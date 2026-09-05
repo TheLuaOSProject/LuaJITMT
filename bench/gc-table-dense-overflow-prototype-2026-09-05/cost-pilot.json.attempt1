@@ -1,0 +1,52 @@
+[
+  {
+    "name": "ordinary",
+    "kind": "barrier",
+    "variant": "base-normal",
+    "mode": "joff",
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal-cost",
+      "barrier",
+      "ordinary",
+      "1000000",
+      "joff"
+    ],
+    "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
+    "environment_overrides": {},
+    "exit": -6,
+    "status": "complete",
+    "seconds": 0.18823528199936845,
+    "stdout": "{\"type\":\"memory\",\"stage\":\"before_state\",\"rss_kb\":2172,\"vsize_kb\":5140,\"maxrss_kb\":11504,\"heap_arena\":0,\"heap_used\":0,\"heap_free\":0,\"malloc_mmaps\":0,\"malloc_mmap_bytes\":0,\"small_mappings\":0,\"traversable_mappings\":0,\"sidecar_requested\":0,\"sidecar_usable\":0,\"huge_mappings\":0,\"huge_w_requested\":0,\"huge_w_usable\":0,\"metadata_denied\":0,\"gc_total\":0,\"live_estimate\":0,\"recovery\":0,\"phase\":0}\n",
+    "stderr": "base-normal-cost: /tmp/lj-dense-overflow-20260905-7tl6kcfk/cost.c:107: barrier_cost: Assertion `dirty==n+1u' failed.\n",
+    "data": [
+      {
+        "type": "memory",
+        "stage": "before_state",
+        "rss_kb": 2172,
+        "vsize_kb": 5140,
+        "maxrss_kb": 11504,
+        "heap_arena": 0,
+        "heap_used": 0,
+        "heap_free": 0,
+        "malloc_mmaps": 0,
+        "malloc_mmap_bytes": 0,
+        "small_mappings": 0,
+        "traversable_mappings": 0,
+        "sidecar_requested": 0,
+        "sidecar_usable": 0,
+        "huge_mappings": 0,
+        "huge_w_requested": 0,
+        "huge_w_usable": 0,
+        "metadata_denied": 0,
+        "gc_total": 0,
+        "live_estimate": 0,
+        "recovery": 0,
+        "phase": 0
+      }
+    ]
+  }
+]

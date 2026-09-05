@@ -1,0 +1,30 @@
+build-inline 0 make: Entering directory '/tmp/lj-dense-overflow-20260905-7tl6kcfk/negative-inline/src'
+CC        lj_gc2.o
+AR        libluajit.a
+LINK      luajit
+OK        Successfully built LuaJIT
+make: Leaving directory '/tmp/lj-dense-overflow-20260905-7tl6kcfk/negative-inline/src'
+ 
+compile-inline 0  
+test-inline -6  negative-inline-fixture: /tmp/lj-dense-overflow-20260905-7tl6kcfk/t-dense-negative.c:54: test_old_scanner: Assertion `exact_scan_result == 0' failed.
+
+build-wide 0 make: Entering directory '/tmp/lj-dense-overflow-20260905-7tl6kcfk/negative-wide/src'
+CC        lj_gc2.o
+AR        libluajit.a
+LINK      luajit
+OK        Successfully built LuaJIT
+make: Leaving directory '/tmp/lj-dense-overflow-20260905-7tl6kcfk/negative-wide/src'
+ 
+compile-wide 0  
+test-wide -6  negative-wide-fixture: /tmp/lj-dense-overflow-20260905-7tl6kcfk/t-dense-negative.c:54: test_old_scanner: Assertion `exact_scan_result == 0' failed.
+
+build-mode 0 make: Entering directory '/tmp/lj-dense-overflow-20260905-7tl6kcfk/negative-mode/src'
+CC        lj_gc2.o
+AR        libluajit.a
+LINK      luajit
+OK        Successfully built LuaJIT
+make: Leaving directory '/tmp/lj-dense-overflow-20260905-7tl6kcfk/negative-mode/src'
+ 
+compile-mode 0  
+test-mode -6  negative-mode-fixture: /tmp/lj-dense-overflow-20260905-7tl6kcfk/t-dense-negative.c:73: peer_promote: Assertion `(uint32_t)(dense_snapshot(f->parent).lo >> 32) == 0' failed.
+

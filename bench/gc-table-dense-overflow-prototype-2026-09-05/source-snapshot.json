@@ -1,0 +1,92 @@
+{
+  "base": "d680421c4cb50b85437d88255bc89358c5e3a6b1",
+  "frozen_source_variants": {
+    "base-normal": {
+      "src/lj_arena.c": "fa91f740bc8271cf61b8ce214e4c957dc4327bb6f49c87538869376ff50acbbd",
+      "src/lj_arena.h": "04e84f9cccbed43277879e6bd5124e0b03796f0acd88c9c2b85f36044b8d9ec0",
+      "src/lj_gc2.c": "61009e510a1de2b591fffe32162a1772a4a24d4a4bb7b84368bbdc0eb8341c25",
+      "src/lj_gc2.h": "12a024f5b2de1c760bc56702dc17d112357a7fc56d229f013a299d9b13552f99",
+      "src/vm_x64.dasc": "ad48405b4793e8514307cd4efc15238dcd3a29b0d1970b452ee77952b921d64b",
+      "src/lj_asm_x86.h": "e5c4bd5411014c84bfc1704f60b24e8efe41bde66ea240908a2af4caaf527742",
+      "src/lj_tab.c": "ee0a474944854a2d6ccd63cb1f885abb8975044f8392dc93e695465068877c2f",
+      "src/lj_meta.c": "ee8be87f397f680553f3352fca94e0cb43084d5366c68ecb6296aef0ae9c4a11"
+    },
+    "normal": {
+      "src/lj_arena.c": "8f5ed17aed6b4e978afbd02d57f4bea50c7bea413f2c6baf9adecfbbedcbe1b7",
+      "src/lj_arena.h": "bb96ac4858d601bf45c1025dae45857582c8c76f8496f10234ed9199a862bc3d",
+      "src/lj_gc2.c": "760251a22796a7f6976071e82beea821c068d2ad457bb1cce3757bbe89cc90e1",
+      "src/lj_gc2.h": "e638fe043296bc74868746618115c47d2ea0a8f26b27e746f7fcfbc75b313516",
+      "src/vm_x64.dasc": "ad48405b4793e8514307cd4efc15238dcd3a29b0d1970b452ee77952b921d64b",
+      "src/lj_asm_x86.h": "e5c4bd5411014c84bfc1704f60b24e8efe41bde66ea240908a2af4caaf527742",
+      "src/lj_tab.c": "ee0a474944854a2d6ccd63cb1f885abb8975044f8392dc93e695465068877c2f",
+      "src/lj_meta.c": "ee8be87f397f680553f3352fca94e0cb43084d5366c68ecb6296aef0ae9c4a11"
+    }
+  },
+  "binaries": {
+    "normal/src/libluajit.a": "5af846b0fe7e78efb1ccba027ad85923f89e9437403ffe5542e6dc11a698125a",
+    "normal/src/luajit": "0ba5f71383fe68796d1622189c3abb51cf9aec455813a6dfec37ed65feddc744",
+    "normal/src/lj_gc2.o": "7677987d526e8cb41a84e14392a067cd1a77a788ab891d61ace3427ceaece2b1",
+    "normal/src/lj_vm.o": "8a703932d4ffc860e52d66198524b0128190fed49747698e878446ff8a40df50",
+    "base-normal/src/libluajit.a": "7187b0c3a4867cd7656010926dc1e59b56eaf4d198dbb4c6111f542de6c5d9b7",
+    "base-normal/src/luajit": "a26c4f3247bd62f8ff4384d23d18318e07883deebab1f9eb7e259f7cd5bce39f",
+    "base-normal/src/lj_gc2.o": "ec54fdfae8e62530f48860017dc06ce0b57baff7503f45a351a0b651c519594a",
+    "base-normal/src/lj_vm.o": "8a703932d4ffc860e52d66198524b0128190fed49747698e878446ff8a40df50",
+    "base-normal-cost": "c5970390f2709834de6ffb08ae8ac88b8735a0c96a346d43ab7a7b99eac00c2b",
+    "normal-cost": "2c98227fbcf2422c9f4c8022d66065d7064bd9ba87f8a46c28e2cbd9061a0025"
+  },
+  "builds": {
+    "base-normal": {
+      "command": [
+        "taskset",
+        "-c",
+        "0-15",
+        "make",
+        "-C",
+        "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src",
+        "-j4",
+        "BUILDMODE=static",
+        "CCDEBUG=-g",
+        "TARGET_STRIP=:"
+      ],
+      "environment": {},
+      "environment_scope": "default"
+    },
+    "normal": {
+      "command": [
+        "taskset",
+        "-c",
+        "0-15",
+        "make",
+        "-C",
+        "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src",
+        "-j4",
+        "BUILDMODE=static",
+        "CCDEBUG=-g",
+        "TARGET_STRIP=:"
+      ],
+      "environment": {},
+      "environment_scope": "default"
+    }
+  },
+  "tools": {
+    "gcc": "gcc (Debian 14.2.0-19) 14.2.0\nCopyright (C) 2024 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+    "clang": "Debian clang version 19.1.7 (3+b1)\nTarget: x86_64-pc-linux-gnu\nThread model: posix\nInstalledDir: /usr/lib/llvm-19/bin",
+    "kernel": "Linux 7f3bd9b38fd8 7.2.1-ogc4.1.fc44.x86_64 #1 SMP PREEMPT_DYNAMIC Tue Sep  1 22:10:56 UTC 2026 x86_64 GNU/Linux",
+    "glibc": "glibc 2.41"
+  },
+  "source_files": {
+    "cost.c": "c7600234bd80076ac154530242b05de3f8a12168366eaa2b0addfc68fb07513c",
+    "cost-study.py": "9a13dd2998e2c5414e7185706642e22a296c5de4e8ee46c6f91f7e74d14dbf4e",
+    "summarize-cost.py": "bd71d905eb4964ffe28c88a4c2a631bcb86eed114105328d78a3beee12df6448",
+    "compile-cost.py": "76a201b824ab3669a5589cb6bc69f7f4c83dd6f9a5728494640e436836f8e849"
+  },
+  "plan_harness": {
+    "base_path": "plan/aux/bench/bench.lua",
+    "packaged_path": "plan-bench.lua",
+    "sha256": "ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9"
+  },
+  "tested_patch_sha256": "58ab8e401f35389d83477e95aad611301d538a2af5dd1bb6eb7a6785ca3ca47a",
+  "candidate_difference": "Only the small-only accessor comment; candidate patch was not measured.",
+  "original_final_validation_sha256": "1c5a9894cb9764453c451070a64216ed2e2feeedc5ed2a9c0d8c2f64936d2b6b",
+  "runtime_source_boundary": "Exact d680 plus dense-W.patch, excluding later arena/scalar/direct-hit and Huge-tail changes."
+}

@@ -1,0 +1,13 @@
+--- a/src/lj_arena.h
++++ b/src/lj_arena.h
+@@ -379,6 +379,10 @@
+   la_storeptr_rel((void **)&a->hdr.next, next);
+ }
+ 
++/* Small-mapping-only accessor. The caller retains the exact non-Huge
++** mapping; immutable mapping kind selects this union arm. Plain small maps
++** return NULL. Huge body-proof users must use lj_arena_gc2_wide_acq after
++** their separate readable-body admission; header-only token users stay W-blind. */
+ static LJ_AINLINE LJGC2TabStampArena *
+ lj_arena_gc2_tabstamp_acq(const GCArena *a)
+ {

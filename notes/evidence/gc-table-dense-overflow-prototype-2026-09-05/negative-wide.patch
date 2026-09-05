@@ -1,0 +1,11 @@
+--- a/src/lj_gc2.c
++++ b/src/lj_gc2.c
+@@ -15588,7 +15588,7 @@
+       return 0;
+     old = lj_arena_gc2_wide_snapshot(w);
+     for (;;) {
+-      if (old.hi != captured.proof.hi || gc2_tabstamp_dirty(old.lo) != dirty)
++      if (gc2_tabstamp_dirty(old.lo) != dirty)
+         return 0;
+       next.lo = gc2_tabstamp_pack(cycle, dirty);
+       next.hi = old.hi;

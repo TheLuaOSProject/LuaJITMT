@@ -1,0 +1,22 @@
+make: Entering directory '/tmp/lj-dense-overflow-20260905-7tl6kcfk/strict/src'
+HOSTCC    host/minilua.o
+HOSTCC    host/buildvm_asm.o
+HOSTCC    host/buildvm_peobj.o
+HOSTCC    host/buildvm_lib.o
+HOSTCC    host/buildvm_fold.o
+HOSTLINK  host/minilua
+VERSION   luajit.h
+DYNASM    host/buildvm_arch.h
+CC        luajit.o
+In file included from lj_obj.h:13,
+                 from lj_safepoint.h:9,
+                 from luajit.c:22:
+lj_def.h:387:47: error: size of array ‘STATIC_ASSERTION_FAILED’ is negative
+  387 |   extern void LJ_ASSERT_NAME(__COUNTER__)(int STATIC_ASSERTION_FAILED[(cond)?1:-1])
+      |                                               ^~~~~~~~~~~~~~~~~~~~~~~
+lj_arena.h:1639:1: note: in expansion of macro ‘LJ_STATIC_ASSERT’
+ 1639 | LJ_STATIC_ASSERT(sizeof(LJGC2TabStampArena) == LJ_ARENA_SIZE);
+      | ^~~~~~~~~~~~~~~~
+make: *** [Makefile:728: luajit.o] Error 1
+make: *** Waiting for unfinished jobs....
+make: Leaving directory '/tmp/lj-dense-overflow-20260905-7tl6kcfk/strict/src'

@@ -1,0 +1,33 @@
+samples 153 True
+barrier {'comparison': 'ordinary_base_to_dense', 'left_median_ns': 119.1306, 'right_median_ns': 119.4352, 'paired_percent_median': 0.26232107125072623, 'paired_percent_min': 0.12790353186635794, 'paired_percent_max': 1.0150204901175686}
+barrier {'comparison': 'dense_ordinary_to_promoted', 'left_median_ns': 119.4352, 'right_median_ns': 192.827, 'paired_percent_median': 61.569251317207716, 'paired_percent_min': 60.2787274035689, 'paired_percent_max': 61.60736585030615}
+plan {'name': 'alloc_tables', 'mode': 'joff', 'base_median_ns': 2262.67, 'dense_median_ns': 2268.94, 'paired_percent_median': 0.2408722669837049, 'paired_percent_min': 0.17139928966480866, 'paired_percent_max': 0.39930663034728475}
+plan {'name': 'alloc_tables', 'mode': 'jon', 'base_median_ns': 1.07, 'dense_median_ns': 1.08, 'paired_percent_median': 0.9345794392523477, 'paired_percent_min': -0.92592592592593, 'paired_percent_max': 1.869158878504673}
+plan {'name': 'tab_insert_newkey', 'mode': 'joff', 'base_median_ns': 993.25, 'dense_median_ns': 1006.0, 'paired_percent_median': 1.328653797944357, 'paired_percent_min': 0.654582074521648, 'paired_percent_max': 1.7658930373360304}
+plan {'name': 'tab_insert_newkey', 'mode': 'jon', 'base_median_ns': 106.25, 'dense_median_ns': 107.25, 'paired_percent_median': 0.9456264775413725, 'paired_percent_min': -1.157407407407407, 'paired_percent_max': 2.5821596244131495}
+plan {'name': 'closures_upval', 'mode': 'joff', 'base_median_ns': 1574.92, 'dense_median_ns': 1577.8, 'paired_percent_median': 0.10224104755796048, 'paired_percent_min': -0.3001238405742179, 'paired_percent_max': 0.36716596155557113}
+plan {'name': 'closures_upval', 'mode': 'jon', 'base_median_ns': 1582.5, 'dense_median_ns': 1585.61, 'paired_percent_median': 0.1079613611970398, 'paired_percent_min': -0.27224602974539325, 'paired_percent_max': 0.59648812084101}
+memory tables joff
+base-normal cpu 0.289897815 mapped 41 sidecar 2686976 2687304 RSS retain/delta/free 9260 5768 9008 VmSize 13412 mmapcount/bytes 0 0 promotionRSS None
+normal cpu 0.290293978 mapped 41 sidecar 5373952 5541232 RSS retain/delta/free 9124 5744 8876 VmSize 16200 mmapcount/bytes 41 5541888 promotionRSS None
+memory tables jon
+base-normal cpu 0.115065948 mapped 42 sidecar 2752512 2752848 RSS retain/delta/free 9556 6164 9288 VmSize 13604 mmapcount/bytes 0 0 promotionRSS None
+normal cpu 0.115729426 mapped 42 sidecar 5505024 5676384 RSS retain/delta/free 9392 6012 9124 VmSize 16524 mmapcount/bytes 42 5677056 promotionRSS None
+memory insertion joff
+base-normal cpu 0.078207766 mapped 18 sidecar 1179648 1179792 RSS retain/delta/free 6896 3472 6312 VmSize 10852 mmapcount/bytes 0 0 promotionRSS None
+normal cpu 0.076561631 mapped 18 sidecar 2359296 2432736 RSS retain/delta/free 6624 3388 6044 VmSize 12140 mmapcount/bytes 18 2433024 promotionRSS None
+memory insertion jon
+base-normal cpu 0.026454811 mapped 18 sidecar 1179648 1179792 RSS retain/delta/free 7236 3848 6612 VmSize 11044 mmapcount/bytes 0 0 promotionRSS None
+normal cpu 0.026665561 mapped 18 sidecar 2359296 2432736 RSS retain/delta/free 7204 3736 6576 VmSize 12332 mmapcount/bytes 18 2433024 promotionRSS None
+memory closures joff
+base-normal cpu 1.156576889 mapped 35 sidecar 2293760 2294040 RSS retain/delta/free 8540 5164 8288 VmSize 12644 mmapcount/bytes 0 0 promotionRSS None
+normal cpu 1.159107545 mapped 35 sidecar 4587520 4730320 RSS retain/delta/free 8476 5092 8224 VmSize 15024 mmapcount/bytes 35 4730880 promotionRSS None
+memory closures jon
+base-normal cpu 0.252632989 mapped 35 sidecar 2293760 2294040 RSS retain/delta/free 8836 5448 8640 VmSize 12772 mmapcount/bytes 0 0 promotionRSS None
+normal cpu 0.252606247 mapped 35 sidecar 4587520 4730320 RSS retain/delta/free 8748 5332 8492 VmSize 15152 mmapcount/bytes 35 4730880 promotionRSS None
+memory promoted_tables joff
+base-normal cpu 0.289471881 mapped 41 sidecar 2686976 2687304 RSS retain/delta/free 9204 5756 9052 VmSize 13412 mmapcount/bytes 0 0 promotionRSS 100
+normal cpu 0.287953402 mapped 41 sidecar 5373952 5541232 RSS retain/delta/free 9120 5732 11228 VmSize 16200 mmapcount/bytes 41 5541888 promotionRSS 2356
+memory promoted_tables jon
+base-normal cpu 0.115095336 mapped 42 sidecar 2752512 2752848 RSS retain/delta/free 9568 6208 9400 VmSize 13604 mmapcount/bytes 0 0 promotionRSS 104
+normal cpu 0.115942048 mapped 42 sidecar 5505024 5676384 RSS retain/delta/free 9396 6040 11488 VmSize 16524 mmapcount/bytes 42 5677056 promotionRSS 2364

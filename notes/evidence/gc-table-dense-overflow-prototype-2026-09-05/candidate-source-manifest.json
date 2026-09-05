@@ -1,0 +1,23 @@
+{
+  "base": "d680421c4cb50b85437d88255bc89358c5e3a6b1",
+  "files": [
+    {
+      "path": "src/lj_arena.c",
+      "sha256": "8f5ed17aed6b4e978afbd02d57f4bea50c7bea413f2c6baf9adecfbbedcbe1b7"
+    },
+    {
+      "path": "src/lj_arena.h",
+      "sha256": "c183dbcc19bab140729f17bb75e322311fe764a293ea195d120071cfe05a2ae0"
+    },
+    {
+      "path": "src/lj_gc2.c",
+      "sha256": "760251a22796a7f6976071e82beea821c068d2ad457bb1cce3757bbe89cc90e1"
+    },
+    {
+      "path": "src/lj_gc2.h",
+      "sha256": "e638fe043296bc74868746618115c47d2ea0a8f26b27e746f7fcfbc75b313516"
+    }
+  ],
+  "patch_sha256": "424a3f5ebcf908e51a4a54fe6faed00947fb1593135ca2e89f86d406d1b65e20",
+  "difference_from_tested_and_measured_patch": "One small-only accessor precondition comment in src/lj_arena.h; no code changes."
+}

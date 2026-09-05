@@ -1,0 +1,36 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/tests/stock",
+    "seconds": 0.002719940001043142,
+    "exit": 1,
+    "status": "complete",
+    "stdout": "",
+    "stderr": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit: cannot open test.lua: No such file or directory\n"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/tests/stock",
+    "seconds": 0.00260297999921022,
+    "exit": 1,
+    "status": "complete",
+    "stdout": "",
+    "stderr": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit: cannot open test.lua: No such file or directory\n"
+  }
+]

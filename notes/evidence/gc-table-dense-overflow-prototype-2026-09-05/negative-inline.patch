@@ -1,0 +1,15 @@
+--- a/src/lj_gc2.c
++++ b/src/lj_gc2.c
+@@ -15581,6 +15581,12 @@
+   uint32_t dirty = gc2_tabstamp_dirty(captured.proof.lo);
+   if (!s || !captured.stamped)
+     return 0;
++  /* NEGATIVE: completion adopts the current domain after its payload scan. */
++  if (!captured.wide && gc2_tabstamp_dirty(la_load64_acq(&s->state)) == UINT32_MAX) {
++    captured.wide = 1;
++    captured.proof = lj_arena_gc2_wide_snapshot(lj_arena_gc2_wide_acq(t));
++    dirty = gc2_tabstamp_dirty(captured.proof.lo);
++  }
+   if (captured.wide) {
+     LJGC2TabWideStamp *w = lj_arena_gc2_wide_acq(t);
+     la_u128 old, next;

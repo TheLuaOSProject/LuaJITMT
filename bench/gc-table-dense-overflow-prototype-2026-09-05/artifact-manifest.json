@@ -1,0 +1,33 @@
+{
+  "hash": "sha256",
+  "scope": "Frozen normal cost and memory evidence; no new runtime run during packaging.",
+  "files": {
+    "README.md": "868b779affa64d49b47fdac310112ace1f49449af90f8bada6da1a29fc66a4c7",
+    "compile-cost-attempt2.json": "336d57adc0243be76cc43f0600d7be40670c80e66ee5b7538d5c8720b1146ac9",
+    "compile-cost.json": "1208c457cf0c7c58e8f479a2dba894367a7d9218dc5f1d79dc87c316bcce5a0f",
+    "compile-cost.py": "76a201b824ab3669a5589cb6bc69f7f4c83dd6f9a5728494640e436836f8e849",
+    "cost-counter-diagnostic.c": "9b42e071a59b718447bdd8326f4c331eebc2ec11049fd56c918a53c2667f05fa",
+    "cost-diagnostic-2.log": "6f88386f211df5b8229a17bcd37d9e26d37238bbbced712d8e4368ce5e6fcf95",
+    "cost-diagnostic.log": "1f68a362209650ad4fb29b2e3c8f3ba6f00865ae40d825d84485f583cbca9be1",
+    "cost-pilot.json": "c7bc424f8e94d0566982cd5362e7c24c172a3082464d451dc94f621492aa7326",
+    "cost-pilot.json.attempt1": "e12831275a5c4d2383cfbf338903cb0b68580663183fdf0bcef5db74ef2c06f5",
+    "cost-pilot.json.pilot1": "c7bc424f8e94d0566982cd5362e7c24c172a3082464d451dc94f621492aa7326",
+    "cost-pilot.log": "39091d27993e0bf62e93454034fdaf69c400bf68ea53fd18f506f5bdfe58ce6f",
+    "cost-pilot.log.attempt1": "ed7df79395f1618dcbea3c84a3b8972ac4b8d2fc9aef4fcdef5342fa5fb95624",
+    "cost-pilot.log.pilot1": "39091d27993e0bf62e93454034fdaf69c400bf68ea53fd18f506f5bdfe58ce6f",
+    "cost-results.json": "328da05c9b84c0b059a74271fef28661983dc5540c1d2811de720cbc9aa2ca5f",
+    "cost-study.py": "9a13dd2998e2c5414e7185706642e22a296c5de4e8ee46c6f91f7e74d14dbf4e",
+    "cost-study.py.pilot1": "e461f3e9433e6d4bb790860010c437faa4a6525c1ffe813ed94476cab4a2abea",
+    "cost-summary.json": "91587a160574356a6614c199e609ad9c391ee8425b61e14d449fefd0806b4d2d",
+    "cost.c": "c7600234bd80076ac154530242b05de3f8a12168366eaa2b0addfc68fb07513c",
+    "cost.c.attempt1": "27b2399fcc47128503c6d3d67831f9ba7ededf8cbb32f6cc7e268282770e72f3",
+    "cost.c.pilot1": "4cfea1b7c2d4c689ec5a390d1cc3701086e92c6ff39b12294380c08464056fdb",
+    "cost.log": "4cdb6d898ee5ee2e291a39eb28ad8ce8379da71a7ea3e3834a83a3ccdde7bd36",
+    "plan-bench.lua": "ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9",
+    "promoted-memory-pilot.log": "e36eac58bfaf17c7190fc205e9eff6a33ac358291f176fdc3e9ef193deebc124",
+    "source-snapshot.json": "d2f51ba4f89f0fd84bcbf7bcd1b9b19702639e50117b44820679ed3cd3fc651d",
+    "summarize-cost.py": "bd71d905eb4964ffe28c88a4c2a631bcb86eed114105328d78a3beee12df6448",
+    "summary-regeneration.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "summary-regeneration.stdout": "334932d4a22f32803c31df08c6c98196ad01d93b2ff12b336d82ac7d90642d9c"
+  }
+}

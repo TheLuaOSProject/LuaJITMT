@@ -1,0 +1,55 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost.c",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal-cost"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost.c: In function \u2018barrier_cost\u2019:\n/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost.c:107:2: error: this \u2018if\u2019 clause does not guard... [-Werror=misleading-indentation]\n  107 |  if(dirty!=n+1u)fprintf(stderr,\"dirty=%\"PRIu64\" expected=%u phase=%u active=%u\\n\",dirty,n+1u,gc2_phase_acq(g),lj_tg_mark_active_acq(tg)); assert(dirty==n+1u);assert(numV(&array[1])==(lua_Number)n);\n      |  ^~\nIn file included from /tmp/lj-dense-overflow-20260905-7tl6kcfk/cost.c:2:\n/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost.c:107:139: note: ...this statement, but the latter is misleadingly indented as if it were guarded by the \u2018if\u2019\n  107 |  if(dirty!=n+1u)fprintf(stderr,\"dirty=%\"PRIu64\" expected=%u phase=%u active=%u\\n\",dirty,n+1u,gc2_phase_acq(g),lj_tg_mark_active_acq(tg)); assert(dirty==n+1u);assert(numV(&array[1])==(lua_Number)n);\n      |                                                                                                                                           ^~~~~~\ncc1: all warnings being treated as errors\n"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost.c",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal-cost",
+      "-DDENSE_W"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost.c: In function \u2018barrier_cost\u2019:\n/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost.c:107:2: error: this \u2018if\u2019 clause does not guard... [-Werror=misleading-indentation]\n  107 |  if(dirty!=n+1u)fprintf(stderr,\"dirty=%\"PRIu64\" expected=%u phase=%u active=%u\\n\",dirty,n+1u,gc2_phase_acq(g),lj_tg_mark_active_acq(tg)); assert(dirty==n+1u);assert(numV(&array[1])==(lua_Number)n);\n      |  ^~\nIn file included from /tmp/lj-dense-overflow-20260905-7tl6kcfk/cost.c:2:\n/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost.c:107:139: note: ...this statement, but the latter is misleadingly indented as if it were guarded by the \u2018if\u2019\n  107 |  if(dirty!=n+1u)fprintf(stderr,\"dirty=%\"PRIu64\" expected=%u phase=%u active=%u\\n\",dirty,n+1u,gc2_phase_acq(g),lj_tg_mark_active_acq(tg)); assert(dirty==n+1u);assert(numV(&array[1])==(lua_Number)n);\n      |                                                                                                                                           ^~~~~~\ncc1: all warnings being treated as errors\n"
+  }
+]

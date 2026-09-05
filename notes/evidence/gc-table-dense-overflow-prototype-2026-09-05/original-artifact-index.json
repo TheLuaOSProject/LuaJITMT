@@ -1,0 +1,497 @@
+{
+  "original_directory": "/tmp/lj-dense-overflow-20260905-7tl6kcfk",
+  "files": [
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/accessor-comment.patch",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/accessor-comment.patch",
+      "bytes": 514,
+      "sha256": "492733ad868326e5d14256a709f341e63ab3ab230daaf5a4214f356f95e3dfa0"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/adapt.py",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/adapt.py",
+      "bytes": 4140,
+      "sha256": "e60dd8d06c46364edcd8b83c22acccab9328f4261a3d78add79ebc7890dfbadd"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/archive-patch.py",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/archive-patch.py",
+      "bytes": 833,
+      "sha256": "1177a4613134344c33188da2f4c24ad77d1fbc997fab3274396e27e0150c67b3"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/asan-results.json",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/asan-results.json",
+      "bytes": 12134,
+      "sha256": "e6a34f2ceed7acc60ce1136a32c45b38f29eb23e92894a3fb4b4b641e2425fe5"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/audit.md",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/audit.md",
+      "bytes": 15721,
+      "sha256": "f04b4edd3368cd7508430d142577583c2ed4c87f9cbd17b9dbd6c79476b7530f"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-stock-results.json",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/base-stock-results.json",
+      "bytes": 812,
+      "sha256": "030d798802e129be37043caa203cb8d5a6173ff8f4a4a5916606c00e1486a49c"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-stock.log",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/base-stock.log",
+      "bytes": 39,
+      "sha256": "5f1d7e131147f8ccea5aab92a154cac01acb9b5b2b08a42fe4cd4409c82aa360"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-stock.py",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/base-stock.py",
+      "bytes": 845,
+      "sha256": "0833adee42d949f64c5233769f93cd0e83d8348bc37d89eed6b6c84e9afafbf5"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/build-asan-1.log",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/build-asan-1.log",
+      "bytes": 2303,
+      "sha256": "155b145013443f5b9e064a548fd60b728973880958febc9763b4e40a099b999d"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/build-base-normal.log",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/build-base-normal.log",
+      "bytes": 2317,
+      "sha256": "8f4693cc4ea36fc9527077ef926a96428635040eaae2cf764e7ba8bd43ce31fb"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/build-normal-1.log",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/build-normal-1.log",
+      "bytes": 2307,
+      "sha256": "e2f5fbe0a833b43e3c9a395e42d2d669785ca1053f54cf0bdfbcefb22261bc5d"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/build-strict-1.log",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/build-strict-1.log",
+      "bytes": 1003,
+      "sha256": "bdb46e3e7017b366fb9690925e16eb1c2953742a94737dd042aa037ad42fe03a"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/build-strict-2.log",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/build-strict-2.log",
+      "bytes": 2091,
+      "sha256": "fd39f05e285e52aaef5957dda8d132aea8a75cc50867db09e024d905ba801f67"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/candidate-source-manifest.json",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/candidate-source-manifest.json",
+      "bytes": 799,
+      "sha256": "21203ba1e93d62d714b3062944a3f68bc21227d81336859dea1ff2fd12159e2d"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/coalescing-adapter.c",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/coalescing-adapter.c",
+      "bytes": 22187,
+      "sha256": "8cd8ce8f3805ad38ec95eae3e43de7c8962247a317e4bab36588c2455e44e6cf"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/compile-cost-attempt2.json",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/compile-cost-attempt2.json",
+      "bytes": 3365,
+      "sha256": "336d57adc0243be76cc43f0600d7be40670c80e66ee5b7538d5c8720b1146ac9"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/compile-cost.json",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/compile-cost.json",
+      "bytes": 1157,
+      "sha256": "1208c457cf0c7c58e8f479a2dba894367a7d9218dc5f1d79dc87c316bcce5a0f"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/compile-cost.py",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/compile-cost.py",
+      "bytes": 663,
+      "sha256": "76a201b824ab3669a5589cb6bc69f7f4c83dd6f9a5728494640e436836f8e849"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost-counter-diagnostic.c",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/cost-counter-diagnostic.c",
+      "bytes": 7172,
+      "sha256": "9b42e071a59b718447bdd8326f4c331eebc2ec11049fd56c918a53c2667f05fa"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost-diagnostic-2.log",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/cost-diagnostic-2.log",
+      "bytes": 547,
+      "sha256": "6f88386f211df5b8229a17bcd37d9e26d37238bbbced712d8e4368ce5e6fcf95"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost-diagnostic.log",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/cost-diagnostic.log",
+      "bytes": 505,
+      "sha256": "1f68a362209650ad4fb29b2e3c8f3ba6f00865ae40d825d84485f583cbca9be1"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost-pilot.json",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/cost-pilot.json",
+      "bytes": 113612,
+      "sha256": "c7bc424f8e94d0566982cd5362e7c24c172a3082464d451dc94f621492aa7326"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost-pilot.json.attempt1",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/cost-pilot.json.attempt1",
+      "bytes": 1729,
+      "sha256": "e12831275a5c4d2383cfbf338903cb0b68580663183fdf0bcef5db74ef2c06f5"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost-pilot.json.pilot1",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/cost-pilot.json.pilot1",
+      "bytes": 113612,
+      "sha256": "c7bc424f8e94d0566982cd5362e7c24c172a3082464d451dc94f621492aa7326"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost-pilot.log",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/cost-pilot.log",
+      "bytes": 1126,
+      "sha256": "39091d27993e0bf62e93454034fdaf69c400bf68ea53fd18f506f5bdfe58ce6f"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost-pilot.log.attempt1",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/cost-pilot.log.attempt1",
+      "bytes": 551,
+      "sha256": "ed7df79395f1618dcbea3c84a3b8972ac4b8d2fc9aef4fcdef5342fa5fb95624"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost-pilot.log.pilot1",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/cost-pilot.log.pilot1",
+      "bytes": 1126,
+      "sha256": "39091d27993e0bf62e93454034fdaf69c400bf68ea53fd18f506f5bdfe58ce6f"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost-results.json",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/cost-results.json",
+      "bytes": 526450,
+      "sha256": "328da05c9b84c0b059a74271fef28661983dc5540c1d2811de720cbc9aa2ca5f"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost-study.py",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/cost-study.py",
+      "bytes": 2440,
+      "sha256": "9a13dd2998e2c5414e7185706642e22a296c5de4e8ee46c6f91f7e74d14dbf4e"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost-study.py.pilot1",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/cost-study.py.pilot1",
+      "bytes": 2689,
+      "sha256": "e461f3e9433e6d4bb790860010c437faa4a6525c1ffe813ed94476cab4a2abea"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost-summary.json",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/cost-summary.json",
+      "bytes": 48644,
+      "sha256": "91587a160574356a6614c199e609ad9c391ee8425b61e14d449fefd0806b4d2d"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost.c",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/cost.c",
+      "bytes": 8627,
+      "sha256": "c7600234bd80076ac154530242b05de3f8a12168366eaa2b0addfc68fb07513c"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost.c.attempt1",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/cost.c.attempt1",
+      "bytes": 7029,
+      "sha256": "27b2399fcc47128503c6d3d67831f9ba7ededf8cbb32f6cc7e268282770e72f3"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost.c.pilot1",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/cost.c.pilot1",
+      "bytes": 7319,
+      "sha256": "4cfea1b7c2d4c689ec5a390d1cc3701086e92c6ff39b12294380c08464056fdb"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost.log",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/cost.log",
+      "bytes": 6540,
+      "sha256": "4cdb6d898ee5ee2e291a39eb28ad8ce8379da71a7ea3e3834a83a3ccdde7bd36"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/dense-W-candidate.patch",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/dense-W-candidate.patch",
+      "bytes": 14004,
+      "sha256": "424a3f5ebcf908e51a4a54fe6faed00947fb1593135ca2e89f86d406d1b65e20"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/dense-W.patch",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/dense-W.patch",
+      "bytes": 13532,
+      "sha256": "58ab8e401f35389d83477e95aad611301d538a2af5dd1bb6eb7a6785ca3ca47a"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/dense-helpers.h",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/dense-helpers.h",
+      "bytes": 778,
+      "sha256": "9b0ae14bb18cf0ce1bf8028272f0f917f2dc17fa8745d74cea0cb45ffcfd4f77"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/final-validation.json",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/final-validation.json",
+      "bytes": 14523,
+      "sha256": "1c5a9894cb9764453c451070a64216ed2e2feeedc5ed2a9c0d8c2f64936d2b6b"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/finalize-adapters.py",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/finalize-adapters.py",
+      "bytes": 3864,
+      "sha256": "3807b7efb265fbfd60b9fb4a44f00561da86dba4aa134991d3e208dc947673b4"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/finalize-candidate.py",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/finalize-candidate.py",
+      "bytes": 1702,
+      "sha256": "4e472a5e0e9fd9e45195c2b2d201dc704f3d4b41db020f14c9439f753d419b95"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/finish-evidence.py",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/finish-evidence.py",
+      "bytes": 3981,
+      "sha256": "c49460cea97cf229b1f89239f45fadb97e6c32559a2871472442cb01a6aa66e5"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/fnew-consistent-results.json",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/fnew-consistent-results.json",
+      "bytes": 5838,
+      "sha256": "5f91f9b36af4829c2db74fd27b2817084678c847232b1d3c634ac1bdee82f4b7"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/fnew-consistent-setup.patch",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/fnew-consistent-setup.patch",
+      "bytes": 4901,
+      "sha256": "4ed507cca9669f574bdce3e8d202230a7718a20c4a1c57f9a60f3e7880499beb"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/fnew-consistent.log",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/fnew-consistent.log",
+      "bytes": 882,
+      "sha256": "a668689962e64dca995d9018a2e7e9a955336a3364322d8df2bd8ad82ca7c672"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/fnew-invalid-allocator-control.c",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/fnew-invalid-allocator-control.c",
+      "bytes": 108900,
+      "sha256": "ccbf22027dae94e368187dd2dde8fbbb04ef93fd379f92e91456a767da4017aa"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/implement-v1.py",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/implement-v1.py",
+      "bytes": 9442,
+      "sha256": "ccc9ecdd806faaec054b243e0a405da8b0ccc97c3b05dc5f678d5893ac1a3bfd"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/implement.py",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/implement.py",
+      "bytes": 9437,
+      "sha256": "09fa723cefe9219e4eb9076c8439ffadc9347bff7cef93f78ac5d574d67cf2b7"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/implementation-failures.log",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/implementation-failures.log",
+      "bytes": 380,
+      "sha256": "ddc778334fb7bbb255d1d3f9a062d788d3050d43aeb0d63040bdfb8f429f5e92"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/layout.c",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/layout.c",
+      "bytes": 465,
+      "sha256": "f790e8a2eaa972960da88f306f7757948c25cd665698f5d72e290f9ea1f08493"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/layout.json",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/layout.json",
+      "bytes": 145,
+      "sha256": "e4423a51e56f0db50353a552fe8bf0b97b1e851bc1e55b668c936ea8ef16a67a"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/metadata.json",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/metadata.json",
+      "bytes": 232,
+      "sha256": "79dca11a27fab910bf09a4c41f3e3590c2570899ea4e6b0cc8e77aeae99c5aaf"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/negative-inline.patch",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/negative-inline.patch",
+      "bytes": 595,
+      "sha256": "bd2ef644c80aa1d8564991fd39256801dbdcda382429573ab2c7ca8cf902381d"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/negative-mode.patch",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/negative-mode.patch",
+      "bytes": 619,
+      "sha256": "0a867d37eb5ad6dc8cab5b3179b2d9058e0b06919ce06b815fc75018ee3b039b"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/negative-results.json",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/negative-results.json",
+      "bytes": 6940,
+      "sha256": "77cee0d9db662456a38a5d7102180143106cf89b0e6e5c87e95ba7c9f256d32d"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/negative-wide.patch",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/negative-wide.patch",
+      "bytes": 358,
+      "sha256": "9d82b831c0916b48cd27a118e2b7ac6b382f9360288acc1c6dbca2fc1b1d65a3"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/negative.log",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/negative.log",
+      "bytes": 1417,
+      "sha256": "dc2a09068802342dfeb60f7446d7d99c7f9efbc279d0aa2a262b36408894e61f"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/negative.py",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/negative.py",
+      "bytes": 3707,
+      "sha256": "7c0544edde44dc9e498a749d9d5d3c444a420f998a70fa3b730f91d5f4145865"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/promoted-memory-pilot.log",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/promoted-memory-pilot.log",
+      "bytes": 3259,
+      "sha256": "e36eac58bfaf17c7190fc205e9eff6a33ac358291f176fdc3e9ef193deebc124"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/source-manifest.json",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/source-manifest.json",
+      "bytes": 735,
+      "sha256": "4658ab80b6e57bea54e24bb8dc35b8fe609d29001565748fc1607e6e683b1e97"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/stock-results-wrong-cwd.json",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/stock-results-wrong-cwd.json",
+      "bytes": 979,
+      "sha256": "f2a8bb4b532845e5145f0a3ab2c4d7533d50d063261894b738aaac9cd869718a"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/stock-results.json",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/stock-results.json",
+      "bytes": 792,
+      "sha256": "db8163ab17ba5db0511d042c58cb6de29c27b6a16f8292330cc81767f7fefd10"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/stock.py",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/stock.py",
+      "bytes": 825,
+      "sha256": "a3cc29863e175bb345ca9ef432e7a859449b4619919aa64b20b506b24bad796b"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/strict-results-1.json",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/strict-results-1.json",
+      "bytes": 12052,
+      "sha256": "e2cadb6b9c44c337f9d0176ff82366c858c072dc55f3d4cdfcc714d2c46a374a"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/strict-results.json",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/strict-results.json",
+      "bytes": 11845,
+      "sha256": "95e97106e6bf040f5a881b889d4875d858dcdef6defc3b6f6bc2949b6fd9d632"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/summarize-cost.py",
+      "repository_path": "bench/gc-table-dense-overflow-prototype-2026-09-05/summarize-cost.py",
+      "bytes": 3814,
+      "sha256": "bd71d905eb4964ffe28c88a4c2a631bcb86eed114105328d78a3beee12df6448"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/t-dense-fnew-consistent.c",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/t-dense-fnew-consistent.c",
+      "bytes": 109677,
+      "sha256": "aca77a9a3bb530d66eebd547918ace38e7851d0d0870803bb6406b0c3ff711ee"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/t-dense-fnew-original-failure.c",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/t-dense-fnew-original-failure.c",
+      "bytes": 109151,
+      "sha256": "f0904f4670d9344aa5e4d1c280587eb54295515fbd0b6a24aedb44756d922bfd"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/t-dense-fnew-settled.c",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/t-dense-fnew-settled.c",
+      "bytes": 109629,
+      "sha256": "9de9ecf03c76315d49b282a0ddd44f138f450b58aaab3619a01300197f1c618b"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/t-dense-fnew.c",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/t-dense-fnew.c",
+      "bytes": 109151,
+      "sha256": "f0904f4670d9344aa5e4d1c280587eb54295515fbd0b6a24aedb44756d922bfd"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/t-dense-negative.c",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/t-dense-negative.c",
+      "bytes": 7590,
+      "sha256": "b2db7e0f2c20bee8c486e3d45766972542c701abebf2f27a410f7d1ed6e5994e"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/t-dense-overflow.c",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/t-dense-overflow.c",
+      "bytes": 7347,
+      "sha256": "e05822a090b993bad2e0be21ee97180249c5a9eb2316401fd8f7118fe625119a"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/t-dense-tnew.c",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/t-dense-tnew.c",
+      "bytes": 3318,
+      "sha256": "663aea838f0b37058acdea0d9462f85282314763ecf0ab3b03b8d603bf7df064"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/tnew-original.c",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/tnew-original.c",
+      "bytes": 26833,
+      "sha256": "46f9a1252d3cfb9c87344154a9048f5db6f13b4da52cd1aabf3f54b697adbf96"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/traverse-adapter-before-protection.c",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/traverse-adapter-before-protection.c",
+      "bytes": 336896,
+      "sha256": "2b444d33fde3abba39fdd8bdf3387db6742a2e36c7c593ab72d3ee04a5d56ab1"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/traverse-adapter.c",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/traverse-adapter.c",
+      "bytes": 338108,
+      "sha256": "807beb027184e58868a22cfab12bcdb24c0c1752dbdb282128ba9916b74094e4"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/validate-asan-1.log",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/validate-asan-1.log",
+      "bytes": 302,
+      "sha256": "8f59c8c2f14dff4f8e1ab797c7c0588b106074b57180c220b21e2a1d3f4d5529"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/validate-fnew.py",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/validate-fnew.py",
+      "bytes": 1563,
+      "sha256": "c1a9f694e8b654d351d724eae3efbfaac2bff806230d7ef6f6760516fd18cc26"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/validate-strict-1.log",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/validate-strict-1.log",
+      "bytes": 858,
+      "sha256": "db8c6034b5ac909056bebac991f67bb764b7ccbf7bfb2cbf18a827c74bd702bd"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/validate-strict-2.log",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/validate-strict-2.log",
+      "bytes": 304,
+      "sha256": "2fe866f702efe62f06f85e369936ae38dd93c97d13c05b880f1433de0ffcb8d3"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/validate.py",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/validate.py",
+      "bytes": 2163,
+      "sha256": "e97abe4d1f3d3957c4caa2db7dc15bd8c45ec14be3d83a25bcd2dec0d0f4240f"
+    },
+    {
+      "original_path": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/wide-guards.h",
+      "repository_path": "notes/evidence/gc-table-dense-overflow-prototype-2026-09-05/wide-guards.h",
+      "bytes": 2279,
+      "sha256": "c8d70333f8e3387c2a097d6cb2ad83459bf0a70120027d7437fa19e13e224a2f"
+    }
+  ]
+}

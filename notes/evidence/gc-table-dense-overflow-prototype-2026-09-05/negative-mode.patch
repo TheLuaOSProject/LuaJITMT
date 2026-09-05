@@ -1,0 +1,14 @@
+--- a/src/lj_gc2.c
++++ b/src/lj_gc2.c
+@@ -15625,6 +15625,11 @@
+         gc2_activation_pin_no_reclaim(g);
+         return;  /* Reserved-storage invariant violation, never lazy OOM. */
+       }
++      /* NEGATIVE: expose W mode before invalidating old W coverage. */
++      while (gc2_tabstamp_dirty(old) != UINT32_MAX) {
++        if (la_cas64(&s->state, &old, (uint64_t)UINT32_MAX, LA_ACQ_REL, LA_ACQ)) break;
++      }
++      gc2_table_coalesce_test_at(g, t, LJ_GC2_TABLE_COALESCE_TEST_POST_MODE);
+       prior = lj_arena_gc2_wide_snapshot(w);
+       for (;;) {
+         uint32_t serial = gc2_tabstamp_dirty(prior.lo);

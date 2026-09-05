@@ -1,0 +1,55 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost.c",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal-cost"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/cost.c",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal-cost",
+      "-DDENSE_W"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+]

@@ -1,0 +1,419 @@
+{
+  "scope": "Read-only verification of existing frozen study plus durable text packaging; no runtime builds/tests or timings rerun.",
+  "original_directory": "/tmp/lj-dense-overflow-20260905-7tl6kcfk",
+  "verification_directory": "/tmp/lj-dense-package-20260905-seoa82sj",
+  "original_manifest_hashes_verified": 112,
+  "original_manifest_items_verified": [
+    "strict/src/lj_arena.c",
+    "strict/src/lj_arena.h",
+    "strict/src/lj_gc2.c",
+    "strict/src/lj_gc2.h",
+    "strict/src/vm_x64.dasc",
+    "strict/src/lj_asm_x86.h",
+    "strict/src/lj_tab.c",
+    "strict/src/lj_meta.c",
+    "normal/src/lj_arena.c",
+    "normal/src/lj_arena.h",
+    "normal/src/lj_gc2.c",
+    "normal/src/lj_gc2.h",
+    "normal/src/vm_x64.dasc",
+    "normal/src/lj_asm_x86.h",
+    "normal/src/lj_tab.c",
+    "normal/src/lj_meta.c",
+    "asan/src/lj_arena.c",
+    "asan/src/lj_arena.h",
+    "asan/src/lj_gc2.c",
+    "asan/src/lj_gc2.h",
+    "asan/src/vm_x64.dasc",
+    "asan/src/lj_asm_x86.h",
+    "asan/src/lj_tab.c",
+    "asan/src/lj_meta.c",
+    "base-normal/src/lj_arena.c",
+    "base-normal/src/lj_arena.h",
+    "base-normal/src/lj_gc2.c",
+    "base-normal/src/lj_gc2.h",
+    "base-normal/src/vm_x64.dasc",
+    "base-normal/src/lj_asm_x86.h",
+    "base-normal/src/lj_tab.c",
+    "base-normal/src/lj_meta.c",
+    "implement.py",
+    "implement-v1.py",
+    "dense-helpers.h",
+    "adapt.py",
+    "coalescing-adapter.c",
+    "traverse-adapter.c",
+    "tnew-original.c",
+    "t-dense-tnew.c",
+    "t-dense-fnew.c",
+    "wide-guards.h",
+    "t-dense-overflow.c",
+    "validate.py",
+    "finalize-adapters.py",
+    "t-dense-fnew-original-failure.c",
+    "t-dense-fnew-settled.c",
+    "traverse-adapter-before-protection.c",
+    "archive-patch.py",
+    "dense-W.patch",
+    "stock.py",
+    "negative.py",
+    "t-dense-negative.c",
+    "negative-inline.patch",
+    "negative-wide.patch",
+    "negative-mode.patch",
+    "t-dense-fnew-consistent.c",
+    "fnew-consistent-setup.patch",
+    "fnew-invalid-allocator-control.c",
+    "validate-fnew.py",
+    "layout.c",
+    "cost.c",
+    "compile-cost.py",
+    "cost-study.py",
+    "cost-counter-diagnostic.c",
+    "finalize-candidate.py",
+    "accessor-comment.patch",
+    "dense-W-candidate.patch",
+    "summarize-cost.py",
+    "finish-evidence.py",
+    "base-stock.py",
+    "strict/src/libluajit.a",
+    "strict/src/luajit",
+    "strict/src/lj_gc2.o",
+    "strict/src/lj_vm.o",
+    "normal/src/libluajit.a",
+    "normal/src/luajit",
+    "normal/src/lj_gc2.o",
+    "normal/src/lj_vm.o",
+    "asan/src/libluajit.a",
+    "asan/src/luajit",
+    "asan/src/lj_gc2.o",
+    "asan/src/lj_vm.o",
+    "base-normal/src/libluajit.a",
+    "base-normal/src/luajit",
+    "base-normal/src/lj_gc2.o",
+    "base-normal/src/lj_vm.o",
+    "strict-overflow",
+    "strict-tnew",
+    "strict-fnew",
+    "strict-traverse",
+    "asan-overflow",
+    "asan-tnew",
+    "asan-fnew",
+    "asan-traverse",
+    "strict-t-dense-fnew-consistent",
+    "asan-t-dense-fnew-consistent",
+    "base-normal-cost",
+    "normal-cost",
+    "strict-results.json",
+    "asan-results.json",
+    "fnew-consistent-results.json",
+    "negative-results.json",
+    "stock-results.json",
+    "cost-results.json",
+    "cost-summary.json",
+    "layout.json",
+    "base-stock-results.json",
+    "audit.md",
+    "dense-W.patch",
+    "dense-W-candidate.patch",
+    "candidate-source-manifest.json"
+  ],
+  "copied_original_text_artifacts": 82,
+  "copied_original_text_bytes": 2329060,
+  "all_original_text_unchanged": true,
+  "source_patch_reconstructions": {
+    "tested": {
+      "patch": "dense-W.patch",
+      "source_sha256": {
+        "src/lj_arena.c": "8f5ed17aed6b4e978afbd02d57f4bea50c7bea413f2c6baf9adecfbbedcbe1b7",
+        "src/lj_arena.h": "bb96ac4858d601bf45c1025dae45857582c8c76f8496f10234ed9199a862bc3d",
+        "src/lj_gc2.c": "760251a22796a7f6976071e82beea821c068d2ad457bb1cce3757bbe89cc90e1",
+        "src/lj_gc2.h": "e638fe043296bc74868746618115c47d2ea0a8f26b27e746f7fcfbc75b313516"
+      }
+    },
+    "candidate": {
+      "patch": "dense-W-candidate.patch",
+      "source_sha256": {
+        "src/lj_arena.c": "8f5ed17aed6b4e978afbd02d57f4bea50c7bea413f2c6baf9adecfbbedcbe1b7",
+        "src/lj_arena.h": "c183dbcc19bab140729f17bb75e322311fe764a293ea195d120071cfe05a2ae0",
+        "src/lj_gc2.c": "760251a22796a7f6976071e82beea821c068d2ad457bb1cce3757bbe89cc90e1",
+        "src/lj_gc2.h": "e638fe043296bc74868746618115c47d2ea0a8f26b27e746f7fcfbc75b313516"
+      }
+    },
+    "comment_only_matches_candidate": true,
+    "negative-inline": {
+      "patch": "negative-inline.patch",
+      "source_sha256": {
+        "src/lj_arena.c": "8f5ed17aed6b4e978afbd02d57f4bea50c7bea413f2c6baf9adecfbbedcbe1b7",
+        "src/lj_arena.h": "bb96ac4858d601bf45c1025dae45857582c8c76f8496f10234ed9199a862bc3d",
+        "src/lj_gc2.c": "bde464de86186b12a833a52308d30ee44e3894dddd3ec4640aa97c3fcd7f3869",
+        "src/lj_gc2.h": "e638fe043296bc74868746618115c47d2ea0a8f26b27e746f7fcfbc75b313516"
+      }
+    },
+    "negative-wide": {
+      "patch": "negative-wide.patch",
+      "source_sha256": {
+        "src/lj_arena.c": "8f5ed17aed6b4e978afbd02d57f4bea50c7bea413f2c6baf9adecfbbedcbe1b7",
+        "src/lj_arena.h": "bb96ac4858d601bf45c1025dae45857582c8c76f8496f10234ed9199a862bc3d",
+        "src/lj_gc2.c": "c3909378ab539db279c2587e5474e73944dad96ae93c1b995f72a3284751a9e0",
+        "src/lj_gc2.h": "e638fe043296bc74868746618115c47d2ea0a8f26b27e746f7fcfbc75b313516"
+      }
+    },
+    "negative-mode": {
+      "patch": "negative-mode.patch",
+      "source_sha256": {
+        "src/lj_arena.c": "8f5ed17aed6b4e978afbd02d57f4bea50c7bea413f2c6baf9adecfbbedcbe1b7",
+        "src/lj_arena.h": "bb96ac4858d601bf45c1025dae45857582c8c76f8496f10234ed9199a862bc3d",
+        "src/lj_gc2.c": "cde7ca0bc4cb568b3773c64bfb344fce6ec568c55539c2978f54b8a35093f8b8",
+        "src/lj_gc2.h": "e638fe043296bc74868746618115c47d2ea0a8f26b27e746f7fcfbc75b313516"
+      }
+    }
+  },
+  "complete_tracked_source_files_per_variant": 224,
+  "source_variants_checked": [
+    "base-normal",
+    "strict",
+    "normal",
+    "asan",
+    "negative-inline",
+    "negative-wide",
+    "negative-mode"
+  ],
+  "result_classifications": {
+    "strict-results.json": {
+      "records": 19,
+      "exit_zero": 19,
+      "diagnostic_only": [
+        "fnew-existing"
+      ],
+      "qualification": "Settled inherited full FNEW setup is not valid protocol evidence; use fnew-consistent-results.json."
+    },
+    "asan-results.json": {
+      "records": 19,
+      "exit_zero": 19,
+      "diagnostic_only": [
+        "fnew-existing"
+      ],
+      "qualification": "Settled inherited full FNEW setup is not valid protocol evidence; use fnew-consistent-results.json."
+    },
+    "negative-results.json": {
+      "records": 9,
+      "expected_assertions": [
+        "test-inline",
+        "test-wide",
+        "test-mode"
+      ]
+    },
+    "fnew-consistent-results.json": {
+      "records": 8,
+      "expected_assertions": [
+        "strict-fnew-invalid-allocator-control",
+        "asan-fnew-invalid-allocator-control"
+      ]
+    },
+    "stock-results.json": {
+      "jit_off": 387,
+      "jit_on": 509,
+      "all_exit_zero": true
+    },
+    "base-stock-results.json": {
+      "jit_off": 387,
+      "jit_on": 509,
+      "all_exit_zero": true
+    }
+  },
+  "cost_samples": 153,
+  "cost_kinds": {
+    "barrier": 21,
+    "plan": 84,
+    "memory": 48
+  },
+  "cost_all_complete_exit_zero": true,
+  "cost_barrier_exact_increments_and_drained": true,
+  "cost_all_recorded_metadata_admissions_succeeded": true,
+  "cost_settled_memory_idle_recovery_zero": true,
+  "cost_no_traversable_huge_w_allocations": true,
+  "regenerated_cost_summary_sha256": "91587a160574356a6614c199e609ad9c391ee8425b61e14d449fefd0806b4d2d",
+  "original_cost_summary_sha256": "91587a160574356a6614c199e609ad9c391ee8425b61e14d449fefd0806b4d2d",
+  "commands": [
+    {
+      "command": [
+        "git",
+        "archive",
+        "d680421c4cb50b85437d88255bc89358c5e3a6b1",
+        "src",
+        "dynasm",
+        "plan/aux/bench",
+        "tests"
+      ],
+      "cwd": "/workspaces/lj-lockless",
+      "exit": 0,
+      "archive_bytes": 13015040,
+      "archive_sha256": "57f35881238401cce559d69f88fdde89d69db1c5f62ea39495a016894f1220fe",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "ls-tree",
+        "-r",
+        "--name-only",
+        "d680421c4cb50b85437d88255bc89358c5e3a6b1",
+        "--",
+        "src",
+        "dynasm"
+      ],
+      "cwd": "/workspaces/lj-lockless",
+      "exit": 0,
+      "stdout": "dynasm/dasm_arm.h\ndynasm/dasm_arm.lua\ndynasm/dasm_arm64.h\ndynasm/dasm_arm64.lua\ndynasm/dasm_mips.h\ndynasm/dasm_mips.lua\ndynasm/dasm_mips64.lua\ndynasm/dasm_ppc.h\ndynasm/dasm_ppc.lua\ndynasm/dasm_proto.h\ndynasm/dasm_x64.lua\ndynasm/dasm_x86.h\ndynasm/dasm_x86.lua\ndynasm/dynasm.lua\nsrc/.gitignore\nsrc/Makefile\nsrc/Makefile.dep\nsrc/host/.gitignore\nsrc/host/README\nsrc/host/buildvm.c\nsrc/host/buildvm.h\nsrc/host/buildvm_asm.c\nsrc/host/buildvm_fold.c\nsrc/host/buildvm_lib.c\nsrc/host/buildvm_libbc.h\nsrc/host/buildvm_peobj.c\nsrc/host/genlibbc.lua\nsrc/host/genminilua.lua\nsrc/host/genversion.lua\nsrc/host/minilua.c\nsrc/jit/.gitignore\nsrc/jit/bc.lua\nsrc/jit/bcsave.lua\nsrc/jit/dis_arm.lua\nsrc/jit/dis_arm64.lua\nsrc/jit/dis_arm64be.lua\nsrc/jit/dis_mips.lua\nsrc/jit/dis_mips64.lua\nsrc/jit/dis_mips64el.lua\nsrc/jit/dis_mips64r6.lua\nsrc/jit/dis_mips64r6el.lua\nsrc/jit/dis_mipsel.lua\nsrc/jit/dis_ppc.lua\nsrc/jit/dis_x64.lua\nsrc/jit/dis_x86.lua\nsrc/jit/dump.lua\nsrc/jit/p.lua\nsrc/jit/v.lua\nsrc/jit/zone.lua\nsrc/lauxlib.h\nsrc/lib_aux.c\nsrc/lib_base.c\nsrc/lib_bit.c\nsrc/lib_buffer.c\nsrc/lib_debug.c\nsrc/lib_ffi.c\nsrc/lib_init.c\nsrc/lib_io.c\nsrc/lib_jit.c\nsrc/lib_math.c\nsrc/lib_os.c\nsrc/lib_package.c\nsrc/lib_string.c\nsrc/lib_table.c\nsrc/lib_threading.c\nsrc/lj_alloc.c\nsrc/lj_alloc.h\nsrc/lj_api.c\nsrc/lj_arch.h\nsrc/lj_arena.c\nsrc/lj_arena.h\nsrc/lj_asm.c\nsrc/lj_asm.h\nsrc/lj_asm_arm.h\nsrc/lj_asm_arm64.h\nsrc/lj_asm_mips.h\nsrc/lj_asm_ppc.h\nsrc/lj_asm_x86.h\nsrc/lj_assert.c\nsrc/lj_atomic.h\nsrc/lj_bc.c\nsrc/lj_bc.h\nsrc/lj_bcdump.h\nsrc/lj_bcread.c\nsrc/lj_bcwrite.c\nsrc/lj_buf.c\nsrc/lj_buf.h\nsrc/lj_carith.c\nsrc/lj_carith.h\nsrc/lj_ccall.c\nsrc/lj_ccall.h\nsrc/lj_ccallback.c\nsrc/lj_ccallback.h\nsrc/lj_cconv.c\nsrc/lj_cconv.h\nsrc/lj_cdata.c\nsrc/lj_cdata.h\nsrc/lj_chan.c\nsrc/lj_chan.h\nsrc/lj_char.c\nsrc/lj_char.h\nsrc/lj_clib.c\nsrc/lj_clib.h\nsrc/lj_cparse.c\nsrc/lj_cparse.h\nsrc/lj_crecord.c\nsrc/lj_crecord.h\nsrc/lj_ctype.c\nsrc/lj_ctype.h\nsrc/lj_debug.c\nsrc/lj_debug.h\nsrc/lj_def.h\nsrc/lj_dispatch.c\nsrc/lj_dispatch.h\nsrc/lj_emit_arm.h\nsrc/lj_emit_arm64.h\nsrc/lj_emit_mips.h\nsrc/lj_emit_ppc.h\nsrc/lj_emit_x86.h\nsrc/lj_err.c\nsrc/lj_err.h\nsrc/lj_errmsg.h\nsrc/lj_ff.h\nsrc/lj_ffrecord.c\nsrc/lj_ffrecord.h\nsrc/lj_frame.h\nsrc/lj_func.c\nsrc/lj_func.h\nsrc/lj_gc.c\nsrc/lj_gc.h\nsrc/lj_gc2.c\nsrc/lj_gc2.h\nsrc/lj_gc2token.h\nsrc/lj_gdbjit.c\nsrc/lj_gdbjit.h\nsrc/lj_ir.c\nsrc/lj_ir.h\nsrc/lj_ircall.h\nsrc/lj_iropt.h\nsrc/lj_jit.h\nsrc/lj_lex.c\nsrc/lj_lex.h\nsrc/lj_lib.c\nsrc/lj_lib.h\nsrc/lj_load.c\nsrc/lj_markword.h\nsrc/lj_mcode.c\nsrc/lj_mcode.h\nsrc/lj_meta.c\nsrc/lj_meta.h\nsrc/lj_mtfields.md\nsrc/lj_obj.c\nsrc/lj_obj.h\nsrc/lj_opt_dce.c\nsrc/lj_opt_fold.c\nsrc/lj_opt_loop.c\nsrc/lj_opt_mem.c\nsrc/lj_opt_narrow.c\nsrc/lj_opt_sink.c\nsrc/lj_opt_split.c\nsrc/lj_oserr.h\nsrc/lj_parse.c\nsrc/lj_parse.h\nsrc/lj_prng.c\nsrc/lj_prng.h\nsrc/lj_profile.c\nsrc/lj_profile.h\nsrc/lj_record.c\nsrc/lj_record.h\nsrc/lj_safepoint.c\nsrc/lj_safepoint.h\nsrc/lj_serialize.c\nsrc/lj_serialize.h\nsrc/lj_snap.c\nsrc/lj_snap.h\nsrc/lj_state.c\nsrc/lj_state.h\nsrc/lj_str.c\nsrc/lj_str.h\nsrc/lj_strfmt.c\nsrc/lj_strfmt.h\nsrc/lj_strfmt_num.c\nsrc/lj_strscan.c\nsrc/lj_strscan.h\nsrc/lj_tab.c\nsrc/lj_tab.h\nsrc/lj_tabtxn.h\nsrc/lj_target.h\nsrc/lj_target_arm.h\nsrc/lj_target_arm64.h\nsrc/lj_target_mips.h\nsrc/lj_target_ppc.h\nsrc/lj_target_x86.h\nsrc/lj_tg.c\nsrc/lj_tg.h\nsrc/lj_tgregistry.h\nsrc/lj_tgslot.h\nsrc/lj_thr.c\nsrc/lj_thr.h\nsrc/lj_trace.c\nsrc/lj_trace.h\nsrc/lj_traceerr.h\nsrc/lj_udata.c\nsrc/lj_udata.h\nsrc/lj_universe.c\nsrc/lj_universe.h\nsrc/lj_vm.h\nsrc/lj_vmevent.c\nsrc/lj_vmevent.h\nsrc/lj_vmmath.c\nsrc/ljamalg.c\nsrc/lua.h\nsrc/lua.hpp\nsrc/luaconf.h\nsrc/luajit.c\nsrc/luajit_rolling.h\nsrc/lualib.h\nsrc/vm_arm.dasc\nsrc/vm_arm64.dasc\nsrc/vm_mips.dasc\nsrc/vm_mips64.dasc\nsrc/vm_ppc.dasc\nsrc/vm_x64.dasc\nsrc/vm_x86.dasc\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "apply",
+        "--check",
+        "/tmp/lj-dense-overflow-20260905-7tl6kcfk/dense-W.patch"
+      ],
+      "cwd": "/tmp/lj-dense-package-20260905-seoa82sj/reconstructed-tested",
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "apply",
+        "/tmp/lj-dense-overflow-20260905-7tl6kcfk/dense-W.patch"
+      ],
+      "cwd": "/tmp/lj-dense-package-20260905-seoa82sj/reconstructed-tested",
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "apply",
+        "--check",
+        "/tmp/lj-dense-overflow-20260905-7tl6kcfk/dense-W-candidate.patch"
+      ],
+      "cwd": "/tmp/lj-dense-package-20260905-seoa82sj/reconstructed-candidate",
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "apply",
+        "/tmp/lj-dense-overflow-20260905-7tl6kcfk/dense-W-candidate.patch"
+      ],
+      "cwd": "/tmp/lj-dense-package-20260905-seoa82sj/reconstructed-candidate",
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "apply",
+        "--check",
+        "/tmp/lj-dense-overflow-20260905-7tl6kcfk/accessor-comment.patch"
+      ],
+      "cwd": "/tmp/lj-dense-package-20260905-seoa82sj/reconstructed-comment",
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "apply",
+        "/tmp/lj-dense-overflow-20260905-7tl6kcfk/accessor-comment.patch"
+      ],
+      "cwd": "/tmp/lj-dense-package-20260905-seoa82sj/reconstructed-comment",
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "apply",
+        "--check",
+        "/tmp/lj-dense-overflow-20260905-7tl6kcfk/negative-inline.patch"
+      ],
+      "cwd": "/tmp/lj-dense-package-20260905-seoa82sj/reconstructed-negative-inline",
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "apply",
+        "/tmp/lj-dense-overflow-20260905-7tl6kcfk/negative-inline.patch"
+      ],
+      "cwd": "/tmp/lj-dense-package-20260905-seoa82sj/reconstructed-negative-inline",
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "apply",
+        "--check",
+        "/tmp/lj-dense-overflow-20260905-7tl6kcfk/negative-wide.patch"
+      ],
+      "cwd": "/tmp/lj-dense-package-20260905-seoa82sj/reconstructed-negative-wide",
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "apply",
+        "/tmp/lj-dense-overflow-20260905-7tl6kcfk/negative-wide.patch"
+      ],
+      "cwd": "/tmp/lj-dense-package-20260905-seoa82sj/reconstructed-negative-wide",
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "apply",
+        "--check",
+        "/tmp/lj-dense-overflow-20260905-7tl6kcfk/negative-mode.patch"
+      ],
+      "cwd": "/tmp/lj-dense-package-20260905-seoa82sj/reconstructed-negative-mode",
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "apply",
+        "/tmp/lj-dense-overflow-20260905-7tl6kcfk/negative-mode.patch"
+      ],
+      "cwd": "/tmp/lj-dense-package-20260905-seoa82sj/reconstructed-negative-mode",
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "python3",
+        "/tmp/lj-dense-package-20260905-seoa82sj/summary-regeneration/summarize-cost.py"
+      ],
+      "cwd": "/tmp/lj-dense-package-20260905-seoa82sj/summary-regeneration",
+      "exit": 0,
+      "stdout": "samples 153 True\nbarrier {'comparison': 'ordinary_base_to_dense', 'left_median_ns': 119.1306, 'right_median_ns': 119.4352, 'paired_percent_median': 0.26232107125072623, 'paired_percent_min': 0.12790353186635794, 'paired_percent_max': 1.0150204901175686}\nbarrier {'comparison': 'dense_ordinary_to_promoted', 'left_median_ns': 119.4352, 'right_median_ns': 192.827, 'paired_percent_median': 61.569251317207716, 'paired_percent_min': 60.2787274035689, 'paired_percent_max': 61.60736585030615}\nplan {'name': 'alloc_tables', 'mode': 'joff', 'base_median_ns': 2262.67, 'dense_median_ns': 2268.94, 'paired_percent_median': 0.2408722669837049, 'paired_percent_min': 0.17139928966480866, 'paired_percent_max': 0.39930663034728475}\nplan {'name': 'alloc_tables', 'mode': 'jon', 'base_median_ns': 1.07, 'dense_median_ns': 1.08, 'paired_percent_median': 0.9345794392523477, 'paired_percent_min': -0.92592592592593, 'paired_percent_max': 1.869158878504673}\nplan {'name': 'tab_insert_newkey', 'mode': 'joff', 'base_median_ns': 993.25, 'dense_median_ns': 1006.0, 'paired_percent_median': 1.328653797944357, 'paired_percent_min': 0.654582074521648, 'paired_percent_max': 1.7658930373360304}\nplan {'name': 'tab_insert_newkey', 'mode': 'jon', 'base_median_ns': 106.25, 'dense_median_ns': 107.25, 'paired_percent_median': 0.9456264775413725, 'paired_percent_min': -1.157407407407407, 'paired_percent_max': 2.5821596244131495}\nplan {'name': 'closures_upval', 'mode': 'joff', 'base_median_ns': 1574.92, 'dense_median_ns': 1577.8, 'paired_percent_median': 0.10224104755796048, 'paired_percent_min': -0.3001238405742179, 'paired_percent_max': 0.36716596155557113}\nplan {'name': 'closures_upval', 'mode': 'jon', 'base_median_ns': 1582.5, 'dense_median_ns': 1585.61, 'paired_percent_median': 0.1079613611970398, 'paired_percent_min': -0.27224602974539325, 'paired_percent_max': 0.59648812084101}\nmemory tables joff\nbase-normal cpu 0.289897815 mapped 41 sidecar 2686976 2687304 RSS retain/delta/free 9260 5768 9008 VmSize 13412 mmapcount/bytes 0 0 promotionRSS None\nnormal cpu 0.290293978 mapped 41 sidecar 5373952 5541232 RSS retain/delta/free 9124 5744 8876 VmSize 16200 mmapcount/bytes 41 5541888 promotionRSS None\nmemory tables jon\nbase-normal cpu 0.115065948 mapped 42 sidecar 2752512 2752848 RSS retain/delta/free 9556 6164 9288 VmSize 13604 mmapcount/bytes 0 0 promotionRSS None\nnormal cpu 0.115729426 mapped 42 sidecar 5505024 5676384 RSS retain/delta/free 9392 6012 9124 VmSize 16524 mmapcount/bytes 42 5677056 promotionRSS None\nmemory insertion joff\nbase-normal cpu 0.078207766 mapped 18 sidecar 1179648 1179792 RSS retain/delta/free 6896 3472 6312 VmSize 10852 mmapcount/bytes 0 0 promotionRSS None\nnormal cpu 0.076561631 mapped 18 sidecar 2359296 2432736 RSS retain/delta/free 6624 3388 6044 VmSize 12140 mmapcount/bytes 18 2433024 promotionRSS None\nmemory insertion jon\nbase-normal cpu 0.026454811 mapped 18 sidecar 1179648 1179792 RSS retain/delta/free 7236 3848 6612 VmSize 11044 mmapcount/bytes 0 0 promotionRSS None\nnormal cpu 0.026665561 mapped 18 sidecar 2359296 2432736 RSS retain/delta/free 7204 3736 6576 VmSize 12332 mmapcount/bytes 18 2433024 promotionRSS None\nmemory closures joff\nbase-normal cpu 1.156576889 mapped 35 sidecar 2293760 2294040 RSS retain/delta/free 8540 5164 8288 VmSize 12644 mmapcount/bytes 0 0 promotionRSS None\nnormal cpu 1.159107545 mapped 35 sidecar 4587520 4730320 RSS retain/delta/free 8476 5092 8224 VmSize 15024 mmapcount/bytes 35 4730880 promotionRSS None\nmemory closures jon\nbase-normal cpu 0.252632989 mapped 35 sidecar 2293760 2294040 RSS retain/delta/free 8836 5448 8640 VmSize 12772 mmapcount/bytes 0 0 promotionRSS None\nnormal cpu 0.252606247 mapped 35 sidecar 4587520 4730320 RSS retain/delta/free 8748 5332 8492 VmSize 15152 mmapcount/bytes 35 4730880 promotionRSS None\nmemory promoted_tables joff\nbase-normal cpu 0.289471881 mapped 41 sidecar 2686976 2687304 RSS retain/delta/free 9204 5756 9052 VmSize 13412 mmapcount/bytes 0 0 promotionRSS 100\nnormal cpu 0.287953402 mapped 41 sidecar 5373952 5541232 RSS retain/delta/free 9120 5732 11228 VmSize 16200 mmapcount/bytes 41 5541888 promotionRSS 2356\nmemory promoted_tables jon\nbase-normal cpu 0.115095336 mapped 42 sidecar 2752512 2752848 RSS retain/delta/free 9568 6208 9400 VmSize 13604 mmapcount/bytes 0 0 promotionRSS 104\nnormal cpu 0.115942048 mapped 42 sidecar 5505024 5676384 RSS retain/delta/free 9396 6040 11488 VmSize 16524 mmapcount/bytes 42 5677056 promotionRSS 2364\n",
+      "stderr": ""
+    }
+  ]
+}

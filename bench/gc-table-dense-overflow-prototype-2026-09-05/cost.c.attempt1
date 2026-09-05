@@ -1,0 +1,134 @@
+#define _GNU_SOURCE
+#include <assert.h>
+#include <inttypes.h>
+#include <malloc.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
+#include <sys/resource.h>
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+#include "luajit.h"
+#include "lj_obj.h"
+#include "lj_arena.h"
+#include "lj_gc2.h"
+#include "lj_tab.h"
+#include "lj_tg.h"
+
+static double cpu_now(void) {
+ struct timespec t; assert(clock_gettime(CLOCK_PROCESS_CPUTIME_ID,&t)==0);
+ return (double)t.tv_sec + (double)t.tv_nsec*1e-9;
+}
+static void script(lua_State *L,const char *s) {
+ if (luaL_dostring(L,s)) { fprintf(stderr,"Lua: %s\n",lua_tostring(L,-1)); abort(); }
+}
+static void memory(global_State *g,const char *stage) {
+ FILE *f; char line[256]; size_t rss=0,vsize=0;
+ struct mallinfo2 mi=mallinfo2();struct rusage ru;
+ uint64_t small=0,traverse=0,side_req=0,side_usable=0,huge=0,wide_req=0,wide_usable=0,denied=0;
+ GC2StatsSnapshot st;memset(&st,0,sizeof(st));
+ f=fopen("/proc/self/status","r");assert(f);
+ while(fgets(line,sizeof(line),f)) { (void)sscanf(line,"VmRSS: %zu kB",&rss); (void)sscanf(line,"VmSize: %zu kB",&vsize); }
+ fclose(f);assert(getrusage(RUSAGE_SELF,&ru)==0);
+ if(g) {
+  HugeTab *tab=(HugeTab *)gc2_small_arena_tab_acq(g);uint32_t cursor=0;void *ptr;LJHugeInfo hi;
+  lj_gc2_stats_snapshot(g,&st);
+  while(tab && lj_arena_hugetab_next(tab,&cursor,&ptr,&hi)) {
+   LJHugeReader r={0};small++;
+   if(hi.flags&LJ_HUGEF_TRAVERSABLE) {traverse++;side_req+=sizeof(LJGC2TabStampArena);}
+   if(lj_arena_hugetab_reader_acquire(tab,ptr,&r,&hi)==LJ_ARENA_HUGE_READER_ACQUIRED) {
+    GCArena *a=(GCArena *)ptr;
+    assert(!lj_arena_ishuge(a));
+    if(lj_arena_flags_acq(a)&LJ_AF_TRAVERSABLE) {
+     LJGC2TabStampArena *s=lj_arena_gc2_tabstamp_acq(a);assert(s);side_usable+=malloc_usable_size(s);
+    }
+    (void)lj_arena_hugetab_reader_release(&r,NULL);
+   } else denied++;
+  }
+  tab=&g->main_tg->huge;cursor=0;
+  while(lj_arena_hugetab_next(tab,&cursor,&ptr,&hi)) {
+   LJHugeReader r={0};huge++;
+#ifdef DENSE_W
+   if(hi.flags&LJ_HUGEF_TRAVERSABLE) wide_req+=sizeof(LJGC2TabWideStamp);
+#endif
+   if(lj_arena_hugetab_reader_acquire(tab,ptr,&r,&hi)==LJ_ARENA_HUGE_READER_ACQUIRED) {
+#ifdef DENSE_W
+    if(hi.flags&LJ_HUGEF_TRAVERSABLE) {
+     LJGC2TabWideStamp *w=lj_arena_gc2_wide_acq(ptr);assert(w);wide_usable+=malloc_usable_size(w);
+    }
+#endif
+    (void)lj_arena_hugetab_reader_release(&r,NULL);
+   } else denied++;
+  }
+ }
+ printf("{\"type\":\"memory\",\"stage\":\"%s\",\"rss_kb\":%zu,\"vsize_kb\":%zu,\"maxrss_kb\":%ld,\"heap_arena\":%zu,\"heap_used\":%zu,\"heap_free\":%zu,\"malloc_mmaps\":%zu,\"malloc_mmap_bytes\":%zu,\"small_mappings\":%"PRIu64",\"traversable_mappings\":%"PRIu64",\"sidecar_requested\":%"PRIu64",\"sidecar_usable\":%"PRIu64",\"huge_mappings\":%"PRIu64",\"huge_w_requested\":%"PRIu64",\"huge_w_usable\":%"PRIu64",\"metadata_denied\":%"PRIu64",\"gc_total\":%"PRIu64",\"live_estimate\":%"PRIu64",\"recovery\":%"PRIu64",\"phase\":%u}\n",stage,rss,vsize,ru.ru_maxrss,mi.arena,mi.uordblks,mi.fordblks,mi.hblks,mi.hblkhd,small,traverse,side_req,side_usable,huge,wide_req,wide_usable,denied,(uint64_t)st.total_bytes,st.live_estimate,st.recovery_items,st.phase);
+ fflush(stdout);
+}
+static void drain(global_State *g,TGState *tg) {
+ uint32_t i;
+ for(i=0;i<128;i++) {
+  (void)lj_gc2_flush_ssb(g,tg);
+  if(gc2_grey_top_acq(g)>=gc2_grey_bottom_acq(g) &&
+     !gc2_ssb_head_acq(g) && !gc2_ssb_drain_acq(g) &&
+     !gc2_recovery_items_acq(g) && lj_tg_ssb_next_acq(tg)==lj_tg_ssb_base_acq(tg)) return;
+  (void)lj_gc2_worker_drain(g,1u<<20);
+ }
+ abort();
+}
+static void barrier_cost(lua_State *L,const char *mode,uint32_t n) {
+ global_State *g=G(L);TGState *tg=G2TG(g);GCtab *t;TValue *array;LJGC2TabStamp *s;
+ uint32_t i;double start,dt;uint64_t dirty;
+ lua_createtable(L,2,0);t=tabV(L->top-1);array=lj_tab_array_acq(t);s=lj_arena_gc2_stamp_acq(t);assert(s);
+ /* Single owner, no running worker or allocation during this private setup. */
+ assert(gc2_phase_acq(g)==LJ_GC2_IDLE);
+ if(!strcmp(mode,"promoted")) {
+#ifdef DENSE_W
+  LJGC2TabWideStamp *w=lj_arena_gc2_wide_acq(t);la_u128 old=lj_arena_gc2_wide_snapshot(w),next={1,7};
+  assert(la_cas128(&w->proof,&old,next));la_store64_rel(&s->state,UINT32_MAX);
+#else
+  abort();
+#endif
+ } else la_store64_rel(&s->state,1);
+ lj_gc2_mark_begin(g);lj_gc2_jit_mark_request_exit(g);gc2_jit_mark_resume_rel(g,0);
+ assert(lj_gc2_markobj(g,obj2gco(t))==1);drain(g,tg);
+ start=cpu_now();
+ for(i=1;i<=n;i++) {
+  setnumV(&array[1],(lua_Number)i);lj_gc2_barrier_tab_g(g,t);
+  if((i&255u)==0)drain(g,tg);
+ }
+ drain(g,tg);dt=cpu_now()-start;
+ dirty=(uint32_t)la_load64_acq(&s->state);
+#ifdef DENSE_W
+ if(dirty==UINT32_MAX)dirty=(uint32_t)lj_arena_gc2_wide_snapshot(lj_arena_gc2_wide_acq(t)).lo;
+#endif
+ assert(dirty==n+1u);assert(numV(&array[1])==(lua_Number)n);
+ assert(!lj_gc2_activation_reclaim_veto(g));assert(gc2_phase_acq(g)==LJ_GC2_MARK);
+ printf("{\"type\":\"barrier\",\"mode\":\"%s\",\"n\":%u,\"cpu_seconds\":%.9f,\"ns_per_op\":%.4f,\"dirty\":%"PRIu64",\"pending\":%u,\"recovery\":%"PRIu64"}\n",mode,n,dt,dt/n*1e9,dirty,gc2_table_rescan_pending_acq(g),gc2_recovery_items_acq(g));
+ (void)lua_gc(L,LUA_GCCOLLECT,0);assert(gc2_phase_acq(g)==LJ_GC2_IDLE);assert(!gc2_recovery_items_acq(g));
+}
+static void memory_work(lua_State *L,const char *mode,uint32_t n) {
+ double start,dt;char source[4096];global_State *g=G(L);
+ memory(g,"opened");
+ if(!strcmp(mode,"tables"))snprintf(source,sizeof(source),"keep={}; for i=1,%u do keep[i]={i,i+1,i+2} end; assert(#keep==%u and keep[%u][3]==%u)",n,n,n,n+2);
+ else if(!strcmp(mode,"insertion"))snprintf(source,sizeof(source),"keep={}; for i=1,%u do keep['k'..i]=i end; local sum=0; for k,v in pairs(keep) do sum=sum+v end; assert(sum==%"PRIu64")",n,(uint64_t)n*(n+1)/2);
+ else if(!strcmp(mode,"closures"))snprintf(source,sizeof(source),"keep={}; for i=1,%u do local x=i; keep[i]=function() x=x+1; return x end end; local sum=0; for i=1,%u do sum=sum+keep[i]() end; assert(sum==%"PRIu64")",n,n,(uint64_t)n*(n+3)/2);
+ else abort();
+ start=cpu_now();script(L,source);dt=cpu_now()-start;
+ printf("{\"type\":\"workload\",\"mode\":\"%s\",\"n\":%u,\"cpu_seconds\":%.9f}\n",mode,n,dt);
+ memory(g,"retained");
+ assert(lua_gc(L,LUA_GCCOLLECT,0)==0);assert(gc2_phase_acq(g)==LJ_GC2_IDLE);memory(g,"retained_collected");
+ script(L,"keep=nil; require('jit').flush()");
+ assert(lua_gc(L,LUA_GCCOLLECT,0)==0);assert(lua_gc(L,LUA_GCCOLLECT,0)==0);
+ assert(gc2_phase_acq(g)==LJ_GC2_IDLE);assert(!gc2_recovery_items_acq(g));memory(g,"released_collected");
+}
+int main(int argc,char **argv) {
+ lua_State *L;uint32_t n=argc>3?(uint32_t)strtoul(argv[3],NULL,10):20000;
+ assert(argc>=3);alarm(60);setvbuf(stdout,NULL,_IOLBF,0);memory(NULL,"before_state");
+ L=luaL_newstate();assert(L);luaL_openlibs(L);
+ if(argc>4 && !strcmp(argv[4],"joff"))assert(luaJIT_setmode(L,0,LUAJIT_MODE_ENGINE|LUAJIT_MODE_OFF));
+ if(!strcmp(argv[1],"barrier"))barrier_cost(L,argv[2],n);else memory_work(L,argv[2],n);
+ lua_close(L);memory(NULL,"after_close");return 0;
+}

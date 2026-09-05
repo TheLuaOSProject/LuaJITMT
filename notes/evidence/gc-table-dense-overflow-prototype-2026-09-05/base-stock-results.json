@@ -1,0 +1,36 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/tests/stock/test",
+    "seconds": 1.3772343499986164,
+    "exit": 0,
+    "status": "complete",
+    "stdout": "387 passed\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/tests/stock/test",
+    "seconds": 1.8350095959995087,
+    "exit": 0,
+    "status": "complete",
+    "stdout": "509 passed\n",
+    "stderr": ""
+  }
+]

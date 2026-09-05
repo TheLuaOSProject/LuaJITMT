@@ -1,0 +1,2 @@
+v1: ValueError locating gc2_table_scan_current: generator used a literal backslash-n instead of newline. No runtime build occurred. Source reset to d680 before reapplying corrected generator.
+strict build1: expected old sidecar-size static assertion still required64KiB; updated to128KiB and added wide-offset64KiB assertion. Inline entry16/token8/header128 invariants unchanged.
