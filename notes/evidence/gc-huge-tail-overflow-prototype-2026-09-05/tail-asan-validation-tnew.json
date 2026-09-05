@@ -1,0 +1,118 @@
+[
+  {
+    "name": "compile-tnew",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "clang",
+      "-O1",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-std=gnu11",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail-asan/src",
+      "-I/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail-asan/tests",
+      "-I/tmp/lj-dense-huge-tail-20260905-djqhqfe8",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/t-dense-tnew.c",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail-asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail-asan-tnew"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.41887191600108054,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "tnew-1536",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail-asan-tnew",
+      "1536"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.010981915998854674,
+    "stdout": "TNEW cell 1536 pending 0: inline reset/wide persistence and promotion/token preservation/neighbor guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "tnew-1537",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail-asan-tnew",
+      "1537"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.010422974000903196,
+    "stdout": "TNEW cell 1537 pending 0: inline reset/wide persistence and promotion/token preservation/neighbor guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "tnew-1536-1",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail-asan-tnew",
+      "1536",
+      "1"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.010326741999961087,
+    "stdout": "TNEW cell 1536 pending 1: inline reset/wide persistence and promotion/token preservation/neighbor guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "tnew-1537-1",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail-asan-tnew",
+      "1537",
+      "1"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.009646511000028113,
+    "stdout": "TNEW cell 1537 pending 1: inline reset/wide persistence and promotion/token preservation/neighbor guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "tnew-existing",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail-asan-tnew",
+      "existing"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.009655236999606132,
+    "stdout": "t-x64-tnew-empty-inline OK: interpreter empty TNEW inline/fallback paths verified\n",
+    "stderr": ""
+  }
+]

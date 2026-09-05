@@ -1,0 +1,2 @@
+error: patch failed: src/lj_arena.c:1928
+error: src/lj_arena.c: patch does not apply

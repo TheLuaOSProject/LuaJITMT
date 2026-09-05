@@ -1,0 +1,13 @@
+compile 0  
+geometry 0 checked physical geometry, full payload bytes, zero W, plain NULL and zero calloc/free
+Huge-tail targeted controls passed
+ 
+bounds 0 logical bounds exclude padding and W; initial tail page untouched
+Huge-tail targeted controls passed
+ 
+resize 0 private direct same-extent W stationary; crossing tail boundary moves/copies only payload
+published traversable resize refuses; plain readers preserve old logical extent through deferred unmap
+Huge-tail targeted controls passed
+ 
+failures -6  tail-targeted: /tmp/lj-dense-huge-tail-20260905-djqhqfe8/t-huge-tail.c:126: failures_transfer: Assertion `lj_arena_huge_map(rs,65393,LJ_AF_TRAVERSABLE)==NULL' failed.
+

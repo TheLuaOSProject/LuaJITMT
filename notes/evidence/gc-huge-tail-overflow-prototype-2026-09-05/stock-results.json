@@ -1,0 +1,70 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/calloc-normal/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/calloc-normal/tests/stock/test",
+    "exit": 0,
+    "status": "complete",
+    "seconds": 1.3889079060008953,
+    "stdout": "387 passed\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/calloc-normal/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/calloc-normal/tests/stock/test",
+    "exit": 0,
+    "status": "complete",
+    "seconds": 1.8135246820002067,
+    "stdout": "509 passed\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail-normal/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail-normal/tests/stock/test",
+    "exit": 0,
+    "status": "complete",
+    "seconds": 1.4303208199999062,
+    "stdout": "387 passed\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail-normal/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail-normal/tests/stock/test",
+    "exit": 0,
+    "status": "complete",
+    "seconds": 1.869627815000058,
+    "stdout": "509 passed\n",
+    "stderr": ""
+  }
+]

@@ -1,0 +1,14 @@
+compile 0  
+geometry 0 checked physical geometry, full payload bytes, zero W, plain NULL and zero calloc/free
+Huge-tail targeted controls passed
+ 
+bounds 0 logical bounds exclude padding and W; initial tail page untouched
+Huge-tail targeted controls passed
+ 
+resize 0 private direct same-extent W stationary; crossing tail boundary moves/copies only payload
+published traversable resize refuses; plain readers preserve old logical extent through deferred unmap
+Huge-tail targeted controls passed
+ 
+failures 0 map/sidecar/insertion/replacement failures, transfer and terminal whole-map cleanup verified
+Huge-tail targeted controls passed
+ 

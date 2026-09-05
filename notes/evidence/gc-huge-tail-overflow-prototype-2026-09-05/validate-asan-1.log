@@ -1,0 +1,29 @@
+compile-overflow 0
+overflow-all 0
+overflow-existing 0
+compile-tnew 1
+ /tmp/lj-dense-huge-tail-20260905-djqhqfe8/t-dense-tnew.c:2:10: fatal error: 'tnew-original.c' file not found
+    2 | #include "tnew-original.c"
+      |          ^~~~~~~~~~~~~~~~~
+1 error generated.
+
+compile-fnew 0
+fnew-1536 0
+fnew-1537 0
+compile-traverse 0
+traverse-all 0
+compile-recovery 0
+recovery-all 0
+compile-guard 0
+guard-all 0
+compile-arena-huge 0
+arena-huge-all 0
+compile-arena-hugetab 0
+arena-hugetab-all 0
+compile-arena-realloc 0
+arena-realloc-all 0
+compile-arena-gcsweep 0
+arena-gcsweep-all 0
+compile-terminal-orphan 0
+terminal-orphan-all 0
+finished tail-asan

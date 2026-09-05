@@ -1,0 +1,87 @@
+--- a/src/lj_arena.c
++++ b/src/lj_arena.c
+@@ -1990,10 +1990,14 @@
+ 
+ size_t lj_arena_huge_mapsize(size_t size)
+ {
+-  size_t need = size + sizeof(GCAhdr);
++  const size_t overhead = sizeof(GCAhdr) + sizeof(LJGC2TabWideStamp);
++  size_t need;
++  /* Size-only physical geometry applies to both immutable mapping kinds.
++  ** HugeTab still publishes the exact logical payload size, never padding/W. */
+   if (size <= LJ_HUGE_THRESHOLD ||
+-      need < size || need > ~(size_t)LJ_ARENA_MASK)
+-    return 0;
++      size > ~(size_t)LJ_ARENA_MASK - overhead)
++    return 0;
++  need = size + overhead;
+   return (need + LJ_ARENA_MASK) & ~(size_t)LJ_ARENA_MASK;
+ }
+ 
+@@ -2011,13 +2015,12 @@
+     (flags & (LJ_AF_FLAG_MASK & ~LJ_AF_EMPTY_RECLAIMED));
+   a->hdr.live_cells = (uint32_t)(mapsize >> LJ_CELL_SHIFT);
+   if (flags & LJ_AF_TRAVERSABLE) {
+-    LJGC2TabWideStamp *wide = NULL;
+-    if (!arena_test_gc2_sidecar_alloc_fails())
+-      wide = (LJGC2TabWideStamp *)calloc(1, sizeof(*wide));
+-    if (!wide) {
+-      arena_unmap_aligned(a, mapsize);
+-      return NULL;  /* No mapping, header or body has been published. */
+-    }
++    LJGC2TabWideStamp *wide = (LJGC2TabWideStamp *)
++      ((char *)a + mapsize - sizeof(LJGC2TabWideStamp));
++    /* arena_map_aligned returns fresh anonymous zero-filled storage. This
++    ** initializes the whole W before publication without touching its page.
++    ** W stays at this physical tail across same-extent logical reallocs.
++    ** No recycled/dirty mapping may enter this private initialization path. */
+     la_storeptr_rel((void **)&a->hdr.gc2_huge_wide, wide);
+   }
+   return (void *)((char *)a + sizeof(GCAhdr));
+@@ -2034,7 +2037,6 @@
+     ** erasing a live scan owner if a terminal caller regresses. */
+     if (lj_arena_gc2_tokens_empty_acq(a) &&
+ 	lj_arena_gc2_desc_mapping_clear_acq(a)) {
+-      free(la_loadptr_acq((void *const *)&a->hdr.gc2_huge_wide));
+       arena_unmap_aligned((void *)a, mapsize);
+     }
+   }
+@@ -2047,7 +2049,6 @@
+   size_t mapsize = lj_arena_huge_mapsize(size);
+   if (p && mapsize) {
+     GCArena *a = lj_arena_of(p);
+-    free(la_loadptr_acq((void *const *)&a->hdr.gc2_huge_wide));
+     arena_unmap_aligned((void *)a, mapsize);
+   }
+   errno = olderr;
+--- a/src/lj_arena.h
++++ b/src/lj_arena.h
+@@ -113,6 +113,7 @@
+   LJGC2TabWideStamp wide[LJ_ARENA_CELLS];
+ } LJGC2TabStampArena;
+ 
++LJ_STATIC_ASSERT(sizeof(LJGC2TabWideStamp) == 16u);
+ LJ_STATIC_ASSERT(sizeof(LJGC2TabStamp) == 16u);
+ LJ_STATIC_ASSERT(offsetof(LJGC2TabStamp, token) == 8u);
+ 
+@@ -165,7 +166,8 @@
+   uint32_t sweep_epoch;
+   uint32_t live_cells;
+   /* Immutable mapping kind selects this union. Small traversable mappings
+-  ** own the full inline+wide cell sidecar; huge mappings own one reserved W.
++  ** own the full inline+wide cell sidecar; huge mappings own one reserved W
++  ** in their physical mapping tail.
+   ** Plain mappings leave the pointer NULL. Both arms live until final unmap. */
+   union {
+     LJGC2TabStampArena *gc2_tabstamp;
+@@ -625,6 +627,10 @@
+ LJ_FUNC int lj_arena_gc2_tokens_empty_acq(const GCArena *a);
+ LJ_FUNC GCArena *lj_arena_map(PRNGState *rs, uint32_t flags);
+ LJ_FUNC void lj_arena_unmap(GCArena *a);
++/* Physical extent for either Huge kind: header + exact logical payload +
++** one aligned 16-byte tail reservation, rounded to the arena quantum.
++** The plain kind leaves its W pointer NULL. Neither padding nor W belongs
++** to HugeTab logical lookup, vector bounds, copying or live-byte accounting. */
+ LJ_FUNC size_t lj_arena_huge_mapsize(size_t size);
+ LJ_FUNC void *lj_arena_huge_map(PRNGState *rs, size_t size, uint32_t flags);
+ LJ_FUNC void lj_arena_huge_unmap(void *p, size_t size);

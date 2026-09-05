@@ -1,0 +1,11 @@
+--- a/src/lj_arena.c
++++ b/src/lj_arena.c
+@@ -8678,7 +8678,7 @@
+   ** table owner has unmapped p. The direct API still assumes the caller owns
+   ** p while copying; arena_allocf adds a BUSY pin for shared huge mappings. */
+   if (oldhuge && nsize > LJ_HUGE_THRESHOLD &&
+-      lj_arena_huge_mapsize(osize) == lj_arena_huge_mapsize(nsize))
++      ((osize+sizeof(GCAhdr)+LJ_ARENA_MASK)&~(size_t)LJ_ARENA_MASK) == ((nsize+sizeof(GCAhdr)+LJ_ARENA_MASK)&~(size_t)LJ_ARENA_MASK))
+     return p;
+   if (oldhuge || nsize > LJ_HUGE_THRESHOLD) {
+     size_t csize = osize < nsize ? osize : nsize;

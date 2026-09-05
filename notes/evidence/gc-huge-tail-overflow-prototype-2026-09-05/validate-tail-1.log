@@ -1,0 +1,34 @@
+compile-overflow 0
+overflow-all 0
+overflow-existing 0
+compile-tnew 1
+ /tmp/lj-dense-huge-tail-20260905-djqhqfe8/t-dense-tnew.c:2:10: fatal error: tnew-original.c: No such file or directory
+    2 | #include "tnew-original.c"
+      |          ^~~~~~~~~~~~~~~~~
+compilation terminated.
+
+compile-fnew 0
+fnew-1536 0
+fnew-1537 0
+compile-traverse 0
+traverse-all 0
+compile-recovery 0
+recovery-all 0
+compile-guard 0
+guard-all 0
+compile-arena-huge 0
+arena-huge-all 0
+compile-arena-hugetab 0
+arena-hugetab-all 0
+compile-arena-realloc 0
+arena-realloc-all 0
+compile-arena-gcsweep 0
+arena-gcsweep-all 0
+compile-terminal-orphan 1
+ /usr/bin/ld: /tmp/ccjFgjgo.o: in function `__wrap_lj_arena_hugetab_transfer':
+/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail/tests/t-tg-terminal-orphan.c:48:(.text+0x1b9): undefined reference to `__real_lj_arena_hugetab_transfer'
+/usr/bin/ld: /tmp/ccjFgjgo.o: in function `__wrap_munmap':
+/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail/tests/t-tg-terminal-orphan.c:60:(.text+0x1ea): undefined reference to `__real_munmap'
+collect2: error: ld returned 1 exit status
+
+finished tail

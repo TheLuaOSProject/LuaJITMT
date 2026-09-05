@@ -1,0 +1,11 @@
+--- a/src/lj_gc2.c
++++ b/src/lj_gc2.c
+@@ -19480,6 +19480,8 @@
+     goto out_lease;
+   }
+   if (acquired == LJ_ARENA_HUGE_TOKEN_LEASE_DEFERRED) {
++    /* NEGATIVE: header-only lease is incorrectly used as W/body proof. */
++    (void)gc2_table_authority(g, (GCtab *)p);
+     /* DEFER_FREE is the irreversible logical-free LP. Only the fixed mapping
+     ** header is legal here: no GC header, mark bit, type, table field or child
+     ** is sampled. Exact completion lets the final lease release hand the

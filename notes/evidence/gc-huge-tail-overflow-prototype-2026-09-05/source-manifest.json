@@ -1,0 +1,48 @@
+{
+  "base": "28de50a622e489019fa22845d6454e029b210582",
+  "parent_patch_sha256": "424a3f5ebcf908e51a4a54fe6faed00947fb1593135ca2e89f86d406d1b65e20",
+  "variants": {
+    "calloc": {
+      "files": [
+        {
+          "path": "src/lj_arena.c",
+          "sha256": "71f2d27e69370dc65ed8b699fc2ea5406c68d72be0d386c210dc0c3ecac8f04f"
+        },
+        {
+          "path": "src/lj_arena.h",
+          "sha256": "1f66a6bde41e65546d9007179bd74f4f9d54f2c7a736e0c369ee451a4ec3bcd1"
+        },
+        {
+          "path": "src/lj_gc2.c",
+          "sha256": "5557bc243f94f5d310287494cc3560d91931455eaa8338ba480f84a33edf45a1"
+        },
+        {
+          "path": "src/lj_gc2.h",
+          "sha256": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9"
+        }
+      ],
+      "patch_sha256": "a4d6e998cce1ebe372f0a5155896662b9eb9a3a6f377340a24fa9e76898c3a28"
+    },
+    "tail": {
+      "files": [
+        {
+          "path": "src/lj_arena.c",
+          "sha256": "b90b713ca6183ec36ca594c16c37d110e87fcebd815aa3f207da3d3f4be83973"
+        },
+        {
+          "path": "src/lj_arena.h",
+          "sha256": "c1e19e04c5a65aa05f7f37a195864995988610f06b4fb9ec897405982a4cd1c8"
+        },
+        {
+          "path": "src/lj_gc2.c",
+          "sha256": "5557bc243f94f5d310287494cc3560d91931455eaa8338ba480f84a33edf45a1"
+        },
+        {
+          "path": "src/lj_gc2.h",
+          "sha256": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9"
+        }
+      ],
+      "patch_sha256": "dca24e13fdc47d886a1ffc07b42a604c4e430090fa5f2fd9b1f8111678a8ee4a"
+    }
+  }
+}

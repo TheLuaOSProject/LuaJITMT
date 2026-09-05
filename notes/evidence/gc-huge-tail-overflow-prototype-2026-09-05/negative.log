@@ -1,0 +1,38 @@
+build-old-size 0 make: Entering directory '/tmp/lj-dense-huge-tail-20260905-djqhqfe8/negative-old-size/src'
+CC        lj_arena.o
+AR        libluajit.a
+LINK      luajit
+OK        Successfully built LuaJIT
+make: Leaving directory '/tmp/lj-dense-huge-tail-20260905-djqhqfe8/negative-old-size/src'
+ 
+compile-old-size 0  
+test-old-size -6  negative-old-size-fixture: /tmp/lj-dense-huge-tail-20260905-djqhqfe8/t-huge-tail.c:54: wide_is: Assertion `actual.lo==expected.lo && actual.hi==expected.hi' failed.
+
+build-old-realloc 0 make: Entering directory '/tmp/lj-dense-huge-tail-20260905-djqhqfe8/negative-old-realloc/src'
+CC        lj_arena.o
+AR        libluajit.a
+LINK      luajit
+OK        Successfully built LuaJIT
+make: Leaving directory '/tmp/lj-dense-huge-tail-20260905-djqhqfe8/negative-old-realloc/src'
+ 
+compile-old-realloc 0  
+test-old-realloc -6  negative-old-realloc-fixture: /tmp/lj-dense-huge-tail-20260905-djqhqfe8/t-huge-tail.c:113: direct_resize: Assertion `q && q!=p' failed.
+
+build-body-proof 0 make: Entering directory '/tmp/lj-dense-huge-tail-20260905-djqhqfe8/negative-body-proof/src'
+CC        lj_gc2.o
+AR        libluajit.a
+LINK      luajit
+OK        Successfully built LuaJIT
+make: Leaving directory '/tmp/lj-dense-huge-tail-20260905-djqhqfe8/negative-body-proof/src'
+ 
+compile-body-proof 0  
+test-body-proof -11  
+stack-body-proof 0  des=...) at /tmp/lj-dense-huge-tail-20260905-djqhqfe8/negative-body-proof/src/lj_atomic.h:87
+#1  lj_arena_gc2_wide_snapshot (w=<optimized out>) at /tmp/lj-dense-huge-tail-20260905-djqhqfe8/negative-body-proof/src/lj_arena.h:123
+#2  gc2_table_authority (g=0x7ffff7c90130, t=0x7ffff6930080) at lj_gc2.c:15564
+#3  gc2_table_token_scan_huge_candidate (g=g@entry=0x7ffff7c90130, tg=<optimized out>, slot=slot@entry=38589, phase=phase@entry=1) at lj_gc2.c:19484
+#4  0x00005555555c230d in gc2_table_token_scan_huge_target (g=0x7ffff7c90130, target=0x7ffff6930080) at lj_gc2.c:20386
+#5  lj_gc2_test_table_token_scan_one (g=g@entry=0x7ffff7c90130, t=t@entry=0x7ffff6930080) at lj_gc2.c:20435
+#6  0x000055555558a47a in test_table_token_huge_phase_behavior (L=L@entry=0x7ffff7c90080, g=g@entry=0x7ffff7c90130, tg=tg@entry=0x7ffff7c92d20) at /tmp/lj-dense-huge-tail-20260905-djqhqfe8/traverse-adapter.c:5779
+#7  0x000055555556e533 in main () at /tmp/lj-dense-huge-tail-20260905-djqhqfe8/traverse-adapter.c:9567
+ 

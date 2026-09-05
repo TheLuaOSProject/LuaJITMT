@@ -1,0 +1,21 @@
+--- a/src/lj_arena.c
++++ b/src/lj_arena.c
+@@ -1990,15 +1990,9 @@
+ 
+ size_t lj_arena_huge_mapsize(size_t size)
+ {
+-  const size_t overhead = sizeof(GCAhdr) + sizeof(LJGC2TabWideStamp);
+-  size_t need;
+-  /* Size-only physical geometry applies to both immutable mapping kinds.
+-  ** HugeTab still publishes the exact logical payload size, never padding/W. */
+-  if (size <= LJ_HUGE_THRESHOLD ||
+-      size > ~(size_t)LJ_ARENA_MASK - overhead)
+-    return 0;
+-  need = size + overhead;
+-  return (need + LJ_ARENA_MASK) & ~(size_t)LJ_ARENA_MASK;
++ size_t need=size+sizeof(GCAhdr);
++ if(size<=LJ_HUGE_THRESHOLD || need<size || need>~(size_t)LJ_ARENA_MASK)return 0;
++ return (need+LJ_ARENA_MASK)&~(size_t)LJ_ARENA_MASK;
+ }
+ 
+ void *lj_arena_huge_map(PRNGState *rs, size_t size, uint32_t flags)

@@ -1,0 +1,117 @@
+[
+  {
+    "name": "compile",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "gcc",
+      "-O2",
+      "-std=gnu11",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail/src",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/t-huge-tail.c",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=mmap",
+      "-Wl,--wrap=mmap64",
+      "-Wl,--wrap=munmap",
+      "-Wl,--wrap=calloc",
+      "-Wl,--wrap=free",
+      "-o",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail-targeted"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.20694913800070935,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "geometry",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail-targeted",
+      "geometry"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.0047745230003783945,
+    "stdout": "checked physical geometry, full payload bytes, zero W, plain NULL and zero calloc/free\nHuge-tail targeted controls passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "payload",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail-targeted",
+      "payload"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.0011482919999252772,
+    "stdout": "final advertised payload byte leaves W intact\nHuge-tail targeted controls passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "bounds",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail-targeted",
+      "bounds"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.0011109339993709,
+    "stdout": "logical bounds exclude padding and W; initial tail page untouched\nHuge-tail targeted controls passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "resize",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail-targeted",
+      "resize"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.001212208999277209,
+    "stdout": "private direct same-extent W stationary; crossing tail boundary moves/copies only payload\npublished traversable resize refuses; plain readers preserve old logical extent through deferred unmap\nHuge-tail targeted controls passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "failures",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-dense-huge-tail-20260905-djqhqfe8/tail-targeted",
+      "failures"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.0011743300001398893,
+    "stdout": "map/sidecar/insertion/replacement failures, transfer and terminal whole-map cleanup verified\nHuge-tail targeted controls passed\n",
+    "stderr": ""
+  }
+]
