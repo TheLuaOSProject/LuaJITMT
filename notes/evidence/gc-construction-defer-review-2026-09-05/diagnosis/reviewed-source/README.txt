@@ -1,0 +1,1 @@
+Exact selected source inputs from frozen initial admission candidate, base 597b8705208957ade8465416da30976ab9b52195 plus its three-file prototype. See source-identity.json for all 807 inputs. No runtime source edits. All line references in HANDOFF.md and PROPOSAL.md refer to these files. Four and six helper builds used byte-identical inputs.

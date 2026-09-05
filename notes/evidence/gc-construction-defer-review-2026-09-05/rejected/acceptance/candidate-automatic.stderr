@@ -1,0 +1,1 @@
+candidate-t-owner-defer: /tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/acceptance/t-owner-defer.c:123: main: Assertion `result == -1 && elapsed < UINT64_C(1000000000)' failed.

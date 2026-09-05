@@ -1,0 +1,98 @@
+[
+  {
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-four/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-four/tests/t-func-construction-anchor.c",
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-four/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/four-observation/debug-six-fixture"
+    ],
+    "exit_code": 0,
+    "seconds": 0.18395459100429434,
+    "stdout": "compile.stdout",
+    "stderr": "compile.stderr",
+    "cwd": "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-four",
+    "LUA_PATH": "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-four/src/?.lua;/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-four/tests/lib/?.lua;;",
+    "identities": {
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/four-observation/debug-six-fixture": {
+        "sha256": "6e27255e83286816d0f258c9d41b49900ce82ebba513fff0d86f31f1033f333a",
+        "bytes": 14056696
+      },
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-four/tests/t-func-construction-anchor.c": {
+        "sha256": "42e9d47359fb27565565fe07678abbc8de7abf119226075cab3a1142768a6f0f",
+        "bytes": 9458
+      },
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-four/src/libluajit.a": {
+        "sha256": "6e30853b82cdd37ada92d30a4caebd095a48814cf62fd99f303f0534e5a17de4",
+        "bytes": 30945034
+      },
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/four-observation/inspect.py": {
+        "sha256": "c865e3ef8c0487909adebc7a91bc3e57f01716bc0e42666d9c64bfb9ecc0c9cd",
+        "bytes": 4115
+      },
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/four-observation/debug.gdb": {
+        "sha256": "9ec9c070179179b5f7909c3d862db165cfaff3bb899f3254140224345a81a248",
+        "bytes": 204
+      }
+    }
+  },
+  {
+    "argv": [
+      "gdb",
+      "--batch",
+      "-x",
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/four-observation/debug.gdb",
+      "--args",
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/four-observation/debug-six-fixture"
+    ],
+    "exit_code": 0,
+    "seconds": 3.1695831030010595,
+    "stdout": "debug.stdout",
+    "stderr": "debug.stderr",
+    "capture_seen": true,
+    "interrupted": true,
+    "observation_seconds_after_capture": 3,
+    "note": "Read-only debugger observation. A debugger exit 0 is not a fixture pass.",
+    "cwd": "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-four",
+    "LUA_PATH": "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-four/src/?.lua;/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-four/tests/lib/?.lua;;",
+    "identities": {
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/four-observation/debug-six-fixture": {
+        "sha256": "6e27255e83286816d0f258c9d41b49900ce82ebba513fff0d86f31f1033f333a",
+        "bytes": 14056696
+      },
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-four/tests/t-func-construction-anchor.c": {
+        "sha256": "42e9d47359fb27565565fe07678abbc8de7abf119226075cab3a1142768a6f0f",
+        "bytes": 9458
+      },
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-four/src/libluajit.a": {
+        "sha256": "6e30853b82cdd37ada92d30a4caebd095a48814cf62fd99f303f0534e5a17de4",
+        "bytes": 30945034
+      },
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/four-observation/inspect.py": {
+        "sha256": "c865e3ef8c0487909adebc7a91bc3e57f01716bc0e42666d9c64bfb9ecc0c9cd",
+        "bytes": 4115
+      },
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/four-observation/debug.gdb": {
+        "sha256": "9ec9c070179179b5f7909c3d862db165cfaff3bb899f3254140224345a81a248",
+        "bytes": 204
+      }
+    }
+  }
+]

@@ -1,0 +1,24 @@
+{
+  "argv": [
+    "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers-safety-t-func-construction-anchor"
+  ],
+  "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers",
+  "exit_code": 0,
+  "seconds": 0.01594395199936116,
+  "timeout_seconds": 60,
+  "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/src/?.lua;;",
+  "identities": {
+    "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers-safety-t-func-construction-anchor": {
+      "sha256": "1a2e8252bc2b5656da9a002263c83b4e20f1bfdb1a6962495f979802c61eea5c",
+      "bytes": 2072424
+    },
+    "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/src/libluajit.a": {
+      "sha256": "89b9ecfc5e7b4ea489d530ba6a887f98e846eb5d3ad8bd43851705674a499cef",
+      "bytes": 2974962
+    },
+    "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/tests/t-func-construction-anchor.c": {
+      "sha256": "42e9d47359fb27565565fe07678abbc8de7abf119226075cab3a1142768a6f0f",
+      "bytes": 9458
+    }
+  }
+}

@@ -80,7 +80,7 @@ are verified reasons the full goal is still open:
 | Table resize | Structural owner plus source `FORWARD` can strand the only value in an owner's local variable; descriptor migration is dormant | Durable exact payloads, helpable migration/publication, GC and native grace |
 | Descriptor installation | Separate capacity-shadow store can corrupt a winning descriptor before the losing ownership CAS | Publish control and capacity in one atomic pair; deterministic competing-generation test |
 | Automatic GC | Durable IDLE requests now enter at safe boundaries; public control survives delayed attachment stores; worker-enabled cycles still miss SWEEP completion bounds | Resolve worker completion and unfinished-owner deferral, then complete asynchronous phase ownership; retain independent finalizer suppression |
-| Closure construction | A test-only nested full collect repeatedly revisits a real unfinished closure whose constructor cannot resume until that call returns | Return deferred with exact allocation/retry authority preserved, then prove completion after publication/cancellation and useful progress for other owners |
+| Closure construction | A test-only nested full collect revisits an unfinished closure; the first deferral candidate stops that wait but starves later eligible TGs | Preserve construction/retry authority, prove completion after publish/cancel, and provide fair bounded owner traversal across work-budget boundaries |
 | Native acknowledgement | Completed exact owner-root actions can release through the unique remote executor; local/duplicate and broader actions still hold | Replace mutable-root borrowing and retain exact completion authority; local native-depth polls can overlap a remote pre-claim scan |
 | First MT attachment | Mode-0 traces omitted the TG request poll and real attachment waited for natural exit | Every XPOLL now observes the TG request; the larger attachment/flush ownership dependencies still require asynchronous completion |
 | Worker scheduling | MARK-close ownership loss can be reported as progress and cause repeated drain-loop execution | Return/defer without false progress or peer sleep; preserve durable retry |
@@ -341,6 +341,13 @@ controls and post-fix completion tests:
   processes still miss SWEEP completion. Seventy matched cost processes show
   no measured increase in selected allocation/arithmetic/FFI cases. See
   `notes/gc-auto-control-2026-09-05.md`.
+- The first unfinished-constructor deferral candidate remains rejected. It
+  preserves exact construction state and permits completion after publication
+  or cancellation, but a real tail constructor monopolizes all 64 subsequent
+  drains and a two-worker window while another eligible TG gets no arena
+  completion. Preserve this counterexample when adding a bounded continuation
+  between owner turns. See
+  `notes/gc-construction-defer-review-2026-09-05.md`.
 - `1bce0fa5`: promote exhausted inline table dirty authority into pre-reserved
   persistent wide proof, retaining common stamp/token geometry. Small mappings
   use a dense sidecar plane and Huge mappings use checked tail reservation.

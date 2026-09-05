@@ -1,0 +1,72 @@
+[
+  {
+    "name": "candidate-build",
+    "argv": [
+      "make",
+      "-C",
+      "src",
+      "-j4",
+      "BUILDMODE=static",
+      "XCFLAGS=-DLUA_USE_ASSERT -DLUA_USE_APICHECK -DLJ_GC2_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_FUNC_TEST_HELPERS -DLJ_UDATA_TEST_HELPERS -DLJ_STR_TEST_HELPERS",
+      "TARGET_STRIP=:"
+    ],
+    "cwd": "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate",
+    "LUA_PATH": "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/src/?.lua;/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/tests/lib/?.lua;;",
+    "timeout_seconds": 120,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 8.474315742001636,
+    "stdout": "candidate-build.stdout",
+    "stderr": "candidate-build.stderr"
+  },
+  {
+    "name": "candidate-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/tests/t-func-construction-anchor.c",
+      "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate-t-func-construction-anchor"
+    ],
+    "cwd": "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate",
+    "LUA_PATH": "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/src/?.lua;/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/tests/lib/?.lua;;",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.16390574799879687,
+    "stdout": "candidate-compile.stdout",
+    "stderr": "candidate-compile.stderr"
+  },
+  {
+    "name": "candidate-fixture",
+    "argv": [
+      "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate-t-func-construction-anchor"
+    ],
+    "cwd": "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate",
+    "LUA_PATH": "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/src/?.lua;/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/tests/lib/?.lua;;",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.015469386999029666,
+    "stdout": "candidate-fixture.stdout",
+    "stderr": "candidate-fixture.stderr"
+  }
+]

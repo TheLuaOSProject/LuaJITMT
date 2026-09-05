@@ -1,0 +1,204 @@
+{
+  "status": "frozen first focused checkpoint; broader acceptance evidence pending",
+  "package": "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk",
+  "artifacts": [
+    {
+      "path": "FOCUSED-HANDOFF.md",
+      "bytes": 3375,
+      "sha256": "da547046851b4fbcc7f67992fff9b526d5ee6814c16b420dba8f777ae7647879",
+      "storage": "text"
+    },
+    {
+      "path": "baseline-compile.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "storage": "text"
+    },
+    {
+      "path": "baseline-compile.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "storage": "text"
+    },
+    {
+      "path": "baseline-fixture.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "storage": "text"
+    },
+    {
+      "path": "baseline-fixture.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "storage": "text"
+    },
+    {
+      "path": "baseline-focused-identities.json",
+      "bytes": 612,
+      "sha256": "79db2f8901527aab225a1e65fbcd08c841336cd699570490ca8c1652564661c4",
+      "storage": "text"
+    },
+    {
+      "path": "baseline-focused-results.json",
+      "bytes": 1902,
+      "sha256": "6d3d1a98cea40d69db01b65c3be0d6f4788462b8acba3725e2bf4967b2d39472",
+      "storage": "text"
+    },
+    {
+      "path": "baseline-t-func-construction-anchor",
+      "bytes": 2006424,
+      "sha256": "a7ba877afa0634f7157930990f9b8d88622d7112cea1b6a2fbf42e9b5ce8705e",
+      "storage": "hash-only"
+    },
+    {
+      "path": "candidate/src/libluajit.a",
+      "bytes": 2976886,
+      "sha256": "1af3f648f2a010f3b49c5d9f9a910f969646b647ca1cb9653229f2066bbf0944",
+      "storage": "hash-only"
+    },
+    {
+      "path": "candidate/src/lj_gc.c",
+      "bytes": 195241,
+      "sha256": "0d71c5c4cc1ee42c60ca8f2e6c04931723c8d5fff093aac3b073b4c74bc4edf0",
+      "storage": "text"
+    },
+    {
+      "path": "candidate/src/lj_gc.h",
+      "bytes": 22424,
+      "sha256": "7608931249f84498b743d8b354edd15230162704e08881eef48a83030c9f2d0a",
+      "storage": "text"
+    },
+    {
+      "path": "candidate/src/lj_gc2.c",
+      "bytes": 768162,
+      "sha256": "4456088d54b1e2a41be345b8b44210effcd3aafdf371c1a67ab7ac89551256ed",
+      "storage": "text"
+    },
+    {
+      "path": "candidate/src/luajit",
+      "bytes": 2005936,
+      "sha256": "38c661792962b2e736c9b2f07b60b2ecc3593aa6075d20cab22f8a08f59326b1",
+      "storage": "hash-only"
+    },
+    {
+      "path": "candidate/tests/t-func-construction-anchor.c",
+      "bytes": 9458,
+      "sha256": "42e9d47359fb27565565fe07678abbc8de7abf119226075cab3a1142768a6f0f",
+      "storage": "text"
+    },
+    {
+      "path": "candidate-build.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "storage": "text"
+    },
+    {
+      "path": "candidate-build.stdout",
+      "bytes": 2323,
+      "sha256": "f7b8ef78df1b2eadc4b115093624f7b302a63a418602a178d0dbb3ccb8711596",
+      "storage": "text"
+    },
+    {
+      "path": "candidate-compile.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "storage": "text"
+    },
+    {
+      "path": "candidate-compile.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "storage": "text"
+    },
+    {
+      "path": "candidate-fixture.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "storage": "text"
+    },
+    {
+      "path": "candidate-fixture.stdout",
+      "bytes": 30,
+      "sha256": "ca4f3984a265b2a4e4f01499e99c8b05517784d8c0d6f323aceba22f342b4f0a",
+      "storage": "text"
+    },
+    {
+      "path": "candidate-focused-identities.json",
+      "bytes": 591,
+      "sha256": "8d8a5092166c44407c9d6f3d5a668f2424186fa94ea4b62ba1471302b25515fb",
+      "storage": "text"
+    },
+    {
+      "path": "candidate-focused-results.json",
+      "bytes": 2580,
+      "sha256": "bc20131c8a430cd1609967fa9ddd40ddb66d4c06c2fac3130e5697f719d1f48f",
+      "storage": "text"
+    },
+    {
+      "path": "candidate-t-func-construction-anchor",
+      "bytes": 2006472,
+      "sha256": "8ec40ed9136c337f43a52132ad4e40c863766cddd881c12af653b40a62d1e080",
+      "storage": "hash-only"
+    },
+    {
+      "path": "candidate.patch",
+      "bytes": 4287,
+      "sha256": "6904c48d7d24ad9776c390c3618d7cb0b562ba96bafab124be0d58bc8b22cb44",
+      "storage": "text"
+    },
+    {
+      "path": "focused-freeze.py",
+      "bytes": 2367,
+      "sha256": "1a659786142d219e2014e33e3cfe59daee771c88e828d5163341b002e53cffb1",
+      "storage": "text"
+    },
+    {
+      "path": "focused-source-validation.json",
+      "bytes": 1019,
+      "sha256": "e6646c3827800aba63916000aae5c3f47e9b1478eba933464cc61dec9ddd03eb",
+      "storage": "text"
+    },
+    {
+      "path": "focused.py",
+      "bytes": 2083,
+      "sha256": "7c88077d7e6f8ed6a1e458353835a648d4a0163f068b453f519192b75ef7efb7",
+      "storage": "text"
+    },
+    {
+      "path": "initial-source-validation.json",
+      "bytes": 188,
+      "sha256": "02a7a95deee6ebba22926e518fa42f8e81fb2054d74ba65ef15d2ae60cdb3756",
+      "storage": "text"
+    },
+    {
+      "path": "prior/HANDOFF.md",
+      "bytes": 11351,
+      "sha256": "dbc3cdfecaa5ed68f55074777fd519dcbcb59536730311c38399d015a32c8fa8",
+      "storage": "text"
+    },
+    {
+      "path": "prior/PROPOSAL.md",
+      "bytes": 10494,
+      "sha256": "874f0b44d10feccb71e6ccda46dbbd9403b6c913d7a267ca1e1c1028d88d1041",
+      "storage": "text"
+    },
+    {
+      "path": "prior/manifest.json",
+      "bytes": 25109,
+      "sha256": "520715455c2b82e9ad800621bf03be1a1300957ccf5b521d9a2419f94895532e",
+      "storage": "text"
+    },
+    {
+      "path": "setup.py",
+      "bytes": 5465,
+      "sha256": "2306a23e363a6aa25f403cdb04cf2fd2c659805dbccca7397a9f02e1020e5afb",
+      "storage": "text"
+    },
+    {
+      "path": "source-identity.json",
+      "bytes": 83394,
+      "sha256": "c41d626b34e3765b0bf6d0e99d0e18e63afc6da6951d6f155170e1cf1fcaf41f",
+      "storage": "text"
+    }
+  ]
+}

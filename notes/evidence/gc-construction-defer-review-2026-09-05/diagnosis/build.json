@@ -1,0 +1,35 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j4",
+    "BUILDMODE=static",
+    "XCFLAGS=-DLUA_USE_ASSERT -DLUA_USE_APICHECK -DLJ_GC2_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_FUNC_TEST_HELPERS -DLJ_UDATA_TEST_HELPERS -DLJ_STR_TEST_HELPERS",
+    "CCDEBUG=-g",
+    "TARGET_STRIP=:"
+  ],
+  "cwd": "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-six",
+  "exit_code": 0,
+  "seconds": 10.373657780997746,
+  "compiler": "cc (Debian 14.2.0-19) 14.2.0\nCopyright (C) 2024 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "note": "Same source and six helper macros as frozen initial candidate; only debug metadata enabled. Original optimization settings retained.",
+  "identities": {
+    "src/luajit": {
+      "bytes": 14087136,
+      "sha256": "4eecd20689d1349fdfc659511f6871aaafd24a5fc29bbc17dadefe04a5a9acf0"
+    },
+    "src/libluajit.a": {
+      "bytes": 31006854,
+      "sha256": "17d8bf2ab91cd74da888311c50b86e212147b1bb1a1373585a4397254975827b"
+    },
+    "src/lj_gc2.o": {
+      "bytes": 4793632,
+      "sha256": "b4c1dd1d0b8b43b2d886b94fdbdb5f920b08cb4d52e19c409feef15741f21c50"
+    },
+    "src/lj_func.o": {
+      "bytes": 372928,
+      "sha256": "6423a43dc9d0238dff928911d594784975df0a566235c91553486b1300748497"
+    }
+  }
+}

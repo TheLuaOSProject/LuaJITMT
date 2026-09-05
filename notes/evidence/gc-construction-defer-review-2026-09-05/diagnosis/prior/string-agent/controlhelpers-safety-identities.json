@@ -1,0 +1,26 @@
+{
+  "controlhelpers-safety-t-func-construction-anchor-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "controlhelpers-safety-t-func-construction-anchor.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "controlhelpers-safety-t-func-construction-anchor-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "controlhelpers-safety-t-func-construction-anchor.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "controlhelpers/src/libluajit.a": {
+    "sha256": "f5601a17e163f7013b41e7ce4906f42fec6181b23a0a2cafdb5d35631fbb3814",
+    "bytes": 2976874
+  },
+  "controlhelpers-safety-t-func-construction-anchor": {
+    "sha256": "fbb919b97cbc6ee94f43654bd70c4382bae65d8f04023e6f7a7eef3d5495f338",
+    "bytes": 2072456
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j4",
+    "BUILDMODE=static",
+    "XCFLAGS=-DLUA_USE_ASSERT -DLUA_USE_APICHECK -DLJ_GC2_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_FUNC_TEST_HELPERS",
+    "TARGET_STRIP=:"
+  ],
+  "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers",
+  "exit_code": 0,
+  "seconds": 9.786763534000784,
+  "binaries": {
+    "luajit": {
+      "sha256": "06f5e548783355a9eecab3e3ff8aee4e9fd8625543c73b17a43eb095e33bdee1",
+      "bytes": 2004960
+    },
+    "libluajit.a": {
+      "sha256": "ddf8989ea13915f6282daa6627ff344b2e51d9183f6b59ede5ced26614181935",
+      "bytes": 2976530
+    },
+    "host/minilua": {
+      "sha256": "8ab7d5a14b0525e3759effc570de0f02965b5618600fbfe15499924a399f1538",
+      "bytes": 154760
+    },
+    "host/buildvm": {
+      "sha256": "e117a1792b733cffb3c30a38574c718f213102a0ba72f39cf33d8a4625eb747b",
+      "bytes": 122336
+    },
+    "lj_str.o": {
+      "sha256": "d284d30823c6e0f3821d496dbdd740c295fd582602a1f656619435bbb77fa5b7",
+      "bytes": 38448
+    }
+  }
+}

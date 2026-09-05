@@ -1,0 +1,153 @@
+Breakpoint 1 at 0x6edb4: file lj_func.c, line 86.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+FUNC_DIAG capture-fn-provenance {"source": "tail at i=0, before any pending-chain append; source equality tail=obj2gco(fn)"}
+FUNC_DIAG capture {"L": "0x7ffff7c90080", "fn": "0x7ffff7a592f0", "g": "0x7ffff7c90130", "uv": "0x7ffff7a59330"}
+FUNC_DIAG entry-gc {"assist_active": 0, "cycle": 0, "cycle_leader": 1, "deferred_epoch": 0, "grey_bottom": 0, "grey_top": 0, "hs_epoch": 0, "hs_pending": 0, "mark_close_intent": 0, "mark_root_scanned": 0, "n_workers": 0, "phase": 0, "recovery_failed": 0, "recovery_items": 0, "smr_reclaiming": 0, "ssb_consumer_active": 0, "ssb_drain": 0, "ssb_head": 0, "sweep_bridge_ready": 0, "sweep_grace_needed": 0, "sweep_owner_arenas": 0, "sweep_owner_live_cells": 0, "sweep_owner_runs": 0, "sweep_root_scanned": 0, "table_rescan_pending": 27, "thread_scan_needscan_pending": 0, "worker_active": 0}
+FUNC_DIAG entry-function {"address": 140737348211440, "arena": 140737348173824, "block": 1, "cell": 2351, "flags": 9, "late": 0, "lifetime": 2, "mark": 0, "owner_tid": 1, "ready": 0, "reclaim_cell": 0, "recovery": 0, "remote_active": 0, "retire_epoch": 0, "root": 1, "sweep": 0, "sweep_epoch": 0}
+FUNC_DIAG entry-upvalue {"address": 140737348211504, "arena": 140737348173824, "block": 1, "cell": 2355, "flags": 9, "late": 0, "lifetime": 1, "mark": 0, "owner_tid": 1, "ready": 1, "reclaim_cell": 0, "recovery": 0, "remote_active": 0, "retire_epoch": 0, "root": 0, "sweep": 0, "sweep_epoch": 0}
+FUNC_DIAG entry-tg {"poll": 0, "reqmask": 0, "ssb_base": 140737350547808, "ssb_free": 140737350556000, "ssb_next": 140737350548024}
+FUNC_DIAG entry-alloc {"huge_reclaim_cursor": 0, "huge_retire_cursor": 0, "huge_retire_done": 0, "prepare_epoch": 0, "sweep_epoch": 0}
+FUNC_DIAG entry-needsweep {"hdr": null, "head": 0}
+FUNC_DIAG entry-quarantine {"hdr": null, "head": 0}
+FUNC_DIAG entry-owned {"hdr": "{flags = 9, owner_tid = 1, next = 0x0, grey = 0x0, sweep_epoch = 0, live_cells = 0, {gc2_tabstamp = 0x55555570b350, gc2_huge_wide = 0x55555570b350}, retire_epoch = 0, reclaim_cell = 0, reclaim_deferred = 0, remote_active = 0, remote_free = 0x0, retire_obj = 0x0, progress_g = 0x7ffff7c90130, prep_bump_cell = 0, prep_bump_end = 0, gcprep_pending = 0, terminal_closed = 0, huge_tabstamp = {state = 0, token = {control = 0}}, gc2_tabledesc = 0x7ffff7c91310}", "head": 140737348173824}
+FUNC_DIAG COLLECT_ENTRY_CAPTURED
+
+Program received signal SIGINT, Interrupt.
+lj_gc_reclaim_gc2_arena (g=g@entry=0x7ffff7c90130, a=a@entry=0x7ffff7a50000, limit=limit@entry=64, donep=donep@entry=0x7fffffffdbf8) at lj_gc.c:3000
+3000	  while (cell < LJ_ARENA_CELLS && scanned < limit) {
+FUNC_DIAG interrupted-gc {"assist_active": 0, "cycle": 1, "cycle_leader": 0, "deferred_epoch": 0, "grey_bottom": 5, "grey_top": 5, "hs_epoch": 11, "hs_pending": 0, "mark_close_intent": 0, "mark_root_scanned": 0, "n_workers": 0, "phase": 3, "recovery_failed": 0, "recovery_items": 0, "smr_reclaiming": 2, "ssb_consumer_active": 0, "ssb_drain": 0, "ssb_head": 0, "sweep_bridge_ready": 1, "sweep_grace_needed": 0, "sweep_owner_arenas": 0, "sweep_owner_live_cells": 0, "sweep_owner_runs": 844833, "sweep_root_scanned": 1, "table_rescan_pending": 0, "thread_scan_needscan_pending": 0, "worker_active": 1}
+FUNC_DIAG interrupted-function {"address": 140737348211440, "arena": 140737348173824, "block": 1, "cell": 2351, "flags": 89, "late": 0, "lifetime": 2, "mark": 1, "owner_tid": 1, "ready": 0, "reclaim_cell": 1318, "recovery": 0, "remote_active": 13835058055282163712, "retire_epoch": 9, "root": 1, "sweep": 0, "sweep_epoch": 0}
+FUNC_DIAG interrupted-upvalue {"address": 140737348211504, "arena": 140737348173824, "block": 1, "cell": 2355, "flags": 89, "late": 0, "lifetime": 1, "mark": 1, "owner_tid": 1, "ready": 1, "reclaim_cell": 1318, "recovery": 0, "remote_active": 13835058055282163712, "retire_epoch": 9, "root": 0, "sweep": 0, "sweep_epoch": 0}
+FUNC_DIAG interrupted-tg {"poll": 0, "reqmask": 0, "ssb_base": 140737350556024, "ssb_free": 140737350547784, "ssb_next": 140737350556024}
+FUNC_DIAG interrupted-alloc {"huge_reclaim_cursor": 0, "huge_retire_cursor": 0, "huge_retire_done": 0, "prepare_epoch": 1, "sweep_epoch": 1}
+FUNC_DIAG interrupted-needsweep {"hdr": null, "head": 0}
+FUNC_DIAG interrupted-quarantine {"hdr": "{flags = 89, owner_tid = 1, next = 0x0, grey = 0x0, sweep_epoch = 0, live_cells = 0, {gc2_tabstamp = 0x55555570b350, gc2_huge_wide = 0x55555570b350}, retire_epoch = 9, reclaim_cell = 1318, reclaim_deferred = 0, remote_active = 13835058055282163712, remote_free = 0x0, retire_obj = 0x0, progress_g = 0x7ffff7c90130, prep_bump_cell = 0, prep_bump_end = 0, gcprep_pending = 0, terminal_closed = 0, huge_tabstamp = {state = 0, token = {control = 0}}, gc2_tabledesc = 0x7ffff7c91310}", "head": 140737348173824}
+FUNC_DIAG interrupted-owned {"hdr": null, "head": 0}
+
+Thread 1 (Thread 0x7ffff7ca21c0 (LWP 341028) "debug-six-fixtu"):
+#0  lj_gc_reclaim_gc2_arena (g=g@entry=0x7ffff7c90130, a=a@entry=0x7ffff7a50000, limit=limit@entry=64, donep=donep@entry=0x7fffffffdbf8) at lj_gc.c:3000
+        cell = 1376
+        scanned = 58
+        changed = 0
+        pending = <optimized out>
+        __func__ = "lj_gc_reclaim_gc2_ar"...
+#1  0x0000555555576557 in lj_gc2_sweep_owner_progress (g=g@entry=0x7ffff7c90130, tg=tg@entry=0x7ffff7c92d20, limit=limit@entry=64, finishedp=finishedp@entry=0x7fffffffdc8c) at lj_gc2.c:5978
+        reclaimed_step = <optimized out>
+        done = 0
+        finished_arena = 0
+        step = 0
+        retire_epoch = <optimized out>
+        next = <optimized out>
+        qa = <optimized out>
+        n = 9
+        arenas = <optimized out>
+        epoch = <optimized out>
+        live = <optimized out>
+        minor = <optimized out>
+        preserve_marks = <optimized out>
+#2  0x000055555559a38e in gc2_worker_sweep_progress (g=0x7ffff7c90130, limit=64) at lj_gc2.c:22296
+        flags = <optimized out>
+        finished = 0
+        tg = 0x7ffff7c92d20
+        n = 0
+        defer0 = <optimized out>
+        tg = <optimized out>
+        n = <optimized out>
+        defer0 = <optimized out>
+        moved = <optimized out>
+        o = <optimized out>
+        traversed = <optimized out>
+        stop_quantum = <optimized out>
+        recovered = <optimized out>
+        grace = <optimized out>
+        strings = <optimized out>
+        flags = <optimized out>
+        finished = <optimized out>
+#3  gc2_worker_drain_inner (g=g@entry=0x7ffff7c90130, logical_tg=logical_tg@entry=0x7ffff7c92d20, limit=limit@entry=64, progress=progress@entry=0x7fffffffdcf8, hold_mark_gate=hold_mark_gate@entry=0) at lj_gc2.c:22452
+        phase = <optimized out>
+        n = 0
+        converted = 0
+        recovered = 0
+        weak = <optimized out>
+        sweep = 0
+        finalizer = <optimized out>
+        total = <optimized out>
+        defer0 = <optimized out>
+        mark_gate_closed = 0
+        sweep_gate_closed = <optimized out>
+#4  0x000055555559e348 in gc2_worker_drain_logical (g=0x7ffff7c90130, tg=0x7ffff7c92d20, limit=64, hold_mark_gate=0) at lj_gc2.c:22545
+        progress = 0
+#5  lj_gc2_collect_active (L=L@entry=0x7ffff7c90080) at lj_gc2.c:3061
+        cost = 1
+        finstep = <optimized out>
+        defer0 = <optimized out>
+        phase = <optimized out>
+        g = 0x7ffff7c90130
+        tg = 0x7ffff7c92d20
+        need_major = 0
+        extra_finreg = 0
+#6  0x00005555555c2dbc in func_finduv_nothrow (L=L@entry=0x7ffff7c90080, slot=0x7ffff7a72690) at lj_func.c:86
+        g = 0x7ffff7c90130
+        pp = 0x7ffff7c900c0
+        p = <optimized out>
+        uv = 0x7ffff7a59330
+        next = 0x0
+        __func__ = "func_finduv_nothrow"
+#7  0x00005555555c47d2 in func_newL_gc_base (L=<optimized out>, base=<optimized out>, pt=0x7ffff7a59080, parent=<optimized out>) at lj_func.c:1125
+        slot = 0x7ffff7a72690
+        v = 49152
+        uv = <optimized out>
+        fn = <optimized out>
+        tail = 0x7ffff7a592f0
+        i = 0
+        nuv = 2
+        __func__ = "func_newL_gc_base"
+#8  0x00005555555c5d9b in lj_func_newL_gc_forjit (L=<optimized out>, base=<optimized out>, pt=<optimized out>, parent=<optimized out>) at lj_func.c:1190
+No locals.
+#9  0x000055555555e85f in construct_inherit_cp (L=<optimized out>, dummy=<optimized out>, ud=0x7fffffffdf20) at /tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-four/tests/t-func-construction-anchor.c:81
+        ctx = 0x7fffffffdf20
+#10 0x000055555564bc3d in lj_vm_cpcall_asm ()
+No symbol table info available.
+#11 0x00005555555cf320 in lj_vm_cpcall (L=L@entry=0x7ffff7c90080, func=func@entry=0x0, ud=ud@entry=0x7fffffffdf20, cp=cp@entry=0x55555555e840 <construct_inherit_cp>) at lj_state.c:114
+        tabread = {tg = 0x7ffff7c92d20, epoch = 0, depth = 0}
+        oldtg = <optimized out>
+        owner = <optimized out>
+        root_anchor_top = 1
+        status = <optimized out>
+#12 0x000055555555e47c in test_open_upvalue_handoff_then_oom (L=0x7ffff7c90080) at /tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-four/tests/t-func-construction-anchor.c:193
+        oldthreshold = 148836
+        i = <optimized out>
+        fnv = {u64 = 18445618173662565056, n = -nan(0xbfffff7a592c0), gcr = {gcptr64 = 18445618173662565056}, it64 = -1125900046986560, {i = -140143936, it = 4294705151}, ftsz = -1125900046986560, u32 = {lo = 4154823360, hi = 4294705151}}
+        anchor = <optimized out>
+        oldflags2 = 2
+        oldhard = 198448
+        oldtrigger = <optimized out>
+        maxslot = <optimized out>
+        errcode = <optimized out>
+        ctx = {pt = 0x7ffff7a59080, parent = 0x7ffff7a592c0, fn = 0x0}
+        parent = <optimized out>
+        cycle0 = <optimized out>
+        tg = 0x7ffff7c92d20
+        child = 0x7ffff7a59080
+        anchoridx = 0
+        tg = <optimized out>
+        ctx = <optimized out>
+        parent = <optimized out>
+        child = <optimized out>
+        fnv = <optimized out>
+        anchor = <optimized out>
+        anchoridx = <optimized out>
+        oldflags2 = <optimized out>
+        cycle0 = <optimized out>
+        oldthreshold = <optimized out>
+        oldhard = <optimized out>
+        oldtrigger = <optimized out>
+        i = <optimized out>
+        maxslot = <optimized out>
+        errcode = <optimized out>
+        __func__ = "test_open_upvalue_ha"...
+        __PRETTY_FUNCTION__ = "test_open_upvalue_ha"...
+        v = <optimized out>
+#13 main () at /tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-four/tests/t-func-construction-anchor.c:332
+        L = 0x7ffff7c90080

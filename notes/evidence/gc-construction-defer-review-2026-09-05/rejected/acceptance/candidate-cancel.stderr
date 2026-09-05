@@ -1,0 +1,1 @@
+candidate-t-owner-defer: /tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/acceptance/t-owner-defer.c:132: main: Assertion `lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_FREE' failed.

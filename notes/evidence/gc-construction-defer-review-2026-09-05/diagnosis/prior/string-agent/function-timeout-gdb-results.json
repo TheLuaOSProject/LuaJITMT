@@ -1,0 +1,50 @@
+[
+  {
+    "name": "controlhelpers-function-timeout-gdb",
+    "argv": [
+      "gdb",
+      "--batch",
+      "-ex",
+      "set pagination off",
+      "-ex",
+      "set confirm off",
+      "-ex",
+      "run",
+      "-ex",
+      "thread apply all bt",
+      "--args",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers-safety-t-func-construction-anchor"
+    ],
+    "exit_code": 0,
+    "seconds": 3.0159925109983305,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers/tests/lib/?.lua;;",
+    "interrupted_after_seconds": 3,
+    "stdout": "controlhelpers-function-timeout-gdb.stdout",
+    "stderr": "controlhelpers-function-timeout-gdb.stderr"
+  },
+  {
+    "name": "helpers-function-timeout-gdb",
+    "argv": [
+      "gdb",
+      "--batch",
+      "-ex",
+      "set pagination off",
+      "-ex",
+      "set confirm off",
+      "-ex",
+      "run",
+      "-ex",
+      "thread apply all bt",
+      "--args",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers-safety-t-func-construction-anchor"
+    ],
+    "exit_code": 0,
+    "seconds": 3.0161362920043757,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers/tests/lib/?.lua;;",
+    "interrupted_after_seconds": 3,
+    "stdout": "helpers-function-timeout-gdb.stdout",
+    "stderr": "helpers-function-timeout-gdb.stderr"
+  }
+]

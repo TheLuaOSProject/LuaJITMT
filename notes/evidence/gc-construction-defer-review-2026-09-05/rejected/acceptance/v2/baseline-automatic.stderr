@@ -1,0 +1,1 @@
+baseline-t-owner-defer: /tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/acceptance/v2/t-owner-defer.c:118: main: Assertion `result == (automatic ? -1 : 0) && elapsed < UINT64_C(1000000000)' failed.

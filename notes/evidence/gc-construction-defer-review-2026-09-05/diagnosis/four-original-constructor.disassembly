@@ -1,0 +1,473 @@
+
+/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers-safety-t-func-construction-anchor:     file format elf64-x86-64
+
+
+Disassembly of section .init:
+
+Disassembly of section .plt:
+
+Disassembly of section .plt.got:
+
+Disassembly of section .text:
+
+00000000000704f0 <func_newL_gc_base>:
+   704f0:	41 57                	push   %r15
+   704f2:	49 89 f0             	mov    %rsi,%r8
+   704f5:	41 56                	push   %r14
+   704f7:	49 89 d6             	mov    %rdx,%r14
+   704fa:	41 55                	push   %r13
+   704fc:	41 54                	push   %r12
+   704fe:	55                   	push   %rbp
+   704ff:	53                   	push   %rbx
+   70500:	48 83 ec 58          	sub    $0x58,%rsp
+   70504:	48 89 7c 24 08       	mov    %rdi,0x8(%rsp)
+   70509:	48 85 f6             	test   %rsi,%rsi
+   7050c:	0f 84 d6 05 00 00    	je     70ae8 <func_newL_gc_base+0x5f8>
+   70512:	45 0f b6 7e 3c       	movzbl 0x3c(%r14),%r15d
+   70517:	41 83 ff 01          	cmp    $0x1,%r15d
+   7051b:	0f 85 47 05 00 00    	jne    70a68 <func_newL_gc_base+0x578>
+   70521:	41 f6 46 10 02       	testb  $0x2,0x10(%r14)
+   70526:	0f 85 14 01 00 00    	jne    70640 <func_newL_gc_base+0x150>
+   7052c:	4c 89 44 24 18       	mov    %r8,0x18(%rsp)
+   70531:	48 8b 51 10          	mov    0x10(%rcx),%rdx
+   70535:	4c 89 f6             	mov    %r14,%rsi
+   70538:	48 89 4c 24 10       	mov    %rcx,0x10(%rsp)
+   7053d:	48 8b 7c 24 08       	mov    0x8(%rsp),%rdi
+   70542:	e8 a9 e3 ff ff       	call   6e8f0 <func_newL_unlinked_nothrow>
+   70547:	48 8b 4c 24 10       	mov    0x10(%rsp),%rcx
+   7054c:	4c 8b 44 24 18       	mov    0x18(%rsp),%r8
+   70551:	48 85 c0             	test   %rax,%rax
+   70554:	49 89 c4             	mov    %rax,%r12
+   70557:	0f 84 05 06 00 00    	je     70b62 <func_newL_gc_base+0x672>
+   7055d:	49 8d 5c 24 28       	lea    0x28(%r12),%rbx
+   70562:	4c 89 64 24 18       	mov    %r12,0x18(%rsp)
+   70567:	45 89 fd             	mov    %r15d,%r13d
+   7056a:	31 ed                	xor    %ebp,%ebp
+   7056c:	4c 89 64 24 30       	mov    %r12,0x30(%rsp)
+   70571:	49 89 cf             	mov    %rcx,%r15
+   70574:	49 89 dc             	mov    %rbx,%r12
+   70577:	48 89 5c 24 38       	mov    %rbx,0x38(%rsp)
+   7057c:	4c 89 44 24 10       	mov    %r8,0x10(%rsp)
+   70581:	e9 97 00 00 00       	jmp    7061d <func_newL_gc_base+0x12d>
+   70586:	66 2e 0f 1f 84 00 00 	cs nopw 0x0(%rax,%rax,1)
+   7058d:	00 00 00 
+   70590:	48 8b 4c 24 10       	mov    0x10(%rsp),%rcx
+   70595:	0f b6 c2             	movzbl %dl,%eax
+   70598:	0f b7 da             	movzwl %dx,%ebx
+   7059b:	48 8d 34 c1          	lea    (%rcx,%rax,8),%rsi
+   7059f:	41 8b 46 10          	mov    0x10(%r14),%eax
+   705a3:	a8 02                	test   $0x2,%al
+   705a5:	0f 84 15 02 00 00    	je     707c0 <func_newL_gc_base+0x2d0>
+   705ab:	48 8b 06             	mov    (%rsi),%rax
+   705ae:	48 89 c7             	mov    %rax,%rdi
+   705b1:	48 c1 ff 2f          	sar    $0x2f,%rdi
+   705b5:	83 ff fa             	cmp    $0xfffffffa,%edi
+   705b8:	0f 85 42 02 00 00    	jne    70800 <func_newL_gc_base+0x310>
+   705be:	48 b9 ff ff ff ff ff 	movabs $0x7fffffffffff,%rcx
+   705c5:	7f 00 00 
+   705c8:	48 21 c8             	and    %rcx,%rax
+   705cb:	80 78 09 05          	cmpb   $0x5,0x9(%rax)
+   705cf:	0f 85 97 05 00 00    	jne    70b6c <func_newL_gc_base+0x67c>
+   705d5:	80 78 0a 00          	cmpb   $0x0,0xa(%rax)
+   705d9:	49 89 c3             	mov    %rax,%r11
+   705dc:	0f 84 ad 05 00 00    	je     70b8f <func_newL_gc_base+0x69f>
+   705e2:	48 8d 50 10          	lea    0x10(%rax),%rdx
+   705e6:	48 39 50 20          	cmp    %rdx,0x20(%rax)
+   705ea:	0f 85 9f 05 00 00    	jne    70b8f <func_newL_gc_base+0x69f>
+   705f0:	89 da                	mov    %ebx,%edx
+   705f2:	c1 e3 18             	shl    $0x18,%ebx
+   705f5:	c1 ea 0e             	shr    $0xe,%edx
+   705f8:	83 e2 01             	and    $0x1,%edx
+   705fb:	41 88 53 0b          	mov    %dl,0xb(%r11)
+   705ff:	41 33 5f 20          	xor    0x20(%r15),%ebx
+   70603:	41 89 5b 28          	mov    %ebx,0x28(%r11)
+   70607:	48 83 c5 01          	add    $0x1,%rbp
+   7060b:	49 83 c4 08          	add    $0x8,%r12
+   7060f:	49 89 44 24 f8       	mov    %rax,-0x8(%r12)
+   70614:	44 39 ed             	cmp    %r13d,%ebp
+   70617:	0f 83 db 04 00 00    	jae    70af8 <func_newL_gc_base+0x608>
+   7061d:	49 8b 46 28          	mov    0x28(%r14),%rax
+   70621:	0f b7 14 68          	movzwl (%rax,%rbp,2),%edx
+   70625:	66 85 d2             	test   %dx,%dx
+   70628:	0f 88 62 ff ff ff    	js     70590 <func_newL_gc_base+0xa0>
+   7062e:	48 83 c2 05          	add    $0x5,%rdx
+   70632:	49 8b 04 d7          	mov    (%r15,%rdx,8),%rax
+   70636:	eb cf                	jmp    70607 <func_newL_gc_base+0x117>
+   70638:	0f 1f 84 00 00 00 00 	nopl   0x0(%rax,%rax,1)
+   7063f:	00 
+   70640:	49 8b 46 28          	mov    0x28(%r14),%rax
+   70644:	0f b7 18             	movzwl (%rax),%ebx
+   70647:	66 85 db             	test   %bx,%bx
+   7064a:	0f 89 dc fe ff ff    	jns    7052c <func_newL_gc_base+0x3c>
+   70650:	0f b6 c3             	movzbl %bl,%eax
+   70653:	4d 8d 2c c0          	lea    (%r8,%rax,8),%r13
+   70657:	49 8b 45 00          	mov    0x0(%r13),%rax
+   7065b:	48 c1 f8 2f          	sar    $0x2f,%rax
+   7065f:	83 f8 fa             	cmp    $0xfffffffa,%eax
+   70662:	0f 84 c4 fe ff ff    	je     7052c <func_newL_gc_base+0x3c>
+   70668:	48 8b 51 10          	mov    0x10(%rcx),%rdx
+   7066c:	48 89 4c 24 10       	mov    %rcx,0x10(%rsp)
+   70671:	4c 89 f6             	mov    %r14,%rsi
+   70674:	48 8b 7c 24 08       	mov    0x8(%rsp),%rdi
+   70679:	e8 72 e2 ff ff       	call   6e8f0 <func_newL_unlinked_nothrow>
+   7067e:	48 8b 4c 24 10       	mov    0x10(%rsp),%rcx
+   70683:	48 85 c0             	test   %rax,%rax
+   70686:	49 89 c4             	mov    %rax,%r12
+   70689:	0f 84 d3 04 00 00    	je     70b62 <func_newL_gc_base+0x672>
+   7068f:	48 8b 7c 24 08       	mov    0x8(%rsp),%rdi
+   70694:	4c 89 ee             	mov    %r13,%rsi
+   70697:	48 89 4c 24 10       	mov    %rcx,0x10(%rsp)
+   7069c:	e8 0f e3 ff ff       	call   6e9b0 <func_snapshotuv_unlinked_nothrow>
+   706a1:	48 8b 4c 24 10       	mov    0x10(%rsp),%rcx
+   706a6:	48 85 c0             	test   %rax,%rax
+   706a9:	48 89 c5             	mov    %rax,%rbp
+   706ac:	0f 84 ee 02 00 00    	je     709a0 <func_newL_gc_base+0x4b0>
+   706b2:	0f b7 c3             	movzwl %bx,%eax
+   706b5:	4c 89 e6             	mov    %r12,%rsi
+   706b8:	89 c2                	mov    %eax,%edx
+   706ba:	c1 e0 18             	shl    $0x18,%eax
+   706bd:	c1 ea 0e             	shr    $0xe,%edx
+   706c0:	83 e2 01             	and    $0x1,%edx
+   706c3:	88 55 0b             	mov    %dl,0xb(%rbp)
+   706c6:	33 41 20             	xor    0x20(%rcx),%eax
+   706c9:	48 89 ea             	mov    %rbp,%rdx
+   706cc:	89 45 28             	mov    %eax,0x28(%rbp)
+   706cf:	49 89 6c 24 28       	mov    %rbp,0x28(%r12)
+   706d4:	48 c7 45 00 00 00 00 	movq   $0x0,0x0(%rbp)
+   706db:	00 
+   706dc:	49 89 2c 24          	mov    %rbp,(%r12)
+   706e0:	4c 8b 7c 24 08       	mov    0x8(%rsp),%r15
+   706e5:	49 8b 7f 10          	mov    0x10(%r15),%rdi
+   706e9:	e8 22 7f fa ff       	call   18610 <lj_gc_linkobj_new_chain>
+   706ee:	4c 89 e6             	mov    %r12,%rsi
+   706f1:	4c 89 ff             	mov    %r15,%rdi
+   706f4:	e8 c7 2e fa ff       	call   135c0 <lj_gc_pubobjroot>
+   706f9:	48 89 ea             	mov    %rbp,%rdx
+   706fc:	4c 89 e6             	mov    %r12,%rsi
+   706ff:	4c 89 ff             	mov    %r15,%rdi
+   70702:	e8 c9 a3 fd ff       	call   4aad0 <lj_gc2_barrier_obj_pair>
+   70707:	80 e7 40             	and    $0x40,%bh
+   7070a:	0f 85 8e 00 00 00    	jne    7079e <func_newL_gc_base+0x2ae>
+   70710:	48 b8 00 00 00 00 00 	movabs $0xfffd000000000000,%rax
+   70717:	00 fd ff 
+   7071a:	48 09 c5             	or     %rax,%rbp
+   7071d:	48 89 6c 24 48       	mov    %rbp,0x48(%rsp)
+   70722:	48 8b 44 24 48       	mov    0x48(%rsp),%rax
+   70727:	49 89 c1             	mov    %rax,%r9
+   7072a:	49 c1 f9 2f          	sar    $0x2f,%r9
+   7072e:	41 8d 51 04          	lea    0x4(%r9),%edx
+   70732:	83 fa f6             	cmp    $0xfffffff6,%edx
+   70735:	76 1d                	jbe    70754 <func_newL_gc_base+0x264>
+   70737:	48 ba ff ff ff ff ff 	movabs $0x7fffffffffff,%rdx
+   7073e:	7f 00 00 
+   70741:	41 f7 d1             	not    %r9d
+   70744:	48 21 d0             	and    %rdx,%rax
+   70747:	0f b6 40 09          	movzbl 0x9(%rax),%eax
+   7074b:	41 39 c1             	cmp    %eax,%r9d
+   7074e:	0f 85 6a 04 00 00    	jne    70bbe <func_newL_gc_base+0x6ce>
+   70754:	48 8b 44 24 48       	mov    0x48(%rsp),%rax
+   70759:	49 89 45 00          	mov    %rax,0x0(%r13)
+   7075d:	49 8b 45 00          	mov    0x0(%r13),%rax
+   70761:	49 89 c1             	mov    %rax,%r9
+   70764:	49 c1 f9 2f          	sar    $0x2f,%r9
+   70768:	41 8d 51 04          	lea    0x4(%r9),%edx
+   7076c:	83 fa f6             	cmp    $0xfffffff6,%edx
+   7076f:	76 1d                	jbe    7078e <func_newL_gc_base+0x29e>
+   70771:	48 ba ff ff ff ff ff 	movabs $0x7fffffffffff,%rdx
+   70778:	7f 00 00 
+   7077b:	41 f7 d1             	not    %r9d
+   7077e:	48 21 d0             	and    %rdx,%rax
+   70781:	0f b6 40 09          	movzbl 0x9(%rax),%eax
+   70785:	41 39 c1             	cmp    %eax,%r9d
+   70788:	0f 85 30 04 00 00    	jne    70bbe <func_newL_gc_base+0x6ce>
+   7078e:	48 8b 7c 24 08       	mov    0x8(%rsp),%rdi
+   70793:	4c 89 ea             	mov    %r13,%rdx
+   70796:	48 89 fe             	mov    %rdi,%rsi
+   70799:	e8 02 af 00 00       	call   7b6a0 <lj_state_stack_pubtv>
+   7079e:	f0 83 05 e6 4e 14 00 	lock addl $0x1,0x144ee6(%rip)        # 1b568c <func_test_gc1uv_chain_calls>
+   707a5:	01 
+   707a6:	48 83 c4 58          	add    $0x58,%rsp
+   707aa:	4c 89 e0             	mov    %r12,%rax
+   707ad:	5b                   	pop    %rbx
+   707ae:	5d                   	pop    %rbp
+   707af:	41 5c                	pop    %r12
+   707b1:	41 5d                	pop    %r13
+   707b3:	41 5e                	pop    %r14
+   707b5:	41 5f                	pop    %r15
+   707b7:	c3                   	ret
+   707b8:	0f 1f 84 00 00 00 00 	nopl   0x0(%rax,%rax,1)
+   707bf:	00 
+   707c0:	a8 01                	test   $0x1,%al
+   707c2:	0f 85 90 00 00 00    	jne    70858 <func_newL_gc_base+0x368>
+   707c8:	48 8b 7c 24 08       	mov    0x8(%rsp),%rdi
+   707cd:	e8 fe e4 ff ff       	call   6ecd0 <func_finduv_nothrow>
+   707d2:	48 89 c2             	mov    %rax,%rdx
+   707d5:	48 85 c0             	test   %rax,%rax
+   707d8:	0f 84 ca 00 00 00    	je     708a8 <func_newL_gc_base+0x3b8>
+   707de:	89 de                	mov    %ebx,%esi
+   707e0:	c1 e3 18             	shl    $0x18,%ebx
+   707e3:	c1 ee 0e             	shr    $0xe,%esi
+   707e6:	83 e6 01             	and    $0x1,%esi
+   707e9:	40 88 72 0b          	mov    %sil,0xb(%rdx)
+   707ed:	41 33 5f 20          	xor    0x20(%r15),%ebx
+   707f1:	89 5a 28             	mov    %ebx,0x28(%rdx)
+   707f4:	e9 0e fe ff ff       	jmp    70607 <func_newL_gc_base+0x117>
+   707f9:	0f 1f 80 00 00 00 00 	nopl   0x0(%rax)
+   70800:	48 8b 7c 24 08       	mov    0x8(%rsp),%rdi
+   70805:	89 54 24 2c          	mov    %edx,0x2c(%rsp)
+   70809:	48 89 74 24 20       	mov    %rsi,0x20(%rsp)
+   7080e:	e8 9d e1 ff ff       	call   6e9b0 <func_snapshotuv_unlinked_nothrow>
+   70813:	49 89 c3             	mov    %rax,%r11
+   70816:	48 85 c0             	test   %rax,%rax
+   70819:	0f 84 89 00 00 00    	je     708a8 <func_newL_gc_base+0x3b8>
+   7081f:	48 c7 00 00 00 00 00 	movq   $0x0,(%rax)
+   70826:	48 8b 7c 24 18       	mov    0x18(%rsp),%rdi
+   7082b:	48 89 07             	mov    %rax,(%rdi)
+   7082e:	f0 83 05 52 4e 14 00 	lock addl $0x1,0x144e52(%rip)        # 1b5688 <func_test_uv_afterfn_calls>
+   70835:	01 
+   70836:	8b 54 24 2c          	mov    0x2c(%rsp),%edx
+   7083a:	48 8b 74 24 20       	mov    0x20(%rsp),%rsi
+   7083f:	80 e6 40             	and    $0x40,%dh
+   70842:	0f 84 78 01 00 00    	je     709c0 <func_newL_gc_base+0x4d0>
+   70848:	4c 89 5c 24 18       	mov    %r11,0x18(%rsp)
+   7084d:	e9 9e fd ff ff       	jmp    705f0 <func_newL_gc_base+0x100>
+   70852:	66 0f 1f 44 00 00    	nopw   0x0(%rax,%rax,1)
+   70858:	48 8b 44 24 08       	mov    0x8(%rsp),%rax
+   7085d:	48 8b 40 10          	mov    0x10(%rax),%rax
+   70861:	8b 90 c0 15 00 00    	mov    0x15c0(%rax),%edx
+   70867:	85 d2                	test   %edx,%edx
+   70869:	0f 84 61 02 00 00    	je     70ad0 <func_newL_gc_base+0x5e0>
+   7086f:	48 8b 7c 24 08       	mov    0x8(%rsp),%rdi
+   70874:	e8 37 e1 ff ff       	call   6e9b0 <func_snapshotuv_unlinked_nothrow>
+   70879:	48 89 c2             	mov    %rax,%rdx
+   7087c:	48 85 c0             	test   %rax,%rax
+   7087f:	74 27                	je     708a8 <func_newL_gc_base+0x3b8>
+   70881:	48 c7 00 00 00 00 00 	movq   $0x0,(%rax)
+   70888:	48 8b 4c 24 18       	mov    0x18(%rsp),%rcx
+   7088d:	48 89 01             	mov    %rax,(%rcx)
+   70890:	f0 83 05 f0 4d 14 00 	lock addl $0x1,0x144df0(%rip)        # 1b5688 <func_test_uv_afterfn_calls>
+   70897:	01 
+   70898:	48 89 44 24 18       	mov    %rax,0x18(%rsp)
+   7089d:	e9 3c ff ff ff       	jmp    707de <func_newL_gc_base+0x2ee>
+   708a2:	66 0f 1f 44 00 00    	nopw   0x0(%rax,%rax,1)
+   708a8:	4c 8b 64 24 30       	mov    0x30(%rsp),%r12
+   708ad:	4c 8b 44 24 10       	mov    0x10(%rsp),%r8
+   708b2:	41 f6 46 10 02       	testb  $0x2,0x10(%r14)
+   708b7:	0f 84 e3 00 00 00    	je     709a0 <func_newL_gc_base+0x4b0>
+   708bd:	85 ed                	test   %ebp,%ebp
+   708bf:	0f 84 db 00 00 00    	je     709a0 <func_newL_gc_base+0x4b0>
+   708c5:	48 01 ed             	add    %rbp,%rbp
+   708c8:	31 db                	xor    %ebx,%ebx
+   708ca:	4d 89 c7             	mov    %r8,%r15
+   708cd:	49 bd ff ff ff ff ff 	movabs $0x7fffffffffff,%r13
+   708d4:	7f 00 00 
+   708d7:	eb 14                	jmp    708ed <func_newL_gc_base+0x3fd>
+   708d9:	0f 1f 80 00 00 00 00 	nopl   0x0(%rax)
+   708e0:	48 83 c3 02          	add    $0x2,%rbx
+   708e4:	48 39 dd             	cmp    %rbx,%rbp
+   708e7:	0f 84 b3 00 00 00    	je     709a0 <func_newL_gc_base+0x4b0>
+   708ed:	49 8b 46 28          	mov    0x28(%r14),%rax
+   708f1:	0f b7 04 18          	movzwl (%rax,%rbx,1),%eax
+   708f5:	89 c2                	mov    %eax,%edx
+   708f7:	66 81 e2 00 c0       	and    $0xc000,%dx
+   708fc:	66 81 fa 00 80       	cmp    $0x8000,%dx
+   70901:	75 dd                	jne    708e0 <func_newL_gc_base+0x3f0>
+   70903:	0f b6 c0             	movzbl %al,%eax
+   70906:	49 8d 0c c7          	lea    (%r15,%rax,8),%rcx
+   7090a:	48 8b 11             	mov    (%rcx),%rdx
+   7090d:	48 89 d0             	mov    %rdx,%rax
+   70910:	48 c1 f8 2f          	sar    $0x2f,%rax
+   70914:	83 f8 fa             	cmp    $0xfffffffa,%eax
+   70917:	75 c7                	jne    708e0 <func_newL_gc_base+0x3f0>
+   70919:	4c 21 ea             	and    %r13,%rdx
+   7091c:	80 7a 09 05          	cmpb   $0x5,0x9(%rdx)
+   70920:	0f 85 d4 02 00 00    	jne    70bfa <func_newL_gc_base+0x70a>
+   70926:	49 8b 04 24          	mov    (%r12),%rax
+   7092a:	48 85 c0             	test   %rax,%rax
+   7092d:	75 19                	jne    70948 <func_newL_gc_base+0x458>
+   7092f:	eb af                	jmp    708e0 <func_newL_gc_base+0x3f0>
+   70931:	66 66 2e 0f 1f 84 00 	data16 cs nopw 0x0(%rax,%rax,1)
+   70938:	00 00 00 00 
+   7093c:	0f 1f 40 00          	nopl   0x0(%rax)
+   70940:	48 8b 00             	mov    (%rax),%rax
+   70943:	48 85 c0             	test   %rax,%rax
+   70946:	74 98                	je     708e0 <func_newL_gc_base+0x3f0>
+   70948:	48 39 d0             	cmp    %rdx,%rax
+   7094b:	75 f3                	jne    70940 <func_newL_gc_base+0x450>
+   7094d:	48 8b 40 10          	mov    0x10(%rax),%rax
+   70951:	48 89 01             	mov    %rax,(%rcx)
+   70954:	48 8b 11             	mov    (%rcx),%rdx
+   70957:	48 89 d0             	mov    %rdx,%rax
+   7095a:	48 c1 f8 2f          	sar    $0x2f,%rax
+   7095e:	8d 70 04             	lea    0x4(%rax),%esi
+   70961:	83 fe f6             	cmp    $0xfffffff6,%esi
+   70964:	76 1b                	jbe    70981 <func_newL_gc_base+0x491>
+   70966:	48 be ff ff ff ff ff 	movabs $0x7fffffffffff,%rsi
+   7096d:	7f 00 00 
+   70970:	f7 d0                	not    %eax
+   70972:	48 21 f2             	and    %rsi,%rdx
+   70975:	0f b6 52 09          	movzbl 0x9(%rdx),%edx
+   70979:	39 d0                	cmp    %edx,%eax
+   7097b:	0f 85 38 02 00 00    	jne    70bb9 <func_newL_gc_base+0x6c9>
+   70981:	48 8b 7c 24 08       	mov    0x8(%rsp),%rdi
+   70986:	48 89 ca             	mov    %rcx,%rdx
+   70989:	48 83 c3 02          	add    $0x2,%rbx
+   7098d:	48 89 fe             	mov    %rdi,%rsi
+   70990:	e8 0b ad 00 00       	call   7b6a0 <lj_state_stack_pubtv>
+   70995:	48 39 dd             	cmp    %rbx,%rbp
+   70998:	0f 85 4f ff ff ff    	jne    708ed <func_newL_gc_base+0x3fd>
+   7099e:	66 90                	xchg   %ax,%ax
+   709a0:	48 8b 5c 24 08       	mov    0x8(%rsp),%rbx
+   709a5:	4c 89 e6             	mov    %r12,%rsi
+   709a8:	48 8b 7b 10          	mov    0x10(%rbx),%rdi
+   709ac:	e8 ff f6 ff ff       	call   700b0 <func_pending_chain_free.isra.0>
+   709b1:	48 89 df             	mov    %rbx,%rdi
+   709b4:	e8 c7 e1 fd ff       	call   4eb80 <lj_err_mem>
+   709b9:	0f 1f 80 00 00 00 00 	nopl   0x0(%rax)
+   709c0:	48 ba 00 00 00 00 00 	movabs $0xfffd000000000000,%rdx
+   709c7:	00 fd ff 
+   709ca:	48 09 c2             	or     %rax,%rdx
+   709cd:	48 89 54 24 48       	mov    %rdx,0x48(%rsp)
+   709d2:	48 8b 54 24 48       	mov    0x48(%rsp),%rdx
+   709d7:	48 89 d7             	mov    %rdx,%rdi
+   709da:	48 c1 ff 2f          	sar    $0x2f,%rdi
+   709de:	8d 4f 04             	lea    0x4(%rdi),%ecx
+   709e1:	83 f9 f6             	cmp    $0xfffffff6,%ecx
+   709e4:	76 1d                	jbe    70a03 <func_newL_gc_base+0x513>
+   709e6:	89 f9                	mov    %edi,%ecx
+   709e8:	48 bf ff ff ff ff ff 	movabs $0x7fffffffffff,%rdi
+   709ef:	7f 00 00 
+   709f2:	48 21 fa             	and    %rdi,%rdx
+   709f5:	f7 d1                	not    %ecx
+   709f7:	0f b6 52 09          	movzbl 0x9(%rdx),%edx
+   709fb:	39 d1                	cmp    %edx,%ecx
+   709fd:	0f 85 e7 01 00 00    	jne    70bea <func_newL_gc_base+0x6fa>
+   70a03:	48 8b 54 24 48       	mov    0x48(%rsp),%rdx
+   70a08:	48 89 16             	mov    %rdx,(%rsi)
+   70a0b:	48 8b 16             	mov    (%rsi),%rdx
+   70a0e:	48 89 d7             	mov    %rdx,%rdi
+   70a11:	48 c1 ff 2f          	sar    $0x2f,%rdi
+   70a15:	8d 4f 04             	lea    0x4(%rdi),%ecx
+   70a18:	83 f9 f6             	cmp    $0xfffffff6,%ecx
+   70a1b:	76 1d                	jbe    70a3a <func_newL_gc_base+0x54a>
+   70a1d:	89 f9                	mov    %edi,%ecx
+   70a1f:	48 bf ff ff ff ff ff 	movabs $0x7fffffffffff,%rdi
+   70a26:	7f 00 00 
+   70a29:	48 21 fa             	and    %rdi,%rdx
+   70a2c:	f7 d1                	not    %ecx
+   70a2e:	0f b6 52 09          	movzbl 0x9(%rdx),%edx
+   70a32:	39 d1                	cmp    %edx,%ecx
+   70a34:	0f 85 b0 01 00 00    	jne    70bea <func_newL_gc_base+0x6fa>
+   70a3a:	48 8b 7c 24 08       	mov    0x8(%rsp),%rdi
+   70a3f:	48 89 f2             	mov    %rsi,%rdx
+   70a42:	48 89 44 24 20       	mov    %rax,0x20(%rsp)
+   70a47:	4c 89 5c 24 18       	mov    %r11,0x18(%rsp)
+   70a4c:	48 89 fe             	mov    %rdi,%rsi
+   70a4f:	e8 4c ac 00 00       	call   7b6a0 <lj_state_stack_pubtv>
+   70a54:	48 8b 44 24 20       	mov    0x20(%rsp),%rax
+   70a59:	4c 8b 5c 24 18       	mov    0x18(%rsp),%r11
+   70a5e:	e9 e5 fd ff ff       	jmp    70848 <func_newL_gc_base+0x358>
+   70a63:	0f 1f 44 00 00       	nopl   0x0(%rax,%rax,1)
+   70a68:	4c 89 44 24 18       	mov    %r8,0x18(%rsp)
+   70a6d:	48 8b 51 10          	mov    0x10(%rcx),%rdx
+   70a71:	4c 89 f6             	mov    %r14,%rsi
+   70a74:	48 89 4c 24 10       	mov    %rcx,0x10(%rsp)
+   70a79:	48 8b 7c 24 08       	mov    0x8(%rsp),%rdi
+   70a7e:	e8 6d de ff ff       	call   6e8f0 <func_newL_unlinked_nothrow>
+   70a83:	49 89 c4             	mov    %rax,%r12
+   70a86:	48 85 c0             	test   %rax,%rax
+   70a89:	0f 84 d3 00 00 00    	je     70b62 <func_newL_gc_base+0x672>
+   70a8f:	45 85 ff             	test   %r15d,%r15d
+   70a92:	48 8b 4c 24 10       	mov    0x10(%rsp),%rcx
+   70a97:	4c 8b 44 24 18       	mov    0x18(%rsp),%r8
+   70a9c:	0f 85 bb fa ff ff    	jne    7055d <func_newL_gc_base+0x6d>
+   70aa2:	48 8b 5c 24 08       	mov    0x8(%rsp),%rbx
+   70aa7:	48 89 c2             	mov    %rax,%rdx
+   70aaa:	48 89 c6             	mov    %rax,%rsi
+   70aad:	48 8b 7b 10          	mov    0x10(%rbx),%rdi
+   70ab1:	e8 5a 7b fa ff       	call   18610 <lj_gc_linkobj_new_chain>
+   70ab6:	4c 89 e6             	mov    %r12,%rsi
+   70ab9:	48 89 df             	mov    %rbx,%rdi
+   70abc:	e8 ff 2a fa ff       	call   135c0 <lj_gc_pubobjroot>
+   70ac1:	e9 e0 fc ff ff       	jmp    707a6 <func_newL_gc_base+0x2b6>
+   70ac6:	66 2e 0f 1f 84 00 00 	cs nopw 0x0(%rax,%rax,1)
+   70acd:	00 00 00 
+   70ad0:	8b 80 c8 15 00 00    	mov    0x15c8(%rax),%eax
+   70ad6:	85 c0                	test   %eax,%eax
+   70ad8:	0f 85 91 fd ff ff    	jne    7086f <func_newL_gc_base+0x37f>
+   70ade:	e9 e5 fc ff ff       	jmp    707c8 <func_newL_gc_base+0x2d8>
+   70ae3:	0f 1f 44 00 00       	nopl   0x0(%rax,%rax,1)
+   70ae8:	4c 8b 47 20          	mov    0x20(%rdi),%r8
+   70aec:	e9 21 fa ff ff       	jmp    70512 <func_newL_gc_base+0x22>
+   70af1:	0f 1f 80 00 00 00 00 	nopl   0x0(%rax)
+   70af8:	45 89 ef             	mov    %r13d,%r15d
+   70afb:	4c 8b 6c 24 08       	mov    0x8(%rsp),%r13
+   70b00:	4c 8b 64 24 30       	mov    0x30(%rsp),%r12
+   70b05:	48 8b 54 24 18       	mov    0x18(%rsp),%rdx
+   70b0a:	48 8b 5c 24 38       	mov    0x38(%rsp),%rbx
+   70b0f:	49 8b 7d 10          	mov    0x10(%r13),%rdi
+   70b13:	4c 89 e6             	mov    %r12,%rsi
+   70b16:	e8 f5 7a fa ff       	call   18610 <lj_gc_linkobj_new_chain>
+   70b1b:	4c 89 e6             	mov    %r12,%rsi
+   70b1e:	4c 89 ef             	mov    %r13,%rdi
+   70b21:	e8 9a 2a fa ff       	call   135c0 <lj_gc_pubobjroot>
+   70b26:	41 8d 47 ff          	lea    -0x1(%r15),%eax
+   70b2a:	49 8d 6c c4 30       	lea    0x30(%r12,%rax,8),%rbp
+   70b2f:	eb 1c                	jmp    70b4d <func_newL_gc_base+0x65d>
+   70b31:	66 66 2e 0f 1f 84 00 	data16 cs nopw 0x0(%rax,%rax,1)
+   70b38:	00 00 00 00 
+   70b3c:	0f 1f 40 00          	nopl   0x0(%rax)
+   70b40:	48 83 c3 08          	add    $0x8,%rbx
+   70b44:	48 39 dd             	cmp    %rbx,%rbp
+   70b47:	0f 84 59 fc ff ff    	je     707a6 <func_newL_gc_base+0x2b6>
+   70b4d:	48 8b 13             	mov    (%rbx),%rdx
+   70b50:	48 85 d2             	test   %rdx,%rdx
+   70b53:	74 eb                	je     70b40 <func_newL_gc_base+0x650>
+   70b55:	4c 89 e6             	mov    %r12,%rsi
+   70b58:	4c 89 ef             	mov    %r13,%rdi
+   70b5b:	e8 70 9f fd ff       	call   4aad0 <lj_gc2_barrier_obj_pair>
+   70b60:	eb de                	jmp    70b40 <func_newL_gc_base+0x650>
+   70b62:	48 8b 7c 24 08       	mov    0x8(%rsp),%rdi
+   70b67:	e8 14 e0 fd ff       	call   4eb80 <lj_err_mem>
+   70b6c:	4c 8d 05 d5 67 0f 00 	lea    0xf67d5(%rip),%r8        # 167348 <_IO_stdin_used+0x3348>
+   70b73:	ba 50 04 00 00       	mov    $0x450,%edx
+   70b78:	31 ff                	xor    %edi,%edi
+   70b7a:	31 c0                	xor    %eax,%eax
+   70b7c:	48 8d 0d dd 4e 10 00 	lea    0x104edd(%rip),%rcx        # 175a60 <__func__.2>
+   70b83:	48 8d 35 8c e6 0f 00 	lea    0xfe68c(%rip),%rsi        # 16f216 <_IO_stdin_used+0xb216>
+   70b8a:	e8 91 a4 f9 ff       	call   b020 <lj_assert_fail>
+   70b8f:	48 8b 44 24 08       	mov    0x8(%rsp),%rax
+   70b94:	4c 8d 05 a3 e6 0f 00 	lea    0xfe6a3(%rip),%r8        # 16f23e <_IO_stdin_used+0xb23e>
+   70b9b:	48 8d 0d be 4e 10 00 	lea    0x104ebe(%rip),%rcx        # 175a60 <__func__.2>
+   70ba2:	ba 51 04 00 00       	mov    $0x451,%edx
+   70ba7:	48 8d 35 68 e6 0f 00 	lea    0xfe668(%rip),%rsi        # 16f216 <_IO_stdin_used+0xb216>
+   70bae:	48 8b 78 10          	mov    0x10(%rax),%rdi
+   70bb2:	31 c0                	xor    %eax,%eax
+   70bb4:	e8 67 a4 f9 ff       	call   b020 <lj_assert_fail>
+   70bb9:	41 89 c1             	mov    %eax,%r9d
+   70bbc:	89 d0                	mov    %edx,%eax
+   70bbe:	48 8b 4c 24 08       	mov    0x8(%rsp),%rcx
+   70bc3:	48 8b 79 10          	mov    0x10(%rcx),%rdi
+   70bc7:	52                   	push   %rdx
+   70bc8:	50                   	push   %rax
+   70bc9:	4c 8d 05 08 37 0f 00 	lea    0xf3708(%rip),%r8        # 1642d8 <_IO_stdin_used+0x2d8>
+   70bd0:	48 8d 0d 99 4f 10 00 	lea    0x104f99(%rip),%rcx        # 175b70 <__func__.12>
+   70bd7:	ba e3 19 00 00       	mov    $0x19e3,%edx
+   70bdc:	31 c0                	xor    %eax,%eax
+   70bde:	48 8d 35 72 e1 0f 00 	lea    0xfe172(%rip),%rsi        # 16ed57 <_IO_stdin_used+0xad57>
+   70be5:	e8 36 a4 f9 ff       	call   b020 <lj_assert_fail>
+   70bea:	48 8b 44 24 08       	mov    0x8(%rsp),%rax
+   70bef:	41 89 c9             	mov    %ecx,%r9d
+   70bf2:	48 8b 78 10          	mov    0x10(%rax),%rdi
+   70bf6:	51                   	push   %rcx
+   70bf7:	52                   	push   %rdx
+   70bf8:	eb cf                	jmp    70bc9 <func_newL_gc_base+0x6d9>
+   70bfa:	4c 8d 05 57 68 0f 00 	lea    0xf6857(%rip),%r8        # 167458 <_IO_stdin_used+0x3458>
+   70c01:	ba c1 03 00 00       	mov    $0x3c1,%edx
+   70c06:	31 ff                	xor    %edi,%edi
+   70c08:	31 c0                	xor    %eax,%eax
+   70c0a:	48 8d 0d 2f 4e 10 00 	lea    0x104e2f(%rip),%rcx        # 175a40 <__func__.1>
+   70c11:	48 8d 35 fe e5 0f 00 	lea    0xfe5fe(%rip),%rsi        # 16f216 <_IO_stdin_used+0xb216>
+   70c18:	e8 03 a4 f9 ff       	call   b020 <lj_assert_fail>
+
+Disassembly of section .fini:

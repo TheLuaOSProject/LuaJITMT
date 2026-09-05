@@ -1,0 +1,85 @@
+[
+  {
+    "original": "/tmp/lj-gc-auto-control-20260905-qs673ryl/manifest.json",
+    "missing": true
+  },
+  {
+    "original": "/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers-safety-results.json",
+    "copy": "prior/string-agent/controlhelpers-safety-results.json",
+    "sha256": "34401bc4dcc71a07646ebf1df17862e3ecee5ff08f7210c9fc055250a8e7196b",
+    "bytes": 1907
+  },
+  {
+    "original": "/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers-safety-identities.json",
+    "copy": "prior/string-agent/controlhelpers-safety-identities.json",
+    "sha256": "14d2047378608499f92a12eee112be4f905877e07b60ed0df2a39911d98b04d4",
+    "bytes": 989
+  },
+  {
+    "original": "/tmp/lj-gc-auto-control-20260905-qs673ryl/function-timeout-gdb-results.json",
+    "copy": "prior/string-agent/function-timeout-gdb-results.json",
+    "sha256": "138d91f76673b62bf9fd6f2d34182fb2ff4538c2c96882db146e9b9202b586fe",
+    "bytes": 1584
+  },
+  {
+    "original": "/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers-function-timeout-gdb.stdout",
+    "copy": "prior/string-agent/controlhelpers-function-timeout-gdb.stdout",
+    "sha256": "970209221a7a2eb4adcf42d3a065ccb48b6f17a71e7f1ab802be52dd6db80466",
+    "bytes": 1178
+  },
+  {
+    "original": "/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers-function-timeout-gdb.stderr",
+    "copy": "prior/string-agent/controlhelpers-function-timeout-gdb.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "original": "/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers-function-timeout-gdb.stdout",
+    "copy": "prior/string-agent/helpers-function-timeout-gdb.stdout",
+    "sha256": "3630c3ac93241ef1e5d468328270c8fdc678a8de1a9bc0cdd137b5f8d5c59a99",
+    "bytes": 1153
+  },
+  {
+    "original": "/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers-function-timeout-gdb.stderr",
+    "copy": "prior/string-agent/helpers-function-timeout-gdb.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "original": "/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers-build.json",
+    "copy": "prior/string-agent/controlhelpers-build.json",
+    "sha256": "99eecaef6c2f13f5610b28df647514ccb46a65fabeb5e1c28111ac1b2af8bce9",
+    "bytes": 1055
+  },
+  {
+    "original": "/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers-build.json",
+    "copy": "prior/string-agent/helpers-build.json",
+    "sha256": "febbf0968609cee120227d3b15cfa140847a84d69905ac0e949c52070b9253a9",
+    "bytes": 1048
+  },
+  {
+    "original": "/tmp/lj-gc-auto-control-20260905-qs673ryl/source-validation.json",
+    "copy": "prior/string-agent/source-validation.json",
+    "sha256": "1bb11c138dc6a4d0e1738171291a6922505ff2494f1d9fc0b3f284bd3a09ed2e",
+    "bytes": 6416
+  },
+  {
+    "original": "/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers-safety-results.json",
+    "copy": "prior/string-agent/helpers-safety-results.json",
+    "sha256": "846d8ca8c313055b04fd8f1a911994dc64d2a3e4d5061fc3c697b31f321e4113",
+    "bytes": 34415
+  },
+  {
+    "original": "/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers-safety-identities.json",
+    "copy": "prior/string-agent/helpers-safety-identities.json",
+    "sha256": "9fd532c3e7317cc8206c19a096592587e3e5d0aec8fcd82b4c6107a562ad9d6f",
+    "bytes": 15992
+  },
+  {
+    "original": "/tmp/lj-gc-auto-control-20260905-qs673ryl/evidence/artifact-manifest.json",
+    "copy": "prior/string-agent/artifact-manifest.json",
+    "sha256": "5bdc2b9431e12a3d769d579b2ab09da3e68074b72258650b9c1fe81274351300",
+    "bytes": 221880,
+    "note": "Resolved manifest under evidence/; earlier root manifest.json lookup was absent."
+  }
+]

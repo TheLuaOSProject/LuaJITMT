@@ -1,0 +1,100 @@
+[
+  {
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-six/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-six/tests/t-func-construction-anchor.c",
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-six/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/construction-six/debug-six-fixture"
+    ],
+    "exit_code": 0,
+    "seconds": 0.18421587599732447,
+    "stdout": "compile.stdout",
+    "stderr": "compile.stderr",
+    "cwd": "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-six",
+    "LUA_PATH": "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-six/src/?.lua;/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-six/tests/lib/?.lua;;",
+    "identities": {
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/construction-six/debug-six-fixture": {
+        "sha256": "b828a586494bf7799ca49cb82bc00fd417130b03bc42b31e59b51e9293c7776c",
+        "bytes": 14078760
+      },
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-six/tests/t-func-construction-anchor.c": {
+        "sha256": "42e9d47359fb27565565fe07678abbc8de7abf119226075cab3a1142768a6f0f",
+        "bytes": 9458
+      },
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-six/src/libluajit.a": {
+        "sha256": "17d8bf2ab91cd74da888311c50b86e212147b1bb1a1373585a4397254975827b",
+        "bytes": 31006854
+      },
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/construction-six/inspect.py": {
+        "sha256": "5fecf7b85c6efe1400a3077b75528981cd2b458be45ae765dd22cb73d002b1ff",
+        "bytes": 5423
+      },
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/construction-six/debug.gdb": {
+        "sha256": "0c81dcacbf53a55d6fe794036718c50baa2f5b36fcb910ee011b72e7d1017341",
+        "bytes": 204
+      }
+    }
+  },
+  {
+    "argv": [
+      "gdb",
+      "--batch",
+      "-x",
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/construction-six/debug.gdb",
+      "--args",
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/construction-six/debug-six-fixture"
+    ],
+    "exit_code": 0,
+    "seconds": 3.127318415004993,
+    "stdout": "debug.stdout",
+    "stderr": "debug.stderr",
+    "capture_seen": true,
+    "interrupted": true,
+    "observation_seconds_after_capture": 3,
+    "note": "Read-only debugger observation. A debugger exit 0 is not a fixture pass.",
+    "cwd": "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-six",
+    "LUA_PATH": "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-six/src/?.lua;/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-six/tests/lib/?.lua;;",
+    "identities": {
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/construction-six/debug-six-fixture": {
+        "sha256": "b828a586494bf7799ca49cb82bc00fd417130b03bc42b31e59b51e9293c7776c",
+        "bytes": 14078760
+      },
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-six/tests/t-func-construction-anchor.c": {
+        "sha256": "42e9d47359fb27565565fe07678abbc8de7abf119226075cab3a1142768a6f0f",
+        "bytes": 9458
+      },
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/debug-six/src/libluajit.a": {
+        "sha256": "17d8bf2ab91cd74da888311c50b86e212147b1bb1a1373585a4397254975827b",
+        "bytes": 31006854
+      },
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/construction-six/inspect.py": {
+        "sha256": "5fecf7b85c6efe1400a3077b75528981cd2b458be45ae765dd22cb73d002b1ff",
+        "bytes": 5423
+      },
+      "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/construction-six/debug.gdb": {
+        "sha256": "0c81dcacbf53a55d6fe794036718c50baa2f5b36fcb910ee011b72e7d1017341",
+        "bytes": 204
+      }
+    }
+  }
+]

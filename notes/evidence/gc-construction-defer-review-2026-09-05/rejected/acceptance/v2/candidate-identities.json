@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/acceptance/v2/t-owner-defer.c": {
+    "sha256": "935acb6d75b4907259be08fffbf7bc10ee13b353faec34dd4a4a9524a1cdafe6",
+    "bytes": 6399
+  },
+  "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/src/libluajit.a": {
+    "sha256": "1af3f648f2a010f3b49c5d9f9a910f969646b647ca1cb9653229f2066bbf0944",
+    "bytes": 2976886
+  },
+  "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/acceptance/v2/candidate-t-owner-defer": {
+    "sha256": "ac4cf7eb4658bc19c57d47f5f0bb27dc2205062558b84d1b099566b1c03d14d7",
+    "bytes": 2005624
+  }
+}

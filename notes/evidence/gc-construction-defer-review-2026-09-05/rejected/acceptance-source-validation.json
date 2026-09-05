@@ -1,0 +1,10 @@
+{
+  "inputs": 807,
+  "changed": [
+    "src/lj_gc.c",
+    "src/lj_gc.h",
+    "src/lj_gc2.c"
+  ],
+  "focused_artifacts_reverified": 33,
+  "candidate_patch_sha256": "6904c48d7d24ad9776c390c3618d7cb0b562ba96bafab124be0d58bc8b22cb44"
+}

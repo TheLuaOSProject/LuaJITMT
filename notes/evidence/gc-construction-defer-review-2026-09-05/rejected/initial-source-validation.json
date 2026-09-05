@@ -1,0 +1,9 @@
+{
+  "changed": [
+    "src/lj_gc.c",
+    "src/lj_gc.h",
+    "src/lj_gc2.c"
+  ],
+  "input_count": 807,
+  "patch_sha256": "6904c48d7d24ad9776c390c3618d7cb0b562ba96bafab124be0d58bc8b22cb44"
+}

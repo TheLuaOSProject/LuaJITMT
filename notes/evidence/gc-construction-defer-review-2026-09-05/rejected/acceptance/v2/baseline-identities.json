@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/acceptance/v2/t-owner-defer.c": {
+    "sha256": "935acb6d75b4907259be08fffbf7bc10ee13b353faec34dd4a4a9524a1cdafe6",
+    "bytes": 6399
+  },
+  "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a": {
+    "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+    "bytes": 2976582
+  },
+  "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/acceptance/v2/baseline-t-owner-defer": {
+    "sha256": "eead0703c784ea788321832ba7837d82670aa3199966359c2b422c0c20a99485",
+    "bytes": 2001472
+  }
+}

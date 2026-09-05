@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/t-func-construction-anchor.c": {
+    "sha256": "42e9d47359fb27565565fe07678abbc8de7abf119226075cab3a1142768a6f0f",
+    "bytes": 9458
+  },
+  "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a": {
+    "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+    "bytes": 2976582
+  },
+  "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/baseline-t-func-construction-anchor": {
+    "sha256": "a7ba877afa0634f7157930990f9b8d88622d7112cea1b6a2fbf42e9b5ce8705e",
+    "bytes": 2006424
+  }
+}

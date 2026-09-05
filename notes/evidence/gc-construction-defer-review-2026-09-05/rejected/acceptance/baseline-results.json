@@ -1,0 +1,54 @@
+[
+  {
+    "name": "baseline-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src",
+      "-I/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/acceptance/t-owner-defer.c",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/acceptance/baseline-t-owner-defer"
+    ],
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.1641564519959502,
+    "stdout": "baseline-compile.stdout",
+    "stderr": "baseline-compile.stderr"
+  },
+  {
+    "name": "baseline-publish",
+    "argv": [
+      "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/acceptance/baseline-t-owner-defer",
+      "publish"
+    ],
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "timeout_seconds": 60,
+    "exit_code": -6,
+    "timed_out": false,
+    "seconds": 0.06377421599609079,
+    "stdout": "baseline-publish.stdout",
+    "stderr": "baseline-publish.stderr"
+  }
+]

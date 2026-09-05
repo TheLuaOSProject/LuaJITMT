@@ -1,0 +1,7 @@
+STATE peer-birth phase=0 cycle=0 deferred=0 owner_runs=0 arenas=0 ptr=0x7f51e7b60000 cell=616 block=1 root=1 life=2 ready=0 mark=0 flags=9 cursor=0 late=0 retire=0 quarantine=(nil) owned=0x7f51e7b60000
+STATE peer-after-collect phase=3 cycle=1 deferred=1 owner_runs=3 arenas=0 ptr=0x7f51e7b60000 cell=616 block=1 root=1 life=2 ready=0 mark=1 flags=25 cursor=3200 late=0 retire=9 quarantine=0x7f51e7b60000 owned=(nil)
+MIXED initial result=0 ns=619121 cycle=1 old_epoch=0 eligible=0x7f51e8480000 epoch=0 flags=25 main_quarantine=0x7f51e8480000 main_needsweep=(nil)
+MIXED held workers=0 objects=1 ns=3100126 events=0 parks=0 runs=2 eligible_done=1 epoch=1 cycle=1 phase=3
+STATE peer-before-release phase=3 cycle=1 deferred=1 owner_runs=5 arenas=2 ptr=0x7f51e7b60000 cell=616 block=1 root=1 life=2 ready=0 mark=0 flags=41 cursor=616 late=0 retire=0 quarantine=(nil) owned=(nil)
+MIXED released result=1 phase=0 peer_quarantine=(nil) eligible_epoch=2
+t-mixed-owner OK

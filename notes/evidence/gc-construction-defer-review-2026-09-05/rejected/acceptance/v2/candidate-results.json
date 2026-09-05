@@ -1,0 +1,84 @@
+[
+  {
+    "name": "candidate-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/src",
+      "-I/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/tests",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/acceptance/v2/t-owner-defer.c",
+      "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/acceptance/v2/candidate-t-owner-defer"
+    ],
+    "cwd": "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate",
+    "LUA_PATH": "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/src/?.lua;/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/tests/lib/?.lua;;",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.16436474600050133,
+    "stdout": "candidate-compile.stdout",
+    "stderr": "candidate-compile.stderr"
+  },
+  {
+    "name": "candidate-publish",
+    "argv": [
+      "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/acceptance/v2/candidate-t-owner-defer",
+      "publish"
+    ],
+    "cwd": "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate",
+    "LUA_PATH": "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/src/?.lua;/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/tests/lib/?.lua;;",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.007454931997926906,
+    "stdout": "candidate-publish.stdout",
+    "stderr": "candidate-publish.stderr"
+  },
+  {
+    "name": "candidate-cancel",
+    "argv": [
+      "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/acceptance/v2/candidate-t-owner-defer",
+      "cancel"
+    ],
+    "cwd": "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate",
+    "LUA_PATH": "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/src/?.lua;/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/tests/lib/?.lua;;",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.007436134001181927,
+    "stdout": "candidate-cancel.stdout",
+    "stderr": "candidate-cancel.stderr"
+  },
+  {
+    "name": "candidate-automatic",
+    "argv": [
+      "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/acceptance/v2/candidate-t-owner-defer",
+      "automatic"
+    ],
+    "cwd": "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate",
+    "LUA_PATH": "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/src/?.lua;/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/tests/lib/?.lua;;",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.0033666949966573156,
+    "stdout": "candidate-automatic.stdout",
+    "stderr": "candidate-automatic.stderr"
+  }
+]

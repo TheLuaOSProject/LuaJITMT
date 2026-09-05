@@ -1,0 +1,37 @@
+{
+  "argv": [
+    "cc",
+    "-std=gnu11",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-I/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/src",
+    "-DLUA_USE_ASSERT",
+    "-DLUA_USE_APICHECK",
+    "-DLJ_GC2_TEST_HELPERS",
+    "-DLJ_TRACE_TEST_HELPERS",
+    "-DLJ_TAB_TEST_HELPERS",
+    "-DLJ_FUNC_TEST_HELPERS",
+    "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/tests/t-func-construction-anchor.c",
+    "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/src/libluajit.a",
+    "-Wl,-E",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-func-construction-timeout-20260905-8htcwnmd/four-fresh-fixture"
+  ],
+  "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers",
+  "exit_code": 0,
+  "seconds": 0.15720478699950036,
+  "old_elf": {
+    "sha256": "1a2e8252bc2b5656da9a002263c83b4e20f1bfdb1a6962495f979802c61eea5c",
+    "bytes": 2072424
+  },
+  "new_elf": {
+    "sha256": "1a2e8252bc2b5656da9a002263c83b4e20f1bfdb1a6962495f979802c61eea5c",
+    "bytes": 2072424
+  }
+}
