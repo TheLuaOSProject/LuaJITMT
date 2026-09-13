@@ -1838,7 +1838,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -1865,7 +1865,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -1892,7 +1892,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -1919,7 +1919,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -1946,7 +1946,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -1973,7 +1973,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -2000,7 +2000,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -2027,7 +2027,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -2054,7 +2054,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -2081,7 +2081,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -2108,7 +2108,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -2135,7 +2135,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -2162,7 +2162,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -2189,7 +2189,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -2216,7 +2216,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -2243,7 +2243,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -2270,7 +2270,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -2297,7 +2297,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -2324,7 +2324,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -2351,7 +2351,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -2378,7 +2378,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -2405,7 +2405,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -2432,7 +2432,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -2459,7 +2459,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -2486,7 +2486,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -2513,7 +2513,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -2540,7 +2540,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -2567,7 +2567,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "alloc_tables"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -2594,7 +2594,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -2621,7 +2621,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -2648,7 +2648,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -2675,7 +2675,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -2702,7 +2702,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -2729,7 +2729,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -2756,7 +2756,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -2783,7 +2783,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -2810,7 +2810,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -2837,7 +2837,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -2864,7 +2864,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -2891,7 +2891,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -2918,7 +2918,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -2945,7 +2945,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -2972,7 +2972,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -2999,7 +2999,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -3026,7 +3026,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -3053,7 +3053,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -3080,7 +3080,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -3107,7 +3107,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -3134,7 +3134,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -3161,7 +3161,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -3188,7 +3188,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -3215,7 +3215,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -3242,7 +3242,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -3269,7 +3269,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -3296,7 +3296,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -3323,7 +3323,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -3350,7 +3350,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -3377,7 +3377,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -3404,7 +3404,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -3431,7 +3431,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -3458,7 +3458,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -3485,7 +3485,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -3512,7 +3512,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -3539,7 +3539,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -3566,7 +3566,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -3593,7 +3593,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -3620,7 +3620,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -3647,7 +3647,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -3674,7 +3674,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -3701,7 +3701,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-joff",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -3728,7 +3728,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -3755,7 +3755,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -3782,7 +3782,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -3809,7 +3809,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -3836,7 +3836,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -3863,7 +3863,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -3890,7 +3890,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -3917,7 +3917,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -3944,7 +3944,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -3971,7 +3971,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -3998,7 +3998,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
@@ -4025,7 +4025,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -4052,7 +4052,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/base-normal",
@@ -4079,7 +4079,7 @@
       "31",
       "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/src/luajit",
       "-jon",
-      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "cwd": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",

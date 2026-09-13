@@ -23,7 +23,7 @@ The benchmark was the closure-heavy active-GC workload:
 
 ```sh
 taskset -c 8 env BENCH_SCALE=1 \
-  src/luajit aux/bench/bench.lua closures_upval
+  src/luajit auxiliary/bench/bench.lua closures_upval
 ```
 
 The default binary was relinked with `TARGET_STRIP=:` so `perf` could retain
@@ -32,7 +32,7 @@ symbols; this does not change generated runtime code. The long profile used:
 ```sh
 taskset -c 8 perf record -q -o /tmp/sweep-current.data \
   -e cpu-clock:u -F 3999 -- \
-  env BENCH_SCALE=1 src/luajit aux/bench/bench.lua closures_upval
+  env BENCH_SCALE=1 src/luajit auxiliary/bench/bench.lua closures_upval
 ```
 
 It collected about 32,000 user samples with zero lost samples and reported

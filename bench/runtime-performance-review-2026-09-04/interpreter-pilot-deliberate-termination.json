@@ -5,7 +5,7 @@
     "-joff",
     "-e",
     "io.stdout:setvbuf('line')",
-    "/tmp/lj-runtime-performance-review-2026-09-04/fork/plan/aux/bench/bench.lua"
+    "/tmp/lj-runtime-performance-review-2026-09-04/fork/plan/auxiliary/bench/bench.lua"
   ],
   "requested_utc": "2026-09-04T21:56:16Z",
   "reason": "Parent requested deliberate termination after the profiled full-suite interpreter pilot established the SWEEP traversal cliff; preserve all partial rows and do not repeat the full suite.",

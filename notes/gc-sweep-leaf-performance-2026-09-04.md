@@ -72,7 +72,7 @@ stderr are retained separately in the same artifact directory.
 
 ## Full harness pilot protocol
 
-The full pilot uses the unmodified `plan/aux/bench/bench.lua`, SHA-256
+The full pilot uses the unmodified `plan/auxiliary/bench/bench.lua`, SHA-256
 `ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9`, with
 `BENCH_SCALE=1`, no filter, and `BENCH_GC_MODE` unset. Lua module paths select
 the measured runtime's own tree. Output is line-buffered so a timeout retains

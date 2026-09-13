@@ -11,7 +11,7 @@
       "-jon",
       "-e",
       "io.stdout:setvbuf(\"line\")",
-      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -42,7 +42,7 @@
       "-jon",
       "-e",
       "io.stdout:setvbuf(\"line\")",
-      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {

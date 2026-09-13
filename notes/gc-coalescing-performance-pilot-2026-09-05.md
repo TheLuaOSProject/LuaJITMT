@@ -33,7 +33,7 @@ preserves the production overlays relative to that base. Stock's normal
 executable is unchanged from the earlier pilots, SHA-256
 `d399449cc8cee4b0c600104a4a66fd44eeeac276c0f8571ce8204744041b5e34`.
 
-Both runtimes execute the unchanged `plan/aux/bench/bench.lua` at
+Both runtimes execute the unchanged `plan/auxiliary/bench/bench.lua` at
 `BENCH_SCALE=1`, with GC mode unset and their own Lua module paths. The order
 is fresh stock JIT, fork JIT, stock interpreter, fork interpreter. Each process
 has a 180-second limit and line-buffered output. All are pinned to logical

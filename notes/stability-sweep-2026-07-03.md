@@ -123,8 +123,8 @@ trace flush/hasany macros instead of leaving an implicit declaration in
 Current focused benchmark probes no longer reproduce the old "TRACE 1 forever"
 failure. With `BENCH_SCALE=1`:
 
-- `src/luajit plan/aux/bench/bench.lua fib30`: 9.441 ms/op.
-- `/usr/bin/luajit plan/aux/bench/bench.lua fib30`: 6.622 ms/op.
+- `src/luajit plan/auxiliary/bench/bench.lua fib30`: 9.441 ms/op.
+- `/usr/bin/luajit plan/auxiliary/bench/bench.lua fib30`: 6.622 ms/op.
 
 The recursive trace guard also passed:
 

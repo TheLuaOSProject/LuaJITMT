@@ -1,7 +1,7 @@
 from pathlib import Path
 import subprocess,time,json,os,hashlib,signal,statistics
 r=Path(__file__).resolve().parent;outdir=r/'cost';outdir.mkdir();rows=[]
-workloads={'ffi_struct':['aux/bench/bench.lua','ffi_struct'],'constructor_sink':[str(r/'constructor-cost.lua'),'sink'],'constructor_nosink':[str(r/'constructor-cost.lua'),'nosink']}
+workloads={'ffi_struct':['auxiliary/bench/bench.lua','ffi_struct'],'constructor_sink':[str(r/'constructor-cost.lua'),'sink'],'constructor_nosink':[str(r/'constructor-cost.lua'),'nosink']}
 for pair in range(7):
  for workload,args in workloads.items():
   for variant in (('base-normal','fix-normal') if pair%2==0 else ('fix-normal','base-normal')):

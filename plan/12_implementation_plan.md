@@ -14,12 +14,12 @@ packaging output. Keep lasting invariants in behavior fixtures, C race/lifetime
 fixtures, release/bytecode artifact checks where the artifact is the public
 product, and code-adjacent comments plus notes when the rule is design guidance
 rather than observable behavior. Run
-`aux/bench/bench.lua` on your machine, both -joff/-jon, 5 runs, commit CSV as
+`auxiliary/bench/bench.lua` on your machine, both -joff/-jon, 5 runs, commit CSV as
 `bench/baseline_<host>.csv`.
 Gate: default builds pass the stock suite; bench CSV committed.
 
 ## M1 — Atomics + state split, behavior-neutral (≈1500 lines)
-Tasks: drop in `aux/lj_atomic.h` as src/lj_atomic.h (verify it compiles
+Tasks: drop in `auxiliary/lj_atomic.h` as src/lj_atomic.h (verify it compiles
 with gcc/clang on x86-64). Create lj_tg.h/.c with TGState (03
 §3.2) embedded in GG_State; `g->jitp`; move tmpbuf/tmptv/tmptv2/prng/
 cur_L/jit_base accessors through `G2TG`-style macros that resolve to the
@@ -33,7 +33,7 @@ migration.
 
 ## M2 — dasc migration + allocator swap, still single-thread (≈3000)
 Tasks: vm_x64.dasc TG addressing per 03 §3.5 dispositions A–F. lj_arena.{h,c}
-per 04 (port aux/arena_bitmap_model.c verbatim for
+per 04 (port auxiliary/arena_bitmap_model.c verbatim for
 bitmap/sweep/free-run code); retire lj_alloc.c body, keep low-address
 mmap probing (04 §4.10); GCHeader change nextgc→gcw + gcflags (04 §4.7) —
 this forces the lj_gc.c single-thread GC to switch sweep to arenas even in
@@ -96,7 +96,7 @@ Gate: all green with `-joff`, 1..8 threads, under torture, 100 repetitions
 of the litmus set; TSAN build of C unit drivers clean.
 
 ## M5 — Concurrent objects: tables/strings/cells (≈5000)
-Tasks: tables per 06 §6.2–6.3 (port aux/nbtab_model.c; GCtab reshape;
+Tasks: tables per 06 §6.2–6.3 (port auxiliary/nbtab_model.c; GCtab reshape;
 IRFL offset constants updated even though JIT still off for MT); string
 intern rewrite 06 §6.5 (+ sweep wave ordering); parser cell model +
 CNEW/CGET/CSET (06 §6.4, 07 §7.6, 10 §10.2–10.3); bcread/bcwrite v4 (10
@@ -333,7 +333,7 @@ finalizer queueing/MPSC drains, finalizer-spawn deferrals, and live estimates.
 `lib_base.c` formats the Lua table from `GC2StatsSnapshot`, while
 `lj_gc2_stats_snapshot()` owns the GC2 acquire-load boundary for the exported
 counters.
-`plan/aux/bench/bench_mt.lua` prints a stable subset of those fields after a run
+`plan/auxiliary/bench/bench_mt.lua` prints a stable subset of those fields after a run
 and reports approximate owner-side poll-ack P99 latency from histogram deltas;
 synthetic leader and remote-native acknowledgements do not contribute to the
 poll-latency histogram.

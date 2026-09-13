@@ -105,7 +105,7 @@ always; CAS writes; cooperative resize with FORWARD sentinels; reclamation
 via GC + handshake grace. DECIDED. Brent-variation node relocation in
 `lj_tab_newkey` (lj_tab.c:436+) is removed — nodes never move within a
 generation, which is also what keeps HREFK valid. Full design: 06 §6.2–6.3,
-executable model: aux/nbtab_model.c.
+executable model: auxiliary/nbtab_model.c.
 
 ### ADR-7 — Upvalues: cell model (always-closed upvalues), new bytecodes
 CNEW/CGET/CSET, no open upvalues in v4 chunks. DECIDED. Open upvalues alias

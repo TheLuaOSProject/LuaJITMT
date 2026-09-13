@@ -14,7 +14,7 @@ for workload in ['direct_clib', 'clib', 'call', 'ffi_struct', 'shared']:
             if workload=='direct_clib': fixture=p/'direct-cost.lua';args=[str(fixture),'clib']
             elif workload=='shared':
                 fixture=p/'shared-cost.lua';args=[str(fixture),'2000000','helper' if variant=='candidate' else 'baseline']
-            elif workload=='ffi_struct': fixture=repo/'aux/bench/bench.lua';args=[str(fixture),'ffi_struct']
+            elif workload=='ffi_struct': fixture=repo/'auxiliary/bench/bench.lua';args=[str(fixture),'ffi_struct']
             else: fixture=p/'cost.lua';args=[str(fixture),workload]
             cmd=['taskset','-c','31',str(tree/'src/luajit'),'-jon']+args
             start=time.monotonic()

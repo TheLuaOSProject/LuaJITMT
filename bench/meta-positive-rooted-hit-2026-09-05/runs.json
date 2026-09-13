@@ -12,7 +12,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -39,7 +39,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -66,7 +66,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -93,7 +93,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -120,7 +120,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -147,7 +147,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -174,7 +174,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -201,7 +201,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -228,7 +228,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -255,7 +255,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -282,7 +282,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -309,7 +309,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -336,7 +336,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -363,7 +363,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -390,7 +390,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -417,7 +417,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -444,7 +444,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -471,7 +471,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -498,7 +498,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -525,7 +525,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -552,7 +552,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -579,7 +579,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -606,7 +606,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -633,7 +633,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -660,7 +660,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -687,7 +687,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -714,7 +714,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -741,7 +741,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -768,7 +768,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -795,7 +795,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -822,7 +822,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -849,7 +849,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -876,7 +876,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -903,7 +903,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -930,7 +930,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -957,7 +957,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -984,7 +984,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1011,7 +1011,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1038,7 +1038,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1065,7 +1065,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1092,7 +1092,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1119,7 +1119,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1146,7 +1146,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1173,7 +1173,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1200,7 +1200,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1227,7 +1227,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1254,7 +1254,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1281,7 +1281,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1308,7 +1308,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1335,7 +1335,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1362,7 +1362,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1389,7 +1389,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1416,7 +1416,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1443,7 +1443,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1470,7 +1470,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1497,7 +1497,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {

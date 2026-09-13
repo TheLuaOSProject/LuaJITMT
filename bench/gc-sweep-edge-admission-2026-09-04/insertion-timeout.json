@@ -7,7 +7,7 @@
     "30",
     "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/control/src/luajit",
     "-joff",
-    "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/control/plan/aux/bench/bench.lua",
+    "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/control/plan/auxiliary/bench/bench.lua",
     "tab_insert_newkey"
   ],
   "env": {
@@ -40,14 +40,14 @@
       "src/lj_ctype.c": "63990b7796d93a7c4c8659e61c2f0ec43dd766a2972ed679f8f46a4237b2171b",
       "src/lj_ctype.h": "8ee89b4adca50452d429e57ae528568ee9a2ac185eb15922f88e4007d0fd5e7d",
       "src/lj_trace.c": "0e9b47d38d52d60b82f05f6ab79aa32f1ac05e14317213e41971ecf371ca2200",
-      "plan/aux/bench/bench.lua": "ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9"
+      "plan/auxiliary/bench/bench.lua": "ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9"
     },
     "after": {
       "src/lj_gc2.c": "03642a1d466a127af219e9654bfc4e2a4ab63fe9119722a7685528df1d5a84f9",
       "src/lj_ctype.c": "63990b7796d93a7c4c8659e61c2f0ec43dd766a2972ed679f8f46a4237b2171b",
       "src/lj_ctype.h": "8ee89b4adca50452d429e57ae528568ee9a2ac185eb15922f88e4007d0fd5e7d",
       "src/lj_trace.c": "0e9b47d38d52d60b82f05f6ab79aa32f1ac05e14317213e41971ecf371ca2200",
-      "plan/aux/bench/bench.lua": "ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9"
+      "plan/auxiliary/bench/bench.lua": "ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9"
     }
   },
   "committed_symbolized_report_command": [

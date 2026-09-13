@@ -1,6 +1,6 @@
 from pathlib import Path
 import subprocess,os,json,time,statistics,hashlib,signal,csv
-out=Path(__file__).parent;harness=out/'base/plan/aux/bench/bench.lua';runs=[];summary=[]
+out=Path(__file__).parent;harness=out/'base/plan/auxiliary/bench/bench.lua';runs=[];summary=[]
 meta={'base_commit':'d680421c4cb50b85437d88255bc89358c5e3a6b1','cpu_requested':32,'cpu_used':31,'affinity_available':sorted(os.sched_getaffinity(0)),'scale':'0.02','normal_builds':True,'pairs':7,'protocol':'Alternating AB/BA, fresh process per sample, unmodified d680 filtered harness; row minimum of five in-process rounds; medians of independent paired ratios. CPU31, no complete host/frequency isolation. Other validation on CPUs0–15 and an independent study may useCPU30.','harness_sha256':hashlib.sha256(harness.read_bytes()).hexdigest(),'binaries':{kind:hashlib.sha256((out/kind/'src/luajit').read_bytes()).hexdigest() for kind in ['base','wide']}}
 (out/'timing-metadata.json').write_text(json.dumps(meta,indent=2))
 for mode in ['-joff','-jon']:

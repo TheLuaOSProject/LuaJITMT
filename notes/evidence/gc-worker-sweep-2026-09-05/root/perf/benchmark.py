@@ -18,7 +18,7 @@ for workload, mode in workloads:
         for variant in (['baseline', 'candidate'] if pair % 2 == 0 else
                         ['candidate', 'baseline']):
             tree = trees[variant]
-            fixture = p/'allocation-cost.lua' if workload in ('tnew', 'tdup') else repo/'aux/bench/bench.lua'
+            fixture = p/'allocation-cost.lua' if workload in ('tnew', 'tdup') else repo/'auxiliary/bench/bench.lua'
             args = [str(fixture), workload]
             if workload in ('tnew', 'tdup'):
                 args.append('100000')

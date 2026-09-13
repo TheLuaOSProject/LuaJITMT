@@ -11,7 +11,7 @@
       "-eL",
       "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/luajit",
       "-jon",
-      "/tmp/lj-gc-jit-combined-20260905-6cxpl6mp/normal/plan/aux/bench/bench.lua"
+      "/tmp/lj-gc-jit-combined-20260905-6cxpl6mp/normal/plan/auxiliary/bench/bench.lua"
     ],
     "environment": {
       "BENCH_SCALE": "1",
@@ -98,7 +98,7 @@
       "-eL",
       "/tmp/lj-gc-jit-combined-20260905-6cxpl6mp/normal/src/luajit",
       "-jon",
-      "/tmp/lj-gc-jit-combined-20260905-6cxpl6mp/normal/plan/aux/bench/bench.lua"
+      "/tmp/lj-gc-jit-combined-20260905-6cxpl6mp/normal/plan/auxiliary/bench/bench.lua"
     ],
     "environment": {
       "BENCH_SCALE": "1",
@@ -185,7 +185,7 @@
       "-eL",
       "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/luajit",
       "-joff",
-      "/tmp/lj-gc-jit-combined-20260905-6cxpl6mp/normal/plan/aux/bench/bench.lua"
+      "/tmp/lj-gc-jit-combined-20260905-6cxpl6mp/normal/plan/auxiliary/bench/bench.lua"
     ],
     "environment": {
       "BENCH_SCALE": "1",
@@ -272,7 +272,7 @@
       "-eL",
       "/tmp/lj-gc-jit-combined-20260905-6cxpl6mp/normal/src/luajit",
       "-joff",
-      "/tmp/lj-gc-jit-combined-20260905-6cxpl6mp/normal/plan/aux/bench/bench.lua"
+      "/tmp/lj-gc-jit-combined-20260905-6cxpl6mp/normal/plan/auxiliary/bench/bench.lua"
     ],
     "environment": {
       "BENCH_SCALE": "1",

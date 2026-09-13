@@ -13,7 +13,7 @@
 
 #include "lj_atomic.h"
 
-#if !defined(__x86_64__)
+#if !defined(__x86_64__) && !defined(_M_X64) && !defined(_M_AMD64)
 #error "TG-slot lifecycle tokens currently require the x86-64 CX16 contract"
 #endif
 

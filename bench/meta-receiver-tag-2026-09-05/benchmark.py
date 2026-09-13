@@ -6,7 +6,7 @@ for case in ['ffi_struct','tab_store_existing','tab_hash_read','tab_read_existin
   for name in (['before','after'] if pair%2 else ['after','before']):
    root=Path(meta['roots'][name]);label=f'{case}-{pair:02}-{name}'
    env=os.environ.copy();env['BENCH_SCALE']='0.005';env.pop('BENCH_GC_MODE',None);env['LUA_PATH']=str(root/'src/?.lua')+';;'
-   cmd=['taskset','-c','30','stdbuf','-oL','-eL',str(root/'src/luajit'),'-joff',str(Path(meta['roots']['after'])/'plan/aux/bench/bench.lua'),case]
+   cmd=['taskset','-c','30','stdbuf','-oL','-eL',str(root/'src/luajit'),'-joff',str(Path(meta['roots']['after'])/'plan/auxiliary/bench/bench.lua'),case]
    start=time.monotonic()
    with (p/(label+'.stdout')).open('w') as out,(p/(label+'.stderr')).open('w') as err:
     proc=subprocess.Popen(cmd,env=env,stdout=out,stderr=err,start_new_session=True)

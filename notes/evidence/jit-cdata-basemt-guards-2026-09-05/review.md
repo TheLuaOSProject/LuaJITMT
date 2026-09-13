@@ -57,7 +57,7 @@ Final normal and assertion/helper static builds use GCC, `CCDEBUG=-g`, and defau
 - Existing canonical xbar/XPOLL, first-thread activation, and first-GC-worker activation cases pass.
 - The original MT hammer remains a preserved failure; the new negative controls fail the exact base as specified above.
 
-Costs use 42 fresh processes on CPU 31, seven alternating pairs for each of three workloads, exact matching normal builds, and no helper flags. The existing `aux/bench/bench.lua ffi_struct` is unchanged, `BENCH_SCALE=1`, and reports best of five at four decimal places. The custom constructor checks sums and a genuine warm native exit, detaches instrumentation before timing, and reports all five CPU-time samples. The host was not globally isolated. No runs were discarded. `guard-cost-results.json` retains commands, environments, source/executable hashes and all process logs; `guard-cost-summary.json` gives paired results.
+Costs use 42 fresh processes on CPU 31, seven alternating pairs for each of three workloads, exact matching normal builds, and no helper flags. The existing `auxiliary/bench/bench.lua ffi_struct` is unchanged, `BENCH_SCALE=1`, and reports best of five at four decimal places. The custom constructor checks sums and a genuine warm native exit, detaches instrumentation before timing, and reports all five CPU-time samples. The host was not globally isolated. No runs were discarded. `guard-cost-results.json` retains commands, environments, source/executable hashes and all process logs; `guard-cost-summary.json` gives paired results.
 
 | Workload | Iterations per sample | Base median best | Fix median best | Median paired change |
 | --- | ---: | ---: | ---: | ---: |

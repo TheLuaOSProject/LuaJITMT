@@ -1144,7 +1144,7 @@
       "30",
       "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "arith_loop"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1170,7 +1170,7 @@
       "30",
       "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "arith_loop"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1196,7 +1196,7 @@
       "30",
       "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "arith_loop"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1222,7 +1222,7 @@
       "30",
       "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "arith_loop"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1248,7 +1248,7 @@
       "30",
       "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "arith_loop"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1274,7 +1274,7 @@
       "30",
       "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "arith_loop"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1300,7 +1300,7 @@
       "30",
       "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "arith_loop"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1326,7 +1326,7 @@
       "30",
       "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "arith_loop"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1352,7 +1352,7 @@
       "30",
       "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "arith_loop"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1378,7 +1378,7 @@
       "30",
       "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "arith_loop"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1404,7 +1404,7 @@
       "30",
       "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "arith_loop"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1430,7 +1430,7 @@
       "30",
       "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "arith_loop"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1456,7 +1456,7 @@
       "30",
       "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "arith_loop"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1482,7 +1482,7 @@
       "30",
       "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "arith_loop"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1508,7 +1508,7 @@
       "30",
       "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1534,7 +1534,7 @@
       "30",
       "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1560,7 +1560,7 @@
       "30",
       "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1586,7 +1586,7 @@
       "30",
       "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1612,7 +1612,7 @@
       "30",
       "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1638,7 +1638,7 @@
       "30",
       "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1664,7 +1664,7 @@
       "30",
       "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1690,7 +1690,7 @@
       "30",
       "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1716,7 +1716,7 @@
       "30",
       "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1742,7 +1742,7 @@
       "30",
       "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1768,7 +1768,7 @@
       "30",
       "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1794,7 +1794,7 @@
       "30",
       "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1820,7 +1820,7 @@
       "30",
       "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/workspaces/lj-lockless",
@@ -1846,7 +1846,7 @@
       "30",
       "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
       "-jon",
-      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "/workspaces/lj-lockless/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/workspaces/lj-lockless",

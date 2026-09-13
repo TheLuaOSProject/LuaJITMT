@@ -1681,7 +1681,7 @@ void lj_arena_scan_free_runs(const GCArena *a, LJArenaRunCB cb, void *ud)
       i = (i | 63u) + 1u;
       continue;
     }
-    i += (uint32_t)__builtin_ctzll(starts);
+    i += lj_ffs64(starts);
     if (i >= LJ_ARENA_CELLS)
       break;
     st = (!arena_side_owners_none(a, i) ||

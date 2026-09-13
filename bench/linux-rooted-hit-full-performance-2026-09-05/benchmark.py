@@ -2,7 +2,7 @@ from pathlib import Path
 import subprocess,json,time,os,signal,hashlib,math,csv
 p=Path(__file__).parent;out=p/'performance';out.mkdir(exist_ok=True)
 roots={'stock':Path('/tmp/lj-runtime-performance-review-2026-09-04/stock'),'fork':Path('/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal')}
-harness=roots['fork']/'plan/aux/bench/bench.lua'
+harness=roots['fork']/'plan/auxiliary/bench/bench.lua'
 rows_expected=['arith_loop','fib30','tab_hash_write','tab_store_existing','tab_insert_newkey','tab_hash_read','tab_read_existing','tab_array','alloc_tables','string_intern','closures_upval','upval_hot','ffi_struct','coroutine_switch','sbuf_format']
 meta={'runtime_metadata':json.loads((p/'metadata.json').read_text()),'build':json.loads((p/'build-normal.json').read_text()),'harness_sha256':hashlib.sha256(harness.read_bytes()).hexdigest(),'stock_ref':'b925b3e3fc6771171602323b45fbe9fb8fc90369','binary_sha256':{name:hashlib.sha256((root/'src/luajit').read_bytes()).hexdigest() for name,root in roots.items()},'protocol':'Fresh stock JIT, fork JIT, stock interpreter, fork interpreter; BENCH_SCALE=1, GC mode unset, unmodified full harness, 360s per process. Each row is minimum of five in-process rounds, not independent process repetitions. CPU 30; other functional work on CPUs 0-15; no full host/frequency isolation.'}
 (out/'metadata.json').write_text(json.dumps(meta,indent=2)+'\n');results=[]

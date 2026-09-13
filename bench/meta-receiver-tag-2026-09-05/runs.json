@@ -12,7 +12,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "environment": {
@@ -39,7 +39,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "environment": {
@@ -66,7 +66,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "environment": {
@@ -93,7 +93,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "environment": {
@@ -120,7 +120,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "environment": {
@@ -147,7 +147,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "environment": {
@@ -174,7 +174,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "environment": {
@@ -201,7 +201,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "environment": {
@@ -228,7 +228,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "environment": {
@@ -255,7 +255,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "environment": {
@@ -282,7 +282,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "environment": {
@@ -309,7 +309,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "environment": {
@@ -336,7 +336,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "environment": {
@@ -363,7 +363,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "environment": {
@@ -390,7 +390,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -417,7 +417,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -444,7 +444,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -471,7 +471,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -498,7 +498,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -525,7 +525,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -552,7 +552,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -579,7 +579,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -606,7 +606,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -633,7 +633,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -660,7 +660,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -687,7 +687,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -714,7 +714,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -741,7 +741,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -768,7 +768,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -795,7 +795,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -822,7 +822,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -849,7 +849,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -876,7 +876,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -903,7 +903,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -930,7 +930,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -957,7 +957,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -984,7 +984,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -1011,7 +1011,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -1038,7 +1038,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -1065,7 +1065,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -1092,7 +1092,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -1119,7 +1119,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_hash_read"
     ],
     "environment": {
@@ -1146,7 +1146,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1173,7 +1173,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1200,7 +1200,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1227,7 +1227,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1254,7 +1254,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1281,7 +1281,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1308,7 +1308,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1335,7 +1335,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1362,7 +1362,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1389,7 +1389,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1416,7 +1416,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1443,7 +1443,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1470,7 +1470,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1497,7 +1497,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_read_existing"
     ],
     "environment": {
@@ -1524,7 +1524,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1551,7 +1551,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1578,7 +1578,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1605,7 +1605,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1632,7 +1632,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1659,7 +1659,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1686,7 +1686,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1713,7 +1713,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1740,7 +1740,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1767,7 +1767,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1794,7 +1794,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1821,7 +1821,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1848,7 +1848,7 @@
       "-eL",
       "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {
@@ -1875,7 +1875,7 @@
       "-eL",
       "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src/luajit",
       "-joff",
-      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/aux/bench/bench.lua",
+      "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/plan/auxiliary/bench/bench.lua",
       "tab_array"
     ],
     "environment": {

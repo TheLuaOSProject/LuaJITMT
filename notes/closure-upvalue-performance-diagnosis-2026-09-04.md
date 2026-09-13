@@ -25,7 +25,7 @@ This diagnosis uses those exact normal, unsanitized binaries:
 - Stock: `/tmp/lj-runtime-performance-review-2026-09-04/stock/src/luajit`,
   revision `b925b3e3fc6771171602323b45fbe9fb8fc90369`, SHA-256
   `d399449cc8cee4b0c600104a4a66fd44eeeac276c0f8571ce8204744041b5e34`.
-- Original harness: `plan/aux/bench/bench.lua` from the frozen fork, SHA-256
+- Original harness: `plan/auxiliary/bench/bench.lua` from the frozen fork, SHA-256
   `ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9`.
 
 Children ran on CPU 30, an Intel Core i9-14900K core without an SMT sibling,

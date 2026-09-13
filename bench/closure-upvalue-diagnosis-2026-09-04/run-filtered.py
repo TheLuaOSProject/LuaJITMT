@@ -7,7 +7,7 @@ binaries={
   "leaf": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/luajit",
   "stock": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/luajit",
 }
-harness="/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua"
+harness="/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/auxiliary/bench/bench.lua"
 records=[]
 for sample in range(3):
   for kind in (["stock","leaf"] if sample%2==0 else ["leaf","stock"]):

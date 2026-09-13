@@ -8,7 +8,7 @@
     "-eL",
     "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
     "-joff",
-    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua"
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/auxiliary/bench/bench.lua"
   ],
   "seconds": 727.4270960239992,
   "status": "complete",

@@ -3,7 +3,7 @@
 This document specifies every shared mutable runtime structure: tables
 (§6.2–6.3), the string intern table (§6.5), upvalue cells (§6.4), thread
 ownership (§6.7), and the long tail (§6.8). Executable reference for the
-table protocol: `aux/nbtab_model.c` (compiles standalone, stress-tested;
+table protocol: `auxiliary/nbtab_model.c` (compiles standalone, stress-tested;
 port it rather than re-deriving).
 
 ## 6.1 Reserved internal value encodings

@@ -2,7 +2,7 @@
 
 Date: 2026-07-05
 
-Filtered `aux/bench/bench.lua` runs are used by `m9_bench_stock_compare` to
+Filtered `auxiliary/bench/bench.lua` runs are used by `m9_bench_stock_compare` to
 measure one throughput surface at a time. Benchmark fixtures therefore need to
 be local to the selected case: unselected fixtures can leave extra live GC
 objects, trigger unrelated recorder work, and distort allocation-heavy rows.

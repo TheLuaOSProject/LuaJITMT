@@ -156,17 +156,21 @@ void lj_dispatch_init_hotcount(global_State *g)
 #define DISPMODE_PROF	0x40	/* Profiling active. */
 #define DISPMODE_UPDATE	0x80	/* Dispatch table update in progress. */
 
+/* BC_CNEW..BC_BSAR is the fork-only tail appended after BC_FUNCCW to keep
+** stock opcode numbers intact for legacy dump compat (10 §10.4); it holds
+** the cell ops and, after them, the bit operators, and both need the same
+** instruction-dispatch overlay treatment as the ordinary [0,BC_FUNCF) ops. */
 static void dispatch_setins_cells(ASMFunction *disp, ASMFunction f)
 {
   uint32_t i;
-  for (i = BC_CNEW; i <= BC_CSET; i++)
+  for (i = BC_CNEW; i <= BC_BSAR; i++)
     disp[i] = f;
 }
 
 static void dispatch_copyins_cells(ASMFunction *disp)
 {
   uint32_t i;
-  for (i = BC_CNEW; i <= BC_CSET; i++)
+  for (i = BC_CNEW; i <= BC_BSAR; i++)
     disp[i] = disp[GG_LEN_DDISP+i];
 }
 

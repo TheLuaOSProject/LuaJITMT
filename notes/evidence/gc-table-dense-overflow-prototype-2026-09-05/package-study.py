@@ -24,7 +24,7 @@ def run(cmd,cwd):
     return q
 
 evidence.mkdir(parents=True,exist_ok=True);bench.mkdir(parents=True,exist_ok=True)
-archive_command=['git','archive',base_ref,'src','dynasm','plan/aux/bench','tests']
+archive_command=['git','archive',base_ref,'src','dynasm','plan/auxiliary/bench','tests']
 archive=subprocess.run(archive_command,cwd=repo,capture_output=True)
 assert archive.returncode==0,archive.stderr
 commands.append({'command':archive_command,'cwd':str(repo),'exit':archive.returncode,
@@ -124,14 +124,14 @@ dependencies={}
 for f in ['tests/lib/lua_fixture_helpers.h','tests/lib/thread_fixture_helpers.h',
           'tests/t-gc2-recovery.c','tests/t-gc2-table-store-guard.c',
           'tests/t-gc2-sweep-table-coalescing.c','tests/t-gc2-traverse.c',
-          'tests/t-x64-tnew-empty-inline.c','tests/t-jit-fnew-bump.c','plan/aux/bench/bench.lua']:
+          'tests/t-x64-tnew-empty-inline.c','tests/t-jit-fnew-bump.c','plan/auxiliary/bench/bench.lua']:
     if not (base/f).exists():continue
     h=sha(base/f)
     for variant in ['base-normal','strict','normal','asan']:
         assert sha(original/variant/f)==h,(variant,f)
     dependencies[f]=h
-plan=original/'normal/plan/aux/bench/bench.lua'
-assert sha(plan)==sha(original/'base-normal/plan/aux/bench/bench.lua')==sha(base/'plan/aux/bench/bench.lua')
+plan=original/'normal/plan/auxiliary/bench/bench.lua'
+assert sha(plan)==sha(original/'base-normal/plan/auxiliary/bench/bench.lua')==sha(base/'plan/auxiliary/bench/bench.lua')
 (bench/'plan-bench.lua').write_bytes(plan.read_bytes())
 write_json(evidence/'supplemental-snapshot.json',{
     'scope':'Packaging-time read-only inventory; not a new runtime or build execution.',
@@ -188,7 +188,7 @@ write_json(bench/'source-snapshot.json',{
     'binaries':{k:h for k,h in final['binaries'].items() if k.startswith(('base-normal','normal'))},
     'builds':{v:final['builds'][v] for v in ['base-normal','normal']},
     'tools':final['tools'],'source_files':{f:sha(original/f) for f in ['cost.c','cost-study.py','summarize-cost.py','compile-cost.py']},
-    'plan_harness':{'base_path':'plan/aux/bench/bench.lua','packaged_path':'plan-bench.lua','sha256':sha(plan)},
+    'plan_harness':{'base_path':'plan/auxiliary/bench/bench.lua','packaged_path':'plan-bench.lua','sha256':sha(plan)},
     'tested_patch_sha256':sha(original/'dense-W.patch'),
     'candidate_difference':'Only the small-only accessor comment; candidate patch was not measured.',
     'original_final_validation_sha256':sha(original/'final-validation.json'),

@@ -56,7 +56,7 @@ cells, and generic/local-cell cases keep using the existing path.
 
 ## Local result
 
-`BENCH_FILTER=closures_upval BENCH_SCALE=0.05 ./aux/bench/run.sh compare
+`BENCH_FILTER=closures_upval BENCH_SCALE=0.05 ./auxiliary/bench/run.sh compare
 /usr/bin/luajit src/luajit`:
 
 - baseline stock: 42.18 ns/op
@@ -66,8 +66,8 @@ cells, and generic/local-cell cases keep using the existing path.
 2026-07-03 follow-up sample after initial-UGET forwarding and fresh-closure
 prototype reload removal:
 
-- `BENCH_SCALE=0.05 src/luajit aux/bench/bench.lua closures_upval`: 72.01 ns/op
-- `BENCH_SCALE=0.05 /usr/bin/luajit aux/bench/bench.lua closures_upval`: 43.86 ns/op
+- `BENCH_SCALE=0.05 src/luajit auxiliary/bench/bench.lua closures_upval`: 72.01 ns/op
+- `BENCH_SCALE=0.05 /usr/bin/luajit auxiliary/bench/bench.lua closures_upval`: 43.86 ns/op
 
 This slice reduces the traced IR/mcode shape (`mcode` 537 -> 492 bytes in the
 local dump) but does not solve the larger allocation/GC-side closure gap.

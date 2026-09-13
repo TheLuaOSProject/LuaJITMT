@@ -132,7 +132,7 @@ int main(void)
     "  return fib(30)\n"
     "end\n"
     "for _ = 1, 5 do assert(runfib() == 832040) end\n");
-  /* This mirrors aux/bench/bench.lua fib30: a nested recursive closure is
+  /* This mirrors auxiliary/bench/bench.lua fib30: a nested recursive closure is
   ** rebuilt around each measured run. The limit leaves room for hotcount
   ** variance, but catches the old unbounded return-trace retry loop.
   */

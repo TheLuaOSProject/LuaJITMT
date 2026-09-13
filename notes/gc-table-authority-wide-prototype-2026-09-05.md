@@ -123,7 +123,7 @@ environment exposes CPUs 0 through 31. No workload ran in those attempts. The
 parent approved CPU 31, which was used for all reported pairs.
 
 The performance comparison uses normal builds and the unmodified d680 filtered
-`plan/aux/bench/bench.lua`, with `BENCH_SCALE=0.02`, automatic GC, seven fresh
+`plan/auxiliary/bench/bench.lua`, with `BENCH_SCALE=0.02`, automatic GC, seven fresh
 process pairs per case and execution mode, and alternating AB/BA order. Each
 harness sample is its minimum of five in-process rounds. The percentage is the
 median of the seven paired ratios, not the ratio of the displayed medians.

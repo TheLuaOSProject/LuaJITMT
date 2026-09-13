@@ -18,7 +18,7 @@
 
 Recorded from the pinned commit, container: 1 vCPU Intel Xeon @2.80 GHz,
 3.9 GiB RAM, gcc 13.3.0, Linux x86-64, default build (GC64 on). Best of 5,
-`aux/bench/bench.lua`. **Single-vCPU machine: these are single-thread
+`auxiliary/bench/bench.lua`. **Single-vCPU machine: these are single-thread
 baselines only; redo scaling runs (bench_mt) on ≥8 real cores.**
 Use `BENCH_GC_MODE=generational|incremental` to pin the GC mode for a run, and
 `BENCH_SCALE=<factor>` for short tuning probes; unset both for canonical
@@ -107,7 +107,7 @@ gc2_fixpoint_test.c: detector unit (05 §5.7.1) — mock workers inject
 marks; assert termination exactly when a round is clean.
 arena_sweep_test.c: extends the aux model with randomized alloc/mark/sweep
 cycles, asserts live-set preservation + free-coalescing (port from
-aux/arena_bitmap_model.c main()).
+auxiliary/arena_bitmap_model.c main()).
 defer_free_test.c: epoch grace — retire under reader load, ASAN build,
 assert no UAF and no leak (counted).
 
@@ -140,7 +140,7 @@ Run litmus + t-api + t-tab suites under it weekly-equivalent cadence.
   per-key last-writer-wins oracle where determinable (single-writer keys).
 - ffi.cdef grammar fuzz reused from upstream practice (cparse).
 
-## 13.8 Benchmarks: multi-thread suite (aux/bench/bench_mt.lua)
+## 13.8 Benchmarks: multi-thread suite (auxiliary/bench/bench_mt.lua)
 Scaling curves 1,2,4,8 threads: arith-MT (embarrassingly parallel),
 tab_read-shared with prebuilt keys, tab_read-keybuild for the historical
 key-construction plus shared-read stress case, tab_write-shared and
@@ -162,7 +162,7 @@ reports per-run owner-side poll-ack P99 bucket bounds from histogram deltas.
 Synthetic leader and remote-native safepoint acknowledgements are excluded from
 that latency histogram.
 Use `BENCH_SCALE=<factor>` for short probes, `BENCH_THREADS="1 2 4 8"` to
-override the scaling set in `aux/bench/run.sh scaling`, and
+override the scaling set in `auxiliary/bench/run.sh scaling`, and
 `BENCH_FILTER=<substring>` to isolate one benchmark. Pairwise channel
 benchmarks require an even thread count of at least two and are reported as
 skipped for the 1-thread reference line.

@@ -93,14 +93,14 @@ as the milestone inventory. Each milestone names its tasks, the
 documents/sections that specify them, the
 tests that gate completion, and what to do if a gate fails.
 
-Auxiliary code shipped with this report (under `aux/`):
+Auxiliary code shipped with this report (under `auxiliary/`):
 
-    aux/lj_atomic.h          complete atomics layer — drop into src/ as-is
-    aux/arena_bitmap_model.c standalone, tested model of the arena bitmap math
-    aux/nbtab_model.c        standalone, tested model of the lock-free table
-    aux/bench/bench.lua      single-thread baseline benchmark harness (run!)
-    aux/bench/bench_mt.lua   multi-thread scaling benchmarks (post-M4)
-    aux/tests/*.lua          threading conformance + stress suite (post-M4)
+    auxiliary/lj_atomic.h          complete atomics layer — drop into src/ as-is
+    auxiliary/arena_bitmap_model.c standalone, tested model of the arena bitmap math
+    auxiliary/nbtab_model.c        standalone, tested model of the lock-free table
+    auxiliary/bench/bench.lua      single-thread baseline benchmark harness (run!)
+    auxiliary/bench/bench_mt.lua   multi-thread scaling benchmarks (post-M4)
+    auxiliary/tests/*.lua          threading conformance + stress suite (post-M4)
 
 The two `*_model.c` files are historical executable sketches. Their passing
 tests do not establish paused-owner progress or absence of lost updates. In
@@ -140,7 +140,7 @@ whose proof fails; preserve the semantic requirements, not an unsafe sketch.
    whose correctness and cost remain supported. Correct or replace those
    contradicted by the current requirements, code, paused-owner schedules, or
    measurements, and record the reason plus the replacement's proof obligations.
-7. **Measure before and after.** `aux/bench/bench.lua` numbers from the
+7. **Measure before and after.** `auxiliary/bench/bench.lua` numbers from the
    reference machine are in 13 §13.2. Re-baseline on your machine at M0 and
    keep a CSV; the single-thread regression budget is ≤10% geomean
    (stretch ≤5%) on the lockless runtime with one thread running.
@@ -154,7 +154,7 @@ whose proof fails; preserve the semantic requirements, not an unsafe sketch.
 - From M3 on, run the GC torture mode (`lj_gc2.c` exposes
   `collectgarbage("torture", 1)`: handshake after every N allocations) under
   the Lua test suite.
-- From M4 on, run `aux/tests/` and the TSAN build target (13 §13.6).
+- From M4 on, run `auxiliary/tests/` and the TSAN build target (13 §13.6).
 - Keep `git commit` granularity at one spec-section per commit; commit
   messages reference the section, e.g. `gc2: grey stack push/pop (05 §5.6)`.
 

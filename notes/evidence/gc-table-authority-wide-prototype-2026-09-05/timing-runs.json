@@ -10,7 +10,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -36,7 +36,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -62,7 +62,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -88,7 +88,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -114,7 +114,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -140,7 +140,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -166,7 +166,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -192,7 +192,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -218,7 +218,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -244,7 +244,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -270,7 +270,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -296,7 +296,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -322,7 +322,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -348,7 +348,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -374,7 +374,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -400,7 +400,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -426,7 +426,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -452,7 +452,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -478,7 +478,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -504,7 +504,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -530,7 +530,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -556,7 +556,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -582,7 +582,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -608,7 +608,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -634,7 +634,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -660,7 +660,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -686,7 +686,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -712,7 +712,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -738,7 +738,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -764,7 +764,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -790,7 +790,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -816,7 +816,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -842,7 +842,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -868,7 +868,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -894,7 +894,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -920,7 +920,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -946,7 +946,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -972,7 +972,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -998,7 +998,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -1024,7 +1024,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -1050,7 +1050,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -1076,7 +1076,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -1102,7 +1102,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -1128,7 +1128,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -1154,7 +1154,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -1180,7 +1180,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -1206,7 +1206,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -1232,7 +1232,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -1258,7 +1258,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -1284,7 +1284,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -1310,7 +1310,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -1336,7 +1336,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -1362,7 +1362,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -1388,7 +1388,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -1414,7 +1414,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -1440,7 +1440,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_store_existing"
     ],
     "environment": {
@@ -1466,7 +1466,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -1492,7 +1492,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -1518,7 +1518,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -1544,7 +1544,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -1570,7 +1570,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -1596,7 +1596,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -1622,7 +1622,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -1648,7 +1648,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -1674,7 +1674,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -1700,7 +1700,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -1726,7 +1726,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -1752,7 +1752,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -1778,7 +1778,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -1804,7 +1804,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "tab_insert_newkey"
     ],
     "environment": {
@@ -1830,7 +1830,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -1856,7 +1856,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -1882,7 +1882,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -1908,7 +1908,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -1934,7 +1934,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -1960,7 +1960,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -1986,7 +1986,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -2012,7 +2012,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -2038,7 +2038,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -2064,7 +2064,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -2090,7 +2090,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -2116,7 +2116,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -2142,7 +2142,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -2168,7 +2168,7 @@
       "31",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-jon",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {

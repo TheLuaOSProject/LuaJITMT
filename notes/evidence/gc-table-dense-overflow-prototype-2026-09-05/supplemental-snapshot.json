@@ -3056,7 +3056,7 @@
     "tests/t-gc2-traverse.c": "d013c592319978b38a1e080143b8494f07ebf35abec1d6458794d72ca8b2b67b",
     "tests/t-x64-tnew-empty-inline.c": "46f9a1252d3cfb9c87344154a9048f5db6f13b4da52cd1aabf3f54b697adbf96",
     "tests/t-jit-fnew-bump.c": "f786b870b55631a864a105bd0facd2b98c738ff2427316aa5c3807567b756960",
-    "plan/aux/bench/bench.lua": "ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9"
+    "plan/auxiliary/bench/bench.lua": "ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9"
   },
   "original_base_tar_sha256": "90323940f8640fd09c0686202152ea4f538c92be04a1a3d440375b906633b939"
 }

@@ -53,6 +53,8 @@ LJ_FUNC TValue *lj_meta_tset_owner(lua_State *L, cTValue *o, cTValue *k,
 				   GCtab **owner);
 LJ_FUNCA TValue *lj_meta_arith(lua_State *L, TValue *ra, cTValue *rb,
 			       cTValue *rc, BCReg op);
+LJ_FUNCA void lj_meta_bitop(lua_State *L, TValue *ra, cTValue *rb,
+			    cTValue *rc, BCReg op);
 LJ_FUNCA TValue *lj_meta_cat(lua_State *L, TValue *top, int left);
 LJ_FUNCA TValue * LJ_FASTCALL lj_meta_len(lua_State *L, cTValue *o);
 LJ_FUNCA TValue *lj_meta_equal(lua_State *L, GCobj *o1, GCobj *o2, int ne);

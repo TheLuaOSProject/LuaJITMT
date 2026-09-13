@@ -1,5 +1,5 @@
 {
-  "workload_source": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/aux/bench/bench.lua",
+  "workload_source": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/auxiliary/bench/bench.lua",
   "workload_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
   "dumps": [
     {

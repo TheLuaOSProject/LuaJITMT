@@ -25,7 +25,7 @@ for name in ['alloc_tables','tab_insert_newkey','closures_upval']:
    variants=['base-normal','normal'] if pair%2==0 else ['normal','base-normal']
    for variant in variants:
     env=os.environ.copy();env['BENCH_SCALE']='0.02'
-    run(name,'plan',variant,mode,['taskset','-c','31',str(p/variant/'src/luajit'),'-'+mode,str(p/variant/'plan/aux/bench/bench.lua'),name],env,pair)
+    run(name,'plan',variant,mode,['taskset','-c','31',str(p/variant/'src/luajit'),'-'+mode,str(p/variant/'plan/auxiliary/bench/bench.lua'),name],env,pair)
 for name in ['tables','insertion','closures','promoted_tables']:
  for mode in ['joff','jon']:
   for pair in range(1 if pilot else 3):

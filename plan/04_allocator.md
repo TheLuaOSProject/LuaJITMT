@@ -4,7 +4,7 @@ Replaces `lj_alloc.c` and `lj_mem_*` (lj_gc.h:112–135). The layout follows
 Pall's LuaJIT-3.0 GC design (arenas, 16-byte cells, segregated block/mark
 bitmaps, differential encoding, huge-block side table); concurrency comes
 from strict per-thread arena ownership. Executable model of the bitmap math:
-`aux/arena_bitmap_model.c` (run it; it asserts the sweep identities).
+`auxiliary/arena_bitmap_model.c` (run it; it asserts the sweep identities).
 
 ## 4.1 Constants & layout
 

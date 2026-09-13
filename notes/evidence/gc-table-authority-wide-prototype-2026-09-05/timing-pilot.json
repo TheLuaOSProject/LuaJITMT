@@ -7,7 +7,7 @@
       "32",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {
@@ -28,7 +28,7 @@
       "32",
       "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
       "-joff",
-      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/auxiliary/bench/bench.lua",
       "closures_upval"
     ],
     "environment": {

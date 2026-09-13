@@ -6,7 +6,7 @@ This note records the closure/upvalue GC2 optimization composed onto
 `cd854a9a`. The focused command is:
 
 ```sh
-BENCH_SCALE=0.10 ./src/luajit aux/bench/bench.lua closures_upval
+BENCH_SCALE=0.10 ./src/luajit auxiliary/bench/bench.lua closures_upval
 ```
 
 The harness reports the best of five runs and divides by the scaled iteration

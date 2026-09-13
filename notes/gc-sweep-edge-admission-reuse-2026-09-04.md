@@ -128,7 +128,7 @@ only in the admission-reuse GC source. The very first control process hit its
 
 ```sh
 BENCH_SCALE=0.05 taskset -c 30 "$control/src/luajit" -joff \
-  "$control/plan/aux/bench/bench.lua" tab_insert_newkey
+  "$control/plan/auxiliary/bench/bench.lua" tab_insert_newkey
 ```
 
 `BENCH_GC_MODE` was unset, and Lua module paths pointed at the control tree.

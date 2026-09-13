@@ -273,7 +273,7 @@ per-TG/worker counter, flushed to the global at handshake/idle —
 cheap, exact-enough monotone detector. Two empty rounds are required by
 the detector only if counters are flushed lazily; with flush-at-round-end
 one zero round suffices (prove in code comment; the model in
-aux/nbtab_model.c is unrelated — write a 30-line unit test for the
+auxiliary/nbtab_model.c is unrelated — write a 30-line unit test for the
 detector in lj_gc2_test.c, 13 §13.5).
 
 Current bridge note: `lj_gc2_fixpoint_round()` is the first bounded

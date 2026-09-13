@@ -17,8 +17,176 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#if defined(_MSC_VER) && !defined(__clang__)
+
+#if !defined(_M_X64) && !defined(_M_IX86)
+#error "lj_atomic.h MSVC backend assumes x86/x86-64 TSO for its compiler-only \
+  acquire/release barriers (_ReadBarrier/_WriteBarrier); this target's memory \
+  model needs real hardware fences (e.g. via MemoryBarrier()) before use."
+#endif
+
+#include <intrin.h>
+#include <windows.h>
+
+#define LA_INLINE static __forceinline
+#ifndef __alignof__
+#define __alignof__(type) __alignof(type)
+#endif
+
+/* MSVC does not expose the C11 atomic API for plain storage. The Interlocked
+** intrinsics are full barriers, which is stronger than the order requested by
+** the API below. Plain x86-64 loads/stores are atomic; compiler barriers keep
+** acquire/release accesses from being reordered by the optimizer. */
+enum {
+  LA_RLX = 0,
+  LA_ACQ = 1,
+  LA_REL = 2,
+  LA_ACQ_REL = 3,
+  LA_SEQ = 4
+};
+
+LA_INLINE uint8_t la_load8_rlx(const uint8_t *p)
+{ return *(const volatile uint8_t *)p; }
+LA_INLINE uint32_t la_load32_rlx(const uint32_t *p)
+{ return *(const volatile uint32_t *)p; }
+LA_INLINE uint64_t la_load64_rlx(const uint64_t *p)
+{ return *(const volatile uint64_t *)p; }
+LA_INLINE uintptr_t la_loaduptr_rlx(const uintptr_t *p)
+{ return *(const volatile uintptr_t *)p; }
+LA_INLINE uint8_t la_load8_acq(const uint8_t *p)
+{ uint8_t v = *(const volatile uint8_t *)p; _ReadBarrier(); return v; }
+LA_INLINE uint16_t la_load16_acq(const uint16_t *p)
+{ uint16_t v = *(const volatile uint16_t *)p; _ReadBarrier(); return v; }
+LA_INLINE uint32_t la_load32_acq(const uint32_t *p)
+{ uint32_t v = *(const volatile uint32_t *)p; _ReadBarrier(); return v; }
+LA_INLINE uint64_t la_load64_acq(const uint64_t *p)
+{ uint64_t v = *(const volatile uint64_t *)p; _ReadBarrier(); return v; }
+LA_INLINE uintptr_t la_loaduptr_acq(const uintptr_t *p)
+{ uintptr_t v = *(const volatile uintptr_t *)p; _ReadBarrier(); return v; }
+LA_INLINE void *la_loadptr_rlx(void *const *p)
+{ return *(void *volatile const *)p; }
+LA_INLINE void *la_loadptr_acq(void *const *p)
+{ void *v = *(void *volatile const *)p; _ReadBarrier(); return v; }
+#define la_loadfunc_acq(p) \
+  _InterlockedCompareExchangePointer((void *volatile *)(p), NULL, NULL)
+
+LA_INLINE void la_store8_rlx(uint8_t *p, uint8_t v)
+{ *(volatile uint8_t *)p = v; }
+LA_INLINE void la_store8_rel(uint8_t *p, uint8_t v)
+{ _WriteBarrier(); *(volatile uint8_t *)p = v; }
+LA_INLINE void la_store32_rlx(uint32_t *p, uint32_t v)
+{ *(volatile uint32_t *)p = v; }
+LA_INLINE void la_store32_rel(uint32_t *p, uint32_t v)
+{ _WriteBarrier(); *(volatile uint32_t *)p = v; }
+LA_INLINE void la_store64_rlx(uint64_t *p, uint64_t v)
+{ *(volatile uint64_t *)p = v; }
+LA_INLINE void la_storeuptr_rlx(uintptr_t *p, uintptr_t v)
+{ *(volatile uintptr_t *)p = v; }
+LA_INLINE void la_store64_rel(uint64_t *p, uint64_t v)
+{ _WriteBarrier(); *(volatile uint64_t *)p = v; }
+LA_INLINE void la_storeuptr_rel(uintptr_t *p, uintptr_t v)
+{ _WriteBarrier(); *(volatile uintptr_t *)p = v; }
+LA_INLINE void la_store16_rel(uint16_t *p, uint16_t v)
+{ _WriteBarrier(); *(volatile uint16_t *)p = v; }
+LA_INLINE void la_storeptr_rlx(void **p, void *v)
+{ *(void *volatile *)p = v; }
+LA_INLINE void la_storeptr_rel(void **p, void *v)
+{ _WriteBarrier(); *(void *volatile *)p = v; }
+#define la_storefunc_rel(p, v) \
+  ((void)_InterlockedExchangePointer((void *volatile *)(p), (void *)(v)))
+
+#define LA_MSVC_CAS(namebits, intrinsicbits, type, itype) \
+  LA_INLINE int la_cas##namebits(type *p, type *exp, type des, int mo_s, int mo_f) \
+  { \
+    itype old; \
+    (void)mo_s; (void)mo_f; \
+    old = _InterlockedCompareExchange##intrinsicbits((volatile itype *)p, \
+                                                     (itype)des, (itype)*exp); \
+    if ((type)old == *exp) return 1; \
+    *exp = (type)old; \
+    return 0; \
+  }
+LA_MSVC_CAS(8, 8, uint8_t, char)
+LA_MSVC_CAS(16, 16, uint16_t, short)
+LA_MSVC_CAS(32, , uint32_t, long)
+LA_MSVC_CAS(64, 64, uint64_t, __int64)
+#undef LA_MSVC_CAS
+
+LA_INLINE int la_casuptr(uintptr_t *p, uintptr_t *exp, uintptr_t des,
+                         int mo_s, int mo_f)
+{ return la_cas64((uint64_t *)p, (uint64_t *)exp, (uint64_t)des, mo_s, mo_f); }
+LA_INLINE int la_casptr(void **p, void **exp, void *des, int mo_s, int mo_f)
+{
+  void *old;
+  (void)mo_s; (void)mo_f;
+  old = _InterlockedCompareExchangePointer((void *volatile *)p, des, *exp);
+  if (old == *exp) return 1;
+  *exp = old;
+  return 0;
+}
+
+typedef __declspec(align(16)) struct la_u128 {
+  uint64_t lo, hi;
+} la_u128;
+
+LA_INLINE int la_cas128(la_u128 *p, la_u128 *exp, la_u128 des)
+{
+  return (int)_InterlockedCompareExchange128((volatile __int64 *)p,
+                                              (__int64)des.hi,
+                                              (__int64)des.lo,
+                                              (__int64 *)exp);
+}
+
+LA_INLINE uint32_t la_add32_rlx(uint32_t *p, uint32_t v)
+{ return (uint32_t)_InterlockedExchangeAdd((volatile long *)p, (long)v); }
+LA_INLINE uint32_t la_add32_acqrel(uint32_t *p, uint32_t v)
+{ return la_add32_rlx(p, v); }
+LA_INLINE uint64_t la_add64_rlx(uint64_t *p, uint64_t v)
+{ return (uint64_t)_InterlockedExchangeAdd64((volatile __int64 *)p, (__int64)v); }
+LA_INLINE uint32_t la_sub32_rlx(uint32_t *p, uint32_t v)
+{ return la_add32_rlx(p, 0u-v); }
+LA_INLINE uint64_t la_sub64_rlx(uint64_t *p, uint64_t v)
+{ return la_add64_rlx(p, 0u-v); }
+LA_INLINE uint32_t la_sub32_acqrel(uint32_t *p, uint32_t v)
+{ return la_sub32_rlx(p, v); }
+LA_INLINE uint64_t la_sub64_acqrel(uint64_t *p, uint64_t v)
+{ return la_sub64_rlx(p, v); }
+LA_INLINE uint8_t la_or8_rlx(uint8_t *p, uint8_t v)
+{ return (uint8_t)_InterlockedOr8((volatile char *)p, (char)v); }
+LA_INLINE uint8_t la_and8_rlx(uint8_t *p, uint8_t v)
+{ return (uint8_t)_InterlockedAnd8((volatile char *)p, (char)v); }
+LA_INLINE uint8_t la_or8_acqrel(uint8_t *p, uint8_t v)
+{ return la_or8_rlx(p, v); }
+LA_INLINE uint8_t la_and8_acqrel(uint8_t *p, uint8_t v)
+{ return la_and8_rlx(p, v); }
+LA_INLINE uint64_t la_or64_rlx(uint64_t *p, uint64_t v)
+{ return (uint64_t)_InterlockedOr64((volatile __int64 *)p, (__int64)v); }
+LA_INLINE uint64_t la_and64_rlx(uint64_t *p, uint64_t v)
+{ return (uint64_t)_InterlockedAnd64((volatile __int64 *)p, (__int64)v); }
+LA_INLINE uint32_t la_xchg32_acqrel(uint32_t *p, uint32_t v)
+{ return (uint32_t)_InterlockedExchange((volatile long *)p, (long)v); }
+LA_INLINE uint64_t la_xchg64_acqrel(uint64_t *p, uint64_t v)
+{ return (uint64_t)_InterlockedExchange64((volatile __int64 *)p, (__int64)v); }
+LA_INLINE void *la_xchgptr_acqrel(void **p, void *v)
+{ return _InterlockedExchangePointer((void *volatile *)p, v); }
+#define la_xchgfunc_acqrel(p, v) \
+  _InterlockedExchangePointer((void *volatile *)(p), (void *)(v))
+
+LA_INLINE int la_bit_test_and_set64(uint64_t *word, unsigned bit)
+{
+  uint64_t mask = (uint64_t)1 << (bit & 63);
+  return (la_or64_rlx(word, mask) & mask) != 0;
+}
+
+LA_INLINE void la_fence_acq(void) { MemoryBarrier(); }
+LA_INLINE void la_fence_rel(void) { MemoryBarrier(); }
+LA_INLINE void la_fence_seq(void) { MemoryBarrier(); }
+LA_INLINE void la_cpu_pause(void) { YieldProcessor(); }
+
+#else
+
 #if !defined(__GNUC__) && !defined(__clang__)
-#error "lj_atomic.h requires GCC or Clang __atomic builtins"
+#error "lj_atomic.h requires GCC, Clang, or MSVC atomics"
 #endif
 
 #define LA_INLINE static inline __attribute__((always_inline))
@@ -144,6 +312,8 @@ LA_INLINE void la_cpu_pause(void)
   __asm__ __volatile__("" ::: "memory");
 #endif
 }
+
+#endif /* MSVC atomic backend. */
 
 /* ---- futex + membarrier (Linux) ------------------------------------- */
 #if defined(__linux__)

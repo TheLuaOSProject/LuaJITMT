@@ -1,5 +1,5 @@
 -- t-tab.lua — concurrent table hammers (06 §6.2–6.3; t-tab-01..08).
--- Mirrors aux/nbtab_model.c at the Lua level; run under torture (05 §5.13).
+-- Mirrors auxiliary/nbtab_model.c at the Lua level; run under torture (05 §5.13).
 local T = require("harness")
 local th = require("threading")
 local NT = tonumber(arg and arg[1]) or 8

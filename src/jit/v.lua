@@ -111,7 +111,7 @@ local function dump_trace(what, tr, func, pc, otr, oex)
   else
     if what == "abort" then
       local loc = fmtfunc(func, pc)
-      if loc ~= startloc then
+      if loc != startloc then
 	out:write(format("[TRACE --- %s%s -- %s at %s]\n",
 	  startex, startloc, fmterr(otr, oex), loc))
       else
@@ -151,7 +151,7 @@ local function dumpoff()
   if active then
     active = false
     jit.attach(dump_trace)
-    if out and out ~= stdout and out ~= stderr then out:close() end
+    if out and out != stdout and out != stderr then out:close() end
     out = nil
   end
 end

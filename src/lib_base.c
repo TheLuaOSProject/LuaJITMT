@@ -245,7 +245,7 @@ LJLIB_CF(rawlen)		LJLIB_REC(.)
 }
 #endif
 
-LJLIB_CF(unpack)
+LJLIB_CF(unpack)		LJLIB_REC(.)
 {
   TGState *tg = L2TG(L);
   TValue nilv;

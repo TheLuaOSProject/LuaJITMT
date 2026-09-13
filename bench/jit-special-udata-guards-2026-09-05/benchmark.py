@@ -6,7 +6,7 @@ for workload in ['clib','file','call','ffi_struct']:
  for pair in range(7):
   for variant in (['baseline','candidate'] if pair%2==0 else ['candidate','baseline']):
    tree=p/variant;env=os.environ.copy();env['LUA_PATH']=str(tree/'src/?.lua')+';;';env['BENCH_SCALE']='1'
-   if workload=='ffi_struct':fixture=tree/'aux/bench/bench.lua';args=[str(fixture),'ffi_struct']
+   if workload=='ffi_struct':fixture=tree/'auxiliary/bench/bench.lua';args=[str(fixture),'ffi_struct']
    else:fixture=p/'cost.lua';args=[str(fixture),workload]
    cmd=['taskset','-c','31',str(tree/'src/luajit'),'-jon']+args
    start=time.monotonic();r=subprocess.run(cmd,cwd=tree,env=env,capture_output=True,text=True,timeout=45)

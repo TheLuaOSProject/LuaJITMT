@@ -10,7 +10,7 @@
 
 #include "lj_atomic.h"
 
-#if !defined(__x86_64__)
+#if !defined(__x86_64__) && !defined(_M_X64) && !defined(_M_AMD64)
 #error "GC2 activation tokens currently require the x86-64 CX16 contract"
 #endif
 
@@ -971,7 +971,7 @@ typedef struct LJGC2RootRange {
   void *hi;
 } LJGC2RootRange;
 
-typedef struct LJGC2RootDesc {
+typedef struct  LJ_ALIGN(16) LJGC2RootDesc {
   uint64_t control;  /* generation << 2 | LJGC2RootDescState. */
   uint32_t flags;
   uint32_t reserved;
@@ -988,7 +988,7 @@ typedef struct LJGC2RootDesc {
   ** coverage after owner-written payload to reduce control-word false sharing.
   */
   la_u128 coverage;
-} __attribute__((aligned(16))) LJGC2RootDesc;
+} LJGC2RootDesc;
 
 typedef struct LJGC2RootDescSpec {
   uint32_t flags;

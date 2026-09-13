@@ -11,7 +11,7 @@
       "-eL",
       "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/luajit",
       "-jon",
-      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/plan/aux/bench/bench.lua"
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/plan/auxiliary/bench/bench.lua"
     ],
     "environment": {
       "BENCH_SCALE": "1",
@@ -98,7 +98,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-jon",
-      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/plan/aux/bench/bench.lua"
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/plan/auxiliary/bench/bench.lua"
     ],
     "environment": {
       "BENCH_SCALE": "1",
@@ -185,7 +185,7 @@
       "-eL",
       "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/luajit",
       "-joff",
-      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/plan/aux/bench/bench.lua"
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/plan/auxiliary/bench/bench.lua"
     ],
     "environment": {
       "BENCH_SCALE": "1",
@@ -272,7 +272,7 @@
       "-eL",
       "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
       "-joff",
-      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/plan/aux/bench/bench.lua"
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/plan/auxiliary/bench/bench.lua"
     ],
     "environment": {
       "BENCH_SCALE": "1",

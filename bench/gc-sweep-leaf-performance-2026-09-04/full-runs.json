@@ -10,7 +10,7 @@
       "-jon",
       "-e",
       "io.stdout:setvbuf(\"line\")",
-      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua"
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/auxiliary/bench/bench.lua"
     ],
     "environment": {
       "BENCH_SCALE": "1",
@@ -58,7 +58,7 @@
       "-jon",
       "-e",
       "io.stdout:setvbuf(\"line\")",
-      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua"
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/auxiliary/bench/bench.lua"
     ],
     "environment": {
       "BENCH_SCALE": "1",
@@ -106,7 +106,7 @@
       "-joff",
       "-e",
       "io.stdout:setvbuf(\"line\")",
-      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua"
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/auxiliary/bench/bench.lua"
     ],
     "environment": {
       "BENCH_SCALE": "1",
@@ -154,7 +154,7 @@
       "-joff",
       "-e",
       "io.stdout:setvbuf(\"line\")",
-      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua"
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/auxiliary/bench/bench.lua"
     ],
     "environment": {
       "BENCH_SCALE": "1",

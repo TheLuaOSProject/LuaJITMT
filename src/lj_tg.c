@@ -1343,7 +1343,8 @@ static void tg_profile_overlay(TGState *tg)
     uint32_t i;
     for (i = 0; i < BC_FUNCF; i++)
       tg->dispatch[i] = lj_vm_profhook;
-    for (i = BC_CNEW; i <= BC_CSET; i++)
+    /* BC_CNEW..BC_BSAR: fork-only tail after BC_FUNCCW (cell ops + bit ops). */
+    for (i = BC_CNEW; i <= BC_BSAR; i++)
       tg->dispatch[i] = lj_vm_profhook;
   }
 }

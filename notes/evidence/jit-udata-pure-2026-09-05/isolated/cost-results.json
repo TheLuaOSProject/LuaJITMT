@@ -2459,7 +2459,7 @@
       "31",
       "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
       "-jon",
-      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/aux/bench/bench.lua",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded",
@@ -2484,7 +2484,7 @@
       "31",
       "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
       "-jon",
-      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/aux/bench/bench.lua",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
@@ -2509,7 +2509,7 @@
       "31",
       "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
       "-jon",
-      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/aux/bench/bench.lua",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
@@ -2534,7 +2534,7 @@
       "31",
       "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
       "-jon",
-      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/aux/bench/bench.lua",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded",
@@ -2559,7 +2559,7 @@
       "31",
       "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
       "-jon",
-      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/aux/bench/bench.lua",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded",
@@ -2584,7 +2584,7 @@
       "31",
       "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
       "-jon",
-      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/aux/bench/bench.lua",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
@@ -2609,7 +2609,7 @@
       "31",
       "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
       "-jon",
-      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/aux/bench/bench.lua",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
@@ -2634,7 +2634,7 @@
       "31",
       "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
       "-jon",
-      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/aux/bench/bench.lua",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded",
@@ -2659,7 +2659,7 @@
       "31",
       "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
       "-jon",
-      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/aux/bench/bench.lua",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded",
@@ -2684,7 +2684,7 @@
       "31",
       "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
       "-jon",
-      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/aux/bench/bench.lua",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
@@ -2709,7 +2709,7 @@
       "31",
       "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
       "-jon",
-      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/aux/bench/bench.lua",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
@@ -2734,7 +2734,7 @@
       "31",
       "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
       "-jon",
-      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/aux/bench/bench.lua",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded",
@@ -2759,7 +2759,7 @@
       "31",
       "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
       "-jon",
-      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/aux/bench/bench.lua",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded",
@@ -2784,7 +2784,7 @@
       "31",
       "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
       "-jon",
-      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/aux/bench/bench.lua",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",

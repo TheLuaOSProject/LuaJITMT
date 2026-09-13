@@ -4,7 +4,7 @@
 
 - Current `v2.1` no longer reproduces the old endless `TRACE 1`
   re-recording failure on `fib30`. Both `tests/stock/bench/recursive-fib.lua`
-  and `aux/bench/bench.lua fib30` finish and publish an up-recursion trace.
+  and `auxiliary/bench/bench.lua fib30` finish and publish an up-recursion trace.
 - There is still a trace-shape/performance gap against stock: the fork records
   and retains more early `LJ_TRLINK_RETURN` roots before the up-recursion graph
   stabilizes. A typical direct `fib(30)` probe showed several live return roots
@@ -15,7 +15,7 @@
   cannot see the return trace and install the stock blacklist edge.
 - A local experiment added an `unlink+retire return` helper and tried both:
   retiring only return-start aborts, and retiring every unlinked return trace.
-  The focused gates still passed, but `-jv aux/bench/bench.lua fib30` continued
+  The focused gates still passed, but `-jv auxiliary/bench/bench.lua fib30` continued
   allocating fresh return-trace numbers during the abort burst, and timing did
   not improve. The experiment was reverted.
 - GDB confirmed the helper was reached with a root return trace and a
@@ -28,7 +28,7 @@ Useful commands:
 
 - `LUA=luajit tools/ci/lua_test.sh m6_jit_recursive_call_unroll`
 - `LUA=luajit tools/ci/lua_test.sh m6_jit_flush_hs`
-- `env LUA_PATH="$PWD/src/?.lua;$PWD/src/?/init.lua;;" src/luajit -jv aux/bench/bench.lua fib30`
+- `env LUA_PATH="$PWD/src/?.lua;$PWD/src/?/init.lua;;" src/luajit -jv auxiliary/bench/bench.lua fib30`
 
 Next attempt:
 
@@ -51,12 +51,12 @@ Follow-up fix:
   call-unroll aborts use `lj_trace_flush_unlink_retire_return()`, which unlinks
   the return trace and retires its slot through the normal trace SMR path.
 - The focused fixture now reports `slot_clears=9`, `returns=0`, and no
-  self-link use for the recursive workload. A `-jv aux/bench/bench.lua fib30`
+  self-link use for the recursive workload. A `-jv auxiliary/bench/bench.lua fib30`
   sample showed trace slot 3 reused for the up-recursion trace after two
   call-unroll aborts, instead of retaining a run of live return roots.
 - Follow-up coverage tightened `tests/t-jit-recursive-retention.c` so the
   fixture now checks both a static recursive local function and the
-  `aux/bench/bench.lua fib30` shape where the recursive closure is rebuilt
+  `auxiliary/bench/bench.lua fib30` shape where the recursive closure is rebuilt
   around each measured run. The assertions are deliberately stock-shaped:
   call-unroll aborts may vary with hotcount jitter, but they must stay bounded
   at 32, every unlinked return trace must clear its public slot, at least one

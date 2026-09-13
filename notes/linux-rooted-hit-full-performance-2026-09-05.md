@@ -17,7 +17,7 @@ The pinned stock revision is `b925b3e3fc6771171602323b45fbe9fb8fc90369`,
 executable SHA-256
 `d399449cc8cee4b0c600104a4a66fd44eeeac276c0f8571ce8204744041b5e34`.
 
-Both execute the unchanged `plan/aux/bench/bench.lua`, SHA-256
+Both execute the unchanged `plan/auxiliary/bench/bench.lua`, SHA-256
 `ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9`,
 at scale 1 with GC enabled and CPU 30 pinned. Each row selects the minimum of
 five internal rounds. There is one complete fresh process per runtime/mode,

@@ -5,7 +5,7 @@ for workload in ['direct_clib','direct_file','direct_buffer','direct_plain','cli
  for pair in range(7):
   for variant in (['guarded','candidate'] if pair%2==0 else ['candidate','guarded']):
    tree=p/variant;env=os.environ.copy();env['LUA_PATH']=str(tree/'src/?.lua')+';;';env['BENCH_SCALE']='1'
-   if workload=='ffi_struct':fixture=tree/'aux/bench/bench.lua';args=[str(fixture),'ffi_struct']
+   if workload=='ffi_struct':fixture=tree/'auxiliary/bench/bench.lua';args=[str(fixture),'ffi_struct']
    elif workload.startswith('direct_'):fixture=p/'direct-cost.lua';args=[str(fixture),workload[len('direct_'):]]
    else:fixture=p/'cost.lua';args=[str(fixture),workload]
    cmd=['taskset','-c','31',str(tree/'src/luajit'),'-jon']+args

@@ -99,7 +99,7 @@
   _(UNM,	dst,	___,	var,	unm) \
   _(LEN,	dst,	___,	var,	len) \
   \
-  /* Binary ops. ORDER OPR. VV last, POW must be next. */ \
+  /* Binary ops. ORDER OPR. ORDER ARITH. VV last, POW must be next. */ \
   _(ADDVN,	dst,	var,	num,	add) \
   _(SUBVN,	dst,	var,	num,	sub) \
   _(MULVN,	dst,	var,	num,	mul) \
@@ -197,10 +197,27 @@
   _(FUNCC,	rbase,	___,	___,	___) \
   _(FUNCCW,	rbase,	___,	___,	___) \
   \
-  /* Local cell ops. */ \
+  /* Local cell ops, followed by the bit operators below: both are fork-only
+  ** additions absent from stock LuaJIT, so they must stay contiguous after
+  ** BC_FUNCCW to keep every stock-aligned opcode's numeric value intact for
+  ** legacy dump compat, and so BC_CNEW.. (through the last bit op) remains
+  ** exactly the legacy-rejection range checked in bcread_verify_bytecode()
+  ** (10 §10.4). The dispatch/profile/tg instruction-overlay installers also
+  ** walk this whole tail as one range (see BC_CNEW..BC_BSAR in lj_dispatch.c,
+  ** lj_profile.c, lj_tg.c) — extend those loops' upper bound if more ops are
+  ** appended here. */ \
   _(CNEW,	dst,	___,	___,	___) \
   _(CGET,	dst,	___,	var,	___) \
-  _(CSET,	var,	___,	var,	___)
+  _(CSET,	var,	___,	var,	___) \
+  \
+  /* Bit operators. ORDER OPR. ORDER BIT. */ \
+  _(BNOT,	dst,	___,	var,	___) \
+  _(BAND,	dst,	var,	var,	___) \
+  _(BOR,	dst,	var,	var,	___) \
+  _(BXOR,	dst,	var,	var,	___) \
+  _(BSHL,	dst,	var,	var,	___) \
+  _(BSHR,	dst,	var,	var,	___) \
+  _(BSAR,	dst,	var,	var,	___)
 
 /* Bytecode opcode numbers. */
 typedef enum {

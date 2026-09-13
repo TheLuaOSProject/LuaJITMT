@@ -10,7 +10,7 @@
       "31",
       "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
       "-jon",
-      "aux/bench/bench.lua",
+      "auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
@@ -41,7 +41,7 @@
       "31",
       "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
       "-jon",
-      "aux/bench/bench.lua",
+      "auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
@@ -212,7 +212,7 @@
       "31",
       "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
       "-jon",
-      "aux/bench/bench.lua",
+      "auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
@@ -243,7 +243,7 @@
       "31",
       "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
       "-jon",
-      "aux/bench/bench.lua",
+      "auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
@@ -414,7 +414,7 @@
       "31",
       "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
       "-jon",
-      "aux/bench/bench.lua",
+      "auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
@@ -445,7 +445,7 @@
       "31",
       "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
       "-jon",
-      "aux/bench/bench.lua",
+      "auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
@@ -616,7 +616,7 @@
       "31",
       "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
       "-jon",
-      "aux/bench/bench.lua",
+      "auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
@@ -647,7 +647,7 @@
       "31",
       "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
       "-jon",
-      "aux/bench/bench.lua",
+      "auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
@@ -818,7 +818,7 @@
       "31",
       "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
       "-jon",
-      "aux/bench/bench.lua",
+      "auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
@@ -849,7 +849,7 @@
       "31",
       "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
       "-jon",
-      "aux/bench/bench.lua",
+      "auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
@@ -1020,7 +1020,7 @@
       "31",
       "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
       "-jon",
-      "aux/bench/bench.lua",
+      "auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
@@ -1051,7 +1051,7 @@
       "31",
       "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
       "-jon",
-      "aux/bench/bench.lua",
+      "auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
@@ -1222,7 +1222,7 @@
       "31",
       "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
       "-jon",
-      "aux/bench/bench.lua",
+      "auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
@@ -1253,7 +1253,7 @@
       "31",
       "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
       "-jon",
-      "aux/bench/bench.lua",
+      "auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",

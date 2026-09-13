@@ -1,7 +1,7 @@
 from pathlib import Path
 import subprocess,os,json,shutil,time,hashlib,re,statistics
 r=Path('/tmp/lj-premt-cdata-hoist-20260905-oa96m15y');w=r/'workloads';w.mkdir(exist_ok=True)
-src=Path('/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/aux/bench/bench.lua');shutil.copy2(src,w/'bench.lua');rows=[]
+src=Path('/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/auxiliary/bench/bench.lua');shutil.copy2(src,w/'bench.lua');rows=[]
 sha=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()
 for v in ['base-normal','fix-normal']:
  env=os.environ.copy();override={'LUA_PATH':str(r/v/'src/?.lua')+';;','BENCH_SCALE':'0.00001'};env.update(override)

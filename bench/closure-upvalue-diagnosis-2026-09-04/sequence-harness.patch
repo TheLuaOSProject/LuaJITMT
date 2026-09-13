@@ -1,4 +1,4 @@
---- frozen/plan/aux/bench/bench.lua
+--- frozen/plan/auxiliary/bench/bench.lua
 +++ diagnosis/sequence.lua
 @@ -11,7 +11,8 @@
  local scale = tonumber(getenv("BENCH_SCALE")) or 1

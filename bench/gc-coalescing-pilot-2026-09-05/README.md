@@ -11,7 +11,7 @@ revision, harness hash, and measurement limits. Apply `measured-runtime.patch`
 with `git apply --unidiff-zero` to its runtime base to reconstruct the four
 production source overlays. Zero context keeps patch syntax compatible with
 the repository whitespace check. The
-benchmark harness is the unchanged `plan/aux/bench/bench.lua` in that tree;
+benchmark harness is the unchanged `plan/auxiliary/bench/bench.lua` in that tree;
 `benchmark.py` records original temporary paths and commands. `build.py` is the
 original build driver; only its normal build was measured.
 

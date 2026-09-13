@@ -52,7 +52,7 @@ removed; the recorded values and call stacks are unchanged.
 | CPU | Intel Core i9-14900K, logical CPU 30, core ID 46, no SMT sibling for CPU 30 |
 | Affinity | Every benchmark child pinned with `taskset -c 30` |
 | CPU policy | `performance` governor; reported maximum frequency 4.4 GHz for CPU 30; no cgroup CPU quota (`cpu.max` was `max 100000`) |
-| Harness | The fork archive's unmodified `plan/aux/bench/bench.lua` |
+| Harness | The fork archive's unmodified `plan/auxiliary/bench/bench.lua` |
 | Harness SHA-256 | `ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9` |
 
 The executed initial build command, in each archive, was:

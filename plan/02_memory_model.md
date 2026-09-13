@@ -2,7 +2,7 @@
 
 This document defines (a) what concurrent Lua programs may assume, (b) what
 the C/asm implementation must do to deliver it, and (c) the exact atomics
-API every other document builds on. `aux/lj_atomic.h` is the normative,
+API every other document builds on. `auxiliary/lj_atomic.h` is the normative,
 compilable form of §2.6 — copy it into `src/` unmodified at M1.
 
 ## 2.1 Language-level model (what Lua programmers get)
@@ -126,7 +126,7 @@ you touch code):
 | g->str.tab vector ptr (becomes StrTabHdr*) | RCU pointer | acq/rel |
 | cts->tabh / cts->top | RCU vector + ticket | 11 §11.2 |
 
-## 2.6 lj_atomic.h API (normative summary — full header in aux/)
+## 2.6 lj_atomic.h API (normative summary — full header in auxiliary/)
 
 Prefixed `la_`. All take plain-typed pointers.
 ```

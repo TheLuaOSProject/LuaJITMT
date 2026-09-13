@@ -8,7 +8,7 @@
       "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
       "-jon",
       "-jdump=im",
-      "aux/bench/bench.lua",
+      "auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
@@ -94,7 +94,7 @@
       "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
       "-jon",
       "-jdump=im",
-      "aux/bench/bench.lua",
+      "auxiliary/bench/bench.lua",
       "ffi_struct"
     ],
     "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",

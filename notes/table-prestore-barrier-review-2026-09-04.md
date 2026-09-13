@@ -117,7 +117,7 @@ The measured command was:
 
 ```sh
 BENCH_SCALE=0.05 taskset -c 30 "$binary" -joff \
-  "$review_dir/before/plan/aux/bench/bench.lua" tab_insert_newkey
+  "$review_dir/before/plan/auxiliary/bench/bench.lua" tab_insert_newkey
 ```
 
 This runs 10,000 insertions per internal iteration and reports the minimum
