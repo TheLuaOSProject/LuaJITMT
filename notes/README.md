@@ -18,8 +18,10 @@ and reports that are no longer authoritative are retained in
 - Latest ARM64 VM acquire-load cleanup: `3f109fa2`.
 - Latest ARM64 interpreter GC2 parity: `d639196b`.
 - Latest ARM64 JIT GC2 cadence parity: `f1fe1f73`.
-- Latest complete bootstrap and fail-closed gates: frozen `709583ee` source,
-  verified on 2026-10-22 in a disposable checkout.
+- Latest complete experimental gate: frozen `348dee94`, including numeric
+  spills and shared capture fixes. Both 509-case source/import stock runs also
+  pass on its native ARM64 assertion build. The default gate retains all
+  ARM64, arm64e and x86-64 branches.
 - The latest complete bootstrap gate passes at frozen `25275a13`, including
   the shared source/import capture fixes. Its default ARM64, arm64e and x64
   unwind branches all ran. The new source/import loop fixture also passes
@@ -81,9 +83,12 @@ available.
   entry paths.
 - Scalar self-linked `LOOP` roots use independent semantic and allocated-state
   capabilities for checked INT arithmetic, NUM arithmetic/conversions,
-  comparisons, PHI copies/shuffles, snapshots and INT spill frames. The old
-  whole-trace NUM arrays are removed. NUM spills and heap effects remain
-  closed; see [`arm64-jit-scalar-capability.md`](arm64-jit-scalar-capability.md).
+  comparisons, PHI copies/shuffles, snapshots and INT/NUM spill frames. NUM
+  spans have explicit width, alignment, ownership and snapshot checks, with
+  native mixed-pressure and fused-arithmetic regressions. The old whole-trace
+  NUM arrays are removed. Heap effects remain closed; see
+  [`arm64-jit-scalar-capability.md`](arm64-jit-scalar-capability.md) and
+  [`arm64-jit-numeric-spills.md`](arm64-jit-numeric-spills.md).
 - Integer `FORL` retains separate constant-step and spill-free variable-stop/
   variable-step certificates, with independent semantic, snapshot and
   post-register-allocation checks.
@@ -110,8 +115,8 @@ available.
   overlap on ARM64 and arm64e/BTI. General table-effect admission remains closed.
 - The common assembler marks the loop-entry boundary before emitting PHI spill
   copies, preventing ARM64 store pairing across that branch target. The native
-  generated-code regression covers both ARM64 and arm64e/BTI. General numeric
-  spill admission remains closed.
+  generated-code regression covers both ARM64 and arm64e/BTI and is required
+  by the admitted NUM pressure cases.
 
 ## Deliberately closed or incomplete
 

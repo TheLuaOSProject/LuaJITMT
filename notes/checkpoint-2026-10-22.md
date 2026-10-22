@@ -126,3 +126,23 @@ umbrella gate has not yet been rerun at this checkpoint.
 
 Temporary evidence: `/tmp/luajitmt-capture-checkpoint-bootstrap.log`, with the
 frozen checkout path in `/tmp/luajitmt-capture-checkpoint-workdir`.
+
+## Complete experimental checkpoint with numeric spills
+
+The unmodified default experimental umbrella gate passes at frozen `348dee94`,
+including the independently validated NUM spill capability (`81936bdb`),
+shared capture repairs, numeric/scalar/integer contracts, exits, entry,
+retirement, FFI/callbacks, unwind, flush/reuse and safepoints. The default
+cross-architecture branches all ran; no source-only diagnostic substitutions
+were made. The new source/import loop fixture also runs at the end of this
+gate. This supersedes the earlier partial scalar integration runs.
+
+Both standalone stock runs on that exact native ARM64 experimental assertion
+build pass all 509 cases: source and original-v2 compilation/import. These
+results establish this checkpoint, not completion of general heap effects,
+CALLXS, side traces, performance or the full port. The separate upstream
+refresh and first rooted table-length capability are still isolated work.
+
+Temporary evidence: `/tmp/luajitmt-numspill-checkpoint-jit.log` and
+`/tmp/luajitmt-numspill-stock-{source,import}.log`. The frozen checkout path is
+in `/tmp/luajitmt-numspill-checkpoint-workdir`.
