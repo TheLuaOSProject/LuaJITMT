@@ -256,6 +256,10 @@ LJ_FUNC void lj_ffi_native_frame_test_set_snapshot_hook(
 
 /* -- C call handling ----------------------------------------------------- */
 
+#if LJ_TARGET_ARM64 && defined(LJ_CCALL_TEST_HELPERS)
+LJ_FUNC unsigned int lj_ccall_test_classify_struct(lua_State *L, CType *ct);
+#endif
+
 /* Really belongs to lj_vm.h. */
 LJ_ASMF void LJ_FASTCALL lj_vm_ffi_call(CCallState *cc);
 

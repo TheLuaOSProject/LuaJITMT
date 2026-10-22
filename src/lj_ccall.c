@@ -434,11 +434,11 @@ static LJ_AINLINE void *ccall_new_temp_root(lua_State *L, CTState *cts,
 /* -- ARM64 calling conventions ------------------------------------------- */
 
 #define CCALL_HANDLE_STRUCTRET \
-  cc->retref = !ccall_classify_struct(cts, ctr); \
+  cc->retref = !ccall_classify_struct(L, cts, ctr); \
   if (cc->retref) cc->retp = dp;
 
 #define CCALL_HANDLE_STRUCTRET2 \
-  unsigned int cl = ccall_classify_struct(cts, ctr); \
+  unsigned int cl = ccall_classify_struct(L, cts, ctr); \
   if ((cl & 4)) { /* Combine float HFA from separate registers. */ \
     CTSize i = (cl >> 8) - 1; \
     do { ((uint32_t *)dp)[i] = cc->fpr[i].lo; } while (i--); \
@@ -461,7 +461,7 @@ static LJ_AINLINE void *ccall_new_temp_root(lua_State *L, CTState *cts,
   }
 
 #define CCALL_HANDLE_STRUCTARG \
-  unsigned int cl = ccall_classify_struct(cts, d); \
+  unsigned int cl = ccall_classify_struct(L, cts, d); \
   if (cl == 0) {  /* Pass struct by reference. */ \
     rp = ccall_new_temp_root(L, cts, did, sz); \
     sz = CTSIZE_PTR; \
@@ -961,22 +961,24 @@ static CTInfo ccall_struct_align_arm64(CTState *cts, CType *ct, CTypeID id)
   ccall_struct_align_arm64((cts), (ct), (id))
 #endif
 
-/* Classify a struct based on its fields. */
-static unsigned int ccall_classify_struct(CTState *cts, CType *ct)
+/* Classify a struct based on stable field and child snapshots. */
+static unsigned int ccall_classify_struct(lua_State *L, CTState *cts, CType *ct)
 {
   CTSize sz = ct->size;
   unsigned int r = 0, n = 0, isu = (ct->info & CTF_UNION);
+  CType field;
   while (ct->sib && n <= 4) {
     unsigned int m = 1;
+    CType child;
     CType *sct;
-    ct = ctype_get(cts, ct->sib);
+    ct = ccall_ctype_snapshot_wait(L, cts, ct->sib, &field);
     if (ctype_isfield(ct->info)) {
-      sct = ctype_rawchild(cts, ct);
+      sct = ccall_rawchild_wait(L, cts, ct, NULL, &child);
       if (ctype_isarray(sct->info) && !sct->size) goto noth;
       while (ctype_isarray(sct->info)) {
-	CType *cct = ctype_rawchild(cts, sct);
-	m *= sct->size / cct->size;
-	sct = cct;
+	CTSize asz = sct->size;
+	sct = ccall_rawchild_wait(L, cts, sct, NULL, &child);
+	m *= asz / sct->size;
       }
       if (ctype_isfp(sct->info)) {
 	r |= sct->size;
@@ -992,10 +994,10 @@ static unsigned int ccall_classify_struct(CTState *cts, CType *ct)
     } else if (ctype_isbitfield(ct->info) && ctype_bitbsz(ct->info)) {
       goto noth;
     } else if (ctype_isxattrib(ct->info, CTA_SUBTYPE)) {
-      sct = ctype_rawchild(cts, ct);
+      sct = ccall_rawchild_wait(L, cts, ct, NULL, &child);
     substruct:
       if (sct->size > 0) {
-	unsigned int s = ccall_classify_struct(cts, sct), sn;
+	unsigned int s = ccall_classify_struct(L, cts, sct), sn;
 	if (s <= 1) goto noth;
 	r |= (s & 255);
 	sn = (s >> 8) * m;
@@ -1008,6 +1010,13 @@ static unsigned int ccall_classify_struct(CTState *cts, CType *ct)
 noth:  /* Not a homogeneous float/double aggregate. */
   return (sz <= 16);  /* Return structs of size <= 16 in GPRs. */
 }
+
+#if defined(LJ_CCALL_TEST_HELPERS)
+unsigned int lj_ccall_test_classify_struct(lua_State *L, CType *ct)
+{
+  return ccall_classify_struct(L, ctype_ctsG(G(L)), ct);
+}
+#endif
 
 #endif
 
