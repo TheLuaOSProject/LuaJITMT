@@ -257,8 +257,12 @@ done
 # Recorder and VM root policies remain independently gated.
 test "$(grep -Fc '#if (LJ_TARGET_X64 || LJ_TARGET_ARM64) && LJ_GC64' \
   "$root/src/lj_record.c")" -eq 3
-test "$(grep -Fc '#if (LJ_TARGET_X64 || LJ_TARGET_ARM64) && LJ_GC64' \
-  "$root/src/lj_opt_loop.c")" -eq 2
+sed -n '/^static LJ_AINLINE int loop_needs_xpoll/,/^#else/p' \
+  "$root/src/lj_opt_loop.c" | grep -F '#if LJ_TARGET_ARM64' >/dev/null
+sed -n '/^static LJ_AINLINE int loop_needs_xpoll/,/^#else/p' \
+  "$root/src/lj_opt_loop.c" | grep -F 'return 1;' >/dev/null
+grep -A2 '^#elif LJ_TARGET_ARM64 && LJ_GC64' "$root/src/lj_opt_loop.c" | \
+  grep -F 'emitir_raw(IRTG(IR_XPOLL, IRT_NIL), loop_needs_xpoll(J), 0);' >/dev/null
 grep -F 'emit_getgl32acq(as, gate, gc2.jit_phase_gate);' \
   "$root/src/lj_asm_arm64.h" >/dev/null
 grep -F 'emit_gettg32(as, gate, poll);' "$root/src/lj_asm_arm64.h" >/dev/null
