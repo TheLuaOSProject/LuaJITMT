@@ -1388,19 +1388,24 @@ static void asm_cnew(ASMState *as, IRIns *ir)
 
 static void asm_tbar(ASMState *as, IRIns *ir)
 {
-  Reg tab = ra_alloc1(as, ir->op1, RSET_GPR);
-  Reg link = ra_scratch(as, rset_exclude(RSET_GPR, tab));
-  Reg mark = RID_TMP;
-  MCLabel l_end = emit_label(as);
-  emit_lso(as, A64I_STRB, mark, tab, (int32_t)offsetof(GCtab, marked));
-  /* Keep STRx in the middle to avoid LDP/STP fusion with surrounding code. */
-  emit_lso(as, A64I_STRx, link, tab, (int32_t)offsetof(GCtab, gclist));
-  emit_setgl(as, tab, gc.grayagain);
-  emit_dn(as, A64I_ANDw^emit_isk13(~LJ_GC_BLACK, 0), mark, mark);
-  emit_getgl(as, link, gc.grayagain);
-  emit_cond_branch(as, CC_EQ, l_end);
-  emit_n(as, A64I_TSTw^emit_isk13(LJ_GC_BLACK, 0), mark);
-  emit_lso(as, A64I_LDRB, mark, tab, (int32_t)offsetof(GCtab, marked));
+  int keybarrier = ir->op2 != REF_NIL;
+  const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_gc_tbar_trace_g];
+  IRRef args[3];
+  Reg gtmp, keytmp;
+  ra_evictset(as, RSET_SCRATCH);
+  args[0] = ASMREF_TMP1;  /* global_State *g */
+  args[1] = ir->op1;      /* GCtab *t       */
+  args[2] = ASMREF_TMP2;  /* cTValue *key   */
+  asm_gencall(as, ci, args);
+  keytmp = ra_releasetmp(as, ASMREF_TMP2);
+  gtmp = ra_releasetmp(as, ASMREF_TMP1);
+  /* Runtime order is key materialization, then GL. The temporary TValue
+  ** builder may reuse gtmp, so install the first call argument afterwards. */
+  emit_dm(as, A64I_MOVx, gtmp, RID_GL);
+  if (keybarrier)
+    asm_tvptr(as, keytmp, ir->op2, IRTMPREF_IN1|IRTMPREF_IN2);
+  else
+    emit_loadi(as, keytmp, 0);
 }
 
 static void asm_obar(ASMState *as, IRIns *ir)
