@@ -100,6 +100,16 @@ if otool -L "$luajit" "$dylib" | grep -i 'libatomic' >/dev/null; then
   exit 1
 fi
 
+legacy_fixture=$root/src/t-legacy-bytecode-cells
+# shellcheck disable=SC2086 # Match the archive's interpreter layout.
+${CC:-clang} -std=gnu11 -O2 -Wall -Wextra -Werror \
+  -mmacosx-version-min="$minver" $xcflags -I"$root/src" \
+  "$root/tests/t-legacy-bytecode-cells.c" "$archive" -lm -pthread \
+  -o "$legacy_fixture"
+perl -MTime::HiRes=alarm -e 'alarm shift; exec @ARGV; die "exec: $!\n"' \
+  120 "$legacy_fixture" "$root/tests/fixtures"
+rm -f "$legacy_fixture"
+
 LJ_ARM64_VM_OBJECT="$vm_object" \
 LJ_ARM64_DISPATCH_OBJECT="$root/src/lj_dispatch.o" \
   sh "$root/tools/ci/arm64_tg_dispatch_contract.sh"

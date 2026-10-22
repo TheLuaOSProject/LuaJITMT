@@ -961,6 +961,11 @@ assert(util.traceinfo(1), "Lua tailcall loop did not trace")
         build = false,
         timeout = "30s"
       }))
+      build_and_run_c(t, t:tmp("lj_t-jit-cell-pending"),
+                      "t-jit-cell-pending.c", build.trace_helper_c_opts({
+        build = false,
+        timeout = "30s"
+      }))
     end
   })
 
