@@ -165,6 +165,9 @@ void lj_func_syncslot_forjit(lua_State *L, TValue *base, int32_t slot,
   lj_state_stack_pubtv(L, L, base + slot);
 }
 
+/* Read-only source captures still share the owner's cell: debug.setupvalue
+** may mutate it, and debug.upvalueid must observe sibling capture identity.
+** PROTO_UV_IMMUTABLE remains an optimization hint, not a copy policy. */
 static LJ_AINLINE void func_storecell_pub(lua_State *L, TValue *slot,
 					  GCupval *uv)
 {
@@ -211,7 +214,9 @@ GCupval *lj_func_promoteuv_forjit(lua_State *L, TValue *base, int32_t slot,
 {
   TValue *dst = base + slot;
   GCupval *uv;
-  if (itype(dst) == LJ_TUPVAL) {
+  /* A supplied SSA value defines a fresh local even if the physical stack
+  ** still contains a promoted cell from an earlier frame or loop iteration. */
+  if (tv == NULL && itype(dst) == LJ_TUPVAL) {
     uv = gco2uv(gcV(dst));
   } else {
     if (tv == NULL)
@@ -828,8 +833,7 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   /* Publish the complete pair; the precheck above rules out accounting assist. */
   func_bump_publish_pair(g, a, obj2gco(fn), cell,
 			 obj2gco(uv), uvcell);
-  if (!(uvspec & PROTO_UV_IMMUTABLE))
-    func_storecell_pub(L, slot, uv);
+  func_storecell_pub(L, slot, uv);
   (void)lj_tg_local_total_add_rlx(tg, nbytes);
   if (count_kind == 1)
     func_test_gc1num_bump_fast_call();
@@ -964,7 +968,7 @@ static void func_pending_cells_restore(lua_State *L, GCfunc *fn,
     return;
   for (i = 0; i < n; i++) {
     uint32_t v = proto_uv(pt)[i];
-    if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE)) {
+    if ((v & PROTO_UV_LOCAL)) {
       TValue *slot = base + (v & 0xffu);
       if (itype(slot) == LJ_TUPVAL) {
 	GCupval *uv = gco2uv(gcV(slot));
@@ -1000,9 +1004,7 @@ static GCfunc *func_newL_gc1uv_chain(lua_State *L, TValue *base, GCproto *pt,
   lj_gc_linkobj_new_chain(G(L), obj2gco(fn), tail);
   lj_gc_pubobjroot(L, obj2gco(fn));
   lj_gc_pubobjobj(L, fn, uv);
-  if (!(v & PROTO_UV_IMMUTABLE)) {
-    func_storecell_pub(L, base + slotno, uv);
-  }
+  func_storecell_pub(L, base + slotno, uv);
   func_test_gc1uv_chain_call();
   return fn;
 }
@@ -1119,8 +1121,7 @@ static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
 	    goto oom;
 	  func_pending_chain_add(&tail, obj2gco(uv));
 	  func_test_uv_afterfn_call();
-	  if (!(v & PROTO_UV_IMMUTABLE))
-	    func_storecell_pub(L, slot, uv);
+	  func_storecell_pub(L, slot, uv);
 	}
 	func_uvmeta(uv, parent, v);
       } else {
@@ -1233,7 +1234,7 @@ GCfunc *lj_func_newL_gc1num_forjit(lua_State *L, TValue *base, GCproto *pt,
   ** trace may leave the previous iteration's promoted cell in BASE[slot].
   ** Each FNEW still has ordinary Lua closure identity, so allocate a fresh
   ** closed upvalue from the numeric SSA value and republish that cell to the
-  ** parent slot for mutable captures.
+  ** parent slot. Read-only captures still share identity through the debug API.
   */
   uv = func_snapshotuv_unlinked_nothrow(L, &tv);
   if (LJ_UNLIKELY(uv == NULL)) {
@@ -1247,9 +1248,7 @@ GCfunc *lj_func_newL_gc1num_forjit(lua_State *L, TValue *base, GCproto *pt,
   lj_gc_linkobj_new_chain(G(L), obj2gco(fn), tail);
   lj_gc_pubobjroot(L, obj2gco(fn));
   lj_gc_pubobjobj(L, fn, uv);
-  if (!(v & PROTO_UV_IMMUTABLE)) {
-    func_storecell_pub(L, slot, uv);
-  }
+  func_storecell_pub(L, slot, uv);
   return fn;
 }
 

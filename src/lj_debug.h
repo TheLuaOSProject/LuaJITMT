@@ -26,6 +26,8 @@ typedef struct lj_Debug {
   int isvararg;
 } lj_Debug;
 
+struct LJStateClaim;
+
 LJ_FUNC cTValue *lj_debug_frame(lua_State *L, int level, int *size);
 LJ_FUNC BCLine LJ_FASTCALL lj_debug_line(GCproto *pt, BCPos pc);
 LJ_FUNC const char *lj_debug_uvname(GCproto *pt, uint32_t idx);
@@ -53,7 +55,8 @@ LJ_FUNC const char *lj_debug_getlocal_claimed(lua_State *L,
 LJ_FUNC const char *lj_debug_setlocal_claimed(lua_State *L,
 					      const lj_Debug *ar, int n,
 					      cTValue *tv, TValue **pubuv,
-					      GCfunc **fnout);
+					      GCfunc **fnout,
+					      struct LJStateClaim *claim);
 LJ_FUNC void lj_debug_pushactivelines(lua_State *L, GCfunc *fn);
 #if LJ_HASPROFILE
 LJ_FUNC void lj_debug_dumpstack(lua_State *L, SBuf *sb, const char *fmt,

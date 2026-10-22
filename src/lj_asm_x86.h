@@ -1416,12 +1416,8 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   checkmclim(as);
 
   allow = RSET_GPR & ~RID2RSET(RID_RET);
-  if (fi.uvspec & PROTO_UV_IMMUTABLE) {
-    base = RID_NONE;
-  } else {
-    base = ra_alloc1(as, REF_BASE, allow);
-    rset_clear(allow, base);
-  }
+  base = ra_alloc1(as, REF_BASE, allow);
+  rset_clear(allow, base);
   parent = ra_alloc1(as, fi.parentref, allow);
   rset_clear(allow, parent);
   val = ra_alloc1(as, fi.valref, RSET_FPR);
@@ -1502,12 +1498,10 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   asm_fnew1num_movi8(as, RID_RET, offsetof(GCfuncL, nupvalues), 1);
   emit_movtomro(as, uv|REX_GC64, RID_RET, offsetof(GCfuncL, uvptr));
 
-  if (!(fi.uvspec & PROTO_UV_IMMUTABLE)) {
-    emit_movtomro(as, tmp|REX_64, base, 8 * fi.slot);
-    emit_rr(as, XO_ARITH(XOg_OR), tmp|REX_64, next|REX_64);
-    emit_loadu64(as, next, uvtag);
-    emit_rr(as, XO_MOV, tmp|REX_64, uv);
-  }
+  emit_movtomro(as, tmp|REX_64, base, 8 * fi.slot);
+  emit_rr(as, XO_ARITH(XOg_OR), tmp|REX_64, next|REX_64);
+  emit_loadu64(as, next, uvtag);
+  emit_rr(as, XO_MOV, tmp|REX_64, uv);
   checkmclim(as);  /* Split stack cell linkage from upvalue initialization. */
 
   emit_movtomro(as, tmp, uv, offsetof(GCupval, dhash));

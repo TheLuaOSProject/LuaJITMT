@@ -157,7 +157,7 @@ static int rec_check_child_cellslot(jit_State *J, GCproto *pt, BCReg slotno)
       if (proto_celluv(child)) {
 	for (j = 0; j < nuv; j++) {
 	  uint32_t v = proto_uv(child)[j];
-	  if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE) &&
+	  if ((v & PROTO_UV_LOCAL) &&
 	      (BCReg)(v & 0xff) == slotno) {
 	    lj_gc2_lease_release(&lease);
 	    return 1;
@@ -340,6 +340,14 @@ static TRef getcurrf(jit_State *J)
   /* Non-base frame functions ought to be loaded already. */
   lj_assertJ(J->baseslot == 1+LJ_FR2, "bad baseslot");
   return sloadt(J, -1-LJ_FR2, IRT_FUNC, IRSLOAD_READONLY);
+}
+
+/* Address the current Lua frame when a helper materializes local cells. */
+static TRef rec_celluv_base(jit_State *J)
+{
+  int32_t ofs = ((int32_t)J->baseslot - 1 - LJ_FR2) * 8;
+  return ofs ? emitir(IRT(IR_ADD, IRT_PGC), REF_BASE,
+		      lj_ir_kintpgc(J, ofs)) : REF_BASE;
 }
 
 /* Compare for raw object equality.
@@ -1140,7 +1148,7 @@ static int rec_fnew1num_call_info(jit_State *J, GCproto *pt, TRef tr,
   if (pt->sizeuv != 1 || !proto_celluv(pt))
     return 0;
   v = proto_uv(pt)[0];
-  if (!(v & PROTO_UV_LOCAL) || (v & PROTO_UV_IMMUTABLE))
+  if (!(v & PROTO_UV_LOCAL))
     return 0;
   slotref = IR(args[3]);
   if (slotref->o != IR_KINT || (BCReg)slotref->i != (BCReg)(v & 0xff))
@@ -2972,6 +2980,8 @@ have_uref:
 static TRef rec_celluv_cnewref(jit_State *J, BCReg slotno)
 {
   IRRef ref, chain, best = 0;
+  int32_t ofs = ((int32_t)J->baseslot - 1 - LJ_FR2) * 8;
+  IRRef kofs = ofs ? tref_ref(lj_ir_kintpgc(J, ofs)) : 0;
   for (chain = 0; chain < 2; chain++) {
     IRIns *ir;
     ref = J->chain[chain == 0 ? IR_CALLA : IR_CALLS];
@@ -2981,8 +2991,20 @@ static TRef rec_celluv_cnewref(jit_State *J, BCReg slotno)
       if (ir->op2 != IRCALL_lj_func_newuvcell_forjit || ir->op1 < REF_FIRST)
 	continue;
       arg = IR(ir->op1);
-      if (arg->o == IR_CARG && arg->op1 == REF_BASE && irref_isk(arg->op2)) {
+      /* Compare the frame expression structurally: equivalent ADDs need not
+      ** have one reference when CSE is disabled. */
+      if (arg->o == IR_CARG && irref_isk(arg->op2)) {
 	IRIns *slot = IR(arg->op2);
+	if (ofs) {
+	  IRIns *base;
+	  if (arg->op1 < REF_FIRST)
+	    continue;
+	  base = IR(arg->op1);
+	  if (base->o != IR_ADD || base->op1 != REF_BASE || base->op2 != kofs)
+	    continue;
+	} else if (arg->op1 != REF_BASE) {
+	  continue;
+	}
 	if (slot->o == IR_KINT && slot->i == (int32_t)slotno)
 	  best = ref > best ? ref : best;
       }
@@ -3031,7 +3053,7 @@ TRef lj_record_tab_len(jit_State *J, TRef tab)
   return emitir(IRTI(IR_ALEN), tab, TREF_NIL);
 }
 
-/* Look ahead in the current loop body for FNEW promotion of a mutable slot. */
+/* Look ahead in the current loop body for FNEW promotion of a captured slot. */
 static int rec_celluv_will_promote(jit_State *J, BCReg slotno)
 {
   const BCIns *pc = J->pc;
@@ -3049,7 +3071,7 @@ static int rec_celluv_will_promote(jit_State *J, BCReg slotno)
 	continue;
       for (i = 0; i < n; i++) {
 	uint32_t v = proto_uv(pt)[i];
-	if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE) &&
+	if ((v & PROTO_UV_LOCAL) &&
 	    (BCReg)(v & 0xff) == slotno && slotno != cnewslot)
 	  return 1;
       }
@@ -3077,7 +3099,7 @@ static TRef rec_celluv_promote_slot(jit_State *J, BCReg slotno, int fromstack)
       slotref = getslot(J, slotno);
       tmp = rec_tmpref(J, slotref);
     }
-    slotref = lj_ir_call(J, IRCALL_lj_func_promoteuv_forjit, REF_BASE,
+    slotref = lj_ir_call(J, IRCALL_lj_func_promoteuv_forjit, rec_celluv_base(J),
 			 lj_ir_kint(J, (int32_t)slotno), tmp);
     J->base[slotno] = slotref;
   }
@@ -3123,7 +3145,7 @@ static void rec_celluv_promote_pending(jit_State *J)
       for (i = 0; i < n; i++) {
 	uint32_t v = proto_uv(pt)[i];
 	BCReg slot = (BCReg)(v & 0xff);
-	if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE) &&
+	if ((v & PROTO_UV_LOCAL) &&
 	    slot != cnewslot && !rec_celluv_slot_defined_before(J, pc, slot))
 	  rec_celluv_promote_slot(J, slot, 1);
       }
@@ -3297,7 +3319,7 @@ static int rec_fnew_celluv(jit_State *J, GCproto *pt)
 	return 0;
       } else {
 	TRef tmp = rec_tmpref(J, tr);
-	lj_ir_call(J, IRCALL_lj_func_syncslot_forjit, REF_BASE,
+	lj_ir_call(J, IRCALL_lj_func_syncslot_forjit, rec_celluv_base(J),
 		   lj_ir_kint(J, (int32_t)slot), tmp);
       }
       nlocal++;
@@ -3329,7 +3351,7 @@ static TRef rec_fnew_gc1num(jit_State *J, GCproto *pt)
   if (!tref_isnum(tr))
     return 0;
   J->needsnap = 1;
-  return lj_ir_call(J, IRCALL_lj_func_newL_gc1num_forjit, REF_BASE,
+  return lj_ir_call(J, IRCALL_lj_func_newL_gc1num_forjit, rec_celluv_base(J),
 		    lj_ir_kgc(J, obj2gco(pt), IRT_PROTO), getcurrf(J),
 		    lj_ir_kint(J, (int32_t)slot), tr);
 }
@@ -3340,7 +3362,7 @@ static void rec_fnew_promoted_slots(jit_State *J, GCproto *pt)
   MSize i, n = pt->sizeuv;
   for (i = 0; i < n; i++) {
     uint32_t v = proto_uv(pt)[i];
-    if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE)) {
+    if ((v & PROTO_UV_LOCAL)) {
       BCReg slot = (BCReg)(v & 0xff);
       if (slot < J->maxslot && !rec_celluv_iscellref(J->base[slot]) &&
 	  itype(&J->L->base[slot]) != LJ_TUPVAL)
@@ -3367,7 +3389,7 @@ static TRef rec_fnew(jit_State *J, GCproto *pt)
     lj_trace_err_info(J, LJ_TRERR_NYIBC);
   }
   J->needsnap = 1;
-  fn = lj_ir_call(J, IRCALL_lj_func_newL_gc_forjit, REF_BASE,
+  fn = lj_ir_call(J, IRCALL_lj_func_newL_gc_forjit, rec_celluv_base(J),
 		  lj_ir_kgc(J, obj2gco(pt), IRT_PROTO), getcurrf(J));
   rec_fnew_promoted_slots(J, pt);
   return fn;
@@ -4164,7 +4186,7 @@ void lj_record_ins(jit_State *J)
     rec_upvalue(J, ra, rc);
     break;
   case BC_CNEW:
-    rc = lj_ir_call(J, IRCALL_lj_func_newuvcell_forjit, REF_BASE,
+    rc = lj_ir_call(J, IRCALL_lj_func_newuvcell_forjit, rec_celluv_base(J),
 		    lj_ir_kint(J, (int32_t)ra));
     rec_setdst(J, (BCReg)ra, rc);
     break;

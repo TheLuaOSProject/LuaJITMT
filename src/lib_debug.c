@@ -278,7 +278,8 @@ LJLIB_CF(debug_setlocal)
     lj_state_dropclaim(&claim);
     lj_err_arg(L, arg+1, LJ_ERR_LVLRNG);
   }
-  name = lj_debug_setlocal_claimed(L1, &ar, slot, &tvcopy, &pubuv, &fnroot);
+  name = lj_debug_setlocal_claimed(L1, &ar, slot, &tvcopy, &pubuv, &fnroot,
+				 &claim);
   if (name && fnroot)
     debug_pushfunc_root(L, fnroot);
   lj_state_dropclaim(&claim);

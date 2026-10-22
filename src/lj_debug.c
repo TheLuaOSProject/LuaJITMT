@@ -21,6 +21,7 @@
 #include "lj_bc.h"
 #include "lj_strfmt.h"
 #include "lj_vm.h"
+#include "lj_trace.h"
 #if LJ_HASJIT
 #include "lj_dispatch.h"
 #include "lj_jit.h"
@@ -495,6 +496,22 @@ static TValue *debug_localcell(TValue *o, GCupval **uvp)
   return o;
 }
 
+/* A promoted local may be constified through an immutable child upvalue.
+** Invalidate those traces before changing the shared cell, as setupvalue does.
+** The cell is heap-resident, so a flush callback cannot move its TValue. */
+static void debug_localcell_flush(lua_State *L, GCupval *uv, cTValue *tv,
+				  LJStateClaim *claim)
+{
+  if (lj_trace_hasany(G(L)) &&
+      tv_rawload_acq(uvval(uv)) != tv_rawload(tv)) {
+    lua_State *errL = debug_errstate(L);
+    if (lj_trace_flushall_hs(errL)) {
+      lj_state_dropclaim(claim);
+      lj_err_caller(errL, LJ_ERR_NOGCMM);
+    }
+  }
+}
+
 static GCfunc *debug_func_from_ar(lua_State *L, const lj_Debug *ar,
 				  TValue **framep, TValue **nextframep)
 {
@@ -547,7 +564,7 @@ const char *lj_debug_getlocal_claimed(lua_State *L, const lj_Debug *ar, int n,
 
 const char *lj_debug_setlocal_claimed(lua_State *L, const lj_Debug *ar, int n,
 				      cTValue *tv, TValue **pubuv,
-				      GCfunc **fnout)
+				      GCfunc **fnout, LJStateClaim *claim)
 {
   const char *name = NULL;
   TValue *o = debug_localname(L, (const lua_Debug *)ar, &name, (BCReg)n);
@@ -558,6 +575,7 @@ const char *lj_debug_setlocal_claimed(lua_State *L, const lj_Debug *ar, int n,
     if (fnout) *fnout = debug_func_from_ar(L, ar, NULL, NULL);
     o = debug_localcell(o, &uv);
     if (uv) {
+      debug_localcell_flush(L, uv, tv, claim);
       copyTVrel(L, o, tv);
       if (pubuv) *pubuv = o;
     } else {
@@ -614,6 +632,7 @@ LUA_API const char *lua_setlocal(lua_State *L, const lua_Debug *ar, int n)
     GCupval *uv;
     o = debug_localcell(o, &uv);
     if (uv) {
+      debug_localcell_flush(L, uv, L->top-1, &claim);
       copyTVrel(L, o, L->top-1);
       pubuv = 1;
     } else {
