@@ -2976,7 +2976,7 @@ have_uref:
   }
 }
 
-/* Find the latest traced CNEW helper for this cell slot, if any. */
+/* Find the latest traced CNEW helper for this cell slot in the current BASE. */
 static TRef rec_celluv_cnewref(jit_State *J, BCReg slotno)
 {
   IRRef ref, chain, best = 0;
@@ -2985,7 +2985,7 @@ static TRef rec_celluv_cnewref(jit_State *J, BCReg slotno)
   for (chain = 0; chain < 2; chain++) {
     IRIns *ir;
     ref = J->chain[chain == 0 ? IR_CALLA : IR_CALLS];
-    for (; ref; ref = ir->prev) {
+    for (; ref > J->chain[IR_RETF]; ref = ir->prev) {
       IRIns *arg;
       ir = IR(ref);
       if (ir->op2 != IRCALL_lj_func_newuvcell_forjit || ir->op1 < REF_FIRST)
@@ -3012,6 +3012,13 @@ static TRef rec_celluv_cnewref(jit_State *J, BCReg slotno)
   }
   return best ? TREF(best, IRT_PGC) : 0;
 }
+
+#ifdef LJ_TRACE_TEST_HELPERS
+TRef lj_record_test_celluv_cnewref(jit_State *J, BCReg slotno)
+{
+  return rec_celluv_cnewref(J, slotno);
+}
+#endif
 
 static int rec_celluv_iscellref(TRef tr)
 {
