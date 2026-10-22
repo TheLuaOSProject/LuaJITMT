@@ -938,6 +938,10 @@ assert(util.traceinfo(1), "Lua tailcall loop did not trace")
         lua_path = true,
         timeout = "30s"
       })
+      luajit_file(t, t:path("tests", "t-jit-cell-retf.lua"), {
+        lua_path = true,
+        timeout = "30s"
+      })
       build_and_run_c(t, t:tmp("lj_t-debug-setlocal"),
                       "t-debug-setlocal.c", {
         build = false,
