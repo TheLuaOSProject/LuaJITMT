@@ -219,10 +219,9 @@ awk '/^static int arm64_postra_nonloop_admit/ { copy=1 }
   "$admit_source" >"$postra_region"
 for required in \
   'rootop = bc_op(view->startins);' \
-  'rootop != BC_LOOP && rootop != BC_FORL && rootop != BC_FUNCF' \
+  'rootop != BC_FORL && rootop != BC_FUNCF' \
   'if (rootop == BC_FUNCF)' \
-  'rootop == BC_FORL && nintadd != 2u' \
-  'rootop == BC_LOOP && nintadd != 0u' \
+  'if (nintadd != 2u)' \
   'flags != 0 && flags != SNAP_NORESTORE' \
   'source.o != IR_SLOAD || source.op1 != slot' \
   'slot != forl_idxslot && slot != forl_idxslot+FORL_STOP' \
