@@ -29,3 +29,10 @@ as partial validation. The default gate and its required x86-64 execution are
 unchanged. Recent source-upvalue tests had already passed native ARM64 and
 Rosetta before these processes stalled; detailed results are in the related
 source-upvalue and recursive-return notes.
+
+The partial experimental gate completed successfully on frozen `dde9ecdb` in
+`/tmp/luajitmt-native-checkpoint-20261022.Mkq7iD`, with output in
+`/tmp/luajitmt-native-checkpoint-jit.log`. It includes the CNEW return-boundary
+recorder test and all remaining gate contracts; callback runtime execution was
+explicitly source-only in this run. It does not certify subsequent scalar-loop
+or legacy-import changes.

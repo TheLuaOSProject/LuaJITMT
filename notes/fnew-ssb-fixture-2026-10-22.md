@@ -24,9 +24,28 @@ later pair publication. It runs before the FNEW fixture in `m6_jit_fnew_bump`.
 Native ARM64 validation used an assertion-enabled experimental JIT archive;
 the fixture itself needs no private test-helper macro or native trace execution.
 
-This is not a full FNEW-suite pass. The later persistent root-snapshot fixture
-also fails natively after its fixed 64 one-item MARK-close attempts. Its setup
-creates 20,000 rooted tables, while `gc2_fixpoint_round` now deliberately defers
-the root snapshot until older queued work is drained (except owner NEEDSCAN
-handoffs). That separate setup assumption remains under investigation; no
-assertion was relaxed and no production snapshot state was forced.
+The later persistent root-snapshot fixture also failed natively after its
+fixed 64 one-item MARK-close attempts. Its setup creates 20,000 rooted tables,
+while `gc2_fixpoint_round` deliberately defers the root snapshot until older
+queued work is drained (except owner NEEDSCAN handoffs).
+
+Review then found that upstream commit `8cea705d` already repairs both setup
+assumptions. Its root-snapshot setup explicitly drains the previous frontier
+and requests native-lease exit before each scheduled close attempt. That
+unchanged upstream setup now passes the native extraction, including all
+snapshot-state and phase assertions. No production state was forced.
+
+The other source/test changes from that upstream commit are also adopted:
+allocator identity is inspected only through a test-only eligibility wrapper;
+real allocation fallback is exercised through the existing MT-entry contender
+instead of lying about the allocator. Constructor-completion assertions remain
+enabled. The new test wrapper is absent from ordinary builds. The upstream
+commit's stored build artifacts and historical report are not copied.
+
+Validation used a clean native ARM64 experimental/assert build with both
+function and table test helpers. Eighteen unchanged portable functions extracted
+from the repaired fixture pass, including the real TNEW fallback, direct
+allocator predicates and fallback, completed constructor states, and SSB
+boundaries. The full fixture also compiles cleanly for x86-64, but its x86-64
+machine-code execution remains unverified while translated test processes are
+stuck. This is not a full FNEW-suite pass.

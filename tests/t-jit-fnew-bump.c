@@ -21,6 +21,7 @@
 #include "lj_func.h"
 #include "lj_state.h"
 #include "lj_target.h"
+#include "lj_tab.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
 #include "lj_vm.h"
@@ -1562,6 +1563,7 @@ static void test_vm_tnew_root_member(lua_State *L, global_State *g,
 static void test_vm_tnew_branch_targets(lua_State *L, global_State *g)
 {
   uint32_t old_allocf_arena = la_load32_acq(&g->allocf_arena);
+  uint32_t helper0;
 
   /* RD!=0 must retain BC_TNEW's original >6 generic-table target. */
   ljt_lua_loadstring(L, "return { 11, 22, 33 }\n");
@@ -1575,10 +1577,17 @@ static void test_vm_tnew_branch_targets(lua_State *L, global_State *g)
   /* A failed fast-path eligibility sample must retain >7, not enter any
   ** membership label inserted between the predicate and the slow helper. */
   assert(old_allocf_arena != 0);
-  la_store32_rel(&g->allocf_arena, 0);
+  /* Keep allocator identity truthful: an arena allocation must finish its
+  ** CONSTRUCT|LINKING lanes. A real MT-entry contender rejects the same VM
+  ** >7 branch; the helper counter witnesses that branch directly. */
   ljt_lua_loadstring(L, "return {}\n");
+  helper0 = lj_tab_test_new0_calls();
+  assert(mt_entering_add_rlx(g, 1) == 0);
   ljt_lua_pcall(L, 0, 1, "x64 TNEW eligibility fallback target");
-  la_store32_rel(&g->allocf_arena, old_allocf_arena);
+  assert(mt_entering_sub_acqrel(g, 1) == 1);
+  mt_entering_futex_wake(g, 0x7fffffff);
+  assert(lj_tab_test_new0_calls() == helper0 + 1u);
+  assert(la_load32_acq(&g->allocf_arena) == old_allocf_arena);
   assert(lua_istable(L, -1));
   lua_pop(L, 1);
 }
@@ -2301,10 +2310,21 @@ static void establish_persistent_fnew_root_snapshot(lua_State *L,
 {
   uint32_t i;
 
+  /* Drain carried old frontier work before asking the one-item close below
+  ** to establish a new global root snapshot. This does not run a fixpoint. */
+  for (i = 0; i < 64u && !fnew_mark_work_empty(g, tg); i++) {
+    lj_gc2_jit_mark_request_exit(g);
+    (void)lj_gc2_worker_drain(g, 1u << 20);
+  }
+  assert(fnew_mark_work_empty(g, tg));
+
   /* A one-item close budget completes the global root snapshot, but the large
   ** rooted graph leaves post-snapshot work and forces a bounded MARK reopen. */
   for (i = 0; i < 64u && gc2_mark_root_scanned_acq(g) != 1; i++) {
     assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+    /* This C-only fixture schedules its close quantum explicitly instead of
+    ** racing the newly granted native turn deadline. */
+    lj_gc2_jit_mark_request_exit(g);
     assert(!lj_gc2_mark_complete(g, L, 1, 1));
   }
   assert(gc2_phase_acq(g) == LJ_GC2_MARK);
@@ -2628,6 +2648,36 @@ static void load_no_upvalue_fixture(lua_State *L, GCfunc **parentp,
   *childp = child;
 }
 
+static void assert_bump_allocator_identity_gate(global_State *g, TGState *tg)
+{
+  uint32_t old_identity = la_load32_acq(&g->allocf_arena);
+  LJArenaBump before = tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
+  uint64_t total0 = lj_gc_total_load(g);
+  uint64_t local0 = lj_tg_local_total_acq(tg);
+  GCobj *pending0 = lj_tg_gcroot_pending_acq(tg);
+  uint32_t fast0 = lj_func_test_gc1num_bump_fast_calls();
+  uint32_t fallback0 = lj_func_test_gc1num_bump_fallback_calls();
+  int denied;
+
+  assert(old_identity != 0);
+  assert(lj_func_test_bump_alloc_ready(g, tg));
+  /* Inspect the real pure predicate only. Restore truthful allocator identity
+  ** before any assertion, constructor, or fallback may run. */
+  la_store32_rel(&g->allocf_arena, 0);
+  denied = !lj_func_test_bump_alloc_ready(g, tg);
+  la_store32_rel(&g->allocf_arena, old_identity);
+  assert(denied);
+  assert(lj_func_test_bump_alloc_ready(g, tg));
+  assert(tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a == before.a);
+  assert(tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].cell == before.cell);
+  assert(tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].end == before.end);
+  assert(lj_gc_total_load(g) == total0);
+  assert(lj_tg_local_total_acq(tg) == local0);
+  assert(lj_tg_gcroot_pending_acq(tg) == pending0);
+  assert(lj_func_test_gc1num_bump_fast_calls() == fast0);
+  assert(lj_func_test_gc1num_bump_fallback_calls() == fallback0);
+}
+
 static void test_bump_allocator_gate_direct(lua_State *L, global_State *g,
 					    TGState *tg)
 {
@@ -2643,6 +2693,7 @@ static void test_bump_allocator_gate_direct(lua_State *L, global_State *g,
   assert(mt_entering_acq(g) == 0);
   assert(old_workers == 0);
   assert(old_allocf_arena != 0);
+  assert_bump_allocator_identity_gate(g, tg);
 
   load_one_upvalue_fixture(L, &parent, &child, &slotno);
   quiet_gc_for_bump(g, tg);
@@ -2658,9 +2709,14 @@ static void test_bump_allocator_gate_direct(lua_State *L, global_State *g,
   assert_gc1num_bump_blocked(L, slots, child, &parent->l, slotno, 22);
   gc2_n_workers_rel(g, old_workers);
 
-  la_store32_rel(&g->allocf_arena, 0);
+  /* Recheck a second MT-entry fallback with fresh closure/cell bodies.
+  ** The pure predicate control above separately covers allocator identity;
+  ** real constructors always keep the allocator's identity truthful. */
+  assert(mt_entering_add_rlx(g, 1) == 0);
   assert_gc1num_bump_blocked(L, slots, child, &parent->l, slotno, 33);
-  la_store32_rel(&g->allocf_arena, old_allocf_arena);
+  assert(mt_entering_sub_acqrel(g, 1) == 1);
+  mt_entering_futex_wake(g, 0x7fffffff);
+  assert(la_load32_acq(&g->allocf_arena) == old_allocf_arena);
   lua_pop(L, 1);
 
   quiet_gc_for_bump(g, tg);
@@ -3085,6 +3141,20 @@ static void test_accounting_checkpoint(lua_State *L, global_State *g,
   lua_pop(L, 1);
 }
 
+static void assert_no_unfinished_owned_constructors(TGState *tg)
+{
+  GCArena *a;
+  uint32_t cell;
+  /* Single-threaded fixture boundary: every allocation call has returned. */
+  for (a = tg->alloc.owned[LJ_ARENAK_TRAVERSABLE]; a;
+       a = lj_arena_next_acq(a))
+    for (cell = LJ_AFIRST_CELL; cell < LJ_ARENA_CELLS; cell++) {
+      assert(lj_arena_lifetime_state_acq(a, cell) !=
+             LJ_ARENA_LIFETIME_CONSTRUCT);
+      assert(lj_arena_root_state_acq(a, cell) != LJ_ARENA_ROOT_LINKING);
+    }
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -3100,6 +3170,7 @@ int main(void)
 
   test_vm_tnew_root_member(L, g, tg);
   test_vm_tnew_branch_targets(L, g);
+  assert_no_unfinished_owned_constructors(tg);
   if (getenv("LJ_TEST_X64_PUBLICATION_ONLY") != NULL) {
     /* Keep a narrow runner for emitted-mcode and active-MARK fallback audits. */
     test_traced_immutable_numeric_inline(L, g);
@@ -3109,6 +3180,7 @@ int main(void)
   }
   test_uvcell_bump_direct(L, g, tg);
   test_bump_allocator_gate_direct(L, g, tg);
+  assert_no_unfinished_owned_constructors(tg);
   test_interpreter_numeric_fast_path(L);
   test_accounting_fast_direct(L, g, tg);
   test_white_bump_clears_seeded_marks(L, g, tg);
