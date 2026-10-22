@@ -60,7 +60,7 @@ def main():
     parser.add_argument('stock_luajit')
     args = parser.parse_args()
     for kind, stripped in [('cells', True), ('cells', False),
-                           ('debug', False), ('sharing', True)]:
+                           ('debug', False), ('sharing', True), ('cell-loops', False)]:
         source = ROOT / 'tests/fixtures' / f'legacy-bytecode-{kind}.lua'
         name = '@stock-cell-debug.lua' if kind == 'debug' else '@stock-cell-' + kind + '.lua'
         code = ('local f=assert(loadstring(io.read("*a"),"' + name + '"));'

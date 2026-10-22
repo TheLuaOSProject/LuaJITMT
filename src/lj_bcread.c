@@ -824,7 +824,9 @@ static void bccell_lower(BCCellCtx *c)
     c->map[pc] = c->nout;
     if (op == BC_UCLO) {
       bccell_unbox(c, pc, &reads, a, c->pt->framesize);
-      bccell_emit(c, BCINS_AJ(BC_JMP, a, 0), pc, bccell_target(c, pc, ins));
+      /* UCLO closes captures without killing higher live temporaries. */
+      bccell_emit(c, BCINS_AJ(BC_JMP, tmp + 3, 0), pc,
+                  bccell_target(c, pc, ins));
       continue;
     }
     if (!c->seen[pc]) { /* Unreachable instructions cannot expose cells. */
@@ -907,14 +909,18 @@ static void bccell_lower(BCCellCtx *c)
     bccell_emit(c, ins, pc,
                 bcmode_d(op) == BCMjump ? bccell_target(c, pc, ins) : 0);
     if (op < BC_MOV) {
+      /* These routing jumps do not end a local lifetime. Their A operand is
+      ** also the recorder's live-slot bound; zero would discard live SSA
+      ** values before either original successor is recorded. */
       if (write) {
-        bccell_emit(c, BCINS_AJ(BC_JMP, 0, 0), pc, 0x80000000u | (c->nout + 2));
-        bccell_emit(c, BCINS_AJ(BC_JMP, 0, 0), pc, pc + 2);
+        bccell_emit(c, BCINS_AJ(BC_JMP, tmp + 3, 0), pc,
+                    0x80000000u | (c->nout + 2));
+        bccell_emit(c, BCINS_AJ(BC_JMP, tmp + 3, 0), pc, pc + 2);
         bccell_emit(c, BCINS_AD(BC_CSET, a, bc_a(ins)), pc, 0);
-        bccell_emit(c, BCINS_AJ(BC_JMP, 0, 0), pc, pc + 1);
+        bccell_emit(c, BCINS_AJ(BC_JMP, tmp + 3, 0), pc, pc + 1);
       } else {
-        bccell_emit(c, BCINS_AJ(BC_JMP, 0, 0), pc, pc + 1);
-        bccell_emit(c, BCINS_AJ(BC_JMP, 0, 0), pc, pc + 2);
+        bccell_emit(c, BCINS_AJ(BC_JMP, tmp + 3, 0), pc, pc + 1);
+        bccell_emit(c, BCINS_AJ(BC_JMP, tmp + 3, 0), pc, pc + 2);
       }
     } else if (write) bccell_emit(c, BCINS_AD(BC_CSET, a, bc_a(ins)), pc, 0);
   }

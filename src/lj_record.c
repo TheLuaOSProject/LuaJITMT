@@ -3096,21 +3096,18 @@ static int rec_celluv_will_promote(jit_State *J, BCReg slotno)
   return 0;
 }
 
-static TRef rec_celluv_promote_slot(jit_State *J, BCReg slotno, int fromstack)
+static TRef rec_celluv_promote_slot(jit_State *J, BCReg slotno)
 {
   TRef slotref, tmp;
   if (slotno >= curr_proto(J->L)->framesize)
     lj_trace_err_info(J, LJ_TRERR_NYIBC);
   if (slotno >= J->maxslot)
     J->maxslot = (BCReg)(slotno + 1);
-  slotref = J->base[slotno];
+  /* Make the input an explicit SSA dependency. A loop-unrolled promotion
+  ** must consume its current carried value, not an old physical stack cell. */
+  slotref = getslot(J, slotno);
   if (!rec_celluv_iscellref(slotref)) {
-    if (fromstack) {
-      tmp = lj_ir_kptr(J, NULL);
-    } else {
-      slotref = getslot(J, slotno);
-      tmp = rec_tmpref(J, slotref);
-    }
+    tmp = rec_tmpref(J, slotref);
     slotref = lj_ir_call(J, IRCALL_lj_func_promoteuv_forjit, rec_celluv_base(J),
 			 lj_ir_kint(J, (int32_t)slotno), tmp);
     J->base[slotno] = slotref;
@@ -3185,7 +3182,7 @@ static void rec_celluv_promote_pending(jit_State *J)
 	BCReg slot = (BCReg)(v & 0xff);
 	if ((v & PROTO_UV_LOCAL) &&
 	    slot != cnewslot && !rec_celluv_slot_defined_before(J, pc, slot))
-	  rec_celluv_promote_slot(J, slot, 1);
+	  rec_celluv_promote_slot(J, slot);
       }
     } else if (rec_celluv_scan_stop(op)) {
       break;
@@ -3292,7 +3289,7 @@ static TRef rec_celluv(jit_State *J, cTValue *slot, TRef slotref, TRef val,
   uint32_t uh = 0;
   if (itype(slot) != LJ_TUPVAL && !rec_celluv_iscellref(slotref)) {
     if (rec_celluv_will_promote(J, slotno)) {
-      slotref = rec_celluv_promote_slot(J, slotno, 0);
+      slotref = rec_celluv_promote_slot(J, slotno);
     } else {
       if (val == 0) {
 	TRef forref = rec_for_ext_cget(J, slotno, slotref);
@@ -3392,8 +3389,9 @@ static TRef rec_fnew_gc1num(jit_State *J, GCproto *pt)
 		    lj_ir_kint(J, (int32_t)slot), tr);
 }
 
-/* Reload slots that the FNEW helper promotes from raw values to cells. */
-static void rec_fnew_promoted_slots(jit_State *J, GCproto *pt)
+/* Recover promoted cells from the newly allocated closure. A mid-trace
+** SLOAD would be mistaken for a loop-carried entry value by loop unrolling. */
+static void rec_fnew_promoted_slots(jit_State *J, GCproto *pt, TRef fn)
 {
   MSize i, n = pt->sizeuv;
   for (i = 0; i < n; i++) {
@@ -3401,8 +3399,11 @@ static void rec_fnew_promoted_slots(jit_State *J, GCproto *pt)
     if ((v & PROTO_UV_LOCAL)) {
       BCReg slot = (BCReg)(v & 0xff);
       if (slot < J->maxslot && !rec_celluv_iscellref(J->base[slot]) &&
-	  itype(&J->L->base[slot]) != LJ_TUPVAL)
-	sloadt(J, (int32_t)slot, IRT_P32, IRSLOAD_INHERIT);
+	  itype(&J->L->base[slot]) != LJ_TUPVAL) {
+	TRef uref = emitir(IRT(IR_UREFC, IRT_PGC), fn, i << 8);
+	J->base[slot] = emitir(IRT(IR_SUB, IRT_PGC), uref,
+			     lj_ir_kintpgc(J, offsetof(GCupval, tv)));
+      }
     }
   }
 }
@@ -3417,7 +3418,7 @@ static TRef rec_fnew(jit_State *J, GCproto *pt)
   TRef fn;
   fn = rec_fnew_gc1num(J, pt);
   if (fn) {
-    rec_fnew_promoted_slots(J, pt);
+    rec_fnew_promoted_slots(J, pt, fn);
     return fn;
   }
   if (pt->sizeuv != 0 && !rec_fnew_celluv(J, pt)) {
@@ -3427,7 +3428,7 @@ static TRef rec_fnew(jit_State *J, GCproto *pt)
   J->needsnap = 1;
   fn = lj_ir_call(J, IRCALL_lj_func_newL_gc_forjit, rec_celluv_base(J),
 		  lj_ir_kgc(J, obj2gco(pt), IRT_PROTO), getcurrf(J));
-  rec_fnew_promoted_slots(J, pt);
+  rec_fnew_promoted_slots(J, pt, fn);
   return fn;
 }
 

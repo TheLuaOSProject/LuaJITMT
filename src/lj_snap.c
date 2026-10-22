@@ -80,7 +80,7 @@ static int snapshot_child_cellslot(jit_State *J, GCproto *pt, BCReg slot)
       if (proto_celluv(child)) {
 	for (j = 0; j < nuv; j++) {
 	  uint32_t v = proto_uv(child)[j];
-	  if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE) &&
+	  if ((v & PROTO_UV_LOCAL) &&
 	      (BCReg)(v & 0xff) == slot) {
 	    lj_gc2_lease_release(&lease);
 	    return 1;
@@ -469,7 +469,7 @@ static void snap_usechildcellsrc(jit_State *J, GCproto *pt, uint8_t *udf,
 	for (j = 0; j < nuv; j++) {
 	  uint32_t v = proto_uv(child)[j];
 	  BCReg slot = (BCReg)(v & 0xff);
-	  if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE) &&
+	  if ((v & PROTO_UV_LOCAL) &&
 	      slot < maxslot)
 	    udf[slot] = 0;
 	}
