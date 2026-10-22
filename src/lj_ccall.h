@@ -75,15 +75,18 @@ typedef union FPRArg {
 #define CCALL_NARG_FPR		8
 #define CCALL_NRET_FPR		4
 #define CCALL_SPS_FREE		0
+#define CCALL_VECTOR_REG	1	/* Short vectors use one SIMD register. */
+#define CCALL_ALIGN_CALLSTATE	16
 #if LJ_TARGET_OSX
 #define CCALL_PACK_STACKARG	1
 #endif
 
 typedef intptr_t GPRArg;
-typedef union FPRArg {
+typedef LJ_ALIGN(16) union FPRArg {
   double d;
   struct { LJ_ENDIAN_LOHI(float f; , float g;) };
   struct { LJ_ENDIAN_LOHI(uint32_t lo; , uint32_t hi;) };
+  uint8_t b[16];
 } FPRArg;
 
 #elif LJ_TARGET_PPC

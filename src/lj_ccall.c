@@ -304,11 +304,14 @@
 
 #define CCALL_HANDLE_STRUCTRET2 \
   unsigned int cl = ccall_classify_struct(cts, ctr); \
-  if ((cl & 4)) { /* Combine float HFA from separate registers. */ \
+  if (cl > 1) {  /* Combine HFA/HVA members from separate registers. */ \
+    CTSize esz = ccall_hfa_size(cl); \
     CTSize i = (cl >> 8) - 1; \
-    do { ((uint32_t *)dp)[i] = cc->fpr[i].lo; } while (i--); \
+    do { \
+      memcpy((uint8_t *)dp + i*esz, \
+	     cc->fpr[i].b + LJ_ENDIAN_SELECT(0, 16-esz), esz); \
+    } while (i--); \
   } else { \
-    if (cl > 1) sp = (uint8_t *)&cc->fpr[0]; \
     memcpy(dp, sp, ctr->size); \
   }
 
@@ -317,13 +320,10 @@
   cc->retref = 0;
 
 #define CCALL_HANDLE_COMPLEXRET2 \
-  if (ctr->size == 2*sizeof(float)) {  /* Copy complex float from FPRs. */ \
-    ((float *)dp)[0] = cc->fpr[0].f; \
-    ((float *)dp)[1] = cc->fpr[1].f; \
-  } else {  /* Copy complex double from FPRs. */ \
-    ((double *)dp)[0] = cc->fpr[0].d; \
-    ((double *)dp)[1] = cc->fpr[1].d; \
-  }
+  CTSize esz = ctr->size >> 1; \
+  memcpy(dp, cc->fpr[0].b + LJ_ENDIAN_SELECT(0, 16-esz), esz); \
+  memcpy((uint8_t *)dp + esz, \
+	 cc->fpr[1].b + LJ_ENDIAN_SELECT(0, 16-esz), esz);
 
 #define CCALL_HANDLE_STRUCTARG \
   unsigned int cl = ccall_classify_struct(cts, d); \
@@ -331,21 +331,21 @@
     rp = cdataptr(lj_cdata_new(cts, did, sz)); \
     sz = CTSIZE_PTR; \
   } else if (cl > 1) {  /* Pass struct in FPRs or on stack. */ \
-    isfp = (cl & 4) ? 2 : 1; \
+    isfp = cl; \
   }  /* else: Pass struct in GPRs or on stack. */
 
 #define CCALL_HANDLE_COMPLEXARG \
   /* Pass complex by value in separate (!) FPRs or on stack. */ \
-  isfp = sz == 2*sizeof(float) ? 2 : 1;
+  isfp = (sz >> 1) + (2 << 8);
 
 #define CCALL_HANDLE_REGARG \
   if (LJ_TARGET_OSX && isva) { \
     /* IOS: All variadic arguments are on the stack. */ \
   } else if (isfp) {  /* Try to pass argument in FPRs. */ \
-    int n2 = ctype_isvector(d->info) ? 1 : \
-	     isfp == 1 ? n : (d->size >> (4-isfp)); \
+    MSize n2 = isfp == 1 ? 1 : (isfp >> 8); \
     if (nfpr + n2 <= CCALL_NARG_FPR) { \
       dp = &cc->fpr[nfpr]; \
+      if (LJ_BE && isfp == 1) dp = (uint8_t *)dp + 16-sz; \
       nfpr += n2; \
       goto done; \
     } else { \
@@ -365,8 +365,8 @@
 
 #if LJ_BE
 #define CCALL_HANDLE_RET \
-  if (ctype_isfp(ctr->info) && ctr->size == sizeof(float)) \
-    sp = (uint8_t *)&cc->fpr[0].f;
+  if (ctype_isfp(ctr->info) || ctype_isvector(ctr->info)) \
+    sp = cc->fpr[0].b + 16-ctr->size;
 #endif
 
 
@@ -781,6 +781,16 @@ noth:  /* Not a homogeneous float/double aggregate. */
 
 #if LJ_TARGET_ARM64
 
+/* Low byte of a homogeneous aggregate class: float=4, double=8,
+** short vector=16 (64 bit) or 32 (128 bit). The high bytes count members.
+** Distinct single-bit classes keep mixtures from looking homogeneous.
+*/
+static CTSize ccall_hfa_size(unsigned int cl)
+{
+  CTSize sz = cl & 255;
+  return sz >= 16 ? sz >> 1 : sz;
+}
+
 #if !LJ_TARGET_OSX
 /* Alignment of pass-by-value structs: 8 or 16. */
 static CTInfo ccall_struct_align_arm64(CTState *cts, CType *ct)
@@ -818,15 +828,20 @@ static unsigned int ccall_classify_struct(CTState *cts, CType *ct)
     if (ctype_isfield(ct->info)) {
       sct = ctype_rawchild(cts, ct);
       if (ctype_isarray(sct->info) && !sct->size) goto noth;
-      while (ctype_isarray(sct->info)) {
+      while (ctype_isrefarray(sct->info)) {
 	CType *cct = ctype_rawchild(cts, sct);
 	m *= sct->size / cct->size;
 	sct = cct;
       }
-      if (ctype_isfp(sct->info)) {
+      if (ctype_isfp(sct->info) && (sct->size == 4 || sct->size == 8)) {
 	r |= sct->size;
 	if (!isu) n += m; else if (n < m) n = m;
-      } else if (ctype_iscomplex(sct->info)) {
+      } else if (ctype_isvector(sct->info) &&
+		 (sct->size == 8 || sct->size == 16)) {
+	r |= sct->size << 1;
+	if (!isu) n += m; else if (n < m) n = m;
+      } else if (ctype_iscomplex(sct->info) &&
+		 (sct->size == 8 || sct->size == 16)) {
 	r |= (sct->size >> 1);
 	if (!isu) n += 2*m; else if (n < 2*m) n = 2*m;
       } else if (ctype_isstruct(sct->info)) {
@@ -848,9 +863,10 @@ static unsigned int ccall_classify_struct(CTState *cts, CType *ct)
       }
     }
   }
-  if ((r == 4 || r == 8) && n <= 4)
+  if ((r == 4 || r == 8 || r == 16 || r == 32) && n <= 4 &&
+      sz == n*ccall_hfa_size(r))
     return r + (n << 8);
-noth:  /* Not a homogeneous float/double aggregate. */
+noth:  /* Not a homogeneous float/double/short-vector aggregate. */
   return (sz <= 16);  /* Return structs of size <= 16 in GPRs. */
 }
 
@@ -1127,10 +1143,6 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
 	*(int32_t *)dp = d->size == 1 ? (int32_t)*(int8_t *)dp :
 					(int32_t)*(int16_t *)dp;
     }
-#if LJ_TARGET_ARM64 && LJ_BE
-    if (isfp && d->size == sizeof(float))
-      ((float *)dp)[1] = ((float *)dp)[0];  /* Floats occupy high slot. */
-#endif
 #if LJ_TARGET_MIPS64 || (LJ_TARGET_ARM64 && LJ_BE)
     if ((ctype_isinteger_or_bool(d->info) || ctype_isenum(d->info)
 #if LJ_TARGET_MIPS64
@@ -1155,7 +1167,19 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
       cc->fpr[nfpr-1].d[0] = cc->fpr[nfpr-2].d[1];  /* Split complex double. */
       cc->fpr[nfpr-2].d[1] = 0;
     }
-#elif LJ_TARGET_ARM64 || (LJ_TARGET_MIPS64 && !LJ_ABI_SOFTFP)
+#elif LJ_TARGET_ARM64
+    if (isfp > 1 && (uint8_t *)dp < (uint8_t *)cc->gpr) {
+      /* Spread HFA/HVA and complex members over full SIMD register slots.
+      ** Copy backwards: conversion initially wrote one contiguous value.
+      */
+      CTSize esz = ccall_hfa_size(isfp), i = (isfp >> 8) - 1;
+      do {
+	memmove((uint8_t *)dp + i*sizeof(FPRArg) +
+		LJ_ENDIAN_SELECT(0, sizeof(FPRArg)-esz),
+		(uint8_t *)dp + i*esz, esz);
+      } while (i--);
+    }
+#elif LJ_TARGET_MIPS64 && !LJ_ABI_SOFTFP
     if (isfp == 2 && (uint8_t *)dp < (uint8_t *)cc->stack) {
       /* Split float HFA or complex float into separate registers. */
       CTSize i = (sz >> 2) - 1;

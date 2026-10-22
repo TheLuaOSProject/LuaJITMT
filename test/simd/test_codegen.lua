@@ -7,6 +7,12 @@ local T = require("simdtest")
 local ffi, simd, test, check = T.ffi, T.simd, T.test, T.check
 local jit_ = require("jit")
 
+if jit_.arch ~= "x64" and jit_.arch ~= "x86" then
+  io.write("   x86 machine-code assertions skipped on ", jit_.arch,
+           "; use test_arm64_codegen on AArch64\n")
+  return T
+end
+
 -- jit.dump lives next to the sources when running from the repository.
 package.path = "src/?.lua;./src/?.lua;" .. package.path
 local ok_dump, dump = pcall(require, "jit.dump")

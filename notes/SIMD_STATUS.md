@@ -4,18 +4,24 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 
 ## Where we are
 
-* Branch: `simd`, forked from `upstream/v2.1` at `346ab587`, merged up to
-  `a471ab78` (2026-07-26).
+* Branch: `codex/simd-aarch64-upstream`, based on `simd` at `a06292ca`,
+  merged with `upstream/v2.1` through `a4c06453` (2026-10-21).
 * Remote: `origin` = https://github.com/TheLuaOSProject/LuaJITMT
 * Upstream: `upstream` = https://github.com/LuaJIT/LuaJIT.git
 * **This branch is based on pristine upstream LuaJIT, not on `origin/v2.1`.**
   The two share only pre-fork history. See `SIMD_DESIGN.md` D13 for what that
   means; it is the first thing to revisit if this work is meant to land in
   the fork rather than stand alone.
-* Latest pushed commit: see "Milestones" below.
-* Target: **x86-64-v3** (SSE4.2 + AVX2 + BMI2), with complete 128-bit
-  lowering and a full supported 256-bit YMM operation surface.
-  Feature use is runtime detected, so the binary still runs on older CPUs.
+* Targets: **little-endian AArch64** with 128-bit NEON, and **x86-64**
+  with 128-bit SSE and 256-bit AVX2. x86 feature use is runtime detected.
+  The AArch64 port is validated natively on Apple Silicon macOS.
+* AArch64 preserves full vectors through snapshots, side traces, spills,
+  garbage collection and C calls, including the ABI's partially preserved
+  V8-V15 registers. FFI calls and callbacks accept 8- and 16-byte vectors;
+  homogeneous vector aggregates are supported in C calls.
+* AArch64 32-byte vectors and conversions between different vector widths
+  remain interpreted. No SVE is required. Big-endian AArch64 retains its
+  scalar exit layout and does not enable the vector JIT.
 
 ## Milestones
 
@@ -84,11 +90,15 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M61 | Widen byte extrema into word pairs and finish with `PHMINPOSUW` | done |
 | M62 | Fuse 16-bit `hsum(a*b)` into `PMADDWD` pair-dot reductions | done |
 | M63 | Fuse 8-bit `hsum(a*b)` into even/odd `PMADDWD` pair-dot reductions | done |
+| M64 | Merge upstream through `a4c06453`; add native AArch64 NEON lowering, vector FFI ABI, trace preservation and architecture-specific codegen checks | done |
+| M65 | Fix SSE-only scalar-insert register aliasing exposed by the merge, and preserve 64-bit PRNG call results without AVX | done |
 
 ## Commands that pass
 
 ```
 make -j$(nproc)                       # release build (x86-64-v3 target)
+# Apple Silicon macOS (also set this variable for clean/debug builds):
+make -j8 MACOSX_DEPLOYMENT_TARGET=13.0
 ./src/luajit test/simd/run.lua        # full suite: interp, jit and mixed modes
 ./src/luajit test/simd/run.lua -interp
 ./src/luajit test/simd/run.lua -jit
@@ -131,7 +141,7 @@ backend bug that neither of the other two modes reached. Keep it.
 
 * LuaJIT has no in-tree test suite, so the regression baseline is an output
   diff of `test/simd/test_noregress.lua` against a pristine build of the
-  current upstream head `a471ab78`. It is **byte-for-byte identical**. See
+  current upstream head `a4c06453`. It is **byte-for-byte identical**. See
   `SIMD_TESTING.md` for the exact commands.
 
 * The Windows x64 upper-YMM issue is fixed. Wine now passes the dynamic-splat,
@@ -158,6 +168,12 @@ src/lj_asm_x86.h                 vector XLOAD/XSTORE (MOVUPS/VMOVUPS)
 src/lj_asm_x86_vec.h             the x86-64 vector backend (new)
 src/lj_emit_x86.h                VEX width encoding, emit_loadkvec(), spills
 src/lj_target_x86.h              packed SSE/AVX opcodes, 256 bit ExitState.fpr
+src/lj_asm_arm64_vec.h           128-bit NEON lowering and exact lane semantics
+src/lj_asm_arm64.h               vector loads/stores and C-call preservation
+src/lj_emit_arm64.h              Q spills, moves and owned vector literals
+src/lj_target_arm64.h            full 128-bit little-endian ExitState.fpr
+src/vm_arm64.dasc                Q-register trace exits and vector FFI ABI
+src/jit/dis_arm64.lua            NEON instructions and Q memory operands
 src/vm_x86.dasc src/vm_x64.dasc  save full XMM/YMM registers at a trace exit
 src/lj_snap.c                    16/32 byte restore, sunk vector boxes
 src/lj_crecord.c                 crec_vec2irt(), crec_arith_vec(), boxing
@@ -327,9 +343,9 @@ wrong answer: where the JIT has no lowering the trace aborts with
 1. **Separate non-constant scalar indices in `shuffle`/`shuffle2`.** Rejected
    at record time. Pass one runtime index vector instead; that form and
    variable `insert` are supported for both XMM and YMM vectors.
-2. **Vectors by value in FFI callbacks are x86-64 SysV only.** Supported for 8
-   and 16 byte vectors there (see `SIMD_DESIGN.md` D14). On Windows x64, x86
-   and non-x86 targets, and for any vector wider than one register, `ffi.cast`
+2. **Vectors by value in FFI callbacks support x86-64 SysV and AArch64.**
+   Both support 8 and 16 byte vectors. On Windows x64, x86 and other targets,
+   and for any vector wider than one register, `ffi.cast`
    still rejects the callback with the ordinary "cannot convert" error; pass a
    pointer instead.
 3. **`a*b+c` written with operators is never contracted into an FMA.**
@@ -338,6 +354,9 @@ wrong answer: where the JIT has no lowering the trace aborts with
    the interpreter (C99 `fma`/`fmaf`) and the JIT (`VFMADD213`), so the two
    still agree bit for bit.
 4. **This branch does not sit on `origin/v2.1`** -- see D13 above.
+5. **AArch64 native vectors are 128 bits and little-endian only.** Wider
+   vectors and conversions between vector widths remain interpreted.
+   Integer 64-bit products use two native scalar operations, without calls.
 
 ## Benchmarks
 

@@ -749,7 +749,8 @@ static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
 	if (ra_hasreg(dest)) {
 	  ra_free(as, dest);
 	  ra_modified(as, dest);
-	  emit_rr(as, asm_sse2op(as, XO_MOVD, 1), dest, RID_RET);
+	  emit_rr(as, asm_sse2op(as, XO_MOVD, 1),
+		  dest | ((as->flags & JIT_F_AVX) ? 0 : REX_64), RID_RET);
 	}
 	if (ofs) emit_movtomro(as, RID_RET|REX_64, RID_ESP, ofs);
       } else {

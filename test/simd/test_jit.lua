@@ -37,6 +37,27 @@ local function diff(name, f, ...)
   end
 end
 
+test("bitcast and convert guard a changing destination ctype", function()
+  local function castloop(cast, dst, value, n)
+    local result
+    for _ = 1, n do result = cast(dst, value) end
+    return result
+  end
+  for _, cast in ipairs({simd.bitcast, simd.convert}) do
+    jit_.flush()
+    jit_.on()
+    local input = T.T.i8x16.ct(-1)
+    -- Both constructor objects have the same CTID_CTYPEID. The represented
+    -- type in their payloads must be independently guarded on the trace.
+    for _, ti in ipairs({T.T.i8x16, T.T.u8x16, T.T.i8x16}) do
+      local got = castloop(cast, ti.ct, input, 300)
+      check(ffi.istype(ti.ct, got), "destination ctype " .. ti.name)
+      checkeq(got, ti.ct(-1), "destination lanes " .. ti.name)
+    end
+    jit_.off()
+  end
+end)
+
 test("vector arithmetic metatype overrides packed default", function()
   ffi.cdef[[
     typedef const float meta_float4 __attribute__((vector_size(16)));

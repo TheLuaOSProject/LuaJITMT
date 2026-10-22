@@ -98,7 +98,11 @@ enum {
 
 /* This definition must match with the *.dasc file(s). */
 typedef struct {
-  lua_Number fpr[RID_NUM_FPR];	/* Floating-point registers. */
+#if LJ_LE
+  union { lua_Number n; uint64_t u64[2]; } fpr[RID_NUM_FPR];
+#else
+  lua_Number fpr[RID_NUM_FPR];	/* SIMD recording is little-endian only. */
+#endif
   intptr_t gpr[RID_NUM_GPR];	/* General-purpose registers. */
   int32_t spill[256];		/* Spill slots. */
 } ExitState;
@@ -152,6 +156,10 @@ static LJ_AINLINE uint32_t *exitstub_trace_addr_(uint32_t *p, uint32_t exitno)
 #define A64F_S_OK(x, b)	((((x) + (1 << (b-1))) >> (b)) == 0)
 
 typedef enum A64Ins {
+  A64I_LDRq = 0x3dc00000,
+  A64I_STRq = 0x3d800000,
+  A64I_LDRLq = 0x9c000000,
+  A64I_MOVv = 0x4ea01c00,  /* ORR Vd.16B, Vn.16B, Vm.16B. */
   A64I_S = 0x20000000,
   A64I_X = 0x80000000,
   A64I_EX = 0x00200000,

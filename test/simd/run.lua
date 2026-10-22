@@ -11,8 +11,11 @@
 local dir = arg[0]:match("^(.*)[/\\][^/\\]*$") or "."
 package.path = dir .. "/?.lua;" .. package.path
 
-local ALL = {"test_types", "test_arith", "test_lib", "test_jit", "test_codegen",
-	     "test_ffi_abi", "test_stress"}
+local arch = require("jit").arch
+local codegen = arch == "arm64" and "test_arm64_codegen" or "test_codegen"
+local ALL = {"test_types", "test_arith", "test_lib", "test_jit", codegen,
+	     "test_ffi_abi", "test_stress", "test_prng"}
+if arch == "arm64" then table.insert(ALL, 6, "test_arm64_conv") end
 
 -- Child process: run one file in one mode.
 if arg[1] == "--one" then
@@ -47,15 +50,23 @@ if #files == 0 then files = ALL end
 local luajit = arg[-1] or "luajit"
 local modes = mode == "both" and {"interp", "jit", "mixed"} or {mode}
 local failed = false
+local function shellquote(s)
+  if package.config:sub(1, 1) == "\\" then return string.format("%q", s) end
+  return "'" .. s:gsub("'", "'\\''") .. "'"
+end
 
 for _, m in ipairs(modes) do
   for _, f in ipairs(files) do
     local fh = io.open(dir .. "/" .. f .. ".lua")
     if fh then
       fh:close()
-      local cmd = string.format("%s %q --one %s %s", luajit, arg[0], m, f)
+      local cmd = table.concat({shellquote(luajit), shellquote(arg[0]),
+        "--one", shellquote(m), shellquote(f)}, " ")
       local ok = os.execute(cmd)
       if ok ~= 0 and ok ~= true then failed = true end
+    else
+      io.stderr:write("No SIMD test file: ", f, "\n")
+      failed = true
     end
   end
 end

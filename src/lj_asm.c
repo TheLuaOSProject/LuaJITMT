@@ -407,7 +407,7 @@ static Reg ra_rematk(ASMState *as, IRRef ref)
     emit_loadk64(as, r, ir);
   } else
 #endif
-#if LJ_TARGET_X86ORX64
+#if LJ_TARGET_X86ORX64 || LJ_TARGET_ARM64
   if (ir->o == IR_KVEC) {
     emit_loadkvec(as, r, ir);
   } else
@@ -447,7 +447,10 @@ static int32_t ra_spill(ASMState *as, IRIns *ir)
   if (!ra_hasspill(slot)) {
     if (irt_isvec(ir->t)) {
       slot = as->evenspill;
-      as->evenspill += irt_isvec256(ir->t) ? 8 : 4;
+      /* Q loads/stores use 16-byte scaled offsets beyond the signed byte
+      ** displacement range. Keep ARM64 vector spills naturally aligned. */
+      if (LUAJIT_TARGET == LUAJIT_ARCH_ARM64) slot = (slot + 3) & ~3;
+      as->evenspill = slot + (irt_isvec256(ir->t) ? 8 : 4);
     } else if (irt_is64(ir->t)) {
       slot = as->evenspill;
       as->evenspill += 2;
@@ -706,7 +709,8 @@ static Reg ra_allocref(ASMState *as, IRRef ref, RegSet allow)
     /* Invariants should preferably get unmodified registers. */
     if (ref < as->loopref && !irt_isphi(ir->t)) {
       RegSet modset = as->modset;
-      if (irt_isvec256(ir->t))
+      if (LUAJIT_TARGET == LUAJIT_ARCH_ARM64 ?
+	  irt_isvec(ir->t) : irt_isvec256(ir->t))
 	modset |= as->vecmodset;
       if ((pick & ~modset))
 	pick &= ~modset;
@@ -829,7 +833,7 @@ static void ra_left(ASMState *as, Reg dest, IRRef lref)
 	  emit_loadk64(as, dest, ir);
 	  return;
 	}
-#if LJ_TARGET_X86ORX64 && LJ_HASFFI
+#if (LJ_TARGET_X86ORX64 || LJ_TARGET_ARM64) && LJ_HASFFI
       } else if (ir->o == IR_KVEC) {
 	emit_loadkvec(as, dest, ir);
 	return;
@@ -1567,7 +1571,8 @@ static void asm_phi_shuffle(ASMState *as)
   while (work) {
     Reg r = rset_pickbot(work);
     IRRef ref = regcost_ref(as->cost[r]);
-    if (irt_isvec256(IR(ref)->t))
+    if (LUAJIT_TARGET == LUAJIT_ARCH_ARM64 ?
+	irt_isvec(IR(ref)->t) : irt_isvec256(IR(ref)->t))
       ra_restore(as, ref);
     rset_clear(work, r);
     checkmclim(as);
@@ -1823,7 +1828,7 @@ static void asm_alen(ASMState *as, IRIns *ir)
 static void asm_ir(ASMState *as, IRIns *ir)
 {
   switch ((IROp)ir->o) {
-#if LJ_HASFFI && LJ_TARGET_X86ORX64
+#if LJ_HASFFI && (LJ_TARGET_X86ORX64 || LJ_TARGET_ARM64)
   /* Vector ops. On other targets these fall through to the NYI default. */
   case IR_VSPLAT: case IR_VADD: case IR_VSUB: case IR_VMUL: case IR_VDIV:
   case IR_VAND: case IR_VOR: case IR_VXOR: case IR_VANDN:

@@ -444,9 +444,10 @@ void lj_ccallback_mcode_free(CTState *cts)
 
 #define CALLBACK_HANDLE_REGARG \
   if (isfp) { \
-    if (nfpr + n <= CCALL_NARG_FPR) { \
+    MSize n2 = isvec ? 1 : n;  /* One V register per short vector. */ \
+    if (nfpr + n2 <= CCALL_NARG_FPR) { \
       sp = &cts->cb.fpr[nfpr]; \
-      nfpr += n; \
+      nfpr += n2; \
       goto done; \
     } else { \
       nfpr = CCALL_NARG_FPR;  /* Prevent reordering. */ \
@@ -638,14 +639,29 @@ static void callback_conv_args(CTState *cts, lua_State *L)
       CALLBACK_HANDLE_REGARG  /* Handle register arguments. */
 
       /* Otherwise pass argument on stack. */
+#if CCALL_PACK_STACKARG
+      {
+	MSize align = (1u << ctype_align(cta->info)) - 1;
+	nsp = (nsp + align) & ~align;
+	sp = (uint8_t *)stack + nsp;
+	nsp += cta->size;
+      }
+#else
       if (CCALL_ALIGN_STACKARG && LJ_32 && sz == 8)
 	nsp = (nsp + 1) & ~1u;  /* Align 64 bit argument on stack. */
       if (isvec && sz == 16)
 	nsp = (nsp + 1) & ~1u;  /* Align 128 bit vector on stack. */
       sp = &stack[nsp];
       nsp += n;
+#endif
 
     done:
+#if LJ_TARGET_ARM64 && LJ_BE
+      if (isfp && (uintptr_t)sp >= (uintptr_t)cts->cb.fpr &&
+	  (uintptr_t)sp < (uintptr_t)cts->cb.gpr)
+	sp = (uint8_t *)sp + sizeof(FPRCBArg)-cta->size;
+      else
+#endif
       if (LJ_BE && cta->size < CTSIZE_PTR
 #if LJ_TARGET_MIPS64
 	  && !(isfp && nsp)
@@ -691,8 +707,8 @@ static void callback_conv_result(CTState *cts, lua_State *L, TValue *o)
       dp = (uint8_t *)&cts->cb.fpr[0];
 #endif
 #if LJ_TARGET_ARM64 && LJ_BE
-    if (ctype_isfp(ctr->info) && ctr->size == sizeof(float))
-      dp = (uint8_t *)&cts->cb.fpr[0].f[1];
+    if (ctype_isfp(ctr->info) || ctype_isvector(ctr->info))
+      dp = cts->cb.fpr[0].b + sizeof(FPRCBArg)-ctr->size;
 #endif
     lj_cconv_ct_tv(cts, ctr, dp, o, 0);
 #ifdef CALLBACK_HANDLE_RET

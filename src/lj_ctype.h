@@ -155,12 +155,11 @@ typedef struct CType {
 #define CCALL_MAX_GPR		8
 #define CCALL_MAX_FPR		8
 
-#if LJ_TARGET_X64 && !LJ_ABI_WIN
-/* A vector argument or result occupies a whole XMM register on x64 SysV, so
-** the callback save area needs 16 bytes per FPR. Kept at 8 byte alignment on
-** purpose: CTState is a plain GC allocation, so the trampoline uses unaligned
-** moves rather than constraining where CTState may be placed. Tied to
-** CCALL_VECTOR_REG by a static assert in lj_ccall.h.
+#if (LJ_TARGET_X64 && !LJ_ABI_WIN) || LJ_TARGET_ARM64
+/* Short vector arguments/results occupy a whole SIMD register on x64 SysV
+** and ARM64. Keep each save slot 16 bytes wide, but only 8 byte aligned:
+** CTState is a plain GC allocation, so the trampolines must permit unaligned
+** accesses. Tied to CCALL_VECTOR_REG by a static assert in lj_ccall.h.
 */
 typedef LJ_ALIGN(8) union FPRCBArg {
   double d; float f[2]; uint8_t b[16];

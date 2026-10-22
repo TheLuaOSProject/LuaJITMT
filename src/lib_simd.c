@@ -601,6 +601,14 @@ static int simd_cf_features(lua_State *L)
 #if LJ_TARGET_X64
     vecsize = (f & JIT_F_AVX2) ? 32 : 16;
 #endif
+#elif LJ_TARGET_ARM64 && LJ_SIMD_JITSIZE == 16
+    /* Advanced SIMD and vector FMA are baseline features of the supported
+    ** little-endian AArch64 JIT. Do not advertise them for a no-JIT/BE build.
+    */
+    SETFEAT("neon", 1);
+    SETFEAT("fma", 1);
+    vecsize = LJ_SIMD_JITSIZE;
+    UNUSED(f);
 #else
     UNUSED(f);
 #endif

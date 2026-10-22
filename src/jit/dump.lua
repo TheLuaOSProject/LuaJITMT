@@ -516,10 +516,10 @@ local function dump_ir(tr, dumpsnap, dumpreg)
       end
       out:write(format("%s%s %s%s %s ",
 		       (rid == 254 or rid == 253) and "}" or
-		       (band(ot, 128) == 0 and " " or ">"),
-		       band(ot, 64) == 0 and " " or "+",
-		       irtype[t], band(ot, 32) ~= 0 and "x2" or "", op))
-      local m1, m2 = band(m, 3), band(m, 3*4)
+		       ((ot & 128) == 0 and " " or ">"),
+		       (ot & 64) == 0 and " " or "+",
+		       irtype[t], (ot & 32) ~= 0 and "x2" or "", op))
+      local m1, m2 = (m & 3), (m & (3 << 2))
       if sub(op, 1, 4) == "CALL" then
 	local ctype
 	if m2 == 1 << 2 then -- op2 == IRMlit

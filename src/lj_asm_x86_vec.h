@@ -1196,7 +1196,12 @@ static void asm_vecshuf2(ASMState *as, IRIns *ir)
       asm_vecscalarconv(as, rref, right, left, RSET_FPR);
       return;
     }
-    right = ra_alloc1(as, rref, fp ? RSET_FPR : RSET_GPR);
+    /* Legacy SSE copies left into dest before the insert. Preserve a scalar
+    ** right operand that would otherwise occupy and be overwritten in dest.
+    */
+    right = ra_alloc1(as, rref, fp ?
+	((as->flags & JIT_F_AVX) ? RSET_FPR : rset_exclude(RSET_FPR, dest)) :
+	RSET_GPR);
     if (as->flags & JIT_F_AVX) {
       if (t == IRT_V2F64) {
 	emit_vexrr(as, imm ? XO_UNPCKLPD : XO_MOVSD,

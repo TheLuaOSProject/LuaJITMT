@@ -286,13 +286,13 @@ static void asm_fusexref(ASMState *as, A64Ins ai, Reg rd, IRRef ref,
 	IRRef lref = ir->op1, rref = ir->op2;
 	IRIns *irl = IR(lref);
 	if (mayfuse(as, irl->op1)) {
-	  unsigned int shift = 4;
+	  unsigned int shift = ~0u;
 	  if (irl->o == IR_BSHL && irref_isk(irl->op2)) {
 	    shift = (IR(irl->op2)->i & 63);
 	  } else if (irl->o == IR_ADD && irl->op1 == irl->op2) {
 	    shift = 1;
 	  }
-	  if ((ai >> 30) == shift) {
+	  if ((unsigned int)emit_lsscale(ai) == shift) {
 	    lref = irl->op1;
 	    irl = IR(lref);
 	    ai |= A64I_LS_SH;
@@ -434,6 +434,20 @@ static int asm_fuseorshift(ASMState *as, IRIns *ir)
 
 /* -- Calls --------------------------------------------------------------- */
 
+/* AAPCS64 preserves only the low 64 bits of V8-V15 across calls. Evict
+** live vectors before establishing a conditional call's branch target. */
+static RegSet asm_call_vec_clobbers(ASMState *as)
+{
+  RegSet work = ~as->freeset & RSET_FPR, drop = RSET_EMPTY;
+  as->vecmodset |= RSET_FPR;
+  while (work) {
+    Reg r = rset_pickbot(work);
+    if (irt_isvec(IR(regcost_ref(as->cost[r]))->t)) rset_set(drop, r);
+    rset_clear(work, r);
+  }
+  return drop;
+}
+
 /* Generate a call to a C function. */
 static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
 {
@@ -512,7 +526,7 @@ static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
 /* Setup result reg/sp for call. Evict scratch regs. */
 static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
 {
-  RegSet drop = RSET_SCRATCH;
+  RegSet drop = RSET_SCRATCH | asm_call_vec_clobbers(as);
   int hiop = ((ir+1)->o == IR_HIOP && !irt_isnil((ir+1)->t));
   if (ra_hasreg(ir->r))
     rset_clear(drop, ir->r); /* Dest reg handled below. */
@@ -661,13 +675,20 @@ static void asm_conv(ASMState *as, IRIns *ir)
 	emit_dn(as, ai, dest, (left & 31));
       }
     }
-  } else if (st >= IRT_I8 && st <= IRT_U16) { /* Extend to 32 bit integer. */
+  } else if (st >= IRT_I8 && st <= IRT_U16) { /* Extend a byte or halfword. */
     Reg dest = ra_dest(as, ir, RSET_GPR);
     Reg left = ra_alloc1(as, lref, RSET_GPR);
     A64Ins ai = st == IRT_I8 ? A64I_SXTBw :
 		st == IRT_U8 ? A64I_UXTBw :
 		st == IRT_I16 ? A64I_SXTHw : A64I_UXTHw;
-    lj_assertA(irt_isint(ir->t) || irt_isu32(ir->t), "bad type for CONV EXT");
+    lj_assertA(irt_isint(ir->t) || irt_isu32(ir->t) || irt_isint64(ir->t),
+               "bad type for CONV EXT");
+    /* A W write zeroes the upper half, which already widens unsigned lanes.
+    ** Signed byte/halfword inputs need SBFM X to extend all the way to 64
+    ** bits, including a signed source converted to an unsigned destination.
+    */
+    if (irt_is64(ir->t) && (st == IRT_I8 || st == IRT_I16))
+      ai = (A64Ins)(ai | A64I_X | 0x00400000);
     emit_dn(as, ai, dest, left);
   } else {
     Reg dest = ra_dest(as, ir, RSET_GPR);
@@ -699,7 +720,7 @@ static void asm_strto(ASMState *as, IRIns *ir)
   IRRef args[2];
   Reg tmp;
   int32_t ofs = 0;
-  ra_evictset(as, RSET_SCRATCH);
+  ra_evictset(as, RSET_SCRATCH | asm_call_vec_clobbers(as));
   if (ra_used(ir)) {
     if (ra_hasspill(ir->s)) {
       ofs = sps_scale(ir->s);
@@ -1001,6 +1022,7 @@ static void asm_strref(ASMState *as, IRIns *ir)
 
 static A64Ins asm_fxloadins(IRIns *ir)
 {
+  if (irt_isvec(ir->t)) return A64I_LDRq;
   switch (irt_type(ir->t)) {
   case IRT_I8: return A64I_LDRB ^ A64I_LS_S;
   case IRT_U8: return A64I_LDRB;
@@ -1014,6 +1036,7 @@ static A64Ins asm_fxloadins(IRIns *ir)
 
 static A64Ins asm_fxstoreins(IRIns *ir)
 {
+  if (irt_isvec(ir->t)) return A64I_STRq;
   switch (irt_type(ir->t)) {
   case IRT_I8: case IRT_U8: return A64I_STRB;
   case IRT_I16: case IRT_U16: return A64I_STRH;
@@ -1059,7 +1082,7 @@ static void asm_fstore(ASMState *as, IRIns *ir)
 
 static void asm_xload(ASMState *as, IRIns *ir)
 {
-  Reg dest = ra_dest(as, ir, irt_isfp(ir->t) ? RSET_FPR : RSET_GPR);
+  Reg dest = ra_dest(as, ir, irt_isfpr(ir->t) ? RSET_FPR : RSET_GPR);
   lj_assertA(LJ_TARGET_UNALIGNED || !(ir->op2 & IRXLOAD_UNALIGNED),
 	     "unaligned XLOAD");
   asm_fusexref(as, asm_fxloadins(ir), dest, ir->op1, RSET_GPR);
@@ -1068,7 +1091,7 @@ static void asm_xload(ASMState *as, IRIns *ir)
 static void asm_xstore(ASMState *as, IRIns *ir)
 {
   if (ir->r != RID_SINK) {
-    Reg src = ra_alloc1(as, ir->op2, irt_isfp(ir->t) ? RSET_FPR : RSET_GPR);
+    Reg src = ra_alloc1(as, ir->op2, irt_isfpr(ir->t) ? RSET_FPR : RSET_GPR);
     asm_fusexref(as, asm_fxstoreins(ir), src, ir->op1,
 		 rset_exclude(RSET_GPR, src));
   }
@@ -1321,7 +1344,7 @@ static void asm_obar(ASMState *as, IRIns *ir)
   Reg obj, val, tmp;
   /* No need for other object barriers (yet). */
   lj_assertA(IR(ir->op1)->o == IR_UREFC, "bad OBAR type");
-  ra_evictset(as, RSET_SCRATCH);
+  ra_evictset(as, RSET_SCRATCH | asm_call_vec_clobbers(as));
   l_end = emit_label(as);
   args[0] = ASMREF_TMP1;  /* global_State *g */
   args[1] = ir->op1;      /* TValue *tv      */
@@ -1848,7 +1871,7 @@ static void asm_gc_check(ASMState *as)
   IRRef args[2];
   MCLabel l_end;
   Reg tmp2;
-  ra_evictset(as, RSET_SCRATCH);
+  ra_evictset(as, RSET_SCRATCH | asm_call_vec_clobbers(as));
   l_end = emit_label(as);
   /* Exit trace if in GCSatomic or GCSfinalize. Avoids syncing GC objects. */
   asm_guardcnb(as, A64I_CBNZ, RID_RET); /* Assumes asm_snap_prep() is done. */
@@ -2098,3 +2121,7 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
   if (cstart) lj_mcode_sync(cstart, px+1);
   lj_mcode_patch(J, mcarea, 1);
 }
+
+#if LJ_HASFFI
+#include "lj_asm_arm64_vec.h"
+#endif

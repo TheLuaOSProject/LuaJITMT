@@ -119,9 +119,15 @@ static void emit_n(ASMState *as, A64Ins ai, Reg rn)
   *--as->mcp = ai | A64F_N(rn);
 }
 
+/* Q-register loads/stores encode their 16-byte scale in the V/opc bits. */
+static int emit_lsscale(A64Ins ai)
+{
+  return (ai & 0x04800000) == 0x04800000 ? 4 : (ai >> 30) & 3;
+}
+
 static int emit_checkofs(A64Ins ai, int64_t ofs)
 {
-  int scale = (ai >> 30) & 3;
+  int scale = emit_lsscale(ai);
   if (ofs < 0 || (ofs & ((1<<scale)-1))) {
     return (ofs >= -256 && ofs <= 255) ? -1 : 0;
   } else {
@@ -142,7 +148,7 @@ static LJ_AINLINE uint32_t emit_lso_pair_candidate(A64Ins ai, int ofs, int sc)
 
 static void emit_lso(ASMState *as, A64Ins ai, Reg rd, Reg rn, int64_t ofs64)
 {
-  int ot = emit_checkofs(ai, ofs64), sc = (ai >> 30) & 3, ofs = (int)ofs64;
+  int ot = emit_checkofs(ai, ofs64), sc = emit_lsscale(ai), ofs = (int)ofs64;
   lj_assertA(ot, "load/store offset %d out of range", ofs);
   /* Combine LDR/STR pairs to LDP/STP. */
   if ((sc == 2 || sc == 3) &&
@@ -337,6 +343,34 @@ static void emit_loadk64(ASMState *as, Reg r, IRIns *ir)
   }
 }
 
+/* Keep vector literals in executable-memory-owned storage. J->cur.ir moves
+** during assembly and cannot be referenced by a finished trace. */
+static void emit_loadkvec(ASMState *as, Reg r, IRIns *ir)
+{
+  const uint64_t *k = (const uint64_t *)ir_kvec(ir);
+  lj_assertA(irt_vecsize(ir->t) == 16, "bad ARM64 vector width");
+  if (!(k[0] | k[1])) {
+    emit_dnm(as, 0x6e201c00, r & 31, r & 31, r & 31);  /* EOR. */
+    return;
+  }
+  if (!ir->i) {
+    if (as->mcp - as->mcbot < MCLIM_REDZONE + 8) asm_mclimit(as);
+    while ((uintptr_t)as->mcbot & 15) *as->mcbot++ = A64I_LE(A64I_NOP);
+    memcpy(as->mcbot, k, 16);
+    ir->i = (int32_t)(as->mctop - as->mcbot);
+    as->mcbot += 4;
+    as->mclim = as->mcbot + MCLIM_REDZONE;
+    lj_mcode_commitbot(as->J, as->mcbot);
+  }
+  k = (const uint64_t *)(as->mctop - ir->i);
+  if (checkmcpofs(as, k)) {
+    emit_dl(as, A64I_LDRLq, r & 31, mcpofs(as, k));
+  } else {
+    emit_lso(as, A64I_LDRq, r & 31, RID_TMP, 0);
+    emit_loadu64(as, RID_TMP, (uintptr_t)k);
+  }
+}
+
 /* Get/set global_State fields. */
 #define emit_getgl(as, r, field) \
   emit_lsptr(as, A64I_LDRx, (r), (void *)&J2G(as->J)->field)
@@ -422,6 +456,10 @@ static void emit_branch_track(ASMState *as)
 static void emit_movrr(ASMState *as, IRIns *ir, Reg dst, Reg src)
 {
   if (dst >= RID_MAX_GPR) {
+    if (irt_isvec(ir->t)) {
+      emit_dnm(as, A64I_MOVv, dst & 31, src & 31, src & 31);
+      return;
+    }
     emit_dn(as, irt_isnum(ir->t) ? A64I_FMOV_D : A64I_FMOV_S,
 	    (dst & 31), (src & 31));
     return;
@@ -442,7 +480,8 @@ static void emit_movrr(ASMState *as, IRIns *ir, Reg dst, Reg src)
 static void emit_loadofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
 {
   if (r >= RID_MAX_GPR)
-    emit_lso(as, irt_isnum(ir->t) ? A64I_LDRd : A64I_LDRs, (r & 31), base, ofs);
+    emit_lso(as, irt_isvec(ir->t) ? A64I_LDRq :
+             irt_isnum(ir->t) ? A64I_LDRd : A64I_LDRs, (r & 31), base, ofs);
   else
     emit_lso(as, irt_is64(ir->t) ? A64I_LDRx : A64I_LDRw, r, base, ofs);
 }
@@ -451,7 +490,8 @@ static void emit_loadofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
 static void emit_storeofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
 {
   if (r >= RID_MAX_GPR)
-    emit_lso(as, irt_isnum(ir->t) ? A64I_STRd : A64I_STRs, (r & 31), base, ofs);
+    emit_lso(as, irt_isvec(ir->t) ? A64I_STRq :
+             irt_isnum(ir->t) ? A64I_STRd : A64I_STRs, (r & 31), base, ofs);
   else
     emit_lso(as, irt_is64(ir->t) ? A64I_STRx : A64I_STRw, r, base, ofs);
 }

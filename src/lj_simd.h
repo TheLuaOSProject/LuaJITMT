@@ -15,6 +15,8 @@
 /* Maximum vector width in bytes that the JIT backend compiles natively. */
 #if LJ_HASJIT && LJ_TARGET_X64
 #define LJ_SIMD_JITSIZE		32
+#elif LJ_HASJIT && LJ_TARGET_ARM64 && LJ_LE
+#define LJ_SIMD_JITSIZE		16
 #else
 #define LJ_SIMD_JITSIZE		0
 #endif

@@ -748,7 +748,7 @@ static void snap_restoreval(jit_State *J, GCtrace *T, ExitState *ex,
       setintV(o, (int32_t)ex->gpr[r-RID_MIN_GPR]);
 #if !LJ_SOFTFP
     } else if (irt_isnum(t)) {
-      setnumV(o, ex->fpr[r-RID_MIN_FPR].n);
+      memcpy(&o->n, &ex->fpr[r-RID_MIN_FPR], sizeof(lua_Number));
 #elif LJ_64  /* && LJ_SOFTFP */
     } else if (irt_isnum(t)) {
       o->u64 = ex->gpr[r-RID_MIN_GPR];

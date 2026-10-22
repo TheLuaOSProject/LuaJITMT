@@ -578,7 +578,10 @@ test("introspection", function()
   local ft = simd.features()
   check(type(ft) == "table", "features is a table")
   check(type(ft.vecsize) == "number", "features.vecsize")
-  checkeq(ft.vecsize, ft.avx2 and 32 or ft.sse2 and 16 or 0,
+
+  local x64 = require("jit").arch == "x64"
+  checkeq(ft.vecsize, x64 and ft.avx2 and 32 or
+          (x64 and ft.sse2 or ft.neon) and 16 or 0,
 	  "features.vecsize matches the usable native width")
 end)
 

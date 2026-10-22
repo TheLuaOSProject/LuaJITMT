@@ -48,7 +48,8 @@ print(c[0], c[3])              --> 3  9
 </pre>
 
 <p>
-Hot loops over vector cdata compile to real packed x86-64 SSE instructions.
+Hot loops over vector cdata compile to native x86-64 SSE/AVX or AArch64
+Advanced SIMD (NEON) instructions.
 The <tt>ffi.simd</tt> module adds only the operations that Lua operators
 cannot express.
 </p>
@@ -292,8 +293,9 @@ local ints = simd.convert(int4, v)                -- 1.9 -> 1, -1.9 -> -1
 </table>
 <p>
 <tt>features().vecsize</tt> is the vector width in bytes that the JIT compiles
-natively: <tt>32</tt> with AVX2, <tt>16</tt> with SSE2, or <tt>0</tt> if this
-build has no vector backend.
+natively: <tt>32</tt> with AVX2, <tt>16</tt> with SSE2 or little-endian
+AArch64 NEON, or <tt>0</tt> if this build has no vector backend.
+On AArch64, <tt>neon</tt> and <tt>fma</tt> are also true.
 </p>
 
 <h2 id="loads">Loading and storing</h2>
@@ -312,11 +314,16 @@ for i = 0, n/4 - 1 do vp[i] = vp[i] * float4(2) end
 <ul>
 <li>Vector lanes are immutable, which is what lets the compiler keep a vector
 in a register. Build a new vector with <tt>simd.insert()</tt> instead.</li>
-<li>The supported target is <b>x86-64-v3</b>. CPU features are still detected
-at run time, so the same binary works on older machines: an operation without
-a packed instruction is never scalarised, the trace is abandoned and the code
-keeps running interpreted with identical results.
-<tt>simd.features()</tt> reports what was found.</li>
+<li>The native targets are <b>x86-64</b> (up to AVX2) and <b>little-endian
+AArch64</b> (128-bit NEON). x86 CPU features are detected at run time.
+Operations outside the backend's supported width keep running interpreted
+with identical results. <tt>simd.features()</tt> reports the available width.</li>
+<li>AArch64 supports 16-byte vectors natively, including per-lane shifts,
+shuffles, reductions, saturating arithmetic, FMA, and numeric conversions
+between equal-width lanes. 64-bit integer multiplication and high products
+use native scalar AArch64 instructions for each lane. 32-byte vectors and
+conversions between different vector widths use the interpreter; this backend
+does not require SVE.</li>
 <li>The 256-bit JIT supports the ordinary vector operators, dynamic scalar
 splats, comparisons and masks, min/max, shifts, abs/sqrt/rounding, FMA,
 saturating arithmetic, <tt>mulhi</tt> at every integer lane width,
@@ -332,11 +339,13 @@ interpreter rounds twice. Ask for the fused form explicitly with
 <tt>simd.fma()</tt>, which rounds once in both the interpreter and the
 JIT.</li>
 <li>Vectors can be passed to and returned from C functions by value. On
-x86-64 SysV this also works for FFI <em>callbacks</em>: a Lua function cast to
+x86-64 SysV and AArch64 this also works for FFI <em>callbacks</em>: a Lua function cast to
 a C function pointer may take and return 8 or 16 byte vectors by value, in
 registers or on the stack, mixed freely with ordinary arguments. On Windows
 x64, on x86, and for 32-byte or wider vectors, such a cast is still rejected
-with a &ldquo;cannot convert&rdquo; error &mdash; pass a pointer instead.</li>
+with a &ldquo;cannot convert&rdquo; error &mdash; pass a pointer instead.
+AArch64 C calls also support homogeneous vector aggregates. Aggregate-valued
+callbacks retain the ordinary FFI limitations.</li>
 </ul>
 <br class="flush">
 </div>

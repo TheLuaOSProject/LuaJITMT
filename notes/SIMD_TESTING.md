@@ -4,6 +4,8 @@
 
 ```
 make -j$(nproc)
+# On Apple Silicon macOS:
+make -j8 MACOSX_DEPLOYMENT_TARGET=13.0
 ./src/luajit test/simd/run.lua            # every file, interpreted and JIT
 ./src/luajit test/simd/run.lua -interp    # interpreter only
 ./src/luajit test/simd/run.lua -jit       # JIT only
@@ -16,6 +18,10 @@ SIMD_SEED=12345 ./src/luajit test/simd/run.lua   # different random seed
 `run.lua` spawns one child process per (file, mode) pair so that `ffi.cdef`
 state and compiled traces from one file cannot leak into another. The exit
 status is non-zero if anything failed.
+The runner selects `test_arm64_codegen.lua` on AArch64 and
+`test_codegen.lua` on x86-64. Machine-code checks require a compiled loop
+and inspect its instructions, so interpreter fallback cannot count as a
+successful native backend test.
 
 ## Layout
 
@@ -27,6 +33,9 @@ status is non-zero if anything failed.
 | `test_lib.lua` | every `ffi.simd` function, randomized against the scalar reference, plus negative tests |
 | `test_jit.lua` | interpreter/JIT differential: the same computation run interpreted and compiled, including loop-carried values, guards, side exits, spills |
 | `test_codegen.lua` | inspects `jit.dump`/`jit.util` output of representative traces to prove packed instructions are emitted and no scalarisation or permanent exit happens; also checks vector IR/constants and explicit YMM operands |
+| `test_arm64_codegen.lua` | requires NEON arithmetic, FMA, shuffles and shifts; checks full-width exits and side traces, aligned Q spills, live vectors across a C function that clobbers vector registers, GC, exact exceptional conversions, disassembly, large code areas, and explicit 256-bit fallback |
+| `test_arm64_conv.lua` | byte/halfword to 64-bit scalar conversions, including signed upper bits, consumed by native 64-bit arithmetic |
+| `test_prng.lua` | all three `math.random` overloads agree with an interpreted sequence after tracing; catches truncated SSE-only C-call results |
 | `test_ffi_abi.lua` | vector arguments, returns, stack spilling, mixed argument lists and memory round trips against a small C helper library compiled at test time; callbacks taking and returning vectors by value for every lane kind, ten vector arguments (registers plus stack), 16-byte stack alignment behind eight register arguments, mixed integer/FP/vector argument lists, and the rejection of vectors too wide for a register |
 | `bench.lua` | scalar/XMM/YMM comparisons for small and heavy kernels, plus production-sized image, audio, depth, checksum, INT8 inference, particle and ChaCha20 workloads |
 | `bench_ops.lua` | realistic kernels, per-operation latency, four-chain numeric-conversion throughput, and direct XMM/YMM lane-throughput comparisons for the AVX2 backend |
@@ -392,7 +401,7 @@ an output diff against a pristine build of the upstream commit the branch
 is currently merged up to:
 
 ```
-git worktree add /tmp/ljbase a471ab78 && (cd /tmp/ljbase && make -j$(nproc))
+git worktree add /tmp/ljbase a4c06453 && (cd /tmp/ljbase && make -j$(nproc))
 ./src/luajit          test/simd/test_noregress.lua > /tmp/new.txt
 /tmp/ljbase/src/luajit test/simd/test_noregress.lua > /tmp/base.txt
 diff /tmp/base.txt /tmp/new.txt      # must be empty
@@ -417,8 +426,8 @@ make -j$(nproc)                                     # default release
 make -j$(nproc) CCDEBUG=-g XCFLAGS=-DLUA_USE_ASSERT # assertions on
 make clean && make -j$(nproc) XCFLAGS=-DLUAJIT_DISABLE_JIT  # no JIT at all
 
-# Compile and exercise the generic x86 modulo fallback. SIMD JIT lowering is
-# intentionally x64-only, so run the focused differential test, not the full
+# Compile and exercise the generic x86 modulo fallback. The 32-bit x86 target
+# has no SIMD JIT, so run the focused differential test, not the full
 # x64 SIMD codegen suite.
 make clean && make -j$(nproc) CC="gcc -m32" \
   CCDEBUG=-g XCFLAGS=-DLUA_USE_ASSERT

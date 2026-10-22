@@ -10,7 +10,7 @@
 -- This is a helper module used by the LuaJIT machine code dumper module.
 --
 -- It disassembles most user-mode AArch64 instructions.
--- NYI: Advanced SIMD and VFP instructions.
+-- Includes the Advanced SIMD operations emitted by the vector backend.
 ------------------------------------------------------------------------------
 
 local type = type
@@ -864,6 +864,211 @@ local function prefer_bfx(sf, uns, imms, immr)
   return true
 end
 
+-- Advanced SIMD instructions used by the 128-bit vector backend. Keep these
+-- masks separate from scalar FP maps: identical low opcode fields can mean
+-- different instructions in the scalar and vector encoding spaces.
+local neon_int3 = {
+  [0x4e208400] = "add", [0x6e208400] = "sub", [0x4e209c00] = "mul",
+  [0x6e208c00] = "cmeq", [0x4e203400] = "cmgt", [0x4e203c00] = "cmge",
+  [0x6e203400] = "cmhi", [0x6e203c00] = "cmhs",
+  [0x4e206c00] = "smin", [0x4e206400] = "smax",
+  [0x6e206c00] = "umin", [0x6e206400] = "umax",
+  [0x4e200c00] = "sqadd", [0x6e200c00] = "uqadd",
+  [0x4e202c00] = "sqsub", [0x6e202c00] = "uqsub",
+  [0x6e207400] = "uabd", [0x4e20bc00] = "addp",
+  [0x4e204400] = "sshl", [0x6e204400] = "ushl",
+  [0x4e003800] = "zip1", [0x4e007800] = "zip2",
+}
+local neon_bits = {
+  [0x4e201c00] = "and", [0x4ea01c00] = "orr", [0x6e201c00] = "eor",
+  [0x4e601c00] = "bic", [0x6e601c00] = "bsl",
+}
+local neon_fp3 = {
+  [0x4e20d400] = "fadd", [0x4ea0d400] = "fsub",
+  [0x6e20dc00] = "fmul", [0x6e20fc00] = "fdiv",
+  [0x4e20cc00] = "fmla", [0x4e20e400] = "fcmeq",
+  [0x6ea0e400] = "fcmgt", [0x6e20e400] = "fcmge",
+}
+local neon_fp2 = {
+  [0x6ea1f800] = "fsqrt", [0x4ea0f800] = "fabs",
+  [0x4e218800] = "frintn", [0x4e219800] = "frintm",
+  [0x4ea18800] = "frintp", [0x4ea19800] = "frintz",
+  [0x4e21d800] = "scvtf", [0x6e21d800] = "ucvtf",
+  [0x4ea1b800] = "fcvtzs",
+}
+local neon_int2 = {
+  [0x4e20b800] = "abs", [0x6e20b800] = "neg",
+}
+local neon_elem = { [0] = "b", "h", "s", "d" }
+
+local function neon_reg(r, sz, q)
+  return "v"..r.."."..((q ? 16 : 8) >> sz)..neon_elem[sz]
+end
+local function neon_lane(r, sz, lane)
+  return "v"..r.."."..neon_elem[sz].."["..lane.."]"
+end
+local function put_neon(ctx, name, operands)
+  putop(ctx, name, operands)
+  return true
+end
+
+local function disass_neon(ctx)
+  local op = ctx.op
+  local d, n, m = op & 31, (op >> 5) & 31, (op >> 16) & 31
+  local sz, q = (op >> 22) & 3, op & 0x40000000 != 0
+  local name = neon_bits[op & 0xffe0fc00]
+  if name then
+    if name == "orr" and n == m then
+      return put_neon(ctx, "mov", {neon_reg(d, 0, true), neon_reg(n, 0, true)})
+    end
+    return put_neon(ctx, name, {
+      neon_reg(d, 0, true), neon_reg(n, 0, true), neon_reg(m, 0, true)})
+  end
+  name = neon_int3[op & 0xff20fc00]
+  if name then
+    return put_neon(ctx, name, {
+      neon_reg(d, sz, true), neon_reg(n, sz, true), neon_reg(m, sz, true)})
+  end
+  name = neon_fp3[op & 0xffa0fc00]
+  if name then
+    sz = (op >> 22) & 1 == 0 ? 2 : 3
+    return put_neon(ctx, name, {
+      neon_reg(d, sz, true), neon_reg(n, sz, true), neon_reg(m, sz, true)})
+  end
+  name = neon_fp2[op & 0xffbffc00]
+  if name then
+    sz = (op >> 22) & 1 == 0 ? 2 : 3
+    return put_neon(ctx, name, {neon_reg(d, sz, true), neon_reg(n, sz, true)})
+  end
+  name = neon_int2[op & 0xff3ffc00]
+  if name then
+    return put_neon(ctx, name, {neon_reg(d, sz, true), neon_reg(n, sz, true)})
+  end
+  if op & 0xff3ffc00 == 0x6e202800 and sz < 3 then
+    return put_neon(ctx, "uaddlp", {neon_reg(d, sz+1, true), neon_reg(n, sz, true)})
+  end
+  if op & 0xff3ffc00 == 0x6e31a800 and sz < 3 then
+    return put_neon(ctx, "uminv", {neon_elem[sz]..d, neon_reg(n, sz, true)})
+  end
+  local key = op & 0xbf20fc00
+  if (key == 0x0e20c000 or key == 0x2e20c000) and sz < 3 then
+    name = key == 0x0e20c000 ? "smull" : "umull"
+    return put_neon(ctx, name..(q ? "2" : ""), {
+      neon_reg(d, sz+1, true), neon_reg(n, sz, q), neon_reg(m, sz, q)})
+  end
+  key = op & 0xff80fc00
+  if key == 0x4f005400 or key == 0x4f000400 or key == 0x6f000400 or
+     key == 0x0f008400 or key == 0x4f008400 then
+    local imm = (op >> 16) & 127
+    if imm < 8 then return false end
+    local bits = 8
+    sz = 0
+    while bits*2 <= imm do bits *= 2; sz += 1 end
+    if key == 0x4f005400 then
+      name = "shl"; imm -= bits
+    elseif key == 0x0f008400 or key == 0x4f008400 then
+      if sz == 3 then return false end
+      return put_neon(ctx, q ? "shrn2" : "shrn", {
+        neon_reg(d, sz, q), neon_reg(n, sz+1, true), "#"..(bits*2-imm)})
+    else
+      name = key == 0x4f000400 ? "sshr" : "ushr"
+      imm = bits*2-imm
+    end
+    return put_neon(ctx, name, {neon_reg(d, sz, true), neon_reg(n, sz, true), "#"..imm})
+  end
+  key = op & 0xffe0fc00
+  local ins = op & 0xffe08400 == 0x6e000400
+  if ins or key == 0x4e000400 or key == 0x4e000c00 or
+     key == 0x4e001c00 or key == 0x0e003c00 or key == 0x4e003c00 or
+     key == 0x0e002c00 or key == 0x4e002c00 or
+     key == 0x5e000400 then
+    local imm5 = (op >> 16) & 31
+    if imm5 == 0 then return false end
+    sz = 0
+    while imm5 & (1 << sz) == 0 do sz += 1 end
+    if sz > 3 then return false end
+    local lane = imm5 >> (sz+1)
+    if ins then
+      return put_neon(ctx, "ins", {
+        neon_lane(d, sz, lane), neon_lane(n, sz, ((op >> 11) & 15) >> sz)})
+    elseif key == 0x4e001c00 then
+      return put_neon(ctx, "ins", {neon_lane(d, sz, lane), (sz == 3 ? "x" : "w")..n})
+    elseif key == 0x4e000c00 then
+      return put_neon(ctx, "dup", {neon_reg(d, sz, true), (sz == 3 ? "x" : "w")..n})
+    elseif key == 0x0e003c00 or key == 0x4e003c00 or
+           key == 0x0e002c00 or key == 0x4e002c00 then
+      return put_neon(ctx, op & 0x1000 != 0 ? "umov" : "smov",
+        {(q ? "x" : "w")..d, neon_lane(n, sz, lane)})
+    elseif key == 0x5e000400 then
+      return put_neon(ctx, "mov", {neon_elem[sz]..d, neon_lane(n, sz, lane)})
+    else
+      return put_neon(ctx, "dup", {neon_reg(d, sz, true), neon_lane(n, sz, lane)})
+    end
+  end
+  if op & 0xffe0fc00 == 0x4e000000 then
+    return put_neon(ctx, "tbl", {
+      neon_reg(d, 0, true), "{"..neon_reg(n, 0, true).."}", neon_reg(m, 0, true)})
+  end
+  if op & 0xffe08400 == 0x6e000000 then
+    return put_neon(ctx, "ext", {neon_reg(d, 0, true), neon_reg(n, 0, true),
+      neon_reg(m, 0, true), "#"..((op >> 11) & 15)})
+  end
+  if op & 0xfff8fc00 == 0x4f00e400 then
+    return put_neon(ctx, "movi", {
+      neon_reg(d, 0, true), "#"..(((op >> 5) & 31) | ((op >> 11) & 224))})
+  end
+  if op & 0xbffffc00 == 0x0e617800 then
+    return put_neon(ctx, q ? "fcvtl2" : "fcvtl", {
+      neon_reg(d, 3, true), neon_reg(n, 2, q)})
+  elseif op & 0xbffffc00 == 0x0e616800 then
+    return put_neon(ctx, q ? "fcvtn2" : "fcvtn", {
+      neon_reg(d, 2, q), neon_reg(n, 3, true)})
+  end
+  -- Q loads/stores use scale 4 even though the ordinary size field is zero.
+  if op & 0xff000000 == (0x9c000000 | 0) then
+    local addr = ctx.addr + ctx.pos + (((op << 8) ~>> 13) << 2)
+    ctx.rel = addr
+    return put_neon(ctx, "ldr", {"q"..d, format("0x%08x", addr)})
+  end
+  local base = map_regs.x[n]
+  key = op & 0xffc00000
+  if key == 0x3d800000 or key == 0x3dc00000 then
+    local imm = ((op >> 10) & 4095)*16
+    return put_neon(ctx, key == 0x3dc00000 ? "ldr" : "str", {
+      "q"..d, "["..base..(imm == 0 ? "" : ", #"..imm).."]"})
+  end
+  key = op & 0xffa00c00
+  if key == 0x3c800000 or key == 0x3c800400 or key == 0x3c800c00 then
+    local imm = (op << 11) ~>> 23
+    local ind = (op >> 10) & 3
+    name = op & 0x400000 != 0 ? "ldr" : "str"
+    local addr = "["..base
+    if ind == 1 then addr = addr.."], #"..imm
+    else addr = addr..(imm == 0 ? "" : ", #"..imm).."]"..(ind == 3 ? "!" : "") end
+    if ind == 0 then name = name == "ldr" ? "ldur" : "stur" end
+    return put_neon(ctx, name, {"q"..d, addr})
+  elseif key == 0x3ca00800 then
+    local opt, shift = (op >> 13) & 7, (op >> 12) & 1
+    if opt != 2 and opt != 3 and opt != 6 and opt != 7 then return false end
+    local addr = "["..base..", "..(opt & 1 == 0 ? "w" : "x")..m
+    if opt != 3 or shift != 0 then
+      addr = addr..", "..(opt == 3 ? "lsl" : map_extend[opt])
+      if shift != 0 then addr = addr.." #4" end
+    end
+    return put_neon(ctx, op & 0x400000 != 0 ? "ldr" : "str", {"q"..d, addr.."]"})
+  end
+  if op & 0xfe000000 == (0xac000000 | 0) then
+    local imm, ind = ((op << 10) ~>> 25)*16, (op >> 23) & 3
+    local addr = "["..base
+    if ind == 1 then addr = addr.."], #"..imm
+    else addr = addr..(imm == 0 ? "" : ", #"..imm).."]"..(ind == 3 ? "!" : "") end
+    name = op & 0x400000 != 0 ? "ldp" : "stp"
+    if ind == 0 then name = name == "ldp" ? "ldnp" : "stnp" end
+    return put_neon(ctx, name, {"q"..d, "q"..((op >> 10) & 31), addr})
+  end
+  return false
+end
+
 -- Disassemble a single instruction.
 local function disass_ins(ctx)
   local pos = ctx.pos
@@ -875,6 +1080,7 @@ local function disass_ins(ctx)
   local map_reg
   ctx.op = op
   ctx.rel = nil
+  if disass_neon(ctx) then return end
   last = nil
   local opat
   opat = map_init[(op >> 25) & 15]

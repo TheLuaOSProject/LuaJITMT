@@ -321,7 +321,8 @@
 |.macro hotcheck, delta
 |  lsr CARG1, PC, #1
 |  and CARG1, CARG1, #126
-|  add CARG1, CARG1, #GG_G2DISP+GG_DISP2HOT
+|  add CARG1, CARG1, #((GG_G2DISP+GG_DISP2HOT) & ~4095)
+|  add CARG1, CARG1, #((GG_G2DISP+GG_DISP2HOT) & 4095)
 |  ldrh CARG2w, [GL, CARG1]
 |  subs CARG2, CARG2, #delta
 |  strh CARG2w, [GL, CARG1]
@@ -2026,14 +2027,38 @@ static void build_subroutines(BuildCtx *ctx)
   |//-----------------------------------------------------------------------
   |
   |.macro savex_, a, b
+  |.if ENDIAN_LE
+  |  stp q..a, q..b, [sp, #a*16]
+  |.else
   |  stp d..a, d..b, [sp, #a*8]
   |  stp x..a, x..b, [sp, #32*8+a*8]
+  |.endif
   |.endmacro
   |
   |->vm_exit_handler:
   |.if JIT
   |  bti_call
-  |  sub     sp, sp, #(64*8)
+  |.if ENDIAN_LE
+  |  sub sp, sp, #32*8
+  |  stp x0, x1, [sp, #0*8]
+  |  stp x2, x3, [sp, #2*8]
+  |  stp x4, x5, [sp, #4*8]
+  |  stp x6, x7, [sp, #6*8]
+  |  stp x8, x9, [sp, #8*8]
+  |  stp x10, x11, [sp, #10*8]
+  |  stp x12, x13, [sp, #12*8]
+  |  stp x14, x15, [sp, #14*8]
+  |  stp x16, x17, [sp, #16*8]
+  |  stp x18, x19, [sp, #18*8]
+  |  stp x20, x21, [sp, #20*8]
+  |  stp x22, x23, [sp, #22*8]
+  |  stp x24, x25, [sp, #24*8]
+  |  stp x26, x27, [sp, #26*8]
+  |  stp x28, x29, [sp, #28*8]
+  |  sub sp, sp, #32*16
+  |.else
+  |  sub sp, sp, #(64*8)
+  |.endif
   |  savex_, 0, 1
   |  savex_, 2, 3
   |  savex_, 4, 5
@@ -2049,11 +2074,20 @@ static void build_subroutines(BuildCtx *ctx)
   |  savex_, 24, 25
   |  savex_, 26, 27
   |  savex_, 28, 29
+  |.if ENDIAN_LE
+  |  stp q30, q31, [sp, #30*16]
+  |  ldr CARG1, [sp, #32*16+32*8]	// Load original value of lr.
+  |   add CARG3, sp, #32*16+32*8	// Recompute original value of sp.
+  |    mv_vmstate CARG4w, EXIT
+  |   str xzr, [sp, #32*16+30*8]	// Store 0/sp in RID_LR/RID_SP.
+  |   str CARG3, [sp, #32*16+31*8]
+  |.else
   |  stp d30, d31, [sp, #30*8]
   |  ldr CARG1, [sp, #64*8]	// Load original value of lr.
   |   add CARG3, sp, #64*8	// Recompute original value of sp.
   |    mv_vmstate CARG4w, EXIT
   |   stp xzr, CARG3, [sp, #62*8]	// Store 0/sp in RID_LR/RID_SP.
+  |.endif
   |  sub CARG1, CARG1, lr
   |   ldr L, GL->cur_L
   |  lsr CARG1, CARG1, #2
@@ -2290,14 +2324,15 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov GL, x10
   |    add x10, sp, # CFRAME_SPACE
   |  str w9, CTSTATE->cb.slot
+  |   add x9, CTSTATE, #offsetof(CTState, cb.fpr)
   |  stp x0, x1, CTSTATE->cb.gpr[0]
-  |   stp d0, d1, CTSTATE->cb.fpr[0]
+  |   stp q0, q1, [x9]
   |  stp x2, x3, CTSTATE->cb.gpr[2]
-  |   stp d2, d3, CTSTATE->cb.fpr[2]
+  |   stp q2, q3, [x9, #32]
   |  stp x4, x5, CTSTATE->cb.gpr[4]
-  |   stp d4, d5, CTSTATE->cb.fpr[4]
+  |   stp q4, q5, [x9, #64]
   |  stp x6, x7, CTSTATE->cb.gpr[6]
-  |   stp d6, d7, CTSTATE->cb.fpr[6]
+  |   stp q6, q7, [x9, #96]
   |    str x10, CTSTATE->cb.stack
   |  mov CARG1, CTSTATE
   |   str CTSTATE, SAVE_PC		// Any value outside of bytecode is ok.
@@ -2323,7 +2358,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov CARG2, RA
   |  bl extern lj_ccallback_leave       // (CTState *cts, TValue *o)
   |  ldp x0, x1, CTSTATE->cb.gpr[0]
-  |   ldp d0, d1, CTSTATE->cb.fpr[0]
+  |   add x9, CTSTATE, #offsetof(CTState, cb.fpr)
+  |   ldp q0, q1, [x9]
   |  b ->vm_leave_unw
   |.endif
   |
@@ -2350,19 +2386,19 @@ static void build_subroutines(BuildCtx *ctx)
   |  bpl <1
   |2:
   |  ldp x0, x1, CCSTATE->gpr[0]
-  |   ldp d0, d1, CCSTATE->fpr[0]
+  |   ldp q0, q1, CCSTATE->fpr[0]
   |  ldp x2, x3, CCSTATE->gpr[2]
-  |   ldp d2, d3, CCSTATE->fpr[2]
+  |   ldp q2, q3, CCSTATE->fpr[2]
   |  ldp x4, x5, CCSTATE->gpr[4]
-  |   ldp d4, d5, CCSTATE->fpr[4]
+  |   ldp q4, q5, CCSTATE->fpr[4]
   |  ldp x6, x7, CCSTATE->gpr[6]
-  |   ldp d6, d7, CCSTATE->fpr[6]
+  |   ldp q6, q7, CCSTATE->fpr[6]
   |  ldr x8, CCSTATE->retp
   |  blr_auth TMP3
   |  sub sp, fp, #16
   |  stp x0, x1, CCSTATE->gpr[0]
-  |   stp d0, d1, CCSTATE->fpr[0]
-  |   stp d2, d3, CCSTATE->fpr[2]
+  |   stp q0, q1, CCSTATE->fpr[0]
+  |   stp q2, q3, CCSTATE->fpr[2]
   |  ldp fp, lr, [sp, #16]
   |  ldp_unwind CCSTATE, x20, [sp], #32
   |  ret_auth
