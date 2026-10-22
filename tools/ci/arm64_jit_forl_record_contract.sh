@@ -213,9 +213,9 @@ for required in \
     exit 1
   }
 done
-awk '/^int lj_asm_arm64_postra_admit/ { copy=1 }
+awk '/^static int arm64_postra_nonloop_admit/ { copy=1 }
      copy { print }
-     copy && /^static int arm64_ir_int_ref/ { exit }' \
+     copy && /^}/ { exit }' \
   "$admit_source" >"$postra_region"
 for required in \
   'rootop = bc_op(view->startins);' \
