@@ -8,7 +8,9 @@ and reports that are no longer authoritative are retained in
 ## Status at a glance
 
 - Development branch: `codex/aarch64-macos-port`.
-- Upstream comparison point: LuaJITMT `v2.1` at `a649f737`.
+- Integrated upstream comparison point: LuaJITMT `v2.1` at `a649f737`.
+  The fetched upstream has advanced to `489bb089`; those changes are not yet
+  merged into this branch.
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
@@ -16,9 +18,10 @@ and reports that are no longer authoritative are retained in
 - Latest ARM64 VM acquire-load cleanup: `3f109fa2`.
 - Latest ARM64 interpreter GC2 parity: `d639196b`.
 - Latest ARM64 JIT GC2 cadence parity: `f1fe1f73`.
-- Latest complete fail-closed gate: `f1fe1f73`.
-- After validation, the checked-out build was manually restored to the safe
-  ARM64 profile, with `jit.status() == false`.
+- Latest complete bootstrap and fail-closed gates: frozen `709583ee` source,
+  verified on 2026-10-22 in a disposable checkout.
+- Build artifacts in the development checkout may belong to either profile;
+  select and rebuild the intended profile explicitly.
 
 This is a working Apple Silicon port with substantial native execution
 evidence. It is not yet a completed or general ARM64 LuaJIT backend. Native
@@ -43,6 +46,14 @@ intentionally rejected; ordinary interpreted Lua remains available.
 - GC2 hard-assist parity at interpreter allocation checks, including the fast
   function helper and the `TNEW`/`TDUP` bytecode paths. Shared pacing fields
   are acquired explicitly and the exact local-debt batch boundary is covered.
+- ARM64 FFI aggregate classification copies CType metadata through the existing
+  writer-token-aware snapshot helpers. Nested homogeneous aggregates, mixed
+  aggregates, indirect results, register overflow, errno, and concurrent cdef
+  publication have native ABI coverage.
+- An exact lock-free admission/count word prevents the first secondary VM
+  admission while any legacy open upvalue still points into an owner's stack.
+  Rejection preserves ordinary owner semantics; admission succeeds after the
+  captures close. See the remaining legacy compatibility limitation below.
 
 ### Bounded native JIT
 
@@ -71,6 +82,9 @@ intentionally rejected; ordinary interpreted Lua remains available.
   matching x64's `total >= threshold || alloc_since > hard_check` behavior.
   The admitted boxed-pointer `CALLXS` trace proves both equality-skip and
   strict-overdue paths without flushing sub-batch debt or starting stopped GC.
+- ARM64 generated table barriers call the existing GC2 runtime helper, matching
+  x64. A dedicated machine-code fixture covers key roots and argument-register
+  overlap on ARM64 and arm64e/BTI. General table-effect admission remains closed.
 
 ## Deliberately closed or incomplete
 
@@ -88,9 +102,15 @@ intentionally rejected; ordinary interpreted Lua remains available.
   stress path.
 - Complete sanitizer, weak-memory, sustained-concurrency, and performance
   recovery matrices.
-- Pre-activation legacy closures with still-open upvalues do not yet have an
-  explicit sharing policy or lifetime proof across `threading.spawn`/attach.
-  Current tests cover captures created after activation, not this older edge.
+- Legacy bytecode executed after activation still snapshots newly captured
+  locals, which does not preserve stock shared-local semantics. Legacy import
+  needs normalization into the fork's shared-cell operations. The new admission
+  veto only protects existing pre-activation open cells.
+- Source read-only captures currently have a separate shared-identity defect;
+  fixes and cross-architecture debug-API regressions are under development.
+- Concurrent tmpbuf stress showed one unchanged-baseline timeout. A rejected
+  inline dirty-epoch experiment also hit a GC2 assertion; no common cause or
+  specific upstream fix has been established.
 
 ## Minimal-divergence review
 
@@ -121,6 +141,12 @@ whole lifecycle and updates the source contracts without changing behavior.
 
 ## Verification checkpoints
 
+- Complete safe ARM64 bootstrap and experimental fail-closed gates passed on
+  frozen `709583ee` source on 2026-10-22. This includes the new aggregate ABI
+  and generated table-barrier contracts. It does not certify subsequent edits.
+- Legacy admission changes passed 387 safe ARM64 stock tests and 509 tests each
+  on experimental ARM64 and x86-64/Rosetta, plus the focused lifetime, admission
+  race, and threading fixtures described in the corresponding note.
 - `tools/ci/arm64_meta_publication_contract.sh`: source and generated-object
   checks pass at `3f109fa2`, including every new unconditional VM acquire.
 - Safe ARM64 runtime smoke at `f1fe1f73`: `jit.arch == "arm64"`,
@@ -143,18 +169,21 @@ whole lifecycle and updates the source contracts without changing behavior.
   FFI callback rounds across four threads, plus ordinary ARM64 and arm64e/BTI
   interpreter GC2 hard-assist proof.
 
-Known diagnostics observed during validation are the pre-existing unused
-`ccall_rawchild_wait` warning, the diagnostic `topofs` warning, and the x86_64
+Known diagnostics observed during validation include the diagnostic `topofs`
+warning and the x86_64
 builder's expected preliminary non-GC64 rejection before its configured GC64
 build.
 
 ## Next review priorities
 
-1. Define and prove the activation policy for legacy closures that retain open
-   upvalues into an owner stack before they cross `threading.spawn`/attach.
-2. Open only one new JIT or FFI boundary at a time, with independent source,
+1. Restore stock shared-upvalue identity for source captures and imported
+   legacy bytecode, including debug API writes under the x64 JIT.
+2. Replace unnecessarily exact scalar JIT restrictions with independently
+   checked semantic and post-register-allocation capabilities. Investigate
+   actual emitter failures before admitting the affected operations.
+3. Open one new JIT or FFI boundary at a time, with independent source,
    IR, snapshot, post-RA, emitted-code, lifecycle, and negative-shape proof.
-3. Keep common-file edits narrower than the protocol being added and preserve
+4. Keep common-file edits narrower than the protocol being added and preserve
    stock LuaJIT control flow wherever no lockless change is required.
 
 ## Notes layout
@@ -163,6 +192,13 @@ build.
   status.
 - [`architecture-constraints.md`](architecture-constraints.md): durable
   correctness and minimal-divergence rules.
+- [`legacy-upvalue-admission.md`](legacy-upvalue-admission.md): exact open-cell
+  admission authority and its compatibility boundary.
+- [`arm64-ffi-aggregate-snapshots.md`](arm64-ffi-aggregate-snapshots.md): aggregate
+  classification publication and native ABI evidence.
+- [`arm64-jit-tbar.md`](arm64-jit-tbar.md): generated GC2 table barriers.
+- [`arm64-vm-epoch-audit-2026-10-22.md`](arm64-vm-epoch-audit-2026-10-22.md):
+  rejected performance experiment and unresolved stress observation.
 - [`archive/aarch64-checkpoints/`](archive/aarch64-checkpoints/): 76 historical
   ARM64 investigation and checkpoint notes.
 - [`archive/pre-aarch64/`](archive/pre-aarch64/): 847 earlier LuaJITMT notes.
