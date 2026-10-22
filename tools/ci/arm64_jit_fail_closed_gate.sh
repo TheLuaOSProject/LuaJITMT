@@ -70,6 +70,7 @@ LJ_ARM64_GC2_RESTORE_XCFLAGS="$xcflags" \
   sh "$root/tools/ci/arm64_gc2_interp_hard_check_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_emitter_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_tbar_contract.sh"
+LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_phi_spill_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_ffi_aggregate_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/jit_hotcount_generation_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/jit_recorder_safepoint_contract.sh"
@@ -193,5 +194,7 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" LUA_PATH="$lua_path" \
   LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
   "$luajit" "$root/tools/test.lua" \
     m5_arm64_jit_fail_closed_safepoint_runtime
+
+env LUA_PATH="$lua_path" "$luajit" "$root/tests/t-upvalue-identity.lua"
 
 echo "arm64_jit_fail_closed_gate OK: exact variable-stop integer dynamic-step FORL plus constrained integer, mixed-NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE plus exact MUL_LT/MUL_LE FMUL and DIV_LT/DIV_LE/DIV_GT/DIV_GE FDIV all-parameter dynamic-accumulator NUM/INT-step-widened LOOP, exact ADD_LT INT-limit-widened LOOP, pure-NUM FORL and literal-true JFUNCF entry contracts sound"

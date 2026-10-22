@@ -26,6 +26,7 @@ local m6_cases = {
   "m6_jit_recursive_retention",
   "m6_jit_trace_proto_gc",
   "m6_jit_cell_ops",
+  "m6_jit_upvalue_identity",
   "m6_jit_fnew_bump",
   "m6_jit_barrier_xpoll",
   "m6_jit_xbar_xpoll",
@@ -921,6 +922,27 @@ assert(util.traceinfo(1), "Lua tailcall loop did not trace")
       cellops.run_jit_closed_upvalue_store_behavior_checks(t)
       cellops.run_jit_runtime_checks(t)
       print("M6 JIT local-cell behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_upvalue_identity",
+    description = "source captures preserve shared identity and debug writes under JIT",
+    run = function(t)
+      build_default(t)
+      luajit_file(t, t:path("tests", "t-upvalue-identity.lua"), {
+        lua_path = true,
+        timeout = "30s"
+      })
+      luajit_file(t, t:path("tests", "t-jit-cell-frame.lua"), {
+        lua_path = true,
+        timeout = "30s"
+      })
+      build_and_run_c(t, t:tmp("lj_t-debug-setlocal"),
+                      "t-debug-setlocal.c", {
+        build = false,
+        timeout = "30s"
+      })
     end
   })
 

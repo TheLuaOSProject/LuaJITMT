@@ -464,6 +464,11 @@ return function(add)
       opts = { joff = true }
     },
     {
+      name = "m4_upvalue_identity",
+      script = "t-upvalue-identity.lua",
+      opts = { joff = true }
+    },
+    {
       name = "m4_threading_join_gcscan",
       description = "thread join makes progress while workers force GC root scans",
       script = "t-threading-join-gcscan.lua",
