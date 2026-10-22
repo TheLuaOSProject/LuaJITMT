@@ -969,6 +969,11 @@ assert(util.traceinfo(1), "Lua tailcall loop did not trace")
     description = "local-cell CNEW/FNEW allocation and publication behavior",
     run = function(t)
       clean_build(t, build.func_helper_build_opts({ quiet = true }))
+      build_and_run_c(t, t:tmp("lj_t-gc2-ssb-preserve-reopen"),
+                      "t-gc2-ssb-preserve-reopen.c", build.func_helper_c_opts({
+        build = false,
+        timeout = "20s"
+      }))
       build_and_run_c(t, t:tmp("lj_t-jit-fnew-bump"),
                       "t-jit-fnew-bump.c", build.func_helper_c_opts({
         build = false,

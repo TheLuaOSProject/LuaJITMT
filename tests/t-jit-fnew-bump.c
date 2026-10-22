@@ -2236,6 +2236,10 @@ static void test_fnew_certificate_ssb_boundary(lua_State *L,
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   begin_open_fnew_mark(g, tg);
   cycle = gc2_cycle_acq(g);
+  /* Cycle start preserves queued work and may have no spare SSB node while
+  ** it owns the worker token. Prepare pair capacity through the normal owner
+  ** flush after that token is released. */
+  (void)lj_gc2_flush_ssb(g, tg);
   node = lj_tg_ssb_active_acq(tg);
   base = lj_tg_ssb_base_acq(tg);
   end = lj_tg_ssb_end_acq(tg);
