@@ -85,10 +85,11 @@ typedef struct RootEntryTraceVec2 {
 enum {
   ROOT_ENTRY_BODY_WORDS = 4,
   ROOT_ENTRY_EXIT_WORDS = ARM64_EXIT_FALLBACK_WORDS +
-	ARM64_EXIT_GATE_WORDS,
+	2*ARM64_EXIT_GATE_WORDS,
   ROOT_ENTRY_MCODE_WORDS = ROOT_ENTRY_BODY_WORDS + ROOT_ENTRY_EXIT_WORDS,
   ROOT_ENTRY_R_VALUE = REF_FIRST,
   ROOT_ENTRY_R_LOOP,
+  ROOT_ENTRY_R_POLL,
   ROOT_ENTRY_R_SUFFIX,
   ROOT_ENTRY_R_END,
   ROOT_ENTRY_IR_CAP = ROOT_ENTRY_R_END
@@ -100,10 +101,10 @@ typedef struct RootEntryMetadataFixture {
   MSize saved_sizetrace;
   RootEntryTraceVec2 tracev;
   IRIns ir[ROOT_ENTRY_IR_CAP];
-  SnapShot snap[1];
-  SnapEntry snapmap[3];
+  SnapShot snap[2];
+  SnapEntry snapmap[5];
   _Alignas(8) MCode mcode[ROOT_ENTRY_MCODE_WORDS];
-  _Alignas(8) MCode *exittab[1];
+  _Alignas(8) MCode *exittab[2];
 } RootEntryMetadataFixture;
 
 typedef struct RootEntryFrameFixture {
@@ -249,8 +250,8 @@ static void install_root_entry_metadata(jit_State *J, GCproto *pt,
   J->cur.nk = REF_TRUE;
   J->cur.snap = fixture->snap;
   J->cur.snapmap = fixture->snapmap;
-  J->cur.nsnap = 1;
-  J->cur.nsnapmap = 3;
+  J->cur.nsnap = 2;
+  J->cur.nsnapmap = 5;
   J->cur.unused1 = TRACE_ARM64_INT_LOOP_ADMITTED;
 
   root_entry_setir(fixture->ir, REF_TRUE, IR_KPRI, IRT_TRUE,
@@ -266,17 +267,27 @@ static void install_root_entry_metadata(jit_State *J, GCproto *pt,
 		   RID_X0, SPS_NONE);
   root_entry_setir(fixture->ir, ROOT_ENTRY_R_LOOP, IR_LOOP,
 		   IRT_NIL|IRT_GUARD, 0, 0, RID_X0, SPS_NONE);
+  root_entry_setir(fixture->ir, ROOT_ENTRY_R_POLL, IR_XPOLL,
+		   IRT_NIL|IRT_GUARD, 1, 0, RID_X0, SPS_NONE);
   root_entry_setir(fixture->ir, ROOT_ENTRY_R_SUFFIX, IR_NOP, IRT_NIL,
 		   0, 0, RID_X0, SPS_NONE);
-  fixture->snap[0].ref = ROOT_ENTRY_R_LOOP;
+  /* The type guard exits before VALUE exists. LOOP and its following poll
+  ** use the second snapshot, which restores the checked value. */
+  fixture->snap[0].ref = ROOT_ENTRY_R_VALUE;
   fixture->snap[0].mapofs = 0;
   assert(pt->framesize > 2);
   fixture->snap[0].nslots = pt->framesize;
   fixture->snap[0].topslot = pt->framesize;
-  fixture->snap[0].nent = 1;
-  fixture->snapmap[0] = SNAP(2, 0, ROOT_ENTRY_R_VALUE);
+  fixture->snap[0].nent = 0;
   snapshot_pcbase = (uint64_t)(uintptr_t)loop->pc << 8;
-  memcpy(&fixture->snapmap[1], &snapshot_pcbase, sizeof(snapshot_pcbase));
+  memcpy(&fixture->snapmap[0], &snapshot_pcbase, sizeof(snapshot_pcbase));
+  fixture->snap[1].ref = ROOT_ENTRY_R_LOOP;
+  fixture->snap[1].mapofs = 2;
+  fixture->snap[1].nslots = pt->framesize;
+  fixture->snap[1].topslot = pt->framesize;
+  fixture->snap[1].nent = 1;
+  fixture->snapmap[2] = SNAP(2, 0, ROOT_ENTRY_R_VALUE);
+  memcpy(&fixture->snapmap[3], &snapshot_pcbase, sizeof(snapshot_pcbase));
 
   fixture->mcode[0] = A64I_NOP;  /* Unreachable AArch64 NOP body. */
   fixture->mcode[1] = A64I_NOP;
@@ -285,7 +296,7 @@ static void install_root_entry_metadata(jit_State *J, GCproto *pt,
   fallback = fixture->mcode + ROOT_ENTRY_BODY_WORDS;
   gates = fallback + ARM64_EXIT_FALLBACK_WORDS;
   exitwords = lj_asm_arm64_exitstub_test(J, fallback,
-	ROOT_ENTRY_EXIT_WORDS, 1, 1, fixture->exittab);
+	ROOT_ENTRY_EXIT_WORDS, 1, 2, fixture->exittab);
   assert(exitwords == ROOT_ENTRY_EXIT_WORDS);
   assert(((uintptr_t)(void *)fixture->exittab &
 	  (sizeof(void *)-1u)) == 0);
@@ -298,6 +309,7 @@ static void install_root_entry_metadata(jit_State *J, GCproto *pt,
   assert(exitstub_trace_fallback_addr_(gates) == fallback);
   assert(exitstub_trace_addr_(gates, 0) == gates);
   assert(trace_exittarget_arm64_acq(&J->cur, 0) == fallback);
+  assert(trace_exittarget_arm64_acq(&J->cur, 1) == fallback);
 #if LJ_ABI_PAUTH
   J->cur.mcauth = lj_ptr_sign(
     ptrauth_nop_cast(ASMFunction, fixture->mcode), &J->cur);
@@ -535,8 +547,8 @@ static void test_spill_layout_mutations(lua_State *L, const BCIns *pc,
 static void test_snapshot_layout_mutations(lua_State *L, const BCIns *pc)
 {
   GCtrace *T = &L2J(L)->cur;
-  SnapShot *snap = T->snap;
-  SnapEntry *snapmap = T->snapmap;
+  SnapShot *snap = &T->snap[1];
+  SnapEntry *snapmap = &T->snapmap[2];
   MSize saved_nslots = snap[0].nslots;
   MSize saved_topslot = snap[0].topslot;
   GCproto *pt = trace_startpt_acq(T);
@@ -544,11 +556,20 @@ static void test_snapshot_layout_mutations(lua_State *L, const BCIns *pc)
 
   assert(root_entry_metadata_layout_valid(T));
 
-  /* The frozen map is one canonical partition: one semantic entry followed
-  ** by the exact PC/base payload. In-bounds shifts and alternate spans fail. */
+  /* Each guard needs a snapshot at or before its instruction, and the
+  ** stack-load slot must be live in that snapshot. */
+  T->snap[0].ref = ROOT_ENTRY_R_LOOP;
+  expect_layout_reject(L, pc);
+  T->snap[0].ref = ROOT_ENTRY_R_VALUE;
+  T->snap[0].nslots = 2;
+  expect_layout_reject(L, pc);
+  T->snap[0].nslots = (uint8_t)saved_nslots;
+
+  /* The loop snapshot follows the type-guard snapshot in one canonical
+  ** partition. In-bounds shifts and alternate spans still fail. */
   snap[0].mapofs = 1;
   expect_layout_reject(L, pc);
-  snap[0].mapofs = 0;
+  snap[0].mapofs = 2;
   snap[0].nent = 0;
   expect_layout_reject(L, pc);
   snap[0].nent = 1;
@@ -672,6 +693,12 @@ static void test_metadata_mutation_rejections(lua_State *L, GCproto *pt,
 
   test_spill_layout_mutations(L, loop->pc, fixture);
   test_snapshot_layout_mutations(L, loop->pc);
+
+  /* A loop without its mandatory poll is never a valid entry target. */
+  ir[ROOT_ENTRY_R_POLL].op1 = 0;
+  expect_layout_reject(L, loop->pc);
+  ir[ROOT_ENTRY_R_POLL].op1 = 1;
+  assert(root_entry_metadata_layout_valid(T));
 
   T->mcloop = 0;
   expect_metadata_reject(L, loop->pc);

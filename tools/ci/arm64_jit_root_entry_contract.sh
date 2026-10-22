@@ -293,7 +293,8 @@ for required in '__arm64_root_jforl' '__arm64_root_jfori' \
   'J->cur.nins = ROOT_ENTRY_R_END;' \
   'J->cur.nk = REF_TRUE;' \
   'J->cur.snap = fixture->snap;' \
-  'J->cur.nsnapmap = 3;' \
+  'J->cur.nsnap = 2;' \
+  'J->cur.nsnapmap = 5;' \
   'root_entry_setir(fixture->ir, REF_TRUE, IR_KPRI, IRT_TRUE,' \
   'root_entry_setir(fixture->ir, REF_FALSE, IR_KPRI, IRT_FALSE,' \
   'root_entry_setir(fixture->ir, REF_NIL, IR_KPRI, IRT_NIL,' \
@@ -301,10 +302,13 @@ for required in '__arm64_root_jforl' '__arm64_root_jfori' \
   'root_entry_setir(fixture->ir, ROOT_ENTRY_R_VALUE, IR_SLOAD,' \
   'root_entry_setir(fixture->ir, ROOT_ENTRY_R_LOOP, IR_LOOP,' \
   'root_entry_setir(fixture->ir, ROOT_ENTRY_R_SUFFIX, IR_NOP, IRT_NIL,' \
-  'fixture->snap[0].ref = ROOT_ENTRY_R_LOOP;' \
-  'fixture->snapmap[0] = SNAP(2, 0, ROOT_ENTRY_R_VALUE);' \
+  'root_entry_setir(fixture->ir, ROOT_ENTRY_R_POLL, IR_XPOLL,' \
+  'fixture->snap[0].ref = ROOT_ENTRY_R_VALUE;' \
+  'fixture->snap[1].ref = ROOT_ENTRY_R_LOOP;' \
+  'fixture->snapmap[2] = SNAP(2, 0, ROOT_ENTRY_R_VALUE);' \
   'snapshot_pcbase = (uint64_t)(uintptr_t)loop->pc << 8;' \
-  'memcpy(&fixture->snapmap[1], &snapshot_pcbase, sizeof(snapshot_pcbase));' \
+  'memcpy(&fixture->snapmap[0], &snapshot_pcbase, sizeof(snapshot_pcbase));' \
+  'memcpy(&fixture->snapmap[3], &snapshot_pcbase, sizeof(snapshot_pcbase));' \
   'expect_metadata_success(L, metadata_loop.pc, &metadata);' \
   'ir[ROOT_ENTRY_R_VALUE].s = SPS_FIRST;' \
   'ir[ROOT_ENTRY_R_VALUE].s = SPS_FIXED-1;' \
@@ -334,6 +338,9 @@ for required in '__arm64_root_jforl' '__arm64_root_jfori' \
   '(uintptr_t)proto_bc(pt)-sizeof(BCIns)' \
   'proto_bc(pt)+pt->sizebc' \
   'T->nk = 0;' \
+  'T->snap[0].ref = ROOT_ENTRY_R_LOOP;' \
+  'T->snap[0].nslots = 2;' \
+  'ir[ROOT_ENTRY_R_POLL].op1 = 0;' \
   'lj_tg_store_jit_base(L->tg_hint, NULL);' \
   'T->unused1 &= (uint8_t)~TRACE_ARM64_INT_LOOP_ADMITTED;' \
   'T->unused1 |= TRACE_ARM64_INT_SIDE_ADMITTED;' \
