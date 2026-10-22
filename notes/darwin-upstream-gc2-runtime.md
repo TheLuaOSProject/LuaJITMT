@@ -49,3 +49,31 @@ Temporary local logs are `/tmp/luajitmt-upstream-huge-tail.log`,
 `/tmp/luajitmt-upstream-darwin-runner.log`, and
 `/tmp/luajitmt-negative-{huge-tail,remote-completion}.log`.
 The isolated source location is in `/tmp/luajitmt-upstream-native-workdir`.
+
+## Local duplicate and native-return holds
+
+The same registered case now also requires the upstream local-native duplicate
+scan test and all four native-root-hold modes on Darwin. Their original Linux
+paths remain unchanged. The Darwin paths retain real owner/global root scans,
+SSB flushes, and native transitions. They observe the exact poll-word ulock wait
+with Mach thread state before releasing the paused executor. The duplicate
+fixture redirects only the parser-root observation point inside the actual
+GC2 source; its wrapper still calls the real parser scanner.
+
+All five added executions passed on `cac092fd` plus these test changes, together
+with the huge-tail and six completion modes. The runner restored the safe
+profile. Independent source review found no weakened ownership, marking,
+completion or source-preservation assertions.
+
+Separate disposable negative controls failed with SIGABRT as intended:
+
+- Removing the `native_parked` restriction from local completion allowed the
+  local duplicate to clear poll while a remote traversal still held its TG;
+  the fixture detected teardown during that traversal.
+- Bypassing the consumed-poll wait made each of the four native-return modes
+  return while poll was still set. Each failed the original poll-clear check.
+
+No production behavior was changed by these test ports. Positive evidence is
+in `/tmp/luajitmt-darwin-holds-runner.log`; negative logs are
+`/tmp/luajitmt-negative-local-hold.log` and
+`/tmp/luajitmt-negative-native-{0,1,2,3}-hold.log`.

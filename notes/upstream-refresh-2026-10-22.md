@@ -7,6 +7,17 @@ snapshot tests, shared source/import capture corrections, numeric-spill
 admission and current gate registration. The focused candidate evidence below
 does not replace a complete gate run on the merged checkpoint.
 
+The first complete-gate attempts after integration are not passing results.
+Concurrent bootstrap and experimental runs on `cac092fd` exhausted the
+120-second legacy-bytecode fixture deadline. An instrumented standalone run
+and the unchanged serial bootstrap run both completed that fixture within the
+original limit. The serial bootstrap then failed threaded tmpbuf stress at
+`lj_gc2_sweep_to_idle`: `table NEEDSCAN leaked to normal sweep close`.
+That collector race is under investigation; neither the assertion nor the
+gate deadline has been weakened. Logs are
+`/tmp/luajitmt-upstream-{bootstrap,jit}-gate.log` and
+`/tmp/luajitmt-upstream-bootstrap-gate-serial.log`.
+
 ## Scope and history
 
 Upstream's new code and tests are retained. Its bulk `bench/`, `notes/` and

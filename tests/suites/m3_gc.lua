@@ -653,8 +653,20 @@ return function(add)
         }, { cflags = flags, link_luajit = true,
              libs = { "-lm", "-ldl", "-pthread" } })
         for mode = 0, 5 do t:run({ exe, tostring(mode) }, { timeout = "25s" }) end
+        compile_and_run_c(t, t:tmp("lj_t-native-duplicate-darwin"), {
+          t:path("tests", "t-safepoint-local-native-duplicate.c"),
+          t:path("tests", "lib", "safepoint_completion_darwin.c"),
+          t:path("tests", "lib", "gc2_native_duplicate_darwin.c")
+        }, { cflags = flags, timeout = "25s" })
+        exe = t:tmp("lj_t-native-root-hold-darwin")
+        t:cc(exe, {
+          t:path("tests", "t-safepoint-native-root-hold.c"),
+          t:path("tests", "lib", "safepoint_root_hold_darwin.c")
+        }, { cflags = flags, link_luajit = true,
+             libs = { "-lm", "-ldl", "-pthread" } })
+        for mode = 0, 3 do t:run({ exe, tostring(mode) }, { timeout = "25s" }) end
       end, { xcflags = restore })
-      print("M3 Darwin huge-tail and six remote-completion modes passed")
+      print("M3 Darwin huge-tail, remote completion and native root holds passed")
     end
   })
 

@@ -3,7 +3,11 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#if defined(__APPLE__)
+#include <mach/mach.h>
+#else
 #include <sys/syscall.h>
+#endif
 #include <time.h>
 #include <unistd.h>
 #include "lua.h"
@@ -23,7 +27,12 @@ typedef struct Probe {
   uint32_t ready, armed, refused, consumed, remote_scan;
   uint32_t release_scan, detached, teardown_overlap, observed_wait;
   uint32_t local_clear, real_remote_scan, owner_scan;
+#if defined(__APPLE__)
+  pthread_t owner_thread;
+  uint32_t wait_active;
+#else
   pid_t owner_sysid;
+#endif
 } Probe;
 static Probe ctx;
 static uint64_t now_ns(void)
@@ -72,6 +81,22 @@ static void completion_hook(global_State *g, TGState *tg,
     la_store32_rel(&p->local_clear, 1);
   }
 }
+#if defined(__APPLE__)
+#define __real_lj_gc2_scan_cycle_owner_tg_roots_native_parked \
+  lj_gc2_scan_cycle_owner_tg_roots_native_parked
+#define __real_lj_lex_gc2_markroots lj_lex_gc2_markroots
+int lj_test_completion_ulock_wait(uint32_t op, void *addr, uint64_t value,
+                                 uint32_t timeout)
+{
+  int watched = addr == &ctx.owner.poll && op == UL_COMPARE_AND_WAIT &&
+    value == 1 && timeout == 0 && la_load32_acq(&ctx.armed);
+  int result;
+  if (watched) la_store32_rel(&ctx.wait_active, 1);
+  result = __ulock_wait(op, addr, value, timeout);
+  if (watched) la_store32_rel(&ctx.wait_active, 0);
+  return result;
+}
+#endif
 extern int __real_lj_gc2_scan_cycle_owner_tg_roots_native_parked(global_State *, TGState *);
 int __wrap_lj_gc2_scan_cycle_owner_tg_roots_native_parked(global_State *g, TGState *tg)
 {
@@ -114,7 +139,11 @@ static void *owner(void *arg)
   lj_tg_tid_rel(tg, lj_thr_newid());
   lj_arena_alloc_owner_rel(&tg->alloc, lj_tg_tid_acq(tg));
   lj_thr_set_tg(tg);
+#if defined(__APPLE__)
+  p->owner_thread = pthread_self();
+#else
   p->owner_sysid = (pid_t)syscall(SYS_gettid);
+#endif
   /* Exercise an attached native owner whose detach services an outstanding
   ** TG-only acknowledgement. GC workers now close their startup native scope
   ** first; this fixture retains the local pre-claim duplicate-action hold. */
@@ -135,20 +164,44 @@ static void *owner(void *arg)
 static void *observer(void *arg)
 {
   Probe *p = arg;
+#if !defined(__APPLE__)
   char path[96], line[320];
+#endif
   uint64_t end;
   until(&p->remote_scan, 1);
   end = now_ns() + 5000000000ull;
+#if !defined(__APPLE__)
   snprintf(path, sizeof(path), "/proc/self/task/%ld/syscall", (long)p->owner_sysid);
+#endif
   for (;;) {
+#if !defined(__APPLE__)
     long nr;
     unsigned long long addr, op, val, timeout_arg;
     FILE *f;
+#endif
     if (la_load32_acq(&p->detached)) {
       assert(la_load32_acq(&p->teardown_overlap));
       break;
     }
     assert(now_ns() < end);
+#if defined(__APPLE__)
+    if (la_load32_acq(&p->wait_active)) {
+      thread_basic_info_data_t info;
+      mach_msg_type_number_t count = THREAD_BASIC_INFO_COUNT;
+      assert(thread_info(pthread_mach_thread_np(p->owner_thread),
+               THREAD_BASIC_INFO, (thread_info_t)&info, &count) == KERN_SUCCESS);
+      if (info.run_state == TH_STATE_WAITING &&
+          la_load32_acq(&p->wait_active)) {
+        assert(!la_load32_acq(&p->local_clear));
+        assert(lj_tg_in_native_acq(&p->owner) == 1);
+        assert(lj_tg_reqmask_acq(&p->owner) == 0);
+        assert(lj_tg_hs_epoch_ack_acq(&p->owner) == gc2_hs_epoch_acq(p->g));
+        puts("local native winner remains in exact consumed-poll Darwin wait");
+        la_store32_rel(&p->observed_wait, 1);
+        break;
+      }
+    }
+#else
     f = fopen(path, "r");
     if (f) {
       if (!fgets(line, sizeof(line), f)) line[0] = 0;
@@ -165,6 +218,7 @@ static void *observer(void *arg)
         break;
       }
     }
+#endif
     usleep(1000);
   }
   la_store32_rel(&p->release_scan, 1);

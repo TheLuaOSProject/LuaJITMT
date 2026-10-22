@@ -16,6 +16,10 @@ and reports that are no longer authoritative are retained in
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
+- Post-refresh full bootstrap validation is currently blocked by a threaded
+  tmpbuf-stress GC2 assertion: `table NEEDSCAN leaked to normal sweep close`.
+  The focused merge checks below do not establish a passing complete gate;
+  see [`upstream-refresh-2026-10-22.md`](upstream-refresh-2026-10-22.md).
 - Latest source-fidelity cleanup: `edbf57fa`.
 - Latest ARM64 VM acquire-load cleanup: `3f109fa2`.
 - Latest ARM64 interpreter GC2 parity: `d639196b`.

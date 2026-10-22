@@ -5,7 +5,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(__APPLE__)
+#include <mach/mach.h>
+#else
 #include <sys/syscall.h>
+#endif
 #include <unistd.h>
 #include "lua.h"
 #include "lauxlib.h"
@@ -18,7 +22,7 @@
 #include "lj_tg.h"
 #include "lj_thr.h"
 
-/* An observation-only Linux probe. The only interposition pauses an already
+/* An observation-only kernel-wait probe. The only interposition pauses an already
 ** admitted real remote-native call (or its completed handshake's global pass).
 ** It does not manufacture request, epoch, pending, native or state ownership. */
 typedef struct Probe {
@@ -32,7 +36,12 @@ typedef struct Probe {
   uint32_t mode, paused, release, returned, peer_done, allow_detach;
   uint32_t observed_futex, scan_calls, global_calls, flush_calls, armed;
   int scan_result;
+#if defined(__APPLE__)
+  pthread_t owner_thread;
+  uint32_t wait_active;
+#else
   pid_t owner_sysid;
+#endif
   pthread_t peer_thread, observer;
 } Probe;
 static Probe ctx;
@@ -65,6 +74,24 @@ static void pause_owner(Probe *p)
   assert(lj_tg_in_native_acq(p->owner) == 0);
   assert(la_load32_acq(&p->returned) == 0);
 }
+#if defined(__APPLE__)
+#define __real_lj_gc2_scan_cycle_owner_tg_roots_native_parked \
+  lj_gc2_scan_cycle_owner_tg_roots_native_parked
+#define __real_lj_gc2_scan_cycle_global_roots lj_gc2_scan_cycle_global_roots
+#define __real_lj_gc2_flush_ssb lj_gc2_flush_ssb
+int lj_test_completion_ulock_wait(uint32_t op, void *addr, uint64_t value,
+                                 uint32_t timeout)
+{
+  int watched = ctx.owner && addr == &ctx.owner->poll &&
+    op == UL_COMPARE_AND_WAIT && value == 1 && timeout == 0 &&
+    la_load32_acq(&ctx.armed);
+  int result;
+  if (watched) la_store32_rel(&ctx.wait_active, 1);
+  result = __ulock_wait(op, addr, value, timeout);
+  if (watched) la_store32_rel(&ctx.wait_active, 0);
+  return result;
+}
+#endif
 extern int __real_lj_gc2_scan_cycle_owner_tg_roots_native_parked(global_State *, TGState *);
 int __wrap_lj_gc2_scan_cycle_owner_tg_roots_native_parked(global_State *g, TGState *tg)
 {
@@ -129,11 +156,27 @@ static void *leader(void *arg)
 static void *observer(void *arg)
 {
   Probe *p = arg;
+#if !defined(__APPLE__)
   char path[96], line[320];
+#endif
   unsigned i;
   until(&p->paused, 1);
+#if !defined(__APPLE__)
   snprintf(path, sizeof(path), "/proc/self/task/%ld/syscall", (long)p->owner_sysid);
+#endif
   for (i=0; i<2000; i++) {
+#if defined(__APPLE__)
+    int waiting = 0;
+    if (la_load32_acq(&p->wait_active)) {
+      thread_basic_info_data_t info;
+      mach_msg_type_number_t count = THREAD_BASIC_INFO_COUNT;
+      assert(thread_info(pthread_mach_thread_np(p->owner_thread),
+               THREAD_BASIC_INFO, (thread_info_t)&info, &count) == KERN_SUCCESS);
+      waiting = info.run_state == TH_STATE_WAITING &&
+        la_load32_acq(&p->wait_active);
+    }
+    if (waiting) {
+#else
     long nr;
     unsigned long long addr, op, val, timeout_arg;
     FILE *f = fopen(path, "r");
@@ -143,6 +186,7 @@ static void *observer(void *arg)
     if (sscanf(line, "%ld %llx %llx %llx %llx", &nr, &addr, &op, &val, &timeout_arg) == 5 &&
         nr == SYS_futex && addr == (unsigned long long)(uintptr_t)&p->owner->poll &&
         op == FUTEX_WAIT_PRIVATE && val == 1 && timeout_arg == 0) {
+#endif
       assert(la_load32_acq(&p->returned) == 0);
       assert(la_load32_acq(&p->release) == 0);
       assert(lj_tg_in_native_acq(p->owner) == 0);
@@ -150,7 +194,11 @@ static void *observer(void *arg)
       assert(lj_tg_poll_acq(p->owner) == 1);
       assert(gc2_hs_epoch_acq(p->g) == p->epoch);
       assert(lj_state_owner_word_acq(p->L) == p->owner_word);
+#if defined(__APPLE__)
+      printf("mode=%u actual_kernel_wait=Darwin ulock poll=1\n", p->mode);
+#else
       printf("mode=%u actual_kernel_wait=%s", p->mode, line);
+#endif
       printf("held: native=0 reqmask=0 poll=1 pending=%u ack=%" PRIu64 " epoch=%" PRIu64 " returned=0 scan_calls=%u\n",
         gc2_hs_pending_acq(p->g), lj_tg_hs_epoch_ack_acq(p->owner), p->epoch, p->scan_calls);
       la_store32_rel(&p->observed_futex, 1);
@@ -159,7 +207,11 @@ static void *observer(void *arg)
     }
     usleep(1000);
   }
+#if defined(__APPLE__)
+  fprintf(stderr, "no exact native-return Darwin wait observed\n");
+#else
   fprintf(stderr, "no exact native-return futex observed; last syscall=%s", line);
+#endif
   abort();
 }
 static int native_probe(lua_State *L)
@@ -169,7 +221,11 @@ static int native_probe(lua_State *L)
   assert(tvistab(L->base));
   ctx.L=L; ctx.g=G(L); ctx.owner=L2TG(L); ctx.root=tabV(L->base);
   ctx.owner_word=lj_state_owner_word_acq(L);
+#if defined(__APPLE__)
+  ctx.owner_thread=pthread_self();
+#else
   ctx.owner_sysid=(pid_t)syscall(SYS_gettid);
+#endif
   assert(lj_thr_get_tg() == ctx.owner);
   assert(lj_tg_owns_state_acq(ctx.owner,L));
   lj_tv_load_acq(&saved,L->base);
