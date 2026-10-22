@@ -29,10 +29,31 @@ LUA_PATH='./src/?.lua;;' src/luajit -O-cse tests/t-jit-cell-retf.lua
 LUA_PATH='./src/?.lua;;' src/luajit -O0 tests/t-jit-cell-retf.lua
 ```
 
-A separate review concern remains in `rec_celluv_cnewref`: its search for an
-earlier cell allocation does not stop at `IR_RETF`, although structural frame
-offset equality cannot establish identity across that boundary. This note does
-not claim a separate runtime reproduction or fix for that lookup. Further
-Rosetta validation stopped when the host stopped executing x86-64 processes
-following a separate debugger attempt; the completed three-mode evidence above
-predates that host problem.
+The separate `rec_celluv_cnewref` lookup also searched before `IR_RETF`, although
+structural frame offset equality cannot establish identity across that boundary.
+`tests/t-jit-cell-cnew-epoch.c` reproduces this directly against the production
+lookup through an `LJ_TRACE_TEST_HELPERS` wrapper: it creates a synthetic
+allocation, inserts `RETF`, and observes that the old allocation is still chosen
+for the new frame. The unchanged lookup fails the assertion that no allocation
+matches. Bounding each call-chain scan at the most recent `IR_RETF` fixes it.
+The native ARM64 fixture passes root and nonroot offsets, `CALLA` and `CALLS`,
+fresh allocations after the boundary, newest allocation across both chains,
+distinct structurally equal `ADD` expressions, and mismatched slots. It neither
+assembles nor enters a synthetic trace.
+
+The direct recorder fixture was built with assertions,
+`LUAJIT_MT_ARM64_BOOTSTRAP`, `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`, and
+`LJ_TRACE_TEST_HELPERS`. After building the archive with those defines:
+
+```sh
+clang -O2 -std=gnu11 -Wall -Wextra -Werror -mmacosx-version-min=13.0 \
+  -DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL \
+  -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS -Isrc \
+  tests/t-jit-cell-cnew-epoch.c src/libluajit.a -lm -pthread \
+  -o /tmp/t-jit-cell-cnew-epoch
+/tmp/t-jit-cell-cnew-epoch
+```
+
+Further Rosetta validation stopped when the host stopped executing x86-64
+LuaJIT processes following a separate debugger attempt; the completed
+three-mode evidence for the `ADD` fix above predates that host problem.
