@@ -859,6 +859,7 @@ static int threading_gc_enter_counted(lua_State *L, GCudata *rootud,
   for (;;) {
     uint32_t expect;
     uint32_t exclusive;
+    int token;
     while ((exclusive = mt_gc_exclusive_acq(g)) != 0) {
       if (mt_shutdown_acq(g) != 0) {
 	if (!retain_entering)
@@ -872,14 +873,16 @@ static int threading_gc_enter_counted(lua_State *L, GCudata *rootud,
 	threading_entering_leave(g);
       return 0;
     }
-    expect = 0;
-    if (mt_active_acq(g) == 0) {
-      int token = threading_mt_active_prepare_traces(L);
-      (void)mt_active_cas(g, &expect, 1);
+    token = mt_active_acq(g) == 0 ? threading_mt_active_prepare_traces(L) : 0;
+    if (!mt_openuv_activate(g)) {
       threading_mt_active_finish_traces(L, token);
-    } else {
-      (void)mt_active_cas(g, &expect, 1);
+      if (!retain_entering)
+	threading_entering_leave(g);
+      return -1;  /* Legacy captures still point into an owner stack. */
     }
+    expect = 0;
+    (void)mt_active_cas(g, &expect, 1);
+    threading_mt_active_finish_traces(L, token);
     if (rootud)
       threading_spawn_gc_handoff(L, rootud);
     if (mt_live_add_rlx(g, 1) == 0) {
@@ -1306,7 +1309,7 @@ static TValue *threading_attach_cp(lua_State *L, lua_CFunction dummy,
   ** protected failure cleanup. The successful path transitions to mt_live;
   ** the failed path must remain visible to lua_close until its final access to
   ** L, g and the private TG has completed. */
-  if (!threading_gc_enter_counted(L, NULL, 1)) {
+  if (threading_gc_enter_counted(L, NULL, 1) <= 0) {
     return NULL;
   }
   ctx->gc_entered = 1;
@@ -2179,10 +2182,13 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
     threading_unstarted_tg_finish(L, th, tg);
     lj_err_mem(L);
   }
-  if (!threading_gc_enter(L, ud)) {
+  rc = threading_gc_enter(L, ud);
+  if (rc <= 0) {
     threading_rehome_unstarted_stack(L, L1, tg);
     threading_unstarted_tg_finish(L, th, tg);
-    lj_err_callermsg(L, "VM shutdown in progress");
+    lj_err_callermsg(L, rc < 0 ?
+	"cannot activate threading with open legacy upvalues" :
+	"VM shutdown in progress");
   }
   {
     int had_stopreq = lj_safepoint_had_stopreq(L);

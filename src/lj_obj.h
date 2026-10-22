@@ -2305,6 +2305,7 @@ typedef struct global_State {
   uint32_t mt_shutdown;	/* VM teardown is rejecting new secondary threads. */
   GCSize mt_gc_threshold;  /* Saved automatic-GC threshold. */
   TabResizeState tab_resize;  /* Cold persistent table-resize state. */
+  uint32_t mt_openuv;  /* Bit 0: activated; bits 1..31: open upvalue count. */
 } global_State;
 
 LJ_STATIC_ASSERT(offsetof(global_State, nilnode) ==
@@ -2653,6 +2654,37 @@ static LJ_AINLINE void mt_entering_futex_wake(global_State *g, int n)
 static LJ_AINLINE int mt_active_or_entering_acq(global_State *g)
 {
   return mt_active_word_acq(g) != 0 || mt_entering_acq(g) != 0;
+}
+
+/* Legacy stack captures and secondary admission share one exact authority.
+** A successful reservation prevents activation until normal close finishes;
+** a successful activation makes every later legacy capture a closed snapshot.
+** Source cell upvalues never enter this cold path. */
+static LJ_AINLINE int mt_openuv_reserve(global_State *g)
+{
+  uint32_t current = la_load32_acq(&g->mt_openuv);
+  for (;;) {
+    if (current & 1u)
+      return 0;
+    if (current == 0xfffffffeu)
+      return -1;  /* Fail allocation rather than change capture semantics. */
+    if (la_cas32(&g->mt_openuv, &current, current + 2u, LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+}
+
+static LJ_AINLINE void mt_openuv_release(global_State *g)
+{
+  uint32_t old = la_sub32_acqrel(&g->mt_openuv, 2u);
+  lj_assertG(old >= 2u && !(old & 1u), "open upvalue admission underflow");
+  UNUSED(old);
+}
+
+static LJ_AINLINE int mt_openuv_activate(global_State *g)
+{
+  uint32_t expected = 0;
+  return la_cas32(&g->mt_openuv, &expected, 1u, LA_ACQ_REL, LA_ACQ) ||
+    expected == 1u;
 }
 
 static LJ_AINLINE uint32_t mt_gc_exclusive_acq(global_State *g)

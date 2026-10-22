@@ -39,6 +39,9 @@ void LJ_FASTCALL lj_func_freeproto(global_State *g, GCproto *pt)
 
 /* -- Upvalues ------------------------------------------------------------ */
 
+static GCupval *func_snapshotuv_unlinked_nothrow(lua_State *L,
+					  const TValue *slot);
+
 /* Find existing open upvalue for a stack slot or create a new one. */
 static GCupval *func_finduv_nothrow(lua_State *L, TValue *slot)
 {
@@ -47,6 +50,7 @@ static GCupval *func_finduv_nothrow(lua_State *L, TValue *slot)
   GCupval *p;
   GCupval *uv;
   GCobj *next;
+  int reserved;
   /* Search the sorted list of open upvalues. */
   while ((next = gcref_acq(*pp)) != NULL &&
 	 uvval((p = gco2uv(next))) >= slot) {
@@ -62,10 +66,21 @@ static GCupval *func_finduv_nothrow(lua_State *L, TValue *slot)
   /* No matching upvalue found. Create a new one. */
   if (func_test_finduv_should_fail())
     return NULL;
+  reserved = mt_openuv_reserve(g);
+  if (reserved < 0)
+    return NULL;
+  if (!reserved) {
+    uv = func_snapshotuv_unlinked_nothrow(L, slot);
+    if (uv)
+      lj_gc_linkobj_new(g, obj2gco(uv));
+    return uv;
+  }
   uv = (GCupval *)lj_mem_newgco_raw_nothrow(L, sizeof(GCupval),
 					    LJ_AF_TRAVERSABLE);
-  if (LJ_UNLIKELY(uv == NULL))
+  if (LJ_UNLIKELY(uv == NULL)) {
+    mt_openuv_release(g);
     return NULL;
+  }
   newwhite(g, uv);
   uv->gct = ~LJ_TUPVAL;
   uv->closed = 0;  /* Still open. */
@@ -389,6 +404,7 @@ void LJ_FASTCALL lj_func_closeuv(lua_State *L, TValue *level)
     ** cell from the per-state open chain to GC2's ownership/publication path;
     ** GC2's mark domain decides whether the closed cell remains live. */
     lj_gc_closeuv(g, uv);
+    mt_openuv_release(g);
   }
 }
 
