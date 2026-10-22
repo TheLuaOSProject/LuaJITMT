@@ -1177,6 +1177,29 @@ static void test_numeric_postra_layout(jit_State *J)
   view.spadjust = 16;
   expect_numeric_postra_result(&view, 0);
 
+  /* NUM spills own aligned pairs of 32-bit slots, including snapshot
+  ** producers; fixed-frame space and the final legal pair are valid. */
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_X_PRE].s = SPS_FIRST;
+  expect_numeric_postra_result(&view, 1);
+  fx.ir[N_R_X_PRE].s = SPS_FIRST+1;
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_X_PRE].s = SPS_FIXED;
+  expect_numeric_postra_result(&view, 0);
+  view.spadjust = 16;
+  expect_numeric_postra_result(&view, 1);
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_X_PRE].s = SPS_LIMIT-2;
+  view.spadjust = sps_scale(SPS_LIMIT-SPS_FIXED);
+  expect_numeric_postra_result(&view, 1);
+  fx.ir[N_R_X_PRE].s = SPS_LIMIT-1;
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_X_PRE].s = SPS_FIRST;
+  fx.ir[N_R_X_BODY].s = SPS_FIRST;
+  expect_numeric_postra_result(&view, 0);
+
   /* A type-directed synthetic NUM RENAME may choose any allocatable FPR. */
   view = make_numeric_postra_view(J);
   fx.ir[N_R_RENAME].op1 = N_R_X_PRE;

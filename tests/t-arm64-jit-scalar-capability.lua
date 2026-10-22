@@ -115,4 +115,4 @@ for i=1,36 do names[i]='x'..i; source[#source+1]='local '..names[i]..'='..i..'.1
 source[#source+1]='while i<40 do'
 for i=1,36 do source[#source+1]=names[i]..'='..names[i]..'*1.0001+.125' end
 source[#source+1]='i=i+1 end return '..table.concat(names,',')
-negative('NUM spills',assert(loadstring(table.concat(source,'\n'))))
+run('numeric_spills',assert(loadstring(table.concat(source,'\n'))))

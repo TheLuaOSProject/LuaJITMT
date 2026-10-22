@@ -43,7 +43,7 @@ int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target, MCode *insp)
 ** literal-true fixed-function root.
 ** Scalar LOOP admission uses independent semantic and allocator certificates
 ** for checked INT arithmetic, NUM arithmetic/conversions, comparisons and
-** same-type PHIs. Heap operations, helper calls and NUM spills remain closed.
+** same-type PHIs. Heap operations and helper calls remain closed.
 */
 
 static int arm64_ir_reject(LJArm64IRReject *reject,
@@ -3668,6 +3668,8 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
   IRRef prevsnap = 0, poll_snap = 0;
   unsigned nphi = 0, loopsnap = 0;
   SnapNo loopsnapno = 0;
+  IRRef1 spillowner[SPS_LIMIT];
+  int spillowners_initialized = 0;
   uintptr_t lo, hi;
   if (!v || !v->ir || !v->snap || !v->snapmap || !v->proto_bc ||
       v->nins <= REF_FIRST || v->nins >= REF_DROP || !v->nk ||
@@ -3807,10 +3809,26 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
     {
       int value = arm64_scalar_postra_value(p) || p.o == IR_PHI;
       if (ra_hasspill(p.s)) {
-        if (!value || type == IRT_NUM || p.s < SPS_FIRST || p.s >= cap)
+        MSize width = type == IRT_NUM ? 2 : 1, slot;
+        if (!value || p.s < SPS_FIRST || (width == 2 && (p.s & 1)) ||
+            (MSize)p.s + width > cap)
           return 0;
-        if ((MSize)p.s + 1 > highest)
-          highest = (MSize)p.s + 1;
+        if ((MSize)p.s + width > highest)
+          highest = (MSize)p.s + width;
+        /* Entry revalidation also visits spill-free traces. Initialize the
+        ** owner table only when needed. ra_spill never releases a slot;
+        ** asm_phi alone aliases a PHI with its right value's full span. */
+        if (!spillowners_initialized) {
+          memset(spillowner, 0, sizeof(spillowner));
+          spillowners_initialized = 1;
+        }
+        for (slot = p.s; slot < (MSize)p.s + width; slot++) {
+          IRRef owner = spillowner[slot];
+          if (owner && (p.o != IR_PHI || p.op2 != owner ||
+                        ir_load_acq(&v->ir[owner]).s != p.s))
+            return 0;
+          spillowner[slot] = (IRRef1)ref;
+        }
       }
       if (value) {
         if (ra_hasreg(p.r)) {
@@ -3907,7 +3925,9 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
       }
       if (ra_hasspill(regsp_spill(rs))) {
         MSize slot = regsp_spill(rs);
-        if (irt_isnum(p.t) || slot < SPS_FIRST || slot >= cap)
+        MSize width = irt_isnum(p.t) ? 2 : 1;
+        if (slot < SPS_FIRST || (width == 2 && (slot & 1)) ||
+            slot + width > cap)
           return 0;
       } else if (!arm64_scalar_postra_register(regsp_reg(rs),
                                                (IRType)irt_type(p.t)))
@@ -3922,27 +3942,30 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
   }
   if (!loopsnap || poll_snap != loop)
     return 0;
-  /* For register-only PHIs, asm_phi_shuffle leaves each left value in
-  ** its PHI register. asm_phi assigns that register to the right value,
-  ** or emits a copy for a duplicate right-hand PHI. For a swapped earlier
-  ** value, loop-scoped renames retain its right-side register. Spilled INT
-  ** PHIs have their concrete locations checked with each snapshot above. */
+  /* asm_phi uses either a register or a spill shared with the right
+  ** value. asm_phi_copyspill copies that slot to the distinct left slot
+  ** on backedges. For register PHIs an owned left spill remains authoritative:
+  ** preloop ra_rename may change its register without recording a RENAME. */
   for (ref = firstphi; ref && ref < n; ref++) {
     IRIns phi = ir_load_acq(&v->ir[ref]);
     IRIns left = ir_load_acq(&v->ir[phi.op1]);
     IRIns right = ir_load_acq(&v->ir[phi.op2]);
     IRRef ren;
     Reg rightreg = right.r;
+    if (ra_hasspill(phi.s)) {
+      if (phi.r != RID_INIT || right.s != phi.s || !ra_hasspill(left.s))
+        return 0;
+      continue;
+    }
     for (ren = v->nins; ren-- > n;) {
       IRIns q = ir_load_acq(&v->ir[ren]);
       if (q.o == IR_RENAME && q.op1 == phi.op2 && q.op2 <= loopsnapno)
         rightreg = q.r;
     }
-    if (!ra_hasspill(phi.s) && !ra_hasspill(left.s) &&
-        !ra_hasspill(right.s)) {
+    {
       IRRef other;
       int right_owner = rightreg == phi.r;
-      if (left.r != phi.r)
+      if (!ra_hasreg(phi.r) || (!ra_hasspill(left.s) && left.r != phi.r))
         return 0;
       for (other = firstphi; other < n; other++) {
         IRIns q = ir_load_acq(&v->ir[other]);
@@ -3951,7 +3974,9 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
         if (q.op2 == phi.op2 && q.r == rightreg)
           right_owner = 1;
       }
-      if (!right_owner)
+      /* An evicted RHS is saved by ra_dest and reloaded by ra_restore
+      ** into the PHI register. Its final register names the producer. */
+      if (!right_owner && !ra_hasspill(right.s))
         return 0;
     }
   }

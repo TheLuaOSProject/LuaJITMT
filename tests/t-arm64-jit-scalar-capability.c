@@ -114,7 +114,7 @@ static void mutate_layout(lua_State *L, GCtrace *T)
   copy[num].r = RID_GL;
   assert(!lj_asm_arm64_postra_admit(&v, NULL));
   copy[num] = T->ir[num];
-  copy[num].s = SPS_FIRST;
+  copy[num].s = SPS_FIRST + 1; /* NUM needs an aligned pair. */
   assert(!lj_asm_arm64_postra_admit(&v, NULL));
   copy[num] = T->ir[num];
   copy[num].op1 = num;
@@ -176,7 +176,12 @@ static void mutate_layout(lua_State *L, GCtrace *T)
     }
   }
   for (ref = REF_FIRST; ref < n; ref++) {
-    if (copy[ref].o == IR_PHI && irt_isnum(copy[ref].t)) {
+    if (copy[ref].o == IR_PHI && irt_isnum(copy[ref].t) &&
+        !ra_hasspill(copy[ref].s) &&
+        !ra_hasspill(copy[copy[ref].op1].s) &&
+        !ra_hasspill(copy[copy[ref].op2].s)) {
+      /* Unspilled PHIs preserve register correspondence. Dedicated numeric
+      ** pressure tests cover saved inputs and the copy-spill path. */
       IRRef left = copy[ref].op1, right = copy[ref].op2;
       Reg changed = copy[ref].r == RID_D14 ? RID_D13 : RID_D14;
       copy[ref].r = changed;
@@ -275,7 +280,7 @@ static void mutate_layout(lua_State *L, GCtrace *T)
   free(map);
   assert(munmap(guarded, mapsize + pagesize) == 0);
   (void)L;
-  puts("MUTATIONS poll, register class, NUM spill, forward/payload ref, "
+  puts("MUTATIONS poll, register class, NUM spill alignment, forward/payload ref, "
        "frame, snapshot rejected");
 }
 

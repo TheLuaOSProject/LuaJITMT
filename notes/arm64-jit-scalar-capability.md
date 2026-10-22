@@ -1,5 +1,9 @@
 # ARM64 scalar LOOP capability
 
+Follow-up: [NUM spill admission](arm64-jit-numeric-spills.md) adds independent
+span, frame, snapshot and PHI validation with native pressure/lifecycle proof.
+The NUM-spill exclusions below describe this earlier checkpoint.
+
 The experimental ARM64 gate now accepts scalar self-linked `BC_LOOP` roots by
 operation, type, provenance, snapshot and allocation properties. It replaces
 the exact mixed-NUM and pure-NUM whole-trace arrays; it does not change Lua
