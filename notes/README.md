@@ -115,10 +115,12 @@ intentionally rejected; ordinary interpreted Lua remains available.
   stress path.
 - Complete sanitizer, weak-memory, sustained-concurrency, and performance
   recovery matrices.
-- Legacy bytecode executed after activation still snapshots newly captured
-  locals, which does not preserve stock shared-local semantics. Legacy import
-  needs normalization into the fork's shared-cell operations. The new admission
-  veto only protects existing pre-activation open cells.
+- Legacy bytecode imports now normalize to shared cells before publication.
+  Native interpreter compatibility covers genuine stock v2 imports, debug
+  metadata, worker sharing, and v4 round trips. Conversion retains explicit
+  frame/jump/window limits, and final x86-64 JIT validation is outstanding;
+  see [`legacy-bytecode-cells.md`](legacy-bytecode-cells.md). True internal legacy
+  open cells still require the admission veto.
 - Concurrent tmpbuf stress showed one unchanged-baseline timeout. A rejected
   inline dirty-epoch experiment also hit a GC2 assertion; no common cause or
   specific upstream fix has been established.
