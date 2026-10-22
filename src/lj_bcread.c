@@ -332,7 +332,7 @@ static GCtab *bcread_ktab(LexState *ls, TValue *anchor)
     for (i = 0; i < nhash; i++) {
       TValue key, tv;
       bcread_ktabk(ls, &key, NULL);
-      lj_assertLS(!tvisnil(&key), "nil key");
+      if (tvisnil(&key)) bcread_error(ls, LJ_ERR_BCBAD);
       copyTVrel(L, keyanchor, &key);
       lj_gc_pubroot(L, keyanchor);
       bcread_ktabk(ls, &tv, t);
