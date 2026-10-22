@@ -65,14 +65,26 @@ if grep -n 'GL_J(trace)' "$root/src/vm_arm64.dasc" >/dev/null; then
   exit 1
 fi
 
-cell_fixture=$root/src/t-jit-cell-cnew-epoch
+for cell_test in t-jit-cell-cnew-epoch t-jit-cell-pending; do
+  cell_fixture=$root/src/$cell_test
+  # shellcheck disable=SC2086 # Match the archive's JIT/helper layout.
+  ${CC:-clang} -std=gnu11 -O2 -Wall -Wextra -Werror \
+    -mmacosx-version-min="$minver" $xcflags -I"$root/src" \
+    "$root/tests/$cell_test.c" "$archive" -lm -pthread \
+    -o "$cell_fixture"
+  "$cell_fixture"
+  rm -f "$cell_fixture"
+done
+
+legacy_fixture=$root/src/t-legacy-bytecode-cells
 # shellcheck disable=SC2086 # Match the archive's JIT/helper layout.
 ${CC:-clang} -std=gnu11 -O2 -Wall -Wextra -Werror \
   -mmacosx-version-min="$minver" $xcflags -I"$root/src" \
-  "$root/tests/t-jit-cell-cnew-epoch.c" "$archive" -lm -pthread \
-  -o "$cell_fixture"
-"$cell_fixture"
-rm -f "$cell_fixture"
+  "$root/tests/t-legacy-bytecode-cells.c" "$archive" -lm -pthread \
+  -o "$legacy_fixture"
+perl -MTime::HiRes=alarm -e 'alarm shift; exec @ARGV; die "exec: $!\n"' \
+  120 "$legacy_fixture" "$root/tests/fixtures"
+rm -f "$legacy_fixture"
 
 LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
 LJ_ARM64_GC2_RESTORE_XCFLAGS="$xcflags" \
@@ -84,6 +96,7 @@ LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_ffi_aggregate_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/jit_hotcount_generation_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/jit_recorder_safepoint_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_ir_admission_contract.sh"
+LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_scalar_capability_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_side_ir_admission_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_side_ingress_metadata_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_b26_contract.sh"
@@ -206,4 +219,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" LUA_PATH="$lua_path" \
 
 env LUA_PATH="$lua_path" "$luajit" "$root/tests/t-upvalue-identity.lua"
 
-echo "arm64_jit_fail_closed_gate OK: exact variable-stop integer dynamic-step FORL plus constrained integer, mixed-NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE plus exact MUL_LT/MUL_LE FMUL and DIV_LT/DIV_LE/DIV_GT/DIV_GE FDIV all-parameter dynamic-accumulator NUM/INT-step-widened LOOP, exact ADD_LT INT-limit-widened LOOP, pure-NUM FORL and literal-true JFUNCF entry contracts sound"
+echo "arm64_jit_fail_closed_gate OK: independent scalar LOOP capabilities, integer FORL, literal-true JFUNCF, bounded first-side entry and lifecycle contracts sound"
