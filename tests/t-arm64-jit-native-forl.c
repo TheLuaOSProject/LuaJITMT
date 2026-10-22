@@ -167,9 +167,9 @@ static GCtrace *expect_forl_trace(lua_State *L, GCproto *pt)
   assert(trace_startpt_acq(T) == pt);
   assert(trace_spadjust_acq(T) == 0);
   assert(trace_topslot_acq(T) == (MSize)pt->framesize);
-  assert((la_load8_acq(&T->unused1) &
+  assert((trace_arm64_admission_acq(T) &
 	  TRACE_ARM64_INT_FORL_ADMITTED) != 0);
-  assert((la_load8_acq(&T->unused1) &
+  assert((trace_arm64_admission_acq(T) &
 	  TRACE_ARM64_INT_LOOP_ADMITTED) == 0);
   assert((la_load8_acq(&T->unused1) & TRACE_ENTRY_GATED) == 0);
   assert(trace_mcode_acq(T) != NULL);

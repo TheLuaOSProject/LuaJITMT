@@ -518,7 +518,7 @@ static void expect_only_step_root(lua_State *L, GCproto *pt)
   const BCIns *pc;
   BCIns patched;
   TraceNo traceno;
-  uint8_t admission;
+  uint32_t admission;
 
   expect_proto_shape(pt);
   assert(trace_runnable_acq(T, 1));
@@ -528,7 +528,7 @@ static void expect_only_step_root(lua_State *L, GCproto *pt)
   assert(trace_startpt_acq(T) == pt);
   assert(trace_topslot_acq(T) == 5);
   assert(trace_spadjust_acq(T) == 0);
-  admission = la_load8_acq(&T->unused1);
+  admission = trace_arm64_admission_acq(T);
   assert((admission & (TRACE_ARM64_INT_LOOP_ADMITTED |
 	  TRACE_ARM64_INT_FORL_ADMITTED | TRACE_ARM64_TRUE_FUNCF_ADMITTED |
 	  TRACE_ARM64_INT_SIDE_ADMITTED)) == TRACE_ARM64_INT_LOOP_ADMITTED);

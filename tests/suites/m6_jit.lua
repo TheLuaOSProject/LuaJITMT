@@ -17,6 +17,9 @@ local m6_cases = {
   "m6_jit_hotcount_generation",
   "m6_jit_token",
   "m6_jit_recorder_safepoint_admission",
+  "m6_jit_first_attach_poll",
+  "m6_jit_stop_admission",
+  "m6_jit_root_abort_retire",
   "m6_jit_event_session",
   "m6_jit_event_callback_owner",
   "m6_jit_flush_stream_gate",
@@ -31,6 +34,11 @@ local m6_cases = {
   "m6_jit_fnew_bump",
   "m6_jit_barrier_xpoll",
   "m6_jit_xbar_xpoll",
+  "m6_jit_cdata_basemt_guards",
+  "m6_jit_special_udata_guards",
+  "m6_jit_udata_pure",
+  "m6_jit_cdata_pure",
+  "m6_jit_cdata_pure_lifecycle",
   "m6_jit_xsave",
   "m6_jit_table_store_helper",
   "m6_jit_rooted_table_len",
@@ -715,6 +723,54 @@ end
 
 return function(add)
   add({
+    name = "m6_jit_root_abort_retire",
+    description = "Linux root ABORT defers cleanup without waiting for SMR",
+    run = function(t)
+      if jit.os ~= "Linux" then
+        print("M6 root-ABORT reclaimer fixture requires Linux")
+        return
+      end
+      local flags = "-DLJ_GC2_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        clean_build(t, { quiet = true, xcflags = flags })
+        build_and_run_c(t, t:tmp("lj_t-jit-root-abort-retire"),
+                        "t-jit-root-abort-retire.c", {
+          build = false, cflags = flags, timeout = "90s"
+        })
+      end)
+      print("M6 root-ABORT deferred retirement passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_stop_admission",
+    description = "Linux side publication completes with a paused IDLE reclaimer",
+    run = function(t)
+      if jit.os ~= "Linux" then
+        print("M6 side-publication pause fixture requires Linux")
+        return
+      end
+      local flags = "-DLJ_GC2_TEST_HELPERS -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        clean_build(t, { quiet = true, xcflags = flags })
+        build_and_run_c(t, t:tmp("lj_t-jit-stop-admission"),
+                        "t-jit-stop-admission.c", {
+          build = false, cflags = flags, timeout = "30s"
+        })
+        local optional = flags ..
+          " -DLUAJIT_USE_GDBJIT -DLUAJIT_USE_PERFTOOLS"
+        clean_build(t, { quiet = true, xcflags = optional })
+        build_and_run_c(t, t:tmp("lj_t-jit-stop-admission-optional"),
+                        "t-jit-stop-admission.c", {
+          build = false, cflags = optional, timeout = "30s",
+          libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=lj_mem_realloc" }
+        })
+      end)
+      print("M6 side-publication admission and cleanup passed")
+    end
+  })
+
+  add({
     name = "m6_dispatch_redispatch",
     description = "M6 dispatch redispatch and x64 TG-local dispatch behavior",
     run = function(t)
@@ -746,6 +802,19 @@ return function(add)
                         cflags = flags
                       })
       print("M6 TG-local JIT hotcount generation passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_first_attach_poll",
+    description = "first external attachment interrupts pre-MT native backedges",
+    run = function(t)
+      build_default(t)
+      local out = t:tmp("lj_t-jit-first-attach")
+      build_and_run_c(t, out, "t-jit-first-attach.c",
+                      { build = false, timeout = "15s" })
+      t:run({ out, "noloop" }, { timeout = "15s" })
+      print("M6 first-attachment native polling passed")
     end
   })
 
@@ -1138,6 +1207,144 @@ assert(threading.gcworkers(0) == 1)
         })
       end)
       print("M6 JIT XSAVE snapshot behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_cdata_pure",
+    description = "pre-MT cdata loop guards, mutations and whole-body exclusions",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then
+        print("M6 pure cdata IR fixtures require Linux/x64")
+        return
+      end
+      build_default(t)
+      for _, mode in ipairs({
+        "index", "newindex", "missing", "nonfunction", "resize",
+        "methodlife", "replace"
+      }) do
+        runtime.luajit_script(t, "t-jit-cdata-pure.lua", { mode }, {
+          jon = true, timeout = "20s"
+        })
+      end
+      runtime.luajit_script(t, "t-jit-cdata-pure-side.lua", nil, {
+        jon = true, timeout = "20s"
+      })
+      for _, mode in ipairs({
+        "allocate", "luastore", "newref", "clear", "foreign", "indirect",
+        "fpmath"
+      }) do
+        runtime.luajit_script(t, "t-jit-cdata-pure-exclusions.lua", { mode }, {
+          jon = true, timeout = "20s"
+        })
+      end
+      runtime.luajit_script(t, "t-jit-cdata-pure-profile.lua", nil, {
+        jon = true, timeout = "20s"
+      })
+      print("M6 pure cdata guard and exclusion behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_cdata_pure_lifecycle",
+    description = "pure cdata phase/worker exits and protected OOM cleanup",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then
+        print("M6 pure cdata lifecycle fixtures require Linux/x64 and GNU ld wrapping")
+        return
+      end
+      build_default(t)
+      local phase = t:tmp("lj_t-jit-cdata-pure-phase")
+      t:cc(phase, { t:path("tests", "t-jit-cdata-pure-phase.c") }, {
+        link_luajit = true, libs = { "-lm", "-ldl", "-pthread" }
+      })
+      for _, mode in ipairs({ "gate", "worker" }) do
+        t:run({ phase, mode }, {
+          timeout = "20s", env = { LUA_PATH = runtime.lua_path(t) }
+        })
+      end
+      build_and_run_c(t, t:tmp("lj_t-jit-cdata-pure-error"),
+                      "t-jit-cdata-pure-error.c", {
+        build = false, timeout = "20s",
+        libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=lj_mem_realloc" }
+      })
+      print("M6 pure cdata lifecycle behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_udata_pure",
+    description = "direct userdata pure-loop guards, mutations and effect exclusions",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then
+        print("M6 pure userdata IR fixtures require Linux/x64")
+        return
+      end
+      build_default(t)
+      for _, kind in ipairs({ "clib", "file", "buffer", "plain" }) do
+        for _, mode in ipairs({
+          "function", "table", "missing", "nonfunction", "replace",
+          "replace_missing", "resize", "methodlife", "table_entry"
+        }) do
+          runtime.luajit_script(t, "t-jit-udata-pure.lua", { kind, mode }, {
+            joff = true, timeout = "20s"
+          })
+          runtime.luajit_script(t, "t-jit-udata-pure.lua", { kind, mode }, {
+            jon = true, timeout = "20s"
+          })
+        end
+      end
+      for _, mode in ipairs({
+        "allocate", "luastore", "newref", "clear", "foreign", "indirect",
+        "fpmath", "directstore"
+      }) do
+        runtime.luajit_script(t, "t-jit-udata-pure-exclusions.lua", { mode }, {
+          jon = true, timeout = "20s"
+        })
+      end
+      print("M6 pure userdata guard and exclusion behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_special_udata_guards",
+    description = "native special userdata dispatch guards mutable methods",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then
+        print("M6 special userdata native guard fixtures require Linux/x64")
+        return
+      end
+      build_default(t)
+      for _, kind in ipairs({ "clib", "file", "buffer", "plain" }) do
+        for _, mode in ipairs({
+          "function", "table", "missing", "nonfunction", "replace",
+          "replace_missing", "resize", "methodlife", "table_entry",
+          "newindex", "newindex_table"
+        }) do
+          runtime.luajit_script(t, "t-jit-special-udata-guards.lua", { kind, mode }, {
+            joff = true, timeout = "20s"
+          })
+          runtime.luajit_script(t, "t-jit-special-udata-guards.lua", { kind, mode }, {
+            jon = true, timeout = "20s"
+          })
+        end
+      end
+      print("M6 special userdata native method guards passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_cdata_basemt_guards",
+    description = "native cdata dispatch guards mutable base-table methods",
+    run = function(t)
+      build_default(t)
+      runtime.luajit_script(t, "t-jit-cdata-basemt-guards.lua", nil, {
+        joff = true, timeout = "20s"
+      })
+      runtime.luajit_script(t, "t-jit-cdata-basemt-guards.lua", nil, {
+        jon = true, timeout = "20s"
+      })
+      print("M6 cdata base-table native method guards passed")
     end
   })
 

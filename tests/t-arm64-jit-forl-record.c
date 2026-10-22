@@ -465,7 +465,7 @@ static GCtrace *expect_published_forl(lua_State *L, GCproto *pt)
   jit_State *J = L2J(L);
   GCtrace *T = traceref_safe(J, 1);
   TraceNo traceno;
-  uint8_t flags;
+  uint32_t flags;
   assert(trace_runnable_acq(T, 1));
   assert(trace_traceno_acq(T) == 1);
   assert(trace_root_acq(T) == 0);
@@ -474,10 +474,10 @@ static GCtrace *expect_published_forl(lua_State *L, GCproto *pt)
   assert(trace_nchild_acq(T) == 0);
   assert(trace_nextside_acq(T) == 0);
   assert(trace_startpt_acq(T) == pt);
-  flags = la_load8_acq(&T->unused1);
+  flags = trace_arm64_admission_acq(T);
   assert((flags & TRACE_ARM64_INT_FORL_ADMITTED) != 0);
   assert((flags & TRACE_ARM64_INT_LOOP_ADMITTED) == 0);
-  assert((flags & TRACE_ENTRY_GATED) == 0);
+  assert((la_load8_acq(&T->unused1) & TRACE_ENTRY_GATED) == 0);
   assert(trace_mcode_acq(T) != NULL);
   assert(trace_szmcode_acq(T) > sizeof(MCode));
   assert(trace_mcloop_acq(T) > 0);

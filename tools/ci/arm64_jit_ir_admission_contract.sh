@@ -218,10 +218,10 @@ for required in \
   '!lj_asm_arm64_postra_admit(' \
   'validated_semantic_nins != arm64_semantic_nins' \
   'if (bc_op(T->startins) == BC_FORL)' \
-  'T->unused1 |= TRACE_ARM64_INT_FORL_ADMITTED;' \
+  'trace_arm64_admission_rel(T, TRACE_ARM64_INT_FORL_ADMITTED);' \
   'else if (bc_op(T->startins) == BC_FUNCF)' \
-  'T->unused1 |= TRACE_ARM64_TRUE_FUNCF_ADMITTED;' \
-  'T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;'; do
+  'trace_arm64_admission_rel(T, TRACE_ARM64_TRUE_FUNCF_ADMITTED);' \
+  'trace_arm64_admission_rel(T, TRACE_ARM64_INT_LOOP_ADMITTED);'; do
   grep -F "$required" "$trace_asm" >/dev/null || {
     echo "ARM64 post-RA admission check changed: $required" >&2
     exit 1
@@ -229,7 +229,7 @@ for required in \
 done
 
 postra_line=$(grep -n '!lj_asm_arm64_postra_admit(' "$trace_asm" | cut -d: -f1)
-marker_line=$(grep -n 'T->unused1 |= TRACE_ARM64_INT_FORL_ADMITTED;' \
+marker_line=$(grep -n 'trace_arm64_admission_rel(T, TRACE_ARM64_INT_FORL_ADMITTED);' \
   "$trace_asm" | cut -d: -f1)
 test -n "$postra_line" && test -n "$marker_line" &&
 test "$postra_line" -lt "$marker_line"

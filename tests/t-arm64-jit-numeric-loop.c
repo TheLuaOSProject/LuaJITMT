@@ -441,7 +441,7 @@ static void expect_only_mixed_root(lua_State *L, GCproto *pt)
   const BCIns *pc;
   BCIns patched;
   TraceNo traceno;
-  uint8_t admission;
+  uint32_t admission;
 
   assert(trace_runnable_acq(T, 1));
   assert(trace_traceno_acq(T) == 1 && trace_root_acq(T) == 0);
@@ -450,7 +450,7 @@ static void expect_only_mixed_root(lua_State *L, GCproto *pt)
   assert(trace_startpt_acq(T) == pt);
   assert(trace_topslot_acq(T) == (MSize)pt->framesize);
   assert(trace_spadjust_acq(T) == 0);
-  admission = la_load8_acq(&T->unused1);
+  admission = trace_arm64_admission_acq(T);
   assert((admission & (TRACE_ARM64_INT_LOOP_ADMITTED |
 	  TRACE_ARM64_INT_FORL_ADMITTED | TRACE_ARM64_TRUE_FUNCF_ADMITTED |
 	  TRACE_ARM64_INT_SIDE_ADMITTED)) == TRACE_ARM64_INT_LOOP_ADMITTED);
@@ -719,7 +719,7 @@ static void test_pure_num_root_isolated(void)
   assert(trace_linktype_acq(T) == LJ_TRLINK_LOOP);
   assert(trace_topslot_acq(T) == 4 && trace_spadjust_acq(T) == 0);
   assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);
-  assert((la_load8_acq(&T->unused1) &
+  assert((trace_arm64_admission_acq(T) &
 	  (TRACE_ARM64_INT_LOOP_ADMITTED | TRACE_ARM64_INT_FORL_ADMITTED |
 	   TRACE_ARM64_TRUE_FUNCF_ADMITTED | TRACE_ARM64_INT_SIDE_ADMITTED)) ==
 	 TRACE_ARM64_INT_LOOP_ADMITTED);

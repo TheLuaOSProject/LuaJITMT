@@ -673,7 +673,7 @@ static void expect_trace_identity(SpillRoot *root)
   assert(trace_startpt_acq(T) == root->pt);
   assert(trace_topslot_acq(T) == (MSize)root->pt->framesize);
   assert(trace_spadjust_acq(T) == root->spec->spadjust);
-  assert((la_load8_acq(&T->unused1) & TRACE_ARM64_INT_LOOP_ADMITTED) != 0);
+  assert((trace_arm64_admission_acq(T) & TRACE_ARM64_INT_LOOP_ADMITTED) != 0);
   assert(trace_mcode_acq(T) != NULL && trace_szmcode_acq(T) > sizeof(MCode));
   assert(trace_mcloop_acq(T) > 0 && trace_mcloop_acq(T) <
 	 trace_szmcode_acq(T));

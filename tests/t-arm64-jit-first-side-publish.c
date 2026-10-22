@@ -193,9 +193,9 @@ static void expect_root_shape(jit_State *J, GCproto *pt, GCtrace **rootp,
   assert(trace_topslot_acq(root) == PROBE_TOPSLOT);
   assert(trace_spadjust_acq(root) == 0);
   assert(trace_mcode_acq(root) != NULL);
-  assert((la_load8_acq(&root->unused1) &
+  assert((trace_arm64_admission_acq(root) &
 	  TRACE_ARM64_INT_LOOP_ADMITTED) != 0);
-  assert((la_load8_acq(&root->unused1) &
+  assert((trace_arm64_admission_acq(root) &
 	  TRACE_ARM64_INT_SIDE_ADMITTED) == 0);
 
   startpc = trace_startpc_acq(root);
@@ -263,7 +263,7 @@ static void expect_child_shape(jit_State *J, GCproto *pt, GCtrace *child,
   assert(ir != NULL && snap != NULL && snapmap != NULL);
   assert(trace_nk_acq(child) == PROBE_CHILD_K_ONE);
   assert(trace_nins_acq(child) == PROBE_CHILD_SEMANTIC_NINS+1u);
-  assert(la_load8_acq(&child->unused1) == TRACE_ARM64_INT_SIDE_ADMITTED);
+  assert(trace_arm64_admission_acq(child) == TRACE_ARM64_INT_SIDE_ADMITTED);
   assert(trace_native_pinword_acq(child) == 0);
   assert(la_load64_acq(&child->retire_epoch) == 0);
 

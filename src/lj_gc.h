@@ -98,6 +98,10 @@ LJ_FUNC uint32_t lj_gc_sweep_gc2_arena_unmarked_exclusive(global_State *g,
 						    GCArena *a);
 LJ_FUNC uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
 					 uint32_t limit, int *donep);
+/* Report an exact intrusive owner without changing its reclaim retry state. */
+LJ_FUNC uint32_t lj_gc_reclaim_gc2_arena_ex(global_State *g, GCArena *a,
+					    uint32_t limit, int *donep,
+					    int *root_owner_blockedp);
 LJ_FUNC uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg,
 					 void *p, const LJHugeInfo *hi,
 					 int *pendingp);
@@ -298,6 +302,55 @@ static LJ_AINLINE void lj_gc_threshold_store(global_State *g, GCSize threshold)
   lj_gcsize_store_rel(&g->gc.threshold, threshold);
 }
 
+#define LJ_GC_AUTO_STOPPED	0x01u
+#define LJ_GC_AUTO_FINPAUSE	0x02u
+
+static LJ_AINLINE uint8_t lj_gc_auto_flags_load(global_State *g)
+{
+  return la_load8_acq(&g->gc.auto_flags);
+}
+
+static LJ_AINLINE void lj_gc_auto_init(global_State *g)
+{
+  la_store8_rel(&g->gc.auto_flags, 0);
+}
+
+/* Public logical control is independent of temporary finalizer suppression. */
+static LJ_AINLINE int lj_gc_auto_enabled(global_State *g)
+{
+  return !(lj_gc_auto_flags_load(g) & LJ_GC_AUTO_STOPPED);
+}
+
+/* Automatic admission also honors the pause owned by an active finalizer. */
+static LJ_AINLINE int lj_gc_auto_running(global_State *g)
+{
+  return lj_gc_auto_flags_load(g) == 0;
+}
+
+static LJ_AINLINE void lj_gc_auto_stop(global_State *g)
+{
+  (void)la_or8_acqrel(&g->gc.auto_flags, LJ_GC_AUTO_STOPPED);
+}
+
+static LJ_AINLINE void lj_gc_auto_restart(global_State *g)
+{
+  (void)la_and8_acqrel(&g->gc.auto_flags, (uint8_t)~LJ_GC_AUTO_STOPPED);
+}
+
+/* Finalizer ownership serializes foreign callbacks and permits same-owner
+** recursion. Only the outer scope clears its pause, retaining any public STOP
+** that was published by the callback or another mutator in the meantime. */
+static LJ_AINLINE uint8_t lj_gc_auto_finalizer_pause(global_State *g)
+{
+  return la_or8_acqrel(&g->gc.auto_flags, LJ_GC_AUTO_FINPAUSE);
+}
+
+static LJ_AINLINE void lj_gc_auto_finalizer_resume(global_State *g, uint8_t old)
+{
+  if (!(old & LJ_GC_AUTO_FINPAUSE))
+    (void)la_and8_acqrel(&g->gc.auto_flags, (uint8_t)~LJ_GC_AUTO_FINPAUSE);
+}
+
 static LJ_AINLINE MSize lj_gc_pause_load(global_State *g)
 {
   return (MSize)la_load32_acq(&g->gc.pause);
@@ -428,10 +481,13 @@ static LJ_AINLINE int lj_gc2_hard_limit_reached(global_State *g)
   return lj_gc2_alloc_since_load(g) > lj_gc2_hard_load(g);
 }
 
+LJ_FUNC int lj_gc_pending_auto_request(global_State *g);
+
 static LJ_AINLINE int lj_gc_should_step(global_State *g)
 {
   return lj_gc_total_load(g) >= lj_gc_threshold_load(g) ||
-	 lj_gc2_hard_limit_reached(g);
+	 lj_gc2_hard_limit_reached(g) ||
+	 (gc2_cycle_leader_acq(g) != 0 && lj_gc_pending_auto_request(g));
 }
 
 /* GC check: drive collector forward if color GC or GC2 pacing asks for work. */

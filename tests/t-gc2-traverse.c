@@ -14,6 +14,10 @@
 #include "luajit.h"
 
 #include "lj_obj.h"
+#if LJ_TARGET_LINUX
+#include <sys/mman.h>
+#include <unistd.h>
+#endif
 #include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
@@ -26,6 +30,7 @@
 #include "lj_safepoint.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
+#include "lib/gc2_wide_fixture_helpers.h"
 #include "lj_lib.h"
 #include "lj_meta.h"
 #if LJ_HASFFI
@@ -1322,6 +1327,10 @@ static void test_proto_chunkname_publish_barrier(lua_State *L, global_State *g,
   chunkname = strV(L->top - 1);
 
   lj_gc2_mark_begin(g);
+  /* Keep parser allocation checks from driving the cycle. This fixture tests
+  ** the publication barrier and drains through a primitive which deliberately
+  ** yields ownership to a pending MARK close. */
+  lj_gc_threshold_store(g, LJ_MAX_MEM);
   assert(la_load8_acq(&tg->alloc.alloc_black) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(chunkname)) == 0);
 
@@ -1330,12 +1339,8 @@ static void test_proto_chunkname_publish_barrier(lua_State *L, global_State *g,
   assert(isluafunc(fn));
   pt = funcproto(fn);
   assert(proto_chunkname_acq(pt) == chunkname);
-  /* Parser allocation checks may drive this deliberately-started cycle all
-  ** the way back to IDLE. A mark bit has no liveness meaning after that point;
-  ** while the cycle remains active, the proto publication barrier must mark
-  ** the chunk name immediately. */
-  assert(gc2_phase_acq(g) == LJ_GC2_IDLE ||
-	 lj_gc2_ismarked(g, obj2gco(chunkname)) == 1);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  assert(lj_gc2_ismarked(g, obj2gco(chunkname)) == 1);
 
   flush_and_drain(g, tg);
   lj_gc2_cycle_to_idle(g);
@@ -2828,6 +2833,10 @@ static void test_weak_overflow_retry_stops_bridge(lua_State *L,
   GCtab *overflow = NULL, *overflow_key = NULL, *overflow_val = NULL;
   GCtab *bridge = NULL, *bridge_key = NULL, *bridge_val = NULL;
   GCRef weak_head;
+  GCstr *filler;
+  WorkerDrainCtx ctx = {0};
+  pthread_t worker;
+  uint64_t busy0;
   MSize cap, i, n;
 
   lua_settop(L, 0);
@@ -2835,6 +2844,8 @@ static void test_weak_overflow_retry_stops_bridge(lua_State *L,
   assert(cap > 0);
   n = cap + 1u;
   make_weak_table_batch(L, n);
+  lua_pushliteral(L, "weak overflow bridge claim source");
+  filler = strV(L->top - 1);
   lj_gc2_mark_begin(g);
   assert(gc2_weak_capacity_acq(g) == cap);
   mark_weak_table_batch(L, g, n);
@@ -2865,14 +2876,45 @@ static void test_weak_overflow_retry_stops_bridge(lua_State *L,
   weak_bridge_link(&weak_head, bridge, LJ_GC_WEAKVAL);
   enter_weak_clear_fixture(g, tg);
 
+  /* Keep an actual worker inside its published-SSB consumer. The test
+  ** bridge must refuse that claim without consuming the value retry hook,
+  ** inspecting weak values, or releasing the other actor's ownership. */
+  assert(lj_gc2_test_ssb_empty(g));
+  assert(lj_gc2_test_ssb_push(g, obj2gco(filler)) == 1);
+  assert(lj_gc2_flush_ssb(g, tg) == 1);
+  lj_gc2_test_recovery_pause(LJ_GC2_RECOVERY_TEST_SSB_COMMITTED);
+  ctx.g = g;
+  ctx.limit = 1;
+  assert(pthread_create(&worker, NULL, grey_worker_drain_thread, &ctx) == 0);
+  while (lj_gc2_test_recovery_paused() != LJ_GC2_RECOVERY_TEST_SSB_COMMITTED)
+    la_cpu_pause();
+  assert(gc2_worker_active_acq(g) == 1);
+  assert(gc2_ssb_consumer_active_acq(g) == 1);
+  busy0 = gc2_worker_busy_retries_acq(g);
   lj_gc2_test_stack_admission_retry_once(obj2gco(overflow_val));
   assert(!lj_gc2_test_weak_overflow_clear_bridge(g, gcref(weak_head)));
+  assert(gc2_worker_busy_retries_acq(g) == busy0 + 1u);
+  assert(lj_gc2_test_stack_admission_retry_hits() == 0);
+  assert(gc2_weak_clear_cursor_acq(g) == 0);
+  assert(!weak_entry_is_nil(L, overflow, overflow_key));
+  assert(!weak_entry_is_nil(L, bridge, bridge_key));
+  assert(gc2_worker_active_acq(g) == 1);
+  assert(gc2_ssb_consumer_active_acq(g) == 1);
+  lj_gc2_test_recovery_release();
+  assert(pthread_join(worker, NULL) == 0);
+  assert(ctx.drained == 1);
+  assert(gc2_worker_active_acq(g) == 0);
+  assert(gc2_ssb_consumer_active_acq(g) == 0);
+
+  assert(!lj_gc2_test_weak_overflow_clear_bridge(g, gcref(weak_head)));
   assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+  assert(gc2_worker_active_acq(g) == 0);
   assert(gc2_weak_clear_cursor_acq(g) == 0);
   assert(!weak_entry_is_nil(L, overflow, overflow_key));
   assert(!weak_entry_is_nil(L, bridge, bridge_key));
 
   assert(lj_gc2_test_weak_overflow_clear_bridge(g, gcref(weak_head)));
+  assert(gc2_worker_active_acq(g) == 0);
   assert(weak_entry_is_nil(L, overflow, overflow_key));
   assert(weak_entry_is_nil(L, bridge, bridge_key));
   setgcrefnull(weak_head);
@@ -4773,30 +4815,28 @@ static void test_table_authority_saturation(void)
   global_State *g;
   TGState *tg;
   GCtab *t;
-  LJGC2TabStamp *stamp;
   LJGC2ActivationSnap activation;
   uint64_t state;
 
-  /* Dirty saturation must invalidate the covered scan cycle without wrapping
-  ** the persistent per-cell identity back to one. Use a private universe
-  ** because NO_RECLAIM is intentionally absorbing. */
+  /* Only exhaustion of the full era/serial namespace is terminal. It must
+  ** invalidate coverage without reusing an old authority. Use a private
+  ** universe because NO_RECLAIM is intentionally absorbing. */
   L = luaL_newstate();
   assert(L != NULL);
   lua_gc(L, LUA_GCSTOP, 0);
   g = G(L);
   lua_newtable(L);
   t = tabV(L->top - 1);
-  stamp = table_token_test_stamp(t);
-  la_store64_rel(&stamp->state,
-		 ((uint64_t)UINT32_C(17) << 32) | (UINT32_MAX - 1u));
+  assert(table_token_test_stamp(t));
+  ljt_gc2_wide_seed(t, UINT64_MAX, UINT32_MAX - 2u, 17u, 1);
   lj_gc2_test_table_dirty_bump(g, t);
-  state = la_load64_acq(&stamp->state);
-  assert((uint32_t)state == UINT32_MAX);
+  state = ljt_gc2_wide_snapshot(t).lo;
+  assert((uint32_t)state == UINT32_MAX - 1u);
   assert((uint32_t)(state >> 32) == 0u);
   activation = lj_gc2_activation_snapshot(&g->gc2.activation);
   assert(activation.state == LJ_GC2_ACT_IDLE);
   lj_gc2_test_table_dirty_bump(g, t);
-  state = la_load64_acq(&stamp->state);
+  state = ljt_gc2_wide_snapshot(t).lo;
   assert((uint32_t)state == UINT32_MAX);
   assert((uint32_t)(state >> 32) == 0u);
   activation = lj_gc2_activation_snapshot(&g->gc2.activation);
@@ -5719,9 +5759,18 @@ static void test_table_token_huge_phase_behavior(lua_State *L,
     GCtab *t = table_token_huge_new(g, tg, size + n, NULL);
     uint64_t payload0, terminal0;
     uint8_t gct;
+#if LJ_TARGET_LINUX
+    LJGC2TabWideStamp *saved_wide;
+    long pagesize = sysconf(_SC_PAGESIZE);
+    void *poison = (char *)lj_arena_of(t) + pagesize;
+    size_t protected_bytes = lj_arena_huge_mapsize(size + n) -
+      (size_t)pagesize;
+    assert(pagesize > 0);
+#endif
 
     assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
     stamp = table_token_test_stamp(t);
+    ljt_gc2_wide_seed(t, 9u, 1u, 0, 1);
     lj_gc2_mark_begin(g);
     (void)table_token_test_request_next(g, t);
     if (phases[n] == LJ_GC2_WEAK)
@@ -5754,11 +5803,26 @@ static void test_table_token_huge_phase_behavior(lua_State *L,
     ** type byte, and the last token lease performs the FREEING handoff. */
     gct = la_load8_acq(&t->gct);
     la_store8_rel(&t->gct, 0);
+#if LJ_TARGET_LINUX
+    saved_wide = lj_arena_gc2_wide_acq(t);
+    assert(saved_wide != NULL);
+#endif
     assert(!lj_arena_hugetab_claim_external_free(&tg->huge, t, &hi));
     assert((hi.flags & LJ_HUGEF_DEFER_FREE) != 0 && hi.readers == 0u);
     payload0 = gc2_table_token_scan_payloads_acq(g);
     terminal0 = gc2_table_token_scan_terminal_acq(g);
+#if LJ_TARGET_LINUX
+    /* Protect every later payload/padding page, including the actual W
+    ** tail. The fixed header and deliberately poisoned gct stay readable. */
+    assert((void *)saved_wide == (char *)lj_arena_of(t) +
+      lj_arena_huge_mapsize(size + n) - sizeof(*saved_wide));
+    assert(mprotect(poison, protected_bytes, PROT_NONE) == 0);
+#endif
     assert(lj_gc2_test_table_token_scan_one(g, t) == 1);
+#if LJ_TARGET_LINUX
+    assert(mprotect(poison, protected_bytes, PROT_READ|PROT_WRITE) == 0);
+    assert(lj_arena_of(t)->hdr.gc2_huge_wide == saved_wide);
+#endif
     assert(gc2_table_token_scan_payloads_acq(g) == payload0);
     assert(gc2_table_token_scan_terminal_acq(g) == terminal0 + 1u);
     assert(lj_gc2_table_token_state(
@@ -5854,6 +5918,12 @@ static void test_table_token_small_free_no_body(lua_State *L,
   uint64_t payload0, terminal0;
   uint32_t cell;
   uint8_t gct;
+#if LJ_TARGET_LINUX
+  LJGC2TabWideStamp *wide;
+  long pagesize = sysconf(_SC_PAGESIZE);
+  void *page;
+  assert(pagesize > 0);
+#endif
   int base = lua_gettop(L);
 
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
@@ -5865,6 +5935,14 @@ static void test_table_token_small_free_no_body(lua_State *L,
   lj_gc2_mark_begin(g);
   (void)table_token_test_request_next(g, t);
   stamp = table_token_test_stamp(t);
+  ljt_gc2_wide_seed(t, 11u, 1u, 0, 1);
+#if LJ_TARGET_LINUX
+  wide = lj_arena_gc2_wide_acq(t);
+  assert(wide != NULL);
+  page = (void *)((uintptr_t)wide & ~((uintptr_t)pagesize - 1u));
+  assert((uintptr_t)page >= (uintptr_t)lj_arena_gc2_tabstamp_acq(a) +
+         offsetof(LJGC2TabStampArena, wide));
+#endif
   payload0 = gc2_table_token_scan_payloads_acq(g);
   terminal0 = gc2_table_token_scan_terminal_acq(g);
   assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
@@ -5873,7 +5951,14 @@ static void test_table_token_small_free_no_body(lua_State *L,
 				     LJ_ARENA_LIFETIME_FREE));
   gct = la_load8_acq(&o->gch.gct);
   la_store8_rel(&o->gch.gct, 0);  /* Any body/header read must reject. */
+#if LJ_TARGET_LINUX
+  /* Inline token storage stays readable while W is inaccessible. */
+  assert(mprotect(page, (size_t)pagesize, PROT_NONE) == 0);
+#endif
   assert(lj_gc2_test_table_token_scan_one(g, t) == 1);
+#if LJ_TARGET_LINUX
+  assert(mprotect(page, (size_t)pagesize, PROT_READ | PROT_WRITE) == 0);
+#endif
   assert(gc2_table_token_scan_payloads_acq(g) == payload0);
   assert(gc2_table_token_scan_terminal_acq(g) == terminal0 + 1u);
   assert(lj_gc2_table_token_state(

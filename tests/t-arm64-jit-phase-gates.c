@@ -234,7 +234,7 @@ static void expect_strict_trace(StrictLoop *loop)
   assert(trace_startpt_acq(T) == loop->pt);
   assert(trace_spadjust_acq(T) == 0);
   assert(trace_topslot_acq(T) == (MSize)loop->pt->framesize);
-  assert((la_load8_acq(&T->unused1) & TRACE_ARM64_INT_LOOP_ADMITTED) != 0);
+  assert((trace_arm64_admission_acq(T) & TRACE_ARM64_INT_LOOP_ADMITTED) != 0);
   assert(trace_mcode_acq(T) != NULL);
 
   pc = trace_startpc_acq(T);

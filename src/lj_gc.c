@@ -65,15 +65,17 @@ static int gc_hard_assist_due_interp(global_State *g, TGState *tg)
 
 static int gc_logical_running(global_State *g)
 {
-  GCSize threshold;
-  if (mt_live_acq(g) != 0) {
-    threshold = lj_gc_mt_threshold_load(g);
-    if (mt_live_acq(g) == 0)
-      threshold = lj_gc_threshold_load(g);
-  } else {
-    threshold = lj_gc_threshold_load(g);
-  }
-  return threshold != LJ_MAX_MEM;
+  return lj_gc_auto_running(g);
+}
+
+/* Allocation checkpoints can publish a request and consume the local debt
+** before an interpreter GC check. The MT threshold bridge must not hide that
+** durable request. Only a normal GC-safe caller may admit it to the existing
+** driver; raw allocation accounting does not have a complete Lua stack. */
+int lj_gc_pending_auto_request(global_State *g)
+{
+  return gc2_cycle_leader_acq(g) != 0 &&
+	 gc2_phase_acq(g) == LJ_GC2_IDLE && gc_logical_running(g);
 }
 
 #if LJ_HASJIT
@@ -2970,14 +2972,17 @@ static LJ_AINLINE uint32_t gc2_reclaim_noop_word_end(const GCArena *a,
   return end;
 }
 
-uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
-				  uint32_t limit, int *donep)
+uint32_t lj_gc_reclaim_gc2_arena_ex(global_State *g, GCArena *a,
+				     uint32_t limit, int *donep,
+				     int *root_owner_blockedp)
 {
   /* scanned counts either one ordinary cell or one proven no-op bitmap word. */
   uint32_t cell, scanned = 0, changed = 0;
   int pending = 0;
   if (donep)
     *donep = 0;
+  if (root_owner_blockedp)
+    *root_owner_blockedp = 0;
   if (!g || !a || limit == 0 ||
       !(lj_arena_flags_acq(a) & LJ_AF_QUARANTINE))
     return 0;
@@ -3011,6 +3016,8 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
 	rootmem == LJ_ARENA_ROOT_UNLINKING) {
       /* A publisher/remover owns both the intrusive link and the allocation
       ** reuse veto. Reclaim never waits for it or inspects a mutable header. */
+      if (root_owner_blockedp)
+	*root_owner_blockedp = 1;
       pending = 1;
       cell++;
       scanned++;
@@ -3309,6 +3316,12 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
   if (changed)
     return changed;
   return cell < LJ_ARENA_CELLS && scanned != 0 ? 1u : 0u;
+}
+
+uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
+				  uint32_t limit, int *donep)
+{
+  return lj_gc_reclaim_gc2_arena_ex(g, a, limit, donep, NULL);
 }
 
 static void gc2_huge_sweep_reader_drop(LJHugeReader *reader, int *pendingp)
@@ -4159,6 +4172,7 @@ static int gc2_step_auto(lua_State *L, int threshold_step, uint32_t step_limit)
   if (running)
     lj_gc2_check_trigger(g, L2TG(L));
   while (running && step_limit-- != 0) {
+    uint64_t defer0 = gc2_deferred_epoch_acq(g);
     uint32_t phase = gc2_phase_acq(g);
     int sweep_step = phase == LJ_GC2_SWEEP;
     if (phase == LJ_GC2_IDLE && gc2_cycle_leader_acq(g) == 0 &&
@@ -4166,6 +4180,9 @@ static int gc2_step_auto(lua_State *L, int threshold_step, uint32_t step_limit)
       break;
     drove = 1;
     done = lj_gc2_step_explicit(L, 1);
+    /* A retained owner ends this automatic batch as well as the inner step. */
+    if (gc2_deferred_epoch_acq(g) != defer0)
+      break;
     if (gc2_phase_acq(g) == LJ_GC2_IDLE)
       break;
     /* Activation grants a bounded number of pre-dispatch opportunities. Each
@@ -4288,7 +4305,7 @@ static void gc_step_assist_top(lua_State *L, global_State *g, int threshold_step
     gc2_interp_hard_checks_add(g, 1);
     lj_gc2_assist(g, tg);  /* 05 section 5.11 interpreter assist bridge. */
   }
-  if (threshold_step)
+  if (threshold_step || lj_gc_pending_auto_request(g))
     gc2_step_auto(L, threshold_step, GCACTIVEAUTOSTEPS);
 }
 

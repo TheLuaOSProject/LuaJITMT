@@ -575,6 +575,7 @@ end
 
 local m9_m10_deps = {
   "m9_gc_stats",
+  "m9_gc_stats_arenas",
   "m9_trace_hard_assist_cadence",
   "m9_fullgc_smr_reclaim",
   "m9_newkey_barrier_scope",
@@ -590,6 +591,27 @@ return function(add)
     name = "m9_gc_stats",
     description = "GC stats telemetry table and smoke test",
     run = run_gc_stats
+  })
+
+  add({
+    name = "m9_gc_stats_arenas",
+    description = "remote arena stats use owner-published scalars across allocator transitions",
+    run = function(t)
+      if jit.os ~= "Linux" then
+        print("M9 arena stats fixture requires Linux pthreads and mprotect")
+        return
+      end
+      local flags = "-DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        build.build_and_run_c(t, t:tmp("lj_t-gc2-stats-arenas"),
+                              "t-gc2-stats-arenas.c", {
+          clean = true,
+          xcflags = flags,
+          cflags = flags,
+          timeout = "30s"
+        })
+      end)
+    end
   })
 
   add({

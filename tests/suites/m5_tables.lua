@@ -4,6 +4,76 @@ local resize_desc_flags =
   "-DLJ_TAB_TEST_HELPERS " .. build.gc2_test_helper_flag
 
 return function(add)
+  add({
+    name = "m5_tab_scalar_next",
+    description = "scalar array iteration, source authority and lifetime with a paused reclaimer",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then
+        print("M5 scalar-next reclaimer fixtures require Linux x64")
+        return
+      end
+      local flags = build.gc2_test_helper_flag ..
+        " -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT -DLUA_USE_APICHECK"
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { quiet = true, xcflags = flags })
+        local function run(name, modes)
+          local out = t:tmp("lj_" .. name)
+          t:cc(out, { t:path("tests", name .. ".c") }, {
+            cflags = flags, link_luajit = true,
+            libs = { "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread" }
+          })
+          for _, mode in ipairs(modes) do
+            local argv = { out }
+            for _, value in ipairs(mode) do argv[#argv + 1] = value end
+            t:run(argv, { timeout = "20s", env = {
+              LUA_PATH = t:path("src", "?.lua") .. ";;"
+            } })
+          end
+        end
+        local progress = {}
+        for _, mode in ipairs({ "next", "itern", "rooted", "cursor" }) do
+          for _, shape in ipairs({ "dense", "sparse", "empty", "holes", "zero", "bool" }) do
+            progress[#progress + 1] = { mode, shape }
+          end
+        end
+        run("t-tab-scalar-next-progress", progress)
+        local authority = {}
+        for _, mode in ipairs({ "basic-colo", "basic-separate", "keys", "aliases",
+          "opaque", "protected", "bounds", "hooks-found", "hooks-end", "resize", "plain" }) do
+          authority[#authority + 1] = { mode }
+        end
+        run("t-tab-scalar-next-authority", authority)
+        local retry = {}
+        for _, mode in ipairs({ "found", "end" }) do
+          for _, slots in ipairs({ { "2", "3" }, { "1", "3" }, { "0", "1" } }) do
+            retry[#retry + 1] = { mode, slots[1], slots[2] }
+          end
+        end
+        run("t-tab-scalar-next-stack-retry", retry)
+        run("t-tab-scalar-next-lifetime", { { "preflight" }, { "retired" } })
+        run("t-jit-idle-reclaim-entry", { {} })
+      end)
+      print("M5 scalar array-next tests passed")
+    end
+  })
+  add({
+    name = "m5_tab_scalar_hit",
+    description = "Linux scalar table hits with a paused IDLE reclaimer",
+    run = function(t)
+      if jit.os ~= "Linux" then
+        print("M5 scalar-hit reclaimer fixture requires Linux")
+        return
+      end
+      local flags = build.gc2_test_helper_flag ..
+        " -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { quiet = true, xcflags = flags })
+        build.build_and_run_c(t, t:tmp("lj_t-tab-scalar-hit"),
+          "t-tab-scalar-hit.c", { build = false, cflags = flags, timeout = "45s" })
+      end)
+      print("M5 scalar table-hit tests passed")
+    end
+  })
   runtime.add_luajit_c_fixture_cases(add, {
     {
       name = "m5_tab_emptyhash",
@@ -226,7 +296,62 @@ return function(add)
     end
   })
 
+  add({
+    name = "m5_meta_cdata_capture_protocol",
+    description = "cdata method capture replacement, refusal and queue pressure",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then
+        print("M5 cdata method capture protocol fixture requires Linux x64")
+        return
+      end
+      local flags = "-DLJ_FUNC_TEST_HELPERS -DLJ_GC2_TEST_HELPERS" ..
+        " -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS" ..
+        " -DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT"
+      local modes = {
+        "basic", "alias-source", "alias-key", "same-source-key", "set-alias",
+        "retry-source", "retry-key", "retry-mt", "retry-method",
+        "replace", "growth", "fail-growth", "throw"
+      }
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { quiet = true, xcflags = flags })
+        local out = t:tmp("lj_t-meta-cdata-capture")
+        t:cc(out, { t:path("tests", "t-meta-cdata-capture.c") }, {
+          default_cflags = false,
+          cflags = "-D_GNU_SOURCE -std=gnu11 -O2 -g -Wall -Wextra -Werror" ..
+                   " -mcx16 " .. flags,
+          link_luajit = true,
+          libs = {
+            "-lm", "-ldl", "-pthread",
+            "-Wl,--wrap=lj_gc2_tv_lease_acquire",
+            "-Wl,--wrap=lj_gc2_lease_release",
+            "-Wl,--wrap=lj_tab_wait_l",
+            "-Wl,--wrap=lj_gc2_smr_read_enter",
+            "-Wl,--wrap=lj_vm_call", "-Wl,--wrap=lj_vm_pcall",
+            "-Wl,--wrap=lj_vm_cpcall", "-Wl,--wrap=lj_vm_resume"
+          }
+        })
+        -- Global one-shot hooks start fresh in each independently bounded mode.
+        for i = 1, #modes do
+          t:run({ out, modes[i] }, { timeout = "15s" })
+        end
+      end)
+      print("M5 cdata method capture protocol schedules passed")
+    end
+  })
+
   runtime.add_luajit_script_cases(add, {
+    {
+      name = "m5_meta_cdata_capture_joff",
+      description = "cdata method lifetime across collection, replacement and callbacks",
+      script = "t-meta-cdata-capture.lua",
+      opts = { joff = true, timeout = "30s" }
+    },
+    {
+      name = "m5_meta_cdata_capture",
+      description = "cdata method lifetime with JIT enabled",
+      script = "t-meta-cdata-capture.lua",
+      opts = { timeout = "30s" }
+    },
     {
       name = "m5_tab_rooted_readers",
       description = "unpack and table.concat retain protected results across resize and GC",

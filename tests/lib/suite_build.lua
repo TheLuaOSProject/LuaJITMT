@@ -139,7 +139,8 @@ function M.with_default_build_restore(t, fn, opts)
   if quiet == nil then quiet = true end
   local ok, err = xpcall(fn, debug.traceback)
   local restore_ok, restore_err = xpcall(function()
-    t:build({ clean = true, quiet = quiet, jobs = opts.jobs })
+    t:build({ clean = true, quiet = quiet, jobs = opts.jobs,
+              xcflags = opts.xcflags })
   end, debug.traceback)
   if not ok then
     if not restore_ok then

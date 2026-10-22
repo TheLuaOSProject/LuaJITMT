@@ -36,14 +36,25 @@ local m3_scaffold_deps = {
   "m3_state_actor_carrier",
   "m3_gc2_table_store_guard",
   "m3_gc2_public_store_weak_window",
+  "m3_gc2_sweep_public_table_rescan",
+  "m3_gc2_sweep_leaf_publication",
+  "m3_gc2_sweep_table_coalescing",
   "m3_gc2_weak_resize_retry",
+  "m3_gc2_weak_helper_claim",
   "m3_gc2_activation_runtime",
   "m3_gc2_no_legacy_runtime",
   "m3_gc2_internal_allocator_only",
   "m3_gc2_recovery",
+  "m3_gc2_sweep_edge_lease",
   "m3_gc2_worker_scheduler",
+  "m3_gc2_worker_sweep_bridge",
+  "m3_gc2_constructor_defer",
+  "m3_gc2_auto_control",
+  "m3_gc2_mark_close_progress",
   "m3_gc_active_thread_roots",
   "m3_safepoint_handshake",
+  "m3_safepoint_native_completion",
+  "m3_darwin_gc2_runtime",
   "m3_vmevent_native_stdio",
   "m3_vm_safepoint",
   "m3_interp_stock_joff",
@@ -149,6 +160,95 @@ return function(add)
         })
       end)
       print("M3 public scalar weak-window regression passed")
+    end
+  })
+
+  register({
+    name = "m3_gc2_sweep_public_table_rescan",
+    description = "public SWEEP rescans and observational FINREG membership",
+    run = function(t)
+      if jit.os ~= "Linux" then
+        print("M3 public SWEEP rescan fixture requires Linux linker wrappers")
+        return
+      end
+      local flags = gc2_test_cflags .. " -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { quiet = true, xcflags = flags })
+        compile_and_run_c(t, t:tmp("lj-t-gc2-sweep-public-table-rescan"),
+                          "t-gc2-sweep-public-table-rescan.c", {
+          cflags = flags,
+          libs = {
+            "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread",
+            "-Wl,--wrap=lj_ctype_fin_istab"
+          },
+          timeout = "20s"
+        })
+      end)
+      print("M3 public SWEEP table rescan regression passed")
+    end
+  })
+
+  register({
+    name = "m3_gc2_sweep_leaf_publication",
+    description = "SWEEP leaves preserve lifetime without creating graph work",
+    run = function(t)
+      local flags = gc2_test_cflags .. " -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { quiet = true, xcflags = flags })
+        compile_and_run_c(t, t:tmp("lj-t-gc2-sweep-leaf-publication"),
+                          "t-gc2-sweep-leaf-publication.c", {
+          cflags = flags,
+          timeout = "30s"
+        })
+      end)
+      print("M3 SWEEP leaf publication regression passed")
+    end
+  })
+
+  register({
+    name = "m3_gc2_sweep_table_coalescing",
+    description = "SWEEP coalescing, persistent overflow proof and paused publisher progress",
+    run = function(t)
+      if jit.os ~= "Linux" then
+        print("M3 SWEEP coalescing protected-memory fixture requires Linux")
+        return
+      end
+      local flags = gc2_test_cflags ..
+                    " -DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { quiet = true, xcflags = flags })
+        compile_and_run_c(t, t:tmp("lj-t-gc2-sweep-table-coalescing"),
+                          "t-gc2-sweep-table-coalescing.c", {
+          cflags = flags .. " -DLJ_TEST_WRAP_CALLOC",
+          libs = {
+            "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread",
+            "-Wl,--wrap=calloc"
+          },
+          timeout = "90s"
+        })
+      end)
+      print("M3 SWEEP table coalescing regression passed")
+    end
+  })
+
+  register({
+    name = "m3_gc2_weak_helper_claim",
+    description = "weak bridge helper claims graph ownership and preserves refused work",
+    run = function(t)
+      if jit.os ~= "Linux" then
+        print("M3 weak bridge worker-claim fixture requires Linux")
+        return
+      end
+      local flags = gc2_test_cflags .. " -DLUA_USE_ASSERT -DLUA_USE_APICHECK"
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { quiet = true, xcflags = flags })
+        compile_and_run_c(t, t:tmp("lj-t-gc2-weak-helper-claim"),
+                          "t-gc2-traverse.c", {
+          cflags = flags .. " -DLJ_GC2_TEST_WEAK_ONLY -Wno-unused-function",
+          timeout = "60s"
+        })
+      end)
+      print("M3 weak bridge worker claim, retry and release passed")
     end
   })
 
@@ -304,6 +404,214 @@ return function(add)
   })
 
   register({
+    name = "m3_gc2_worker_sweep_bridge",
+    description = "workers finish SWEEP preparation and retain native action lifetime during stop",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then
+        print("M3 worker SWEEP fixtures require Linux x64 and GNU ld wrapping")
+        return
+      end
+      build.clean_build(t)
+      local env = {
+        LUA_PATH = t:path("src", "?.lua") .. ";;",
+        RETENTION_JIT = "0"
+      }
+      local function run(name, modes, wraps, timeout)
+        local out = t:tmp("lj_" .. name)
+        local libs = { "-Wl,-E", "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread" }
+        for _, symbol in ipairs(wraps or {}) do
+          libs[#libs + 1] = "-Wl,--wrap=" .. symbol
+        end
+        t:cc(out, { t:path("tests", name .. ".c") }, {
+          cflags = "-g -Wall -Wextra -Werror", link_luajit = true, libs = libs
+        })
+        for _, mode in ipairs(modes) do
+          local argv = { out }
+          for _, value in ipairs(mode) do argv[#argv + 1] = value end
+          t:run(argv, { env = env, timeout = timeout or "35s" })
+        end
+      end
+      local stop_modes = {}
+      for action = 0, 1 do
+        for workers = 1, 2 do
+          for api = 0, 1 do
+            stop_modes[#stop_modes + 1] = {
+              tostring(action), tostring(workers), tostring(api)
+            }
+          end
+        end
+      end
+      local handshake = "lj_safepoint_handshake"
+      local scan = "lj_gc2_scan_cycle_owner_tg_roots_native_parked"
+      local prepare = "lj_arena_alloc_prepare_sweep_kind"
+      run("t-worker-bridge-stop", stop_modes, { handshake })
+      run("t-worker-bridge-detach", { { "0" }, { "1" } }, {
+        handshake, "lj_gc2_flush_ssb_detach", scan, prepare
+      })
+      run("t-worker-bridge-consumed", { { "0" }, { "1" } }, {
+        handshake, "lj_native_leave_tg", "lj_tg_detach", scan, prepare
+      })
+      run("t-worker-bridge-quiet", { { "1" }, { "2" } }, {
+        handshake, "lj_gc_sweep_gc2_unmarked"
+      })
+      local automatic_modes = {}
+      for peer = 0, 1 do
+        for _, workers in ipairs({ 0, 2 }) do
+          automatic_modes[#automatic_modes + 1] = {
+            "0", tostring(peer), tostring(workers), t:path("tests", "peer-control.lua")
+          }
+        end
+      end
+      run("t-string-retention", automatic_modes, {}, "50s")
+      print("M3 worker SWEEP completion and native action lifetime passed")
+    end
+  })
+
+  register({
+    name = "m3_gc2_constructor_defer",
+    description = "retained constructors defer collection while other TGs receive sweep turns",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then
+        print("M3 constructor deferral fixtures require Linux x64")
+        return
+      end
+      local flags = table.concat({
+        "-DLUA_USE_APICHECK", "-DLUA_USE_ASSERT", "-DLJ_FUNC_TEST_HELPERS",
+        "-DLJ_GC2_TEST_HELPERS", "-DLJ_TAB_TEST_HELPERS", "-DLJ_ARENA_TEST_HELPERS",
+        "-DLJ_TRACE_TEST_HELPERS", "-DLJ_XSAVE_TEST_HELPERS",
+        "-DLJ_UDATA_TEST_HELPERS", "-DLJ_STR_TEST_HELPERS"
+      }, " ")
+      local env = {
+        LUA_PATH = t:path("src", "?.lua") .. ";" ..
+                   t:path("tests", "lib", "?.lua") .. ";;"
+      }
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { xcflags = flags })
+        local function run(name, modes)
+          local out = t:tmp("lj_" .. name)
+          t:cc(out, { t:path("tests", name .. ".c") }, {
+            cflags = flags, link_luajit = true,
+            libs = { "-Wl,-E", "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread" }
+          })
+          for _, mode in ipairs(modes) do
+            local argv = { out }
+            for _, value in ipairs(mode) do argv[#argv + 1] = value end
+            t:run(argv, {
+              env = env, timeout = name == "t-func-construction-anchor" and "20s" or "60s"
+            })
+          end
+        end
+        run("t-func-construction-anchor", { {} })
+        run("t-gc2-constructor-defer", { { "publish" }, { "cancel" }, { "automatic" } })
+        run("t-gc2-constructor-mixed", { { "0", "1" }, { "2", "1" } })
+        run("t-gc2-constructor-fairness", {
+          { "0", "1", "1" }, { "0", "3", "1" }, { "0", "3", "64" },
+          { "2", "3", "64" }, { "0", "3", "1", "detach" }
+        })
+      end)
+      print("M3 constructor retention, deferral and TG fairness passed")
+    end
+  })
+
+  register({
+    name = "m3_gc2_auto_control",
+    description = "automatic requests and public STOP/RESTART survive attachment and finalizers",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then
+        print("M3 automatic-control overlap fixtures require Linux x64")
+        return
+      end
+      make_clean(t)
+      make_default(t, { jobs = false })
+      local pthread = os.getenv("PTHREAD") or "-pthread"
+      local env = {
+        LUA_PATH = t:path("src", "?.lua") .. ";" ..
+                   t:path("tests", "lib", "?.lua") .. ";;",
+        RETENTION_JIT = "0"
+      }
+      local function compile(name, wrapper)
+        local out = t:tmp("lj_" .. name)
+        local libs = { "-Wl,-E", "-lm", "-ldl", pthread }
+        if wrapper then libs[#libs + 1] = "-Wl,--wrap=" .. wrapper end
+        t:cc(out, { t:path("tests", name .. ".c") }, {
+          cflags = "-g", link_luajit = true, libs = libs
+        })
+        return out
+      end
+      local stop = compile("t-stop-first-attach", "lj_vm_cpcall")
+      t:run({ stop }, { env = env, timeout = "25s" })
+      local numeric = compile("t-auto-restart-numeric-max")
+      t:run({ numeric }, { env = env, timeout = "25s" })
+
+      -- These two schedules recognize the actual GCC MOV/register geometry.
+      -- Clang retains the first-live STOP and sequential attachment coverage.
+      local macros = t:tmp("lj_auto-control-compiler-macros.txt")
+      t:run(t.compiler .. " -dM -E -x c /dev/null > " ..
+            utils.shell_quote(macros), { quiet = true, timeout = "25s" })
+      local definitions = utils.read_file(macros)
+      if definitions:find("#define __GNUC__ ", 1, true) and
+         not definitions:find("#define __clang__ ", 1, true) then
+        local first = compile("t-restart-first-attach", "lj_vm_cpcall")
+        local last = compile("t-restart-last-detach")
+        t:run({ first }, { env = env, timeout = "25s" })
+        t:run({ last }, { env = env, timeout = "25s" })
+      end
+
+      local finalizers = compile("t-auto-finalizer-controls-v3")
+      for peer = 0, 1 do
+        for inner_error = 0, 1 do
+          for outer_error = 0, 1 do
+            for outer_stop = 0, 1 do
+              t:run({ finalizers, tostring(peer), tostring(inner_error),
+                      tostring(outer_error), tostring(outer_stop), "1" }, {
+                env = env, timeout = "25s"
+              })
+            end
+          end
+        end
+      end
+      for _, script in ipairs({ "t-m8-finalizer-spawn-live.lua",
+                                "t-finalizer-spawn-query-enabled.lua" }) do
+        run_luajit_script_jit_modes(t, script, nil, {
+          env = env, timeout = "40s"
+        })
+      end
+
+      local control = compile("t-auto-controls-v2", "lj_native_enter")
+      local function run_control(mode, boundary, peer)
+        t:run({ control, tostring(mode), tostring(boundary), tostring(peer),
+                "0", t:path("tests", "peer-control.lua"),
+                t:path("tests", "control-boundaries.lua") }, {
+          env = env, timeout = "50s"
+        })
+      end
+      for boundary = 0, 5 do run_control(0, boundary, 1) end
+      for _, mode in ipairs({ 1, 3, 4 }) do
+        for peer = 0, 1 do run_control(mode, 0, peer) end
+      end
+      run_control(2, 0, 1)
+      print("M3 automatic GC control and finalizer query passed")
+    end
+  })
+
+  register({
+    name = "m3_gc2_mark_close_progress",
+    description = "paused GC owner does not block automatic MARK close or spin workers",
+    run = function(t)
+      local pthread = os.getenv("PTHREAD") or "-pthread"
+      make_default(t, { jobs = false })
+      compile_and_run_c(t, t:tmp("lj_t-gc2-mark-close-progress"),
+                        "t-gc2-mark-close-progress.c", {
+        libs = {
+          "-lm", "-ldl", pthread,
+          "-Wl,--wrap=lj_native_enter", "-Wl,--wrap=lj_thr_retry_yield"
+        },
+        timeout = "20s"
+      })
+    end
+  })
+
+  register({
     name = "m3_gc_active_thread_roots",
     description = "active thread GC roots and explicit GC assistance",
     run = function(t)
@@ -316,6 +624,77 @@ return function(add)
       run_luajit_script_jit_modes(t, "t-gc-active-thread-roots.lua", nil,
                                   { timeout = "60s" })
       print("M3 active thread root GC regression passed")
+    end
+  })
+
+  register({
+    name = "m3_darwin_gc2_runtime",
+    description = "Darwin huge-tail lifetime and real remote-root completion waits",
+    run = function(t)
+      if jit.os ~= "OSX" or jit.arch ~= "arm64" then
+        print("M3 Darwin GC2 runtime fixtures require native macOS ARM64")
+        return
+      end
+      local base = "-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUA_USE_ASSERT"
+      local flags = base .. " -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL" ..
+        " -DLJ_GC2_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS"
+      local restore = base .. (jit.opt and
+        " -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL" or " -DLUAJIT_DISABLE_JIT")
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { xcflags = flags })
+        compile_and_run_c(t, t:tmp("lj_t-arena-huge-tail-darwin"), {
+          t:path("tests", "t-arena-huge-tail.c"),
+          t:path("tests", "lib", "arena_huge_tail_darwin.c")
+        }, { cflags = flags, timeout = "60s" })
+        local exe = t:tmp("lj_t-remote-completion-darwin")
+        t:cc(exe, {
+          t:path("tests", "t-safepoint-remote-root-completion.c"),
+          t:path("tests", "lib", "safepoint_completion_darwin.c")
+        }, { cflags = flags, link_luajit = true,
+             libs = { "-lm", "-ldl", "-pthread" } })
+        for mode = 0, 5 do t:run({ exe, tostring(mode) }, { timeout = "25s" }) end
+      end, { xcflags = restore })
+      print("M3 Darwin huge-tail and six remote-completion modes passed")
+    end
+  })
+
+  register({
+    name = "m3_safepoint_native_completion",
+    description = "remote owner-root completion and retained local/scanner holds",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then
+        print("M3 native completion fixtures require Linux/x64 and GNU ld wrapping")
+        return
+      end
+      local flags = gc2_test_cflags .. " -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { xcflags = flags })
+        local fixtures = {
+          { name = "t-safepoint-remote-root-completion", modes = { "0", "1", "2", "3", "4", "5" },
+            wraps = { "lj_gc2_scan_cycle_owner_tg_roots_native_parked" } },
+          { name = "t-safepoint-local-native-duplicate", modes = { false },
+            wraps = { "lj_gc2_scan_cycle_owner_tg_roots_native_parked", "lj_lex_gc2_markroots" } },
+          { name = "t-safepoint-native-root-hold", modes = { "0", "1", "2", "3" },
+            wraps = { "lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+                      "lj_gc2_scan_cycle_global_roots", "lj_gc2_flush_ssb" } }
+        }
+        for _, fixture in ipairs(fixtures) do
+          local exe = t:tmp("lj_" .. fixture.name)
+          local libs = { "-lm", "-ldl", "-pthread" }
+          for _, symbol in ipairs(fixture.wraps) do
+            libs[#libs + 1] = "-Wl,--wrap=" .. symbol
+          end
+          t:cc(exe, { t:path("tests", fixture.name .. ".c") }, {
+            cflags = flags, link_luajit = true, libs = libs
+          })
+          for _, mode in ipairs(fixture.modes) do
+            local argv = { exe }
+            if mode then argv[#argv + 1] = mode end
+            t:run(argv, { timeout = "25s" })
+          end
+        end
+      end)
+      print("M3 remote completion and required native holds passed")
     end
   })
 
@@ -379,6 +758,37 @@ return function(add)
 	timeout = "240s"
       })
       print("M3 interpreter-only stock suite passed under -joff")
+    end
+  })
+
+  register({
+    name = "m3_gc2_sweep_edge_lease",
+    description = "SWEEP TValue edges reuse exact admission through marking and retry",
+    run = function(t)
+      if jit.os ~= "Linux" then
+        print("M3 SWEEP edge admission fixture requires Linux linker wrappers")
+        return
+      end
+      local flags = gc2_test_cflags .. " -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        build.build_and_run_c(t, t:tmp("lj_t-gc2-sweep-edge-lease"),
+                              "t-gc2-sweep-edge-lease.c",
+                              build.gc2_test_helper_opts({
+          jobs = false,
+          xcflags = flags,
+          cflags = flags,
+          libs = {
+            "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread",
+            "-Wl,--wrap=lj_arena_rescue_enter",
+            "-Wl,--wrap=lj_arena_hugetab_rescue_enter",
+            "-Wl,--wrap=lj_arena_hugetab_reader_cdata_range_acquire",
+            "-Wl,--wrap=lj_arena_hugetab_mark_cdata_range_reader_acquire",
+            "-Wl,--wrap=lj_arena_hugetab_mark",
+            "-Wl,--wrap=lj_arena_hugetab_reader_release"
+          },
+          timeout = "30s"
+        }))
+      end, { jobs = false })
     end
   })
 
@@ -463,8 +873,16 @@ return function(add)
       })
 
       utils.run_case(cases, t, "m3_gc2_markword_token_model")
+      utils.run_case(cases, t, "m3_gc2_sweep_public_table_rescan")
+      utils.run_case(cases, t, "m3_gc2_sweep_leaf_publication")
+      utils.run_case(cases, t, "m3_gc2_sweep_table_coalescing")
+      utils.run_case(cases, t, "m3_gc2_weak_helper_claim")
       utils.run_case(cases, t, "m3_gc2_recovery")
+      utils.run_case(cases, t, "m3_gc2_sweep_edge_lease")
       utils.run_case(cases, t, "m3_gc2_worker_scheduler")
+      utils.run_case(cases, t, "m3_gc2_worker_sweep_bridge")
+      utils.run_case(cases, t, "m3_gc2_constructor_defer")
+      utils.run_case(cases, t, "m3_gc2_mark_close_progress")
       utils.run_case(cases, t, "m3_gc_active_thread_roots")
       utils.run_case(cases, t, "m3_safepoint_handshake")
       utils.run_case(cases, t, "m3_vm_safepoint")

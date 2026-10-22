@@ -19,6 +19,19 @@ LJ_FUNC uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions);
 LJ_FUNC void lj_safepoint_apply_tg(global_State *g, TGState *tg,
 				   uint32_t actions);
 LJ_FUNC uint32_t lj_safepoint_retire_dead_tg(global_State *g, TGState *tg);
+
+#if defined(LJ_GC2_TEST_HELPERS)
+enum {
+  LJ_SAFEPOINT_COMPLETION_TEST_BEFORE_CLEAR = 1,
+  LJ_SAFEPOINT_COMPLETION_TEST_CLEARED = 2,
+  LJ_SAFEPOINT_COMPLETION_TEST_CONSUMED = 3,
+  LJ_SAFEPOINT_COMPLETION_TEST_COUNTED = 4
+};
+typedef void (*LJSafepointCompletionTestHook)(global_State *g, TGState *tg,
+					    uint64_t epoch, uint32_t point);
+LJ_FUNC void lj_safepoint_test_completion_hook(
+  LJSafepointCompletionTestHook hook);
+#endif
 typedef struct LJNativeFrame {
   ptrdiff_t base;
   ptrdiff_t top;

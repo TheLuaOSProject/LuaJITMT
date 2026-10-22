@@ -376,6 +376,13 @@ static int arena_list_contains(GCArena *a, GCArena *needle)
   return 0;
 }
 
+static int arena_reclaimed_contains(TGAlloc *alloc, GCArena *needle)
+{
+  return arena_list_contains(lj_arena_alloc_reclaimed_head(
+           alloc, LJ_ARENAK_TRAVERSABLE), needle) ||
+         arena_list_contains(lj_arena_alloc_empty_reclaimed_head(alloc), needle);
+}
+
 static int gc_root_list_contains(global_State *g, GCobj *needle)
 {
   GCobj *o;
@@ -442,6 +449,18 @@ static void arena_needsweep_move_head(TGAlloc *alloc, uint32_t kind,
   alloc->needsweep[kind] = target;
 }
 
+/* These stopped-owner fixtures temporarily inject/detach NEEDSWEEP lists.
+** Keep their scalar publication explicit when bypassing production helpers. */
+static void arena_fixture_needsweep(TGAlloc *alloc, GCArena *head)
+{
+  GCArena *a;
+  uint32_t n = 0;
+  for (a = head; a; a = lj_arena_next_acq(a))
+    assert(++n < LJ_GC2_ROOT_SCAN_LIMIT);
+  alloc->needsweep[LJ_ARENAK_TRAVERSABLE] = head;
+  la_store32_rel(&alloc->needsweep_count[LJ_ARENAK_TRAVERSABLE], n);
+}
+
 static int noop_finalizer(lua_State *L)
 {
   (void)L;
@@ -487,10 +506,12 @@ static void typed_dtor_fixture_init(TypedDtorFixture *fx)
   lua_getglobal(L, "typed_dtor_fixture");
   assert(tvistab(L->top - 1));
 
-  /* Crossing an arena boundary between the two calls is legal. Retry in that
-  ** unlikely case: the next zero-upvalue closure and the atomic one-upvalue
-  ** pair then start in the freshly selected traversable arena. */
-  for (i = 0; i < 8u; i++) {
+  /* The batch tests require an LFUNC0 in one lifetime word and the atomic
+  ** LFUNC1/CLOSED_UV pair together in another. Same-arena placement alone is
+  ** insufficient: valid allocator packing can put all three in one word or
+  ** split the pair. Select the intended geometry instead of depending on the
+  ** first free-run choice, retrying across arena boundaries as needed. */
+  for (i = 0; i < 64u; i++) {
     lua_getfield(L, -1, "make0");
     assert(tvisfunc(L->top - 1));
     lua_call(L, 0, 1);
@@ -515,10 +536,14 @@ static void typed_dtor_fixture_init(TypedDtorFixture *fx)
     assert(uvval(fx->uv) == &fx->uv->tv);
     fx->a = lj_arena_of(fx->f1);
     if (lj_arena_of(fx->f0) == fx->a &&
-	lj_arena_of(fx->uv) == fx->a)
+	lj_arena_of(fx->uv) == fx->a &&
+	(lj_arena_cellof(fx->f0) >> 4) !=
+	(lj_arena_cellof(fx->f1) >> 4) &&
+	(lj_arena_cellof(fx->f1) >> 4) ==
+	(lj_arena_cellof(fx->uv) >> 4))
       break;
   }
-  assert(i < 8u);
+  assert(i < 64u);
 
   fx->L = L;
   fx->g = G(L);
@@ -617,7 +642,7 @@ static GCArena *typed_dtor_prepare_target(TypedDtorFixture *fx,
   assert(lj_gc2_test_sweep_owner_progress(fx->g, fx->tg, 1u) == 1u);
   assert(fx->tg->alloc.quarantine[LJ_ARENAK_TRAVERSABLE] == fx->a);
   other = alloc->needsweep[LJ_ARENAK_TRAVERSABLE];
-  alloc->needsweep[LJ_ARENAK_TRAVERSABLE] = NULL;
+  arena_fixture_needsweep(alloc, NULL);
   return other;
 }
 
@@ -628,8 +653,7 @@ static GCSize typed_dtor_finish_target(TypedDtorFixture *fx, GCArena *other)
   uint32_t i;
 
   for (i = 0; i < 256u &&
-	 !arena_list_contains(lj_arena_alloc_reclaimed_head(
-	   alloc, LJ_ARENAK_TRAVERSABLE), fx->a); i++)
+	 !arena_reclaimed_contains(alloc, fx->a); i++)
     assert(lj_gc2_test_sweep_owner_progress(
 	fx->g, fx->tg, 1u) != 0);
   assert(i < 256u);
@@ -644,7 +668,7 @@ static GCSize typed_dtor_finish_target(TypedDtorFixture *fx, GCArena *other)
   lj_gc2_cycle_to_idle(fx->g);
   assert(gc2_phase_acq(fx->g) == LJ_GC2_IDLE);
 
-  alloc->needsweep[LJ_ARENAK_TRAVERSABLE] = other;
+  arena_fixture_needsweep(alloc, other);
   assert(lj_arena_alloc_restore_sweep_kind(
 	alloc, LJ_ARENAK_TRAVERSABLE));
   return total_after_target;
@@ -808,7 +832,7 @@ static void test_typed_dtor_dense_batch(uint32_t wanted)
   }
 
   other = alloc->needsweep[LJ_ARENAK_TRAVERSABLE];
-  alloc->needsweep[LJ_ARENAK_TRAVERSABLE] = NULL;
+  arena_fixture_needsweep(alloc, NULL);
   memset(&bridge, 0, sizeof(bridge));
   bridge.g = fx.g;
   bridge.tg = fx.tg;
@@ -1308,7 +1332,7 @@ static void test_typed_dtor_batch_extent_reject(void)
 
   lj_arena_bm_clear(fx.a->mark, fx.f1cell + 1u);
   other = alloc->needsweep[LJ_ARENAK_TRAVERSABLE];
-  alloc->needsweep[LJ_ARENAK_TRAVERSABLE] = NULL;
+  arena_fixture_needsweep(alloc, NULL);
   assert(typed_dtor_finish_target(&fx, other) ==
 	 total0 - fx.f1size - fx.uvsize);
   lua_close(fx.L);
@@ -1375,7 +1399,7 @@ static void test_typed_dtor_batch_recovery_cancel(void)
   /* Recovery deliberately preserves the selected object for this cycle, so
   ** this target need not reach reclaimed publication. Reattach the unrelated
   ** NEEDSWEEP suffix and let joined-world lua_close drain the live quarantine. */
-  fx.tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] = other;
+  arena_fixture_needsweep(&fx.tg->alloc, other);
   lua_close(fx.L);
 }
 
@@ -1434,7 +1458,7 @@ static void test_typed_dtor_denied_capability_retires(int smr_busy)
 
   assert(fx.tg->alloc.quarantine[LJ_ARENAK_TRAVERSABLE] == fx.a);
   other = fx.tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE];
-  fx.tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] = NULL;
+  arena_fixture_needsweep(&fx.tg->alloc, NULL);
   assert(typed_dtor_finish_target(&fx, other) == total0 - fx.f0size);
   assert(!lj_arena_bm_get(fx.a->block, fx.f0cell));
   assert(lj_arena_dtor_kind_acq(fx.a, fx.f0cell) == LJ_ARENA_DTOR_NONE);
@@ -1722,7 +1746,7 @@ static void test_quarantine_late_live_after_eof(void)
   /* Keep unrelated prepared arenas out of the focused owner-progress choice;
   ** restore this owner-local list before teardown. */
   other_needsweep = tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE];
-  tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] = NULL;
+  arena_fixture_needsweep(&tg->alloc, NULL);
 
   /* First complete the summarized bounded pass with no actionable sidecar
   ** state. The later LIVE publication is therefore behind its numeric EOF. */
@@ -1796,7 +1820,7 @@ static void test_quarantine_late_live_after_eof(void)
 
   /* Restore the other arenas prepared solely by this fixture. The completed
   ** target deliberately remains on the normal CLOSED reclaimed stack. */
-  tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] = other_needsweep;
+  arena_fixture_needsweep(&tg->alloc, other_needsweep);
   lj_arena_alloc_restore_sweep_kind(&tg->alloc,
 				    LJ_ARENAK_TRAVERSABLE);
   lua_close(L);
@@ -1811,7 +1835,7 @@ static void seed_traversable_needsweep(TGState *tg, uint32_t n)
     a->hdr.owner_tid = tg->alloc.owner_tid;
     a->hdr.flags |= LJ_AF_NEEDSWEEP;
     lj_arena_next_rel(a, tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE]);
-    tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] = a;
+    arena_fixture_needsweep(&tg->alloc, a);
   }
 }
 
@@ -1888,8 +1912,7 @@ static void test_worker_owned_sweep_direct(void)
   assert(gc2_worker_active_acq(g) == 0);
   assert(!arena_list_contains(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
 			      swept_a));
-  assert(arena_list_contains(lj_arena_alloc_reclaimed_head(
-		&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE), swept_a));
+  assert(arena_reclaimed_contains(&extra_tg.alloc, swept_a));
   assert((extra_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert((swept_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert((swept_a->hdr.flags & LJ_AF_RECLAIMED) != 0);
@@ -2117,8 +2140,7 @@ static void test_boundary_lazy_sweep_extra_tg(void)
   assert(!lj_gc2_sweep_pending(g));
   assert(arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_PLAIN],
 			     extra_plain_a));
-  assert(arena_list_contains(lj_arena_alloc_reclaimed_head(
-		&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE), extra_trav_a));
+  assert(arena_reclaimed_contains(&extra_tg.alloc, extra_trav_a));
   assert((extra_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert((extra_trav_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert(extra_trav_a->hdr.sweep_epoch == sweep_cycle);

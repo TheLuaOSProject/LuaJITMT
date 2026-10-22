@@ -287,7 +287,7 @@ for required in '__arm64_root_jforl' '__arm64_root_jfori' \
   'T->unused1 |= TRACE_EXITTAB_MCODE;' \
   'trace_exittab_rel(T, (MCode **)(void *)exitstub);' \
   'trace_exitstub_rel(T, (MCode *)(void *)exittab);' \
-  'J->cur.unused1 = TRACE_ARM64_INT_LOOP_ADMITTED;' \
+  'trace_arm64_admission_rel(&J->cur, TRACE_ARM64_INT_LOOP_ADMITTED);' \
   'IRIns ir[ROOT_ENTRY_IR_CAP];' \
   'J->cur.ir = fixture->ir;' \
   'J->cur.nins = ROOT_ENTRY_R_END;' \
@@ -342,9 +342,9 @@ for required in '__arm64_root_jforl' '__arm64_root_jfori' \
   'T->snap[0].nslots = 2;' \
   'ir[ROOT_ENTRY_R_POLL].op1 = 0;' \
   'lj_tg_store_jit_base(L->tg_hint, NULL);' \
-  'T->unused1 &= (uint8_t)~TRACE_ARM64_INT_LOOP_ADMITTED;' \
-  'T->unused1 |= TRACE_ARM64_INT_SIDE_ADMITTED;' \
-  'T->unused1 &= (uint8_t)~TRACE_ARM64_INT_SIDE_ADMITTED;' \
+  'trace_arm64_admission_rel(T, TRACE_ARM64_INT_LOOP_ADMITTED | 0x10000u);' \
+  'trace_arm64_admission_rel(T, trace_arm64_admission_acq(T) | TRACE_ARM64_INT_SIDE_ADMITTED);' \
+  'trace_arm64_admission_rel(T, trace_arm64_admission_acq(T) & ~TRACE_ARM64_INT_SIDE_ADMITTED);' \
   'T->retire_epoch = 1;' \
   'T->unused1 |= TRACE_ENTRY_INVALIDATED;' \
   'T->startins = BCINS_AJ(BC_LOOP, bc_a(loop->original), 0);' \
@@ -446,10 +446,14 @@ for required in trace_root_acq trace_link_acq trace_linktype_acq \
   trace_exittab_acq trace_exitstub_acq retire_epoch TRACE_EXITTAB_MCODE \
   TRACE_ENTRY_GATED TRACE_ARM64_INT_LOOP_ADMITTED \
   TRACE_ARM64_INT_FORL_ADMITTED TRACE_ARM64_TRUE_FUNCF_ADMITTED \
-  TRACE_ARM64_INT_SIDE_ADMITTED LJ_TRLINK_RETURN; do
+  trace_arm64_admission_acq LJ_TRLINK_RETURN; do
   grep "$required" "$loop_view_region" >/dev/null
 done
-grep -F 'function_root' "$loop_view_region" >/dev/null
+for required in 'v->admission == expected_admission' \
+  'v->flags = la_load8_acq(&T->unused1)' \
+  '!function_root || v->flags == 0'; do
+  grep -F "$required" "$loop_view_region" >/dev/null
+done
 grep -F 'v->spadjust == 0' "$loop_view_region" >/dev/null
 grep -F 'v->link == traceno' "$loop_view_region" >/dev/null
 awk '/^static int trace_root_entry_arm64_layout_valid/ { copy=1 }

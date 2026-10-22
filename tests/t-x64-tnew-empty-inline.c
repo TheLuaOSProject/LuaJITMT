@@ -19,6 +19,8 @@
 #include "lj_tg.h"
 
 #include "lib/lua_fixture_helpers.h"
+#include "lib/gc2_wide_fixture_helpers.h"
+#include "lib/gc2_wide_reuse_helpers.h"
 
 /* Built by the M6 harness with LJ_TAB_TEST_HELPERS enabled. */
 
@@ -788,6 +790,75 @@ static void test_plain_new0_uses_bump_with_free_run(lua_State *L,
   assert(root_chain_contains(g, obj2gco(t)));
 }
 
+static void test_wide_cell_reuse(uint32_t cell, int pending)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  TGState *tg;
+  GCArena *a;
+  LJGC2TabStamp *s;
+  LJGC2TableTokenTicket ticket = { 0 };
+  uint64_t token;
+  uint32_t calls;
+  GCtab *result;
+  assert(L);
+  luaL_openlibs(L);
+  ljt_lua_dostring(L, "jit.off(true, true)");
+  assert(lua_checkstack(L, 64));
+  g = G(L); tg = L2TG(L);
+  (void)lua_gc(L, LUA_GCCOLLECT, 0);
+  lj_gc_threshold_store(g, UINT64_MAX / 2u);
+  lj_gc2_hard_store(g, UINT64_MAX / 2u);
+  lj_gc2_trigger_store(g, UINT64_MAX / 2u);
+  load_empty_table_chunk(L);
+  prime_traversable_bump_window(tg);
+  tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].cell = cell;
+  a = tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a;
+  la_store64_rel(&tg->local_total, 0);
+  token = poison_recycled_empty_table_fields(a, cell);
+  s = lj_arena_gc2_stamp_acq(lj_arena_cellptr(a, cell));
+  ljt_gc2_wide_seed(lj_arena_cellptr(a, cell), UINT64_C(0xfedcba9876543210),
+             2718u, gc2_cycle_acq(g), 1);
+  wide_guards_arm(a, cell, 1u);
+  if (pending) {
+    assert(lj_gc2_table_token_refresh(&s->token, &ticket) == LJ_GC2_TABLE_TOKEN_RESULT_OK);
+    token = ticket.control;
+  }
+  calls = lj_tab_test_new0_calls();
+  ljt_lua_pcall(L, 0, 1, "wide high-cell TNEW");
+  assert(tvistab(L->top - 1));
+  result = tabV(L->top - 1);
+  wide_guards_check();
+  assert(la_load64_acq(&s->token.control) == token);
+  if (!pending) {
+    assert(lj_tab_test_new0_calls() == calls);
+    assert((void *)result == lj_arena_cellptr(a, cell));
+    assert(la_load64_acq(&s->state) == 0);
+    assert(ljt_gc2_wide_snapshot(result).hi == UINT64_C(0xfedcba9876543210));
+    assert((uint32_t)ljt_gc2_wide_snapshot(result).lo == 2718u);
+    la_store64_rel(&s->state, UINT32_MAX - 1u);
+    lj_gc2_test_table_dirty_bump(g, result);
+    assert(la_load64_acq(&s->state) == UINT32_MAX);
+    assert(ljt_gc2_wide_snapshot(result).hi == UINT64_C(0xfedcba9876543210));
+    assert((uint32_t)ljt_gc2_wide_snapshot(result).lo == 2719u);
+    assert((uint32_t)(ljt_gc2_wide_snapshot(result).lo >> 32) == 0);
+  } else {
+    assert(lj_tab_test_new0_calls() == calls + 1u);
+    assert((void *)result != lj_arena_cellptr(a, cell));
+    assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_FREE);
+    assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+    assert(!lj_arena_ready_get(a, cell));
+    assert(la_load64_acq(&s->state) != 0);
+    assert(ljt_gc2_wide_snapshot(lj_arena_cellptr(a, cell)).hi ==
+           UINT64_C(0xfedcba9876543210));
+    assert(lj_gc2_table_token_complete(&s->token, &ticket) == LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  }
+  assert_empty_table_body(g, result);
+  lua_close(L);
+  printf("TNEW cell %u pending %d: inline reset/wide persistence and promotion/token preservation/neighbor guards passed\n", cell, pending);
+}
+
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -827,6 +898,10 @@ int main(void)
   test_plain_new0_uses_bump_with_free_run(L, g, tg);
 
   lua_close(L);
+  test_wide_cell_reuse(1536u, 0);
+  test_wide_cell_reuse(1537u, 0);
+  test_wide_cell_reuse(1536u, 1);
+  test_wide_cell_reuse(1537u, 1);
   puts("t-x64-tnew-empty-inline OK: interpreter empty TNEW inline/fallback paths verified");
   return 0;
 }

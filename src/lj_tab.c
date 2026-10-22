@@ -2259,16 +2259,21 @@ int lj_tab_resize_desc_install(lua_State *L, GCtab *t, TabResizeDesc *desc)
       return 0;
     }
     if (expected == control) {
+      uint64_t weak = lj_tab_weak_record_raw_acq(t);
+      uint64_t desiredweak = (weak & ~LJ_TAB_WEAK_RECORD_ACAP_MASK) |
+	((uint64_t)desc->oldacap << LJ_TAB_WEAK_RECORD_ACAP_SHIFT);
       /*
-      ** Stable tables need not maintain the cold capacity shadow. Synchronize
-      ** it immediately before the one control-tag CAS; a changed stable word
-      ** makes that CAS fail without exposing the shadow to ordinary readers.
+      ** Stable tables need not maintain the cold capacity shadow. Publish it
+      ** atomically with descriptor control: a separate shadow store could
+      ** overwrite a newer descriptor's capacity before our control CAS loses.
+      ** Preserve the sampled semantic weak cycle/state in the same pair CAS.
+      ** A concurrent weak update also rejects this bounded install attempt;
+      ** neither a losing installer nor a delayed helper may write either word.
       */
-      lj_tab_weak_acap_rel(t, desc->oldacap);
       tab_test_resize_desc_install(
 	L, t, desc, LJ_TAB_RESIZE_DESC_HOOK_BEFORE_CONTROL_CAS);
-      if (!lj_tab_struct_control_cas(t, &expected, desired) &&
-	  expected != desired) {
+      if (!lj_tab_struct_weak_pair_cas(t, &expected, &weak, desired,
+				      desiredweak)) {
 	(void)tab_resize_desc_cancel_installing(g, L, desc);
 	lj_gc2_smr_read_leave(g);
 	return 0;
@@ -4705,6 +4710,180 @@ static LJ_AINLINE int tab_rooted_get_key_valid(cTValue *key)
 	 tab_tv_snapshot_valid(key);
 }
 
+#ifdef LJ_TAB_TEST_HELPERS
+static LJTabScalarRootedTryHook tab_test_scalar_rooted_try_hook;
+void lj_tab_test_set_scalar_rooted_try_hook(LJTabScalarRootedTryHook hook)
+{
+  tab_test_scalar_rooted_try_hook = hook;
+}
+static void tab_scalar_test_at(lua_State *L, GCtab *t, uint32_t stage)
+{
+  if (tab_test_scalar_rooted_try_hook)
+    tab_test_scalar_rooted_try_hook(L, t, stage);
+}
+#else
+#define tab_scalar_test_at(L, t, stage) ((void)0)
+#endif
+
+/* This resolver never calls the general snapshot helper: its first header
+** reads already require SMR. Admit each raw vector start, confirm both source
+** roots, then inspect immutable size headers within the retained cell bound.
+** A copied scalar needs no child lease or output publication barrier. */
+int lj_tab_getscalar_rooted_try(lua_State *L, cTValue *tabroot,
+			      cTValue *keyroot, TValue *outroot)
+{
+  TabKeyedSlotOwnerSnapshot owner;
+  LJGC2Lease table_lease = { 0 }, key_lease = { 0 };
+  LJGC2Lease array_lease = { 0 }, node_lease = { 0 };
+  TabForjitSnapshot snap;
+  TValue tablev, keyv, confirm, result, numkey, matched_key;
+  const TValue *hashkey = &keyv;
+  GCtab *t = NULL;
+  Node *n, *matched = NULL;
+  TValue *slot = NULL;
+  size_t table_span = 0, array_span = 0, node_span = 0;
+  MSize visited = 0;
+  int64_t i64;
+  int32_t ik = 0;
+  int isnum, isint = 0, found = 0;
+
+  if (!L || !tabroot || !keyroot || !outroot ||
+      !tab_keyed_slot_owner_snapshot(L, &owner))
+    return 0;
+  lj_tv_load_acq(&tablev, tabroot);
+  lj_tv_load_acq(&keyv, keyroot);
+  if (!tvistab(&tablev) ||
+      !(tvisstr(&keyv) || tvisnumber(&keyv) || tvisbool(&keyv)) ||
+      (tvisnum(&keyv) && tvisnan(&keyv)))
+    return 0;
+  tab_scalar_test_at(L, NULL, LJ_TAB_SCALAR_TEST_SOURCE);
+  if (!lj_gc2_small_lease_try(owner.g, tabV(&tablev), sizeof(GCtab),
+	(uint32_t)~LJ_TTAB, &table_lease, &table_span))
+    goto leave;
+  if (tvisstr(&keyv) && strV(&keyv) != &owner.g->strempty &&
+      !lj_gc2_small_lease_try(owner.g, strV(&keyv), sizeof(GCstr),
+	(uint32_t)~LJ_TSTR, &key_lease, NULL))
+    goto leave;
+  /* Admission may have retained a successor at a reused address. Only the
+  ** actual source cells can authorize that incarnation, never these copies. */
+  lj_tv_load_acq(&confirm, tabroot);
+  if (tv_rawload(&confirm) != tv_rawload(&tablev))
+    goto leave;
+  lj_tv_load_acq(&confirm, keyroot);
+  if (tv_rawload(&confirm) != tv_rawload(&keyv) ||
+      !tab_keyed_slot_owner_current(L, &owner))
+    goto leave;
+  t = tabV(&tablev);
+  snap.array = lj_tab_array_acq(t);
+  snap.node = lj_tab_node_acq(t);
+  tab_scalar_test_at(L, t, LJ_TAB_SCALAR_TEST_VECTORS);
+  if (snap.array && !lj_tab_array_is_colocated(t, snap.array) &&
+      !lj_gc2_small_lease_try(owner.g,
+	(const void *)((uintptr_t)snap.array - sizeof(TabArrayHdr)),
+	sizeof(TabArrayHdr), 0, &array_lease, &array_span))
+    goto leave;
+  if (snap.node != &owner.g->nilnode &&
+      !lj_gc2_small_lease_try(owner.g,
+	(const void *)((uintptr_t)snap.node - sizeof(TabNodeHdr)),
+	sizeof(TabNodeHdr), 0, &node_lease, &node_span))
+    goto leave;
+  if (lj_tab_array_acq(t) != snap.array || lj_tab_node_acq(t) != snap.node)
+    goto leave;
+  tab_scalar_test_at(L, t, LJ_TAB_SCALAR_TEST_RETAINED);
+  if (snap.array && !lj_tab_array_is_colocated(t, snap.array)) {
+    MSize acap = lj_tab_array_hdr_acap_acq(snap.array);
+    snap.asize = lj_tab_array_hdr_asize_acq(snap.array);
+    if (lj_tab_array_is_retiring(t, snap.array) || !tab_valid_acap(acap) ||
+	snap.asize > acap || lj_tab_array_bytes(acap) > array_span)
+      goto leave;
+  } else {
+    snap.asize = lj_tab_asize_acq(t);
+    if ((!snap.array && snap.asize != 0) ||
+	(size_t)snap.asize > (table_span - sizeof(GCtab)) / sizeof(TValue))
+      goto leave;
+  }
+  snap.hmask = snap.node == &owner.g->nilnode ? 0 :
+		 lj_tab_node_hmask_acq(snap.node);
+  if (snap.node != &owner.g->nilnode &&
+      (!tab_valid_hmask(snap.hmask) || lj_tab_node_is_retiring(snap.node) ||
+       lj_tab_node_bytes(snap.hmask) > node_span))
+    goto leave;
+  isnum = tvisnumber(&keyv);
+  if (tvisint(&keyv)) {
+    ik = intV(&keyv);
+    isint = 1;
+    setnumV(&numkey, (lua_Number)ik);
+    hashkey = &numkey;
+  } else if (tvisnum(&keyv)) {
+    isint = lj_num2int_check(numV(&keyv), i64, ik);
+  }
+  if (isint && (MSize)ik < snap.asize) {
+    slot = &snap.array[ik];
+  } else if (snap.hmask != 0) {
+    n = isnum ? hashnum_node(snap.node, snap.hmask, hashkey) :
+	tvisstr(&keyv) ? hashstr_node(snap.node, snap.hmask, strV(&keyv)) :
+	hashmask_node(snap.node, snap.hmask, boolV(&keyv));
+    while (n) {
+      TValue nk;
+      if (!tab_node_in_snapshot(snap.node, snap.hmask, n) ||
+	  visited++ > snap.hmask)
+	goto leave;
+      lj_tv_load_acq(&nk, &n->key);
+      if (tab_key_islocked(&nk) || tvistabinternal(&nk) ||
+	  tab_val_is_publish_claim(&nk) || nk.u32.hi == LJ_KEYINDEX)
+	goto leave;
+      /* Unrelated collision keys are opaque words. Only the requested string
+      ** can match, and its exact body lease already authorizes its header.
+      ** Strings, numeric and boolean keys are never weak collectable keys. */
+      if ((isnum && tvisnum(&nk) && nk.n == hashkey->n) ||
+	  (!isnum && tv_rawload(&nk) == tv_rawload(&keyv))) {
+	slot = &n->val;
+	matched = n;
+	matched_key = nk;
+	break;
+      }
+      n = lj_tab_nextnode_acq(n);
+    }
+  }
+  if (!slot)
+    goto leave;
+  tab_scalar_test_at(L, t, LJ_TAB_SCALAR_TEST_VALUE);
+  lj_tv_load_acq(&result, slot);
+  if (!(tvisnumber(&result) || tvisbool(&result)))
+    goto leave;
+  /* Canonical shared keys are immutable in this vector; shared clear/delete
+  ** changes only values. Private raw clear cannot overlap this owner-only,
+  ** callback-free attempt. Confirm anyway before accepting the value, so a
+  ** malformed/reentrant observation cannot combine different key/value uses. */
+  if (matched) {
+    lj_tv_load_acq(&confirm, &matched->key);
+    if (tv_rawload(&confirm) != tv_rawload(&matched_key))
+      goto leave;
+  }
+  tab_scalar_test_at(L, t, LJ_TAB_SCALAR_TEST_RESULT);
+  if (!tab_forjit_snapshot_current(t, &snap))
+    goto leave;
+  lj_tv_load_acq(&confirm, tabroot);
+  if (tv_rawload(&confirm) != tv_rawload(&tablev))
+    goto leave;
+  lj_tv_load_acq(&confirm, keyroot);
+  if (tv_rawload(&confirm) != tv_rawload(&keyv) ||
+      !tab_keyed_slot_owner_current(L, &owner))
+    goto leave;
+  /* No source cell is needed after this store, including when output aliases
+  ** either input. Number/boolean publication has no GC edge to barrier. */
+  copyTVrel(L, outroot, &result);
+  if (tab_key_on_stack(L, outroot))
+    lj_state_stack_pubtv(L, L, outroot);
+  found = 1;
+leave:
+  lj_gc2_lease_release(&node_lease);
+  lj_gc2_lease_release(&array_lease);
+  lj_gc2_lease_release(&key_lease);
+  lj_gc2_lease_release(&table_lease);
+  return found;
+}
+
 static LJ_AINLINE void tab_rooted_get_publish_nil(TValue *outroot)
 {
   TValue nilv;
@@ -4721,7 +4900,7 @@ static LJ_AINLINE void tab_rooted_get_publish_nil(TValue *outroot)
 static int tab_gettv_rooted_try_impl(lua_State *L, cTValue *tabroot,
 				      cTValue *keyroot,
 				      const TValue *fixedkey,
-				      TValue *outroot)
+				      TValue *outroot, int hit_only)
 {
   TabKeyedSlotOwnerSnapshot owner;
   LJGC2Lease table_lease = { 0 };
@@ -4765,7 +4944,7 @@ static int tab_gettv_rooted_try_impl(lua_State *L, cTValue *tabroot,
   ** pointer from validating as an address-reused successor before its exact
   ** lease has been acquired. */
   if (!lj_gc2_smr_read_try(owner.g)) {
-    if (tab_keyed_slot_owner_current(L, &owner))
+    if (!hit_only && tab_keyed_slot_owner_current(L, &owner))
       tab_rooted_get_publish_nil(curout);
     return LJ_TAB_ROOTED_GET_RETRY;
   }
@@ -4836,7 +5015,7 @@ confirm:
   curout = outstack ? restorestack(L, outofs) : outroot;
   if (status == LJ_TAB_ROOTED_GET_FOUND) {
     copyTVrel(L, curout, &result);
-  } else {
+  } else if (!hit_only) {
     tab_rooted_get_publish_nil(curout);
   }
 
@@ -4866,15 +5045,108 @@ cleanup:
 int lj_tab_gettv_rooted_try(lua_State *L, cTValue *tabroot,
 			     cTValue *keyroot, TValue *outroot)
 {
-  return tab_gettv_rooted_try_impl(L, tabroot, keyroot, NULL, outroot);
+  return tab_gettv_rooted_try_impl(L, tabroot, keyroot, NULL, outroot, 0);
 }
+
+int lj_tab_gettv_rooted_hit_try(lua_State *L, cTValue *tabroot,
+				 cTValue *keyroot, TValue *outroot)
+{
+  /* Meta callers have not allocated their chain roots yet. A miss/refusal
+  ** must preserve both original inputs, including an aliased output, so the
+  ** general chain can capture them after this complete retaining interval. */
+  return tab_gettv_rooted_try_impl(L, tabroot, keyroot, NULL, outroot, 1) ==
+	 LJ_TAB_ROOTED_GET_FOUND;
+}
+
+#if LJ_HASJIT && LJ_HASFFI
+/* Compare with an independently retained trace KGC, never discover a new GC
+** result. The native caller must not cross a safepoint until this returns. */
+int lj_tab_cmpcdata_kgc_rooted_try(lua_State *L, cTValue *tabroot,
+				 cTValue *keyroot, GCcdata *expected)
+{
+  TabKeyedSlotOwnerSnapshot owner;
+  LJGC2Lease table_lease = { 0 };
+  LJGC2Lease key_lease = { 0 };
+  TValue tablev, keysnap, result, table_confirm, key_confirm;
+  cTValue *curtab, *curkey;
+  TValue *jitbase;
+  ptrdiff_t tabofs = 0, keyofs = 0;
+  int tabstack, keystack;
+  int hit = 0, table_snapshot = 0, key_snapshot = 0;
+  int table_lease_active = 0, key_lease_active = 0;
+
+  if (!L || !tabroot || !keyroot || !expected ||
+      !tab_keyed_slot_owner_snapshot(L, &owner))
+    return 0;
+  jitbase = lj_tg_load_jit_base(owner.tg);
+  if (!jitbase)
+    return 0;
+  tabstack = tab_key_on_stack(L, tabroot);
+  keystack = tab_key_on_stack(L, keyroot);
+  tabofs = tabstack ? savestack(L, (TValue *)(void *)tabroot) : 0;
+  keyofs = keystack ? savestack(L, (TValue *)(void *)keyroot) : 0;
+  curtab = tabstack ? restorestack(L, tabofs) : tabroot;
+  curkey = keystack ? restorestack(L, keyofs) : keyroot;
+
+  /* Retain source incarnations before observation, exactly as the rooted
+  ** value getter does. A KGC result does not protect table/vector storage. */
+  if (!lj_gc2_smr_read_try(owner.g))
+    return 0;
+  lj_tv_load_acq(&tablev, curtab);
+  table_snapshot = 1;
+  if (!tvistab(&tablev) ||
+      lj_gc2_tv_lease_acquire(owner.g, &tablev, &table_lease) !=
+	LJ_GC2_TV_EDGE_VALID)
+    goto confirm;
+  table_lease_active = 1;
+  lj_tv_load_acq(&keysnap, curkey);
+  key_snapshot = 1;
+  if (lj_gc2_tv_lease_acquire(owner.g, &keysnap, &key_lease) !=
+      LJ_GC2_TV_EDGE_VALID)
+    goto confirm;
+  key_lease_active = 1;
+  if (!tab_rooted_get_key_valid(&keysnap))
+    goto confirm;
+  if (tab_get_current_forjit(tabV(&tablev), &keysnap, &result) ==
+      LJ_TAB_ROOTED_GET_FOUND) {
+    /* Decode only the copied tag/pointer. An unmatched cache value can be a
+    ** stale or newly published GC word: never dereference or publish it.
+    ** Equality names the exact cdata already kept live by the typed KGC. */
+    hit = tviscdata(&result) && gcval(&result) == obj2gco(expected);
+  }
+
+confirm:
+  if (table_snapshot) {
+    curtab = tabstack ? restorestack(L, tabofs) : tabroot;
+    lj_tv_load_acq(&table_confirm, curtab);
+  }
+  if (key_snapshot) {
+    curkey = keystack ? restorestack(L, keyofs) : keyroot;
+    lj_tv_load_acq(&key_confirm, curkey);
+  }
+  if (!tab_keyed_slot_owner_current(L, &owner) ||
+      lj_tg_load_jit_base(owner.tg) != jitbase ||
+      (table_snapshot &&
+	tv_rawload(&table_confirm) != tv_rawload(&tablev)) ||
+      (key_snapshot && tv_rawload(&key_confirm) != tv_rawload(&keysnap)))
+    hit = 0;
+  /* No vector pointer escapes SMR. Sources are unchanged, and the integer
+  ** result introduces no GC edge requiring a result lease/publication. */
+  lj_gc2_smr_read_leave(owner.g);
+  if (key_lease_active)
+    lj_gc2_lease_release(&key_lease);
+  if (table_lease_active)
+    lj_gc2_lease_release(&table_lease);
+  return hit;
+}
+#endif
 
 int lj_tab_getinttv_rooted_try(lua_State *L, cTValue *tabroot, int32_t key,
 				TValue *outroot)
 {
   TValue keytv;
   setintV(&keytv, key);
-  return tab_gettv_rooted_try_impl(L, tabroot, NULL, &keytv, outroot);
+  return tab_gettv_rooted_try_impl(L, tabroot, NULL, &keytv, outroot, 0);
 }
 
 static int tab_resolve_current_keyed_try_raw(global_State *g, GCtab *t,
@@ -8220,6 +8492,165 @@ enum {
   TAB_ROOTED_NEXT_FOUND = 1
 };
 
+/* A refused global SMR reader need not stop scalar array iteration. Retain
+** small table/array allocations independently, never discover a GC result,
+** and require the permanent nil hash node even for a terminal END. */
+static int tab_nextscalar_rooted_try(lua_State *L, cTValue *tabroot,
+				    cTValue *keyroot, TValue *outkey,
+				    TValue *outval, uint32_t *nextidx)
+{
+  TabKeyedSlotOwnerSnapshot owner;
+  LJGC2Lease table_lease = { 0 }, array_lease = { 0 };
+  TabForjitSnapshot snap;
+  TValue tablev, keyv, confirm, result, nextkey;
+  GCtab *t;
+  size_t table_span = 0, array_span = 0;
+  uint32_t idx, foundidx = 0;
+  int64_t i64;
+  int32_t ik;
+  int colo = 0;
+  int status = TAB_ROOTED_NEXT_RETRY;
+
+  if (!L || !tabroot || !keyroot || !outkey || !outval ||
+      outkey == outval || !tab_keyed_slot_owner_snapshot(L, &owner))
+    return status;
+#ifdef LJ_TAB_TEST_HELPERS
+  /* The established retry hook may allocate or move the stack. Let its
+  ** original general reader close all authority before calling it. */
+  if (tab_test_rooted_reader_retry_hook)
+    return status;
+#endif
+  lj_tv_load_acq(&tablev, tabroot);
+  lj_tv_load_acq(&keyv, keyroot);
+  if (!tvistab(&tablev) ||
+      !(tvisnil(&keyv) || keyv.u32.hi == LJ_KEYINDEX || tvisnumber(&keyv)))
+    return status;
+  tab_scalar_test_at(L, NULL, LJ_TAB_SCALAR_TEST_SOURCE);
+  if (!lj_gc2_small_lease_try(owner.g, tabV(&tablev), sizeof(GCtab),
+	(uint32_t)~LJ_TTAB, &table_lease, &table_span))
+    goto leave;
+  /* Only the actual source can authorize an address-reused successor after
+  ** admission. Neither a copied TValue nor the owner claim alone suffices. */
+  lj_tv_load_acq(&confirm, tabroot);
+  if (tv_rawload(&confirm) != tv_rawload(&tablev))
+    goto leave;
+  lj_tv_load_acq(&confirm, keyroot);
+  if (tv_rawload(&confirm) != tv_rawload(&keyv) ||
+      !tab_keyed_slot_owner_current(L, &owner))
+    goto leave;
+  t = tabV(&tablev);
+  snap.array = lj_tab_array_acq(t);
+  snap.node = lj_tab_node_acq(t);
+  snap.hmask = 0;
+  if (snap.node != &owner.g->nilnode)
+    goto leave;
+  tab_scalar_test_at(L, t, LJ_TAB_SCALAR_TEST_VECTORS);
+  if (snap.array && !lj_tab_array_is_colocated(t, snap.array) &&
+      !lj_gc2_small_lease_try(owner.g,
+	(const void *)((uintptr_t)snap.array - sizeof(TabArrayHdr)),
+	sizeof(TabArrayHdr), 0, &array_lease, &array_span))
+    goto leave;
+  if (lj_tab_array_acq(t) != snap.array || lj_tab_node_acq(t) != snap.node)
+    goto leave;
+  tab_scalar_test_at(L, t, LJ_TAB_SCALAR_TEST_RETAINED);
+  if (snap.array && !lj_tab_array_is_colocated(t, snap.array)) {
+    MSize acap = lj_tab_array_hdr_acap_acq(snap.array);
+    snap.asize = lj_tab_array_hdr_asize_acq(snap.array);
+    if (lj_tab_array_is_retiring(t, snap.array) || !tab_valid_acap(acap) ||
+	snap.asize > acap || lj_tab_array_bytes(acap) > array_span)
+      goto leave;
+  } else {
+    snap.asize = lj_tab_asize_acq(t);
+    if (snap.array) {
+      colo = lj_tab_colo_acq(t);
+      if (colo <= 0 || colo > LJ_MAX_COLOSIZE ||
+	  snap.asize > (MSize)colo ||
+	  (size_t)colo > (table_span - sizeof(GCtab)) / sizeof(TValue))
+	goto leave;
+    } else if (snap.asize != 0) {
+      goto leave;
+    }
+  }
+  if (tvisnil(&keyv)) {
+    idx = 0;
+  } else if (keyv.u32.hi == LJ_KEYINDEX) {
+    idx = keyv.u32.lo;
+  } else if (tvisint(&keyv)) {
+    ik = intV(&keyv);
+    if ((uint32_t)ik >= snap.asize)
+      goto leave;
+    idx = (uint32_t)ik + 1u;
+  } else {
+    if (!lj_num2int_cond(numV(&keyv), i64, ik,
+			(uint32_t)i64 < snap.asize))
+      goto leave;
+    idx = (uint32_t)ik + 1u;
+  }
+  tab_scalar_test_at(L, t, LJ_TAB_SCALAR_TEST_VALUE);
+  status = TAB_ROOTED_NEXT_END;
+  for (; idx < snap.asize; idx++) {
+    TValue val;
+    lj_tv_load_acq(&val, &snap.array[idx]);
+    if (tvisnil(&val))
+      continue;
+    /* Unsupported/internal words are opaque. Never inspect a discovered GC
+    ** header, skip a GC edge, or turn refusal into end-of-iteration. */
+    if (!(tvisnumber(&val) || tvisbool(&val))) {
+      status = TAB_ROOTED_NEXT_RETRY;
+      goto leave;
+    }
+    result = val;
+    foundidx = idx;
+    status = TAB_ROOTED_NEXT_FOUND;
+    break;
+  }
+  tab_scalar_test_at(L, t, LJ_TAB_SCALAR_TEST_RESULT);
+  /* FOUND and END need the same generation/source/owner proof. All inputs
+  ** are confirmed after the local result copy and before either alias store. */
+  if (!tab_forjit_snapshot_current(t, &snap) ||
+      (colo && lj_tab_colo_acq(t) != colo))
+    goto retry;
+  lj_tv_load_acq(&confirm, tabroot);
+  if (tv_rawload(&confirm) != tv_rawload(&tablev))
+    goto retry;
+  lj_tv_load_acq(&confirm, keyroot);
+  if (tv_rawload(&confirm) != tv_rawload(&keyv) ||
+      !tab_keyed_slot_owner_current(L, &owner))
+    goto retry;
+  if (status == TAB_ROOTED_NEXT_FOUND) {
+    setintV(&nextkey, (int32_t)foundidx);
+    copyTVrel(L, outkey, &nextkey);
+    copyTVrel(L, outval, &result);
+    if (nextidx)
+      *nextidx = foundidx + 1u;
+    if (tab_key_on_stack(L, outkey))
+      lj_state_stack_pubtv(L, L, outkey);
+    else
+      lj_gc_pubroot(L, outkey);
+    if (tab_key_on_stack(L, outval))
+      lj_state_stack_pubtv(L, L, outval);
+    else
+      lj_gc_pubroot(L, outval);
+  }
+leave:
+  lj_gc2_lease_release(&array_lease);
+  lj_gc2_lease_release(&table_lease);
+  return status;
+retry:
+  status = TAB_ROOTED_NEXT_RETRY;
+  goto leave;
+}
+
+#ifdef LJ_TAB_TEST_HELPERS
+int lj_tab_test_nextscalar_rooted_try(lua_State *L, cTValue *tabroot,
+				    cTValue *keyroot, TValue *outkey,
+				    TValue *outval, uint32_t *nextidx)
+{
+  return tab_nextscalar_rooted_try(L, tabroot, keyroot, outkey, outval,
+				 nextidx);
+}
+#endif
+
 /* Resolve a next() cursor only against one paired structural snapshot. The
 ** caller owns vector SMR and the exact input-key lease, so hashing and header
 ** validation cannot cross a reclaim/reuse boundary. */
@@ -8378,6 +8809,13 @@ int lj_tab_next_rooted(lua_State *L, cTValue *tabroot, cTValue *keyroot,
     int table_status, key_status, outkey_status, outval_status, status;
 
     if (LJ_UNLIKELY(!lj_gc2_smr_read_try(G(L)))) {
+      /* A prior L-aware wait may have moved every stack-backed output too. */
+      TValue *curoutkey = outkeystack ? restorestack(L, outkeyofs) : outkey;
+      TValue *curoutval = outvalstack ? restorestack(L, outvalofs) : outval;
+      status = tab_nextscalar_rooted_try(L, curtab, curkey, curoutkey,
+					curoutval, nextidx);
+      if (status != TAB_ROOTED_NEXT_RETRY)
+	return status;
       lj_tab_wait_l(L);
       continue;
     }

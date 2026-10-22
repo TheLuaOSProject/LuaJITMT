@@ -271,7 +271,7 @@ static GCtrace *expect_admitted_root(jit_State *J, GCproto *pt)
   assert(trace_link_acq(T) == tr);
   assert(trace_linktype_acq(T) == LJ_TRLINK_LOOP);
   assert(trace_startpt_acq(T) == pt);
-  assert((la_load8_acq(&T->unused1) &
+  assert((trace_arm64_admission_acq(T) &
 	  TRACE_ARM64_INT_LOOP_ADMITTED) != 0);
   assert(trace_mcode_acq(T) != NULL);
   assert(trace_szmcode_acq(T) != 0);

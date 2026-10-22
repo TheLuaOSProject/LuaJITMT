@@ -8,9 +8,11 @@ and reports that are no longer authoritative are retained in
 ## Status at a glance
 
 - Development branch: `codex/aarch64-macos-port`.
-- Integrated upstream comparison point: LuaJITMT `v2.1` at `a649f737`.
-  The fetched upstream has advanced to `489bb089`; those changes are not yet
-  merged into this branch.
+- Integrated upstream comparison point: LuaJITMT `v2.1` at `489bb089`.
+  The refresh has focused native ARM64/arm64e and x86-64/Rosetta evidence;
+  the complete gate checkpoints below predate this merge. See
+  [`upstream-refresh-2026-10-22.md`](upstream-refresh-2026-10-22.md) for merge
+  decisions, retained artifact exclusions, tests and remaining limits.
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.

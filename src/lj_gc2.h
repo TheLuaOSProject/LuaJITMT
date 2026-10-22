@@ -491,6 +491,16 @@ LJ_FUNC void lj_gc2_test_sweep_reclaim_scope_leave(global_State *g);
 #define LJ_GC2_THREAD_NEEDSCAN_TEST_INSTALLING	3u
 #define LJ_GC2_TABLE_RESCAN_TEST_INSTALLING	1u
 #define LJ_GC2_TABLE_RESCAN_TEST_HINT_CLEARED	2u
+#define LJ_GC2_TABLE_COALESCE_TEST_PRE_DIRTY	1u
+#define LJ_GC2_TABLE_COALESCE_TEST_POST_DIRTY	2u
+#define LJ_GC2_TABLE_COALESCE_TEST_SCAN_START	3u
+#define LJ_GC2_TABLE_COALESCE_TEST_PRE_PROOF	4u
+#define LJ_GC2_TABLE_COALESCE_TEST_MARK_ENTER	5u
+#define LJ_GC2_TABLE_COALESCE_TEST_PRE_MODE	6u
+#define LJ_GC2_TABLE_COALESCE_TEST_POST_MODE	7u
+typedef void (*LJGC2TableCoalesceTestHook)(global_State *g, GCtab *t,
+					   uint32_t stage);
+LJ_FUNC void lj_gc2_test_table_coalesce_hook(LJGC2TableCoalesceTestHook hook);
 #define LJ_GC2_TABLE_TOKEN_TEST_PRE_TRANSFER	1u
 #define LJ_GC2_TABLE_TOKEN_TEST_PRE_PROOF	2u
 #define LJ_GC2_TABLE_TOKEN_TEST_POST_PROOF	3u
@@ -685,6 +695,17 @@ LJ_FUNC int lj_gc2_obj_lease_acquire(global_State *g, GCobj *o,
 /* Acquire one exact registered raw allocation with the same tri-state result. */
 LJ_FUNC int lj_gc2_mem_lease_acquire(global_State *g, void *p,
 				      LJGC2Lease *lease);
+/* Nonmarking small-allocation admission through the persistent mapping
+** registry only. expected_gct accepts TAB/STR, or zero for a plain allocation.
+** No global SMR, Huge/custom allocator fallback, allocation or waiting.
+** On success release the lease after the final byte read. spanp is a
+** conservative cell-span bound, capped at the small allocation limit; an
+** unused bump tail can make it larger than the original requested size.
+** The caller must confirm its authoritative source before reading a variable
+** layout header, whose immutable size remains the allocation contract. */
+LJ_FUNC int lj_gc2_small_lease_try(global_State *g, const void *p,
+				 size_t minimum, uint32_t expected_gct,
+				 LJGC2Lease *lease, size_t *spanp);
 /* Release is idempotent and zeros the public token before dropping admission. */
 LJ_FUNC void lj_gc2_lease_release(LJGC2Lease *lease);
 /* Resolve an interior bytecode pointer through allocator identity and retain

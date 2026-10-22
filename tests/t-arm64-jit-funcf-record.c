@@ -330,7 +330,7 @@ static GCtrace *expect_published_true(lua_State *L, GCproto *pt,
   const BCIns *bc = proto_bc(pt);
   BCIns live;
   TraceNo traceno;
-  uint8_t flags;
+  uint32_t flags;
 
   assert(trace_runnable_acq(T, 1));
   assert(trace_traceno_acq(T) == 1);
@@ -346,7 +346,7 @@ static GCtrace *expect_published_true(lua_State *L, GCproto *pt,
   assert(live == BCINS_AD(BC_JFUNCF, bc_a(startins), 1));
   assert(proto_jit_startins_acq(pt, &bc[0]) == startins);
 
-  flags = la_load8_acq(&T->unused1);
+  flags = trace_arm64_admission_acq(T);
   assert(flags == TRACE_ARM64_TRUE_FUNCF_ADMITTED);
   assert((flags & (TRACE_ARM64_INT_LOOP_ADMITTED |
 	 TRACE_ARM64_INT_FORL_ADMITTED)) == 0);
@@ -475,7 +475,7 @@ static void test_funcf_metadata_certificate(lua_State *L, GCfunc *fn,
 	GCtrace *T)
 {
   IRIns *ir = trace_ir_acq(T);
-  uint8_t admission = la_load8_acq(&T->unused1);
+  uint32_t admission = trace_arm64_admission_acq(T);
   LJTraceRootEntry entry;
 
   lj_trace_test_root_entry_reset();
@@ -508,12 +508,12 @@ static void test_funcf_metadata_certificate(lua_State *L, GCfunc *fn,
   expect_funcf_entry_reject(L, fn, T);
   trace_nextside_rel(T, 0);
 
-  T->unused1 = TRACE_ARM64_TRUE_FUNCF_ADMITTED |
-		TRACE_ARM64_INT_LOOP_ADMITTED;
+  trace_arm64_admission_rel(T, TRACE_ARM64_TRUE_FUNCF_ADMITTED |
+		TRACE_ARM64_INT_LOOP_ADMITTED);
   expect_funcf_entry_reject(L, fn, T);
-  T->unused1 = 0;
+  trace_arm64_admission_rel(T, 0);
   expect_funcf_entry_reject(L, fn, T);
-  T->unused1 = admission;
+  trace_arm64_admission_rel(T, admission);
 
   ir[FUNCF_R_SUFFIX].s = SPS_FIRST;
   expect_funcf_entry_reject(L, fn, T);

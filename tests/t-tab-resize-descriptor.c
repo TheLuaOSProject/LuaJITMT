@@ -37,6 +37,8 @@ static uint32_t install_hook_calls;
 static lua_State *clear_hook_L;
 static uint32_t clear_hook_later_acap;
 static uint64_t clear_hook_weak_record;
+static TabResizeDesc *install_racing_desc;
+static uint64_t install_racing_weak_record;
 
 static void install_cancel_pause_hook(lua_State *L, GCtab *t,
 				      TabResizeDesc *desc, uint32_t stage);
@@ -342,6 +344,123 @@ static void finish_installed(global_State *g, GCtab *t, TabResizeDesc *desc,
   assert(lj_tab_resize_desc_clear(t, desc, acap));
   assert(lj_tab_resize_desc_terminal(g, desc,
 				      TAB_RESIZE_DESC_TERMINATING));
+}
+
+static void install_competing_generation_hook(lua_State *L, GCtab *t,
+					     TabResizeDesc *desc,
+					     uint32_t stage)
+{
+  uint64_t weak;
+  if (stage != LJ_TAB_RESIZE_DESC_HOOK_BEFORE_CONTROL_CAS) {
+    lj_tab_test_set_resize_desc_install_hook(
+      install_competing_generation_hook);
+    return;
+  }
+  install_hook_calls++;
+  assert(install_racing_desc != NULL);
+  assert(install_racing_desc->newacap > desc->oldacap);
+  /* The old installer has sampled stable control but has not published either
+  ** half of its control/capacity pair. A peer grows the real vector and then
+  ** installs a different descriptor. The delayed loser must not overwrite the
+  ** peer's capacity shadow when its own table-control CAS fails. */
+  lj_tab_resize(L, t, install_racing_desc->newacap, 3);
+  weak = lj_tab_weak_record_acq(t);
+  assert(lj_tab_weak_record_cas(t, &weak, install_racing_weak_record));
+  assert(lj_tab_resize_desc_install(L, t, install_racing_desc));
+  assert(install_racing_desc->oldacap == install_racing_desc->newacap);
+  assert(lj_tab_acap_acq(t) == install_racing_desc->oldacap);
+}
+
+static void exercise_install_competing_generation(lua_State *L)
+{
+  global_State *g = G(L);
+  TabResizeDesc *desc;
+  GCtab *t;
+  uint32_t acap;
+  uint64_t weak;
+  lua_createtable(L, 4, 4);
+  lua_pushinteger(L, 47);
+  lua_rawseti(L, -2, 1);
+  t = tabV(L->top - 1);
+  acap = (uint32_t)lj_tab_acap_acq(t);
+  weak = lj_tab_weak_record_acq(t);
+  desc = lj_tab_resize_desc_reserve(L, t, acap);
+  install_racing_desc = lj_tab_resize_desc_reserve(L, t, acap + 8u);
+  install_racing_weak_record = U64x(00000123,00000001);
+  install_hook_calls = 0;
+  lj_tab_test_set_resize_desc_install_hook(install_competing_generation_hook);
+  assert(lj_gc2_smr_read_try(g));
+  assert(!lj_tab_resize_desc_install(L, t, desc));
+  assert(install_hook_calls == 1);
+  assert(lj_tab_resize_desc_phase_acq(desc) == TAB_RESIZE_DESC_TERMINAL);
+  assert(lj_tab_resize_desc_control_acq(t) == install_racing_desc);
+  assert(lj_tab_acap_acq(t) == acap + 8u);
+  assert(lj_tab_weak_record_acq(t) == install_racing_weak_record);
+  assert(lj_tab_resize_desc_maintain_held(g, install_racing_desc));
+  assert(mt_resize_guard_count_acq(g) == 1);
+  finish_installed(g, t, install_racing_desc, acap + 8u);
+  assert(lj_tab_acap_acq(t) == acap + 8u);
+  assert(mt_resize_guard_count_acq(g) == 0);
+  lj_gc2_smr_read_leave(g);
+  lj_tab_weak_record_store_rlx(t, weak);
+  install_racing_desc = NULL;
+  lua_rawgeti(L, -1, 1);
+  assert(lua_tointeger(L, -1) == 47);
+  lua_pop(L, 2);
+}
+
+static void install_weak_update_hook(lua_State *L, GCtab *t,
+				     TabResizeDesc *desc, uint32_t stage)
+{
+  uint64_t weak;
+  UNUSED(L);
+  UNUSED(desc);
+  if (stage != LJ_TAB_RESIZE_DESC_HOOK_BEFORE_CONTROL_CAS) {
+    lj_tab_test_set_resize_desc_install_hook(install_weak_update_hook);
+    return;
+  }
+  install_hook_calls++;
+  weak = lj_tab_weak_record_acq(t);
+  assert(lj_tab_weak_record_cas(t, &weak, install_racing_weak_record));
+}
+
+static void exercise_install_weak_update(lua_State *L)
+{
+  global_State *g = G(L);
+  TabResizeDesc *desc;
+  GCtab *t;
+  uint32_t acap;
+  uint64_t weak;
+  lua_createtable(L, 4, 4);
+  t = tabV(L->top - 1);
+  acap = (uint32_t)lj_tab_acap_acq(t);
+  weak = lj_tab_weak_record_acq(t);
+  desc = lj_tab_resize_desc_reserve(L, t, acap);
+  install_racing_weak_record = U64x(00000124,00000002);
+  install_hook_calls = 0;
+  lj_tab_test_set_resize_desc_install_hook(install_weak_update_hook);
+  assert(lj_gc2_smr_read_try(g));
+  /* Losing to a weak-state update consumes this one install attempt without
+  ** erasing the GC's newer state or leaking a VM guard. A fresh attempt still
+  ** succeeds while preserving that exact state. */
+  assert(!lj_tab_resize_desc_install(L, t, desc));
+  assert(install_hook_calls == 1);
+  assert(lj_tab_resize_desc_phase_acq(desc) == TAB_RESIZE_DESC_TERMINAL);
+  assert(lj_tab_resize_desc_control_acq(t) == NULL);
+  assert(lj_tab_acap_acq(t) == acap);
+  assert(lj_tab_weak_record_acq(t) == install_racing_weak_record);
+  assert(mt_resize_guard_count_acq(g) == 0);
+  lj_gc2_smr_read_leave(g);
+  desc = lj_tab_resize_desc_reserve(L, t, acap);
+  assert(lj_gc2_smr_read_try(g));
+  assert(lj_tab_resize_desc_install(L, t, desc));
+  assert(lj_tab_weak_record_acq(t) == install_racing_weak_record);
+  finish_installed(g, t, desc, acap);
+  assert(lj_tab_weak_record_acq(t) == install_racing_weak_record);
+  assert(mt_resize_guard_count_acq(g) == 0);
+  lj_gc2_smr_read_leave(g);
+  lj_tab_weak_record_store_rlx(t, weak);
+  lua_pop(L, 1);
 }
 
 static void exercise_install_pause_points(lua_State *L)
@@ -1241,6 +1360,8 @@ int main(void)
   exercise_packed_vm_guard_word();
   exercise_cross_universe_tracked_smr(L);
   exercise_install_pause_points(L);
+  exercise_install_competing_generation(L);
+  exercise_install_weak_update(L);
   exercise_stale_clear(L);
   exercise_distinct_capacity_cutover(L);
   exercise_displaced_clear(L);

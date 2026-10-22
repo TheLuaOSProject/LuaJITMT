@@ -17,6 +17,12 @@ test -n "$predicate"
 for required in \
   'arm64_vm_u64_acq tmp1, g, GL_OFS(gc.total)' \
   'arm64_vm_u64_acq tmp2, g, GL_OFS(gc.threshold)' \
+  'arm64_vm_gl_u32_acq tmp1w, g, gc2.cycle_leader' \
+  'arm64_vm_gl_u32_acq tmp1w, g, gc2.phase' \
+  'cmp tmp1w, #LJ_GC2_IDLE' \
+  'GL_OFS(gc.auto_flags)&0xfff000' \
+  'ldarb tmp1w, [ATMP]' \
+  'cbz tmp1w, target' \
   'arm64_vm_u64_acq tmp1, g, GL_OFS(gc2.alloc_since_trigger)' \
   'arm64_vm_u64_acq tmp2, g, GL_OFS(gc2.hard_bytes)' \
   'cmp tmp1, tmp2' \
@@ -43,6 +49,9 @@ test "$hard_count" -eq 2 || {
 
 total_line=$(line_of "$predicate" 'GL_OFS(gc.total)')
 threshold_line=$(line_of "$predicate" 'GL_OFS(gc.threshold)')
+leader_line=$(line_of "$predicate" 'gc2.cycle_leader')
+phase_line=$(line_of "$predicate" 'gc2.phase')
+flags_line=$(line_of "$predicate" 'gc.auto_flags')
 since_line=$(line_of "$predicate" 'GL_OFS(gc2.alloc_since_trigger)')
 hard1_line=$(printf '%s\n' "$predicate" | \
   grep -nF 'GL_OFS(gc2.hard_bytes)' | sed -n '1s/:.*//p')
@@ -50,7 +59,10 @@ hard2_line=$(printf '%s\n' "$predicate" | \
   grep -nF 'GL_OFS(gc2.hard_bytes)' | sed -n '2s/:.*//p')
 local_line=$(line_of "$predicate" 'DISPATCH_TG(local_total)&0xfff000')
 test "$total_line" -lt "$threshold_line" && \
-  test "$threshold_line" -lt "$since_line" && \
+  test "$threshold_line" -lt "$leader_line" && \
+  test "$leader_line" -lt "$phase_line" && \
+  test "$phase_line" -lt "$flags_line" && \
+  test "$flags_line" -lt "$since_line" && \
   test "$since_line" -lt "$hard1_line" && \
   test "$hard1_line" -lt "$hard2_line" && \
   test "$hard2_line" -lt "$local_line"
@@ -79,6 +91,9 @@ if printf '%s\n' "$fff_gcstep" | \
 fi
 
 for required in \
+  'test_pending_idle_request' \
+  'pending IDLE request did not enter a GC-safe VM helper' \
+  'LJ_GC_AUTO_STOPPED, LJ_GC_AUTO_FINPAUSE' \
   'test_normal_hard_tnew_batch_gate' \
   'test_normal_hard_tnew_batch_boundary' \
   'test_hard_only_tdup' \
@@ -179,10 +194,18 @@ check_predicate_object() {
     echo "$symbol emitted $nldar predicate acquire loads, expected 6" >&2
     exit 1
   }
+  nldarw=$(printf '%s\n' "$region" | \
+    grep -Ec '[[:space:]]ldar[[:space:]]+w[0-9]+, [[]x14[]]' || true)
+  nldarb=$(printf '%s\n' "$region" | \
+    grep -Ec '[[:space:]]ldarb[[:space:]]+w[0-9]+, [[]x14[]]' || true)
+  test "$nldarw" -eq 2 && test "$nldarb" -eq 1 || {
+    echo "$symbol lost request/phase/auto-flags acquire widths" >&2
+    exit 1
+  }
   nglobal=$(printf '%s\n' "$region" | \
     grep -Ec '[[:space:]]add[[:space:]]+x14, x22, #0x' || true)
-  test "$nglobal" -eq 5 || {
-    echo "$symbol emitted $nglobal global predicate addresses, expected 5" >&2
+  test "$nglobal" -eq 8 || {
+    echo "$symbol emitted $nglobal global predicate addresses, expected 8" >&2
     exit 1
   }
   printf '%s\n' "$region" | \
@@ -268,4 +291,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
     TARGET_FLAGS='-arch arm64' XCFLAGS="$restore_xcflags"
 restore_needed=0
 
-echo "arm64_gc2_interp_hard_check_contract OK: arm64 and arm64e/BTI VM hard-assist parity"
+echo "arm64_gc2_interp_hard_check_contract OK: arm64 and arm64e/BTI VM hard-assist and pending-request parity"

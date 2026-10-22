@@ -16,6 +16,7 @@
 #include "lj_jit.h"
 #include "lj_iropt.h"
 #include "lj_profile.h"
+#include "lj_record.h"
 #include "lj_trace.h"
 #include "lj_snap.h"
 #include "lj_vm.h"
@@ -302,6 +303,67 @@ typedef struct LoopState {
   MSize sizesubst;
 } LoopState;
 
+#if LJ_TARGET_X64 && LJ_GC64
+/* Only a direct scalar payload store is admitted. Pointer-based/indirect FFI
+** stores and every Lua-object store remain outside this first optimization. */
+static int loop_cdata_scalar_store(jit_State *J, IRIns *ir)
+{
+  IRIns *addr = IR(ir->op1), *base, *ofs;
+  if (!(irt_isnum(ir->t) || irt_isint(ir->t)) || addr->o != IR_ADD)
+    return 0;
+  base = IR(addr->op1);
+  ofs = IR(addr->op2);
+  if (!irt_iscdata(base->t) ||
+      (base->o != IR_SLOAD && base->o != IR_KGC))
+    return 0;
+  /* x64 records native address offsets as KINT64. Keep both representations
+  ** within the same positive int32 payload-offset range. */
+  if (ofs->o == IR_KINT)
+    return ofs->i >= (int32_t)sizeof(GCcdata);
+  return ofs->o == IR_KINT64 &&
+    ir_kint64(ofs)->u64 >= (uint64_t)sizeof(GCcdata) &&
+    ir_kint64(ofs)->u64 <= INT32_MAX;
+}
+
+/* Classify the complete original body, including operations after a candidate
+** lookup. The copied prefix alone cannot exclude a previous iteration's late
+** mutation. No opaque/helper operation or allocation is presumed pure. */
+static int loop_cdata_fload_pure(jit_State *J, IRRef end)
+{
+  IRRef ref;
+  if (J->parent != 0 || J->cur.link != J->cur.traceno ||
+      lj_record_mt_runtime_shared(J2G(J), J->L))
+    return 0;
+  for (ref = REF_FIRST; ref < end; ref++) {
+    IRIns *ir = IR(ref);
+    switch (ir->o) {
+    case IR_NOP: case IR_SLOAD: case IR_FLOAD:
+    case IR_HREFK: case IR_HLOAD: case IR_XLOAD:
+    case IR_ADD: case IR_ADDOV: case IR_EQ: case IR_NE:
+      break;
+    case IR_LT: case IR_GE: case IR_LE: case IR_GT:
+    case IR_ULT: case IR_UGE: case IR_ULE: case IR_UGT:
+      if (!(irt_isnum(ir->t) || irt_isint(ir->t)))
+        return 0;
+      break;
+    case IR_CONV:
+      if (ir->op2 != IRCONV_NUM_INT &&
+          ir->op2 != (IRCONV_INT_NUM|IRCONV_CHECK))
+        return 0;
+      break;
+    case IR_XSTORE:
+      if (!loop_cdata_scalar_store(J, ir))
+        return 0;
+      break;
+    default:
+      return 0;
+    }
+  }
+  return 1;
+}
+
+#endif
+
 #if (LJ_TARGET_X64 || LJ_TARGET_ARM64) && LJ_GC64
 static LJ_AINLINE int loop_needs_xpoll(jit_State *J)
 {
@@ -312,11 +374,11 @@ static LJ_AINLINE int loop_needs_xpoll(jit_State *J)
   return 1;
 #else
   global_State *g = J2G(J);
-  /* A loop poll is needed only after another TG can participate in a
-  ** safepoint handshake or while SIGPROF owner requests are enabled. First
-  ** Lua-thread/GC-worker activation and profile start flush existing traces
-  ** around their policy publication, so a trace with the old policy cannot
-  ** survive into a runtime that needs remote/asynchronous polls.
+  /* The literal selects the combined poll/profile-request test. Owner-L policy
+  ** activation flushes traces around publication; global workers_set(g, n)
+  ** may publish a pool without that flush. Native entry and collector payload/
+  ** reclaim safety use the independent phase-gate/jit_base protocol instead.
+  ** Do not infer worker activation responsiveness from this literal.
   */
   return gc2_n_threads_acq(g) > 1 || gc2_n_workers_acq(g) != 0 ||
 	 mt_active_or_entering_acq(g)
@@ -351,7 +413,13 @@ static void loop_unroll(LoopState *lps)
 
   /* LOOP separates the pre-roll from the loop body. */
   emitir_raw(IRTG(IR_LOOP, IRT_NIL), 0, 0);
-#if (LJ_TARGET_X64 || LJ_TARGET_ARM64) && LJ_GC64
+#if LJ_TARGET_X64 && LJ_GC64
+  {
+    int needs_poll = loop_needs_xpoll(J);
+    J->loop_cdata_fload = !needs_poll && loop_cdata_fload_pure(J, invar);
+    emitir_raw(IRTG(IR_XPOLL, IRT_NIL), needs_poll, 0);
+  }
+#elif LJ_TARGET_ARM64 && LJ_GC64
   emitir_raw(IRTG(IR_XPOLL, IRT_NIL), loop_needs_xpoll(J), 0);
 #endif
 
@@ -497,7 +565,11 @@ int lj_opt_loop(jit_State *J)
   lps.J = J;
   lps.subst = NULL;
   lps.sizesubst = 0;
+  J->loop_cdata_fload = 0;
   errcode = lj_vm_cpcall(J->L, NULL, &lps, cploop_opt);
+  /* The protected callback owns the flag on every success/error path. Never
+  ** carry eligibility into loop retry, another trace, or later optimizer work. */
+  J->loop_cdata_fload = 0;
   lj_mem_freevec(J2G(J), lps.subst, lps.sizesubst, IRRef1);
   if (LJ_UNLIKELY(errcode)) {
     lua_State *L = J->L;

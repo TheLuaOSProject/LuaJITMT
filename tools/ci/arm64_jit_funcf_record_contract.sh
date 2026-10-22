@@ -325,7 +325,7 @@ done
 
 grep -E '^#define TRACE_ARM64_TRUE_FUNCF_ADMITTED[[:space:]]+0x40$' \
   "$jit_header" >/dev/null
-grep -F 'T->unused1 |= TRACE_ARM64_TRUE_FUNCF_ADMITTED;' \
+grep -F 'trace_arm64_admission_rel(T, TRACE_ARM64_TRUE_FUNCF_ADMITTED);' \
   "$asm_source" >/dev/null
 
 # Entry independently proves the complete patched JFUNCF/KPRI/RET1 generation
@@ -363,7 +363,8 @@ for required in \
   'v->linktype == LJ_TRLINK_RETURN' \
   'v->mcloop == 0' \
   'v->spadjust == 0' \
-  '!function_root || v->admission == expected_admission'; do
+  'v->admission == expected_admission' \
+  '!function_root || v->flags == 0'; do
   grep -F "$required" "$funcf_root_view" >/dev/null || {
     echo "ARM64 JFUNCF root view changed: $required" >&2
     exit 1

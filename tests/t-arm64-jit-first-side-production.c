@@ -379,9 +379,9 @@ static void expect_root_shape(jit_State *J, global_State *g,
   assert(trace_topslot_acq(pair->root) == PRODUCTION_TOPSLOT);
   assert(trace_spadjust_acq(pair->root) == 0);
   assert(trace_mcode_acq(pair->root) != NULL);
-  assert((la_load8_acq(&pair->root->unused1) &
+  assert((trace_arm64_admission_acq(pair->root) &
 	  TRACE_ARM64_INT_LOOP_ADMITTED) != 0);
-  assert((la_load8_acq(&pair->root->unused1) &
+  assert((trace_arm64_admission_acq(pair->root) &
 	  TRACE_ARM64_INT_SIDE_ADMITTED) == 0);
 
   startpc = trace_startpc_acq(pair->root);
@@ -522,7 +522,7 @@ static void expect_child_shape(jit_State *J, global_State *g,
   assert(trace_nk_acq(pair->child) == PRODUCTION_CHILD_K_ADDEND);
   assert(trace_nins_acq(pair->child) ==
 	 PRODUCTION_CHILD_SEMANTIC_NINS+1u);
-  assert(la_load8_acq(&pair->child->unused1) ==
+  assert(trace_arm64_admission_acq(pair->child) ==
 	 TRACE_ARM64_INT_SIDE_ADMITTED);
   assert(trace_native_pinword_acq(pair->child) == 0);
   assert(la_load64_acq(&pair->child->retire_epoch) == 0);

@@ -252,7 +252,7 @@ static void install_root_entry_metadata(jit_State *J, GCproto *pt,
   J->cur.snapmap = fixture->snapmap;
   J->cur.nsnap = 2;
   J->cur.nsnapmap = 5;
-  J->cur.unused1 = TRACE_ARM64_INT_LOOP_ADMITTED;
+  trace_arm64_admission_rel(&J->cur, TRACE_ARM64_INT_LOOP_ADMITTED);
 
   root_entry_setir(fixture->ir, REF_TRUE, IR_KPRI, IRT_TRUE,
 		   0, 0, RID_X0, SPS_NONE);
@@ -708,15 +708,22 @@ static void test_metadata_mutation_rejections(lua_State *L, GCproto *pt,
   expect_metadata_reject(L, loop->pc);
   T->startins = loop->original;
 
-  T->unused1 &= (uint8_t)~TRACE_ARM64_INT_LOOP_ADMITTED;
+  assert(!trace_retire_pending_acq(T));
+  trace_arm64_admission_rel(T, 0);
+  /* Common pending-retirement bit 0x10 cannot stand in for target admission. */
+  T->unused1 |= TRACE_RETIRE_PENDING;
+  assert(trace_retire_pending_acq(T));
   expect_metadata_reject(L, loop->pc);
-  T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;
+  T->unused1 &= (uint8_t)~TRACE_RETIRE_PENDING;
+  trace_arm64_admission_rel(T, TRACE_ARM64_INT_LOOP_ADMITTED | 0x10000u);
+  expect_metadata_reject(L, loop->pc);
+  trace_arm64_admission_rel(T, TRACE_ARM64_INT_LOOP_ADMITTED);
 
   /* A first-level side certificate is never a second root-entry certificate.
   ** Root admission bits remain mutually exclusive across the 0x80 extension. */
-  T->unused1 |= TRACE_ARM64_INT_SIDE_ADMITTED;
+  trace_arm64_admission_rel(T, trace_arm64_admission_acq(T) | TRACE_ARM64_INT_SIDE_ADMITTED);
   expect_metadata_reject(L, loop->pc);
-  T->unused1 &= (uint8_t)~TRACE_ARM64_INT_SIDE_ADMITTED;
+  trace_arm64_admission_rel(T, trace_arm64_admission_acq(T) & ~TRACE_ARM64_INT_SIDE_ADMITTED);
 
   T->retire_epoch = 1;
   expect_metadata_reject(L, loop->pc);

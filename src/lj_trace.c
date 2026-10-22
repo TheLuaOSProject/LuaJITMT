@@ -667,6 +667,22 @@ static uint32_t trace_test_first_exitno;
 static uint32_t trace_test_last_exit_parent;
 static uint32_t trace_test_last_exitno;
 static uint32_t trace_test_force_event_handoff_failures;
+static void (*trace_test_stop_hook)(jit_State *J, uint32_t stage);
+
+/* Test-only scheduler edges. The fixture declares this private hook locally. */
+LJ_FUNC void lj_trace_test_set_stop_hook(
+  void (*hook)(jit_State *J, uint32_t stage));
+
+void lj_trace_test_set_stop_hook(void (*hook)(jit_State *J, uint32_t stage))
+{
+  trace_test_stop_hook = hook;
+}
+
+static void trace_test_stop_checkpoint(jit_State *J, uint32_t stage)
+{
+  if (trace_test_stop_hook)
+    trace_test_stop_hook(J, stage);
+}
 
 void lj_trace_test_force_startins_retry(uint32_t count)
 {
@@ -763,6 +779,7 @@ static void trace_test_note_exit(TraceNo parent, ExitNo exitno)
 #define trace_test_take_event_handoff_failure() 0
 #define trace_test_note_exit(parent, exitno) \
   ((void)(parent), (void)(exitno))
+#define trace_test_stop_checkpoint(J, stage) ((void)(J), (void)(stage))
 #endif
 
 static int trace_scope_mark_pending(GCtrace *T)
@@ -803,6 +820,8 @@ static int trace_arm64_first_side_retire_candidate(const GCtrace *T);
 static int trace_arm64_first_side_retire_edge(jit_State *J, GCtrace *T);
 static int trace_arm64_first_side_retire_topology(jit_State *J, GCtrace *T);
 static void trace_retire_disconnect(jit_State *J, GCtrace *T);
+static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
+				  uint64_t epoch);
 
 /* -- Error handling ------------------------------------------------------ */
 
@@ -3321,6 +3340,9 @@ static void trace_retire_claim_at_epoch(global_State *g, GCtrace *T,
   }
   (void)la_cas64(&T->retire_epoch, &expect, stamp, LA_ACQ_REL, LA_ACQ);
   trace_native_pin_close(T);
+  /* The nonzero epoch takes over the pending slot's semantic-root duty.
+  ** Root readers load the pending flag before rechecking the epoch. */
+  (void)la_and8_acqrel(&T->unused1, (uint8_t)~TRACE_RETIRE_PENDING);
 }
 
 static int trace_retire_discoverable_acq(jit_State *J, GCtrace *T)
@@ -3994,20 +4016,18 @@ typedef struct TraceArm64LoopView {
   MSize nsnap;
   MSize nsnapmap;
   TraceNo traceno;
-  uint8_t admission;
+  uint32_t admission;
+  uint8_t flags;
 } TraceArm64LoopView;
 
 static int trace_root_entry_loop_view_acq(const GCtrace *T, TraceNo traceno,
 	const BCIns *pc, const GCproto *pt, uint32_t sourceop,
 	TraceArm64LoopView *v)
 {
-  uint8_t expected_admission = sourceop == (uint32_t)BC_JFORL ?
+  uint32_t expected_admission = sourceop == (uint32_t)BC_JFORL ?
 	TRACE_ARM64_INT_FORL_ADMITTED :
 	(sourceop == (uint32_t)BC_JFUNCF ?
 	 TRACE_ARM64_TRUE_FUNCF_ADMITTED : TRACE_ARM64_INT_LOOP_ADMITTED);
-  uint8_t root_admission = TRACE_ARM64_INT_LOOP_ADMITTED |
-	TRACE_ARM64_INT_FORL_ADMITTED | TRACE_ARM64_TRUE_FUNCF_ADMITTED |
-	TRACE_ARM64_INT_SIDE_ADMITTED;
   int function_root = sourceop == (uint32_t)BC_JFUNCF;
   v->retire_epoch = la_load64_acq(&T->retire_epoch);
   v->startpt = trace_startptgco_acq((GCtrace *)T);
@@ -4032,7 +4052,8 @@ static int trace_root_entry_loop_view_acq(const GCtrace *T, TraceNo traceno,
   v->nsnap = trace_nsnap_acq(T);
   v->nsnapmap = trace_nsnapmap_acq(T);
   v->traceno = trace_traceno_acq(T);
-  v->admission = la_load8_acq(&T->unused1);
+  v->admission = trace_arm64_admission_acq(T);
+  v->flags = la_load8_acq(&T->unused1);
   return v->retire_epoch == 0 && v->traceno == traceno &&
 	 trace_root_acq(T) == 0 &&
 	 ((v->nextside == 0 && v->nchild == 0) ||
@@ -4047,16 +4068,16 @@ static int trace_root_entry_loop_view_acq(const GCtrace *T, TraceNo traceno,
 	 v->startpt == obj2gco(pt) && v->startpc == pc &&
 	 trace_root_entry_loop_geometry(sourceop, pt, pc, v->startins) &&
 	 v->mcode != NULL && v->exittab != NULL && v->exitstub != NULL &&
-	 (v->admission & TRACE_EXITTAB_MCODE) == 0 &&
+	 (v->flags & TRACE_EXITTAB_MCODE) == 0 &&
 	 v->szmcode > sizeof(MCode) &&
 	 v->topslot == (MSize)pt->framesize &&
 	 v->ir != NULL && v->nins > REF_FIRST && v->nins < REF_DROP &&
 	 v->nk > 0 && v->nk <= REF_TRUE &&
 	 v->snap != NULL && v->snapmap != NULL && v->nsnap != 0 &&
 	 v->nsnapmap != 0 &&
-	 (v->admission & root_admission) == expected_admission &&
-	 (!function_root || v->admission == expected_admission) &&
-	 (v->admission & TRACE_ENTRY_GATED) == 0;
+	 v->admission == expected_admission &&
+	 (!function_root || v->flags == 0) &&
+	 (v->flags & TRACE_ENTRY_GATED) == 0;
 }
 
 static int trace_root_entry_arm64_exit_layout_valid(
@@ -4124,7 +4145,7 @@ static int trace_root_entry_loop_view_equal(const TraceArm64LoopView *a,
 	 a->snap == b->snap && a->snapmap == b->snapmap &&
 	 a->nsnap == b->nsnap && a->nsnapmap == b->nsnapmap &&
 	 a->traceno == b->traceno &&
-	 a->admission == b->admission;
+	 a->admission == b->admission && a->flags == b->flags;
 }
 
 static LJ_AINLINE int trace_root_entry_request_pending(const TGState *tg)
@@ -4185,7 +4206,8 @@ typedef struct TraceArm64FirstSideLoopView {
   MSize nchild;
   TraceLink linktype;
   uint64_t retire_epoch;
-  uint8_t admission;
+  uint32_t admission;
+  uint8_t flags;
 #if LJ_ABI_PAUTH
   uintptr_t mcauth_bits;
 #endif
@@ -4287,9 +4309,6 @@ static int trace_arm64_first_side_view_acq(jit_State *J, TraceNo parent,
   MSize maxsnapmap;
   uintptr_t mcodep, bodyend, fallbackp, gatesz;
   const MSize footer = 1u + LJ_FR2;
-  uint8_t root_admission = TRACE_ARM64_INT_LOOP_ADMITTED |
-    TRACE_ARM64_INT_FORL_ADMITTED | TRACE_ARM64_TRUE_FUNCF_ADMITTED |
-    TRACE_ARM64_INT_SIDE_ADMITTED;
 
   memset(v, 0, sizeof(*v));
   tv = J ? tracevec_acq(J) : NULL;
@@ -4310,7 +4329,8 @@ static int trace_arm64_first_side_view_acq(jit_State *J, TraceNo parent,
   v->nextside = trace_nextside_acq(T);
   v->nchild = trace_nchild_acq(T);
   v->linktype = trace_linktype_acq(T);
-  v->admission = la_load8_acq(&T->unused1);
+  v->admission = trace_arm64_admission_acq(T);
+  v->flags = la_load8_acq(&T->unused1);
   v->startpt = trace_startptgco_acq(T);
   v->startpc = trace_startpc_acq(T);
   v->startins = trace_startins_acq(T);
@@ -4339,9 +4359,9 @@ static int trace_arm64_first_side_view_acq(jit_State *J, TraceNo parent,
   if (v->retire_epoch != 0 || v->traceno != parent || v->root != 0 ||
       v->link != parent || v->linktype != LJ_TRLINK_LOOP ||
       v->nchild != 0 || v->nextside != 0 ||
-      (v->admission & root_admission) != TRACE_ARM64_INT_LOOP_ADMITTED ||
-      (v->admission & TRACE_EXITTAB_MCODE) != 0 ||
-      (v->admission & TRACE_ENTRY_GATED) != 0 ||
+      v->admission != TRACE_ARM64_INT_LOOP_ADMITTED ||
+      (v->flags & TRACE_EXITTAB_MCODE) != 0 ||
+      (v->flags & TRACE_ENTRY_GATED) != 0 ||
       v->startpt == NULL || !checkptrGC(v->startpt) ||
       v->startpt->gch.gct != (uint32_t)~LJ_TPROTO ||
       v->startpc == NULL || bc_op(v->startins) != BC_LOOP ||
@@ -4451,7 +4471,7 @@ static int trace_arm64_first_side_view_equal(
     a->root == b->root && a->nextside == b->nextside &&
     a->nchild == b->nchild && a->linktype == b->linktype &&
     a->retire_epoch == b->retire_epoch &&
-    a->admission == b->admission
+    a->admission == b->admission && a->flags == b->flags
 #if LJ_ABI_PAUTH
     && a->mcauth_bits == b->mcauth_bits
 #endif
@@ -5123,7 +5143,8 @@ static int trace_arm64_side_publish_child_valid(jit_State *J, GCtrace *T,
       trace_startpc_acq(T) != cert->continuation ||
       trace_startins_acq(T) != BCINS_AD(BC_JMP, 0, 0) ||
       T->sinktags != 0 ||
-      la_load8_acq(&T->unused1) != TRACE_ARM64_INT_SIDE_ADMITTED ||
+      trace_arm64_admission_acq(T) != TRACE_ARM64_INT_SIDE_ADMITTED ||
+      la_load8_acq(&T->unused1) != 0 ||
       trace_native_pinword_acq(T) != 0 ||
       la_load64_acq(&T->retire_epoch) != 0 ||
       trace_retired_link_acq(T) != 0 ||
@@ -5517,7 +5538,8 @@ typedef struct TraceArm64FirstChildEntryView {
   TraceNo nextside;
   MSize nchild;
   TraceLink linktype;
-  uint8_t admission;
+  uint32_t admission;
+  uint8_t flags;
   uint8_t parent_snap_topslot;
   uint8_t parent_snap_count;
   ExitNo parent_exitno;
@@ -5544,6 +5566,7 @@ static int trace_root_entry_first_child_view_equal(
 	a->link == b->link && a->nextroot == b->nextroot &&
 	a->nextside == b->nextside && a->nchild == b->nchild &&
 	a->linktype == b->linktype && a->admission == b->admission &&
+	a->flags == b->flags &&
 	a->parent_snap_topslot == b->parent_snap_topslot &&
 	a->parent_snap_count == b->parent_snap_count &&
 	a->parent_exitno == b->parent_exitno
@@ -5634,7 +5657,8 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
   view->nextside = trace_nextside_acq(child);
   view->nchild = trace_nchild_acq(child);
   view->linktype = trace_linktype_acq(child);
-  view->admission = la_load8_acq(&child->unused1);
+  view->admission = trace_arm64_admission_acq(child);
+  view->flags = la_load8_acq(&child->unused1);
 #if LJ_ABI_PAUTH
   view->mcauth_bits =
 	trace_arm64_first_side_function_bits(trace_mcauth_acq(child));
@@ -5646,7 +5670,7 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
 	view->linktype != LJ_TRLINK_ROOT ||
 	view->startpt != rootview->startpt || view->startpc == NULL ||
 	trace_startins_acq(child) != BCINS_AD(BC_JMP, 0, 0) ||
-	view->admission != TRACE_ARM64_INT_SIDE_ADMITTED ||
+	view->admission != TRACE_ARM64_INT_SIDE_ADMITTED || view->flags != 0 ||
 	view->spadjust != 0 || view->topslot != rootview->topslot ||
 	view->nsnap != 5u || view->nsnapmap != 17u ||
 	view->ir == NULL || view->snap == NULL || view->snapmap == NULL ||
@@ -6672,14 +6696,57 @@ static LJ_AINLINE int trace_root_cycle_step(TraceRootCycleGuard *guard,
   return 1;
 }
 
+/* The caller retains an outer SMR reader through this complete transaction.
+** Normal preservation/disconnection may nest readers, but a nested reader
+** reuses that admitted thread depth and cannot wait behind a later closer.
+** A pending ABORT must remain inspectable until its active recorder finishes;
+** token/recorder refusal preserves the graph and asks the root pass to retry. */
+static int trace_retire_pending_consume(jit_State *J, TraceNo traceno,
+					GCtrace *T)
+{
+  int token = 0;
+  if (lj_trace_state_load(J) != LJ_TRACE_IDLE)
+    return 0;
+  if (!lj_jit_token_held(J)) {
+    if (!lj_jit_token_try(J))
+      return 0;
+    token = 1;
+  }
+  if (lj_trace_state_load(J) != LJ_TRACE_IDLE) {
+    if (token)
+      lj_jit_token_release(J);
+    return 0;
+  }
+  /* A peer flush may have completed the request before token admission.
+  ** Neither a stale body nor a replacement at the same number is ours. */
+  if (traceref_safe(J, traceno) == T && trace_retire_pending_acq(T)) {
+    lj_assertJ(trace_traceno_acq(T) == traceno &&
+	       trace_root_acq(T) == 0 &&
+	       !trace_runnable_acq(T, traceno) &&
+	       la_load64_acq(&T->retire_epoch) == 0,
+	       "invalid deferred root-abort retirement");
+    trace_scope_clear_slot(J, traceno, T, lj_gc2_retire_epoch(J2G(J)));
+  }
+  if (token)
+    lj_jit_token_release(J);
+  return 1;
+}
+
 int lj_trace_markvecs(global_State *g, int gc2)
 {
   jit_State *J = G2J(g);
-  TraceVec *tv = tracevec_acq(J);
+  TraceVec *tv;
   GCtrace *rt, *nextrt;
   TraceVec *nexttv;
   TraceRootCycleGuard guard;
+  int complete = 1;
   UNUSED(gc2);  /* Compatibility argument: GC2 is the sole runtime collector. */
+  /* Production root scans already own a reader. Require tracked same-universe
+  ** depth as well: an independent-universe fallback count does not authorize
+  ** the nested reader elision used by preservation and disconnection. */
+  if (!lj_gc2_smr_read_tracked_try(g))
+    return 0;
+  tv = tracevec_acq(J);
   if (tv) {
     (void)lj_gc2_markmem(g, tv);
     /*
@@ -6699,8 +6766,15 @@ int lj_trace_markvecs(global_State *g, int gc2)
       */
       for (i = 1; i < sizetrace; i++) {
 	GCtrace *T = traceref_safe(J, i);
-	if (T && la_load64_acq(&T->retire_epoch) != 0)
-	  trace_preserve_retired_body(g, T);
+	if (T) {
+	  /* Pending loads precede epoch loads: clearing the request after its
+	  ** epoch claim must not leave a root-preservation handoff gap. */
+	  int pending = trace_retire_pending_acq(T);
+	  if (pending || la_load64_acq(&T->retire_epoch) != 0)
+	    trace_preserve_retired_body(g, T);
+	  if (pending && !trace_retire_pending_consume(J, i, T))
+	    complete = 0;
+	}
       }
     }
   }
@@ -6711,10 +6785,10 @@ int lj_trace_markvecs(global_State *g, int gc2)
     (void)lj_gc2_markmem_registered(g, tv);
     tv = nexttv;
     if (LJ_UNLIKELY(!trace_root_cycle_step(&guard, tv)))
-      return 0;
+      goto incomplete;
   }
   if (LJ_UNLIKELY(tv != NULL))
-    return 0;
+    goto incomplete;
   rt = trace_retired_head_acq(J);
   trace_root_cycle_init(&guard, rt);
   while (rt != NULL && lj_gc2_mem_registered(g, rt)) {
@@ -6722,9 +6796,15 @@ int lj_trace_markvecs(global_State *g, int gc2)
     trace_preserve_retired_body(g, rt);
     rt = nextrt;
     if (LJ_UNLIKELY(!trace_root_cycle_step(&guard, rt)))
-      return 0;
+      goto incomplete;
   }
-  return rt == NULL;
+  if (rt != NULL)
+    goto incomplete;
+  lj_gc2_smr_read_leave(g);
+  return complete;
+incomplete:
+  lj_gc2_smr_read_leave(g);
+  return 0;
 }
 
 /* Find a free trace number. */
@@ -6987,7 +7067,9 @@ static void trace_compact_body_init(jit_State *J,
   setgcrefnullrel(T->nextgc);
   newwhite(J2G(J), T);
   la_store8_rel(&T->gct, (uint8_t)~LJ_TTRACE);
-#if LJ_GC64
+#if LJ_TARGET_ARM64
+  trace_arm64_admission_rel(T, trace_arm64_admission_acq(source));
+#elif LJ_GC64
   la_store32_rel(&T->unused_gc64, 0);
 #endif
   setgcrefnullrel(T->gclist);
@@ -7061,7 +7143,7 @@ static int trace_compact_body_initialized_valid(jit_State *J,
       !trace_body_refs_valid(g, T, NULL))
     return 0;
 #if LJ_GC64
-  if (la_load32_acq(&T->unused_gc64) != 0)
+  if (trace_arm64_admission_acq(T) != trace_arm64_admission_acq(source))
     return 0;
 #endif
 #ifdef LUAJIT_USE_GDBJIT
@@ -7123,7 +7205,8 @@ static int trace_arm64_side_publish_initialized_revalidate_held(
 	trace_linktype_acq(body) == LJ_TRLINK_ROOT &&
 	trace_nextroot_acq(body) == 0 && trace_nextside_acq(body) == 0 &&
 	trace_nchild_acq(body) == 0 &&
-	la_load8_acq(&body->unused1) == TRACE_ARM64_INT_SIDE_ADMITTED &&
+	trace_arm64_admission_acq(body) == TRACE_ARM64_INT_SIDE_ADMITTED &&
+	la_load8_acq(&body->unused1) == 0 &&
 	gcref_acq(*plan->childslot) == (const GCobj *)LJ_TRACE_PENDING &&
 	trace_arm64_first_side_pointer_bits(
 	  la_loadptr_acq((void *const *)plan->parent_exitslot)) ==
@@ -7159,7 +7242,8 @@ static int trace_arm64_first_side_publish_enabled(jit_State *J)
 	trace_linktype_acq(&J->cur) == LJ_TRLINK_ROOT &&
 	trace_startpc_acq(&J->cur) == cert->continuation &&
 	trace_startins_acq(&J->cur) == BCINS_AD(BC_JMP, 0, 0) &&
-	la_load8_acq(&J->cur.unused1) == TRACE_ARM64_INT_SIDE_ADMITTED &&
+	trace_arm64_admission_acq(&J->cur) == TRACE_ARM64_INT_SIDE_ADMITTED &&
+	la_load8_acq(&J->cur.unused1) == 0 &&
 	trace_arm64_side_parent_asm_owner_exact(
 	  J, cert->parent, cert->exitno, cert->continuation);
 #if defined(LJ_TRACE_TEST_HELPERS) && \
@@ -7624,10 +7708,6 @@ static void trace_save(jit_State *J, GCtrace *T)
   lj_gc_linkobj_new(g, obj2gco(T));  /* Publish root after body init. */
   traceslot_publish(J, T->traceno, T);
   lj_gc_pubtrace(g, T->traceno);
-  lj_gdbjit_addtrace(J, T);
-#ifdef LUAJIT_USE_PERFTOOLS
-  perftools_addtrace(J, T);
-#endif
 }
 
 int LJ_FASTCALL lj_trace_free_gc(global_State *g, GCtrace *T)
@@ -7917,7 +7997,7 @@ static LJ_NORET void trace_arm64_first_side_retire_failstop(
 static int trace_arm64_first_side_retire_candidate(const GCtrace *T)
 {
   return T != NULL &&
-    (la_load8_acq(&T->unused1) & TRACE_ARM64_INT_SIDE_ADMITTED) != 0;
+    (trace_arm64_admission_acq(T) & TRACE_ARM64_INT_SIDE_ADMITTED) != 0;
 }
 
 /* Reconstruct the exact published first-child generation without changing it.
@@ -7957,10 +8037,8 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
     return 0;
   g = J2G(J);
   childflags = la_load8_acq(&T->unused1);
-  if ((childflags &
-       (uint8_t)~(TRACE_ARM64_INT_SIDE_ADMITTED|
-		  TRACE_SCOPE_FLUSH_PENDING)) != 0 ||
-      (childflags & TRACE_ARM64_INT_SIDE_ADMITTED) == 0)
+  if ((childflags & (uint8_t)~TRACE_SCOPE_FLUSH_PENDING) != 0 ||
+      trace_arm64_admission_acq(T) != TRACE_ARM64_INT_SIDE_ADMITTED)
     return 0;
   childno = trace_traceno_acq(T);
   parentno = trace_root_acq(T);
@@ -8026,10 +8104,8 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
       (MSize)exitno >= parent_nexits || parent_nexits != parent_nsnap)
     return 0;
   parentflags = la_load8_acq(&parent->unused1);
-  if ((parentflags &
-       (uint8_t)~(TRACE_ARM64_INT_LOOP_ADMITTED|
-		  TRACE_SCOPE_FLUSH_PENDING)) != 0 ||
-      (parentflags & TRACE_ARM64_INT_LOOP_ADMITTED) == 0)
+  if ((parentflags & (uint8_t)~TRACE_SCOPE_FLUSH_PENDING) != 0 ||
+      trace_arm64_admission_acq(parent) != TRACE_ARM64_INT_LOOP_ADMITTED)
     return 0;
   startpt = trace_startptgco_acq(T);
   if (startpt == NULL || !checkptrGC(startpt) ||
@@ -9733,10 +9809,48 @@ static TraceStartResult trace_start(jit_State *J)
   return TRACE_START_RESULT_ACTIVE;
 }
 
+/* Admit the exact bodies needed for a side/stitch publication. This lookup is
+** still speculative: neither mcode nor the final trace has been committed.
+** Once a runnable slot is validated, the already-held recorder token excludes
+** its peer retirement claim, slot teardown and physical destruction until the
+** link publication below completes. The remaining publication core cannot
+** retire trace graphs or call arbitrary Lua; optional debug allocation/I/O
+** follows the link so same-owner GC assistance cannot retire an admitted parent
+** early. A paused unrelated reclaimer may own metadata SMR while being unable
+** to retire these token-retained bodies, so do not reacquire it after save.
+** Nor may the reader span native sync, optional debugger allocation, perf-map
+** I/O, or the eventual user event callback.
+*/
+static void trace_stop_admit(jit_State *J, TraceNo parentno, TraceNo rootno,
+			     ExitNo exitno, GCtrace **parentp, GCtrace **rootp)
+{
+  global_State *g = J2G(J);
+  GCtrace *parent, *root = NULL;
+  int valid;
+  lj_assertJ(lj_jit_token_held(J),
+	     "trace publication without recorder-token ownership");
+  if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g)))
+    lj_trace_err(J, LJ_TRERR_RETRY);
+  parent = traceref_safe(J, parentno);
+  valid = trace_runnable_acq(parent, parentno);
+  if (rootno != 0) {
+    root = traceref_safe(J, rootno);
+    valid = valid && trace_runnable_acq(root, rootno) &&
+      exitno < trace_nsnap_acq(parent) && trace_snap_acq(parent) != NULL &&
+      trace_exittab_acq(parent) != NULL;
+  }
+  if (valid) {
+    *parentp = parent;
+    *rootp = root;
+  }
+  lj_gc2_smr_read_leave(g);
+  if (LJ_UNLIKELY(!valid))
+    lj_trace_err(J, LJ_TRERR_RETRY);
+}
+
 /* Stop tracing. */
 static int trace_stop(jit_State *J)
 {
-  global_State *g = J2G(J);
   BCIns *pc = mref(J->cur.startpc, BCIns);
   BCOp op = bc_op(J->cur.startins);
   GCproto *pt = trace_startpt_acq(&J->cur);
@@ -9764,6 +9878,7 @@ static int trace_stop(jit_State *J)
   }
 #endif
 
+  trace_test_stop_checkpoint(J, 1);  /* Before speculative parent admission. */
   switch (op) {
   case BC_FORL:
     /* The matching FORI is patched after trace publication. */
@@ -9789,33 +9904,28 @@ static int trace_stop(jit_State *J)
     parentno = J->parent;
     rootno = J->cur.root;
     lj_assertJ(parentno != 0 && rootno != 0, "not a side trace");
-    lj_gc2_smr_read_enter(g);
-    parent = traceref_safe(J, parentno);
-    root = traceref_safe(J, rootno);
-    lj_assertJ(parent != NULL && root != NULL, "missing parent/root trace");
+    trace_stop_admit(J, parentno, rootno, exitno, &parent, &root);
     /* Avoid compiling a side trace twice (stack resizing uses parent exit). */
     J->cur.nextside = (TraceNo1)trace_nextside_acq(root);
-    lj_gc2_smr_read_leave(g);
     break;
   case BC_CALLM:
   case BC_CALL:
   case BC_ITERC:
     parentno = (TraceNo)J->exitno;
-    lj_gc2_smr_read_enter(g);
-    parent = traceref_safe(J, parentno);
-    lj_assertJ(parent != NULL, "missing stitched trace");
-    lj_gc2_smr_read_leave(g);
+    trace_stop_admit(J, parentno, 0, exitno, &parent, &root);
     break;
   default:
     lj_assertJ(0, "bad stop bytecode %d", op);
     break;
   }
 
+  trace_test_stop_checkpoint(J, 2);  /* Admission transferred to token lifetime. */
   /* Commit and publish the final trace before enabling bytecode/exits. */
   lj_mcode_commit(J, J->cur.mcode);
   lj_mcode_sync_core(J);
   J->postproc = LJ_POST_NONE;
   trace_save(J, T);
+  trace_test_stop_checkpoint(J, 3);  /* Before the runnable parent link. */
 
   switch (op) {
   case BC_FORL:
@@ -9848,15 +9958,23 @@ static int trace_stop(jit_State *J)
 	BCIns observed = lj_bc_publish_cas_vm(patchpc, J->cur.startins,
 					    patchins);
 	root_patch_lost = observed != patchins;
+	if (LJ_UNLIKELY(root_patch_lost)) {
+	  /* Publish the exact reserved-slot cleanup request before optional
+	  ** metadata or Lua can reenter. This newly committed body has never
+	  ** enabled entry, and this uninterrupted recorder token excludes peer
+	  ** retirement until the descriptor is visible. IDLE/MARK recording
+	  ** and current-trace root retry exclude sweep before publication;
+	  ** future root scans preserve pending slots until ordinary retirement
+	  ** transfers ownership to the existing epoch/list protocol. */
+	  (void)la_or8_acqrel(&T->unused1,
+	    TRACE_ENTRY_INVALIDATED|TRACE_RETIRE_PENDING);
+	}
       }
     }
     break;
   case BC_JMP:
-    lj_gc2_smr_read_enter(g);
-    parent = traceref_safe(J, parentno);
-    root = traceref_safe(J, rootno);
-    lj_assertJ(parent != NULL && root != NULL, "missing parent/root trace");
-    lj_assertJ(trace_exittab_acq(parent) != NULL, "missing parent exit table");
+    /* Exact admitted bodies remain live under this unchanged recorder token. */
+    lj_assertJ(lj_jit_token_held(J), "side publication lost recorder token");
     snap = &trace_snap_acq(parent)[exitno];
     topslot = trace_topslot_acq(T);
     if (topslot > snap_topslot_acq(snap)) snap_topslot_rel(snap, topslot);
@@ -9868,32 +9986,34 @@ static int trace_stop(jit_State *J)
     ** after the parent/root metadata above can be observed by other threads.
     */
 #if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
-    trace_exittarget_arm64_rel(g, parent, exitno, trace_mcode_acq(T));
+    trace_exittarget_arm64_rel(J2G(J), parent, exitno, trace_mcode_acq(T));
 #else
     trace_exittarget_rel(parent, exitno, trace_mcode_acq(T));
 #endif
-    lj_gc2_smr_read_leave(g);
     break;
   case BC_CALLM:
   case BC_CALL:
   case BC_ITERC:
-    lj_gc2_smr_read_enter(g);
-    parent = traceref_safe(J, parentno);
-    lj_assertJ(parent != NULL, "missing stitched trace");
+    lj_assertJ(lj_jit_token_held(J), "stitch publication lost recorder token");
     trace_link_rel(parent, traceno);
-    lj_gc2_smr_read_leave(g);
     break;
   default:
     break;
   }
 
+  /* Optional metadata can allocate, assist GC or cross a native boundary.
+  ** Finish every exact parent/root use before this possible same-owner
+  ** retirement/reentry, while preserving metadata-before-event ordering. */
+  trace_test_stop_checkpoint(J, 4);
+  lj_gdbjit_addtrace(J, T);
+#ifdef LUAJIT_USE_PERFTOOLS
+  perftools_addtrace(J, T);
+#endif
+
   if (LJ_UNLIKELY(root_patch_lost)) {
-    /* trace_save() already published the body and prototype root. Preserve it
-    ** for abort-event inspection, but gate native entry before invoking user
-    ** code. Ordinary abort consumers (notably jit.dump's aborted-IR mode) expect
-    ** jit.util.trace* to resolve the trace during the callback. The callback may
-    ** reentrantly flush it, so resolve the exact slot again before cleanup. */
-    (void)trace_entry_mark_invalidated(T);
+    /* Keep ordinary abort inspection while the recorder is active. Cleanup is
+    ** already a durable reserved-slot request, so this callback may flush,
+    ** collect or reuse the number without any later raw T access here. */
     lj_vmevent_send_l(J->L, TRACE,
       setstrV(V, V->top++, lj_str_newlit(V, "abort"));
       setintV(V->top++, traceno);
@@ -9902,13 +10022,6 @@ static int trace_stop(jit_State *J)
       setintV(V->top++, LJ_TRERR_RETRY);
       setnilV(V->top++);
     );
-    lj_gc2_smr_read_enter(g);
-    {
-      GCtrace *live = traceref_safe(J, traceno);
-      if (live == T && trace_traceno_acq(live) == traceno)
-	trace_scope_clear_slot(J, traceno, live, lj_gc2_retire_epoch(g));
-    }
-    lj_gc2_smr_read_leave(g);
     return 0;
   }
 

@@ -173,7 +173,7 @@ for required in \
   'if (sourceins != expected || ins != sourceins)' \
   '(sourceop == (uint32_t)BC_JFUNCF ?' \
   'TRACE_ARM64_TRUE_FUNCF_ADMITTED : TRACE_ARM64_INT_LOOP_ADMITTED)' \
-  '(v->admission & root_admission) == expected_admission' \
+  'v->admission == expected_admission' \
   'trace_root_entry_loop_geometry(sourceop, pt, pc, v->startins)' \
   'bc_op(startins) != BC_FORL' \
   'bc_op(fori) == BC_FORI' \

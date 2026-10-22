@@ -160,9 +160,9 @@ static void expect_root_shape(jit_State *J, GCproto *pt, GCtrace **rootp,
   assert(trace_startpt_acq(root) == pt);
   assert(trace_topslot_acq(root) == 5 && trace_spadjust_acq(root) == 0);
   assert(trace_mcode_acq(root) != NULL);
-  assert((la_load8_acq(&root->unused1) &
+  assert((trace_arm64_admission_acq(root) &
 	  TRACE_ARM64_INT_LOOP_ADMITTED) != 0);
-  assert((la_load8_acq(&root->unused1) &
+  assert((trace_arm64_admission_acq(root) &
 	  TRACE_ARM64_INT_SIDE_ADMITTED) == 0);
 
   startpc = trace_startpc_acq(root);

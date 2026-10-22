@@ -233,9 +233,9 @@ for required in \
   }
 done
 for required in \
-  'T->unused1 |= TRACE_ARM64_INT_FORL_ADMITTED;' \
-  'T->unused1 |= TRACE_ARM64_TRUE_FUNCF_ADMITTED;' \
-  'T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;'; do
+  'trace_arm64_admission_rel(T, TRACE_ARM64_INT_FORL_ADMITTED);' \
+  'trace_arm64_admission_rel(T, TRACE_ARM64_TRUE_FUNCF_ADMITTED);' \
+  'trace_arm64_admission_rel(T, TRACE_ARM64_INT_LOOP_ADMITTED);'; do
   grep -F "$required" "$asm_source" >/dev/null
 done
 

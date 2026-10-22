@@ -491,11 +491,23 @@ LJ_STATIC_ASSERT(FRAME_TYPEP == 7);
 |  ldar dst, [ATMP]
 |.endmacro
 |// VM-owned color-GC threshold and GC2 hard-assist decision.
-|.macro arm64_vm_gc_should_step, g, tmp1, tmp2, target, done
+|.macro arm64_vm_gc_should_step, g, tmp1, tmp1w, tmp2, target, done
 |  arm64_vm_u64_acq tmp1, g, GL_OFS(gc.total)
 |  arm64_vm_u64_acq tmp2, g, GL_OFS(gc.threshold)
 |  cmp tmp1, tmp2
 |  bhs target
+|  // A durable IDLE request may outlive the local accounting batch. Honor
+|  // the authoritative public stop/finalizer pause bits before driving it.
+|  arm64_vm_gl_u32_acq tmp1w, g, gc2.cycle_leader
+|  cbz tmp1w, >6
+|  arm64_vm_gl_u32_acq tmp1w, g, gc2.phase
+|  cmp tmp1w, #LJ_GC2_IDLE
+|  bne >6
+|  add ATMP, g, #(GL_OFS(gc.auto_flags)&0xfff000)
+|  add ATMP, ATMP, #(GL_OFS(gc.auto_flags)&0xfff)
+|  ldarb tmp1w, [ATMP]
+|  cbz tmp1w, target
+|6:
 |  arm64_vm_u64_acq tmp1, g, GL_OFS(gc2.alloc_since_trigger)
 |  arm64_vm_u64_acq tmp2, g, GL_OFS(gc2.hard_bytes)
 |  cmp tmp1, tmp2
@@ -1454,9 +1466,9 @@ static void build_subroutines(BuildCtx *ctx)
   |.endmacro
   |
   |// VM-owned GC threshold/assist check.
-  |// Caveat: uses CARG1, CARG2 and labels 1 and 9.
+  |// Caveat: uses CARG1, CARG2 and labels 1, 6 and 9.
   |.macro ffgccheck
-  |  arm64_vm_gc_should_step GLREG, CARG1, CARG2, >9, >1
+  |  arm64_vm_gc_should_step GLREG, CARG1, CARG1w, CARG2, >9, >1
   |  b >1
   |9:
   |  bl ->fff_gcstep
@@ -3843,7 +3855,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   str BASE, L->base
     |   str PC, SAVE_PC
     |   mov CARG1, L
-    |  arm64_vm_gc_should_step GLREG, CARG3, CARG4, >5, >1
+    |  arm64_vm_gc_should_step GLREG, CARG3, CARG3w, CARG4, >5, >1
     |1:
     if (op == BC_TNEW) {
       |  and CARG2, RC, #0x7ff

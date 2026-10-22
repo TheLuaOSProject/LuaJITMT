@@ -420,6 +420,17 @@ LJ_STATIC_ASSERT(sizeof(GCtab) == 80u);
 |  mov tmp, [g+GL_OFS(gc.total)]	// TSO acquire load: lj_gc_total_load().
 |  cmp tmp, [g+GL_OFS(gc.threshold)]	// TSO acquire load: lj_gc_threshold_load().
 |  jae target
+|  // A published IDLE request survives the accounting flush below the local
+|  // hard-assist cadence. Mirror lj_gc_pending_auto_request(), including the
+|  // authoritative public stop and owned finalizer pause state.
+|  cmp dword [g+GL_OFS(gc2.cycle_leader)], 0
+|  je >6
+|  cmp dword [g+GL_OFS(gc2.phase)], LJ_GC2_IDLE
+|  jne >6
+|  cmp byte [g+GL_OFS(gc.auto_flags)], 0
+|  jne >6
+|  jmp target
+|6:
 |  mov tmp, [g+GL_OFS(gc2.alloc_since_trigger)]  // TSO acquire load.
 |  cmp tmp, [g+GL_OFS(gc2.hard_bytes)]  // lj_gc2_hard_limit_reached().
 |  jbe >7

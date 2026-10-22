@@ -286,7 +286,7 @@ static GCtrace *expect_trace(lua_State *L, const ScalarSpec *spec,
   assert(trace_startpt_acq(T) == pt);
   assert(trace_topslot_acq(T) == (MSize)pt->framesize);
   assert(trace_spadjust_acq(T) == 0);
-  assert((la_load8_acq(&T->unused1) & TRACE_ARM64_INT_LOOP_ADMITTED) != 0);
+  assert((trace_arm64_admission_acq(T) & TRACE_ARM64_INT_LOOP_ADMITTED) != 0);
   assert(trace_mcode_acq(T) != NULL && trace_szmcode_acq(T) > sizeof(MCode));
   assert(trace_mcloop_acq(T) > 0 &&
 	 trace_mcloop_acq(T) < trace_szmcode_acq(T));

@@ -1846,7 +1846,7 @@ typedef struct GCState {
   GCSize threshold;	/* Memory threshold. */
   uint8_t currentwhite;	/* Current white color. */
   uint8_t state;	/* GC state. */
-  uint8_t unused0;
+  uint8_t auto_flags;  /* Automatic-GC control, independent of pacing thresholds. */
 #if LJ_64
   uint8_t lightudnum;	/* Number of lightuserdata segments - 1. */
 #else
@@ -2044,6 +2044,7 @@ typedef struct GC2State {
   uint32_t generational;  /* M10: requested generational mode. */
   GCRef *grey_stack;	/* GC2 grey work deque ring. */
   MSize grey_capacity;	/* Allocated grey deque slots. */
+  uint32_t sweep_owner_next_tid;  /* Worker-owned sweep scheduling hint. */
   uint64_t grey_top;	/* Chase-Lev steal-side index. */
   uint64_t grey_bottom;	/* Chase-Lev owner-side index. */
   uint64_t grey_pushed;	/* Grey entries scheduled from SSB/traversal. */
@@ -4263,6 +4264,18 @@ static LJ_AINLINE void gc2_sweep_grace_needed_rel(global_State *g,
 
 LJ_GC2_COUNTER64_ACCESSORS(gc2_sweep_to_idle, sweep_to_idle)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_preserve_abort_to_idle, preserve_abort_to_idle)
+
+/* The worker token serializes this scalar hint. It never pins a TG body. */
+static LJ_AINLINE uint32_t gc2_sweep_owner_next_tid_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.sweep_owner_next_tid);
+}
+
+static LJ_AINLINE void gc2_sweep_owner_next_tid_store_rlx(global_State *g,
+                                                       uint32_t tid)
+{
+  la_store32_rlx(&g->gc2.sweep_owner_next_tid, tid);
+}
 
 static LJ_AINLINE TGState *gc2_tg_list_acq(global_State *g)
 {

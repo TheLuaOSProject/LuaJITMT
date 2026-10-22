@@ -98,7 +98,10 @@ return function(add)
     run = function(t)
       build.build_and_run_c(t, t:tmp("lj_t-x64-tnew-empty-inline"),
                             "t-x64-tnew-empty-inline.c",
-                            build.tab_helper_opts())
+                            build.tab_helper_opts({
+                              xcflags = "-DLJ_TAB_TEST_HELPERS -DLJ_GC2_TEST_HELPERS",
+                              cflags = "-DLJ_TAB_TEST_HELPERS -DLJ_GC2_TEST_HELPERS"
+                            }))
       print("M5 x64 empty TNEW inline arena bump behavior passed")
     end
   })

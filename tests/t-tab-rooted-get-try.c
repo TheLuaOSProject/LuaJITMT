@@ -98,6 +98,23 @@ static int bounded_getint(lua_State *L, cTValue *tabroot, int32_t key,
   return status;
 }
 
+static int bounded_hit(lua_State *L, cTValue *tabroot,
+		       cTValue *keyroot, TValue *outroot)
+{
+  WaitState state = wait_state();
+  uint64_t tabword = tv_rawload_acq(tabroot);
+  uint64_t keyword = tv_rawload_acq(keyroot);
+  uint64_t outword = tv_rawload_acq(outroot);
+  int hit = lj_tab_gettv_rooted_hit_try(L, tabroot, keyroot, outroot);
+  assert_wait_state(state);
+  if (!hit) {
+    assert(tv_rawload_acq(tabroot) == tabword);
+    assert(tv_rawload_acq(keyroot) == keyword);
+    assert(tv_rawload_acq(outroot) == outword);
+  }
+  return hit;
+}
+
 static int result_function(lua_State *L)
 {
   lua_pushinteger(L, 12345);
@@ -387,6 +404,117 @@ static void exercise_owner_contract(lua_State *L, lua_State *wrong)
   lua_settop(L, top);
 }
 
+static void exercise_hit_only(lua_State *L, lua_State *wrong)
+{
+  int top = lua_gettop(L), i;
+  GCtab *t;
+  GCobj *denied[3];
+  uint32_t expect;
+  TValue *tabroot, *keyroot, *outroot, *oldarray, *newarray;
+  MSize oldasize;
+  CleanState clean = clean_state(L);
+  GCSize total0;
+
+  populate(L);
+  t = tabV(L->top - 1);
+  lua_pushliteral(L, "handler");
+  lua_getfield(L, -2, "handler");
+  denied[0] = obj2gco(t);
+  denied[1] = gcV(L->top - 2);
+  denied[2] = gcV(L->top - 1);
+  lua_pop(L, 1);
+  lua_pushinteger(L, 88);
+  tabroot = L->top - 3;
+  keyroot = L->top - 2;
+  outroot = L->top - 1;
+  total0 = lj_gc_total_load(G(L));
+
+  assert(!bounded_hit(wrong, tabroot, keyroot, outroot));
+  expect = LJ_GC2_SMR_OPEN;
+  assert(gc2_smr_reclaiming_cas(G(L), &expect, LJ_GC2_SMR_META_EXCLUSIVE));
+  assert(!bounded_hit(L, tabroot, keyroot, outroot));
+  gc2_smr_reclaiming_rel(G(L), LJ_GC2_SMR_OPEN);
+  for (i = 0; i < 3; i++) {
+    lj_gc2_test_stack_admission_retry_once(denied[i]);
+    assert(!bounded_hit(L, tabroot, keyroot, outroot));
+    assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+  }
+  assert(bounded_hit(L, tabroot, keyroot, outroot));
+  assert(tvisfunc(outroot) && funcV(outroot)->c.f == result_function);
+  assert(lj_gc_total_load(G(L)) == total0);
+  assert_clean(L, clean);
+
+  /* The newly published output is the only function root after removing its
+  ** source edge. It must survive collection after every read lease closes. */
+  lua_pushnil(L);
+  lua_setfield(L, top + 1, "handler");
+  (void)lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_call(L, 0, 1);
+  assert(lua_tointeger(L, -1) == 12345);
+  lua_pop(L, 2);
+
+  lua_pushvalue(L, -1);
+  lua_pushliteral(L, "missing");
+  assert(!bounded_hit(L, L->top - 2, L->top - 1, L->top - 2));
+  assert(!bounded_hit(L, L->top - 2, L->top - 1, L->top - 1));
+  lua_pop(L, 2);
+  lua_pushnil(L);
+  lua_pushinteger(L, 88);
+  assert(!bounded_hit(L, L->top - 3, L->top - 2, L->top - 1));
+  lua_pop(L, 2);
+
+  lua_pushinteger(L, 3);
+  assert(bounded_hit(L, L->top - 2, L->top - 1, L->top - 1));
+  assert(lua_tointeger(L, -1) == 33);
+  lua_pop(L, 1);
+  lua_pushvalue(L, -1);
+  lua_pushinteger(L, 3);
+  assert(bounded_hit(L, L->top - 2, L->top - 1, L->top - 2));
+  assert(lua_tointeger(L, -2) == 33);
+  lua_pop(L, 2);
+
+  oldarray = lj_tab_array_acq(t);
+  oldasize = lj_tab_asize_acq(t);
+  lj_tab_resize(L, t, oldasize + 32u,
+	       lj_fls(lj_tab_node_hmask_acq(lj_tab_node_acq(t))) + 1u);
+  newarray = lj_tab_array_acq(t);
+  assert(newarray != oldarray && lj_tab_array_is_retiring(t, oldarray));
+  lj_tab_array_rel(t, oldarray);
+  lua_pushinteger(L, 3);
+  lua_pushinteger(L, 88);
+  assert(!bounded_hit(L, L->top - 3, L->top - 2, L->top - 1));
+  lj_tab_array_rel(t, newarray);
+  lua_pop(L, 2);
+
+  /* Ordinary large vectors and GC-valued hits reach this path after scalar
+  ** refusal. Keep construction outside the nonallocating read interval. */
+  lua_createtable(L, 8192, 0);
+  lua_pushliteral(L, "large-result");
+  lua_rawseti(L, -2, 1001);
+  t = tabV(L->top - 1);
+  assert(lj_tab_array_bytes(lj_tab_array_hdr_acap_acq(lj_tab_array_acq(t))) >
+	 LJ_HUGE_THRESHOLD);
+  lua_pushinteger(L, 1001);
+  lua_pushinteger(L, 88);
+  total0 = lj_gc_total_load(G(L));
+  assert(bounded_hit(L, L->top - 3, L->top - 2, L->top - 1));
+  assert(strcmp(lua_tostring(L, -1), "large-result") == 0);
+  assert(lj_gc_total_load(G(L)) == total0);
+  assert_clean(L, clean);
+  lua_settop(L, top);
+
+  assert(luaL_dostring(L,
+    "local calls = 0\n"
+    "local leaf = setmetatable({}, {__index=function(t,k)\n"
+    "  assert(type(t)=='table' and k=='missing'); calls=calls+1; return false end})\n"
+    "local t = setmetatable({value=0}, {__index=leaf})\n"
+    "assert(t.value==0 and calls==0)\n"
+    "assert(t.missing==false and calls==1)\n"
+    "assert(({value=0})[nil]==nil)\n") == 0);
+  assert_clean(L, clean);
+  lua_settop(L, top);
+}
+
 static int close_finalizer_get(lua_State *L)
 {
   int top = lua_gettop(L);
@@ -438,6 +566,7 @@ int main(void)
   exercise_admission_retries(L);
   exercise_structural_retries(L);
   exercise_owner_contract(L, wrong);
+  exercise_hit_only(L, wrong);
 
   install_close_finalizer(L);
   lua_close(L);

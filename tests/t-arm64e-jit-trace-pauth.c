@@ -355,7 +355,7 @@ static void expect_exact_loop_body(jit_State *J, GCtrace *T, GCproto *pt)
   assert(trace_startpt_acq(T) == pt);
   assert(la_load64_acq(&T->retire_epoch) == 0);
   assert((la_load8_acq(&T->unused1) & TRACE_ENTRY_GATED) == 0);
-  assert((la_load8_acq(&T->unused1) &
+  assert((trace_arm64_admission_acq(T) &
 	  TRACE_ARM64_INT_LOOP_ADMITTED) != 0);
 
   pc = trace_startpc_acq(T);
@@ -383,7 +383,7 @@ static void expect_exact_loop_body(jit_State *J, GCtrace *T, GCproto *pt)
 
 static void expect_exact_forl_body(jit_State *J, GCtrace *T, GCproto *pt)
 {
-  uint8_t admission;
+  uint32_t admission;
   TraceNo traceno;
 
   assert(T != NULL && trace_runnable_acq(T, 1));
@@ -395,8 +395,8 @@ static void expect_exact_forl_body(jit_State *J, GCtrace *T, GCproto *pt)
   assert(trace_nextside_acq(T) == 0);
   assert(trace_startpt_acq(T) == pt);
   assert(la_load64_acq(&T->retire_epoch) == 0);
-  admission = la_load8_acq(&T->unused1);
-  assert((admission & TRACE_ENTRY_GATED) == 0);
+  admission = trace_arm64_admission_acq(T);
+  assert((la_load8_acq(&T->unused1) & TRACE_ENTRY_GATED) == 0);
   assert((admission & (TRACE_ARM64_INT_LOOP_ADMITTED |
 	 TRACE_ARM64_INT_FORL_ADMITTED)) == TRACE_ARM64_INT_FORL_ADMITTED);
 
@@ -427,7 +427,7 @@ static void expect_exact_funcf_body(jit_State *J, GCtrace *T, GCproto *pt)
   const BCIns *pc;
   BCIns startins, live, kpri, ret;
   BCReg result;
-  uint8_t admission;
+  uint32_t admission;
   TraceNo traceno;
 
   assert(pt->sizebc == 3);
@@ -463,7 +463,7 @@ static void expect_exact_funcf_body(jit_State *J, GCtrace *T, GCproto *pt)
   assert((BCIns)la_load32_acq((const uint32_t *)&bc[1]) == kpri);
   assert((BCIns)la_load32_acq((const uint32_t *)&bc[2]) == ret);
 
-  admission = la_load8_acq(&T->unused1);
+  admission = trace_arm64_admission_acq(T);
   assert(admission == TRACE_ARM64_TRUE_FUNCF_ADMITTED);
   assert((admission & (TRACE_ARM64_INT_LOOP_ADMITTED |
 	 TRACE_ARM64_INT_FORL_ADMITTED)) == 0);

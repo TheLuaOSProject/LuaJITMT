@@ -566,7 +566,7 @@ static void test_phase_transition_guards(lua_State *L, global_State *g,
   assert_idle(g, tg);
 }
 
-static void test_mark_complete_waits_for_peer(lua_State *L, global_State *g,
+static void test_mark_complete_defers_to_peer(lua_State *L, global_State *g,
 					      TGState *tg)
 {
   GCtab *parent, *child;
@@ -606,6 +606,7 @@ static void test_mark_complete_waits_for_peer(lua_State *L, global_State *g,
   ** graph can legitimately need more than two bounded closure rounds. */
   assert(lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0) == 0);
   assert(pthread_join(thread, NULL) == 0);
+  assert(rel.saw_native == 0);
   assert(gc2_worker_active_acq(g) == 0);
   assert(gc2_major_root_scans_acq(g) == roots0);
   assert(lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0) == 1);
@@ -616,7 +617,7 @@ static void test_mark_complete_waits_for_peer(lua_State *L, global_State *g,
   assert(gc2_major_root_scans_acq(g) - roots0 <= 64u);
   assert(gc2_mark_complete_runs_acq(g) == runs0 + 2u);
   assert(gc2_mark_complete_hits_acq(g) == hits0 + 1u);
-  assert(gc2_mark_complete_peer_waits_acq(g) > waits0);
+  assert(gc2_mark_complete_peer_waits_acq(g) == waits0);
   assert(lj_gc2_test_ssb_empty(g));
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
 
@@ -625,7 +626,7 @@ static void test_mark_complete_waits_for_peer(lua_State *L, global_State *g,
   lua_pop(L, 1);
 }
 
-static void test_mark_complete_waits_for_assist(lua_State *L, global_State *g,
+static void test_mark_complete_defers_to_assist(lua_State *L, global_State *g,
 						TGState *tg)
 {
   GCtab *parent, *child;
@@ -664,6 +665,7 @@ static void test_mark_complete_waits_for_assist(lua_State *L, global_State *g,
 		       release_assist_worker_active, &rel) == 0);
   assert(lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0) == 0);
   assert(pthread_join(thread, NULL) == 0);
+  assert(rel.saw_native == 0);
   assert(gc2_assist_active_acq(g) == 0);
   assert(gc2_worker_active_acq(g) == 0);
   assert(lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0) == 1);
@@ -671,7 +673,7 @@ static void test_mark_complete_waits_for_assist(lua_State *L, global_State *g,
   assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
   assert(gc2_mark_complete_runs_acq(g) == runs0 + 2u);
   assert(gc2_mark_complete_hits_acq(g) == hits0 + 1u);
-  assert(gc2_mark_complete_peer_waits_acq(g) > waits0);
+  assert(gc2_mark_complete_peer_waits_acq(g) == waits0);
 
   g->gc.state = GCSpause;
   lj_gc2_cycle_to_idle(g);
@@ -1034,8 +1036,8 @@ int main(void)
   test_phase_transition_guards(L, g, tg);
   test_incremental_worker_step(L, g, tg);
   test_incremental_fixpoint_round(L, g);
-  test_mark_complete_waits_for_peer(L, g, tg);
-  test_mark_complete_waits_for_assist(L, g, tg);
+  test_mark_complete_defers_to_peer(L, g, tg);
+  test_mark_complete_defers_to_assist(L, g, tg);
   test_stale_mark_intent_does_not_block_weak(L, g, tg);
   test_weak_complete_waits_for_assist(L, g, tg);
 

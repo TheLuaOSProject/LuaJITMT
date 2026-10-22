@@ -15,6 +15,9 @@ int32_t lj_callxs_flush_entered_count(void);
 int32_t lj_callxs_flush_entry_count(void);
 int32_t lj_callxs_flush_effect_count(void);
 int32_t lj_callxs_flush_aggregate_call_count(void);
+void lj_callxs_flush_clear_traces(void);
+int32_t lj_callxs_flush_add_trace(uintptr_t, uint32_t);
+int32_t lj_callxs_flush_generated_count(void);
 int32_t lj_callxs_flush_maybe_block(int32_t);
 int32_t lj_callxs_flush_identity_maybe_block(int32_t);
 int32_t *lj_callxs_flush_ptr_maybe_block(int32_t *, int32_t);
@@ -23,15 +26,15 @@ _Bool lj_callxs_flush_bool_maybe_block(int32_t, int32_t);
 
 local so = assert(os.getenv("LJ_M7_FFI_CALLXS_FLUSH_SO"))
 local lib = ffi.load(so)
-local scalar_call_mt, scalar_call_mm, scalar_call_replacement
+local scalar_fn_mt, scalar_fn_mm, scalar_fn_replacement
 if scalar_only then
-  scalar_call_mt = debug.getmetatable(
+  scalar_fn_mt = debug.getmetatable(
     lib.lj_callxs_flush_identity_maybe_block)
-  scalar_call_mm = rawget(scalar_call_mt, "__call")
-  scalar_call_replacement = function(_, value)
+  scalar_fn_mm = rawget(scalar_fn_mt, "__call")
+  scalar_fn_replacement = function(_, value)
     return value + 0x100000
   end
-  jit.off(scalar_call_replacement, true)
+  jit.off(scalar_fn_replacement, true)
 end
 local ready = threading.channel(1)
 local start = threading.channel(1)
@@ -47,6 +50,9 @@ local worker = threading.spawn(function(ready_ch, start_ch, so_path)
   ffi.cdef [[
   void lj_callxs_flush_configure(int32_t, int32_t);
   int32_t lj_callxs_flush_aggregate_call_count(void);
+void lj_callxs_flush_clear_traces(void);
+int32_t lj_callxs_flush_add_trace(uintptr_t, uint32_t);
+int32_t lj_callxs_flush_generated_count(void);
   int32_t lj_callxs_flush_maybe_block(int32_t);
   int32_t lj_callxs_flush_identity_maybe_block(int32_t);
   int32_t *lj_callxs_flush_ptr_maybe_block(int32_t *, int32_t);
@@ -62,15 +68,17 @@ local worker = threading.spawn(function(ready_ch, start_ch, so_path)
     lj_callxs_flush_aggregate_maybe_block(double, int32_t);
   ]]
   local worker_lib = ffi.load(so_path)
-  local scalar_call = scalar_only and
+  local scalar_fn = scalar_only and
     worker_lib.lj_callxs_flush_identity_maybe_block or
     worker_lib.lj_callxs_flush_maybe_block
-  local pointer_call, bool_call, aggregate_call
+  local pointer_fn, bool_fn, aggregate_fn
   if not scalar_only then
-    pointer_call = worker_lib.lj_callxs_flush_ptr_maybe_block
-    bool_call = worker_lib.lj_callxs_flush_bool_maybe_block
-    aggregate_call = worker_lib.lj_callxs_flush_aggregate_maybe_block
+    pointer_fn = worker_lib.lj_callxs_flush_ptr_maybe_block
+    bool_fn = worker_lib.lj_callxs_flush_bool_maybe_block
+    aggregate_fn = worker_lib.lj_callxs_flush_aggregate_maybe_block
   end
+  local invoke = debug.getmetatable(scalar_fn).__call
+  assert(type(invoke) == "function")
   assert(ffi.sizeof("struct lj_callxs_flush_aggregate") == 24)
 
   local function trace_op_count(wanted)
@@ -98,11 +106,24 @@ local worker = threading.spawn(function(ready_ch, start_ch, so_path)
     end
     return true
   end
+  local function publish_trace_ranges()
+    worker_lib.lj_callxs_flush_clear_traces()
+    local count = 0
+    for tr = 1, 256 do
+      local code, addr = util.tracemc(tr)
+      if code then
+        assert(worker_lib.lj_callxs_flush_add_trace(addr, #code) == 1)
+        count = count + 1
+      end
+    end
+    assert(count > 0, "blocked call must have a published native caller")
+  end
+  jit.off(publish_trace_ranges, true)
 
   local function run_scalar(base, n)
     local sum = 0
     for i = 1, n do
-      sum = sum + scalar_call(base + i)
+      sum = sum + invoke(scalar_fn, base + i)
     end
     return sum
   end
@@ -110,7 +131,7 @@ local worker = threading.spawn(function(ready_ch, start_ch, so_path)
   local function run_pointer(ptr, base, n)
     local result
     for i = 1, n do
-      result = pointer_call(ptr, base + i)
+      result = invoke(pointer_fn, ptr, base + i)
     end
     return result
   end
@@ -118,7 +139,7 @@ local worker = threading.spawn(function(ready_ch, start_ch, so_path)
   local function run_bool(base, n, truth)
     local result
     for i = 1, n do
-      result = bool_call(base + i, truth)
+      result = invoke(bool_fn, base + i, truth)
     end
     return result
   end
@@ -126,7 +147,8 @@ local worker = threading.spawn(function(ready_ch, start_ch, so_path)
   local function run_aggregate(base, n)
     local result
     for i = 1, n do
-      result = aggregate_call(0.5, base + i)
+      result = invoke(aggregate_fn,
+        0.5, base + i)
     end
     return result
   end
@@ -147,7 +169,7 @@ local worker = threading.spawn(function(ready_ch, start_ch, so_path)
   if scalar_only then
     worker_lib.lj_callxs_flush_configure(-2147483647 - 1, 0)
     for _ = 1, 80 do
-      assert(run_scalar_arm64(scalar_call, 8))
+      assert(run_scalar_arm64(scalar_fn, 8))
     end
     local scalar_xsave = trace_op_count("XSAVE ")
     local scalar_callxs = trace_op_count("CALLXS")
@@ -162,7 +184,7 @@ local worker = threading.spawn(function(ready_ch, start_ch, so_path)
 
     local command, ok = start_ch:recv(10)
     assert(ok == true and command == "guard_metacall")
-    local guarded_result = run_scalar_arm64(scalar_call, 8)
+    local guarded_result = run_scalar_arm64(scalar_fn, 8)
     assert(guarded_result == false)
     assert(ready_ch:send({
       phase = "metacall_guarded",
@@ -174,7 +196,7 @@ local worker = threading.spawn(function(ready_ch, start_ch, so_path)
     assert(ready_ch:send({ phase = "metacall_race_started" }, 10) == true)
     local alternate_results = 0
     for _ = 1, 20000 do
-      if not run_scalar_arm64(scalar_call, 8) then
+      if not run_scalar_arm64(scalar_fn, 8) then
         alternate_results = alternate_results + 1
       end
     end
@@ -185,7 +207,7 @@ local worker = threading.spawn(function(ready_ch, start_ch, so_path)
 
     command, ok = start_ch:recv(10)
     assert(ok == true and command == "block_scalar")
-    local scalar_result = run_scalar_arm64(scalar_call, 8)
+    local scalar_result = run_scalar_arm64(scalar_fn, 8)
     assert(scalar_result == true)
     assert(ready_ch:send({
       phase = "scalar_done",
@@ -217,6 +239,7 @@ local worker = threading.spawn(function(ready_ch, start_ch, so_path)
   local boxed_callxs = trace_op_count("CALLXS")
   assert(boxed_xsave > 0, "boxed blocker did not record XSAVE")
   assert(boxed_callxs > 0, "boxed blocker did not record CALLXS")
+  publish_trace_ranges()
   assert(ready_ch:send({
     phase = "pointer_ready",
     scalar_xsave = scalar_xsave,
@@ -244,13 +267,14 @@ local worker = threading.spawn(function(ready_ch, start_ch, so_path)
     assert(run_bool(i * 16, 8, 1) == true)
   end
   local bool_xsave = trace_op_count("XSAVE ")
-  local bool_callxs = trace_op_count("CALLXS")
+  local bool_fnxs = trace_op_count("CALLXS")
   assert(bool_xsave > 0, "boolean blocker did not record XSAVE")
-  assert(bool_callxs > 0, "boolean blocker did not record CALLXS")
+  assert(bool_fnxs > 0, "boolean blocker did not record CALLXS")
+  publish_trace_ranges()
   assert(ready_ch:send({
     phase = "bool_ready",
     bool_xsave = bool_xsave,
-    bool_callxs = bool_callxs,
+    bool_fnxs = bool_fnxs,
   }, 10) == true)
   command, ok = start_ch:recv(10)
   assert(ok == true and command == "block_bool")
@@ -274,13 +298,14 @@ local worker = threading.spawn(function(ready_ch, start_ch, so_path)
   end
   assert(worker_lib.lj_callxs_flush_aggregate_call_count() == 80 * 8)
   local aggregate_xsave = trace_op_count("XSAVE ")
-  local aggregate_callxs = trace_op_count("CALLXS")
+  local aggregate_fnxs = trace_op_count("CALLXS")
   assert(aggregate_xsave > 0, "sret blocker did not record XSAVE")
-  assert(aggregate_callxs > 0, "sret blocker did not record CALLXS")
+  assert(aggregate_fnxs > 0, "sret blocker did not record CALLXS")
+  publish_trace_ranges()
   assert(ready_ch:send({
     phase = "aggregate_ready",
     aggregate_xsave = aggregate_xsave,
-    aggregate_callxs = aggregate_callxs,
+    aggregate_fnxs = aggregate_fnxs,
     warm_calls = worker_lib.lj_callxs_flush_aggregate_call_count(),
   }, 10) == true)
   command, ok = start_ch:recv(10)
@@ -310,9 +335,9 @@ if scalar_only then
   assert(scalar_ready.phase == "scalar_ready")
   assert(scalar_ready.scalar_xsave == 2 and scalar_ready.scalar_callxs == 2)
 
-  assert(type(scalar_call_mt) == "table" and
-         type(scalar_call_mm) == "function")
-  rawset(scalar_call_mt, "__call", scalar_call_replacement)
+  assert(type(scalar_fn_mt) == "table" and
+         type(scalar_fn_mm) == "function")
+  rawset(scalar_fn_mt, "__call", scalar_fn_replacement)
   assert(start:send("guard_metacall", 10) == true)
   local guarded, guarded_ok = ready:recv(10)
   assert(guarded_ok == true and guarded.phase == "metacall_guarded")
@@ -324,10 +349,10 @@ if scalar_only then
   assert(race_started_ok == true and
          race_started.phase == "metacall_race_started")
   for i = 1, 20000 do
-    rawset(scalar_call_mt, "__call",
-           i % 2 == 0 and scalar_call_replacement or scalar_call_mm)
+    rawset(scalar_fn_mt, "__call",
+           i % 2 == 0 and scalar_fn_replacement or scalar_fn_mm)
   end
-  rawset(scalar_call_mt, "__call", scalar_call_mm)
+  rawset(scalar_fn_mt, "__call", scalar_fn_mm)
   local race_done, race_done_ok = ready:recv(10)
   assert(race_done_ok == true and race_done.phase == "metacall_race_done")
   assert(race_done.alternate_results > 0,
@@ -398,6 +423,14 @@ assert(recorded.phase == "pointer_ready")
 assert(recorded.scalar_xsave > 0 and recorded.scalar_callxs > 0)
 assert(recorded.boxed_xsave > 0 and recorded.boxed_callxs > 0)
 
+local function assert_generated_entry()
+  local count = lib.lj_callxs_flush_generated_count()
+  -- Release before reporting failure, so close can join an interpreted caller.
+  if count ~= 1 then lib.lj_callxs_flush_unblock() end
+  assert(count == 1, "blocked foreign call did not originate in published mcode")
+end
+jit.off(assert_generated_entry, true)
+
 -- The first loop iteration reaches the patched loop backedge. The gate is on
 -- the eighth iteration, which therefore executes from the already-recorded
 -- generic CALLXS trace rather than from the interpreter warm-up edge.
@@ -411,6 +444,7 @@ while lib.lj_callxs_flush_entered_count() == 0 and
 end
 assert(lib.lj_callxs_flush_entered_count() == 1,
        "generated CALLXS did not enter the blocker")
+assert_generated_entry()
 assert(lib.lj_callxs_flush_entry_count() == 1,
        "blocking call was entered more than once")
 assert(lib.lj_callxs_flush_effect_count() == 0,
@@ -451,7 +485,7 @@ assert(start:send("continue", 10) == true)
 
 local bool_ready, bool_ready_ok = ready:recv(10)
 assert(bool_ready_ok == true and bool_ready.phase == "bool_ready")
-assert(bool_ready.bool_xsave > 0 and bool_ready.bool_callxs > 0)
+assert(bool_ready.bool_xsave > 0 and bool_ready.bool_fnxs > 0)
 lib.lj_callxs_flush_configure(108, 1)
 assert(start:send("block_bool", 10) == true)
 
@@ -462,6 +496,7 @@ while lib.lj_callxs_flush_entered_count() == 0 and
 end
 assert(lib.lj_callxs_flush_entered_count() == 1,
        "generated boolean CALLXS did not enter the blocker")
+assert_generated_entry()
 assert(lib.lj_callxs_flush_entry_count() == 1)
 assert(lib.lj_callxs_flush_effect_count() == 0)
 
@@ -496,7 +531,7 @@ local aggregate_ready, aggregate_ready_ok = ready:recv(10)
 assert(aggregate_ready_ok == true and
        aggregate_ready.phase == "aggregate_ready")
 assert(aggregate_ready.aggregate_xsave > 0 and
-       aggregate_ready.aggregate_callxs > 0)
+       aggregate_ready.aggregate_fnxs > 0)
 assert(aggregate_ready.warm_calls == 80 * 8,
        "sret warm-up call count was not exact")
 
@@ -510,6 +545,7 @@ while lib.lj_callxs_flush_entered_count() == 0 and
 end
 assert(lib.lj_callxs_flush_entered_count() == 1,
        "generated sret CALLXS did not enter the blocker")
+assert_generated_entry()
 assert(lib.lj_callxs_flush_entry_count() == 1,
        "blocking sret call was entered more than once")
 assert(lib.lj_callxs_flush_effect_count() == 0,

@@ -19,6 +19,7 @@
 #include "lj_iropt.h"
 #include "lj_ircall.h"
 #include "lj_dispatch.h"
+#include "lj_record.h"
 
 /* Some local macros to save typing. Undef'd at the end. */
 #define IR(ref)		(&J->cur.ir[(ref)])
@@ -56,6 +57,44 @@ static LJ_AINLINE IRRef uload_alias_limit(jit_State *J, IRRef lim, IRType1 t)
   return lim;
 }
 
+/* Reuse only a cdata base-root or direct userdata metatable and its node
+** chain while the protected root-loop unroller has classified the whole body
+** as pure. Entry guards, XBAR, ordinary table alias checks, and the
+** unconditional GC phase poll remain unchanged. */
+static int fload_pure_unroll_invariant(jit_State *J, IRRef obj, IRRef fid)
+{
+#if LJ_TARGET_X64 && LJ_GC64
+  const IRRef basefid = (IRRef)(GG_OFS(g.gcroot[GCROOT_BASEMT+~LJ_TCDATA]) >> 2);
+  IRRef poll = J->chain[IR_XPOLL];
+  if (!J->loop_cdata_fload || !J->chain[IR_LOOP] ||
+      poll <= J->chain[IR_LOOP] || IR(poll)->op1 != 0 ||
+      J->parent != 0 || lj_record_mt_runtime_shared(J2G(J), J->L))
+    return 0;
+  if (obj == REF_NIL && fid == basefid && irt_istab(fins->t))
+    return 1;
+  if (fid == IRFL_UDATA_META && irt_istab(fins->t)) {
+    IRIns *ud = IR(obj);
+    if ((irt_type(ud->t) == IRT_UDATA) && (ud->o == IR_SLOAD || ud->o == IR_KGC))
+      return 1;
+  }
+  if (fid == IRFL_TAB_NODE && !irref_isk(obj)) {
+    IRIns *base = IR(obj);
+    if (base->o == IR_FLOAD && irt_istab(base->t)) {
+      if (base->op1 == REF_NIL && base->op2 == basefid)
+        return 1;
+      if (base->op2 == IRFL_UDATA_META) {
+        IRIns *ud = IR(base->op1);
+        return (irt_type(ud->t) == IRT_UDATA) &&
+          (ud->o == IR_SLOAD || ud->o == IR_KGC);
+      }
+    }
+  }
+#else
+  UNUSED(J); UNUSED(obj); UNUSED(fid);
+#endif
+  return 0;
+}
+
 static LJ_AINLINE IRRef fload_alias_limit(jit_State *J, IRRef lim, IRRef fid)
 {
   if (J->chain[IR_XBAR] > lim) lim = J->chain[IR_XBAR];
@@ -66,6 +105,7 @@ static LJ_AINLINE IRRef fload_alias_limit(jit_State *J, IRRef lim, IRRef fid)
   ** MT traces keep XPOLL as an alias boundary.
   */
   if ((fid != IRFL_TAB_META || mt_active_or_entering_acq(J2G(J))) &&
+      !fload_pure_unroll_invariant(J, fins->op1, fid) &&
       J->chain[IR_XPOLL] > lim)
     lim = J->chain[IR_XPOLL];
   return lim;

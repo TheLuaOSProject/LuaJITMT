@@ -213,7 +213,7 @@ static void side_meta_install(lua_State *L, SideMetaFixture *f)
   setmref(T->startpc, f->looppc);
   T->startins = f->loopins;
   T->topslot = f->pt->framesize;
-  T->unused1 = TRACE_ARM64_INT_LOOP_ADMITTED;
+  trace_arm64_admission_rel(T, TRACE_ARM64_INT_LOOP_ADMITTED);
   T->ir = f->ir;
   T->nk = REF_TRUE;
   T->nins = SIDE_META_R_END;
@@ -493,15 +493,15 @@ static void test_metadata_mutations(lua_State *L, SideMetaFixture *f)
   expect_metadata_reject(L, f);
   T->unused1 &= (uint8_t)~TRACE_ENTRY_INVALIDATED;
 
-  T->unused1 &= (uint8_t)~TRACE_ARM64_INT_LOOP_ADMITTED;
+  trace_arm64_admission_rel(T, trace_arm64_admission_acq(T) & ~TRACE_ARM64_INT_LOOP_ADMITTED);
   expect_metadata_reject(L, f);
-  T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;
-  T->unused1 |= TRACE_ARM64_INT_FORL_ADMITTED;
+  trace_arm64_admission_rel(T, trace_arm64_admission_acq(T) | TRACE_ARM64_INT_LOOP_ADMITTED);
+  trace_arm64_admission_rel(T, trace_arm64_admission_acq(T) | TRACE_ARM64_INT_FORL_ADMITTED);
   expect_metadata_reject(L, f);
-  T->unused1 &= (uint8_t)~TRACE_ARM64_INT_FORL_ADMITTED;
-  T->unused1 |= TRACE_ARM64_INT_SIDE_ADMITTED;
+  trace_arm64_admission_rel(T, trace_arm64_admission_acq(T) & ~TRACE_ARM64_INT_FORL_ADMITTED);
+  trace_arm64_admission_rel(T, trace_arm64_admission_acq(T) | TRACE_ARM64_INT_SIDE_ADMITTED);
   expect_metadata_reject(L, f);
-  T->unused1 &= (uint8_t)~TRACE_ARM64_INT_SIDE_ADMITTED;
+  trace_arm64_admission_rel(T, trace_arm64_admission_acq(T) & ~TRACE_ARM64_INT_SIDE_ADMITTED);
 
   T->root = SIDE_META_PARENT;
   expect_metadata_reject(L, f);

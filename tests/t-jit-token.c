@@ -290,7 +290,7 @@ static uint32_t trace_ir_op_count(GCtrace *T, IROp op)
   return n;
 }
 
-static uint32_t trace_ir_xpoll_remote_count(GCtrace *T)
+static uint32_t trace_ir_xpoll_wide_count(GCtrace *T)
 {
   IRIns *ir = trace_ir_acq(T);
   IRRef i, nins = trace_nins_acq(T);
@@ -410,11 +410,11 @@ static void expect_loop_xpoll_shape(lua_State *L, int want_xpoll)
   T = first_live_trace(J);
   assert(T != NULL);
   assert(trace_ir_op_count(T, IR_LOOP) > 0);
-  assert(trace_ir_op_count(T, IR_XPOLL) > 0);  /* Gate-only is unconditional. */
+  assert(trace_ir_op_count(T, IR_XPOLL) > 0);  /* Every mode checks the phase gate and TG request. */
   if (want_xpoll)
-    assert(trace_ir_xpoll_remote_count(T) > 0);
+    assert(trace_ir_xpoll_wide_count(T) > 0);
   else
-    assert(trace_ir_xpoll_remote_count(T) == 0);
+    assert(trace_ir_xpoll_wide_count(T) == 0);
 }
 
 static void *release_jit_token_after_delay(void *arg)

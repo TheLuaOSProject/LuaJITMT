@@ -94,12 +94,16 @@ local m7_cases = {
   "m7_ffi_cdata_shared_hammer",
   "m7_ffi_carith_l",
   "m7_ffi_clib_cache",
+  "m7_ffi_clib_receiver",
+  "m7_ffi_clib_cache_authority",
+  "m7_ffi_clib_cdata_compare",
   "m7_ffi_clib_ldscript",
   "m7_ffi_nested_state",
   "m7_ffi_callback_install",
   "m7_ffi_callback_runtime",
   "m7_ffi_callxs_arm64_scalar",
   "m7_ffi_callxs_authentic",
+  "m7_ffi_callxs_callback_stack",
   "m7_ffi_callxs_sysv_small_aggregate",
   "m7_ffi_ccall_native",
   "m7_ffi_native_frames"
@@ -230,6 +234,20 @@ return function(add)
       end)
       print("M7 experimental Darwin ARM64 int/double/boxed-pointer " ..
             "CALLXS lifecycle passed")
+    end
+  })
+
+  add({
+    name = "m7_ffi_callxs_callback_stack",
+    description = "generated callbacks preserve XSAVE stack extent and unwind",
+    run = function(t)
+      build.build_default(t)
+      build_and_run_c(t, t:tmp("lj_t-ffi-callxs-callback-stack"),
+                      "t-ffi-callxs-callback-stack.c", {
+        build = false,
+        timeout = "30s"
+      })
+      print("M7 generated callback stack geometry passed")
     end
   })
 
@@ -589,6 +607,201 @@ print("bulk fill ok")
         })
       end)
       print("M7 FFI clib cache behavior passed")
+    end
+  })
+
+  add({
+    name = "m7_ffi_clib_receiver",
+    description = "captured namespace methods retain and guard their receiver",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then
+        print("M7 captured namespace receiver fixtures require Linux/x64")
+        return
+      end
+      build.build_default(t)
+      local libraries = {}
+      for _, value in ipairs({ 11, 29 }) do
+        libraries[#libraries + 1] = build_shared_library(t,
+          t:tmp("lj_t-ffi-clib-receiver-" .. value .. ".so"),
+          "t-ffi-clib-receiver-lib.c", {
+            cflags = "-O2 -Wall -Wextra -Werror -DNAMESPACE_VALUE=" .. value
+          })
+      end
+      for _, mode in ipairs({
+        "index-other", "index-type", "newindex-other", "newindex-type",
+        "index-life", "newindex-life", "index-side-other", "index-side-type",
+        "newindex-side-other", "newindex-side-type"
+      }) do
+        local args = { mode, libraries[1], libraries[2] }
+        run_luajit_script(t, "t-ffi-clib-receiver.lua", args, {
+          joff = true, timeout = "20s"
+        })
+        run_luajit_script(t, "t-ffi-clib-receiver.lua", args, {
+          jon = true, timeout = "20s"
+        })
+      end
+      print("M7 captured namespace receiver guards passed")
+    end
+  })
+
+  add({
+    name = "m7_ffi_clib_cache_authority",
+    description = "native namespace cache writes, close, GC and recorder cleanup",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then
+        print("M7 namespace cache authority fixtures require Linux/x64 and GNU ld wrapping")
+        return
+      end
+      build.build_default(t)
+      local library = build_shared_library(t,
+        t:tmp("lj_t-ffi-clib-cache-authority.so"),
+        "t-ffi-clib-cache-authority-lib.c")
+      local geometry = t:tmp("lj_t-ffi-clib-cache-geometry.so")
+      t:cc(geometry, { t:path("tests", "t-ffi-clib-cache-geometry.c") }, {
+        cflags = "-shared -fPIC", link_luajit = false
+      })
+      local function authority(kind, mode, target, gc)
+        local args = { kind, mode, target, library, "helper", gc }
+        for _, enabled in ipairs({ false, true }) do
+          run_luajit_script(t, "t-ffi-clib-cache-authority.lua", args, {
+            joff = not enabled, jon = enabled, timeout = "30s"
+          })
+        end
+      end
+      local cases = {
+        { "function", "false", "nil", "other", "fenv", "close" },
+        { "read", "false", "nil", "other", "close" },
+        { "write", "false", "nil", "other", "close" },
+        { "zero", "negative-zero", "positive-zero", "false", "nil" },
+        { "big", "number", "false", "nil" }
+      }
+      for _, spec in ipairs(cases) do
+        for i = 2, #spec do
+          for _, target in ipairs({ "root", "side" }) do
+            authority(spec[1], spec[i], target)
+          end
+        end
+      end
+      for _, spec in ipairs({
+        { "function", "nil" }, { "function", "other" },
+        { "function", "fenv" }, { "read", "close" }, { "write", "close" }
+      }) do
+        for _, target in ipairs({ "root", "side" }) do
+          authority(spec[1], spec[2], target, "gc")
+        end
+      end
+      for _, spec in ipairs({
+        { "zero", "nan" }, { "zero", "pos-inf" }, { "zero", "neg-inf" },
+        { "read", "resize-other" }, { "write", "resize-other" }
+      }) do
+        for _, target in ipairs({ "root", "side" }) do
+          for _, phase in ipairs({ "pre-mt", "mt" }) do
+            local args = { spec[1], spec[2], target, library,
+              phase == "mt" and "helper" or "no-helper", "gc", phase, geometry }
+            for _, enabled in ipairs({ false, true }) do
+              run_luajit_script(t, "t-ffi-clib-cache-supplement.lua", args, {
+                joff = not enabled, jon = enabled, timeout = "30s"
+              })
+            end
+          end
+        end
+      end
+      local between = t:tmp("lj_t-ffi-clib-cache-between-close")
+      t:cc(between, { t:path("tests", "t-ffi-clib-cache-between-close.c") }, {
+        link_luajit = true,
+        libs = { "-lm", "-ldl", "-pthread",
+                 "-Wl,--wrap=lj_tab_cmpcdata_kgc_rooted_try" }
+      })
+      for _, gc in ipairs({ false, "gc" }) do
+        for _, kind in ipairs({ "read", "write" }) do
+          for _, target in ipairs({ "root", "side" }) do
+            local args = { between, t:path("tests", "t-ffi-clib-cache-authority.lua"),
+              kind, "between-close", target, library }
+            if gc then args[#args + 1] = gc end
+            t:run(args, { timeout = "30s", env = { LUA_PATH = lua_path(t) } })
+          end
+        end
+      end
+      local roots = t:tmp("lj_t-ffi-clib-recorder-roots")
+      t:cc(roots, { t:path("tests", "t-ffi-clib-recorder-roots.c") }, {
+        link_luajit = true,
+        libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=lj_tg_root_anchor_push",
+                 "-Wl,--wrap=lj_tab_gettv_rooted_hit_try" }
+      })
+      for _, mode in ipairs({ "1", "2", "3", "refuse", "hit" }) do
+        t:run({ roots, mode }, {
+          timeout = "30s", env = { LUA_PATH = lua_path(t) }
+        })
+      end
+      print("M7 namespace cache authority and lifecycle passed")
+    end
+  })
+
+  add({
+    name = "m7_ffi_clib_cdata_compare",
+    description = "native cdata cache comparison refusal, overlap and trace retention",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then
+        print("M7 cdata comparison fixtures require Linux/x64 and GNU ld wrapping")
+        return
+      end
+      build.build_default(t)
+      local library = build_shared_library(t,
+        t:tmp("lj_t-ffi-clib-cdata-compare.so"),
+        "t-ffi-clib-cache-authority-lib.c")
+      local flags = table.concat({
+        "-DLUA_USE_APICHECK", "-DLUA_USE_ASSERT", "-DLJ_GC2_TEST_HELPERS",
+        "-DLJ_FUNC_TEST_HELPERS", "-DLJ_TAB_TEST_HELPERS",
+        "-DLJ_ARENA_TEST_HELPERS", "-DLJ_TRACE_TEST_HELPERS",
+        "-DLJ_XSAVE_TEST_HELPERS"
+      }, " ")
+      local function run_comparisons(helpers)
+        local binary = t:tmp("lj_t-ffi-clib-cdata-compare-" ..
+                             (helpers and "helpers" or "default"))
+        t:cc(binary, { t:path("tests", "t-ffi-clib-cdata-compare.c") }, {
+          cflags = helpers and flags or "",
+          link_luajit = true,
+          libs = { "-lm", "-ldl", "-pthread", "-Wl,--export-dynamic",
+            "-Wl,--wrap=lj_tab_cmpcdata_kgc_rooted_try",
+            "-Wl,--wrap=lj_tg_any_jit_active",
+            "-Wl,--wrap=lj_gc2_collect_active",
+            "-Wl,--wrap=lj_gc2_smr_read_try",
+            "-Wl,--wrap=lj_gc2_smr_read_leave",
+            "-Wl,--wrap=lj_gc2_tv_lease_acquire",
+            "-Wl,--wrap=lj_gc2_lease_release" }
+        })
+        local modes = { "wrong", "null", "smr", "gc", "flush" }
+        if helpers then
+          modes[#modes + 1] = "table-refusal"
+          modes[#modes + 1] = "key-refusal"
+        end
+        for _, mode in ipairs(modes) do
+          for _, kind in ipairs({ "function", "read", "write" }) do
+            for _, target in ipairs({ "root", "side" }) do
+              local args = { binary, t:path("tests", "t-ffi-clib-cdata-probe.lua"),
+                kind, mode, target, library }
+              if mode == "gc" or mode == "flush" then args[#args + 1] = "gc" end
+              t:run(args, { timeout = "38s", env = { LUA_PATH = lua_path(t) } })
+            end
+          end
+        end
+        for _, enabled in ipairs({ "on", "off" }) do
+          for _, kind in ipairs({ "function", "read", "write" }) do
+            for _, target in ipairs({ "root", "side" }) do
+              t:run({ binary, t:path("tests", "t-ffi-clib-cdata-retention.lua"),
+                kind, "kgc", target, library, enabled }, {
+                timeout = "38s", env = { LUA_PATH = lua_path(t) }
+              })
+            end
+          end
+        end
+      end
+      run_comparisons(false)
+      build.with_default_build_restore(t, function()
+        clean_build(t, { xcflags = flags })
+        run_comparisons(true)
+      end)
+      print("M7 native cdata comparison and trace retention passed")
     end
   })
 

@@ -38,7 +38,9 @@ static void assert_loaded_chunk_has_op(lua_State *L, BCOp op)
 
 static void arm_gc2_hard_mark(global_State *g)
 {
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   lj_gc2_mark_begin(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
   /* The explicit cycle-start request makes the ordinary threshold due. Reset
   ** it afterwards: these fixtures isolate the hard cadence from threshold GC. */
   lj_gc_threshold_store(g, LJ_MAX_MEM);
@@ -49,7 +51,9 @@ static void arm_gc2_hard_mark(global_State *g)
 
 static void arm_gc2_normal_hard_mark(global_State *g)
 {
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   lj_gc2_mark_begin(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
   lj_gc_threshold_store(g, LJ_MAX_MEM);
   la_store64_rel(&g->gc2.hard_bytes, 2u * LJ_GC2_ACCT_FLUSH);
   la_store32_rel(&g->gc2.assist_shift, 0);
@@ -57,9 +61,14 @@ static void arm_gc2_normal_hard_mark(global_State *g)
 		 2u * LJ_GC2_ACCT_FLUSH + 1u);
 }
 
-static void finish_gc2_mark(global_State *g)
+static void finish_gc2_mark(lua_State *L, global_State *g)
 {
-  lj_gc2_cycle_to_idle(g);
+  /* A threshold step may leave fair MARK-close intent pending. The preserving
+  ** cycle_to_idle abort can then refuse; use the real completion driver and
+  ** prove that the next hard-assist case starts from a completed cycle. */
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(gc2_mark_close_intent_acq(g) == 0);
   g->gc.state = GCSpause;
   lj_gc_threshold_store(g, g->gc.total + 4u * LJ_GC2_ACCT_FLUSH);
 }
@@ -89,7 +98,7 @@ static void test_hard_only_helper(lua_State *L, global_State *g)
 	    (unsigned)color_state0, (unsigned)g->gc.state);
     assert(0);
   }
-  finish_gc2_mark(g);
+  finish_gc2_mark(L, g);
 }
 
 static void test_normal_hard_tnew_batch_gate(lua_State *L, global_State *g)
@@ -123,7 +132,7 @@ static void test_normal_hard_tnew_batch_gate(lua_State *L, global_State *g)
     fputs("normal hard-only TNEW assisted before local batch debt\n", stderr);
     assert(0);
   }
-  finish_gc2_mark(g);
+  finish_gc2_mark(L, g);
   lj_tg_local_total_xchg_acqrel(L2TG(L), 0);
 }
 
@@ -157,7 +166,7 @@ static void test_normal_hard_tnew_batch_boundary(lua_State *L,
     fputs("normal hard-only TNEW skipped the boundary assist\n", stderr);
     assert(0);
   }
-  finish_gc2_mark(g);
+  finish_gc2_mark(L, g);
   lj_tg_local_total_xchg_acqrel(L2TG(L), 0);
 }
 
@@ -199,7 +208,7 @@ static void test_hard_only_tdup(lua_State *L, global_State *g)
 	    (unsigned)color_state0, (unsigned)g->gc.state);
     assert(0);
   }
-  finish_gc2_mark(g);
+  finish_gc2_mark(L, g);
 }
 
 static void test_hard_only_c_check(lua_State *L, global_State *g)
@@ -229,7 +238,7 @@ static void test_hard_only_c_check(lua_State *L, global_State *g)
 	    (unsigned)color_state0, (unsigned)g->gc.state);
     assert(0);
   }
-  finish_gc2_mark(g);
+  finish_gc2_mark(L, g);
 }
 
 static void test_hard_only_fastfunc(lua_State *L, global_State *g)
@@ -262,7 +271,56 @@ static void test_hard_only_fastfunc(lua_State *L, global_State *g)
 	    (unsigned)color_state0, (unsigned)g->gc.state);
     assert(0);
   }
-  finish_gc2_mark(g);
+  finish_gc2_mark(L, g);
+}
+
+/* The request token is durable after allocation accounting consumes its
+** local debt. The VM must still visit a GC-safe helper, unless public STOP
+** or an owned finalizer pause suppresses automatic admission. */
+static void test_pending_idle_request(lua_State *L, global_State *g)
+{
+  static const char *const chunks[] = {
+    "return {}", "return {1, 2, 3}", "return string.char(41)"
+  };
+  static const uint8_t paused[] = {
+    0, LJ_GC_AUTO_STOPPED, LJ_GC_AUTO_FINPAUSE
+  };
+  unsigned i, j;
+  for (i = 0; i < sizeof(chunks)/sizeof(chunks[0]); i++) {
+    for (j = 0; j < sizeof(paused)/sizeof(paused[0]); j++) {
+      uint32_t cycle;
+      ljt_lua_loadstring(L, chunks[i]);
+      if (i < 2) assert_loaded_chunk_has_op(L, i ? BC_TDUP : BC_TNEW);
+      finish_gc2_mark(L, g);
+      assert(lj_gc2_request_cycle_pressure(g, L2TG(L)));
+      assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+      assert(gc2_cycle_leader_acq(g) != 0);
+      cycle = gc2_cycle_acq(g);
+      lj_gc_threshold_store(g, LJ_MAX_MEM);
+      la_store64_rel(&g->gc2.hard_bytes, ~(uint64_t)0);
+      la_store64_rel(&g->gc2.alloc_since_trigger, 0);
+      lj_tg_local_total_xchg_acqrel(L2TG(L), 0);
+      /* Synthetic flag state isolates both independent suppression bits. */
+      la_store8_rel(&g->gc.auto_flags, paused[j]);
+      lj_gc_test_reset_step_fixtop_calls();
+      ljt_lua_pcall(L, 0, 0, "pending IDLE request");
+      if (paused[j]) {
+        assert(gc2_cycle_acq(g) == cycle);
+        assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+        assert(gc2_cycle_leader_acq(g) != 0);
+        assert(lj_gc_test_step_fixtop_calls() == 0);
+      } else {
+        if (gc2_cycle_acq(g) == cycle) {
+          fputs("pending IDLE request did not enter a GC-safe VM helper\n",
+                stderr);
+          assert(0);
+        }
+        if (i < 2) assert(lj_gc_test_step_fixtop_calls() != 0);
+      }
+      la_store8_rel(&g->gc.auto_flags, 0);
+      finish_gc2_mark(L, g);
+    }
+  }
 }
 
 int main(void)
@@ -279,6 +337,7 @@ int main(void)
   assert(gc2_interp_hard_checks_acq(g) == 0);
 
   ljt_lua_dostring(L, "if jit then jit.off() end\n");
+  test_pending_idle_request(L, g);
   test_normal_hard_tnew_batch_gate(L, g);
   test_normal_hard_tnew_batch_boundary(L, g);
   test_hard_only_tdup(L, g);
@@ -303,7 +362,7 @@ int main(void)
     assert(0);
   }
 
-  finish_gc2_mark(g);
+  finish_gc2_mark(L, g);
 
   ljt_lua_loadstring(L,
     "local x = {}\n"
@@ -330,7 +389,7 @@ int main(void)
 	    (unsigned)color_state0, (unsigned)g->gc.state);
     assert(0);
   }
-  finish_gc2_mark(g);
+  finish_gc2_mark(L, g);
 
   test_hard_only_fastfunc(L, g);
   test_hard_only_helper(L, g);

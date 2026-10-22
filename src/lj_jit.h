@@ -386,7 +386,7 @@ typedef struct GCtrace {
   uint16_t nsnap;	/* Number of snapshots. */
   IRRef nins;		/* Next IR instruction. Biased with REF_BIAS. */
 #if LJ_GC64
-  uint32_t unused_gc64;
+  uint32_t unused_gc64;  /* ARM64 immutable admission certificate. */
 #endif
   GCRef gclist;
   IRIns *ir;		/* IR instructions/constants. Biased with REF_BIAS. */
@@ -432,8 +432,32 @@ typedef struct GCtrace {
 #define TRACE_ARM64_INT_FORL_ADMITTED	0x20
 #define TRACE_ARM64_TRUE_FUNCF_ADMITTED	0x40
 #define TRACE_ARM64_INT_SIDE_ADMITTED	0x80
+#define TRACE_RETIRE_PENDING		0x10
+#if LJ_TARGET_ARM64
+/* Keep target admission separate from common mutable trace lifecycle flags.
+** This uses existing GC64 padding and preserves all trace offsets and size. */
+static LJ_AINLINE uint32_t trace_arm64_admission_acq(const GCtrace *T)
+{
+  return la_load32_acq(&T->unused_gc64);
+}
+
+static LJ_AINLINE void trace_arm64_admission_rel(GCtrace *T, uint32_t flags)
+{
+  la_store32_rel(&T->unused_gc64, flags);
+}
+#endif
+
 #define TRACE_ENTRY_GATED \
   (TRACE_SCOPE_FLUSH_PENDING|TRACE_ENTRY_INVALIDATED)
+
+/* A committed root which lost its bytecode CAS remains inspectable in its
+** exact public slot until an IDLE recorder-token owner consumes this request.
+** The slot is a semantic GC root while pending; it is not a retire-list node
+** until ordinary preserved retirement claims a nonzero epoch. */
+static LJ_AINLINE int trace_retire_pending_acq(const GCtrace *T)
+{
+  return (la_load8_acq(&T->unused1) & TRACE_RETIRE_PENDING) != 0;
+}
 
 /* An assembler scratch copy is never a semantic trace body. Once this bit is
 ** published it is immutable until the retire-list owner destroys the exact
@@ -1026,6 +1050,7 @@ typedef struct jit_State {
   IRType1 guardemit;	/* Accumulated IRT_GUARD for emitted instructions. */
   uint8_t bcskip;	/* Number of bytecode instructions to skip. */
   uint8_t root_startins_pending;  /* Record captured root ITERN once. */
+  uint8_t loop_cdata_fload;  /* Token-private pure pre-MT unroll scope. */
 
   FoldState fold;	/* Fold state. */
 

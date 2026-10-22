@@ -2087,7 +2087,7 @@ static int asm_test_side_probe_finish(jit_State *J, GCtrace *T)
     return 0;
   asm_test_side_probe.child = trace_traceno_acq(T);
   asm_test_side_probe.marker =
-    (uint8_t)(la_load8_acq(&T->unused1) & TRACE_ARM64_INT_SIDE_ADMITTED);
+    (uint8_t)(trace_arm64_admission_acq(T) & TRACE_ARM64_INT_SIDE_ADMITTED);
   if (lj_trace_test_arm64_side_compact_roundtrip(J, T,
 	&asm_test_side_probe.compact_geometry_reject,
 	&asm_test_side_probe.compact_init,
@@ -3291,11 +3291,11 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
 	lj_trace_err_info(J, LJ_TRERR_NYIIR);
       }
       if (bc_op(T->startins) == BC_FORL)
-	T->unused1 |= TRACE_ARM64_INT_FORL_ADMITTED;
+	trace_arm64_admission_rel(T, TRACE_ARM64_INT_FORL_ADMITTED);
       else if (bc_op(T->startins) == BC_FUNCF)
-	T->unused1 |= TRACE_ARM64_TRUE_FUNCF_ADMITTED;
+	trace_arm64_admission_rel(T, TRACE_ARM64_TRUE_FUNCF_ADMITTED);
       else
-	T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;
+	trace_arm64_admission_rel(T, TRACE_ARM64_INT_LOOP_ADMITTED);
     }
   }
 #endif
@@ -3339,7 +3339,7 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
 #endif
     /* Publish the scratch-only marker after the exact side post-RA gate and
     ** the last fallible assembler operation both succeeded. */
-    T->unused1 |= TRACE_ARM64_INT_SIDE_ADMITTED;
+    trace_arm64_admission_rel(T, TRACE_ARM64_INT_SIDE_ADMITTED);
 #if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
     asm_test_side_probe_note(LJ_ARM64_SIDE_ASM_PROBE_MARKER);
 #endif

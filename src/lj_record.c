@@ -1517,7 +1517,7 @@ int lj_record_mm_lookup(jit_State *J, RecordIndex *ix, MMS mm)
 {
   RecordIndex mix;
   GCtab *mt;
-  TValue motv, motv2;
+  TValue motv2;
   /*
   ** The stock recorder samples a receiver's metatable pointer before it emits
   ** the corresponding FLOAD guard. In active MT, a peer may replace that edge
@@ -1541,9 +1541,10 @@ int lj_record_mm_lookup(jit_State *J, RecordIndex *ix, MMS mm)
     int udtype = lj_udata_udtype_acq(udataV(&ix->tabv));
     mt = lj_udata_metatable_acq(udataV(&ix->tabv));
     mix.tab = emitir(IRT(IR_FLOAD, IRT_TAB), ix->tab, IRFL_UDATA_META);
-    /* The metatables of special userdata objects are treated as immutable. */
+    /* Retain the receiver specialization needed by special userdata recorders.
+    ** Their metatables and methods can still change through ordinary Lua table
+    ** writes and debug.setmetatable(), so use the common guarded lookup below. */
     if (udtype != UDTYPE_USERDATA) {
-      cTValue *mo;
       if (LJ_HASFFI && udtype == UDTYPE_FFI_CLIB) {
 	/* Specialize to the C library namespace object. */
 	emitir(IRTG(IR_EQ, IRT_PGC), ix->tab, lj_ir_kptr(J, udataV(&ix->tabv)));
@@ -1552,22 +1553,6 @@ int lj_record_mm_lookup(jit_State *J, RecordIndex *ix, MMS mm)
 	TRef tr = emitir(IRT(IR_FLOAD, IRT_U8), ix->tab, IRFL_UDATA_UDTYPE);
 	emitir(IRTGI(IR_EQ), tr, lj_ir_kint(J, udtype));
       }
-  immutable_mt:
-      mo = lj_tab_getstr(mt, mmname_str(J2G(J), mm));
-      ix->mt = mix.tab;
-      ix->mtv = mt;
-      if (!mo)
-	return 0;  /* No metamethod. */
-      lj_tv_load_acq(&motv, mo);
-      mo = &motv;
-      if (tvisnil(mo))
-	return 0;  /* No metamethod. */
-      /* Treat metamethod or index table as immutable, too. */
-      if (!(tvisfunc(mo) || tvistab(mo)))
-	lj_trace_err(J, LJ_TRERR_BADTYPE);
-      copyTV(J->L, &ix->mobjv, mo);
-      ix->mobj = lj_ir_kgc(J, gcV(mo), tvisfunc(mo) ? IRT_FUNC : IRT_TAB);
-      return 1;  /* Got metamethod or index table. */
     }
   } else {
     /* Specialize to base metatable. Must flush mcode in lua_setmetatable(). */
@@ -1587,9 +1572,9 @@ int lj_record_mm_lookup(jit_State *J, RecordIndex *ix, MMS mm)
 	  return rec_mm_cdata_call_shared(J, ix, mt);
 #endif
 #endif
-      mix.tab = TREF_NIL;
-      goto immutable_mt;
     }
+    /* Cdata uses the same method guards: its base table's entries can change
+    ** without replacing the base root or flushing existing native traces. */
     ix->mt = mix.tab = lj_ir_ggfload(J, IRT_TAB,
       GG_OFS(g.gcroot[GCROOT_BASEMT+itypemap(&ix->tabv)]));
     goto nocheck;

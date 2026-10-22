@@ -3643,10 +3643,15 @@ LUA_API int lua_resume(lua_State *L, int nargs)
 
 /* -- GC and memory management -------------------------------------------- */
 
-static void api_gc_setlogical(global_State *g, GCSize threshold)
+static void api_gc_setlogical(global_State *g, GCSize threshold, int stopped)
 {
   uint64_t soft = ~(uint64_t)0;
-  if (threshold != LJ_MAX_MEM) {
+  /* Public control is authoritative. Delayed attachment/detachment and
+  ** finalizer threshold stores only affect pacing; they cannot undo STOP or
+  ** RESTART. Change only the public bit, retaining an owned finalizer pause. */
+  if (stopped)
+    lj_gc_auto_stop(g);
+  if (!stopped) {
     GCSize total = lj_gc_total_load(g);
     soft = (uint64_t)total > soft - LJ_GC2_HELPER_IDLE_STEP ?
 	   soft : (uint64_t)total + LJ_GC2_HELPER_IDLE_STEP;
@@ -3659,6 +3664,8 @@ static void api_gc_setlogical(global_State *g, GCSize threshold)
   } else {
     lj_gc_threshold_store(g, threshold);
   }
+  if (!stopped)
+    lj_gc_auto_restart(g);
 }
 
 static GCSize api_gc_restart_threshold(global_State *g)
@@ -3681,12 +3688,12 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
   int res = 0;
   switch (what) {
   case LUA_GCSTOP:
-    api_gc_setlogical(g, LJ_MAX_MEM);
+    api_gc_setlogical(g, LJ_MAX_MEM, 1);
     break;
   case LUA_GCRESTART:
     {
       api_gc_setlogical(g, data == -1 ? api_gc_restart_threshold(g) :
-			lj_gc_total_load(g));
+			lj_gc_total_load(g), 0);
     }
     break;
   case LUA_GCCOLLECT:
@@ -3707,7 +3714,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
 	lj_err_throw(L, errcode);
       UNUSED(collected);
     }
-    api_gc_setlogical(g, api_gc_restart_threshold(g));
+    api_gc_setlogical(g, api_gc_restart_threshold(g), 0);
     break;
   case LUA_GCCOUNT:
     res = (int)(lj_gc_total_load(g) >> 10);
@@ -3729,8 +3736,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     gc2_assist_shift_rel(g, lj_gc2_assist_shift_from_stepmul((uint32_t)data));
     break;
   case LUA_GCISRUNNING:
-    res = ((mt_live_acq(g) != 0 ? lj_gc_mt_threshold_load(g) :
-	    lj_gc_threshold_load(g)) != LJ_MAX_MEM);
+    res = lj_gc_auto_enabled(g);
     break;
   default:
     res = -1;  /* Invalid option. */

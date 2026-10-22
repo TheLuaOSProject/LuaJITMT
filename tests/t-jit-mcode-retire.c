@@ -127,7 +127,7 @@ static GCtrace *arm64_admitted_root_trace(lua_State *L, jit_State *J,
   assert(trace_runnable_acq(T, tr));
   assert(trace_root_acq(T) == 0);
   assert(trace_startpt_acq(T) == pt);
-  assert((la_load8_acq(&T->unused1) & TRACE_ARM64_INT_LOOP_ADMITTED) != 0);
+  assert((trace_arm64_admission_acq(T) & TRACE_ARM64_INT_LOOP_ADMITTED) != 0);
   assert(trace_mcode_acq(T) != NULL);
   return T;
 }
