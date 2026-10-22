@@ -98,8 +98,13 @@ cell traces. After the translated-process stall cleared, frozen `57ae11b2` passe
 source and 509 imported stock cases under Rosetta. The larger legacy fixture
 then exposed a shared JIT bug in a closure-producing `ipairs` loop: the exact
 source also omits a closure, while interpreter mode and original LuaJIT pass.
-Final x86-64 closure/import compatibility therefore remains unresolved; see
-[checkpoint-2026-10-22.md](checkpoint-2026-10-22.md).
+Commit `25275a13` fixes that bug and the imported repeat/conditional cases it
+exposed. Both 509-case stock corpora, the complete import C fixture, source/v2
+LE/v2 BE native capture loops, and FNEW regressions now pass on x86-64. The
+focused loop cases also pass with optimization disabled and with CSE disabled.
+The full native ARM64 bootstrap gate passes at the same source checkpoint;
+general ARM64 upvalue JIT admission is still closed. See
+[jit-cell-loop-conformance-2026-10-22.md](jit-cell-loop-conformance-2026-10-22.md).
 
 The load-time converter currently reserves three scratch slots in an owning
 prototype. Original frames above 247 slots fail with “function or expression

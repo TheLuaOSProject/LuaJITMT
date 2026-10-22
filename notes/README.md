@@ -20,12 +20,17 @@ and reports that are no longer authoritative are retained in
 - Latest ARM64 JIT GC2 cadence parity: `f1fe1f73`.
 - Latest complete bootstrap and fail-closed gates: frozen `709583ee` source,
   verified on 2026-10-22 in a disposable checkout.
+- The latest complete bootstrap gate passes at frozen `25275a13`, including
+  the shared source/import capture fixes. Its default ARM64, arm64e and x64
+  unwind branches all ran. The new source/import loop fixture also passes
+  directly on that interpreter build.
 - The bootstrap gate also passes at `857c44cc`. Its experimental gate stopped
   at an uninterruptible Rosetta callback test; it is not a complete pass.
   Native-only bootstrap diagnostics also pass at `01b8c560`, including the
   legacy import fixture; the Rosetta unwind branch was omitted.
   Rosetta later recovered: both stock509 runs, FNEW, callback and unwind checks
-  pass; a separate captured-iterator JIT failure is being repaired.
+  pass. The subsequently exposed shared captured-iterator JIT failure is fixed
+  by `25275a13`, with source/import native x64 regressions.
   See [`checkpoint-2026-10-22.md`](checkpoint-2026-10-22.md).
 - Build artifacts in the development checkout may belong to either profile;
   select and rebuild the intended profile explicitly.
@@ -127,9 +132,10 @@ available.
 - Legacy bytecode imports now normalize to shared cells before publication.
   Native interpreter compatibility covers genuine stock v2 imports, debug
   metadata, worker sharing, and v4 round trips. Conversion retains explicit
-  frame/jump/window limits, and final x86-64 JIT validation is outstanding;
-  see [`legacy-bytecode-cells.md`](legacy-bytecode-cells.md). The current x86-64
-  issue also reproduces from source in a closure-producing iterator loop.
+  frame/jump/window limits. Both 509-case stock corpora and targeted native
+  closure/import tests now pass on x86-64; unrestricted original-bytecode
+  compatibility is not yet established. See
+  [`legacy-bytecode-cells.md`](legacy-bytecode-cells.md).
   True internal legacy
   open cells still require the admission veto.
 - Concurrent tmpbuf stress showed one unchanged-baseline timeout. A rejected

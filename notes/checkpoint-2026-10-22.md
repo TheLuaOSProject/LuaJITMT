@@ -106,3 +106,23 @@ work land. Temporary outputs are
 `/tmp/lj-root-entry-capability-contract.log`, and
 `/tmp/luajitmt-scalar-checkpoint-last-contracts.log`; the first records the
 obsolete synthetic root fixture failure before its independent repaired rerun.
+
+## Shared-capture repair and complete bootstrap checkpoint
+
+`25275a13` fixes the captured-iterator, imported repeat/conditional and
+immutable-capture snapshot failures described above. All 509 source and 509
+imported stock cases, the complete original-bytecode C fixture, and FNEW pass
+under Rosetta. Source/v2 little-endian/v2 big-endian capture-loop tests require
+actual x64 native exits and pass with default optimization, `-O0` and `-O-cse`.
+Details and the four distinct causes are in
+[`jit-cell-loop-conformance-2026-10-22.md`](jit-cell-loop-conformance-2026-10-22.md).
+
+The unchanged default ARM64 bootstrap gate completed on frozen `25275a13`.
+No Rosetta or other runtime branch was omitted: the required x64 unwind test
+ran alongside ARM64 and arm64e. The new source/import loop Lua fixture also
+passes directly on the resulting assertion interpreter build; `e6356fd6`
+adds that invocation to future default bootstrap runs. The experimental
+umbrella gate has not yet been rerun at this checkpoint.
+
+Temporary evidence: `/tmp/luajitmt-capture-checkpoint-bootstrap.log`, with the
+frozen checkout path in `/tmp/luajitmt-capture-checkpoint-workdir`.
