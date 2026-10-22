@@ -259,6 +259,8 @@ static void test_terminal_queue_open_upvalue(void)
   setintV(slot, 41);
   uv = lj_func_test_openuv(co, slot);
   assert(uv != NULL && !uv->closed && uvval(uv) == slot);
+  assert(la_load32_acq(&g->mt_openuv) == 2);
+  assert(!mt_openuv_activate(g));
   setgcrefrel(fn->l.uvptr[0], obj2gco(uv));
   lj_gc_pubobjobj(L, fn, uv);
 
@@ -305,6 +307,7 @@ static void test_terminal_queue_open_upvalue(void)
   ** unique pop and must retag GCPREP to its actor before destructing co. */
   assert(lj_state_gcprep_drain(g, LJ_GC2_ROOT_SCAN_LIMIT) == 1);
   assert(lj_state_gcprep_pending_acq(g) == 0);
+  assert(la_load32_acq(&g->mt_openuv) == 0);
 
   /* Preparation copied the stack cell into the escaped upvalue before the
   ** stack vector was released. Later collections may reuse the state body. */
