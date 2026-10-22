@@ -85,9 +85,7 @@ enum {
   V_R_POSTRA_END
 };
 
-/* Exact recorder order for the first admitted mixed INT/NUM BC_LOOP root.
-** Keep these names distinct from the older all-integer policy fixture above:
-** the two fixtures deliberately exercise separate admission grammars. */
+/* Representative mixed INT/NUM loop for generic capability tests. */
 enum {
   N_K_ONE = REF_TRUE - 1,
 
@@ -110,7 +108,7 @@ enum {
   N_R_POSTRA_END
 };
 
-/* Exact recorder order for the first pure-NUM BC_LOOP root. The KNUM
+/* Representative pure-NUM loop. The KNUM
 ** occupies a header plus the following 64-bit payload slot. */
 enum {
   H_K_HALF = REF_TRUE - 2,
@@ -130,164 +128,6 @@ enum {
   H_R_POSTRA_END
 };
 
-/* Exact recorder order for the pure-NUM root whose step is an invariant
-** parameter. Unlike H_*, this trace has no IR constants: the prototype's
-** +0.5 initializes x before the trace starts, while step is an SLOAD. */
-enum {
-  D_R_X = REF_FIRST,
-  D_R_STEP,
-  D_R_X_PRE,
-  D_R_LIMIT,
-  D_R_PRE_GUARD,
-  D_R_LOOP,
-  D_R_XPOLL,
-  D_R_X_BODY,
-  D_R_BODY_GUARD,
-  D_R_X_PHI,
-  D_R_SEMANTIC_END,
-  D_R_NOP = D_R_SEMANTIC_END,
-  D_R_POSTRA_END
-};
-
-/* Exact recorder order for the pure-NUM root whose accumulator, limit and
-** step are all parameters. Like D_*, this trace has no IR constants, but its
-** prototype and stack-slot certificate are intentionally distinct. */
-enum {
-  A_R_X = REF_FIRST,
-  A_R_STEP,
-  A_R_X_PRE,
-  A_R_LIMIT,
-  A_R_PRE_GUARD,
-  A_R_LOOP,
-  A_R_XPOLL,
-  A_R_X_BODY,
-  A_R_BODY_GUARD,
-  A_R_X_PHI,
-  A_R_SEMANTIC_END,
-  A_R_NOP = A_R_SEMANTIC_END,
-  A_R_POSTRA_END
-};
-
-/* Exact shifted recorder order when the invariant step is an INT parameter
-** widened once before the otherwise-identical NUM recurrence. */
-enum {
-  AI_R_X = REF_FIRST,
-  AI_R_STEP_INT,
-  AI_R_STEP_NUM,
-  AI_R_X_PRE,
-  AI_R_LIMIT,
-  AI_R_PRE_GUARD,
-  AI_R_LOOP,
-  AI_R_XPOLL,
-  AI_R_X_BODY,
-  AI_R_BODY_GUARD,
-  AI_R_X_PHI,
-  AI_R_SEMANTIC_END,
-  AI_R_NOP = AI_R_SEMANTIC_END,
-  AI_R_POSTRA_END
-};
-
-/* Exact shifted recorder order when the invariant limit is an INT parameter
-** widened once after the first NUM recurrence and before either guard. */
-enum {
-  AIL_R_X = REF_FIRST,
-  AIL_R_STEP,
-  AIL_R_X_PRE,
-  AIL_R_LIMIT_INT,
-  AIL_R_LIMIT_NUM,
-  AIL_R_PRE_GUARD,
-  AIL_R_LOOP,
-  AIL_R_XPOLL,
-  AIL_R_X_BODY,
-  AIL_R_BODY_GUARD,
-  AIL_R_X_PHI,
-  AIL_R_SEMANTIC_END,
-  AIL_R_NOP = AIL_R_SEMANTIC_END,
-  AIL_R_POSTRA_END
-};
-
-/* Exact recorder order when the loop-carried accumulator begins as INT. Its
-** widened NUM value feeds the recurrence, while loop optimization inserts one
-** checked NUM-to-INT repair immediately after XPOLL. */
-enum {
-  AX_R_X_INT = REF_FIRST,
-  AX_R_STEP,
-  AX_R_X_NUM,
-  AX_R_X_PRE,
-  AX_R_LIMIT,
-  AX_R_PRE_GUARD,
-  AX_R_LOOP,
-  AX_R_XPOLL,
-  AX_R_X_CHECK,
-  AX_R_X_BODY,
-  AX_R_BODY_GUARD,
-  AX_R_X_PHI,
-  AX_R_SEMANTIC_END,
-  AX_R_NOP = AX_R_SEMANTIC_END,
-  AX_R_POSTRA_END
-};
-
-enum {
-  NUMACC_FIXTURE_ADD_LT = 1u,
-  NUMACC_FIXTURE_ADD_LE = 2u,
-  NUMACC_FIXTURE_SUB_GT = 3u,
-  NUMACC_FIXTURE_SUB_GE = 4u,
-  NUMACC_FIXTURE_ADD_GT = 5u,
-  NUMACC_FIXTURE_ADD_GE = 6u,
-  NUMACC_FIXTURE_MUL_LT = 7u,
-  NUMACC_FIXTURE_MUL_LE = 8u,
-  NUMACC_FIXTURE_DIV_LT = 9u,
-  NUMACC_FIXTURE_DIV_LE = 10u,
-  NUMACC_FIXTURE_DIV_GT = 11u,
-  NUMACC_FIXTURE_DIV_GE = 12u
-};
-
-enum {
-  NUMACC_FIXTURE_ARGS_NUM = 1u,
-  NUMACC_FIXTURE_ARGS_INT_STEP = 2u,
-  NUMACC_FIXTURE_ARGS_INT_LIMIT = 3u,
-  NUMACC_FIXTURE_ARGS_INT_X = 4u
-};
-
-typedef struct NumaccFixtureProfile {
-  unsigned id;
-  BCOp comparison_bc;
-  BCReg comparison_a;
-  BCReg comparison_d;
-  BCOp recurrence_bc;
-  IROp recurrence_op;
-  IRRef pre_left;
-  IRRef pre_right;
-  IROp precondition_op;
-  IROp body_op;
-} NumaccFixtureProfile;
-
-static const NumaccFixtureProfile numacc_fixture_profiles[] = {
-  { NUMACC_FIXTURE_ADD_LT, BC_ISGE, 3, 4, BC_ADDVV, IR_ADD,
-    A_R_STEP, A_R_X, IR_GT, IR_LT },
-  { NUMACC_FIXTURE_ADD_LE, BC_ISGT, 3, 4, BC_ADDVV, IR_ADD,
-    A_R_STEP, A_R_X, IR_GE, IR_LE },
-  { NUMACC_FIXTURE_SUB_GT, BC_ISGE, 4, 3, BC_SUBVV, IR_SUB,
-    A_R_X, A_R_STEP, IR_LT, IR_GT },
-  { NUMACC_FIXTURE_SUB_GE, BC_ISGT, 4, 3, BC_SUBVV, IR_SUB,
-    A_R_X, A_R_STEP, IR_LE, IR_GE },
-  { NUMACC_FIXTURE_ADD_GT, BC_ISGE, 4, 3, BC_ADDVV, IR_ADD,
-    A_R_STEP, A_R_X, IR_LT, IR_GT },
-  { NUMACC_FIXTURE_ADD_GE, BC_ISGT, 4, 3, BC_ADDVV, IR_ADD,
-    A_R_STEP, A_R_X, IR_LE, IR_GE },
-  { NUMACC_FIXTURE_MUL_LT, BC_ISGE, 3, 4, BC_MULVV, IR_MUL,
-    A_R_STEP, A_R_X, IR_GT, IR_LT },
-  { NUMACC_FIXTURE_MUL_LE, BC_ISGT, 3, 4, BC_MULVV, IR_MUL,
-    A_R_STEP, A_R_X, IR_GE, IR_LE },
-  { NUMACC_FIXTURE_DIV_LT, BC_ISGE, 3, 4, BC_DIVVV, IR_DIV,
-    A_R_X, A_R_STEP, IR_GT, IR_LT },
-  { NUMACC_FIXTURE_DIV_LE, BC_ISGT, 3, 4, BC_DIVVV, IR_DIV,
-    A_R_X, A_R_STEP, IR_GE, IR_LE },
-  { NUMACC_FIXTURE_DIV_GT, BC_ISGE, 4, 3, BC_DIVVV, IR_DIV,
-    A_R_X, A_R_STEP, IR_LT, IR_GT },
-  { NUMACC_FIXTURE_DIV_GE, BC_ISGT, 4, 3, BC_DIVVV, IR_DIV,
-    A_R_X, A_R_STEP, IR_LE, IR_GE }
-};
 
 typedef struct AdmissionFixture {
   GCtrace T;
@@ -310,112 +150,10 @@ static const BCIns *numeric_fixture_loop_pc;
 static const BCIns *numeric_fixture_snapshot_pc;
 static GCproto *numhalf_fixture_pt;
 static const BCIns *numhalf_fixture_loop_pc;
-static GCproto *numstep_fixture_pt;
-static const BCIns *numstep_fixture_loop_pc;
-static GCproto *numacc_strict_fixture_pt;
-static const BCIns *numacc_strict_fixture_loop_pc;
-static GCproto *numacc_inclusive_fixture_pt;
-static const BCIns *numacc_inclusive_fixture_loop_pc;
-static GCproto *numacc_sub_gt_fixture_pt;
-static const BCIns *numacc_sub_gt_fixture_loop_pc;
-static GCproto *numacc_sub_ge_fixture_pt;
-static const BCIns *numacc_sub_ge_fixture_loop_pc;
-static GCproto *numacc_add_gt_fixture_pt;
-static const BCIns *numacc_add_gt_fixture_loop_pc;
-static GCproto *numacc_add_ge_fixture_pt;
-static const BCIns *numacc_add_ge_fixture_loop_pc;
-static GCproto *numacc_mul_lt_fixture_pt;
-static const BCIns *numacc_mul_lt_fixture_loop_pc;
-static GCproto *numacc_mul_le_fixture_pt;
-static const BCIns *numacc_mul_le_fixture_loop_pc;
-static GCproto *numacc_div_lt_fixture_pt;
-static const BCIns *numacc_div_lt_fixture_loop_pc;
-static GCproto *numacc_div_le_fixture_pt;
-static const BCIns *numacc_div_le_fixture_loop_pc;
-static GCproto *numacc_div_gt_fixture_pt;
-static const BCIns *numacc_div_gt_fixture_loop_pc;
-static GCproto *numacc_div_ge_fixture_pt;
-static const BCIns *numacc_div_ge_fixture_loop_pc;
-/* Active full-shape prototype. The shared synthetic geometry is always
-** rebuilt from this exact source certificate before every mutation. */
-static GCproto *numacc_fixture_pt;
-static const BCIns *numacc_fixture_loop_pc;
-static const NumaccFixtureProfile *numacc_fixture_profile;
 
 static BCIns loadbc(const BCIns *pc)
 {
   return (BCIns)la_load32_acq((const uint32_t *)pc);
-}
-
-static void select_numacc_fixture(unsigned profile_id)
-{
-  assert(profile_id >= NUMACC_FIXTURE_ADD_LT &&
-	 profile_id <= NUMACC_FIXTURE_DIV_GE);
-  numacc_fixture_profile = &numacc_fixture_profiles[profile_id-1u];
-  assert(numacc_fixture_profile->id == profile_id);
-  if (profile_id == NUMACC_FIXTURE_ADD_LT) {
-    assert(numacc_strict_fixture_pt != NULL &&
-	   numacc_strict_fixture_loop_pc != NULL);
-    numacc_fixture_pt = numacc_strict_fixture_pt;
-    numacc_fixture_loop_pc = numacc_strict_fixture_loop_pc;
-  } else if (profile_id == NUMACC_FIXTURE_ADD_LE) {
-    assert(numacc_inclusive_fixture_pt != NULL &&
-	   numacc_inclusive_fixture_loop_pc != NULL);
-    numacc_fixture_pt = numacc_inclusive_fixture_pt;
-    numacc_fixture_loop_pc = numacc_inclusive_fixture_loop_pc;
-  } else if (profile_id == NUMACC_FIXTURE_SUB_GT) {
-    assert(numacc_sub_gt_fixture_pt != NULL &&
-	   numacc_sub_gt_fixture_loop_pc != NULL);
-    numacc_fixture_pt = numacc_sub_gt_fixture_pt;
-    numacc_fixture_loop_pc = numacc_sub_gt_fixture_loop_pc;
-  } else if (profile_id == NUMACC_FIXTURE_SUB_GE) {
-    assert(numacc_sub_ge_fixture_pt != NULL &&
-	   numacc_sub_ge_fixture_loop_pc != NULL);
-    numacc_fixture_pt = numacc_sub_ge_fixture_pt;
-    numacc_fixture_loop_pc = numacc_sub_ge_fixture_loop_pc;
-  } else if (profile_id == NUMACC_FIXTURE_ADD_GT) {
-    assert(numacc_add_gt_fixture_pt != NULL &&
-	   numacc_add_gt_fixture_loop_pc != NULL);
-    numacc_fixture_pt = numacc_add_gt_fixture_pt;
-    numacc_fixture_loop_pc = numacc_add_gt_fixture_loop_pc;
-  } else if (profile_id == NUMACC_FIXTURE_ADD_GE) {
-    assert(numacc_add_ge_fixture_pt != NULL &&
-	   numacc_add_ge_fixture_loop_pc != NULL);
-    numacc_fixture_pt = numacc_add_ge_fixture_pt;
-    numacc_fixture_loop_pc = numacc_add_ge_fixture_loop_pc;
-  } else if (profile_id == NUMACC_FIXTURE_MUL_LT) {
-    assert(numacc_mul_lt_fixture_pt != NULL &&
-	   numacc_mul_lt_fixture_loop_pc != NULL);
-    numacc_fixture_pt = numacc_mul_lt_fixture_pt;
-    numacc_fixture_loop_pc = numacc_mul_lt_fixture_loop_pc;
-  } else if (profile_id == NUMACC_FIXTURE_MUL_LE) {
-    assert(numacc_mul_le_fixture_pt != NULL &&
-	   numacc_mul_le_fixture_loop_pc != NULL);
-    numacc_fixture_pt = numacc_mul_le_fixture_pt;
-    numacc_fixture_loop_pc = numacc_mul_le_fixture_loop_pc;
-  } else if (profile_id == NUMACC_FIXTURE_DIV_LT) {
-    assert(numacc_div_lt_fixture_pt != NULL &&
-	   numacc_div_lt_fixture_loop_pc != NULL);
-    numacc_fixture_pt = numacc_div_lt_fixture_pt;
-    numacc_fixture_loop_pc = numacc_div_lt_fixture_loop_pc;
-  } else if (profile_id == NUMACC_FIXTURE_DIV_LE) {
-    assert(numacc_div_le_fixture_pt != NULL &&
-	   numacc_div_le_fixture_loop_pc != NULL);
-    numacc_fixture_pt = numacc_div_le_fixture_pt;
-    numacc_fixture_loop_pc = numacc_div_le_fixture_loop_pc;
-  } else if (profile_id == NUMACC_FIXTURE_DIV_GT) {
-    assert(numacc_div_gt_fixture_pt != NULL &&
-	   numacc_div_gt_fixture_loop_pc != NULL);
-    numacc_fixture_pt = numacc_div_gt_fixture_pt;
-    numacc_fixture_loop_pc = numacc_div_gt_fixture_loop_pc;
-  } else if (profile_id == NUMACC_FIXTURE_DIV_GE) {
-    assert(numacc_div_ge_fixture_pt != NULL &&
-	   numacc_div_ge_fixture_loop_pc != NULL);
-    numacc_fixture_pt = numacc_div_ge_fixture_pt;
-    numacc_fixture_loop_pc = numacc_div_ge_fixture_loop_pc;
-  } else {
-    assert(!"unknown NUM dynamic-accumulator fixture profile");
-  }
 }
 
 static void set_snapshot_payload(SnapNo snapno, const BCIns *pc,
@@ -822,465 +560,6 @@ static void make_numhalf_trace(jit_State *J)
   J->startpc = numhalf_fixture_loop_pc;
 }
 
-static void make_numstep_trace(jit_State *J)
-{
-  static const IRRef snaprefs[5] = {
-    D_R_X, D_R_LIMIT, D_R_PRE_GUARD, D_R_LOOP, D_R_BODY_GUARD
-  };
-  static const uint16_t mapofs[5] = { 0, 2, 6, 9, 12 };
-  static const uint8_t nent[5] = { 0, 2, 1, 1, 1 };
-  static const uint8_t nslots[5] = { 5, 6, 5, 5, 5 };
-  static const MSize pcpos[5] = { 7, 3, 12, 7, 12 };
-  SnapNo snapno;
-
-  assert(numstep_fixture_pt != NULL && numstep_fixture_loop_pc != NULL);
-  assert(numstep_fixture_pt->framesize == 5);
-  assert(numstep_fixture_pt->sizebc == 14);
-  assert(numstep_fixture_pt->numparams == 2);
-  memset(&fx, 0, sizeof(fx));
-
-  setir(REF_TRUE, IR_KPRI, IRT_TRUE, 0, 0);
-  setir(REF_FALSE, IR_KPRI, IRT_FALSE, 0, 0);
-  setir(REF_NIL, IR_KPRI, IRT_NIL, 0, 0);
-
-  setir(REF_BASE, IR_BASE, IRT_PGC, 0, 0);
-  setir(D_R_X, IR_SLOAD, IRT_NUM|IRT_GUARD,
-	4, IRSLOAD_TYPECHECK);
-  setir(D_R_STEP, IR_SLOAD, IRT_NUM|IRT_GUARD,
-	3, IRSLOAD_TYPECHECK);
-  setir(D_R_X_PRE, IR_ADD, IRT_NUM|IRT_ISPHI,
-	D_R_STEP, D_R_X);
-  setir(D_R_LIMIT, IR_SLOAD, IRT_NUM|IRT_GUARD,
-	2, IRSLOAD_TYPECHECK);
-  setir(D_R_PRE_GUARD, IR_GT, IRT_NUM|IRT_GUARD,
-	D_R_LIMIT, D_R_X_PRE);
-  setir(D_R_LOOP, IR_LOOP, IRT_NIL|IRT_GUARD, 0, 0);
-  setir(D_R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);
-  setir(D_R_X_BODY, IR_ADD, IRT_NUM|IRT_ISPHI,
-	D_R_X_PRE, D_R_STEP);
-  setir(D_R_BODY_GUARD, IR_LT, IRT_NUM|IRT_GUARD,
-	D_R_X_BODY, D_R_LIMIT);
-  setir(D_R_X_PHI, IR_PHI, IRT_NUM, D_R_X_PRE, D_R_X_BODY);
-
-  for (snapno = 0; snapno < 5; snapno++) {
-    fx.snap[snapno].ref = snaprefs[snapno];
-    fx.snap[snapno].mapofs = mapofs[snapno];
-    fx.snap[snapno].nent = nent[snapno];
-    fx.snap[snapno].nslots = nslots[snapno];
-    fx.snap[snapno].topslot = 5;
-  }
-  fx.snapmap[2] = SNAP(4, 0, D_R_X_PRE);
-  fx.snapmap[3] = SNAP(5, 0, D_R_X_PRE);
-  fx.snapmap[6] = SNAP(4, 0, D_R_X_PRE);
-  fx.snapmap[9] = SNAP(4, 0, D_R_X_PRE);
-  fx.snapmap[12] = SNAP(4, 0, D_R_X_BODY);
-
-  fx.T.nk = REF_TRUE;
-  fx.T.nins = D_R_SEMANTIC_END;
-  fx.T.ir = fx.ir;
-  fx.T.nsnap = 5;
-  fx.T.snap = fx.snap;
-  fx.T.nsnapmap = 15;
-  fx.T.snapmap = fx.snapmap;
-  fx.T.traceno = 1;
-  fx.T.link = 1;
-  fx.T.root = 0;
-  fx.T.linktype = LJ_TRLINK_LOOP;
-  fx.T.sinktags = 0;
-  fx.T.startins = loadbc(numstep_fixture_loop_pc);
-  trace_startpt_rel(&fx.T, numstep_fixture_pt);
-  setmref(fx.T.startpc, numstep_fixture_loop_pc);
-  for (snapno = 0; snapno < 5; snapno++)
-    set_snapshot_payload(snapno, proto_bc(numstep_fixture_pt)+pcpos[snapno], 0);
-
-  J->parent = 0;
-  J->exitno = 0;
-  J->pt = numstep_fixture_pt;
-  J->baseslot = 1 + LJ_FR2;
-  J->framedepth = 0;
-  J->retdepth = 0;
-  J->loopref = D_R_LOOP;
-  J->startpc = numstep_fixture_loop_pc;
-}
-
-static unsigned numacc_fixture_full_shape(void)
-{
-  BCIns comparison, arithmetic;
-  MSize n;
-  assert(numacc_fixture_pt != NULL && numacc_fixture_profile != NULL);
-  assert(numacc_fixture_pt->sizebc == 13);
-  comparison = loadbc(proto_bc(numacc_fixture_pt)+3);
-  arithmetic = loadbc(proto_bc(numacc_fixture_pt)+8);
-  for (n = 0;
-	 n < sizeof(numacc_fixture_profiles)/sizeof(numacc_fixture_profiles[0]);
-	 n++) {
-    const NumaccFixtureProfile *profile = &numacc_fixture_profiles[n];
-    if (bc_op(comparison) == profile->comparison_bc &&
-	bc_a(comparison) == profile->comparison_a &&
-	bc_d(comparison) == profile->comparison_d &&
-	bc_op(arithmetic) == profile->recurrence_bc &&
-	bc_a(arithmetic) == 3 && bc_b(arithmetic) == 3 &&
-	bc_c(arithmetic) == 4)
-      return profile->id;
-  }
-  return 0;
-}
-
-static const NumaccFixtureProfile *numacc_active_profile(void)
-{
-  assert(numacc_fixture_profile != NULL);
-  assert(numacc_fixture_full_shape() == numacc_fixture_profile->id);
-  return numacc_fixture_profile;
-}
-
-static void make_numacc_trace(jit_State *J)
-{
-  static const IRRef snaprefs[5] = {
-    A_R_X, A_R_LIMIT, A_R_PRE_GUARD, A_R_LOOP, A_R_BODY_GUARD
-  };
-  static const uint16_t mapofs[5] = { 0, 2, 6, 9, 12 };
-  static const uint8_t nent[5] = { 0, 2, 1, 1, 1 };
-  static const uint8_t nslots[5] = { 5, 6, 5, 5, 5 };
-  static const MSize pcpos[5] = { 6, 2, 11, 6, 11 };
-  SnapNo snapno;
-  const NumaccFixtureProfile *profile;
-
-  assert(numacc_fixture_pt != NULL && numacc_fixture_loop_pc != NULL);
-  assert(numacc_fixture_pt->framesize == 5);
-  assert(numacc_fixture_pt->sizebc == 13);
-  assert(numacc_fixture_pt->numparams == 3);
-  profile = numacc_active_profile();
-  memset(&fx, 0, sizeof(fx));
-
-  setir(REF_TRUE, IR_KPRI, IRT_TRUE, 0, 0);
-  setir(REF_FALSE, IR_KPRI, IRT_FALSE, 0, 0);
-  setir(REF_NIL, IR_KPRI, IRT_NIL, 0, 0);
-
-  setir(REF_BASE, IR_BASE, IRT_PGC, 0, 0);
-  setir(A_R_X, IR_SLOAD, IRT_NUM|IRT_GUARD,
-	2, IRSLOAD_TYPECHECK);
-  setir(A_R_STEP, IR_SLOAD, IRT_NUM|IRT_GUARD,
-	4, IRSLOAD_TYPECHECK);
-  setir(A_R_X_PRE, profile->recurrence_op, IRT_NUM|IRT_ISPHI,
-	profile->pre_left, profile->pre_right);
-  setir(A_R_LIMIT, IR_SLOAD, IRT_NUM|IRT_GUARD,
-	3, IRSLOAD_TYPECHECK);
-  setir(A_R_PRE_GUARD, profile->precondition_op, IRT_NUM|IRT_GUARD,
-	A_R_LIMIT, A_R_X_PRE);
-  setir(A_R_LOOP, IR_LOOP, IRT_NIL|IRT_GUARD, 0, 0);
-  setir(A_R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);
-  setir(A_R_X_BODY, profile->recurrence_op, IRT_NUM|IRT_ISPHI,
-	A_R_X_PRE, A_R_STEP);
-  setir(A_R_BODY_GUARD, profile->body_op, IRT_NUM|IRT_GUARD,
-	A_R_X_BODY, A_R_LIMIT);
-  setir(A_R_X_PHI, IR_PHI, IRT_NUM, A_R_X_PRE, A_R_X_BODY);
-
-  for (snapno = 0; snapno < 5; snapno++) {
-    fx.snap[snapno].ref = snaprefs[snapno];
-    fx.snap[snapno].mapofs = mapofs[snapno];
-    fx.snap[snapno].nent = nent[snapno];
-    fx.snap[snapno].nslots = nslots[snapno];
-    fx.snap[snapno].topslot = 5;
-  }
-  fx.snapmap[2] = SNAP(2, 0, A_R_X_PRE);
-  fx.snapmap[3] = SNAP(5, 0, A_R_X_PRE);
-  fx.snapmap[6] = SNAP(2, 0, A_R_X_PRE);
-  fx.snapmap[9] = SNAP(2, 0, A_R_X_PRE);
-  fx.snapmap[12] = SNAP(2, 0, A_R_X_BODY);
-
-  fx.T.nk = REF_TRUE;
-  fx.T.nins = A_R_SEMANTIC_END;
-  fx.T.ir = fx.ir;
-  fx.T.nsnap = 5;
-  fx.T.snap = fx.snap;
-  fx.T.nsnapmap = 15;
-  fx.T.snapmap = fx.snapmap;
-  fx.T.traceno = 1;
-  fx.T.link = 1;
-  fx.T.root = 0;
-  fx.T.linktype = LJ_TRLINK_LOOP;
-  fx.T.sinktags = 0;
-  fx.T.startins = loadbc(numacc_fixture_loop_pc);
-  trace_startpt_rel(&fx.T, numacc_fixture_pt);
-  setmref(fx.T.startpc, numacc_fixture_loop_pc);
-  for (snapno = 0; snapno < 5; snapno++)
-    set_snapshot_payload(snapno, proto_bc(numacc_fixture_pt)+pcpos[snapno], 0);
-
-  J->parent = 0;
-  J->exitno = 0;
-  J->pt = numacc_fixture_pt;
-  J->baseslot = 1 + LJ_FR2;
-  J->framedepth = 0;
-  J->retdepth = 0;
-  J->loopref = A_R_LOOP;
-  J->startpc = numacc_fixture_loop_pc;
-}
-
-static IRRef numacc_intstep_ref(IRRef ref)
-{
-  assert(ref >= A_R_X && ref <= A_R_X_PHI);
-  return ref == A_R_X ? AI_R_X : ref+1u;
-}
-
-static void make_numacc_intstep_trace(jit_State *J)
-{
-  static const IRRef snaprefs[5] = {
-    AI_R_X, AI_R_LIMIT, AI_R_PRE_GUARD, AI_R_LOOP, AI_R_BODY_GUARD
-  };
-  static const uint16_t mapofs[5] = { 0, 2, 6, 9, 12 };
-  static const uint8_t nent[5] = { 0, 2, 1, 1, 1 };
-  static const uint8_t nslots[5] = { 5, 6, 5, 5, 5 };
-  static const MSize pcpos[5] = { 6, 2, 11, 6, 11 };
-  SnapNo snapno;
-  const NumaccFixtureProfile *profile;
-
-  assert(numacc_fixture_pt != NULL && numacc_fixture_loop_pc != NULL);
-  assert(numacc_fixture_pt->framesize == 5);
-  assert(numacc_fixture_pt->sizebc == 13);
-  assert(numacc_fixture_pt->numparams == 3);
-  profile = numacc_active_profile();
-  memset(&fx, 0, sizeof(fx));
-
-  setir(REF_TRUE, IR_KPRI, IRT_TRUE, 0, 0);
-  setir(REF_FALSE, IR_KPRI, IRT_FALSE, 0, 0);
-  setir(REF_NIL, IR_KPRI, IRT_NIL, 0, 0);
-
-  setir(REF_BASE, IR_BASE, IRT_PGC, 0, 0);
-  setir(AI_R_X, IR_SLOAD, IRT_NUM|IRT_GUARD,
-	2, IRSLOAD_TYPECHECK);
-  setir(AI_R_STEP_INT, IR_SLOAD, IRT_INT|IRT_GUARD,
-	4, IRSLOAD_TYPECHECK);
-  setir(AI_R_STEP_NUM, IR_CONV, IRT_NUM,
-	AI_R_STEP_INT, IRCONV_NUM_INT);
-  setir(AI_R_X_PRE, profile->recurrence_op, IRT_NUM|IRT_ISPHI,
-	numacc_intstep_ref(profile->pre_left),
-	numacc_intstep_ref(profile->pre_right));
-  setir(AI_R_LIMIT, IR_SLOAD, IRT_NUM|IRT_GUARD,
-	3, IRSLOAD_TYPECHECK);
-  setir(AI_R_PRE_GUARD, profile->precondition_op, IRT_NUM|IRT_GUARD,
-	AI_R_LIMIT, AI_R_X_PRE);
-  setir(AI_R_LOOP, IR_LOOP, IRT_NIL|IRT_GUARD, 0, 0);
-  setir(AI_R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);
-  setir(AI_R_X_BODY, profile->recurrence_op, IRT_NUM|IRT_ISPHI,
-	AI_R_X_PRE, AI_R_STEP_NUM);
-  setir(AI_R_BODY_GUARD, profile->body_op, IRT_NUM|IRT_GUARD,
-	AI_R_X_BODY, AI_R_LIMIT);
-  setir(AI_R_X_PHI, IR_PHI, IRT_NUM, AI_R_X_PRE, AI_R_X_BODY);
-
-  for (snapno = 0; snapno < 5; snapno++) {
-    fx.snap[snapno].ref = snaprefs[snapno];
-    fx.snap[snapno].mapofs = mapofs[snapno];
-    fx.snap[snapno].nent = nent[snapno];
-    fx.snap[snapno].nslots = nslots[snapno];
-    fx.snap[snapno].topslot = 5;
-  }
-  fx.snapmap[2] = SNAP(2, 0, AI_R_X_PRE);
-  fx.snapmap[3] = SNAP(5, 0, AI_R_X_PRE);
-  fx.snapmap[6] = SNAP(2, 0, AI_R_X_PRE);
-  fx.snapmap[9] = SNAP(2, 0, AI_R_X_PRE);
-  fx.snapmap[12] = SNAP(2, 0, AI_R_X_BODY);
-
-  fx.T.nk = REF_TRUE;
-  fx.T.nins = AI_R_SEMANTIC_END;
-  fx.T.ir = fx.ir;
-  fx.T.nsnap = 5;
-  fx.T.snap = fx.snap;
-  fx.T.nsnapmap = 15;
-  fx.T.snapmap = fx.snapmap;
-  fx.T.traceno = 1;
-  fx.T.link = 1;
-  fx.T.root = 0;
-  fx.T.linktype = LJ_TRLINK_LOOP;
-  fx.T.sinktags = 0;
-  fx.T.startins = loadbc(numacc_fixture_loop_pc);
-  trace_startpt_rel(&fx.T, numacc_fixture_pt);
-  setmref(fx.T.startpc, numacc_fixture_loop_pc);
-  for (snapno = 0; snapno < 5; snapno++)
-    set_snapshot_payload(snapno, proto_bc(numacc_fixture_pt)+pcpos[snapno], 0);
-
-  J->parent = 0;
-  J->exitno = 0;
-  J->pt = numacc_fixture_pt;
-  J->baseslot = 1 + LJ_FR2;
-  J->framedepth = 0;
-  J->retdepth = 0;
-  J->loopref = AI_R_LOOP;
-  J->startpc = numacc_fixture_loop_pc;
-}
-
-static void make_numacc_intlimit_trace(jit_State *J)
-{
-  static const IRRef snaprefs[5] = {
-    AIL_R_X, AIL_R_LIMIT_INT, AIL_R_PRE_GUARD, AIL_R_LOOP,
-    AIL_R_BODY_GUARD
-  };
-  static const uint16_t mapofs[5] = { 0, 2, 6, 9, 12 };
-  static const uint8_t nent[5] = { 0, 2, 1, 1, 1 };
-  static const uint8_t nslots[5] = { 5, 6, 5, 5, 5 };
-  static const MSize pcpos[5] = { 6, 2, 11, 6, 11 };
-  SnapNo snapno;
-  const NumaccFixtureProfile *profile;
-
-  assert(numacc_fixture_pt != NULL && numacc_fixture_loop_pc != NULL);
-  assert(numacc_fixture_pt->framesize == 5);
-  assert(numacc_fixture_pt->sizebc == 13);
-  assert(numacc_fixture_pt->numparams == 3);
-  profile = numacc_active_profile();
-  memset(&fx, 0, sizeof(fx));
-
-  setir(REF_TRUE, IR_KPRI, IRT_TRUE, 0, 0);
-  setir(REF_FALSE, IR_KPRI, IRT_FALSE, 0, 0);
-  setir(REF_NIL, IR_KPRI, IRT_NIL, 0, 0);
-
-  setir(REF_BASE, IR_BASE, IRT_PGC, 0, 0);
-  setir(AIL_R_X, IR_SLOAD, IRT_NUM|IRT_GUARD,
-	2, IRSLOAD_TYPECHECK);
-  setir(AIL_R_STEP, IR_SLOAD, IRT_NUM|IRT_GUARD,
-	4, IRSLOAD_TYPECHECK);
-  setir(AIL_R_X_PRE, profile->recurrence_op, IRT_NUM|IRT_ISPHI,
-	profile->pre_left, profile->pre_right);
-  setir(AIL_R_LIMIT_INT, IR_SLOAD, IRT_INT|IRT_GUARD,
-	3, IRSLOAD_TYPECHECK);
-  setir(AIL_R_LIMIT_NUM, IR_CONV, IRT_NUM,
-	AIL_R_LIMIT_INT, IRCONV_NUM_INT);
-  setir(AIL_R_PRE_GUARD, profile->precondition_op, IRT_NUM|IRT_GUARD,
-	AIL_R_LIMIT_NUM, AIL_R_X_PRE);
-  setir(AIL_R_LOOP, IR_LOOP, IRT_NIL|IRT_GUARD, 0, 0);
-  setir(AIL_R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);
-  setir(AIL_R_X_BODY, profile->recurrence_op, IRT_NUM|IRT_ISPHI,
-	AIL_R_X_PRE, AIL_R_STEP);
-  setir(AIL_R_BODY_GUARD, profile->body_op, IRT_NUM|IRT_GUARD,
-	AIL_R_X_BODY, AIL_R_LIMIT_NUM);
-  setir(AIL_R_X_PHI, IR_PHI, IRT_NUM, AIL_R_X_PRE, AIL_R_X_BODY);
-
-  for (snapno = 0; snapno < 5; snapno++) {
-    fx.snap[snapno].ref = snaprefs[snapno];
-    fx.snap[snapno].mapofs = mapofs[snapno];
-    fx.snap[snapno].nent = nent[snapno];
-    fx.snap[snapno].nslots = nslots[snapno];
-    fx.snap[snapno].topslot = 5;
-  }
-  fx.snapmap[2] = SNAP(2, 0, AIL_R_X_PRE);
-  fx.snapmap[3] = SNAP(5, 0, AIL_R_X_PRE);
-  fx.snapmap[6] = SNAP(2, 0, AIL_R_X_PRE);
-  fx.snapmap[9] = SNAP(2, 0, AIL_R_X_PRE);
-  fx.snapmap[12] = SNAP(2, 0, AIL_R_X_BODY);
-
-  fx.T.nk = REF_TRUE;
-  fx.T.nins = AIL_R_SEMANTIC_END;
-  fx.T.ir = fx.ir;
-  fx.T.nsnap = 5;
-  fx.T.snap = fx.snap;
-  fx.T.nsnapmap = 15;
-  fx.T.snapmap = fx.snapmap;
-  fx.T.traceno = 1;
-  fx.T.link = 1;
-  fx.T.root = 0;
-  fx.T.linktype = LJ_TRLINK_LOOP;
-  fx.T.sinktags = 0;
-  fx.T.startins = loadbc(numacc_fixture_loop_pc);
-  trace_startpt_rel(&fx.T, numacc_fixture_pt);
-  setmref(fx.T.startpc, numacc_fixture_loop_pc);
-  for (snapno = 0; snapno < 5; snapno++)
-    set_snapshot_payload(snapno, proto_bc(numacc_fixture_pt)+pcpos[snapno], 0);
-
-  J->parent = 0;
-  J->exitno = 0;
-  J->pt = numacc_fixture_pt;
-  J->baseslot = 1 + LJ_FR2;
-  J->framedepth = 0;
-  J->retdepth = 0;
-  J->loopref = AIL_R_LOOP;
-  J->startpc = numacc_fixture_loop_pc;
-}
-
-static void make_numacc_intx_trace(jit_State *J)
-{
-  static const IRRef snaprefs[5] = {
-    AX_R_X_INT, AX_R_LIMIT, AX_R_PRE_GUARD, AX_R_LOOP, AX_R_BODY_GUARD
-  };
-  static const uint16_t mapofs[5] = { 0, 2, 6, 9, 12 };
-  static const uint8_t nent[5] = { 0, 2, 1, 1, 1 };
-  static const uint8_t nslots[5] = { 5, 6, 5, 5, 5 };
-  static const MSize pcpos[5] = { 6, 2, 11, 6, 11 };
-  SnapNo snapno;
-  const NumaccFixtureProfile *profile;
-
-  assert(numacc_fixture_pt != NULL && numacc_fixture_loop_pc != NULL);
-  assert(numacc_fixture_pt->framesize == 5);
-  assert(numacc_fixture_pt->sizebc == 13);
-  assert(numacc_fixture_pt->numparams == 3);
-  profile = numacc_active_profile();
-  memset(&fx, 0, sizeof(fx));
-
-  setir(REF_TRUE, IR_KPRI, IRT_TRUE, 0, 0);
-  setir(REF_FALSE, IR_KPRI, IRT_FALSE, 0, 0);
-  setir(REF_NIL, IR_KPRI, IRT_NIL, 0, 0);
-
-  setir(REF_BASE, IR_BASE, IRT_PGC, 0, 0);
-  setir(AX_R_X_INT, IR_SLOAD, IRT_INT|IRT_GUARD,
-	2, IRSLOAD_TYPECHECK);
-  setir(AX_R_STEP, IR_SLOAD, IRT_NUM|IRT_GUARD,
-	4, IRSLOAD_TYPECHECK);
-  setir(AX_R_X_NUM, IR_CONV, IRT_NUM,
-	AX_R_X_INT, IRCONV_NUM_INT);
-  setir(AX_R_X_PRE, profile->recurrence_op, IRT_NUM|IRT_ISPHI,
-	AX_R_X_NUM, AX_R_STEP);
-  setir(AX_R_LIMIT, IR_SLOAD, IRT_NUM|IRT_GUARD,
-	3, IRSLOAD_TYPECHECK);
-  setir(AX_R_PRE_GUARD, profile->precondition_op, IRT_NUM|IRT_GUARD,
-	AX_R_LIMIT, AX_R_X_PRE);
-  setir(AX_R_LOOP, IR_LOOP, IRT_NIL|IRT_GUARD, 0, 0);
-  setir(AX_R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);
-  setir(AX_R_X_CHECK, IR_CONV, IRT_INT|IRT_GUARD,
-	AX_R_X_PRE, IRCONV_INT_NUM|IRCONV_CHECK);
-  setir(AX_R_X_BODY, profile->recurrence_op, IRT_NUM|IRT_ISPHI,
-	AX_R_X_PRE, AX_R_STEP);
-  setir(AX_R_BODY_GUARD, profile->body_op, IRT_NUM|IRT_GUARD,
-	AX_R_X_BODY, AX_R_LIMIT);
-  setir(AX_R_X_PHI, IR_PHI, IRT_NUM, AX_R_X_PRE, AX_R_X_BODY);
-
-  for (snapno = 0; snapno < 5; snapno++) {
-    fx.snap[snapno].ref = snaprefs[snapno];
-    fx.snap[snapno].mapofs = mapofs[snapno];
-    fx.snap[snapno].nent = nent[snapno];
-    fx.snap[snapno].nslots = nslots[snapno];
-    fx.snap[snapno].topslot = 5;
-  }
-  fx.snapmap[2] = SNAP(2, 0, AX_R_X_PRE);
-  fx.snapmap[3] = SNAP(5, 0, AX_R_X_PRE);
-  fx.snapmap[6] = SNAP(2, 0, AX_R_X_PRE);
-  fx.snapmap[9] = SNAP(2, 0, AX_R_X_PRE);
-  fx.snapmap[12] = SNAP(2, 0, AX_R_X_BODY);
-
-  fx.T.nk = REF_TRUE;
-  fx.T.nins = AX_R_SEMANTIC_END;
-  fx.T.ir = fx.ir;
-  fx.T.nsnap = 5;
-  fx.T.snap = fx.snap;
-  fx.T.nsnapmap = 15;
-  fx.T.snapmap = fx.snapmap;
-  fx.T.traceno = 1;
-  fx.T.link = 1;
-  fx.T.root = 0;
-  fx.T.linktype = LJ_TRLINK_LOOP;
-  fx.T.sinktags = 0;
-  fx.T.startins = loadbc(numacc_fixture_loop_pc);
-  trace_startpt_rel(&fx.T, numacc_fixture_pt);
-  setmref(fx.T.startpc, numacc_fixture_loop_pc);
-  for (snapno = 0; snapno < 5; snapno++)
-    set_snapshot_payload(snapno, proto_bc(numacc_fixture_pt)+pcpos[snapno], 0);
-
-  J->parent = 0;
-  J->exitno = 0;
-  J->pt = numacc_fixture_pt;
-  J->baseslot = 1 + LJ_FR2;
-  J->framedepth = 0;
-  J->retdepth = 0;
-  J->loopref = AX_R_LOOP;
-  J->startpc = numacc_fixture_loop_pc;
-}
-
 static LJArm64IRReject expect_reject(jit_State *J,
 		LJArm64IRRejectReason reason, IROp op)
 {
@@ -1307,6 +586,11 @@ static LJArm64PostRAView make_postra_view(jit_State *J)
 {
   LJArm64PostRAView view = { 0 };
   make_trace(J);
+  fx.ir[R_A].r = RID_X3;
+  fx.ir[R_B].r = RID_X4;
+  fx.ir[R_C].r = RID_X5;
+  fx.ir[R_SUM1].r = fx.ir[R_BODY1].r = fx.ir[R_PHI1].r = RID_X0;
+  fx.ir[R_SUM2].r = fx.ir[R_BODY2].r = fx.ir[R_PHI2].r = RID_X1;
   setir(R_END, IR_NOP, IRT_NIL, 0, 0);
   view.ir = fx.ir;
   view.snap = fx.snap;
@@ -1324,14 +608,20 @@ static LJArm64PostRAView make_postra_view(jit_State *J)
   return view;
 }
 
-static void expect_postra_result(LJArm64PostRAView *view, int admitted)
+static void expect_postra_result_at(LJArm64PostRAView *view, int admitted, unsigned line)
 {
   IRRef semantic_nins = 0;
   int result = lj_asm_arm64_postra_admit(view, &semantic_nins);
+  if (result != admitted)
+    fprintf(stderr, "post-RA expectation at line %u: wanted=%d got=%d\n",
+            line, admitted, result);
   assert(result == admitted);
   if (admitted)
     assert(semantic_nins == R_END);
 }
+#define expect_postra_result(view, admitted) \
+  expect_postra_result_at((view), (admitted), __LINE__)
+
 
 static LJArm64PostRAView make_dynamic_forl_postra_view(jit_State *J,
 	int negative)
@@ -1380,15 +670,21 @@ static LJArm64PostRAView make_dynamic_forl_postra_view(jit_State *J,
   return view;
 }
 
-static void expect_dynamic_forl_postra_result(LJArm64PostRAView *view,
-	int admitted)
+static void expect_dynamic_forl_postra_result_at(LJArm64PostRAView *view,
+	int admitted, unsigned line)
 {
   IRRef semantic_nins = 0;
   int result = lj_asm_arm64_postra_admit(view, &semantic_nins);
+  if (result != admitted)
+    fprintf(stderr, "post-RA expectation at line %u: wanted=%d got=%d\n",
+            line, admitted, result);
   assert(result == admitted);
   if (admitted)
     assert(semantic_nins == V_R_SEMANTIC_END);
 }
+#define expect_dynamic_forl_postra_result(view, admitted) \
+  expect_dynamic_forl_postra_result_at((view), (admitted), __LINE__)
+
 
 static LJArm64PostRAView make_numeric_postra_view(jit_State *J)
 {
@@ -1429,15 +725,21 @@ static LJArm64PostRAView make_numeric_postra_view(jit_State *J)
   return view;
 }
 
-static void expect_numeric_postra_result(LJArm64PostRAView *view,
-	int admitted)
+static void expect_numeric_postra_result_at(LJArm64PostRAView *view,
+	int admitted, unsigned line)
 {
   IRRef semantic_nins = 0;
   int result = lj_asm_arm64_postra_admit(view, &semantic_nins);
+  if (result != admitted)
+    fprintf(stderr, "post-RA expectation at line %u: wanted=%d got=%d\n",
+            line, admitted, result);
   assert(result == admitted);
   if (admitted)
     assert(semantic_nins == N_R_SEMANTIC_END);
 }
+#define expect_numeric_postra_result(view, admitted) \
+  expect_numeric_postra_result_at((view), (admitted), __LINE__)
+
 
 static LJArm64PostRAView make_numhalf_postra_view(jit_State *J)
 {
@@ -1471,1649 +773,21 @@ static LJArm64PostRAView make_numhalf_postra_view(jit_State *J)
   return view;
 }
 
-static void expect_numhalf_postra_result(LJArm64PostRAView *view,
-	int admitted)
+static void expect_numhalf_postra_result_at(LJArm64PostRAView *view,
+	int admitted, unsigned line)
 {
   IRRef semantic_nins = 0;
   int result = lj_asm_arm64_postra_admit(view, &semantic_nins);
+  if (result != admitted)
+    fprintf(stderr, "post-RA expectation at line %u: wanted=%d got=%d\n",
+            line, admitted, result);
   assert(result == admitted);
   if (admitted)
     assert(semantic_nins == H_R_SEMANTIC_END);
 }
+#define expect_numhalf_postra_result(view, admitted) \
+  expect_numhalf_postra_result_at((view), (admitted), __LINE__)
 
-static LJArm64PostRAView make_numstep_postra_view(jit_State *J)
-{
-  LJArm64PostRAView view = { 0 };
-  make_numstep_trace(J);
-
-  /* Exact observed spill-free allocation. STEP and LIMIT stay invariant in
-  ** distinct FPRs while the loop-carried family remains in d15. */
-  fx.ir[D_R_X].r = RID_D2;
-  fx.ir[D_R_STEP].r = RID_D1;
-  fx.ir[D_R_X_PRE].r = RID_D15;
-  fx.ir[D_R_LIMIT].r = RID_D0;
-  fx.ir[D_R_X_BODY].r = RID_D15;
-  fx.ir[D_R_X_PHI].r = RID_D15;
-  setir(D_R_NOP, IR_NOP, IRT_NIL, 0, 0);
-
-  view.ir = fx.ir;
-  view.snap = fx.snap;
-  view.snapmap = fx.snapmap;
-  view.proto_bc = proto_bc(numstep_fixture_pt);
-  view.nins = D_R_POSTRA_END;
-  view.nk = fx.T.nk;
-  view.nsnap = fx.T.nsnap;
-  view.nsnapmap = fx.T.nsnapmap;
-  view.spadjust = 0;
-  view.proto_sizebc = numstep_fixture_pt->sizebc;
-  view.root_topslot = 5;
-  view.startins = fx.T.startins;
-  view.base_delta = 0;
-  return view;
-}
-
-static void expect_numstep_postra_result(LJArm64PostRAView *view,
-	int admitted)
-{
-  IRRef semantic_nins = 0;
-  int result = lj_asm_arm64_postra_admit(view, &semantic_nins);
-  assert(result == admitted);
-  if (admitted)
-    assert(semantic_nins == D_R_SEMANTIC_END);
-}
-
-static LJArm64PostRAView make_numacc_postra_view(jit_State *J)
-{
-  LJArm64PostRAView view = { 0 };
-  make_numacc_trace(J);
-
-  /* Exact observed spill-free allocation. STEP and LIMIT stay invariant in
-  ** distinct FPRs while the loop-carried accumulator remains in d15. */
-  fx.ir[A_R_X].r = RID_D2;
-  fx.ir[A_R_STEP].r = RID_D1;
-  fx.ir[A_R_X_PRE].r = RID_D15;
-  fx.ir[A_R_LIMIT].r = RID_D0;
-  fx.ir[A_R_X_BODY].r = RID_D15;
-  fx.ir[A_R_X_PHI].r = RID_D15;
-  setir(A_R_NOP, IR_NOP, IRT_NIL, 0, 0);
-
-  view.ir = fx.ir;
-  view.snap = fx.snap;
-  view.snapmap = fx.snapmap;
-  view.proto_bc = proto_bc(numacc_fixture_pt);
-  view.nins = A_R_POSTRA_END;
-  view.nk = fx.T.nk;
-  view.nsnap = fx.T.nsnap;
-  view.nsnapmap = fx.T.nsnapmap;
-  view.spadjust = 0;
-  view.proto_sizebc = numacc_fixture_pt->sizebc;
-  view.root_topslot = 5;
-  view.startins = fx.T.startins;
-  view.base_delta = 0;
-  return view;
-}
-
-static void expect_numacc_postra_result(LJArm64PostRAView *view,
-	int admitted)
-{
-  IRRef semantic_nins = 0;
-  int result = lj_asm_arm64_postra_admit(view, &semantic_nins);
-  assert(result == admitted);
-  if (admitted)
-    assert(semantic_nins == A_R_SEMANTIC_END);
-}
-
-static LJArm64PostRAView make_numacc_intstep_postra_view(jit_State *J)
-{
-  LJArm64PostRAView view = { 0 };
-  make_numacc_intstep_trace(J);
-
-  /* Exact observed spill-free allocation. The raw INT step occupies a GPR;
-  ** its single widened value remains invariant in a distinct FPR. */
-  fx.ir[AI_R_X].r = RID_D2;
-  fx.ir[AI_R_STEP_INT].r = RID_X1;
-  fx.ir[AI_R_STEP_NUM].r = RID_D1;
-  fx.ir[AI_R_X_PRE].r = RID_D15;
-  fx.ir[AI_R_LIMIT].r = RID_D0;
-  fx.ir[AI_R_X_BODY].r = RID_D15;
-  fx.ir[AI_R_X_PHI].r = RID_D15;
-  setir(AI_R_NOP, IR_NOP, IRT_NIL, 0, 0);
-
-  view.ir = fx.ir;
-  view.snap = fx.snap;
-  view.snapmap = fx.snapmap;
-  view.proto_bc = proto_bc(numacc_fixture_pt);
-  view.nins = AI_R_POSTRA_END;
-  view.nk = fx.T.nk;
-  view.nsnap = fx.T.nsnap;
-  view.nsnapmap = fx.T.nsnapmap;
-  view.spadjust = 0;
-  view.proto_sizebc = numacc_fixture_pt->sizebc;
-  view.root_topslot = 5;
-  view.startins = fx.T.startins;
-  view.base_delta = 0;
-  return view;
-}
-
-static void expect_numacc_intstep_postra_result(LJArm64PostRAView *view,
-	int admitted)
-{
-  IRRef semantic_nins = 0;
-  int result = lj_asm_arm64_postra_admit(view, &semantic_nins);
-  assert(result == admitted);
-  if (admitted)
-    assert(semantic_nins == AI_R_SEMANTIC_END);
-}
-
-static LJArm64PostRAView make_numacc_intlimit_postra_view(jit_State *J)
-{
-  LJArm64PostRAView view = { 0 };
-  make_numacc_intlimit_trace(J);
-
-  /* Exact observed spill-free allocation. The raw INT limit occupies a GPR;
-  ** its one widened value remains invariant in a distinct FPR. */
-  fx.ir[AIL_R_X].r = RID_D2;
-  fx.ir[AIL_R_STEP].r = RID_D1;
-  fx.ir[AIL_R_X_PRE].r = RID_D15;
-  fx.ir[AIL_R_LIMIT_INT].r = RID_X0;
-  fx.ir[AIL_R_LIMIT_NUM].r = RID_D0;
-  fx.ir[AIL_R_X_BODY].r = RID_D15;
-  fx.ir[AIL_R_X_PHI].r = RID_D15;
-  setir(AIL_R_NOP, IR_NOP, IRT_NIL, 0, 0);
-
-  view.ir = fx.ir;
-  view.snap = fx.snap;
-  view.snapmap = fx.snapmap;
-  view.proto_bc = proto_bc(numacc_fixture_pt);
-  view.nins = AIL_R_POSTRA_END;
-  view.nk = fx.T.nk;
-  view.nsnap = fx.T.nsnap;
-  view.nsnapmap = fx.T.nsnapmap;
-  view.spadjust = 0;
-  view.proto_sizebc = numacc_fixture_pt->sizebc;
-  view.root_topslot = 5;
-  view.startins = fx.T.startins;
-  view.base_delta = 0;
-  return view;
-}
-
-static void expect_numacc_intlimit_postra_result(LJArm64PostRAView *view,
-	int admitted)
-{
-  IRRef semantic_nins = 0;
-  int result = lj_asm_arm64_postra_admit(view, &semantic_nins);
-  assert(result == admitted);
-  if (admitted)
-    assert(semantic_nins == AIL_R_SEMANTIC_END);
-}
-
-static LJArm64PostRAView make_numacc_intx_postra_view(jit_State *J)
-{
-  LJArm64PostRAView view = { 0 };
-  make_numacc_intx_trace(J);
-
-  /* Exact observed spill-free allocation. The raw INT accumulator and the
-  ** checked repair use GPRs; its widened recurrence remains in FPRs. */
-  fx.ir[AX_R_X_INT].r = RID_X1;
-  fx.ir[AX_R_STEP].r = RID_D1;
-  fx.ir[AX_R_X_NUM].r = RID_D2;
-  fx.ir[AX_R_X_PRE].r = RID_D15;
-  fx.ir[AX_R_LIMIT].r = RID_D0;
-  fx.ir[AX_R_X_CHECK].r = RID_X28;
-  fx.ir[AX_R_X_BODY].r = RID_D15;
-  fx.ir[AX_R_X_PHI].r = RID_D15;
-  /* Resultless guards carry no allocator value, but the completed ARM64 pass
-  ** canonically marks their register byte RID_INIT. Keep the synthetic view
-  ** byte-faithful without making dead register bytes an admission condition. */
-  fx.ir[AX_R_PRE_GUARD].r = RID_INIT;
-  fx.ir[AX_R_LOOP].r = RID_INIT;
-  fx.ir[AX_R_XPOLL].r = RID_INIT;
-  fx.ir[AX_R_BODY_GUARD].r = RID_INIT;
-  setir(AX_R_NOP, IR_NOP, IRT_NIL, 0, 0);
-
-  view.ir = fx.ir;
-  view.snap = fx.snap;
-  view.snapmap = fx.snapmap;
-  view.proto_bc = proto_bc(numacc_fixture_pt);
-  view.nins = AX_R_POSTRA_END;
-  view.nk = fx.T.nk;
-  view.nsnap = fx.T.nsnap;
-  view.nsnapmap = fx.T.nsnapmap;
-  view.spadjust = 0;
-  view.proto_sizebc = numacc_fixture_pt->sizebc;
-  view.root_topslot = 5;
-  view.startins = fx.T.startins;
-  view.base_delta = 0;
-  return view;
-}
-
-static void expect_numacc_intx_postra_result(LJArm64PostRAView *view,
-	int admitted)
-{
-  IRRef semantic_nins = 0;
-  int result = lj_asm_arm64_postra_admit(view, &semantic_nins);
-  assert(result == admitted);
-  if (admitted)
-    assert(semantic_nins == AX_R_SEMANTIC_END);
-}
-
-/* Keep every reference coherent while relocating the widening after LIMIT.
-** The resulting trace is a valid dependency order, but not the admitted exact
-** recorder order. */
-static void relocate_numacc_intstep_conversion(void)
-{
-  IRIns conv = fx.ir[AI_R_STEP_NUM];
-  IRIns xpre = fx.ir[AI_R_X_PRE];
-  IRIns limit = fx.ir[AI_R_LIMIT];
-
-  fx.ir[AI_R_STEP_NUM] = limit;
-  fx.ir[AI_R_X_PRE] = conv;
-  fx.ir[AI_R_LIMIT] = xpre;
-  if (fx.ir[AI_R_LIMIT].op1 == AI_R_STEP_NUM)
-    fx.ir[AI_R_LIMIT].op1 = AI_R_X_PRE;
-  if (fx.ir[AI_R_LIMIT].op2 == AI_R_STEP_NUM)
-    fx.ir[AI_R_LIMIT].op2 = AI_R_X_PRE;
-  fx.ir[AI_R_PRE_GUARD].op1 = AI_R_STEP_NUM;
-  fx.ir[AI_R_PRE_GUARD].op2 = AI_R_LIMIT;
-  fx.ir[AI_R_X_BODY].op1 = AI_R_LIMIT;
-  fx.ir[AI_R_X_BODY].op2 = AI_R_X_PRE;
-  fx.ir[AI_R_X_PHI].op1 = AI_R_LIMIT;
-  fx.snap[1].ref = AI_R_STEP_NUM;
-  fx.snapmap[2] = SNAP(2, 0, AI_R_LIMIT);
-  fx.snapmap[3] = SNAP(5, 0, AI_R_LIMIT);
-  fx.snapmap[6] = SNAP(2, 0, AI_R_LIMIT);
-  fx.snapmap[9] = SNAP(2, 0, AI_R_LIMIT);
-}
-
-/* Insert a second exact conversion immediately before X_PRE and shift the
-** complete suffix, including snapshots, to keep the expanded trace coherent. */
-static void duplicate_numacc_intstep_conversion(jit_State *J, int postra)
-{
-  IRRef ref;
-  for (ref = AI_R_X_PHI; ref >= AI_R_X_PRE; ref--)
-    fx.ir[ref+1u] = fx.ir[ref];
-  fx.ir[AI_R_X_PRE] = fx.ir[AI_R_STEP_NUM];
-  fx.ir[AI_R_X_PRE+1u].op1 =
-    fx.ir[AI_R_X_PRE+1u].op1 == AI_R_X_PRE ?
-      AI_R_X_PRE+1u : fx.ir[AI_R_X_PRE+1u].op1;
-  fx.ir[AI_R_X_PRE+1u].op2 =
-    fx.ir[AI_R_X_PRE+1u].op2 == AI_R_X_PRE ?
-      AI_R_X_PRE+1u : fx.ir[AI_R_X_PRE+1u].op2;
-  fx.ir[AI_R_PRE_GUARD+1u].op1 = AI_R_LIMIT+1u;
-  fx.ir[AI_R_PRE_GUARD+1u].op2 = AI_R_X_PRE+1u;
-  fx.ir[AI_R_X_BODY+1u].op1 = AI_R_X_PRE+1u;
-  fx.ir[AI_R_X_BODY+1u].op2 = AI_R_STEP_NUM;
-  fx.ir[AI_R_BODY_GUARD+1u].op1 = AI_R_X_BODY+1u;
-  fx.ir[AI_R_BODY_GUARD+1u].op2 = AI_R_LIMIT+1u;
-  fx.ir[AI_R_X_PHI+1u].op1 = AI_R_X_PRE+1u;
-  fx.ir[AI_R_X_PHI+1u].op2 = AI_R_X_BODY+1u;
-  for (ref = 1; ref < 5; ref++)
-    fx.snap[ref].ref++;
-  fx.snapmap[2] = SNAP(2, 0, AI_R_X_PRE+1u);
-  fx.snapmap[3] = SNAP(5, 0, AI_R_X_PRE+1u);
-  fx.snapmap[6] = SNAP(2, 0, AI_R_X_PRE+1u);
-  fx.snapmap[9] = SNAP(2, 0, AI_R_X_PRE+1u);
-  fx.snapmap[12] = SNAP(2, 0, AI_R_X_BODY+1u);
-  fx.T.nins++;
-  J->loopref++;
-  if (postra)
-    setir(AI_R_NOP+1u, IR_NOP, IRT_NIL, 0, 0);
-}
-
-/* Keep the dependency order valid while moving the INT limit and its widening
-** before X_PRE. This is semantically equivalent, but not the recorded layout. */
-static void relocate_numacc_intlimit_conversion(void)
-{
-  IRIns xpre = fx.ir[AIL_R_X_PRE];
-  IRIns limitint = fx.ir[AIL_R_LIMIT_INT];
-  IRIns limitnum = fx.ir[AIL_R_LIMIT_NUM];
-
-  fx.ir[AIL_R_X_PRE] = limitint;
-  fx.ir[AIL_R_LIMIT_INT] = limitnum;
-  fx.ir[AIL_R_LIMIT_INT].op1 = AIL_R_X_PRE;
-  fx.ir[AIL_R_LIMIT_NUM] = xpre;
-  fx.ir[AIL_R_PRE_GUARD].op1 = AIL_R_LIMIT_INT;
-  fx.ir[AIL_R_PRE_GUARD].op2 = AIL_R_LIMIT_NUM;
-  fx.ir[AIL_R_X_BODY].op1 = AIL_R_LIMIT_NUM;
-  fx.ir[AIL_R_BODY_GUARD].op2 = AIL_R_LIMIT_INT;
-  fx.ir[AIL_R_X_PHI].op1 = AIL_R_LIMIT_NUM;
-  fx.snap[1].ref = AIL_R_X_PRE;
-  fx.snapmap[2] = SNAP(2, 0, AIL_R_LIMIT_NUM);
-  fx.snapmap[3] = SNAP(5, 0, AIL_R_LIMIT_NUM);
-  fx.snapmap[6] = SNAP(2, 0, AIL_R_LIMIT_NUM);
-  fx.snapmap[9] = SNAP(2, 0, AIL_R_LIMIT_NUM);
-}
-
-/* Insert a second exact widening immediately before PRE_GUARD and keep the
-** shifted suffix, snapshots and optional post-RA NOP internally coherent. */
-static void duplicate_numacc_intlimit_conversion(jit_State *J, int postra)
-{
-  IRRef ref;
-  for (ref = AIL_R_X_PHI; ref >= AIL_R_PRE_GUARD; ref--)
-    fx.ir[ref+1u] = fx.ir[ref];
-  fx.ir[AIL_R_PRE_GUARD] = fx.ir[AIL_R_LIMIT_NUM];
-  fx.ir[AIL_R_PRE_GUARD+1u].op1 = AIL_R_PRE_GUARD;
-  fx.ir[AIL_R_PRE_GUARD+1u].op2 = AIL_R_X_PRE;
-  fx.ir[AIL_R_X_BODY+1u].op1 = AIL_R_X_PRE;
-  fx.ir[AIL_R_X_BODY+1u].op2 = AIL_R_STEP;
-  fx.ir[AIL_R_BODY_GUARD+1u].op1 = AIL_R_X_BODY+1u;
-  fx.ir[AIL_R_BODY_GUARD+1u].op2 = AIL_R_PRE_GUARD;
-  fx.ir[AIL_R_X_PHI+1u].op1 = AIL_R_X_PRE;
-  fx.ir[AIL_R_X_PHI+1u].op2 = AIL_R_X_BODY+1u;
-  for (ref = 2; ref < 5; ref++)
-    fx.snap[ref].ref++;
-  fx.snapmap[12] = SNAP(2, 0, AIL_R_X_BODY+1u);
-  fx.T.nins++;
-  J->loopref++;
-  if (postra)
-    setir(AIL_R_NOP+1u, IR_NOP, IRT_NIL, 0, 0);
-}
-
-static void expect_numstep_reject(jit_State *J)
-{
-  LJArm64IRReject reject;
-  assert(!lj_asm_arm64_ir_admit(J, &fx.T, &reject));
-  assert(reject.reason != LJ_ARM64_IR_REJECT_NONE);
-}
-
-static void expect_numacc_reject(jit_State *J)
-{
-  LJArm64IRReject reject;
-  assert(!lj_asm_arm64_ir_admit(J, &fx.T, &reject));
-  assert(reject.reason != LJ_ARM64_IR_REJECT_NONE);
-}
-
-static void expect_numacc_semantic_result(jit_State *J, int admitted)
-{
-  LJArm64IRReject reject;
-  int result = lj_asm_arm64_ir_admit(J, &fx.T, &reject);
-  assert(result == admitted);
-  if (admitted)
-    assert(reject.reason == LJ_ARM64_IR_REJECT_NONE);
-  else
-    assert(reject.reason != LJ_ARM64_IR_REJECT_NONE);
-}
-
-static void expect_numacc_reject_detail(jit_State *J,
-	LJArm64IRRejectReason reason, IRRef ref, IROp op, uint32_t detail)
-{
-  LJArm64IRReject reject;
-  assert(!lj_asm_arm64_ir_admit(J, &fx.T, &reject));
-  assert(reject.reason == reason);
-  assert(reject.ref == ref);
-  assert(reject.op == op);
-  assert(reject.detail == detail);
-}
-
-static void expect_numhalf_reject(jit_State *J)
-{
-  LJArm64IRReject reject;
-  assert(!lj_asm_arm64_ir_admit(J, &fx.T, &reject));
-  assert(reject.reason != LJ_ARM64_IR_REJECT_NONE);
-}
-
-static void test_numhalf_postra_layout(jit_State *J)
-{
-  static const IRRef fprrefs[] = {
-    H_R_X, H_R_X_PRE, H_R_LIMIT, H_R_X_BODY, H_R_X_PHI
-  };
-  LJArm64PostRAView view;
-  MSize i;
-
-  view = make_numhalf_postra_view(J);
-  assert(fx.ir[H_K_HALF].o == IR_KNUM);
-  assert(fx.ir[H_K_HALF].r == RID_INIT);
-  assert(fx.ir[H_K_HALF].s == SPS_NONE);
-  assert(fx.ir[H_K_HALF_PAYLOAD].tv.u64 ==
-	 UINT64_C(0x3fe0000000000000));
-  assert(fx.ir[H_R_X].r == RID_D2);
-  assert(fx.ir[H_R_X_PRE].r == RID_D15);
-  assert(fx.ir[H_R_LIMIT].r == RID_D0);
-  assert(fx.ir[H_R_X_BODY].r == RID_D15);
-  assert(fx.ir[H_R_X_PHI].r == RID_D15);
-  assert(fx.ir[H_R_NOP].o == IR_NOP);
-  expect_numhalf_postra_result(&view, 1);
-
-  /* Invariants may use another allocatable FPR. The PHI family may move as
-  ** a unit, but a partial move is not a realizable asm_phi() result. */
-  view = make_numhalf_postra_view(J);
-  fx.ir[H_R_X].r = RID_D3;
-  fx.ir[H_R_LIMIT].r = RID_D4;
-  expect_numhalf_postra_result(&view, 1);
-  view = make_numhalf_postra_view(J);
-  fx.ir[H_R_X_PRE].r = RID_D14;
-  fx.ir[H_R_X_BODY].r = RID_D14;
-  fx.ir[H_R_X_PHI].r = RID_D14;
-  expect_numhalf_postra_result(&view, 1);
-  view = make_numhalf_postra_view(J);
-  fx.ir[H_R_X_PRE].r = RID_D14;
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  fx.ir[H_R_X_BODY].r = RID_D14;
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  fx.ir[H_R_X_PHI].r = RID_D14;
-  expect_numhalf_postra_result(&view, 0);
-
-  for (i = 0; i < sizeof(fprrefs)/sizeof(fprrefs[0]); i++) {
-    view = make_numhalf_postra_view(J);
-    fx.ir[fprrefs[i]].r = RID_X0;
-    expect_numhalf_postra_result(&view, 0);
-    view = make_numhalf_postra_view(J);
-    fx.ir[fprrefs[i]].r = RID_MAX_FPR;
-    expect_numhalf_postra_result(&view, 0);
-    view = make_numhalf_postra_view(J);
-    fx.ir[fprrefs[i]].s = 2;
-    view.spadjust = 16;
-    expect_numhalf_postra_result(&view, 0);
-  }
-  view = make_numhalf_postra_view(J);
-  view.spadjust = 16;
-  expect_numhalf_postra_result(&view, 0);
-
-  /* KNUM is a two-slot constant and is rematerialized, never allocated. */
-  view = make_numhalf_postra_view(J);
-  fx.ir[H_K_HALF].r = RID_D0;
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  fx.ir[H_K_HALF].s = 2;
-  view.spadjust = 16;
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  fx.ir[H_K_HALF].op12 = 1;
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  fx.ir[H_K_HALF].o = IR_KINT64;
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  fx.ir[H_K_HALF_PAYLOAD].tv.u64 ^= UINT64_C(1);
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  view.nk = H_K_HALF_PAYLOAD;
-  expect_numhalf_postra_result(&view, 0);
-
-  /* The pure-NUM profile has exactly one trailing NOP and no RENAME suffix. */
-  view = make_numhalf_postra_view(J);
-  fx.ir[H_R_NOP].t.irt = IRT_PGC;
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  fx.ir[H_R_NOP].op1 = 1;
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  fx.ir[H_R_NOP].prev = 1;
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  setir(H_R_NOP, IR_RENAME, IRT_NIL, H_R_X_PRE, 3);
-  fx.ir[H_R_NOP].r = RID_D14;
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  view.nins = H_R_SEMANTIC_END;
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  setir(H_R_POSTRA_END, IR_NOP, IRT_NIL, 0, 0);
-  view.nins++;
-  expect_numhalf_postra_result(&view, 0);
-
-  /* Post-RA validation independently rechecks the exact semantic and
-  ** snapshot certificate instead of trusting the recorder pass. */
-  view = make_numhalf_postra_view(J);
-  fx.ir[H_R_PRE_GUARD].o = IR_GE;
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  fx.ir[H_R_BODY_GUARD].o = IR_LE;
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  fx.ir[H_R_X_BODY].op2 = H_R_LIMIT;
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  fx.snap[1].nent = 1;
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  fx.snapmap[12] = SNAP(3, 0, H_R_X_PRE);
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  set_snapshot_payload(3, proto_bc(numhalf_fixture_pt)+8, 0);
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  view.nsnapmap = 14;
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  view.proto_sizebc = 12;
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  view.root_topslot = 5;
-  expect_numhalf_postra_result(&view, 0);
-  view = make_numhalf_postra_view(J);
-  view.startins = loadbc(fixture_forl_pc);
-  expect_numhalf_postra_result(&view, 0);
-}
-
-static void test_numstep_postra_layout(jit_State *J)
-{
-  static const IRRef value_refs[] = {
-    D_R_X, D_R_STEP, D_R_X_PRE, D_R_LIMIT, D_R_X_BODY, D_R_X_PHI
-  };
-  static const IRRef semantic_refs[] = {
-    D_R_X, D_R_STEP, D_R_X_PRE, D_R_LIMIT, D_R_PRE_GUARD,
-    D_R_LOOP, D_R_XPOLL, D_R_X_BODY, D_R_BODY_GUARD, D_R_X_PHI
-  };
-  static const uint16_t entryofs[5] = { 2, 3, 6, 9, 12 };
-  LJArm64PostRAView view;
-  MSize i;
-
-  view = make_numstep_postra_view(J);
-  assert(fx.ir[D_R_X].r == RID_D2);
-  assert(fx.ir[D_R_STEP].r == RID_D1);
-  assert(fx.ir[D_R_X_PRE].r == RID_D15);
-  assert(fx.ir[D_R_LIMIT].r == RID_D0);
-  assert(fx.ir[D_R_X_BODY].r == RID_D15);
-  assert(fx.ir[D_R_X_PHI].r == RID_D15);
-  assert(fx.ir[D_R_NOP].o == IR_NOP);
-  expect_numstep_postra_result(&view, 1);
-
-  /* Any allocatable FPR assignment is valid when the liveness aliases hold. */
-  view = make_numstep_postra_view(J);
-  fx.ir[D_R_X].r = RID_D3;
-  fx.ir[D_R_STEP].r = RID_D4;
-  fx.ir[D_R_LIMIT].r = RID_D5;
-  expect_numstep_postra_result(&view, 1);
-  view = make_numstep_postra_view(J);
-  fx.ir[D_R_X_PRE].r = RID_D14;
-  fx.ir[D_R_X_BODY].r = RID_D14;
-  fx.ir[D_R_X_PHI].r = RID_D14;
-  expect_numstep_postra_result(&view, 1);
-
-  /* X dies in the first ADD and may alias LIMIT or its destination. */
-  view = make_numstep_postra_view(J);
-  fx.ir[D_R_X].r = fx.ir[D_R_LIMIT].r;
-  expect_numstep_postra_result(&view, 1);
-  view = make_numstep_postra_view(J);
-  fx.ir[D_R_X].r = fx.ir[D_R_X_PHI].r;
-  expect_numstep_postra_result(&view, 1);
-
-  /* STEP, LIMIT and the loop-carried family overlap in lifetime. X and STEP
-  ** are simultaneous first-ADD inputs. Every prohibited alias fails closed. */
-  view = make_numstep_postra_view(J);
-  fx.ir[D_R_STEP].r = fx.ir[D_R_X_PHI].r;
-  expect_numstep_postra_result(&view, 0);
-  view = make_numstep_postra_view(J);
-  fx.ir[D_R_LIMIT].r = fx.ir[D_R_X_PHI].r;
-  expect_numstep_postra_result(&view, 0);
-  view = make_numstep_postra_view(J);
-  fx.ir[D_R_STEP].r = fx.ir[D_R_LIMIT].r;
-  expect_numstep_postra_result(&view, 0);
-  view = make_numstep_postra_view(J);
-  fx.ir[D_R_X].r = fx.ir[D_R_STEP].r;
-  expect_numstep_postra_result(&view, 0);
-
-  /* PHI allocation is indivisible. */
-  view = make_numstep_postra_view(J);
-  fx.ir[D_R_X_PRE].r = RID_D14;
-  expect_numstep_postra_result(&view, 0);
-  view = make_numstep_postra_view(J);
-  fx.ir[D_R_X_BODY].r = RID_D14;
-  expect_numstep_postra_result(&view, 0);
-  view = make_numstep_postra_view(J);
-  fx.ir[D_R_X_PHI].r = RID_D14;
-  expect_numstep_postra_result(&view, 0);
-
-  for (i = 0; i < sizeof(value_refs)/sizeof(value_refs[0]); i++) {
-    view = make_numstep_postra_view(J);
-    fx.ir[value_refs[i]].r = RID_X0;
-    expect_numstep_postra_result(&view, 0);
-    view = make_numstep_postra_view(J);
-    fx.ir[value_refs[i]].r = RID_MAX_FPR;
-    expect_numstep_postra_result(&view, 0);
-    view = make_numstep_postra_view(J);
-    fx.ir[value_refs[i]].s = 2;
-    view.spadjust = 16;
-    expect_numstep_postra_result(&view, 0);
-  }
-  view = make_numstep_postra_view(J);
-  view.spadjust = 16;
-  expect_numstep_postra_result(&view, 0);
-
-  /* Exactly one zeroed NOP follows the semantic root; spills and RENAMEs are
-  ** never part of this profile. */
-  view = make_numstep_postra_view(J);
-  fx.ir[D_R_NOP].t.irt = IRT_PGC;
-  expect_numstep_postra_result(&view, 0);
-  view = make_numstep_postra_view(J);
-  fx.ir[D_R_NOP].op1 = 1;
-  expect_numstep_postra_result(&view, 0);
-  view = make_numstep_postra_view(J);
-  fx.ir[D_R_NOP].prev = 1;
-  expect_numstep_postra_result(&view, 0);
-  view = make_numstep_postra_view(J);
-  setir(D_R_NOP, IR_RENAME, IRT_NIL, D_R_X_PRE, 3);
-  fx.ir[D_R_NOP].r = RID_D14;
-  expect_numstep_postra_result(&view, 0);
-  view = make_numstep_postra_view(J);
-  view.nins = D_R_SEMANTIC_END;
-  expect_numstep_postra_result(&view, 0);
-  view = make_numstep_postra_view(J);
-  setir(D_R_POSTRA_END, IR_NOP, IRT_NIL, 0, 0);
-  view.nins++;
-  expect_numstep_postra_result(&view, 0);
-
-  /* Recheck every semantic tuple after allocation. */
-  for (i = 0; i < sizeof(semantic_refs)/sizeof(semantic_refs[0]); i++) {
-    IRRef ref = semantic_refs[i];
-    view = make_numstep_postra_view(J);
-    fx.ir[ref].o = IR_NOP;
-    expect_numstep_postra_result(&view, 0);
-    view = make_numstep_postra_view(J);
-    fx.ir[ref].t.irt ^= IRT_GUARD;
-    expect_numstep_postra_result(&view, 0);
-    view = make_numstep_postra_view(J);
-    fx.ir[ref].op1 ^= 1u;
-    expect_numstep_postra_result(&view, 0);
-    view = make_numstep_postra_view(J);
-    fx.ir[ref].op2 ^= 1u;
-    expect_numstep_postra_result(&view, 0);
-  }
-  view = make_numstep_postra_view(J);
-  fx.ir[REF_BASE].o = IR_NOP;
-  expect_numstep_postra_result(&view, 0);
-
-  /* Snapshot headers, entries and footers are independently immutable. */
-  for (i = 0; i < 5; i++) {
-    view = make_numstep_postra_view(J);
-    fx.snap[i].ref++;
-    expect_numstep_postra_result(&view, 0);
-    view = make_numstep_postra_view(J);
-    fx.snap[i].mapofs++;
-    expect_numstep_postra_result(&view, 0);
-    view = make_numstep_postra_view(J);
-    fx.snap[i].nent++;
-    expect_numstep_postra_result(&view, 0);
-    view = make_numstep_postra_view(J);
-    fx.snap[i].nslots++;
-    expect_numstep_postra_result(&view, 0);
-    view = make_numstep_postra_view(J);
-    fx.snap[i].topslot = 4;
-    expect_numstep_postra_result(&view, 0);
-    view = make_numstep_postra_view(J);
-    set_snapshot_payload((SnapNo)i, proto_bc(numstep_fixture_pt)+1, 0);
-    expect_numstep_postra_result(&view, 0);
-    view = make_numstep_postra_view(J);
-    set_snapshot_payload((SnapNo)i, proto_bc(numstep_fixture_pt)+
-	(i == 2 || i == 4 ? 12 : 7), 1);
-    expect_numstep_postra_result(&view, 0);
-  }
-  for (i = 0; i < sizeof(entryofs)/sizeof(entryofs[0]); i++) {
-    view = make_numstep_postra_view(J);
-    fx.snapmap[entryofs[i]] ^= 1u;
-    expect_numstep_postra_result(&view, 0);
-  }
-
-  view = make_numstep_postra_view(J);
-  view.nk = REF_TRUE-1u;
-  expect_numstep_postra_result(&view, 0);
-  view = make_numstep_postra_view(J);
-  view.nsnap = 4;
-  expect_numstep_postra_result(&view, 0);
-  view = make_numstep_postra_view(J);
-  view.nsnap = 6;
-  expect_numstep_postra_result(&view, 0);
-  view = make_numstep_postra_view(J);
-  view.nsnapmap = 14;
-  expect_numstep_postra_result(&view, 0);
-  view = make_numstep_postra_view(J);
-  view.nsnapmap = 16;
-  expect_numstep_postra_result(&view, 0);
-  view = make_numstep_postra_view(J);
-  view.proto_sizebc = 13;
-  expect_numstep_postra_result(&view, 0);
-  view = make_numstep_postra_view(J);
-  view.root_topslot = 4;
-  expect_numstep_postra_result(&view, 0);
-  view = make_numstep_postra_view(J);
-  view.base_delta = 1;
-  expect_numstep_postra_result(&view, 0);
-  view = make_numstep_postra_view(J);
-  view.startins = loadbc(fixture_forl_pc);
-  expect_numstep_postra_result(&view, 0);
-}
-
-static void test_numacc_postra_layout(jit_State *J)
-{
-  const NumaccFixtureProfile *profile = numacc_active_profile();
-  static const IRRef value_refs[] = {
-    A_R_X, A_R_STEP, A_R_X_PRE, A_R_LIMIT, A_R_X_BODY, A_R_X_PHI
-  };
-  static const IRRef semantic_refs[] = {
-    A_R_X, A_R_STEP, A_R_X_PRE, A_R_LIMIT, A_R_PRE_GUARD,
-    A_R_LOOP, A_R_XPOLL, A_R_X_BODY, A_R_BODY_GUARD, A_R_X_PHI
-  };
-  static const uint16_t entryofs[5] = { 2, 3, 6, 9, 12 };
-  static const IROp comparison_ops[] = {
-    IR_GT, IR_GE, IR_LT, IR_LE, IR_EQ, IR_NE,
-    IR_ULT, IR_UGE, IR_ULE, IR_UGT
-  };
-  LJArm64PostRAView view;
-  MSize i;
-  IROp expected_pre = profile->precondition_op;
-  IROp expected_body = profile->body_op;
-
-  view = make_numacc_postra_view(J);
-  assert(fx.ir[A_R_X].r == RID_D2);
-  assert(fx.ir[A_R_STEP].r == RID_D1);
-  assert(fx.ir[A_R_X_PRE].r == RID_D15);
-  assert(fx.ir[A_R_LIMIT].r == RID_D0);
-  assert(fx.ir[A_R_X_BODY].r == RID_D15);
-  assert(fx.ir[A_R_X_PHI].r == RID_D15);
-  assert(fx.ir[A_R_NOP].o == IR_NOP);
-  expect_numacc_postra_result(&view, 1);
-
-  /* Register numbers are not frozen, but all liveness relationships are. */
-  view = make_numacc_postra_view(J);
-  fx.ir[A_R_X].r = RID_D3;
-  fx.ir[A_R_STEP].r = RID_D4;
-  fx.ir[A_R_LIMIT].r = RID_D5;
-  expect_numacc_postra_result(&view, 1);
-  view = make_numacc_postra_view(J);
-  fx.ir[A_R_X_PRE].r = RID_D14;
-  fx.ir[A_R_X_BODY].r = RID_D14;
-  fx.ir[A_R_X_PHI].r = RID_D14;
-  expect_numacc_postra_result(&view, 1);
-
-  /* X dies in the first recurrence and may alias LIMIT or its destination. */
-  view = make_numacc_postra_view(J);
-  fx.ir[A_R_X].r = fx.ir[A_R_LIMIT].r;
-  expect_numacc_postra_result(&view, 1);
-  view = make_numacc_postra_view(J);
-  fx.ir[A_R_X].r = fx.ir[A_R_X_PHI].r;
-  expect_numacc_postra_result(&view, 1);
-
-  /* STEP, LIMIT and the PHI family overlap; X and STEP are simultaneous
-  ** first-recurrence inputs. These four aliases are therefore impossible. */
-  view = make_numacc_postra_view(J);
-  fx.ir[A_R_STEP].r = fx.ir[A_R_X_PHI].r;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  fx.ir[A_R_LIMIT].r = fx.ir[A_R_X_PHI].r;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  fx.ir[A_R_STEP].r = fx.ir[A_R_LIMIT].r;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  fx.ir[A_R_X].r = fx.ir[A_R_STEP].r;
-  expect_numacc_postra_result(&view, 0);
-
-  view = make_numacc_postra_view(J);
-  fx.ir[A_R_X_PRE].r = RID_D14;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  fx.ir[A_R_X_BODY].r = RID_D14;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  fx.ir[A_R_X_PHI].r = RID_D14;
-  expect_numacc_postra_result(&view, 0);
-
-  for (i = 0; i < sizeof(value_refs)/sizeof(value_refs[0]); i++) {
-    view = make_numacc_postra_view(J);
-    fx.ir[value_refs[i]].r = RID_X0;
-    expect_numacc_postra_result(&view, 0);
-    view = make_numacc_postra_view(J);
-    fx.ir[value_refs[i]].r = RID_MAX_FPR;
-    expect_numacc_postra_result(&view, 0);
-    view = make_numacc_postra_view(J);
-    fx.ir[value_refs[i]].s = 2;
-    view.spadjust = 16;
-    expect_numacc_postra_result(&view, 0);
-  }
-  view = make_numacc_postra_view(J);
-  view.spadjust = 16;
-  expect_numacc_postra_result(&view, 0);
-
-  /* Exactly one zeroed NOP follows the semantic root. */
-  view = make_numacc_postra_view(J);
-  fx.ir[A_R_NOP].t.irt = IRT_PGC;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  fx.ir[A_R_NOP].op1 = 1;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  fx.ir[A_R_NOP].op2 = 1;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  fx.ir[A_R_NOP].prev = 1;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  setir(A_R_NOP, IR_RENAME, IRT_NIL, A_R_X_PRE, 3);
-  fx.ir[A_R_NOP].r = RID_D14;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  view.nins = A_R_SEMANTIC_END;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  setir(A_R_POSTRA_END, IR_NOP, IRT_NIL, 0, 0);
-  view.nins++;
-  expect_numacc_postra_result(&view, 0);
-
-  /* Post-RA rechecks every semantic tuple, not only allocation metadata. */
-  for (i = 0; i < sizeof(semantic_refs)/sizeof(semantic_refs[0]); i++) {
-    IRRef ref = semantic_refs[i];
-    view = make_numacc_postra_view(J);
-    fx.ir[ref].o = IR_NOP;
-    expect_numacc_postra_result(&view, 0);
-    view = make_numacc_postra_view(J);
-    fx.ir[ref].t.irt ^= IRT_GUARD;
-    expect_numacc_postra_result(&view, 0);
-    view = make_numacc_postra_view(J);
-    fx.ir[ref].op1 ^= 1u;
-    expect_numacc_postra_result(&view, 0);
-    view = make_numacc_postra_view(J);
-    fx.ir[ref].op2 ^= 1u;
-    expect_numacc_postra_result(&view, 0);
-  }
-  view = make_numacc_postra_view(J);
-  fx.ir[REF_BASE].o = IR_NOP;
-  expect_numacc_postra_result(&view, 0);
-
-  /* Arithmetic operand direction is exact, including for commutative ADD and
-  ** MUL. */
-  view = make_numacc_postra_view(J);
-  fx.ir[A_R_X_PRE].op1 = (IRRef1)profile->pre_right;
-  fx.ir[A_R_X_PRE].op2 = (IRRef1)profile->pre_left;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  fx.ir[A_R_X_BODY].op1 = A_R_STEP;
-  fx.ir[A_R_X_BODY].op2 = A_R_X_PRE;
-  expect_numacc_postra_result(&view, 0);
-
-  /* Bytecode comparison polarity selects exactly one signed IR pair. Both
-  ** unsigned neighbours and reversed operands remain invalid after RA. */
-  for (i = 0; i < sizeof(comparison_ops)/sizeof(comparison_ops[0]); i++) {
-    if (comparison_ops[i] != expected_pre) {
-      view = make_numacc_postra_view(J);
-      fx.ir[A_R_PRE_GUARD].o = (IROp1)comparison_ops[i];
-      expect_numacc_postra_result(&view, 0);
-    }
-    if (comparison_ops[i] != expected_body) {
-      view = make_numacc_postra_view(J);
-      fx.ir[A_R_BODY_GUARD].o = (IROp1)comparison_ops[i];
-      expect_numacc_postra_result(&view, 0);
-    }
-  }
-  view = make_numacc_postra_view(J);
-  fx.ir[A_R_PRE_GUARD].op1 = A_R_X_PRE;
-  fx.ir[A_R_PRE_GUARD].op2 = A_R_LIMIT;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  fx.ir[A_R_BODY_GUARD].op1 = A_R_LIMIT;
-  fx.ir[A_R_BODY_GUARD].op2 = A_R_X_BODY;
-  expect_numacc_postra_result(&view, 0);
-
-  /* Every snapshot header, restored entry and footer remains exact. */
-  for (i = 0; i < 5; i++) {
-    view = make_numacc_postra_view(J);
-    fx.snap[i].ref++;
-    expect_numacc_postra_result(&view, 0);
-    view = make_numacc_postra_view(J);
-    fx.snap[i].mapofs++;
-    expect_numacc_postra_result(&view, 0);
-    view = make_numacc_postra_view(J);
-    fx.snap[i].nent++;
-    expect_numacc_postra_result(&view, 0);
-    view = make_numacc_postra_view(J);
-    fx.snap[i].nslots++;
-    expect_numacc_postra_result(&view, 0);
-    view = make_numacc_postra_view(J);
-    fx.snap[i].topslot = 4;
-    expect_numacc_postra_result(&view, 0);
-    view = make_numacc_postra_view(J);
-    set_snapshot_payload((SnapNo)i, proto_bc(numacc_fixture_pt)+1, 0);
-    expect_numacc_postra_result(&view, 0);
-    view = make_numacc_postra_view(J);
-    set_snapshot_payload((SnapNo)i, proto_bc(numacc_fixture_pt)+
-	(i == 2 || i == 4 ? 11 : 6), 1);
-    expect_numacc_postra_result(&view, 0);
-  }
-  for (i = 0; i < sizeof(entryofs)/sizeof(entryofs[0]); i++) {
-    view = make_numacc_postra_view(J);
-    fx.snapmap[entryofs[i]] ^= 1u;
-    expect_numacc_postra_result(&view, 0);
-  }
-
-  view = make_numacc_postra_view(J);
-  view.nk = REF_TRUE-1u;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  view.nsnap = 4;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  view.nsnap = 6;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  view.nsnapmap = 14;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  view.nsnapmap = 16;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  view.proto_sizebc = 12;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  view.proto_sizebc = 14;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  view.root_topslot = 4;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  view.root_topslot = 6;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  view.base_delta = 1;
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  view.startins ^= (BCIns)(UINT32_C(1) << 8);
-  expect_numacc_postra_result(&view, 0);
-  view = make_numacc_postra_view(J);
-  view.startins = loadbc(fixture_forl_pc);
-  expect_numacc_postra_result(&view, 0);
-
-  /* Dispatching either no-constant profile through the other's prototype and
-  ** snapshot certificate cannot silently broaden the grammar. */
-  view = make_numacc_postra_view(J);
-  view.proto_bc = proto_bc(numstep_fixture_pt);
-  view.proto_sizebc = numstep_fixture_pt->sizebc;
-  view.startins = loadbc(numstep_fixture_loop_pc);
-  expect_numacc_postra_result(&view, 0);
-  view = make_numstep_postra_view(J);
-  view.proto_bc = proto_bc(numacc_fixture_pt);
-  view.proto_sizebc = numacc_fixture_pt->sizebc;
-  view.startins = loadbc(numacc_fixture_loop_pc);
-  expect_numacc_postra_result(&view, 0);
-}
-
-static void test_numacc_intstep_postra_layout(jit_State *J)
-{
-  const NumaccFixtureProfile *profile = numacc_active_profile();
-  static const IRRef fpr_refs[] = {
-    AI_R_X, AI_R_STEP_NUM, AI_R_X_PRE, AI_R_LIMIT,
-    AI_R_X_BODY, AI_R_X_PHI
-  };
-  static const IRRef semantic_refs[] = {
-    AI_R_X, AI_R_STEP_INT, AI_R_STEP_NUM, AI_R_X_PRE, AI_R_LIMIT,
-    AI_R_PRE_GUARD, AI_R_LOOP, AI_R_XPOLL, AI_R_X_BODY,
-    AI_R_BODY_GUARD, AI_R_X_PHI
-  };
-  static const uint16_t entryofs[5] = { 2, 3, 6, 9, 12 };
-  static const IROp comparison_ops[] = {
-    IR_GT, IR_GE, IR_LT, IR_LE, IR_EQ, IR_NE,
-    IR_ULT, IR_UGE, IR_ULE, IR_UGT
-  };
-  LJArm64PostRAView view;
-  MSize i;
-
-  view = make_numacc_intstep_postra_view(J);
-  assert(fx.ir[AI_R_X].r == RID_D2);
-  assert(fx.ir[AI_R_STEP_INT].r == RID_X1);
-  assert(fx.ir[AI_R_STEP_NUM].r == RID_D1);
-  assert(fx.ir[AI_R_X_PRE].r == RID_D15);
-  assert(fx.ir[AI_R_LIMIT].r == RID_D0);
-  assert(fx.ir[AI_R_X_BODY].r == RID_D15);
-  assert(fx.ir[AI_R_X_PHI].r == RID_D15);
-  assert(fx.ir[AI_R_NOP].o == IR_NOP);
-  expect_numacc_intstep_postra_result(&view, 1);
-
-  /* Register identities float, but the raw and widened steps remain in their
-  ** respective classes and the loop-carried FPR family stays unified. */
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_STEP_INT].r = RID_X2;
-  fx.ir[AI_R_X].r = RID_D3;
-  fx.ir[AI_R_STEP_NUM].r = RID_D4;
-  fx.ir[AI_R_LIMIT].r = RID_D5;
-  expect_numacc_intstep_postra_result(&view, 1);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_X_PRE].r = RID_D14;
-  fx.ir[AI_R_X_BODY].r = RID_D14;
-  fx.ir[AI_R_X_PHI].r = RID_D14;
-  expect_numacc_intstep_postra_result(&view, 1);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_X].r = fx.ir[AI_R_LIMIT].r;
-  expect_numacc_intstep_postra_result(&view, 1);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_X].r = fx.ir[AI_R_X_PHI].r;
-  expect_numacc_intstep_postra_result(&view, 1);
-
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_STEP_NUM].r = fx.ir[AI_R_X_PHI].r;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_LIMIT].r = fx.ir[AI_R_X_PHI].r;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_STEP_NUM].r = fx.ir[AI_R_LIMIT].r;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_X].r = fx.ir[AI_R_STEP_NUM].r;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_X_PRE].r = RID_D14;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_X_BODY].r = RID_D14;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_X_PHI].r = RID_D14;
-  expect_numacc_intstep_postra_result(&view, 0);
-
-  /* The conversion source is the sole GPR value in this geometry. */
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_STEP_INT].r = RID_D1;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_STEP_INT].r = RID_X18;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_STEP_INT].r = RID_MAX_GPR;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_STEP_INT].s = 2;
-  view.spadjust = 16;
-  expect_numacc_intstep_postra_result(&view, 0);
-  for (i = 0; i < sizeof(fpr_refs)/sizeof(fpr_refs[0]); i++) {
-    view = make_numacc_intstep_postra_view(J);
-    fx.ir[fpr_refs[i]].r = RID_X0;
-    expect_numacc_intstep_postra_result(&view, 0);
-    view = make_numacc_intstep_postra_view(J);
-    fx.ir[fpr_refs[i]].r = RID_MAX_FPR;
-    expect_numacc_intstep_postra_result(&view, 0);
-    view = make_numacc_intstep_postra_view(J);
-    fx.ir[fpr_refs[i]].s = 2;
-    view.spadjust = 16;
-    expect_numacc_intstep_postra_result(&view, 0);
-  }
-  view = make_numacc_intstep_postra_view(J);
-  view.spadjust = 16;
-  expect_numacc_intstep_postra_result(&view, 0);
-
-  /* Exactly one zero NOP, no RENAME and no extra post-RA suffix are allowed. */
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_NOP].t.irt = IRT_PGC;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_NOP].op1 = 1;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_NOP].op2 = 1;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_NOP].prev = 1;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  setir(AI_R_NOP, IR_RENAME, IRT_NIL, AI_R_X_PRE, 3);
-  fx.ir[AI_R_NOP].r = RID_D14;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  view.nins = AI_R_SEMANTIC_END;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  setir(AI_R_POSTRA_END, IR_NOP, IRT_NIL, 0, 0);
-  view.nins++;
-  expect_numacc_intstep_postra_result(&view, 0);
-
-  /* Post-RA independently rechecks every field of all semantic tuples. */
-  for (i = 0; i < sizeof(semantic_refs)/sizeof(semantic_refs[0]); i++) {
-    IRRef ref = semantic_refs[i];
-    view = make_numacc_intstep_postra_view(J);
-    fx.ir[ref].o = IR_NOP;
-    expect_numacc_intstep_postra_result(&view, 0);
-    view = make_numacc_intstep_postra_view(J);
-    fx.ir[ref].t.irt ^= IRT_GUARD;
-    expect_numacc_intstep_postra_result(&view, 0);
-    view = make_numacc_intstep_postra_view(J);
-    fx.ir[ref].op1 ^= 1u;
-    expect_numacc_intstep_postra_result(&view, 0);
-    view = make_numacc_intstep_postra_view(J);
-    fx.ir[ref].op2 ^= 1u;
-    expect_numacc_intstep_postra_result(&view, 0);
-  }
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[REF_BASE].o = IR_NOP;
-  expect_numacc_intstep_postra_result(&view, 0);
-
-  /* Source, direction, mode, result type and flags are independent conversion
-  ** dimensions. Missing, duplicate, relocated and raw-recurrence variants all
-  ** stay closed at this second gate. */
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_STEP_NUM].op1 = AI_R_X;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_STEP_NUM].op2 = IRCONV_INT_NUM;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_STEP_NUM].op2 = IRCONV_NUM_INT|IRCONV_SEXT;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_STEP_NUM].op2 = IRCONV_NUM_INT|IRCONV_CHECK;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_STEP_NUM].t.irt = IRT_INT;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_STEP_NUM].t.irt = IRT_NUM|IRT_GUARD;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_STEP_NUM].t.irt = IRT_NUM|IRT_ISPHI;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  setir(AI_R_STEP_NUM, IR_NOP, IRT_NIL, 0, 0);
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  duplicate_numacc_intstep_conversion(J, 1);
-  view.nins++;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  relocate_numacc_intstep_conversion();
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  if (fx.ir[AI_R_X_PRE].op1 == AI_R_STEP_NUM)
-    fx.ir[AI_R_X_PRE].op1 = AI_R_STEP_INT;
-  else
-    fx.ir[AI_R_X_PRE].op2 = AI_R_STEP_INT;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_X_BODY].op2 = AI_R_STEP_INT;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  setir(AI_R_X_PRE, IR_CONV, IRT_NUM, AI_R_X, IRCONV_NUM_INT);
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  setir(AI_R_X_BODY, IR_CONV, IRT_NUM, AI_R_X_PRE, IRCONV_NUM_INT);
-  expect_numacc_intstep_postra_result(&view, 0);
-
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_X_PRE].op1 = numacc_intstep_ref(profile->pre_right);
-  fx.ir[AI_R_X_PRE].op2 = numacc_intstep_ref(profile->pre_left);
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_X_BODY].op1 = AI_R_STEP_NUM;
-  fx.ir[AI_R_X_BODY].op2 = AI_R_X_PRE;
-  expect_numacc_intstep_postra_result(&view, 0);
-  for (i = 0; i < sizeof(comparison_ops)/sizeof(comparison_ops[0]); i++) {
-    if (comparison_ops[i] != profile->precondition_op) {
-      view = make_numacc_intstep_postra_view(J);
-      fx.ir[AI_R_PRE_GUARD].o = (IROp1)comparison_ops[i];
-      expect_numacc_intstep_postra_result(&view, 0);
-    }
-    if (comparison_ops[i] != profile->body_op) {
-      view = make_numacc_intstep_postra_view(J);
-      fx.ir[AI_R_BODY_GUARD].o = (IROp1)comparison_ops[i];
-      expect_numacc_intstep_postra_result(&view, 0);
-    }
-  }
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_PRE_GUARD].op1 = AI_R_X_PRE;
-  fx.ir[AI_R_PRE_GUARD].op2 = AI_R_LIMIT;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  fx.ir[AI_R_BODY_GUARD].op1 = AI_R_LIMIT;
-  fx.ir[AI_R_BODY_GUARD].op2 = AI_R_X_BODY;
-  expect_numacc_intstep_postra_result(&view, 0);
-
-  for (i = 0; i < 5; i++) {
-    view = make_numacc_intstep_postra_view(J);
-    fx.snap[i].ref++;
-    expect_numacc_intstep_postra_result(&view, 0);
-    view = make_numacc_intstep_postra_view(J);
-    fx.snap[i].mapofs++;
-    expect_numacc_intstep_postra_result(&view, 0);
-    view = make_numacc_intstep_postra_view(J);
-    fx.snap[i].nent++;
-    expect_numacc_intstep_postra_result(&view, 0);
-    view = make_numacc_intstep_postra_view(J);
-    fx.snap[i].nslots++;
-    expect_numacc_intstep_postra_result(&view, 0);
-    view = make_numacc_intstep_postra_view(J);
-    fx.snap[i].topslot = 4;
-    expect_numacc_intstep_postra_result(&view, 0);
-    view = make_numacc_intstep_postra_view(J);
-    set_snapshot_payload((SnapNo)i, proto_bc(numacc_fixture_pt)+1, 0);
-    expect_numacc_intstep_postra_result(&view, 0);
-    view = make_numacc_intstep_postra_view(J);
-    set_snapshot_payload((SnapNo)i, proto_bc(numacc_fixture_pt)+
-	(i == 2 || i == 4 ? 11 : 6), 1);
-    expect_numacc_intstep_postra_result(&view, 0);
-  }
-  for (i = 0; i < sizeof(entryofs)/sizeof(entryofs[0]); i++) {
-    view = make_numacc_intstep_postra_view(J);
-    fx.snapmap[entryofs[i]] ^= 1u;
-    expect_numacc_intstep_postra_result(&view, 0);
-  }
-  view = make_numacc_intstep_postra_view(J);
-  view.nk = REF_TRUE-1u;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  view.nsnap = 4;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  view.nsnapmap = 14;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  view.proto_sizebc = 12;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  view.root_topslot = 4;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  view.base_delta = 1;
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  view.startins ^= (BCIns)(UINT32_C(1) << 8);
-  expect_numacc_intstep_postra_result(&view, 0);
-  view = make_numacc_intstep_postra_view(J);
-  view.proto_bc = proto_bc(numstep_fixture_pt);
-  view.proto_sizebc = numstep_fixture_pt->sizebc;
-  view.startins = loadbc(numstep_fixture_loop_pc);
-  expect_numacc_intstep_postra_result(&view, 0);
-}
-
-static void test_numacc_intlimit_postra_layout(jit_State *J)
-{
-  static const IRRef fpr_refs[] = {
-    AIL_R_X, AIL_R_STEP, AIL_R_X_PRE, AIL_R_LIMIT_NUM,
-    AIL_R_X_BODY, AIL_R_X_PHI
-  };
-  static const IRRef semantic_refs[] = {
-    AIL_R_X, AIL_R_STEP, AIL_R_X_PRE, AIL_R_LIMIT_INT,
-    AIL_R_LIMIT_NUM, AIL_R_PRE_GUARD, AIL_R_LOOP, AIL_R_XPOLL,
-    AIL_R_X_BODY, AIL_R_BODY_GUARD, AIL_R_X_PHI
-  };
-  static const uint16_t entryofs[5] = { 2, 3, 6, 9, 12 };
-  static const IROp comparison_ops[] = {
-    IR_GT, IR_GE, IR_LT, IR_LE, IR_EQ, IR_NE,
-    IR_ULT, IR_UGE, IR_ULE, IR_UGT
-  };
-  LJArm64PostRAView view;
-  MSize i;
-
-  assert(numacc_active_profile()->id == NUMACC_FIXTURE_ADD_LT);
-  view = make_numacc_intlimit_postra_view(J);
-  assert(fx.ir[AIL_R_X].r == RID_D2);
-  assert(fx.ir[AIL_R_STEP].r == RID_D1);
-  assert(fx.ir[AIL_R_X_PRE].r == RID_D15);
-  assert(fx.ir[AIL_R_LIMIT_INT].r == RID_X0);
-  assert(fx.ir[AIL_R_LIMIT_NUM].r == RID_D0);
-  assert(fx.ir[AIL_R_X_BODY].r == RID_D15);
-  assert(fx.ir[AIL_R_X_PHI].r == RID_D15);
-  assert(fx.ir[AIL_R_NOP].o == IR_NOP);
-  expect_numacc_intlimit_postra_result(&view, 1);
-
-  /* Register numbers float, but the raw/widened limit classes, live invariant
-  ** separation and loop-carried family are exact. */
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_LIMIT_INT].r = RID_X2;
-  fx.ir[AIL_R_X].r = RID_D3;
-  fx.ir[AIL_R_STEP].r = RID_D4;
-  fx.ir[AIL_R_LIMIT_NUM].r = RID_D5;
-  expect_numacc_intlimit_postra_result(&view, 1);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_X_PRE].r = RID_D14;
-  fx.ir[AIL_R_X_BODY].r = RID_D14;
-  fx.ir[AIL_R_X_PHI].r = RID_D14;
-  expect_numacc_intlimit_postra_result(&view, 1);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_X].r = fx.ir[AIL_R_LIMIT_NUM].r;
-  expect_numacc_intlimit_postra_result(&view, 1);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_X].r = fx.ir[AIL_R_X_PHI].r;
-  expect_numacc_intlimit_postra_result(&view, 1);
-
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_STEP].r = fx.ir[AIL_R_X_PHI].r;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_LIMIT_NUM].r = fx.ir[AIL_R_X_PHI].r;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_STEP].r = fx.ir[AIL_R_LIMIT_NUM].r;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_X].r = fx.ir[AIL_R_STEP].r;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_X_PRE].r = RID_D14;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_X_BODY].r = RID_D14;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_X_PHI].r = RID_D14;
-  expect_numacc_intlimit_postra_result(&view, 0);
-
-  /* The raw limit is the sole GPR value and neither half may spill. */
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_LIMIT_INT].r = RID_D0;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_LIMIT_INT].r = RID_NONE;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_LIMIT_INT].r = RID_X18;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_LIMIT_INT].r = RID_MAX_GPR;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  for (i = 0; i < sizeof(fpr_refs)/sizeof(fpr_refs[0]); i++) {
-    view = make_numacc_intlimit_postra_view(J);
-    fx.ir[fpr_refs[i]].r = RID_X0;
-    expect_numacc_intlimit_postra_result(&view, 0);
-    view = make_numacc_intlimit_postra_view(J);
-    fx.ir[fpr_refs[i]].r = RID_NONE;
-    expect_numacc_intlimit_postra_result(&view, 0);
-    view = make_numacc_intlimit_postra_view(J);
-    fx.ir[fpr_refs[i]].r = RID_MAX_FPR;
-    expect_numacc_intlimit_postra_result(&view, 0);
-  }
-  for (i = 0; i < sizeof(semantic_refs)/sizeof(semantic_refs[0]); i++) {
-    view = make_numacc_intlimit_postra_view(J);
-    fx.ir[semantic_refs[i]].s = 2;
-    view.spadjust = 16;
-    expect_numacc_intlimit_postra_result(&view, 0);
-  }
-  view = make_numacc_intlimit_postra_view(J);
-  view.spadjust = 16;
-  expect_numacc_intlimit_postra_result(&view, 0);
-
-  /* Exactly one zero NOP follows the semantic root. */
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_NOP].t.irt = IRT_PGC;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_NOP].op1 = 1;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_NOP].op2 = 1;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_NOP].prev = 1;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  setir(AIL_R_NOP, IR_RENAME, IRT_NIL, AIL_R_X_PRE, 3);
-  fx.ir[AIL_R_NOP].r = RID_D14;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  view.nins = AIL_R_SEMANTIC_END;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  setir(AIL_R_POSTRA_END, IR_NOP, IRT_NIL, 0, 0);
-  view.nins++;
-  expect_numacc_intlimit_postra_result(&view, 0);
-
-  /* Post-RA independently rechecks all four fields of every semantic tuple. */
-  for (i = 0; i < sizeof(semantic_refs)/sizeof(semantic_refs[0]); i++) {
-    IRRef ref = semantic_refs[i];
-    view = make_numacc_intlimit_postra_view(J);
-    fx.ir[ref].o = IR_NOP;
-    expect_numacc_intlimit_postra_result(&view, 0);
-    view = make_numacc_intlimit_postra_view(J);
-    fx.ir[ref].t.irt ^= IRT_GUARD;
-    expect_numacc_intlimit_postra_result(&view, 0);
-    view = make_numacc_intlimit_postra_view(J);
-    fx.ir[ref].op1 ^= 1u;
-    expect_numacc_intlimit_postra_result(&view, 0);
-    view = make_numacc_intlimit_postra_view(J);
-    fx.ir[ref].op2 ^= 1u;
-    expect_numacc_intlimit_postra_result(&view, 0);
-  }
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[REF_BASE].o = IR_NOP;
-  expect_numacc_intlimit_postra_result(&view, 0);
-
-  /* Conversion source, reference, direction, mode, result type and flags are
-  ** independent. Missing, duplicate, relocated and unrelated conversions stay
-  ** closed at the second gate. */
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_LIMIT_NUM].op1 = AIL_R_X;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_LIMIT_NUM].op1 = REF_TRUE-1u;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_LIMIT_NUM].op2 = IRCONV_INT_NUM;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_LIMIT_NUM].op2 = IRCONV_NUM_INT|IRCONV_SEXT;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_LIMIT_NUM].op2 = IRCONV_NUM_INT|IRCONV_CHECK;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_LIMIT_NUM].t.irt = IRT_INT;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_LIMIT_NUM].t.irt = IRT_NUM|IRT_GUARD;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_LIMIT_NUM].t.irt = IRT_NUM|IRT_ISPHI;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  setir(AIL_R_LIMIT_NUM, IR_NOP, IRT_NIL, 0, 0);
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  duplicate_numacc_intlimit_conversion(J, 1);
-  view.nins++;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  relocate_numacc_intlimit_conversion();
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  setir(AIL_R_X_PRE, IR_CONV, IRT_NUM, AIL_R_X, IRCONV_NUM_INT);
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  setir(AIL_R_X_BODY, IR_CONV, IRT_NUM, AIL_R_X_PRE, IRCONV_NUM_INT);
-  expect_numacc_intlimit_postra_result(&view, 0);
-
-  /* Both guards must consume the widened limit and all ADD_LT operand
-  ** directions remain exact. */
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_X_PRE].op1 = AIL_R_X;
-  fx.ir[AIL_R_X_PRE].op2 = AIL_R_STEP;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_X_BODY].op1 = AIL_R_STEP;
-  fx.ir[AIL_R_X_BODY].op2 = AIL_R_X_PRE;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  for (i = 0; i < sizeof(comparison_ops)/sizeof(comparison_ops[0]); i++) {
-    if (comparison_ops[i] != IR_GT) {
-      view = make_numacc_intlimit_postra_view(J);
-      fx.ir[AIL_R_PRE_GUARD].o = (IROp1)comparison_ops[i];
-      expect_numacc_intlimit_postra_result(&view, 0);
-    }
-    if (comparison_ops[i] != IR_LT) {
-      view = make_numacc_intlimit_postra_view(J);
-      fx.ir[AIL_R_BODY_GUARD].o = (IROp1)comparison_ops[i];
-      expect_numacc_intlimit_postra_result(&view, 0);
-    }
-  }
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_PRE_GUARD].op1 = AIL_R_LIMIT_INT;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_BODY_GUARD].op2 = AIL_R_LIMIT_INT;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_PRE_GUARD].op1 = AIL_R_X_PRE;
-  fx.ir[AIL_R_PRE_GUARD].op2 = AIL_R_LIMIT_NUM;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  fx.ir[AIL_R_BODY_GUARD].op1 = AIL_R_LIMIT_NUM;
-  fx.ir[AIL_R_BODY_GUARD].op2 = AIL_R_X_BODY;
-  expect_numacc_intlimit_postra_result(&view, 0);
-
-  /* Snapshot headers, restored values and footer PCs use the INT-limit refs. */
-  for (i = 0; i < 5; i++) {
-    view = make_numacc_intlimit_postra_view(J);
-    fx.snap[i].ref++;
-    expect_numacc_intlimit_postra_result(&view, 0);
-    view = make_numacc_intlimit_postra_view(J);
-    fx.snap[i].mapofs++;
-    expect_numacc_intlimit_postra_result(&view, 0);
-    view = make_numacc_intlimit_postra_view(J);
-    fx.snap[i].nent++;
-    expect_numacc_intlimit_postra_result(&view, 0);
-    view = make_numacc_intlimit_postra_view(J);
-    fx.snap[i].nslots++;
-    expect_numacc_intlimit_postra_result(&view, 0);
-    view = make_numacc_intlimit_postra_view(J);
-    fx.snap[i].topslot = 4;
-    expect_numacc_intlimit_postra_result(&view, 0);
-    view = make_numacc_intlimit_postra_view(J);
-    set_snapshot_payload((SnapNo)i, proto_bc(numacc_fixture_pt)+1, 0);
-    expect_numacc_intlimit_postra_result(&view, 0);
-    view = make_numacc_intlimit_postra_view(J);
-    set_snapshot_payload((SnapNo)i, proto_bc(numacc_fixture_pt)+
-	(i == 2 || i == 4 ? 11 : 6), 1);
-    expect_numacc_intlimit_postra_result(&view, 0);
-  }
-  for (i = 0; i < sizeof(entryofs)/sizeof(entryofs[0]); i++) {
-    view = make_numacc_intlimit_postra_view(J);
-    fx.snapmap[entryofs[i]] ^= 1u;
-    expect_numacc_intlimit_postra_result(&view, 0);
-  }
-  view = make_numacc_intlimit_postra_view(J);
-  fx.snapmap[9] = SNAP(2, SNAP_NORESTORE, AIL_R_X_PRE);
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  view.nk = REF_TRUE-1u;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  view.nsnap = 4;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  view.nsnap = 6;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  view.nsnapmap = 14;
-  expect_numacc_intlimit_postra_result(&view, 0);
-  view = make_numacc_intlimit_postra_view(J);
-  view.nsnapmap = 16;
-  expect_numacc_intlimit_postra_result(&view, 0);
-}
-
-static void test_numacc_intx_postra_layout(jit_State *J)
-{
-  static const IRRef semantic_refs[] = {
-    AX_R_X_INT, AX_R_STEP, AX_R_X_NUM, AX_R_X_PRE, AX_R_LIMIT,
-    AX_R_PRE_GUARD, AX_R_LOOP, AX_R_XPOLL, AX_R_X_CHECK, AX_R_X_BODY,
-    AX_R_BODY_GUARD, AX_R_X_PHI
-  };
-  static const IRRef fpr_refs[] = {
-    AX_R_STEP, AX_R_X_NUM, AX_R_X_PRE, AX_R_LIMIT,
-    AX_R_X_BODY, AX_R_X_PHI
-  };
-  static const uint16_t entryofs[5] = { 2, 3, 6, 9, 12 };
-  LJArm64PostRAView view;
-  MSize i;
-
-  view = make_numacc_intx_postra_view(J);
-  expect_numacc_intx_postra_result(&view, 1);
-
-  /* Both conversions and every surrounding tuple remain exact at the second
-  ** gate; no field can be changed independently. */
-  for (i = 0; i < sizeof(semantic_refs)/sizeof(semantic_refs[0]); i++) {
-    IRRef ref = semantic_refs[i];
-    view = make_numacc_intx_postra_view(J);
-    fx.ir[ref].o = IR_NOP;
-    expect_numacc_intx_postra_result(&view, 0);
-    view = make_numacc_intx_postra_view(J);
-    fx.ir[ref].t.irt ^= IRT_GUARD;
-    expect_numacc_intx_postra_result(&view, 0);
-    view = make_numacc_intx_postra_view(J);
-    fx.ir[ref].op1 ^= 1u;
-    expect_numacc_intx_postra_result(&view, 0);
-    view = make_numacc_intx_postra_view(J);
-    fx.ir[ref].op2 ^= 1u;
-    expect_numacc_intx_postra_result(&view, 0);
-    view = make_numacc_intx_postra_view(J);
-    fx.ir[ref].s = 2;
-    view.spadjust = 16;
-    expect_numacc_intx_postra_result(&view, 0);
-  }
-
-  /* The raw accumulator and checked repair require unspilled allocatable GPRs;
-  ** every live NUM value requires an unspilled FPR. */
-  view = make_numacc_intx_postra_view(J);
-  fx.ir[AX_R_X_INT].r = RID_D2;
-  expect_numacc_intx_postra_result(&view, 0);
-  view = make_numacc_intx_postra_view(J);
-  fx.ir[AX_R_X_INT].r = RID_X18;
-  expect_numacc_intx_postra_result(&view, 0);
-  view = make_numacc_intx_postra_view(J);
-  fx.ir[AX_R_X_CHECK].r = RID_D2;
-  expect_numacc_intx_postra_result(&view, 0);
-  view = make_numacc_intx_postra_view(J);
-  fx.ir[AX_R_X_CHECK].r = RID_NONE;
-  expect_numacc_intx_postra_result(&view, 0);
-  for (i = 0; i < sizeof(fpr_refs)/sizeof(fpr_refs[0]); i++) {
-    view = make_numacc_intx_postra_view(J);
-    fx.ir[fpr_refs[i]].r = RID_X0;
-    expect_numacc_intx_postra_result(&view, 0);
-    view = make_numacc_intx_postra_view(J);
-    fx.ir[fpr_refs[i]].r = RID_NONE;
-    expect_numacc_intx_postra_result(&view, 0);
-    view = make_numacc_intx_postra_view(J);
-    fx.ir[fpr_refs[i]].r = RID_MAX_FPR;
-    expect_numacc_intx_postra_result(&view, 0);
-  }
-
-  /* Invariants stay distinct from the loop-carried family and from each
-  ** other. The widened initial value must not alias STEP while both are live. */
-  view = make_numacc_intx_postra_view(J);
-  fx.ir[AX_R_X_PRE].r = RID_D14;
-  expect_numacc_intx_postra_result(&view, 0);
-  view = make_numacc_intx_postra_view(J);
-  fx.ir[AX_R_X_BODY].r = RID_D14;
-  expect_numacc_intx_postra_result(&view, 0);
-  view = make_numacc_intx_postra_view(J);
-  fx.ir[AX_R_X_PHI].r = RID_D14;
-  expect_numacc_intx_postra_result(&view, 0);
-  view = make_numacc_intx_postra_view(J);
-  fx.ir[AX_R_STEP].r = RID_D15;
-  expect_numacc_intx_postra_result(&view, 0);
-  view = make_numacc_intx_postra_view(J);
-  fx.ir[AX_R_LIMIT].r = RID_D15;
-  expect_numacc_intx_postra_result(&view, 0);
-  view = make_numacc_intx_postra_view(J);
-  fx.ir[AX_R_LIMIT].r = RID_D1;
-  expect_numacc_intx_postra_result(&view, 0);
-  view = make_numacc_intx_postra_view(J);
-  fx.ir[AX_R_X_NUM].r = RID_D1;
-  expect_numacc_intx_postra_result(&view, 0);
-
-  /* The post-RA suffix is exactly one zero NOP and the snapshot geometry is
-  ** the recorder-observed five-snapshot certificate. */
-  view = make_numacc_intx_postra_view(J);
-  fx.ir[AX_R_NOP].op1 = 1;
-  expect_numacc_intx_postra_result(&view, 0);
-  view = make_numacc_intx_postra_view(J);
-  view.nins = AX_R_SEMANTIC_END;
-  expect_numacc_intx_postra_result(&view, 0);
-  view = make_numacc_intx_postra_view(J);
-  setir(AX_R_POSTRA_END, IR_NOP, IRT_NIL, 0, 0);
-  view.nins++;
-  expect_numacc_intx_postra_result(&view, 0);
-  for (i = 0; i < 5; i++) {
-    view = make_numacc_intx_postra_view(J);
-    fx.snap[i].ref++;
-    expect_numacc_intx_postra_result(&view, 0);
-  }
-  for (i = 0; i < sizeof(entryofs)/sizeof(entryofs[0]); i++) {
-    view = make_numacc_intx_postra_view(J);
-    fx.snapmap[entryofs[i]] ^= 1u;
-    expect_numacc_intx_postra_result(&view, 0);
-  }
-  view = make_numacc_intx_postra_view(J);
-  view.nsnap = 4;
-  expect_numacc_intx_postra_result(&view, 0);
-  view = make_numacc_intx_postra_view(J);
-  view.nsnapmap = 14;
-  expect_numacc_intx_postra_result(&view, 0);
-}
 
 static void expect_dynamic_forl_ir_reject(jit_State *J)
 {
@@ -3517,27 +1191,35 @@ static void test_numeric_postra_layout(jit_State *J)
   fx.ir[N_R_RENAME].r = RID_MAX_FPR;
   expect_numeric_postra_result(&view, 0);
 
-  /* The post-RA pass independently retains the adjacent-family closures. */
+  /* The post-RA pass independently checks scalar operations and rejects
+  ** unsupported producers, malformed constants and invalid conversions. */
   view = make_numeric_postra_view(J);
   setir(N_K_ONE, IR_KNUM, IRT_NUM, 0, 0);
   expect_numeric_postra_result(&view, 0);
   view = make_numeric_postra_view(J);
   setir(N_R_PRE_GUARD, IR_GT, IRT_NUM|IRT_GUARD,
 	N_R_X_PRE, N_R_X);
+  expect_numeric_postra_result(&view, 1);
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_X_PRE].o = IR_CONV;
+  fx.ir[N_R_X_PRE].op1 = N_R_X;
+  fx.ir[N_R_X_PRE].op2 = IRCONV_NUM_INT;
   expect_numeric_postra_result(&view, 0);
   view = make_numeric_postra_view(J);
-  setir(N_R_X_PRE, IR_CONV, IRT_NUM|IRT_ISPHI,
-	N_R_X, IRCONV_NUM_INT);
-  expect_numeric_postra_result(&view, 0);
+  fx.ir[N_R_X_PRE].o = IR_SUB;
+  fx.ir[N_R_X_PRE].op1 = N_R_STEP;
+  fx.ir[N_R_X_PRE].op2 = N_R_X;
+  expect_numeric_postra_result(&view, 1);
   view = make_numeric_postra_view(J);
-  setir(N_R_X_PRE, IR_SUB, IRT_NUM|IRT_ISPHI, N_R_STEP, N_R_X);
-  expect_numeric_postra_result(&view, 0);
+  fx.ir[N_R_X_PRE].o = IR_MUL;
+  fx.ir[N_R_X_PRE].op1 = N_R_STEP;
+  fx.ir[N_R_X_PRE].op2 = N_R_X;
+  expect_numeric_postra_result(&view, 1);
   view = make_numeric_postra_view(J);
-  setir(N_R_X_PRE, IR_MUL, IRT_NUM|IRT_ISPHI, N_R_STEP, N_R_X);
-  expect_numeric_postra_result(&view, 0);
-  view = make_numeric_postra_view(J);
-  setir(N_R_X_PRE, IR_DIV, IRT_NUM|IRT_ISPHI, N_R_STEP, N_R_X);
-  expect_numeric_postra_result(&view, 0);
+  fx.ir[N_R_X_PRE].o = IR_DIV;
+  fx.ir[N_R_X_PRE].op1 = N_R_STEP;
+  fx.ir[N_R_X_PRE].op2 = N_R_X;
+  expect_numeric_postra_result(&view, 1);
   view = make_numeric_postra_view(J);
   setir(N_R_X_PRE, IR_CALLN, IRT_NUM, N_R_X, IRCALL_lj_vm_modi);
   expect_numeric_postra_result(&view, 0);
@@ -3549,10 +1231,7 @@ static void test_numeric_postra_layout(jit_State *J)
   expect_numeric_postra_result(&view, 0);
 }
 
-typedef struct ThrowContext {
-  jit_State *J;
-  GCtrace *T;
-} ThrowContext;
+typedef struct ThrowContext { jit_State *J; GCtrace *T; } ThrowContext;
 
 static TValue *validate_throw_cp(lua_State *L, lua_CFunction dummy, void *ud)
 {
@@ -3695,7 +1374,7 @@ static void test_phi_and_xpoll_rejections(jit_State *J)
 
   make_trace(J);
   setir(R_BODY2, IR_PHI, IRT_INT, R_SUM1, R_BODY1);
-  expect_reject(J, LJ_ARM64_IR_REJECT_TRACE, IR_LE);
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_LE);
 
   make_trace(J);
   fx.ir[R_PHI1].op1 = R_BODY2;
@@ -3703,11 +1382,11 @@ static void test_phi_and_xpoll_rejections(jit_State *J)
 
   make_trace(J);
   fx.ir[R_PHI1].op2 = R_A;
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_PHI);
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SLOAD);
 
   make_trace(J);
   fx.ir[R_SUM1].t.irt &= (uint8_t)~IRT_ISPHI;
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_PHI);
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SUBOV);
 
   make_trace(J);
   fx.ir[R_A].t.irt |= IRT_ISPHI;
@@ -3719,7 +1398,7 @@ static void test_phi_and_xpoll_rejections(jit_State *J)
 
   make_trace(J);
   fx.ir[R_PHI2].op1 = R_SUM1;
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_PHI);
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_PHI);
 
   make_trace(J);
   pre = REF_FIRST;
@@ -3767,7 +1446,7 @@ static void test_numeric_positive_and_negative(jit_State *J)
   expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SLOAD);
   make_numeric_trace(J);
   fx.ir[N_R_X].op1 = 1;
-  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_SLOAD);
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SLOAD);
   make_numeric_trace(J);
   fx.ir[N_R_X].op2 = IRSLOAD_READONLY;
   expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SLOAD);
@@ -3779,17 +1458,17 @@ static void test_numeric_positive_and_negative(jit_State *J)
   expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_ADD);
   make_numeric_trace(J);
   fx.ir[N_R_X_PRE].op1 = N_R_I;
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_ADD);
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_ADD);
   make_numeric_trace(J);
   fx.ir[N_R_X_PRE].op1 = N_R_X_BODY;
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_ADD);
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_ADD);
   make_numeric_trace(J);
   fx.ir[N_R_X_PRE].op1 = N_K_ONE;
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_ADD);
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_ADD);
 
   make_numeric_trace(J);
   fx.ir[N_R_X_PHI].op2 = N_R_I_BODY;
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_PHI);
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_PHI);
 
   make_numeric_trace(J);
   setir(N_K_ONE, IR_KNUM, IRT_NUM, 0, 0);
@@ -3798,32 +1477,28 @@ static void test_numeric_positive_and_negative(jit_State *J)
   make_numeric_trace(J);
   setir(N_R_PRE_GUARD, IR_GT, IRT_NUM|IRT_GUARD,
 	N_R_X_PRE, N_R_X);
-  /* Ordered NUM guards now reach the exact per-root shape discriminator;
-  ** this mixed-root mutation must still fail, but rejection order is not API. */
-  expect_numhalf_reject(J);
+  /* Ordered numeric guards compose with an integer loop counter. */
+  assert(lj_asm_arm64_ir_admit(J, &fx.T, &reject));
 
   make_numeric_trace(J);
   setir(N_R_X_PRE, IR_CONV, IRT_NUM|IRT_ISPHI,
 	N_R_X, IRCONV_NUM_INT);
   expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_CONV);
 
-  /* DIV now has a dedicated NUM profile, so this mixed-loop mutation reaches
-  ** the profile/type discriminator rather than generic opcode closure. */
+  /* Numeric arithmetic composes with the mixed integer recurrence. */
   make_numeric_trace(J);
   setir(N_R_X_PRE, IR_DIV, IRT_NUM|IRT_ISPHI, N_R_STEP, N_R_X);
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_DIV);
+  assert(lj_asm_arm64_ir_admit(J, &fx.T, &reject));
 
-  /* MUL now has dedicated NUM profiles, so this mixed-loop mutation reaches
-  ** the profile/type discriminator rather than generic opcode closure. */
+
   make_numeric_trace(J);
   setir(N_R_X_PRE, IR_MUL, IRT_NUM|IRT_ISPHI, N_R_STEP, N_R_X);
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_MUL);
+  assert(lj_asm_arm64_ir_admit(J, &fx.T, &reject));
 
-  /* SUB now has a dedicated NUM profile, so this mixed-loop mutation reaches
-  ** the profile/type discriminator rather than the generic opcode closure. */
+
   make_numeric_trace(J);
   setir(N_R_X_PRE, IR_SUB, IRT_NUM|IRT_ISPHI, N_R_STEP, N_R_X);
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SUB);
+  assert(lj_asm_arm64_ir_admit(J, &fx.T, &reject));
 
   make_numeric_trace(J);
   setir(N_R_X_PRE, IR_CALLN, IRT_NUM, N_R_X, IRCALL_lj_vm_modi);
@@ -3840,1658 +1515,6 @@ static void test_numeric_positive_and_negative(jit_State *J)
   J->startpc = fixture_forl_pc;
   assert(!lj_asm_arm64_ir_admit(J, &fx.T, &reject));
   assert(reject.reason != LJ_ARM64_IR_REJECT_NONE);
-}
-
-static void test_numhalf_positive_and_negative(jit_State *J)
-{
-  static const IROp wrong_pre_guards[] = {
-    IR_LT, IR_GE, IR_LE, IR_EQ, IR_NE
-  };
-  static const IROp wrong_body_guards[] = {
-    IR_GT, IR_GE, IR_LE, IR_EQ, IR_NE
-  };
-  static const MSize wrong_pcpos[5] = { 8, 4, 10, 8, 10 };
-  LJArm64IRReject reject;
-  MSize i;
-
-  make_numhalf_trace(J);
-  if (!lj_asm_arm64_ir_admit(J, &fx.T, &reject))
-    fprintf(stderr, "NUM half admission failed: reason=%d ref=%u op=%u "
-	    "detail=%u\n", (int)reject.reason, (unsigned)reject.ref,
-	    (unsigned)reject.op, (unsigned)reject.detail);
-  assert(reject.reason == LJ_ARM64_IR_REJECT_NONE);
-
-  /* The only admitted FP constant is the canonical two-slot +0.5 KNUM. */
-  make_numhalf_trace(J);
-  fx.ir[H_K_HALF].o = IR_KINT64;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_K_HALF].t.irt = IRT_I64;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_K_HALF].op12 = 1;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_K_HALF_PAYLOAD].tv.u64 ^= UINT64_C(1);
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_K_HALF_PAYLOAD].tv.u64 = UINT64_C(0xbfe0000000000000);
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_K_HALF_PAYLOAD].tv.u64 = UINT64_C(0x7ff0000000000000);
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_K_HALF_PAYLOAD].tv.u64 = UINT64_C(0x7ff8000000000000);
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_K_HALF_PAYLOAD].o = IR_KNUM;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.T.nk = H_K_HALF_PAYLOAD;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.T.nk = H_K_HALF-1u;
-  setir(H_K_HALF-1u, IR_KINT, IRT_INT, 7, 0);
-  expect_numhalf_reject(J);
-
-  /* Slots, modes, operand order and PHI marks are frozen to the observed
-  ** recorder output; the constant payload slot is never a usable IR ref. */
-  make_numhalf_trace(J);
-  fx.ir[H_R_X].op1 = 2;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_X].op2 = IRSLOAD_READONLY;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_X].t.irt = IRT_NUM;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_LIMIT].op1 = 3;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_LIMIT].t.irt = IRT_INT|IRT_GUARD;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_X_PRE].op1 = H_R_LIMIT;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_X_PRE].op1 = H_K_HALF;
-  fx.ir[H_R_X_PRE].op2 = H_R_X;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_X_PRE].op2 = H_K_HALF_PAYLOAD;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_X_PRE].t.irt = IRT_NUM;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_X_BODY].op1 = H_R_X;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_X_BODY].op1 = H_K_HALF;
-  fx.ir[H_R_X_BODY].op2 = H_R_X_PRE;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_X_BODY].op2 = H_R_LIMIT;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_X_BODY].t.irt = IRT_NUM;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_X_PHI].op1 = H_R_X;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_X_PHI].op2 = H_R_X_PRE;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_X_PHI].t.irt = IRT_NUM|IRT_ISPHI;
-  expect_numhalf_reject(J);
-
-  for (i = 0;
-	 i < sizeof(wrong_pre_guards)/sizeof(wrong_pre_guards[0]); i++) {
-    make_numhalf_trace(J);
-    fx.ir[H_R_PRE_GUARD].o = (IROp1)wrong_pre_guards[i];
-    expect_numhalf_reject(J);
-  }
-  for (i = 0;
-	 i < sizeof(wrong_body_guards)/sizeof(wrong_body_guards[0]); i++) {
-    make_numhalf_trace(J);
-    fx.ir[H_R_BODY_GUARD].o = (IROp1)wrong_body_guards[i];
-    expect_numhalf_reject(J);
-  }
-  make_numhalf_trace(J);
-  fx.ir[H_R_PRE_GUARD].op1 = H_R_X_PRE;
-  fx.ir[H_R_PRE_GUARD].op2 = H_R_LIMIT;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_BODY_GUARD].op1 = H_R_LIMIT;
-  fx.ir[H_R_BODY_GUARD].op2 = H_R_X_BODY;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_PRE_GUARD].t.irt = IRT_INT|IRT_GUARD;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_PRE_GUARD].t.irt = IRT_NUM|IRT_GUARD|IRT_ISPHI;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_BODY_GUARD].t.irt = IRT_NUM;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_LOOP].t.irt = IRT_NIL;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.ir[H_R_XPOLL].op1 = 0;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  J->loopref = H_R_LOOP-1u;
-  expect_numhalf_reject(J);
-
-#define REJECT_NUMHALF_ADJACENT(op, type, left, right) \
-  do { \
-    make_numhalf_trace(J); \
-    setir(H_R_X_PRE, (op), (type), (left), (right)); \
-    expect_numhalf_reject(J); \
-  } while (0)
-  REJECT_NUMHALF_ADJACENT(IR_CONV, IRT_NUM|IRT_ISPHI,
-	H_R_X, IRCONV_NUM_INT);
-  REJECT_NUMHALF_ADJACENT(IR_SUB, IRT_NUM|IRT_ISPHI,
-	H_R_X, H_K_HALF);
-  REJECT_NUMHALF_ADJACENT(IR_MUL, IRT_NUM|IRT_ISPHI,
-	H_R_X, H_K_HALF);
-  REJECT_NUMHALF_ADJACENT(IR_DIV, IRT_NUM|IRT_ISPHI,
-	H_R_X, H_K_HALF);
-#undef REJECT_NUMHALF_ADJACENT
-  make_numhalf_trace(J);
-  setir(H_R_X_PRE, IR_CALLN, IRT_NUM, H_R_X, IRCALL_lj_vm_modi);
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  setir(H_R_X_PRE, IR_TNEW, IRT_TAB, 0, 0);
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  setir(H_R_SEMANTIC_END, IR_NOP, IRT_NIL, 0, 0);
-  fx.T.nins++;
-  expect_numhalf_reject(J);
-
-  /* Every snapshot field and footer position is part of this root's proof. */
-  for (i = 0; i < 5; i++) {
-    make_numhalf_trace(J);
-    fx.snap[i].ref++;
-    expect_numhalf_reject(J);
-    make_numhalf_trace(J);
-    fx.snap[i].mapofs++;
-    expect_numhalf_reject(J);
-    make_numhalf_trace(J);
-    fx.snap[i].nent++;
-    expect_numhalf_reject(J);
-    make_numhalf_trace(J);
-    fx.snap[i].nslots++;
-    expect_numhalf_reject(J);
-    make_numhalf_trace(J);
-    fx.snap[i].topslot = 3;
-    expect_numhalf_reject(J);
-    make_numhalf_trace(J);
-    set_snapshot_payload((SnapNo)i,
-	proto_bc(numhalf_fixture_pt)+wrong_pcpos[i], 0);
-    expect_numhalf_reject(J);
-  }
-  make_numhalf_trace(J);
-  fx.snapmap[2] = SNAP(2, 0, H_R_X_PRE);
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.snapmap[3] = SNAP(4, 0, H_R_X);
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.snapmap[6] = SNAP(3, 0, H_R_X);
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.snapmap[6] = SNAP(3, 0, H_K_HALF);
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.snapmap[9] = SNAP(3, SNAP_NORESTORE, H_R_X_PRE);
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.snapmap[12] = SNAP(3, 0, H_R_X_PRE);
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.T.nsnap = 4;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.T.nsnap = 6;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.T.nsnapmap = 14;
-  expect_numhalf_reject(J);
-  make_numhalf_trace(J);
-  fx.T.nsnapmap = 16;
-  expect_numhalf_reject(J);
-
-  /* Prototype geometry is part of the exact profile, too. */
-  make_numhalf_trace(J);
-  numhalf_fixture_pt->framesize = 5;
-  expect_numhalf_reject(J);
-  numhalf_fixture_pt->framesize = 4;
-  make_numhalf_trace(J);
-  numhalf_fixture_pt->sizebc = 12;
-  expect_numhalf_reject(J);
-  numhalf_fixture_pt->sizebc = 13;
-
-  make_numhalf_trace(J);
-  fx.T.startins = loadbc(fixture_forl_pc);
-  setmref(fx.T.startpc, fixture_forl_pc);
-  J->startpc = fixture_forl_pc;
-  expect_numhalf_reject(J);
-}
-
-static void test_numstep_positive_and_negative(jit_State *J)
-{
-  static const IRRef semantic_refs[] = {
-    D_R_X, D_R_STEP, D_R_X_PRE, D_R_LIMIT, D_R_PRE_GUARD,
-    D_R_LOOP, D_R_XPOLL, D_R_X_BODY, D_R_BODY_GUARD, D_R_X_PHI
-  };
-  static const IROp wrong_pre_guards[] = {
-    IR_LT, IR_GE, IR_LE, IR_EQ, IR_NE
-  };
-  static const IROp wrong_body_guards[] = {
-    IR_GT, IR_GE, IR_LE, IR_EQ, IR_NE
-  };
-  static const MSize wrong_pcpos[5] = { 8, 4, 11, 8, 11 };
-  static const uint16_t entryofs[5] = { 2, 3, 6, 9, 12 };
-  LJArm64IRReject reject;
-  MSize i, bitno;
-
-  make_numstep_trace(J);
-  if (!lj_asm_arm64_ir_admit(J, &fx.T, &reject))
-    fprintf(stderr, "NUM dynamic-step admission failed: reason=%d ref=%u "
-	    "op=%u detail=%u\n", (int)reject.reason,
-	    (unsigned)reject.ref, (unsigned)reject.op,
-	    (unsigned)reject.detail);
-  assert(reject.reason == LJ_ARM64_IR_REJECT_NONE);
-
-  /* There are no IR constants in this profile. Neither an integer constant
-  ** nor the separately admitted two-slot half constant may contaminate it. */
-  make_numstep_trace(J);
-  fx.T.nk = REF_TRUE-1u;
-  setir(REF_TRUE-1u, IR_KINT, IRT_INT, 1, 0);
-  expect_numstep_reject(J);
-  make_numstep_trace(J);
-  fx.T.nk = H_K_HALF;
-  setir(H_K_HALF, IR_KNUM, IRT_NUM, 0, 0);
-  fx.ir[H_K_HALF_PAYLOAD].tv.u64 = UINT64_C(0x3fe0000000000000);
-  expect_numstep_reject(J);
-
-  /* Conversely, hiding constants below nk cannot turn any older fixture into
-  ** this root: profile selection and exact shape must agree. */
-  make_numhalf_trace(J);
-  fx.T.nk = REF_TRUE;
-  expect_numstep_reject(J);
-  make_numeric_trace(J);
-  fx.T.nk = REF_TRUE;
-  expect_numstep_reject(J);
-  make_trace(J);
-  fx.T.nk = REF_TRUE;
-  expect_numstep_reject(J);
-
-  /* Every IR tuple field in the exact ten-reference grammar is significant. */
-  for (i = 0; i < sizeof(semantic_refs)/sizeof(semantic_refs[0]); i++) {
-    IRRef ref = semantic_refs[i];
-    make_numstep_trace(J);
-    fx.ir[ref].o = IR_NOP;
-    expect_numstep_reject(J);
-    make_numstep_trace(J);
-    fx.ir[ref].t.irt ^= IRT_GUARD;
-    expect_numstep_reject(J);
-    make_numstep_trace(J);
-    fx.ir[ref].op1 ^= 1u;
-    expect_numstep_reject(J);
-    make_numstep_trace(J);
-    fx.ir[ref].op2 ^= 1u;
-    expect_numstep_reject(J);
-  }
-  make_numstep_trace(J);
-  fx.ir[REF_BASE].o = IR_NOP;
-  expect_numstep_reject(J);
-  make_numstep_trace(J);
-  fx.ir[D_R_X_PRE].op1 = D_R_X;
-  fx.ir[D_R_X_PRE].op2 = D_R_STEP;
-  expect_numstep_reject(J);
-  make_numstep_trace(J);
-  fx.ir[D_R_X_BODY].op1 = D_R_STEP;
-  fx.ir[D_R_X_BODY].op2 = D_R_X_PRE;
-  expect_numstep_reject(J);
-  make_numstep_trace(J);
-  fx.ir[D_R_X_PHI].op1 = D_R_X;
-  expect_numstep_reject(J);
-  make_numstep_trace(J);
-  fx.ir[D_R_X_PHI].op2 = D_R_X_PRE;
-  expect_numstep_reject(J);
-  make_numstep_trace(J);
-  J->loopref = D_R_LOOP-1u;
-  expect_numstep_reject(J);
-  make_numstep_trace(J);
-  fx.T.nins--;
-  expect_numstep_reject(J);
-  make_numstep_trace(J);
-  setir(D_R_SEMANTIC_END, IR_NOP, IRT_NIL, 0, 0);
-  fx.T.nins++;
-  expect_numstep_reject(J);
-
-  for (i = 0;
-	 i < sizeof(wrong_pre_guards)/sizeof(wrong_pre_guards[0]); i++) {
-    make_numstep_trace(J);
-    fx.ir[D_R_PRE_GUARD].o = (IROp1)wrong_pre_guards[i];
-    expect_numstep_reject(J);
-  }
-  for (i = 0;
-	 i < sizeof(wrong_body_guards)/sizeof(wrong_body_guards[0]); i++) {
-    make_numstep_trace(J);
-    fx.ir[D_R_BODY_GUARD].o = (IROp1)wrong_body_guards[i];
-    expect_numstep_reject(J);
-  }
-
-#define REJECT_NUMSTEP_ADJACENT(op, type, left, right) \
-  do { \
-    make_numstep_trace(J); \
-    setir(D_R_X_PRE, (op), (type), (left), (right)); \
-    expect_numstep_reject(J); \
-  } while (0)
-  REJECT_NUMSTEP_ADJACENT(IR_CONV, IRT_NUM|IRT_ISPHI,
-	D_R_X, IRCONV_NUM_INT);
-  REJECT_NUMSTEP_ADJACENT(IR_SUB, IRT_NUM|IRT_ISPHI,
-	D_R_STEP, D_R_X);
-  REJECT_NUMSTEP_ADJACENT(IR_MUL, IRT_NUM|IRT_ISPHI,
-	D_R_STEP, D_R_X);
-  REJECT_NUMSTEP_ADJACENT(IR_DIV, IRT_NUM|IRT_ISPHI,
-	D_R_STEP, D_R_X);
-#undef REJECT_NUMSTEP_ADJACENT
-  make_numstep_trace(J);
-  setir(D_R_X_PRE, IR_CALLN, IRT_NUM, D_R_X, IRCALL_lj_vm_modi);
-  expect_numstep_reject(J);
-  make_numstep_trace(J);
-  setir(D_R_X_PRE, IR_TNEW, IRT_TAB, 0, 0);
-  expect_numstep_reject(J);
-
-  /* Every snapshot header, restored entry and footer is exact. */
-  for (i = 0; i < 5; i++) {
-    make_numstep_trace(J);
-    fx.snap[i].ref++;
-    expect_numstep_reject(J);
-    make_numstep_trace(J);
-    fx.snap[i].mapofs++;
-    expect_numstep_reject(J);
-    make_numstep_trace(J);
-    fx.snap[i].nent++;
-    expect_numstep_reject(J);
-    make_numstep_trace(J);
-    fx.snap[i].nslots++;
-    expect_numstep_reject(J);
-    make_numstep_trace(J);
-    fx.snap[i].topslot = 4;
-    expect_numstep_reject(J);
-    make_numstep_trace(J);
-    set_snapshot_payload((SnapNo)i,
-	proto_bc(numstep_fixture_pt)+wrong_pcpos[i], 0);
-    expect_numstep_reject(J);
-    make_numstep_trace(J);
-    set_snapshot_payload((SnapNo)i,
-	proto_bc(numstep_fixture_pt)+wrong_pcpos[i], 1);
-    expect_numstep_reject(J);
-  }
-  for (i = 0; i < sizeof(entryofs)/sizeof(entryofs[0]); i++) {
-    make_numstep_trace(J);
-    fx.snapmap[entryofs[i]] ^= 1u;
-    expect_numstep_reject(J);
-  }
-  make_numstep_trace(J);
-  fx.snapmap[9] = SNAP(4, SNAP_NORESTORE, D_R_X_PRE);
-  expect_numstep_reject(J);
-  make_numstep_trace(J);
-  fx.T.nsnap = 4;
-  expect_numstep_reject(J);
-  make_numstep_trace(J);
-  fx.T.nsnap = 6;
-  expect_numstep_reject(J);
-  make_numstep_trace(J);
-  fx.T.nsnapmap = 14;
-  expect_numstep_reject(J);
-  make_numstep_trace(J);
-  fx.T.nsnapmap = 16;
-  expect_numstep_reject(J);
-  make_numstep_trace(J);
-  J->baseslot = 2 + LJ_FR2;
-  expect_numstep_reject(J);
-
-  /* The source prototype is also a complete certificate. Mutate opcode, A
-  ** and D/B/C bits at every bytecode position and restore after each probe. */
-  for (i = 0; i < 14; i++) {
-    const BCIns *pc = proto_bc(numstep_fixture_pt)+i;
-    BCIns saved = loadbc(pc);
-    static const uint32_t masks[3] = {
-      UINT32_C(1), UINT32_C(1) << 8, UINT32_C(1) << 16
-    };
-    for (bitno = 0; bitno < 3; bitno++) {
-      make_numstep_trace(J);
-      bc_publish((const uint32_t *)pc, saved ^ masks[bitno]);
-      expect_numstep_reject(J);
-      bc_publish((const uint32_t *)pc, saved);
-    }
-  }
-
-  make_numstep_trace(J);
-  numstep_fixture_pt->framesize = 4;
-  expect_numstep_reject(J);
-  numstep_fixture_pt->framesize = 5;
-  make_numstep_trace(J);
-  numstep_fixture_pt->framesize = 6;
-  expect_numstep_reject(J);
-  numstep_fixture_pt->framesize = 5;
-  make_numstep_trace(J);
-  numstep_fixture_pt->sizebc = 13;
-  expect_numstep_reject(J);
-  numstep_fixture_pt->sizebc = 14;
-  make_numstep_trace(J);
-  numstep_fixture_pt->sizebc = 15;
-  expect_numstep_reject(J);
-  numstep_fixture_pt->sizebc = 14;
-  make_numstep_trace(J);
-  numstep_fixture_pt->numparams = 1;
-  expect_numstep_reject(J);
-  numstep_fixture_pt->numparams = 2;
-  make_numstep_trace(J);
-  numstep_fixture_pt->numparams = 3;
-  expect_numstep_reject(J);
-  numstep_fixture_pt->numparams = 2;
-  make_numstep_trace(J);
-  numstep_fixture_pt->sizeuv = 1;
-  expect_numstep_reject(J);
-  numstep_fixture_pt->sizeuv = 0;
-  make_numstep_trace(J);
-  numstep_fixture_pt->sizekn = 0;
-  expect_numstep_reject(J);
-  numstep_fixture_pt->sizekn = 1;
-  make_numstep_trace(J);
-  numstep_fixture_pt->sizekn = 2;
-  expect_numstep_reject(J);
-  numstep_fixture_pt->sizekn = 1;
-  make_numstep_trace(J);
-  numstep_fixture_pt->sizekgc = 1;
-  expect_numstep_reject(J);
-  numstep_fixture_pt->sizekgc = 0;
-
-  /* The prototype KNUM is exactly finite +0.5, even though it is not part of
-  ** the recorded IR constant range. */
-  make_numstep_trace(J);
-  proto_knumtv(numstep_fixture_pt, 0)->u64 ^= UINT64_C(1);
-  expect_numstep_reject(J);
-  proto_knumtv(numstep_fixture_pt, 0)->u64 = UINT64_C(0x3fe0000000000000);
-  make_numstep_trace(J);
-  proto_knumtv(numstep_fixture_pt, 0)->u64 = UINT64_C(0xbfe0000000000000);
-  expect_numstep_reject(J);
-  proto_knumtv(numstep_fixture_pt, 0)->u64 = UINT64_C(0x3fe0000000000000);
-  make_numstep_trace(J);
-  proto_knumtv(numstep_fixture_pt, 0)->u64 = UINT64_C(0x7ff0000000000000);
-  expect_numstep_reject(J);
-  proto_knumtv(numstep_fixture_pt, 0)->u64 = UINT64_C(0x3fe0000000000000);
-  make_numstep_trace(J);
-  proto_knumtv(numstep_fixture_pt, 0)->u64 = UINT64_C(0x7ff8000000000000);
-  expect_numstep_reject(J);
-  proto_knumtv(numstep_fixture_pt, 0)->u64 = UINT64_C(0x3fe0000000000000);
-
-  make_numstep_trace(J);
-  setmref(fx.T.startpc, proto_bc(numstep_fixture_pt)+5);
-  J->startpc = proto_bc(numstep_fixture_pt)+5;
-  expect_numstep_reject(J);
-  make_numstep_trace(J);
-  fx.T.startins ^= (BCIns)(UINT32_C(1) << 8);
-  expect_numstep_reject(J);
-  make_numstep_trace(J);
-  fx.T.startins = loadbc(fixture_forl_pc);
-  setmref(fx.T.startpc, fixture_forl_pc);
-  J->startpc = fixture_forl_pc;
-  expect_numstep_reject(J);
-}
-
-static void test_numacc_positive_and_negative(jit_State *J)
-{
-  const NumaccFixtureProfile *profile = numacc_active_profile();
-  static const IRRef semantic_refs[] = {
-    A_R_X, A_R_STEP, A_R_X_PRE, A_R_LIMIT, A_R_PRE_GUARD,
-    A_R_LOOP, A_R_XPOLL, A_R_X_BODY, A_R_BODY_GUARD, A_R_X_PHI
-  };
-  static const IROp wrong_pre_guards[] = {
-    IR_GT, IR_GE, IR_LT, IR_LE, IR_EQ, IR_NE,
-    IR_ULT, IR_UGE, IR_ULE, IR_UGT
-  };
-  static const IROp wrong_body_guards[] = {
-    IR_LT, IR_LE, IR_GT, IR_GE, IR_EQ, IR_NE,
-    IR_ULT, IR_UGE, IR_ULE, IR_UGT
-  };
-  static const MSize wrong_pcpos[5] = { 7, 3, 10, 7, 10 };
-  static const uint16_t entryofs[5] = { 2, 3, 6, 9, 12 };
-  LJArm64IRReject reject;
-  MSize i, bitno;
-  IROp expected_pre = profile->precondition_op;
-  IROp expected_body = profile->body_op;
-
-  make_numacc_trace(J);
-  if (!lj_asm_arm64_ir_admit(J, &fx.T, &reject))
-	  fprintf(stderr, "NUM dynamic-accumulator profile %u admission failed: "
-	    "reason=%d ref=%u op=%u detail=%u\n",
-	    profile->id, (int)reject.reason,
-	    (unsigned)reject.ref, (unsigned)reject.op,
-	    (unsigned)reject.detail);
-  assert(reject.reason == LJ_ARM64_IR_REJECT_NONE);
-
-  /* This profile has no trace constants and no prototype constants. */
-  make_numacc_trace(J);
-  fx.T.nk = REF_TRUE-1u;
-  setir(REF_TRUE-1u, IR_KINT, IRT_INT, 1, 0);
-  expect_numacc_reject(J);
-  make_numacc_trace(J);
-  fx.T.nk = H_K_HALF;
-  setir(H_K_HALF, IR_KNUM, IRT_NUM, 0, 0);
-  fx.ir[H_K_HALF_PAYLOAD].tv.u64 = UINT64_C(0x3fe0000000000000);
-  expect_numacc_reject(J);
-
-  /* Older constant-bearing roots cannot masquerade as this grammar. */
-  make_numhalf_trace(J);
-  fx.T.nk = REF_TRUE;
-  expect_numacc_reject(J);
-  make_numeric_trace(J);
-  fx.T.nk = REF_TRUE;
-  expect_numacc_reject(J);
-  make_trace(J);
-  fx.T.nk = REF_TRUE;
-  expect_numacc_reject(J);
-
-  /* The two no-constant NUM roots differ in both stack-slot semantics and
-  ** source prototype. Combining either half with the other must stay closed. */
-  make_numacc_trace(J);
-  fx.ir[A_R_X].op1 = 4;
-  fx.ir[A_R_STEP].op1 = 3;
-  fx.ir[A_R_LIMIT].op1 = 2;
-  expect_numacc_reject(J);
-  make_numstep_trace(J);
-  fx.ir[D_R_X].op1 = 2;
-  fx.ir[D_R_STEP].op1 = 4;
-  fx.ir[D_R_LIMIT].op1 = 3;
-  expect_numacc_reject(J);
-
-  /* Every field of every semantic IR tuple is independently required. */
-  for (i = 0; i < sizeof(semantic_refs)/sizeof(semantic_refs[0]); i++) {
-    IRRef ref = semantic_refs[i];
-    make_numacc_trace(J);
-    fx.ir[ref].o = IR_NOP;
-    expect_numacc_reject(J);
-    make_numacc_trace(J);
-    fx.ir[ref].t.irt ^= IRT_GUARD;
-    expect_numacc_reject(J);
-    make_numacc_trace(J);
-    fx.ir[ref].op1 ^= 1u;
-    expect_numacc_reject(J);
-    make_numacc_trace(J);
-    fx.ir[ref].op2 ^= 1u;
-    expect_numacc_reject(J);
-  }
-  make_numacc_trace(J);
-  fx.ir[REF_BASE].o = IR_NOP;
-  expect_numacc_reject(J);
-  make_numacc_trace(J);
-  fx.ir[A_R_X_PRE].op1 = profile->pre_right;
-  fx.ir[A_R_X_PRE].op2 = profile->pre_left;
-  expect_numacc_reject(J);
-  make_numacc_trace(J);
-  fx.ir[A_R_X_BODY].op1 = A_R_STEP;
-  fx.ir[A_R_X_BODY].op2 = A_R_X_PRE;
-  expect_numacc_reject(J);
-  make_numacc_trace(J);
-  fx.ir[A_R_X_PHI].op1 = A_R_X;
-  expect_numacc_reject(J);
-  make_numacc_trace(J);
-  fx.ir[A_R_X_PHI].op2 = A_R_X_PRE;
-  expect_numacc_reject(J);
-  make_numacc_trace(J);
-  J->loopref = A_R_LOOP-1u;
-  expect_numacc_reject(J);
-  make_numacc_trace(J);
-  fx.T.nins--;
-  expect_numacc_reject(J);
-  make_numacc_trace(J);
-  setir(A_R_SEMANTIC_END, IR_NOP, IRT_NIL, 0, 0);
-  fx.T.nins++;
-  expect_numacc_reject(J);
-
-  for (i = 0;
-	 i < sizeof(wrong_pre_guards)/sizeof(wrong_pre_guards[0]); i++) {
-    if (wrong_pre_guards[i] == expected_pre)
-      continue;
-    make_numacc_trace(J);
-    fx.ir[A_R_PRE_GUARD].o = (IROp1)wrong_pre_guards[i];
-    expect_numacc_reject(J);
-  }
-  for (i = 0;
-	 i < sizeof(wrong_body_guards)/sizeof(wrong_body_guards[0]); i++) {
-    if (wrong_body_guards[i] == expected_body)
-      continue;
-    make_numacc_trace(J);
-    fx.ir[A_R_BODY_GUARD].o = (IROp1)wrong_body_guards[i];
-    expect_numacc_reject(J);
-  }
-  make_numacc_trace(J);
-  fx.ir[A_R_PRE_GUARD].op1 = A_R_X_PRE;
-  fx.ir[A_R_PRE_GUARD].op2 = A_R_LIMIT;
-  expect_numacc_reject(J);
-  make_numacc_trace(J);
-  fx.ir[A_R_BODY_GUARD].op1 = A_R_LIMIT;
-  fx.ir[A_R_BODY_GUARD].op2 = A_R_X_BODY;
-  expect_numacc_reject(J);
-
-#define REJECT_NUMACC_ADJACENT(op, type, left, right) \
-  do { \
-    make_numacc_trace(J); \
-    setir(A_R_X_PRE, (op), (type), (left), (right)); \
-    expect_numacc_reject(J); \
-  } while (0)
-  REJECT_NUMACC_ADJACENT(IR_CONV, IRT_NUM|IRT_ISPHI,
-	A_R_X, IRCONV_NUM_INT);
-  if (profile->recurrence_op == IR_ADD)
-    REJECT_NUMACC_ADJACENT(IR_SUB, IRT_NUM|IRT_ISPHI,
-	  A_R_X, A_R_STEP);
-  else if (profile->recurrence_op == IR_SUB)
-    REJECT_NUMACC_ADJACENT(IR_ADD, IRT_NUM|IRT_ISPHI,
-	  A_R_STEP, A_R_X);
-  else if (profile->recurrence_op == IR_MUL) {
-    REJECT_NUMACC_ADJACENT(IR_ADD, IRT_NUM|IRT_ISPHI,
-	  A_R_STEP, A_R_X);
-    REJECT_NUMACC_ADJACENT(IR_SUB, IRT_NUM|IRT_ISPHI,
-	  A_R_X, A_R_STEP);
-  } else {
-    assert(profile->recurrence_op == IR_DIV);
-    REJECT_NUMACC_ADJACENT(IR_ADD, IRT_NUM|IRT_ISPHI,
-	  A_R_STEP, A_R_X);
-    REJECT_NUMACC_ADJACENT(IR_SUB, IRT_NUM|IRT_ISPHI,
-	  A_R_X, A_R_STEP);
-  }
-  make_numacc_trace(J);
-  fx.ir[A_R_X_BODY].o =
-    (IROp1)(profile->recurrence_op == IR_ADD ? IR_SUB : IR_ADD);
-  expect_numacc_reject(J);
-  REJECT_NUMACC_ADJACENT(IR_MUL, IRT_NUM|IRT_ISPHI,
-	A_R_X, A_R_STEP);
-  if (profile->recurrence_op == IR_DIV)
-    REJECT_NUMACC_ADJACENT(IR_DIV, IRT_NUM|IRT_ISPHI,
-	  A_R_STEP, A_R_X);
-  else
-    REJECT_NUMACC_ADJACENT(IR_DIV, IRT_NUM|IRT_ISPHI,
-	  A_R_X, A_R_STEP);
-#undef REJECT_NUMACC_ADJACENT
-  make_numacc_trace(J);
-  setir(A_R_X_PRE, IR_CALLN, IRT_NUM, A_R_X, IRCALL_lj_vm_modi);
-  expect_numacc_reject(J);
-  make_numacc_trace(J);
-  setir(A_R_X_PRE, IR_TNEW, IRT_TAB, 0, 0);
-  expect_numacc_reject(J);
-
-  /* Every snapshot header, restored entry and footer is exact. */
-  for (i = 0; i < 5; i++) {
-    make_numacc_trace(J);
-    fx.snap[i].ref++;
-    expect_numacc_reject(J);
-    make_numacc_trace(J);
-    fx.snap[i].mapofs++;
-    expect_numacc_reject(J);
-    make_numacc_trace(J);
-    fx.snap[i].nent++;
-    expect_numacc_reject(J);
-    make_numacc_trace(J);
-    fx.snap[i].nslots++;
-    expect_numacc_reject(J);
-    make_numacc_trace(J);
-    fx.snap[i].topslot = 4;
-    expect_numacc_reject(J);
-    make_numacc_trace(J);
-    set_snapshot_payload((SnapNo)i,
-	proto_bc(numacc_fixture_pt)+wrong_pcpos[i], 0);
-    expect_numacc_reject(J);
-    make_numacc_trace(J);
-    set_snapshot_payload((SnapNo)i,
-	proto_bc(numacc_fixture_pt)+wrong_pcpos[i], 1);
-    expect_numacc_reject(J);
-  }
-  for (i = 0; i < sizeof(entryofs)/sizeof(entryofs[0]); i++) {
-    make_numacc_trace(J);
-    fx.snapmap[entryofs[i]] ^= 1u;
-    expect_numacc_reject(J);
-  }
-  make_numacc_trace(J);
-  fx.snapmap[9] = SNAP(2, SNAP_NORESTORE, A_R_X_PRE);
-  expect_numacc_reject(J);
-  make_numacc_trace(J);
-  fx.T.nsnap = 4;
-  expect_numacc_reject(J);
-  make_numacc_trace(J);
-  fx.T.nsnap = 6;
-  expect_numacc_reject(J);
-  make_numacc_trace(J);
-  fx.T.nsnapmap = 14;
-  expect_numacc_reject(J);
-  make_numacc_trace(J);
-  fx.T.nsnapmap = 16;
-  expect_numacc_reject(J);
-  make_numacc_trace(J);
-  J->baseslot = 2 + LJ_FR2;
-  expect_numacc_reject(J);
-
-  /* Mutate opcode, A, D/C and B bits at every one of the 13 bytecodes. */
-  for (i = 0; i < 13; i++) {
-    const BCIns *pc = proto_bc(numacc_fixture_pt)+i;
-    BCIns saved = loadbc(pc);
-    static const uint32_t masks[4] = {
-      UINT32_C(1), UINT32_C(1) << 8, UINT32_C(1) << 16,
-      UINT32_C(1) << 24
-    };
-    for (bitno = 0; bitno < 4; bitno++) {
-      make_numacc_trace(J);
-      bc_publish((const uint32_t *)pc, saved ^ masks[bitno]);
-      expect_numacc_reject(J);
-      bc_publish((const uint32_t *)pc, saved);
-    }
-  }
-  {
-    const BCIns *comparepc = proto_bc(numacc_fixture_pt)+3;
-    BCIns saved = loadbc(comparepc);
-    make_numacc_trace(J);
-    bc_publish((const uint32_t *)comparepc,
-	BCINS_AD(bc_op(saved), profile->comparison_d,
-	  profile->comparison_a));
-    expect_numacc_reject(J);
-    bc_publish((const uint32_t *)comparepc, saved);
-  }
-  {
-    const BCIns *arithmeticpc = proto_bc(numacc_fixture_pt)+8;
-    BCIns saved = loadbc(arithmeticpc);
-    BCOp adjacent = profile->recurrence_op == IR_ADD ? BC_SUBVV : BC_ADDVV;
-    make_numacc_trace(J);
-    bc_publish((const uint32_t *)arithmeticpc,
-	BCINS_ABC(adjacent, 3, 3, 4));
-    expect_numacc_reject(J);
-    bc_publish((const uint32_t *)arithmeticpc, saved);
-    make_numacc_trace(J);
-    bc_publish((const uint32_t *)arithmeticpc,
-	BCINS_ABC(profile->recurrence_bc, 3, 4, 3));
-    expect_numacc_reject(J);
-    bc_publish((const uint32_t *)arithmeticpc, saved);
-    if (profile->recurrence_op == IR_MUL) {
-      make_numacc_trace(J);
-      bc_publish((const uint32_t *)arithmeticpc,
-	  BCINS_ABC(BC_SUBVV, 3, 3, 4));
-      expect_numacc_reject(J);
-      bc_publish((const uint32_t *)arithmeticpc, saved);
-      make_numacc_trace(J);
-      bc_publish((const uint32_t *)arithmeticpc,
-	  BCINS_ABC(BC_DIVVV, 3, 3, 4));
-      expect_numacc_reject(J);
-      bc_publish((const uint32_t *)arithmeticpc, saved);
-    } else if (profile->recurrence_op == IR_DIV) {
-      make_numacc_trace(J);
-      bc_publish((const uint32_t *)arithmeticpc,
-	  BCINS_ABC(BC_SUBVV, 3, 3, 4));
-      expect_numacc_reject(J);
-      bc_publish((const uint32_t *)arithmeticpc, saved);
-      make_numacc_trace(J);
-      bc_publish((const uint32_t *)arithmeticpc,
-	  BCINS_ABC(BC_MULVV, 3, 3, 4));
-      expect_numacc_reject(J);
-      bc_publish((const uint32_t *)arithmeticpc, saved);
-    }
-  }
-
-  /* All prototype identity fields are part of the certificate. */
-  make_numacc_trace(J);
-  numacc_fixture_pt->framesize = 4;
-  expect_numacc_reject(J);
-  numacc_fixture_pt->framesize = 5;
-  make_numacc_trace(J);
-  numacc_fixture_pt->framesize = 6;
-  expect_numacc_reject(J);
-  numacc_fixture_pt->framesize = 5;
-  make_numacc_trace(J);
-  numacc_fixture_pt->sizebc = 12;
-  expect_numacc_reject(J);
-  numacc_fixture_pt->sizebc = 13;
-  make_numacc_trace(J);
-  numacc_fixture_pt->sizebc = 14;
-  expect_numacc_reject(J);
-  numacc_fixture_pt->sizebc = 13;
-  make_numacc_trace(J);
-  numacc_fixture_pt->numparams = 2;
-  expect_numacc_reject(J);
-  numacc_fixture_pt->numparams = 3;
-  make_numacc_trace(J);
-  numacc_fixture_pt->numparams = 4;
-  expect_numacc_reject(J);
-  numacc_fixture_pt->numparams = 3;
-  make_numacc_trace(J);
-  numacc_fixture_pt->sizeuv = 1;
-  expect_numacc_reject(J);
-  numacc_fixture_pt->sizeuv = 0;
-  make_numacc_trace(J);
-  numacc_fixture_pt->sizekn = 1;
-  expect_numacc_reject(J);
-  numacc_fixture_pt->sizekn = 0;
-  make_numacc_trace(J);
-  numacc_fixture_pt->sizekgc = 1;
-  expect_numacc_reject(J);
-  numacc_fixture_pt->sizekgc = 0;
-  make_numacc_trace(J);
-  numacc_fixture_pt->flags2 = 0;
-  expect_numacc_reject(J);
-  numacc_fixture_pt->flags2 = PROTO2_CELLOPS;
-  make_numacc_trace(J);
-  numacc_fixture_pt->flags2 = PROTO2_CELLOPS|PROTO2_CELLUV;
-  expect_numacc_reject(J);
-  numacc_fixture_pt->flags2 = PROTO2_CELLOPS;
-
-  make_numacc_trace(J);
-  setmref(fx.T.startpc, proto_bc(numacc_fixture_pt)+4);
-  J->startpc = proto_bc(numacc_fixture_pt)+4;
-  expect_numacc_reject(J);
-  make_numacc_trace(J);
-  setmref(fx.T.startpc, proto_bc(numacc_fixture_pt)+6);
-  J->startpc = proto_bc(numacc_fixture_pt)+6;
-  expect_numacc_reject(J);
-  make_numacc_trace(J);
-  fx.T.startins ^= (BCIns)(UINT32_C(1) << 8);
-  expect_numacc_reject(J);
-  make_numacc_trace(J);
-  fx.T.startins = loadbc(fixture_forl_pc);
-  setmref(fx.T.startpc, fixture_forl_pc);
-  J->startpc = fixture_forl_pc;
-  expect_numacc_reject(J);
-}
-
-static void test_numacc_intstep_positive_and_negative(jit_State *J)
-{
-  const NumaccFixtureProfile *profile = numacc_active_profile();
-  static const IRRef semantic_refs[] = {
-    AI_R_X, AI_R_STEP_INT, AI_R_STEP_NUM, AI_R_X_PRE, AI_R_LIMIT,
-    AI_R_PRE_GUARD, AI_R_LOOP, AI_R_XPOLL, AI_R_X_BODY,
-    AI_R_BODY_GUARD, AI_R_X_PHI
-  };
-  static const IROp comparison_ops[] = {
-    IR_GT, IR_GE, IR_LT, IR_LE, IR_EQ, IR_NE,
-    IR_ULT, IR_UGE, IR_ULE, IR_UGT
-  };
-  static const MSize wrong_pcpos[5] = { 7, 3, 10, 7, 10 };
-  static const uint16_t entryofs[5] = { 2, 3, 6, 9, 12 };
-  LJArm64IRReject reject;
-  MSize i;
-
-  make_numacc_intstep_trace(J);
-  if (!lj_asm_arm64_ir_admit(J, &fx.T, &reject))
-    fprintf(stderr, "INT-step NUM dynamic-accumulator profile %u admission "
-	"failed: reason=%d ref=%u op=%u detail=%u\n", profile->id,
-	(int)reject.reason, (unsigned)reject.ref, (unsigned)reject.op,
-	(unsigned)reject.detail);
-  assert(reject.reason == LJ_ARM64_IR_REJECT_NONE);
-
-  /* No trace or prototype constant is introduced by widening the parameter. */
-  make_numacc_intstep_trace(J);
-  fx.T.nk = REF_TRUE-1u;
-  setir(REF_TRUE-1u, IR_KINT, IRT_INT, 1, 0);
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  fx.T.nk = H_K_HALF;
-  setir(H_K_HALF, IR_KNUM, IRT_NUM, 0, 0);
-  fx.ir[H_K_HALF_PAYLOAD].tv.u64 = UINT64_C(0x3fe0000000000000);
-  expect_numacc_reject(J);
-
-  /* Every tuple field is independently required by semantic admission. */
-  for (i = 0; i < sizeof(semantic_refs)/sizeof(semantic_refs[0]); i++) {
-    IRRef ref = semantic_refs[i];
-    make_numacc_intstep_trace(J);
-    fx.ir[ref].o = IR_NOP;
-    expect_numacc_reject(J);
-    make_numacc_intstep_trace(J);
-    fx.ir[ref].t.irt ^= IRT_GUARD;
-    expect_numacc_reject(J);
-    make_numacc_intstep_trace(J);
-    fx.ir[ref].op1 ^= 1u;
-    expect_numacc_reject(J);
-    make_numacc_intstep_trace(J);
-    fx.ir[ref].op2 ^= 1u;
-    expect_numacc_reject(J);
-  }
-  make_numacc_intstep_trace(J);
-  fx.ir[REF_BASE].o = IR_NOP;
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  J->loopref = AI_R_LOOP-1u;
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  fx.T.nins--;
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  setir(AI_R_SEMANTIC_END, IR_NOP, IRT_NIL, 0, 0);
-  fx.T.nins++;
-  expect_numacc_reject(J);
-
-  /* Source, reference, direction, mode, destination type and all result flags
-  ** of the one widening are exact and independent. */
-  make_numacc_intstep_trace(J);
-  fx.ir[AI_R_STEP_NUM].op1 = AI_R_X;
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  fx.ir[AI_R_STEP_NUM].op1 = REF_TRUE-1u;
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  fx.ir[AI_R_STEP_NUM].op2 = IRCONV_INT_NUM;
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  fx.ir[AI_R_STEP_NUM].op2 = IRCONV_NUM_INT|IRCONV_SEXT;
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  fx.ir[AI_R_STEP_NUM].op2 = IRCONV_NUM_INT|IRCONV_CHECK;
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  fx.ir[AI_R_STEP_NUM].t.irt = IRT_INT;
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  fx.ir[AI_R_STEP_NUM].t.irt = IRT_NUM|IRT_GUARD;
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  fx.ir[AI_R_STEP_NUM].t.irt = IRT_NUM|IRT_ISPHI;
-  expect_numacc_reject(J);
-
-  make_numacc_intstep_trace(J);
-  setir(AI_R_STEP_NUM, IR_NOP, IRT_NIL, 0, 0);
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  duplicate_numacc_intstep_conversion(J, 0);
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  relocate_numacc_intstep_conversion();
-  expect_numacc_reject(J);
-
-  /* Neither recurrence may consume the raw INT, and no second instruction may
-  ** enter the otherwise-empty CONV allowlist. */
-  make_numacc_intstep_trace(J);
-  if (fx.ir[AI_R_X_PRE].op1 == AI_R_STEP_NUM)
-    fx.ir[AI_R_X_PRE].op1 = AI_R_STEP_INT;
-  else
-    fx.ir[AI_R_X_PRE].op2 = AI_R_STEP_INT;
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  fx.ir[AI_R_X_BODY].op2 = AI_R_STEP_INT;
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  setir(AI_R_X_PRE, IR_CONV, IRT_NUM, AI_R_X, IRCONV_NUM_INT);
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  setir(AI_R_X_BODY, IR_CONV, IRT_NUM, AI_R_X_PRE, IRCONV_NUM_INT);
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  setir(AI_R_LIMIT, IR_CONV, IRT_NUM, AI_R_STEP_INT, IRCONV_NUM_INT);
-  expect_numacc_reject(J);
-
-  make_numacc_intstep_trace(J);
-  fx.ir[AI_R_X_PRE].op1 = numacc_intstep_ref(profile->pre_right);
-  fx.ir[AI_R_X_PRE].op2 = numacc_intstep_ref(profile->pre_left);
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  fx.ir[AI_R_X_BODY].op1 = AI_R_STEP_NUM;
-  fx.ir[AI_R_X_BODY].op2 = AI_R_X_PRE;
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  fx.ir[AI_R_X_PHI].op1 = AI_R_X;
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  fx.ir[AI_R_X_PHI].op2 = AI_R_X_PRE;
-  expect_numacc_reject(J);
-
-  for (i = 0; i < sizeof(comparison_ops)/sizeof(comparison_ops[0]); i++) {
-    if (comparison_ops[i] != profile->precondition_op) {
-      make_numacc_intstep_trace(J);
-      fx.ir[AI_R_PRE_GUARD].o = (IROp1)comparison_ops[i];
-      expect_numacc_reject(J);
-    }
-    if (comparison_ops[i] != profile->body_op) {
-      make_numacc_intstep_trace(J);
-      fx.ir[AI_R_BODY_GUARD].o = (IROp1)comparison_ops[i];
-      expect_numacc_reject(J);
-    }
-  }
-  make_numacc_intstep_trace(J);
-  fx.ir[AI_R_PRE_GUARD].op1 = AI_R_X_PRE;
-  fx.ir[AI_R_PRE_GUARD].op2 = AI_R_LIMIT;
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  fx.ir[AI_R_BODY_GUARD].op1 = AI_R_LIMIT;
-  fx.ir[AI_R_BODY_GUARD].op2 = AI_R_X_BODY;
-  expect_numacc_reject(J);
-
-  /* Snapshot headers, restored values and footer PCs use the shifted refs. */
-  for (i = 0; i < 5; i++) {
-    make_numacc_intstep_trace(J);
-    fx.snap[i].ref++;
-    expect_numacc_reject(J);
-    make_numacc_intstep_trace(J);
-    fx.snap[i].mapofs++;
-    expect_numacc_reject(J);
-    make_numacc_intstep_trace(J);
-    fx.snap[i].nent++;
-    expect_numacc_reject(J);
-    make_numacc_intstep_trace(J);
-    fx.snap[i].nslots++;
-    expect_numacc_reject(J);
-    make_numacc_intstep_trace(J);
-    fx.snap[i].topslot = 4;
-    expect_numacc_reject(J);
-    make_numacc_intstep_trace(J);
-    set_snapshot_payload((SnapNo)i,
-	proto_bc(numacc_fixture_pt)+wrong_pcpos[i], 0);
-    expect_numacc_reject(J);
-    make_numacc_intstep_trace(J);
-    set_snapshot_payload((SnapNo)i,
-	proto_bc(numacc_fixture_pt)+wrong_pcpos[i], 1);
-    expect_numacc_reject(J);
-  }
-  for (i = 0; i < sizeof(entryofs)/sizeof(entryofs[0]); i++) {
-    make_numacc_intstep_trace(J);
-    fx.snapmap[entryofs[i]] ^= 1u;
-    expect_numacc_reject(J);
-  }
-  make_numacc_intstep_trace(J);
-  fx.snapmap[9] = SNAP(2, SNAP_NORESTORE, AI_R_X_PRE);
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  fx.T.nsnap = 4;
-  expect_numacc_reject(J);
-  make_numacc_intstep_trace(J);
-  fx.T.nsnapmap = 14;
-  expect_numacc_reject(J);
-}
-
-static void test_numacc_intlimit_positive_and_negative(jit_State *J)
-{
-  static const IRRef semantic_refs[] = {
-    AIL_R_X, AIL_R_STEP, AIL_R_X_PRE, AIL_R_LIMIT_INT,
-    AIL_R_LIMIT_NUM, AIL_R_PRE_GUARD, AIL_R_LOOP, AIL_R_XPOLL,
-    AIL_R_X_BODY, AIL_R_BODY_GUARD, AIL_R_X_PHI
-  };
-  static const IROp comparison_ops[] = {
-    IR_GT, IR_GE, IR_LT, IR_LE, IR_EQ, IR_NE,
-    IR_ULT, IR_UGE, IR_ULE, IR_UGT
-  };
-  static const MSize wrong_pcpos[5] = { 7, 3, 10, 7, 10 };
-  static const uint16_t entryofs[5] = { 2, 3, 6, 9, 12 };
-  LJArm64IRReject reject;
-  MSize i;
-
-  assert(numacc_active_profile()->id == NUMACC_FIXTURE_ADD_LT);
-  make_numacc_intlimit_trace(J);
-  if (!lj_asm_arm64_ir_admit(J, &fx.T, &reject))
-    fprintf(stderr, "INT-limit ADD_LT NUM dynamic-accumulator admission "
-	"failed: reason=%d ref=%u op=%u detail=%u\n", (int)reject.reason,
-	(unsigned)reject.ref, (unsigned)reject.op, (unsigned)reject.detail);
-  assert(reject.reason == LJ_ARM64_IR_REJECT_NONE);
-
-  /* Widening the parameter introduces no trace or prototype constant. */
-  make_numacc_intlimit_trace(J);
-  fx.T.nk = REF_TRUE-1u;
-  setir(REF_TRUE-1u, IR_KINT, IRT_INT, 1, 0);
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  fx.T.nk = H_K_HALF;
-  setir(H_K_HALF, IR_KNUM, IRT_NUM, 0, 0);
-  fx.ir[H_K_HALF_PAYLOAD].tv.u64 = UINT64_C(0x3fe0000000000000);
-  expect_numacc_reject(J);
-
-  /* Every opcode, type/flag, left operand and right operand is independent. */
-  for (i = 0; i < sizeof(semantic_refs)/sizeof(semantic_refs[0]); i++) {
-    IRRef ref = semantic_refs[i];
-    make_numacc_intlimit_trace(J);
-    fx.ir[ref].o = IR_NOP;
-    expect_numacc_reject(J);
-    make_numacc_intlimit_trace(J);
-    fx.ir[ref].t.irt ^= IRT_GUARD;
-    expect_numacc_reject(J);
-    make_numacc_intlimit_trace(J);
-    fx.ir[ref].op1 ^= 1u;
-    expect_numacc_reject(J);
-    make_numacc_intlimit_trace(J);
-    fx.ir[ref].op2 ^= 1u;
-    expect_numacc_reject(J);
-  }
-  make_numacc_intlimit_trace(J);
-  fx.ir[REF_BASE].o = IR_NOP;
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  J->loopref = AIL_R_LOOP-1u;
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  fx.T.nins--;
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  setir(AIL_R_SEMANTIC_END, IR_NOP, IRT_NIL, 0, 0);
-  fx.T.nins++;
-  expect_numacc_reject(J);
-
-  /* The single LIMIT_INT -> LIMIT_NUM conversion has one exact reference,
-  ** source, mode, destination type and flag set. */
-  make_numacc_intlimit_trace(J);
-  fx.ir[AIL_R_LIMIT_NUM].op1 = AIL_R_X;
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  fx.ir[AIL_R_LIMIT_NUM].op1 = REF_TRUE-1u;
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  fx.ir[AIL_R_LIMIT_NUM].op2 = IRCONV_INT_NUM;
-  expect_numacc_reject_detail(J, LJ_ARM64_IR_REJECT_TYPE,
-	AIL_R_LIMIT_NUM, IR_CONV, IRCONV_INT_NUM);
-  make_numacc_intlimit_trace(J);
-  fx.ir[AIL_R_LIMIT_NUM].op2 = IRCONV_NUM_INT|IRCONV_SEXT;
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  fx.ir[AIL_R_LIMIT_NUM].op2 = IRCONV_NUM_INT|IRCONV_CHECK;
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  fx.ir[AIL_R_LIMIT_NUM].t.irt = IRT_INT;
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  fx.ir[AIL_R_LIMIT_NUM].t.irt = IRT_NUM|IRT_GUARD;
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  fx.ir[AIL_R_LIMIT_NUM].t.irt = IRT_NUM|IRT_ISPHI;
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  setir(AIL_R_LIMIT_NUM, IR_NOP, IRT_NIL, 0, 0);
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  duplicate_numacc_intlimit_conversion(J, 0);
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  relocate_numacc_intlimit_conversion();
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  setir(AIL_R_X_PRE, IR_CONV, IRT_NUM, AIL_R_X, IRCONV_NUM_INT);
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  setir(AIL_R_X_BODY, IR_CONV, IRT_NUM, AIL_R_X_PRE, IRCONV_NUM_INT);
-  expect_numacc_reject(J);
-
-  /* The raw INT limit is never a NUM operand; only its one widened value may
-  ** feed either comparison. */
-  make_numacc_intlimit_trace(J);
-  fx.ir[AIL_R_PRE_GUARD].op1 = AIL_R_LIMIT_INT;
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  fx.ir[AIL_R_BODY_GUARD].op2 = AIL_R_LIMIT_INT;
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  fx.ir[AIL_R_X_PRE].op1 = AIL_R_X;
-  fx.ir[AIL_R_X_PRE].op2 = AIL_R_STEP;
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  fx.ir[AIL_R_X_BODY].op1 = AIL_R_STEP;
-  fx.ir[AIL_R_X_BODY].op2 = AIL_R_X_PRE;
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  fx.ir[AIL_R_X_PHI].op1 = AIL_R_X;
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  fx.ir[AIL_R_X_PHI].op2 = AIL_R_X_PRE;
-  expect_numacc_reject(J);
-
-  for (i = 0; i < sizeof(comparison_ops)/sizeof(comparison_ops[0]); i++) {
-    if (comparison_ops[i] != IR_GT) {
-      make_numacc_intlimit_trace(J);
-      fx.ir[AIL_R_PRE_GUARD].o = (IROp1)comparison_ops[i];
-      expect_numacc_reject(J);
-    }
-    if (comparison_ops[i] != IR_LT) {
-      make_numacc_intlimit_trace(J);
-      fx.ir[AIL_R_BODY_GUARD].o = (IROp1)comparison_ops[i];
-      expect_numacc_reject(J);
-    }
-  }
-  make_numacc_intlimit_trace(J);
-  fx.ir[AIL_R_PRE_GUARD].op1 = AIL_R_X_PRE;
-  fx.ir[AIL_R_PRE_GUARD].op2 = AIL_R_LIMIT_NUM;
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  fx.ir[AIL_R_BODY_GUARD].op1 = AIL_R_LIMIT_NUM;
-  fx.ir[AIL_R_BODY_GUARD].op2 = AIL_R_X_BODY;
-  expect_numacc_reject(J);
-
-  /* Every snapshot header, restored entry and footer uses the shifted
-  ** INT-limit layout, including the raw limit at snapshot #1. */
-  for (i = 0; i < 5; i++) {
-    make_numacc_intlimit_trace(J);
-    fx.snap[i].ref++;
-    expect_numacc_reject(J);
-    make_numacc_intlimit_trace(J);
-    fx.snap[i].mapofs++;
-    expect_numacc_reject(J);
-    make_numacc_intlimit_trace(J);
-    fx.snap[i].nent++;
-    expect_numacc_reject(J);
-    make_numacc_intlimit_trace(J);
-    fx.snap[i].nslots++;
-    expect_numacc_reject(J);
-    make_numacc_intlimit_trace(J);
-    fx.snap[i].topslot = 4;
-    expect_numacc_reject(J);
-    make_numacc_intlimit_trace(J);
-    set_snapshot_payload((SnapNo)i,
-	proto_bc(numacc_fixture_pt)+wrong_pcpos[i], 0);
-    expect_numacc_reject(J);
-    make_numacc_intlimit_trace(J);
-    set_snapshot_payload((SnapNo)i,
-	proto_bc(numacc_fixture_pt)+wrong_pcpos[i], 1);
-    expect_numacc_reject(J);
-  }
-  for (i = 0; i < sizeof(entryofs)/sizeof(entryofs[0]); i++) {
-    make_numacc_intlimit_trace(J);
-    fx.snapmap[entryofs[i]] ^= 1u;
-    expect_numacc_reject(J);
-  }
-  make_numacc_intlimit_trace(J);
-  fx.snapmap[9] = SNAP(2, SNAP_NORESTORE, AIL_R_X_PRE);
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  fx.T.nsnap = 4;
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  fx.T.nsnap = 6;
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  fx.T.nsnapmap = 14;
-  expect_numacc_reject(J);
-  make_numacc_intlimit_trace(J);
-  fx.T.nsnapmap = 16;
-  expect_numacc_reject(J);
-}
-
-static void test_numacc_intx_positive_and_negative(jit_State *J)
-{
-  static const IRRef semantic_refs[] = {
-    AX_R_X_INT, AX_R_STEP, AX_R_X_NUM, AX_R_X_PRE, AX_R_LIMIT,
-    AX_R_PRE_GUARD, AX_R_LOOP, AX_R_XPOLL, AX_R_X_CHECK, AX_R_X_BODY,
-    AX_R_BODY_GUARD, AX_R_X_PHI
-  };
-  static const uint16_t entryofs[5] = { 2, 3, 6, 9, 12 };
-  LJArm64IRReject reject;
-  MSize i;
-
-  make_numacc_intx_trace(J);
-  if (!lj_asm_arm64_ir_admit(J, &fx.T, &reject))
-    fprintf(stderr, "INT-X dynamic-accumulator profile %u admission failed: "
-	"reason=%d ref=%u op=%u detail=%u\n", numacc_active_profile()->id,
-	(int)reject.reason, (unsigned)reject.ref, (unsigned)reject.op,
-	(unsigned)reject.detail);
-  assert(reject.reason == LJ_ARM64_IR_REJECT_NONE);
-
-  /* Both conversions and every surrounding tuple are part of one exact
-  ** recorder shape. */
-  for (i = 0; i < sizeof(semantic_refs)/sizeof(semantic_refs[0]); i++) {
-    IRRef ref = semantic_refs[i];
-    make_numacc_intx_trace(J);
-    fx.ir[ref].o = IR_NOP;
-    expect_numacc_reject(J);
-    make_numacc_intx_trace(J);
-    fx.ir[ref].t.irt ^= IRT_GUARD;
-    expect_numacc_reject(J);
-    make_numacc_intx_trace(J);
-    fx.ir[ref].op1 ^= 1u;
-    expect_numacc_reject(J);
-    make_numacc_intx_trace(J);
-    fx.ir[ref].op2 ^= 1u;
-    expect_numacc_reject(J);
-  }
-  make_numacc_intx_trace(J);
-  fx.ir[REF_BASE].o = IR_NOP;
-  expect_numacc_reject(J);
-  make_numacc_intx_trace(J);
-  J->loopref--;
-  expect_numacc_reject(J);
-  make_numacc_intx_trace(J);
-  fx.T.nins--;
-  expect_numacc_reject(J);
-  make_numacc_intx_trace(J);
-  setir(AX_R_SEMANTIC_END, IR_NOP, IRT_NIL, 0, 0);
-  fx.T.nins++;
-  expect_numacc_reject(J);
-
-  /* The hoisted widening and checked loop repair have distinct sources,
-  ** directions, result types and flags. */
-  make_numacc_intx_trace(J);
-  fx.ir[AX_R_X_NUM].op1 = AX_R_STEP;
-  expect_numacc_reject(J);
-  make_numacc_intx_trace(J);
-  fx.ir[AX_R_X_NUM].op2 = IRCONV_INT_NUM;
-  expect_numacc_reject_detail(J, LJ_ARM64_IR_REJECT_TYPE,
-	AX_R_X_NUM, IR_CONV, IRCONV_INT_NUM);
-  make_numacc_intx_trace(J);
-  fx.ir[AX_R_X_NUM].t.irt = IRT_NUM|IRT_GUARD;
-  expect_numacc_reject(J);
-  make_numacc_intx_trace(J);
-  fx.ir[AX_R_X_CHECK].op1 = AX_R_X_NUM;
-  expect_numacc_reject(J);
-  make_numacc_intx_trace(J);
-  fx.ir[AX_R_X_CHECK].op2 = IRCONV_INT_NUM;
-  expect_numacc_reject_detail(J, LJ_ARM64_IR_REJECT_TYPE,
-	AX_R_X_CHECK, IR_CONV, IRCONV_INT_NUM);
-  make_numacc_intx_trace(J);
-  fx.ir[AX_R_X_CHECK].op2 = IRCONV_NUM_INT|IRCONV_CHECK;
-  expect_numacc_reject(J);
-  make_numacc_intx_trace(J);
-  fx.ir[AX_R_X_CHECK].t.irt = IRT_INT;
-  expect_numacc_reject(J);
-  make_numacc_intx_trace(J);
-  setir(AX_R_X_CHECK, IR_CONV, IRT_NUM,
-	AX_R_STEP, IRCONV_NUM_INT);
-  expect_numacc_reject(J);
-
-  /* Only X_NUM may feed the first recurrence; snapshots restore the widened
-  ** loop-carried value, never the raw INT argument or the checked result. */
-  make_numacc_intx_trace(J);
-  fx.ir[AX_R_X_PRE].op1 = AX_R_X_INT;
-  expect_numacc_reject(J);
-  make_numacc_intx_trace(J);
-  fx.ir[AX_R_X_BODY].op1 = AX_R_X_CHECK;
-  expect_numacc_reject(J);
-  for (i = 0; i < 5; i++) {
-    make_numacc_intx_trace(J);
-    fx.snap[i].ref++;
-    expect_numacc_reject(J);
-  }
-  for (i = 0; i < sizeof(entryofs)/sizeof(entryofs[0]); i++) {
-    make_numacc_intx_trace(J);
-    fx.snapmap[entryofs[i]] ^= 1u;
-    expect_numacc_reject(J);
-  }
-  make_numacc_intx_trace(J);
-  fx.T.nsnap = 4;
-  expect_numacc_reject(J);
-  make_numacc_intx_trace(J);
-  fx.T.nsnapmap = 14;
-  expect_numacc_reject(J);
-}
-
-static void test_numacc_shape_cross_product(jit_State *J)
-{
-  static const unsigned profiles[12] = {
-    NUMACC_FIXTURE_ADD_LT, NUMACC_FIXTURE_ADD_LE,
-    NUMACC_FIXTURE_SUB_GT, NUMACC_FIXTURE_SUB_GE,
-    NUMACC_FIXTURE_ADD_GT, NUMACC_FIXTURE_ADD_GE,
-    NUMACC_FIXTURE_MUL_LT, NUMACC_FIXTURE_MUL_LE,
-    NUMACC_FIXTURE_DIV_LT, NUMACC_FIXTURE_DIV_LE,
-    NUMACC_FIXTURE_DIV_GT, NUMACC_FIXTURE_DIV_GE
-  };
-  static const IROp preops[4] = { IR_GT, IR_GE, IR_LT, IR_LE };
-  static const IROp bodyops[4] = { IR_LT, IR_LE, IR_GT, IR_GE };
-  static const unsigned args_kinds[4] = {
-    NUMACC_FIXTURE_ARGS_NUM, NUMACC_FIXTURE_ARGS_INT_STEP,
-    NUMACC_FIXTURE_ARGS_INT_LIMIT, NUMACC_FIXTURE_ARGS_INT_X
-  };
-  MSize p, argkind, prearith, bodyarith, pre, body;
-  MSize combinations = 0, semantic_admissions = 0, postra_admissions = 0;
-
-  /* Exercise the complete 12x4x2x2x4x4 source-profile, argument-kind,
-  ** pre-arithmetic, body-arithmetic, pre-guard and body-guard product. The NUM,
-  ** INT-step, and INT-X shapes admit one tuple per profile; INT-limit admits
-  ** ADD_LT alone, for exactly 37 admissions at each independent gate. */
-  for (p = 0; p < 12; p++) {
-    const NumaccFixtureProfile *profile;
-    IROp arithmetic_ops[2];
-    select_numacc_fixture(profiles[p]);
-    assert(numacc_fixture_full_shape() == profiles[p]);
-    profile = numacc_active_profile();
-    arithmetic_ops[0] = profile->recurrence_op;
-    arithmetic_ops[1] = profile->recurrence_op == IR_ADD ? IR_SUB : IR_ADD;
-    for (argkind = 0; argkind < 4; argkind++) {
-      int intstep = args_kinds[argkind] == NUMACC_FIXTURE_ARGS_INT_STEP;
-      int intlimit = args_kinds[argkind] == NUMACC_FIXTURE_ARGS_INT_LIMIT;
-      int intx = args_kinds[argkind] == NUMACC_FIXTURE_ARGS_INT_X;
-      IRRef xpreref = intstep ? AI_R_X_PRE :
-	intlimit ? AIL_R_X_PRE : intx ? AX_R_X_PRE : A_R_X_PRE;
-      IRRef preguardref = intstep ? AI_R_PRE_GUARD :
-	intlimit ? AIL_R_PRE_GUARD : intx ? AX_R_PRE_GUARD : A_R_PRE_GUARD;
-      IRRef xbodyref = intstep ? AI_R_X_BODY :
-	intlimit ? AIL_R_X_BODY : intx ? AX_R_X_BODY : A_R_X_BODY;
-      IRRef bodyguardref = intstep ? AI_R_BODY_GUARD :
-	intlimit ? AIL_R_BODY_GUARD : intx ? AX_R_BODY_GUARD : A_R_BODY_GUARD;
-      for (prearith = 0; prearith < 2; prearith++) {
-	for (bodyarith = 0; bodyarith < 2; bodyarith++) {
-	  for (pre = 0; pre < 4; pre++) {
-	    for (body = 0; body < 4; body++) {
-	      IROp pre_arithmetic = arithmetic_ops[prearith];
-	      IROp body_arithmetic = arithmetic_ops[bodyarith];
-	      IRRef pre_left = pre_arithmetic == profile->recurrence_op ?
-		profile->pre_left :
-		(pre_arithmetic == IR_SUB ? A_R_X : A_R_STEP);
-	      IRRef pre_right = pre_arithmetic == profile->recurrence_op ?
-		profile->pre_right :
-		(pre_arithmetic == IR_SUB ? A_R_STEP : A_R_X);
-	      int admitted = pre_arithmetic == profile->recurrence_op &&
-		body_arithmetic == profile->recurrence_op &&
-		preops[pre] == profile->precondition_op &&
-		bodyops[body] == profile->body_op &&
-		(!intlimit || profile->id == NUMACC_FIXTURE_ADD_LT);
-	      LJArm64PostRAView view;
-
-	      if (intstep) {
-		make_numacc_intstep_trace(J);
-		pre_left = numacc_intstep_ref(pre_left);
-		pre_right = numacc_intstep_ref(pre_right);
-	      } else if (intx) {
-		make_numacc_intx_trace(J);
-		if (pre_arithmetic == profile->recurrence_op ||
-		    pre_arithmetic == IR_SUB) {
-		  pre_left = AX_R_X_NUM;
-		  pre_right = AX_R_STEP;
-		} else {
-		  pre_left = AX_R_STEP;
-		  pre_right = AX_R_X_NUM;
-		}
-	      } else if (intlimit) {
-		make_numacc_intlimit_trace(J);
-	      } else {
-		make_numacc_trace(J);
-	      }
-	      fx.ir[xpreref].o = (IROp1)pre_arithmetic;
-	      fx.ir[xpreref].op1 = (IRRef1)pre_left;
-	      fx.ir[xpreref].op2 = (IRRef1)pre_right;
-	      fx.ir[xbodyref].o = (IROp1)body_arithmetic;
-	      fx.ir[preguardref].o = (IROp1)preops[pre];
-	      fx.ir[bodyguardref].o = (IROp1)bodyops[body];
-	      expect_numacc_semantic_result(J, admitted);
-	      semantic_admissions += (MSize)admitted;
-
-	      if (intstep) {
-		view = make_numacc_intstep_postra_view(J);
-		pre_left = numacc_intstep_ref(
-		  pre_arithmetic == profile->recurrence_op ?
-		    profile->pre_left :
-		    (pre_arithmetic == IR_SUB ? A_R_X : A_R_STEP));
-		pre_right = numacc_intstep_ref(
-		  pre_arithmetic == profile->recurrence_op ?
-		    profile->pre_right :
-		    (pre_arithmetic == IR_SUB ? A_R_STEP : A_R_X));
-	      } else if (intx) {
-		view = make_numacc_intx_postra_view(J);
-		if (pre_arithmetic == profile->recurrence_op ||
-		    pre_arithmetic == IR_SUB) {
-		  pre_left = AX_R_X_NUM;
-		  pre_right = AX_R_STEP;
-		} else {
-		  pre_left = AX_R_STEP;
-		  pre_right = AX_R_X_NUM;
-		}
-	      } else if (intlimit) {
-		view = make_numacc_intlimit_postra_view(J);
-		pre_left = pre_arithmetic == profile->recurrence_op ?
-		  profile->pre_left :
-		  (pre_arithmetic == IR_SUB ? A_R_X : A_R_STEP);
-		pre_right = pre_arithmetic == profile->recurrence_op ?
-		  profile->pre_right :
-		  (pre_arithmetic == IR_SUB ? A_R_STEP : A_R_X);
-	      } else {
-		view = make_numacc_postra_view(J);
-	      }
-	      fx.ir[xpreref].o = (IROp1)pre_arithmetic;
-	      fx.ir[xpreref].op1 = (IRRef1)pre_left;
-	      fx.ir[xpreref].op2 = (IRRef1)pre_right;
-	      fx.ir[xbodyref].o = (IROp1)body_arithmetic;
-	      fx.ir[preguardref].o = (IROp1)preops[pre];
-	      fx.ir[bodyguardref].o = (IROp1)bodyops[body];
-	      if (intstep)
-		expect_numacc_intstep_postra_result(&view, admitted);
-	      else if (intx)
-		expect_numacc_intx_postra_result(&view, admitted);
-	      else if (intlimit)
-		expect_numacc_intlimit_postra_result(&view, admitted);
-	      else
-		expect_numacc_postra_result(&view, admitted);
-	      postra_admissions += (MSize)admitted;
-	      combinations++;
-	    }
-	  }
-	}
-      }
-    }
-  }
-  assert(combinations == 12u*4u*2u*2u*4u*4u);
-  assert(combinations == 3072);
-  assert(semantic_admissions == 37 && postra_admissions == 37);
-
-  /* Semantic admission and post-RA independently re-read the exact compare
-  ** operand direction and recurrence opcode from the live prototype. */
-  for (p = 0; p < 12; p++) {
-    const NumaccFixtureProfile *profile;
-    const BCIns *comparepc, *arithmeticpc;
-    BCIns saved_compare, saved_arithmetic;
-    BCOp adjacent;
-    LJArm64PostRAView view;
-
-    select_numacc_fixture(profiles[p]);
-    profile = numacc_active_profile();
-    comparepc = proto_bc(numacc_fixture_pt)+3;
-    arithmeticpc = proto_bc(numacc_fixture_pt)+8;
-    saved_compare = loadbc(comparepc);
-    saved_arithmetic = loadbc(arithmeticpc);
-    adjacent = profile->recurrence_op == IR_ADD ? BC_SUBVV : BC_ADDVV;
-
-    make_numacc_trace(J);
-    bc_publish((const uint32_t *)comparepc,
-	BCINS_AD(bc_op(saved_compare), profile->comparison_d,
-	  profile->comparison_a));
-    expect_numacc_reject(J);
-    bc_publish((const uint32_t *)comparepc, saved_compare);
-
-    view = make_numacc_postra_view(J);
-    bc_publish((const uint32_t *)comparepc,
-	BCINS_AD(bc_op(saved_compare), profile->comparison_d,
-	  profile->comparison_a));
-    expect_numacc_postra_result(&view, 0);
-    bc_publish((const uint32_t *)comparepc, saved_compare);
-
-    /* Switching only strict/inclusive comparison bytecode leaves a mixed
-    ** source/IR profile and must fail independently at both gates. */
-    make_numacc_trace(J);
-    bc_publish((const uint32_t *)comparepc,
-	BCINS_AD(bc_op(saved_compare) == BC_ISGE ? BC_ISGT : BC_ISGE,
-	  profile->comparison_a, profile->comparison_d));
-    expect_numacc_reject(J);
-    bc_publish((const uint32_t *)comparepc, saved_compare);
-
-    view = make_numacc_postra_view(J);
-    bc_publish((const uint32_t *)comparepc,
-	BCINS_AD(bc_op(saved_compare) == BC_ISGE ? BC_ISGT : BC_ISGE,
-	  profile->comparison_a, profile->comparison_d));
-    expect_numacc_postra_result(&view, 0);
-    bc_publish((const uint32_t *)comparepc, saved_compare);
-
-    make_numacc_trace(J);
-    bc_publish((const uint32_t *)arithmeticpc,
-	BCINS_ABC(adjacent, 3, 3, 4));
-    expect_numacc_reject(J);
-    bc_publish((const uint32_t *)arithmeticpc, saved_arithmetic);
-
-    view = make_numacc_postra_view(J);
-    bc_publish((const uint32_t *)arithmeticpc,
-	BCINS_ABC(adjacent, 3, 3, 4));
-    expect_numacc_postra_result(&view, 0);
-    bc_publish((const uint32_t *)arithmeticpc, saved_arithmetic);
-
-    make_numacc_trace(J);
-    bc_publish((const uint32_t *)arithmeticpc,
-	BCINS_ABC(profile->recurrence_bc, 3, 4, 3));
-    expect_numacc_reject(J);
-    bc_publish((const uint32_t *)arithmeticpc, saved_arithmetic);
-
-    view = make_numacc_postra_view(J);
-    bc_publish((const uint32_t *)arithmeticpc,
-	BCINS_ABC(profile->recurrence_bc, 3, 4, 3));
-    expect_numacc_postra_result(&view, 0);
-    bc_publish((const uint32_t *)arithmeticpc, saved_arithmetic);
-
-    /* The shifted INT-step shape independently re-reads the same live source
-    ** tuple at both gates. */
-    make_numacc_intstep_trace(J);
-    bc_publish((const uint32_t *)comparepc,
-	BCINS_AD(bc_op(saved_compare), profile->comparison_d,
-	  profile->comparison_a));
-    expect_numacc_reject(J);
-    bc_publish((const uint32_t *)comparepc, saved_compare);
-
-    view = make_numacc_intstep_postra_view(J);
-    bc_publish((const uint32_t *)comparepc,
-	BCINS_AD(bc_op(saved_compare), profile->comparison_d,
-	  profile->comparison_a));
-    expect_numacc_intstep_postra_result(&view, 0);
-    bc_publish((const uint32_t *)comparepc, saved_compare);
-
-    make_numacc_intstep_trace(J);
-    bc_publish((const uint32_t *)comparepc,
-	BCINS_AD(bc_op(saved_compare) == BC_ISGE ? BC_ISGT : BC_ISGE,
-	  profile->comparison_a, profile->comparison_d));
-    expect_numacc_reject(J);
-    bc_publish((const uint32_t *)comparepc, saved_compare);
-
-    view = make_numacc_intstep_postra_view(J);
-    bc_publish((const uint32_t *)comparepc,
-	BCINS_AD(bc_op(saved_compare) == BC_ISGE ? BC_ISGT : BC_ISGE,
-	  profile->comparison_a, profile->comparison_d));
-    expect_numacc_intstep_postra_result(&view, 0);
-    bc_publish((const uint32_t *)comparepc, saved_compare);
-
-    make_numacc_intstep_trace(J);
-    bc_publish((const uint32_t *)arithmeticpc,
-	BCINS_ABC(adjacent, 3, 3, 4));
-    expect_numacc_reject(J);
-    bc_publish((const uint32_t *)arithmeticpc, saved_arithmetic);
-
-    view = make_numacc_intstep_postra_view(J);
-    bc_publish((const uint32_t *)arithmeticpc,
-	BCINS_ABC(adjacent, 3, 3, 4));
-    expect_numacc_intstep_postra_result(&view, 0);
-    bc_publish((const uint32_t *)arithmeticpc, saved_arithmetic);
-
-    make_numacc_intstep_trace(J);
-    bc_publish((const uint32_t *)arithmeticpc,
-	BCINS_ABC(profile->recurrence_bc, 3, 4, 3));
-    expect_numacc_reject(J);
-    bc_publish((const uint32_t *)arithmeticpc, saved_arithmetic);
-
-    view = make_numacc_intstep_postra_view(J);
-    bc_publish((const uint32_t *)arithmeticpc,
-	BCINS_ABC(profile->recurrence_bc, 3, 4, 3));
-    expect_numacc_intstep_postra_result(&view, 0);
-    bc_publish((const uint32_t *)arithmeticpc, saved_arithmetic);
-  }
-
-  select_numacc_fixture(NUMACC_FIXTURE_ADD_LT);
 }
 
 static void test_positive_and_negative(lua_State *L)
@@ -5614,23 +1637,22 @@ static void test_positive_and_negative(lua_State *L)
   setir(R_SUM1, IR_CONV, IRT_INT, R_A, IRCONV_INT_NUM);
   expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_CONV);
 
-  /* DIV has a dedicated case only for the exact NUM DIV profiles. */
+  /* Floating-point arithmetic cannot consume unconverted integer values. */
   make_trace(J);
   setir(R_SUM1, IR_DIV, IRT_NUM, R_A, R_B);
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_DIV);
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_DIV);
 
-  /* MUL has a dedicated case only for the exact NUM MUL_LT/MUL_LE profiles. */
+  /* Integer multiplication still requires overflow-checked MULOV. */
   make_trace(J);
   setir(R_SUM1, IR_MUL, IRT_INT, R_A, R_B);
   expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_MUL);
 
-  /* SUB has a dedicated case only for the exact NUM SUB_GT/SUB_GE profiles. */
+  /* Integer subtraction still requires overflow-checked SUBOV. */
   make_trace(J);
   setir(R_SUM1, IR_SUB, IRT_INT, R_A, R_B);
   expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SUB);
 
-  /* IR_ADD belongs only to the exact FORL induction grammar. A LOOP root
-  ** reaches its dedicated case, but may not use the producer. */
+  /* Unchecked integer ADD remains scoped to the exact FORL induction. */
   make_trace(J);
   setir(R_SUM1, IR_ADD, IRT_INT, R_A, R_B);
   expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_ADD);
@@ -5641,11 +1663,11 @@ static void test_positive_and_negative(lua_State *L)
 
   make_trace(J);
   setir(REF_TRUE, IR_KINT, IRT_INT, 1, 0);
-  expect_reject(J, LJ_ARM64_IR_REJECT_CONSTANT, IR_KPRI);
+  expect_reject(J, LJ_ARM64_IR_REJECT_CONSTANT, IR_KINT);
 
   make_trace(J);
   setir(REF_FALSE, IR_KNUM, IRT_NUM, 0, 0);
-  expect_reject(J, LJ_ARM64_IR_REJECT_CONSTANT, IR_KPRI);
+  expect_reject(J, LJ_ARM64_IR_REJECT_CONSTANT, IR_KNUM);
 
   make_trace(J);
   fx.ir[REF_TRUE].t.irt = IRT_STR;
@@ -5653,11 +1675,10 @@ static void test_positive_and_negative(lua_State *L)
 
   make_trace(J);
   setir(K_STOP, IR_KNUM, IRT_NUM, 0, 0);
+  setnilV(&fx.ir[K_STEP].tv);
   expect_reject(J, LJ_ARM64_IR_REJECT_CONSTANT, IR_KNUM);
 
-  /* An otherwise integer-only root cannot smuggle in the exact admitted
-  ** half-KNUM profile as an unused constant family. Keep its operands
-  ** dynamic so this reaches the scalar/profile discriminator itself. */
+  /* An unused valid NUM constant is independent of integer producers. */
   make_trace(J);
   fx.T.nk = H_K_HALF;
   setir(H_K_HALF, IR_KNUM, IRT_NUM, 0, 0);
@@ -5665,7 +1686,7 @@ static void test_positive_and_negative(lua_State *L)
   fx.ir[R_PRECOND].op2 = R_A;
   fx.ir[R_BODY2].op2 = R_C;
   fx.ir[R_LOOPCOND].op2 = R_A;
-  expect_reject(J, LJ_ARM64_IR_REJECT_CONSTANT, IR_KNUM);
+  assert(lj_asm_arm64_ir_admit(J, &fx.T, &reject));
 
   make_trace(J);
   fx.ir[R_A].t.irt = IRT_TAB|IRT_GUARD;
@@ -5685,17 +1706,16 @@ static void test_positive_and_negative(lua_State *L)
 
   make_trace(J);
   fx.ir[R_A].t.irt = IRT_NUM|IRT_GUARD;
-  /* NUM SLOAD itself is now part of the mixed-loop grammar; this otherwise
-  ** integer fixture still fails when SUBOV consumes it as an integer. */
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SUBOV);
+  /* A NUM load still cannot feed an integer operation without conversion. */
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_SUBOV);
 
   make_trace(J);
   fx.ir[R_A].op1 = 1;
-  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_SLOAD);
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SLOAD);
 
   make_trace(J);
   fx.ir[R_A].op1 = fx.snap[0].nslots;
-  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_SLOAD);
+  expect_reject(J, LJ_ARM64_IR_REJECT_SNAPSHOT, IR_XPOLL);
 
   make_trace(J);
   fx.ir[R_A].op1 = fixture_pt->framesize + 1 + LJ_FR2;
@@ -5704,7 +1724,7 @@ static void test_positive_and_negative(lua_State *L)
     for (n = 0; n < fx.T.nsnap; n++)
       fx.snap[n].nslots = (uint8_t)(fx.ir[R_A].op1 + 1u);
   }
-  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_SLOAD);
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SLOAD);
 
   make_trace(J);
   fx.ir[R_SUM1].t.irt &= (uint8_t)~IRT_GUARD;
@@ -5720,11 +1740,11 @@ static void test_positive_and_negative(lua_State *L)
 
   make_trace(J);
   fx.ir[R_SUM1].op1 = R_BODY1;
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SUBOV);
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_SUBOV);
 
   make_trace(J);
   fx.ir[R_BODY1].op1 = R_PRECOND;
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SUBOV);
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_SUBOV);
 
   make_trace(J);
   fx.ir[R_SUM2].t.irt &= (uint8_t)~IRT_GUARD;
@@ -5732,11 +1752,11 @@ static void test_positive_and_negative(lua_State *L)
 
   make_trace(J);
   fx.ir[R_SUM2].op2 = R_LOOPCOND;
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_MULOV);
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_MULOV);
 
   make_trace(J);
   fx.ir[R_PRECOND].t.irt = IRT_NUM|IRT_GUARD;
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_GE);
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_GE);
 
   make_trace(J);
   fx.T.sinktags = 1;
@@ -5772,7 +1792,7 @@ static void test_positive_and_negative(lua_State *L)
 
   make_trace(J);
   fx.snapmap[6] = SNAP(2, SNAP_NORESTORE, R_SUM1);
-  expect_reject(J, LJ_ARM64_IR_REJECT_SNAPSHOT, IR_SLOAD);
+  expect_reject(J, LJ_ARM64_IR_REJECT_SNAPSHOT, IR_XPOLL);
 
   make_trace(J);
   fx.snapmap[6] |= 0x00200000u;
@@ -5820,13 +1840,146 @@ static void test_positive_and_negative(lua_State *L)
 
   make_trace(J);
   fx.snap[0].ref = R_PRECOND;
-  expect_reject(J, LJ_ARM64_IR_REJECT_SNAPSHOT, IR_SLOAD);
+  expect_reject(J, LJ_ARM64_IR_REJECT_SNAPSHOT, IR_XPOLL);
 
   test_snapshot_payload_rejections(J);
   test_start_metadata_rejections(J);
   test_phi_and_xpoll_rejections(J);
 
   test_deterministic_trace_error(L, J);
+}
+
+/* Exercise supported operations independently of literal values, accumulator
+** profiles, or the recorder's instruction numbering for a particular script. */
+static void test_scalar_capabilities(jit_State *J)
+{
+  static const IROp arithmetic[] = { IR_ADD, IR_SUB, IR_MUL, IR_DIV };
+  static const IROp guards[] = { IR_LT, IR_GE, IR_LE, IR_GT, IR_EQ, IR_NE };
+  static const uint64_t constants[] = {
+    UINT64_C(0), UINT64_C(0x8000000000000000),
+    UINT64_C(0x3fd0000000000000), UINT64_C(0xbff0000000000000),
+    UINT64_C(0x7ff0000000000000), UINT64_C(0xfff0000000000000),
+    UINT64_C(0x7ff8000000000000)
+  };
+  LJArm64IRReject reject;
+  LJArm64PostRAView view;
+  MSize a, b, c, d;
+  for (a = 0; a < sizeof(arithmetic)/sizeof(arithmetic[0]); a++)
+    for (b = 0; b < sizeof(arithmetic)/sizeof(arithmetic[0]); b++)
+      for (c = 0; c < sizeof(guards)/sizeof(guards[0]); c++)
+        for (d = 0; d < sizeof(guards)/sizeof(guards[0]); d++) {
+          make_numhalf_trace(J);
+          fx.ir[H_R_X_PRE].o = (IROp1)arithmetic[a];
+          fx.ir[H_R_X_BODY].o = (IROp1)arithmetic[b];
+          fx.ir[H_R_PRE_GUARD].o = (IROp1)guards[c];
+          fx.ir[H_R_BODY_GUARD].o = (IROp1)guards[d];
+          assert(lj_asm_arm64_ir_admit(J, &fx.T, &reject));
+          view = make_numhalf_postra_view(J);
+          fx.ir[H_R_X_PRE].o = (IROp1)arithmetic[a];
+          fx.ir[H_R_X_BODY].o = (IROp1)arithmetic[b];
+          fx.ir[H_R_PRE_GUARD].o = (IROp1)guards[c];
+          fx.ir[H_R_BODY_GUARD].o = (IROp1)guards[d];
+          expect_numhalf_postra_result(&view, 1);
+        }
+  for (a = 0; a < sizeof(constants)/sizeof(constants[0]); a++) {
+    make_numhalf_trace(J);
+    fx.ir[H_K_HALF_PAYLOAD].tv.u64 = constants[a];
+    assert(lj_asm_arm64_ir_admit(J, &fx.T, &reject));
+    view = make_numhalf_postra_view(J);
+    fx.ir[H_K_HALF_PAYLOAD].tv.u64 = constants[a];
+    expect_numhalf_postra_result(&view, 1);
+  }
+
+  /* asm_phi emits a copy when two distinct left values share one right
+  ** value. Only one PHI owns that producer's physical register. */
+  make_numhalf_trace(J);
+  fx.ir[H_R_X].t.irt |= IRT_ISPHI;
+  setir(H_R_SEMANTIC_END, IR_PHI, IRT_NUM, H_R_X, H_R_X_BODY);
+  fx.T.nins++;
+  assert(lj_asm_arm64_ir_admit(J, &fx.T, &reject));
+  view = make_numhalf_postra_view(J);
+  fx.ir[H_R_X].t.irt |= IRT_ISPHI;
+  fx.ir[H_R_X].r = RID_D14;
+  setir(H_R_SEMANTIC_END, IR_PHI, IRT_NUM, H_R_X, H_R_X_BODY);
+  fx.ir[H_R_SEMANTIC_END].r = RID_D14;
+  setir(H_R_POSTRA_END, IR_NOP, IRT_NIL, 0, 0);
+  view.nins++;
+  {
+    IRRef semantic_nins = 0;
+    assert(lj_asm_arm64_postra_admit(&view, &semantic_nins));
+    assert(semantic_nins == H_R_SEMANTIC_END+1);
+  }
+  fx.ir[H_R_X].r = fx.ir[H_R_SEMANTIC_END].r = RID_D15;
+  assert(!lj_asm_arm64_postra_admit(&view, NULL));
+  fx.ir[H_R_X].r = fx.ir[H_R_SEMANTIC_END].r = RID_D14;
+  fx.ir[H_R_X_BODY].r = RID_D13;
+  assert(!lj_asm_arm64_postra_admit(&view, NULL));
+
+  /* Widening and checked narrowing compose with either scalar recurrence. */
+  make_numeric_trace(J);
+  setir(N_R_X_PRE, IR_CONV, IRT_NUM|IRT_ISPHI,
+        N_R_I_PRE, IRCONV_NUM_INT);
+  assert(lj_asm_arm64_ir_admit(J, &fx.T, &reject));
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_X_PRE].o = IR_CONV;
+  fx.ir[N_R_X_PRE].op1 = N_R_I_PRE;
+  fx.ir[N_R_X_PRE].op2 = IRCONV_NUM_INT;
+  expect_numeric_postra_result(&view, 1);
+  make_numeric_trace(J);
+  setir(N_R_I_BODY, IR_CONV, IRT_INT|IRT_GUARD|IRT_ISPHI,
+        N_R_X_PRE, IRCONV_INT_NUM|IRCONV_CHECK);
+  assert(lj_asm_arm64_ir_admit(J, &fx.T, &reject));
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_I_BODY].o = IR_CONV;
+  fx.ir[N_R_I_BODY].op1 = N_R_X_PRE;
+  fx.ir[N_R_I_BODY].op2 = IRCONV_INT_NUM|IRCONV_CHECK;
+  expect_numeric_postra_result(&view, 1);
+
+  /* These corruptions reach each certificate separately. The post-RA pass
+  ** is never given a semantic pass result to borrow. */
+  for (a = 0; a < 15; a++) {
+    unsigned postra;
+    for (postra = 0; postra < 2; postra++) {
+      if (postra) view = make_numhalf_postra_view(J);
+      else make_numhalf_trace(J);
+      switch (a) {
+      case 0: setnilV(&fx.ir[H_K_HALF_PAYLOAD].tv); break;
+      case 1: fx.ir[H_K_HALF].op1 = 1; break;
+      case 2: fx.ir[H_R_X_PRE].op2 = H_K_HALF_PAYLOAD; break;
+      case 3: fx.snapmap[9] = SNAP(3, 0, H_K_HALF_PAYLOAD); break;
+      case 4: fx.ir[H_R_X_PRE].op1 = H_R_X_BODY; break;
+      case 5: fx.ir[H_R_X_PRE].op1 = H_R_PRE_GUARD; break;
+      case 6: fx.ir[H_R_X_PRE].t.irt |= IRT_GUARD; break;
+      case 7: fx.ir[H_R_X].op2 |= IRSLOAD_KEYINDEX; break;
+      case 8: fx.ir[H_R_X].t.irt = IRT_TAB|IRT_GUARD; break;
+      case 9: fx.ir[H_R_XPOLL].op1 = 0; break;
+      case 10: fx.ir[H_R_X_PHI].op2 = H_R_X_PRE; break;
+      case 11: fx.ir[H_R_X_BODY].t.irt &= (uint8_t)~IRT_ISPHI; break;
+      case 12: fx.snap[3].mapofs++; break;
+      case 13: fx.ir[H_R_X_BODY].o = IR_CALLN;
+               fx.ir[H_R_X_BODY].op2 = IRCALL_lj_vm_modi; break;
+      case 14: /* Within the prototype, beyond the current snapshot. */
+               fx.ir[H_R_X].op1 = fx.snap[0].nslots; break;
+      }
+      if (postra) expect_numhalf_postra_result(&view, 0);
+      else assert(!lj_asm_arm64_ir_admit(J, &fx.T, &reject));
+    }
+  }
+  for (a = 0; a < 3; a++) {
+    unsigned postra;
+    for (postra = 0; postra < 2; postra++) {
+      if (postra) view = make_numeric_postra_view(J);
+      else make_numeric_trace(J);
+      fx.ir[N_R_I_BODY].o = IR_CONV;
+      fx.ir[N_R_I_BODY].op1 = N_R_X_PRE;
+      fx.ir[N_R_I_BODY].op2 = IRCONV_INT_NUM|IRCONV_CHECK;
+      if (a == 0) fx.ir[N_R_I_BODY].op2 &= ~IRCONV_CHECK;
+      if (a == 1) fx.ir[N_R_I_BODY].t.irt &= (uint8_t)~IRT_GUARD;
+      if (a == 2) fx.ir[N_R_I_BODY].op1 = N_R_I_PRE;
+      if (postra) expect_numeric_postra_result(&view, 0);
+      else assert(!lj_asm_arm64_ir_admit(J, &fx.T, &reject));
+    }
+  }
 }
 
 int main(void)
@@ -5922,411 +2075,6 @@ int main(void)
   assert(bc_op(loadbc(numhalf_fixture_loop_pc+
 	bc_j(loadbc(numhalf_fixture_loop_pc)))) == BC_JMP);
 
-  assert(luaL_loadstring(L,
-	"return function(limit,step) local x=0.5 "
-	"while x<limit do x=x+step end return x end") == 0);
-  assert(lua_pcall(L, 0, 1, 0) == 0);
-  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
-  numstep_fixture_pt = funcproto(funcV(L->top-1));
-  assert(numstep_fixture_pt->framesize == 5);
-  assert(numstep_fixture_pt->sizebc == 14);
-  assert(numstep_fixture_pt->numparams == 2);
-  assert(numstep_fixture_pt->sizeuv == 0);
-  assert(numstep_fixture_pt->sizekn == 1);
-  assert(numstep_fixture_pt->sizekgc == 0);
-  assert(proto_knumtv(numstep_fixture_pt, 0)->u64 ==
-	 UINT64_C(0x3fe0000000000000));
-  for (i = 0; i < numstep_fixture_pt->sizebc; i++) {
-    const BCIns *pc = &proto_bc(numstep_fixture_pt)[i];
-    if (bc_op(loadbc(pc)) == BC_LOOP && numstep_fixture_loop_pc == NULL)
-      numstep_fixture_loop_pc = pc;
-  }
-  assert(numstep_fixture_loop_pc == proto_bc(numstep_fixture_pt)+6);
-  assert(bc_j(loadbc(numstep_fixture_loop_pc)) > 0);
-  assert(bc_op(loadbc(numstep_fixture_loop_pc+
-	bc_j(loadbc(numstep_fixture_loop_pc)))) == BC_JMP);
-
-  assert(luaL_loadstring(L,
-	"return function(x,limit,step) "
-	"while x<limit do x=x+step end return x end") == 0);
-  assert(lua_pcall(L, 0, 1, 0) == 0);
-  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
-  numacc_strict_fixture_pt = funcproto(funcV(L->top-1));
-  numacc_fixture_pt = numacc_strict_fixture_pt;
-  assert(numacc_fixture_pt->framesize == 5);
-  assert(numacc_fixture_pt->sizebc == 13);
-  assert(numacc_fixture_pt->numparams == 3);
-  assert(numacc_fixture_pt->sizeuv == 0);
-  assert(numacc_fixture_pt->sizekn == 0);
-  assert(numacc_fixture_pt->sizekgc == 0);
-  assert(numacc_fixture_pt->flags2 == PROTO2_CELLOPS);
-  for (i = 0; i < numacc_fixture_pt->sizebc; i++) {
-    const BCIns *pc = &proto_bc(numacc_fixture_pt)[i];
-    if (bc_op(loadbc(pc)) == BC_LOOP && numacc_fixture_loop_pc == NULL)
-      numacc_fixture_loop_pc = pc;
-  }
-  assert(numacc_fixture_loop_pc == proto_bc(numacc_fixture_pt)+5);
-  assert(bc_j(loadbc(numacc_fixture_loop_pc)) > 0);
-  assert(bc_op(loadbc(numacc_fixture_loop_pc+
-	bc_j(loadbc(numacc_fixture_loop_pc)))) == BC_JMP);
-  assert(bc_op(loadbc(proto_bc(numacc_fixture_pt)+3)) == BC_ISGE);
-  numacc_strict_fixture_loop_pc = numacc_fixture_loop_pc;
-
-  assert(luaL_loadstring(L,
-	"return function(x,limit,step) "
-	"while x<=limit do x=x+step end return x end") == 0);
-  assert(lua_pcall(L, 0, 1, 0) == 0);
-  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
-  numacc_inclusive_fixture_pt = funcproto(funcV(L->top-1));
-  assert(numacc_inclusive_fixture_pt->framesize == 5);
-  assert(numacc_inclusive_fixture_pt->sizebc == 13);
-  assert(numacc_inclusive_fixture_pt->numparams == 3);
-  assert(numacc_inclusive_fixture_pt->sizeuv == 0);
-  assert(numacc_inclusive_fixture_pt->sizekn == 0);
-  assert(numacc_inclusive_fixture_pt->sizekgc == 0);
-  assert(numacc_inclusive_fixture_pt->flags2 == PROTO2_CELLOPS);
-  for (i = 0; i < numacc_inclusive_fixture_pt->sizebc; i++) {
-    const BCIns *pc = &proto_bc(numacc_inclusive_fixture_pt)[i];
-    if (bc_op(loadbc(pc)) == BC_LOOP &&
-	numacc_inclusive_fixture_loop_pc == NULL)
-      numacc_inclusive_fixture_loop_pc = pc;
-  }
-  assert(numacc_inclusive_fixture_loop_pc ==
-	 proto_bc(numacc_inclusive_fixture_pt)+5);
-  assert(bc_j(loadbc(numacc_inclusive_fixture_loop_pc)) > 0);
-  assert(bc_op(loadbc(numacc_inclusive_fixture_loop_pc+
-	bc_j(loadbc(numacc_inclusive_fixture_loop_pc)))) == BC_JMP);
-  assert(bc_op(loadbc(proto_bc(numacc_inclusive_fixture_pt)+3)) == BC_ISGT);
-
-  assert(luaL_loadstring(L,
-	"return function(x,limit,step) "
-	"while x>limit do x=x-step end return x end") == 0);
-  assert(lua_pcall(L, 0, 1, 0) == 0);
-  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
-  numacc_sub_gt_fixture_pt = funcproto(funcV(L->top-1));
-  assert(numacc_sub_gt_fixture_pt->framesize == 5);
-  assert(numacc_sub_gt_fixture_pt->sizebc == 13);
-  assert(numacc_sub_gt_fixture_pt->numparams == 3);
-  assert(numacc_sub_gt_fixture_pt->sizeuv == 0);
-  assert(numacc_sub_gt_fixture_pt->sizekn == 0);
-  assert(numacc_sub_gt_fixture_pt->sizekgc == 0);
-  assert(numacc_sub_gt_fixture_pt->flags2 == PROTO2_CELLOPS);
-  for (i = 0; i < numacc_sub_gt_fixture_pt->sizebc; i++) {
-    const BCIns *pc = &proto_bc(numacc_sub_gt_fixture_pt)[i];
-    if (bc_op(loadbc(pc)) == BC_LOOP &&
-	numacc_sub_gt_fixture_loop_pc == NULL)
-      numacc_sub_gt_fixture_loop_pc = pc;
-  }
-  assert(numacc_sub_gt_fixture_loop_pc ==
-	 proto_bc(numacc_sub_gt_fixture_pt)+5);
-  assert(bc_j(loadbc(numacc_sub_gt_fixture_loop_pc)) > 0);
-  assert(bc_op(loadbc(numacc_sub_gt_fixture_loop_pc+
-	bc_j(loadbc(numacc_sub_gt_fixture_loop_pc)))) == BC_JMP);
-  {
-    BCIns comparison = loadbc(proto_bc(numacc_sub_gt_fixture_pt)+3);
-    BCIns arithmetic = loadbc(proto_bc(numacc_sub_gt_fixture_pt)+8);
-    assert(bc_op(comparison) == BC_ISGE);
-    assert(bc_a(comparison) == 4 && bc_d(comparison) == 3);
-    assert(bc_op(arithmetic) == BC_SUBVV && bc_a(arithmetic) == 3);
-    assert(bc_b(arithmetic) == 3 && bc_c(arithmetic) == 4);
-  }
-
-  assert(luaL_loadstring(L,
-	"return function(x,limit,step) "
-	"while x>=limit do x=x-step end return x end") == 0);
-  assert(lua_pcall(L, 0, 1, 0) == 0);
-  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
-  numacc_sub_ge_fixture_pt = funcproto(funcV(L->top-1));
-  assert(numacc_sub_ge_fixture_pt->framesize == 5);
-  assert(numacc_sub_ge_fixture_pt->sizebc == 13);
-  assert(numacc_sub_ge_fixture_pt->numparams == 3);
-  assert(numacc_sub_ge_fixture_pt->sizeuv == 0);
-  assert(numacc_sub_ge_fixture_pt->sizekn == 0);
-  assert(numacc_sub_ge_fixture_pt->sizekgc == 0);
-  assert(numacc_sub_ge_fixture_pt->flags2 == PROTO2_CELLOPS);
-  for (i = 0; i < numacc_sub_ge_fixture_pt->sizebc; i++) {
-    const BCIns *pc = &proto_bc(numacc_sub_ge_fixture_pt)[i];
-    if (bc_op(loadbc(pc)) == BC_LOOP &&
-	numacc_sub_ge_fixture_loop_pc == NULL)
-      numacc_sub_ge_fixture_loop_pc = pc;
-  }
-  assert(numacc_sub_ge_fixture_loop_pc ==
-	 proto_bc(numacc_sub_ge_fixture_pt)+5);
-  assert(bc_j(loadbc(numacc_sub_ge_fixture_loop_pc)) > 0);
-  assert(bc_op(loadbc(numacc_sub_ge_fixture_loop_pc+
-	bc_j(loadbc(numacc_sub_ge_fixture_loop_pc)))) == BC_JMP);
-  {
-    BCIns comparison = loadbc(proto_bc(numacc_sub_ge_fixture_pt)+3);
-    BCIns arithmetic = loadbc(proto_bc(numacc_sub_ge_fixture_pt)+8);
-    assert(bc_op(comparison) == BC_ISGT);
-    assert(bc_a(comparison) == 4 && bc_d(comparison) == 3);
-    assert(bc_op(arithmetic) == BC_SUBVV && bc_a(arithmetic) == 3);
-    assert(bc_b(arithmetic) == 3 && bc_c(arithmetic) == 4);
-  }
-
-  assert(luaL_loadstring(L,
-	"return function(x,limit,step) "
-	"while x>limit do x=x+step end return x end") == 0);
-  assert(lua_pcall(L, 0, 1, 0) == 0);
-  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
-  numacc_add_gt_fixture_pt = funcproto(funcV(L->top-1));
-  assert(numacc_add_gt_fixture_pt->framesize == 5);
-  assert(numacc_add_gt_fixture_pt->sizebc == 13);
-  assert(numacc_add_gt_fixture_pt->numparams == 3);
-  assert(numacc_add_gt_fixture_pt->sizeuv == 0);
-  assert(numacc_add_gt_fixture_pt->sizekn == 0);
-  assert(numacc_add_gt_fixture_pt->sizekgc == 0);
-  assert(numacc_add_gt_fixture_pt->flags2 == PROTO2_CELLOPS);
-  for (i = 0; i < numacc_add_gt_fixture_pt->sizebc; i++) {
-    const BCIns *pc = &proto_bc(numacc_add_gt_fixture_pt)[i];
-    if (bc_op(loadbc(pc)) == BC_LOOP &&
-	numacc_add_gt_fixture_loop_pc == NULL)
-      numacc_add_gt_fixture_loop_pc = pc;
-  }
-  assert(numacc_add_gt_fixture_loop_pc ==
-	 proto_bc(numacc_add_gt_fixture_pt)+5);
-  assert(bc_j(loadbc(numacc_add_gt_fixture_loop_pc)) > 0);
-  assert(bc_op(loadbc(numacc_add_gt_fixture_loop_pc+
-	bc_j(loadbc(numacc_add_gt_fixture_loop_pc)))) == BC_JMP);
-  {
-    BCIns comparison = loadbc(proto_bc(numacc_add_gt_fixture_pt)+3);
-    BCIns arithmetic = loadbc(proto_bc(numacc_add_gt_fixture_pt)+8);
-    assert(bc_op(comparison) == BC_ISGE);
-    assert(bc_a(comparison) == 4 && bc_d(comparison) == 3);
-    assert(bc_op(arithmetic) == BC_ADDVV && bc_a(arithmetic) == 3);
-    assert(bc_b(arithmetic) == 3 && bc_c(arithmetic) == 4);
-  }
-
-  assert(luaL_loadstring(L,
-	"return function(x,limit,step) "
-	"while x>=limit do x=x+step end return x end") == 0);
-  assert(lua_pcall(L, 0, 1, 0) == 0);
-  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
-  numacc_add_ge_fixture_pt = funcproto(funcV(L->top-1));
-  assert(numacc_add_ge_fixture_pt->framesize == 5);
-  assert(numacc_add_ge_fixture_pt->sizebc == 13);
-  assert(numacc_add_ge_fixture_pt->numparams == 3);
-  assert(numacc_add_ge_fixture_pt->sizeuv == 0);
-  assert(numacc_add_ge_fixture_pt->sizekn == 0);
-  assert(numacc_add_ge_fixture_pt->sizekgc == 0);
-  assert(numacc_add_ge_fixture_pt->flags2 == PROTO2_CELLOPS);
-  for (i = 0; i < numacc_add_ge_fixture_pt->sizebc; i++) {
-    const BCIns *pc = &proto_bc(numacc_add_ge_fixture_pt)[i];
-    if (bc_op(loadbc(pc)) == BC_LOOP &&
-	 numacc_add_ge_fixture_loop_pc == NULL)
-      numacc_add_ge_fixture_loop_pc = pc;
-  }
-  assert(numacc_add_ge_fixture_loop_pc ==
-	 proto_bc(numacc_add_ge_fixture_pt)+5);
-  assert(bc_j(loadbc(numacc_add_ge_fixture_loop_pc)) > 0);
-  assert(bc_op(loadbc(numacc_add_ge_fixture_loop_pc+
-	bc_j(loadbc(numacc_add_ge_fixture_loop_pc)))) == BC_JMP);
-  {
-    BCIns comparison = loadbc(proto_bc(numacc_add_ge_fixture_pt)+3);
-    BCIns arithmetic = loadbc(proto_bc(numacc_add_ge_fixture_pt)+8);
-    assert(bc_op(comparison) == BC_ISGT);
-    assert(bc_a(comparison) == 4 && bc_d(comparison) == 3);
-    assert(bc_op(arithmetic) == BC_ADDVV && bc_a(arithmetic) == 3);
-    assert(bc_b(arithmetic) == 3 && bc_c(arithmetic) == 4);
-  }
-
-  assert(luaL_loadstring(L,
-	"return function(x,limit,factor) "
-	"while x<limit do x=x*factor end return x end") == 0);
-  assert(lua_pcall(L, 0, 1, 0) == 0);
-  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
-  numacc_mul_lt_fixture_pt = funcproto(funcV(L->top-1));
-  assert(numacc_mul_lt_fixture_pt->framesize == 5);
-  assert(numacc_mul_lt_fixture_pt->sizebc == 13);
-  assert(numacc_mul_lt_fixture_pt->numparams == 3);
-  assert(numacc_mul_lt_fixture_pt->sizeuv == 0);
-  assert(numacc_mul_lt_fixture_pt->sizekn == 0);
-  assert(numacc_mul_lt_fixture_pt->sizekgc == 0);
-  assert(numacc_mul_lt_fixture_pt->flags2 == PROTO2_CELLOPS);
-  for (i = 0; i < numacc_mul_lt_fixture_pt->sizebc; i++) {
-    const BCIns *pc = &proto_bc(numacc_mul_lt_fixture_pt)[i];
-    if (bc_op(loadbc(pc)) == BC_LOOP &&
-	 numacc_mul_lt_fixture_loop_pc == NULL)
-      numacc_mul_lt_fixture_loop_pc = pc;
-  }
-  assert(numacc_mul_lt_fixture_loop_pc ==
-	 proto_bc(numacc_mul_lt_fixture_pt)+5);
-  assert(bc_j(loadbc(numacc_mul_lt_fixture_loop_pc)) > 0);
-  assert(bc_op(loadbc(numacc_mul_lt_fixture_loop_pc+
-	bc_j(loadbc(numacc_mul_lt_fixture_loop_pc)))) == BC_JMP);
-  {
-    BCIns comparison = loadbc(proto_bc(numacc_mul_lt_fixture_pt)+3);
-    BCIns arithmetic = loadbc(proto_bc(numacc_mul_lt_fixture_pt)+8);
-    assert(bc_op(comparison) == BC_ISGE);
-    assert(bc_a(comparison) == 3 && bc_d(comparison) == 4);
-    assert(bc_op(arithmetic) == BC_MULVV && bc_a(arithmetic) == 3);
-    assert(bc_b(arithmetic) == 3 && bc_c(arithmetic) == 4);
-  }
-
-  assert(luaL_loadstring(L,
-	"return function(x,limit,factor) "
-	"while x<=limit do x=x*factor end return x end") == 0);
-  assert(lua_pcall(L, 0, 1, 0) == 0);
-  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
-  numacc_mul_le_fixture_pt = funcproto(funcV(L->top-1));
-  assert(numacc_mul_le_fixture_pt->framesize == 5);
-  assert(numacc_mul_le_fixture_pt->sizebc == 13);
-  assert(numacc_mul_le_fixture_pt->numparams == 3);
-  assert(numacc_mul_le_fixture_pt->sizeuv == 0);
-  assert(numacc_mul_le_fixture_pt->sizekn == 0);
-  assert(numacc_mul_le_fixture_pt->sizekgc == 0);
-  assert(numacc_mul_le_fixture_pt->flags2 == PROTO2_CELLOPS);
-  for (i = 0; i < numacc_mul_le_fixture_pt->sizebc; i++) {
-    const BCIns *pc = &proto_bc(numacc_mul_le_fixture_pt)[i];
-    if (bc_op(loadbc(pc)) == BC_LOOP &&
-	 numacc_mul_le_fixture_loop_pc == NULL)
-      numacc_mul_le_fixture_loop_pc = pc;
-  }
-  assert(numacc_mul_le_fixture_loop_pc ==
-	 proto_bc(numacc_mul_le_fixture_pt)+5);
-  assert(bc_j(loadbc(numacc_mul_le_fixture_loop_pc)) > 0);
-  assert(bc_op(loadbc(numacc_mul_le_fixture_loop_pc+
-	bc_j(loadbc(numacc_mul_le_fixture_loop_pc)))) == BC_JMP);
-  {
-    BCIns comparison = loadbc(proto_bc(numacc_mul_le_fixture_pt)+3);
-    BCIns arithmetic = loadbc(proto_bc(numacc_mul_le_fixture_pt)+8);
-    assert(bc_op(comparison) == BC_ISGT);
-    assert(bc_a(comparison) == 3 && bc_d(comparison) == 4);
-    assert(bc_op(arithmetic) == BC_MULVV && bc_a(arithmetic) == 3);
-    assert(bc_b(arithmetic) == 3 && bc_c(arithmetic) == 4);
-  }
-
-  assert(luaL_loadstring(L,
-	"return function(x,limit,divisor) "
-	"while x<limit do x=x/divisor end return x end") == 0);
-  assert(lua_pcall(L, 0, 1, 0) == 0);
-  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
-  numacc_div_lt_fixture_pt = funcproto(funcV(L->top-1));
-  assert(numacc_div_lt_fixture_pt->framesize == 5);
-  assert(numacc_div_lt_fixture_pt->sizebc == 13);
-  assert(numacc_div_lt_fixture_pt->numparams == 3);
-  assert(numacc_div_lt_fixture_pt->sizeuv == 0);
-  assert(numacc_div_lt_fixture_pt->sizekn == 0);
-  assert(numacc_div_lt_fixture_pt->sizekgc == 0);
-  assert(numacc_div_lt_fixture_pt->flags2 == PROTO2_CELLOPS);
-  for (i = 0; i < numacc_div_lt_fixture_pt->sizebc; i++) {
-    const BCIns *pc = &proto_bc(numacc_div_lt_fixture_pt)[i];
-    if (bc_op(loadbc(pc)) == BC_LOOP &&
-	 numacc_div_lt_fixture_loop_pc == NULL)
-      numacc_div_lt_fixture_loop_pc = pc;
-  }
-  assert(numacc_div_lt_fixture_loop_pc ==
-	 proto_bc(numacc_div_lt_fixture_pt)+5);
-  assert(bc_j(loadbc(numacc_div_lt_fixture_loop_pc)) > 0);
-  assert(bc_op(loadbc(numacc_div_lt_fixture_loop_pc+
-	bc_j(loadbc(numacc_div_lt_fixture_loop_pc)))) == BC_JMP);
-  {
-    BCIns comparison = loadbc(proto_bc(numacc_div_lt_fixture_pt)+3);
-    BCIns arithmetic = loadbc(proto_bc(numacc_div_lt_fixture_pt)+8);
-    assert(bc_op(comparison) == BC_ISGE);
-    assert(bc_a(comparison) == 3 && bc_d(comparison) == 4);
-    assert(bc_op(arithmetic) == BC_DIVVV && bc_a(arithmetic) == 3);
-    assert(bc_b(arithmetic) == 3 && bc_c(arithmetic) == 4);
-  }
-
-  assert(luaL_loadstring(L,
-	"return function(x,limit,divisor) "
-	"while x<=limit do x=x/divisor end return x end") == 0);
-  assert(lua_pcall(L, 0, 1, 0) == 0);
-  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
-  numacc_div_le_fixture_pt = funcproto(funcV(L->top-1));
-  assert(numacc_div_le_fixture_pt->framesize == 5);
-  assert(numacc_div_le_fixture_pt->sizebc == 13);
-  assert(numacc_div_le_fixture_pt->numparams == 3);
-  assert(numacc_div_le_fixture_pt->sizeuv == 0);
-  assert(numacc_div_le_fixture_pt->sizekn == 0);
-  assert(numacc_div_le_fixture_pt->sizekgc == 0);
-  assert(numacc_div_le_fixture_pt->flags2 == PROTO2_CELLOPS);
-  for (i = 0; i < numacc_div_le_fixture_pt->sizebc; i++) {
-    const BCIns *pc = &proto_bc(numacc_div_le_fixture_pt)[i];
-    if (bc_op(loadbc(pc)) == BC_LOOP &&
-	 numacc_div_le_fixture_loop_pc == NULL)
-      numacc_div_le_fixture_loop_pc = pc;
-  }
-  assert(numacc_div_le_fixture_loop_pc ==
-	 proto_bc(numacc_div_le_fixture_pt)+5);
-  assert(bc_j(loadbc(numacc_div_le_fixture_loop_pc)) > 0);
-  assert(bc_op(loadbc(numacc_div_le_fixture_loop_pc+
-	bc_j(loadbc(numacc_div_le_fixture_loop_pc)))) == BC_JMP);
-  {
-    BCIns comparison = loadbc(proto_bc(numacc_div_le_fixture_pt)+3);
-    BCIns arithmetic = loadbc(proto_bc(numacc_div_le_fixture_pt)+8);
-    assert(bc_op(comparison) == BC_ISGT);
-    assert(bc_a(comparison) == 3 && bc_d(comparison) == 4);
-    assert(bc_op(arithmetic) == BC_DIVVV && bc_a(arithmetic) == 3);
-    assert(bc_b(arithmetic) == 3 && bc_c(arithmetic) == 4);
-  }
-
-  assert(luaL_loadstring(L,
-	"return function(x,limit,divisor) "
-	"while x>limit do x=x/divisor end return x end") == 0);
-  assert(lua_pcall(L, 0, 1, 0) == 0);
-  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
-  numacc_div_gt_fixture_pt = funcproto(funcV(L->top-1));
-  assert(numacc_div_gt_fixture_pt->framesize == 5);
-  assert(numacc_div_gt_fixture_pt->sizebc == 13);
-  assert(numacc_div_gt_fixture_pt->numparams == 3);
-  assert(numacc_div_gt_fixture_pt->sizeuv == 0);
-  assert(numacc_div_gt_fixture_pt->sizekn == 0);
-  assert(numacc_div_gt_fixture_pt->sizekgc == 0);
-  assert(numacc_div_gt_fixture_pt->flags2 == PROTO2_CELLOPS);
-  for (i = 0; i < numacc_div_gt_fixture_pt->sizebc; i++) {
-    const BCIns *pc = &proto_bc(numacc_div_gt_fixture_pt)[i];
-    if (bc_op(loadbc(pc)) == BC_LOOP &&
-	 numacc_div_gt_fixture_loop_pc == NULL)
-      numacc_div_gt_fixture_loop_pc = pc;
-  }
-  assert(numacc_div_gt_fixture_loop_pc ==
-	 proto_bc(numacc_div_gt_fixture_pt)+5);
-  assert(bc_j(loadbc(numacc_div_gt_fixture_loop_pc)) > 0);
-  assert(bc_op(loadbc(numacc_div_gt_fixture_loop_pc+
-	bc_j(loadbc(numacc_div_gt_fixture_loop_pc)))) == BC_JMP);
-  {
-    BCIns comparison = loadbc(proto_bc(numacc_div_gt_fixture_pt)+3);
-    BCIns arithmetic = loadbc(proto_bc(numacc_div_gt_fixture_pt)+8);
-    assert(bc_op(comparison) == BC_ISGE);
-    assert(bc_a(comparison) == 4 && bc_d(comparison) == 3);
-    assert(bc_op(arithmetic) == BC_DIVVV && bc_a(arithmetic) == 3);
-    assert(bc_b(arithmetic) == 3 && bc_c(arithmetic) == 4);
-  }
-
-  assert(luaL_loadstring(L,
-	"return function(x,limit,divisor) "
-	"while x>=limit do x=x/divisor end return x end") == 0);
-  assert(lua_pcall(L, 0, 1, 0) == 0);
-  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
-  numacc_div_ge_fixture_pt = funcproto(funcV(L->top-1));
-  assert(numacc_div_ge_fixture_pt->framesize == 5);
-  assert(numacc_div_ge_fixture_pt->sizebc == 13);
-  assert(numacc_div_ge_fixture_pt->numparams == 3);
-  assert(numacc_div_ge_fixture_pt->sizeuv == 0);
-  assert(numacc_div_ge_fixture_pt->sizekn == 0);
-  assert(numacc_div_ge_fixture_pt->sizekgc == 0);
-  assert(numacc_div_ge_fixture_pt->flags2 == PROTO2_CELLOPS);
-  for (i = 0; i < numacc_div_ge_fixture_pt->sizebc; i++) {
-    const BCIns *pc = &proto_bc(numacc_div_ge_fixture_pt)[i];
-    if (bc_op(loadbc(pc)) == BC_LOOP &&
-	 numacc_div_ge_fixture_loop_pc == NULL)
-      numacc_div_ge_fixture_loop_pc = pc;
-  }
-  assert(numacc_div_ge_fixture_loop_pc ==
-	 proto_bc(numacc_div_ge_fixture_pt)+5);
-  assert(bc_j(loadbc(numacc_div_ge_fixture_loop_pc)) > 0);
-  assert(bc_op(loadbc(numacc_div_ge_fixture_loop_pc+
-	bc_j(loadbc(numacc_div_ge_fixture_loop_pc)))) == BC_JMP);
-  {
-    BCIns comparison = loadbc(proto_bc(numacc_div_ge_fixture_pt)+3);
-    BCIns arithmetic = loadbc(proto_bc(numacc_div_ge_fixture_pt)+8);
-    assert(bc_op(comparison) == BC_ISGT);
-    assert(bc_a(comparison) == 4 && bc_d(comparison) == 3);
-    assert(bc_op(arithmetic) == BC_DIVVV && bc_a(arithmetic) == 3);
-    assert(bc_b(arithmetic) == 3 && bc_c(arithmetic) == 4);
-  }
   J = L2J(L);
   savedL = J->L;
   savedparent = J->parent;
@@ -6344,122 +2092,7 @@ int main(void)
   test_dynamic_forl_postra_layout(J);
   test_numeric_positive_and_negative(J);
   test_numeric_postra_layout(J);
-  test_numhalf_positive_and_negative(J);
-  test_numhalf_postra_layout(J);
-  test_numstep_positive_and_negative(J);
-  test_numstep_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_ADD_LT);
-  test_numacc_positive_and_negative(J);
-  test_numacc_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_ADD_LE);
-  test_numacc_positive_and_negative(J);
-  test_numacc_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_SUB_GT);
-  test_numacc_positive_and_negative(J);
-  test_numacc_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_SUB_GE);
-  test_numacc_positive_and_negative(J);
-  test_numacc_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_ADD_GT);
-  test_numacc_positive_and_negative(J);
-  test_numacc_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_ADD_GE);
-  test_numacc_positive_and_negative(J);
-  test_numacc_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_MUL_LT);
-  test_numacc_positive_and_negative(J);
-  test_numacc_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_MUL_LE);
-  test_numacc_positive_and_negative(J);
-  test_numacc_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_DIV_LT);
-  test_numacc_positive_and_negative(J);
-  test_numacc_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_DIV_LE);
-  test_numacc_positive_and_negative(J);
-  test_numacc_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_DIV_GT);
-  test_numacc_positive_and_negative(J);
-  test_numacc_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_DIV_GE);
-  test_numacc_positive_and_negative(J);
-  test_numacc_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_ADD_LT);
-  test_numacc_intstep_positive_and_negative(J);
-  test_numacc_intstep_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_ADD_LE);
-  test_numacc_intstep_positive_and_negative(J);
-  test_numacc_intstep_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_SUB_GT);
-  test_numacc_intstep_positive_and_negative(J);
-  test_numacc_intstep_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_SUB_GE);
-  test_numacc_intstep_positive_and_negative(J);
-  test_numacc_intstep_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_ADD_GT);
-  test_numacc_intstep_positive_and_negative(J);
-  test_numacc_intstep_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_ADD_GE);
-  test_numacc_intstep_positive_and_negative(J);
-  test_numacc_intstep_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_MUL_LT);
-  test_numacc_intstep_positive_and_negative(J);
-  test_numacc_intstep_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_MUL_LE);
-  test_numacc_intstep_positive_and_negative(J);
-  test_numacc_intstep_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_DIV_LT);
-  test_numacc_intstep_positive_and_negative(J);
-  test_numacc_intstep_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_DIV_LE);
-  test_numacc_intstep_positive_and_negative(J);
-  test_numacc_intstep_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_DIV_GT);
-  test_numacc_intstep_positive_and_negative(J);
-  test_numacc_intstep_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_DIV_GE);
-  test_numacc_intstep_positive_and_negative(J);
-  test_numacc_intstep_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_ADD_LT);
-  test_numacc_intx_positive_and_negative(J);
-  test_numacc_intx_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_ADD_LE);
-  test_numacc_intx_positive_and_negative(J);
-  test_numacc_intx_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_SUB_GT);
-  test_numacc_intx_positive_and_negative(J);
-  test_numacc_intx_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_SUB_GE);
-  test_numacc_intx_positive_and_negative(J);
-  test_numacc_intx_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_ADD_GT);
-  test_numacc_intx_positive_and_negative(J);
-  test_numacc_intx_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_ADD_GE);
-  test_numacc_intx_positive_and_negative(J);
-  test_numacc_intx_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_MUL_LT);
-  test_numacc_intx_positive_and_negative(J);
-  test_numacc_intx_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_MUL_LE);
-  test_numacc_intx_positive_and_negative(J);
-  test_numacc_intx_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_DIV_LT);
-  test_numacc_intx_positive_and_negative(J);
-  test_numacc_intx_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_DIV_LE);
-  test_numacc_intx_positive_and_negative(J);
-  test_numacc_intx_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_DIV_GT);
-  test_numacc_intx_positive_and_negative(J);
-  test_numacc_intx_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_DIV_GE);
-  test_numacc_intx_positive_and_negative(J);
-  test_numacc_intx_postra_layout(J);
-  select_numacc_fixture(NUMACC_FIXTURE_ADD_LT);
-  test_numacc_intlimit_positive_and_negative(J);
-  test_numacc_intlimit_postra_layout(J);
-  test_numacc_shape_cross_product(J);
+  test_scalar_capabilities(J);
   J->L = savedL;
   J->parent = savedparent;
   J->exitno = savedexit;
@@ -6469,9 +2102,9 @@ int main(void)
   J->framedepth = savedframedepth;
   J->retdepth = savedretdepth;
   J->startpc = savedstartpc;
-  L->top -= 17;
+  L->top -= 4;
   lua_close(L);
-  puts("arm64_jit_ir_admission OK: exact variable-step INT FORL plus integer, mixed NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE/MUL_LT/MUL_LE/DIV_LT/DIV_LE/DIV_GT/DIV_GE dynamic-accumulator NUM/INT-step/INT-X plus ADD_LT INT-limit LOOP policy verified");
+  puts("arm64_jit_ir_admission OK: scalar capabilities, independent corruption checks and exact INT FORL");
   return 0;
 }
 
