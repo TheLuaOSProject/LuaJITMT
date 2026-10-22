@@ -305,70 +305,70 @@ for required in \
   'function __arm64_fixed_half_inclusive(limit) local x=0.5' \
   'function __arm64_fixed_initializer_add_descending(limit,step)' \
   'function __arm64_fixed_half_add_descending(limit) local x=20.5' \
-  'expect_no_trace(L, "__arm64_fixed_initializer_add_descending");' \
-  'expect_no_trace(L, "__arm64_fixed_half_add_descending");' \
+  'expect_scalar_trace(L, "__arm64_fixed_initializer_add_descending");' \
+  'expect_scalar_trace(L, "__arm64_fixed_half_add_descending");' \
   'function __arm64_fixed_initializer_add_descending_inclusive(limit,step)' \
   'function __arm64_fixed_half_add_descending_inclusive(limit)' \
-  'expect_no_trace(L, "__arm64_fixed_initializer_add_descending_inclusive");' \
-  'expect_no_trace(L, "__arm64_fixed_half_add_descending_inclusive");' \
+  'expect_scalar_trace(L, "__arm64_fixed_initializer_add_descending_inclusive");' \
+  'expect_scalar_trace(L, "__arm64_fixed_half_add_descending_inclusive");' \
   'function __arm64_fixed_initializer_descending(limit,step) local x=20.5' \
   'function __arm64_fixed_half_descending(limit) local x=20.5' \
   'function __arm64_fixed_initializer_descending_inclusive(limit,step)' \
   'function __arm64_fixed_half_descending_inclusive(limit) local x=20.5' \
-  'expect_no_trace(L, "__arm64_fixed_initializer_descending_inclusive");' \
-  'expect_no_trace(L, "__arm64_fixed_half_descending_inclusive");' \
+  'expect_scalar_trace(L, "__arm64_fixed_initializer_descending_inclusive");' \
+  'expect_scalar_trace(L, "__arm64_fixed_half_descending_inclusive");' \
   'function __arm64_args_sub_lt(x,limit,step)' \
   'while x<limit do x=x-step end return x end' \
-  'expect_no_trace(L, "__arm64_args_sub_lt");' \
+  'expect_scalar_trace(L, "__arm64_args_sub_lt");' \
   'while limit>=x do x=x+step end return x end' \
   'while x<=limit do x=step+x end return x end' \
   'while x<limit do x=x+step+step end return x end' \
   'while x<=limit do x=x+step+step end return x end' \
   'function __arm64_args_reversed_add_gt_compare(x,limit,step)' \
   'while limit<x do x=x+step end return x end' \
-  'expect_no_trace(L, "__arm64_args_reversed_add_gt_compare");' \
+  'expect_scalar_trace(L, "__arm64_args_reversed_add_gt_compare");' \
   'function __arm64_args_reversed_add_gt(x,limit,step)' \
   'while x>limit do x=step+x end return x end' \
-  'expect_no_trace(L, "__arm64_args_reversed_add_gt");' \
+  'expect_scalar_trace(L, "__arm64_args_reversed_add_gt");' \
   'function __arm64_args_extra_add_gt(x,limit,step)' \
   'while x>limit do x=x+step+step end return x end' \
-  'expect_no_trace(L, "__arm64_args_extra_add_gt");' \
+  'expect_scalar_trace(L, "__arm64_args_extra_add_gt");' \
   'function __arm64_args_add_gt_mul(x,limit,step)' \
-  'expect_no_trace(L, "__arm64_args_add_gt_mul");' \
+  'expect_scalar_trace(L, "__arm64_args_add_gt_mul");' \
   'function __arm64_args_reversed_add_ge_compare(x,limit,step)' \
   'while limit<=x do x=x+step end return x end' \
-  'expect_no_trace(L, "__arm64_args_reversed_add_ge_compare");' \
+  'expect_scalar_trace(L, "__arm64_args_reversed_add_ge_compare");' \
   'function __arm64_args_reversed_add_ge(x,limit,step)' \
   'while x>=limit do x=step+x end return x end' \
-  'expect_no_trace(L, "__arm64_args_reversed_add_ge");' \
+  'expect_scalar_trace(L, "__arm64_args_reversed_add_ge");' \
   'function __arm64_args_extra_add_ge(x,limit,step)' \
   'while x>=limit do x=x+step+step end return x end' \
-  'expect_no_trace(L, "__arm64_args_extra_add_ge");' \
+  'expect_scalar_trace(L, "__arm64_args_extra_add_ge");' \
   'function __arm64_args_add_ge_mul(x,limit,step)' \
-  'expect_no_trace(L, "__arm64_args_add_ge_mul");' \
+  'expect_scalar_trace(L, "__arm64_args_add_ge_mul");' \
   'function __arm64_args_sub_le(x,limit,step)' \
   'while x<=limit do x=x-step end return x end' \
-  'expect_no_trace(L, "__arm64_args_sub_le");' \
+  'expect_scalar_trace(L, "__arm64_args_sub_le");' \
   'function __arm64_args_descending_mul(x,limit,step)' \
   'while x>limit do x=x*step end return x end' \
   'function __arm64_args_descending_inclusive_mul(x,limit,step)' \
   'while x>=limit do x=x*step end return x end' \
-  'expect_no_trace(L, "__arm64_args_descending_inclusive_mul");' \
+  'expect_scalar_trace(L, "__arm64_args_descending_inclusive_mul");' \
   'function __arm64_args_reversed_descending_compare(x,limit,step)' \
   'while limit<x do x=x-step end return x end' \
   'function __arm64_args_reversed_descending_inclusive_compare' \
   '(x,limit,step) while limit<=x do x=x-step end return x end' \
-  'expect_no_trace(L, "__arm64_args_reversed_descending_inclusive_compare");' \
+  'expect_scalar_trace(L, "__arm64_args_reversed_descending_inclusive_compare");' \
   'function __arm64_args_reversed_sub(x,limit,step)' \
   'while x>limit do x=step-x end return x end' \
   'function __arm64_args_reversed_inclusive_sub(x,limit,step)' \
   'while x>=limit do x=step-x end return x end' \
-  'expect_no_trace(L, "__arm64_args_reversed_inclusive_sub");' \
+  'expect_short_loop(L, "__arm64_args_reversed_inclusive_sub");' \
   'function __arm64_args_extra_sub(x,limit,step)' \
   'while x>limit do x=x-step-step end return x end' \
   'function __arm64_args_extra_inclusive_sub(x,limit,step)' \
   'while x>=limit do x=x-step-step end return x end' \
-  'expect_no_trace(L, "__arm64_args_extra_inclusive_sub");' \
+  'expect_scalar_trace(L, "__arm64_args_extra_inclusive_sub");' \
   'test_positive_and_guard_exits(&strict_profile);' \
   'test_positive_and_guard_exits(&inclusive_profile);' \
   'test_positive_and_guard_exits(&mul_profile);' \
@@ -381,8 +381,8 @@ for required in \
   'test_positive_and_guard_exits(&add_descending_inclusive_profile);' \
   'test_positive_and_guard_exits(&descending_profile);' \
   'test_positive_and_guard_exits(&descending_inclusive_profile);' \
-  'test_mul_inclusive_adjacent_rejected();' \
-  'test_div_adjacent_rejected();' \
+  'test_mul_inclusive_adjacent_admitted();' \
+  'test_div_adjacent_admitted();' \
   'run_lua(L, "jit.flush()")' \
   'proto_trace_acq(pt) == 0'; do
   grep -F "$required" "$fixture_source" >/dev/null || {
@@ -1014,92 +1014,92 @@ for required in \
 done
 
 for required in \
-  '"function __arm64_fixed_initializer_add_descending(limit,step) " "local x=20.5 while x>limit do x=x+step end return x end " "assert(__arm64_fixed_initializer_add_descending(0.25,-0.5)==0.0)"); expect_no_trace(L, "__arm64_fixed_initializer_add_descending");' \
-  '"function __arm64_fixed_half_add_descending(limit) local x=20.5 " "while x>limit do x=x+(-0.5) end return x end " "assert(__arm64_fixed_half_add_descending(0.25)==0.0)"); pt = global_proto(L, "__arm64_fixed_half_add_descending"); expect_no_trace(L, "__arm64_fixed_half_add_descending");' \
-  '"function __arm64_fixed_initializer_add_descending_inclusive(limit,step) " "local x=20.5 while x>=limit do x=x+step end return x end " "assert(__arm64_fixed_initializer_add_descending_inclusive" "(0.5,-0.5)==0.0)"); expect_no_trace(L, "__arm64_fixed_initializer_add_descending_inclusive");' \
-  '"function __arm64_fixed_half_add_descending_inclusive(limit) " "local x=20.5 while x>=limit do x=x+(-0.5) end return x end " "assert(__arm64_fixed_half_add_descending_inclusive(0.5)==0.0)"); pt = global_proto(L, "__arm64_fixed_half_add_descending_inclusive"); expect_no_trace(L, "__arm64_fixed_half_add_descending_inclusive");'; do
+  '"function __arm64_fixed_initializer_add_descending(limit,step) " "local x=20.5 while x>limit do x=x+step end return x end " "assert(__arm64_fixed_initializer_add_descending(0.25,-0.5)==0.0)"); expect_scalar_trace(L, "__arm64_fixed_initializer_add_descending");' \
+  '"function __arm64_fixed_half_add_descending(limit) local x=20.5 " "while x>limit do x=x+(-0.5) end return x end " "assert(__arm64_fixed_half_add_descending(0.25)==0.0)"); pt = global_proto(L, "__arm64_fixed_half_add_descending"); expect_scalar_trace(L, "__arm64_fixed_half_add_descending");' \
+  '"function __arm64_fixed_initializer_add_descending_inclusive(limit,step) " "local x=20.5 while x>=limit do x=x+step end return x end " "assert(__arm64_fixed_initializer_add_descending_inclusive" "(0.5,-0.5)==0.0)"); expect_scalar_trace(L, "__arm64_fixed_initializer_add_descending_inclusive");' \
+  '"function __arm64_fixed_half_add_descending_inclusive(limit) " "local x=20.5 while x>=limit do x=x+(-0.5) end return x end " "assert(__arm64_fixed_half_add_descending_inclusive(0.5)==0.0)"); pt = global_proto(L, "__arm64_fixed_half_add_descending_inclusive"); expect_scalar_trace(L, "__arm64_fixed_half_add_descending_inclusive");'; do
   require_fixture_sequence \
-    'static void test_fixed_initializers_remain_separate' \
-    'static void test_sub_lt_rejected' "$required"
+    'static void test_fixed_initializers_admitted' \
+    'static void test_sub_lt_admitted' "$required"
 done
 
 for required in \
-  '"function __arm64_fixed_initializer_mul_inclusive(limit,factor) " "local x=0.5 while x<=limit do x=x*factor end return x end " "assert(__arm64_fixed_initializer_mul_inclusive(20.25,2)==32)"); expect_no_trace(L, "__arm64_fixed_initializer_mul_inclusive");' \
-  '"function __arm64_fixed_factor_mul_inclusive(x,limit) " "while x<=limit do x=x*2 end return x end " "assert(__arm64_fixed_factor_mul_inclusive(0.5,20.25)==32)"); pt = global_proto(L, "__arm64_fixed_factor_mul_inclusive"); expect_no_trace(L, "__arm64_fixed_factor_mul_inclusive");'; do
+  '"function __arm64_fixed_initializer_mul_inclusive(limit,factor) " "local x=0.5 while x<=limit do x=x*factor end return x end " "assert(__arm64_fixed_initializer_mul_inclusive(20.25,2)==32)"); expect_scalar_trace(L, "__arm64_fixed_initializer_mul_inclusive");' \
+  '"function __arm64_fixed_factor_mul_inclusive(x,limit) " "while x<=limit do x=x*2 end return x end " "assert(__arm64_fixed_factor_mul_inclusive(0.5,20.25)==32)"); pt = global_proto(L, "__arm64_fixed_factor_mul_inclusive"); expect_scalar_trace(L, "__arm64_fixed_factor_mul_inclusive");'; do
   require_fixture_sequence \
-    'static void test_fixed_initializers_remain_separate' \
-    'static void test_sub_lt_rejected' "$required"
+    'static void test_fixed_initializers_admitted' \
+    'static void test_sub_lt_admitted' "$required"
 done
 
 for required in \
-  '"function __arm64_fixed_initializer_div(limit,divisor) " "local x=0.5 while x<limit do x=x/divisor end return x end " "assert(__arm64_fixed_initializer_div(20.25,0.5)==32)"); expect_no_trace(L, "__arm64_fixed_initializer_div");' \
-  '"function __arm64_fixed_divisor_div(x,limit) " "while x<limit do x=x/0.5 end return x end " "assert(__arm64_fixed_divisor_div(0.5,20.25)==32)"); pt = global_proto(L, "__arm64_fixed_divisor_div"); expect_no_trace(L, "__arm64_fixed_divisor_div");'; do
+  '"function __arm64_fixed_initializer_div(limit,divisor) " "local x=0.5 while x<limit do x=x/divisor end return x end " "assert(__arm64_fixed_initializer_div(20.25,0.5)==32)"); expect_scalar_trace(L, "__arm64_fixed_initializer_div");' \
+  '"function __arm64_fixed_divisor_div(x,limit) " "while x<limit do x=x/0.5 end return x end " "assert(__arm64_fixed_divisor_div(0.5,20.25)==32)"); pt = global_proto(L, "__arm64_fixed_divisor_div"); expect_scalar_trace(L, "__arm64_fixed_divisor_div");'; do
   require_fixture_sequence \
-    'static void test_fixed_initializers_remain_separate' \
-    'static void test_sub_lt_rejected' "$required"
+    'static void test_fixed_initializers_admitted' \
+    'static void test_sub_lt_admitted' "$required"
 done
 
 for required in \
-  '"function __arm64_fixed_initializer_div_inclusive(limit,divisor) " "local x=0.5 while x<=limit do x=x/divisor end return x end " "assert(__arm64_fixed_initializer_div_inclusive(20.25,0.5)==32)"); expect_no_trace(L, "__arm64_fixed_initializer_div_inclusive");' \
-  '"function __arm64_fixed_divisor_div_inclusive(x,limit) " "while x<=limit do x=x/0.5 end return x end " "assert(__arm64_fixed_divisor_div_inclusive(0.5,20.25)==32)"); pt = global_proto(L, "__arm64_fixed_divisor_div_inclusive"); expect_no_trace(L, "__arm64_fixed_divisor_div_inclusive");'; do
+  '"function __arm64_fixed_initializer_div_inclusive(limit,divisor) " "local x=0.5 while x<=limit do x=x/divisor end return x end " "assert(__arm64_fixed_initializer_div_inclusive(20.25,0.5)==32)"); expect_scalar_trace(L, "__arm64_fixed_initializer_div_inclusive");' \
+  '"function __arm64_fixed_divisor_div_inclusive(x,limit) " "while x<=limit do x=x/0.5 end return x end " "assert(__arm64_fixed_divisor_div_inclusive(0.5,20.25)==32)"); pt = global_proto(L, "__arm64_fixed_divisor_div_inclusive"); expect_scalar_trace(L, "__arm64_fixed_divisor_div_inclusive");'; do
   require_fixture_sequence \
-    'static void test_fixed_initializers_remain_separate' \
-    'static void test_sub_lt_rejected' "$required"
+    'static void test_fixed_initializers_admitted' \
+    'static void test_sub_lt_admitted' "$required"
 done
 
 for required in \
-  '"function __arm64_fixed_initializer_div_descending(limit,divisor) " "local x=16.0 while x>limit do x=x/divisor end return x end " "assert(__arm64_fixed_initializer_div_descending(1.0,2.0)==1.0)"); expect_no_trace(L, "__arm64_fixed_initializer_div_descending");' \
-  '"function __arm64_fixed_divisor_div_descending(x,limit) " "while x>limit do x=x/2.0 end return x end " "assert(__arm64_fixed_divisor_div_descending(16.0,1.0)==1.0)"); pt = global_proto(L, "__arm64_fixed_divisor_div_descending"); expect_no_trace(L, "__arm64_fixed_divisor_div_descending");' \
-  '"function __arm64_fixed_initializer_div_descending_inclusive" "(limit,divisor) local x=16.0 while x>=limit do x=x/divisor end " "return x end " "assert(__arm64_fixed_initializer_div_descending_inclusive" "(1.0,2.0)==0.5)"); expect_no_trace(L, "__arm64_fixed_initializer_div_descending_inclusive");' \
-  '"function __arm64_fixed_divisor_div_descending_inclusive(x,limit) " "while x>=limit do x=x/2.0 end return x end " "assert(__arm64_fixed_divisor_div_descending_inclusive" "(16.0,1.0)==0.5)"); pt = global_proto(L, "__arm64_fixed_divisor_div_descending_inclusive"); expect_no_trace(L, "__arm64_fixed_divisor_div_descending_inclusive");'; do
+  '"function __arm64_fixed_initializer_div_descending(limit,divisor) " "local x=16.0 while x>limit do x=x/divisor end return x end " "assert(__arm64_fixed_initializer_div_descending(1.0,2.0)==1.0)"); expect_scalar_trace(L, "__arm64_fixed_initializer_div_descending");' \
+  '"function __arm64_fixed_divisor_div_descending(x,limit) " "while x>limit do x=x/2.0 end return x end " "assert(__arm64_fixed_divisor_div_descending(16.0,1.0)==1.0)"); pt = global_proto(L, "__arm64_fixed_divisor_div_descending"); expect_scalar_trace(L, "__arm64_fixed_divisor_div_descending");' \
+  '"function __arm64_fixed_initializer_div_descending_inclusive" "(limit,divisor) local x=16.0 while x>=limit do x=x/divisor end " "return x end " "assert(__arm64_fixed_initializer_div_descending_inclusive" "(1.0,2.0)==0.5)"); expect_scalar_trace(L, "__arm64_fixed_initializer_div_descending_inclusive");' \
+  '"function __arm64_fixed_divisor_div_descending_inclusive(x,limit) " "while x>=limit do x=x/2.0 end return x end " "assert(__arm64_fixed_divisor_div_descending_inclusive" "(16.0,1.0)==0.5)"); pt = global_proto(L, "__arm64_fixed_divisor_div_descending_inclusive"); expect_scalar_trace(L, "__arm64_fixed_divisor_div_descending_inclusive");'; do
   require_fixture_sequence \
-    'static void test_fixed_initializers_remain_separate' \
-    'static void test_sub_lt_rejected' "$required"
+    'static void test_fixed_initializers_admitted' \
+    'static void test_sub_lt_admitted' "$required"
 done
 
 for required in \
   '"function __arm64_args_div_reversed_compare(x,limit,divisor) " "while limit>x do x=x/divisor end return x end");' \
-  'expect_no_trace(L, "__arm64_args_div_reversed_compare");' \
+  'expect_scalar_trace(L, "__arm64_args_div_reversed_compare");' \
   '"function __arm64_args_div_inclusive_reversed_compare" "(x,limit,divisor) while limit>=x do x=x/divisor end return x end");' \
   'assert(call_triple(L, "__arm64_args_div_inclusive_reversed_compare", 0.5, 20.25, 0.5, 0, 0, 0) == 32.0);' \
-  'expect_no_trace(L, "__arm64_args_div_inclusive_reversed_compare");' \
+  'expect_scalar_trace(L, "__arm64_args_div_inclusive_reversed_compare");' \
   '"function __arm64_args_div_reversed(x,limit,divisor) " "while x<limit do x=divisor/x end return x end");' \
-  'expect_no_trace(L, "__arm64_args_div_reversed");' \
+  'expect_short_loop(L, "__arm64_args_div_reversed");' \
   '"function __arm64_args_div_inclusive_reversed(x,limit,divisor) " "while x<=limit do x=divisor/x end return x end");' \
   'assert(call_triple(L, "__arm64_args_div_inclusive_reversed", 0.5, 0.75, 0.5, 0, 0, 0) == 1.0);' \
-  'expect_no_trace(L, "__arm64_args_div_inclusive_reversed");' \
+  'expect_short_loop(L, "__arm64_args_div_inclusive_reversed");' \
   '"function __arm64_args_div_extra(x,limit,divisor) " "while x<limit do x=x/divisor/divisor end return x end");' \
-  'expect_no_trace(L, "__arm64_args_div_extra");' \
+  'expect_scalar_trace(L, "__arm64_args_div_extra");' \
   '"function __arm64_args_div_inclusive_extra(x,limit,divisor) " "while x<=limit do x=x/divisor/divisor end return x end");' \
   'assert(call_triple(L, "__arm64_args_div_inclusive_extra", 0.5, 20.25, 0.5, 0, 0, 0) == 32.0);' \
-  'expect_no_trace(L, "__arm64_args_div_inclusive_extra");' \
+  'expect_scalar_trace(L, "__arm64_args_div_inclusive_extra");' \
   '"function __arm64_args_div_descending_reversed_compare" "(x,limit,divisor) while limit<x do x=x/divisor end return x end");' \
-  'expect_no_trace(L, "__arm64_args_div_descending_reversed_compare");' \
+  'expect_scalar_trace(L, "__arm64_args_div_descending_reversed_compare");' \
   '"function __arm64_args_div_descending_inclusive_reversed_compare" "(x,limit,divisor) while limit<=x do x=x/divisor end return x end");' \
-  'expect_no_trace(L, "__arm64_args_div_descending_inclusive_reversed_compare");' \
+  'expect_scalar_trace(L, "__arm64_args_div_descending_inclusive_reversed_compare");' \
   '"function __arm64_args_div_descending_reversed(x,limit,divisor) " "while x>limit do x=divisor/x end return x end");' \
-  'expect_no_trace(L, "__arm64_args_div_descending_reversed");' \
+  'expect_short_loop(L, "__arm64_args_div_descending_reversed");' \
   '"function __arm64_args_div_descending_inclusive_reversed" "(x,limit,divisor) while x>=limit do x=divisor/x end return x end");' \
-  'expect_no_trace(L, "__arm64_args_div_descending_inclusive_reversed");' \
+  'expect_short_loop(L, "__arm64_args_div_descending_inclusive_reversed");' \
   '"function __arm64_args_div_descending_extra(x,limit,divisor) " "while x>limit do x=x/divisor/divisor end return x end");' \
-  'expect_no_trace(L, "__arm64_args_div_descending_extra");' \
+  'expect_scalar_trace(L, "__arm64_args_div_descending_extra");' \
   '"function __arm64_args_div_descending_inclusive_extra" "(x,limit,divisor) while x>=limit do x=x/divisor/divisor end " "return x end");' \
-  'expect_no_trace(L, "__arm64_args_div_descending_inclusive_extra");'; do
+  'expect_scalar_trace(L, "__arm64_args_div_descending_inclusive_extra");'; do
   require_fixture_sequence \
-    'static void test_div_adjacent_rejected' \
-    'static void test_adjacent_comparisons_rejected' "$required"
+    'static void test_div_adjacent_admitted' \
+    'static void test_adjacent_comparisons_admitted' "$required"
 done
 
 for required in \
   '"function __arm64_args_mul_inclusive_reversed_compare" "(x,limit,factor) while limit>=x do x=x*factor end return x end");' \
-  'expect_no_trace(L, "__arm64_args_mul_inclusive_reversed_compare");' \
+  'expect_scalar_trace(L, "__arm64_args_mul_inclusive_reversed_compare");' \
   '"function __arm64_args_mul_inclusive_reversed(x,limit,factor) " "while x<=limit do x=factor*x end return x end");' \
-  'expect_no_trace(L, "__arm64_args_mul_inclusive_reversed");' \
+  'expect_scalar_trace(L, "__arm64_args_mul_inclusive_reversed");' \
   '"function __arm64_args_mul_inclusive_extra(x,limit,factor) " "while x<=limit do x=x*factor*factor end return x end");' \
-  'expect_no_trace(L, "__arm64_args_mul_inclusive_extra");'; do
+  'expect_scalar_trace(L, "__arm64_args_mul_inclusive_extra");'; do
   require_fixture_sequence \
-    'static void test_mul_inclusive_adjacent_rejected' \
-    'static void test_add_descending_adjacent_rejected' "$required"
+    'static void test_mul_inclusive_adjacent_admitted' \
+    'static void test_add_descending_adjacent_admitted' "$required"
 done
 
 for required in \
@@ -1112,8 +1112,8 @@ for required in \
   '"function __arm64_args_extra_add_ge(x,limit,step) " "while x>=limit do x=x+step+step end return x end");' \
   '"function __arm64_args_add_ge_mul(x,limit,step) " "while x>=limit do x=x*step end return x end");'; do
   require_fixture_sequence \
-    'static void test_add_descending_adjacent_rejected' \
-    'static void test_extra_add_rejected' "$required"
+    'static void test_add_descending_adjacent_admitted' \
+    'static void test_extra_add_admitted' "$required"
 done
 
 for required in \
@@ -1239,11 +1239,11 @@ for required in \
   'proto_trace_acq(pt) == 0' \
   'call = numeric_args_int_x_negative(profile);' \
   '1, 0, 1) == call.result' \
-  'expect_no_trace(L, profile->name);' \
+  'expect_scalar_trace(L, profile->name);' \
   'data->integer_limit.step, 0, 1, 1) == data->integer_limit.result'; do
   require_fixture_sequence \
     'static void test_int_step_positive_and_guard_exits' \
-    'static void test_fixed_initializers_remain_separate' "$required"
+    'static void test_fixed_initializers_admitted' "$required"
 done
 
 for required in \
@@ -1270,7 +1270,7 @@ for required in \
   'expect_single_exit(exitno);' \
   'expect_only_args_root_kind(L, pt, profile, NUMERIC_ARGS_X_INT);' \
   'assert(call_triple(L, profile->name, call->x, call->limit, call->step, 1, integer_limit, integer_step) == call->result);' \
-  'expect_no_trace(L, profile->name);'; do
+  'expect_scalar_trace(L, profile->name);'; do
   require_fixture_sequence \
     'static void expect_int_x_call' \
     'static void test_int_x_positive_and_guard_exits' "$required"
@@ -1301,8 +1301,8 @@ for required in \
   'assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);' \
   'assert((BCIns)la_load32_acq((const uint32_t *)startpc) == startins);' \
   'assert(proto_trace_acq(pt) == 0);' \
-  'expect_int_x_recording_rejected(L, profile, &data->integer_step, 0, 1);' \
-  'expect_int_x_recording_rejected(L, profile, &data->integer_limit, 1, 0);' \
+  'expect_int_x_recording_admitted(L, profile, &data->integer_step, 0, 1);' \
+  'expect_int_x_recording_admitted(L, profile, &data->integer_limit, 1, 0);' \
   'expect_int_x_call(L, pt, profile, &data->reuse, FINAL_EXIT);'; do
   require_fixture_sequence \
     'static void test_int_x_positive_and_guard_exits' \
@@ -1315,15 +1315,15 @@ for required in \
   'expect_only_args_root_kind(L, pt, &strict_profile, NUMERIC_ARGS_LIMIT_INT);'; do
   require_fixture_sequence \
     'static void expect_int_limit_call' \
-    'static void expect_int_limit_recording_rejected' "$required"
+    'static void expect_int_limit_recording_admitted' "$required"
 done
 
 for required in \
   'load_numeric_args_function(L, profile);' \
   'integer_x, 1, integer_step) == call->result' \
-  'expect_no_trace(L, profile->name);'; do
+  'expect_scalar_trace(L, profile->name);'; do
   require_fixture_sequence \
-    'static void expect_int_limit_recording_rejected' \
+    'static void expect_int_limit_recording_admitted' \
     'static void test_int_limit_positive_and_guard_exits' "$required"
 done
 
@@ -1350,13 +1350,13 @@ for required in \
   'assert((BCIns)la_load32_acq((const uint32_t *)startpc) == startins);' \
   'assert(proto_trace_acq(pt) == 0);' \
   'load_numeric_args_function(L, &strict_profile);' \
-  'expect_int_limit_recording_rejected(L, &strict_profile, &data->integer_step, 0, 1);' \
-  'expect_int_limit_recording_rejected(L, &strict_profile, &data->integer_x, 1, 0);' \
-  'assert(sizeof(rejected_profiles)/sizeof(rejected_profiles[0]) == 11);' \
-  'expect_int_limit_recording_rejected(L, profile, &profile->integer_limit, 0, 0);'; do
+  'expect_int_limit_recording_admitted(L, &strict_profile, &data->integer_step, 0, 1);' \
+  'expect_int_limit_recording_admitted(L, &strict_profile, &data->integer_x, 1, 0);' \
+  'assert(sizeof(additional_profiles)/sizeof(additional_profiles[0]) == 11);' \
+  'expect_int_limit_recording_admitted(L, profile, &profile->integer_limit, 0, 0);'; do
   require_fixture_sequence \
     'static void test_int_limit_positive_and_guard_exits' \
-    'static void test_fixed_initializers_remain_separate' "$required"
+    'static void test_fixed_initializers_admitted' "$required"
 done
 
 for profile in inclusive_profile mul_profile mul_inclusive_profile \
@@ -1390,7 +1390,22 @@ for profile in strict_profile inclusive_profile mul_profile \
   num_modes=$((num_modes+1))
 done
 
-# Keep the fail-closed proof bodies live: source-token checks alone would not
+for required in \
+  'assert(no && trace_runnable_acq(T, no));' \
+  'assert(trace_startpt_acq(T) == pt && trace_root_acq(T) == 0);' \
+  'assert(trace_link_acq(T) == no && trace_linktype_acq(T) == LJ_TRLINK_LOOP);' \
+  'assert(bc_op(trace_startins_acq(T)) == BC_LOOP);' \
+  'assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);'; do
+  require_fixture_sequence \
+    'static void expect_scalar_trace' \
+    'static void expect_short_loop' "$required"
+done
+require_fixture_sequence \
+  'static void expect_short_loop' \
+  'static void test_positive_and_guard_exits' \
+  'assert(proto_trace_acq(global_proto(L, name)) == 0);'
+
+# Keep the admission and short-loop proof bodies live: source tokens cannot
 # detect main() silently ceasing to execute one of their containing suites.
 main_region=$(
   awk '
@@ -1469,14 +1484,14 @@ default_mode_executions=$((modes_per_process*default_processes))
 test "$modes_per_process" -eq 37
 test "$default_mode_executions" -eq 222
 for suite in \
-  test_fixed_initializers_remain_separate \
-  test_sub_lt_rejected \
-  test_div_adjacent_rejected \
-  test_adjacent_comparisons_rejected \
-  test_mul_inclusive_adjacent_rejected \
-  test_extra_add_rejected \
-  test_add_descending_adjacent_rejected \
-  test_descending_adjacent_rejected; do
+  test_fixed_initializers_admitted \
+  test_sub_lt_admitted \
+  test_div_adjacent_admitted \
+  test_adjacent_comparisons_admitted \
+  test_mul_inclusive_adjacent_admitted \
+  test_extra_add_admitted \
+  test_add_descending_adjacent_admitted \
+  test_descending_adjacent_admitted; do
   test "$(printf '%s\n' "$main_region" | grep -Fc "$suite();")" -eq 1 || {
     echo "ARM64 dynamic-args NUM fixture lost exact $suite invocation" >&2
     exit 1
@@ -1522,9 +1537,16 @@ for name in \
   __arm64_args_div_descending_inclusive_extra \
   __arm64_args_sub_lt \
   __arm64_args_sub_le; do
-  test "$(grep -Fc "expect_no_trace(L, \"$name\");" \
+  case "$name" in
+    __arm64_args_div_reversed|__arm64_args_div_inclusive_reversed|\
+    __arm64_args_div_descending_reversed|\
+    __arm64_args_div_descending_inclusive_reversed)
+      expected_check=expect_short_loop ;;
+    *) expected_check=expect_scalar_trace ;;
+  esac
+  test "$(grep -Fc "$expected_check(L, \"$name\");" \
     "$fixture_source")" -eq 1 || {
-    echo "ARM64 dynamic-args NUM fixture lost exact no-trace identity: $name" >&2
+    echo "ARM64 dynamic-args NUM fixture lost exact admission identity: $name" >&2
     exit 1
   }
 done
@@ -1646,6 +1668,11 @@ grep -F 'CC_HI, CC_LS, CC_GE, CC_LT, CC_GT, CC_LE, CC_AL' \
   echo "ARM64 inclusive dynamic-args condition codes changed" >&2
   exit 1
 }
+
+if test "${LJ_ARM64_PURE_NUMERIC_ARGS_SOURCE_ONLY:-}" = 1; then
+  echo "arm64_jit_pure_numeric_args_contract source preflight OK: 37 ABI/SLOAD modes and scalar/short-loop proof bodies retained"
+  exit 0
+fi
 
 acquire_lock
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lj-arm64-dynamic-args-num.XXXXXX")
