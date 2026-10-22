@@ -28,8 +28,9 @@ and reports that are no longer authoritative are retained in
 
 This is a working Apple Silicon port with substantial native execution
 evidence. It is not yet a completed or general ARM64 LuaJIT backend. Native
-JIT recording and entry outside the exact admitted shapes below are
-intentionally rejected; ordinary interpreted Lua remains available.
+JIT recording and entry outside the admitted capabilities and exact ABI
+certificates below are intentionally rejected; ordinary interpreted Lua remains
+available.
 
 ## Implemented and exercised
 
@@ -69,10 +70,14 @@ intentionally rejected; ordinary interpreted Lua remains available.
 - ARM64 and arm64e/BTI trace publication, authenticated entry and exits,
   retirement, flush/reuse, GDB-JIT preparation, and bounded root/first-side
   entry paths.
-- Exact integer and numeric loop certificates, including constant-step integer
-  `FORL`, one spill-free variable-stop/variable-step integer `FORL`, bounded
-  integer and mixed numeric `LOOP` roots, and their independent semantic,
-  snapshot, and post-register-allocation checks.
+- Scalar self-linked `LOOP` roots use independent semantic and allocated-state
+  capabilities for checked INT arithmetic, NUM arithmetic/conversions,
+  comparisons, PHI copies/shuffles, snapshots and INT spill frames. The old
+  whole-trace NUM arrays are removed. NUM spills and heap effects remain
+  closed; see [`arm64-jit-scalar-capability.md`](arm64-jit-scalar-capability.md).
+- Integer `FORL` retains separate constant-step and spill-free variable-stop/
+  variable-step certificates, with independent semantic, snapshot and
+  post-register-allocation checks.
 - A bounded set of first-side traces. General side traces, side-of-side traces,
   and stitches remain closed.
 - TG-local `XSAVE` staging and native-call frame lifecycle for two exact Darwin
@@ -191,9 +196,9 @@ build.
 
 1. Restore stock shared-upvalue semantics for imported legacy bytecode and
    extend the source-capture/debug-API regressions as new cases are found.
-2. Replace unnecessarily exact scalar JIT restrictions with independently
-   checked semantic and post-register-allocation capabilities. Investigate
-   actual emitter failures before admitting the affected operations.
+2. Extend the independent scalar capabilities to additional proved allocation
+   and rooted-helper mechanisms. NUM spill admission needs separate frame,
+   slot-width, PHI and lifecycle evidence despite the repaired pairing emitter.
 3. Open one new JIT or FFI boundary at a time, with independent source,
    IR, snapshot, post-RA, emitted-code, lifecycle, and negative-shape proof.
 4. Keep common-file edits narrower than the protocol being added and preserve
@@ -210,6 +215,8 @@ build.
 - [`arm64-ffi-aggregate-snapshots.md`](arm64-ffi-aggregate-snapshots.md): aggregate
   classification publication and native ABI evidence.
 - [`arm64-jit-tbar.md`](arm64-jit-tbar.md): generated GC2 table barriers.
+- [`arm64-jit-scalar-capability.md`](arm64-jit-scalar-capability.md): independent
+  scalar certificates and native arithmetic/PHI/lifecycle evidence.
 - [`arm64-vm-epoch-audit-2026-10-22.md`](arm64-vm-epoch-audit-2026-10-22.md):
   rejected performance experiment and unresolved stress observation.
 - [`archive/aarch64-checkpoints/`](archive/aarch64-checkpoints/): 76 historical
