@@ -755,14 +755,20 @@ static void test_step_mutation(lua_State *L, GCproto *pt,
   expect_only_step_root(L, pt);
 }
 
-static void expect_no_trace(lua_State *L, const char *name)
+/* These scalar variations no longer need a separate whole-trace grammar. */
+static void expect_scalar_trace(lua_State *L, const char *name)
 {
   jit_State *J = L2J(L);
   GCproto *pt = global_proto(L, name);
-  TraceNo traceno;
-  assert(proto_trace_acq(pt) == 0);
-  for (traceno = 1; (MSize)traceno < trace_sizetrace_acq(J); traceno++)
-    assert(!trace_runnable_acq(traceref_safe(J, traceno), traceno));
+  TraceNo no = proto_trace_acq(pt);
+  GCtrace *T = traceref_safe(J, no);
+  if (!no || !trace_runnable_acq(T, no))
+    fprintf(stderr, "missing scalar capability trace for %s\n", name);
+  assert(no && trace_runnable_acq(T, no));
+  assert(trace_startpt_acq(T) == pt && trace_root_acq(T) == 0);
+  assert(trace_link_acq(T) == no && trace_linktype_acq(T) == LJ_TRLINK_LOOP);
+  assert(bc_op(trace_startins_acq(T)) == BC_LOOP);
+  assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);
 }
 
 static void test_positive_and_guard_exits(void)
@@ -846,7 +852,7 @@ static void test_positive_and_guard_exits(void)
   lua_close(L);
 }
 
-static void test_quarter_initial_rejected(void)
+static void test_quarter_initial_admitted(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
@@ -858,11 +864,11 @@ static void test_quarter_initial_rejected(void)
       "while x<limit do x=x+step end return x end");
   assert(call_pair(L, "__arm64_dynamic_negative",
 	20.25, 0.5, 0, 0) == 20.25);
-  expect_no_trace(L, "__arm64_dynamic_negative");
+  expect_scalar_trace(L, "__arm64_dynamic_negative");
   lua_close(L);
 }
 
-static void test_sub_rejected(void)
+static void test_sub_admitted(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
@@ -874,11 +880,11 @@ static void test_sub_rejected(void)
       "while x<limit do x=x-step end return x end");
   assert(call_pair(L, "__arm64_dynamic_negative",
 	20.25, -0.5, 0, 0) == 20.5);
-  expect_no_trace(L, "__arm64_dynamic_negative");
+  expect_scalar_trace(L, "__arm64_dynamic_negative");
   lua_close(L);
 }
 
-static void test_mul_rejected(void)
+static void test_mul_admitted(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
@@ -890,11 +896,11 @@ static void test_mul_rejected(void)
       "while x<limit do x=x*step end return x end");
   assert(call_pair(L, "__arm64_dynamic_negative",
 	20.25, 2.0, 0, 0) == 32.0);
-  expect_no_trace(L, "__arm64_dynamic_negative");
+  expect_scalar_trace(L, "__arm64_dynamic_negative");
   lua_close(L);
 }
 
-static void test_div_rejected(void)
+static void test_div_admitted(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
@@ -906,11 +912,11 @@ static void test_div_rejected(void)
       "while x<limit do x=x/step end return x end");
   assert(call_pair(L, "__arm64_dynamic_negative",
 	20.25, 0.5, 0, 0) == 32.0);
-  expect_no_trace(L, "__arm64_dynamic_negative");
+  expect_scalar_trace(L, "__arm64_dynamic_negative");
   lua_close(L);
 }
 
-static void test_adjacent_compare_rejected(void)
+static void test_adjacent_compare_admitted(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
@@ -922,11 +928,11 @@ static void test_adjacent_compare_rejected(void)
       "while x<=limit do x=x+step end return x end");
   assert(call_pair(L, "__arm64_dynamic_negative",
 	20.25, 0.5, 0, 0) == 20.5);
-  expect_no_trace(L, "__arm64_dynamic_negative");
+  expect_scalar_trace(L, "__arm64_dynamic_negative");
   lua_close(L);
 }
 
-static void test_extra_add_rejected(void)
+static void test_extra_add_admitted(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
@@ -938,7 +944,7 @@ static void test_extra_add_rejected(void)
       "while x<limit do x=x+step+step end return x end");
   assert(call_pair(L, "__arm64_dynamic_negative",
 	20.25, 0.25, 0, 0) == 20.5);
-  expect_no_trace(L, "__arm64_dynamic_negative");
+  expect_scalar_trace(L, "__arm64_dynamic_negative");
   lua_close(L);
 }
 
@@ -949,12 +955,12 @@ int main(int argc, char **argv)
     assert(strcmp(argv[1], "direct") == 0 ||
 	   strcmp(argv[1], "randomized") == 0);
   test_positive_and_guard_exits();
-  test_quarter_initial_rejected();
-  test_sub_rejected();
-  test_mul_rejected();
-  test_div_rejected();
-  test_adjacent_compare_rejected();
-  test_extra_add_rejected();
+  test_quarter_initial_admitted();
+  test_sub_admitted();
+  test_mul_admitted();
+  test_div_admitted();
+  test_adjacent_compare_admitted();
+  test_extra_add_admitted();
   puts("t-arm64-jit-pure-numeric-step OK");
   return 0;
 }

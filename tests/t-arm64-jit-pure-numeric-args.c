@@ -1841,16 +1841,26 @@ static void test_nonterminating_mutation_stop(lua_State *L, GCproto *pt,
   expect_only_args_root(L, pt, profile);
 }
 
-static void expect_no_trace(lua_State *L, const char *name)
+/* These scalar variations no longer need a separate whole-trace grammar. */
+static void expect_scalar_trace(lua_State *L, const char *name)
 {
   jit_State *J = L2J(L);
   GCproto *pt = global_proto(L, name);
-  TraceNo traceno;
-  if (proto_trace_acq(pt) != 0)
-    fprintf(stderr, "dynamic args NUM unexpected trace for %s\n", name);
-  assert(proto_trace_acq(pt) == 0);
-  for (traceno = 1; (MSize)traceno < trace_sizetrace_acq(J); traceno++)
-    assert(!trace_runnable_acq(traceref_safe(J, traceno), traceno));
+  TraceNo no = proto_trace_acq(pt);
+  GCtrace *T = traceref_safe(J, no);
+  if (!no || !trace_runnable_acq(T, no))
+    fprintf(stderr, "missing scalar capability trace for %s\n", name);
+  assert(no && trace_runnable_acq(T, no));
+  assert(trace_startpt_acq(T) == pt && trace_root_acq(T) == 0);
+  assert(trace_link_acq(T) == no && trace_linktype_acq(T) == LJ_TRLINK_LOOP);
+  assert(bc_op(trace_startins_acq(T)) == BC_LOOP);
+  assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);
+}
+
+/* These calls exit after one iteration, before a self-linked trace exists. */
+static void expect_short_loop(lua_State *L, const char *name)
+{
+  assert(proto_trace_acq(global_proto(L, name)) == 0);
 }
 
 static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
@@ -2992,14 +3002,21 @@ static void test_int_step_positive_and_guard_exits(
   assert(T == NULL || !trace_runnable_acq(T, 1));
   assert_native_idle(L, idle_vmstate);
 
-  /* Converting an invariant INT is the sole new boundary. An INT X or LIMIT
-  ** at recording time must not admit a root with another conversion. */
+  /* The generic scalar capability also permits simultaneous checked
+  ** conversions of the accumulator, step and limit. */
   load_numeric_args_function(L, profile);
   call = numeric_args_int_x_negative(profile);
   for (i = 0; i < 4; i++)
     assert(call_triple(L, profile->name, call.x, call.limit, call.step,
 	  1, 0, 1) == call.result);
-  expect_no_trace(L, profile->name);
+  /* The adjacent input above can leave after one iteration. Heat the same
+  ** operand types with a complete loop before requiring native admission. */
+  load_numeric_args_function(L, profile);
+  call = data->integer_x;
+  for (i = 0; i < 4; i++)
+    assert(call_triple(L, profile->name, call.x, call.limit, call.step,
+          1, 0, 1) == call.result);
+  expect_scalar_trace(L, profile->name);
 
   load_numeric_args_function(L, profile);
   for (i = 0; i < 4; i++)
@@ -3007,7 +3024,7 @@ static void test_int_step_positive_and_guard_exits(
 	  data->integer_limit.x, data->integer_limit.limit,
 	  data->integer_limit.step, 0, 1, 1) ==
 	data->integer_limit.result);
-  expect_no_trace(L, profile->name);
+  expect_scalar_trace(L, profile->name);
   assert_native_idle(L, idle_vmstate);
   lua_close(L);
 }
@@ -3100,7 +3117,7 @@ static void expect_int_x_call(lua_State *L, GCproto *pt,
   expect_only_args_root_kind(L, pt, profile, NUMERIC_ARGS_X_INT);
 }
 
-static void expect_int_x_recording_rejected(lua_State *L,
+static void expect_int_x_recording_admitted(lua_State *L,
 	const NumericArgsProfile *profile, const NumericArgsCall *call,
 	int integer_limit, int integer_step)
 {
@@ -3110,7 +3127,7 @@ static void expect_int_x_recording_rejected(lua_State *L,
     assert(call_triple(L, profile->name,
 	call->x, call->limit, call->step,
 	1, integer_limit, integer_step) == call->result);
-  expect_no_trace(L, profile->name);
+  expect_scalar_trace(L, profile->name);
 }
 
 static void test_int_x_positive_and_guard_exits(
@@ -3238,10 +3255,10 @@ static void test_int_x_positive_and_guard_exits(
   assert(T == NULL || !trace_runnable_acq(T, 1));
   assert_native_idle(L, idle_vmstate);
 
-  /* The exact INT-X grammar contains one conversion pair. A second input
-  ** conversion stays closed, and a subsequent exact recording still works. */
-  expect_int_x_recording_rejected(L, profile, &data->integer_step, 0, 1);
-  expect_int_x_recording_rejected(L, profile, &data->integer_limit, 1, 0);
+  /* Additional checked input conversions share the scalar certificate.
+  ** The original argument profile must remain recordable afterwards. */
+  expect_int_x_recording_admitted(L, profile, &data->integer_step, 0, 1);
+  expect_int_x_recording_admitted(L, profile, &data->integer_limit, 1, 0);
 
   load_numeric_args_function(L, profile);
   assert(call_triple(L, profile->name,
@@ -3272,7 +3289,7 @@ static void expect_int_limit_call(lua_State *L, GCproto *pt,
 	NUMERIC_ARGS_LIMIT_INT);
 }
 
-static void expect_int_limit_recording_rejected(lua_State *L,
+static void expect_int_limit_recording_admitted(lua_State *L,
 	const NumericArgsProfile *profile, const NumericArgsCall *call,
 	int integer_x, int integer_step)
 {
@@ -3282,12 +3299,12 @@ static void expect_int_limit_recording_rejected(lua_State *L,
     assert(call_triple(L, profile->name,
 	call->x, call->limit, call->step,
 	integer_x, 1, integer_step) == call->result);
-  expect_no_trace(L, profile->name);
+  expect_scalar_trace(L, profile->name);
 }
 
 static void test_int_limit_positive_and_guard_exits(void)
 {
-  static const NumericArgsProfile *const rejected_profiles[] = {
+  static const NumericArgsProfile *const additional_profiles[] = {
     &inclusive_profile,
     &mul_profile,
     &mul_inclusive_profile,
@@ -3422,27 +3439,26 @@ static void test_int_limit_positive_and_guard_exits(void)
   expect_int_limit_call(L, pt, &data->reuse, FINAL_EXIT);
   assert_native_idle(L, idle_vmstate);
 
-  /* A second widening and an INT accumulator remain closed at recording. */
-  expect_int_limit_recording_rejected(L, &strict_profile,
+  /* A second widening and an INT accumulator use the same certificate. */
+  expect_int_limit_recording_admitted(L, &strict_profile,
 	&data->integer_step, 0, 1);
-  expect_int_limit_recording_rejected(L, &strict_profile,
+  expect_int_limit_recording_admitted(L, &strict_profile,
 	&data->integer_x, 1, 0);
 
-  /* The INT-limit exception is exact ADD_LT only. Every other admitted NUM
-  ** grammar profile must remain fail-closed with the same operand types. */
-  assert(sizeof(rejected_profiles)/sizeof(rejected_profiles[0]) == 11);
+  /* INT limits also work across the other scalar recurrence profiles. */
+  assert(sizeof(additional_profiles)/sizeof(additional_profiles[0]) == 11);
   for (profile_index = 0;
-       profile_index < sizeof(rejected_profiles)/sizeof(rejected_profiles[0]);
+       profile_index < sizeof(additional_profiles)/sizeof(additional_profiles[0]);
        profile_index++) {
-    const NumericArgsProfile *profile = rejected_profiles[profile_index];
-    expect_int_limit_recording_rejected(L, profile,
+    const NumericArgsProfile *profile = additional_profiles[profile_index];
+    expect_int_limit_recording_admitted(L, profile,
 	&profile->integer_limit, 0, 0);
   }
   assert_native_idle(L, idle_vmstate);
   lua_close(L);
 }
 
-static void test_fixed_initializers_remain_separate(void)
+static void test_fixed_initializers_admitted(void)
 {
   lua_State *L = luaL_newstate();
   jit_State *J;
@@ -3486,7 +3502,7 @@ static void test_fixed_initializers_remain_separate(void)
     "function __arm64_fixed_initializer_inclusive(limit,step) local x=0.5 "
       "while x<=limit do x=x+step end return x end "
     "assert(__arm64_fixed_initializer_inclusive(20.25,0.5)==20.5)");
-  expect_no_trace(L, "__arm64_fixed_initializer_inclusive");
+  expect_scalar_trace(L, "__arm64_fixed_initializer_inclusive");
 
   run_lua(L,
     "jit.flush(); "
@@ -3494,14 +3510,14 @@ static void test_fixed_initializers_remain_separate(void)
       "while x<=limit do x=x+0.5 end return x end "
     "assert(__arm64_fixed_half_inclusive(20.25)==20.5)");
   pt = global_proto(L, "__arm64_fixed_half_inclusive");
-  expect_no_trace(L, "__arm64_fixed_half_inclusive");
+  expect_scalar_trace(L, "__arm64_fixed_half_inclusive");
 
   run_lua(L,
     "jit.flush(); "
     "function __arm64_fixed_initializer_mul_inclusive(limit,factor) "
       "local x=0.5 while x<=limit do x=x*factor end return x end "
     "assert(__arm64_fixed_initializer_mul_inclusive(20.25,2)==32)");
-  expect_no_trace(L, "__arm64_fixed_initializer_mul_inclusive");
+  expect_scalar_trace(L, "__arm64_fixed_initializer_mul_inclusive");
 
   run_lua(L,
     "jit.flush(); "
@@ -3509,14 +3525,14 @@ static void test_fixed_initializers_remain_separate(void)
       "while x<=limit do x=x*2 end return x end "
     "assert(__arm64_fixed_factor_mul_inclusive(0.5,20.25)==32)");
   pt = global_proto(L, "__arm64_fixed_factor_mul_inclusive");
-  expect_no_trace(L, "__arm64_fixed_factor_mul_inclusive");
+  expect_scalar_trace(L, "__arm64_fixed_factor_mul_inclusive");
 
   run_lua(L,
     "jit.flush(); "
     "function __arm64_fixed_initializer_div(limit,divisor) "
       "local x=0.5 while x<limit do x=x/divisor end return x end "
     "assert(__arm64_fixed_initializer_div(20.25,0.5)==32)");
-  expect_no_trace(L, "__arm64_fixed_initializer_div");
+  expect_scalar_trace(L, "__arm64_fixed_initializer_div");
 
   run_lua(L,
     "jit.flush(); "
@@ -3524,14 +3540,14 @@ static void test_fixed_initializers_remain_separate(void)
       "while x<limit do x=x/0.5 end return x end "
     "assert(__arm64_fixed_divisor_div(0.5,20.25)==32)");
   pt = global_proto(L, "__arm64_fixed_divisor_div");
-  expect_no_trace(L, "__arm64_fixed_divisor_div");
+  expect_scalar_trace(L, "__arm64_fixed_divisor_div");
 
   run_lua(L,
     "jit.flush(); "
     "function __arm64_fixed_initializer_div_inclusive(limit,divisor) "
       "local x=0.5 while x<=limit do x=x/divisor end return x end "
     "assert(__arm64_fixed_initializer_div_inclusive(20.25,0.5)==32)");
-  expect_no_trace(L, "__arm64_fixed_initializer_div_inclusive");
+  expect_scalar_trace(L, "__arm64_fixed_initializer_div_inclusive");
 
   run_lua(L,
     "jit.flush(); "
@@ -3539,14 +3555,14 @@ static void test_fixed_initializers_remain_separate(void)
       "while x<=limit do x=x/0.5 end return x end "
     "assert(__arm64_fixed_divisor_div_inclusive(0.5,20.25)==32)");
   pt = global_proto(L, "__arm64_fixed_divisor_div_inclusive");
-  expect_no_trace(L, "__arm64_fixed_divisor_div_inclusive");
+  expect_scalar_trace(L, "__arm64_fixed_divisor_div_inclusive");
 
   run_lua(L,
     "jit.flush(); "
     "function __arm64_fixed_initializer_div_descending(limit,divisor) "
       "local x=16.0 while x>limit do x=x/divisor end return x end "
     "assert(__arm64_fixed_initializer_div_descending(1.0,2.0)==1.0)");
-  expect_no_trace(L, "__arm64_fixed_initializer_div_descending");
+  expect_scalar_trace(L, "__arm64_fixed_initializer_div_descending");
 
   run_lua(L,
     "jit.flush(); "
@@ -3554,7 +3570,7 @@ static void test_fixed_initializers_remain_separate(void)
       "while x>limit do x=x/2.0 end return x end "
     "assert(__arm64_fixed_divisor_div_descending(16.0,1.0)==1.0)");
   pt = global_proto(L, "__arm64_fixed_divisor_div_descending");
-  expect_no_trace(L, "__arm64_fixed_divisor_div_descending");
+  expect_scalar_trace(L, "__arm64_fixed_divisor_div_descending");
 
   run_lua(L,
     "jit.flush(); "
@@ -3563,7 +3579,7 @@ static void test_fixed_initializers_remain_separate(void)
       "return x end "
     "assert(__arm64_fixed_initializer_div_descending_inclusive"
       "(1.0,2.0)==0.5)");
-  expect_no_trace(L, "__arm64_fixed_initializer_div_descending_inclusive");
+  expect_scalar_trace(L, "__arm64_fixed_initializer_div_descending_inclusive");
 
   run_lua(L,
     "jit.flush(); "
@@ -3572,14 +3588,14 @@ static void test_fixed_initializers_remain_separate(void)
     "assert(__arm64_fixed_divisor_div_descending_inclusive"
       "(16.0,1.0)==0.5)");
   pt = global_proto(L, "__arm64_fixed_divisor_div_descending_inclusive");
-  expect_no_trace(L, "__arm64_fixed_divisor_div_descending_inclusive");
+  expect_scalar_trace(L, "__arm64_fixed_divisor_div_descending_inclusive");
 
   run_lua(L,
     "jit.flush(); "
     "function __arm64_fixed_initializer_add_descending(limit,step) "
       "local x=20.5 while x>limit do x=x+step end return x end "
     "assert(__arm64_fixed_initializer_add_descending(0.25,-0.5)==0.0)");
-  expect_no_trace(L, "__arm64_fixed_initializer_add_descending");
+  expect_scalar_trace(L, "__arm64_fixed_initializer_add_descending");
 
   run_lua(L,
     "jit.flush(); "
@@ -3587,7 +3603,7 @@ static void test_fixed_initializers_remain_separate(void)
       "while x>limit do x=x+(-0.5) end return x end "
     "assert(__arm64_fixed_half_add_descending(0.25)==0.0)");
   pt = global_proto(L, "__arm64_fixed_half_add_descending");
-  expect_no_trace(L, "__arm64_fixed_half_add_descending");
+  expect_scalar_trace(L, "__arm64_fixed_half_add_descending");
 
   run_lua(L,
     "jit.flush(); "
@@ -3595,7 +3611,7 @@ static void test_fixed_initializers_remain_separate(void)
       "local x=20.5 while x>=limit do x=x+step end return x end "
     "assert(__arm64_fixed_initializer_add_descending_inclusive"
       "(0.5,-0.5)==0.0)");
-  expect_no_trace(L, "__arm64_fixed_initializer_add_descending_inclusive");
+  expect_scalar_trace(L, "__arm64_fixed_initializer_add_descending_inclusive");
 
   run_lua(L,
     "jit.flush(); "
@@ -3603,14 +3619,14 @@ static void test_fixed_initializers_remain_separate(void)
       "local x=20.5 while x>=limit do x=x+(-0.5) end return x end "
     "assert(__arm64_fixed_half_add_descending_inclusive(0.5)==0.0)");
   pt = global_proto(L, "__arm64_fixed_half_add_descending_inclusive");
-  expect_no_trace(L, "__arm64_fixed_half_add_descending_inclusive");
+  expect_scalar_trace(L, "__arm64_fixed_half_add_descending_inclusive");
 
   run_lua(L,
     "jit.flush(); "
     "function __arm64_fixed_initializer_descending(limit,step) local x=20.5 "
       "while x>limit do x=x-step end return x end "
     "assert(__arm64_fixed_initializer_descending(0.25,0.5)==0.0)");
-  expect_no_trace(L, "__arm64_fixed_initializer_descending");
+  expect_scalar_trace(L, "__arm64_fixed_initializer_descending");
 
   run_lua(L,
     "jit.flush(); "
@@ -3618,14 +3634,14 @@ static void test_fixed_initializers_remain_separate(void)
       "while x>limit do x=x-0.5 end return x end "
     "assert(__arm64_fixed_half_descending(0.25)==0.0)");
   pt = global_proto(L, "__arm64_fixed_half_descending");
-  expect_no_trace(L, "__arm64_fixed_half_descending");
+  expect_scalar_trace(L, "__arm64_fixed_half_descending");
 
   run_lua(L,
     "jit.flush(); "
     "function __arm64_fixed_initializer_descending_inclusive(limit,step) "
       "local x=20.5 while x>=limit do x=x-step end return x end "
     "assert(__arm64_fixed_initializer_descending_inclusive(0.5,0.5)==0.0)");
-  expect_no_trace(L, "__arm64_fixed_initializer_descending_inclusive");
+  expect_scalar_trace(L, "__arm64_fixed_initializer_descending_inclusive");
 
   run_lua(L,
     "jit.flush(); "
@@ -3633,14 +3649,14 @@ static void test_fixed_initializers_remain_separate(void)
       "while x>=limit do x=x-0.5 end return x end "
     "assert(__arm64_fixed_half_descending_inclusive(0.5)==0.0)");
   pt = global_proto(L, "__arm64_fixed_half_descending_inclusive");
-  expect_no_trace(L, "__arm64_fixed_half_descending_inclusive");
+  expect_scalar_trace(L, "__arm64_fixed_half_descending_inclusive");
 
   run_lua(L, "jit.flush()");
   assert(proto_trace_acq(pt) == 0);
   lua_close(L);
 }
 
-static void test_sub_lt_rejected(void)
+static void test_sub_lt_admitted(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
@@ -3650,13 +3666,14 @@ static void test_sub_lt_rejected(void)
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
     "function __arm64_args_sub_lt(x,limit,step) "
       "while x<limit do x=x-step end return x end");
-  assert(call_triple(L, "__arm64_args_sub_lt",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_sub_lt",
 	0.5, 20.25, -0.5, 0, 0, 0) == 20.5);
-  expect_no_trace(L, "__arm64_args_sub_lt");
+  expect_scalar_trace(L, "__arm64_args_sub_lt");
   lua_close(L);
 }
 
-static void test_div_adjacent_rejected(void)
+static void test_div_adjacent_admitted(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
@@ -3667,104 +3684,116 @@ static void test_div_adjacent_rejected(void)
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
     "function __arm64_args_div_reversed_compare(x,limit,divisor) "
       "while limit>x do x=x/divisor end return x end");
-  assert(call_triple(L, "__arm64_args_div_reversed_compare",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_div_reversed_compare",
 	0.5, 20.25, 0.5, 0, 0, 0) == 32.0);
-  expect_no_trace(L, "__arm64_args_div_reversed_compare");
+  expect_scalar_trace(L, "__arm64_args_div_reversed_compare");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_div_inclusive_reversed_compare"
       "(x,limit,divisor) while limit>=x do x=x/divisor end return x end");
-  assert(call_triple(L, "__arm64_args_div_inclusive_reversed_compare",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_div_inclusive_reversed_compare",
 	0.5, 20.25, 0.5, 0, 0, 0) == 32.0);
-  expect_no_trace(L, "__arm64_args_div_inclusive_reversed_compare");
+  expect_scalar_trace(L, "__arm64_args_div_inclusive_reversed_compare");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_div_reversed(x,limit,divisor) "
       "while x<limit do x=divisor/x end return x end");
-  assert(call_triple(L, "__arm64_args_div_reversed",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_div_reversed",
 	0.5, 0.75, 0.5, 0, 0, 0) == 1.0);
-  expect_no_trace(L, "__arm64_args_div_reversed");
+  expect_short_loop(L, "__arm64_args_div_reversed");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_div_inclusive_reversed(x,limit,divisor) "
       "while x<=limit do x=divisor/x end return x end");
-  assert(call_triple(L, "__arm64_args_div_inclusive_reversed",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_div_inclusive_reversed",
 	0.5, 0.75, 0.5, 0, 0, 0) == 1.0);
-  expect_no_trace(L, "__arm64_args_div_inclusive_reversed");
+  expect_short_loop(L, "__arm64_args_div_inclusive_reversed");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_div_extra(x,limit,divisor) "
       "while x<limit do x=x/divisor/divisor end return x end");
-  assert(call_triple(L, "__arm64_args_div_extra",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_div_extra",
 	0.5, 20.25, 0.5, 0, 0, 0) == 32.0);
-  expect_no_trace(L, "__arm64_args_div_extra");
+  expect_scalar_trace(L, "__arm64_args_div_extra");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_div_inclusive_extra(x,limit,divisor) "
       "while x<=limit do x=x/divisor/divisor end return x end");
-  assert(call_triple(L, "__arm64_args_div_inclusive_extra",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_div_inclusive_extra",
 	0.5, 20.25, 0.5, 0, 0, 0) == 32.0);
-  expect_no_trace(L, "__arm64_args_div_inclusive_extra");
+  expect_scalar_trace(L, "__arm64_args_div_inclusive_extra");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_div_descending_reversed_compare"
       "(x,limit,divisor) while limit<x do x=x/divisor end return x end");
-  assert(call_triple(L, "__arm64_args_div_descending_reversed_compare",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_div_descending_reversed_compare",
 	20.5, 0.5, 2.0, 0, 0, 0) == 0.3203125);
-  expect_no_trace(L, "__arm64_args_div_descending_reversed_compare");
+  expect_scalar_trace(L, "__arm64_args_div_descending_reversed_compare");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_div_descending_inclusive_reversed_compare"
       "(x,limit,divisor) while limit<=x do x=x/divisor end return x end");
-  assert(call_triple(L,
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L,
       "__arm64_args_div_descending_inclusive_reversed_compare",
 	20.5, 0.5, 2.0, 0, 0, 0) == 0.3203125);
-  expect_no_trace(L,
+  expect_scalar_trace(L,
     "__arm64_args_div_descending_inclusive_reversed_compare");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_div_descending_reversed(x,limit,divisor) "
       "while x>limit do x=divisor/x end return x end");
-  assert(call_triple(L, "__arm64_args_div_descending_reversed",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_div_descending_reversed",
 	2.0, 1.5, 2.0, 0, 0, 0) == 1.0);
-  expect_no_trace(L, "__arm64_args_div_descending_reversed");
+  expect_short_loop(L, "__arm64_args_div_descending_reversed");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_div_descending_inclusive_reversed"
       "(x,limit,divisor) while x>=limit do x=divisor/x end return x end");
-  assert(call_triple(L, "__arm64_args_div_descending_inclusive_reversed",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_div_descending_inclusive_reversed",
 	2.0, 1.5, 2.0, 0, 0, 0) == 1.0);
-  expect_no_trace(L, "__arm64_args_div_descending_inclusive_reversed");
+  expect_short_loop(L, "__arm64_args_div_descending_inclusive_reversed");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_div_descending_extra(x,limit,divisor) "
       "while x>limit do x=x/divisor/divisor end return x end");
-  assert(call_triple(L, "__arm64_args_div_descending_extra",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_div_descending_extra",
 	20.5, 0.5, 2.0, 0, 0, 0) == 0.3203125);
-  expect_no_trace(L, "__arm64_args_div_descending_extra");
+  expect_scalar_trace(L, "__arm64_args_div_descending_extra");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_div_descending_inclusive_extra"
       "(x,limit,divisor) while x>=limit do x=x/divisor/divisor end "
       "return x end");
-  assert(call_triple(L, "__arm64_args_div_descending_inclusive_extra",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_div_descending_inclusive_extra",
 	20.5, 0.5, 2.0, 0, 0, 0) == 0.3203125);
-  expect_no_trace(L, "__arm64_args_div_descending_inclusive_extra");
+  expect_scalar_trace(L, "__arm64_args_div_descending_inclusive_extra");
   lua_close(L);
 }
 
-static void test_adjacent_comparisons_rejected(void)
+static void test_adjacent_comparisons_admitted(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
@@ -3774,21 +3803,23 @@ static void test_adjacent_comparisons_rejected(void)
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
     "function __arm64_args_reversed_compare(x,limit,step) "
       "while limit>=x do x=x+step end return x end");
-  assert(call_triple(L, "__arm64_args_reversed_compare",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_reversed_compare",
 	0.5, 20.25, 0.5, 0, 0, 0) == 20.5);
-  expect_no_trace(L, "__arm64_args_reversed_compare");
+  expect_scalar_trace(L, "__arm64_args_reversed_compare");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_reversed_add(x,limit,step) "
       "while x<=limit do x=step+x end return x end");
-  assert(call_triple(L, "__arm64_args_reversed_add",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_reversed_add",
 	0.5, 20.25, 0.5, 0, 0, 0) == 20.5);
-  expect_no_trace(L, "__arm64_args_reversed_add");
+  expect_scalar_trace(L, "__arm64_args_reversed_add");
   lua_close(L);
 }
 
-static void test_mul_inclusive_adjacent_rejected(void)
+static void test_mul_inclusive_adjacent_admitted(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
@@ -3799,30 +3830,33 @@ static void test_mul_inclusive_adjacent_rejected(void)
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
     "function __arm64_args_mul_inclusive_reversed_compare"
       "(x,limit,factor) while limit>=x do x=x*factor end return x end");
-  assert(call_triple(L, "__arm64_args_mul_inclusive_reversed_compare",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_mul_inclusive_reversed_compare",
 	0.5, 20.25, 2.0, 0, 0, 0) == 32.0);
-  expect_no_trace(L, "__arm64_args_mul_inclusive_reversed_compare");
+  expect_scalar_trace(L, "__arm64_args_mul_inclusive_reversed_compare");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_mul_inclusive_reversed(x,limit,factor) "
       "while x<=limit do x=factor*x end return x end");
-  assert(call_triple(L, "__arm64_args_mul_inclusive_reversed",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_mul_inclusive_reversed",
 	0.5, 20.25, 2.0, 0, 0, 0) == 32.0);
-  expect_no_trace(L, "__arm64_args_mul_inclusive_reversed");
+  expect_scalar_trace(L, "__arm64_args_mul_inclusive_reversed");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_mul_inclusive_extra(x,limit,factor) "
       "while x<=limit do x=x*factor*factor end return x end");
-  assert(call_triple(L, "__arm64_args_mul_inclusive_extra",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_mul_inclusive_extra",
 	0.5, 20.25, 2.0, 0, 0, 0) == 32.0);
-  expect_no_trace(L, "__arm64_args_mul_inclusive_extra");
+  expect_scalar_trace(L, "__arm64_args_mul_inclusive_extra");
 
   lua_close(L);
 }
 
-static void test_add_descending_adjacent_rejected(void)
+static void test_add_descending_adjacent_admitted(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
@@ -3833,70 +3867,78 @@ static void test_add_descending_adjacent_rejected(void)
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
     "function __arm64_args_reversed_add_gt_compare(x,limit,step) "
       "while limit<x do x=x+step end return x end");
-  assert(call_triple(L, "__arm64_args_reversed_add_gt_compare",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_reversed_add_gt_compare",
 	20.5, 0.25, -0.5, 0, 0, 0) == 0.0);
-  expect_no_trace(L, "__arm64_args_reversed_add_gt_compare");
+  expect_scalar_trace(L, "__arm64_args_reversed_add_gt_compare");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_reversed_add_gt(x,limit,step) "
       "while x>limit do x=step+x end return x end");
-  assert(call_triple(L, "__arm64_args_reversed_add_gt",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_reversed_add_gt",
 	20.5, 0.25, -0.5, 0, 0, 0) == 0.0);
-  expect_no_trace(L, "__arm64_args_reversed_add_gt");
+  expect_scalar_trace(L, "__arm64_args_reversed_add_gt");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_extra_add_gt(x,limit,step) "
       "while x>limit do x=x+step+step end return x end");
-  assert(call_triple(L, "__arm64_args_extra_add_gt",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_extra_add_gt",
 	20.5, 0.25, -0.25, 0, 0, 0) == 0.0);
-  expect_no_trace(L, "__arm64_args_extra_add_gt");
+  expect_scalar_trace(L, "__arm64_args_extra_add_gt");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_add_gt_mul(x,limit,step) "
       "while x>limit do x=x*step end return x end");
-  assert(call_triple(L, "__arm64_args_add_gt_mul",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_add_gt_mul",
 	20.5, 0.5, 0.5, 0, 0, 0) == 0.3203125);
-  expect_no_trace(L, "__arm64_args_add_gt_mul");
+  expect_scalar_trace(L, "__arm64_args_add_gt_mul");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_reversed_add_ge_compare(x,limit,step) "
       "while limit<=x do x=x+step end return x end");
-  assert(call_triple(L, "__arm64_args_reversed_add_ge_compare",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_reversed_add_ge_compare",
 	20.5, 0.5, -0.5, 0, 0, 0) == 0.0);
-  expect_no_trace(L, "__arm64_args_reversed_add_ge_compare");
+  expect_scalar_trace(L, "__arm64_args_reversed_add_ge_compare");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_reversed_add_ge(x,limit,step) "
       "while x>=limit do x=step+x end return x end");
-  assert(call_triple(L, "__arm64_args_reversed_add_ge",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_reversed_add_ge",
 	20.5, 0.5, -0.5, 0, 0, 0) == 0.0);
-  expect_no_trace(L, "__arm64_args_reversed_add_ge");
+  expect_scalar_trace(L, "__arm64_args_reversed_add_ge");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_extra_add_ge(x,limit,step) "
       "while x>=limit do x=x+step+step end return x end");
-  assert(call_triple(L, "__arm64_args_extra_add_ge",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_extra_add_ge",
 	20.5, 0.5, -0.25, 0, 0, 0) == 0.0);
-  expect_no_trace(L, "__arm64_args_extra_add_ge");
+  expect_scalar_trace(L, "__arm64_args_extra_add_ge");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_add_ge_mul(x,limit,step) "
       "while x>=limit do x=x*step end return x end");
-  assert(call_triple(L, "__arm64_args_add_ge_mul",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_add_ge_mul",
 	20.5, 0.5, 0.5, 0, 0, 0) == 0.3203125);
-  expect_no_trace(L, "__arm64_args_add_ge_mul");
+  expect_scalar_trace(L, "__arm64_args_add_ge_mul");
 
   lua_close(L);
 }
 
-static void test_extra_add_rejected(void)
+static void test_extra_add_admitted(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
@@ -3906,21 +3948,23 @@ static void test_extra_add_rejected(void)
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
     "function __arm64_args_negative(x,limit,step) "
       "while x<limit do x=x+step+step end return x end");
-  assert(call_triple(L, "__arm64_args_negative",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_negative",
 	0.5, 20.25, 0.25, 0, 0, 0) == 20.5);
-  expect_no_trace(L, "__arm64_args_negative");
+  expect_scalar_trace(L, "__arm64_args_negative");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_extra_inclusive(x,limit,step) "
       "while x<=limit do x=x+step+step end return x end");
-  assert(call_triple(L, "__arm64_args_extra_inclusive",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_extra_inclusive",
 	0.5, 20.25, 0.25, 0, 0, 0) == 20.5);
-  expect_no_trace(L, "__arm64_args_extra_inclusive");
+  expect_scalar_trace(L, "__arm64_args_extra_inclusive");
   lua_close(L);
 }
 
-static void test_descending_adjacent_rejected(void)
+static void test_descending_adjacent_admitted(void)
 {
   lua_State *L = luaL_newstate();
   int i;
@@ -3932,75 +3976,84 @@ static void test_descending_adjacent_rejected(void)
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
     "function __arm64_args_sub_le(x,limit,step) "
       "while x<=limit do x=x-step end return x end");
-  assert(call_triple(L, "__arm64_args_sub_le",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_sub_le",
 	0.5, 20.25, -0.5, 0, 0, 0) == 20.5);
-  expect_no_trace(L, "__arm64_args_sub_le");
+  expect_scalar_trace(L, "__arm64_args_sub_le");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_descending_mul(x,limit,step) "
       "while x>limit do x=x*step end return x end");
-  assert(call_triple(L, "__arm64_args_descending_mul",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_descending_mul",
 	20.5, 0.5, 0.5, 0, 0, 0) == 0.3203125);
-  expect_no_trace(L, "__arm64_args_descending_mul");
+  expect_scalar_trace(L, "__arm64_args_descending_mul");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_descending_inclusive_mul(x,limit,step) "
       "while x>=limit do x=x*step end return x end");
-  assert(call_triple(L, "__arm64_args_descending_inclusive_mul",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_descending_inclusive_mul",
 	20.5, 0.5, 0.5, 0, 0, 0) == 0.3203125);
-  expect_no_trace(L, "__arm64_args_descending_inclusive_mul");
+  expect_scalar_trace(L, "__arm64_args_descending_inclusive_mul");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_reversed_descending_compare(x,limit,step) "
       "while limit<x do x=x-step end return x end");
-  assert(call_triple(L, "__arm64_args_reversed_descending_compare",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_reversed_descending_compare",
 	20.5, 0.25, 0.5, 0, 0, 0) == 0.0);
-  expect_no_trace(L, "__arm64_args_reversed_descending_compare");
+  expect_scalar_trace(L, "__arm64_args_reversed_descending_compare");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_reversed_descending_inclusive_compare"
       "(x,limit,step) while limit<=x do x=x-step end return x end");
-  assert(call_triple(L, "__arm64_args_reversed_descending_inclusive_compare",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_reversed_descending_inclusive_compare",
 	20.5, 0.5, 0.5, 0, 0, 0) == 0.0);
-  expect_no_trace(L, "__arm64_args_reversed_descending_inclusive_compare");
+  expect_scalar_trace(L, "__arm64_args_reversed_descending_inclusive_compare");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_reversed_sub(x,limit,step) "
       "while x>limit do x=step-x end return x end");
   for (i = 0; i < 4; i++)
+    for (int repeat = 0; repeat < 4; repeat++)
     assert(call_triple(L, "__arm64_args_reversed_sub",
 	2.0, 0.0, 1.0, 0, 0, 0) == -1.0);
-  expect_no_trace(L, "__arm64_args_reversed_sub");
+  expect_short_loop(L, "__arm64_args_reversed_sub");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_reversed_inclusive_sub(x,limit,step) "
       "while x>=limit do x=step-x end return x end");
   for (i = 0; i < 4; i++)
+    for (int repeat = 0; repeat < 4; repeat++)
     assert(call_triple(L, "__arm64_args_reversed_inclusive_sub",
 	2.0, 0.0, 1.0, 0, 0, 0) == -1.0);
-  expect_no_trace(L, "__arm64_args_reversed_inclusive_sub");
+  expect_short_loop(L, "__arm64_args_reversed_inclusive_sub");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_extra_sub(x,limit,step) "
       "while x>limit do x=x-step-step end return x end");
-  assert(call_triple(L, "__arm64_args_extra_sub",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_extra_sub",
 	20.5, 0.5, 0.25, 0, 0, 0) == 0.5);
-  expect_no_trace(L, "__arm64_args_extra_sub");
+  expect_scalar_trace(L, "__arm64_args_extra_sub");
 
   run_lua(L,
-    "jit.flush(); "
+    "jit.flush(); jit.opt.start('hotloop=1'); "
     "function __arm64_args_extra_inclusive_sub(x,limit,step) "
       "while x>=limit do x=x-step-step end return x end");
-  assert(call_triple(L, "__arm64_args_extra_inclusive_sub",
+  for (int repeat = 0; repeat < 4; repeat++)
+    assert(call_triple(L, "__arm64_args_extra_inclusive_sub",
 	20.5, 0.5, 0.25, 0, 0, 0) == 0.0);
-  expect_no_trace(L, "__arm64_args_extra_inclusive_sub");
+  expect_scalar_trace(L, "__arm64_args_extra_inclusive_sub");
   lua_close(L);
 }
 
@@ -4051,14 +4104,14 @@ int main(int argc, char **argv)
   test_int_x_positive_and_guard_exits(&descending_profile);
   test_int_x_positive_and_guard_exits(&descending_inclusive_profile);
   test_int_limit_positive_and_guard_exits();
-  test_fixed_initializers_remain_separate();
-  test_sub_lt_rejected();
-  test_div_adjacent_rejected();
-  test_adjacent_comparisons_rejected();
-  test_mul_inclusive_adjacent_rejected();
-  test_extra_add_rejected();
-  test_add_descending_adjacent_rejected();
-  test_descending_adjacent_rejected();
+  test_fixed_initializers_admitted();
+  test_sub_lt_admitted();
+  test_div_adjacent_admitted();
+  test_adjacent_comparisons_admitted();
+  test_mul_inclusive_adjacent_admitted();
+  test_extra_add_admitted();
+  test_add_descending_adjacent_admitted();
+  test_descending_adjacent_admitted();
   puts("t-arm64-jit-pure-numeric-args OK");
   return 0;
 }

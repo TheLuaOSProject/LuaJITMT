@@ -614,14 +614,20 @@ static void test_xpoll_lifecycle(lua_State *L, GCproto *pt,
   expect_only_mixed_root(L, pt);
 }
 
-static void expect_no_trace(lua_State *L, const char *name)
+/* These scalar variations no longer need a separate whole-trace grammar. */
+static void expect_scalar_trace(lua_State *L, const char *name)
 {
   jit_State *J = L2J(L);
   GCproto *pt = global_proto(L, name);
-  TraceNo traceno;
-  assert(proto_trace_acq(pt) == 0);
-  for (traceno = 1; (MSize)traceno < trace_sizetrace_acq(J); traceno++)
-    assert(!trace_runnable_acq(traceref_safe(J, traceno), traceno));
+  TraceNo no = proto_trace_acq(pt);
+  GCtrace *T = traceref_safe(J, no);
+  if (!no || !trace_runnable_acq(T, no))
+    fprintf(stderr, "missing scalar capability trace for %s\n", name);
+  assert(no && trace_runnable_acq(T, no));
+  assert(trace_startpt_acq(T) == pt && trace_root_acq(T) == 0);
+  assert(trace_link_acq(T) == no && trace_linktype_acq(T) == LJ_TRLINK_LOOP);
+  assert(bc_op(trace_startins_acq(T)) == BC_LOOP);
+  assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);
 }
 
 static void test_positive_and_hot_type_exit(void)
@@ -726,7 +732,7 @@ static void test_pure_num_root_isolated(void)
   lua_close(L);
 }
 
-static void test_conversion_rejected(void)
+static void test_conversion_admitted(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
@@ -737,11 +743,11 @@ static void test_conversion_rejected(void)
     "function __arm64_numeric_negative(n,x,step) local i=0 "
       "while i<n do i=i+1; x=x+i end return x end");
   assert(call_negative3(L, 20, 1.25, 0.5) == 211.25);
-  expect_no_trace(L, "__arm64_numeric_negative");
+  expect_scalar_trace(L, "__arm64_numeric_negative");
   lua_close(L);
 }
 
-static void test_num_mul_rejected(void)
+static void test_num_mul_admitted(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
@@ -752,7 +758,7 @@ static void test_num_mul_rejected(void)
     "function __arm64_numeric_negative(n,x,step) local i=0 "
       "while i<n do i=i+1; x=x*step end return x end");
   assert(call_negative3(L, 20, 1.25, 2.0) == 1310720.0);
-  expect_no_trace(L, "__arm64_numeric_negative");
+  expect_scalar_trace(L, "__arm64_numeric_negative");
   lua_close(L);
 }
 
@@ -764,8 +770,8 @@ int main(int argc, char **argv)
 	   strcmp(argv[1], "randomized") == 0);
   test_positive_and_hot_type_exit();
   test_pure_num_root_isolated();
-  test_conversion_rejected();
-  test_num_mul_rejected();
+  test_conversion_admitted();
+  test_num_mul_admitted();
   puts("t-arm64-jit-numeric-loop OK");
   return 0;
 }
