@@ -2461,6 +2461,8 @@ LJFOLDX(lj_opt_fwd_xload)
 /* -- Frame handling ------------------------------------------------------ */
 
 /* Prevent CSE of a REF_BASE operand across IR_RETF. */
+LJFOLD(ADD BASE KINT)
+LJFOLD(ADD BASE KINT64)
 LJFOLD(SUB any BASE)
 LJFOLD(SUB BASE any)
 LJFOLD(EQ any BASE)
