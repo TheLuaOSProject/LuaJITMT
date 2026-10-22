@@ -3060,6 +3060,13 @@ TRef lj_record_tab_len(jit_State *J, TRef tab)
   return emitir(IRTI(IR_ALEN), tab, TREF_NIL);
 }
 
+/* No later lexical capture is reachable through these scan boundaries. */
+static int rec_celluv_scan_stop(BCOp op)
+{
+  return op == BC_FORL || op == BC_ITERL || op == BC_LOOP || op == BC_UCLO ||
+         bc_isret_or_tail(op);
+}
+
 /* Look ahead in the current loop body for FNEW promotion of a captured slot. */
 static int rec_celluv_will_promote(jit_State *J, BCReg slotno)
 {
@@ -3082,9 +3089,7 @@ static int rec_celluv_will_promote(jit_State *J, BCReg slotno)
 	    (BCReg)(v & 0xff) == slotno && slotno != cnewslot)
 	  return 1;
       }
-    } else if (op == BC_FORL || op == BC_ITERL || op == BC_LOOP ||
-	       op == BC_RET || op == BC_RET0 || op == BC_RET1 ||
-	       op == BC_UCLO) {
+    } else if (rec_celluv_scan_stop(op)) {
       break;
     }
   }
@@ -3129,10 +3134,36 @@ static int rec_celluv_slot_defined_before(jit_State *J, const BCIns *limit,
 	return 1;
     } else if (bcmode_a(op) == BCMdst && bc_a(ins) == slotno) {
       return 1;
+    } else if ((op == BC_CALL || op == BC_CALLM ||
+                op == BC_ITERC || op == BC_ITERN) && slotno >= bc_a(ins)) {
+      /* Callees may clobber all temporary slots above their result base. */
+      return 1;
+    } else if (op == BC_VARG && slotno >= bc_a(ins) &&
+               (!bc_b(ins) || slotno < bc_a(ins)+bc_b(ins)-1)) {
+      return 1;
+    } else if ((op == BC_FORI || op == BC_FORL) &&
+               slotno >= bc_a(ins) && slotno < bc_a(ins)+4) {
+      return 1;
+    } else if ((op == BC_ITERL || op == BC_ISNEXT) &&
+               slotno+1 == bc_a(ins)) {
+      return 1;
     }
   }
   return 0;
 }
+
+#ifdef LJ_TRACE_TEST_HELPERS
+int lj_record_test_celluv_will_promote(jit_State *J, BCReg slotno)
+{
+  return rec_celluv_will_promote(J, slotno);
+}
+
+int lj_record_test_celluv_defined_before(jit_State *J, const BCIns *limit,
+                                        BCReg slotno)
+{
+  return rec_celluv_slot_defined_before(J, limit, slotno);
+}
+#endif
 
 static void rec_celluv_promote_pending(jit_State *J)
 {
@@ -3156,9 +3187,7 @@ static void rec_celluv_promote_pending(jit_State *J)
 	    slot != cnewslot && !rec_celluv_slot_defined_before(J, pc, slot))
 	  rec_celluv_promote_slot(J, slot, 1);
       }
-    } else if (op == BC_FORL || op == BC_ITERL || op == BC_LOOP ||
-	       op == BC_RET || op == BC_RET0 || op == BC_RET1 ||
-	       op == BC_UCLO) {
+    } else if (rec_celluv_scan_stop(op)) {
       break;
     }
   }
