@@ -151,6 +151,8 @@ run_lua -joff "$root/tests/t-threading-api.lua"
 run_lua -joff "$root/tests/t-threading-hooks.lua"
 run_lua -joff "$root/tests/t-threading-coroutine.lua"
 run_lua -joff "$root/tests/t-upvalue-identity.lua"
+env LJ_TEST_ROOT="$root" LUA_PATH="$lua_path" \
+  "$luajit" -joff "$root/tests/t-jit-cell-loops.lua"
 run_lua -joff "$root/tests/t-ffi-callback-runtime.lua" 4 80
 
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_ffi_aggregate_contract.sh"
