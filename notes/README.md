@@ -22,6 +22,8 @@ and reports that are no longer authoritative are retained in
   verified on 2026-10-22 in a disposable checkout.
 - The bootstrap gate also passes at `857c44cc`. Its experimental gate stopped
   at an uninterruptible Rosetta callback test; it is not a complete pass.
+  Native-only bootstrap diagnostics also pass at `01b8c560`, including the
+  legacy import fixture; the Rosetta unwind branch was omitted.
   See [`checkpoint-2026-10-22.md`](checkpoint-2026-10-22.md).
 - Build artifacts in the development checkout may belong to either profile;
   select and rebuild the intended profile explicitly.
