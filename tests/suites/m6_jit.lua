@@ -27,6 +27,7 @@ local m6_cases = {
   "m6_jit_trace_proto_gc",
   "m6_jit_cell_ops",
   "m6_jit_upvalue_identity",
+  "m6_jit_cell_cnew_epoch",
   "m6_jit_fnew_bump",
   "m6_jit_barrier_xpoll",
   "m6_jit_xbar_xpoll",
@@ -947,6 +948,19 @@ assert(util.traceinfo(1), "Lua tailcall loop did not trace")
         build = false,
         timeout = "30s"
       })
+    end
+  })
+
+  add({
+    name = "m6_jit_cell_cnew_epoch",
+    description = "recorder cell allocation lookup respects returned frame boundaries",
+    run = function(t)
+      clean_build(t, build.trace_helper_build_opts({ quiet = true }))
+      build_and_run_c(t, t:tmp("lj_t-jit-cell-cnew-epoch"),
+                      "t-jit-cell-cnew-epoch.c", build.trace_helper_c_opts({
+        build = false,
+        timeout = "30s"
+      }))
     end
   })
 

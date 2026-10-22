@@ -65,6 +65,15 @@ if grep -n 'GL_J(trace)' "$root/src/vm_arm64.dasc" >/dev/null; then
   exit 1
 fi
 
+cell_fixture=$root/src/t-jit-cell-cnew-epoch
+# shellcheck disable=SC2086 # Match the archive's JIT/helper layout.
+${CC:-clang} -std=gnu11 -O2 -Wall -Wextra -Werror \
+  -mmacosx-version-min="$minver" $xcflags -I"$root/src" \
+  "$root/tests/t-jit-cell-cnew-epoch.c" "$archive" -lm -pthread \
+  -o "$cell_fixture"
+"$cell_fixture"
+rm -f "$cell_fixture"
+
 LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
 LJ_ARM64_GC2_RESTORE_XCFLAGS="$xcflags" \
   sh "$root/tools/ci/arm64_gc2_interp_hard_check_contract.sh"
