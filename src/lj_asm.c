@@ -3369,6 +3369,62 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
 }
 
 #if LJ_TARGET_ARM64 && defined(LJ_ARM64_EMIT_TEST_HELPERS)
+/* Exercise the production loop/PHI boundary without admitting new traces.
+** Input: x0 points to six doubles, w1 is a positive iteration count. The first
+** body entry must preserve slot 14; backedges copy PHI slot 2 into slot 14.
+** An adjacent body store deliberately offers the ARM64 pairing peephole its
+** formerly unsafe merge across the prologue's skip-copy branch target. */
+MCode *lj_asm_arm64_phi_spill_test(jit_State *J, MCode *buf, MSize cap)
+{
+  ASMState as_;
+  ASMState *as = &as_;
+  IRIns ir[REF_FIRST+2];
+  MCode *done;
+  if (!J || !buf || cap < 256)
+    return NULL;
+  memset(as, 0, sizeof(*as));
+  memset(ir, 0, sizeof(ir));
+  as->J = J;
+  as->ir = ir;
+  as->mcp = buf+cap;
+  as->mclim = buf+MCLIM_REDZONE;
+#ifdef LUA_USE_ASSERT
+  as->mcp_prev = as->mcp;
+#endif
+  as->curins = as->orignins = REF_FIRST+2;
+  ra_setup(as);
+  ir[REF_FIRST].ot = IRT(IR_SLOAD, IRT_NUM);
+  ir[REF_FIRST].r = RID_NONE;
+  ir[REF_FIRST].s = 14;
+  ir[REF_FIRST+1].ot = IRT(IR_PHI, IRT_NUM);
+  ir[REF_FIRST+1].op1 = REF_FIRST;
+  ir[REF_FIRST+1].r = RID_NONE;
+  ir[REF_FIRST+1].s = 2;
+
+  *--as->mcp = 0xd65f03c0u;  /* ret */
+  emit_dn(as, A64I_ADDx^emit_isk12(64), RID_SP, RID_SP);
+  done = as->mcp;
+  *--as->mcp = A64I_B;  /* Patched by the production loop fixup. */
+  as->mctop = as->mcp+1;
+  emit_cond_branch(as, CC_EQ, done);
+  emit_dn(as, A64I_SUBSw^emit_isk12(1), RID_X1, RID_X1);
+  emit_lso(as, A64I_STRd, 2, RID_X0, 40);
+  emit_lso(as, A64I_LDRd, 2, RID_SP, 48);
+  emit_lso(as, A64I_STRd, 2, RID_X0, 32);
+  emit_lso(as, A64I_LDRd, 2, RID_SP, 56);
+  emit_lso(as, A64I_STRd, 1, RID_SP, 48);
+  asm_loop(as);
+  emit_lso(as, A64I_STRd, 3, RID_SP, 56);
+  emit_lso(as, A64I_STRd, 2, RID_SP, 8);
+  emit_lso(as, A64I_LDRd, 3, RID_X0, 24);
+  emit_lso(as, A64I_LDRd, 2, RID_X0, 16);
+  emit_lso(as, A64I_LDRd, 1, RID_X0, 8);
+  emit_lso(as, A64I_LDRd, 0, RID_X0, 0);
+  emit_dn(as, A64I_ADDx^emit_isk12(-64), RID_SP, RID_SP);
+  *--as->mcp = A64I_BTI_C;
+  return as->mcp;
+}
+
 /* Exercise the production TBAR lowering without widening trace admission.
 ** The fixture supplies GL/DISPATCH and preserves the ABI's callee-save regs.
 ** A dynamic key is deliberately allocated in the first helper argument reg. */
