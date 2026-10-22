@@ -6,6 +6,8 @@ GNU linker wrapping remain unchanged. This case builds an assertion/helper
 profile, runs both fixtures, and restores the caller's ARM64 bootstrap or
 experimental profile. The shared test build helper accepts an explicit restore
 XCFLAGS value; callers that omit it retain their previous behavior.
+The complete ARM64 bootstrap gate requires this case, including restoration
+of its disabled-JIT assertion profile before the remaining stock and FFI tests.
 
 Darwin wrapper translation units compile the actual arena and safepoint sources
 with selected call names redirected to the existing test wrappers. They replace

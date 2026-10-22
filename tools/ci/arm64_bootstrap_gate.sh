@@ -140,7 +140,7 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
     m5_arm64_root_publication_runtime m5_arm64_safepoint_runtime \
     m5_arm64_pcall_anchor_runtime m5_arm64_capi_meta_roots \
     m5_arm64_tmpbuf_runtime \
-    m4_posix_signal_arm64_gate
+    m4_posix_signal_arm64_gate m3_darwin_gc2_runtime
 
 (
   cd "$root/tests/stock/test"
