@@ -89,3 +89,20 @@ Temporary evidence: `/tmp/luajitmt-scalar-stock-{source,import}.log`,
 `/tmp/luajitmt-generic-cell-repro{,-dump}.log`. The x86-64 checkout path is in
 `/tmp/luajitmt-x64-recheck-workdir`; it is now used for isolated diagnosis, so
 its current contents must not be assumed to remain frozen at that commit.
+
+The remaining native scalar integration contracts also completed as separate
+diagnostic runs. These cover exits and trace retirement, root entry, live
+flush/reuse, recorder and VM safepoints, and source upvalue identity. The root
+entry fixture needed `1685aaa5`: its synthetic trace now includes the initial
+guard snapshot and loop XPOLL required by the independent scalar capability.
+The repair retains the existing metadata mutations and adds missing guard,
+snapshot-slot and poll negative controls. Its complete contract passes ARM64
+and arm64e. The diagnostic tail passes both targets as well.
+
+These component results are not a new complete umbrella-gate result. A fresh
+default gate remains necessary after the shared capture fixes and numeric spill
+work land. Temporary outputs are
+`/tmp/luajitmt-scalar-checkpoint-final-contracts.log`,
+`/tmp/lj-root-entry-capability-contract.log`, and
+`/tmp/luajitmt-scalar-checkpoint-last-contracts.log`; the first records the
+obsolete synthetic root fixture failure before its independent repaired rerun.
