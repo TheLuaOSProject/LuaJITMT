@@ -142,6 +142,8 @@ run_lua -joff "$root/tests/t-threading-hooks.lua"
 run_lua -joff "$root/tests/t-threading-coroutine.lua"
 run_lua -joff "$root/tests/t-ffi-callback-runtime.lua" 4 80
 
+LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_ffi_aggregate_contract.sh"
+
 LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
 LJ_OSERR_RESTORE_XCFLAGS="$xcflags" \
   sh "$root/tools/ci/arm64_oserr_unwind_contract.sh"
