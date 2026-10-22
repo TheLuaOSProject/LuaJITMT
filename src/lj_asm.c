@@ -3367,6 +3367,85 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
 }
 
 #if LJ_TARGET_ARM64 && defined(LJ_ARM64_EMIT_TEST_HELPERS)
+/* Exercise the production TBAR lowering without widening trace admission.
+** The fixture supplies GL/DISPATCH and preserves the ABI's callee-save regs.
+** A dynamic key is deliberately allocated in the first helper argument reg. */
+MCode *lj_asm_arm64_tbar_test(jit_State *J, MCode *buf, MSize cap,
+	GCtab *tab, cTValue *key, int dynamic)
+{
+  ASMState as_;
+  ASMState *as = &as_;
+  IRIns ir[REF_FIRST+2];
+  IRIns barrier;
+  IRRef tabref = REF_TRUE-2, keyref = REF_TRUE-4;
+  IRType kt = key ? itype2irt(key) : IRT_NIL;
+  if (!J || !buf || cap < 256 || !tab ||
+      (key && (!tvisgcv(key) && !tvisnumber(key))) ||
+      (key && !dynamic && tvisnum(key)))
+    return NULL;
+  memset(as, 0, sizeof(*as));
+  memset(ir, 0, sizeof(ir));
+  memset(&barrier, 0, sizeof(barrier));
+  as->J = J;
+  as->ir = ir;
+  as->mcp = buf+cap;
+  as->mclim = buf+MCLIM_REDZONE;
+#ifdef LUA_USE_ASSERT
+  as->mcp_prev = as->mcp;
+#endif
+  as->curins = REF_FIRST+1;
+  as->evenspill = SPS_FIRST;
+  ra_setup(as);
+  ir[ASMREF_TMP1].t.irt = IRT_PGC;
+  ir[ASMREF_TMP1].r = RID_INIT;
+  ir[ASMREF_TMP2].t.irt = IRT_PGC;
+  ir[ASMREF_TMP2].r = RID_INIT;
+  ir_kgc_publish(&ir[tabref], obj2gco(tab), IRT_TAB);
+  ir[tabref].r = RID_INIT;
+  if (key) {
+    if (dynamic) {
+      keyref = REF_FIRST;
+      ir[keyref].o = IR_SLOAD;
+      ir[keyref].t.irt = (uint8_t)kt;
+      ra_sethint(ir[keyref].r, kt == IRT_NUM ? RID_D0 : RID_X0);
+    } else {
+      ir[keyref].t.irt = (uint8_t)kt;
+      ir[keyref].r = RID_INIT;
+      if (tvisgcv(key))
+        ir_kgc_publish(&ir[keyref], gcV(key), kt);
+      else {
+        ir[keyref].o = IR_KINT;
+        ir[keyref].i = intV(key);
+      }
+    }
+  }
+  barrier.op1 = (IRRef1)tabref;
+  barrier.op2 = key ? (IRRef1)keyref : REF_NIL;
+  barrier.ot = IRT(IR_TBAR, IRT_NIL);
+  /* A private ABI envelope preserves LR across the emitted helper call. */
+  *--as->mcp = 0xd65f03c0u;  /* ret */
+  emit_dn(as, A64I_ADDx^emit_isk12(16), RID_SP, RID_SP);
+  emit_lso(as, A64I_LDRx, RID_LR, RID_SP, 8);
+  asm_tbar(as, &barrier);
+  if (key && dynamic) {
+    Reg r = ir[keyref].r;
+    lj_assertA(r == (kt == IRT_NUM ? RID_D0 : RID_X0),
+               "TBAR fixture lost its argument-register conflict");
+    if (kt == IRT_NUM) {
+      emit_dn(as, A64I_FMOV_D_R, r & 31, RID_TMP);
+      emit_loadu64(as, RID_TMP, key->u64);
+    } else {
+      emit_loadu64(as, r, tvisint(key) ? (uint32_t)intV(key) :
+                   (uint64_t)(uintptr_t)gcV(key));
+    }
+  }
+  ra_evictk(as);
+  emit_lso(as, A64I_STRx, RID_LR, RID_SP, 8);
+  emit_dn(as, A64I_ADDx^emit_isk12(-16), RID_SP, RID_SP);
+  *--as->mcp = A64I_BTI_C;
+  return as->mcp;
+}
+
 MSize lj_asm_arm64_emit_test(jit_State *J, MCode *buf, MSize cap,
 			     LJArm64EmitTestOp op, int32_t state)
 {

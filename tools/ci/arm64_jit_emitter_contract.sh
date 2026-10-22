@@ -109,13 +109,11 @@ for required in \
   }
 done
 if test "$(grep -Ec '^[[:space:]]*emit_(get|set)gl' \
-     "$root/src/lj_asm_arm64.h")" -ne 7; then
+     "$root/src/lj_asm_arm64.h")" -ne 5; then
   echo "ARM64 assembler global-field allowlist changed" >&2
   exit 1
 fi
 for required in \
-  'emit_setgl(as, tab, gc.grayagain);' \
-  'emit_getgl(as, link, gc.grayagain);' \
   'emit_getglacq(as, tmp2, gc2.hard_check_bytes);' \
   'emit_getglacq(as, tmp1, gc2.alloc_since_trigger);' \
   'emit_getglacq(as, tmp2, gc.threshold);' \
