@@ -20,6 +20,9 @@ and reports that are no longer authoritative are retained in
 - Latest ARM64 JIT GC2 cadence parity: `f1fe1f73`.
 - Latest complete bootstrap and fail-closed gates: frozen `709583ee` source,
   verified on 2026-10-22 in a disposable checkout.
+- The bootstrap gate also passes at `857c44cc`. Its experimental gate stopped
+  at an uninterruptible Rosetta callback test; it is not a complete pass.
+  See [`checkpoint-2026-10-22.md`](checkpoint-2026-10-22.md).
 - Build artifacts in the development checkout may belong to either profile;
   select and rebuild the intended profile explicitly.
 
@@ -54,6 +57,12 @@ intentionally rejected; ordinary interpreted Lua remains available.
   admission while any legacy open upvalue still points into an owner's stack.
   Rejection preserves ordinary owner semantics; admission succeeds after the
   captures close. See the remaining legacy compatibility limitation below.
+- Source captures share their closed-cell identity even when the captured
+  local is read-only. Lua and C debug-local writes update that cell and use
+  the existing trace-flush handshake when its value changes. Current-frame
+  addressing, fresh invocation cells, and `RETF` boundaries have targeted
+  regressions; see [`source-upvalue-conformance.md`](source-upvalue-conformance.md)
+  and [`jit-cell-retf-2026-10-22.md`](jit-cell-retf-2026-10-22.md).
 
 ### Bounded native JIT
 
@@ -85,6 +94,10 @@ intentionally rejected; ordinary interpreted Lua remains available.
 - ARM64 generated table barriers call the existing GC2 runtime helper, matching
   x64. A dedicated machine-code fixture covers key roots and argument-register
   overlap on ARM64 and arm64e/BTI. General table-effect admission remains closed.
+- The common assembler marks the loop-entry boundary before emitting PHI spill
+  copies, preventing ARM64 store pairing across that branch target. The native
+  generated-code regression covers both ARM64 and arm64e/BTI. General numeric
+  spill admission remains closed.
 
 ## Deliberately closed or incomplete
 
@@ -106,8 +119,6 @@ intentionally rejected; ordinary interpreted Lua remains available.
   locals, which does not preserve stock shared-local semantics. Legacy import
   needs normalization into the fork's shared-cell operations. The new admission
   veto only protects existing pre-activation open cells.
-- Source read-only captures currently have a separate shared-identity defect;
-  fixes and cross-architecture debug-API regressions are under development.
 - Concurrent tmpbuf stress showed one unchanged-baseline timeout. A rejected
   inline dirty-epoch experiment also hit a GC2 assertion; no common cause or
   specific upstream fix has been established.
@@ -176,8 +187,8 @@ build.
 
 ## Next review priorities
 
-1. Restore stock shared-upvalue identity for source captures and imported
-   legacy bytecode, including debug API writes under the x64 JIT.
+1. Restore stock shared-upvalue semantics for imported legacy bytecode and
+   extend the source-capture/debug-API regressions as new cases are found.
 2. Replace unnecessarily exact scalar JIT restrictions with independently
    checked semantic and post-register-allocation capabilities. Investigate
    actual emitter failures before admitting the affected operations.
