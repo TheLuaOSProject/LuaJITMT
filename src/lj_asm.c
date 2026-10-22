@@ -1936,7 +1936,9 @@ static void asm_loop(ASMState *as)
   as->sectref = 0;
   if (!neverfuse(as)) as->fuseref = 0;
   asm_phi_shuffle(as);
-  mcspill = as->mcp;
+  /* The prologue skips PHI spill copies. Keep their stores from merging
+  ** across its entry into the loop body (e.g. ARM64 STR pairs into STP). */
+  as->mcloop = mcspill = as->mcp;
   asm_phi_copyspill(as);
   asm_loop_fixup(as);
   as->mcloop = as->mcp;
