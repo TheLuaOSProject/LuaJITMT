@@ -24,6 +24,8 @@ and reports that are no longer authoritative are retained in
   at an uninterruptible Rosetta callback test; it is not a complete pass.
   Native-only bootstrap diagnostics also pass at `01b8c560`, including the
   legacy import fixture; the Rosetta unwind branch was omitted.
+  Rosetta later recovered: both stock509 runs, FNEW, callback and unwind checks
+  pass; a separate captured-iterator JIT failure is being repaired.
   See [`checkpoint-2026-10-22.md`](checkpoint-2026-10-22.md).
 - Build artifacts in the development checkout may belong to either profile;
   select and rebuild the intended profile explicitly.
@@ -126,7 +128,9 @@ available.
   Native interpreter compatibility covers genuine stock v2 imports, debug
   metadata, worker sharing, and v4 round trips. Conversion retains explicit
   frame/jump/window limits, and final x86-64 JIT validation is outstanding;
-  see [`legacy-bytecode-cells.md`](legacy-bytecode-cells.md). True internal legacy
+  see [`legacy-bytecode-cells.md`](legacy-bytecode-cells.md). The current x86-64
+  issue also reproduces from source in a closure-producing iterator loop.
+  True internal legacy
   open cells still require the admission veto.
 - Concurrent tmpbuf stress showed one unchanged-baseline timeout. A rejected
   inline dirty-epoch experiment also hit a GC2 assertion; no common cause or

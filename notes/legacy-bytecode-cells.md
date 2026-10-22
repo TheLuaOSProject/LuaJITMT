@@ -94,11 +94,12 @@ The ordinary suite case is `m5_legacy_bytecode_cells`.
 This is a compatibility improvement, not a claim of full stock bytecode or JIT
 conformance. ARM64's existing admission policy still rejects general generated
 upvalue effects; these native suite passes therefore do not prove unrestricted
-cell traces. An intermediate importer passed 509 imported tests on x86-64 via
-Rosetta, but a later x86-64 run encountered a recursive JIT failure before the
-subsequent `RETF`/CNEW fixes. Final x86-64 JIT validation is outstanding because
-Rosetta LuaJIT processes on this host became uninterruptible. No new x86-64 pass
-is inferred from the ARM64 evidence.
+cell traces. After the translated-process stall cleared, frozen `57ae11b2` passed all 509
+source and 509 imported stock cases under Rosetta. The larger legacy fixture
+then exposed a shared JIT bug in a closure-producing `ipairs` loop: the exact
+source also omits a closure, while interpreter mode and original LuaJIT pass.
+Final x86-64 closure/import compatibility therefore remains unresolved; see
+[checkpoint-2026-10-22.md](checkpoint-2026-10-22.md).
 
 The load-time converter currently reserves three scratch slots in an owning
 prototype. Original frames above 247 slots fail with “function or expression

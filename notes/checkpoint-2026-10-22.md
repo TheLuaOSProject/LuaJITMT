@@ -52,3 +52,40 @@ its output in `/tmp/luajitmt-legacy-checkpoint-bootstrap.log`. The diagnostic
 script `/tmp/luajitmt-native-diagnostic-gates.py` preserves a patch describing
 its omissions inside each frozen checkout. Committed default gates retain all
 cross-architecture requirements.
+
+## Scalar integration and recovered translation
+
+Scalar production source `6182f769` plus its fixtures passed both 509-case stock
+runs on native ARM64 at frozen `82320b43`: ordinary source and genuine original
+v2 bytecode through the FIFO compiler harness. Broader integration exposed
+stale shell source checks after splitting the validators and admitting adjacent
+numeric shapes. `1355cd2d`, `57ae11b2`, and `cc3c8d0a` update those checks;
+production arithmetic and FORL behavior were not changed by these repairs.
+The numeric-argument contract retains all 37 modes and 222 default native
+ARM64/arm64e executions, including its ABI, emitted-code and lifecycle checks.
+
+Later on 2026-10-22, the previously stuck translated processes were no longer
+present. No system-service action or reboot was performed by this task. A fresh
+x86-64 build of `57ae11b2` executed successfully. Both 509-case stock runs then
+passed under Rosetta, and the full FNEW fixture passed in both default and
+`LJ_TEST_TRACED_FNEW=1` modes. The CNEW return-boundary, pending-capture scan and
+SSB-preserve fixtures passed too. The callback-result and OS-error unwind
+contracts were rerun with their default cross-architecture branches intact and
+passed on ARM64, arm64e/BTI and x86-64.
+
+This recovery also exposed a real shared-JIT conformance failure in the larger
+legacy-bytecode fixture. An `ipairs` loop which stores closures capturing its
+key/value omits a closure after native compilation. The exact source program
+fails too; interpreter mode and original LuaJIT pass. A reduced 14-line source
+case reports a missing closure at key 4 with hotloop/hotexit set to 1. This
+failure is under investigation and prevents claiming full closure/import JIT
+compatibility despite the passing stock corpus.
+
+Temporary evidence: `/tmp/luajitmt-scalar-stock-{source,import}.log`,
+`/tmp/luajitmt-x64-stock-{source,import}.log`,
+`/tmp/luajitmt-x64-fnew{,-traced}.log`,
+`/tmp/luajitmt-x64-capture-fixtures.log`,
+`/tmp/luajitmt-scalar-full-{callback,unwind}.log`, and
+`/tmp/luajitmt-generic-cell-repro{,-dump}.log`. The x86-64 checkout path is in
+`/tmp/luajitmt-x64-recheck-workdir`; it is now used for isolated diagnosis, so
+its current contents must not be assumed to remain frozen at that commit.

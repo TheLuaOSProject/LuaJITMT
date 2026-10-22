@@ -49,3 +49,13 @@ allocator predicates and fallback, completed constructor states, and SSB
 boundaries. The full fixture also compiles cleanly for x86-64, but its x86-64
 machine-code execution remains unverified while translated test processes are
 stuck. This is not a full FNEW-suite pass.
+
+
+After translated execution recovered, a fresh assertion-enabled x86-64 build
+at `57ae11b2` passed the complete fixture under Rosetta, both with its default
+selection and with `LJ_TEST_TRACED_FNEW=1` enabling the additional traced cases.
+The portable SSB-preserve regression also passed. Logs are
+`/tmp/luajitmt-x64-fnew.log`, `/tmp/luajitmt-x64-fnew-traced.log`, and
+`/tmp/luajitmt-x64-capture-fixtures.log`. This supersedes the earlier execution
+limitation for this fixture; it does not resolve the separate captured-iterator
+JIT failure described in the checkpoint note.
