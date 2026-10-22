@@ -481,7 +481,8 @@ static int bcread_verify_bytecode(LexState *ls, GCproto *pt)
       cellops |= BCREAD_CELL_ACCESS;
       if (bc_a(ins) >= pt->framesize || bc_d(ins) >= pt->framesize)
 	bcread_error(ls, LJ_ERR_BCBAD);
-      if (bc_a(ins) == bc_d(ins))
+      /* Self-CGET unboxes a closing local without clobbering multires slots. */
+      if (op == BC_CSET && bc_a(ins) == bc_d(ins))
 	bcread_error(ls, LJ_ERR_BCBAD);
       break;
     default:
@@ -524,12 +525,578 @@ static int bcread_uv_haslocal(GCproto *pt)
   return 0;
 }
 
+/* -- Legacy local-cell normalization ------------------------------------- */
+
+/* Stock bytecode refers to captured locals directly until UCLO closes them.
+** Convert those accesses to the same cells used by the source compiler, before
+** publishing any prototype. This preserves owner/closure aliasing in MT.
+**
+** The forward analysis distinguishes actual captures from cells the recorder
+** may promote speculatively at trace entry. Raw definitions can discard the
+** latter, but only UCLO ends an actual capture's lifetime. A backward scan
+** bounds those speculative promotions by the recorder's definition rules.
+** CGET accepts raw values, so joins may conservatively include cell states.
+*/
+typedef struct BCCellBits {
+  uint64_t w[4];
+} BCCellBits;
+typedef struct BCCellIns {
+  BCIns ins;
+  BCPos origin, target;
+} BCCellIns;
+typedef struct BCCellCtx {
+  LexState *ls;
+  GCproto *pt;
+  BCCellBits *active, *pending, *possible;
+  uint32_t *queue, *map;
+  uint8_t *seen, *queued;
+  BCCellIns *out;
+  MSize cap, nout;
+  SBuf dbg;
+} BCCellCtx;
+
+static int bccell_has(const BCCellBits *s, BCReg r)
+{
+  return r < 256 && ((s->w[r >> 6] >> (r & 63)) & 1u);
+}
+static void bccell_set(BCCellBits *s, BCReg r)
+{
+  s->w[r >> 6] |= (uint64_t)1 << (r & 63);
+}
+static void bccell_clear(BCCellBits *s, BCReg r)
+{
+  s->w[r >> 6] &= ~((uint64_t)1 << (r & 63));
+}
+static void bccell_clear_from(BCCellBits *s, BCReg r)
+{
+  for (; r < 256; r++) s->w[r >> 6] &= ~((uint64_t)1 << (r & 63));
+}
+static int bccell_any_from(const BCCellBits *s, BCReg r)
+{
+  for (; r < 256; r++)
+    if (bccell_has(s, r)) return 1;
+  return 0;
+}
+static void bccell_free(BCCellCtx *c)
+{
+  global_State *g;
+  MSize n;
+  if (!c) return;
+  g = G(c->ls->L);
+  n = c->pt->sizebc;
+  if (c->active) lj_mem_freevec(g, c->active, n, BCCellBits);
+  if (c->pending) lj_mem_freevec(g, c->pending, n, BCCellBits);
+  if (c->possible) lj_mem_freevec(g, c->possible, n, BCCellBits);
+  if (c->queue) lj_mem_freevec(g, c->queue, n, uint32_t);
+  if (c->map) lj_mem_freevec(g, c->map, n + 1, uint32_t);
+  if (c->seen) lj_mem_freevec(g, c->seen, n, uint8_t);
+  if (c->queued) lj_mem_freevec(g, c->queued, n, uint8_t);
+  if (c->out) lj_mem_freevec(g, c->out, c->cap, BCCellIns);
+  lj_buf_free(g, &c->dbg);
+  lj_mem_freet(g, c);
+}
+static BCPos bccell_target(BCCellCtx *c, BCPos pc, BCIns ins)
+{
+  ptrdiff_t target = (ptrdiff_t)pc + 1 + bc_j(ins);
+  if (target < 1 || target >= c->pt->sizebc) bcread_error(c->ls, LJ_ERR_BCBAD);
+  return (BCPos)target;
+}
+static GCproto *bccell_child(BCCellCtx *c, BCIns ins)
+{
+  GCobj *o;
+  if (bc_d(ins) >= c->pt->sizekgc) bcread_error(c->ls, LJ_ERR_BCBAD);
+  o = proto_kgc(c->pt, ~(ptrdiff_t)bc_d(ins));
+  if (o->gch.gct != ~LJ_TPROTO) bcread_error(c->ls, LJ_ERR_BCBAD);
+  return gco2pt(o);
+}
+static void bccell_capture(BCCellCtx *c, BCIns ins, BCCellBits *s)
+{
+  GCproto *ch = bccell_child(c, ins);
+  MSize i;
+  for (i = 0; i < ch->sizeuv; i++) {
+    uint32_t v = proto_uv(ch)[i];
+    if (v & PROTO_UV_LOCAL) {
+      if ((v & 255u) >= c->pt->framesize) bcread_error(c->ls, LJ_ERR_BCBAD);
+      bccell_set(s, v & 255u);
+    }
+  }
+}
+static void bccell_merge(BCCellCtx *c, BCPos pc, const BCCellBits *s,
+                         const BCCellBits *p, MSize *tail, MSize *pending)
+{
+  MSize i;
+  int changed;
+  if (pc < 1 || pc >= c->pt->sizebc) bcread_error(c->ls, LJ_ERR_BCBAD);
+  changed = !c->seen[pc];
+  c->seen[pc] = 1;
+  for (i = 0; i < 4; i++) {
+    uint64_t v = c->active[pc].w[i] | s->w[i];
+    changed |= v != c->active[pc].w[i];
+    c->active[pc].w[i] = v;
+    v = c->possible[pc].w[i] | p->w[i];
+    changed |= v != c->possible[pc].w[i];
+    c->possible[pc].w[i] = v;
+  }
+  if (changed && !c->queued[pc]) {
+    c->queued[pc] = 1;
+    c->queue[*tail] = pc;
+    *tail = (*tail + 1) % c->pt->sizebc;
+    ++*pending;
+  }
+}
+/* Validate every register window consumed by normalization, including dead
+** instructions. Legacy readers historically accepted unchecked operands. */
+static void bccell_validate(BCCellCtx *c)
+{
+  BCPos pc;
+  BCReg frame = c->pt->framesize;
+  for (pc = 1; pc < c->pt->sizebc; pc++) {
+    BCIns ins = proto_bc(c->pt)[pc];
+    BCOp op = bc_op(ins);
+    BCReg a = bc_a(ins), b = bc_b(ins), d = bc_d(ins), cv = bc_c(ins);
+    BCMode am = bcmode_a(op), bm = bcmode_b(op), dm = bcmode_d(op);
+    if (((am == BCMvar || am == BCMdst) && a >= frame) ||
+        ((am == BCMbase || am == BCMrbase) && a > frame) ||
+        (bm == BCMvar && b >= frame) ||
+        (dm == BCMvar && (bm == BCMnone ? d : cv) >= frame))
+      bcread_error(c->ls, LJ_ERR_BCBAD);
+    if ((op == BC_KNIL && (a > d || d >= frame)) ||
+        (op == BC_CAT && (b > cv || cv >= frame)) ||
+        ((op == BC_FORI || op == BC_FORL) && a + 3 >= frame) ||
+        ((op == BC_ITERL || op == BC_ISNEXT || op == BC_ITERC ||
+          op == BC_ITERN) &&
+         a < 3) ||
+        ((op == BC_ITERC || op == BC_ITERN) &&
+         (a + b - 1 > frame || a > frame)) ||
+        (op == BC_TSETM && a < 1) ||
+        ((op == BC_CALL || op == BC_CALLM) &&
+         (a >= frame || (b && a + b - 1 > frame) || a + cv + c->ls->fr2 > frame)) ||
+        (op == BC_VARG && b && a + b - 1 > frame) ||
+        (op == BC_RET1 && a >= frame) ||
+        (op == BC_RET && (d < 1 || a + d - 1 > frame)))
+      bcread_error(c->ls, LJ_ERR_BCBAD);
+    /* Dumps contain the original interpreter opcodes, never trace IDs. */
+    if (op == BC_JFORI || op == BC_IFORL || op == BC_JFORL || op == BC_IITERL ||
+        op == BC_JITERL || op == BC_ILOOP || op == BC_JLOOP || op >= BC_FUNCF)
+      bcread_error(c->ls, LJ_ERR_BCBAD);
+  }
+}
+static void bccell_analyze(BCCellCtx *c)
+{
+  MSize n = c->pt->sizebc, head = 0, tail = 0, pending = 0;
+  BCCellBits empty = {{0, 0, 0, 0}};
+  bccell_merge(c, 1, &empty, &empty, &tail, &pending);
+  while (pending) {
+    BCPos pc = c->queue[head];
+    BCIns ins = proto_bc(c->pt)[pc];
+    BCOp op = bc_op(ins);
+    BCCellBits s = c->active[pc], p = c->possible[pc];
+    MSize i;
+    for (i = 0; i < 4; i++) p.w[i] |= c->pending[pc].w[i];
+    c->possible[pc] = p;
+    head = (head + 1) % n;
+    --pending;
+    c->queued[pc] = 0;
+    if (op == BC_FNEW) {
+      bccell_capture(c, ins, &s);
+      bccell_capture(c, ins, &p);
+    }
+    if (op == BC_UCLO) {
+      bccell_clear_from(&s, bc_a(ins));
+      bccell_clear_from(&p, bc_a(ins));
+    } else if (bcmode_a(op) == BCMdst && op >= BC_MOV) {
+      if (!bccell_has(&s, bc_a(ins))) bccell_clear(&p, bc_a(ins));
+    } else if (op == BC_KNIL) {
+      BCReg r;
+      for (r = bc_a(ins); r <= bc_d(ins); r++)
+        if (!bccell_has(&s, r)) bccell_clear(&p, r);
+    } else if (op == BC_CALL || op == BC_CALLM || op == BC_ITERC ||
+               op == BC_ITERN) {
+      bccell_clear_from(&p, bc_a(ins));
+    } else if (op == BC_VARG) {
+      BCReg r, top = bc_b(ins) ? bc_a(ins) + bc_b(ins) - 1 : c->pt->framesize;
+      for (r = bc_a(ins); r < top; r++) bccell_clear(&p, r);
+    } else if (op == BC_FORI || op == BC_FORL) {
+      BCReg r;
+      for (r = bc_a(ins); r < bc_a(ins) + 4; r++) bccell_clear(&p, r);
+    }
+
+    if (op == BC_RET || op == BC_RET0 || op == BC_RET1 || op == BC_RETM ||
+        op == BC_CALLT || op == BC_CALLMT)
+      continue;
+    if (op < BC_MOV) {
+      bccell_merge(c, pc + 1, &s, &p, &tail, &pending);
+      bccell_merge(c, pc + 2, &s, &p, &tail, &pending);
+    } else if (op == BC_JMP || op == BC_UCLO || op == BC_ISNEXT) {
+      bccell_merge(c, bccell_target(c, pc, ins), &s, &p, &tail, &pending);
+    } else {
+      bccell_merge(c, pc + 1, &s, &p, &tail, &pending);
+      if (op == BC_FORI || op == BC_FORL || op == BC_ITERL)
+        bccell_merge(c, bccell_target(c, pc, ins), &s, &p, &tail, &pending);
+    }
+  }
+}
+/* Trace entry may promote a future FNEW capture before its first use. Reads
+** before that FNEW must use CGET too, as the source parser does. Match the
+** recorder's pending scan, including its intervening-definition boundaries. */
+static void bccell_pending(BCCellCtx *c)
+{
+  BCCellBits pending = {{0, 0, 0, 0}};
+  BCPos pc = c->pt->sizebc;
+  while (--pc) {
+    BCIns ins = proto_bc(c->pt)[pc];
+    BCOp op = bc_op(ins);
+    BCReg r;
+    MSize i;
+    if (op == BC_FORL || op == BC_ITERL || op == BC_LOOP ||
+        bc_isret_or_tail(op) || op == BC_UCLO)
+      memset(&pending, 0, sizeof(pending));
+    if (op == BC_FNEW) bccell_capture(c, ins, &pending);
+    if (bcmode_a(op) == BCMdst) {
+      r = bc_a(ins);
+      pending.w[r >> 6] &= ~((uint64_t)1 << (r & 63));
+    } else if (op == BC_KNIL) {
+      for (r = bc_a(ins); r <= bc_d(ins); r++)
+        pending.w[r >> 6] &= ~((uint64_t)1 << (r & 63));
+    } else if (op == BC_CALL || op == BC_CALLM || op == BC_VARG ||
+               op == BC_ITERC || op == BC_ITERN) {
+      BCReg top = op == BC_VARG && bc_b(ins) ? bc_a(ins) + bc_b(ins) - 1
+                                             : c->pt->framesize;
+      for (r = bc_a(ins); r < top; r++)
+        pending.w[r >> 6] &= ~((uint64_t)1 << (r & 63));
+    } else if (op == BC_FORI || op == BC_FORL) {
+      for (r = bc_a(ins); r < bc_a(ins) + 4; r++)
+        pending.w[r >> 6] &= ~((uint64_t)1 << (r & 63));
+    } else if (op == BC_ITERL || op == BC_ISNEXT) {
+      r = bc_a(ins) - 1;
+      pending.w[r >> 6] &= ~((uint64_t)1 << (r & 63));
+    }
+    for (i = 0; i < 4; i++) c->pending[pc].w[i] = pending.w[i];
+  }
+}
+static void bccell_emit(BCCellCtx *c, BCIns ins, BCPos origin, BCPos target)
+{
+  if (c->nout == c->cap) {
+    MSize cap = c->cap ? c->cap * 2 : 64;
+    if (cap > LJ_MAX_BCINS || cap > LJ_MAX_MEM32 / sizeof(BCCellIns))
+      bcread_error(c->ls, LJ_ERR_BCBAD);
+    c->out = (BCCellIns *)lj_mem_realloc(
+        c->ls->L, c->out, c->cap * sizeof(BCCellIns), cap * sizeof(BCCellIns));
+    c->cap = cap;
+  }
+  c->out[c->nout].ins = ins;
+  c->out[c->nout].origin = origin;
+  c->out[c->nout++].target = target;
+}
+static void bccell_unbox(BCCellCtx *c, BCPos pc, const BCCellBits *s,
+                         BCReg from, BCReg to)
+{
+  BCReg r;
+  for (r = from; r < to; r++)
+    if (bccell_has(s, r)) {
+      bccell_emit(c, BCINS_AD(BC_CGET, r, r), pc, 0);
+    }
+}
+static BCReg bccell_read(BCCellCtx *c, BCPos pc, const BCCellBits *s, BCReg r,
+                         BCReg *scratch)
+{
+  if (r >= c->pt->framesize) bcread_error(c->ls, LJ_ERR_BCBAD);
+  if (bccell_has(s, r)) {
+    BCReg tmp = (*scratch)++;
+    bccell_emit(c, BCINS_AD(BC_CGET, tmp, r), pc, 0);
+    return tmp;
+  }
+  return r;
+}
+static void bccell_lower(BCCellCtx *c)
+{
+  BCPos pc;
+  MSize i;
+  BCReg tmp = c->pt->framesize;
+  bccell_emit(c, proto_bc(c->pt)[0], 0, 0);
+  c->map[0] = 0;
+  for (pc = 1; pc < c->pt->sizebc; pc++) {
+    BCIns ins = proto_bc(c->pt)[pc];
+    BCOp op = bc_op(ins);
+    BCCellBits s = c->active[pc], after = s, reads = c->possible[pc];
+    BCReg a = bc_a(ins), scratch = tmp;
+    int write = 0;
+    c->map[pc] = c->nout;
+    if (op == BC_UCLO) {
+      bccell_unbox(c, pc, &reads, a, c->pt->framesize);
+      bccell_emit(c, BCINS_AJ(BC_JMP, a, 0), pc, bccell_target(c, pc, ins));
+      continue;
+    }
+    if (!c->seen[pc]) { /* Unreachable instructions cannot expose cells. */
+      bccell_emit(c, ins, pc,
+                  bcmode_d(op) == BCMjump ? bccell_target(c, pc, ins) : 0);
+      continue;
+    }
+    if (op == BC_RET || op == BC_RET1 || op == BC_RETM || op == BC_CALLT ||
+        op == BC_CALLMT) {
+      bccell_unbox(c, pc, &reads, a, c->pt->framesize);
+      bccell_emit(c, ins, pc, 0);
+      continue;
+    }
+    if (op == BC_CALL || op == BC_CALLM || op == BC_VARG || op == BC_ITERC ||
+        op == BC_ITERN || op == BC_TSETM) {
+      BCReg floor = (op == BC_ITERC || op == BC_ITERN) ? a - 3
+                    : op == BC_TSETM                   ? a - 1
+                                                       : a;
+      if (bccell_any_from(&s, floor)) bcread_error(c->ls, LJ_ERR_BCFMT);
+      /* Discard speculative cells only where this instruction reads raw
+      ** operands. Result slots may still be uninitialized at this boundary. */
+      if (op == BC_CALL || op == BC_CALLM) {
+        bccell_unbox(c, pc, &reads, a, a + 1);
+        bccell_unbox(c, pc, &reads, a + 1 + c->ls->fr2, a + bc_c(ins) + c->ls->fr2);
+      } else if (op == BC_ITERC || op == BC_ITERN) {
+        bccell_unbox(c, pc, &reads, a - 3, a);
+      } else if (op == BC_TSETM) {
+        bccell_unbox(c, pc, &reads, a - 1, a);
+      }
+      bccell_emit(c, ins, pc, 0);
+      continue;
+    }
+    if (op == BC_FORI || op == BC_FORL || op == BC_ITERL || op == BC_ISNEXT) {
+      BCReg hi = op == BC_FORI || op == BC_FORL ? a + 4 : a + 1, r;
+      BCReg lo = op == BC_ITERL || op == BC_ISNEXT ? a-1 : a;
+      for (r = lo; r < hi; r++)
+        if (bccell_has(&s, r)) bcread_error(c->ls, LJ_ERR_BCFMT);
+      if (op == BC_FORI || op == BC_FORL) bccell_unbox(c, pc, &reads, a, a + 3);
+      else if (op == BC_ISNEXT) bccell_unbox(c, pc, &reads, a - 3, a);
+      else bccell_unbox(c, pc, &reads, a, a + 1);
+      bccell_emit(c, ins, pc, bccell_target(c, pc, ins));
+      continue;
+    }
+    if (op == BC_CAT) {
+      BCReg r;
+      int any = 0;
+      for (r = bc_b(ins); r <= bc_c(ins); r++) any |= bccell_has(&reads, r);
+      /* No contiguous raw scratch range is reserved. */
+      if (any) bcread_error(c->ls, LJ_ERR_BCFMT);
+    }
+    if (op == BC_KNIL) {
+      BCReg r;
+      for (r = a; r <= bc_d(ins); r++) {
+        if (bccell_has(&s, r)) {
+          bccell_emit(c, BCINS_AD(BC_KPRI, tmp, ~LJ_TNIL), pc, 0);
+          bccell_emit(c, BCINS_AD(BC_CSET, r, tmp), pc, 0);
+        } else bccell_emit(c, BCINS_AD(BC_KPRI, r, ~LJ_TNIL), pc, 0);
+      }
+      continue;
+    }
+    if (op == BC_FNEW) {
+      bccell_capture(c, ins, &after);
+      if (bccell_has(&after, a) && !bccell_has(&s, a))
+        bccell_emit(c, BCINS_AD(BC_CNEW, a, 0), pc, 0);
+    }
+    if (bcmode_a(op) == BCMvar)
+      setbc_a(&ins, bccell_read(c, pc, &reads, a, &scratch));
+    if (bcmode_b(op) == BCMvar)
+      setbc_b(&ins, bccell_read(c, pc, &reads, bc_b(ins), &scratch));
+    if (bcmode_d(op) == BCMvar) {
+      if (bcmode_hasd(op))
+        setbc_d(&ins, bccell_read(c, pc, &reads, bc_d(ins), &scratch));
+      else setbc_c(&ins, bccell_read(c, pc, &reads, bc_c(ins), &scratch));
+    }
+    if (bcmode_a(op) == BCMdst && bccell_has(&after, a)) {
+      write = 1;
+      setbc_a(&ins, scratch++);
+    }
+    if (scratch > tmp + 3) bcread_error(c->ls, LJ_ERR_BCBAD);
+    bccell_emit(c, ins, pc,
+                bcmode_d(op) == BCMjump ? bccell_target(c, pc, ins) : 0);
+    if (op < BC_MOV) {
+      if (write) {
+        bccell_emit(c, BCINS_AJ(BC_JMP, 0, 0), pc, 0x80000000u | (c->nout + 2));
+        bccell_emit(c, BCINS_AJ(BC_JMP, 0, 0), pc, pc + 2);
+        bccell_emit(c, BCINS_AD(BC_CSET, a, bc_a(ins)), pc, 0);
+        bccell_emit(c, BCINS_AJ(BC_JMP, 0, 0), pc, pc + 1);
+      } else {
+        bccell_emit(c, BCINS_AJ(BC_JMP, 0, 0), pc, pc + 1);
+        bccell_emit(c, BCINS_AJ(BC_JMP, 0, 0), pc, pc + 2);
+      }
+    } else if (write) bccell_emit(c, BCINS_AD(BC_CSET, a, bc_a(ins)), pc, 0);
+  }
+  c->map[c->pt->sizebc] = c->nout;
+  for (i = 1; i < c->nout; i++) {
+    if (bc_op(c->out[i].ins) == BC_ITERN &&
+        (i+1 == c->nout || bc_op(c->out[i+1].ins) != BC_ITERL))
+      bcread_error(c->ls, LJ_ERR_BCFMT);
+  }
+  for (i = 1; i < c->nout; i++)
+    if (c->out[i].target) {
+      BCPos t = c->out[i].target;
+      ptrdiff_t delta =
+          (ptrdiff_t)((t & 0x80000000u) ? t & 0x7fffffffu : c->map[t]) - i - 1;
+      if (delta < -BCBIAS_J || delta >= BCBIAS_J)
+        bcread_error(c->ls, LJ_ERR_XJUMP);
+      setbc_j(&c->out[i].ins, delta);
+    }
+}
+static uint32_t bccell_uleb(const uint8_t **pp)
+{
+  const uint8_t *p = *pp;
+  uint32_t v = 0, shift = 0, b;
+  do {
+    b = *p++;
+    v |= (b & 127u) << shift;
+    shift += 7;
+  } while (b & 128);
+  *pp = p;
+  return v;
+}
+static MSize bccell_debug(BCCellCtx *c)
+{
+  GCproto *pt = c->pt;
+  MSize i, lishift = pt->numline < 256 ? 0 : pt->numline < 65536 ? 1 : 2, uvlen;
+  const uint8_t *v = proto_varinfo(pt);
+  BCPos oldlast = 0, newlast = 0;
+  if (!proto_lineinfo(pt)) return 0;
+  for (i = 1; i < c->nout; i++) {
+    const char *p =
+        (const char *)proto_lineinfo(pt) + ((c->out[i].origin - 1) << lishift);
+    lj_buf_putmem(&c->dbg, p, (MSize)1 << lishift);
+  }
+  uvlen = (MSize)(v - proto_uvinfo(pt));
+  lj_buf_putmem(&c->dbg, proto_uvinfo(pt), uvlen);
+  while (*v) {
+    const uint8_t *name = v;
+    BCPos start, len, newstart, newend;
+    char *p;
+    if (*v < VARNAME__MAX) v++;
+    else
+      while (*v++);
+    lj_buf_putmem(&c->dbg, name, (MSize)(v - name));
+    start = bccell_uleb(&v);
+    if (start > pt->sizebc-oldlast) bcread_error(c->ls, LJ_ERR_BCBAD);
+    start += oldlast;
+    len = bccell_uleb(&v);
+    if (start > pt->sizebc || len > pt->sizebc - start)
+      bcread_error(c->ls, LJ_ERR_BCBAD);
+    newstart = c->map[start];
+    newend = c->map[start + len];
+    p = lj_buf_more(&c->dbg, 10);
+    p = lj_strfmt_wuleb128(p, newstart - newlast);
+    p = lj_strfmt_wuleb128(p, newend - newstart);
+    c->dbg.w = p;
+    oldlast = start;
+    newlast = newstart;
+  }
+  lj_buf_putb(&c->dbg, 0);
+  return sbuflen(&c->dbg);
+}
+static GCproto *bccell_normalize(LexState *ls, GCproto *pt, TValue *anchor,
+                                 BCCellCtx **workp, GCproto **pending,
+                                 MSize *pendingsz)
+{
+  BCCellCtx *c;
+  BCCellBits captured = {{0, 0, 0, 0}};
+  GCproto *np;
+  lua_State *L = ls->L;
+  MSize n = pt->sizebc, i, dbgsize, ofsk, ofsuv, ofsdbg, sizept,
+        kgc = pt->sizekgc;
+  uint64_t wide;
+  int own = 0;
+  if (!proto_legacyuv(pt) && bcread_version(ls) != BCDUMP_VERSION_TRANS)
+    return pt;
+  pt->flags2 &= ~PROTO2_LEGACYUV;
+  if (bcread_uv_haslocal(pt)) proto_setcelluv(pt);
+  for (i = 1; i < n; i++)
+    if (bc_op(proto_bc(pt)[i]) == BC_FNEW) {
+      own = 1;
+      break;
+    }
+  if (!own) return pt;
+  c = lj_mem_newt(L, sizeof(BCCellCtx), BCCellCtx);
+  memset(c, 0, sizeof(*c));
+  *workp = c;
+  c->ls = ls;
+  c->pt = pt;
+  lj_buf_init(L, &c->dbg);
+  for (i = 1; i < n; i++)
+    if (bc_op(proto_bc(pt)[i]) == BC_FNEW)
+      bccell_capture(c, proto_bc(pt)[i], &captured);
+  if (!bccell_any_from(&captured, 0)) return pt;
+  if (pt->framesize > LJ_MAX_SLOTS - 3) bcread_error(ls, LJ_ERR_XSLOTS);
+  if (n > LJ_MAX_MEM32 / sizeof(BCCellBits)) bcread_error(ls, LJ_ERR_BCBAD);
+  c->active = lj_mem_newvec(L, n, BCCellBits);
+  memset(c->active, 0, n * sizeof(BCCellBits));
+  c->pending = lj_mem_newvec(L, n, BCCellBits);
+  c->possible = lj_mem_newvec(L, n, BCCellBits);
+  memset(c->possible, 0, n * sizeof(BCCellBits));
+  c->queue = lj_mem_newvec(L, n, uint32_t);
+  c->map = lj_mem_newvec(L, n + 1, uint32_t);
+  c->seen = lj_mem_newvec(L, n, uint8_t);
+  memset(c->seen, 0, n);
+  c->queued = lj_mem_newvec(L, n, uint8_t);
+  memset(c->queued, 0, n);
+  bccell_validate(c);
+  bccell_pending(c);
+  bccell_analyze(c);
+  bccell_lower(c);
+  dbgsize = bccell_debug(c);
+  wide = sizeof(GCproto) + (uint64_t)c->nout * 2 * sizeof(BCIns) +
+         (uint64_t)kgc * sizeof(GCRef);
+  wide = (wide + sizeof(TValue) - 1) & ~((uint64_t)sizeof(TValue) - 1);
+  ofsk = (MSize)wide;
+  wide += (uint64_t)pt->sizekn * sizeof(TValue);
+  ofsuv = (MSize)wide;
+  wide += (uint64_t)((pt->sizeuv + 1u) & ~1u) * 2;
+  ofsdbg = (MSize)wide;
+  wide += dbgsize;
+  if (wide > LJ_MAX_MEM32) bcread_error(ls, LJ_ERR_BCBAD);
+  sizept = (MSize)wide;
+  np = (GCproto *)lj_mem_newgco_unlinked(L, sizept);
+  memcpy(np, pt, sizeof(GCproto));
+  np->sizept = sizept;
+  np->sizebc = c->nout;
+  np->framesize = pt->framesize + 3;
+  proto_setcellops(np);
+  for (i = 0; i < c->nout; i++) proto_bc(np)[i] = c->out[i].ins;
+  setbc_a(proto_bc(np), np->framesize);
+  setmref(np->jit_startins, proto_bc(np) + c->nout);
+  memset(proto_jit_startins(np), 0, c->nout * sizeof(BCIns));
+  setmref(np->k, (char *)np + ofsk);
+  setmref(np->uv, (char *)np + ofsuv);
+  *(uint32_t *)((char *)np + ofsk - sizeof(GCRef) * (kgc + 1)) = 0;
+  memcpy(mref(np->k, GCRef) - kgc, mref(pt->k, GCRef) - kgc,
+         kgc * sizeof(GCRef));
+  memcpy(mref(np->k, TValue), mref(pt->k, TValue), pt->sizekn * sizeof(TValue));
+  memcpy(proto_uv(np), proto_uv(pt), pt->sizeuv * 2);
+  if (dbgsize) {
+    MSize shift = pt->numline < 256 ? 0 : pt->numline < 65536 ? 1 : 2;
+    MSize uvlen = (MSize)(proto_varinfo(pt) - proto_uvinfo(pt));
+    memcpy((char *)np + ofsdbg, c->dbg.b, dbgsize);
+    setmref(np->lineinfo, (char *)np + ofsdbg);
+    setmref(np->uvinfo, (char *)np + ofsdbg + ((c->nout - 1) << shift));
+    setmref(np->varinfo, proto_uvinfo(np) + uvlen);
+  } else {
+    setmref(np->lineinfo, NULL);
+    setmref(np->uvinfo, NULL);
+    setmref(np->varinfo, NULL);
+  }
+  {
+    TValue value;
+    setprotoV(L, &value, np);
+    copyTVrel(L, anchor, &value);
+  }
+  *pending = np;
+  *pendingsz = sizept;
+  /* Keep old allocation alive until work arrays have used its original size. */
+  bccell_free(c);
+  *workp = NULL;
+  lj_mem_freegco_unpublished(G(L), pt, pt->sizept);
+  return np;
+}
+
 typedef struct BCReadProtoCtx {
   LexState *ls;
   GCproto *pt;
   MSize sizept;
   uint32_t anchoridx;
   int published;
+  BCCellCtx *cell;
 } BCReadProtoCtx;
 
 /* Read a prototype body under the protected cancellation wrapper below. */
@@ -686,6 +1253,9 @@ static GCproto *bcread_proto_body(LexState *ls, uint32_t *anchoridx,
     setmref(pt->uvinfo, NULL);
     setmref(pt->varinfo, NULL);
   }
+  pt = bccell_normalize(ls, pt, anchor, &ctx->cell, &ctx->pt, &ctx->sizept);
+  bccell_free(ctx->cell);
+  ctx->cell = NULL;
   /* READY is the full-body publication point. The retained KGC anchors close
   ** child lifetimes while the parent is opaque; the post-READY root barrier
   ** transfers those leases to the complete prototype before they are popped. */
@@ -722,11 +1292,13 @@ GCproto *lj_bcread_proto(LexState *ls, uint32_t *anchoridx)
   ctx.sizept = 0;
   ctx.anchoridx = 0;
   ctx.published = 0;
+  ctx.cell = NULL;
   errcode = lj_vm_cpcall(L, NULL, &ctx, bcread_proto_cp);
   if (LJ_UNLIKELY(errcode)) {
     /* A malformed/truncated body must not strand an opaque READY=0 allocation,
     ** which sweep deliberately pins. The body was never discoverable, so this
     ** protected owner can cancel it directly before dropping child anchors. */
+    bccell_free(ctx.cell);
     if (ctx.pt != NULL && !ctx.published)
       lj_mem_freegco_unpublished(G(L), ctx.pt, ctx.sizept);
     while (lj_tg_root_anchor_top_acq(tg) > anchor_base)

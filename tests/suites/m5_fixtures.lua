@@ -68,6 +68,14 @@ return function(add)
       message = "M5 bytecode dump/load behavior tests passed"
     },
     {
+      name = "m5_legacy_bytecode_cells",
+      description = "original LuaJIT bytecode cell normalization and sharing",
+      output = "lj_t-legacy-bytecode-cells",
+      cfile = "t-legacy-bytecode-cells.c",
+      opts = { timeout = "120s" },
+      message = "M5 original bytecode cell semantics passed"
+    },
+    {
       name = "m5_registry_root",
       description = "direct registry root publication C fixture",
       output = "lj_t-registry-root",
