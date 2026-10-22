@@ -97,6 +97,7 @@ LJ_TEST_ROOT="$root" sh "$root/tools/ci/jit_hotcount_generation_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/jit_recorder_safepoint_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_ir_admission_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_scalar_capability_contract.sh"
+LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_numeric_spills_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_side_ir_admission_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_side_ingress_metadata_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_b26_contract.sh"
@@ -218,5 +219,6 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" LUA_PATH="$lua_path" \
     m5_arm64_jit_fail_closed_safepoint_runtime
 
 env LUA_PATH="$lua_path" "$luajit" "$root/tests/t-upvalue-identity.lua"
+env LJ_TEST_ROOT="$root" LUA_PATH="$lua_path" "$luajit" "$root/tests/t-jit-cell-loops.lua"
 
 echo "arm64_jit_fail_closed_gate OK: independent scalar LOOP capabilities, integer FORL, literal-true JFUNCF, bounded first-side entry and lifecycle contracts sound"
