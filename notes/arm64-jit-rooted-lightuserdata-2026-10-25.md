@@ -38,9 +38,10 @@ the argument path.
 The complete `tools/ci/arm64_jit_rooted_gc_contract.sh` passed on ARM64 and
 arm64e/BTI, assertion and release, including all earlier rooted scalar/GC
 read, store, raw nil-deletion and lifetime regressions. Log:
-`/tmp/ljmt-lightud-read-contract.log`. The wider experimental/bootstrap and
-stock regression remains at the preceding frozen `65068cdf` checkpoint until
-the next combined run.
+`/tmp/ljmt-lightud-read-contract.log`. The wider experimental/bootstrap, stock
+and signed x86-64 regression now passes at the subsequent segment-map runtime
+checkpoint `7f377f51`, with a bootstrap-only test-profile correction; see
+[combined validation](lightuserdata-validation-2026-10-25.md).
 
 The first pressure draft initialized its snapshot-visible sum as integer zero
 before replacing it with a NUM. It observed 620 warm exits, 601 at snapshot

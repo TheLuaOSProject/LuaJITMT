@@ -367,7 +367,13 @@ return function(add)
         print("M5 lightuserdata segment-map fixture requires 64-bit POSIX")
         return
       end
-      local flags = build.assert_flag .. " -DLJ_UDATA_TEST_HELPERS"
+      local baseflags = build.assert_flag
+      if jit.arch == "arm64" then
+        baseflags = baseflags .. " -DLUAJIT_MT_ARM64_BOOTSTRAP " ..
+          (jit.opt and "-DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL" or
+                       "-DLUAJIT_DISABLE_JIT")
+      end
+      local flags = baseflags .. " -DLJ_UDATA_TEST_HELPERS"
       build.with_default_build_restore(t, function()
         t:build({ clean = true, quiet = true, xcflags = flags })
         local fixture = t:tmp("lj_t-lightud-segment-map-race")
@@ -378,7 +384,7 @@ return function(add)
         t:run({ fixture, t:path("tests", "t-lightud-segment-map-race.lua") }, {
           timeout = "60s", env = { LUA_PATH = runtime.lua_path(t) }
         })
-      end)
+      end, { xcflags = baseflags })
     end
   })
 end

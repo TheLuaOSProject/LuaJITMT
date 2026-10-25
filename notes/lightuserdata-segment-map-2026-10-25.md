@@ -64,6 +64,11 @@ lightuserdata, raw nil-deletion and GC lifetime test. Log:
 `/tmp/ljmt-lightud-map-contract.log`. The new fixture is also registered as
 `m5_lightuserdata_segment_map` and included in the bootstrap gate.
 
-The combined experimental/bootstrap, stock and signed x86-64 regression is
-pending at this checkpoint. These focused results are not sanitizer coverage,
+The complete experimental gate and both 509-case stock corpora pass at
+`7f377f51`; signed x86-64 also passes the capacity, concurrent decode and
+forced CAS-race fixture and both stock corpora. Bootstrap passes after the M5
+registration was corrected to retain its ARM64 opt-in and JIT-mode build
+flags. Runtime sources were unchanged during that correction and rerun. See
+[combined validation](lightuserdata-validation-2026-10-25.md) for exact logs
+and the initial harness failure. These results are not sanitizer coverage,
 native Intel evidence or overall port completion.

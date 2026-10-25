@@ -23,11 +23,12 @@ and reports that are no longer authoritative are retained in
   entry, exits and refusals. Shared build profiles bind runtime, archive,
   fixture and helper-library identity. All review work streams are integrated.
   See [`review-implementation-2026-10-25.md`](review-implementation-2026-10-25.md).
-- Latest complete combined validation: frozen `65068cdf`. Experimental,
-  ARM64 and signed x86-64 stock source/import, shared helper regressions and
-  bootstrap ran sequentially without source changes. Every default target
-  branch ran. See
-  [`rooted-values-validation-2026-10-25.md`](rooted-values-validation-2026-10-25.md)
+- Latest combined runtime validation: `7f377f51`. Experimental, ARM64 and
+  signed x86-64 stock source/import and shared helper regressions passed on
+  frozen source. Bootstrap then passed after correcting the new M5 test's
+  build profile, with runtime sources unchanged. Every default target branch
+  ran. See
+  [`lightuserdata-validation-2026-10-25.md`](lightuserdata-validation-2026-10-25.md)
   for commands, logs and profile. The earlier architecture-review checkpoint
   and its sanitizer/performance scope remain in
   [`review-validation-2026-10-25.md`](review-validation-2026-10-25.md).
@@ -42,8 +43,8 @@ and reports that are no longer authoritative are retained in
 - The complete bootstrap gate passes, including 387 applicable stock cases,
   threaded tmpbuf, Darwin native roots/GC2, ARM64/arm64e callbacks,
   variadic/aggregate interpreter FFI and x86-64 errno unwind.
-- The signed x86-64/Rosetta runtime at `65068cdf` passed both 509-case corpora
-  and the shared rooted-store and raw nil-deletion fixtures. The combined
+- The signed x86-64/Rosetta runtime at `7f377f51` passed both 509-case corpora
+  and the shared rooted-store, raw nil-deletion and segment-map race fixtures. The combined
   gates also ran x86-64 callback-result lifetime and errno unwind. Earlier
   authentic CALLXS/remote-flush/callback and callback-stack relocation/unwind
   evidence is at `9b0c6e18`. These are targeted regressions, not a complete
