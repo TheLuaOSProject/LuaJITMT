@@ -202,6 +202,7 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
 test "$(lipo -archs "$root/src/libluajit.a")" = x86_64
 # shellcheck disable=SC2086 # Compiler flag group is intentional.
 "$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch x86_64 -mcx16 \
+  -Wl,-adhoc_codesign \
   -mmacosx-version-min="$minver" $x64_flags -I"$root/src" \
   "$fixture_source" "$root/src/libluajit.a" -lm -ldl -pthread \
   -o "$tmpdir/t-oserr-unwind-x86_64"

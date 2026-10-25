@@ -270,6 +270,10 @@ run_case() {
   "$cc" -std=gnu11 -O2 -Wall -Wextra -Werror $target_flags \
     -mmacosx-version-min="$minver" $xcflags -I"$root/src" \
     "$fixture_source" "$root/src/libluajit.a" -lm -pthread -o "$fixture"
+  if test "$expected_arch" = x86_64; then
+    # Explicit local signing avoids unsigned Rosetta launch stalls on macOS.
+    codesign --sign - "$fixture"
+  fi
   run=0
   while test "$run" -lt "${LJ_CALLBACK_RESULT_RUNS:-2}"; do
     env MallocScribble=1 "$fixture"
