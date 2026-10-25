@@ -91,7 +91,7 @@ for region in "$scalar_semantic" "$scalar_postra"; do
       exit 1
     }
   done
-  for forbidden in AREF HREF UREFO UREFC FLOAD XLOAD ASTORE HSTORE USTORE FSTORE XSTORE SNEW TNEW CNEW BUFHDR TBAR OBAR XBAR XSAVE RETF PROF CARG MOD POW FPMATH; do
+  for forbidden in AREF HREF UREFO UREFC FLOAD XLOAD ASTORE HSTORE USTORE FSTORE XSTORE SNEW TNEW CNEW BUFHDR TBAR OBAR XBAR XSAVE RETF PROF MOD POW FPMATH; do
     if grep -E "case[[:space:]]+IR_$forbidden:" "$region" >/dev/null; then
       echo "unsupported scalar capability gained a case: IR_$forbidden" >&2
       exit 1
@@ -102,15 +102,21 @@ for region in "$scalar_semantic" "$scalar_postra"; do
     exit 1
   fi
 done
+# CARG exists only inside the opt-in rooted-read certificate; generic scalar
+# traces retain the historical reject-all behavior.
+test "$(grep -c 'case IR_CARG:' "$scalar_semantic")" -eq 1
+test "$(grep -c 'case IR_CARG:' "$scalar_postra")" -eq 1
+grep -F 'if (!rooted_read || type != IRT_NIL' "$scalar_semantic" >/dev/null
+grep -F 'if (!rooted_read || p.t.irt != IRT_NIL' "$scalar_postra" >/dev/null
 
-# General native calls remain rejected. IR_CALLS has one isolated exception:
-# the rooted-length profile audited below; its exact callee/root/guard checks
-# must not weaken blanket CALLN/CALLA/CALLL/CALLXS rejection.
+# General native calls remain rejected. Exact rooted-length and scalar-read
+# CALLS profiles must not weaken blanket CALLN/CALLA/CALLL/CALLXS rejection.
 awk '/case IR_CALLN:/ { copying = 1 }
-     copying && /^    case IR_CALLS:/ { copying = 0 }
-     /^    case IR_CALLXS:/ { copying = 1 }
-     copying && /^    default:/ { exit }
+     copying && /^    case IR_CARG:/ { exit }
      copying { print }' "$scalar_semantic" >"$call_region"
+awk '/case IR_CALLXS:/ { copying = 1 }
+     copying && /^    default:/ { exit }
+     copying { print }' "$scalar_semantic" >>"$call_region"
 for opcode in CALLN CALLA CALLL CALLXS; do
   grep -F "case IR_$opcode:" "$call_region" >/dev/null || {
     echo "ARM64 general call blacklist lost IR_$opcode" >&2

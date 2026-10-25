@@ -2085,10 +2085,25 @@ static IRType rec_idx_mt_shared_sample(jit_State *J, RecordIndex *ix,
 
 static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t)
 {
+  TRef res;
   TRef parentout = rec_tmpref_mode(J, ix->tab,
 				   IRTMPREF_IN1|IRTMPREF_OUT1);
   TRef key = rec_tmpref_mode(J, ix->key, IRTMPREF_IN2);
-  TRef res = lj_ir_call(J, IRCALL_lj_tab_gettv_rooted,
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+  if (t == IRT_NUM) {
+    /* A bounded scalar hit attempt never waits. Its false result side-exits
+    ** before the rooted output is consumed. */
+    TRef found = lj_ir_call(J, IRCALL_lj_tab_getscalar_rooted_try,
+			    parentout, key, parentout);
+    J->mergesnap = 0;
+    emitir(IRTGI(IR_NE), found, lj_ir_kint(J, 0));
+    lj_snap_add(J);  /* Type exits after a successful hit must not replay. */
+    J->mergesnap = 1;
+    return lj_record_vload(J, parentout, 0, t);
+  }
+
+#endif
+  res = lj_ir_call(J, IRCALL_lj_tab_gettv_rooted,
 			 parentout, key, parentout);
   /*
   ** The helper has side effects and copies a raced shared-table value into its
