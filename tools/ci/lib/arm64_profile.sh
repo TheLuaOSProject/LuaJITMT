@@ -33,6 +33,10 @@ lj_ci_profile_init() {
   LJ_CI_MINVER=${MACOSX_DEPLOYMENT_TARGET:-13.0}
   LJ_CI_JOBS=${JOBS:-${MAKE_JOBS:-$(sysctl -n hw.logicalcpu 2>/dev/null || echo 2)}}
   LJ_CI_CC=${CC:-$(xcrun --sdk macosx --find clang)}
+  # Legacy nested contracts use CC directly. Keep their fixture compiler on
+  # the selected SDK toolchain, including Apple's arm64e ptrauth intrinsics.
+  CC=$LJ_CI_CC
+  export CC
   LJ_CI_TARGET_SYS=${LJ_TEST_TARGET_SYS:-Darwin}
   LJ_CI_CFLAGS=${CFLAGS:-}
   LJ_CI_CPPFLAGS=${CPPFLAGS:-}

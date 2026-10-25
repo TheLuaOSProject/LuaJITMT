@@ -417,3 +417,32 @@ needed. Executables were ad-hoc signed and fixture/archive profiles matched.
 Logs: `/tmp/ljmt-review-x64-stock-{source,import}.log`,
 `/tmp/ljmt-review-x64-errno.log`, and
 `/tmp/ljmt-review-x64-t-{gc2-table-store-guard,jit-hotcount-generation,lockless-progress-metrics}.log`.
+
+## Function/loop profile consolidation and compiler selection
+
+FUNCF and FORL now use the common profile helper for builds, compilation,
+execution deadlines and restoration. Their native, independent mutation,
+randomized-code-placement and ARM64e/BTI checks remain. This removes 214 net
+lines of duplicated shell plumbing. Both complete contracts passed in the
+isolated migration copy at `1fc79b0a` (integrated as `98cfd4fb`):
+`/tmp/ljmt-profile-funcf-final.log` and
+`/tmp/ljmt-profile-forl-final.log`.
+
+The migrated FUNCF contract also passed with target-only AddressSanitizer on
+both targets, including randomized MCODE and profile restoration. `CFLAGS`
+and `LDFLAGS` were empty; instrumentation was supplied through
+`TARGET_CFLAGS='-O1 -g -fsanitize=address -fno-omit-frame-pointer'`,
+`TARGET_LDFLAGS` and `TARGET_SHLDFLAGS`. Host generator flags stayed separate.
+Leak detection was disabled. Log: `/tmp/ljmt-funcf-target-asan.log`.
+
+The full experimental run at `b59a91de` reached the native-loop contract after
+passing the generic FORL/FUNCF and earlier contracts. That wrapper selected
+Homebrew Clang from PATH for the fixture while the runtime used Apple's
+compiler. The Homebrew pointer-authentication header lacks Apple's
+`ptrauth_nop_cast`, so the ARM64e fixture could not compile. The common helper
+now exports its selected `CC` to nested wrappers. The native-loop wrapper
+also selects the SDK compiler by default and passes that compiler explicitly
+to its runtime builds, including restoration. Its complete standalone run,
+with both `CC` and `SDKROOT` initially unset, now passes on ARM64/ARM64e:
+`/tmp/ljmt-review-native-loop-sdk.log`. No runtime pointer-authentication
+semantics were changed.

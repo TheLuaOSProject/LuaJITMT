@@ -8,6 +8,11 @@ if test "$(uname -s)" != Darwin || test "$(uname -m)" != arm64; then
   exit 0
 fi
 
+if test -z "${SDKROOT:-}"; then
+  SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
+  export SDKROOT
+fi
+
 lock_dir=$root/src/.lj-test-run.lock
 lock_held=0
 restore_needed=0
@@ -17,10 +22,10 @@ cleanup() {
   trap - EXIT HUP INT TERM
   if test "$restore_needed" = 1; then
     env MACOSX_DEPLOYMENT_TARGET="$minver" \
-      make -C "$root/src" clean TARGET_FLAGS='-arch arm64' \
+      make -C "$root/src" CC="$cc" clean TARGET_FLAGS='-arch arm64' \
         XCFLAGS="$xcflags" >/dev/null 2>&1 || status=1
     env MACOSX_DEPLOYMENT_TARGET="$minver" \
-      make -C "$root/src" -j"$jobs" TARGET_FLAGS='-arch arm64' \
+      make -C "$root/src" CC="$cc" -j"$jobs" TARGET_FLAGS='-arch arm64' \
         XCFLAGS="$xcflags" >/dev/null 2>&1 || status=1
   fi
   if test "$lock_held" = 1; then
@@ -73,7 +78,7 @@ acquire_lock
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lj-arm64-native-loop.XXXXXX")
 
 jobs=${JOBS:-${MAKE_JOBS:-$(sysctl -n hw.logicalcpu 2>/dev/null || echo 2)}}
-cc=${CC:-clang}
+cc=${CC:-$(xcrun --sdk macosx --find clang)}
 minver=${MACOSX_DEPLOYMENT_TARGET:-13.0}
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS -DLUAJIT_MCODE_TEST'
 pauth_xcflags="$xcflags -DLUAJIT_ENABLE_CET_BR"
@@ -94,9 +99,9 @@ pauth_jloop_disasm=$tmpdir/vm-arm64e-jloop.disasm
 restore_needed=1
 
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" XCFLAGS="$xcflags" clean
+  make -C "$root/src" CC="$cc" XCFLAGS="$xcflags" clean
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" -j"$jobs" XCFLAGS="$xcflags"
+  make -C "$root/src" CC="$cc" -j"$jobs" XCFLAGS="$xcflags"
 
 test "$(lipo -archs "$archive")" = arm64
 nm "$archive" | grep ' T _lj_trace_test_root_entry_reset$' >/dev/null
@@ -296,11 +301,11 @@ test "$(grep -Fc 'call_sum_and_check_cframe(L, 20, 210)' \
 # fallback is placement-independent and always uses the K64 load plus BLRAAZ;
 # normal and randomized mcode hints must execute the same immutable gates.
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" clean \
+  make -C "$root/src" CC="$cc" clean \
     TARGET_FLAGS='-arch arm64e -mbranch-protection=bti' \
     XCFLAGS="$pauth_xcflags"
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" -j"$jobs" \
+  make -C "$root/src" CC="$cc" -j"$jobs" \
     TARGET_FLAGS='-arch arm64e -mbranch-protection=bti' \
     XCFLAGS="$pauth_xcflags"
 
@@ -354,9 +359,9 @@ test "$sub_line" -lt "$branch_line"
 
 # Leave the shared checkout in ordinary native experimental mode.
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" clean TARGET_FLAGS='-arch arm64' XCFLAGS="$xcflags"
+  make -C "$root/src" CC="$cc" clean TARGET_FLAGS='-arch arm64' XCFLAGS="$xcflags"
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" -j"$jobs" \
+  make -C "$root/src" CC="$cc" -j"$jobs" \
     TARGET_FLAGS='-arch arm64' XCFLAGS="$xcflags"
 restore_needed=0
 
