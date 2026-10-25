@@ -717,3 +717,9 @@ STOPREQ unwind/resume and full-GC reentry. Log:
 `/tmp/ljmt-rooted-len-exit-overlay-contract.log`. The complete experimental
 gate must be rerun with this fix; the failed combined log remains
 `/tmp/ljmt-review-experimental-final-9b0c6e18.log`.
+
+The strengthened regression installs only a RECORD observer after warmup and
+requires a LEN event for the exact traced function during the forced retry.
+It does not require a heap-effect child to publish. This observer version also
+passed the complete focused contract on both targets, log
+`/tmp/ljmt-rooted-len-record-observer.log`.

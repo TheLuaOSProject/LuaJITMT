@@ -38,14 +38,14 @@ int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target, MCode *insp)
 /*
 ** The stock ARM64 backend can encode a much larger IR surface than the
 ** lockless runtime has proved safe. Keep native publication to optimized,
-** self-linked scalar BC_LOOP roots, separately certified constant-step and
-** exact variable-stop/variable-step integer BC_FORL roots, and the exact
-** literal-true fixed-function root.
-** Scalar LOOP admission uses independent semantic and allocator certificates
-** for checked INT arithmetic, NUM arithmetic/conversions, comparisons and
-** same-type PHIs. Rooted helpers have per-operation input, output and retry
-** contracts, independent of trace length, table count or constant key values.
-** Other heap effects and helper calls remain closed.
+** self-linked scalar BC_LOOP roots, separately certified integer BC_FORL
+** evolution, fixed-function scalar bodies, and first scalar side traces.
+** Independent semantic and allocator certificates cover checked INT
+** arithmetic, NUM arithmetic/conversions, comparisons and same-type PHIs.
+** Rooted helpers have per-operation input, output and retry contracts,
+** independent of trace length, table count or constant key values. Unsunk
+** table construction and fixed scalar FFI calls have their own publication,
+** ABI and snapshot contracts. Unproved heap and call effects remain closed.
 */
 
 static int arm64_ir_reject(LJArm64IRReject *reject,

@@ -441,6 +441,21 @@ static void assert_rooted_len_result(lua_State *L)
 #endif
 
 #if LJ_TARGET_ARM64
+static const void *retry_record_func;
+static GCproto *retry_record_pt;
+static uint32_t retry_record_len_calls;
+
+static int record_retry_len(lua_State *L)
+{
+  if (lua_topointer(L, 2) == retry_record_func) {
+    lua_Integer pc = lua_tointeger(L, 3);
+    assert(pc >= 0 && (MSize)pc < retry_record_pt->sizebc);
+    if (bc_op(proto_bc(retry_record_pt)[pc]) == BC_LEN)
+      retry_record_len_calls++;
+  }
+  return 0;
+}
+
 /* Revalidate the actual immutable native trace through both independent
 ** certificates, then corrupt the helper, retry guard and temporary root in a
 ** private copy. The published trace is never modified. */
@@ -766,6 +781,16 @@ static void exercise_jit_retry_side_exit(lua_State *L)
   ** With hotexit=1 this also starts recording at the retried LEN. The first
   ** resumed instruction must use the TG recorder dispatch: skipping LEN
   ** leaves the inherited TAB slot inconsistent with its numeric result. */
+#if LJ_TARGET_ARM64
+  lua_getglobal(L, "rooted_len_trace_call");
+  retry_record_func = lua_topointer(L, -1);
+  retry_record_pt = funcproto(funcV(L->top - 1));
+  lua_pop(L, 1);
+  retry_record_len_calls = 0;
+  lua_pushcfunction(L, record_retry_len);
+  lua_setglobal(L, "rooted_len_retry_record");
+  run_script(L, "jit.attach(rooted_len_retry_record, 'record')");
+#endif
   outer_clean = clean_state(L);
   lj_tab_read_enter(L2TG(L));
   clean = clean_state(L);
@@ -782,6 +807,16 @@ static void exercise_jit_retry_side_exit(lua_State *L)
   assert(lua_tointeger(L, -1) == 480);
   lua_pop(L, 1);
   assert(len_hook.hits == 1u && lj_tab_array_acq(t) == replacement_array);
+#if LJ_TARGET_ARM64
+  /* Observe the resumed bytecode itself, independent of runtime assertions
+  ** or child publication (heap-effect side traces remain unsupported). */
+  assert(retry_record_len_calls > 0);
+  run_script(L,
+    "jit.attach(rooted_len_retry_record)\n"
+    "rooted_len_retry_record = nil\n");
+  retry_record_func = NULL;
+  retry_record_pt = NULL;
+#endif
   assert_wait_state(waits);
   assert_clean(L, clean);
 
