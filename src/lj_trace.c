@@ -6444,9 +6444,9 @@ uint32_t lj_trace_test_arm64_side_scalar_copy_contract(jit_State *J,
 }
 #endif
 
-/* Validate the only published side topology admitted so far. A childless root
-** remains the fast case. A one-child root must name the exact post-RA grammar,
-** GC membership and raw arm64/arm64e exit encoding before native root entry. */
+/* Validate the published scalar side selected by a root. A childless root
+** remains the fast case; a one-child root must match its sealed body identity,
+** live parent edge, GC membership and arm64/arm64e target before entry. */
 static int trace_arm64_side_semantic_extent(const IRIns *ir, IRRef nins,
 	IRRef *semantic_ninsp)
 {
@@ -6472,7 +6472,7 @@ static int trace_arm64_side_semantic_extent(const IRIns *ir, IRRef nins,
 static int trace_root_entry_first_child_view_acq(jit_State *J,
 	GCtrace *parent, TraceNo parentno, uint32_t sourceop,
 	const TraceArm64LoopView *rootview,
-	TraceArm64FirstChildEntryView *view)
+	TraceArm64FirstChildEntryView *view, int full_audit)
 {
   global_State *g = J2G(J);
   TraceVec *tv;
@@ -6628,7 +6628,8 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
   ** against both parent arrays before forming either selected pointer. */
   base = ir_load_acq(&view->ir[REF_BASE]);
   if (base.o != IR_BASE || base.t.irt != IRT_PGC ||
-	(TraceNo)base.op1 != parentno)
+	(TraceNo)base.op1 != parentno ||
+	(ExitNo)base.op2 != child->arm64_side_cert.exitno)
     return 0;
   parent_exitno = (ExitNo)base.op2;
   parent_nexits = trace_exittab_nslots_acq(parent);
@@ -6670,59 +6671,66 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
 	  return 0;
   }
 
-  memset(&postra, 0, sizeof(postra));
-  if (!trace_arm64_side_semantic_extent(view->ir, view->nins,
-	&semantic_nins))
-    return 0;
-  postra.semantic.ir = view->ir;
-  postra.semantic.snap = view->snap;
-  postra.semantic.snapmap = view->snapmap;
-  postra.semantic.proto_bc = proto_bc(pt);
-  postra.semantic.nins = semantic_nins;
-  postra.semantic.nk = view->nk;
-  postra.semantic.nsnap = view->nsnap;
-  postra.semantic.nsnapmap = view->nsnapmap;
-  postra.semantic.proto_sizebc = pt->sizebc;
-  postra.semantic.baseslot = 1u+LJ_FR2;
-  postra.semantic.root_topslot = rootview->topslot;
-  postra.semantic.traceno = view->traceno;
-  postra.semantic.parent = parentno;
-  postra.semantic.root = view->root;
-  postra.semantic.link = view->link;
-  postra.semantic.exitno = parent_exitno;
-  postra.semantic.startins = trace_startins_acq(child);
-  postra.semantic.linktype = view->linktype;
-  postra.semantic.sinktags = child->sinktags;
-  postra.semantic.base_delta = 0;
-  postra.owner = child;
+  /* Admission and sealing run unconditionally before the edge is published.
+  ** In release builds the immutable child IR/snapshot layout is represented by
+  ** that generation-bound certificate, so reacquisition below checks the
+  ** current ownership, parent snapshot/edge, body generation and target
+  ** without repeating the full scalar walk. Assert builds retain the complete
+  ** post-RA integrity audit at both entry checkpoints. */
+  if (full_audit) {
+	memset(&postra, 0, sizeof(postra));
+	if (!trace_arm64_side_semantic_extent(view->ir, view->nins,
+		&semantic_nins))
+		return 0;
+	postra.semantic.ir = view->ir;
+	postra.semantic.snap = view->snap;
+	postra.semantic.snapmap = view->snapmap;
+	postra.semantic.proto_bc = proto_bc(pt);
+	postra.semantic.nins = semantic_nins;
+	postra.semantic.nk = view->nk;
+	postra.semantic.nsnap = view->nsnap;
+	postra.semantic.nsnapmap = view->nsnapmap;
+	postra.semantic.proto_sizebc = pt->sizebc;
+	postra.semantic.baseslot = 1u+LJ_FR2;
+	postra.semantic.root_topslot = rootview->topslot;
+	postra.semantic.traceno = view->traceno;
+	postra.semantic.parent = parentno;
+	postra.semantic.root = view->root;
+	postra.semantic.link = view->link;
+	postra.semantic.exitno = parent_exitno;
+	postra.semantic.startins = trace_startins_acq(child);
+	postra.semantic.linktype = view->linktype;
+	postra.semantic.sinktags = child->sinktags;
+	postra.semantic.base_delta = 0;
+	postra.owner = child;
 	if (!trace_arm64_side_parentmap(J, parent, parent_exitno, view->ir,
-	  semantic_nins, parentmap, side_snapshot.bindings, &parentmap_n))
-	  return 0;
+		semantic_nins, parentmap, side_snapshot.bindings, &parentmap_n))
+		return 0;
 	if (!trace_arm64_side_context_from_parent(&postra.semantic,
-	&side_snapshot, rootview->snap, rootview->snapmap,
-	rootview->nsnap, rootview->nsnapmap, rootview->startpc,
-	rootview->startins, pt, rootview->ir, rootview->nins,
-	  rootview->nk, rootview->nsnap, parentmap, side_snapshot.bindings,
-	  parentmap_n,
-	parent_exitno))
-	  return 0;
-  postra.parentmap = parentmap;
-  postra.entry = view->mcode;
-  postra.nins = view->nins;
-  postra.stopins = parentmap_n ?
-	(IRRef)(REF_FIRST+parentmap_n-1u) : REF_BASE;
-  postra.orignins = semantic_nins;
-  postra.spadjust = view->spadjust;
-  postra.parent_spadjust = rootview->spadjust;
-  postra.topslot = view->topslot;
-  postra.parent_topslot = rootview->topslot;
-  postra.parentmap_n = parentmap_n;
-  postra.entry_words = view->szmcode/sizeof(MCode);
-  postra.loop_mcofs = trace_mcloop_acq(child);
-  postra.branch_track = (uint8_t)LJ_ABI_BRANCH_TRACK;
-  if (!lj_asm_arm64_side_postra_admit(&postra, &admitted_nins) ||
-	admitted_nins != semantic_nins)
-    return 0;
+		&side_snapshot, rootview->snap, rootview->snapmap,
+		rootview->nsnap, rootview->nsnapmap, rootview->startpc,
+		rootview->startins, pt, rootview->ir, rootview->nins,
+		rootview->nk, rootview->nsnap, parentmap, side_snapshot.bindings,
+		parentmap_n, parent_exitno))
+		return 0;
+	postra.parentmap = parentmap;
+	postra.entry = view->mcode;
+	postra.nins = view->nins;
+	postra.stopins = parentmap_n ?
+		(IRRef)(REF_FIRST+parentmap_n-1u) : REF_BASE;
+	postra.orignins = semantic_nins;
+	postra.spadjust = view->spadjust;
+	postra.parent_spadjust = rootview->spadjust;
+	postra.topslot = view->topslot;
+	postra.parent_topslot = rootview->topslot;
+	postra.parentmap_n = parentmap_n;
+	postra.entry_words = view->szmcode/sizeof(MCode);
+	postra.loop_mcofs = trace_mcloop_acq(child);
+	postra.branch_track = (uint8_t)LJ_ABI_BRANCH_TRACK;
+	if (!lj_asm_arm64_side_postra_admit(&postra, &admitted_nins) ||
+		admitted_nins != semantic_nins)
+		return 0;
+  }
 
   return tracevec_acq(J) == tv &&
 	gcref_acq(tv->slot[parentno]) == obj2gco(parent) &&
@@ -6736,6 +6744,12 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
 	    (void *const *)&rootview->exittab[parent_exitno])) ==
 	  view->parent_target_bits;
 }
+
+#if defined(LUA_USE_ASSERT)
+#define TRACE_ROOT_ENTRY_SIDE_FULL_AUDIT 1
+#else
+#define TRACE_ROOT_ENTRY_SIDE_FULL_AUDIT 0
+#endif
 
 /* Validate and publish one root-trace entry intent without allocating,
 ** waiting, entering SMR, invoking callbacks or raising an error. The gate
@@ -6829,7 +6843,8 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
       !trace_root_entry_arm64_layout_valid(
 	&view, T, ctype_ctsG(g), sourceins) ||
       !trace_root_entry_first_child_view_acq(
-	J, T, traceno, sourceop, &view, &childview) ||
+	J, T, traceno, sourceop, &view, &childview,
+	TRACE_ROOT_ENTRY_SIDE_FULL_AUDIT) ||
       !trace_root_entry_bytecode_valid(pc, pt, traceno, sourceop,
 				       view.startins, sourceins))
     goto reject_published;
@@ -6856,13 +6871,15 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   T2 = trace_root_entry_slot_acq(J, traceno, &tv2);
   /* The publication certificate binds immutable layout to this allocation.
   ** Reacquire every body pointer/extent and mutable authority after the target
-  ** load; snapshot counts and exit targets are deliberately outside the seal. */
+  ** load. Parent snapshot state and exact exit targets remain live checks even
+  ** though the immutable body layout is bound by the publication seal. */
   if (tv2 != tv || T2 != T || !trace_runnable_acq(T2, traceno) ||
       !trace_root_entry_loop_view_acq(T2, traceno, pc, pt, sourceop,
 				      &view2) ||
       !trace_root_entry_loop_view_equal(&view, &view2) ||
       !trace_root_entry_first_child_view_acq(
-	J, T2, traceno, sourceop, &view2, &childview2) ||
+	J, T2, traceno, sourceop, &view2, &childview2,
+	TRACE_ROOT_ENTRY_SIDE_FULL_AUDIT) ||
       !trace_root_entry_first_child_view_equal(&childview, &childview2) ||
       !trace_root_entry_start_valid(sourceop, view2.startins) ||
       !trace_root_entry_bytecode_valid(pc, pt, traceno, sourceop,
