@@ -9,17 +9,18 @@ and reports that are no longer authoritative are retained in
 
 - Development branch: `codex/aarch64-macos-port`.
 - Integrated upstream comparison point: LuaJITMT `v2.1` at `489bb089`.
-  The refresh has focused native ARM64/arm64e and x86-64/Rosetta evidence;
-  the complete gate checkpoints below predate this merge. See
+  The post-refresh bootstrap gate now passes at `608e5d7e`; the latest
+  experimental gate is being revalidated. See
   [`upstream-refresh-2026-10-22.md`](upstream-refresh-2026-10-22.md) for merge
   decisions, retained artifact exclusions, tests and remaining limits.
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
-- Post-refresh full bootstrap validation is currently blocked by a threaded
-  tmpbuf-stress GC2 assertion: `table NEEDSCAN leaked to normal sweep close`.
-  The focused merge checks below do not establish a passing complete gate;
-  see [`upstream-refresh-2026-10-22.md`](upstream-refresh-2026-10-22.md).
+- Post-refresh bootstrap validation passes on frozen `608e5d7e`, including
+  all 387 applicable stock cases, threaded tmpbuf, Darwin native roots,
+  ARM64/arm64e callbacks, variadic/aggregate FFI, and x86-64 unwind execution.
+  The table-rescan close race and internal FFI errno regressions are fixed;
+  see [`checkpoint-2026-10-25.md`](checkpoint-2026-10-25.md).
 - Latest source-fidelity cleanup: `edbf57fa`.
 - Latest ARM64 VM acquire-load cleanup: `3f109fa2`.
 - Latest ARM64 interpreter GC2 parity: `d639196b`.
@@ -28,7 +29,7 @@ and reports that are no longer authoritative are retained in
   spills and shared capture fixes. Both 509-case source/import stock runs also
   pass on its native ARM64 assertion build. The default gate retains all
   ARM64, arm64e and x86-64 branches.
-- The latest complete bootstrap gate passes at frozen `25275a13`, including
+- The earlier complete bootstrap gate passes at frozen `25275a13`, including
   the shared source/import capture fixes. Its default ARM64, arm64e and x64
   unwind branches all ran. The new source/import loop fixture also passes
   directly on that interpreter build.

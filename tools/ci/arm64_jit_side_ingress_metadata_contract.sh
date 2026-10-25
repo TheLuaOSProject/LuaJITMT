@@ -122,7 +122,7 @@ awk '/^typedef struct TraceArm64FirstSideLoopView/ { copy=1 }
   "$root/src/lj_trace.c" >"$helper_region"
 test -s "$helper_region"
 for required in \
-  'TRACE_ARM64_INT_SIDE_ADMITTED' \
+  'v->admission != TRACE_ARM64_INT_LOOP_ADMITTED' \
   'TRACE_EXITTAB_MCODE' \
   'trace_runnable_acq(T, parent)' \
   'trace_nchild_acq(T)' \
