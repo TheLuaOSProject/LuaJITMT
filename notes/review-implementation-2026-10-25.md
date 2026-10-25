@@ -241,3 +241,25 @@ the bytecode grammar or relaxing the live-entry checks. The focused FUNCF
 record/lifecycle contract passed on ARM64 and arm64e/BTI, including native entry,
 GC and retirement. Log: `/tmp/ljmt-review-funcf-prepub.log`. Broader FUNCF
 operation admission is a separate change under implementation.
+
+## Integer FORL operation graphs
+
+Integer FORL bodies now use the generic scalar/effect walkers. The loop control
+proof follows the hidden index, stop and step slots, recurrence, direction and
+overflow guards by their def-use relationships; it no longer requires the
+example accumulator, two PHIs, or adjacent IR ordinals. The independent
+allocated proof verifies the same authorities from immutable IR and concrete
+locations. Unchecked integer ADD remains restricted to the two proven control
+increments; an arbitrary integer body operation must retain its overflow guard.
+CALLXS effects retain their separate ABI validator.
+
+Five separately flushed kernels each published and executed one native trace
+with 20 exits across 20 calls, on both ARM64 and arm64e/BTI: one accumulator,
+three accumulators, positive and negative dynamic steps, and a floating-point
+body with integer induction. The driver is interpreted and each case checks
+its own function identity, code and linkage, plus post-GC reentry. The existing
+native JFORL lifecycle tests also passed. Both independent mutation suites
+passed, including out-of-range step references and unguarded body additions.
+The complete rooted-read contract and registered ARM64 scalar/pointer CALLXS
+lifecycle suite passed after integration. Logs:
+`/tmp/ljmt-review-forl-{native,ir,reads,ffi}.log`.

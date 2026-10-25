@@ -286,6 +286,8 @@ while test "$run" -le "$ordinary_runs"; do
   "$fixture"
   run=$((run+1))
 done
+env LUA_PATH="$root/src/?.lua;$root/src/jit/?.lua;;" \
+  "$root/src/luajit" "$root/tests/t-arm64-jit-forl-varied.lua"
 LUAJIT_MCODE_TEST=R "$fixture"
 
 otool -tvV "$vm_object" >"$vm_disasm"
@@ -336,6 +338,8 @@ while test "$run" -le "$pauth_runs"; do
   "$pauth_fixture"
   run=$((run+1))
 done
+env LUA_PATH="$root/src/?.lua;$root/src/jit/?.lua;;" \
+  "$root/src/luajit" "$root/tests/t-arm64-jit-forl-varied.lua"
 LUAJIT_MCODE_TEST=R "$pauth_fixture"
 
 otool -tvV "$vm_object" >"$pauth_vm_disasm"

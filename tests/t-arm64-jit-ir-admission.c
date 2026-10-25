@@ -335,9 +335,9 @@ static void make_dynamic_forl_trace(jit_State *J, int negative)
     fx.snap[snapno].nslots = nslots[snapno];
     fx.snap[snapno].topslot = 10;
   }
-  fx.snapmap[2] = SNAP(6, SNAP_NORESTORE, V_R_IDX);
-  fx.snapmap[3] = SNAP(7, SNAP_NORESTORE, V_R_STOP);
-  fx.snapmap[4] = SNAP(8, SNAP_NORESTORE, V_R_STEP);
+  fx.snapmap[2] = SNAP(idxslot, SNAP_NORESTORE, V_R_IDX);
+  fx.snapmap[3] = SNAP(idxslot+FORL_STOP, SNAP_NORESTORE, V_R_STOP);
+  fx.snapmap[4] = SNAP(idxslot+FORL_STEP, SNAP_NORESTORE, V_R_STEP);
   fx.snapmap[5] = SNAP(9, 0, V_R_IDX);
   fx.snapmap[6] = SNAP(10, 0, V_R_SUM);
   fx.snapmap[7] = SNAP(11, 0, V_R_IDX);
@@ -560,12 +560,13 @@ static void make_numhalf_trace(jit_State *J)
   J->startpc = numhalf_fixture_loop_pc;
 }
 
-static LJArm64IRReject expect_reject(jit_State *J,
-		LJArm64IRRejectReason reason, IROp op)
+static LJArm64IRReject expect_reject_at(jit_State *J,
+		LJArm64IRRejectReason reason, IROp op, int test_line)
 {
   LJArm64IRReject reject;
   if (lj_asm_arm64_ir_admit(J, &fx.T, &reject))
-    fprintf(stderr, "unexpected admission: wanted reason=%d op=%u\n",
+    fprintf(stderr, "unexpected admission at test line %d wanted reason=%d op=%u\n",
+	test_line,
 	(int)reason, (unsigned)op);
   assert(reject.reason != LJ_ARM64_IR_REJECT_NONE);
   if (reject.reason != reason)
@@ -581,6 +582,7 @@ static LJArm64IRReject expect_reject(jit_State *J,
   assert(reject.op == op);
   return reject;
 }
+#define expect_reject(J, reason, op) expect_reject_at((J), (reason), (op), __LINE__)
 
 static LJArm64PostRAView make_postra_view(jit_State *J)
 {
@@ -826,6 +828,10 @@ static void test_dynamic_forl_positive_and_negative(jit_State *J)
   fx.ir[V_R_OVERFLOW].t.irt = IRT_INT;
   expect_dynamic_forl_ir_reject(J);
   make_dynamic_forl_trace(J, 0);
+  fx.ir[V_R_SUM_BODY].o = IR_ADD;
+  fx.ir[V_R_SUM_BODY].t.irt = IRT_INT|IRT_ISPHI;
+  expect_dynamic_forl_ir_reject(J);
+  make_dynamic_forl_trace(J, 0);
   fx.ir[V_R_USE].t.irt = IRT_NIL;
   expect_dynamic_forl_ir_reject(J);
   make_dynamic_forl_trace(J, 0);
@@ -860,6 +866,10 @@ static void test_dynamic_forl_postra_layout(jit_State *J)
   }
 
   view = make_dynamic_forl_postra_view(J, 0);
+  fx.ir[V_R_SUM_BODY].o = IR_ADD;
+  fx.ir[V_R_SUM_BODY].t.irt = IRT_INT|IRT_ISPHI;
+  expect_dynamic_forl_postra_result(&view, 0);
+  view = make_dynamic_forl_postra_view(J, 0);
   fx.ir[V_R_USE].s = SPS_FIRST;
   view.spadjust = 16;
   expect_dynamic_forl_postra_result(&view, 0);
@@ -887,9 +897,6 @@ static void test_dynamic_forl_postra_layout(jit_State *J)
   fx.ir[V_R_IDX].r = fx.ir[V_R_STEP].r;
   expect_dynamic_forl_postra_result(&view, 0);
   view = make_dynamic_forl_postra_view(J, 0);
-  fx.ir[V_R_SUM].r = fx.ir[V_R_IDX].r;
-  expect_dynamic_forl_postra_result(&view, 0);
-  view = make_dynamic_forl_postra_view(J, 0);
   fx.ir[V_R_OVERFLOW].r = fx.ir[V_R_STEP].r;
   expect_dynamic_forl_postra_result(&view, 0);
   view = make_dynamic_forl_postra_view(J, 0);
@@ -903,6 +910,9 @@ static void test_dynamic_forl_postra_layout(jit_State *J)
   expect_dynamic_forl_postra_result(&view, 0);
   view = make_dynamic_forl_postra_view(J, 0);
   fx.ir[V_R_IDX_BODY].op2 = V_R_STOP;
+  expect_dynamic_forl_postra_result(&view, 0);
+  view = make_dynamic_forl_postra_view(J, 0);
+  fx.ir[V_R_IDX_PRE].op2 = V_R_POSTRA_END;
   expect_dynamic_forl_postra_result(&view, 0);
   view = make_dynamic_forl_postra_view(J, 0);
   fx.snapmap[4] = SNAP(8, SNAP_NORESTORE, V_R_STOP);
