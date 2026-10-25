@@ -102,6 +102,7 @@ local m7_cases = {
   "m7_ffi_callback_install",
   "m7_ffi_callback_runtime",
   "m7_ffi_callback_arm64_lifecycle",
+  "m7_ffi_errno_preservation",
   "m7_ffi_callxs_arm64_scalar",
   "m7_ffi_callxs_authentic",
   "m7_ffi_callxs_callback_stack",
@@ -127,6 +128,16 @@ local arm64_bootstrap_flags = table.concat({
   "-DLUAJIT_DISABLE_JIT",
   "-DLUA_USE_ASSERT"
 }, " ")
+
+local function run_errno_fixture(t, flags, sign)
+  local out = t:tmp("lj_t-ffi-errno-preservation")
+  t:cc(out, { t:path("tests", "t-ffi-errno-preservation.c") }, {
+    cflags = flags,
+    link_luajit = true
+  })
+  if sign then t:run("codesign --sign - " .. utils.shell_quote(out)) end
+  t:run({ out }, { timeout = "30s" })
+end
 
 local function with_arm64_bootstrap_restore(t, fn)
   local ok, err = xpcall(fn, debug.traceback)
@@ -493,6 +504,43 @@ print("bulk fill ok")
         })
       end)
       print("M7 Darwin ARM64 callback lifecycle fixtures passed")
+    end
+  })
+
+  add({
+    name = "m7_ffi_errno_preservation",
+    description = "FFI errno and platform last-error preservation",
+    run = function(t)
+      if jit and jit.os == "OSX" and jit.arch == "arm64" and
+         t.target_arch == "arm64" then
+        local bootstrap = table.concat({
+          "-DLUAJIT_MT_ARM64_BOOTSTRAP",
+          "-DLUAJIT_DISABLE_JIT",
+          "-DLUA_USE_ASSERT"
+        }, " ")
+        local experimental = table.concat({
+          "-DLUAJIT_MT_ARM64_BOOTSTRAP",
+          "-DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL",
+          "-DLUA_USE_ASSERT"
+        }, " ")
+        with_arm64_bootstrap_restore(t, function()
+          clean_build(t, { quiet = true, xcflags = bootstrap })
+          run_errno_fixture(t, bootstrap, false)
+          clean_build(t, { quiet = true, xcflags = experimental })
+          run_errno_fixture(t, experimental, false)
+        end)
+      elseif t.target_arch == "x64" then
+        local flags = "-DLUA_USE_ASSERT"
+        build.with_default_build_restore(t, function()
+          clean_build(t, { quiet = true, xcflags = flags })
+          run_errno_fixture(t, flags,
+                            jit and jit.os == "OSX")
+        end)
+      else
+        print("m7_ffi_errno_preservation SKIP: requires ARM64 or x86_64 runtime")
+        return
+      end
+      print("M7 FFI errno preservation fixtures passed")
     end
   })
 

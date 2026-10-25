@@ -43,3 +43,11 @@ and x86-64 compatibility checks are recorded separately once rerun.
 
 References: Apple's [ARM64 calling convention](https://developer.apple.com/documentation/xcode/writing-arm64-code-for-apple-platforms)
 and LuaJIT's [ffi.errno contract](https://luajit.org/ext_ffi_api.html#ffi_errno).
+
+The reusable `m7_ffi_errno_preservation` suite case now runs the shared wait/GC
+checks independently of the ARM64 aggregate ABI fixture. The exact suite case
+passed in isolated assertion-enabled ARM64 bootstrap, ARM64 experimental, and
+x86-64/Rosetta builds; macOS x86-64 fixtures were locally ad hoc signed. The
+case restores its expected build profile and is included in the bootstrap
+gate. Its Windows LastError assertions are conditional coverage, not a claim
+of Windows execution on this Mac.
