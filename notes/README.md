@@ -16,12 +16,13 @@ and reports that are no longer authoritative are retained in
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
-- Current review implementation replaces whole-trace root templates with
-  operation proofs for scalar LOOP/FORL bodies, rooted scalar reads and
-  existing-key stores, and unsunk table construction. Immutable root
-  certificates remove repeated release-entry scans; native coverage and
-  progress counters make execution/refusal visible. These changes have focused
-  ARM64/arm64e evidence; the complete combined gates below are still historical.
+- Current review implementation replaces whole-trace templates with operation
+  proofs for scalar LOOP/FORL/FUNCF bodies, first scalar side traces, rooted
+  scalar reads and existing-key stores, unsunk table construction, and fixed
+  scalar FFI calls. Root and child publication certificates remove immutable
+  release-entry scans; native coverage and progress counters expose successful
+  entry, exits and refusals. The combined bootstrap passed at `2e765c3e`;
+  the complete experimental rerun is pending the final FFI snapshot audit.
   See [`review-implementation-2026-10-25.md`](review-implementation-2026-10-25.md).
 - Post-refresh bootstrap validation passes on frozen `d8f02a81`, including
   all 387 applicable stock cases, threaded tmpbuf, Darwin native roots,
@@ -41,10 +42,16 @@ and reports that are no longer authoritative are retained in
 - Latest ARM64 VM acquire-load cleanup: `3f109fa2`.
 - Latest ARM64 interpreter GC2 parity: `d639196b`.
 - Latest ARM64 JIT GC2 cadence parity: `f1fe1f73`.
-- Latest complete experimental gate: frozen `d8f02a81`, including rooted
-  table length/reads, numeric spills, and shared runtime fixes. Both stock corpora
-  pass on its native ARM64 assertion build. The default gate retains all
-  ARM64, arm64e and x86-64 branches.
+- Latest complete experimental gate: frozen `12e1011b`, including generic
+  scalar roots and rooted effects. This precedes the generic FFI and scalar
+  side integration. Current focused entry and child retirement contracts pass
+  on ARM64/arm64e; the updated umbrella also includes the registered FFI M7
+  suite explicitly on both targets.
+- The x86-64/Rosetta source and import corpora each passed 509 cases at
+  `47ba8734`, which includes generic FFI and scalar-side production code.
+  Shared errno, atomic, progress, table-store and hotcount checks also passed;
+  a separate combined harness stall remains unexplained. See
+  [`x64-rosetta-final-regression-47ba-2026-10-25.md`](x64-rosetta-final-regression-47ba-2026-10-25.md).
 - The earlier complete bootstrap gate passes at frozen `25275a13`, including
   the shared source/import capture fixes. Its default ARM64, arm64e and x64
   unwind branches all ran. The new source/import loop fixture also passes
@@ -105,12 +112,13 @@ available.
 - ARM64 and arm64e/BTI trace publication, authenticated entry and exits,
   retirement, flush/reuse, GDB-JIT preparation, and bounded root/first-side
   entry paths.
-- Root entry validates the immutable allocation layout once, then reacquires
-  and compares identity, extents, and every mutable entry authority. Removing
-  the duplicate layout scan passed the focused ARM64/arm64e entry contract;
-  the measured assertion/helper-build improvement and broader architecture
-  recommendations are in
-  [`implementation-review-2026-10-25.md`](implementation-review-2026-10-25.md).
+- Root and first-child publication seal exact body/allocation generations,
+  IR/snapshot geometry, source identity and machine code after independent
+  semantic and allocated-layout checks. Release entry validates the seal and
+  reacquires every mutable lifetime, topology, bytecode, request and PAC
+  authority. Assertion entry also rescans immutable content. Both target and
+  release corruption/lifecycle tests and measured entry costs are recorded in
+  [`review-implementation-2026-10-25.md`](review-implementation-2026-10-25.md).
 - Scalar self-linked `LOOP` roots use independent semantic and allocated-state
   capabilities for checked INT arithmetic, NUM arithmetic/conversions,
   comparisons, PHI copies/shuffles, snapshots and INT/NUM spill frames. NUM
@@ -120,35 +128,34 @@ available.
   below remain closed; see
   [`arm64-jit-scalar-capability.md`](arm64-jit-scalar-capability.md) and
   [`arm64-jit-numeric-spills.md`](arm64-jit-numeric-spills.md).
-- Rooted table length in scalar `BC_LOOP` roots: one guarded table source,
-  bounded `lj_tab_len_rooted_try` calls, and an immediate retry guard after
-  each call. Both admission passes reject malformed references and helper
-  graphs; table and root-address values remain in registers. Native ARM64 and
-  arm64e/BTI checks cover generation/root retries, STOPREQ unwind/resume, and
-  collection with roots live. See
-  [`arm64-jit-rooted-tablen-capability.md`](arm64-jit-rooted-tablen-capability.md).
-- Rooted numeric reads of fixed key `1` in `BC_LOOP` roots, using the existing
-  no-wait scalar helper, explicit status and NUM type guards, and independent
-  semantic/post-RA certificates. Native ARM64 and arm64e/BTI tests cover
-  concurrent resize, collection, refused/type-changing results, STOPREQ and
-  reentry. See [`arm64-jit-rooted-read-next-2026-10-25.md`](arm64-jit-rooted-read-next-2026-10-25.md).
-- Integer `FORL` retains separate constant-step and spill-free variable-stop/
-  variable-step certificates, with independent semantic, snapshot and
-  post-register-allocation checks.
-- A bounded set of first-side traces. General side traces, side-of-side traces,
-  and stitches remain closed.
-- TG-local `XSAVE` staging and native-call frame lifecycle for two exact Darwin
-  ARM64 root geometries and three exact CDECL signatures:
-  `int32_t(int32_t)`, `double(double)`, and
-  `const char *(const char *)`.
+- Rooted table length and scalar reads are validated per helper operation,
+  scratch root and immediate retry/type guard. Numeric, string and boolean
+  keys, numeric/boolean results, multiple tables and mixed read/length effects
+  have native and malformed-graph coverage. Table spills retain explicit
+  width, alignment and ownership checks. Resize, retirement, GC, STOPREQ and
+  type-change exits keep the existing runtime authorities.
+- Existing-key scalar stores and unsunk TNEW use their own publication and
+  rooted-effect contracts; raw heap effects remain excluded.
+- Scalar `FORL` supports constant and variable integer bounds/steps through
+  def-use and source-control-flow checks. Scalar fixed-arity `FUNCF` supports
+  bounded arithmetic, argument/cell loads and one scalar return.
+- First scalar side traces inherit the selected parent's exact snapshot and
+  locations, then close as a self-loop or through its certified root tail.
+  Successful native handoff and bounded exits are required; ROOT and LOOP
+  children are retired through GC-claim, scoped flush and full flush on both
+  targets. Side-of-side traces, heap-effect children and stitches remain closed.
+- TG-local XSAVE staging and native-frame lifecycle support fixed scalar FFI
+  signatures classified from stable CType snapshots, separate GPR/FPR argument
+  banks and independently validated allocated operands/results. Multiple
+  calls per loop and rooted pointer results replace the three exact templates.
 - Exact FFI lifecycle evidence covers errno, normal and forced exits, STOPREQ,
   one-level and depth-two callbacks, callback errors, cleanup/reuse, remote GC
   and flush, mutable cdata `__call`, double ABI/results, boxed-pointer identity,
   and result-root survival.
-- Lockless OS-error restoration for C, fast-function, and the certified JIT
-  unwind path. The standalone arbitrary arm64e JIT-frame contract is still
-  synthetic; only the exact integer `CALLXS` STOPREQ path has real trace-unwind
-  evidence.
+- Lockless OS-error restoration for C, fast-function and admitted JIT unwind
+  paths. A native observer proves the C++ callback-error fixture enters from
+  an ACTIVE generated frame, catches/rethrows through C++, runs destructors,
+  clears pins/staging and executes native calls again after GC and flush.
 - Trace-head GC checks acquire both color-GC fields and both GC2 cadence fields,
   matching x64's `total >= threshold || alloc_since > hard_check` behavior.
   The admitted boxed-pointer `CALLXS` trace proves both equality-skip and
@@ -171,9 +178,9 @@ available.
   interpreter `lj_vm_next` does not by itself open other JIT heap paths.
 - General side traces, side-of-side traces, stitches, and production JIT
   side-exit unwind resolution.
-- Generic Darwin ARM64 `CALLXS` lowering. Other signatures, indirect callees,
-  variadics, aggregates/sret, other pointer types, and other call-site
-  geometries remain rejected.
+- ARM64 CALLXS outgoing stack arguments, aggregates/sret, variadics, vectors,
+  complex results and unsupported result/IR representations. ABI scalar
+  classification alone does not certify all float or boxed-64-bit graphs.
 - Full parity with every x86_64 lockless VM, JIT, FFI, profiler, unwind, and
   stress path.
 - Complete sanitizer, weak-memory, sustained-concurrency, and performance
@@ -253,18 +260,16 @@ warning and the x86_64
 builder's expected preliminary non-GC64 rejection before its configured GC64
 build.
 
-## Next review priorities
+## Review implementation and future capabilities
 
-1. Grow operation/effect capabilities for rooted reads, stores, allocation and
-   calls, preserving independent semantic and post-RA proofs. Avoid adding
-   another entire trace template for every workload.
-2. Address numeric type transitions and scalar side entry, and measure entry
-   cost, native work and exit frequency alongside stock conformance.
-3. Consolidate test build profiles and fixture reuse; expand weak-ordering,
-   stalled-participant, sanitizer and sustained-concurrency validation.
-4. Keep common changes narrow and retain stock LuaJIT control flow where the
-   lockless protocol does not require a difference. See the concrete sequence
-   in [`implementation-review-2026-10-25.md`](implementation-review-2026-10-25.md).
+The review's concrete changes and evidence are tracked in
+[`review-implementation-2026-10-25.md`](review-implementation-2026-10-25.md):
+operation/effect admission, root/child entry certificates, numeric adaptation,
+native coverage, shared build profiles and measured progress contracts.
+Further ABI classes, raw heap effects and arbitrary child topology need their
+own semantic, allocated-layout, execution and lifecycle proofs. Keep common
+changes narrow and retain stock LuaJIT control flow wherever the lockless
+protocol permits it.
 
 ## Notes layout
 
