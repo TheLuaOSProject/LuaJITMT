@@ -2593,14 +2593,16 @@ static void build_subroutines(BuildCtx *ctx)
   |  cmn CARG1w, #17			// Static dispatch?
   |  beq >5
   |  cmp RBw, #BC__MAX			// Fast function?
-  |   add TMP1, GL, INS, uxtb #3
+  |   add TMP1, DISPATCH, INS, uxtb #3
   |  bhs >4
   |  cmp RBw, #BC_FUNCCW
   |  bhi >6				// Local cell ops are ordinary bytecode.
   |2:
   |  cmp RBw, #BC_FUNCF			// Function header?
-  |  add TMP0, GL, RB, uxtb #3
-  |  ldr RB, [TMP0, #GG_G2DISP]
+  |  // A hot exit may have installed the recorder owner's TG overlay.
+  |  // Dispatch the first resumed instruction through that same table.
+  |  add TMP0, DISPATCH, RB, uxtb #3
+  |  ldr RB, [TMP0]
   |   decode_RA RA, INS
   |   lsr TMP0, INS, #16
   |   csel RC, TMP0, RC, lo

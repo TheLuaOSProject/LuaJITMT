@@ -762,7 +762,10 @@ static void exercise_jit_retry_side_exit(lua_State *L)
 #endif
 
   /* Exercise the generated helper under an existing vector-read scope. Its
-  ** nested enter/leave must preserve the caller's exact depth and epoch. */
+  ** nested enter/leave must preserve the caller's exact depth and epoch.
+  ** With hotexit=1 this also starts recording at the retried LEN. The first
+  ** resumed instruction must use the TG recorder dispatch: skipping LEN
+  ** leaves the inherited TAB slot inconsistent with its numeric result. */
   outer_clean = clean_state(L);
   lj_tab_read_enter(L2TG(L));
   clean = clean_state(L);

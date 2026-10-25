@@ -695,3 +695,25 @@ accepts an explicit `LJ_ARM64_CALLXS_ASSERT=0` runtime profile; the umbrella
 requires both assertion and release-entry behavior on both targets. These
 release tests retain fixture helper instrumentation and are correctness checks,
 not release-performance measurements.
+
+## First resumed instruction uses the recorder overlay
+
+The final combined gate at `9b0c6e18` stopped in the rooted-length contract:
+forcing the generation-retry exit with `hotexit=1` triggered `rec_check_slots`
+(slot 7 was a number in the interpreter and TAB in the recorder). A standalone
+reproduction localized this to the first resumed LEN, after warmup and both
+admission mutation passes succeeded. The ARM64 exit landing still used
+`GL + GG_G2DISP` for ordinary/function bytecode, so it skipped the owner's
+newly installed recorder overlay for one instruction. The following ADD
+reached the recorder with a stale inherited table value.
+
+The landing now loads its dynamic target and dispatch-slot pointer from the
+current TG's `DISPATCH`, matching ordinary VM dispatch and the x64 exit path.
+No lock, assertion relaxation, or admission exception is added. The existing
+generation-retry fixture is the regression: the unchanged test failed at
+`9b0c6e18` and passes with this correction. Its full contract passed on ARM64
+and arm64e/BTI, including native helper execution, independent certificates,
+STOPREQ unwind/resume and full-GC reentry. Log:
+`/tmp/ljmt-rooted-len-exit-overlay-contract.log`. The complete experimental
+gate must be rerun with this fix; the failed combined log remains
+`/tmp/ljmt-review-experimental-final-9b0c6e18.log`.
