@@ -103,33 +103,117 @@ static BCIns arm64_ir_bc_acq(uintptr_t lo, MSize pos)
   return (BCIns)la_load32_acq(pc);
 }
 
-/* Exact immutable bytecode grammar for the first fixed-function root. The
-** trace can only return literal true from the final frame slot. */
+/* Check the immutable, side-effect-free bytecode subset supported for a
+** fixed-function root. Register state is derived from bytecode definitions:
+** CGET imports only a real fixed parameter; constants and MOV define local
+** values, and arithmetic requires values established by this bytecode walk. */
 static int arm64_ir_funcf_bytecode(const BCIns *bc, MSize sizebc,
-	MSize framesize, BCIns startins, BCIns liveins)
+	MSize framesize, MSize numparams, BCIns startins, BCIns liveins,
+	int prepublication)
 {
   uintptr_t lo = (uintptr_t)bc;
-  BCIns kpri, ret;
-  BCReg result;
+  BCIns word, ret;
+  BCIns generation[UINT8_MAX+1u];
+  uint8_t initialized[UINT8_MAX+1u] = { 0 };
+  uint8_t numeric[UINT8_MAX+1u] = { 0 };
+  MSize pos;
   LJ_STATIC_ASSERT((sizeof(BCIns) & (sizeof(BCIns)-1)) == 0);
-  if (bc == NULL || (lo & (sizeof(BCIns)-1)) != 0 || sizebc != 3 ||
+  if (bc == NULL || (lo & (sizeof(BCIns)-1)) != 0 || sizebc < 3 ||
+	sizebc > UINT8_MAX ||
 	(uintptr_t)sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns) || framesize == 0 ||
-	framesize > UINT8_MAX || bc_op(startins) != BC_FUNCF ||
+	framesize > UINT8_MAX || numparams >= framesize ||
+	bc_op(startins) != BC_FUNCF ||
 	bc_a(startins) != framesize || bc_d(startins) != 0 ||
 	!((liveins == startins) ||
 	  (bc_op(liveins) == BC_JFUNCF &&
 	   bc_a(liveins) == bc_a(startins) && bc_d(liveins) != 0)) ||
-	(BCIns)la_load32_acq((const uint32_t *)&bc[0]) != liveins)
+	(BCIns)la_load32_acq((const uint32_t *)&bc[0]) !=
+	  (prepublication ? startins : liveins))
     return 0;
-  result = (BCReg)(framesize-1u);
-  kpri = (BCIns)la_load32_acq((const uint32_t *)&bc[1]);
-  ret = (BCIns)la_load32_acq((const uint32_t *)&bc[2]);
-  return bc_op(kpri) == BC_KPRI && bc_a(kpri) == result &&
-	 bc_d(kpri) == 2u && bc_op(ret) == BC_RET1 &&
-	 bc_a(ret) == result && bc_d(ret) == 2u &&
-	 (BCIns)la_load32_acq((const uint32_t *)&bc[0]) == liveins &&
-	 (BCIns)la_load32_acq((const uint32_t *)&bc[1]) == kpri &&
-	 (BCIns)la_load32_acq((const uint32_t *)&bc[2]) == ret;
+  for (pos = 0; pos < numparams; pos++)
+    initialized[pos] = 1;
+  for (pos = 0; pos < sizebc; pos++)
+    generation[pos] = arm64_ir_bc_acq(lo, pos);
+  for (pos = 1; pos < sizebc; pos++) {
+    BCOp op;
+    BCReg a, b, c;
+    word = generation[pos];
+    op = bc_op(word);
+    a = bc_a(word); b = bc_b(word); c = bc_c(word);
+    if (op == BC_RET1) {
+      if (pos+1u != sizebc || bc_d(word) != 2u || a >= framesize ||
+	  !initialized[a])
+	return 0;
+      ret = word;
+      goto check_generation;
+    }
+    if (op == BC_KPRI) {
+      if (a >= framesize || bc_d(word) > 2u)
+	return 0;
+      initialized[a] = 1;
+      numeric[a] = 2;
+    } else if (op == BC_KSHORT) {
+      if (a >= framesize)
+	return 0;
+      initialized[a] = numeric[a] = 1;
+    } else if (op == BC_MOV) {
+      c = bc_d(word);
+      if (a >= framesize || c >= framesize || !initialized[c])
+	return 0;
+      initialized[a] = 1;
+      numeric[a] = numeric[c];
+    } else if (op == BC_CGET) {
+      BCReg src = bc_d(word);
+      if (a >= framesize || src >= framesize ||
+          (src >= numparams && !initialized[src]))
+	return 0;
+      initialized[a] = 1;
+      numeric[a] = numeric[src];
+    } else if (op == BC_ADDVV || op == BC_SUBVV || op == BC_MULVV ||
+	       op == BC_DIVVV) {
+      if (a >= framesize || b >= framesize || c >= framesize ||
+	  !initialized[b] || !initialized[c] || numeric[b] == 2 ||
+	  numeric[c] == 2)
+	return 0;
+      initialized[a] = numeric[a] = 1;
+    } else {
+      /* Calls, upvalues, branches, heap access and all other effects are
+      ** outside this scalar root certificate. */
+      return 0;
+    }
+  }
+  return 0;
+check_generation:
+  for (pos = 0; pos < sizebc; pos++)
+    if (arm64_ir_bc_acq(lo, pos) != generation[pos]) return 0;
+  if (generation[0] != (prepublication ? startins : liveins) ||
+      generation[sizebc-1u] != ret)
+    return 0;
+  return 1;
+}
+
+int lj_asm_arm64_funcf_bytecode(const BCIns *bc, MSize sizebc,
+	MSize framesize, MSize numparams, BCIns startins, BCIns liveins,
+	int prepublication)
+{
+  return arm64_ir_funcf_bytecode(bc, sizebc, framesize, numparams,
+	startins, liveins, prepublication);
+}
+
+static int arm64_ir_funcf_slot_source(const BCIns *bc, MSize sizebc,
+	MSize numparams, MSize baseslot, MSize slot)
+{
+  uintptr_t lo = (uintptr_t)bc;
+  MSize pos;
+  if (bc == NULL || sizebc > UINT8_MAX ||
+	(uintptr_t)sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns)) return 0;
+  for (pos = 1; pos+1u < sizebc; pos++) {
+    BCIns ins = arm64_ir_bc_acq(lo, pos);
+    if (bc_op(ins) == BC_CGET && bc_d(ins) < numparams &&
+	 slot == baseslot + bc_d(ins))
+      return 1;
+  }
+  return 0;
 }
 
 static int arm64_ir_start(const jit_State *J, const GCtrace *T,
@@ -188,7 +272,7 @@ static int arm64_ir_start(const jit_State *J, const GCtrace *T,
     if (LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED || pos != 0 ||
 	(pt->flags & PROTO_VARARG) != 0 ||
 	!arm64_ir_funcf_bytecode(proto_bc(pt), pt->sizebc, pt->framesize,
-	  startins, startins) ||
+	  pt->numparams, startins, startins, 1) ||
 	pt->numparams > (BCReg)(pt->framesize-1u))
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE, REF_BASE,
 			     IR_XPOLL, (uint16_t)op);
@@ -468,56 +552,381 @@ static int arm64_postra_scalar_kref(const LJArm64PostRAView *view,
 
 static int arm64_scalar_postra_register(Reg r, IRType type);
 
-static int arm64_ir_funcf_snapshots(const SnapShot *snap,
-	const SnapEntry *snapmap, MSize nsnap, MSize nsnapmap,
-	const BCIns *proto_bc, MSize proto_sizebc, MSize root_topslot,
-	uint8_t base_delta);
+
+static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
+	IRType type);
+
+static int arm64_ir_funcf_const_ref(const IRIns *ir, IRRef nk,
+	IRRef value, IRType type)
+{
+  IRRef k;
+  if (value == REF_TRUE || value == REF_FALSE || value == REF_NIL)
+	return irt_type(ir_load_acq(&ir[value]).t) == type;
+  if (value < nk || value >= REF_TRUE) return 0;
+  for (k = nk; k < REF_TRUE; k++) {
+	IRIns ins = ir_load_acq(&ir[k]);
+	if (ins.o == IR_KNUM) {
+	  if (k == value) return type == IRT_NUM && irt_type(ins.t) == IRT_NUM;
+	  k++;  /* KNUM payload is not an independently addressable constant. */
+	} else if (k == value) {
+	  return irt_type(ins.t) == type &&
+		 (ins.o == IR_KINT || ins.o == IR_KPRI);
+	}
+  }
+  return 0;
+}
+
+/* Find the recorded value for one bytecode scalar operation. The bytecode
+** state walker below invokes this once per operation, keeping even repeated
+** expressions linear in bytecode size rather than recursively recomputing
+** every operand tree. */
+static int arm64_ir_funcf_find_value(const IRIns *ir, IRRef nins, BCOp op,
+	IRRef x, IRRef y, IRRef *valuep)
+{
+  IRRef ref;
+  for (ref = REF_FIRST; ref < nins; ref++) {
+	IRIns ins = ir_load_acq(&ir[ref]);
+	IRType type = irt_type(ins.t);
+	int commutative = op == BC_ADDVV || op == BC_MULVV;
+	int operands = (ins.op1 == x && ins.op2 == y) ||
+		(commutative && ins.op1 == y && ins.op2 == x);
+	if (!operands) continue;
+	if (op == BC_ADDVV && ins.o == IR_ADDOV && type == IRT_INT &&
+	    ins.t.irt == (IRT_INT|IRT_GUARD)) {
+	  *valuep = ref;
+	  return 1;
+	}
+	if (type != IRT_NUM || (ins.t.irt & ~(IRT_TYPE|IRT_ISPHI)))
+	  continue;
+	if ((op == BC_ADDVV && ins.o == IR_ADD) ||
+	    (op == BC_SUBVV && ins.o == IR_SUB) ||
+	    (op == BC_MULVV && ins.o == IR_MUL) ||
+	    (op == BC_DIVVV && ins.o == IR_DIV)) {
+	  *valuep = ref;
+	  return 1;
+	}
+  }
+  return 0;
+}
+
+static int arm64_ir_funcf_short_value(const IRIns *ir, IRRef nk,
+	int16_t immediate, IRRef *valuep)
+{
+  IRRef k;
+  for (k = nk; k < REF_TRUE; k++) {
+	IRIns ins = ir_load_acq(&ir[k]);
+	if (ins.o == IR_KNUM) {
+	  if (k+1u >= REF_TRUE) return 0;
+	  k++;
+	} else if (ins.o == IR_KINT && ins.t.irt == IRT_INT &&
+		   ins.i == immediate) {
+	  *valuep = k;
+	  return 1;
+	}
+  }
+  return 0;
+}
+
+/* Advance an allocated interpreter-register map to a snapshot PC. Parameters
+** begin at exact guarded SLOADs. Every bytecode definition updates one slot;
+** local reads copy the current value, so repeated dependency graphs do not
+** cause recursive/exponential work. */
+static int arm64_ir_funcf_advance(const IRIns *ir, IRRef nins, IRRef nk,
+	const BCIns *bc, MSize sizebc, MSize framesize,
+	MSize baseslot, MSize target, MSize *posp, IRRef *values,
+	uint8_t *valid)
+{
+  uintptr_t lo = (uintptr_t)bc;
+  MSize pos;
+  if (!bc || ((uintptr_t)bc & (sizeof(BCIns)-1u)) != 0 || !ir ||
+	!posp || !values || !valid || target > sizebc ||
+	*posp > target || framesize > UINT8_MAX || sizebc > UINT8_MAX ||
+	(uintptr_t)sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns)) return 0;
+  for (pos = *posp; pos < target; pos++) {
+	BCIns ins = arm64_ir_bc_acq(lo, pos);
+	BCOp op = bc_op(ins);
+	BCReg a = bc_a(ins), b = bc_b(ins), c = bc_c(ins);
+	IRRef value;
+	if (op == BC_CGET) {
+	  BCReg src = bc_d(ins);
+	  if (a >= framesize || src >= framesize || !valid[src]) return 0;
+	  values[a] = values[src];
+	  valid[a] = 1;
+	} else if (op == BC_MOV) {
+	  BCReg src = bc_d(ins);
+	  if (a >= framesize || src >= framesize || !valid[src]) return 0;
+	  values[a] = values[src];
+	  valid[a] = 1;
+	} else if (op == BC_KPRI) {
+	  if (a >= framesize || bc_d(ins) > 2u) return 0;
+	  values[a] = (IRRef)(REF_NIL-bc_d(ins));
+	  valid[a] = 1;
+	} else if (op == BC_KSHORT) {
+	  if (a >= framesize || !arm64_ir_funcf_short_value(ir, nk,
+	      (int16_t)bc_d(ins), &value)) return 0;
+	  values[a] = value;
+	  valid[a] = 1;
+	} else if (op == BC_ADDVV || op == BC_SUBVV || op == BC_MULVV ||
+	   op == BC_DIVVV) {
+	  if (a >= framesize || b >= framesize || c >= framesize ||
+	      !valid[b] || !valid[c] ||
+	      !arm64_ir_funcf_find_value(ir, nins, op, values[b], values[c],
+					 &value)) return 0;
+	  values[a] = value;
+	  valid[a] = 1;
+	} else if (op != BC_RET1) {
+	  return 0;
+	}
+  }
+  *posp = target;
+  return 1;
+}
+
+static int arm64_ir_funcf_result_matches(const BCIns *bc,
+	MSize sizebc, MSize framesize, const IRRef *values,
+	const uint8_t *valid, IRRef value)
+{
+  uintptr_t lo = (uintptr_t)bc;
+  BCIns ret;
+  if (!bc || !values || !valid || sizebc < 2 || sizebc > UINT8_MAX ||
+	(uintptr_t)sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns)) return 0;
+  ret = arm64_ir_bc_acq(lo, sizebc-1u);
+  return bc_op(ret) == BC_RET1 && bc_d(ret) == 2u &&
+	bc_a(ret) < framesize && valid[bc_a(ret)] &&
+	values[bc_a(ret)] == value;
+}
+
+static int arm64_ir_funcf_scalar_snapshots(const IRIns *ir, IRRef nins,
+	IRRef nk, const SnapShot *snaps, MSize nsnap,
+	const SnapEntry *snapmap, MSize nsnapmap, const BCIns *proto_bc,
+	MSize proto_sizebc, MSize numparams, MSize framesize,
+	MSize baseslot, IRRef pollref, uint8_t base_delta)
+{
+  MSize s, expected = 0, maxslots = framesize+1u+LJ_FR2;
+  IRRef previous = 0;
+  IRRef values[UINT8_MAX];
+  uint8_t valid[UINT8_MAX] = { 0 };
+  MSize bytecode_pos = 1;
+  MSize previous_pc = 0;
+  uintptr_t lo = (uintptr_t)proto_bc, hi;
+  BCIns ret;
+  MSize result_slot;
+  int saw_result = 0;
+  if (!proto_bc || proto_sizebc == 0 || framesize == 0 ||
+	!ir || nins <= REF_FIRST || nk == 0 || !snaps || !snapmap ||
+	!nsnap || !nsnapmap ||
+	proto_sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns)) return 0;
+  ret = arm64_ir_bc_acq(lo, proto_sizebc-1u);
+  result_slot = 1u+LJ_FR2+bc_a(ret);
+  hi = lo+(uintptr_t)proto_sizebc*sizeof(BCIns);
+  if (hi <= lo) return 0;
+  for (s = REF_FIRST; s < nins; s++) {
+    IRIns ins = ir_load_acq(&ir[s]);
+    if (ins.o == IR_SLOAD && ins.op1 >= baseslot &&
+	ins.op1-baseslot < numparams &&
+	ins.op2 == IRSLOAD_TYPECHECK && (ins.t.irt & IRT_GUARD) &&
+	(irt_type(ins.t) == IRT_NUM || irt_type(ins.t) == IRT_INT)) {
+      BCReg reg = (BCReg)(ins.op1-baseslot);
+      values[reg] = (IRRef)s;
+      valid[reg] = 1;
+    }
+  }
+  for (s = 0; s < nsnap; s++) {
+	const SnapShot *snap = &snaps[s];
+    MSize ofs = snap->mapofs;
+	MSize next = s+1u < nsnap ? snaps[s+1u].mapofs : nsnapmap;
+    MSize i, pcpos, previous_slot = 0;
+    uint64_t pcbase;
+	if (snap->ref < REF_FIRST || snap->ref >= nins ||
+	snap->ref < previous || ofs != expected || next < ofs ||
+	    next > nsnapmap || snap->nent > next-ofs ||
+	next-ofs-snap->nent != 1u+LJ_FR2 || snap->nslots < 1u+LJ_FR2 ||
+	    snap->nslots > maxslots || snap->topslot != framesize)
+      return 0;
+    previous = snap->ref;
+    expected = next;
+    for (i = 0; i < snap->nent; i++) {
+	    SnapEntry entry = snapmap[ofs+i];
+	IRRef value = snap_ref(entry);
+	IRType type;
+	if (snap_slot(entry) < 1u+LJ_FR2 || snap_slot(entry) >= snap->nslots ||
+	    (i != 0 && snap_slot(entry) <= previous_slot) ||
+	    (entry & 0x00ff0000u) != 0 ||
+	    (value < REF_BASE ?
+	     !((value >= nk && value < REF_TRUE) ||
+	       (value >= REF_TRUE && value <= REF_NIL)) :
+	     (value < REF_FIRST || value >= snap->ref)))
+	  return 0;
+	    type = irt_type(ir_load_acq(&ir[value]).t);
+	if (type != IRT_INT && type != IRT_NUM && type != IRT_TRUE &&
+	    type != IRT_FALSE && type != IRT_NIL)
+	  return 0;
+	if (irref_isk(value) && !arm64_ir_funcf_const_ref(ir, nk, value, type)) {
+	  return 0; }
+	if (snap_slot(entry) == result_slot && snap->ref == pollref) {
+	  saw_result = 1;
+	}
+	previous_slot = snap_slot(entry);
+    }
+    {
+	SnapEntry raw[1+LJ_FR2];
+	MSize i;
+	for (i = 0; i < 1u+LJ_FR2; i++) raw[i] = snapmap[ofs+snap->nent+i];
+	memcpy(&pcbase, raw, sizeof(pcbase));
+	if ((uint8_t)pcbase != base_delta ||
+	    !arm64_ir_pcpos((uintptr_t)(pcbase >> 8), lo, hi, &pcpos) ||
+	    pcpos <= previous_pc || pcpos > proto_sizebc-1u ||
+	    (s+1u == nsnap && pcpos != proto_sizebc-1u))
+	  return 0;
+	previous_pc = pcpos;
+	if (!arm64_ir_funcf_advance(ir, nins, nk, proto_bc, proto_sizebc,
+	    framesize, baseslot, pcpos, &bytecode_pos, values, valid))
+	  return 0;
+        for (i = 0; i < snap->nent; i++) {
+          SnapEntry entry = snapmap[ofs+i];
+          MSize slot = snap_slot(entry);
+          IRRef value = snap_ref(entry);
+          BCReg reg;
+          if (slot < 1u+LJ_FR2 || slot >= 1u+LJ_FR2+framesize ||
+              (reg = (BCReg)(slot-(1u+LJ_FR2))) >= framesize ||
+              !valid[reg] || values[reg] != value)
+            return 0;
+          if (slot == result_slot && snap->ref == pollref &&
+	      !arm64_ir_funcf_result_matches(proto_bc, proto_sizebc,
+		framesize, values, valid, value)) return 0;
+        }
+    }
+  }
+  return expected == nsnapmap && saw_result &&
+	 snaps[nsnap-1u].ref == pollref;
+}
+
+/* Frame slots simultaneously present in a native snapshot are concurrently
+** live. Their allocated sources must have distinct physical locations unless
+** the bytecode state proves the slots contain the same SSA value. */
+static int arm64_postra_funcf_locations(const LJArm64PostRAView *view,
+	IRRef semantic_nins)
+{
+  IRRef nins = semantic_nins;
+  MSize snapno;
+  for (snapno = 0; snapno < view->nsnap; snapno++) {
+	const SnapShot *snap = &view->snap[snapno];
+	MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap), n, m;
+	IRRef refs[UINT8_MAX];
+	RegSP locs[UINT8_MAX];
+	if (nent > UINT8_MAX) return 0;
+	for (n = 0; n < nent; n++) {
+	  SnapEntry entry = snapentry_acq(&view->snapmap[ofs+n]);
+	  IRRef value = snap_ref(entry);
+	  IRIns source;
+	  RegSP loc;
+	  if (irref_isk(value)) {
+	    refs[n] = value;
+	    locs[n] = REGSP_INIT;
+	    continue;
+	  }
+	  if (value < REF_FIRST || value >= snap_ref_acq(snap) || value >= nins)
+	    return 0;
+	  source = ir_load_acq(&view->ir[value]);
+	  loc = source.prev;
+	  if (ra_hasspill(regsp_spill(loc)) ||
+	      !arm64_scalar_postra_register(regsp_reg(loc), irt_type(source.t)))
+	    return 0;
+	  refs[n] = value;
+	  locs[n] = loc;
+	}
+	for (n = 0; n < nent; n++) {
+	  if (irref_isk(refs[n])) continue;
+	  for (m = n+1u; m < nent; m++)
+	    if (!irref_isk(refs[m]) && refs[n] != refs[m] &&
+		locs[n] == locs[m])
+	      return 0;
+	}
+  }
+  return 1;
+}
 
 static int arm64_postra_funcf_admit(const LJArm64PostRAView *view,
-	BCIns liveins, IRRef *semantic_ninsp)
+	BCIns liveins, int prepublication, IRRef *semantic_ninsp)
 {
   const IRIns *ir;
-  IRRef ref;
+  IRRef ref, pollref, semantic_nins;
+  IRIns base, suffix;
   if (view == NULL || (ir = view->ir) == NULL || view->snap == NULL ||
 	view->snapmap == NULL || view->proto_bc == NULL ||
 	view->nins <= REF_FIRST || view->nins >= REF_DROP ||
 	view->nk == 0 || view->nk > REF_TRUE || view->nsnap == 0 ||
 	view->nsnapmap == 0 || view->proto_sizebc == 0 ||
 	view->root_topslot == 0 || view->root_topslot > UINT8_MAX ||
-	view->base_delta != 0 ||
-	view->nk != REF_TRUE || view->nins != REF_BASE+4u ||
-	view->spadjust != 0 ||
+	view->base_delta != 0 || view->spadjust != 0 ||
 	!arm64_ir_funcf_bytecode(view->proto_bc, view->proto_sizebc,
-	  view->root_topslot, view->startins, liveins))
+	  view->root_topslot, view->proto_numparams, view->startins, liveins,
+	  prepublication) || !arm64_postra_constants(view)) {
+	return 0;
+	}
+  semantic_nins = view->nins;
+  suffix = ir_load_acq(&ir[semantic_nins-1u]);
+  if (suffix.o != IR_NOP || suffix.t.irt != IRT_NIL || suffix.op1 ||
+	suffix.op2 || suffix.s != SPS_NONE || suffix.prev)
     return 0;
-  for (ref = REF_TRUE; ref <= REF_NIL; ref++) {
-    IRIns k = ir_load_acq(&ir[ref]);
-    if (k.o != IR_KPRI || k.t.irt != (uint8_t)(REF_NIL-ref) ||
-	k.op12 != 0)
+  semantic_nins--;
+  if (semantic_nins <= REF_BASE+1u) return 0;
+  pollref = semantic_nins-1u;
+  base = ir_load_acq(&ir[REF_BASE]);
+  if (base.o != IR_BASE || base.t.irt != IRT_PGC || base.op1 || base.op2) return 0;
+  for (ref = REF_BASE+1u; ref < semantic_nins; ref++) {
+    IRIns ins = ir_load_acq(&ir[ref]);
+    IRType type = irt_type(ins.t);
+    if (ref == pollref) {
+      if (ins.o != IR_XPOLL || ins.t.irt != (IRT_NIL|IRT_GUARD) ||
+          ins.op1 != 1 || ins.op2 || ins.s != SPS_NONE)
+        return 0;
+    } else if (ins.o == IR_NOP) {
+      if (ins.t.irt != IRT_NIL || ins.op1 || ins.op2 ||
+	  ins.s != SPS_NONE || ins.prev != 0xff)
+        return 0;
+    } else if (ins.o == IR_SLOAD) {
+      if ((type != IRT_NUM && type != IRT_INT) ||
+          !arm64_ir_type_flags(ins.t, type, IRT_GUARD,
+		IRT_GUARD|IRT_ISPHI) || ins.op2 != IRSLOAD_TYPECHECK ||
+          ins.op1 < 1u+LJ_FR2 ||
+          ins.op1 >= view->root_topslot+1u+LJ_FR2 ||
+          !arm64_ir_funcf_slot_source(view->proto_bc, view->proto_sizebc,
+		view->proto_numparams, 1u+LJ_FR2, ins.op1) || !ra_hasreg(ins.r) ||
+          !arm64_scalar_postra_register(ins.r, type) || ra_hasspill(ins.s))
+        return 0;
+    } else if (ins.o == IR_ADDOV || ins.o == IR_ADD || ins.o == IR_SUB ||
+               ins.o == IR_MUL || ins.o == IR_DIV) {
+      IRIns a, b;
+      if ((ins.o == IR_ADDOV ?
+           (type != IRT_INT || ins.t.irt != (IRT_INT|IRT_GUARD)) :
+           (type != IRT_NUM || (ins.t.irt & ~(IRT_TYPE|IRT_ISPHI)))) ||
+          ins.op1 < REF_FIRST || ins.op1 >= ref ||
+          ins.op2 < REF_FIRST || ins.op2 >= ref)
+        return 0;
+      a = ir_load_acq(&ir[ins.op1]);
+      b = ir_load_acq(&ir[ins.op2]);
+      if (irt_type(a.t) != type || irt_type(b.t) != type ||
+	  ra_hasspill(regsp_spill(a.prev)) ||
+	  ra_hasspill(regsp_spill(b.prev)) ||
+	  !arm64_scalar_postra_register(regsp_reg(a.prev), type) ||
+	  !arm64_scalar_postra_register(regsp_reg(b.prev), type) ||
+	  (ins.op1 != ins.op2 && regsp_reg(a.prev) == regsp_reg(b.prev)) ||
+          !ra_hasreg(ins.r) ||
+          !arm64_scalar_postra_register(ins.r, type) || ra_hasspill(ins.s))
+        return 0;
+    } else {
       return 0;
+    }
   }
-  {
-    IRIns base = ir_load_acq(&ir[REF_BASE]);
-    IRIns entry = ir_load_acq(&ir[REF_BASE+1u]);
-    IRIns poll = ir_load_acq(&ir[REF_BASE+2u]);
-    IRIns suffix = ir_load_acq(&ir[REF_BASE+3u]);
-    if (base.o != IR_BASE || base.t.irt != IRT_PGC ||
-	base.op1 != 0 || base.op2 != 0 || base.s != SPS_NONE ||
-	entry.o != IR_NOP || entry.t.irt != IRT_NIL ||
-	entry.op1 != 0 || entry.op2 != 0 || entry.s != SPS_NONE ||
-	poll.o != IR_XPOLL || poll.t.irt != (IRT_NIL|IRT_GUARD) ||
-	poll.op1 != 1 || poll.op2 != 0 || poll.s != SPS_NONE ||
-	suffix.o != IR_NOP || suffix.t.irt != IRT_NIL ||
-	suffix.op1 != 0 || suffix.op2 != 0 || suffix.s != SPS_NONE ||
-	suffix.prev != 0)
-      return 0;
-  }
-  if (!arm64_ir_funcf_snapshots(view->snap, view->snapmap, view->nsnap,
-	view->nsnapmap, view->proto_bc, view->proto_sizebc,
-	view->root_topslot, view->base_delta))
+  if (!arm64_ir_funcf_scalar_snapshots(ir, semantic_nins, view->nk,
+      view->snap, view->nsnap, view->snapmap, view->nsnapmap,
+      view->proto_bc, view->proto_sizebc, view->proto_numparams,
+      view->root_topslot, 1u+LJ_FR2, pollref,
+      view->base_delta) ||
+	  !arm64_postra_funcf_locations(view, semantic_nins))
     return 0;
-  if (semantic_ninsp)
-    *semantic_ninsp = REF_BASE+3u;
+  if (semantic_ninsp) *semantic_ninsp = semantic_nins;
   return 1;
 }
 
@@ -2231,7 +2640,7 @@ static int arm64_postra_nonloop_admit(const LJArm64PostRAView *view,
   if (rootop != BC_FORL && rootop != BC_FUNCF)
     return 0;
   if (rootop == BC_FUNCF)
-    return arm64_postra_funcf_admit(view, view->startins, semantic_ninsp);
+    return arm64_postra_funcf_admit(view, view->startins, 0, semantic_ninsp);
   if (!arm64_postra_constants(view))
     return 0;
   maxslots = view->root_topslot+1u+LJ_FR2;
@@ -2475,7 +2884,7 @@ int lj_asm_arm64_postra_funcf_entry_admit(
 	bc_op(liveins) != BC_JFUNCF ||
 	bc_a(liveins) != bc_a(view->startins) || bc_d(liveins) == 0)
     return 0;
-  return arm64_postra_funcf_admit(view, liveins, semantic_ninsp);
+  return arm64_postra_funcf_admit(view, liveins, 0, semantic_ninsp);
 }
 
 static int arm64_ir_int_ref(const GCtrace *T, IRRef ref, IRRef before,
@@ -2784,80 +3193,60 @@ int lj_asm_arm64_side_postra_admit(const LJArm64SidePostRAView *view,
   return 1;
 }
 
-static int arm64_ir_funcf_snapshots(const SnapShot *snap,
-	const SnapEntry *snapmap, MSize nsnap, MSize nsnapmap,
-	const BCIns *proto_bc, MSize proto_sizebc, MSize root_topslot,
-	uint8_t base_delta)
-{
-  MSize result_slot;
-  SnapEntry pcraw[1+LJ_FR2];
-  uint64_t pcbase;
-  uintptr_t lo, hi, snappc;
-  MSize snappos;
-  const SnapShot *s0, *s1;
-  if (snap == NULL || snapmap == NULL || nsnap != 2 || nsnapmap != 5 ||
-	root_topslot == 0 || root_topslot > UINT8_MAX || base_delta != 0)
-    return 0;
-  lo = (uintptr_t)proto_bc;
-  LJ_STATIC_ASSERT((sizeof(BCIns) & (sizeof(BCIns)-1)) == 0);
-  if (proto_sizebc != 3 || lo == 0 ||
-	(lo & (sizeof(BCIns)-1)) != 0 ||
-	(uintptr_t)proto_sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns))
-    return 0;
-  hi = lo+(uintptr_t)proto_sizebc*sizeof(BCIns);
-  if (hi <= lo)
-    return 0;
-  result_slot = root_topslot+LJ_FR2;
-  if (result_slot > UINT8_MAX)
-    return 0;
-  s0 = &snap[0];
-  s1 = &snap[1];
-  if (snap_ref_acq(s0) != REF_BASE+1u || snap_mapofs_acq(s0) != 0 ||
-	snap_nent_acq(s0) != 0 || snap_nslots_acq(s0) != result_slot ||
-	snap_topslot_acq(s0) != root_topslot ||
-	snap_ref_acq(s1) != REF_BASE+2u || snap_mapofs_acq(s1) != 2 ||
-	snap_nent_acq(s1) != 1 || snap_nslots_acq(s1) != result_slot+1u ||
-	snap_topslot_acq(s1) != root_topslot ||
-	snapentry_acq(&snapmap[2]) != SNAP(result_slot, 0, REF_TRUE))
-    return 0;
-  pcraw[0] = snapentry_acq(&snapmap[0]);
-  pcraw[1] = snapentry_acq(&snapmap[1]);
-  LJ_STATIC_ASSERT(sizeof(pcraw) == sizeof(pcbase));
-  memcpy(&pcbase, pcraw, sizeof(pcbase));
-  snappc = (uintptr_t)(pcbase >> 8);
-  if ((uint8_t)pcbase != base_delta ||
-	!arm64_ir_pcpos(snappc, lo, hi, &snappos) || snappos != 1u)
-    return 0;
-  pcraw[0] = snapentry_acq(&snapmap[3]);
-  pcraw[1] = snapentry_acq(&snapmap[4]);
-  memcpy(&pcbase, pcraw, sizeof(pcbase));
-  snappc = (uintptr_t)(pcbase >> 8);
-  return (uint8_t)pcbase == base_delta &&
-	 arm64_ir_pcpos(snappc, lo, hi, &snappos) && snappos == 2u;
-}
 
 static int arm64_ir_funcf_shape(const jit_State *J, const GCtrace *T,
 	const GCproto *pt, LJArm64IRReject *reject)
 {
   const IRIns *ir = T->ir;
-  if (J->loopref != 0 || T->nins != REF_BASE+3u ||
-	T->nk != REF_TRUE ||
-	ir[REF_BASE].o != IR_BASE || ir[REF_BASE].t.irt != IRT_PGC ||
-	ir[REF_BASE].op1 != 0 || ir[REF_BASE].op2 != 0 ||
-	ir[REF_BASE+1u].o != IR_NOP ||
-	ir[REF_BASE+1u].t.irt != IRT_NIL ||
-	ir[REF_BASE+1u].op1 != 0 || ir[REF_BASE+1u].op2 != 0 ||
-	ir[REF_BASE+2u].o != IR_XPOLL ||
-	ir[REF_BASE+2u].t.irt != (IRT_NIL|IRT_GUARD) ||
-	ir[REF_BASE+2u].op1 != 1 || ir[REF_BASE+2u].op2 != 0)
-    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPCODE,
-			   REF_BASE, IR_XPOLL, (uint16_t)bc_op(T->startins));
-  if (!arm64_ir_funcf_snapshots(T->snap, T->snapmap, T->nsnap,
-	T->nsnapmap, proto_bc(pt), pt->sizebc, pt->framesize,
-	(uint8_t)(J->baseslot-2u)))
-    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
-			   REF_BASE+2u, IR_XPOLL, 0);
+  IRRef ref, poll = 0;
+  if (J->loopref != 0 || T->nins <= REF_BASE+1u ||
+      !arm64_ir_funcf_bytecode(proto_bc(pt), pt->sizebc, pt->framesize,
+	pt->numparams, T->startins, T->startins, 1) ||
+      ir[REF_BASE].o != IR_BASE || ir[REF_BASE].t.irt != IRT_PGC ||
+      ir[REF_BASE].op1 != 0 || ir[REF_BASE].op2 != 0)
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
+	REF_BASE, IR_BASE, BC_FUNCF);
+  for (ref = REF_BASE+1u; ref < T->nins; ref++) {
+    const IRIns *ins = &ir[ref];
+    IRType type = irt_type(ins->t);
+    if (ins->o == IR_XPOLL) {
+      if (poll || ref+1u != T->nins ||
+          ins->t.irt != (IRT_NIL|IRT_GUARD) || ins->op1 != 1 || ins->op2)
+        goto bad_funcf;
+      poll = ref;
+    } else if (ins->o == IR_NOP) {
+      if (ins->t.irt != IRT_NIL || ins->op1 || ins->op2 || ins->s)
+        goto bad_funcf;
+    } else if (ins->o == IR_SLOAD) {
+      if ((type != IRT_NUM && type != IRT_INT) ||
+          !arm64_ir_type_flags(ins->t, type, IRT_GUARD,
+		IRT_GUARD|IRT_ISPHI) || ins->op2 != IRSLOAD_TYPECHECK ||
+          ins->op1 < 1u+LJ_FR2 ||
+          ins->op1 >= pt->framesize+1u+LJ_FR2 ||
+          !arm64_ir_funcf_slot_source(proto_bc(pt), pt->sizebc,
+		pt->numparams, J->baseslot, ins->op1))
+        goto bad_funcf;
+    } else if (ins->o == IR_ADDOV || ins->o == IR_ADD || ins->o == IR_SUB ||
+               ins->o == IR_MUL || ins->o == IR_DIV) {
+      if ((ins->o == IR_ADDOV ?
+           (type != IRT_INT || ins->t.irt != (IRT_INT|IRT_GUARD)) :
+           (type != IRT_NUM || (ins->t.irt & ~(IRT_TYPE|IRT_ISPHI)))) ||
+          !arm64_scalar_ir_ref(T, ins->op1, ref, type) ||
+          !arm64_scalar_ir_ref(T, ins->op2, ref, type))
+        goto bad_funcf;
+    } else {
+      goto bad_funcf;
+    }
+  }
+  if (!poll || !arm64_ir_funcf_scalar_snapshots(ir, T->nins, T->nk,
+      T->snap, T->nsnap, T->snapmap, T->nsnapmap,
+      proto_bc(pt), pt->sizebc, pt->numparams, pt->framesize,
+      J->baseslot, poll, (uint8_t)(J->baseslot-2u)))
+    goto bad_funcf;
   return 1;
+ bad_funcf:
+  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND, ref,
+	(IROp)ir[ref < T->nins ? ref : REF_BASE].o, BC_FUNCF);
 }
 
 static int arm64_ir_int_binary(const GCtrace *T, const IRIns *ir,
@@ -3332,8 +3721,10 @@ static int arm64_ir_nonloop_admit(const jit_State *J, const GCtrace *T,
 #endif
   if (!arm64_ir_constants(T, reject))
     return 0;
-  if (startop == BC_FUNCF)
-    return arm64_ir_funcf_shape(J, T, pt, reject);
+  if (startop == BC_FUNCF) {
+    int ok = arm64_ir_funcf_shape(J, T, pt, reject);
+    return ok;
+  }
   {
     SnapNo snapno;
     for (snapno = 0; snapno < T->nsnap; snapno++)

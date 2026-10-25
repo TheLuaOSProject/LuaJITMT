@@ -3896,41 +3896,21 @@ static LJ_AINLINE GCtrace *trace_root_entry_slot_acq(jit_State *J,
   return traceref_fromgco_safe(o);
 }
 
-/* Prove the complete live three-word function generation. The immutable trace
-** view carries the original FUNCF word, while the prototype header is the
-** exact JFUNCF word consumed by the VM. All three acquire-loaded words are
-** reread before success so a test mutation cannot splice two generations. */
+static int trace_root_funcf_shape(GCproto *pt, const BCIns *pc,
+	BCIns startins);
+
+/* Validate mutable FUNCF entry metadata. The sealed entry-bytecode copy binds
+** the complete body generation separately; do not rescan its grammar here. */
 static int trace_root_entry_funcf_generation_valid(const GCproto *pt,
 	const BCIns *pc, BCIns startins, BCIns liveins)
 {
-  const BCIns *bc;
-  uintptr_t lo;
-  BCIns kpri, ret;
-  BCReg result;
-  LJ_STATIC_ASSERT((sizeof(BCIns) & (sizeof(BCIns)-1u)) == 0);
-  if (pt == NULL || pc == NULL || pt->sizebc != 3 || pt->framesize == 0 ||
-	pt->framesize > UINT8_MAX || (pt->flags & PROTO_VARARG) != 0 ||
-	bc_op(startins) != BC_FUNCF || bc_a(startins) != pt->framesize ||
-	bc_d(startins) != 0 || bc_op(liveins) != BC_JFUNCF ||
-	bc_a(liveins) != bc_a(startins) || bc_d(liveins) == 0)
-    return 0;
-  bc = proto_bc(pt);
-  lo = (uintptr_t)(const void *)bc;
-  if (lo == 0 || (lo & (sizeof(BCIns)-1u)) != 0 || pc != bc ||
-	(uintptr_t)pt->sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns))
-    return 0;
-  result = (BCReg)(pt->framesize-1u);
-  if (pt->numparams > result ||
-	(BCIns)la_load32_acq((const uint32_t *)&bc[0]) != liveins)
-    return 0;
-  kpri = (BCIns)la_load32_acq((const uint32_t *)&bc[1]);
-  ret = (BCIns)la_load32_acq((const uint32_t *)&bc[2]);
-  return bc_op(kpri) == BC_KPRI && bc_a(kpri) == result &&
-	 bc_d(kpri) == 2u && bc_op(ret) == BC_RET1 &&
-	 bc_a(ret) == result && bc_d(ret) == 2u &&
-	 (BCIns)la_load32_acq((const uint32_t *)&bc[0]) == liveins &&
-	 (BCIns)la_load32_acq((const uint32_t *)&bc[1]) == kpri &&
-	 (BCIns)la_load32_acq((const uint32_t *)&bc[2]) == ret;
+  return pt != NULL && pc == proto_bc(pt) &&
+	(pt->flags & PROTO_VARARG) == 0 && pt->sizebc >= 3 &&
+	pt->sizebc <= UINT8_MAX && pt->framesize != 0 &&
+	pt->framesize <= UINT8_MAX && pt->numparams < pt->framesize &&
+	bc_op(startins) == BC_FUNCF && bc_a(startins) == pt->framesize &&
+	bc_d(startins) == 0 && bc_op(liveins) == BC_JFUNCF &&
+	bc_a(liveins) == bc_a(startins) && bc_d(liveins) != 0;
 }
 
 static LJ_AINLINE int trace_root_entry_bytecode_valid(const BCIns *pc,
@@ -3965,14 +3945,13 @@ static int trace_root_entry_loop_geometry(uint32_t sourceop,
     return 0;
   pos = proto_bcpos(pt, pc);
   if (sourceop == (uint32_t)BC_JFUNCF) {
-    BCReg result;
-    if (pos != 0 || pt->sizebc != 3 || pt->framesize == 0 ||
+    if (pos != 0 || pt->sizebc < 3 || pt->sizebc > UINT8_MAX ||
+	pt->framesize == 0 ||
 	pt->framesize > UINT8_MAX || (pt->flags & PROTO_VARARG) != 0 ||
 	bc_op(startins) != BC_FUNCF || bc_a(startins) != pt->framesize ||
 	bc_d(startins) != 0)
       return 0;
-    result = (BCReg)(pt->framesize-1u);
-    return pt->numparams <= result;
+    return pt->numparams < pt->framesize;
   }
   if (sourceop == (uint32_t)BC_JFORL) {
     ra = bc_a(startins);
@@ -9814,33 +9793,18 @@ static int trace_root_forl_tuple(GCproto *pt, const BCIns *pc,
          (BCIns)la_load32_acq((const uint32_t *)&bc[(BCPos)foripos]) == fori;
 }
 
-/* Admit only the immutable three-word fixed-function seed used by the first
-** ARM64 function-root tranche. It has no body effects: the sole instruction
-** writes one primitive to the final frame slot and RET1 returns that slot. */
+/* Admit a fixed function only when its bytecode is a bounded scalar program.
+** The recorder and allocator validators independently prove the resulting IR
+** and snapshot dataflow; this check binds the admitted trace to one bytecode
+** generation and rejects effects before recording starts. */
 static int trace_root_funcf_shape(GCproto *pt, const BCIns *pc,
 	BCIns startins)
 {
-  const BCIns *bc;
-  BCIns kpri, ret;
-  BCReg result;
-  if (!pt || !pc || pt->sizebc != 3 || pt->framesize == 0 ||
-      (pt->flags & PROTO_VARARG) != 0 || bc_op(startins) != BC_FUNCF ||
-      bc_a(startins) != pt->framesize || bc_d(startins) != 0)
-    return 0;
-  bc = proto_bc(pt);
-  if (pc != bc)
-    return 0;
-  result = (BCReg)(pt->framesize-1u);
-  if (pt->numparams > result)
-    return 0;
-  kpri = (BCIns)la_load32_acq((const uint32_t *)&bc[1]);
-  ret = (BCIns)la_load32_acq((const uint32_t *)&bc[2]);
-  return bc_op(kpri) == BC_KPRI && bc_a(kpri) == result &&
-	 bc_d(kpri) == 2u && bc_op(ret) == BC_RET1 &&
-	 bc_a(ret) == result && bc_d(ret) == 2u &&
-	 (BCIns)la_load32_acq((const uint32_t *)&bc[0]) == startins &&
-	 (BCIns)la_load32_acq((const uint32_t *)&bc[1]) == kpri &&
-	 (BCIns)la_load32_acq((const uint32_t *)&bc[2]) == ret;
+	if (!pt || !pc || pc != proto_bc(pt) ||
+	    (pt->flags & PROTO_VARARG) != 0)
+	  return 0;
+	return lj_asm_arm64_funcf_bytecode(proto_bc(pt), pt->sizebc,
+	  pt->framesize, pt->numparams, startins, startins, 1);
 }
 
 static int trace_root_arm64_generation_valid(GCproto *pt, const BCIns *pc,

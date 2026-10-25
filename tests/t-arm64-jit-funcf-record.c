@@ -1,6 +1,6 @@
 /*
-** macOS ARM64 native-entry contract for the first fixed FUNCF root.
-** The exact function(a, b) return true end trace is recorded, published as
+** macOS ARM64 native-entry contract for fixed FUNCF scalar roots.
+** Several primitive-return and arithmetic bodies are recorded, published as
 ** JFUNCF and entered through the certified fixed-function header path.
 */
 
@@ -904,15 +904,324 @@ static void run_rejection(const char *name, const char *definition,
 
 static void run_rejections(void)
 {
-  run_rejection("__arm64_funcf_false",
-    "function __arm64_funcf_false(a, b) return false end\n", NEG_FALSE);
-  run_rejection("__arm64_funcf_nil",
-    "function __arm64_funcf_nil(a, b) return nil end\n", NEG_NIL);
-  run_rejection("__arm64_funcf_number",
-    "function __arm64_funcf_number(a, b) return 42 end\n", NEG_NUMBER);
   run_rejection("__arm64_funcf_nontrivial",
     "function __arm64_funcf_nontrivial(a, b) return a == b end\n",
     NEG_NONTRIVIAL);
+}
+
+static void call_scalar_value(lua_State *L, const char *name,
+	 lua_Number a, lua_Number b, int nargs, int expected_type,
+	 lua_Number expected_number, int expected_boolean)
+{
+  int status;
+  lua_getglobal(L, name);
+  if (nargs > 0) lua_pushnumber(L, a);
+  if (nargs > 1) lua_pushnumber(L, b);
+  status = lua_pcall(L, nargs, 1, 0);
+  if (status != LUA_OK) {
+    fprintf(stderr, "ARM64 FUNCF value call failed: %s\n",
+	    lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
+  assert(lua_type(L, -1) == expected_type);
+  if (expected_type == LUA_TNUMBER)
+    assert(lua_tonumber(L, -1) == expected_number);
+  else if (expected_type == LUA_TBOOLEAN)
+    assert(lua_toboolean(L, -1) == expected_boolean);
+  lua_pop(L, 1);
+}
+
+static void run_value_native(const char *name, const char *definition,
+	 lua_Number a, lua_Number b, int nargs, int expected_type,
+	 lua_Number expected_number, int expected_boolean)
+{
+  lua_State *L = luaL_newstate();
+  jit_State *J;
+  GCproto *pt;
+  GCtrace *T = NULL;
+  unsigned i;
+  assert(L != NULL);
+  luaL_openlibs(L);
+  run_lua(L,
+    "collectgarbage('stop'); jit.flush(); jit.on()\n"
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=4')\n");
+  run_lua(L, definition);
+  J = L2J(L);
+  pt = global_proto(L, name);
+  for (i = 0; i < 256; i++) {
+    lua_Number av = expected_number == -1 ? a+i : a;
+    lua_Number bv = expected_number == -1 ? b+i : b;
+    lua_Number want = expected_number == -1 ? bv : expected_number;
+    call_scalar_value(L, name, av, bv, nargs, expected_type,
+	      want, expected_boolean);
+    if (trace_runnable_acq(traceref_safe(J, 1), 1)) {
+      T = traceref_safe(J, 1);
+      break;
+    }
+  }
+  if (T == NULL || trace_startins_acq(T) == 0)
+    fprintf(stderr, "FUNCF value did not publish: %s\n", name);
+  assert(T != NULL && trace_startins_acq(T) != 0);
+  assert(bc_op(trace_startins_acq(T)) == BC_FUNCF);
+  assert(bc_op((BCIns)la_load32_acq(
+	(const uint32_t *)proto_bc(pt))) == BC_JFUNCF);
+  assert(trace_arm64_admission_acq(T) == TRACE_ARM64_TRUE_FUNCF_ADMITTED);
+  lj_trace_test_root_entry_reset();
+  if (expected_number == -1)
+    call_scalar_value(L, name, a+256, b+256, nargs, expected_type,
+	      b+256, expected_boolean);
+  else
+    call_scalar_value(L, name, a, b, nargs, expected_type,
+	      expected_number, expected_boolean);
+  assert(lj_trace_test_root_entry_publishes() == 1);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+  assert(lj_trace_test_exit_calls() == 0);
+  lua_close(L);
+}
+
+static void call_scalar_number(lua_State *L, const char *name,
+	 lua_Number a, lua_Number b, int nargs, lua_Number want)
+{
+  int status;
+  lua_getglobal(L, name);
+  lua_pushnumber(L, a);
+  if (nargs == 2) lua_pushnumber(L, b);
+  status = lua_pcall(L, nargs, 1, 0);
+  if (status != LUA_OK) {
+    fprintf(stderr, "ARM64 FUNCF scalar call failed: %s\n",
+	    lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
+  assert(lua_isnumber(L, -1));
+  assert(lua_tonumber(L, -1) == want);
+  lua_pop(L, 1);
+}
+
+static void run_scalar_native(const char *name, const char *definition,
+	 lua_Number a, lua_Number b, int nargs, lua_Number want)
+{
+  lua_State *L = luaL_newstate();
+  jit_State *J;
+  GCproto *pt;
+  GCtrace *T = NULL;
+  unsigned i;
+  assert(L != NULL);
+  luaL_openlibs(L);
+  run_lua(L,
+    "collectgarbage('stop'); jit.flush(); jit.on()\n"
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=4')\n");
+  run_lua(L, definition);
+  J = L2J(L);
+  pt = global_proto(L, name);
+  for (i = 0; i < 256; i++) {
+    call_scalar_number(L, name, a, b, nargs, want);
+    if (trace_runnable_acq(traceref_safe(J, 1), 1)) {
+      T = traceref_safe(J, 1);
+      break;
+    }
+  }
+  if (T == NULL || trace_startins_acq(T) == 0)
+    fprintf(stderr, "FUNCF scalar did not publish: %s\n", name);
+  assert(T != NULL && trace_startins_acq(T) != 0);
+  assert(bc_op(trace_startins_acq(T)) == BC_FUNCF);
+  assert(bc_op((BCIns)la_load32_acq(
+	(const uint32_t *)proto_bc(pt))) == BC_JFUNCF);
+  assert(trace_arm64_admission_acq(T) == TRACE_ARM64_TRUE_FUNCF_ADMITTED);
+  {
+    LJArm64PostRAView view;
+    IRIns *ir = trace_ir_acq(T);
+    IRRef ref, load = 0;
+    BCIns live = (BCIns)la_load32_acq(
+	(const uint32_t *)proto_bc(pt));
+    memset(&view, 0, sizeof(view));
+    view.ir = ir;
+    view.owner = T;
+    view.snap = trace_snap_acq(T);
+    view.snapmap = trace_snapmap_acq(T);
+    view.proto_bc = proto_bc(pt);
+    view.nins = trace_nins_acq(T);
+    view.nk = trace_nk_acq(T);
+    view.nsnap = trace_nsnap_acq(T);
+    view.nsnapmap = trace_nsnapmap_acq(T);
+    view.spadjust = trace_spadjust_acq(T);
+    view.proto_sizebc = pt->sizebc;
+    view.proto_numparams = pt->numparams;
+    view.root_topslot = trace_topslot_acq(T);
+    view.startins = trace_startins_acq(T);
+    view.base_delta = 0;
+    assert(lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
+    for (ref = REF_FIRST; ref < view.nins; ref++) {
+      if (ir_load_acq(&ir[ref]).o == IR_SLOAD) {
+	load = ref;
+	break;
+      }
+    }
+    assert(load != 0);
+    ir[load].op1++;
+    assert(!lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
+    ir[load].op1--;
+    assert(lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
+    if (strcmp(name, "__arm64_funcf_add") == 0) {
+      {
+      SnapShot snapshots[8];
+      SnapEntry entries[1024];
+      LJArm64PostRAView forged = view;
+      IRRef arg = 0, result = 0, binary = 0;
+      RegSP saved;
+      MSize i, last, ofs, nent, insert;
+      assert(view.nsnap <= sizeof(snapshots)/sizeof(snapshots[0]));
+      assert(view.nsnapmap < sizeof(entries)/sizeof(entries[0]));
+      memcpy(snapshots, view.snap, view.nsnap*sizeof(SnapShot));
+      memcpy(entries, view.snapmap, view.nsnapmap*sizeof(SnapEntry));
+      last = view.nsnap-1u;
+      ofs = snap_mapofs_acq(&snapshots[last]);
+      nent = snap_nent_acq(&snapshots[last]);
+      for (i = 0; i < nent; i++) {
+	IRRef value = snap_ref(entries[ofs+i]);
+	if (!irref_isk(value) && result == 0) result = value;
+      }
+      for (ref = REF_FIRST; ref < view.nins; ref++) {
+	IRIns src = ir_load_acq(&ir[ref]);
+	if (src.o == IR_SLOAD && irt_type(src.t) == IRT_NUM &&
+	    src.prev != ir[result].prev && arg == 0)
+	  arg = ref;
+	if ((src.o == IR_ADD || src.o == IR_SUB || src.o == IR_MUL ||
+	     src.o == IR_DIV) && src.op1 != src.op2)
+	  binary = ref;
+      }
+      assert(result != 0 && arg != 0 && result != arg && binary != 0);
+      insert = ofs;
+      for (i = 0; i < nent; i++) {
+	BCReg slot = snap_slot(entries[ofs+i]);
+	assert(slot != (BCReg)ir[arg].op1);
+	if (slot > (BCReg)ir[arg].op1) break;
+	insert++;
+      }
+      memmove(&entries[insert+1u], &entries[insert],
+	(view.nsnapmap-insert)*sizeof(SnapEntry));
+      entries[insert] = SNAP((BCReg)ir[arg].op1, 0, arg);
+      snapshots[last].nent++;
+      forged.snap = snapshots;
+      forged.snapmap = entries;
+      forged.nsnapmap++;
+      assert(lj_asm_arm64_postra_funcf_entry_admit(&forged, live, NULL));
+      saved = ir[result].prev;
+      ir[result].prev = ir[arg].prev;
+      assert(!lj_asm_arm64_postra_funcf_entry_admit(&forged, live, NULL));
+      ir[result].prev = saved;
+      assert(lj_asm_arm64_postra_funcf_entry_admit(&forged, live, NULL));
+	/* Inputs are simultaneously live at the instruction even if one is not
+	** in a later snapshot. Distinct SSA operands cannot share one location. */
+	{
+	  IRRef left = ir[binary].op1, right = ir[binary].op2;
+	  RegSP rightloc = ir[right].prev;
+	  assert(left < view.nins && right < view.nins && left != right);
+	  ir[right].prev = ir[left].prev;
+	  assert(!lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
+	  ir[right].prev = rightloc;
+	  assert(lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
+	}
+      }
+    }
+  }
+  lj_trace_test_root_entry_reset();
+  call_scalar_number(L, name, a, b, nargs, want);
+  assert(lj_trace_test_root_entry_publishes() == 1);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+  assert(lj_trace_test_exit_calls() == 0);
+  lua_close(L);
+}
+
+static lua_Number call_integer_add(lua_State *L, const char *name,
+	 lua_Integer a, lua_Integer b)
+{
+  int status;
+  lua_getglobal(L, name);
+  lua_pushinteger(L, a);
+  lua_pushinteger(L, b);
+  status = lua_pcall(L, 2, 1, 0);
+  if (status != LUA_OK) {
+    fprintf(stderr, "ARM64 FUNCF integer call failed: %s\n",
+	    lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
+  assert(lua_isnumber(L, -1));
+  {
+    lua_Number result = lua_tonumber(L, -1);
+    lua_pop(L, 1);
+    return result;
+  }
+}
+
+static void run_integer_addov_native(void)
+{
+  const char *name = "__arm64_funcf_addov";
+  lua_State *L = luaL_newstate();
+  jit_State *J;
+  GCtrace *T = NULL;
+  IRRef ref;
+  unsigned i;
+  int saw_addov = 0;
+  assert(L != NULL);
+  luaL_openlibs(L);
+  run_lua(L,
+    "collectgarbage('stop'); jit.flush(); jit.on()\n"
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=4')\n"
+    "function __arm64_funcf_addov(a,b) return a+b end\n");
+  J = L2J(L);
+  for (i = 0; i < 256; i++) {
+    assert(call_integer_add(L, name, 100+i, 200+i) == 300+2*i);
+    if (trace_runnable_acq(traceref_safe(J, 1), 1)) {
+      T = traceref_safe(J, 1);
+      break;
+    }
+  }
+  assert(T != NULL && bc_op(trace_startins_acq(T)) == BC_FUNCF);
+  for (ref = REF_FIRST; ref < trace_nins_acq(T); ref++)
+    if (ir_load_acq(&trace_ir_acq(T)[ref]).o == IR_ADDOV)
+      saw_addov = 1;
+  assert(saw_addov);
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  assert(call_integer_add(L, name, 2000, 3000) == 5000);
+  assert(lj_trace_test_root_entry_publishes() == 1);
+  assert(lj_trace_test_exit_calls() == 0);
+  assert(call_integer_add(L, name, 2147483647, 1) == 2147483648.0);
+  assert(lj_trace_test_root_entry_publishes() == 2);
+  assert(lj_trace_test_exit_calls() >= 1);
+  lua_close(L);
+}
+
+static void run_scalar_positives(void)
+{
+  run_value_native("__arm64_funcf_false",
+	"function __arm64_funcf_false(a,b) return false end\n",
+	0, 0, 0, LUA_TBOOLEAN, 0, 0);
+  run_value_native("__arm64_funcf_nil",
+	"function __arm64_funcf_nil(a,b) return nil end\n",
+	0, 0, 0, LUA_TNIL, 0, 0);
+  run_value_native("__arm64_funcf_number",
+	"function __arm64_funcf_number(a,b) return 42 end\n",
+	0, 0, 0, LUA_TNUMBER, 42, 0);
+  run_value_native("__arm64_funcf_argument",
+	"function __arm64_funcf_argument(a,b) return b end\n",
+	0, 0, 2, LUA_TNUMBER, -1, 0);
+  run_scalar_native("__arm64_funcf_add",
+	"function __arm64_funcf_add(a, b) return a+b end\n",
+	10.5, 2.25, 2, 12.75);
+  run_scalar_native("__arm64_funcf_sub",
+	"function __arm64_funcf_sub(a, b) return a-b end\n",
+	10.5, 2.25, 2, 8.25);
+  run_scalar_native("__arm64_funcf_mul",
+	"function __arm64_funcf_mul(a, b) return a*b end\n",
+	10.5, 2.25, 2, 23.625);
+  run_scalar_native("__arm64_funcf_div",
+	"function __arm64_funcf_div(a, b) return a/b end\n",
+	10.5, 2.5, 2, 4.2);
+  run_scalar_native("__arm64_funcf_multi",
+	"function __arm64_funcf_multi(a,b) local x=a+b; local y=x*a; return y-b end\n",
+	3, 2, 2, 13);
+  run_integer_addov_native();
 }
 
 int main(int argc, char **argv)
@@ -921,8 +1230,9 @@ int main(int argc, char **argv)
   assert(strcmp(argv[1], "default") == 0 ||
 	 strcmp(argv[1], "randomized") == 0);
   run_positive();
+  run_scalar_positives();
   run_rejections();
-  puts("arm64_jit_funcf_record OK: exact true FUNCF published and entered natively");
+  puts("arm64_jit_funcf_record OK: scalar FUNCF values published and entered natively");
   return 0;
 }
 

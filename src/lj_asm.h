@@ -125,6 +125,9 @@ LJ_FUNC int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
 LJ_FUNC int lj_asm_arm64_postra_funcf_entry_admit(
 	const LJArm64PostRAView *view, BCIns liveins,
 	IRRef *semantic_ninsp);
+LJ_FUNC int lj_asm_arm64_funcf_bytecode(const BCIns *bc, MSize sizebc,
+	MSize framesize, MSize numparams, BCIns startins, BCIns liveins,
+	int prepublication);
 LJ_FUNC int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
 	LJArm64IRReject *reject);
 LJ_FUNC const LJArm64SideShape *lj_asm_arm64_side_shape(ExitNo exitno);

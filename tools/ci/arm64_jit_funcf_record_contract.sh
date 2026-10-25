@@ -123,294 +123,95 @@ pauth_vm_disasm=$tmpdir/vm-arm64e.disasm
 pauth_jfuncf_disasm=$tmpdir/vm-arm64e-jfuncf.disasm
 restore_needed=1
 
-# Freeze publication, the native RETURN path, entry-certificate mutations and
-# the terminal XPOLL witness. Calls with zero, one and two arguments must all
-# enter natively after the VM has filled missing fixed parameters.
+# The C fixture itself exercises actual native publication for each supported
+# scalar operation and value class, plus fail-closed mutations and entry races.
+# Keep these checks about the evidence being run, not one particular IR layout.
 for required in \
-  'function __arm64_funcf_true(a, b) return true end' \
-  'trace_link_acq(T) == 0' \
-  'trace_linktype_acq(T) == LJ_TRLINK_RETURN' \
-  'flags == TRACE_ARM64_TRUE_FUNCF_ADMITTED' \
-  'trace_mcloop_acq(T) == 0' \
-  'trace_spadjust_acq(T) == 0' \
-  'FUNCF_R_SEPARATOR, IR_NOP, IRT_NIL, 0, 0' \
-  'FUNCF_R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0' \
-  'trace_nsnap_acq(T) == 2' \
-  'trace_nsnapmap_acq(T) == 5' \
-  'SNAP(result_slot, 0, REF_TRUE)' \
-  'expect_native_jfuncf_boundary(L, 1)' \
-  'expect_native_jfuncf_boundary(L, 2)' \
-  'expect_native_jfuncf_boundary(L, 3)' \
-  'expect_native_jfuncf_boundary(L, 4)' \
-  'test_funcf_entry_view_preflight(T, pt)' \
-  'lj_asm_arm64_postra_funcf_entry_admit(NULL, live, NULL)' \
-  'assert(view.ir == NULL)' \
-  'lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL)' \
-  'test_funcf_metadata_certificate(L, fn, T)' \
-  'TRACE_ARM64_TRUE_FUNCF_ADMITTED |' \
-  'ir[FUNCF_R_SUFFIX].s = SPS_FIRST' \
-  'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA' \
-  'test_funcf_generation_race(L, fn, T, (BCIns *)&proto_bc(pt)[0]' \
-  'test_funcf_generation_race(L, fn, T, (BCIns *)&proto_bc(pt)[1]' \
-  'test_funcf_generation_race(L, fn, T, (BCIns *)&proto_bc(pt)[2]' \
-  'expect_funcf_mcode_tail(J, T)' \
-  'assert(nadd == 1 && nsub == 0)' \
-  'assert(tail[-1] == indirect)' \
-  'assert(tail[-3] == add_fixed)' \
-  'assert(tail[-2] == ldr_interp)' \
-  'assert(tail[-2] == add_fixed)' \
-  'A64F_S26(bytes/(intptr_t)sizeof(MCode))' \
-  'trace_exittab_nslots_acq(T) == 2' \
-  'gate[3] ==' \
-  'A64I_LDARx | A64F_D(RID_LR)' \
-  'trace_exittarget_arm64_acq(T, (ExitNo)i) == fallback' \
-  'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION' \
-  'test_funcf_native_xpoll(L, "__arm64_funcf_true", T)' \
-  'lj_trace_test_first_exitno() == 1' \
-  'lj_trace_test_last_exitno() == 1' \
-  'lj_trace_test_root_entry_publishes() == 1' \
-  'lj_trace_test_root_entry_cleanups() == 0' \
-  'lj_tg_in_native_acq(tg) == 0' \
-  'gc2_hs_epoch_acq(g) == saved_epoch' \
-  'lj_tg_vmstate_load_acq(tg) == saved_vmstate' \
-  'L->base == saved_base' \
-  'L->cframe == saved_cframe' \
-  'lua_gettop(L) == saved_top' \
-  'trace_runnable_acq(T, 1)' \
-  'lj_tg_load_jit_base(tg) == NULL' \
-  'test_funcf_native_stopreq(L, "__arm64_funcf_true", T)' \
-  'gc2_hs_actions_rel(race->g, LJ_GC2_HS_STOPREQ)' \
-  'gc2_hs_pending_rel(race->g, 1)' \
-  'gc2_hs_epoch_rel(race->g, race->epoch+1u)' \
-  'lj_tg_reqmask_rel(race->tg, LJ_GC2_HS_STOPREQ)' \
-  'lj_tg_poll_rel(race->tg, 1)' \
-  'status == LUA_ERRRUN' \
-  'thread interrupted: VM shutdown' \
-  'gc2_hs_epoch_acq(g) == saved_epoch+1u' \
-  'lj_tg_hs_epoch_ack_acq(tg) == saved_epoch+1u' \
-  '(lj_tg_flags_acq(tg) & TGF_STOPREQ) != 0' \
-  '(lj_tg_flags_acq(tg) & TGF_STOPREQ_FRESH) == 0' \
-  'run_lua(L, "jit.flush(); jit.opt.start('\''hotloop=1'\'')\n");' \
-  'trace_traceno_acq(T) == 1' \
+  'run_scalar_positives();' \
+  'run_rejections();' \
+  'run_integer_addov_native();' \
   '__arm64_funcf_false' \
   '__arm64_funcf_nil' \
   '__arm64_funcf_number' \
-  '__arm64_funcf_nontrivial'; do
-  grep -F "$required" "$fixture_source" >/dev/null || {
-    echo "ARM64 FUNCF fixture lost required proof: $required" >&2
-    exit 1
-  }
-done
-
-# Recorder ingress validates one immutable three-word header generation, and
-# does not share the LOOP/FORL start geometry.
-awk '/^static int trace_root_funcf_shape/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$trace_source" >"$funcf_generation"
-for required in \
-  'pt->sizebc != 3' \
-  '(pt->flags & PROTO_VARARG) != 0' \
-  'bc_op(startins) != BC_FUNCF' \
-  'bc_a(startins) != pt->framesize' \
-  'bc_d(startins) != 0' \
-  'pt->numparams > result' \
-  'bc_op(kpri) == BC_KPRI' \
-  'bc_d(kpri) == 2u' \
-  'bc_op(ret) == BC_RET1' \
-  'bc_d(ret) == 2u' \
-  'la_load32_acq((const uint32_t *)&bc[0]) == startins' \
-  'la_load32_acq((const uint32_t *)&bc[1]) == kpri' \
-  'la_load32_acq((const uint32_t *)&bc[2]) == ret'; do
-  grep -F "$required" "$funcf_generation" >/dev/null || {
-    echo "ARM64 FUNCF recorder generation proof changed: $required" >&2
-    exit 1
-  }
-done
-test "$(grep -Fc 'trace_root_funcf_shape(' "$trace_source")" -eq 2
-
-# The assembler independently repeats the bytecode proof and admits only the
-# separator NOP plus terminal XPOLL(1), the exact primitive snapshot, and a
-# spill-free allocator suffix.
-awk '/^static int arm64_ir_funcf_bytecode/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$admit_source" >"$funcf_bytecode"
-for required in \
-  'sizebc != 3' \
-  '(lo & (sizeof(BCIns)-1)) != 0' \
-  '(UINTPTR_MAX-lo)/sizeof(BCIns)' \
-  'bc_op(startins) != BC_FUNCF' \
-  'liveins == startins' \
-  'bc_op(liveins) == BC_JFUNCF' \
-  'bc_a(liveins) == bc_a(startins)' \
-  'bc_d(liveins) != 0' \
-  'bc_d(kpri) == 2u' \
-  'bc_op(ret) == BC_RET1' \
-  'bc_d(ret) == 2u' \
-  'la_load32_acq((const uint32_t *)&bc[0]) == liveins' \
-  'la_load32_acq((const uint32_t *)&bc[1]) == kpri' \
-  'la_load32_acq((const uint32_t *)&bc[2]) == ret'; do
-  grep -F "$required" "$funcf_bytecode" >/dev/null || {
-    echo "ARM64 FUNCF assembler bytecode proof changed: $required" >&2
-    exit 1
-  }
-done
-awk '/^static int arm64_ir_funcf_shape/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$admit_source" >"$funcf_shape"
-for required in \
-  'J->loopref != 0' \
-  'T->nins != REF_BASE+3u' \
-  'T->nk != REF_TRUE' \
-  'ir[REF_BASE+1u].o != IR_NOP' \
-  'ir[REF_BASE+2u].o != IR_XPOLL' \
-  'ir[REF_BASE+2u].op1 != 1' \
-  'arm64_ir_funcf_snapshots'; do
-  grep -F "$required" "$funcf_shape" >/dev/null || {
-    echo "ARM64 FUNCF semantic shape changed: $required" >&2
-    exit 1
-  }
-done
-awk '/^static int arm64_postra_funcf_admit/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$admit_source" >"$funcf_postra"
-for required in \
-  '(ir = view->ir) == NULL' \
-  'view->snap == NULL' \
-  'view->snapmap == NULL' \
-  'view->proto_bc == NULL' \
-  'view->nins <= REF_FIRST' \
-  'view->nins >= REF_DROP' \
-  'view->nsnap == 0' \
-  'view->nsnapmap == 0' \
-  'view->root_topslot > UINT8_MAX' \
-  'view->base_delta != 0' \
-  'view->nins != REF_BASE+4u' \
-  'view->spadjust != 0' \
-  'entry.o != IR_NOP' \
-  'poll.o != IR_XPOLL' \
-  'poll.op1 != 1' \
-  'suffix.o != IR_NOP' \
-  'suffix.s != SPS_NONE' \
-  'suffix.prev != 0' \
-  '*semantic_ninsp = REF_BASE+3u'; do
-  grep -F "$required" "$funcf_postra" >/dev/null || {
-    echo "ARM64 FUNCF post-RA shape changed: $required" >&2
-    exit 1
-  }
-done
-awk '/^int lj_asm_arm64_postra_funcf_entry_admit/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$admit_source" >"$funcf_entry_postra"
-for required in \
-  'bc_op(view->startins) != BC_FUNCF' \
-  'bc_op(liveins) != BC_JFUNCF' \
-  'bc_a(liveins) != bc_a(view->startins)' \
-  'bc_d(liveins) == 0' \
-  'arm64_postra_funcf_admit(view, liveins, semantic_ninsp)'; do
-  grep -F "$required" "$funcf_entry_postra" >/dev/null || {
-    echo "ARM64 FUNCF entry post-RA proof changed: $required" >&2
-    exit 1
-  }
-done
-for required in \
-  'nsnap != 2 || nsnapmap != 5' \
-  'snapentry_acq(&snapmap[2]) != SNAP(result_slot, 0, REF_TRUE)' \
-  'snappos != 1u' \
-  'snappos == 2u'; do
-  grep -F "$required" "$admit_source" >/dev/null || {
-    echo "ARM64 FUNCF snapshot proof changed: $required" >&2
-    exit 1
-  }
-done
-
-grep -E '^#define TRACE_ARM64_TRUE_FUNCF_ADMITTED[[:space:]]+0x40$' \
-  "$jit_header" >/dev/null
-grep -F 'trace_arm64_admission_rel(T, TRACE_ARM64_TRUE_FUNCF_ADMITTED);' \
-  "$asm_source" >/dev/null
-
-# Entry independently proves the complete patched JFUNCF/KPRI/RET1 generation
-# on all three bytecode checks and selects RETURN/zero-mcloop topology only for
-# the exact 0x40 admission flag.
-awk '/^static int trace_root_entry_funcf_generation_valid/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' \
-  "$trace_source" >"$funcf_entry_generation"
-for required in \
-  'pt->sizebc != 3' \
-  '(pt->flags & PROTO_VARARG) != 0' \
-  'bc_op(startins) != BC_FUNCF' \
-  'bc_op(liveins) != BC_JFUNCF' \
-  'bc_a(liveins) != bc_a(startins)' \
-  'pt->numparams > result' \
-  'bc_op(kpri) == BC_KPRI' \
-  'bc_d(kpri) == 2u' \
-  'bc_op(ret) == BC_RET1' \
-  'bc_d(ret) == 2u' \
-  'la_load32_acq((const uint32_t *)&bc[0]) == liveins' \
-  'la_load32_acq((const uint32_t *)&bc[1]) == kpri' \
-  'la_load32_acq((const uint32_t *)&bc[2]) == ret'; do
-  grep -F "$required" "$funcf_entry_generation" >/dev/null || {
-    echo "ARM64 JFUNCF live-generation proof changed: $required" >&2
-    exit 1
-  }
-done
-awk '/^static int trace_root_entry_loop_view_acq/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$trace_source" >"$funcf_root_view"
-for required in \
+  '__arm64_funcf_argument' \
+  '__arm64_funcf_add' \
+  '__arm64_funcf_sub' \
+  '__arm64_funcf_mul' \
+  '__arm64_funcf_div' \
+  '__arm64_funcf_multi' \
+  'test_funcf_generation_race' \
+  'ir[load].op1++' \
+  'ir[result].prev = ir[arg].prev' \
+  'ir[right].prev = ir[left].prev' \
+  'assert(!lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL))' \
   'TRACE_ARM64_TRUE_FUNCF_ADMITTED' \
-  'v->link == 0' \
-  'v->linktype == LJ_TRLINK_RETURN' \
-  'v->mcloop == 0' \
-  'v->spadjust == 0' \
-  'v->admission == expected_admission' \
-  '!function_root || v->flags == 0'; do
-  grep -F "$required" "$funcf_root_view" >/dev/null || {
-    echo "ARM64 JFUNCF root view changed: $required" >&2
+  'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA' \
+  'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION' \
+  'test_funcf_native_xpoll' \
+  'test_funcf_native_stopreq'; do
+  grep -F "$required" "$fixture_source" >/dev/null || {
+    echo "ARM64 FUNCF executable proof lost required case: $required" >&2
     exit 1
   }
 done
-test "$(grep -Fc 'trace_root_entry_bytecode_valid(pc, pt, traceno,' \
-  "$trace_source")" = 3
-grep -F 'lj_asm_arm64_postra_funcf_entry_admit(' "$trace_source" >/dev/null
 
-# Native entry is independently open and uses a function-specific certificate.
-# The successful VM arm reserves SPS_FIXED only after both returned aggregate
-# words are non-null, then branches with the exact trace as PAUTH modifier.
-awk '/^static LJ_AINLINE int trace_root_entry_source_admitted/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$trace_source" >"$source_gate"
-grep -F 'sourceop == (uint32_t)BC_JFUNCF' "$source_gate" >/dev/null
-grep -F '!LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED' \
-  "$source_gate" >/dev/null
+# Both independent validators derive the returned scalar from bytecode
+# definitions and validate concrete snapshots/allocator state. Runtime
+# positives and post-RA corruption/recovery execute these paths; source checks
+# only ensure neither independent walker disappeared.
+for required in \
+  'arm64_ir_funcf_advance' \
+  'arm64_ir_funcf_result_matches' \
+  'arm64_ir_funcf_scalar_snapshots' \
+  'arm64_postra_funcf_admit' \
+  'arm64_scalar_postra_register' \
+  'arm64_ir_funcf_bytecode'; do
+  grep -F "$required" "$admit_source" >/dev/null || {
+    echo "ARM64 FUNCF operation validator lost required proof: $required" >&2
+    exit 1
+  }
+done
+
+# Reject regressions to the former exact-three-word true-return template.
+if grep -E 'pt->sizebc != 3|T->nins != REF_BASE\+3u|nsnap != 2 \|\| nsnapmap != 5|SNAP\(result_slot, 0, REF_TRUE\)' \
+     "$admit_source" "$trace_source" >/dev/null; then
+  echo "ARM64 FUNCF operation admission reverted to the exact-true template" >&2
+  exit 1
+fi
+
+for required in \
+  'LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED 0' \
+  'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 0'; do
+  setting=${required%% *}
+  value=${required##* }
+  grep -E "^#define[[:space:]]+$setting[[:space:]]+$value$" \
+    "$arch_source" >/dev/null || {
+    echo "ARM64 FUNCF gate mismatch: $required" >&2
+    exit 1
+  }
+done
+
+# Native JFUNCF entry remains a separate VM boundary proof. The executable
+# fixture checks both entry lifecycle and post-ADMISSION STOPREQ behavior.
+grep -F 'trace_arm64_entrybc_matches' "$trace_source" >/dev/null
+grep -F 'lj_asm_arm64_postra_funcf_entry_admit(' "$trace_source" >/dev/null
+grep -F 'sourceins == v->startins' "$trace_source" >/dev/null
+grep -F '&& prepublication)' "$trace_source" >/dev/null
+grep -F 'sourceop == (uint32_t)BC_JFUNCF' "$trace_source" >/dev/null
+grep -F 'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED' "$vm_source" >/dev/null
 awk '/case BC_JFUNCF:/ { seen++; if (seen == 2) copy=1 }
      copy { print }
-     copy && /^  case BC_JFUNCV:/ { exit }' \
+     copy && /case BC_FUNCV:/ { exit }' \
   "$vm_source" >"$jfuncf_source"
 for required in \
   'bl extern lj_trace_enter_root' \
-  '#if LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED' \
-  'clear_tg_jit_base' \
   'sub sp, sp, #16' \
-  'br_trace_auth CARG2, CRET1' \
-  'bl extern lj_trace_stale_startins' \
-  'Preserve callee-save RC'; do
+  'br_trace_auth CARG2, CRET1'; do
   grep -F "$required" "$jfuncf_source" >/dev/null || {
-    echo "ARM64 JFUNCF source boundary changed: $required" >&2
+    echo "ARM64 JFUNCF native boundary lost required instruction: $required" >&2
     exit 1
   }
 done
-test "$(grep -Fc 'sub sp, sp, #16' "$jfuncf_source")" = 1
-first_null=$(grep -nF 'cbz CRET1, >4' "$jfuncf_source" | \
-  sed -n '1p' | cut -d: -f1)
-second_null=$(grep -nF 'cbz CARG2, >4' "$jfuncf_source" | \
-  sed -n '1p' | cut -d: -f1)
-reserve=$(grep -nF 'sub sp, sp, #16' "$jfuncf_source" | \
-  sed -n '1p' | cut -d: -f1)
-transfer=$(grep -nF 'br_trace_auth CARG2, CRET1' "$jfuncf_source" | \
-  sed -n '1p' | cut -d: -f1)
-test "$first_null" -lt "$second_null" && test "$second_null" -lt "$reserve" &&
-test "$reserve" -lt "$transfer"
 
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" clean TARGET_FLAGS='-arch arm64' XCFLAGS="$xcflags"
@@ -424,17 +225,13 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
 for setting in \
   'LJ_TARGET_ARM64 1' \
   'LJ_ABI_PAUTH 0' \
-  'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
-  'LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED 1' \
-  'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED 1'; do
-  grep -E "^#define ${setting}$" "$macros" >/dev/null || {
-    echo "ARM64 FUNCF gate mismatch: $setting" >&2
+  'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 0'; do
+  name=${setting%% *}
+  value=${setting##* }
+  grep -E "^#define[[:space:]]+$name[[:space:]]+$value$" \
+    "$macros" >/dev/null || {
+    echo "ARM64 FUNCF profile mismatch: $setting" >&2
     exit 1
   }
 done
@@ -447,6 +244,7 @@ nm "$vm_object" | grep ' U _lj_trace_enter_root$' >/dev/null
   -c "$fixture_source" -o "$fixture_obj"
 "$cc" -arch arm64 -mmacosx-version-min="$minver" \
   "$fixture_obj" "$archive" -lm -pthread -o "$fixture"
+
 otool -hv "$fixture" | grep -E 'ARM64[[:space:]]+ALL' >/dev/null
 otool -tvV "$fixture_obj" >"$fixture_disasm"
 grep '^_main:' "$fixture_disasm" >/dev/null
@@ -540,4 +338,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
     XCFLAGS="$xcflags"
 restore_needed=0
 
-echo "arm64_jit_funcf_record_contract OK: exact true FUNCF published and entered natively on ARM64/ARM64e"
+echo "arm64_jit_funcf_record_contract OK: scalar FUNCF proofs passed natively on ARM64/ARM64e"
