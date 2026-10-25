@@ -230,3 +230,14 @@ argument/root/status/snapshot graphs. Log:
 The new M6 case is registered separately. GC-valued stores, new-key trace
 construction and allocation effects still require their own operation proofs;
 this checkpoint does not claim those paths.
+
+## Function-entry publication stage
+
+The immutable root scanner now distinguishes private FUNCF publication from
+live JFUNCF entry. Before bytecode patching it verifies the original header and
+the ordinary independent post-RA proof; runtime entry still verifies the exact
+patched generation. This fixes the publication assertion without duplicating
+the bytecode grammar or relaxing the live-entry checks. The focused FUNCF
+record/lifecycle contract passed on ARM64 and arm64e/BTI, including native entry,
+GC and retirement. Log: `/tmp/ljmt-review-funcf-prepub.log`. Broader FUNCF
+operation admission is a separate change under implementation.

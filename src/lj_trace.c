@@ -4103,7 +4103,8 @@ static int trace_root_entry_arm64_exit_layout_valid(
 }
 
 static int trace_root_entry_arm64_layout_scan(
-	const TraceArm64LoopView *v, const GCtrace *owner, BCIns sourceins)
+	const TraceArm64LoopView *v, const GCtrace *owner, BCIns sourceins,
+	int prepublication)
 {
   LJArm64PostRAView postra = { 0 };
   GCproto *pt = gco2pt(v->startpt);
@@ -4124,6 +4125,12 @@ static int trace_root_entry_arm64_layout_scan(
   postra.base_delta = 0;
   if (!trace_root_entry_arm64_exit_layout_valid(v))
     return 0;
+  if (bc_op(v->startins) == BC_FUNCF && prepublication) {
+    /* The source header is still FUNCF while the compact body is private.
+    ** Runtime entry instead validates the patched JFUNCF generation below. */
+    return sourceins == v->startins &&
+      lj_asm_arm64_postra_admit(&postra, NULL);
+  }
   if (bc_op(v->startins) == BC_FUNCF)
     return lj_asm_arm64_postra_funcf_entry_admit(
 	&postra, sourceins, NULL);
@@ -4149,7 +4156,7 @@ static int trace_arm64_root_certify(GCtrace *T)
   if (!trace_root_entry_loop_view_acq(T, trace_traceno_acq(T),
         trace_startpc_acq(T), pt, sourceop, &v) ||
       !trace_root_entry_arm64_layout_scan(&v, T,
-        (BCIns)la_load32_acq((const uint32_t *)v.startpc))) return 0;
+        (BCIns)la_load32_acq((const uint32_t *)v.startpc), 1)) return 0;
   memset(&cert, 0, sizeof(cert));
   cert.body = T;
   cert.ir = v.ir; cert.snap = v.snap; cert.snapmap = v.snapmap;
@@ -4194,7 +4201,7 @@ static int trace_root_entry_arm64_layout_valid(
 #ifdef LUA_USE_ASSERT
   /* Debug builds audit the immutable-content invariant as well. Release
   ** entry needs only the sealed tuple; legal writers never edit that body. */
-  return trace_root_entry_arm64_layout_scan(v, owner, sourceins);
+  return trace_root_entry_arm64_layout_scan(v, owner, sourceins, 0);
 #else
   UNUSED(sourceins);
   return 1;
