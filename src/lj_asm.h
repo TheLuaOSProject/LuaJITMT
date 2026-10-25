@@ -173,8 +173,6 @@ LJ_FUNC int lj_asm_arm64_postra_funcf_entry_admit(
 LJ_FUNC int lj_asm_arm64_funcf_bytecode(const BCIns *bc, MSize sizebc,
 	MSize framesize, MSize numparams, BCIns startins, BCIns liveins,
 	int prepublication);
-LJ_FUNC int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
-	LJArm64IRReject *reject);
 LJ_FUNC int lj_asm_arm64_side_scalar_ir_admit(const jit_State *J,
 	const GCtrace *child, const LJArm64SideIRView *view,
 	LJArm64IRReject *reject);

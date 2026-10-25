@@ -105,27 +105,40 @@ int main(void)
   run(L, "for i=1,100 do assert(kernel(64,1.25)==80) end");
   assert(lj_trace_test_root_entry_publishes() > 0);
   assert(lj_trace_test_root_entry_successes() > 0);
-  /* Successful root-entry handoffs count only after post-publish child/body
-  ** and exact target checks pass; no cleanup means none was rejected.
-  ** Normal completion leaves native traces, but must not exit once per loop
-  ** iteration as interpreter fallback would. */
+  /* Every successful handoff follows the post-publish child/body and exact
+  ** target checks. Full function completion accounts for native exits; cap
+  ** exits at two per call to rule out an interpreter exit per loop iteration. */
+  assert(lj_trace_test_root_entry_publishes() ==
+         lj_trace_test_root_entry_successes());
+  assert(lj_trace_test_root_entry_successes() <= 2u*100u);
   assert(lj_trace_test_root_entry_cleanups() == 0);
   assert(lj_trace_test_exit_calls() > 0 &&
-	lj_trace_test_exit_calls() < 100u*64u);
+         lj_trace_test_exit_calls() <= 2u*100u);
 
-  /* Short and long body counts must preserve the same scalar result. A full
-  ** collection retains the globally rooted function/proto and published JIT
-  ** generations; the adapted native path remains usable afterward. */
+  /* Short and long bodies must execute the adapted native traces and preserve
+  ** results. A full collection must retain the function/proto and generations. */
+  lj_trace_test_reset_exit_stats();
+  lj_trace_test_root_entry_reset();
   run(L, "assert(kernel(8,1.25)==10); assert(kernel(1024,1.25)==1280); "
          "collectgarbage('collect')");
+  assert(lj_trace_test_root_entry_publishes() > 0);
+  assert(lj_trace_test_root_entry_successes() > 0);
+  assert(lj_trace_test_root_entry_publishes() ==
+         lj_trace_test_root_entry_successes());
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+  assert(lj_trace_test_exit_calls() > 0 &&
+         lj_trace_test_exit_calls() <= 4u);
   lj_trace_test_reset_exit_stats();
   lj_trace_test_root_entry_reset();
   run(L, "for i=1,100 do assert(kernel(64,1.25)==80) end");
   assert(lj_trace_test_root_entry_publishes() > 0);
   assert(lj_trace_test_root_entry_successes() > 0);
+  assert(lj_trace_test_root_entry_publishes() ==
+         lj_trace_test_root_entry_successes());
+  assert(lj_trace_test_root_entry_successes() <= 2u*100u);
   assert(lj_trace_test_root_entry_cleanups() == 0);
   assert(lj_trace_test_exit_calls() > 0 &&
-	lj_trace_test_exit_calls() < 100u*64u);
+         lj_trace_test_exit_calls() <= 2u*100u);
 
   /* Overflow must retain LuaJIT numeric semantics across the loop boundary. */
   run(L, "overflow_kernel=function(n) local i,sum=1,2147483600 "
@@ -152,9 +165,12 @@ int main(void)
   run(L, "for i=1,100 do assert(kernel(64,1.25)==80) end");
   assert(lj_trace_test_root_entry_publishes() > 0);
   assert(lj_trace_test_root_entry_successes() > 0);
+  assert(lj_trace_test_root_entry_publishes() ==
+         lj_trace_test_root_entry_successes());
+  assert(lj_trace_test_root_entry_successes() <= 2u*100u);
   assert(lj_trace_test_root_entry_cleanups() == 0);
   assert(lj_trace_test_exit_calls() > 0 &&
-	lj_trace_test_exit_calls() < 100u*64u);
+         lj_trace_test_exit_calls() <= 2u*100u);
 
   /* An overflow exit mid-loop carries parent state into a side trace. */
   run(L, "local jit=require('jit'); jit.flush(); "
@@ -174,9 +190,12 @@ int main(void)
   run(L, "for i=1,100 do assert(overflow_kernel(64,1,2147483600)==2147483664) end");
   assert(lj_trace_test_root_entry_publishes() > 0);
   assert(lj_trace_test_root_entry_successes() > 0);
+  assert(lj_trace_test_root_entry_publishes() ==
+         lj_trace_test_root_entry_successes());
+  assert(lj_trace_test_root_entry_successes() <= 2u*100u);
   assert(lj_trace_test_root_entry_cleanups() == 0);
   assert(lj_trace_test_exit_calls() > 0 &&
-	lj_trace_test_exit_calls() < 100u*64u);
+         lj_trace_test_exit_calls() <= 2u*100u);
 
   /* A later type mismatch must leave the immutable child generation cleanly
   ** and preserve ordinary Lua arithmetic errors. */
