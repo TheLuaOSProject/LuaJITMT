@@ -748,3 +748,23 @@ No production gate was weakened. The complete GDB-JIT contract passed with
 helper and production profiles on ARM64/arm64e, including rollback and delayed
 retirement. Log: `/tmp/ljmt-gdbjit-generic-side-contract.log`. The stopped
 combined log is `/tmp/ljmt-review-experimental-final-241a41e8.log`.
+
+## Exit-table accounting isolates the root retry
+
+The later exit-contract preflight at `2e7b4e1d` reached all root ownership and
+native XPOLL/terminal checks, then failed its exact allocation count at close.
+A diagnostic build observed three allocations and two frees before close,
+and three allocations and three frees after close. With `hotexit=1`, a rejected
+side recording allocated and freed an additional provisional table; no child
+was published. There was no outstanding allocation at shutdown.
+
+The root-slot fixture now uses `hotexit=1000` to isolate its forced assembler
+retry and published root. It retains the exact two allocations/two frees,
+snapshot and machine-code checks, production retargeting, and actual SIGTRAP
+and ARM64e authentication-failure cases. Generic side publication and retirement
+remain covered by the separate first-child contracts. The original stopped
+log is `/tmp/ljmt-review-exit-final-2e7b4e1d.log`; diagnostic counts are in
+`/tmp/ljmt-exittab-diag-2e7b4e1d/result.log`. The complete exit contract now
+passes on ARM64 and ARM64e/BTI, including trace retirement, immutable gate
+disassembly, reset and all signal-based target checks. Rerun log:
+`/tmp/ljmt-exit-isolated-root-2e7b4e1d.log`.

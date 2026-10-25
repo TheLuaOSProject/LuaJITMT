@@ -1,7 +1,7 @@
 /*
 ** Live macOS ARM64 contract for heap-published JIT exit targets.
 **
-** The fixture records the one admitted integer BC_LOOP root, proves that its
+** The fixture records an admitted integer BC_LOOP root, proves that its
 ** immutable gates are backed by a separately allocated target table, drives
 ** the default XPOLL fallback, and then exercises production retargeting of
 ** deterministic exit 8. Signal-producing target modes run in fresh children
@@ -639,9 +639,12 @@ static int child_mode(TargetMode mode)
   run_lua(L, "jit.opt.start('maxsnap=500')");
   lj_trace_test_reset_exittab_stats();
   lj_asm_arm64_test_force_exitstub_mcode_retry(1);
+  /* Keep this root-slot ownership test below the side-recording threshold.
+  ** A rejected side may still allocate and free its provisional exit table;
+  ** the exact two allocations here belong to the forced retry and root. */
   run_lua(L,
     "jit.flush(); jit.on(); "
-    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
+    "jit.opt.start('hotloop=1','hotexit=1000','maxtrace=2'); "
     "local function f(n) "
       "local i,x=0,0 "
       "while i<n do i=i+1 x=x+i end "
