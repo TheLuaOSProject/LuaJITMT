@@ -22,7 +22,6 @@ archive=$root/src/libluajit.a
 fixture_source=$root/tests/t-arm64-jit-forl-record.c
 trace_source=$root/src/lj_trace.c
 asm_source=$root/src/lj_asm.c
-admit_source=$root/src/lj_asm_arm64_admit.h
 vm_source=$root/src/vm_arm64.dasc
 lock_dir=$root/src/.lj-test-run.lock
 lock_held=0
@@ -96,9 +95,6 @@ pauth_obj=$tmpdir/t-arm64-jit-forl-record-arm64e.o
 macros=$tmpdir/macros.txt
 pauth_macros=$tmpdir/macros-arm64e.txt
 tuple_region=$tmpdir/tuple-region.txt
-forl_shape=$tmpdir/forl-shape.txt
-postra_dynamic=$tmpdir/postra-dynamic.txt
-postra_region=$tmpdir/postra-region.txt
 trace_stop=$tmpdir/trace-stop.txt
 forl_vm=$tmpdir/forl-vm.txt
 branch_only_vm=$tmpdir/branch-only-vm.txt
@@ -169,69 +165,11 @@ for required in \
 done
 test "$(grep -Fc 'trace_root_forl_tuple(' "$trace_source")" -eq 3
 
-# Pin the narrow semantic grammar and its independent post-RA recheck.
-awk '/^static int arm64_ir_forl_shape/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$admit_source" >"$forl_shape"
-for required in \
-  'nadd != 2u' \
-  'nstepload != 1u || stepload != stepref || nuse != 1u' \
-  'step == 0' \
-  'post.op1 != preadd || post.op2 != stepref' \
-  'IRSLOAD_TYPECHECK|IRSLOAD_INHERIT' \
-  'cmpop = step > 0 ? IR_LE : IR_GE;' \
-  'IRSLOAD_READONLY|IRSLOAD_INHERIT' \
-  'direction.o != IR_GE && direction.o != IR_LT' \
-  'overflow.o != IR_ADDOV || overflow.op1 != stepref' \
-  'use.t.irt != IRT_INT || use.op1 != stepref+2u || use.op2 != 0' \
-  '(int64_t)INT32_MAX-(int64_t)step' \
-  '(int64_t)INT32_MIN-(int64_t)step' \
-  'indexphi == 0'; do
-  grep -F "$required" "$forl_shape" >/dev/null || {
-    echo "ARM64 FORL semantic proof changed: $required" >&2
-    exit 1
-  }
-done
-awk '/^static int arm64_postra_forl_dynamic_shape/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$admit_source" >"$postra_dynamic"
-for required in \
-  'nstep == 0 && nuse == 0' \
-  'nstep != 1u || nuse != 1u' \
-  'stepref+4u != pre.op1' \
-  'direction.o != IR_GE && direction.o != IR_LT' \
-  'overflow.o != IR_ADDOV || overflow.op1 != stepref' \
-  'useref != stepref+3u || use.o != IR_USE || use.t.irt != IRT_INT' \
-  'overflow.s != SPS_NONE || overflow.r >= RID_MAX_GPR' \
-  'ri != pre.r || ri != post.r' \
-  'ra != accpre.r || ra != accpost.r' \
-  'stop.r == step.r || stop.r == ri || stop.r == ra' \
-  'overflow.r == stop.r || overflow.r == step.r' \
-  '*dynamic_stepp = 1;'; do
-  grep -F "$required" "$postra_dynamic" >/dev/null || {
-    echo "ARM64 dynamic FORL post-RA proof changed: $required" >&2
-    exit 1
-  }
-done
-awk '/^static int arm64_postra_nonloop_admit/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' \
-  "$admit_source" >"$postra_region"
-for required in \
-  'rootop = bc_op(view->startins);' \
-  'rootop != BC_FORL && rootop != BC_FUNCF' \
-  'if (rootop == BC_FUNCF)' \
-  'if (nintadd != 2u)' \
-  'flags != 0 && flags != SNAP_NORESTORE' \
-  'source.o != IR_SLOAD || source.op1 != slot' \
-  'slot != forl_idxslot && slot != forl_idxslot+FORL_STOP' \
-  '!forl_dynamic_step ||' \
-  'slot != forl_idxslot+FORL_STEP'; do
-  grep -F "$required" "$postra_region" >/dev/null || {
-    echo "ARM64 FORL post-RA proof changed: $required" >&2
-    exit 1
-  }
-done
+# The executable IR admission contract below checks the generic FORL graph
+# and its independent post-RA proof, including dynamic step direction,
+# overflow, snapshot ownership and allocated-location mutations. Do not pin
+# instruction counts or adjacency: unrelated scalar operations may compose
+# with the same control graph.
 for required in \
   'trace_arm64_admission_rel(T, TRACE_ARM64_INT_FORL_ADMITTED);' \
   'trace_arm64_admission_rel(T, TRACE_ARM64_TRUE_FUNCF_ADMITTED);' \
@@ -337,7 +275,8 @@ while test "$run" -le "$ordinary_runs"; do
   run=$((run+1))
 done
 LUAJIT_MCODE_TEST=R "$fixture"
-LJ_TEST_RUN_LOCK_HELD=1 "$root/tools/ci/arm64_jit_ir_admission_contract.sh"
+LJ_TEST_RUN_LOCK_HELD=1 LJ_TEST_XCFLAGS="$xcflags" \
+  "$root/tools/ci/arm64_jit_ir_admission_contract.sh"
 
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" clean \

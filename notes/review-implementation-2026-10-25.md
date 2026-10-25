@@ -393,3 +393,27 @@ Logs: `/tmp/ljmt-review-aligned-tab-pair.log` and
 `/tmp/ljmt-review-tnew-ubsan-aligned.log`. The sanitizer runtime used an isolated
 `92393d92` source copy plus this alignment fix; this does not yet validate the
 later generic function, side or FFI patches.
+
+## Generic FORL gate and x86-64 regression checkpoint
+
+The next full experimental run reached FORL but stopped at source-text checks
+for exactly two ADDs and fixed control-instruction adjacency. The generic
+control graph intentionally removed those restrictions. The wrapper now relies
+on its executable semantic/post-RA mutation contract, while retaining separate
+publication/VM ordering checks. The nested contract receives the wrapper's
+exact build flags. The complete focused FORL contract passes on ARM64/ARM64e,
+including dynamic positive/negative steps and native versus branch-only entry.
+Log: `/tmp/ljmt-review-forl-generic-contract.log`.
+
+Frozen `cc7b6899` also passes both 509-case stock source/original-bytecode corpora
+on x86-64/Rosetta, the registered errno case, nested-universe table guard and
+foreign-thread hotcount generation fixtures. The progress fixture initially
+assumed dual-number representation when inspecting its preserved output; it
+now uses the representation-independent numeric accessor. With that fixture
+fix, x86-64 completes 1,000 reads plus a missing-key refusal during a paused
+reclaimer (zero waits), independent-table progress during a paused publisher,
+and 40,000 balanced rescan credits across four workers. No runtime change was
+needed. Executables were ad-hoc signed and fixture/archive profiles matched.
+Logs: `/tmp/ljmt-review-x64-stock-{source,import}.log`,
+`/tmp/ljmt-review-x64-errno.log`, and
+`/tmp/ljmt-review-x64-t-{gc2-table-store-guard,jit-hotcount-generation,lockless-progress-metrics}.log`.

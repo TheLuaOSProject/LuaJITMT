@@ -110,7 +110,7 @@ static void bounded_scalar_during_stalled_reclaimer(void)
   setintV((TValue *)keyroot, 2);
   setintV(&out, -9);
   assert(!lj_tab_getscalar_rooted_try(L, tabroot, keyroot, &out));
-  assert(intV(&out) == -9);
+  assert(numberVnum(&out) == -9);
   alarm(0);
   assert(hits == 1000);
   assert(lj_tab_test_wait_l_calls() == waits);
