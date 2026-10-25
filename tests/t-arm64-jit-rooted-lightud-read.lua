@@ -100,14 +100,17 @@ local function closed_store(t, key, value, n)
   return t[key]
 end
 local function check_closed_store(label, key, value)
-  jit.flush(); jit.on(closed_store, true)
+  -- Give each rejection case its own bytecode and hotcount history.
+  local fn = assert(loadstring(string.dump(closed_store)))
+  jit.flush(); jit.on(fn, true)
+  jit.opt.start('hotloop=1','hotexit=1000','maxtrace=4','maxrecord=4000')
   local t, roots, aborts = {[key] = value}, {}, 0
-  local function trace(what, no, fn)
-    if what == 'start' and fn == closed_store then roots[no] = true end
+  local function trace(what, no, func)
+    if what == 'start' and func == fn then roots[no] = true end
     if what == 'abort' and roots[no] then roots[no] = nil; aborts = aborts + 1 end
   end
   jit.attach(trace, 'trace')
-  for _ = 1, 20 do assert(closed_store(t, key, value, 32) == value) end
+  for _ = 1, 20 do assert(fn(t, key, value, 32) == value) end
   jit.attach(trace)
   for no in pairs(roots) do assert(not util.traceinfo(no), label..' admitted') end
   assert(aborts > 0, label..' did not exercise recording')

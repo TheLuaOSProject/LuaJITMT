@@ -431,6 +431,18 @@ LJ_FUNC int lj_tab_getinttv_rooted_try(lua_State *L, cTValue *tabroot,
 ** interval and supports GC results and Huge vectors. It never waits for SMR. */
 LJ_FUNC int lj_tab_gettv_rooted_hit_try(lua_State *L, cTValue *tabroot,
 				     cTValue *keyroot, TValue *outroot);
+/* Positive raw-nil fast path for native indexing. Return one only after the
+** authoritative raw lookup is ABSENT and a subsequent acquire-load observes
+** NULL TAB_META, with the exact table/key roots and owner still current.
+** Non-table operands, raw hits, non-NULL metatables and every RETRY/refusal
+** return zero without changing any cell. The caller must side-exit on zero so
+** the ordinary ordered lookup can acquire TAB_META and resolve __index. Nil
+** is published only on success; output may alias either input. No GC result
+** lease/publication or allocation is needed. */
+LJ_FUNC int lj_tab_getnil_nometa_rooted_try(lua_State *L,
+					    cTValue *tabroot,
+					    cTValue *keyroot,
+					    TValue *outroot);
 #if LJ_HASJIT && LJ_HASFFI
 /* Native JIT comparison only. expected must be an exact typed IR_KGC cdata
 ** operand retained by the executing trace, not an observed raw cache pointer.

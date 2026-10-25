@@ -1506,9 +1506,10 @@ static BCReg rec_mm_prep(jit_State *J, ASMFunction cont)
 
 static TRef rec_tmpref(jit_State *J, TRef tr);
 static IRType rec_idx_mt_shared_sample(jit_State *J, RecordIndex *ix,
-				       TValue *snap, TRef *constp);
+				       TValue *snap, TRef *constp,
+				       int *nil_no_meta);
 static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t,
-				 int bounded);
+				 int bounded, int nil_no_meta);
 #if LJ_HASJIT_FFI_CALLXS
 static int rec_mm_cdata_call_shared(jit_State *J, RecordIndex *ix, GCtab *mt);
 #endif
@@ -1606,7 +1607,7 @@ nocheck:
       ** broader previous-nil __index/__newindex active-MT fences intact, but
       ** let this raw metatable guard use the helper-backed stable-miss path.
       */
-      ix->mobj = rec_idx_mt_shared_load(J, &mix, IRT_NIL, 0);
+      ix->mobj = rec_idx_mt_shared_load(J, &mix, IRT_NIL, 0, 0);
       return 0;
     }
     ix->mobj = lj_record_idx(J, &mix);
@@ -2022,7 +2023,8 @@ static TRef rec_tmpref_mode(jit_State *J, TRef tr, int mode);
 
 /* Sample one active-MT lookup through the same enumerated roots used by mcode. */
 static IRType rec_idx_mt_shared_sample(jit_State *J, RecordIndex *ix,
-				       TValue *snap, TRef *constp)
+				       TValue *snap, TRef *constp,
+				       int *nil_no_meta)
 {
   /* Protected-call rollback checkpoints L2TG(J->L). Anchor the recorder
   ** inputs in that same authoritative owner TG instead of relying on the
@@ -2064,7 +2066,17 @@ static IRType rec_idx_mt_shared_sample(jit_State *J, RecordIndex *ix,
 	     "missing active-MT recorder lookup roots");
   lj_gc_pubroot(J->L, parentout);
   lj_gc_pubroot(J->L, keyroot);
-  (void)lj_tab_gettv_rooted(J->L, parentout, keyroot, parentout);
+  if (nil_no_meta != NULL)
+    *nil_no_meta = 0;
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+  /* Probe before the parent anchor becomes the result. Only this positive
+  ** certificate permits a nil read to bypass mutable metamethod sampling. */
+  if (nil_no_meta != NULL &&
+      lj_tab_getnil_nometa_rooted_try(J->L, parentout, keyroot, parentout))
+    *nil_no_meta = 1;
+  else
+#endif
+    (void)lj_tab_gettv_rooted(J->L, parentout, keyroot, parentout);
   /* Inspect while the result is still an enumerated root. The local copy is
   ** only a scalar type-selection snapshot and is never dereferenced later.
   */
@@ -2087,23 +2099,26 @@ static IRType rec_idx_mt_shared_sample(jit_State *J, RecordIndex *ix,
 }
 
 static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t,
-				 int bounded)
+				 int bounded, int nil_no_meta)
 {
   TRef res;
   TRef parentout = rec_tmpref_mode(J, ix->tab,
 				   IRTMPREF_IN1|IRTMPREF_OUT1);
   TRef key = rec_tmpref_mode(J, ix->key, IRTMPREF_IN2);
   UNUSED(bounded);
+  UNUSED(nil_no_meta);
 #if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
-  if (bounded && (t == IRT_NUM || t == IRT_INT ||
+  if (bounded && ((t == IRT_NIL && nil_no_meta) ||
+      t == IRT_NUM || t == IRT_INT ||
       t == IRT_TRUE || t == IRT_FALSE ||
       t == IRT_STR || t == IRT_TAB || t == IRT_FUNC || t == IRT_THREAD ||
       t == IRT_UDATA || t == IRT_CDATA || t == IRT_LIGHTUD)) {
-    /* A bounded hit attempt never waits. Its false result side-exits before
+    /* A bounded read attempt never waits. Its false result side-exits before
     ** the rooted output is consumed. GC hits publish the result before their
     ** lease ends; the JIT phase lease then spans every later native use until
     ** an exit restores the snapshot into the Lua stack. */
-    IRCallID helper = (t == IRT_NUM || t == IRT_INT ||
+    IRCallID helper = t == IRT_NIL ? IRCALL_lj_tab_getnil_nometa_rooted_try :
+      (t == IRT_NUM || t == IRT_INT ||
                       t == IRT_TRUE || t == IRT_FALSE) &&
       (tref_isstr(ix->key) || tref_isnumber(ix->key) ||
        tref_istrue(ix->key) || tref_isfalse(ix->key)) ?
@@ -2112,7 +2127,7 @@ static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t,
 			    parentout, key, parentout);
     J->mergesnap = 0;
     emitir(IRTGI(IR_NE), found, lj_ir_kint(J, 0));
-    lj_snap_add(J);  /* Type exits after a successful hit must not replay. */
+    lj_snap_add(J);  /* Type exits after a successful read must not replay. */
     J->mergesnap = 1;
     return lj_record_vload(J, parentout, 0, t);
   }
@@ -2157,11 +2172,11 @@ static int rec_mm_cdata_call_shared(jit_State *J, RecordIndex *ix, GCtab *mt)
   setstrV(J->L, &mix.keyv, mmstr);
   mix.val = 0;
   mix.idxchain = 0;
-  type = rec_idx_mt_shared_sample(J, &mix, &snap, &kfunc);
+  type = rec_idx_mt_shared_sample(J, &mix, &snap, &kfunc, NULL);
   if (type != IRT_FUNC || !tvisfunc(&snap))
     return 0;
   /* CALLXS retains its separately certified lookup/result snapshot grammar. */
-  mobj = rec_idx_mt_shared_load(J, &mix, IRT_FUNC, 0);
+  mobj = rec_idx_mt_shared_load(J, &mix, IRT_FUNC, 0, 0);
   lj_assertJ(tref_isfunc(kfunc), "missing rooted cdata __call function");
   UNUSED(kfunc);
   ix->mt = kmt;
@@ -2506,7 +2521,12 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
   if (tvisnil(&ix->keyv) || (tvisnum(&ix->keyv) && tvisnan(&ix->keyv))) {
     if (ix->val)  /* Better fail early. */
       lj_trace_err(J, LJ_TRERR_STORENN);
-    if (tref_isk(ix->key)) {
+    if (tref_isk(ix->key)
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+	/* The bounded active-MT path below must still guard __index absence. */
+	&& !rec_idx_mt_shared_tabop(J, ix)
+#endif
+       ) {
       if (ix->idxchain && lj_record_mm_lookup(J, ix, MM_index))
 	goto handlemm;
       return TREF_NIL;
@@ -2519,16 +2539,17 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
       return res;
     if (rec_idx_mt_shared_tabop(J, ix)) {
       TValue oldsnap;
-      IRType t = rec_idx_mt_shared_sample(J, ix, &oldsnap, NULL);
+      int nil_no_meta;
+      IRType t = rec_idx_mt_shared_sample(J, ix, &oldsnap, NULL, &nil_no_meta);
       /*
       ** Sample through the same rooted protocol used by generated code. The
       ** recorder uses this copy only to choose the VLOAD guard type; it must
       ** never retain a raw slot from a generation which a peer can retire.
       */
-      if (tvisnil(&oldsnap) && ix->idxchain &&
+      if (tvisnil(&oldsnap) && !nil_no_meta && ix->idxchain &&
 	  lj_record_mm_lookup(J, ix, MM_index))
 	goto handlemm;
-      return rec_idx_mt_shared_load(J, ix, t, 1);
+      return rec_idx_mt_shared_load(J, ix, t, 1, nil_no_meta);
     }
   } else {
     mt_shared_store = rec_idx_mt_shared_tabop(J, ix);
@@ -2536,7 +2557,7 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
       int keybarrier = tref_isgcv(ix->key) && !tref_isnil(ix->val);
       if (rec_idx_tab_unproven_alloc(J, ix->tab))
 	lj_trace_err_info(J, LJ_TRERR_NYIBC);
-      (void)rec_idx_mt_shared_sample(J, ix, &oldsnap, NULL);
+      (void)rec_idx_mt_shared_sample(J, ix, &oldsnap, NULL, NULL);
       /*
       ** Active-MT stores must not record raw HREF/AREF/NEWREF probes: a
       ** concurrent resize can retire that generation before generated code

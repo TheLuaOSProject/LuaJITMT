@@ -4341,6 +4341,7 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
       (ir->op2 == IRCALL_lj_tab_len_rooted_try ||
        ir->op2 == IRCALL_lj_tab_getscalar_rooted_try ||
        ir->op2 == IRCALL_lj_tab_gettv_rooted_hit_try ||
+       ir->op2 == IRCALL_lj_tab_getnil_nometa_rooted_try ||
        ir->op2 == IRCALL_lj_tab_storenum_rooted ||
        ir->op2 == IRCALL_lj_tab_storebool_rooted ||
        ir->op2 == IRCALL_lj_tab_storegc_rooted);
@@ -4387,7 +4388,8 @@ static int arm64_rooted_ir_effect(const GCtrace *T, IRRef ref,
   const IRIns *call = &T->ir[ref], *guard;
   IRRef key;
   int tvread = call->op2 == IRCALL_lj_tab_gettv_rooted_hit_try;
-  int read = call->op2 == IRCALL_lj_tab_getscalar_rooted_try || tvread;
+  int nilread = call->op2 == IRCALL_lj_tab_getnil_nometa_rooted_try;
+  int read = call->op2 == IRCALL_lj_tab_getscalar_rooted_try || tvread || nilread;
   int gcstore = call->op2 == IRCALL_lj_tab_storegc_rooted;
   int store = call->op2 == IRCALL_lj_tab_storenum_rooted ||
               call->op2 == IRCALL_lj_tab_storebool_rooted || gcstore;
@@ -4412,7 +4414,9 @@ static int arm64_rooted_ir_effect(const GCtrace *T, IRRef ref,
       return 0;
     /* The optimized scalar helper only hashes string/number/boolean keys.
     ** Other visible GC keys need the generic helper's exact key lease. */
-    if (!tvread &&
+    if (!nilread && T->ir[root2].op1 == REF_NIL)
+      return 0;
+    if (!tvread && !nilread &&
         !arm64_scalar_ir_ref(T, T->ir[root2].op1, root2, IRT_STR) &&
         !arm64_scalar_ir_ref(T, T->ir[root2].op1, root2, IRT_INT) &&
         !arm64_scalar_ir_ref(T, T->ir[root2].op1, root2, IRT_NUM) &&
@@ -4421,10 +4425,11 @@ static int arm64_rooted_ir_effect(const GCtrace *T, IRRef ref,
       return 0;
     value = &T->ir[ref+2];
     if (value->o != IR_VLOAD || value->op1 != root1 || value->op2 ||
-        (irt_type(value->t) != IRT_INT && irt_type(value->t) != IRT_NUM &&
+        (nilread ? value->t.irt != (IRT_NIL|IRT_GUARD) :
+         (irt_type(value->t) != IRT_INT && irt_type(value->t) != IRT_NUM &&
          irt_type(value->t) != IRT_TRUE && irt_type(value->t) != IRT_FALSE &&
          !(tvread && (arm64_rooted_gc_type(irt_type(value->t)) ||
-                      irt_type(value->t) == IRT_LIGHTUD))) ||
+                      irt_type(value->t) == IRT_LIGHTUD)))) ||
         !irt_isguard(value->t) ||
         (value->t.irt & ~(IRT_TYPE|IRT_GUARD|IRT_ISPHI)))
       return 0;
@@ -4433,6 +4438,7 @@ static int arm64_rooted_ir_effect(const GCtrace *T, IRRef ref,
     IRType type = call->op2 == IRCALL_lj_tab_storenum_rooted ? IRT_NUM : IRT_INT;
     IRRef chain = call->op1;
     if (!root2 || chain < REF_FIRST || chain >= ref ||
+        T->ir[root2].op1 == REF_NIL ||
         arm64_scalar_ir_ref(T, T->ir[root2].op1, root2, IRT_LIGHTUD))
       return 0;
     tail = &T->ir[chain];
@@ -4742,7 +4748,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
         break;
       }
       if (arm64_rooted_gc_type(type) || type == IRT_LIGHTUD ||
-          type == IRT_TRUE || type == IRT_FALSE) {
+          type == IRT_TRUE || type == IRT_FALSE || (!side && type == IRT_NIL)) {
         if ((flags & ~((arm64_rooted_gc_type(type) || type == IRT_LIGHTUD) ?
                        IRT_ISPHI : 0)) != IRT_GUARD ||
             ir->op2 != IRSLOAD_TYPECHECK || ir->op1 < 1 + LJ_FR2 ||
@@ -4775,6 +4781,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
             !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_NUM) &&
             !arm64_scalar_ir_gc_ref(T, ir->op1, ref) &&
             !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_LIGHTUD) &&
+            ir->op1 != REF_NIL &&
             !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_TRUE) &&
             !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_FALSE))
           goto bad_operand;
@@ -4788,7 +4795,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
     case IR_VLOAD:
       if (ref != resultref || !resultroot || ir->op1 != resultroot ||
           ir->op2 || (type != IRT_INT && type != IRT_NUM &&
-                      type != IRT_TRUE && type != IRT_FALSE &&
+                      type != IRT_TRUE && type != IRT_FALSE && type != IRT_NIL &&
                       !arm64_rooted_gc_type(type) && type != IRT_LIGHTUD) ||
           !(flags & IRT_GUARD) || (flags & ~(IRT_GUARD|IRT_ISPHI)))
         goto bad_type;
@@ -4993,6 +5000,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
            !arm64_scalar_ir_ref(T, value, ref, IRT_NUM) &&
            !arm64_scalar_ir_gc_ref(T, value, ref) &&
            !arm64_scalar_ir_ref(T, value, ref, IRT_LIGHTUD) &&
+           (side || value != REF_NIL) &&
            !arm64_scalar_ir_ref(T, value, ref, IRT_TRUE) &&
            !arm64_scalar_ir_ref(T, value, ref, IRT_FALSE)))
         goto bad_snapshot;
@@ -5107,6 +5115,7 @@ static int arm64_scalar_postra_value(IRIns p)
            (p.op2 == IRCALL_lj_tab_len_rooted_try ||
             p.op2 == IRCALL_lj_tab_getscalar_rooted_try ||
             p.op2 == IRCALL_lj_tab_gettv_rooted_hit_try ||
+            p.op2 == IRCALL_lj_tab_getnil_nometa_rooted_try ||
             p.op2 == IRCALL_lj_tab_storenum_rooted ||
             p.op2 == IRCALL_lj_tab_storebool_rooted ||
             p.op2 == IRCALL_lj_tab_storegc_rooted);
@@ -5212,7 +5221,8 @@ static int arm64_rooted_postra_effect(const LJArm64PostRAView *v, IRRef n,
   IRIns c = ir_load_acq(&v->ir[ref]), g, r1;
   IRRef sentinel;
   int tvread = c.op2 == IRCALL_lj_tab_gettv_rooted_hit_try;
-  int read = c.op2 == IRCALL_lj_tab_getscalar_rooted_try || tvread;
+  int nilread = c.op2 == IRCALL_lj_tab_getnil_nometa_rooted_try;
+  int read = c.op2 == IRCALL_lj_tab_getscalar_rooted_try || tvread || nilread;
   int gcstore = c.op2 == IRCALL_lj_tab_storegc_rooted;
   int store = c.op2 == IRCALL_lj_tab_storenum_rooted ||
               c.op2 == IRCALL_lj_tab_storebool_rooted || gcstore;
@@ -5239,7 +5249,8 @@ static int arm64_rooted_postra_effect(const LJArm64PostRAView *v, IRRef n,
         r2.op2 != IRTMPREF_IN2 || !ra_hasreg(r2.r) ||
         !arm64_scalar_postra_register(r2.r, IRT_PGC) ||
         ra_hasspill(r2.s) || r1.r == r2.r) return 0;
-    if (!tvread &&
+    if (!nilread && r2.op1 == REF_NIL) return 0;
+    if (!tvread && !nilread &&
         !arm64_scalar_postra_ref(v, r2.op1, root2, IRT_STR) &&
         !arm64_scalar_postra_ref(v, r2.op1, root2, IRT_INT) &&
         !arm64_scalar_postra_ref(v, r2.op1, root2, IRT_NUM) &&
@@ -5247,10 +5258,11 @@ static int arm64_rooted_postra_effect(const LJArm64PostRAView *v, IRRef n,
         !arm64_scalar_postra_ref(v, r2.op1, root2, IRT_TRUE)) return 0;
     value = ir_load_acq(&v->ir[ref+2]);
     if (value.o != IR_VLOAD || value.op1 != root1 || value.op2 ||
-        (irt_type(value.t) != IRT_INT && irt_type(value.t) != IRT_NUM &&
+        (nilread ? value.t.irt != (IRT_NIL|IRT_GUARD) :
+         (irt_type(value.t) != IRT_INT && irt_type(value.t) != IRT_NUM &&
          irt_type(value.t) != IRT_FALSE && irt_type(value.t) != IRT_TRUE &&
          !(tvread && (arm64_rooted_gc_type(irt_type(value.t)) ||
-                      irt_type(value.t) == IRT_LIGHTUD))) ||
+                      irt_type(value.t) == IRT_LIGHTUD)))) ||
         !irt_isguard(value.t) ||
         (value.t.irt & ~(IRT_TYPE|IRT_GUARD|IRT_ISPHI))) return 0;
   } else if (store) {
@@ -5268,7 +5280,8 @@ static int arm64_rooted_postra_effect(const LJArm64PostRAView *v, IRRef n,
     r2 = ir_load_acq(&v->ir[root2]);
     /* Lightuserdata keys are currently certified for the generic reader.
     ** The existing-key store helpers still reject that key class. */
-    if (arm64_scalar_postra_ref(v, r2.op1, root2, IRT_LIGHTUD)) return 0;
+    if (r2.op1 == REF_NIL ||
+        arm64_scalar_postra_ref(v, r2.op1, root2, IRT_LIGHTUD)) return 0;
     if (inner.o != IR_CARG || inner.t.irt != IRT_NIL ||
         inner.op1 != root1 || inner.op2 != root2 ||
         root1 >= outer.op1 || root2 >= outer.op1 ||
@@ -5476,11 +5489,13 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
         break;
       }
       if (arm64_rooted_gc_type(type) || type == IRT_LIGHTUD ||
-          type == IRT_FALSE || type == IRT_TRUE) {
+          type == IRT_FALSE || type == IRT_TRUE || (!side && type == IRT_NIL)) {
         if ((p.t.irt & ~((arm64_rooted_gc_type(type) || type == IRT_LIGHTUD) ?
                          IRT_ISPHI : 0)) != (type|IRT_GUARD) ||
             p.op2 != IRSLOAD_TYPECHECK || p.op1 < 1 + LJ_FR2 ||
             p.op1 >= v->root_topslot + 1 + LJ_FR2)
+          return 0;
+        if (type == IRT_NIL && (p.r != RID_INIT || p.s != SPS_NONE))
           return 0;
         break;
       }
@@ -5507,6 +5522,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
             !arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM) &&
             !arm64_scalar_postra_gc_ref(v, p.op1, ref) &&
             !arm64_scalar_postra_ref(v, p.op1, ref, IRT_LIGHTUD) &&
+            p.op1 != REF_NIL &&
             !arm64_scalar_postra_ref(v, p.op1, ref, IRT_FALSE) &&
             !arm64_scalar_postra_ref(v, p.op1, ref, IRT_TRUE)) return 0;
         root2 = ref;
@@ -5584,10 +5600,11 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
     case IR_VLOAD:
       if (!resultroot || ref != resultref || p.op1 != resultroot || p.op2 ||
           (type != IRT_INT && type != IRT_NUM &&
-           type != IRT_FALSE && type != IRT_TRUE &&
+           type != IRT_FALSE && type != IRT_TRUE && type != IRT_NIL &&
            !arm64_rooted_gc_type(type) && type != IRT_LIGHTUD) ||
           !(flags & IRT_GUARD) ||
           (flags & ~(IRT_GUARD|IRT_ISPHI))) return 0;
+      if (type == IRT_NIL && (p.r != RID_INIT || p.s != SPS_NONE)) return 0;
       resultroot = resultref = 0;
       break;
     case IR_CONV:
@@ -5768,6 +5785,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
            !arm64_scalar_postra_ref(v, r, at, IRT_NUM) &&
            !arm64_scalar_postra_gc_ref(v, r, at) &&
            !arm64_scalar_postra_ref(v, r, at, IRT_LIGHTUD) &&
+           (side || r != REF_NIL) &&
            !arm64_scalar_postra_ref(v, r, at, IRT_FALSE) &&
            !arm64_scalar_postra_ref(v, r, at, IRT_TRUE)))
         return 0;

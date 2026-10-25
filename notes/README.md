@@ -146,6 +146,12 @@ available.
   preserve the segmented token without treating it as a GC pointer. The full
   rooted-value contract passes in all four profiles; see
   [`arm64-jit-rooted-lightuserdata-2026-10-25.md`](arm64-jit-rooted-lightuserdata-2026-10-25.md).
+- Rooted nil reads in LOOP/FORL use a bounded raw-absence and NULL-metatable
+  proof, including nil and NaN keys. Insertion or a metatable causes an exit
+  into ordinary lookup. Native key/mutation matrices and independent admission
+  checks pass in all four profiles; ARM64 and signed x64 stock source/import
+  each pass 509 cases. See
+  [`arm64-jit-rooted-nil-reads-2026-10-25.md`](arm64-jit-rooted-nil-reads-2026-10-25.md).
 - Scalar `FORL` supports constant and variable integer bounds/steps through
   def-use and source-control-flow checks. Scalar fixed-arity `FUNCF` supports
   bounded arithmetic, argument/cell loads and one scalar return.
@@ -187,7 +193,7 @@ available.
 - General table and upvalue JIT reads, writes and traversal, plus sunk/duplicate
   allocation and raw initialization effects. Rooted scalar/GC reads,
   existing-key scalar/GC stores and unsunk TNEW have operation proofs;
-  new-key insertion, nil results, lightuserdata stores and general metamethod
+  new-key insertion, nil deletion, lightuserdata stores and general metamethod
   paths remain closed. Shared raw nil stores sampled as absent now abort recording
   instead of losing a deletion on later execution; see the
   [raw nil-store regression](arm64-raw-nil-store-2026-10-25.md). Forwarding-safe
