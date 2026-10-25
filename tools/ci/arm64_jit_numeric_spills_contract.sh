@@ -16,8 +16,6 @@ case "$arch" in
   *) echo "unsupported numeric spill target: $arch" >&2; exit 2 ;;
 esac
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS'
-lj_ci_set_restore '-arch arm64' \
-  '-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT'
 lj_ci_build_profile "$arch" "$target_flags" "$xcflags" numeric-spills
 lj_ci_require_symbols lj_asm_arm64_ir_admit lj_asm_arm64_postra_admit \
   lj_trace_test_root_entry_publishes

@@ -37,6 +37,10 @@ lj_ci_profile_init() {
   LJ_CI_CFLAGS=${CFLAGS:-}
   LJ_CI_CPPFLAGS=${CPPFLAGS:-}
   LJ_CI_LDFLAGS=${LDFLAGS:-}
+  LJ_CI_TARGET_CFLAGS=${TARGET_CFLAGS:-}
+  LJ_CI_TARGET_LDFLAGS=${TARGET_LDFLAGS:-}
+  LJ_CI_TARGET_SHLDFLAGS=${TARGET_SHLDFLAGS:-}
+  LJ_CI_CCDEBUG=${CCDEBUG:-}
   trap 'lj_ci_finish $?' EXIT
   trap 'exit 129' HUP
   trap 'exit 130' INT
@@ -87,6 +91,8 @@ lj_ci_profile_hash() {
   config=$(printf '%s\n' "$LJ_CI_NAME" "$label" "$LJ_CI_ARCH" \
     "$LJ_CI_TARGET_SYS" "$LJ_CI_TARGET_FLAGS" "$LJ_CI_XCFLAGS" \
     "$LJ_CI_CC" "$LJ_CI_CFLAGS" "$LJ_CI_CPPFLAGS" "$LJ_CI_LDFLAGS" \
+    "$LJ_CI_TARGET_CFLAGS" "$LJ_CI_TARGET_LDFLAGS" \
+    "$LJ_CI_TARGET_SHLDFLAGS" "$LJ_CI_CCDEBUG" \
     "$LJ_CI_MINVER" "$LJ_CI_SDKROOT" "$LJ_CI_BUILT_ARCHIVE_SHA" \
     "$LJ_CI_BUILT_RUNTIME_SHA") || return $?
   hashline=$(printf '%s' "$config" | shasum -a 256) || return $?
@@ -113,6 +119,9 @@ lj_ci_record_lua_profile() {
     TARGET_SYS="$LJ_CI_TARGET_SYS" TARGET_FLAGS="$LJ_CI_TARGET_FLAGS" \
     CFLAGS="$LJ_CI_CFLAGS" CPPFLAGS="$LJ_CI_CPPFLAGS" \
     LDFLAGS="$LJ_CI_LDFLAGS" XCFLAGS="$LJ_CI_XCFLAGS" \
+    TARGET_CFLAGS="$LJ_CI_TARGET_CFLAGS" \
+    TARGET_LDFLAGS="$LJ_CI_TARGET_LDFLAGS" \
+    TARGET_SHLDFLAGS="$LJ_CI_TARGET_SHLDFLAGS" CCDEBUG="$LJ_CI_CCDEBUG" \
     SDKROOT="$LJ_CI_SDKROOT" MACOSX_DEPLOYMENT_TARGET="$LJ_CI_MINVER" \
     "$LJ_CI_RUNTIME" "$LJ_CI_ROOT/tools/ci/record_build_profile.lua"
 }
@@ -127,12 +136,18 @@ lj_ci_build_profile() {
     make -C "$LJ_CI_ROOT/src" clean TARGET_SYS="$LJ_CI_TARGET_SYS" \
       CC="$LJ_CI_CC" TARGET_FLAGS="$LJ_CI_TARGET_FLAGS" \
       CFLAGS="$LJ_CI_CFLAGS" CPPFLAGS="$LJ_CI_CPPFLAGS" \
+      TARGET_CFLAGS="$LJ_CI_TARGET_CFLAGS" \
+      TARGET_LDFLAGS="$LJ_CI_TARGET_LDFLAGS" \
+      TARGET_SHLDFLAGS="$LJ_CI_TARGET_SHLDFLAGS" CCDEBUG="$LJ_CI_CCDEBUG" \
       LDFLAGS="$LJ_CI_LDFLAGS" XCFLAGS="$LJ_CI_XCFLAGS" || return $?
   env MACOSX_DEPLOYMENT_TARGET="$LJ_CI_MINVER" \
     make -C "$LJ_CI_ROOT/src" -j"$LJ_CI_JOBS" \
       TARGET_SYS="$LJ_CI_TARGET_SYS" CC="$LJ_CI_CC" \
       TARGET_FLAGS="$LJ_CI_TARGET_FLAGS" CFLAGS="$LJ_CI_CFLAGS" \
       CPPFLAGS="$LJ_CI_CPPFLAGS" LDFLAGS="$LJ_CI_LDFLAGS" \
+      TARGET_CFLAGS="$LJ_CI_TARGET_CFLAGS" \
+      TARGET_LDFLAGS="$LJ_CI_TARGET_LDFLAGS" \
+      TARGET_SHLDFLAGS="$LJ_CI_TARGET_SHLDFLAGS" CCDEBUG="$LJ_CI_CCDEBUG" \
       XCFLAGS="$LJ_CI_XCFLAGS" || return $?
   actual=$(lipo -archs "$LJ_CI_ARCHIVE") || return $?
   if test "$actual" != "$LJ_CI_ARCH"; then
@@ -193,9 +208,10 @@ lj_ci_compile_fixture() {
   # shellcheck disable=SC2086 # compiler and build flags are intentional lists.
   set -- $LJ_CI_CC $LJ_CI_CFLAGS $LJ_CI_CPPFLAGS \
     -std=gnu11 -O2 -Wall -Wextra -Werror $LJ_CI_TARGET_FLAGS \
+    $LJ_CI_TARGET_CFLAGS $LJ_CI_CCDEBUG \
     -mmacosx-version-min="$LJ_CI_MINVER" $LJ_CI_XCFLAGS \
     -I"$LJ_CI_ROOT/src" "$@" "$LJ_CI_ARCHIVE" \
-    $LJ_CI_LDFLAGS -lm -pthread -o "$output"
+    $LJ_CI_LDFLAGS $LJ_CI_TARGET_LDFLAGS -lm -pthread -o "$output"
   "$@" || { status=$?; set +f; return "$status"; }
   set +f
   actual=$(lipo -archs "$output") || return $?
@@ -220,6 +236,7 @@ lj_ci_compile_object() {
   # shellcheck disable=SC2086 # compiler and build flags are intentional lists.
   set -- $LJ_CI_CC $LJ_CI_CFLAGS $LJ_CI_CPPFLAGS \
     -std=gnu11 -O2 -Wall -Wextra -Werror $LJ_CI_TARGET_FLAGS \
+    $LJ_CI_TARGET_CFLAGS $LJ_CI_CCDEBUG \
     -mmacosx-version-min="$LJ_CI_MINVER" $LJ_CI_XCFLAGS \
     -I"$LJ_CI_ROOT/src" "$@" -c "$source" -o "$output"
   "$@" || { status=$?; set +f; return "$status"; }
@@ -294,12 +311,18 @@ lj_ci_restore() {
     make -C "$LJ_CI_ROOT/src" clean TARGET_SYS="$LJ_CI_TARGET_SYS" \
       CC="$LJ_CI_CC" TARGET_FLAGS="$target_flags" \
       CFLAGS="$LJ_CI_CFLAGS" CPPFLAGS="$LJ_CI_CPPFLAGS" \
+      TARGET_CFLAGS="$LJ_CI_TARGET_CFLAGS" \
+      TARGET_LDFLAGS="$LJ_CI_TARGET_LDFLAGS" \
+      TARGET_SHLDFLAGS="$LJ_CI_TARGET_SHLDFLAGS" CCDEBUG="$LJ_CI_CCDEBUG" \
       LDFLAGS="$LJ_CI_LDFLAGS" XCFLAGS="$xcflags" || return $?
   env MACOSX_DEPLOYMENT_TARGET="$LJ_CI_MINVER" \
     make -C "$LJ_CI_ROOT/src" -j"$LJ_CI_JOBS" \
       TARGET_SYS="$LJ_CI_TARGET_SYS" CC="$LJ_CI_CC" \
       TARGET_FLAGS="$target_flags" CFLAGS="$LJ_CI_CFLAGS" \
       CPPFLAGS="$LJ_CI_CPPFLAGS" LDFLAGS="$LJ_CI_LDFLAGS" \
+      TARGET_CFLAGS="$LJ_CI_TARGET_CFLAGS" \
+      TARGET_LDFLAGS="$LJ_CI_TARGET_LDFLAGS" \
+      TARGET_SHLDFLAGS="$LJ_CI_TARGET_SHLDFLAGS" CCDEBUG="$LJ_CI_CCDEBUG" \
       XCFLAGS="$xcflags" || return $?
   case " $target_flags " in
     *' -arch arm64e '*) expected=arm64e ;;

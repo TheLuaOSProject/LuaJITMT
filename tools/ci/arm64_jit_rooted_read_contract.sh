@@ -14,8 +14,7 @@ minver=$LJ_CI_MINVER
 archive=$LJ_CI_ARCHIVE
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS'
 pauth_xcflags="$xcflags -DLUAJIT_ENABLE_CET_BR"
-safeexperimental_xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT'
-restore_xcflags=${LJ_ARM64_ROOTED_READ_RESTORE_XCFLAGS:-$safeexperimental_xcflags}
+restore_xcflags=${LJ_ARM64_ROOTED_READ_RESTORE_XCFLAGS:-$LJ_CI_RESTORE_XCFLAGS}
 lj_ci_set_restore '-arch arm64' "$restore_xcflags"
 admit=$root/src/lj_asm_arm64_admit.h
 contract=$root/tools/ci/arm64_jit_ir_admission_contract.sh

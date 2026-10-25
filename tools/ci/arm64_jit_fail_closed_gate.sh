@@ -13,6 +13,12 @@ export LJ_TEST_RUN_LOCK_HELD
 jobs=${JOBS:-${MAKE_JOBS:-$(sysctl -n hw.logicalcpu 2>/dev/null || echo 2)}}
 minver=${MACOSX_DEPLOYMENT_TARGET:-13.0}
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_ARM64_EMIT_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS'
+# Nested shared contracts must restore the enclosing archive's complete helper
+# profile before the next fixture consumes it.
+LJ_TEST_RESTORE_XCFLAGS=$xcflags
+LJ_TEST_RESTORE_TARGET_FLAGS='-arch arm64'
+LJ_TEST_XCFLAGS=$xcflags
+export LJ_TEST_RESTORE_XCFLAGS LJ_TEST_RESTORE_TARGET_FLAGS LJ_TEST_XCFLAGS
 luajit=$root/src/luajit
 archive=$root/src/libluajit.a
 vm_object=$root/src/lj_vm.o

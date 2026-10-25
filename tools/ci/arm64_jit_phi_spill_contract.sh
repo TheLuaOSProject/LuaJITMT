@@ -16,8 +16,6 @@ case "$arch" in
   *) echo "unsupported PHI spill target: $arch" >&2; exit 2 ;;
 esac
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_ARM64_EMIT_TEST_HELPERS'
-lj_ci_set_restore '-arch arm64' \
-  '-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT'
 lj_ci_build_profile "$arch" "$target_flags" "$xcflags" phi-spill
 lj_ci_require_symbols lj_asm_arm64_phi_spill_test
 fixture=$tmpdir/t-arm64-jit-phi-spill

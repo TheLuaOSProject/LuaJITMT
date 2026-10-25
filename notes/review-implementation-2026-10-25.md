@@ -306,3 +306,26 @@ The original entry benchmark used `hotexit=1000`; its large exit count does not
 prove adaptation failure with ordinary settings. The historical review now
 states that limitation. Numeric-side acceptance must identify a genuine child
 and the patched parent exit, rather than infer adaptation from trace count.
+
+## Nested and sanitizer shell profiles
+
+The combined experimental run exposed a restoration mismatch: the migrated
+PHI contract restored its standalone profile, dropping trace helpers required
+by the next scalar fixture. The umbrella now passes its complete restoration
+profile to nested shared contracts; PHI and numeric-spill contracts respect it.
+The actual PHI-then-scalar sequence passes, including native scalar/FMA exits,
+independent corruption checks, GC and flush. Log:
+`/tmp/ljmt-review-nested-profile.log`.
+
+The shell profile helper also propagates target compile/link/shared-link flags
+and debug flags explicitly through builds, restoration, stamps and fixture
+compilation. Previously target-only sanitizer flags reached the runtime through
+the environment but were absent from the fixture compiler command. With the
+fix, the complete allocation contract passes under AddressSanitizer on both
+ARM64 and ARM64e, including all capacity variants, independent admission
+mutations and concurrent GC. Runtime sources are frozen at `a836be4b` (same
+production code as `450471dc`) in an isolated copy. Flags were `-O1 -g
+-fno-omit-frame-pointer -fsanitize=address`, matching link/shared-link sanitizer
+flags, and `ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:abort_on_error=1`.
+Leak detection is separate from this retained-arena test. Log:
+`/tmp/ljmt-review-tnew-asan.log`.
