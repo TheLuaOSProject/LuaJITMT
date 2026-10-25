@@ -9,18 +9,20 @@ and reports that are no longer authoritative are retained in
 
 - Development branch: `codex/aarch64-macos-port`.
 - Integrated upstream comparison point: LuaJITMT `v2.1` at `489bb089`.
-  The post-refresh bootstrap gate now passes at `608e5d7e`; the latest
+  The post-refresh bootstrap gate now passes at `a549d537`; the latest
   experimental gate is being revalidated. See
   [`upstream-refresh-2026-10-22.md`](upstream-refresh-2026-10-22.md) for merge
   decisions, retained artifact exclusions, tests and remaining limits.
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
-- Post-refresh bootstrap validation passes on frozen `608e5d7e`, including
+- Post-refresh bootstrap validation passes on frozen `a549d537`, including
   all 387 applicable stock cases, threaded tmpbuf, Darwin native roots,
   ARM64/arm64e callbacks, variadic/aggregate FFI, and x86-64 unwind execution.
   The table-rescan close race and internal FFI errno regressions are fixed;
   see [`checkpoint-2026-10-25.md`](checkpoint-2026-10-25.md).
+- Native ARM64 source and original-v2 import stock corpora both pass all 509
+  cases on frozen `1a67d2ea`, including rooted table-length admission.
 - A nested-universe JIT initialization stall is fixed by resolving hotcount
   handshake ownership through the existing physical-actor-checked fallback.
   The focused GC2 fixture passes on ARM64 and x86-64, and both x86-64 stock

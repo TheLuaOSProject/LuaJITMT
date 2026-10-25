@@ -60,6 +60,20 @@ the safe interpreter fixture retained; the foreign-actor rejection still
 passes. Both x86-64 509-case source/import suites also pass after the fix. See
 [`x64-shared-runtime-regression-2026-10-25.md`](x64-shared-runtime-regression-2026-10-25.md).
 
+The complete bootstrap gate passed again on frozen `a549d537`, including the
+registered shared errno suite and all default architecture branches. The log
+is `/tmp/luajitmt-20261025-bootstrap-current.log`. Both native ARM64 stock
+corpora on frozen `1a67d2ea` passed all 509 cases after rooted-length admission
+was added (`/tmp/luajitmt-20261025-arm64-stock-{source,import}.log`).
+
+The complete experimental attempt on `1a67d2ea` exposed the static audit's
+old blanket scalar-call prohibition. The updated audit retains rejection of
+CALLN/CALLA/CALLL/CALLXS and separately verifies the exact rooted-length
+CALLS/root/retry relationship in both passes. Its existing table-typed SLOAD
+negative now expects rejection at the invalid numeric use; that SLOAD type
+can validly occur only with the rooted helper graph. The focused IR contract
+and the separate native ARM64/arm64e rooted-length contract both pass.
+
 Temporary full bootstrap log:
 `/tmp/luajitmt-20261025-bootstrap-final.log`.
 Partial experimental log:

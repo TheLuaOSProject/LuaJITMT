@@ -59,6 +59,8 @@ nm "$archive" | grep ' T _lj_asm_arm64_postra_admit$' >/dev/null || {
 
 scalar_semantic=$tmpdir/scalar-semantic.txt
 scalar_postra=$tmpdir/scalar-postra.txt
+semantic_tablen_call=$tmpdir/semantic-tablen-call.txt
+postra_tablen_call=$tmpdir/postra-tablen-call.txt
 awk '/^static int arm64_scalar_ir_admit/ { copying = 1 }
      copying && /^static int arm64_scalar_postra_kref/ { exit }
      copying { print }' "$admit_source" >"$scalar_semantic"
@@ -66,6 +68,13 @@ awk '/^static int arm64_scalar_postra_kref/ { copying = 1 }
      copying && /^int lj_asm_arm64_ir_admit/ { exit }
      copying { print }' "$admit_source" >"$scalar_postra"
 test -s "$scalar_semantic" && test -s "$scalar_postra"
+awk '/case IR_CALLS:/ { copying = 1 }
+     copying && /^    case IR_CALLXS:/ { exit }
+     copying { print }' "$scalar_semantic" >"$semantic_tablen_call"
+awk '/case IR_CALLS:/ { copying = 1 }
+     copying && /^    case IR_ADDOV:/ { exit }
+     copying { print }' "$scalar_postra" >"$postra_tablen_call"
+test -s "$semantic_tablen_call" && test -s "$postra_tablen_call"
 
 # The two certificates must derive their own decisions from their inputs.
 # Basic checked bytecode range utilities may be shared; verdicts and scalar
@@ -94,15 +103,116 @@ for region in "$scalar_semantic" "$scalar_postra"; do
   fi
 done
 
-# Calls may be diagnosed by the semantic gate, but cannot be admitted there.
+# General native calls remain rejected. IR_CALLS has one isolated exception:
+# the rooted-length profile audited below; its exact callee/root/guard checks
+# must not weaken blanket CALLN/CALLA/CALLL/CALLXS rejection.
 awk '/case IR_CALLN:/ { copying = 1 }
+     copying && /^    case IR_CALLS:/ { copying = 0 }
+     /^    case IR_CALLXS:/ { copying = 1 }
      copying && /^    default:/ { exit }
      copying { print }' "$scalar_semantic" >"$call_region"
+for opcode in CALLN CALLA CALLL CALLXS; do
+  grep -F "case IR_$opcode:" "$call_region" >/dev/null || {
+    echo "ARM64 general call blacklist lost IR_$opcode" >&2
+    exit 1
+  }
+done
 test "$(grep -c 'LJ_ARM64_IR_REJECT_CALL' "$call_region")" -eq 2
-if grep -E 'break;|return 1|IRCALL_[A-Za-z0-9_]+[[:space:]]*:' "$call_region" >/dev/null; then
-  echo "ARM64 scalar call gate acquired an allowed helper" >&2
+if grep -E 'break;|return 1|IR_CALLS[[:space:]]*:' "$call_region" >/dev/null; then
+  echo "ARM64 general call gate acquired an unscoped helper" >&2
   exit 1
 fi
+
+# The sole CALLS exception is a bounded rooted table-length capability. Keep
+# the semantic and post-RA certificates independent, with a checked IN1 root,
+# exact helper identity, and an immediate retry-sentinel guard backed by a real
+# integer constant-pool member.
+for required in \
+  'static int arm64_tablen_retry_kint(const IRIns *ir, IRRef nk, IRRef ref)' \
+  'ref < nk || ref >= REF_TRUE' \
+  'k.o == IR_KINT && k.t.irt == IRT_INT' \
+  'k.i == LJ_TAB_LEN_RETRY' \
+  'IRCALL_lj_tab_len_rooted_try' \
+  'tablen_table >= tablen_root' \
+  'tablen_guard != tablen_calls' \
+  'guard != call + 1u' \
+  'guard != ref + 1u' \
+  'arm64_tablen_retry_kint(T->ir, T->nk, kref)' \
+  'arm64_tablen_retry_kint(v->ir, v->nk, kref)' \
+  'LJ_ARM64_TABLEN_MAX_CALLS 8u' \
+  'IRTMPREF_IN1'; do
+  grep -F "$required" "$admit_source" >/dev/null || {
+    echo "ARM64 rooted-length admission proof changed: $required" >&2
+    exit 1
+  }
+done
+for required in \
+  'ir->op1 < REF_FIRST || ir->op1 >= ref' \
+  'T->ir[ir->op1].o != IR_TMPREF' \
+  'T->ir[ir->op1].op1 != tablen_table' \
+  'ir->op2 != IRCALL_lj_tab_len_rooted_try' \
+  'tablen_calls++'; do
+  grep -F "$required" "$semantic_tablen_call" >/dev/null || {
+    echo "ARM64 semantic rooted-length call proof lost $required" >&2
+    exit 1
+  }
+done
+for required in \
+  'p.op1 < REF_FIRST || p.op1 >= ref' \
+  'ir_load_acq(&v->ir[p.op1]).o != IR_TMPREF' \
+  'ir_load_acq(&v->ir[p.op1]).op1 != tablen_table' \
+  'p.op2 != IRCALL_lj_tab_len_rooted_try' \
+  'tablen_calls++'; do
+  grep -F "$required" "$postra_tablen_call" >/dev/null || {
+    echo "ARM64 post-RA rooted-length call proof lost $required" >&2
+    exit 1
+  }
+done
+for required in \
+  'p.op2 != IRTMPREF_IN1' \
+  'guard != ref + 1u'; do
+  grep -F "$required" "$scalar_postra" >/dev/null || {
+    echo "ARM64 post-RA rooted-length retry proof lost $required" >&2
+    exit 1
+  }
+done
+# Keep the capability tied to its independent runtime/negative contract and
+# user-visible active-MT IR assertion. That companion builds and executes both
+# ARM64 and ARM64e/BTI profiles.
+grep -F 'sh "$root/tools/ci/arm64_jit_rooted_tablen_contract.sh"' \
+  "$root/tools/ci/arm64_jit_fail_closed_gate.sh" >/dev/null || {
+  echo 'ARM64 fail-closed gate no longer enrolls the rooted-length contract' >&2
+  exit 1
+}
+for required in \
+  'fixture_source=$root/tests/t-tab-rooted-len-try.c' \
+  "build_and_run arm64 '-arch arm64'" \
+  "build_and_run arm64e '-arch arm64e -mbranch-protection=bti'"; do
+  grep -F "$required" "$root/tools/ci/arm64_jit_rooted_tablen_contract.sh" \
+    >/dev/null || {
+    echo "ARM64 rooted-length companion contract lost: $required" >&2
+    exit 1
+  }
+done
+for required in \
+  'assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));' \
+  'assert(!lj_asm_arm64_postra_admit(&v, NULL));' \
+  'IRCALL_lj_tab_len' \
+  'LJ_TAB_LEN_RETRY + 1' \
+  'IRTMPREF_IN1 | IRTMPREF_IN2' \
+  'guard != call + 1u' \
+  'LJ_TAB_LEN_RETRY'; do
+  grep -F "$required" "$root/tests/t-tab-rooted-len-try.c" \
+    "$admit_source" >/dev/null || {
+    echo "ARM64 rooted-length independent negative missing: $required" >&2
+    exit 1
+  }
+done
+grep -F 'assert_rooted_len_ir("active-MT #table BC_LOOP")' \
+  "$root/tests/suites/m6_jit.lua" >/dev/null || {
+  echo 'ARM64 active-MT rooted-length native IR assertion was removed' >&2
+  exit 1
+}
 
 # Generic scalar checks coexist with independently scoped FORL, FUNCF and
 # CALLXS admission. They must not absorb these roots or native-call layouts.

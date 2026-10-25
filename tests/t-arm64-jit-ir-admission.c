@@ -1713,7 +1713,9 @@ static void test_positive_and_negative(lua_State *L)
 
   make_trace(J);
   fx.ir[R_A].t.irt = IRT_TAB|IRT_GUARD;
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SLOAD);
+  /* Table SLOAD is recognized only as the rooted-length profile's table
+  ** source; this ordinary scalar graph must reject its numeric use. */
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_SUBOV);
 
   make_trace(J);
   fx.ir[R_A].op2 |= IRSLOAD_KEYINDEX;
