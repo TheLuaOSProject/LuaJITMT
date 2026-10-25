@@ -199,3 +199,34 @@ experimental assertion build. It checks an interpreter control, a real compiled
 numeric loop with observed exits, hook conflicts, and workload failure. The
 JIT-disabled branch was also checked separately. Log:
 `/tmp/ljmt-review-native-coverage.log`.
+
+## Rooted scalar store effects
+
+Existing-key numeric and boolean stores now use generic rooted helpers on the
+experimental ARM64 path. Table and key inputs are retained under exact leases,
+revalidated, and handed to enumerated TG anchors before invoking the existing
+cooperative keyed-store protocol. Temporary leases and SMR readers are closed
+before retry/wait boundaries. String writes invalidate the negative metamethod
+cache; a missing/deleted key resumes ordinary Lua assignment. This retains the
+existing resize/weak/barrier rules and does not expose raw array/hash stores.
+
+The helper is a cooperative operation, not a no-wait try. It may reserve anchor
+storage and retry during resize; a refusal following a raced CAS does not mean
+no write ever occurred. This matches the existing store protocol. Semantic and
+post-RA walkers independently validate roots, the scalar argument chain, status
+guard, allocated scratch registers, and post-store guard snapshots. They impose
+no trace-wide store count, key, table count or reference ordinal.
+
+`tools/ci/arm64_jit_rooted_store_contract.sh` passed on ARM64 and arm64e/BTI:
+six live active-peer loop shapes each had one native trace and 20 exits across
+20 calls, including mixed reads/stores and computed keys/values. Deleted-key
+metamethod fallback was checked. Direct helper tests covered source handoff,
+full GC, stack growth, resize, first/second anchor reservation failure, missing
+and invalid keys, closed reclamation admission, OS error preservation and
+protected error rollback. Both independent validators rejected corrupted
+argument/root/status/snapshot graphs. Log:
+`/tmp/ljmt-review-rooted-store-contract.log`.
+
+The new M6 case is registered separately. GC-valued stores, new-key trace
+construction and allocation effects still require their own operation proofs;
+this checkpoint does not claim those paths.

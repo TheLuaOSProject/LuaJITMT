@@ -453,6 +453,19 @@ LJ_FUNC int lj_tab_cmpcdata_kgc_rooted_try(lua_State *L, cTValue *tabroot,
 ** The ordinary rooted API retains its broader semantics and progress debt. */
 LJ_FUNC int lj_tab_getscalar_rooted_try(lua_State *L, cTValue *tabroot,
 				      cTValue *keyroot, TValue *outroot);
+/* Existing-key scalar stores from authoritative table/key roots. The inputs
+** are copied to enumerated TG anchors under exact leases before the existing
+** cooperative resize/store protocol runs. Return zero for setup refusal or a
+** missing/deleted key, requiring the caller to resume ordinary Lua assignment.
+** Unlike the read try helper, this may allocate anchor storage and retry/park;
+** zero after a raced store is not a promise that no earlier CAS occurred.
+** No raw vector pointer or temporary lease crosses a wait. String-key success
+** also invalidates the negative metamethod cache. The value has no GC edge;
+** GC-valued stores, new keys and metamethod dispatch use the ordinary path. */
+LJ_FUNC int32_t lj_tab_storenum_rooted(lua_State *L, cTValue *tabroot,
+				    cTValue *keyroot, lua_Number number);
+LJ_FUNC int32_t lj_tab_storebool_rooted(lua_State *L, cTValue *tabroot,
+				     cTValue *keyroot, int32_t boolean);
 /* Copy one semantic value starting from an authoritative table TValue root.
 ** The helper retains the exact parent, key and result incarnations across its
 ** current-generation SMR read, and release-publishes into an already
@@ -527,6 +540,11 @@ typedef void (*LJTabConstructorPrepublishHook)(lua_State *L, GCtab *t);
 typedef void (*LJTabWaitLAfterYieldHook)(lua_State *L);
 typedef void (*LJTabStorePostCasHook)(lua_State *L, GCtab *t, TValue *dst,
 				      cTValue *key, cTValue *value);
+/* After rooted store handoff, with only enumerated anchors retained. The test
+** may collect, relocate the Lua stack or throw to test protected rollback. */
+typedef void (*LJTabRootedStoreHook)(lua_State *L, TValue *tabroot,
+				  TValue *keyroot);
+LJ_FUNC void lj_tab_test_set_rooted_store_hook(LJTabRootedStoreHook hook);
 typedef void (*LJTabRootedReaderRetryHook)(lua_State *L, GCtab *t,
 					   int reader);
 /* Test-only one-shot hook immediately before rooted length validates its

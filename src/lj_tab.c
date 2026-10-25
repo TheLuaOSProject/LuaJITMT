@@ -7778,6 +7778,117 @@ LJ_FUNCA int32_t lj_tab_storetv_existing_forjit(lua_State *L, GCtab *parent,
 }
 
 #ifdef LJ_TAB_TEST_HELPERS
+static LJTabRootedStoreHook tab_test_rooted_store_hook;
+void lj_tab_test_set_rooted_store_hook(LJTabRootedStoreHook hook)
+{
+  tab_test_rooted_store_hook = hook;
+}
+#endif
+
+/* Bridge enumerated input cells to the existing cooperative store protocol.
+** Reserve empty anchors before retaining any object: allocation failure must
+** never strand an SMR reader or a lease. Publish both exact inputs before the
+** first retry can park, grow the Lua stack, or observe a new GC phase. */
+static int32_t tab_storescalar_rooted(lua_State *L, cTValue *tabroot,
+				    cTValue *keyroot, cTValue *value)
+{
+  TabKeyedSlotOwnerSnapshot owner;
+  LJGC2Lease table_lease = { 0 }, key_lease = { 0 };
+  LJOSerrState oserr;
+  TValue tablev, keyv, confirm, nilv;
+  TValue *tableanchor = NULL, *keyanchor = NULL;
+  uint32_t tableidx = 0, keyidx = 0;
+  ptrdiff_t tabofs = 0, keyofs = 0;
+  int tabstack, keystack, smr = 0;
+  int32_t result = 0;
+
+  lj_oserr_save(&oserr);
+  if (!L || !tabroot || !keyroot ||
+      !tab_keyed_slot_owner_snapshot(L, &owner))
+    goto done;
+  tabstack = tab_key_on_stack(L, tabroot);
+  keystack = tab_key_on_stack(L, keyroot);
+  if (tabstack) tabofs = savestack(L, tabroot);
+  if (keystack) keyofs = savestack(L, keyroot);
+  setnilV(&nilv);
+  if (!lj_tg_root_anchor_reserve_nothrow(L, owner.tg))
+    goto done;
+  tableanchor = lj_tg_root_anchor_push(L, owner.tg, &nilv, &tableidx);
+  if (!lj_tg_root_anchor_reserve_nothrow(L, owner.tg))
+    goto leave;
+  keyanchor = lj_tg_root_anchor_push(L, owner.tg, &nilv, &keyidx);
+  if (tabstack) tabroot = restorestack(L, tabofs);
+  if (keystack) keyroot = restorestack(L, keyofs);
+  if (!tab_keyed_slot_owner_current(L, &owner) ||
+      !lj_gc2_smr_read_try(owner.g))
+    goto leave;
+  smr = 1;
+  lj_tv_load_acq(&tablev, tabroot);
+  lj_tv_load_acq(&keyv, keyroot);
+  if (!tvistab(&tablev) ||
+      !(tvisstr(&keyv) || tvisnumber(&keyv) || tvisbool(&keyv)) ||
+      (tvisnum(&keyv) && tvisnan(&keyv)) ||
+      lj_gc2_tv_lease_acquire(owner.g, &tablev, &table_lease) !=
+	LJ_GC2_TV_EDGE_VALID ||
+      lj_gc2_tv_lease_acquire(owner.g, &keyv, &key_lease) !=
+	LJ_GC2_TV_EDGE_VALID)
+    goto leave;
+  lj_tv_load_acq(&confirm, tabroot);
+  if (tv_rawload(&confirm) != tv_rawload(&tablev))
+    goto leave;
+  lj_tv_load_acq(&confirm, keyroot);
+  if (tv_rawload(&confirm) != tv_rawload(&keyv) ||
+      !tab_keyed_slot_owner_current(L, &owner))
+    goto leave;
+  copyTVrel(L, tableanchor, &tablev);
+  copyTVrel(L, keyanchor, &keyv);
+  lj_gc2_smr_read_leave(owner.g);
+  smr = 0;
+  lj_gc_pubroot(L, tableanchor);
+  lj_gc_pubroot(L, keyanchor);
+  lj_gc2_lease_release(&key_lease);
+  lj_gc2_lease_release(&table_lease);
+#ifdef LJ_TAB_TEST_HELPERS
+  if (tab_test_rooted_store_hook)
+    tab_test_rooted_store_hook(L, tableanchor, keyanchor);
+#endif
+
+  /* No temporary lifetime scope crosses the cooperative retry boundary.
+  ** The scalar value carries no GC edge. A nonlocal STOPREQ/error restores
+  ** these anchors through the enclosing protected-frame checkpoint. */
+  lj_oserr_restore(&oserr);
+  result = lj_tab_storetv_existing_forjit(L, tabV(tableanchor), keyanchor,
+					 value);
+  if (result && tvisstr(keyanchor))
+    lj_tab_nomm_rel(tabV(tableanchor), 0);
+leave:
+  if (smr) lj_gc2_smr_read_leave(owner.g);
+  lj_gc2_lease_release(&key_lease);
+  lj_gc2_lease_release(&table_lease);
+  if (keyanchor) lj_tg_root_anchor_pop(owner.tg, keyidx);
+  if (tableanchor) lj_tg_root_anchor_pop(owner.tg, tableidx);
+done:
+  lj_oserr_restore(&oserr);
+  return result;
+}
+
+int32_t lj_tab_storenum_rooted(lua_State *L, cTValue *tabroot,
+			     cTValue *keyroot, lua_Number number)
+{
+  TValue value;
+  setnumV(&value, number);
+  return tab_storescalar_rooted(L, tabroot, keyroot, &value);
+}
+
+int32_t lj_tab_storebool_rooted(lua_State *L, cTValue *tabroot,
+			      cTValue *keyroot, int32_t boolean)
+{
+  TValue value;
+  setboolV(&value, boolean != 0);
+  return tab_storescalar_rooted(L, tabroot, keyroot, &value);
+}
+
+#ifdef LJ_TAB_TEST_HELPERS
 static TValue *tab_forwarded_jit_array_slot(lua_State *L, GCtab *parent,
 					    TValue *array, MSize asize,
 					    TValue *dst, MSize key)

@@ -2555,6 +2555,27 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 	J->needsnap = 1;
 	return 0;
       } else {
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+	if (tref_isnumber(ix->val) || tref_istrue(ix->val) ||
+	    tref_isfalse(ix->val)) {
+	  TRef parent, key, value, ok;
+	  IRCallID helper;
+	  if (tref_isnumber(ix->val)) {
+	    value = tref_isinteger(ix->val) ?
+	      emitir(IRTN(IR_CONV), ix->val, IRCONV_NUM_INT) : ix->val;
+	    helper = IRCALL_lj_tab_storenum_rooted;
+	  } else {
+	    value = lj_ir_kint(J, tref_istrue(ix->val));
+	    helper = IRCALL_lj_tab_storebool_rooted;
+	  }
+	  parent = rec_tmpref_mode(J, ix->tab, IRTMPREF_IN1);
+	  key = rec_tmpref_mode(J, ix->key, IRTMPREF_IN2);
+	  ok = lj_ir_call(J, helper, parent, key, value);
+	  emitir(IRTGI(IR_NE), ok, lj_ir_kint(J, 0));
+	  J->needsnap = 1;
+	  return 0;
+	}
+#endif
 	TRef key = rec_tmpref_mode(J, ix->key, IRTMPREF_IN1|IRTMPREF_IN2);
 	TRef src;
 	TRef ok;

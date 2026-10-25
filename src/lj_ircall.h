@@ -212,6 +212,8 @@ typedef struct CCallInfo {
   _(ANY,	lj_tab_storetv_forjit_hash, 5, S, PGC, CCI_L|CCI_T) \
   _(ANY,	lj_tab_storetv_forjit_newref, 5, S, PGC, CCI_L|CCI_T) \
   _(ANY,	lj_tab_storetv_existing_forjit, 4, S, INT, CCI_L|CCI_T) \
+  _(ANY,	lj_tab_storenum_rooted,	4, S, INT, CCI_L|CCI_T) \
+  _(ANY,	lj_tab_storebool_rooted,	4, S, INT, CCI_L|CCI_T) \
   _(ANY,	lj_tab_len_rooted_try, 2, S, INT, CCI_L) \
   _(ANY,	lj_tab_len_forjit_try, 2, S, INT, CCI_L) \
   _(ANY,	lj_tab_keyindex,	2,  FL, INT, 0) \
