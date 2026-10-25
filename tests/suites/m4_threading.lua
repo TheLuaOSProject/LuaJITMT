@@ -510,12 +510,11 @@ return function(add)
       local tsan_options = getenv("TSAN_OPTIONS",
         "halt_on_error=1 second_deadlock_stack=1")
 
-      t:make({ "clean" }, { quiet = true, jobs = false })
-      t:make({
-        "TARGET_CFLAGS=" .. target_cflags,
-        "TARGET_LDFLAGS=" .. target_ldflags,
-        "TARGET_SHLDFLAGS=" .. target_ldflags
-      }, { quiet = true })
+      t:build({clean = true, quiet = true, env = {
+        TARGET_CFLAGS = target_cflags,
+        TARGET_LDFLAGS = target_ldflags,
+        TARGET_SHLDFLAGS = target_ldflags
+      }})
 
       local env = { TSAN_OPTIONS = tsan_options }
       local thr_out = t:tmp("lj_t-thr-substrate-tsan")

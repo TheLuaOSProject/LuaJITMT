@@ -108,6 +108,15 @@ lj_ci_set_restore() {
   LJ_CI_RESTORE_XCFLAGS=$2
 }
 
+lj_ci_record_lua_profile() {
+  env LJ_TEST_ROOT="$LJ_CI_ROOT" CC="$LJ_CI_CC" \
+    TARGET_SYS="$LJ_CI_TARGET_SYS" TARGET_FLAGS="$LJ_CI_TARGET_FLAGS" \
+    CFLAGS="$LJ_CI_CFLAGS" CPPFLAGS="$LJ_CI_CPPFLAGS" \
+    LDFLAGS="$LJ_CI_LDFLAGS" XCFLAGS="$LJ_CI_XCFLAGS" \
+    SDKROOT="$LJ_CI_SDKROOT" MACOSX_DEPLOYMENT_TARGET="$LJ_CI_MINVER" \
+    "$LJ_CI_RUNTIME" "$LJ_CI_ROOT/tools/ci/record_build_profile.lua"
+}
+
 lj_ci_build_profile() {
   LJ_CI_ARCH=$1
   LJ_CI_TARGET_FLAGS=$2
@@ -138,6 +147,7 @@ lj_ci_build_profile() {
   fi
   LJ_CI_BUILT_RUNTIME_SHA=$(lj_ci_sha256 "$LJ_CI_RUNTIME") || return $?
   lj_ci_profile_hash "$label" || return $?
+  lj_ci_record_lua_profile || return $?
   echo "$LJ_CI_NAME profile=$LJ_CI_PROFILE_ID target=$LJ_CI_ARCH flags='$LJ_CI_XCFLAGS'"
 }
 
@@ -311,6 +321,7 @@ lj_ci_restore() {
   LJ_CI_BUILT_ARCHIVE_SHA=$(lj_ci_sha256 "$LJ_CI_ARCHIVE") || return $?
   LJ_CI_BUILT_RUNTIME_SHA=$(lj_ci_sha256 "$LJ_CI_RUNTIME") || return $?
   lj_ci_profile_hash restore || return $?
+  lj_ci_record_lua_profile || return $?
   echo "$LJ_CI_NAME restored profile=$LJ_CI_PROFILE_ID target=$expected flags='$xcflags'"
   LJ_CI_RESTORE_NEEDED=0
 }

@@ -1,6 +1,8 @@
 # Test runner can relabel a sanitizer build as default (2026-07-14)
 
-Status: open harness issue; validation has a safe explicit-clean workaround.
+Status: addressed by the 2026-10-25 build-profile hardening. See
+[`review-implementation-2026-10-25.md`](../../review-implementation-2026-10-25.md)
+for current tests and validation limits. The original report follows.
 
 When an existing checkout already has a persisted `default` build signature,
 an out-of-band target sanitizer build can be reused by a later focused suite

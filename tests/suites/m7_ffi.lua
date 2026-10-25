@@ -15,14 +15,10 @@ local run_luajit_script = runtime.luajit_script
 local run_stock = runtime.run_stock
 
 local function build_and_run_cpp(t, out, cppfile, opts)
-  local old_compiler = t.compiler
-  local ok, err
-  t.compiler = getenv("CXX", "c++")
-  ok, err = xpcall(function()
-    build_and_run_c(t, out, cppfile, opts)
-  end, debug.traceback)
-  t.compiler = old_compiler
-  if not ok then error(err, 0) end
+  local cppopts = {}
+  for k, v in pairs(opts or {}) do cppopts[k] = v end
+  cppopts.compiler = getenv("CXX", "c++")
+  build_and_run_c(t, out, cppfile, cppopts)
 end
 
 local function read_all(path)

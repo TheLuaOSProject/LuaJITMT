@@ -157,3 +157,26 @@ The separate non-test bootstrap profile measured one million direct scalar
 helper calls at 81.25 ns/read. This is C-helper timing, not JIT throughput.
 The complete focused progress and release-helper scripts passed on the
 combined worktree; both restored the ARM64 experimental assertion profile.
+
+## Build-profile identity
+
+The Lua harness now records compiler, target, compile/link flags, SDK,
+deployment target, target sanitizer flags and output hashes. Linked fixtures
+load that exact profile, including in a fresh harness instance; stale runtime
+or archive replacement and a changed valid profile are rejected. Profile
+changes force a clean build, including the non-clean API path. C++ fixtures
+use an explicit compiler option while retaining the archive's target/macros.
+
+Shell builders publish the same stamp immediately after their known build.
+The bootstrap and experimental umbrella gates now use the shared build lock
+and profile helper. The experimental gate restores its own exact profile
+after its nested contracts before running the final linked fixtures.
+
+`m0_build_profile_identity` passed, covering compiler/macro/target changes,
+replaced outputs, stale instances, C++ selection and target sanitizer flags.
+The actual registered ISNEXT C fixture and complete interpreter callback
+lifecycle suite also passed, including its C++ unwind executable. The broader
+bootstrap run reached the concurrent string-buffer fixture but one run timed
+out at its 90-second deadline; another run had passed that fixture before
+exposing the now-fixed C++ compiler selection issue. This timeout is under
+investigation and the combined bootstrap gate is not yet claimed passing.

@@ -162,6 +162,7 @@ function M.compile_and_run_sources(t, out, sources, opts)
   opts = opts or {}
   local run_opts = copy_run_opts(opts)
   t:cc(out, sources, {
+    compiler = opts.compiler,
     cflags = opts.cflags,
     default_cflags = opts.default_cflags,
     include_src = opts.include_src,

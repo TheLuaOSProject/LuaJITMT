@@ -2,33 +2,13 @@
 set -eu
 
 root=${LJ_TEST_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)}
-
-if test "$(uname -s)" != Darwin || test "$(uname -m)" != arm64; then
-  echo "arm64_jit_fail_closed_gate SKIP: requires native macOS arm64"
-  exit 0
+. "$root/tools/ci/lib/arm64_profile.sh"
+if lj_ci_native_arm64_or_skip arm64_jit_fail_closed_gate; then :; else
+  status=$?; test "$status" -eq 1 && exit 0; exit "$status"
 fi
-
-if test -z "${SDKROOT:-}"; then
-  SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
-  export SDKROOT
-fi
-
-lock_dir=$root/src/.lj-test-run.lock
-lock_held=0
-
-cleanup_lock() {
-  if test "$lock_held" = 1; then
-    rm -f "$lock_dir/owner"
-    rmdir "$lock_dir" 2>/dev/null || true
-  fi
-}
-
-while ! mkdir "$lock_dir" 2>/dev/null; do
-  sleep 0.2
-done
-lock_held=1
-trap cleanup_lock EXIT HUP INT TERM
-printf 'cmd=%s\n' "$0" >"$lock_dir/owner" 2>/dev/null || true
+lj_ci_profile_init "$root" arm64_jit_fail_closed_gate
+LJ_TEST_RUN_LOCK_HELD=1
+export LJ_TEST_RUN_LOCK_HELD
 
 jobs=${JOBS:-${MAKE_JOBS:-$(sysctl -n hw.logicalcpu 2>/dev/null || echo 2)}}
 minver=${MACOSX_DEPLOYMENT_TARGET:-13.0}
@@ -38,10 +18,8 @@ archive=$root/src/libluajit.a
 vm_object=$root/src/lj_vm.o
 lua_path="$root/tests/lib/?.lua;$root/src/?.lua;$root/src/jit/?.lua;;"
 
-env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" XCFLAGS="$xcflags" clean
-env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" -j"$jobs" XCFLAGS="$xcflags"
+lj_ci_set_restore '-arch arm64' "$xcflags"
+lj_ci_build_profile arm64 '-arch arm64' "$xcflags" experimental
 
 for artifact in "$luajit" "$archive" "$vm_object"; do
   test "$(lipo -archs "$artifact")" = arm64 || {
@@ -197,6 +175,9 @@ if test -f "$live_flush_contract"; then
     sh "$live_flush_contract"
 fi
 
+# Nested contracts select their own profiles. Re-establish this gate's exact
+# profile before the final runtime and linked-fixture checks.
+lj_ci_build_profile arm64 '-arch arm64' "$xcflags" final-runtime
 env LUA_PATH="$lua_path" "$luajit" -e '
 assert(jit.status() == true, "experimental build did not admit JIT APIs")
 local util = require("jit.util")
@@ -227,4 +208,5 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" LUA_PATH="$lua_path" \
 env LUA_PATH="$lua_path" "$luajit" "$root/tests/t-upvalue-identity.lua"
 env LJ_TEST_ROOT="$root" LUA_PATH="$lua_path" "$luajit" "$root/tests/t-jit-cell-loops.lua"
 
+LJ_CI_RESTORE_NEEDED=0
 echo "arm64_jit_fail_closed_gate OK: independent scalar LOOP capabilities, integer FORL, literal-true JFUNCF, bounded first-side entry and lifecycle contracts sound"

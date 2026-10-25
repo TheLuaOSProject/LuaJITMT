@@ -2,58 +2,13 @@
 set -eu
 
 root=${LJ_TEST_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)}
-
-if test "$(uname -s)" != Darwin || test "$(uname -m)" != arm64; then
-  echo "arm64_bootstrap_gate SKIP: requires native macOS arm64"
-  exit 0
+. "$root/tools/ci/lib/arm64_profile.sh"
+if lj_ci_native_arm64_or_skip arm64_bootstrap_gate; then :; else
+  status=$?; test "$status" -eq 1 && exit 0; exit "$status"
 fi
-
-lock_dir=$root/src/.lj-test-run.lock
-lock_held=0
-
-cleanup_lock() {
-  if test "$lock_held" = 1; then
-    rm -f "$lock_dir/owner"
-    rmdir "$lock_dir" 2>/dev/null || true
-  fi
-}
-
-acquire_lock() {
-  if test "${LJ_TEST_DISABLE_RUN_LOCK:-}" = 1 ||
-     test "${LJ_TEST_RUN_LOCK_HELD:-}" = 1; then
-    return
-  fi
-
-  lock_timeout=${LJ_TEST_RUN_LOCK_TIMEOUT:-900}
-  lock_started=$(date +%s)
-  lock_announced=0
-  while ! mkdir "$lock_dir" 2>/dev/null; do
-    lock_now=$(date +%s)
-    if test "$lock_timeout" -ge 0 &&
-       test $((lock_now - lock_started)) -ge "$lock_timeout"; then
-      echo "ARM64 bootstrap gate lock timed out: $lock_dir" >&2
-      if test -f "$lock_dir/owner"; then
-        echo "owner:" >&2
-        cat "$lock_dir/owner" >&2 || true
-      fi
-      exit 2
-    fi
-    if test "$lock_announced" = 0; then
-      echo "waiting for Lua test runner lock: $lock_dir" >&2
-      lock_announced=1
-    fi
-    sleep 0.2
-  done
-
-  lock_held=1
-  trap cleanup_lock EXIT HUP INT TERM
-  {
-    printf 'time=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf 'cmd=%s\n' "$0"
-  } >"$lock_dir/owner" 2>/dev/null || true
-}
-
-acquire_lock
+lj_ci_profile_init "$root" arm64_bootstrap_gate
+LJ_TEST_RUN_LOCK_HELD=1
+export LJ_TEST_RUN_LOCK_HELD
 
 jobs=${JOBS:-${MAKE_JOBS:-$(sysctl -n hw.logicalcpu 2>/dev/null || echo 2)}}
 minver=${MACOSX_DEPLOYMENT_TARGET:-13.0}
@@ -64,10 +19,8 @@ archive=$root/src/libluajit.a
 vm_object=$root/src/lj_vm.o
 lua_path="$root/tests/lib/?.lua;$root/src/?.lua;$root/src/jit/?.lua;;"
 
-env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" XCFLAGS="$xcflags" clean
-env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" -j"$jobs" XCFLAGS="$xcflags"
+lj_ci_set_restore '-arch arm64' "$xcflags"
+lj_ci_build_profile arm64 '-arch arm64' "$xcflags" bootstrap
 
 require_thin_arm64() {
   artifact=$1
@@ -170,4 +123,5 @@ LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
 LJ_ARM64_GC2_RESTORE_XCFLAGS="$xcflags" \
   sh "$root/tools/ci/arm64_gc2_interp_hard_check_contract.sh"
 
+lj_ci_restore '-arch arm64' "$xcflags"
 echo "arm64_bootstrap_gate OK: assert interpreter, GC2 hard assist, stock, TG hooks, coroutine/dead-resume and FFI callbacks"

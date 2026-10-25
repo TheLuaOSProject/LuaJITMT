@@ -223,6 +223,16 @@ return function(add)
   })
 
   add({
+    name = "m0_build_profile_identity",
+    description = "fixture profiles reject replaced archives and stale compiler settings",
+    run = function(t)
+      runtime.luajit_script(t, "t-ljtest-profile.lua", nil, {
+        timeout = "30s"
+      })
+    end
+  })
+
+  add({
     name = "m0_build_profile_switch",
     description = "Lua test harness rebuilds when the XCFLAGS profile changes",
     run = function(t)
