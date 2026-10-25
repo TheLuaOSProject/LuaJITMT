@@ -200,6 +200,17 @@ numeric loop with observed exits, hook conflicts, and workload failure. The
 JIT-disabled branch was also checked separately. Log:
 `/tmp/ljmt-review-native-coverage.log`.
 
+The side integration exposed an observer limitation: transactional ARM64 child
+publication requires an absent TRACE callback. The default coverage tool's
+trace observer therefore changes side-recording eligibility. Its output now
+labels that observer, and `--exits-only` installs only the exit callback so
+adaptation can proceed. That mode reports exit totals and per-trace-number
+counts; publication, recording refusals and flush generations are unobserved,
+and reused trace numbers are intentionally not described as one incarnation.
+Interpreter and generated-loop controls, hook ownership and failure reporting
+passed in both modes (`/tmp/ljmt-native-coverage-exits-only.log`). Direct child
+execution remains a separate native fixture assertion.
+
 ## Rooted scalar store effects
 
 Existing-key numeric and boolean stores now use generic rooted helpers on the
