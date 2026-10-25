@@ -1123,6 +1123,44 @@ static void run_scalar_native(const char *name, const char *definition,
 	}
       }
     }
+    if (strcmp(name, "__arm64_funcf_live_interference") == 0) {
+	IRRef mul = 0, live_ref = 0;
+	Reg saved_reg;
+	assert(lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
+	for (ref = REF_FIRST; ref < view.nins && mul == 0; ref++) {
+	  IRIns ins = ir_load_acq(&ir[ref]);
+	  IRRef candidates[2], c;
+	  if (ins.o != IR_MUL) continue;
+	  candidates[0] = ins.op1;
+	  candidates[1] = ins.op2;
+	  for (c = 0; c < 2; c++) {
+	    IRRef user;
+	    if (candidates[c] < REF_FIRST || candidates[c] >= ref) continue;
+	    for (user = ref+1u; user < view.nins; user++) {
+	      IRIns next = ir_load_acq(&ir[user]);
+	      if ((next.o == IR_ADDOV || next.o == IR_ADD || next.o == IR_SUB ||
+		   next.o == IR_MUL || next.o == IR_DIV) &&
+		  (next.op1 == candidates[c] || next.op2 == candidates[c])) {
+		mul = ref;
+		live_ref = candidates[c];
+		break;
+	      }
+	    }
+	    if (mul != 0) break;
+	  }
+	}
+	assert(mul != 0 && live_ref != 0 && mul < view.nins && live_ref < mul);
+	saved_reg = ir[mul].r;
+	assert(saved_reg != ir[live_ref].r);
+	/* The intermediate x remains live after y=x*a. An allocator mutation
+	** that puts y over x would corrupt the later x+y, even if no snapshot
+	** simultaneously names both values. */
+	assert(lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
+	ir[mul].r = ir[live_ref].r;
+	assert(!lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
+	ir[mul].r = saved_reg;
+	assert(lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
+    }
   }
   lj_trace_test_root_entry_reset();
   call_scalar_number(L, name, a, b, nargs, want);
@@ -1221,6 +1259,9 @@ static void run_scalar_positives(void)
   run_scalar_native("__arm64_funcf_multi",
 	"function __arm64_funcf_multi(a,b) local x=a+b; local y=x*a; return y-b end\n",
 	3, 2, 2, 13);
+  run_scalar_native("__arm64_funcf_live_interference",
+	"function __arm64_funcf_live_interference(a,b) local x=a+b; local y=x*a; return x+y end\n",
+	3, 2, 2, 20);
   run_integer_addov_native();
 }
 

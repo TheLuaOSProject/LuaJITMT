@@ -807,8 +807,65 @@ static int arm64_ir_funcf_scalar_snapshots(const IRIns *ir, IRRef nins,
 static int arm64_postra_funcf_locations(const LJArm64PostRAView *view,
 	IRRef semantic_nins)
 {
+	enum { MAX_FUNC_DYNAMIC_REFS = 2u*UINT8_MAX+8u };
   IRRef nins = semantic_nins;
-  MSize snapno;
+	IRRef last_ir_use[MAX_FUNC_DYNAMIC_REFS];
+	IRRef last_snap_use[MAX_FUNC_DYNAMIC_REFS] = { 0 };
+	IRRef ref;
+	MSize snapno;
+	if (nins < REF_FIRST || nins-REF_FIRST > MAX_FUNC_DYNAMIC_REFS)
+	  return 0;
+	for (ref = REF_FIRST; ref < nins; ref++) {
+	  IRRef index = ref-REF_FIRST;
+	  IRIns ins = ir_load_acq(&view->ir[ref]);
+	  last_ir_use[index] = ref;
+	  if (ins.o == IR_ADDOV || ins.o == IR_ADD || ins.o == IR_SUB ||
+	      ins.o == IR_MUL || ins.o == IR_DIV) {
+	    if (ins.op1 < REF_FIRST || ins.op1 >= ref ||
+		ins.op2 < REF_FIRST || ins.op2 >= ref)
+	      return 0;
+	    last_ir_use[ins.op1-REF_FIRST] = ref;
+	    last_ir_use[ins.op2-REF_FIRST] = ref;
+	  }
+	}
+	for (snapno = 0; snapno < view->nsnap; snapno++) {
+	  const SnapShot *snap = &view->snap[snapno];
+	  MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap), n;
+	  IRRef snapref = snap_ref_acq(snap);
+	  if (snapref >= nins) return 0;
+	  for (n = 0; n < nent; n++) {
+	    IRRef value = snap_ref(snapentry_acq(&view->snapmap[ofs+n]));
+	    if (value >= REF_FIRST && value < nins &&
+		last_snap_use[value-REF_FIRST] < snapref)
+	      last_snap_use[value-REF_FIRST] = snapref;
+	  }
+	}
+	for (ref = REF_FIRST; ref < nins; ref++) {
+	  IRIns current = ir_load_acq(&view->ir[ref]);
+	  IRType type = irt_type(current.t);
+	  Reg output;
+	  IRRef old;
+	  if (current.o != IR_SLOAD && current.o != IR_ADDOV &&
+	      current.o != IR_ADD && current.o != IR_SUB &&
+	      current.o != IR_MUL && current.o != IR_DIV)
+	    continue;
+	  output = current.r;
+	  for (old = REF_FIRST; old < ref; old++) {
+	    IRIns previous = ir_load_acq(&view->ir[old]);
+	    IRType oldtype = irt_type(previous.t);
+	    if ((previous.o != IR_SLOAD && previous.o != IR_ADDOV &&
+		previous.o != IR_ADD && previous.o != IR_SUB &&
+		previous.o != IR_MUL && previous.o != IR_DIV) ||
+		oldtype != type || previous.r != output)
+	      continue;
+	    /* A dying operand may be reused after its instruction. A value in
+	    ** that instruction's deopt snapshot must remain intact even if its
+	    ** last ordinary IR use is the instruction itself. */
+	    if (last_ir_use[old-REF_FIRST] > ref ||
+		last_snap_use[old-REF_FIRST] >= ref)
+	      return 0;
+	  }
+	}
   for (snapno = 0; snapno < view->nsnap; snapno++) {
 	const SnapShot *snap = &view->snap[snapno];
 	MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap), n, m;
@@ -924,7 +981,7 @@ static int arm64_postra_funcf_admit(const LJArm64PostRAView *view,
       view->proto_bc, view->proto_sizebc, view->proto_numparams,
       view->root_topslot, 1u+LJ_FR2, pollref,
       view->base_delta) ||
-	  !arm64_postra_funcf_locations(view, semantic_nins))
+      !arm64_postra_funcf_locations(view, semantic_nins))
     return 0;
   if (semantic_ninsp) *semantic_ninsp = semantic_nins;
   return 1;

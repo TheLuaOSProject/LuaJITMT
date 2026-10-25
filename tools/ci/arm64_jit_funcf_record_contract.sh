@@ -139,10 +139,12 @@ for required in \
   '__arm64_funcf_mul' \
   '__arm64_funcf_div' \
   '__arm64_funcf_multi' \
+  '__arm64_funcf_live_interference' \
   'test_funcf_generation_race' \
   'ir[load].op1++' \
   'ir[result].prev = ir[arg].prev' \
   'ir[right].prev = ir[left].prev' \
+  'ir[mul].r = ir[live_ref].r' \
   'assert(!lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL))' \
   'TRACE_ARM64_TRUE_FUNCF_ADMITTED' \
   'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA' \
@@ -164,6 +166,7 @@ for required in \
   'arm64_ir_funcf_result_matches' \
   'arm64_ir_funcf_scalar_snapshots' \
   'arm64_postra_funcf_admit' \
+  'arm64_postra_funcf_locations' \
   'arm64_scalar_postra_register' \
   'arm64_ir_funcf_bytecode'; do
   grep -F "$required" "$admit_source" >/dev/null || {
