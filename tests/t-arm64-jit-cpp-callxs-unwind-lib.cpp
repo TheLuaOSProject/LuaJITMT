@@ -1,4 +1,5 @@
 /* C++ frame between generated CALLXS and an erroring Lua FFI callback. */
+#include <assert.h>
 typedef int (*LuaCallback)(int);
 typedef int (*NativeObserver)(int);
 static LuaCallback active_callback;
@@ -25,6 +26,19 @@ extern "C" int arm64_cpp_call_bridge(int value)
     cxx_unwinds++;
     throw;
   }
+}
+
+/* Five outgoing stack arguments exceed the VM's fixed spill area. Retain
+   native C++ frames across the callback and check the carriers on return. */
+extern "C" int arm64_cpp_stack_bridge(int a, int b, int c, int d, int e,
+    int f, int g, int h, int i, int j, int k, int l, int value)
+{
+  volatile int args[] = { a, b, c, d, e, f, g, h, i, j, k, l, value };
+  for (unsigned n = 0; n < 12; n++) assert(args[n] == 101*(int)(n+1));
+  int result = arm64_cpp_call_bridge(args[12]);
+  for (unsigned n = 0; n < 12; n++) assert(args[n] == 101*(int)(n+1));
+  assert(args[12] == value);
+  return result;
 }
 
 extern "C" void arm64_cpp_install_callback(LuaCallback callback)

@@ -239,6 +239,20 @@ return function(add)
           env = { LJ_ARM64_CPP_CALLXS_LIB = callxs_cpp_so },
           timeout = "30s"
         })
+        build_and_run_cpp(t,
+                          t:tmp("lj_t-arm64-jit-cpp-callxs-stack-unwind"),
+                          "t-arm64-jit-cpp-callxs-unwind.cpp", {
+          build = false,
+          default_cflags = false,
+          cflags = t:with_target_arch_flags(flags ..
+            " -std=gnu++11 -O2 -Wall -Wextra -Werror -fexceptions " ..
+            "-funwind-tables"),
+          env = {
+            LJ_ARM64_CPP_CALLXS_LIB = callxs_cpp_so,
+            LJ_ARM64_CPP_CALLXS_STACK = "1"
+          },
+          timeout = "30s"
+        })
         run_luajit_script(t, "t-ffi-callxs-production.lua", nil, {
           env = { LJ_M7_FFI_CALLXS_ARM64_SCALAR = "1" },
           timeout = "30s"

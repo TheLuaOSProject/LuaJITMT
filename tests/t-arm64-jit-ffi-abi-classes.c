@@ -25,6 +25,7 @@
 #include "lj_ircall.h"
 #include "lj_jit.h"
 #include "lj_tg.h"
+#include "lj_target.h"
 #include "lj_trace.h"
 #include "lib/lua_fixture_helpers.h"
 
@@ -39,8 +40,9 @@ typedef void (*InstallObserver)(void (*fn)(unsigned));
 typedef unsigned (*ReadCounter)(unsigned id);
 
 static TGState *test_tg;
-static unsigned native_seen[8];
-static void *expected_func[8];
+enum { ABI_TEST_MAX_ID = 12 };
+static unsigned native_seen[ABI_TEST_MAX_ID];
+static void *expected_func[ABI_TEST_MAX_ID];
 
 typedef struct SemanticClone {
   GCtrace trace;
@@ -201,6 +203,322 @@ static void expect_semantic_reject(jit_State *J, GCtrace *T,
     fprintf(stderr, "ABI footer semantic mutation accepted: %s\n", mutation);
   assert(!accepted && reject.reason == LJ_ARM64_IR_REJECT_SNAPSHOT &&
          reject.op == IR_XSAVE);
+}
+
+static void expect_semantic_reject_any(jit_State *J, GCtrace *T,
+                                       const char *mutation)
+{
+  LJArm64IRReject reject;
+  uint32_t *startpc = (uint32_t *)trace_startpc_acq(T);
+  uint32_t liveins = la_load32_acq(startpc);
+  int accepted;
+  la_store32_rel(startpc, T->startins);
+  accepted = lj_asm_arm64_ir_admit(J, T, &reject);
+  la_store32_rel(startpc, liveins);
+  if (accepted)
+    fprintf(stderr, "ABI stack semantic mutation accepted: %s\n", mutation);
+  assert(!accepted && reject.reason != LJ_ARM64_IR_REJECT_NONE);
+}
+
+static int fixture_callxs_carg_values(const IRIns *ir, IRRef nk,
+                                      IRRef nins, IRRef call,
+                                      unsigned nargs, IRRef *values)
+{
+  IRIns ins;
+  IRRef ref;
+  unsigned i;
+  if (call < REF_FIRST || call >= nins || values == NULL ||
+      nargs > LJ_ARM64_ABI_MAX_ARGS)
+    return 0;
+  ins = ir_load_acq(&ir[call]);
+  if (ins.o != IR_CALLXS) return 0;
+  ref = ins.op1;
+  for (i = nargs; i > 1u; i--) {
+    IRIns carg;
+    if (ref < REF_FIRST || ref >= call) return 0;
+    carg = ir_load_acq(&ir[ref]);
+    if (carg.o != IR_CARG || carg.t.irt != IRT_NIL ||
+        carg.op1 < nk || carg.op1 >= ref ||
+        carg.op2 < nk || carg.op2 >= ref)
+      return 0;
+    values[i-1u] = carg.op2;
+    ref = carg.op1;
+  }
+  if (nargs == 0) return ref == 0;
+  if (ref < nk || ref >= call) return 0;
+  values[0] = ref;
+  return 1;
+}
+
+static IRRef fixture_callxs_carg_for_argument(const IRIns *ir, IRRef call,
+                                      unsigned nargs, unsigned argindex)
+{
+  IRRef ref = ir_load_acq(&ir[call]).op1;
+  unsigned i;
+  assert(argindex > 0 && argindex < nargs);
+  for (i = nargs-1u; i > argindex; i--) {
+    IRIns carg = ir_load_acq(&ir[ref]);
+    assert(carg.o == IR_CARG && carg.op1 < ref);
+    ref = carg.op1;
+  }
+  assert(ir_load_acq(&ir[ref]).o == IR_CARG);
+  return ref;
+}
+
+static int fixture_callxs_signature(CTState *cts, const IRIns *ir,
+                                    IRRef nk, IRRef nins, IRRef call,
+                                    CTypeID expected, LJArm64ABISignature *abi,
+                                    IRRef *values)
+{
+  IRIns c, fp;
+  IRRef cdref, fpref, ref;
+  int found = 0;
+  if (call < REF_FIRST || call >= nins ||
+      (c = ir_load_acq(&ir[call])).o != IR_CALLXS ||
+      (fpref = c.op2) < REF_FIRST || fpref >= call)
+    return 0;
+  fp = ir_load_acq(&ir[fpref]);
+  if (fp.o != IR_FLOAD || fp.op2 != IRFL_CDATA_PTR ||
+      (cdref = fp.op1) < REF_FIRST || cdref >= fpref ||
+      ir_load_acq(&ir[cdref]).o != IR_SLOAD)
+    return 0;
+  for (ref = REF_FIRST; ref < call; ref++) {
+    IRIns id = ir_load_acq(&ir[ref]);
+    IRRef guard;
+    if (id.o != IR_FLOAD || id.op1 != cdref ||
+        id.op2 != IRFL_CDATA_CTYPEID)
+      continue;
+    for (guard = ref+1u; guard < call; guard++) {
+      IRIns eq = ir_load_acq(&ir[guard]);
+      IRRef kref;
+      IRIns k;
+      if (eq.o != IR_EQ || !irt_isguard(eq.t) ||
+          (eq.op1 != ref && eq.op2 != ref))
+        continue;
+      kref = eq.op1 == ref ? eq.op2 : eq.op1;
+      if (kref < nk || kref >= REF_TRUE) return 0;
+      k = ir_load_acq(&ir[kref]);
+      if (k.o != IR_KINT || (CTypeID)k.i != expected) continue;
+      if (found || !lj_ccall_arm64_signature(cts, expected, abi) ||
+          !fixture_callxs_carg_values(ir, nk, nins, call, abi->nargs,
+                                      values))
+        return 0;
+      found = 1;
+      break;
+    }
+  }
+  return found;
+}
+
+static int trace_has_stack_store(const GCtrace *T, uint32_t opcode,
+                                 unsigned scale, unsigned offset)
+{
+  MCode *code = trace_mcode_acq(T);
+  MSize bytes = trace_szmcode_acq(T);
+  MSize i;
+  for (i = 0; i+sizeof(MCode) <= bytes; i += sizeof(MCode)) {
+    uint32_t ins = (uint32_t)code[i/sizeof(MCode)];
+    unsigned rn = (ins >> 5) & 31u;
+    unsigned imm12 = (ins >> 10) & 0xfffu;
+    if ((ins & 0xffc00000u) == (opcode & 0xffc00000u) && rn == 31u &&
+        (imm12 << scale) == offset)
+      return 1;
+  }
+  return 0;
+}
+
+/* Authenticate the stack-argument trace independently at both boundaries.
+** The two byte stores and three naturally aligned word stores have distinct
+** widths/offsets, so unrelated STP spill pairs cannot satisfy these checks. */
+static void test_stack_call_admission(lua_State *L)
+{
+  jit_State *J = G2J(G(L));
+  CTState *cts = ctype_ctsG(G(L));
+  GCfunc *fn;
+  GCproto *pt;
+  const BCIns *bc;
+  uintptr_t lo, hi;
+  TraceVec *tv;
+  GCtrace *T = NULL;
+  IRRef compact_call = 0, narrow8 = 0, narrow_carg = 0;
+  IRRef narrow16_carg = 0, narrow16 = 0;
+  IRRef refs[LJ_ARM64_ABI_MAX_ARGS];
+  MSize trace_no;
+  IRRef ref;
+  LJArm64PostRAView view = { 0 };
+  IRIns *copy;
+  SemanticClone semantic;
+  SemanticJSave jsave;
+  CTypeID compact_id;
+  LJArm64ABISignature compact_abi;
+  IRRef spillref = 0;
+
+  lua_getglobal(L, "__abi_compact");
+  assert(tviscdata(L->top-1));
+  compact_id = cdataV(L->top-1)->ctypeid;
+  lua_pop(L, 1);
+  assert(lj_ccall_arm64_signature(cts, compact_id, &compact_abi));
+  lua_getglobal(L, "__abi_run_stack_matrix");
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  fn = funcV(L->top-1);
+  pt = funcproto(fn);
+  lua_pop(L, 1);
+  bc = proto_bc(pt);
+  lo = (uintptr_t)(const void *)bc;
+  hi = lo+(uintptr_t)pt->sizebc*sizeof(BCIns);
+  tv = tracevec_acq(J);
+  assert(tv != NULL);
+  for (trace_no = 1; trace_no < tv->sizetrace && T == NULL; trace_no++) {
+    GCtrace *candidate = traceref_safe(J, trace_no);
+    if (candidate == NULL || trace_startpc_acq(candidate) == NULL ||
+        (uintptr_t)(const void *)trace_startpc_acq(candidate) < lo ||
+        (uintptr_t)(const void *)trace_startpc_acq(candidate) >= hi)
+      continue;
+    for (ref = trace_nk_acq(candidate); ref < trace_nins_acq(candidate); ref++) {
+      LJArm64ABISignature abi;
+      if (ir_load_acq(&trace_ir_acq(candidate)[ref]).o != IR_CALLXS ||
+          !fixture_callxs_signature(cts, trace_ir_acq(candidate),
+              trace_nk_acq(candidate), trace_nins_acq(candidate), ref,
+              compact_id, &abi, refs) || abi.nargs != 21 ||
+          abi.result_id != compact_abi.result_id ||
+          abi.arg[16].id != compact_abi.arg[16].id ||
+          abi.arg[17].id != compact_abi.arg[17].id ||
+          abi.arg[19].id != compact_abi.arg[19].id)
+        continue;
+      if (abi.arg[16].size != 1 || abi.arg[17].size != 2 ||
+          abi.arg[18].size != 8 || abi.arg[19].kind != LJ_ARM64_ABI_KIND_POINTER)
+        continue;
+      T = candidate;
+      compact_call = ref;
+      narrow8 = refs[16];
+      narrow16 = refs[17];
+      narrow_carg = fixture_callxs_carg_for_argument(trace_ir_acq(T), ref,
+                                                     abi.nargs, 16);
+      narrow16_carg = fixture_callxs_carg_for_argument(trace_ir_acq(T), ref,
+                                                       abi.nargs, 17);
+      break;
+    }
+  }
+  assert(T != NULL && compact_call != 0 && narrow8 != 0 && narrow16 != 0);
+  view.ir = trace_ir_acq(T);
+  view.owner = T;
+  view.cts = cts;
+  view.snap = trace_snap_acq(T);
+  view.snapmap = trace_snapmap_acq(T);
+  view.proto_bc = bc;
+  view.proto = pt;
+  view.startpc = trace_startpc_acq(T);
+  view.nins = trace_nins_acq(T);
+  view.nk = trace_nk_acq(T);
+  view.nsnap = trace_nsnap_acq(T);
+  view.nsnapmap = trace_nsnapmap_acq(T);
+  view.spadjust = trace_spadjust_acq(T);
+  view.proto_sizebc = pt->sizebc;
+  view.proto_numparams = pt->numparams;
+  view.root_topslot = trace_topslot_acq(T);
+  view.startins = trace_startins_acq(T);
+  assert(view.spadjust >= 32u);
+  assert(lj_asm_arm64_postra_admit(&view, NULL));
+  semantic_clone_init(&semantic, T);
+  jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+  expect_semantic_admit(J, &semantic.trace);
+  semantic_j_leave(J, &jsave);
+  semantic_clone_free(&semantic);
+
+  assert(trace_has_stack_store(T, A64I_STRB, 0, 0));
+  assert(trace_has_stack_store(T, A64I_STRH, 1, 2));
+  assert(trace_has_stack_store(T, A64I_STRd, 3, 8));
+  assert(trace_has_stack_store(T, A64I_STRx, 3, 16));
+  assert(trace_has_stack_store(T, A64I_STRw, 2, 24));
+
+  semantic_clone_init(&semantic, T);
+  jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+  expect_semantic_admit(J, &semantic.trace);
+  semantic.ir[narrow8].t.irt = IRT_INT;
+  expect_semantic_reject_any(J, &semantic.trace,
+                             "byte stack carrier widened to INT");
+  semantic_j_leave(J, &jsave);
+  semantic_clone_free(&semantic);
+
+  semantic_clone_init(&semantic, T);
+  jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+  expect_semantic_admit(J, &semantic.trace);
+  semantic.ir[narrow_carg].op1 = REF_NIL;
+  expect_semantic_reject_any(J, &semantic.trace,
+                             "stack CARG chain shortened");
+  semantic_j_leave(J, &jsave);
+  semantic_clone_free(&semantic);
+
+  semantic_clone_init(&semantic, T);
+  jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+  expect_semantic_admit(J, &semantic.trace);
+  semantic.ir[narrow_carg].op2 = narrow16;
+  semantic.ir[narrow16_carg].op2 = narrow8;
+  expect_semantic_reject_any(J, &semantic.trace,
+                             "byte and halfword stack CARG classes swapped");
+  semantic_j_leave(J, &jsave);
+  semantic_clone_free(&semantic);
+
+  copy = (IRIns *)calloc(view.nins, sizeof(*copy));
+  assert(copy != NULL);
+  memcpy(&copy[view.nk], &view.ir[view.nk],
+         (view.nins-view.nk)*sizeof(IRIns));
+  view.ir = copy;
+  copy[narrow8].t.irt = IRT_INT;
+  assert(!lj_asm_arm64_postra_admit(&view, NULL));
+  free(copy);
+  view.ir = trace_ir_acq(T);
+
+  copy = (IRIns *)calloc(view.nins, sizeof(*copy));
+  assert(copy != NULL);
+  memcpy(&copy[view.nk], &view.ir[view.nk],
+         (view.nins-view.nk)*sizeof(IRIns));
+  view.ir = copy;
+  copy[narrow_carg].op1 = REF_NIL;
+  assert(!lj_asm_arm64_postra_admit(&view, NULL));
+  free(copy);
+  view.ir = trace_ir_acq(T);
+
+  copy = (IRIns *)calloc(view.nins, sizeof(*copy));
+  assert(copy != NULL);
+  memcpy(&copy[view.nk], &view.ir[view.nk],
+         (view.nins-view.nk)*sizeof(IRIns));
+  view.ir = copy;
+  copy[narrow_carg].op2 = narrow16;
+  copy[narrow16_carg].op2 = narrow8;
+  assert(!lj_asm_arm64_postra_admit(&view, NULL));
+  free(copy);
+  view.ir = trace_ir_acq(T);
+
+  {
+    LJArm64PostRAView badview = view;
+    badview.spadjust = 0;
+    assert(!lj_asm_arm64_postra_admit(&badview, NULL));
+  }
+
+  for (ref = REF_FIRST; ref < view.nins && !spillref; ref++) {
+    IRIns ins = ir_load_acq(&view.ir[ref]);
+    IRRef use;
+    if (!ra_hasspill(ins.s) || ins.s < SPS_FIRST || ref >= compact_call ||
+        ins.o == IR_CARG || ins.o == IR_XSAVE || ins.o == IR_RENAME)
+      continue;
+    for (use = compact_call+1u; use < view.nins; use++) {
+      IRIns later = ir_load_acq(&view.ir[use]);
+      if (later.op1 == ref || later.op2 == ref) {
+        spillref = ref;
+        break;
+      }
+    }
+  }
+  assert(spillref != 0);
+  copy = (IRIns *)calloc(view.nins, sizeof(*copy));
+  assert(copy != NULL);
+  memcpy(&copy[view.nk], &view.ir[view.nk],
+         (view.nins-view.nk)*sizeof(IRIns));
+  view.ir = copy;
+  copy[spillref].s = SPS_FIRST;
+  assert(!lj_asm_arm64_postra_admit(&view, NULL));
+  free(copy);
 }
 
 static void test_other_callsite_footer_rejected(lua_State *L)
@@ -435,7 +753,7 @@ static void observe_native_call(unsigned id)
   const LJFFINativeFrame *frame;
   GCtrace *trace;
   uint32_t flags;
-  assert(id > 0 && id < 8);
+  assert(id > 0 && id < ABI_TEST_MAX_ID);
   result = lj_ffi_native_frame_snapshot(test_tg, &snapshot);
   if (result == LJ_FFI_NATIVE_FRAME_SNAPSHOT_EMPTY)
     return;  /* Interpreter warm-up calls are counted separately by the library. */
@@ -500,6 +818,26 @@ static void assert_argument_classes(CTState *cts, CTypeID id,
   }
 }
 
+static void assert_stack_argument(CTState *cts, CTypeID id, unsigned index,
+                                  uint8_t cls, uint16_t offset,
+                                  uint8_t size)
+{
+  LJArm64ABISignature abi;
+  assert(lj_ccall_arm64_signature(cts, id, &abi));
+  assert(index < abi.nargs);
+  assert(abi.arg[index].cls == cls);
+  assert(abi.arg[index].reg == LJ_ARM64_ABI_STACK);
+  assert(abi.arg[index].stack_offset == offset);
+  assert(abi.arg[index].size == size);
+}
+
+static void assert_stack_extent(CTState *cts, CTypeID id, uint16_t extent)
+{
+  LJArm64ABISignature abi;
+  assert(lj_ccall_arm64_signature(cts, id, &abi));
+  assert(abi.stack_size == extent);
+}
+
 static void test_long_callsite(lua_State *L)
 {
 	const size_t prefix_count = 33000;
@@ -539,7 +877,7 @@ int main(void)
   ReadCounter calls;
   CTState *cts;
   CTypeID six, mixed, many_a, many_b, many_c, unused, f32;
-  CTypeID stack9, aggregate_arg, aggregate_result, vararg;
+  CTypeID stack9, fpr9, banks, compact, aggregate_arg, aggregate_result, vararg;
   unsigned i;
   assert(L != NULL && path != NULL);
   test_tg = L2TG(L);
@@ -555,7 +893,11 @@ int main(void)
   expected_func[5] = dlsym(library, "arm64_abi_many_c");
   expected_func[6] = dlsym(library, "arm64_abi_unused_result");
   expected_func[7] = dlsym(library, "arm64_abi_float_result");
-  for (i = 1; i < 8; i++) assert(expected_func[i] != NULL);
+  expected_func[8] = dlsym(library, "arm64_abi_stack9");
+  expected_func[9] = dlsym(library, "arm64_abi_fpr9");
+  expected_func[10] = dlsym(library, "arm64_abi_banks_exhausted");
+  expected_func[11] = dlsym(library, "arm64_abi_compact_stack");
+  for (i = 1; i < ABI_TEST_MAX_ID; i++) assert(expected_func[i] != NULL);
   install(observe_native_call);
 
   ljt_lua_dostring(L,
@@ -566,6 +908,10 @@ int main(void)
     "typedef int32_t (*abi_pair_fn)(int32_t,int32_t);\n"
     "typedef int32_t (*abi_unused_fn)(int32_t);\n"
     "typedef float (*abi_float_fn)(float,float);\n"
+    "typedef int32_t (*abi_stack9_fn)(int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t);\n"
+    "typedef double (*abi_fpr9_fn)(double,double,double,double,double,double,double,double,double);\n"
+    "typedef int32_t (*abi_banks_fn)(int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double);\n"
+    "typedef int32_t (*abi_compact_fn)(int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,double,double,double,double,double,double,double,double,int8_t,int16_t,double,void *,int32_t);\n"
     "typedef struct { int64_t a,b; } abi_pair;\n"
     "int32_t arm64_abi_i32_six(int32_t,int32_t,int32_t,int32_t,int32_t,int32_t);\n"
     "double arm64_abi_mixed(double,int32_t,double,int32_t,double);\n"
@@ -575,6 +921,9 @@ int main(void)
     "int32_t arm64_abi_unused_result(int32_t);\n"
     "float arm64_abi_float_result(float,float);\n"
     "int32_t arm64_abi_stack9(int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t);\n"
+    "double arm64_abi_fpr9(double,double,double,double,double,double,double,double,double);\n"
+    "int32_t arm64_abi_banks_exhausted(int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double);\n"
+    "int32_t arm64_abi_compact_stack(int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,double,double,double,double,double,double,double,double,int8_t,int16_t,double,void *,int32_t);\n"
     "abi_pair arm64_abi_aggregate_arg(abi_pair);\n"
     "abi_pair arm64_abi_aggregate_result(int32_t);\n"
     "int32_t arm64_abi_vararg(int32_t,...);\n"
@@ -586,6 +935,9 @@ int main(void)
     "_G.__abi_unused = lib.arm64_abi_unused_result\n"
     "_G.__abi_f32 = lib.arm64_abi_float_result\n"
     "_G.__abi_stack9 = lib.arm64_abi_stack9\n"
+    "_G.__abi_fpr9 = lib.arm64_abi_fpr9\n"
+    "_G.__abi_banks = lib.arm64_abi_banks_exhausted\n"
+    "_G.__abi_compact = lib.arm64_abi_compact_stack\n"
     "_G.__abi_aggregate_arg = lib.arm64_abi_aggregate_arg\n"
     "_G.__abi_aggregate_result = lib.arm64_abi_aggregate_result\n"
     "_G.__abi_vararg = lib.arm64_abi_vararg\n"
@@ -599,6 +951,25 @@ int main(void)
     " for i=1,n do fa(a,b); fb(a,b); fc(a,b) end; return true end\n"
     "function _G.__abi_run_unused(fn,a,n)\n"
     " for i=1,n do fn(a) end; return n end\n"
+    "function _G.__abi_run_stack_matrix(f9,ffpr,fbanks,fcompact,n)\n"
+    " local p = require('ffi').cast('void *',0x12345678)\n"
+    " local total=0\n"
+    " for k=1,n do\n"
+    "  local b=k; local d=b+0.25\n"
+    "  local a0,a1,a2,a3,a4,a5,a6,a7=b,b+1,b+2,b+3,b+4,b+5,b+6,b+7\n"
+    "  local f0,f1,f2,f3,f4,f5,f6,f7=d,d+1,d+2,d+3,d+4,d+5,d+6,d+7\n"
+    "  if f9(a0,a1,a2,a3,a4,a5,a6,a7,b+8) ~= b+108 then return false end\n"
+    "  if ffpr(d,d+1,d+2,d+3,d+4,d+5,d+6,d+7,d+8) ~= d*100+800 then return false end\n"
+    "  if fbanks(b+9,d+9,b+10,d+10,b+11,d+11,b+12,d+12,b+13,d+13,b+14,d+14,b+15,d+15,b+16,d+16,b+17,d+17) ~= 1010 then return false end\n"
+    "  if fcompact(b+19,b+20,b+21,b+22,b+23,b+24,b+25,b+26,d+19,d+20,d+21,d+22,d+23,d+24,d+25,d+26,-7,1234,d+27,p,0x2468) ~= 1111 then return false end\n"
+    "  total=total+a0+a1+a2+a3+a4+a5+a6+a7+f0+f1+f2+f3+f4+f5+f6+f7\n"
+    " end\n"
+    " return total > 0 end\n"
+    "function _G.__abi_run_stack_dynamic(fn,n8,n16,p,d0,d1,d2,d3,d4,d5,d6,d7,n)\n"
+    " for k=1,n do\n"
+    "  if fn(20,21,22,23,24,25,26,27,d0,d1,d2,d3,d4,d5,d6,d7,n8,n16,d7+1,p,0x2468) ~= 1111 then return false end\n"
+    " end\n"
+    " return true end\n"
     "jit.flush(); jit.on(); jit.opt.start('hotloop=1','hotexit=1')\n");
 
   cts = ctype_ctsG(G(L));
@@ -611,6 +982,9 @@ int main(void)
   unused = global_ctype(L, "__abi_unused");
   f32 = global_ctype(L, "__abi_f32");
   stack9 = global_ctype(L, "__abi_stack9");
+  fpr9 = global_ctype(L, "__abi_fpr9");
+  banks = global_ctype(L, "__abi_banks");
+  compact = global_ctype(L, "__abi_compact");
   aggregate_arg = global_ctype(L, "__abi_aggregate_arg");
   aggregate_result = global_ctype(L, "__abi_aggregate_result");
   vararg = global_ctype(L, "__abi_vararg");
@@ -630,7 +1004,31 @@ int main(void)
     assert_argument_classes(cts, six, gpr6, gpr_regs, 6);
     assert_argument_classes(cts, mixed, mixed_classes, mixed_regs, 5);
   }
-  assert_rejected(cts, stack9);
+  assert_abi_class(cts, stack9, LJ_ARM64_ABI_GPR, 9, 8, 0);
+  assert_abi_class(cts, fpr9, LJ_ARM64_ABI_FPR, 9, 0, 8);
+  assert_abi_class(cts, banks, LJ_ARM64_ABI_GPR, 18, 8, 8);
+  assert_abi_class(cts, compact, LJ_ARM64_ABI_GPR, 21, 8, 8);
+  {
+    const uint8_t gpr_stack_classes[] = { 2,2,2,2,2,2,2,2,2 };
+    const uint8_t gpr_stack_regs[] = { 0,1,2,3,4,5,6,7,LJ_ARM64_ABI_STACK };
+    const uint8_t fpr_stack_classes[] = { 3,3,3,3,3,3,3,3,3 };
+    const uint8_t fpr_stack_regs[] = { 0,1,2,3,4,5,6,7,LJ_ARM64_ABI_STACK };
+    assert_argument_classes(cts, stack9, gpr_stack_classes, gpr_stack_regs, 9);
+    assert_argument_classes(cts, fpr9, fpr_stack_classes, fpr_stack_regs, 9);
+    assert_stack_argument(cts, stack9, 8, LJ_ARM64_ABI_GPR, 0, 4);
+    assert_stack_argument(cts, fpr9, 8, LJ_ARM64_ABI_FPR, 0, 8);
+    assert_stack_argument(cts, banks, 16, LJ_ARM64_ABI_GPR, 0, 4);
+    assert_stack_argument(cts, banks, 17, LJ_ARM64_ABI_FPR, 8, 8);
+    assert_stack_argument(cts, compact, 16, LJ_ARM64_ABI_GPR, 0, 1);
+    assert_stack_argument(cts, compact, 17, LJ_ARM64_ABI_GPR, 2, 2);
+    assert_stack_argument(cts, compact, 18, LJ_ARM64_ABI_FPR, 8, 8);
+    assert_stack_argument(cts, compact, 19, LJ_ARM64_ABI_GPR, 16, 8);
+    assert_stack_argument(cts, compact, 20, LJ_ARM64_ABI_GPR, 24, 4);
+    assert_stack_extent(cts, stack9, 4);
+    assert_stack_extent(cts, fpr9, 8);
+    assert_stack_extent(cts, banks, 16);
+    assert_stack_extent(cts, compact, 28);
+  }
   assert_rejected(cts, aggregate_arg);
   assert_rejected(cts, aggregate_result);
   assert_rejected(cts, vararg);
@@ -642,6 +1040,28 @@ int main(void)
     "assert(__abi_a(11,5)==16 and __abi_b(11,5)==6 and __abi_c(11,5)==14)\n"
     "assert(__abi_run_three(__abi_a,__abi_b,__abi_c,11,5,300))\n"
     "assert(__abi_run_unused(__abi_unused,9,300)==300)\n");
+  {
+    unsigned id;
+    ljt_lua_dostring(L,
+      "assert(__abi_run_stack_matrix(__abi_stack9,__abi_fpr9,__abi_banks,__abi_compact,300))\n");
+    for (id = 8; id <= 11; id++)
+      assert(native_seen[id] >= 200u);
+  }
+  {
+    unsigned before = native_seen[11];
+    ljt_lua_dostring(L,
+      "local ffi=require('ffi'); local p=ffi.cast('void *',0x12345678)\n"
+      "assert(__abi_run_stack_dynamic(__abi_compact,-7,1234,p,10.5,11.5,12.5,13.5,14.5,15.5,16.5,17.5,300))\n");
+    assert(native_seen[11] >= before+200u);
+  }
+  {
+    unsigned before = native_seen[11];
+    ljt_lua_dostring(L,
+      "local ffi=require('ffi'); local p=ffi.cast('void *',0x12345678)\n"
+      "assert(__abi_run_stack_dynamic(__abi_compact,249,66770,p,10.5,11.5,12.5,13.5,14.5,15.5,16.5,17.5,300))\n");
+    assert(native_seen[11] >= before+200u);
+  }
+  test_stack_call_admission(L);
   {
     unsigned native_before = native_seen[2];
     ljt_lua_dostring(L,
@@ -657,15 +1077,19 @@ int main(void)
   }
   test_other_callsite_footer_rejected(L);
 
-  for (i = 1; i < 7; i++) {
+  for (i = 1; i <= 6; i++) {
     assert(native_seen[i] >= 200);
     assert(calls(i) >= 300);
   }
   assert(native_seen[7] == 0 && calls(7) == 0);
+  for (i = 8; i <= 11; i++) {
+    assert(native_seen[i] >= 200);
+    assert(calls(i) >= 300);
+  }
   install(NULL);
   lua_close(L);
   assert(dlclose(library) == 0);
-  printf("t-arm64-jit-ffi-abi-classes OK: six-GPR, mixed GPR/FPR, three calls/loop and unused result; float return classifier checked\n");
+  printf("t-arm64-jit-ffi-abi-classes OK: register classes, outgoing stack offsets, bank exhaustion and live CALLXS execution checked\n");
   return 0;
 }
 

@@ -98,6 +98,7 @@ int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
   const char *path = getenv("LJ_ARM64_CPP_CALLXS_LIB");
+  int stack_args = getenv("LJ_ARM64_CPP_CALLXS_STACK") != NULL;
   void *library;
   InstallObserver install_observer;
   InstallCallback install_callback;
@@ -107,7 +108,8 @@ int main(void)
   test_tg = L2TG(L);
   library = dlopen(path, RTLD_NOW | RTLD_LOCAL);
   assert(library != NULL);
-  bridge_address = dlsym(library, "arm64_cpp_call_bridge");
+  bridge_address = dlsym(library, stack_args ? "arm64_cpp_stack_bridge" :
+                        "arm64_cpp_call_bridge");
   install_observer = (InstallObserver)dlsym(library, "arm64_cpp_install_observer");
   install_callback = (InstallCallback)dlsym(library, "arm64_cpp_install_callback");
   calls = (ReadCounter)dlsym(library, "arm64_cpp_bridge_calls");
@@ -120,12 +122,22 @@ int main(void)
     "local ffi = require('ffi')\n"
     "ffi.cdef[[typedef int (*arm64_lua_cb)(int); "
     "int arm64_cpp_call_bridge(int); "
+    "int arm64_cpp_stack_bridge(int,int,int,int,int,int,int,int,int,int,int,int,int); "
     "void arm64_cpp_install_callback(arm64_lua_cb);]]\n"
     "local lib = ffi.load(assert(os.getenv('LJ_ARM64_CPP_CALLXS_LIB')))\n"
     "local bridge = lib.arm64_cpp_call_bridge\n"
     "local function run_bridge(fn, n)\n"
     "  for i = 1, n do if fn(i) ~= i then return false end end\n"
     "  return true\n"
+    "end\n"
+    "if os.getenv('LJ_ARM64_CPP_CALLXS_STACK') then\n"
+    "  bridge = lib.arm64_cpp_stack_bridge\n"
+    "  run_bridge = function(fn, n)\n"
+    "    for i=1,n do\n"
+    "      if fn(101,202,303,404,505,606,707,808,909,1010,1111,1212,i) ~= i then return false end\n"
+    "    end\n"
+    "    return true\n"
+    "  end\n"
     "end\n"
     "_G.__arm64_cpp_run = run_bridge\n"
     "_G.__arm64_cpp_bridge = bridge\n"
@@ -170,9 +182,10 @@ int main(void)
   install_observer(NULL);
   lua_close(L);
   assert(dlclose(library) == 0);
-  printf("t-arm64-jit-cpp-callxs-unwind OK: %u generated calls; "
+  printf("t-arm64-jit-cpp-callxs-unwind OK: %s, %u generated calls; "
          "trace %u unwound through C++/Lua callback, cleaned roots, "
-         "and recovered after GC/flush\n", generated_calls, (unsigned)error_trace);
+         "and recovered after GC/flush\n", stack_args ? "stack args" : "register args",
+         generated_calls, (unsigned)error_trace);
   return 0;
 }
 

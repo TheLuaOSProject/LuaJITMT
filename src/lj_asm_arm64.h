@@ -575,7 +575,8 @@ static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
 	  Reg r = ra_alloc1(as, ref, RSET_GPR);
 	  int32_t al = spalign;
 #if LJ_HASFFI && LJ_TARGET_OSX
-	  al |= irt_size(ir->t) - 1;
+	  /* Call operands can retain guard/PHI flags. Size only the base type. */
+	  al |= lj_ir_type_size[irt_type(ir->t)] - 1;
 #endif
 	  spofs = (spofs + al) & ~al;
 	  if (al >= 3) {
@@ -2167,7 +2168,7 @@ static Reg asm_setup_call_slots(ASMState *as, IRIns *ir, const CCallInfo *ci)
       } else {
 	if (ngpr > 0) { ngpr--; continue; }
 #if LJ_TARGET_OSX
-	al |= irt_size(IR(args[i])->t) - 1;
+	al |= lj_ir_type_size[irt_type(IR(args[i])->t)] - 1;
 #endif
       }
       spofs = (spofs + 2*al+1) & ~al;  /* Align and bump stack pointer. */

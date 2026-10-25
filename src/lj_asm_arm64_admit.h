@@ -301,7 +301,7 @@ static int arm64_callxs_phi_types_match(const IRIns *ir, IRRef nk,
 static int arm64_callxs_value_kind(const IRIns *ir, IRRef ref,
 				   IRRef nk, IRRef nins, IRRef limit,
 				   LJArm64ABIKind kind, unsigned size,
-				   int is_unsigned)
+				   int is_unsigned, int on_stack)
 {
   IRIns value;
   IRType type;
@@ -321,6 +321,14 @@ static int arm64_callxs_value_kind(const IRIns *ir, IRRef ref,
 	 ((value.op2 & IRCONV_CONVMASK) == 0 ||
 	  (value.op2 & IRCONV_CONVMASK) == IRCONV_ANY))) {
       /* This is the recorder's defined integral-to-double conversion. */
+    } else if ((kind == LJ_ARM64_ABI_KIND_INTEGER ||
+                kind == LJ_ARM64_ABI_KIND_ENUM) && on_stack &&
+               (size == 1 || size == 2) && from == IRT_INT &&
+               type == (size == 1 ? IRT_U8 : IRT_U16) &&
+               value.t.irt == type &&
+               value.op2 == ((type << IRCONV_DSH)|IRT_INT)) {
+      /* The store consumes the low CType-width bits. Signed and unsigned
+      ** fixed stack arguments use the same unpromoted carrier. */
     } else return 0;
   }
   switch (kind) {
@@ -330,9 +338,10 @@ static int arm64_callxs_value_kind(const IRIns *ir, IRRef ref,
 	  return type == (is_unsigned ? IRT_U64 : IRT_I64);
 	if (size == 4)
 	  return type == (is_unsigned ? IRT_U32 : IRT_INT);
-	/* The recorder canonicalizes narrow integer arguments to IRT_INT after
-	** the CType-width conversion, preserving sign/zero extension in the IR. */
-	return (size == 1 || size == 2) && type == IRT_INT;
+	/* Registers carry sign/zero-extended INTs. Fixed stack arguments retain
+	** their CType width; the store consumes the low bits of that carrier. */
+	return (size == 1 || size == 2) &&
+          type == (on_stack ? (size == 1 ? IRT_U8 : IRT_U16) : IRT_INT);
   case LJ_ARM64_ABI_KIND_FLOAT:
 	return (size == 4 && type == IRT_FLOAT) ||
 	       (size == 8 && type == IRT_NUM);
@@ -919,7 +928,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
     case IR_CALLXS: {
       LJArm64ABISignature abi;
       IRRef fpref, values[LJ_ARM64_ABI_MAX_ARGS];
-      unsigned i;
+      unsigned i, gpr = 0, fpr = 0, stack_size = 0;
       if (state != CALLXS_READY)
 	return 0;
       if (!arm64_callxs_signature_for_call(cts, T->ir, nk, nins,
@@ -938,9 +947,27 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
       for (i = 0; i < abi.nargs; i++) {
 	LJArm64ABIArg *a = &abi.arg[i];
 	if (!arm64_callxs_value_kind(T->ir, values[i], nk, nins, ref,
-		(LJArm64ABIKind)a->kind, a->size, a->is_unsigned))
+		(LJArm64ABIKind)a->kind, a->size, a->is_unsigned,
+		a->reg == LJ_ARM64_ABI_STACK))
 	  return 0;
+        /* Match the CType plan to the IR carriers consumed by asm_gencall.
+        ** In particular, a promoted INT cannot stand for a byte/halfword
+        ** stack argument, and exhausting one bank cannot consume the other. */
+        if (a->cls == LJ_ARM64_ABI_FPR && fpr < CCALL_NARG_FPR) {
+          if (a->reg != fpr++) return 0;
+        } else if (a->cls == LJ_ARM64_ABI_GPR && gpr < CCALL_NARG_GPR) {
+          if (a->reg != gpr++) return 0;
+        } else {
+          IRIns carrier = ir_load_acq(&T->ir[values[i]]);
+          unsigned width = lj_ir_type_size[irt_type(carrier.t)];
+          if (width != a->size || width == 0 || width > 8) return 0;
+          stack_size = (stack_size + width-1u) & ~(width-1u);
+          if (a->reg != LJ_ARM64_ABI_STACK ||
+              a->stack_offset != stack_size) return 0;
+          stack_size += width;
+        }
       }
+      if (stack_size != abi.stack_size) return 0;
       if (irt_type(ins.t) != arm64_callxs_result_type(&abi))
 	return 0;
       if (abi.result_kind != LJ_ARM64_ABI_KIND_VOID &&
@@ -1099,9 +1126,10 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
         return 0;
       break;
     case IR_CONV:
-      if (irt_type(ins.t) != IRT_NUM || (ins.t.irt & ~IRT_TYPE) != 0 ||
-          ins.op2 != IRCONV_NUM_INT || ins.op1 < REF_FIRST ||
-          ins.op1 >= ref ||
+      if ((ins.t.irt != IRT_NUM && ins.t.irt != IRT_U8 &&
+           ins.t.irt != IRT_U16) ||
+          ins.op2 != ((irt_type(ins.t) << IRCONV_DSH)|IRT_INT) ||
+          !arm64_callxs_ref_valid(T->ir, nk, nins, ref, ins.op1) ||
           irt_type(ir_load_acq(&T->ir[ins.op1]).t) != IRT_INT)
         return 0;
       break;
@@ -2635,7 +2663,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	CTypeID box_ctype = 0;
 	int box_store_seen = 0, result_is_cdata = 0;
 	unsigned protocol = 0, nc = 0, nx = 0, nloop = 0, npoll = 0;
-	MSize capacity, highest = 0;
+	MSize capacity, highest = 0, outgoing = 0;
 	GCtrace temp;
 	GCproto *pt;
 	uintptr_t pclo, pchi, startpc;
@@ -2943,7 +2971,9 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	      return 0;
 	  } else if (ins.o == IR_CONV) {
 	    IRIns src;
-	    if (irt_type(ins.t) != IRT_NUM || ins.op2 != IRCONV_NUM_INT ||
+	    if ((ins.t.irt != IRT_NUM && ins.t.irt != IRT_U8 &&
+                 ins.t.irt != IRT_U16) ||
+		ins.op2 != ((irt_type(ins.t) << IRCONV_DSH)|IRT_INT) ||
 		ins.op1 >= ref || !arm64_callxs_ref_valid(view->ir, view->nk,
 		semantic_nins, ref, ins.op1))
 	      return 0;
@@ -3029,6 +3059,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	  IRIns c = ir_load_acq(&view->ir[call]);
 	  LJArm64ABISignature abi;
 	  IRRef values[LJ_ARM64_ABI_MAX_ARGS];
+	  unsigned ngpr = 0, nfpr = 0, bytes = 0;
 	  int found_type = 0;
 	  if (c.o != IR_CALLXS) continue;
 	  if (c.op2 < REF_FIRST || c.op2 >= call) return 0;
@@ -3074,8 +3105,30 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    LJArm64ABIArg *a = &abi.arg[guard];
 	    if (!arm64_callxs_value_kind(view->ir, values[guard], view->nk,
 		semantic_nins, call,
-		(LJArm64ABIKind)a->kind, a->size, a->is_unsigned)) return 0;
+		(LJArm64ABIKind)a->kind, a->size, a->is_unsigned,
+		a->reg == LJ_ARM64_ABI_STACK)) return 0;
+	    {
+	      IRIns carrier = ir_load_acq(&view->ir[values[guard]]);
+	      unsigned width = lj_ir_type_size[irt_type(carrier.t)];
+	      int fp = irt_isfp(carrier.t);
+	      unsigned *bank = fp ? &nfpr : &ngpr;
+	      unsigned limit = fp ? REGARG_NUMFPR : REGARG_NUMGPR;
+	      if ((fp ? LJ_ARM64_ABI_FPR : LJ_ARM64_ABI_GPR) != a->cls)
+		return 0;
+	      if (*bank < limit) {
+		if (a->reg != (*bank)++) return 0;
+	      } else {
+		if (width == 0 || width > 8 || width != a->size ||
+		    a->reg != LJ_ARM64_ABI_STACK) return 0;
+		bytes = (bytes + width-1u) & ~(width-1u);
+		if (a->stack_offset != bytes) return 0;
+		bytes += width;
+	      }
+	    }
 	  }
+	  if (bytes != abi.stack_size || bytes > capacity*sizeof(int32_t))
+	    return 0;
+	  if (bytes > outgoing) outgoing = bytes;
 	  if (irt_type(c.t) != arm64_callxs_result_type(&abi) ||
 	      (abi.result_class == LJ_ARM64_ABI_GPR &&
 	       !ra_hasspill(regsp_spill(c.prev)) && c.r != RID_RET &&
@@ -3085,6 +3138,15 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	      (abi.result_class == LJ_ARM64_ABI_FPR && c.r != RID_FPRET))
 	    return 0;
 	  if (!arm64_postra_callxs_live_across(view, semantic_nins, call, capacity))
+	    return 0;
+	}
+	/* The assembler reserves the largest outgoing area before allocating
+	** any spills. A call may overwrite that entire area, including dead
+	** argument slots, so no snapshot or live value may own part of it. */
+	for (ref = REF_BASE; ref < semantic_nins; ref++) {
+	  IRIns value = ir_load_acq(&view->ir[ref]);
+	  if (ra_hasspill(value.s) &&
+	      (MSize)sps_scale(value.s) < outgoing)
 	    return 0;
 	}
 	if (semantic_ninsp) *semantic_ninsp = semantic_nins;

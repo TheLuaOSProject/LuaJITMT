@@ -14,6 +14,7 @@ static int32_t lifecycle_first_errno;
 static int32_t lifecycle_second_errno;
 static int32_t lifecycle_third_errno;
 static int32_t lifecycle_last_errno;
+static int32_t lifecycle_stack_bad_args;
 static int32_t lifecycle_mismatch = INT32_MIN;
 static int32_t lifecycle_callback_first;
 static int32_t lifecycle_callback_second;
@@ -39,6 +40,7 @@ void lj_callxs_arm64_lifecycle_configure(int32_t mismatch,
   lifecycle_store(&lifecycle_second_errno, 0);
   lifecycle_store(&lifecycle_third_errno, 0);
   lifecycle_store(&lifecycle_last_errno, 0);
+  lifecycle_store(&lifecycle_stack_bad_args, 0);
   lifecycle_store(&lifecycle_mismatch, mismatch);
   lifecycle_store(&lifecycle_callback_first, callback_first);
   lifecycle_store(&lifecycle_callback_second, callback_second);
@@ -85,6 +87,11 @@ int32_t lj_callxs_arm64_lifecycle_last_errno_value(void)
   return lifecycle_load(&lifecycle_last_errno);
 }
 
+int32_t lj_callxs_arm64_lifecycle_stack_bad_args(void)
+{
+  return lifecycle_load(&lifecycle_stack_bad_args);
+}
+
 int32_t lj_callxs_arm64_lifecycle(int32_t value)
 {
   int32_t incoming_errno = errno;
@@ -115,5 +122,36 @@ int32_t lj_callxs_arm64_lifecycle(int32_t value)
   if (value == lifecycle_load(&lifecycle_mismatch))
     result++;
   errno = EDOM;
+  return result;
+}
+
+/* Keep the first eight GPR arguments distinct and place the meaningful value
+** in argument nine, which Darwin ARM64 passes in the outgoing stack area. */
+int32_t lj_callxs_arm64_lifecycle_stack(
+	int32_t a0, int32_t a1, int32_t a2, int32_t a3,
+	int32_t a4, int32_t a5, int32_t a6, int32_t a7, int32_t value)
+{
+  volatile int32_t args[9];
+  int32_t result;
+  args[0] = a0;
+  args[1] = a1;
+  args[2] = a2;
+  args[3] = a3;
+  args[4] = a4;
+  args[5] = a5;
+  args[6] = a6;
+  args[7] = a7;
+  args[8] = value;
+  if (args[0] != 101 || args[1] != 202 || args[2] != 303 ||
+      args[3] != 404 || args[4] != 505 || args[5] != 606 ||
+      args[6] != 707 || args[7] != 808 || args[8] != value)
+    (void)__atomic_add_fetch(&lifecycle_stack_bad_args, 1,
+			     __ATOMIC_ACQ_REL);
+  result = lj_callxs_arm64_lifecycle(args[8]);
+  if (args[0] != 101 || args[1] != 202 || args[2] != 303 ||
+      args[3] != 404 || args[4] != 505 || args[5] != 606 ||
+      args[6] != 707 || args[7] != 808 || args[8] != value)
+    (void)__atomic_add_fetch(&lifecycle_stack_bad_args, 1,
+			     __ATOMIC_ACQ_REL);
   return result;
 }

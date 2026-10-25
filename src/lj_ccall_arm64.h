@@ -29,6 +29,7 @@ typedef enum LJArm64ABIKind {
 } LJArm64ABIKind;
 
 #define LJ_ARM64_ABI_MAX_ARGS 32
+#define LJ_ARM64_ABI_STACK 255
 
 typedef struct LJArm64ABIArg {
   CTypeID id;
@@ -38,6 +39,7 @@ typedef struct LJArm64ABIArg {
   uint8_t size;
   uint8_t align;
   uint8_t is_unsigned;
+  uint16_t stack_offset;
 } LJArm64ABIArg;
 
 typedef struct LJArm64ABISignature {
@@ -50,6 +52,7 @@ typedef struct LJArm64ABISignature {
   uint8_t nargs;
   uint8_t ngpr;
   uint8_t nfpr;
+  uint16_t stack_size;
 } LJArm64ABISignature;
 
 /* Resolve typedef and attribute wrappers using only a stable CType snapshot. */
@@ -155,16 +158,16 @@ static int lj_ccall_arm64_scalar_class(CTState *cts, CTypeID id,
   return 0;
 }
 
-/* Classify fixed scalar signatures in Darwin's independent GPR and FPR
-** argument registers. Stack arguments are not admitted until emitted-layout
-** and unwind tests cover their outgoing-area geometry. */
+/* Classify fixed scalars in Darwin's independent GPR/FPR banks. Overflow
+** arguments occupy naturally aligned, byte-packed stack locations. The
+** assembler rounds the complete outgoing area together with its spill frame. */
 static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
 				    LJArm64ABISignature *abi)
 {
   CType fn, field;
   CTInfo info;
   CTypeID rawid, fid;
-  unsigned nargs = 0, ngpr = 0, nfpr = 0;
+  unsigned nargs = 0, ngpr = 0, nfpr = 0, stack_size = 0;
   LJArm64ABIArg result;
   if (cts == NULL || abi == NULL ||
       !lj_ccall_arm64_raw_type(cts, id, &fn, &rawid))
@@ -208,7 +211,17 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
     } else if (arg->cls == LJ_ARM64_ABI_GPR && ngpr < CCALL_NARG_GPR) {
       arg->reg = (uint8_t)ngpr++;
     } else {
-      return 0;
+      unsigned mask = arg->size-1u;
+      /* Over-aligned carriers need their own lowering. Do not silently
+      ** substitute the ordinary scalar IR alignment for a different CType. */
+      if (arg->size == 0 || arg->size > 8 ||
+          (arg->size & mask) != 0 || arg->align > 3 ||
+          (1u << arg->align) != arg->size)
+        return 0;
+      stack_size = (stack_size + mask) & ~mask;
+      arg->reg = LJ_ARM64_ABI_STACK;
+      arg->stack_offset = (uint16_t)stack_size;
+      stack_size += arg->size;
     }
     nargs++;
     fid = ctype_sib_acq(&field);
@@ -218,6 +231,7 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
   abi->nargs = (uint8_t)nargs;
   abi->ngpr = (uint8_t)ngpr;
   abi->nfpr = (uint8_t)nfpr;
+  abi->stack_size = (uint16_t)stack_size;
   return 1;
 }
 

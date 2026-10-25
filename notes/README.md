@@ -7,7 +7,7 @@ and reports that are no longer authoritative are retained in
 
 ## Status at a glance
 
-- Development branch: `codex/aarch64-macos-port`.
+- Current branch: `v2.1`.
 - Integrated upstream comparison point: LuaJITMT `v2.1` at `489bb089`.
   See
   [`upstream-refresh-2026-10-22.md`](upstream-refresh-2026-10-22.md) for merge
@@ -28,6 +28,11 @@ and reports that are no longer authoritative are retained in
   Every default target branch ran. See
   [`review-validation-2026-10-25.md`](review-validation-2026-10-25.md) for commands,
   logs, profiles and the scope of earlier sanitizer/performance evidence.
+- Fixed scalar FFI stack arguments now pass the four-profile M7 suite,
+  including compact Darwin stack slots, spill separation, nested callbacks
+  and C++ unwind/recovery. The complete combined baseline above predates this
+  change. See
+  [`arm64-ffi-stack-arguments-2026-10-25.md`](arm64-ffi-stack-arguments-2026-10-25.md).
 - The experimental gate includes generic roots, rooted effects, scalar-side
   publication/entry/retirement, native numeric adaptation, and generic FFI M7
   on ARM64 and arm64e/BTI with both assertion and release runtimes.
@@ -128,8 +133,10 @@ available.
   targets. Side-of-side traces, heap-effect children and stitches remain closed.
 - TG-local XSAVE staging and native-frame lifecycle support fixed scalar FFI
   signatures classified from stable CType snapshots, separate GPR/FPR argument
-  banks and independently validated allocated operands/results. Multiple
-  calls per loop and rooted pointer results replace the three exact templates.
+  banks, naturally packed outgoing stack arguments and independently validated
+  allocated operands/results. Multiple calls per loop and rooted pointer
+  results replace the three exact templates. Stack layouts retain separate
+  semantic and allocated-state checks, including frame and spill separation.
 - Exact FFI lifecycle evidence covers errno, normal and forced exits, STOPREQ,
   one-level and depth-two callbacks, callback errors, cleanup/reuse, remote GC
   and flush, mutable cdata `__call`, double ABI/results, boxed-pointer identity,
@@ -160,8 +167,8 @@ available.
   interpreter `lj_vm_next` does not by itself open other JIT heap paths.
 - General side traces, side-of-side traces, stitches, and production JIT
   side-exit unwind resolution.
-- ARM64 CALLXS outgoing stack arguments, aggregates/sret, variadics, vectors,
-  complex results and unsupported result/IR representations. ABI scalar
+- ARM64 CALLXS aggregates/sret, variadics, vectors, complex results and
+  unsupported result/IR representations. ABI scalar
   classification alone does not certify all float or boxed-64-bit graphs.
 - Full parity with every x86_64 lockless VM, JIT, FFI, profiler, unwind, and
   stress path.
