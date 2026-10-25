@@ -471,10 +471,36 @@ static void expect_funcf_entry_reject(lua_State *L, GCfunc *fn, GCtrace *T)
   assert(lj_trace_test_root_entry_startins_calls() == 0);
 }
 
+static void test_funcf_body_certificate(lua_State *L, GCfunc *fn, GCtrace *T)
+{
+  LJArm64RootCertificate saved = T->arm64_root_cert;
+  MSize nentrybc = T->arm64_nentrybc;
+  BCIns *copy = (BCIns *)saved.entrybc;
+  BCIns word;
+  assert(nentrybc == funcproto(fn)->sizebc-1u && nentrybc != 0);
+  assert(saved.nentrybc == nentrybc && copy != NULL);
+  T->arm64_nentrybc = UINT32_MAX;
+  expect_funcf_entry_reject(L, fn, T);
+  T->arm64_nentrybc = nentrybc;
+  T->arm64_root_cert.nentrybc = nentrybc-1u;
+  expect_funcf_entry_reject(L, fn, T);
+  T->arm64_root_cert = saved;
+  T->arm64_root_cert.entrybc = copy+1;
+  expect_funcf_entry_reject(L, fn, T);
+  T->arm64_root_cert = saved;
+  word = copy[0];
+  copy[0] ^= (BCIns)1u << 16;
+  expect_funcf_entry_reject(L, fn, T);
+  copy[0] = word;
+  assert(invoke_funcf_entry_helper(L, fn, T).trace == T);
+}
+
 static void test_funcf_metadata_certificate(lua_State *L, GCfunc *fn,
 	GCtrace *T)
 {
+#ifdef LUA_USE_ASSERT
   IRIns *ir = trace_ir_acq(T);
+#endif
   uint32_t admission = trace_arm64_admission_acq(T);
   LJTraceRootEntry entry;
 
@@ -515,9 +541,13 @@ static void test_funcf_metadata_certificate(lua_State *L, GCfunc *fn,
   expect_funcf_entry_reject(L, fn, T);
   trace_arm64_admission_rel(T, admission);
 
+#ifdef LUA_USE_ASSERT
+  /* Illegal IR writes are audited only in the assertion profile. The release
+  ** contract checks the immutable publication tuple and mutable bytecode. */
   ir[FUNCF_R_SUFFIX].s = SPS_FIRST;
   expect_funcf_entry_reject(L, fn, T);
   ir[FUNCF_R_SUFFIX].s = SPS_NONE;
+#endif
 
   lj_trace_test_root_entry_reset();
   entry = invoke_funcf_entry_helper(L, fn, T);
@@ -768,6 +798,7 @@ static void run_positive(void)
   test_funcf_entry_view_preflight(T, pt);
   expect_native_jfuncf_calls(L, "__arm64_funcf_true");
   test_funcf_metadata_certificate(L, fn, T);
+  test_funcf_body_certificate(L, fn, T);
   test_funcf_generation_race(L, fn, T, (BCIns *)&proto_bc(pt)[0],
 	BCINS_AD(BC_JFUNCF, (BCReg)(bc_a(startins)+1u), 1));
   test_funcf_generation_race(L, fn, T, (BCIns *)&proto_bc(pt)[1],

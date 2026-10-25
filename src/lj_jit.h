@@ -391,6 +391,8 @@ typedef struct LJArm64RootCertificate {
   const SnapEntry *snapmap;
   const GCobj *startpt;
   const BCIns *startpc;
+  const BCIns *entrybc;
+  MSize nentrybc;
   const MCode *mcode;
   MCode *const *exittab;
   const MCode *exitstub;
@@ -444,6 +446,7 @@ typedef struct GCtrace {
   struct GCtrace *retired_next;  /* Token-owned tagged retire-list link. */
 #if LJ_TARGET_ARM64
   uint64_t arm64_generation;  /* Exact allocation serial, never reused. */
+  MSize arm64_nentrybc;  /* Exact FUNCF body words in the compact tail. */
   LJArm64RootCertificate arm64_root_cert;
 #endif
 #ifdef LUAJIT_USE_GDBJIT

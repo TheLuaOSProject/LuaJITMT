@@ -3042,6 +3042,15 @@ static int trace_size_checked(global_State *g, GCtrace *T, GCSize *sizep,
 			   (GCSize)sizeof(SnapEntry))
     return 0;
   size += (GCSize)nsnapmap * (GCSize)sizeof(SnapEntry);
+#if LJ_TARGET_ARM64
+  {
+    MSize nentrybc = la_load32_acq(&T->arm64_nentrybc);
+    if (nentrybc > UINT8_MAX ||
+        nentrybc > ((GCSize)LJ_MAX_MEM32-size)/(GCSize)sizeof(BCIns))
+      return 0;
+    size += (GCSize)nentrybc * (GCSize)sizeof(BCIns);
+  }
+#endif
   if (!trace_body_fits_alloc(g, T, size))
     return 0;
   *sizep = size;
@@ -3083,6 +3092,9 @@ static int trace_body_refs_valid(global_State *g, GCtrace *T, SnapNo *nsnapp)
   if (snapmap != (SnapEntry *)p)
     return 0;
   p += nsnapmap * sizeof(SnapEntry);
+#if LJ_TARGET_ARM64
+  p += la_load32_acq(&T->arm64_nentrybc) * sizeof(BCIns);
+#endif
   if (p != (char *)T + size)
     return 0;
   if (nsnapp)
@@ -4137,6 +4149,26 @@ static int trace_root_entry_arm64_layout_scan(
   return lj_asm_arm64_postra_admit(&postra, NULL);
 }
 
+/* Unlike the immutable IR body, a prototype's bytecode header is patched
+** during publication/flush. FUNCF entry also binds every body word: accepting
+** the same instruction grammar does not establish the compiled generation.
+** The compact tail stores an exact copy, so there are no hash collisions and
+** no release-entry scans of the IR, snapshots or register allocation. */
+static int trace_arm64_entrybc_matches(const LJArm64RootCertificate *c,
+    const GCproto *pt)
+{
+  MSize i;
+  if (bc_op(c->startins) != BC_FUNCF)
+    return c->nentrybc == 0 && c->entrybc == NULL;
+  if (c->nentrybc == 0 || c->nentrybc > UINT8_MAX ||
+      c->nentrybc+1u != pt->sizebc || c->entrybc == NULL)
+    return 0;
+  for (i = 0; i < c->nentrybc; i++)
+    if (c->entrybc[i] != (BCIns)la_load32_acq(
+          (const uint32_t *)&proto_bc(pt)[i+1u])) return 0;
+  return 1;
+}
+
 /* Run only while constructing a private root body. Both semantic and
 ** allocated-state passes have already succeeded before the admission marker;
 ** rescan the final compact layout before sealing its exact identity. */
@@ -4169,6 +4201,10 @@ static int trace_arm64_root_certify(GCtrace *T)
   cert.proto_sizebc = pt->sizebc; cert.proto_numparams = pt->numparams;
   cert.startins = v.startins; cert.admission = v.admission;
   cert.traceno = v.traceno;
+  cert.nentrybc = la_load32_acq(&T->arm64_nentrybc);
+  cert.entrybc = cert.nentrybc ?
+    (const BCIns *)(v.snapmap + v.nsnapmap) : NULL;
+  if (!trace_arm64_entrybc_matches(&cert, pt)) return 0;
   T->arm64_root_cert = cert;
   la_store64_rel(&T->arm64_root_cert.generation, generation);
   return 1;
@@ -4191,7 +4227,11 @@ static int trace_root_entry_arm64_certificate_valid(
     c->spadjust == v->spadjust && c->topslot == v->topslot &&
     c->proto_sizebc == pt->sizebc && c->proto_numparams == pt->numparams &&
     c->startins == v->startins && c->admission == v->admission &&
-    c->traceno == v->traceno;
+    c->traceno == v->traceno &&
+    c->nentrybc == la_load32_acq(&owner->arm64_nentrybc) &&
+    c->entrybc == (c->nentrybc ?
+      (const BCIns *)(v->snapmap + v->nsnapmap) : NULL) &&
+    trace_arm64_entrybc_matches(c, pt);
 }
 
 static int trace_root_entry_arm64_layout_valid(
@@ -6040,6 +6080,8 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
 #endif
   trace_test_root_entry_pause_at(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA);
   if (trace_root_entry_request_pending(tg) ||
+      (sourceop == BC_JFUNCF &&
+       !trace_arm64_entrybc_matches(&T2->arm64_root_cert, pt)) ||
       !trace_root_entry_bytecode_valid(pc, pt, traceno, sourceop,
 				       view2.startins, sourceins))
     goto reject_published;
@@ -7008,6 +7050,7 @@ typedef struct TraceCompactBodyPlan {
   GCSize size;
 #if LJ_TARGET_ARM64
   uint64_t arm64_generation;
+  MSize arm64_nentrybc;
 #endif
 } TraceCompactBodyPlan;
 
@@ -7025,6 +7068,7 @@ static void trace_compact_scratch_init(GCtrace *T, IRIns *ir,
 #endif
 #if LJ_TARGET_ARM64
   la_store64_rel(&T->arm64_generation, 0);
+  la_store32_rel(&T->arm64_nentrybc, 0);
   memset(&T->arm64_root_cert, 0, sizeof(T->arm64_root_cert));
 #endif
   setgcrefnullrel(T->gclist);
@@ -7133,6 +7177,17 @@ static int trace_compact_body_plan(jit_State *J, GCtrace *body,
   p += (MSize)local.nsnap * sizeof(SnapShot);
   local.snapmap = (SnapEntry *)p;
   p += local.nsnapmap * sizeof(SnapEntry);
+#if LJ_TARGET_ARM64
+  local.arm64_nentrybc = la_load32_acq(&body->arm64_nentrybc);
+  if (bc_op(trace_startins_acq(source)) == BC_FUNCF) {
+    GCproto *pt = trace_startpt_acq(source);
+    if (!pt || !local.arm64_nentrybc ||
+        local.arm64_nentrybc+1u != pt->sizebc) return 0;
+  } else if (local.arm64_nentrybc != 0) {
+    return 0;
+  }
+  p += local.arm64_nentrybc * sizeof(BCIns);
+#endif
   expected = (GCSize)(p-(char *)body);
   if (checked_nsnap != local.nsnap || size != expected)
     return 0;
@@ -7169,6 +7224,7 @@ static void trace_compact_body_init(jit_State *J,
 #if LJ_TARGET_ARM64
   trace_arm64_admission_rel(T, trace_arm64_admission_acq(source));
   la_store64_rel(&T->arm64_generation, plan->arm64_generation);
+  la_store32_rel(&T->arm64_nentrybc, plan->arm64_nentrybc);
   memset(&T->arm64_root_cert, 0, sizeof(T->arm64_root_cert));
 #elif LJ_GC64
   la_store32_rel(&T->unused_gc64, 0);
@@ -7201,6 +7257,7 @@ static void trace_compact_body_reset(const TraceCompactBodyPlan *plan)
   trace_compact_scratch_init(plan->body, plan->ir, plan->nins, plan->nk,
 	plan->nsnap, plan->nsnapmap);
   la_store64_rel(&plan->body->arm64_generation, plan->arm64_generation);
+  la_store32_rel(&plan->body->arm64_nentrybc, plan->arm64_nentrybc);
 }
 
 static int trace_compact_body_initialized_valid(jit_State *J,
@@ -7247,6 +7304,7 @@ static int trace_compact_body_initialized_valid(jit_State *J,
 #if LJ_GC64
   if (trace_arm64_admission_acq(T) != trace_arm64_admission_acq(source) ||
       la_load64_acq(&T->arm64_generation) != plan->arm64_generation ||
+      la_load32_acq(&T->arm64_nentrybc) != plan->arm64_nentrybc ||
       la_load64_acq(&T->arm64_root_cert.generation) != 0)
     return 0;
 #endif
@@ -7714,6 +7772,15 @@ GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
 #if LJ_TARGET_ARM64
   jit_State *J = L2J(L);
   uint64_t generation;
+  MSize nentrybc = 0;
+  GCproto *entrypt = NULL;
+  if (bc_op(trace_startins_acq(T)) == BC_FUNCF) {
+    entrypt = trace_startpt_acq(T);
+    if (!entrypt || entrypt->sizebc < 2u ||
+        entrypt->sizebc-1u > UINT8_MAX)
+      lj_trace_err(J, LJ_TRERR_NYIIR);
+    nentrybc = entrypt->sizebc-1u;
+  }
   if (J->arm64_trace_generation == UINT64_MAX)
     lj_trace_err(J, LJ_TRERR_TRACEOV);
   generation = ++J->arm64_trace_generation;
@@ -7723,13 +7790,25 @@ GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
   size_t sz = sztr + szins +
 	      T->nsnap*sizeof(SnapShot) +
 	      T->nsnapmap*sizeof(SnapEntry);
-  GCtrace *T2 = (GCtrace *)lj_mem_newgco_raw(
+  GCtrace *T2;
+#if LJ_TARGET_ARM64
+  sz += nentrybc * sizeof(BCIns);
+#endif
+  T2 = (GCtrace *)lj_mem_newgco_raw(
     L, (MSize)sz, LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT);
   char *p = (char *)T2 + sztr;
   trace_compact_scratch_init(T2, (IRIns *)p-T->nk, T->nins, T->nk,
 	T->nsnap, T->nsnapmap);
 #if LJ_TARGET_ARM64
   la_store64_rel(&T2->arm64_generation, generation);
+  la_store32_rel(&T2->arm64_nentrybc, nentrybc);
+  if (nentrybc) {
+    BCIns *entrybc = (BCIns *)((char *)T2+sz-nentrybc*sizeof(BCIns));
+    MSize i;
+    for (i = 0; i < nentrybc; i++)
+      entrybc[i] = (BCIns)la_load32_acq(
+        (const uint32_t *)&proto_bc(entrypt)[i+1u]);
+  }
 #endif
   memcpy(p, T->ir + T->nk, szins);
   return T2;

@@ -354,3 +354,22 @@ contract passes on ARM64/ARM64e, including private compaction, reset, MCODELM
 recapture and the raw ARM64e negative publication seal. Log:
 `/tmp/ljmt-review-side-asm-fixed.log`. The whole experimental gate remains
 pending the combined generic FUNCF/FFI/side implementation.
+
+## Exact function-body generation
+
+FUNCF traces now reserve a bounded copy of their bytecode body in the compact
+trace allocation. The certificate binds its pointer/count and entry compares
+acquire-loaded live words with the copy; the separately patched JFUNCF header
+retains its existing exact generation checks. This distinguishes two legal
+bodies (for example, `return true` and `return false`) without hashes or release
+IR/snapshot scans. Other trace kinds allocate no bytecode tail and incur no
+additional body scan. Private compaction/reset and exact-size reclamation
+preserve the allocation count.
+
+The full existing FUNCF contract passes on ARM64 and ARM64e, in both assertion
+and release configurations. New independent corruption checks cover allocation
+count, certificate count/pointer and copied word; the existing paused
+POSTMETADATA header/body/return mutations still refuse entry. Logs:
+`/tmp/ljmt-review-funcf-generation.log` and
+`/tmp/ljmt-review-funcf-generation-release.log`. General scalar FUNCF bytecode
+and IR admission are a separate patch currently under review.
