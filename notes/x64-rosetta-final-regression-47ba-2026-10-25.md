@@ -30,6 +30,13 @@ ad-hoc-signed and launched with `arch -x86_64`.
   balanced contended credit additions/subtractions. This is instrumented
   Rosetta execution, not release performance evidence. Log:
   `/tmp/ljmt-final-x64-progress-47ba.log`.
+- The direct `t-gc2-table-store-guard` fixture passed, including its
+  nested-universe public-store coverage; `t-jit-hotcount-generation` passed
+  its TG-local generation and foreign-actor checks. Each was compiled against
+  the matching x86-64 assertion/helper archive, ad-hoc-signed, and run once
+  through a 60-second alarm wrapper. Logs:
+  `/tmp/ljmt-final-x64-table-guard-47ba.log` and
+  `/tmp/ljmt-final-x64-hotcount-47ba.log`.
 
 ## Unresolved suite invocation
 
@@ -41,10 +48,13 @@ PID 3651; after sending TERM and KILL it remained in `U`. `lsof` showed the
 x86-64 LuaJIT executable, dyld, and Rosetta runtime, with no child process and
 an empty log (`/tmp/ljmt-final-x64-universe-foreign-47ba.log`). A `sample`
 attempt also blocked waiting on the process and was terminated. The result
-does not establish which suite case or stage stalled, so no nested-universe
-table-store or foreign-actor hotcount pass is claimed here. No retry was
-started while PID 3651 remained active.
+does not establish which suite case or stage stalled. The two direct-C
+fixtures listed above were then run independently with bounded wrappers and
+passed; the combined Lua harness remains an unresolved stall observation. The
+Lua test runner was not repeated while PID 3651 remained active.
 
 Build logs are `/tmp/ljmt-final-x64-build-47ba.log`,
 `/tmp/ljmt-final-x64-helper-build-47ba.log`, and
 `/tmp/ljmt-final-x64-progress-build-47ba.log`.
+The matched direct-fixture archive build log is
+`/tmp/ljmt-final-x64-direct-build-47ba.log`.
