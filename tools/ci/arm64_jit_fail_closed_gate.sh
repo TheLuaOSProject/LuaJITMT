@@ -187,6 +187,27 @@ if test -f "$live_flush_contract"; then
     sh "$live_flush_contract"
 fi
 
+# Generic foreign-call admission has its own build profiles and callback
+# libraries. Exercise both native targets with private fixture paths before
+# restoring the enclosing gate's profile below.
+lj_ci_tmpdir lj-arm64-experimental-callxs
+callxs_cxx=${CXX:-$(xcrun --sdk macosx --find clang++)}
+for callxs_arch in arm64 arm64e; do
+  callxs_target="-arch $callxs_arch"
+  callxs_cppflags=$LJ_CI_CPPFLAGS
+  if test "$callxs_arch" = arm64e; then
+    callxs_target="$callxs_target -mbranch-protection=bti"
+    callxs_cppflags="$callxs_cppflags -DLUAJIT_ENABLE_CET_BR"
+  fi
+  mkdir "$LJ_CI_TMPDIR/$callxs_arch"
+  env MACOSX_DEPLOYMENT_TARGET="$minver" LUA_PATH="$lua_path" \
+    LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+    LJ_TEST_TARGET_ARCH=arm64 TARGET_SYS=Darwin \
+    TARGET_FLAGS="$callxs_target" CPPFLAGS="$callxs_cppflags" \
+    CXX="$callxs_cxx" TMPDIR="$LJ_CI_TMPDIR/$callxs_arch" \
+    "$luajit" "$root/tools/test.lua" m7_ffi_callxs_arm64_scalar
+done
+
 # Nested contracts select their own profiles. Re-establish this gate's exact
 # profile before the final runtime and linked-fixture checks.
 lj_ci_build_profile arm64 '-arch arm64' "$xcflags" final-runtime
@@ -219,6 +240,7 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" LUA_PATH="$lua_path" \
 
 env LUA_PATH="$lua_path" "$luajit" "$root/tests/t-upvalue-identity.lua"
 env LJ_TEST_ROOT="$root" LUA_PATH="$lua_path" "$luajit" "$root/tests/t-jit-cell-loops.lua"
+env LJ_TEST_ROOT="$root" LUA_PATH="$lua_path" "$luajit" "$root/tests/t-native-coverage.lua"
 
 LJ_CI_RESTORE_NEEDED=0
-echo "arm64_jit_fail_closed_gate OK: independent scalar LOOP capabilities, integer FORL, literal-true JFUNCF, bounded first-side entry and lifecycle contracts sound"
+echo "arm64_jit_fail_closed_gate OK: scalar LOOP/FORL/FUNCF, rooted effects, first-side entry, generic FFI and lifecycle contracts sound"

@@ -614,3 +614,20 @@ Log: `/tmp/ljmt-first-side-default.log`; integrated changes `0643f8d4` and
 The contemporaneous x86-64 stock, errno, atomic, progress and direct-C shared
 runtime checks are recorded in
 [`x64-rosetta-final-regression-47ba-2026-10-25.md`](x64-rosetta-final-regression-47ba-2026-10-25.md).
+
+## Remaining profile consolidation and umbrella coverage
+
+The first-side publication seam now uses the common profile helper for its
+builds, archive/fixture identity, locking, deadlines and restoration. Its
+existing publication ordering and negative configuration checks remain.
+Default two-repetition GC-claim, full-flush and scoped-flush cases passed on
+ARM64 and arm64e in the isolated migration copy, including restoration with
+the seam disabled. Log: `/tmp/ljmt-first-side-publish-profile-8aed.log`.
+
+The experimental umbrella now explicitly includes the registered generic FFI
+M7 suite on ARM64 and arm64e/BTI, with private library/fixture temporary paths,
+and runs the native-coverage observer contract. It restores its own exact
+profile after the FFI suites. Previously its final registered runtime case
+was M5, so a passing umbrella alone did not include this M7 evidence. Shell
+syntax and diff checks pass; the full updated gate is pending the final
+CALLXS snapshot-anchor integration.
