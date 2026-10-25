@@ -3896,9 +3896,6 @@ static LJ_AINLINE GCtrace *trace_root_entry_slot_acq(jit_State *J,
   return traceref_fromgco_safe(o);
 }
 
-static int trace_root_funcf_shape(GCproto *pt, const BCIns *pc,
-	BCIns startins);
-
 /* Validate mutable FUNCF entry metadata. The sealed entry-bytecode copy binds
 ** the complete body generation separately; do not rescan its grammar here. */
 static int trace_root_entry_funcf_generation_valid(const GCproto *pt,

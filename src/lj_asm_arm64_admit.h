@@ -633,7 +633,7 @@ static int arm64_ir_funcf_short_value(const IRIns *ir, IRRef nk,
 ** cause recursive/exponential work. */
 static int arm64_ir_funcf_advance(const IRIns *ir, IRRef nins, IRRef nk,
 	const BCIns *bc, MSize sizebc, MSize framesize,
-	MSize baseslot, MSize target, MSize *posp, IRRef *values,
+	MSize target, MSize *posp, IRRef *values,
 	uint8_t *valid)
 {
   uintptr_t lo = (uintptr_t)bc;
@@ -780,7 +780,7 @@ static int arm64_ir_funcf_scalar_snapshots(const IRIns *ir, IRRef nins,
 	  return 0;
 	previous_pc = pcpos;
 	if (!arm64_ir_funcf_advance(ir, nins, nk, proto_bc, proto_sizebc,
-	    framesize, baseslot, pcpos, &bytecode_pos, values, valid))
+	    framesize, pcpos, &bytecode_pos, values, valid))
 	  return 0;
         for (i = 0; i < snap->nent; i++) {
           SnapEntry entry = snapmap[ofs+i];

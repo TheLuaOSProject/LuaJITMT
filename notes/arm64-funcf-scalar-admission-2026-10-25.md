@@ -5,3 +5,9 @@ The experimental ARM64 root-entry profile now treats a fixed-arity `FUNCF` body 
 Semantic and post-register-allocation checks each resolve the returned bytecode register from its latest definition and require the snapshot result to name that same IR value. They also validate snapshot PC order, legal frame slots, scalar SLOAD provenance, and allocator register/spill constraints independently. The publication certificate separately retains the exact FUNCF bytecode generation, so a legal mutation between the last pre-entry check and root transfer cannot substitute different code that happens to fit the same grammar. The final runtime boundary compares the compact body copy with acquire-loaded live bytecode; it does not rerun full IR/register-allocation admission there.
 
 The focused native fixture covers false, nil, integer constant and argument returns; four floating arithmetic operations; multi-local arithmetic; integer overflow side exit; independent post-RA slot, snapshot-location, and simultaneously-live input-register corruption/recovery checks; and a deterministic `POSTMETADATA` bytecode mutation race. On 2026-10-25, the contract passed on native arm64 and arm64e with `LUAJIT_MT_ARM64_BOOTSTRAP`, `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`, `LUA_USE_ASSERT`, `LJ_TRACE_TEST_HELPERS`, and `LUAJIT_MCODE_TEST`. These are bounded positive proofs for this grammar, not support for arbitrary function bodies.
+
+Combined-gate follow-up: the standalone emitter contract compiles admission
+with `-Wextra -Werror`, exposing an unused bytecode-walker argument that the
+ordinary build did not reject. Removed that argument and an obsolete forward
+declaration; the emitted-instruction contract passes unchanged. Log:
+`/tmp/ljmt-review-funcf-emitter.log`.
