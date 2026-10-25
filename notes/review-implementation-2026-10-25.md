@@ -631,3 +631,11 @@ profile after the FFI suites. Previously its final registered runtime case
 was M5, so a passing umbrella alone did not include this M7 evidence. Shell
 syntax and diff checks pass; the full updated gate is pending the final
 CALLXS snapshot-anchor integration.
+
+The first combined preflight at `3a4b961e` passed interpreter GC2 checks, then
+the strict emitter compile caught an unused snapshot parameter in the new
+generic FFI helper. The redundant parameter is removed; the complete emitter
+contract now passes (`/tmp/ljmt-emitter-generic-werror.log`). This preflight is
+not a complete experimental pass. The publication-profile migration was also
+rerun with the private working directory and source SHA printed in the log:
+`/tmp/ljmt-first-side-publish-profile-explicit.log`, source `d96f128d`.

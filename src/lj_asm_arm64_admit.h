@@ -1922,7 +1922,7 @@ static int arm64_postra_forl_dynamic_shape(const LJArm64PostRAView *view,
 
 #if LJ_HASJIT_FFI_CALLXS
 static int arm64_callxs_snapshot_frame_pc(const GCtrace *T,
-	const SnapShot *snap, MSize ofs, MSize nent,
+	MSize ofs, MSize nent,
 	uintptr_t proto_lo, uintptr_t proto_hi, uintptr_t *pcp)
 {
 	MSize i;
@@ -2138,7 +2138,7 @@ static int arm64_callxs_snapshot_bounds(const GCtrace *T,
 	      !arm64_callxs_snapshot_call_after_save(T, meta_at, &meta_call) ||
 	      meta_call != call_ref)
 	    continue;
-	  if (!arm64_callxs_snapshot_frame_pc(T, meta_snap, meta_ofs,
+	  if (!arm64_callxs_snapshot_frame_pc(T, meta_ofs,
 		meta_nent, lo, hi, &candidate))
 	    SNAP_BOUNDS_FAIL();
 	  if (expected_return_pc != 0 && expected_return_pc != candidate)
@@ -2160,7 +2160,7 @@ static int arm64_callxs_snapshot_bounds(const GCtrace *T,
     } else {
       /* Read and validate frame PC payloads as part of the bounded map
       ** walk. The footer relation is checked against the leave snapshot. */
-      if (!arm64_callxs_snapshot_frame_pc(T, snap, ofs, nent, lo, hi,
+      if (!arm64_callxs_snapshot_frame_pc(T, ofs, nent, lo, hi,
 		&frame_pc))
 	SNAP_BOUNDS_FAIL();
       (void)frame_pc;
