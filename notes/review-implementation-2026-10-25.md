@@ -67,3 +67,30 @@ The replaced source-string checks are now covered by executable positives and
 malformed-neighbor tests. The production-ordering checks remain separate.
 Other review work streams are still in progress; this result does not certify
 the final combined implementation.
+
+## Immutable root publication proof
+
+Root publication now seals the final compact body with an exact identity tuple
+and a monotonically allocated serial. The body, IR/snapshot pointers and
+extents, prototype, original instruction, admission kind, trace number, and
+machine-code/exit geometry must all match at entry. This is not a reusable
+boolean or a collision-prone checksum. Compaction rollback preserves the
+allocation serial but clears the seal; a new allocation cannot reuse it.
+
+Both independent admission passes still precede publication. The final compact
+layout is checked again before the certificate is release-published. Release
+entry compares its bounded tuple while retaining the TG lifetime publication,
+slot/body revalidation, live bytecode, topology, retirement, request, and PAC
+checks. Assertion builds additionally rescan immutable contents to detect
+illegal writes. Mutable snapshot counters and exit targets remain outside the
+seal and retain their existing ownership rules.
+
+The complete root-entry contract passed on ARM64, arm64e/BTI, and an ARM64 build
+without `LUA_USE_ASSERT`. Certificate corruption covers every tuple field,
+missing publication, and same-address/new-allocation serial mismatch. Existing
+layout negatives now also require the publication scanner to refuse sealing;
+assertion entry still detects their illegal post-publication mutations. The
+same run passed source-generation, retirement/request-race, emitted caller ABI,
+first-side ingress, and real hot-loop checks. Log:
+`/tmp/ljmt-root-certificate-contract.log`. Release performance and combined
+validation remain separate work items.

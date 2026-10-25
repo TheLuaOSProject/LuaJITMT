@@ -380,6 +380,29 @@ typedef enum {
   LJ_TRLINK_STITCH		/* Trace stitching. */
 } TraceLink;
 
+#if LJ_TARGET_ARM64
+/* Publication-time proof of the immutable root body. This is an exact tuple,
+** not a hash: entry compares it while holding the native lifetime lease. */
+typedef struct LJArm64RootCertificate {
+  uint64_t generation;
+  const struct GCtrace *body;
+  const IRIns *ir;
+  const SnapShot *snap;
+  const SnapEntry *snapmap;
+  const GCobj *startpt;
+  const BCIns *startpc;
+  const MCode *mcode;
+  MCode *const *exittab;
+  const MCode *exitstub;
+  IRRef nins, nk;
+  MSize nsnap, nsnapmap, szmcode, mcloop, spadjust, topslot;
+  MSize proto_sizebc, proto_numparams;
+  BCIns startins;
+  uint32_t admission;
+  TraceNo traceno;
+} LJArm64RootCertificate;
+#endif
+
 /* Trace object. */
 typedef struct GCtrace {
   GCHeader;
@@ -419,6 +442,10 @@ typedef struct GCtrace {
   uint32_t native_pins;  /* Closed admission bit + exact-body native leases. */
   uint64_t retire_epoch;  /* Safepoint epoch + 1 when retirement is claimed. */
   struct GCtrace *retired_next;  /* Token-owned tagged retire-list link. */
+#if LJ_TARGET_ARM64
+  uint64_t arm64_generation;  /* Exact allocation serial, never reused. */
+  LJArm64RootCertificate arm64_root_cert;
+#endif
 #ifdef LUAJIT_USE_GDBJIT
   void *gdbjit_entry;	/* GDB JIT entry. */
 #endif
@@ -1148,6 +1175,7 @@ typedef struct jit_State {
   uint64_t mcode_reclaim_pin_seq;  /* Token-owned mcode-scan notification. */
 #if LJ_TARGET_ARM64
   LJTraceArm64SideParentCert arm64_side_parent;
+  uint64_t arm64_trace_generation;  /* Recorder-token-owned serial source. */
 #endif
 } jit_State;
 

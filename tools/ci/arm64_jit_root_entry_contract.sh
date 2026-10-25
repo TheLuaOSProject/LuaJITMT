@@ -454,7 +454,7 @@ for required in 'v->admission == expected_admission' \
 done
 grep -F 'v->spadjust == 0' "$loop_view_region" >/dev/null
 grep -F 'v->link == traceno' "$loop_view_region" >/dev/null
-awk '/^static int trace_root_entry_arm64_layout_valid/ { copy=1 }
+awk '/^static int trace_root_entry_arm64_layout_scan/ { copy=1 }
      copy { print }
      copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$layout_region"
 for required in 'postra.ir = v->ir;' 'postra.snap = v->snap;' \
@@ -695,6 +695,20 @@ env LUA_PATH="$root/src/?.lua;$root/src/jit/?.lua;;" "$root/src/luajit" -e '
   assert(util.traceinfo(2) == nil,
          "root-only arm64e workload unexpectedly published trace 2")
 '
+
+# Without LUA_USE_ASSERT, entry trusts the immutable proof but still rejects
+# every mismatched certificate tuple and every mutable lifetime authority.
+release_xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLJ_TRACE_TEST_HELPERS -DLJ_ARM64_EXIT_TEST_HELPERS'
+env MACOSX_DEPLOYMENT_TARGET="$minver" \
+  make -C "$root/src" clean TARGET_FLAGS='-arch arm64' XCFLAGS="$release_xcflags"
+env MACOSX_DEPLOYMENT_TARGET="$minver" \
+  make -C "$root/src" -j"$jobs" TARGET_FLAGS='-arch arm64' XCFLAGS="$release_xcflags"
+# shellcheck disable=SC2086 # build profile is intentionally a word list.
+"$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64 \
+  -mmacosx-version-min="$minver" $release_xcflags -I"$root/src" \
+  "$root/tests/t-arm64-jit-root-entry.c" "$archive" -lm -pthread \
+  -o "$tmpdir/t-arm64-root-certificate-release"
+"$tmpdir/t-arm64-root-certificate-release"
 
 # Leave the isolated checkout in its ordinary native experimental mode.
 env MACOSX_DEPLOYMENT_TARGET="$minver" \

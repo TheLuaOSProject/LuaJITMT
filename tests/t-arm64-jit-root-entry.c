@@ -234,6 +234,7 @@ static void install_root_entry_metadata(jit_State *J, GCproto *pt,
 
   memset(&J->cur, 0, sizeof(J->cur));
   J->cur.gct = (uint32_t)~LJ_TTRACE;
+  J->cur.arm64_generation = 1;
   trace_traceno_rel(&J->cur, 1);
   J->cur.root = 0;
   trace_link_rel(&J->cur, 1);
@@ -418,6 +419,7 @@ static void expect_metadata_success(lua_State *L, const BCIns *pc,
   uint32_t publishes = lj_trace_test_root_entry_publishes();
   uint32_t cleanups = lj_trace_test_root_entry_cleanups();
   assert(root_entry_metadata_layout_valid(&L2J(L)->cur));
+  assert(lj_trace_test_arm64_root_certify(&L2J(L)->cur));
   LJTraceRootEntry entry = test_trace_enter_root(
     L2J(L), pc, 1, L, L->base, BC_JLOOP);
   assert(entry.trace == &L2J(L)->cur);
@@ -436,7 +438,58 @@ static void expect_metadata_success(lua_State *L, const BCIns *pc,
 static void expect_layout_reject(lua_State *L, const BCIns *pc)
 {
   assert(!root_entry_metadata_layout_valid(&L2J(L)->cur));
+  assert(!lj_trace_test_arm64_root_certify(&L2J(L)->cur));
+#ifdef LUA_USE_ASSERT
+  /* Assertion entry additionally detects illegal writes to sealed contents. */
   expect_metadata_reject(L, pc);
+#else
+  UNUSED(pc);
+#endif
+}
+
+/* These cases exercise the release entry path too: every immutable identity
+** field must match the private publication proof, without relying on a scan. */
+static void test_certificate_mutations(lua_State *L, const BCIns *pc,
+                                      RootEntryMetadataFixture *fixture)
+{
+  GCtrace *T = &L2J(L)->cur;
+  LJArm64RootCertificate saved = T->arm64_root_cert;
+  uint64_t generation = T->arm64_generation;
+#define CERT_REJECT(field, value) do { \
+    T->arm64_root_cert.field = (value); \
+    expect_metadata_reject(L, pc); \
+    T->arm64_root_cert = saved; \
+  } while (0)
+  CERT_REJECT(generation, 0);
+  CERT_REJECT(generation, generation + 1);
+  CERT_REJECT(body, NULL);
+  CERT_REJECT(ir, NULL);
+  CERT_REJECT(snap, NULL);
+  CERT_REJECT(snapmap, NULL);
+  CERT_REJECT(startpt, NULL);
+  CERT_REJECT(startpc, NULL);
+  CERT_REJECT(mcode, NULL);
+  CERT_REJECT(exittab, NULL);
+  CERT_REJECT(exitstub, NULL);
+  CERT_REJECT(nins, saved.nins + 1);
+  CERT_REJECT(nk, saved.nk + 1);
+  CERT_REJECT(nsnap, saved.nsnap + 1);
+  CERT_REJECT(nsnapmap, saved.nsnapmap + 1);
+  CERT_REJECT(szmcode, saved.szmcode + sizeof(MCode));
+  CERT_REJECT(mcloop, saved.mcloop + sizeof(MCode));
+  CERT_REJECT(spadjust, saved.spadjust + 16);
+  CERT_REJECT(topslot, saved.topslot + 1);
+  CERT_REJECT(proto_sizebc, saved.proto_sizebc + 1);
+  CERT_REJECT(proto_numparams, saved.proto_numparams + 1);
+  CERT_REJECT(startins, 0);
+  CERT_REJECT(admission, 0);
+  CERT_REJECT(traceno, saved.traceno + 1);
+#undef CERT_REJECT
+  /* Reusing the same address for a new allocation cannot reuse the seal. */
+  T->arm64_generation = generation + 1;
+  expect_metadata_reject(L, pc);
+  T->arm64_generation = generation;
+  expect_metadata_success(L, pc, fixture);
 }
 
 static void test_spill_layout_mutations(lua_State *L, const BCIns *pc,
@@ -1047,6 +1100,7 @@ int main(void)
     RootEntryMetadataFixture metadata;
     install_root_entry_metadata(J, metadata_pt, &metadata_loop, &metadata);
     expect_metadata_success(L, metadata_loop.pc, &metadata);
+    test_certificate_mutations(L, metadata_loop.pc, &metadata);
     test_metadata_mutation_rejections(L, metadata_pt, &metadata_loop,
 				      &metadata);
     run_pause_race(L, metadata_loop.pc, ROOT_ENTRY_POLL_AFTER_METADATA);
