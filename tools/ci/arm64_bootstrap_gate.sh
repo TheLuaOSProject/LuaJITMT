@@ -140,7 +140,8 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
     m5_arm64_root_publication_runtime m5_arm64_safepoint_runtime \
     m5_arm64_pcall_anchor_runtime m5_arm64_capi_meta_roots \
     m5_arm64_tmpbuf_runtime \
-    m4_posix_signal_arm64_gate m3_darwin_gc2_runtime
+    m4_posix_signal_arm64_gate m3_darwin_gc2_runtime \
+    m7_ffi_callback_arm64_lifecycle
 
 (
   cd "$root/tests/stock/test"
@@ -154,6 +155,10 @@ run_lua -joff "$root/tests/t-upvalue-identity.lua"
 env LJ_TEST_ROOT="$root" LUA_PATH="$lua_path" \
   "$luajit" -joff "$root/tests/t-jit-cell-loops.lua"
 run_lua -joff "$root/tests/t-ffi-callback-runtime.lua" 4 80
+
+LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+LJ_CALLBACK_LIFECYCLE_RESTORE_XCFLAGS="$xcflags" \
+  sh "$root/tools/ci/arm64e_ffi_callback_lifecycle_contract.sh"
 
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_ffi_aggregate_contract.sh"
 

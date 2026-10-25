@@ -101,6 +101,7 @@ local m7_cases = {
   "m7_ffi_nested_state",
   "m7_ffi_callback_install",
   "m7_ffi_callback_runtime",
+  "m7_ffi_callback_arm64_lifecycle",
   "m7_ffi_callxs_arm64_scalar",
   "m7_ffi_callxs_authentic",
   "m7_ffi_callxs_callback_stack",
@@ -455,6 +456,43 @@ print("bulk fill ok")
       luajit_file(t, t:path("tests", "stock", "test", "lib", "ffi",
                             "ffi_callback.lua"))
       print("M7 FFI callback runtime behavior passed")
+    end
+  })
+
+  add({
+    name = "m7_ffi_callback_arm64_lifecycle",
+    description = "Darwin ARM64 callback attach, unwind, and TG lifecycle",
+    run = function(t)
+      if not native_darwin_arm64(t) then
+        print("m7_ffi_callback_arm64_lifecycle SKIP: requires native Darwin ARM64")
+        return
+      end
+      local flags = table.concat({
+        "-DLUAJIT_MT_ARM64_BOOTSTRAP",
+        "-DLUAJIT_DISABLE_JIT",
+        "-DLUA_USE_ASSERT"
+      }, " ")
+      with_arm64_bootstrap_restore(t, function()
+        clean_build(t, { quiet = true, xcflags = flags })
+        run_c_fixture_specs(t, {
+          { cfile = "t-ffi-callback-nested-native.c", timeout = "30s" },
+          { cfile = "t-ffi-callback-owner-lifetime.c", timeout = "30s" },
+          { cfile = "t-ffi-callback-stopreq.c", timeout = "30s" },
+          { cfile = "t-ffi-callback-attached-carrier.c", timeout = "30s" },
+          { cfile = "t-ffi-callback-auto-attach.c", timeout = "30s" }
+        }, { cflags = flags })
+        build_and_run_cpp(t, t:tmp("lj_t-ffi-callback-auto-unwind-arm64"),
+                          "t-ffi-callback-auto-unwind.cpp", {
+          build = false,
+          default_cflags = false,
+          cflags = t:with_target_arch_flags(table.concat({
+            flags, "-std=gnu++11", "-O2", "-Wall", "-Wextra", "-Werror",
+            "-fexceptions", "-funwind-tables"
+          }, " ")),
+          timeout = "30s"
+        })
+      end)
+      print("M7 Darwin ARM64 callback lifecycle fixtures passed")
     end
   })
 

@@ -73,6 +73,19 @@ Separate disposable negative controls failed with SIGABRT as intended:
 - Bypassing the consumed-poll wait made each of the four native-return modes
   return while poll was still set. Each failed the original poll-clear check.
 
+The earlier memory summary's mention of `teardown-during-scan=1` and
+`lj_tg_poll_acq(ctx.owner)==0` as Darwin rerun failures was an incorrect
+classification of those negative-control outputs. The captured positive run
+and a fresh isolated repetition pass; no fixture or assertion change was
+needed. On 2026-10-25, an archive of `c3cbb04a` was built under
+`/tmp/luajitmt-darwin-root-repeat` with the Darwin assertion/helper profile.
+The local duplicate fixture passed three consecutive runs, each observing the
+exact consumed-poll ulock wait and reporting `teardown-during-scan=0`. The
+native-return fixture passed modes 0 through 3 in three consecutive rounds
+(12 total), each observing the real ulock wait and returning with the root
+marked and source unchanged. This is focused repeat evidence, not a substitute
+for the complete Darwin gate.
+
 No production behavior was changed by these test ports. Positive evidence is
 in `/tmp/luajitmt-darwin-holds-runner.log`; negative logs are
 `/tmp/luajitmt-negative-local-hold.log` and
