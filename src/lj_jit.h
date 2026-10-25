@@ -852,12 +852,12 @@ static LJ_AINLINE MCode *trace_exittarget_arm64_acq(const GCtrace *T,
 						     ExitNo exitno)
 {
   MCode **exittab = trace_exittab_acq(T);
-  void *target = la_loadptr_acq((void *const *)&exittab[exitno]);
+  MCode *target = (MCode *)la_loadptr_acq((void *const *)&exittab[exitno]);
 #if LJ_ABI_PAUTH
   ASMFunction signedtarget = ptrauth_nop_cast(ASMFunction, target);
   return ptrauth_nop_cast(MCode *, lj_ptr_strip(signedtarget));
 #else
-  return (MCode *)target;
+  return target;
 #endif
 }
 
