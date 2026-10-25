@@ -1,105 +1,76 @@
 #!/bin/sh
 set -eu
-
 root=${LJ_TEST_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)}
-
-if test "$(uname -s)" != Darwin || test "$(uname -m)" != arm64; then
-  echo "arm64_jit_forl_record_contract SKIP: requires native macOS arm64"
-  exit 0
+. "$root/tools/ci/lib/arm64_profile.sh"
+if lj_ci_native_arm64_or_skip arm64_jit_forl_record_contract; then :; else
+  status=$?; test "$status" -eq 1 && exit 0; exit "$status"
 fi
-
-if test -z "${SDKROOT:-}"; then
-  SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
-  export SDKROOT
-fi
-
-jobs=${JOBS:-${MAKE_JOBS:-$(sysctl -n hw.logicalcpu 2>/dev/null || echo 2)}}
-cc=${CC:-$(xcrun --sdk macosx --find clang)}
-minver=${MACOSX_DEPLOYMENT_TARGET:-13.0}
-xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS -DLUAJIT_MCODE_TEST'
-pauth_xcflags="$xcflags -DLUAJIT_ENABLE_CET_BR"
-archive=$root/src/libluajit.a
+lj_ci_profile_init "$root" arm64_jit_forl_record_contract
+lj_ci_tmpdir lj-arm64-forl-record
+tmpdir=$LJ_CI_TMPDIR
+root=$LJ_CI_ROOT
+archive=$LJ_CI_ARCHIVE
 fixture_source=$root/tests/t-arm64-jit-forl-record.c
 trace_source=$root/src/lj_trace.c
 asm_source=$root/src/lj_asm.c
 vm_source=$root/src/vm_arm64.dasc
-lock_dir=$root/src/.lj-test-run.lock
-lock_held=0
-restore_needed=0
-tmpdir=
-
-cleanup() {
-  status=$?
-  trap - EXIT HUP INT TERM
-  if test "$restore_needed" = 1; then
-    env MACOSX_DEPLOYMENT_TARGET="$minver" \
-      make -C "$root/src" clean TARGET_FLAGS='-arch arm64' \
-        XCFLAGS="$xcflags" >/dev/null 2>&1 || status=1
-    env MACOSX_DEPLOYMENT_TARGET="$minver" \
-      make -C "$root/src" -j"$jobs" TARGET_FLAGS='-arch arm64' \
-        XCFLAGS="$xcflags" >/dev/null 2>&1 || status=1
-  fi
-  if test "$lock_held" = 1; then
-    rm -f "$lock_dir/owner"
-    rmdir "$lock_dir" 2>/dev/null || true
-  fi
-  if test -n "$tmpdir"; then
-    rm -rf "$tmpdir"
-  fi
-  exit "$status"
-}
-
-trap cleanup EXIT
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 143' TERM
-
-acquire_lock() {
-  if test "${LJ_TEST_DISABLE_RUN_LOCK:-}" = 1 ||
-     test "${LJ_TEST_RUN_LOCK_HELD:-}" = 1; then
-    return
-  fi
-  lock_timeout=${LJ_TEST_RUN_LOCK_TIMEOUT:-900}
-  lock_started=$(date +%s)
-  lock_announced=0
-  while ! mkdir "$lock_dir" 2>/dev/null; do
-    lock_now=$(date +%s)
-    if test "$lock_timeout" -ge 0 &&
-       test $((lock_now-lock_started)) -ge "$lock_timeout"; then
-      echo "ARM64 FORL record contract lock timed out: $lock_dir" >&2
-      if test -f "$lock_dir/owner"; then
-        echo "owner:" >&2
-        cat "$lock_dir/owner" >&2 || true
-      fi
-      exit 2
-    fi
-    if test "$lock_announced" = 0; then
-      echo "waiting for Lua test runner lock: $lock_dir" >&2
-      lock_announced=1
-    fi
-    sleep 0.2
-  done
-  lock_held=1
-  {
-    printf 'time=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf 'cmd=%s\n' "$0"
-  } >"$lock_dir/owner" 2>/dev/null || true
-}
-
-acquire_lock
-tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lj-arm64-forl-record.XXXXXX")
+minver=$LJ_CI_MINVER
+xcflags=${LJ_ARM64_FORL_XCFLAGS:--DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS -DLUAJIT_MCODE_TEST}
+pauth_xcflags="$xcflags -DLUAJIT_ENABLE_CET_BR"
+restore_target=${LJ_ARM64_FORL_RESTORE_TARGET_FLAGS:-${LJ_TEST_RESTORE_TARGET_FLAGS:--arch arm64}}
+restore_xcflags=${LJ_ARM64_FORL_RESTORE_XCFLAGS:-${LJ_TEST_RESTORE_XCFLAGS:-$xcflags}}
+lj_ci_set_restore "$restore_target" "$restore_xcflags"
 fixture=$tmpdir/t-arm64-jit-forl-record
-fixture_obj=$tmpdir/t-arm64-jit-forl-record.o
 pauth_fixture=$tmpdir/t-arm64-jit-forl-record-arm64e
-pauth_obj=$tmpdir/t-arm64-jit-forl-record-arm64e.o
-macros=$tmpdir/macros.txt
-pauth_macros=$tmpdir/macros-arm64e.txt
-tuple_region=$tmpdir/tuple-region.txt
-trace_stop=$tmpdir/trace-stop.txt
+profile_check=$tmpdir/profile-check.c
 forl_vm=$tmpdir/forl-vm.txt
 branch_only_vm=$tmpdir/branch-only-vm.txt
 root_entry=$tmpdir/root-entry.txt
-restore_needed=1
+tuple_region=$tmpdir/tuple-region.txt
+trace_stop=$tmpdir/trace-stop.txt
+cat >"$profile_check" <<'EOF'
+#include "lj_arch.h"
+#if !LJ_TARGET_ARM64
+#error "not ARM64"
+#endif
+#if LJ_ABI_PAUTH != EXPECT_PAUTH
+#error "unexpected pointer-authentication ABI"
+#endif
+#if LJ_ABI_BRANCH_TRACK != EXPECT_BRANCH
+#error "unexpected branch-tracking ABI"
+#endif
+#if LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED != 0
+#error "root recorder gate is closed"
+#endif
+#if LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED != 0
+#error "FORL recorder gate is closed"
+#endif
+#if LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED != 0
+#error "FUNCF recorder gate is closed"
+#endif
+#if LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED != 1
+#error "side recorder gate unexpectedly opened"
+#endif
+#if LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED != 0
+#error "first-side recorder gate is closed"
+#endif
+#if LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED != 1
+#error "stitch recorder gate unexpectedly opened"
+#endif
+#if LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED != 0
+#error "loop native-entry gate is closed"
+#endif
+#if LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED != 0
+#error "FORL native-entry gate is closed"
+#endif
+#if LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED != 0
+#error "JFUNCF native-entry gate is closed"
+#endif
+#if LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED != 1
+#error "stitch native-entry gate unexpectedly opened"
+#endif
+int profile_check;
+EOF
 
 # Freeze the recorder/publication proof independently from the native-entry
 # contract. Integer roots enter their certified target; FP JFORL remains on
@@ -235,96 +206,40 @@ grep -F 'BC_JFORL' "$root_entry" >/dev/null
 grep -F '!LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED' \
   "$root_entry" >/dev/null
 
-env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" clean TARGET_FLAGS='-arch arm64' XCFLAGS="$xcflags"
-env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" -j"$jobs" TARGET_FLAGS='-arch arm64' \
-    XCFLAGS="$xcflags"
 
-# shellcheck disable=SC2086 # xcflags intentionally expands to arguments.
-"$cc" -arch arm64 -mmacosx-version-min="$minver" $xcflags \
-  -I"$root/src" -dM -E -x c -include lj_arch.h /dev/null >"$macros"
-for setting in \
-  'LJ_TARGET_ARM64 1' \
-  'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
-  'LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED 1' \
-  'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED 1'; do
-  grep -E "^#define ${setting}$" "$macros" >/dev/null || {
-    echo "ARM64 FORL gate mismatch: $setting" >&2
-    exit 1
-  }
-done
+build_and_run() {
+  arch=$1
+  target_flags=$2
+  flags=$3
+  tag=$4
+  pauth=$5
+  branch=$6
+  lj_ci_build_profile "$arch" "$target_flags" "$flags" "$tag"
+  lj_ci_compile_object "$tmpdir/profile-$tag.o" "$profile_check" \
+    "-DEXPECT_PAUTH=$pauth" "-DEXPECT_BRANCH=$branch"
+  fixture=$tmpdir/t-arm64-jit-forl-record-$tag
+  lj_ci_compile_fixture "$fixture" "$fixture_source"
+  otool -hv "$fixture" | grep -E 'ARM64[[:space:]]+(ALL|E)' >/dev/null
+  if test "$tag" = arm64; then
+    ordinary_runs=${LJ_ARM64_FORL_RECORD_RUNS:-3}
+  else
+    ordinary_runs=${LJ_ARM64_FORL_RECORD_PAUTH_RUNS:-2}
+  fi
+  run=1
+  while test "$run" -le "$ordinary_runs"; do
+    lj_ci_run_fixture 120 "$fixture"
+    run=$((run+1))
+  done
+  LUAJIT_MCODE_TEST=R lj_ci_run_fixture 120 "$fixture"
+  if test "$tag" = arm64; then
+    LJ_TEST_RUN_LOCK_HELD=1 LJ_TEST_XCFLAGS="$flags" \
+      sh "$root/tools/ci/arm64_jit_ir_admission_contract.sh"
+  fi
+}
 
-# shellcheck disable=SC2086 # xcflags intentionally expands to arguments.
-"$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64 \
-  -mmacosx-version-min="$minver" $xcflags -I"$root/src" \
-  -c "$fixture_source" -o "$fixture_obj"
-"$cc" -arch arm64 -mmacosx-version-min="$minver" \
-  "$fixture_obj" "$archive" -lm -pthread -o "$fixture"
-ordinary_runs=${LJ_ARM64_FORL_RECORD_RUNS:-3}
-run=1
-while test "$run" -le "$ordinary_runs"; do
-  "$fixture"
-  run=$((run+1))
-done
-LUAJIT_MCODE_TEST=R "$fixture"
-LJ_TEST_RUN_LOCK_HELD=1 LJ_TEST_XCFLAGS="$xcflags" \
-  "$root/tools/ci/arm64_jit_ir_admission_contract.sh"
-
-env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" clean \
-    TARGET_FLAGS='-arch arm64e -mbranch-protection=bti' \
-    XCFLAGS="$pauth_xcflags"
-env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" -j"$jobs" \
-    TARGET_FLAGS='-arch arm64e -mbranch-protection=bti' \
-    XCFLAGS="$pauth_xcflags"
-
-# shellcheck disable=SC2086 # pauth_xcflags intentionally expands to arguments.
-"$cc" -arch arm64e -mbranch-protection=bti \
-  -mmacosx-version-min="$minver" $pauth_xcflags -I"$root/src" \
-  -dM -E -x c -include lj_arch.h /dev/null >"$pauth_macros"
-for setting in \
-  'LJ_ABI_PAUTH 1' \
-  'LJ_ABI_BRANCH_TRACK 1' \
-  'LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED 0'; do
-  grep -E "^#define ${setting}$" "$pauth_macros" >/dev/null || {
-    echo "ARM64e FORL gate mismatch: $setting" >&2
-    exit 1
-  }
-done
-
-# shellcheck disable=SC2086 # pauth_xcflags intentionally expands to arguments.
-"$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64e \
-  -mbranch-protection=bti -mmacosx-version-min="$minver" \
-  $pauth_xcflags -I"$root/src" -c "$fixture_source" -o "$pauth_obj"
-"$cc" -arch arm64e -mbranch-protection=bti \
-  -mmacosx-version-min="$minver" "$pauth_obj" "$archive" -lm -pthread \
-  -o "$pauth_fixture"
-otool -hv "$pauth_fixture" | grep -E 'ARM64[[:space:]]+E' >/dev/null
-pauth_runs=${LJ_ARM64_FORL_RECORD_PAUTH_RUNS:-2}
-run=1
-while test "$run" -le "$pauth_runs"; do
-  "$pauth_fixture"
-  run=$((run+1))
-done
-LUAJIT_MCODE_TEST=R "$pauth_fixture"
-
-# Leave the shared checkout in the ordinary experimental configuration.
-env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" clean TARGET_FLAGS='-arch arm64' XCFLAGS="$xcflags"
-env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" -j"$jobs" TARGET_FLAGS='-arch arm64' \
-    XCFLAGS="$xcflags"
-restore_needed=0
-
+vm_object=$root/src/lj_vm.o
+build_and_run arm64 '-arch arm64' "$xcflags" arm64 0 0
+build_and_run arm64e '-arch arm64e -mbranch-protection=bti' \
+  "$pauth_xcflags" arm64e 1 1
+lj_ci_restore "$restore_target" "$restore_xcflags"
 echo "arm64_jit_forl_record_contract OK: bounded FORL roots published and entered on ARM64/ARM64e; FP stayed branch-only"
