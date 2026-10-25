@@ -298,7 +298,8 @@ for required in \
   'thread interrupted: VM shutdown' \
   'void *saved_cframe = L->cframe;' \
   'assert(L->cframe == saved_cframe);' \
-  'trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0' \
+  'assert(trace_nchild_acq(T) == (childno ? 1u : 0u));' \
+  'childno = trace_nextside_acq(T);' \
   'function __arm64_fixed_initializer(limit,step) local x=0.5' \
   'function __arm64_fixed_half(limit) local x=0.5' \
   'function __arm64_fixed_initializer_inclusive(limit,step) local x=0.5' \
@@ -1239,7 +1240,8 @@ for required in \
   'proto_trace_acq(pt) == 0' \
   'call = numeric_args_int_x_negative(profile);' \
   '1, 0, 1) == call.result' \
-  'expect_scalar_trace(L, profile->name);' \
+  'expect_scalar_trace_child(L, profile->name);' \
+  'expect_scalar_native(L, profile, &call, 1, 0, 1, profile == &div_profile);' \
   'data->integer_limit.step, 0, 1, 1) == data->integer_limit.result'; do
   require_fixture_sequence \
     'static void test_int_step_positive_and_guard_exits' \
@@ -1270,7 +1272,7 @@ for required in \
   'expect_single_exit(exitno);' \
   'expect_only_args_root_kind(L, pt, profile, NUMERIC_ARGS_X_INT);' \
   'assert(call_triple(L, profile->name, call->x, call->limit, call->step, 1, integer_limit, integer_step) == call->result);' \
-  'expect_scalar_trace(L, profile->name);'; do
+  'expect_scalar_native(L, profile, call, 1, integer_limit, integer_step, 0);'; do
   require_fixture_sequence \
     'static void expect_int_x_call' \
     'static void test_int_x_positive_and_guard_exits' "$required"
@@ -1298,7 +1300,7 @@ for required in \
   'data->integer_limit.step, 1, 1, 0) == data->integer_limit.result' \
   'expect_native_exit(LIMIT_TYPE_EXIT, X_OR_STEP_TYPE_EXIT);' \
   'expect_int_x_call(L, pt, profile, &data->precondition, PRECOND_EXIT);' \
-  'assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);' \
+  'expect_scalar_trace_child(L, profile->name);' \
   'assert((BCIns)la_load32_acq((const uint32_t *)startpc) == startins);' \
   'assert(proto_trace_acq(pt) == 0);' \
   'expect_int_x_recording_admitted(L, profile, &data->integer_step, 0, 1);' \
@@ -1321,7 +1323,7 @@ done
 for required in \
   'load_numeric_args_function(L, profile);' \
   'integer_x, 1, integer_step) == call->result' \
-  'expect_scalar_trace(L, profile->name);'; do
+  'expect_scalar_native(L, profile, call, integer_x, 1, integer_step, 0);'; do
   require_fixture_sequence \
     'static void expect_int_limit_recording_admitted' \
     'static void test_int_limit_positive_and_guard_exits' "$required"
@@ -1346,7 +1348,7 @@ for required in \
   'expect_native_exit(LIMIT_TYPE_EXIT, LIMIT_TYPE_EXIT);' \
   'data->integer_step.step, 0, 1, 1) == data->integer_step.result' \
   'expect_native_exit(X_OR_STEP_TYPE_EXIT, X_OR_STEP_TYPE_EXIT);' \
-  'assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);' \
+  'expect_scalar_trace_child(L, strict_profile.name);' \
   'assert((BCIns)la_load32_acq((const uint32_t *)startpc) == startins);' \
   'assert(proto_trace_acq(pt) == 0);' \
   'load_numeric_args_function(L, &strict_profile);' \
@@ -1395,7 +1397,7 @@ for required in \
   'assert(trace_startpt_acq(T) == pt && trace_root_acq(T) == 0);' \
   'assert(trace_link_acq(T) == no && trace_linktype_acq(T) == LJ_TRLINK_LOOP);' \
   'assert(bc_op(trace_startins_acq(T)) == BC_LOOP);' \
-  'assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);'; do
+  '(void)expect_scalar_trace_child(L, name);'; do
   require_fixture_sequence \
     'static void expect_scalar_trace' \
     'static void expect_short_loop' "$required"

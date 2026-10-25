@@ -798,6 +798,11 @@ static void test_positive_and_guard_exits(void)
   expect_only_step_root(L, pt);
   assert_native_idle(L, idle_vmstate);
 
+  /* This fixture checks the root's guard/exit ABI. Keep later type-changing
+  ** calls from recording a side; numeric adaptation is covered separately
+  ** by the dynamic-args fixtures. */
+  run_lua(L, "jit.opt.start('hotexit=1000')");
+
   /* The same trace must consume a different exact NUM step without recording
   ** or specializing a second root. */
   lj_trace_test_root_entry_reset();
@@ -811,8 +816,7 @@ static void test_positive_and_guard_exits(void)
   test_step_mutation(L, pt, idle_vmstate, POSTADMISSION_QNAN_STEP);
   test_step_mutation(L, pt, idle_vmstate, POSTADMISSION_PINF_STEP);
 
-  /* Repeated hot exits try to start side traces. The side recorder must stay
-  ** closed for all three speculative guard families. */
+  /* Keep the admitted root on its exact guard paths for all three families. */
   lj_trace_test_root_entry_reset();
   lj_trace_test_reset_exit_stats();
   for (i = 0; i < 4; i++)

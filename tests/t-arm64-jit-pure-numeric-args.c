@@ -1435,6 +1435,8 @@ static void expect_dynamic_fp_mcode(const GCtrace *T,
   assert(nfcmp == 2 && npre == 1 && nbody == 1);
 }
 
+static GCtrace *expect_scalar_trace_child(lua_State *L, const char *name);
+
 static void expect_only_args_root_kind(lua_State *L, GCproto *pt,
 	const NumericArgsProfile *profile, NumericArgsStepKind step_kind)
 {
@@ -1443,6 +1445,7 @@ static void expect_only_args_root_kind(lua_State *L, GCproto *pt,
   const BCIns *pc;
   BCIns patched;
   TraceNo traceno;
+  TraceNo childno;
   uint32_t admission;
 
   assert(step_kind == NUMERIC_ARGS_STEP_NUM ||
@@ -1453,7 +1456,7 @@ static void expect_only_args_root_kind(lua_State *L, GCproto *pt,
   assert(trace_runnable_acq(T, 1));
   assert(trace_traceno_acq(T) == 1 && trace_root_acq(T) == 0);
   assert(trace_link_acq(T) == 1 && trace_linktype_acq(T) == LJ_TRLINK_LOOP);
-  assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);
+  (void)expect_scalar_trace_child(L, profile->name);
   assert(trace_startpt_acq(T) == pt);
   assert(trace_topslot_acq(T) == 5);
   assert(trace_spadjust_acq(T) == 0);
@@ -1496,8 +1499,11 @@ static void expect_only_args_root_kind(lua_State *L, GCproto *pt,
   expect_ir_shape(T, profile, step_kind);
   expect_snapshot_shape(T, pt, step_kind);
   expect_dynamic_fp_mcode(T, profile, step_kind);
+  childno = trace_nextside_acq(T);
+  assert(trace_nchild_acq(T) == (childno ? 1u : 0u));
   for (traceno = 2; (MSize)traceno < trace_sizetrace_acq(J); traceno++)
-    assert(!trace_runnable_acq(traceref_safe(J, traceno), traceno));
+    assert(traceno == childno ||
+	   !trace_runnable_acq(traceref_safe(J, traceno), traceno));
 }
 
 static void expect_only_args_root(lua_State *L, GCproto *pt,
@@ -1854,7 +1860,103 @@ static void expect_scalar_trace(lua_State *L, const char *name)
   assert(trace_startpt_acq(T) == pt && trace_root_acq(T) == 0);
   assert(trace_link_acq(T) == no && trace_linktype_acq(T) == LJ_TRLINK_LOOP);
   assert(bc_op(trace_startins_acq(T)) == BC_LOOP);
-  assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);
+  (void)expect_scalar_trace_child(L, name);
+}
+
+static GCtrace *expect_scalar_trace_child(lua_State *L, const char *name)
+{
+  jit_State *J = L2J(L);
+  GCproto *pt = global_proto(L, name);
+  TraceNo rootno = proto_trace_acq(pt);
+  GCtrace *root = traceref_safe(J, rootno);
+  TraceNo childno;
+  GCtrace *child;
+  IRIns base;
+  ExitNo exitno;
+
+  assert(rootno != 0 && trace_runnable_acq(root, rootno));
+  assert(trace_startpt_acq(root) == pt && trace_root_acq(root) == 0);
+  assert(trace_link_acq(root) == rootno &&
+         trace_linktype_acq(root) == LJ_TRLINK_LOOP);
+  assert(bc_op(trace_startins_acq(root)) == BC_LOOP);
+  if (trace_nchild_acq(root) == 0) {
+    assert(trace_nextside_acq(root) == 0);
+    return NULL;
+  }
+  assert(trace_nchild_acq(root) == 1);
+  childno = trace_nextside_acq(root);
+  child = traceref_safe(J, childno);
+  assert(childno != 0 && trace_runnable_acq(child, childno));
+  assert(trace_root_acq(child) == rootno && trace_nchild_acq(child) == 0);
+  assert(trace_linktype_acq(child) == LJ_TRLINK_ROOT ||
+         trace_linktype_acq(child) == LJ_TRLINK_LOOP);
+  if (trace_linktype_acq(child) == LJ_TRLINK_ROOT) {
+    assert(trace_link_acq(child) == rootno && trace_mcloop_acq(child) == 0);
+  } else {
+    assert(trace_link_acq(child) == childno &&
+           trace_mcloop_acq(child) > 0 &&
+           trace_mcloop_acq(child) < trace_szmcode_acq(child));
+  }
+  base = trace_ir_acq(child)[REF_BASE];
+  assert(base.o == IR_BASE && (TraceNo)base.op1 == rootno);
+  exitno = (ExitNo)base.op2;
+  assert(exitno < trace_nsnap_acq(root));
+  assert(trace_exittarget_arm64_acq(root, exitno) == trace_mcode_acq(child));
+  return child;
+}
+
+static void expect_scalar_native(lua_State *L,
+	const NumericArgsProfile *profile, const NumericArgsCall *call,
+	int integer_x, int integer_limit, int integer_step,
+	int require_child_native)
+{
+  jit_State *J = L2J(L);
+  GCproto *pt = global_proto(L, profile->name);
+  TraceNo rootno = proto_trace_acq(pt);
+  GCtrace *root = traceref_safe(J, rootno);
+  GCtrace *child = expect_scalar_trace_child(L, profile->name);
+  TraceNo childno = child ? trace_traceno_acq(child) : 0;
+  int i;
+
+  assert(rootno != 0 && trace_runnable_acq(root, rootno));
+  if (require_child_native)
+    assert(childno != 0);
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  for (i = 0; i < 100; i++)
+    assert(call_triple(L, profile->name, call->x, call->limit, call->step,
+	  integer_x, integer_limit, integer_step) == call->result);
+  assert(lj_trace_test_root_entry_publishes() > 0);
+  assert(lj_trace_test_root_entry_successes() > 0);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+  assert(lj_trace_test_exit_calls() > 0 &&
+	 lj_trace_test_exit_calls() <= 2u*100u);
+  if (childno == 0) {
+    child = expect_scalar_trace_child(L, profile->name);
+    childno = child ? trace_traceno_acq(child) : 0;
+  }
+  if (require_child_native && childno != 0 &&
+      lj_trace_test_first_exit_parent() != childno &&
+      lj_trace_test_last_exit_parent() != childno)
+    fprintf(stderr, "scalar child never exited natively: %s root=%u child=%u "
+	"entries=%u/%u cleanups=%u exits=%u first=%u last=%u\n",
+	profile->name, (unsigned)rootno, (unsigned)childno,
+	(unsigned)lj_trace_test_root_entry_successes(),
+	(unsigned)lj_trace_test_root_entry_publishes(),
+	(unsigned)lj_trace_test_root_entry_cleanups(),
+	(unsigned)lj_trace_test_exit_calls(),
+	(unsigned)lj_trace_test_first_exit_parent(),
+	(unsigned)lj_trace_test_last_exit_parent());
+  if (require_child_native && childno != 0)
+    assert(lj_trace_test_first_exit_parent() == childno ||
+	   lj_trace_test_last_exit_parent() == childno);
+  else {
+    assert(lj_trace_test_first_exit_parent() == rootno ||
+	   lj_trace_test_last_exit_parent() == rootno ||
+	   (childno != 0 &&
+	    (lj_trace_test_first_exit_parent() == childno ||
+	     lj_trace_test_last_exit_parent() == childno)));
+  }
 }
 
 /* These calls exit after one iteration, before a self-linked trace exists. */
@@ -1959,12 +2061,19 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
 	"while x<limit do x=x+step end return x end");
   }
 
+  /* Keep the initial root/guard fixture isolated from automatic side
+  ** recording. Fresh adaptation cases below use their own hotexit=1 setup. */
+  run_lua(L, "jit.opt.start('hotexit=1000')");
   assert(call_triple(L, profile->name,
 	profile->record.x, profile->record.limit, profile->record.step,
 	0, 0, 0) == profile->record.result);
   pt = global_proto(L, profile->name);
   expect_only_args_root(L, pt, profile);
   assert_native_idle(L, idle_vmstate);
+
+  /* This block inspects the root's argument guards and exit ABI. The separate
+  ** conversion tests below accept a root-only trace or a validated child. */
+  expect_scalar_native(L, profile, &profile->record, 0, 0, 0, 0);
 
   /* The same trace must consume different accumulator, limit, and step NUMs
   ** without recording or specializing a second root. */
@@ -2597,7 +2706,7 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
   expect_native_exit(PRECOND_EXIT, PRECOND_EXIT);
   expect_only_args_root(L, pt, profile);
   T = traceref_safe(L2J(L), 1);
-  assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);
+  (void)expect_scalar_trace_child(L, profile->name);
   assert_native_idle(L, idle_vmstate);
 
   startpc = trace_startpc_acq(T);
@@ -2891,6 +3000,9 @@ static void test_int_step_positive_and_guard_exits(
   tg = L2TG(L);
   idle_vmstate = lj_tg_vmstate_load_acq(tg);
   load_numeric_args_function(L, profile);
+  /* This first section proves the root's guards and lifecycle independently
+  ** of side-trace recording; the adaptation cases below use a fresh profile. */
+  run_lua(L, "jit.opt.start('hotexit=1000')");
 
   /* X and LIMIT are genuine NUMs while the invariant arrives as an INT. */
   assert(call_triple(L, profile->name, data->record.x, data->record.limit,
@@ -2898,6 +3010,7 @@ static void test_int_step_positive_and_guard_exits(
   pt = global_proto(L, profile->name);
   expect_only_args_root_kind(L, pt, profile, NUMERIC_ARGS_STEP_INT);
   assert_native_idle(L, idle_vmstate);
+  expect_scalar_native(L, profile, &data->record, 0, 0, 1, 0);
 
   /* One root must consume new values for all three arguments. Keeping one
   ** recording-time value in each call rules out constant specialization. */
@@ -2989,7 +3102,7 @@ static void test_int_step_positive_and_guard_exits(
   expect_native_exit(PRECOND_EXIT, PRECOND_EXIT);
   expect_only_args_root_kind(L, pt, profile, NUMERIC_ARGS_STEP_INT);
   T = traceref_safe(L2J(L), 1);
-  assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);
+  (void)expect_scalar_trace_child(L, profile->name);
   assert_native_idle(L, idle_vmstate);
 
   startpc = trace_startpc_acq(T);
@@ -3016,7 +3129,10 @@ static void test_int_step_positive_and_guard_exits(
   for (i = 0; i < 4; i++)
     assert(call_triple(L, profile->name, call.x, call.limit, call.step,
           1, 0, 1) == call.result);
-  expect_scalar_trace(L, profile->name);
+  T = expect_scalar_trace_child(L, profile->name);
+  (void)T;
+  expect_scalar_native(L, profile, &call, 1, 0, 1,
+	profile == &div_profile);
 
   load_numeric_args_function(L, profile);
   for (i = 0; i < 4; i++)
@@ -3024,7 +3140,9 @@ static void test_int_step_positive_and_guard_exits(
 	  data->integer_limit.x, data->integer_limit.limit,
 	  data->integer_limit.step, 0, 1, 1) ==
 	data->integer_limit.result);
-  expect_scalar_trace(L, profile->name);
+  T = expect_scalar_trace_child(L, profile->name);
+  (void)T;
+  expect_scalar_native(L, profile, &data->integer_limit, 0, 1, 1, 0);
   assert_native_idle(L, idle_vmstate);
   lua_close(L);
 }
@@ -3115,6 +3233,7 @@ static void expect_int_x_call(lua_State *L, GCproto *pt,
 	(unsigned)lj_trace_test_last_exitno(), (unsigned)exitno);
   expect_single_exit(exitno);
   expect_only_args_root_kind(L, pt, profile, NUMERIC_ARGS_X_INT);
+  expect_scalar_trace(L, profile->name);
 }
 
 static void expect_int_x_recording_admitted(lua_State *L,
@@ -3127,7 +3246,7 @@ static void expect_int_x_recording_admitted(lua_State *L,
     assert(call_triple(L, profile->name,
 	call->x, call->limit, call->step,
 	1, integer_limit, integer_step) == call->result);
-  expect_scalar_trace(L, profile->name);
+  expect_scalar_native(L, profile, call, 1, integer_limit, integer_step, 0);
 }
 
 static void test_int_x_positive_and_guard_exits(
@@ -3150,6 +3269,7 @@ static void test_int_x_positive_and_guard_exits(
   tg = L2TG(L);
   idle_vmstate = lj_tg_vmstate_load_acq(tg);
   load_numeric_args_function(L, profile);
+  run_lua(L, "jit.opt.start('hotexit=1000')");
 
   /* X arrives as INT. LIMIT and STEP are genuine NUMs, and the first
   ** recurrence remains exactly representable by the checked conversion. */
@@ -3159,6 +3279,9 @@ static void test_int_x_positive_and_guard_exits(
   pt = global_proto(L, profile->name);
   expect_only_args_root_kind(L, pt, profile, NUMERIC_ARGS_X_INT);
   assert_native_idle(L, idle_vmstate);
+  expect_scalar_native(L, profile, &data->record, 1, 0, 0, 0);
+
+  run_lua(L, "jit.opt.start('hotexit=1000')");
 
   /* Keep two recording-time operands live in every substitution call. */
   expect_int_x_call(L, pt, profile, &data->reuse, FINAL_EXIT);
@@ -3242,7 +3365,7 @@ static void test_int_x_positive_and_guard_exits(
 
   expect_int_x_call(L, pt, profile, &data->precondition, PRECOND_EXIT);
   T = traceref_safe(L2J(L), 1);
-  assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);
+  (void)expect_scalar_trace_child(L, profile->name);
   assert_native_idle(L, idle_vmstate);
 
   startpc = trace_startpc_acq(T);
@@ -3299,7 +3422,7 @@ static void expect_int_limit_recording_admitted(lua_State *L,
     assert(call_triple(L, profile->name,
 	call->x, call->limit, call->step,
 	integer_x, 1, integer_step) == call->result);
-  expect_scalar_trace(L, profile->name);
+  expect_scalar_native(L, profile, call, integer_x, 1, integer_step, 0);
 }
 
 static void test_int_limit_positive_and_guard_exits(void)
@@ -3334,6 +3457,7 @@ static void test_int_limit_positive_and_guard_exits(void)
   tg = L2TG(L);
   idle_vmstate = lj_tg_vmstate_load_acq(tg);
   load_numeric_args_function(L, &strict_profile);
+  run_lua(L, "jit.opt.start('hotexit=1000')");
 
   /* X and STEP are genuine NUMs while LIMIT arrives as an INT. */
   assert(call_triple(L, strict_profile.name,
@@ -3343,6 +3467,9 @@ static void test_int_limit_positive_and_guard_exits(void)
   expect_only_args_root_kind(L, pt, &strict_profile,
 	NUMERIC_ARGS_LIMIT_INT);
   assert_native_idle(L, idle_vmstate);
+  expect_scalar_native(L, &strict_profile, &data->record, 0, 1, 0, 0);
+
+  run_lua(L, "jit.opt.start('hotexit=1000')");
 
   /* One root must consume new values for all three arguments. Keeping one
   ** recording-time value in each call rules out constant specialization. */
@@ -3383,8 +3510,9 @@ static void test_int_limit_positive_and_guard_exits(void)
   test_xpoll_lifecycle(L, pt, idle_vmstate, &strict_profile,
 	NUMERIC_ARGS_LIMIT_INT, &data->lifecycle);
 
-  /* Repeated type exits must not start a side trace. INT X becomes NUM after
-  ** the interpreter resumes, while a NUM limit or INT step stays mismatched. */
+  /* Keep this deliberately cold root-guard scenario from recording a side.
+  ** INT X becomes NUM after the interpreter resumes, while a NUM limit or
+  ** INT step stays mismatched. */
   lj_trace_test_root_entry_reset();
   lj_trace_test_reset_exit_stats();
   for (i = 0; i < 4; i++)
@@ -3415,7 +3543,7 @@ static void test_int_limit_positive_and_guard_exits(void)
   expect_only_args_root_kind(L, pt, &strict_profile,
 	NUMERIC_ARGS_LIMIT_INT);
   T = traceref_safe(L2J(L), 1);
-  assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);
+  (void)expect_scalar_trace_child(L, strict_profile.name);
   assert_native_idle(L, idle_vmstate);
 
   /* Flush must restore LOOP, and the exact root must remain recordable. */
