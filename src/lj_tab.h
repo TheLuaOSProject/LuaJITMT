@@ -475,6 +475,14 @@ LJ_FUNCA TValue *lj_tab_getinttv_rooted(lua_State *L, cTValue *tabroot,
 LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
 				     TValue *out);
 #if defined(LJ_GC2_TEST_HELPERS)
+typedef struct LJTabScalarProgressMetrics {
+  uint64_t calls;
+  uint64_t hits;
+  uint64_t refusals;
+} LJTabScalarProgressMetrics;
+LJ_FUNC void lj_tab_test_scalar_progress_metrics_reset(void);
+LJ_FUNC void lj_tab_test_scalar_progress_metrics_read(
+  LJTabScalarProgressMetrics *metrics);
 LJ_FUNC void lj_tab_test_forjit_lease_pause(void);
 LJ_FUNC uint32_t lj_tab_test_forjit_lease_paused(void);
 LJ_FUNC void lj_tab_test_forjit_lease_release(void);

@@ -40,6 +40,26 @@ static uint32_t tab_test_forjit_initial_miss;
 static uint32_t tab_test_forjit_result_pause;
 static uint32_t tab_test_forjit_result_paused;
 static uint32_t tab_test_forjit_result_release;
+static LJTabScalarProgressMetrics tab_test_scalar_progress_metrics;
+
+void lj_tab_test_scalar_progress_metrics_reset(void)
+{
+  la_store64_rlx(&tab_test_scalar_progress_metrics.calls, 0);
+  la_store64_rlx(&tab_test_scalar_progress_metrics.hits, 0);
+  la_store64_rlx(&tab_test_scalar_progress_metrics.refusals, 0);
+}
+
+void lj_tab_test_scalar_progress_metrics_read(
+  LJTabScalarProgressMetrics *metrics)
+{
+  if (!metrics) return;
+  metrics->calls = la_load64_rlx(&tab_test_scalar_progress_metrics.calls);
+  metrics->hits = la_load64_rlx(&tab_test_scalar_progress_metrics.hits);
+  metrics->refusals = la_load64_rlx(&tab_test_scalar_progress_metrics.refusals);
+}
+
+#define TAB_SCALAR_METRIC_ADD(field) \
+  ((void)la_add64_rlx(&tab_test_scalar_progress_metrics.field, 1))
 
 void lj_tab_test_forjit_lease_pause(void)
 {
@@ -151,6 +171,7 @@ static void tab_forjit_test_pause_after_result_lease(cTValue *result)
 #define tab_forjit_test_pause_after_integral_array() ((void)0)
 #define tab_forjit_test_pause_after_result_lease(result) ((void)(result))
 #define tab_forjit_test_take_initial_miss() 0
+#define TAB_SCALAR_METRIC_ADD(field) ((void)0)
 #endif
 
 /* -- Object hashing ------------------------------------------------------ */
@@ -4747,15 +4768,20 @@ int lj_tab_getscalar_rooted_try(lua_State *L, cTValue *tabroot,
   int32_t ik = 0;
   int isnum, isint = 0, found = 0;
 
+  TAB_SCALAR_METRIC_ADD(calls);
   if (!L || !tabroot || !keyroot || !outroot ||
-      !tab_keyed_slot_owner_snapshot(L, &owner))
+      !tab_keyed_slot_owner_snapshot(L, &owner)) {
+    TAB_SCALAR_METRIC_ADD(refusals);
     return 0;
+  }
   lj_tv_load_acq(&tablev, tabroot);
   lj_tv_load_acq(&keyv, keyroot);
   if (!tvistab(&tablev) ||
       !(tvisstr(&keyv) || tvisnumber(&keyv) || tvisbool(&keyv)) ||
-      (tvisnum(&keyv) && tvisnan(&keyv)))
+      (tvisnum(&keyv) && tvisnan(&keyv))) {
+    TAB_SCALAR_METRIC_ADD(refusals);
     return 0;
+  }
   tab_scalar_test_at(L, NULL, LJ_TAB_SCALAR_TEST_SOURCE);
   if (!lj_gc2_small_lease_try(owner.g, tabV(&tablev), sizeof(GCtab),
 	(uint32_t)~LJ_TTAB, &table_lease, &table_span))
@@ -4881,6 +4907,8 @@ leave:
   lj_gc2_lease_release(&array_lease);
   lj_gc2_lease_release(&key_lease);
   lj_gc2_lease_release(&table_lease);
+  if (found) TAB_SCALAR_METRIC_ADD(hits);
+  else TAB_SCALAR_METRIC_ADD(refusals);
   return found;
 }
 

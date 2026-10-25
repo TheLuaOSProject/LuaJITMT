@@ -306,6 +306,37 @@ static uint32_t gc2_table_token_test_pause_stage;
 static uint32_t gc2_table_token_test_paused_count;
 static uint32_t gc2_table_token_test_pause_release;
 static LJGC2TableCoalesceTestHook gc2_table_coalesce_test_hook;
+static LJGC2TestProgressMetrics gc2_test_progress_metrics;
+
+#define GC2_PROGRESS_ADD(field) \
+  ((void)la_add64_rlx(&gc2_test_progress_metrics.field, 1))
+
+void lj_gc2_test_progress_metrics_reset(void)
+{
+  la_store64_rlx(&gc2_test_progress_metrics.lease_attempts, 0);
+  la_store64_rlx(&gc2_test_progress_metrics.lease_admitted, 0);
+  la_store64_rlx(&gc2_test_progress_metrics.lease_refused, 0);
+  la_store64_rlx(&gc2_test_progress_metrics.lease_rescue_retry, 0);
+  la_store64_rlx(&gc2_test_progress_metrics.pending_credit_adds, 0);
+  la_store64_rlx(&gc2_test_progress_metrics.pending_credit_subs, 0);
+  la_store64_rlx(&gc2_test_progress_metrics.pending_reservations, 0);
+  la_store64_rlx(&gc2_test_progress_metrics.pending_reservation_conflicts, 0);
+  la_store64_rlx(&gc2_test_progress_metrics.pending_cas_retries, 0);
+}
+
+void lj_gc2_test_progress_metrics_read(LJGC2TestProgressMetrics *metrics)
+{
+  if (!metrics) return;
+  metrics->lease_attempts = la_load64_rlx(&gc2_test_progress_metrics.lease_attempts);
+  metrics->lease_admitted = la_load64_rlx(&gc2_test_progress_metrics.lease_admitted);
+  metrics->lease_refused = la_load64_rlx(&gc2_test_progress_metrics.lease_refused);
+  metrics->lease_rescue_retry = la_load64_rlx(&gc2_test_progress_metrics.lease_rescue_retry);
+  metrics->pending_credit_adds = la_load64_rlx(&gc2_test_progress_metrics.pending_credit_adds);
+  metrics->pending_credit_subs = la_load64_rlx(&gc2_test_progress_metrics.pending_credit_subs);
+  metrics->pending_reservations = la_load64_rlx(&gc2_test_progress_metrics.pending_reservations);
+  metrics->pending_reservation_conflicts = la_load64_rlx(&gc2_test_progress_metrics.pending_reservation_conflicts);
+  metrics->pending_cas_retries = la_load64_rlx(&gc2_test_progress_metrics.pending_cas_retries);
+}
 
 void lj_gc2_test_table_coalesce_hook(LJGC2TableCoalesceTestHook hook)
 {
@@ -733,6 +764,7 @@ uint32_t lj_gc2_test_worker_table_skips(void)
 #define LJ_GC2_THREAD_NEEDSCAN_TEST_INSTALLING 3u
 #define LJ_GC2_TABLE_RESCAN_TEST_INSTALLING 1u
 #define LJ_GC2_TABLE_RESCAN_TEST_HINT_CLEARED 2u
+#define GC2_PROGRESS_ADD(field) ((void)0)
 #define gc2_recovery_test_pause_at(stage) ((void)(stage))
 #define gc2_thread_needscan_test_pause_at(stage) ((void)(stage))
 #define gc2_table_rescan_test_pause_at(stage) ((void)(stage))
@@ -16881,8 +16913,11 @@ int lj_gc2_small_lease_try(global_State *g, const void *p,
   GCArena *a;
   uint32_t cell, flags;
   size_t span;
-  if (!lease)
+  GC2_PROGRESS_ADD(lease_attempts);
+  if (!lease) {
+    GC2_PROGRESS_ADD(lease_refused);
     return 0;
+  }
   gc2_public_lease_init(lease);
   if (spanp) *spanp = 0;
   if (!g || !p || !minimum || minimum > LJ_HUGE_THRESHOLD ||
@@ -16890,16 +16925,23 @@ int lj_gc2_small_lease_try(global_State *g, const void *p,
       la_load32_acq(&g->allocf_arena) == 0 ||
       (expected_gct && expected_gct != (uint32_t)~LJ_TTAB &&
 		       expected_gct != (uint32_t)~LJ_TSTR) ||
-      !(registry = (HugeTab *)gc2_small_arena_tab_acq(g)))
+      !(registry = (HugeTab *)gc2_small_arena_tab_acq(g))) {
+    GC2_PROGRESS_ADD(lease_refused);
     return 0;
+  }
   a = lj_arena_of(p);
   cell = lj_arena_cellof(p);
-  if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS)
+  if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS) {
+    GC2_PROGRESS_ADD(lease_refused);
     return 0;
+  }
   gc2_mark_scope_init(&scope);
   scope.admission = lj_arena_hugetab_rescue_enter(registry, a, &hi);
-  if (scope.admission == LJ_ARENA_RESCUE_RETRY)
+  if (scope.admission == LJ_ARENA_RESCUE_RETRY) {
+    GC2_PROGRESS_ADD(lease_rescue_retry);
+    GC2_PROGRESS_ADD(lease_refused);
     return 0;
+  }
   scope.a = a;
   la_fence_seq();  /* Pair with lifetime CAS -> SC fence -> reader check. */
   if (hi.size != LJ_ARENA_SIZE)
@@ -16926,8 +16968,10 @@ int lj_gc2_small_lease_try(global_State *g, const void *p,
     goto denied;
   gc2_public_lease_take(lease, &scope);
   if (spanp) *spanp = span;
+  GC2_PROGRESS_ADD(lease_admitted);
   return 1;
 denied:
+  GC2_PROGRESS_ADD(lease_refused);
   gc2_mark_scope_leave(&scope);
   return 0;
 }
@@ -18431,9 +18475,13 @@ static LJ_AINLINE int gc2_table_rescan_pending_begin(global_State *g,
   ** clearer can consume only a COUNTED token, so it can neither steal this
   ** provisional credit nor clear the header hint between the old OR/inc pair.
   ** A failed installer immediately returns its provisional credit. */
+  GC2_PROGRESS_ADD(pending_reservations);
+  GC2_PROGRESS_ADD(pending_credit_adds);
   gc2_table_rescan_pending_inc(g);
   if (!lj_tab_gc2_rescan_state_cas(
 	 t, &expect, LJ_TAB_RESCAN_INSTALLING)) {
+	GC2_PROGRESS_ADD(pending_reservation_conflicts);
+	GC2_PROGRESS_ADD(pending_credit_subs);
     gc2_table_rescan_pending_dec(g);
     (void)gc2_rescan_pending_set(o);
     return 0;
@@ -18469,10 +18517,12 @@ static void gc2_table_rescan_pending_finish(global_State *g, GCtab *t,
     if (state == LJ_TAB_RESCAN_INSTALLING) {
       uint8_t next = published ? LJ_TAB_RESCAN_COUNTED : LJ_TAB_RESCAN_NONE;
       if (!lj_tab_gc2_rescan_state_cas(t, &expect, next)) {
+	GC2_PROGRESS_ADD(pending_cas_retries);
 	state = expect;
 	continue;
       }
       if (!published) {
+	GC2_PROGRESS_ADD(pending_credit_subs);
 	gc2_table_rescan_pending_dec(g);
 	gc2_table_rescan_hint_clear(g, t);
       }
@@ -18481,9 +18531,11 @@ static void gc2_table_rescan_pending_finish(global_State *g, GCtab *t,
     if (state == LJ_TAB_RESCAN_CANCELLED) {
       if (!lj_tab_gc2_rescan_state_cas(
 	    t, &expect, LJ_TAB_RESCAN_NONE)) {
+	GC2_PROGRESS_ADD(pending_cas_retries);
 	state = expect;
 	continue;
       }
+	GC2_PROGRESS_ADD(pending_credit_subs);
       gc2_table_rescan_pending_dec(g);
       gc2_table_rescan_hint_clear(g, t);
       return;
@@ -18510,6 +18562,7 @@ static LJ_AINLINE int gc2_table_rescan_pending_clear_held(global_State *g,
       uint8_t expect = LJ_TAB_RESCAN_INSTALLING;
       if (!lj_tab_gc2_rescan_state_cas(
 	    t, &expect, LJ_TAB_RESCAN_CANCELLED)) {
+	GC2_PROGRESS_ADD(pending_cas_retries);
 	state = expect;
 	continue;
       }
@@ -18522,9 +18575,11 @@ static LJ_AINLINE int gc2_table_rescan_pending_clear_held(global_State *g,
     if (state == LJ_TAB_RESCAN_COUNTED) {
       uint8_t expect = LJ_TAB_RESCAN_COUNTED;
       if (!lj_tab_gc2_rescan_state_cas(t, &expect, LJ_TAB_RESCAN_NONE)) {
+	GC2_PROGRESS_ADD(pending_cas_retries);
 	state = expect;
 	continue;
       }
+	GC2_PROGRESS_ADD(pending_credit_subs);
       gc2_table_rescan_pending_dec(g);
     } else {
       lj_assertG(state == LJ_TAB_RESCAN_NONE,

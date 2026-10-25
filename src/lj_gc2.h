@@ -477,6 +477,20 @@ LJ_FUNC int lj_gc2_test_sweep_reclaim_scope_enter(global_State *g);
 LJ_FUNC void lj_gc2_test_sweep_reclaim_scope_leave(global_State *g);
 #endif
 #if defined(LJ_GC2_TEST_HELPERS)
+typedef struct LJGC2TestProgressMetrics {
+  uint64_t lease_attempts;
+  uint64_t lease_admitted;
+  uint64_t lease_refused;
+  uint64_t lease_rescue_retry;
+  uint64_t pending_credit_adds;
+  uint64_t pending_credit_subs;
+  uint64_t pending_reservations;
+  uint64_t pending_reservation_conflicts;
+  uint64_t pending_cas_retries;
+} LJGC2TestProgressMetrics;
+LJ_FUNC void lj_gc2_test_progress_metrics_reset(void);
+LJ_FUNC void lj_gc2_test_progress_metrics_read(
+  LJGC2TestProgressMetrics *metrics);
 #define LJ_GC2_RECOVERY_TEST_RESERVED	1u
 #define LJ_GC2_RECOVERY_TEST_PRE_COMPLETE	2u
 #define LJ_GC2_RECOVERY_TEST_SSB_COMMITTED	3u

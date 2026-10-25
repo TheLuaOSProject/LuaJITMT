@@ -139,3 +139,21 @@ entry-dominated workload improved about 44%; the longer loop improved about
 16%. These are matching release-build measurements of these kernels on this
 host, not a general performance or complete-port claim. Raw output:
 `/tmp/ljmt-root-certificate-release-comparison.log`.
+
+## Progress contracts and measurement
+
+Test-only counters now expose scalar-read attempts/hits/refusals, physical
+lease admissions/refusals/rescue retries, and rescan reservations, conflicts,
+credit settlement and CAS retries. They add no production instructions or
+ordering changes. The focused native contract completed 1,000 reads and a
+missing-key refusal while the idle reclaimer was paused, with no table waits.
+A paused INSTALLING publisher could be cancelled while an independent table
+continued; every pending credit was returned. Four workers also completed
+40,000 independent-table reservations and balanced settlements.
+
+The operation progress and suspension contracts, commands and measurements are
+recorded in `notes/lockless-progress-contracts-and-ci-profile-2026-10-25.md`.
+The separate non-test bootstrap profile measured one million direct scalar
+helper calls at 81.25 ns/read. This is C-helper timing, not JIT throughput.
+The complete focused progress and release-helper scripts passed on the
+combined worktree; both restored the ARM64 experimental assertion profile.
