@@ -1,5 +1,6 @@
 /* ARM64 aggregate ABI and snapshot-wait regression. */
 #include <assert.h>
+#include <errno.h>
 #include <pthread.h>
 #include <stdio.h>
 
@@ -9,6 +10,7 @@
 #include "lj_obj.h"
 #include "lj_ctype.h"
 #include "lj_ccall.h"
+#include "lj_gc.h"
 #include "lj_tg.h"
 #include "lib/lua_fixture_helpers.h"
 #include "lib/test_sleep.h"
@@ -44,8 +46,50 @@ static void *release_parser(void *arg)
 
 static int classify_snapshot(lua_State *L)
 {
-  lua_pushinteger(L, lj_ccall_test_classify_struct(L, &parent_snapshot));
+  unsigned int cl;
+  errno = 73;
+  cl = lj_ccall_test_classify_struct(L, &parent_snapshot);
+  assert(errno == 73);
+  lua_pushinteger(L, cl);
   return 1;
+}
+
+static void check_parse_errno(lua_State *L)
+{
+  CTState *cts = ctype_ctsG(G(L));
+  unsigned int i;
+  for (i = 0; i < 2; i++) {
+    uint32_t seq = ctype_parse_token_acq(cts);
+    assert(!(seq & 1u));
+    ctype_parse_token_rel(cts, seq + 1u);
+    errno = 73;
+    /* No publisher releases the token: exercise the real timed kernel wait,
+    ** both with and without a Lua owner, then wake an address with no waiters. */
+    lj_ctype_parse_wait(cts, i ? L : NULL, seq + 1u);
+    assert(errno == 73);
+    lj_ctype_parse_unlock(cts);
+    assert(errno == 73);
+    assert(ctype_parse_token_acq(cts) == seq + 2u);
+  }
+}
+
+static void check_gc_errno(lua_State *L)
+{
+  unsigned int i;
+  for (i = 0; i < 64; i++) {
+    lua_newtable(L);
+    /* Exercise real automatic collector progress, including its kernel wakes,
+    ** with a valid C API stack. Both C and interpreter entry points preserve
+    ** an immediately preceding foreign call's error value. */
+    lj_gc_threshold_store(G(L), 0);
+    errno = 73;
+    (void)lj_gc_step(L);
+    assert(errno == 73);
+    lj_gc_threshold_store(G(L), 0);
+    lj_gc_step_top(L);
+    assert(errno == 73);
+    lua_pop(L, 1);
+  }
 }
 
 static void check_wait(lua_State *L, const char *name, unsigned int expected)
@@ -103,12 +147,19 @@ int main(void)
     "double arm64_fp_overflow(double,double,double,double,double,double,\n"
     "                         double,Double2,double);\n"
     "double arm64_gp_overflow(int,int,int,int,int,int,int,Mixed,int);\n"
+    "int arm64_vararg_ints(int, ...);\n"
+    "double arm64_vararg_mixed(double, ...);\n"
+    "int arm64_vararg_after_stack(int,int,int,int,int,int,int,int,int,\n"
+    "                             signed char,signed char,double, ...);\n"
+    "int arm64_named_stack(int,int,int,int,int,int,int,int,\n"
+    "                      signed char,unsigned char,short,int);\n"
     "]]\n"
     "for _, name in ipairs{'Float4','Double3','DoubleUnion','Mixed',\n"
     "                       'Bits','Large','Complex'} do\n"
     "  _G[name] = ffi.typeof(name)\n"
     "end\n"
     "local lib = ffi.load(assert(os.getenv('LJ_ARM64_AGGREGATE_LIB')))\n"
+    "local int = ffi.typeof('int')\n"
     "function run_aggregate_abi()\n"
     "  for i = 1, 200 do\n"
     "    local f = lib.arm64_float4(Float4({{{1,2},{3,4}}}))\n"
@@ -120,16 +171,31 @@ int main(void)
     "    local m = lib.arm64_mixed(Mixed(1.25, 9))\n"
     "    assert(m.a==1.75 and m.b==16)\n"
     "    local l = lib.arm64_large(Large(1,2,3))\n"
-    "    assert(l.a==11 and l.b==22 and l.c==33 and ffi.errno()==73)\n"
+    "    local call_errno = ffi.errno()\n"
+    "    local a,b,c = l.a,l.b,l.c; local field_errno = ffi.errno()\n"
+    "    assert(a==11 and b==22 and c==33 and call_errno==73 and field_errno==73,\n"
+    "      'large result: '..tostring(a)..','..tostring(b)..','..\n"
+    "      tostring(c)..' errno='..call_errno..'->'..field_errno)\n"
     "    local z = Complex(); z.z=ffi.new('complex',3,4); z=lib.arm64_complex(z)\n"
     "    assert(z.z.re==4 and z.z.im==6)\n"
     "    assert(lib.arm64_fp_overflow(1,2,3,4,5,6,7,ffi.new('Double2',8,9),10)==385)\n"
     "    assert(lib.arm64_gp_overflow(1,2,3,4,5,6,7,Mixed(8,9),10)==385)\n"
+    "    assert(lib.arm64_vararg_ints(3,int(11),int(22),int(33))==154)\n"
+    "    assert(lib.arm64_vararg_ints(5,ffi.new('int8_t',-11),\n"
+    "      ffi.new('uint8_t',22),ffi.new('int16_t',-33),\n"
+    "      ffi.new('uint16_t',44),true)==115)\n"
+    "    assert(lib.arm64_vararg_mixed(0.5,int(1),ffi.new('float',2),\n"
+    "      int(3),4,Float4({{{5,6},{7,8}}}),Large(9,10,11))==506.5)\n"
+    "    assert(lib.arm64_vararg_after_stack(1,2,3,4,5,6,7,8,9,-10,11,2,\n"
+    "      int(12),int(13),int(14))==845)\n"
+    "    assert(lib.arm64_named_stack(1,2,3,4,5,6,7,8,-9,250,-1100,12)==-9333)\n"
     "    if i % 25 == 0 then collectgarbage('collect') end\n"
     "  end\n"
     "end\n"
     "run_aggregate_abi()\n");
 
+  check_parse_errno(L);
+  check_gc_errno(L);
   check_wait(L, "Float4", 4 + (4 << 8));
   check_wait(L, "Double3", 8 + (3 << 8));
   check_wait(L, "DoubleUnion", 8 + (2 << 8));
@@ -158,9 +224,10 @@ int main(void)
     "end\n"
     "for i = 1, 4 do start:send(1) end\n"
     "for i = 1, 4 do\n"
-    "  local ok, result = workers[i]:join(20); assert(ok and result==true)\n"
+    "  local ok, result = workers[i]:join(20)\n"
+    "  assert(ok and result==true, 'aggregate worker '..i..': '..tostring(result))\n"
     "end\n");
   lua_close(L);
-  puts("t-arm64-ffi-aggregate OK: HFA, nested arrays, unions, complex, mixed, sret, register overflow and snapshot waits");
+  puts("t-arm64-ffi-aggregate OK: HFA, nested arrays, unions, complex, mixed, sret, register overflow, variadics, packed stack and snapshot waits");
   return 0;
 }

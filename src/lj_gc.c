@@ -18,6 +18,7 @@
 #include "lj_gc2.h"
 #include "lj_chan.h"
 #include "lj_err.h"
+#include "lj_dispatch.h"
 #include "lj_safepoint.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
@@ -4223,9 +4224,14 @@ static int gc2_step_auto(lua_State *L, int threshold_step, uint32_t step_limit)
 /* Perform a limited amount of incremental GC steps. */
 int LJ_FASTCALL lj_gc_step(lua_State *L)
 {
+  ERRNO_SAVE
   global_State *g = G(L);
-  return gc2_step_auto(L, lj_gc_total_load(g) >= lj_gc_threshold_load(g),
-		       GCACTIVEAUTOSTEPS);
+  int result = gc2_step_auto(L,
+    lj_gc_total_load(g) >= lj_gc_threshold_load(g), GCACTIVEAUTOSTEPS);
+  /* Automatic progress may wake or wait on collector/safepoint addresses.
+  ** Preserve the foreign call's OS error state across this VM activity. */
+  ERRNO_RESTORE
+  return result;
 }
 
 #ifdef LJ_GC2_TEST_HELPERS
@@ -4297,6 +4303,7 @@ void lj_gc_test_reset_step_fixtop_calls(void)
 
 static void gc_step_assist_top(lua_State *L, global_State *g, int threshold_step)
 {
+  ERRNO_SAVE
   TGState *tg = L2TG(L);
   lj_gc2_check_trigger(g, L2TG(L));
   if (!threshold_step)
@@ -4307,6 +4314,7 @@ static void gc_step_assist_top(lua_State *L, global_State *g, int threshold_step
   }
   if (threshold_step || lj_gc_pending_auto_request(g))
     gc2_step_auto(L, threshold_step, GCACTIVEAUTOSTEPS);
+  ERRNO_RESTORE
 }
 
 /* Ditto, but fix the stack top first. */
@@ -4329,12 +4337,15 @@ void LJ_FASTCALL lj_gc_step_top(lua_State *L)
 /* Perform multiple GC steps. Called from JIT-compiled code. */
 int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
 {
+  ERRNO_SAVE
   lua_State *L = lj_tg_cur_L(g);
   TValue *jbase = lj_tg_jit_base(g);
   int threshold_step, hard_step, needs_exit;
   TGState *tg;
-  if (!L || !jbase)
+  if (!L || !jbase) {
+    ERRNO_RESTORE
     return 1;
+  }
   L->base = jbase;
   L->top = curr_topL(L);
   tg = L2TG(L);
@@ -4380,8 +4391,10 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
   if (needs_exit && gc2_phase_acq(g) == LJ_GC2_MARK &&
       lj_gc2_jit_entry_open(g))
     lj_gc2_jit_mark_request_exit(g);
-  if (needs_exit)
+  if (needs_exit) {
+    ERRNO_RESTORE
     return 1;
+  }
   if (threshold_step && gc2_phase_acq(g) == LJ_GC2_SWEEP &&
       lj_gc2_jit_entry_open(g)) {
     /* Allocation is already governed by the post-RESET SWEEP policy: major
@@ -4407,6 +4420,7 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
   ** payload has been closed by a root scan; leaving at the poll gives the
   ** interpreter-side scanner an authoritative frame before the cycle advances.
   */
+  ERRNO_RESTORE
   return needs_exit;
 }
 #endif

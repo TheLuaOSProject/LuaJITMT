@@ -38,4 +38,4 @@ env LUA_PATH="$root/src/?.lua;;" \
   LJ_ARM64_AGGREGATE_LIB="$tmpdir/aggregate.dylib" \
   perl -MTime::HiRes=alarm -e 'alarm shift; exec @ARGV; die "exec: $!\n"' \
   30 "$tmpdir/aggregate"
-echo "arm64_ffi_aggregate_contract OK: native aggregate ABI and parser waits"
+echo "arm64_ffi_aggregate_contract OK: native aggregate/vararg ABI, parser waits and automatic GC errno"

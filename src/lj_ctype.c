@@ -326,6 +326,7 @@ int lj_ctype_predefined_payload_size(CTypeID id, CTSize *sizep)
 
 void lj_ctype_parse_wait(CTState *cts, lua_State *L, uint32_t seq)
 {
+  ERRNO_SAVE
   if ((seq & 1u) == 0)
     return;
 #if defined(LA_HAS_FUTEX)
@@ -338,6 +339,7 @@ void lj_ctype_parse_wait(CTState *cts, lua_State *L, uint32_t seq)
     }
     (void)ctype_parse_token_wait(cts, seq, 1000000);
     actions = L ? lj_native_leave(L) : 0;
+    ERRNO_RESTORE
     lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
     /* 11.2: ctype waits may park in native state. */
   }
@@ -350,9 +352,11 @@ void lj_ctype_parse_wait(CTState *cts, lua_State *L, uint32_t seq)
     ** fixed timer tick. The caller rechecks the parse sequence after return.
     */
     uint32_t actions = lj_thr_retry_yield(L);
+    ERRNO_RESTORE
     lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   }
 #endif
+  ERRNO_RESTORE
 }
 
 void lj_ctype_parse_lock(CTState *cts, lua_State *L)
@@ -371,6 +375,7 @@ void lj_ctype_parse_lock(CTState *cts, lua_State *L)
 
 void lj_ctype_parse_unlock(CTState *cts)
 {
+  ERRNO_SAVE
   uint32_t seq = ctype_parse_token_acq(cts);
   lj_assertCTS((seq & 1u) != 0, "cparse mutation sequence not held");
   ctype_parse_token_rel(cts, seq + 1u);  /* 11.2: publish parser mutations. */
@@ -382,6 +387,7 @@ void lj_ctype_parse_unlock(CTState *cts)
   */
   (void)ctype_parse_token_wake(cts, 0x7fffffff);
 #endif
+  ERRNO_RESTORE
 }
 
 static LJ_AINLINE int ctype_snapshot_done(CTState *cts, uint32_t seq0,
