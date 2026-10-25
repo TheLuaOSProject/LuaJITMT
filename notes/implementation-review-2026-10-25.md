@@ -1,5 +1,11 @@
 # Implementation and architecture review
 
+The recommendations below have now been implemented at the bounded capability
+scope described in the [implementation ledger](review-implementation-2026-10-25.md).
+The [final validation record](review-validation-2026-10-25.md) covers the complete
+combined run at `be031e3b`. This review retains the starting observations and
+measurements as historical context.
+
 Scope: LuaJITMT ARM64 branch at `a907dbb9`, with the rooted numeric-read change
 reviewed and integrated at `0d9475d8`. This is a source review and
 targeted execution study, not a proof of all runtime interleavings. After

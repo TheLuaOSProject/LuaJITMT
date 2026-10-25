@@ -5,6 +5,14 @@ recommendations, with replacement of example-specific trace templates as the
 first priority. This is the live implementation ledger; completed evidence is
 recorded at each commit rather than inferred from the starting gates.
 
+**Completed checkpoint:** all seven work streams below are integrated. The
+complete experimental gate, both ARM64 509-case stock corpora, and the complete
+bootstrap gate passed sequentially on frozen `be031e3b`. The experimental gate
+includes all four ARM64/arm64e assertion/release FFI profiles. See
+[`review-validation-2026-10-25.md`](review-validation-2026-10-25.md) for commands,
+logs and evidence limits. The dated checkpoints below retain their historical
+pending/failure statements; the completed validation supersedes those statuses.
+
 ## Work streams
 
 1. Replace whole-trace rooted read/length shapes with operation-level contracts:
@@ -794,8 +802,9 @@ in the private checkpoint (`29538996` plus fixture `943642b2`, integrated as
 `4a64d42d` and `423390a2`). Logs are
 `/private/tmp/ljmt-numeric-final/numeric-final.log` and `pure-final.log`.
 The pure fixture also passed with an ARM64 runtime built without
-`LUA_USE_ASSERT`, while C fixture assertions remained active. Final combined
-validation follows the remaining numeric-argument fixture integration.
+`LUA_USE_ASSERT`, while C fixture assertions remained active. At this checkpoint,
+numeric-argument integration and final combined validation were still pending;
+both are completed below.
 
 The integrated reruns also strengthen exit attribution: a self-loop child must
 actually exit as that child; the mixed kernel may subsequently reenter its
@@ -805,3 +814,20 @@ ordinal. Both complete contracts pass on both targets with these checks:
 `/tmp/ljmt-numeric-child-exits-final2.log` and
 `/tmp/ljmt-pure-child-exits-final.log`. The CI success messages now describe
 the generalized capability rather than claiming numeric sides remain closed.
+
+The dynamic-step and argument fixtures are integrated at `be031e3b`. They keep
+exact root guard, machine-code, snapshot and lifecycle checks, validate any
+admitted first child by its actual parent edge, and require successful native
+entry with bounded exits for fresh scalar-conversion variants. The dedicated
+division variant also requires an exit attributed to its child. Both complete
+focused contracts passed on ARM64/arm64e; the argument matrix ran 37 modes per
+process, 222 default executions. Logs:
+`/tmp/ljmt-pure-numeric-step-2e7b4e1d-fixed.log` and
+`/tmp/ljmt-pure-numeric-args-2e7b4e1d-fixed7.log` (the names identify the private
+base; the runs include the loop-generation correction).
+
+Final combined acceptance then passed on the exact integrated commit, including
+every default experimental/bootstrap branch and both 509-case ARM64 corpora.
+The development assertion profile was restored, and the tree was clean. The
+[`final validation record`](review-validation-2026-10-25.md) supersedes all
+earlier incomplete combined-run checkpoints in this ledger.

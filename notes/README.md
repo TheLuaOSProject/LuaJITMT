@@ -9,8 +9,7 @@ and reports that are no longer authoritative are retained in
 
 - Development branch: `codex/aarch64-macos-port`.
 - Integrated upstream comparison point: LuaJITMT `v2.1` at `489bb089`.
-  Both complete post-refresh bootstrap and experimental gates pass at
-  `d8f02a81`. See
+  See
   [`upstream-refresh-2026-10-22.md`](upstream-refresh-2026-10-22.md) for merge
   decisions, retained artifact exclusions, tests and remaining limits.
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
@@ -21,52 +20,35 @@ and reports that are no longer authoritative are retained in
   scalar reads and existing-key stores, unsunk table construction, and fixed
   scalar FFI calls. Root and child publication certificates remove immutable
   release-entry scans; native coverage and progress counters expose successful
-  entry, exits and refusals. The combined bootstrap passed at `2e765c3e`;
-  the complete experimental rerun is pending the final FFI snapshot audit.
+  entry, exits and refusals. Shared build profiles bind runtime, archive,
+  fixture and helper-library identity. All review work streams are integrated.
   See [`review-implementation-2026-10-25.md`](review-implementation-2026-10-25.md).
-- Post-refresh bootstrap validation passes on frozen `d8f02a81`, including
-  all 387 applicable stock cases, threaded tmpbuf, Darwin native roots,
-  ARM64/arm64e callbacks, variadic/aggregate FFI, and x86-64 unwind execution.
-  The table-rescan close race and internal FFI errno regressions are fixed;
-  see [`checkpoint-2026-10-25.md`](checkpoint-2026-10-25.md).
-- Native ARM64 source and original-v2 import stock corpora both pass all 509
-  cases on frozen `d8f02a81`, including rooted length/numeric-read admission
-  and the removal of the duplicate immutable entry-layout scan.
-- A nested-universe JIT initialization stall is fixed by resolving hotcount
-  handshake ownership through the existing physical-actor-checked fallback.
-  The focused GC2 fixture passes on ARM64 and x86-64, and both x86-64 stock
-  source/import corpora pass all 509 cases on frozen `d8f02a81`; the shared
-  errno and foreign-actor hotcount regressions also pass. See
-  [`x64-shared-runtime-regression-2026-10-25.md`](x64-shared-runtime-regression-2026-10-25.md).
-- Latest source-fidelity cleanup: `edbf57fa`.
-- Latest ARM64 VM acquire-load cleanup: `3f109fa2`.
-- Latest ARM64 interpreter GC2 parity: `d639196b`.
-- Latest ARM64 JIT GC2 cadence parity: `f1fe1f73`.
-- Latest complete experimental gate: frozen `12e1011b`, including generic
-  scalar roots and rooted effects. This precedes the generic FFI and scalar
-  side integration. Current focused entry and child retirement contracts pass
-  on ARM64/arm64e; the updated umbrella also includes the registered FFI M7
-  suite explicitly on both targets.
-- The x86-64/Rosetta source and import corpora each passed 509 cases at
-  `47ba8734`, which includes generic FFI and scalar-side production code.
-  Shared errno, atomic, progress, table-store and hotcount checks also passed;
-  a separate combined harness stall remains unexplained. See
-  [`x64-rosetta-final-regression-47ba-2026-10-25.md`](x64-rosetta-final-regression-47ba-2026-10-25.md).
-- The earlier complete bootstrap gate passes at frozen `25275a13`, including
-  the shared source/import capture fixes. Its default ARM64, arm64e and x64
-  unwind branches all ran. The new source/import loop fixture also passes
-  directly on that interpreter build.
-- The bootstrap gate also passes at `857c44cc`. Its experimental gate stopped
-  at an uninterruptible Rosetta callback test; it is not a complete pass.
-  Native-only bootstrap diagnostics also pass at `01b8c560`, including the
-  legacy import fixture; the Rosetta unwind branch was omitted.
-  Rosetta later recovered: both stock509 runs, FNEW, callback and unwind checks
-  pass. The subsequently exposed shared captured-iterator JIT failure is fixed
-  by `25275a13`, with source/import native x64 regressions.
-  See [`checkpoint-2026-10-22.md`](checkpoint-2026-10-22.md).
-- Build artifacts in the development checkout may belong to either profile;
-  select and rebuild the intended profile explicitly. Shared harness profiles
-  bind linked fixtures to the runtime/archive, compiler, target and macros.
+- Latest complete combined validation: frozen `be031e3b`. Experimental,
+  stock source/import and bootstrap ran sequentially without source changes.
+  Every default target branch ran. See
+  [`review-validation-2026-10-25.md`](review-validation-2026-10-25.md) for commands,
+  logs, profiles and the scope of earlier sanitizer/performance evidence.
+- The experimental gate includes generic roots, rooted effects, scalar-side
+  publication/entry/retirement, native numeric adaptation, and generic FFI M7
+  on ARM64 and arm64e/BTI with both assertion and release runtimes.
+- Native ARM64 source and original-v2 import stock corpora each pass all 509
+  cases at that same checkpoint.
+- The complete bootstrap gate passes, including 387 applicable stock cases,
+  threaded tmpbuf, Darwin native roots/GC2, ARM64/arm64e callbacks,
+  variadic/aggregate interpreter FFI and x86-64 errno unwind.
+- The shared x86-64/Rosetta checkpoint at `9b0c6e18` passed both 509-case
+  corpora, errno, authentic CALLXS/remote-flush/callback tests and callback-stack
+  relocation/unwind. Later production corrections are ARM64-only. This is
+  targeted regression evidence, not a complete x86 umbrella or native Intel
+  performance result. See
+  [`x64-rosetta-final-regression-9b0c6e187-2026-10-25.md`](x64-rosetta-final-regression-9b0c6e187-2026-10-25.md).
+- Earlier investigations and checkpoints remain in
+  [`checkpoint-2026-10-25.md`](checkpoint-2026-10-25.md),
+  [`checkpoint-2026-10-22.md`](checkpoint-2026-10-22.md) and the implementation
+  ledger. Passing later runs do not retrospectively explain earlier stalls.
+- The development checkout was restored to the ARM64 experimental assertion
+  profile after final validation. Select and rebuild the intended profile
+  explicitly when switching configurations.
 
 This is a working Apple Silicon port with substantial native execution
 evidence. It is not yet a completed or general ARM64 LuaJIT backend. Native
