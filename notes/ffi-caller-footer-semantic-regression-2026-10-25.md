@@ -7,17 +7,17 @@ only while invoking the pre-publication semantic checker, and restores the
 live `JFORL` word before any later checker or Lua execution. Each mutation
 starts from a newly reconstructed view that first passes semantic admission.
 
-Two malformed-but-plausible cases must be refused: changing only the meta
+Two malformed-but-plausible cases must be refused: changing only the caller
 snapshot footer to another valid `BC_CALL` site, and changing that footer plus
 the matching KNUM payload to the same alternate site. This verifies that a
 paired payload cannot make a footer from another callsite authoritative.
 
-The fixture also bounds constant-pool walks by `REF_FIRST`, the end of the
-constant region, rather than `REF_TRUE`, the first true-valued IR reference.
-Wide KNUM/KINT64 (and GC64 pointer-like) constants consume two IR slots; the
-walk checks that the second slot remains within the constant pool before
-reading it. This avoids interpreting payload words as independent constants
-or reading beyond the pool while preparing the semantic mutation view.
+Constant-pool walks cover `[nk, REF_TRUE)`, excluding canonical primitive
+references and IR_BASE. Wide KNUM/KINT64 and GC64 pointer-like constants
+consume two slots; their next reference may equal `REF_TRUE`, but their payload
+must precede it. The integration review corrected an unnecessarily extended
+`REF_FIRST` boundary and preserved the actual signed frame-depth field widths
+when saving recorder state.
 
 Validation: the complete focused `m7_ffi_callxs_arm64_scalar` contract passed
 on native ARM64 with the semantic mutations enabled. The arm64e variant remains

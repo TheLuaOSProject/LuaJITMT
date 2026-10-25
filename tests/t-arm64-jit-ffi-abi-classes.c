@@ -58,7 +58,7 @@ typedef struct SemanticJSave {
   TraceNo parent;
   ExitNo exitno;
   BCReg baseslot;
-  uint8_t framedepth, retdepth;
+  int32_t framedepth, retdepth;
   IRRef ktrace;
 } SemanticJSave;
 
@@ -86,16 +86,16 @@ static void semantic_clone_init(SemanticClone *clone, GCtrace *owner)
   clone->trace.snap = clone->snap;
   clone->trace.snapmap = clone->snapmap;
   clone->ktrace = 0;
-  for (ref = nk; ref < REF_FIRST; ) {
+  for (ref = nk; ref < REF_TRUE; ) {
     IRIns k = ir_load_acq(&clone->ir[ref]);
     IRRef next = ref+1u;
     if (k.o == IR_KNUM || k.o == IR_KINT64 ||
         (LJ_GC64 && (k.o == IR_KGC || k.o == IR_KPTR ||
                      k.o == IR_KKPTR)))
-      next = ref+2u <= REF_FIRST ? ref+2u : REF_DROP;
+      next = ref+2u <= REF_TRUE ? ref+2u : REF_DROP;
     if (k.o == IR_KGC && ir_kgc_load_acq(&clone->ir[ref]) == obj2gco(owner)) {
       assert(clone->ktrace == 0 && k.t.irt == IRT_P64 &&
-             ref+1u < REF_FIRST);
+             ref+1u < REF_TRUE);
       clone->ktrace = ref;
       clone->ir[ref+1u].tv.u64 = 0;
       clone->ir[ref].op12 = 0;
@@ -103,7 +103,7 @@ static void semantic_clone_init(SemanticClone *clone, GCtrace *owner)
       clone->ir[ref].o = IR_KNUM;
       clone->ir[ref].prev = 0;
     }
-    assert(next > ref && next <= REF_FIRST);
+    assert(next > ref && next <= REF_TRUE);
     ref = next;
   }
   assert(clone->ktrace >= nk && clone->ktrace < REF_TRUE);
@@ -271,6 +271,7 @@ static void test_other_callsite_footer_rejected(lua_State *L)
   assert(snapmap != NULL);
   memcpy(snapmap, view.snapmap, view.nsnapmap*sizeof(SnapEntry));
   view.snapmap = snapmap;
+  assert(lj_asm_arm64_postra_admit(&view, NULL));
   for (s = 0; s < view.nsnap; s++) {
     const SnapShot *snap = &view.snap[s];
     IRRef at = snap_ref_acq(snap), scan;
@@ -350,19 +351,19 @@ static void test_other_callsite_footer_rejected(lua_State *L)
         footer_count++;
       }
     }
-    for (constref = semantic.trace.nk; constref < REF_FIRST; ) {
+    for (constref = semantic.trace.nk; constref < REF_TRUE; ) {
       IRIns k = ir_load_acq(&semantic.ir[constref]);
       IRRef next = constref+1u;
       if (k.o == IR_KNUM || k.o == IR_KINT64 ||
           (LJ_GC64 && (k.o == IR_KGC || k.o == IR_KPTR ||
                        k.o == IR_KKPTR)))
-        next = constref+2u <= REF_FIRST ? constref+2u : REF_DROP;
-      if (k.o == IR_KNUM && constref+1u < REF_FIRST &&
+        next = constref+2u <= REF_TRUE ? constref+2u : REF_DROP;
+      if (k.o == IR_KNUM && constref+1u < REF_TRUE &&
           ir_load_acq(&semantic.ir[constref+1u]).tv.u64 == original >> 8) {
         semantic.ir[constref+1u].tv.u64 = changed >> 8;
         paired++;
       }
-      assert(next > constref && next <= REF_FIRST);
+      assert(next > constref && next <= REF_TRUE);
       constref = next;
     }
     assert(footer_count > 0 && paired > 0);
@@ -385,6 +386,9 @@ static void test_other_callsite_footer_rejected(lua_State *L)
     assert(ircopy != NULL);
     memcpy(&ircopy[view.nk], &trace_ir_acq(T)[view.nk],
 	   (view.nins-view.nk)*sizeof(IRIns));
+    memcpy(snapmap, trace_snapmap_acq(T), view.nsnapmap*sizeof(SnapEntry));
+    view.ir = ircopy;
+    assert(lj_asm_arm64_postra_admit(&view, NULL));
     for (s = 0; s < view.nsnap; s++) {
       const SnapShot *snap = &view.snap[s];
       MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap);
@@ -401,15 +405,15 @@ static void test_other_callsite_footer_rejected(lua_State *L)
       }
     }
     assert(footer_count > 0);
-    for (constref = view.nk; constref < REF_FIRST; ) {
+    for (constref = view.nk; constref < REF_TRUE; ) {
       IRIns k = ir_load_acq(&ircopy[constref]);
       IRRef next = constref+1u;
       if (k.o == IR_KNUM || k.o == IR_KINT64 ||
 	  (LJ_GC64 && (k.o == IR_KGC || k.o == IR_KPTR ||
 		       k.o == IR_KKPTR)))
-	next = constref+2u <= REF_FIRST ? constref+2u : REF_DROP;
-      if (next <= constref || next > REF_FIRST) break;
-      if (k.o == IR_KNUM && constref+1u < REF_FIRST &&
+	next = constref+2u <= REF_TRUE ? constref+2u : REF_DROP;
+      assert(next > constref && next <= REF_TRUE);
+      if (k.o == IR_KNUM && constref+1u < REF_TRUE &&
 	  ir_load_acq(&ircopy[constref+1u]).tv.u64 == original >> 8) {
 	ircopy[constref+1u].tv.u64 = (uint64_t)(lo+
 	    (uintptr_t)candidate*sizeof(BCIns));
@@ -418,7 +422,6 @@ static void test_other_callsite_footer_rejected(lua_State *L)
       constref = next;
     }
     assert(paired > 0);
-    view.ir = ircopy;
     assert(!lj_asm_arm64_postra_admit(&view, NULL));
     free(ircopy);
   }
