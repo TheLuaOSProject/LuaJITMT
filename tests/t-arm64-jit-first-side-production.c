@@ -526,8 +526,8 @@ static void expect_child_shape(jit_State *J, global_State *g,
   assert(trace_runnable_acq(pair->child, pair->childno));
   assert(trace_traceno_acq(pair->child) == pair->childno);
   assert(trace_root_acq(pair->child) == pair->rootno);
-  if (pair->require_loop_child)
-    assert(trace_linktype_acq(pair->child) == LJ_TRLINK_LOOP);
+  assert(trace_linktype_acq(pair->child) ==
+	 (pair->require_loop_child ? LJ_TRLINK_LOOP : LJ_TRLINK_ROOT));
   if (trace_linktype_acq(pair->child) == LJ_TRLINK_ROOT) {
     assert(trace_link_acq(pair->child) == pair->rootno);
     assert(trace_mcloop_acq(pair->child) == 0);
