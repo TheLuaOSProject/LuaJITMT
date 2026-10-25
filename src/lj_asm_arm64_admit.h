@@ -4438,14 +4438,16 @@ static int arm64_rooted_ir_effect(const GCtrace *T, IRRef ref,
     IRType type = call->op2 == IRCALL_lj_tab_storenum_rooted ? IRT_NUM : IRT_INT;
     IRRef chain = call->op1;
     if (!root2 || chain < REF_FIRST || chain >= ref ||
-        T->ir[root2].op1 == REF_NIL ||
-        arm64_scalar_ir_ref(T, T->ir[root2].op1, root2, IRT_LIGHTUD))
+        T->ir[root2].op1 == REF_NIL)
       return 0;
     tail = &T->ir[chain];
     if (tail->o != IR_CARG || tail->t.irt != IRT_NIL ||
         tail->op1 < REF_FIRST || tail->op1 >= chain ||
         (gcstore ? (!root3 || tail->op2 != root3 || root3 >= chain ||
-                    T->ir[root3].op2 != IRTMPREF_IN3) :
+                    T->ir[root3].op2 != IRTMPREF_IN3 ||
+                    (!arm64_scalar_ir_gc_ref(T, T->ir[root3].op1, root3) &&
+                     !arm64_scalar_ir_ref(T, T->ir[root3].op1, root3,
+                                           IRT_LIGHTUD))) :
          !arm64_scalar_ir_ref(T, tail->op2, chain, type)))
       return 0;
     head = &T->ir[tail->op1];
@@ -4787,7 +4789,8 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
           goto bad_operand;
         root2 = ref;
       } else if (ir->op2 == IRTMPREF_IN3) {
-        if (!arm64_scalar_ir_gc_ref(T, ir->op1, ref))
+        if (!arm64_scalar_ir_gc_ref(T, ir->op1, ref) &&
+            !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_LIGHTUD))
           goto bad_operand;
         root3 = ref;
       } else goto bad_operand;
@@ -5278,10 +5281,7 @@ static int arm64_rooted_postra_effect(const LJArm64PostRAView *v, IRRef n,
       return 0;
     inner = ir_load_acq(&v->ir[outer.op1]);
     r2 = ir_load_acq(&v->ir[root2]);
-    /* Lightuserdata keys are currently certified for the generic reader.
-    ** The existing-key store helpers still reject that key class. */
-    if (r2.op1 == REF_NIL ||
-        arm64_scalar_postra_ref(v, r2.op1, root2, IRT_LIGHTUD)) return 0;
+    if (r2.op1 == REF_NIL) return 0;
     if (inner.o != IR_CARG || inner.t.irt != IRT_NIL ||
         inner.op1 != root1 || inner.op2 != root2 ||
         root1 >= outer.op1 || root2 >= outer.op1 ||
@@ -5295,7 +5295,9 @@ static int arm64_rooted_postra_effect(const LJArm64PostRAView *v, IRRef n,
       if (r3.o != IR_TMPREF || r3.t.irt != IRT_PGC ||
           r3.op2 != IRTMPREF_IN3 || !ra_hasreg(r3.r) ||
           !arm64_scalar_postra_register(r3.r, IRT_PGC) ||
-          ra_hasspill(r3.s) || r3.r == r1.r || r3.r == r2.r)
+          ra_hasspill(r3.s) || r3.r == r1.r || r3.r == r2.r ||
+          (!arm64_scalar_postra_gc_ref(v, r3.op1, root3) &&
+           !arm64_scalar_postra_ref(v, r3.op1, root3, IRT_LIGHTUD)))
         return 0;
     }
   } else if (c.op2 != IRCALL_lj_tab_len_rooted_try ||
@@ -5527,7 +5529,8 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
             !arm64_scalar_postra_ref(v, p.op1, ref, IRT_TRUE)) return 0;
         root2 = ref;
       } else if (p.op2 == IRTMPREF_IN3) {
-        if (!arm64_scalar_postra_gc_ref(v, p.op1, ref)) return 0;
+        if (!arm64_scalar_postra_gc_ref(v, p.op1, ref) &&
+            !arm64_scalar_postra_ref(v, p.op1, ref, IRT_LIGHTUD)) return 0;
         root3 = ref;
       } else return 0;
       break;

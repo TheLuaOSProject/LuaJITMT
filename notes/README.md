@@ -152,6 +152,10 @@ available.
   checks pass in all four profiles; ARM64 and signed x64 stock source/import
   each pass 509 cases. See
   [`arm64-jit-rooted-nil-reads-2026-10-25.md`](arm64-jit-rooted-nil-reads-2026-10-25.md).
+- Existing-key rooted stores also support lightuserdata keys and values in
+  LOOP/FORL. Internal table markers remain excluded despite sharing the tag.
+  All four native profiles and signed x64 helper/stock regressions pass; see
+  [`arm64-jit-rooted-lightuserdata-stores-2026-10-25.md`](arm64-jit-rooted-lightuserdata-stores-2026-10-25.md).
 - Scalar `FORL` supports constant and variable integer bounds/steps through
   def-use and source-control-flow checks. Scalar fixed-arity `FUNCF` supports
   bounded arithmetic, argument/cell loads and one scalar return.
@@ -193,7 +197,7 @@ available.
 - General table and upvalue JIT reads, writes and traversal, plus sunk/duplicate
   allocation and raw initialization effects. Rooted scalar/GC reads,
   existing-key scalar/GC stores and unsunk TNEW have operation proofs;
-  new-key insertion, nil deletion, lightuserdata stores and general metamethod
+  new-key insertion, nil deletion and general metamethod
   paths remain closed. Shared raw nil stores sampled as absent now abort recording
   instead of losing a deletion on later execution; see the
   [raw nil-store regression](arm64-raw-nil-store-2026-10-25.md). Forwarding-safe

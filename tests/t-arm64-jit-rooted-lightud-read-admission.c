@@ -9,6 +9,7 @@
 #include "lualib.h"
 #include "lj_ircall.h"
 #include "lj_target.h"
+#include "lj_bc.h"
 #include "lib/arm64_trace_fixture.h"
 #if !LJ_TARGET_ARM64 || !defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
 #error "lightuserdata admission requires experimental ARM64 profile"
@@ -44,7 +45,8 @@ int main(int argc, char **argv)
   assert(L && argc == 3);
   pressure = !strcmp(argv[2], "admission");
   assert(pressure || !strcmp(argv[2], "admission_sload") ||
-         !strcmp(argv[2], "matrix"));
+         !strcmp(argv[2], "matrix") || !strcmp(argv[2], "store") ||
+         !strcmp(argv[2], "store_for"));
   /* Seed before opening libraries so token 0 and the high-bits segment are
   ** unambiguous. These are values only; the addresses are never dereferenced.
   */
@@ -82,6 +84,12 @@ int main(int argc, char **argv)
   } else if (!strcmp(argv[2], "admission_sload")) {
     lua_pushboolean(L, 1);
     lua_setglobal(L, "rooted_lightud_sload_admission");
+  } else if (!strcmp(argv[2], "store")) {
+    lua_pushboolean(L, 1);
+    lua_setglobal(L, "rooted_lightud_store_admission");
+  } else if (!strcmp(argv[2], "store_for")) {
+    lua_pushboolean(L, 1);
+    lua_setglobal(L, "rooted_lightud_store_for_admission");
   }
   if (luaL_dofile(L, argv[1])) {
     fprintf(stderr, "lightuserdata Lua fixture: %s\n", lua_tostring(L, -1));
@@ -90,6 +98,71 @@ int main(int argc, char **argv)
   if (!strcmp(argv[2], "matrix")) {
     puts("t-arm64-jit-rooted-lightud-read matrix driver OK");
     lua_close(L);
+    return 0;
+  }
+  if (!strcmp(argv[2], "store") || !strcmp(argv[2], "store_for")) {
+    int forl = !strcmp(argv[2], "store_for");
+    const char *clone = forl ? "rooted_lightud_store_for_trace_clone" :
+                               "rooted_lightud_store_trace_clone";
+    IRRef call = 0, tail, head, tabroot, keyroot, valueroot, keyvalue, valuevalue, r;
+    arm64_fixture_init(&f, L, clone);
+    assert(bc_op(f.view.startins) == (forl ? BC_FORL : BC_LOOP));
+    assert(semantic(&f) && allocated(&f));
+    for (r = REF_FIRST; r < f.semantic_nins; r++)
+      if (f.ir[r].o == IR_CALLS &&
+	  f.ir[r].op2 == IRCALL_lj_tab_storegc_rooted) {
+	call = r;
+	break;
+      }
+    assert(call != 0);
+    tail = f.ir[call].op1;
+    head = f.ir[tail].op1;
+    tabroot = f.ir[head].op1;
+    keyroot = f.ir[head].op2;
+    valueroot = f.ir[tail].op2;
+    keyvalue = f.ir[keyroot].op1;
+    valuevalue = f.ir[valueroot].op1;
+    assert(f.ir[tabroot].op2 == IRTMPREF_IN1);
+    assert(f.ir[keyroot].op2 == IRTMPREF_IN2 &&
+	   irt_type(f.ir[keyvalue].t) == IRT_LIGHTUD);
+    assert(f.ir[valueroot].op2 == IRTMPREF_IN3 &&
+	   irt_type(f.ir[valuevalue].t) == IRT_LIGHTUD);
+#define SEM_REJECT(change) do { \
+  arm64_fixture_reset(&f); assert(semantic(&f) && allocated(&f)); \
+  change; assert(!semantic(&f) && allocated(&f)); \
+} while (0)
+#define POST_REJECT(change) do { \
+  arm64_fixture_reset(&f); assert(semantic(&f) && allocated(&f)); \
+  change; assert(semantic(&f) && !allocated(&f)); \
+} while (0)
+    SEM_REJECT(f.ir[call].op2 = IRCALL_lj_tab_storebool_rooted);
+    SEM_REJECT(f.ir[keyroot].op2 = IRTMPREF_IN1);
+    SEM_REJECT(f.ir[valueroot].op2 = IRTMPREF_IN2);
+    SEM_REJECT(f.ir[tail].op2 = keyroot);
+    SEM_REJECT(f.ir[keyroot].op1 = REF_NIL);
+    SEM_REJECT(f.ir[valueroot].op1 = REF_NIL);
+    SEM_REJECT(f.ir[keyvalue].t.irt = IRT_NIL | IRT_GUARD);
+    SEM_REJECT(f.ir[keyvalue].t.irt = IRT_P64 | IRT_GUARD);
+    SEM_REJECT(f.ir[valuevalue].t.irt = IRT_P64 | IRT_GUARD);
+    POST_REJECT(f.postra[call].op2 = IRCALL_lj_tab_storebool_rooted);
+    POST_REJECT(f.postra[keyroot].op2 = IRTMPREF_IN1);
+    POST_REJECT(f.postra[valueroot].op2 = IRTMPREF_IN2);
+    POST_REJECT(f.postra[tail].op2 = keyroot);
+    POST_REJECT(f.postra[keyroot].op1 = REF_NIL);
+    POST_REJECT(f.postra[valueroot].op1 = REF_NIL);
+    POST_REJECT(f.postra[keyvalue].t.irt = IRT_NIL | IRT_GUARD);
+    POST_REJECT(f.postra[keyvalue].t.irt = IRT_P64 | IRT_GUARD);
+    POST_REJECT(f.postra[valuevalue].t.irt = IRT_P64 | IRT_GUARD);
+    POST_REJECT(f.postra[valuevalue].r = RID_D0);
+    POST_REJECT(f.postra[valueroot].r = f.postra[keyroot].r);
+#undef POST_REJECT
+#undef SEM_REJECT
+    arm64_fixture_reset(&f);
+    assert(semantic(&f) && allocated(&f));
+    arm64_fixture_free(&f);
+    lua_close(L);
+    puts(forl ? "rooted lightuserdata FORL store independent semantic/post-RA mutations OK" :
+                "rooted lightuserdata LOOP store independent semantic/post-RA mutations OK");
     return 0;
   }
   arm64_fixture_init(&f, L, "rooted_lightud_read_trace_clone");

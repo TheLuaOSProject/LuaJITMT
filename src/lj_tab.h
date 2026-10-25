@@ -473,8 +473,9 @@ LJ_FUNC int lj_tab_getscalar_rooted_try(lua_State *L, cTValue *tabroot,
 ** zero after a raced store is not a promise that no earlier CAS occurred.
 ** No raw vector pointer or temporary lease crosses a wait. String-key success
 ** also invalidates the negative metamethod cache. The scalar forms below carry
-** no GC edge; the separate GC form accepts only an exactly rooted GC value.
-** Both forms accept ordinary visible keys including GC identity keys. */
+** no GC edge; the three-root form accepts an exactly rooted GC value or an
+** opaque lightuserdata token. Both forms accept ordinary visible keys,
+** including GC identity keys and lightuserdata, but not nil or NaN. */
 LJ_FUNC int32_t lj_tab_storenum_rooted(lua_State *L, cTValue *tabroot,
 				    cTValue *keyroot, lua_Number number);
 LJ_FUNC int32_t lj_tab_storebool_rooted(lua_State *L, cTValue *tabroot,

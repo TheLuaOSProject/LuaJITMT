@@ -7903,7 +7903,8 @@ static int32_t tab_storescalar_rooted(lua_State *L, cTValue *tabroot,
   lj_tv_load_acq(&keyv, keyroot);
   if (!tvistab(&tablev) ||
       !(tvisstr(&keyv) || tvisnumber(&keyv) || tvisbool(&keyv) ||
-	tvisgcv(&keyv)) || !tab_keyed_slot_key_valid(&keyv) ||
+	tvisgcv(&keyv) || (tvislightud(&keyv) && !tvistabinternal(&keyv))) ||
+      !tab_keyed_slot_key_valid(&keyv) ||
       lj_gc2_tv_lease_acquire(owner.g, &tablev, &table_lease) !=
 	LJ_GC2_TV_EDGE_VALID ||
       lj_gc2_tv_lease_acquire(owner.g, &keyv, &key_lease) !=
@@ -7964,9 +7965,11 @@ int32_t lj_tab_storebool_rooted(lua_State *L, cTValue *tabroot,
   return tab_storescalar_rooted(L, tabroot, keyroot, &value);
 }
 
-/* Existing-key GC value store. All three caller roots are copied into one
-** owner-local anchor set before any retaining interval. The anchors, not the
-** incoming stack/scratch cells, authorize the store after a cooperative wait. */
+/* Existing-key collectable or lightuserdata value store. All three caller
+** roots are copied into one owner-local anchor set before any retaining
+** interval. Collectable values receive an exact lease; lightuserdata remains
+** an opaque tagged pointer with no GC lifetime. The anchors, not the incoming
+** stack/scratch cells, authorize the store after a cooperative wait. */
 int32_t lj_tab_storegc_rooted(lua_State *L, cTValue *tabroot,
 			      cTValue *keyroot, cTValue *valueroot)
 {
@@ -8012,8 +8015,10 @@ int32_t lj_tab_storegc_rooted(lua_State *L, cTValue *tabroot,
   lj_tv_load_acq(&valuev, valueroot);
   if (!tvistab(&tablev) ||
       !(tvisstr(&keyv) || tvisnumber(&keyv) || tvisbool(&keyv) ||
-	tvisgcv(&keyv)) || !tab_keyed_slot_key_valid(&keyv) ||
-      !tvisgcv(&valuev) ||
+	tvisgcv(&keyv) || (tvislightud(&keyv) && !tvistabinternal(&keyv))) ||
+      !tab_keyed_slot_key_valid(&keyv) ||
+      !(tvisgcv(&valuev) ||
+	(tvislightud(&valuev) && tab_keyed_store_value_valid(&valuev))) ||
       lj_gc2_tv_lease_acquire(owner.g, &tablev, &table_lease) !=
 	LJ_GC2_TV_EDGE_VALID ||
       lj_gc2_tv_lease_acquire(owner.g, &keyv, &key_lease) !=

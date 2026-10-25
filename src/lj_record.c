@@ -2617,7 +2617,7 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 	  J->needsnap = 1;
 	  return 0;
 	}
-	if (tref_isgcv(ix->val)) {
+	if (tref_isgcv(ix->val) || tref_islightud(ix->val)) {
 	  TRef parent = rec_tmpref_mode(J, ix->tab, IRTMPREF_IN1);
 	  TRef key = rec_tmpref_mode(J, ix->key, IRTMPREF_IN2);
 	  TRef value = rec_tmpref_mode(J, ix->val, IRTMPREF_IN3);

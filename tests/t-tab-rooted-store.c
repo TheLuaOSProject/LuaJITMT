@@ -21,6 +21,8 @@
 static uint32_t baseline_anchors, baseline_readers, hook_calls;
 static uint32_t gc_hook_calls;
 static int hook_throw;
+static int gc_hook_lightud;
+static int lightud_key_token, lightud_value_token;
 
 static void clean(lua_State *L)
 {
@@ -36,13 +38,14 @@ static void set_key(lua_State *L, int mode)
   else if (mode == 1) lua_pushnumber(L, -2.5);
   else if (mode == 2) lua_pushboolean(L, 0);
   else if (mode == 3) lua_pushliteral(L, "__index");
-  else lua_newtable(L);
+  else if (mode == 4) lua_newtable(L);
+  else lua_pushlightuserdata(L, &lightud_key_token);
 }
 
 static void basics(lua_State *L)
 {
   int mode;
-  for (mode = 0; mode < 5; mode++) {
+  for (mode = 0; mode < 6; mode++) {
     lua_createtable(L, 4, 4);
     set_key(L, mode);
     lua_pushvalue(L, -1);
@@ -130,13 +133,21 @@ static void gc_handoff(lua_State *L, TValue *tabroot, TValue *keyroot,
   assert(gc2_smr_readers_acq(G(L)) == baseline_readers);
   assert(lj_gc2_rootdesc_snapshot(&L2TG(L)->root_desc, NULL) ==
          LJ_GC2_ROOTDESC_SNAPSHOT_IDLE);
-  assert(tvistab(tabroot) && tvisgcv(keyroot) && tvisgcv(valueroot));
+  assert(tvistab(tabroot));
+  if (gc_hook_lightud)
+    assert(tvislightud(keyroot) && tvislightud(valueroot));
+  else
+    assert(tvisgcv(keyroot) && tvisgcv(valueroot));
   lua_pushnil(L); lua_replace(L, 1);
   lua_pushnil(L); lua_replace(L, 2);
   lua_pushnil(L); lua_replace(L, 3);
   assert(lua_checkstack(L, 4096));
   lua_gc(L, LUA_GCCOLLECT, 0);
-  assert(tvistab(tabroot) && tvisgcv(keyroot) && tvisgcv(valueroot));
+  assert(tvistab(tabroot));
+  if (gc_hook_lightud)
+    assert(tvislightud(keyroot) && tvislightud(valueroot));
+  else
+    assert(tvisgcv(keyroot) && tvisgcv(valueroot));
   lj_tab_resize(L, tabV(tabroot), 128, 6);
   errno = 811;
   if (hook_throw) luaL_error(L, "rooted GC store rollback");
@@ -167,6 +178,37 @@ static int call_gc_store(lua_State *L)
   clean(L);
   lua_pushboolean(L, result);
   return 1;
+}
+
+static int call_lightud_store(lua_State *L)
+{
+  int result;
+  luaL_checktype(L, 1, LUA_TTABLE);
+  luaL_checktype(L, 2, LUA_TLIGHTUSERDATA);
+  luaL_checktype(L, 3, LUA_TLIGHTUSERDATA);
+  errno = 617;
+  result = lj_tab_storegc_rooted(L, L->base, L->base+1, L->base+2);
+  assert(result && errno == 617);
+  clean(L);
+  lua_pushboolean(L, result);
+  return 1;
+}
+
+static int call_tagged_store(lua_State *L)
+{
+  int result;
+  luaL_checktype(L, 1, LUA_TTABLE);
+  result = lj_tab_storegc_rooted(L, L->base, L->base+1, L->base+2);
+  clean(L);
+  lua_pushboolean(L, result);
+  return 1;
+}
+
+static int push_lightud_pair(lua_State *L)
+{
+  lua_pushlightuserdata(L, &lightud_key_token);
+  lua_pushlightuserdata(L, &lightud_value_token);
+  return 2;
 }
 
 static void anchored_lifetime(lua_State *L)
@@ -248,6 +290,94 @@ static void anchored_gc_lifetime(lua_State *L)
   assert(gc_hook_calls == 2);
 }
 
+static void anchored_lightud_lifetime(lua_State *L)
+{
+  lua_pushcfunction(L, call_lightud_store);
+  lua_setglobal(L, "rooted_lightud_store");
+  lua_pushcfunction(L, call_tagged_store);
+  lua_setglobal(L, "rooted_tagged_store");
+  lua_pushcfunction(L, push_lightud_pair);
+  lua_setglobal(L, "rooted_lightud_pair");
+  /* Missing keys may reach the post-anchor hook before the existing-key
+  ** protocol declines. Exercise ordinary refusals with the hook disabled. */
+  assert(luaL_dostring(L,
+    "local k,v=rooted_lightud_pair(); local t={[k]='prior'}\n"
+    "assert(not rooted_tagged_store(t,nil,v))\n"
+    "assert(not rooted_tagged_store(t,0/0,v))\n"
+    "assert(not rooted_tagged_store(t,42,v))\n"
+    "assert(not rooted_tagged_store(t,k,nil))\n"
+    "assert(t[42]==nil and t[k]=='prior')\n") == 0);
+  for (hook_throw = 0; hook_throw <= 1; hook_throw++) {
+    int status;
+    gc_hook_lightud = 1;
+    lj_tab_test_set_rooted_gc_store_hook(gc_handoff);
+    status = luaL_dostring(L,
+      "local weak=setmetatable({}, {__mode='v'})\n"
+      "local k,v=rooted_lightud_pair()\n"
+      "local function invoke()\n"
+      "  local t={[k]='prior'}; weak[1]=t\n"
+      "  return rooted_lightud_store(t,k,v)\n"
+      "end\n"
+      "local ok,err=pcall(invoke)\n"
+      "if ok then assert(err and weak[1][k]==v)\n"
+      "else assert(tostring(err):find('rooted GC store rollback',1,true) and weak[1][k]=='prior') end\n"
+      "rooted_lightud_store_weak=weak\n");
+    if (status) fprintf(stderr, "lightuserdata handoff mode %d: %s\n",
+                        hook_throw, lua_tostring(L, -1));
+    assert(status == 0);
+    clean(L);
+    lua_gc(L, LUA_GCCOLLECT, 0);
+    lua_gc(L, LUA_GCCOLLECT, 0);
+    lua_getglobal(L, "rooted_lightud_store_weak");
+    lua_rawgeti(L, -1, 1);
+    assert(lua_isnil(L, -1));
+    lua_pop(L, 2);
+    lua_pushnil(L); lua_setglobal(L, "rooted_lightud_store_weak");
+  }
+  gc_hook_lightud = 0;
+  lj_tab_test_set_rooted_gc_store_hook(NULL);
+  assert(gc_hook_calls == 4);
+}
+
+static void internal_lightud_refusals(lua_State *L)
+{
+  uint64_t invalid[] = { LJ_TFORWARD_BITS, LJ_TKEYLOCK_BITS,
+    LJ_TAB_RESIZE_MARK_BITS(1, LJ_TAB_RESIZE_MARK_SRC),
+    LJ_TAB_RESIZE_MARK_BITS(2, LJ_TAB_RESIZE_MARK_NIL_DONE) };
+  unsigned i;
+  for (i = 0; i < sizeof(invalid)/sizeof(invalid[0]); i++) {
+    TValue key;
+    uint32_t waits;
+    lua_newtable(L);
+    lua_pushlightuserdata(L, &lightud_key_token);
+    lua_pushvalue(L, -1);
+    lua_pushliteral(L, "prior");
+    lua_rawset(L, -4);
+    lua_pushlightuserdata(L, &lightud_value_token);
+    waits = lj_tab_test_store_wait_l_calls();
+    lj_tv_load_acq(&key, L->top-2);
+    tv_rawstore_rel(L->top-1, invalid[i]);
+    assert(!lj_tab_storegc_rooted(L, L->top-3, L->top-2, L->top-1));
+    assert(tv_rawload_acq(L->top-1) == invalid[i]);
+    clean(L);
+    lua_pop(L, 1);
+    lua_pushlightuserdata(L, &lightud_value_token);
+    tv_rawstore_rel(L->top-2, invalid[i]);
+    assert(!lj_tab_storegc_rooted(L, L->top-3, L->top-2, L->top-1));
+    assert(!lj_tab_storenum_rooted(L, L->top-3, L->top-2, 1.25));
+    assert(!lj_tab_storebool_rooted(L, L->top-3, L->top-2, 1));
+    assert(tv_rawload_acq(L->top-2) == invalid[i]);
+    assert(lj_tab_test_store_wait_l_calls() == waits);
+    clean(L);
+    tv_rawstore_rel(L->top-2, tv_rawload(&key));
+    lua_pop(L, 1);
+    lua_pushvalue(L, -1);
+    lua_rawget(L, -3);
+    assert(strcmp(lua_tostring(L, -1), "prior") == 0);
+    lua_pop(L, 3);
+  }
+}
+
 static void reserve_failure(int second)
 {
   lua_State *L = luaL_newstate();
@@ -324,12 +454,14 @@ int main(void)
   refusals(L);
   anchored_lifetime(L);
   anchored_gc_lifetime(L);
+  anchored_lightud_lifetime(L);
+  internal_lightud_refusals(L);
   lua_close(L);
   reserve_failure(0);
   reserve_failure(1);
   gc_reserve_failure(1);
   gc_reserve_failure(2);
   gc_reserve_failure(3);
-  puts("rooted stores: scalar and GC values, root handoff, relocation, GC, OOM and unwind OK");
+  puts("rooted stores: scalar, GC and lightuserdata values, root handoff, relocation, GC, OOM and unwind OK");
   return 0;
 }

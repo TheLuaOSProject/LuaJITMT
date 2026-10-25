@@ -46,7 +46,7 @@ run_profile() {
   lj_ci_run_fixture 60 "$deletion"
   lj_ci_run_fixture 120 "$scalarkeys" "$root/tests/t-arm64-jit-rooted-scalar-keys.lua"
   lj_ci_run_lua 120 "$root/tests/t-arm64-jit-rooted-scalar-keys.lua"
-  for mode in matrix admission admission_sload; do
+  for mode in matrix admission admission_sload store store_for; do
     lj_ci_run_fixture 120 "$lightud" "$root/tests/t-arm64-jit-rooted-lightud-read.lua" "$mode"
   done
   for matrix in operations values; do

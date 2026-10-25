@@ -12,9 +12,11 @@ nonzero status guards, post-helper snapshots and result type guards. Both
 passes accept matching PHIs and snapshots. Allocated locations must be GPRs
 or complete, aligned, nonoverlapping 64-bit spills. Arithmetic, conversions,
 raw pointer/prototype types and unguarded producers remain rejected. The
-optimized scalar helper retains its old key domain. Rooted stores explicitly
-reject lightuserdata keys; lightuserdata values, CALLXS and side-trace
-capabilities are not opened by this change. No emitter changes are needed.
+optimized scalar reader retains its old key domain. This read checkpoint kept
+lightuserdata stores, CALLXS and side-trace capabilities closed. Existing-key
+stores now have a subsequent
+[rooted-store certificate](arm64-jit-rooted-lightuserdata-stores-2026-10-25.md).
+No emitter changes are needed.
 
 `t-arm64-jit-rooted-lightud-read-admission.c` seeds synthetic opaque addresses
 before opening libraries, including zero and nonzero upper segments. These
@@ -23,8 +25,8 @@ with INT, NUM, true, false, LIGHTUD and all six visible GC result classes,
 plus keys loaded by an earlier rooted read. LIGHTUD results require an actual
 loop-carried PHI. Native results are checked with `lua_touserdata` after exit,
 segment-changing replacement and full collection. Missing keys and changed
-result types exercise exits. Separate negative loops retain closed store
-key/value boundaries.
+result types exercise exits. The original negative store loops have been
+replaced by the subsequent positive store and invalid-token regressions.
 
 The pressure loop loads twelve LIGHTUD tokens before using them as keys. It
 requires one root, no aborts and 19--21 native exits across twenty calls; all
