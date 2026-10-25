@@ -33,9 +33,10 @@ if test "$(lipo -archs "$archive")" != arm64; then
 fi
 
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS'
-# The native test observes the real patched parent edge and interpreter exits.
-# It also checks exact result adaptation and a later guarded type mismatch.
-for symbol in _lj_trace_test_exit_calls _lj_trace_test_root_entry_startins_calls; do
+# The native test observes the exact patched edge, successful root-entry
+# handoffs, native exits, and a later guarded type mismatch.
+for symbol in _lj_trace_test_exit_calls _lj_trace_test_root_entry_publishes \
+    _lj_trace_test_root_entry_successes _lj_trace_test_root_entry_cleanups; do
   nm "$archive" | grep " T ${symbol}$" >/dev/null || {
     echo "experimental archive lacks native side witness: $symbol" >&2
     exit 1

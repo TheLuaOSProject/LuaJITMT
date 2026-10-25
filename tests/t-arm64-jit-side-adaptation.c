@@ -74,7 +74,6 @@ int main(void)
   TraceNo parentno, childno;
   IRIns base;
   ExitNo exitno;
-  uint32_t entries;
   assert(L != NULL);
   luaL_openlibs(L);
   J = L2J(L);
@@ -103,12 +102,15 @@ int main(void)
   lj_trace_test_reset_exit_stats();
   lj_trace_test_root_entry_reset();
   run(L, "for i=1,100 do assert(kernel(64,1.25)==80) end");
-  entries = lj_trace_test_root_entry_startins_calls();
-  assert(entries > 0);
-  /* If the patched exit edge returned to the interpreter, lj_trace_exit would
-  ** be counted. The loop results and entry activity above are from the warmed
-  ** native dispatch path. */
-  assert(lj_trace_test_exit_calls() == 0);
+  assert(lj_trace_test_root_entry_publishes() > 0);
+  assert(lj_trace_test_root_entry_successes() > 0);
+  /* Successful root-entry handoffs count only after post-publish child/body
+  ** and exact target checks pass; no cleanup means none was rejected.
+  ** Normal completion leaves native traces, but must not exit once per loop
+  ** iteration as interpreter fallback would. */
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+  assert(lj_trace_test_exit_calls() > 0 &&
+	lj_trace_test_exit_calls() < 100u*64u);
 
   /* Short and long body counts must preserve the same scalar result. A full
   ** collection retains the globally rooted function/proto and published JIT
@@ -118,8 +120,11 @@ int main(void)
   lj_trace_test_reset_exit_stats();
   lj_trace_test_root_entry_reset();
   run(L, "for i=1,100 do assert(kernel(64,1.25)==80) end");
-  assert(lj_trace_test_root_entry_startins_calls() > 0);
-  assert(lj_trace_test_exit_calls() == 0);
+  assert(lj_trace_test_root_entry_publishes() > 0);
+  assert(lj_trace_test_root_entry_successes() > 0);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+  assert(lj_trace_test_exit_calls() > 0 &&
+	lj_trace_test_exit_calls() < 100u*64u);
 
   /* Overflow must retain LuaJIT numeric semantics across the loop boundary. */
   run(L, "overflow_kernel=function(n) local i,sum=1,2147483600 "
@@ -144,8 +149,11 @@ int main(void)
   lj_trace_test_reset_exit_stats();
   lj_trace_test_root_entry_reset();
   run(L, "for i=1,100 do assert(kernel(64,1.25)==80) end");
-  assert(lj_trace_test_root_entry_startins_calls() > 0);
-  assert(lj_trace_test_exit_calls() == 0);
+  assert(lj_trace_test_root_entry_publishes() > 0);
+  assert(lj_trace_test_root_entry_successes() > 0);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+  assert(lj_trace_test_exit_calls() > 0 &&
+	lj_trace_test_exit_calls() < 100u*64u);
 
   /* An overflow exit mid-loop carries parent state into a side trace. */
   run(L, "local jit=require('jit'); jit.flush(); "
@@ -163,8 +171,11 @@ int main(void)
   lj_trace_test_reset_exit_stats();
   lj_trace_test_root_entry_reset();
   run(L, "for i=1,100 do assert(overflow_kernel(64,1,2147483600)==2147483664) end");
-  assert(lj_trace_test_root_entry_startins_calls() > 0);
-  assert(lj_trace_test_exit_calls() == 0);
+  assert(lj_trace_test_root_entry_publishes() > 0);
+  assert(lj_trace_test_root_entry_successes() > 0);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+  assert(lj_trace_test_exit_calls() > 0 &&
+	lj_trace_test_exit_calls() < 100u*64u);
 
   /* A later type mismatch must leave the immutable child generation cleanly
   ** and preserve ordinary Lua arithmetic errors. */

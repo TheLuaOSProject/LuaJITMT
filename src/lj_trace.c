@@ -460,6 +460,7 @@ static uint32_t trace_test_root_entry_pause_stage;
 static uint32_t trace_test_root_entry_pause_waiting;
 static uint32_t trace_test_root_entry_pause_release;
 static uint32_t trace_test_root_entry_publish_count;
+static uint32_t trace_test_root_entry_success_count;
 static uint32_t trace_test_root_entry_cleanup_count;
 static uint32_t trace_test_root_entry_startins_call_count;
 static BCIns *trace_test_root_entry_retry_restore_pc;
@@ -471,6 +472,7 @@ void lj_trace_test_root_entry_reset(void)
   la_store32_rel(&trace_test_root_entry_pause_waiting, 0);
   la_store32_rel(&trace_test_root_entry_pause_release, 0);
   la_store32_rel(&trace_test_root_entry_publish_count, 0);
+  la_store32_rel(&trace_test_root_entry_success_count, 0);
   la_store32_rel(&trace_test_root_entry_cleanup_count, 0);
   la_store32_rel(&trace_test_root_entry_startins_call_count, 0);
   trace_test_root_entry_retry_restore_pc = NULL;
@@ -497,6 +499,11 @@ void lj_trace_test_root_entry_release(void)
 uint32_t lj_trace_test_root_entry_publishes(void)
 {
   return la_load32_acq(&trace_test_root_entry_publish_count);
+}
+
+uint32_t lj_trace_test_root_entry_successes(void)
+{
+  return la_load32_acq(&trace_test_root_entry_success_count);
 }
 
 uint32_t lj_trace_test_root_entry_cleanups(void)
@@ -546,6 +553,8 @@ static void trace_test_root_entry_maybe_pause(uint32_t stage)
   trace_test_root_entry_maybe_pause((stage))
 #define trace_test_root_entry_published() \
   ((void)la_add32_acqrel(&trace_test_root_entry_publish_count, 1))
+#define trace_test_root_entry_succeeded() \
+  ((void)la_add32_acqrel(&trace_test_root_entry_success_count, 1))
 #define trace_test_root_entry_cleaned() \
   ((void)la_add32_acqrel(&trace_test_root_entry_cleanup_count, 1))
 #define trace_test_root_entry_startins_note() \
@@ -3850,6 +3859,7 @@ int lj_trace_test_proto_pc_candidate(global_State *g, GCobj *o,
 #if LJ_TARGET_ARM64
 #define trace_test_root_entry_pause_at(stage) ((void)0)
 #define trace_test_root_entry_published() ((void)0)
+#define trace_test_root_entry_succeeded() ((void)0)
 #define trace_test_root_entry_cleaned() ((void)0)
 #endif
 #endif
@@ -6430,6 +6440,28 @@ uint32_t lj_trace_test_arm64_side_scalar_copy_contract(jit_State *J,
 /* Validate the only published side topology admitted so far. A childless root
 ** remains the fast case. A one-child root must name the exact post-RA grammar,
 ** GC membership and raw arm64/arm64e exit encoding before native root entry. */
+static int trace_arm64_side_semantic_extent(const IRIns *ir, IRRef nins,
+	IRRef *semantic_ninsp)
+{
+  IRRef n = nins;
+  IRIns last;
+  if (ir == NULL || semantic_ninsp == NULL || n <= REF_FIRST || n >= REF_DROP)
+    return 0;
+  last = ir_load_acq(&ir[n-1u]);
+  if (last.o == IR_NOP) {
+    n--;
+  } else {
+    while (n > REF_FIRST && ir_load_acq(&ir[n-1u]).o == IR_RENAME)
+      n--;
+    if (n == nins || nins-n > LJ_MAX_PHI)
+      return 0;
+  }
+  if (n <= REF_FIRST)
+    return 0;
+  *semantic_ninsp = n;
+  return 1;
+}
+
 static int trace_root_entry_first_child_view_acq(jit_State *J,
 	GCtrace *parent, TraceNo parentno, uint32_t sourceop,
 	const TraceArm64LoopView *rootview,
@@ -6632,7 +6664,9 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
   }
 
   memset(&postra, 0, sizeof(postra));
-  semantic_nins = view->nins-1u;
+  if (!trace_arm64_side_semantic_extent(view->ir, view->nins,
+	&semantic_nins))
+    return 0;
   postra.semantic.ir = view->ir;
   postra.semantic.snap = view->snap;
   postra.semantic.snapmap = view->snapmap;
@@ -6677,6 +6711,7 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
   postra.parent_topslot = rootview->topslot;
   postra.parentmap_n = parentmap_n;
   postra.entry_words = view->szmcode/sizeof(MCode);
+  postra.loop_mcofs = trace_mcloop_acq(child);
   postra.branch_track = (uint8_t)LJ_ABI_BRANCH_TRACK;
   if (!lj_asm_arm64_side_postra_admit(&postra, &admitted_nins) ||
 	admitted_nins != semantic_nins)
@@ -6843,6 +6878,7 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   ** helper before the VM branches to the already validated target. */
   trace_test_root_entry_pause_at(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION);
   setsbufL(&tg->tmpbuf, L);
+  trace_test_root_entry_succeeded();
   result.trace = T;
   result.target = target;
   return result;
