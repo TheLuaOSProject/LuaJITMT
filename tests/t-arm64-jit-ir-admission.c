@@ -1540,7 +1540,7 @@ static void test_numeric_positive_and_negative(jit_State *J)
 
   make_numeric_trace(J);
   setir(N_R_X_PRE, IR_TNEW, IRT_TAB, 0, 0);
-  expect_reject(J, LJ_ARM64_IR_REJECT_OPCODE, IR_TNEW);
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_TNEW);
 
   make_numeric_trace(J);
   fx.T.startins = loadbc(fixture_forl_pc);
@@ -1617,7 +1617,7 @@ static void test_positive_and_negative(lua_State *L)
 
   make_trace(J);
   setir(R_SUM1, IR_TNEW, IRT_TAB, 0, 0);
-  expect_reject(J, LJ_ARM64_IR_REJECT_OPCODE, IR_TNEW);
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_TNEW);
 
   make_trace(J);
   setir(R_SUM1, IR_SNEW, IRT_STR, R_A, R_B);

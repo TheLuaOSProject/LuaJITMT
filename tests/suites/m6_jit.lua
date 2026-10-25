@@ -72,6 +72,7 @@ local m6_cases = {
   "m6_jit_rooted_table_len",
   "m6_jit_rooted_read_ir",
   "m6_jit_rooted_store_ir",
+  "m6_jit_tnew_publication",
   "m6_jit_entering_table_store",
   "m6_jit_tbar_gc2_black_gate",
   "m6_jit_aref_pair_boundary",
@@ -2145,6 +2146,24 @@ assert(exits > 0, "active-MT rooted-length BC_LOOP never entered native code")
         end)
       else
         print("M6 JIT rooted scalar store requires native ARM64")
+      end
+    end
+  })
+
+  add({
+    name = "m6_jit_tnew_publication",
+    description = "active-MT ARM64 table allocation publishes complete rooted bodies",
+    run = function(t)
+      if jit.os == "OSX" and jit.arch == "arm64" and
+         t.target_arch == "arm64" then
+        with_arm64_jit_profile(t, function()
+          luajit_file(t, t:path("tests", "t-arm64-jit-tnew.lua"), {
+            lua_path = true,
+            timeout = "120s"
+          })
+        end)
+      else
+        print("M6 native TNEW publication requires native ARM64")
       end
     end
   })

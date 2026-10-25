@@ -263,3 +263,32 @@ passed, including out-of-range step references and unguarded body additions.
 The complete rooted-read contract and registered ARM64 scalar/pointer CALLXS
 lifecycle suite passed after integration. Logs:
 `/tmp/ljmt-review-forl-{native,ir,reads,ffi}.log`.
+
+## Table-construction effects
+
+Unsunk TNEW is now a scalar-walker effect, including table PHIs and full-width
+snapshot/spill ownership. It uses the existing `lj_tab_new0_forjit` and
+`lj_tab_new1` constructors: complete array/hash initialization, enumerated
+construction anchor, READY publication, ownership linking, and deferred
+accounting remain unchanged. The native `jit_base` lease prevents collection
+from finishing while values live in machine registers. Existing allocation
+checks and XPOLL restore a certified snapshot before interpreter-owned GC
+progress; no new helper, lock or raw heap store was added.
+
+The focused contract passes on ARM64 and arm64e/BTI. Empty, two-live-table and
+FORL kernels each have one native trace and 20 measured exits over 20 calls.
+A constructor hook observes thousands of actual native allocations and checks
+READY, anchors and all initialized storage. Capacity hints 0, 4, and 65 array
+slots plus 16 hash nodes exercise both native constructor calls; the largest
+case has 23 measured exits because allocation pressure also requests GC exits.
+Each workload survives eight concurrent peer collection cycles, retains fresh
+and distinct returned tables, and reenters after collection. Independent
+semantic/post-RA mutations reject malformed capacities/types/PHIs, raw stores,
+sunk locations, wrong register class and partial-width spills. The general IR
+contract and registered M6 allocation/store cases also pass. Logs:
+`/tmp/ljmt-review-tnew-contract-final.log`, `/tmp/ljmt-review-tnew-ir.log`, and
+`/tmp/ljmt-review-allocation-registered.log`.
+
+Sunk allocation, TDUP, raw initialization stores, new-key stores and GC-valued
+stores retain their separate admission boundaries. This checkpoint proves
+construction through the existing runtime publication protocol.

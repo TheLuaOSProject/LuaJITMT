@@ -16,6 +16,13 @@ and reports that are no longer authoritative are retained in
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
+- Current review implementation replaces whole-trace root templates with
+  operation proofs for scalar LOOP/FORL bodies, rooted scalar reads and
+  existing-key stores, and unsunk table construction. Immutable root
+  certificates remove repeated release-entry scans; native coverage and
+  progress counters make execution/refusal visible. These changes have focused
+  ARM64/arm64e evidence; the complete combined gates below are still historical.
+  See [`review-implementation-2026-10-25.md`](review-implementation-2026-10-25.md).
 - Post-refresh bootstrap validation passes on frozen `d8f02a81`, including
   all 387 applicable stock cases, threaded tmpbuf, Darwin native roots,
   ARM64/arm64e callbacks, variadic/aggregate FFI, and x86-64 unwind execution.
@@ -51,9 +58,8 @@ and reports that are no longer authoritative are retained in
   by `25275a13`, with source/import native x64 regressions.
   See [`checkpoint-2026-10-22.md`](checkpoint-2026-10-22.md).
 - Build artifacts in the development checkout may belong to either profile;
-  select and rebuild the intended profile explicitly. The 2026-10-25 review
-  ended with a clean assertion-enabled ARM64 bootstrap build (JIT disabled)
-  and a passing four-worker channel/join smoke test.
+  select and rebuild the intended profile explicitly. Shared harness profiles
+  bind linked fixtures to the runtime/archive, compiler, target and macros.
 
 This is a working Apple Silicon port with substantial native execution
 evidence. It is not yet a completed or general ARM64 LuaJIT backend. Native
@@ -159,9 +165,10 @@ available.
 
 - General ARM64 JIT IR admission for arbitrary Lua programs, unrestricted
   spill or register layouts, and general root geometries.
-- General table and upvalue JIT reads, writes, traversal, allocation, and other
-  generated heap effects. Forwarding-safe interpreter `lj_vm_next` does not by
-  itself open these JIT paths.
+- General table and upvalue JIT reads, writes and traversal, plus sunk/duplicate
+  allocation and raw initialization effects. Rooted scalar reads, existing-key
+  scalar stores and unsunk TNEW have operation proofs; forwarding-safe
+  interpreter `lj_vm_next` does not by itself open other JIT heap paths.
 - General side traces, side-of-side traces, stitches, and production JIT
   side-exit unwind resolution.
 - Generic Darwin ARM64 `CALLXS` lowering. Other signatures, indirect callees,

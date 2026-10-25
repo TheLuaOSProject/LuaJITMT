@@ -3468,6 +3468,10 @@ static int arm64_ir_nonloop_admit(const jit_State *J, const GCtrace *T,
   return 1;
 }
 
+/* TNEW encodes its array capacity in one IRRef1; all such values fit the
+** runtime constructor bound. Hash capacity is checked independently below. */
+LJ_STATIC_ASSERT(UINT16_MAX <= LJ_MAX_ASIZE);
+
 /* Recorder-side scalar provenance. Deliberately independent of the immutable
 ** allocator certificate below: neither pass consumes the other's verdict. */
 static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
@@ -3497,8 +3501,11 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
        ir->op2 == IRCALL_lj_tab_getscalar_rooted_try ||
        ir->op2 == IRCALL_lj_tab_storenum_rooted ||
        ir->op2 == IRCALL_lj_tab_storebool_rooted);
-  if (type == IRT_TAB || type == IRT_STR)
-    return ir->o == IR_SLOAD && ir->t.irt == (type|IRT_GUARD);
+  if (type == IRT_TAB)
+    return (ir->o == IR_SLOAD || ir->o == IR_TNEW) &&
+      (ir->t.irt & ~IRT_ISPHI) == (IRT_TAB|IRT_GUARD);
+  if (type == IRT_STR)
+    return ir->o == IR_SLOAD && ir->t.irt == (IRT_STR|IRT_GUARD);
   switch ((IROp)ir->o) {
   case IR_SLOAD:
   case IR_VLOAD:
@@ -3682,7 +3689,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       }
       if (type == IRT_TAB || type == IRT_STR ||
           type == IRT_TRUE || type == IRT_FALSE) {
-        if (flags != IRT_GUARD ||
+        if ((flags & ~((type == IRT_TAB) ? IRT_ISPHI : 0)) != IRT_GUARD ||
             ir->op2 != IRSLOAD_TYPECHECK || ir->op1 < 1 + LJ_FR2 ||
             ir->op1 >= maxslots)
           goto bad_type;
@@ -3691,6 +3698,14 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       if ((type != IRT_INT && type != IRT_NUM) || !(flags & IRT_GUARD) ||
           (flags & ~(IRT_GUARD | IRT_ISPHI)) || ir->op2 != IRSLOAD_TYPECHECK ||
           ir->op1 < 1 + LJ_FR2 || ir->op1 >= maxslots)
+        goto bad_type;
+      break;
+    case IR_TNEW:
+      /* asm_tnew calls the existing READY-publishing table constructors.
+      ** No raw table payload stores or sunk allocations are admitted here. */
+      if (type != IRT_TAB || !(flags & IRT_GUARD) ||
+          (flags & ~(IRT_GUARD|IRT_ISPHI)) ||
+          ir->op2 > LJ_MAX_HBITS)
         goto bad_type;
       break;
     case IR_TMPREF:
@@ -3784,7 +3799,8 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       if (!firstphi)
         firstphi = ref;
       if (++nphi > LJ_MAX_PHI || !poll || flags ||
-          (type != IRT_INT && type != IRT_NUM) || ir->op1 < REF_FIRST ||
+          (type != IRT_INT && type != IRT_NUM && type != IRT_TAB) ||
+          ir->op1 < REF_FIRST ||
           ir->op1 >= loop || ir->op2 < REF_FIRST || ir->op2 >= firstphi)
         goto bad_type;
       {
@@ -3996,7 +4012,10 @@ static int arm64_scalar_postra_value(IRIns p)
   case IR_CONV:
     return irt_type(p.t) == IRT_INT || irt_type(p.t) == IRT_NUM ||
            (p.o == IR_SLOAD &&
-            (p.t.irt == (IRT_TAB|IRT_GUARD) || p.t.irt == (IRT_STR|IRT_GUARD)));
+            ((p.t.irt & ~IRT_ISPHI) == (IRT_TAB|IRT_GUARD) ||
+             p.t.irt == (IRT_STR|IRT_GUARD)));
+  case IR_TNEW:
+    return (p.t.irt & ~IRT_ISPHI) == (IRT_TAB|IRT_GUARD);
   case IR_TMPREF:
     return irt_type(p.t) == IRT_PGC;
   case IR_CALLS:
@@ -4022,8 +4041,10 @@ static int arm64_scalar_postra_ref(const LJArm64PostRAView *v, IRRef ref,
     return 0;
   p = ir_load_acq(&v->ir[ref]);
   return arm64_scalar_postra_value(p) && irt_type(p.t) == type &&
-         ((type != IRT_TAB && type != IRT_STR) ||
-          (p.o == IR_SLOAD && p.t.irt == (type|IRT_GUARD)));
+         (type == IRT_TAB ?
+           ((p.o == IR_SLOAD || p.o == IR_TNEW) &&
+            (p.t.irt & ~IRT_ISPHI) == (IRT_TAB|IRT_GUARD)) :
+          type != IRT_STR || (p.o == IR_SLOAD && p.t.irt == (IRT_STR|IRT_GUARD)));
 }
 static int arm64_scalar_postra_register(Reg r, IRType type)
 {
@@ -4268,7 +4289,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       }
       if (type == IRT_TAB || type == IRT_STR ||
           type == IRT_FALSE || type == IRT_TRUE) {
-        if (p.t.irt != (type|IRT_GUARD) ||
+        if ((p.t.irt & ~((type == IRT_TAB) ? IRT_ISPHI : 0)) != (type|IRT_GUARD) ||
             p.op2 != IRSLOAD_TYPECHECK || p.op1 < 1 + LJ_FR2 ||
             p.op1 >= v->root_topslot + 1 + LJ_FR2)
           return 0;
@@ -4277,6 +4298,12 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       if ((type != IRT_INT && type != IRT_NUM) || !(flags & IRT_GUARD) ||
           (flags & ~(IRT_GUARD | IRT_ISPHI)) || p.op2 != IRSLOAD_TYPECHECK ||
           p.op1 < 1 + LJ_FR2 || p.op1 >= v->root_topslot + 1 + LJ_FR2)
+        return 0;
+      break;
+    case IR_TNEW:
+      if (type != IRT_TAB || !(flags & IRT_GUARD) ||
+          (flags & ~(IRT_GUARD|IRT_ISPHI)) ||
+          p.op2 > LJ_MAX_HBITS)
         return 0;
       break;
     case IR_TMPREF:
@@ -4394,7 +4421,8 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       if (!firstphi)
         firstphi = ref;
       if (++nphi > LJ_MAX_PHI || !poll || flags ||
-          (type != IRT_INT && type != IRT_NUM) || p.op1 < REF_FIRST ||
+          (type != IRT_INT && type != IRT_NUM && type != IRT_TAB) ||
+          p.op1 < REF_FIRST ||
           p.op1 >= loop || p.op2 < REF_FIRST || p.op2 >= firstphi)
         return 0;
       {
