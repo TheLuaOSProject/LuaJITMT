@@ -87,9 +87,23 @@ stored the same object, exited, survived collection/reentry, and the weak
 witness cleared after the last strong edges were removed.
 
 Log: `/tmp/ljmt-gc-contract-development.log`. The ordinary scalar store matrix
-also passed during development. Full regression gates will run on the
-committed checkpoint; this focused result does not establish overall port
-completion or unrestricted FFI/side-trace support.
+also passed during development. The first full regression at `5bf113a4`
+passed the rooted GC, table allocation, side-entry, numeric, exit and live-flush
+contracts, then stopped in the first CALLXS admission fixture. The shared
+recorder had also changed the cdata `__call` FUNC lookup to the bounded helper,
+breaking its separately certified FFI graph. An explicit recorder mode now
+keeps that lookup on its existing full helper and snapshot sequence; ordinary
+table reads retain the new bounded helper. The CALLXS admission rules are
+unchanged. The failed run is `/tmp/ljmt-gc-experimental-5bf113a4.log`.
+
+The repaired ARM64 assertion profile passed the complete
+`m7_ffi_callxs_arm64_scalar` suite, including independent int/double/pointer
+admission, stack ABI, C++ callback unwind and integer/double/pointer lifecycle
+checks. Log: `/tmp/ljmt-gc-ffi-lookup-fixed.log`.
+
+Full regression validation remains pending after this repair. These focused
+results do not establish overall port completion or unrestricted FFI/side-trace
+support.
 
 ## Remaining boundary
 

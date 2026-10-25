@@ -1507,7 +1507,8 @@ static BCReg rec_mm_prep(jit_State *J, ASMFunction cont)
 static TRef rec_tmpref(jit_State *J, TRef tr);
 static IRType rec_idx_mt_shared_sample(jit_State *J, RecordIndex *ix,
 				       TValue *snap, TRef *constp);
-static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t);
+static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t,
+				 int bounded);
 #if LJ_HASJIT_FFI_CALLXS
 static int rec_mm_cdata_call_shared(jit_State *J, RecordIndex *ix, GCtab *mt);
 #endif
@@ -1605,7 +1606,7 @@ nocheck:
       ** broader previous-nil __index/__newindex active-MT fences intact, but
       ** let this raw metatable guard use the helper-backed stable-miss path.
       */
-      ix->mobj = rec_idx_mt_shared_load(J, &mix, IRT_NIL);
+      ix->mobj = rec_idx_mt_shared_load(J, &mix, IRT_NIL, 0);
       return 0;
     }
     ix->mobj = lj_record_idx(J, &mix);
@@ -2085,16 +2086,19 @@ static IRType rec_idx_mt_shared_sample(jit_State *J, RecordIndex *ix,
   return itype2irt(snap);
 }
 
-static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t)
+static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t,
+				 int bounded)
 {
   TRef res;
   TRef parentout = rec_tmpref_mode(J, ix->tab,
 				   IRTMPREF_IN1|IRTMPREF_OUT1);
   TRef key = rec_tmpref_mode(J, ix->key, IRTMPREF_IN2);
+  UNUSED(bounded);
 #if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
-  if (t == IRT_NUM || t == IRT_INT || t == IRT_TRUE || t == IRT_FALSE ||
+  if (bounded && (t == IRT_NUM || t == IRT_INT ||
+      t == IRT_TRUE || t == IRT_FALSE ||
       t == IRT_STR || t == IRT_TAB || t == IRT_FUNC || t == IRT_THREAD ||
-      t == IRT_UDATA || t == IRT_CDATA) {
+      t == IRT_UDATA || t == IRT_CDATA)) {
     /* A bounded hit attempt never waits. Its false result side-exits before
     ** the rooted output is consumed. GC hits publish the result before their
     ** lease ends; the JIT phase lease then spans every later native use until
@@ -2154,7 +2158,8 @@ static int rec_mm_cdata_call_shared(jit_State *J, RecordIndex *ix, GCtab *mt)
   type = rec_idx_mt_shared_sample(J, &mix, &snap, &kfunc);
   if (type != IRT_FUNC || !tvisfunc(&snap))
     return 0;
-  mobj = rec_idx_mt_shared_load(J, &mix, IRT_FUNC);
+  /* CALLXS retains its separately certified lookup/result snapshot grammar. */
+  mobj = rec_idx_mt_shared_load(J, &mix, IRT_FUNC, 0);
   lj_assertJ(tref_isfunc(kfunc), "missing rooted cdata __call function");
   UNUSED(kfunc);
   ix->mt = kmt;
@@ -2521,7 +2526,7 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
       if (tvisnil(&oldsnap) && ix->idxchain &&
 	  lj_record_mm_lookup(J, ix, MM_index))
 	goto handlemm;
-      return rec_idx_mt_shared_load(J, ix, t);
+      return rec_idx_mt_shared_load(J, ix, t, 1);
     }
   } else {
     mt_shared_store = rec_idx_mt_shared_tabop(J, ix);
