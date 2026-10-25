@@ -26,6 +26,7 @@ boundary prevents those differences from becoming live memory-safety defects.
 | 1 | `lj_trace_enter_root()` calls the full allocated-layout validator twice per entry, although published IR and layout are immutable under its lifetime lease. | Remove the second scan while retaining view equality and every mutable entry check. Then evaluate an immutable certificate published only after both independent validators pass. | Existing corrupted-layout, flush/reuse, slot, bytecode, PAC, gate, and child-topology tests; matching-build entry benchmarks. |
 | 1 | Ordinary INT-to-NUM specialization can leave an ARM64 loop repeatedly taking guards while general side traces remain unavailable. Correct answers and a trace count conceal this. | Make side-exit frequency and actual native work part of acceptance; prioritize numeric type adaptation and general scalar side-entry support. | INT and NUM initial values, changing types, overflows, short and long loops, concurrent GC/flush, and exit/entry counts. |
 | 2 | Root, side, and FFI admission still contain exact bytecode lengths, IR ordinals, register assignments, and selected exit numbers. | Replace these incrementally with operation/effect contracts: scalar arithmetic, rooted no-wait reads, rooted stores, allocation publication, call ABI, and snapshot continuation. | Independent semantic and post-RA implementations, corrupted-graph negatives, generated code, and lifecycle tests for each contract. |
+| 2 | Native FFI admission covers three exact signatures; arbitrary arm64e generated-frame unwind still has only synthetic evidence. | Grow admission by ABI argument/result classes using the existing metadata-snapshot discipline, and add real generated Lua/native/callback unwind coverage before widening the promise. | Register and stack classes, aggregates/sret, variadics, result roots, errno, callbacks, C++ exceptions, and remote GC/flush. |
 | 2 | Many shell contracts duplicate builds, profile restoration, and checks for source text. Several stale text checks blocked valid code during this session. | Centralize build/run plumbing and an explicit profile identity; retain independent semantic/runtime assertions. Replace text checks with compiled or emitted-object checks where those prove the intended property. | All registered cases execute, archives and fixture translation units match, native branches cannot silently skip, and negative controls still fail. |
 | 3 | A scalar table hit can retain table, key, array, and node bodies separately. The global rescan pending credit is also shared across tables. | Measure lease admissions, retries, and pending-credit contention before specializing or sharding. A numeric-index fast path is a candidate, not a demonstrated improvement. | Hits, misses, resize, retirement, contention, throughput, tail latency, and generated atomics on both targets. |
 | 3 | The code uses bounded try operations, retries, cooperative polls, and scheduler waits for different purposes. | Document each operation's progress contract and allowed suspension points. Test stalled publishers and collectors explicitly. | Bounded refusal for try helpers; progress or a documented external dependency for retrying operations. |
@@ -108,6 +109,12 @@ wait. A mutex-free implementation is not, by that fact alone, a proof that an
 entire operation is wait-free or that a stalled participant cannot delay it.
 Use the actual per-operation progress contract when evaluating the design.
 
+Inspection anchors: `src/lj_tab.c:lj_tab_getscalar_rooted_try`,
+`src/lj_gc2.c:lj_gc2_small_lease_try` and `lj_gc2_sweep_to_idle`, and
+`src/lj_safepoint.c`'s acknowledgement and native-root completion paths.
+These are optimization candidates with specific invariants, not a recommendation
+to replace the collector or broadly weaken memory ordering.
+
 ### Test reliability and maintainability
 
 The new admission fixture initially copied `[0, nins)` from a biased trace IR
@@ -145,3 +152,9 @@ the same large policy blocks into more files.
    weak-ordering, stalled-participant, and sustained-concurrency coverage.
 6. Measure release performance and merge focused generic fixes upstream in
    small commits. Do not infer full port parity from stock-suite passes.
+
+The recorded `m6_jit_aref_pair_boundary` case still tests broad variable-key
+reads and hash paths outside the admitted ARM64 capability. Its old TValue
+helper expectation is not a reason to admit those graphs or silently waive
+the assertion. The new numeric-read case covers its own exact contract;
+broader M6 parity needs its own implementation and target evidence.
