@@ -116,7 +116,16 @@ root modes/CARG ordering, wrong status guard/constant, unsupported result
 types, missing type guard and broken result snapshot. Log:
 `/tmp/ljmt-scalar-keys-contract.log`.
 
-Full regression validation remains pending after this repair. These focused
+The next full regression at `2cbb2352` exposed an obsolete negative assertion
+in the older scalar-read fixture: it rejected the bounded generic helper even
+though scalar results are now part of that helper's certificate. Both passes
+now positively check that substitution and independently reject the full,
+unbounded helper instead. The refreshed rooted-read contract passed on ARM64
+and arm64e/BTI, including native lifecycle and registered M6 coverage. Log:
+`/tmp/ljmt-rooted-read-admission-refresh.log`. The stopped umbrella run is
+`/tmp/ljmt-rooted-experimental-2cbb2352.log`.
+
+Full regression validation remains pending after this fixture correction. These focused
 results do not establish overall port completion or unrestricted FFI/side-trace
 support.
 

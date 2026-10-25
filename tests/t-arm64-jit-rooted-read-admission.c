@@ -187,6 +187,11 @@ int main(int argc, char **argv)
     snapmap = semantic_map;
   }
   assert(semantic_admit(J, &semantic));
+  /* The bounded generic reader now accepts scalar results too. Its full,
+  ** unbounded counterpart still has no ordinary root-operation certificate. */
+  ir[call0].op2 = IRCALL_lj_tab_gettv_rooted_hit_try;
+  assert(semantic_admit(J, &semantic));
+  memcpy(ir, semantic_good, (size_t)nins * sizeof(IRIns));
 #define SEM_REJECT(change) do { \
   memcpy(ir, semantic_good, (size_t)nins*sizeof(IRIns)); \
   semantic.ir = ir; semantic.nins = semantic_nins; change; \
@@ -194,7 +199,7 @@ int main(int argc, char **argv)
 } while (0)
   SEM_REJECT(ir[tab0].op2 = IRTMPREF_IN2);
   SEM_REJECT(ir[key0].op2 = IRTMPREF_IN1|IRTMPREF_OUT1);
-  SEM_REJECT(ir[call0].op2 = IRCALL_lj_tab_gettv_rooted_hit_try);
+  SEM_REJECT(ir[call0].op2 = IRCALL_lj_tab_gettv_rooted);
   SEM_REJECT(ir[vload0].op2 = 8);
   SEM_REJECT(ir[vload0].o = IR_ALOAD);
   SEM_REJECT(ir[vload0].o = IR_HLOAD);
@@ -257,6 +262,8 @@ int main(int argc, char **argv)
                                             postra_ir[guard0].op1;
   vload0 = nth(postra_ir, nins, IR_VLOAD, 0);
   carg0 = postra_ir[postra_ir[call0].op1].op1;
+  postra_ir[call0].op2 = IRCALL_lj_tab_gettv_rooted_hit_try;
+  assert(postra_admit(&view));
 #define POST_REJECT(change) do { \
   memcpy(postra_ir + owner->nk, trace_ir_acq(owner) + owner->nk, \
          (size_t)(nins - owner->nk)*sizeof(IRIns)); \
@@ -264,7 +271,7 @@ int main(int argc, char **argv)
 } while (0)
   POST_REJECT(postra_ir[tab0].op2 = IRTMPREF_IN2);
   POST_REJECT(postra_ir[key0].op2 = IRTMPREF_IN1|IRTMPREF_OUT1);
-  POST_REJECT(postra_ir[call0].op2 = IRCALL_lj_tab_gettv_rooted_hit_try);
+  POST_REJECT(postra_ir[call0].op2 = IRCALL_lj_tab_gettv_rooted);
   POST_REJECT(postra_ir[vload0].op2 = 8);
   POST_REJECT(postra_ir[vload0].o = IR_ALOAD);
   POST_REJECT(postra_ir[vload0].o = IR_HLOAD);
