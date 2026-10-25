@@ -2546,6 +2546,11 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
       if (tvisnil(&oldsnap)) {
 	if (ix->idxchain && lj_record_mm_lookup(J, ix, MM_newindex))
 	  goto handlemm;
+	/* An absent raw deletion is still an effect: another invocation or
+	** actor can insert this key before the native store. Do not erase it
+	** until a rooted deletion or an authoritative absence guard is emitted. */
+	if (!ix->idxchain && tref_isnil(ix->val))
+	  lj_trace_err_info(J, LJ_TRERR_NYIBC);
 	if (!tref_isnil(ix->val)) {
 	  TRef key = rec_tmpref_mode(J, ix->key,
 				     IRTMPREF_IN1|IRTMPREF_IN2);

@@ -21,10 +21,13 @@ run_profile() {
   helper=$tmpdir/helper-$label
   admission=$tmpdir/admission-$label
   lifecycle=$tmpdir/lifecycle-$label
+  deletion=$tmpdir/deletion-$label
   lj_ci_compile_fixture "$helper" "$root/tests/t-tab-rooted-store.c"
   lj_ci_compile_fixture "$admission" "$root/tests/t-arm64-jit-rooted-gc-admission.c"
   lj_ci_compile_fixture "$lifecycle" "$root/tests/t-arm64-jit-rooted-gc-lifecycle.c"
+  lj_ci_compile_fixture "$deletion" "$root/tests/t-jit-raw-nil-store.c"
   lj_ci_run_fixture 60 "$helper"
+  lj_ci_run_fixture 60 "$deletion"
   for matrix in operations values; do
     lj_ci_run_fixture 120 "$admission" "$root/tests/t-arm64-jit-rooted-gc-$matrix.lua"
     lj_ci_run_lua 120 "$root/tests/t-arm64-jit-rooted-gc-$matrix.lua"

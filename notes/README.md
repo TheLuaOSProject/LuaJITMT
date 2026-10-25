@@ -173,7 +173,9 @@ available.
   allocation and raw initialization effects. Rooted scalar/GC reads,
   existing-key scalar/GC stores and unsunk TNEW have operation proofs;
   new-key insertion, nil/lightuserdata values and general metamethod paths
-  remain closed. Forwarding-safe
+  remain closed. Shared raw nil stores sampled as absent now abort recording
+  instead of losing a deletion on later execution; see the
+  [raw nil-store regression](arm64-raw-nil-store-2026-10-25.md). Forwarding-safe
   interpreter `lj_vm_next` does not by itself open other JIT heap paths.
   The historical
   [`GC-value rooting audit`](arm64-gc-value-rooting-audit-2026-10-25.md)

@@ -72,6 +72,7 @@ local m6_cases = {
   "m6_jit_rooted_table_len",
   "m6_jit_rooted_read_ir",
   "m6_jit_rooted_store_ir",
+  "m6_jit_raw_nil_store",
   "m6_jit_tnew_publication",
   "m6_jit_entering_table_store",
   "m6_jit_tbar_gc2_black_gate",
@@ -2146,6 +2147,27 @@ assert(exits > 0, "active-MT rooted-length BC_LOOP never entered native code")
         end)
       else
         print("M6 JIT rooted scalar store requires native ARM64")
+      end
+    end
+  })
+
+  add({
+    name = "m6_jit_raw_nil_store",
+    description = "shared raw nil stores delete keys inserted after recording",
+    run = function(t)
+      local function run_case()
+        build_and_run_c(t, t:tmp("lj_t-jit-raw-nil-store"),
+                        "t-jit-raw-nil-store.c", {
+          build = false,
+          timeout = "30s"
+        })
+      end
+      if jit.os == "OSX" and jit.arch == "arm64" and
+         t.target_arch == "arm64" then
+        with_arm64_jit_profile(t, run_case)
+      else
+        build_default(t)
+        run_case()
       end
     end
   })
