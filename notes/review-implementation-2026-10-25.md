@@ -329,3 +329,28 @@ production code as `450471dc`) in an isolated copy. Flags were `-O1 -g
 flags, and `ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:abort_on_error=1`.
 Leak detection is separate from this retained-arena test. Log:
 `/tmp/ljmt-review-tnew-asan.log`.
+
+## Sanitizer expansion and gate maintenance
+
+At the same frozen production checkpoint, AddressSanitizer also passed the
+complete rooted-store contract on ARM64/ARM64e, both 509-case stock source and
+original-bytecode corpora, 300 join/GC cycles, and six-thread cdata stress with
+24,000 iterations per worker. Logs: `/tmp/ljmt-review-rooted-store-asan.log`,
+`/tmp/ljmt-review-stock-asan-source.log`,
+`/tmp/ljmt-review-stock-asan-import.log`, `/tmp/ljmt-review-join-gc-asan.log`,
+and `/tmp/ljmt-review-cdata-asan.log`.
+
+The registered `m4_tsan_drivers` passed with target-only ThreadSanitizer flags
+on frozen `92393d92`. These are the real C thread/TG TLS/sleep and bounded MPMC
+channel drivers, not a claim of complete VM/JIT race freedom. Log:
+`/tmp/ljmt-review-tsan-drivers-target.log`. Host generators must remain
+uninstrumented when only the target linker receives sanitizer flags.
+
+The next experimental gate stopped at an obsolete source assertion in the
+side-assembler contract. Root publication now has separate geometry and
+immutable-certificate fail-stops; the contract still demanded exactly one.
+It now checks both guards and the expected two fail-stops. The full focused
+contract passes on ARM64/ARM64e, including private compaction, reset, MCODELM
+recapture and the raw ARM64e negative publication seal. Log:
+`/tmp/ljmt-review-side-asm-fixed.log`. The whole experimental gate remains
+pending the combined generic FUNCF/FFI/side implementation.

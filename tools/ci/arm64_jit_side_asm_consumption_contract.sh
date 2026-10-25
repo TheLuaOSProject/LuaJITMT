@@ -277,7 +277,19 @@ test "$(grep -Fc 'trace_compact_body_plan(J, T, &plan)' \
   "$trace_save_region")" = 1
 test "$(grep -Fc 'trace_compact_body_init(J, &plan);' \
   "$trace_save_region")" = 1
-test "$(grep -Fc 'abort();' "$trace_save_region")" = 1
+# Geometry and the immutable ARM64 root certificate have separate fail-stops.
+# Check both guards rather than mistaking the extra certificate for a new
+# side-publication action.
+for required in \
+  'invalid compact trace body at publication' \
+  'if (LJ_UNLIKELY(!trace_arm64_root_certify(T))) {' \
+  'invalid immutable ARM64 root certificate'; do
+  grep -F "$required" "$trace_save_region" >/dev/null || {
+    echo "trace_save lost publication validation: $required" >&2
+    exit 1
+  }
+done
+test "$(grep -Fc 'abort();' "$trace_save_region")" = 2
 for forbidden in \
   'memcpy(T, &J->cur, sizeof(GCtrace))' 'newwhite' 'TRACE_APPENDVEC' \
   'mcauth =' 'trace_mcauth' 'la_storefunc_rel(&T->mcauth' \
