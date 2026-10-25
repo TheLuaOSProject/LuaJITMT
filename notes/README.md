@@ -127,7 +127,9 @@ available.
   functions, threads, userdata and opaque cdata. Their phase-gate lifetime
   proof permits values across later helpers, full-width spills, PHIs and exit
   restoration. Three distinct TG-local input slots feed the anchored store
-  helper. Native GC identity keys, mixed-value pressure and a deterministic
+  helper. Numeric/boolean results through GC identity keys use the generic
+  bounded reader; string/number/boolean keys keep the optimized scalar helper.
+  Native GC identity keys, mixed-value pressure and a deterministic
   source-edge-removal/collector handoff pass on ARM64 and arm64e/BTI in both
   assertion and release profiles; see
   [`arm64-jit-rooted-gc-values-2026-10-25.md`](arm64-jit-rooted-gc-values-2026-10-25.md).

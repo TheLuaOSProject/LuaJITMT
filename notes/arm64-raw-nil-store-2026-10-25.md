@@ -26,8 +26,9 @@ of `arm64_jit_rooted_gc_contract.sh`.
 
 The registered test passed in the native ARM64 assertion profile after the
 fix. The unproven loop was rejected during recording and the inserted key was
-deleted correctly. Log: `/tmp/ljmt-raw-nil-fixed.log`. The four-profile contract
-remains pending at this checkpoint.
+deleted correctly. Log: `/tmp/ljmt-raw-nil-fixed.log`. The complete rooted GC
+contract then passed this regression on ARM64 and arm64e/BTI in both assertion
+and release builds: `/tmp/ljmt-scalar-keys-contract.log`.
 
 The x86_64 build succeeded, but this host could not start its runtime: the
 process remained in uninterruptible OS wait before executing the build-profile

@@ -22,12 +22,16 @@ run_profile() {
   admission=$tmpdir/admission-$label
   lifecycle=$tmpdir/lifecycle-$label
   deletion=$tmpdir/deletion-$label
+  scalarkeys=$tmpdir/scalar-keys-$label
   lj_ci_compile_fixture "$helper" "$root/tests/t-tab-rooted-store.c"
   lj_ci_compile_fixture "$admission" "$root/tests/t-arm64-jit-rooted-gc-admission.c"
   lj_ci_compile_fixture "$lifecycle" "$root/tests/t-arm64-jit-rooted-gc-lifecycle.c"
   lj_ci_compile_fixture "$deletion" "$root/tests/t-jit-raw-nil-store.c"
+  lj_ci_compile_fixture "$scalarkeys" "$root/tests/t-arm64-jit-rooted-scalar-keys-admission.c"
   lj_ci_run_fixture 60 "$helper"
   lj_ci_run_fixture 60 "$deletion"
+  lj_ci_run_fixture 120 "$scalarkeys" "$root/tests/t-arm64-jit-rooted-scalar-keys.lua"
+  lj_ci_run_lua 120 "$root/tests/t-arm64-jit-rooted-scalar-keys.lua"
   for matrix in operations values; do
     lj_ci_run_fixture 120 "$admission" "$root/tests/t-arm64-jit-rooted-gc-$matrix.lua"
     lj_ci_run_lua 120 "$root/tests/t-arm64-jit-rooted-gc-$matrix.lua"

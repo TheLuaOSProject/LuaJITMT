@@ -4,7 +4,8 @@ This tranche extends the existing operation-based root certificates to visible
 GC TValues: string, table, function, thread, userdata and opaque cdata. Root
 LOOP/FORL traces can load these values through rooted table reads, carry them
 across later helpers, restore them from snapshots, and store them to existing
-keys. This is not general ARM64 JIT parity.
+keys. Numeric and boolean results can also be read through GC identity keys.
+This is not general ARM64 JIT parity.
 
 ## Lifetime mechanism
 
@@ -39,7 +40,10 @@ and `lj_trace.c:trace_exit_cp`/`lj_trace_exit`.
 
 - GC-valued reads use bounded `lj_tab_gettv_rooted_hit_try`, an immediate
   success guard, a post-helper snapshot and a typed guarded VLOAD. Numeric
-  and boolean reads keep the optimized scalar helper.
+  and boolean reads keep the optimized scalar helper for string, numeric and
+  boolean keys. Other visible GC keys use the generic bounded reader, whose
+  exact key lease authorizes hashing. Both admission passes separately reject
+  pairing such a key with the scalar-only helper.
 - `lj_tab_storegc_rooted` stages table, key and value in three distinct
   TG-local TMPREF slots. New input-only IN3 addresses `tmptv3`; ARM64 and x64
   emitters materialize the complete TValue, with nil initialization, GC2 root
@@ -101,6 +105,17 @@ The repaired ARM64 assertion profile passed the complete
 admission, stack ABI, C++ callback unwind and integer/double/pointer lifecycle
 checks. Log: `/tmp/ljmt-gc-ffi-lookup-fixed.log`.
 
+The scalar-result/GC-key extension passed the full rooted GC contract in all
+four profiles, alongside the earlier GC lifetime, spill, mutation and raw nil
+deletion regressions. Its Lua matrix covers all six GC key classes with INT,
+NUM, true and false results, same-type numeric replacement, collection and
+native reentry, plus a key supplied by an earlier rooted VLOAD. Each warmup
+requires one published root, no aborts and 19--21 native loop exits across
+20 calls. Separate semantic and post-RA mutations reject the wrong helper,
+root modes/CARG ordering, wrong status guard/constant, unsupported result
+types, missing type guard and broken result snapshot. Log:
+`/tmp/ljmt-scalar-keys-contract.log`.
+
 Full regression validation remains pending after this repair. These focused
 results do not establish overall port completion or unrestricted FFI/side-trace
 support.
@@ -110,6 +125,6 @@ support.
 New-key insertion, nil/lightuserdata result/value classes, general metamethod
 paths, raw table/upvalue heap IR, sunk initialization, heap-effect side traces
 and general FFI combinations still need their own proofs. The optimized scalar
-read helper retains its numeric/string/boolean key domain; GC identity keys
-are covered here for GC-valued reads and rooted stores. The full port also
+read helper retains its numeric/string/boolean key domain; generic bounded
+reads cover the other visible GC identity keys. The full port also
 retains the broader parity, stress and performance work listed in README.

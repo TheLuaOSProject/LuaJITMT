@@ -2104,7 +2104,9 @@ static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t,
     ** lease ends; the JIT phase lease then spans every later native use until
     ** an exit restores the snapshot into the Lua stack. */
     IRCallID helper = (t == IRT_NUM || t == IRT_INT ||
-                      t == IRT_TRUE || t == IRT_FALSE) ?
+                      t == IRT_TRUE || t == IRT_FALSE) &&
+      (tref_isstr(ix->key) || tref_isnumber(ix->key) ||
+       tref_istrue(ix->key) || tref_isfalse(ix->key)) ?
       IRCALL_lj_tab_getscalar_rooted_try : IRCALL_lj_tab_gettv_rooted_hit_try;
     TRef found = lj_ir_call(J, helper,
 			    parentout, key, parentout);
