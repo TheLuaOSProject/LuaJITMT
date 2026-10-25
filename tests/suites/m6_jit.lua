@@ -96,6 +96,7 @@ local m6_cases = {
   "m6_jit_gcworkers_activation_flush",
   "m6_jit_vmevent_flush",
   "m6_jit_traceerr_format",
+  "m6_jit_native_coverage",
   "m6_jit_gdbjit_publish",
   "m6_jit_tmpbuf_thread_format",
   "m6_jit_perftools_native",
@@ -3050,6 +3051,18 @@ assert(threading.gcworkers(0) == 1)
       luajit_file(t, t:path("tests", "t-jit-vmevent-flush.lua"),
                   { lua_path = true, timeout = "20s" })
       print("M6 JIT VM event flush hook behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_native_coverage",
+    description = "native coverage reports generated traces, exits and observer conflicts",
+    run = function(t)
+      build_default(t)
+      luajit_file(t, t:path("tests", "t-native-coverage.lua"), {
+        lua_path = true,
+        timeout = "90s"
+      })
     end
   })
 

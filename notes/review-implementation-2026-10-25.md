@@ -180,3 +180,22 @@ bootstrap run reached the concurrent string-buffer fixture but one run timed
 out at its 90-second deadline; another run had passed that fixture before
 exposing the now-fixed C++ compiler selection issue. This timeout is under
 investigation and the combined bootstrap gate is not yet claimed passing.
+
+Three immediate isolated reruns of the same string-buffer program passed in
+5.20, 4.63 and 4.14 seconds. That does not explain the earlier deadline failure;
+the full combined gate remains required after the implementation integrations.
+
+## Observable native execution
+
+`bench/native-coverage.lua workload.lua [arguments...]` now reports trace
+publication, recording refusal reasons, code/IR sizes, parent/link metadata,
+and per-exit counts. It owns the trace and exit observer hooks; a workload that
+replaces those hooks fails explicitly instead of producing misleading zero
+counts. Workload failures likewise cannot produce a successful coverage report.
+This is an observation run, not a timing tool or a count of native iterations.
+
+The registered `m6_jit_native_coverage` case passed on the native ARM64
+experimental assertion build. It checks an interpreter control, a real compiled
+numeric loop with observed exits, hook conflicts, and workload failure. The
+JIT-disabled branch was also checked separately. Log:
+`/tmp/ljmt-review-native-coverage.log`.
