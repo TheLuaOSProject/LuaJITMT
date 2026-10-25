@@ -1,5 +1,5 @@
 -- Entry-dominated and sustained scalar loops. Run with the same build/profile.
--- Usage: luajit bench/arm64-entry-cost.lua on|off iterations calls [initial_sum]
+-- Usage: luajit bench/arm64-entry-cost.lua on|off iterations calls [initial_sum] [hotexit]
 local jit = require('jit')
 local util = require('jit.util')
 local mode = assert(arg[1])
@@ -9,7 +9,7 @@ local initial = tonumber(arg[4] or '0.5')
 local hotexit = assert(tonumber(arg[5] or '1000'))
 assert((mode == 'on' or mode == 'off') and initial)
 assert(n >= 1 and n % 1 == 0 and calls >= 1 and calls % 1 == 0)
-assert(hotexit >= 1 and hotexit <= 254 and hotexit % 1 == 0)
+assert(hotexit >= 1 and hotexit <= 2147483647 and hotexit % 1 == 0)
 
 -- A literal preserves the INT-versus-NUM specialization being measured.
 local kernel = assert(loadstring(string.format([[
