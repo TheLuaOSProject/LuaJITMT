@@ -39,7 +39,7 @@ check_root_entry_order() {
   fence=$(line 'la_fence_seq()')
   gate=$(line 'lj_gc2_jit_entry_open(g)' 2)
   first_slot=$(line 'trace_root_entry_slot_acq(J, traceno' 1)
-  first_layout=$(line 'trace_root_entry_arm64_layout_valid(&view, T, sourceins)')
+  first_layout=$(line '!trace_root_entry_arm64_layout_valid(')
   first_child=$(line 'trace_root_entry_first_child_view_acq(' 1)
   second_slot=$(line 'trace_root_entry_slot_acq(J, traceno' 2)
   equal_child=$(line 'trace_root_entry_first_child_view_equal(&childview, &childview2)')
@@ -148,12 +148,12 @@ check_vm_entry_order() {
 run_profile() {
   arch=$1 target=$2 flags=$3 tag=$4
   lj_ci_build_profile "$arch" "$target" "$flags" "$tag"
-  lj_ci_require_symbols lj_trace_enter_root lj_trace_test_root_entry_publishes
+  lj_ci_require_symbols lj_trace_enter_root lj_trace_test_root_entry_publishes \
+    lj_trace_test_root_entry_successes
   root_bin=$tmpdir/root-entry-$tag
   side_bin=$tmpdir/side-adaptation-$tag
   lj_ci_compile_fixture "$root_bin" "$root_fixture"
-  lj_ci_compile_fixture "$side_bin" "$side_fixture" \
-    -Wno-unused-but-set-variable
+  lj_ci_compile_fixture "$side_bin" "$side_fixture"
   lj_ci_run_fixture 120 "$root_bin"
   lj_ci_run_fixture 120 "$side_bin"
   check_vm_entry_order "$root/src/lj_vm.o" "$tag"
@@ -171,6 +171,9 @@ lj_ci_build_profile arm64 '-arch arm64' "$release_xcflags" release
 release_bin=$tmpdir/root-entry-release
 lj_ci_compile_fixture "$release_bin" "$root_fixture"
 lj_ci_run_fixture 120 "$release_bin"
+release_side_bin=$tmpdir/side-adaptation-release
+lj_ci_compile_fixture "$release_side_bin" "$side_fixture"
+lj_ci_run_fixture 120 "$release_side_bin"
 
 lj_ci_restore "$LJ_CI_RESTORE_TARGET_FLAGS" "$LJ_CI_RESTORE_XCFLAGS"
 echo "arm64_jit_root_entry_contract OK: root, generic first-child revalidation, ARM64/arm64e entry ordering and release certificate rejection"
