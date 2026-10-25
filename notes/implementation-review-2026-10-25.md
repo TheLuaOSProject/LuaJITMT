@@ -68,10 +68,15 @@ is median process CPU time over five rounds. The driver was interpreted and
 | 1,024 iterations, INT initial accumulator | 10,000 | 0.145688 | 5.038312 | 20,460 |
 
 The last case computes the correct result. Its trace dump shows an INT entry
-guard and checked NUM-to-INT conversion repeatedly exiting. This is an
-intentional coverage limit with a real performance consequence, not evidence
-of an arithmetic miscompile. The first two measurements show entry-dominated
-versus sustained work; they do not isolate validator cost by themselves.
+guard and checked NUM-to-INT conversion repeatedly exiting. The probe set
+`hotexit=1000`, which suppresses ordinary side recording; its exit count alone
+does not establish whether a normal hot-exit threshold can adapt. The count
+does demonstrate the cost of repeatedly entering that incompatible root.
+Numeric adaptation requires a separate test that observes a real child trace,
+its parent/exit relationship, and reduced exit frequency. Two published root
+traces are not evidence of a side trace. The first two measurements show
+entry-dominated versus sustained work; they do not isolate validator cost by
+themselves.
 
 Raw logs are `/tmp/luajitmt-entry-review-{stable-,}20261025.log`; the original
 probe used a literal initial accumulator. The checked-in

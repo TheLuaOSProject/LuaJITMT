@@ -292,3 +292,17 @@ contract and registered M6 allocation/store cases also pass. Logs:
 Sunk allocation, TDUP, raw initialization stores, new-key stores and GC-valued
 stores retain their separate admission boundaries. This checkpoint proves
 construction through the existing runtime publication protocol.
+
+## Combined bootstrap checkpoint
+
+The complete bootstrap gate passed on frozen `450471dc`: assertion interpreter,
+GC2 hard assist, stock cases, TG hooks, coroutine/dead-resume and FFI callback
+lifecycle tests, followed by restoration of its exact bootstrap profile. The
+concurrent string-buffer fixture also completed in this run. This supplies a
+passing combined run; it does not explain the earlier intermittent timeout.
+Log: `/tmp/ljmt-review-bootstrap-450471dc.log`.
+
+The original entry benchmark used `hotexit=1000`; its large exit count does not
+prove adaptation failure with ordinary settings. The historical review now
+states that limitation. Numeric-side acceptance must identify a genuine child
+and the patched parent exit, rather than infer adaptation from trace count.
