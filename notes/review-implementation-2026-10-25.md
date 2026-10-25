@@ -373,3 +373,23 @@ POSTMETADATA header/body/return mutations still refuse entry. Logs:
 `/tmp/ljmt-review-funcf-generation.log` and
 `/tmp/ljmt-review-funcf-generation-release.log`. General scalar FUNCF bytecode
 and IR admission are a separate patch currently under review.
+
+## Common GC object alignment
+
+UBSan found that `GCobj` inherited `GCtab`'s 16-byte alignment, while ordinary
+objects (including strings) can occupy valid 8-byte-aligned addresses. Even
+forming a union member address then asserted an alignment the allocation did
+not have. The common union view is now capped at 8-byte alignment; concrete
+object types, table layout and the 16-byte atomic pair are unchanged.
+
+A standalone UBSan regression exercises an address that is 8 mod 16 and proves
+the generic reference/tag/header paths, while separately asserting table-pair
+alignment. It passed on native ARM64 and an ad-hoc-signed x86-64/Rosetta binary.
+Both ARM64 umbrella gates now run it. The table-pair concurrency and emitted
+CASPAL-only contract also passed. With the fix, the entire TNEW contract passes
+on ARM64/ARM64e under `-fsanitize=undefined` without disabling alignment checks,
+including native construction, independent mutation tests and concurrent GC.
+Logs: `/tmp/ljmt-review-aligned-tab-pair.log` and
+`/tmp/ljmt-review-tnew-ubsan-aligned.log`. The sanitizer runtime used an isolated
+`92393d92` source copy plus this alignment fix; this does not yet validate the
+later generic function, side or FFI patches.

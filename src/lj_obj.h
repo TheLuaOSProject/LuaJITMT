@@ -3183,6 +3183,11 @@ LJ_STATIC_ASSERT(offsetof(GChead, gclist) == offsetof(GCproto, gclist));
 LJ_STATIC_ASSERT(offsetof(GChead, gclist) == offsetof(GCfuncL, gclist));
 LJ_STATIC_ASSERT(offsetof(GChead, gclist) == offsetof(GCtab, gclist));
 
+/* GCobj is a view over separately allocated object types, not an allocation
+** type. Tables need 16-byte alignment for their atomic pair, but strings and
+** other objects retain the common 8-byte allocator alignment. Limit the union
+** view's alignment without changing any concrete object type or layout. */
+#pragma pack(push, 8)
 typedef union GCobj {
   GChead gch;
   GCstr str;
@@ -3194,6 +3199,7 @@ typedef union GCobj {
   GCtab tab;
   GCudata ud;
 } GCobj;
+#pragma pack(pop)
 
 static LJ_AINLINE GCRef *lj_obj_gcwref(GCobj *o)
 {

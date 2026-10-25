@@ -10,6 +10,8 @@ lj_ci_profile_init "$root" arm64_jit_fail_closed_gate
 LJ_TEST_RUN_LOCK_HELD=1
 export LJ_TEST_RUN_LOCK_HELD
 
+LJ_TEST_ROOT="$root" sh "$root/tools/ci/gcobj_alignment_contract.sh"
+
 jobs=${JOBS:-${MAKE_JOBS:-$(sysctl -n hw.logicalcpu 2>/dev/null || echo 2)}}
 minver=${MACOSX_DEPLOYMENT_TARGET:-13.0}
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_ARM64_EMIT_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS'
