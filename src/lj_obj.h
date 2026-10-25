@@ -2114,6 +2114,7 @@ typedef struct GC2State {
   uint32_t table_token_pass_ack_phase;  /* GC phase paired with last ack. */
   uint32_t thread_scan_needscan_pending;  /* Live NEEDSCAN handoffs. */
   uint32_t table_rescan_pending;  /* Live table NEEDSCAN handoffs. */
+  uint32_t sweep_table_close_gate;  /* SWEEP close admission fence. */
   uint64_t thread_scan_dirty_misses;  /* Same-cycle scans rejected as stale. */
   uint64_t thread_scan_frame_fallbacks;  /* Invalid frame walks using maxstack. */
   uint64_t ffi_native_scan_attempts;  /* Certified parked-owner scan calls. */
@@ -5349,7 +5350,8 @@ static LJ_AINLINE void gc2_thread_scan_needscan_pending_dec(global_State *g)
 
 static LJ_AINLINE uint32_t gc2_table_rescan_pending_acq(global_State *g)
 {
-  return la_load32_acq(&g->gc2.table_rescan_pending);
+  /* Pairs with the SC close-flag store and publisher flag load. */
+  return __atomic_load_n(&g->gc2.table_rescan_pending, __ATOMIC_SEQ_CST);
 }
 
 static LJ_AINLINE void gc2_table_rescan_pending_store_rlx(global_State *g,
@@ -5360,14 +5362,31 @@ static LJ_AINLINE void gc2_table_rescan_pending_store_rlx(global_State *g,
 
 static LJ_AINLINE void gc2_table_rescan_pending_inc(global_State *g)
 {
-  la_add32_rlx(&g->gc2.table_rescan_pending, 1);
+  /* See gc2_table_rescan_pending_acq(): close and reservation must not both
+  ** observe the other's pre-publication value. */
+  (void)__atomic_add_fetch(&g->gc2.table_rescan_pending, 1,
+			   __ATOMIC_SEQ_CST);
 }
 
 static LJ_AINLINE void gc2_table_rescan_pending_dec(global_State *g)
 {
-  uint32_t old = la_sub32_rlx(&g->gc2.table_rescan_pending, 1);
+  uint32_t old = __atomic_fetch_sub(&g->gc2.table_rescan_pending, 1,
+				    __ATOMIC_SEQ_CST);
   lj_assertG(old > 0, "table NEEDSCAN pending underflow");
   UNUSED(old);
+}
+
+static LJ_AINLINE uint32_t gc2_sweep_table_close_gate_sc(global_State *g)
+{
+  return __atomic_load_n(&g->gc2.sweep_table_close_gate,
+			 __ATOMIC_SEQ_CST);
+}
+
+static LJ_AINLINE void gc2_sweep_table_close_gate_store_sc(global_State *g,
+						    uint32_t value)
+{
+  __atomic_store_n(&g->gc2.sweep_table_close_gate, value,
+			   __ATOMIC_SEQ_CST);
 }
 
 static LJ_AINLINE uint64_t gc2_table_token_scan_requested_acq(global_State *g)

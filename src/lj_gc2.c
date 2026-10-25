@@ -1854,6 +1854,7 @@ void lj_gc2_init(global_State *g)
   gc2_table_token_pass_ack_phase_store_rlx(g, 0);
   gc2_thread_scan_needscan_pending_store_rlx(g, 0);
   gc2_table_rescan_pending_store_rlx(g, 0);
+  gc2_sweep_table_close_gate_store_sc(g, 0);
   gc2_thread_scan_dirty_misses_store_rlx(g, 0);
   gc2_thread_scan_frame_fallbacks_store_rlx(g, 0);
   gc2_ffi_native_scan_attempts_store_rlx(g, 0);
@@ -6496,6 +6497,11 @@ int lj_gc2_sweep_to_idle(global_State *g)
     gc2_worker_release(g);
     return 0;
   }
+  /* This close-only SC flag distinguishes terminal SWEEP->IDLE from the
+  ** shared GCSCAN forward transitions. It pairs with reservation increment
+  ** and pending-count reads so only a late terminal-close publisher may
+  ** leave an uncounted SSB identity for next MARK. */
+  gc2_sweep_table_close_gate_store_sc(g, 1);
   if (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
       gc2_sweep_blocked_by_finalizer(g) ||
       !gc2_sweep_bridge_ready_acq(g) ||
@@ -6509,6 +6515,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
       !gc2_grey_empty(g) || lj_gc2_sweep_needs_prepare(g) ||
       lj_gc2_sweep_pending(g) ||
       gc2_marks_this_round_xchg_acqrel(g, 0) != 0) {
+    gc2_sweep_table_close_gate_store_sc(g, 0);
     gc2_jit_phase_gate_open_sweep(g, 0);
     gc2_phase_gate_release(g);
     gc2_worker_release(g);
@@ -6532,6 +6539,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
       !gc2_grey_empty(g) || lj_gc2_sweep_needs_prepare(g) ||
       lj_gc2_sweep_pending(g) ||
       gc2_marks_this_round_xchg_acqrel(g, 0) != 0) {
+    gc2_sweep_table_close_gate_store_sc(g, 0);
     gc2_jit_phase_gate_open_sweep(g, 0);
     gc2_phase_gate_release(g);
     gc2_worker_release(g);
@@ -6553,6 +6561,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
   gc2_mark_close_intent_rel(g, 0);
   lj_gc2_worker_wake(g);
   if (phase != LJ_GC2_SWEEP) {
+    gc2_sweep_table_close_gate_store_sc(g, 0);
     if (gc2_phase_acq(g) == LJ_GC2_IDLE)
       gc2_jit_phase_gate_open_idle(g);
     gc2_phase_gate_release(g);
@@ -6593,6 +6602,9 @@ int lj_gc2_sweep_to_idle(global_State *g)
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_update_pacing(g);
   gc2_jit_phase_gate_open_idle(g);
+  /* Keep late SWEEP-close publishers on the uncounted path until all close
+  ** cleanup is complete; after this point IDLE reservations belong to MARK. */
+  gc2_sweep_table_close_gate_store_sc(g, 0);
   gc2_phase_gate_release(g);
   return 1;
 }
@@ -18661,6 +18673,10 @@ static int gc2_table_rescan_later_(global_State *g, GCtab *t, int force)
 {
   if (!g || !t)
     return 0;
+  /* Only terminal SWEEP close owns this SC flag. Forward GCSCAN transitions
+  ** and ordinary IDLE stores retain their counted table reservation. */
+  if (gc2_sweep_table_close_gate_sc(g))
+    return gc2_publish_mutator(g, obj2gco(t));
   if (!force && gc2_table_scan_current(g, t))
     return 1;
   if (!gc2_table_rescan_pending_begin(g, t)) {
@@ -18671,6 +18687,11 @@ static int gc2_table_rescan_later_(global_State *g, GCtab *t, int force)
 	!gc2_grey_empty(g) || !lj_gc2_ssb_empty(g))
       return 1;
     return gc2_table_rescan_publish_duplicate(g, t);
+  }
+  /* Pair the reservation with terminal close's flag/count SC protocol. */
+  if (gc2_sweep_table_close_gate_sc(g)) {
+    gc2_table_rescan_pending_finish(g, t, 0);
+    return gc2_publish_mutator(g, obj2gco(t));
   }
   /*
   ** Table traversal can run from root-scan contexts as well as worker-owned
@@ -18708,6 +18729,10 @@ static int gc2_table_rescan_retry_publish_held(global_State *g, GCtab *t)
       if (!gc2_table_rescan_pending_begin(g, t)) {
 	state = lj_tab_gc2_rescan_state_acq(t);
 	continue;
+      }
+      if (gc2_sweep_table_close_gate_sc(g)) {
+	gc2_table_rescan_pending_finish(g, t, 0);
+	return gc2_publish_mutator(g, obj2gco(t));
       }
       return gc2_table_rescan_publish_reserved(g, t);
     }

@@ -625,6 +625,24 @@ typedef struct FinishObserveCtx {
   uint8_t saw_installing;
 } FinishObserveCtx;
 
+typedef struct CloseGateObserveCtx {
+  global_State *g;
+  GCtab *t;
+  uint32_t pending;
+  uint8_t state;
+} CloseGateObserveCtx;
+
+static void *close_gate_observer(void *ud)
+{
+  CloseGateObserveCtx *ctx = (CloseGateObserveCtx *)ud;
+  wait_table_rescan_pause(LJ_GC2_TABLE_RESCAN_TEST_INSTALLING);
+  ctx->pending = gc2_table_rescan_pending_acq(ctx->g);
+  ctx->state = lj_tab_gc2_rescan_state_acq(ctx->t);
+  gc2_sweep_table_close_gate_store_sc(ctx->g, 1);
+  lj_gc2_test_table_rescan_release();
+  return NULL;
+}
+
 static void *successful_finish_observer(void *ud)
 {
   FinishObserveCtx *ctx = (FinishObserveCtx *)ud;
@@ -646,10 +664,7 @@ static void test_finish_ordering(void)
 {
   Fixture f = fixture_open();
   LJGC2TableStoreGuard failed, committed;
-  FinishObserveCtx ctx;
-  pthread_t thread;
   ResourceSnap before = resource_snapshot(&f);
-  LJGC2TableStoreGuardResult result;
   LJGC2TabStamp *stamp = lj_arena_gc2_stamp_acq(f.parent);
   uint32_t dirty_before;
   uint64_t stamp_before;
@@ -683,8 +698,8 @@ static void test_finish_ordering(void)
   assert(la_load64_acq(&stamp->state) == stamp_before);
   lj_gc2_test_table_rescan_release();
 
-  /* A successful heap CAS retains ACTIVE until its forced parent rescan is
-  ** durably installing. The pause is inside that real handoff, before finish. */
+  /* An ordinary IDLE store is counted for the upcoming MARK cycle; only the
+  ** terminal sweep-close grace suppresses this credit. */
   assert(lj_gc2_table_store_begin(f.L, &committed, f.parent,
                                    &f.key, &f.value) ==
          LJ_GC2_TABLE_STORE_GUARD_OK);
@@ -695,22 +710,15 @@ static void test_finish_ordering(void)
   assert(lj_gc2_table_store_revalidate(f.L, &committed) ==
          LJ_GC2_TABLE_STORE_GUARD_OK);
   assert(committed.store_authorized);
-  memset(&ctx, 0, sizeof(ctx));
-  ctx.fixture = &f;
-  lj_gc2_test_table_rescan_pause(LJ_GC2_TABLE_RESCAN_TEST_INSTALLING);
-  assert(pthread_create(&thread, NULL, successful_finish_observer, &ctx) == 0);
-  result = lj_gc2_table_store_finish(f.L, &committed, 1);
-  assert(pthread_join(thread, NULL) == 0);
-  assert(result == LJ_GC2_TABLE_STORE_GUARD_OK);
-  assert(ctx.saw_active && ctx.saw_installing);
-  assert(ctx.stamp_state == stamp_committed);
+  assert(lj_gc2_table_store_finish(f.L, &committed, 1) ==
+         LJ_GC2_TABLE_STORE_GUARD_OK);
   assert_descriptor_idle(&f);
   assert(lj_tab_gc2_rescan_state_acq(f.parent) == LJ_TAB_RESCAN_COUNTED);
   assert(la_load64_acq(&stamp->state) == stamp_committed);
   assert_resources_unchanged(&f, &before);
 
-  /* Consume the exact legacy migration token before normal state teardown. */
   assert(lj_gc2_test_table_rescan_clear(f.g, f.parent) == 1);
+  lj_gc2_test_table_rescan_release();
   fixture_close(&f);
 }
 
@@ -748,22 +756,10 @@ static LJGC2ActivationSnap enter_sweep_fixture(Fixture *f)
   return sweep;
 }
 
-static void leave_sweep_fixture(Fixture *f,
-                                const LJGC2ActivationSnap *sweep)
-{
-  LJGC2ActivationSnap idle;
-  assert(gc2_phase_acq(f->g) == LJ_GC2_SWEEP);
-  gc2_phase_rel(f->g, LJ_GC2_IDLE);
-  assert(lj_gc2_activation_try_abandon_sweep_open(
-           &f->g->gc2.activation, sweep, &idle) == LJ_GC2_TRANSITION_OK);
-  assert(idle.state == LJ_GC2_ACT_IDLE &&
-         idle.gate == LJ_GC2_ROOT_GATE_OPEN);
-}
-
 static void test_sweep_finish_dirty_ordering(void)
 {
   Fixture f = fixture_open();
-  LJGC2ActivationSnap sweep = enter_sweep_fixture(&f);
+  LJGC2ActivationSnap sweep = enter_sweep_fixture(&f), idle;
   LJGC2TableStoreGuard failed, committed;
   FinishObserveCtx ctx;
   LJGC2TableStoreGuardResult result;
@@ -774,6 +770,7 @@ static void test_sweep_finish_dirty_ordering(void)
   uint64_t stamp_before;
   uint64_t stamp_admitted;
   uint64_t stamp_committed;
+  uint32_t pending_before;
 
   assert(stamp != NULL);
   dirty_before = (uint32_t)la_load64_acq(&stamp->state);
@@ -836,7 +833,91 @@ static void test_sweep_finish_dirty_ordering(void)
   assert_resources_unchanged(&f, &before);
   assert(lj_gc2_test_table_rescan_clear(f.g, f.parent) == 1);
 
-  leave_sweep_fixture(&f, &sweep);
+  /* Generic GCSCAN also protects forward MARK/WEAK transitions. It must not
+  ** be mistaken for terminal close: a store retains its counted reservation. */
+  {
+    uint32_t expect = 0;
+    uint32_t gate = LJ_THREAD_GCSCAN;
+    pending_before = gc2_table_rescan_pending_acq(f.g);
+    assert(gc2_cycle_leader_cas(f.g, &expect, LJ_THREAD_GCSCAN));
+    assert(lj_gc2_table_store_begin(f.L, &committed, f.parent,
+                                     &f.key, &f.value) ==
+           LJ_GC2_TABLE_STORE_GUARD_OK);
+    assert(lj_gc2_table_store_admit(f.L, &committed) ==
+           LJ_GC2_TABLE_STORE_GUARD_OK);
+    assert(lj_gc2_table_store_revalidate(f.L, &committed) ==
+           LJ_GC2_TABLE_STORE_GUARD_OK);
+    assert(lj_gc2_table_store_finish(f.L, &committed, 1) ==
+           LJ_GC2_TABLE_STORE_GUARD_OK);
+    assert(gc2_table_rescan_pending_acq(f.g) == pending_before + 1u);
+    assert(lj_tab_gc2_rescan_state_acq(f.parent) == LJ_TAB_RESCAN_COUNTED);
+    assert(gc2_cycle_leader_cas(f.g, &gate, 0));
+    assert(lj_gc2_test_table_rescan_clear(f.g, f.parent) == 1);
+    assert(gc2_table_rescan_pending_acq(f.g) == pending_before);
+  }
+
+  /* Close can set its flag after a publisher exposes INSTALLING. Its owner
+  ** settles exactly that token, retaining only the already-published SSB. */
+  {
+    uint32_t expect = 0;
+    uint32_t gate = LJ_THREAD_GCSCAN;
+    CloseGateObserveCtx close_ctx;
+    pending_before = gc2_table_rescan_pending_acq(f.g);
+    assert(gc2_cycle_leader_cas(f.g, &expect, LJ_THREAD_GCSCAN));
+    assert(lj_gc2_table_store_begin(f.L, &committed, f.parent,
+                                     &f.key, &f.value) ==
+           LJ_GC2_TABLE_STORE_GUARD_OK);
+    assert(lj_gc2_table_store_admit(f.L, &committed) ==
+           LJ_GC2_TABLE_STORE_GUARD_OK);
+    assert(lj_gc2_table_store_revalidate(f.L, &committed) ==
+           LJ_GC2_TABLE_STORE_GUARD_OK);
+    close_ctx.g = f.g;
+    close_ctx.t = f.parent;
+    close_ctx.pending = 0;
+    close_ctx.state = 0;
+    lj_gc2_test_table_rescan_pause(LJ_GC2_TABLE_RESCAN_TEST_INSTALLING);
+    assert(pthread_create(&thread, NULL, close_gate_observer, &close_ctx) == 0);
+    assert(lj_gc2_table_store_finish(f.L, &committed, 1) ==
+           LJ_GC2_TABLE_STORE_GUARD_OK);
+    assert(pthread_join(thread, NULL) == 0);
+    assert(close_ctx.state == LJ_TAB_RESCAN_INSTALLING);
+    assert(close_ctx.pending == pending_before + 1u);
+    assert(gc2_table_rescan_pending_acq(f.g) == pending_before);
+    assert(lj_tab_gc2_rescan_state_acq(f.parent) == LJ_TAB_RESCAN_NONE);
+    assert(!lj_gc2_test_ssb_empty(f.g));
+    gc2_sweep_table_close_gate_store_sc(f.g, 0);
+    assert(gc2_cycle_leader_cas(f.g, &gate, 0));
+  }
+
+  /* A publisher that begins after close-flag publication takes the direct
+  ** uncounted SSB path. */
+  {
+    uint32_t expect = 0;
+    uint32_t gate = LJ_THREAD_GCSCAN;
+    pending_before = gc2_table_rescan_pending_acq(f.g);
+    assert(gc2_cycle_leader_cas(f.g, &expect, LJ_THREAD_GCSCAN));
+    gc2_sweep_table_close_gate_store_sc(f.g, 1);
+    assert(gc2_table_rescan_pending_acq(f.g) == pending_before);
+    assert(lj_gc2_table_store_begin(f.L, &committed, f.parent,
+                                     &f.key, &f.value) ==
+           LJ_GC2_TABLE_STORE_GUARD_OK);
+    assert(lj_gc2_table_store_admit(f.L, &committed) ==
+           LJ_GC2_TABLE_STORE_GUARD_OK);
+    assert(lj_gc2_table_store_revalidate(f.L, &committed) ==
+           LJ_GC2_TABLE_STORE_GUARD_OK);
+    assert(lj_gc2_table_store_finish(f.L, &committed, 1) ==
+           LJ_GC2_TABLE_STORE_GUARD_OK);
+    assert(gc2_table_rescan_pending_acq(f.g) == pending_before);
+    assert(lj_tab_gc2_rescan_state_acq(f.parent) == LJ_TAB_RESCAN_NONE);
+    assert(!lj_gc2_test_ssb_empty(f.g));
+    gc2_phase_rel(f.g, LJ_GC2_IDLE);
+    assert(lj_gc2_activation_try_abandon_sweep_open(
+             &f.g->gc2.activation, &sweep, &idle) ==
+           LJ_GC2_TRANSITION_OK);
+    gc2_sweep_table_close_gate_store_sc(f.g, 0);
+    assert(gc2_cycle_leader_cas(f.g, &gate, 0));
+  }
+
   fixture_close(&f);
 }
 
@@ -1011,7 +1092,14 @@ static void test_suspended_coroutine_public_api_stores(void)
   assert_suspended_state(&f, co);
 
   assert(lj_tab_gc2_rescan_state_acq(target) == LJ_TAB_RESCAN_COUNTED);
-  assert(lj_gc2_test_table_rescan_clear(f.g, target) == 1);
+  /* An IDLE store carries a counted reservation across the next MARK startup
+  ** until the table is scanned. */
+  lua_gc(f.L, LUA_GCCOLLECT, 0);
+  assert(lj_tab_gc2_rescan_state_acq(target) == LJ_TAB_RESCAN_NONE);
+  lua_pushliteral(co, "gc2-hash-value");
+  lua_rawget(co, 1);
+  assert(lua_istable(co, -1));
+  lua_pop(co, 1);
   lua_settop(co, 0);
   assert_suspended_state(&f, co);
   fixture_close(&f);
@@ -1059,7 +1147,12 @@ static void test_second_universe_public_api_stores(void)
   assert(lj_gc2_rootdesc_snapshot(&tg2->root_desc, NULL) ==
          LJ_GC2_ROOTDESC_SNAPSHOT_IDLE);
   assert(lj_tab_gc2_rescan_state_acq(target) == LJ_TAB_RESCAN_COUNTED);
-  assert(lj_gc2_test_table_rescan_clear(g2, target) == 1);
+  lua_gc(L2, LUA_GCCOLLECT, 0);
+  assert(lj_tab_gc2_rescan_state_acq(target) == LJ_TAB_RESCAN_NONE);
+  lua_pushliteral(L2, "second-universe-value");
+  lua_rawget(L2, 1);
+  assert(lua_istable(L2, -1));
+  lua_pop(L2, 1);
   lua_close(L2);
   assert(lj_thr_get_tg() == f.tg);
   fixture_close(&f);

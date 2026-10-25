@@ -242,6 +242,9 @@ build.
   scalar certificates and native arithmetic/PHI/lifecycle evidence.
 - [`arm64-vm-epoch-audit-2026-10-22.md`](arm64-vm-epoch-audit-2026-10-22.md):
   rejected performance experiment and unresolved stress observation.
+- [`gc2-idle-table-rescan-close-2026-10-25.md`](gc2-idle-table-rescan-close-2026-10-25.md):
+  intermittent SWEEP close assertion from IDLE table-store reservations and
+  the targeted next-cycle SSB handoff repair.
 - [`archive/aarch64-checkpoints/`](archive/aarch64-checkpoints/): 76 historical
   ARM64 investigation and checkpoint notes.
 - [`archive/pre-aarch64/`](archive/pre-aarch64/): 847 earlier LuaJITMT notes.
