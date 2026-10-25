@@ -3,8 +3,8 @@
 **
 ** This intentionally certifies one exact loop: a 0.5 accumulator, an
 ** invariant 0.5 increment, and ordered comparisons against one dynamic NUM
-** limit. Numeric conversions, other constants and operations, spills, side
-** traces, calls and heap effects remain outside this tranche.
+** limit. Root-only lifecycle tests keep side recording cold; a separate test
+** covers a supported integer-limit adaptation.
 */
 
 #include <assert.h>
@@ -548,6 +548,44 @@ static void expect_native_exit(ExitNo first, ExitNo last)
   assert(lj_trace_test_last_exitno() == last);
 }
 
+static GCtrace *expect_pure_root_side(jit_State *J, TraceNo rootno,
+	ExitNo *exitnop)
+{
+  GCtrace *root = traceref_safe(J, rootno);
+  TraceNo childno;
+  GCtrace *child;
+  IRIns base;
+  assert(trace_runnable_acq(root, rootno));
+  assert(trace_root_acq(root) == 0);
+  assert(trace_arm64_admission_acq(root) & TRACE_ARM64_INT_LOOP_ADMITTED);
+  assert(trace_nchild_acq(root) == 1);
+  childno = trace_nextside_acq(root);
+  assert(childno != 0);
+  child = traceref_safe(J, childno);
+  assert(trace_runnable_acq(child, childno));
+  assert(trace_startpc_acq(child) >= proto_bc(gco2pt(
+	 trace_startptgco_acq(root))));
+  assert(trace_startpc_acq(child) < trace_startpc_acq(root));
+  assert(trace_root_acq(child) == rootno);
+  assert(trace_arm64_admission_acq(child) == TRACE_ARM64_INT_SIDE_ADMITTED);
+  base = trace_ir_acq(child)[REF_BASE];
+  assert(base.o == IR_BASE && (TraceNo)base.op1 == rootno);
+  *exitnop = (ExitNo)base.op2;
+  assert(*exitnop < trace_nsnap_acq(root));
+  assert(trace_exittarget_arm64_acq(root, *exitnop) ==
+	 trace_mcode_acq(child));
+  if (trace_linktype_acq(child) == LJ_TRLINK_LOOP) {
+    assert(trace_link_acq(child) == childno);
+    assert(trace_mcloop_acq(child) > 0 &&
+	   trace_mcloop_acq(child) < trace_szmcode_acq(child));
+  } else {
+    assert(trace_linktype_acq(child) == LJ_TRLINK_ROOT);
+    assert(trace_link_acq(child) == rootno);
+    assert(trace_mcloop_acq(child) == 0);
+  }
+  return child;
+}
+
 static void expect_profile_exit_and_reentry(void)
 {
   assert(lj_trace_test_root_entry_publishes() == 2);
@@ -755,7 +793,7 @@ static void test_positive_and_guard_exits(void)
   idle_vmstate = lj_tg_vmstate_load_acq(tg);
   run_lua(L,
     "jit.flush(); jit.on(); "
-    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
+    "jit.opt.start('hotloop=1','hotexit=1000','maxtrace=2'); "
     "function __arm64_pure_numeric_loop(limit) local x=0.5 "
       "while x<limit do x=x+0.5 end return x end");
 
@@ -776,7 +814,7 @@ static void test_positive_and_guard_exits(void)
   expect_only_pure_root(L, pt);
 
   /* An integer limit takes the NUM SLOAD type exit on every attempted native
-  ** entry. hotexit=1 forces side-recording attempts, which must remain closed. */
+  ** entry. Keep this root-only lifecycle cold; adaptation is tested below. */
   lj_trace_test_root_entry_reset();
   lj_trace_test_reset_exit_stats();
   for (i = 0; i < 4; i++)
@@ -799,6 +837,56 @@ static void test_positive_and_guard_exits(void)
   lua_close(L);
 }
 
+static void test_pure_root_integer_limit_side(void)
+{
+  lua_State *L = luaL_newstate();
+  jit_State *J;
+  TGState *tg;
+  GCproto *pt;
+  GCtrace *root, *child;
+  TraceNo rootno;
+  ExitNo side_exit;
+  int32_t idle_vmstate;
+  unsigned i;
+  assert(L != NULL);
+  luaL_openlibs(L);
+  J = L2J(L);
+  tg = L2TG(L);
+  idle_vmstate = lj_tg_vmstate_load_acq(tg);
+  run_lua(L,
+    "jit.flush(); jit.on(); "
+    "jit.opt.start('hotloop=1','hotexit=2','maxtrace=64'); "
+    "function __arm64_pure_adapt_loop(limit) local x=0.5 "
+      "while x<limit do x=x+0.5 end return x end");
+  assert(call_limit(L, "__arm64_pure_adapt_loop", 20.25, 0) == 20.5);
+  pt = global_proto(L, "__arm64_pure_adapt_loop");
+  rootno = proto_trace_acq(pt);
+  assert(rootno != 0);
+  root = traceref_safe(J, rootno);
+  assert(trace_runnable_acq(root, rootno) && trace_nchild_acq(root) == 0);
+  for (i = 0; i < 8; i++)
+    assert(call_limit(L, "__arm64_pure_adapt_loop", 20, 1) == 20.0);
+  child = expect_pure_root_side(J, rootno, &side_exit);
+  lj_trace_test_reset_exit_stats();
+  lj_trace_test_root_entry_reset();
+  for (i = 0; i < 100; i++)
+    assert(call_limit(L, "__arm64_pure_adapt_loop", 20, 1) == 20.0);
+  assert(lj_trace_test_root_entry_publishes() == 100);
+  assert(lj_trace_test_root_entry_successes() == 100);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+  assert(lj_trace_test_exit_calls() == 100);
+  assert(lj_trace_test_first_exit_parent() == trace_traceno_acq(child));
+  assert(lj_trace_test_last_exit_parent() == trace_traceno_acq(child));
+  assert(lj_trace_test_first_exitno() == side_exit);
+  assert(lj_trace_test_last_exitno() == side_exit);
+  assert(trace_runnable_acq(root, rootno) &&
+	 trace_runnable_acq(child, trace_traceno_acq(child)));
+  assert(lj_tg_load_jit_base(tg) == NULL);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(lj_tg_vmstate_load_acq(tg) == idle_vmstate);
+  lua_close(L);
+}
+
 static void test_quarter_knum_admitted(void)
 {
   lua_State *L = luaL_newstate();
@@ -806,7 +894,7 @@ static void test_quarter_knum_admitted(void)
   luaL_openlibs(L);
   run_lua(L,
     "jit.flush(); jit.on(); "
-    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
+    "jit.opt.start('hotloop=1','hotexit=1000','maxtrace=2'); "
     "function __arm64_pure_numeric_negative(limit) local x=0.25 "
       "while x<limit do x=x+0.25 end return x end");
   assert(call_limit(L, "__arm64_pure_numeric_negative", 20.25, 0) == 20.25);
@@ -824,7 +912,7 @@ static void test_dynamic_step_separate_profile(void)
   luaL_openlibs(L);
   run_lua(L,
     "jit.flush(); jit.on(); "
-    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
+    "jit.opt.start('hotloop=1','hotexit=1000','maxtrace=2'); "
     "function __arm64_pure_numeric_negative(limit,step) local x=0.5 "
       "while x<limit do x=x+step end return x end");
   assert(call_two_num(L, "__arm64_pure_numeric_negative",
@@ -854,7 +942,7 @@ static void test_conversion_admitted(void)
   luaL_openlibs(L);
   run_lua(L,
     "jit.flush(); jit.on(); "
-    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
+    "jit.opt.start('hotloop=1','hotexit=1000','maxtrace=2'); "
     "function __arm64_pure_numeric_negative(n,x) local i=0 "
       "while i<n do i=i+1; x=x+i end return x end");
   assert(call_conversion(L, 20, 1.25) == 211.25);
@@ -869,7 +957,7 @@ static void test_num_mul_admitted(void)
   luaL_openlibs(L);
   run_lua(L,
     "jit.flush(); jit.on(); "
-    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
+    "jit.opt.start('hotloop=1','hotexit=1000','maxtrace=2'); "
     "function __arm64_pure_numeric_negative(limit,step) local x=0.5 "
       "while x<limit do x=x*step end return x end");
   assert(call_two_num(L, "__arm64_pure_numeric_negative",
@@ -885,7 +973,7 @@ static void test_adjacent_compare_admitted(void)
   luaL_openlibs(L);
   run_lua(L,
     "jit.flush(); jit.on(); "
-    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
+    "jit.opt.start('hotloop=1','hotexit=1000','maxtrace=2'); "
     "function __arm64_pure_numeric_negative(limit) local x=0.5 "
       "while x<=limit do x=x+0.5 end return x end");
   assert(call_limit(L, "__arm64_pure_numeric_negative", 20.25, 0) == 20.5);
@@ -900,6 +988,7 @@ int main(int argc, char **argv)
     assert(strcmp(argv[1], "direct") == 0 ||
 	   strcmp(argv[1], "randomized") == 0);
   test_positive_and_guard_exits();
+  test_pure_root_integer_limit_side();
   test_quarter_knum_admitted();
   test_dynamic_step_separate_profile();
   test_conversion_admitted();
