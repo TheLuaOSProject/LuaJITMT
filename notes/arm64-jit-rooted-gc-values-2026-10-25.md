@@ -125,9 +125,13 @@ and arm64e/BTI, including native lifecycle and registered M6 coverage. Log:
 `/tmp/ljmt-rooted-read-admission-refresh.log`. The stopped umbrella run is
 `/tmp/ljmt-rooted-experimental-2cbb2352.log`.
 
-Full regression validation remains pending after this fixture correction. These focused
-results do not establish overall port completion or unrestricted FFI/side-trace
-support.
+The complete sequential regression now passes at frozen `65068cdf`, including
+the experimental and bootstrap gates and both 509-case stock corpora on
+ARM64 and signed x86-64. The shared rooted-store and raw nil-deletion fixtures
+also pass on x86-64. See
+[`rooted-values-validation-2026-10-25.md`](rooted-values-validation-2026-10-25.md)
+for exact scope and logs. This does not establish overall port completion or
+unrestricted FFI/side-trace support.
 
 ## Remaining boundary
 

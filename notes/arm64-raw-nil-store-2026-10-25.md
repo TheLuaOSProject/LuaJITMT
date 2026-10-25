@@ -36,3 +36,11 @@ script, with zero recorded CPU time. A termination request did not reap it;
 the build driver was stopped and the native ARM64 development profile restored.
 Thus this run supplies no x86_64 execution evidence. The source correction is
 shared because the erased-write branch is shared.
+
+A subsequent signed x86-64 build at frozen `65068cdf` starts and passes the
+same fixture: zero published traces, five recording aborts and correct
+deletion after the key is inserted. Both 509-case stock corpora and the shared
+rooted-store fixture pass in that profile too. The successful build uses
+`LDFLAGS=-Wl,-adhoc_codesign`; this is execution evidence for that build, not
+proof that the earlier OS-wait process recovered. Log:
+`/tmp/ljmt-rooted-x64-regression-65068cdf.log`.
