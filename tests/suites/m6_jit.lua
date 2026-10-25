@@ -12,6 +12,34 @@ local run_lua_test_case = runtime.run_lua_test_case
 local gc2_test_cflags = build.gc2_test_helper_flag
 local shell_quote = utils.shell_quote
 
+local function with_arm64_jit_profile(t, fn)
+  local flags = table.concat({
+    "-DLUAJIT_MT_ARM64_BOOTSTRAP",
+    "-DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL",
+    "-DLUA_USE_ASSERT",
+    "-DLJ_TRACE_TEST_HELPERS",
+    "-DLJ_GC2_TEST_HELPERS",
+    "-DLJ_TAB_TEST_HELPERS"
+  }, " ")
+  local restore = table.concat({
+    "-DLUAJIT_MT_ARM64_BOOTSTRAP",
+    "-DLUAJIT_DISABLE_JIT",
+    "-DLUA_USE_ASSERT"
+  }, " ")
+  local ok, err = xpcall(function()
+    clean_build(t, { quiet = true, xcflags = flags })
+    fn()
+  end, debug.traceback)
+  local restore_ok, restore_err = xpcall(function()
+    t:build({ clean = true, quiet = true, xcflags = restore })
+  end, debug.traceback)
+  if not ok then
+    if not restore_ok then err = err .. "\n(ARM64 bootstrap restore failed)\n" .. restore_err end
+    error(err, 0)
+  end
+  if not restore_ok then error(restore_err, 0) end
+end
+
 local m6_cases = {
   "m6_dispatch_redispatch",
   "m6_jit_hotcount_generation",
@@ -1955,12 +1983,15 @@ assert(trace_count(200) == 0,
     name = "m6_jit_rooted_table_len",
     description = "active-MT table length uses a bounded rooted helper",
     run = function(t)
-      build_default(t)
+      local function run_case()
       luajit_code(t, [=[
 local bit = require("bit")
 local util = require("jit.util")
 local vmdef = require("jit.vmdef")
 local rawlen_fn = rawlen
+local rooted_helper = jit.arch == "arm64" and
+                      "lj_tab_len_rooted_try" or
+                      "lj_tab_len_forjit_try"
 
 local function table_len_ir(limit)
   local alen, rooted, in1 = 0, 0, 0
@@ -1975,7 +2006,7 @@ local function table_len_ir(limit)
           if name == "ALEN  " then
             alen = alen + 1
           elseif name == "CALLS " and
-                 vmdef.ircall[op2] == "lj_tab_len_forjit_try" then
+                 vmdef.ircall[op2] == rooted_helper then
             rooted = rooted + 1
           elseif name == "TMPREF" and bit.band(op2, 1) ~= 0 then
             in1 = in1 + 1
@@ -1990,13 +2021,15 @@ jit.off(table_len_ir, true)
 
 local function assert_stock_len_ir(label)
   local alen, rooted = table_len_ir(256)
-  assert(alen > 0, label .. " omitted stock IR_ALEN")
+  if jit.arch ~= "arm64" then
+    assert(alen > 0, label .. " omitted stock IR_ALEN")
+  end
   assert(rooted == 0, label .. " unexpectedly used rooted length helper")
 end
 
 local function assert_rooted_len_ir(label)
   local alen, rooted, in1 = table_len_ir(256)
-  assert(rooted > 0, label .. " omitted lj_tab_len_forjit_try")
+  assert(rooted > 0, label .. " omitted " .. rooted_helper)
   assert(in1 >= rooted, label .. " omitted TMPREF IN1 table root")
   assert(alen == 0, label .. " retained unsafe IR_ALEN")
 end
@@ -2022,25 +2055,57 @@ if rawlen_fn then
 end
 
 local threading = require("threading")
+local shared = { 1, 2, 3 }
 assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
-if rawlen_fn then
+if rawlen_fn and jit.arch ~= "arm64" then
   local shared_raw = { 1, 2, 3, 4 }
   local raw_sum = 0
   for _ = 1, 80 do raw_sum = raw_sum + rawlen_fn(shared_raw) end
   assert(raw_sum == 320)
   assert_rooted_len_ir("active-MT rawlen(table)")
 else
-  local shared = { 1, 2, 3 }
   sum = 0
-  for _ = 1, 80 do sum = sum + #shared end
+  if jit.arch == "arm64" then
+    local i = 1
+    while i <= 80 do
+      sum = sum + #shared
+      i = i + 1
+    end
+  else
+    for _ = 1, 80 do sum = sum + #shared end
+  end
   assert(sum == 240)
   assert_rooted_len_ir("active-MT #table")
 end
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local exits = 0
+local function witness() exits = exits + 1 end
+jit.off(witness, true)
+jit.attach(witness, "texit")
+local i = 1
+sum = 0
+while i <= 80 do
+  sum = sum + #shared
+  i = i + 1
+end
+assert(sum == 240)
+assert_rooted_len_ir("active-MT #table BC_LOOP")
+assert(exits > 0, "active-MT rooted-length BC_LOOP never entered native code")
 ]=], { timeout = "20s" })
       print("M6 JIT rooted table-length lowering passed")
+      end
+      if jit.os == "OSX" and jit.arch == "arm64" and
+         t.target_arch == "arm64" then
+        with_arm64_jit_profile(t, run_case)
+      else
+        build_default(t)
+        run_case()
+      end
     end
   })
 

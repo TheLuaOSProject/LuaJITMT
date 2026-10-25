@@ -39,6 +39,18 @@ separately requires its call in `trace_stop()` to precede both debugger/perf
 hooks. The corrected complete focused contract passed both ARM64 and arm64e
 branches and restored the ordinary ARM64 build. No runtime change was needed.
 
+The remaining diagnostic continuation then passed, including first-side
+production, GDB-JIT preparation, VM iteration, callback-result lifetime,
+numeric/FORL profiles, FFI CALLXS lifecycle, root entry, live flush/reuse, and
+source/import loop cells. These segmented diagnostics identify no further
+baseline failure; they do not replace the required single complete gate.
+
+The rooted table-length capability is now integrated. Its dedicated native
+ARM64 and arm64e/BTI contract and both registered M5/M6 cases pass against the
+combined source. See
+[`arm64-jit-rooted-tablen-capability.md`](arm64-jit-rooted-tablen-capability.md)
+for the bounded admission and lifecycle evidence.
+
 Temporary full bootstrap log:
 `/tmp/luajitmt-20261025-bootstrap-final.log`.
 Partial experimental log:

@@ -93,9 +93,17 @@ available.
   comparisons, PHI copies/shuffles, snapshots and INT/NUM spill frames. NUM
   spans have explicit width, alignment, ownership and snapshot checks, with
   native mixed-pressure and fused-arithmetic regressions. The old whole-trace
-  NUM arrays are removed. Heap effects remain closed; see
+  NUM arrays are removed. Heap operations outside the rooted length exception
+  below remain closed; see
   [`arm64-jit-scalar-capability.md`](arm64-jit-scalar-capability.md) and
   [`arm64-jit-numeric-spills.md`](arm64-jit-numeric-spills.md).
+- Rooted table length in scalar `BC_LOOP` roots: one guarded table source,
+  bounded `lj_tab_len_rooted_try` calls, and an immediate retry guard after
+  each call. Both admission passes reject malformed references and helper
+  graphs; table and root-address values remain in registers. Native ARM64 and
+  arm64e/BTI checks cover generation/root retries, STOPREQ unwind/resume, and
+  collection with roots live. See
+  [`arm64-jit-rooted-tablen-capability.md`](arm64-jit-rooted-tablen-capability.md).
 - Integer `FORL` retains separate constant-step and spill-free variable-stop/
   variable-step certificates, with independent semantic, snapshot and
   post-register-allocation checks.

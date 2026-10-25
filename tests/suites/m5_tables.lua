@@ -5,6 +5,31 @@ local resize_desc_flags =
 
 return function(add)
   add({
+    name = "m5_tab_rooted_len_try",
+    description = "bounded authoritative-root table length reads",
+    run = function(t)
+      if jit.os == "OSX" and t.target_arch == "arm64" then
+        t:run({ "sh", t:path("tools", "ci", "arm64_jit_rooted_tablen_contract.sh") }, {
+          timeout = "180s",
+          env = {
+            LJ_TEST_ROOT = t.root,
+            LJ_TEST_RUN_LOCK_HELD = "1",
+            LJ_ARM64_ROOTED_TABLEN_RESTORE_XCFLAGS =
+              "-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_DISABLE_JIT -DLUA_USE_ASSERT"
+          }
+        })
+      else
+        build.build_and_run_c(t, t:tmp("lj_t-tab-rooted-len-try"),
+          "t-tab-rooted-len-try.c", build.gc2_test_helper_opts({
+            timeout = "20s",
+            xcflags = build.gc2_test_helper_flag .. " -DLJ_TAB_TEST_HELPERS",
+            cflags = build.gc2_test_helper_flag .. " -DLJ_TAB_TEST_HELPERS"
+          }))
+      end
+      print("M5 bounded rooted table length tests passed")
+    end
+  })
+  add({
     name = "m5_tab_scalar_next",
     description = "scalar array iteration, source authority and lifetime with a paused reclaimer",
     run = function(t)
@@ -112,18 +137,6 @@ return function(add)
         cflags = build.gc2_test_helper_flag .. " -DLJ_TAB_TEST_HELPERS"
       }),
       message = "M5 bounded rooted table point-read tests passed"
-    },
-    {
-      name = "m5_tab_rooted_len_try",
-      description = "bounded authoritative-root table length reads",
-      output = "lj_t-tab-rooted-len-try",
-      cfile = "t-tab-rooted-len-try.c",
-      opts = build.gc2_test_helper_opts({
-        timeout = "20s",
-        xcflags = build.gc2_test_helper_flag .. " -DLJ_TAB_TEST_HELPERS",
-        cflags = build.gc2_test_helper_flag .. " -DLJ_TAB_TEST_HELPERS"
-      }),
-      message = "M5 bounded rooted table length tests passed"
     },
     {
       name = "m5_meta_rooted_chain",

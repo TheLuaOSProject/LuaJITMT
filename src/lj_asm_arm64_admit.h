@@ -43,7 +43,9 @@ int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target, MCode *insp)
 ** literal-true fixed-function root.
 ** Scalar LOOP admission uses independent semantic and allocator certificates
 ** for checked INT arithmetic, NUM arithmetic/conversions, comparisons and
-** same-type PHIs. Heap operations and helper calls remain closed.
+** same-type PHIs. The sole heap-helper exception is the exact rooted table
+** length CALLS -> immediate retry guard profile below; other heap operations
+** and helper calls remain closed.
 */
 
 static int arm64_ir_reject(LJArm64IRReject *reject,
@@ -3320,6 +3322,10 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
   ir = &T->ir[value];
   if (irt_type(ir->t) != type)
     return 0;
+  if (ir->o == IR_CALLS)
+    return type == IRT_INT && ir->op2 == IRCALL_lj_tab_len_rooted_try;
+  if (type == IRT_TAB)
+    return ir->o == IR_SLOAD && ir->t.irt == (IRT_TAB|IRT_GUARD);
   switch ((IROp)ir->o) {
   case IR_SLOAD:
   case IR_ADDOV:
@@ -3336,10 +3342,29 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
   }
 }
 
+/* Recorder loop unrolling can duplicate a length call. Keep the exact helper
+** profile bounded so the independent guard-to-call proofs stay linear in the
+** trace size rather than permitting adversarial quadratic scans. */
+#define LJ_ARM64_TABLEN_MAX_CALLS 8u
+
+/* A sentinel comparison must name a real member of the trace's integer
+** constant pool, not merely any sub-REF_BIAS value. */
+static int arm64_tablen_retry_kint(const IRIns *ir, IRRef nk, IRRef ref)
+{
+  IRIns k;
+  if (!irref_isk(ref) || ref < nk || ref >= REF_TRUE)
+    return 0;
+  k = ir_load_acq(&ir[ref]);
+  return k.o == IR_KINT && k.t.irt == IRT_INT &&
+         k.i == LJ_TAB_LEN_RETRY;
+}
+
 static int arm64_scalar_ir_admit(const jit_State *J, const GCtrace *T,
                                  LJArm64IRReject *reject)
 {
   IRRef ref = REF_BASE, loop = 0, poll = 0, firstphi = 0;
+  IRRef tablen_table = 0, tablen_root = 0;
+  unsigned tablen_calls = 0, tablen_guard = 0;
   IRRef previous_snap = 0, poll_snap = 0;
   MSize expected_ofs = 0, maxslots;
   uintptr_t proto_lo, proto_hi;
@@ -3397,10 +3422,24 @@ static int arm64_scalar_ir_admit(const jit_State *J, const GCtrace *T,
       goto bad_operand;
     switch ((IROp)ir->o) {
     case IR_SLOAD:
+      if (type == IRT_TAB) {
+        if (tablen_table || flags != IRT_GUARD ||
+            ir->op2 != IRSLOAD_TYPECHECK || ir->op1 < 1 + LJ_FR2 ||
+            ir->op1 >= maxslots)
+          goto bad_type;
+        tablen_table = ref;
+        break;
+      }
       if ((type != IRT_INT && type != IRT_NUM) || !(flags & IRT_GUARD) ||
           (flags & ~(IRT_GUARD | IRT_ISPHI)) || ir->op2 != IRSLOAD_TYPECHECK ||
           ir->op1 < 1 + LJ_FR2 || ir->op1 >= maxslots)
         goto bad_type;
+      break;
+    case IR_TMPREF:
+      if (!tablen_table || type != IRT_PGC || flags ||
+          ir->op1 != tablen_table || ir->op2 != IRTMPREF_IN1)
+        goto bad_operand;
+      if (!tablen_root) tablen_root = ref;
       break;
     case IR_ADDOV:
     case IR_SUBOV:
@@ -3426,6 +3465,28 @@ static int arm64_scalar_ir_admit(const jit_State *J, const GCtrace *T,
     case IR_NE:
       if ((type != IRT_INT && type != IRT_NUM) || flags != IRT_GUARD)
         goto bad_type;
+      /* Guard operands obey SSA order. Check this before inspecting either
+      ** reference so malformed forward/self/out-of-range refs stay bounded. */
+      if ((ir->op1 >= REF_FIRST && ir->op1 >= ref) ||
+          (ir->op2 >= REF_FIRST && ir->op2 >= ref))
+        goto bad_operand;
+      if (ir->o == IR_NE &&
+          ((ir->op1 >= REF_FIRST && T->ir[ir->op1].o == IR_CALLS) ||
+           (ir->op2 >= REF_FIRST && T->ir[ir->op2].o == IR_CALLS))) {
+        IRRef call = ir->op1 >= REF_FIRST && T->ir[ir->op1].o == IR_CALLS ? ir->op1 : ir->op2;
+        IRRef kref = ir->op1 == call ? ir->op2 : ir->op1;
+        if (T->ir[call].op2 != IRCALL_lj_tab_len_rooted_try)
+          goto bad_operand;
+        if (!arm64_tablen_retry_kint(T->ir, T->nk, kref) ||
+            ref != call + 1u)
+          goto bad_operand;
+        tablen_guard++;
+      } else if ((ir->op1 >= REF_FIRST &&
+                  T->ir[ir->op1].o == IR_CALLS) ||
+                 (ir->op2 >= REF_FIRST &&
+                  T->ir[ir->op2].o == IR_CALLS)) {
+        goto bad_operand;
+      }
       binary = 1;
       break;
     case IR_CONV:
@@ -3468,9 +3529,21 @@ static int arm64_scalar_ir_admit(const jit_State *J, const GCtrace *T,
     case IR_CALLN:
     case IR_CALLA:
     case IR_CALLL:
-    case IR_CALLS:
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL, ref, (IROp)ir->o,
                              ir->op2);
+    case IR_CALLS:
+      if (!tablen_root || type != IRT_INT || flags ||
+          ir->op1 < REF_FIRST || ir->op1 >= ref ||
+          T->ir[ir->op1].o != IR_TMPREF ||
+          T->ir[ir->op1].op1 != tablen_table ||
+          ir->op2 != IRCALL_lj_tab_len_rooted_try)
+        return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL, ref,
+                               IR_CALLS, ir->op2);
+      tablen_calls++;
+      if (tablen_calls > LJ_ARM64_TABLEN_MAX_CALLS)
+        return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL, ref,
+                               IR_CALLS, IRCALL_lj_tab_len_rooted_try);
+      break;
     case IR_CALLXS:
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL, ref, IR_CALLXS,
                              LJ_ARM64_IR_CALL_NONE);
@@ -3485,6 +3558,35 @@ static int arm64_scalar_ir_admit(const jit_State *J, const GCtrace *T,
   ref = loop;
   if (!loop || poll != loop + 1 || J->loopref != loop)
     goto bad_poll;
+  if ((tablen_calls != 0) != (tablen_root != 0) ||
+      (tablen_calls && (!tablen_table || tablen_guard != tablen_calls ||
+                        tablen_table >= tablen_root)) ||
+      (tablen_table != 0) != (tablen_calls != 0))
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
+                           tablen_calls ? tablen_table : 0,
+                           IR_CALLS, IRCALL_lj_tab_len_rooted_try);
+  if (tablen_calls) {
+    IRRef call;
+    for (call = REF_FIRST; call < T->nins; call++) {
+      IRRef guard;
+      unsigned nguard = 0;
+      if (T->ir[call].o != IR_CALLS) continue;
+      for (guard = REF_FIRST; guard < T->nins; guard++) {
+        IRIns *g = &T->ir[guard];
+        if (g->o == IR_NE && (g->op1 == call || g->op2 == call)) {
+          IRRef kref = g->op1 == call ? g->op2 : g->op1;
+          if (!arm64_tablen_retry_kint(T->ir, T->nk, kref) ||
+              guard != call + 1u)
+            return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
+                                   guard, IR_NE, IRCALL_lj_tab_len_rooted_try);
+          nguard++;
+        }
+      }
+      if (nguard != 1)
+        return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
+                               call, IR_CALLS, IRCALL_lj_tab_len_rooted_try);
+    }
+  }
   for (ref = REF_FIRST; ref < (firstphi ? firstphi : T->nins); ref++) {
     IRRef phi;
     int marked = 0;
@@ -3523,7 +3625,8 @@ static int arm64_scalar_ir_admit(const jit_State *J, const GCtrace *T,
         continue;
       if (slot < 1 + LJ_FR2 || (sn & 0x00ff0000u) ||
           (!arm64_scalar_ir_ref(T, value, ref, IRT_INT) &&
-           !arm64_scalar_ir_ref(T, value, ref, IRT_NUM)))
+           !arm64_scalar_ir_ref(T, value, ref, IRT_NUM) &&
+           !arm64_scalar_ir_ref(T, value, ref, IRT_TAB)))
         goto bad_snapshot;
     }
     memcpy(&pcbase, &T->snapmap[snap->mapofs + snap->nent], sizeof(pcbase));
@@ -3587,7 +3690,13 @@ static int arm64_scalar_postra_value(IRIns p)
   case IR_MUL:
   case IR_DIV:
   case IR_CONV:
-    return irt_type(p.t) == IRT_INT || irt_type(p.t) == IRT_NUM;
+    return irt_type(p.t) == IRT_INT || irt_type(p.t) == IRT_NUM ||
+           (p.o == IR_SLOAD && p.t.irt == (IRT_TAB|IRT_GUARD));
+  case IR_TMPREF:
+    return irt_type(p.t) == IRT_PGC;
+  case IR_CALLS:
+    return irt_type(p.t) == IRT_INT &&
+           p.op2 == IRCALL_lj_tab_len_rooted_try;
   default:
     return 0;
   }
@@ -3601,7 +3710,9 @@ static int arm64_scalar_postra_ref(const LJArm64PostRAView *v, IRRef ref,
   if (ref < REF_FIRST || ref >= before)
     return 0;
   p = ir_load_acq(&v->ir[ref]);
-  return arm64_scalar_postra_value(p) && irt_type(p.t) == type;
+  return arm64_scalar_postra_value(p) && irt_type(p.t) == type &&
+         (type != IRT_TAB ||
+          (p.o == IR_SLOAD && p.t.irt == (IRT_TAB|IRT_GUARD)));
 }
 static int arm64_scalar_postra_register(Reg r, IRType type)
 {
@@ -3664,6 +3775,8 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
                                      IRRef *ninsout)
 {
   IRRef ref, n, loop = 0, poll = 0, firstphi = 0;
+  IRRef tablen_table = 0, tablen_root = 0;
+  unsigned tablen_calls = 0, tablen_guard = 0;
   MSize cap = 0, highest = 0, s, expectedofs = 0;
   IRRef prevsnap = 0, poll_snap = 0;
   unsigned nphi = 0, loopsnap = 0;
@@ -3732,9 +3845,36 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
       return 0;
     switch ((IROp)p.o) {
     case IR_SLOAD:
+      if (type == IRT_TAB) {
+        if (tablen_table || p.t.irt != (IRT_TAB|IRT_GUARD) ||
+            p.op2 != IRSLOAD_TYPECHECK || p.op1 < 1 + LJ_FR2 ||
+            p.op1 >= v->root_topslot + 1 + LJ_FR2)
+          return 0;
+        tablen_table = ref;
+        break;
+      }
       if ((type != IRT_INT && type != IRT_NUM) || !(flags & IRT_GUARD) ||
           (flags & ~(IRT_GUARD | IRT_ISPHI)) || p.op2 != IRSLOAD_TYPECHECK ||
           p.op1 < 1 + LJ_FR2 || p.op1 >= v->root_topslot + 1 + LJ_FR2)
+        return 0;
+      break;
+    case IR_TMPREF:
+      if (!tablen_table || p.t.irt != IRT_PGC ||
+          p.op1 != tablen_table || p.op2 != IRTMPREF_IN1 ||
+          !ra_hasreg(p.r) || !arm64_scalar_postra_register(p.r, IRT_INT))
+        return 0;
+      if (!tablen_root) tablen_root = ref;
+      break;
+    case IR_CALLS:
+      if (!tablen_root || p.t.irt != IRT_INT ||
+          p.op1 < REF_FIRST || p.op1 >= ref ||
+          ir_load_acq(&v->ir[p.op1]).o != IR_TMPREF ||
+          ir_load_acq(&v->ir[p.op1]).op1 != tablen_table ||
+          p.op2 != IRCALL_lj_tab_len_rooted_try || !ra_hasreg(p.r) ||
+          !arm64_scalar_postra_register(p.r, IRT_INT))
+        return 0;
+      tablen_calls++;
+      if (tablen_calls > LJ_ARM64_TABLEN_MAX_CALLS)
         return 0;
       break;
     case IR_ADDOV:
@@ -3761,6 +3901,22 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
     case IR_NE:
       if ((type != IRT_INT && type != IRT_NUM) || flags != IRT_GUARD)
         return 0;
+      /* Do not dereference a candidate call until both operands are known to
+      ** be valid earlier SSA refs (or constants). */
+      if ((p.op1 >= REF_FIRST && p.op1 >= ref) ||
+          (p.op2 >= REF_FIRST && p.op2 >= ref))
+        return 0;
+      if ((p.op1 >= REF_FIRST && ir_load_acq(&v->ir[p.op1]).o == IR_CALLS) ||
+          (p.op2 >= REF_FIRST && ir_load_acq(&v->ir[p.op2]).o == IR_CALLS)) {
+        if (p.o != IR_NE) return 0;
+        IRRef call = p.op1 >= REF_FIRST && ir_load_acq(&v->ir[p.op1]).o == IR_CALLS ? p.op1 : p.op2;
+        IRRef kref = p.op1 == call ? p.op2 : p.op1;
+        int retry = arm64_tablen_retry_kint(v->ir, v->nk, kref);
+        if (ir_load_acq(&v->ir[call]).op2 != IRCALL_lj_tab_len_rooted_try ||
+            !retry)
+          return 0;
+        tablen_guard++;
+      }
       binary = 1;
       break;
     case IR_CONV:
@@ -3810,7 +3966,10 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
       int value = arm64_scalar_postra_value(p) || p.o == IR_PHI;
       if (ra_hasspill(p.s)) {
         MSize width = type == IRT_NUM ? 2 : 1, slot;
-        if (!value || p.s < SPS_FIRST || (width == 2 && (p.s & 1)) ||
+        /* The scalar spill model knows only 32-bit INT and 64-bit NUM.
+        ** TAB/PGC are pointer-width values; keep this profile register-only. */
+        if (!value || (type != IRT_INT && type != IRT_NUM) ||
+            p.s < SPS_FIRST || (width == 2 && (p.s & 1)) ||
             (MSize)p.s + width > cap)
           return 0;
         if ((MSize)p.s + width > highest)
@@ -3847,6 +4006,32 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
   }
   if (!loop || poll != loop + 1)
     return 0;
+  if ((tablen_calls != 0) != (tablen_root != 0) ||
+      (tablen_calls && (!tablen_table || tablen_guard != tablen_calls ||
+                        tablen_table >= tablen_root)) ||
+      (tablen_table != 0) != (tablen_calls != 0))
+    return 0;
+  if (tablen_calls) {
+    for (ref = REF_FIRST; ref < n; ref++) {
+      IRIns c = ir_load_acq(&v->ir[ref]);
+      IRRef guard;
+      unsigned nguard = 0;
+      if (c.o != IR_CALLS) continue;
+      for (guard = REF_FIRST; guard < n; guard++) {
+        IRIns g = ir_load_acq(&v->ir[guard]);
+        if (g.o == IR_NE && (g.op1 == ref || g.op2 == ref)) {
+          IRRef kref = g.op1 == ref ? g.op2 : g.op1;
+          int retry = arm64_tablen_retry_kint(v->ir, v->nk, kref);
+          if (c.op2 != IRCALL_lj_tab_len_rooted_try ||
+              !retry ||
+              guard != ref + 1u)
+            return 0;
+          nguard++;
+        }
+      }
+      if (nguard != 1) return 0;
+    }
+  }
   for (ref = REF_FIRST; ref < (firstphi ? firstphi : n); ref++) {
     IRRef phi;
     int operand = 0;
@@ -3910,7 +4095,8 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
         continue;
       if (slot < 1 + LJ_FR2 || (sn & 0x00ff0000u) ||
           (!arm64_scalar_postra_ref(v, r, at, IRT_INT) &&
-           !arm64_scalar_postra_ref(v, r, at, IRT_NUM)))
+           !arm64_scalar_postra_ref(v, r, at, IRT_NUM) &&
+           !arm64_scalar_postra_ref(v, r, at, IRT_TAB)))
         return 0;
       if (irref_isk(r))
         continue;
@@ -3926,7 +4112,8 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
       if (ra_hasspill(regsp_spill(rs))) {
         MSize slot = regsp_spill(rs);
         MSize width = irt_isnum(p.t) ? 2 : 1;
-        if (slot < SPS_FIRST || (width == 2 && (slot & 1)) ||
+        if (irt_type(p.t) == IRT_TAB || irt_type(p.t) == IRT_PGC ||
+            slot < SPS_FIRST || (width == 2 && (slot & 1)) ||
             slot + width > cap)
           return 0;
       } else if (!arm64_scalar_postra_register(regsp_reg(rs),
