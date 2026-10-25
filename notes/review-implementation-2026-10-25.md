@@ -639,3 +639,22 @@ contract now passes (`/tmp/ljmt-emitter-generic-werror.log`). This preflight is
 not a complete experimental pass. The publication-profile migration was also
 rerun with the private working directory and source SHA printed in the log:
 `/tmp/ljmt-first-side-publish-profile-explicit.log`, source `d96f128d`.
+
+## Resize and retirement contention measurements
+
+The progress fixture now forces an array generation change while a scalar
+reader holds its leases, checks output-preserving refusal, then successful
+retry. A separate attached reader measures successful and refused try calls
+during bounded resize churn. Output starts with a sentinel, and latency arrays
+are sorted before reporting independent success/refusal percentiles. Caller
+retry counts are separate from GC2 lease retries. The fixture reports exhausted
+16-attempt budgets rather than inventing a bounded eventual-success guarantee.
+
+Final explicit-directory runs passed on ARM64 and arm64e/BTI. The ARM64 sample
+completed 4,000 logical reads with 3,050 caller retries; arm64e completed 3,999
+and reported one exhausted budget, with 2,962 caller retries. Both forced
+generation-change cases refused once and then succeeded. These are
+instrumented helper samples with deferred retired arrays, not full collector
+tail latency or release-speed claims. Commands, profiles, raw percentiles and
+limitations are in
+[`lockless-progress-contracts-and-ci-profile-2026-10-25.md`](lockless-progress-contracts-and-ci-profile-2026-10-25.md).
