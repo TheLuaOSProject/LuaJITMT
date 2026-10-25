@@ -1,5 +1,23 @@
 # Post-refresh ARM64 validation (2026-10-25)
 
+Latest complete validation is frozen
+`d8f02a81081ac6f678279a2dd02e8a959f620ad2`: the full experimental gate, both
+509-case native ARM64 stock source/import corpora, and then the full bootstrap
+gate all passed sequentially. The bootstrap gate includes 387 stock cases.
+No default architecture branch was omitted. This validates the rooted numeric
+read from `0d9475d8`, the duplicate entry-scan removal from `61801fae`, and the
+nested M6 caller-profile restoration fix in `d8f02a81` together.
+
+Logs: `/tmp/luajitmt-20261025-reviewed-experimental.log`,
+`/tmp/luajitmt-20261025-reviewed-stock-source.log`,
+`/tmp/luajitmt-20261025-reviewed-stock-import.log`, and
+`/tmp/luajitmt-20261025-reviewed-bootstrap.log`.
+
+The implementation and architecture review, including measured entry cost and
+remaining coverage limits, is in
+[`implementation-review-2026-10-25.md`](implementation-review-2026-10-25.md).
+The earlier checkpoints below retain their original evidence and limits.
+
 The unmodified full bootstrap gate passed on frozen `608e5d7e`. The gate used
 `MACOSX_DEPLOYMENT_TARGET=13.0 JOBS=4` and the assertion-enabled ARM64
 interpreter profile. No architecture branch or runtime fixture was omitted.

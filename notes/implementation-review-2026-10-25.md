@@ -2,9 +2,10 @@
 
 Scope: LuaJITMT ARM64 branch at `a907dbb9`, with the rooted numeric-read change
 reviewed and integrated at `0d9475d8`. This is a source review and
-targeted execution study, not a proof of all runtime interleavings. The complete
-experimental gate and both stock 509-case corpora passed at `d8f6ab68`; the
-complete bootstrap gate passed at `a549d537`.
+targeted execution study, not a proof of all runtime interleavings. After
+integration, the full experimental gate, both ARM64 stock 509-case corpora,
+and the complete bootstrap gate passed sequentially on frozen `d8f02a81`.
+All default target branches ran; the bootstrap suite includes 387 stock cases.
 
 ## Recommended direction
 
@@ -139,10 +140,10 @@ the same large policy blocks into more files.
 
 ## Implementation sequence
 
-1. Finish the bounded no-wait numeric-read change with independent admission,
+1. Completed: bounded no-wait numeric reads with independent admission,
    native lifetime, refusal, type-exit, and both target variants checked.
-2. Remove the redundant entry scan as a separate measured change; retain all
-   lifetime and mutable-state revalidation.
+2. Completed: redundant entry scan removed as a separate measured change;
+   all lifetime and mutable-state revalidation retained.
 3. Add workload reporting for trace rejection and exit reasons, then prioritize
    common numeric transitions and scalar side traces.
 4. Generalize rooted helper contracts by key/result/effect class, followed by
