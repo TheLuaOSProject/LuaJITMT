@@ -446,3 +446,37 @@ to its runtime builds, including restoration. Its complete standalone run,
 with both `CC` and `SDKROOT` initially unset, now passes on ARM64/ARM64e:
 `/tmp/ljmt-review-native-loop-sdk.log`. No runtime pointer-authentication
 semantics were changed.
+
+The complete experimental gate then passed on frozen `12e1011b`, including
+the generic FUNCF/FORL contracts, numerical variants, rooted operations,
+native lifecycle and registered FFI/VM cases. Log:
+`/tmp/ljmt-review-experimental-12e1011b.log`. This checkpoint precedes the
+generic FFI and side implementations currently being reviewed in private
+copies; their combined validation is still required.
+
+## Actual generated C++ callback unwind
+
+The C++ fixture now installs a plain native observer through `dlsym`. Inside
+the bridge, before invoking the erroring Lua callback, it verifies an ACTIVE,
+synchronized generated native frame, the exact foreign function, its trace
+pin, TG VM state and JIT base. The callback error is triggered only after
+those checks; an interpreted first loop iteration cannot satisfy this proof.
+After `pcall`, the fixture verifies the C++ catch/rethrow and destructor
+counts, empty native frames and XSAVE roots, and zero trace pins. It then
+executes successfully after GC and a full trace flush, requiring native calls
+again. This closes the former gap where an existing trace and total call
+count could coexist with an entirely interpreted failing call.
+
+Three runs per target passed on ARM64 and ARM64e/BTI using frozen `12e1011b`
+plus the fixture and C++ header fix: 1,195 observed generated calls per run,
+one error from a verified generated call, and successful recovery. Logs:
+`/tmp/ljmt-cpp-observer-final.log` (ARM64; also records the initial ARM64e
+compile diagnostic) and `/tmp/ljmt-cpp-observer-arm64e-final.log` (all ARM64e
+runs passing). The header fix gives the loaded exit-slot address its existing
+`MCode *` type before the no-op pointer-authentication cast; this preserves
+bits and avoids dereferencing `void *` inside Apple's macro in C++.
+
+The private generic-FFI M7 run also passes with this fixture:
+`/tmp/ffi-m7-final-cpparith.log`. Its suite registration will be integrated
+with that implementation. These tests establish this generated unwind and
+recovery path; they do not establish every foreign exception/aggregate ABI.
