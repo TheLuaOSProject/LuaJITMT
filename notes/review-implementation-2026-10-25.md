@@ -593,3 +593,24 @@ attempt's stale exit number could make the test inspect a different fallback
 slot. With this corrected identity, default repeated ROOT-tail GC-claim,
 scoped-flush and full-flush cases pass on ARM64 and arm64e. A separate LOOP
 child lifecycle extension and the final combined experimental gate follow.
+
+## Combined bootstrap and explicit child retirement
+
+The complete bootstrap gate passed at `2e765c3e` with all default branches,
+including stock tests, GC2 hard assist, C API roots, errno/unwind landings,
+coroutines, threaded callbacks and arm64e callback lifecycle. It restored the
+requested assertion/bootstrap profile. Log:
+`/tmp/ljmt-review-bootstrap-combined-f849.log` (the filename identifies its
+production parent; `2e765c3e` added notes only).
+
+The extended first-side contract now executes four ROOT-tail children and one
+self-linked LOOP child and requires the expected topology explicitly. Each
+case verifies the actual selected edge, successful native entry and bounded
+child exits before GC-claim, scoped-flush and full-flush retirement. Default
+repetitions pass on ARM64 and arm64e with matching fixture/archive profiles.
+Log: `/tmp/ljmt-first-side-default.log`; integrated changes `0643f8d4` and
+`33b0a8a7`. No production retirement change was needed.
+
+The contemporaneous x86-64 stock, errno, atomic, progress and direct-C shared
+runtime checks are recorded in
+[`x64-rosetta-final-regression-47ba-2026-10-25.md`](x64-rosetta-final-regression-47ba-2026-10-25.md).
