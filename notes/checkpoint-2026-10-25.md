@@ -8,6 +8,20 @@ No default architecture branch was omitted. This validates the rooted numeric
 read from `0d9475d8`, the duplicate entry-scan removal from `61801fae`, and the
 nested M6 caller-profile restoration fix in `d8f02a81` together.
 
+The same frozen source passed both 509-case stock source/import corpora on
+x86-64/Rosetta, the registered errno regression, and matched-helper
+nested-universe and hotcount-generation fixtures. See
+[`x64-shared-runtime-regression-2026-10-25.md`](x64-shared-runtime-regression-2026-10-25.md)
+for the explicit target-selection and signing details.
+
+The development checkout was then clean-built for ARM64 with
+`-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_DISABLE_JIT -DLUA_USE_ASSERT` and
+`MACOSX_DEPLOYMENT_TARGET=13.0`. Its executable is Mach-O ARM64; a bounded
+four-worker arithmetic/channel/join smoke test and the 64-bit FFI pointer ABI
+check passed. This is the current checkout profile, separate from the complete
+frozen-source gates above. Logs are
+`/tmp/luajitmt-20261025-main-bootstrap-{build,smoke}.log`.
+
 Logs: `/tmp/luajitmt-20261025-reviewed-experimental.log`,
 `/tmp/luajitmt-20261025-reviewed-stock-source.log`,
 `/tmp/luajitmt-20261025-reviewed-stock-import.log`, and

@@ -6,6 +6,9 @@ targeted execution study, not a proof of all runtime interleavings. After
 integration, the full experimental gate, both ARM64 stock 509-case corpora,
 and the complete bootstrap gate passed sequentially on frozen `d8f02a81`.
 All default target branches ran; the bootstrap suite includes 387 stock cases.
+The same frozen code also passed both 509-case stock corpora on x86-64/Rosetta,
+the registered errno case, and the nested-universe/foreign-actor fixtures with
+matched assertion/helper profiles and signed executables.
 
 ## Recommended direction
 

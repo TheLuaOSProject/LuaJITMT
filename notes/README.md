@@ -27,7 +27,8 @@ and reports that are no longer authoritative are retained in
 - A nested-universe JIT initialization stall is fixed by resolving hotcount
   handshake ownership through the existing physical-actor-checked fallback.
   The focused GC2 fixture passes on ARM64 and x86-64, and both x86-64 stock
-  source/import corpora pass all 509 cases; see
+  source/import corpora pass all 509 cases on frozen `d8f02a81`; the shared
+  errno and foreign-actor hotcount regressions also pass. See
   [`x64-shared-runtime-regression-2026-10-25.md`](x64-shared-runtime-regression-2026-10-25.md).
 - Latest source-fidelity cleanup: `edbf57fa`.
 - Latest ARM64 VM acquire-load cleanup: `3f109fa2`.
@@ -50,7 +51,9 @@ and reports that are no longer authoritative are retained in
   by `25275a13`, with source/import native x64 regressions.
   See [`checkpoint-2026-10-22.md`](checkpoint-2026-10-22.md).
 - Build artifacts in the development checkout may belong to either profile;
-  select and rebuild the intended profile explicitly.
+  select and rebuild the intended profile explicitly. The 2026-10-25 review
+  ended with a clean assertion-enabled ARM64 bootstrap build (JIT disabled)
+  and a passing four-worker channel/join smoke test.
 
 This is a working Apple Silicon port with substantial native execution
 evidence. It is not yet a completed or general ARM64 LuaJIT backend. Native

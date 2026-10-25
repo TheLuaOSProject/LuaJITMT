@@ -1,5 +1,30 @@
 # x86-64/Rosetta shared-runtime regression check (2026-10-25)
 
+## Combined final-code validation
+
+Frozen `d8f02a81081ac6f678279a2dd02e8a959f620ad2` was validated again in
+the detached checkout `/private/tmp/lj-x64-d8f02a81`. This includes the rooted
+numeric-read and entry-scan changes as well as the shared runtime fixes below.
+Both stock corpora passed all 509 cases. The registered
+`m7_ffi_errno_preservation` case, `t-gc2-table-store-guard`, and
+`t-jit-hotcount-generation` also passed. The latter two retain the
+nested-universe ownership and foreign-actor rejection checks.
+
+The assertion build used `MACOSX_DEPLOYMENT_TARGET=13.0`,
+`TARGET_SYS=Darwin`, `TARGET_FLAGS='-arch x86_64 -mcx16'`, and
+`XCFLAGS='-DLUA_USE_ASSERT'`. The two internal C fixtures used a matching
+runtime and translation-unit profile with `LJ_GC2_TEST_HELPERS` and
+`LJ_TAB_TEST_HELPERS`. All x86-64 executables were ad-hoc signed before
+execution under Rosetta.
+
+For the registered errno case, inherit `TARGET_SYS` and `TARGET_FLAGS` in
+addition to `CC='clang -arch x86_64 -mcx16'` and `LJ_TEST_TARGET_ARCH=x64`.
+An initial invocation with only the latter two variables failed at the
+architecture guard during its internal rebuild. Passing the explicit target
+variables fixed the invocation; no source change or test waiver was needed.
+
+## Earlier investigation and correction
+
 Validation used an isolated `git archive` copy of main HEAD `b702e2dc` at `/tmp/luajitmt-x64-shared-runtime-1792922668`. The initial stock compatibility checks used an isolated archive of that HEAD. The subsequent fix was then tested in a fresh isolated archive with the changed safepoint source and regression fixture. No main-tree binaries were rebuilt. All x86-64 executables launched under Rosetta were ad-hoc signed first because unsigned x86-64 processes have hung on this host.
 
 ## Build profile
