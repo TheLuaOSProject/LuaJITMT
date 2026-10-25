@@ -51,6 +51,7 @@ the computed result or lowering the threshold. This records a separate
 dual-number trace adaptation/performance limitation, not a lightuserdata
 identity failure. Initial log: `/tmp/ljmt-lightud-read-dev.log`.
 
-This native certificate consumes existing tokens. The shared runtime's old
-movable segment map still needs its own concurrent publication repair; read
-coverage alone does not establish safe concurrent segment creation.
+This native certificate consumes existing tokens. Concurrent segment creation
+has a subsequent, separate
+[atomic publication repair](lightuserdata-segment-map-2026-10-25.md); native
+read coverage alone does not establish that shared interner property.

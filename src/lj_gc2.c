@@ -2223,8 +2223,8 @@ uint32_t lj_gc2_terminal_reclaim_tgs(global_State *g)
   if (!g || mt_shutdown_acq(g) == 0)
     return 0;
   /* close_state calls this only after lj_gc2_fini and every final allocator-
-  ** routed raw free (including main-TG/global tmpbufs, main stack and lightud
-  ** segments), but before GG/main-TG/registry/retire metadata is released. */
+  ** routed raw free (including main-TG/global tmpbufs and main stack), but
+  ** before GG/main-TG/registry/retire metadata is released. */
   lj_assertG(gc2_n_workers_acq(g) == 0 &&
 	     gc2_worker_active_acq(g) == 0,
 	     "terminal TG drain overlaps GC worker");
@@ -9744,9 +9744,6 @@ static void gc2_scan_global_roots(global_State *g)
   gc2_scan_threading_states(g);
   gc2_mark_strtab_mem(g);
   gc2_mark_tab_retired_mem(g);
-#if LJ_64
-  lj_gc2_markmem(g, mref(g->gc.lightudseg, uint32_t));
-#endif
   lj_gc2_markmem(g, lj_buf_bptr_acq(&g->tmpbuf));
 #if LJ_HASFFI
   {

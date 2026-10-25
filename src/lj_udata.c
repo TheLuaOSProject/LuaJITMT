@@ -22,6 +22,19 @@
 
 #if defined(LJ_UDATA_TEST_HELPERS)
 static uint32_t udata_test_fail_finreg;
+static LJLightudInternHook udata_test_lightud_intern_hook;
+
+void lj_udata_test_set_lightud_intern_hook(LJLightudInternHook hook)
+{
+  la_storefunc_rel(&udata_test_lightud_intern_hook, hook);
+}
+
+static LJ_AINLINE void udata_test_lightud_intern_at(lua_State *L,
+                                                  uint32_t up, uint32_t seg)
+{
+  LJLightudInternHook hook = la_loadfunc_acq(&udata_test_lightud_intern_hook);
+  if (hook) hook(L, up, seg);
+}
 
 void lj_udata_test_fail_finreg_after(uint32_t nth)
 {
@@ -40,6 +53,7 @@ static int udata_test_fail_finreg_take(void)
 }
 #else
 #define udata_test_fail_finreg_take() 0
+#define udata_test_lightud_intern_at(L, up, seg) ((void)0)
 #endif
 
 static GCudata *udata_new_at_anchor(lua_State *L, MSize sz, GCtab *env,
@@ -250,23 +264,26 @@ void *lj_lightud_intern(lua_State *L, void *p)
   global_State *g = G(L);
   uint64_t u = (uint64_t)p;
   uint32_t up = lightudup(u);
-  uint32_t *segmap = mref(g->gc.lightudseg, uint32_t);
-  MSize segnum = g->gc.lightudnum;
-  if (segmap) {
-    MSize seg;
-    for (seg = 0; seg <= segnum; seg++)
-      if (segmap[seg] == up)  /* Fast path. */
+  const MSize nseg = (1u << LJ_LIGHTUD_BITS_SEG)-1u;
+  MSize n, seg = (up >> (LJ_LIGHTUD_BITS_LO-32)) % nseg;
+  LJ_STATIC_ASSERT(LJ_LIGHTUD_BITS_LO > 32);
+  LJ_STATIC_ASSERT(__atomic_always_lock_free(sizeof(uint32_t), 0));
+  /* Every caller probes the same immutable sequence for a given prefix.
+  ** A lost CAS observes the winner before continuing, so equal prefixes
+  ** converge on one slot. The inline map never moves and slots never recycle. */
+  for (n = 0; n < nseg; n++) {
+    uint32_t seen = la_load32_acq(&g->gc.lightudseg[seg]);
+    if (seen == up)
+      return (void *)(((uint64_t)seg << LJ_LIGHTUD_BITS_LO) | lightudlo(u));
+    if (seen == UINT32_MAX) {
+      udata_test_lightud_intern_at(L, up, (uint32_t)seg);
+      if (la_cas32(&g->gc.lightudseg[seg], &seen, up,
+		   __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE) || seen == up)
 	return (void *)(((uint64_t)seg << LJ_LIGHTUD_BITS_LO) | lightudlo(u));
-    segnum++;
-    /* Leave last segment unused to avoid clash with ITERN key. */
-    if (segnum >= (1 << LJ_LIGHTUD_BITS_SEG)-1) lj_err_msg(L, LJ_ERR_BADLU);
+    }
+    if (++seg == nseg) seg = 0;
   }
-  if (!((segnum-1) & segnum) && segnum != 1) {
-    lj_mem_reallocvec(L, segmap, segnum, segnum ? 2*segnum : 2u, uint32_t);
-    setmref(g->gc.lightudseg, segmap);
-  }
-  g->gc.lightudnum = segnum;
-  segmap[segnum] = up;
-  return (void *)(((uint64_t)segnum << LJ_LIGHTUD_BITS_LO) | lightudlo(u));
+  lj_err_msg(L, LJ_ERR_BADLU);
+  return NULL;  /* Unreachable. */
 }
 #endif

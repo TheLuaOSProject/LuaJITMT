@@ -78,6 +78,11 @@ available.
   including active mutation, generation forwarding, retirement retry,
   separated arrays, hidden keys, and caller-owned result snapshots.
 - Callback-result lifetime through post-detach TG reclamation.
+- Lightuserdata segment creation uses a fixed map of atomic, immutable prefix
+  slots shared by the universe. A concurrent test reproduced corruption of
+  old tokens with the previous movable map; the replacement passes capacity,
+  concurrent decoding and forced same-slot CAS races in all four ARM64 profiles.
+  See [`lightuserdata-segment-map-2026-10-25.md`](lightuserdata-segment-map-2026-10-25.md).
 - GC2 hard-assist parity at interpreter allocation checks, including the fast
   function helper and the `TNEW`/`TDUP` bytecode paths. Shared pacing fields
   are acquired explicitly and the exact local-debt batch boundary is covered.

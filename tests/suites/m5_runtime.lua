@@ -358,4 +358,27 @@ return function(add)
       end)
     end
   })
+
+  add({
+    name = "m5_lightuserdata_segment_map",
+    description = "atomic lightuserdata prefix publication, identity and capacity",
+    run = function(t)
+      if not require("ffi").abi("64bit") or jit.os == "Windows" then
+        print("M5 lightuserdata segment-map fixture requires 64-bit POSIX")
+        return
+      end
+      local flags = build.assert_flag .. " -DLJ_UDATA_TEST_HELPERS"
+      build.with_default_build_restore(t, function()
+        t:build({ clean = true, quiet = true, xcflags = flags })
+        local fixture = t:tmp("lj_t-lightud-segment-map-race")
+        t:cc(fixture, { t:path("tests", "t-lightud-segment-map-race.c") }, {
+          cflags = flags, link_luajit = true,
+          libs = require("suite_utils").luajit_fixture_libs({})
+        })
+        t:run({ fixture, t:path("tests", "t-lightud-segment-map-race.lua") }, {
+          timeout = "60s", env = { LUA_PATH = runtime.lua_path(t) }
+        })
+      end)
+    end
+  })
 end

@@ -8,7 +8,7 @@ fi
 lj_ci_profile_init "$root" arm64_jit_rooted_gc_contract
 lj_ci_tmpdir lj-rooted-gc
 tmpdir=$LJ_CI_TMPDIR
-flags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLJ_TRACE_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_TG_ROOT_TEST_HELPERS'
+flags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLJ_TRACE_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_TG_ROOT_TEST_HELPERS -DLJ_UDATA_TEST_HELPERS'
 export LUA_PATH="$root/tests/lib/?.lua;$root/src/?.lua;$root/src/?/init.lua;;"
 run_profile() {
   arch=$1
@@ -24,12 +24,15 @@ run_profile() {
   deletion=$tmpdir/deletion-$label
   scalarkeys=$tmpdir/scalar-keys-$label
   lightud=$tmpdir/lightud-read-$label
+  segmentmap=$tmpdir/lightud-segment-map-$label
   lj_ci_compile_fixture "$helper" "$root/tests/t-tab-rooted-store.c"
   lj_ci_compile_fixture "$admission" "$root/tests/t-arm64-jit-rooted-gc-admission.c"
   lj_ci_compile_fixture "$lifecycle" "$root/tests/t-arm64-jit-rooted-gc-lifecycle.c"
   lj_ci_compile_fixture "$deletion" "$root/tests/t-jit-raw-nil-store.c"
   lj_ci_compile_fixture "$scalarkeys" "$root/tests/t-arm64-jit-rooted-scalar-keys-admission.c"
   lj_ci_compile_fixture "$lightud" "$root/tests/t-arm64-jit-rooted-lightud-read-admission.c"
+  lj_ci_compile_fixture "$segmentmap" "$root/tests/t-lightud-segment-map-race.c"
+  lj_ci_run_fixture 120 "$segmentmap" "$root/tests/t-lightud-segment-map-race.lua"
   lj_ci_run_fixture 60 "$helper"
   lj_ci_run_fixture 60 "$deletion"
   lj_ci_run_fixture 120 "$scalarkeys" "$root/tests/t-arm64-jit-rooted-scalar-keys.lua"

@@ -1847,11 +1847,7 @@ typedef struct GCState {
   uint8_t currentwhite;	/* Current white color. */
   uint8_t state;	/* GC state. */
   uint8_t auto_flags;  /* Automatic-GC control, independent of pacing thresholds. */
-#if LJ_64
-  uint8_t lightudnum;	/* Number of lightuserdata segments - 1. */
-#else
   uint8_t unused1;
-#endif
   MSize sweepstr;	/* Sweep position in string table. */
   GCRef root;		/* List of all collectable objects. */
   MRef sweep;		/* Sweep position in root list. */
@@ -1863,7 +1859,10 @@ typedef struct GCState {
   MSize stepmul;	/* Incremental GC step granularity. */
   MSize pause;		/* Pause between successive GC cycles. */
 #if LJ_64
-  MRef lightudseg;	/* Upper bits of lightuserdata segments. */
+  /* Stable, append-only segment prefixes. UINT32_MAX denotes an empty slot;
+  ** every real prefix has LJ_LIGHTUD_BITS_LO-32 zero low bits. Segment 255
+  ** remains reserved for internal TValue markers. */
+  uint32_t lightudseg[(1u << LJ_LIGHTUD_BITS_SEG)-1u];
 #endif
 } GCState;
 
@@ -6685,11 +6684,12 @@ static LJ_AINLINE void *lightudV(global_State *g, cTValue *o)
 {
   uint64_t u = o->u64;
   uint64_t seg = lightudseg(u);
-  uint32_t *segmap = mref(g->gc.lightudseg, uint32_t);
+  uint32_t up;
   lj_assertG(tvislightud(o), "lightuserdata expected");
   if (seg == (1 << LJ_LIGHTUD_BITS_SEG)-1) return NULL;
-  lj_assertG(seg <= g->gc.lightudnum, "bad lightuserdata segment %d", seg);
-  return (void *)(((uint64_t)segmap[seg] << 32) | lightudlo(u));
+  up = la_load32_acq(&g->gc.lightudseg[seg]);
+  lj_assertG(up != UINT32_MAX, "bad lightuserdata segment %d", seg);
+  return (void *)(((uint64_t)up << 32) | lightudlo(u));
 }
 #else
 #define lightudV(g, o)	check_exp(tvislightud(o), gcrefp((o)->gcr, void))

@@ -33,6 +33,8 @@ LJ_FUNC void lj_udata_specialize(lua_State *L, GCudata *ud, uint8_t udtype);
 LJ_FUNC void lj_udata_rescan(lua_State *L, GCudata *ud);
 LJ_FUNC void LJ_FASTCALL lj_udata_free(global_State *g, GCudata *ud);
 #if defined(LJ_UDATA_TEST_HELPERS)
+typedef void (*LJLightudInternHook)(lua_State *L, uint32_t up, uint32_t seg);
+LJ_FUNC void lj_udata_test_set_lightud_intern_hook(LJLightudInternHook hook);
 LJ_FUNC void lj_udata_test_fail_finreg_after(uint32_t nth);
 #endif
 #if LJ_64

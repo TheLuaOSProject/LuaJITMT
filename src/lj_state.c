@@ -1139,15 +1139,9 @@ static void close_state(lua_State *L)
   }
   lj_buf_free(g, &g->tmpbuf);
   lj_mem_freevec(g, tvref(L->stack), L->stacksize, TValue);
-#if LJ_64
-  if (mref(g->gc.lightudseg, uint32_t)) {
-    MSize segnum = g->gc.lightudnum ? (2 << lj_fls(g->gc.lightudnum)) : 2;
-    lj_mem_freevec(g, mref(g->gc.lightudseg, uint32_t), segnum, uint32_t);
-  }
-#endif
   /* This is the final owner-lookup boundary. GC objects, subsystem/GC2 raw
-  ** metadata, per-main/global buffers, the Lua stack and lightud segments are
-  ** all gone, while GG, the main allocator, TG registry and embedded worker-
+  ** metadata, per-main/global buffers and the Lua stack are all gone, while
+  ** GG, the main allocator, TG registry and embedded worker-
   ** retire list remain live. Dead allocators which could not fit a runtime
   ** hugetab transfer can now be destroyed in place without invalidating a
   ** subsequent lj_mem_free(). */
@@ -1271,6 +1265,11 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
     return NULL;
   }
   memset(GG, 0, sizeof(GG_State));
+#if LJ_64
+  /* The map is stable for the entire universe lifetime and is initialized
+  ** before any state, allocator or TG can publish a lightuserdata token. */
+  memset(GG->g.gc.lightudseg, 0xff, sizeof(GG->g.gc.lightudseg));
+#endif
   if (arena_internal) {
     GG->main_tg.alloc = boot_alloc;
     GG->main_tg.prng = prng;
