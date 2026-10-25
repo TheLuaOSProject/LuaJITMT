@@ -723,3 +723,28 @@ requires a LEN event for the exact traced function during the forced retry.
 It does not require a heap-effect child to publish. This observer version also
 passed the complete focused contract on both targets, log
 `/tmp/ljmt-rooted-len-record-observer.log`.
+
+A release-runtime negative control also confirmed the observer: the old VM
+exit source from `9b0c6e18` fails `retry_record_len_calls > 0`, while the fixed
+source passes. The runtime omitted `LUA_USE_ASSERT`; the separately compiled
+fixture retained assertions. Logs: `/tmp/ljmt-record-observer-old-run.log` and
+`/tmp/ljmt-record-observer-fixed-run.log`. The isolated base was `3621183f`
+with the observer fixture subsequently committed in `241a41e8`.
+
+## GDB metadata coverage follows the generalized side boundary
+
+The combined rerun at `241a41e8` passed rooted effects, native scalar side
+adaptation, and first-child publication/retirement, then exposed a stale GDB
+fixture: its "unsupported" example was a scalar conditional increment now
+accepted by the generalized validator. That example is retained as a positive
+which requires a real child, its exact parent/selected edge, distinct GDB
+metadata, and successful ready-before-registration accounting. The selected
+exit is derived from the child's IR_BASE rather than a fixed ordinal.
+
+The negative now takes a conditional table-store path outside scalar-child
+admission. It verifies the store executes in the interpreter and still
+requires zero child publication and zero metadata preparation/registration.
+No production gate was weakened. The complete GDB-JIT contract passed with
+helper and production profiles on ARM64/arm64e, including rollback and delayed
+retirement. Log: `/tmp/ljmt-gdbjit-generic-side-contract.log`. The stopped
+combined log is `/tmp/ljmt-review-experimental-final-241a41e8.log`.

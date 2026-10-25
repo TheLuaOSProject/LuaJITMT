@@ -58,9 +58,18 @@ static const char fixture_lua[] =
   "  end\n"
   "  return i\n"
   "end\n"
-  "function __gdbjit_unsupported_side(n, bias)\n"
+  "function __gdbjit_scalar_side(n, bias)\n"
   "  local i=0\n"
   "  while i<n do i=(i~=0 and i or i)+3 end\n"
+  "  return i\n"
+  "end\n"
+  "__gdbjit_side_box = {}\n"
+  "function __gdbjit_unsupported_side(n, bias)\n"
+  "  local i=0\n"
+  "  while i<n do\n"
+  "    i=i+1\n"
+  "    if bias~=0 then __gdbjit_side_box[1]=i end\n"
+  "  end\n"
   "  return i\n"
   "end\n";
 
@@ -737,6 +746,59 @@ static void run_side_case(GDBJITSideCase which)
     lua_close(L);
 }
 
+/* A scalar shape rejected by the former trace template now publishes real
+** child metadata. Derive its selected exit from IR_BASE, not a fixed ordinal. */
+static void run_generic_scalar_side_case(void)
+{
+  lua_State *L = ljt_lua_newstate_openlibs();
+  jit_State *J = G2J(G(L));
+  GCproto *pt;
+  GCtrace *root = NULL, *child;
+  TraceNo rootno = 0, childno;
+  IRIns base;
+  LJGDBJITTestStats stats;
+  unsigned attempt;
+  int token;
+
+  ljt_lua_dostring(L,
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=4')\n");
+  ljt_lua_assert_ok(L,
+    luaL_loadbuffer(L, fixture_lua, sizeof(fixture_lua)-1u,
+        "@gdbjit-scalar-side.lua"), "load GDBJIT scalar-side fixture");
+  ljt_lua_pcall(L, 0, 0, "install GDBJIT scalar-side fixture");
+  pt = named_proto(L, "__gdbjit_scalar_side");
+  for (attempt = 0; attempt < 64; attempt++) {
+    assert(call_named_pair(L, "__gdbjit_scalar_side", 4, 0) == 6);
+    rootno = proto_trace_acq(pt);
+    root = rootno ? traceref_safe(J, rootno) : NULL;
+    if (trace_runnable_acq(root, rootno)) break;
+  }
+  assert(root && trace_gdbjit_entry_acq(root));
+  assert(trace_nchild_acq(root) == 0);
+  lj_gdbjit_test_reset();
+  for (attempt = 0; attempt < 8; attempt++)
+    assert(call_named_pair(L, "__gdbjit_scalar_side", 7, 0) == 9);
+  childno = trace_nextside_acq(root);
+  child = childno ? traceref_safe(J, childno) : NULL;
+  assert(child && trace_runnable_acq(child, childno));
+  assert(trace_root_acq(child) == rootno && trace_nchild_acq(root) == 1);
+  assert(trace_gdbjit_entry_acq(child) &&
+         trace_gdbjit_entry_acq(child) != trace_gdbjit_entry_acq(root));
+  base = trace_ir_acq(child)[REF_BASE];
+  assert(base.o == IR_BASE && base.op1 == rootno &&
+         base.op2 < trace_nsnap_acq(root));
+  assert(trace_exittarget_arm64_acq(root, base.op2) == trace_mcode_acq(child));
+  token = lj_jit_token_acquire_wait(J);
+  assert(token == 1);
+  assert(lj_trace_test_arm64_gdbjit_callback_ready(J, root, base.op2, child));
+  lj_jit_token_release(J);
+  assert_side_quiescent(L, J);
+  lj_gdbjit_test_stats(&stats);
+  assert_side_stats(GDBJIT_SIDE_SUCCESS_SCOPED, &stats);
+  lua_close(L);
+}
+
 static void run_unsupported_side_case(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -758,7 +820,7 @@ static void run_unsupported_side_case(void)
   ljt_lua_pcall(L, 0, 0, "install GDBJIT unsupported-side fixture");
   pt = named_proto(L, "__gdbjit_unsupported_side");
   for (attempt = 0; attempt < 64; attempt++) {
-    assert(call_named_pair(L, "__gdbjit_unsupported_side", 4, 0) == 6);
+    assert(call_named_pair(L, "__gdbjit_unsupported_side", 4, 0) == 4);
     rootno = proto_trace_acq(pt);
     if (rootno != 0) {
       root = traceref_safe(J, rootno);
@@ -769,7 +831,11 @@ static void run_unsupported_side_case(void)
   assert(root != NULL && trace_gdbjit_entry_acq(root) != NULL);
   lj_gdbjit_test_reset();
   for (attempt = 0; attempt < 8; attempt++)
-    assert(call_named_pair(L, "__gdbjit_unsupported_side", 7, 0) == 9);
+    assert(call_named_pair(L, "__gdbjit_unsupported_side", 7, 1) == 7);
+  lua_getglobal(L, "__gdbjit_side_box");
+  lua_rawgeti(L, -1, 1);
+  assert(lua_tointeger(L, -1) == 7);  /* The unsupported store did execute. */
+  lua_pop(L, 2);
   assert(trace_nextside_acq(root) == 0);
   assert(trace_nchild_acq(root) == 0);
   assert_side_quiescent(L, J);
@@ -802,6 +868,7 @@ int main(void)
   run_side_case(GDBJIT_SIDE_POST_PREPARE_EXTERNAL_ERROR);
   run_side_case(GDBJIT_SIDE_SUCCESS_FULL_FLUSH);
   run_side_case(GDBJIT_SIDE_RETIRE_LOCK_OMIT);
+  run_generic_scalar_side_case();
   run_unsupported_side_case();
   puts("t-arm64-jit-gdbjit-prepare OK");
   return 0;
