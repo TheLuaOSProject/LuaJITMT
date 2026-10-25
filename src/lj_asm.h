@@ -64,6 +64,23 @@ typedef struct LJArm64PostRAView {
 /* Pure immutable view for the bounded ARM64 side-trace grammars. This is
 ** intentionally separate from GCtrace/jit_State so the policy can be tested
 ** before any recorder or publication path is opened. */
+typedef struct LJArm64SideParentBinding {
+  IRIns value;
+  IRRef ref;
+  uint16_t regsp;
+  uint16_t slot;
+} LJArm64SideParentBinding;
+
+/* Bounded source evidence for one value in the selected parent restart map.
+** It is copied under SMR so both independent child validators can verify
+** constant-pool starts and dynamic-ref ordering without retaining parent IR. */
+typedef struct LJArm64SideParentMapValue {
+  IRIns value;
+  IRRef ref;
+  uint16_t slot;
+  uint8_t ref_start;
+} LJArm64SideParentMapValue;
+
 typedef struct LJArm64SideIRView {
   const IRIns *ir;
   const SnapShot *snap;
@@ -73,6 +90,25 @@ typedef struct LJArm64SideIRView {
   IRRef nk;
   MSize nsnap;
   MSize nsnapmap;
+  /* The selected parent exit is copied while its body is under SMR. The
+  ** child validator never follows a parent snapshot pointer after capture. */
+  const SnapShot *parent_snap;
+  const SnapEntry *parent_snapmap;
+  const LJArm64SideParentMapValue *parent_map_values;
+  const LJArm64SideParentBinding *parent_bindings;
+  const uint16_t *parent_regspmap;
+  IRRef parent_nins;
+  IRRef parent_nk;
+  MSize parent_nsnap;
+  MSize parent_nsnapmap;
+  MSize parent_nmap_values;
+  MSize parent_nregspmap;
+  MSize parent_nslots;
+  MSize parent_topslot;
+  const BCIns *parent_continuation;
+  MSize loop_header_pc;
+  MSize loop_start_pc;
+  MSize loop_end_pc;
   MSize proto_sizebc;
   MSize baseslot;
   MSize root_topslot;
@@ -87,23 +123,31 @@ typedef struct LJArm64SideIRView {
   uint8_t base_delta;
 } LJArm64SideIRView;
 
-enum { LJ_ARM64_SIDE_CHILD_NSNAP = 5 };
-
-/* Exact root/child bytecode geometry for an admitted first-side shape. */
-typedef struct LJArm64SideShape {
-  ExitNo exitno;
+typedef struct LJArm64SideParentSnapshot {
+  SnapShot snap;
+  SnapEntry map[LJ_MAX_JSLOTS+1+LJ_FR2];
+  LJArm64SideParentMapValue map_values[LJ_MAX_JSLOTS];
+  uint16_t regspmap[LJ_MAX_JSLOTS];
+  LJArm64SideParentBinding bindings[LJ_MAX_JSLOTS];
+  MSize nmap_values;
+  IRRef parent_nins;
+  IRRef parent_nk;
   MSize parent_nsnap;
-  MSize continuation_pc;
-  MSize child_pcpos[LJ_ARM64_SIDE_CHILD_NSNAP];
-  uint32_t inherited_reg;
-  uint32_t sload_reg;
-  int32_t addends[2];  /* Repeat addends[0] for a singleton exact set. */
-} LJArm64SideShape;
+  MSize nsnapmap;
+  MSize nregspmap;
+  MSize nslots;
+  MSize topslot;
+  const BCIns *continuation;
+  /* Parent BC_LOOP marker and its body interval [backedge target, backedge). */
+  MSize loop_header_pc;
+  MSize loop_start_pc;
+  MSize loop_end_pc;
+} LJArm64SideParentSnapshot;
 
-/* Exact immutable view of the repeatedly observed first-side ARM64 allocator
-** layout. Production dispatch remains separate and fail-closed. */
+/* Immutable view used by the independent first-side post-RA validator. */
 typedef struct LJArm64SidePostRAView {
   LJArm64SideIRView semantic;
+  const GCtrace *owner;
   const uint16_t *parentmap;
   const MCode *entry;
   IRRef nins;
@@ -115,6 +159,7 @@ typedef struct LJArm64SidePostRAView {
   MSize parent_topslot;
   MSize parentmap_n;
   MSize entry_words;
+  MSize loop_mcofs;
   uint8_t branch_track;
 } LJArm64SidePostRAView;
 
@@ -130,7 +175,12 @@ LJ_FUNC int lj_asm_arm64_funcf_bytecode(const BCIns *bc, MSize sizebc,
 	int prepublication);
 LJ_FUNC int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
 	LJArm64IRReject *reject);
-LJ_FUNC const LJArm64SideShape *lj_asm_arm64_side_shape(ExitNo exitno);
+LJ_FUNC int lj_asm_arm64_side_scalar_ir_admit(const jit_State *J,
+	const GCtrace *child, const LJArm64SideIRView *view,
+	LJArm64IRReject *reject);
+LJ_FUNC int lj_asm_arm64_side_scalar_postra_admit(
+	const LJArm64PostRAView *child, const LJArm64SideIRView *view,
+	IRRef *semantic_ninsp);
 LJ_FUNC int lj_asm_arm64_side_prehead_admit(
 	const LJArm64SidePostRAView *view, IRRef *semantic_ninsp);
 LJ_FUNC int lj_asm_arm64_side_postra_admit(

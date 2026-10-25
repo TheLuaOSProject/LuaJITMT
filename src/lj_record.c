@@ -461,7 +461,7 @@ void lj_record_stop(jit_State *J, TraceLink linktype, TraceNo lnk)
   J->cur.link = (uint16_t)lnk;
   /* Looping back at the same stack level? */
   if (lnk == J->cur.traceno && J->framedepth + J->retdepth == 0) {
-    if ((jit_flags_acq(J) & JIT_F_OPT_LOOP))  /* Shall we try to create a loop? */
+    if (jit_flags_acq(J) & JIT_F_OPT_LOOP)
       goto nocanon;  /* Do not canonicalize or we lose the narrowing. */
     if (J->cur.root)  /* Otherwise ensure we always link to the root trace. */
       J->cur.link = J->cur.root;
@@ -927,7 +927,7 @@ static void rec_loop_jit(jit_State *J, TraceNo lnk, LoopEvent ev)
     J->instunroll = 0;  /* Cannot continue across a compiled loop op. */
     if (J->pc == J->startpc && J->framedepth + J->retdepth == 0)
       lj_record_stop(J, LJ_TRLINK_LOOP, J->cur.traceno);  /* Form extra loop. */
-    else {
+	else {
       (void)rec_traceref_live(J, lnk);
       lj_record_stop(J, LJ_TRLINK_ROOT, lnk);  /* Link to the loop. */
     }
@@ -4661,9 +4661,19 @@ void lj_record_setup(jit_State *J, BCIns root_iterl)
 	rec_for_loop(J, J->pc-1, &J->scev, 1);
 	goto sidecheck;
       }
-    } else {
-      J->startpc = NULL;  /* Prevent forming an extra loop. */
     }
+#if LJ_TARGET_ARM64
+	/* Keep the real selected continuation for ARM64 side tracing. The side
+	** segment links back to its parent; clearing this would destroy inherited
+	** snapshot ownership before the scalar proof runs. */
+	if (J->parent != 0 && !lj_trace_arm64_first_side_loop_valid(
+	      J, J->L, J->parent, J->exitno, J->pc, J->pc,
+	      LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER))
+	  J->startpc = NULL;
+#else
+	if (J->exitno != 0 || snap_nent_acq(&snap[J->exitno]) != 0)
+	  J->startpc = NULL;
+#endif
     lj_snap_replay(J, T);
     if (rec_celluv_prepare_cget_sources(J, -1))
       lj_snap_add(J);

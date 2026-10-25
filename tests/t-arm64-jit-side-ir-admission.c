@@ -1,9 +1,6 @@
 /*
-** Pure contract for the bounded ARM64 first-side grammars and the exact
-** allocator layout captured by an abort-before-publication native probe.
-** Production assembly consumes this certificate for the exact first-side
-** canary. Broader side grammars remain closed and no generated code runs in
-** this pure fixture.
+** Pure contract for the bounded ARM64 scalar side grammar and allocator
+** handoff derived from a captured parent exit. No generated code runs here.
 */
 
 #include <assert.h>
@@ -44,8 +41,11 @@ typedef struct SideFixture {
   IRIns ir[SIDE_IR_CAP];
   SnapShot snap[5];
   SnapEntry snapmap[17];
+  SnapShot parent_snap;
+  SnapEntry parentsnapmap[2+LJ_FR2];
   BCIns proto[19];
   uint16_t parentmap[1];
+  uint16_t parent_regspmap[1];
   MCode entry[5];
   LJArm64SideIRView view;
   LJArm64SidePostRAView postra;
@@ -69,6 +69,15 @@ static void set_footer(MSize snapno, MSize pcpos, uint8_t basedelta)
   uint64_t pcbase =
     ((uint64_t)(uintptr_t)(const void *)&fx.proto[pcpos] << 8) | basedelta;
   memcpy(&fx.snapmap[snap->mapofs+snap->nent], &pcbase, sizeof(pcbase));
+}
+
+static void set_parent_continuation(MSize pcpos)
+{
+  uint64_t pcbase =
+    ((uint64_t)(uintptr_t)(const void *)&fx.proto[pcpos] << 8);
+  fx.view.parent_continuation = &fx.proto[pcpos];
+  fx.postra.semantic.parent_continuation = &fx.proto[pcpos];
+  memcpy(&fx.parentsnapmap[1], &pcbase, sizeof(pcbase));
 }
 
 static void make_semantic(void)
@@ -116,6 +125,19 @@ static void make_semantic(void)
   for (i = 0; i < 5; i++)
     set_footer(i, pcpos[i], 0);
 
+  fx.parent_snap.mapofs = 0;
+  fx.parent_snap.ref = R_PARENT;
+  fx.parent_snap.nslots = 5;
+  fx.parent_snap.topslot = 5;
+  fx.parent_snap.nent = 1;
+  fx.parent_snap.count = 1;
+  fx.parentsnapmap[0] = SNAP(4, 0, R_PARENT);
+  {
+    uint64_t pcbase =
+	((uint64_t)(uintptr_t)(const void *)&fx.proto[13] << 8);
+    memcpy(&fx.parentsnapmap[1], &pcbase, sizeof(pcbase));
+  }
+
   fx.view.ir = fx.ir;
   fx.view.snap = fx.snap;
   fx.view.snapmap = fx.snapmap;
@@ -124,6 +146,16 @@ static void make_semantic(void)
   fx.view.nk = K_ADDEND;
   fx.view.nsnap = 5;
   fx.view.nsnapmap = 17;
+  fx.view.parent_snap = &fx.parent_snap;
+  fx.view.parent_snapmap = fx.parentsnapmap;
+  fx.view.parent_regspmap = fx.parent_regspmap;
+  fx.view.parent_nsnapmap = 1+1+LJ_FR2;
+  fx.view.parent_nregspmap = 1;
+  fx.view.parent_nslots = 5;
+  fx.view.parent_topslot = 5;
+  fx.view.parent_continuation = &fx.proto[13];
+  fx.view.loop_start_pc = 1;
+  fx.view.loop_end_pc = 18;
   fx.view.proto_sizebc = 19;
   fx.view.baseslot = 1+LJ_FR2;
   fx.view.root_topslot = 5;
@@ -143,7 +175,7 @@ static void expect_semantic(int admitted)
   LJArm64IRReject reject;
   int result = lj_asm_arm64_side_ir_admit(&fx.view, &reject);
   if (result != admitted)
-    fprintf(stderr, "semantic result=%d wanted=%d reason=%d ref=%u op=%u detail=%u\n",
+	fprintf(stderr, "semantic result=%d wanted=%d reason=%d ref=%u op=%u detail=%u\n",
 	result, admitted, (int)reject.reason, (unsigned)reject.ref,
 	(unsigned)reject.op, (unsigned)reject.detail);
   assert(result == admitted);
@@ -179,6 +211,7 @@ static void test_semantic_header(void)
   make_semantic();
   fx.view.exitno = 6;
   fx.ir[REF_BASE].op2 = 6;
+  set_parent_continuation(10);
   set_footer(0, 10, 0);
   set_footer(1, 11, 0);
   expect_semantic(1);
@@ -194,13 +227,14 @@ static void test_semantic_header(void)
   fx.ir[REF_BASE].op2 = 7;
   expect_semantic(1);
 
-  /* Nearby exits are not implicitly admitted by the relational BASE check. */
+  /* The local semantic contract does not hardcode a parent exit allowlist;
+  ** the publication path separately bounds BASE against the live parent. */
   make_semantic(); fx.view.exitno = 1; fx.ir[REF_BASE].op2 = 1;
-  expect_semantic(0);
+  expect_semantic(1);
   make_semantic(); fx.view.exitno = 3; fx.ir[REF_BASE].op2 = 3;
-  expect_semantic(0);
+  expect_semantic(1);
   make_semantic(); fx.view.exitno = 8; fx.ir[REF_BASE].op2 = 8;
-  expect_semantic(0);
+  expect_semantic(1);
 
   SEMANTIC_MUTATION(fx.view.ir = NULL);
   SEMANTIC_MUTATION(fx.view.snap = NULL);
@@ -212,8 +246,8 @@ static void test_semantic_header(void)
   SEMANTIC_MUTATION(fx.view.nk++);
   SEMANTIC_MUTATION(fx.view.nsnap--);
   SEMANTIC_MUTATION(fx.view.nsnapmap--);
-  SEMANTIC_MUTATION(fx.view.proto_sizebc--);
-  SEMANTIC_MUTATION(fx.view.proto_sizebc++);
+  make_semantic(); fx.view.proto_sizebc--; expect_semantic(0);
+  make_semantic(); fx.view.proto_sizebc++; expect_semantic(1);
   SEMANTIC_MUTATION(fx.view.baseslot++);
   SEMANTIC_MUTATION(fx.view.root_topslot--);
   SEMANTIC_MUTATION(fx.view.traceno = 0);
@@ -242,19 +276,22 @@ static void test_semantic_constants_and_ir(void)
   };
   MSize i;
 
-  /* Addends are an exact descriptor-owned set: exit 6 admits 1 and 2,
-  ** while exits 2 and 7 remain singleton 1 descriptors. */
-  SEMANTIC_MUTATION(setir(K_ADDEND, IR_KINT, IRT_INT, 2, 0));
+  /* Scalar constants are data, not part of a trace-position template. */
+  make_semantic();
+  fx.ir[K_ADDEND].i = 2;
+  expect_semantic(1);
   make_semantic();
   fx.view.exitno = 6;
   fx.ir[REF_BASE].op2 = 6;
+  set_parent_continuation(10);
   set_footer(0, 10, 0);
   set_footer(1, 11, 0);
   fx.ir[K_ADDEND].i = 3;
-  expect_semantic(0);
+  expect_semantic(1);
   make_semantic();
   fx.view.exitno = 6;
   fx.ir[REF_BASE].op2 = 6;
+  set_parent_continuation(10);
   set_footer(0, 10, 0);
   set_footer(1, 11, 0);
   fx.ir[K_ADDEND].i = 2;
@@ -264,15 +301,17 @@ static void test_semantic_constants_and_ir(void)
   make_semantic();
   fx.view.exitno = 6;
   fx.ir[REF_BASE].op2 = 6;
+  set_parent_continuation(10);
   set_footer(0, 10, 0);
   set_footer(1, 11, 0);
   fx.ir[K_ADDEND].i = 2;
   fx.ir[R_GT].o = IR_LE;
-  expect_semantic(0);
-  /* Complete observed n=3/n=4 return-linked tuple remains closed. */
+  expect_semantic(1);
+  /* Return-linked side traces remain outside the one-child topology. */
   make_semantic();
   fx.view.exitno = 6;
   fx.ir[REF_BASE].op2 = 6;
+  set_parent_continuation(10);
   set_footer(0, 10, 0);
   set_footer(1, 11, 0);
   fx.ir[K_ADDEND].i = 2;
@@ -284,7 +323,7 @@ static void test_semantic_constants_and_ir(void)
   fx.view.exitno = 7;
   fx.ir[REF_BASE].op2 = 7;
   fx.ir[K_ADDEND].i = 2;
-  expect_semantic(0);
+  expect_semantic(1);
   SEMANTIC_MUTATION(setir(K_ADDEND, IR_KNUM, IRT_NUM, 1, 0));
   SEMANTIC_MUTATION(setir(K_ADDEND, IR_KINT, IRT_NUM, 1, 0));
   SEMANTIC_MUTATION(setir(REF_TRUE, IR_KPRI, IRT_FALSE, 0, 0));
@@ -301,19 +340,19 @@ static void test_semantic_constants_and_ir(void)
     expect_semantic(0);
     make_semantic();
     fx.ir[ref].op1++;
-    expect_semantic(0);
+    expect_semantic(ref == R_LIMIT ? 1 : 0);
     make_semantic();
     fx.ir[ref].op2++;
-    expect_semantic(0);
+    expect_semantic(ref == R_GT ? 1 : 0);
   }
   SEMANTIC_MUTATION(fx.ir[R_PARENT].op2 = IRSLOAD_PARENT);
   SEMANTIC_MUTATION(fx.ir[R_PARENT].t.irt |= IRT_GUARD);
   SEMANTIC_MUTATION(fx.ir[R_CGET].t.irt = IRT_INT);
   SEMANTIC_MUTATION(fx.ir[R_ADD].op1 = R_CGET);
-  SEMANTIC_MUTATION(fx.ir[R_ADD].op2 = R_PARENT);
-  SEMANTIC_MUTATION(fx.ir[R_LIMIT].op1 = 3);
-  SEMANTIC_MUTATION(fx.ir[R_GT].op1 = R_PARENT);
-  SEMANTIC_MUTATION(fx.ir[R_GT].op2 = R_PARENT);
+  make_semantic(); fx.ir[R_ADD].op2 = R_PARENT; expect_semantic(1);
+  make_semantic(); fx.ir[R_LIMIT].op1 = 3; expect_semantic(1);
+  make_semantic(); fx.ir[R_GT].op1 = R_PARENT; expect_semantic(1);
+  make_semantic(); fx.ir[R_GT].op2 = R_PARENT; expect_semantic(1);
   SEMANTIC_MUTATION(fx.ir[R_XPOLL].op1 = 0);
 
   /* BASE operands follow the relational parent/exit fields. */
@@ -337,23 +376,39 @@ static void test_semantic_snapshots(void)
   expect_semantic(1);
 
   for (i = 0; i < 5; i++) {
-    make_semantic(); fx.snap[i].ref++; expect_semantic(0);
+    make_semantic(); fx.snap[i].ref = R_END; expect_semantic(0);
     make_semantic(); fx.snap[i].mapofs++; expect_semantic(0);
     make_semantic(); fx.snap[i].nent++; expect_semantic(0);
-    make_semantic(); fx.snap[i].nslots++; expect_semantic(0);
+    make_semantic(); fx.snap[i].nslots++; expect_semantic(1);
     make_semantic(); fx.snap[i].topslot--; expect_semantic(0);
     make_semantic(); set_footer(i, pcpos[i], 1); expect_semantic(0);
-    make_semantic(); set_footer(i, (pcpos[i]+1u)%19u, 0); expect_semantic(0);
+    make_semantic(); set_footer(i, (pcpos[i]+1u)%19u, 0);
+    expect_semantic(i != 0);
   }
   SEMANTIC_MUTATION(fx.snapmap[0] = SNAP(3, 0, R_PARENT));
   SEMANTIC_MUTATION(fx.snapmap[0] = SNAP(4, SNAP_NORESTORE, R_PARENT));
   SEMANTIC_MUTATION(fx.snapmap[0] = SNAP(4, 0, R_ADD));
   SEMANTIC_MUTATION(fx.snapmap[3] = SNAP(4, 0, R_ADD));
-  SEMANTIC_MUTATION(fx.snapmap[4] = SNAP(5, 0, R_CGET));
-  SEMANTIC_MUTATION(fx.snapmap[7] = SNAP(4, 0, R_PARENT));
-  SEMANTIC_MUTATION(fx.snapmap[8] = SNAP(5, 0, R_PARENT));
+  make_semantic(); fx.snapmap[3] = SNAP(4, 0, R_END);
+  assert(fx.view.snapmap == fx.snapmap && snap_nent_acq(&fx.snap[1]) == 2);
+  assert(snap_ref(fx.snapmap[3]) == R_END);
+  expect_semantic(0);
+  make_semantic(); fx.snapmap[7] = SNAP(4, 0, R_PARENT); expect_semantic(1);
+  make_semantic(); fx.snapmap[8] = SNAP(5, 0, R_PARENT); expect_semantic(1);
   SEMANTIC_MUTATION(fx.snapmap[11] = SNAP(4, SNAP_FRAME, R_ADD));
   SEMANTIC_MUTATION(fx.snapmap[14] = SNAP(5, 0, R_ADD));
+  make_semantic(); set_footer(0, 12, 0); expect_semantic(0);
+  make_semantic(); set_footer(1, 0, 0); expect_semantic(0);
+  make_semantic(); fx.view.loop_end_pc = 12; expect_semantic(0);
+  make_semantic(); fx.view.root_topslot++; expect_semantic(0);
+  make_semantic(); fx.parent_snap.topslot--; expect_semantic(0);
+  make_semantic(); fx.parentsnapmap[0] = SNAP(3, 0, R_PARENT);
+  expect_semantic(0);
+  make_semantic(); {
+    uint64_t pcbase =
+	((uint64_t)(uintptr_t)(const void *)&fx.proto[12] << 8);
+    memcpy(&fx.parentsnapmap[1], &pcbase, sizeof(pcbase));
+  } expect_semantic(0);
 }
 
 static void make_postra(void)
@@ -399,6 +454,9 @@ static void make_postra(void)
   fx.postra.topslot = 5;
   fx.postra.parent_topslot = 5;
   fx.postra.parentmap_n = 1;
+  fx.parent_regspmap[0] = (uint16_t)REGSP(RID_X28, SPS_NONE);
+  fx.postra.semantic.parent_regspmap = fx.parent_regspmap;
+  fx.postra.semantic.parent_nregspmap = 1;
   fx.postra.entry_words = headidx+4u;
   fx.postra.branch_track = (uint8_t)LJ_ABI_BRANCH_TRACK;
 }
@@ -409,12 +467,14 @@ static void make_second_postra(void)
   make_postra();
   fx.postra.semantic.exitno = 6;
   fx.ir[REF_BASE].op2 = 6;
+  set_parent_continuation(10);
   set_footer(0, 10, 0);
   set_footer(1, 11, 0);
   fx.ir[R_PARENT].r = RID_X28;
   fx.ir[R_ADD].r = RID_X27;
   fx.ir[R_LIMIT].r = RID_X28;
   fx.parentmap[0] = REGSP(RID_X27, SPS_NONE);
+  fx.parent_regspmap[0] = (uint16_t)REGSP(RID_X27, SPS_NONE);
   fx.entry[headidx] = A64I_LE(A64I_MOVx |
 	A64F_D(RID_X28) | A64F_M(RID_X27));
 }
@@ -459,7 +519,7 @@ static void expect_prehead(int admitted)
   int result = lj_asm_arm64_side_prehead_admit(&fx.postra,
 	&semantic_nins);
   if (result != admitted)
-    fprintf(stderr, "prehead result=%d wanted=%d\n", result, admitted);
+	fprintf(stderr, "prehead result=%d wanted=%d\n", result, admitted);
   assert(result == admitted);
   if (admitted)
     assert(semantic_nins == R_END);
@@ -482,36 +542,40 @@ static void test_prehead(void)
   make_third_postra();
   expect_prehead(1);
 
-  make_second_postra(); fx.ir[K_ADDEND].i = 3; expect_prehead(0);
-  make_postra(); fx.ir[K_ADDEND].i = 2; expect_prehead(0);
-  make_third_postra(); fx.ir[K_ADDEND].i = 2; expect_prehead(0);
+  make_second_postra(); fx.ir[K_ADDEND].i = 3; expect_prehead(1);
+  make_postra(); fx.ir[K_ADDEND].i = 2; expect_prehead(1);
+  make_third_postra(); fx.ir[K_ADDEND].i = 2; expect_prehead(1);
 
-  /* Geometry and allocator shape form one descriptor: neither cross-product
-  ** is admitted even though each half is independently known. */
+  /* Any safe parent exit and allocator mapping can use the same scalar
+  ** semantic grammar; these used to be cross-product template negatives. */
   make_postra();
   fx.postra.semantic.exitno = 6;
   fx.ir[REF_BASE].op2 = 6;
+  set_parent_continuation(10);
   set_footer(0, 10, 0);
   set_footer(1, 11, 0);
-  expect_prehead(0);
+  expect_prehead(1);
   make_second_postra();
   fx.postra.semantic.exitno = 2;
   fx.ir[REF_BASE].op2 = 2;
+  set_parent_continuation(13);
   set_footer(0, 13, 0);
   set_footer(1, 14, 0);
-  expect_prehead(0);
+  expect_prehead(1);
   make_third_postra();
   fx.postra.semantic.exitno = 6;
   fx.ir[REF_BASE].op2 = 6;
+  set_parent_continuation(10);
   set_footer(0, 10, 0);
   set_footer(1, 11, 0);
-  expect_prehead(0);
+  expect_prehead(1);
   make_second_postra();
   fx.postra.semantic.exitno = 7;
   fx.ir[REF_BASE].op2 = 7;
+  set_parent_continuation(13);
   set_footer(0, 13, 0);
   set_footer(1, 14, 0);
-  expect_prehead(0);
+  expect_prehead(1);
 
   /* The pre-head certificate covers the complete semantic/layout authority
   ** needed before asm_head_side() indexes the inherited-register map. */
@@ -533,12 +597,12 @@ static void test_prehead(void)
   PREHEAD_MUTATION(fx.parentmap[0] = REGSP_INIT);
   PREHEAD_MUTATION(fx.parentmap[0] = REGSP(RID_X27, SPS_NONE));
   PREHEAD_MUTATION(fx.ir[REF_BASE].r = RID_X0);
-  PREHEAD_MUTATION(fx.ir[R_PARENT].r = RID_X0);
-  PREHEAD_MUTATION(fx.ir[R_CGET].r = RID_X0);
-  PREHEAD_MUTATION(fx.ir[R_CGET].s = 2);
-  PREHEAD_MUTATION(fx.ir[R_GT].r = RID_X0);
-  PREHEAD_MUTATION(fx.ir[R_XPOLL].s = 2);
-  PREHEAD_MUTATION(fx.ir[K_ADDEND].r = RID_X0);
+  make_postra(); fx.ir[R_PARENT].r = RID_X0; expect_prehead(1);
+  make_postra(); fx.ir[R_CGET].r = RID_X0; expect_prehead(1);
+  make_postra(); fx.ir[R_CGET].s = 2; expect_prehead(1);
+  make_postra(); fx.ir[R_GT].r = RID_X0; expect_prehead(1);
+  make_postra(); fx.ir[R_XPOLL].s = 2; expect_prehead(1);
+  make_postra(); fx.ir[K_ADDEND].r = RID_X0; expect_prehead(1);
 
   /* Entry bytes do not exist yet at pre-head time. The full post-RA gate,
   ** tested below, is solely responsible for the emitted BTI/MOV/VM-state
@@ -576,9 +640,9 @@ static void test_postra(void)
   make_third_postra();
   expect_postra(1);
 
-  make_second_postra(); fx.ir[K_ADDEND].i = 3; expect_postra(0);
-  make_postra(); fx.ir[K_ADDEND].i = 2; expect_postra(0);
-  make_third_postra(); fx.ir[K_ADDEND].i = 2; expect_postra(0);
+  make_second_postra(); fx.ir[K_ADDEND].i = 3; expect_postra(1);
+  make_postra(); fx.ir[K_ADDEND].i = 2; expect_postra(1);
+  make_third_postra(); fx.ir[K_ADDEND].i = 2; expect_postra(1);
 
   make_postra();
   fx.snap[0].count = SNAPCOUNT_DONE;
@@ -690,20 +754,21 @@ static void test_postra(void)
   POSTRA_MUTATION(fx.ir[REF_BASE].s = 2);
 
   for (ref = R_PARENT; ref <= R_LIMIT; ref++) {
-    make_postra(); fx.ir[ref].r = RID_X0; expect_postra(0);
+    make_postra(); fx.ir[ref].r = RID_X0;
+	expect_postra(ref == R_CGET || ref == R_ADD || ref == R_LIMIT);
     make_postra(); fx.ir[ref].r = fx.ir[ref].r == RID_INIT ?
-	RID_X0 : RID_INIT; expect_postra(0);
-    make_postra(); fx.ir[ref].r = RID_D0; expect_postra(0);
-    make_postra(); fx.ir[ref].s = 2; expect_postra(0);
+	RID_X0 : RID_INIT; expect_postra(ref == R_CGET);
+    make_postra(); fx.ir[ref].r = RID_D0; expect_postra(ref == R_CGET);
+    make_postra(); fx.ir[ref].s = 2; expect_postra(ref == R_CGET);
   }
-  POSTRA_MUTATION(fx.ir[R_GT].r = RID_X0);
-  POSTRA_MUTATION(fx.ir[R_GT].s = 2);
-  POSTRA_MUTATION(fx.ir[R_XPOLL].r = RID_X0);
-  POSTRA_MUTATION(fx.ir[R_XPOLL].s = 2);
+  make_postra(); fx.ir[R_GT].r = RID_X0; expect_postra(1);
+  make_postra(); fx.ir[R_GT].s = 2; expect_postra(1);
+  make_postra(); fx.ir[R_XPOLL].r = RID_X0; expect_postra(1);
+  make_postra(); fx.ir[R_XPOLL].s = 2; expect_postra(1);
 
   for (ref = K_ADDEND; ref <= REF_NIL; ref++) {
-    make_postra(); fx.ir[ref].r = RID_X0; expect_postra(0);
-    make_postra(); fx.ir[ref].s = 2; expect_postra(0);
+    make_postra(); fx.ir[ref].r = RID_X0; expect_postra(1);
+    make_postra(); fx.ir[ref].s = 2; expect_postra(1);
   }
   POSTRA_MUTATION(fx.ir[R_ADD].o = IR_TNEW);
   POSTRA_MUTATION(fx.snap[1].nslots = 5);

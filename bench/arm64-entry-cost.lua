@@ -6,8 +6,10 @@ local mode = assert(arg[1])
 local n = assert(tonumber(arg[2]))
 local calls = assert(tonumber(arg[3]))
 local initial = tonumber(arg[4] or '0.5')
+local hotexit = assert(tonumber(arg[5] or '1000'))
 assert((mode == 'on' or mode == 'off') and initial)
 assert(n >= 1 and n % 1 == 0 and calls >= 1 and calls % 1 == 0)
+assert(hotexit >= 1 and hotexit <= 254 and hotexit % 1 == 0)
 
 -- A literal preserves the INT-versus-NUM specialization being measured.
 local kernel = assert(loadstring(string.format([[
@@ -27,7 +29,7 @@ local function driver()
 end
 jit.off(driver)
 jit.flush()
-jit.opt.start('hotloop=1', 'hotexit=1000')
+jit.opt.start('hotloop=1', 'hotexit=' .. hotexit)
 if mode == 'off' then jit.off(kernel) end
 
 local exits = 0
@@ -48,5 +50,5 @@ for k = 1, 5 do
 end
 table.sort(samples)
 print(string.format(
-  'mode=%s n=%d calls=%d initial=%g median_cpu_s=%.6f min=%.6f max=%.6f traces=%d warmup_exits=%d',
-  mode, n, calls, initial, samples[3], samples[1], samples[5], traces, exits))
+  'mode=%s n=%d calls=%d initial=%g hotexit=%d median_cpu_s=%.6f min=%.6f max=%.6f traces=%d warmup_exits=%d',
+  mode, n, calls, initial, hotexit, samples[3], samples[1], samples[5], traces, exits))

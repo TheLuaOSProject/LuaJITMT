@@ -403,6 +403,31 @@ typedef struct LJArm64RootCertificate {
   uint32_t admission;
   TraceNo traceno;
 } LJArm64RootCertificate;
+
+/* Publication proof for a first-level ARM64 side body. It binds the exact
+** child allocation and the selected parent exit generation used at publish. */
+typedef struct LJArm64SideCertificate {
+  uint64_t generation, parent_generation;
+  const struct GCtrace *body, *parent;
+  const IRIns *ir;
+  const SnapShot *snap, *parent_snap;
+  const SnapEntry *snapmap, *parent_snapmap;
+  const GCobj *startpt;
+  const BCIns *startpc;
+  const MCode *mcode, *exitstub, *parent_mcode, *parent_exitstub;
+  MCode **exittab, **parent_exittab;
+  IRRef nins, nk;
+  MSize nsnap, nsnapmap, szmcode, mcloop, spadjust, topslot;
+  MSize parent_nins, parent_nk, parent_nsnap, parent_nsnapmap;
+  MSize parent_szmcode, parent_mcloop, parent_spadjust, parent_topslot;
+  BCIns startins, continuationins;
+  TraceNo traceno, rootno, link, nextroot, nextside, nchild;
+  TraceNo parentno, parent_root, parent_link, parent_nextroot;
+  TraceNo parent_nextside, parent_nchild;
+  uint32_t admission, parent_admission;
+  uint8_t linktype, parent_linktype, sinktags, parent_sinktags;
+  ExitNo exitno;
+} LJArm64SideCertificate;
 #endif
 
 /* Trace object. */
@@ -448,6 +473,7 @@ typedef struct GCtrace {
   uint64_t arm64_generation;  /* Exact allocation serial, never reused. */
   MSize arm64_nentrybc;  /* Exact FUNCF body words in the compact tail. */
   LJArm64RootCertificate arm64_root_cert;
+  LJArm64SideCertificate arm64_side_cert;
 #endif
 #ifdef LUAJIT_USE_GDBJIT
   void *gdbjit_entry;	/* GDB JIT entry. */

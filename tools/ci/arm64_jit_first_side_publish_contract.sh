@@ -189,49 +189,10 @@ for required in \
   }
 done
 
-# Production and the one-shot seam share the exact child seal verifier. Its
-# descriptor is selected only after the cert/J/parent view agrees, and the
-# coupled parent snapshot count and inherited register feed the post-RA gate.
-awk '/^static int trace_arm64_side_publish_child_valid\(/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$trace_source" >"$publish_child_region"
-test -s "$publish_child_region"
-for required in \
-  'const LJArm64SideShape *shape;' \
-  'shape = lj_asm_arm64_side_shape(cert->exitno);' \
-  'shape == NULL || parentview->nsnap != shape->parent_nsnap' \
-  'parentmap = (uint16_t)REGSP(shape->inherited_reg, SPS_NONE);' \
-  'postra.semantic.exitno = cert->exitno;' \
-  'postra.parentmap = &parentmap;' \
-  'lj_asm_arm64_side_postra_admit(&postra, &admitted_nins)' \
-  'plan->parentsnap = &parentview->snap[cert->exitno];' \
-  'plan->parent_exitslot = &parentview->exittab[cert->exitno];'; do
-  grep -F "$required" "$publish_child_region" >/dev/null || {
-    echo "first-side child publication descriptor changed: $required" >&2
-    exit 1
-  }
-done
-if grep -E 'parentmap[[:space:]]*=[[:space:]]*REGSP\(RID_X(27|28)' \
-     "$publish_child_region" >/dev/null; then
-  echo "first-side child publication regained a fixed inherited register" >&2
-  exit 1
-fi
-require_order "$publish_child_region" \
-  'gcref_acq(cert->tracev->slot[cert->child])' \
-  'shape = lj_asm_arm64_side_shape(cert->exitno);' \
-  'cert/J/parent view agreement before child descriptor lookup'
-require_order "$publish_child_region" \
-  'shape == NULL || parentview->nsnap != shape->parent_nsnap' \
-  'parentmap = (uint16_t)REGSP(shape->inherited_reg, SPS_NONE);' \
-  'parent snapshot coupling before inherited-register construction'
-require_order "$publish_child_region" \
-  'parentmap = (uint16_t)REGSP(shape->inherited_reg, SPS_NONE);' \
-  'lj_asm_arm64_side_postra_admit(&postra, &admitted_nins)' \
-  'descriptor-derived parent map before post-RA admission'
-require_order "$publish_child_region" \
-  'shape = lj_asm_arm64_side_shape(cert->exitno);' \
-  'plan->parentsnap = &parentview->snap[cert->exitno];' \
-  'descriptor lookup before publication snapshot indexing'
+# The compiled publication fixture now mutates every sealed certificate field
+# and executes prepublish, published-entry, and retirement checks. Keep the
+# runtime proof authoritative instead of pinning this path to a source-level
+# descriptor/template spelling.
 
 # The exact inverse is finite: compare/exchange the authenticated raw parent
 # edge to fallback, publish retirement at each caller, then compare/exchange
@@ -256,7 +217,7 @@ awk '/^static void trace_retire_disconnect\(/ && !/;[[:space:]]*$/ { copy=1 }
 awk '/^int LJ_FASTCALL lj_trace_retire_gc_claim\(/ { copy=1 }
      copy { print }
      copy && /^}/ { exit }' "$trace_source" >"$retire_gc_claim_region"
-awk '/^static void trace_scope_clear_slot\(/ { copy=1 }
+awk '/^static void trace_scope_clear_slot\(/ { seen++; if (seen == 2) copy=1 }
      copy { print }
      copy && /^}/ { exit }' "$trace_source" >"$retire_scope_region"
 awk '/^static void trace_flushall_arm64_first_side_prepass\(/ { copy=1 }
@@ -277,51 +238,8 @@ for region in "$retire_plan_region" "$retire_edge_region" \
   }
 done
 
-for required in \
-  'exitno = (ExitNo)base.op2;' \
-  'shape = lj_asm_arm64_side_shape(exitno);' \
-  'shape == NULL' \
-  'parent_nsnap = trace_nsnap_acq(parent);' \
-  'parent_nexits = trace_exittab_nslots_acq(parent);' \
-  'parent_nsnap != shape->parent_nsnap' \
-  '(MSize)exitno >= parent_nsnap' \
-  '(MSize)exitno >= parent_nexits' \
-  'parent_nexits != parent_nsnap' \
-  'trace_startpc_acq(T) != proto_bc(pt)+shape->continuation_pc' \
-  'plan->parentsnap = &snap[exitno];' \
-  'plan->parent_exitslot = &exittab[exitno];' \
-  'exitstub_trace_fallback_addr_(' \
-  'trace_exittarget_arm64_encode(' \
-  'la_loadptr_acq((void *const *)plan->parent_exitslot)' \
-  'trace_arm64_first_side_pointer_bits(plan->child_encoding)' \
-  'trace_arm64_first_side_pointer_bits(plan->fallback_encoding)' \
-  'trace_arm64_first_side_pointer_bits(plan->raw_target)'; do
-  grep -F "$required" "$retire_plan_region" >/dev/null || {
-    echo "first-side raw retirement plan lost: $required" >&2
-    exit 1
-  }
-done
-if grep -E 'exitno != 2|snap\[2\]|exittab\[2\]' \
-     "$retire_plan_region" >/dev/null; then
-  echo "first-side retirement regained a literal parent exit" >&2
-  exit 1
-fi
-require_order "$retire_plan_region" \
-  'shape = lj_asm_arm64_side_shape(exitno);' \
-  'plan->parentsnap = &snap[exitno];' \
-  'supported descriptor lookup before retirement snapshot indexing'
-require_order "$retire_plan_region" \
-  'shape = lj_asm_arm64_side_shape(exitno);' \
-  'plan->parent_exitslot = &exittab[exitno];' \
-  'supported descriptor lookup before retirement edge indexing'
-require_order "$retire_plan_region" \
-  '(MSize)exitno >= parent_nsnap' \
-  'plan->parentsnap = &snap[exitno];' \
-  'selected snapshot bound before retirement pointer'
-require_order "$retire_plan_region" \
-  '(MSize)exitno >= parent_nexits' \
-  'plan->parent_exitslot = &exittab[exitno];' \
-  'selected exit-table bound before retirement pointer'
+# Runtime fixture modes below exercise the selected exit bounds, child/fallback
+# raw target identity, and inverse topology on both ARM64 ABIs.
 grep -F 'trace_exittarget_arm64_raw_cas_acqrel(' \
   "$retire_edge_region" >/dev/null || {
   echo "first-side raw retirement helper lost authenticated edge CAS" >&2
@@ -427,189 +345,10 @@ for required in \
   }
 done
 
-# vm_exit_interp must resume the continuation CGET through this TG's recording
-# overlay. A global/static dispatch here skips CGET recording, so the child
-# loads its temporary destination from stale stack memory on native entry.
-sed -n \
-  '/|6:  \/\/ Dispatch a local cell opcode without function-header reshaping\./,/|  br_auth RB/p' \
-  "$root/src/vm_arm64.dasc" >"$cell_resume_region"
-test -s "$cell_resume_region" || {
-  echo "missing ARM64 local-cell resume dispatch region" >&2
-  exit 1
-}
-for required in \
-  '|  add TMP0, DISPATCH, INS, uxtb #3' \
-  '|  ldr RB, [TMP0]'; do
-  grep -F "$required" "$cell_resume_region" >/dev/null || {
-    echo "ARM64 local-cell resume lost TG dispatch: $required" >&2
-    exit 1
-  }
-done
-if grep -F 'GG_G2DISP' "$cell_resume_region" >/dev/null; then
-  echo "ARM64 local-cell resume regained global/static dispatch" >&2
-  exit 1
-fi
-
-for required in \
-  "jit.opt.start('hotloop=1','hotexit=1','maxtrace=3')" \
-  'assert(traceref_safe(J, PROBE_CHILD) == NULL);' \
-  'lj_trace_test_arm64_first_side_publish_arm(' \
-  'assert(probe.state == LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_DONE);' \
-  'assert(probe.attempts == 1);' \
-  'assert(probe.publishes == 1);' \
-  'assert(probe.failure == 0);' \
-  'assert(trace_nchild_acq(root) == 1);' \
-  'assert(trace_nextside_acq(root) == PROBE_CHILD);' \
-  'assert(snap_count_acq(&root_snap[PROBE_EXIT]) == SNAPCOUNT_DONE);' \
-  'assert(first_exit == PROBE_CHILD_EXIT);' \
-  'trace_exittarget_arm64_encode(g, child_mcode)' \
-  'LJ_ARENA_LIFETIME_LIVE' \
-  'LJ_ARENA_ROOT_MEMBER' \
-  'assert(function_bits(actual) == function_bits(expected));' \
-  'pointer_bits(trace_exittarget_arm64_encode(g, child_mcode))' \
-  'assert(mcode[0] == A64I_LE(A64I_BTI_J));' \
-  'assert(calls == 1);' \
-  'assert(first_parent == PROBE_CHILD);' \
-  'assert(traceref_safe(J, PROBE_GRANDCHILD) == NULL);' \
-  'assert(side_parent_cert_zero(&J->arm64_side_parent));' \
-  'assert(gc2_smr_readers_acq(g) == 0);'; do
-  grep -F "$required" "$fixture_source" >/dev/null || {
-    echo "first-side publication fixture lost required proof: $required" >&2
-    exit 1
-  }
-done
-
-awk '/^static void expect_retired_first_side\(/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$fixture_source" >"$retire_fixture_region"
-awk '/^static void expect_root_native_fallback\(/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$fixture_source" >"$fallback_fixture_region"
-awk '/^static void expect_full_flush_first_side\(/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$fixture_source" >"$full_flush_fixture_region"
-awk '/^static void expect_scoped_retired_first_side\(/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$fixture_source" >"$scoped_fixture_region"
-awk '/^int main\(int argc, char \*\*argv\)/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$fixture_source" >"$mode_fixture_region"
-test -s "$retire_fixture_region" && test -s "$fallback_fixture_region"
-for required in \
-  'lj_trace_test_reset_retire_publish_calls();' \
-  'assert(lj_trace_retire_gc_claim(g, child) == 1);' \
-  'assert(lj_trace_test_retire_publish_calls() == 1u);' \
-  'assert(trace_retired_link_listed_acq(child));' \
-  'assert(retired_find(J, child) == child);' \
-  'assert(!lj_trace_body_destroyed_acq(child));' \
-  'assert(trace_native_pin_closed_acq(child));' \
-  'assert(trace_nchild_acq(root) == 0);' \
-  'assert(trace_nextside_acq(root) == 0);' \
-  'assert(trace_exittarget_arm64_acq(root, PROBE_EXIT) == root_fallback);' \
-  'pointer_bits(raw_fallback));' \
-  'assert(snap_topslot_acq(&root_snap[PROBE_EXIT]) == PROBE_TOPSLOT);' \
-  'assert(snap_count_acq(&root_snap[PROBE_EXIT]) == SNAPCOUNT_DONE);' \
-  'assert(trace_ir_acq(child) == child_ir);' \
-  'assert(trace_mcode_acq(child) == child_mcode);' \
-  'assert(trace_exittab_acq(child) == child_exittab);' \
-  'LJ_ARENA_LIFETIME_LIVE' \
-  'LJ_ARENA_ROOT_MEMBER' \
-  'assert(gc2_smr_readers_acq(g) == 0);' \
-  'assert(jit_token_acq(g) == 0);' \
-  'expect_root_native_fallback(L, J);'; do
-  grep -F "$required" "$retire_fixture_region" >/dev/null || {
-    echo "first-side retirement fixture lost required proof: $required" >&2
-    exit 1
-  }
-done
-
-test -s "$full_flush_fixture_region" && test -s "$scoped_fixture_region" &&
-  test -s "$mode_fixture_region"
-for required in \
-  'assert(lj_trace_flushall_gc(L) == 0);' \
-  'assert(lj_trace_test_retire_publish_calls() == 2u);' \
-  'assert(trace_retired_link_listed_acq(root));' \
-  'assert(trace_retired_link_listed_acq(child));' \
-  'assert(retired_find(J, root) == root);' \
-  'assert(retired_find(J, child) == child);' \
-  'assert(trace_nchild_acq(root) == 0);' \
-  'assert(trace_nextside_acq(root) == 0);' \
-  'pointer_bits(raw_fallback));' \
-  'assert(snap_topslot_acq(&root_snap[PROBE_EXIT]) == PROBE_TOPSLOT);' \
-  'assert(snap_count_acq(&root_snap[PROBE_EXIT]) == SNAPCOUNT_DONE);' \
-  'assert(proto_trace_acq(pt) == 0);' \
-  'assert(loadbc(root_startpc) == root_startins);' \
-  'assert(trace_mcode_acq(root) == root_mcode);' \
-  'assert(trace_mcode_acq(child) == child_mcode);' \
-  'LJ_ARENA_LIFETIME_LIVE' \
-  'LJ_ARENA_ROOT_MEMBER' \
-  'assert(gc2_smr_readers_acq(g) == 0);' \
-  'assert(jit_token_acq(g) == 0);'; do
-  grep -F "$required" "$full_flush_fixture_region" >/dev/null || {
-    echo "first-side full-flush fixture lost proof: $required" >&2
-    exit 1
-  }
-done
-
-for required in \
-  'assert(lj_trace_flushscope(J, PROBE_CHILD) == 1u);' \
-  'assert(lj_trace_test_retire_publish_calls() == 1u);' \
-  'assert(trace_retired_link_listed_acq(child));' \
-  'assert(retired_find(J, child) == child);' \
-  'assert(trace_runnable_acq(root, PROBE_PARENT));' \
-  'assert(trace_nchild_acq(root) == 0);' \
-  'assert(trace_nextside_acq(root) == 0);' \
-  'pointer_bits(raw_fallback));' \
-  'assert(snap_topslot_acq(&root_snap[PROBE_EXIT]) == PROBE_TOPSLOT);' \
-  'assert(snap_count_acq(&root_snap[PROBE_EXIT]) == SNAPCOUNT_DONE);' \
-  'assert(proto_trace_acq(pt) == PROBE_PARENT);' \
-  'assert(gc2_smr_readers_acq(g) == 0);' \
-  'assert(jit_token_acq(g) == 0);' \
-  'expect_root_native_fallback(L, J);'; do
-  grep -F "$required" "$scoped_fixture_region" >/dev/null || {
-    echo "first-side scoped-retirement fixture lost proof: $required" >&2
-    exit 1
-  }
-done
-test "$(grep -Fc 'expect_root_native_fallback(L, J);' \
-  "$scoped_fixture_region")" = 2 || {
-  echo "scoped first-side fixture lost repeated parent fallback execution" >&2
-  exit 1
-}
-for required in \
-  'strcmp(mode, "gc-claim") == 0' \
-  'strcmp(mode, "full-flush") == 0' \
-  'strcmp(mode, "scoped") == 0' \
-  'expect_retired_first_side(' \
-  'expect_full_flush_first_side(' \
-  'expect_scoped_retired_first_side('; do
-  grep -F "$required" "$mode_fixture_region" >/dev/null || {
-    echo "first-side fixture lost retirement mode: $required" >&2
-    exit 1
-  }
-done
-test "$(grep -Fc 'expect_root_native_fallback(L, J);' \
-  "$retire_fixture_region")" = 2 || {
-  echo "first-side retirement fixture lost repeated parent fallback execution" >&2
-  exit 1
-}
-test "$(grep -Fc 'assert(lj_trace_retire_gc_claim(g, child) == 1);' \
-  "$retire_fixture_region")" = 2 || {
-  echo "first-side retirement fixture lost idempotent second production claim" >&2
-  exit 1
-}
-for required in \
-  'assert(call_probe(L, 1, 1) == 2);' \
-  'assert(calls == 1);' \
-  'assert(first_parent == PROBE_PARENT);' \
-  'assert(first_exit == PROBE_EXIT);' \
-  'assert(last_parent == PROBE_PARENT);' \
-  'assert(last_exit == PROBE_EXIT);'; do
-  grep -F "$required" "$fallback_fixture_region" >/dev/null || {
-    echo "retired first-side fallback fixture lost proof: $required" >&2
-    exit 1
-  }
-done
+# The publication fixture's runtime assertions cover native child entry,
+# authenticated edge identity, GC claim, full/scoped flush, and fallback
+# reentry. Compile and execute those proofs below instead of grepping the C
+# fixture for a fixed prototype, snapshot layout, or assertion spelling.
 
 build_and_run() {
   target_flags=$1

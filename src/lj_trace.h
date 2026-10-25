@@ -56,7 +56,6 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
 LJ_FUNC int lj_trace_arm64_first_side_loop_valid(
   jit_State *J, lua_State *L, TraceNo parent, ExitNo exitno,
   const BCIns *continuation, const BCIns *pc, uint32_t context);
-
 /* First-side parent lifetime/authentication API. All operations are bounded
 ** and token-private. The ARM64 assembler captures it only for the exact
 ** production first-side canary; all broader side grammars remain closed.
@@ -72,6 +71,9 @@ typedef enum LJTraceArm64SideParentResult {
 LJ_FUNC void lj_trace_arm64_side_parent_clear(jit_State *J);
 LJ_FUNC LJTraceArm64SideParentResult
 lj_trace_arm64_side_parent_capture(jit_State *J);
+struct LJArm64SideParentSnapshot;
+LJ_FUNC int lj_trace_arm64_side_parent_snapshot(jit_State *J,
+	struct LJArm64SideParentSnapshot *snapshot);
 LJ_FUNC LJTraceArm64SideParentResult
 lj_trace_arm64_side_parent_revalidate(jit_State *J);
 #if defined(LJ_TRACE_TEST_HELPERS) && \

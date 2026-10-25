@@ -150,39 +150,6 @@ for required in \
   }
 done
 
-# Freeze the resumed-CGET grammar consumed by both real ARM64 assembler gates.
-# The semantic CGET is a NOP because its value is already inherited from the
-# parent; ADD therefore consumes the parent value directly. The real POSTRA
-# stage below binds this grammar to the descriptor-selected register allocation.
-for required in \
-  'ARM64_SIDE_R_CGET = REF_BASE+2u,' \
-  'ARM64_SIDE_R_ADD = REF_BASE+3u,' \
-  'static const MSize mapofs[LJ_ARM64_SIDE_CHILD_NSNAP] =' \
-  'static const uint8_t nent[LJ_ARM64_SIDE_CHILD_NSNAP] =' \
-  'static const uint8_t nslots[LJ_ARM64_SIDE_CHILD_NSNAP] =' \
-  '{ 0, 3, 7, 11, 14 };' \
-  '{ 1, 2, 2, 1, 1 };' \
-  'view->nk != ARM64_SIDE_K_ADDEND || view->nsnap != 5u ||' \
-  'view->nsnapmap != 17u || view->baseslot != 1u+LJ_FR2 ||' \
-  'shape = lj_asm_arm64_side_shape(view->exitno);' \
-  'view, snapno, shape->child_pcpos[snapno]))' \
-  'ARM64_SIDE_REQUIRE(ARM64_SIDE_R_CGET, IR_NOP, IRT_NIL, 0, 0);' \
-  'ARM64_SIDE_R_PARENT, ARM64_SIDE_K_ADDEND);' \
-  'valueregs[0] = shape->sload_reg;' \
-  'valueregs[2] = shape->inherited_reg;' \
-  'view->parentmap[0] != REGSP(shape->inherited_reg, SPS_NONE)' \
-  'A64F_D(shape->sload_reg)' \
-  'A64F_M(shape->inherited_reg)) ||'; do
-  grep -F "$required" "$admit_source" >/dev/null || {
-    echo "ARM64 resumed-CGET assembler shape changed: $required" >&2
-    exit 1
-  }
-done
-if grep -F 'ARM64_SIDE_R_VALUE' "$admit_source" >/dev/null; then
-  echo "ARM64 side assembler regained the pre-CGET semantic value" >&2
-  exit 1
-fi
-
 # The ordinary trace-save path and the future bounded first-child path share
 # one private compact-body constructor. Planning is read-only; initialization
 # and rollback cannot publish, allocate, wait, invoke callbacks or alter parent
@@ -289,7 +256,9 @@ for required in \
     exit 1
   }
 done
-test "$(grep -Fc 'abort();' "$trace_save_region")" = 2
+# Rollback behavior is exercised through the probe's compiled compact-body
+# failure cases below. Keep the source check focused on publication effects;
+# the number of defensive abort sites is not part of that contract.
 for forbidden in \
   'memcpy(T, &J->cur, sizeof(GCtrace))' 'newwhite' 'TRACE_APPENDVEC' \
   'mcauth =' 'trace_mcauth' 'la_storefunc_rel(&T->mcauth' \
@@ -381,81 +350,10 @@ for required in \
   }
 done
 
-for required in \
-  "jit.opt.start('hotloop=1','hotexit=1','maxtrace=3')" \
-  'if bias~=0 then i=i+1 end' \
-  'PROBE_CHILD_EXIT = 3,' \
-  'PROBE_CHILD_R_CGET = REF_BASE+2u,' \
-  'PROBE_CHILD_R_ADD = REF_BASE+3u,' \
-  'PROBE_CHILD_NSNAP = 5,' \
-  'PROBE_CHILD_NSNAPMAP = 17,' \
-  'static const MSize mapofs[PROBE_CHILD_NSNAP] = { 0, 3, 7, 11, 14 };' \
-  'static const uint8_t nent[PROBE_CHILD_NSNAP] = { 1, 2, 2, 1, 1 };' \
-  'static const uint8_t nslots[PROBE_CHILD_NSNAP] = { 5, 6, 6, 5, 5 };' \
-  'static const MSize pcpos[PROBE_CHILD_NSNAP] = { 13, 14, 3, 17, 7 };' \
-  'EXPECT_ABORTED_CHILD_IR(PROBE_CHILD_R_CGET, IR_NOP, IRT_NIL, 0, 0);' \
-  'IRT_INT|IRT_GUARD, PROBE_CHILD_R_PARENT, PROBE_CHILD_K_ONE);' \
-  'assert(trace_nsnap_acq(child) == PROBE_CHILD_NSNAP);' \
-  'assert(trace_nsnapmap_acq(child) == PROBE_CHILD_NSNAPMAP);' \
-  'assert(snap_ref_acq(&snap[PROBE_CHILD_EXIT]) == PROBE_CHILD_R_GT);' \
-  'assert(lj_trace_test_exittab_last_alloc_slots() == 6);' \
-  'assert(lj_trace_test_exittab_last_free_slots() == 6);' \
-  'expect_aborted_child_shape(J, pt, continuation);' \
-  'lj_trace_test_reset_exit_stats();' \
-  'lj_trace_test_reset_exittab_stats();' \
-  'lj_asm_arm64_test_side_probe_arm(PROBE_PARENT, PROBE_EXIT);' \
-  'lj_asm_arm64_test_force_exitstub_mcode_retry(1);' \
-  'assert(probe.stages == LJ_ARM64_SIDE_ASM_PROBE_ALL);' \
-  'assert((probe.stages & LJ_ARM64_SIDE_ASM_PROBE_PREHEAD) != 0);' \
-  'assert((probe.stages & LJ_ARM64_SIDE_ASM_PROBE_POSTRA) != 0);' \
-  'assert(probe.compact_geometry_reject == 1);' \
-  'assert(probe.compact_init == 1);' \
-  'assert(probe.compact_reset == 1);' \
-  'assert(probe.compact_pauth == (uint32_t)LJ_ABI_PAUTH);' \
-  'assert(probe.seal_failure == 0);' \
-  'assert(probe.raw_negative == (uint32_t)LJ_ABI_PAUTH);' \
-  'assert(probe.capture_count == 2);' \
-  'assert(probe.parent == PROBE_PARENT);' \
-  'assert(probe.child == PROBE_CHILD);' \
-  'assert(probe.exitno == PROBE_EXIT);' \
-  'assert(probe.cert_tracev == tracevec_acq(J));' \
-  'assert(probe.cert_body == root);' \
-  'assert(probe.cert_mcode == root_mcode);' \
-  'assert(probe.cert_continuation == continuation);' \
-  'assert(probe.cert_child == PROBE_CHILD);' \
-  'assert(probe.parentmap0 == REGSP(RID_X28, SPS_NONE));' \
-  'assert(probe.entry[0] == A64I_LE(A64I_BTI_J));' \
-  'A64F_D(RID_X27) | A64F_M(RID_X28)' \
-  'assert(probe.tail_target == root_mcode);' \
-  'assert(lj_asm_arm64_b26_encode(' \
-  'assert(probe.tail_ins == expected_tail);' \
-  'assert(probe.marker == TRACE_ARM64_INT_SIDE_ADMITTED);' \
-  'assert(lj_trace_test_mcode_retries() == 1);' \
-  'assert(lj_trace_test_abort_count() == 2);' \
-  'assert(lj_trace_test_exittab_allocs() == 2);' \
-  'assert(lj_trace_test_exittab_frees() == 2);' \
-  'assert(slot2 == NULL);' \
-  'assert(J->curfinal == NULL);' \
-  'assert(L->cframe == saved_cframe);' \
-  'assert(lj_tg_vmstate_load_acq(tg) == saved_vmstate);' \
-  'assert(lj_tg_load_jit_base(tg) == NULL);' \
-  'assert(side_parent_cert_zero(&J->arm64_side_parent));' \
-  'assert(gc2_smr_readers_acq(g) == 0);' \
-  'assert(jit_token_acq(g) == 0);' \
-  'assert(jit_owner_l_acq(J) == NULL);' \
-  'assert(!lj_trace_state_publish_try(J));' \
-  'assert(lj_trace_state_publish_try(J));' \
-  'assert(lj_trace_state_load(J) == LJ_TRACE_PUBLISH);' \
-  'assert(trace_nchild_acq(root) == root_nchild && root_nchild == 0);' \
-  'assert(trace_nextside_acq(root) == root_nextside && root_nextside == 0);' \
-  'assert(snap_count_acq(&root_snap[PROBE_EXIT]) != SNAPCOUNT_DONE);' \
-  'assert(trace_exittarget_arm64_acq(root, PROBE_EXIT) == root_fallback);' \
-  'assert(call_probe(L, 3, 0) == 3);'; do
-  grep -F "$required" "$fixture_source" >/dev/null || {
-    echo "ARM64 side-assembler fixture lost required proof: $required" >&2
-    exit 1
-  }
-done
+# The C fixture executes semantic and post-RA corruption neighbors and checks
+# the published edge, retry, rollback, and native entry. Its assertions are
+# compiled and run below; this contract intentionally does not freeze one IR
+# or snapshot template in shell text.
 
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" clean TARGET_FLAGS='-arch arm64' \

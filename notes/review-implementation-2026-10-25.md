@@ -187,6 +187,31 @@ the full combined gate remains required after the implementation integrations.
 
 ## Observable native execution
 
+The scalar side runtime checkpoint removes selected exit-number, prototype
+length, snapshot-PC and inherited-register templates. A selected parent exit
+is copied under SMR and exact recorder-token ownership; inherited values are
+validated by slot, IR provenance, type and actual parent location. Children
+can close naturally as scalar loops or return through the certified parent
+tail. The independent allocator pass checks emitted layout, snapshots and
+loop geometry. Child publication seals both allocation generations and their
+exact body/code/topology tuple; retirement detaches the authenticated incoming
+edge before unlinking the child. Heap effects remain excluded from children.
+
+The integrated native fixture passed on ARM64 and arm64e/BTI. It warms an INT
+root, publishes a NUM child, checks that the selected parent edge targets the
+child's code, and observes correct results, root-entry activity and zero
+interpreter trace exits over 100 warmed fractional calls. A later boolean
+arithmetic error exits normally, and closing the state retires the child
+without a fail-stop. Log: `/tmp/ljmt-side-integrated-adaptation2.log`.
+
+The integrated scalar capability contract passed, along with complete FORL,
+FUNCF and rooted-store contracts on both targets. The merge initially retained
+an old LOOP-only allocator check that rejected FORL; it was removed before this
+checkpoint. Logs: `/tmp/ljmt-side-merge-scalar.log`,
+`/tmp/ljmt-side-merge-{forl,funcf,store}3.log`. Copied-child corruption cases,
+remaining shell-contract migration and the full combined gates are subsequent
+acceptance work, not implied by these focused passes.
+
 `bench/native-coverage.lua workload.lua [arguments...]` now reports trace
 publication, recording refusal reasons, code/IR sizes, parent/link metadata,
 and per-exit counts. It owns the trace and exit observer hooks; a workload that

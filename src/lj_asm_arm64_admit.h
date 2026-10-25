@@ -2981,272 +2981,492 @@ static int arm64_ir_constants(const GCtrace *T, LJArm64IRReject *reject)
 
 /* -- Pure ARM64 first-side admission ------------------------------------- */
 
-enum {
-  ARM64_SIDE_K_ADDEND = REF_TRUE-1u,
-  ARM64_SIDE_R_PARENT = REF_BASE+1u,
-  ARM64_SIDE_R_CGET = REF_BASE+2u,
-  ARM64_SIDE_R_ADD = REF_BASE+3u,
-  ARM64_SIDE_R_LIMIT = REF_BASE+4u,
-  ARM64_SIDE_R_GT = REF_BASE+5u,
-  ARM64_SIDE_R_XPOLL = REF_BASE+6u,
-  ARM64_SIDE_SEMANTIC_NINS = REF_BASE+7u
-};
-
-const LJArm64SideShape *lj_asm_arm64_side_shape(ExitNo exitno)
+/* Legacy side-fragment resolver. General scalar side loops are admitted by
+** the independent scalar walk below after their parent topology is proved. */
+static int arm64_side_ir_ref(const LJArm64SideIRView *view, IRRef value,
+	IRRef before, IRType type)
 {
-  static const LJArm64SideShape shapes[] = {
-    { 2u, 8u, 13u, { 13u, 14u, 3u, 17u, 7u },
-      RID_X28, RID_X27, { 1, 1 } },
-    { 6u, 9u, 10u, { 10u, 11u, 3u, 17u, 7u },
-      RID_X27, RID_X28, { 1, 2 } },
-    { 7u, 11u, 13u, { 13u, 14u, 3u, 17u, 7u },
-      RID_X28, RID_X27, { 1, 1 } }
-  };
-  MSize i;
-  for (i = 0; i < sizeof(shapes)/sizeof(shapes[0]); i++)
-    if (shapes[i].exitno == exitno)
-      return &shapes[i];
-  return NULL;
+  IRIns p;
+  if (irref_isk(value)) {
+    IRRef k;
+    if (value < view->nk || value >= REF_TRUE)
+      return 0;
+    for (k = view->nk; k < REF_TRUE; k++) {
+      p = ir_load_acq(&view->ir[k]);
+      if (k == value)
+	return irt_type(p.t) == type &&
+	  ((p.o == IR_KINT && type == IRT_INT) ||
+	   (p.o == IR_KNUM && type == IRT_NUM));
+      if (p.o == IR_KNUM)
+	k++;
+    }
+    return 0;
+  }
+  if (value < REF_FIRST || value >= before || value >= view->nins)
+    return 0;
+  p = ir_load_acq(&view->ir[value]);
+  if (irt_type(p.t) != type)
+    return 0;
+  switch ((IROp)p.o) {
+  case IR_SLOAD: return type == IRT_INT || type == IRT_NUM;
+  case IR_ADDOV: case IR_SUBOV: case IR_MULOV: return type == IRT_INT;
+  case IR_ADD: case IR_SUB: case IR_MUL: case IR_DIV: return type == IRT_NUM;
+  case IR_CONV:
+	return (type == IRT_NUM && p.op2 == IRCONV_NUM_INT) ||
+	  (type == IRT_INT && p.op2 ==
+	   (IRCONV_INT_NUM|IRCONV_CHECK));
+  default: return 0;
+  }
 }
 
-static int arm64_side_snapshot_footer(const LJArm64SideIRView *view,
-	MSize snapno, MSize expected_pcpos)
-{
-  const SnapShot *snap = &view->snap[snapno];
-  SnapEntry pcraw[1+LJ_FR2];
-  uint64_t pcbase;
-  uintptr_t proto, expected;
-  MSize n;
-  LJ_STATIC_ASSERT(LJ_FR2 == 1);
-  LJ_STATIC_ASSERT(sizeof(pcraw) == sizeof(pcbase));
-  proto = (uintptr_t)(const void *)view->proto_bc;
-  if (expected_pcpos >= view->proto_sizebc ||
-	(uintptr_t)expected_pcpos >
-	  (UINTPTR_MAX-proto)/sizeof(BCIns))
-    return 0;
-  expected = proto+(uintptr_t)expected_pcpos*sizeof(BCIns);
-  for (n = 0; n < 1u+LJ_FR2; n++)
-    pcraw[n] = snapentry_acq(
-	&view->snapmap[snap_mapofs_acq(snap)+snap_nent_acq(snap)+n]);
-  memcpy(&pcbase, pcraw, sizeof(pcbase));
-  if (expected > (uintptr_t)(UINT64_MAX >> 8))
-    return 0;
-  return (uint8_t)pcbase == 0 && (uintptr_t)(pcbase >> 8) == expected;
-}
+static int arm64_side_parent_ref_valid(const LJArm64SideIRView *side,
+	IRRef ref);
+static int arm64_side_parent_location(const LJArm64SideIRView *side,
+	IRRef value, MSize ordinal, RegSP *rsp);
+static int arm64_scalar_postra_register(Reg r, IRType type);
+static int arm64_side_parent_snapshot_valid(const LJArm64SideIRView *side);
+static int arm64_side_scalar_topology(const LJArm64SideIRView *side,
+	const GCtrace *owner);
+static int arm64_side_scalar_context_postra(const LJArm64PostRAView *view,
+	const LJArm64SideIRView *side);
 
 int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
 	LJArm64IRReject *reject)
 {
-  static const IRRef snaprefs[LJ_ARM64_SIDE_CHILD_NSNAP] = {
-    ARM64_SIDE_R_CGET, ARM64_SIDE_R_ADD, ARM64_SIDE_R_LIMIT,
-    ARM64_SIDE_R_GT, ARM64_SIDE_R_XPOLL
-  };
-  static const MSize mapofs[LJ_ARM64_SIDE_CHILD_NSNAP] =
-    { 0, 3, 7, 11, 14 };
-  static const uint8_t nent[LJ_ARM64_SIDE_CHILD_NSNAP] =
-    { 1, 2, 2, 1, 1 };
-  static const uint8_t nslots[LJ_ARM64_SIDE_CHILD_NSNAP] =
-    { 5, 6, 6, 5, 5 };
-  const LJArm64SideShape *shape;
-  const IRIns *ir;
-  IRIns ins;
-  uintptr_t proto;
-  MSize snapno;
-
+  IRRef ref;
+  IRRef xpoll = 0;
+  MSize maxslots, expectedofs = 0, parent_nent, parent_sloads = 0, s;
+  uintptr_t lo, hi;
   if (reject) {
     reject->reason = LJ_ARM64_IR_REJECT_NONE;
     reject->ref = 0;
     reject->op = IR_NOP;
     reject->detail = LJ_ARM64_IR_CALL_NONE;
   }
-  if (view == NULL || (ir = view->ir) == NULL || view->snap == NULL ||
-	view->snapmap == NULL || view->proto_bc == NULL)
+  if (view == NULL)
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
-	REF_BASE, IR_BASE, 0);
-  shape = lj_asm_arm64_side_shape(view->exitno);
-  proto = (uintptr_t)(const void *)view->proto_bc;
-  if (shape == NULL || (proto & (sizeof(BCIns)-1u)) != 0 ||
-	view->proto_sizebc != 19u ||
-	(uintptr_t)view->proto_sizebc >
-	  (UINTPTR_MAX-proto)/sizeof(BCIns) ||
-	view->nins != ARM64_SIDE_SEMANTIC_NINS ||
-	view->nk != ARM64_SIDE_K_ADDEND || view->nsnap != 5u ||
-	view->nsnapmap != 17u || view->baseslot != 1u+LJ_FR2 ||
-	view->root_topslot != 5u || view->traceno == 0 ||
-	view->traceno > UINT16_MAX || view->parent == 0 ||
-	view->parent > UINT16_MAX || view->traceno == view->parent ||
-	view->root != view->parent ||
-	view->link != view->parent ||
-	view->startins != BCINS_AD(BC_JMP, 0, 0) ||
-	view->linktype != LJ_TRLINK_ROOT || view->sinktags != 0 ||
-	view->base_delta != 0)
+			   REF_BASE, IR_BASE, 0);
+  if (view->ir == NULL || view->snap == NULL ||
+      view->snapmap == NULL || view->proto_bc == NULL ||
+      view->nins <= REF_FIRST || view->nins >= REF_DROP || !view->nk ||
+      view->nk > REF_TRUE || !view->nsnap || !view->nsnapmap ||
+      view->nsnap >= REF_DROP || !view->proto_sizebc ||
+      view->parent_snap == NULL || view->parent_snapmap == NULL ||
+	view->parent_regspmap == NULL ||
+	view->parent_nregspmap > LJ_MAX_JSLOTS ||
+	!view->parent_nsnapmap || !view->parent_nslots ||
+      view->parent_nslots > LJ_MAX_JSLOTS ||
+      view->parent_topslot > view->parent_nslots ||
+      view->parent_topslot != view->root_topslot ||
+      view->parent_continuation == NULL ||
+      view->loop_start_pc >= view->proto_sizebc ||
+      view->loop_end_pc >= view->proto_sizebc ||
+      view->loop_start_pc >= view->loop_end_pc ||
+      view->baseslot != 1u + LJ_FR2 || !view->root_topslot ||
+      view->root_topslot > UINT8_MAX || view->traceno == 0 ||
+      view->traceno > UINT16_MAX || view->parent == 0 ||
+      view->parent > UINT16_MAX || view->traceno == view->parent ||
+      view->root != view->parent || view->link != view->parent ||
+      view->startins != BCINS_AD(BC_JMP, 0, 0) ||
+      view->linktype != LJ_TRLINK_ROOT || view->sinktags != 0 ||
+      view->base_delta != 0 ||
+      !arm64_side_parent_snapshot_valid(view))
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
-	REF_BASE, IR_BASE, (uint16_t)view->exitno);
+                           REF_BASE, IR_BASE, (uint16_t)view->exitno);
+  lo = (uintptr_t)(const void *)view->proto_bc;
+  if ((lo & (sizeof(BCIns)-1u)) != 0 ||
+      view->proto_sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns))
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
+                           REF_BASE, IR_BASE, 0);
+  hi = lo + view->proto_sizebc*sizeof(BCIns);
+  maxslots = view->root_topslot + 1u + LJ_FR2;
+  if (maxslots > LJ_MAX_JSLOTS)
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
+                           REF_BASE, IR_BASE, (uint16_t)view->exitno);
 
-  ins = ir_load_acq(&ir[ARM64_SIDE_K_ADDEND]);
-  if (ins.o != IR_KINT || ins.t.irt != IRT_INT ||
-	(ins.i != shape->addends[0] && ins.i != shape->addends[1]))
-    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CONSTANT,
-	ARM64_SIDE_K_ADDEND, (IROp)ins.o, ins.t.irt);
-  for (snapno = REF_TRUE; snapno <= REF_NIL; snapno++) {
-    IRType expected = (IRType)(REF_NIL-snapno);
-    ins = ir_load_acq(&ir[snapno]);
-    if (ins.o != IR_KPRI || ins.t.irt != expected || ins.op12 != 0)
-      return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CONSTANT,
-	(IRRef)snapno, (IROp)ins.o, ins.t.irt);
-  }
-
-#define ARM64_SIDE_REQUIRE(ref, op, type, a, b) \
-  do { \
-    ins = ir_load_acq(&ir[(ref)]); \
-    if (ins.o != (op) || ins.t.irt != (type) || \
-	ins.op1 != (a) || ins.op2 != (b)) \
-      return arm64_ir_reject(reject, \
-	ins.o != (op) ? LJ_ARM64_IR_REJECT_OPCODE : \
-	ins.t.irt != (type) ? LJ_ARM64_IR_REJECT_TYPE : \
-	LJ_ARM64_IR_REJECT_OPERAND, (ref), (IROp)ins.o, ins.op2); \
-  } while (0)
-  ARM64_SIDE_REQUIRE(REF_BASE, IR_BASE, IRT_PGC,
-	view->parent, view->exitno);
-  ARM64_SIDE_REQUIRE(ARM64_SIDE_R_PARENT, IR_SLOAD, IRT_INT, 4,
-	IRSLOAD_PARENT|IRSLOAD_INHERIT);
-  ARM64_SIDE_REQUIRE(ARM64_SIDE_R_CGET, IR_NOP, IRT_NIL, 0, 0);
-  ARM64_SIDE_REQUIRE(ARM64_SIDE_R_ADD, IR_ADDOV, IRT_INT|IRT_GUARD,
-	ARM64_SIDE_R_PARENT, ARM64_SIDE_K_ADDEND);
-  ARM64_SIDE_REQUIRE(ARM64_SIDE_R_LIMIT, IR_SLOAD, IRT_INT|IRT_GUARD, 2,
-	IRSLOAD_TYPECHECK);
-  ARM64_SIDE_REQUIRE(ARM64_SIDE_R_GT, IR_GT, IRT_INT|IRT_GUARD,
-	ARM64_SIDE_R_LIMIT, ARM64_SIDE_R_ADD);
-  ARM64_SIDE_REQUIRE(ARM64_SIDE_R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);
-#undef ARM64_SIDE_REQUIRE
-
-  for (snapno = 0; snapno < LJ_ARM64_SIDE_CHILD_NSNAP; snapno++) {
-    const SnapShot *snap = &view->snap[snapno];
-    MSize nextofs = snapno+1u < LJ_ARM64_SIDE_CHILD_NSNAP ?
-	mapofs[snapno+1u] : 17u;
-    if (snap_ref_acq(snap) != snaprefs[snapno] ||
-	snap_mapofs_acq(snap) != mapofs[snapno] ||
-	snap_nent_acq(snap) != nent[snapno] ||
-	snap_nslots_acq(snap) != nslots[snapno] ||
-	snap_topslot_acq(snap) != 5u ||
-	nextofs-mapofs[snapno] != nent[snapno]+1u+LJ_FR2 ||
-	!arm64_side_snapshot_footer(
-	  view, snapno, shape->child_pcpos[snapno]))
+  /* Snapshot restart PCs are compiler-owned provenance, but the first child
+  ** restart must be exactly the selected parent exit. Later PCs stay inside
+  ** the parent's reachable loop interval. The selected parent map is a
+  ** bounded value copy made under SMR, never a retained raw trace pointer. */
+  parent_nent = snap_nent_acq(view->parent_snap);
+  {
+    MSize parent_pos, i;
+    uintptr_t parent_pc;
+    SnapEntry parent_footer[1+LJ_FR2];
+    if (snap_mapofs_acq(view->parent_snap) != 0 ||
+	parent_nent > view->parent_nsnapmap ||
+	view->parent_nsnapmap-parent_nent != 1u+LJ_FR2 ||
+	snap_nslots_acq(view->parent_snap) != view->parent_nslots ||
+	snap_topslot_acq(view->parent_snap) != view->parent_topslot ||
+	snap_nslots_acq(view->parent_snap) > LJ_MAX_JSLOTS ||
+	snap_topslot_acq(view->parent_snap) > snap_nslots_acq(view->parent_snap) ||
+	!arm64_ir_pcpos((uintptr_t)(const void *)view->parent_continuation,
+	  lo, hi, &parent_pos) ||
+	parent_pos < view->loop_start_pc || parent_pos >= view->loop_end_pc)
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
-	snaprefs[snapno], IR_XPOLL, (uint16_t)snapno);
+			     REF_BASE, IR_BASE, 0);
+    for (i = 0; i < parent_nent; i++) {
+	SnapEntry sn = snapentry_acq(&view->parent_snapmap[i]);
+	BCReg slot = snap_slot(sn);
+	IRRef value = snap_ref(sn);
+	if (slot >= view->parent_nslots ||
+	    (i && slot <= snap_slot(snapentry_acq(
+	      &view->parent_snapmap[i-1u]))))
+	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+				 snap_ref(sn), IR_BASE, (uint16_t)i);
+	if (sn == SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL))
+	  continue;
+	if ((sn & UINT32_C(0x00ff0000)) != 0 ||
+	    !arm64_side_parent_ref_valid(view, value))
+	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+				 value, IR_BASE, (uint16_t)i);
+    }
+    if (view->parent_snap->ref < REF_FIRST ||
+	view->parent_snap->ref >= view->parent_nins)
+	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+				 view->parent_snap->ref, IR_BASE, 0);
+    for (i = 0; i < 1u+LJ_FR2; i++)
+	parent_footer[i] = view->parent_snapmap[parent_nent+i];
+    parent_pc = (uintptr_t)(const void *)snap_pc_acq(parent_footer);
+    if (parent_pc != (uintptr_t)(const void *)view->parent_continuation)
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+			       REF_BASE, IR_BASE, 1);
   }
-  if (snapentry_acq(&view->snapmap[0]) !=
-	SNAP(4, 0, ARM64_SIDE_R_PARENT) ||
-      snapentry_acq(&view->snapmap[3]) !=
-	SNAP(4, 0, ARM64_SIDE_R_PARENT) ||
-      snapentry_acq(&view->snapmap[4]) !=
-	SNAP(5, 0, ARM64_SIDE_R_PARENT) ||
-      snapentry_acq(&view->snapmap[7]) !=
-	SNAP(4, 0, ARM64_SIDE_R_ADD) ||
-      snapentry_acq(&view->snapmap[8]) !=
-	SNAP(5, 0, ARM64_SIDE_R_ADD) ||
-      snapentry_acq(&view->snapmap[11]) !=
-	SNAP(4, 0, ARM64_SIDE_R_ADD) ||
-      snapentry_acq(&view->snapmap[14]) !=
-	SNAP(4, 0, ARM64_SIDE_R_ADD))
+
+  for (ref = REF_TRUE; ref <= REF_NIL; ref++) {
+    IRIns k = ir_load_acq(&view->ir[ref]);
+    if (k.o != IR_KPRI || k.t.irt != REF_NIL-ref || k.op12)
+      return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CONSTANT, ref,
+			     (IROp)k.o, k.t.irt);
+  }
+  for (ref = view->nk; ref < REF_TRUE; ref++) {
+    IRIns k = ir_load_acq(&view->ir[ref]);
+    if (k.o == IR_KINT && k.t.irt == IRT_INT)
+      continue;
+    if (k.o != IR_KNUM || k.t.irt != IRT_NUM || k.op12 ||
+	ref+1u >= REF_TRUE)
+      return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CONSTANT, ref,
+			     (IROp)k.o, k.t.irt);
+    {
+	IRIns payload = ir_load_acq(&view->ir[ref+1u]);
+	if (!tvisnum(&payload.tv))
+	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CONSTANT, ref,
+				 (IROp)k.o, k.t.irt);
+    }
+    ref++;
+  }
+  {
+    IRIns b = ir_load_acq(&view->ir[REF_BASE]);
+    if (b.o != IR_BASE || b.t.irt != IRT_PGC ||
+	b.op1 != view->parent || b.op2 != view->exitno)
+      return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
+			     REF_BASE, (IROp)b.o, b.op2);
+  }
+  for (ref = REF_FIRST; ref < view->nins; ref++) {
+    IRIns ir = ir_load_acq(&view->ir[ref]);
+    IRType type = (IRType)irt_type(ir.t);
+    unsigned flags = ir.t.irt & ~IRT_TYPE;
+    int binary = 0;
+    switch ((IROp)ir.o) {
+    case IR_SLOAD:
+      if (type != IRT_INT && type != IRT_NUM)
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE,
+			       ref, IR_SLOAD, type);
+      if (ir.op1 < view->baseslot || ir.op1 >= maxslots)
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
+			       ref, IR_SLOAD, ir.op1);
+	  if (ir.op2 == (IRSLOAD_PARENT|IRSLOAD_INHERIT) && flags == 0) {
+	parent_sloads++;
+	break;
+	  }
+      if (ir.op2 != IRSLOAD_TYPECHECK || flags != IRT_GUARD)
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE,
+			       ref, IR_SLOAD, ir.op2);
+      break;
+    case IR_NOP:
+      if (ir.t.irt != IRT_NIL || ir.op12)
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
+			       ref, IR_NOP, 0);
+      break;
+    case IR_ADDOV: case IR_SUBOV: case IR_MULOV:
+      if (type != IRT_INT || !(flags & IRT_GUARD) ||
+	(flags & ~(IRT_GUARD|IRT_ISPHI)))
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE,
+			       ref, (IROp)ir.o, flags);
+      binary = 1;
+      break;
+    case IR_ADD: case IR_SUB: case IR_MUL: case IR_DIV:
+      if (type != IRT_NUM || (flags & ~IRT_ISPHI))
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE,
+			       ref, (IROp)ir.o, flags);
+      binary = 1;
+      break;
+    case IR_LT: case IR_GE: case IR_LE: case IR_GT: case IR_EQ: case IR_NE:
+      if ((type != IRT_INT && type != IRT_NUM) || flags != IRT_GUARD)
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE,
+			       ref, (IROp)ir.o, flags);
+      binary = 1;
+      break;
+    case IR_CONV:
+	if (type == IRT_NUM && flags == 0 && ir.op2 == IRCONV_NUM_INT &&
+	arm64_side_ir_ref(view, ir.op1, ref, IRT_INT))
+	break;
+      if (type == IRT_INT && flags == IRT_GUARD &&
+	ir.op2 == (IRCONV_INT_NUM|IRCONV_CHECK) &&
+	arm64_side_ir_ref(view, ir.op1, ref, IRT_NUM))
+	break;
+      return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE,
+			     ref, IR_CONV, ir.op2);
+    case IR_XPOLL:
+      if (xpoll || ir.t.irt != (IRT_NIL|IRT_GUARD) || ir.op1 != 1 || ir.op2)
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_XPOLL,
+			       ref, IR_XPOLL, 0);
+      xpoll = ref;
+      break;
+    default:
+      return arm64_ir_reject(reject,
+	(ir.o == IR_CALLS || ir.o == IR_CALLN || ir.o == IR_CALLA ||
+	 ir.o == IR_CALLL || ir.o == IR_CALLXS) ? LJ_ARM64_IR_REJECT_CALL :
+	 LJ_ARM64_IR_REJECT_OPCODE, ref, (IROp)ir.o, ir.op2);
+    }
+    if (binary) {
+	if (!arm64_side_ir_ref(view, ir.op1, ref, type) ||
+	    !arm64_side_ir_ref(view, ir.op2, ref, type))
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
+			       ref, (IROp)ir.o, 0);
+    }
+  }
+  if (parent_sloads != view->parent_nregspmap || !xpoll)
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
+			   REF_BASE, IR_SLOAD, 0);
+
+  for (s = 0; s < view->nsnap; s++) {
+    const SnapShot *snap = &view->snap[s];
+    MSize next = s+1u < view->nsnap ?
+	snap_mapofs_acq(&view->snap[s+1u]) : view->nsnapmap;
+    MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap), i, pos;
+    IRRef at = snap_ref_acq(snap);
+    uint64_t pcbase;
+    SnapEntry footer[1+LJ_FR2];
+    if (at < REF_FIRST || at >= view->nins ||
+	(s && at < snap_ref_acq(&view->snap[s-1u])) ||
+	ofs != expectedofs || ofs > view->nsnapmap || next > view->nsnapmap ||
+	next < ofs || nent > next-ofs || next-ofs-nent != 1u+LJ_FR2 ||
+	snap_nslots_acq(snap) < view->baseslot ||
+	snap_nslots_acq(snap) > maxslots ||
+	snap_topslot_acq(snap) != view->root_topslot)
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+			       at, IR_XPOLL, (uint16_t)s);
+    expectedofs = next;
+    for (i = 0; i < nent; i++) {
+	SnapEntry sn = snapentry_acq(&view->snapmap[ofs+i]);
+	BCReg slot = snap_slot(sn);
+	IRRef value = snap_ref(sn);
+	if (value >= at)
+	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+			 value, IR_XPOLL, (uint16_t)s);
+	if (slot >= snap_nslots_acq(snap) ||
+	    (i && slot <= snap_slot(snapentry_acq(&view->snapmap[ofs+i-1u]))))
+	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+				 value, IR_XPOLL, (uint16_t)s);
+	if (sn == SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL))
+	  continue;
+	if (slot < view->baseslot || (sn & UINT32_C(0x00ff0000)) ||
+	    (!arm64_side_ir_ref(view, value, at, IRT_INT) &&
+	     !arm64_side_ir_ref(view, value, at, IRT_NUM)))
+	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+				 value, IR_XPOLL, (uint16_t)s);
+    }
+    for (ref = REF_FIRST; ref < view->nins; ref++) {
+	IRIns parent_ir = ir_load_acq(&view->ir[ref]);
+	if (parent_ir.o != IR_SLOAD ||
+	    parent_ir.op2 != (IRSLOAD_PARENT|IRSLOAD_INHERIT))
+	  continue;
+	BCReg slot = parent_ir.op1;
+	int in_parent = 0, in_child = 0;
+	for (i = 0; i < parent_nent; i++)
+	  if (snap_slot(snapentry_acq(&view->parent_snapmap[i])) == slot)
+	    in_parent = 1;
+	for (i = 0; i < nent; i++)
+	  if (snap_slot(snapentry_acq(&view->snapmap[ofs+i])) == slot)
+	    in_child = 1;
+	if (!in_parent || !in_child)
+	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+				 ref, IR_SLOAD, slot);
+    }
+    for (i = 0; i < 1u+LJ_FR2; i++)
+	footer[i] = snapentry_acq(&view->snapmap[ofs+nent+i]);
+    memcpy(&pcbase, footer, sizeof(pcbase));
+    if ((uint8_t)pcbase != view->base_delta ||
+	!arm64_ir_pcpos((uintptr_t)(pcbase>>8), lo, hi, &pos) ||
+	pos < view->loop_start_pc ||
+	(pos >= view->loop_end_pc &&
+	 !(s != 0 && pos == view->loop_end_pc+1u)) ||
+	(s == 0 && (uintptr_t)(pcbase>>8) !=
+	 (uintptr_t)(const void *)view->parent_continuation))
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+			       at, IR_XPOLL, (uint16_t)s);
+  }
+  if (expectedofs != view->nsnapmap)
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
-	ARM64_SIDE_R_ADD, IR_XPOLL, 0xffffu);
+			   REF_BASE, IR_XPOLL, 0);
+  /* Every guard needs a preceding restart state; side traces may have fewer
+  ** snapshots than root loops, so select by semantic ref rather than ordinal. */
+  s = 0;
+  for (ref = REF_FIRST; ref < view->nins; ref++) {
+    IRIns ir = ir_load_acq(&view->ir[ref]);
+    while (s+1u < view->nsnap &&
+	   snap_ref_acq(&view->snap[s+1u]) <= ref)
+	  s++;
+    if (irt_isguard(ir.t) && snap_ref_acq(&view->snap[s]) > ref)
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+			       ref, (IROp)ir.o, 0);
+    if (ir.o == IR_SLOAD && ir.op1 >= snap_nslots_acq(&view->snap[s]))
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+			       ref, IR_SLOAD, ir.op1);
+  }
   return 1;
 }
 
 int lj_asm_arm64_side_prehead_admit(const LJArm64SidePostRAView *view,
 	IRRef *semantic_ninsp)
 {
-  Reg valueregs[4];
-  const LJArm64SideShape *shape;
   const IRIns *ir;
   IRIns ins;
-  IRRef ref;
+  IRRef ref, first_parent = 0, last_parent = 0;
+  MSize mapneed = 0;
+
   if (view == NULL || (ir = view->semantic.ir) == NULL ||
-	!lj_asm_arm64_side_ir_admit(&view->semantic, NULL) ||
-	view->nins != ARM64_SIDE_SEMANTIC_NINS+1u ||
-	view->stopins != ARM64_SIDE_R_PARENT ||
-	view->orignins != ARM64_SIDE_SEMANTIC_NINS ||
+	!view->owner || view->owner->traceno != view->semantic.traceno ||
+	view->owner->root != view->semantic.parent ||
+	!arm64_side_scalar_topology(&view->semantic, view->owner) ||
+	view->owner->sinktags ||
+	view->owner->startins != BCINS_AD(BC_JMP, 0, 0) ||
+	trace_startpc_acq((GCtrace *)view->owner) !=
+	  view->semantic.parent_continuation ||
+	view->semantic.root != view->semantic.parent ||
+	!arm64_side_parent_snapshot_valid(&view->semantic) ||
+	view->nins != view->semantic.nins+1u ||
+	view->orignins != view->semantic.nins ||
 	view->spadjust != 0 || view->parent_spadjust != 0 ||
-	view->topslot != 5u || view->parent_topslot != 5u ||
-	view->parentmap == NULL || view->parentmap_n != 1u ||
-	((uintptr_t)(const void *)view->parentmap &
-	 (sizeof(uint16_t)-1u)) != 0)
+	(view->entry != NULL && view->topslot != view->semantic.root_topslot) ||
+	(view->entry == NULL && view->topslot != 0 &&
+	 view->topslot != view->semantic.root_topslot) ||
+	view->parent_topslot != view->semantic.parent_topslot ||
+	(view->parentmap_n != 0 && view->parentmap == NULL) ||
+	view->parentmap_n > LJ_MAX_JSLOTS ||
+	(view->parentmap != NULL &&
+	 ((uintptr_t)(const void *)view->parentmap &
+	 (sizeof(uint16_t)-1u)) != 0))
     return 0;
+  for (ref = REF_FIRST; ref < view->semantic.nins; ref++) {
+    ins = ir_load_acq(&ir[ref]);
+    if (ins.o == IR_SLOAD &&
+	(ins.op2 & (IRSLOAD_PARENT|IRSLOAD_INHERIT)) ==
+	 (IRSLOAD_PARENT|IRSLOAD_INHERIT)) {
+	if (!first_parent) first_parent = ref;
+	last_parent = ref;
+	mapneed++;
+    }
+  }
 
-  shape = lj_asm_arm64_side_shape(view->semantic.exitno);
-  if (shape == NULL)
-    return 0;
-  valueregs[0] = shape->sload_reg;
-  valueregs[1] = RID_INIT;
-  valueregs[2] = shape->inherited_reg;
-  valueregs[3] = shape->sload_reg;
+  if ((first_parent && view->stopins != last_parent) ||
+	(!first_parent && view->stopins != REF_BASE) ||
+	view->parentmap_n != mapneed ||
+	view->parentmap_n != view->semantic.parent_nregspmap) {
+	return 0;
+	}
+  ins = ir_load_acq(&ir[view->semantic.nins]);
 
-  ins = ir_load_acq(&ir[ARM64_SIDE_SEMANTIC_NINS]);
-  if (ins.o != IR_NOP || ins.t.irt != IRT_NIL ||
+  if (view->entry == NULL) {
+    if (ins.o != IR_NOP || ins.t.irt != IRT_NIL ||
 	ins.op1 != 0 || ins.op2 != 0 || ins.r != 0 || ins.s != 0)
-    return 0;
-
-  /* The map extent comes directly from lj_snap_regspmap(). The later full
-  ** post-RA certificate proves that asm_head_side() consumes the descriptor's
-  ** sole inherited value into its allocator-selected SLOAD register before
-  ** any body instruction. */
-  if (view->parentmap[0] != REGSP(shape->inherited_reg, SPS_NONE))
-    return 0;
+	return 0;
+  } else if (ins.o == IR_RENAME) {
+	if (ins.t.irt != IRT_NIL || ins.op1 < REF_FIRST ||
+	    ins.op1 >= view->semantic.nins ||
+	    ins.op2 >= view->semantic.nsnap || !ra_hasreg(ins.r) ||
+	    ins.s != SPS_NONE)
+	  return 0;
+  } else if (ins.o != IR_NOP || ins.t.irt != IRT_NIL ||
+	ins.op1 != 0 || ins.op2 != 0 || ins.r != 0 || ins.s != SPS_NONE) {
+	return 0;
+  }
   ins = ir_load_acq(&ir[REF_BASE]);
   if (ins.r != RID_BASE || ins.s != SPS_NONE)
-    return 0;
-  for (ref = ARM64_SIDE_R_PARENT; ref <= ARM64_SIDE_R_LIMIT; ref++) {
-    ins = ir_load_acq(&ir[ref]);
-    if (ins.r != valueregs[ref-ARM64_SIDE_R_PARENT] ||
-	ins.s != SPS_NONE)
-      return 0;
-  }
-  ins = ir_load_acq(&ir[ARM64_SIDE_R_GT]);
-  if (ins.r != RID_INIT || ins.s != SPS_NONE)
-    return 0;
-  ins = ir_load_acq(&ir[ARM64_SIDE_R_XPOLL]);
-  if (ins.r != RID_INIT || ins.s != SPS_NONE)
-    return 0;
-  for (ref = ARM64_SIDE_K_ADDEND; ref <= REF_NIL; ref++) {
-    ins = ir_load_acq(&ir[ref]);
-    if (ins.r != RID_INIT || ins.s != SPS_NONE)
-      return 0;
-  }
+    { return 0; }
+
+  /* Parent values are copied from the selected parent exit's register/spill
+  ** map. Check every inherited slot by its actual IR reference so this gate
+  ** remains independent of allocator register choices and parent exit ID. */
+	{
+	  MSize parent_ordinal = 0;
+	  for (ref = REF_FIRST; ref < view->semantic.nins; ref++) {
+	    ins = ir_load_acq(&ir[ref]);
+	    if (ins.o != IR_SLOAD ||
+		ins.op2 != (IRSLOAD_PARENT|IRSLOAD_INHERIT))
+	      continue;
+	    {
+	      RegSP rs = view->parentmap[parent_ordinal];
+	      IRType type = (IRType)irt_type(ins.t);
+
+	      if (rs != view->semantic.parent_regspmap[parent_ordinal] ||
+		  !ra_hasreg(ins.r) ||
+		  !arm64_scalar_postra_register(ins.r, type) || ins.s != SPS_NONE ||
+		  !arm64_scalar_postra_register(regsp_reg(rs), type) ||
+		  ra_hasspill(regsp_spill(rs)))
+		return 0;
+	    }
+	    parent_ordinal++;
+	  }
+	}
   if (semantic_ninsp)
-    *semantic_ninsp = ARM64_SIDE_SEMANTIC_NINS;
+    *semantic_ninsp = view->semantic.nins;
   return 1;
 }
 
 int lj_asm_arm64_side_postra_admit(const LJArm64SidePostRAView *view,
 	IRRef *semantic_ninsp)
 {
-  const LJArm64SideShape *shape;
   IRRef semantic_nins;
-  MSize headidx;
-  MCode vmstore;
-  if (!lj_asm_arm64_side_prehead_admit(view, &semantic_nins) ||
-	(shape = lj_asm_arm64_side_shape(view->semantic.exitno)) == NULL ||
+  LJArm64PostRAView core;
+  int pre = lj_asm_arm64_side_prehead_admit(view, &semantic_nins);
+  if (!pre ||
 	view->entry == NULL ||
 	((uintptr_t)(const void *)view->entry & (sizeof(MCode)-1u)) != 0 ||
-	view->branch_track != (uint8_t)LJ_ABI_BRANCH_TRACK)
+	view->branch_track != (uint8_t)LJ_ABI_BRANCH_TRACK ||
+	view->parentmap_n > LJ_MAX_JSLOTS || !view->owner)
     return 0;
-  headidx = (MSize)LJ_ABI_BRANCH_TRACK;
-  vmstore = A64I_STRw | A64F_D(RID_TMP) | A64F_N(RID_DISPATCH) |
-	    A64F_U12((uint32_t)DISPATCH_TG(vmstate) >> 2);
-  if (view->entry_words < headidx+4u ||
-	(view->branch_track && view->entry[0] != A64I_LE(A64I_BTI_J)) ||
-	view->entry[headidx] != A64I_LE(A64I_MOVx |
-				     A64F_D(shape->sload_reg) |
-				     A64F_M(shape->inherited_reg)) ||
-	view->entry[headidx+1u] != A64I_LE(A64I_MOVZw |
-				     A64F_U16(view->semantic.traceno) |
-				     A64F_D(RID_TMP)) ||
-	view->entry[headidx+2u] != A64I_LE(A64I_DMB_ISH) ||
-	view->entry[headidx+3u] != A64I_LE(vmstore))
+  /* Semantic and pre-head checks precede machine loop-label assignment.
+  ** Final post-RA admission binds the emitted label to this child body. */
+  if (view->semantic.linktype == LJ_TRLINK_LOOP &&
+	(view->loop_mcofs == 0 ||
+	 view->loop_mcofs >= view->entry_words*sizeof(MCode) ||
+	 (view->loop_mcofs & (sizeof(MCode)-1u)) != 0))
+	return 0;
+  memset(&core, 0, sizeof(core));
+  core.ir = view->semantic.ir;
+  core.owner = view->owner;
+  core.snap = view->semantic.snap;
+  core.snapmap = view->semantic.snapmap;
+  core.proto_bc = view->semantic.proto_bc;
+  /* Post-RA needs the complete allocator view, including validated trailing
+  ** RENAMEs; the scalar walker strips those to recover its semantic extent. */
+  core.nins = view->nins;
+  core.nk = view->semantic.nk;
+  core.nsnap = view->semantic.nsnap;
+  core.nsnapmap = view->semantic.nsnapmap;
+  core.spadjust = view->spadjust;
+  core.proto_sizebc = view->semantic.proto_sizebc;
+  core.root_topslot = view->topslot;
+  core.startins = view->semantic.startins;
+
+  if (!lj_asm_arm64_side_scalar_postra_admit(
+	&core, &view->semantic, semantic_ninsp)) {
+
     return 0;
-  if (semantic_ninsp)
-    *semantic_ninsp = semantic_nins;
+  }
+
   return 1;
 }
 
@@ -4044,9 +4264,142 @@ static int arm64_rooted_ir_effect(const GCtrace *T, IRRef ref,
   return read ? 2 : store ? 3 : 1;
 }
 
+static int arm64_scalar_side_geometry_ir(const LJArm64SideIRView *side,
+	uintptr_t lo, uintptr_t hi, MSize *continuation_pos)
+{
+  MSize header, end, cont;
+  int64_t target;
+  BCIns h, back;
+  if (!side || !side->proto_bc || !side->parent_continuation ||
+	  side->loop_start_pc >= side->loop_end_pc ||
+	  side->loop_end_pc >= side->proto_sizebc ||
+	  side->loop_header_pc >= side->loop_end_pc)
+    return 0;
+  header = side->loop_header_pc;
+  end = side->loop_end_pc;
+  h = (BCIns)la_load32_acq((const uint32_t *)&side->proto_bc[header]);
+  back = (BCIns)la_load32_acq((const uint32_t *)&side->proto_bc[end]);
+  target = (int64_t)end + 1 + (int64_t)bc_j(back);
+  if (bc_op(h) != BC_JLOOP || bc_d(h) != side->parent ||
+	  bc_op(back) != BC_JMP || bc_j(back) >= 0 ||
+	  (int64_t)end + 1 + (int64_t)bc_j(back) < 0 ||
+	  target < 0 || (MSize)target != side->loop_start_pc ||
+      !arm64_ir_pcpos((uintptr_t)(const void *)side->parent_continuation,
+	    lo, hi, &cont) || cont < (MSize)target || cont >= end)
+    return 0;
+  if (continuation_pos)
+    *continuation_pos = cont;
+  return 1;
+}
+
+static int arm64_side_parent_ref_valid(const LJArm64SideIRView *side,
+	IRRef ref)
+{
+	MSize i;
+	if (!side || !side->parent_snap ||
+	    !side->parent_map_values ||
+	    side->parent_nmap_values != snap_nent_acq(side->parent_snap) ||
+	    side->parent_nins <= REF_FIRST ||
+	    side->parent_nins >= REF_DROP || !side->parent_nk ||
+	    side->parent_nk > REF_TRUE || side->parent_nk >= REF_BASE ||
+	    side->parent_snap->ref < REF_FIRST ||
+	    side->parent_snap->ref >= side->parent_nins)
+	  return 0;
+	if (irref_isk(ref)) {
+	  if (ref >= REF_BASE)
+	    return 0;
+	  for (i = 0; i < side->parent_nmap_values; i++) {
+		const LJArm64SideParentMapValue *mv = &side->parent_map_values[i];
+		if (mv->ref != ref) continue;
+		if (ref >= REF_TRUE && ref <= REF_NIL)
+		  return mv->value.o == IR_KPRI &&
+			 mv->value.t.irt == REF_NIL-ref && mv->value.op12 == 0;
+		return ref >= side->parent_nk && ref < REF_TRUE && mv->ref_start &&
+		  (mv->value.o == IR_KINT || mv->value.o == IR_KNUM ||
+		   mv->value.o == IR_KGC || mv->value.o == IR_KPTR ||
+		   mv->value.o == IR_KNULL || mv->value.o == IR_KINT64);
+	  }
+	  return 0;
+	}
+	if (ref < REF_FIRST || ref >= side->parent_nins ||
+	    ref >= side->parent_snap->ref)
+	  return 0;
+	for (i = 0; i < side->parent_nmap_values; i++)
+	  if (side->parent_map_values[i].ref == ref)
+		return side->parent_map_values[i].ref_start == 0;
+	return 0;
+}
+
+static int arm64_side_parent_location(const LJArm64SideIRView *side,
+	IRRef value, MSize ordinal, RegSP *rsp)
+{
+	if (!side || !rsp || !side->parent_bindings ||
+	    ordinal >= side->parent_nregspmap ||
+	    !arm64_side_parent_ref_valid(side, value) ||
+	    side->parent_bindings[ordinal].ref != value)
+	  return 0;
+	*rsp = (RegSP)side->parent_bindings[ordinal].regsp;
+	return regsp_used(*rsp);
+}
+
+static int arm64_side_parent_sload_valid(const LJArm64SideIRView *side,
+	const IRIns *load, MSize ordinal)
+{
+  MSize i, nent;
+  IRRef ref;
+  IRType type;
+  RegSP rs;
+  if (!side || !load || !side->parent_snap ||
+	  load->op2 != (IRSLOAD_PARENT|IRSLOAD_INHERIT) ||
+	  (irt_type(load->t) != IRT_INT && irt_type(load->t) != IRT_NUM) ||
+	  (load->t.irt & ~IRT_TYPE) || ordinal >= side->parent_nregspmap ||
+	  side->parent_nslots > LJ_MAX_JSLOTS ||
+	  snap_nent_acq(side->parent_snap) > side->parent_nsnapmap ||
+	  side->parent_nsnapmap-snap_nent_acq(side->parent_snap) < 1u+LJ_FR2)
+	return 0;
+  nent = snap_nent_acq(side->parent_snap);
+  for (i = 0; i < nent; i++) {
+	SnapEntry sn = snapentry_acq(&side->parent_snapmap[i]);
+		if (snap_slot(sn) != load->op1)
+	  continue;
+	ref = snap_ref(sn);
+	if (!arm64_side_parent_ref_valid(side, ref) ||
+	    !side->parent_bindings || ordinal >= side->parent_nregspmap ||
+	    side->parent_bindings[ordinal].slot != load->op1 ||
+	    side->parent_bindings[ordinal].ref != ref)
+	  return 0;
+	if (i >= side->parent_nmap_values ||
+	    side->parent_map_values[i].slot != load->op1 ||
+	    side->parent_map_values[i].ref != ref ||
+	    side->parent_map_values[i].value.o !=
+	      side->parent_bindings[ordinal].value.o ||
+	    side->parent_map_values[i].value.t.irt !=
+	      side->parent_bindings[ordinal].value.t.irt ||
+	    side->parent_map_values[i].value.op12 !=
+	      side->parent_bindings[ordinal].value.op12)
+	  return 0;
+	type = (IRType)irt_type(side->parent_bindings[ordinal].value.t);
+	if (irref_isk(ref) &&
+	    !((type == IRT_INT && side->parent_bindings[ordinal].value.o == IR_KINT) ||
+	      (type == IRT_NUM && side->parent_bindings[ordinal].value.o == IR_KNUM)))
+	  return 0;
+	if (type != irt_type(load->t))
+	  return 0;
+	rs = (RegSP)side->parent_regspmap[ordinal];
+	  {
+	    RegSP actual;
+	    return arm64_side_parent_location(side, ref, ordinal, &actual) &&
+		   actual == rs &&
+		   !ra_hasspill(regsp_spill(rs)) &&
+		   arm64_scalar_postra_register(regsp_reg(rs), type);
+	  }
+  }
+  return 0;
+}
+
 static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
-                                      BCOp rootop,
-                                      LJArm64IRReject *reject)
+				 BCOp rootop, const LJArm64SideIRView *side,
+				 LJArm64IRReject *reject)
 {
   IRRef ref = REF_BASE, loop = 0, poll = 0, firstphi = 0;
   IRRef root1 = 0, root2 = 0, resultroot = 0, resultref = 0;
@@ -4055,6 +4408,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
   uintptr_t proto_lo, proto_hi;
   unsigned nphi = 0, loop_snap = 0;
   int forl_dynamic_step = 0;
+  MSize parent_sload = 0;
   SnapNo s;
   if (reject) {
     reject->reason = LJ_ARM64_IR_REJECT_NONE;
@@ -4062,11 +4416,24 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
     reject->op = IR_NOP;
     reject->detail = LJ_ARM64_IR_CALL_NONE;
   }
-  if (!J || !T || !T->ir || !J->pt || J->parent || J->exitno || T->root ||
+  if (!J || !T || !T->ir || !J->pt ||
+      (!side && (J->parent || J->exitno || T->root ||
+	bc_op(T->startins) != rootop)) ||
+      (side && (J->parent != side->parent || J->exitno != side->exitno ||
+	T->root != side->parent || side->root != side->parent ||
+	  side->traceno != T->traceno ||
+	  !arm64_side_scalar_topology(side, T) ||
+	T->startins != BCINS_AD(BC_JMP, 0, 0) ||
+	trace_startpc_acq((GCtrace *)T) != side->parent_continuation ||
+	  J->startpc != side->parent_continuation ||
+	  (side->linktype == LJ_TRLINK_LOOP &&
+	   (J->pc != J->startpc || J->pc != side->parent_continuation)) ||
+	  !side->parent_snap)) ||
       !T->traceno || T->nins <= REF_FIRST || T->nins >= REF_DROP || !T->nk ||
-      T->nk > REF_TRUE || bc_op(T->startins) != rootop ||
-      (rootop != BC_LOOP && rootop != BC_FORL) ||
-      T->link != T->traceno || T->linktype != LJ_TRLINK_LOOP ||
+      T->nk > REF_TRUE ||
+      (!side && (bc_op(T->startins) != rootop ||
+       (rootop != BC_LOOP && rootop != BC_FORL) ||
+       T->link != T->traceno || T->linktype != LJ_TRLINK_LOOP)) ||
       J->baseslot != 1 + LJ_FR2 || J->framedepth || J->retdepth ||
       trace_startptgco_acq((GCtrace *)T) != obj2gco(J->pt) ||
       !checkptrGC(obj2gco(J->pt)) || J->pt->gct != (uint32_t)~LJ_TPROTO ||
@@ -4076,8 +4443,14 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
   if (T->sinktags)
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SINK, REF_BASE, IR_TNEW,
                            T->sinktags);
-  if (!arm64_ir_start(J, T, J->pt, &proto_lo, &proto_hi, reject))
-    return 0;
+  if (side) {
+	if (!arm64_ir_proto_range(J->pt, &proto_lo, &proto_hi) ||
+	    !arm64_scalar_side_geometry_ir(side, proto_lo, proto_hi, NULL))
+	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
+			 REF_BASE, IR_LOOP, (uint16_t)side->parent);
+  } else if (!arm64_ir_start(J, T, J->pt, &proto_lo, &proto_hi, reject)) {
+	return 0;
+  }
   maxslots = J->pt->framesize + 1u + LJ_FR2;
   if (rootop == BC_FORL &&
       (MSize)bc_a(T->startins) + FORL_EXT >= J->pt->framesize)
@@ -4107,7 +4480,9 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
     ref++; /* The payload is not an addressable IR value. */
   }
   if (T->ir[REF_BASE].o != IR_BASE || T->ir[REF_BASE].t.irt != IRT_PGC ||
-      T->ir[REF_BASE].op12) {
+      (!side && T->ir[REF_BASE].op12) ||
+      (side && (T->ir[REF_BASE].op1 != side->parent ||
+	T->ir[REF_BASE].op2 != side->exitno))) {
     ref = REF_BASE;
     goto bad_operand;
   }
@@ -4116,10 +4491,38 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
     IRType type = (IRType)irt_type(ir->t);
     unsigned flags = ir->t.irt & ~IRT_TYPE;
     int binary = 0;
+    /* Child traces currently prove only scalar effects. Root capability
+    ** growth must not silently widen the side-publication boundary. */
+    if (side) {
+      if (type != IRT_INT && type != IRT_NUM && type != IRT_NIL)
+        goto bad_type;
+      switch ((IROp)ir->o) {
+      case IR_NOP: case IR_SLOAD: case IR_ADDOV: case IR_SUBOV: case IR_MULOV:
+      case IR_ADD: case IR_SUB: case IR_MUL: case IR_DIV: case IR_CONV:
+      case IR_LT: case IR_GE: case IR_LE: case IR_GT: case IR_EQ: case IR_NE:
+      case IR_LOOP: case IR_XPOLL: case IR_PHI: case IR_USE:
+        break;
+      default:
+        goto bad_operand;
+      }
+    }
     if (firstphi && ir->o != IR_PHI)
       goto bad_operand;
     switch ((IROp)ir->o) {
+    case IR_NOP:
+      if (!side)
+        return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPCODE, ref,
+                               IR_NOP, 0);
+      if (ir->t.irt != IRT_NIL || ir->op12 || ir->r ||
+          ir->s != SPS_NONE)
+        goto bad_operand;
+      break;
     case IR_SLOAD:
+      if (side && ir->op2 == (IRSLOAD_PARENT|IRSLOAD_INHERIT)) {
+	if (!arm64_side_parent_sload_valid(side, ir, parent_sload++))
+	  goto bad_operand;
+	break;
+      }
       if (rootop == BC_FORL &&
           ir->op1 == 1u + LJ_FR2 + bc_a(T->startins)) {
         if (ir->t.irt != (IRT_INT|IRT_GUARD) ||
@@ -4238,7 +4641,9 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       loop = ref;
       break;
     case IR_XPOLL:
-      if (poll || !loop || ref != loop + 1 ||
+	  if (poll || (side ?
+	      (side->linktype == LJ_TRLINK_ROOT ? loop != 0 :
+	       (!loop || ref != loop + 1)) : (!loop || ref != loop + 1)) ||
           ir->t.irt != (IRT_NIL | IRT_GUARD) || ir->op1 != 1 || ir->op2)
         goto bad_poll;
       poll = ref;
@@ -4306,9 +4711,16 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
                    !arm64_scalar_ir_ref(T, ir->op2, ref, type)))
       goto bad_operand;
   }
+  if (side && parent_sload != side->parent_nregspmap)
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND, REF_BASE,
+			       IR_SLOAD, (uint16_t)parent_sload);
   ref = loop;
-  if (!loop || poll != loop + 1 || J->loopref != loop)
-    goto bad_poll;
+  if (side && side->linktype == LJ_TRLINK_ROOT) {
+	if (loop || !poll || J->loopref != 0)
+	  goto bad_poll;
+  } else if (!loop || poll != loop + 1 || J->loopref != loop) {
+	goto bad_poll;
+  }
   for (ref = REF_FIRST; ref < (firstphi ? firstphi : T->nins); ref++) {
     IRRef phi;
     int marked = 0;
@@ -4378,9 +4790,20 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
     if ((uint8_t)pcbase ||
         !arm64_ir_pcpos((uintptr_t)(pcbase >> 8), proto_lo, proto_hi, &pcpos))
       goto bad_snapshot;
+    if (side && ((s == 0 && pcpos != proto_bcpos(J->pt,
+	       side->parent_continuation)) ||
+	       (pcpos < side->loop_start_pc ||
+	        (pcpos >= side->loop_end_pc &&
+	         !(s != 0 && pcpos == side->loop_end_pc+1u))))) {
+	  goto bad_snapshot;
+	}
   }
-  if (!loop_snap || poll_snap != loop)
-    goto bad_snapshot;
+  if (side && side->linktype == LJ_TRLINK_ROOT) {
+	if (loop_snap || poll_snap != poll)
+	  goto bad_snapshot;
+  } else if (!loop_snap || poll_snap != loop) {
+	goto bad_snapshot;
+  }
   s = 0;
   for (ref = REF_FIRST; ref < T->nins; ref++) {
     const IRIns *ir = &T->ir[ref];
@@ -4426,7 +4849,7 @@ bad_snapshot:
 static int arm64_scalar_ir_admit(const jit_State *J, const GCtrace *T,
                                  LJArm64IRReject *reject)
 {
-  return arm64_scalar_ir_admit_mode(J, T, BC_LOOP, reject);
+  return arm64_scalar_ir_admit_mode(J, T, BC_LOOP, NULL, reject);
 }
 
 /* Immutable allocator-side certificate. It rechecks scalar provenance and
@@ -4629,13 +5052,16 @@ static int arm64_rooted_postra_effect(const LJArm64PostRAView *v, IRRef n,
 }
 
 static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
-                                         BCOp rootop, IRRef *ninsout)
+                                         BCOp rootop,
+                                         const LJArm64SideIRView *side,
+                                         IRRef *ninsout)
 {
   IRRef ref, n, loop = 0, poll = 0, firstphi = 0;
   IRRef root1 = 0, root2 = 0, resultroot = 0, resultref = 0;
-  MSize cap = 0, highest = 0, s, expectedofs = 0;
+  MSize cap = 0, highest = 0, s, expectedofs = 0, continuation_pos = 0;
   IRRef prevsnap = 0, poll_snap = 0, completed_store = 0;
   unsigned nphi = 0, loopsnap = 0;
+  MSize parent_sload = 0;
   SnapNo loopsnapno = 0;
   IRRef1 spillowner[SPS_LIMIT];
   int spillowners_initialized = 0, forl_dynamic_step = 0;
@@ -4644,13 +5070,44 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       v->nins <= REF_FIRST || v->nins >= REF_DROP || !v->nk ||
       v->nk > REF_TRUE || !v->nsnap || !v->nsnapmap || !v->root_topslot ||
       v->root_topslot > UINT8_MAX || v->base_delta ||
-      bc_op(v->startins) != rootop ||
-      (rootop != BC_LOOP && rootop != BC_FORL) || !v->proto_sizebc)
+      (!side && (bc_op(v->startins) != rootop ||
+       (rootop != BC_LOOP && rootop != BC_FORL))) || !v->proto_sizebc)
     return 0;
   lo = (uintptr_t)v->proto_bc;
   if ((lo & 3u) || v->proto_sizebc > (UINTPTR_MAX - lo) / sizeof(BCIns))
     return 0;
   hi = lo + v->proto_sizebc * sizeof(BCIns);
+  if (side) {
+	const GCtrace *owner = v->owner;
+	MSize header = side->loop_header_pc, end = side->loop_end_pc;
+	int64_t target;
+	BCIns h, back;
+	MSize cont;
+
+	if (!owner || v->proto_bc != side->proto_bc ||
+	    owner->traceno != side->traceno || owner->root != side->parent ||
+	    !arm64_side_scalar_topology(side, owner) || owner->sinktags ||
+	    owner->startins != BCINS_AD(BC_JMP, 0, 0) ||
+	    trace_startpc_acq((GCtrace *)owner) != side->parent_continuation ||
+	    side->parent == 0 ||
+	    side->root != side->parent ||
+	  v->root_topslot != side->root_topslot ||
+	  !side->parent_snap ||
+	    side->loop_start_pc >= end || end >= side->proto_sizebc ||
+	    header >= end)
+	  return 0;
+	h = (BCIns)la_load32_acq((const uint32_t *)&side->proto_bc[header]);
+	back = (BCIns)la_load32_acq((const uint32_t *)&side->proto_bc[end]);
+	target = (int64_t)end + 1 + (int64_t)bc_j(back);
+	if (bc_op(h) != BC_JLOOP || bc_d(h) != side->parent ||
+	    bc_op(back) != BC_JMP || bc_j(back) >= 0 || target < 0 ||
+	    (MSize)target != side->loop_start_pc ||
+	    !arm64_ir_pcpos((uintptr_t)(const void *)side->parent_continuation,
+	      lo, hi, &cont) || cont < (MSize)target || cont >= end)
+	  return 0;
+	continuation_pos = cont;
+
+  }
   for (ref = REF_TRUE; ref <= REF_NIL; ref++) {
     IRIns p = ir_load_acq(&v->ir[ref]);
     if (p.o != IR_KPRI || p.t.irt != REF_NIL - ref || p.op12)
@@ -4677,6 +5134,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
         return 0;
     }
   }
+
   n = v->nins;
   {
     if (v->spadjust & 15u ||
@@ -4701,21 +5159,52 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
   }
   {
     IRIns base = ir_load_acq(&v->ir[REF_BASE]);
-    if (base.o != IR_BASE || base.t.irt != IRT_PGC || base.op12 ||
+    if (base.o != IR_BASE || base.t.irt != IRT_PGC ||
+	(side ? (base.op1 != side->parent || base.op2 != side->exitno) :
+	      base.op12 != 0) ||
         (base.s != SPS_NONE ||
          (base.r != RID_INIT && base.r != (RID_NONE | RID_BASE) &&
           !arm64_scalar_postra_register(base.r, IRT_INT))))
       return 0;
   }
+
   for (ref = REF_FIRST; ref < n; ref++) {
     IRIns p = ir_load_acq(&v->ir[ref]);
     IRType type = (IRType)irt_type(p.t);
     unsigned flags = p.t.irt & ~IRT_TYPE;
     int binary = 0;
+
     if (firstphi && p.o != IR_PHI)
       return 0;
+    /* Independently keep child allocation proof within scalar effects. */
+    if (side) {
+      if (type != IRT_INT && type != IRT_NUM && type != IRT_NIL)
+        return 0;
+      switch ((IROp)p.o) {
+      case IR_NOP: case IR_SLOAD: case IR_ADDOV: case IR_SUBOV: case IR_MULOV:
+      case IR_ADD: case IR_SUB: case IR_MUL: case IR_DIV: case IR_CONV:
+      case IR_LT: case IR_GE: case IR_LE: case IR_GT: case IR_EQ: case IR_NE:
+      case IR_LOOP: case IR_XPOLL: case IR_PHI: case IR_USE:
+        break;
+      default:
+        return 0;
+      }
+    }
     switch ((IROp)p.o) {
+    case IR_NOP:
+      if (!side || p.t.irt != IRT_NIL || p.op12 || ra_hasreg(p.r) ||
+	  p.s != SPS_NONE)
+	return 0;
+      break;
     case IR_SLOAD:
+      if (side && p.op2 == (IRSLOAD_PARENT|IRSLOAD_INHERIT)) {
+	MSize ord = parent_sload++;
+	if (!arm64_side_parent_sload_valid(side, &p, ord)) {
+
+	  return 0;
+	}
+	break;
+      }
       if (rootop == BC_FORL &&
           p.op1 == 1u + LJ_FR2 + bc_a(v->startins)) {
         if (p.t.irt != (IRT_INT|IRT_GUARD) ||
@@ -4860,7 +5349,9 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       loop = ref;
       break;
     case IR_XPOLL:
-      if (poll || !loop || ref != loop + 1 ||
+	  if (poll || (side ?
+	      (side->linktype == LJ_TRLINK_ROOT ? loop != 0 :
+	       (!loop || ref != loop + 1)) : (!loop || ref != loop + 1)) ||
           p.t.irt != (IRT_NIL | IRT_GUARD) || p.op1 != 1 || p.op2)
         return 0;
       poll = ref;
@@ -4931,8 +5422,13 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       }
     }
   }
-  if (!loop || poll != loop + 1)
-    return 0;
+
+  if (side && parent_sload != side->parent_nregspmap)
+	return 0;
+  if (side ?
+	(side->linktype == LJ_TRLINK_ROOT ? (loop != 0 || poll == 0) :
+	 (!loop || poll != loop + 1)) : (!loop || poll != loop + 1))
+	return 0;
   for (ref = REF_FIRST; ref < (firstphi ? firstphi : n); ref++) {
     IRRef phi;
     int operand = 0;
@@ -4977,7 +5473,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       return 0;
     expectedofs = next;
     prevsnap = at;
-    if (at == loop) {
+    if ((!side || side->linktype == LJ_TRLINK_LOOP) && at == loop) {
       loopsnap = 1;
       loopsnapno = (SnapNo)s;
     }
@@ -5044,9 +5540,17 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
     if ((uint8_t)pcbase != v->base_delta ||
         !arm64_ir_pcpos((uintptr_t)(pcbase >> 8), lo, hi, &pos))
       return 0;
+	if (side && ((s == 0 && pos != continuation_pos) ||
+		(pos < side->loop_start_pc ||
+		 (pos >= side->loop_end_pc &&
+		  !(s != 0 && pos == side->loop_end_pc+1u)))))
+	  return 0;
   }
-  if (!loopsnap || poll_snap != loop)
-    return 0;
+  if (side ?
+	(side->linktype == LJ_TRLINK_ROOT ?
+	 (loopsnap || poll_snap != poll) :
+	 (!loopsnap || poll_snap != loop)) : (!loopsnap || poll_snap != loop))
+	return 0;
   /* asm_phi uses either a register or a spill shared with the right
   ** value. asm_phi_copyspill copies that slot to the distinct left slot
   ** on backedges. For register PHIs an owned left spill remains authoritative:
@@ -5109,14 +5613,160 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
     *ninsout = n;
   return 1;
 }
-static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
-                                     IRRef *ninsout)
+static int arm64_side_parent_snapshot_valid(const LJArm64SideIRView *side)
 {
-  return arm64_scalar_postra_admit_mode(v, BC_LOOP, ninsout);
+  uint64_t pcbase;
+  SnapEntry footer[1+LJ_FR2];
+  MSize i, nent, extent;
+  if (!side || !side->parent_snap || !side->parent_snapmap ||
+	  !side->parent_nins || !side->parent_nk ||
+	  side->parent_nins >= REF_DROP || side->parent_nk > REF_TRUE ||
+	  !side->parent_nsnap || side->parent_nsnap >= REF_DROP ||
+	  side->exitno >= side->parent_nsnap ||
+	  side->parent_nregspmap > LJ_MAX_JSLOTS ||
+	  (side->parent_nregspmap && !side->parent_regspmap) ||
+	  (side->parent_nregspmap && !side->parent_bindings) ||
+	  snap_mapofs_acq(side->parent_snap) != 0 ||
+	  snap_nslots_acq(side->parent_snap) != side->parent_nslots ||
+	  snap_topslot_acq(side->parent_snap) != side->parent_topslot ||
+	  side->parent_topslot != side->root_topslot ||
+	  snap_nslots_acq(side->parent_snap) < 1u+LJ_FR2 ||
+	  snap_topslot_acq(side->parent_snap) > snap_nslots_acq(side->parent_snap))
+    return 0;
+  nent = snap_nent_acq(side->parent_snap);
+  if (nent > LJ_MAX_JSLOTS || nent > side->parent_nslots ||
+	  nent > (MSize)-1-(1u+LJ_FR2))
+	return 0;
+  extent = nent+1u+LJ_FR2;
+  if (side->parent_nsnapmap != extent)
+	return 0;
+  for (i = 0; i < nent; i++) {
+	SnapEntry sn = snapentry_acq(&side->parent_snapmap[i]);
+	IRRef ref = snap_ref(sn);
+	if (snap_slot(sn) >= side->parent_nslots ||
+	    (i && snap_slot(sn) <=
+	       snap_slot(snapentry_acq(&side->parent_snapmap[i-1]))) ||
+	    (sn != SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL) &&
+	     (sn & 0x00ff0000u)))
+	  return 0;
+	if (sn == SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL))
+	  continue;
+	if (!arm64_side_parent_ref_valid(side, ref))
+	  return 0;
+	}
+	if (side->parent_snap->ref < REF_FIRST ||
+	    side->parent_snap->ref >= side->parent_nins)
+	  return 0;
+	for (i = 0; i < side->parent_nregspmap; i++) {
+	const LJArm64SideParentBinding *binding = &side->parent_bindings[i];
+	RegSP rs = (RegSP)side->parent_regspmap[i];
+	MSize j;
+	if (binding->regsp != rs || binding->slot >= side->parent_nslots ||
+	    !regsp_used(rs) || ra_hasspill(regsp_spill(rs)) ||
+	    (irt_type(binding->value.t) != IRT_INT &&
+	     irt_type(binding->value.t) != IRT_NUM) ||
+	    !arm64_scalar_postra_register(regsp_reg(rs),
+					 (IRType)irt_type(binding->value.t)))
+	  return 0;
+	for (j = 0; j < nent; j++)
+	  if (snap_slot(snapentry_acq(&side->parent_snapmap[j])) == binding->slot &&
+	      snap_ref(snapentry_acq(&side->parent_snapmap[j])) == binding->ref)
+	    break;
+	if (j == nent || !arm64_side_parent_ref_valid(side, binding->ref))
+	  return 0;
+	}
+  for (i = 0; i < 1u+LJ_FR2; i++)
+	footer[i] = snapentry_acq(&side->parent_snapmap[nent+i]);
+  memcpy(&pcbase, footer, sizeof(pcbase));
+  return (uint8_t)pcbase == 0 &&
+	(uintptr_t)(pcbase >> 8) ==
+	  (uintptr_t)(const void *)side->parent_continuation;
+}
+
+static int arm64_side_scalar_topology(const LJArm64SideIRView *side,
+	const GCtrace *owner)
+{
+	MSize continuation_pos = 0;
+	uintptr_t lo;
+	if (!side || !owner)
+	  return 0;
+	if (side->link == side->parent && side->linktype == LJ_TRLINK_ROOT &&
+	    owner->link == side->parent && owner->linktype == LJ_TRLINK_ROOT &&
+	    owner->mcloop == 0)
+	  return 1;
+	lo = (uintptr_t)(const void *)side->proto_bc;
+	if (side->link != side->traceno || side->linktype != LJ_TRLINK_LOOP ||
+	    owner->link != side->traceno || owner->linktype != LJ_TRLINK_LOOP || !lo ||
+	    side->proto_sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns))
+	  return 0;
+	return arm64_scalar_side_geometry_ir(side, lo,
+	    lo+side->proto_sizebc*sizeof(BCIns), &continuation_pos);
+}
+
+static int arm64_side_scalar_context_ir(const jit_State *J,
+	const GCtrace *T, const LJArm64SideIRView *side)
+{
+	if (!J || !T || !side || !arm64_side_scalar_topology(side, T) ||
+	    (side->linktype == LJ_TRLINK_LOOP &&
+	     (J->pc != J->startpc || J->pc != side->parent_continuation)))
+	  return 0;
+	return J->parent == side->parent &&
+	J->exitno == side->exitno &&
+	J->pt && side->traceno == T->traceno && side->parent != 0 &&
+	side->parent != side->traceno && side->root == side->parent &&
+	T->root == side->parent &&
+	T->startins == BCINS_AD(BC_JMP, 0, 0) &&
+	trace_startptgco_acq((GCtrace *)T) == obj2gco(J->pt) &&
+	trace_startpc_acq((GCtrace *)T) == side->parent_continuation &&
+	J->startpc == side->parent_continuation &&
+	J->baseslot == 1u+LJ_FR2 && !J->framedepth && !J->retdepth &&
+	side->proto_bc == proto_bc(J->pt) &&
+	side->proto_sizebc == J->pt->sizebc &&
+	side->ir == T->ir && side->snap == T->snap &&
+	side->snapmap == T->snapmap && side->nins == T->nins &&
+	side->nk == T->nk && side->nsnap == T->nsnap &&
+	side->nsnapmap == T->nsnapmap &&
+	arm64_side_parent_snapshot_valid(side);
+}
+
+static int arm64_side_scalar_context_postra(const LJArm64PostRAView *v,
+	const LJArm64SideIRView *side)
+{
+  const GCtrace *owner;
+  if (!v || !side || !(owner = v->owner) ||
+	  owner->traceno != side->traceno || owner->root != side->parent ||
+	  owner->sinktags || owner->startins != BCINS_AD(BC_JMP, 0, 0) ||
+	  trace_startpc_acq((GCtrace *)owner) != side->parent_continuation ||
+	  v->proto_bc != side->proto_bc || v->proto_sizebc != side->proto_sizebc ||
+	  v->root_topslot != side->root_topslot ||
+	  v->snap != side->snap || v->snapmap != side->snapmap ||
+	  v->nsnap != side->nsnap || v->nsnapmap != side->nsnapmap ||
+	  !arm64_side_parent_snapshot_valid(side) ||
+	  !arm64_side_scalar_topology(side, owner))
+    return 0;
+  return 1;
+}
+
+int lj_asm_arm64_side_scalar_ir_admit(const jit_State *J, const GCtrace *T,
+	const LJArm64SideIRView *side, LJArm64IRReject *reject)
+{
+	if (!arm64_side_scalar_context_ir(J, T, side)) {
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE, REF_BASE,
+			       IR_LOOP, 0);
+	}
+  return arm64_scalar_ir_admit_mode(J, T, BC_LOOP, side, reject);
+}
+
+int lj_asm_arm64_side_scalar_postra_admit(const LJArm64PostRAView *view,
+	const LJArm64SideIRView *side, IRRef *semantic_ninsp)
+{
+  if (!arm64_side_scalar_context_postra(view, side))
+	return 0;
+  return arm64_scalar_postra_admit_mode(view, BC_LOOP, side, semantic_ninsp);
 }
 
 int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
-                          LJArm64IRReject *reject)
+			  LJArm64IRReject *reject)
 {
 #if LJ_HASJIT_FFI_CALLXS
   /* FFI effects require their own call/ABI proof in addition to scalar
@@ -5132,7 +5782,7 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
   if (T && bc_op(T->startins) == BC_LOOP)
     return arm64_scalar_ir_admit(J, T, reject);
   if (T && bc_op(T->startins) == BC_FORL)
-    return arm64_scalar_ir_admit_mode(J, T, BC_FORL, reject);
+    return arm64_scalar_ir_admit_mode(J, T, BC_FORL, NULL, reject);
   return arm64_ir_nonloop_admit(J, T, reject);
 }
 int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
@@ -5149,10 +5799,10 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
 #endif
   if (view && bc_op(view->startins) == BC_LOOP)
   {
-    return arm64_scalar_postra_admit(view, semantic_ninsp);
+    return arm64_scalar_postra_admit_mode(view, BC_LOOP, NULL, semantic_ninsp);
   }
   if (view && bc_op(view->startins) == BC_FORL)
-    return arm64_scalar_postra_admit_mode(view, BC_FORL, semantic_ninsp);
+    return arm64_scalar_postra_admit_mode(view, BC_FORL, NULL, semantic_ninsp);
   return arm64_postra_nonloop_admit(view, semantic_ninsp);
 }
 

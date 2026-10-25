@@ -124,6 +124,7 @@ typedef struct ASMState {
   IRRef1 phireg[RID_MAX];  /* PHI register references. */
 #if LJ_TARGET_ARM64
   MSize parentmap_n;  /* Number of entries copied from lj_snap_regspmap(). */
+  LJArm64SideParentSnapshot side_parent_snapshot;
 #endif
   uint16_t parentmap[LJ_MAX_JSLOTS];  /* Parent instruction to RegSP map. */
 } ASMState;
@@ -137,7 +138,8 @@ typedef struct ASMState {
 #if LJ_TARGET_ARM64
 static void asm_arm64_side_ir_view_init(const jit_State *J,
 	const GCtrace *T, const IRIns *ir, IRRef nins, TraceNo parent,
-	ExitNo exitno, LJArm64SideIRView *view)
+	ExitNo exitno, const LJArm64SideParentSnapshot *parent_snapshot,
+	LJArm64SideIRView *view)
 {
   GCproto *pt;
   memset(view, 0, sizeof(*view));
@@ -166,6 +168,25 @@ static void asm_arm64_side_ir_view_init(const jit_State *J,
   view->linktype = trace_linktype_acq((GCtrace *)T);
   view->sinktags = T->sinktags;
   view->base_delta = (uint8_t)(J->baseslot-(1u+LJ_FR2));
+  if (parent_snapshot != NULL && parent_snapshot->continuation != NULL) {
+    view->parent_snap = &parent_snapshot->snap;
+    view->parent_snapmap = parent_snapshot->map;
+    view->parent_map_values = parent_snapshot->map_values;
+    view->parent_bindings = parent_snapshot->bindings;
+    view->parent_regspmap = parent_snapshot->regspmap;
+    view->parent_nins = parent_snapshot->parent_nins;
+    view->parent_nk = parent_snapshot->parent_nk;
+    view->parent_nsnap = parent_snapshot->parent_nsnap;
+    view->parent_nsnapmap = parent_snapshot->nsnapmap;
+    view->parent_nmap_values = parent_snapshot->nmap_values;
+    view->parent_nregspmap = parent_snapshot->nregspmap;
+    view->parent_nslots = parent_snapshot->nslots;
+    view->parent_topslot = parent_snapshot->topslot;
+    view->parent_continuation = parent_snapshot->continuation;
+    view->loop_header_pc = parent_snapshot->loop_header_pc;
+    view->loop_start_pc = parent_snapshot->loop_start_pc;
+    view->loop_end_pc = parent_snapshot->loop_end_pc;
+  }
 }
 
 static void asm_arm64_side_parent_result(jit_State *J,
@@ -182,8 +203,10 @@ static void asm_arm64_side_postra_view_init(ASMState *as,
 {
   const LJTraceArm64SideParentCert *cert = &as->J->arm64_side_parent;
   memset(view, 0, sizeof(*view));
+  view->owner = as->T;
   asm_arm64_side_ir_view_init(as->J, as->T, as->ir,
-	as->arm64_semantic_nins, cert->parent, cert->exitno, &view->semantic);
+	as->arm64_semantic_nins, cert->parent, cert->exitno,
+	&as->side_parent_snapshot, &view->semantic);
   view->parentmap = as->parentmap;
   view->entry = entry;
   /* J->cur.nins is reset to the semantic boundary on every assembler pass;
@@ -198,9 +221,13 @@ static void asm_arm64_side_postra_view_init(ASMState *as,
   ** run before asm_head_side() performs its first parent-body load. */
   view->parent_spadjust = 0;
   view->parent_topslot = view->semantic.root_topslot;
-  view->topslot = as->topslot;
+  /* Before asm_head_side, the candidate has not inherited the parent's
+  ** frame extent yet. Final post-RA admission checks the emitted trace field. */
+  view->topslot = entry ? trace_topslot_acq(as->T) : as->topslot;
   view->parentmap_n = as->parentmap_n;
   view->entry_words = entry_words;
+  view->loop_mcofs = entry && as->mcloop ?
+	(MSize)((const char *)as->mcloop-(const char *)as->mcp) : 0;
   view->branch_track = (uint8_t)LJ_ABI_BRANCH_TRACK;
 }
 #endif
@@ -559,7 +586,9 @@ static Reg ra_releasetmp(ASMState *as, IRRef ref)
   IRIns *ir = IR(ref);
   Reg r = ir->r;
   if (LJ_UNLIKELY(!ra_hasreg(r) || ra_hasspill(ir->s)))
+  {
     lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
+  }
   lj_assertA(ra_hasreg(r), "release of TMP%d has no reg", ref-ASMREF_TMP1+1);
   lj_assertA(!ra_hasspill(ir->s),
 	     "release of TMP%d has spill slot [%x]", ref-ASMREF_TMP1+1, ir->s);
@@ -2372,9 +2401,12 @@ static void asm_head_side(ASMState *as)
     if (LJ_UNLIKELY(as->parent != as->J->arm64_side_parent.body))
       lj_trace_err(as->J, LJ_TRERR_RETRY);
     asm_arm64_side_postra_view_init(as, NULL, 0, &prehead);
+
+
     if (LJ_UNLIKELY(!lj_asm_arm64_side_prehead_admit(
 	  &prehead, &validated_semantic_nins) ||
 	validated_semantic_nins != as->arm64_semantic_nins)) {
+
       setintV(&as->J->errinfo, (int32_t)IR_RENAME);
       lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
     }
@@ -2387,8 +2419,12 @@ static void asm_head_side(ASMState *as)
   parent_topslot = trace_topslot_acq(as->parent);
   parent_spadjust = (int32_t)trace_spadjust_acq(as->parent);
 #if LJ_TARGET_ARM64
-  if (LJ_UNLIKELY(parent_topslot != 5u || parent_spadjust != 0))
+  /* The selected parent snapshot carries the live frame extent. Side code
+  ** must preserve that extent; requiring the example trace's five slots
+  ** would reject valid scalar loops with additional locals. */
+  if (LJ_UNLIKELY(parent_spadjust != 0)) {
     lj_trace_err(as->J, LJ_TRERR_RETRY);
+  }
 #endif
   if (as->snapno && as->topslot > parent_topslot) {
     /* Force snap #0 alloc to prevent register overwrite in stack check. */
@@ -3047,18 +3083,18 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
 	    !lj_trace_test_arm64_first_side_publish_asm_authorized(J)))
 	lj_trace_err(J, LJ_TRERR_RETRY);
 #endif
-      if (LJ_UNLIKELY(J->loopref != 0)) {
-	setintV(&J->errinfo, (int32_t)IR_LOOP);
-	lj_trace_err_info(J, LJ_TRERR_NYIIR);
-      }
+      asm_arm64_side_parent_result(J,
+	lj_trace_arm64_side_parent_capture(J));
+      if (LJ_UNLIKELY(!lj_trace_arm64_side_parent_snapshot(
+	    J, &as->side_parent_snapshot)))
+	lj_trace_err(J, LJ_TRERR_RETRY);
       asm_arm64_side_ir_view_init(J, T, T->ir, T->nins,
-	J->parent, J->exitno, &sideview);
-      if (LJ_UNLIKELY(!lj_asm_arm64_side_ir_admit(&sideview, &reject))) {
+	J->parent, J->exitno, &as->side_parent_snapshot, &sideview);
+      if (LJ_UNLIKELY(!lj_asm_arm64_side_scalar_ir_admit(
+	    J, T, &sideview, &reject))) {
 	setintV(&J->errinfo, (int32_t)reject.op);
 	lj_trace_err_info(J, LJ_TRERR_NYIIR);
       }
-      asm_arm64_side_parent_result(J,
-	lj_trace_arm64_side_parent_capture(J));
 #if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
       asm_test_side_probe_capture(J);
 #endif
@@ -3242,10 +3278,12 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
     IRRef validated_semantic_nins;
     if (J->parent != 0) {
       LJArm64SidePostRAView sidepostra;
+      int side_postra_ok;
       asm_arm64_side_postra_view_init(as, as->mcp,
 	(MSize)(as->mctoporig-as->mcp), &sidepostra);
-      if (LJ_UNLIKELY(!lj_asm_arm64_side_postra_admit(
-	    &sidepostra, &validated_semantic_nins) ||
+      side_postra_ok = lj_asm_arm64_side_postra_admit(
+	&sidepostra, &validated_semantic_nins);
+      if (LJ_UNLIKELY(!side_postra_ok ||
 	  validated_semantic_nins != arm64_semantic_nins)) {
 	setintV(&J->errinfo, (int32_t)IR_RENAME);
 	lj_trace_err_info(J, LJ_TRERR_NYIIR);
