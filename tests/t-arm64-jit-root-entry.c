@@ -419,7 +419,7 @@ static void expect_metadata_success(lua_State *L, const BCIns *pc,
   uint32_t publishes = lj_trace_test_root_entry_publishes();
   uint32_t cleanups = lj_trace_test_root_entry_cleanups();
   assert(root_entry_metadata_layout_valid(&L2J(L)->cur));
-  assert(lj_trace_test_arm64_root_certify(&L2J(L)->cur));
+  assert(lj_trace_test_arm64_root_certify(L2J(L), &L2J(L)->cur));
   LJTraceRootEntry entry = test_trace_enter_root(
     L2J(L), pc, 1, L, L->base, BC_JLOOP);
   assert(entry.trace == &L2J(L)->cur);
@@ -438,7 +438,7 @@ static void expect_metadata_success(lua_State *L, const BCIns *pc,
 static void expect_layout_reject(lua_State *L, const BCIns *pc)
 {
   assert(!root_entry_metadata_layout_valid(&L2J(L)->cur));
-  assert(!lj_trace_test_arm64_root_certify(&L2J(L)->cur));
+  assert(!lj_trace_test_arm64_root_certify(L2J(L), &L2J(L)->cur));
 #ifdef LUA_USE_ASSERT
   /* Assertion entry additionally detects illegal writes to sealed contents. */
   expect_metadata_reject(L, pc);

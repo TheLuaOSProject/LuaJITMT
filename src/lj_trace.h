@@ -183,7 +183,7 @@ LJ_FUNC void lj_trace_test_root_entry_reset(void);
 LJ_FUNC void lj_trace_test_root_entry_pause(uint32_t stage);
 LJ_FUNC uint32_t lj_trace_test_root_entry_paused(void);
 LJ_FUNC void lj_trace_test_root_entry_release(void);
-LJ_FUNC int lj_trace_test_arm64_root_certify(GCtrace *T);
+LJ_FUNC int lj_trace_test_arm64_root_certify(jit_State *J, GCtrace *T);
 LJ_FUNC uint32_t lj_trace_test_root_entry_publishes(void);
 LJ_FUNC uint32_t lj_trace_test_root_entry_successes(void);
 LJ_FUNC uint32_t lj_trace_test_root_entry_cleanups(void);

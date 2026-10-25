@@ -249,7 +249,7 @@ test "$(grep -Fc 'trace_compact_body_init(J, &plan);' \
 # side-publication action.
 for required in \
   'invalid compact trace body at publication' \
-  'if (LJ_UNLIKELY(!trace_arm64_root_certify(T))) {' \
+  'if (LJ_UNLIKELY(!trace_arm64_root_certify(J, T))) {' \
   'invalid immutable ARM64 root certificate'; do
   grep -F "$required" "$trace_save_region" >/dev/null || {
     echo "trace_save lost publication validation: $required" >&2

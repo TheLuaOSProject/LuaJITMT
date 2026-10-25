@@ -22,6 +22,9 @@
 #if LJ_TARGET_ARM64 && LJ_HASJIT_FFI_CALLXS
 #include "lj_ff.h"
 #endif
+#if LJ_TARGET_ARM64 && LJ_TARGET_OSX && LJ_HASFFI
+#include "lj_ccall_arm64.h"
+#endif
 #include "lj_ir.h"
 #include "lj_jit.h"
 #include "lj_ircall.h"
@@ -3099,6 +3102,11 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
       asm_test_side_probe_capture(J);
 #endif
     } else if (LJ_UNLIKELY(!lj_asm_arm64_ir_admit(J, T, &reject))) {
+      fprintf(stderr, "ARM64 IR reject reason=%u ref=%u op=%u detail=%u start=%u nk=%u nins=%u\n",
+              (unsigned)reject.reason, (unsigned)reject.ref,
+              (unsigned)reject.op, (unsigned)reject.detail,
+              (unsigned)bc_op(T->startins), (unsigned)T->nk,
+              (unsigned)T->nins);
       /* Use the established deterministic assembler error. The exact
       ** rejected opcode remains available through errinfo; CALL helper IDs
       ** and shape details are exposed by the pure admission result. */
@@ -3308,10 +3316,13 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
       }
 
       postraview.ir = finalir;
-      postraview.owner = J->curfinal;
+      postraview.owner = T;
+      postraview.cts = ctype_ctsG(J2G(J));
       postraview.snap = T->snap;
       postraview.snapmap = T->snapmap;
       postraview.proto_bc = proto_bc(J->pt);
+      postraview.proto = J->pt;
+      postraview.startpc = J->startpc;
       postraview.nins = finalnins;
       postraview.nk = T->nk;
       postraview.nsnap = T->nsnap;
@@ -3322,6 +3333,7 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
       postraview.root_topslot = T->topslot;
       postraview.startins = T->startins;
       postraview.base_delta = (uint8_t)(J->baseslot-2u);
+      postraview.owner_private = 1;
       if (LJ_UNLIKELY(!lj_asm_arm64_postra_admit(
 	    &postraview, &validated_semantic_nins) ||
 	  validated_semantic_nins != arm64_semantic_nins)) {

@@ -8,6 +8,8 @@
 
 #include "lj_jit.h"
 
+typedef struct CTState CTState;
+
 #if LJ_HASJIT
 LJ_FUNC void lj_asm_trace(jit_State *J, GCtrace *T);
 LJ_FUNC void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno,
@@ -46,9 +48,12 @@ typedef struct LJArm64IRReject {
 typedef struct LJArm64PostRAView {
   const IRIns *ir;
   const GCtrace *owner;
+  CTState *cts; /* Read-only CType snapshots for independent FFI validation. */
   const SnapShot *snap;
   const SnapEntry *snapmap;
   const BCIns *proto_bc;
+  const GCproto *proto;
+  const BCIns *startpc;
   IRRef nins;
   IRRef nk;
   MSize nsnap;
@@ -59,6 +64,7 @@ typedef struct LJArm64PostRAView {
   MSize root_topslot;
   BCIns startins;
   uint8_t base_delta;
+  uint8_t owner_private;
 } LJArm64PostRAView;
 
 /* Pure immutable view for the bounded ARM64 side-trace grammars. This is

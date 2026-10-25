@@ -21,6 +21,13 @@ local function build_and_run_cpp(t, out, cppfile, opts)
   build_and_run_c(t, out, cppfile, cppopts)
 end
 
+local function build_shared_cpp_library(t, out, cppfile, opts)
+  local cppopts = {}
+  for k, v in pairs(opts or {}) do cppopts[k] = v end
+  cppopts.compiler = getenv("CXX", "c++")
+  return build_shared_library(t, out, cppfile, cppopts)
+end
+
 local function read_all(path)
   local f = assert(io.open(path, "rb"))
   local s = assert(f:read("*a"))
@@ -182,6 +189,16 @@ return function(add)
       local callxs_pointer_lifecycle_so = build_shared_library(t,
         t:tmp("lj_t-arm64-jit-callxs-pointer-lifecycle.so"),
         "t-arm64-jit-callxs-pointer-lifecycle-lib.c")
+      local callxs_abi_classes_so = build_shared_library(t,
+        t:tmp("lj_t-arm64-jit-ffi-abi-classes.dylib"),
+        "t-arm64-jit-ffi-abi-classes-lib.c")
+      local callxs_cpp_so = build_shared_cpp_library(t,
+        t:tmp("lj_t-arm64-jit-cpp-callxs-unwind.dylib"),
+        "t-arm64-jit-cpp-callxs-unwind-lib.cpp", {
+          cflags = t:with_target_arch_flags(
+            "-std=gnu++11 -O2 -Wall -Wextra -Werror -fexceptions " ..
+            "-funwind-tables")
+        })
       with_arm64_bootstrap_restore(t, function()
         clean_build(t, { quiet = true, xcflags = flags })
         build_and_run_c(t, t:tmp("lj_t-arm64-jit-callxs-admission"),
@@ -195,6 +212,27 @@ return function(add)
                         "t-arm64-jit-callxs-pointer-admission.c", {
           build = false,
           cflags = flags,
+          timeout = "30s"
+        })
+        build_and_run_c(t,
+                        t:tmp("lj_t-arm64-jit-ffi-abi-classes"),
+                        "t-arm64-jit-ffi-abi-classes.c", {
+          build = false,
+          cflags = flags,
+          env = {
+            LJ_ARM64_FFI_ABI_LIB = callxs_abi_classes_so
+          },
+          timeout = "60s"
+        })
+        build_and_run_cpp(t,
+                          t:tmp("lj_t-arm64-jit-cpp-callxs-unwind"),
+                          "t-arm64-jit-cpp-callxs-unwind.cpp", {
+          build = false,
+          default_cflags = false,
+          cflags = t:with_target_arch_flags(flags ..
+            " -std=gnu++11 -O2 -Wall -Wextra -Werror -fexceptions " ..
+            "-funwind-tables"),
+          env = { LJ_ARM64_CPP_CALLXS_LIB = callxs_cpp_so },
           timeout = "30s"
         })
         run_luajit_script(t, "t-ffi-callxs-production.lua", nil, {

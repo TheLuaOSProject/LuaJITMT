@@ -14,11 +14,13 @@ ffi.cdef [[
 int abs(int);
 double fabs(double);
 float fabsf(float);
+double fma(double, double, double);
+double ldexp(double, int);
 ]]
 
 local function trace_op_count(wanted)
   local count = 0
-  for tr = 1, 128 do
+  for tr = 1, 1000 do
     local info = util.traceinfo(tr)
     if info then
       for ref = 1, info.nins do
@@ -57,19 +59,45 @@ local function run_arm64_double(fn, n)
   return true
 end
 
+local function run_arm64_fma(fn, n)
+  for i = 1, n do
+    local a = i * 0.5
+    if fn(a, 2.0, -i) ~= 0.0 then return false end
+  end
+  return true
+end
+
+local function run_arm64_mixed(fn, n)
+  for i = 1, n do
+    if fn(i, 3) ~= i * 8 then return false end
+  end
+  return true
+end
+
+local function callxs_lifecycle_count()
+  return trace_op_count("XSAVE "), trace_op_count("CALLXS")
+end
+
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 if arm64_scalar then
   assert(ffi.C.fabs(-3.25) == 3.25)
   assert(run_arm64_i32(ffi.C.abs, 400))
   assert(run_arm64_double(ffi.C.fabs, 400))
+  local base_xsave, base_callxs = callxs_lifecycle_count()
+  assert(run_arm64_fma(ffi.C.fma, 400))
+  local fma_xsave, fma_callxs = callxs_lifecycle_count()
+  assert(run_arm64_mixed(ffi.C.ldexp, 400))
+  local all_xsave, all_callxs = callxs_lifecycle_count()
+  print("CALLXS profile counts", base_xsave, base_callxs,
+        fma_xsave, fma_callxs, all_xsave, all_callxs)
 else
   assert(run(400) == 400 * 401 / 2)
 end
 local xsave = trace_op_count("XSAVE ")
 local callxs = trace_op_count("CALLXS")
 if arm64_scalar then
-  assert(xsave == 4 and callxs == 4,
+  assert(xsave == 8 and callxs == 8,
          ("wrong ARM64 scalar CALLXS lifecycles: %d/%d"):format(
            xsave, callxs))
   jit.flush()

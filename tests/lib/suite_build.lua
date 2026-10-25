@@ -218,7 +218,7 @@ function M.build_shared_library(t, out, cfile, opts)
   local cflags = opts.cflags or "-O2 -Wall -Wextra -Werror"
   local sources = opts.sources or
     (type(cfile) == "table" and cfile or { t:path("tests", cfile) })
-  local parts = { t.compiler, "-shared", "-fPIC", cflags }
+  local parts = { opts.compiler or t.compiler, "-shared", "-fPIC", cflags }
   for i = 1, #sources do parts[#parts + 1] = shell_quote(sources[i]) end
   parts[#parts + 1] = "-o"
   parts[#parts + 1] = shell_quote(out)

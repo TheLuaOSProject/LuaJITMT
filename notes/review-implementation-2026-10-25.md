@@ -521,3 +521,36 @@ The private generic-FFI M7 run also passes with this fixture:
 `/tmp/ffi-m7-final-cpparith.log`. Its suite registration will be integrated
 with that implementation. These tests establish this generated unwind and
 recovery path; they do not establish every foreign exception/aggregate ABI.
+
+## Generic FFI call effects
+
+The ARM64 FFI path now classifies fixed scalar signatures from stable CType
+snapshots and checks each call's operands, type guard and native-frame protocol.
+It accepts multiple calls in one numeric loop and no longer matches three
+complete example IR/register/snapshot templates. The independent allocated
+walk checks argument/result carriers, caller-clobbered live values, spill
+extent, snapshot ownership and the enter/CALLXS/leave sequence. Pointer results
+must own the matching rooted CNEW box and payload store before leaving the
+native frame. Call snapshots are associated with their matching XSAVE/leave
+region rather than one global continuation PC.
+
+The classifier models separate scalar GPR/FPR argument banks, including narrow
+integers, enums and pointers. Classification alone does not admit every possible
+IR graph or return representation. Outgoing stack arguments, aggregates/sret,
+variadics, vectors and complex values remain closed; float and boxed 64-bit
+result graphs still need their own emitted-layout evidence. Apple's platform
+ABI reference is [Writing ARM64 code for Apple platforms](https://developer.apple.com/documentation/xcode/writing-arm64-code-for-apple-platforms).
+
+The focused ABI matrix passed on ARM64 and arm64e/BTI. Positives include six
+integer arguments, mixed integer/double arguments, three foreign calls per
+loop and unused results. Negative controls include unsupported ABI classes and
+a valid but wrong callsite continuation. The integrated M7 case also passed
+the original scalar/pointer admission mutations, generated calls, remote flush,
+integer/double/pointer lifecycle tests and the C++ callback unwind fixture
+(1,195 generated calls). Log: `/tmp/ljmt-ffi-integrated-m7.log`.
+
+The stronger scalar-side fixture passed against the same combined production
+code using the shared profile runner, strict fixture warnings, archive/object
+identity checks and a deadline. Log:
+`/tmp/ljmt-side-ffi-integrated-native.log`. Full combined gates and the final
+caller-clobber audit are still pending at this checkpoint.

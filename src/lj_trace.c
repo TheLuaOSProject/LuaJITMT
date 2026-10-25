@@ -34,6 +34,7 @@
 #include "lj_iropt.h"
 #include "lj_mcode.h"
 #include "lj_trace.h"
+#include <stdio.h>
 #include "lj_snap.h"
 #include "lj_gdbjit.h"
 #include "lj_record.h"
@@ -4102,16 +4103,20 @@ static int trace_root_entry_arm64_exit_layout_valid(
 }
 
 static int trace_root_entry_arm64_layout_scan(
-	const TraceArm64LoopView *v, const GCtrace *owner, BCIns sourceins,
+	const TraceArm64LoopView *v, const GCtrace *owner, CTState *cts, BCIns sourceins,
 	int prepublication)
 {
   LJArm64PostRAView postra = { 0 };
   GCproto *pt = gco2pt(v->startpt);
   postra.ir = v->ir;
   postra.owner = owner;
+  postra.cts = cts;
   postra.snap = v->snap;
   postra.snapmap = v->snapmap;
   postra.proto_bc = proto_bc(pt);
+  postra.proto = pt;
+  postra.startpc = v->startpc;
+  postra.owner_private = (uint8_t)prepublication;
   postra.nins = v->nins;
   postra.nk = v->nk;
   postra.nsnap = v->nsnap;
@@ -4159,7 +4164,7 @@ static int trace_arm64_entrybc_matches(const LJArm64RootCertificate *c,
 /* Run only while constructing a private root body. Both semantic and
 ** allocated-state passes have already succeeded before the admission marker;
 ** rescan the final compact layout before sealing its exact identity. */
-static int trace_arm64_root_certify(GCtrace *T)
+static int trace_arm64_root_certify(jit_State *J, GCtrace *T)
 {
   TraceArm64LoopView v;
   LJArm64RootCertificate cert;
@@ -4174,7 +4179,7 @@ static int trace_arm64_root_certify(GCtrace *T)
   sourceop = (uint32_t)op + (uint32_t)BC_JLOOP - (uint32_t)BC_LOOP;
   if (!trace_root_entry_loop_view_acq(T, trace_traceno_acq(T),
         trace_startpc_acq(T), pt, sourceop, &v) ||
-      !trace_root_entry_arm64_layout_scan(&v, T,
+      !trace_root_entry_arm64_layout_scan(&v, T, ctype_ctsG(J2G(J)),
         (BCIns)la_load32_acq((const uint32_t *)v.startpc), 1)) return 0;
   memset(&cert, 0, sizeof(cert));
   cert.body = T;
@@ -4222,23 +4227,25 @@ static int trace_root_entry_arm64_certificate_valid(
 }
 
 static int trace_root_entry_arm64_layout_valid(
-    const TraceArm64LoopView *v, const GCtrace *owner, BCIns sourceins)
+    const TraceArm64LoopView *v, const GCtrace *owner, CTState *cts,
+    BCIns sourceins)
 {
   if (!trace_root_entry_arm64_certificate_valid(v, owner)) return 0;
 #ifdef LUA_USE_ASSERT
   /* Debug builds audit the immutable-content invariant as well. Release
   ** entry needs only the sealed tuple; legal writers never edit that body. */
-  return trace_root_entry_arm64_layout_scan(v, owner, sourceins, 0);
+  return trace_root_entry_arm64_layout_scan(v, owner, cts, sourceins, 0);
 #else
   UNUSED(sourceins);
+  UNUSED(cts);
   return 1;
 #endif
 }
 
 #ifdef LJ_TRACE_TEST_HELPERS
-int lj_trace_test_arm64_root_certify(GCtrace *T)
+int lj_trace_test_arm64_root_certify(jit_State *J, GCtrace *T)
 {
-  return trace_arm64_root_certify(T);
+  return trace_arm64_root_certify(J, T);
 }
 #endif
 
@@ -6819,7 +6826,8 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   if (!trace_runnable_acq(T, traceno) ||
       !trace_root_entry_start_valid(sourceop, trace_startins_acq(T)) ||
       !trace_root_entry_loop_view_acq(T, traceno, pc, pt, sourceop, &view) ||
-      !trace_root_entry_arm64_layout_valid(&view, T, sourceins) ||
+      !trace_root_entry_arm64_layout_valid(
+	&view, T, ctype_ctsG(g), sourceins) ||
       !trace_root_entry_first_child_view_acq(
 	J, T, traceno, sourceop, &view, &childview) ||
       !trace_root_entry_bytecode_valid(pc, pt, traceno, sourceop,
@@ -9008,7 +9016,7 @@ static void trace_save(jit_State *J, GCtrace *T)
   }
   trace_compact_body_init(J, &plan);
 #if LJ_TARGET_ARM64
-  if (LJ_UNLIKELY(!trace_arm64_root_certify(T))) {
+  if (LJ_UNLIKELY(!trace_arm64_root_certify(J, T))) {
     lj_assertJ(0, "invalid immutable ARM64 root certificate");
     abort();
   }

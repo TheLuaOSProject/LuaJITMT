@@ -7,6 +7,7 @@
 #define LUA_CORE
 
 #include "lj_obj.h"
+#include <stdio.h>
 
 #if LJ_HASJIT && LJ_HASFFI
 
@@ -20,6 +21,9 @@
 #include "lj_carith.h"
 #include "lj_clib.h"
 #include "lj_ccall.h"
+#if LJ_HASJIT_FFI_CALLXS && LJ_TARGET_ARM64
+#include "lj_ccall_arm64.h"
+#endif
 #include "lj_ff.h"
 #include "lj_ir.h"
 #include "lj_jit.h"
@@ -2488,23 +2492,14 @@ static int crec_call_arm64_admit(jit_State *J, CTState *cts,
 				  const GCcdata *cd, const CType *ct,
 				  CTypeID id, CTInfo info)
 {
-  CType field;
-  CTypeID fid, result;
-  CTInfo finfo;
-  if (J->maxslot != 2 || id != cd->ctypeid || !ctype_isfunc(info) ||
-      ctype_size_acq(ct) != 1 || (info & CTF_VARARG) != 0 ||
-      ctype_cconv(info) != CTCC_CDECL)
+  LJArm64ABISignature abi;
+  (void)J;
+  (void)ct;
+  if (id != cd->ctypeid || !ctype_isfunc(info) ||
+      !lj_ccall_arm64_signature(cts, id, &abi)) {
     return 0;
-  result = ctype_cid(info);
-  if (result != CTID_INT32 && result != CTID_DOUBLE &&
-      result != CTID_P_CCHAR)
-    return 0;
-  fid = ctype_sib_acq(ct);
-  if (fid == 0)
-    return 0;
-  finfo = ctype_info_acq(crec_ctype_snapshot(J, cts, fid, &field));
-  return ctype_isfield(finfo) && ctype_cid(finfo) == result &&
-	 ctype_sib_acq(&field) == 0;
+  }
+  return 1;
 }
 #endif
 
