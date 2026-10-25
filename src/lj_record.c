@@ -2098,7 +2098,7 @@ static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t,
   if (bounded && (t == IRT_NUM || t == IRT_INT ||
       t == IRT_TRUE || t == IRT_FALSE ||
       t == IRT_STR || t == IRT_TAB || t == IRT_FUNC || t == IRT_THREAD ||
-      t == IRT_UDATA || t == IRT_CDATA)) {
+      t == IRT_UDATA || t == IRT_CDATA || t == IRT_LIGHTUD)) {
     /* A bounded hit attempt never waits. Its false result side-exits before
     ** the rooted output is consumed. GC hits publish the result before their
     ** lease ends; the JIT phase lease then spans every later native use until

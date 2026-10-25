@@ -135,6 +135,11 @@ available.
   source-edge-removal/collector handoff pass on ARM64 and arm64e/BTI in both
   assertion and release profiles; see
   [`arm64-jit-rooted-gc-values-2026-10-25.md`](arm64-jit-rooted-gc-values-2026-10-25.md).
+- Generic bounded reads also accept exact lightuserdata keys and results.
+  Guarded loads, loop-carried values, full-width spills and snapshot restoration
+  preserve the segmented token without treating it as a GC pointer. The full
+  rooted-value contract passes in all four profiles; see
+  [`arm64-jit-rooted-lightuserdata-2026-10-25.md`](arm64-jit-rooted-lightuserdata-2026-10-25.md).
 - Scalar `FORL` supports constant and variable integer bounds/steps through
   def-use and source-control-flow checks. Scalar fixed-arity `FUNCF` supports
   bounded arithmetic, argument/cell loads and one scalar return.
@@ -176,8 +181,8 @@ available.
 - General table and upvalue JIT reads, writes and traversal, plus sunk/duplicate
   allocation and raw initialization effects. Rooted scalar/GC reads,
   existing-key scalar/GC stores and unsunk TNEW have operation proofs;
-  new-key insertion, nil/lightuserdata values and general metamethod paths
-  remain closed. Shared raw nil stores sampled as absent now abort recording
+  new-key insertion, nil results, lightuserdata stores and general metamethod
+  paths remain closed. Shared raw nil stores sampled as absent now abort recording
   instead of losing a deletion on later execution; see the
   [raw nil-store regression](arm64-raw-nil-store-2026-10-25.md). Forwarding-safe
   interpreter `lj_vm_next` does not by itself open other JIT heap paths.

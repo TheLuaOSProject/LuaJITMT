@@ -4344,7 +4344,9 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
        ir->op2 == IRCALL_lj_tab_storenum_rooted ||
        ir->op2 == IRCALL_lj_tab_storebool_rooted ||
        ir->op2 == IRCALL_lj_tab_storegc_rooted);
-  if (arm64_rooted_gc_type(type))
+  /* Lightuserdata is an opaque segmented token. Like a GC pointer, it can
+  ** only originate in an exact tagged load here, never arithmetic or CONV. */
+  if (arm64_rooted_gc_type(type) || type == IRT_LIGHTUD)
     return (ir->o == IR_SLOAD || ir->o == IR_VLOAD ||
             (type == IRT_TAB && ir->o == IR_TNEW)) &&
       (ir->t.irt & ~IRT_ISPHI) == (type|IRT_GUARD);
@@ -4421,7 +4423,8 @@ static int arm64_rooted_ir_effect(const GCtrace *T, IRRef ref,
     if (value->o != IR_VLOAD || value->op1 != root1 || value->op2 ||
         (irt_type(value->t) != IRT_INT && irt_type(value->t) != IRT_NUM &&
          irt_type(value->t) != IRT_TRUE && irt_type(value->t) != IRT_FALSE &&
-         !(tvread && arm64_rooted_gc_type(irt_type(value->t)))) ||
+         !(tvread && (arm64_rooted_gc_type(irt_type(value->t)) ||
+                      irt_type(value->t) == IRT_LIGHTUD))) ||
         !irt_isguard(value->t) ||
         (value->t.irt & ~(IRT_TYPE|IRT_GUARD|IRT_ISPHI)))
       return 0;
@@ -4429,7 +4432,8 @@ static int arm64_rooted_ir_effect(const GCtrace *T, IRRef ref,
     const IRIns *tail, *head;
     IRType type = call->op2 == IRCALL_lj_tab_storenum_rooted ? IRT_NUM : IRT_INT;
     IRRef chain = call->op1;
-    if (!root2 || chain < REF_FIRST || chain >= ref)
+    if (!root2 || chain < REF_FIRST || chain >= ref ||
+        arm64_scalar_ir_ref(T, T->ir[root2].op1, root2, IRT_LIGHTUD))
       return 0;
     tail = &T->ir[chain];
     if (tail->o != IR_CARG || tail->t.irt != IRT_NIL ||
@@ -4737,9 +4741,10 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
           goto bad_type;
         break;
       }
-      if (arm64_rooted_gc_type(type) ||
+      if (arm64_rooted_gc_type(type) || type == IRT_LIGHTUD ||
           type == IRT_TRUE || type == IRT_FALSE) {
-        if ((flags & ~(arm64_rooted_gc_type(type) ? IRT_ISPHI : 0)) != IRT_GUARD ||
+        if ((flags & ~((arm64_rooted_gc_type(type) || type == IRT_LIGHTUD) ?
+                       IRT_ISPHI : 0)) != IRT_GUARD ||
             ir->op2 != IRSLOAD_TYPECHECK || ir->op1 < 1 + LJ_FR2 ||
             ir->op1 >= maxslots)
           goto bad_type;
@@ -4769,6 +4774,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
         if (!arm64_scalar_ir_ref(T, ir->op1, ref, IRT_INT) &&
             !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_NUM) &&
             !arm64_scalar_ir_gc_ref(T, ir->op1, ref) &&
+            !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_LIGHTUD) &&
             !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_TRUE) &&
             !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_FALSE))
           goto bad_operand;
@@ -4783,7 +4789,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       if (ref != resultref || !resultroot || ir->op1 != resultroot ||
           ir->op2 || (type != IRT_INT && type != IRT_NUM &&
                       type != IRT_TRUE && type != IRT_FALSE &&
-                      !arm64_rooted_gc_type(type)) ||
+                      !arm64_rooted_gc_type(type) && type != IRT_LIGHTUD) ||
           !(flags & IRT_GUARD) || (flags & ~(IRT_GUARD|IRT_ISPHI)))
         goto bad_type;
       resultroot = resultref = 0;
@@ -4856,7 +4862,8 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       if (!firstphi)
         firstphi = ref;
       if (++nphi > LJ_MAX_PHI || !poll || flags ||
-          (type != IRT_INT && type != IRT_NUM && !arm64_rooted_gc_type(type)) ||
+          (type != IRT_INT && type != IRT_NUM &&
+           !arm64_rooted_gc_type(type) && type != IRT_LIGHTUD) ||
           ir->op1 < REF_FIRST ||
           ir->op1 >= loop || ir->op2 < REF_FIRST || ir->op2 >= firstphi)
         goto bad_type;
@@ -4985,6 +4992,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
           (!arm64_scalar_ir_ref(T, value, ref, IRT_INT) &&
            !arm64_scalar_ir_ref(T, value, ref, IRT_NUM) &&
            !arm64_scalar_ir_gc_ref(T, value, ref) &&
+           !arm64_scalar_ir_ref(T, value, ref, IRT_LIGHTUD) &&
            !arm64_scalar_ir_ref(T, value, ref, IRT_TRUE) &&
            !arm64_scalar_ir_ref(T, value, ref, IRT_FALSE)))
         goto bad_snapshot;
@@ -5087,7 +5095,8 @@ static int arm64_scalar_postra_value(IRIns p)
   case IR_CONV:
     return irt_type(p.t) == IRT_INT || irt_type(p.t) == IRT_NUM ||
            (p.o == IR_SLOAD &&
-            arm64_rooted_gc_type(irt_type(p.t)) &&
+            (arm64_rooted_gc_type(irt_type(p.t)) ||
+             irt_type(p.t) == IRT_LIGHTUD) &&
             (p.t.irt & ~IRT_ISPHI) == (irt_type(p.t)|IRT_GUARD));
   case IR_TNEW:
     return (p.t.irt & ~IRT_ISPHI) == (IRT_TAB|IRT_GUARD);
@@ -5103,7 +5112,8 @@ static int arm64_scalar_postra_value(IRIns p)
             p.op2 == IRCALL_lj_tab_storegc_rooted);
   case IR_VLOAD:
     return (irt_type(p.t) == IRT_INT || irt_type(p.t) == IRT_NUM ||
-            arm64_rooted_gc_type(irt_type(p.t))) &&
+            arm64_rooted_gc_type(irt_type(p.t)) ||
+            irt_type(p.t) == IRT_LIGHTUD) &&
            irt_isguard(p.t);
   default:
     return 0;
@@ -5119,7 +5129,7 @@ static int arm64_scalar_postra_ref(const LJArm64PostRAView *v, IRRef ref,
     return 0;
   p = ir_load_acq(&v->ir[ref]);
   return arm64_scalar_postra_value(p) && irt_type(p.t) == type &&
-         (!arm64_rooted_gc_type(type) ||
+         ((!arm64_rooted_gc_type(type) && type != IRT_LIGHTUD) ||
           ((p.o == IR_SLOAD || p.o == IR_VLOAD ||
             (type == IRT_TAB && p.o == IR_TNEW)) &&
            (p.t.irt & ~IRT_ISPHI) == (type|IRT_GUARD)));
@@ -5239,7 +5249,8 @@ static int arm64_rooted_postra_effect(const LJArm64PostRAView *v, IRRef n,
     if (value.o != IR_VLOAD || value.op1 != root1 || value.op2 ||
         (irt_type(value.t) != IRT_INT && irt_type(value.t) != IRT_NUM &&
          irt_type(value.t) != IRT_FALSE && irt_type(value.t) != IRT_TRUE &&
-         !(tvread && arm64_rooted_gc_type(irt_type(value.t)))) ||
+         !(tvread && (arm64_rooted_gc_type(irt_type(value.t)) ||
+                      irt_type(value.t) == IRT_LIGHTUD))) ||
         !irt_isguard(value.t) ||
         (value.t.irt & ~(IRT_TYPE|IRT_GUARD|IRT_ISPHI))) return 0;
   } else if (store) {
@@ -5255,6 +5266,9 @@ static int arm64_rooted_postra_effect(const LJArm64PostRAView *v, IRRef n,
       return 0;
     inner = ir_load_acq(&v->ir[outer.op1]);
     r2 = ir_load_acq(&v->ir[root2]);
+    /* Lightuserdata keys are currently certified for the generic reader.
+    ** The existing-key store helpers still reject that key class. */
+    if (arm64_scalar_postra_ref(v, r2.op1, root2, IRT_LIGHTUD)) return 0;
     if (inner.o != IR_CARG || inner.t.irt != IRT_NIL ||
         inner.op1 != root1 || inner.op2 != root2 ||
         root1 >= outer.op1 || root2 >= outer.op1 ||
@@ -5461,9 +5475,10 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
           return 0;
         break;
       }
-      if (arm64_rooted_gc_type(type) ||
+      if (arm64_rooted_gc_type(type) || type == IRT_LIGHTUD ||
           type == IRT_FALSE || type == IRT_TRUE) {
-        if ((p.t.irt & ~(arm64_rooted_gc_type(type) ? IRT_ISPHI : 0)) != (type|IRT_GUARD) ||
+        if ((p.t.irt & ~((arm64_rooted_gc_type(type) || type == IRT_LIGHTUD) ?
+                         IRT_ISPHI : 0)) != (type|IRT_GUARD) ||
             p.op2 != IRSLOAD_TYPECHECK || p.op1 < 1 + LJ_FR2 ||
             p.op1 >= v->root_topslot + 1 + LJ_FR2)
           return 0;
@@ -5491,6 +5506,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
         if (!arm64_scalar_postra_ref(v, p.op1, ref, IRT_INT) &&
             !arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM) &&
             !arm64_scalar_postra_gc_ref(v, p.op1, ref) &&
+            !arm64_scalar_postra_ref(v, p.op1, ref, IRT_LIGHTUD) &&
             !arm64_scalar_postra_ref(v, p.op1, ref, IRT_FALSE) &&
             !arm64_scalar_postra_ref(v, p.op1, ref, IRT_TRUE)) return 0;
         root2 = ref;
@@ -5569,7 +5585,8 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       if (!resultroot || ref != resultref || p.op1 != resultroot || p.op2 ||
           (type != IRT_INT && type != IRT_NUM &&
            type != IRT_FALSE && type != IRT_TRUE &&
-           !arm64_rooted_gc_type(type)) || !(flags & IRT_GUARD) ||
+           !arm64_rooted_gc_type(type) && type != IRT_LIGHTUD) ||
+          !(flags & IRT_GUARD) ||
           (flags & ~(IRT_GUARD|IRT_ISPHI))) return 0;
       resultroot = resultref = 0;
       break;
@@ -5601,7 +5618,8 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       if (!firstphi)
         firstphi = ref;
       if (++nphi > LJ_MAX_PHI || !poll || flags ||
-          (type != IRT_INT && type != IRT_NUM && !arm64_rooted_gc_type(type)) ||
+          (type != IRT_INT && type != IRT_NUM &&
+           !arm64_rooted_gc_type(type) && type != IRT_LIGHTUD) ||
           p.op1 < REF_FIRST ||
           p.op1 >= loop || p.op2 < REF_FIRST || p.op2 >= firstphi)
         return 0;
@@ -5623,11 +5641,11 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       int value = arm64_scalar_postra_value(p) || p.o == IR_PHI;
       if (ra_hasspill(p.s)) {
         MSize width = type == IRT_INT ? 1 : 2, slot;
-        /* GC values need the complete 64-bit pointer in spills and snapshots.
-        ** The native phase lease spans these unscanned locations until exit
-        ** restoration; it is never released by an admitted table helper. */
+        /* Preserve the complete 64-bit NUM, GC pointer or lightuserdata token.
+        ** GC pointers additionally rely on the native phase lease until exit
+        ** restoration; lightuserdata tokens carry no GC edge. */
         if (!value || (type != IRT_INT && type != IRT_NUM &&
-                       !arm64_rooted_gc_type(type)) ||
+                       !arm64_rooted_gc_type(type) && type != IRT_LIGHTUD) ||
             p.s < SPS_FIRST || (width == 2 && (p.s & 1)) ||
             (MSize)p.s + width > cap)
           return 0;
@@ -5749,6 +5767,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
           (!arm64_scalar_postra_ref(v, r, at, IRT_INT) &&
            !arm64_scalar_postra_ref(v, r, at, IRT_NUM) &&
            !arm64_scalar_postra_gc_ref(v, r, at) &&
+           !arm64_scalar_postra_ref(v, r, at, IRT_LIGHTUD) &&
            !arm64_scalar_postra_ref(v, r, at, IRT_FALSE) &&
            !arm64_scalar_postra_ref(v, r, at, IRT_TRUE)))
         return 0;

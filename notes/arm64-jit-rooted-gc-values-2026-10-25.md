@@ -135,9 +135,11 @@ unrestricted FFI/side-trace support.
 
 ## Remaining boundary
 
-New-key insertion, nil/lightuserdata result/value classes, general metamethod
+New-key insertion, nil results, lightuserdata stores, general metamethod
 paths, raw table/upvalue heap IR, sunk initialization, heap-effect side traces
 and general FFI combinations still need their own proofs. The optimized scalar
 read helper retains its numeric/string/boolean key domain; generic bounded
 reads cover the other visible GC identity keys. The full port also
 retains the broader parity, stress and performance work listed in README.
+Lightuserdata reads have a subsequent, separate
+[token-preservation certificate](arm64-jit-rooted-lightuserdata-2026-10-25.md).
