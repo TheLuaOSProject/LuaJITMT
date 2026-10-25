@@ -23,16 +23,16 @@ and reports that are no longer authoritative are retained in
   entry, exits and refusals. Shared build profiles bind runtime, archive,
   fixture and helper-library identity. All review work streams are integrated.
   See [`review-implementation-2026-10-25.md`](review-implementation-2026-10-25.md).
-- Latest complete combined validation: frozen `be031e3b`. Experimental,
+- Latest complete combined validation: frozen `effe6467`. Experimental,
   stock source/import and bootstrap ran sequentially without source changes.
   Every default target branch ran. See
-  [`review-validation-2026-10-25.md`](review-validation-2026-10-25.md) for commands,
-  logs, profiles and the scope of earlier sanitizer/performance evidence.
-- Fixed scalar FFI stack arguments now pass the four-profile M7 suite,
+  [`arm64-ffi-stack-arguments-2026-10-25.md`](arm64-ffi-stack-arguments-2026-10-25.md)
+  for commands, logs and profile. The earlier architecture-review checkpoint
+  and its sanitizer/performance scope remain in
+  [`review-validation-2026-10-25.md`](review-validation-2026-10-25.md).
+- Fixed scalar FFI stack arguments pass the four-profile M7 suite,
   including compact Darwin stack slots, spill separation, nested callbacks
-  and C++ unwind/recovery. The complete combined baseline above predates this
-  change. See
-  [`arm64-ffi-stack-arguments-2026-10-25.md`](arm64-ffi-stack-arguments-2026-10-25.md).
+  and C++ unwind/recovery, both separately and within the combined gate.
 - The experimental gate includes generic roots, rooted effects, scalar-side
   publication/entry/retirement, native numeric adaptation, and generic FFI M7
   on ARM64 and arm64e/BTI with both assertion and release runtimes.
@@ -165,6 +165,9 @@ available.
   allocation and raw initialization effects. Rooted scalar reads, existing-key
   scalar stores and unsunk TNEW have operation proofs; forwarding-safe
   interpreter `lj_vm_next` does not by itself open other JIT heap paths.
+  The read-only
+  [`GC-value rooting audit`](arm64-gc-value-rooting-audit-2026-10-25.md)
+  describes the remaining value-lifetime boundary for rooted reads and stores.
 - General side traces, side-of-side traces, stitches, and production JIT
   side-exit unwind resolution.
 - ARM64 CALLXS aggregates/sret, variadics, vectors, complex results and

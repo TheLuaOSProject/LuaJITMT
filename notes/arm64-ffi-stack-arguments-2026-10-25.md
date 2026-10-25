@@ -73,9 +73,53 @@ The four profiles use matching runtime/archive/fixture/helper-library flags
 through the existing shared build helper. The complete experimental gate
 already invokes these profiles and therefore includes the new coverage.
 
-The prior combined regression baseline remains `be031e3b` until the broader
-gates below are rerun on the committed source. Focused M7 passes alone do not
-replace the experimental/bootstrap gates or either 509-case stock corpus.
+## Combined validation
+
+All of the following passed sequentially on clean, frozen source
+`effe64673520f03856ce8036ece201c728b13821`. Source did not change during the
+combined run, and the checkout was clean afterward. Later changes to this
+checkpoint only update documentation.
+
+| Check | Result | Log under `/tmp/` |
+| --- | --- | --- |
+| Complete experimental gate | All default branches passed, including all four M7 profiles and both C++ unwind signatures in each | `ljmt-stack-experimental-effe6467.log` |
+| ARM64 stock source corpus | 509 passed | `ljmt-stack-stock-source-effe6467.log` |
+| ARM64 original-v2 bytecode import corpus | 509 passed | `ljmt-stack-stock-import-effe6467.log` |
+| Complete bootstrap gate | Passed, including 387 stock cases, threaded tmpbuf, Darwin roots/GC2, ARM64/arm64e callbacks, aggregate/variadic FFI and x86-64 errno unwind | `ljmt-stack-bootstrap-effe6467.log` |
+| Development profile restoration | Thin ARM64 assertion runtime, JIT enabled, no test-helper defines | `ljmt-stack-development-profile-effe6467.log` |
+
+Builds used Apple SDK clang/clang++, SDKROOT from `xcrun --sdk macosx`,
+deployment target 13.0 and `JOBS=2 MAKE_JOBS=2`. No test branch, assertion or
+timeout was disabled. The experimental numeric-argument contract ran all
+222 default executions. The final development profile fingerprint is
+`a2c50c1dcdd16f500f9873dee8d7094b6f1da122a662327b6d16a762c00caa2e`.
+
+Reproduce serially in one checkout:
+
+```sh
+export LJ_TEST_ROOT="$PWD" JOBS=2 MAKE_JOBS=2
+export CC="$(xcrun --sdk macosx --find clang)"
+export CXX="$(xcrun --sdk macosx --find clang++)"
+export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+export MACOSX_DEPLOYMENT_TARGET=13.0
+sh tools/ci/arm64_jit_fail_closed_gate.sh
+(cd tests/stock/test && ../../../src/luajit test.lua --quiet)
+(cd tests/stock/test && LUAJIT_STOCK=/opt/homebrew/bin/luajit ../../../src/luajit ../../../tools/ci/stock_bytecode_corpus.lua)
+sh tools/ci/arm64_bootstrap_gate.sh
+```
+
+After bootstrap, restore the development runtime explicitly:
+
+```sh
+(
+  set -eu
+  . tools/ci/lib/arm64_profile.sh
+  lj_ci_profile_init "$LJ_TEST_ROOT" stack-development-profile
+  lj_ci_build_profile arm64 '-arch arm64' '-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT' stack-development
+  lj_ci_run_lua 30 -e 'assert(jit.arch == "arm64" and jit.status())'
+  LJ_CI_RESTORE_NEEDED=0
+)
+```
 
 ## Remaining scope
 
