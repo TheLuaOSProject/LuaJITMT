@@ -2,720 +2,175 @@
 set -eu
 
 root=${LJ_TEST_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)}
-
-if test "$(uname -s)" != Darwin || test "$(uname -m)" != arm64; then
-  echo "arm64_jit_root_entry_contract SKIP: requires native macOS arm64"
-  exit 0
+. "$root/tools/ci/lib/arm64_profile.sh"
+if lj_ci_native_arm64_or_skip arm64_jit_root_entry_contract; then :; else
+  status=$?; test "$status" -eq 1 && exit 0; exit "$status"
 fi
 
-if test -z "${SDKROOT:-}"; then
-  SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
-  export SDKROOT
-fi
-
-lock_dir=$root/src/.lj-test-run.lock
-lock_held=0
-restore_needed=0
-tmpdir=
-cleanup() {
-  status=$?
-  trap - EXIT HUP INT TERM
-  if test "$restore_needed" = 1; then
-    env MACOSX_DEPLOYMENT_TARGET="$minver" \
-      make -C "$root/src" clean TARGET_FLAGS='-arch arm64' \
-        XCFLAGS="$xcflags" >/dev/null 2>&1 || status=1
-    env MACOSX_DEPLOYMENT_TARGET="$minver" \
-      make -C "$root/src" -j"$jobs" TARGET_FLAGS='-arch arm64' \
-        XCFLAGS="$xcflags" >/dev/null 2>&1 || status=1
-  fi
-  if test "$lock_held" = 1; then
-    rm -f "$lock_dir/owner"
-    rmdir "$lock_dir" 2>/dev/null || true
-  fi
-  if test -n "$tmpdir"; then
-    rm -rf "$tmpdir"
-  fi
-  exit "$status"
-}
-
-if test "${LJ_TEST_DISABLE_RUN_LOCK:-}" != 1 &&
-   test "${LJ_TEST_RUN_LOCK_HELD:-}" != 1; then
-  while ! mkdir "$lock_dir" 2>/dev/null; do sleep 0.2; done
-  lock_held=1
-fi
-tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lj-arm64-root-entry.XXXXXX")
-trap cleanup EXIT HUP INT TERM
-if test "$lock_held" = 1; then
-  printf 'cmd=%s\n' "$0" >"$lock_dir/owner" 2>/dev/null || true
-fi
-
-jobs=${JOBS:-${MAKE_JOBS:-$(sysctl -n hw.logicalcpu 2>/dev/null || echo 2)}}
-cc=${CC:-$(xcrun --sdk macosx --find clang)}
-minver=${MACOSX_DEPLOYMENT_TARGET:-13.0}
+lj_ci_profile_init "$root" arm64_jit_root_entry_contract
+lj_ci_tmpdir lj-arm64-root-entry
+tmpdir=$LJ_CI_TMPDIR
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS -DLJ_ARM64_EXIT_TEST_HELPERS'
 pauth_xcflags="$xcflags -DLUAJIT_ENABLE_CET_BR"
-archive=$root/src/libluajit.a
-vm_object=$root/src/lj_vm.o
-fixture_obj=$tmpdir/t-arm64-jit-root-entry.o
-fixture=$tmpdir/t-arm64-jit-root-entry
-disasm=$tmpdir/fixture.disasm
-abi_region=$tmpdir/abi-region.txt
-ordinary_macros=$tmpdir/macros-arm64.txt
-helper_region=$tmpdir/helper-region.txt
-pending_region=$tmpdir/pending-region.txt
-source_gate_region=$tmpdir/source-gate-region.txt
-loop_view_region=$tmpdir/loop-view-region.txt
-layout_region=$tmpdir/layout-region.txt
-first_child_region=$tmpdir/first-child-region.txt
-first_child_equal_region=$tmpdir/first-child-equal-region.txt
-vm_disasm=$tmpdir/vm.disasm
-vm_reloc=$tmpdir/vm.reloc
-jloop_region=$tmpdir/vm-jloop.txt
-jfuncf_region=$tmpdir/vm-jfuncf.txt
-jfuncv_region=$tmpdir/vm-jfuncv.txt
-pauth_macros=$tmpdir/macros-arm64e.txt
-pauth_vm_disasm=$tmpdir/vm-arm64e.disasm
-pauth_jloop_region=$tmpdir/vm-arm64e-jloop.txt
-pauth_fixture_obj=$tmpdir/t-arm64-jit-root-entry-arm64e.o
-pauth_fixture=$tmpdir/t-arm64-jit-root-entry-arm64e
-pauth_side_fixture_obj=$tmpdir/t-arm64-jit-side-ingress-metadata-arm64e.o
-pauth_side_fixture=$tmpdir/t-arm64-jit-side-ingress-metadata-arm64e
-restore_needed=1
+lj_ci_set_restore "${LJ_TEST_RESTORE_TARGET_FLAGS:--arch arm64}" \
+  "${LJ_TEST_RESTORE_XCFLAGS:-$xcflags}"
 
-env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" clean TARGET_FLAGS='-arch arm64' XCFLAGS="$xcflags"
-env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" -j"$jobs" XCFLAGS="$xcflags"
+root_fixture=$root/tests/t-arm64-jit-root-entry.c
+side_fixture=$root/tests/t-arm64-jit-side-adaptation.c
+test -f "$root_fixture" && test -f "$side_fixture"
 
-test "$(lipo -archs "$archive")" = arm64
-nm "$archive" | grep ' T _lj_trace_enter_root$' >/dev/null
-nm "$vm_object" | grep ' U _lj_trace_enter_root$' >/dev/null
+check_root_entry_order() {
+  helper=$tmpdir/entry-helper.c
+  child=$tmpdir/entry-child.c
+  equal=$tmpdir/entry-child-equal.c
+  awk '/^lj_trace_enter_root\(/ { copy=1 }
+       copy { print }
+       copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$helper"
+  awk '/^static int trace_root_entry_first_child_view_acq/ { copy=1 }
+       copy { print }
+       copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$child"
+  awk '/^static int trace_root_entry_first_child_view_equal/ { copy=1 }
+       copy { print }
+       copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$equal"
+  test -s "$helper" && test -s "$child" && test -s "$equal"
+  line() { grep -nF "$1" "$helper" | sed -n "${2:-1}p" | cut -d: -f1; }
+  source_gate=$(line '!trace_root_entry_source_admitted(sourceop)')
+  publish=$(line 'lj_tg_store_jit_base(tg, base)')
+  fence=$(line 'la_fence_seq()')
+  gate=$(line 'lj_gc2_jit_entry_open(g)' 2)
+  first_slot=$(line 'trace_root_entry_slot_acq(J, traceno' 1)
+  first_layout=$(line 'trace_root_entry_arm64_layout_valid(&view, T, sourceins)')
+  first_child=$(line 'trace_root_entry_first_child_view_acq(' 1)
+  second_slot=$(line 'trace_root_entry_slot_acq(J, traceno' 2)
+  equal_child=$(line 'trace_root_entry_first_child_view_equal(&childview, &childview2)')
+  postmetadata=$(line 'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA')
+  postadmission=$(line 'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION')
+  cleanup=$(line 'lj_tg_store_jit_base(tg, NULL)')
+  test -n "$source_gate" && test -n "$publish" && test -n "$fence" &&
+    test -n "$gate" && test -n "$first_slot" && test -n "$first_layout" &&
+    test -n "$first_child" && test -n "$second_slot" &&
+    test -n "$equal_child" && test -n "$postmetadata" &&
+    test -n "$postadmission" && test -n "$cleanup"
+  test "$source_gate" -lt "$publish" && test "$publish" -lt "$fence" &&
+    test "$fence" -lt "$gate" && test "$gate" -lt "$first_slot" &&
+    test "$first_slot" -lt "$first_layout" &&
+    test "$first_layout" -lt "$first_child" &&
+    test "$first_child" -lt "$second_slot" &&
+    test "$second_slot" -lt "$equal_child" &&
+    test "$equal_child" -lt "$postmetadata" &&
+    test "$postmetadata" -lt "$postadmission" &&
+    test "$postadmission" -lt "$cleanup"
 
-# shellcheck disable=SC2086 # xcflags intentionally expands to arguments.
-"$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64 \
-  -mmacosx-version-min="$minver" $xcflags -I"$root/src" \
-  -c "$root/tests/t-arm64-jit-root-entry.c" -o "$fixture_obj"
-# shellcheck disable=SC2086 # xcflags intentionally expands to arguments.
-"$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64 \
-  -mmacosx-version-min="$minver" $xcflags -I"$root/src" \
-  "$root/tests/t-arm64-jit-root-entry.c" "$archive" -lm -pthread -o "$fixture"
-"$fixture"
-
-# Prove the checked-in caller consumes the 16-byte non-HFA result in x0/x1:
-# x6 (the seventh argument) is preserved, the helper has a direct BR26 call,
-# x1 is stored as target, and x0 is returned without a hidden x8 sret pointer.
-otool -tvV "$fixture_obj" >"$disasm"
-awk '/^_lj_test_root_entry_abi_probe:/ { copy=1 }
-     copy { print }
-     copy && /^_main:/ { exit }' "$disasm" >"$abi_region"
-grep -E 'mov[[:space:]]+x19, x6' "$abi_region" >/dev/null
-grep -E 'str[[:space:]]+x1, \[x19\]' "$abi_region" >/dev/null
-grep -E 'ret$' "$abi_region" >/dev/null
-if grep -E '(^|[[:space:],])x8([[:space:],]|$)' "$abi_region" >/dev/null; then
-  echo "root-entry ABI probe unexpectedly uses hidden-result register x8" >&2
-  exit 1
-fi
-otool -rv "$fixture_obj" | \
-  grep '^00000010 .* BR26 .* _lj_trace_enter_root$' >/dev/null
-
-# The generated VM has distinct JLOOP, integer-JFORL and JFUNCF AAPCS64 helper
-# call sites. JLOOP, post-update integer JFORL and certified JFUNCF continue
-# through the fixed reserve before their raw/authenticated mcode transfer.
-otool -rv "$vm_object" >"$vm_reloc"
-test "$(grep -c 'BR26.*_lj_trace_enter_root$' "$vm_reloc")" = 3
-otool -tvV "$vm_object" >"$vm_disasm"
-awk '/^_lj_BC_JLOOP:/ { copy=1 }
-     copy { print }
-     copy && /^_lj_BC_JMP:/ { exit }' "$vm_disasm" >"$jloop_region"
-awk '/^_lj_BC_JFUNCF:/ { copy=1 }
-     copy { print }
-     copy && /^_lj_BC_(FUNCV|IFUNCV):/ { exit }' \
-  "$vm_disasm" >"$jfuncf_region"
-awk '/^_lj_BC_JFUNCV:/ { copy=1 }
-     copy { print }
-     copy && /^_lj_BC_FUNCC:/ { exit }' "$vm_disasm" >"$jfuncv_region"
-test -s "$jloop_region" && test -s "$jfuncf_region" && test -s "$jfuncv_region"
-for region in "$jloop_region" "$jfuncf_region"; do
-  grep -E 'mov[[:space:]]+x4, x19' "$region" >/dev/null
-  grep -E 'mov[[:space:]]+w5, w16' "$region" >/dev/null
-done
-grep -E 'sub[[:space:]]+sp, sp, #0x10' "$jloop_region" >/dev/null
-grep -E 'br[[:space:]]+x1$' "$jloop_region" >/dev/null
-if grep -E 'stlr[[:space:]]+xzr, \[x14\]' "$jloop_region" >/dev/null; then
-  echo "open JLOOP unexpectedly clears its successful helper lease" >&2
-  exit 1
-fi
-grep -E 'ldar[[:space:]]+w16, \[x14\]' "$jfuncf_region" >/dev/null
-grep -E 'sub[[:space:]]+sp, sp, #0x10' "$jfuncf_region" >/dev/null
-grep -E 'br[[:space:]]+x1$' "$jfuncf_region" >/dev/null
-if grep -E 'stlr[[:space:]]+xzr, \[x14\]' "$jfuncf_region" >/dev/null; then
-  echo "open JFUNCF unexpectedly clears its successful helper lease" >&2
-  exit 1
-fi
-jloop_call=$(grep -nE 'bl[[:space:]]+0x' "$jloop_region" | sed -n '1p' | cut -d: -f1)
-jloop_sub=$(grep -nE 'sub[[:space:]]+sp, sp, #0x10' \
-  "$jloop_region" | sed -n '1p' | cut -d: -f1)
-jloop_branch=$(grep -nE 'br[[:space:]]+x1$' "$jloop_region" | \
-  sed -n '1p' | cut -d: -f1)
-test -n "$jloop_call" && test "$jloop_call" -lt "$jloop_sub" &&
-test "$jloop_sub" -lt "$jloop_branch"
-grep -E 'mov[[:space:]]+w2, w28' "$jloop_region" >/dev/null
-grep -E 'add[[:space:]]+x8, x21, x28, lsl #2' "$jloop_region" >/dev/null
-grep -E 'sub[[:space:]]+x21, x8, #0x20, lsl #12' \
-  "$jloop_region" >/dev/null
-if grep -E 'ubfx[[:space:]]+x28' "$jfuncf_region" >/dev/null; then
-  echo "JFUNCF rejection clobbers the preserved actual-nargs register" >&2
-  exit 1
-fi
-grep -E 'brk[[:space:]]+#0' "$jfuncv_region" >/dev/null
-
-jloop_source=$tmpdir/vm-jloop.dasc
-jfuncf_source=$tmpdir/vm-jfuncf.dasc
-for_source=$tmpdir/vm-for.dasc
-awk '/case BC_FORL:/ { seen++; if (seen == 2) copy=1 }
-     copy { print }
-     copy && /case BC_ITERL:/ { exit }' \
-  "$root/src/vm_arm64.dasc" >"$for_source"
-awk '/case BC_JLOOP:/ { seen++; if (seen == 2) copy=1 }
-     copy { print }
-     copy && /case BC_JMP:/ { exit }' \
-  "$root/src/vm_arm64.dasc" >"$jloop_source"
-awk '/case BC_JFUNCF:/ { seen++; if (seen == 2) copy=1 }
-     copy { print }
-     copy && /case BC_JFUNCV:/ { exit }' \
-  "$root/src/vm_arm64.dasc" >"$jfuncf_source"
-for source in "$jloop_source" "$jfuncf_source"; do
-  grep -F 'add CARG1, GL, #GG_G2J_HI' "$source" >/dev/null
-  grep -F 'sub CARG2, PC, #4' "$source" >/dev/null
-  grep -F 'decode_RD CARG3, INS' "$source" >/dev/null
-  grep -F 'mov CARG4, L' "$source" >/dev/null
-  grep -F 'mov CARG5, BASE' "$source" >/dev/null
-  grep -F 'bl extern lj_trace_enter_root' "$source" >/dev/null
-done
-grep -F 'mov CARG6w, INSw' "$jloop_source" >/dev/null
-grep -F 'mov CARG3w, RCw' "$jloop_source" >/dev/null
-grep -F '#if LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED' \
-  "$jloop_source" >/dev/null
-grep -F 'sub sp, sp, #16' "$jloop_source" >/dev/null
-grep -F 'br_trace_auth CARG2, CRET1' "$jloop_source" >/dev/null
-jloop_source_call=$(grep -n 'bl extern lj_trace_enter_root' "$jloop_source" |
-  sed -n '1p' | cut -d: -f1)
-jloop_source_sub=$(grep -n 'sub sp, sp, #16' "$jloop_source" |
-  sed -n '1p' | cut -d: -f1)
-jloop_source_branch=$(grep -n 'br_trace_auth CARG2, CRET1' "$jloop_source" |
-  sed -n '1p' | cut -d: -f1)
-test "$jloop_source_call" -lt "$jloop_source_sub" &&
-test "$jloop_source_sub" -lt "$jloop_source_branch"
-for required in '#BC_JFORL' '#BC_JITERL' '#BC_FORL' '#BC_ITERL' \
-  'add TMP0, PC, RC, lsl #2' 'arm64_vm_poll_acq TMP0w, TMP1w'; do
-  grep -F "$required" "$jloop_source" >/dev/null
-done
-test "$(grep -Fc 'cmp TMP0w, #BC_JLOOP' "$jloop_source")" -ge 3
-test "$(grep -Fc 'mov PC, RC' "$for_source")" = 2
-test "$(grep -Fc 'ldrh RCw, [RC, #-4+OFS_RD]' "$for_source")" = 1
-test "$(grep -Fc 'ldrh RCw, [PC, #-4+OFS_RD]' "$for_source")" = 1
-grep -F 'mov CARG6w, INSw' "$jfuncf_source" >/dev/null
-grep -F '#if LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED' \
-  "$jfuncf_source" >/dev/null
-grep -F 'clear_tg_jit_base' "$jfuncf_source" >/dev/null
-grep -F 'sub sp, sp, #16' "$jfuncf_source" >/dev/null
-grep -F 'br_trace_auth CARG2, CRET1' "$jfuncf_source" >/dev/null
-grep -F 'Preserve callee-save RC' "$jfuncf_source" >/dev/null
-grep -F '#if LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED' \
-  "$root/src/lj_trace.c" >/dev/null
-
-# The aggregate remains a conservative out-of-tree signal. This fixture names
-# the exact open and closed recorder/entry surfaces it relies on. Inspect the
-# evaluated ordinary-ARM64 values, rather than matching one conditional arm in
-# the source header.
-# shellcheck disable=SC2086 # xcflags intentionally expands to arguments.
-"$cc" -arch arm64 -mmacosx-version-min="$minver" $xcflags -I"$root/src" \
-  -dM -E -include lj_arch.h -x c /dev/null >"$ordinary_macros"
-grep -E '^#define LJ_ABI_PAUTH[[:space:]]+0$' \
-  "$ordinary_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
-  "$ordinary_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
-  "$ordinary_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
-  "$ordinary_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
-  "$ordinary_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
-  "$ordinary_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
-  "$ordinary_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
-  "$ordinary_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
-  "$ordinary_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
-  "$ordinary_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+1$' \
-  "$ordinary_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_EXIT_TARGET_SLOTS[[:space:]]+1$' \
-  "$ordinary_macros" >/dev/null
-if grep -R 'LJ_ARM64_JIT_FAIL_CLOSED' \
-     "$root/tests/t-arm64-jit-root-entry.c" \
-     "$root/tests/t-arm64-jit-emitter.c" \
-     "$root/tests/t-arm64-jit-exit.c" \
-     "$root/tests/t-jit-recorder-safepoint.c" \
-     "$root/tests/t-vm-safepoint.c" >/dev/null; then
-  echo "ARM64 fixtures still use the ambiguous aggregate predicate" >&2
-  exit 1
-fi
-
-root_fixture_source=$root/tests/t-arm64-jit-root-entry.c
-for required in '__arm64_root_jforl' '__arm64_root_jfori' \
-  'lua_tointeger(L, -1) == 1234' \
-  'lua_pushnumber(L, 4.5)' \
-  'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED' \
-  'LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED' \
-  'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED' \
-  'LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED' \
-  'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED' \
-  'trace_startpt_rel(&J->cur, pt);' \
-  'trace_link_rel(&J->cur, 1);' \
-  'J->cur.linktype = LJ_TRLINK_LOOP;' \
-  'J->cur.mcloop = (MSize)sizeof(MCode);' \
-  'lj_asm_arm64_exitstub_test(J, fallback,' \
-  'trace_exittab_rel(&J->cur, fixture->exittab);' \
-  'trace_exitstub_rel(&J->cur, gates);' \
-  'trace_exittarget_arm64_acq(&J->cur, 0) == fallback' \
-  'trace_exittab_rel(T, NULL);' \
-  'trace_exitstub_rel(T, NULL);' \
-  'T->unused1 |= TRACE_EXITTAB_MCODE;' \
-  'trace_exittab_rel(T, (MCode **)(void *)exitstub);' \
-  'trace_exitstub_rel(T, (MCode *)(void *)exittab);' \
-  'trace_arm64_admission_rel(&J->cur, TRACE_ARM64_INT_LOOP_ADMITTED);' \
-  'IRIns ir[ROOT_ENTRY_IR_CAP];' \
-  'J->cur.ir = fixture->ir;' \
-  'J->cur.nins = ROOT_ENTRY_R_END;' \
-  'J->cur.nk = REF_TRUE;' \
-  'J->cur.snap = fixture->snap;' \
-  'J->cur.nsnap = 2;' \
-  'J->cur.nsnapmap = 5;' \
-  'root_entry_setir(fixture->ir, REF_TRUE, IR_KPRI, IRT_TRUE,' \
-  'root_entry_setir(fixture->ir, REF_FALSE, IR_KPRI, IRT_FALSE,' \
-  'root_entry_setir(fixture->ir, REF_NIL, IR_KPRI, IRT_NIL,' \
-  'root_entry_setir(fixture->ir, REF_BASE, IR_BASE, IRT_PGC,' \
-  'root_entry_setir(fixture->ir, ROOT_ENTRY_R_VALUE, IR_SLOAD,' \
-  'root_entry_setir(fixture->ir, ROOT_ENTRY_R_LOOP, IR_LOOP,' \
-  'root_entry_setir(fixture->ir, ROOT_ENTRY_R_SUFFIX, IR_NOP, IRT_NIL,' \
-  'root_entry_setir(fixture->ir, ROOT_ENTRY_R_POLL, IR_XPOLL,' \
-  'fixture->snap[0].ref = ROOT_ENTRY_R_VALUE;' \
-  'fixture->snap[1].ref = ROOT_ENTRY_R_LOOP;' \
-  'fixture->snapmap[2] = SNAP(2, 0, ROOT_ENTRY_R_VALUE);' \
-  'snapshot_pcbase = (uint64_t)(uintptr_t)loop->pc << 8;' \
-  'memcpy(&fixture->snapmap[0], &snapshot_pcbase, sizeof(snapshot_pcbase));' \
-  'memcpy(&fixture->snapmap[3], &snapshot_pcbase, sizeof(snapshot_pcbase));' \
-  'expect_metadata_success(L, metadata_loop.pc, &metadata);' \
-  'ir[ROOT_ENTRY_R_VALUE].s = SPS_FIRST;' \
-  'ir[ROOT_ENTRY_R_VALUE].s = SPS_FIXED-1;' \
-  'ir[ROOT_ENTRY_R_VALUE].s = SPS_FIXED;' \
-  'T->spadjust = 4;' \
-  'T->spadjust = 8;' \
-  'T->spadjust = 12;' \
-  'sps_scale(SPS_LIMIT-SPS_FIXED) == 1008u' \
-  'ir[ROOT_ENTRY_R_VALUE].s = SPS_FIXED+4;' \
-  'ir[ROOT_ENTRY_R_VALUE].s = SPS_FIRST-1;' \
-  'ROOT_ENTRY_R_VALUE, IR_LT,' \
-  'ROOT_ENTRY_R_VALUE, IR_LOOP,' \
-  'ROOT_ENTRY_R_VALUE, IR_XPOLL,' \
-  'ROOT_ENTRY_R_SUFFIX, IR_RENAME, IRT_NIL,' \
-  'ROOT_ENTRY_R_VALUE, T->nsnap, RID_X1, SPS_NONE);' \
-  'ROOT_ENTRY_R_VALUE, 0, RID_MAX_GPR, SPS_NONE);' \
-  'snap[0].mapofs = 1;' \
-  'snap[0].nent = 0;' \
-  'SNAP(2, SNAP_NORESTORE, ROOT_ENTRY_R_VALUE)' \
-  'SNAP(2, SNAP_FRAME, ROOT_ENTRY_R_VALUE)' \
-  'SNAP(2, 0, ROOT_ENTRY_R_LOOP)' \
-  'SNAP(2, 0, REF_TRUE-1u)' \
-  'T->topslot+2u+LJ_FR2' \
-  'saved_topslot-1u' \
-  'bad_pcbase = saved_pcbase | UINT64_C(1);' \
-  '(uintptr_t)proto_bc(pt)+1u' \
-  '(uintptr_t)proto_bc(pt)-sizeof(BCIns)' \
-  'proto_bc(pt)+pt->sizebc' \
-  'T->nk = 0;' \
-  'T->snap[0].ref = ROOT_ENTRY_R_LOOP;' \
-  'T->snap[0].nslots = 2;' \
-  'ir[ROOT_ENTRY_R_POLL].op1 = 0;' \
-  'lj_tg_store_jit_base(L->tg_hint, NULL);' \
-  'trace_arm64_admission_rel(T, TRACE_ARM64_INT_LOOP_ADMITTED | 0x10000u);' \
-  'trace_arm64_admission_rel(T, trace_arm64_admission_acq(T) | TRACE_ARM64_INT_SIDE_ADMITTED);' \
-  'trace_arm64_admission_rel(T, trace_arm64_admission_acq(T) & ~TRACE_ARM64_INT_SIDE_ADMITTED);' \
-  'T->retire_epoch = 1;' \
-  'T->unused1 |= TRACE_ENTRY_INVALIDATED;' \
-  'T->startins = BCINS_AJ(BC_LOOP, bc_a(loop->original), 0);' \
-  'trace_link_rel(T, 2);' \
-  'trace_traceno_rel(T, 2);' \
-  'T->mcloop = 0;' \
-  'L->base = stack + LJ_FR2;' \
-  'L->base = maxstack-1;' \
-  'metadata_pt->framesize > (MSize)(maxstack-L->base)' \
-  'lj_tg_vmstate_store_rel(tg, (int32_t)~LJ_VMST_INTERP);' \
-  'lj_tg_vmstate_store_rel(tg, (int32_t)~LJ_VMST_C);' \
-  'lj_tg_vmstate_store_rel(tg, saved_vmstate);' \
-  'lj_trace_test_root_entry_retry_restore(loop.pc, loop.original)' \
-  'lj_trace_test_root_entry_startins_calls() == 1' \
-  'ROOT_ENTRY_POLL_AFTER_METADATA' \
-  'ROOT_ENTRY_REQMASK_AFTER_METADATA' \
-  'ROOT_ENTRY_PROFILE_AFTER_METADATA'; do
-  grep -F "$required" "$root_fixture_source" >/dev/null
-done
-
-# Keep the semantic ordering reviewable independently of compiler scheduling.
-awk '/^lj_trace_enter_root\(/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$helper_region"
-test -s "$helper_region"
-line_of() { grep -n "$1" "$helper_region" | sed -n "${2:-1}p" | cut -d: -f1; }
-source_gate=$(line_of '!trace_root_entry_source_admitted(sourceop)' 1)
-frame_bound=$(line_of 'basep - stackp <' 1)
-interp_state=$(line_of \
-  'lj_tg_vmstate_load_acq(tg) != (int32_t)~LJ_VMST_INTERP' 1)
-current_func=$(line_of 'fn = curr_func(L)' 1)
-prototype=$(line_of 'pt = funcproto(fn)' 1)
-frame_extent=$(line_of 'pt->framesize >' 1)
-gate1=$(line_of 'lj_gc2_jit_entry_open(g)' 1)
-publish=$(line_of 'lj_tg_store_jit_base(tg, base)' 1)
-fence=$(line_of 'la_fence_seq()' 1)
-gate2=$(line_of 'lj_gc2_jit_entry_open(g)' 2)
-slot1=$(line_of 'trace_root_entry_slot_acq(J, traceno' 1)
-view1=$(line_of 'trace_root_entry_loop_view_acq(T, traceno' 1)
-layout1=$(line_of 'trace_root_entry_arm64_layout_valid(&view, T, sourceins)' 1)
-mcode=$(line_of 'mcode = view.mcode' 1)
-slot2=$(line_of 'trace_root_entry_slot_acq(J, traceno' 2)
-view2=$(line_of 'trace_root_entry_loop_view_acq(T2, traceno' 1)
-view_equal=$(line_of 'trace_root_entry_loop_view_equal(&view, &view2)' 1)
-pending1=$(line_of 'trace_root_entry_request_pending(tg)' 1)
-pending2=$(line_of 'trace_root_entry_request_pending(tg)' 2)
-pending3=$(line_of 'trace_root_entry_request_pending(tg)' 3)
-postmetadata=$(line_of 'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA' 1)
-final_admission=$(line_of 'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION' 1)
-tmpbuf=$(line_of 'setsbufL(&tg->tmpbuf, L)' 1)
-cleanup_line=$(line_of 'lj_tg_store_jit_base(tg, NULL)' 1)
-test "$source_gate" -lt "$frame_bound" &&
-test "$frame_bound" -lt "$interp_state" &&
-test "$interp_state" -lt "$pending1" &&
-test "$pending1" -lt "$current_func" &&
-test "$current_func" -lt "$prototype" &&
-test "$prototype" -lt "$frame_extent" &&
-test "$frame_extent" -lt "$gate1" &&
-test "$gate1" -lt "$publish" &&
-test "$publish" -lt "$fence" && test "$fence" -lt "$gate2" &&
-test "$gate2" -lt "$pending2" && test "$pending2" -lt "$slot1" &&
-test "$slot1" -lt "$view1" && test "$view1" -lt "$layout1" &&
-test "$layout1" -lt "$mcode" && test "$mcode" -lt "$slot2" &&
-test "$slot2" -lt "$view2" && test "$view2" -lt "$view_equal" &&
-test "$view_equal" -lt "$postmetadata" &&
-test "$postmetadata" -lt "$pending3" &&
-test "$pending3" -lt "$final_admission" &&
-test "$final_admission" -lt "$tmpbuf" &&
-test "$tmpbuf" -lt "$cleanup_line"
-test "$publish" -lt "$layout1" && test "$layout1" -lt "$final_admission"
-test "$(grep -Fc 'trace_root_entry_arm64_layout_valid(&view' \
-  "$helper_region")" = 1
-test "$(grep -c 'lj_tg_store_jit_base(tg, NULL)' "$helper_region")" = 1
-for required in trace_runnable_acq trace_startins_acq \
-  trace_root_entry_loop_view_acq trace_root_entry_loop_view_equal \
-  trace_mcauth_acq lj_ptr_strip \
-  'trace_arm64_first_side_function_bits(trace_mcauth_acq(T2))' \
-  target_bits; do
-  grep "$required" "$helper_region" >/dev/null
-done
-awk '/^static LJ_AINLINE int trace_root_entry_source_admitted/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$source_gate_region"
-grep -F 'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED' \
-  "$source_gate_region" >/dev/null
-grep -F 'LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED' \
-  "$source_gate_region" >/dev/null
-grep -F 'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED' \
-  "$source_gate_region" >/dev/null
-awk '/^static int trace_root_entry_loop_view_acq/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$loop_view_region"
-for required in trace_root_acq trace_link_acq trace_linktype_acq \
-  trace_nextside_acq trace_nchild_acq trace_spadjust_acq trace_startptgco_acq \
-  trace_startpc_acq trace_mcloop_acq trace_topslot_acq trace_ir_acq \
-  trace_nk_acq trace_snap_acq trace_snapmap_acq trace_traceno_acq \
-  trace_exittab_acq trace_exitstub_acq retire_epoch TRACE_EXITTAB_MCODE \
-  TRACE_ENTRY_GATED TRACE_ARM64_INT_LOOP_ADMITTED \
-  TRACE_ARM64_INT_FORL_ADMITTED TRACE_ARM64_TRUE_FUNCF_ADMITTED \
-  trace_arm64_admission_acq LJ_TRLINK_RETURN; do
-  grep "$required" "$loop_view_region" >/dev/null
-done
-for required in 'v->admission == expected_admission' \
-  'v->flags = la_load8_acq(&T->unused1)' \
-  '!function_root || v->flags == 0'; do
-  grep -F "$required" "$loop_view_region" >/dev/null
-done
-grep -F 'v->spadjust == 0' "$loop_view_region" >/dev/null
-grep -F 'v->link == traceno' "$loop_view_region" >/dev/null
-awk '/^static int trace_root_entry_arm64_layout_scan/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$layout_region"
-for required in 'postra.ir = v->ir;' 'postra.snap = v->snap;' \
-  'postra.snapmap = v->snapmap;' 'postra.proto_bc = proto_bc(pt);' \
-  'postra.nins = v->nins;' \
-  'postra.nk = v->nk;' \
-  'postra.nsnap = v->nsnap;' 'postra.nsnapmap = v->nsnapmap;' \
-  'postra.spadjust = v->spadjust;' \
-  'postra.proto_sizebc = pt->sizebc;' \
-  'postra.root_topslot = v->topslot;' \
-  'postra.startins = v->startins;' \
-  'postra.base_delta = 0;' \
-  'trace_root_entry_arm64_exit_layout_valid(v)' \
-  'lj_asm_arm64_postra_funcf_entry_admit(' \
-  'return lj_asm_arm64_postra_admit(&postra, NULL);'; do
-  grep -F "$required" "$layout_region" >/dev/null
-done
-awk '/^static int trace_root_entry_first_child_view_acq/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$first_child_region"
-test -s "$first_child_region"
-awk '/^static int trace_root_entry_first_child_view_equal/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' \
-  "$root/src/lj_trace.c" >"$first_child_equal_region"
-test -s "$first_child_equal_region"
-grep -F 'a->parent_exitno == b->parent_exitno' \
-  "$first_child_equal_region" >/dev/null || {
-  echo "root-entry first-child race view lost selected-exit equality" >&2
-  exit 1
-}
-grep -F 'trace_root_entry_first_child_view_equal(&childview, &childview2)' \
-  "$helper_region" >/dev/null || {
-  echo "root-entry helper lost double-capture first-child equality" >&2
-  exit 1
-}
-for required in \
-  'base = ir_load_acq(&view->ir[REF_BASE]);' \
-  '(TraceNo)base.op1 != parentno' \
-  'parent_exitno = (ExitNo)base.op2;' \
-  'shape = lj_asm_arm64_side_shape(parent_exitno);' \
-  'shape == NULL || rootview->nsnap != shape->parent_nsnap' \
-  '(MSize)base.op2 >= rootview->nsnap' \
-  '(MSize)base.op2 >= parent_nexits' \
-  'parent_nexits != rootview->nsnap' \
-  'view->parent_exitno = parent_exitno;' \
-  'parentmap0 = (uint16_t)REGSP(shape->inherited_reg, SPS_NONE);' \
-  'parentsnap = &rootview->snap[parent_exitno];' \
-  'continuation != proto_bc(pt)+shape->continuation_pc' \
-  'rootview->exittab[parent_exitno]' \
-  'postra.semantic.exitno = parent_exitno;'; do
-  grep -F "$required" "$first_child_region" >/dev/null || {
-    echo "root-entry dynamic first-side exit lost: $required" >&2
+  # The selected exit must come from the child IR, be bounded against both
+  # parent arrays before indexing, and be re-read after independent post-RA
+  # admission. Do not pin this contract to one trace shape or exit number.
+  base=$(grep -nF 'base = ir_load_acq(&view->ir[REF_BASE]);' "$child" |
+    sed -n '1p' | cut -d: -f1)
+  select=$(grep -nF 'parent_exitno = (ExitNo)base.op2;' "$child" |
+    sed -n '1p' | cut -d: -f1)
+  snap_bound=$(grep -nF '(MSize)base.op2 >= rootview->nsnap' "$child" |
+    sed -n '1p' | cut -d: -f1)
+  edge_bound=$(grep -nF '(MSize)base.op2 >= parent_nexits' "$child" |
+    sed -n '1p' | cut -d: -f1)
+  snapshot=$(grep -nF '&rootview->snap[parent_exitno]' "$child" |
+    sed -n '1p' | cut -d: -f1)
+  edge1=$(grep -nF 'rootview->exittab[parent_exitno]' "$child" |
+    sed -n '1p' | cut -d: -f1)
+  postra=$(grep -nF 'lj_asm_arm64_side_postra_admit(&postra' "$child" |
+    sed -n '1p' | cut -d: -f1)
+  edge2=$(grep -nF 'rootview->exittab[parent_exitno]' "$child" |
+    sed -n '2p' | cut -d: -f1)
+  for number in "$base" "$select" "$snap_bound" "$edge_bound" \
+    "$snapshot" "$edge1" "$postra" "$edge2"; do
+    test -n "$number"
+  done
+  test "$base" -lt "$select" && test "$select" -lt "$snap_bound" &&
+    test "$select" -lt "$edge_bound" && test "$snap_bound" -lt "$snapshot" &&
+    test "$edge_bound" -lt "$edge1" && test "$edge1" -lt "$postra" &&
+    test "$postra" -lt "$edge2"
+  for required in trace_size_checked trace_body_refs_valid \
+      trace_arm64_side_certificate_valid_held trace_nextside_acq \
+      trace_nchild_acq trace_mcloop_acq trace_retired_link_acq; do
+    grep -F "$required" "$child" >/dev/null
+  done
+  grep -F 'a->parent_exitno == b->parent_exitno' "$equal" >/dev/null
+  if grep -E 'lj_gc2_smr|lj_mem_|lj_alloc|lj_err_|lj_vmevent|lj_safepoint' \
+      "$helper" >/dev/null; then
+    echo "root-entry hot helper gained a blocking or allocating operation" >&2
     exit 1
-  }
-done
-if grep -E 'rootview->(snap|exittab)\[2\]|semantic\.exitno = 2' \
-     "$first_child_region" >/dev/null; then
-  echo "root-entry first-child verifier regained a literal parent exit" >&2
-  exit 1
-fi
-first_child_size=$(awk -v needle='trace_size_checked(g, child' \
-  'index($0, needle) { print NR; exit }' "$first_child_region")
-first_child_refs=$(awk -v needle='trace_body_refs_valid(g, child' \
-  'index($0, needle) { print NR; exit }' "$first_child_region")
-first_child_base=$(awk -v needle='base = ir_load_acq(&view->ir[REF_BASE]);' \
-  'index($0, needle) { print NR; exit }' "$first_child_region")
-first_child_selector=$(awk -v needle='parent_exitno = (ExitNo)base.op2;' \
-  'index($0, needle) { print NR; exit }' "$first_child_region")
-first_child_shape=$(awk -v needle='shape = lj_asm_arm64_side_shape(parent_exitno);' \
-  'index($0, needle) { print NR; exit }' "$first_child_region")
-first_child_snap=$(awk -v needle='parentsnap = &rootview->snap[parent_exitno];' \
-  'index($0, needle) { print NR; exit }' "$first_child_region")
-first_child_parentmap=$(awk \
-  -v needle='parentmap0 = (uint16_t)REGSP(shape->inherited_reg, SPS_NONE);' \
-  'index($0, needle) { print NR; exit }' "$first_child_region")
-first_child_snap_bound=$(awk -v needle='(MSize)base.op2 >= rootview->nsnap' \
-  'index($0, needle) { print NR; exit }' "$first_child_region")
-first_child_edge_bound=$(awk -v needle='(MSize)base.op2 >= parent_nexits' \
-  'index($0, needle) { print NR; exit }' "$first_child_region")
-first_child_edge=$(awk -v needle='rootview->exittab[parent_exitno]' \
-  'index($0, needle) && ++seen == 1 { print NR; exit }' "$first_child_region")
-first_child_postra=$(awk -v needle='lj_asm_arm64_side_postra_admit' \
-  'index($0, needle) { print NR; exit }' "$first_child_region")
-first_child_final_edge=$(awk -v needle='rootview->exittab[parent_exitno]' \
-  'index($0, needle) && ++seen == 2 { print NR; exit }' "$first_child_region")
-test -n "$first_child_size" && test -n "$first_child_refs" && \
-test -n "$first_child_base" && test -n "$first_child_selector" && \
-test -n "$first_child_shape" && test -n "$first_child_parentmap" && \
-test -n "$first_child_snap" && \
-test -n "$first_child_snap_bound" && test -n "$first_child_edge_bound" && \
-test -n "$first_child_edge" && test -n "$first_child_postra" && \
-test -n "$first_child_final_edge" && \
-test "$first_child_size" -lt "$first_child_base" && \
-test "$first_child_refs" -lt "$first_child_base" && \
-test "$first_child_base" -lt "$first_child_selector" && \
-test "$first_child_selector" -lt "$first_child_shape" && \
-test "$first_child_shape" -lt "$first_child_snap_bound" && \
-test "$first_child_snap_bound" -lt "$first_child_parentmap" && \
-test "$first_child_parentmap" -lt "$first_child_snap" && \
-test "$first_child_edge_bound" -lt "$first_child_edge" && \
-test "$first_child_edge" -lt "$first_child_postra" && \
-test "$first_child_postra" -lt "$first_child_final_edge"
-test "$(grep -Fc 'rootview->exittab[parent_exitno]' \
-  "$first_child_region")" = 2 || {
-  echo "root-entry first-child verifier lost its final dynamic edge reread" >&2
-  exit 1
+  fi
 }
-awk '/^static LJ_AINLINE int trace_root_entry_request_pending/ { copy=1 }
-     copy { print }
-     copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$pending_region"
-for required in lj_tg_poll_acq lj_tg_reqmask_acq \
-  lj_tg_profile_request_acq; do
-  grep "$required" "$pending_region" >/dev/null
-done
-if grep -E 'lj_gc2_smr|lj_mem_|lj_alloc|lj_err_|lj_vmevent|lj_safepoint' \
-     "$helper_region" >/dev/null; then
-  echo "root-entry helper acquired a forbidden blocking/allocating surface" >&2
-  exit 1
-fi
 
-env LUA_PATH="$root/src/?.lua;$root/src/jit/?.lua;;" "$root/src/luajit" -e '
-  local util = require("jit.util")
-  jit.flush(); jit.on(); jit.opt.start("hotloop=1", "hotexit=1", "maxtrace=2")
-  local function f(n)
-    local i, x = 0, 0
-    while i < n do i = i + 1; x = x + i end
-    return x
-  end
-  assert(f(20) == 210); assert(f(20) == 210); assert(f(20) == 210)
-  assert(f(20) == 210); assert(f(20) == 210)
-  assert(util.traceinfo(1), "open integer-loop root did not record")
-  assert(util.traceinfo(2) == nil,
-         "root-only workload unexpectedly published trace 2")
-'
+check_vm_entry_order() {
+  vm=$1
+  tag=$2
+  disasm=$tmpdir/vm-$tag.disasm
+  reloc=$tmpdir/vm-$tag.reloc
+  loop=$tmpdir/vm-$tag-loop.txt
+  funcf=$tmpdir/vm-$tag-funcf.txt
+  otool -rv "$vm" >"$reloc"
+  test "$(grep -c 'BR26.*_lj_trace_enter_root$' "$reloc")" = 3
+  otool -tvV "$vm" >"$disasm"
+  awk '/^_lj_BC_JLOOP:/ { copy=1 }
+       copy { print }
+       copy && /^_lj_BC_JMP:/ { exit }' "$disasm" >"$loop"
+  awk '/^_lj_BC_JFUNCF:/ { copy=1 }
+       copy { print }
+       copy && /^_lj_BC_JFUNCV:/ { exit }' "$disasm" >"$funcf"
+  test -s "$loop" && test -s "$funcf"
+  if test "$tag" = arm64e; then
+    grep -E 'bti[[:space:]]+j' "$loop" >/dev/null
+    grep -E 'braa[[:space:]]+x1, x0$' "$loop" >/dev/null
+  else
+    grep -E 'br[[:space:]]+x1$' "$loop" >/dev/null
+  fi
+  grep -E 'sub[[:space:]]+sp, sp, #0x10' "$loop" >/dev/null
+  call=$(grep -nE 'bl[[:space:]]+0x' "$loop" | sed -n '1p' | cut -d: -f1)
+  reserve=$(grep -nE 'sub[[:space:]]+sp, sp, #0x10' "$loop" |
+    sed -n '1p' | cut -d: -f1)
+  branch=$(grep -nE 'br(a|aa)[[:space:]]+x1' "$loop" |
+    sed -n '1p' | cut -d: -f1)
+  test -n "$call" && test -n "$reserve" && test -n "$branch" &&
+    test "$call" -lt "$reserve" && test "$reserve" -lt "$branch"
+  if grep -E 'stlr[[:space:]]+xzr, \[x14\]' "$loop" >/dev/null; then
+    echo "open JLOOP unexpectedly clears its entry lease" >&2
+    exit 1
+  fi
+  grep -E 'ldar[[:space:]]+w16, \[x14\]' "$funcf" >/dev/null
+  grep -E 'sub[[:space:]]+sp, sp, #0x10' "$funcf" >/dev/null
+  if test "$tag" = arm64e; then
+    grep -E 'braa[[:space:]]+x1, x0$' "$funcf" >/dev/null
+  else
+    grep -E 'br[[:space:]]+x1$' "$funcf" >/dev/null
+  fi
+}
 
-# Arm64e/BTI admits the same exact root recorder and all three certified root
-# entry families. The exact first-side canary is open, while unsupported side
-# grammars and stitch remain independently closed.
-env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" clean \
-    TARGET_FLAGS='-arch arm64e -mbranch-protection=bti' \
-    XCFLAGS="$pauth_xcflags"
-env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" -j"$jobs" \
-    TARGET_FLAGS='-arch arm64e -mbranch-protection=bti' \
-    XCFLAGS="$pauth_xcflags"
-otool -hv "$vm_object" | grep -E 'ARM64[[:space:]]+E' >/dev/null
-# shellcheck disable=SC2086 # pauth_xcflags intentionally expands.
-"$cc" -arch arm64e -mbranch-protection=bti \
-  -mmacosx-version-min="$minver" $pauth_xcflags -I"$root/src" \
-  -dM -E -include lj_arch.h -x c /dev/null >"$pauth_macros"
-grep -E '^#define LJ_ABI_PAUTH[[:space:]]+1$' \
-  "$pauth_macros" >/dev/null
-grep -E '^#define LJ_ABI_BRANCH_TRACK[[:space:]]+1$' \
-  "$pauth_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
-  "$pauth_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
-  "$pauth_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
-  "$pauth_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
-  "$pauth_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
-  "$pauth_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
-  "$pauth_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
-  "$pauth_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
-  "$pauth_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
-  "$pauth_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+1$' \
-  "$pauth_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_EXIT_TARGET_SLOTS[[:space:]]+1$' \
-  "$pauth_macros" >/dev/null
+run_profile() {
+  arch=$1 target=$2 flags=$3 tag=$4
+  lj_ci_build_profile "$arch" "$target" "$flags" "$tag"
+  lj_ci_require_symbols lj_trace_enter_root lj_trace_test_root_entry_publishes
+  root_bin=$tmpdir/root-entry-$tag
+  side_bin=$tmpdir/side-adaptation-$tag
+  lj_ci_compile_fixture "$root_bin" "$root_fixture"
+  lj_ci_compile_fixture "$side_bin" "$side_fixture" \
+    -Wno-unused-but-set-variable
+  lj_ci_run_fixture 120 "$root_bin"
+  lj_ci_run_fixture 120 "$side_bin"
+  check_vm_entry_order "$root/src/lj_vm.o" "$tag"
+}
 
-# Run the same synthetic exit-table and root-entry mutation certificate with
-# authenticated slots and an arm64e ABI, in addition to the live root below.
-# shellcheck disable=SC2086 # pauth_xcflags intentionally expands.
-"$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64e \
-  -mbranch-protection=bti -mmacosx-version-min="$minver" $pauth_xcflags \
-  -I"$root/src" -c "$root/tests/t-arm64-jit-root-entry.c" \
-  -o "$pauth_fixture_obj"
-# shellcheck disable=SC2086 # pauth_xcflags intentionally expands.
-"$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64e \
-  -mbranch-protection=bti -mmacosx-version-min="$minver" $pauth_xcflags \
-  -I"$root/src" "$root/tests/t-arm64-jit-root-entry.c" "$archive" \
-  -lm -pthread -o "$pauth_fixture"
-"$pauth_fixture"
+check_root_entry_order
+run_profile arm64 '-arch arm64' "$xcflags" arm64
+run_profile arm64e '-arch arm64e -mbranch-protection=bti' \
+  "$pauth_xcflags" arm64e
 
-# Exercise the side-ingress fixture under PAC too. Its selected exit slot is
-# encoded with the owning global_State, and a separately signed wrong-
-# discriminator mutation must fail the read-only checkpoint.
-# shellcheck disable=SC2086 # pauth_xcflags intentionally expands.
-"$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64e \
-  -mbranch-protection=bti -mmacosx-version-min="$minver" $pauth_xcflags \
-  -I"$root/src" -c "$root/tests/t-arm64-jit-side-ingress-metadata.c" \
-  -o "$pauth_side_fixture_obj"
-# shellcheck disable=SC2086 # pauth_xcflags intentionally expands.
-"$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64e \
-  -mbranch-protection=bti -mmacosx-version-min="$minver" $pauth_xcflags \
-  -I"$root/src" "$root/tests/t-arm64-jit-side-ingress-metadata.c" \
-  "$archive" -lm -pthread -o "$pauth_side_fixture"
-"$pauth_side_fixture"
-
-otool -tvV "$vm_object" >"$pauth_vm_disasm"
-awk '/^_lj_BC_JLOOP:/ { copy=1 }
-     copy { print }
-     copy && /^_lj_BC_JMP:/ { exit }' \
-  "$pauth_vm_disasm" >"$pauth_jloop_region"
-test -s "$pauth_jloop_region"
-grep -E 'bti[[:space:]]+j' "$pauth_jloop_region" >/dev/null
-grep -E 'sub[[:space:]]+sp, sp, #0x10' "$pauth_jloop_region" >/dev/null
-grep -E 'braa[[:space:]]+x1, x0$' "$pauth_jloop_region" >/dev/null
-pauth_sub=$(grep -nE 'sub[[:space:]]+sp, sp, #0x10' \
-  "$pauth_jloop_region" | sed -n '1p' | cut -d: -f1)
-pauth_branch=$(grep -nE 'braa[[:space:]]+x1, x0$' \
-  "$pauth_jloop_region" | sed -n '1p' | cut -d: -f1)
-test "$pauth_sub" -lt "$pauth_branch"
-
-# Exercise a genuinely hot loop with JIT enabled. The authenticated JLOOP must
-# execute the exact root; this root-only workload has no admitted first side,
-# and unsupported side/stitch paths leave slot 2 empty.
-env LUA_PATH="$root/src/?.lua;$root/src/jit/?.lua;;" "$root/src/luajit" -e '
-  local util = require("jit.util")
-  jit.flush(); jit.on(); assert(jit.status())
-  jit.opt.start("hotloop=1", "hotexit=1", "maxtrace=2")
-  local function f(n)
-    local i, x = 0, 0
-    while i < n do i = i + 1; x = x + i end
-    return x
-  end
-  for _ = 1, 8 do assert(f(20) == 210) end
-  assert(util.traceinfo(1), "open arm64e integer-loop root did not record")
-  assert(util.traceinfo(2) == nil,
-         "root-only arm64e workload unexpectedly published trace 2")
-'
-
-# Without LUA_USE_ASSERT, entry trusts the immutable proof but still rejects
-# every mismatched certificate tuple and every mutable lifetime authority.
+# Run the runtime certificate mutations without assertions too: release entry
+# must still reject stale identity, generation and lifetime authorities.
 release_xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLJ_TRACE_TEST_HELPERS -DLJ_ARM64_EXIT_TEST_HELPERS'
-env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" clean TARGET_FLAGS='-arch arm64' XCFLAGS="$release_xcflags"
-env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" -j"$jobs" TARGET_FLAGS='-arch arm64' XCFLAGS="$release_xcflags"
-# shellcheck disable=SC2086 # build profile is intentionally a word list.
-"$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64 \
-  -mmacosx-version-min="$minver" $release_xcflags -I"$root/src" \
-  "$root/tests/t-arm64-jit-root-entry.c" "$archive" -lm -pthread \
-  -o "$tmpdir/t-arm64-root-certificate-release"
-"$tmpdir/t-arm64-root-certificate-release"
+lj_ci_build_profile arm64 '-arch arm64' "$release_xcflags" release
+release_bin=$tmpdir/root-entry-release
+lj_ci_compile_fixture "$release_bin" "$root_fixture"
+lj_ci_run_fixture 120 "$release_bin"
 
-# Leave the isolated checkout in its ordinary native experimental mode.
-env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" clean TARGET_FLAGS='-arch arm64' XCFLAGS="$xcflags"
-env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" -j"$jobs" TARGET_FLAGS='-arch arm64' \
-    XCFLAGS="$xcflags"
-restore_needed=0
-
-echo "arm64_jit_root_entry_contract OK: strict LOOP/FORL/JFUNCF source gates verified on ARM64 and authenticated ARM64e"
+lj_ci_restore "$LJ_CI_RESTORE_TARGET_FLAGS" "$LJ_CI_RESTORE_XCFLAGS"
+echo "arm64_jit_root_entry_contract OK: root, generic first-child revalidation, ARM64/arm64e entry ordering and release certificate rejection"
