@@ -15,8 +15,8 @@
 
 #include "lj_obj.h"
 
-#if !defined(__APPLE__) || !defined(__aarch64__)
-#error "t-arm64-tab-pair-contract requires native Apple AArch64"
+#if !defined(__APPLE__) || (!defined(__aarch64__) && !defined(__x86_64__))
+#error "tab-pair contract requires Darwin ARM64 or x86-64"
 #endif
 
 #define TAB_PAIR_ITERS 200000u

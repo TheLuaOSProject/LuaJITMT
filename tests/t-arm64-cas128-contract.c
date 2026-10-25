@@ -12,8 +12,8 @@
 
 #include "lj_atomic.h"
 
-#if !defined(__APPLE__) || !defined(__aarch64__)
-#error "t-arm64-cas128-contract requires native Apple AArch64"
+#if !defined(__APPLE__) || (!defined(__aarch64__) && !defined(__x86_64__))
+#error "cas128 contract requires Darwin ARM64 or x86-64"
 #endif
 
 __attribute__((noinline))

@@ -122,3 +122,22 @@ samples complement the resize/retirement and stalled-publisher contracts;
 they do not measure their tail latency. Log:
 `/tmp/ljmt-review-read-latency-mach.log`, profile
 `7d7937dde82a0ac24db5cac693dc93a637e2e797b5b5d7042ac2a5fe3830a0f8`.
+
+## x86-64/Rosetta counterpart
+
+The same release C-helper driver at `cc7b6899` ran in an ad-hoc-signed x86-64
+build with `-arch x86_64 -mcx16 -DLUAJIT_DISABLE_JIT`. All six cases verified
+one million outcomes and 10,000 individual samples. Array/numeric-hash/string/
+boolean hits measured 66.65/104.79/123.69/101.03 ns per call; array/hash misses
+59.40/112.34 ns. Raw p99 values were 167/125/167/125/84/167 ns respectively;
+the timer-pair p99 was 42 ns. Rosetta reports a 1/1 Mach timebase but the
+observed samples still reflect the host clock. This is translated execution
+on Apple Silicon, not a native Intel versus ARM performance comparison.
+Log: `/tmp/ljmt-review-x64-scalar-read-bench.log`.
+
+`sh tools/ci/x64_atomic_contract.sh` now reuses the CAS and concurrent table-pair
+fixtures with their x86-64 implementations. Both pass under Rosetta; separate
+object inspection requires inline CMPXCHG16B in the primitive and complete
+GCtab-pair wrapper and rejects atomic-runtime imports. ARM64 retains its
+separate CASPAL/LL-SC and per-helper exact-pair checks. No atomic implementation
+or memory order changed. Log: `/tmp/ljmt-review-x64-atomic.log`.
