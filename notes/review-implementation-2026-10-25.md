@@ -41,3 +41,29 @@ verdict. Source shapes, IR graph meaning, allocated locations, snapshots,
 emitted execution, lifecycle races, and adjacent malformed inputs all remain
 part of acceptance. A generic contract replaces a template only when the
 additional accepted shapes execute and their unsafe neighbors still reject.
+
+## Rooted operation contracts
+
+The numeric read and length certificates now validate each operation by
+def-use relationships and scratch-slot effects. They no longer require key 1,
+one table, two reads, an exact number of TMPREF/CARG nodes, or an arbitrary
+eight-call ceiling. A call consumes the currently written input roots; a
+status guard must immediately follow it, and a numeric result load must use
+the matching output root with its own post-helper snapshot. The independent
+post-RA walk also proves distinct scratch GPRs and full-width table spill
+ownership. Unrelated helper calls and raw heap operations remain rejected.
+
+The native matrix covers argument keys, fractional numeric hash keys,
+induction keys, two tables and computed keys, INT results, mixed length/read
+effects, and five reads per iteration. Every case produced one native trace
+and 20 exits across 20 calls, with correct post-GC reentry. Both ARM64 and
+arm64e/BTI passed the complete rooted-read contract, including independent
+semantic/allocated mutation fixtures, aligned table-spill negatives, original
+refusal/type-change/resize/GC/STOPREQ lifecycle tests, and the registered M6
+case. The compiled general IR-admission fixture also passed. Log:
+`/tmp/ljmt-generic-rooted-contract.log`.
+
+The replaced source-string checks are now covered by executable positives and
+malformed-neighbor tests. The production-ordering checks remain separate.
+Other review work streams are still in progress; this result does not certify
+the final combined implementation.

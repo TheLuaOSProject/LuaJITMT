@@ -1,5 +1,5 @@
-/* Independent semantic and post-RA corruption checks for the fixed-key
-** rooted numeric BC_LOOP profile. The positive source is a live native trace. */
+/* Independent semantic and post-RA corruption checks for rooted operations.
+** Positive sources are live native traces with different keys and tables. */
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,10 +58,14 @@ int main(int argc, char **argv)
   MSize nrename = 0;
   jit_State *fake;
   LJArm64PostRAView view;
-  assert(argc == 2);
+  assert(argc == 2 || argc == 3);
   L = luaL_newstate();
   assert(L != NULL);
   luaL_openlibs(L);
+  if (argc == 3) {
+    lua_pushboolean(L, 1);
+    lua_setglobal(L, "rooted_operations_admission");
+  }
   assert(luaL_dostring(L, "package.path = \"./src/?.lua;./src/?/init.lua;\" .. package.path") == LUA_OK);
   if (luaL_dofile(L, argv[1]) != LUA_OK) {
     fprintf(stderr, "Lua fixture: %s\n", lua_tostring(L, -1));
@@ -294,6 +298,28 @@ int main(int argc, char **argv)
   snaps[value_snap1 - 1].ref = call1 + 2;
   assert(postra_admit(&view));
 #undef POST_REJECT
+
+  if (argc == 3) {
+    unsigned spilled_tables = 0;
+    /* Table pointers need two aligned spill words. Changing one span must
+    ** fail independently of both scratch-address and numeric spill checks. */
+    for (ref = REF_FIRST; ref < semantic_nins; ref++) {
+      IRIns *slot = &postra_ir[ref];
+      if (slot->o == IR_SLOAD && irt_type(slot->t) == IRT_TAB &&
+          ra_hasspill(slot->s)) {
+        uint8_t saved = slot->s;
+        spilled_tables++;
+        assert((saved & 1) == 0);
+        slot->s = saved + 1;
+        assert(!postra_admit(&view));
+        slot->s = (uint8_t)(SPS_FIXED + view.spadjust / 4 - 1);
+        assert(!postra_admit(&view));
+        slot->s = saved;
+        assert(postra_admit(&view));
+      }
+    }
+    assert(spilled_tables > 0);
+  }
 
   free(postra_ir); free(semantic_good); free(snapmap); free(snaps); free(ir);
   free(fake);

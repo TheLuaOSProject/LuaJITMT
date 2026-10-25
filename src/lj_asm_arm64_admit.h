@@ -43,9 +43,9 @@ int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target, MCode *insp)
 ** literal-true fixed-function root.
 ** Scalar LOOP admission uses independent semantic and allocator certificates
 ** for checked INT arithmetic, NUM arithmetic/conversions, comparisons and
-** same-type PHIs. The sole heap-helper exception is the exact rooted table
-** length CALLS -> immediate retry guard profile below; other heap operations
-** and helper calls remain closed.
+** same-type PHIs. Rooted helpers have per-operation input, output and retry
+** contracts, independent of trace length, table count or constant key values.
+** Other heap effects and helper calls remain closed.
 */
 
 static int arm64_ir_reject(LJArm64IRReject *reject,
@@ -3345,141 +3345,63 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
   }
 }
 
-/* Recorder loop unrolling can duplicate a length call. Keep the exact helper
-** profile bounded so the independent guard-to-call proofs stay linear in the
-** trace size rather than permitting adversarial quadratic scans. */
-#define LJ_ARM64_TABLEN_MAX_CALLS 8u
-
-/* A sentinel comparison must name a real member of the trace's integer
-** constant pool, not merely any sub-REF_BIAS value. */
-static int arm64_tablen_retry_kint(const IRIns *ir, IRRef nk, IRRef ref)
+/* Each rooted helper is an operation with explicit input/output effects.
+** Scratch values may be overwritten only after the preceding operation has
+** consumed them. Neither call count, table count, key value nor placement in
+** the unrolled loop is part of this contract. */
+static int arm64_rooted_ir_effect(const GCtrace *T, IRRef ref,
+                                 IRRef root1, IRRef root2)
 {
-  IRIns k;
-  if (!irref_isk(ref) || ref < nk || ref >= REF_TRUE)
+  const IRIns *call = &T->ir[ref], *guard;
+  IRRef key;
+  int read = call->op2 == IRCALL_lj_tab_getscalar_rooted_try;
+  if (!root1 || ref + 1 >= T->nins ||
+      call->t.irt != (read ? (IRT_INT|IRT_GUARD) : IRT_INT))
     return 0;
-  k = ir_load_acq(&ir[ref]);
-  return k.o == IR_KINT && k.t.irt == IRT_INT &&
-         k.i == LJ_TAB_LEN_RETRY;
-}
-
-/* Fixed key-1 numeric read loop. The helper is bounded/no-wait and copies
-** only scalar results; false status exits before the rooted output is read. */
-static int arm64_rooted_read_ir_key(const GCtrace *T, IRRef target)
-{
-  IRRef ref;
-  if (target < T->nk || target >= REF_TRUE) return 0;
-  for (ref = T->nk; ref < REF_TRUE; ref++) {
-    const IRIns *k = &T->ir[ref];
-    if (ref == target)
-      return k->o == IR_KINT && k->t.irt == IRT_INT && k->i == 1;
-    if (k->o == IR_KNUM) {
-      if (ref + 1 >= REF_TRUE) return 0;
-      ref++;
-    } else if (k->o != IR_KINT || k->t.irt != IRT_INT) {
+  if (read) {
+    const IRIns *a, *b, *value;
+    IRRef chain = call->op1;
+    if (!root2 || chain < REF_FIRST || chain >= ref || ref + 2 >= T->nins)
       return 0;
-    }
-  }
-  return 0;
-}
-
-static int arm64_rooted_read_ir_shape(const GCtrace *T)
-{
-  IRRef ref, loop = 0, poll = 0, calls[2], guards[2], loads[2];
-  IRRef table = 0;
-  unsigned nc = 0, nl = 0, nt = 0, ncarg = 0, ntab = 0;
-  if (!T || !T->ir || T->nins <= REF_FIRST || T->nins >= REF_DROP ||
-      !T->nk || T->nk > REF_TRUE || !T->nsnap || T->nsnap >= REF_DROP ||
-      !T->snap || !T->snapmap || !T->nsnapmap) return 0;
-  for (ref = REF_FIRST; ref < T->nins; ref++) {
-    const IRIns *p = &T->ir[ref];
-    if (p->o == IR_LOOP) loop = ref;
-    if (p->o == IR_XPOLL) poll = ref;
-    if (p->o == IR_SLOAD && irt_type(p->t) == IRT_TAB) ntab++;
-    if (p->o == IR_CARG) ncarg++;
-    if (p->o == IR_TMPREF) nt++;
-    if (p->o == IR_ALOAD || p->o == IR_HLOAD ||
-        p->o == IR_UREFO || p->o == IR_ULOAD) return 0;
-    if (p->o == IR_VLOAD) {
-      if (nl >= 2) return 0;
-      loads[nl++] = ref;
-    }
-    if (p->o == IR_CALLS &&
-        p->op2 == IRCALL_lj_tab_getscalar_rooted_try) {
-      IRRef carg, tabroot, keyroot, zero;
-      const IRIns *a, *b, *tr, *kr, *guard, *vload;
-      if (nc >= 2 || p->op1 < REF_FIRST || p->op1 >= ref) return 0;
-      carg = p->op1; a = &T->ir[carg];
-      if (a->o != IR_CARG || a->op1 < REF_FIRST || a->op1 >= carg ||
-          a->op2 < REF_FIRST || a->op2 >= carg) return 0;
-      b = &T->ir[a->op1];
-      if (b->o != IR_CARG || b->op1 < REF_FIRST || b->op1 >= a->op1 ||
-          b->op2 < REF_FIRST || b->op2 >= a->op1 || a->op2 != b->op1)
-        return 0;
-      tabroot = b->op1; keyroot = b->op2;
-      tr = &T->ir[tabroot]; kr = &T->ir[keyroot];
-      if (tr->o != IR_TMPREF || tr->t.irt != IRT_PGC ||
-          tr->op2 != (IRTMPREF_IN1|IRTMPREF_OUT1) ||
-          kr->o != IR_TMPREF || kr->t.irt != IRT_PGC ||
-          kr->op2 != IRTMPREF_IN2 ||
-          !arm64_rooted_read_ir_key(T, kr->op1) || tr->op1 < REF_FIRST ||
-          tr->op1 >= tabroot || T->ir[tr->op1].o != IR_SLOAD ||
-          irt_type(T->ir[tr->op1].t) != IRT_TAB ||
-          !irt_isguard(T->ir[tr->op1].t)) return 0;
-      if (table && table != tr->op1) return 0;
-      table = tr->op1;
-      if (ref+2 >= T->nins) return 0;
-      guard = &T->ir[ref+1];
-      if (guard->o != IR_NE || irt_type(guard->t) != IRT_INT ||
-          !irt_isguard(guard->t)) return 0;
-      if (guard->op1 == ref) zero = guard->op2;
-      else if (guard->op2 == ref) zero = guard->op1;
-      else return 0;
-      if (zero < T->nk || zero >= REF_TRUE ||
-          T->ir[zero].o != IR_KINT || T->ir[zero].i != 0) return 0;
-      vload = &T->ir[ref+2];
-      if (vload->o != IR_VLOAD || vload->op1 != tabroot ||
-          vload->op2 != 0 || irt_type(vload->t) != IRT_NUM ||
-          !irt_isguard(vload->t)) return 0;
-      calls[nc] = ref; guards[nc] = ref+1; nc++;
-    }
-  }
-  if (nc != 2 || ntab != 1 || nt != 4 || ncarg != 4 || nl != 2 ||
-      !loop || poll != loop+1 || calls[0] >= loop || calls[1] <= poll ||
-      loads[0] != calls[0]+2 || loads[1] != calls[1]+2) return 0;
-  for (ref = 0; ref < nc; ref++) {
-    SnapNo sn; int found = 0;
-    for (sn = 0; sn < T->nsnap; sn++)
-      found |= T->snap[sn].ref == guards[ref] + 1u;
-    if (!found) return 0;
-  }
-  return 1;
-}
-
-static int arm64_rooted_read_postra_key(const LJArm64PostRAView *v,
-                                        IRRef target)
-{
-  IRRef ref;
-  if (target < v->nk || target >= REF_TRUE) return 0;
-  for (ref = v->nk; ref < REF_TRUE; ref++) {
-    IRIns k = ir_load_acq(&v->ir[ref]);
-    if (ref == target)
-      return k.o == IR_KINT && k.t.irt == IRT_INT && k.i == 1;
-    if (k.o == IR_KNUM) {
-      if (ref + 1 >= REF_TRUE) return 0;
-      ref++;
-    } else if (k.o != IR_KINT || k.t.irt != IRT_INT) {
+    a = &T->ir[chain];
+    if (a->o != IR_CARG || a->t.irt != IRT_NIL ||
+        a->op1 < REF_FIRST || a->op1 >= chain || a->op2 != root1)
       return 0;
-    }
+    b = &T->ir[a->op1];
+    if (b->o != IR_CARG || b->t.irt != IRT_NIL ||
+        b->op1 != root1 || b->op2 != root2 ||
+        root1 >= a->op1 || root2 >= a->op1 ||
+        T->ir[root1].op2 != (IRTMPREF_IN1|IRTMPREF_OUT1) ||
+        T->ir[root2].op2 != IRTMPREF_IN2)
+      return 0;
+    value = &T->ir[ref+2];
+    if (value->o != IR_VLOAD || value->op1 != root1 || value->op2 ||
+        (irt_type(value->t) != IRT_INT && irt_type(value->t) != IRT_NUM) ||
+        !irt_isguard(value->t) ||
+        (value->t.irt & ~(IRT_TYPE|IRT_GUARD|IRT_ISPHI)))
+      return 0;
+  } else if (call->op2 != IRCALL_lj_tab_len_rooted_try ||
+             call->op1 != root1 || T->ir[root1].op2 != IRTMPREF_IN1) {
+    return 0;
   }
-  return 0;
+  guard = &T->ir[ref+1];
+  if (guard->o != IR_NE || guard->t.irt != (IRT_INT|IRT_GUARD))
+    return 0;
+  if (guard->op1 == ref) key = guard->op2;
+  else if (guard->op2 == ref) key = guard->op1;
+  else return 0;
+  if (!arm64_scalar_ir_ref(T, key, ref, IRT_INT) || !irref_isk(key) ||
+      T->ir[key].o != IR_KINT ||
+      T->ir[key].i != (read ? 0 : LJ_TAB_LEN_RETRY))
+    return 0;
+  return read ? 2 : 1;
 }
 
 static int arm64_scalar_ir_admit(const jit_State *J, const GCtrace *T,
-                                 LJArm64IRReject *reject, int rooted_read)
+                                 LJArm64IRReject *reject)
 {
   IRRef ref = REF_BASE, loop = 0, poll = 0, firstphi = 0;
-  IRRef tablen_table = 0, tablen_root = 0;
-  unsigned tablen_calls = 0, tablen_guard = 0;
+  IRRef root1 = 0, root2 = 0, resultroot = 0, resultref = 0;
   IRRef previous_snap = 0, poll_snap = 0;
   MSize expected_ofs = 0, maxslots;
   uintptr_t proto_lo, proto_hi;
@@ -3538,11 +3460,10 @@ static int arm64_scalar_ir_admit(const jit_State *J, const GCtrace *T,
     switch ((IROp)ir->o) {
     case IR_SLOAD:
       if (type == IRT_TAB) {
-        if (tablen_table || flags != IRT_GUARD ||
+        if (flags != IRT_GUARD ||
             ir->op2 != IRSLOAD_TYPECHECK || ir->op1 < 1 + LJ_FR2 ||
             ir->op1 >= maxslots)
           goto bad_type;
-        tablen_table = ref;
         break;
       }
       if ((type != IRT_INT && type != IRT_NUM) || !(flags & IRT_GUARD) ||
@@ -3551,30 +3472,25 @@ static int arm64_scalar_ir_admit(const jit_State *J, const GCtrace *T,
         goto bad_type;
       break;
     case IR_TMPREF:
-      if (rooted_read) {
-        if (type != IRT_PGC || flags ||
-            (ir->op2 != IRTMPREF_IN2 &&
-             ir->op2 != (IRTMPREF_IN1|IRTMPREF_OUT1))) goto bad_operand;
-        if (ir->op2 == (IRTMPREF_IN1|IRTMPREF_OUT1)) {
-          if (ir->op1 < REF_FIRST || ir->op1 >= ref ||
-              ir->op1 != tablen_table ||
-              T->ir[ir->op1].o != IR_SLOAD ||
-              irt_type(T->ir[ir->op1].t) != IRT_TAB) goto bad_operand;
-          if (!tablen_root) tablen_root = ref;
-        } else if (ir->op1 < T->nk || ir->op1 >= REF_TRUE ||
-                   T->ir[ir->op1].o != IR_KINT || T->ir[ir->op1].i != 1)
+      if (type != IRT_PGC || flags) goto bad_type;
+      if (ir->op2 == IRTMPREF_IN1 ||
+          ir->op2 == (IRTMPREF_IN1|IRTMPREF_OUT1)) {
+        if (!arm64_scalar_ir_ref(T, ir->op1, ref, IRT_TAB))
           goto bad_operand;
-        break;
-      }
-      if (!tablen_table || type != IRT_PGC || flags ||
-          ir->op1 != tablen_table || ir->op2 != IRTMPREF_IN1)
-        goto bad_operand;
-      if (!tablen_root) tablen_root = ref;
+        root1 = ref;
+      } else if (ir->op2 == IRTMPREF_IN2) {
+        if (!arm64_scalar_ir_ref(T, ir->op1, ref, IRT_INT) &&
+            !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_NUM))
+          goto bad_operand;
+        root2 = ref;
+      } else goto bad_operand;
       break;
     case IR_VLOAD:
-      if (!rooted_read || type != IRT_NUM || !(flags & IRT_GUARD) ||
-          (flags & ~(IRT_GUARD|IRT_ISPHI)) || ir->op2 != 0)
+      if (ref != resultref || !resultroot || ir->op1 != resultroot ||
+          ir->op2 || (type != IRT_INT && type != IRT_NUM) ||
+          !(flags & IRT_GUARD) || (flags & ~(IRT_GUARD|IRT_ISPHI)))
         goto bad_type;
+      resultroot = resultref = 0;
       break;
     case IR_ADDOV:
     case IR_SUBOV:
@@ -3605,30 +3521,6 @@ static int arm64_scalar_ir_admit(const jit_State *J, const GCtrace *T,
       if ((ir->op1 >= REF_FIRST && ir->op1 >= ref) ||
           (ir->op2 >= REF_FIRST && ir->op2 >= ref))
         goto bad_operand;
-      if (ir->o == IR_NE &&
-          ((ir->op1 >= REF_FIRST && T->ir[ir->op1].o == IR_CALLS) ||
-           (ir->op2 >= REF_FIRST && T->ir[ir->op2].o == IR_CALLS))) {
-        IRRef call = ir->op1 >= REF_FIRST && T->ir[ir->op1].o == IR_CALLS ? ir->op1 : ir->op2;
-        IRRef kref = ir->op1 == call ? ir->op2 : ir->op1;
-        if (rooted_read) {
-          IRIns k;
-          if (T->ir[call].op2 != IRCALL_lj_tab_getscalar_rooted_try ||
-              kref < T->nk || kref >= REF_TRUE || ref != call + 1u)
-            goto bad_operand;
-          k = T->ir[kref];
-          if (k.o != IR_KINT || k.i != 0) goto bad_operand;
-        } else {
-          if (T->ir[call].op2 != IRCALL_lj_tab_len_rooted_try ||
-              !arm64_tablen_retry_kint(T->ir, T->nk, kref) ||
-              ref != call + 1u) goto bad_operand;
-        }
-        tablen_guard++;
-      } else if ((ir->op1 >= REF_FIRST &&
-                  T->ir[ir->op1].o == IR_CALLS) ||
-                 (ir->op2 >= REF_FIRST &&
-                  T->ir[ir->op2].o == IR_CALLS)) {
-        goto bad_operand;
-      }
       binary = 1;
       break;
     case IR_CONV:
@@ -3674,30 +3566,22 @@ static int arm64_scalar_ir_admit(const jit_State *J, const GCtrace *T,
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL, ref, (IROp)ir->o,
                              ir->op2);
     case IR_CARG:
-      if (!rooted_read || type != IRT_NIL || flags ||
+      if (type != IRT_NIL || flags ||
           ir->op1 < REF_FIRST || ir->op1 >= ref ||
-          ir->op2 < REF_FIRST || ir->op2 >= ref) goto bad_operand;
+          ir->op2 < REF_FIRST || ir->op2 >= ref ||
+          (T->ir[ir->op1].o != IR_TMPREF &&
+           T->ir[ir->op1].o != IR_CARG) || T->ir[ir->op2].o != IR_TMPREF)
+        goto bad_operand;
       break;
     case IR_CALLS:
-      if (rooted_read) {
-        if (type != IRT_INT || flags != IRT_GUARD ||
-            ir->op2 != IRCALL_lj_tab_getscalar_rooted_try ||
-            ir->op1 < REF_FIRST || ir->op1 >= ref ||
-            T->ir[ir->op1].o != IR_CARG) goto bad_operand;
-        tablen_calls++;
-        break;
+      {
+        int effect = arm64_rooted_ir_effect(T, ref, root1, root2);
+        if (!effect)
+          return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL, ref,
+                                 IR_CALLS, ir->op2);
+        if (effect == 2) { resultroot = root1; resultref = ref+2; }
+        root1 = root2 = 0;
       }
-      if (!tablen_root || type != IRT_INT || flags ||
-          ir->op1 < REF_FIRST || ir->op1 >= ref ||
-          T->ir[ir->op1].o != IR_TMPREF ||
-          T->ir[ir->op1].op1 != tablen_table ||
-          ir->op2 != IRCALL_lj_tab_len_rooted_try)
-        return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL, ref,
-                               IR_CALLS, ir->op2);
-      tablen_calls++;
-      if (tablen_calls > LJ_ARM64_TABLEN_MAX_CALLS)
-        return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL, ref,
-                               IR_CALLS, IRCALL_lj_tab_len_rooted_try);
       break;
     case IR_CALLXS:
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL, ref, IR_CALLXS,
@@ -3713,35 +3597,6 @@ static int arm64_scalar_ir_admit(const jit_State *J, const GCtrace *T,
   ref = loop;
   if (!loop || poll != loop + 1 || J->loopref != loop)
     goto bad_poll;
-  if ((tablen_calls != 0) != (tablen_root != 0) ||
-      (tablen_calls && (!tablen_table || tablen_guard != tablen_calls ||
-                        tablen_table >= tablen_root)) ||
-      (tablen_table != 0) != (tablen_calls != 0))
-    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
-                           tablen_calls ? tablen_table : 0,
-                           IR_CALLS, IRCALL_lj_tab_len_rooted_try);
-  if (tablen_calls && !rooted_read) {
-    IRRef call;
-    for (call = REF_FIRST; call < T->nins; call++) {
-      IRRef guard;
-      unsigned nguard = 0;
-      if (T->ir[call].o != IR_CALLS) continue;
-      for (guard = REF_FIRST; guard < T->nins; guard++) {
-        IRIns *g = &T->ir[guard];
-        if (g->o == IR_NE && (g->op1 == call || g->op2 == call)) {
-          IRRef kref = g->op1 == call ? g->op2 : g->op1;
-          if (!arm64_tablen_retry_kint(T->ir, T->nk, kref) ||
-              guard != call + 1u)
-            return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
-                                   guard, IR_NE, IRCALL_lj_tab_len_rooted_try);
-          nguard++;
-        }
-      }
-      if (nguard != 1)
-        return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
-                               call, IR_CALLS, IRCALL_lj_tab_len_rooted_try);
-    }
-  }
   for (ref = REF_FIRST; ref < (firstphi ? firstphi : T->nins); ref++) {
     IRRef phi;
     int marked = 0;
@@ -3798,6 +3653,10 @@ static int arm64_scalar_ir_admit(const jit_State *J, const GCtrace *T,
       goto bad_snapshot;
     while (s + 1 < T->nsnap && T->snap[s + 1].ref <= ref)
       s++;
+    /* A successful read's type guard resumes after the helper; a refused
+    ** read uses the preceding snapshot and must not consume its output. */
+    if (ir->o == IR_VLOAD && T->snap[s].ref != ref)
+      goto bad_snapshot;
     if (ir->o == IR_SLOAD && ir->op1 >= T->snap[s].nslots)
       goto bad_snapshot;
   }
@@ -3854,7 +3713,8 @@ static int arm64_scalar_postra_value(IRIns p)
            (p.op2 == IRCALL_lj_tab_len_rooted_try ||
             p.op2 == IRCALL_lj_tab_getscalar_rooted_try);
   case IR_VLOAD:
-    return irt_type(p.t) == IRT_NUM && irt_isguard(p.t);
+    return (irt_type(p.t) == IRT_INT || irt_type(p.t) == IRT_NUM) &&
+           irt_isguard(p.t);
   default:
     return 0;
   }
@@ -3929,89 +3789,64 @@ static int arm64_scalar_postra_nolocation(const LJArm64PostRAView *v,
   return 1;
 }
 
-/* Immutable counterpart of the exact rooted scalar read certificate. */
-static int arm64_rooted_read_postra_shape(const LJArm64PostRAView *v,
-                                          IRRef n)
+/* Allocated helper effects are checked independently of recorder admission.
+** In addition to the ABI graph, both scratch pointers must have distinct GPR
+** locations. The general scalar pass proves every input and snapshot location. */
+static int arm64_rooted_postra_effect(const LJArm64PostRAView *v, IRRef n,
+                                     IRRef ref, IRRef root1, IRRef root2)
 {
-  IRRef ref, loop = 0, poll = 0, calls[2], guards[2], loads[2];
-  unsigned nc = 0, nl = 0, nt = 0, nargs = 0, ntab = 0;
-  if (!v || !v->ir || !v->snap || !v->snapmap || !v->nsnap ||
-      !v->nsnapmap || v->nsnap >= REF_DROP || !v->nk ||
-      v->nk > REF_TRUE || n <= REF_FIRST || n > v->nins ||
-      n >= REF_DROP) return 0;
-  for (ref = REF_FIRST; ref < n; ref++) {
-    IRIns p = ir_load_acq(&v->ir[ref]);
-    if (p.o == IR_LOOP) loop = ref;
-    if (p.o == IR_XPOLL) poll = ref;
-    if (p.o == IR_SLOAD && irt_type(p.t) == IRT_TAB) ntab++;
-    if (p.o == IR_CARG) nargs++;
-    if (p.o == IR_TMPREF) nt++;
-    if (p.o == IR_ALOAD || p.o == IR_HLOAD || p.o == IR_UREFO ||
-        p.o == IR_ULOAD) return 0;
-    if (p.o == IR_VLOAD) {
-      if (nl >= 2) return 0;
-      loads[nl++] = ref;
-    }
-    if (p.o == IR_CALLS &&
-        p.op2 == IRCALL_lj_tab_getscalar_rooted_try) {
-      IRIns carg, a, tr, kr, guard, zero, val;
-      IRRef cr, tabroot, keyroot, kref;
-      if (nc >= 2 || p.op1 < REF_FIRST || p.op1 >= ref) return 0;
-      cr = p.op1; carg = ir_load_acq(&v->ir[cr]);
-      if (carg.o != IR_CARG || carg.op1 < REF_FIRST || carg.op1 >= cr ||
-          carg.op2 < REF_FIRST || carg.op2 >= cr) return 0;
-      a = ir_load_acq(&v->ir[carg.op1]);
-      if (a.o != IR_CARG || a.op1 < REF_FIRST || a.op1 >= carg.op1 ||
-          a.op2 < REF_FIRST || a.op2 >= carg.op1 || carg.op2 != a.op1)
-        return 0;
-      /* This inner CARG carries (table-root,key-root); outer carries
-      ** (inner-carg,output-root), with output aliased to table-root. */
-      tabroot = a.op1; keyroot = a.op2;
-      tr = ir_load_acq(&v->ir[tabroot]); kr = ir_load_acq(&v->ir[keyroot]);
-      if (tr.o != IR_TMPREF || tr.t.irt != IRT_PGC ||
-          tr.op2 != (IRTMPREF_IN1|IRTMPREF_OUT1) ||
-          kr.o != IR_TMPREF || kr.t.irt != IRT_PGC ||
-          kr.op2 != IRTMPREF_IN2 ||
-          !arm64_rooted_read_postra_key(v, kr.op1)) return 0;
-      if (!ra_hasreg(tr.r) || !ra_hasreg(kr.r) || tr.r == kr.r) return 0;
-      if (tr.op1 < REF_FIRST || tr.op1 >= tabroot) return 0;
-      { IRIns ts = ir_load_acq(&v->ir[tr.op1]);
-        if (ts.o != IR_SLOAD || irt_type(ts.t) != IRT_TAB ||
-            !irt_isguard(ts.t)) return 0; }
-      if (ref + 2 >= n) return 0;
-      guard = ir_load_acq(&v->ir[ref+1]);
-      if (guard.o != IR_NE || irt_type(guard.t) != IRT_INT ||
-          !irt_isguard(guard.t)) return 0;
-      if (guard.op1 == ref) kref = guard.op2;
-      else if (guard.op2 == ref) kref = guard.op1;
-      else return 0;
-      if (kref < v->nk || kref >= REF_TRUE) return 0;
-      zero = ir_load_acq(&v->ir[kref]);
-      if (zero.o != IR_KINT || zero.i != 0) return 0;
-      val = ir_load_acq(&v->ir[ref+2]);
-      if (val.o != IR_VLOAD || val.op1 != tabroot || val.op2 != 0 ||
-          irt_type(val.t) != IRT_NUM || !irt_isguard(val.t)) return 0;
-      calls[nc] = ref; guards[nc] = ref+1; nc++;
-    }
+  IRIns c = ir_load_acq(&v->ir[ref]), g, r1;
+  IRRef sentinel;
+  int read = c.op2 == IRCALL_lj_tab_getscalar_rooted_try;
+  if (!root1 || root1 >= ref || ref+1 >= n ||
+      c.t.irt != (read ? (IRT_INT|IRT_GUARD) : IRT_INT)) return 0;
+  r1 = ir_load_acq(&v->ir[root1]);
+  if (r1.o != IR_TMPREF || r1.t.irt != IRT_PGC ||
+      !ra_hasreg(r1.r) || !arm64_scalar_postra_register(r1.r, IRT_PGC) ||
+      ra_hasspill(r1.s)) return 0;
+  if (read) {
+    IRIns a, b, r2, value;
+    if (!root2 || root2 >= ref || c.op1 < REF_FIRST || c.op1 >= ref ||
+        ref+2 >= n) return 0;
+    a = ir_load_acq(&v->ir[c.op1]);
+    if (a.o != IR_CARG || a.t.irt != IRT_NIL ||
+        a.op1 < REF_FIRST || a.op1 >= c.op1 || a.op2 != root1) return 0;
+    b = ir_load_acq(&v->ir[a.op1]);
+    r2 = ir_load_acq(&v->ir[root2]);
+    if (b.o != IR_CARG || b.t.irt != IRT_NIL ||
+        b.op1 != root1 || b.op2 != root2 ||
+        root1 >= a.op1 || root2 >= a.op1 ||
+        r1.op2 != (IRTMPREF_IN1|IRTMPREF_OUT1) ||
+        r2.o != IR_TMPREF || r2.t.irt != IRT_PGC ||
+        r2.op2 != IRTMPREF_IN2 || !ra_hasreg(r2.r) ||
+        !arm64_scalar_postra_register(r2.r, IRT_PGC) ||
+        ra_hasspill(r2.s) || r1.r == r2.r) return 0;
+    value = ir_load_acq(&v->ir[ref+2]);
+    if (value.o != IR_VLOAD || value.op1 != root1 || value.op2 ||
+        (irt_type(value.t) != IRT_INT && irt_type(value.t) != IRT_NUM) ||
+        !irt_isguard(value.t) ||
+        (value.t.irt & ~(IRT_TYPE|IRT_GUARD|IRT_ISPHI))) return 0;
+  } else if (c.op2 != IRCALL_lj_tab_len_rooted_try ||
+             c.op1 != root1 || r1.op2 != IRTMPREF_IN1) return 0;
+  g = ir_load_acq(&v->ir[ref+1]);
+  if (g.o != IR_NE || g.t.irt != (IRT_INT|IRT_GUARD)) return 0;
+  if (g.op1 == ref) sentinel = g.op2;
+  else if (g.op2 == ref) sentinel = g.op1;
+  else return 0;
+  if (!irref_isk(sentinel) ||
+      !arm64_scalar_postra_kref(v, sentinel, IRT_INT)) return 0;
+  {
+    IRIns k = ir_load_acq(&v->ir[sentinel]);
+    if (k.o != IR_KINT || k.i != (read ? 0 : LJ_TAB_LEN_RETRY)) return 0;
   }
-  if (nc != 2 || ntab != 1 || nt != 4 || nargs != 4 || nl != 2 ||
-      !loop || poll != loop+1 || calls[0] >= loop || calls[1] <= poll ||
-      loads[0] != calls[0]+2 || loads[1] != calls[1]+2) return 0;
-  for (ref = 0; ref < 2; ref++) {
-    SnapNo sn; int found = 0;
-    for (sn = 0; sn < v->nsnap; sn++)
-      found |= snap_ref_acq(&v->snap[sn]) == guards[ref] + 1u;
-    if (!found) return 0;
-  }
-  return 1;
+  return read ? 2 : 1;
 }
 
 static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
-                                     IRRef *ninsout, int rooted_read)
+                                     IRRef *ninsout)
 {
   IRRef ref, n, loop = 0, poll = 0, firstphi = 0;
-  IRRef tablen_table = 0, tablen_root = 0;
-  unsigned tablen_calls = 0, tablen_guard = 0;
+  IRRef root1 = 0, root2 = 0, resultroot = 0, resultref = 0;
   MSize cap = 0, highest = 0, s, expectedofs = 0;
   IRRef prevsnap = 0, poll_snap = 0;
   unsigned nphi = 0, loopsnap = 0;
@@ -4081,11 +3916,10 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
     switch ((IROp)p.o) {
     case IR_SLOAD:
       if (type == IRT_TAB) {
-        if (tablen_table || p.t.irt != (IRT_TAB|IRT_GUARD) ||
+        if (p.t.irt != (IRT_TAB|IRT_GUARD) ||
             p.op2 != IRSLOAD_TYPECHECK || p.op1 < 1 + LJ_FR2 ||
             p.op1 >= v->root_topslot + 1 + LJ_FR2)
           return 0;
-        tablen_table = ref;
         break;
       }
       if ((type != IRT_INT && type != IRT_NUM) || !(flags & IRT_GUARD) ||
@@ -4094,50 +3928,26 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
         return 0;
       break;
     case IR_TMPREF:
-      if (rooted_read) {
-        if (p.t.irt != IRT_PGC ||
-            (p.op2 != IRTMPREF_IN2 &&
-             p.op2 != (IRTMPREF_IN1|IRTMPREF_OUT1)) ||
-            !ra_hasreg(p.r)) return 0;
-        if (p.op2 == (IRTMPREF_IN1|IRTMPREF_OUT1)) {
-          if (p.op1 < REF_FIRST || p.op1 >= ref ||
-              p.op1 != tablen_table ||
-              ir_load_acq(&v->ir[p.op1]).o != IR_SLOAD) return 0;
-          if (!tablen_root) tablen_root = ref;
-        } else {
-          if (p.op1 < v->nk || p.op1 >= REF_TRUE ||
-              ir_load_acq(&v->ir[p.op1]).o != IR_KINT ||
-              ir_load_acq(&v->ir[p.op1]).i != 1) return 0;
-        }
-        break;
-      }
-      if (!tablen_table || p.t.irt != IRT_PGC ||
-          p.op1 != tablen_table || p.op2 != IRTMPREF_IN1 ||
-          !ra_hasreg(p.r) || !arm64_scalar_postra_register(p.r, IRT_INT))
+      if (p.t.irt != IRT_PGC || !ra_hasreg(p.r) ||
+          !arm64_scalar_postra_register(p.r, IRT_PGC) || ra_hasspill(p.s))
         return 0;
-      if (!tablen_root) tablen_root = ref;
+      if (p.op2 == IRTMPREF_IN1 || p.op2 == (IRTMPREF_IN1|IRTMPREF_OUT1)) {
+        if (!arm64_scalar_postra_ref(v, p.op1, ref, IRT_TAB)) return 0;
+        root1 = ref;
+      } else if (p.op2 == IRTMPREF_IN2) {
+        if (!arm64_scalar_postra_ref(v, p.op1, ref, IRT_INT) &&
+            !arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM)) return 0;
+        root2 = ref;
+      } else return 0;
       break;
     case IR_CALLS:
-      if (rooted_read) {
-        if (p.t.irt != (IRT_INT|IRT_GUARD) ||
-            p.op2 != IRCALL_lj_tab_getscalar_rooted_try ||
-            p.op1 < REF_FIRST || p.op1 >= ref ||
-            ir_load_acq(&v->ir[p.op1]).o != IR_CARG ||
-            !ra_hasreg(p.r) || !arm64_scalar_postra_register(p.r, IRT_INT))
-          return 0;
-        tablen_calls++;
-        break;
+      {
+        int effect = arm64_rooted_postra_effect(v, n, ref, root1, root2);
+        if (!effect || !ra_hasreg(p.r) ||
+            !arm64_scalar_postra_register(p.r, IRT_INT)) return 0;
+        if (effect == 2) { resultroot = root1; resultref = ref+2; }
+        root1 = root2 = 0;
       }
-      if (!tablen_root || p.t.irt != IRT_INT ||
-          p.op1 < REF_FIRST || p.op1 >= ref ||
-          ir_load_acq(&v->ir[p.op1]).o != IR_TMPREF ||
-          ir_load_acq(&v->ir[p.op1]).op1 != tablen_table ||
-          p.op2 != IRCALL_lj_tab_len_rooted_try || !ra_hasreg(p.r) ||
-          !arm64_scalar_postra_register(p.r, IRT_INT))
-        return 0;
-      tablen_calls++;
-      if (tablen_calls > LJ_ARM64_TABLEN_MAX_CALLS)
-        return 0;
       break;
     case IR_ADDOV:
     case IR_SUBOV:
@@ -4168,37 +3978,21 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
       if ((p.op1 >= REF_FIRST && p.op1 >= ref) ||
           (p.op2 >= REF_FIRST && p.op2 >= ref))
         return 0;
-      if ((p.op1 >= REF_FIRST && ir_load_acq(&v->ir[p.op1]).o == IR_CALLS) ||
-          (p.op2 >= REF_FIRST && ir_load_acq(&v->ir[p.op2]).o == IR_CALLS)) {
-        if (p.o != IR_NE) return 0;
-        IRRef call = p.op1 >= REF_FIRST && ir_load_acq(&v->ir[p.op1]).o == IR_CALLS ? p.op1 : p.op2;
-        IRRef kref = p.op1 == call ? p.op2 : p.op1;
-        if (rooted_read) {
-          IRIns k;
-          if (call + 1u != ref || kref < v->nk || kref >= REF_TRUE)
-            return 0;
-          k = ir_load_acq(&v->ir[kref]);
-          if (ir_load_acq(&v->ir[call]).op2 !=
-                IRCALL_lj_tab_getscalar_rooted_try ||
-              k.o != IR_KINT || k.i != 0) return 0;
-        } else {
-          int retry = arm64_tablen_retry_kint(v->ir, v->nk, kref);
-          if (ir_load_acq(&v->ir[call]).op2 != IRCALL_lj_tab_len_rooted_try ||
-              !retry) return 0;
-        }
-        tablen_guard++;
-      }
       binary = 1;
       break;
     case IR_CARG:
-      if (!rooted_read || p.t.irt != IRT_NIL || flags ||
-          p.op1 < REF_FIRST || p.op1 >= ref ||
+      if (p.t.irt != IRT_NIL || p.op1 < REF_FIRST || p.op1 >= ref ||
           p.op2 < REF_FIRST || p.op2 >= ref) return 0;
+      {
+        IRIns a = ir_load_acq(&v->ir[p.op1]), b = ir_load_acq(&v->ir[p.op2]);
+        if ((a.o != IR_TMPREF && a.o != IR_CARG) || b.o != IR_TMPREF) return 0;
+      }
       break;
     case IR_VLOAD:
-      if (!rooted_read || type != IRT_NUM || !(flags & IRT_GUARD) ||
-          (flags & ~(IRT_GUARD|IRT_ISPHI)) || p.op2 != 0 ||
-          !ra_hasreg(p.r)) return 0;
+      if (!resultroot || ref != resultref || p.op1 != resultroot || p.op2 ||
+          (type != IRT_INT && type != IRT_NUM) || !(flags & IRT_GUARD) ||
+          (flags & ~(IRT_GUARD|IRT_ISPHI))) return 0;
+      resultroot = resultref = 0;
       break;
     case IR_CONV:
       if (type == IRT_NUM && (flags & ~IRT_ISPHI) == 0 &&
@@ -4246,10 +4040,11 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
     {
       int value = arm64_scalar_postra_value(p) || p.o == IR_PHI;
       if (ra_hasspill(p.s)) {
-        MSize width = type == IRT_NUM ? 2 : 1, slot;
-        /* The scalar spill model knows only 32-bit INT and 64-bit NUM.
-        ** TAB/PGC are pointer-width values; keep this profile register-only. */
-        if (!value || (type != IRT_INT && type != IRT_NUM) ||
+        MSize width = type == IRT_INT ? 1 : 2, slot;
+        /* Scalars are 32-bit INT or 64-bit NUM/TAB. Scratch addresses remain
+        ** register-only at their operation boundary; table values may spill
+        ** with the same full-width ownership proof as numeric values. */
+        if (!value || (type != IRT_INT && type != IRT_NUM && type != IRT_TAB) ||
             p.s < SPS_FIRST || (width == 2 && (p.s & 1)) ||
             (MSize)p.s + width > cap)
           return 0;
@@ -4287,32 +4082,6 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
   }
   if (!loop || poll != loop + 1)
     return 0;
-  if ((tablen_calls != 0) != (tablen_root != 0) ||
-      (tablen_calls && (!tablen_table || tablen_guard != tablen_calls ||
-                        tablen_table >= tablen_root)) ||
-      (tablen_table != 0) != (tablen_calls != 0))
-    return 0;
-  if (tablen_calls && !rooted_read) {
-    for (ref = REF_FIRST; ref < n; ref++) {
-      IRIns c = ir_load_acq(&v->ir[ref]);
-      IRRef guard;
-      unsigned nguard = 0;
-      if (c.o != IR_CALLS) continue;
-      for (guard = REF_FIRST; guard < n; guard++) {
-        IRIns g = ir_load_acq(&v->ir[guard]);
-        if (g.o == IR_NE && (g.op1 == ref || g.op2 == ref)) {
-          IRRef kref = g.op1 == ref ? g.op2 : g.op1;
-          int retry = arm64_tablen_retry_kint(v->ir, v->nk, kref);
-          if (c.op2 != IRCALL_lj_tab_len_rooted_try ||
-              !retry ||
-              guard != ref + 1u)
-            return 0;
-          nguard++;
-        }
-      }
-      if (nguard != 1) return 0;
-    }
-  }
   for (ref = REF_FIRST; ref < (firstphi ? firstphi : n); ref++) {
     IRRef phi;
     int operand = 0;
@@ -4392,8 +4161,8 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
       }
       if (ra_hasspill(regsp_spill(rs))) {
         MSize slot = regsp_spill(rs);
-        MSize width = irt_isnum(p.t) ? 2 : 1;
-        if (irt_type(p.t) == IRT_TAB || irt_type(p.t) == IRT_PGC ||
+        MSize width = irt_type(p.t) == IRT_INT ? 1 : 2;
+        if (irt_type(p.t) == IRT_PGC ||
             slot < SPS_FIRST || (width == 2 && (slot & 1)) ||
             slot + width > cap)
           return 0;
@@ -4455,6 +4224,8 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
       return 0;
     while (s + 1 < v->nsnap && snap_ref_acq(&v->snap[s + 1]) <= ref)
       s++;
+    if (ir.o == IR_VLOAD && snap_ref_acq(&v->snap[s]) != ref)
+      return 0;
     if (ir.o == IR_SLOAD && ir.op1 >= snap_nslots_acq(&v->snap[s]))
       return 0;
   }
@@ -4466,8 +4237,7 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
                           LJArm64IRReject *reject)
 {
   if (T && bc_op(T->startins) == BC_LOOP) {
-    return arm64_scalar_ir_admit(J, T, reject,
-                                 arm64_rooted_read_ir_shape(T));
+    return arm64_scalar_ir_admit(J, T, reject);
   }
   return arm64_ir_nonloop_admit(J, T, reject);
 }
@@ -4476,8 +4246,7 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
 {
   if (view && bc_op(view->startins) == BC_LOOP)
   {
-    int rr = arm64_rooted_read_postra_shape(view, view->nins);
-    return arm64_scalar_postra_admit(view, semantic_ninsp, rr);
+    return arm64_scalar_postra_admit(view, semantic_ninsp);
   }
   return arm64_postra_nonloop_admit(view, semantic_ninsp);
 }

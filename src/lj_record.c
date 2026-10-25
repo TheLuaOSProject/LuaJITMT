@@ -2090,7 +2090,7 @@ static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t)
 				   IRTMPREF_IN1|IRTMPREF_OUT1);
   TRef key = rec_tmpref_mode(J, ix->key, IRTMPREF_IN2);
 #if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
-  if (t == IRT_NUM) {
+  if (t == IRT_NUM || t == IRT_INT) {
     /* A bounded scalar hit attempt never waits. Its false result side-exits
     ** before the rooted output is consumed. */
     TRef found = lj_ir_call(J, IRCALL_lj_tab_getscalar_rooted_try,

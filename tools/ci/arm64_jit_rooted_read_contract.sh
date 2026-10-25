@@ -72,116 +72,10 @@ if test "${LJ_TEST_DISABLE_RUN_LOCK:-0}" != 1 &&
 fi
 
 test -f "$fixture_source" && test -f "$lifecycle_source" && test -f "$loop_lua"
-# Keep the broad scalar CALLS rejection and rooted-length exception audited by
-# their existing contract. This capability adds only its separately certified
-# rooted scalar helper and is tied to independent semantic/post-RA mutations.
-for required in \
-  'static int arm64_rooted_read_ir_shape(' \
-  'static int arm64_rooted_read_postra_shape(' \
-  'arm64_rooted_read_ir_shape(T)' \
-  'arm64_rooted_read_postra_shape(view, view->nins)' \
-  'p->o == IR_ALOAD || p->o == IR_HLOAD' \
-  'p.o == IR_ALOAD || p.o == IR_HLOAD' \
-  'IRCALL_lj_tab_getscalar_rooted_try' \
-  'guard->o != IR_NE' \
-  'vload->o != IR_VLOAD' \
-  'nc != 2 || ntab != 1 || nt != 4 || ncarg != 4 || nl != 2' \
-  'calls[0] >= loop || calls[1] <= poll' \
-  'loads[0] != calls[0]+2 || loads[1] != calls[1]+2' \
-  'T->snap[sn].ref == guards[ref] + 1u' \
-  'tr.r == kr.r' \
-  'rooted_read'; do
-  grep -F "$required" "$admit" >/dev/null || {
-    echo "ARM64 rooted-read admission proof changed: $required" >&2
-    exit 1
-  }
-done
-for required in \
-  'SEM_REJECT(ir[tab0].op2 = IRTMPREF_IN2);' \
-  'SEM_REJECT(ir[key0].op2 = IRTMPREF_IN1|IRTMPREF_OUT1);' \
-  'SEM_REJECT(ir[call0].op2 = IRCALL_lj_tab_gettv_rooted_hit_try);' \
-  'SEM_REJECT(ir[vload0].op2 = 8);' \
-  'SEM_REJECT(ir[call1].o = IR_NOP);' \
-  'SEM_REJECT(ir[guard0].o = IR_EQ);' \
-  'SEM_REJECT(ir[key0].op1 = REF_TRUE);' \
-  'SEM_REJECT(ir[carg0].op1 = owner->nk - 1);' \
-  'SEM_REJECT(ir[carg0].op1 = call1);' \
-  'SEM_REJECT(ir[carg0].op1 = (IRRef)nins);' \
-  'SEM_REJECT(ir[key0].op1 = owner->nk - 1);' \
-  'SEM_REJECT(ir[key0].op1 = key0);' \
-  'SEM_REJECT(ir[key0].op1 = (IRRef)nins);' \
-  'IRRef kr = payload_base;' \
-  'assert(semantic_admit(J, &semantic));' \
-  'SEM_REJECT(ir[vload0].o = IR_ALOAD);' \
-  'SEM_REJECT(ir[vload0].o = IR_HLOAD);' \
-  'SEM_REJECT(ir[call0].op1 = call0);' \
-  'SEM_REJECT(ir[zero0].i = 1);' \
-  'ir[kr].o = IR_KNUM; ir[kr].t.irt = IRT_NUM;' \
-  'snaps[value_snap0 - 1].ref = call0;' \
-  'POST_REJECT(postra_ir[tab0].op2 = IRTMPREF_IN2);' \
-  'POST_REJECT(postra_ir[key0].op2 = IRTMPREF_IN1|IRTMPREF_OUT1);' \
-  'POST_REJECT(postra_ir[call0].op2 = IRCALL_lj_tab_gettv_rooted_hit_try);' \
-  'POST_REJECT(postra_ir[vload0].op2 = 8);' \
-  'POST_REJECT(postra_ir[key0].r = postra_ir[tab0].r);' \
-  'POST_REJECT(postra_ir[call1].o = IR_NOP);' \
-  'POST_REJECT(postra_ir[guard0].o = IR_EQ);' \
-  'POST_REJECT(postra_ir[key0].op1 = REF_TRUE);' \
-  'POST_REJECT(postra_ir[vload0].o = IR_ALOAD);' \
-  'POST_REJECT(postra_ir[vload0].o = IR_HLOAD);' \
-  'POST_REJECT(postra_ir[call0].op1 = call0);' \
-  'POST_REJECT(postra_ir[zero0].i = 1);' \
-  'postra_ir[kr].o = IR_KNUM; postra_ir[kr].t.irt = IRT_NUM;' \
-  'POST_REJECT(postra_ir[tab0].r = RID_INIT);' \
-  'POST_REJECT(postra_ir[tab0].r = RID_D0);' \
-  'postra_ir[tab0].s = SPS_FIRST;' \
-  'POST_REJECT(postra_ir[carg0].op1 = owner->nk - 1);' \
-  'POST_REJECT(postra_ir[carg0].op1 = call1);' \
-  'POST_REJECT(postra_ir[carg0].op1 = (IRRef)nins);' \
-  'POST_REJECT(postra_ir[key0].op1 = owner->nk - 1);' \
-  'POST_REJECT(postra_ir[key0].op1 = key0);' \
-  'POST_REJECT(postra_ir[key0].op1 = (IRRef)nins);' \
-  'IRRef kr = payload_base;' \
-  'assert(postra_admit(&view));' \
-  'free(fake);' \
-  'snaps[value_snap1 - 1].ref = REF_DROP;'; do
-  grep -F "$required" "$fixture_source" >/dev/null || {
-    echo "ARM64 rooted-read negative fixture changed: $required" >&2
-    exit 1
-  }
-done
-for required in \
-  'memcpy(ir + owner->nk, trace_ir_acq(owner) + owner->nk,' \
-  'memcpy(postra_ir + owner->nk, trace_ir_acq(owner) + owner->nk,' \
-  'memcpy(postra_ir + owner->nk, trace_ir_acq(owner) + owner->nk,'; do
-  grep -F "$required" "$fixture_source" >/dev/null || {
-    echo "ARM64 rooted-read fixture copy bounds changed: $required" >&2
-    exit 1
-  }
-done
-for required in \
-  'while i <= n do' \
-  'sum = sum + t[1]' \
-  "vmdef.ircall[op2] == 'lj_tab_getscalar_rooted_try'" \
-  'calls == 2 and table_roots == 2 and key_roots == 2' \
-  'raw_loads == 0' \
-  'assert(exits > 0' \
-  'table_value[1] = 2.5' \
-  'assert(exits > 1'; do
-  grep -F "$required" "$loop_lua" >/dev/null || {
-    echo "ARM64 active-peer rooted-read assertion changed: $required" >&2
-    exit 1
-  }
-done
-grep -F 't:path("tests", "t-arm64-jit-rooted-read-loop.lua")' \
-  "$root/tests/suites/m6_jit.lua" >/dev/null || {
-  echo "ARM64 rooted-read Lua fixture is not run by the M6 suite" >&2
-  exit 1
-}
-grep -F 'sh "$root/tools/ci/arm64_jit_rooted_read_contract.sh"' \
-  "$root/tools/ci/arm64_jit_fail_closed_gate.sh" >/dev/null || {
-  echo "ARM64 fail-closed gate no longer enrolls rooted-read contract" >&2
-  exit 1
-}
+# Malformed references, roots, helper IDs, guards, snapshots and locations
+# are checked by executing independent mutation fixtures on both targets.
+# The positive operation matrix deliberately varies formerly fixed shapes.
+test -f "$root/tests/t-arm64-jit-rooted-operations.lua"
 
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lj-arm64-rooted-read.XXXXXX")
 restore_needed=1
@@ -221,11 +115,17 @@ build_and_run() {
   env LUA_PATH="$root/tests/lib/?.lua;$root/src/?.lua;$root/src/jit/?.lua;;" \
     perl -MTime::HiRes=alarm -e 'alarm shift; exec @ARGV; die "exec: $!\n"' \
       120 "$fixture" "$loop_lua"
+  env LUA_PATH="$root/tests/lib/?.lua;$root/src/?.lua;$root/src/jit/?.lua;;" \
+    perl -MTime::HiRes=alarm -e 'alarm shift; exec @ARGV; die "exec: $!\n"' \
+      120 "$fixture" "$root/tests/t-arm64-jit-rooted-operations.lua" multiple
   perl -MTime::HiRes=alarm -e 'alarm shift; exec @ARGV; die "exec: $!\n"' \
     120 "$lifecycle"
   env LJ_TEST_ROOT="$root" LUA_PATH="$root/tests/lib/?.lua;$root/src/?.lua;$root/src/jit/?.lua;;" \
     perl -MTime::HiRes=alarm -e 'alarm shift; exec @ARGV; die "exec: $!\n"' \
       120 "$root/src/luajit" "$loop_lua"
+  env LUA_PATH="$root/src/?.lua;$root/src/?/init.lua;;" \
+    perl -MTime::HiRes=alarm -e 'alarm shift; exec @ARGV; die "exec: $!\n"' \
+      120 "$root/src/luajit" "$root/tests/t-arm64-jit-rooted-operations.lua"
 }
 
 build_and_run arm64 '-arch arm64' "$xcflags" arm64
