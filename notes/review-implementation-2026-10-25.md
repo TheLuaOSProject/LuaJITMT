@@ -554,3 +554,42 @@ code using the shared profile runner, strict fixture warnings, archive/object
 identity checks and a deadline. Log:
 `/tmp/ljmt-side-ffi-integrated-native.log`. Full combined gates and the final
 caller-clobber audit are still pending at this checkpoint.
+
+## Accepted side entry and release measurements
+
+The combined root-entry contract passes on ARM64, arm64e/BTI and release at
+`47ba8734`, including certificate corruption, mutable-state/request races,
+emitted VM entry ordering and the stronger scalar-side fixture. Release runs
+now exercise side adaptation explicitly. Log:
+`/tmp/ljmt-root-entry-combined-47ba.log`.
+
+Release child entry uses the generation-bound publication seal for immutable
+IR and parent binding layout, retaining live topology, body/lifetime, selected
+snapshot, exact edge, bytecode and PAC checks at both acquisitions. Assertion
+builds continue the full independent post-RA integrity walk. On this Mac, the
+same release profile (no assertion/test-helper instrumentation) measured:
+
+| Kernel, calls | Full child scan | Certified child entry | Interpreter |
+| --- | ---: | ---: | ---: |
+| 1,024 iterations, 10,000 calls | 0.026515 s | 0.014204 s | 0.156129 s |
+| 8 iterations, 100,000 calls | 0.192821 s | 0.068404 s | 0.019754 s |
+
+These are medians of five process-CPU samples from
+`bench/arm64-entry-cost.lua`, initial accumulator `0`, `hotexit=2`. Both JIT
+profiles published a root and child and observed 41 native exits over 20
+warmup calls. Timing removes the observer. The before snapshot is private
+`24324076` (combined production before `ecc63dd0`, with the development print
+removed); the after snapshot contains `47ba8734`. The runtime changes between
+them are the side seal entry path and its exact selected-exit identity check.
+Before log: `/tmp/ljmt-side-release-accepted-before.log`; after build/profile:
+`/tmp/ljmt-side-release-accepted-after-build.log`. The after timing results are
+recorded in this table from the command output. These local samples do not
+establish general workload speedups; short-loop native entry remains costly.
+
+The first-side lifecycle fixture now derives the selected exit from the actual
+child IR_BASE, obtains its code from `trace_mcode(child)`, and requires that
+exact parent edge before entering native code. Previously a token-interrupted
+attempt's stale exit number could make the test inspect a different fallback
+slot. With this corrected identity, default repeated ROOT-tail GC-claim,
+scoped-flush and full-flush cases pass on ARM64 and arm64e. A separate LOOP
+child lifecycle extension and the final combined experimental gate follow.
