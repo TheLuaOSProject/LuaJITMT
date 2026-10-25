@@ -74,6 +74,19 @@ negative now expects rejection at the invalid numeric use; that SLOAD type
 can validly occur only with the rooted helper graph. The focused IR contract
 and the separate native ARM64/arm64e rooted-length contract both pass.
 
+The single complete experimental gate subsequently passed on frozen
+`d8f6ab685b697d8410dc36c7c4cd2ff29d90a6e4`, with its default ARM64,
+arm64e/BTI, and x86-64 branches intact. Both 509-case native ARM64 stock
+source/import corpora then passed on the same tree. This supersedes the
+segmented experimental diagnostics above. Logs:
+
+- `/tmp/luajitmt-20261025-experimental-current.log`
+- `/tmp/luajitmt-20261025-arm64-current-stock-source.log`
+- `/tmp/luajitmt-20261025-arm64-current-stock-import.log`
+
+These results certify the currently admitted capabilities. General ARM64
+JIT heap operations and unrestricted FFI signatures remain closed.
+
 Temporary full bootstrap log:
 `/tmp/luajitmt-20261025-bootstrap-final.log`.
 Partial experimental log:

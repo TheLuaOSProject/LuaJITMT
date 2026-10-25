@@ -9,8 +9,8 @@ and reports that are no longer authoritative are retained in
 
 - Development branch: `codex/aarch64-macos-port`.
 - Integrated upstream comparison point: LuaJITMT `v2.1` at `489bb089`.
-  The post-refresh bootstrap gate now passes at `a549d537`; the latest
-  experimental gate is being revalidated. See
+  The post-refresh bootstrap gate passes at `a549d537`, and the complete
+  experimental gate passes at `d8f6ab68`. See
   [`upstream-refresh-2026-10-22.md`](upstream-refresh-2026-10-22.md) for merge
   decisions, retained artifact exclusions, tests and remaining limits.
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
@@ -22,7 +22,7 @@ and reports that are no longer authoritative are retained in
   The table-rescan close race and internal FFI errno regressions are fixed;
   see [`checkpoint-2026-10-25.md`](checkpoint-2026-10-25.md).
 - Native ARM64 source and original-v2 import stock corpora both pass all 509
-  cases on frozen `1a67d2ea`, including rooted table-length admission.
+  cases on frozen `d8f6ab68`, including rooted table-length admission.
 - A nested-universe JIT initialization stall is fixed by resolving hotcount
   handshake ownership through the existing physical-actor-checked fallback.
   The focused GC2 fixture passes on ARM64 and x86-64, and both x86-64 stock
@@ -32,8 +32,8 @@ and reports that are no longer authoritative are retained in
 - Latest ARM64 VM acquire-load cleanup: `3f109fa2`.
 - Latest ARM64 interpreter GC2 parity: `d639196b`.
 - Latest ARM64 JIT GC2 cadence parity: `f1fe1f73`.
-- Latest complete experimental gate: frozen `348dee94`, including numeric
-  spills and shared capture fixes. Both 509-case source/import stock runs also
+- Latest complete experimental gate: frozen `d8f6ab68`, including rooted
+  table length, numeric spills, and shared runtime fixes. Both stock corpora
   pass on its native ARM64 assertion build. The default gate retains all
   ARM64, arm64e and x86-64 branches.
 - The earlier complete bootstrap gate passes at frozen `25275a13`, including

@@ -1,5 +1,14 @@
 # ARM64 JIT heap-read entry points
 
+2026-10-25 correction: `lj_tab_gettv_rooted()` is a progress helper whose
+contention paths may call `lj_tab_wait_l()`. Its existing recorder shape is
+therefore not a no-wait native-read certificate. The bounded scalar
+`lj_tab_getscalar_rooted_try()` is the suitable existing runtime helper for
+the first numeric read capability: it returns a status, leaves the output
+unchanged on refusal, and requires a status guard before the numeric VLOAD.
+This correction supersedes the helper choice below; the original audit did
+not enable that path.
+
 Read-only source audit at `1355cd2d`. This does not enable any new IR or claim
 native heap-read execution. Scalar capabilities continue to reject heap and
 helper operations.

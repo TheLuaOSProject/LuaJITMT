@@ -1,5 +1,12 @@
 # Next ARM64 JIT capability boundary
 
+2026-10-25 update: the scalar and spill portions below are implemented. The
+proposed first rooted-read helper must be corrected: `lj_tab_gettv_rooted()`
+can wait under contention. Use the existing bounded scalar try helper with
+an explicit success guard before VLOAD; see
+[`arm64-jit-heap-read-audit.md`](arm64-jit-heap-read-audit.md). This note's
+original prototype evidence did not establish a no-wait helper path.
+
 2026-10-22. The current integer scalar gate already admits arbitrary checked
 INT arithmetic within its single-frame self-linked LOOP geometry. Most NUM
 restrictions encode particular accumulator examples: bytecode length, exact
