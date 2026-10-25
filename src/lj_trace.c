@@ -4402,11 +4402,12 @@ static int trace_arm64_first_side_snapshot_valid(
 
 /* Capture one selected root snapshot without deriving pointers until all
 ** advertised counts needed for that derivation have been bounded. */
-static int trace_arm64_first_side_view_acq(jit_State *J, TraceNo parent,
-    ExitNo exitno, TraceArm64FirstSideLoopView *v)
+static int trace_arm64_first_side_view_acq_mode(jit_State *J, TraceNo parent,
+    ExitNo exitno, TraceArm64FirstSideLoopView *v, int allow_published_child)
 {
   TraceVec *tv;
   GCtrace *T;
+  GCtrace *sidechild = NULL;
   SnapShot *selected;
   MSize maxsnapmap;
   uintptr_t mcodep, bodyend, fallbackp, gatesz;
@@ -4462,7 +4463,9 @@ static int trace_arm64_first_side_view_acq(jit_State *J, TraceNo parent,
   ** loop interval instead of an example prototype's exact bytecode offsets. */
   if (v->retire_epoch != 0 || v->traceno != parent || v->root != 0 ||
       v->link != parent || v->linktype != LJ_TRLINK_LOOP ||
-      v->nchild != 0 || v->nextside != 0 ||
+      (v->nchild != 0 && (!allow_published_child || v->nchild != 1 ||
+	v->nextside == 0 || (MSize)v->nextside >= tv->sizetrace)) ||
+      (v->nextside != 0 && !allow_published_child) ||
       v->admission != TRACE_ARM64_INT_LOOP_ADMITTED ||
       (v->flags & TRACE_EXITTAB_MCODE) != 0 ||
       (v->flags & TRACE_ENTRY_GATED) != 0 ||
@@ -4521,8 +4524,37 @@ static int trace_arm64_first_side_view_acq(jit_State *J, TraceNo parent,
     trace_arm64_first_side_pointer_bits(v->exittarget_raw);
   v->fallback_encoding_bits =
     trace_arm64_first_side_pointer_bits(v->fallback_encoding);
-  if (v->exittarget_bits != v->fallback_encoding_bits)
-    return 0;
+  if (v->exittarget_bits != v->fallback_encoding_bits) {
+    void *expected_child;
+    IRIns childbase;
+    if (!allow_published_child || v->nchild != 1 || v->nextside == 0 ||
+	(MSize)v->nextside >= tv->sizetrace)
+      return 0;
+    sidechild = traceref_fromgco_safe(gcref_acq(tv->slot[v->nextside]));
+    if (!trace_runnable_acq(sidechild, v->nextside) ||
+	trace_root_acq(sidechild) != parent)
+      return 0;
+    if (trace_linktype_acq(sidechild) == LJ_TRLINK_ROOT) {
+      if (trace_link_acq(sidechild) != parent ||
+	  trace_mcloop_acq(sidechild) != 0)
+	return 0;
+    } else if (trace_linktype_acq(sidechild) == LJ_TRLINK_LOOP) {
+      if (trace_link_acq(sidechild) != v->nextside ||
+	  trace_mcloop_acq(sidechild) == 0 ||
+	  trace_mcloop_acq(sidechild) >= trace_szmcode_acq(sidechild) ||
+	  (trace_mcloop_acq(sidechild) & (sizeof(MCode)-1u)) != 0)
+	return 0;
+    } else return 0;
+    childbase = ir_load_acq(&trace_ir_acq(sidechild)[REF_BASE]);
+    if (childbase.o != IR_BASE || (TraceNo)childbase.op1 != parent ||
+	(ExitNo)childbase.op2 != exitno)
+      return 0;
+    expected_child = trace_exittarget_arm64_encode(
+	J2G(J), trace_mcode_acq(sidechild));
+    if (trace_arm64_first_side_pointer_bits(expected_child) !=
+	v->exittarget_bits)
+      return 0;
+  }
 
   selected = &v->snap[exitno];
   v->mapofs = snap_mapofs_acq(selected);
@@ -4543,6 +4575,12 @@ static int trace_arm64_first_side_view_acq(jit_State *J, TraceNo parent,
   return trace_runnable_acq(T, parent) &&
     tracevec_acq(J) == tv &&
     gcref_acq(tv->slot[parent]) == obj2gco(T);
+}
+
+static int trace_arm64_first_side_view_acq(jit_State *J, TraceNo parent,
+    ExitNo exitno, TraceArm64FirstSideLoopView *v)
+{
+  return trace_arm64_first_side_view_acq_mode(J, parent, exitno, v, 0);
 }
 
 static int trace_arm64_first_side_view_equal(
@@ -6156,6 +6194,238 @@ static int trace_arm64_side_parentmap(jit_State *J, GCtrace *parent,
   *mapp = n;
   return 1;
 }
+
+#if defined(LJ_TRACE_TEST_HELPERS)
+/* Test copied real side traces through both validators independently. The
+** semantic copy ends at the pre-RA extent returned by the post-RA parser; the
+** complete allocator view remains intact for post-RA validation. */
+static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
+    unsigned mutation, int *sem_ok, int *post_ok)
+{
+  TraceArm64FirstSideLoopView parentview;
+  LJArm64SideParentSnapshot parentcopy;
+  LJArm64SideIRView side, semside;
+  LJArm64PostRAView postra;
+  LJArm64IRReject reject;
+  GCtrace childcopy, postowner;
+  jit_State jcopy;
+  IRIns *source, *ir;
+  SnapShot *snap;
+  SnapEntry *snapmap;
+  uint16_t parentmap[LJ_MAX_JSLOTS];
+  LJArm64SideParentBinding bindings[LJ_MAX_JSLOTS];
+  MSize nins, nk, nsnap, nsnapmap, parentmap_n = 0, i;
+  IRRef semantic_nins = 0, loopref = 0, arith = 0, sloadref = 0;
+  GCproto *pt;
+  int sem_base, post_base;
+
+  if (!J || !child || !sem_ok || !post_ok ||
+      !(source = trace_ir_acq(child)) ||
+      (nins = trace_nins_acq(child)) <= REF_FIRST || nins >= REF_DROP ||
+      (nk = trace_nk_acq(child)) == 0 || nk > REF_TRUE || nk >= nins ||
+      (nsnap = trace_nsnap_acq(child)) == 0 ||
+      (nsnapmap = trace_nsnapmap_acq(child)) == 0 ||
+      nsnap > 4096 || nsnapmap > 65536 || nins > REF_BASE+8192 ||
+      !(pt = trace_startpt_acq(child)))
+    return 0;
+  if (!lj_gc2_smr_read_try(J2G(J)))
+    return 0;
+  if (!trace_arm64_first_side_view_acq_mode(J, trace_root_acq(child),
+      (ExitNo)ir_load_acq(&source[REF_BASE]).op2, &parentview, 1)) {
+    lj_gc2_smr_read_leave(J2G(J));
+    return 0;
+  }
+  ir = (IRIns *)calloc(nins, sizeof(*ir));
+  snap = (SnapShot *)malloc(nsnap*sizeof(*snap));
+  snapmap = (SnapEntry *)malloc(nsnapmap*sizeof(*snapmap));
+  if (!ir || !snap || !snapmap) {
+    free(ir); free(snap); free(snapmap);
+    lj_gc2_smr_read_leave(J2G(J));
+    return 0;
+  }
+  memcpy(&ir[nk], &source[nk], (nins-nk)*sizeof(*ir));
+  memcpy(snap, trace_snap_acq(child), nsnap*sizeof(*snap));
+  memcpy(snapmap, trace_snapmap_acq(child), nsnapmap*sizeof(*snapmap));
+  for (i = REF_FIRST; i < nins; i++) {
+    IRIns p = ir_load_acq(&ir[i]);
+    if (p.o == IR_ADD || p.o == IR_ADDOV || p.o == IR_SUB ||
+	p.o == IR_SUBOV || p.o == IR_MUL || p.o == IR_MULOV) {
+      arith = (IRRef)i;
+      break;
+    }
+  }
+  for (i = REF_FIRST; i < nins; i++) {
+    IRIns p = ir_load_acq(&ir[i]);
+    if (p.o == IR_SLOAD) {
+      sloadref = (IRRef)i;
+      break;
+    }
+  }
+  { int mapok = arith && trace_arm64_side_parentmap(J, parentview.parent,
+	  (ExitNo)ir_load_acq(&source[REF_BASE]).op2, ir, nins,
+	  parentmap, bindings, &parentmap_n);
+    int ctxok = mapok && trace_arm64_side_context_from_parent(&side, &parentcopy,
+	  parentview.snap, parentview.snapmap, parentview.nsnap,
+	  parentview.nsnapmap, parentview.startpc, parentview.startins,
+	  pt, parentview.ir, parentview.nins, parentview.nk,
+	  parentview.nsnap, parentmap, bindings, parentmap_n,
+	  (ExitNo)ir_load_acq(&source[REF_BASE]).op2);
+    if (!ctxok) {
+    free(ir); free(snap); free(snapmap);
+    lj_gc2_smr_read_leave(J2G(J));
+    return 0;
+    }
+  }
+  side.ir = ir;
+  side.snap = snap;
+  side.snapmap = snapmap;
+  side.proto_bc = proto_bc(pt);
+  side.nins = nins;
+  side.nk = nk;
+  side.nsnap = nsnap;
+  side.nsnapmap = nsnapmap;
+  side.proto_sizebc = pt->sizebc;
+  side.baseslot = 1u+LJ_FR2;
+  side.root_topslot = parentview.topslot;
+  side.traceno = trace_traceno_acq(child);
+  side.parent = trace_root_acq(child);
+  side.root = trace_root_acq(child);
+  side.link = trace_link_acq(child);
+  side.exitno = (ExitNo)ir_load_acq(&source[REF_BASE]).op2;
+  side.startins = trace_startins_acq(child);
+  side.linktype = trace_linktype_acq(child);
+  side.sinktags = child->sinktags;
+  side.base_delta = 0;
+
+  memcpy(&childcopy, child, sizeof(childcopy));
+  childcopy.ir = ir;
+  childcopy.snap = snap;
+  childcopy.snapmap = snapmap;
+  postowner = childcopy;
+  memcpy(&jcopy, J, sizeof(jcopy));
+  jcopy.pt = pt;
+  jcopy.parent = side.parent;
+  jcopy.exitno = side.exitno;
+  jcopy.pc = (BCIns *)side.parent_continuation;
+  jcopy.startpc = (BCIns *)side.parent_continuation;
+  jcopy.baseslot = side.baseslot;
+  jcopy.framedepth = 0;
+  jcopy.retdepth = 0;
+
+  memset(&postra, 0, sizeof(postra));
+  postra.ir = ir;
+  postra.owner = &postowner;
+  postra.snap = snap;
+  postra.snapmap = snapmap;
+  postra.proto_bc = proto_bc(pt);
+  postra.nins = nins;
+  postra.nk = nk;
+  postra.nsnap = nsnap;
+  postra.nsnapmap = nsnapmap;
+  postra.spadjust = trace_spadjust_acq(child);
+  postra.proto_sizebc = pt->sizebc;
+  postra.root_topslot = trace_topslot_acq(child);
+  postra.startins = trace_startins_acq(child);
+  post_base = lj_asm_arm64_side_scalar_postra_admit(&postra, &side,
+	&semantic_nins);
+  childcopy.nins = semantic_nins;
+  semside = side;
+  semside.nins = semantic_nins;
+  for (i = REF_FIRST; i < semantic_nins; i++)
+    if (ir_load_acq(&ir[i]).o == IR_LOOP)
+      loopref = (IRRef)i;
+  jcopy.loopref = loopref;
+  sem_base = lj_asm_arm64_side_scalar_ir_admit(&jcopy, &childcopy,
+	&semside, &reject);
+  *sem_ok = sem_base;
+  *post_ok = post_base;
+  if (!sem_base || !post_base)
+    goto done;
+
+  if (mutation == 1) {
+    IRIns bad = ir_load_acq(&ir[arith]);
+    bad.o = IR_TNEW; bad.t.irt = IRT_TAB; bad.op1 = 0; bad.op2 = 0;
+    ir[arith] = bad;
+  } else if (mutation == 2) {
+    IRIns bad = ir_load_acq(&ir[arith]);
+    bad.r = RID_NONE;
+    ir[arith] = bad;
+  } else if (mutation == 3) {
+    IRIns bad = ir_load_acq(&ir[sloadref]);
+    bad.op2 = IRSLOAD_PARENT|IRSLOAD_INHERIT;
+    ir[sloadref] = bad;
+  } else if (mutation == 4) {
+    IRIns bad = ir_load_acq(&ir[arith]);
+    bad.op1 = (IRRef1)arith;
+    ir[arith] = bad;
+  } else if (mutation == 5) {
+    for (i = REF_FIRST; i < semantic_nins; i++) {
+      IRIns bad = ir_load_acq(&ir[i]);
+      if (bad.o == IR_XPOLL) {
+	bad.o = IR_NOP; bad.t.irt = IRT_NIL; bad.op1 = 0; bad.op2 = 0;
+	ir[i] = bad;
+	break;
+      }
+    }
+  } else if (mutation == 6) {
+    const BCIns *other = side.proto_bc + side.loop_start_pc + 1u;
+    if (other < side.proto_bc + side.loop_end_pc)
+	semside.parent_continuation = other, side.parent_continuation = other;
+    else goto done;
+  } else if (mutation == 7) {
+    SnapShot *ss = &snap[0];
+    MSize pos = snap_mapofs_acq(ss)+snap_nent_acq(ss);
+    uint64_t badpc = ((uint64_t)(uintptr_t)(proto_bc(pt)+pt->sizebc+1u)<<8);
+    memcpy(&snapmap[pos], &badpc, sizeof(badpc));
+  } else if (mutation == 8) {
+    side.link = side.parent;
+    side.linktype = LJ_TRLINK_ROOT;
+    semside.link = side.parent;
+    semside.linktype = LJ_TRLINK_ROOT;
+  } else if (mutation == 9) {
+    SnapEntry sn = snapentry_acq(&snapmap[snap_mapofs_acq(&snap[0])]);
+    snapmap[snap_mapofs_acq(&snap[0])] =
+	SNAP(snap_slot(sn), 0, (IRRef)(nins+1u));
+  } else if (mutation == 10) {
+    IRIns bad = ir_load_acq(&ir[sloadref]);
+    bad.t.irt = (irt_type(bad.t) == IRT_INT ? IRT_NUM : IRT_INT) |
+	(bad.t.irt & ~IRT_TYPE);
+    ir[sloadref] = bad;
+  } else if (mutation == 11) {
+    IRIns bad = ir_load_acq(&ir[sloadref]);
+    bad.r = RID_NONE;
+    ir[sloadref] = bad;
+  }
+  *sem_ok = lj_asm_arm64_side_scalar_ir_admit(&jcopy, &childcopy,
+	&semside, &reject);
+  *post_ok = lj_asm_arm64_side_scalar_postra_admit(&postra, &side, NULL);
+done:
+  free(ir); free(snap); free(snapmap);
+  lj_gc2_smr_read_leave(J2G(J));
+  return 1;
+}
+
+uint32_t lj_trace_test_arm64_side_scalar_copy_contract(jit_State *J,
+    TraceNo childno)
+{
+  GCtrace *child = J ? traceref_safe(J, childno) : NULL;
+  uint32_t result = 0;
+  int sem, post;
+  unsigned mutation;
+  if (!child || !trace_runnable_acq(child, childno) ||
+	!trace_test_side_scalar_copy(J, child, 0, &sem, &post) || !sem || !post)
+    return 0;
+  result = 3u;
+  for (mutation = 1; mutation <= 11; mutation++) {
+    if (!trace_test_side_scalar_copy(J, child, mutation, &sem, &post))
+	return result;
+    if (((mutation == 2 || mutation == 11) && sem && !post) ||
+	((mutation != 2 && mutation != 11) && !sem && !post))
+	result |= 1u << (mutation+1u);
+  }
+  return result;
+}
+#endif
 
 /* Validate the only published side topology admitted so far. A childless root
 ** remains the fast case. A one-child root must name the exact post-RA grammar,
