@@ -1112,6 +1112,9 @@ static void test_second_universe_public_api_stores(void)
   global_State *g2;
   TGState *tg2;
   GCtab *target;
+#if LJ_HASJIT
+  uint64_t hotcount_generation_before;
+#endif
 
   assert(lj_thr_get_tg() == f.tg);
   L2 = luaL_newstate();
@@ -1120,12 +1123,25 @@ static void test_second_universe_public_api_stores(void)
   tg2 = G2TG(g2);
   assert(tg2 != NULL && tg2 != f.tg && L2->tg_hint == tg2);
   assert(lj_thr_get_tg() == f.tg);
+#if LJ_HASJIT
+  hotcount_generation_before =
+    lj_tg_hotcount_applied_generation_acq(tg2);
+#endif
 
   /* Library initialization performs many GC-valued table publications. It
   ** must use universe 2's canonical main-TG carrier without replacing the
   ** first universe's raw TLS binding. */
   luaL_openlibs(L2);
   assert(lj_thr_get_tg() == f.tg);
+#if LJ_HASJIT
+  /* Enabling L2's JIT runs the reset-hotcount handshake. The outer raw TLS
+  ** binding is preserved, while the logical owner must still apply L2's
+  ** generation before its counted acknowledgement retires. */
+  assert((lj_tg_hotcount_reset_word_acq(tg2) >> 16) >
+         hotcount_generation_before);
+  assert(lj_tg_hotcount_applied_generation_acq(tg2) ==
+         (lj_tg_hotcount_reset_word_acq(tg2) >> 16));
+#endif
 
   lua_newtable(L2);
   target = tabV(L2->top - 1);

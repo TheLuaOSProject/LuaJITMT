@@ -26,9 +26,20 @@ require_source 'lj_tg_hotcount_applied_generation_rel' src/lj_dispatch.c \
   'owner fill lost its release-published applied generation'
 require_source 'LJ_GC2_HS_REDISPATCH\|LJ_GC2_HS_RESET_HOTCOUNT' \
   src/lj_dispatch.c 'JIT off-to-on no longer combines redispatch and reset'
-require_source 'native_parked \|\| tg == lj_thr_get_tg\(\)' \
+require_source 'native_parked \|\| tg == lj_thr_get_tg_fallback\(g\)' \
   src/lj_safepoint.c \
-  'foreign hotcount fill is no longer restricted to native-park/TLS authority'
+  'foreign hotcount fill is no longer restricted to native-park/logical-owner authority'
+require_source 'tg != lj_thr_get_tg_fallback\(g\)' src/lj_safepoint.c \
+  'counted reset acknowledgement no longer rejects foreign logical TGs'
+fallback=$(sed -n \
+  '/^TGState \*lj_thr_get_tg_fallback(global_State \*g)/,/^}/p' \
+  "$root/src/lj_thr.c")
+if ! printf '%s\n' "$fallback" | rg -q \
+    'lj_tg_actor_acq\(tg\) == actor'; then
+  printf '%s\n' \
+    'logical TG fallback no longer validates the physical actor id' >&2
+  bad=1
+fi
 require_source 'G2TG\(g\) != tg' src/lj_dispatch.h \
   'runtime bucket writes no longer require the exact physical TG actor'
 require_source 'after the successful list CAS closes that window' src/lj_tg.c \

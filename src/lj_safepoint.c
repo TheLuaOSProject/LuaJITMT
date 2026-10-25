@@ -442,11 +442,13 @@ static void safepoint_apply_tg_mode(global_State *g, TGState *tg,
   if (actions & LJ_GC2_HS_RESET_HOTCOUNT) {
     /* Hotcount buckets are owner-private mutable VM state. A foreign leader
     ** may fill them only on the existing consumed-poll native-park path; an
-    ** attach/ordinary ACK must instead be executing on this exact TLS TG. The
-    ** applied-generation release occurs inside the fill, before hs_pending is
+    ** attach/ordinary ACK must instead resolve to this TG as the logical owner
+    ** of g. The fallback preserves outer raw TLS across nested universes while
+    ** still checking the current physical actor. The applied-generation
+    ** release occurs inside the fill, before hs_pending is
     ** decremented by safepoint_ack_tg(). hs_epoch_ack is deliberately not a
     ** completion certificate because the epoch is claimed before actions. */
-    if (native_parked || tg == lj_thr_get_tg())
+    if (native_parked || tg == lj_thr_get_tg_fallback(g))
       (void)lj_dispatch_hotcount_apply_tg(g, tg);
   }
 #endif
@@ -515,10 +517,12 @@ retry:
   epoch = gc2_hs_epoch_acq(g);  /* 05 section 5.4.2 epoch. */
 #if LJ_HASJIT
   if ((actions & LJ_GC2_HS_RESET_HOTCOUNT) && !native_parked &&
-      tg != lj_thr_get_tg()) {
+      tg != lj_thr_get_tg_fallback(g)) {
     /* A TG-only call from a foreign actor is not an owner acknowledgement.
-    ** Leave its counted slot pending instead of letting hs_pending reach zero
-    ** without an applied-generation publication. */
+    ** Resolve logical self through g so nested universes can preserve the
+    ** outer raw TLS binding; foreign TGs still leave their counted slot
+    ** pending instead of letting hs_pending reach zero without an
+    ** applied-generation publication. */
     safepoint_requeue_consumed(tg, actions);
     return 0;
   }

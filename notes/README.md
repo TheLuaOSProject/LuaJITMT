@@ -21,6 +21,11 @@ and reports that are no longer authoritative are retained in
   ARM64/arm64e callbacks, variadic/aggregate FFI, and x86-64 unwind execution.
   The table-rescan close race and internal FFI errno regressions are fixed;
   see [`checkpoint-2026-10-25.md`](checkpoint-2026-10-25.md).
+- A nested-universe JIT initialization stall is fixed by resolving hotcount
+  handshake ownership through the existing physical-actor-checked fallback.
+  The focused GC2 fixture passes on ARM64 and x86-64, and both x86-64 stock
+  source/import corpora pass all 509 cases; see
+  [`x64-shared-runtime-regression-2026-10-25.md`](x64-shared-runtime-regression-2026-10-25.md).
 - Latest source-fidelity cleanup: `edbf57fa`.
 - Latest ARM64 VM acquire-load cleanup: `3f109fa2`.
 - Latest ARM64 interpreter GC2 parity: `d639196b`.

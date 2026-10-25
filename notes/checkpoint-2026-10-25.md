@@ -51,6 +51,15 @@ combined source. See
 [`arm64-jit-rooted-tablen-capability.md`](arm64-jit-rooted-tablen-capability.md)
 for the bounded admission and lifecycle evidence.
 
+The x86-64 focused GC2 fixture exposed a separate nested-universe hotcount
+handshake stall: the physical actor owned the second universe's main TG while
+raw TLS intentionally retained the first universe's TG. Both reset-hotcount
+owner checks now use the existing universe-aware, actor-checked TG lookup.
+The regression passes on x86-64/Rosetta and ARM64 experimental builds, with
+the safe interpreter fixture retained; the foreign-actor rejection still
+passes. Both x86-64 509-case source/import suites also pass after the fix. See
+[`x64-shared-runtime-regression-2026-10-25.md`](x64-shared-runtime-regression-2026-10-25.md).
+
 Temporary full bootstrap log:
 `/tmp/luajitmt-20261025-bootstrap-final.log`.
 Partial experimental log:
