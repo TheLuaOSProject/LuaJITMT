@@ -2,25 +2,19 @@
 set -eu
 
 root=${LJ_TEST_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)}
-
-if test "$(uname -s)" != Darwin || test "$(uname -m)" != arm64; then
-  echo "arm64_jit_ir_admission_contract SKIP: requires native macOS arm64"
-  exit 0
+. "$root/tools/ci/lib/arm64_profile.sh"
+if lj_ci_native_arm64_or_skip arm64_jit_ir_admission_contract; then :; else
+  status=$?; test "$status" -eq 1 && exit 0; exit "$status"
 fi
 
-if test -z "${SDKROOT:-}"; then
-  SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
-  export SDKROOT
-fi
-
-cc=${CC:-$(xcrun --sdk macosx --find clang)}
-minver=${MACOSX_DEPLOYMENT_TARGET:-13.0}
+lj_ci_profile_init "$root" arm64_jit_ir_admission_contract
+lj_ci_tmpdir lj-arm64-ir-admission
+tmpdir=$LJ_CI_TMPDIR
+minver=$LJ_CI_MINVER
 archive=$root/src/libluajit.a
 asm_object=$root/src/lj_asm.o
 asm_source=$root/src/lj_asm.c
 admit_source=$root/src/lj_asm_arm64_admit.h
-tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lj-arm64-ir-admission.XXXXXX")
-trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
 fixture=$tmpdir/t-arm64-jit-ir-admission
 trace_asm=$tmpdir/trace-asm.txt
@@ -31,8 +25,9 @@ dynamic_forl_region=$tmpdir/dynamic-forl-region.txt
 dynamic_forl_tests=$tmpdir/dynamic-forl-tests.txt
 pauth_macros=$tmpdir/macros-arm64e.txt
 audit_object=$tmpdir/lj_asm-arm64e.o
-xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT'
+xcflags=${LJ_TEST_XCFLAGS:-'-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT'}
 pauth_xcflags="$xcflags -DLUAJIT_ENABLE_CET_BR"
+lj_ci_bind_existing_profile arm64 '-arch arm64' "$xcflags" arm64-ir-admission
 
 test -f "$archive" && test -f "$asm_object" || {
   echo "ARM64 IR admission contract requires an existing experimental build" >&2
@@ -172,10 +167,13 @@ fi
 # arm64e/BTI compilation catches pointer-auth and branch-tracking target drift
 # without executing any admitted trace. Verify the intended ABI feature macros
 # first, so unsupported or misspelled flags cannot silently weaken this audit.
-# shellcheck disable=SC2086 # pauth_xcflags intentionally expands to arguments.
-"$cc" -arch arm64e -mbranch-protection=bti \
-  -mmacosx-version-min="$minver" $pauth_xcflags -I"$root/src" \
-  -x c -dM -E -include lj_arch.h /dev/null >"$pauth_macros"
+# shellcheck disable=SC2086 # compiler and target profile are intentional lists.
+set -f
+set -- $LJ_CI_CC $LJ_CI_CFLAGS $LJ_CI_CPPFLAGS -arch arm64e \
+  -mbranch-protection=bti -mmacosx-version-min="$minver" $pauth_xcflags \
+  -I"$root/src" -x c -dM -E -include lj_arch.h /dev/null
+"$@" >"$pauth_macros"
+set +f
 for required in \
   '#define LJ_TARGET_ARM64 1' \
   '#define LJ_ABI_PAUTH 1' \
@@ -186,17 +184,15 @@ for required in \
   }
 done
 
-# shellcheck disable=SC2086 # pauth_xcflags intentionally expands to arguments.
-"$cc" -std=gnu11 -O0 -Wall -Wextra -Werror -arch arm64e \
-  -mbranch-protection=bti -mmacosx-version-min="$minver" \
-  $pauth_xcflags -I"$root/src" \
-  -c "$asm_source" -o "$audit_object"
+LJ_CI_ARCH=arm64e
+LJ_CI_TARGET_FLAGS='-arch arm64e -mbranch-protection=bti'
+LJ_CI_XCFLAGS=$pauth_xcflags
+lj_ci_compile_object "$audit_object" "$asm_source"
 
-# shellcheck disable=SC2086 # xcflags intentionally expands to arguments.
-"$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64 \
-  -mmacosx-version-min="$minver" $xcflags -I"$root/src" \
-  "$root/tests/t-arm64-jit-ir-admission.c" "$archive" -lm -pthread \
-  -o "$fixture"
-"$fixture"
+LJ_CI_ARCH=arm64
+LJ_CI_TARGET_FLAGS='-arch arm64'
+LJ_CI_XCFLAGS=$xcflags
+lj_ci_compile_fixture "$fixture" "$root/tests/t-arm64-jit-ir-admission.c"
+lj_ci_run_fixture 60 "$fixture"
 
 echo "arm64_jit_ir_admission_contract OK: generic scalar capabilities, independent semantic/post-RA corruption checks, exact INT FORL, publication ordering and ARM64e/BTI compilation"

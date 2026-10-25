@@ -63,7 +63,7 @@ int main(int argc, char **argv)
   assert(L != NULL);
   luaL_openlibs(L);
   if (argc == 3) {
-    lua_pushboolean(L, 1);
+    lua_pushstring(L, argv[2]);
     lua_setglobal(L, "rooted_operations_admission");
   }
   assert(luaL_dostring(L, "package.path = \"./src/?.lua;./src/?/init.lua;\" .. package.path") == LUA_OK);
@@ -203,7 +203,7 @@ int main(int argc, char **argv)
   SEM_REJECT(ir[call1].o = IR_NOP);
   SEM_REJECT(ir[guard0].o = IR_EQ);
   SEM_REJECT(ir[zero0].i = 1);
-  SEM_REJECT(ir[key0].op1 = REF_TRUE);
+  SEM_REJECT(ir[key0].op1 = REF_NIL);
   SEM_REJECT(ir[carg0].op1 = owner->nk - 1);
   SEM_REJECT(ir[carg0].op1 = call1);
   SEM_REJECT(ir[carg0].op1 = (IRRef)nins);
@@ -214,6 +214,15 @@ int main(int argc, char **argv)
     ir[kr].o = IR_KNUM; ir[kr].t.irt = IRT_NUM; ir[kr].op12 = 0; \
     ir[kr+1].o = IR_KINT; ir[kr+1].t.irt = IRT_INT; \
     ir[kr+1].i = 1; ir[key0].op1 = kr+1; } while (0));
+  for (ref = owner->nk; ref < REF_TRUE; ref++) {
+    if (semantic_good[ref].o == IR_KGC) {
+      assert(semantic_good[ref].t.irt == IRT_STR);
+      SEM_REJECT(ir[ref].t.irt = IRT_TAB);
+      SEM_REJECT(setgcrefnull(ir[ref+LJ_GC64].gcr));
+      SEM_REJECT(ir[key0].op1 = ref+LJ_GC64);
+      ref += LJ_GC64;
+    } else if (semantic_good[ref].o == IR_KNUM) ref++;
+  }
   memcpy(ir, semantic_good, (size_t)nins * sizeof(IRIns));
   semantic.ir = ir; semantic.nins = semantic_nins;
   assert(semantic_admit(J, &semantic));
@@ -265,7 +274,7 @@ int main(int argc, char **argv)
   POST_REJECT(postra_ir[call1].o = IR_NOP);
   POST_REJECT(postra_ir[guard0].o = IR_EQ);
   POST_REJECT(postra_ir[zero0].i = 1);
-  POST_REJECT(postra_ir[key0].op1 = REF_TRUE);
+  POST_REJECT(postra_ir[key0].op1 = REF_NIL);
   POST_REJECT(postra_ir[tab0].r = RID_INIT);
   POST_REJECT(do { postra_ir[tab0].r = RID_INIT; \
                    postra_ir[tab0].s = SPS_FIRST; } while (0));
@@ -281,6 +290,16 @@ int main(int argc, char **argv)
     postra_ir[kr].op12 = 0; postra_ir[kr+1].o = IR_KINT; \
     postra_ir[kr+1].t.irt = IRT_INT; postra_ir[kr+1].i = 1; \
     postra_ir[key0].op1 = kr+1; } while (0));
+  for (ref = owner->nk; ref < REF_TRUE; ref++) {
+    IRIns k = trace_ir_acq(owner)[ref];
+    if (k.o == IR_KGC) {
+      assert(k.t.irt == IRT_STR);
+      POST_REJECT(postra_ir[ref].t.irt = IRT_TAB);
+      POST_REJECT(setgcrefnull(postra_ir[ref+LJ_GC64].gcr));
+      POST_REJECT(postra_ir[key0].op1 = ref+LJ_GC64);
+      ref += LJ_GC64;
+    } else if (k.o == IR_KNUM) ref++;
+  }
   memcpy(postra_ir + owner->nk, trace_ir_acq(owner) + owner->nk,
          (size_t)(nins - owner->nk) * sizeof(IRIns));
   view.ir = postra_ir;
@@ -299,7 +318,7 @@ int main(int argc, char **argv)
   assert(postra_admit(&view));
 #undef POST_REJECT
 
-  if (argc == 3) {
+  if (argc == 3 && strcmp(argv[2], "multiple") == 0) {
     unsigned spilled_tables = 0;
     /* Table pointers need two aligned spill words. Changing one span must
     ** fail independently of both scratch-address and numeric spill checks. */

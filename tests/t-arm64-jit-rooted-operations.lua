@@ -9,6 +9,8 @@ assert(jit.arch == 'arm64' and jit.status())
 local a, b, ints = {}, {}, {}
 for i = 1, 64 do a[i], b[i], ints[i] = i + 0.25, i + 0.5, i end
 a[0.5] = 7.25
+a.word, a[true], a[false] = 4.5, 5.25, 6.25
+a.enabled, a.disabled = true, false
 local ready, release = threading.channel(1), threading.channel(1)
 local peer = threading.spawn(function(rdy, rel)
   assert(rdy:send(true, 5))
@@ -50,6 +52,42 @@ local cases = {
       while i <= n do sum = sum + t[i] + #t; i = i + 1 end
       return sum
     end, { a, 32 }, 2584.5, 2, 2 },
+  { 'string argument key', function(t, k, n)
+      local i, sum = 1, 0.5
+      while i <= n do sum = sum + t[k]; i = i + 1 end
+      return sum
+    end, { a, 'word', 32 }, 144.5, 2, 0 },
+  { 'constant string key', function(t, n)
+      local i, sum = 1, 0.5
+      while i <= n do sum = sum + t.word; i = i + 1 end
+      return sum
+    end, { a, 32 }, 144.5, 2, 0 },
+  { 'boolean key', function(t, k, n)
+      local i, sum = 1, 0.5
+      while i <= n do sum = sum + t[k]; i = i + 1 end
+      return sum
+    end, { a, true, 32 }, 168.5, 2, 0 },
+  { 'false key', function(t, n)
+      local i, sum = 1, 0.5
+      while i <= n do sum = sum + t[false]; i = i + 1 end
+      return sum
+    end, { a, 32 }, 200.5, 2, 0 },
+  { 'boolean result', function(t, k, n)
+      local i, sum = 1, 0.5
+      while i <= n do
+        if t[k] then sum = sum + 1 end
+        i = i + 1
+      end
+      return sum
+    end, { a, 'enabled', 32 }, 32.5, 2, 0 },
+  { 'false result', function(t, k, n)
+      local i, sum = 1, 0.5
+      while i <= n do
+        if not t[k] then sum = sum + 1 end
+        i = i + 1
+      end
+      return sum
+    end, { a, 'disabled', 32 }, 32.5, 2, 0 },
   { 'five reads per iteration', function(t, k, n)
       local i, sum = 1, 0.5
       while i <= n do
@@ -107,6 +145,13 @@ local function run(case)
   assert(reads == case[5] and lengths == case[6], name .. ': helper effects')
   collectgarbage('collect')
   assert(kernel(unpack(args)) == expected, name .. ': post-GC reentry')
+  if name == 'boolean result' or name == 'false result' then
+    local saved = args[1][args[2]]
+    args[1][args[2]] = not saved
+    assert(kernel(unpack(args)) == 0.5, name .. ': changed boolean exit')
+    args[1][args[2]] = saved
+    assert(kernel(unpack(args)) == expected, name .. ': restored boolean')
+  end
   print(string.format('rooted operations: %s, traces=%d exits=%d reads=%d lengths=%d',
                       name, native, exits, reads, lengths))
 end
@@ -114,8 +159,12 @@ jit.off(run, true)
 if rooted_operations_admission then
   -- The C corruption fixture rebuilds semantic context against a separate,
   -- byte-for-byte identical prototype while retaining this native trace.
-  rooted_read_trace_clone = assert(loadstring(string.dump(cases[3][2])))
-  run(cases[3])
+  local selected = ({ multiple = 3, ['string-key'] = 7,
+                      ['constant-string'] = 8, ['boolean-result'] = 11 })[
+                      rooted_operations_admission]
+  assert(selected, 'unknown rooted operation admission case')
+  rooted_read_trace_clone = assert(loadstring(string.dump(cases[selected][2])))
+  run(cases[selected])
 else
   for _, case in ipairs(cases) do run(case) end
 end

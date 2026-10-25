@@ -3309,10 +3309,12 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
   const IRIns *ir;
   if (irref_isk(value)) {
     IRRef k;
+    if (value == REF_TRUE || value == REF_FALSE)
+      return type == (IRType)(REF_NIL - value);
     for (k = T->nk; k < REF_TRUE; k++) {
       if (k == value)
         return irt_type(T->ir[k].t) == type;
-      if (T->ir[k].o == IR_KNUM)
+      if (T->ir[k].o == IR_KNUM || T->ir[k].o == IR_KGC)
         k++;
     }
     return 0;
@@ -3326,8 +3328,8 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
     return type == IRT_INT &&
       (ir->op2 == IRCALL_lj_tab_len_rooted_try ||
        ir->op2 == IRCALL_lj_tab_getscalar_rooted_try);
-  if (type == IRT_TAB)
-    return ir->o == IR_SLOAD && ir->t.irt == (IRT_TAB|IRT_GUARD);
+  if (type == IRT_TAB || type == IRT_STR)
+    return ir->o == IR_SLOAD && ir->t.irt == (type|IRT_GUARD);
   switch ((IROp)ir->o) {
   case IR_SLOAD:
   case IR_VLOAD:
@@ -3376,7 +3378,8 @@ static int arm64_rooted_ir_effect(const GCtrace *T, IRRef ref,
       return 0;
     value = &T->ir[ref+2];
     if (value->o != IR_VLOAD || value->op1 != root1 || value->op2 ||
-        (irt_type(value->t) != IRT_INT && irt_type(value->t) != IRT_NUM) ||
+        (irt_type(value->t) != IRT_INT && irt_type(value->t) != IRT_NUM &&
+         irt_type(value->t) != IRT_TRUE && irt_type(value->t) != IRT_FALSE) ||
         !irt_isguard(value->t) ||
         (value->t.irt & ~(IRT_TYPE|IRT_GUARD|IRT_ISPHI)))
       return 0;
@@ -3440,6 +3443,14 @@ static int arm64_scalar_ir_admit(const jit_State *J, const GCtrace *T,
     const IRIns *k = &T->ir[ref];
     if (k->o == IR_KINT && k->t.irt == IRT_INT)
       continue;
+    if (k->o == IR_KGC && k->t.irt == IRT_STR && !k->op12 &&
+        ref + LJ_GC64 < REF_TRUE) {
+      GCobj *o = ir_kgc_acq(k);
+      if (!o || !checkptrGC(o) || o->gch.gct != (uint32_t)~LJ_TSTR)
+        goto bad_constant;
+      ref += LJ_GC64; /* GC64 payload cannot be referenced as an IR value. */
+      continue;
+    }
     if (k->o != IR_KNUM || k->t.irt != IRT_NUM || k->op12 ||
         ref + 1 >= REF_TRUE || !tvisnum(&T->ir[ref + 1].tv))
       goto bad_constant;
@@ -3459,7 +3470,8 @@ static int arm64_scalar_ir_admit(const jit_State *J, const GCtrace *T,
       goto bad_operand;
     switch ((IROp)ir->o) {
     case IR_SLOAD:
-      if (type == IRT_TAB) {
+      if (type == IRT_TAB || type == IRT_STR ||
+          type == IRT_TRUE || type == IRT_FALSE) {
         if (flags != IRT_GUARD ||
             ir->op2 != IRSLOAD_TYPECHECK || ir->op1 < 1 + LJ_FR2 ||
             ir->op1 >= maxslots)
@@ -3480,14 +3492,18 @@ static int arm64_scalar_ir_admit(const jit_State *J, const GCtrace *T,
         root1 = ref;
       } else if (ir->op2 == IRTMPREF_IN2) {
         if (!arm64_scalar_ir_ref(T, ir->op1, ref, IRT_INT) &&
-            !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_NUM))
+            !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_NUM) &&
+            !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_STR) &&
+            !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_TRUE) &&
+            !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_FALSE))
           goto bad_operand;
         root2 = ref;
       } else goto bad_operand;
       break;
     case IR_VLOAD:
       if (ref != resultref || !resultroot || ir->op1 != resultroot ||
-          ir->op2 || (type != IRT_INT && type != IRT_NUM) ||
+          ir->op2 || (type != IRT_INT && type != IRT_NUM &&
+                      type != IRT_TRUE && type != IRT_FALSE) ||
           !(flags & IRT_GUARD) || (flags & ~(IRT_GUARD|IRT_ISPHI)))
         goto bad_type;
       resultroot = resultref = 0;
@@ -3636,7 +3652,10 @@ static int arm64_scalar_ir_admit(const jit_State *J, const GCtrace *T,
       if (slot < 1 + LJ_FR2 || (sn & 0x00ff0000u) ||
           (!arm64_scalar_ir_ref(T, value, ref, IRT_INT) &&
            !arm64_scalar_ir_ref(T, value, ref, IRT_NUM) &&
-           !arm64_scalar_ir_ref(T, value, ref, IRT_TAB)))
+           !arm64_scalar_ir_ref(T, value, ref, IRT_TAB) &&
+           !arm64_scalar_ir_ref(T, value, ref, IRT_STR) &&
+           !arm64_scalar_ir_ref(T, value, ref, IRT_TRUE) &&
+           !arm64_scalar_ir_ref(T, value, ref, IRT_FALSE)))
         goto bad_snapshot;
     }
     memcpy(&pcbase, &T->snapmap[snap->mapofs + snap->nent], sizeof(pcbase));
@@ -3683,11 +3702,13 @@ static int arm64_scalar_postra_kref(const LJArm64PostRAView *v, IRRef target,
                                     IRType type)
 {
   IRRef ref;
+  if (target == REF_TRUE || target == REF_FALSE)
+    return type == (IRType)(REF_NIL - target);
   for (ref = v->nk; ref < REF_TRUE; ref++) {
     IRIns k = ir_load_acq(&v->ir[ref]);
     if (ref == target)
       return irt_type(k.t) == type;
-    if (k.o == IR_KNUM)
+    if (k.o == IR_KNUM || k.o == IR_KGC)
       ref++;
   }
   return 0;
@@ -3705,7 +3726,8 @@ static int arm64_scalar_postra_value(IRIns p)
   case IR_DIV:
   case IR_CONV:
     return irt_type(p.t) == IRT_INT || irt_type(p.t) == IRT_NUM ||
-           (p.o == IR_SLOAD && p.t.irt == (IRT_TAB|IRT_GUARD));
+           (p.o == IR_SLOAD &&
+            (p.t.irt == (IRT_TAB|IRT_GUARD) || p.t.irt == (IRT_STR|IRT_GUARD)));
   case IR_TMPREF:
     return irt_type(p.t) == IRT_PGC;
   case IR_CALLS:
@@ -3729,8 +3751,8 @@ static int arm64_scalar_postra_ref(const LJArm64PostRAView *v, IRRef ref,
     return 0;
   p = ir_load_acq(&v->ir[ref]);
   return arm64_scalar_postra_value(p) && irt_type(p.t) == type &&
-         (type != IRT_TAB ||
-          (p.o == IR_SLOAD && p.t.irt == (IRT_TAB|IRT_GUARD)));
+         ((type != IRT_TAB && type != IRT_STR) ||
+          (p.o == IR_SLOAD && p.t.irt == (type|IRT_GUARD)));
 }
 static int arm64_scalar_postra_register(Reg r, IRType type)
 {
@@ -3823,7 +3845,8 @@ static int arm64_rooted_postra_effect(const LJArm64PostRAView *v, IRRef n,
         ra_hasspill(r2.s) || r1.r == r2.r) return 0;
     value = ir_load_acq(&v->ir[ref+2]);
     if (value.o != IR_VLOAD || value.op1 != root1 || value.op2 ||
-        (irt_type(value.t) != IRT_INT && irt_type(value.t) != IRT_NUM) ||
+        (irt_type(value.t) != IRT_INT && irt_type(value.t) != IRT_NUM &&
+         irt_type(value.t) != IRT_FALSE && irt_type(value.t) != IRT_TRUE) ||
         !irt_isguard(value.t) ||
         (value.t.irt & ~(IRT_TYPE|IRT_GUARD|IRT_ISPHI))) return 0;
   } else if (c.op2 != IRCALL_lj_tab_len_rooted_try ||
@@ -3873,6 +3896,15 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
     IRIns k = ir_load_acq(&v->ir[ref]);
     if (k.o == IR_KINT && k.t.irt == IRT_INT)
       continue;
+    if (k.o == IR_KGC && k.t.irt == IRT_STR && k.op12 == 0 &&
+        ref + LJ_GC64 < REF_TRUE) {
+      GCobj *o = ir_kgc_load_acq(&v->ir[ref]);
+      if (o == NULL || !checkptrGC(o) ||
+          la_load8_acq(&o->gch.gct) != (uint32_t)~LJ_TSTR)
+        return 0;
+      ref += LJ_GC64;
+      continue;
+    }
     if (k.o != IR_KNUM || k.t.irt != IRT_NUM || k.op12 || ref + 1 >= REF_TRUE)
       return 0;
     {
@@ -3915,8 +3947,9 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
       return 0;
     switch ((IROp)p.o) {
     case IR_SLOAD:
-      if (type == IRT_TAB) {
-        if (p.t.irt != (IRT_TAB|IRT_GUARD) ||
+      if (type == IRT_TAB || type == IRT_STR ||
+          type == IRT_FALSE || type == IRT_TRUE) {
+        if (p.t.irt != (type|IRT_GUARD) ||
             p.op2 != IRSLOAD_TYPECHECK || p.op1 < 1 + LJ_FR2 ||
             p.op1 >= v->root_topslot + 1 + LJ_FR2)
           return 0;
@@ -3936,7 +3969,10 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
         root1 = ref;
       } else if (p.op2 == IRTMPREF_IN2) {
         if (!arm64_scalar_postra_ref(v, p.op1, ref, IRT_INT) &&
-            !arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM)) return 0;
+            !arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM) &&
+            !arm64_scalar_postra_ref(v, p.op1, ref, IRT_STR) &&
+            !arm64_scalar_postra_ref(v, p.op1, ref, IRT_FALSE) &&
+            !arm64_scalar_postra_ref(v, p.op1, ref, IRT_TRUE)) return 0;
         root2 = ref;
       } else return 0;
       break;
@@ -3990,7 +4026,8 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
       break;
     case IR_VLOAD:
       if (!resultroot || ref != resultref || p.op1 != resultroot || p.op2 ||
-          (type != IRT_INT && type != IRT_NUM) || !(flags & IRT_GUARD) ||
+          (type != IRT_INT && type != IRT_NUM &&
+           type != IRT_FALSE && type != IRT_TRUE) || !(flags & IRT_GUARD) ||
           (flags & ~(IRT_GUARD|IRT_ISPHI))) return 0;
       resultroot = resultref = 0;
       break;
@@ -4041,10 +4078,11 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
       int value = arm64_scalar_postra_value(p) || p.o == IR_PHI;
       if (ra_hasspill(p.s)) {
         MSize width = type == IRT_INT ? 1 : 2, slot;
-        /* Scalars are 32-bit INT or 64-bit NUM/TAB. Scratch addresses remain
+        /* Values are 32-bit INT or 64-bit NUM/TAB/STR. Scratch addresses remain
         ** register-only at their operation boundary; table values may spill
         ** with the same full-width ownership proof as numeric values. */
-        if (!value || (type != IRT_INT && type != IRT_NUM && type != IRT_TAB) ||
+        if (!value || (type != IRT_INT && type != IRT_NUM &&
+                       type != IRT_TAB && type != IRT_STR) ||
             p.s < SPS_FIRST || (width == 2 && (p.s & 1)) ||
             (MSize)p.s + width > cap)
           return 0;
@@ -4146,7 +4184,10 @@ static int arm64_scalar_postra_admit(const LJArm64PostRAView *v,
       if (slot < 1 + LJ_FR2 || (sn & 0x00ff0000u) ||
           (!arm64_scalar_postra_ref(v, r, at, IRT_INT) &&
            !arm64_scalar_postra_ref(v, r, at, IRT_NUM) &&
-           !arm64_scalar_postra_ref(v, r, at, IRT_TAB)))
+           !arm64_scalar_postra_ref(v, r, at, IRT_TAB) &&
+           !arm64_scalar_postra_ref(v, r, at, IRT_STR) &&
+           !arm64_scalar_postra_ref(v, r, at, IRT_FALSE) &&
+           !arm64_scalar_postra_ref(v, r, at, IRT_TRUE)))
         return 0;
       if (irref_isk(r))
         continue;

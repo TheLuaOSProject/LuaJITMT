@@ -94,3 +94,48 @@ same run passed source-generation, retirement/request-race, emitted caller ABI,
 first-side ingress, and real hot-loop checks. Log:
 `/tmp/ljmt-root-certificate-contract.log`. Release performance and combined
 validation remain separate work items.
+
+## Rooted key/result classes and shared test plumbing
+
+The operation walker now accepts guarded string inputs, string constants,
+boolean keys, and boolean read results as well as numeric keys/results. GC64
+constant payload words cannot masquerade as independent IR values. Strings
+remain rooted through the trace or guarded stack input and the existing
+runtime helper retains the exact key body before using it. Boolean results
+remain guard-only values with canonical primitive snapshot references.
+
+Thirteen active-peer workloads passed on ARM64 and arm64e/BTI, each producing
+one trace and 20 exits for 20 calls; boolean flips resumed correctly. The
+independent semantic and allocated mutation fixture also ran against live
+multi-table, string-argument, string-constant, and boolean-result traces.
+Wrong constant types, null roots, GC payload references, broken scratch
+relationships, and snapshot/location corruption all refused admission. The
+complete rooted-read contract, existing lifecycle races, and registered M6
+case passed. Log: `/tmp/ljmt-rooted-key-types-contract.log`.
+
+Five focused contracts now use the common build/profile helper (phi spill,
+numeric spill, IR admission, rooted length, rooted reads). It binds runtime,
+archive, and fixture hashes to compiler/target/macro settings and checks them
+before execution. The rooted-read run above used the shared plumbing on both
+targets. The isolated migration validation also passed rooted length on both
+targets and PHI with `CC='clang -pipe' CFLAGS='-O0 -fno-common'`. The broader
+Lua test harness profile hardening is still in progress.
+
+## Release root-entry comparison
+
+Compared `c441404c` with the immutable-certificate implementation in matching
+non-assertion, non-test-helper ARM64 experimental builds, using
+`bench/arm64-entry-cost.lua`. Five process-CPU samples per workload, median:
+
+| Workload | Before certificate | Certificate |
+| --- | ---: | ---: |
+| JIT, 8 iterations x 100,000 calls | 0.041809 s | 0.023436 s |
+| Interpreter control, same calls | 0.017663 s | 0.018343 s |
+| JIT, 1,024 iterations x 10,000 calls | 0.011685 s | 0.009771 s |
+| Interpreter control, same calls | 0.152365 s | 0.155330 s |
+
+Both JIT workloads retained one native trace and 20 warmup exits. The local
+entry-dominated workload improved about 44%; the longer loop improved about
+16%. These are matching release-build measurements of these kernels on this
+host, not a general performance or complete-port claim. Raw output:
+`/tmp/ljmt-root-certificate-release-comparison.log`.
