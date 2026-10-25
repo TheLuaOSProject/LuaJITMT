@@ -192,19 +192,23 @@ fi
 # restoring the enclosing gate's profile below.
 lj_ci_tmpdir lj-arm64-experimental-callxs
 callxs_cxx=${CXX:-$(xcrun --sdk macosx --find clang++)}
-for callxs_arch in arm64 arm64e; do
+for callxs_profile in arm64 arm64e arm64-release arm64e-release; do
+  callxs_arch=${callxs_profile%-release}
+  callxs_assert=1
+  case "$callxs_profile" in *-release) callxs_assert=0 ;; esac
   callxs_target="-arch $callxs_arch"
   callxs_cppflags=$LJ_CI_CPPFLAGS
   if test "$callxs_arch" = arm64e; then
     callxs_target="$callxs_target -mbranch-protection=bti"
     callxs_cppflags="$callxs_cppflags -DLUAJIT_ENABLE_CET_BR"
   fi
-  mkdir "$LJ_CI_TMPDIR/$callxs_arch"
+  mkdir "$LJ_CI_TMPDIR/$callxs_profile"
   env MACOSX_DEPLOYMENT_TARGET="$minver" LUA_PATH="$lua_path" \
     LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
     LJ_TEST_TARGET_ARCH=arm64 TARGET_SYS=Darwin \
     TARGET_FLAGS="$callxs_target" CPPFLAGS="$callxs_cppflags" \
-    CXX="$callxs_cxx" TMPDIR="$LJ_CI_TMPDIR/$callxs_arch" \
+    LJ_ARM64_CALLXS_ASSERT="$callxs_assert" \
+    CXX="$callxs_cxx" TMPDIR="$LJ_CI_TMPDIR/$callxs_profile" \
     "$luajit" "$root/tools/test.lua" m7_ffi_callxs_arm64_scalar
 done
 

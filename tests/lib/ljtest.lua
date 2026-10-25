@@ -205,6 +205,12 @@ function M.new(root)
     cppflags = getenv("CPPFLAGS", ""),
     ldflags = getenv("LDFLAGS", ""),
     sdkroot = getenv("SDKROOT", ""),
+    deployment_target = getenv("MACOSX_DEPLOYMENT_TARGET", ""),
+    cross = getenv("CROSS", ""),
+    ccdebug = getenv("CCDEBUG", ""),
+    target_cflags = getenv("TARGET_CFLAGS", ""),
+    target_ldflags = getenv("TARGET_LDFLAGS", ""),
+    target_shldflags = getenv("TARGET_SHLDFLAGS", ""),
     jobs = getenv("JOBS", getenv("MAKE_JOBS", utils.detect_jobs())),
     tmpdir = getenv("TMPDIR", "/tmp"),
     build_signature = nil
@@ -355,6 +361,7 @@ local function configure_build_profile(self, opts)
   self.build_profile_id = signature
   self.build_profile_target_cflags = build_env.TARGET_CFLAGS or ""
   self.build_profile_target_ldflags = build_env.TARGET_LDFLAGS or ""
+  self.build_profile_target_shldflags = build_env.TARGET_SHLDFLAGS or ""
   self.build_profile_ccdebug = build_env.CCDEBUG or ""
   self.build_profile_cross = build_env.CROSS or ""
   return build_env, signature
@@ -482,6 +489,7 @@ local function load_build_profile(self)
   self.build_profile_ldflags = values.LDFLAGS or ""
   self.build_profile_target_cflags = values.TARGET_CFLAGS or ""
   self.build_profile_target_ldflags = values.TARGET_LDFLAGS or ""
+  self.build_profile_target_shldflags = values.TARGET_SHLDFLAGS or ""
   self.build_profile_ccdebug = values.CCDEBUG or ""
   self.build_profile_cross = values.CROSS or ""
   self.build_profile_target_flags = values.TARGET_FLAGS or ""
@@ -519,16 +527,18 @@ function Test:cc(output, sources, opts)
     end
   end
   local compiler = opts.compiler or
-    ((self.build_profile_cross or "") .. (self.build_profile_compiler or self.compiler))
+    ((self.build_profile_cross or self.cross) ..
+     (self.build_profile_compiler or self.compiler))
   local parts = { compiler }
+  if opts.shared then append(parts, "-shared -fPIC") end
   if opts.default_cflags ~= false then
     append(parts, self.build_profile_cflags or self.cflags)
   end
   append(parts, self.build_profile_target_flags or self.target_flags)
   append(parts, self.build_profile_cppflags or self.cppflags)
   append(parts, self.build_profile_xcflags or "")
-  append(parts, self.build_profile_ccdebug or "")
-  append(parts, self.build_profile_target_cflags or "")
+  append(parts, self.build_profile_ccdebug or self.ccdebug)
+  append(parts, self.build_profile_target_cflags or self.target_cflags)
   append_flags(parts, opts.cflags)
   if opts.include_src ~= false then
     append(parts, "-I" .. shell_quote(self:path("src")))
@@ -546,17 +556,21 @@ function Test:cc(output, sources, opts)
     for i = 1, #opts.libs do append(parts, opts.libs[i]) end
   end
   append(parts, self.build_profile_ldflags or self.ldflags)
-  append(parts, self.build_profile_target_ldflags or "")
+  append(parts, self.build_profile_target_ldflags or self.target_ldflags)
+  if opts.shared then
+    append(parts, self.build_profile_target_shldflags or self.target_shldflags)
+  end
   append(parts, "-o " .. shell_quote(output))
   local runopts = { quiet = opts.quiet, env = {} }
   for k, v in pairs(opts.env or {}) do runopts.env[k] = v end
-  if self.build_profile_sdkroot and self.build_profile_sdkroot ~= "" then
-    runopts.env.SDKROOT = self.build_profile_sdkroot
+  local sdkroot = self.build_profile_sdkroot or self.sdkroot
+  local deployment_target = self.build_profile_deployment_target or
+                            self.deployment_target
+  if sdkroot ~= "" then
+    runopts.env.SDKROOT = sdkroot
   end
-  if self.build_profile_deployment_target and
-     self.build_profile_deployment_target ~= "" then
-    runopts.env.MACOSX_DEPLOYMENT_TARGET =
-      self.build_profile_deployment_target
+  if deployment_target ~= "" then
+    runopts.env.MACOSX_DEPLOYMENT_TARGET = deployment_target
   end
   if next(runopts.env) == nil then runopts.env = nil end
   self:run(table.concat(parts, " "), runopts)

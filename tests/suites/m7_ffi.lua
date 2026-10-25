@@ -168,10 +168,14 @@ return function(add)
         print("m7_ffi_callxs_arm64_scalar SKIP: requires native Darwin ARM64")
         return
       end
+      local assertions = getenv("LJ_ARM64_CALLXS_ASSERT", "1")
+      assert(assertions == "0" or assertions == "1",
+             "LJ_ARM64_CALLXS_ASSERT must be 0 or 1")
+      print("ARM64 CALLXS runtime assertions: " .. assertions)
       local flags = table.concat({
         "-DLUAJIT_MT_ARM64_BOOTSTRAP",
         "-DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL",
-        "-DLUA_USE_ASSERT",
+        assertions == "1" and "-DLUA_USE_ASSERT" or "",
         "-DLJ_TRACE_TEST_HELPERS",
         "-DLJ_XSAVE_TEST_HELPERS",
         "-DLJ_GC2_TEST_HELPERS",

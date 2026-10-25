@@ -684,3 +684,14 @@ stock corpora, errno and generated foreign-call/callback-stack tests; see
 The subsequent source-identity and register-mask changes are ARM64-only.
 Final combined gates and additional semantic caller-footer negatives remain
 pending; this focused pass does not replace them.
+
+Shared C/C++ helper libraries now use the same compiler wrapper as linked
+fixtures, including target architecture, CPP flags, target sanitizer/linker
+flags, SDK and deployment target. The old helper bypassed that wrapper and
+produced arm64 C libraries for arm64e tests. The profile unit contract covers
+pre-build shared-library flags, and the complete M7 now passes on arm64e/BTI
+with matching libraries (`/tmp/ljmt-profile-m7-arm64e.log`). The M7 runner also
+accepts an explicit `LJ_ARM64_CALLXS_ASSERT=0` runtime profile; the umbrella
+requires both assertion and release-entry behavior on both targets. These
+release tests retain fixture helper instrumentation and are correctness checks,
+not release-performance measurements.

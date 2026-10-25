@@ -1,5 +1,6 @@
 local utils = require("suite_utils")
 local ljtest = require("ljtest")
+local build = require("suite_build")
 
 local root = os.tmpname() .. "-ljtest-profile"
 os.remove(root)
@@ -21,6 +22,31 @@ end
 function t:run(command, options)
   run_command, run_options = command, options
 end
+
+-- Shared libraries built before the runtime must use the requested target
+-- and instrumentation too. An arm64 library cannot serve an arm64e process.
+local library = ljtest.new(root)
+library.target_flags = "-arch arm64e -mbranch-protection=bti"
+library.cppflags = "-DLUAJIT_ENABLE_CET_BR"
+library.target_cflags = "-fsanitize=address"
+library.target_ldflags = "-Wl,-headerpad_max_install_names"
+library.target_shldflags = "-fsanitize=address"
+library.sdkroot = "/test/library-sdk"
+library.deployment_target = "13.0"
+function library:run(command, options)
+  run_command, run_options = command, options
+end
+build.build_shared_library(library, "/tmp/library.dylib", "fixture.cpp", {
+  compiler = "clang++ -pipe", cflags = "-std=gnu++11"
+})
+assert(run_command:find("clang%+%+ %-pipe %-shared %-fPIC"))
+assert(run_command:find("%-arch arm64e %-mbranch%-protection=bti"))
+assert(run_command:find("%-DLUAJIT_ENABLE_CET_BR"))
+assert(run_command:find("%-Wl,%-headerpad_max_install_names"))
+local _, library_sanitizers = run_command:gsub("%-fsanitize=address", "")
+assert(library_sanitizers == 2)
+assert(run_options.env.SDKROOT == "/test/library-sdk")
+assert(run_options.env.MACOSX_DEPLOYMENT_TARGET == "13.0")
 
 local common = {
   clean = true,
