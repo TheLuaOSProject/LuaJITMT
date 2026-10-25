@@ -4639,11 +4639,10 @@ static int trace_arm64_first_side_view_equal(
     ;
 }
 
-static int trace_arm64_first_side_loop_generation_valid(
-    TraceArm64FirstSideLoopView *v, TraceNo parent,
-    const BCIns *continuation)
+static int trace_arm64_loop_generation_valid(GCproto *pt,
+    const BCIns *startpc, BCIns startins, TraceNo parent,
+    const BCIns *continuation, BCIns *continuationinsp)
 {
-  GCproto *pt = gco2pt(v->startpt);
   const BCIns *bc = proto_bc(pt);
   BCPos startpos;
   int64_t endpos, target;
@@ -4652,41 +4651,51 @@ static int trace_arm64_first_side_loop_generation_valid(
   BCIns continuation1, continuation2;
   BCPos continuationpos;
 
-  if (!trace_pc_in_proto_range(v->startpc, bc, pt->sizebc) ||
+  if (!trace_pc_in_proto_range(startpc, bc, pt->sizebc) ||
       !trace_pc_in_proto_range(continuation, bc, pt->sizebc) ||
-      bc_op(v->startins) != BC_LOOP || bc_j(v->startins) <= 0 ||
-      (MSize)bc_a(v->startins) > (MSize)pt->framesize)
+      bc_op(startins) != BC_LOOP || bc_j(startins) <= 0 ||
+      (MSize)bc_a(startins) > (MSize)pt->framesize)
     return 0;
-  startpos = proto_bcpos(pt, v->startpc);
-  endpos = (int64_t)startpos + (int64_t)bc_j(v->startins);
+  startpos = proto_bcpos(pt, startpc);
+  endpos = (int64_t)startpos + (int64_t)bc_j(startins);
   if (endpos < 0 || endpos >= (int64_t)pt->sizebc)
     return 0;
   backpc = &bc[(BCPos)endpos];
-  /* Continuations must remain in the loop body; the forward target itself
-  ** exits the loop and cannot be restarted as a native side trace. */
-  continuation1 =
-    (BCIns)la_load32_acq((const uint32_t *)continuation);
-  live1 = (BCIns)la_load32_acq((const uint32_t *)v->startpc);
+  /* A side continuation may start in the condition/setup prefix before the
+  ** native loop body, but never before the validated bytecode backedge target
+  ** or after the loop's backward-jump instruction. */
+  continuation1 = (BCIns)la_load32_acq((const uint32_t *)continuation);
+  live1 = (BCIns)la_load32_acq((const uint32_t *)startpc);
   back1 = (BCIns)la_load32_acq((const uint32_t *)backpc);
-  shadow1 = proto_jit_startins_acq(pt, v->startpc);
-  expected = BCINS_AD(BC_JLOOP, bc_a(v->startins), parent);
+  shadow1 = proto_jit_startins_acq(pt, startpc);
+  expected = BCINS_AD(BC_JLOOP, bc_a(startins), parent);
   target = endpos + 1 + (int64_t)bc_j(back1);
   continuationpos = proto_bcpos(pt, continuation);
-  if (live1 != expected || shadow1 != v->startins || bc_op(back1) != BC_JMP ||
+  if (live1 != expected || shadow1 != startins || bc_op(back1) != BC_JMP ||
       bc_j(back1) >= 0 || target < 0 || target > (int64_t)startpos ||
       target >= (int64_t)pt->sizebc ||
       (int64_t)continuationpos < target ||
       (int64_t)continuationpos >= endpos)
     return 0;
-  live2 = (BCIns)la_load32_acq((const uint32_t *)v->startpc);
+  live2 = (BCIns)la_load32_acq((const uint32_t *)startpc);
   back2 = (BCIns)la_load32_acq((const uint32_t *)backpc);
-  shadow2 = proto_jit_startins_acq(pt, v->startpc);
-  continuation2 =
-    (BCIns)la_load32_acq((const uint32_t *)continuation);
+  shadow2 = proto_jit_startins_acq(pt, startpc);
+  continuation2 = (BCIns)la_load32_acq((const uint32_t *)continuation);
   if (live2 != live1 || back2 != back1 || shadow2 != shadow1 ||
       continuation2 != continuation1)
     return 0;
-  v->continuationins = continuation2;
+  if (continuationinsp)
+    *continuationinsp = continuation2;
+  return 1;
+}
+
+static int trace_arm64_first_side_loop_generation_valid(
+    TraceArm64FirstSideLoopView *v, TraceNo parent,
+    const BCIns *continuation)
+{
+  if (!trace_arm64_loop_generation_valid(gco2pt(v->startpt), v->startpc,
+	 v->startins, parent, continuation, &v->continuationins))
+    return 0;
   return 1;
 }
 
@@ -6662,12 +6671,11 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
 	  trace_exittarget_arm64_encode(g, view->mcode)))
     return 0;
   {
-	int64_t loopend = (int64_t)proto_bcpos(pt, rootview->startpc) +
-	  (int64_t)bc_j(rootview->startins);
-	MSize continuationpos = proto_bcpos(pt, continuation);
-	if (loopend < 0 || loopend >= (int64_t)pt->sizebc ||
-	    continuationpos < proto_bcpos(pt, rootview->startpc) ||
-	    continuationpos >= (MSize)loopend)
+	BCIns live_continuation;
+	if (!trace_arm64_loop_generation_valid(pt, rootview->startpc,
+		rootview->startins, parentno, continuation,
+		&live_continuation) ||
+	    live_continuation != child->arm64_side_cert.continuationins)
 	  return 0;
   }
 
