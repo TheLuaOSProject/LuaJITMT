@@ -55,6 +55,7 @@ static void test_other_callsite_footer_rejected(lua_State *L)
   uintptr_t lo, hi;
   LJArm64PostRAView view = { 0 };
   SnapEntry *snapmap;
+  IRIns *ircopy;
   uint64_t original, changed;
   IRRef ref;
   lua_getglobal(L, "__abi_run_three");
@@ -154,6 +155,50 @@ static void test_other_callsite_footer_rejected(lua_State *L)
     memcpy(&((SnapEntry *)view.snapmap)[ofs+nent], &changed, sizeof(changed));
   }
   assert(!lj_asm_arm64_postra_admit(&view, NULL));
+  {
+    IRRef constref;
+    int paired = 0, footer_count = 0;
+    ircopy = (IRIns *)calloc(view.nins, sizeof(IRIns));
+    assert(ircopy != NULL);
+    memcpy(&ircopy[view.nk], &trace_ir_acq(T)[view.nk],
+	   (view.nins-view.nk)*sizeof(IRIns));
+    for (s = 0; s < view.nsnap; s++) {
+      const SnapShot *snap = &view.snap[s];
+      MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap);
+      uint64_t pcbase;
+      if (ofs > view.nsnapmap || nent > view.nsnapmap-ofs ||
+	  view.nsnapmap-ofs-nent < 1u+LJ_FR2)
+	continue;
+      memcpy(&pcbase, &((SnapEntry *)view.snapmap)[ofs+nent],
+	     sizeof(pcbase));
+      if (pcbase == original) {
+	memcpy(&((SnapEntry *)view.snapmap)[ofs+nent], &changed,
+	       sizeof(changed));
+	footer_count++;
+      }
+    }
+    assert(footer_count > 0);
+    for (constref = view.nk; constref < REF_TRUE; ) {
+      IRIns k = ir_load_acq(&ircopy[constref]);
+      IRRef next = constref+1u;
+      if (k.o == IR_KNUM || k.o == IR_KINT64 ||
+	  (LJ_GC64 && (k.o == IR_KGC || k.o == IR_KPTR ||
+		       k.o == IR_KKPTR)))
+	next = constref+2u < REF_TRUE ? constref+2u : REF_DROP;
+      if (next <= constref || next > REF_TRUE) break;
+      if (k.o == IR_KNUM && constref+1u < REF_TRUE &&
+	  ir_load_acq(&ircopy[constref+1u]).tv.u64 == original >> 8) {
+	ircopy[constref+1u].tv.u64 = (uint64_t)(lo+
+	    (uintptr_t)candidate*sizeof(BCIns));
+	paired++;
+      }
+      constref = next;
+    }
+    assert(paired > 0);
+    view.ir = ircopy;
+    assert(!lj_asm_arm64_postra_admit(&view, NULL));
+    free(ircopy);
+  }
   free(snapmap);
 }
 
@@ -227,6 +272,36 @@ static void assert_argument_classes(CTState *cts, CTypeID id,
     assert(abi.arg[i].cls == classes[i]);
     assert(abi.arg[i].reg == registers[i]);
   }
+}
+
+static void test_long_callsite(lua_State *L)
+{
+	const size_t prefix_count = 33000;
+	const char begin[] = "return function(fn) local x=0;";
+	const char statement[] = "x=x+1;";
+	const char end[] = "for i=1,300 do fn(9) end; return x end";
+	size_t capacity = sizeof(begin)+prefix_count*(sizeof(statement)-1u)+
+		  sizeof(end);
+	char *source = (char *)malloc(capacity);
+	char *out;
+	size_t i;
+	assert(source != NULL);
+	out = source;
+	memcpy(out, begin, sizeof(begin)-1u);
+	out += sizeof(begin)-1u;
+	for (i = 0; i < prefix_count; i++) {
+		memcpy(out, statement, sizeof(statement)-1u);
+		out += sizeof(statement)-1u;
+	}
+	memcpy(out, end, sizeof(end));
+	assert(luaL_loadbuffer(L, source, (size_t)(out-source)+sizeof(end)-1u,
+		"=long-callsite") == 0);
+	free(source);
+	assert(lua_pcall(L, 0, 1, 0) == 0);
+	lua_setglobal(L, "__abi_long_callsite");
+	ljt_lua_dostring(L,
+		"assert(require('jit.util').funcinfo(__abi_long_callsite).bytecodes > 32768)\n"
+		"assert(__abi_long_callsite(__abi_unused) == 33000)\n");
 }
 
 int main(void)
@@ -339,6 +414,13 @@ int main(void)
     "assert(__abi_a(11,5)==16 and __abi_b(11,5)==6 and __abi_c(11,5)==14)\n"
     "assert(__abi_run_three(__abi_a,__abi_b,__abi_c,11,5,300))\n"
     "assert(__abi_run_unused(__abi_unused,9,300)==300)\n");
+	{
+	uint64_t before = calls(6);
+	uint64_t native_before = native_seen[6];
+	test_long_callsite(L);
+	assert(calls(6) >= before+300u);
+	assert(native_seen[6] >= native_before+200u);
+  }
   test_other_callsite_footer_rejected(L);
 
   for (i = 1; i < 7; i++) {

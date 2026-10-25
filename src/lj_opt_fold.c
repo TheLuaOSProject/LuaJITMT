@@ -2536,11 +2536,6 @@ LJFOLD(CALLS any any)
 LJFOLD(CALLXS any any)
 LJFOLD(XBAR)
 LJFOLD(XPOLL)
-/* XSAVE is ordered and must be re-emitted when LOOP substitutes its body.
-** Passing an operandless marker to CSE could merge it with an earlier marker,
-** leaving the copied snapshot without its matching publication boundary.
-*/
-LJFOLD(XSAVE)
 LJFOLD(RETF any any)  /* Modifies BASE. */
 LJFOLD(TNEW any any)
 LJFOLD(TDUP any)
@@ -2580,6 +2575,12 @@ TRef LJ_FASTCALL lj_opt_fold(jit_State *J)
 {
   uint32_t key, any;
   IRRef ref;
+
+  /* XSAVE is an ordered materialization boundary. Its source-PC literals
+  ** may overlap constant-reference numbers, so bypass operand inspection as
+  ** well as CSE when LOOP re-emits it. Every snapshot keeps its own marker. */
+  if (fins->o == IR_XSAVE)
+    return lj_ir_emit(J);
 
   if (LJ_UNLIKELY((jit_flags_acq(J) & JIT_F_OPT_MASK) != JIT_F_OPT_DEFAULT)) {
     lj_assertJ(((JIT_F_OPT_FOLD|JIT_F_OPT_FWD|JIT_F_OPT_CSE|JIT_F_OPT_DSE) |

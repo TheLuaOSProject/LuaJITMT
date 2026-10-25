@@ -516,6 +516,33 @@ static int arm64_callxs_kint_value(const IRIns *ir, IRRef nk, IRRef target,
 	return 0;
 }
 
+static int arm64_callxs_xsave_anchor(const IRIns *ir, IRRef nins,
+	IRRef xsave, const BCIns *proto_bc, MSize proto_sizebc,
+	uintptr_t *returnpcp)
+{
+	IRIns marker;
+	uint32_t offset;
+	BCOp op;
+	if (xsave < REF_FIRST || xsave >= nins || proto_bc == NULL ||
+	    proto_sizebc == 0)
+		return 0;
+	marker = ir_load_acq(&ir[xsave]);
+	if (marker.o != IR_XSAVE || marker.t.irt != IRT_NIL ||
+	    marker.op1 >= REF_BIAS || marker.op2 >= REF_BIAS ||
+	    (marker.op1 == 0 && marker.op2 == 0))
+		return 0;
+	offset = (uint32_t)marker.op1 | ((uint32_t)marker.op2 << 15);
+	if (offset >= LJ_MAX_BCINS || (uint64_t)offset >= proto_sizebc)
+		return 0;
+	op = bc_op((BCIns)la_load32_acq(
+		(const uint32_t *)&proto_bc[(MSize)offset-1u]));
+	if (op != BC_CALL)
+		return 0;
+	if (returnpcp != NULL)
+		*returnpcp = (uintptr_t)(const void *)&proto_bc[offset];
+	return 1;
+}
+
 static int arm64_callxs_offset_value(const IRIns *ir, IRRef nk,
 				     IRRef target, int64_t *valuep)
 {
@@ -805,7 +832,8 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
       break;
     case IR_XSAVE:
       if (state != CALLXS_CLOSED || irt_type(ins.t) != IRT_NIL ||
-	  ins.op1 || ins.op2)
+	  !arm64_callxs_xsave_anchor(T->ir, nins, ref,
+	    proto_bc(J->pt), J->pt->sizebc, NULL))
 	return 0;
       xsave = ref;
       state = CALLXS_SAVED;
@@ -1988,6 +2016,24 @@ static int arm64_callxs_snapshot_call_before_leave(const GCtrace *T,
 	return 0;
 }
 
+static int arm64_callxs_snapshot_anchor_for_call(const GCtrace *T,
+	IRRef call, const GCproto *pt, uintptr_t *returnpcp)
+{
+	IRRef ref;
+	if (call >= T->nins) return 0;
+	for (ref = call; ref > REF_FIRST; ) {
+		IRIns ins = ir_load_acq(&T->ir[--ref]);
+		if (ins.o == IR_XSAVE)
+			return arm64_callxs_xsave_anchor(T->ir, T->nins,
+				ref, proto_bc(pt), pt->sizebc, returnpcp);
+		if (ins.o == IR_CALLXS ||
+		    (ins.o == IR_CALLS &&
+		     ins.op2 == IRCALL_lj_ffi_native_trace_leave))
+			return 0;
+	}
+	return 0;
+}
+
 static int arm64_callxs_snapshot_call_after_save(const GCtrace *T,
 						 IRRef at, IRRef *callp)
 {
@@ -2016,6 +2062,67 @@ static int arm64_callxs_snapshot_call_after_save(const GCtrace *T,
 		}
 	}
 	return 0;
+}
+
+static int arm64_callxs_snapshot_allocation_call(const GCtrace *T,
+						 IRRef at, IRRef end, IRRef *callp)
+{
+	IRRef ref, xsave;
+	IRRef alloc = 0;
+	if (at >= end || end > T->nins) return 0;
+	/* CNEW belongs to the snapshot whose active interval contains it. Do not
+	** let an earlier setup/entry snapshot claim a later allocation effect. */
+	for (ref = at; ref < end; ref++) {
+		IRIns ins = ir_load_acq(&T->ir[ref]);
+		if (ins.o == IR_CNEW) {
+			alloc = ref;
+			break;
+		}
+	}
+	if (alloc == 0) return 0;
+	for (ref = alloc+1u; ref < T->nins; ref++) {
+		IRIns ins = ir_load_acq(&T->ir[ref]);
+		if (ins.o == IR_XSAVE) {
+			xsave = ref;
+			break;
+		}
+		if (ins.o == IR_LOOP || ins.o == IR_XPOLL ||
+		    ins.o == IR_CALLXS ||
+		    (ins.o == IR_CALLS &&
+		     ins.op2 == IRCALL_lj_ffi_native_trace_leave))
+			return 0;
+	}
+	if (ref == T->nins) return 0;
+	for (ref = xsave+1u; ref < T->nins; ref++) {
+		IRIns ins = ir_load_acq(&T->ir[ref]);
+		if (ins.o == IR_CALLXS) {
+			*callp = ref;
+			return 1;
+		}
+		if (ins.o == IR_XSAVE || ins.o == IR_LOOP || ins.o == IR_XPOLL ||
+		    (ins.o == IR_CALLS &&
+		     ins.op2 == IRCALL_lj_ffi_native_trace_leave))
+			return 0;
+	}
+	return 0;
+}
+
+static int arm64_callxs_replay_setup_op(BCOp op)
+{
+	/* The replay snapshot may precede the exact anchored CALL only through
+	** side-effect-free argument setup; crossing any foreign effect could replay it. */
+	switch (op) {
+	case BC_MOV:
+	case BC_KPRI:
+	case BC_KSHORT:
+	case BC_KNUM:
+	case BC_KSTR:
+	case BC_KCDATA:
+	case BC_CGET:
+		return 1;
+	default:
+		return 0;
+	}
 }
 
 static int arm64_callxs_snapshot_bounds(const GCtrace *T,
@@ -2064,11 +2171,14 @@ static int arm64_callxs_snapshot_bounds(const GCtrace *T,
 	T->nsnapmap;
     MSize slots = snap_nslots_acq(snap), i, frame_slot = UINT_MAX;
     IRRef at = snap_ref_acq(snap);
+    IRRef next_at = s+1u < T->nsnap ?
+	snap_ref_acq(&T->snap[s+1u]) : T->nins;
     IRRef leave_ref = 0, call_ref = 0;
     uintptr_t frame_pc = 0;
     uint64_t pcbase;
     SnapEntry footer[1+LJ_FR2];
     if (at < REF_FIRST || at >= T->nins || at < previous ||
+	next_at < at || next_at > T->nins ||
 	ofs != expected || ofs > T->nsnapmap || next > T->nsnapmap ||
 	next < ofs || nent > next-ofs || next-ofs-nent != 1u+LJ_FR2 ||
 	slots < LJ_FR2+1u || slots > (MSize)pt->framesize+LJ_ARM64_ABI_MAX_ARGS+1u+LJ_FR2 ||
@@ -2108,10 +2218,12 @@ static int arm64_callxs_snapshot_bounds(const GCtrace *T,
 	  arm64_callxs_snapshot_precedes_leave(T, at, &leave_ref)) {
 	uintptr_t pc = (uintptr_t)(pcbase >> 8);
 	MSize pcindex = (MSize)((pc-lo)/sizeof(BCIns));
-	uintptr_t expected_return_pc = 0;
+	uintptr_t expected_return_pc = 0, source_return_pc = 0;
 	MSize prior;
 	if (!arm64_callxs_snapshot_call_before_leave(T, leave_ref,
-		&call_ref))
+		&call_ref) ||
+	    !arm64_callxs_snapshot_anchor_for_call(T, call_ref, pt,
+		&source_return_pc))
 	  SNAP_BOUNDS_FAIL();
 	/* Bind this caller continuation to the meta-frame snapshot for this
 	** specific CALLXS region. A valid continuation from another BC_CALL in
@@ -2145,11 +2257,41 @@ static int arm64_callxs_snapshot_bounds(const GCtrace *T,
 	    SNAP_BOUNDS_FAIL();
 	  expected_return_pc = candidate;
 	}
-	if (expected_return_pc == 0 || pc != expected_return_pc || pcindex == 0 ||
+	if (expected_return_pc == 0 || pc != expected_return_pc ||
+	    pc != source_return_pc || pcindex == 0 ||
 	    pcindex >= pt->sizebc ||
-	    bc_op((BCIns)la_load32_acq((const uint32_t *)&bc[pcindex-1u])) !=
-	      BC_CALL)
+	    bc_op((BCIns)la_load32_acq(
+	      (const uint32_t *)&bc[pcindex-1u])) != BC_CALL)
 	  SNAP_BOUNDS_FAIL();
+      }
+      {
+	IRRef probe_leave, alloc_call;
+	if (!arm64_callxs_snapshot_precedes_leave(T, at, &probe_leave) &&
+	    arm64_callxs_snapshot_allocation_call(T, at, next_at,
+		&alloc_call)) {
+	  uintptr_t source_return_pc;
+	  uintptr_t pc = (uintptr_t)(pcbase >> 8);
+	  MSize pcindex, callindex, setup;
+	  if (!arm64_callxs_snapshot_anchor_for_call(T, alloc_call, pt,
+		&source_return_pc) || source_return_pc < lo+sizeof(BCIns) ||
+	      pc < lo || pc >= source_return_pc ||
+	      ((pc-lo) % sizeof(BCIns)) != 0 ||
+	      ((source_return_pc-lo) % sizeof(BCIns)) != 0) {
+	    SNAP_BOUNDS_FAIL();
+	  }
+	  pcindex = (MSize)((pc-lo)/sizeof(BCIns));
+	  callindex = (MSize)((source_return_pc-lo)/sizeof(BCIns))-1u;
+	  if (callindex >= pt->sizebc || pcindex > callindex ||
+	      bc_op((BCIns)la_load32_acq((const uint32_t *)&bc[callindex])) !=
+		BC_CALL) {
+	    SNAP_BOUNDS_FAIL();
+	  }
+	  for (setup = pcindex; setup < callindex; setup++)
+	    if (!arm64_callxs_replay_setup_op(bc_op((BCIns)la_load32_acq(
+		(const uint32_t *)&bc[setup])))) {
+	      SNAP_BOUNDS_FAIL();
+	    }
+	}
       }
     } else if (meta_pc == NULL ||
 	(uintptr_t)(pcbase>>8) != (uintptr_t)(const void *)meta_pc ||
@@ -2158,12 +2300,19 @@ static int arm64_callxs_snapshot_bounds(const GCtrace *T,
 
       SNAP_BOUNDS_FAIL();
     } else {
-      /* Read and validate frame PC payloads as part of the bounded map
-      ** walk. The footer relation is checked against the leave snapshot. */
+      /* Allocation exits precede XSAVE and are not necessarily paired with
+      ** a leave snapshot. Bind their nested caller PC directly to the same
+      ** source authority as snapshots between XSAVE and native entry. */
       if (!arm64_callxs_snapshot_frame_pc(T, ofs, nent, lo, hi,
 		&frame_pc))
 	SNAP_BOUNDS_FAIL();
-      (void)frame_pc;
+      if (arm64_callxs_snapshot_allocation_call(T, at, next_at, &call_ref) ||
+	  arm64_callxs_snapshot_call_after_save(T, at, &call_ref)) {
+	uintptr_t source_return_pc;
+	if (!arm64_callxs_snapshot_anchor_for_call(T, call_ref, pt,
+		&source_return_pc) || frame_pc != source_return_pc)
+	  SNAP_BOUNDS_FAIL();
+      }
     }
   }
   if (expected != T->nsnapmap) SNAP_BOUNDS_FAIL();
@@ -2272,6 +2421,36 @@ static int arm64_postra_callxs_result_unused(
 	return 1;
 }
 
+static int arm64_postra_callxs_value_survives(const LJArm64PostRAView *view,
+		IRRef value, IRRef call, MSize capacity, unsigned depth)
+{
+	IRIns ins;
+	int fp;
+	if (value < REF_FIRST) return 1;
+	if (value >= call || depth > 32u) return 0;
+	ins = ir_load_acq(&view->ir[value]);
+	if (ins.s != SPS_NONE) {
+		MSize width = irt_is64(ins.t) ? 2u : 1u;
+		MSize end = (MSize)ins.s+width;
+		return arm64_postra_spill_slot(ins.s, capacity) && end <= capacity &&
+		       (width != 2u || (((MSize)ins.s-SPS_FIRST)&1u) == 0);
+	}
+	if (ra_hasreg(ins.r)) {
+		fp = irt_type(ins.t) == IRT_NUM || irt_type(ins.t) == IRT_FLOAT;
+		return fp ? (ins.r >= RID_D8 && ins.r <= RID_D15) :
+			    (ins.r >= RID_X19 && ins.r <= RID_X28);
+	}
+	if (ins.o == IR_CONV)
+		return arm64_postra_callxs_value_survives(view, ins.op1, call,
+			capacity, depth+1u);
+	if (ins.o == IR_ADD)
+		return arm64_postra_callxs_value_survives(view, ins.op1, call,
+			capacity, depth+1u) &&
+		       arm64_postra_callxs_value_survives(view, ins.op2, call,
+			capacity, depth+1u);
+	return 0;
+}
+
 static int arm64_postra_callxs_live_across(const LJArm64PostRAView *view,
 		IRRef semantic_nins, IRRef call, MSize capacity)
 {
@@ -2279,7 +2458,7 @@ static int arm64_postra_callxs_live_across(const LJArm64PostRAView *view,
 	MSize s, i;
 	for (value = REF_BASE; value < semantic_nins; value++) {
 		IRIns ins = ir_load_acq(&view->ir[value]);
-		int live = 0, fp;
+		int live = 0;
 		if (value >= call && ins.o != IR_PHI) continue;
 		if (ins.o == IR_BASE || irref_isk(value) || ins.o == IR_NOP ||
 		    ins.o == IR_CARG || ins.o == IR_TMPREF || ins.o == IR_XSAVE)
@@ -2299,21 +2478,8 @@ static int arm64_postra_callxs_live_across(const LJArm64PostRAView *view,
 				}
 		}
 		if (!live) continue;
-		if (ins.s != SPS_NONE) {
-			MSize width = irt_is64(ins.t) ? 2u : 1u;
-			MSize end = (MSize)ins.s+width;
-			if (!arm64_postra_spill_slot(ins.s, capacity) || end > capacity ||
-			    (width == 2u && (((MSize)ins.s-SPS_FIRST)&1u) != 0))
-				return 0;
-			continue;
-		}
-		if (!ra_hasreg(ins.r) && ins.s == SPS_NONE &&
-		    (ins.o == IR_ADD || ins.o == IR_CONV))
-			continue; /* Pure rematerialized value; its inputs are checked too. */
-		if (!ra_hasreg(ins.r)) return 0;
-		fp = irt_type(ins.t) == IRT_NUM || irt_type(ins.t) == IRT_FLOAT;
-		if (fp ? (ins.r < RID_D8 || ins.r > RID_D15) :
-			 (ins.r < RID_X19 || ins.r > RID_X28))
+		if (!arm64_postra_callxs_value_survives(view, value, call,
+			capacity, 0))
 			return 0;
 	}
 	return 1;
@@ -2404,6 +2570,60 @@ static int arm64_callxs_phi_types_match(const IRIns *ir, IRRef nk,
 /* Independent allocator-side CALLXS proof. Unlike the semantic walk above,
 ** this validates concrete ABI result registers, spill bounds and snapshot
 ** locations from the published IR and CType snapshot. */
+static int arm64_postra_callxs_rename_valid(
+	const LJArm64PostRAView *view, const IRIns *rename,
+	IRRef semantic_nins, MSize capacity)
+{
+	IRIns source;
+	int fp;
+	const SnapShot *snap;
+	MSize i, ofs, nent;
+	IRRef ref;
+	if (rename->op1 < REF_FIRST || rename->op1 >= semantic_nins ||
+	    rename->r >= RID_MAX || !ra_hasreg(rename->r) ||
+	    rename->op2 >= view->nsnap)
+		return 0;
+	source = ir_load_acq(&view->ir[rename->op1]);
+	if (irt_type(source.t) == IRT_NIL || source.o == IR_RENAME)
+		return 0;
+	fp = irt_type(source.t) == IRT_NUM || irt_type(source.t) == IRT_FLOAT;
+	if (!rset_test(fp ? RSET_FPR : RSET_GPR, rename->r)) return 0;
+	for (ref = REF_BASE; ref < view->nins; ref++) {
+		IRIns sibling = ir_load_acq(&view->ir[ref]);
+		if (sibling.o != IR_RENAME || sibling.op2 != rename->op2)
+			continue;
+		if (sibling.op1 < REF_FIRST || sibling.op1 >= semantic_nins ||
+		    sibling.r >= RID_MAX || !ra_hasreg(sibling.r) ||
+		    (sibling.r == rename->r && sibling.op1 != rename->op1))
+			return 0;
+	}
+	snap = &view->snap[rename->op2];
+	ofs = snap_mapofs_acq(snap);
+	nent = snap_nent_acq(snap);
+	if (ofs > view->nsnapmap || nent > view->nsnapmap-ofs)
+		return 0;
+	for (i = 0; i < nent; i++) {
+		IRRef value = snap_ref(snapentry_acq(&view->snapmap[ofs+i]));
+		IRIns live;
+		RegSP rs;
+		if (value == rename->op1 || irref_isk(value)) continue;
+		if (value < REF_FIRST || value >= view->nins) return 0;
+		live = ir_load_acq(&view->ir[value]);
+		rs = live.prev;
+		if (ra_hasspill(regsp_spill(rs))) {
+			MSize slot = regsp_spill(rs);
+			MSize width = irt_is64(live.t) ? 2u : 1u;
+			if (!arm64_postra_spill_slot(slot, capacity) ||
+			    (MSize)slot+width > capacity ||
+			    (width == 2u && ((slot-SPS_FIRST)&1u) != 0))
+				return 0;
+		} else if (regsp_reg(rs) == rename->r) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
 static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	IRRef *semantic_ninsp)
 {
@@ -2428,7 +2648,9 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    view->nk == 0 || view->nk >= REF_TRUE || view->nk >= view->nins ||
 	    view->base_delta != 0 || (view->spadjust & 15u) != 0 ||
 	    view->spadjust > (MSize)sps_scale(SPS_LIMIT-SPS_FIXED))
-	  do return 0; while (0);
+	  return 0;
+	capacity = SPS_FIXED + view->spadjust / sizeof(int32_t);
+	if (capacity > SPS_LIMIT) return 0;
 	semantic_nins = view->nins;
 	while (semantic_nins > REF_FIRST) {
 	  IRIns tail = ir_load_acq(&view->ir[semantic_nins-1u]);
@@ -2438,33 +2660,48 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    break;
 	  }
 	  if (tail.o == IR_RENAME && tail.t.irt == IRT_NIL &&
-	      tail.op1 >= REF_FIRST && tail.op1 < semantic_nins &&
+	      tail.op1 >= REF_FIRST && tail.op1 < semantic_nins-1u &&
 	      tail.op2 < view->nsnap && tail.s == SPS_NONE) {
 	    semantic_nins--;
 	    continue;
 	  }
 	  break;
 	}
+	for (ref = semantic_nins; ref < view->nins; ref++) {
+	  IRIns rename = ir_load_acq(&view->ir[ref]);
+	  /* The assembler reserves one zero NOP before its RENAME suffix. */
+	  if (ref == semantic_nins && rename.o == IR_NOP &&
+	      rename.t.irt == IRT_NIL && rename.op1 == 0 &&
+	      rename.op2 == 0 && rename.prev == 0)
+	    continue;
+	  if (rename.o != IR_RENAME || rename.op1 < REF_FIRST ||
+	      rename.op1 >= semantic_nins || rename.op2 >= view->nsnap ||
+	      rename.t.irt != IRT_NIL || rename.s != SPS_NONE)
+	    return 0;
+	  if (!arm64_postra_callxs_rename_valid(view, &rename,
+		semantic_nins, capacity))
+	    return 0;
+	}
 	if (semantic_nins <= REF_FIRST || (!view->owner_private &&
 	    (view->owner->root != 0 || trace_traceno_acq((GCtrace *)view->owner) == 0 ||
 	     trace_startins_acq((GCtrace *)view->owner) != view->startins)))
-	  do return 0; while (0);
+	  return 0;
 	pt = (GCproto *)view->proto;
 	if (proto_bc(pt) != view->proto_bc || pt->sizebc != view->proto_sizebc ||
 	    pt->numparams != view->proto_numparams)
-	  do return 0; while (0);
+	  return 0;
 	pclo = (uintptr_t)(const void *)view->proto_bc;
 	pchi = pclo + (uintptr_t)view->proto_sizebc*sizeof(BCIns);
 	startpc = (uintptr_t)(const void *)view->startpc;
 	if (pchi <= pclo || startpc < pclo || startpc >= pchi ||
 	    ((startpc-pclo) % sizeof(BCIns)) != 0)
-	  do return 0; while (0);
+	  return 0;
 	liveins = (BCIns)la_load32_acq((const uint32_t *)startpc);
 	if (view->owner_private) {
 	  /* During assembly the source FORL has not yet been patched. Accept only
 	  ** the exact captured source instruction, with the owner still private. */
 	  if (liveins != view->startins)
-	    do return 0; while (0);
+	    return 0;
 	} else if (bc_op(liveins) != BC_JFORL ||
 		   bc_a(liveins) != bc_a(view->startins) ||
 		   bc_d(liveins) != trace_traceno_acq((GCtrace *)view->owner) ||
@@ -2475,7 +2712,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		   trace_linktype_acq((GCtrace *)view->owner) != LJ_TRLINK_LOOP ||
 		   trace_startptgco_acq((GCtrace *)view->owner) != obj2gco(pt) ||
 		   trace_startpc_acq((GCtrace *)view->owner) != view->startpc) {
-	  do return 0; while (0);
+	  return 0;
 	}
 	temp = *view->owner;
 	temp.ir = (IRIns *)view->ir;
@@ -2486,23 +2723,24 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	temp.nsnap = view->nsnap;
 	temp.nsnapmap = view->nsnapmap;
 	if (!arm64_callxs_snapshot_bounds(&temp, pt))
-	  do return 0; while (0);
-	capacity = SPS_FIXED + view->spadjust / sizeof(int32_t);
+	  return 0;
 	for (ref = REF_BASE; ref < semantic_nins; ref++) {
 	  IRIns ins = ir_load_acq(&view->ir[ref]);
 	  if ((protocol == 1 || protocol == 3) && irt_isguard(ins.t))
-	    do return 0; while (0);
+	    return 0;
 	  if (protocol == 2 && irt_isguard(ins.t) && ins.o != IR_NE)
-	    do return 0; while (0);
+	    return 0;
 	  if (protocol == 4 && irt_isguard(ins.t) &&
 	      (ins.o != IR_CALLS ||
 	       ins.op2 != IRCALL_lj_ffi_native_trace_leave))
-	    do return 0; while (0);
+	    return 0;
 	  if (protocol == 5 && ins.o != IR_EQ && ins.o != IR_NOP)
-	    do return 0; while (0);
+	    return 0;
 	  if (ins.o == IR_XSAVE) {
-	    if (protocol != 0 || ins.t.irt != IRT_NIL || ins.op1 || ins.op2)
-	      do return 0; while (0);
+	    if (protocol != 0 || ins.t.irt != IRT_NIL ||
+		!arm64_callxs_xsave_anchor(view->ir, semantic_nins,
+		  ref, view->proto_bc, view->proto_sizebc, NULL))
+	      return 0;
 	    protocol = 1;
 	    nx++;
 	  } else if (ins.o == IR_CALLS &&
@@ -2510,7 +2748,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    if (protocol != 1 || irt_type(ins.t) != IRT_INT || irt_isguard(ins.t) ||
 		!arm64_callxs_carg_values(view->ir, view->nk, semantic_nins,
 			ref, 3, enterargs))
-	      do return 0; while (0);
+	      return 0;
 	    if (!arm64_callxs_const_member(view->ir, view->nk, enterargs[0]) ||
 		arm64_callxs_ref_type(view->ir, view->nk, enterargs[0]) != IRT_P64 ||
 		enterargs[1] < REF_FIRST || enterargs[1] >= ref ||
@@ -2519,7 +2757,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		(enterargs[2] >= view->nk &&
 		 ir_load_acq(&view->ir[enterargs[2]]).o != IR_KNULL &&
 		 ir_load_acq(&view->ir[enterargs[2]]).o != IR_CNEW))
-	      do return 0; while (0);
+	      return 0;
 	    active_enter = ref;
 	    protocol = 2;
 	  } else if (ins.o == IR_NE && protocol == 2) {
@@ -2528,18 +2766,18 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    if (ins.t.irt != (IRT_INT|IRT_GUARD) || zero == 0 ||
 		!arm64_callxs_kint_value(view->ir, view->nk, zero, NULL) ||
 		ir_load_acq(&view->ir[zero]).i != 0)
-	      do return 0; while (0);
+	      return 0;
 	    protocol = 3;
 	  } else if (ins.o == IR_CALLXS) {
 	    LJArm64ABISignature abi;
 	    IRRef fpref;
 	    if (protocol != 3 || active_call != 0)
-	      do return 0; while (0);
+	      return 0;
 	    if (!arm64_callxs_signature_for_call(view->cts, view->ir, view->nk,
 		semantic_nins, ref, &abi, &fpref))
-	      do return 0; while (0);
+	      return 0;
 	    if (fpref != enterargs[1])
-	      do return 0; while (0);
+	      return 0;
 	    if (abi.result_kind == LJ_ARM64_ABI_KIND_POINTER ?
 		(boxref == 0 || enterargs[2] != boxref || box_ctype != abi.result_id) :
 		(boxref != 0 || !arm64_callxs_const_member(view->ir, view->nk, enterargs[2]) ||
@@ -2556,7 +2794,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		ref <= active_call ||
 		(result_is_cdata && (boxref == 0 || !box_store_seen)) ||
 		(!result_is_cdata && (boxref != 0 || box_store_seen)))
-	      do return 0; while (0);
+	      return 0;
 	    active_call = 0;
 	    active_leave = ref;
 	    protocol = 5;
@@ -2566,7 +2804,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    if (ins.t.irt != (IRT_INT|IRT_GUARD) || zero == 0 ||
 		!arm64_callxs_kint_value(view->ir, view->nk, zero, NULL) ||
 		ir_load_acq(&view->ir[zero]).i != 0)
-	      do return 0; while (0);
+	      return 0;
 	    active_leave = 0;
 	    protocol = 0;
 	    boxref = 0;
@@ -2580,7 +2818,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		!arm64_callxs_types_comparable(
 		  arm64_callxs_ref_type(view->ir, view->nk, ins.op1),
 		  arm64_callxs_ref_type(view->ir, view->nk, ins.op2)))
-	      do return 0; while (0);
+	      return 0;
 	  } else if (ins.o == IR_NE) {
 	    if (!irt_isguard(ins.t) || ins.op1 >= ref || ins.op2 >= ref ||
 		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref, ins.op1) ||
@@ -2588,14 +2826,14 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		!arm64_callxs_types_comparable(
 		  arm64_callxs_ref_type(view->ir, view->nk, ins.op1),
 		  arm64_callxs_ref_type(view->ir, view->nk, ins.op2)))
-	      do return 0; while (0);
+	      return 0;
 	  } else if (ins.o == IR_CALLS &&
 		     ins.op2 == IRCALL_lj_tab_gettv_rooted) {
 	    if (protocol != 0 || irt_type(ins.t) != IRT_P64 ||
 		!irt_isguard(ins.t) ||
 		!arm64_callxs_carg_values(view->ir, view->nk, semantic_nins,
 			ref, 3, lookupargs))
-	      do return 0; while (0);
+	      return 0;
 	    if (lookupargs[2] != lookupargs[0] ||
 		lookupargs[0] >= ref || lookupargs[1] >= ref ||
 		ir_load_acq(&view->ir[lookupargs[0]]).o != IR_TMPREF ||
@@ -2609,69 +2847,69 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		  ir_load_acq(&view->ir[lookupargs[0]]).op1) ||
 		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref,
 		  ir_load_acq(&view->ir[lookupargs[1]]).op1))
-	      do return 0; while (0);
+	      return 0;
 	  } else if (ins.o == IR_LOOP) {
 	    if (protocol != 0 || ins.t.irt != (IRT_NIL|IRT_GUARD) ||
 		ins.op1 != 0 || ins.op2 != 0)
-	      do return 0; while (0);
+	      return 0;
 	    nloop++;
 	  } else if (ins.o == IR_XPOLL) {
 	    if (protocol != 0 || ins.t.irt != (IRT_NIL|IRT_GUARD) ||
 		ins.op1 != 1 || ins.op2 != 0)
-	      do return 0; while (0);
+	      return 0;
 	    npoll++;
 	  } else if (ins.o == IR_BASE) {
 	    if (ref != REF_BASE || ins.t.irt != IRT_PGC || ins.op1 || ins.op2)
-	      do return 0; while (0);
+	      return 0;
 	  } else if (ins.o == IR_NOP) {
 	    if (ins.t.irt != IRT_NIL || ins.op1 || ins.op2)
-	      do return 0; while (0);
+	      return 0;
 	  } else if (ins.o == IR_FLOAD) {
 	    if (ins.op1 >= ref || !arm64_callxs_ref_valid(view->ir, view->nk,
 		semantic_nins, ref, ins.op1))
-	      do return 0; while (0);
+	      return 0;
 	    if (ins.op2 == IRFL_CDATA_PTR) {
 	      IRIns src = ir_load_acq(&view->ir[ins.op1]);
 	      if (src.o != IR_SLOAD || irt_type(src.t) != IRT_CDATA ||
 		irt_type(ins.t) != IRT_P64)
-	        do return 0; while (0);
+	        return 0;
 	    } else if (ins.op2 == IRFL_CDATA_CTYPEID) {
 	      IRIns src = ir_load_acq(&view->ir[ins.op1]);
 	      if (src.o != IR_SLOAD || irt_type(src.t) != IRT_CDATA ||
 		!arm64_callxs_integer_type(irt_type(ins.t)) ||
 		((IRT_IS64 >> irt_type(ins.t)) & 1u) != 0)
-	        do return 0; while (0);
+	        return 0;
 	    } else if (ins.op2 == IRFL_TAB_META ||
 		ins.op2 == (GG_OFS(g.gcroot[GCROOT_BASEMT+(~LJ_TCDATA)]) >> 2)) {
 	      if (ins.op1 != REF_NIL || irt_type(ins.t) != IRT_TAB ||
 		!arm64_callxs_has_equal_guard(view->ir, semantic_nins, view->nk,
 		  ref, IRT_TAB))
-	        do return 0; while (0);
+	        return 0;
 	    } else {
-	      do return 0; while (0);
+	      return 0;
 	    }
 	  } else if (ins.o == IR_VLOAD) {
 	    IRIns src;
 	    if (irt_type(ins.t) != IRT_FUNC || !irt_isguard(ins.t) ||
 		ins.op2 != 0 || ins.op1 >= ref ||
 		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref, ins.op1))
-	      do return 0; while (0);
+	      return 0;
 	    src = ir_load_acq(&view->ir[ins.op1]);
 	    if (src.o != IR_CALLS || src.op2 != IRCALL_lj_tab_gettv_rooted ||
 		!arm64_callxs_has_equal_guard(view->ir, semantic_nins, view->nk,
 		  ref, IRT_FUNC))
-	      do return 0; while (0);
+	      return 0;
 	  } else if (ins.o == IR_TMPREF) {
 	    if (ins.t.irt != IRT_PGC ||
 		(ins.op2 & ~(IRTMPREF_IN1|IRTMPREF_OUT1|IRTMPREF_IN2|IRTMPREF_OUT2)) != 0 ||
 		(ins.op2 & (IRTMPREF_IN1|IRTMPREF_OUT1|IRTMPREF_IN2|IRTMPREF_OUT2)) == 0 ||
 		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref, ins.op1))
-	      do return 0; while (0);
+	      return 0;
 	  } else if (ins.o == IR_CARG) {
 	    if (ins.t.irt != IRT_NIL || ins.op1 >= ref || ins.op2 >= ref ||
 		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref, ins.op1) ||
 		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref, ins.op2))
-	      do return 0; while (0);
+	      return 0;
 	  } else if (ins.o == IR_PHI) {
 	    if (irt_isguard(ins.t) ||
 		!arm64_callxs_phi_types_match(view->ir, view->nk, ref, &ins) ||
@@ -2679,7 +2917,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		ins.op1 >= ref || ins.op2 >= ref ||
 		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref, ins.op1) ||
 		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref, ins.op2))
-	      do return 0; while (0);
+	      return 0;
 	  } else if (ins.o == IR_SLOAD) {
 	    if (ins.op1 < 1u+LJ_FR2 || ins.op1 >= pt->framesize ||
 		(ins.op2 & ~(IRSLOAD_PARENT|IRSLOAD_FRAME|IRSLOAD_TYPECHECK|
@@ -2688,7 +2926,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		 irt_type(ins.t) != IRT_FLOAT && irt_type(ins.t) != IRT_CDATA &&
 		 irt_type(ins.t) != IRT_P64 && irt_type(ins.t) != IRT_TAB &&
 		 irt_type(ins.t) != IRT_FUNC && irt_type(ins.t) != IRT_STR))
-	      do return 0; while (0);
+	      return 0;
 	  } else if (ins.o == IR_ADD || ins.o == IR_MUL) {
 	    if (ins.op1 >= ref || ins.op2 >= ref ||
 		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref, ins.op1) ||
@@ -2697,31 +2935,31 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		(ins.o == IR_ADD &&
 		 (ins.t.irt & ~(IRT_TYPE|IRT_ISPHI)) != 0) ||
 		!arm64_callxs_add_shape(view->ir, view->nk, irt_type(ins.t), ins.op1, ins.op2))
-	      do return 0; while (0);
+	      return 0;
 	  } else if (ins.o == IR_ADDOV || ins.o == IR_SUBOV ||
 		     ins.o == IR_MULOV) {
 	    if (!arm64_callxs_int_overflow_shape(view->ir, view->nk,
 		semantic_nins, ref, &ins))
-	      do return 0; while (0);
+	      return 0;
 	  } else if (ins.o == IR_CONV) {
 	    IRIns src;
 	    if (irt_type(ins.t) != IRT_NUM || ins.op2 != IRCONV_NUM_INT ||
 		ins.op1 >= ref || !arm64_callxs_ref_valid(view->ir, view->nk,
 		semantic_nins, ref, ins.op1))
-	      do return 0; while (0);
+	      return 0;
 	    src = ir_load_acq(&view->ir[ins.op1]);
 	    if (irt_type(src.t) != IRT_INT)
-	      do return 0; while (0);
+	      return 0;
 	  } else if (ins.o == IR_USE) {
 	    if (irt_type(ins.t) != IRT_NIL || ins.op2 != 0 ||
 		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref, ins.op1))
-	      do return 0; while (0);
+	      return 0;
 	  } else if (ins.o == IR_CNEW) {
 	    if (boxref != 0 || irt_type(ins.t) != IRT_CDATA ||
 		(ins.t.irt & IRT_GUARD) == 0 || ins.op2 != REF_NIL ||
 		!arm64_callxs_const_member(view->ir, view->nk, ins.op1) ||
 		!arm64_callxs_kint_value(view->ir, view->nk, ins.op1, NULL))
-	      do return 0; while (0);
+	      return 0;
 	    boxref = ref;
 	    box_ctype = (CTypeID)ir_load_acq(&view->ir[ins.op1]).i;
 	  } else if (ins.o == IR_XSTORE) {
@@ -2730,41 +2968,41 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    if (protocol != 4 || !result_is_cdata || boxref == 0 || box_store_seen ||
 		ins.op2 != active_call || ins.op1 >= ref ||
 		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref, ins.op1))
-	      do return 0; while (0);
+	      return 0;
 	    payload = ir_load_acq(&view->ir[ins.op1]);
 	    if (payload.o != IR_ADD || irt_type(payload.t) != IRT_P64 ||
 		payload.op1 != boxref ||
 		!arm64_callxs_offset_value(view->ir, view->nk, payload.op2, &offset) ||
 		offset != (int64_t)sizeof(GCcdata) || irt_type(ins.t) != IRT_P64)
-	      do return 0; while (0);
+	      return 0;
 	    box_store_seen = 1;
 	  } else if (ins.o == IR_LT || ins.o == IR_GE || ins.o == IR_LE || ins.o == IR_GT) {
 	    IRType t1, t2;
 	    if (ins.t.irt != (IRT_INT|IRT_GUARD) || ins.op1 >= ref || ins.op2 >= ref ||
 		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref, ins.op1) ||
 		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref, ins.op2))
-	      do return 0; while (0);
+	      return 0;
 	    t1 = arm64_callxs_ref_type(view->ir, view->nk, ins.op1);
 	    t2 = arm64_callxs_ref_type(view->ir, view->nk, ins.op2);
 	    if (t1 != t2 || (t1 != IRT_INT && t1 != IRT_NUM))
-	      do return 0; while (0);
+	      return 0;
 	  } else {
 	    /* Every CALLS ID and opcode must have matched a validated branch above. */
-	    do return 0; while (0);
+	    return 0;
 	  }
 	  if (ins.s != SPS_NONE) {
 	    MSize width = irt_is64(ins.t) ? 2u : 1u;
 	    MSize end = (MSize)ins.s + width;
 	    if (!arm64_postra_spill_slot(ins.s, capacity) || end > capacity ||
 		(width == 2u && (((MSize)ins.s - SPS_FIRST) & 1u) != 0))
-	      do return 0; while (0);
+	      return 0;
 	    if (end > highest) highest = end;
 	  }
 	  if (ra_hasreg(ins.r)) {
 	    RegSet rs = irt_type(ins.t) == IRT_FLOAT || irt_type(ins.t) == IRT_NUM ?
 		RSET_FPR : RSET_GPR;
 	    if (ins.r >= RID_MAX_FPR || !rset_test(rs, ins.r))
-	      do return 0; while (0);
+	      return 0;
 	  }
 	}
 
@@ -2772,14 +3010,14 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	  IRIns k = ir_load_acq(&view->ir[ref]);
 	  IRRef next;
 	  if (!arm64_callxs_const_member(view->ir, view->nk, ref))
-	    do return 0; while (0);
+	    return 0;
 	  if ((k.o == IR_KINT || k.o == IR_KINT64 || k.o == IR_KNUM ||
 	       k.o == IR_KGC || k.o == IR_KPTR || k.o == IR_KPRI) &&
 	      (k.r != RID_INIT || k.s != SPS_NONE))
-	    do return 0; while (0);
+	    return 0;
 	  next = arm64_callxs_const_next(view->ir, ref);
 	  if (next <= ref || next > REF_TRUE)
-	    do return 0; while (0);
+	    return 0;
 	  ref = next;
 	}
 	if (nc == 0 || protocol != 0 || active_call != 0 ||
@@ -2793,22 +3031,22 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	  IRRef values[LJ_ARM64_ABI_MAX_ARGS];
 	  int found_type = 0;
 	  if (c.o != IR_CALLXS) continue;
-	  if (c.op2 < REF_FIRST || c.op2 >= call) do return 0; while (0);
+	  if (c.op2 < REF_FIRST || c.op2 >= call) return 0;
 	  fpref = c.op2;
 	  if (ir_load_acq(&view->ir[fpref]).o != IR_FLOAD ||
 	      ir_load_acq(&view->ir[fpref]).op2 != IRFL_CDATA_PTR)
-	    do return 0; while (0);
+	    return 0;
 	  /* The captured function pointer can already occupy an argument GPR
 	  ** (for example X2). asm_callx relocates indirect targets into its
 	  ** dedicated non-argument register before emitting BLR_AUTH. */
 	  if (!ra_hasreg(ir_load_acq(&view->ir[fpref]).r) ||
-	      !rset_test(RSET_GPR-RSET_FIXED,
+	      !rset_test(RSET_GPR,
 		ir_load_acq(&view->ir[fpref]).r))
-	    do return 0; while (0);
+	    return 0;
 	  cdref = ir_load_acq(&view->ir[fpref]).op1;
 	  if (cdref < REF_FIRST || cdref >= fpref ||
 	      ir_load_acq(&view->ir[cdref]).o != IR_SLOAD)
-	    do return 0; while (0);
+	    return 0;
 	  for (typeref = REF_FIRST; typeref < call && !found_type; typeref++) {
 	    IRIns typeid = ir_load_acq(&view->ir[typeref]);
 	    if (typeid.o != IR_FLOAD || typeid.op1 != cdref ||
@@ -2831,12 +3069,12 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    }
 	  }
 	  if (!found_type || !arm64_callxs_carg_values(view->ir, view->nk,
-	      semantic_nins, call, abi.nargs, values)) do return 0; while (0);
+	      semantic_nins, call, abi.nargs, values)) return 0;
 	  for (guard = 0; guard < abi.nargs; guard++) {
 	    LJArm64ABIArg *a = &abi.arg[guard];
 	    if (!arm64_callxs_value_kind(view->ir, values[guard], view->nk,
 		semantic_nins, call,
-		(LJArm64ABIKind)a->kind, a->size, a->is_unsigned)) do return 0; while (0);
+		(LJArm64ABIKind)a->kind, a->size, a->is_unsigned)) return 0;
 	  }
 	  if (irt_type(c.t) != arm64_callxs_result_type(&abi) ||
 	      (abi.result_class == LJ_ARM64_ABI_GPR &&
@@ -2845,19 +3083,14 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		 !ra_hasspill(regsp_spill(c.prev)) &&
 		 arm64_postra_callxs_result_unused(view, semantic_nins, call))) ||
 	      (abi.result_class == LJ_ARM64_ABI_FPR && c.r != RID_FPRET))
-	    do return 0; while (0);
+	    return 0;
 	  if (!arm64_postra_callxs_live_across(view, semantic_nins, call, capacity))
-	    do return 0; while (0);
+	    return 0;
 	}
 	if (semantic_ninsp) *semantic_ninsp = semantic_nins;
 	return 1;
 }
 
-static int arm64_postra_callxs_admit(const LJArm64PostRAView *view,
-	IRRef *semantic_ninsp)
-{
-	return arm64_postra_callxs_generic(view, semantic_ninsp);
-}
 
 #endif
 
@@ -2896,7 +3129,7 @@ static int arm64_postra_nonloop_admit(const LJArm64PostRAView *view,
     IRRef callref;
     for (callref = REF_BASE; callref < view->nins; callref++) {
       if (ir_load_acq(&view->ir[callref]).o == IR_CALLXS)
-	return arm64_postra_callxs_admit(view, semantic_ninsp);
+	return arm64_postra_callxs_generic(view, semantic_ninsp);
     }
   }
 #endif

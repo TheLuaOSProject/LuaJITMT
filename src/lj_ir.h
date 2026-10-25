@@ -38,7 +38,7 @@
   _(HIOP,	S , ref, ref) \
   _(LOOP,	S , ___, ___) \
   _(XPOLL,	S , lit, ___) \
-  _(XSAVE,	S , ___, ___) \
+  _(XSAVE,	S , lit, lit) \
   _(USE,	S , ref, ___) \
   _(PHI,	S , ref, ref) \
   _(RENAME,	S , ref, lit) \

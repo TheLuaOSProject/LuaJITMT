@@ -449,6 +449,19 @@ static void expect_postra(CallXSFixture *fx, LJArm64PostRAView *view,
     assert(semantic_nins == profile_semantic_nins(fx));
 }
 
+static uint32_t alternate_call_continuation(const GCproto *pt,
+	uint32_t current)
+{
+	const BCIns *bc = proto_bc(pt);
+	MSize i;
+	for (i = 1; i < pt->sizebc; i++) {
+		BCOp op = bc_op(loadbc(&bc[i-1u]));
+		if (i != current && op == BC_CALL)
+			return i;
+	}
+	return current+1u < pt->sizebc ? current+1u : 0;
+}
+
 static void test_double_semantic_mutations(jit_State *J,
 	CallXSFixture *fx)
 {
@@ -577,6 +590,8 @@ static void test_semantic(jit_State *J, CallXSFixture *fx)
   IRRef cross_callpre = fx->profile == CX_PROFILE_I32 ?
 	CX_D_R_CALL_PRE : CX_R_CALL_PRE;
   IRRef xsavepre = profile_ref(fx, CX_R_XSAVE_PRE);
+  IRIns marker;
+  uint32_t original_site, alternate_site;
 
   assert(bc_op(fx->owner->startins) == BC_FORL);
   bc_publish((const uint32_t *)&bc[13], fx->owner->startins);
@@ -584,6 +599,29 @@ static void test_semantic(jit_State *J, CallXSFixture *fx)
 
   reset_semantic_clone(fx);
   expect_semantic_admit(J, fx);
+
+  marker = fx->ir[xsavepre];
+	original_site = (uint32_t)marker.op1 |
+	  ((uint32_t)marker.op2 << 15);
+  alternate_site = alternate_call_continuation(fx->pt, original_site);
+  assert(original_site != 0 && alternate_site != 0);
+
+  reset_semantic_clone(fx);
+  fx->ir[xsavepre].op1 = (uint16_t)alternate_site;
+	fx->ir[xsavepre].op2 = (uint16_t)(alternate_site >> 15);
+  expect_semantic_reject(J, fx, LJ_ARM64_IR_REJECT_CALL, xsavepre,
+	IR_XSAVE, 12);
+
+  reset_semantic_clone(fx);
+  fx->ir[xsavepre].op1 = 0;
+  fx->ir[xsavepre].op2 = 0;
+  expect_semantic_reject(J, fx, LJ_ARM64_IR_REJECT_CALL, xsavepre,
+	IR_XSAVE, 12);
+
+	reset_semantic_clone(fx);
+	fx->ir[xsavepre].op2 = REF_BIAS;
+	expect_semantic_reject(J, fx, LJ_ARM64_IR_REJECT_CALL, xsavepre,
+	  IR_XSAVE, 13);
 
   reset_semantic_clone(fx);
   ir_kgc_publish(&fx->ir[CX_K_TRACE], obj2gco(fx->owner), IRT_P64);
@@ -688,13 +726,36 @@ static void test_postra(CallXSFixture *fx)
   IRRef callbody = profile_ref(fx, CX_R_CALL_BODY);
   IRRef indexpre = profile_ref(fx, CX_R_INDEX_PRE);
   IRRef xsavebody = profile_ref(fx, CX_R_XSAVE_BODY);
+  IRRef xsavepre = profile_ref(fx, CX_R_XSAVE_PRE);
   IRRef semantic_nins = profile_semantic_nins(fx);
+  IRIns marker;
+  uint32_t original_site, alternate_site;
 
   view = make_postra_view(fx);
   assert(view.nins == profile_published_nins(fx) &&
 	 view.nsnap == CX_NSNAP && view.nsnapmap == CX_NSNAPMAP &&
 	 view.spadjust == profile_spadjust(fx));
   expect_postra(fx, &view, 1);
+
+  marker = fx->ir[xsavepre];
+	original_site = (uint32_t)marker.op1 |
+	  ((uint32_t)marker.op2 << 15);
+  alternate_site = alternate_call_continuation(fx->pt, original_site);
+  assert(original_site != 0 && alternate_site != 0);
+
+  view = make_postra_view(fx);
+  fx->ir[xsavepre].op1 = (uint16_t)alternate_site;
+	fx->ir[xsavepre].op2 = (uint16_t)(alternate_site >> 15);
+  expect_postra(fx, &view, 0);
+
+  view = make_postra_view(fx);
+  fx->ir[xsavepre].op1 = 0;
+  fx->ir[xsavepre].op2 = 0;
+  expect_postra(fx, &view, 0);
+
+	view = make_postra_view(fx);
+	fx->ir[xsavepre].op2 = REF_BIAS;
+	expect_postra(fx, &view, 0);
 
   view = make_postra_view(fx);
   decoy.traceno = (TraceNo1)(trace_traceno_acq(fx->owner)+1u);

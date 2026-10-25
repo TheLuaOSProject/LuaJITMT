@@ -7,7 +7,6 @@
 #define LUA_CORE
 
 #include "lj_obj.h"
-#include <stdio.h>
 
 #if LJ_HASJIT && LJ_HASFFI
 
@@ -2485,9 +2484,8 @@ static int crec_call_indirect_struct_result(CTInfo info, CTSize size)
 }
 
 #if LJ_HASJIT_FFI_CALLXS && LJ_TARGET_ARM64
-/* Keep the Darwin ARM64 CALLXS certificates at the recorder boundary: one
-** direct single-argument CDECL function cdata with an exactly admitted
-** argument/result pair. */
+/* Keep Darwin ARM64 CALLXS limited to CTypes with a proven direct ABI
+** classification. */
 static int crec_call_arm64_admit(jit_State *J, CTState *cts,
 				  const GCcdata *cd, const CType *ct,
 				  CTypeID id, CTInfo info)
@@ -2518,6 +2516,72 @@ static TRef crec_call_trace(jit_State *J)
   }
 }
 
+#if LJ_HASJIT_FFI_CALLXS && LJ_TARGET_ARM64
+static uint32_t crec_callxs_site(jit_State *J)
+{
+  cTValue *frame = J->L->base-1;
+  const BCIns *returnpc = frame_pc(frame);
+  GCobj *startpt;
+  GCproto *pt;
+  uintptr_t bcbase, pcaddr;
+  uintptr_t stackbase, frameaddr, calleraddr, stackend;
+  size_t bcbytes, stackbytes;
+  BCIns callins;
+  BCReg cbase;
+  cTValue *callerframe;
+  GCfunc *caller;
+  uintptr_t offset;
+  if (!frame_islua(frame) || returnpc == NULL) {
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+  }
+  startpt = trace_startptgco_acq(&J->cur);
+  if (startpt == NULL || !checkptrGC(startpt) ||
+      startpt->gch.gct != (uint32_t)~LJ_TPROTO)
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+  pt = gco2pt(startpt);
+  if ((size_t)pt->sizebc > SIZE_MAX / sizeof(BCIns))
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+  /* The live Lua frame gives the exact caller proto. Establish bytecode-array
+  ** ownership and alignment before dereferencing its saved return PC. */
+  bcbase = (uintptr_t)(const void *)proto_bc(pt);
+  pcaddr = (uintptr_t)(const void *)returnpc;
+  bcbytes = (size_t)pt->sizebc * sizeof(BCIns);
+  if (pcaddr < bcbase || pcaddr - bcbase < sizeof(BCIns) ||
+      pcaddr - bcbase >= bcbytes ||
+      (pcaddr - bcbase) % sizeof(BCIns) != 0)
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+  callins = returnpc[-1];
+  if (!(bc_op(callins) == BC_CALL || bc_op(callins) == BC_CALLM ||
+	bc_op(callins) == BC_ITERC))
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+  cbase = bc_a(callins);
+  if (cbase >= pt->framesize ||
+      (size_t)J->L->stacksize > SIZE_MAX / sizeof(TValue))
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+  stackbase = (uintptr_t)(void *)mref(J->L->stack, TValue);
+  frameaddr = (uintptr_t)(void *)frame;
+  stackbytes = (size_t)J->L->stacksize * sizeof(TValue);
+  if (stackbase > UINTPTR_MAX-stackbytes)
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+  stackend = stackbase+stackbytes;
+  if (frameaddr < stackbase || frameaddr >= stackend ||
+      frameaddr-stackbase < (uintptr_t)(cbase+1u+LJ_FR2)*sizeof(TValue))
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+  calleraddr = frameaddr-(uintptr_t)(cbase+1u+LJ_FR2)*sizeof(TValue);
+  if (calleraddr < stackbase || calleraddr >= stackend ||
+	  calleraddr-stackbase < sizeof(TValue))
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+  callerframe = (cTValue *)(void *)calleraddr;
+  caller = frame_func(callerframe);
+  if (!isluafunc(caller) || funcproto(caller) != pt)
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+  offset = (pcaddr - bcbase) / sizeof(BCIns);
+  if (offset == 0 || offset >= LJ_MAX_BCINS)
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+  return (uint32_t)offset;
+}
+#endif
+
 /* Record a function call through the single generic CALLXS path. */
 static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
 {
@@ -2537,6 +2601,9 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
   if (ctype_isfunc(info)) {
     TRef callargs[CCI_NARGS_MAX];
     TRef args, entered, func, callfunc, tr, result_box, result_payload;
+#if LJ_HASJIT_FFI_CALLXS && LJ_TARGET_ARM64
+    uint32_t callsite;
+#endif
     CType ctrsnap;
     CType *ctr;
     CTypeID result_id, raw_result_id, result_box_id;
@@ -2568,6 +2635,9 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
 #if LJ_HASJIT_FFI_CALLXS && LJ_TARGET_ARM64
     if (!crec_call_arm64_admit(J, cts, cd, ct, id, info))
       lj_trace_err(J, LJ_TRERR_NYICALL);
+#endif
+#if LJ_HASJIT_FFI_CALLXS && LJ_TARGET_ARM64
+    callsite = crec_callxs_site(J);
 #endif
 
     func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
@@ -2659,14 +2729,22 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
 			      lj_ir_kintp(J, sizeof(GCcdata)));
       J->base[oldmax] = result_box;
       J->maxslot = oldmax + 1;
+#if LJ_HASJIT_FFI_CALLXS && LJ_TARGET_ARM64
+      lj_ffrecord_xsave_callxs(J, callsite);
+#else
       lj_ffrecord_xsave(J);
+#endif
       J->cur.snap[J->cur.nsnap-1].count = SNAPCOUNT_DONE;
       J->maxslot = oldmax;
       J->base[oldmax] = 0;
       lj_snap_add(J);
       J->cur.snap[J->cur.nsnap-1].count = SNAPCOUNT_DONE;
     } else {
+#if LJ_HASJIT_FFI_CALLXS && LJ_TARGET_ARM64
+      lj_ffrecord_xsave_callxs(J, callsite);
+#else
       lj_ffrecord_xsave(J);
+#endif
       J->cur.snap[J->cur.nsnap-1].count = SNAPCOUNT_DONE;
     }
 

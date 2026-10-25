@@ -699,6 +699,26 @@ void lj_ffrecord_xsave(jit_State *J)
 #endif
 }
 
+/* Record the originating caller continuation on an ARM64 FFI XSAVE marker.
+** This value comes from the live Lua frame and remains independent of the
+** mutable exit snapshot map used to restore that frame. */
+void lj_ffrecord_xsave_callxs(jit_State *J, uint32_t callsite)
+{
+#if LJ_HASJIT_FFI_CALLXS && LJ_TARGET_ARM64
+  IRRef ref;
+  lj_snap_add(J);
+  lj_ir_set(J, IRT(IR_XSAVE, IRT_NIL), callsite & 0x7fffu,
+	    callsite >> 15);
+  ref = tref_ref(lj_ir_emit(J));
+  lj_assertJ(J->cur.nsnap != 0 && J->cur.snap[J->cur.nsnap-1].ref == ref,
+	     "XSAVE snapshot does not name marker IR");
+  UNUSED(ref);
+#else
+  UNUSED(callsite);
+  lj_ffrecord_xsave(J);
+#endif
+}
+
 static void LJ_FASTCALL recff_math_abs(jit_State *J, RecordFFData *rd)
 {
   TRef tr = lj_ir_tonum(J, J->base[0]);

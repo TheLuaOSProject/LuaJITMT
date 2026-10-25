@@ -658,3 +658,29 @@ instrumented helper samples with deferred retired arrays, not full collector
 tail latency or release-speed claims. Commands, profiles, raw percentiles and
 limitations are in
 [`lockless-progress-contracts-and-ci-profile-2026-10-25.md`](lockless-progress-contracts-and-ci-profile-2026-10-25.md).
+
+## FFI source authority and independent snapshot regressions
+
+CALLXS XSAVE markers now carry the recorded source continuation as two bounded
+literal halves. Both validators bind completed-call and allocation snapshots
+to that authority; a different valid CALL in the same prototype is insufficient.
+An isolated allocation-frame constant mutation was accepted by the old gate
+and is rejected by both fixed walkers. Folding emits ordered XSAVE markers
+before inspecting literal operands. Allocator suffix checks exclude self,
+forward, metadata and constant-payload RENAME sources and conflicting registers.
+
+The complete native ARM64 M7 passed on frozen private `20e326cd` before
+integration, including the large-source native-call witness, mixed ABI banks,
+multiple calls, pointer roots, errno, callbacks, C++ unwind and remote GC/flush.
+Log: `/tmp/ljmt-anchor-integrated-m7-20e326cd.log`. The stronger witness found a
+double-subtracted register mask; using the already filtered `RSET_GPR` admits
+the valid X19 allocation while reserved-register negatives still reject.
+Details and the corrected history of early private validation are in
+[`arm64-callxs-source-identity.md`](arm64-callxs-source-identity.md).
+
+The shared XSAVE literal/fold change also passed both 509-case x86-64/Rosetta
+stock corpora, errno and generated foreign-call/callback-stack tests; see
+[`x64-rosetta-xsaveliteral-final-regression-815e7d5e-2026-10-25.md`](x64-rosetta-xsaveliteral-final-regression-815e7d5e-2026-10-25.md).
+The subsequent source-identity and register-mask changes are ARM64-only.
+Final combined gates and additional semantic caller-footer negatives remain
+pending; this focused pass does not replace them.

@@ -40,8 +40,8 @@
 #error "t-arm64-jit-callxs-pointer-admission requires experimental ARM64 CALLXS"
 #endif
 
-/* Mirror the deliberately private pointer geometry in
-** lj_asm_arm64_admit.h. Keep it local to the mutation fixture. */
+/* Pin one authentic pointer trace for independent mutations. Production
+** admission does not depend on these fixture-local IR ordinals. */
 enum {
   PX_K_ZERO = REF_TRUE-19u,
   PX_K_TRACE = REF_TRUE-18u,
@@ -230,9 +230,13 @@ static void assert_bad_signature(lua_State *L, CTypeID id)
 	 ctype_sib_acq(&arg) == 0);
 }
 
+static MSize find_bc_opcode(const GCproto *pt, BCOp op, MSize occurrence);
+
 static GCtrace *find_exact_pointer_trace(jit_State *J, PointerFixture *fx)
 {
   TraceNo traceno;
+  MSize loopindex = find_bc_opcode(fx->pt, BC_FORL, 0);
+  if (loopindex == UINT_MAX) return NULL;
   for (traceno = 1; (MSize)traceno < trace_sizetrace_acq(J); traceno++) {
     GCtrace *T = traceref_safe(J, traceno);
     const IRIns *ir;
@@ -240,7 +244,7 @@ static GCtrace *find_exact_pointer_trace(jit_State *J, PointerFixture *fx)
     if (!trace_runnable_acq(T, traceno) || trace_root_acq(T) != 0 ||
 	trace_startpt_acq(T) != fx->pt ||
 	bc_op(trace_startins_acq(T)) != BC_FORL ||
-	trace_startpc_acq(T) != proto_bc(fx->pt)+10 ||
+	trace_startpc_acq(T) != proto_bc(fx->pt)+loopindex ||
 	trace_nins_acq(T) != PX_PUBLISHED_NINS ||
 	trace_nk_acq(T) != PX_K_ZERO || trace_nsnap_acq(T) != PX_NSNAP ||
 	trace_nsnapmap_acq(T) != PX_NSNAPMAP ||
@@ -341,7 +345,6 @@ static void semantic_j_leave(jit_State *J, const SemanticJSave *save)
 
 static void expect_semantic_admit(jit_State *J, PointerFixture *fx)
 {
-  fprintf(stderr, "pointer semantic admit begin\n");
   LJArm64IRReject reject;
   int admitted = lj_asm_arm64_ir_admit(J, &fx->semantic, &reject);
   if (!admitted)
@@ -350,21 +353,18 @@ static void expect_semantic_admit(jit_State *J, PointerFixture *fx)
 	    (unsigned)reject.ref, (unsigned)reject.op,
 	    (unsigned)reject.detail);
   assert(admitted && reject.reason == LJ_ARM64_IR_REJECT_NONE);
-  fprintf(stderr, "pointer semantic admit end\n");
 }
 
 static void expect_semantic_reject_at(jit_State *J, PointerFixture *fx,
 	LJArm64IRRejectReason reason, IRRef ref, IROp op, uint16_t detail,
 	unsigned line)
 {
-  fprintf(stderr, "pointer semantic reject line %u begin\n", line);
   LJArm64IRReject reject;
   int admitted = lj_asm_arm64_ir_admit(J, &fx->semantic, &reject);
   (void)reason; (void)ref; (void)op; (void)detail;
   if (admitted)
 	fprintf(stderr, "pointer CALLXS corruption was admitted at %u\n", line);
   assert(!admitted);
-  fprintf(stderr, "pointer semantic reject line %u end\n", line);
 }
 
 #define expect_semantic_reject(J, fx, reason, ref, op, detail) \
@@ -400,7 +400,6 @@ static void expect_postra(LJArm64PostRAView *view, int admitted)
 {
 	static unsigned serial;
 	serial++;
-  fprintf(stderr, "pointer postra begin want=%d\n", admitted);
   IRRef semantic_nins = 0;
   int result = lj_asm_arm64_postra_admit(view, &semantic_nins);
   if (result != admitted)
@@ -409,24 +408,85 @@ static void expect_postra(LJArm64PostRAView *view, int admitted)
   assert(result == admitted);
   if (admitted)
     assert(semantic_nins == PX_SEMANTIC_NINS);
-  fprintf(stderr, "pointer postra end\n");
+}
+
+static MSize find_bc_opcode(const GCproto *pt, BCOp op, MSize occurrence)
+{
+	const BCIns *bc = proto_bc(pt);
+	MSize i;
+	for (i = 0; i < pt->sizebc; i++) {
+		BCOp current = bc_op(loadbc(&bc[i]));
+		if (current == op || (op == BC_FORL && current == BC_JFORL)) {
+			if (occurrence == 0) return i;
+			occurrence--;
+		}
+	}
+	return UINT_MAX;
+}
+
+/* Give only the allocation-owned meta snapshot a private frame-PC constant.
+** The published trace may share that constant with post-call snapshots. */
+static IRRef isolate_allocation_frame_pc(PointerFixture *fx)
+{
+  MSize s, i;
+  IRRef detached = trace_nk_acq(fx->owner)-2u;
+  for (s = 0; s < PX_NSNAP; s++) {
+    IRRef at = snap_ref_acq(&fx->snap[s]);
+    IRRef next = s+1u < PX_NSNAP ? snap_ref_acq(&fx->snap[s+1u]) :
+      PX_SEMANTIC_NINS;
+    MSize ofs, nent;
+    if (at > PX_R_BOX_PRE || next <= PX_R_BOX_PRE) continue;
+    ofs = snap_mapofs_acq(&fx->snap[s]);
+    nent = snap_nent_acq(&fx->snap[s]);
+    for (i = 0; i < nent; i++) {
+      SnapEntry se = fx->snapmap[ofs+i];
+      IRRef value = snap_ref(se);
+      if (!(se & SNAP_FRAME) || value >= REF_TRUE ||
+          fx->ir[value].o != IR_KNUM) continue;
+      assert(fx->ir[value+1u].tv.u64 ==
+        (uint64_t)(uintptr_t)(proto_bc(fx->pt)+
+          find_bc_opcode(fx->pt, BC_CALL, 0)+1u));
+      fx->ir[detached] = fx->ir[value];
+      fx->ir[detached+1u] = fx->ir[value+1u];
+      fx->snapmap[ofs+i] = (se & ~(SnapEntry)UINT16_MAX) | detached;
+      return detached;
+    }
+  }
+  assert(!"allocation-owned meta snapshot is missing");
+  return 0;
 }
 
 static void test_semantic(jit_State *J, PointerFixture *fx)
 {
   const BCIns *bc = proto_bc(fx->pt);
-  BCIns saved_start = loadbc(&bc[10]);
+  MSize loopindex = find_bc_opcode(fx->pt, BC_FORL, 0);
+  MSize callindex = find_bc_opcode(fx->pt, BC_CALL, 0);
+  BCIns saved_start;
   BCIns saved_call;
   SemanticJSave save;
   IRRef saved_loopref;
   uint64_t pcbase;
 
-  assert(bc_op(fx->owner->startins) == BC_FORL);
-  bc_publish((const uint32_t *)&bc[10], fx->owner->startins);
+  assert(loopindex != UINT_MAX && callindex != UINT_MAX &&
+	 bc_op(fx->owner->startins) == BC_FORL);
+  saved_start = loadbc(&bc[loopindex]);
+  bc_publish((const uint32_t *)&bc[loopindex], fx->owner->startins);
   save = semantic_j_enter(J, fx);
 
   reset_semantic_clone(fx);
   expect_semantic_admit(J, fx);
+
+  reset_semantic_clone(fx);
+  {
+    IRRef frame = isolate_allocation_frame_pc(fx);
+    MSize alternate = find_bc_opcode(fx->pt, BC_CALL, 1);
+    assert(alternate != UINT_MAX && alternate != callindex);
+    fx->semantic.nk = frame;
+    expect_semantic_admit(J, fx);
+    fx->ir[frame+1u].tv.u64 = (uint64_t)(uintptr_t)(bc+alternate+1u);
+    expect_semantic_reject(J, fx, LJ_ARM64_IR_REJECT_SNAPSHOT,
+      PX_R_BOX_PRE, IR_CNEW, 0);
+  }
 
   reset_semantic_clone(fx);
   ir_kgc_publish(&fx->ir[PX_K_TRACE], obj2gco(fx->owner), IRT_P64);
@@ -460,12 +520,12 @@ static void test_semantic(jit_State *J, PointerFixture *fx)
   J->loopref = saved_loopref;
 
   reset_semantic_clone(fx);
-  saved_call = loadbc(&bc[8]);
+  saved_call = loadbc(&bc[callindex]);
   assert(bc_op(saved_call) == BC_CALL && bc_b(saved_call) == 2);
-  bc_publish((const uint32_t *)&bc[8],
+  bc_publish((const uint32_t *)&bc[callindex],
 	BCINS_ABC(BC_CALL, bc_a(saved_call), 3, bc_c(saved_call)));
 	expect_semantic_admit(J, fx);
-  bc_publish((const uint32_t *)&bc[8], saved_call);
+  bc_publish((const uint32_t *)&bc[callindex], saved_call);
 
   reset_semantic_clone(fx);
   fx->ir[PX_R_STRING_PTR].op2 = PX_K_PAYLOAD_OFS;
@@ -511,7 +571,7 @@ static void test_semantic(jit_State *J, PointerFixture *fx)
 	PX_R_XSAVE_PRE, IR_XSAVE, 11);
 
   semantic_j_leave(J, &save);
-  bc_publish((const uint32_t *)&bc[10], saved_start);
+  bc_publish((const uint32_t *)&bc[loopindex], saved_start);
 }
 
 static void test_postra(PointerFixture *fx)
@@ -523,13 +583,25 @@ static void test_postra(PointerFixture *fx)
   TraceNo owner_no = trace_traceno_acq(fx->owner);
   TraceNo wrong_no = owner_no == 1 ? 2 : 1;
   uint64_t saved_pcbase;
+  MSize loopindex = find_bc_opcode(fx->pt, BC_FORL, 0);
 
   view = make_postra_view(fx);
   assert(view.nins == PX_PUBLISHED_NINS && view.nk == PX_K_ZERO &&
 	 view.nsnap == PX_NSNAP && view.nsnapmap == PX_NSNAPMAP &&
 	 view.spadjust == 16 && view.root_topslot == 11 &&
-	 view.proto_sizebc == 13 && view.proto_numparams == 3);
+	 view.proto_sizebc == fx->pt->sizebc && view.proto_numparams == 3);
   expect_postra(&view, 1);
+
+  view = make_postra_view(fx);
+  {
+    IRRef frame = isolate_allocation_frame_pc(fx);
+    MSize alternate = find_bc_opcode(fx->pt, BC_CALL, 1);
+    assert(alternate != UINT_MAX);
+    view.nk = frame;
+    expect_postra(&view, 1);
+    fx->ir[frame+1u].tv.u64 = (uint64_t)(uintptr_t)(bc+alternate+1u);
+    expect_postra(&view, 0);
+  }
 
 	/* Keep the footer aligned and inside the prototype, but move the
 	** completed-call continuation back before its BC_CALL. */
@@ -548,12 +620,12 @@ static void test_postra(PointerFixture *fx)
 	expect_postra(&view, 1);
 
   view = make_postra_view(fx);
-  saved_start = loadbc(&bc[10]);
+  saved_start = loadbc(&bc[loopindex]);
   assert(bc_op(saved_start) == BC_JFORL && wrong_no != owner_no);
-  bc_publish((const uint32_t *)&bc[10],
+  bc_publish((const uint32_t *)&bc[loopindex],
 	BCINS_AD(BC_JFORL, bc_a(view.startins), wrong_no));
   expect_postra(&view, 0);
-  bc_publish((const uint32_t *)&bc[10], saved_start);
+  bc_publish((const uint32_t *)&bc[loopindex], saved_start);
 
   view = make_postra_view(fx);
   view.nins--;
@@ -577,9 +649,78 @@ static void test_postra(PointerFixture *fx)
 	expect_postra(&view, 1);
 
   view = make_postra_view(fx);
+  fx->ir[PX_SEMANTIC_NINS+1u].r = RID_D0;
+  expect_postra(&view, 0);
+
+  /* Tail metadata cannot supply a value, refer forward, or address a constant
+  ** payload. Start each corruption from the accepted published trace. */
+  view = make_postra_view(fx);
+  fx->ir[PX_SEMANTIC_NINS].op1 = PX_SEMANTIC_NINS;
+  expect_postra(&view, 0);
+
+  view = make_postra_view(fx);
+  fx->ir[PX_SEMANTIC_NINS].op1 = PX_SEMANTIC_NINS+1u;
+  expect_postra(&view, 0);
+
+  view = make_postra_view(fx);
+  fx->ir[PX_SEMANTIC_NINS+1u].op1 = PX_SEMANTIC_NINS;
+  expect_postra(&view, 0);
+
+  view = make_postra_view(fx);
+  fx->ir[PX_SEMANTIC_NINS].op1 = PX_K_TRACE+1u;
+  expect_postra(&view, 0);
+
+  view = make_postra_view(fx);
+  fx->ir[PX_SEMANTIC_NINS].op1 = PX_R_XSAVE_PRE;
+  expect_postra(&view, 0);
+
+  view = make_postra_view(fx);
+  fx->ir[PX_SEMANTIC_NINS].r = RID_MAX_FPR;
+  expect_postra(&view, 0);
+
+  view = make_postra_view(fx);
+  fx->ir[PX_SEMANTIC_NINS+1u].op1 = PX_R_STRING;
+  expect_postra(&view, 1);
+  fx->ir[PX_SEMANTIC_NINS+1u].r = fx->ir[PX_SEMANTIC_NINS].r;
+  expect_postra(&view, 0);
+
+  view = make_postra_view(fx);
+  {
+    IRIns rename = fx->ir[PX_SEMANTIC_NINS];
+    const SnapShot *snap = &view.snap[rename.op2];
+    MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap), i;
+    Reg alias = RID_NONE;
+    for (i = 0; i < nent; i++) {
+      IRRef value = snap_ref(snapentry_acq(&view.snapmap[ofs+i]));
+      IRIns live;
+      RegSP rs;
+      if (value == rename.op1 || irref_isk(value) || value >= view.nins)
+        continue;
+      live = fx->ir[value];
+      rs = live.prev;
+      if (!ra_hasspill(regsp_spill(rs)) && ra_hasreg(regsp_reg(rs)) &&
+	  rset_test(RSET_GPR, regsp_reg(rs))) {
+        alias = regsp_reg(rs);
+        break;
+      }
+    }
+    assert(alias != RID_NONE);
+    fx->ir[PX_SEMANTIC_NINS].r = alias;
+  }
+  expect_postra(&view, 0);
+
+  view = make_postra_view(fx);
   assert(fx->ir[PX_R_FUNCPTR].r == RID_X20 &&
 	 fx->ir[PX_R_FUNCPTR].s == SPS_NONE);
   fx->ir[PX_R_FUNCPTR].r = RID_X0;
+  expect_postra(&view, 0);
+
+  view = make_postra_view(fx);
+  fx->ir[PX_R_FUNCPTR].r = RID_X18;
+  expect_postra(&view, 0);
+
+  view = make_postra_view(fx);
+  fx->ir[PX_R_FUNCPTR].r = RID_DISPATCH;
   expect_postra(&view, 0);
 
   view = make_postra_view(fx);
@@ -647,6 +788,7 @@ int main(void)
     "function _G.__arm64_callxs_pointer_admission(fn, n, p)\n"
     "  local value\n"
     "  for _ = 1, n do value = fn(p) end\n"
+    "  if n == -1 then value = fn(p) end\n"
     "  return value\n"
     "end\n"
     "jit.flush()\n"
