@@ -254,11 +254,13 @@ static int32_t asm_fuseabase(ASMState *as, IRRef ref)
 
 LJ_STATIC_ASSERT((DISPATCH_TG(tmptv) & (sizeof(TValue)-1)) == 0);
 LJ_STATIC_ASSERT((DISPATCH_TG(tmptv2) & (sizeof(TValue)-1)) == 0);
+LJ_STATIC_ASSERT((DISPATCH_TG(tmptv3) & (sizeof(TValue)-1)) == 0);
 LJ_STATIC_ASSERT(DISPATCH_TG(tmptv) >= 0 &&
-		 DISPATCH_TG(tmptv2) < (4096 << 3));
+		 DISPATCH_TG(tmptv3) < (4096 << 3));
 
 static int32_t asm_tmpref_ofs(MSize mode)
 {
+  if (mode & IRTMPREF_IN3) return DISPATCH_TG(tmptv3);
   return (int32_t)((mode & (IRTMPREF_IN2|IRTMPREF_OUT2)) ?
 	DISPATCH_TG(tmptv2) : DISPATCH_TG(tmptv));
 }
@@ -842,7 +844,7 @@ static void asm_tvstore64(ASMState *as, Reg base, int32_t ofs, IRRef ref)
 /* Get pointer to TValue. */
 static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
 {
-  if ((mode & (IRTMPREF_IN1|IRTMPREF_IN2))) {
+  if ((mode & (IRTMPREF_IN1|IRTMPREF_IN2|IRTMPREF_IN3))) {
     IRIns *ir = IR(ref);
     if (irt_isnum(ir->t)) {
 	if (irref_isk(ref) && !(mode & (IRTMPREF_OUT1|IRTMPREF_OUT2))) {
@@ -855,7 +857,7 @@ static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
       asm_tvstore64(as, dest, 0, ref);
     }
   }
-  /* The current TG owns both temporary TValue roots while mcode is active. */
+  /* The current TG owns the temporary TValue roots while mcode is active. */
   emit_opk(as, A64I_ADDx, dest, RID_DISPATCH, asm_tmpref_ofs(mode),
 	   rset_exclude(RSET_GPR, dest));
 }

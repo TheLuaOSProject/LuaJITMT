@@ -123,6 +123,14 @@ available.
   type-change exits keep the existing runtime authorities.
 - Existing-key scalar stores and unsunk TNEW use their own publication and
   rooted-effect contracts; raw heap effects remain excluded.
+- GC-valued rooted reads and existing-key stores cover strings, tables,
+  functions, threads, userdata and opaque cdata. Their phase-gate lifetime
+  proof permits values across later helpers, full-width spills, PHIs and exit
+  restoration. Three distinct TG-local input slots feed the anchored store
+  helper. Native GC identity keys, mixed-value pressure and a deterministic
+  source-edge-removal/collector handoff pass on ARM64 and arm64e/BTI in both
+  assertion and release profiles; see
+  [`arm64-jit-rooted-gc-values-2026-10-25.md`](arm64-jit-rooted-gc-values-2026-10-25.md).
 - Scalar `FORL` supports constant and variable integer bounds/steps through
   def-use and source-control-flow checks. Scalar fixed-arity `FUNCF` supports
   bounded arithmetic, argument/cell loads and one scalar return.
@@ -162,12 +170,14 @@ available.
 - General ARM64 JIT IR admission for arbitrary Lua programs, unrestricted
   spill or register layouts, and general root geometries.
 - General table and upvalue JIT reads, writes and traversal, plus sunk/duplicate
-  allocation and raw initialization effects. Rooted scalar reads, existing-key
-  scalar stores and unsunk TNEW have operation proofs; forwarding-safe
+  allocation and raw initialization effects. Rooted scalar/GC reads,
+  existing-key scalar/GC stores and unsunk TNEW have operation proofs;
+  new-key insertion, nil/lightuserdata values and general metamethod paths
+  remain closed. Forwarding-safe
   interpreter `lj_vm_next` does not by itself open other JIT heap paths.
-  The read-only
+  The historical
   [`GC-value rooting audit`](arm64-gc-value-rooting-audit-2026-10-25.md)
-  describes the remaining value-lifetime boundary for rooted reads and stores.
+  links to the implemented rooted-value lifetime proof and its limits.
 - General side traces, side-of-side traces, stitches, and production JIT
   side-exit unwind resolution.
 - ARM64 CALLXS aggregates/sret, variadics, vectors, complex results and

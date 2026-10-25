@@ -93,6 +93,8 @@ LJ_ARM64_ROOTED_READ_RESTORE_XCFLAGS="$xcflags" \
 LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
   sh "$root/tools/ci/arm64_jit_rooted_store_contract.sh"
 LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+  sh "$root/tools/ci/arm64_jit_rooted_gc_contract.sh"
+LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
   sh "$root/tools/ci/arm64_jit_tnew_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_side_ir_admission_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_side_ingress_metadata_contract.sh"

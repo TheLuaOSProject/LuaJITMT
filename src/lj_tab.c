@@ -29,6 +29,14 @@
 
 #define LJ_TAB_MAXCHAIN		8u
 
+#ifdef LJ_TAB_TEST_HELPERS
+static LJTabRootedGCReadHook tab_test_rooted_gc_read_hook;
+void lj_tab_test_set_rooted_gc_read_hook(LJTabRootedGCReadHook hook)
+{
+  tab_test_rooted_gc_read_hook = hook;
+}
+#endif
+
 #if defined(LJ_GC2_TEST_HELPERS)
 static uint32_t tab_test_forjit_lease_pause;
 static uint32_t tab_test_forjit_lease_paused;
@@ -5079,11 +5087,23 @@ int lj_tab_gettv_rooted_try(lua_State *L, cTValue *tabroot,
 int lj_tab_gettv_rooted_hit_try(lua_State *L, cTValue *tabroot,
 				 cTValue *keyroot, TValue *outroot)
 {
+  int found;
+#ifdef LJ_TAB_TEST_HELPERS
+  int outstack = outroot && tab_key_on_stack(L, outroot);
+  ptrdiff_t outofs = outstack ? savestack(L, outroot) : 0;
+#endif
   /* Meta callers have not allocated their chain roots yet. A miss/refusal
   ** must preserve both original inputs, including an aliased output, so the
   ** general chain can capture them after this complete retaining interval. */
-  return tab_gettv_rooted_try_impl(L, tabroot, keyroot, NULL, outroot, 1) ==
-	 LJ_TAB_ROOTED_GET_FOUND;
+  found = tab_gettv_rooted_try_impl(L, tabroot, keyroot, NULL, outroot, 1) ==
+	  LJ_TAB_ROOTED_GET_FOUND;
+#ifdef LJ_TAB_TEST_HELPERS
+  /* The implementation has ended SMR and all leases before observers run. */
+  if (outstack) outroot = restorestack(L, outofs);
+  if (found && outroot && tvisgcv(outroot) && tab_test_rooted_gc_read_hook)
+    tab_test_rooted_gc_read_hook(L, outroot);
+#endif
+  return found;
 }
 
 #if LJ_HASJIT && LJ_HASFFI
@@ -7779,9 +7799,14 @@ LJ_FUNCA int32_t lj_tab_storetv_existing_forjit(lua_State *L, GCtab *parent,
 
 #ifdef LJ_TAB_TEST_HELPERS
 static LJTabRootedStoreHook tab_test_rooted_store_hook;
+static LJTabRootedGCStoreHook tab_test_rooted_gc_store_hook;
 void lj_tab_test_set_rooted_store_hook(LJTabRootedStoreHook hook)
 {
   tab_test_rooted_store_hook = hook;
+}
+void lj_tab_test_set_rooted_gc_store_hook(LJTabRootedGCStoreHook hook)
+{
+  tab_test_rooted_gc_store_hook = hook;
 }
 #endif
 
@@ -7826,8 +7851,8 @@ static int32_t tab_storescalar_rooted(lua_State *L, cTValue *tabroot,
   lj_tv_load_acq(&tablev, tabroot);
   lj_tv_load_acq(&keyv, keyroot);
   if (!tvistab(&tablev) ||
-      !(tvisstr(&keyv) || tvisnumber(&keyv) || tvisbool(&keyv)) ||
-      (tvisnum(&keyv) && tvisnan(&keyv)) ||
+      !(tvisstr(&keyv) || tvisnumber(&keyv) || tvisbool(&keyv) ||
+	tvisgcv(&keyv)) || !tab_keyed_slot_key_valid(&keyv) ||
       lj_gc2_tv_lease_acquire(owner.g, &tablev, &table_lease) !=
 	LJ_GC2_TV_EDGE_VALID ||
       lj_gc2_tv_lease_acquire(owner.g, &keyv, &key_lease) !=
@@ -7886,6 +7911,106 @@ int32_t lj_tab_storebool_rooted(lua_State *L, cTValue *tabroot,
   TValue value;
   setboolV(&value, boolean != 0);
   return tab_storescalar_rooted(L, tabroot, keyroot, &value);
+}
+
+/* Existing-key GC value store. All three caller roots are copied into one
+** owner-local anchor set before any retaining interval. The anchors, not the
+** incoming stack/scratch cells, authorize the store after a cooperative wait. */
+int32_t lj_tab_storegc_rooted(lua_State *L, cTValue *tabroot,
+			      cTValue *keyroot, cTValue *valueroot)
+{
+  TabKeyedSlotOwnerSnapshot owner;
+  LJGC2Lease table_lease = { 0 }, key_lease = { 0 }, value_lease = { 0 };
+  LJOSerrState oserr;
+  TValue tablev, keyv, valuev, confirm, nilv;
+  TValue *tableanchor = NULL, *keyanchor = NULL, *valueanchor = NULL;
+  uint32_t tableidx = 0, keyidx = 0, valueidx = 0;
+  ptrdiff_t tabofs = 0, keyofs = 0, valueofs = 0;
+  int tabstack, keystack, valuestack, smr = 0;
+  int32_t result = 0;
+
+  lj_oserr_save(&oserr);
+  if (!L || !tabroot || !keyroot || !valueroot ||
+      !tab_keyed_slot_owner_snapshot(L, &owner))
+    goto done;
+  tabstack = tab_key_on_stack(L, tabroot);
+  keystack = tab_key_on_stack(L, keyroot);
+  valuestack = tab_key_on_stack(L, valueroot);
+  if (tabstack) tabofs = savestack(L, (TValue *)(void *)tabroot);
+  if (keystack) keyofs = savestack(L, (TValue *)(void *)keyroot);
+  if (valuestack) valueofs = savestack(L, (TValue *)(void *)valueroot);
+  setnilV(&nilv);
+  if (!lj_tg_root_anchor_reserve_nothrow(L, owner.tg))
+    goto done;
+  tableanchor = lj_tg_root_anchor_push(L, owner.tg, &nilv, &tableidx);
+  if (!lj_tg_root_anchor_reserve_nothrow(L, owner.tg))
+    goto leave;
+  keyanchor = lj_tg_root_anchor_push(L, owner.tg, &nilv, &keyidx);
+  if (!lj_tg_root_anchor_reserve_nothrow(L, owner.tg))
+    goto leave;
+  valueanchor = lj_tg_root_anchor_push(L, owner.tg, &nilv, &valueidx);
+  if (tabstack) tabroot = restorestack(L, tabofs);
+  if (keystack) keyroot = restorestack(L, keyofs);
+  if (valuestack) valueroot = restorestack(L, valueofs);
+  if (!tab_keyed_slot_owner_current(L, &owner) ||
+      !lj_gc2_smr_read_try(owner.g))
+    goto leave;
+  smr = 1;
+  lj_tv_load_acq(&tablev, tabroot);
+  lj_tv_load_acq(&keyv, keyroot);
+  lj_tv_load_acq(&valuev, valueroot);
+  if (!tvistab(&tablev) ||
+      !(tvisstr(&keyv) || tvisnumber(&keyv) || tvisbool(&keyv) ||
+	tvisgcv(&keyv)) || !tab_keyed_slot_key_valid(&keyv) ||
+      !tvisgcv(&valuev) ||
+      lj_gc2_tv_lease_acquire(owner.g, &tablev, &table_lease) !=
+	LJ_GC2_TV_EDGE_VALID ||
+      lj_gc2_tv_lease_acquire(owner.g, &keyv, &key_lease) !=
+	LJ_GC2_TV_EDGE_VALID ||
+      lj_gc2_tv_lease_acquire(owner.g, &valuev, &value_lease) !=
+	LJ_GC2_TV_EDGE_VALID)
+    goto leave;
+  lj_tv_load_acq(&confirm, tabroot);
+  if (tv_rawload(&confirm) != tv_rawload(&tablev))
+    goto leave;
+  lj_tv_load_acq(&confirm, keyroot);
+  if (tv_rawload(&confirm) != tv_rawload(&keyv))
+    goto leave;
+  lj_tv_load_acq(&confirm, valueroot);
+  if (tv_rawload(&confirm) != tv_rawload(&valuev) ||
+      !tab_keyed_slot_owner_current(L, &owner))
+    goto leave;
+  copyTVrel(L, tableanchor, &tablev);
+  copyTVrel(L, keyanchor, &keyv);
+  copyTVrel(L, valueanchor, &valuev);
+  lj_gc2_smr_read_leave(owner.g);
+  smr = 0;
+  lj_gc_pubroot(L, tableanchor);
+  lj_gc_pubroot(L, keyanchor);
+  lj_gc_pubroot(L, valueanchor);
+  lj_gc2_lease_release(&value_lease);
+  lj_gc2_lease_release(&key_lease);
+  lj_gc2_lease_release(&table_lease);
+#ifdef LJ_TAB_TEST_HELPERS
+  if (tab_test_rooted_gc_store_hook)
+    tab_test_rooted_gc_store_hook(L, tableanchor, keyanchor, valueanchor);
+#endif
+  lj_oserr_restore(&oserr);
+  result = lj_tab_storetv_existing_forjit(L, tabV(tableanchor), keyanchor,
+					  valueanchor);
+  if (result && tvisstr(keyanchor))
+    lj_tab_nomm_rel(tabV(tableanchor), 0);
+leave:
+  if (smr) lj_gc2_smr_read_leave(owner.g);
+  lj_gc2_lease_release(&value_lease);
+  lj_gc2_lease_release(&key_lease);
+  lj_gc2_lease_release(&table_lease);
+  if (valueanchor) lj_tg_root_anchor_pop(owner.tg, valueidx);
+  if (keyanchor) lj_tg_root_anchor_pop(owner.tg, keyidx);
+  if (tableanchor) lj_tg_root_anchor_pop(owner.tg, tableidx);
+done:
+  lj_oserr_restore(&oserr);
+  return result;
 }
 
 #ifdef LJ_TAB_TEST_HELPERS

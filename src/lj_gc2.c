@@ -9602,6 +9602,8 @@ static int gc2_scan_owner_tg_roots(global_State *g, TGState *tg)
     gc2_mark_thread_root_tv(g, &tv);
     lj_tv_load_acq(&tv, &tg->tmptv2);
     gc2_mark_thread_root_tv(g, &tv);
+    lj_tv_load_acq(&tv, &tg->tmptv3);
+    gc2_mark_thread_root_tv(g, &tv);
   }
   /* Table resize/retry helpers publish transient keys here instead of L->top.
   ** The block walk also roots dynamically extended anchor backing storage. */

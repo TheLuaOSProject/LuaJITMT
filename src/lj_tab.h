@@ -460,12 +460,15 @@ LJ_FUNC int lj_tab_getscalar_rooted_try(lua_State *L, cTValue *tabroot,
 ** Unlike the read try helper, this may allocate anchor storage and retry/park;
 ** zero after a raced store is not a promise that no earlier CAS occurred.
 ** No raw vector pointer or temporary lease crosses a wait. String-key success
-** also invalidates the negative metamethod cache. The value has no GC edge;
-** GC-valued stores, new keys and metamethod dispatch use the ordinary path. */
+** also invalidates the negative metamethod cache. The scalar forms below carry
+** no GC edge; the separate GC form accepts only an exactly rooted GC value.
+** Both forms accept ordinary visible keys including GC identity keys. */
 LJ_FUNC int32_t lj_tab_storenum_rooted(lua_State *L, cTValue *tabroot,
 				    cTValue *keyroot, lua_Number number);
 LJ_FUNC int32_t lj_tab_storebool_rooted(lua_State *L, cTValue *tabroot,
 				     cTValue *keyroot, int32_t boolean);
+LJ_FUNC int32_t lj_tab_storegc_rooted(lua_State *L, cTValue *tabroot,
+				    cTValue *keyroot, cTValue *valueroot);
 /* Copy one semantic value starting from an authoritative table TValue root.
 ** The helper retains the exact parent, key and result incarnations across its
 ** current-generation SMR read, and release-publishes into an already
@@ -545,6 +548,13 @@ typedef void (*LJTabStorePostCasHook)(lua_State *L, GCtab *t, TValue *dst,
 typedef void (*LJTabRootedStoreHook)(lua_State *L, TValue *tabroot,
 				  TValue *keyroot);
 LJ_FUNC void lj_tab_test_set_rooted_store_hook(LJTabRootedStoreHook hook);
+typedef void (*LJTabRootedGCStoreHook)(lua_State *L, TValue *tabroot,
+				       TValue *keyroot, TValue *valueroot);
+LJ_FUNC void lj_tab_test_set_rooted_gc_store_hook(
+				       LJTabRootedGCStoreHook hook);
+typedef void (*LJTabRootedGCReadHook)(lua_State *L, cTValue *outroot);
+LJ_FUNC void lj_tab_test_set_rooted_gc_read_hook(
+				       LJTabRootedGCReadHook hook);
 typedef void (*LJTabRootedReaderRetryHook)(lua_State *L, GCtab *t,
 					   int reader);
 /* Test-only one-shot hook immediately before rooted length validates its

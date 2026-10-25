@@ -349,7 +349,7 @@ struct TGState {
   GCobj *gcroot_pending;
   GCobj *gcroot_pending_after_main;
   SBuf tmpbuf;
-  TValue tmptv, tmptv2;
+  TValue tmptv, tmptv2, tmptv3;
   TGRootAnchorBlock root_anchor;
   uint32_t root_anchor_top;
   PRNGState prng;

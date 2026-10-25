@@ -2034,6 +2034,7 @@ static IRType rec_idx_mt_shared_sample(jit_State *J, RecordIndex *ix,
   uint32_t anchorbase = lj_tg_root_anchor_top_acq(tg);
   uint64_t scratch1 = tg->tmptv.u64;
   uint64_t scratch2 = tg->tmptv2.u64;
+  uint64_t scratch3 = tg->tmptv3.u64;
 #endif
   /*
   ** ix carries recorder snapshots, not roots enumerated by GC2. Materialize
@@ -2074,7 +2075,8 @@ static IRType rec_idx_mt_shared_sample(jit_State *J, RecordIndex *ix,
   }
   lj_tg_root_anchor_pop(tg, keyidx);
   lj_tg_root_anchor_pop(tg, parentidx);
-  lj_assertJ(tg->tmptv.u64 == scratch1 && tg->tmptv2.u64 == scratch2,
+  lj_assertJ(tg->tmptv.u64 == scratch1 && tg->tmptv2.u64 == scratch2 &&
+             tg->tmptv3.u64 == scratch3,
 	     "rooted recorder lookup clobbered VM comparison scratch");
   lj_assertJ(lj_tg_root_anchor_top_acq(tg) == anchorbase,
 	     "rooted recorder lookup leaked a root anchor");
@@ -2090,10 +2092,17 @@ static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t)
 				   IRTMPREF_IN1|IRTMPREF_OUT1);
   TRef key = rec_tmpref_mode(J, ix->key, IRTMPREF_IN2);
 #if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
-  if (t == IRT_NUM || t == IRT_INT || t == IRT_TRUE || t == IRT_FALSE) {
-    /* A bounded scalar hit attempt never waits. Its false result side-exits
-    ** before the rooted output is consumed. */
-    TRef found = lj_ir_call(J, IRCALL_lj_tab_getscalar_rooted_try,
+  if (t == IRT_NUM || t == IRT_INT || t == IRT_TRUE || t == IRT_FALSE ||
+      t == IRT_STR || t == IRT_TAB || t == IRT_FUNC || t == IRT_THREAD ||
+      t == IRT_UDATA || t == IRT_CDATA) {
+    /* A bounded hit attempt never waits. Its false result side-exits before
+    ** the rooted output is consumed. GC hits publish the result before their
+    ** lease ends; the JIT phase lease then spans every later native use until
+    ** an exit restores the snapshot into the Lua stack. */
+    IRCallID helper = (t == IRT_NUM || t == IRT_INT ||
+                      t == IRT_TRUE || t == IRT_FALSE) ?
+      IRCALL_lj_tab_getscalar_rooted_try : IRCALL_lj_tab_gettv_rooted_hit_try;
+    TRef found = lj_ir_call(J, helper,
 			    parentout, key, parentout);
     J->mergesnap = 0;
     emitir(IRTGI(IR_NE), found, lj_ir_kint(J, 0));
@@ -2571,6 +2580,16 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 	  parent = rec_tmpref_mode(J, ix->tab, IRTMPREF_IN1);
 	  key = rec_tmpref_mode(J, ix->key, IRTMPREF_IN2);
 	  ok = lj_ir_call(J, helper, parent, key, value);
+	  emitir(IRTGI(IR_NE), ok, lj_ir_kint(J, 0));
+	  J->needsnap = 1;
+	  return 0;
+	}
+	if (tref_isgcv(ix->val)) {
+	  TRef parent = rec_tmpref_mode(J, ix->tab, IRTMPREF_IN1);
+	  TRef key = rec_tmpref_mode(J, ix->key, IRTMPREF_IN2);
+	  TRef value = rec_tmpref_mode(J, ix->val, IRTMPREF_IN3);
+	  TRef ok = lj_ir_call(J, IRCALL_lj_tab_storegc_rooted,
+			      parent, key, value);
 	  emitir(IRTGI(IR_NE), ok, lj_ir_kint(J, 0));
 	  J->needsnap = 1;
 	  return 0;

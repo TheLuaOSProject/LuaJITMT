@@ -16,7 +16,8 @@ review boundary for both x86-64 and Apple ARM64 work.
   recorder ownership, and safepoint requests TG-local unless a protocol
   explicitly publishes shared immutable state.
 - Generated `IR_TMPREF` storage belongs to the executing TG. `IN1`/`OUT1`
-  address `tmptv`; `IN2`/`OUT2` address `tmptv2`. Never alias the two slots or
+  address `tmptv`; `IN2`/`OUT2` address `tmptv2`; input-only `IN3` addresses
+  `tmptv3`. Never alias these slots or
   regress generated code to universe-global scratch storage.
 
 ## Publication and weak ordering
@@ -51,6 +52,12 @@ review boundary for both x86-64 and Apple ARM64 work.
 - New ARM64 IR shapes stay fail-closed until source bytecode, semantic IR,
   post-register-allocation layout, snapshots, emitted instructions, exits,
   lifecycle, and adjacent negative shapes are independently certified.
+- A GC pointer in a native register or spill is not an enumerated root.
+  Rooted read helpers must publish/mark/rescue their result before releasing
+  its object lease. Subsequent native uses rely on the GC2 phase/reclamation
+  gate while TG-local JIT activity remains published, followed by snapshot
+  restoration before exit clears that activity. A helper which releases the
+  native phase lease needs a separate proof for every live GC value.
 - Do not centralize independent semantic and post-RA certificates merely to
   reduce line count; that would create a common-mode acceptance bug.
 - Physical co-location in a target-local header is fine, but semantic and

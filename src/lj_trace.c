@@ -11129,6 +11129,7 @@ static TraceStartResult trace_start(jit_State *J)
   lj_vmevent_send_l_(J->L, TRACE,
     TValue savetv = J2TG(J)->tmptv;
     TValue savetv2 = J2TG(J)->tmptv2;
+    TValue savetv3 = J2TG(J)->tmptv3;
     TraceNo parent = J->parent;
     ExitNo exitno = J->exitno;
     setstrV(V, V->top++, lj_str_newlit(V, "start"));
@@ -11148,6 +11149,7 @@ static TraceStartResult trace_start(jit_State *J)
   ,
     J2TG(J)->tmptv = savetv;
     J2TG(J)->tmptv2 = savetv2;
+    J2TG(J)->tmptv3 = savetv3;
     J->parent = parent;
     J->exitno = exitno;
   );
@@ -11678,6 +11680,7 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
 	/* Save/restore state for trace recorder. */
 	TValue savetv = J2TG(J)->tmptv;
 	TValue savetv2 = J2TG(J)->tmptv2;
+	TValue savetv3 = J2TG(J)->tmptv3;
 	TraceNo parent = J->parent;
 	ExitNo exitno = J->exitno;
 	setintV(V->top++, J->cur.traceno);
@@ -11687,6 +11690,7 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
       ,
 	J2TG(J)->tmptv = savetv;
 	J2TG(J)->tmptv2 = savetv2;
+	J2TG(J)->tmptv3 = savetv3;
 	J->parent = parent;
 	J->exitno = exitno;
       );

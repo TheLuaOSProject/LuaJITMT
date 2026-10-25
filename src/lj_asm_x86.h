@@ -303,7 +303,8 @@ static void asm_fuseahuref(ASMState *as, IRRef ref, RegSet allow)
       }
       break;
     case IR_TMPREF:
-      as->mrm.ofs = (ir->op2 & (IRTMPREF_IN2|IRTMPREF_OUT2)) ?
+	as->mrm.ofs = (ir->op2 & IRTMPREF_IN3) ? DISPATCH_TG(tmptv3) :
+	  (ir->op2 & (IRTMPREF_IN2|IRTMPREF_OUT2)) ?
 	DISPATCH_TG(tmptv2) : DISPATCH_TG(tmptv);
       as->mrm.base = RID_DISPATCH;
       as->mrm.idx = RID_NONE;
@@ -2026,7 +2027,7 @@ static void asm_strto(ASMState *as, IRIns *ir)
 static void asm_tvptr_protected(ASMState *as, Reg dest, IRRef ref, MSize mode,
 				RegSet protect)
 {
-  if ((mode & (IRTMPREF_IN1|IRTMPREF_IN2))) {
+  if ((mode & (IRTMPREF_IN1|IRTMPREF_IN2|IRTMPREF_IN3))) {
     IRIns *ir = IR(ref);
     if (irt_isnum(ir->t)) {
       if (irref_isk(ref) && !(mode & IRTMPREF_OUT1)) {
@@ -2055,7 +2056,9 @@ static void asm_tvptr_protected(ASMState *as, Reg dest, IRRef ref, MSize mode,
       }
     }
   }
-  if (mode & (IRTMPREF_IN2|IRTMPREF_OUT2))
+  if (mode & IRTMPREF_IN3)
+	emit_leatg(as, dest, tmptv3);
+  else if (mode & (IRTMPREF_IN2|IRTMPREF_OUT2))
     emit_leatg(as, dest, tmptv2);
   else
     emit_leatg(as, dest, tmptv);

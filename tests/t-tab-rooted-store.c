@@ -19,6 +19,7 @@
 #endif
 
 static uint32_t baseline_anchors, baseline_readers, hook_calls;
+static uint32_t gc_hook_calls;
 static int hook_throw;
 
 static void clean(lua_State *L)
@@ -34,13 +35,14 @@ static void set_key(lua_State *L, int mode)
   if (mode == 0) lua_pushinteger(L, 1);
   else if (mode == 1) lua_pushnumber(L, -2.5);
   else if (mode == 2) lua_pushboolean(L, 0);
-  else lua_pushliteral(L, "__index");
+  else if (mode == 3) lua_pushliteral(L, "__index");
+  else lua_newtable(L);
 }
 
 static void basics(lua_State *L)
 {
   int mode;
-  for (mode = 0; mode < 4; mode++) {
+  for (mode = 0; mode < 5; mode++) {
     lua_createtable(L, 4, 4);
     set_key(L, mode);
     lua_pushvalue(L, -1);
@@ -120,6 +122,26 @@ static void handoff(lua_State *L, TValue *tabroot, TValue *keyroot)
   if (hook_throw) luaL_error(L, "rooted store rollback");
 }
 
+static void gc_handoff(lua_State *L, TValue *tabroot, TValue *keyroot,
+		       TValue *valueroot)
+{
+  gc_hook_calls++;
+  assert(lj_tg_root_anchor_top_acq(L2TG(L)) == baseline_anchors + 3u);
+  assert(gc2_smr_readers_acq(G(L)) == baseline_readers);
+  assert(lj_gc2_rootdesc_snapshot(&L2TG(L)->root_desc, NULL) ==
+         LJ_GC2_ROOTDESC_SNAPSHOT_IDLE);
+  assert(tvistab(tabroot) && tvisgcv(keyroot) && tvisgcv(valueroot));
+  lua_pushnil(L); lua_replace(L, 1);
+  lua_pushnil(L); lua_replace(L, 2);
+  lua_pushnil(L); lua_replace(L, 3);
+  assert(lua_checkstack(L, 4096));
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(tvistab(tabroot) && tvisgcv(keyroot) && tvisgcv(valueroot));
+  lj_tab_resize(L, tabV(tabroot), 128, 6);
+  errno = 811;
+  if (hook_throw) luaL_error(L, "rooted GC store rollback");
+}
+
 static int call_store(lua_State *L)
 {
   int result;
@@ -127,6 +149,20 @@ static int call_store(lua_State *L)
   luaL_checktype(L, 2, LUA_TSTRING);
   errno = 617;
   result = lj_tab_storenum_rooted(L, L->base, L->base+1, 29.5);
+  assert(result && errno == 617);
+  clean(L);
+  lua_pushboolean(L, result);
+  return 1;
+}
+
+static int call_gc_store(lua_State *L)
+{
+  int result;
+  luaL_checktype(L, 1, LUA_TTABLE);
+  luaL_checktype(L, 2, LUA_TTABLE);
+  luaL_checktype(L, 3, LUA_TTABLE);
+  errno = 617;
+  result = lj_tab_storegc_rooted(L, L->base, L->base+1, L->base+2);
   assert(result && errno == 617);
   clean(L);
   lua_pushboolean(L, result);
@@ -170,6 +206,48 @@ static void anchored_lifetime(lua_State *L)
   assert(hook_calls == 2);
 }
 
+static void anchored_gc_lifetime(lua_State *L)
+{
+  lua_pushcfunction(L, call_gc_store);
+  lua_setglobal(L, "rooted_gc_store");
+  for (hook_throw = 0; hook_throw <= 1; hook_throw++) {
+    int status;
+    lj_tab_test_set_rooted_gc_store_hook(gc_handoff);
+    status = luaL_dostring(L,
+      "local weak = setmetatable({}, {__mode='v'})\n"
+      "local function invoke()\n"
+      "  local key = {}; weak[3] = key\n"
+      "  local value = {}; weak[1] = value\n"
+      "  local t = {[key] = false}; weak[2] = t\n"
+      "  return rooted_gc_store(t, key, value)\n"
+      "end\n"
+      "local ok, err = pcall(invoke)\n"
+      "if ok then\n"
+      "  local t = weak[2]; assert(t and t[next(t)] == weak[1])\n"
+      "else assert(tostring(err):find('rooted GC store rollback', 1, true)) end\n"
+      "rooted_gc_store_weak = weak\n");
+    if (status) fprintf(stderr, "GC handoff mode %d: %s\n",
+                        hook_throw, lua_tostring(L, -1));
+    assert(status == 0);
+    clean(L);
+    lua_gc(L, LUA_GCCOLLECT, 0);
+    lua_gc(L, LUA_GCCOLLECT, 0);
+    lua_getglobal(L, "rooted_gc_store_weak");
+    lua_rawgeti(L, -1, 1);
+    assert(lua_isnil(L, -1));
+    lua_pop(L, 1);
+    lua_rawgeti(L, -1, 2);
+    assert(lua_isnil(L, -1));
+    lua_pop(L, 1);
+    lua_rawgeti(L, -1, 3);
+    assert(lua_isnil(L, -1));
+    lua_pop(L, 2);
+    lua_pushnil(L); lua_setglobal(L, "rooted_gc_store_weak");
+  }
+  lj_tab_test_set_rooted_gc_store_hook(NULL);
+  assert(gc_hook_calls == 2);
+}
+
 static void reserve_failure(int second)
 {
   lua_State *L = luaL_newstate();
@@ -204,6 +282,36 @@ static void reserve_failure(int second)
   lua_close(L);
 }
 
+static void gc_reserve_failure(unsigned stage)
+{
+  lua_State *L = luaL_newstate();
+  TGState *tg;
+  TGRootAnchorBlock *block;
+  uint32_t i, idx, top, capacity;
+  TValue nilv;
+  assert(L);
+  luaL_openlibs(L);
+  tg = L2TG(L);
+  lua_newtable(L);
+  lua_pushliteral(L, "key");
+  lua_newtable(L);
+  capacity = TG_ROOT_ANCHOR_SLOTS;
+  for (block = &tg->root_anchor;
+       (block = lj_tg_root_anchor_next_acq(block)) != NULL; )
+    capacity += TG_ROOT_ANCHOR_SLOTS;
+  top = capacity - (stage - 1u);
+  setnilV(&nilv);
+  for (i = 0; i < top; i++)
+    assert(lj_tg_root_anchor_push(L, tg, &nilv, &idx));
+  lj_tg_root_test_fail_reserve_after(1);
+  assert(!lj_tab_storegc_rooted(L, L->top-3, L->top-2, L->top-1));
+  lj_tg_root_test_fail_reserve_after(0);
+  assert(lj_tg_root_anchor_top_acq(tg) == top);
+  assert(gc2_smr_readers_acq(G(L)) == 0);
+  lj_tg_root_anchor_rollback(tg, 0);
+  lua_close(L);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -215,9 +323,13 @@ int main(void)
   basics(L);
   refusals(L);
   anchored_lifetime(L);
+  anchored_gc_lifetime(L);
   lua_close(L);
   reserve_failure(0);
   reserve_failure(1);
-  puts("rooted scalar store: values, refusal, root handoff, relocation, GC, OOM and unwind OK");
+  gc_reserve_failure(1);
+  gc_reserve_failure(2);
+  gc_reserve_failure(3);
+  puts("rooted stores: scalar and GC values, root handoff, relocation, GC, OOM and unwind OK");
   return 0;
 }

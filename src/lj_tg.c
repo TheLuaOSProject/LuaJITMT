@@ -341,6 +341,7 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   lj_tg_worker_retire_next_rel(tg, NULL);
   setnilV(&tg->tmptv);
   setnilV(&tg->tmptv2);
+  setnilV(&tg->tmptv3);
   tg_root_anchor_block_init(&tg->root_anchor);
   lj_tg_root_anchor_top_rel(tg, 0);
   lj_tg_gcroot_pending_store_rlx(tg, NULL);

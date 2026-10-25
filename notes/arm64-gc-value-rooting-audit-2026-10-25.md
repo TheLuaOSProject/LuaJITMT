@@ -1,8 +1,10 @@
 # Remaining GC-value lifetime boundary in ARM64 rooted table effects
 
-This is a read-only design audit at `effe6467`, not an implementation or a
-new capability certificate. Existing native rooted reads and stores still
-accept only their documented scalar result/value classes.
+This records the design audit at `effe6467`. The subsequent implementation and
+validation are recorded in
+[`arm64-jit-rooted-gc-values-2026-10-25.md`](arm64-jit-rooted-gc-values-2026-10-25.md).
+The initial lifetime alternatives below were superseded by the GC2 native
+phase/reclamation gate proof in that note.
 
 ## Stores
 
@@ -41,11 +43,14 @@ guard, typed VLOAD and post-helper snapshot in both independent validators.
 The result lifetime after VLOAD is a separate constraint: a register or spill
 can retain the GC pointer after another helper overwrites the output root.
 The helper's valid return alone does not certify that later native lifetime.
-An initial capability must either prove the last use occurs before any root
-clobber/safepoint, or provide persistent native-frame rooting. String/table
-results are the first candidates; cdata also needs its FFI representation
-and payload-use contracts checked. Arbitrary GC-valued live ranges remain
-unproved.
+The initial audit proposed either restricting the last use to precede root
+clobber/safepoints or adding persistent native-frame rooting. Further source
+inspection established a third mechanism already present in GC2: result
+publication marks/rescues the current-cycle object, and active JIT state
+prevents phase completion and physical reclamation until snapshot restoration.
+This permits GC values across ordinary admitted table helpers without adding
+a per-value root buffer. Opaque cdata values do not authorize payload access
+or mixed CALLXS graphs.
 
 ## Implementation and evidence boundaries
 
