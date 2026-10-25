@@ -91,3 +91,34 @@ host. Treat this as an initial local reference, not a portable performance
 target; the profile and result are printed together for future comparisons.
 The complete logs are `/tmp/ljmt-review-lockless_progress_contract.log` and
 `/tmp/ljmt-review-release-scalar.log`.
+
+## Hit/miss latency sampling
+
+The release helper benchmark now exercises array, fractional-number hash,
+string and boolean hits, plus array and hash misses. Each case verifies one
+million hit/refusal outcomes and result preservation, then records 10,000
+individual call samples. It reports raw p50/p95/p99/max and a separate empty
+timer-pair baseline; it does not subtract unrelated quantiles. Darwin's Mach
+absolute clock avoids the one-microsecond quantization observed with
+`CLOCK_MONOTONIC` on this host. Its reported tick was 125/3 ns.
+
+An exploratory release run (production `a836be4b`, shared profile plumbing from
+`92393d92`) measured the following. Other isolated builds were active, so this
+is methodology/coverage evidence and a local reference, not a controlled
+before/after optimization claim. Raw individual samples include timer overhead
+and scheduling; their tails are quantized by the 41.67 ns clock tick.
+
+| Case | ns/read throughput | Raw p50 | Raw p95 | Raw p99 |
+| --- | ---: | ---: | ---: | ---: |
+| Array hit | 82.96 | 83 | 83 | 125 |
+| Numeric hash hit | 140.74 | 125 | 166 | 250 |
+| String hit | 190.94 | 208 | 208 | 291 |
+| Boolean hit | 141.34 | 125 | 458 | 500 |
+| Array miss | 76.00 | 83 | 83 | 83 |
+| Hash miss | 185.95 | 166 | 208 | 291 |
+
+The timer-pair baseline was p50=0 and p99=41 ns. These isolated direct helper
+samples complement the resize/retirement and stalled-publisher contracts;
+they do not measure their tail latency. Log:
+`/tmp/ljmt-review-read-latency-mach.log`, profile
+`7d7937dde82a0ac24db5cac693dc93a637e2e797b5b5d7042ac2a5fe3830a0f8`.
