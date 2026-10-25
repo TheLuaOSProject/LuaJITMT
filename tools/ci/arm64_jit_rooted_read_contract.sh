@@ -232,6 +232,13 @@ build_and_run arm64 '-arch arm64' "$xcflags" arm64
 build_and_run arm64e '-arch arm64e -mbranch-protection=bti' \
   "$pauth_xcflags" arm64e
 
+# The registered suite selects and restores its own native ARM64 profile.
+# Run it before the final caller-profile restoration, including on failure.
+env LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+  LUA_PATH="$root/tests/lib/?.lua;$root/tests/suites/?.lua;;" \
+  perl -MTime::HiRes=alarm -e 'alarm shift; exec @ARGV; die "exec: $!\n"' \
+    150 "$root/src/luajit" "$root/tools/test.lua" m6_jit_rooted_read_ir
+
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" clean TARGET_FLAGS='-arch arm64' \
     XCFLAGS="$restore_xcflags"
@@ -239,10 +246,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" -j"$jobs" TARGET_FLAGS='-arch arm64' \
     XCFLAGS="$restore_xcflags"
 restore_needed=0
-# Exercise the actual M6 suite registration once, after the helper profiles are
-# complete and the caller's normal asserted bootstrap profile is restored.
-env LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
-  LUA_PATH="$root/tests/lib/?.lua;$root/tests/suites/?.lua;;" \
-  perl -MTime::HiRes=alarm -e 'alarm shift; exec @ARGV; die "exec: $!\n"' \
-    150 "$root/src/luajit" "$root/tools/test.lua" m6_jit_rooted_read_ir
 echo "arm64_jit_rooted_read_contract OK: ARM64 and arm64e/BTI semantic/post-RA rejection, native rooted scalar helper, active-peer read lifecycle, and M6 suite registration verified"
