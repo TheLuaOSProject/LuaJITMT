@@ -2,7 +2,8 @@
 ** Native ARM64 proof for the first generalized scalar side-loop topology.
 ** The side is recorded after an INT root sees a NUM accumulator, then closes
 ** naturally at its own loop label. Repeated parent exits must target its body
-** directly: no interpreter exit is recorded while the fractional calls run.
+** directly. Successful native entry and bounded machine-code exits are
+** required while the fractional calls run.
 */
 #include <assert.h>
 #include <stdint.h>

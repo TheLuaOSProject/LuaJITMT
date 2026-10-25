@@ -197,12 +197,17 @@ loop geometry. Child publication seals both allocation generations and their
 exact body/code/topology tuple; retirement detaches the authenticated incoming
 edge before unlinking the child. Heap effects remain excluded from children.
 
-The integrated native fixture passed on ARM64 and arm64e/BTI. It warms an INT
-root, publishes a NUM child, checks that the selected parent edge targets the
-child's code, and observes correct results, root-entry activity and zero
-interpreter trace exits over 100 warmed fractional calls. A later boolean
-arithmetic error exits normally, and closing the state retires the child
-without a fail-stop. Log: `/tmp/ljmt-side-integrated-adaptation2.log`.
+The initial integrated fixture passed on ARM64 and arm64e/BTI, but its entry
+counter was insufficient: it counted lookups, not successful native handoffs.
+The zero-exit result in `/tmp/ljmt-side-integrated-adaptation2.log` did not prove
+execution. Release measurements exposed the gap. The published-child validator
+was missing the emitted loop offset, so it could refuse an otherwise published
+child. Entry now supplies that offset and derives the semantic extent from the
+actual trailing RENAME markers. A new counter increments only at the final
+successful native handoff. The fixture requires positive successful entries,
+zero cleanup refusals, a patched parent edge, and bounded native trace exits;
+normal loop completion legitimately exits native code. The stronger private
+fixture passes on both targets. Combined integration validation follows below.
 
 The integrated scalar capability contract passed, along with complete FORL,
 FUNCF and rooted-store contracts on both targets. The merge initially retained
