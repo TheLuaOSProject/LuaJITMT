@@ -30,6 +30,15 @@ runtime fixture separately rejects the side marker and mixed admission flags.
 A complete rerun remains required; the partial run is not a full experimental
 pass.
 
+A diagnostic continuation passed B26 and sealed-root publication, then exposed
+another stale static audit in `arm64_jit_side_asm_consumption_contract.sh`.
+That audit searched `trace_save()` for debugger/perf publication hooks which
+the source places in `trace_stop()`. It now retains the complete compaction,
+root, slot, and GC-publication ordering checks inside `trace_save()`, and
+separately requires its call in `trace_stop()` to precede both debugger/perf
+hooks. The corrected complete focused contract passed both ARM64 and arm64e
+branches and restored the ordinary ARM64 build. No runtime change was needed.
+
 Temporary full bootstrap log:
 `/tmp/luajitmt-20261025-bootstrap-final.log`.
 Partial experimental log:

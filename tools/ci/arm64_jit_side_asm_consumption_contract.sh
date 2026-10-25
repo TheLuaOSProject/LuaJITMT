@@ -110,6 +110,7 @@ compact_plan_region=$tmpdir/trace-compact-plan.txt
 compact_init_region=$tmpdir/trace-compact-init.txt
 compact_reset_region=$tmpdir/trace-compact-reset.txt
 trace_save_region=$tmpdir/trace-save.txt
+trace_stop_region=$tmpdir/trace-stop.txt
 restore_needed=1
 
 # The bypass is deliberately impossible in an ordinary helper build, and the
@@ -200,8 +201,11 @@ awk '/^static void trace_compact_body_reset\(/ { copy=1 }
      copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$compact_reset_region"
 sed -n '/^static void trace_save(/,/^int LJ_FASTCALL lj_trace_free_gc(/p' \
   "$root/src/lj_trace.c" >"$trace_save_region"
+sed -n '/^static int trace_stop(/,/^static TraceStartResult trace_downrec(/p' \
+  "$root/src/lj_trace.c" >"$trace_stop_region"
 for region in "$compact_scratch_region" "$compact_plan_region" \
-  "$compact_init_region" "$compact_reset_region" "$trace_save_region"; do
+  "$compact_init_region" "$compact_reset_region" "$trace_save_region" \
+  "$trace_stop_region"; do
   test -s "$region" || {
     echo "ARM64 compact-body contract region is empty: $region" >&2
     exit 1
@@ -304,10 +308,12 @@ slot_publish_line=$(grep -n 'traceslot_publish(J, T->traceno, T);' \
   "$trace_save_region" | cut -d: -f1)
 pubtrace_line=$(grep -n 'lj_gc_pubtrace(g, T->traceno);' \
   "$trace_save_region" | cut -d: -f1)
+trace_save_call_line=$(grep -n 'trace_save(J, T);' \
+  "$trace_stop_region" | cut -d: -f1)
 gdb_publish_line=$(grep -n 'lj_gdbjit_addtrace(J, T);' \
-  "$trace_save_region" | cut -d: -f1)
+  "$trace_stop_region" | cut -d: -f1)
 perf_publish_line=$(grep -n 'perftools_addtrace(J, T);' \
-  "$trace_save_region" | cut -d: -f1)
+  "$trace_stop_region" | cut -d: -f1)
 test "$compact_init_line" -lt "$owner_clear_line"
 test "$owner_clear_line" -lt "$exittab_clear_line"
 test "$exittab_clear_line" -lt "$exitstub_clear_line"
@@ -315,7 +321,7 @@ test "$exitstub_clear_line" -lt "$curfinal_clear_line"
 test "$curfinal_clear_line" -lt "$root_publish_line"
 test "$root_publish_line" -lt "$slot_publish_line"
 test "$slot_publish_line" -lt "$pubtrace_line"
-test "$pubtrace_line" -lt "$gdb_publish_line"
+test "$trace_save_call_line" -lt "$gdb_publish_line"
 test "$gdb_publish_line" -lt "$perf_publish_line"
 for required in \
   'LJ_TRACE_PUBLISH' \
