@@ -42,6 +42,167 @@ static TGState *test_tg;
 static unsigned native_seen[8];
 static void *expected_func[8];
 
+typedef struct SemanticClone {
+  GCtrace trace;
+  IRIns *ir;
+  SnapShot *snap;
+  SnapEntry *snapmap;
+  IRRef ktrace;
+} SemanticClone;
+
+typedef struct SemanticJSave {
+  GCtrace *curfinal;
+  GCproto *pt;
+  const BCIns *startpc;
+  IRRef loopref;
+  TraceNo parent;
+  ExitNo exitno;
+  BCReg baseslot;
+  uint8_t framedepth, retdepth;
+  IRRef ktrace;
+} SemanticJSave;
+
+static void semantic_clone_init(SemanticClone *clone, GCtrace *owner)
+{
+  IRRef nins = trace_nins_acq(owner), nk = trace_nk_acq(owner);
+  IRRef ref;
+  MSize nsnap = trace_nsnap_acq(owner);
+  MSize nsnapmap = trace_nsnapmap_acq(owner);
+  memset(clone, 0, sizeof(*clone));
+  clone->ir = (IRIns *)calloc(nins, sizeof(IRIns));
+  clone->snap = (SnapShot *)malloc(nsnap*sizeof(SnapShot));
+  clone->snapmap = (SnapEntry *)malloc(nsnapmap*sizeof(SnapEntry));
+  assert(clone->ir != NULL && clone->snap != NULL &&
+         clone->snapmap != NULL);
+  assert(nk < REF_FIRST && nins >= REF_FIRST && nsnap != 0 &&
+         nsnapmap >= 1u+LJ_FR2);
+  memcpy(&clone->ir[nk], &trace_ir_acq(owner)[nk],
+         (nins-nk)*sizeof(IRIns));
+  memcpy(clone->snap, trace_snap_acq(owner), nsnap*sizeof(SnapShot));
+  memcpy(clone->snapmap, trace_snapmap_acq(owner),
+         nsnapmap*sizeof(SnapEntry));
+  clone->trace = *owner;
+  clone->trace.ir = clone->ir;
+  clone->trace.snap = clone->snap;
+  clone->trace.snapmap = clone->snapmap;
+  clone->ktrace = 0;
+  for (ref = nk; ref < REF_FIRST; ) {
+    IRIns k = ir_load_acq(&clone->ir[ref]);
+    IRRef next = ref+1u;
+    if (k.o == IR_KNUM || k.o == IR_KINT64 ||
+        (LJ_GC64 && (k.o == IR_KGC || k.o == IR_KPTR ||
+                     k.o == IR_KKPTR)))
+      next = ref+2u <= REF_FIRST ? ref+2u : REF_DROP;
+    if (k.o == IR_KGC && ir_kgc_load_acq(&clone->ir[ref]) == obj2gco(owner)) {
+      assert(clone->ktrace == 0 && k.t.irt == IRT_P64 &&
+             ref+1u < REF_FIRST);
+      clone->ktrace = ref;
+      clone->ir[ref+1u].tv.u64 = 0;
+      clone->ir[ref].op12 = 0;
+      clone->ir[ref].t.irt = IRT_P64;
+      clone->ir[ref].o = IR_KNUM;
+      clone->ir[ref].prev = 0;
+    }
+    assert(next > ref && next <= REF_FIRST);
+    ref = next;
+  }
+  assert(clone->ktrace >= nk && clone->ktrace < REF_TRUE);
+  /* Drop the post-RA-only RENAME/NOP suffix. */
+  while (clone->trace.nins > REF_FIRST) {
+    IRRef ref = clone->trace.nins-1u;
+    IRIns tail = ir_load_acq(&clone->ir[ref]);
+    if (tail.o == IR_RENAME ||
+        (tail.o == IR_NOP && tail.t.irt == IRT_NIL &&
+         tail.op1 == 0 && tail.op2 == 0 && tail.prev == 0))
+      clone->trace.nins = ref;
+    else
+      break;
+  }
+}
+
+static void semantic_clone_free(SemanticClone *clone)
+{
+  free(clone->snapmap);
+  free(clone->snap);
+  free(clone->ir);
+  memset(clone, 0, sizeof(*clone));
+}
+
+static SemanticJSave semantic_j_enter(jit_State *J, GCproto *pt,
+                                      GCtrace *T, IRRef ktrace)
+{
+  SemanticJSave save = { J->curfinal, J->pt, J->startpc, J->loopref,
+    J->parent, J->exitno, J->baseslot, J->framedepth, J->retdepth,
+    J->ktrace };
+  IRRef ref;
+  J->curfinal = NULL;
+  J->pt = pt;
+  J->startpc = trace_startpc_acq(T);
+  J->loopref = 0;
+  for (ref = REF_BASE; ref < T->nins; ref++)
+    if (T->ir[ref].o == IR_LOOP) {
+      J->loopref = ref;
+      break;
+    }
+  assert(J->loopref != 0);
+  J->parent = 0;
+  J->exitno = 0;
+  J->baseslot = 1+LJ_FR2;
+  J->framedepth = 0;
+  J->retdepth = 0;
+  J->ktrace = ktrace;
+  return save;
+}
+
+static void semantic_j_leave(jit_State *J, const SemanticJSave *save)
+{
+  J->curfinal = save->curfinal;
+  J->pt = save->pt;
+  J->startpc = save->startpc;
+  J->loopref = save->loopref;
+  J->parent = save->parent;
+  J->exitno = save->exitno;
+  J->baseslot = save->baseslot;
+  J->framedepth = save->framedepth;
+  J->retdepth = save->retdepth;
+  J->ktrace = save->ktrace;
+}
+
+static void expect_semantic_admit(jit_State *J, GCtrace *T)
+{
+  LJArm64IRReject reject;
+  uint32_t *startpc = (uint32_t *)trace_startpc_acq(T);
+  uint32_t liveins = la_load32_acq(startpc);
+  int accepted;
+  /* The semantic checker runs at the pre-publication boundary, where the
+  ** source FORL is still present. Restore that one word only for the check. */
+  la_store32_rel(startpc, T->startins);
+  accepted = lj_asm_arm64_ir_admit(J, T, &reject);
+  la_store32_rel(startpc, liveins);
+  if (!accepted)
+    fprintf(stderr, "ABI footer semantic baseline rejected: reason=%d "
+            "ref=%u op=%u detail=%u\n", (int)reject.reason,
+            (unsigned)reject.ref, (unsigned)reject.op,
+            (unsigned)reject.detail);
+  assert(accepted && reject.reason == LJ_ARM64_IR_REJECT_NONE);
+}
+
+static void expect_semantic_reject(jit_State *J, GCtrace *T,
+                                   const char *mutation)
+{
+  LJArm64IRReject reject;
+  uint32_t *startpc = (uint32_t *)trace_startpc_acq(T);
+  uint32_t liveins = la_load32_acq(startpc);
+  int accepted;
+  la_store32_rel(startpc, T->startins);
+  accepted = lj_asm_arm64_ir_admit(J, T, &reject);
+  la_store32_rel(startpc, liveins);
+  if (accepted)
+    fprintf(stderr, "ABI footer semantic mutation accepted: %s\n", mutation);
+  assert(!accepted && reject.reason == LJ_ARM64_IR_REJECT_SNAPSHOT &&
+         reject.op == IR_XSAVE);
+}
+
 static void test_other_callsite_footer_rejected(lua_State *L)
 {
   jit_State *J = G2J(G(L));
@@ -58,6 +219,8 @@ static void test_other_callsite_footer_rejected(lua_State *L)
   IRIns *ircopy;
   uint64_t original, changed;
   IRRef ref;
+  SemanticClone semantic;
+  SemanticJSave jsave;
   lua_getglobal(L, "__abi_run_three");
   assert(tvisfunc(L->top-1));
   fn = funcV(L->top-1);
@@ -148,7 +311,67 @@ static void test_other_callsite_footer_rejected(lua_State *L)
     }
   }
   assert(candidate != UINT_MAX);
-  changed = (uint64_t)(lo+(uintptr_t)candidate*sizeof(BCIns)) << 8;
+  changed = ((uint64_t)(lo+(uintptr_t)candidate*sizeof(BCIns)) << 8) |
+            (original & UINT64_C(0xff));
+
+  /* Prove this source-identity check in the semantic walk independently
+  ** from the post-RA mutation below. Each negative starts from a fresh
+  ** clone that first passes semantic admission. */
+  semantic_clone_init(&semantic, T);
+  jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+  expect_semantic_admit(J, &semantic.trace);
+  {
+    const SnapShot *snap = &semantic.snap[snapno];
+    MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap);
+    memcpy(&semantic.snapmap[ofs+nent], &changed, sizeof(changed));
+  }
+  expect_semantic_reject(J, &semantic.trace,
+                         "other valid BC_CALL footer only");
+  semantic_clone_free(&semantic);
+
+  semantic_clone_init(&semantic, T);
+  (void)semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+  expect_semantic_admit(J, &semantic.trace);
+  {
+    IRRef constref;
+    MSize s, footer_count = 0;
+    unsigned paired = 0;
+    for (s = 0; s < semantic.trace.nsnap; s++) {
+      const SnapShot *snap = &semantic.snap[s];
+      MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap);
+      uint64_t pcbase;
+      if (ofs > semantic.trace.nsnapmap ||
+          nent > semantic.trace.nsnapmap-ofs ||
+          semantic.trace.nsnapmap-ofs-nent < 1u+LJ_FR2)
+        continue;
+      memcpy(&pcbase, &semantic.snapmap[ofs+nent], sizeof(pcbase));
+      if (pcbase == original) {
+        memcpy(&semantic.snapmap[ofs+nent], &changed, sizeof(changed));
+        footer_count++;
+      }
+    }
+    for (constref = semantic.trace.nk; constref < REF_FIRST; ) {
+      IRIns k = ir_load_acq(&semantic.ir[constref]);
+      IRRef next = constref+1u;
+      if (k.o == IR_KNUM || k.o == IR_KINT64 ||
+          (LJ_GC64 && (k.o == IR_KGC || k.o == IR_KPTR ||
+                       k.o == IR_KKPTR)))
+        next = constref+2u <= REF_FIRST ? constref+2u : REF_DROP;
+      if (k.o == IR_KNUM && constref+1u < REF_FIRST &&
+          ir_load_acq(&semantic.ir[constref+1u]).tv.u64 == original >> 8) {
+        semantic.ir[constref+1u].tv.u64 = changed >> 8;
+        paired++;
+      }
+      assert(next > constref && next <= REF_FIRST);
+      constref = next;
+    }
+    assert(footer_count > 0 && paired > 0);
+  }
+  expect_semantic_reject(J, &semantic.trace,
+                         "other valid BC_CALL footer and paired KNUM");
+  semantic_clone_free(&semantic);
+  semantic_j_leave(J, &jsave);
+
   {
     const SnapShot *snap = &view.snap[snapno];
     MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap);
@@ -178,15 +401,15 @@ static void test_other_callsite_footer_rejected(lua_State *L)
       }
     }
     assert(footer_count > 0);
-    for (constref = view.nk; constref < REF_TRUE; ) {
+    for (constref = view.nk; constref < REF_FIRST; ) {
       IRIns k = ir_load_acq(&ircopy[constref]);
       IRRef next = constref+1u;
       if (k.o == IR_KNUM || k.o == IR_KINT64 ||
 	  (LJ_GC64 && (k.o == IR_KGC || k.o == IR_KPTR ||
 		       k.o == IR_KKPTR)))
-	next = constref+2u < REF_TRUE ? constref+2u : REF_DROP;
-      if (next <= constref || next > REF_TRUE) break;
-      if (k.o == IR_KNUM && constref+1u < REF_TRUE &&
+	next = constref+2u <= REF_FIRST ? constref+2u : REF_DROP;
+      if (next <= constref || next > REF_FIRST) break;
+      if (k.o == IR_KNUM && constref+1u < REF_FIRST &&
 	  ir_load_acq(&ircopy[constref+1u]).tv.u64 == original >> 8) {
 	ircopy[constref+1u].tv.u64 = (uint64_t)(lo+
 	    (uintptr_t)candidate*sizeof(BCIns));
