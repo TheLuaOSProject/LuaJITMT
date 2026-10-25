@@ -593,6 +593,8 @@ int main(void)
     " for i=1,n do if fn(a,b,c,d,e,f)~=91 then return false end end; return true end\n"
     "function _G.__abi_run_mixed(fn,a,b,c,d,e,n)\n"
     " for i=1,n do if fn(a,b,c,d,e)~=16 then return false end end; return true end\n"
+    "function _G.__abi_run_mixed_int(fn,a,b,c,d,e,n)\n"
+    " for i=1,n do if fn(a,b,c,d,e)~=9 then return false end end; return true end\n"
     "function _G.__abi_run_three(fa,fb,fc,a,b,n)\n"
     " for i=1,n do fa(a,b); fb(a,b); fc(a,b) end; return true end\n"
     "function _G.__abi_run_unused(fn,a,n)\n"
@@ -640,6 +642,12 @@ int main(void)
     "assert(__abi_a(11,5)==16 and __abi_b(11,5)==6 and __abi_c(11,5)==14)\n"
     "assert(__abi_run_three(__abi_a,__abi_b,__abi_c,11,5,300))\n"
     "assert(__abi_run_unused(__abi_unused,9,300)==300)\n");
+  {
+    unsigned native_before = native_seen[2];
+    ljt_lua_dostring(L,
+      "assert(__abi_run_mixed_int(__abi_mixed,1,2,1,4,1,300))\n");
+    assert(native_seen[2] >= native_before+200u);
+  }
 	{
 	uint64_t before = calls(6);
 	uint64_t native_before = native_seen[6];

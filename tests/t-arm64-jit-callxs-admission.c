@@ -796,6 +796,15 @@ static void test_postra(CallXSFixture *fx)
 	expect_postra(fx, &view, 1);
   } else {
     view = make_postra_view(fx);
+    assert(fx->ir[CX_D_R_ARG_PRE].o == IR_CONV &&
+	   fx->ir[CX_D_R_ARG_PRE].t.irt == IRT_NUM &&
+	   fx->ir[CX_D_R_ARG_PRE].op2 == IRCONV_NUM_INT);
+    fx->ir[CX_D_R_ARG_PRE].op2 =
+	(uint16_t)((fx->ir[CX_D_R_ARG_PRE].op2 & ~IRCONV_CONVMASK) |
+		   IRCONV_CHECK);
+    expect_postra(fx, &view, 0);
+
+    view = make_postra_view(fx);
     assert(fx->ir[CX_D_R_ARG_PRE].r == RID_D9 &&
 	   fx->ir[CX_D_R_ARG_PRE].s == SPS_NONE &&
 	   fx->ir[CX_D_R_ARG_BODY].r == RID_D15 &&
