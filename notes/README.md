@@ -95,6 +95,12 @@ available.
 - ARM64 and arm64e/BTI trace publication, authenticated entry and exits,
   retirement, flush/reuse, GDB-JIT preparation, and bounded root/first-side
   entry paths.
+- Root entry validates the immutable allocation layout once, then reacquires
+  and compares identity, extents, and every mutable entry authority. Removing
+  the duplicate layout scan passed the focused ARM64/arm64e entry contract;
+  the measured assertion/helper-build improvement and broader architecture
+  recommendations are in
+  [`implementation-review-2026-10-25.md`](implementation-review-2026-10-25.md).
 - Scalar self-linked `LOOP` roots use independent semantic and allocated-state
   capabilities for checked INT arithmetic, NUM arithmetic/conversions,
   comparisons, PHI copies/shuffles, snapshots and INT/NUM spill frames. NUM
@@ -238,15 +244,16 @@ build.
 
 ## Next review priorities
 
-1. Restore stock shared-upvalue semantics for imported legacy bytecode and
-   extend the source-capture/debug-API regressions as new cases are found.
-2. Extend the independent scalar capabilities to additional proved allocation
-   and rooted-helper mechanisms. NUM spill admission needs separate frame,
-   slot-width, PHI and lifecycle evidence despite the repaired pairing emitter.
-3. Open one new JIT or FFI boundary at a time, with independent source,
-   IR, snapshot, post-RA, emitted-code, lifecycle, and negative-shape proof.
-4. Keep common-file edits narrower than the protocol being added and preserve
-   stock LuaJIT control flow wherever no lockless change is required.
+1. Grow operation/effect capabilities for rooted reads, stores, allocation and
+   calls, preserving independent semantic and post-RA proofs. Avoid adding
+   another entire trace template for every workload.
+2. Address numeric type transitions and scalar side entry, and measure entry
+   cost, native work and exit frequency alongside stock conformance.
+3. Consolidate test build profiles and fixture reuse; expand weak-ordering,
+   stalled-participant, sanitizer and sustained-concurrency validation.
+4. Keep common changes narrow and retain stock LuaJIT control flow where the
+   lockless protocol does not require a difference. See the concrete sequence
+   in [`implementation-review-2026-10-25.md`](implementation-review-2026-10-25.md).
 
 ## Notes layout
 

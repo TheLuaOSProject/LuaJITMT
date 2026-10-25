@@ -194,7 +194,7 @@ for required in \
   }
 done
 test "$(grep -Fc 'trace_root_entry_arm64_layout_valid(&view' \
-  "$root/src/lj_trace.c")" = 2
+  "$root/src/lj_trace.c")" = 1
 
 restore_needed=1
 env MACOSX_DEPLOYMENT_TARGET="$minver" \

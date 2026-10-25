@@ -388,7 +388,6 @@ layout1=$(line_of 'trace_root_entry_arm64_layout_valid(&view, T, sourceins)' 1)
 mcode=$(line_of 'mcode = view.mcode' 1)
 slot2=$(line_of 'trace_root_entry_slot_acq(J, traceno' 2)
 view2=$(line_of 'trace_root_entry_loop_view_acq(T2, traceno' 1)
-layout2=$(line_of 'trace_root_entry_arm64_layout_valid(&view2, T2, sourceins)' 1)
 view_equal=$(line_of 'trace_root_entry_loop_view_equal(&view, &view2)' 1)
 pending1=$(line_of 'trace_root_entry_request_pending(tg)' 1)
 pending2=$(line_of 'trace_root_entry_request_pending(tg)' 2)
@@ -409,16 +408,15 @@ test "$publish" -lt "$fence" && test "$fence" -lt "$gate2" &&
 test "$gate2" -lt "$pending2" && test "$pending2" -lt "$slot1" &&
 test "$slot1" -lt "$view1" && test "$view1" -lt "$layout1" &&
 test "$layout1" -lt "$mcode" && test "$mcode" -lt "$slot2" &&
-test "$slot2" -lt "$view2" && test "$view2" -lt "$layout2" &&
-test "$layout2" -lt "$view_equal" && test "$view_equal" -lt "$postmetadata" &&
+test "$slot2" -lt "$view2" && test "$view2" -lt "$view_equal" &&
+test "$view_equal" -lt "$postmetadata" &&
 test "$postmetadata" -lt "$pending3" &&
 test "$pending3" -lt "$final_admission" &&
 test "$final_admission" -lt "$tmpbuf" &&
 test "$tmpbuf" -lt "$cleanup_line"
 test "$publish" -lt "$layout1" && test "$layout1" -lt "$final_admission"
-test "$publish" -lt "$layout2" && test "$layout2" -lt "$final_admission"
 test "$(grep -Fc 'trace_root_entry_arm64_layout_valid(&view' \
-  "$helper_region")" = 2
+  "$helper_region")" = 1
 test "$(grep -c 'lj_tg_store_jit_base(tg, NULL)' "$helper_region")" = 1
 for required in trace_runnable_acq trace_startins_acq \
   trace_root_entry_loop_view_acq trace_root_entry_loop_view_equal \

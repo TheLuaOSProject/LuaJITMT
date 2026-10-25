@@ -5933,10 +5933,13 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   ** target loads. This catches slot replacement, retirement, repatching and a
   ** torn body view without extending authority beyond the TG lifetime lease. */
   T2 = trace_root_entry_slot_acq(J, traceno, &tv2);
+  /* Published IR and immutable snapshot fields were fully scanned above.
+  ** Reacquire and compare every body pointer/extent here, but don't rescan
+  ** the same immutable allocation layout on each entry. Snapshot counts and
+  ** exit targets are mutable and aren't part of that layout proof. */
   if (tv2 != tv || T2 != T || !trace_runnable_acq(T2, traceno) ||
       !trace_root_entry_loop_view_acq(T2, traceno, pc, pt, sourceop,
 				      &view2) ||
-      !trace_root_entry_arm64_layout_valid(&view2, T2, sourceins) ||
       !trace_root_entry_loop_view_equal(&view, &view2) ||
       !trace_root_entry_first_child_view_acq(
 	J, T2, traceno, sourceop, &view2, &childview2) ||
