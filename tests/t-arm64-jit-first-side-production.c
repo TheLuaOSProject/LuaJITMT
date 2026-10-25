@@ -45,14 +45,14 @@ static void run_lua(lua_State *L, const char *chunk)
 }
 
 static lua_Integer call_named(lua_State *L, const char *name,
-	lua_Integer n, lua_Integer bias)
+	lua_Integer n, lua_Number bias)
 {
   lua_Integer result;
   int status;
   lua_getglobal(L, name);
   assert(lua_isfunction(L, -1));
   lua_pushinteger(L, n);
-  lua_pushinteger(L, bias);
+  lua_pushnumber(L, bias);
   status = lua_pcall(L, 2, 1, 0);
   if (status != LUA_OK) {
     fprintf(stderr, "ARM64 production first-side call %s failed: %s\n",
@@ -117,6 +117,11 @@ static void define_probes(lua_State *L)
       "end "
       "return i "
     "end "
+    "local function loopchild(n, step) "
+      "local i,sum=1,0 "
+      "while i<=n do sum=sum+step; i=i+1 end "
+      "return sum "
+    "end "
     "local opaque=setmetatable({}, {__index=__arm64_first_side_opaque_index}) "
     "local function unsupported(n, bias) "
       "local i=0 "
@@ -130,6 +135,7 @@ static void define_probes(lua_State *L)
     "__arm64_first_side_production_second=second; "
     "__arm64_first_side_production_third=third; "
     "__arm64_first_side_production_fourth=fourth; "
+    "__arm64_first_side_production_loopchild=loopchild; "
     "__arm64_first_side_production_unsupported=unsupported");
 }
 
@@ -166,6 +172,9 @@ static int smoke_main(void)
   assert(call_named(L, "__arm64_first_side_production_second", 3, 0) == 3);
   assert(call_named(L, "__arm64_first_side_production_second", 2, 0) == 2);
   assert(call_named(L, "__arm64_first_side_production_third", 3, 0) == 3);
+  assert(call_named(L, "__arm64_first_side_production_loopchild", 64, 1) == 64);
+  assert(call_named(L, "__arm64_first_side_production_loopchild", 64, 1.25) == 80);
+  assert(call_named(L, "__arm64_first_side_production_loopchild", 64, 1.25) == 80);
   assert(call_named(L, "__arm64_first_side_production_third", 4, 0) == 4);
   assert(call_named(L, "__arm64_first_side_production_third", 4, 0) == 4);
   assert(call_named(L, "__arm64_first_side_production_third", 3, 0) == 3);
@@ -176,8 +185,8 @@ static int smoke_main(void)
       "if i.linktype=='loop' then roots=roots+1 "
       "elseif i.linktype=='root' then sides=sides+1 end "
     "end end; "
-    "assert(live==10, 'expected ten production traces, got '..live); "
-    "assert(roots==6, 'expected six roots, got '..roots); "
+    "assert(live==12, 'expected twelve production traces, got '..live); "
+    "assert(roots==8, 'expected eight loop traces, got '..roots); "
     "assert(sides==4, 'expected four first sides, got '..sides)");
 
   lua_close(L);
@@ -210,38 +219,22 @@ static void set_hotexit(lua_State *L, unsigned threshold)
 }
 
 enum {
-  PRODUCTION_PAIR_COUNT = 4,
-  PRODUCTION_TOPSLOT = 5,
-  PRODUCTION_CHILD_NSNAP = 5,
-  PRODUCTION_CHILD_NSNAPMAP = 17,
-  PRODUCTION_CHILD_K_ADDEND = REF_TRUE-1u,
-  PRODUCTION_CHILD_R_PARENT = REF_BASE+1u,
-  PRODUCTION_CHILD_R_CGET = REF_BASE+2u,
-  PRODUCTION_CHILD_R_ADD = REF_BASE+3u,
-  PRODUCTION_CHILD_R_LIMIT = REF_BASE+4u,
-  PRODUCTION_CHILD_R_GT = REF_BASE+5u,
-  PRODUCTION_CHILD_R_XPOLL = REF_BASE+6u,
-  PRODUCTION_CHILD_SEMANTIC_NINS = REF_BASE+7u
+  PRODUCTION_PAIR_COUNT = 5
 };
 
 typedef struct ProductionPair {
   const char *name;
   lua_Integer root_n;
-  lua_Integer root_bias;
+  lua_Number root_bias;
   lua_Integer root_result;
   lua_Integer side_n;
-  lua_Integer side_bias;
+  lua_Number side_bias;
   lua_Integer side_result;
   lua_Integer native_n;
-  lua_Integer native_bias;
+  lua_Number native_bias;
   lua_Integer native_result;
   ExitNo exitno;
-  MSize root_nsnap;
-  MSize continuation_pos;
-  MSize child_pcpos[PRODUCTION_CHILD_NSNAP];
-  Reg inherited_reg;
-  Reg sload_reg;
-  int32_t addend;
+  int require_loop_child;
   GCproto *pt;
   TraceNo rootno;
   TraceNo childno;
@@ -404,10 +397,7 @@ static void expect_root_shape(jit_State *J, global_State *g,
   pair->root_fallback = trace_exittarget_arm64_acq(pair->root,
 						 pair->exitno);
   assert(pair->root_exittab != NULL && pair->root_fallback != NULL);
-  assert(pair->continuation_pos < pair->pt->sizebc);
   pair->continuation = selected_continuation(pair->root, pair->exitno);
-  assert(pair->continuation ==
-	 proto_bc(pair->pt)+pair->continuation_pos);
   assert(pair->continuation >= proto_bc(pair->pt) &&
 	 pair->continuation < proto_bc(pair->pt)+pair->pt->sizebc);
   assert(snap_count_acq(&pair->root_snap[pair->exitno]) != SNAPCOUNT_DONE);
@@ -486,9 +476,6 @@ static void expect_post_token_request_cleanup(lua_State *L, jit_State *J,
   pair->root_fallback = trace_exittarget_arm64_acq(pair->root,
 						 pair->exitno);
   pair->continuation = selected_continuation(pair->root, pair->exitno);
-  pair->continuation_pos = (MSize)(pair->continuation-
-					  proto_bc(pair->pt));
-  assert(pair->continuation_pos < pair->pt->sizebc);
   assert(lj_trace_test_admission_side_snapshot_before() == before);
   assert(lj_trace_test_admission_side_gate_blocks() == 0);
   assert(lj_trace_test_admission_side_clean_releases() == 1);
@@ -535,11 +522,12 @@ static void expect_child_shape(jit_State *J, global_State *g,
   pair->root_fallback = exitstub_trace_fallback_addr_(
 	trace_exitstub_acq(pair->root));
   pair->continuation = selected_continuation(pair->root, pair->exitno);
-  pair->continuation_pos = (MSize)(pair->continuation-proto_bc(pair->pt));
 
   assert(trace_runnable_acq(pair->child, pair->childno));
   assert(trace_traceno_acq(pair->child) == pair->childno);
   assert(trace_root_acq(pair->child) == pair->rootno);
+  if (pair->require_loop_child)
+    assert(trace_linktype_acq(pair->child) == LJ_TRLINK_LOOP);
   if (trace_linktype_acq(pair->child) == LJ_TRLINK_ROOT) {
     assert(trace_link_acq(pair->child) == pair->rootno);
     assert(trace_mcloop_acq(pair->child) == 0);
@@ -770,7 +758,7 @@ static void expect_full_flush(lua_State *L, jit_State *J, global_State *g,
   unsigned i;
   lj_trace_test_reset_retire_publish_calls();
   assert(lj_trace_flushall_gc(L) == 0);
-  assert(lj_trace_test_retire_publish_calls() == 10u);
+  assert(lj_trace_test_retire_publish_calls() == 12u);
   assert(trace_traceno_acq(decoy) == 0);
   assert(proto_trace_acq(decoy_pt) == 0);
   for (i = 0; i < PRODUCTION_PAIR_COUNT; i++) {
@@ -810,45 +798,42 @@ static int detailed_main(int argc, char **argv)
       .root_n = 3, .root_bias = 0, .root_result = 3,
       .side_n = 3, .side_bias = 1, .side_result = 4,
       .native_n = 3, .native_bias = 1, .native_result = 4,
-      .exitno = 2, .root_nsnap = 8, .continuation_pos = 13,
-      .child_pcpos = { 13, 14, 3, 17, 7 },
-      .inherited_reg = RID_X28, .sload_reg = RID_X27, .addend = 1
+      .exitno = 2
     },
     {
       .name = "__arm64_first_side_production_second",
       .root_n = 3, .root_bias = 0, .root_result = 3,
       .side_n = 3, .side_bias = 0, .side_result = 3,
       .native_n = 2, .native_bias = 0, .native_result = 2,
-      .exitno = 6, .root_nsnap = 9, .continuation_pos = 10,
-      .child_pcpos = { 10, 11, 3, 17, 7 },
-      .inherited_reg = RID_X27, .sload_reg = RID_X28, .addend = 1
+      .exitno = 6
     },
     {
       .name = "__arm64_first_side_production_third",
       .root_n = 3, .root_bias = 0, .root_result = 3,
       .side_n = 4, .side_bias = 0, .side_result = 4,
       .native_n = 3, .native_bias = 0, .native_result = 3,
-      .exitno = 7, .root_nsnap = 11, .continuation_pos = 13,
-      .child_pcpos = { 13, 14, 3, 17, 7 },
-      .inherited_reg = RID_X28, .sload_reg = RID_X27, .addend = 1
+      .exitno = 7
     },
     {
       .name = "__arm64_first_side_production_fourth",
       .root_n = 3, .root_bias = 0, .root_result = 4,
       .side_n = 5, .side_bias = 0, .side_result = 6,
       .native_n = 3, .native_bias = 0, .native_result = 4,
-      .exitno = 6, .root_nsnap = 9, .continuation_pos = 10,
-      .child_pcpos = { 10, 11, 3, 17, 7 },
-      .inherited_reg = RID_X27, .sload_reg = RID_X28, .addend = 2
+      .exitno = 6
+    },
+    {
+      .name = "__arm64_first_side_production_loopchild",
+      .root_n = 64, .root_bias = 1, .root_result = 64,
+      .side_n = 64, .side_bias = 1.25, .side_result = 80,
+      .native_n = 64, .native_bias = 1.25, .native_result = 80,
+      .require_loop_child = 1
     }
   };
   ProductionPair unsupported = {
     .name = "__arm64_first_side_production_unsupported",
     .root_n = 4, .root_bias = 0, .root_result = 6,
     .side_n = 7, .side_bias = 1, .side_result = 9,
-    .exitno = 6, .root_nsnap = 9, .continuation_pos = 10,
-    .child_pcpos = { 10, 11, 3, 17, 7 },
-    .inherited_reg = RID_X27, .sload_reg = RID_X28, .addend = 3
+    .exitno = 6
   };
   void *saved_cframe;
   int32_t saved_vmstate;
@@ -889,13 +874,13 @@ static int detailed_main(int argc, char **argv)
   }
   expect_unsupported_first_side_closed(L, J, g, &unsupported);
   assert(unsupported.rootno > pairs[PRODUCTION_PAIR_COUNT-1u].childno);
-  assert(live_trace_count(J) == 10u);
+  assert(live_trace_count(J) == 12u);
 
   expect_quiescent(L, J, g, tg, saved_cframe, saved_vmstate);
   for (j = 0; j < 2; j++)
     for (i = 0; i < PRODUCTION_PAIR_COUNT; i++)
       expect_native_child(L, J, &pairs[i]);
-  assert(live_trace_count(J) == 10u);
+  assert(live_trace_count(J) == 12u);
   for (i = 0; i < PRODUCTION_PAIR_COUNT; i++)
     expect_edge(g, &pairs[i], pairs[i].child_mcode);
   expect_quiescent(L, J, g, tg, saved_cframe, saved_vmstate);
