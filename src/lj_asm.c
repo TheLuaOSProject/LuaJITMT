@@ -3102,11 +3102,6 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
       asm_test_side_probe_capture(J);
 #endif
     } else if (LJ_UNLIKELY(!lj_asm_arm64_ir_admit(J, T, &reject))) {
-      fprintf(stderr, "ARM64 IR reject reason=%u ref=%u op=%u detail=%u start=%u nk=%u nins=%u\n",
-              (unsigned)reject.reason, (unsigned)reject.ref,
-              (unsigned)reject.op, (unsigned)reject.detail,
-              (unsigned)bc_op(T->startins), (unsigned)T->nk,
-              (unsigned)T->nins);
       /* Use the established deterministic assembler error. The exact
       ** rejected opcode remains available through errinfo; CALL helper IDs
       ** and shape details are exposed by the pure admission result. */
