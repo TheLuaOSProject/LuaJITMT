@@ -265,4 +265,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
     XCFLAGS="$xcflags"
 restore_needed=0
 
-echo "arm64_jit_numeric_loop_contract OK: exact spill-free mixed INT/NUM loop and FPR-restoring XPOLL lifecycle ran on ARM64 and ARM64e/BTI; the separate half-step root stayed isolated while CONV, MUL and mixed-root sides remained closed"
+echo "arm64_jit_numeric_loop_contract OK: mixed INT/NUM root guards, FPR-restoring XPOLL lifecycle, scalar conversions and native integer-x side adaptation ran on ARM64 and ARM64e/BTI"

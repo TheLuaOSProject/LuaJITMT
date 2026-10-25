@@ -768,3 +768,40 @@ log is `/tmp/ljmt-review-exit-final-2e7b4e1d.log`; diagnostic counts are in
 passes on ARM64 and ARM64e/BTI, including trace retirement, immutable gate
 disassembly, reset and all signal-based target checks. Rerun log:
 `/tmp/ljmt-exit-isolated-root-2e7b4e1d.log`.
+
+## Numeric adaptation and the loop-condition continuation
+
+The combined gate at `2e7b4e1d` stopped at numeric tests that required no child
+after deliberately heating type exits. The mixed and pure root-only fixtures
+now keep side recording cold while retaining exact IR, snapshot, generated
+guard and XPOLL/STOPREQ/GC checks. Dedicated hot-exit positives exercise the
+same kernels with integer accumulators or limits and require native child
+execution, its exact selected parent edge, and bounded exits.
+
+The new pure case found a real publication/entry mismatch. A side from a NUM
+limit to an INT limit resumes in the condition before `BC_LOOP`. Publication
+already used the actual backward-jump target as the safe lower bound, but
+entry still used the root loop header. All 7,800 entry attempts over 100 calls
+were refused even though a child had published. Entry and publication now use
+the same bounded live-generation helper, which double-checks the current
+header, shadow, backedge and continuation and binds the continuation to the
+child's certificate. Independent semantic and allocated-layout proofs remain.
+
+The fixed pure regression explicitly requires the earlier continuation and
+records 100 successful handoffs, zero cleanups and 100 exits from the child for
+100 calls. Complete mixed and pure contracts passed on ARM64 and ARM64e/BTI
+in the private checkpoint (`29538996` plus fixture `943642b2`, integrated as
+`4a64d42d` and `423390a2`). Logs are
+`/private/tmp/ljmt-numeric-final/numeric-final.log` and `pure-final.log`.
+The pure fixture also passed with an ARM64 runtime built without
+`LUA_USE_ASSERT`, while C fixture assertions remained active. Final combined
+validation follows the remaining numeric-argument fixture integration.
+
+The integrated reruns also strengthen exit attribution: a self-loop child must
+actually exit as that child; the mixed kernel may subsequently reenter its
+now-compatible NUM root and finish through the root's terminal exit. The
+child's own exit ordinal is bounded independently of the selected parent
+ordinal. Both complete contracts pass on both targets with these checks:
+`/tmp/ljmt-numeric-child-exits-final2.log` and
+`/tmp/ljmt-pure-child-exits-final.log`. The CI success messages now describe
+the generalized capability rather than claiming numeric sides remain closed.

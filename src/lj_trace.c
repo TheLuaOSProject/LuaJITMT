@@ -4663,7 +4663,7 @@ static int trace_arm64_loop_generation_valid(GCproto *pt,
   backpc = &bc[(BCPos)endpos];
   /* A side continuation may start in the condition/setup prefix before the
   ** native loop body, but never before the validated bytecode backedge target
-  ** or after the loop's backward-jump instruction. */
+  ** or at or after the loop's backward-jump instruction. */
   continuation1 = (BCIns)la_load32_acq((const uint32_t *)continuation);
   live1 = (BCIns)la_load32_acq((const uint32_t *)startpc);
   back1 = (BCIns)la_load32_acq((const uint32_t *)backpc);

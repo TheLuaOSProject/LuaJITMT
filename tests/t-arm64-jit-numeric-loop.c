@@ -789,6 +789,27 @@ static void test_mixed_root_integer_x_side(void)
   assert(lj_trace_test_root_entry_cleanups() == 0);
   assert(lj_trace_test_exit_calls() > 0 &&
 	 lj_trace_test_exit_calls() <= 2u*100u);
+  /* A root entry followed by its original type exit would leave the loop
+  ** interpreted. Require an exit from the child, or the parent's completed
+  ** loop after a native child-to-root handoff. */
+  if (trace_linktype_acq(child) == LJ_TRLINK_LOOP) {
+    assert(lj_trace_test_first_exit_parent() == trace_traceno_acq(child));
+    assert(lj_trace_test_first_exitno() < trace_nsnap_acq(child));
+    if (lj_trace_test_last_exit_parent() == trace_traceno_acq(child)) {
+      assert(lj_trace_test_last_exitno() < trace_nsnap_acq(child));
+    } else {
+      /* The adapted arithmetic may become compatible with the original
+      ** root again; its final loop exit still proves resumed native work. */
+      assert(lj_trace_test_last_exit_parent() == rootno);
+      assert(lj_trace_test_last_exitno() == NUMERIC_FINAL_EXIT);
+    }
+  } else {
+    assert(side_exit != NUMERIC_FINAL_EXIT);
+    assert(lj_trace_test_first_exit_parent() == rootno);
+    assert(lj_trace_test_last_exit_parent() == rootno);
+    assert(lj_trace_test_first_exitno() == NUMERIC_FINAL_EXIT);
+    assert(lj_trace_test_last_exitno() == NUMERIC_FINAL_EXIT);
+  }
   assert(lj_tg_load_jit_base(tg) == NULL);
   assert(lj_tg_in_native_acq(tg) == 0);
   assert(lj_tg_vmstate_load_acq(tg) == idle_vmstate);

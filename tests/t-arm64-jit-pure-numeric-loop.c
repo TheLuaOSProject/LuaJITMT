@@ -877,8 +877,8 @@ static void test_pure_root_integer_limit_side(void)
   assert(lj_trace_test_exit_calls() == 100);
   assert(lj_trace_test_first_exit_parent() == trace_traceno_acq(child));
   assert(lj_trace_test_last_exit_parent() == trace_traceno_acq(child));
-  assert(lj_trace_test_first_exitno() == side_exit);
-  assert(lj_trace_test_last_exitno() == side_exit);
+  assert(lj_trace_test_first_exitno() < trace_nsnap_acq(child));
+  assert(lj_trace_test_last_exitno() == lj_trace_test_first_exitno());
   assert(trace_runnable_acq(root, rootno) &&
 	 trace_runnable_acq(child, trace_traceno_acq(child)));
   assert(lj_tg_load_jit_base(tg) == NULL);

@@ -291,4 +291,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
     XCFLAGS="$xcflags"
 restore_needed=0
 
-echo "arm64_jit_pure_numeric_loop_contract OK: exact half-step pure-NUM root, ordered FCMP NaN-exit polarity, FPR snapshots, XPOLL/STOPREQ reuse and ARM64e/BTI all ran; dynamic-step profile stayed isolated and remaining adjacent numeric families and sides stayed closed"
+echo "arm64_jit_pure_numeric_loop_contract OK: half-step root guards, ordered FCMP NaN exits, FPR snapshots, XPOLL/STOPREQ reuse and native integer-limit side adaptation ran on ARM64 and ARM64e/BTI"
