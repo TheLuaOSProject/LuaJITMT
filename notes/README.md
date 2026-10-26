@@ -31,6 +31,9 @@ and reports that are no longer authoritative are retained in
   shared helpers, rooted-GC/upvalue profiles and M7 FFI suites passed. See
   [`arm64-jit-callback-recording-2026-10-26.md`](arm64-jit-callback-recording-2026-10-26.md)
   for exact source identities, the harness correction, logs and open failures.
+  The later test-only unwind repair passed the full seven-build callback
+  contract, restoring the x64 release token fixture; see
+  [`x64-vmevent-test-unwind-2026-10-26.md`](x64-vmevent-test-unwind-2026-10-26.md).
   The earlier closed-upvalue checkpoint remains in
   [`arm64-jit-rooted-upvalues-2026-10-26.md`](arm64-jit-rooted-upvalues-2026-10-26.md).
   The architecture-review checkpoint and its sanitizer/performance scope remain in
@@ -269,10 +272,9 @@ available.
   stress path.
 - Concurrent Darwin profiler start/stop can still terminate on a fresh late
   kernel SIGPROF after the saved disposition is restored. Discarding signals
-  already pending does not close that producer race. The x64 release token
-  fixture also retains a baseline external-unwind panic on injected OOM.
-  Both reproduce on the preceding clean checkpoint and are excluded explicitly
-  from the new callback contract's claimed coverage; see the callback notes.
+  already pending does not close that producer race. This reproduces on the
+  preceding clean checkpoint and is excluded explicitly from the callback
+  contract's claimed coverage; see the callback notes.
 - The normal development build's repeated upvalue regression passed 110
   processes, then one process timed out after 120 seconds. Subsequent unchanged
   runs passed 300 unbuffered and 1,000 buffered processes without reproducing

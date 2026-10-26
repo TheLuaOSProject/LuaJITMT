@@ -360,8 +360,11 @@ static void vmevent_prepare_roots_close(lua_State *L,
 }
 
 #if defined(LJ_GC2_TEST_HELPERS)
-static void vmevent_prepare_test_call(lua_State *L, VMEvent ev, int stage,
-				      const VMEVENTPrepareRoots *roots)
+/* This hook can throw into its caller's protected setup. Inlined staged
+** hooks expose a mismatched CFA in x64 Darwin release fixtures. Keep a
+** distinct frame; this seam is absent from ordinary runtimes. */
+static LJ_NOINLINE void vmevent_prepare_test_call(lua_State *L, VMEvent ev,
+				      int stage, const VMEVENTPrepareRoots *roots)
 {
   LJVMEVENTPrepareTestHook hook = vmevent_prepare_test_hook;
   void *ud = vmevent_prepare_test_ud;

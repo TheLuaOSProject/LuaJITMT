@@ -60,13 +60,19 @@ both baseline and patched sources. No portable userspace drain/barrier for an
 in-flight AST was identified; the pending-signal test proves only that a
 signal already queued before stop is discarded.
 
-## Other baseline issue
+## Baseline x64 fixture failure, subsequently repaired
 
-The x64 release `t-jit-token.c` fixture also panics with an unprotected
+The x64 release `t-jit-token.c` fixture also panicked with an unprotected
 `not enough memory` error on clean baseline `37d0baef` (profile hash
 `6b3723229cbb3670d3101aca0465c17bcf5e164a653807f5915039ee8f14ccf3`). See
 `/tmp/ljmt-callback-token-baseline.log`. Treat this as an independent baseline
 fixture failure, not evidence about callback recording.
+
+The later
+[`test-hook unwind repair`](x64-vmevent-test-unwind-2026-10-26.md) gives the
+test-only preparation hook a distinct frame. The complete release fixture
+passes afterward and is restored to the seven-build callback contract. The
+following diagnosis and initial validation limits describe the earlier state.
 
 Preserved-binary LLDB inspection narrowed that panic to an unwind mismatch at
 the injected stage-3 preparation hook. `_Unwind_RaiseException` returned
@@ -81,8 +87,8 @@ addresses are retained in `/tmp/ljmt-x64-unwind-evidence.txt`.
 
 The new CI contract intentionally selects `--callback-cleanup` from
 `t-profile-stop-native`, leaving its default concurrent timer case intact. It
-runs the full x64 token fixture in the assertion profile; the release panic
-above remains open. Both runtime modes run the callback overlap, owner,
+initially ran the full x64 token fixture only in the assertion profile; the
+release panic above was then open. Both runtime modes ran the callback overlap, owner,
 flush-stream, pending-signal, timer failure-injection, and cleanup fixtures.
 
 The corrected seven-build callback contract passed uninterrupted inside
@@ -202,5 +208,6 @@ signal cleanup. It adds no new native bytecode capability and does not finish
 the ARM64 port. General captured-local CGET/CSET cells still need rooted
 recorder sampling and separate runtime/admission proofs; rejecting their
 raw-cell IR at assembly does not itself prove the earlier recorder access.
-The existing wider JIT/FFI admission limits, the two baseline failures, and the
-new unexplained repetition timeout above remain open.
+The wider JIT/FFI admission limits, concurrent Darwin profiler shutdown race,
+and unexplained repetition timeout remain open. The x64 test-hook unwind
+failure was repaired in the linked follow-up.

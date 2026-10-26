@@ -35,13 +35,10 @@ run_profile() {
   lj_ci_run_fixture 60 "$tmpdir/profile-cleanup-$label" --callback-cleanup
   lj_ci_run_lua 30 -joff "$root/tests/t-profile-blocked-tg.lua"
   if test "$arch" = x86_64; then
-    # The existing release token fixture has an independently reproduced
-    # baseline external-unwind panic. Its assertion profile remains covered;
-    # callback overlap/owner/cleanup above run in both runtime modes.
-    if test "$label" = x64-assert; then
-      lj_ci_compile_fixture "$tmpdir/token-$label" "$root/tests/t-jit-token.c"
-      lj_ci_run_fixture 60 "$tmpdir/token-$label"
-    fi
+    # The injected preparation error must cross both protected C and Lua
+    # frames in release as well as assertion builds.
+    lj_ci_compile_fixture "$tmpdir/token-$label" "$root/tests/t-jit-token.c"
+    lj_ci_run_fixture 60 "$tmpdir/token-$label"
     lj_ci_run_lua 30 "$root/tests/t-profile-single-trace.lua"
   else
     lj_ci_run_lua 120 "$root/tests/t-arm64-jit-rooted-upvalues.lua"
