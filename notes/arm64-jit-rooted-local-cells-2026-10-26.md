@@ -75,10 +75,63 @@ visible values over the cell identity slot. Those production defects were
 fixed before the passing evidence above. Fixture-only mutation/reset errors
 were then corrected; later broad profile validation is recorded separately.
 
-The new four-profile contract is
-tools/ci/arm64_jit_rooted_cell_contract.sh and is wired into the experimental
-gate. At this initial checkpoint, arm64e/release and broader regressions have
-not yet been rerun for this change.
+## Completed validation
+
+Production implementation `8607c74c7769fd8599aaff923927f1842d44b1e7`
+passed an uninterrupted frozen-source combined run. The driver verified that
+HEAD and all tracked files were unchanged at completion. Four build jobs,
+the selected macOS SDK compiler, deployment target 13.0 and ad-hoc signing
+were used. `/tmp/ljmt-cell-full.log` is the driver record.
+
+- The complete experimental gate passed, including the new cell contract,
+  existing rooted values/upvalues, callback recording, scalar roots and sides,
+  publication/lifecycle and all four M7 FFI profiles. Its detailed log is
+  `/tmp/ljmt-cell-experimental.log`.
+- ARM64 stock source and original-v2 import each passed all 509 cases:
+  `/tmp/ljmt-cell-stock-source.log` and `/tmp/ljmt-cell-stock-import.log`.
+- The signed x86-64/Rosetta build passed rooted stores, nil/no-metatable reads,
+  bounded reads, raw nil stores, closed-upvalue helpers, the new direct cell
+  helper fixture, the lightuserdata segment race, and both 509-case corpora.
+  No imported atomic fallback was found in the runtime or inspected helper
+  objects. Log: `/tmp/ljmt-cell-x64-regression.log`; bound profile
+  `ae056eb004e415cc5fccc773fe462df35ece48d4b87bf22828a19b01f5c4b2c0`.
+  This is targeted Rosetta regression evidence, not a native Intel performance
+  measurement or a complete x64 umbrella.
+- The complete bootstrap gate passed, including all 387 applicable stock
+  cases, threading/TG roots, interpreter GC2, callbacks and interpreter FFI:
+  `/tmp/ljmt-cell-bootstrap.log`.
+- The driver restored an ordinary ARM64 experimental/assertion runtime with
+  no test-helper defines. Native cells and the full rooted-upvalue suite passed;
+  no `__atomic`/libatomic imports or function/recorded-hook test symbols were
+  present. Log: `/tmp/ljmt-cell-development.log`; profile
+  `6d21e069982e37c994b2b39076a8a24b7b4f3b2be8b832d14849339da9cff28f`.
+  Object disassembly was retained at `/tmp/ljmt-cell-development-lj_func.asm`.
+
+The standalone four-profile contract also passed before that combined run
+(`/tmp/ljmt-cell-matrix.log`). A later test-only change,
+`4cde29165d4b48eb71f0205c1e431cd41daac1ef`, added explicit raw-cell snapshot
+references and NORESTORE mutations in both independent admission passes.
+Snapshots are chosen after the cell guard, so a forward-reference check cannot
+explain their rejection. The unchanged production implementation passed the
+complete cell contract again, uninterrupted on that frozen test checkpoint:
+`/tmp/ljmt-cell-final-matrix.log`.
+
+Final four-profile runtime/archive bindings:
+
+| Profile | Bound identity |
+| --- | --- |
+| ARM64 assert | `450c3922cb15bcc4d4b9fc40d9792cb951dfedf19a4e8762996858428db4c68d` |
+| arm64e/BTI assert | `696fe384f2fb852394fca6ae616458552b39233188914133a7dacaece8fb36fe` |
+| ARM64 release | `b9ac5ac592f16c0e629e37000acb0621e9284bb945e28eb0c44ac69b589fe0b5` |
+| arm64e/BTI release | `4bf2385b85c95cd9c5ef68eb2506578f9cbedf42e2f3f194746127283dab598f` |
+
+Each profile ran direct helpers plus native value/GC/concurrency cases, all 15
+admission selectors, ordinary native cell execution, and the original native
+closed-upvalue suite. The contract restored the ordinary ARM64 experimental
+assertion build afterward. `tools/ci/arm64_jit_rooted_cell_contract.sh` remains
+wired into the experimental umbrella.
+
+## Remaining scope
 
 The Darwin concurrent profiler-stop SIGPROF race and the earlier unexplained
 120-second upvalue repetition timeout remain open as documented in

@@ -23,19 +23,18 @@ and reports that are no longer authoritative are retained in
   entry, exits and refusals. Shared build profiles bind runtime, archive,
   fixture and helper-library identity. All review work streams are integrated.
   See [`review-implementation-2026-10-25.md`](review-implementation-2026-10-25.md).
-- Latest combined runtime validation: the callback-recording checkpoint on
-  2026-10-26, based on `37d0baef`. Experimental gate phases passed across an
-  initial run and a corrected continuation with identical production sources;
-  the seven-build callback contract passed uninterrupted in the continuation.
-  The complete bootstrap gate, ARM64 and signed x86-64 stock source/import,
-  shared helpers, rooted-GC/upvalue profiles and M7 FFI suites passed. See
+- Latest combined runtime validation: the rooted local-cell checkpoint on
+  2026-10-26, frozen at `8607c74c`. The complete experimental and bootstrap
+  gates passed uninterrupted, including all four M7 FFI profiles. ARM64 and
+  signed x86-64 each passed both 509-case stock source/import corpora; shared
+  cell/upvalue/table helpers and the segment-map race passed as well. A later
+  test-only snapshot expansion at `4cde2916` passed the complete four-profile
+  cell contract with unchanged production sources. See
+  [`arm64-jit-rooted-local-cells-2026-10-26.md`](arm64-jit-rooted-local-cells-2026-10-26.md)
+  for exact source/build identities, logs and validation limits.
+  Earlier callback recording and the repaired x64 test-only unwind are in
   [`arm64-jit-callback-recording-2026-10-26.md`](arm64-jit-callback-recording-2026-10-26.md)
-  for exact source identities, the harness correction, logs and open failures.
-  The later test-only unwind repair passed the full seven-build callback
-  contract, restoring the x64 release token fixture; see
-  [`x64-vmevent-test-unwind-2026-10-26.md`](x64-vmevent-test-unwind-2026-10-26.md).
-  The earlier closed-upvalue checkpoint remains in
-  [`arm64-jit-rooted-upvalues-2026-10-26.md`](arm64-jit-rooted-upvalues-2026-10-26.md).
+  and [`x64-vmevent-test-unwind-2026-10-26.md`](x64-vmevent-test-unwind-2026-10-26.md).
   The architecture-review checkpoint and its sanitizer/performance scope remain in
   [`review-validation-2026-10-25.md`](review-validation-2026-10-25.md).
 - Fixed scalar FFI stack arguments pass the four-profile M7 suite,
@@ -50,7 +49,7 @@ and reports that are no longer authoritative are retained in
   threaded tmpbuf, Darwin native roots/GC2, ARM64/arm64e callbacks,
   variadic/aggregate interpreter FFI and x86-64 errno unwind.
 - The signed x86-64/Rosetta runtime at that checkpoint passed both 509-case corpora
-  and the shared rooted-store, raw nil-deletion and segment-map race fixtures. The combined
+  and the shared rooted-store, raw nil-deletion, upvalue/cell and segment-map race fixtures. The combined
   gates also ran x86-64 callback-result lifetime and errno unwind. Earlier
   authentic CALLXS/remote-flush/callback and callback-stack relocation/unwind
   evidence is at `9b0c6e18`. These are targeted regressions, not a complete
@@ -199,9 +198,10 @@ available.
   [`arm64-jit-rooted-upvalues-2026-10-26.md`](arm64-jit-rooted-upvalues-2026-10-26.md).
 - Captured-local CGET/CSET in root LOOP/FORL use owned-stack cell helpers,
   leased payload sampling and independent admission. Cell identity loads stay
-  guard-only and never enter registers, spills or exit snapshots. Initial
-  ARM64 assertion coverage includes visible values, GC, peer sharing and exact
-  post-store exits; broader profile validation is pending for this checkpoint.
+  guard-only and never enter registers, spills or exit snapshots. Visible
+  values, GC, peer sharing, exact post-store exits and independent malformed
+  snapshot/IR rejection pass on ARM64/arm64e with assertions and in release.
+  Shared x64 helpers and both architectures' stock corpora also pass.
   See [`arm64-jit-rooted-local-cells-2026-10-26.md`](arm64-jit-rooted-local-cells-2026-10-26.md).
 - Scalar `FORL` supports constant and variable integer bounds/steps through
   def-use and source-control-flow checks. Scalar fixed-arity `FUNCF` supports
