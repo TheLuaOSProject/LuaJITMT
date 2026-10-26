@@ -538,7 +538,7 @@ static int arm64_callxs_kint_value(const IRIns *ir, IRRef nk, IRRef target,
 
 static int arm64_callxs_xsave_anchor(const IRIns *ir, IRRef nins,
 	IRRef xsave, const BCIns *proto_bc, MSize proto_sizebc,
-	uintptr_t *returnpcp)
+	uintptr_t *returnpcp, BCIns *sourceinsp)
 {
 	IRIns marker;
 	uint32_t offset;
@@ -556,10 +556,46 @@ static int arm64_callxs_xsave_anchor(const IRIns *ir, IRRef nins,
 		return 0;
 	op = bc_op((BCIns)la_load32_acq(
 		(const uint32_t *)&proto_bc[(MSize)offset-1u]));
-	if (op != BC_CALL)
+	if (op != BC_CALL && op != BC_CALLM)
 		return 0;
 	if (returnpcp != NULL)
 		*returnpcp = (uintptr_t)(const void *)&proto_bc[offset];
+	if (sourceinsp != NULL)
+		*sourceinsp = (BCIns)la_load32_acq(
+		  (const uint32_t *)&proto_bc[(MSize)offset-1u]);
+	return 1;
+}
+
+/* CALLM is admitted only when its complete variable tail is the single
+** result of the immediately preceding multires CALL. */
+static int arm64_callxs_callm_pair(const BCIns *bc, MSize sizebc,
+	uintptr_t producer_returnpc, uintptr_t consumer_returnpc,
+	unsigned nargs)
+{
+	uintptr_t lo = (uintptr_t)(const void *)bc;
+	uintptr_t hi;
+	uintptr_t consumer_pc;
+	MSize consumer_index;
+	BCIns producer, consumer;
+	if (bc == NULL || sizebc < 3u || sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns))
+		return 0;
+	hi = lo+(uintptr_t)sizebc*sizeof(BCIns);
+	if (consumer_returnpc < lo+2u*sizeof(BCIns) || consumer_returnpc >= hi ||
+	    producer_returnpc != consumer_returnpc-sizeof(BCIns) ||
+	    ((consumer_returnpc-lo) % sizeof(BCIns)) != 0)
+		return 0;
+	consumer_pc = consumer_returnpc-sizeof(BCIns);
+	consumer_index = (MSize)((consumer_pc-lo)/sizeof(BCIns));
+	if (consumer_index == 0 || consumer_index >= sizebc)
+		return 0;
+	producer = (BCIns)la_load32_acq((const uint32_t *)&bc[consumer_index-1u]);
+	consumer = (BCIns)la_load32_acq((const uint32_t *)&bc[consumer_index]);
+	if (bc_op(producer) != BC_CALL || bc_b(producer) != 0 ||
+	    bc_op(consumer) != BC_CALLM ||
+	    nargs != (unsigned)bc_c(consumer)+1u ||
+	    (unsigned)bc_a(producer) != (unsigned)bc_a(consumer)+
+	      (unsigned)bc_c(consumer)+1u+LJ_FR2)
+		return 0;
 	return 1;
 }
 
@@ -786,6 +822,10 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
   IRRef ref, nk, nins, enter = 0, call = 0, leave = 0, xsave = 0;
   IRRef enterargs[3] = { 0, 0, 0 };
   unsigned state = CALLXS_CLOSED, calls = 0, enters = 0, leaves = 0;
+  IRRef producer_call = 0, completed_producer = 0;
+  uintptr_t xsave_returnpc = 0, producer_returnpc = 0;
+  IRType producer_type = IRT_NIL;
+  int producer_pending = 0, producer_scalar = 0;
   int ctype_seen = 0;
   IRRef boxref = 0;
   CTypeID box_ctype = 0;
@@ -843,17 +883,23 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	  irt_type(ins.t) != IRT_NIL || !irt_isguard(ins.t))
 	return 0;
       g->loop = ref;
+      completed_producer = 0;
+      producer_returnpc = 0;
+      producer_type = IRT_NIL;
       break;
     case IR_XPOLL:
       if (state != CALLXS_CLOSED || g->poll ||
 	  irt_type(ins.t) != IRT_NIL || !irt_isguard(ins.t))
 	return 0;
       g->poll = ref;
+      completed_producer = 0;
+      producer_returnpc = 0;
+      producer_type = IRT_NIL;
       break;
     case IR_XSAVE:
       if (state != CALLXS_CLOSED || irt_type(ins.t) != IRT_NIL ||
 	  !arm64_callxs_xsave_anchor(T->ir, nins, ref,
-	    proto_bc(J->pt), J->pt->sizebc, NULL))
+	    proto_bc(J->pt), J->pt->sizebc, &xsave_returnpc, NULL))
 	return 0;
       xsave = ref;
       state = CALLXS_SAVED;
@@ -929,6 +975,16 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	      ir_load_acq(&T->ir[zero]).i != 0)
 	    return 0;
 	  state = CALLXS_CLOSED;
+	  if (producer_pending && producer_scalar) {
+	    completed_producer = producer_call;
+	    producer_returnpc = xsave_returnpc;
+	    producer_type = call_result_type;
+	  } else {
+	    completed_producer = 0;
+	    producer_returnpc = 0;
+	    producer_type = IRT_NIL;
+	  }
+	  producer_pending = 0;
 	  boxref = 0;
 	  box_ctype = 0;
 	  box_store_seen = 0;
@@ -955,6 +1011,33 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	return 0;
       if (!arm64_callxs_carg_values(T->ir, nk, nins, ref,
 				    abi.nargs, values)) return 0;
+      {
+	BCIns sourceins;
+	BCOp sourceop;
+	if (xsave_returnpc == 0 ||
+	    !arm64_callxs_xsave_anchor(T->ir, nins, xsave,
+	      proto_bc(J->pt), J->pt->sizebc, NULL, &sourceins)) return 0;
+	sourceop = bc_op(sourceins);
+	if (sourceop == BC_CALLM) {
+	  IRRef value;
+	  IRIns carrier;
+	  if (abi.nargs == 0 || completed_producer == 0 ||
+	      producer_type == IRT_NIL ||
+	      !arm64_callxs_callm_pair(proto_bc(J->pt), J->pt->sizebc,
+		producer_returnpc, xsave_returnpc, abi.nargs)) return 0;
+	  value = values[abi.nargs-1u];
+	  carrier = ir_load_acq(&T->ir[value]);
+	  if (value != completed_producer &&
+	      (carrier.o != IR_CONV || carrier.op1 != completed_producer ||
+	       !((irt_type(carrier.t) == IRT_FLOAT &&
+		  (producer_type == IRT_NUM || producer_type == IRT_INT) &&
+		  carrier.op2 == ((IRT_FLOAT << IRCONV_DSH)|producer_type) &&
+		  carrier.t.irt == IRT_FLOAT) ||
+		 (irt_type(carrier.t) == IRT_NUM && producer_type == IRT_FLOAT &&
+		  carrier.op2 == ((IRT_NUM << IRCONV_DSH)|IRT_FLOAT) &&
+		  carrier.t.irt == IRT_NUM)))) return 0;
+	} else if (sourceop != BC_CALL) return 0;
+      }
       for (i = 0; i < abi.nargs; i++) {
 	LJArm64ABIArg *a = &abi.arg[i];
 	if (!arm64_callxs_value_kind(T->ir, values[i], nk, nins, ref,
@@ -988,6 +1071,18 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
       call = ref;
       result_is_cdata = abi.result_kind == LJ_ARM64_ABI_KIND_POINTER;
       call_result_type = (IRType)irt_type(ins.t);
+      {
+	BCIns sourceins;
+	if (!arm64_callxs_xsave_anchor(T->ir, nins, xsave,
+	      proto_bc(J->pt), J->pt->sizebc, NULL, &sourceins)) return 0;
+	producer_call = ref;
+	producer_pending = 1;
+	producer_scalar = bc_op(sourceins) == BC_CALL && bc_b(sourceins) == 0 &&
+	  abi.nargs+1u == (unsigned)bc_c(sourceins) &&
+	  (abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER ||
+	   abi.result_kind == LJ_ARM64_ABI_KIND_FLOAT ||
+	   abi.result_kind == LJ_ARM64_ABI_KIND_ENUM);
+      }
       calls++;
       state = CALLXS_ACTIVE;
       break;
@@ -1052,6 +1147,16 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 		ir_load_acq(&T->ir[zero]).i != 0)
 	      return 0;
 	    state = CALLXS_CLOSED;
+	    if (producer_pending && producer_scalar) {
+	      completed_producer = producer_call;
+	      producer_returnpc = xsave_returnpc;
+	      producer_type = call_result_type;
+	    } else {
+	      completed_producer = 0;
+	      producer_returnpc = 0;
+	      producer_type = IRT_NIL;
+	    }
+	    producer_pending = 0;
 	    boxref = 0;
 	    box_ctype = 0;
 	    box_store_seen = 0;
@@ -2094,7 +2199,7 @@ static int arm64_callxs_snapshot_anchor_for_call(const GCtrace *T,
 		IRIns ins = ir_load_acq(&T->ir[--ref]);
 		if (ins.o == IR_XSAVE)
 			return arm64_callxs_xsave_anchor(T->ir, T->nins,
-				ref, proto_bc(pt), pt->sizebc, returnpcp);
+				ref, proto_bc(pt), pt->sizebc, returnpcp, NULL);
 		if (ins.o == IR_CALLXS ||
 		    (ins.o == IR_CALLS &&
 		     ins.op2 == IRCALL_lj_ffi_native_trace_leave))
@@ -2329,8 +2434,10 @@ static int arm64_callxs_snapshot_bounds(const GCtrace *T,
 	if (expected_return_pc == 0 || pc != expected_return_pc ||
 	    pc != source_return_pc || pcindex == 0 ||
 	    pcindex >= pt->sizebc ||
-	    bc_op((BCIns)la_load32_acq(
-	      (const uint32_t *)&bc[pcindex-1u])) != BC_CALL)
+	      (bc_op((BCIns)la_load32_acq(
+		(const uint32_t *)&bc[pcindex-1u])) != BC_CALL &&
+	       bc_op((BCIns)la_load32_acq(
+		(const uint32_t *)&bc[pcindex-1u])) != BC_CALLM))
 	  SNAP_BOUNDS_FAIL();
       }
       {
@@ -2351,8 +2458,10 @@ static int arm64_callxs_snapshot_bounds(const GCtrace *T,
 	  pcindex = (MSize)((pc-lo)/sizeof(BCIns));
 	  callindex = (MSize)((source_return_pc-lo)/sizeof(BCIns))-1u;
 	  if (callindex >= pt->sizebc || pcindex > callindex ||
-	      bc_op((BCIns)la_load32_acq((const uint32_t *)&bc[callindex])) !=
-		BC_CALL) {
+	      (bc_op((BCIns)la_load32_acq((const uint32_t *)&bc[callindex])) !=
+		BC_CALL &&
+	       bc_op((BCIns)la_load32_acq((const uint32_t *)&bc[callindex])) !=
+		BC_CALLM)) {
 	    SNAP_BOUNDS_FAIL();
 	  }
 	  for (setup = pcindex; setup < callindex; setup++)
@@ -2698,11 +2807,15 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 {
 	IRRef semantic_nins, ref, active_call = 0, active_enter = 0;
 	IRRef active_leave = 0;
+	IRRef active_xsave = 0, producer_call = 0, completed_producer = 0;
 	IRRef enterargs[3] = { 0, 0, 0 };
 	IRRef lookupargs[3] = { 0, 0, 0 };
 	IRRef boxref = 0;
 	CTypeID box_ctype = 0;
 	int box_store_seen = 0, result_is_cdata = 0;
+	uintptr_t xsave_returnpc = 0, producer_returnpc = 0;
+	IRType producer_type = IRT_NIL;
+	int producer_pending = 0, producer_scalar = 0;
 	unsigned protocol = 0, nc = 0, nx = 0, nloop = 0, npoll = 0;
 	MSize capacity, highest = 0, outgoing = 0;
 	GCtrace temp;
@@ -2808,8 +2921,10 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	  if (ins.o == IR_XSAVE) {
 	    if (protocol != 0 || ins.t.irt != IRT_NIL ||
 		!arm64_callxs_xsave_anchor(view->ir, semantic_nins,
-		  ref, view->proto_bc, view->proto_sizebc, NULL))
+		  ref, view->proto_bc, view->proto_sizebc,
+		  &xsave_returnpc, NULL))
 	      return 0;
+	    active_xsave = ref;
 	    protocol = 1;
 	    nx++;
 	  } else if (ins.o == IR_CALLS &&
@@ -2839,12 +2954,46 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    protocol = 3;
 	  } else if (ins.o == IR_CALLXS) {
 	    LJArm64ABISignature abi;
-	    IRRef fpref;
+	    IRRef fpref, values[LJ_ARM64_ABI_MAX_ARGS];
+	    BCIns sourceins;
 	    if (protocol != 3 || active_call != 0)
 	      return 0;
 	    if (!arm64_callxs_signature_for_call(view->cts, view->ir, view->nk,
 		semantic_nins, ref, &abi, &fpref))
 	      return 0;
+	    if (active_xsave == 0 || xsave_returnpc == 0 ||
+		!arm64_callxs_xsave_anchor(view->ir, semantic_nins, active_xsave,
+		  view->proto_bc, view->proto_sizebc, NULL, &sourceins))
+	      return 0;
+	    if (!arm64_callxs_carg_values(view->ir, view->nk, semantic_nins,
+		ref, abi.nargs, values)) return 0;
+	    if (bc_op(sourceins) == BC_CALLM) {
+	      IRIns carrier;
+	      IRRef value;
+	      if (abi.nargs == 0 || completed_producer == 0 ||
+		  producer_type == IRT_NIL ||
+		  !arm64_callxs_callm_pair(view->proto_bc, view->proto_sizebc,
+		    producer_returnpc, xsave_returnpc, abi.nargs)) return 0;
+	      value = values[abi.nargs-1u];
+	      carrier = ir_load_acq(&view->ir[value]);
+	      if (value != completed_producer &&
+		  (carrier.o != IR_CONV || carrier.op1 != completed_producer ||
+		   !((irt_type(carrier.t) == IRT_FLOAT &&
+		      (producer_type == IRT_NUM || producer_type == IRT_INT) &&
+		      carrier.op2 == ((IRT_FLOAT << IRCONV_DSH)|producer_type) &&
+		      carrier.t.irt == IRT_FLOAT) ||
+		     (irt_type(carrier.t) == IRT_NUM && producer_type == IRT_FLOAT &&
+		      carrier.op2 == ((IRT_NUM << IRCONV_DSH)|IRT_FLOAT) &&
+		      carrier.t.irt == IRT_NUM)))) return 0;
+	    } else if (bc_op(sourceins) != BC_CALL) return 0;
+	    producer_call = ref;
+	    producer_pending = 1;
+	    producer_scalar = bc_op(sourceins) == BC_CALL && bc_b(sourceins) == 0 &&
+	      abi.nargs+1u == (unsigned)bc_c(sourceins) &&
+	      (abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER ||
+	       abi.result_kind == LJ_ARM64_ABI_KIND_FLOAT ||
+	       abi.result_kind == LJ_ARM64_ABI_KIND_ENUM);
+	    producer_type = (IRType)irt_type(ir_load_acq(&view->ir[ref]).t);
 	    if (fpref != enterargs[1])
 	      return 0;
 	    if (abi.result_kind == LJ_ARM64_ABI_KIND_POINTER ?
@@ -2875,6 +3024,16 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		ir_load_acq(&view->ir[zero]).i != 0)
 	      return 0;
 	    active_leave = 0;
+	    if (producer_pending && producer_scalar) {
+	      completed_producer = producer_call;
+	      producer_returnpc = xsave_returnpc;
+	    } else {
+	      completed_producer = 0;
+	      producer_returnpc = 0;
+	      producer_type = IRT_NIL;
+	    }
+	    producer_pending = 0;
+	    active_xsave = 0;
 	    protocol = 0;
 	    boxref = 0;
 	    box_ctype = 0;
@@ -2922,11 +3081,17 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		ins.op1 != 0 || ins.op2 != 0)
 	      return 0;
 	    nloop++;
+	    completed_producer = 0;
+	    producer_returnpc = 0;
+	    producer_type = IRT_NIL;
 	  } else if (ins.o == IR_XPOLL) {
 	    if (protocol != 0 || ins.t.irt != (IRT_NIL|IRT_GUARD) ||
 		ins.op1 != 1 || ins.op2 != 0)
 	      return 0;
 	    npoll++;
+	    completed_producer = 0;
+	    producer_returnpc = 0;
+	    producer_type = IRT_NIL;
 	  } else if (ins.o == IR_BASE) {
 	    if (ref != REF_BASE || ins.t.irt != IRT_PGC || ins.op1 || ins.op2)
 	      return 0;
@@ -3197,7 +3362,12 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	       !(c.r == RID_NONE && c.s == SPS_NONE &&
 		 !ra_hasspill(regsp_spill(c.prev)) &&
 		 arm64_postra_callxs_result_unused(view, semantic_nins, call))) ||
-	      (abi.result_class == LJ_ARM64_ABI_FPR && c.r != RID_FPRET))
+	      /* ra_destreg moves S0/D0 into an already allocated destination.
+	      ** A nested result may need a preserved FPR across the leave/enter
+	      ** helpers before its consumer places it in an outgoing stack slot. */
+	      (abi.result_class == LJ_ARM64_ABI_FPR && c.r != RID_FPRET &&
+	       !(irt_type(c.t) == IRT_FLOAT &&
+		 c.r >= RID_D8 && c.r <= RID_D15)))
 	    return 0;
 	  if (!arm64_postra_callxs_live_across(view, semantic_nins, call, capacity))
 	    return 0;

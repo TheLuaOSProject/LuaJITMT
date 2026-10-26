@@ -40,9 +40,11 @@ typedef void (*InstallObserver)(void (*fn)(unsigned));
 typedef unsigned (*ReadCounter)(unsigned id);
 
 static TGState *test_tg;
-enum { ABI_TEST_MAX_ID = 14 };
+enum { ABI_TEST_MAX_ID = 15 };
 static unsigned native_seen[ABI_TEST_MAX_ID];
 static void *expected_func[ABI_TEST_MAX_ID];
+static unsigned finish_target, forced_finishes;
+static uint64_t finish_old_epoch;
 static CTypeID global_ctype(lua_State *L, const char *name);
 
 typedef struct SemanticClone {
@@ -1136,6 +1138,314 @@ static void test_other_callsite_footer_rejected(lua_State *L)
   free(snapmap);
 }
 
+static void test_callm_admission(lua_State *L)
+{
+  jit_State *J = G2J(G(L));
+  GCfunc *fn;
+  GCproto *pt;
+  const BCIns *bc;
+  TraceVec *tv;
+  GCtrace *T = NULL;
+  MSize trace_no, source_index = UINT_MAX, i;
+  IRRef ref, producer_call = 0, consumer_call = 0, carg_ref;
+  IRRef wrong_carg_value = 0;
+  uintptr_t lo, hi;
+  LJArm64PostRAView view = { 0 };
+  SemanticClone semantic;
+  SemanticJSave jsave;
+  IRIns *copy;
+  BCIns producer_original, consumer_original;
+  lua_getglobal(L, "__abi_run_callm");
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  fn = funcV(L->top-1);
+  pt = funcproto(fn);
+  lua_pop(L, 1);
+  bc = proto_bc(pt);
+  lo = (uintptr_t)(const void *)bc;
+  hi = lo+(uintptr_t)pt->sizebc*sizeof(BCIns);
+  for (i = 1; i < pt->sizebc; i++) {
+    BCIns ins = (BCIns)la_load32_acq((const uint32_t *)&bc[i]);
+    if (bc_op(ins) == BC_CALLM) {
+      assert(source_index == UINT_MAX);
+      source_index = i;
+      assert(bc_op((BCIns)la_load32_acq((const uint32_t *)&bc[i-1u])) == BC_CALL);
+    }
+  }
+  assert(source_index != UINT_MAX);
+  tv = tracevec_acq(J);
+  assert(tv != NULL);
+  for (trace_no = 1; trace_no < tv->sizetrace; trace_no++) {
+    GCtrace *candidate = traceref_safe(J, trace_no);
+    unsigned calls = 0;
+    if (candidate == NULL || trace_startpc_acq(candidate) == NULL ||
+        (uintptr_t)(const void *)trace_startpc_acq(candidate) < lo ||
+        (uintptr_t)(const void *)trace_startpc_acq(candidate) >= hi)
+      continue;
+    for (ref = trace_nk_acq(candidate); ref < trace_nins_acq(candidate); ref++)
+      if (ir_load_acq(&trace_ir_acq(candidate)[ref]).o == IR_CALLXS) calls++;
+    if (calls >= 2u) { T = candidate; break; }
+  }
+  assert(T != NULL);
+  view.ir = trace_ir_acq(T);
+  view.owner = T;
+  view.cts = ctype_ctsG(G(L));
+  view.snap = trace_snap_acq(T);
+  view.snapmap = trace_snapmap_acq(T);
+  view.proto_bc = bc;
+  view.proto = pt;
+  view.startpc = trace_startpc_acq(T);
+  view.nins = trace_nins_acq(T);
+  view.nk = trace_nk_acq(T);
+  view.nsnap = trace_nsnap_acq(T);
+  view.nsnapmap = trace_nsnapmap_acq(T);
+  view.spadjust = trace_spadjust_acq(T);
+  view.proto_sizebc = pt->sizebc;
+  view.proto_numparams = pt->numparams;
+  view.root_topslot = trace_topslot_acq(T);
+  view.startins = trace_startins_acq(T);
+  assert(lj_asm_arm64_postra_admit(&view, NULL));
+  semantic_clone_init(&semantic, T);
+  jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+  expect_semantic_admit(J, &semantic.trace);
+  semantic_j_leave(J, &jsave);
+  semantic_clone_free(&semantic);
+
+  /* Identify the consumer from its exact XSAVE source site and CARG graph. */
+  for (ref = view.nk; ref < view.nins; ref++) {
+    IRIns ins = ir_load_acq(&view.ir[ref]);
+    if (ins.o == IR_XSAVE) {
+      BCIns source;
+      uint32_t offset = (uint32_t)ins.op1 | ((uint32_t)ins.op2 << 15);
+      assert(ins.t.irt == IRT_NIL && ins.op1 < REF_BIAS &&
+             ins.op2 < REF_BIAS && offset > 0 && offset < pt->sizebc);
+      source = (BCIns)la_load32_acq((const uint32_t *)&bc[offset-1u]);
+      if (bc_op(source) == BC_CALLM) {
+        IRRef scan;
+        for (scan = ref+1u; scan < view.nins; scan++) {
+          IRIns next = ir_load_acq(&view.ir[scan]);
+          if (next.o == IR_XSAVE) break;
+          if (next.o == IR_CALLXS) { consumer_call = scan; break; }
+        }
+      }
+    }
+  }
+  assert(consumer_call != 0);
+  {
+    LJArm64ABISignature abi;
+    IRRef args[LJ_ARM64_ABI_MAX_ARGS];
+    assert(fixture_callxs_signature(view.cts, view.ir, view.nk,
+             view.nins, consumer_call, global_ctype(L, "__abi_callm"),
+             &abi, args));
+    assert(abi.nargs == 2);
+    wrong_carg_value = args[0];
+    carg_ref = fixture_callxs_carg_for_argument(view.ir, consumer_call,
+                                                abi.nargs, 1);
+    assert(args[1] == ir_load_acq(&view.ir[carg_ref]).op2);
+    producer_call = args[1];
+    if (ir_load_acq(&view.ir[producer_call]).o == IR_CONV)
+      producer_call = ir_load_acq(&view.ir[producer_call]).op1;
+    assert(ir_load_acq(&view.ir[producer_call]).o == IR_CALLXS);
+  }
+
+  producer_original = (BCIns)la_load32_acq((const uint32_t *)&bc[source_index-1u]);
+  consumer_original = (BCIns)la_load32_acq((const uint32_t *)&bc[source_index]);
+  {
+    BCIns bads[] = {
+      BCINS_ABC(BC_CALL, bc_a(producer_original), 1, bc_c(producer_original)),
+      BCINS_ABC(BC_CALL, (BCReg)(bc_a(producer_original)+1u),
+                bc_b(producer_original), bc_c(producer_original)),
+      BCINS_ABC(BC_CALL, bc_a(producer_original), bc_b(producer_original),
+                (BCReg)(bc_c(producer_original)-1u)),
+      BCINS_ABC(BC_CALLM, bc_a(consumer_original), bc_b(consumer_original), 0),
+      BCINS_ABC(BC_MOV, bc_a(producer_original), 0, 0)
+    };
+    unsigned mutation;
+    for (mutation = 0; mutation < sizeof(bads)/sizeof(bads[0]); mutation++) {
+      if (mutation != 3)
+        la_store32_rel((uint32_t *)&bc[source_index-1u], bads[mutation]);
+      if (mutation == 3)
+        la_store32_rel((uint32_t *)&bc[source_index], bads[mutation]);
+      semantic_clone_init(&semantic, T);
+      jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+      expect_semantic_reject_any(J, &semantic.trace,
+                                 "forged CALLM source geometry");
+      semantic_j_leave(J, &jsave);
+      semantic_clone_free(&semantic);
+      assert(!lj_asm_arm64_postra_admit(&view, NULL));
+      la_store32_rel((uint32_t *)&bc[source_index-1u], producer_original);
+      la_store32_rel((uint32_t *)&bc[source_index], consumer_original);
+      assert(lj_asm_arm64_postra_admit(&view, NULL));
+    }
+  }
+  /* Mutating only the consumer's final CARG must fail in each independent
+  ** graph walk while retaining the valid source CALL/CALLM pair. */
+  semantic_clone_init(&semantic, T);
+  jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+  expect_semantic_admit(J, &semantic.trace);
+  semantic.ir[carg_ref].op2 = wrong_carg_value;
+  expect_semantic_reject_any(J, &semantic.trace,
+                             "CALLM final CARG not producer result");
+  semantic_j_leave(J, &jsave);
+  semantic_clone_free(&semantic);
+  copy = (IRIns *)calloc(view.nins, sizeof(*copy));
+  assert(copy != NULL);
+  memcpy(&copy[view.nk], &view.ir[view.nk],
+         (view.nins-view.nk)*sizeof(IRIns));
+  view.ir = copy;
+  assert(lj_asm_arm64_postra_admit(&view, NULL));
+  copy[carg_ref].op2 = wrong_carg_value;
+  assert(!lj_asm_arm64_postra_admit(&view, NULL));
+  copy[carg_ref] = ir_load_acq(&trace_ir_acq(T)[carg_ref]);
+  {
+    const IRType badtypes[] = { IRT_NIL, IRT_CDATA, IRT_P64 };
+    unsigned mutation;
+    for (mutation = 0; mutation < sizeof(badtypes)/sizeof(badtypes[0]);
+         mutation++) {
+      semantic_clone_init(&semantic, T);
+      jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+      expect_semantic_admit(J, &semantic.trace);
+      semantic.ir[producer_call].t.irt = (uint8_t)badtypes[mutation];
+      expect_semantic_reject_any(J, &semantic.trace,
+                                 "CALLM non-scalar producer result");
+      semantic_j_leave(J, &jsave);
+      semantic_clone_free(&semantic);
+      assert(lj_asm_arm64_postra_admit(&view, NULL));
+      copy[producer_call].t.irt = (uint8_t)badtypes[mutation];
+      assert(!lj_asm_arm64_postra_admit(&view, NULL));
+      copy[producer_call] = ir_load_acq(&trace_ir_acq(T)[producer_call]);
+    }
+  }
+  free(copy);
+  view.ir = trace_ir_acq(T);
+  {
+    SnapEntry *snapmap = (SnapEntry *)malloc(view.nsnapmap*sizeof(SnapEntry));
+    MSize s, checked = 0;
+    uintptr_t returnpc = lo+(source_index+1u)*sizeof(BCIns);
+    uintptr_t producerpc = lo+source_index*sizeof(BCIns);
+    assert(snapmap != NULL);
+    memcpy(snapmap, view.snapmap, view.nsnapmap*sizeof(SnapEntry));
+    view.snapmap = snapmap;
+    for (s = 0; s < view.nsnap; s++) {
+      const SnapShot *snap = &view.snap[s];
+      MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap);
+      uint64_t original, changed;
+      IRRef scan, at = snap_ref_acq(snap);
+      int before_leave = 0;
+      assert(ofs <= view.nsnapmap && nent <= view.nsnapmap-ofs &&
+             view.nsnapmap-ofs-nent >= 1u+LJ_FR2);
+      memcpy(&original, &snapmap[ofs+nent], sizeof(original));
+      if ((uintptr_t)(original>>8) != returnpc) continue;
+      for (scan = at; scan < view.nins; scan++) {
+        IRIns ins = ir_load_acq(&view.ir[scan]);
+        if (scan > at && (ins.o == IR_XSAVE || ins.o == IR_CALLXS)) break;
+        if (ins.o == IR_CALLS &&
+            ins.op2 == IRCALL_lj_ffi_native_trace_leave) {
+          before_leave = 1;
+          break;
+        }
+      }
+      if (!before_leave) continue;
+      /* Both PCs name valid call continuations, but the earlier one would
+      ** replay the consumer after its native call has already completed. */
+      changed = ((uint64_t)producerpc << 8) | (original & UINT64_C(0xff));
+      semantic_clone_init(&semantic, T);
+      jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+      expect_semantic_admit(J, &semantic.trace);
+      memcpy(&semantic.snapmap[ofs+nent], &changed, sizeof(changed));
+      expect_semantic_reject_any(J, &semantic.trace,
+                                 "CALLM leave replays consumer");
+      semantic_j_leave(J, &jsave);
+      semantic_clone_free(&semantic);
+      assert(lj_asm_arm64_postra_admit(&view, NULL));
+      memcpy(&snapmap[ofs+nent], &changed, sizeof(changed));
+      assert(!lj_asm_arm64_postra_admit(&view, NULL));
+      memcpy(&snapmap[ofs+nent], &original, sizeof(original));
+      checked++;
+    }
+    assert(checked > 0);
+    free(snapmap);
+  }
+}
+
+static void test_callm_float_result_layout(lua_State *L)
+{
+  jit_State *J = G2J(G(L));
+  GCproto *pt;
+  GCtrace *T = NULL;
+  TraceVec *tv = tracevec_acq(J);
+  LJArm64PostRAView view;
+  IRIns *copy;
+  IRRef ref, result = 0;
+  MSize n, i;
+  uintptr_t lo, hi;
+  uint32_t move;
+  int found = 0;
+  const Reg badregs[] = { RID_D7, RID_D16, RID_X19, RID_NONE };
+  lua_getglobal(L, "__abi_run_callm_float_stack");
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  pt = funcproto(funcV(L->top-1));
+  lua_pop(L, 1);
+  lo = (uintptr_t)(const void *)proto_bc(pt);
+  hi = lo+pt->sizebc*sizeof(BCIns);
+  assert(tv != NULL);
+  for (n = 1; n < tv->sizetrace && T == NULL; n++) {
+    GCtrace *candidate = traceref_safe(J, n);
+    uintptr_t pc;
+    if (candidate == NULL) continue;
+    pc = (uintptr_t)(const void *)trace_startpc_acq(candidate);
+    if (pc >= lo && pc < hi) T = candidate;
+  }
+  assert(T != NULL);
+  view = (LJArm64PostRAView){
+    .ir = trace_ir_acq(T), .owner = T, .cts = ctype_ctsG(G(L)),
+    .snap = trace_snap_acq(T), .snapmap = trace_snapmap_acq(T),
+    .proto_bc = proto_bc(pt), .proto = pt, .startpc = trace_startpc_acq(T),
+    .nins = trace_nins_acq(T), .nk = trace_nk_acq(T),
+    .nsnap = trace_nsnap_acq(T), .nsnapmap = trace_nsnapmap_acq(T),
+    .spadjust = trace_spadjust_acq(T), .proto_sizebc = pt->sizebc,
+    .proto_numparams = pt->numparams, .root_topslot = trace_topslot_acq(T),
+    .startins = trace_startins_acq(T)
+  };
+  assert(lj_asm_arm64_postra_admit(&view, NULL));
+  for (ref = REF_FIRST; ref < view.nins; ref++) {
+    IRIns ins = ir_load_acq(&view.ir[ref]);
+    if (ins.o == IR_CALLXS && irt_type(ins.t) == IRT_FLOAT &&
+        ins.r >= RID_D8 && ins.r <= RID_D15) {
+      result = ref;
+      break;
+    }
+  }
+  assert(result != 0);
+  move = A64I_FMOV_S |
+         A64F_D(ir_load_acq(&view.ir[result]).r & 31u) |
+         A64F_N(RID_FPRET & 31u);
+  for (i = 0; i < trace_szmcode_acq(T)/sizeof(MCode); i++)
+    if ((uint32_t)trace_mcode_acq(T)[i] == move) found = 1;
+  assert(found && trace_has_stack_store(T, A64I_STRs, 2u, 0));
+  copy = (IRIns *)calloc(view.nins, sizeof(*copy));
+  assert(copy != NULL);
+  memcpy(&copy[view.nk], &view.ir[view.nk],
+         (view.nins-view.nk)*sizeof(*copy));
+  view.ir = copy;
+  for (i = 0; i < sizeof(badregs)/sizeof(badregs[0]); i++) {
+    assert(lj_asm_arm64_postra_admit(&view, NULL));
+    copy[result].r = badregs[i];
+    assert(!lj_asm_arm64_postra_admit(&view, NULL));
+    copy[result] = ir_load_acq(&trace_ir_acq(T)[result]);
+  }
+  free(copy);
+}
+
+static void force_callm_postcall(TGState *tg)
+{
+  assert((lj_ffi_native_frame_sequence_acq(tg) & 1u) != 0);
+  finish_old_epoch = lj_tg_hs_epoch_ack_acq(tg);
+  assert(finish_old_epoch != UINT64_MAX);
+  lj_tg_hs_epoch_ack_rel(tg, finish_old_epoch+1u);
+  forced_finishes++;
+  lj_ffi_native_trace_test_set_finish_hook(NULL);
+}
+
 static void observe_native_call(unsigned id)
 {
   LJFFINativeFrameSnapshot snapshot;
@@ -1167,6 +1477,69 @@ static void observe_native_call(unsigned id)
   assert(lj_tg_vmstate_load_acq(test_tg) ==
          (int32_t)lj_ffi_native_frame_trace_no_acq(frame));
   native_seen[id]++;
+  if (finish_target == id) {
+    finish_target = 0;
+    lj_ffi_native_trace_test_set_finish_hook(force_callm_postcall);
+  }
+}
+
+static void test_callm_postcall(lua_State *L, ReadCounter calls,
+                               const char *name, const char *inner,
+                               const char *outer, unsigned producer,
+                               unsigned consumer, unsigned target)
+{
+  unsigned p0 = native_seen[producer], c0 = native_seen[consumer];
+  unsigned pc0 = calls(producer), cc0 = calls(consumer);
+  jit_State *J = G2J(G(L));
+  GCproto *pt;
+  const BCIns *bc;
+  GCtrace *T;
+  const SnapShot *snap;
+  MSize i, source_index = UINT_MAX, ofs, nent;
+  uint64_t pcbase;
+  lua_getglobal(L, name);
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  pt = funcproto(funcV(L->top-1));
+  lua_pop(L, 1);
+  bc = proto_bc(pt);
+  for (i = 1; i < pt->sizebc; i++) {
+    if (bc_op((BCIns)la_load32_acq((const uint32_t *)&bc[i])) == BC_CALLM) {
+      assert(source_index == UINT_MAX);
+      source_index = i;
+    }
+  }
+  assert(source_index != UINT_MAX &&
+         (target == producer || target == consumer));
+  forced_finishes = 0;
+  finish_target = target;
+  lj_trace_test_reset_exit_stats();
+  lua_getglobal(L, name);
+  lua_getglobal(L, inner);
+  lua_getglobal(L, outer);
+  lua_pushinteger(L, 20);
+  assert(lua_pcall(L, 3, 1, 0) == 0 && lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  lj_ffi_native_trace_test_set_finish_hook(NULL);
+  assert(forced_finishes == 1 && finish_target == 0);
+  lj_tg_hs_epoch_ack_rel(test_tg, finish_old_epoch);
+  assert(calls(producer) == pc0+20u && calls(consumer) == cc0+20u);
+  assert(native_seen[producer] > p0 && native_seen[consumer] > c0);
+  assert(lj_trace_test_exit_calls() > 0 && lj_tg_in_native_acq(test_tg) == 0 &&
+         lj_tg_load_jit_base(test_tg) == NULL);
+  T = traceref_safe(J, lj_trace_test_first_exit_parent());
+  assert(T != NULL && trace_native_pins_acq(T) == 0 &&
+         lj_trace_test_first_exitno() < trace_nsnap_acq(T));
+  snap = &trace_snap_acq(T)[lj_trace_test_first_exitno()];
+  ofs = snap_mapofs_acq(snap);
+  nent = snap_nent_acq(snap);
+  assert(ofs <= trace_nsnapmap_acq(T) &&
+         nent+1u+LJ_FR2 <= trace_nsnapmap_acq(T)-ofs);
+  memcpy(&pcbase, &trace_snapmap_acq(T)[ofs+nent], sizeof(pcbase));
+  assert((uintptr_t)(pcbase>>8) ==
+         (uintptr_t)(const void *)&bc[source_index+(target == consumer)]);
+  printf("CALLM %s forced %s POSTCALL: producer=%u consumer=%u, no replay\n",
+         name, target == producer ? "producer" : "consumer",
+         native_seen[producer]-p0, native_seen[consumer]-c0);
 }
 
 static CTypeID global_ctype(lua_State *L, const char *name)
@@ -1282,6 +1655,7 @@ int main(void)
   expected_func[3] = dlsym(library, "arm64_abi_many_a");
   expected_func[4] = dlsym(library, "arm64_abi_many_b");
   expected_func[5] = dlsym(library, "arm64_abi_many_c");
+  expected_func[14] = dlsym(library, "arm64_abi_callm_consumer");
   expected_func[6] = dlsym(library, "arm64_abi_unused_result");
   expected_func[7] = dlsym(library, "arm64_abi_float_result");
   expected_func[8] = dlsym(library, "arm64_abi_stack9");
@@ -1313,6 +1687,7 @@ int main(void)
     "int32_t arm64_abi_many_a(int32_t,int32_t);\n"
     "int32_t arm64_abi_many_b(int32_t,int32_t);\n"
     "int32_t arm64_abi_many_c(int32_t,int32_t);\n"
+    "int32_t arm64_abi_callm_consumer(int32_t,int32_t);\n"
     "int32_t arm64_abi_unused_result(int32_t);\n"
     "float arm64_abi_float_result(float,float);\n"
     "int32_t arm64_abi_stack9(int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t);\n"
@@ -1329,6 +1704,7 @@ int main(void)
     "_G.__abi_six = lib.arm64_abi_i32_six\n"
     "_G.__abi_mixed = lib.arm64_abi_mixed\n"
     "_G.__abi_a, _G.__abi_b, _G.__abi_c = lib.arm64_abi_many_a, lib.arm64_abi_many_b, lib.arm64_abi_many_c\n"
+    "_G.__abi_callm = lib.arm64_abi_callm_consumer\n"
     "_G.__abi_unused = lib.arm64_abi_unused_result\n"
     "_G.__abi_f32 = lib.arm64_abi_float_result\n"
     "_G.__abi_stack9 = lib.arm64_abi_stack9\n"
@@ -1348,6 +1724,18 @@ int main(void)
     " for i=1,n do if fn(a,b,c,d,e)~=9 then return false end end; return true end\n"
     "function _G.__abi_run_three(fa,fb,fc,a,b,n)\n"
     " for i=1,n do fa(a,b); fb(a,b); fc(a,b) end; return true end\n"
+    "function _G.__abi_run_callm(inner,outer,n)\n"
+    " for i=1,n do if outer(7,inner(i,5))~=i+12 then return false end end; return true end\n"
+    "function _G.__abi_run_callm_stack(inner,outer,n)\n"
+    " for i=1,n do if outer(i,i+1,i+2,i+3,i+4,i+5,i+6,i+7,inner(i,8))~=i+108 then return false end end; return true end\n"
+    "function _G.__abi_run_callm_float_double(inner,outer,n)\n"
+    " for i=1,n do if outer(1.25,2,3.5,4,inner(5.25,0))~=16 then return false end end; return true end\n"
+    "function _G.__abi_run_callm_float_stack(inner,outer,n)\n"
+    " for i=1,n do local got=outer(1.1,2.2,3.3,4.4,5.5,6.6,7.7,8.8,inner(9.0,0.9)); if got<9.89 or got>10.1 then return false end end; return true end\n"
+    "function _G.__abi_run_callm_double_stack(inner,outer,n)\n"
+    " for i=1,n do if outer(1,2,3,4,5,6,7,8,inner(1.25,2,3.5,4,-1.75))~=900 then return false end end; return true end\n"
+    "function _G.__abi_run_callm_exit(inner,outer)\n"
+    " for i=1,20 do local got=outer(7,inner(i,5)); if got~=i+12 then return false end; if i==4 then return true end end; return false end\n"
     "function _G.__abi_run_unused(fn,a,n)\n"
     " for i=1,n do fn(a) end; return n end\n"
     "function _G.__abi_run_stack_matrix(f9,ffpr,fbanks,fcompact,n)\n"
@@ -1445,12 +1833,80 @@ int main(void)
   assert_rejected(cts, vararg);
   assert_rejected(cts, UINT32_MAX);  /* malformed/out-of-range CType ID */
 
+  {
+    unsigned p0 = native_seen[3], c0 = native_seen[14];
+    unsigned pc0 = calls(3), cc0 = calls(14);
+    ljt_lua_dostring(L, "assert(__abi_run_callm(__abi_a,__abi_callm,300))\n");
+    assert(native_seen[3] >= p0+200u && native_seen[14] >= c0+200u);
+    assert(calls(3) == pc0+300u && calls(14) == cc0+300u);
+  }
+  test_callm_postcall(L, calls, "__abi_run_callm", "__abi_a", "__abi_callm",
+                     3, 14, 3);
+  test_callm_postcall(L, calls, "__abi_run_callm", "__abi_a", "__abi_callm",
+                     3, 14, 14);
+  {
+    unsigned p0 = native_seen[7], c0 = native_seen[2];
+    unsigned pc0 = calls(7), cc0 = calls(2);
+    ljt_lua_dostring(L,
+      "assert(__abi_run_callm_float_double(__abi_f32,__abi_mixed,300))\n");
+    assert(native_seen[7] >= p0+200u && native_seen[2] >= c0+200u);
+    assert(calls(7) == pc0+300u && calls(2) == cc0+300u);
+    printf("CALLM float/double: producer=%u consumer=%u\n",
+           native_seen[7]-p0, native_seen[2]-c0);
+  }
+  {
+    unsigned p0 = native_seen[7], c0 = native_seen[12];
+    unsigned pc0 = calls(7), cc0 = calls(12);
+    ljt_lua_dostring(L,
+      "assert(__abi_run_callm_float_stack(__abi_f32,__abi_fpr9_float,300))\n");
+    assert(native_seen[7] >= p0+200u && native_seen[12] >= c0+200u);
+    assert(calls(7) == pc0+300u && calls(12) == cc0+300u);
+    printf("CALLM float/float stack: producer=%u consumer=%u\n",
+           native_seen[7]-p0, native_seen[12]-c0);
+  }
+  test_callm_float_result_layout(L);
+  test_callm_postcall(L, calls, "__abi_run_callm_float_stack", "__abi_f32",
+                     "__abi_fpr9_float", 7, 12, 7);
+  test_callm_postcall(L, calls, "__abi_run_callm_float_stack", "__abi_f32",
+                     "__abi_fpr9_float", 7, 12, 12);
+  {
+    unsigned p0 = native_seen[2], c0 = native_seen[9];
+    unsigned pc0 = calls(2), cc0 = calls(9);
+    ljt_lua_dostring(L,
+      "assert(__abi_run_callm_double_stack(__abi_mixed,__abi_fpr9,300))\n");
+    assert(native_seen[2] >= p0+200u && native_seen[9] >= c0+200u);
+    assert(calls(2) == pc0+300u && calls(9) == cc0+300u);
+    printf("CALLM double/double stack: producer=%u consumer=%u\n",
+           native_seen[2]-p0, native_seen[9]-c0);
+  }
+  test_callm_postcall(L, calls, "__abi_run_callm_double_stack", "__abi_mixed",
+                     "__abi_fpr9", 2, 9, 2);
+  test_callm_postcall(L, calls, "__abi_run_callm_double_stack", "__abi_mixed",
+                     "__abi_fpr9", 2, 9, 9);
+  {
+    unsigned p0 = native_seen[3], c0 = native_seen[8];
+    unsigned pc0 = calls(3), cc0 = calls(8);
+    ljt_lua_dostring(L,
+      "assert(__abi_run_callm_stack(__abi_a,__abi_stack9,300))\n");
+    assert(native_seen[3] >= p0+200u && native_seen[8] >= c0+200u);
+    assert(calls(3) == pc0+300u && calls(8) == cc0+300u);
+  }
+  {
+    unsigned p0 = native_seen[3], c0 = native_seen[14];
+    unsigned pc0 = calls(3), cc0 = calls(14);
+    ljt_lua_dostring(L,
+      "assert(__abi_run_callm_exit(__abi_a,__abi_callm))\n");
+    assert(native_seen[3] > p0 && native_seen[14] > c0);
+    assert(calls(3) == pc0+4u && calls(14) == cc0+4u);
+  }
   ljt_lua_dostring(L,
     "assert(__abi_run_six(__abi_six,1,2,3,4,5,6,300))\n"
     "assert(__abi_run_mixed(__abi_mixed,1.25,2,3.5,4,5.25,300))\n"
     "assert(__abi_a(11,5)==16 and __abi_b(11,5)==6 and __abi_c(11,5)==14)\n"
     "assert(__abi_run_three(__abi_a,__abi_b,__abi_c,11,5,300))\n"
     "assert(__abi_run_unused(__abi_unused,9,300)==300)\n");
+  assert(native_seen[14] >= 200u && calls(14) >= 300u);
+  test_callm_admission(L);
   {
     unsigned id;
     ljt_lua_dostring(L,

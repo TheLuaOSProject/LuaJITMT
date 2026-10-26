@@ -4,7 +4,7 @@
 typedef void (*abi_observer)(unsigned id);
 
 static abi_observer observer;
-static unsigned call_count[14];
+static unsigned call_count[15];
 
 void arm64_abi_install_observer(abi_observer fn)
 {
@@ -54,6 +54,12 @@ int32_t arm64_abi_many_c(int32_t a, int32_t b)
 {
   note(5);
   return a ^ b;
+}
+
+int32_t arm64_abi_callm_consumer(int32_t fixed, int32_t tail)
+{
+  note(14);
+  return fixed+tail;
 }
 
 int32_t arm64_abi_unused_result(int32_t value)

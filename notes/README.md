@@ -184,6 +184,13 @@ available.
   NaN/infinity exits, no-replay and independent malformed-graph checks pass
   across all four M7 profiles. See
   [`arm64-jit-ffi-float-2026-10-26.md`](arm64-jit-ffi-float-2026-10-26.md).
+- Direct scalar producer `CALL` to consumer `CALLM` chains support nested
+  integer, float and double calls with register and stack arguments. Source
+  geometry, final-argument identity and continuation snapshots have independent
+  semantic/post-RA checks. Six forced producer/consumer exits preserve exact
+  effects without replay in all four M7 profiles; both ARM64 stock corpora
+  pass 509 cases. See
+  [`arm64-jit-ffi-callm-2026-10-26.md`](arm64-jit-ffi-callm-2026-10-26.md).
 - Exact FFI lifecycle evidence covers errno, normal and forced exits, STOPREQ,
   one-level and depth-two callbacks, callback errors, cleanup/reuse, remote GC
   and flush, mutable cdata `__call`, double ABI/results, boxed-pointer identity,
@@ -221,8 +228,9 @@ available.
   links to the implemented rooted-value lifetime proof and its limits.
 - General side traces, side-of-side traces, stitches, and production JIT
   side-exit unwind resolution.
-- ARM64 CALLXS aggregates/sret, variadics, vectors, complex results, CALLM
-  source sites and unsupported result/IR representations. The admitted scalar
+- ARM64 CALLXS aggregates/sret, variadics, vectors, complex results, general
+  multires/tail calls, CALLM outside the direct scalar producer shape, and
+  unsupported result/IR representations. The admitted scalar
   float conversions do not certify arbitrary float or boxed-64-bit graphs.
 - Full parity with every x86_64 lockless VM, JIT, FFI, profiler, unwind, and
   stress path.

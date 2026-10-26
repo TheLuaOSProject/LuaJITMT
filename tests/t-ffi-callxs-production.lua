@@ -91,6 +91,17 @@ local function run_arm64_float_to_double(ff, fd, n)
   return true
 end
 
+local function run_arm64_nested_float(ff, fd, n)
+  for i = 1, n do
+    local x = i * 0.123456789
+    local got = fd(ff(x))
+    if got == x or got < x - 0.0001 or got > x + 0.0001 then
+      return false
+    end
+  end
+  return true
+end
+
 local function run_arm64_float_to_float(fn, n)
   for i = 1, n do
     local x = i * 0.123456789
@@ -144,17 +155,23 @@ if arm64_scalar then
   assert(widened_xsave == float_xsave + 4 and
          widened_callxs == float_callxs + 4,
          "F32-to-double arguments did not publish both call pairs")
+  assert(run_arm64_nested_float(ffi.C.fabsf, ffi.C.fabs, 400))
+  local nested_xsave, nested_callxs = callxs_lifecycle_count()
+  assert(nested_xsave == widened_xsave + 4 and
+         nested_callxs == widened_callxs + 4,
+         ("nested CALLM float lifecycles: %d/%d -> %d/%d"):format(
+           widened_xsave, widened_callxs, nested_xsave, nested_callxs))
   assert(run_arm64_float_to_float(ffi.C.fabsf, 400))
   local chained_xsave, chained_callxs = callxs_lifecycle_count()
-  assert(chained_xsave == widened_xsave + 4 and
-         chained_callxs == widened_callxs + 4,
+  assert(chained_xsave == nested_xsave + 4 and
+         chained_callxs == nested_callxs + 4,
          "F32-to-F32 arguments did not publish both call pairs")
   assert(run_arm64_fma(ffi.C.fma, 400))
   local fma_xsave, fma_callxs = callxs_lifecycle_count()
   assert(run_arm64_mixed(ffi.C.ldexp, 400))
   local all_xsave, all_callxs = callxs_lifecycle_count()
   print("CALLXS profile counts", base_xsave, base_callxs,
-        float_xsave, float_callxs,
+        float_xsave, float_callxs, nested_xsave, nested_callxs,
         fma_xsave, fma_callxs, all_xsave, all_callxs)
 else
   assert(run(400) == 400 * 401 / 2)
@@ -162,7 +179,7 @@ end
 local xsave = trace_op_count("XSAVE ")
 local callxs = trace_op_count("CALLXS")
 if arm64_scalar then
-  assert(xsave == 20 and callxs == 20,
+  assert(xsave == 24 and callxs == 24,
          ("wrong ARM64 scalar CALLXS lifecycles: %d/%d"):format(
            xsave, callxs))
 else
