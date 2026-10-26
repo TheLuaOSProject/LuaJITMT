@@ -23,6 +23,11 @@ and reports that are no longer authoritative are retained in
   entry, exits and refusals. Shared build profiles bind runtime, archive,
   fixture and helper-library identity. All review work streams are integrated.
   See [`review-implementation-2026-10-25.md`](review-implementation-2026-10-25.md).
+- New focused checkpoint: fixed owned I64/U64 CALLXS arguments pass the
+  ARM64 assertion contract, including nine arguments, exact CData roots,
+  prior boxed-call inputs, fixed-prefix varargs and independent malformed
+  semantic/post-RA views. The wider profile and regression matrix is pending.
+  See [`arm64-jit-i64-arguments-2026-10-26.md`](arm64-jit-i64-arguments-2026-10-26.md).
 - Latest combined runtime validation: the boxed-I64/U64 result and shared
   constructor/recovery checkpoint on 2026-10-26, frozen at `2ba1e91b`.
   The complete experimental and bootstrap gates passed, including all four
