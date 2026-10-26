@@ -27,7 +27,8 @@ static LJ_AINLINE int lj_snap_rooted_continuation(const jit_State *J,
   return call->o == IR_CALLS &&
     (call->op2 == IRCALL_lj_tab_storeraw_rooted ||
      call->op2 == IRCALL_lj_tab_storenil_rooted ||
-     call->op2 == IRCALL_lj_func_storeuv_rooted_try);
+     call->op2 == IRCALL_lj_func_storeuv_rooted_try ||
+     call->op2 == IRCALL_lj_func_storecell_rooted_try);
 }
 #else
 #define lj_snap_rooted_continuation(J, snap) 0

@@ -306,6 +306,8 @@ typedef struct CCallInfo {
   _(ANY,	lj_func_storeuv_forjit, 3, S, NIL, CCI_L) \
   _(ANY,	lj_func_getuv_rooted_try, 4, S, INT, CCI_L|CCI_T) \
   _(ANY,	lj_func_storeuv_rooted_try, 4, S, INT, CCI_L|CCI_T) \
+  _(ANY,	lj_func_getcell_rooted_try, 4, S, INT, CCI_L|CCI_T) \
+  _(ANY,	lj_func_storecell_rooted_try, 4, S, INT, CCI_L|CCI_T) \
   _(ANY,	lj_func_promoteuv_forjit, 4, S, PGC, CCI_L|CCI_T) \
   _(ANY,	lj_func_newuvcell_forjit, 3, A, PGC, CCI_L|CCI_T) \
   _(ANY,	lj_func_newL_gc_forjit, 4, A, FUNC, CCI_L|CCI_T) \

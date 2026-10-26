@@ -4581,7 +4581,9 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
        ir->op2 == IRCALL_lj_tab_storeraw_rooted ||
        ir->op2 == IRCALL_lj_tab_storenil_rooted ||
        ir->op2 == IRCALL_lj_func_getuv_rooted_try ||
-       ir->op2 == IRCALL_lj_func_storeuv_rooted_try);
+       ir->op2 == IRCALL_lj_func_storeuv_rooted_try ||
+       ir->op2 == IRCALL_lj_func_getcell_rooted_try ||
+       ir->op2 == IRCALL_lj_func_storecell_rooted_try);
   /* Lightuserdata is an opaque segmented token. Like a GC pointer, it can
   ** only originate in an exact tagged load here, never arithmetic or CONV. */
   /* The current function is an immutable frame root (not a type-checked
@@ -4616,6 +4618,12 @@ static int arm64_rooted_upvalue_call(IRCallID id)
          id == IRCALL_lj_func_storeuv_rooted_try;
 }
 
+static int arm64_rooted_cell_call(IRCallID id)
+{
+  return id == IRCALL_lj_func_getcell_rooted_try ||
+         id == IRCALL_lj_func_storecell_rooted_try;
+}
+
 /* Exact rooted function operand used by the bounded closed-upvalue helpers. */
 static int arm64_upvalue_fnroot_ir(const GCtrace *T, IRRef root,
                                   IRRef before, uint16_t mode)
@@ -4641,6 +4649,172 @@ static int arm64_scalar_ir_gc_ref(const GCtrace *T, IRRef value, IRRef before)
          arm64_scalar_ir_ref(T, value, before, type);
 }
 
+/* Local cell operands use only visible TValue sources. In particular, raw
+** P32 cell identities are never accepted as rooted payloads. */
+static int arm64_cell_value_ir_ref(const GCtrace *T, IRRef value,
+                                  IRRef before)
+{
+  return value == REF_NIL ||
+         arm64_scalar_ir_ref(T, value, before, IRT_INT) ||
+         arm64_scalar_ir_ref(T, value, before, IRT_NUM) ||
+         arm64_scalar_ir_ref(T, value, before, IRT_TRUE) ||
+         arm64_scalar_ir_ref(T, value, before, IRT_FALSE) ||
+         arm64_scalar_ir_ref(T, value, before, IRT_LIGHTUD) ||
+         arm64_scalar_ir_gc_ref(T, value, before);
+}
+
+/* A P32 local-cell SLOAD is permitted only as an unmaterialized type guard.
+** It must not acquire an SSA consumer or appear in any exit snapshot. */
+static int arm64_cell_guard_ir(const GCtrace *T, IRRef guardref)
+{
+  IRRef ref;
+  MSize s;
+  IRIns guard;
+  if (!T || !T->snap || guardref < REF_FIRST || guardref >= T->nins)
+    return 0;
+  guard = T->ir[guardref];
+  if (guard.o != IR_SLOAD || guard.t.irt != (IRT_P32|IRT_GUARD) ||
+      guard.op2 != IRSLOAD_TYPECHECK)
+    return 0;
+  for (ref = guardref+1u; ref < T->nins; ref++) {
+    IRIns use = T->ir[ref];
+    switch ((IROp)use.o) {
+    case IR_BASE: case IR_SLOAD: case IR_KINT: case IR_KNUM: case IR_KGC:
+    case IR_KPRI: case IR_LOOP: case IR_XPOLL:
+      break;
+    case IR_CALLS:
+      if (use.op1 == guardref) return 0;
+      break;
+    default:
+      if (use.op1 == guardref || use.op2 == guardref) return 0;
+      break;
+    }
+  }
+  for (s = 0; s < T->nsnap; s++) {
+    const SnapShot *snap = &T->snap[s];
+    MSize ofs = snap->mapofs;
+    MSize i;
+    if (!T->snapmap || ofs > T->nsnapmap ||
+        snap->nent > T->nsnapmap-ofs ||
+        T->nsnapmap-ofs-snap->nent < 1u+LJ_FR2)
+      return 0;
+    for (i = 0; i < snap->nent; i++) {
+      SnapEntry se = T->snapmap[ofs+i];
+      if (snap_ref(se) == guardref || snap_slot(se) == guard.op1) return 0;
+    }
+  }
+  return 1;
+}
+
+static int arm64_cell_guard_proto(const GCproto *pt, MSize slot)
+{
+  return pt && proto_cellops(pt) && slot >= 1u+LJ_FR2 &&
+         slot < 1u+LJ_FR2+pt->framesize;
+}
+
+/* Match a TMPREF only when a later exact rooted-cell call consumes it. This
+** keeps the broader visible-value root grammar local to this operation. */
+static int arm64_cell_root_ir(const GCtrace *T, IRRef root)
+{
+  const IRIns *tmp;
+  IRRef callref;
+  if (!T || root < REF_FIRST || root >= T->nins) return 0;
+  tmp = &T->ir[root];
+  if (tmp->o != IR_TMPREF || tmp->t.irt != IRT_PGC) return 0;
+  for (callref = root+1u; callref < T->nins; callref++) {
+    const IRIns *call = &T->ir[callref], *tail, *head;
+    int get;
+    if (call->o != IR_CALLS || !arm64_rooted_cell_call((IRCallID)call->op2))
+      continue;
+    get = call->op2 == IRCALL_lj_func_getcell_rooted_try;
+    if (call->op1 < REF_FIRST || call->op1 >= callref) continue;
+    tail = &T->ir[call->op1];
+    if (tail->o != IR_CARG || tail->op1 < REF_FIRST ||
+        tail->op1 >= call->op1 || tail->op2 != root)
+      continue;
+    head = &T->ir[tail->op1];
+    if (head->o == IR_CARG && head->op2 >= T->nk &&
+        head->op2 < REF_TRUE && T->ir[head->op2].o == IR_KINT &&
+        head->op1 == REF_BASE &&
+        tmp->op2 == (get ? (IRTMPREF_IN1|IRTMPREF_OUT1) : IRTMPREF_IN1) &&
+        (get ? tmp->op1 == REF_NIL :
+         arm64_cell_value_ir_ref(T, tmp->op1, root)))
+      return 1;
+  }
+  return 0;
+}
+
+static int arm64_cell_head_carg_ir(const GCtrace *T, IRRef headref)
+{
+  IRRef callref;
+  for (callref = headref+1u; callref < T->nins; callref++) {
+    const IRIns *call = &T->ir[callref], *tail, *head;
+    if (call->o != IR_CALLS || !arm64_rooted_cell_call((IRCallID)call->op2) ||
+        call->op1 < REF_FIRST || call->op1 >= callref)
+      continue;
+    tail = &T->ir[call->op1];
+    if (tail->o != IR_CARG || tail->op1 < REF_FIRST ||
+        tail->op1 >= call->op1)
+      continue;
+    head = &T->ir[tail->op1];
+    if (tail->op1 == headref && head->o == IR_CARG &&
+        head->op1 == REF_BASE && head->op2 >= T->nk &&
+        head->op2 < REF_TRUE && T->ir[head->op2].o == IR_KINT)
+      return 1;
+  }
+  return 0;
+}
+
+static int arm64_rooted_cell_ir_effect(const GCtrace *T, IRRef ref,
+                                      IRRef root1, IRRef root2,
+                                      IRRef root3)
+{
+  const IRIns *call = &T->ir[ref], *tmp, *tail, *head, *guard;
+  IRRef out;
+  int get = call->op2 == IRCALL_lj_func_getcell_rooted_try;
+  if (!root1 || root1 >= ref || root2 || root3 || ref+1u >= T->nins ||
+      call->t.irt != (IRT_INT|IRT_GUARD) || !arm64_cell_root_ir(T, root1) ||
+      call->op1 < REF_FIRST || call->op1 >= ref)
+    return 0;
+  tmp = &T->ir[root1];
+  tail = &T->ir[call->op1];
+  if (tail->o != IR_CARG || tail->t.irt != IRT_NIL ||
+      tail->op1 < REF_FIRST || tail->op1 >= call->op1 ||
+      tail->op2 != root1)
+    return 0;
+  head = &T->ir[tail->op1];
+  if (head->o != IR_CARG || head->t.irt != IRT_NIL ||
+      head->op1 != REF_BASE || head->op2 < T->nk ||
+      head->op2 >= REF_TRUE || T->ir[head->op2].o != IR_KINT ||
+      T->ir[head->op2].t.irt != IRT_INT || head->op2 >= tail->op1 ||
+      tail->op1 >= call->op1 || head->op1 >= tail->op1)
+    return 0;
+  if (tmp->op2 != (get ? (IRTMPREF_IN1|IRTMPREF_OUT1) : IRTMPREF_IN1) ||
+      (get ? tmp->op1 != REF_NIL :
+       !arm64_cell_value_ir_ref(T, tmp->op1, root1)))
+    return 0;
+  guard = &T->ir[ref+1u];
+  if (guard->o != IR_NE || guard->t.irt != (IRT_INT|IRT_GUARD) ||
+      !((guard->op1 == ref && irref_isk(guard->op2)) ||
+        (guard->op2 == ref && irref_isk(guard->op1))))
+    return 0;
+  out = guard->op1 == ref ? guard->op2 : guard->op1;
+  if (!arm64_ir_int_kref(T, out) || T->ir[out].i != 0) return 0;
+  if (!get) return 5;
+  if (ref+2u >= T->nins) return 0;
+  {
+    const IRIns *value = &T->ir[ref+2u];
+    IRType type = irt_type(value->t);
+    if (value->o != IR_VLOAD || value->op1 != root1 || value->op2 ||
+        (type != IRT_NIL && type != IRT_INT && type != IRT_NUM &&
+         type != IRT_TRUE && type != IRT_FALSE && type != IRT_LIGHTUD &&
+         !arm64_rooted_gc_type(type)) || !irt_isguard(value->t) ||
+        (value->t.irt & ~(IRT_TYPE|IRT_GUARD|IRT_ISPHI)))
+      return 0;
+  }
+  return 4;
+}
+
 /* Each rooted helper is an operation with explicit input/output effects.
 ** Scratch values may be overwritten only after the preceding operation has
 ** consumed them. Neither call count, table count, key value nor placement in
@@ -4650,6 +4824,8 @@ static int arm64_rooted_ir_effect(const GCtrace *T, IRRef ref,
 {
   const IRIns *call = &T->ir[ref], *guard;
   IRRef key;
+  if (arm64_rooted_cell_call((IRCallID)call->op2))
+    return arm64_rooted_cell_ir_effect(T, ref, root1, root2, root3);
   int tvread = call->op2 == IRCALL_lj_tab_gettv_rooted_hit_try;
   int nilread = call->op2 == IRCALL_lj_tab_getnil_nometa_rooted_try;
   int read = call->op2 == IRCALL_lj_tab_getscalar_rooted_try || tvread || nilread;
@@ -4989,6 +5165,120 @@ static int arm64_upvalue_ir_source(const jit_State *J, const GCtrace *T,
   }
 }
 
+static int arm64_cell_rhs_ir(const GCtrace *T, const SnapShot *pre,
+                             MSize slot, IRRef value, IRRef callref)
+{
+  MSize i;
+  for (i = 0; i < pre->nent; i++) {
+    SnapEntry se = T->snapmap[pre->mapofs+i];
+    if (snap_slot(se) == slot) {
+      IRRef saved = snap_ref(se);
+      if (value == saved) return 1;
+      if (value >= REF_FIRST && value < callref) {
+        const IRIns *conv = &T->ir[value];
+        return conv->o == IR_CONV &&
+               (conv->t.irt & ~IRT_ISPHI) == IRT_NUM &&
+               conv->op2 == IRCONV_NUM_INT && conv->op1 == saved;
+      }
+      return 0;
+    }
+  }
+  if (value >= REF_FIRST && value < callref &&
+      T->ir[value].o == IR_CONV &&
+      (T->ir[value].t.irt & ~IRT_ISPHI) == IRT_NUM &&
+      T->ir[value].op2 == IRCONV_NUM_INT)
+    value = T->ir[value].op1;
+  return value >= REF_FIRST && value < callref &&
+         T->ir[value].o == IR_SLOAD && T->ir[value].op1 == slot &&
+         T->ir[value].op2 == IRSLOAD_TYPECHECK;
+}
+
+/* Bind a cell helper to the exact CGET/CSET bytecode and its guard-only
+** local-cell SLOAD. No cell pointer is accepted as a TValue operand. */
+static int arm64_cell_ir_source(const jit_State *J, const GCtrace *T,
+                                IRRef ref, SnapNo s, IRRef root1)
+{
+  const SnapShot *pre, *post;
+  const BCIns *pc;
+  BCIns bc;
+  const IRIns *call = &T->ir[ref];
+  IRRef guardref;
+  uint32_t local;
+  MSize slot, count = 0;
+  int get = call->op2 == IRCALL_lj_func_getcell_rooted_try;
+  if (!J || !J->pt || !T->snap || !T->snapmap || s >= T->nsnap ||
+      (bc_op(T->startins) != BC_LOOP &&
+                       bc_op(T->startins) != BC_FORL) ||
+      !proto_cellops(J->pt) || J->pt->framesize == 0 ||
+      s+1u >= T->nsnap)
+    return 0;
+  pre = &T->snap[s];
+  post = &T->snap[s+1u];
+  if (pre->mapofs > T->nsnapmap ||
+      pre->nent > T->nsnapmap-pre->mapofs ||
+      T->nsnapmap-pre->mapofs-pre->nent < 1u+LJ_FR2 ||
+      post->mapofs > T->nsnapmap ||
+      post->nent > T->nsnapmap-post->mapofs ||
+      T->nsnapmap-post->mapofs-post->nent < 1u+LJ_FR2)
+    return 0;
+  pc = snap_pc(&T->snapmap[pre->mapofs+pre->nent]);
+  bc = (BCIns)la_load32_acq((const uint32_t *)pc);
+  if (pre->ref != root1 ||
+      (get ? bc_op(bc) != BC_CGET : bc_op(bc) != BC_CSET)) return 0;
+  if ((get && bc_a(bc) >= J->pt->framesize) ||
+      (!get && bc_d(bc) >= J->pt->framesize))
+    return 0;
+  local = get ? bc_d(bc) : bc_a(bc);
+  if (local >= J->pt->framesize) return 0;
+  slot = 1u+LJ_FR2+local;
+  if (!arm64_cell_guard_proto(J->pt, slot)) return 0;
+  if (post->ref != ref+2u ||
+      snap_pc(&T->snapmap[post->mapofs+post->nent]) !=
+        (get ? pc : pc+1))
+    return 0;
+  if (!get && (post->count != SNAPCOUNT_DONE ||
+               bc_d(bc) >= J->pt->framesize ||
+               !arm64_cell_rhs_ir(T, pre, 1u+LJ_FR2+bc_d(bc),
+                                  T->ir[root1].op1, ref)))
+    return 0;
+  for (guardref = REF_FIRST; guardref < ref; guardref++) {
+    const IRIns *guard = &T->ir[guardref];
+    if (guard->o == IR_SLOAD && guard->op1 == slot &&
+        guard->t.irt == (IRT_P32|IRT_GUARD) &&
+        guard->op2 == IRSLOAD_TYPECHECK) {
+      if (!arm64_cell_guard_ir(T, guardref)) return 0;
+      count++;
+    }
+  }
+  if (count != 1u) return 0;
+  {
+    IRRef tailref = T->ir[ref].op1;
+    const IRIns *tail, *head;
+    if (tailref < REF_FIRST || tailref >= ref) return 0;
+    tail = &T->ir[tailref];
+    if (tail->o != IR_CARG || tail->op1 < REF_FIRST ||
+        tail->op1 >= tailref)
+      return 0;
+    head = &T->ir[tail->op1];
+    if (head->o != IR_CARG || head->op2 < T->nk ||
+        head->op2 >= REF_TRUE)
+      return 0;
+    IRRef kref = head->op2;
+    return kref >= T->nk && kref < REF_TRUE &&
+           T->ir[kref].o == IR_KINT &&
+           T->ir[kref].i == (int32_t)local;
+  }
+}
+
+static int arm64_cell_ir_snapshots(const jit_State *J, const GCtrace *T,
+                                   IRRef ref, SnapNo s, IRRef root1)
+{
+  const IRIns *call = &T->ir[ref];
+  int get = call->op2 == IRCALL_lj_func_getcell_rooted_try;
+  return arm64_cell_ir_source(J, T, ref, s, root1) &&
+         (get || T->snap[s+1u].count == SNAPCOUNT_DONE);
+}
+
 static int arm64_upvalue_ir_snapshots(const jit_State *J, const GCtrace *T,
                                      IRRef ref, SnapNo s,
                                      IRRef root1, IRRef root2)
@@ -5266,6 +5556,11 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
 	  goto bad_operand;
 	break;
       }
+      if (!side && ir->t.irt == (IRT_P32|IRT_GUARD) &&
+          ir->op2 == IRSLOAD_TYPECHECK &&
+          arm64_cell_guard_proto(J->pt, ir->op1) &&
+          arm64_cell_guard_ir(T, ref))
+	break;
       if (!side && type == IRT_FUNC && flags == 0 && ir->op1 == 0 &&
           ir->op2 == IRSLOAD_READONLY && ir->t.irt == IRT_FUNC)
         break;
@@ -5315,7 +5610,8 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
               arm64_upvalue_fnroot_ir(T, ref, ref+1u, IRTMPREF_IN1)) &&
             !(type == IRT_PGC && ir->op2 == (IRTMPREF_IN1|IRTMPREF_OUT1) &&
               arm64_upvalue_fnroot_ir(T, ref, ref+1u,
-                                      IRTMPREF_IN1|IRTMPREF_OUT1)))
+                                      IRTMPREF_IN1|IRTMPREF_OUT1)) &&
+            !(type == IRT_PGC && arm64_cell_root_ir(T, ref)))
           goto bad_operand;
         root1 = ref;
       } else if (ir->op2 == IRTMPREF_IN2) {
@@ -5449,8 +5745,11 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL, ref, (IROp)ir->o,
                              ir->op2);
     case IR_CARG:
-      if (type != IRT_NIL || flags ||
-          ir->op1 < REF_FIRST || ir->op1 >= ref ||
+      if (type != IRT_NIL || flags || ir->op1 >= ref)
+        goto bad_operand;
+      if (ir->op1 == REF_BASE && arm64_cell_head_carg_ir(T, ref))
+        break;
+      if (ir->op1 < REF_FIRST ||
           (T->ir[ir->op1].o != IR_TMPREF &&
            T->ir[ir->op1].o != IR_CARG) ||
           !((ir->op2 >= REF_FIRST && ir->op2 < ref &&
@@ -5461,7 +5760,8 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       break;
     case IR_CALLS:
       {
-        if (side && arm64_rooted_upvalue_call((IRCallID)ir->op2))
+        if (side && (arm64_rooted_upvalue_call((IRCallID)ir->op2) ||
+                     arm64_rooted_cell_call((IRCallID)ir->op2)))
           return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL, ref,
                                  IR_CALLS, ir->op2);
         int effect = arm64_rooted_ir_effect(T, ref, root1, root2, root3);
@@ -5626,6 +5926,14 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
         goto bad_snapshot;
       if (!get) completed_store = ref;
     }
+    if (ir->o == IR_CALLS && arm64_rooted_cell_call((IRCallID)ir->op2)) {
+      const IRIns *tail = &T->ir[ir->op1];
+      IRRef root = tail->op2;
+      int get = ir->op2 == IRCALL_lj_func_getcell_rooted_try;
+      if (!arm64_cell_ir_snapshots(J, T, ref, s, root))
+        goto bad_snapshot;
+      if (!get) completed_store = ref;
+    }
     if (rootop != BC_FORL && ir->o == IR_SLOAD &&
         ir->op1 >= T->snap[s].nslots)
       goto bad_snapshot;
@@ -5706,7 +6014,9 @@ static int arm64_scalar_postra_value(IRIns p)
             p.op2 == IRCALL_lj_tab_storeraw_rooted ||
             p.op2 == IRCALL_lj_tab_storenil_rooted ||
             p.op2 == IRCALL_lj_func_getuv_rooted_try ||
-            p.op2 == IRCALL_lj_func_storeuv_rooted_try);
+            p.op2 == IRCALL_lj_func_storeuv_rooted_try ||
+            p.op2 == IRCALL_lj_func_getcell_rooted_try ||
+            p.op2 == IRCALL_lj_func_storecell_rooted_try);
   case IR_VLOAD:
     return (irt_type(p.t) == IRT_INT || irt_type(p.t) == IRT_NUM ||
             irt_type(p.t) == IRT_NIL || irt_type(p.t) == IRT_TRUE ||
@@ -5745,6 +6055,114 @@ static int arm64_scalar_postra_gc_ref(const LJArm64PostRAView *v, IRRef ref,
   p = ir_load_acq(&v->ir[ref]);
   return arm64_rooted_gc_type(irt_type(p.t)) &&
          arm64_scalar_postra_ref(v, ref, before, irt_type(p.t));
+}
+
+static int arm64_cell_value_postra_ref(const LJArm64PostRAView *v,
+                                       IRRef value, IRRef before)
+{
+  return value == REF_NIL ||
+         arm64_scalar_postra_ref(v, value, before, IRT_INT) ||
+         arm64_scalar_postra_ref(v, value, before, IRT_NUM) ||
+         arm64_scalar_postra_ref(v, value, before, IRT_TRUE) ||
+         arm64_scalar_postra_ref(v, value, before, IRT_FALSE) ||
+         arm64_scalar_postra_ref(v, value, before, IRT_LIGHTUD) ||
+         arm64_scalar_postra_gc_ref(v, value, before);
+}
+
+static int arm64_cell_guard_postra(const LJArm64PostRAView *v, IRRef guardref)
+{
+  IRRef ref;
+  MSize s;
+  IRIns guard;
+  if (!v || !v->snap || guardref < REF_FIRST || guardref >= v->nins)
+    return 0;
+  guard = ir_load_acq(&v->ir[guardref]);
+  if (guard.o != IR_SLOAD || guard.t.irt != (IRT_P32|IRT_GUARD) ||
+      guard.op2 != IRSLOAD_TYPECHECK || guard.s != SPS_NONE ||
+      ra_hasreg(guard.r))
+    return 0;
+  for (ref = guardref+1u; ref < v->nins; ref++) {
+    IRIns use = ir_load_acq(&v->ir[ref]);
+    switch ((IROp)use.o) {
+    case IR_BASE: case IR_SLOAD: case IR_KINT: case IR_KNUM: case IR_KGC:
+    case IR_KPRI: case IR_LOOP: case IR_XPOLL:
+      break;
+    case IR_CALLS:
+      if (use.op1 == guardref) return 0;
+      break;
+    default:
+      if (use.op1 == guardref || use.op2 == guardref) return 0;
+      break;
+    }
+  }
+  for (s = 0; s < v->nsnap; s++) {
+    const SnapShot *snap = &v->snap[s];
+    MSize ofs = snap_mapofs_acq(snap);
+    MSize i;
+    if (!v->snapmap || ofs > v->nsnapmap ||
+        snap_nent_acq(snap) > v->nsnapmap-ofs ||
+        v->nsnapmap-ofs-snap_nent_acq(snap) < 1u+LJ_FR2)
+      return 0;
+    for (i = 0; i < snap_nent_acq(snap); i++) {
+      SnapEntry se = snapentry_acq(&v->snapmap[ofs+i]);
+      if (snap_ref(se) == guardref || snap_slot(se) == guard.op1) return 0;
+    }
+  }
+  return 1;
+}
+
+static int arm64_cell_root_postra(const LJArm64PostRAView *v, IRRef root)
+{
+  IRIns tmp;
+  IRRef callref;
+  if (!v || root < REF_FIRST || root >= v->nins) return 0;
+  tmp = ir_load_acq(&v->ir[root]);
+  if (tmp.o != IR_TMPREF || tmp.t.irt != IRT_PGC || !ra_hasreg(tmp.r) ||
+      !arm64_scalar_postra_register(tmp.r, IRT_PGC) || ra_hasspill(tmp.s))
+    return 0;
+  for (callref = root+1u; callref < v->nins; callref++) {
+    IRIns call = ir_load_acq(&v->ir[callref]), tail, head;
+    int get;
+    if (call.o != IR_CALLS || !arm64_rooted_cell_call((IRCallID)call.op2) ||
+        call.op1 < REF_FIRST || call.op1 >= callref)
+      continue;
+    get = call.op2 == IRCALL_lj_func_getcell_rooted_try;
+    tail = ir_load_acq(&v->ir[call.op1]);
+    if (tail.o != IR_CARG || tail.op1 < REF_FIRST ||
+        tail.op1 >= call.op1 || tail.op2 != root)
+      continue;
+    head = ir_load_acq(&v->ir[tail.op1]);
+    if (head.o == IR_CARG && head.op1 == REF_BASE &&
+        head.op2 >= v->nk && head.op2 < REF_TRUE &&
+        ir_load_acq(&v->ir[head.op2]).o == IR_KINT &&
+        tmp.op2 == (get ? (IRTMPREF_IN1|IRTMPREF_OUT1) : IRTMPREF_IN1) &&
+        (get ? tmp.op1 == REF_NIL :
+         arm64_cell_value_postra_ref(v, tmp.op1, root)))
+      return 1;
+  }
+  return 0;
+}
+
+static int arm64_cell_head_carg_postra(const LJArm64PostRAView *v,
+                                       IRRef headref)
+{
+  IRRef callref;
+  for (callref = headref+1u; callref < v->nins; callref++) {
+    IRIns call = ir_load_acq(&v->ir[callref]), tail, head;
+    if (call.o != IR_CALLS || !arm64_rooted_cell_call((IRCallID)call.op2) ||
+        call.op1 < REF_FIRST || call.op1 >= callref)
+      continue;
+    tail = ir_load_acq(&v->ir[call.op1]);
+    if (tail.o != IR_CARG || tail.op1 < REF_FIRST ||
+        tail.op1 >= call.op1)
+      continue;
+    head = ir_load_acq(&v->ir[tail.op1]);
+    if (tail.op1 == headref && head.o == IR_CARG &&
+        head.op1 == REF_BASE && head.op2 >= v->nk &&
+        head.op2 < REF_TRUE && ir_load_acq(&v->ir[head.op2]).o == IR_KINT)
+      return 1;
+  }
+  return 0;
 }
 static int arm64_scalar_postra_register(Reg r, IRType type)
 {
@@ -5825,6 +6243,54 @@ static int arm64_rooted_postra_effect(const LJArm64PostRAView *v, IRRef n,
   int store = c.op2 == IRCALL_lj_tab_storenum_rooted ||
               c.op2 == IRCALL_lj_tab_storebool_rooted || gcstore ||
               newstore || rawstore || nilstore;
+  if (arm64_rooted_cell_call((IRCallID)c.op2)) {
+    IRIns tail, head, guard, tmp;
+    IRRef out;
+    int get = c.op2 == IRCALL_lj_func_getcell_rooted_try;
+    if (!root1 || root1 >= ref || root2 || root3 || ref+1u >= n ||
+        c.t.irt != (IRT_INT|IRT_GUARD) ||
+        !arm64_cell_root_postra(v, root1) || c.op1 < REF_FIRST ||
+        c.op1 >= ref)
+      return 0;
+    tmp = ir_load_acq(&v->ir[root1]);
+    tail = ir_load_acq(&v->ir[c.op1]);
+    if (tail.o != IR_CARG || tail.t.irt != IRT_NIL ||
+        tail.op1 < REF_FIRST || tail.op1 >= c.op1 || tail.op2 != root1)
+      return 0;
+    head = ir_load_acq(&v->ir[tail.op1]);
+    if (head.o != IR_CARG || head.t.irt != IRT_NIL ||
+        head.op1 != REF_BASE || head.op2 < v->nk || head.op2 >= REF_TRUE ||
+        head.op2 >= tail.op1 || ir_load_acq(&v->ir[head.op2]).o != IR_KINT ||
+        !arm64_scalar_postra_kref(v, head.op2, IRT_INT))
+      return 0;
+    if (tmp.op2 != (get ? (IRTMPREF_IN1|IRTMPREF_OUT1) : IRTMPREF_IN1) ||
+        (get ? tmp.op1 != REF_NIL :
+         !arm64_cell_value_postra_ref(v, tmp.op1, root1)))
+      return 0;
+    guard = ir_load_acq(&v->ir[ref+1u]);
+    if (guard.o != IR_NE || guard.t.irt != (IRT_INT|IRT_GUARD) ||
+        !((guard.op1 == ref && irref_isk(guard.op2)) ||
+          (guard.op2 == ref && irref_isk(guard.op1))))
+      return 0;
+    out = guard.op1 == ref ? guard.op2 : guard.op1;
+    if (!arm64_scalar_postra_kref(v, out, IRT_INT) ||
+        ir_load_acq(&v->ir[out]).o != IR_KINT ||
+        ir_load_acq(&v->ir[out]).i != 0)
+      return 0;
+    if (!get) return 5;
+    if (ref+2u >= n) return 0;
+    {
+      IRIns value = ir_load_acq(&v->ir[ref+2u]);
+      IRType type = irt_type(value.t);
+      if (value.o != IR_VLOAD || value.op1 != root1 || value.op2 ||
+          (type != IRT_NIL && type != IRT_INT && type != IRT_NUM &&
+           type != IRT_TRUE && type != IRT_FALSE && type != IRT_LIGHTUD &&
+           !arm64_rooted_gc_type(type)) || !irt_isguard(value.t) ||
+          (value.t.irt & ~(IRT_TYPE|IRT_GUARD|IRT_ISPHI)))
+        return 0;
+    }
+    return 4;
+  }
   if (uvget || uvset) {
     IRIns tail, head, guard, r2;
     IRRef out;
@@ -6195,6 +6661,118 @@ static int arm64_upvalue_postra_snapshots(const LJArm64PostRAView *v,
   }
 }
 
+static int arm64_cell_rhs_postra(const LJArm64PostRAView *v,
+                                 const SnapShot *pre,
+                                 const SnapEntry *map, MSize slot,
+                                 IRRef value, IRRef callref)
+{
+  MSize i;
+  for (i = 0; i < snap_nent_acq(pre); i++) {
+    SnapEntry se = snapentry_acq(&map[i]);
+    if (snap_slot(se) == slot) {
+      IRRef saved = snap_ref(se);
+      if (value == saved) return 1;
+      if (value >= REF_FIRST && value < callref) {
+        IRIns conv = ir_load_acq(&v->ir[value]);
+        return conv.o == IR_CONV &&
+               (conv.t.irt & ~IRT_ISPHI) == IRT_NUM &&
+               conv.op2 == IRCONV_NUM_INT && conv.op1 == saved;
+      }
+      return 0;
+    }
+  }
+  if (value >= REF_FIRST && value < callref) {
+    IRIns conv = ir_load_acq(&v->ir[value]);
+    if (conv.o == IR_CONV &&
+        (conv.t.irt & ~IRT_ISPHI) == IRT_NUM &&
+        conv.op2 == IRCONV_NUM_INT)
+      value = conv.op1;
+  }
+  if (value < REF_FIRST || value >= callref) return 0;
+  {
+    IRIns source = ir_load_acq(&v->ir[value]);
+    return source.o == IR_SLOAD && source.op1 == slot &&
+           source.op2 == IRSLOAD_TYPECHECK;
+  }
+}
+
+static int arm64_cell_postra_snapshots(const LJArm64PostRAView *v,
+                                       IRRef ref, MSize s, IRRef root1)
+{
+  IRIns call = ir_load_acq(&v->ir[ref]);
+  const SnapShot *pre, *post;
+  const SnapEntry *map;
+  const BCIns *pc;
+  BCIns bc;
+  int get = call.op2 == IRCALL_lj_func_getcell_rooted_try;
+  uint32_t local;
+  MSize slot, count = 0;
+  IRRef guardref;
+  if (!v->proto || !v->snap || !v->snapmap || s >= v->nsnap ||
+      !proto_cellops(v->proto) ||
+      (bc_op(v->startins) != BC_LOOP && bc_op(v->startins) != BC_FORL) ||
+      s+1u >= v->nsnap)
+    return 0;
+  pre = &v->snap[s];
+  post = &v->snap[s+1u];
+  {
+    MSize ofs = snap_mapofs_acq(pre), nent = snap_nent_acq(pre);
+    MSize postofs = snap_mapofs_acq(post), postnent = snap_nent_acq(post);
+    if (ofs > v->nsnapmap || nent > v->nsnapmap-ofs ||
+        v->nsnapmap-ofs-nent < 1u+LJ_FR2 ||
+        postofs > v->nsnapmap || postnent > v->nsnapmap-postofs ||
+        v->nsnapmap-postofs-postnent < 1u+LJ_FR2)
+      return 0;
+    map = &v->snapmap[ofs];
+    pc = snap_pc_acq(&map[nent]);
+  }
+  bc = (BCIns)la_load32_acq((const uint32_t *)pc);
+  if (snap_ref_acq(pre) != root1 ||
+      (get ? bc_op(bc) != BC_CGET : bc_op(bc) != BC_CSET)) return 0;
+  if ((get && bc_a(bc) >= v->proto->framesize) ||
+      (!get && bc_d(bc) >= v->proto->framesize)) return 0;
+  local = get ? bc_d(bc) : bc_a(bc);
+  if (local >= v->proto->framesize) return 0;
+  slot = 1u+LJ_FR2+local;
+  if (!arm64_cell_guard_proto(v->proto, slot)) return 0;
+  if (snap_ref_acq(post) != ref+2u ||
+      snap_pc_acq(&v->snapmap[snap_mapofs_acq(post)+
+                               snap_nent_acq(post)]) != (get ? pc : pc+1))
+    return 0;
+  if (!get && (snap_count_acq(post) != SNAPCOUNT_DONE ||
+               bc_d(bc) >= v->proto->framesize ||
+               !arm64_cell_rhs_postra(v, pre, map,
+                 1u+LJ_FR2+bc_d(bc),
+                 ir_load_acq(&v->ir[root1]).op1, ref)))
+    return 0;
+  for (guardref = REF_FIRST; guardref < ref; guardref++) {
+    IRIns guard = ir_load_acq(&v->ir[guardref]);
+    if (guard.o == IR_SLOAD && guard.op1 == slot &&
+        guard.t.irt == (IRT_P32|IRT_GUARD) &&
+        guard.op2 == IRSLOAD_TYPECHECK) {
+      if (!arm64_cell_guard_postra(v, guardref)) return 0;
+      count++;
+    }
+  }
+  if (count != 1u) return 0;
+  {
+    IRRef tailref = call.op1;
+    IRIns tail, head;
+    if (tailref < REF_FIRST || tailref >= ref) return 0;
+    tail = ir_load_acq(&v->ir[tailref]);
+    if (tail.o != IR_CARG || tail.op1 < REF_FIRST ||
+        tail.op1 >= tailref)
+      return 0;
+    head = ir_load_acq(&v->ir[tail.op1]);
+    if (head.o != IR_CARG || head.op2 < v->nk || head.op2 >= REF_TRUE)
+      return 0;
+    IRRef kref = head.op2;
+    return kref >= v->nk && kref < REF_TRUE &&
+           ir_load_acq(&v->ir[kref]).o == IR_KINT &&
+           ir_load_acq(&v->ir[kref]).i == (int32_t)local;
+  }
+}
+
 static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
                                          BCOp rootop,
                                          const LJArm64SideIRView *side,
@@ -6350,6 +6928,11 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
 	}
 	break;
       }
+      if (!side && p.t.irt == (IRT_P32|IRT_GUARD) &&
+          p.op2 == IRSLOAD_TYPECHECK &&
+          arm64_cell_guard_proto(v->proto, p.op1) &&
+          arm64_cell_guard_postra(v, ref))
+	break;
       if (!side && type == IRT_FUNC && flags == 0 && p.op1 == 0 &&
           p.op2 == IRSLOAD_READONLY && p.t.irt == IRT_FUNC)
         break;
@@ -6410,7 +6993,8 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
               arm64_scalar_postra_ref(v, p.op1, ref, IRT_FUNC) &&
               ir_load_acq(&v->ir[p.op1]).o == IR_SLOAD &&
               ir_load_acq(&v->ir[p.op1]).op1 == 0 &&
-              ir_load_acq(&v->ir[p.op1]).op2 == IRSLOAD_READONLY)) return 0;
+              ir_load_acq(&v->ir[p.op1]).op2 == IRSLOAD_READONLY) &&
+            !arm64_cell_root_postra(v, ref)) return 0;
         root1 = ref;
       } else if (p.op2 == IRTMPREF_IN2) {
         if (!arm64_scalar_postra_ref(v, p.op1, ref, IRT_INT) &&
@@ -6433,7 +7017,8 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       break;
     case IR_CALLS:
       {
-        if (side && arm64_rooted_upvalue_call((IRCallID)p.op2)) return 0;
+        if (side && (arm64_rooted_upvalue_call((IRCallID)p.op2) ||
+                     arm64_rooted_cell_call((IRCallID)p.op2))) return 0;
         int effect = arm64_rooted_postra_effect(v, n, ref, root1, root2, root3);
         if (!effect || !ra_hasreg(p.r) ||
             !arm64_scalar_postra_register(p.r, IRT_INT)) return 0;
@@ -6509,7 +7094,9 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       binary = 1;
       break;
     case IR_CARG:
-      if (p.t.irt != IRT_NIL || p.op1 < REF_FIRST || p.op1 >= ref) return 0;
+      if (p.t.irt != IRT_NIL || p.op1 >= ref) return 0;
+      if (p.op1 == REF_BASE && arm64_cell_head_carg_postra(v, ref)) break;
+      if (p.op1 < REF_FIRST) return 0;
       {
         IRIns a = ir_load_acq(&v->ir[p.op1]);
         if ((a.o != IR_TMPREF && a.o != IR_CARG) ||
@@ -6816,6 +7403,13 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       int get = ir.op2 == IRCALL_lj_func_getuv_rooted_try;
       if (!arm64_upvalue_postra_snapshots(v, ref, s, head.op1,
                                           get ? 0 : tail.op2))
+        return 0;
+      if (!get) completed_store = ref;
+    }
+    if (ir.o == IR_CALLS && arm64_rooted_cell_call((IRCallID)ir.op2)) {
+      IRIns tail = ir_load_acq(&v->ir[ir.op1]);
+      int get = ir.op2 == IRCALL_lj_func_getcell_rooted_try;
+      if (!arm64_cell_postra_snapshots(v, ref, s, tail.op2))
         return 0;
       if (!get) completed_store = ref;
     }

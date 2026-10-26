@@ -21,6 +21,13 @@ LJ_FUNC int lj_func_getuv_rooted_try(lua_State *L, cTValue *fnroot,
 				      uint32_t uv, TValue *outroot);
 LJ_FUNC int lj_func_storeuv_rooted_try(lua_State *L, cTValue *fnroot,
 					uint32_t uv, cTValue *valueroot);
+/* Nonwaiting access to a closed local cell named by its current frame slot.
+** The explicit base must be the interpreter base or published native base. */
+LJ_FUNC int lj_func_getcell_rooted_try(lua_State *L, TValue *base,
+					       uint32_t slot, TValue *outroot);
+LJ_FUNC int lj_func_storecell_rooted_try(lua_State *L, TValue *base,
+						uint32_t slot,
+						cTValue *valueroot);
 
 /* Functions (closures). */
 LJ_FUNC GCfunc *lj_func_newC(lua_State *L, MSize nelems, GCtab *env,

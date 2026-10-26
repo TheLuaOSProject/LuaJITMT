@@ -97,6 +97,8 @@ LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
 LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
   sh "$root/tools/ci/arm64_jit_rooted_upvalue_contract.sh"
 LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+  sh "$root/tools/ci/arm64_jit_rooted_cell_contract.sh"
+LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
   sh "$root/tools/ci/arm64_jit_callback_recording_contract.sh"
 LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
   sh "$root/tools/ci/arm64_jit_tnew_contract.sh"

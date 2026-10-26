@@ -197,6 +197,12 @@ available.
   writers pass on ARM64/arm64e, assertion/release. Shared helpers and stock
   regressions pass on signed x64 as well. See
   [`arm64-jit-rooted-upvalues-2026-10-26.md`](arm64-jit-rooted-upvalues-2026-10-26.md).
+- Captured-local CGET/CSET in root LOOP/FORL use owned-stack cell helpers,
+  leased payload sampling and independent admission. Cell identity loads stay
+  guard-only and never enter registers, spills or exit snapshots. Initial
+  ARM64 assertion coverage includes visible values, GC, peer sharing and exact
+  post-store exits; broader profile validation is pending for this checkpoint.
+  See [`arm64-jit-rooted-local-cells-2026-10-26.md`](arm64-jit-rooted-local-cells-2026-10-26.md).
 - Scalar `FORL` supports constant and variable integer bounds/steps through
   def-use and source-control-flow checks. Scalar fixed-arity `FUNCF` supports
   bounded arithmetic, argument/cell loads and one scalar return.
@@ -251,8 +257,8 @@ available.
 - General table and upvalue JIT reads, writes and traversal, plus sunk/duplicate
   allocation and raw initialization effects. Rooted scalar/GC reads,
   existing-key scalar/GC stores, bounded ordinary/raw insertion, closed closure
-  upvalues and unsunk TNEW have operation proofs. True shared-cell CGET/CSET
-  locals, open upvalues, closure/cell creation, other insertion/call geometries
+  upvalues, root-frame closed-cell CGET/CSET and unsunk TNEW have operation proofs.
+  Other local-cell geometries, open upvalues, closure/cell creation, other insertion/call geometries
   and general metamethod
   paths remain closed. Bounded nil
   deletion now emits a rooted effect even when the recording sample is absent,

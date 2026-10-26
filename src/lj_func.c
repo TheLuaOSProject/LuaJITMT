@@ -274,6 +274,161 @@ int lj_func_storeuv_rooted_try(lua_State *L, cTValue *fnroot, uint32_t uv,
   return func_rooted_try_common(L, fnroot, uv, valueroot, NULL, 1);
 }
 
+/* Resolve the exact local cell slot owned by this interpreter/native frame.
+** Native traces keep their entry frame at TG jit_base; the explicit base
+** argument must name that same frame. Outside native code only L->base is
+** accepted. This avoids interpreting a stale L->base during a trace. */
+static int func_rooted_cell_slot(lua_State *L,
+				 const FuncRootedOwnerSnapshot *owner,
+				 TValue *base, uint32_t index, TValue **slotp)
+{
+  uintptr_t stackp, maxstackp, basep, slotaddr;
+  TValue *nativebase;
+  if (!L || !owner || !base || !slotp || G(L) != owner->g ||
+      lj_thr_actor_current() != owner->actor)
+    return 0;
+  nativebase = lj_tg_load_jit_base(owner->tg);
+  if ((nativebase != NULL &&
+       (nativebase != base || lj_tg_load_cur_L(owner->tg) != L)) ||
+      (nativebase == NULL && L->base != base))
+    return 0;
+  stackp = (uintptr_t)(void *)mref_acq(L->stack, TValue);
+  maxstackp = (uintptr_t)(void *)mref_acq(L->maxstack, TValue);
+  basep = (uintptr_t)(void *)base;
+  if (stackp == 0 || maxstackp <= stackp || basep < stackp ||
+      basep >= maxstackp ||
+      ((basep-stackp) & (sizeof(TValue)-1u)) != 0 ||
+      index >= (maxstackp-basep)/sizeof(TValue))
+    return 0;
+  slotaddr = basep + (uintptr_t)index*sizeof(TValue);
+  if (slotaddr < basep || slotaddr >= maxstackp ||
+      (slotaddr & (sizeof(TValue)-1u)) != 0)
+    return 0;
+  *slotp = (TValue *)(void *)slotaddr;
+  return 1;
+}
+
+static int func_rooted_cell_try_common(lua_State *L, TValue *base,
+				       uint32_t index, cTValue *valueroot,
+				       TValue *outroot, int store)
+{
+  FuncRootedOwnerSnapshot owner;
+  LJGC2Lease uvlease = { 0 }, vallease = { 0 };
+  TValue cell, cellconfirm, valuesnap, valueconfirm, result;
+  TValue *slot = NULL, *confirm_slot = NULL;
+  GCupval *uv = NULL;
+  GCobj *obj;
+  ptrdiff_t valueofs = 0, outofs = 0;
+  int valuestack = 0, outstack = 0;
+  int smr_active = 0, uvlease_active = 0, vallease_active = 0;
+  int success = 0;
+  LJOSerrState oserr;
+
+  lj_oserr_save(&oserr);
+  if (!L || (store ? !valueroot : !outroot) ||
+      !func_rooted_owner_snapshot(L, &owner) ||
+      !func_rooted_cell_slot(L, &owner, base, index, &slot))
+    goto done;
+  valuestack = store && func_tv_on_stack(L, valueroot);
+  outstack = !store && func_tv_on_stack(L, outroot);
+  valueofs = valuestack ? savestack(L, (TValue *)(void *)valueroot) : 0;
+  outofs = outstack ? savestack(L, outroot) : 0;
+  /* Writing the cell slot itself would destroy the identity used to resolve
+  ** this operation, so it is never a valid output root. */
+  if (!store && outroot == slot)
+    goto done;
+
+  if (!lj_gc2_smr_read_try(owner.g))
+    goto done;
+  smr_active = 1;
+  lj_tv_load_acq(&cell, slot);
+  if (itype(&cell) != LJ_TUPVAL ||
+      lj_gc2_tv_lease_acquire(owner.g, &cell, &uvlease) !=
+	LJ_GC2_TV_EDGE_VALID)
+    goto done;
+  uvlease_active = 1;
+  obj = gcV(&cell);
+  uv = &obj->uv;
+  /* The `closed` byte is compatibility metadata and can race. The acquired
+  ** value pointer is the authoritative closed-cell identity. */
+  if (mref_acq(uv->v, TValue) != &uv->tv)
+    goto done;
+
+  if (store) {
+    lj_tv_load_acq(&valuesnap,
+		   valuestack ? restorestack(L, valueofs) : valueroot);
+    if (tvistabinternal(&valuesnap) ||
+	lj_gc2_tv_lease_acquire(owner.g, &valuesnap, &vallease) !=
+	  LJ_GC2_TV_EDGE_VALID)
+      goto done;
+    vallease_active = 1;
+    if (!func_rooted_value_visible(&valuesnap))
+      goto done;
+  } else {
+    lj_tv_load_acq(&result, &uv->tv);
+    if (tvistabinternal(&result) ||
+	lj_gc2_tv_lease_acquire(owner.g, &result, &vallease) !=
+	  LJ_GC2_TV_EDGE_VALID)
+      goto done;
+    vallease_active = 1;
+    if (!func_rooted_value_visible(&result))
+      goto done;
+  }
+
+  /* Revalidate the frame, exact cell edge, and mutable source immediately
+  ** before the terminal read publication or write. No wait/allocation occurs
+  ** while these short leases are held. */
+  lj_tv_load_acq(&cellconfirm, slot);
+  if (tv_rawload(&cellconfirm) != tv_rawload(&cell) ||
+      mref_acq(uv->v, TValue) != &uv->tv ||
+      !func_rooted_cell_slot(L, &owner, base, index, &confirm_slot) ||
+      confirm_slot != slot ||
+      !func_rooted_owner_current(L, &owner))
+    goto done;
+  if (store) {
+    lj_tv_load_acq(&valueconfirm,
+		   valuestack ? restorestack(L, valueofs) : valueroot);
+    if (tv_rawload(&valueconfirm) != tv_rawload(&valuesnap))
+      goto done;
+    copyTVrel(L, &uv->tv, &valuesnap);
+    if (tvisgcv(&valuesnap))
+      lj_gc2_barrier_tv_pair_g(owner.g, obj2gco(uv), &valuesnap);
+  } else {
+    TValue *out = outstack ? restorestack(L, outofs) : outroot;
+    copyTVrel(L, out, &result);
+  }
+  success = 1;
+
+done:
+  if (smr_active)
+    lj_gc2_smr_read_leave(owner.g);
+  if (success && !store) {
+    TValue *out = outstack ? restorestack(L, outofs) : outroot;
+    if (outstack)
+      lj_state_stack_pubtv(L, L, out);
+    else
+      lj_gc_pubroot(L, out);
+  }
+  if (vallease_active)
+    lj_gc2_lease_release(&vallease);
+  if (uvlease_active)
+    lj_gc2_lease_release(&uvlease);
+  lj_oserr_restore(&oserr);
+  return success;
+}
+
+int lj_func_getcell_rooted_try(lua_State *L, TValue *base, uint32_t slot,
+			       TValue *outroot)
+{
+  return func_rooted_cell_try_common(L, base, slot, NULL, outroot, 0);
+}
+
+int lj_func_storecell_rooted_try(lua_State *L, TValue *base, uint32_t slot,
+				cTValue *valueroot)
+{
+  return func_rooted_cell_try_common(L, base, slot, valueroot, NULL, 1);
+}
+
 static GCupval *func_snapshotuv_unlinked_nothrow(lua_State *L,
 					  const TValue *slot);
 

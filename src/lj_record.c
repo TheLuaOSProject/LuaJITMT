@@ -68,6 +68,15 @@ static LJ_AINLINE void rec_copy_runtime_tv(jit_State *J, TValue *dst,
   ** into IR. Retry recording after the interpreter reaches a coherent value.
   */
   lj_tv_load_acq(&snap, src);
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+  if (itype(&snap) == LJ_TUPVAL &&
+      lj_record_mt_runtime_shared(J2G(J), J->L)) {
+    /* Cell operands are identity tags only. Their body and payload are sampled
+    ** later by the rooted helper under exact leases, never by copyTV checks. */
+    tv_rawstore(dst, tv_rawload(&snap));
+    return;
+  }
+#endif
   if (LJ_UNLIKELY(!lj_tv_gcref_type_match(&snap)))
     lj_trace_err(J, LJ_TRERR_RETRY);
   copyTV(J->L, dst, &snap);
@@ -3500,6 +3509,81 @@ static int rec_celluv_prepare_cget_sources(jit_State *J,
   return materialized;
 }
 
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+/* The stack contains the cell identity throughout this root trace. Sample its
+** payload through a leased operation and a private enumerated root, without
+** carrying the internal cell pointer in native registers or scratch roots. */
+static IRType rec_celluv_rooted_sample(jit_State *J, BCReg slotno)
+{
+  TGState *tg = L2TG(J->L);
+  TValue nil, value;
+  TValue *root;
+  uint32_t index;
+  int ok;
+#ifdef LUA_USE_ASSERT
+  uint32_t top = lj_tg_root_anchor_top_acq(tg);
+  uint64_t scratch1 = tg->tmptv.u64, scratch2 = tg->tmptv2.u64;
+  uint64_t scratch3 = tg->tmptv3.u64;
+#endif
+  if (!lj_tg_root_anchor_reserve_nothrow(J->L, tg))
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
+  setnilV(&nil);
+  root = lj_tg_root_anchor_push(J->L, tg, &nil, &index);
+  ok = lj_func_getcell_rooted_try(J->L, J->L->base, slotno, root);
+  lj_tv_load_acq(&value, root);
+  lj_tg_root_anchor_pop(tg, index);
+  lj_assertJ(lj_tg_root_anchor_top_acq(tg) == top &&
+             tg->tmptv.u64 == scratch1 && tg->tmptv2.u64 == scratch2 &&
+             tg->tmptv3.u64 == scratch3,
+             "rooted local-cell sample changed recorder roots/scratch");
+  if (!ok)
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
+  return itype2irt(&value);
+}
+
+static TRef rec_celluv_rooted(jit_State *J, cTValue *slot, TRef slotref,
+                              TRef val, BCReg slotno)
+{
+  const IRIns *source;
+  TRef root, index, status;
+  IRType type;
+  if (J->parent || J->framedepth || J->retdepth ||
+      J->baseslot != 1+LJ_FR2 || slotno >= J->pt->framesize ||
+      itype(slot) != LJ_TUPVAL || tref_ref(slotref) < REF_FIRST)
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
+  source = IR(tref_ref(slotref));
+  if (source->o != IR_SLOAD || source->op1 != J->baseslot+slotno ||
+      source->op2 != IRSLOAD_TYPECHECK ||
+      source->t.irt != (IRT_P32|IRT_GUARD))
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
+  type = rec_celluv_rooted_sample(J, slotno);
+  if (val && !LJ_DUALNUM && tref_isinteger(val))
+    val = emitir(IRTN(IR_CONV), val, IRCONV_NUM_INT);
+  J->mergesnap = 0;
+  lj_snap_add(J);
+  root = rec_tmpref_mode(J, val ? val : REF_NIL,
+                        val ? IRTMPREF_IN1 : IRTMPREF_IN1|IRTMPREF_OUT1);
+  index = lj_ir_kint(J, (int32_t)slotno);
+  status = lj_ir_call(J, val ? IRCALL_lj_func_storecell_rooted_try :
+                             IRCALL_lj_func_getcell_rooted_try,
+                     REF_BASE, index, root);
+  emitir(IRTGI(IR_NE), status, lj_ir_kint(J, 0));
+  J->mergesnap = 0;
+  if (val) {
+    const BCIns *pc = J->pc;
+    J->pc = pc+1;
+    lj_snap_add(J);
+    J->pc = pc;
+    J->cur.snap[J->cur.nsnap-1].count = SNAPCOUNT_DONE;
+    J->needsnap = 0;
+    return 0;
+  }
+  lj_snap_add(J);
+  J->mergesnap = 1;
+  return lj_record_vload(J, root, 0, type);
+}
+#endif
+
 /* Record local cell load/store. */
 static TRef rec_celluv(jit_State *J, cTValue *slot, TRef slotref, TRef val,
 		       BCReg slotno)
@@ -3507,6 +3591,11 @@ static TRef rec_celluv(jit_State *J, cTValue *slot, TRef slotref, TRef val,
   GCupval *uvp = NULL;
   IRRef uref;
   uint32_t uh = 0;
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+  if (lj_record_mt_runtime_shared(J2G(J), J->L) &&
+      (itype(slot) == LJ_TUPVAL || rec_celluv_iscellref(slotref)))
+    return rec_celluv_rooted(J, slot, slotref, val, slotno);
+#endif
   if (itype(slot) != LJ_TUPVAL && !rec_celluv_iscellref(slotref)) {
     if (rec_celluv_will_promote(J, slotno)) {
       slotref = rec_celluv_promote_slot(J, slotno);
@@ -4458,12 +4547,13 @@ void lj_record_ins(jit_State *J)
     J->needsnap = 1;
     break;
   case BC_CSET:
-    rec_celluv(J, rav, ra, rc, bc_a(ins));
     /*
     ** CSET updates a raw local slot or a closed cell. Keep following exits
-    ** aligned with the interpreter-visible local value.
+    ** aligned with the interpreter-visible local value. A rooted store creates
+    ** its exact completed-effect snapshot and clears this request itself.
     */
     J->needsnap = 1;
+    rec_celluv(J, rav, ra, rc, bc_a(ins));
     break;
   case BC_FNEW:
     rc = rec_fnew(J, gco2pt(proto_kgc(J->pt, ~(ptrdiff_t)rc)));
