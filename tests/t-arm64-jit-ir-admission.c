@@ -570,8 +570,8 @@ static LJArm64IRReject expect_reject_at(jit_State *J,
 	(int)reason, (unsigned)op);
   assert(reject.reason != LJ_ARM64_IR_REJECT_NONE);
   if (reject.reason != reason)
-    fprintf(stderr, "reject reason mismatch: wanted=%d got=%d ref=%u "
-	    "op=%u detail=%u\n", (int)reason, (int)reject.reason,
+    fprintf(stderr, "reject reason mismatch at test line %d: wanted=%d got=%d ref=%u "
+	    "op=%u detail=%u\n", test_line, (int)reason, (int)reject.reason,
 	    (unsigned)reject.ref, (unsigned)reject.op,
 	    (unsigned)reject.detail);
   assert(reject.reason == reason);
@@ -1657,15 +1657,18 @@ static void test_positive_and_negative(lua_State *L)
   reject = expect_reject(J, LJ_ARM64_IR_REJECT_CALL, IR_CALLXS);
   assert(reject.detail == LJ_ARM64_IR_CALL_NONE);
 
-#define REJECT_REMOVED(ref, op, type, op1, op2) \
-  do { \
-    make_trace(J); \
-    setir((ref), (op), (type), (op1), (op2)); \
-    expect_reject(J, LJ_ARM64_IR_REJECT_OPCODE, (op)); \
-  } while (0)
-  REJECT_REMOVED(R_SUM1, IR_NOP, IRT_NIL, 0, 0);
-  REJECT_REMOVED(R_SUM1, IR_USE, IRT_INT, R_A, 0);
-#undef REJECT_REMOVED
+  /* Narrowing may erase a superseded guard, but NOP is never a value. */
+  make_trace(J);
+  setir(R_PRECOND, IR_NOP, IRT_NIL, 0, 0);
+  assert(lj_asm_arm64_ir_admit(J, &fx.T, &reject));
+  fx.ir[R_PRECOND].op1 = R_A;
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_NOP);
+  make_trace(J);
+  setir(R_SUM1, IR_NOP, IRT_NIL, 0, 0);
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_MULOV);
+  make_trace(J);
+  setir(R_SUM1, IR_USE, IRT_INT, R_A, 0);
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPCODE, IR_USE);
   make_trace(J);
   setir(R_SUM1, IR_CONV, IRT_INT, R_A, IRCONV_INT_NUM);
   expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_CONV);
@@ -1680,14 +1683,21 @@ static void test_positive_and_negative(lua_State *L)
   setir(R_SUM1, IR_MUL, IRT_INT, R_A, R_B);
   expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_MUL);
 
-  /* Integer subtraction still requires overflow-checked SUBOV. */
+  /* Bit narrowing's wrapping ADD/SUB retain exact PHI and guard flags. */
   make_trace(J);
-  setir(R_SUM1, IR_SUB, IRT_INT, R_A, R_B);
+  setir(R_SUM1, IR_SUB, IRT_INT|IRT_ISPHI, R_A, R_B);
+  assert(lj_asm_arm64_ir_admit(J, &fx.T, &reject));
+  fx.ir[R_SUM1].t.irt = IRT_INT;
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SUB);
+  fx.ir[R_SUM1].t.irt = IRT_INT|IRT_GUARD|IRT_ISPHI;
   expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SUB);
 
-  /* Unchecked integer ADD remains scoped to the exact FORL induction. */
   make_trace(J);
-  setir(R_SUM1, IR_ADD, IRT_INT, R_A, R_B);
+  setir(R_SUM1, IR_ADD, IRT_INT|IRT_ISPHI, R_A, R_B);
+  assert(lj_asm_arm64_ir_admit(J, &fx.T, &reject));
+  fx.ir[R_SUM1].t.irt = IRT_INT;
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_ADD);
+  fx.ir[R_SUM1].t.irt = IRT_INT|IRT_GUARD|IRT_ISPHI;
   expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_ADD);
 
   make_trace(J);

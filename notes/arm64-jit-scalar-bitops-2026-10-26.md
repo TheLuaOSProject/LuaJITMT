@@ -85,3 +85,10 @@ FUNCF/side bit operations, BROL, bit64/cdata, STRTO and unrelated integer or
 floating-point operations remain closed. This is one bounded extension of the
 experimental port; the general JIT, FFI, profiler and sustained concurrency gaps
 in `README.md` remain open.
+
+The first combined run stopped in the older generic admission fixture because
+it still expected every NOP to be an unsupported opcode. The fixture now
+accepts an unused canonical NOP, rejects a NOP used as a value or carrying
+operands, and distinguishes valid wrapping ADD/SUB from wrong PHI/guard flags.
+The complete generic admission contract passes after that test-only update;
+production sources are unchanged from the initial bitops checkpoint.
