@@ -184,3 +184,31 @@ Full-run local logs are `/tmp/ljmt-bitops-matrix.log`,
 `/tmp/ljmt-bitops-x64-stock-import.log`. These are bounded regressions, not a
 new sanitizer, sustained-concurrency or performance matrix. Existing profiler
 and unexplained historical timeout limits remain open.
+
+## Main integration
+
+The branch was fast-forwarded and pushed to `v2.1` at
+`68a4de41aa7685df1a88b9558e223bac73c760fd`. Its production/test/tool sources
+are unchanged from `04b7ec58`. The main checkout was rebuilt as ordinary ARM64
+with `LUAJIT_MT_ARM64_BOOTSTRAP`, `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL` and
+`LUA_USE_ASSERT`, without helper defines.
+
+That runtime passes the standalone bitops cases, rooted local-cell/upvalue
+tests, the NUM fusion-boundary fixture, all 509 stock source cases and all 509
+original-v2 imports. Code signing verifies, and symbol checks find neither
+trace/function test helpers nor out-of-line atomic dependencies. The
+standalone bitops run claims correct results and published trace metadata;
+the exact native counts and forced lifecycle evidence remain the C harness
+runs above.
+
+- Main build profile:
+  `239880c254f01c51b7c466870a151bfcb3af11c55113e50439e28c33dd4c98ea`
+- Runtime SHA-256:
+  `80ffc0939d04483022b68864a3aa736dace30422c8b801ee916d4695f30c4fbe`
+- Archive SHA-256:
+  `05d05cdff8aafbb747062b7c2203e1317d00da78a710bc2476cd30c7945065f4`
+
+Logs: `/tmp/ljmt-bitops-main-verify.log`, `/tmp/ljmt-bitops-main-ordinary.log`,
+`/tmp/ljmt-bitops-main-cells.log`, `/tmp/ljmt-bitops-main-upvalues.log`,
+`/tmp/ljmt-bitops-main-fusion.log`, `/tmp/ljmt-bitops-main-stock-source.log`
+and `/tmp/ljmt-bitops-main-stock-import.log`.

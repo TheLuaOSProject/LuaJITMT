@@ -59,7 +59,8 @@ and reports that are no longer authoritative are retained in
   publication/entry/retirement, native numeric adaptation, and generic FFI M7
   on ARM64 and arm64e/BTI with both assertion and release runtimes.
 - Native ARM64 source and original-v2 import stock corpora each pass all 509
-  cases at the combined `bbf3f5ba` checkpoint.
+  cases at the combined `bbf3f5ba` checkpoint. Both also pass on the final
+  ordinary main runtime at `68a4de41`, after the NUM fusion correction.
 - The complete bootstrap gate passes, including 387 applicable stock cases,
   threaded tmpbuf, Darwin native roots/GC2, ARM64/arm64e callbacks,
   variadic/aggregate interpreter FFI and x86-64 errno unwind.
