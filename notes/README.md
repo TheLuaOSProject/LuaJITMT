@@ -23,15 +23,17 @@ and reports that are no longer authoritative are retained in
   entry, exits and refusals. Shared build profiles bind runtime, archive,
   fixture and helper-library identity. All review work streams are integrated.
   See [`review-implementation-2026-10-25.md`](review-implementation-2026-10-25.md).
-- Latest combined runtime validation: the rooted local-cell checkpoint on
-  2026-10-26, frozen at `8607c74c`. The complete experimental and bootstrap
-  gates passed uninterrupted, including all four M7 FFI profiles. ARM64 and
-  signed x86-64 each passed both 509-case stock source/import corpora; shared
-  cell/upvalue/table helpers and the segment-map race passed as well. A later
-  test-only snapshot expansion at `4cde2916` passed the complete four-profile
-  cell contract with unchanged production sources. See
-  [`arm64-jit-rooted-local-cells-2026-10-26.md`](arm64-jit-rooted-local-cells-2026-10-26.md)
-  for exact source/build identities, logs and validation limits.
+- Latest combined runtime validation: the scalar bit-operation checkpoint on
+  2026-10-26, frozen at `bbf3f5ba`. The complete experimental and bootstrap
+  gates passed, including all four M7 FFI profiles. ARM64 and signed x86-64
+  each passed both 509-case stock source/import corpora. The subsequent NUM
+  fusion-boundary tightening at `04b7ec58` passed the four-profile bitops/fusion
+  matrix and existing ARM64 scalar/FMA and numeric-spill contracts; the whole
+  combined gate was not repeated after that one-condition change. See
+  [`arm64-jit-scalar-bitops-2026-10-26.md`](arm64-jit-scalar-bitops-2026-10-26.md)
+  for exact evidence and validation limits. Earlier shared-helper and
+  segment-map race evidence remains in the
+  [rooted local-cell checkpoint](arm64-jit-rooted-local-cells-2026-10-26.md).
   Earlier callback recording and the repaired x64 test-only unwind are in
   [`arm64-jit-callback-recording-2026-10-26.md`](arm64-jit-callback-recording-2026-10-26.md)
   and [`x64-vmevent-test-unwind-2026-10-26.md`](x64-vmevent-test-unwind-2026-10-26.md).
@@ -45,10 +47,10 @@ and reports that are no longer authoritative are retained in
   [`arm64-jit-scalar-varargs-2026-10-26.md`](arm64-jit-scalar-varargs-2026-10-26.md).
 - The scalar bit-operation tranche now admits 32-bit bit.* operations in
   LOOP/FORL roots, including stock integer narrowing, instruction fusions and
-  exact snapshot-only INT-to-NUM restoration. The focused ARM64 assertion
-  fixture passes 52 native cases, malformed-view checks and deterministic
-  profile/STOPREQ exits. The four-profile and combined validation for this
-  checkpoint are still pending. See
+  exact snapshot-only INT-to-NUM restoration. All four ARM64/arm64e
+  assertion/release profiles pass 52 native cases, malformed-view checks,
+  deterministic profile/STOPREQ exits and independent INT/NUM cross-loop
+  fusion rejections. See
   [`arm64-jit-scalar-bitops-2026-10-26.md`](arm64-jit-scalar-bitops-2026-10-26.md).
 - Fixed scalar FFI stack arguments pass the four-profile M7 suite,
   including compact Darwin stack slots, spill separation, nested callbacks
@@ -57,13 +59,14 @@ and reports that are no longer authoritative are retained in
   publication/entry/retirement, native numeric adaptation, and generic FFI M7
   on ARM64 and arm64e/BTI with both assertion and release runtimes.
 - Native ARM64 source and original-v2 import stock corpora each pass all 509
-  cases at that same checkpoint.
+  cases at the combined `bbf3f5ba` checkpoint.
 - The complete bootstrap gate passes, including 387 applicable stock cases,
   threaded tmpbuf, Darwin native roots/GC2, ARM64/arm64e callbacks,
   variadic/aggregate interpreter FFI and x86-64 errno unwind.
-- The signed x86-64/Rosetta runtime at that checkpoint passed both 509-case corpora
-  and the shared rooted-store, raw nil-deletion, upvalue/cell and segment-map race fixtures. The combined
-  gates also ran x86-64 callback-result lifetime and errno unwind. Earlier
+- The signed x86-64/Rosetta runtime at `bbf3f5ba` passed both 509-case corpora.
+  The combined gates also ran x86-64 callback-result lifetime and errno unwind.
+  Shared rooted-store, raw nil-deletion, upvalue/cell and segment-map race
+  fixtures were validated at the earlier local-cell checkpoint. Earlier
   authentic CALLXS/remote-flush/callback and callback-stack relocation/unwind
   evidence is at `9b0c6e18`. These are targeted regressions, not a complete
   x86 umbrella or native Intel performance result. See
@@ -300,6 +303,8 @@ available.
   multires/tail calls, CALLM outside the direct scalar producer shape, and
   unsupported result/IR representations. The admitted scalar
   float conversions do not certify arbitrary float or boxed-64-bit graphs.
+  The next fixed-signature I64/U64 result candidate is documented in the
+  [boxed-64-bit plan](arm64-jit-boxed64-plan-2026-10-26.md); it is not implemented.
 - Full parity with every x86_64 lockless VM, JIT, FFI, profiler, unwind, and
   stress path.
 - Concurrent Darwin profiler start/stop can still terminate on a fresh late

@@ -74,10 +74,11 @@ claims exact entry/exit counts, malformed-view checks and forced lifecycle
 coverage.
 
 `tools/ci/arm64_jit_bitops_contract.sh` builds the ARM64/arm64e assertion/release
-matrix and is included in the experimental gate. The full matrix and combined
-regressions are pending at this implementation checkpoint. Local development
-log: `/tmp/ljmt-bitops-focused.log`; the tracked fixtures are the reproducible
-validation source. All temporary production diagnostic prints were removed.
+matrix and is included in the experimental gate. Both the full bitops matrix
+and the combined regressions passed; the exact checkpoints and the subsequent
+NUM proof correction are distinguished below. The tracked fixtures are the
+reproducible validation source. All temporary production diagnostic prints
+were removed.
 
 ## Limits
 
@@ -114,9 +115,8 @@ a certificate gap, not a demonstrated native wrong-code result.
 The broad run at `8b605112` was deliberately stopped after its current numeric
 contract completed, and its ordinary runtime restoration finished. It had
 already passed all four bitops profiles and the rooted-value/callback/side
-contracts reached so far; it is not claimed as a complete gate pass. Final
-combined validation will use a new frozen source checkpoint including this
-correction. Local before/after logs are
+contracts reached so far; it is not claimed as a complete gate pass. The final
+combined run used `bbf3f5ba`, including this correction. Local before/after logs are
 `/tmp/ljmt-bitops-boundary-before.log` and
 `/tmp/ljmt-bitops-boundary-after.log`.
 
@@ -144,3 +144,43 @@ numeric regression results above describe its final validation scope. Logs:
 `/tmp/ljmt-bitops-final-four-profile.log`,
 `/tmp/ljmt-bitops-final-scalar.log`, and
 `/tmp/ljmt-bitops-final-spills.log`.
+
+## Combined evidence and final profiles
+
+The uninterrupted matrix at `bbf3f5ba379210163174c7185f9f46eb509044f6`
+completed the entire experimental and bootstrap gates. This includes the four
+M7 FFI profiles, shared-cell/upvalue/GC-value contracts, scalar first-side
+publication and retirement, native root/exit lifecycle, and callback/unwind
+contracts. ARM64 and signed x86-64/Rosetta each passed all 509 stock source
+cases and all 509 original-v2 bytecode-import cases. Ordinary ARM64 bitops,
+local cells and upvalues also passed without C test probes. The matrix verified
+unchanged source/HEAD, code signing, absence of trace/function test helpers
+and out-of-line atomic dependencies, and restored the ordinary ARM64 assertion
+runtime.
+
+The final production correction is
+`04b7ec58ac5308c6b8c9b38d9f5b5d064c3f222a`. Its unchanged source passed these
+four profile-bound bitops and NUM-boundary runs:
+
+| Profile | Profile identity |
+| --- | --- |
+| ARM64 assertions | `335fa2e534ff6bfd9716f6b9b7dd09eeb40f016690be1aa588e4d141c38532ed` |
+| ARM64e assertions + BTI | `95f886c0d3d8fa82201f4813580d54cffc6caaa7351a0d461e95e3c75e1db2da` |
+| ARM64 release | `dd00f3c190bd282950dc60f04e5e1cdace749abd47ae3e49cdc3c1f1832b7c05` |
+| ARM64e release + BTI | `f87b95c8178412b43db865bbdb1c671e528021d9e9fb49786cb5310123810882` |
+
+Each run retains 52 measured native bitops cases, 25 fused integers, 12
+rematerialized snapshot entries, 423 integer spill entries, the exact 1023
+W-instruction mask and one required INT boundary rejection. The separate NUM
+fixture also rejects its malformed clone and verifies the original results
+and FMADD instructions. Existing scalar/FMA and numeric-spill contracts passed
+after rebuilding their required helper profile; the latter profile is
+`a4cc192f8150bb4817ebc51b73d4493fb3edfa6c5003d24cf1630572349cb972`.
+
+Full-run local logs are `/tmp/ljmt-bitops-matrix.log`,
+`/tmp/ljmt-bitops-experimental.log`, `/tmp/ljmt-bitops-bootstrap.log`,
+`/tmp/ljmt-bitops-stock-source.log`, `/tmp/ljmt-bitops-stock-import.log`,
+`/tmp/ljmt-bitops-x64-stock-source.log`, and
+`/tmp/ljmt-bitops-x64-stock-import.log`. These are bounded regressions, not a
+new sanitizer, sustained-concurrency or performance matrix. Existing profiler
+and unexplained historical timeout limits remain open.

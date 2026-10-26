@@ -1,0 +1,27 @@
+# ARM64 CALLXS boxed I64/U64 result plan (2026-10-26)
+
+Read-only design reviewed at `04b7ec58`; no new FFI capability is implemented by this note.
+
+Scope: admit fixed-signature scalar `int64_t`/`uint64_t` results only. Do not change argument classification, variadic admission, enums, 32-bit boxed results, aggregates, or sret.
+
+## Current boundary
+
+The ABI classifier already admits 8-byte integer results as `LJ_ARM64_ABI_KIND_INTEGER` and preserves signedness/raw result CTypeID (`src/lj_ccall_arm64.h:114-124,188-196`). `arm64_callxs_result_type()` already maps that pair to `IRT_I64` or `IRT_U64` (`src/lj_asm_arm64_admit.h:378-396`). The recorder already sets `boxed_result` for these IR types, allocates an exact CType CNEW before native entry, passes it as the rooted-result argument, performs an XSTORE from CALLXS, and returns the CData box (`src/lj_crecord.c:2683-2741,2754-2774`). On ARM64 the split pass is disabled (`src/lj_jit.h:1051-1058`). The emitter already takes integer CALLXS results from X0 (`src/lj_asm_arm64.h:604-629`) and lowers XSTORE through its typed store opcode (`1161-1167`). Therefore no ABI classifier, recorder, allocator, or runtime-helper change appears necessary for basic I64/U64.
+
+Admission is the blocker. `arm64_callxs_box_call()` is pointer-specific: it requires P64 XSTORE/CALLXS and `ABI_KIND_POINTER` (`src/lj_asm_arm64_admit.h:684-727`). The semantic lifecycle requires a box/root only for pointer results, treats other kinds as KNULL, and types XSTORE as P64 (`1115-1117,1197-1202,1296-1297,1420-1435`). The independently structured post-RA lifecycle and CData-PHI checker repeat those pointer-only conditions (`2897-2960,3533-3538,3542-3549,3740-3761`). The post-RA result-register rule already accepts GPR results allocated to RID_RET or a spill, and checks their live-across-call state (`3964-3978`); I64/U64 are single 64-bit GPR returns on this target.
+
+## Minimal production change
+
+Add a narrow predicate for “boxed scalar result required”: existing pointer result, or `ABI_KIND_INTEGER && result_size == 8` (excluding `ABI_KIND_ENUM`). For the new integer case, additionally require GPR result class, `result_id` exactly equal to the CNEW CTypeID, and ABI result type exactly IRT_I64 for signed or IRT_U64 for unsigned. Keep pointer checks unchanged.
+
+Extend semantic and post-RA lifecycle checks independently so `enterargs[2]` must be the exact CNEW for this case, the unique XSTORE source must be this CALLXS, its payload address must be `box + sizeof(GCcdata)`, and `irt_type(XSTORE.t)` must equal both the CALLXS result type and the ABI-derived I64/U64 type. Apply the same boxed-result rule to each CData PHI incoming CNEW in the semantic and post-RA PHI validators. Do not let the broader predicate accept enums merely because they also use boxes in the recorder.
+
+The box must stay rooted through the same lifecycle already used by pointer returns: allocation replay snapshot before CNEW, XSAVE/root staging before native entry, native frame root during the call, and the exact post-call continuation snapshot after the payload store. `arm64_callxs_snapshot_bounds()` validates snapshot geometry and types (`2526+`) and existing pointer traces exercise this path; add a mutation that removes the result box from the relevant XSAVE/post-call snapshot. If the existing snapshot checks do not bind the box ref to its hidden result slot, add that narrow binding before enabling I64/U64, since a live GPR/spill alone is not a GC root.
+
+## Focused evidence
+
+Add C helpers returning boxed `int64_t` and `uint64_t` with no new argument classes. Vary results across `INT64_MIN`, values below/above 32-bit boundaries, a positive signed high-word value, `UINT64_MAX`, and a bit-63-set unsigned value. In Lua, compare against exact FFI cdata constants and assert `ffi.istype` for signedness; drive a hot FORL whose result CData is live as the loop result. Use native call counters to prove CALLXS execution and exact non-replay when one iteration deliberately fails a post-call result guard. Check helper/native-frame cleanup and the result after trace flush/GC pressure.
+
+For both semantic and post-RA clones, independently reject: CNEW CTypeID mismatch; signed/unsigned ABI-result mismatch; P64/I32 or wrong-width CALLXS/XSTORE; XSTORE sourced from another call; wrong payload base/offset; missing or duplicate XSTORE; entry root changed from the exact box to KNULL/another box; and a corrupted post-call snapshot that drops/replaces the returned box. Include a loop PHI with two valid same-CType result boxes, then mutate one incoming box/store. Retain existing pointer- and float-result positives unchanged; add negative cross-type mutations that substitute a pointer/float signature, CALLXS type, or XSTORE type into an I64/U64 box graph. Enum and aggregate results remain outside this tranche.
+
+`result_id` is the raw terminal CTypeID, not the declared wrapper ID. `lj_ccall_arm64_raw_type()` follows both attribute qualifiers (including `const`) and typedef links until it reaches the underlying type (`src/lj_ccall_arm64.h:60-79`); signature construction stores that returned `rawid` in `abi->result_id` (`188-196`). The recorder uses the same raw ID as `result_box_id` for scalar results (`src/lj_crecord.c:2653-2654,2683-2684`). Thus exact I64/U64 checks compare the terminal signed/unsigned primitive ID even when the declaration spells it through `const` or a typedef; this does not broaden accepted result kinds.
