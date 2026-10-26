@@ -23,19 +23,22 @@ and reports that are no longer authoritative are retained in
   entry, exits and refusals. Shared build profiles bind runtime, archive,
   fixture and helper-library identity. All review work streams are integrated.
   See [`review-implementation-2026-10-25.md`](review-implementation-2026-10-25.md).
-- New focused checkpoint: fixed owned I64/U64 CALLXS arguments pass the
-  ARM64 assertion contract, including nine arguments, exact CData roots,
+- Fixed owned I64/U64 CALLXS arguments pass all four ARM64/arm64e
+  assertion/release profiles, including nine arguments, exact CData roots,
   prior boxed-call inputs, fixed-prefix varargs and independent malformed
-  semantic/post-RA views. The wider profile and regression matrix is pending.
+  semantic/post-RA views. Each profile records 344 native observations and
+  independent 4-positive/26-negative admission checks.
   See [`arm64-jit-i64-arguments-2026-10-26.md`](arm64-jit-i64-arguments-2026-10-26.md).
-- Latest combined runtime validation: the boxed-I64/U64 result and shared
-  constructor/recovery checkpoint on 2026-10-26, frozen at `2ba1e91b`.
+- Latest combined runtime validation: the fixed I64/U64 argument checkpoint
+  on 2026-10-26, frozen at `f0c4f574`.
   The complete experimental and bootstrap gates passed, including all four
   M7 scalar CALLXS profiles. ARM64 and signed x86-64 each passed both 509-case
   stock source/import corpora. The ordinary main ARM64 rebuild passes both
-  corpora and nine boxed-result smoke cases without test helpers. See the
-  [boxed-result evidence](arm64-jit-boxed64-results-2026-10-26.md) and
-  [eight-profile recovery matrix](gc2-constructor-recovery-2026-10-26.md).
+  corpora, six fixed-argument and nine boxed-result smoke cases without test
+  helpers. See the [fixed-argument evidence](arm64-jit-i64-arguments-2026-10-26.md).
+  The preceding boxed-result and shared constructor/recovery checkpoint is
+  documented in the [boxed-result evidence](arm64-jit-boxed64-results-2026-10-26.md)
+  and [eight-profile recovery matrix](gc2-constructor-recovery-2026-10-26.md).
   The earlier scalar bit-operation and NUM fusion-boundary work is in
   [`arm64-jit-scalar-bitops-2026-10-26.md`](arm64-jit-scalar-bitops-2026-10-26.md)
   with its initial evidence and limits. Earlier shared-helper and
@@ -46,7 +49,7 @@ and reports that are no longer authoritative are retained in
   and [`x64-vmevent-test-unwind-2026-10-26.md`](x64-vmevent-test-unwind-2026-10-26.md).
   The architecture-review checkpoint and its sanitizer/performance scope remain in
   [`review-validation-2026-10-25.md`](review-validation-2026-10-25.md).
-- Latest focused FFI validation: boxed I64/U64 result checkpoint `2ba1e91b`
+- Earlier focused FFI validation: boxed I64/U64 result checkpoint `2ba1e91b`
   passes its four-profile ARM64/arm64e assertion/release contract, with 1,722
   native boxed results and independent admission mutations per profile. The
   earlier combined run at `9651f937` failed in native TNEW on a shared
@@ -75,11 +78,11 @@ and reports that are no longer authoritative are retained in
   publication/entry/retirement, native numeric adaptation, and M7 scalar CALLXS
   on ARM64 and arm64e/BTI with both assertion and release runtimes.
 - Native ARM64 source and original-v2 import stock corpora each pass all 509
-  cases at the combined `2ba1e91b` checkpoint and its ordinary main rebuild.
+  cases at the combined `f0c4f574` checkpoint and its ordinary main rebuild.
 - The complete bootstrap gate passes, including 387 applicable stock cases,
   threaded tmpbuf, Darwin native roots/GC2, ARM64/arm64e callbacks,
   variadic/aggregate interpreter FFI and x86-64 errno unwind.
-- The signed x86-64/Rosetta runtime at `2ba1e91b` passed both 509-case corpora.
+- The signed x86-64/Rosetta runtime at `f0c4f574` passed both 509-case corpora.
   The combined gates also ran x86-64 callback-result lifetime and errno unwind.
   Shared rooted-store, raw nil-deletion, upvalue/cell and segment-map race
   fixtures were validated at the earlier local-cell checkpoint. Earlier
@@ -292,6 +295,13 @@ available.
   identities, discarded results and forced POSTCALL exits without replay pass
   in all four ARM64 profiles. Boxed CALLM producers remain closed. See
   [boxed-result implementation and evidence](arm64-jit-boxed64-results-2026-10-26.md).
+- Fixed owned I64/U64 arguments bind exact guarded CData types or completed
+  ordinary boxed-call results to their payload loads and caller argument roots.
+  Independent admission checks constrain every payload use to an exact fixed
+  ABI argument. Eight GPRs plus a ninth stack argument, full-width spills,
+  typedef/const identities, fixed-prefix varargs and no-replay exits pass in
+  all four ARM64 profiles. See the
+  [fixed-argument evidence](arm64-jit-i64-arguments-2026-10-26.md).
 - Lockless OS-error restoration for C, fast-function and admitted JIT unwind
   paths. A native observer proves the C++ callback-error fixture enters from
   an ACTIVE generated frame, catches/rethrows through C++, runs destructors,
@@ -332,10 +342,11 @@ available.
   multires/tail calls, CALLM outside the direct scalar producer shape, and
   unsupported result/IR representations. The admitted scalar
   float conversions do not certify arbitrary float graphs. Boxed I64/U64
-  results now have a narrow implementation with passing four-profile
-  focused and combined validation at `2ba1e91b`. General 64-bit cdata
-  arguments/arithmetic remain excluded. See the
-  [boxed-64-bit result note](arm64-jit-boxed64-results-2026-10-26.md).
+  results and fixed owned arguments have narrow certificates with passing
+  four-profile and combined validation at `f0c4f574`. General 64-bit cdata
+  arithmetic, references, PHI arguments and variadic suffixes remain excluded.
+  See the [boxed-result note](arm64-jit-boxed64-results-2026-10-26.md) and
+  [fixed-argument note](arm64-jit-i64-arguments-2026-10-26.md).
 - Full parity with every x86_64 lockless VM, JIT, FFI, profiler, unwind, and
   stress path.
 - Concurrent Darwin profiler start/stop can still terminate on a fresh late
