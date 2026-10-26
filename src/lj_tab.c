@@ -20,6 +20,7 @@
 #include "lj_safepoint.h"
 #include "lj_tab.h"
 #include "lj_tabtxn.h"
+#include "lj_meta.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
 #include "lj_trace.h"
@@ -7484,9 +7485,9 @@ guarded_finish:
 					     mode, observed, observed_rooted);
     committed = rc == LJ_TAB_STORE_CAS_OK;
 #ifdef LJ_TAB_TEST_HELPERS
-    /* Exercise the nil-delete committed/stale handoff with the existing
-    ** post-CAS test hook. Production builds compile this away. */
-    if (committed && mode == TAB_STORE_MODE_ANY && tvisnil(&valuesnap))
+    /* Exercise committed/stale handoff for rooted operations using the
+    ** existing post-CAS test hook. Production builds compile this away. */
+    if (committed && mode == TAB_STORE_MODE_ANY)
       tab_test_store_post_cas(L, parent, dst, &keysnap, &valuesnap);
 #endif
     if (rc == LJ_TAB_STORE_CAS_OK &&
@@ -8246,6 +8247,205 @@ leave:
   lj_gc2_lease_release(&value_lease);
   lj_gc2_lease_release(&key_lease);
   lj_gc2_lease_release(&table_lease);
+  if (valueanchor) lj_tg_root_anchor_pop(owner.tg, valueidx);
+  if (keyanchor) lj_tg_root_anchor_pop(owner.tg, keyidx);
+  if (tableanchor) lj_tg_root_anchor_pop(owner.tg, tableidx);
+done:
+  lj_oserr_restore(&oserr);
+  return result;
+}
+
+/* Existing or absent non-nil assignment from three enumerated trace roots.
+** An absent key first gets the same independent __newindex decision as the
+** interpreter. The temporary method result is an anchor only while that
+** decision is made; it is popped before structural insertion can allocate or
+** park. No table-vector address crosses either operation. */
+int32_t lj_tab_storenew_rooted(lua_State *L, cTValue *tabroot,
+			       cTValue *keyroot, cTValue *valueroot)
+{
+  TabKeyedSlotOwnerSnapshot owner;
+  LJGC2Lease table_lease = { 0 }, key_lease = { 0 }, value_lease = { 0 };
+  LJOSerrState oserr;
+  TValue tablev, keyv, valuev, confirm, nilv;
+  TValue *tableanchor = NULL, *keyanchor = NULL, *valueanchor = NULL;
+  TValue *methodanchor = NULL;
+  uint32_t tableidx = 0, keyidx = 0, valueidx = 0, methodidx = 0;
+  ptrdiff_t tabofs = 0, keyofs = 0, valueofs = 0;
+  int tabstack, keystack, valuestack, smr = 0;
+  int absence_authorized = 0, committed = 0;
+  int32_t result = 0;
+
+  lj_oserr_save(&oserr);
+  if (!L || !tabroot || !keyroot || !valueroot ||
+      !tab_keyed_slot_owner_snapshot(L, &owner))
+    goto done;
+  tabstack = tab_key_on_stack(L, tabroot);
+  keystack = tab_key_on_stack(L, keyroot);
+  valuestack = tab_key_on_stack(L, valueroot);
+  if (tabstack) tabofs = savestack(L, (TValue *)(void *)tabroot);
+  if (keystack) keyofs = savestack(L, (TValue *)(void *)keyroot);
+  if (valuestack) valueofs = savestack(L, (TValue *)(void *)valueroot);
+  setnilV(&nilv);
+  if (!lj_tg_root_anchor_reserve_nothrow(L, owner.tg)) goto done;
+  tableanchor = lj_tg_root_anchor_push(L, owner.tg, &nilv, &tableidx);
+  if (!lj_tg_root_anchor_reserve_nothrow(L, owner.tg)) goto leave;
+  keyanchor = lj_tg_root_anchor_push(L, owner.tg, &nilv, &keyidx);
+  if (!lj_tg_root_anchor_reserve_nothrow(L, owner.tg)) goto leave;
+  valueanchor = lj_tg_root_anchor_push(L, owner.tg, &nilv, &valueidx);
+  if (tabstack) tabroot = restorestack(L, tabofs);
+  if (keystack) keyroot = restorestack(L, keyofs);
+  if (valuestack) valueroot = restorestack(L, valueofs);
+  if (!tab_keyed_slot_owner_current(L, &owner) ||
+      !lj_gc2_smr_read_try(owner.g))
+    goto leave;
+  smr = 1;
+  lj_tv_load_acq(&tablev, tabroot);
+  lj_tv_load_acq(&keyv, keyroot);
+  lj_tv_load_acq(&valuev, valueroot);
+  if (!tvistab(&tablev) || tvisnil(&valuev) ||
+      !(tvisstr(&keyv) || tvisnumber(&keyv) || tvisbool(&keyv) ||
+	tvisgcv(&keyv) || (tvislightud(&keyv) && !tvistabinternal(&keyv))) ||
+      !tab_keyed_slot_key_valid(&keyv) ||
+      !tab_keyed_store_value_valid(&valuev) ||
+      lj_gc2_tv_lease_acquire(owner.g, &tablev, &table_lease) !=
+	LJ_GC2_TV_EDGE_VALID ||
+      lj_gc2_tv_lease_acquire(owner.g, &keyv, &key_lease) !=
+	LJ_GC2_TV_EDGE_VALID ||
+      (tvisgcv(&valuev) &&
+       lj_gc2_tv_lease_acquire(owner.g, &valuev, &value_lease) !=
+	LJ_GC2_TV_EDGE_VALID))
+    goto leave;
+  lj_tv_load_acq(&confirm, tabroot);
+  if (tv_rawload(&confirm) != tv_rawload(&tablev)) goto leave;
+  lj_tv_load_acq(&confirm, keyroot);
+  if (tv_rawload(&confirm) != tv_rawload(&keyv)) goto leave;
+  lj_tv_load_acq(&confirm, valueroot);
+  if (tv_rawload(&confirm) != tv_rawload(&valuev) ||
+      !tab_keyed_slot_owner_current(L, &owner))
+    goto leave;
+  copyTVrel(L, tableanchor, &tablev);
+  copyTVrel(L, keyanchor, &keyv);
+  copyTVrel(L, valueanchor, &valuev);
+  lj_gc2_smr_read_leave(owner.g);
+  smr = 0;
+  lj_gc_pubroot(L, tableanchor);
+  lj_gc_pubroot(L, keyanchor);
+  lj_gc_pubroot(L, valueanchor);
+  lj_gc2_lease_release(&value_lease);
+  lj_gc2_lease_release(&key_lease);
+  lj_gc2_lease_release(&table_lease);
+#ifdef LJ_TAB_TEST_HELPERS
+  if (tab_test_rooted_gc_store_hook)
+    tab_test_rooted_gc_store_hook(L, tableanchor, keyanchor, valueanchor);
+#endif
+
+  /* Anchors cover allocation and waits. Publish the table barriers after
+  ** the semantic decision accepts a raw assignment. */
+  lj_oserr_restore(&oserr);
+  for (;;) {
+    TValue oldvalue;
+    TValue *dst = NULL;
+    int status = TAB_RESOLVE_RETRY;
+    int rc, attempt_committed = 0, store_mode;
+    if (lj_gc2_smr_read_try(G(L))) {
+      status = tab_resolve_current_keyed_held(tabV(tableanchor), keyanchor,
+					      &dst, &oldvalue);
+      if (status == TAB_RESOLVE_FOUND && tvisnil(&oldvalue) &&
+	  !absence_authorized && !committed)
+	status = TAB_RESOLVE_ABSENT;
+      lj_gc2_smr_read_leave(G(L));
+    }
+    if (status == TAB_RESOLVE_RETRY) {
+      lj_tab_store_wait_l(L);
+      continue;
+    }
+    /* STALE after commit is not success: the successor may have been
+    ** published from before this value CAS. Confirm the exact current value
+    ** or replay the already-authorized raw assignment in the current root.
+    ** Once committed, never consult __newindex again and never return zero. */
+    if (committed && status == TAB_RESOLVE_FOUND &&
+	tv_rawload(&oldvalue) == tv_rawload(valueanchor)) {
+      result = 1;
+      break;
+    }
+    if (status == TAB_RESOLVE_FORWARD_ARRAY ||
+	status == TAB_RESOLVE_FORWARD_HASH) {
+      /* Repair storage without creating the missing key: insertion would
+      ** otherwise run before the absent-key __newindex decision. */
+      if (status == TAB_RESOLVE_FORWARD_HASH) {
+	rehashtab(L, tabV(tableanchor), keyanchor);
+      } else {
+	TValue *array;
+	MSize asize, hmask;
+	uint32_t hbits, nasize;
+	int64_t i64;
+	int32_t ik;
+	if (tvisint(keyanchor)) ik = intV(keyanchor);
+	else if (!(tvisnum(keyanchor) &&
+		   lj_num2int_check(numV(keyanchor), i64, ik))) {
+	  result = committed;
+	  break;
+	}
+	asize = lj_tab_array_snapshot_acq(tabV(tableanchor), &array);
+	(void)lj_tab_node_snapshot_acq(tabV(tableanchor), &hmask);
+	hbits = hmask > 0 ? lj_fls((uint32_t)hmask) + 1u : 0;
+	if (asize >= LJ_MAX_ASIZE) {
+	  lj_tab_resize(L, tabV(tableanchor), (uint32_t)ik, hbits);
+	} else {
+	  nasize = (uint32_t)asize + 1u;
+	  if ((MSize)ik >= asize && (MSize)ik + 1u > (MSize)nasize)
+	    nasize = (uint32_t)ik + 1u;
+	  lj_tab_resize(L, tabV(tableanchor), nasize, hbits);
+	}
+	UNUSED(array);
+      }
+      continue;
+    }
+    if (status == TAB_RESOLVE_ABSENT) {
+      if (!absence_authorized && !committed) {
+	if (!lj_tg_root_anchor_reserve_nothrow(L, owner.tg))
+	  break;
+	methodanchor = lj_tg_root_anchor_push(L, owner.tg, &nilv, &methodidx);
+	lj_gc_pubroot(L, methodanchor);
+	/* This call may allocate/park. It runs with no SMR or object leases. */
+	(void)lj_meta_lookuptv(L, methodanchor, tableanchor, MM_newindex);
+	if (!tvisnil(methodanchor))
+	  break;
+	lj_tg_root_anchor_pop(owner.tg, methodidx);
+	methodanchor = NULL;
+	absence_authorized = 1;
+      }
+      tab_store_barrier_write(L, tabV(tableanchor), keyanchor, valueanchor);
+      /* This may add a nil-valued structural slot. Re-resolve before CAS so
+      ** only a fresh current-generation pointer reaches the one-shot helper. */
+      (void)lj_tab_set(L, tabV(tableanchor), keyanchor);
+      continue;
+    }
+
+    store_mode = (absence_authorized || committed) ?
+		 TAB_STORE_MODE_ANY : TAB_STORE_MODE_EXISTING;
+    if (!tvisnil(&oldvalue))
+      absence_authorized = 0;
+    tab_store_barrier_write(L, tabV(tableanchor), keyanchor, valueanchor);
+    rc = tab_trystoretv_cas_keyed_once_mode(L, tabV(tableanchor), dst,
+	keyanchor, valueanchor, store_mode, NULL, 0,
+	&attempt_committed);
+    if (rc == LJ_TAB_STORE_CAS_OK) {
+      result = 1;
+      break;
+    }
+    if (attempt_committed)
+      committed = 1;
+    lj_tab_store_wait_l(L);
+  }
+  if (result && tvisstr(keyanchor))
+    lj_tab_nomm_rel(tabV(tableanchor), 0);
+leave:
+  if (smr) lj_gc2_smr_read_leave(owner.g);
+  lj_gc2_lease_release(&value_lease);
+  lj_gc2_lease_release(&key_lease);
+  lj_gc2_lease_release(&table_lease);
+  if (methodanchor) lj_tg_root_anchor_pop(owner.tg, methodidx);
   if (valueanchor) lj_tg_root_anchor_pop(owner.tg, valueidx);
   if (keyanchor) lj_tg_root_anchor_pop(owner.tg, keyidx);
   if (tableanchor) lj_tg_root_anchor_pop(owner.tg, tableidx);

@@ -2070,7 +2070,8 @@ static IRType rec_idx_mt_shared_sample(jit_State *J, RecordIndex *ix,
     *nil_no_meta = 0;
 #if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
   /* Probe before the parent anchor becomes the result. Only this positive
-  ** certificate permits a nil read to bypass mutable metamethod sampling. */
+  ** certificate permits a nil read or ordinary absent store to bypass
+  ** mutable metamethod sampling. */
   if (nil_no_meta != NULL &&
       lj_tab_getnil_nometa_rooted_try(J->L, parentout, keyroot, parentout))
     *nil_no_meta = 1;
@@ -2559,7 +2560,7 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
       if (rec_idx_tab_unproven_alloc(J, ix->tab))
 	lj_trace_err_info(J, LJ_TRERR_NYIBC);
       (void)rec_idx_mt_shared_sample(J, ix, &oldsnap, NULL,
-				    tref_isnil(ix->val) ? &nil_no_meta : NULL);
+	(tref_isnil(ix->val) || ix->idxchain) ? &nil_no_meta : NULL);
       /*
       ** Active-MT stores must not record raw HREF/AREF/NEWREF probes: a
       ** concurrent resize can retire that generation before generated code
@@ -2586,10 +2587,31 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 	return 0;
       }
       if (tvisnil(&oldsnap)) {
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+	/* The positive rooted nil/no-meta sample is a recorder-time certificate
+	** for an ordinary absent assignment. Raw stores keep their old path. The
+	** runtime helper independently repeats the method check before insertion. */
+	if (ix->idxchain && nil_no_meta && !tref_isnil(ix->val) &&
+	    (tref_isnumber(ix->val) || tref_istrue(ix->val) ||
+	     tref_isfalse(ix->val) || tref_isgcv(ix->val) ||
+	     tref_islightud(ix->val))) {
+	  TRef parent = rec_tmpref_mode(J, ix->tab, IRTMPREF_IN1);
+	  TRef key = rec_tmpref_mode(J, ix->key, IRTMPREF_IN2);
+	  TRef value;
+	  if (!LJ_DUALNUM && tref_isinteger(ix->val))
+	    ix->val = emitir(IRTN(IR_CONV), ix->val, IRCONV_NUM_INT);
+	  value = rec_tmpref_mode(J, ix->val, IRTMPREF_IN3);
+	  TRef ok = lj_ir_call(J, IRCALL_lj_tab_storenew_rooted,
+			       parent, key, value);
+	  emitir(IRTGI(IR_NE), ok, lj_ir_kint(J, 0));
+	  J->needsnap = 1;
+	  return 0;
+	}
+#endif
 	if (ix->idxchain && lj_record_mm_lookup(J, ix, MM_newindex))
 	  goto handlemm;
-	/* Nil effects were handled above. Keep the established new-key helper
-	** for non-nil stores sampled as absent. */
+	/* Retain the pre-existing fallback for values outside this helper's
+	** deliberately bounded ordinary TValue domain. */
 	if (!tref_isnil(ix->val)) {
 	  TRef key = rec_tmpref_mode(J, ix->key,
 				     IRTMPREF_IN1|IRTMPREF_IN2);

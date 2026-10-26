@@ -482,6 +482,10 @@ LJ_FUNC int32_t lj_tab_storebool_rooted(lua_State *L, cTValue *tabroot,
 				     cTValue *keyroot, int32_t boolean);
 LJ_FUNC int32_t lj_tab_storegc_rooted(lua_State *L, cTValue *tabroot,
 				    cTValue *keyroot, cTValue *valueroot);
+/* Non-nil assignment through the rooted current-generation protocol. Missing
+** keys perform a rooted __newindex decision before structural insertion. */
+LJ_FUNC int32_t lj_tab_storenew_rooted(lua_State *L, cTValue *tabroot,
+				    cTValue *keyroot, cTValue *valueroot);
 LJ_FUNC int32_t lj_tab_storenil_rooted(lua_State *L, cTValue *tabroot,
 				       cTValue *keyroot);
 /* Copy one semantic value starting from an authoritative table TValue root.

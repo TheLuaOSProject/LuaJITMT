@@ -4577,6 +4577,7 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
        ir->op2 == IRCALL_lj_tab_storenum_rooted ||
        ir->op2 == IRCALL_lj_tab_storebool_rooted ||
        ir->op2 == IRCALL_lj_tab_storegc_rooted ||
+       ir->op2 == IRCALL_lj_tab_storenew_rooted ||
        ir->op2 == IRCALL_lj_tab_storenil_rooted);
   /* Lightuserdata is an opaque segmented token. Like a GC pointer, it can
   ** only originate in an exact tagged load here, never arithmetic or CONV. */
@@ -4624,9 +4625,11 @@ static int arm64_rooted_ir_effect(const GCtrace *T, IRRef ref,
   int nilread = call->op2 == IRCALL_lj_tab_getnil_nometa_rooted_try;
   int read = call->op2 == IRCALL_lj_tab_getscalar_rooted_try || tvread || nilread;
   int gcstore = call->op2 == IRCALL_lj_tab_storegc_rooted;
+  int newstore = call->op2 == IRCALL_lj_tab_storenew_rooted;
   int nilstore = call->op2 == IRCALL_lj_tab_storenil_rooted;
   int store = call->op2 == IRCALL_lj_tab_storenum_rooted ||
-              call->op2 == IRCALL_lj_tab_storebool_rooted || gcstore || nilstore;
+              call->op2 == IRCALL_lj_tab_storebool_rooted || gcstore ||
+              newstore || nilstore;
   if (!root1 || ref + 1 >= T->nins ||
       call->t.irt != ((read || store) ? (IRT_INT|IRT_GUARD) : IRT_INT))
     return 0;
@@ -4693,11 +4696,14 @@ static int arm64_rooted_ir_effect(const GCtrace *T, IRRef ref,
     } else {
       if (tail->o != IR_CARG || tail->t.irt != IRT_NIL ||
           tail->op1 < REF_FIRST || tail->op1 >= chain ||
-          (gcstore ? (!root3 || tail->op2 != root3 || root3 >= chain ||
+          ((gcstore || newstore) ? (!root3 || tail->op2 != root3 || root3 >= chain ||
                       T->ir[root3].op2 != IRTMPREF_IN3 ||
-                      (!arm64_scalar_ir_gc_ref(T, T->ir[root3].op1, root3) &&
-                       !arm64_scalar_ir_ref(T, T->ir[root3].op1, root3,
-                                             IRT_LIGHTUD))) :
+                      !(arm64_scalar_ir_gc_ref(T, T->ir[root3].op1, root3) ||
+                        arm64_scalar_ir_ref(T, T->ir[root3].op1, root3, IRT_LIGHTUD) ||
+                        (newstore && (arm64_scalar_ir_ref(T, T->ir[root3].op1, root3, IRT_NUM) ||
+                                      arm64_scalar_ir_ref(T, T->ir[root3].op1, root3, IRT_INT) ||
+                                      arm64_scalar_ir_ref(T, T->ir[root3].op1, root3, IRT_TRUE) ||
+                                      arm64_scalar_ir_ref(T, T->ir[root3].op1, root3, IRT_FALSE))))) :
            !arm64_scalar_ir_ref(T, tail->op2, chain, type)))
         return 0;
       head = &T->ir[tail->op1];
@@ -5041,7 +5047,11 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
         root2 = ref;
       } else if (ir->op2 == IRTMPREF_IN3) {
         if (!arm64_scalar_ir_gc_ref(T, ir->op1, ref) &&
-            !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_LIGHTUD))
+            !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_LIGHTUD) &&
+            !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_NUM) &&
+            !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_INT) &&
+            !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_TRUE) &&
+            !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_FALSE))
           goto bad_operand;
         root3 = ref;
       } else goto bad_operand;
@@ -5298,6 +5308,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
         (ir->op2 == IRCALL_lj_tab_storenum_rooted ||
          ir->op2 == IRCALL_lj_tab_storebool_rooted ||
          ir->op2 == IRCALL_lj_tab_storegc_rooted ||
+         ir->op2 == IRCALL_lj_tab_storenew_rooted ||
          ir->op2 == IRCALL_lj_tab_storenil_rooted))
       completed_store = ref;
     if (rootop != BC_FORL && ir->o == IR_SLOAD &&
@@ -5374,6 +5385,7 @@ static int arm64_scalar_postra_value(IRIns p)
             p.op2 == IRCALL_lj_tab_storenum_rooted ||
             p.op2 == IRCALL_lj_tab_storebool_rooted ||
             p.op2 == IRCALL_lj_tab_storegc_rooted ||
+            p.op2 == IRCALL_lj_tab_storenew_rooted ||
             p.op2 == IRCALL_lj_tab_storenil_rooted);
   case IR_VLOAD:
     return (irt_type(p.t) == IRT_INT || irt_type(p.t) == IRT_NUM ||
@@ -5480,9 +5492,11 @@ static int arm64_rooted_postra_effect(const LJArm64PostRAView *v, IRRef n,
   int nilread = c.op2 == IRCALL_lj_tab_getnil_nometa_rooted_try;
   int read = c.op2 == IRCALL_lj_tab_getscalar_rooted_try || tvread || nilread;
   int gcstore = c.op2 == IRCALL_lj_tab_storegc_rooted;
+  int newstore = c.op2 == IRCALL_lj_tab_storenew_rooted;
   int nilstore = c.op2 == IRCALL_lj_tab_storenil_rooted;
   int store = c.op2 == IRCALL_lj_tab_storenum_rooted ||
-              c.op2 == IRCALL_lj_tab_storebool_rooted || gcstore || nilstore;
+              c.op2 == IRCALL_lj_tab_storebool_rooted || gcstore ||
+              newstore || nilstore;
   if (!root1 || root1 >= ref || ref+1 >= n ||
       c.t.irt != ((read || store) ? (IRT_INT|IRT_GUARD) : IRT_INT)) return 0;
   r1 = ir_load_acq(&v->ir[root1]);
@@ -5549,7 +5563,7 @@ static int arm64_rooted_postra_effect(const LJArm64PostRAView *v, IRRef n,
     } else {
       if (outer.o != IR_CARG || outer.t.irt != IRT_NIL ||
           outer.op1 < REF_FIRST || outer.op1 >= c.op1 ||
-          (gcstore ? (!root3 || root3 >= c.op1 || outer.op2 != root3) :
+          ((gcstore || newstore) ? (!root3 || root3 >= c.op1 || outer.op2 != root3) :
            !arm64_scalar_postra_ref(v, outer.op2, c.op1, type)))
         return 0;
       inner = ir_load_acq(&v->ir[outer.op1]);
@@ -5561,14 +5575,18 @@ static int arm64_rooted_postra_effect(const LJArm64PostRAView *v, IRRef n,
         !ra_hasreg(r2.r) || !arm64_scalar_postra_register(r2.r, IRT_PGC) ||
         ra_hasspill(r2.s) || r1.r == r2.r)
         return 0;
-      if (gcstore) {
+      if (gcstore || newstore) {
       IRIns r3 = ir_load_acq(&v->ir[root3]);
       if (r3.o != IR_TMPREF || r3.t.irt != IRT_PGC ||
           r3.op2 != IRTMPREF_IN3 || !ra_hasreg(r3.r) ||
           !arm64_scalar_postra_register(r3.r, IRT_PGC) ||
           ra_hasspill(r3.s) || r3.r == r1.r || r3.r == r2.r ||
-          (!arm64_scalar_postra_gc_ref(v, r3.op1, root3) &&
-           !arm64_scalar_postra_ref(v, r3.op1, root3, IRT_LIGHTUD)))
+          !(arm64_scalar_postra_gc_ref(v, r3.op1, root3) ||
+            arm64_scalar_postra_ref(v, r3.op1, root3, IRT_LIGHTUD) ||
+            (newstore && (arm64_scalar_postra_ref(v, r3.op1, root3, IRT_NUM) ||
+                          arm64_scalar_postra_ref(v, r3.op1, root3, IRT_INT) ||
+                          arm64_scalar_postra_ref(v, r3.op1, root3, IRT_TRUE) ||
+                          arm64_scalar_postra_ref(v, r3.op1, root3, IRT_FALSE)))))
         return 0;
       }
     }
@@ -5802,7 +5820,11 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
         root2 = ref;
       } else if (p.op2 == IRTMPREF_IN3) {
         if (!arm64_scalar_postra_gc_ref(v, p.op1, ref) &&
-            !arm64_scalar_postra_ref(v, p.op1, ref, IRT_LIGHTUD)) return 0;
+            !arm64_scalar_postra_ref(v, p.op1, ref, IRT_LIGHTUD) &&
+            !arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM) &&
+            !arm64_scalar_postra_ref(v, p.op1, ref, IRT_INT) &&
+            !arm64_scalar_postra_ref(v, p.op1, ref, IRT_TRUE) &&
+            !arm64_scalar_postra_ref(v, p.op1, ref, IRT_FALSE)) return 0;
         root3 = ref;
       } else return 0;
       break;
@@ -6157,6 +6179,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
         (ir.op2 == IRCALL_lj_tab_storenum_rooted ||
          ir.op2 == IRCALL_lj_tab_storebool_rooted ||
          ir.op2 == IRCALL_lj_tab_storegc_rooted ||
+         ir.op2 == IRCALL_lj_tab_storenew_rooted ||
          ir.op2 == IRCALL_lj_tab_storenil_rooted))
       completed_store = ref;
     if (rootop != BC_FORL && ir.o == IR_SLOAD &&
