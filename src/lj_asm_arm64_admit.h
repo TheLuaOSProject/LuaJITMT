@@ -396,6 +396,15 @@ static IRType arm64_callxs_result_type(const LJArm64ABISignature *abi)
   return IRT_CDATA;
 }
 
+/* These scalar ABI results are returned to Lua in a fresh CData root. The
+** argument plan, including promoted variadic arguments, remains independent. */
+static int arm64_callxs_result_boxed(const LJArm64ABISignature *abi)
+{
+  return abi->result_class == LJ_ARM64_ABI_GPR && abi->result_size == 8 &&
+    (abi->result_kind == LJ_ARM64_ABI_KIND_POINTER ||
+     abi->result_kind == LJ_ARM64_ABI_KIND_INTEGER);
+}
+
 static IRRef arm64_callxs_const_next(const IRIns *ir, IRRef ref)
 {
 	IRIns k = ir_load_acq(&ir[ref]);
@@ -681,7 +690,7 @@ static int arm64_callxs_signature_for_call(CTState *cts, const IRIns *ir,
 	return found;
 }
 
-/* Prove that one CNEW is the root box allocated for one pointer-returning
+/* Prove that one CNEW is the root box allocated for one boxed-scalar
 ** CALLXS. The call's XSTORE must use this box and the exact GCcdata payload
 ** offset; the signature's result CType must match the allocation CType. */
 static int arm64_callxs_box_call(CTState *cts, const IRIns *ir, IRRef nk,
@@ -712,12 +721,13 @@ static int arm64_callxs_box_call(CTState *cts, const IRIns *ir, IRRef nk,
 		    offset != (int64_t)sizeof(GCcdata))
 			continue;
 		callref = store.op2;
-		if (irt_type(store.t) != IRT_P64 ||
-		    !arm64_callxs_signature_for_call(cts, ir, nk, nins,
+		if (!arm64_callxs_signature_for_call(cts, ir, nk, nins,
 		      callref, &abi, NULL) ||
-		    abi.result_kind != LJ_ARM64_ABI_KIND_POINTER ||
+		    !arm64_callxs_result_boxed(&abi) ||
 		    abi.result_id != (CTypeID)ctype ||
-		    irt_type(ir_load_acq(&ir[callref]).t) != IRT_P64 || found != 0)
+		    irt_type(store.t) != arm64_callxs_result_type(&abi) ||
+		    irt_type(ir_load_acq(&ir[callref]).t) !=
+		      arm64_callxs_result_type(&abi) || found != 0)
 			return 0;
 		found = callref;
 	}
@@ -733,6 +743,7 @@ static int arm64_callxs_cdata_phi(CTState *cts, const IRIns *ir,
 		IRRef nk, IRRef nins, IRRef ref, const IRIns *phi)
 {
 	IRRef refs[2];
+	CTypeID ctypes[2] = { 0, 0 };
 	unsigned i;
 	if (irt_type(phi->t) != IRT_CDATA) return 1;
 	if (phi->op1 < REF_FIRST || phi->op1 >= ref ||
@@ -743,13 +754,16 @@ static int arm64_callxs_cdata_phi(CTState *cts, const IRIns *ir,
 	for (i = 0; i < 2; i++) {
 		IRIns input = ir_load_acq(&ir[refs[i]]);
 		if (input.o == IR_CNEW) {
-			if (!arm64_callxs_box_call(cts, ir, nk, nins, refs[i], NULL, NULL))
+			if (!arm64_callxs_box_call(cts, ir, nk, nins, refs[i],
+			      NULL, &ctypes[i]))
 				return 0;
 		} else if (input.o != IR_SLOAD || irt_type(input.t) != IRT_CDATA ||
 			   !irt_isguard(input.t) || input.op1 < 1u+LJ_FR2 ||
 			   input.op2 & ~(IRSLOAD_PARENT|IRSLOAD_FRAME|IRSLOAD_TYPECHECK|
 			     IRSLOAD_CONVERT|IRSLOAD_READONLY|IRSLOAD_INHERIT|IRSLOAD_KEYINDEX)) return 0;
 	}
+	if (ctypes[0] != 0 && ctypes[1] != 0 && ctypes[0] != ctypes[1])
+		return 0;
 	return 1;
 }
 
@@ -922,6 +936,48 @@ static int arm64_callxs_source_value(const GCtrace *T, IRRef xsave,
   return 0;
 }
 
+/* Read one exact, restorable slot from an effect-boundary snapshot. This is
+** metadata validation only: each admission pass separately derives the box,
+** marker, caller slot and frame geometry from its own CALLXS lifecycle. */
+static int arm64_callxs_snapshot_box_slot(const SnapShot *snapshots,
+    const SnapEntry *map, MSize nsnap, MSize nsnapmap, IRRef at,
+    MSize base, MSize slot, IRRef box, int hidden)
+{
+  const SnapShot *snap = NULL;
+  MSize s, ofs, nent, nslots, i;
+  unsigned found = 0;
+  SnapEntry footer_words[1+LJ_FR2];
+  uint64_t footer;
+  if (snapshots == NULL || map == NULL || base < 1u+LJ_FR2 ||
+      base > UINT8_MAX || slot > UINT8_MAX || box < REF_FIRST || box >= at)
+    return 0;
+  for (s = 0; s < nsnap; s++) {
+    if (snap_ref_acq(&snapshots[s]) == at) {
+      if (snap != NULL) return 0;
+      snap = &snapshots[s];
+    }
+  }
+  if (snap == NULL || snap_count_acq(snap) != SNAPCOUNT_DONE) return 0;
+  ofs = snap_mapofs_acq(snap);
+  nent = snap_nent_acq(snap);
+  nslots = snap_nslots_acq(snap);
+  if (ofs > nsnapmap || nent > nsnapmap-ofs ||
+      nsnapmap-ofs-nent < 1u+LJ_FR2 || slot >= nslots ||
+      (hidden && nslots != slot+1u)) return 0;
+  for (i = 0; i < 1u+LJ_FR2; i++)
+    footer_words[i] = snapentry_acq(&map[ofs+nent+i]);
+  memcpy(&footer, footer_words, sizeof(footer));
+  if ((uint8_t)footer != base-(1u+LJ_FR2)) return 0;
+  for (i = 0; i < nent; i++) {
+    SnapEntry entry = snapentry_acq(&map[ofs+i]);
+    if (snap_slot(entry) == slot) {
+      /* A fresh CNEW cannot be an unchanged SLOAD or a NORESTORE value. */
+      if (entry != SNAP(slot, 0, box) || found++) return 0;
+    }
+  }
+  return found == 1;
+}
+
 static int arm64_callxs_vararg_sources(const GCtrace *T, IRRef xsave,
     IRRef fpref, BCIns sourceins, uintptr_t returnpc,
     const LJArm64ABISignature *abi, unsigned nargs, const IRRef *values)
@@ -1022,6 +1078,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
   CTypeID box_ctype = 0;
   IRType call_result_type = IRT_NIL;
   int result_is_cdata = 0, box_store_seen = 0;
+  MSize result_slot = 0;
   if (J == NULL || T == NULL || T->ir == NULL || g == NULL)
     return 0;
   nk = trace_nk_acq((GCtrace *)T);
@@ -1115,6 +1172,10 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	if ((result_is_cdata && (!boxref || !box_store_seen)) ||
 	    (!result_is_cdata && (boxref || box_store_seen)))
 	  return 0;
+	if (result_is_cdata && result_slot != 0 &&
+	    !arm64_callxs_snapshot_box_slot(T->snap, T->snapmap,
+	      T->nsnap, T->nsnapmap, ref, 1u+LJ_FR2,
+	      result_slot, boxref, 0)) return 0;
 	leaves++;
 	leave = ref;
 	state = CALLXS_LEFT;
@@ -1195,7 +1256,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	return 0;
 
       if (enterargs[0] != J->ktrace || enterargs[1] != fpref) return 0;
-      if (abi.result_kind == LJ_ARM64_ABI_KIND_POINTER ?
+      if (arm64_callxs_result_boxed(&abi) ?
 	  (!boxref || enterargs[2] != boxref || box_ctype != abi.result_id) :
 	  (boxref || enterargs[2] < nk || enterargs[2] >= REF_TRUE ||
 	   ir_load_acq(&T->ir[enterargs[2]]).o != IR_KNULL ||
@@ -1246,6 +1307,19 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 		   (unsigned)bc_c(sourceins)-1u != actual_count) return 0;
         if (abi.is_vararg && !arm64_callxs_vararg_sources(T, xsave, fpref,
               sourceins, xsave_returnpc, &abi, actual_count, values)) return 0;
+        result_slot = 0;
+        if (arm64_callxs_result_boxed(&abi)) {
+          MSize base = 1u+LJ_FR2+(MSize)bc_a(sourceins)+1u+LJ_FR2;
+          /* The meta-call frame holds the callable cdata before its native
+          ** arguments. CNEW occupies the next slot, past both. */
+          if (!arm64_callxs_snapshot_box_slot(T->snap, T->snapmap,
+                T->nsnap, T->nsnapmap, xsave, base,
+                base+1u+actual_count, boxref, 1)) return 0;
+          /* B=1 discards the result. Otherwise lj_record_ret replaces the
+          ** caller's function slot with this exact box before native leave. */
+          if (bc_b(sourceins) != 1)
+            result_slot = 1u+LJ_FR2+(MSize)bc_a(sourceins);
+        }
       }
       for (i = 0; i < abi.nargs; i++) {
 	LJArm64ABIArg *a = &abi.arg[i];
@@ -1293,7 +1367,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 					   (IRType)irt_type(ins.t)))
 	return 0;
       call = ref;
-      result_is_cdata = abi.result_kind == LJ_ARM64_ABI_KIND_POINTER;
+      result_is_cdata = arm64_callxs_result_boxed(&abi);
       call_result_type = (IRType)irt_type(ins.t);
       {
 	BCIns sourceins;
@@ -1301,7 +1375,8 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	      proto_bc(J->pt), J->pt->sizebc, NULL, &sourceins)) return 0;
 	producer_call = ref;
 	producer_pending = 1;
-	producer_scalar = bc_op(sourceins) == BC_CALL && bc_b(sourceins) == 0 &&
+	producer_scalar = !result_is_cdata &&
+	  bc_op(sourceins) == BC_CALL && bc_b(sourceins) == 0 &&
 	  actual_count+1u == (unsigned)bc_c(sourceins) &&
 	  (abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER ||
 	   abi.result_kind == LJ_ARM64_ABI_KIND_FLOAT ||
@@ -1429,7 +1504,6 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	    payload.op1 != boxref ||
 	    !arm64_callxs_offset_value(T->ir, nk, payload.op2, &offset) ||
 	    offset != (int64_t)sizeof(GCcdata) ||
-	    irt_type(ins.t) != IRT_P64 ||
 	    irt_type(ins.t) != call_result_type) return 0;
 	box_store_seen = 1;
       }
@@ -2895,7 +2969,7 @@ static int arm64_postra_callxs_live_across(const LJArm64PostRAView *view,
 }
 
 /* Independent post-RA check that each CData PHI input owns a matching
-** pointer-returning CALLXS root/store lifecycle. */
+** boxed-scalar CALLXS root/store lifecycle. */
 static int arm64_postra_callxs_cdata_phi(const LJArm64PostRAView *view,
 		IRRef nins, IRRef ref, const IRIns *phi)
 {
@@ -2942,12 +3016,13 @@ static int arm64_postra_callxs_cdata_phi(const LJArm64PostRAView *view,
 			    offset != (int64_t)sizeof(GCcdata))
 				continue;
 			callref = store.op2;
-			if (irt_type(store.t) != IRT_P64 ||
-			    !arm64_callxs_signature_for_call(view->cts, view->ir,
+			if (!arm64_callxs_signature_for_call(view->cts, view->ir,
 			      view->nk, nins, callref, &abi, NULL) ||
-			    abi.result_kind != LJ_ARM64_ABI_KIND_POINTER ||
+			    !arm64_callxs_result_boxed(&abi) ||
 			    abi.result_id != ctypes[i] ||
-			    irt_type(ir_load_acq(&view->ir[callref]).t) != IRT_P64 ||
+			    irt_type(store.t) != arm64_callxs_result_type(&abi) ||
+			    irt_type(ir_load_acq(&view->ir[callref]).t) !=
+			      arm64_callxs_result_type(&abi) ||
 			    found != 0)
 				return 0;
 			found = callref;
@@ -3328,6 +3403,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	IRRef boxref = 0;
 	CTypeID box_ctype = 0;
 	int box_store_seen = 0, result_is_cdata = 0;
+	MSize result_slot = 0;
 	uintptr_t xsave_returnpc = 0, producer_returnpc = 0;
 	IRType producer_type = IRT_NIL;
 	int producer_pending = 0, producer_scalar = 0;
@@ -3522,7 +3598,8 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		       (unsigned)bc_c(sourceins)-1u != actual_count) return 0;
 	    producer_call = ref;
 	    producer_pending = 1;
-	    producer_scalar = bc_op(sourceins) == BC_CALL && bc_b(sourceins) == 0 &&
+	    producer_scalar = !arm64_callxs_result_boxed(&abi) &&
+	      bc_op(sourceins) == BC_CALL && bc_b(sourceins) == 0 &&
 	      actual_count+1u == (unsigned)bc_c(sourceins) &&
 	      (abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER ||
 	       abi.result_kind == LJ_ARM64_ABI_KIND_FLOAT ||
@@ -3530,12 +3607,21 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    producer_type = (IRType)irt_type(ir_load_acq(&view->ir[ref]).t);
 	    if (fpref != enterargs[1])
 	      return 0;
-	    if (abi.result_kind == LJ_ARM64_ABI_KIND_POINTER ?
+	    if (arm64_callxs_result_boxed(&abi) ?
 		(boxref == 0 || enterargs[2] != boxref || box_ctype != abi.result_id) :
 		(boxref != 0 || !arm64_callxs_const_member(view->ir, view->nk, enterargs[2]) ||
 		 ir_load_acq(&view->ir[enterargs[2]]).o != IR_KNULL ||
 		 arm64_callxs_ref_type(view->ir, view->nk, enterargs[2]) != IRT_CDATA)) return 0;
-	    result_is_cdata = abi.result_kind == LJ_ARM64_ABI_KIND_POINTER;
+	    result_is_cdata = arm64_callxs_result_boxed(&abi);
+	    result_slot = 0;
+	    if (result_is_cdata) {
+	      MSize base = 1u+LJ_FR2+(MSize)bc_a(sourceins)+1u+LJ_FR2;
+	      if (!arm64_callxs_snapshot_box_slot(view->snap, view->snapmap,
+		    view->nsnap, view->nsnapmap, active_xsave, base,
+		    base+1u+actual_count, boxref, 1)) return 0;
+	      if (bc_b(sourceins) != 1)
+		result_slot = 1u+LJ_FR2+(MSize)bc_a(sourceins);
+	    }
 	    active_call = ref;
 	    protocol = 4;
 	    nc++;
@@ -3547,6 +3633,10 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		(result_is_cdata && (boxref == 0 || !box_store_seen)) ||
 		(!result_is_cdata && (boxref != 0 || box_store_seen)))
 	      return 0;
+	    if (result_is_cdata && result_slot != 0 &&
+		!arm64_callxs_snapshot_box_slot(view->snap, view->snapmap,
+		  view->nsnap, view->nsnapmap, ref, 1u+LJ_FR2,
+		  result_slot, boxref, 0)) return 0;
 	    active_call = 0;
 	    active_leave = ref;
 	    protocol = 5;
@@ -3756,7 +3846,8 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    if (payload.o != IR_ADD || irt_type(payload.t) != IRT_P64 ||
 		payload.op1 != boxref ||
 		!arm64_callxs_offset_value(view->ir, view->nk, payload.op2, &offset) ||
-		offset != (int64_t)sizeof(GCcdata) || irt_type(ins.t) != IRT_P64)
+		offset != (int64_t)sizeof(GCcdata) ||
+		irt_type(ins.t) != irt_type(ir_load_acq(&view->ir[active_call]).t))
 	      return 0;
 	    box_store_seen = 1;
 	  } else if (ins.o == IR_LT || ins.o == IR_GE || ins.o == IR_LE || ins.o == IR_GT) {

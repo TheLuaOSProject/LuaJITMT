@@ -303,9 +303,11 @@ available.
 - ARM64 CALLXS aggregates/sret, unproven variadic cdata forms, vectors, complex results, general
   multires/tail calls, CALLM outside the direct scalar producer shape, and
   unsupported result/IR representations. The admitted scalar
-  float conversions do not certify arbitrary float or boxed-64-bit graphs.
-  The next fixed-signature I64/U64 result candidate is documented in the
-  [boxed-64-bit plan](arm64-jit-boxed64-plan-2026-10-26.md); it is not implemented.
+  float conversions do not certify arbitrary float graphs. Boxed I64/U64
+  results now have a narrow implementation with initial ARM64 assertion
+  evidence; its four-profile matrix is pending. General 64-bit cdata
+  arguments/arithmetic remain excluded. See the
+  [boxed-64-bit result note](arm64-jit-boxed64-results-2026-10-26.md).
 - Full parity with every x86_64 lockless VM, JIT, FFI, profiler, unwind, and
   stress path.
 - Concurrent Darwin profiler start/stop can still terminate on a fresh late

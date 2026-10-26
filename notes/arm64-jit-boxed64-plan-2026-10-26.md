@@ -2,7 +2,7 @@
 
 Read-only design reviewed at `04b7ec58`; no new FFI capability is implemented by this note.
 
-Scope: admit fixed-signature scalar `int64_t`/`uint64_t` results only. Do not change argument classification, variadic admission, enums, 32-bit boxed results, aggregates, or sret.
+Initial candidate: scalar `int64_t`/`uint64_t` results. The implemented scope also composes with already-certified promoted variadic arguments and scalar CALL-to-CALLM handoffs; no new argument classes or variadic cdata forms are admitted. Enums, 32-bit boxed results, aggregates, and sret remain separate work. See [implementation and validation](arm64-jit-boxed64-results-2026-10-26.md) for current evidence; the source analysis below describes the pre-implementation checkpoint.
 
 ## Current boundary
 

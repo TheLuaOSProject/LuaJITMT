@@ -558,9 +558,10 @@ static void test_semantic(jit_State *J, PointerFixture *fx)
   assert(fx->snapmap[PX_ROOTED_PRE_MAP] ==
 	 SNAP(14, 0, PX_R_BOX_PRE));
   fx->snapmap[PX_ROOTED_PRE_MAP] = SNAP(14, 0, PX_R_STRING);
-	/* A well-formed alternate live root is allowed; admission checks the
-	** snapshot map structurally rather than requiring this value's role. */
-	expect_semantic_admit(J, fx);
+  /* XSAVE must publish the exact allocated result box. A valid but unrelated
+  ** GC root cannot substitute for this hidden result-root slot. */
+  expect_semantic_reject(J, fx, LJ_ARM64_IR_REJECT_SNAPSHOT,
+	PX_R_XSAVE_PRE, IR_XSAVE, 0);
 
   reset_semantic_clone(fx);
   LJ_STATIC_ASSERT(sizeof(pcbase) == sizeof(SnapEntry)*(1+LJ_FR2));
@@ -739,6 +740,10 @@ static void test_postra(PointerFixture *fx)
   assert(fx->snapmap[PX_ROOTED_PRE_MAP] ==
 	 SNAP(14, 0, PX_R_BOX_PRE));
   fx->snapmap[PX_ROOTED_PRE_MAP] = SNAP(14, 0, PX_R_BOX_BODY);
+  expect_postra(&view, 0);
+
+  view = make_postra_view(fx);
+  fx->snapmap[PX_ROOTED_PRE_MAP] = SNAP(14, 0, PX_R_STRING);
   expect_postra(&view, 0);
 
 	view = make_postra_view(fx);
