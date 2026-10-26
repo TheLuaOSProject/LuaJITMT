@@ -43,6 +43,13 @@ and reports that are no longer authoritative are retained in
   ordinary ARM64 runtime also passes all eight variadic smoke cases without
   test helpers. See
   [`arm64-jit-scalar-varargs-2026-10-26.md`](arm64-jit-scalar-varargs-2026-10-26.md).
+- The scalar bit-operation tranche now admits 32-bit bit.* operations in
+  LOOP/FORL roots, including stock integer narrowing, instruction fusions and
+  exact snapshot-only INT-to-NUM restoration. The focused ARM64 assertion
+  fixture passes 52 native cases, malformed-view checks and deterministic
+  profile/STOPREQ exits. The four-profile and combined validation for this
+  checkpoint are still pending. See
+  [`arm64-jit-scalar-bitops-2026-10-26.md`](arm64-jit-scalar-bitops-2026-10-26.md).
 - Fixed scalar FFI stack arguments pass the four-profile M7 suite,
   including compact Darwin stack slots, spill separation, nested callbacks
   and C++ unwind/recovery, both separately and within the combined gate.
@@ -141,6 +148,13 @@ available.
   below remain closed; see
   [`arm64-jit-scalar-capability.md`](arm64-jit-scalar-capability.md) and
   [`arm64-jit-numeric-spills.md`](arm64-jit-numeric-spills.md).
+- Scalar 32-bit bit.* fast functions in LOOP/FORL roots use the stock
+  recorder and emitter. Independent operation/allocation proofs cover bitwise
+  logic, byte swap, shifts/rotations, TOBIT's exact numeric bias, integer
+  negation, wrapping ADD/SUB and bounded target fusions. Snapshot-only
+  NUM<-INT conversions require a separately restorable integer source.
+  FUNCF/side bitops, BROL, string coercion and cdata/64-bit operations remain
+  excluded. See the [bit-operation note](arm64-jit-scalar-bitops-2026-10-26.md).
 - Rooted table length and scalar reads are validated per helper operation,
   scratch root and immediate retry/type guard. Numeric, string and boolean
   keys, numeric/boolean results, multiple tables and mixed read/length effects

@@ -85,6 +85,8 @@ LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_ir_admission_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_scalar_capability_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_numeric_spills_contract.sh"
 LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+  sh "$root/tools/ci/arm64_jit_bitops_contract.sh"
+LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
 LJ_ARM64_ROOTED_TABLEN_RESTORE_XCFLAGS="$xcflags" \
   sh "$root/tools/ci/arm64_jit_rooted_tablen_contract.sh"
 LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
@@ -255,4 +257,4 @@ env LJ_TEST_ROOT="$root" LUA_PATH="$lua_path" "$luajit" "$root/tests/t-jit-cell-
 env LJ_TEST_ROOT="$root" LUA_PATH="$lua_path" "$luajit" "$root/tests/t-native-coverage.lua"
 
 LJ_CI_RESTORE_NEEDED=0
-echo "arm64_jit_fail_closed_gate OK: scalar LOOP/FORL/FUNCF, rooted effects, first-side entry, generic FFI and lifecycle contracts sound"
+echo "arm64_jit_fail_closed_gate OK: scalar LOOP/FORL/FUNCF, bitops, rooted effects, first-side entry, generic FFI and lifecycle contracts sound"

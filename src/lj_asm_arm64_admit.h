@@ -2077,7 +2077,7 @@ static int arm64_postra_funcf_admit(const LJArm64PostRAView *view,
 ** register allocation. Constant-step roots have neither a STEP load nor
 ** IR_USE and retain the existing allocator certificate. */
 static int arm64_postra_forl_dynamic_shape(const LJArm64PostRAView *view,
-	IRRef semantic_nins, int *dynamic_stepp)
+	IRRef semantic_nins, int *dynamic_stepp, int allow_wrapping)
 {
   const IRIns *ir = view->ir;
   MSize idxslot = (MSize)(1u+LJ_FR2+bc_a(view->startins));
@@ -2134,7 +2134,7 @@ static int arm64_postra_forl_dynamic_shape(const LJArm64PostRAView *view,
   post = ir_load_acq(&ir[postadd]);
   for (ref = REF_FIRST; ref < semantic_nins; ref++) {
     IRIns ins = ir_load_acq(&ir[ref]);
-    if (ins.o == IR_ADD && irt_type(ins.t) == IRT_INT &&
+    if (!allow_wrapping && ins.o == IR_ADD && irt_type(ins.t) == IRT_INT &&
         ref != preadd && ref != postadd)
       return 0;
   }
@@ -4091,7 +4091,7 @@ static int arm64_postra_nonloop_admit(const LJArm64PostRAView *view,
     return 0;
   if (rootop == BC_FORL &&
       !arm64_postra_forl_dynamic_shape(view, semantic_nins,
-	&forl_dynamic_step))
+	&forl_dynamic_step, 0))
     return 0;
 
   for (ref = REF_BASE; ref < semantic_nins; ref++) {
@@ -4548,7 +4548,7 @@ static int arm64_ir_kint_value(const GCtrace *T, IRRef ref, int32_t *value)
 ** and stop use the recorder's direction guard plus a live ADDOV proof. */
 static int arm64_ir_forl_shape(const jit_State *J, const GCtrace *T,
 	IRRef loopref, IRRef xpollref, IRRef firstphi, int *dynamic_stepp,
-	LJArm64IRReject *reject)
+	int allow_wrapping, LJArm64IRReject *reject)
 {
   MSize idxslot = (MSize)(1u+LJ_FR2+bc_a(T->startins));
   MSize stopslot = idxslot+FORL_STOP;
@@ -4596,7 +4596,7 @@ static int arm64_ir_forl_shape(const jit_State *J, const GCtrace *T,
   post = T->ir[postadd];
   for (ref = REF_FIRST; ref < T->nins; ref++) {
     const IRIns *ins = &T->ir[ref];
-    if (ins->o == IR_ADD && irt_type(ins->t) == IRT_INT &&
+    if (!allow_wrapping && ins->o == IR_ADD && irt_type(ins->t) == IRT_INT &&
         ref != preadd && ref != postadd)
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
                              ref, IR_ADD, 23);
@@ -5127,7 +5127,7 @@ static int arm64_ir_nonloop_admit(const jit_State *J, const GCtrace *T,
     return 0;
   if (startop == BC_FORL &&
       !arm64_ir_forl_shape(J, T, loopref, xpollref, firstphi,
-	&forl_dynamic_step, reject))
+	&forl_dynamic_step, 0, reject))
     return 0;
   if (!arm64_ir_snapshots(T, loopref, xpollref, root_topslot, J,
 				  proto_lo, proto_hi, startop,
@@ -5149,6 +5149,14 @@ static int arm64_rooted_gc_type(IRType type)
 {
   return type == IRT_STR || type == IRT_TAB || type == IRT_FUNC ||
          type == IRT_THREAD || type == IRT_UDATA || type == IRT_CDATA;
+}
+
+/* These fast functions record scalar operations without a remaining call.
+** Keep allocation (bit.tohex), cdata arithmetic and other fast functions out
+** of this identity-guard capability; their IR still needs its own proof. */
+static int arm64_scalar_builtin_ffid(uint32_t ffid)
+{
+  return ffid == FF_rawset || lj_ff_is_bit_scalar(ffid);
 }
 
 /* Recorder-side scalar provenance. Deliberately independent of the immutable
@@ -5212,6 +5220,10 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
   case IR_MUL:
   case IR_DIV:
   case IR_CONV:
+  case IR_BNOT: case IR_BSWAP:
+  case IR_BAND: case IR_BOR: case IR_BXOR:
+  case IR_BSHL: case IR_BSHR: case IR_BSAR: case IR_BROR:
+  case IR_NEG: case IR_TOBIT:
     return 1;
   default:
     return 0;
@@ -6149,11 +6161,9 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       goto bad_operand;
     switch ((IROp)ir->o) {
     case IR_NOP:
-      if (!side)
-        return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPCODE, ref,
-                               IR_NOP, 0);
-      if (ir->t.irt != IRT_NIL || ir->op12 || ir->r ||
-          ir->s != SPS_NONE)
+      /* Narrowing can remove a superseded overflow guard. NOP defines no
+      ** value; normal operand/snapshot provenance cannot reference it. */
+      if (ir->t.irt != IRT_NIL || ir->op12)
         goto bad_operand;
       break;
     case IR_SLOAD:
@@ -6259,8 +6269,10 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       binary = 1;
       break;
     case IR_ADD:
-      if (rootop == BC_FORL && type == IRT_INT &&
-          flags == IRT_ISPHI) {
+      /* The stock bit narrowing pass uses wrapping INT ADD/SUB. These are
+      ** pure 32-bit operations, distinct from guarded Lua arithmetic. */
+      if (type == IRT_INT && ((!side && !(flags & ~IRT_ISPHI)) ||
+          (rootop == BC_FORL && flags == IRT_ISPHI))) {
         binary = 1;
         break;
       }
@@ -6269,11 +6281,42 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       binary = 1;
       break;
     case IR_SUB:
+      if (!side && type == IRT_INT && !(flags & ~IRT_ISPHI)) {
+        binary = 1;
+        break;
+      }
+      /* fallthrough */
     case IR_MUL:
     case IR_DIV:
       if (type != IRT_NUM || (flags & ~IRT_ISPHI))
         goto bad_type;
       binary = 1;
+      break;
+    case IR_BNOT: case IR_BSWAP:
+      if (type != IRT_INT || (flags & ~IRT_ISPHI) || ir->op2 ||
+          !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_INT))
+        goto bad_operand;
+      break;
+    case IR_NEG:
+      /* ARM64 unifies ROL with ROR of the negated 32-bit count. */
+      if (type != IRT_INT || (flags & ~IRT_ISPHI) ||
+          ir->op2 != ir->op1 ||
+          !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_INT))
+        goto bad_operand;
+      break;
+    case IR_BAND: case IR_BOR: case IR_BXOR:
+    case IR_BSHL: case IR_BSHR: case IR_BSAR: case IR_BROR:
+      if (type != IRT_INT || (flags & ~IRT_ISPHI))
+        goto bad_type;
+      binary = 1;
+      break;
+    case IR_TOBIT:
+      if (type != IRT_INT || (flags & ~IRT_ISPHI) ||
+          !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_NUM) ||
+          !arm64_scalar_ir_ref(T, ir->op2, ref, IRT_NUM) ||
+          !irref_isk(ir->op2) || T->ir[ir->op2].o != IR_KNUM ||
+          T->ir[ir->op2+1u].tv.u64 != U64x(43380000,00000000))
+        goto bad_operand;
       break;
     case IR_LT:
     case IR_GE:
@@ -6283,7 +6326,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
     case IR_NE:
       if (type == IRT_FUNC && ir->o == IR_EQ && flags == IRT_GUARD) {
         GCobj *o;
-        /* The rawset call is specialized to its exact builtin closure. */
+        /* Specialize only exact supported builtin closures. */
         if (ir->op1 < REF_FIRST ||
             !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_FUNC) ||
             !arm64_scalar_ir_ref(T, ir->op2, ref, IRT_FUNC) ||
@@ -6291,7 +6334,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
           goto bad_operand;
         o = ir_kgc_acq(&T->ir[ir->op2]);
         if (o == NULL || !checkptrGC(o) || o->gch.gct != (uint32_t)~LJ_TFUNC ||
-            lj_func_ffid_acq(gco2func(o)) != FF_rawset)
+            !arm64_scalar_builtin_ffid(lj_func_ffid_acq(gco2func(o))))
           goto bad_operand;
         break;
       }
@@ -6422,7 +6465,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
   }
   if (rootop == BC_FORL) {
     if (!arm64_ir_forl_shape(J, T, loop, poll, firstphi, &forl_dynamic_step,
-                             reject))
+                             1, reject))
       return 0;
   }
   for (s = 0; s < T->nsnap; s++) {
@@ -6587,6 +6630,11 @@ static int arm64_scalar_postra_kref(const LJArm64PostRAView *v, IRRef target,
 static int arm64_scalar_postra_value(IRIns p)
 {
   switch ((IROp)p.o) {
+  case IR_BNOT: case IR_BSWAP:
+  case IR_BAND: case IR_BOR: case IR_BXOR:
+  case IR_BSHL: case IR_BSHR: case IR_BSAR: case IR_BROR:
+  case IR_NEG: case IR_TOBIT:
+    return (p.t.irt & ~IRT_ISPHI) == IRT_INT;
   case IR_SLOAD:
   case IR_ADDOV:
   case IR_SUBOV:
@@ -6777,9 +6825,167 @@ static int arm64_scalar_postra_register(Reg r, IRType type)
              : r < RID_MAX_GPR && rset_test(RSET_GPR, r);
 }
 
-/* A missing location is legal only for an unused scalar or a multiply fused
-** into NUM add/sub consumers. Snapshot sources are checked after renames.
-** This mirrors the target's fusion capability, not an IR-number grammar. */
+/* Operand locations for the stock target's 32-bit instruction fusions. Every
+** reference is bounded before a future consumer is inspected: its main-pass
+** validation has not necessarily happened yet. */
+static int arm64_scalar_postra_int_location(const LJArm64PostRAView *v,
+                                            IRRef ref, IRRef before)
+{
+  IRIns p;
+  if (!arm64_scalar_postra_ref(v, ref, before, IRT_INT)) return 0;
+  if (irref_isk(ref)) return 1;
+  p = ir_load_acq(&v->ir[ref]);
+  return (ra_hasreg(p.r) && arm64_scalar_postra_register(p.r, IRT_INT)) ||
+         ra_hasspill(p.s);
+}
+
+static int arm64_scalar_postra_kint(const LJArm64PostRAView *v, IRRef ref,
+                                    int32_t *kp)
+{
+  IRIns p;
+  if (!arm64_scalar_postra_kref(v, ref, IRT_INT)) return 0;
+  p = ir_load_acq(&v->ir[ref]);
+  if (p.o != IR_KINT) return 0;
+  if (kp) *kp = p.i;
+  return 1;
+}
+
+/* asm_fuseopm consumes at most one unmaterialized shift/double operation.
+** Its input must have a real location; this is not recursive permission to
+** erase an arbitrary chain. A rotate is available only to logical opcodes. */
+static int arm64_scalar_postra_fuseopm(const LJArm64PostRAView *v,
+                                      IRRef ref, IRRef before, int logical)
+{
+  IRIns p;
+  if (ref < REF_FIRST || ref >= before) return 0;
+  p = ir_load_acq(&v->ir[ref]);
+  if (p.t.irt != IRT_INT ||
+      !arm64_scalar_postra_int_location(v, p.op1, ref)) return 0;
+  if (p.o == IR_ADD && p.op1 == p.op2) return 1;
+  return (p.o == IR_BSHL || p.o == IR_BSHR || p.o == IR_BSAR ||
+          (logical && p.o == IR_BROR)) &&
+         arm64_scalar_postra_kint(v, p.op2, NULL);
+}
+
+/* The target chooses the shifted operand before allocation, using only IR.
+** Match that choice rather than accepting an absent left operand too. */
+static int arm64_scalar_postra_swapops(const LJArm64PostRAView *v,
+                                      IRRef left, IRRef right)
+{
+  IRIns p;
+  if (irref_isk(right)) return 0;
+  if (irref_isk(left)) return 1;
+  p = ir_load_acq(&v->ir[right]);
+  if ((p.o >= IR_BSHL && p.o <= IR_BROR) ||
+      (p.o == IR_ADD && p.op1 == p.op2)) return 0;
+  p = ir_load_acq(&v->ir[left]);
+  return (p.o >= IR_BSHL && p.o <= IR_BROR) ||
+         (p.o == IR_ADD && p.op1 == p.op2);
+}
+
+static int arm64_scalar_postra_int_fusion(const LJArm64PostRAView *v,
+                                         IRRef value, IRRef consumer)
+{
+  IRIns source = ir_load_acq(&v->ir[value]);
+  IRIns use = ir_load_acq(&v->ir[consumer]);
+  IRRef left = use.op1, right = use.op2;
+  int32_t k, shift;
+  int logical = use.o == IR_BAND || use.o == IR_BOR || use.o == IR_BXOR;
+  int compare = use.o == IR_LT || use.o == IR_GE || use.o == IR_LE ||
+                use.o == IR_GT || use.o == IR_EQ || use.o == IR_NE;
+  if (source.t.irt != IRT_INT || irt_type(use.t) != IRT_INT) return 0;
+
+  /* ORN/EON can in turn consume a shifted NOT input, exactly one level. */
+  if (source.o == IR_BNOT && (use.o == IR_BOR || use.o == IR_BXOR) &&
+      source.op2 == 0 && left != right &&
+      arm64_scalar_postra_ref(v, left, consumer, IRT_INT) &&
+      arm64_scalar_postra_ref(v, right, consumer, IRT_INT)) {
+    IRRef notref = (!irref_isk(left) &&
+      ir_load_acq(&v->ir[left]).o == IR_BNOT) ? left : right;
+    IRRef other = value == left ? right : left;
+    if (notref == value && !irref_isk(other) &&
+        arm64_scalar_postra_int_location(v, other, consumer) &&
+        (arm64_scalar_postra_int_location(v, source.op1, value) ||
+         arm64_scalar_postra_fuseopm(v, source.op1, value, 1))) return 1;
+  }
+  if (use.o == IR_BNOT && (use.t.irt & ~IRT_ISPHI) == IRT_INT &&
+      use.op2 == 0 &&
+      left == value && arm64_scalar_postra_fuseopm(v, value, consumer, 1))
+    return 1;
+
+  /* UBFM/SBFM replace a left shift followed by a constant right shift. The
+  ** outer shift needs a location: another instruction's shifted operand
+  ** does not also encode this two-shift transformation. */
+  if (source.o == IR_BSHL && (use.o == IR_BSHR || use.o == IR_BSAR) &&
+      left == value && arm64_scalar_postra_kint(v, source.op2, NULL) &&
+      arm64_scalar_postra_kint(v, right, NULL) &&
+      arm64_scalar_postra_int_location(v, source.op1, value) &&
+      (ra_hasreg(use.r) || ra_hasspill(use.s))) return 1;
+
+  /* UBFM for BAND(constant-shift, low contiguous mask). */
+  if (use.o == IR_BAND && left == value &&
+      (source.o == IR_BSHL || source.o == IR_BSHR) &&
+      arm64_scalar_postra_kint(v, source.op2, &shift) &&
+      arm64_scalar_postra_kint(v, right, &k) &&
+      arm64_scalar_postra_int_location(v, source.op1, value) &&
+      (ra_hasreg(use.r) || ra_hasspill(use.s))) {
+    uint64_t mask = (uint64_t)(int64_t)k;
+    if (source.o == IR_BSHL) mask >>= (uint32_t)shift & 31u;
+    if (mask && !((mask+1u) & mask)) return 1;
+  }
+
+  /* EXTR consumes two complementary constant shifts without either result. */
+  if (use.o == IR_BOR && left != right &&
+      left >= REF_FIRST && left < consumer &&
+      right >= REF_FIRST && right < consumer) {
+    IRIns a = ir_load_acq(&v->ir[left]), b = ir_load_acq(&v->ir[right]);
+    if (a.t.irt == IRT_INT && b.t.irt == IRT_INT &&
+        ((a.o == IR_BSHL && b.o == IR_BSHR) ||
+         (a.o == IR_BSHR && b.o == IR_BSHL)) &&
+        arm64_scalar_postra_kint(v, a.op2, &shift) &&
+        arm64_scalar_postra_kint(v, b.op2, &k) &&
+        (uint32_t)shift + (uint32_t)k == 32u &&
+        arm64_scalar_postra_int_location(v, a.op1, left) &&
+        arm64_scalar_postra_int_location(v, b.op1, right)) return 1;
+  }
+
+  /* Adjacent BAND-vs-zero is TST or TBZ/TBNZ. Both inputs are independently
+  ** located, except the exact shifted operand accepted by TST. */
+  if (source.o == IR_BAND && compare && consumer == value+1u &&
+      use.t.irt == (IRT_INT|IRT_GUARD) && left != right &&
+      (use.o == IR_EQ || use.o == IR_NE ||
+       (left == value && (use.o == IR_LT || use.o == IR_GE)) ||
+       (right == value && (use.o == IR_GT || use.o == IR_LE)))) {
+    IRRef other = left == value ? right : left;
+    if (arm64_scalar_postra_kint(v, other, &k) && k == 0 &&
+        arm64_scalar_postra_ref(v, source.op1, value, IRT_INT) &&
+        arm64_scalar_postra_ref(v, source.op2, value, IRT_INT)) {
+      IRRef a = source.op1, b = source.op2;
+      if (arm64_scalar_postra_swapops(v, a, b)) {
+        IRRef tmp = a; a = b; b = tmp;
+      }
+      if (arm64_scalar_postra_int_location(v, a, value) &&
+          (arm64_scalar_postra_int_location(v, b, value) ||
+           arm64_scalar_postra_fuseopm(v, b, value, 1))) return 1;
+    }
+  }
+
+  /* Ordinary shifted-register arithmetic, logical operations and compares. */
+  if (!(logical || compare || use.o == IR_ADD || use.o == IR_SUB ||
+        use.o == IR_ADDOV || use.o == IR_SUBOV) || left == right ||
+      !arm64_scalar_postra_ref(v, left, consumer, IRT_INT) ||
+      !arm64_scalar_postra_ref(v, right, consumer, IRT_INT)) return 0;
+  if (use.o != IR_SUB && use.o != IR_SUBOV &&
+      arm64_scalar_postra_swapops(v, left, right)) {
+    IRRef tmp = left; left = right; right = tmp;
+  }
+  return right == value &&
+         arm64_scalar_postra_int_location(v, left, consumer) &&
+         arm64_scalar_postra_fuseopm(v, value, consumer, logical);
+}
+
+/* A missing location is legal only for an unused scalar or a proven target
+** fusion at every use. Snapshot sources are checked separately after renames. */
 static int arm64_scalar_postra_nolocation(const LJArm64PostRAView *v,
                                           IRRef value, IRRef end)
 {
@@ -6809,10 +7015,14 @@ static int arm64_scalar_postra_nolocation(const LJArm64PostRAView *v,
     }
     if (!used)
       continue;
+    if (source.t.irt == IRT_INT &&
+        arm64_scalar_postra_int_fusion(v, value, ref))
+      continue;
     if (source.o != IR_MUL || source.t.irt != IRT_NUM ||
         (use.o != IR_ADD && use.o != IR_SUB) || !irt_isnum(use.t) ||
-        use.op1 == use.op2)
+        use.op1 == use.op2) {
       return 0;
+    }
     {
       IRRef other = use.op1 == value ? use.op2 : use.op1;
       if (!irref_isk(other)) {
@@ -7379,6 +7589,20 @@ static int arm64_cell_postra_snapshots(const LJArm64PostRAView *v,
   }
 }
 
+/* Match snap_renameref for a bounded source at this exact exit. */
+static RegSP arm64_scalar_postra_snapshot_regsp(const LJArm64PostRAView *v,
+                                               IRRef n, IRRef ref, MSize s)
+{
+  IRRef ren;
+  RegSP rs = ir_load_acq(&v->ir[ref]).prev;
+  for (ren = v->nins; ren-- > n;) {
+    IRIns q = ir_load_acq(&v->ir[ren]);
+    if (q.o != IR_RENAME) break;
+    if (q.op1 == ref && q.op2 <= s) rs = q.prev;
+  }
+  return rs;
+}
+
 static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
                                          BCOp rootop,
                                          const LJArm64SideIRView *side,
@@ -7483,7 +7707,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
   }
   if (rootop == BC_FORL) {
     if ((MSize)bc_a(v->startins) + FORL_EXT >= v->root_topslot ||
-        !arm64_postra_forl_dynamic_shape(v, n, &forl_dynamic_step))
+        !arm64_postra_forl_dynamic_shape(v, n, &forl_dynamic_step, 1))
       return 0;
   }
   {
@@ -7521,7 +7745,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
     }
     switch ((IROp)p.o) {
     case IR_NOP:
-      if (!side || p.t.irt != IRT_NIL || p.op12 || ra_hasreg(p.r) ||
+      if (p.t.irt != IRT_NIL || p.op12 || p.r != RID_INIT ||
 	  p.s != SPS_NONE)
 	return 0;
       break;
@@ -7650,8 +7874,8 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       binary = 1;
       break;
     case IR_ADD:
-      if (rootop == BC_FORL && type == IRT_INT &&
-          flags == IRT_ISPHI) {
+      if (type == IRT_INT && ((!side && !(flags & ~IRT_ISPHI)) ||
+          (rootop == BC_FORL && flags == IRT_ISPHI))) {
         binary = 1;
         break;
       }
@@ -7660,11 +7884,40 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       binary = 1;
       break;
     case IR_SUB:
+      if (!side && type == IRT_INT && !(flags & ~IRT_ISPHI)) {
+        binary = 1;
+        break;
+      }
+      /* fallthrough */
     case IR_MUL:
     case IR_DIV:
       if (type != IRT_NUM || (flags & ~IRT_ISPHI))
         return 0;
       binary = 1;
+      break;
+    case IR_BNOT: case IR_BSWAP:
+      if (type != IRT_INT || (flags & ~IRT_ISPHI) || p.op2 ||
+          !arm64_scalar_postra_ref(v, p.op1, ref, IRT_INT))
+        return 0;
+      break;
+    case IR_NEG:
+      if (type != IRT_INT || (flags & ~IRT_ISPHI) || p.op2 != p.op1 ||
+          !arm64_scalar_postra_ref(v, p.op1, ref, IRT_INT))
+        return 0;
+      break;
+    case IR_BAND: case IR_BOR: case IR_BXOR:
+    case IR_BSHL: case IR_BSHR: case IR_BSAR: case IR_BROR:
+      if (type != IRT_INT || (flags & ~IRT_ISPHI))
+        return 0;
+      binary = 1;
+      break;
+    case IR_TOBIT:
+      if (type != IRT_INT || (flags & ~IRT_ISPHI) ||
+          !arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM) ||
+          !arm64_scalar_postra_kref(v, p.op2, IRT_NUM) ||
+          ir_load_acq(&v->ir[p.op2]).o != IR_KNUM ||
+          ir_load_acq(&v->ir[p.op2+1u]).tv.u64 != U64x(43380000,00000000))
+        return 0;
       break;
     case IR_LT:
     case IR_GE:
@@ -7686,7 +7939,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
         fn = ir_kgc_load_acq(&v->ir[p.op2]);
         if (fn == NULL || !checkptrGC(fn) ||
             la_load8_acq(&fn->gch.gct) != (uint32_t)~LJ_TFUNC ||
-            lj_func_ffid_acq(gco2func(fn)) != FF_rawset)
+            !arm64_scalar_builtin_ffid(lj_func_ffid_acq(gco2func(fn))))
           return 0;
         break;
       }
@@ -7872,7 +8125,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       poll_snap = at;
     for (j = 0; j < nent; j++) {
       SnapEntry sn = snapentry_acq(&v->snapmap[ofs + j]);
-      IRRef r = snap_ref(sn), ren;
+      IRRef r = snap_ref(sn);
       BCReg slot = snap_slot(sn);
       IRIns p;
       RegSP rs;
@@ -7907,13 +8160,19 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       if (irref_isk(r))
         continue;
       p = ir_load_acq(&v->ir[r]);
-      rs = p.prev;
-      for (ren = v->nins; ren-- > n;) {
-        IRIns q = ir_load_acq(&v->ir[ren]);
-        if (q.o != IR_RENAME)
-          break;
-        if (q.op1 == r && q.op2 <= s)
-          rs = q.prev;
+      rs = arm64_scalar_postra_snapshot_regsp(v, n, r, s);
+      /* asm_snap_alloc1 can leave a snapshot-only NUM<-INT conversion
+      ** unmaterialized. snap_restoreval reconstructs it from the integer at
+      ** this exit. Certify that exact one-level source and its own renames;
+      ** an arbitrary missing snapshot location remains a refusal. */
+      if (!side && !ra_hasspill(regsp_spill(rs)) &&
+          ra_noreg(regsp_reg(rs)) && p.o == IR_CONV &&
+          p.t.irt == IRT_NUM && p.op2 == IRCONV_NUM_INT) {
+        if (!arm64_scalar_postra_ref(v, p.op1, r, IRT_INT)) return 0;
+        r = p.op1;
+        if (irref_isk(r)) continue;
+        p = ir_load_acq(&v->ir[r]);
+        rs = arm64_scalar_postra_snapshot_regsp(v, n, r, s);
       }
       if (ra_hasspill(regsp_spill(rs))) {
         MSize slot = regsp_spill(rs);

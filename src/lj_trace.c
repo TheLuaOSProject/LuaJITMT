@@ -11945,6 +11945,31 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
 	    (J->postproc == LJ_POST_NONE &&
 	     (J->pc != returnpc-1 || J->framedepth != 1 || J->maxslot != 3)))
 	  return 0;
+      } else if (lj_ff_is_bit_scalar(ffid)) {
+	const BCIns *returnpc;
+	BCIns call;
+	unsigned nargs;
+	unsigned minargs = (ffid >= FF_bit_lshift && ffid <= FF_bit_ror) ? 2 : 1;
+	/* These recorders return a scalar without an external call. Admit an
+	** ordinary CALL or a CALLM with one trailing scalar from this root.
+	** An all-results return is still exactly one result. Tail calls and
+	** nested Lua frames keep their separate limits. */
+	if ((bc_op(startins) != BC_LOOP && bc_op(startins) != BC_FORL) ||
+	    !frame_islua(owner->base-1)) return 0;
+	returnpc = frame_pc(owner->base-1);
+	if (!trace_pc_in_proto_range(returnpc, proto_bc(rootpt), rootpt->sizebc) ||
+	    returnpc == proto_bc(rootpt)) return 0;
+	call = (BCIns)la_load32_acq((const uint32_t *)(returnpc-1));
+	if (bc_op(call) == BC_CALL && bc_c(call) != 0)
+	  nargs = bc_c(call)-1u;
+	else if (bc_op(call) == BC_CALLM)
+	  nargs = bc_c(call)+1u;
+	else return 0;
+	if (nargs < minargs || bc_b(call) > 2 ||
+	    (MSize)bc_a(call)+nargs+1u+LJ_FR2 > rootpt->framesize ||
+	    (J->postproc == LJ_POST_NONE &&
+	     (J->pc != returnpc-1 || J->framedepth != 1 ||
+	      J->maxslot != nargs))) return 0;
       } else
 #endif
       {
@@ -11955,7 +11980,14 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
 #endif
       }
       ins = (BCIns)la_load32_acq((const uint32_t *)pc);
-      if (bc_op(ins) != BC_FUNCC)
+      if (lj_ff_is_bit_scalar(ffid)) {
+	uintptr_t lo = (uintptr_t)&G2GG(g)->bcff[0], at = (uintptr_t)pc;
+	uintptr_t bytes = sizeof(G2GG(g)->bcff);
+	/* Assembly fast functions use the universe's immutable synthetic
+	** bytecode slots, not BC_FUNCC. Verify the exact slot before recording. */
+	if (at < lo || at-lo >= bytes || (at-lo) % sizeof(BCIns) ||
+	    ins != BCINS_AD(BC__MAX+(at-lo)/sizeof(BCIns), 0, 0)) return 0;
+      } else if (bc_op(ins) != BC_FUNCC)
 	return 0;
       if (J->postproc == LJ_POST_NONE) {
         /* An admitted exact call enters its recorder fast function before
