@@ -154,11 +154,28 @@ int main(void)
     }
   }
 
+  if (script_ok) {
+    /* A raw nil store must not invoke __newindex, including on an empty
+    ** array slot or a key whose value was cleared after recording. This
+    ** shared test also runs against the native x64 helper ABI. */
+    script_ok = luaL_dostring(L,
+      "local calls = 0\n"
+      "setmetatable(raw_nil_store_t, { __newindex = function() calls=calls+1 end })\n"
+      "for i=1,20 do\n"
+      "  assert(raw_nil_set(raw_nil_store_t, 1, 32))\n"
+      "  assert(rawget(raw_nil_store_t, 1)==nil and calls==0)\n"
+      "  rawset(raw_nil_store_t, 1, i)\n"
+      "  assert(raw_nil_set(raw_nil_store_t, 1, 32))\n"
+      "  assert(rawget(raw_nil_store_t, 1)==nil and calls==0)\n"
+      "end\n") == LUA_OK;
+    if (!script_ok) fprintf(stderr, "%s\n", lua_tostring(L, -1));
+  }
+
   /* The entering lease belongs to this test and is always restored before close. */
   assert(mt_entering_sub_acqrel(g, 1) == 1);
   mt_entering_futex_wake(g, INT_MAX);
   lua_close(L);
   assert(script_ok);
-  puts("t-jit-raw-nil-store OK: a key inserted after recording is deleted");
+  puts("t-jit-raw-nil-store OK: post-record insertion deleted; raw nil stores bypass __newindex");
   return 0;
 }

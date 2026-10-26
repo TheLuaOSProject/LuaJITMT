@@ -2555,9 +2555,11 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
     mt_shared_store = rec_idx_mt_shared_tabop(J, ix);
     if (mt_shared_store) {
       int keybarrier = tref_isgcv(ix->key) && !tref_isnil(ix->val);
+      int nil_no_meta = 0;
       if (rec_idx_tab_unproven_alloc(J, ix->tab))
 	lj_trace_err_info(J, LJ_TRERR_NYIBC);
-      (void)rec_idx_mt_shared_sample(J, ix, &oldsnap, NULL, NULL);
+      (void)rec_idx_mt_shared_sample(J, ix, &oldsnap, NULL,
+				    tref_isnil(ix->val) ? &nil_no_meta : NULL);
       /*
       ** Active-MT stores must not record raw HREF/AREF/NEWREF probes: a
       ** concurrent resize can retire that generation before generated code
@@ -2566,14 +2568,28 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
       ** that re-lookup the key and own resize/forwarding retries. A previous-nil
       ** metamethod-sensitive store fails closed in lj_record_mm_lookup().
       */
+      if (tref_isnil(ix->val)) {
+	/* Preserve the existing fail-closed metamethod rule when recording an
+	** absent sample. Existing-key nil deletion is raw Lua semantics even when
+	** __newindex exists; the runtime helper re-resolves and handles a key that
+	** becomes absent after recording by declining unless the current meta is
+	** NULL. */
+	if (tvisnil(&oldsnap) && !nil_no_meta && ix->idxchain &&
+	    lj_record_mm_lookup(J, ix, MM_newindex))
+	  goto handlemm;
+	TRef parent = rec_tmpref_mode(J, ix->tab, IRTMPREF_IN1);
+	TRef key = rec_tmpref_mode(J, ix->key, IRTMPREF_IN2);
+	TRef ok = lj_ir_call(J, IRCALL_lj_tab_storenil_rooted,
+			     parent, key);
+	emitir(IRTGI(IR_NE), ok, lj_ir_kint(J, 0));
+	J->needsnap = 1;
+	return 0;
+      }
       if (tvisnil(&oldsnap)) {
 	if (ix->idxchain && lj_record_mm_lookup(J, ix, MM_newindex))
 	  goto handlemm;
-	/* An absent raw deletion is still an effect: another invocation or
-	** actor can insert this key before the native store. Do not erase it
-	** until a rooted deletion or an authoritative absence guard is emitted. */
-	if (!ix->idxchain && tref_isnil(ix->val))
-	  lj_trace_err_info(J, LJ_TRERR_NYIBC);
+	/* Nil effects were handled above. Keep the established new-key helper
+	** for non-nil stores sampled as absent. */
 	if (!tref_isnil(ix->val)) {
 	  TRef key = rec_tmpref_mode(J, ix->key,
 				     IRTMPREF_IN1|IRTMPREF_IN2);

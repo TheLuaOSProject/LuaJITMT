@@ -5686,6 +5686,7 @@ static LJTabNewkeyReserveHook tab_test_newkey_chain_after_reserve_hook;
 static LJTabNewkeyPublishHook tab_test_newkey_publish_hook;
 static LJTabNextAfterKeyindexHook tab_test_next_after_keyindex_hook;
 static LJTabStorePostCasHook tab_test_store_post_cas_hook;
+static LJTabStorePostCasHook tab_test_nil_store_found_hook;
 static LJTabRootedReaderRetryHook tab_test_rooted_reader_retry_hook;
 static LJTabLenRootedTryHook tab_test_len_rooted_try_hook;
 static uint32_t tab_test_keyed_cas_changed_stack_grow;
@@ -5723,6 +5724,11 @@ void lj_tab_test_set_next_after_keyindex_hook(
 void lj_tab_test_set_store_post_cas_hook(LJTabStorePostCasHook hook)
 {
   tab_test_store_post_cas_hook = hook;
+}
+
+void lj_tab_test_set_nil_store_found_hook(LJTabStorePostCasHook hook)
+{
+  tab_test_nil_store_found_hook = hook;
 }
 
 void lj_tab_test_set_rooted_reader_retry_hook(
@@ -7378,13 +7384,14 @@ static int tab_trystoretv_cas_keyed_once_mode(lua_State *L,
 					       GCtab *parent, TValue *dst,
 					       cTValue *key, cTValue *src,
 					       int mode, TValue *observed,
-					       int observed_rooted)
+					       int observed_rooted, int *did_commit)
 {
   global_State *g;
   TValue keysnap, valuesnap, expected;
   int committed = 0;
   int guarded;
   int rc = LJ_TAB_STORE_CAS_STALE;
+  if (did_commit) *did_commit = 0;
   if (!parent)
     return tab_trystoretv_cas_once(L, dst, src);
   lj_tv_load_acq(&keysnap, key);
@@ -7475,6 +7482,13 @@ guarded_finish:
   } else {
     rc = tab_trystoretv_cas_expected(L, dst, &expected, &valuesnap,
 					     mode, observed, observed_rooted);
+    committed = rc == LJ_TAB_STORE_CAS_OK;
+#ifdef LJ_TAB_TEST_HELPERS
+    /* Exercise the nil-delete committed/stale handoff with the existing
+    ** post-CAS test hook. Production builds compile this away. */
+    if (committed && mode == TAB_STORE_MODE_ANY && tvisnil(&valuesnap))
+      tab_test_store_post_cas(L, parent, dst, &keysnap, &valuesnap);
+#endif
     if (rc == LJ_TAB_STORE_CAS_OK &&
 	!tab_current_slot_for_key_bounded(parent, dst, &keysnap)) {
       lj_gc_pubtabtv(L, parent, &valuesnap);
@@ -7483,6 +7497,7 @@ guarded_finish:
   }
 leave:
   lj_gc2_smr_read_leave(g);
+  if (did_commit) *did_commit = committed;
   return rc;
 }
 
@@ -7493,7 +7508,7 @@ static LJ_AINLINE int tab_trystoretv_cas_keyed_once(lua_State *L,
 						    cTValue *src)
 {
   return tab_trystoretv_cas_keyed_once_mode(
-    L, parent, dst, key, src, TAB_STORE_MODE_ANY, NULL, 0);
+    L, parent, dst, key, src, TAB_STORE_MODE_ANY, NULL, 0, NULL);
 }
 
 LJ_FUNCA int lj_tab_trystoretv_cas_keyed(lua_State *L, GCtab *parent,
@@ -7641,7 +7656,7 @@ static int tab_trysetnil_cas_keyed(lua_State *L, GCtab *parent,
   for (;;) {
     rc = tab_trystoretv_cas_keyed_once_mode(
 	      L, parent, dst, key, src, TAB_STORE_MODE_NIL, oldp,
-	      oldp_rooted);
+	      oldp_rooted, NULL);
     if (rc != LJ_TAB_STORE_CAS_CHANGED)
       return rc;
     lj_tab_store_wait_l(L);
@@ -7835,7 +7850,7 @@ LJ_FUNCA int32_t lj_tab_storetv_existing_forjit(lua_State *L, GCtab *parent,
       continue;
     }
     rc = tab_trystoretv_cas_keyed_once_mode(
-	      L, parent, dst, key, src, TAB_STORE_MODE_EXISTING, NULL, 0);
+	      L, parent, dst, key, src, TAB_STORE_MODE_EXISTING, NULL, 0, NULL);
     if (rc == LJ_TAB_STORE_CAS_OK) {
       tab_store_barrier_write(L, parent, key, src);
       return 1;
@@ -7936,6 +7951,176 @@ static int32_t tab_storescalar_rooted(lua_State *L, cTValue *tabroot,
   lj_oserr_restore(&oserr);
   result = lj_tab_storetv_existing_forjit(L, tabV(tableanchor), keyanchor,
 					 value);
+  if (result && tvisstr(keyanchor))
+    lj_tab_nomm_rel(tabV(tableanchor), 0);
+leave:
+  if (smr) lj_gc2_smr_read_leave(owner.g);
+  lj_gc2_lease_release(&key_lease);
+  lj_gc2_lease_release(&table_lease);
+  if (keyanchor) lj_tg_root_anchor_pop(owner.tg, keyidx);
+  if (tableanchor) lj_tg_root_anchor_pop(owner.tg, tableidx);
+done:
+  lj_oserr_restore(&oserr);
+  return result;
+}
+
+/* Existing-key deletion. Inputs are rooted before any SMR refusal or
+** cooperative retry. Absence is a successful no-op only while the current
+** table has no metatable; otherwise generated code must side-exit so normal
+** __newindex semantics remain authoritative. A stale CAS is re-resolved in
+** the current generation before success; its commit is remembered so a
+** racing delete is not mistaken for a fresh absent assignment. */
+int32_t lj_tab_storenil_rooted(lua_State *L, cTValue *tabroot,
+			       cTValue *keyroot)
+{
+  TabKeyedSlotOwnerSnapshot owner;
+  LJGC2Lease table_lease = { 0 }, key_lease = { 0 };
+  LJOSerrState oserr;
+  TValue tablev, keyv, confirm, nilv;
+  TValue *tableanchor = NULL, *keyanchor = NULL;
+  uint32_t tableidx = 0, keyidx = 0;
+  ptrdiff_t tabofs = 0, keyofs = 0;
+  int tabstack, keystack, smr = 0, result = 0;
+
+  lj_oserr_save(&oserr);
+  if (!L || !tabroot || !keyroot ||
+      !tab_keyed_slot_owner_snapshot(L, &owner)) goto done;
+  tabstack = tab_key_on_stack(L, tabroot);
+  keystack = tab_key_on_stack(L, keyroot);
+  if (tabstack) tabofs = savestack(L, (TValue *)(void *)tabroot);
+  if (keystack) keyofs = savestack(L, (TValue *)(void *)keyroot);
+  setnilV(&nilv);
+  if (!lj_tg_root_anchor_reserve_nothrow(L, owner.tg)) goto done;
+  tableanchor = lj_tg_root_anchor_push(L, owner.tg, &nilv, &tableidx);
+  if (!lj_tg_root_anchor_reserve_nothrow(L, owner.tg)) goto leave;
+  keyanchor = lj_tg_root_anchor_push(L, owner.tg, &nilv, &keyidx);
+  if (tabstack) tabroot = restorestack(L, tabofs);
+  if (keystack) keyroot = restorestack(L, keyofs);
+  if (!tab_keyed_slot_owner_current(L, &owner) ||
+      !lj_gc2_smr_read_try(owner.g)) goto leave;
+  smr = 1;
+  lj_tv_load_acq(&tablev, tabroot);
+  lj_tv_load_acq(&keyv, keyroot);
+  if (!tvistab(&tablev) ||
+      !(tvisstr(&keyv) || tvisnumber(&keyv) || tvisbool(&keyv) ||
+	tvisgcv(&keyv) || (tvislightud(&keyv) && !tvistabinternal(&keyv))) ||
+      !tab_keyed_slot_key_valid(&keyv) ||
+      lj_gc2_tv_lease_acquire(owner.g, &tablev, &table_lease) !=
+	LJ_GC2_TV_EDGE_VALID ||
+      lj_gc2_tv_lease_acquire(owner.g, &keyv, &key_lease) !=
+	LJ_GC2_TV_EDGE_VALID) goto leave;
+  lj_tv_load_acq(&confirm, tabroot);
+  if (tv_rawload(&confirm) != tv_rawload(&tablev)) goto leave;
+  lj_tv_load_acq(&confirm, keyroot);
+  if (tv_rawload(&confirm) != tv_rawload(&keyv) ||
+      !tab_keyed_slot_owner_current(L, &owner)) goto leave;
+  copyTVrel(L, tableanchor, &tablev);
+  copyTVrel(L, keyanchor, &keyv);
+  lj_gc2_smr_read_leave(owner.g);
+  smr = 0;
+  lj_gc_pubroot(L, tableanchor);
+  lj_gc_pubroot(L, keyanchor);
+  lj_gc2_lease_release(&key_lease);
+  lj_gc2_lease_release(&table_lease);
+#ifdef LJ_TAB_TEST_HELPERS
+  if (tab_test_rooted_store_hook)
+    tab_test_rooted_store_hook(L, tableanchor, keyanchor);
+#endif
+  lj_oserr_restore(&oserr);
+  {
+    int committed = 0, saw_present = 0;
+    for (;;) {
+      TValue *dst = NULL;
+      TValue oldvalue;
+      int attempt_committed = 0;
+      /* Preserve the internal FORWARD distinction: public keyed stores map a
+      ** forward marker to ABSENT so the caller can side-exit, but nil deletion
+      ** must retry the paired generation before treating absence as a no-op. */
+      int status = TAB_RESOLVE_RETRY;
+      int rc;
+      if (lj_gc2_smr_read_try(G(L))) {
+	status = tab_resolve_current_keyed_held(tabV(tableanchor), keyanchor,
+					      &dst, &oldvalue);
+	/* A retained hash node or an array slot can be semantically absent.
+	** Classify the copied value before leaving its current-generation SMR
+	** interval; the address alone cannot authorize bypassing __newindex. */
+	if (status == TAB_RESOLVE_FOUND) {
+	  if (tvisnil(&oldvalue))
+	    status = TAB_RESOLVE_ABSENT;
+	  else if (!tab_tv_snapshot_valid(&oldvalue))
+	    status = TAB_RESOLVE_RETRY;
+	}
+	lj_gc2_smr_read_leave(G(L));
+      }
+      if (status == TAB_RESOLVE_ABSENT) {
+	result = committed || saw_present ||
+		 lj_tab_metatable_acq(tabV(tableanchor)) == NULL;
+	break;
+      }
+      if (status == TAB_RESOLVE_RETRY) {
+	lj_tab_store_wait_l(L);
+	continue;
+      }
+      if (status == TAB_RESOLVE_FORWARD_ARRAY ||
+	  status == TAB_RESOLVE_FORWARD_HASH) {
+	/* Stable forwarding is not absence. Existing setters repair it, but their
+	** public helpers then create a missing key. Repair storage only here and
+	** re-resolve, so deletion never enters new-key insertion. */
+	if (status == TAB_RESOLVE_FORWARD_HASH) {
+	  rehashtab(L, tabV(tableanchor), keyanchor);
+	} else {
+	  TValue *array;
+	  MSize asize, hmask;
+	  uint32_t hbits, nasize;
+	  int64_t i64;
+	  int32_t ik;
+	  if (tvisint(keyanchor)) ik = intV(keyanchor);
+	  else if (!(tvisnum(keyanchor) &&
+		     lj_num2int_check(numV(keyanchor), i64, ik))) {
+	    lj_assertL(0, "non-integral key resolved to array FORWARD");
+	    result = 0;
+	    break;
+	  }
+	  asize = lj_tab_array_snapshot_acq(tabV(tableanchor), &array);
+	  (void)lj_tab_node_snapshot_acq(tabV(tableanchor), &hmask);
+	  hbits = hmask > 0 ? lj_fls((uint32_t)hmask) + 1u : 0;
+	  if (asize >= LJ_MAX_ASIZE) {
+	    lj_tab_resize(L, tabV(tableanchor), (uint32_t)ik, hbits);
+	  } else {
+	    nasize = (uint32_t)asize + 1u;
+	    if ((MSize)ik >= asize && (MSize)ik + 1u > (MSize)nasize)
+	      nasize = (uint32_t)ik + 1u;
+	    lj_tab_resize(L, tabV(tableanchor), nasize, hbits);
+	  }
+	  UNUSED(array);
+	}
+	continue;
+      }
+      /* A confirmed present key makes this a raw delete even if a competing
+      ** deletion wins the CAS and the next lookup sees absence. The two
+      ** operations overlap, so this operation can linearize at this snapshot. */
+      saw_present = 1;
+#ifdef LJ_TAB_TEST_HELPERS
+      if (tab_test_nil_store_found_hook) {
+	LJTabStorePostCasHook hook = tab_test_nil_store_found_hook;
+	tab_test_nil_store_found_hook = NULL;
+	hook(L, tabV(tableanchor), dst, keyanchor, &nilv);
+      }
+#endif
+      rc = tab_trystoretv_cas_keyed_once_mode(L, tabV(tableanchor), dst,
+	keyanchor, &nilv, TAB_STORE_MODE_ANY, NULL, 0, &attempt_committed);
+      if (rc == LJ_TAB_STORE_CAS_OK) {
+	result = 1;
+	break;
+      }
+      /* A resize may make a committed old-generation CAS stale. Re-resolve
+      ** and prove deletion in the current generation before returning. */
+      if (attempt_committed)
+	committed = 1;
+      if (rc == LJ_TAB_STORE_CAS_ABSENT) continue;
+      lj_tab_store_wait_l(L);
+    }
+  }
   if (result && tvisstr(keyanchor))
     lj_tab_nomm_rel(tabV(tableanchor), 0);
 leave:

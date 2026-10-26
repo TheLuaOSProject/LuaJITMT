@@ -24,6 +24,15 @@ static int hook_throw;
 static int gc_hook_lightud;
 static int lightud_key_token, lightud_value_token;
 
+static uint32_t nil_post_cas_calls, nil_found_calls, nil_newindex_calls;
+static struct {
+  GCtab *table;
+  TValue *oldarray, *newarray;
+  MSize newasize;
+  int32_t key;
+  uint8_t called;
+} nil_stale_ctx;
+
 static void clean(lua_State *L)
 {
   assert(lj_tg_root_anchor_top_acq(L2TG(L)) == baseline_anchors);
@@ -213,6 +222,7 @@ static int push_lightud_pair(lua_State *L)
 
 static void anchored_lifetime(lua_State *L)
 {
+  uint32_t calls_before = hook_calls;
   int mode;
   lua_pushcfunction(L, call_store);
   lua_setglobal(L, "rooted_store");
@@ -245,7 +255,7 @@ static void anchored_lifetime(lua_State *L)
     lua_pop(L, 2);
     lua_pushnil(L); lua_setglobal(L, "rooted_store_weak");
   }
-  assert(hook_calls == 2);
+  assert(hook_calls == calls_before + 2u);
 }
 
 static void anchored_gc_lifetime(lua_State *L)
@@ -339,6 +349,235 @@ static void anchored_lightud_lifetime(lua_State *L)
   assert(gc_hook_calls == 4);
 }
 
+static int call_nil_store(lua_State *L)
+{
+  int result;
+  luaL_checktype(L, 1, LUA_TTABLE);
+  errno = 617;
+  result = lj_tab_storenil_rooted(L, L->base, L->base+1);
+  assert(errno == 617);
+  clean(L);
+  lua_pushboolean(L, result);
+  return 1;
+}
+
+static void nil_deletions(lua_State *L)
+{
+  int result;
+  lua_newtable(L);
+  lua_pushliteral(L, "delete"); lua_pushnumber(L, 7.5); lua_rawset(L, -3);
+  lua_pushliteral(L, "delete");
+  result = lj_tab_storenil_rooted(L, L->top-2, L->top-1);
+  assert(result == 1); clean(L);
+  lua_pushliteral(L, "delete"); lua_rawget(L, -3);
+  assert(lua_isnil(L, -1)); lua_pop(L, 1);
+  /* Repeated absent deletion is a successful no-op only with NULL metatable. */
+  assert(lj_tab_storenil_rooted(L, L->top-2, L->top-1) == 1); clean(L);
+  lua_pushliteral(L, "absent");
+  assert(lj_tab_storenil_rooted(L, L->top-3, L->top-1) == 1); clean(L);
+  lua_pop(L, 1);
+  lua_pop(L, 2);
+  /* Existing deletion is allowed with any metatable; absent assignment is not. */
+  lua_newtable(L); lua_pushliteral(L, "delete"); lua_pushnumber(L, 9);
+  lua_rawset(L, -3); lua_newtable(L); lua_setmetatable(L, -2);
+  lua_pushliteral(L, "delete");
+  assert(lj_tab_storenil_rooted(L, L->top-2, L->top-1) == 1); clean(L);
+  /* Deletion retains the hash key's nil-valued node. It is absent for
+  ** __newindex purposes even though the storage resolver finds the node. */
+  assert(lj_tab_storenil_rooted(L, L->top-2, L->top-1) == 0); clean(L);
+  lua_pushliteral(L, "absent");
+  assert(lj_tab_storenil_rooted(L, L->top-3, L->top-1) == 0); clean(L);
+  lua_pop(L, 3);
+  lua_createtable(L, 8, 0);
+  lua_newtable(L); lua_setmetatable(L, -2);
+  lua_pushinteger(L, 3);
+  assert(lj_tab_storenil_rooted(L, L->top-2, L->top-1) == 0); clean(L);
+  lua_pop(L, 2);
+  /* Invalid nil/NaN keys decline without retaining anchors or readers. */
+  lua_newtable(L); lua_pushnil(L);
+  assert(!lj_tab_storenil_rooted(L, L->top-2, L->top-1)); clean(L);
+  lua_pop(L, 1);
+  lua_newtable(L); lua_pushnumber(L, NAN);
+  assert(!lj_tab_storenil_rooted(L, L->top-2, L->top-1)); clean(L);
+  lua_pop(L, 2);
+  {
+    TValue forward;
+    lua_newtable(L); setforwardV(&forward);
+    assert(!lj_tab_storenil_rooted(L, L->top-1, &forward)); clean(L);
+    lua_pop(L, 1);
+  }
+  lua_pop(L, 1);
+}
+
+/* A one-shot post-CAS resize forces a committed old-generation store to
+** become STALE before the helper returns. The helper must re-resolve rather
+** than report failure or replay an insertion. */
+static void nil_resize_after_cas(lua_State *L, GCtab *t, TValue *dst,
+				 cTValue *key, cTValue *value)
+{
+  assert(t == nil_stale_ctx.table && dst == &nil_stale_ctx.oldarray[nil_stale_ctx.key]);
+  assert((tvisint(key) && intV(key) == nil_stale_ctx.key) ||
+	 (tvisnum(key) && numV(key) == (lua_Number)nil_stale_ctx.key));
+  assert(tvisnil(value));
+  /* A numeric-key nil CAS publishes no collectable edge, so it needs the
+  ** keyed SMR interval and helper anchors, but no table-store descriptor. */
+  assert(lj_gc2_rootdesc_snapshot(&L2TG(L)->root_desc, NULL) ==
+         LJ_GC2_ROOTDESC_SNAPSHOT_IDLE);
+  assert(gc2_smr_readers_acq(G(L)) == baseline_readers + 1u);
+  assert(lj_tg_root_anchor_top_acq(L2TG(L)) == baseline_anchors + 2u);
+  nil_post_cas_calls++;
+  assert(!nil_stale_ctx.called);
+  nil_stale_ctx.called = 1;
+  lj_tab_test_set_store_post_cas_hook(NULL);
+  /* Publish the already prepared successor generation without waiting inside
+  ** the helper's SMR interval. This is the same bounded handoff used by the
+  ** existing post-CAS stale fixture. */
+  lj_tab_asize_rel(t, nil_stale_ctx.newasize);
+  lj_tab_array_rel(t, nil_stale_ctx.newarray);
+}
+
+static int nil_newindex(lua_State *L)
+{
+  UNUSED(L);
+  nil_newindex_calls++;
+  return 0;
+}
+
+/* Deterministically interleave another raw delete after the helper's FOUND
+** observation and before its CAS, then install __newindex. This exercises the
+** overlapping-operation contract without relying on scheduler timing. */
+static void nil_delete_after_found(lua_State *L, GCtab *t, TValue *dst,
+				   cTValue *key, cTValue *value)
+{
+  TValue *slot;
+  (void)dst; (void)value;
+  nil_found_calls++;
+  slot = lj_tab_set(L, t, key);
+  setnilV(slot);
+  lua_createtable(L, 0, 1);
+  lua_pushcfunction(L, nil_newindex);
+  lua_setfield(L, -2, "__newindex");
+  lua_setmetatable(L, -3);  /* table, key, metatable */
+}
+
+static void nil_resize_and_found_races(lua_State *L)
+{
+  TValue *oldarray;
+  MSize oldasize, oldacap, newasize;
+  int32_t k = 6;
+  GCtab *t;
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
+  t = tabV(L->top-1);
+  lua_pushinteger(L, k); lua_pushinteger(L, 41); lua_rawset(L, -3);
+  oldarray = lj_tab_array_acq(t);
+  oldasize = lj_tab_asize_acq(t);
+  oldacap = t->acap;
+  assert(lj_tab_array_separated(t) && (MSize)k < oldasize);
+  lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
+  nil_stale_ctx.table = t;
+  nil_stale_ctx.oldarray = oldarray;
+  nil_stale_ctx.newarray = lj_tab_array_acq(t);
+  nil_stale_ctx.newasize = newasize = lj_tab_asize_acq(t);
+  nil_stale_ctx.key = k;
+  nil_stale_ctx.called = 0;
+  assert(nil_stale_ctx.newarray != oldarray && newasize > oldasize);
+  /* Re-expose the coherent old vector; the post-CAS hook publishes its
+  ** prepared successor after the nil CAS has committed. */
+  la_store32_rel(&lj_tab_array_hdrw(oldarray)->acap,
+                 lj_tab_array_hdr_pack_acap(oldacap, 0));
+  lj_tab_asize_rel(t, oldasize);
+  lj_tab_array_rel(t, oldarray);
+  lua_pushinteger(L, k);
+  nil_post_cas_calls = 0;
+  lj_tab_test_set_store_post_cas_hook(nil_resize_after_cas);
+  assert(lj_tab_storenil_rooted(L, L->top-2, L->top-1) == 1);
+  lj_tab_test_set_store_post_cas_hook(NULL);
+  assert(nil_post_cas_calls == 1); clean(L);
+  lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+  memset(&nil_stale_ctx, 0, sizeof(nil_stale_ctx));
+  lua_pop(L, 1); /* original helper key */
+  lua_pushinteger(L, k); lua_rawget(L, -2);
+  assert(lua_isnil(L, -1)); lua_pop(L, 1);
+  lua_pushinteger(L, 99); lua_rawseti(L, -2, k + 1);
+  lua_rawgeti(L, -1, k + 1);
+  assert(lua_tointeger(L, -1) == 99); lua_pop(L, 2);
+
+  lua_createtable(L, 0, 2);
+  lua_pushliteral(L, "race-delete"); lua_pushinteger(L, 17); lua_rawset(L, -3);
+  lua_pushliteral(L, "race-delete");
+  nil_found_calls = nil_newindex_calls = 0;
+  lj_tab_test_set_nil_store_found_hook(nil_delete_after_found);
+  assert(lj_tab_storenil_rooted(L, L->top-2, L->top-1) == 1);
+  lj_tab_test_set_nil_store_found_hook(NULL);
+  assert(nil_found_calls == 1 && nil_newindex_calls == 0); clean(L);
+  lua_pushliteral(L, "race-delete"); lua_rawget(L, -3);
+  assert(lua_isnil(L, -1)); lua_pop(L, 1);
+  lua_pushinteger(L, 5); lua_pushinteger(L, 6); lua_settable(L, -4);
+  assert(nil_newindex_calls == 1); /* the installed metamethod is live */
+  lua_pop(L, 2);
+}
+
+/* Stable FORWARD markers are synthetic single-threaded equivalents of a
+** completed handoff. They verify storage repair without relying on timing of
+** an active resize owner, and the postcondition forbids key insertion. */
+static void nil_stable_forward_repair(lua_State *L)
+{
+  TValue *array;
+  MSize asize, hmask;
+  GCtab *t;
+  Node *node;
+  lua_createtable(L, 128, 0);
+  t = tabV(L->top-1);
+  lua_pushinteger(L, 64); lua_pushinteger(L, 123); lua_rawset(L, -3);
+  asize = lj_tab_array_snapshot_acq(t, &array);
+  assert(asize > 64 && !lj_tab_array_is_colocated(t, array));
+  setforwardV(&array[64]);
+  lua_pushinteger(L, 64);
+  assert(lj_tab_storenil_rooted(L, L->top-2, L->top-1) == 1);
+  clean(L);
+  lua_pushinteger(L, 64); lua_rawget(L, -3); assert(lua_isnil(L, -1));
+  lua_pop(L, 1); lua_pop(L, 2);
+
+  lua_createtable(L, 0, 8);
+  t = tabV(L->top-1);
+  lua_pushliteral(L, "forward-hash"); lua_pushinteger(L, 321); lua_rawset(L, -3);
+  lua_pushliteral(L, "forward-hash");
+  {
+    Node *base = lj_tab_node_snapshot_acq(t, &hmask);
+    node = hashstr_node(base, hmask, strV(L->top-1));
+  }
+  assert(hmask > 0 && node != NULL);
+  setforwardV(&node->val);
+  assert(lj_tab_storenil_rooted(L, L->top-2, L->top-1) == 1);
+  clean(L);
+  lua_pushliteral(L, "forward-hash"); lua_rawget(L, -3); assert(lua_isnil(L, -1));
+  lua_pop(L, 3);
+}
+
+static void nil_handoff(lua_State *L)
+{
+  int mode;
+  uint32_t calls_before = hook_calls;
+  lua_pushcfunction(L, call_nil_store); lua_setglobal(L, "rooted_nil_store");
+  for (mode = 0; mode < 2; mode++) {
+    int status;
+    hook_throw = mode;
+    lj_tab_test_set_rooted_store_hook(handoff);
+    status = luaL_dostring(L,
+      "local t = { [string.rep('delete-key', 9000)] = 12 }\n"
+      "local k = next(t)\n"
+      "local ok, err = pcall(rooted_nil_store, t, k)\n"
+      "if ok then assert(err and next(t) == nil)\n"
+      "else assert(tostring(err):find('rooted store rollback',1,true)) end");
+    if (status) fprintf(stderr, "nil handoff mode %d: %s\n",
+                        mode, lua_tostring(L, -1));
+    assert(status == 0);
+    lj_tab_test_set_rooted_store_hook(NULL);
+    clean(L);
+  }
+  assert(hook_calls == calls_before + 2u);
+}
+
 static void internal_lightud_refusals(lua_State *L)
 {
   uint64_t invalid[] = { LJ_TFORWARD_BITS, LJ_TKEYLOCK_BITS,
@@ -366,6 +605,7 @@ static void internal_lightud_refusals(lua_State *L)
     assert(!lj_tab_storegc_rooted(L, L->top-3, L->top-2, L->top-1));
     assert(!lj_tab_storenum_rooted(L, L->top-3, L->top-2, 1.25));
     assert(!lj_tab_storebool_rooted(L, L->top-3, L->top-2, 1));
+    assert(!lj_tab_storenil_rooted(L, L->top-3, L->top-2));
     assert(tv_rawload_acq(L->top-2) == invalid[i]);
     assert(lj_tab_test_store_wait_l_calls() == waits);
     clean(L);
@@ -401,6 +641,10 @@ static void reserve_failure(int second)
   top -= second ? 1u : 0u;
   for (i = 0; i < top; i++)
     assert(lj_tg_root_anchor_push(L, tg, &nilv, &idx));
+  lj_tg_root_test_fail_reserve_after(1);
+  assert(!lj_tab_storenil_rooted(L, L->top-2, L->top-1));
+  lj_tg_root_test_fail_reserve_after(0);
+  assert(lj_tg_root_anchor_top_acq(tg) == top);
   lj_tg_root_test_fail_reserve_after(1);
   assert(!lj_tab_storenum_rooted(L, L->top-2, L->top-1, 99.5));
   lj_tg_root_test_fail_reserve_after(0);
@@ -451,6 +695,10 @@ int main(void)
   baseline_anchors = lj_tg_root_anchor_top_acq(L2TG(L));
   baseline_readers = gc2_smr_readers_acq(G(L));
   basics(L);
+  nil_deletions(L);
+  nil_resize_and_found_races(L);
+  nil_stable_forward_repair(L);
+  nil_handoff(L);
   refusals(L);
   anchored_lifetime(L);
   anchored_gc_lifetime(L);
@@ -462,6 +710,6 @@ int main(void)
   gc_reserve_failure(1);
   gc_reserve_failure(2);
   gc_reserve_failure(3);
-  puts("rooted stores: scalar, GC and lightuserdata values, root handoff, relocation, GC, OOM and unwind OK");
+  puts("rooted stores: scalar, GC/lightuserdata values and nil deletion, root handoff, relocation, GC, OOM and unwind OK");
   return 0;
 }

@@ -482,6 +482,8 @@ LJ_FUNC int32_t lj_tab_storebool_rooted(lua_State *L, cTValue *tabroot,
 				     cTValue *keyroot, int32_t boolean);
 LJ_FUNC int32_t lj_tab_storegc_rooted(lua_State *L, cTValue *tabroot,
 				    cTValue *keyroot, cTValue *valueroot);
+LJ_FUNC int32_t lj_tab_storenil_rooted(lua_State *L, cTValue *tabroot,
+				       cTValue *keyroot);
 /* Copy one semantic value starting from an authoritative table TValue root.
 ** The helper retains the exact parent, key and result incarnations across its
 ** current-generation SMR read, and release-publishes into an already
@@ -627,6 +629,7 @@ LJ_FUNC void lj_tab_test_set_constructor_prepublish_hook(
 LJ_FUNC void lj_tab_test_set_wait_l_after_yield_hook(
   LJTabWaitLAfterYieldHook hook);
 LJ_FUNC void lj_tab_test_set_store_post_cas_hook(LJTabStorePostCasHook hook);
+LJ_FUNC void lj_tab_test_set_nil_store_found_hook(LJTabStorePostCasHook hook);
 LJ_FUNC void lj_tab_test_keyed_cas_changed_stack_grow_once(void);
 LJ_FUNC uint32_t lj_tab_test_keyed_cas_changed_stack_grow_hits(void);
 LJ_FUNC void lj_tab_test_set_rooted_reader_retry_hook(

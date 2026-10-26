@@ -157,6 +157,13 @@ available.
   LOOP/FORL. Internal table markers remain excluded despite sharing the tag.
   All four native profiles and signed x64 helper/stock regressions pass; see
   [`arm64-jit-rooted-lightuserdata-stores-2026-10-25.md`](arm64-jit-rooted-lightuserdata-stores-2026-10-25.md).
+- Rooted nil stores delete present keys and perform absent-key no-ops when
+  the current table has no metatable. Retained nil-valued hash nodes count as
+  absence; `__newindex` cases fall back to the interpreter. Native LOOP/FORL
+  key matrices, deterministic resize/delete interleavings and independent
+  admission negatives pass in all four profiles, with signed x64 helper and
+  stock regressions. See
+  [`arm64-jit-rooted-nil-stores-2026-10-26.md`](arm64-jit-rooted-nil-stores-2026-10-26.md).
 - Scalar `FORL` supports constant and variable integer bounds/steps through
   def-use and source-control-flow checks. Scalar fixed-arity `FUNCF` supports
   bounded arithmetic, argument/cell loads and one scalar return.
@@ -204,9 +211,9 @@ available.
 - General table and upvalue JIT reads, writes and traversal, plus sunk/duplicate
   allocation and raw initialization effects. Rooted scalar/GC reads,
   existing-key scalar/GC stores and unsunk TNEW have operation proofs;
-  new-key insertion, nil deletion and general metamethod
-  paths remain closed. Shared raw nil stores sampled as absent now abort recording
-  instead of losing a deletion on later execution; see the
+  new-key insertion and general metamethod paths remain closed. Bounded nil
+  deletion now emits a rooted effect even when the recording sample is absent,
+  replacing the earlier raw-store recording veto described in the
   [raw nil-store regression](arm64-raw-nil-store-2026-10-25.md). Forwarding-safe
   interpreter `lj_vm_next` does not by itself open other JIT heap paths.
   The historical
