@@ -131,6 +131,21 @@ closed-upvalue suite. The contract restored the ordinary ARM64 experimental
 assertion build afterward. `tools/ci/arm64_jit_rooted_cell_contract.sh` remains
 wired into the experimental umbrella.
 
+## Main checkout verification
+
+The implementation and final test matrix were integrated and pushed to `v2.1`
+at `735bd5bbc84eb4cc8acfb5c4e7fb48fffa53d203`. The main checkout was clean,
+then rebuilt as ordinary ARM64 experimental/assertion with no test-helper
+defines. The native cell and rooted-upvalue suites passed; code-signature
+verification passed, and the inspected runtime/helper object had no imported
+atomic fallback or function/recorded-hook test symbols. Evidence is in
+`/tmp/ljmt-cell-main.log`. Bound profile:
+`7d9c56dd8119f7fbf74cc2cf60d49863c20667a1d03e378da2a9aad27c7a1359`;
+runtime SHA-256:
+`bfe8123f200d1924d346e1c9a46e4a8119df87acab9649cb855a983483862730`.
+Local and remote `v2.1` identities matched after pushing. This final evidence
+addition changes documentation only.
+
 ## Remaining scope
 
 The Darwin concurrent profiler-stop SIGPROF race and the earlier unexplained
