@@ -68,3 +68,15 @@ The log retains the other five profile identities. This focused follow-up did
 not repeat the full experimental/bootstrap umbrellas: their earlier coverage
 is recorded in
 [`arm64-jit-callback-recording-2026-10-26.md`](arm64-jit-callback-recording-2026-10-26.md).
+
+After integration at `74746813fddfcda082809f5e38ffbfa9428581db`, the main
+checkout was rebuilt as ordinary ARM64 experimental/assert, profile
+`c41b82d0ace74f0abd47081a93ba484b6cd33f3dff139327f9efa82ce501edc2`.
+Runtime SHA-256 is
+`23e0df55b70bdb1be619d4a857dbe576e06bf9e8299bd538a42f229a5151d70a`.
+The original rooted-upvalue smoke passed (reader 392, writer 388 native exit
+events), with ad-hoc signing, no test-helper symbols and no imported atomic
+fallback in the runtime or affected objects. Source remained clean throughout.
+See `/tmp/ljmt-callback-final-main.sh` and
+`/tmp/ljmt-callback-final-main.log`. This final smoke does not supersede the
+earlier repeated-run timeout or its documented limits.
