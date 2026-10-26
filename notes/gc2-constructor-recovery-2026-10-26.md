@@ -104,5 +104,25 @@ fixtures in `/tmp/ljmt-constructor-eight-profiles.log`:
 | ARM64 paranoia | `508bd5bf43fb1afec5e5a57677de9a0a01cb1ca0bb2fb05af972ae346bda3361` |
 | x64 paranoia | `e84663cbed7a92ba3085d3ed15195a7daf7e5c178324968d94bab368f3857def` |
 
-The renewed combined gates are pending at this checkpoint. The full ARM64
-port, long-duration concurrency and weak-memory coverage remain incomplete.
+## Renewed combined validation
+
+Frozen source `2ba1e91b87bd69c49bbd703cd7bb04cb9934531f` passes the complete
+experimental and bootstrap gates. In particular, native TNEW capacities
+0/4/8257 pass on both targets:
+
+- ARM64 assertion profile
+  `be52ec75533d86a56feb9962c9784485d49390f030f6b2d9892e7b2456364112`:
+  7,458 / 5,122 / 8,830 native observations respectively.
+- arm64e assertion/BTI profile
+  `2bad1ae9b1d4eae6856cbcdcea948951400427a7fc513586be88485c0468ba37`:
+  4,627 / 7,350 / 9,913 native observations respectively.
+
+The four-profile boxed-result contract, all four M7 scalar CALLXS profiles
+inside the experimental gate, and both 509-case source/import stock corpora
+on ordinary ARM64 and signed x64/Rosetta also pass. The main checkout was
+rebuilt and rechecked without test helpers. Exact profiles, artifact hashes
+and logs are in the [boxed-result evidence](arm64-jit-boxed64-results-2026-10-26.md).
+
+These passing runs do not retrospectively identify the precise lifetime lane
+at the original intermittent abort. The full ARM64 port, long-duration
+concurrency and weak-memory coverage remain incomplete.

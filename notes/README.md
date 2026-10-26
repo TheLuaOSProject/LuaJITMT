@@ -23,15 +23,17 @@ and reports that are no longer authoritative are retained in
   entry, exits and refusals. Shared build profiles bind runtime, archive,
   fixture and helper-library identity. All review work streams are integrated.
   See [`review-implementation-2026-10-25.md`](review-implementation-2026-10-25.md).
-- Latest combined runtime validation: the scalar bit-operation checkpoint on
-  2026-10-26, frozen at `bbf3f5ba`. The complete experimental and bootstrap
-  gates passed, including all four M7 FFI profiles. ARM64 and signed x86-64
-  each passed both 509-case stock source/import corpora. The subsequent NUM
-  fusion-boundary tightening at `04b7ec58` passed the four-profile bitops/fusion
-  matrix and existing ARM64 scalar/FMA and numeric-spill contracts; the whole
-  combined gate was not repeated after that one-condition change. See
+- Latest combined runtime validation: the boxed-I64/U64 result and shared
+  constructor/recovery checkpoint on 2026-10-26, frozen at `2ba1e91b`.
+  The complete experimental and bootstrap gates passed, including all four
+  M7 scalar CALLXS profiles. ARM64 and signed x86-64 each passed both 509-case
+  stock source/import corpora. The ordinary main ARM64 rebuild passes both
+  corpora and nine boxed-result smoke cases without test helpers. See the
+  [boxed-result evidence](arm64-jit-boxed64-results-2026-10-26.md) and
+  [eight-profile recovery matrix](gc2-constructor-recovery-2026-10-26.md).
+  The earlier scalar bit-operation and NUM fusion-boundary work is in
   [`arm64-jit-scalar-bitops-2026-10-26.md`](arm64-jit-scalar-bitops-2026-10-26.md)
-  for exact evidence and validation limits. Earlier shared-helper and
+  with its initial evidence and limits. Earlier shared-helper and
   segment-map race evidence remains in the
   [rooted local-cell checkpoint](arm64-jit-rooted-local-cells-2026-10-26.md).
   Earlier callback recording and the repaired x64 test-only unwind are in
@@ -39,14 +41,14 @@ and reports that are no longer authoritative are retained in
   and [`x64-vmevent-test-unwind-2026-10-26.md`](x64-vmevent-test-unwind-2026-10-26.md).
   The architecture-review checkpoint and its sanitizer/performance scope remain in
   [`review-validation-2026-10-25.md`](review-validation-2026-10-25.md).
-- Latest focused FFI validation: boxed I64/U64 result checkpoint `9651f937`
+- Latest focused FFI validation: boxed I64/U64 result checkpoint `2ba1e91b`
   passes its four-profile ARM64/arm64e assertion/release contract, with 1,722
-  native boxed results and independent admission mutations per profile. Its
-  combined experimental run then failed in native TNEW on a shared constructor
-  root-membership race; bootstrap and stock stages were not reached. The
-  [constructor/recovery repair](gc2-constructor-recovery-2026-10-26.md) passes
-  its eight-profile ARM64/arm64e/x64 recovery and pending-root matrix, with
-  renewed combined validation pending. See the
+  native boxed results and independent admission mutations per profile. The
+  earlier combined run at `9651f937` failed in native TNEW on a shared
+  constructor root-membership assertion. With the
+  [constructor/recovery repair](gc2-constructor-recovery-2026-10-26.md), the
+  eight-profile ARM64/arm64e/x64 recovery and pending-root matrix and renewed
+  combined validation now pass. The original failure remains documented in the
   [boxed-result note](arm64-jit-boxed64-results-2026-10-26.md).
   The preceding scalar variadic checkpoint `328fcb23`
   passed the complete M7 FFI suite in all four ARM64/arm64e assertion/release
@@ -65,15 +67,14 @@ and reports that are no longer authoritative are retained in
   including compact Darwin stack slots, spill separation, nested callbacks
   and C++ unwind/recovery, both separately and within the combined gate.
 - The experimental gate includes generic roots, rooted effects, scalar-side
-  publication/entry/retirement, native numeric adaptation, and generic FFI M7
+  publication/entry/retirement, native numeric adaptation, and M7 scalar CALLXS
   on ARM64 and arm64e/BTI with both assertion and release runtimes.
 - Native ARM64 source and original-v2 import stock corpora each pass all 509
-  cases at the combined `bbf3f5ba` checkpoint. Both also pass on the final
-  ordinary main runtime at `68a4de41`, after the NUM fusion correction.
+  cases at the combined `2ba1e91b` checkpoint and its ordinary main rebuild.
 - The complete bootstrap gate passes, including 387 applicable stock cases,
   threaded tmpbuf, Darwin native roots/GC2, ARM64/arm64e callbacks,
   variadic/aggregate interpreter FFI and x86-64 errno unwind.
-- The signed x86-64/Rosetta runtime at `bbf3f5ba` passed both 509-case corpora.
+- The signed x86-64/Rosetta runtime at `2ba1e91b` passed both 509-case corpora.
   The combined gates also ran x86-64 callback-result lifetime and errno unwind.
   Shared rooted-store, raw nil-deletion, upvalue/cell and segment-map race
   fixtures were validated at the earlier local-cell checkpoint. Earlier
@@ -118,6 +119,12 @@ available.
 - GC2 hard-assist parity at interpreter allocation checks, including the fast
   function helper and the `TNEW`/`TDUP` bytecode paths. Shared pacing fields
   are acquired explicitly and the exact local-debt batch boundary is covered.
+- Fresh-object construction preserves recovery's borrowed lifetime while
+  committing or abandoning root membership. Deterministic sampled-state,
+  claimed-drainer and release-repair cases pass with the full recovery and
+  pending-root fixtures in eight ARM64/arm64e/x64 profiles. The repaired
+  combined gate also passes native TNEW on both ARM64 targets. See the
+  [constructor/recovery note](gc2-constructor-recovery-2026-10-26.md).
 - ARM64 FFI aggregate classification copies CType metadata through the existing
   writer-token-aware snapshot helpers. Nested homogeneous aggregates, mixed
   aggregates, indirect results, register overflow, errno, and concurrent cdef
@@ -247,8 +254,8 @@ available.
 - TG-local XSAVE staging and native-frame lifecycle support fixed scalar FFI
   signatures classified from stable CType snapshots, separate GPR/FPR argument
   banks, naturally packed outgoing stack arguments and independently validated
-  allocated operands/results. Multiple calls per loop and rooted pointer
-  results replace the three exact templates. Stack layouts retain separate
+  allocated operands/results. Multiple calls per loop and rooted boxed
+  pointer/I64/U64 results replace the three exact templates. Stack layouts retain separate
   semantic and allocated-state checks, including frame and spill separation.
 - Fixed scalar float arguments/results support exact NUM/INT-to-FLOAT and
   FLOAT-to-NUM conversions, float-to-float call chains, ninth-argument stack
@@ -272,7 +279,14 @@ available.
 - Exact FFI lifecycle evidence covers errno, normal and forced exits, STOPREQ,
   one-level and depth-two callbacks, callback errors, cleanup/reuse, remote GC
   and flush, mutable cdata `__call`, double ABI/results, boxed-pointer identity,
-  and result-root survival.
+  boxed I64/U64 payloads and result-root survival.
+- Boxed signed/unsigned 64-bit results compose with existing fixed and
+  promoted-variadic arguments, including a scalar CALL producer feeding a
+  boxed CALLM consumer. Both admission passes bind the exact hidden and caller
+  result snapshots to the CNEW root. Full-width patterns, typedef/const
+  identities, discarded results and forced POSTCALL exits without replay pass
+  in all four ARM64 profiles. Boxed CALLM producers remain closed. See
+  [boxed-result implementation and evidence](arm64-jit-boxed64-results-2026-10-26.md).
 - Lockless OS-error restoration for C, fast-function and admitted JIT unwind
   paths. A native observer proves the C++ callback-error fixture enters from
   an ACTIVE generated frame, catches/rethrows through C++, runs destructors,
@@ -313,9 +327,8 @@ available.
   multires/tail calls, CALLM outside the direct scalar producer shape, and
   unsupported result/IR representations. The admitted scalar
   float conversions do not certify arbitrary float graphs. Boxed I64/U64
-  results now have a narrow implementation with a passing four-profile
-  focused contract; renewed combined validation after the shared GC repair
-  is pending. General 64-bit cdata
+  results now have a narrow implementation with passing four-profile
+  focused and combined validation at `2ba1e91b`. General 64-bit cdata
   arguments/arithmetic remain excluded. See the
   [boxed-64-bit result note](arm64-jit-boxed64-results-2026-10-26.md).
 - Full parity with every x86_64 lockless VM, JIT, FFI, profiler, unwind, and
