@@ -236,6 +236,17 @@ static int call_tagged_new_store(lua_State *L)
   return 1;
 }
 
+static int call_raw_store(lua_State *L)
+{
+  int result;
+  errno = 617;
+  result = lj_tab_storeraw_rooted(L, L->base, L->base+1, L->base+2);
+  assert(errno == 617);
+  clean(L);
+  lua_pushboolean(L, result);
+  return 1;
+}
+
 static int push_lightud_pair(lua_State *L)
 {
   lua_pushlightuserdata(L, &lightud_key_token);
@@ -343,39 +354,68 @@ static void rooted_nonnull_insertions(lua_State *L)
     "local t={}; assert(not rooted_tagged_new_store(t,nil,1))\n"
     "assert(not rooted_tagged_new_store(t,0/0,1))\n"
     "assert(not rooted_tagged_new_store(t,'nil-value',nil))\n") == 0);
+  lua_pushcfunction(L, call_raw_store);
+  lua_setglobal(L, "rooted_raw_store");
+  lua_pushcfunction(L, call_raw_store);
+  lua_setglobal(L, "rooted_tagged_raw_store");
+  lua_pushcfunction(L, push_lightud_pair);
+  lua_setglobal(L, "rooted_lightud_pair");
+  assert(luaL_dostring(L,
+    "local calls=0; local t=setmetatable({}, {__newindex=function() calls=calls+1; error('raw helper called __newindex') end})\n"
+    "assert(rooted_raw_store(t,'new',7)); assert(rawget(t,'new')==7 and calls==0)\n"
+    "local redirect={}; setmetatable(t,{__newindex=redirect})\n"
+    "assert(rooted_raw_store(t,'redirect',12)); assert(rawget(t,'redirect')==12 and next(redirect)==nil)\n"
+    "rawset(t,'present',1); assert(rooted_raw_store(t,'present',8)); assert(rawget(t,'present')==8 and calls==0)\n"
+    "local k='nil-node'; rawset(t,k,1); rawset(t,k,nil); assert(rooted_raw_store(t,k,9)); assert(rawget(t,k)==9 and calls==0)\n"
+    "local a={}; assert(rooted_raw_store(a,98273,11)); assert(rawget(a,98273)==11)\n"
+    "local lk,lv=rooted_lightud_pair(); local u=setmetatable({}, {__newindex=function() error('raw lightud helper called __newindex') end})\n"
+    "assert(rooted_tagged_raw_store(u,lk,lv)); assert(rawget(u,lk)==lv)\n"
+    "assert(not rooted_tagged_raw_store(t,nil,1)); assert(not rooted_tagged_raw_store(t,0/0,1))\n"
+    "assert(not rooted_tagged_raw_store(t,'nil-value',nil))\n") == 0);
   clean(L);
 
   lua_pushcfunction(L, call_new_store);
   lua_setglobal(L, "rooted_new_store");
-  for (hook_throw = 0; hook_throw <= 1; hook_throw++) {
-    int status;
-    lj_tab_test_set_rooted_gc_store_hook(gc_handoff);
-    status = luaL_dostring(L,
+  lua_pushcfunction(L, call_raw_store);
+  lua_setglobal(L, "rooted_raw_store");
+  {
+    int raw, mode;
+    for (raw = 0; raw <= 1; raw++) {
+      lua_pushboolean(L, raw); lua_setglobal(L, "rooted_insert_raw_gc");
+      for (mode = 0; mode <= 1; mode++) {
+        int status;
+        hook_throw = mode;
+        lj_tab_test_set_rooted_gc_store_hook(gc_handoff);
+        status = luaL_dostring(L,
       "local weak=setmetatable({}, {__mode='v'})\n"
       "local function invoke()\n"
       "  local k,v={},{}; local t={}; weak[1]=k; weak[2]=t; weak[3]=v\n"
-      "  local ok,err=pcall(rooted_new_store,t,k,v)\n"
-      "  if ok then assert(err and t[k]==v)\n"
+      "  local set = rooted_insert_raw_gc and rooted_raw_store or rooted_new_store\n"
+      "  if rooted_insert_raw_gc then setmetatable(t,{__newindex=function() error('raw newindex') end}) end\n"
+      "  local ok,err=pcall(set,t,k,v)\n"
+      "  if ok then assert(err and rawget(t,k)==v)\n"
       "  else assert(tostring(err):find('rooted GC store rollback',1,true)) end\n"
       "end\n"
       "invoke(); rooted_new_store_weak=weak\n");
-    if (status) fprintf(stderr, "new-store GC mode %d: %s\n",
-                        hook_throw, lua_tostring(L, -1));
-    assert(status == 0);
-    clean(L);
-    lj_tab_test_set_rooted_gc_store_hook(NULL);
-    lua_gc(L, LUA_GCCOLLECT, 0);
-    lua_gc(L, LUA_GCCOLLECT, 0);
-    lua_getglobal(L, "rooted_new_store_weak");
-    lua_rawgeti(L, -1, 1); assert(lua_isnil(L, -1)); lua_pop(L, 1);
-    lua_rawgeti(L, -1, 2); assert(lua_isnil(L, -1)); lua_pop(L, 1);
-    lua_rawgeti(L, -1, 3); assert(lua_isnil(L, -1)); lua_pop(L, 2);
-    lua_pushnil(L); lua_setglobal(L, "rooted_new_store_weak");
+        if (status) fprintf(stderr, "new-store GC raw=%d mode=%d: %s\n",
+                            raw, mode, lua_tostring(L, -1));
+        assert(status == 0);
+        clean(L);
+        lj_tab_test_set_rooted_gc_store_hook(NULL);
+        lua_gc(L, LUA_GCCOLLECT, 0);
+        lua_gc(L, LUA_GCCOLLECT, 0);
+        lua_getglobal(L, "rooted_new_store_weak");
+        lua_rawgeti(L, -1, 1); assert(lua_isnil(L, -1)); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 2); assert(lua_isnil(L, -1)); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 3); assert(lua_isnil(L, -1)); lua_pop(L, 2);
+        lua_pushnil(L); lua_setglobal(L, "rooted_new_store_weak");
+      }
+    }
   }
-  assert(gc_hook_calls == before + 2u);
+  assert(gc_hook_calls == before + 4u);
 }
 
-static void new_store_reserve_failure(unsigned stage)
+static void new_store_reserve_failure(unsigned stage, int raw)
 {
   lua_State *L = luaL_newstate();
   TGState *tg;
@@ -394,7 +434,8 @@ static void new_store_reserve_failure(unsigned stage)
   setnilV(&nilv);
   for (i=0; i<top; i++) assert(lj_tg_root_anchor_push(L,tg,&nilv,&idx));
   lj_tg_root_test_fail_reserve_after(1);
-  assert(!lj_tab_storenew_rooted(L,L->top-3,L->top-2,L->top-1));
+  assert(!(raw ? lj_tab_storeraw_rooted(L,L->top-3,L->top-2,L->top-1) :
+           lj_tab_storenew_rooted(L,L->top-3,L->top-2,L->top-1)));
   lj_tg_root_test_fail_reserve_after(0);
   assert(lj_tg_root_anchor_top_acq(tg)==top);
   assert(gc2_smr_readers_acq(G(L))==0);
@@ -764,6 +805,7 @@ static void internal_lightud_refusals(lua_State *L)
     tv_rawstore_rel(L->top-1, invalid[i]);
     assert(!lj_tab_storegc_rooted(L, L->top-3, L->top-2, L->top-1));
     assert(!lj_tab_storenew_rooted(L, L->top-3, L->top-2, L->top-1));
+    assert(!lj_tab_storeraw_rooted(L, L->top-3, L->top-2, L->top-1));
     assert(tv_rawload_acq(L->top-1) == invalid[i]);
     clean(L);
     lua_pop(L, 1);
@@ -774,6 +816,7 @@ static void internal_lightud_refusals(lua_State *L)
     assert(!lj_tab_storebool_rooted(L, L->top-3, L->top-2, 1));
     assert(!lj_tab_storenil_rooted(L, L->top-3, L->top-2));
     assert(!lj_tab_storenew_rooted(L, L->top-3, L->top-2, L->top-1));
+    assert(!lj_tab_storeraw_rooted(L, L->top-3, L->top-2, L->top-1));
     assert(tv_rawload_acq(L->top-2) == invalid[i]);
     assert(lj_tab_test_store_wait_l_calls() == waits);
     clean(L);
@@ -879,10 +922,13 @@ int main(void)
   gc_reserve_failure(1);
   gc_reserve_failure(2);
   gc_reserve_failure(3);
-  new_store_reserve_failure(1);
-  new_store_reserve_failure(2);
-  new_store_reserve_failure(3);
-  new_store_reserve_failure(4);
+  new_store_reserve_failure(1, 0);
+  new_store_reserve_failure(2, 0);
+  new_store_reserve_failure(3, 0);
+  new_store_reserve_failure(4, 0);
+  new_store_reserve_failure(1, 1);
+  new_store_reserve_failure(2, 1);
+  new_store_reserve_failure(3, 1);
   puts("rooted stores: scalar, GC/lightuserdata values and nil deletion, root handoff, relocation, GC, OOM and unwind OK");
   return 0;
 }

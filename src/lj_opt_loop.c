@@ -229,16 +229,19 @@ static void loop_subst_snap(jit_State *J, SnapShot *osnap,
   BCReg nslots = osnap->nslots;
   SnapShot *snap = &J->cur.snap[J->cur.nsnap];
   int keep_xsave = 0;
+  int keep_continuation = lj_snap_rawset_continuation(J, osnap);
   if (J->cur.nsnap != 0) {
     SnapShot *prev = &J->cur.snap[J->cur.nsnap-1];
     IRRef pref = prev->ref;
+    keep_continuation |= lj_snap_rawset_continuation(J, prev);
     keep_xsave = pref >= REF_FIRST && pref < J->cur.nins &&
 		 IR(pref)->o == IR_XSAVE;
   }
-  if (irt_isguard(J->guardemit) || keep_xsave) {
+  if (irt_isguard(J->guardemit) || keep_xsave || keep_continuation) {
     /* XSAVE snapshots are materialization boundaries even without an
     ** intervening guard. Never let a later copied snapshot overwrite the
-    ** assembler-position identity of the copied marker. */
+    ** assembler-position identity of the copied marker, or the exact PC of
+    ** a rawset continuation. */
     nmapofs = J->cur.nsnapmap;
     J->cur.nsnap++;  /* Add new snapshot. */
   } else {  /* Otherwise overwrite previous snapshot. */
@@ -453,8 +456,8 @@ static void loop_unroll(LoopState *lps)
     /* Several recorder snapshots may name the same original IR ref. XSAVE
     ** requires its copied snapshot to name the copied marker exactly, so drain
     ** every snapshot due before re-emitting that instruction. With no copied
-    ** guard/IR between equal-ref snapshots, loop_subst_snap() deliberately
-    ** merges them and retains the last state, just like lj_snap_add(). */
+    ** guard/IR between equal-ref snapshots, loop_subst_snap() merges them
+    ** and retains the last state, except for exact rawset continuations. */
     while (osnap < loopsnap && ins >= osnap->ref)
       loop_subst_snap(J, osnap++, loopmap, subst, invar);
 

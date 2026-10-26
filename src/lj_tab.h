@@ -486,6 +486,10 @@ LJ_FUNC int32_t lj_tab_storegc_rooted(lua_State *L, cTValue *tabroot,
 ** keys perform a rooted __newindex decision before structural insertion. */
 LJ_FUNC int32_t lj_tab_storenew_rooted(lua_State *L, cTValue *tabroot,
 				    cTValue *keyroot, cTValue *valueroot);
+/* Raw assignment through the same rooted current-generation protocol, with no
+** __newindex lookup for either present or absent keys. */
+LJ_FUNC int32_t lj_tab_storeraw_rooted(lua_State *L, cTValue *tabroot,
+				       cTValue *keyroot, cTValue *valueroot);
 LJ_FUNC int32_t lj_tab_storenil_rooted(lua_State *L, cTValue *tabroot,
 				       cTValue *keyroot);
 /* Copy one semantic value starting from an authoritative table TValue root.

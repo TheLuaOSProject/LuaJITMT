@@ -8260,8 +8260,9 @@ done:
 ** interpreter. The temporary method result is an anchor only while that
 ** decision is made; it is popped before structural insertion can allocate or
 ** park. No table-vector address crosses either operation. */
-int32_t lj_tab_storenew_rooted(lua_State *L, cTValue *tabroot,
-			       cTValue *keyroot, cTValue *valueroot)
+static int32_t tab_storenew_rooted_mode(lua_State *L, cTValue *tabroot,
+					cTValue *keyroot, cTValue *valueroot,
+					int raw)
 {
   TabKeyedSlotOwnerSnapshot owner;
   LJGC2Lease table_lease = { 0 }, key_lease = { 0 }, value_lease = { 0 };
@@ -8402,7 +8403,9 @@ int32_t lj_tab_storenew_rooted(lua_State *L, cTValue *tabroot,
       continue;
     }
     if (status == TAB_RESOLVE_ABSENT) {
-      if (!absence_authorized && !committed) {
+      if (raw) {
+	absence_authorized = 1;
+      } else if (!absence_authorized && !committed) {
 	if (!lj_tg_root_anchor_reserve_nothrow(L, owner.tg))
 	  break;
 	methodanchor = lj_tg_root_anchor_push(L, owner.tg, &nilv, &methodidx);
@@ -8452,6 +8455,21 @@ leave:
 done:
   lj_oserr_restore(&oserr);
   return result;
+}
+
+/* Ordinary indexed assignment observes __newindex before a missing-key
+** insertion. Raw assignment shares the exact rooted storage/retry protocol,
+** but deliberately bypasses that method decision. */
+int32_t lj_tab_storenew_rooted(lua_State *L, cTValue *tabroot,
+			       cTValue *keyroot, cTValue *valueroot)
+{
+  return tab_storenew_rooted_mode(L, tabroot, keyroot, valueroot, 0);
+}
+
+int32_t lj_tab_storeraw_rooted(lua_State *L, cTValue *tabroot,
+			       cTValue *keyroot, cTValue *valueroot)
+{
+  return tab_storenew_rooted_mode(L, tabroot, keyroot, valueroot, 1);
 }
 
 #ifdef LJ_TAB_TEST_HELPERS

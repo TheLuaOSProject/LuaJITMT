@@ -337,7 +337,7 @@ static LJ_AINLINE SnapEntry snapentry_acq(const SnapEntry *entry)
   return (SnapEntry)la_load32_acq(entry);
 }
 
-static LJ_AINLINE const BCIns *snap_pc_acq(SnapEntry *sn)
+static LJ_AINLINE const BCIns *snap_pc_acq(const SnapEntry *sn)
 {
 #if LJ_FR2
   SnapEntry pcraw[2];

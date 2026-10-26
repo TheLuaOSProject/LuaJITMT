@@ -337,11 +337,11 @@ static void LJ_FASTCALL recff_rawget(jit_State *J, RecordFFData *rd)
 static void LJ_FASTCALL recff_rawset(jit_State *J, RecordFFData *rd)
 {
   RecordIndex ix;
-  /*
-  ** M5/M6: explicit rawset() can install new array/hash slots while bypassing
-  ** metamethod guards. Keep it in the VM until traced helper stores can side
-  ** exit after following a resized table generation without stale slot users.
-  */
+  /* Only the active-MT ARM64 path has admitted rooted raw insertion. */
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+  if (!(tref_istab(J->base[0]) && J->base[1] && J->base[2] &&
+        lj_record_mt_shared_tab(J, J->base[0])))
+#endif
   lj_trace_err(J, LJ_TRERR_NYIFFU);
   ix.tab = J->base[0]; ix.key = J->base[1]; ix.val = J->base[2];
   if (tref_istab(ix.tab) && ix.key && ix.val) {
@@ -1623,10 +1623,10 @@ static void ffrecord_postcall_snap(jit_State *J, TValue *ffbase)
   J->fn = callerfn;
   J->pt = callerpt;
   lj_snap_add(J);
-  /* A completed foreign call may retain an exact trace pin in a POSTCALL
-  ** frame. Only the central trace-exit path releases it after restoring this
-  ** caller snapshot. A linked side trace would bypass that cleanup entirely,
-  ** so this exit is permanently interpreter-only. */
+  /* Keep forced call continuations interpreter-only. A foreign call may
+  ** retain an exact trace pin in a POSTCALL frame; only the central exit path
+  ** releases it after restoring this caller snapshot. Raw store continuations
+  ** likewise have no independent side-entry certificate yet. */
   J->cur.snap[J->cur.nsnap-1].count = SNAPCOUNT_DONE;
   J->pt = pt;
   J->fn = fn;
@@ -1665,6 +1665,16 @@ void lj_ffrecord_func(jit_State *J)
   if (rd.nres >= 0) {
     if (J->postproc == LJ_POST_NONE) J->postproc = LJ_POST_FFRETRY;
     lj_record_ret(J, 0, rd.nres);
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+    if (lj_func_ffid_acq(J->fn) == FF_rawset) {
+      /* Preserve the completed store and its table result at the exact caller
+      ** continuation, before later argument setup can merge the snapshot. */
+      J->mergesnap = 0;
+      ffrecord_postcall_snap(J, rd.argv);
+      J->needsnap = 0;
+      J->mergesnap = 0;
+    }
+#endif
     if (rd.postcall_native) {
       TRef postcall_exit;
       BCReg bool_slot = 0;

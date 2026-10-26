@@ -22,7 +22,7 @@
 #include "lj_err.h"
 #include "lj_oserr.h"
 #include "lj_debug.h"
-#if LJ_TARGET_ARM64 && LJ_HASJIT_FFI_CALLXS
+#if LJ_TARGET_ARM64
 #include "lj_ff.h"
 #endif
 #include "lj_str.h"
@@ -11903,18 +11903,44 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
 	  !trace_pc_in_proto_range(pc, proto_bc(pt), pt->sizebc))
 	return 0;
     } else {
-#if LJ_HASJIT_FFI_CALLXS
+#if LJ_HASJIT_FFI_CALLXS || defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
       const BCIns *fnpc = mref_acq(fn->c.pc, const BCIns);
+      uint32_t ffid = lj_func_ffid_acq(fn);
       BCIns ins;
-      if (lj_func_ffid_acq(fn) != FF_ffi_meta___call || fnpc == NULL ||
-	  pc != fnpc)
+      if (fnpc == NULL || pc != fnpc)
 	return 0;
+#if defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+      if (ffid == FF_rawset) {
+	const BCIns *returnpc;
+	BCIns call;
+	/* Only a fixed three-argument call in this root, with zero or one
+	** result, has a certified rooted store and caller return. */
+	if (!frame_islua(owner->base-1)) return 0;
+	returnpc = frame_pc(owner->base-1);
+	if (!trace_pc_in_proto_range(returnpc, proto_bc(rootpt),
+		rootpt->sizebc) || returnpc == proto_bc(rootpt))
+	  return 0;
+	call = (BCIns)la_load32_acq((const uint32_t *)(returnpc-1));
+	if (bc_op(call) != BC_CALL || bc_c(call) != 4 ||
+	    (bc_b(call) != 1 && bc_b(call) != 2) ||
+	    (J->postproc == LJ_POST_NONE &&
+	     (J->pc != returnpc-1 || J->framedepth != 1 || J->maxslot != 3)))
+	  return 0;
+      } else
+#endif
+      {
+#if LJ_HASJIT_FFI_CALLXS
+	if (ffid != FF_ffi_meta___call) return 0;
+#else
+	return 0;
+#endif
+      }
       ins = (BCIns)la_load32_acq((const uint32_t *)pc);
       if (bc_op(ins) != BC_FUNCC)
 	return 0;
       if (J->postproc == LJ_POST_NONE) {
         /* An admitted exact call enters its recorder fast function before
-        ** producing CALLXS and the pending caller return. */
+        ** producing its effect and the pending caller return. */
         if (J->fn == NULL || !isluafunc(J->fn) ||
 	    funcproto(J->fn) != rootpt || J->pt != rootpt)
 	  return 0;

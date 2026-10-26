@@ -1277,6 +1277,18 @@ static void rec_call_setup(jit_State *J, BCReg func, ptrdiff_t nargs)
     fbase[0] = ix.mobj;  /* Replace function. */
     functv = &ix.mobjv;
   }
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+  if (lj_func_ffid_acq(funcV(functv)) == FF_rawset) {
+    /* A refused rooted raw store must replay this exact caller CALL with all
+    ** three arguments. Preserve this snapshot before installing the C frame. */
+    if (!J->pt || J->framedepth != 0 || nargs != 3 ||
+        bc_op(*J->pc) != BC_CALL || bc_c(*J->pc) != 4 ||
+        (bc_b(*J->pc) != 1 && bc_b(*J->pc) != 2))
+      lj_trace_err(J, LJ_TRERR_NYIFFU);
+    lj_snap_add(J);
+    J->mergesnap = 0;
+  }
+#endif
   kfunc = rec_call_specialize(J, funcV(functv), fbase[0]);
   fbase[0] = kfunc;
   fbase[1] = TREF_FRAME;
@@ -2586,12 +2598,16 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 	J->needsnap = 1;
 	return 0;
       }
-      if (tvisnil(&oldsnap)) {
+      if (tvisnil(&oldsnap)
 #if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
-	/* The positive rooted nil/no-meta sample is a recorder-time certificate
-	** for an ordinary absent assignment. Raw stores keep their old path. The
-	** runtime helper independently repeats the method check before insertion. */
-	if (ix->idxchain && nil_no_meta && !tref_isnil(ix->val) &&
+          || !ix->idxchain
+#endif
+          ) {
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+	/* Raw stores need no metamethod certificate; ordinary indexed stores use
+	** only a positive rooted NULL-meta sample. Both helpers re-resolve the
+	** key and generation before publishing any insertion. */
+	if ((!ix->idxchain || nil_no_meta) && !tref_isnil(ix->val) &&
 	    (tref_isnumber(ix->val) || tref_istrue(ix->val) ||
 	     tref_isfalse(ix->val) || tref_isgcv(ix->val) ||
 	     tref_islightud(ix->val))) {
@@ -2601,7 +2617,9 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 	  if (!LJ_DUALNUM && tref_isinteger(ix->val))
 	    ix->val = emitir(IRTN(IR_CONV), ix->val, IRCONV_NUM_INT);
 	  value = rec_tmpref_mode(J, ix->val, IRTMPREF_IN3);
-	  TRef ok = lj_ir_call(J, IRCALL_lj_tab_storenew_rooted,
+	  IRCallID helper = ix->idxchain ? IRCALL_lj_tab_storenew_rooted :
+					     IRCALL_lj_tab_storeraw_rooted;
+	  TRef ok = lj_ir_call(J, helper,
 			       parent, key, value);
 	  emitir(IRTGI(IR_NE), ok, lj_ir_kint(J, 0));
 	  J->needsnap = 1;

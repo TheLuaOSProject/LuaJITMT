@@ -30,7 +30,21 @@ local function fill_for(t, offset, value, n)
   return n + 1
 end
 
-local function run(fn, offset, value, label)
+local function fill_raw_loop(rawsetfn, t, offset, value, n)
+  local i = 1
+  while i <= n do
+    rawsetfn(t, i + offset, value)
+    i = i + 1
+  end
+  return i
+end
+
+local function fill_raw_for(rawsetfn, t, offset, value, n)
+  for i=1,n do rawsetfn(t, i + offset, value) end
+  return n + 1
+end
+
+local function run(fn, rawmode, offset, value, label)
   jit.flush()
   jit.on(fn, true)
   jit.opt.start('hotloop=1', 'hotexit=1000', 'maxtrace=4')
@@ -50,8 +64,17 @@ local function run(fn, offset, value, label)
   local tables = {}
   for round = 1, 20 do
     local t = {}
+    local redirect = {}
+    if rawmode then
+      local method = round % 2 == 0 and redirect or
+        function() error('raw growth called __newindex') end
+      setmetatable(t, {__newindex = method})
+    end
     tables[round] = t
-    assert(fn(t, offset, value, 256) == 257)
+    local result = rawmode and fn(rawset, t, offset, value, 256) or
+                             fn(t, offset, value, 256)
+    assert(result == 257)
+    assert(next(redirect) == nil)
     for i = 1, 256 do assert(t[i+offset] == value) end
     if round == 10 then collectgarbage('collect') end
   end
@@ -65,7 +88,8 @@ local function run(fn, offset, value, label)
         local opcode = op and bit.rshift(op, 8)
         local name = opcode and vmdef.irnames:sub(opcode*6+1, opcode*6+6)
         assert(name ~= 'ASTORE' and name ~= 'HSTORE' and name ~= 'FSTORE')
-        if name == 'CALLS ' and vmdef.ircall[id] == 'lj_tab_storenew_rooted' then
+        if name == 'CALLS ' and vmdef.ircall[id] ==
+           (rawmode and 'lj_tab_storeraw_rooted' or 'lj_tab_storenew_rooted') then
           effects = effects + 1
         end
       end
@@ -91,10 +115,13 @@ local function run(fn, offset, value, label)
 end
 
 jit.off(run, true)
-for _, spec in ipairs({{fill_loop, 'LOOP'}, {fill_for, 'FORL'}}) do
+for _, spec in ipairs({
+  {fill_loop, false, 'LOOP'}, {fill_for, false, 'FORL'},
+  {fill_raw_loop, true, 'raw LOOP'}, {fill_raw_for, true, 'raw FORL'},
+}) do
   for _, offset in ipairs({0, 65536}) do
-    run(spec[1], offset, 42.5, spec[2]..'/'..offset..'/number')
-    run(spec[1], offset, {}, spec[2]..'/'..offset..'/table')
+    run(spec[1], spec[2], offset, 42.5, spec[3]..'/'..offset..'/number')
+    run(spec[1], spec[2], offset, {}, spec[3]..'/'..offset..'/table')
   end
 end
 assert(release:send(true, 5))

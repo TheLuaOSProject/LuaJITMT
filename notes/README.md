@@ -171,6 +171,12 @@ available.
   commit repair and independent admission negatives pass in all four profiles,
   with shared signed x64 helpers and both stock corpora. See
   [`arm64-jit-rooted-insertion-2026-10-26.md`](arm64-jit-rooted-insertion-2026-10-26.md).
+- Exact three-argument `rawset` CALLs support zero or one result in bounded
+  LOOP/FORL roots. Rooted insertion bypasses `__newindex`, while exact caller
+  snapshots preserve refusal, unwind and completed-store effects. Independent
+  admission, native no-replay/growth tests and the complete rooted-GC and M7
+  FFI suites pass in all four profiles, with ARM64/x64 stock regressions. See
+  [`arm64-jit-rooted-rawset-2026-10-26.md`](arm64-jit-rooted-rawset-2026-10-26.md).
 - Scalar `FORL` supports constant and variable integer bounds/steps through
   def-use and source-control-flow checks. Scalar fixed-arity `FUNCF` supports
   bounded arithmetic, argument/cell loads and one scalar return.
@@ -224,9 +230,9 @@ available.
   spill or register layouts, and general root geometries.
 - General table and upvalue JIT reads, writes and traversal, plus sunk/duplicate
   allocation and raw initialization effects. Rooted scalar/GC reads,
-  existing-key scalar/GC stores, bounded ordinary insertion and unsunk TNEW
-  have operation proofs; other insertion and general metamethod paths remain
-  closed. Bounded nil
+  existing-key scalar/GC stores, bounded ordinary/raw insertion and unsunk TNEW
+  have operation proofs; other insertion/call geometries and general metamethod
+  paths remain closed. Bounded nil
   deletion now emits a rooted effect even when the recording sample is absent,
   replacing the earlier raw-store recording veto described in the
   [raw nil-store regression](arm64-raw-nil-store-2026-10-25.md). Forwarding-safe

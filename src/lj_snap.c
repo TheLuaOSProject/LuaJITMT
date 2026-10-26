@@ -272,9 +272,11 @@ void lj_snap_add(jit_State *J)
 {
   MSize nsnap = J->cur.nsnap;
   MSize nsnapmap = J->cur.nsnapmap;
-  /* Merge if no ins. inbetween or if requested and no guard inbetween. */
-  if ((nsnap > 0 && J->cur.snap[nsnap-1].ref == J->cur.nins) ||
-      (J->mergesnap && !irt_isguard(J->guardemit))) {
+  /* Preserve exact rawset continuations, even when argument
+  ** setup for the next call produces no IR. Other snapshots may merge. */
+  if ((nsnap == 0 || !lj_snap_rawset_continuation(J, &J->cur.snap[nsnap-1])) &&
+      ((nsnap > 0 && J->cur.snap[nsnap-1].ref == J->cur.nins) ||
+       (J->mergesnap && !irt_isguard(J->guardemit)))) {
     if (nsnap == 1) {  /* But preserve snap #0 PC. */
       emitir_raw(IRT(IR_NOP, IRT_NIL), 0, 0);
       goto nomerge;
