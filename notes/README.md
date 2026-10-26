@@ -18,7 +18,7 @@ and reports that are no longer authoritative are retained in
 - Current review implementation replaces whole-trace templates with operation
   proofs for scalar LOOP/FORL/FUNCF bodies, first scalar side traces, rooted
   scalar reads and existing-key stores, unsunk table construction, and fixed
-  scalar FFI calls. Root and child publication certificates remove immutable
+  scalar FFI calls, including bounded promoted variadic suffixes. Root and child publication certificates remove immutable
   release-entry scans; native coverage and progress counters expose successful
   entry, exits and refusals. Shared build profiles bind runtime, archive,
   fixture and helper-library identity. All review work streams are integrated.
@@ -37,6 +37,12 @@ and reports that are no longer authoritative are retained in
   and [`x64-vmevent-test-unwind-2026-10-26.md`](x64-vmevent-test-unwind-2026-10-26.md).
   The architecture-review checkpoint and its sanitizer/performance scope remain in
   [`review-validation-2026-10-25.md`](review-validation-2026-10-25.md).
+- Latest focused FFI validation: the scalar variadic checkpoint `328fcb23`
+  passed the complete M7 FFI suite in all four ARM64/arm64e assertion/release
+  profiles. ARM64 and signed x64 each passed both 509-case stock corpora. The
+  ordinary ARM64 runtime also passes all eight variadic smoke cases without
+  test helpers. See
+  [`arm64-jit-scalar-varargs-2026-10-26.md`](arm64-jit-scalar-varargs-2026-10-26.md).
 - Fixed scalar FFI stack arguments pass the four-profile M7 suite,
   including compact Darwin stack slots, spill separation, nested callbacks
   and C++ unwind/recovery, both separately and within the combined gate.
@@ -233,8 +239,8 @@ available.
 - Variadic scalar calls validate the named prefix, exact CARG separator and
   promoted number/boolean/string/nil suffix against the original Lua snapshot.
   Independent post-RA checks include eight-byte unnamed stack slots and spill
-  separation. Focused native ABI, no-replay and malformed-clone tests pass;
-  full matrix validation is pending at this checkpoint. See
+  separation. Native ABI, no-replay and malformed-clone tests pass in all four
+  M7 profiles, with both stock corpora passing on ARM64 and signed x64. See
   [`arm64-jit-scalar-varargs-2026-10-26.md`](arm64-jit-scalar-varargs-2026-10-26.md).
 - Exact FFI lifecycle evidence covers errno, normal and forced exits, STOPREQ,
   one-level and depth-two callbacks, callback errors, cleanup/reuse, remote GC
