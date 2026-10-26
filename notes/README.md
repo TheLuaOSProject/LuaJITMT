@@ -230,6 +230,12 @@ available.
   effects without replay in all four M7 profiles; both ARM64 stock corpora
   pass 509 cases. See
   [`arm64-jit-ffi-callm-2026-10-26.md`](arm64-jit-ffi-callm-2026-10-26.md).
+- Variadic scalar calls validate the named prefix, exact CARG separator and
+  promoted number/boolean/string/nil suffix against the original Lua snapshot.
+  Independent post-RA checks include eight-byte unnamed stack slots and spill
+  separation. Focused native ABI, no-replay and malformed-clone tests pass;
+  full matrix validation is pending at this checkpoint. See
+  [`arm64-jit-scalar-varargs-2026-10-26.md`](arm64-jit-scalar-varargs-2026-10-26.md).
 - Exact FFI lifecycle evidence covers errno, normal and forced exits, STOPREQ,
   one-level and depth-two callbacks, callback errors, cleanup/reuse, remote GC
   and flush, mutable cdata `__call`, double ABI/results, boxed-pointer identity,
@@ -270,7 +276,7 @@ available.
   links to the implemented rooted-value lifetime proof and its limits.
 - General side traces, side-of-side traces, stitches, and production JIT
   side-exit unwind resolution.
-- ARM64 CALLXS aggregates/sret, variadics, vectors, complex results, general
+- ARM64 CALLXS aggregates/sret, unproven variadic cdata forms, vectors, complex results, general
   multires/tail calls, CALLM outside the direct scalar producer shape, and
   unsupported result/IR representations. The admitted scalar
   float conversions do not certify arbitrary float or boxed-64-bit graphs.

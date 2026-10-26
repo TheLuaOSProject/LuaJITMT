@@ -162,7 +162,7 @@ return function(add)
   add({
     name = "m7_ffi_callxs_arm64_scalar",
     description =
-      "experimental Darwin ARM64 int/float/double/boxed-pointer CALLXS lifecycle",
+      "experimental Darwin ARM64 scalar and promoted-variadic CALLXS lifecycle",
     run = function(t)
       if not native_darwin_arm64(t) then
         print("m7_ffi_callxs_arm64_scalar SKIP: requires native Darwin ARM64")
@@ -196,6 +196,9 @@ return function(add)
       local callxs_abi_classes_so = build_shared_library(t,
         t:tmp("lj_t-arm64-jit-ffi-abi-classes.dylib"),
         "t-arm64-jit-ffi-abi-classes-lib.c")
+      local callxs_varargs_so = build_shared_library(t,
+        t:tmp("lj_t-arm64-jit-ffi-varargs.dylib"),
+        "t-arm64-jit-ffi-varargs-lib.c")
       local callxs_cpp_so = build_shared_cpp_library(t,
         t:tmp("lj_t-arm64-jit-cpp-callxs-unwind.dylib"),
         "t-arm64-jit-cpp-callxs-unwind-lib.cpp", {
@@ -225,6 +228,16 @@ return function(add)
           cflags = flags,
           env = {
             LJ_ARM64_FFI_ABI_LIB = callxs_abi_classes_so
+          },
+          timeout = "60s"
+        })
+        build_and_run_c(t,
+                        t:tmp("lj_t-arm64-jit-ffi-varargs"),
+                        "t-arm64-jit-ffi-varargs.c", {
+          build = false,
+          cflags = flags,
+          env = {
+            LJ_ARM64_FFI_VARARGS_LIB = callxs_varargs_so
           },
           timeout = "60s"
         })

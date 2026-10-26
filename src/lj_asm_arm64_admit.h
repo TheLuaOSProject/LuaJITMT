@@ -628,12 +628,23 @@ static int arm64_callxs_signature_for_call(CTState *cts, const IRIns *ir,
 {
 	IRIns c, fp;
 	IRRef fpref, cdref, ref;
+	int32_t wrapper_id = 0;
 	int found = 0;
 	if (call < REF_FIRST || call >= nins ||
 	    (c = ir_load_acq(&ir[call])).o != IR_CALLXS ||
 	    (fpref = c.op2) < REF_FIRST || fpref >= call)
 	  return 0;
 	fp = ir_load_acq(&ir[fpref]);
+	/* The generic recorder carries the variadic CType on the callable, not
+	** in the argument list. Its identity must match the guarded cdata. */
+	if (fp.o == IR_CARG) {
+	  if (fp.t.irt != IRT_NIL || fp.op1 < REF_FIRST || fp.op1 >= fpref ||
+	      !arm64_callxs_kint_value(ir, nk, fp.op2, &wrapper_id) ||
+	      wrapper_id <= 0)
+	    return 0;
+	  fpref = fp.op1;
+	  fp = ir_load_acq(&ir[fpref]);
+	}
 	if (fp.o != IR_FLOAD || fp.op2 != IRFL_CDATA_PTR ||
 	    (cdref = fp.op1) < REF_FIRST || cdref >= fpref ||
 	    ir_load_acq(&ir[cdref]).o != IR_SLOAD)
@@ -659,7 +670,8 @@ static int arm64_callxs_signature_for_call(CTState *cts, const IRIns *ir,
 	    if (k.i <= 0 || !lj_ccall_arm64_signature(cts, (CTypeID)k.i, abi)) {
 	      return 0;
 	    }
-	    if (found)
+	    if ((abi->is_vararg && wrapper_id != k.i) ||
+		(!abi->is_vararg && wrapper_id != 0) || found)
 	      return 0;
 	    found = 1;
 	    break;
@@ -810,6 +822,185 @@ static int arm64_callxs_carg_values(const IRIns *ir, IRRef nk, IRRef nins,
   if (ref < nk || ref >= call || ref >= nins)
     return 0;
   values[0] = ref;
+  return 1;
+}
+
+/* Decode only the bounded CARG tree. The semantic and allocated passes
+** separately certify its fixed prefix, variadic marker and source arity. */
+static int arm64_callxs_arglist(const IRIns *ir, IRRef nk, IRRef nins,
+                                IRRef call, IRRef *values, unsigned *countp)
+{
+  IRRef reversed[LJ_ARM64_ABI_MAX_ARGS];
+  IRRef ref = ir_load_acq(&ir[call]).op1;
+  unsigned n = 0, i;
+  /* Empty fixed signatures remain outside this admission tranche. */
+  if (ref == REF_NIL) return 0;
+  for (;;) {
+    IRIns value;
+    if (n == LJ_ARM64_ABI_MAX_ARGS ||
+        !arm64_callxs_ref_valid(ir, nk, nins, call, ref))
+      return 0;
+    value = ir_load_acq(&ir[ref]);
+    if (value.o != IR_CARG) {
+      reversed[n++] = ref;
+      break;
+    }
+    if (value.t.irt != IRT_NIL ||
+        !arm64_callxs_ref_valid(ir, nk, nins, ref, value.op1) ||
+        !arm64_callxs_ref_valid(ir, nk, nins, ref, value.op2))
+      return 0;
+    reversed[n++] = value.op2;
+    ref = value.op1;
+  }
+  for (i = 0; i < n; i++) values[i] = reversed[n-i-1u];
+  *countp = n;
+  return 1;
+}
+
+/* Bind one ABI operand to the value staged by the source Lua frame. This
+** semantic proof is separate from the allocated snapshot/carrier proof. */
+static int arm64_callxs_source_value(const GCtrace *T, IRRef xsave,
+                                    IRRef source, IRRef value, int tail)
+{
+  IRIns src, dst;
+  IRType st, dt;
+  if (!arm64_callxs_ref_valid(T->ir, T->nk, T->nins, xsave, source) ||
+      !arm64_callxs_ref_valid(T->ir, T->nk, T->nins, xsave, value))
+    return 0;
+  src = ir_load_acq(&T->ir[source]);
+  dst = ir_load_acq(&T->ir[value]);
+  st = arm64_callxs_ref_type(T->ir, T->nk, source);
+  dt = arm64_callxs_ref_type(T->ir, T->nk, value);
+  if (!tail && source == value) return 1;
+  /* C integer conversion drops the overflow check from an already guarded
+  ** Lua arithmetic value. Its operands must still be exactly the same. */
+  if (!tail && st == IRT_INT && dt == IRT_INT && irt_isguard(src.t) &&
+      !irt_isguard(dst.t) && src.op1 == dst.op1 && src.op2 == dst.op2 &&
+      ((src.o == IR_ADDOV && dst.o == IR_ADD) ||
+       (src.o == IR_SUBOV && dst.o == IR_SUB) ||
+       (src.o == IR_MULOV && dst.o == IR_MUL)))
+    return 1;
+  if (!tail && dst.o == IR_CONV && dst.op1 == source) {
+    /* The independent CType/carrier and operation checks certify the
+    ** conversion itself. Here its source must be the actual caller value. */
+    return 1;
+  }
+  if ((st == IRT_INT || st == IRT_NUM) && dt == IRT_NUM) {
+    if (st == IRT_NUM && source == value) return 1;
+    if (st == IRT_INT && dst.o == IR_CONV && dst.op1 == source &&
+        dst.t.irt == IRT_NUM && dst.op2 == IRCONV_NUM_INT)
+      return 1;
+    if (src.o == IR_KINT && st == IRT_INT && dst.o == IR_KNUM &&
+        dst.t.irt == IRT_NUM && dst.op12 == 0 && value+1u < REF_TRUE) {
+      TValue converted;
+      setnumV(&converted, (lua_Number)src.i);
+      return converted.u64 == ir_load_acq(&T->ir[value+1u]).tv.u64;
+    }
+    return 0;
+  }
+  if (st == IRT_TRUE || st == IRT_FALSE)
+    return dst.o == IR_KINT && dst.t.irt == IRT_INT &&
+           dst.i == (st == IRT_TRUE);
+  if ((st == IRT_STR || st == IRT_NIL) && dt == IRT_P64) {
+    if (st == IRT_STR && dst.o == IR_ADD && dst.op1 == source) {
+      int64_t offset;
+      return arm64_callxs_offset_value(T->ir, T->nk, dst.op2, &offset) &&
+             offset == (int64_t)sizeof(GCstr);
+    }
+    if ((dst.o == IR_KPTR || dst.o == IR_KKPTR) &&
+        dst.t.irt == IRT_P64 && dst.op12 == 0 && value+1u < REF_TRUE) {
+      uint64_t ptr = ir_load_acq(&T->ir[value+1u]).tv.u64;
+      if (st == IRT_NIL) return ptr == 0;
+      if (src.o == IR_KGC && src.t.irt == IRT_STR && src.op12 == 0 &&
+          source+1u < REF_TRUE) {
+        uint64_t str = ir_load_acq(&T->ir[source+1u]).tv.u64;
+        return str <= UINTPTR_MAX-sizeof(GCstr) &&
+               ptr == str+sizeof(GCstr);
+      }
+    }
+  }
+  return 0;
+}
+
+static int arm64_callxs_vararg_sources(const GCtrace *T, IRRef xsave,
+    IRRef fpref, BCIns sourceins, uintptr_t returnpc,
+    const LJArm64ABISignature *abi, unsigned nargs, const IRRef *values)
+{
+  const SnapShot *snapshot = NULL;
+  IRRef sources[LJ_ARM64_ABI_MAX_ARGS];
+  IRRef frame = 0, callable = 0, cdata = 0;
+  MSize base = 1u+LJ_FR2+(MSize)bc_a(sourceins)+1u+LJ_FR2;
+  MSize ofs, nent, nslots, i, prior_slot = 0;
+  SnapNo s;
+  uint64_t footer;
+  SnapEntry footer_words[1+LJ_FR2];
+  IRIns fn, pc, fp;
+  GCobj *obj;
+  if (nargs > LJ_ARM64_ABI_MAX_ARGS || nargs < abi->nargs ||
+      base > UINT8_MAX || base+1u+nargs > UINT8_MAX ||
+      T->snap == NULL || T->snapmap == NULL)
+    return 0;
+  memset(sources, 0, sizeof(sources));
+  for (s = 0; s < T->nsnap; s++) {
+    if (snap_ref_acq(&T->snap[s]) == xsave) {
+      if (snapshot != NULL) return 0;
+      snapshot = &T->snap[s];
+    }
+  }
+  if (snapshot == NULL || snap_count_acq(snapshot) != SNAPCOUNT_DONE) return 0;
+  ofs = snap_mapofs_acq(snapshot);
+  nent = snap_nent_acq(snapshot);
+  nslots = snap_nslots_acq(snapshot);
+  if (ofs > T->nsnapmap || nent > T->nsnapmap-ofs ||
+      T->nsnapmap-ofs-nent < 1u+LJ_FR2 || base+1u+nargs > nslots)
+    return 0;
+  for (i = 0; i < 1u+LJ_FR2; i++)
+    footer_words[i] = snapentry_acq(&T->snapmap[ofs+nent+i]);
+  memcpy(&footer, footer_words, sizeof(footer));
+  if ((uint8_t)footer != base-(1u+LJ_FR2)) return 0;
+  for (i = 0; i < nent; i++) {
+    SnapEntry entry = snapentry_acq(&T->snapmap[ofs+i]);
+    MSize slot = snap_slot(entry);
+    IRRef value = snap_ref(entry);
+    uint32_t flags = entry & 0x00ff0000u;
+    if (slot >= nslots || (i != 0 && slot <= prior_slot)) return 0;
+    prior_slot = slot;
+    if (slot == base-1u) {
+      if (flags != SNAP_FRAME) return 0;
+      frame = value;
+    } else if (slot == base-1u-LJ_FR2) {
+      if (flags != 0) return 0;
+      callable = value;
+    } else if (slot == base) {
+      if (flags != 0) return 0;
+      cdata = value;
+    } else if (slot > base && slot <= base+nargs) {
+      if (flags != 0) return 0;
+      sources[slot-base-1u] = value;
+    }
+  }
+  if (!arm64_callxs_const_member(T->ir, T->nk, frame) ||
+      !arm64_callxs_const_member(T->ir, T->nk, callable) ||
+      fpref < REF_FIRST || fpref >= xsave) return 0;
+  pc = ir_load_acq(&T->ir[frame]);
+  fn = ir_load_acq(&T->ir[callable]);
+  fp = ir_load_acq(&T->ir[fpref]);
+  if (pc.o != IR_KNUM || pc.t.irt != IRT_NUM || pc.op12 != 0 ||
+      frame+1u >= REF_TRUE ||
+      ir_load_acq(&T->ir[frame+1u]).tv.u64 != (uint64_t)returnpc ||
+      fn.o != IR_KGC || fn.t.irt != IRT_FUNC ||
+      fp.o != IR_FLOAD || fp.op2 != IRFL_CDATA_PTR || fp.op1 != cdata)
+    return 0;
+  obj = ir_kgc_load_acq(&T->ir[callable]);
+  if (obj == NULL || !checkptrGC(obj) ||
+      obj->gch.gct != (uint32_t)~LJ_TFUNC ||
+      lj_func_ffid_acq(gco2func(obj)) != FF_ffi_meta___call ||
+      (uintptr_t)(footer >> 8) !=
+        (uintptr_t)mref_acq(gco2func(obj)->c.pc, const BCIns))
+    return 0;
+  for (i = 0; i < nargs; i++)
+    if (!arm64_callxs_source_value(T, xsave, sources[i], values[i],
+                                  i >= abi->nargs)) return 0;
   return 1;
 }
 
@@ -995,7 +1186,8 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
     case IR_CALLXS: {
       LJArm64ABISignature abi;
       IRRef fpref, values[LJ_ARM64_ABI_MAX_ARGS];
-      unsigned i, gpr = 0, fpr = 0, stack_size = 0;
+      unsigned i, rawcount, actual_count, tail_count;
+      unsigned gpr = 0, fpr = 0, stack_size = 0;
       if (state != CALLXS_READY)
 	return 0;
       if (!arm64_callxs_signature_for_call(cts, T->ir, nk, nins,
@@ -1009,8 +1201,22 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	   ir_load_acq(&T->ir[enterargs[2]]).o != IR_KNULL ||
 	   irt_type(ir_load_acq(&T->ir[enterargs[2]]).t) != IRT_CDATA))
 	return 0;
-      if (!arm64_callxs_carg_values(T->ir, nk, nins, ref,
-				    abi.nargs, values)) return 0;
+      if (!arm64_callxs_arglist(T->ir, nk, nins, ref, values, &rawcount) ||
+	  rawcount > LJ_ARM64_ABI_MAX_ARGS) return 0;
+      if (rawcount > abi.nargs) {
+	if (!abi.is_vararg || rawcount <= abi.nargs+1u ||
+	    values[abi.nargs] != REF_NIL) return 0;
+	for (i = 0; i < rawcount; i++)
+	  if (i != abi.nargs && values[i] == REF_NIL) return 0;
+	actual_count = rawcount-1u;
+	for (i = abi.nargs; i < actual_count; i++) values[i] = values[i+1u];
+      } else {
+	if (rawcount != abi.nargs) return 0;
+	actual_count = rawcount;
+	for (i = 0; i < actual_count; i++)
+	  if (values[i] == REF_NIL) return 0;
+      }
+      tail_count = actual_count-abi.nargs;
       {
 	BCIns sourceins;
 	BCOp sourceop;
@@ -1021,11 +1227,11 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	if (sourceop == BC_CALLM) {
 	  IRRef value;
 	  IRIns carrier;
-	  if (abi.nargs == 0 || completed_producer == 0 ||
+	  if (actual_count == 0 || completed_producer == 0 ||
 	      producer_type == IRT_NIL ||
 	      !arm64_callxs_callm_pair(proto_bc(J->pt), J->pt->sizebc,
-		producer_returnpc, xsave_returnpc, abi.nargs)) return 0;
-	  value = values[abi.nargs-1u];
+		producer_returnpc, xsave_returnpc, actual_count)) return 0;
+	  value = values[actual_count-1u];
 	  carrier = ir_load_acq(&T->ir[value]);
 	  if (value != completed_producer &&
 	      (carrier.o != IR_CONV || carrier.op1 != completed_producer ||
@@ -1036,7 +1242,10 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 		 (irt_type(carrier.t) == IRT_NUM && producer_type == IRT_FLOAT &&
 		  carrier.op2 == ((IRT_NUM << IRCONV_DSH)|IRT_FLOAT) &&
 		  carrier.t.irt == IRT_NUM)))) return 0;
-	} else if (sourceop != BC_CALL) return 0;
+	} else if (sourceop != BC_CALL || bc_c(sourceins) == 0 ||
+		   (unsigned)bc_c(sourceins)-1u != actual_count) return 0;
+        if (abi.is_vararg && !arm64_callxs_vararg_sources(T, xsave, fpref,
+              sourceins, xsave_returnpc, &abi, actual_count, values)) return 0;
       }
       for (i = 0; i < abi.nargs; i++) {
 	LJArm64ABIArg *a = &abi.arg[i];
@@ -1062,6 +1271,21 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
         }
       }
       if (stack_size != abi.stack_size) return 0;
+      if (tail_count != 0) {
+	stack_size = (stack_size+7u) & ~7u;
+	for (i = abi.nargs; i < actual_count; i++) {
+	  IRType type = arm64_callxs_ref_type(T->ir, nk, values[i]);
+	  LJArm64ABIKind kind;
+	  unsigned width;
+	  if (type == IRT_NUM) kind = LJ_ARM64_ABI_KIND_FLOAT, width = 8;
+	  else if (type == IRT_INT) kind = LJ_ARM64_ABI_KIND_INTEGER, width = 4;
+	  else if (type == IRT_P64) kind = LJ_ARM64_ABI_KIND_POINTER, width = 8;
+	  else return 0;
+	  if (!arm64_callxs_value_kind(T->ir, values[i], nk, nins, ref,
+		kind, width, 0, 1)) return 0;
+	  stack_size += 8u;
+	}
+      }
       if (irt_type(ins.t) != arm64_callxs_result_type(&abi))
 	return 0;
       if (abi.result_kind != LJ_ARM64_ABI_KIND_VOID &&
@@ -1078,7 +1302,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	producer_call = ref;
 	producer_pending = 1;
 	producer_scalar = bc_op(sourceins) == BC_CALL && bc_b(sourceins) == 0 &&
-	  abi.nargs+1u == (unsigned)bc_c(sourceins) &&
+	  actual_count+1u == (unsigned)bc_c(sourceins) &&
 	  (abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER ||
 	   abi.result_kind == LJ_ARM64_ABI_KIND_FLOAT ||
 	   abi.result_kind == LJ_ARM64_ABI_KIND_ENUM);
@@ -2373,11 +2597,18 @@ static int arm64_callxs_snapshot_bounds(const GCtrace *T,
 	frame_slot = snap_slot(se);
       if (se == SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL))
 	continue;
+      if (value >= REF_TRUE && value <= REF_NIL) {
+	IRIns primitive = ir_load_acq(&T->ir[value]);
+	if ((se & 0x00ff0000u) != 0 || snap_slot(se) < 1u+LJ_FR2 ||
+	    primitive.o != IR_KPRI || primitive.op12 != 0 ||
+	    primitive.t.irt != (uint8_t)(REF_NIL-value))
+	  SNAP_BOUNDS_FAIL();
+	continue;
+      }
       if (snap_slot(se) < 1u+LJ_FR2 ||
 	  ((se & 0x00ff0000u) &
 	   ~(SNAP_FRAME|SNAP_NORESTORE)) != 0 ||
-	  (value < REF_FIRST && value >= REF_TRUE) ||
-	  (value >= REF_FIRST && value >= at))
+	  !arm64_callxs_ref_valid(T->ir, T->nk, T->nins, at, value))
 	SNAP_BOUNDS_FAIL();
     }
     for (i = 0; i < 1u+LJ_FR2; i++)
@@ -2802,6 +3033,290 @@ static int arm64_postra_callxs_rename_valid(
 	return 1;
 }
 
+/* Independently bind allocated variadic operands to the saved Lua frame. */
+static int arm64_postra_snapshot_find(const GCtrace *T, IRRef xsave,
+		MSize *indexp, MSize *ofsp, MSize *nentp, MSize *nextp)
+{
+	MSize s, found = (MSize)-1, ofs, nent, next, slots;
+	for (s = 0; s < T->nsnap; s++) {
+		if (snap_ref_acq(&T->snap[s]) != xsave) continue;
+		if (found != (MSize)-1) return 0;
+		found = s;
+	}
+	if (found == (MSize)-1) return 0;
+	{
+		const SnapShot *snap = &T->snap[found];
+		if (snap_count_acq(snap) != SNAPCOUNT_DONE) return 0;
+		ofs = snap_mapofs_acq(snap);
+		nent = snap_nent_acq(snap);
+		next = found+1u < T->nsnap ?
+		  snap_mapofs_acq(&T->snap[found+1u]) : T->nsnapmap;
+		slots = snap_nslots_acq(snap);
+	}
+	if (ofs > T->nsnapmap || next > T->nsnapmap || next < ofs ||
+	    nent > next-ofs || next-ofs-nent != 1u+LJ_FR2 ||
+	    slots < 1u+LJ_FR2) return 0;
+	for (s = 0; s < nent; s++) {
+		SnapEntry se = snapentry_acq(&T->snapmap[ofs+s]);
+		IRRef r = snap_ref(se);
+		if (snap_slot(se) >= slots || (s != 0 &&
+		    snap_slot(se) <= snap_slot(snapentry_acq(&T->snapmap[ofs+s-1u]))))
+			return 0;
+		if (r >= REF_DROP ||
+		    !arm64_callxs_ref_valid(T->ir, T->nk, T->nins, xsave, r))
+			return 0;
+	}
+	*indexp = found;
+	*ofsp = ofs;
+	*nentp = nent;
+	*nextp = next;
+	return 1;
+}
+
+static int arm64_postra_snapshot_slot_ref(const GCtrace *T, IRRef xsave,
+						  unsigned slot, IRRef *refp)
+{
+	MSize index, ofs, nent, next, i;
+	if (!arm64_postra_snapshot_find(T, xsave, &index, &ofs, &nent, &next) ||
+	    slot >= snap_nslots_acq(&T->snap[index])) return 0;
+	UNUSED(next);
+	for (i = 0; i < nent; i++) {
+		SnapEntry se = snapentry_acq(&T->snapmap[ofs+i]);
+		if (snap_slot(se) == slot) {
+			IRRef r = snap_ref(se);
+			/* Source slots must be ordinary values with no frame,
+			** continuation, restore, soft-FP, or traversal marker flags. */
+			if ((se & 0x00ff0000u) != 0 || r >= REF_DROP ||
+			    !arm64_callxs_ref_valid(T->ir, T->nk, T->nins, xsave, r))
+				return 0;
+			*refp = r;
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static int arm64_postra_snapshot_frame_raw(const GCtrace *T, IRRef xsave,
+						  unsigned slot, uint64_t *rawp)
+{
+	MSize index, ofs, nent, next, i;
+	if (!arm64_postra_snapshot_find(T, xsave, &index, &ofs, &nent, &next))
+		return 0;
+	UNUSED(index); UNUSED(next);
+	for (i = 0; i < nent; i++) {
+		SnapEntry se = snapentry_acq(&T->snapmap[ofs+i]);
+		IRRef r = snap_ref(se);
+		IRIns k;
+		if (snap_slot(se) != slot ||
+		    (se & 0x00ff0000u) != SNAP_FRAME || r < T->nk || r >= REF_TRUE ||
+		    !arm64_callxs_const_member(T->ir, T->nk, r) ||
+		    r+1u >= REF_TRUE) continue;
+		k = ir_load_acq(&T->ir[r]);
+		if (k.o != IR_KNUM || k.t.irt != IRT_NUM || k.op12 != 0)
+			return 0;
+		*rawp = ir_load_acq(&T->ir[r+1u]).tv.u64;
+		return 1;
+	}
+	return 0;
+}
+
+/* Match the numeric bits produced by the interpreter's double conversion. */
+static int arm64_postra_num_constant_is_int(const IRIns *ir, IRRef nk,
+						    IRRef numref, int32_t i)
+{
+	IRIns k;
+	TValue tv;
+	if (!arm64_callxs_const_member(ir, nk, numref)) return 0;
+	k = ir_load_acq(&ir[numref]);
+	if (k.o != IR_KNUM || k.t.irt != IRT_NUM || k.op12 != 0 ||
+	    numref+1u >= REF_TRUE) return 0;
+	setnumV(&tv, (lua_Number)i);
+	return ir_load_acq(&ir[numref+1u]).tv.u64 == tv.u64;
+}
+
+static int arm64_postra_source_value_matches(const IRIns *ir, IRRef nk,
+		IRRef nins, IRRef call, IRRef source, IRRef carrier,
+		IRType source_type)
+{
+	IRIns c;
+	if (!arm64_callxs_ref_valid(ir, nk, nins, call, source) ||
+	    !arm64_callxs_ref_valid(ir, nk, nins, call, carrier)) return 0;
+	if (carrier == source) return 1;
+	if (carrier == REF_TRUE || carrier == REF_FALSE || carrier == REF_NIL)
+		return 0;
+	c = ir_load_acq(&ir[carrier]);
+	if (source_type == IRT_INT && irt_type(c.t) == IRT_INT &&
+	    !irt_isguard(c.t)) {
+		IRIns original = ir_load_acq(&ir[source]);
+		if (irt_isguard(original.t) && original.op1 == c.op1 &&
+		    original.op2 == c.op2 &&
+		    ((original.o == IR_ADDOV && c.o == IR_ADD) ||
+		     (original.o == IR_SUBOV && c.o == IR_SUB) ||
+		     (original.o == IR_MULOV && c.o == IR_MUL))) return 1;
+	}
+	/* Source-linked conversions are separately checked against the exact
+	** conversion table by the enclosing graph validators and ABI classifier. */
+	if (c.o == IR_CONV && c.op1 == source) return 1;
+	if (source_type == IRT_INT && arm64_callxs_const_member(ir, nk, source) &&
+	    ir_load_acq(&ir[source]).o == IR_KINT &&
+	    ir_load_acq(&ir[source]).t.irt == IRT_INT &&
+	    arm64_postra_num_constant_is_int(ir, nk, carrier,
+	      ir_load_acq(&ir[source]).i)) return 1;
+	if (source_type == IRT_TRUE || source_type == IRT_FALSE) {
+		int32_t expected = source_type == IRT_TRUE ? 1 : 0;
+		return arm64_callxs_kint_value(ir, nk, carrier, NULL) &&
+		       ir_load_acq(&ir[carrier]).i == expected;
+	}
+	if (source_type == IRT_STR) {
+		int64_t offset;
+		if (c.o == IR_ADD && c.t.irt == IRT_P64 &&
+		    ((c.op1 == source && arm64_callxs_offset_value(ir, nk,
+			c.op2, &offset) && offset == (int64_t)sizeof(GCstr)) ||
+	     (c.op2 == source && arm64_callxs_offset_value(ir, nk,
+			c.op1, &offset) && offset == (int64_t)sizeof(GCstr)))) return 1;
+		if (arm64_callxs_const_member(ir, nk, source) &&
+		    ir_load_acq(&ir[source]).o == IR_KGC &&
+		    ir_load_acq(&ir[source]).t.irt == IRT_STR &&
+		    arm64_callxs_const_member(ir, nk, carrier)) {
+			GCobj *str = ir_kgc_load_acq(&ir[source]);
+			IRIns k = ir_load_acq(&ir[carrier]);
+			if (str != NULL && k.t.irt == IRT_P64 &&
+			    (k.o == IR_KPTR || k.o == IR_KKPTR) &&
+			    (uintptr_t)(const void *)str <= UINTPTR_MAX-sizeof(GCstr) &&
+			    (uintptr_t)ir_kptr(&ir[carrier]) ==
+			      (uintptr_t)(const void *)str + sizeof(GCstr)) return 1;
+		}
+	}
+	if (source_type == IRT_NIL && carrier < REF_TRUE &&
+	    arm64_callxs_const_member(ir, nk, carrier)) {
+		IRIns k = ir_load_acq(&ir[carrier]);
+		return (k.o == IR_KPTR || k.o == IR_KKPTR) &&
+		       k.t.irt == IRT_P64 && ir_kptr(&ir[carrier]) == NULL;
+	}
+	return 0;
+}
+
+static int arm64_postra_vararg_promoted(const IRIns *ir, IRRef nk,
+						IRRef nins, IRRef call,
+						IRRef source, IRRef carrier,
+						IRType source_type)
+{
+	if (!arm64_callxs_ref_valid(ir, nk, nins, call, source) ||
+	    !arm64_callxs_ref_valid(ir, nk, nins, call, carrier)) return 0;
+	if (source_type == IRT_INT) {
+		IRIns c;
+		if (arm64_callxs_ref_type(ir, nk, carrier) != IRT_NUM) return 0;
+		c = ir_load_acq(&ir[carrier]);
+		if (c.o == IR_CONV && irt_type(c.t) == IRT_NUM &&
+		    c.t.irt == IRT_NUM && c.op1 == source &&
+		    c.op2 == IRCONV_NUM_INT) return 1;
+		return arm64_callxs_const_member(ir, nk, source) &&
+		       ir_load_acq(&ir[source]).o == IR_KINT &&
+		       ir_load_acq(&ir[source]).t.irt == IRT_INT &&
+		       arm64_postra_num_constant_is_int(ir, nk, carrier,
+			 ir_load_acq(&ir[source]).i);
+	}
+	if (source_type == IRT_NUM) return carrier == source;
+	if (source_type == IRT_TRUE || source_type == IRT_FALSE)
+		return arm64_callxs_ref_type(ir, nk, carrier) == IRT_INT &&
+		       arm64_postra_source_value_matches(ir, nk, nins, call,
+			 source, carrier, source_type);
+	if (source_type == IRT_STR)
+		return arm64_callxs_ref_type(ir, nk, carrier) == IRT_P64 &&
+		       arm64_postra_source_value_matches(ir, nk, nins, call,
+			 source, carrier, source_type);
+	if (source_type == IRT_NIL)
+		return arm64_callxs_ref_type(ir, nk, carrier) == IRT_P64 &&
+		       arm64_postra_source_value_matches(ir, nk, nins, call,
+			 source, carrier, source_type);
+	return 0;
+}
+
+/*
+** Check the real interpreter XSAVE before the CALLXS. `values` is the
+** normalized physical CARG list (the NIL vararg separator has already been
+** removed by the caller). Fixed arguments use a bounded set of source-linked
+** normalizations; each suffix carrier is tied to its exact stack slot.
+*/
+static int arm64_postra_vararg_source_proof(const GCtrace *T,
+		IRRef xsave, IRRef call, const BCIns *proto_bc, MSize proto_sizebc,
+		uintptr_t returnpc, BCIns sourceins,
+		IRRef callable_cdata_ref, unsigned fixed_count,
+		unsigned actual_count, const IRRef *values)
+{
+	uint64_t frame_pc, footer_pcbase;
+	uintptr_t anchored_pc;
+	BCIns anchored_ins;
+	SnapEntry footer[1+LJ_FR2];
+	MSize index, ofs, nent, next, i;
+	unsigned argbase, metaslot, frameslot, cdataslot, a;
+	IRRef meta_fn, cdata;
+	GCobj *fn;
+	const BCIns *meta_pc;
+	if (T == NULL || T->ir == NULL || T->snap == NULL ||
+	    T->snapmap == NULL || T->nsnapmap == 0 || proto_bc == NULL ||
+	    proto_sizebc == 0 || values == NULL ||
+	    xsave >= call || call >= T->nins ||
+	    (bc_op(sourceins) != BC_CALL && bc_op(sourceins) != BC_CALLM) ||
+	    actual_count == 0 || actual_count < fixed_count ||
+	    actual_count > LJ_ARM64_ABI_MAX_ARGS ||
+	    !arm64_postra_snapshot_find(T, xsave, &index, &ofs, &nent, &next))
+		return 0;
+	if (!arm64_callxs_xsave_anchor(T->ir, T->nins, xsave,
+	    proto_bc, proto_sizebc, &anchored_pc, &anchored_ins) ||
+	    anchored_pc != returnpc || anchored_ins != sourceins) return 0;
+	UNUSED(next);
+	metaslot = (unsigned)bc_a(sourceins)+1u+LJ_FR2;
+	frameslot = metaslot+LJ_FR2;
+	cdataslot = frameslot+1u;
+	argbase = cdataslot+1u;
+	if (argbase+actual_count > UINT8_MAX ||
+	    snap_nslots_acq(&T->snap[index]) < argbase+actual_count ||
+	    snap_topslot_acq(&T->snap[index]) < argbase+actual_count-1u) return 0;
+	for (i = 0; i < 1u+LJ_FR2; i++)
+		footer[i] = snapentry_acq(&T->snapmap[ofs+nent+i]);
+	memcpy(&footer_pcbase, footer, sizeof(footer_pcbase));
+	if ((uint8_t)footer_pcbase != (uint8_t)metaslot) return 0;
+	if (!arm64_postra_snapshot_frame_raw(T, xsave, frameslot, &frame_pc) ||
+	    frame_pc != (uint64_t)returnpc) return 0;
+	/* Slot A+2 is the active FFI __call function and the footer's high part
+	** is its C-frame PC. */
+	if (!arm64_postra_snapshot_slot_ref(T, xsave,
+	    metaslot, &meta_fn) ||
+	    meta_fn < T->nk || meta_fn >= REF_TRUE ||
+	    !arm64_callxs_const_member(T->ir, T->nk, meta_fn) ||
+	    ir_load_acq(&T->ir[meta_fn]).o != IR_KGC ||
+	    ir_load_acq(&T->ir[meta_fn]).t.irt != IRT_FUNC) return 0;
+	fn = ir_kgc_load_acq(&T->ir[meta_fn]);
+	if (fn == NULL || !checkptrGC(fn) ||
+	    fn->gch.gct != (uint32_t)~LJ_TFUNC ||
+	    lj_func_ffid_acq(gco2func(fn)) != FF_ffi_meta___call) return 0;
+	meta_pc = mref_acq(gco2func(fn)->c.pc, const BCIns);
+	if (meta_pc == NULL || (uintptr_t)(footer_pcbase >> 8) !=
+	    (uintptr_t)(const void *)meta_pc) return 0;
+	if (callable_cdata_ref < REF_FIRST || callable_cdata_ref >= xsave ||
+	    ir_load_acq(&T->ir[callable_cdata_ref]).o != IR_SLOAD ||
+	    !arm64_postra_snapshot_slot_ref(T, xsave,
+	      cdataslot, &cdata) ||
+	    cdata != callable_cdata_ref) return 0;
+	for (a = 0; a < actual_count; a++) {
+		IRRef source;
+		IRType stype;
+		if (values[a] >= xsave ||
+		    !arm64_postra_snapshot_slot_ref(T, xsave, argbase+a, &source) ||
+		    !arm64_callxs_ref_valid(T->ir, T->nk, T->nins, xsave, source) ||
+		    !arm64_callxs_ref_valid(T->ir, T->nk, T->nins, xsave, values[a]))
+			return 0;
+		stype = arm64_callxs_ref_type(T->ir, T->nk, source);
+		if (a < fixed_count) {
+			if (!arm64_postra_source_value_matches(T->ir, T->nk,
+			    T->nins, xsave, source, values[a], stype)) return 0;
+		} else if (!arm64_postra_vararg_promoted(T->ir, T->nk,
+		    T->nins, xsave, source, values[a], stype)) return 0;
+	}
+	return 1;
+}
+
 static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	IRRef *semantic_ninsp)
 {
@@ -2818,6 +3333,8 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	int producer_pending = 0, producer_scalar = 0;
 	unsigned protocol = 0, nc = 0, nx = 0, nloop = 0, npoll = 0;
 	MSize capacity, highest = 0, outgoing = 0;
+	IRRef layout_xsave = 0;
+	uintptr_t layout_producer_returnpc = 0;
 	GCtrace temp;
 	GCproto *pt;
 	uintptr_t pclo, pchi, startpc;
@@ -2955,6 +3472,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	  } else if (ins.o == IR_CALLXS) {
 	    LJArm64ABISignature abi;
 	    IRRef fpref, values[LJ_ARM64_ABI_MAX_ARGS];
+	    unsigned rawcount, actual_count, i;
 	    BCIns sourceins;
 	    if (protocol != 3 || active_call != 0)
 	      return 0;
@@ -2965,16 +3483,31 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		!arm64_callxs_xsave_anchor(view->ir, semantic_nins, active_xsave,
 		  view->proto_bc, view->proto_sizebc, NULL, &sourceins))
 	      return 0;
-	    if (!arm64_callxs_carg_values(view->ir, view->nk, semantic_nins,
-		ref, abi.nargs, values)) return 0;
+	    if (!arm64_callxs_arglist(view->ir, view->nk, semantic_nins,
+		ref, values, &rawcount) || rawcount > LJ_ARM64_ABI_MAX_ARGS)
+	      return 0;
+	    if (rawcount > abi.nargs) {
+	      if (!abi.is_vararg || rawcount <= abi.nargs+1u ||
+		  values[abi.nargs] != REF_NIL) return 0;
+	      for (i = 0; i < rawcount; i++)
+		if (i != abi.nargs && values[i] == REF_NIL) return 0;
+	      actual_count = rawcount-1u;
+	      for (i = abi.nargs; i < actual_count; i++)
+		values[i] = values[i+1u];
+	    } else {
+	      if (rawcount != abi.nargs) return 0;
+	      actual_count = rawcount;
+	      for (i = 0; i < actual_count; i++)
+		if (values[i] == REF_NIL) return 0;
+	    }
 	    if (bc_op(sourceins) == BC_CALLM) {
 	      IRIns carrier;
 	      IRRef value;
-	      if (abi.nargs == 0 || completed_producer == 0 ||
+	      if (actual_count == 0 || completed_producer == 0 ||
 		  producer_type == IRT_NIL ||
 		  !arm64_callxs_callm_pair(view->proto_bc, view->proto_sizebc,
-		    producer_returnpc, xsave_returnpc, abi.nargs)) return 0;
-	      value = values[abi.nargs-1u];
+		    producer_returnpc, xsave_returnpc, actual_count)) return 0;
+	      value = values[actual_count-1u];
 	      carrier = ir_load_acq(&view->ir[value]);
 	      if (value != completed_producer &&
 		  (carrier.o != IR_CONV || carrier.op1 != completed_producer ||
@@ -2985,11 +3518,12 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		     (irt_type(carrier.t) == IRT_NUM && producer_type == IRT_FLOAT &&
 		      carrier.op2 == ((IRT_NUM << IRCONV_DSH)|IRT_FLOAT) &&
 		      carrier.t.irt == IRT_NUM)))) return 0;
-	    } else if (bc_op(sourceins) != BC_CALL) return 0;
+	    } else if (bc_op(sourceins) != BC_CALL || bc_c(sourceins) == 0 ||
+		       (unsigned)bc_c(sourceins)-1u != actual_count) return 0;
 	    producer_call = ref;
 	    producer_pending = 1;
 	    producer_scalar = bc_op(sourceins) == BC_CALL && bc_b(sourceins) == 0 &&
-	      abi.nargs+1u == (unsigned)bc_c(sourceins) &&
+	      actual_count+1u == (unsigned)bc_c(sourceins) &&
 	      (abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER ||
 	       abi.result_kind == LJ_ARM64_ABI_KIND_FLOAT ||
 	       abi.result_kind == LJ_ARM64_ABI_KIND_ENUM);
@@ -3287,10 +3821,33 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	  LJArm64ABISignature abi;
 	  IRRef values[LJ_ARM64_ABI_MAX_ARGS];
 	  unsigned ngpr = 0, nfpr = 0, bytes = 0;
+	  unsigned rawcount, actual_count, tail_count, i;
+	  int32_t wrapper_id = 0;
+	  BCIns sourceins;
+	  uintptr_t source_returnpc;
 	  int found_type = 0;
+	  if (c.o == IR_XSAVE) {
+	    if (layout_xsave != 0) return 0;
+	    layout_xsave = call;
+	    continue;
+	  }
 	  if (c.o != IR_CALLXS) continue;
+	  if (layout_xsave == 0 ||
+	      !arm64_callxs_xsave_anchor(view->ir, semantic_nins, layout_xsave,
+		view->proto_bc, view->proto_sizebc, &source_returnpc, &sourceins))
+	    return 0;
 	  if (c.op2 < REF_FIRST || c.op2 >= call) return 0;
 	  fpref = c.op2;
+	  if (ir_load_acq(&view->ir[fpref]).o == IR_CARG) {
+	    IRIns wrapper = ir_load_acq(&view->ir[fpref]);
+	    if (wrapper.t.irt != IRT_NIL ||
+		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins,
+		  fpref, wrapper.op1) ||
+		!arm64_callxs_kint_value(view->ir, view->nk, wrapper.op2,
+		  &wrapper_id) || wrapper_id <= 0)
+	      return 0;
+	    fpref = wrapper.op1;
+	  }
 	  if (ir_load_acq(&view->ir[fpref]).o != IR_FLOAD ||
 	      ir_load_acq(&view->ir[fpref]).op2 != IRFL_CDATA_PTR)
 	    return 0;
@@ -3321,13 +3878,45 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	      if (kref < view->nk || kref >= REF_TRUE) continue;
 	      k = ir_load_acq(&view->ir[kref]);
 	      if (k.o == IR_KINT && k.t.irt == IRT_INT && k.i > 0 &&
-		  lj_ccall_arm64_signature(view->cts, (CTypeID)k.i, &abi))
+		  lj_ccall_arm64_signature(view->cts, (CTypeID)k.i, &abi) &&
+		  ((abi.is_vararg && wrapper_id == k.i) ||
+		   (!abi.is_vararg && wrapper_id == 0)))
 		found_type = 1;
 	      break;
 	    }
 	  }
-	  if (!found_type || !arm64_callxs_carg_values(view->ir, view->nk,
-	      semantic_nins, call, abi.nargs, values)) return 0;
+	  if (!found_type || !arm64_callxs_arglist(view->ir, view->nk,
+	      semantic_nins, call, values, &rawcount) ||
+	      rawcount > LJ_ARM64_ABI_MAX_ARGS) return 0;
+	  if (rawcount > abi.nargs) {
+	    if (!abi.is_vararg || rawcount <= abi.nargs+1u ||
+		values[abi.nargs] != REF_NIL) return 0;
+	    for (i = 0; i < rawcount; i++)
+	      if (i != abi.nargs && values[i] == REF_NIL) return 0;
+	    actual_count = rawcount-1u;
+	    for (i = abi.nargs; i < actual_count; i++) values[i] = values[i+1u];
+	  } else {
+	    if (rawcount != abi.nargs) return 0;
+	    actual_count = rawcount;
+	    for (i = 0; i < actual_count; i++)
+	      if (values[i] == REF_NIL) return 0;
+	  }
+	  tail_count = actual_count-abi.nargs;
+	  if (bc_op(sourceins) == BC_CALLM) {
+	    if (layout_producer_returnpc == 0 ||
+		!arm64_callxs_callm_pair(view->proto_bc, view->proto_sizebc,
+		  layout_producer_returnpc, source_returnpc, actual_count)) return 0;
+	    layout_producer_returnpc = 0;
+	  } else if (bc_op(sourceins) == BC_CALL) {
+	    if (bc_c(sourceins) == 0 ||
+		(unsigned)bc_c(sourceins)-1u != actual_count) return 0;
+	    layout_producer_returnpc = bc_b(sourceins) == 0 ? source_returnpc : 0;
+	  } else return 0;
+	  if (abi.is_vararg && !arm64_postra_vararg_source_proof(&temp,
+	      layout_xsave, call, view->proto_bc, view->proto_sizebc,
+	      source_returnpc, sourceins, cdref, abi.nargs, actual_count, values))
+	    return 0;
+	  layout_xsave = 0;
 	  for (guard = 0; guard < abi.nargs; guard++) {
 	    LJArm64ABIArg *a = &abi.arg[guard];
 	    if (!arm64_callxs_value_kind(view->ir, values[guard], view->nk,
@@ -3353,7 +3942,23 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	      }
 	    }
 	  }
-	  if (bytes != abi.stack_size || bytes > capacity*sizeof(int32_t))
+	  if (bytes != abi.stack_size) return 0;
+	  if (tail_count != 0) {
+	    bytes = (bytes+7u) & ~7u;
+	    for (i = abi.nargs; i < actual_count; i++) {
+	      IRType type = arm64_callxs_ref_type(view->ir, view->nk, values[i]);
+	      LJArm64ABIKind kind;
+	      unsigned width;
+	      if (type == IRT_NUM) kind = LJ_ARM64_ABI_KIND_FLOAT, width = 8;
+	      else if (type == IRT_INT) kind = LJ_ARM64_ABI_KIND_INTEGER, width = 4;
+	      else if (type == IRT_P64) kind = LJ_ARM64_ABI_KIND_POINTER, width = 8;
+	      else return 0;
+	      if (!arm64_callxs_value_kind(view->ir, values[i], view->nk,
+		  semantic_nins, call, kind, width, 0, 1)) return 0;
+	      bytes += 8u;
+	    }
+	  }
+	  if (bytes > capacity*sizeof(int32_t))
 	    return 0;
 	  if (bytes > outgoing) outgoing = bytes;
 	  if (irt_type(c.t) != arm64_callxs_result_type(&abi) ||
@@ -3372,6 +3977,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	  if (!arm64_postra_callxs_live_across(view, semantic_nins, call, capacity))
 	    return 0;
 	}
+	if (layout_xsave != 0) return 0;
 	/* The assembler reserves the largest outgoing area before allocating
 	** any spills. A call may overwrite that entire area, including dead
 	** argument slots, so no snapshot or live value may own part of it. */

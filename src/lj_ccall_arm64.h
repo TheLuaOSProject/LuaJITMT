@@ -49,6 +49,7 @@ typedef struct LJArm64ABISignature {
   uint8_t result_kind;
   uint8_t result_size;
   uint8_t result_unsigned;
+  uint8_t is_vararg;
   uint8_t nargs;
   uint8_t ngpr;
   uint8_t nfpr;
@@ -158,9 +159,12 @@ static int lj_ccall_arm64_scalar_class(CTState *cts, CTypeID id,
   return 0;
 }
 
-/* Classify fixed scalars in Darwin's independent GPR/FPR banks. Overflow
-** arguments occupy naturally aligned, byte-packed stack locations. The
-** assembler rounds the complete outgoing area together with its spill frame. */
+/* Classify the fixed prefix in Darwin's independent GPR/FPR banks. For a
+** variadic function, nargs and arg[] describe only the named fixed prefix;
+** dynamic promoted tail arguments are classified from the CALLXS IR suffix
+** by the independent semantic and post-RA admission passes. Fixed overflow
+** arguments use naturally aligned, byte-packed stack locations. The assembler
+** rounds the complete outgoing area together with its spill frame. */
 static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
 				    LJArm64ABISignature *abi)
 {
@@ -173,13 +177,14 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
       !lj_ccall_arm64_raw_type(cts, id, &fn, &rawid))
     return 0;
   info = ctype_info_acq(&fn);
-  if (!ctype_isfunc(info) || (info & CTF_VARARG) != 0 ||
+  if (!ctype_isfunc(info) ||
       (ctype_cconv(info) != CTCC_CDECL &&
        ctype_cconv(info) != CTCC_STDCALL) ||
       ctype_size_acq(&fn) > LJ_ARM64_ABI_MAX_ARGS)
     return 0;
   memset(abi, 0, sizeof(*abi));
   memset(&result, 0, sizeof(result));
+  abi->is_vararg = (uint8_t)((info & CTF_VARARG) != 0);
   abi->result_id = ctype_cid(info);
   if (!lj_ccall_arm64_scalar_class(cts, abi->result_id, 1, &result,
 				   &rawid))

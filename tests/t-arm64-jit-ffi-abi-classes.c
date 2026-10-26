@@ -1830,7 +1830,14 @@ int main(void)
   }
   assert_rejected(cts, aggregate_arg);
   assert_rejected(cts, aggregate_result);
-  assert_rejected(cts, vararg);
+  {
+    LJArm64ABISignature vararg_abi;
+    assert(lj_ccall_arm64_signature(cts, vararg, &vararg_abi));
+    assert(vararg_abi.is_vararg && vararg_abi.nargs == 1 &&
+           vararg_abi.result_class == LJ_ARM64_ABI_GPR &&
+           vararg_abi.arg[0].cls == LJ_ARM64_ABI_GPR &&
+           vararg_abi.arg[0].reg == 0 && vararg_abi.arg[0].size == 4);
+  }
   assert_rejected(cts, UINT32_MAX);  /* malformed/out-of-range CType ID */
 
   {
