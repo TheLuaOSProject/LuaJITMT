@@ -119,3 +119,17 @@ Frozen validation logs: `/tmp/ljmt-varargs-matrix.log`,
 `/tmp/ljmt-varargs-final-check.log`.
 
 Reference: Apple's [ARM64 calling convention](https://developer.apple.com/documentation/xcode/writing-arm64-code-for-apple-platforms).
+
+## Main checkout integration
+
+The validated branch was fast-forwarded into `v2.1` at `0c615818` and rebuilt
+in `/Users/frityet/Projects/LuaJITMT` with the ordinary ARM64 experimental
+assertion configuration, without test-helper defines. All eight variadic smoke
+cases and both rooted local-cell/upvalue suites passed, including their
+concurrent cases. Code signing and the absence of libatomic/test-helper imports
+were checked. The integrated runtime profile is
+`f19b7f3e1965e2a8e2880945be7e959908f71eda3a00561fa8b262d12042df24`, with
+runtime SHA-256
+`6f04d0b3c2f50eb4b4cf82585c0e60840614b426660f2c81fa36a552083f5b99`.
+Evidence: `/tmp/ljmt-varargs-main.log`. The following commit changes only this
+validation note; production sources remain those tested at `328fcb23`.
