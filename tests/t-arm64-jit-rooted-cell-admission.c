@@ -140,12 +140,13 @@ static int snapshot_has_slot(const SnapShot *snaps, const SnapEntry *map,
 }
 
 static MSize find_value_map_entry(const SnapShot *snaps, const SnapEntry *map,
-                                  MSize nsnap)
+                                  MSize nsnap, IRRef after)
 {
   SnapNo s;
   for (s = 0; s < nsnap; s++) {
     MSize i, ofs = snap_mapofs_acq(&snaps[s]);
     MSize nent = snap_nent_acq(&snaps[s]);
+    if (snap_ref_acq(&snaps[s]) <= after) continue;
     for (i = 0; i < nent; i++) {
       SnapEntry entry = snapentry_acq(&map[ofs+i]);
       if (!(entry & SNAP_FRAME) && snap_slot(entry) >= 1u+LJ_FR2)
@@ -449,14 +450,25 @@ int main(int argc, char **argv)
   POST_REJECT(((GCproto *)f.view.proto)->framesize = (uint8_t)cellslot);
   SEM_REJECT(f.J->pt->flags2 &= (uint32_t)~PROTO2_CELLOPS);
   POST_REJECT(((GCproto *)f.view.proto)->flags2 &= (uint32_t)~PROTO2_CELLOPS);
-  /* Raw cell pointers must never become snapshot values, even NORESTORE. */
+  /* Neither visible restoration over the cell slot nor a raw cell value
+  ** is permitted, including entries marked NORESTORE. Choose snapshots after
+  ** the cell guard so rejection cannot be explained by a forward IR ref. */
   {
-    MSize m = find_value_map_entry(f.snaps, f.map, f.semantic.nsnap);
-    SEM_REJECT(f.map[m] = (f.map[m] & 0x00ffffffu) |
-                          ((SnapEntry)stackslot << 24));
-    m = find_value_map_entry(viewsnaps, f.postmap, f.view.nsnap);
-    POST_REJECT(f.postmap[m] = (f.postmap[m] & 0x00ffffffu) |
-                              ((SnapEntry)stackslot << 24));
+    MSize m = find_value_map_entry(f.snaps, f.map, f.semantic.nsnap,
+                                  cellload);
+    SEM_REJECT(f.map[m] = SNAP(stackslot, 0, snap_ref(f.map[m])));
+    SEM_REJECT(f.map[m] = SNAP(stackslot, SNAP_NORESTORE,
+                              snap_ref(f.map[m])));
+    SEM_REJECT(f.map[m] = SNAP(snap_slot(f.map[m]), 0, cellload));
+    SEM_REJECT(f.map[m] = SNAP(snap_slot(f.map[m]), SNAP_NORESTORE,
+                              cellload));
+    m = find_value_map_entry(viewsnaps, f.postmap, f.view.nsnap, cellload);
+    POST_REJECT(f.postmap[m] = SNAP(stackslot, 0, snap_ref(f.postmap[m])));
+    POST_REJECT(f.postmap[m] = SNAP(stackslot, SNAP_NORESTORE,
+                                   snap_ref(f.postmap[m])));
+    POST_REJECT(f.postmap[m] = SNAP(snap_slot(f.postmap[m]), 0, cellload));
+    POST_REJECT(f.postmap[m] = SNAP(snap_slot(f.postmap[m]), SNAP_NORESTORE,
+                                   cellload));
   }
   if (!get) {
     IRRef rhs = f.ir[root1].op1;
