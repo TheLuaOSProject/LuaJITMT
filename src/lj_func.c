@@ -16,9 +16,11 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_func.h"
+#include "lj_oserr.h"
 #include "lj_state.h"
 #include "lj_trace.h"
 #include "lj_tg.h"
+#include "lj_thr.h"
 #include "lj_vm.h"
 
 #ifdef LJ_FUNC_TEST_HELPERS
@@ -38,6 +40,239 @@ void LJ_FASTCALL lj_func_freeproto(global_State *g, GCproto *pt)
 }
 
 /* -- Upvalues ------------------------------------------------------------ */
+
+typedef struct FuncRootedOwnerSnapshot {
+  global_State *g;
+  TGState *tg;
+  LJStateOwner owner;
+  uint32_t actor;
+  uint32_t tid;
+} FuncRootedOwnerSnapshot;
+
+/* Bind rooted upvalue operations to the same exact physical owner as rooted
+** table access. In particular, the GC2 root lease is meaningful only while
+** this TLS actor owns this lua_State in this TG. */
+static int func_rooted_owner_snapshot(lua_State *L,
+				      FuncRootedOwnerSnapshot *snap)
+{
+  global_State *g;
+  TGState *tg;
+  LJStateOwner owner;
+  uint32_t actor, tid;
+  int terminal;
+  if (!L || !snap || !(g = G(L)) || !(actor = lj_thr_actor_current()))
+    return 0;
+  tg = lj_thr_get_tg_fallback(g);
+  if (!tg || tg->gl != g || lj_tg_actor_acq(tg) != actor ||
+      lj_tg_flags_test_acq(tg, TGF_DEAD))
+    return 0;
+  tid = lj_tg_tid_acq(tg);
+  owner = lj_state_owner_word_acq(L);
+  terminal = mt_shutdown_acq(g) != 0 && tg == g->main_tg &&
+	     L == mainthread_acq(g);
+  if (!lj_thr_id_is_owner(tid) || owner != lj_state_owner_pack(tid, actor) ||
+      (mt_shutdown_acq(g) != 0 && !terminal) ||
+      (lj_tg_load_cur_L(tg) != L && L->tg_hint != tg && !terminal) ||
+      lj_tg_actor_acq(tg) != actor || lj_thr_actor_current() != actor ||
+      lj_state_owner_word_acq(L) != owner)
+    return 0;
+  snap->g = g;
+  snap->tg = tg;
+  snap->owner = owner;
+  snap->actor = actor;
+  snap->tid = tid;
+  return 1;
+}
+
+static int func_rooted_owner_current(lua_State *L,
+				     const FuncRootedOwnerSnapshot *snap)
+{
+  TGState *tg;
+  int terminal;
+  if (!L || !snap || G(L) != snap->g ||
+      lj_thr_actor_current() != snap->actor)
+    return 0;
+  tg = lj_thr_get_tg_fallback(snap->g);
+  if (tg != snap->tg || !tg || tg->gl != snap->g)
+    return 0;
+  terminal = mt_shutdown_acq(snap->g) != 0 && tg == snap->g->main_tg &&
+	     L == mainthread_acq(snap->g);
+  return (mt_shutdown_acq(snap->g) == 0 || terminal) &&
+    !lj_tg_flags_test_acq(tg, TGF_DEAD) &&
+    lj_tg_actor_acq(tg) == snap->actor &&
+    lj_tg_tid_acq(tg) == snap->tid && lj_thr_id_is_owner(snap->tid) &&
+    lj_state_owner_word_acq(L) == snap->owner &&
+    lj_state_owner_tid(snap->owner) == snap->tid &&
+    lj_state_owner_actor(snap->owner) == snap->actor &&
+    (lj_tg_load_cur_L(tg) == L || L->tg_hint == tg || terminal) &&
+    lj_tg_actor_acq(tg) == snap->actor;
+}
+
+static int func_tv_on_stack(lua_State *L, const TValue *tv)
+{
+  const TValue *lo = tvref(L->stack);
+  const TValue *hi = tvref(L->maxstack);
+  return (uintptr_t)tv >= (uintptr_t)lo && (uintptr_t)tv < (uintptr_t)hi;
+}
+
+static int func_rooted_value_visible(const TValue *tv)
+{
+  if (tvistabinternal(tv))
+    return 0;
+  if (tvisgcv(tv))
+    return tvisstr(tv) || tvistab(tv) || tvisfunc(tv) ||
+	   tvisthread(tv) || tvisudata(tv) || tviscdata(tv);
+  return tvispri(tv) || tvisnumber(tv) || tvislightud(tv);
+}
+
+/* Resolve one exact closed cell while holding SMR. The uvptr edge is mutable
+** (lua_upvaluejoin), so callers must start SMR before observing it and confirm
+** this exact edge again before their terminal effect. Comparing the acquired
+** v pointer avoids racing GCupval.closed, which is a compatibility byte. */
+static GCupval *func_rooted_closed_uv(global_State *g, GCfuncL *fn,
+				      uint32_t index, LJGC2Lease *lease)
+{
+  GCobj *obj;
+  GCupval *uv;
+  if (index >= lj_funcL_nupvalues(fn))
+    return NULL;
+  obj = func_uvptr_acq(fn, index);
+  if (!obj || lj_gc2_obj_lease_acquire(g, obj, (uint32_t)~LJ_TUPVAL,
+					      NULL, lease) < 0)
+    return NULL;
+  uv = &obj->uv;
+  if (mref_acq(uv->v, TValue) != &uv->tv) {
+    lj_gc2_lease_release(lease);
+    return NULL;
+  }
+  return uv;
+}
+
+static int func_rooted_try_common(lua_State *L, cTValue *fnroot,
+				  uint32_t index, cTValue *valueroot,
+				  TValue *outroot, int store)
+{
+  FuncRootedOwnerSnapshot owner;
+  LJGC2Lease fnlease = { 0 }, uvlease = { 0 }, vallease = { 0 };
+  TValue fnsnap, fnconfirm, valuesnap, valueconfirm, result;
+  GCfuncL *fn = NULL;
+  GCupval *uv = NULL;
+  ptrdiff_t fnoffs = 0, valueofs = 0, outofs = 0;
+  int fnstack = 0, valuestack = 0, outstack = 0;
+  int smr_active = 0, fnlease_active = 0, uvlease_active = 0;
+  int vallease_active = 0, success = 0;
+  LJOSerrState oserr;
+
+  lj_oserr_save(&oserr);
+  if (!L || !fnroot || (store ? !valueroot : !outroot) ||
+      !func_rooted_owner_snapshot(L, &owner))
+    goto done;
+  fnstack = func_tv_on_stack(L, fnroot);
+  valuestack = store && func_tv_on_stack(L, valueroot);
+  outstack = !store && func_tv_on_stack(L, outroot);
+  fnoffs = fnstack ? savestack(L, (TValue *)(void *)fnroot) : 0;
+  valueofs = valuestack ? savestack(L, (TValue *)(void *)valueroot) : 0;
+  outofs = outstack ? savestack(L, outroot) : 0;
+
+  /* SMR precedes every mutable-root load, including the function's uvptr
+  ** edge. It protects the edge against address reuse until exact leases exist. */
+  if (!lj_gc2_smr_read_try(owner.g))
+    goto done;
+  smr_active = 1;
+  lj_tv_load_acq(&fnsnap, fnstack ? restorestack(L, fnoffs) : fnroot);
+  /* The tag test is safe on the acquired TValue word; defer every GC body
+  ** read (including FFID) until its exact allocation lease is held. */
+  if (!tvisfunc(&fnsnap) ||
+      lj_gc2_tv_lease_acquire(owner.g, &fnsnap, &fnlease) !=
+	  LJ_GC2_TV_EDGE_VALID)
+    goto done;
+  fnlease_active = 1;
+  if (!isluafunc(funcV(&fnsnap)))
+    goto done;
+  fn = &funcV(&fnsnap)->l;
+  uv = func_rooted_closed_uv(owner.g, fn, index, &uvlease);
+  if (!uv)
+    goto done;
+  uvlease_active = 1;
+
+  if (store) {
+    lj_tv_load_acq(&valuesnap,
+		   valuestack ? restorestack(L, valueofs) : valueroot);
+    if (tvistabinternal(&valuesnap) ||
+	lj_gc2_tv_lease_acquire(owner.g, &valuesnap, &vallease) !=
+	  LJ_GC2_TV_EDGE_VALID)
+      goto done;
+    vallease_active = 1;
+    if (!func_rooted_value_visible(&valuesnap))
+      goto done;
+  } else {
+    lj_tv_load_acq(&result, &uv->tv);
+    if (tvistabinternal(&result) ||
+	lj_gc2_tv_lease_acquire(owner.g, &result, &vallease) !=
+	  LJ_GC2_TV_EDGE_VALID)
+      goto done;
+    vallease_active = 1;
+    if (!func_rooted_value_visible(&result))
+      goto done;
+  }
+
+  /* Recheck both mutable roots and the exact function-to-cell edge immediately
+  ** before effect/publication. No allocation or cooperative wait is allowed
+  ** between this confirmation and the operation. */
+  lj_tv_load_acq(&fnconfirm, fnstack ? restorestack(L, fnoffs) : fnroot);
+  if (tv_rawload(&fnconfirm) != tv_rawload(&fnsnap) ||
+      func_uvptr_acq(fn, index) != obj2gco(uv) ||
+      !func_rooted_owner_current(L, &owner))
+    goto done;
+  if (store) {
+    lj_tv_load_acq(&valueconfirm,
+		   valuestack ? restorestack(L, valueofs) : valueroot);
+    if (tv_rawload(&valueconfirm) != tv_rawload(&valuesnap))
+      goto done;
+    copyTVrel(L, &uv->tv, &valuesnap);
+    /* The barrier uses the exact published snapshot, not a second read of the
+    ** mutable cell that another writer could already have replaced. */
+    if (tvisgcv(&valuesnap))
+      lj_gc2_barrier_tv_pair_g(owner.g, obj2gco(uv), &valuesnap);
+  } else {
+    TValue *out = outstack ? restorestack(L, outofs) : outroot;
+    copyTVrel(L, out, &result);
+    success = 1;
+  }
+  if (store)
+    success = 1;
+
+done:
+  if (smr_active)
+    lj_gc2_smr_read_leave(owner.g);
+  if (success && !store) {
+    TValue *out = outstack ? restorestack(L, outofs) : outroot;
+    if (outstack)
+      lj_state_stack_pubtv(L, L, out);
+    else
+      lj_gc_pubroot(L, out);
+  }
+  if (vallease_active)
+    lj_gc2_lease_release(&vallease);
+  if (uvlease_active)
+    lj_gc2_lease_release(&uvlease);
+  if (fnlease_active)
+    lj_gc2_lease_release(&fnlease);
+  lj_oserr_restore(&oserr);
+  return success;
+}
+
+int lj_func_getuv_rooted_try(lua_State *L, cTValue *fnroot, uint32_t uv,
+			     TValue *outroot)
+{
+  return func_rooted_try_common(L, fnroot, uv, NULL, outroot, 0);
+}
+
+int lj_func_storeuv_rooted_try(lua_State *L, cTValue *fnroot, uint32_t uv,
+			       cTValue *valueroot)
+{
+  return func_rooted_try_common(L, fnroot, uv, valueroot, NULL, 1);
+}
 
 static GCupval *func_snapshotuv_unlinked_nothrow(lua_State *L,
 					  const TValue *slot);

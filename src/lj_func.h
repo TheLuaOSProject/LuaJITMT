@@ -15,6 +15,12 @@ LJ_FUNC void LJ_FASTCALL lj_func_freeproto(global_State *g, GCproto *pt);
 LJ_FUNCA GCupval *LJ_FASTCALL lj_func_newuvcell(lua_State *L);
 LJ_FUNCA void LJ_FASTCALL lj_func_closeuv(lua_State *L, TValue *level);
 LJ_FUNC void LJ_FASTCALL lj_func_freeuv(global_State *g, GCupval *uv);
+/* Nonwaiting rooted closed-upvalue access for exact native certificates.
+** A refusal returns zero before effect and leaves all roots unchanged. */
+LJ_FUNC int lj_func_getuv_rooted_try(lua_State *L, cTValue *fnroot,
+				      uint32_t uv, TValue *outroot);
+LJ_FUNC int lj_func_storeuv_rooted_try(lua_State *L, cTValue *fnroot,
+					uint32_t uv, cTValue *valueroot);
 
 /* Functions (closures). */
 LJ_FUNC GCfunc *lj_func_newC(lua_State *L, MSize nelems, GCtab *env,

@@ -13,6 +13,7 @@
 
 #include "lj_err.h"
 #include "lj_gc.h"
+#include "lj_func.h"
 #include "lj_gc2.h"
 #include "lj_state.h"
 #include "lj_str.h"
@@ -3001,14 +3002,104 @@ static int rec_upvalue_constify(jit_State *J, GCupval *uvp)
   return 0;
 }
 
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+/* Sample a shared cell through an enumerated closure root. Do not keep a raw
+** uvptr or payload across recorder allocation, or borrow the VM's comparison
+** scratch words. A refused attempt abandons recording without waiting. */
+static IRType rec_upvalue_rooted_sample(jit_State *J, uint32_t uv)
+{
+  TGState *tg = L2TG(J->L);
+  TValue fnv, value;
+  TValue *root;
+  uint32_t index;
+  int ok;
+#ifdef LUA_USE_ASSERT
+  uint32_t top = lj_tg_root_anchor_top_acq(tg);
+  uint64_t scratch1 = tg->tmptv.u64, scratch2 = tg->tmptv2.u64;
+  uint64_t scratch3 = tg->tmptv3.u64;
+#endif
+  if (!lj_tg_root_anchor_reserve_nothrow(J->L, tg))
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
+  setfuncV(J->L, &fnv, J->fn);
+  root = lj_tg_root_anchor_push(J->L, tg, &fnv, &index);
+  lj_gc_pubroot(J->L, root);
+  ok = lj_func_getuv_rooted_try(J->L, root, uv, root);
+  lj_tv_load_acq(&value, root);
+  lj_tg_root_anchor_pop(tg, index);
+  lj_assertJ(lj_tg_root_anchor_top_acq(tg) == top &&
+             tg->tmptv.u64 == scratch1 && tg->tmptv2.u64 == scratch2 &&
+             tg->tmptv3.u64 == scratch3,
+             "rooted upvalue sample changed recorder roots/scratch");
+  if (!ok)
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
+  return itype2irt(&value);
+}
+
+static TRef rec_upvalue_rooted(jit_State *J, uint32_t uv, TRef val)
+{
+  TRef fn, root, index, status;
+  IRType type;
+  if (J->parent || J->framedepth || J->retdepth ||
+      J->baseslot != 1+LJ_FR2)
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
+  type = rec_upvalue_rooted_sample(J, uv);
+  fn = getcurrf(J);
+  if (val && bc_op(*J->pc) == BC_USETN) {
+    TValue literal;
+    /* Preserve the proto's exact numeric TValue. Operand decoding may have
+    ** canonicalized an integral double to IR_KINT. */
+    lj_tv_load_acq(&literal, proto_knumtv(J->pt, bc_d(*J->pc)));
+    val = tvisint(&literal) ? lj_ir_kint(J, intV(&literal)) :
+                             lj_ir_knum_u64(J, tv_rawload(&literal));
+  }
+  /* Refusal must resume this exact UGET/USET with its current source slots.
+  ** Input SLOADs precede this snapshot; their ordinary type guards still use
+  ** the earlier interpreter state. */
+  J->mergesnap = 0;
+  lj_snap_add(J);
+  root = rec_tmpref_mode(J, fn,
+                        val ? IRTMPREF_IN1 : IRTMPREF_IN1|IRTMPREF_OUT1);
+  index = lj_ir_kint(J, (int32_t)uv);
+  if (val) {
+    TRef value = rec_tmpref_mode(J, val, IRTMPREF_IN2);
+    status = lj_ir_call(J, IRCALL_lj_func_storeuv_rooted_try, root, index, value);
+  } else {
+    status = lj_ir_call(J, IRCALL_lj_func_getuv_rooted_try, root, index, root);
+  }
+  emitir(IRTGI(IR_NE), status, lj_ir_kint(J, 0));
+  J->mergesnap = 0;
+  if (val) {
+    const BCIns *pc = J->pc;
+    J->pc = pc+1;
+    lj_snap_add(J);
+    J->pc = pc;
+    /* A successful write is already committed. Preserve this exact next-PC
+    ** state even if the following bytecode emits no IR, and do not link a
+    ** side trace until that boundary has its own certificate. */
+    J->cur.snap[J->cur.nsnap-1].count = SNAPCOUNT_DONE;
+    J->needsnap = 0;
+    return 0;
+  }
+  lj_snap_add(J);
+  J->mergesnap = 1;
+  return lj_record_vload(J, root, 0, type);
+}
+#endif
+
 /* Record upvalue load/store. */
 static TRef rec_upvalue(jit_State *J, uint32_t uv, TRef val)
 {
-  GCupval *uvp = func_uv_acq(&J->fn->l, uv);
-  TRef fn = getcurrf(J);
+  GCupval *uvp;
+  TRef fn;
   IRRef uref;
   RecFnew1NumUV fnew1num;
   int needbarrier = 0;
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+  if (lj_record_mt_runtime_shared(J2G(J), J->L))
+    return rec_upvalue_rooted(J, uv, val);
+#endif
+  uvp = func_uv_acq(&J->fn->l, uv);
+  fn = getcurrf(J);
   if (val == 0 && proto_celluv(J->pt) &&
       (proto_uv(J->pt)[uv] & PROTO_UV_LOCAL) && tvisfunc(uvval(uvp)))
     goto noconstify;

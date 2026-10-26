@@ -13,10 +13,10 @@
 #if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
 #include "lj_ircall.h"
 
-/* Retain the exact caller state after a rooted rawset effect/status pair.
+/* Retain the exact continuation after a rooted store effect/status pair.
 ** DONE alone also marks FFI boundaries, whose existing merging is unchanged.
 ** This is a recorder retention rule; admission separately proves the call. */
-static LJ_AINLINE int lj_snap_rawset_continuation(const jit_State *J,
+static LJ_AINLINE int lj_snap_rooted_continuation(const jit_State *J,
                                                 const SnapShot *snap)
 {
   const IRIns *call;
@@ -26,10 +26,11 @@ static LJ_AINLINE int lj_snap_rawset_continuation(const jit_State *J,
   call = &J->cur.ir[snap->ref-2u];
   return call->o == IR_CALLS &&
     (call->op2 == IRCALL_lj_tab_storeraw_rooted ||
-     call->op2 == IRCALL_lj_tab_storenil_rooted);
+     call->op2 == IRCALL_lj_tab_storenil_rooted ||
+     call->op2 == IRCALL_lj_func_storeuv_rooted_try);
 }
 #else
-#define lj_snap_rawset_continuation(J, snap) 0
+#define lj_snap_rooted_continuation(J, snap) 0
 #endif
 
 LJ_FUNC void lj_snap_add(jit_State *J);

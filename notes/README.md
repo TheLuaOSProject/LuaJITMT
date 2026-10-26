@@ -23,14 +23,13 @@ and reports that are no longer authoritative are retained in
   entry, exits and refusals. Shared build profiles bind runtime, archive,
   fixture and helper-library identity. All review work streams are integrated.
   See [`review-implementation-2026-10-25.md`](review-implementation-2026-10-25.md).
-- Latest combined runtime validation: the float CALLXS checkpoint on
-  2026-10-26, based on `e2f6b7fd`. Experimental contracts, ARM64 and signed
-  x86-64 stock source/import, shared helpers and bootstrap passed on one
-  frozen source hash. The interrupted experimental gate resumed from the
-  interrupted contract; the completed prefix and resumed suffix together
-  cover every default target branch. See
-  [`arm64-jit-ffi-float-2026-10-26.md`](arm64-jit-ffi-float-2026-10-26.md)
-  for exact source identity, commands, logs and profile. The earlier architecture-review checkpoint
+- Latest combined runtime validation: the closed-upvalue checkpoint on
+  2026-10-26, based on `29406344`. The complete experimental and bootstrap
+  gates, ARM64 and signed x86-64 stock source/import, and shared helpers passed
+  on one frozen source hash. All four new upvalue profiles and existing
+  rooted-GC and M7 FFI suites passed within that uninterrupted run. See
+  [`arm64-jit-rooted-upvalues-2026-10-26.md`](arm64-jit-rooted-upvalues-2026-10-26.md)
+  for exact source identity, commands, logs and limits. The earlier architecture-review checkpoint
   and its sanitizer/performance scope remain in
   [`review-validation-2026-10-25.md`](review-validation-2026-10-25.md).
 - Fixed scalar FFI stack arguments pass the four-profile M7 suite,
@@ -177,6 +176,14 @@ available.
   admission, native no-replay/growth tests and the complete rooted-GC and M7
   FFI suites pass in all four profiles, with ARM64/x64 stock regressions. See
   [`arm64-jit-rooted-rawset-2026-10-26.md`](arm64-jit-rooted-rawset-2026-10-26.md).
+- Closed closure-upvalue reads and writes in LOOP/FORL use exact function,
+  cell and value leases with acquire/release publication. Independent source,
+  semantic and post-RA checks preserve literal representation, current-function
+  spills and completed-store continuations. All visible value classes,
+  no-replay exits, cell joining, GC retention and concurrent native readers and
+  writers pass on ARM64/arm64e, assertion/release. Shared helpers and stock
+  regressions pass on signed x64 as well. See
+  [`arm64-jit-rooted-upvalues-2026-10-26.md`](arm64-jit-rooted-upvalues-2026-10-26.md).
 - Scalar `FORL` supports constant and variable integer bounds/steps through
   def-use and source-control-flow checks. Scalar fixed-arity `FUNCF` supports
   bounded arithmetic, argument/cell loads and one scalar return.
@@ -230,8 +237,10 @@ available.
   spill or register layouts, and general root geometries.
 - General table and upvalue JIT reads, writes and traversal, plus sunk/duplicate
   allocation and raw initialization effects. Rooted scalar/GC reads,
-  existing-key scalar/GC stores, bounded ordinary/raw insertion and unsunk TNEW
-  have operation proofs; other insertion/call geometries and general metamethod
+  existing-key scalar/GC stores, bounded ordinary/raw insertion, closed closure
+  upvalues and unsunk TNEW have operation proofs. True shared-cell CGET/CSET
+  locals, open upvalues, closure/cell creation, other insertion/call geometries
+  and general metamethod
   paths remain closed. Bounded nil
   deletion now emits a rooted effect even when the recording sample is absent,
   replacing the earlier raw-store recording veto described in the

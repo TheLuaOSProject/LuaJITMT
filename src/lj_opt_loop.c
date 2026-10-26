@@ -229,11 +229,11 @@ static void loop_subst_snap(jit_State *J, SnapShot *osnap,
   BCReg nslots = osnap->nslots;
   SnapShot *snap = &J->cur.snap[J->cur.nsnap];
   int keep_xsave = 0;
-  int keep_continuation = lj_snap_rawset_continuation(J, osnap);
+  int keep_continuation = lj_snap_rooted_continuation(J, osnap);
   if (J->cur.nsnap != 0) {
     SnapShot *prev = &J->cur.snap[J->cur.nsnap-1];
     IRRef pref = prev->ref;
-    keep_continuation |= lj_snap_rawset_continuation(J, prev);
+    keep_continuation |= lj_snap_rooted_continuation(J, prev);
     keep_xsave = pref >= REF_FIRST && pref < J->cur.nins &&
 		 IR(pref)->o == IR_XSAVE;
   }
@@ -241,7 +241,7 @@ static void loop_subst_snap(jit_State *J, SnapShot *osnap,
     /* XSAVE snapshots are materialization boundaries even without an
     ** intervening guard. Never let a later copied snapshot overwrite the
     ** assembler-position identity of the copied marker, or the exact PC of
-    ** a rawset continuation. */
+    ** a rooted store continuation. */
     nmapofs = J->cur.nsnapmap;
     J->cur.nsnap++;  /* Add new snapshot. */
   } else {  /* Otherwise overwrite previous snapshot. */
