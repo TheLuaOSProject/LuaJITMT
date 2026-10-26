@@ -40,6 +40,8 @@ static uint64_t expected_bits;
 static void *expected_func;
 static void *expected_producer;
 static uint32_t native_producers;
+static uint64_t total_native_results;
+static uint64_t total_native_producers;
 static CTypeID const_i64_result_id;
 static const char *result_stage = "unspecified";
 static TGState *expected_tg;
@@ -49,12 +51,19 @@ static GCtrace *expected_trace;
 static const uint64_t i64_patterns[] = {
   UINT64_C(0x8000000000000000), UINT64_C(0x7fffffffffffffff),
   UINT64_C(0xffffffffffffffff), UINT64_C(0x0123456789abcdef),
-  UINT64_C(0xfedcba9876543210), UINT64_C(0x8000000000000001)
+  UINT64_C(0xfedcba9876543210), UINT64_C(0x8000000000000001),
+  UINT64_C(0x000000007fffffff), UINT64_C(0x0000000080000000),
+  UINT64_C(0x0000000100000000), UINT64_C(0xffffffff80000000),
+  UINT64_C(0xffffffff7fffffff), UINT64_C(0xaaaaaaaaaaaaaaaa),
+  UINT64_C(0x5555555555555555)
 };
 static const uint64_t u64_patterns[] = {
   UINT64_C(0x0000000000000000), UINT64_C(0xffffffffffffffff),
   UINT64_C(0x8000000000000000), UINT64_C(0x0123456789abcdef),
-  UINT64_C(0xfedcba9876543210), UINT64_C(0x0000000100000001)
+  UINT64_C(0xfedcba9876543210), UINT64_C(0x0000000100000001),
+  UINT64_C(0x000000007fffffff), UINT64_C(0x0000000080000000),
+  UINT64_C(0x00000000ffffffff), UINT64_C(0x0000000100000000),
+  UINT64_C(0xaaaaaaaaaaaaaaaa), UINT64_C(0x5555555555555555)
 };
 
 static uint64_t payload_bits(const GCcdata *cd)
@@ -88,6 +97,7 @@ static void observe_native_result(TGState *tg)
       lj_ffi_native_frame_func_acq(frame) == expected_producer) {
     assert(lj_ffi_native_frame_result_root_acq(frame) == NULL);
     native_producers++;
+    total_native_producers++;
     return;
   }
   assert(lj_ffi_native_frame_func_acq(frame) == expected_func);
@@ -104,6 +114,7 @@ static void observe_native_result(TGState *tg)
   assert(payload_bits(root) == expected_bits);
   native_roots++;
   native_finishes++;
+  total_native_results++;
 }
 
 static void observe_finish(TGState *tg)
@@ -441,6 +452,47 @@ static GCtrace *check_native_loop(lua_State *L, jit_State *J, TGState *tg,
   return T;
 }
 
+static void check_discarded_loop(lua_State *L, jit_State *J, TGState *tg,
+    int is_unsigned, int force_epoch, MSize callback_slot,
+    void *old_ffi_func, uint8_t callback_stopreq)
+{
+  const char *runner = is_unsigned ? "__u64_discard" : "__i64_discard";
+  const char *func = is_unsigned ? "__i64_u64_call" : "__i64_i64_call";
+  GCtrace *T;
+  int status, observed_errno;
+  configure(L, is_unsigned, 1);
+  capture_func(L, func);
+  expected_tg = tg;
+  expected_L = L;
+  expected_ctype = is_unsigned ? CTID_UINT64 : CTID_INT64;
+  expected_bits = expected_for(is_unsigned, 1, 44);
+  result_stage = runner;
+  expected_trace = NULL;
+  expected_producer = NULL;
+  native_finishes = native_roots = native_producers = 0;
+  old_epoch = UINT64_MAX;
+  lj_trace_test_reset_exit_stats();
+  lj_ffi_native_trace_test_set_finish_hook(force_epoch ?
+      force_postcall_epoch : observe_finish);
+  status = start_loop(L, runner, func, 44);
+  observed_errno = errno;
+  lj_ffi_native_trace_test_set_finish_hook(NULL);
+  if (force_epoch && old_epoch != UINT64_MAX)
+    lj_tg_hs_epoch_ack_rel(tg, old_epoch);
+  assert(status == 0 && lua_tointeger(L, -1) == 44);
+  lua_pop(L, 1);
+  T = find_result_trace(J, global_proto(L, runner));
+  assert(T != NULL && expected_trace == T);
+  assert(native_finishes != 0 && native_roots == native_finishes);
+  assert(int_getter(L, counter_name(is_unsigned)) == 44);
+  assert(observed_errno == EDOM);
+  if (force_epoch) {
+    assert(old_epoch != UINT64_MAX);
+    assert(lj_trace_test_exit_calls() == native_finishes);
+  }
+  assert_native_clean(tg, T, callback_slot, old_ffi_func, callback_stopreq);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -533,6 +585,12 @@ int main(void)
     "  while i < n do i = i + 1; result = fn(i) end\n"
     "  return result\n"
     "end\n"
+    "function _G.__i64_discard(fn, n)\n"
+    "  for i = 1, n do fn(i) end; return n\n"
+    "end\n"
+    "function _G.__u64_discard(fn, n)\n"
+    "  for i = 1, n do fn(i) end; return n\n"
+    "end\n"
     "function _G.__i64_vararg_run(fn, n)\n"
     "  local result\n"
     "  for i = 1, n do result = fn(i, i + 0.5, true, 'i64-vararg') end\n"
@@ -578,11 +636,11 @@ int main(void)
   assert_result(L, const_i64_result_id, expected_for(0, 3, 1));
   lua_pop(L, 1);
 
-  for (i = 0; i < 6; i++)
+  for (i = 0; i < (int)(sizeof(i64_patterns)/sizeof(i64_patterns[0])); i++)
     last_trace = check_native_loop(L, J, tg, "__i64_run", "__i64_i64_call",
 	0, i, CTID_INT64, 40 + i, 0, callback_slot, old_ffi_func,
 	callback_stopreq);
-  for (i = 0; i < 6; i++)
+  for (i = 0; i < (int)(sizeof(u64_patterns)/sizeof(u64_patterns[0])); i++)
     last_trace = check_native_loop(L, J, tg, "__u64_run", "__i64_u64_call",
 	1, i, CTID_UINT64, 40 + i, 0, callback_slot, old_ffi_func,
 	callback_stopreq);
@@ -688,6 +746,15 @@ int main(void)
 	callback_stopreq);
   assert(trace_runnable_acq(last_trace, trace_traceno_acq(last_trace)));
 
+  /* B=1 still roots and fills the box through native leave, but intentionally
+  ** has no caller result slot. A forced postcall exit must not replay it. */
+  check_discarded_loop(L, J, tg, 0, 0, callback_slot, old_ffi_func,
+      callback_stopreq);
+  check_discarded_loop(L, J, tg, 1, 0, callback_slot, old_ffi_func,
+      callback_stopreq);
+  check_discarded_loop(L, J, tg, 0, 1, callback_slot, old_ffi_func,
+      callback_stopreq);
+
   /* A returned value stays strongly rooted across collection and trace flush. */
   configure(L, 1, 1);
   result_stage = "GC/flush retained uint64_t result";
@@ -705,6 +772,9 @@ int main(void)
   expected_L = NULL;
   expected_tg = NULL;
   lua_close(L);
+  printf("boxed I64/U64 native results=%llu scalar CALLM producers=%llu\n",
+         (unsigned long long)total_native_results,
+         (unsigned long long)total_native_producers);
   puts("t-arm64-jit-callxs-i64 OK: signed/unsigned 64-bit boxed returns, "
        "typedef/const CType resolution, native roots, POSTCALL no-replay, "
        "errno, GC, and cleanup verified");

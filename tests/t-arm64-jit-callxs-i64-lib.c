@@ -34,13 +34,20 @@ static void store_i32(int32_t *p, int32_t v)
 static const uint64_t i64_patterns[] = {
   UINT64_C(0x8000000000000000), UINT64_C(0x7fffffffffffffff),
   UINT64_C(0xffffffffffffffff), UINT64_C(0x0123456789abcdef),
-  UINT64_C(0xfedcba9876543210), UINT64_C(0x8000000000000001)
+  UINT64_C(0xfedcba9876543210), UINT64_C(0x8000000000000001),
+  UINT64_C(0x000000007fffffff), UINT64_C(0x0000000080000000),
+  UINT64_C(0x0000000100000000), UINT64_C(0xffffffff80000000),
+  UINT64_C(0xffffffff7fffffff), UINT64_C(0xaaaaaaaaaaaaaaaa),
+  UINT64_C(0x5555555555555555)
 };
 
 static const uint64_t u64_patterns[] = {
   UINT64_C(0x0000000000000000), UINT64_C(0xffffffffffffffff),
   UINT64_C(0x8000000000000000), UINT64_C(0x0123456789abcdef),
-  UINT64_C(0xfedcba9876543210), UINT64_C(0x0000000100000001)
+  UINT64_C(0xfedcba9876543210), UINT64_C(0x0000000100000001),
+  UINT64_C(0x000000007fffffff), UINT64_C(0x0000000080000000),
+  UINT64_C(0x00000000ffffffff), UINT64_C(0x0000000100000000),
+  UINT64_C(0xaaaaaaaaaaaaaaaa), UINT64_C(0x5555555555555555)
 };
 
 void lj_callxs_arm64_i64_configure(int32_t mode)
@@ -134,6 +141,18 @@ lj_test_i64_alias lj_callxs_arm64_i64_alias(int32_t selector)
 int64_t lj_callxs_arm64_i64_const(int32_t selector)
 {
   return lj_callxs_arm64_i64(selector);
+}
+
+/* Safe interpreter-only neighbor: boxed int64 cdata stays an integer in a
+** C vararg list, so its consumer must read int64_t rather than double. */
+int64_t lj_callxs_arm64_i64_boxed_consumer(int32_t fixed, ...)
+{
+  va_list ap;
+  int64_t value;
+  va_start(ap, fixed);
+  value = va_arg(ap, int64_t);
+  va_end(ap);
+  return fixed == 17 ? value : 0;
 }
 
 int64_t lj_callxs_arm64_i64_vararg(int32_t fixed, ...)

@@ -41,6 +41,7 @@ typedef struct I64Fixture {
   SnapShot *snap;
   SnapEntry *snapmap;
   IRRef semantic_nins;
+  IRRef insertion;
   IRRef ktrace;
   IRRef box[8];
   IRRef store[8];
@@ -48,6 +49,9 @@ typedef struct I64Fixture {
   IRRef xsave[8];
   IRRef leave[8];
   unsigned nbox;
+  int inserted;
+  int discarded;
+  GCtrace view_owner;
   GCtrace semantic;
 } I64Fixture;
 
@@ -63,6 +67,9 @@ typedef struct JSave {
   int32_t retdepth;
   IRRef1 ktrace;
 } JSave;
+
+static unsigned semantic_accepts, semantic_rejects;
+static unsigned postra_accepts, postra_rejects;
 
 static BCIns loadbc(const BCIns *pc)
 {
@@ -140,6 +147,14 @@ static IRRef find_loopref(const GCtrace *T)
   IRRef ref;
   const IRIns *ir = trace_ir_acq(T);
   for (ref = REF_FIRST; ref < trace_nins_acq(T); ref++)
+    if (ir_load_acq(&ir[ref]).o == IR_LOOP) return ref;
+  return 0;
+}
+
+static IRRef find_loopref_ir(const IRIns *ir, IRRef nins)
+{
+  IRRef ref;
+  for (ref = REF_FIRST; ref < nins; ref++)
     if (ir_load_acq(&ir[ref]).o == IR_LOOP) return ref;
   return 0;
 }
@@ -251,7 +266,7 @@ static void init_fixture(lua_State *L, jit_State *J, I64Fixture *fx,
   fx->semantic_nins = semantic_nins(fx->owner);
   fx->ktrace = find_owner_ktrace(fx->owner);
   assert(fx->cts != NULL && fx->ktrace != 0 && find_loopref(fx->owner) != 0);
-  fx->ir = (IRIns *)calloc((size_t)trace_nins_acq(fx->owner), sizeof(IRIns));
+  fx->ir = (IRIns *)calloc((size_t)trace_nins_acq(fx->owner)+1u, sizeof(IRIns));
   fx->snap = (SnapShot *)calloc(trace_nsnap_acq(fx->owner), sizeof(SnapShot));
   fx->snapmap = (SnapEntry *)calloc(trace_nsnapmap_acq(fx->owner), sizeof(SnapEntry));
   assert(fx->ir != NULL && fx->snap != NULL && fx->snapmap != NULL);
@@ -265,12 +280,13 @@ static void init_fixture(lua_State *L, jit_State *J, I64Fixture *fx,
   memcpy(fx->snapmap, trace_snapmap_acq(fx->owner),
          (size_t)trace_nsnapmap_acq(fx->owner)*sizeof(SnapEntry));
   assert(no == trace_nk_acq(fx->owner));
+  fx->view_owner = *fx->owner;
   locate_boxed_calls(fx);
 }
 
 static void reset_clone(I64Fixture *fx)
 {
-  memset(fx->ir, 0, (size_t)trace_nins_acq(fx->owner)*sizeof(IRIns));
+  memset(fx->ir, 0, ((size_t)trace_nins_acq(fx->owner)+1u)*sizeof(IRIns));
   memcpy(&fx->ir[trace_nk_acq(fx->owner)],
          &trace_ir_acq(fx->owner)[trace_nk_acq(fx->owner)],
          (size_t)(trace_nins_acq(fx->owner)-trace_nk_acq(fx->owner))*sizeof(IRIns));
@@ -278,13 +294,70 @@ static void reset_clone(I64Fixture *fx)
          (size_t)trace_nsnap_acq(fx->owner)*sizeof(SnapShot));
   memcpy(fx->snapmap, trace_snapmap_acq(fx->owner),
          (size_t)trace_nsnapmap_acq(fx->owner)*sizeof(SnapEntry));
+  fx->view_owner = *fx->owner;
+  fx->view_owner.ir = fx->ir;
+  fx->view_owner.snap = fx->snap;
+  fx->view_owner.snapmap = fx->snapmap;
+  fx->inserted = 0;
+  fx->insertion = 0;
+  fx->semantic_nins = semantic_nins(fx->owner);
+  locate_boxed_calls(fx);
+}
+
+/* Add a genuine no-op instruction in the private published-view clone. Shift
+** every mode-declared IR reference and every snapshot reference/map value at
+** or after the insertion point. Allocator r/s bytes (the `prev` overlay) are
+** intentionally preserved. */
+static void insert_nop_before(I64Fixture *fx, IRRef at)
+{
+  IRRef oldnins = trace_nins_acq(fx->owner), r;
+  MSize s;
+  assert(!fx->inserted && at >= REF_BASE && at < oldnins);
+  memmove(&fx->ir[at+1u], &fx->ir[at],
+          (size_t)(oldnins-at)*sizeof(IRIns));
+  memset(&fx->ir[at], 0, sizeof(IRIns));
+  fx->ir[at].o = IR_NOP;
+  fx->ir[at].t.irt = IRT_NIL;
+  for (r = at+1u; r <= oldnins; r++) {
+    IRIns *ins = &fx->ir[r];
+    uint8_t mode = lj_ir_mode[ins->o];
+    if (irm_op1(mode) == IRMref && ins->op1 >= at)
+      ins->op1++;
+    if (irm_op2(mode) == IRMref && ins->op2 >= at)
+      ins->op2++;
+  }
+  for (s = 0; s < trace_nsnap_acq(fx->owner); s++) {
+    SnapShot *snap = &fx->snap[s];
+    MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap), i;
+    if (snap_ref_acq(snap) >= at) snap->ref++;
+    for (i = 0; i < nent; i++) {
+      SnapEntry *entry = &fx->snapmap[ofs+i];
+      IRRef value = snap_ref(*entry);
+      if (value >= at) *entry = (*entry & ~(SnapEntry)UINT16_MAX) | (value+1u);
+    }
+  }
+  for (r = 0; r < fx->nbox; r++) {
+    if (fx->box[r] >= at) fx->box[r]++;
+    if (fx->store[r] >= at) fx->store[r]++;
+    if (fx->call[r] >= at) fx->call[r]++;
+    if (fx->xsave[r] >= at) fx->xsave[r]++;
+    if (fx->leave[r] >= at) fx->leave[r]++;
+  }
+  fx->insertion = at;
+  fx->inserted = 1;
+  fx->semantic_nins++;
+  fx->view_owner = *fx->owner;
+  fx->view_owner.nins = oldnins+1u;
+  fx->view_owner.ir = fx->ir;
+  fx->view_owner.snap = fx->snap;
+  fx->view_owner.snapmap = fx->snapmap;
 }
 
 static JSave enter_semantic(jit_State *J, I64Fixture *fx)
 {
   JSave save = { J->curfinal, J->pt, J->startpc, J->loopref, J->parent,
     J->exitno, J->baseslot, J->framedepth, J->retdepth, J->ktrace };
-  fx->semantic = *fx->owner;
+  fx->semantic = fx->view_owner;
   fx->semantic.ir = fx->ir;
   fx->semantic.snap = fx->snap;
   fx->semantic.snapmap = fx->snapmap;
@@ -297,7 +370,7 @@ static JSave enter_semantic(jit_State *J, I64Fixture *fx)
   J->curfinal = NULL;
   J->pt = fx->pt;
   J->startpc = trace_startpc_acq(fx->owner);
-  J->loopref = find_loopref(fx->owner);
+  J->loopref = find_loopref_ir(fx->ir, fx->semantic.nins);
   J->parent = 0;
   J->exitno = 0;
   J->baseslot = 1u+LJ_FR2;
@@ -325,14 +398,14 @@ static LJArm64PostRAView postra_view(I64Fixture *fx)
 {
   LJArm64PostRAView v = { 0 };
   v.ir = fx->ir;
-  v.owner = fx->owner;
+  v.owner = &fx->view_owner;
   v.cts = fx->cts;
   v.snap = fx->snap;
   v.snapmap = fx->snapmap;
   v.proto_bc = proto_bc(fx->pt);
   v.proto = fx->pt;
   v.startpc = trace_startpc_acq(fx->owner);
-  v.nins = trace_nins_acq(fx->owner);
+  v.nins = trace_nins_acq(&fx->view_owner);
   v.nk = trace_nk_acq(fx->owner);
   v.nsnap = trace_nsnap_acq(fx->owner);
   v.nsnapmap = trace_nsnapmap_acq(fx->owner);
@@ -353,6 +426,7 @@ static void expect_semantic(jit_State *J, I64Fixture *fx, int admitted)
             admitted, got, (int)reject.reason, (unsigned)reject.ref,
             (unsigned)reject.op, (unsigned)reject.detail);
   assert(got == admitted);
+  if (admitted) semantic_accepts++; else semantic_rejects++;
 }
 
 static void expect_postra(LJArm64PostRAView *v, int admitted)
@@ -362,6 +436,7 @@ static void expect_postra(LJArm64PostRAView *v, int admitted)
   if (got != admitted)
     fprintf(stderr, "boxed CALLXS post-RA expected %d, got %d\n", admitted, got);
   assert(got == admitted);
+  if (admitted) postra_accepts++; else postra_rejects++;
   if (admitted) assert(semantic > REF_FIRST && semantic <= v->nins);
 }
 
@@ -372,7 +447,7 @@ enum Mutation {
   MUT_PHI_INPUT, MUT_PRE_SNAPSHOT_OTHER, MUT_POST_SNAPSHOT_OTHER,
   MUT_PRE_SNAPSHOT_MISSING, MUT_POST_SNAPSHOT_MISSING,
   MUT_PRE_SNAPSHOT_NORESTORE, MUT_POST_SNAPSHOT_NORESTORE,
-  MUT_DUP_STORE, MUT_VARARG_SEPARATOR
+  MUT_VARARG_SEPARATOR
 };
 
 static unsigned choose_box(int alternate)
@@ -497,23 +572,6 @@ static void mutate(I64Fixture *fx, enum Mutation m, int unsigned_result)
     assert(changed && "expected boxed result in exact pre/post snapshot");
     break;
   }
-  case MUT_DUP_STORE: {
-    IRRef r, end = trace_nins_acq(fx->owner);
-    int changed = 0;
-    for (r = store+1u; r < end; r++) {
-      IRIns ins = ir_load_acq(&fx->ir[r]);
-      if (ins.o == IR_CALLS && ins.op2 == IRCALL_lj_ffi_native_trace_leave)
-        break;
-      if (ins.o == IR_NOP && ins.t.irt == IRT_NIL &&
-          ins.op1 == 0 && ins.op2 == 0 && ins.prev == 0) {
-        fx->ir[r] = fx->ir[store];
-        changed = 1;
-        break;
-      }
-    }
-    assert(changed && "no spare NOP in call interval for duplicate-store mutation");
-    break;
-  }
   case MUT_VARARG_SEPARATOR: {
     IRRef r, alternate = 0;
     int changed = 0;
@@ -576,20 +634,6 @@ static void expect_both(I64Fixture *fx, jit_State *J, enum Mutation m,
   test_postra_mutation(fx, m, is_unsigned);
 }
 
-static int has_spare_call_nop(const I64Fixture *fx)
-{
-  IRRef r, store = fx->store[1];
-  for (r = store+1u; r < trace_nins_acq(fx->owner); r++) {
-    IRIns ins = ir_load_acq(&fx->ir[r]);
-    if (ins.o == IR_CALLS && ins.op2 == IRCALL_lj_ffi_native_trace_leave)
-      return 0;
-    if (ins.o == IR_NOP && ins.t.irt == IRT_NIL &&
-        ins.op1 == 0 && ins.op2 == 0 && ins.prev == 0)
-      return 1;
-  }
-  return 0;
-}
-
 static int run_loop(lua_State *L, const char *runner, const char *func)
 {
   lua_getglobal(L, "__i64_driver");
@@ -616,6 +660,85 @@ static int run_callm(lua_State *L)
   return 1;
 }
 
+static int run_boxed_callm(lua_State *L)
+{
+  lua_getglobal(L, "__i64_boxed_callm_driver");
+  lua_getglobal(L, "__i64_boxed_callm_run");
+  lua_getglobal(L, "__i64_i64_call");
+  lua_getglobal(L, "__i64_boxed_callm_consumer");
+  lua_pushinteger(L, 64);
+  if (lua_pcall(L, 4, 1, 0) != 0) {
+    fprintf(stderr, "boxed producer CALLM runner failed: %s\n", lua_tostring(L, -1));
+    return 0;
+  }
+  assert(tviscdata(L->top-1));
+  assert(cdataV(L->top-1)->ctypeid == CTID_INT64);
+  {
+    int64_t result;
+    memcpy(&result, cdataptr(cdataV(L->top-1)), sizeof(result));
+    assert(result == INT64_MIN);
+  }
+  lua_pop(L, 1);
+  return 1;
+}
+
+static int proto_has_boxed_callm_pair(const GCproto *pt)
+{
+  const BCIns *bc = proto_bc(pt);
+  MSize i;
+  for (i = 1; i < pt->sizebc; i++) {
+    BCIns curr = loadbc(&bc[i]);
+    BCIns prev = loadbc(&bc[i-1u]);
+    if (bc_op(curr) == BC_CALLM && bc_op(prev) == BC_CALL &&
+        bc_b(prev) == 0)
+      return 1;
+  }
+  return 0;
+}
+
+static int proto_has_callxs_trace(jit_State *J, GCproto *pt)
+{
+  TraceNo no;
+  for (no = 1; (MSize)no < trace_sizetrace_acq(J); no++) {
+    GCtrace *T = traceref_safe(J, no);
+    if (T != NULL && trace_runnable_acq(T, no) &&
+        trace_startpt_acq(T) == pt && op_count(T, IR_CALLXS) != 0)
+      return 1;
+  }
+  return 0;
+}
+
+static void assert_discard_source_and_snapshot(const I64Fixture *fx)
+{
+  const BCIns *bc = proto_bc(fx->pt);
+  MSize i;
+  BCReg result_slot = 0;
+  for (i = 0; i < fx->pt->sizebc; i++) {
+    BCIns ins = loadbc(&bc[i]);
+    if (bc_op(ins) == BC_CALL && bc_b(ins) == 1 && bc_c(ins) == 2) {
+      result_slot = (BCReg)(1u+LJ_FR2+bc_a(ins));
+      break;
+    }
+  }
+  assert(result_slot != 0 && "discarded-result CALL must encode B=1");
+  for (unsigned b = 0; b < fx->nbox; b++) {
+    MSize s;
+    int found = 0;
+    for (s = 0; s < trace_nsnap_acq(fx->owner); s++) {
+      MSize ofs, nent, i;
+      if (snap_ref_acq(&fx->snap[s]) != fx->leave[b]) continue;
+      found = 1;
+      ofs = snap_mapofs_acq(&fx->snap[s]);
+      nent = snap_nent_acq(&fx->snap[s]);
+      for (i = 0; i < nent; i++) {
+        SnapEntry se = fx->snapmap[ofs+i];
+        assert(!(snap_slot(se) == result_slot && snap_ref(se) == fx->box[b]));
+      }
+    }
+    assert(found && "discarded FFI call needs its post-leave snapshot");
+  }
+}
+
 static void assert_positive(I64Fixture *fx, jit_State *J)
 {
   const BCIns *bc = proto_bc(fx->pt);
@@ -639,15 +762,130 @@ static void assert_positive(I64Fixture *fx, jit_State *J)
   expect_postra(&v, 1);
 }
 
+static void assert_inserted_nop_positive(I64Fixture *fx, jit_State *J)
+{
+  const BCIns *bc = proto_bc(fx->pt);
+  uintptr_t start = (uintptr_t)(const void *)trace_startpc_acq(fx->owner);
+  uintptr_t base = (uintptr_t)(const void *)bc;
+  MSize index = (MSize)((start-base)/sizeof(BCIns));
+  BCIns saved;
+  JSave save;
+  LJArm64PostRAView v;
+  reset_clone(fx);
+  insert_nop_before(fx, fx->leave[1]);
+  assert(fx->ir[fx->insertion].o == IR_NOP);
+  saved = loadbc(&bc[index]);
+  assert(bc_op(saved) == BC_JFORL);
+  bc_publish((const uint32_t *)&bc[index], trace_startins_acq(fx->owner));
+  save = enter_semantic(J, fx);
+  expect_semantic(J, fx, 1);
+  leave_semantic(J, &save);
+  bc_publish((const uint32_t *)&bc[index], saved);
+  reset_clone(fx);
+  insert_nop_before(fx, fx->leave[1]);
+  v = postra_view(fx);
+  expect_postra(&v, 1);
+}
+
+static void expect_inserted_duplicate_reject(I64Fixture *fx, jit_State *J)
+{
+  const BCIns *bc = proto_bc(fx->pt);
+  uintptr_t start = (uintptr_t)(const void *)trace_startpc_acq(fx->owner);
+  uintptr_t base = (uintptr_t)(const void *)bc;
+  MSize index = (MSize)((start-base)/sizeof(BCIns));
+  BCIns saved;
+  JSave save;
+  LJArm64PostRAView v;
+  reset_clone(fx);
+  insert_nop_before(fx, fx->leave[1]);
+  fx->ir[fx->insertion] = fx->ir[fx->store[1]];
+  saved = loadbc(&bc[index]);
+  assert(bc_op(saved) == BC_JFORL);
+  bc_publish((const uint32_t *)&bc[index], trace_startins_acq(fx->owner));
+  save = enter_semantic(J, fx);
+  expect_semantic(J, fx, 0);
+  leave_semantic(J, &save);
+  bc_publish((const uint32_t *)&bc[index], saved);
+  reset_clone(fx);
+  insert_nop_before(fx, fx->leave[1]);
+  fx->ir[fx->insertion] = fx->ir[fx->store[1]];
+  v = postra_view(fx);
+  expect_postra(&v, 0);
+}
+
+static void assert_discarded_call_positive(I64Fixture *fx, jit_State *J)
+{
+  assert_discard_source_and_snapshot(fx);
+  assert_positive(fx, J);
+}
+
+/* A discarded CData result still needs the exact post-effect continuation.
+** Repoint only the leave snapshot, keeping its map and ordered snapshot
+** geometry valid, so this exercises the exact-ref certificate. */
+static void reject_discard_leave_snapshot(I64Fixture *fx, jit_State *J)
+{
+  const BCIns *bc = proto_bc(fx->pt);
+  uintptr_t start = (uintptr_t)(const void *)trace_startpc_acq(fx->owner);
+  uintptr_t base = (uintptr_t)(const void *)bc;
+  MSize index = (MSize)((start-base)/sizeof(BCIns));
+  BCIns saved;
+  MSize s, target_snap = (MSize)-1;
+  IRRef target;
+  JSave save;
+  LJArm64PostRAView v;
+
+  reset_clone(fx);
+  for (s = 0; s < trace_nsnap_acq(fx->owner); s++) {
+    if (snap_ref_acq(&fx->snap[s]) == fx->leave[0]) {
+      assert(target_snap == (MSize)-1);
+      target_snap = s;
+    }
+  }
+  assert(target_snap != (MSize)-1);
+  target = fx->leave[0]-1u;
+  if (target <= fx->store[0]) target = fx->store[0];
+  assert(target < fx->leave[0]);
+  if (target_snap != 0)
+    assert(snap_ref_acq(&fx->snap[target_snap-1u]) <= target);
+  if (target_snap+1u < trace_nsnap_acq(fx->owner))
+    assert(target <= snap_ref_acq(&fx->snap[target_snap+1u]));
+  fx->snap[target_snap].ref = target;
+
+  saved = loadbc(&bc[index]);
+  assert(index < fx->pt->sizebc && bc_op(saved) == BC_JFORL);
+  bc_publish((const uint32_t *)&bc[index], trace_startins_acq(fx->owner));
+  save = enter_semantic(J, fx);
+  expect_semantic(J, fx, 0);
+  leave_semantic(J, &save);
+  bc_publish((const uint32_t *)&bc[index], saved);
+
+  reset_clone(fx);
+  target_snap = (MSize)-1;
+  for (s = 0; s < trace_nsnap_acq(fx->owner); s++) {
+    if (snap_ref_acq(&fx->snap[s]) == fx->leave[0]) {
+      assert(target_snap == (MSize)-1);
+      target_snap = s;
+    }
+  }
+  assert(target_snap != (MSize)-1);
+  target = fx->leave[0]-1u;
+  if (target <= fx->store[0]) target = fx->store[0];
+  fx->snap[target_snap].ref = target;
+  v = postra_view(fx);
+  expect_postra(&v, 0);
+}
+
 int main(void)
 {
   lua_State *L;
   jit_State *J;
-  I64Fixture fx[5] = { 0 };
-  const char *runners[5] = { "__i64_run", "__u64_run",
-    "__i64_vararg_run", "__u64_vararg_run", "__i64_callm_run" };
-  const char *functions[4] = { "__i64_i64_call", "__i64_u64_call",
-    "__i64_i64_vararg", "__i64_u64_vararg" };
+  I64Fixture fx[7] = { 0 };
+  const char *runners[7] = { "__i64_run", "__u64_run",
+    "__i64_vararg_run", "__u64_vararg_run", "__i64_callm_run",
+    "__i64_discard_run", "__u64_discard_run" };
+  const char *functions[7] = { "__i64_i64_call", "__i64_u64_call",
+    "__i64_i64_vararg", "__i64_u64_vararg", NULL,
+    "__i64_i64_call", "__i64_u64_call" };
   unsigned i;
 
   L = ljt_lua_newstate_openlibs();
@@ -662,6 +900,7 @@ int main(void)
     "uint64_t lj_callxs_arm64_u64_vararg(int32_t, ...);\n"
     "double lj_callxs_arm64_i64_callm_producer(int32_t);\n"
     "int64_t lj_callxs_arm64_i64_callm(int32_t, ...);\n"
+    "int64_t lj_callxs_arm64_i64_boxed_consumer(int32_t, ...);\n"
     "]]\n"
     "local lib=ffi.load(assert(os.getenv('LJ_M7_FFI_CALLXS_I64_SO')))\n"
     "_G.__i64_i64_call=lib.lj_callxs_arm64_i64\n"
@@ -670,28 +909,41 @@ int main(void)
     "_G.__i64_u64_vararg=lib.lj_callxs_arm64_u64_vararg\n"
     "_G.__i64_callm_producer=lib.lj_callxs_arm64_i64_callm_producer\n"
     "_G.__i64_callm_consumer=lib.lj_callxs_arm64_i64_callm\n"
+    "_G.__i64_boxed_callm_consumer=lib.lj_callxs_arm64_i64_boxed_consumer\n"
     "function _G.__i64_run(fn,n) local r; for i=1,n do r=fn(i) end; return r end\n"
     "function _G.__u64_run(fn,n) local r; for i=1,n do r=fn(i) end; return r end\n"
     "function _G.__i64_vararg_run(fn,n) local r; for i=1,n do r=fn(i,i+0.5,true,'i64-vararg') end; return r end\n"
     "function _G.__u64_vararg_run(fn,n) local r; for i=1,n do r=fn(i,i+0.5,true,'u64-vararg') end; return r end\n"
     "function _G.__i64_callm_run(n) local r; local p,c=__i64_callm_producer,__i64_callm_consumer; for i=1,n do r=c(17,p(i)) end; return r end\n"
+    "function _G.__i64_discard_run(fn,n) for i=1,n do fn(i) end; return n end\n"
+    "function _G.__u64_discard_run(fn,n) for i=1,n do fn(i) end; return n end\n"
+    "function _G.__i64_boxed_callm_run(producer,consumer,n) local r; for i=1,n do r=consumer(17,producer(i)) end; return r end\n"
     "function _G.__i64_driver(run,fn,n) local r=run(fn,n); return r end\n"
     "function _G.__i64_callm_driver(n) local r=__i64_callm_run(n); return r end\n"
+    "function _G.__i64_boxed_callm_driver(run,producer,consumer,n) local r=run(producer,consumer,n); return r end\n"
     "jit.on(); jit.flush(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=128')\n"
     "local a=__i64_driver(__i64_run,__i64_i64_call,64)\n"
     "local b=__i64_driver(__u64_run,__i64_u64_call,64)\n"
     "local c=__i64_driver(__i64_vararg_run,__i64_i64_vararg,64)\n"
     "local d=__i64_driver(__u64_vararg_run,__i64_u64_vararg,64)\n"
     "local e=__i64_callm_driver(64)\n"
-    "assert(a and b and c and d and e)\n");
+    "local f=__i64_driver(__i64_discard_run,__i64_i64_call,64)\n"
+    "local g=__i64_driver(__u64_discard_run,__i64_u64_call,64)\n"
+    "assert(a and b and c and d and e and f and g)\n");
 
-  for (i = 0; i < 5; i++) {
-    if (i < 4)
+  for (i = 0; i < 7; i++) {
+    if (i < 4 || i >= 5)
       assert(run_loop(L, runners[i], functions[i]));
-    else
+    else if (i == 4)
       assert(run_callm(L));
-    init_fixture(L, J, &fx[i], runners[i], i == 4);
-    assert_positive(&fx[i], J);
+    if (i < 7) {
+      init_fixture(L, J, &fx[i], runners[i], i == 4);
+      fx[i].discarded = (i >= 5);
+      if (fx[i].discarded)
+        assert_discarded_call_positive(&fx[i], J);
+      else
+        assert_positive(&fx[i], J);
+    }
   }
 
   /* Signedness is paired across the CALLXS result and XSTORE, but the CData
@@ -713,23 +965,34 @@ int main(void)
   expect_both(&fx[0], J, MUT_POST_SNAPSHOT_MISSING, 0);
   expect_both(&fx[0], J, MUT_PRE_SNAPSHOT_NORESTORE, 0);
   expect_both(&fx[0], J, MUT_POST_SNAPSHOT_NORESTORE, 0);
-  if (has_spare_call_nop(&fx[0]))
-    expect_both(&fx[0], J, MUT_DUP_STORE, 0);
-  else
-    puts("duplicate XSTORE mutation skipped: trace has no spare in-call NOP");
+  assert_inserted_nop_positive(&fx[0], J);
+  expect_inserted_duplicate_reject(&fx[0], J);
   expect_both(&fx[1], J, MUT_PAIRED_UNSIGNED, 1);
   expect_both(&fx[1], J, MUT_CTYPE, 1);
   expect_both(&fx[2], J, MUT_VARARG_SEPARATOR, 0);
   expect_both(&fx[3], J, MUT_PAIRED_UNSIGNED, 1);
   expect_both(&fx[3], J, MUT_CROSS_WIDTH, 1);
   expect_both(&fx[4], J, MUT_CTYPE, 0);
+  reject_discard_leave_snapshot(&fx[5], J);
 
-  for (i = 0; i < 5; i++) {
+  /* A boxed CData producer feeding CALLM cannot be treated as the previous
+  ** scalar multires producer; it remains interpreter-correct and unpublished. */
+  assert(run_boxed_callm(L));
+  {
+    GCproto *pt = global_proto(L, "__i64_boxed_callm_run");
+    assert(proto_has_boxed_callm_pair(pt));
+    assert(!proto_has_callxs_trace(J, pt));
+  }
+
+  for (i = 0; i < 7; i++) {
     free(fx[i].ir);
     free(fx[i].snap);
     free(fx[i].snapmap);
   }
   lua_close(L);
+  printf("boxed I64/U64 semantic=%u positive/%u negative "
+         "post-RA=%u positive/%u negative\n", semantic_accepts,
+         semantic_rejects, postra_accepts, postra_rejects);
   puts("t-arm64-jit-callxs-i64-admission OK");
   return 0;
 }

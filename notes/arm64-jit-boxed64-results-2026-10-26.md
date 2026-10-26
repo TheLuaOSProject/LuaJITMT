@@ -24,6 +24,8 @@ The shared reader only validates bounded snapshot metadata; it does not
 replace either pass's source, lifecycle, ABI, or allocation proof. The hidden
 slot follows the synthetic meta-call frame's callable cdata and arguments.
 The caller result occupies CALL/CALLM register A; B=1 discards the result.
+Discarding still requires the exact DONE snapshot at native leave, so an
+exit resumes after the foreign effect even though no result slot is retained.
 
 Const-qualified integer CTypes retain their distinct terminal CTypeID.
 Tests resolve that exact declared type and verify interpreter, native-frame,
@@ -51,11 +53,20 @@ The admission fixture first admits each authentic semantic and post-RA
 clone independently, then rejects result type/width, CType, payload, store
 source, entry root, PHI, variadic separator, and separate hidden/caller
 snapshot substitutions. Substitutions use an earlier valid CNEW. Snapshot
-NORESTORE and nil substitutions are checked independently too. At this
-initial checkpoint, the duplicate-store mutation reports a skip because
-the real trace has no spare instruction between XSTORE and leave. A dedicated
-discarded-result positive and a non-skipped duplicate-store case remain to
-be added before the final matrix.
+NORESTORE and nil substitutions are checked independently too. The initial
+checkpoint skipped the duplicate-store mutation because no spare instruction
+existed in the captured trace. The completed fixture now inserts/rebases one
+private canonical NOP, proves both passes accept that clone, then replaces
+the NOP with a second XSTORE and requires both passes to reject it.
+
+The follow-up ARM64 assertion development profile
+`543c899433ba31bf0ab4e34f40b6fef49ab32d25a79ee52ad21408847775c781`
+passes the expanded fixtures. They add all 13 signed and 12 unsigned payload
+patterns, including 32-bit boundaries and alternating bits; native discarded
+I64/U64 results and forced discarded-result POSTCALL exits; independent
+discarded-result continuation mutations; and a well-defined integer-vararg
+consumer confirming boxed CALLM producers remain closed. No duplicate-store
+mutation is skipped.
 
 The first development runs exposed fixture issues, not weakened admission:
 const was incorrectly expected to have the unqualified CTypeID, and a

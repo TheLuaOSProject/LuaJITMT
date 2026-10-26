@@ -38,12 +38,15 @@ run_profile() {
     -mmacosx-version-min="$LJ_CI_MINVER" "$object" \
     $LJ_CI_LDFLAGS $LJ_CI_TARGET_LDFLAGS -o "$library"
   test "$(lipo -archs "$library")" = "$arch"
+  library_sha=$(lj_ci_sha256 "$library")
+  echo "arm64_jit_boxed_i64_contract library=$library_sha profile=$LJ_CI_PROFILE_ID"
   export LJ_M7_FFI_CALLXS_I64_SO="$library"
   for name in callxs-i64 callxs-i64-admission callxs-pointer-admission; do
     fixture=$tmpdir/t-arm64-jit-$name-$profile
     lj_ci_compile_fixture "$fixture" "$root/tests/t-arm64-jit-$name.c"
     lj_ci_run_fixture 60 "$fixture"
   done
+  test "$(lj_ci_sha256 "$library")" = "$library_sha"
 }
 
 profiles=${LJ_ARM64_BOXED_I64_PROFILES:-'arm64-assert arm64e-assert arm64-release arm64e-release'}

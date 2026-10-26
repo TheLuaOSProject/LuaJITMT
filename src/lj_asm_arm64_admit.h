@@ -938,7 +938,9 @@ static int arm64_callxs_source_value(const GCtrace *T, IRRef xsave,
 
 /* Read one exact, restorable slot from an effect-boundary snapshot. This is
 ** metadata validation only: each admission pass separately derives the box,
-** marker, caller slot and frame geometry from its own CALLXS lifecycle. */
+** marker, caller slot and frame geometry from its own CALLXS lifecycle.
+** A zero slot denotes a discarded Lua result: the completed-call snapshot
+** is still mandatory, but it need not retain the native frame's box. */
 static int arm64_callxs_snapshot_box_slot(const SnapShot *snapshots,
     const SnapEntry *map, MSize nsnap, MSize nsnapmap, IRRef at,
     MSize base, MSize slot, IRRef box, int hidden)
@@ -962,12 +964,14 @@ static int arm64_callxs_snapshot_box_slot(const SnapShot *snapshots,
   nent = snap_nent_acq(snap);
   nslots = snap_nslots_acq(snap);
   if (ofs > nsnapmap || nent > nsnapmap-ofs ||
-      nsnapmap-ofs-nent < 1u+LJ_FR2 || slot >= nslots ||
+      nsnapmap-ofs-nent < 1u+LJ_FR2 || nslots < base ||
+      (slot != 0 && slot >= nslots) || (hidden && slot == 0) ||
       (hidden && nslots != slot+1u)) return 0;
   for (i = 0; i < 1u+LJ_FR2; i++)
     footer_words[i] = snapentry_acq(&map[ofs+nent+i]);
   memcpy(&footer, footer_words, sizeof(footer));
   if ((uint8_t)footer != base-(1u+LJ_FR2)) return 0;
+  if (slot == 0) return 1;
   for (i = 0; i < nent; i++) {
     SnapEntry entry = snapentry_acq(&map[ofs+i]);
     if (snap_slot(entry) == slot) {
@@ -1172,7 +1176,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	if ((result_is_cdata && (!boxref || !box_store_seen)) ||
 	    (!result_is_cdata && (boxref || box_store_seen)))
 	  return 0;
-	if (result_is_cdata && result_slot != 0 &&
+	if (result_is_cdata &&
 	    !arm64_callxs_snapshot_box_slot(T->snap, T->snapmap,
 	      T->nsnap, T->nsnapmap, ref, 1u+LJ_FR2,
 	      result_slot, boxref, 0)) return 0;
@@ -3633,7 +3637,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		(result_is_cdata && (boxref == 0 || !box_store_seen)) ||
 		(!result_is_cdata && (boxref != 0 || box_store_seen)))
 	      return 0;
-	    if (result_is_cdata && result_slot != 0 &&
+	    if (result_is_cdata &&
 		!arm64_callxs_snapshot_box_slot(view->snap, view->snapmap,
 		  view->nsnap, view->nsnapmap, ref, 1u+LJ_FR2,
 		  result_slot, boxref, 0)) return 0;
