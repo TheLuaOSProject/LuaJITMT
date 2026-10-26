@@ -40,6 +40,7 @@ static const struct {
 };
 static uint64_t covered_ops;
 static unsigned machine_ops, snapshot_conversions, fused_integers, integer_spills;
+static unsigned cross_loop_fusions;
 static unsigned last_fused, last_fusion_mask;
 
 static unsigned bitop_machine_mask(GCtrace *T)
@@ -484,6 +485,57 @@ static void mutate_snapshots(BitopView *v)
   assert(lj_asm_arm64_postra_admit(&v->post, NULL));
 }
 
+/* The first recorded iteration and the optimized loop body each contain
+** shifts. A clone may remain valid scalar IR when the body starts consuming
+** an unlocated first-iteration shift, but asm_fuseopm cannot fuse across LOOP.
+** Change only that operand: snapshots, PHIs, locations and frame stay intact. */
+static void mutate_cross_loop_fusion(BitopView *v)
+{
+  IRRef loop = v->fake->loopref, source, consumer;
+  for (source = REF_FIRST; source < loop; source++) {
+    IRIns p = v->post_ir[source];
+    IRRef use;
+    int preloop_use = 0;
+    if (p.o != IR_BSHL || p.t.irt != IRT_INT ||
+        !irref_isk(p.op2) || ra_hasreg(p.r) || ra_hasspill(p.s)) continue;
+    for (use = source+1u; use < loop; use++) {
+      IRIns q = v->post_ir[use];
+      if (q.o == IR_BXOR && (q.op1 == source || q.op2 == source))
+        preloop_use = 1;
+    }
+    if (!preloop_use) continue;
+    for (consumer = loop+1u; consumer < v->semantic_nins; consumer++) {
+      IRIns q = v->post_ir[consumer], shifted;
+      IRRef ref;
+      int accepted, operand1;
+      if (q.o != IR_BXOR || !irt_isint(q.t)) continue;
+      operand1 = q.op1 > loop && q.op1 < consumer &&
+                 v->post_ir[q.op1].o == IR_BSHL;
+      ref = operand1 ? q.op1 : q.op2;
+      if (ref <= loop || ref >= consumer) continue;
+      shifted = v->post_ir[ref];
+      if (shifted.o != IR_BSHL || shifted.t.irt != IRT_INT ||
+          shifted.op2 != p.op2 || ra_hasreg(shifted.r) ||
+          ra_hasspill(shifted.s)) continue;
+      if (operand1)
+        v->post_ir[consumer].op1 = v->sem_ir[consumer].op1 = (IRRef1)source;
+      else
+        v->post_ir[consumer].op2 = v->sem_ir[consumer].op2 = (IRRef1)source;
+      assert(lj_asm_arm64_ir_admit(v->fake, &v->sem, NULL));
+      accepted = lj_asm_arm64_postra_admit(&v->post, NULL);
+      if (accepted)
+        fprintf(stderr, "cross-loop fusion accepted: source=%u loop=%u use=%u\n",
+                (unsigned)source, (unsigned)loop, (unsigned)consumer);
+      assert(!accepted);
+      v->post_ir[consumer] = v->sem_ir[consumer] = q;
+      assert(lj_asm_arm64_ir_admit(v->fake, &v->sem, NULL));
+      assert(lj_asm_arm64_postra_admit(&v->post, NULL));
+      cross_loop_fusions++;
+      return;
+    }
+  }
+}
+
 static int fused_check(lua_State *L)
 {
   unsigned required = (unsigned)luaL_checkinteger(L, 1);
@@ -528,6 +580,7 @@ static int check(lua_State *L)
   bitop_view_init(&v, L, T);
   mutate_admission(&v, required);
   mutate_snapshots(&v);
+  mutate_cross_loop_fusion(&v);
   machine_ops |= bitop_machine_mask(T);
   last_fusion_mask = bitop_fusion_mask(T);
   bitop_view_free(&v);
@@ -784,9 +837,11 @@ int main(int argc, char **argv)
         (sizeof(bitops)/sizeof(bitops[0]))) - 1u;
     required &= ~(UINT64_C(1) << 9);  /* BROL remains intentionally closed. */
     assert((covered_ops & required) == required);
-    printf("BITOPS totals machine_mask=%u fused=%u rematerialized_snapshots=%u integer_spills=%u\n",
-           machine_ops, fused_integers, snapshot_conversions, integer_spills);
-    assert(machine_ops == 1023u && fused_integers && integer_spills && snapshot_conversions);
+    printf("BITOPS totals machine_mask=%u fused=%u rematerialized_snapshots=%u integer_spills=%u cross_loop_rejections=%u\n",
+           machine_ops, fused_integers, snapshot_conversions, integer_spills,
+           cross_loop_fusions);
+    assert(machine_ops == 1023u && fused_integers && integer_spills &&
+           snapshot_conversions && cross_loop_fusions);
   }
   lua_close(L);
   return 0;

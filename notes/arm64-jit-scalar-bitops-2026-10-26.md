@@ -91,4 +91,31 @@ it still expected every NOP to be an unsupported opcode. The fixture now
 accepts an unused canonical NOP, rejects a NOP used as a value or carrying
 operands, and distinguishes valid wrapping ADD/SUB from wrong PHI/guard flags.
 The complete generic admission contract passes after that test-only update;
-production sources are unchanged from the initial bitops checkpoint.
+that correction did not change production sources.
+
+## Loop-boundary certificate correction
+
+A subsequent review found that the shifted-operand certificate also needs the
+emitter's `mayfuse` loop boundary. The first recorded iteration can contain an
+unlocated shift fused into its local consumer, but that shift cannot also fuse
+into a consumer after `IR_LOOP`. The use walk now tracks the consumer's active
+loop boundary and applies it only to `asm_fuseopm` paths; the separate `canfuse`
+transformations keep their existing rules. No emitter behavior changes.
+
+The regression clones the real `allocated_fusion_shift_xor` trace and changes
+only the body XOR's shifted operand to the unlocated first-iteration shift.
+Semantic admission still accepts it. The previous physical checker incorrectly
+accepted this clone; the corrected checker rejects it. Snapshots, PHIs,
+locations and frame size remain untouched, and the restored original passes.
+The full focused run still passes all 52 native cases with the same layout
+totals, plus one independently required cross-loop rejection. This establishes
+a certificate gap, not a demonstrated native wrong-code result.
+
+The broad run at `8b605112` was deliberately stopped after its current numeric
+contract completed, and its ordinary runtime restoration finished. It had
+already passed all four bitops profiles and the rooted-value/callback/side
+contracts reached so far; it is not claimed as a complete gate pass. Final
+combined validation will use a new frozen source checkpoint including this
+correction. Local before/after logs are
+`/tmp/ljmt-bitops-boundary-before.log` and
+`/tmp/ljmt-bitops-boundary-after.log`.

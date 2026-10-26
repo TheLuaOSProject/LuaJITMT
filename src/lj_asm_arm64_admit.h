@@ -6852,12 +6852,15 @@ static int arm64_scalar_postra_kint(const LJArm64PostRAView *v, IRRef ref,
 
 /* asm_fuseopm consumes at most one unmaterialized shift/double operation.
 ** Its input must have a real location; this is not recursive permission to
-** erase an arbitrary chain. A rotate is available only to logical opcodes. */
+** erase an arbitrary chain. Match mayfuse's loop boundary at the consumer;
+** unlike canfuse paths, an invariant shift cannot fuse into the loop body.
+** A rotate is available only to logical opcodes. */
 static int arm64_scalar_postra_fuseopm(const LJArm64PostRAView *v,
-                                      IRRef ref, IRRef before, int logical)
+                                      IRRef ref, IRRef before, IRRef loop,
+                                      int logical)
 {
   IRIns p;
-  if (ref < REF_FIRST || ref >= before) return 0;
+  if (ref < REF_FIRST || ref >= before || ref <= loop) return 0;
   p = ir_load_acq(&v->ir[ref]);
   if (p.t.irt != IRT_INT ||
       !arm64_scalar_postra_int_location(v, p.op1, ref)) return 0;
@@ -6884,7 +6887,8 @@ static int arm64_scalar_postra_swapops(const LJArm64PostRAView *v,
 }
 
 static int arm64_scalar_postra_int_fusion(const LJArm64PostRAView *v,
-                                         IRRef value, IRRef consumer)
+                                         IRRef value, IRRef consumer,
+                                         IRRef loop)
 {
   IRIns source = ir_load_acq(&v->ir[value]);
   IRIns use = ir_load_acq(&v->ir[consumer]);
@@ -6906,11 +6910,11 @@ static int arm64_scalar_postra_int_fusion(const LJArm64PostRAView *v,
     if (notref == value && !irref_isk(other) &&
         arm64_scalar_postra_int_location(v, other, consumer) &&
         (arm64_scalar_postra_int_location(v, source.op1, value) ||
-         arm64_scalar_postra_fuseopm(v, source.op1, value, 1))) return 1;
+         arm64_scalar_postra_fuseopm(v, source.op1, value, loop, 1))) return 1;
   }
   if (use.o == IR_BNOT && (use.t.irt & ~IRT_ISPHI) == IRT_INT &&
       use.op2 == 0 &&
-      left == value && arm64_scalar_postra_fuseopm(v, value, consumer, 1))
+      left == value && arm64_scalar_postra_fuseopm(v, value, consumer, loop, 1))
     return 1;
 
   /* UBFM/SBFM replace a left shift followed by a constant right shift. The
@@ -6966,7 +6970,7 @@ static int arm64_scalar_postra_int_fusion(const LJArm64PostRAView *v,
       }
       if (arm64_scalar_postra_int_location(v, a, value) &&
           (arm64_scalar_postra_int_location(v, b, value) ||
-           arm64_scalar_postra_fuseopm(v, b, value, 1))) return 1;
+           arm64_scalar_postra_fuseopm(v, b, value, loop, 1))) return 1;
     }
   }
 
@@ -6981,13 +6985,13 @@ static int arm64_scalar_postra_int_fusion(const LJArm64PostRAView *v,
   }
   return right == value &&
          arm64_scalar_postra_int_location(v, left, consumer) &&
-         arm64_scalar_postra_fuseopm(v, value, consumer, logical);
+         arm64_scalar_postra_fuseopm(v, value, consumer, loop, logical);
 }
 
 /* A missing location is legal only for an unused scalar or a proven target
 ** fusion at every use. Snapshot sources are checked separately after renames. */
 static int arm64_scalar_postra_nolocation(const LJArm64PostRAView *v,
-                                          IRRef value, IRRef end)
+                                          IRRef value, IRRef end, IRRef loop)
 {
   IRIns source = ir_load_acq(&v->ir[value]);
   IRRef ref;
@@ -7002,8 +7006,10 @@ static int arm64_scalar_postra_nolocation(const LJArm64PostRAView *v,
     IRIns use = ir_load_acq(&v->ir[ref]);
     int used;
     switch ((IROp)use.o) {
-    case IR_SLOAD:
     case IR_LOOP:
+      loop = ref;
+      continue;
+    case IR_SLOAD:
     case IR_XPOLL:
       continue;
     case IR_CONV:
@@ -7016,7 +7022,7 @@ static int arm64_scalar_postra_nolocation(const LJArm64PostRAView *v,
     if (!used)
       continue;
     if (source.t.irt == IRT_INT &&
-        arm64_scalar_postra_int_fusion(v, value, ref))
+        arm64_scalar_postra_int_fusion(v, value, ref, loop))
       continue;
     if (source.o != IR_MUL || source.t.irt != IRT_NUM ||
         (use.o != IR_ADD && use.o != IR_SUB) || !irt_isnum(use.t) ||
@@ -8060,7 +8066,8 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
               !(ra_hashint(p.r) &&
                 arm64_scalar_postra_register(ra_gethint(p.r), type)))
             return 0;
-          if (!ra_hasspill(p.s) && !arm64_scalar_postra_nolocation(v, ref, n))
+          if (!ra_hasspill(p.s) &&
+              !arm64_scalar_postra_nolocation(v, ref, n, loop))
             return 0;
         }
       }
