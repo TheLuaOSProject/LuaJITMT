@@ -61,10 +61,10 @@ local function collect(label, mode, enable_jit)
   }
 end
 
-local results = {
-  collect("interp", "i1", false),
-  collect("jit", "i1l", true)
-}
+local results = {collect("interp", "i1", false)}
+if not (arg and arg[1] == "--interp-only") then
+  results[#results + 1] = collect("jit", "i1l", true)
+end
 
 assert(release:send("release", 1) == true)
 local joined, result = worker:join(2)
@@ -78,6 +78,8 @@ for _, r in ipairs(results) do
   assert(r.callbacks > 0 and r.x > 0)
 end
 
-print(("t-profile-blocked-tg OK: interp=%d/%d jit=%d/%d"):format(
-  results[1].samples, results[1].callbacks,
-  results[2].samples, results[2].callbacks))
+local counts = {}
+for _, r in ipairs(results) do
+  counts[#counts + 1] = ("%s=%d/%d"):format(r.label, r.samples, r.callbacks)
+end
+print("t-profile-blocked-tg OK: " .. table.concat(counts, " "))

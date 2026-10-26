@@ -2780,6 +2780,29 @@ static LJ_AINLINE int hookmask_vmevent_enter(global_State *g)
     HOOK_ACTIVE|HOOK_VMEVENT);
 }
 
+/* Keep protected callbacks mutually excluded without suppressing a peer's
+** recorder dispatch. ACTIVE still excludes ordinary hooks; VMEVENT belongs
+** to the callback's TG and is reserved separately before this claim. */
+static LJ_AINLINE int hookmask_callback_enter(global_State *g)
+{
+  return hookmask_set_if_clear(g,
+    HOOK_ACTIVE|HOOK_VMEVENT|HOOK_GC|HOOK_PROFILE, HOOK_ACTIVE);
+}
+
+static LJ_AINLINE void hookmask_callback_leave(global_State *g)
+{
+  uint8_t old = hookmask_load(g);
+  for (;;) {
+    uint8_t next = old;
+    if (la_load32_acq(&g->hookactive) == 0 && !(next & HOOK_GC))
+      next &= (uint8_t)~HOOK_ACTIVE;
+    else
+      next |= HOOK_ACTIVE;
+    if (la_cas8(&g->hookmask, &old, next, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
+}
+
 static LJ_AINLINE void hookmask_vmevent_leave(global_State *g)
 {
   uint8_t old = hookmask_load(g);

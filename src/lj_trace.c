@@ -11627,6 +11627,16 @@ static void trace_terminal_release(lua_State *L, jit_State *J)
 #endif
 }
 
+#ifdef LJ_TRACE_TEST_HELPERS
+static void (*trace_test_recorded_hook)(jit_State *J, const BCIns *pc);
+
+void lj_trace_test_set_recorded_hook(
+  void (*hook)(jit_State *J, const BCIns *pc))
+{
+  trace_test_recorded_hook = hook;
+}
+#endif
+
 /* State machine for the trace compiler. Protected callback. */
 static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
 {
@@ -11694,7 +11704,16 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
 	J->parent = parent;
 	J->exitno = exitno;
       );
-      lj_record_ins(J);
+      {
+#ifdef LJ_TRACE_TEST_HELPERS
+        const BCIns *recorded_pc = J->pc;
+#endif
+        lj_record_ins(J);
+#ifdef LJ_TRACE_TEST_HELPERS
+        if (trace_test_recorded_hook)
+          trace_test_recorded_hook(J, recorded_pc);
+#endif
+      }
       break;
 
     case LJ_TRACE_END:

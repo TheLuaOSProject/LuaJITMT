@@ -116,6 +116,19 @@ Logs and drivers remain under /tmp:
 - ljmt-upvalue-bootstrap-closed-upvalues.log
 - ljmt-upvalue-development-profile-closed-upvalues.log
 
+## Later callback regression
+
+After the uninterrupted validation above, repeated runs of the concurrent
+reader/writer test found a `rec_check_slots` mismatch at process 56. A peer
+legacy VM-event/profile callback could set global VMEVENT and suppress one
+bytecode of an active recorder, leaving the recorder's function slot where
+the VM had already returned a table. The later callback checkpoint replaces
+that dispatch suppression with a TG-local marker and includes deterministic
+before/after overlap fixtures. See
+[`arm64-jit-callback-recording-2026-10-26.md`](arm64-jit-callback-recording-2026-10-26.md)
+for the reproduction, fix and subsequent validation. The earlier passing run
+above did not establish the absence of this intermittent recorder race.
+
 ## Remaining scope
 
 This adds closed closure-upvalue operations, not general upvalue/cell JIT

@@ -261,11 +261,14 @@ static void run_busy_callback_state_test(lua_State *L, global_State *g)
 
 #endif
 
-int main(void)
+int main(int argc, char **argv)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
   global_State *g;
   TGState *tg;
+  int callback_cleanup = argc == 2 &&
+                         strcmp(argv[1], "--callback-cleanup") == 0;
+  assert(argc == 1 || callback_cleanup);
 
   g = G(L);
   tg = G2TG(g);
@@ -274,14 +277,17 @@ int main(void)
   ljt_lua_dostring(L, "assert(require('jit.profile'))");
   run_sticky_cleanup_test(L, tg);
   run_callback_error_test(L);
-  run_concurrent_lifecycle_test(L);
+  if (!callback_cleanup)
+    run_concurrent_lifecycle_test(L);
 #if LJ_PROFILE_PTHREAD
   run_native_join_test(L, g, tg);
   run_busy_callback_state_test(L, g);
 #endif
 
   lua_close(L);
-  printf("t-profile-stop-native OK: profile.stop STOPREQ cleanup guarded\n");
+  printf("t-profile-stop-native OK: %s\n", callback_cleanup ?
+         "callback error and STOPREQ cleanup" :
+         "profile.stop STOPREQ cleanup guarded");
   return 0;
 }
 

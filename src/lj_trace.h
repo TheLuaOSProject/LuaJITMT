@@ -415,6 +415,9 @@ LJ_FUNC uint32_t lj_trace_reclaim_retired(global_State *g,
 LJ_FUNC int lj_trace_retired_mcode_refs(global_State *g, MCode *area,
 					size_t size);
 #ifdef LJ_TRACE_TEST_HELPERS
+/* Exact bytecode just recorded, before its interpreter execution. */
+LJ_FUNC void lj_trace_test_set_recorded_hook(
+  void (*hook)(jit_State *J, const BCIns *pc));
 LJ_FUNC int lj_trace_test_body_mcode_refs(global_State *g, GCtrace *T,
 					  MCode *area, size_t size);
 LJ_FUNC void lj_trace_test_reset_exittab_stats(void);

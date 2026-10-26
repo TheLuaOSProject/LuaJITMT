@@ -606,7 +606,7 @@ static void *release_paused_signal(void *arg)
 
 static void test_profile_timer(void)
 {
-  struct sigaction sa, oldsa;
+  struct sigaction sa, oldsa, current;
   lua_State *L;
   TGState *tg;
   TGState signal_tg;
@@ -852,8 +852,8 @@ static void test_profile_timer(void)
   assert(!lj_profile_active(L));
   assert(!lj_profile_timer_test_handler_installed());
 
-  /* A failed restore after a successful disarm has the same recoverable inert
-  ** state and does not overwrite oldsa on the next start. */
+  /* Failure to install SIG_IGN after timer disarm retains the owned inert
+  ** handler. A retry reuses that handler and later completes both actions. */
   lj_profile_timer_test_reset();
   profile_start_long(L);
   assert(lj_profile_active(L));
@@ -861,14 +861,98 @@ static void test_profile_timer(void)
   lj_profile_timer_test_fail_sigaction(1);
   luaJIT_profile_stop(L);
   assert(!lj_profile_active(L));
+  assert(lj_profile_timer_test_sigaction_calls() == 1u);
   assert(lj_profile_timer_test_handler_installed());
   assert_inert_profile_handler();
   lj_profile_timer_test_reset();
   profile_start_long(L);
   assert(lj_profile_active(L));
+  assert(lj_profile_timer_test_sigaction_calls() == 0u);
+  lj_profile_timer_test_reset();
+  luaJIT_profile_stop(L);
+  assert(!lj_profile_active(L));
+  assert(lj_profile_timer_test_sigaction_calls() == 2u);
+  assert(!lj_profile_timer_test_handler_installed());
+  assert(sigaction(SIGPROF, NULL, &current) == 0);
+  assert(current.sa_handler == sample_handler);
+  sample_signal(tg);
+
+  /* If SIG_IGN is installed after disarm but restoring oldsa fails, the inert
+  ** ignore disposition is retained. The next start reinstalls our handler
+  ** without replacing the saved action, and stop restores that action. */
+  lj_profile_timer_test_reset();
+  profile_start_long(L);
+  assert(lj_profile_active(L));
+  lj_profile_timer_test_reset();
+  lj_profile_timer_test_fail_sigaction(2);
+  luaJIT_profile_stop(L);
+  assert(!lj_profile_active(L));
+  assert(lj_profile_timer_test_sigaction_calls() == 2u);
+  assert(lj_profile_timer_test_handler_installed());
+  assert_inert_profile_handler();
+  la_store32_rel(&profile_callback_count, 0);
+  la_store32_rel(&profile_callback_samples, 0);
+  lj_profile_timer_test_reset();
+  profile_start_long(L);
+  assert(lj_profile_active(L));
+  assert(lj_profile_timer_test_sigaction_calls() == 1u);
+  assert(lj_profile_timer_test_handler_installed());
+  assert(raise(SIGPROF) == 0);
+  assert(lj_tg_profile_request_acq(tg));
+  assert(lj_safepoint_poll(L) == 0);
+  assert(lj_tg_hookmask_load(tg) & HOOK_PROFILE);
+  lj_profile_interpreter(L);
+  assert(la_load32_acq(&profile_callback_count) == 1u);
   luaJIT_profile_stop(L);
   assert(!lj_profile_active(L));
   assert(!lj_profile_timer_test_handler_installed());
+  assert(sigaction(SIGPROF, NULL, &current) == 0);
+  assert(current.sa_handler == sample_handler);
+  sample_signal(tg);
+
+  /* A failed arm from retained IGNORE keeps an inert owned handler. A
+  ** retry reuses it without overwriting oldsa, and the eventual stop restores
+  ** the original application handler. */
+  lj_profile_timer_test_reset();
+  profile_start_long(L);
+  assert(lj_profile_active(L));
+  lj_profile_timer_test_reset();
+  lj_profile_timer_test_fail_sigaction(2);  /* IGNORE succeeds; oldsa fails. */
+  luaJIT_profile_stop(L);
+  assert(!lj_profile_active(L));
+  assert(lj_profile_timer_test_sigaction_calls() == 2u);
+  assert(lj_profile_timer_test_handler_installed());
+  assert(sigaction(SIGPROF, NULL, &current) == 0);
+  assert(current.sa_handler == SIG_IGN);
+  la_store32_rel(&profile_callback_count, 0);
+  assert_inert_profile_handler();
+  assert(la_load32_acq(&profile_callback_count) == 0u);
+
+  lj_profile_timer_test_reset();
+  lj_profile_timer_test_fail_setitimer(1);
+  profile_start_long(L);
+  assert(!lj_profile_active(L));
+  assert(lj_profile_timer_test_sigaction_calls() == 1u);
+  assert(lj_profile_timer_test_setitimer_calls() == 1u);
+  assert(lj_profile_timer_test_handler_installed());
+  assert(sigaction(SIGPROF, NULL, &current) == 0);
+  assert(current.sa_handler != SIG_IGN && current.sa_handler != sample_handler);
+  assert_inert_profile_handler();
+  assert(la_load32_acq(&profile_callback_count) == 0u);
+  assert(!lj_tg_profile_request_acq(tg));
+  assert(!(lj_tg_hookmask_load(tg) & HOOK_PROFILE));
+
+  lj_profile_timer_test_reset();
+  profile_start_long(L);
+  assert(lj_profile_active(L));
+  assert(lj_profile_timer_test_sigaction_calls() == 0u);
+  luaJIT_profile_stop(L);
+  assert(!lj_profile_active(L));
+  assert(!lj_profile_timer_test_handler_installed());
+  assert(lj_profile_timer_test_sigaction_calls() == 2u);
+  assert(sigaction(SIGPROF, NULL, &current) == 0);
+  assert(current.sa_handler == sample_handler);
+  sample_signal(tg);
 
   /* Hold a handler after its entry count but before ACTIVE validation. STOPPING
   ** must observe and drain it before returning and permitting VM teardown. */

@@ -80,6 +80,12 @@ typedef unsigned int (WINAPI *WMM_TPFUNC)(unsigned int);
 
 #endif
 
+#if LJ_PROFILE_SIGPROF
+#define PROFILE_SIGNAL_NONE	0u
+#define PROFILE_SIGNAL_HANDLER	1u
+#define PROFILE_SIGNAL_IGNORE	2u
+#endif
+
 /* Profiler state. */
 typedef struct ProfileState {
   global_State *g;		/* VM state that started the profiler. */
@@ -96,7 +102,7 @@ typedef struct ProfileState {
   int32_t vmstate;		/* VM state when profile timer triggered. */
 #if LJ_PROFILE_SIGPROF
   struct sigaction oldsa;	/* Previous SIGPROF state. */
-  uint32_t signal_handler_installed;  /* Our handler still owns SIGPROF. */
+  uint32_t signal_action;  /* Owned handler/ignore action, or NONE. */
   uint32_t signal_handlers;  /* In-flight handlers that may have seen ACTIVE. */
 #elif LJ_PROFILE_PTHREAD
   pthread_t thread;		/* Timer thread. */
@@ -431,7 +437,7 @@ void LJ_FASTCALL lj_profile_owner_poll(lua_State *L)
     return;
   if (!profile_tg_eligible(g, tg) || !profile_state_active_g(ps, g))
     return;
-  if (!(hookmask_load(g) & (HOOK_VMEVENT|HOOK_GC)) &&
+  if (!(hookmask_load(g) & (HOOK_ACTIVE|HOOK_VMEVENT|HOOK_GC)) &&
       lj_tg_hookmask_set_if_clear(tg,
 	HOOK_PROFILE|HOOK_ACTIVE|HOOK_VMEVENT, HOOK_PROFILE))
     profile_tg_sethook(tg);
@@ -458,7 +464,6 @@ void LJ_FASTCALL lj_profile_interpreter(lua_State *L)
   uint32_t samples;
   int32_t vmstate;
   int entered = 0;
-  uint8_t saved;
   if (tg)
     (void)lj_tg_profile_request_xchg_acqrel(tg, 0);
   if (!profile_tg_eligible(g, tg) || !(lj_tg_hookmask_load(tg) & HOOK_PROFILE))
@@ -477,7 +482,28 @@ void LJ_FASTCALL lj_profile_interpreter(lua_State *L)
     lj_tg_profile_vmstate_store_rel(tg, 'N');
     return;
   }
-  if (!hookmask_profile_enter(g, &saved)) {
+  /* Profile callbacks are owner-local in this build. Reserve the TG's
+  ** callback bits first, then acquire the universe-wide callback exclusion.
+  ** HOOK_PROFILE remains set until the callback owner has been published. */
+  if (!lj_tg_hookmask_set_if_clear(tg,
+	HOOK_ACTIVE|HOOK_VMEVENT, HOOK_ACTIVE|HOOK_VMEVENT)) {
+    profile_tg_clearhook(L, tg);
+    return;
+  }
+  if (!hookmask_callback_enter(g)) {
+    if (LJ_UNLIKELY(!lj_tg_hookmask_callback_leave_exact(tg)))
+      abort();
+    profile_tg_clearhook(L, tg);
+    return;
+  }
+  /* Close PROFILE -> callback_tg handoff and local-claim races before any
+  ** callback is published. The global exclusion prevents the opposite
+  ** event/profile admission order from passing its recheck. */
+  if (lj_profile_callback_active_tg(tg) ||
+      !(lj_tg_hookmask_load(tg) & HOOK_VMEVENT)) {
+    if (LJ_UNLIKELY(!lj_tg_hookmask_callback_leave_exact(tg)))
+      abort();
+    hookmask_callback_leave(g);
     profile_tg_clearhook(L, tg);
     return;
   }
@@ -496,7 +522,9 @@ void LJ_FASTCALL lj_profile_interpreter(lua_State *L)
     cb(data, L, (int)samples, (int)vmstate);  /* Invoke user callback. */
     profile_callback_leave(ps);
   }
-  hookmask_profile_leave(g, saved);
+  if (LJ_UNLIKELY(!lj_tg_hookmask_callback_leave_exact(tg)))
+    abort();
+  hookmask_callback_leave(g);
 #else
   uint8_t saved;
   if (!profile_state_active_g(ps, g)) {
@@ -546,7 +574,7 @@ static void profile_trigger(ProfileState *ps)
     lj_tg_profile_samples_add(tg, 1);
     st = profile_sample_vmstate_tg(g, tg);
     lj_tg_profile_vmstate_store_rel(tg, st);
-    if ((hookmask_load(g) & (HOOK_VMEVENT|HOOK_GC)) ||
+    if ((hookmask_load(g) & (HOOK_ACTIVE|HOOK_VMEVENT|HOOK_GC)) ||
 	(lj_tg_hookmask_load(tg) & (HOOK_ACTIVE|HOOK_VMEVENT)))
       return;
     if (lj_tg_hookmask_set_if_clear(tg,
@@ -668,7 +696,7 @@ uint32_t lj_profile_timer_test_setitimer_calls(void)
 
 uint32_t lj_profile_timer_test_handler_installed(void)
 {
-  return la_load32_acq(&profile_state.signal_handler_installed);
+  return la_load32_acq(&profile_state.signal_action) != PROFILE_SIGNAL_NONE;
 }
 
 uint32_t lj_profile_timer_test_image_pinned(void)
@@ -1109,6 +1137,7 @@ static int profile_timer_start(ProfileState *ps, TGState *expected_tg)
   int interval = ps->interval;
   int installed_now = 0;
   int saved_errno = errno;
+  uint32_t action;
   struct itimerval tm;
   struct sigaction sa;
   /* Seed process identity before any cold state becomes BUILDING, then
@@ -1138,13 +1167,17 @@ static int profile_timer_start(ProfileState *ps, TGState *expected_tg)
     errno = saved_errno;
     return 0;
   }
-  if (!la_load32_acq(&ps->signal_handler_installed)) {
-    if (profile_sigaction(SIGPROF, &sa, &ps->oldsa) != 0) {
+  action = la_load32_acq(&ps->signal_action);
+  if (action != PROFILE_SIGNAL_HANDLER) {
+    /* A failed stop restore can leave SIG_IGN installed. Reinstall the real
+    ** handler before arming, without replacing the saved original action. */
+    if (profile_sigaction(SIGPROF, &sa,
+	  action == PROFILE_SIGNAL_NONE ? &ps->oldsa : NULL) != 0) {
       errno = saved_errno;
       return 0;
     }
-    la_store32_rel(&ps->signal_handler_installed, 1);
-    installed_now = 1;
+    la_store32_rel(&ps->signal_action, PROFILE_SIGNAL_HANDLER);
+    installed_now = action == PROFILE_SIGNAL_NONE;
   }
 #if defined(LJ_PROFILE_TIMER_TEST_HELPERS)
   if (la_load32_acq(&profile_test_before_arm_pause)) {
@@ -1157,7 +1190,7 @@ static int profile_timer_start(ProfileState *ps, TGState *expected_tg)
   if (profile_setitimer(ITIMER_PROF, &tm, NULL) != 0) {
     if (installed_now &&
         profile_sigaction(SIGPROF, &ps->oldsa, NULL) == 0)
-      la_store32_rel(&ps->signal_handler_installed, 0);
+      la_store32_rel(&ps->signal_action, PROFILE_SIGNAL_NONE);
     errno = saved_errno;
     return 0;
   }
@@ -1170,15 +1203,26 @@ static uint32_t profile_timer_stop(ProfileState *ps, lua_State *L)
 {
   UNUSED(L);
   struct itimerval tm;
+  struct sigaction sa;
   tm.it_value.tv_sec = tm.it_interval.tv_sec = 0;
   tm.it_value.tv_usec = tm.it_interval.tv_usec = 0;
-  /* Never restore the old action until disarm succeeded. If either syscall
-  ** fails, our static handler remains installed and observes STOPPING/IDLE
-  ** with a NULL global state, so a still-armed or external signal is inert. */
+  /* Disarm does not discard signals already pending on other threads. Briefly
+  ** ignoring SIGPROF removes those samples before restoring a possibly fatal
+  ** default action. Handlers which could have read ACTIVE are drained by the
+  ** caller. This does not quiesce a kernel timer producer which has not yet
+  ** queued its signal (notably a concurrent Darwin BSD AST).
+  ** Failed disarm/ignore keeps our inert handler; failed restore keeps IGNORE
+  ** and the original saved action for a later start to repair. */
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_handler = SIG_IGN;
   if (profile_setitimer(ITIMER_PROF, &tm, NULL) == 0 &&
-      la_load32_acq(&ps->signal_handler_installed) &&
-      profile_sigaction(SIGPROF, &ps->oldsa, NULL) == 0)
-    la_store32_rel(&ps->signal_handler_installed, 0);
+      la_load32_acq(&ps->signal_action) != PROFILE_SIGNAL_NONE &&
+      sigemptyset(&sa.sa_mask) == 0 &&
+      profile_sigaction(SIGPROF, &sa, NULL) == 0) {
+    la_store32_rel(&ps->signal_action, PROFILE_SIGNAL_IGNORE);
+    if (profile_sigaction(SIGPROF, &ps->oldsa, NULL) == 0)
+      la_store32_rel(&ps->signal_action, PROFILE_SIGNAL_NONE);
+  }
   return 0;
 }
 

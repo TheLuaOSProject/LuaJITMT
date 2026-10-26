@@ -26,6 +26,12 @@
 #include "lj_vm.h"
 #include "lj_vmevent.h"
 
+/* These VMs consume both the TG-local and global hook masks. Keep the legacy
+** callback path unchanged on targets without that dispatch/profile contract. */
+#define VMEVENT_TGLOCAL \
+  (LJ_HASJIT && (LJ_TARGET_X64 || LJ_TARGET_ARM64) && \
+   (!LJ_HASPROFILE || LJ_PROFILE_TGLOCAL))
+
 #if defined(LJ_GC2_TEST_HELPERS)
 static LJVMEVENTPrepareTestHook vmevent_prepare_test_hook;
 static void *vmevent_prepare_test_ud;
@@ -1237,6 +1243,35 @@ void lj_vmevent_call(lua_State *L, ptrdiff_t argbase, ptrdiff_t oldtop)
     L->top = restorestack(L, oldtop);
     return;
   }
+#if VMEVENT_TGLOCAL
+  /* A peer recorder must observe every bytecode while this callback runs.
+  ** Reserve suppression on this TG only; retain global ACTIVE exclusion for
+  ** ordinary hooks and other protected callbacks, without global VMEVENT. */
+  if (!tg ||
+#if LJ_HASPROFILE
+      lj_profile_callback_active_tg(tg) ||
+#endif
+      !lj_tg_hookmask_callback_enter_try(tg)) {
+    L->top = restorestack(L, oldtop);
+    vmevent_owner_rel(g, tid);
+    return;
+  }
+  if (!hookmask_callback_enter(g)) {
+    if (LJ_UNLIKELY(!lj_tg_hookmask_callback_leave_exact(tg))) abort();
+    L->top = restorestack(L, oldtop);
+    vmevent_owner_rel(g, tid);
+    return;
+  }
+#if LJ_HASPROFILE
+  if (lj_profile_callback_active_tg(tg)) {
+    if (LJ_UNLIKELY(!lj_tg_hookmask_callback_leave_exact(tg))) abort();
+    hookmask_callback_leave(g);
+    L->top = restorestack(L, oldtop);
+    vmevent_owner_rel(g, tid);
+    return;
+  }
+#endif
+#else
   if (!hookmask_vmevent_enter(g)) {
     L->top = restorestack(L, oldtop);
     vmevent_owner_rel(g, tid);
@@ -1250,6 +1285,7 @@ void lj_vmevent_call(lua_State *L, ptrdiff_t argbase, ptrdiff_t oldtop)
     vmevent_owner_rel(g, tid);
     return;
   }
+#endif
 #endif
 
   old_tg_hint = L->tg_hint;
@@ -1285,7 +1321,12 @@ void lj_vmevent_call(lua_State *L, ptrdiff_t argbase, ptrdiff_t oldtop)
     jit_owner_l_rel(J, oldJL);
 #endif
   L->tg_hint = old_tg_hint;
+#if VMEVENT_TGLOCAL
+  if (LJ_UNLIKELY(!lj_tg_hookmask_callback_leave_exact(tg))) abort();
+  hookmask_callback_leave(g);
+#else
   hookmask_vmevent_leave(g);
+#endif
   vmevent_owner_rel(g, tid);  /* Release before STOPREQ can throw. */
   if (LJ_UNLIKELY(status))
     lj_safepoint_checkstop_fresh(L, actions, had_stopreq);

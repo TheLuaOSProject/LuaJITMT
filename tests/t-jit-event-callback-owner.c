@@ -676,18 +676,22 @@ static void profile_callback_claim(void *data, lua_State *L, int samples,
   assert(L2TG(L) == ctx->tg);
   assert(lj_profile_callback_active_tg(ctx->tg));
   assert(!lj_profile_callback_active_tg(ctx->other_tg));
-  /* PROFILE has already handed exclusion to callback_tg. Neither the local
-  ** overlay nor the legacy VM-event owner word blocks this claim. */
-  assert((lj_tg_hookmask_load(ctx->tg) &
-          (HOOK_PROFILE|HOOK_ACTIVE|HOOK_VMEVENT)) == 0);
-  assert((hookmask_load(G(L)) & HOOK_VMEVENT) != 0);
+  /* PROFILE has handed off to the exact callback owner. The callback keeps
+  ** TG-local ACTIVE|VMEVENT exclusion while global VMEVENT stays clear, so a
+  ** peer recorder is not suppressed for this TG's profile callback. */
+  assert((lj_tg_hookmask_load(ctx->tg) & HOOK_PROFILE) == 0);
+  assert((lj_tg_hookmask_load(ctx->tg) & (HOOK_ACTIVE|HOOK_VMEVENT)) ==
+         (HOOK_ACTIVE|HOOK_VMEVENT));
+  assert((hookmask_load(G(L)) & HOOK_VMEVENT) == 0);
+  assert((hookmask_load(G(L)) & HOOK_ACTIVE) != 0);
   assert(vmevent_owner_acq(G(L)) == 0);
   acquire_callback_session(L, ctx->tg, &session);
   assert(!lj_jit_event_callback_claim_l(L, 3003u, &session, &rejected));
   assert(rejected.tg == NULL && rejected.owner_L == NULL);
+  /* The local suppression reservation belongs to the profiler, so this
+  ** substrate must report busy rather than an admissible idle snapshot. */
   assert(lj_jit_event_callback_snapshot(ctx->tg, &owner) ==
-         LJ_JIT_EVENT_CALLBACK_SNAPSHOT_IDLE);
-  assert(owner.next_generation == ctx->next_generation);
+         LJ_JIT_EVENT_CALLBACK_SNAPSHOT_RETRY);
   assert(lj_jit_event_session_snapshot_release(&session));
   ctx->calls++;
 }
@@ -701,6 +705,7 @@ static void test_profile_callback_exclusion(lua_State *L, jit_State *J,
   LJJitEventSessionSnapshot session;
   LJJitEventCallbackSnapshot before;
   LJJitEventCallbackHandle callback;
+  uint8_t global = hookmask_load(G(L));
 
   memset(&ctx, 0, sizeof(ctx));
   assert(lj_jit_event_callback_snapshot(tg, &before) ==
@@ -724,6 +729,8 @@ static void test_profile_callback_exclusion(lua_State *L, jit_State *J,
   assert(!lj_profile_callback_active_tg(tg));
   assert((lj_tg_hookmask_load(tg) &
           (HOOK_PROFILE|HOOK_ACTIVE|HOOK_VMEVENT)) == 0);
+  assert(hookmask_load(G(L)) == global);
+  expect_owner_idle(tg, ctx.next_generation);
 
   /* The exact same structural claim is immediately admissible once the
   ** profiler callback has returned. */

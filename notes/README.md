@@ -23,14 +23,17 @@ and reports that are no longer authoritative are retained in
   entry, exits and refusals. Shared build profiles bind runtime, archive,
   fixture and helper-library identity. All review work streams are integrated.
   See [`review-implementation-2026-10-25.md`](review-implementation-2026-10-25.md).
-- Latest combined runtime validation: the closed-upvalue checkpoint on
-  2026-10-26, based on `29406344`. The complete experimental and bootstrap
-  gates, ARM64 and signed x86-64 stock source/import, and shared helpers passed
-  on one frozen source hash. All four new upvalue profiles and existing
-  rooted-GC and M7 FFI suites passed within that uninterrupted run. See
-  [`arm64-jit-rooted-upvalues-2026-10-26.md`](arm64-jit-rooted-upvalues-2026-10-26.md)
-  for exact source identity, commands, logs and limits. The earlier architecture-review checkpoint
-  and its sanitizer/performance scope remain in
+- Latest combined runtime validation: the callback-recording checkpoint on
+  2026-10-26, based on `37d0baef`. Experimental gate phases passed across an
+  initial run and a corrected continuation with identical production sources;
+  the seven-build callback contract passed uninterrupted in the continuation.
+  The complete bootstrap gate, ARM64 and signed x86-64 stock source/import,
+  shared helpers, rooted-GC/upvalue profiles and M7 FFI suites passed. See
+  [`arm64-jit-callback-recording-2026-10-26.md`](arm64-jit-callback-recording-2026-10-26.md)
+  for exact source identities, the harness correction, logs and open failures.
+  The earlier closed-upvalue checkpoint remains in
+  [`arm64-jit-rooted-upvalues-2026-10-26.md`](arm64-jit-rooted-upvalues-2026-10-26.md).
+  The architecture-review checkpoint and its sanitizer/performance scope remain in
   [`review-validation-2026-10-25.md`](review-validation-2026-10-25.md).
 - Fixed scalar FFI stack arguments pass the four-profile M7 suite,
   including compact Darwin stack slots, spill separation, nested callbacks
@@ -101,6 +104,13 @@ available.
   addressing, fresh invocation cells, and `RETF` boundaries have targeted
   regressions; see [`source-upvalue-conformance.md`](source-upvalue-conformance.md)
   and [`jit-cell-retf-2026-10-22.md`](jit-cell-retf-2026-10-22.md).
+- Legacy VM-event and profiler callbacks on ARM64/x64 reserve dispatch
+  suppression on their own TG, preserving peer recorder continuity. Global
+  ACTIVE retains ordinary-hook/callback exclusion. Profiler stop also discards
+  already-pending SIGPROF before restoring the saved disposition, with explicit
+  failure/restart ownership. The seven-build callback contract covers both
+  target/runtime modes and no-JIT profiling; see
+  [`arm64-jit-callback-recording-2026-10-26.md`](arm64-jit-callback-recording-2026-10-26.md).
 
 ### Bounded native JIT
 
@@ -257,6 +267,12 @@ available.
   float conversions do not certify arbitrary float or boxed-64-bit graphs.
 - Full parity with every x86_64 lockless VM, JIT, FFI, profiler, unwind, and
   stress path.
+- Concurrent Darwin profiler start/stop can still terminate on a fresh late
+  kernel SIGPROF after the saved disposition is restored. Discarding signals
+  already pending does not close that producer race. The x64 release token
+  fixture also retains a baseline external-unwind panic on injected OOM.
+  Both reproduce on the preceding clean checkpoint and are excluded explicitly
+  from the new callback contract's claimed coverage; see the callback notes.
 - Complete sanitizer, weak-memory, sustained-concurrency, and performance
   recovery matrices.
 - Legacy bytecode imports now normalize to shared cells before publication.
