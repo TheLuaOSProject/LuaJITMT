@@ -4,7 +4,7 @@
 typedef void (*abi_observer)(unsigned id);
 
 static abi_observer observer;
-static unsigned call_count[12];
+static unsigned call_count[14];
 
 void arm64_abi_install_observer(abi_observer fn)
 {
@@ -102,6 +102,36 @@ int32_t arm64_abi_banks_exhausted(
          f1 == f0+1.0 && f2 == f0+2.0 && f3 == f0+3.0 &&
          f4 == f0+4.0 && f5 == f0+5.0 && f6 == f0+6.0 &&
          f7 == f0+7.0 && f8 == f0+8.0 ? 1010 : -10;
+}
+
+float arm64_abi_fpr9_float(float a, float b, float c, float d, float e,
+                           float f, float g, float h, float i)
+{
+  note(12);
+  return a >= 1.09f && a < 1.2f && b >= 2.19f && b < 2.3f &&
+         c >= 3.29f && c < 3.4f && d >= 4.39f && d < 4.5f &&
+         e >= 5.49f && e < 5.6f && f >= 6.59f && f < 6.7f &&
+         g >= 7.69f && g < 7.8f && h >= 8.79f && h < 8.9f &&
+         i >= 9.89f && i < 10.1f ? i : (float)-12.0;
+}
+
+float arm64_abi_mixed_stack_float(
+    int32_t i0, float f0, int32_t i1, float f1,
+    int32_t i2, float f2, int32_t i3, float f3,
+    int32_t i4, float f4, int32_t i5, float f5,
+    int32_t i6, float f6, int32_t i7, float f7,
+    int32_t i8, float f8)
+{
+  note(13);
+  if (i1 != i0+1 || i2 != i0+2 || i3 != i0+3 || i4 != i0+4 ||
+      i5 != i0+5 || i6 != i0+6 || i7 != i0+7 || i8 != i0+8 ||
+      !(f0 >= 1.09f && f0 < 1.2f && f1 >= 2.19f && f1 < 2.3f &&
+        f2 >= 3.29f && f2 < 3.4f && f3 >= 4.39f && f3 < 4.5f &&
+        f4 >= 5.49f && f4 < 5.6f && f5 >= 6.59f && f5 < 6.7f &&
+        f6 >= 7.69f && f6 < 7.8f && f7 >= 8.79f && f7 < 8.9f &&
+        f8 >= 9.89f && f8 < 10.1f))
+    return (float)-13.0;
+  return f8;
 }
 
 int32_t arm64_abi_compact_stack(

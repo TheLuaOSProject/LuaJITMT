@@ -23,13 +23,14 @@ and reports that are no longer authoritative are retained in
   entry, exits and refusals. Shared build profiles bind runtime, archive,
   fixture and helper-library identity. All review work streams are integrated.
   See [`review-implementation-2026-10-25.md`](review-implementation-2026-10-25.md).
-- Latest combined runtime validation: `7f377f51`. Experimental, ARM64 and
-  signed x86-64 stock source/import and shared helper regressions passed on
-  frozen source. Bootstrap then passed after correcting the new M5 test's
-  build profile, with runtime sources unchanged. Every default target branch
-  ran. See
-  [`lightuserdata-validation-2026-10-25.md`](lightuserdata-validation-2026-10-25.md)
-  for commands, logs and profile. The earlier architecture-review checkpoint
+- Latest combined runtime validation: the float CALLXS checkpoint on
+  2026-10-26, based on `e2f6b7fd`. Experimental contracts, ARM64 and signed
+  x86-64 stock source/import, shared helpers and bootstrap passed on one
+  frozen source hash. The interrupted experimental gate resumed from the
+  interrupted contract; the completed prefix and resumed suffix together
+  cover every default target branch. See
+  [`arm64-jit-ffi-float-2026-10-26.md`](arm64-jit-ffi-float-2026-10-26.md)
+  for exact source identity, commands, logs and profile. The earlier architecture-review checkpoint
   and its sanitizer/performance scope remain in
   [`review-validation-2026-10-25.md`](review-validation-2026-10-25.md).
 - Fixed scalar FFI stack arguments pass the four-profile M7 suite,
@@ -43,7 +44,7 @@ and reports that are no longer authoritative are retained in
 - The complete bootstrap gate passes, including 387 applicable stock cases,
   threaded tmpbuf, Darwin native roots/GC2, ARM64/arm64e callbacks,
   variadic/aggregate interpreter FFI and x86-64 errno unwind.
-- The signed x86-64/Rosetta runtime at `7f377f51` passed both 509-case corpora
+- The signed x86-64/Rosetta runtime at that checkpoint passed both 509-case corpora
   and the shared rooted-store, raw nil-deletion and segment-map race fixtures. The combined
   gates also ran x86-64 callback-result lifetime and errno unwind. Earlier
   authentic CALLXS/remote-flush/callback and callback-stack relocation/unwind
@@ -170,6 +171,12 @@ available.
   allocated operands/results. Multiple calls per loop and rooted pointer
   results replace the three exact templates. Stack layouts retain separate
   semantic and allocated-state checks, including frame and spill separation.
+- Fixed scalar float arguments/results support exact NUM/INT-to-FLOAT and
+  FLOAT-to-NUM conversions, float-to-float call chains, ninth-argument stack
+  overflow and mixed compact integer/float stack slots. Native rounding,
+  NaN/infinity exits, no-replay and independent malformed-graph checks pass
+  across all four M7 profiles. See
+  [`arm64-jit-ffi-float-2026-10-26.md`](arm64-jit-ffi-float-2026-10-26.md).
 - Exact FFI lifecycle evidence covers errno, normal and forced exits, STOPREQ,
   one-level and depth-two callbacks, callback errors, cleanup/reuse, remote GC
   and flush, mutable cdata `__call`, double ABI/results, boxed-pointer identity,
@@ -207,9 +214,9 @@ available.
   links to the implemented rooted-value lifetime proof and its limits.
 - General side traces, side-of-side traces, stitches, and production JIT
   side-exit unwind resolution.
-- ARM64 CALLXS aggregates/sret, variadics, vectors, complex results and
-  unsupported result/IR representations. ABI scalar
-  classification alone does not certify all float or boxed-64-bit graphs.
+- ARM64 CALLXS aggregates/sret, variadics, vectors, complex results, CALLM
+  source sites and unsupported result/IR representations. The admitted scalar
+  float conversions do not certify arbitrary float or boxed-64-bit graphs.
 - Full parity with every x86_64 lockless VM, JIT, FFI, profiler, unwind, and
   stress path.
 - Complete sanitizer, weak-memory, sustained-concurrency, and performance

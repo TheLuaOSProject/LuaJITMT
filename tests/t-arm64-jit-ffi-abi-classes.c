@@ -40,9 +40,10 @@ typedef void (*InstallObserver)(void (*fn)(unsigned));
 typedef unsigned (*ReadCounter)(unsigned id);
 
 static TGState *test_tg;
-enum { ABI_TEST_MAX_ID = 12 };
+enum { ABI_TEST_MAX_ID = 14 };
 static unsigned native_seen[ABI_TEST_MAX_ID];
 static void *expected_func[ABI_TEST_MAX_ID];
+static CTypeID global_ctype(lua_State *L, const char *name);
 
 typedef struct SemanticClone {
   GCtrace trace;
@@ -521,6 +522,395 @@ static void test_stack_call_admission(lua_State *L)
   free(copy);
 }
 
+/* Mutate each exact F32 conversion independently at both CALLXS admission
+** boundaries. The ordinary rooted/scalar path is intentionally untouched. */
+static void test_float_call_admission(lua_State *L)
+{
+  jit_State *J = G2J(G(L));
+  CTState *cts = ctype_ctsG(G(L));
+  GCfunc *fn;
+  GCproto *pt;
+  CTypeID ctype;
+  const BCIns *bc;
+  uintptr_t lo, hi;
+  TraceVec *tv;
+  GCtrace *T = NULL;
+  IRRef args[LJ_ARM64_ABI_MAX_ARGS], call = 0;
+  IRRef argconv = 0, resconv = 0, ref;
+  LJArm64ABISignature abi;
+  LJArm64PostRAView view = { 0 };
+  SemanticClone semantic;
+  SemanticJSave jsave;
+  IRIns *copy;
+  MSize no;
+  unsigned i;
+
+  lua_getglobal(L, "__abi_run_float_result");
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  fn = funcV(L->top-1);
+  pt = funcproto(fn);
+  lua_pop(L, 1);
+  ctype = global_ctype(L, "__abi_f32");
+  bc = proto_bc(pt);
+  lo = (uintptr_t)(const void *)bc;
+  hi = lo+(uintptr_t)pt->sizebc*sizeof(BCIns);
+  tv = tracevec_acq(J);
+  assert(tv != NULL);
+  for (no = 1; no < tv->sizetrace && T == NULL; no++) {
+    GCtrace *candidate = traceref_safe(J, no);
+    if (candidate == NULL || trace_startpc_acq(candidate) == NULL ||
+	(uintptr_t)(const void *)trace_startpc_acq(candidate) < lo ||
+	(uintptr_t)(const void *)trace_startpc_acq(candidate) >= hi)
+      continue;
+    for (ref = trace_nk_acq(candidate); ref < trace_nins_acq(candidate); ref++) {
+      if (ir_load_acq(&trace_ir_acq(candidate)[ref]).o == IR_CALLXS &&
+	  fixture_callxs_signature(cts, trace_ir_acq(candidate),
+	    trace_nk_acq(candidate), trace_nins_acq(candidate), ref, ctype,
+	    &abi, args)) {
+	T = candidate;
+	call = ref;
+	break;
+      }
+    }
+  }
+  assert(T != NULL && call != 0 && abi.nargs == 2);
+  for (i = 0; i < abi.nargs; i++) {
+    IRIns arg = ir_load_acq(&trace_ir_acq(T)[args[i]]);
+    if (arg.o == IR_CONV && arg.t.irt == IRT_FLOAT &&
+	arg.op2 == ((IRT_FLOAT << IRCONV_DSH)|IRT_NUM)) {
+      argconv = args[i];
+      break;
+    }
+  }
+  for (ref = call+1u; ref < trace_nins_acq(T); ref++) {
+    IRIns ins = ir_load_acq(&trace_ir_acq(T)[ref]);
+    if (ins.o == IR_CONV && ins.op1 == call && ins.t.irt == IRT_NUM &&
+	ins.op2 == ((IRT_NUM << IRCONV_DSH)|IRT_FLOAT)) {
+      resconv = ref;
+      break;
+    }
+  }
+  assert(argconv != 0 && resconv != 0);
+
+  view.ir = trace_ir_acq(T);
+  view.owner = T;
+  view.cts = cts;
+  view.snap = trace_snap_acq(T);
+  view.snapmap = trace_snapmap_acq(T);
+  view.proto_bc = bc;
+  view.proto = pt;
+  view.startpc = trace_startpc_acq(T);
+  view.nins = trace_nins_acq(T);
+  view.nk = trace_nk_acq(T);
+  view.nsnap = trace_nsnap_acq(T);
+  view.nsnapmap = trace_nsnapmap_acq(T);
+  view.spadjust = trace_spadjust_acq(T);
+  view.proto_sizebc = pt->sizebc;
+  view.proto_numparams = pt->numparams;
+  view.root_topslot = trace_topslot_acq(T);
+  view.startins = trace_startins_acq(T);
+  view.owner_private = 0;
+  assert(lj_asm_arm64_postra_admit(&view, NULL));
+
+  semantic_clone_init(&semantic, T);
+  jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+  expect_semantic_admit(J, &semantic.trace);
+  semantic.ir[argconv].op2 = IRCONV_NUM_INT;
+  expect_semantic_reject_any(J, &semantic.trace,
+			     "F32 argument conversion source/mode mismatch");
+  semantic_j_leave(J, &jsave);
+  semantic_clone_free(&semantic);
+
+  semantic_clone_init(&semantic, T);
+  jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+  expect_semantic_admit(J, &semantic.trace);
+  semantic.ir[resconv].op2 = IRCONV_NUM_INT;
+  expect_semantic_reject_any(J, &semantic.trace,
+			     "F32 result conversion source/mode mismatch");
+  semantic_j_leave(J, &jsave);
+  semantic_clone_free(&semantic);
+
+  semantic_clone_init(&semantic, T);
+  jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+  expect_semantic_admit(J, &semantic.trace);
+  semantic.ir[argconv].op2 |= IRCONV_SEXT;
+  expect_semantic_reject_any(J, &semantic.trace,
+			     "F32 conversion with unsupported sign-extension flag");
+  semantic_j_leave(J, &jsave);
+  semantic_clone_free(&semantic);
+
+  copy = (IRIns *)calloc(view.nins, sizeof(*copy));
+  assert(copy != NULL);
+  memcpy(&copy[view.nk], &view.ir[view.nk],
+	 (view.nins-view.nk)*sizeof(IRIns));
+  view.ir = copy;
+  copy[argconv].op2 = IRCONV_NUM_INT;
+  assert(!lj_asm_arm64_postra_admit(&view, NULL));
+  memcpy(&copy[view.nk], &trace_ir_acq(T)[view.nk],
+	 (view.nins-view.nk)*sizeof(IRIns));
+  copy[resconv].op2 = IRCONV_NUM_INT;
+  assert(!lj_asm_arm64_postra_admit(&view, NULL));
+  memcpy(&copy[view.nk], &trace_ir_acq(T)[view.nk],
+	 (view.nins-view.nk)*sizeof(IRIns));
+  copy[argconv].op2 |= IRCONV_SEXT;
+  assert(!lj_asm_arm64_postra_admit(&view, NULL));
+  {
+    IRRef targets[] = { argconv, argconv, argconv, resconv,
+                        resconv, resconv, resconv };
+    IRIns bad[7];
+    unsigned m;
+    for (m = 0; m < 7; m++)
+      bad[m] = ir_load_acq(&trace_ir_acq(T)[targets[m]]);
+    bad[0].op1 = REF_BASE;  /* Raw pointer source is not a number. */
+    bad[1].t.irt = IRT_NUM;
+    bad[2].t.irt |= IRT_ISPHI;
+    bad[3].op1 = ir_load_acq(&trace_ir_acq(T)[argconv]).op1;
+    bad[4].t.irt = IRT_FLOAT;
+    bad[5].t.irt |= IRT_ISPHI;
+    bad[6].op2 |= IRCONV_SEXT;
+    for (m = 0; m < 7; m++) {
+      semantic_clone_init(&semantic, T);
+      jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+      expect_semantic_admit(J, &semantic.trace);
+      semantic.ir[targets[m]] = bad[m];
+      expect_semantic_reject_any(J, &semantic.trace,
+                                 "F32 conversion type/source/flag mismatch");
+      semantic_j_leave(J, &jsave);
+      semantic_clone_free(&semantic);
+      memcpy(&copy[view.nk], &trace_ir_acq(T)[view.nk],
+             (view.nins-view.nk)*sizeof(IRIns));
+      copy[targets[m]] = bad[m];
+      assert(!lj_asm_arm64_postra_admit(&view, NULL));
+    }
+    for (m = 0; m < 2; m++) {
+      memcpy(&copy[view.nk], &trace_ir_acq(T)[view.nk],
+             (view.nins-view.nk)*sizeof(IRIns));
+      copy[m ? resconv : argconv].r = RID_X0;
+      assert(!lj_asm_arm64_postra_admit(&view, NULL));
+    }
+  }
+  {
+    unsigned found = 0;
+    /* Certify the result's range checks separately from its conversions. */
+    for (ref = call+1u; ref < trace_nins_acq(T); ref++) {
+      IRIns original = ir_load_acq(&trace_ir_acq(T)[ref]);
+      unsigned m;
+      if (original.o != IR_SUB && original.o != IR_ULE &&
+          original.o != IR_UGE) continue;
+      found |= original.o == IR_SUB ? 1u : original.o == IR_ULE ? 2u : 4u;
+      for (m = 0; m < 5; m++) {
+        IRIns bad = original;
+        if (m == 0) bad.t.irt = IRT_INT | (original.t.irt & IRT_GUARD);
+        if (m == 1) bad.t.irt ^= IRT_GUARD;
+        if (m == 2) bad.op1 = REF_BASE;
+        if (m == 3) bad.op2 = ref;
+        if (m == 4) bad.t.irt |= IRT_ISPHI;
+        semantic_clone_init(&semantic, T);
+        jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+        expect_semantic_admit(J, &semantic.trace);
+        semantic.ir[ref] = bad;
+        expect_semantic_reject_any(J, &semantic.trace,
+                                  "F32 range check type/guard/source mismatch");
+        semantic_j_leave(J, &jsave);
+        semantic_clone_free(&semantic);
+        memcpy(&copy[view.nk], &trace_ir_acq(T)[view.nk],
+               (view.nins-view.nk)*sizeof(IRIns));
+        copy[ref] = bad;
+        assert(!lj_asm_arm64_postra_admit(&view, NULL));
+      }
+    }
+    assert(found == 7u);
+  }
+  free(copy);
+}
+
+static void test_float_stack_emission(lua_State *L)
+{
+  jit_State *J = G2J(G(L));
+  CTState *cts = ctype_ctsG(G(L));
+  GCfunc *fn;
+  GCproto *pt;
+  CTypeID ctype = global_ctype(L, "__abi_fpr9_float");
+  const BCIns *bc;
+  uintptr_t lo, hi;
+  TraceVec *tv;
+  GCtrace *T = NULL;
+  LJArm64ABISignature abi;
+  IRRef args[LJ_ARM64_ABI_MAX_ARGS], ref;
+  LJArm64PostRAView view = { 0 };
+  SemanticClone semantic;
+  SemanticJSave jsave;
+  MSize no;
+
+  lua_getglobal(L, "__abi_run_float_stack");
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  fn = funcV(L->top-1);
+  pt = funcproto(fn);
+  lua_pop(L, 1);
+  bc = proto_bc(pt);
+  lo = (uintptr_t)(const void *)bc;
+  hi = lo+(uintptr_t)pt->sizebc*sizeof(BCIns);
+  tv = tracevec_acq(J);
+  assert(tv != NULL);
+  for (no = 1; no < tv->sizetrace && T == NULL; no++) {
+    GCtrace *candidate = traceref_safe(J, no);
+    if (candidate == NULL || trace_startpc_acq(candidate) == NULL ||
+	(uintptr_t)(const void *)trace_startpc_acq(candidate) < lo ||
+	(uintptr_t)(const void *)trace_startpc_acq(candidate) >= hi)
+      continue;
+    for (ref = trace_nk_acq(candidate); ref < trace_nins_acq(candidate); ref++) {
+      if (ir_load_acq(&trace_ir_acq(candidate)[ref]).o == IR_CALLXS &&
+	  fixture_callxs_signature(cts, trace_ir_acq(candidate),
+	    trace_nk_acq(candidate), trace_nins_acq(candidate), ref, ctype,
+	    &abi, args)) {
+	T = candidate;
+	break;
+      }
+    }
+  }
+  assert(T != NULL && abi.nargs == 9 &&
+	 abi.arg[8].reg == LJ_ARM64_ABI_STACK &&
+	 abi.arg[8].stack_offset == 0 && abi.arg[8].size == 4);
+  assert(trace_has_stack_store(T, A64I_STRs, 2, 0));
+  view.ir = trace_ir_acq(T);
+  view.owner = T;
+  view.cts = cts;
+  view.snap = trace_snap_acq(T);
+  view.snapmap = trace_snapmap_acq(T);
+  view.proto_bc = bc;
+  view.proto = pt;
+  view.startpc = trace_startpc_acq(T);
+  view.nins = trace_nins_acq(T);
+  view.nk = trace_nk_acq(T);
+  view.nsnap = trace_nsnap_acq(T);
+  view.nsnapmap = trace_nsnapmap_acq(T);
+  view.spadjust = trace_spadjust_acq(T);
+  view.proto_sizebc = pt->sizebc;
+  view.proto_numparams = pt->numparams;
+  view.root_topslot = trace_topslot_acq(T);
+  view.startins = trace_startins_acq(T);
+  view.owner_private = 0;
+  assert(lj_asm_arm64_postra_admit(&view, NULL));
+  semantic_clone_init(&semantic, T);
+  jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+  expect_semantic_admit(J, &semantic.trace);
+  semantic_j_leave(J, &jsave);
+  semantic_clone_free(&semantic);
+}
+
+static void test_mixed_float_stack_emission(lua_State *L)
+{
+  jit_State *J = G2J(G(L));
+  CTState *cts = ctype_ctsG(G(L));
+  GCfunc *fn;
+  GCproto *pt;
+  CTypeID ctype = global_ctype(L, "__abi_mixed_f32_stack");
+  const BCIns *bc;
+  uintptr_t lo, hi;
+  TraceVec *tv;
+  GCtrace *T = NULL;
+  LJArm64ABISignature abi;
+  IRRef args[LJ_ARM64_ABI_MAX_ARGS], ref;
+  IRRef resultconv = 0;
+  IRRef leave = 0;
+  unsigned i;
+  MSize no;
+  LJArm64PostRAView view = { 0 };
+  SemanticClone semantic;
+  SemanticJSave jsave;
+
+  lua_getglobal(L, "__abi_run_mixed_float_stack");
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  fn = funcV(L->top-1);
+  pt = funcproto(fn);
+  lua_pop(L, 1);
+  bc = proto_bc(pt);
+  lo = (uintptr_t)(const void *)bc;
+  hi = lo+(uintptr_t)pt->sizebc*sizeof(BCIns);
+  tv = tracevec_acq(J);
+  assert(tv != NULL);
+  for (no = 1; no < tv->sizetrace && T == NULL; no++) {
+    GCtrace *candidate = traceref_safe(J, no);
+    if (candidate == NULL || trace_startpc_acq(candidate) == NULL ||
+	(uintptr_t)(const void *)trace_startpc_acq(candidate) < lo ||
+	(uintptr_t)(const void *)trace_startpc_acq(candidate) >= hi)
+      continue;
+    for (ref = trace_nk_acq(candidate); ref < trace_nins_acq(candidate); ref++) {
+      if (ir_load_acq(&trace_ir_acq(candidate)[ref]).o == IR_CALLXS &&
+	  fixture_callxs_signature(cts, trace_ir_acq(candidate),
+	    trace_nk_acq(candidate), trace_nins_acq(candidate), ref, ctype,
+	    &abi, args)) {
+	T = candidate;
+	break;
+      }
+    }
+  }
+  assert(T != NULL && abi.nargs == 18 && abi.stack_size == 8);
+  assert(abi.arg[16].cls == LJ_ARM64_ABI_GPR &&
+	 abi.arg[16].reg == LJ_ARM64_ABI_STACK &&
+	 abi.arg[16].stack_offset == 0 && abi.arg[16].size == 4);
+  assert(abi.arg[17].cls == LJ_ARM64_ABI_FPR &&
+	 abi.arg[17].reg == LJ_ARM64_ABI_STACK &&
+	 abi.arg[17].stack_offset == 4 && abi.arg[17].size == 4);
+  assert(trace_has_stack_store(T, A64I_STRw, 2, 0));
+  assert(trace_has_stack_store(T, A64I_STRs, 2, 4));
+  /* The helper's F32 result must be converted before native leave and the
+  ** converted Lua number must be represented in the post-call snapshots. */
+  for (ref = trace_nk_acq(T); ref < trace_nins_acq(T); ref++) {
+    IRIns ins = ir_load_acq(&trace_ir_acq(T)[ref]);
+    if (ins.o == IR_CALLS && ins.op2 == IRCALL_lj_ffi_native_trace_leave)
+      leave = ref;
+    if (ins.o == IR_CONV && ins.t.irt == IRT_NUM &&
+	ins.op2 == ((IRT_NUM << IRCONV_DSH)|IRT_FLOAT)) {
+      IRIns src = ir_load_acq(&trace_ir_acq(T)[ins.op1]);
+      if (src.o == IR_CALLXS) resultconv = ref;
+    }
+  }
+  assert(resultconv != 0 && leave > resultconv);
+  {
+    MSize s, i;
+    int snapshotted = 0;
+    for (s = 0; s < trace_nsnap_acq(T); s++) {
+      const SnapShot *snap = &trace_snap_acq(T)[s];
+      MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap);
+      if (snap_ref_acq(snap) != leave) continue;
+      for (i = 0; i < nent; i++)
+	if (snap_ref(snapentry_acq(&trace_snapmap_acq(T)[ofs+i])) == resultconv)
+	  snapshotted = 1;
+    }
+    assert(snapshotted);
+  }
+  for (i = 0; i < abi.nargs; i++) {
+    IRIns carg = ir_load_acq(&trace_ir_acq(T)[args[i]]);
+    if (i % 2 == 0) assert(irt_type(carg.t) == IRT_INT);
+    else assert(irt_type(carg.t) == IRT_FLOAT);
+  }
+  view.ir = trace_ir_acq(T);
+  view.owner = T;
+  view.cts = cts;
+  view.snap = trace_snap_acq(T);
+  view.snapmap = trace_snapmap_acq(T);
+  view.proto_bc = bc;
+  view.proto = pt;
+  view.startpc = trace_startpc_acq(T);
+  view.nins = trace_nins_acq(T);
+  view.nk = trace_nk_acq(T);
+  view.nsnap = trace_nsnap_acq(T);
+  view.nsnapmap = trace_nsnapmap_acq(T);
+  view.spadjust = trace_spadjust_acq(T);
+  view.proto_sizebc = pt->sizebc;
+  view.proto_numparams = pt->numparams;
+  view.root_topslot = trace_topslot_acq(T);
+  view.startins = trace_startins_acq(T);
+  view.owner_private = 0;
+  assert(lj_asm_arm64_postra_admit(&view, NULL));
+  semantic_clone_init(&semantic, T);
+  jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+  expect_semantic_admit(J, &semantic.trace);
+  semantic_j_leave(J, &jsave);
+  semantic_clone_free(&semantic);
+}
+
 static void test_other_callsite_footer_rejected(lua_State *L)
 {
   jit_State *J = G2J(G(L));
@@ -877,7 +1267,8 @@ int main(void)
   ReadCounter calls;
   CTState *cts;
   CTypeID six, mixed, many_a, many_b, many_c, unused, f32;
-  CTypeID stack9, fpr9, banks, compact, aggregate_arg, aggregate_result, vararg;
+  CTypeID stack9, fpr9, fpr9_float, banks, compact;
+  CTypeID aggregate_arg, aggregate_result, vararg;
   unsigned i;
   assert(L != NULL && path != NULL);
   test_tg = L2TG(L);
@@ -897,6 +1288,8 @@ int main(void)
   expected_func[9] = dlsym(library, "arm64_abi_fpr9");
   expected_func[10] = dlsym(library, "arm64_abi_banks_exhausted");
   expected_func[11] = dlsym(library, "arm64_abi_compact_stack");
+  expected_func[12] = dlsym(library, "arm64_abi_fpr9_float");
+  expected_func[13] = dlsym(library, "arm64_abi_mixed_stack_float");
   for (i = 1; i < ABI_TEST_MAX_ID; i++) assert(expected_func[i] != NULL);
   install(observe_native_call);
 
@@ -910,6 +1303,8 @@ int main(void)
     "typedef float (*abi_float_fn)(float,float);\n"
     "typedef int32_t (*abi_stack9_fn)(int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t);\n"
     "typedef double (*abi_fpr9_fn)(double,double,double,double,double,double,double,double,double);\n"
+    "typedef float (*abi_fpr9_float_fn)(float,float,float,float,float,float,float,float,float);\n"
+    "typedef float (*abi_mixed_stack_float_fn)(int32_t,float,int32_t,float,int32_t,float,int32_t,float,int32_t,float,int32_t,float,int32_t,float,int32_t,float,int32_t,float);\n"
     "typedef int32_t (*abi_banks_fn)(int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double);\n"
     "typedef int32_t (*abi_compact_fn)(int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,double,double,double,double,double,double,double,double,int8_t,int16_t,double,void *,int32_t);\n"
     "typedef struct { int64_t a,b; } abi_pair;\n"
@@ -922,6 +1317,8 @@ int main(void)
     "float arm64_abi_float_result(float,float);\n"
     "int32_t arm64_abi_stack9(int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t);\n"
     "double arm64_abi_fpr9(double,double,double,double,double,double,double,double,double);\n"
+    "float arm64_abi_fpr9_float(float,float,float,float,float,float,float,float,float);\n"
+    "float arm64_abi_mixed_stack_float(int32_t,float,int32_t,float,int32_t,float,int32_t,float,int32_t,float,int32_t,float,int32_t,float,int32_t,float,int32_t,float);\n"
     "int32_t arm64_abi_banks_exhausted(int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double,int32_t,double);\n"
     "int32_t arm64_abi_compact_stack(int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,double,double,double,double,double,double,double,double,int8_t,int16_t,double,void *,int32_t);\n"
     "abi_pair arm64_abi_aggregate_arg(abi_pair);\n"
@@ -936,6 +1333,8 @@ int main(void)
     "_G.__abi_f32 = lib.arm64_abi_float_result\n"
     "_G.__abi_stack9 = lib.arm64_abi_stack9\n"
     "_G.__abi_fpr9 = lib.arm64_abi_fpr9\n"
+    "_G.__abi_fpr9_float = lib.arm64_abi_fpr9_float\n"
+    "_G.__abi_mixed_f32_stack = lib.arm64_abi_mixed_stack_float\n"
     "_G.__abi_banks = lib.arm64_abi_banks_exhausted\n"
     "_G.__abi_compact = lib.arm64_abi_compact_stack\n"
     "_G.__abi_aggregate_arg = lib.arm64_abi_aggregate_arg\n"
@@ -970,6 +1369,14 @@ int main(void)
     "  if fn(20,21,22,23,24,25,26,27,d0,d1,d2,d3,d4,d5,d6,d7,n8,n16,d7+1,p,0x2468) ~= 1111 then return false end\n"
     " end\n"
     " return true end\n"
+    "function _G.__abi_run_float_result(fn,n)\n"
+    " for k=1,n do local x=k*0.123456789; local got=fn(x,0.0); if got==x or got<x-0.0001 or got>x+0.0001 then return false end end; return true end\n"
+    "function _G.__abi_run_float_range(fn,x,low,high,n)\n"
+    " for k=1,n do local got=fn(x*k,0.0); if got<low then return 1 end; if got>high then return 2 end end; return 0 end\n"
+    "function _G.__abi_run_float_stack(fn,n)\n"
+    " for k=1,n do local x=k*0.000137; local want=x+9.9; local got=fn(x+1.1,x+2.2,x+3.3,x+4.4,x+5.5,x+6.6,x+7.7,x+8.8,x+9.9); if got==want or got<want-0.001 or got>want+0.001 then return false end end; return true end\n"
+    "function _G.__abi_run_mixed_float_stack(fn,n)\n"
+    " for k=1,n do local x=k*0.000137; local want=x+9.9; local got=fn(k,1.1+x,k+1,2.2+x,k+2,3.3+x,k+3,4.4+x,k+4,5.5+x,k+5,6.6+x,k+6,7.7+x,k+7,8.8+x,k+8,9.9+x); if got==want or got<want-0.001 or got>want+0.001 then return false end end; return true end\n"
     "jit.flush(); jit.on(); jit.opt.start('hotloop=1','hotexit=1')\n");
 
   cts = ctype_ctsG(G(L));
@@ -983,6 +1390,7 @@ int main(void)
   f32 = global_ctype(L, "__abi_f32");
   stack9 = global_ctype(L, "__abi_stack9");
   fpr9 = global_ctype(L, "__abi_fpr9");
+  fpr9_float = global_ctype(L, "__abi_fpr9_float");
   banks = global_ctype(L, "__abi_banks");
   compact = global_ctype(L, "__abi_compact");
   aggregate_arg = global_ctype(L, "__abi_aggregate_arg");
@@ -1026,6 +1434,9 @@ int main(void)
     assert_stack_argument(cts, compact, 20, LJ_ARM64_ABI_GPR, 24, 4);
     assert_stack_extent(cts, stack9, 4);
     assert_stack_extent(cts, fpr9, 8);
+    assert_abi_class(cts, fpr9_float, LJ_ARM64_ABI_FPR, 9, 0, 8);
+    assert_stack_argument(cts, fpr9_float, 8, LJ_ARM64_ABI_FPR, 0, 4);
+    assert_stack_extent(cts, fpr9_float, 4);
     assert_stack_extent(cts, banks, 16);
     assert_stack_extent(cts, compact, 28);
   }
@@ -1047,6 +1458,16 @@ int main(void)
     for (id = 8; id <= 11; id++)
       assert(native_seen[id] >= 200u);
   }
+  ljt_lua_dostring(L,
+    "assert(__abi_run_float_result(__abi_f32,300))\n"
+    "assert(__abi_run_float_stack(__abi_fpr9_float,300))\n"
+    "assert(__abi_run_mixed_float_stack(__abi_mixed_f32_stack,300))\n");
+  assert(native_seen[7] >= 200u && calls(7) >= 300u);
+  assert(native_seen[12] >= 200u && calls(12) >= 300u);
+  assert(native_seen[13] >= 200u && calls(13) >= 300u);
+  test_float_call_admission(L);
+  test_float_stack_emission(L);
+  test_mixed_float_stack_emission(L);
   {
     unsigned before = native_seen[11];
     ljt_lua_dostring(L,
@@ -1077,12 +1498,39 @@ int main(void)
   }
   test_other_callsite_footer_rejected(L);
 
+  {
+    unsigned before = native_seen[7];
+    unsigned total;
+    ljt_lua_dostring(L,
+      "assert(__abi_run_float_range(__abi_f32,0.123456789,-100.0,100.0,300)==0)\n");
+    assert(native_seen[7] >= before+200u);
+    before = native_seen[7];
+    total = calls(7);
+    ljt_lua_dostring(L,
+      "assert(__abi_run_float_range(__abi_f32,0/0,-100.0,100.0,300)==0)\n");
+    assert(native_seen[7] >= before+200u && calls(7) == total+300u);
+    /* The fourth input overflows F32, after native loop entry. The result
+    ** guard exits after the effect, without replaying that fourth call. */
+    for (i = 0; i < 2; i++) {
+      before = native_seen[7];
+      total = calls(7);
+      ljt_lua_dostring(L, i == 0 ?
+        "assert(__abi_run_float_range(__abi_f32,1e38,-1e39,1e39,300)==2)\n" :
+        "assert(__abi_run_float_range(__abi_f32,-1e38,-1e39,1e39,300)==1)\n");
+      assert(native_seen[7] >= before+2u && calls(7) == total+4u);
+    }
+    before = native_seen[7];
+    ljt_lua_dostring(L,
+      "assert(__abi_run_float_range(__abi_f32,0.123456789,-100.0,100.0,300)==0)\n");
+    assert(native_seen[7] >= before+200u);
+  }
+
   for (i = 1; i <= 6; i++) {
     assert(native_seen[i] >= 200);
     assert(calls(i) >= 300);
   }
-  assert(native_seen[7] == 0 && calls(7) == 0);
-  for (i = 8; i <= 11; i++) {
+  assert(native_seen[7] >= 200 && calls(7) >= 300);
+  for (i = 8; i < ABI_TEST_MAX_ID; i++) {
     assert(native_seen[i] >= 200);
     assert(calls(i) >= 300);
   }

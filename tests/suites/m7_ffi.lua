@@ -162,7 +162,7 @@ return function(add)
   add({
     name = "m7_ffi_callxs_arm64_scalar",
     description =
-      "experimental Darwin ARM64 int/double/boxed-pointer CALLXS lifecycle",
+      "experimental Darwin ARM64 int/float/double/boxed-pointer CALLXS lifecycle",
     run = function(t)
       if not native_darwin_arm64(t) then
         print("m7_ffi_callxs_arm64_scalar SKIP: requires native Darwin ARM64")
@@ -296,7 +296,7 @@ return function(add)
           timeout = "30s"
         })
       end)
-      print("M7 experimental Darwin ARM64 int/double/boxed-pointer " ..
+      print("M7 experimental Darwin ARM64 int/float/double/boxed-pointer " ..
             "CALLXS lifecycle passed")
     end
   })

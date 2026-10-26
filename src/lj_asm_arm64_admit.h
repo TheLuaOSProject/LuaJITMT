@@ -321,6 +321,17 @@ static int arm64_callxs_value_kind(const IRIns *ir, IRRef ref,
 	 ((value.op2 & IRCONV_CONVMASK) == 0 ||
 	  (value.op2 & IRCONV_CONVMASK) == IRCONV_ANY))) {
       /* This is the recorder's defined integral-to-double conversion. */
+    } else if (kind == LJ_ARM64_ABI_KIND_FLOAT && size == 4 &&
+	       type == IRT_FLOAT &&
+	       (from == IRT_NUM || from == IRT_INT) &&
+	       value.t.irt == IRT_FLOAT &&
+	       value.op2 == ((IRT_FLOAT << IRCONV_DSH) | from)) {
+	/* Narrow scalar conversion for a fixed float argument. */
+    } else if (kind == LJ_ARM64_ABI_KIND_FLOAT && size == 8 &&
+	       type == IRT_NUM && from == IRT_FLOAT &&
+	       value.t.irt == IRT_NUM &&
+	       value.op2 == ((IRT_NUM << IRCONV_DSH) | IRT_FLOAT)) {
+	/* Widen a float result before passing it as a double argument. */
     } else if ((kind == LJ_ARM64_ABI_KIND_INTEGER ||
                 kind == LJ_ARM64_ABI_KIND_ENUM) && on_stack &&
                (size == 1 || size == 2) && from == IRT_INT &&
@@ -1058,6 +1069,16 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
            arm64_callxs_ref_type(T->ir, nk, ins.op1) != IRT_NUM))
         return 0;
       break;
+    case IR_ULE: case IR_UGE:
+      /* Negated floating range checks must preserve unordered (NaN) cases. */
+      if (ins.t.irt != (IRT_NUM|IRT_GUARD) || ins.op1 >= ref ||
+          ins.op2 >= ref ||
+          !arm64_callxs_ref_valid(T->ir, nk, nins, ref, ins.op1) ||
+          !arm64_callxs_ref_valid(T->ir, nk, nins, ref, ins.op2) ||
+          arm64_callxs_ref_type(T->ir, nk, ins.op1) != IRT_NUM ||
+          arm64_callxs_ref_type(T->ir, nk, ins.op2) != IRT_NUM)
+        return 0;
+      break;
     case IR_PHI:
 	if (irt_isguard(ins.t) || !arm64_callxs_phi_types_match(T->ir, nk,
 	    ref, &ins) || !arm64_callxs_cdata_phi(cts, T->ir,
@@ -1117,7 +1138,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
       if (!arm64_callxs_int_overflow_shape(T->ir, nk, nins, ref, &ins))
         return 0;
       break;
-    case IR_MUL:
+    case IR_SUB: case IR_MUL:
       if (irt_type(ins.t) != IRT_NUM || ins.t.irt != IRT_NUM ||
           ins.op1 >= ref || ins.op2 >= ref ||
           !arm64_callxs_ref_valid(T->ir, nk, nins, ref, ins.op1) ||
@@ -1126,12 +1147,32 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
         return 0;
       break;
     case IR_CONV:
-      if ((ins.t.irt != IRT_NUM && ins.t.irt != IRT_U8 &&
-           ins.t.irt != IRT_U16) ||
-          ins.op2 != ((irt_type(ins.t) << IRCONV_DSH)|IRT_INT) ||
-          !arm64_callxs_ref_valid(T->ir, nk, nins, ref, ins.op1) ||
-          irt_type(ir_load_acq(&T->ir[ins.op1]).t) != IRT_INT)
-        return 0;
+      {
+	IRIns src;
+	IRType dst = irt_type(ins.t);
+	IRType from = (IRType)(ins.op2 & IRCONV_SRCMASK);
+	if ((ins.t.irt & ~(IRT_TYPE|IRT_ISPHI)) != 0 ||
+	    !arm64_callxs_ref_valid(T->ir, nk, nins, ref, ins.op1))
+	  return 0;
+	src = ir_load_acq(&T->ir[ins.op1]);
+	if (irt_type(src.t) != from)
+	  return 0;
+	if (dst == IRT_NUM && from == IRT_INT &&
+	    ins.op2 == IRCONV_NUM_INT && ins.t.irt == IRT_NUM)
+	  break;
+	if ((dst == IRT_U8 || dst == IRT_U16) && from == IRT_INT &&
+	    ins.op2 == ((dst << IRCONV_DSH)|IRT_INT) && ins.t.irt == dst)
+	  break;
+	if (dst == IRT_FLOAT && (from == IRT_NUM || from == IRT_INT) &&
+	    ins.op2 == ((IRT_FLOAT << IRCONV_DSH)|from) &&
+	    ins.t.irt == IRT_FLOAT)
+	  break;
+	if (dst == IRT_NUM && from == IRT_FLOAT &&
+	    ins.op2 == ((IRT_NUM << IRCONV_DSH)|IRT_FLOAT) &&
+	    ins.t.irt == IRT_NUM)
+	  break;
+	return 0;
+      }
       break;
     case IR_USE:
       if (irt_type(ins.t) != IRT_NIL || ins.op2 != 0 ||
@@ -2955,11 +2996,11 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		 irt_type(ins.t) != IRT_P64 && irt_type(ins.t) != IRT_TAB &&
 		 irt_type(ins.t) != IRT_FUNC && irt_type(ins.t) != IRT_STR))
 	      return 0;
-	  } else if (ins.o == IR_ADD || ins.o == IR_MUL) {
+	  } else if (ins.o == IR_ADD || ins.o == IR_SUB || ins.o == IR_MUL) {
 	    if (ins.op1 >= ref || ins.op2 >= ref ||
 		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref, ins.op1) ||
 		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref, ins.op2) ||
-		(ins.o == IR_MUL && ins.t.irt != IRT_NUM) ||
+		(ins.o != IR_ADD && ins.t.irt != IRT_NUM) ||
 		(ins.o == IR_ADD &&
 		 (ins.t.irt & ~(IRT_TYPE|IRT_ISPHI)) != 0) ||
 		!arm64_callxs_add_shape(view->ir, view->nk, irt_type(ins.t), ins.op1, ins.op2))
@@ -2971,14 +3012,27 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	      return 0;
 	  } else if (ins.o == IR_CONV) {
 	    IRIns src;
-	    if ((ins.t.irt != IRT_NUM && ins.t.irt != IRT_U8 &&
-                 ins.t.irt != IRT_U16) ||
-		ins.op2 != ((irt_type(ins.t) << IRCONV_DSH)|IRT_INT) ||
+	    IRType dst = irt_type(ins.t);
+	    IRType from = (IRType)(ins.op2 & IRCONV_SRCMASK);
+	    if ((ins.t.irt & ~(IRT_TYPE|IRT_ISPHI)) != 0 ||
 		ins.op1 >= ref || !arm64_callxs_ref_valid(view->ir, view->nk,
 		semantic_nins, ref, ins.op1))
 	      return 0;
 	    src = ir_load_acq(&view->ir[ins.op1]);
-	    if (irt_type(src.t) != IRT_INT)
+	    if (irt_type(src.t) != from ||
+		!((dst == IRT_NUM && from == IRT_INT &&
+		   ins.op2 == IRCONV_NUM_INT &&
+		   ins.t.irt == IRT_NUM) ||
+		  ((dst == IRT_U8 || dst == IRT_U16) && from == IRT_INT &&
+		   ins.op2 == ((dst << IRCONV_DSH)|IRT_INT) &&
+		   ins.t.irt == dst) ||
+		  (dst == IRT_FLOAT &&
+		   (from == IRT_NUM || from == IRT_INT) &&
+		   ins.op2 == ((IRT_FLOAT << IRCONV_DSH)|from) &&
+		   ins.t.irt == IRT_FLOAT) ||
+		  (dst == IRT_NUM && from == IRT_FLOAT &&
+		   ins.op2 == ((IRT_NUM << IRCONV_DSH)|IRT_FLOAT) &&
+		   ins.t.irt == IRT_NUM)))
 	      return 0;
 	  } else if (ins.o == IR_USE) {
 	    if (irt_type(ins.t) != IRT_NIL || ins.op2 != 0 ||
@@ -3015,6 +3069,14 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    t1 = arm64_callxs_ref_type(view->ir, view->nk, ins.op1);
 	    t2 = arm64_callxs_ref_type(view->ir, view->nk, ins.op2);
 	    if (t1 != t2 || (t1 != IRT_INT && t1 != IRT_NUM))
+	      return 0;
+	  } else if (ins.o == IR_ULE || ins.o == IR_UGE) {
+	    if (ins.t.irt != (IRT_NUM|IRT_GUARD) || ins.op1 >= ref ||
+		ins.op2 >= ref ||
+		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref, ins.op1) ||
+		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref, ins.op2) ||
+		arm64_callxs_ref_type(view->ir, view->nk, ins.op1) != IRT_NUM ||
+		arm64_callxs_ref_type(view->ir, view->nk, ins.op2) != IRT_NUM)
 	      return 0;
 	  } else {
 	    /* Every CALLS ID and opcode must have matched a validated branch above. */

@@ -59,6 +59,50 @@ local function run_arm64_double(fn, n)
   return true
 end
 
+local function run_arm64_float(fn, n)
+  for i = 1, n do
+    local x = i * 0.123456789
+    local got, mag = fn(x), x
+    if got == mag or got < mag - 0.0001 or got > mag + 0.0001 then
+      return false
+    end
+  end
+  return true
+end
+
+local function run_arm64_float_int(fn, n)
+  for i = 1, n do
+    local x = 16777217 + 2 * i
+    local got = fn(x)
+    if got == x or got < x - 2 or got > x + 2 then return false end
+  end
+  return true
+end
+
+local function run_arm64_float_to_double(ff, fd, n)
+  for i = 1, n do
+    local x = i * 0.123456789
+    local rounded = ff(x)
+    local got = fd(rounded)
+    if got == x or got < x - 0.0001 or got > x + 0.0001 then
+      return false
+    end
+  end
+  return true
+end
+
+local function run_arm64_float_to_float(fn, n)
+  for i = 1, n do
+    local x = i * 0.123456789
+    local rounded = fn(x)
+    local got = fn(rounded)
+    if got == x or got < x - 0.0001 or got > x + 0.0001 then
+      return false
+    end
+  end
+  return true
+end
+
 local function run_arm64_fma(fn, n)
   for i = 1, n do
     local a = i * 0.5
@@ -85,11 +129,32 @@ if arm64_scalar then
   assert(run_arm64_i32(ffi.C.abs, 400))
   assert(run_arm64_double(ffi.C.fabs, 400))
   local base_xsave, base_callxs = callxs_lifecycle_count()
+  assert(run_arm64_float(ffi.C.fabsf, 400))
+  local num_float_xsave, num_float_callxs = callxs_lifecycle_count()
+  assert(num_float_xsave == base_xsave + 2 and
+         num_float_callxs == base_callxs + 2,
+         "NUM-to-F32 loop did not publish both call lifecycles")
+  assert(run_arm64_float_int(ffi.C.fabsf, 400))
+  local float_xsave, float_callxs = callxs_lifecycle_count()
+  assert(float_xsave == num_float_xsave + 2 and
+         float_callxs == num_float_callxs + 2,
+         "INT-to-F32 loop did not publish both call lifecycles")
+  assert(run_arm64_float_to_double(ffi.C.fabsf, ffi.C.fabs, 400))
+  local widened_xsave, widened_callxs = callxs_lifecycle_count()
+  assert(widened_xsave == float_xsave + 4 and
+         widened_callxs == float_callxs + 4,
+         "F32-to-double arguments did not publish both call pairs")
+  assert(run_arm64_float_to_float(ffi.C.fabsf, 400))
+  local chained_xsave, chained_callxs = callxs_lifecycle_count()
+  assert(chained_xsave == widened_xsave + 4 and
+         chained_callxs == widened_callxs + 4,
+         "F32-to-F32 arguments did not publish both call pairs")
   assert(run_arm64_fma(ffi.C.fma, 400))
   local fma_xsave, fma_callxs = callxs_lifecycle_count()
   assert(run_arm64_mixed(ffi.C.ldexp, 400))
   local all_xsave, all_callxs = callxs_lifecycle_count()
   print("CALLXS profile counts", base_xsave, base_callxs,
+        float_xsave, float_callxs,
         fma_xsave, fma_callxs, all_xsave, all_callxs)
 else
   assert(run(400) == 400 * 401 / 2)
@@ -97,20 +162,16 @@ end
 local xsave = trace_op_count("XSAVE ")
 local callxs = trace_op_count("CALLXS")
 if arm64_scalar then
-  assert(xsave == 8 and callxs == 8,
+  assert(xsave == 20 and callxs == 20,
          ("wrong ARM64 scalar CALLXS lifecycles: %d/%d"):format(
            xsave, callxs))
-  jit.flush()
-  assert(run_arm64_double(ffi.C.fabsf, 400))
-  assert(trace_op_count("CALLXS") == 0,
-         "unsupported float(float) CALLXS trace was published")
 else
   assert(xsave > 0, "production scalar FFI call omitted XSAVE")
   assert(callxs > 0, "production scalar FFI call omitted CALLXS")
 end
 
 if arm64_scalar then
-  print("t-ffi-callxs-production OK: int/double CALLXS executed")
+  print("t-ffi-callxs-production OK: int/float/double CALLXS executed")
 else
   print("t-ffi-callxs-production OK: default scalar CALLXS executed")
 end
