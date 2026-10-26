@@ -43,6 +43,9 @@ run_profile() {
   fixture=$tmpdir/t-arm64-jit-bitops-$profile
   lj_ci_compile_fixture "$fixture" "$root/tests/t-arm64-jit-bitops.c"
   lj_ci_run_fixture 180 "$fixture" "$root/tests/t-arm64-jit-bitops.lua"
+  fixture=$tmpdir/t-arm64-jit-fusion-boundary-$profile
+  lj_ci_compile_fixture "$fixture" "$root/tests/t-arm64-jit-fusion-boundary.c"
+  lj_ci_run_fixture 30 "$fixture"
 }
 
 profiles=${LJ_ARM64_BITOPS_PROFILES:-'arm64-assert arm64e-assert arm64-release arm64e-release'}
@@ -55,4 +58,4 @@ if test "${LJ_ARM64_BITOPS_BIND_EXISTING:-0}" != 1; then
   lj_ci_restore "${LJ_ARM64_BITOPS_RESTORE_TARGET_FLAGS:--arch arm64}" \
     "${LJ_ARM64_BITOPS_RESTORE_XCFLAGS:-$LJ_CI_RESTORE_XCFLAGS}"
 fi
-echo "arm64_jit_bitops_contract OK: independent semantic/post-RA bitop admission and native integer LOOP/FORL coverage across profiles: $profiles"
+echo "arm64_jit_bitops_contract OK: independent bitop admission, integer LOOP/FORL and INT/NUM fusion boundaries across profiles: $profiles"

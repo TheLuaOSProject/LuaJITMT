@@ -7024,7 +7024,7 @@ static int arm64_scalar_postra_nolocation(const LJArm64PostRAView *v,
     if (source.t.irt == IRT_INT &&
         arm64_scalar_postra_int_fusion(v, value, ref, loop))
       continue;
-    if (source.o != IR_MUL || source.t.irt != IRT_NUM ||
+    if (value <= loop || source.o != IR_MUL || source.t.irt != IRT_NUM ||
         (use.o != IR_ADD && use.o != IR_SUB) || !irt_isnum(use.t) ||
         use.op1 == use.op2) {
       return 0;

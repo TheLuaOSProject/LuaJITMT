@@ -119,3 +119,28 @@ combined validation will use a new frozen source checkpoint including this
 correction. Local before/after logs are
 `/tmp/ljmt-bitops-boundary-before.log` and
 `/tmp/ljmt-bitops-boundary-after.log`.
+
+## Existing NUM fusion follow-up
+
+The older NUM MUL-to-ADD/SUB certificate had the equivalent missing `mayfuse`
+boundary. A separate diagnostic against the unchanged main runtime at
+`d124b6fa` reproduced semantic and physical acceptance after redirecting only
+the loop-body ADD to an unlocated first-iteration MUL. The original has two
+real FMADD instructions and remains accepted after restoring the clone.
+
+The physical use walk now applies the same loop boundary to NUM fusion.
+`tests/t-arm64-jit-fusion-boundary.c` retains the diagnostic as a required
+negative, with exact original results and emitted FMADD checks. It runs beside
+the bitops fixture in all four assertion/release ARM64/arm64e profiles. All
+four pass, as do the existing ARM64 scalar/FMA and numeric-spill contracts,
+including lifecycle, snapshots and flush/reuse. The original 52 bitops cases
+retain their layout totals and INT cross-loop rejection. The source change is
+one additional physical-admission condition; emitter code remains unchanged.
+
+The complete combined matrix passed at `bbf3f5ba` before this NUM tightening.
+It was not repeated after the one-condition follow-up; the four-profile and
+numeric regression results above describe its final validation scope. Logs:
+`/tmp/ljmt-fma-boundary-before.log`,
+`/tmp/ljmt-bitops-final-four-profile.log`,
+`/tmp/ljmt-bitops-final-scalar.log`, and
+`/tmp/ljmt-bitops-final-spills.log`.
