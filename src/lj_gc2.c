@@ -759,6 +759,7 @@ uint32_t lj_gc2_test_worker_table_skips(void)
 #define LJ_GC2_RECOVERY_TEST_PRE_LIFETIME_RESTORE 4u
 #define LJ_GC2_RECOVERY_TEST_POST_CLAIM 5u
 #define LJ_GC2_RECOVERY_TEST_SMALL_IDLE_SAMPLED 6u
+#define LJ_GC2_RECOVERY_TEST_POST_CONSTRUCT_RESTORE 7u
 #define LJ_GC2_THREAD_NEEDSCAN_TEST_BEFORE_SET 1u
 #define LJ_GC2_THREAD_NEEDSCAN_TEST_AFTER_SET 2u
 #define LJ_GC2_THREAD_NEEDSCAN_TEST_INSTALLING 3u
@@ -10436,17 +10437,16 @@ static int gc2_recovery_small_lifetime_release(global_State *g, GCArena *a,
     target = LJ_ARENA_LIFETIME_LIVE;
   if (LJ_LIKELY(lj_arena_lifetime_state_cas(a, start,
 	held, target))) {
-    if (target == LJ_ARENA_LIFETIME_CONSTRUCT &&
-	lj_arena_root_state_acq(a, start) != LJ_ARENA_ROOT_LINKING) {
-      /* Constructor commit/abandon may have won its LINKING transition after
-      ** our first root sample. Repair the transient CONSTRUCT publication;
-      ** the constructor performs the symmetric recheck if it wins later. */
-      if (!lj_arena_lifetime_state_cas(a, start,
-	    LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE) &&
-	  lj_arena_lifetime_state_acq(a, start) !=
-	    LJ_ARENA_LIFETIME_LIVE) {
-	gc2_recovery_fail_closed(g);
-	return 0;
+    if (target == LJ_ARENA_LIFETIME_CONSTRUCT) {
+      gc2_recovery_test_pause_at(
+	LJ_GC2_RECOVERY_TEST_POST_CONSTRUCT_RESTORE);
+      if (lj_arena_root_state_acq(a, start) != LJ_ARENA_ROOT_LINKING) {
+        /* Constructor commit/abandon may have won its LINKING transition
+        ** after our first root sample. Repair transient CONSTRUCT publication.
+        ** We surrendered lifetime above: a lost CAS belongs to the constructor
+        ** or another recovery owner, whose release performs the same repair. */
+        (void)lj_arena_lifetime_state_cas(a, start,
+	  LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE);
       }
     }
     return 1;

@@ -39,7 +39,16 @@ and reports that are no longer authoritative are retained in
   and [`x64-vmevent-test-unwind-2026-10-26.md`](x64-vmevent-test-unwind-2026-10-26.md).
   The architecture-review checkpoint and its sanitizer/performance scope remain in
   [`review-validation-2026-10-25.md`](review-validation-2026-10-25.md).
-- Latest focused FFI validation: the scalar variadic checkpoint `328fcb23`
+- Latest focused FFI validation: boxed I64/U64 result checkpoint `9651f937`
+  passes its four-profile ARM64/arm64e assertion/release contract, with 1,722
+  native boxed results and independent admission mutations per profile. Its
+  combined experimental run then failed in native TNEW on a shared constructor
+  root-membership race; bootstrap and stock stages were not reached. The
+  [constructor/recovery repair](gc2-constructor-recovery-2026-10-26.md) passes
+  its eight-profile ARM64/arm64e/x64 recovery and pending-root matrix, with
+  renewed combined validation pending. See the
+  [boxed-result note](arm64-jit-boxed64-results-2026-10-26.md).
+  The preceding scalar variadic checkpoint `328fcb23`
   passed the complete M7 FFI suite in all four ARM64/arm64e assertion/release
   profiles. ARM64 and signed x64 each passed both 509-case stock corpora. The
   ordinary ARM64 runtime also passes all eight variadic smoke cases without
@@ -304,8 +313,9 @@ available.
   multires/tail calls, CALLM outside the direct scalar producer shape, and
   unsupported result/IR representations. The admitted scalar
   float conversions do not certify arbitrary float graphs. Boxed I64/U64
-  results now have a narrow implementation with initial ARM64 assertion
-  evidence; its four-profile matrix is pending. General 64-bit cdata
+  results now have a narrow implementation with a passing four-profile
+  focused contract; renewed combined validation after the shared GC repair
+  is pending. General 64-bit cdata
   arguments/arithmetic remain excluded. See the
   [boxed-64-bit result note](arm64-jit-boxed64-results-2026-10-26.md).
 - Full parity with every x86_64 lockless VM, JIT, FFI, profiler, unwind, and

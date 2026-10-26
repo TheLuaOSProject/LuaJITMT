@@ -742,8 +742,12 @@ static int gc_root_construct_claimed_at(global_State *g, GCobj *o,
   if (kind == GC_ROOT_STATE_SMALL) {
     uint32_t life = lj_arena_lifetime_state_acq(ref->a, ref->cell);
     if (life != LJ_ARENA_LIFETIME_CONSTRUCT &&
-	life != LJ_ARENA_LIFETIME_RECOVERY)
+	life != LJ_ARENA_LIFETIME_RECOVERY &&
+	life != LJ_ARENA_LIFETIME_MUTATING)
       return LJ_GC_ROOT_LINK_DEFER;
+    /* Exact constructor base plus LINKING pins this incarnation. The only
+    ** borrower of CONSTRUCT into MUTATING is the GC2 recovery drainer; its
+    ** release observes our eventual MEMBER/NONE root transition. */
   }
   return LJ_GC_ROOT_LINKED;
 }

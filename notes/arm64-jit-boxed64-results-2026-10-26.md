@@ -78,8 +78,32 @@ trace also showed an X0 payload store and exact INT64_MIN result.
 The focused `tools/ci/arm64_jit_boxed_i64_contract.sh` binds each runtime,
 archive, and fixture to an exact profile and restores ordinary ARM64 after
 the four assertion/release ARM64/arm64e targets. Both new fixtures are also
-registered in the full M7 suite. The final four-profile and combined gates
-have not yet been run for this change.
+registered in the M7 scalar CALLXS suite.
+
+## Frozen four-profile validation and combined-gate failure
+
+At `9651f9372cb815f3e2b00980ad48c96c23e35abd`, the focused contract passed:
+
+| Target/runtime | Profile |
+| --- | --- |
+| ARM64 assertion | `10b96f60714444d99a40d6c85f0db0c93fb3edd717db1bc187fb7e230d33aa7f` |
+| arm64e assertion/BTI | `3ce68559bf1754c73e714774fc2426260b7af63696b9167a8ea043e569658896` |
+| ARM64 release | `03d1fa7fc68ccee79dda16e5128a9253b45f439fdec4c0db4b1f9ba9c0876557` |
+| arm64e release/BTI | `e16159973b27cc274ee9fef9130b92dfd132d57d309d46798684e4e07bfa5e05` |
+
+Each profile recorded 1,722 native boxed-I64/U64 results and 46 native scalar
+CALLM producer observations. Semantic and post-RA fixtures independently
+passed 8 positives and rejected 25 mutations, without skipping the duplicate
+store case. Existing pointer admission also passed. The log is
+`/tmp/ljmt-i64-four-profile.log`.
+
+The subsequent experimental umbrella aborted during the capacity-4 native
+TNEW contract on an intermittent shared GC constructor membership assertion.
+The earlier portions of that umbrella passed, but the whole gate did not;
+bootstrap and stock-corpus stages were not reached. Shared GC source was
+unchanged by the boxed-result implementation. The failure, deterministic
+constructor/recovery regressions and repair are recorded in the
+[constructor/recovery note](gc2-constructor-recovery-2026-10-26.md).
 
 ## Remaining scope
 

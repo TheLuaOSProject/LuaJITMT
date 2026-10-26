@@ -97,6 +97,12 @@ static void hugetab_test_admission_close_pause_after_close(void);
 #define hugetab_test_admission_close_pause_after_close() ((void)0)
 #endif
 
+#if defined(LJ_ARENA_TEST_HELPERS) || defined(LJ_GC2_TEST_HELPERS)
+static void arena_test_construct_pause_after_sample(uint32_t stage);
+#else
+#define arena_test_construct_pause_after_sample(stage) ((void)0)
+#endif
+
 static LJ_AINLINE uint64_t arena_remote_count(uint64_t active)
 {
   return active & LJ_ARENA_REMOTE_COUNT_MASK;
@@ -558,12 +564,16 @@ int lj_arena_root_construct_commit(GCArena *a, uint32_t cell)
   if (!arena_lifetime_managed(a) || cell < LJ_AFIRST_CELL ||
       cell >= LJ_ARENA_CELLS)
     return 0;
+retry:
   life = lj_arena_lifetime_state_acq(a, cell);
   root = lj_arena_root_state_acq(a, cell);
-  if (life == LJ_ARENA_LIFETIME_RECOVERY) {
-    /* Only recovery may claim CONSTRUCT. Publish the already-visible edge
-    ** without stealing its lane; recovery restores LIVE after observing that
-    ** LINKING no longer owns constructor state. */
+  arena_test_construct_pause_after_sample(LJ_ARENA_CONSTRUCT_TEST_COMMIT);
+  if (life == LJ_ARENA_LIFETIME_RECOVERY ||
+      life == LJ_ARENA_LIFETIME_MUTATING) {
+    /* The caller retains the unique construction identity. Only a recovery
+    ** publisher or drainer can borrow CONSTRUCT in these lanes. Publish the
+    ** already-visible edge without stealing that ownership; recovery restores
+    ** LIVE after observing that LINKING no longer owns constructor state. */
     committed = root == LJ_ARENA_ROOT_MEMBER ||
       (root == LJ_ARENA_ROOT_LINKING &&
        lj_arena_root_state_cas(a, cell, LJ_ARENA_ROOT_LINKING,
@@ -583,11 +593,13 @@ int lj_arena_root_construct_commit(GCArena *a, uint32_t cell)
       return 0;
     if (!lj_arena_lifetime_state_cas(a, cell,
 	  LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE))
-      return 0;
+      /* Recovery can claim CONSTRUCT after our sample. Re-read its exact
+      ** lane instead of losing an already-published root edge. */
+      goto retry;
     life = LJ_ARENA_LIFETIME_LIVE;
   }
   if (life != LJ_ARENA_LIFETIME_LIVE)
-    return 0;  /* Recovery, mutation or free owns the lane; never wait. */
+    return 0;  /* An unrelated mutation or free owns the lane; never wait. */
   root = lj_arena_root_state_acq(a, cell);
   if (root == LJ_ARENA_ROOT_MEMBER)
     return 1;
@@ -659,22 +671,35 @@ fallback:
 int lj_arena_root_construct_abandon(GCArena *a, uint32_t cell)
 {
   uint32_t life, root;
+  int cleared = 0;
   if (!arena_lifetime_managed(a) || cell < LJ_AFIRST_CELL ||
       cell >= LJ_ARENA_CELLS)
     return 0;
+retry:
   life = lj_arena_lifetime_state_acq(a, cell);
   if (life != LJ_ARENA_LIFETIME_CONSTRUCT &&
       life != LJ_ARENA_LIFETIME_LIVE &&
-      life != LJ_ARENA_LIFETIME_RECOVERY)
+      life != LJ_ARENA_LIFETIME_RECOVERY &&
+      life != LJ_ARENA_LIFETIME_MUTATING)
     return 0;
   root = lj_arena_root_state_acq(a, cell);
-  if (root == LJ_ARENA_ROOT_LINKING &&
-      !lj_arena_root_state_cas(a, cell, LJ_ARENA_ROOT_LINKING,
-			       LJ_ARENA_ROOT_NONE))
+  /* NONE alone does not identify a constructor while MUTATING owns the
+  ** allocation. Only this invocation's LINKING cancellation grants that
+  ** proof across a lifetime-CAS retry. */
+  if (life == LJ_ARENA_LIFETIME_MUTATING &&
+      root != LJ_ARENA_ROOT_LINKING && !cleared)
     return 0;
+  arena_test_construct_pause_after_sample(LJ_ARENA_CONSTRUCT_TEST_ABANDON);
+  if (root == LJ_ARENA_ROOT_LINKING) {
+    if (!lj_arena_root_state_cas(a, cell, LJ_ARENA_ROOT_LINKING,
+			       LJ_ARENA_ROOT_NONE))
+      return 0;
+    cleared = 1;
+  }
   if (lj_arena_root_state_acq(a, cell) != LJ_ARENA_ROOT_NONE)
     return 0;
-  if (life == LJ_ARENA_LIFETIME_RECOVERY)
+  if (life == LJ_ARENA_LIFETIME_RECOVERY ||
+      life == LJ_ARENA_LIFETIME_MUTATING)
   {
     /* Repair recovery's stale-LINKING CONSTRUCT restore if it crossed the root
     ** clear. A still-RECOVERY publisher performs the symmetric root recheck. */
@@ -682,9 +707,12 @@ int lj_arena_root_construct_abandon(GCArena *a, uint32_t cell)
 	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE);
     return 1;
   }
-  if (life == LJ_ARENA_LIFETIME_CONSTRUCT)
-    return lj_arena_lifetime_state_cas(a, cell,
-	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE);
+  if (life == LJ_ARENA_LIFETIME_CONSTRUCT &&
+      !lj_arena_lifetime_state_cas(a, cell,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE))
+    /* Root cancellation already completed. Recovery may now own the lane
+    ** and must perform its usual NONE-to-LIVE release repair. */
+    goto retry;
   return 1;
 }
 
@@ -1594,8 +1622,32 @@ static int arena_test_gc2_sidecar_alloc_fails(void)
 #endif
 
 #if defined(LJ_ARENA_TEST_HELPERS) || defined(LJ_GC2_TEST_HELPERS)
+static uint32_t arena_test_construct_pause_stage;
+static uint32_t arena_test_construct_pause_seen;
 static uint32_t arena_test_lifetime_pause_flag;
 static uint32_t arena_test_lifetime_pause_seen;
+
+void lj_arena_test_construct_pause(uint32_t stage)
+{
+  if (stage)
+    la_store32_rel(&arena_test_construct_pause_seen, 0);
+  la_store32_rel(&arena_test_construct_pause_stage, stage);
+}
+
+uint32_t lj_arena_test_construct_paused(void)
+{
+  return la_load32_acq(&arena_test_construct_pause_seen);
+}
+
+static void arena_test_construct_pause_after_sample(uint32_t stage)
+{
+  if (la_load32_acq(&arena_test_construct_pause_stage) == stage) {
+    la_store32_rel(&arena_test_construct_pause_seen, stage);
+    while (la_load32_acq(&arena_test_construct_pause_stage) == stage)
+      la_cpu_pause();
+    la_store32_rel(&arena_test_construct_pause_seen, 0);
+  }
+}
 
 void lj_arena_test_lifetime_pause(int enabled)
 {

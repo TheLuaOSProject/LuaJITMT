@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/types.h>
@@ -55,6 +56,13 @@ typedef struct RecoveryFreeCtx {
   void *p;
   size_t size;
 } RecoveryFreeCtx;
+
+typedef struct RecoveryConstructCtx {
+  global_State *g;
+  GCobj *o;
+  int abandon;
+  int result;
+} RecoveryConstructCtx;
 
 typedef struct RecoveryIdleReclaimCtx {
   global_State *g;
@@ -137,6 +145,36 @@ static void recovery_wait_paused(uint32_t stage)
     la_cpu_pause();
 }
 
+static void recovery_wait_construct_paused(uint32_t stage)
+{
+  while (lj_arena_test_construct_paused() != stage)
+    la_cpu_pause();
+}
+
+static int recovery_pending_contains(TGState *tg, GCobj *needle)
+{
+  GCobj *o;
+  uint32_t n = 0;
+  for (o = lj_tg_gcroot_pending_acq(tg); o != NULL;
+       o = lj_obj_gcw_acq(o)) {
+    if (o == needle)
+      return 1;
+    assert(++n < LJ_GC2_ROOT_SCAN_LIMIT);
+  }
+  return 0;
+}
+
+static uint32_t recovery_root_occurrences(global_State *g, GCobj *needle)
+{
+  GCobj *o;
+  uint32_t n = 0, found = 0;
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+    found += o == needle;
+    assert(++n < LJ_GC2_ROOT_SCAN_LIMIT);
+  }
+  return found;
+}
+
 static void *recovery_publish_thread(void *arg)
 {
   RecoveryPublishCtx *ctx = (RecoveryPublishCtx *)arg;
@@ -162,6 +200,16 @@ static void *recovery_free_thread(void *arg)
 {
   RecoveryFreeCtx *ctx = (RecoveryFreeCtx *)arg;
   lj_arena_free(ctx->alloc, ctx->p, ctx->size);
+  return NULL;
+}
+
+static void *recovery_construct_thread(void *arg)
+{
+  RecoveryConstructCtx *ctx = (RecoveryConstructCtx *)arg;
+  if (ctx->abandon)
+    ctx->result = lj_mem_abandon_gco_unpublished(ctx->g, ctx->o);
+  else
+    ctx->result = lj_gc_linkobj_new(ctx->g, ctx->o);
   return NULL;
 }
 
@@ -1090,6 +1138,280 @@ static void test_constructor_recovery_overlaps(void)
     LJ_GC2_RECOVERY_TEST_RESERVED, 0);
   test_constructor_recovery_overlap_one(
     LJ_GC2_RECOVERY_TEST_PRE_LIFETIME_RESTORE, 0);
+}
+
+/* Pause after the constructor has sampled CONSTRUCT, then let GC2 recovery
+** claim that exact lane before its CAS. Linking has already published the
+** pending-root edge when the commit hook pauses. */
+static void test_constructor_sampled_recovery_race_one(int abandon)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  RecoveryConstructCtx construct = {0};
+  RecoveryPublishCtx publish = {0};
+  pthread_t constructor_thread, publisher_thread;
+  GCupval *uv = recovery_new_constructing_upvalue(&f);
+  GCobj *o = obj2gco(uv);
+  GCArena *a = lj_arena_of(o);
+  uint32_t cell = lj_arena_cellof(o);
+  uint64_t published0 = gc2_recovery_published_acq(f.g);
+  uint64_t drained0 = gc2_recovery_drained_acq(f.g);
+  uint32_t pause = abandon ? LJ_ARENA_CONSTRUCT_TEST_ABANDON :
+			     LJ_ARENA_CONSTRUCT_TEST_COMMIT;
+
+  construct.g = f.g;
+  construct.o = o;
+  construct.abandon = abandon;
+  construct.result = -99;
+  lj_arena_test_construct_pause(pause);
+  assert(pthread_create(&constructor_thread, NULL,
+			recovery_construct_thread, &construct) == 0);
+  recovery_wait_construct_paused(pause);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_CONSTRUCT);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_LINKING);
+
+  publish.g = f.g;
+  publish.o = o;
+  lj_gc2_test_recovery_pause(LJ_GC2_RECOVERY_TEST_RESERVED);
+  assert(pthread_create(&publisher_thread, NULL,
+			recovery_publish_thread, &publish) == 0);
+  recovery_wait_paused(LJ_GC2_RECOVERY_TEST_RESERVED);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_RECOVERY);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+
+  /* The publisher has claimed RECOVERY but has not published its side item.
+  ** Let the constructor resume first so its stale CONSTRUCT snapshot loses
+  ** the lane CAS in the exact sampled-state window. */
+  lj_arena_test_construct_pause(0);
+  assert(pthread_join(constructor_thread, NULL) == 0);
+  if (abandon) {
+    assert(construct.result == LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE);
+    assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  } else {
+    assert(construct.result == LJ_GC_ROOT_LINKED);
+    assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_MEMBER);
+    assert(lj_gc_root_acq(f.g) != NULL);
+    assert(recovery_root_occurrences(f.g, o) == 1u);
+  }
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_RECOVERY);
+
+  lj_gc2_test_recovery_release();
+  assert(pthread_join(publisher_thread, NULL) == 0);
+  assert(publish.result == 1);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  assert(lj_gc2_test_recovery_drain(f.g, 1) == 1u);
+  assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_recovery_state_acq(a, cell) == LJ_ARENA_RECOVERY_IDLE);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_published_acq(f.g) == published0 + 1u);
+  assert(gc2_recovery_drained_acq(f.g) == drained0 + 1u);
+  if (abandon) {
+    assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+    lj_mem_free(f.g, o, sizeof(GCupval));
+    assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_FREE);
+  } else {
+    assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_MEMBER);
+    assert(recovery_root_occurrences(f.g, o) == 1u);
+  }
+  assert(gc2_recovery_failed_acq(f.g) == 0);
+  recovery_fixture_close(&f);
+}
+
+static void test_constructor_sampled_recovery_races(void)
+{
+  test_constructor_sampled_recovery_race_one(0);
+  test_constructor_sampled_recovery_race_one(1);
+}
+
+/* MUTATING is accepted only when the constructor still proves the exact
+** LINKING incarnation. A ROOT_NONE object has no such retained ownership. */
+static void test_unrelated_mutating_construct_rejected(void)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  GCupval *uv = recovery_new_constructing_upvalue(&f);
+  GCobj *o = obj2gco(uv);
+  GCArena *a = lj_arena_of(o);
+  uint32_t cell = lj_arena_cellof(o);
+
+  assert(lj_arena_root_state_cas(a, cell, LJ_ARENA_ROOT_LINKING,
+				 LJ_ARENA_ROOT_NONE));
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_CONSTRUCT,
+					   LJ_ARENA_LIFETIME_MUTATING));
+  assert(!lj_arena_root_construct_commit(a, cell));
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_MUTATING);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  assert(!lj_arena_root_construct_abandon(a, cell));
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_MUTATING);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_MUTATING,
+					   LJ_ARENA_LIFETIME_CONSTRUCT));
+  assert(lj_mem_abandon_gco_unpublished(f.g, o) ==
+	 LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE);
+  assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  assert(gc2_recovery_failed_acq(f.g) == 0);
+  lj_mem_free(f.g, o, sizeof(GCupval));
+  recovery_fixture_close(&f);
+}
+
+/* A claimed recovery item holds construction ownership in MUTATING while the
+** worker is parked. Resolve the constructor from both root-linked and
+** root-abandoned states before the worker resumes traversal. */
+static void test_postclaim_constructor_resolution_one(int abandon)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  RecoveryDrainCtx drain = {0};
+  pthread_t thread;
+  GCupval *uv = recovery_new_constructing_upvalue(&f);
+  GCobj *o = obj2gco(uv);
+  GCArena *a = lj_arena_of(o);
+  uint32_t cell = lj_arena_cellof(o);
+  uint64_t published0 = gc2_recovery_published_acq(f.g);
+  uint64_t drained0 = gc2_recovery_drained_acq(f.g);
+
+  assert(lj_gc2_test_recovery_publish(f.g, o) == 1);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_CONSTRUCT);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_LINKING);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  lj_gc2_test_recovery_pause(LJ_GC2_RECOVERY_TEST_POST_CLAIM);
+  drain.g = f.g;
+  drain.limit = 1;
+  assert(pthread_create(&thread, NULL, recovery_drain_thread, &drain) == 0);
+  recovery_wait_paused(LJ_GC2_RECOVERY_TEST_POST_CLAIM);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_MUTATING);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_CLAIMED);
+
+  if (abandon) {
+    assert(lj_mem_abandon_gco_unpublished(f.g, o) ==
+	   LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE);
+    assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  } else {
+    assert(lj_gc_linkobj_new(f.g, o) == LJ_GC_ROOT_LINKED);
+    assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_MEMBER);
+    assert(recovery_pending_contains(f.tg, o));
+  }
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_MUTATING);
+
+  lj_gc2_test_recovery_release();
+  assert(pthread_join(thread, NULL) == 0);
+  assert(drain.result == 1u);
+  assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_recovery_state_acq(a, cell) == LJ_ARENA_RECOVERY_IDLE);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_published_acq(f.g) == published0 + 1u);
+  assert(gc2_recovery_drained_acq(f.g) == drained0 + 1u);
+  if (abandon) {
+    assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+    lj_mem_free(f.g, o, sizeof(GCupval));
+    assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_FREE);
+  } else {
+    assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_MEMBER);
+    assert(lj_gc_flush_root_pending(f.g) != 0);
+    assert(recovery_root_occurrences(f.g, o) == 1u);
+  }
+  assert(gc2_recovery_failed_acq(f.g) == 0);
+  recovery_fixture_close(&f);
+}
+
+static void test_postclaim_constructor_resolution(void)
+{
+  test_postclaim_constructor_resolution_one(0);
+  test_postclaim_constructor_resolution_one(1);
+}
+
+/* After recovery releases its MUTATING hold as CONSTRUCT, resolve the real
+** constructor, then model the LIVE->MUTATING claim before a layout mutator's
+** side-owner validation. That validation would reject CLAIMED and restore
+** LIVE; no mutation body is admitted or exercised by this fixture. */
+static void test_postrestore_claimant_one(int abandon)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  RecoveryDrainCtx drain = {0};
+  pthread_t thread;
+  GCupval *uv = recovery_new_constructing_upvalue(&f);
+  GCobj *o = obj2gco(uv);
+  GCArena *a = lj_arena_of(o);
+  uint32_t cell = lj_arena_cellof(o);
+  uint64_t published0 = gc2_recovery_published_acq(f.g);
+  uint64_t drained0 = gc2_recovery_drained_acq(f.g);
+
+  assert(lj_gc2_test_recovery_publish(f.g, o) == 1);
+  lj_gc2_test_recovery_pause(LJ_GC2_RECOVERY_TEST_POST_CONSTRUCT_RESTORE);
+  drain.g = f.g;
+  drain.limit = 1;
+  assert(pthread_create(&thread, NULL, recovery_drain_thread, &drain) == 0);
+  recovery_wait_paused(LJ_GC2_RECOVERY_TEST_POST_CONSTRUCT_RESTORE);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_CONSTRUCT);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_LINKING);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_CLAIMED);
+
+  if (abandon) {
+    assert(lj_mem_abandon_gco_unpublished(f.g, o) ==
+	   LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE);
+    assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  } else {
+    assert(lj_gc_linkobj_new(f.g, o) == LJ_GC_ROOT_LINKED);
+    assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_MEMBER);
+    assert(recovery_pending_contains(f.tg, o));
+  }
+  assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
+					   LJ_ARENA_LIFETIME_MUTATING));
+
+  /* Stop the hook from catching a later recovery retry, then let its original
+  ** drainer attempt the stale CONSTRUCT root recheck against our claimant. */
+  lj_gc2_test_recovery_pause_disarm();
+  lj_gc2_test_recovery_release();
+  assert(pthread_join(thread, NULL) == 0);
+  assert(drain.result == 1u);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_MUTATING);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(gc2_recovery_failed_acq(f.g) == 0);
+
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_MUTATING,
+					   LJ_ARENA_LIFETIME_LIVE));
+  assert(lj_gc2_test_recovery_drain(f.g, 1) == 1u);
+  assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_recovery_state_acq(a, cell) == LJ_ARENA_RECOVERY_IDLE);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_published_acq(f.g) == published0 + 1u);
+  assert(gc2_recovery_drained_acq(f.g) == drained0 + 1u);
+  assert(gc2_recovery_failed_acq(f.g) == 0);
+  if (abandon) {
+    assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+    lj_mem_free(f.g, o, sizeof(GCupval));
+    assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_FREE);
+  } else {
+    assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_MEMBER);
+    assert(lj_gc_flush_root_pending(f.g) != 0);
+    assert(recovery_root_occurrences(f.g, o) == 1u);
+  }
+  recovery_fixture_close(&f);
+}
+
+static void test_postrestore_claimants(void)
+{
+  test_postrestore_claimant_one(0);
+  test_postrestore_claimant_one(1);
 }
 
 static void test_postclaim_late_retained_requeues(void)
@@ -2174,8 +2496,36 @@ static void test_sticky_failure_without_items_is_bounded(void)
   recovery_fixture_close(&f);
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+  if (argc == 2) {
+    if (!strcmp(argv[1], "sampled-commit"))
+      test_constructor_sampled_recovery_race_one(0);
+    else if (!strcmp(argv[1], "sampled-abandon"))
+      test_constructor_sampled_recovery_race_one(1);
+    else if (!strcmp(argv[1], "drain-commit"))
+      test_postclaim_constructor_resolution_one(0);
+    else if (!strcmp(argv[1], "drain-abandon"))
+      test_postclaim_constructor_resolution_one(1);
+    else if (!strcmp(argv[1], "unrelated-mutating"))
+      test_unrelated_mutating_construct_rejected();
+    else if (!strcmp(argv[1], "postrestore-commit"))
+      test_postrestore_claimant_one(0);
+    else if (!strcmp(argv[1], "postrestore-abandon"))
+      test_postrestore_claimant_one(1);
+    else {
+      fprintf(stderr, "unknown t-gc2-recovery selector: %s\n", argv[1]);
+      return 2;
+    }
+    puts("t-gc2-recovery selected constructor race OK");
+    return 0;
+  }
+  if (argc != 1) {
+    fprintf(stderr, "usage: %s [sampled-commit|sampled-abandon|"
+	    "drain-commit|drain-abandon|unrelated-mutating|"
+	    "postrestore-commit|postrestore-abandon]\n", argv[0]);
+    return 2;
+  }
   test_full_active_ssb_fallback();
   test_full_ssb_barrier_coalesces_reserved_recovery();
   test_stale_idle_sample_rechecks_mutating_recovery();
@@ -2185,6 +2535,10 @@ int main(void)
   test_public_lease_excludes_destructor();
   test_small_recovery_vs_free_both_orders();
   test_constructor_recovery_overlaps();
+  test_constructor_sampled_recovery_races();
+  test_unrelated_mutating_construct_rejected();
+  test_postclaim_constructor_resolution();
+  test_postrestore_claimants();
   test_postclaim_late_retained_requeues();
   test_weak_clear_recovery_gate();
   test_sweep_empty_string_is_immortal();

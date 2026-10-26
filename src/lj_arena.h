@@ -959,6 +959,10 @@ LJ_FUNC int lj_arena_test_quarantine_apply_bitmap(GCArena *a,
 						   int preserve_marks);
 #endif
 #if defined(LJ_ARENA_TEST_HELPERS) || defined(LJ_GC2_TEST_HELPERS)
+#define LJ_ARENA_CONSTRUCT_TEST_COMMIT 1u
+#define LJ_ARENA_CONSTRUCT_TEST_ABANDON 2u
+LJ_FUNC void lj_arena_test_construct_pause(uint32_t stage);
+LJ_FUNC uint32_t lj_arena_test_construct_paused(void);
 LJ_FUNC void lj_arena_test_lifetime_pause(int enabled);
 LJ_FUNC uint32_t lj_arena_test_lifetime_paused(void);
 #endif
