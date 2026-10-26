@@ -68,6 +68,15 @@ The x64 release `t-jit-token.c` fixture also panics with an unprotected
 `/tmp/ljmt-callback-token-baseline.log`. Treat this as an independent baseline
 fixture failure, not evidence about callback recording.
 
+Preserved-binary LLDB inspection narrowed that panic to an unwind mismatch at
+the injected stage-3 preparation hook. `_Unwind_RaiseException` returned
+END_OF_STACK without reaching LuaJIT's personality or protected C landing.
+The live `lj_vmevent_prepare_try` caller return address was at RSP+136, but its
+FDE selected RSP+152 at the callback return PC. The latter word belonged to a
+different earlier call. This establishes a 16-byte stack/CFI mismatch in that
+diagnostic binary, not its ultimate code-generation cause. Evidence and exact
+addresses are retained in `/tmp/ljmt-x64-unwind-evidence.txt`.
+
 ## Validation status
 
 The new CI contract intentionally selects `--callback-cleanup` from
@@ -152,6 +161,40 @@ passed on ARM64 assertion and x64 release builds in
 Production-source hash remained unchanged, and the driver restored the ordinary
 ARM64 profile on exit. This extra test was added after the frozen combined run.
 
+## Development-build repetition and open timeout
+
+The checkpoint was committed and pushed as
+`5a9090ab5eda78cb861d85792b0bb3a30f8a66c8`, then the main checkout was rebuilt
+without test-helper defines. Profile
+`fa38c7520f8710bf043ff49dcb7f0bcf2cd477ea9f2426f0e5fba1a266acc6a5`
+produced ARM64 runtime SHA-256
+`2a39cc8485397ede5cf2c6b838090c02158e55e74a26b1942c3a349543f60656`.
+The runtime is ad-hoc signed. It contains no callback/profile test-helper
+symbols, and neither it nor the affected function/profile/VM-event objects
+import a compiler atomic fallback. Disassembly is retained in
+`/tmp/ljmt-callback-main-lj_{func,profile,vmevent}.asm`.
+
+The initial planned 128-process repetition did **not** finish: 110 executions
+passed, then process 111 exceeded its 120-second alarm and exited 142. Its
+buffered log contains no Lua progress output, so the stalled stage and cause
+are unknown. The original `rec_check_slots` assertion was not observed.
+See `/tmp/ljmt-callback-main-profile.log` and
+`/tmp/ljmt-callback-main-upvalues-111.log`; driver
+`/tmp/ljmt-callback-main-profile.sh`.
+
+Two diagnostic follow-ups retained exactly the same runtime and HEAD:
+
+- 300 unbuffered processes passed in `/tmp/ljmt-callback-main-repeat.log`;
+  driver `/tmp/ljmt-callback-main-repeat.py`.
+- 1,000 processes with the original buffered/perl-alarm launch passed in
+  `/tmp/ljmt-callback-main-buffered.log`; driver
+  `/tmp/ljmt-callback-main-buffered.py`.
+
+Both follow-ups armed automatic stack sampling for any process lasting over
+ten seconds; neither reached that threshold. Their success does not explain
+or close the earlier timeout. This is bounded repeated execution, not sustained
+runtime/performance or full-port acceptance.
+
 ## Remaining port work
 
 This fixes recorder continuity during peer callbacks and already-pending
@@ -159,5 +202,5 @@ signal cleanup. It adds no new native bytecode capability and does not finish
 the ARM64 port. General captured-local CGET/CSET cells still need rooted
 recorder sampling and separate runtime/admission proofs; rejecting their
 raw-cell IR at assembly does not itself prove the earlier recorder access.
-The existing wider JIT/FFI admission limits and the two baseline failures
-above remain open.
+The existing wider JIT/FFI admission limits, the two baseline failures, and the
+new unexplained repetition timeout above remain open.

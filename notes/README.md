@@ -273,6 +273,11 @@ available.
   fixture also retains a baseline external-unwind panic on injected OOM.
   Both reproduce on the preceding clean checkpoint and are excluded explicitly
   from the new callback contract's claimed coverage; see the callback notes.
+- The normal development build's repeated upvalue regression passed 110
+  processes, then one process timed out after 120 seconds. Subsequent unchanged
+  runs passed 300 unbuffered and 1,000 buffered processes without reproducing
+  the original recorder assertion or the timeout. The timeout's stage and cause
+  remain unknown; these later passes do not explain it.
 - Complete sanitizer, weak-memory, sustained-concurrency, and performance
   recovery matrices.
 - Legacy bytecode imports now normalize to shared cells before publication.
