@@ -15,6 +15,10 @@ and reports that are no longer authoritative are retained in
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
+- Latest focused JIT checkpoint: nested table reads feeding CALLXS at
+  `662cd828`, with independent GC root checks across callback suspension.
+  The four-profile contract, broader M7 suite and ordinary main rebuild pass;
+  see the [nested-read evidence](arm64-jit-table-chains-2026-10-27.md).
 - Current review implementation replaces whole-trace templates with operation
   proofs for scalar LOOP/FORL/FUNCF bodies, first scalar side traces, rooted
   scalar reads and existing-key stores, unsunk table construction, and fixed
@@ -294,9 +298,14 @@ available.
   owned I64 arguments. Independent semantic/post-RA checks require live GC
   roots at every native call, including callback suspension. The focused
   native tests cover table-edge removal, deferred GC, callback collection,
-  exact XSAVE roots and eventual weak reclamation. See
+  exact XSAVE roots and eventual weak reclamation. Checkpoint `662cd828`
+  passes all 14 focused fixtures and the broader M7 suite in all four
+  ARM64/arm64e assertion/release profiles. ARM64 and signed x64 each pass
+  both 509-case stock corpora; the ordinary main rebuild also passes both
+  corpora and five nested-read, nine I64-argument and nine table-callable
+  smoke cases. See
   [`arm64-jit-table-chains-2026-10-27.md`](arm64-jit-table-chains-2026-10-27.md)
-  for validation progress and the remaining experimental limits.
+  for the profile identities and remaining experimental limits.
 - Direct scalar producer `CALL` to consumer `CALLM` chains support nested
   integer, float and double calls with register and stack arguments. Source
   geometry, final-argument identity and continuation snapshots have independent
