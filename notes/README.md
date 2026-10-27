@@ -283,7 +283,11 @@ available.
   Both admission passes retain exact CType, signedness, ABI-use and XSAVE
   source checks; the existing table-read proof supplies scratch and snapshot
   provenance. Native fixtures cover peer replacement, nine arguments,
-  fixed-prefix varargs, deferred GC and exact native-frame roots. See
+  fixed-prefix varargs, deferred GC and exact native-frame roots. Checkpoint
+  `39396f18` passes the extended ten-fixture contract and broader M7 suite in
+  all four ARM64/arm64e assertion/release profiles. ARM64 and signed x64 each
+  pass both 509-case stock corpora; the ordinary main rebuild also passes
+  both corpora and nine argument plus nine callable smoke cases. See
   [`arm64-jit-table-i64-arguments-2026-10-27.md`](arm64-jit-table-i64-arguments-2026-10-27.md)
   for the current validation checkpoint and remaining scope.
 - Direct scalar producer `CALL` to consumer `CALLM` chains support nested
