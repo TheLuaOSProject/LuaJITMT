@@ -15,11 +15,15 @@ and reports that are no longer authoritative are retained in
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
-- Latest JIT source checkpoint: ordinary Lua NUM values feeding fixed C
+- Latest JIT checkpoint: ordinary Lua NUM values feeding fixed C
   integer CALLXS arguments, including all eight signed/unsigned widths and
-  compact Darwin stack arguments. The new native fixture and independent
-  18-positive/86-semantic-negative/106-allocated-negative admission fixture
-  pass ARM64 assertions. Broader frozen-checkpoint validation is pending.
+  compact Darwin stack arguments, at `f05b4658`. All 20 focused fixtures and
+  the broader M7 FFI suite pass four ARM64/arm64e assertion/release profiles,
+  including 162 numeric runs, nine forced post-call exits and independent
+  18-positive/86-semantic-negative/106-allocated-negative admission checks.
+  Both complete experimental/bootstrap gates pass; ARM64 and signed x64 pass
+  both 509-case stock corpora. The ordinary main rebuild passes 102 smoke
+  runs plus boundary checks. Direct NUM-to-integer CALLM adaptation remains closed.
   See the [numeric-argument evidence](arm64-jit-ffi-numeric-arguments-2026-10-27.md).
 - Preceding JIT checkpoint: scalar CALLXS results held across a later CALLXS
   at `9f5ee143`. All 18 focused fixtures and the broader M7 FFI suite pass
@@ -48,13 +52,15 @@ and reports that are no longer authoritative are retained in
   semantic/post-RA views. Each profile records 344 native observations and
   independent 4-positive/26-negative admission checks.
   See [`arm64-jit-i64-arguments-2026-10-26.md`](arm64-jit-i64-arguments-2026-10-26.md).
-- Latest complete umbrella validation: the scalar-table argument checkpoint
-  on 2026-10-27, frozen at `df3269d1`.
+- Latest complete umbrella validation: the numeric fixed-integer argument
+  checkpoint on 2026-10-27, frozen at `f05b4658`.
   The complete experimental and bootstrap gates passed, including all four
   M7 scalar CALLXS profiles. ARM64 and signed x86-64 each passed both 509-case
   stock source/import corpora. The ordinary main ARM64 rebuild passes both
-  corpora and all 34 scalar-table/nested-read/I64-argument/callable smoke runs
-  without test helpers. See the
+  corpora and 102 numeric/held-result/scalar-table/nested-read/I64-argument/
+  callable smoke runs without test helpers. See the
+  [numeric-argument evidence](arm64-jit-ffi-numeric-arguments-2026-10-27.md).
+  The preceding complete scalar-table checkpoint is in the
   [scalar-argument evidence](arm64-jit-table-scalar-arguments-2026-10-27.md).
   Earlier fixed I64/U64 argument validation is in the
   [fixed-argument evidence](arm64-jit-i64-arguments-2026-10-26.md).
@@ -100,11 +106,11 @@ and reports that are no longer authoritative are retained in
   publication/entry/retirement, native numeric adaptation, and M7 scalar CALLXS
   on ARM64 and arm64e/BTI with both assertion and release runtimes.
 - Native ARM64 source and original-v2 import stock corpora each pass all 509
-  cases at the `9f5ee143` checkpoint and its ordinary main rebuild.
+  cases at the `f05b4658` checkpoint and its ordinary main rebuild.
 - The complete bootstrap gate passes, including 387 applicable stock cases,
   threaded tmpbuf, Darwin native roots/GC2, ARM64/arm64e callbacks,
   variadic/aggregate interpreter FFI and x86-64 errno unwind.
-- The signed x86-64/Rosetta runtime at `9f5ee143` passed both 509-case corpora.
+- The signed x86-64/Rosetta runtime at `f05b4658` passed both 509-case corpora.
   The combined gates also ran x86-64 callback-result lifetime and errno unwind.
   Shared rooted-store, raw nil-deletion, upvalue/cell and segment-map race
   fixtures were validated at the earlier local-cell checkpoint. Earlier
@@ -330,6 +336,13 @@ available.
   provenance. All 16 focused fixtures pass in four profiles, together with
   both complete gates and ARM64/x64 stock source and bytecode checks. See
   [`arm64-jit-table-scalar-arguments-2026-10-27.md`](arm64-jit-table-scalar-arguments-2026-10-27.md).
+- Ordinary Lua NUM values can feed fixed signed/unsigned 8/16/32/64-bit C
+  integer arguments through the recorder's existing conversion chains. Both
+  admission passes retain the original NUM in XSAVE and reject native-only
+  carriers in Lua snapshots. Four-profile native tests include fractional,
+  boundary, NaN/infinite and compact Darwin stack arguments, with exact
+  interpreter/native argument comparison. See the
+  [numeric-argument evidence](arm64-jit-ffi-numeric-arguments-2026-10-27.md).
 - Direct scalar producer `CALL` to consumer `CALLM` chains support nested
   integer, float and double calls with register and stack arguments. Source
   geometry, final-argument identity and continuation snapshots have independent
