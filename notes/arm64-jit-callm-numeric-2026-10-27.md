@@ -101,11 +101,46 @@ fixture and both new fixtures pass together in the ARM64 assertion profile
 (`/tmp/ljmt-callm-numeric-legacy-snapshot.log`). No production change was
 needed for this correction.
 
+## Full-gate failures and scalar fixture recovery
+
+At `56befe28`, all 22 focused fixtures passed all four ARM64/arm64e
+assertion/release profiles. The first complete experimental run then timed
+out after 60 seconds in the older `t-arm64-jit-table-i64-args` fixture, with
+no assertion or thread sample. Thirty isolated repeats passed, and that
+fixture passed all four profiles on the next full-gate attempt. The original
+timeout remains unexplained; later passes do not identify or repair its cause.
+Logs: `/tmp/ljmt-callm-numeric-experimental-i64-timeout.log` and
+`/tmp/ljmt-i64-timeout-repro.log`.
+
+The second complete experimental attempt reached its final arm64e release
+M7 profile, where the older scalar-table fixture returned the correct Lua
+result and errno but saw no native finish during its first cold call to
+`__table_scalar_run_v_double`. Fifty isolated runs passed with additional
+recording diagnostics, so the original abort reason was not recovered.
+Logs: `/tmp/ljmt-callm-numeric-experimental-scalar-cold.log` and
+`/tmp/ljmt-scalar-cold-repro.log`.
+
+That scalar fixture now permits at most eight attempts for a fresh,
+non-forced runner. It never flushes traces, checks the exact result, errno,
+total and selected-helper counts plus native-state cleanup on every attempt,
+and still requires an authentic published trace and its native witness.
+Pre-existing trace reuse and forced post-call exits remain single-attempt
+checks. A deterministic test interrupts cold recording at the target
+prototype's TGETV using RECERR, requires an interpreted-only first attempt,
+then requires native execution on recovery. This synthetic interruption is
+not evidence of the cause of the original sporadic failure.
+
+The corrected fixture passes the arm64e release profile with one injected
+abort and one cold retry. A counterfactual that disallows the retry fails
+at the missing native witness as intended. Logs:
+`/tmp/ljmt-scalar-cold-fixed.log` and
+`/tmp/ljmt-scalar-cold-counterfactual.log`. This changes only the test.
+
 ## Validation still to complete
 
-The frozen four-profile contract, complete experimental/bootstrap gates,
-ordinary compatibility matrix and main-checkout integration have not yet
-been completed for this checkpoint.
+The renewed frozen four-profile contract, complete experimental/bootstrap
+gates, ordinary compatibility matrix and main-checkout integration have not
+yet been completed for the corrected fixture checkpoint.
 
 ## Limits
 

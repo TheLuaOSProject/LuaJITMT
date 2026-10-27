@@ -44,6 +44,9 @@ static uint32_t native_finishes;
 static uint32_t force_postcall;
 static uint32_t forced_finishes;
 static uint64_t forced_epoch = UINT64_MAX;
+static GCproto *abort_recording_pt;
+static uint32_t injected_aborts;
+static uint32_t recording_retries;
 
 static void *capture_func(lua_State *L, const char *name)
 {
@@ -83,7 +86,7 @@ static GCtrace *find_loop_trace(jit_State *J, GCproto *pt)
   TraceNo no;
   for (no = 1; (MSize)no < trace_sizetrace_acq(J); no++) {
     GCtrace *T = traceref_safe(J, no);
-    if (T != NULL && T == expected_trace && trace_runnable_acq(T, no) &&
+    if (T != NULL && trace_runnable_acq(T, no) &&
         trace_root_acq(T) == 0 && trace_startpt_acq(T) == pt &&
         bc_op(trace_startins_acq(T)) == BC_FORL &&
         op_count(T, IR_CALLXS) != 0 &&
@@ -91,6 +94,15 @@ static GCtrace *find_loop_trace(jit_State *J, GCproto *pt)
       return T;
   }
   return NULL;
+}
+
+static void interrupt_cold_recording(jit_State *J, const BCIns *pc)
+{
+  if (J->pt == abort_recording_pt && bc_op(*pc) == BC_TGETV) {
+    assert(J2TG(J) == owner_tg);
+    injected_aborts++;
+    lj_trace_err(J, LJ_TRERR_RECERR);
+  }
 }
 
 static void observe_native(TGState *tg)
@@ -175,7 +187,7 @@ static void assert_clean(TGState *tg, GCtrace *T)
   assert(lj_tg_in_native_acq(tg) == 0 && lj_tg_load_jit_base(tg) == NULL);
   assert(tg->ffi_xsave_root == NULL && tg->ffi_xsave_baseslot == 0 &&
          tg->ffi_xsave_nslots == 0);
-  assert(trace_native_pins_acq(T) == 0);
+  if (T != NULL) assert(trace_native_pins_acq(T) == 0);
   for (i = 0; i < LJ_FFI_NATIVE_FRAME_MAX; i++) {
     const LJFFINativeFrame *frame = &tg->ffi_native_frame[i];
     assert(lj_ffi_native_frame_trace_acq(frame) == NULL);
@@ -215,53 +227,76 @@ static void assert_first_exit_at(jit_State *J, GCtrace *expected,
 static GCtrace *run_case(lua_State *L, jit_State *J, TGState *tg,
                          const char *runner, const char *fn_name,
                          int32_t mode, lua_Integer n, unsigned calls_per_iter,
-                         lua_Number expected, void *func, int force)
+                         lua_Number expected, void *func, const char *count_name,
+                         int force)
 {
+  GCproto *pt = global_proto(L, runner);
+  GCtrace *T = find_loop_trace(J, pt);
+  int cold = T == NULL && !force;
   int status, saved_errno;
+  unsigned attempt;
   uint32_t exits_before;
-  lua_getglobal(L, "__table_scalar_configure");
-  lua_pushinteger(L, mode);
-  assert(lua_pcall(L, 1, 0, 0) == LUA_OK);
-  lj_trace_test_reset_exit_stats();
-  exits_before = lj_trace_test_exit_calls();
-  expected_trace = NULL;
-  expected_func = func;
-  native_finishes = forced_finishes = 0;
-  forced_epoch = UINT64_MAX;
-  force_postcall = (uint32_t)force;
-  if (force)
-    lj_ffi_native_trace_test_set_finish_hook(force_finish);
-  else
-    lj_ffi_native_trace_test_set_finish_hook(observe_finish);
-  errno = 0;
-  status = call_driver(L, runner, fn_name, 2, n);
-  saved_errno = errno;
-  lj_ffi_native_trace_test_set_finish_hook(NULL);
-  force_postcall = 0;
-  assert(status == LUA_OK && lua_isnumber(L, -1));
-  if (lua_tonumber(L, -1) != expected) {
-    fprintf(stderr, "%s returned %.17g, expected %.17g\n", runner,
-            (double)lua_tonumber(L, -1), (double)expected);
-    assert(0);
-  }
-  lua_pop(L, 1);
-  assert(saved_errno == EDOM);
-  if (native_finishes == 0)
-    fprintf(stderr, "no native scalar CALLXS finish: runner=%s\n", runner);
-  assert(native_finishes != 0);
-  assert(counter(L, "__table_scalar_total_count") == n * calls_per_iter);
-  if (force) {
-    assert(forced_finishes == 1 && forced_epoch != UINT64_MAX);
-    assert(lj_trace_test_exit_calls() > exits_before);
-    assert_first_exit_at(J, expected_trace, global_proto(L, runner), BC_CALL, 1);
-    lj_tg_hs_epoch_ack_rel(tg, forced_epoch);
+  for (attempt = 0; ; attempt++) {
+    int inject = abort_recording_pt == pt && attempt == 0;
+    if (cold) run_lua(L, "jit.opt.start('hotloop=1')");
+    lua_getglobal(L, "__table_scalar_configure");
+    lua_pushinteger(L, mode);
+    assert(lua_pcall(L, 1, 0, 0) == LUA_OK);
+    lj_trace_test_reset_exit_stats();
+    lj_trace_test_reset_exittab_stats();
+    exits_before = lj_trace_test_exit_calls();
+    expected_trace = T;
+    expected_func = func;
+    native_finishes = forced_finishes = 0;
     forced_epoch = UINT64_MAX;
-  }
-  {
-    GCtrace *T = find_loop_trace(J, global_proto(L, runner));
-    assert(T != NULL && T == expected_trace);
+    force_postcall = (uint32_t)force;
+    lj_ffi_native_trace_test_set_finish_hook(force ? force_finish : observe_finish);
+    if (inject) {
+      assert(cold && T == NULL && injected_aborts == 0);
+      lj_trace_test_set_recorded_hook(interrupt_cold_recording);
+    }
+    errno = 0;
+    status = call_driver(L, runner, fn_name, 2, n);
+    saved_errno = errno;
+    lj_trace_test_set_recorded_hook(NULL);
+    lj_ffi_native_trace_test_set_finish_hook(NULL);
+    force_postcall = 0;
+    assert(status == LUA_OK && lua_isnumber(L, -1));
+    if (lua_tonumber(L, -1) != expected) {
+      fprintf(stderr, "%s returned %.17g, expected %.17g\n", runner,
+              (double)lua_tonumber(L, -1), (double)expected);
+      assert(0);
+    }
+    lua_pop(L, 1);
+    assert(saved_errno == EDOM);
+    assert(counter(L, "__table_scalar_total_count") == n * calls_per_iter);
+    assert(counter(L, count_name) == n * calls_per_iter);
+    T = find_loop_trace(J, pt);
+    if (inject) {
+      assert(injected_aborts != 0 && native_finishes == 0 && T == NULL);
+      assert(lj_trace_test_abort_count() != 0 &&
+             lj_trace_test_last_abort_error() == LJ_TRERR_RECERR);
+    }
+    if (force) {
+      assert(forced_finishes == 1 && forced_epoch != UINT64_MAX);
+      assert(lj_trace_test_exit_calls() > exits_before);
+      assert_first_exit_at(J, expected_trace, pt, BC_CALL, 1);
+      lj_tg_hs_epoch_ack_rel(tg, forced_epoch);
+      forced_epoch = UINT64_MAX;
+    }
     assert_clean(tg, T);
-    return T;
+    if (native_finishes != 0) {
+      assert(T != NULL && T == expected_trace);
+      return T;
+    }
+    fprintf(stderr, "no native scalar CALLXS finish: runner=%s attempt=%u "
+            "aborts=%u last=%u injected=%d\n", runner, attempt + 1u,
+            lj_trace_test_abort_count(),
+            (unsigned)lj_trace_test_last_abort_error(), inject);
+    /* Only first-time recording may retry. Every attempt checks effects,
+    ** errno and cleanup; published-trace reuse and forced exits get one try. */
+    assert(cold && attempt < 7u);
+    recording_retries++;
   }
 }
 
@@ -314,28 +349,34 @@ int main(void)
   i32_9_func = capture_func(L, "__table_scalar_fn_i32_9");
   mixed11_func = capture_func(L, "__table_scalar_fn_mixed11");
 
-  T = run_case(L,J,tg,"__table_scalar_run_s_i32","__table_scalar_fn_i32",0,32,1,-544.0,i32_func,0);
+  T = run_case(L,J,tg,"__table_scalar_run_s_i32","__table_scalar_fn_i32",0,32,1,-544.0,i32_func,"__table_scalar_i32_count",0);
   assert(counter(L,"__table_scalar_i32_count")==32);
   same_trace = T;
-  T = run_case(L,J,tg,"__table_scalar_run_read_after_call","__table_scalar_fn_i32",0,16,2,-544.0,i32_func,0);
+  T = run_case(L,J,tg,"__table_scalar_run_read_after_call","__table_scalar_fn_i32",0,16,2,-544.0,i32_func,"__table_scalar_i32_count",0);
   assert(counter(L,"__table_scalar_i32_count")==32);
   run_lua(L,"assert(__table_scalar_go:send('replace',5)); local _,ok=__table_scalar_done:recv(5); assert(ok)");
-  T = run_case(L,J,tg,"__table_scalar_run_s_i32","__table_scalar_fn_i32",1,32,1,-608.0,i32_func,0);
+  T = run_case(L,J,tg,"__table_scalar_run_s_i32","__table_scalar_fn_i32",1,32,1,-608.0,i32_func,"__table_scalar_i32_count",0);
   assert(T == same_trace && counter(L,"__table_scalar_i32_count")==32);
 
-  T = run_case(L,J,tg,"__table_scalar_run_v_double","__table_scalar_fn_double",8,32,1,136.0,double_func,0);
+  /* Interrupt the first cold attempt before its C call. This synthetic
+  ** RECERR verifies recovery, without attributing any intermittent failure
+  ** to a particular runtime event. The next attempt must execute natively. */
+  abort_recording_pt = global_proto(L, "__table_scalar_run_v_double");
+  T = run_case(L,J,tg,"__table_scalar_run_v_double","__table_scalar_fn_double",8,32,1,136.0,double_func,"__table_scalar_double_count",0);
+  assert(injected_aborts != 0 && recording_retries != 0);
+  abort_recording_pt = NULL;
   assert(counter(L,"__table_scalar_double_count")==32);
-  T = run_case(L,J,tg,"__table_scalar_run_v_tablekey_double","__table_scalar_fn_double",10,32,1,176.0,double_func,0);
+  T = run_case(L,J,tg,"__table_scalar_run_v_tablekey_double","__table_scalar_fn_double",10,32,1,176.0,double_func,"__table_scalar_double_count",0);
   assert(counter(L,"__table_scalar_double_count")==32);
-  T = run_case(L,J,tg,"__table_scalar_run_b_float","__table_scalar_fn_float",9,32,1,88.0,float_func,0);
+  T = run_case(L,J,tg,"__table_scalar_run_b_float","__table_scalar_fn_float",9,32,1,88.0,float_func,"__table_scalar_float_count",0);
   assert(counter(L,"__table_scalar_float_count")==32);
-  T = run_case(L,J,tg,"__table_scalar_run_bool_i32","__table_scalar_fn_bool",2,32,1,32.0,bool_func,0);
+  T = run_case(L,J,tg,"__table_scalar_run_bool_i32","__table_scalar_fn_bool",2,32,1,32.0,bool_func,"__table_scalar_bool_count",0);
   assert(counter(L,"__table_scalar_bool_count")==32);
-  T = run_case(L,J,tg,"__table_scalar_run_bool_false_i32","__table_scalar_fn_bool",11,32,1,0.0,bool_func,0);
+  T = run_case(L,J,tg,"__table_scalar_run_bool_false_i32","__table_scalar_fn_bool",11,32,1,0.0,bool_func,"__table_scalar_bool_count",0);
   assert(counter(L,"__table_scalar_bool_count")==32);
-  T = run_case(L,J,tg,"__table_scalar_run_nested9","__table_scalar_fn_i32_9",5,32,1,4320.0,i32_9_func,0);
+  T = run_case(L,J,tg,"__table_scalar_run_nested9","__table_scalar_fn_i32_9",5,32,1,4320.0,i32_9_func,"__table_scalar_i32_9_count",0);
   assert(counter(L,"__table_scalar_i32_9_count")==32);
-  T = run_case(L,J,tg,"__table_scalar_run_mixed11","__table_scalar_fn_mixed11",7,32,1,4512.0,mixed11_func,0);
+  T = run_case(L,J,tg,"__table_scalar_run_mixed11","__table_scalar_fn_mixed11",7,32,1,4512.0,mixed11_func,"__table_scalar_mixed11_count",0);
   assert(counter(L,"__table_scalar_mixed11_count")==32);
 
   /* A changed table value of a different Lua type must guard-exit before the
@@ -364,7 +405,7 @@ int main(void)
   /* Force one post-call exit after a committed scalar effect; the helper must
   ** still run exactly once per loop iteration. */
   run_lua(L,"assert(__table_scalar_go:send('replace',5)); local _,ok=__table_scalar_done:recv(5); assert(ok)");
-  T = run_case(L,J,tg,"__table_scalar_run_s_i32","__table_scalar_fn_i32",1,16,1,-304.0,i32_func,1);
+  T = run_case(L,J,tg,"__table_scalar_run_s_i32","__table_scalar_fn_i32",1,16,1,-304.0,i32_func,"__table_scalar_i32_count",1);
   assert(counter(L,"__table_scalar_i32_count")==16);
   assert(forced_finishes == 1 && T == same_trace);
 
@@ -372,7 +413,8 @@ int main(void)
     "assert(__table_scalar_go:send('stop',5)); local _,ok=__table_scalar_done:recv(5); assert(ok); assert(__table_scalar_release:send(true,5)); local joined,res=__table_scalar_peer:join(5); assert(joined and res)");
   assert_clean(tg,T);
   lua_close(L);
-  puts("t-arm64-jit-table-scalar-args OK: native shared-table scalar arguments");
+  printf("t-arm64-jit-table-scalar-args OK: native shared-table scalar arguments; "
+         "injected aborts=%u cold retries=%u\n", injected_aborts, recording_retries);
   return 0;
 }
 
