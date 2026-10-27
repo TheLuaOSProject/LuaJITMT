@@ -306,6 +306,12 @@ available.
   smoke cases. See
   [`arm64-jit-table-chains-2026-10-27.md`](arm64-jit-table-chains-2026-10-27.md)
   for the profile identities and remaining experimental limits.
+- Scalar values read from shared tables can feed existing fixed integer,
+  double and float CALLXS arguments, including canonical booleans and nested
+  receivers. Independent source/result and XSAVE argument proofs retain exact
+  provenance. The initial 16-fixture ARM64 assertion contract passes; full
+  frozen-profile validation is pending. See
+  [`arm64-jit-table-scalar-arguments-2026-10-27.md`](arm64-jit-table-scalar-arguments-2026-10-27.md).
 - Direct scalar producer `CALL` to consumer `CALLM` chains support nested
   integer, float and double calls with register and stack arguments. Source
   geometry, final-argument identity and continuation snapshots have independent
