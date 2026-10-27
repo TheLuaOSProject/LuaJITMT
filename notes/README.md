@@ -15,7 +15,12 @@ and reports that are no longer authoritative are retained in
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
-- Latest JIT checkpoint: scalar table arguments feeding CALLXS at `df3269d1`.
+- Latest JIT increment: scalar CALLXS results held across a later CALLXS.
+  The focused ARM64 assertion contract passes all 18 fixtures, including
+  four result classes, eight forced post-call exits and 15 malformed
+  allocation rejections. Frozen-checkpoint validation follows in the
+  [held-result evidence](arm64-jit-held-call-results-2026-10-27.md).
+- Preceding JIT checkpoint: scalar table arguments feeding CALLXS at `df3269d1`.
   All 16 focused fixtures pass in four ARM64/arm64e assertion/release profiles,
   both complete experimental/bootstrap gates pass, and ARM64 plus signed x64
   pass both 509-case stock corpora. The ordinary main rebuild also passes

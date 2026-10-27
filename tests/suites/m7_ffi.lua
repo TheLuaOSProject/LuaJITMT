@@ -220,6 +220,9 @@ return function(add)
       local table_scalar_args_so = build_shared_library(t,
         t:tmp("lj_t-arm64-jit-table-scalar-args.dylib"),
         "t-arm64-jit-table-scalar-args-lib.c")
+      local callxs_held_results_so = build_shared_library(t,
+        t:tmp("lj_t-arm64-jit-callxs-held-results.dylib"),
+        "t-arm64-jit-callxs-held-results-lib.c")
       local callxs_funcptr_so = build_shared_library(t,
         t:tmp("lj_t-arm64-jit-callxs-funcptr.dylib"),
         "t-arm64-jit-callxs-funcptr-lib.c")
@@ -333,6 +336,15 @@ return function(add)
             build = false,
             cflags = flags,
             env = { LJ_M7_FFI_TABLE_SCALAR_ARGS_SO = table_scalar_args_so },
+            timeout = "60s"
+          })
+        end
+        for _, name in ipairs({ "callxs-held-results", "callxs-held-results-admission" }) do
+          build_and_run_c(t, t:tmp("lj_t-arm64-jit-" .. name),
+                          "t-arm64-jit-" .. name .. ".c", {
+            build = false,
+            cflags = flags,
+            env = { LJ_M7_FFI_CALLXS_HELD_RESULTS_SO = callxs_held_results_so },
             timeout = "60s"
           })
         end

@@ -5134,15 +5134,15 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	  if (irt_type(c.t) != arm64_callxs_result_type(&abi) ||
 	      (abi.result_class == LJ_ARM64_ABI_GPR &&
 	       !ra_hasspill(regsp_spill(c.prev)) && c.r != RID_RET &&
+	       !(c.r >= RID_X19 && c.r <= RID_X28) &&
 	       !(c.r == RID_NONE && c.s == SPS_NONE &&
 		 !ra_hasspill(regsp_spill(c.prev)) &&
 		 arm64_postra_callxs_result_unused(view, semantic_nins, call))) ||
-	      /* ra_destreg moves S0/D0 into an already allocated destination.
-	      ** A nested result may need a preserved FPR across the leave/enter
-	      ** helpers before its consumer places it in an outgoing stack slot. */
+	      /* ra_destreg moves X0/S0/D0 into an already allocated destination.
+	      ** Held results may use a preserved register across leave/enter and
+	      ** later calls. Independent liveness and snapshot checks still apply. */
 	      (abi.result_class == LJ_ARM64_ABI_FPR && c.r != RID_FPRET &&
-	       !(irt_type(c.t) == IRT_FLOAT &&
-		 c.r >= RID_D8 && c.r <= RID_D15)))
+	       !(c.r >= RID_D8 && c.r <= RID_D15)))
 	    return 0;
 	  if (!arm64_postra_callxs_live_across(view, semantic_nins, call, capacity))
 	    return 0;
