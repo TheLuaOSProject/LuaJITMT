@@ -15,7 +15,13 @@ and reports that are no longer authoritative are retained in
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
-- Latest JIT checkpoint: scalar CALLXS results held across a later CALLXS
+- Latest JIT source checkpoint: ordinary Lua NUM values feeding fixed C
+  integer CALLXS arguments, including all eight signed/unsigned widths and
+  compact Darwin stack arguments. The new native fixture and independent
+  18-positive/86-semantic-negative/106-allocated-negative admission fixture
+  pass ARM64 assertions. Broader frozen-checkpoint validation is pending.
+  See the [numeric-argument evidence](arm64-jit-ffi-numeric-arguments-2026-10-27.md).
+- Preceding JIT checkpoint: scalar CALLXS results held across a later CALLXS
   at `9f5ee143`. All 18 focused fixtures and the broader M7 FFI suite pass
   four ARM64/arm64e assertion/release profiles, including four result classes,
   eight forced post-call exits and 15 malformed allocation rejections.

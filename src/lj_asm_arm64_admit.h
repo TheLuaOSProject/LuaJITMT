@@ -339,6 +339,23 @@ static int arm64_callxs_value_kind(const IRIns *ir, IRRef ref,
 	       value.t.irt == IRT_NUM &&
 	       value.op2 == ((IRT_NUM << IRCONV_DSH) | IRT_FLOAT)) {
 	/* Widen a float result before passing it as a double argument. */
+    } else if (kind == LJ_ARM64_ABI_KIND_INTEGER &&
+               ((size == 8 && from == IRT_NUM &&
+                 type == (is_unsigned ? IRT_U64 : IRT_I64) &&
+                 value.t.irt == type &&
+                 value.op2 == ((type << IRCONV_DSH)|IRT_NUM|IRCONV_ANY)) ||
+                (size == 4 && from == IRT_I64 &&
+                 type == (is_unsigned ? IRT_U32 : IRT_INT) &&
+                 value.t.irt == type &&
+                 value.op2 == ((type << IRCONV_DSH)|IRT_I64)) ||
+                (!on_stack && (size == 1 || size == 2) &&
+                 from == IRT_INT && value.t.irt == IRT_INT &&
+                 value.op2 == ((IRT_INT << IRCONV_DSH) |
+                   (size == 1 ? (is_unsigned ? IRT_U8 : IRT_I8) :
+                                (is_unsigned ? IRT_U16 : IRT_I16)) |
+                   (is_unsigned ? 0 : IRCONV_SEXT))))) {
+      /* Each graph walk independently binds the complete NUM conversion
+      ** chain to a fixed argument and its original Lua snapshot value. */
     } else if ((kind == LJ_ARM64_ABI_KIND_INTEGER ||
                 kind == LJ_ARM64_ABI_KIND_ENUM) && on_stack &&
                (size == 1 || size == 2) && from == IRT_INT &&
@@ -993,6 +1010,92 @@ static int arm64_callxs_i64_argument(const jit_State *J, const GCtrace *T,
   return uses != 0;
 }
 
+/* Decode only the recorder's NUM-to-fixed-integer carrier. Native carriers
+** are not Lua values: the caller snapshot must retain the original NUM. */
+static IRRef arm64_callxs_numarg_source(const GCtrace *T, IRRef carrier,
+                                      IRRef member)
+{
+  IRRef r = carrier;
+  IRIns c;
+  int found = member == 0;
+  if (!arm64_callxs_ref_valid(T->ir, T->nk, T->nins, T->nins, r)) return 0;
+  c = ir_load_acq(&T->ir[r]);
+  found |= r == member;
+  if (c.o != IR_CONV) return 0;
+  if ((c.t.irt == IRT_INT &&
+       (c.op2 == ((IRT_INT<<IRCONV_DSH)|IRT_I8|IRCONV_SEXT) ||
+        c.op2 == ((IRT_INT<<IRCONV_DSH)|IRT_I16|IRCONV_SEXT) ||
+        c.op2 == ((IRT_INT<<IRCONV_DSH)|IRT_U8) ||
+        c.op2 == ((IRT_INT<<IRCONV_DSH)|IRT_U16))) ||
+      ((c.t.irt == IRT_U8 || c.t.irt == IRT_U16) &&
+       c.op2 == ((c.t.irt<<IRCONV_DSH)|IRT_INT))) {
+    if (!arm64_callxs_ref_valid(T->ir, T->nk, T->nins, r, c.op1)) return 0;
+    r = c.op1; c = ir_load_acq(&T->ir[r]); found |= r == member;
+    if (c.o != IR_CONV || c.t.irt != IRT_INT) return 0;
+  }
+  if (c.t.irt == IRT_INT || c.t.irt == IRT_U32) {
+    if (c.o != IR_CONV || c.op2 != ((c.t.irt<<IRCONV_DSH)|IRT_I64) ||
+        !arm64_callxs_ref_valid(T->ir, T->nk, T->nins, r, c.op1)) return 0;
+    r = c.op1; c = ir_load_acq(&T->ir[r]); found |= r == member;
+    if (c.t.irt != IRT_I64) return 0;
+  }
+  if (!found || c.o != IR_CONV ||
+      (c.t.irt != IRT_I64 && c.t.irt != IRT_U64) ||
+      c.op2 != ((c.t.irt<<IRCONV_DSH)|IRT_NUM|IRCONV_ANY) ||
+      !arm64_callxs_ref_valid(T->ir, T->nk, T->nins, r, c.op1) ||
+      irt_type(ir_load_acq(&T->ir[c.op1]).t) != IRT_NUM) return 0;
+  return c.op1;
+}
+
+static int arm64_callxs_numarg_member(const jit_State *J, const GCtrace *T,
+                                     IRRef value)
+{
+  IRRef r;
+  MSize s, i;
+  unsigned consumers = 0;
+  if (!arm64_callxs_numarg_source(T, value, 0)) return 0;
+  for (s = 0; s < T->nsnap; s++) {
+    MSize ofs = snap_mapofs_acq(&T->snap[s]), n = snap_nent_acq(&T->snap[s]);
+    if (ofs > T->nsnapmap || n > T->nsnapmap-ofs) return 0;
+    for (i = 0; i < n; i++)
+      if (snap_ref(snapentry_acq(&T->snapmap[ofs+i])) == value) return 0;
+  }
+  for (r = value+1u; r < T->nins; r++) {
+    IRIns ins = ir_load_acq(&T->ir[r]);
+    IRMode mode;
+    if (ins.o >= IR__MAX) return 0;
+    mode = lj_ir_mode[ins.o];
+    if ((irm_op1(mode) == IRMref && ins.op1 == value) ||
+        (irm_op2(mode) == IRMref && ins.op2 == value)) {
+      if (ins.o == IR_CONV) {
+        if (!arm64_callxs_numarg_source(T, r, value)) return 0;
+      } else if (ins.o != IR_CARG &&
+                 !(ins.o == IR_CALLXS && ins.op1 == value && ins.op2 != value))
+        return 0;
+    }
+    if (ins.o == IR_CALLXS) {
+      LJArm64ABISignature abi;
+      IRRef args[LJ_ARM64_ABI_MAX_ARGS];
+      unsigned count, a;
+      if (!arm64_callxs_signature_for_call(ctype_ctsG(J2G(J)), T->ir,
+            T->nk, T->nins, r, &abi, NULL) ||
+          !arm64_callxs_arglist(T->ir, T->nk, T->nins, r, args, &count) ||
+          count < abi.nargs) return 0;
+      for (a = 0; a < abi.nargs; a++) {
+        LJArm64ABIArg *arg = &abi.arg[a];
+        if (arm64_callxs_numarg_source(T, args[a], value)) {
+          if (arg->kind != LJ_ARM64_ABI_KIND_INTEGER ||
+              !arm64_callxs_value_kind(T->ir, args[a], T->nk, T->nins, r,
+                LJ_ARM64_ABI_KIND_INTEGER, arg->size, arg->is_unsigned,
+                arg->reg == LJ_ARM64_ABI_STACK)) return 0;
+          consumers++;
+        }
+      }
+    }
+  }
+  return consumers != 0;
+}
+
 /* Bind one ABI operand to the value staged by the source Lua frame. This
 ** semantic proof is separate from the allocated snapshot/carrier proof. */
 static int arm64_callxs_source_value(const GCtrace *T, IRRef xsave,
@@ -1008,6 +1111,8 @@ static int arm64_callxs_source_value(const GCtrace *T, IRRef xsave,
   st = arm64_callxs_ref_type(T->ir, T->nk, source);
   dt = arm64_callxs_ref_type(T->ir, T->nk, value);
   if (!tail && source == value) return 1;
+  if (!tail && st == IRT_NUM &&
+      arm64_callxs_numarg_source(T, value, 0) == source) return 1;
   if (!tail && st == IRT_CDATA && dst.o == IR_FLOAD &&
       dst.op1 == source && dst.op2 == IRFL_CDATA_INT64 &&
       (dst.t.irt == IRT_I64 || dst.t.irt == IRT_U64)) return 1;
@@ -1749,7 +1854,8 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
             ir_load_acq(&T->ir[cdref]).o == IR_VLOAD;
           for (i = 0; i < abi.nargs; i++) {
             IRIns arg = ir_load_acq(&T->ir[values[i]]);
-            if (arg.o == IR_FLOAD && arg.op2 == IRFL_CDATA_INT64)
+            if ((arg.o == IR_FLOAD && arg.op2 == IRFL_CDATA_INT64) ||
+                arm64_callxs_numarg_source(T, values[i], 0))
               rooted_args = 1;
           }
           if (rooted_args && !arm64_callxs_vararg_sources(T, xsave, fpref,
@@ -2033,6 +2139,8 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	if (!arm64_callxs_ref_valid(T->ir, nk, nins, ref, ins.op1))
 	  return 0;
 	src = ir_load_acq(&T->ir[ins.op1]);
+	if (state == CALLXS_CLOSED && arm64_callxs_numarg_member(J, T, ref))
+	  break;
 	if (irt_type(src.t) != from)
 	  return 0;
 	/* The loop optimizer may narrow a numeric result or accumulator. The
@@ -3975,6 +4083,98 @@ static int arm64_postra_i64_argument(const LJArm64PostRAView *view,
   return consumers != 0;
 }
 
+/* Independently walk an allocated fixed-integer carrier back to its Lua NUM.
+** Small register extensions name an I8/U8/I16/U16 source in op2 even though
+** the actual low-word operand is INT. No other source-type mismatch is valid. */
+static IRRef arm64_postra_numarg_source(const IRIns *ir, IRRef nk, IRRef nins,
+                                       IRRef carrier, IRRef member)
+{
+  IRRef r = carrier;
+  unsigned depth;
+  IRType required = IRT_NIL;
+  int seen = member == 0;
+  for (depth = 0; depth < 3u; depth++) {
+    IRIns c;
+    IRType t;
+    if (!arm64_callxs_ref_valid(ir, nk, nins, nins, r)) return 0;
+    c = ir_load_acq(&ir[r]); t = irt_type(c.t);
+    if (c.o != IR_CONV || c.t.irt != t ||
+        (required != IRT_NIL && t != required) ||
+        !arm64_callxs_ref_valid(ir, nk, nins, r, c.op1)) return 0;
+    seen |= r == member;
+    if (t == IRT_I64 || t == IRT_U64) {
+      return seen && c.op2 == ((t<<IRCONV_DSH)|IRT_NUM|IRCONV_ANY) &&
+        irt_type(ir_load_acq(&ir[c.op1]).t) == IRT_NUM ? c.op1 : 0;
+    }
+    if ((t == IRT_INT || t == IRT_U32) &&
+        c.op2 == ((t<<IRCONV_DSH)|IRT_I64)) {
+      required = IRT_I64;
+    } else if (depth == 0 &&
+        ((t == IRT_INT &&
+          (c.op2 == ((IRT_INT<<IRCONV_DSH)|IRT_I8|IRCONV_SEXT) ||
+           c.op2 == ((IRT_INT<<IRCONV_DSH)|IRT_I16|IRCONV_SEXT) ||
+           c.op2 == ((IRT_INT<<IRCONV_DSH)|IRT_U8) ||
+           c.op2 == ((IRT_INT<<IRCONV_DSH)|IRT_U16))) ||
+         ((t == IRT_U8 || t == IRT_U16) &&
+          c.op2 == ((t<<IRCONV_DSH)|IRT_INT)))) {
+      required = IRT_INT;
+    } else return 0;
+    r = c.op1;
+  }
+  return 0;
+}
+
+static int arm64_postra_numarg_member(const LJArm64PostRAView *view,
+                                      IRRef nins, IRRef value)
+{
+  IRRef r;
+  MSize s, i;
+  unsigned uses = 0;
+  if (!arm64_postra_numarg_source(view->ir, view->nk, nins, value, 0))
+    return 0;
+  for (s = 0; s < view->nsnap; s++) {
+    MSize ofs = snap_mapofs_acq(&view->snap[s]);
+    MSize n = snap_nent_acq(&view->snap[s]);
+    if (ofs > view->nsnapmap || n > view->nsnapmap-ofs) return 0;
+    for (i = 0; i < n; i++)
+      if (snap_ref(snapentry_acq(&view->snapmap[ofs+i])) == value) return 0;
+  }
+  for (r = value+1u; r < nins; r++) {
+    IRIns ins = ir_load_acq(&view->ir[r]);
+    IRMode mode;
+    if (ins.o >= IR__MAX) return 0;
+    mode = lj_ir_mode[ins.o];
+    if ((irm_op1(mode) == IRMref && ins.op1 == value) ||
+        (irm_op2(mode) == IRMref && ins.op2 == value)) {
+      if (ins.o == IR_CONV) {
+        if (!arm64_postra_numarg_source(view->ir, view->nk, nins, r, value))
+          return 0;
+      } else if (ins.o != IR_CARG &&
+                 !(ins.o == IR_CALLXS && ins.op1 == value && ins.op2 != value))
+        return 0;
+    }
+    if (ins.o == IR_CALLXS) {
+      IRRef args[LJ_ARM64_ABI_MAX_ARGS];
+      LJArm64ABISignature abi;
+      unsigned count, a;
+      if (!arm64_callxs_arglist(view->ir, view->nk, nins, r, args, &count) ||
+          !arm64_callxs_signature_for_call(view->cts, view->ir, view->nk,
+            nins, r, &abi, NULL) || count < abi.nargs) return 0;
+      for (a = 0; a < abi.nargs; a++) {
+        LJArm64ABIArg *arg = &abi.arg[a];
+        if (arm64_postra_numarg_source(view->ir, view->nk, nins, args[a], value)) {
+          if (arg->kind != LJ_ARM64_ABI_KIND_INTEGER ||
+              !arm64_callxs_value_kind(view->ir, args[a], view->nk, nins, r,
+                LJ_ARM64_ABI_KIND_INTEGER, arg->size, arg->is_unsigned,
+                arg->reg == LJ_ARM64_ABI_STACK)) return 0;
+          uses++;
+        }
+      }
+    }
+  }
+  return uses != 0;
+}
+
 static int arm64_postra_source_value_matches(const IRIns *ir, IRRef nk,
 		IRRef nins, IRRef call, IRRef source, IRRef carrier,
 		IRType source_type)
@@ -3983,6 +4183,8 @@ static int arm64_postra_source_value_matches(const IRIns *ir, IRRef nk,
 	if (!arm64_callxs_ref_valid(ir, nk, nins, call, source) ||
 	    !arm64_callxs_ref_valid(ir, nk, nins, call, carrier)) return 0;
 	if (carrier == source) return 1;
+	if (source_type == IRT_NUM &&
+	    arm64_postra_numarg_source(ir, nk, nins, carrier, 0) == source) return 1;
 	if (carrier == REF_TRUE || carrier == REF_FALSE || carrier == REF_NIL)
 		return 0;
 	c = ir_load_acq(&ir[carrier]);
@@ -4860,12 +5062,17 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    IRIns src;
 	    IRType dst = irt_type(ins.t);
 	    IRType from = (IRType)(ins.op2 & IRCONV_SRCMASK);
+	    int numeric_arg;
 	    if (ins.op1 >= ref || !arm64_callxs_ref_valid(view->ir, view->nk,
 		semantic_nins, ref, ins.op1))
 	      return 0;
 	    src = ir_load_acq(&view->ir[ins.op1]);
-	    if (irt_type(src.t) != from) return 0;
-	    if (dst == IRT_NUM && from == IRT_U32 &&
+	    numeric_arg = protocol == 0 &&
+	      arm64_postra_numarg_member(view, semantic_nins, ref);
+	    if (!numeric_arg && irt_type(src.t) != from) return 0;
+	    if (numeric_arg) {
+	      /* Exact fixed-argument chain, including its native-only uses. */
+	    } else if (dst == IRT_NUM && from == IRT_U32 &&
 		(ins.t.irt & ~IRT_ISPHI) == IRT_NUM &&
 		ins.op2 == ((IRT_NUM << IRCONV_DSH)|IRT_U32) &&
 		protocol == 4 && result_is_u32 && ins.op1 == active_call &&
@@ -5078,7 +5285,9 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	      ir_load_acq(&view->ir[cdref]).o == IR_VLOAD;
 	    for (i = 0; i < abi.nargs; i++) {
 	      IRIns arg = ir_load_acq(&view->ir[values[i]]);
-	      if (arg.o == IR_FLOAD && arg.op2 == IRFL_CDATA_INT64)
+	      if ((arg.o == IR_FLOAD && arg.op2 == IRFL_CDATA_INT64) ||
+	          arm64_postra_numarg_source(view->ir, view->nk, semantic_nins,
+	            values[i], 0))
 	        roots_required = 1;
 	    }
 	    if (roots_required && !arm64_postra_vararg_source_proof(&temp,
