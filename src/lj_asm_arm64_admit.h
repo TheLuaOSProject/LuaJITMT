@@ -8014,7 +8014,7 @@ static IRRef arm64_lua_leaf_ir_arith(const GCtrace *T, IROp op,
   return 0;
 }
 
-/* Derive the complete child prefix at its resume PC. A CGET forces a new
+/* Derive the complete child prefix at its resume PC. CGET/CSET request a new
 ** snapshot, but an arithmetic bytecode need not: later guards may replay
 ** several pure operations, including operations removed by CSE. */
 static int arm64_lua_leaf_ir_prefix(const GCtrace *T, const GCproto *pt,
@@ -8045,8 +8045,13 @@ static int arm64_lua_leaf_ir_prefix(const GCtrace *T, const GCproto *pt,
            op != BC_MULNV && op != BC_DIVNV && op != BC_ADDVV &&
            op != BC_SUBVV && op != BC_MULVV && op != BC_DIVVV)) return 0;
     }
-    if (op == BC_CGET || op == BC_MOV) {
+    if (op == BC_CGET || op == BC_MOV || op == BC_CSET) {
       value = slots[bc_d(ins)];
+      if (op == BC_CSET &&
+          ((!arm64_scalar_ir_ref(T, slots[a], limit, IRT_INT) &&
+            !arm64_scalar_ir_ref(T, slots[a], limit, IRT_NUM)) ||
+           (!arm64_scalar_ir_ref(T, value, limit, IRT_INT) &&
+            !arm64_scalar_ir_ref(T, value, limit, IRT_NUM)))) return 0;
     } else if (op == BC_KSHORT) {
       value = arm64_lua_leaf_ir_literal(T, (int16_t)bc_d(ins), 0);
     } else if (op == BC_KNUM) {
@@ -9922,8 +9927,15 @@ static int arm64_lua_leaf_postra_prefix(const LJArm64PostRAView *v,
       out = arm64_lua_leaf_postra_arith(v, arithmetic,
                                       reverse ? rhs : lhs,
                                       reverse ? lhs : rhs, limit);
-    } else if (op == BC_CGET || op == BC_MOV) {
+    } else if (op == BC_CGET || op == BC_MOV || op == BC_CSET) {
       out = values[bc_d(ins)];
+      if (op == BC_CSET) {
+        IRRef old = values[dst];
+        if ((!arm64_scalar_postra_ref(v, old, limit, IRT_NUM) &&
+             !arm64_scalar_postra_ref(v, old, limit, IRT_INT)) ||
+            (!arm64_scalar_postra_ref(v, out, limit, IRT_NUM) &&
+             !arm64_scalar_postra_ref(v, out, limit, IRT_INT))) return 0;
+      }
     } else if (op == BC_KSHORT) {
       out = arm64_lua_leaf_postra_literal(v, (int16_t)bc_d(ins), 0);
     } else if (op == BC_KNUM) {

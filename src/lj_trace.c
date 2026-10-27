@@ -11894,9 +11894,13 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
     if (a >= frame) return 0;
     if (pos+1u == size) {
       if (op != BC_RET1 || bc_d(ins) != 2 || !defined[a]) return 0;
-    } else if (op == BC_CGET || op == BC_MOV) {
+    } else if (op == BC_CGET || op == BC_MOV || op == BC_CSET) {
       BCReg from = bc_d(ins);
       if (from >= frame || !defined[from]) return 0;
+      /* CSET examines the old destination tag before deciding between a raw
+      ** local and a closed cell. A preceding numeric definition is required;
+      ** function entry does not clear unused stack slots. Keep arg0 stable. */
+      if (op == BC_CSET && (!a || !defined[a])) return 0;
     } else if (op == BC_KSHORT) {
       /* Snapshot admission separately proves any surviving overflow exits. */
     } else if (op == BC_KNUM) {

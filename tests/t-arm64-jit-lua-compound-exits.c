@@ -39,6 +39,7 @@ typedef struct LeafCase {
 static unsigned native_runs, child_exits, same_trace_reuses;
 static unsigned gc_reuses, cold_retries;
 static unsigned semantic_bad, postra_bad, alias_bad;
+static unsigned cset_semantic_bad[6], cset_postra_bad[6];
 
 static GCfunc *global_function(lua_State *L, const char *name)
 {
@@ -381,6 +382,71 @@ static RegSP child_location(ChildFixture *f, IRRef ref, SnapNo snap)
   return rs;
 }
 
+static MSize child_cset(const GCproto *pt, MSize before, int latest)
+{
+  const BCIns *bc = proto_bc(pt);
+  MSize pc, found = UINT32_MAX;
+  for (pc = 1; pc < pt->sizebc && pc < before; pc++) {
+    if (bc_op((BCIns)la_load32_acq((const uint32_t *)&bc[pc])) == BC_CSET) {
+      found = pc;
+      if (!latest) break;
+    }
+  }
+  return found;
+}
+
+static int child_slot_defined_before(const GCproto *pt, MSize before,
+                                     BCReg slot)
+{
+  const BCIns *bc = proto_bc(pt);
+  MSize pc;
+  if (slot < pt->numparams) return 1;
+  for (pc = 1; pc < pt->sizebc && pc < before; pc++) {
+    BCIns ins = (BCIns)la_load32_acq((const uint32_t *)&bc[pc]);
+    BCOp op = bc_op(ins);
+    BCReg a = bc_a(ins);
+    if (op == BC_CGET || op == BC_CSET || op == BC_MOV ||
+        op == BC_KSHORT || op == BC_KNUM || op == BC_KPRI ||
+        (op >= BC_ADDVN && op <= BC_DIVVV)) {
+      if (a == slot) return 1;
+    }
+  }
+  return 0;
+}
+
+static BCReg child_undefined_slot(const GCproto *pt, MSize csetpc)
+{
+  const BCIns *bc = proto_bc(pt);
+  BCIns set = (BCIns)la_load32_acq((const uint32_t *)&bc[csetpc]);
+  BCReg slot;
+  for (slot = 1; slot < pt->framesize; slot++)
+    if (slot != bc_a(set) && slot != bc_d(set) &&
+        !child_slot_defined_before(pt, csetpc, slot)) return slot;
+  return (BCReg)pt->framesize;
+}
+
+static MSize child_snap_entry(const SnapEntry *map, MSize ofs, MSize nent,
+                              MSize slot)
+{
+  MSize i;
+  for (i = 0; i < nent; i++)
+    if (snap_slot(map[ofs+i]) == slot) return ofs+i;
+  return UINT32_MAX;
+}
+
+static IRRef child_other_num(const ChildFixture *f, IRRef value)
+{
+  const SnapShot *snap = &f->snap[f->child];
+  if (irt_type(f->ir[value].t) != IRT_NUM) return 0;
+  for (MSize i = 0; i < snap->nent; i++) {
+    SnapEntry entry = f->map[snap->mapofs+i];
+    IRRef r = snap_ref(entry);
+    if (!(entry & 0x00ff0000u) && r != value &&
+        irt_type(f->ir[r].t) == IRT_NUM) return r;
+  }
+  return 0;
+}
+
 enum {
   C_BASE_ZERO, C_BASE_SHIFT, C_PC_ROOT, C_PC_RETURN, C_TOP_LOW, C_TOP_HIGH,
   C_SLOTS_LOW, C_SLOTS_HIGH, C_FRAME_FLAG, C_FRAME_CONT, C_FRAME_NORESTORE,
@@ -388,7 +454,9 @@ enum {
   C_NO_GUARD, C_GUARD_CONSTANT, C_CALLEE_ARITY, C_CALLEE_SIZE,
   C_CALLEE_COPY, C_CALLEE_OP, C_CALLEE_OUTPUT, C_CALLEE_RETURN,
   C_CALL_ARITY, C_CALL_A, C_CALL_LINK, C_IDENTITY,
-  C_NORESTORE_LOCAL, C_LOCAL_REF, C_CHILD_PC, C_CHILD_PREFIX, C_OMIT_ENTRY, C_COUNT
+  C_NORESTORE_LOCAL, C_LOCAL_REF, C_CHILD_PC, C_CHILD_PREFIX, C_OMIT_ENTRY,
+  C_CSET_SOURCE, C_CSET_DEST, C_CSET_UNDEFINED_DEST,
+  C_CSET_UNDEFINED_SOURCE, C_CSET_OLD_VALUE, C_CSET_NUM_VALUE, C_COUNT
 };
 
 static void child_mutate(ChildFixture *f, unsigned m)
@@ -402,11 +470,13 @@ static void child_mutate(ChildFixture *f, unsigned m)
   IRRef k = guard->op1 == arg ? guard->op2 : guard->op1;
   MSize childpc;
   MSize local_entry = UINT32_MAX;
+  MSize csetpc = UINT32_MAX;
   uint64_t pcbase;
   memcpy(&pcbase, &f->map[snap->mapofs+snap->nent], 8);
   childpc = proto_bcpos(f->leafpt,
       (const BCIns *)(uintptr_t)(pcbase >> 8));
   assert(childpc < f->leafpt->sizebc);
+  csetpc = child_cset(f->leafpt, f->leafpt->sizebc, 0);
   for (MSize i = 0; i < snap->nent; i++) {
     MSize at = snap->mapofs+i;
     if (snap_slot(f->map[at]) > snap_slot(f->map[f->arg_entry])) {
@@ -488,6 +558,44 @@ static void child_mutate(ChildFixture *f, unsigned m)
     for (MSize s = f->child+1u; s < f->copy.nsnap; s++) f->snap[s].mapofs--;
     f->copy.nsnapmap--; f->view.nsnapmap--;
     break;
+  case C_CSET_SOURCE:
+    assert(csetpc != UINT32_MAX && bc_d(leafbc[csetpc]) != 0);
+    setbc_d(&leafbc[csetpc], 0);
+    break;
+  case C_CSET_DEST:
+    assert(csetpc != UINT32_MAX && bc_a(leafbc[csetpc]) != 0);
+    setbc_a(&leafbc[csetpc], 0);
+    break;
+  case C_CSET_UNDEFINED_DEST: {
+    BCReg slot = child_undefined_slot(f->leafpt, csetpc);
+    assert(csetpc != UINT32_MAX && slot < f->leafpt->framesize);
+    setbc_a(&leafbc[csetpc], slot);
+    break;
+  }
+  case C_CSET_UNDEFINED_SOURCE: {
+    BCReg slot = child_undefined_slot(f->leafpt, csetpc);
+    assert(csetpc != UINT32_MAX && slot < f->leafpt->framesize);
+    setbc_d(&leafbc[csetpc], slot);
+    break;
+  }
+  case C_CSET_OLD_VALUE: case C_CSET_NUM_VALUE: {
+    BCReg dest;
+    MSize entry;
+    IRRef replacement;
+    csetpc = child_cset(f->leafpt, childpc, 1);
+    assert(csetpc != UINT32_MAX && csetpc < childpc);
+    dest = bc_a(leafbc[csetpc]);
+    entry = child_snap_entry(f->map, snap->mapofs, snap->nent,
+                             (uint8_t)pcbase+2u+dest);
+    assert(entry != UINT32_MAX);
+    replacement = m == C_CSET_OLD_VALUE ? snap_ref(f->map[f->arg_entry]) :
+                    child_other_num(f, snap_ref(f->map[entry]));
+    assert(replacement && replacement != snap_ref(f->map[entry]) &&
+           irt_type(f->ir[replacement].t) ==
+           irt_type(f->ir[snap_ref(f->map[entry])].t));
+    f->map[entry] = SNAP(snap_slot(f->map[entry]), 0, replacement);
+    break;
+  }
   case C_CHILD_PC:
     pcbase = (u64ptr(leafbc+1u)<<8)|(uint8_t)pcbase;
     break;
@@ -582,6 +690,42 @@ static void child_admission(GCtrace *T, const LeafCase *shape)
               bc_d(proto_bc(f.leafpt)[p])+1u >= f.leafpt->framesize)
             applicable = 0;
         }
+        if (m >= C_CSET_SOURCE && m <= C_CSET_NUM_VALUE) {
+          const BCIns *leafbc = proto_bc(f.leafpt);
+          MSize cset = child_cset(f.leafpt, f.leafpt->sizebc, 0);
+          MSize resume = proto_bcpos(live_leafpt,
+              (const BCIns *)(uintptr_t)(pcbase >> 8));
+          if (cset == UINT32_MAX) {
+            applicable = 0;
+          } else if (m == C_CSET_SOURCE) {
+            applicable = bc_d(leafbc[cset]) != 0 &&
+                         child_slot_defined_before(f.leafpt, cset, 0);
+          } else if (m == C_CSET_DEST) {
+            applicable = bc_a(leafbc[cset]) != 0 &&
+                         child_slot_defined_before(f.leafpt, cset, 0);
+          } else if (m == C_CSET_UNDEFINED_DEST ||
+                     m == C_CSET_UNDEFINED_SOURCE) {
+            applicable = child_undefined_slot(f.leafpt, cset) <
+                         f.leafpt->framesize;
+          } else {
+            MSize prior = child_cset(f.leafpt, resume, 1);
+            MSize entry = UINT32_MAX;
+            if (prior != UINT32_MAX) {
+              BCReg dest = bc_a(leafbc[prior]);
+              entry = child_snap_entry(f.map, f.snap[f.child].mapofs,
+                                       f.snap[f.child].nent,
+                                       (uint8_t)pcbase+2u+dest);
+            }
+            applicable = prior != UINT32_MAX && entry != UINT32_MAX;
+            if (applicable) {
+              IRRef current = snap_ref(f.map[entry]);
+              IRRef replacement = m == C_CSET_OLD_VALUE ?
+                snap_ref(f.map[f.arg_entry]) : child_other_num(&f, current);
+              applicable = replacement && replacement != current &&
+                irt_type(f.ir[current].t) == irt_type(f.ir[replacement].t);
+            }
+          }
+        }
         if (m == C_CALLEE_OP) {
           const BCIns *childpc = (const BCIns *)(uintptr_t)(pcbase >> 8);
           BCOp op = bc_op((BCIns)la_load32_acq((const uint32_t *)childpc));
@@ -597,6 +741,11 @@ static void child_admission(GCtrace *T, const LeafCase *shape)
           assert(0);
         }
         if (allocated) postra_bad++; else semantic_bad++;
+        if (m >= C_CSET_SOURCE && m <= C_CSET_NUM_VALUE) {
+          unsigned kind = m - C_CSET_SOURCE;
+          if (allocated) cset_postra_bad[kind]++;
+          else cset_semantic_bad[kind]++;
+        }
       }
     }
     child_reset(&f); assert(child_admit(&f, 1));
@@ -680,7 +829,26 @@ int main(void)
     {"nvchain", "return 100-(x+3)*4",
       {{INT_MAX-3, INT_MAX-2, 2, BC_ADDVN, 0},
        {536870908, 536870909, 2, BC_ADDVN, 0},
-       {-536870891, -536870890, 2, BC_ADDVN, 0}}, 3, 3, NULL}
+       {-536870891, -536870890, 2, BC_ADDVN, 0}}, 3, 3, NULL},
+    {"reassign-mul", "local a=x; a=a+3; return a*2",
+      {{INT_MAX-3, INT_MAX-2, 3, BC_ADDVN, 0},
+       {1073741820, 1073741821, 6, BC_MULVN, 0},
+       {1073741819, 1073741821, 6, BC_MULVN, 1}}, 3, 2, NULL},
+    {"repeated-writes", "local a=x; a=a+3; a=a*2; a=a+5; return a",
+      {{INT_MAX-3, INT_MAX-2, 3, BC_ADDVN, 0},
+       {1073741820, 1073741821, 6, BC_MULVN, 0},
+       {1073741818, 1073741819, 9, BC_ADDVN, 0},
+       {1073741817, 1073741819, 9, BC_ADDVN, 1}}, 4, 3, NULL},
+    {"old-local-live", "local a=x; local b=a+3; a=a*3; return b+a",
+      {{INT_MAX-3, INT_MAX-2, 3, BC_ADDVN, 0},
+       {715827882, 715827883, 5, BC_MULVN, 0},
+       {536870911, 536870912, 9, BC_ADDVV, 0},
+       {536870910, 536870912, 9, BC_ADDVV, 1}}, 4, 3, NULL},
+    {"reassign-num-tail", "local a=x; a=a+3; return a*2.5",
+      {{INT_MAX-3, INT_MAX-2, 3, BC_ADDVN, 0}}, 1, 2, NULL},
+    {"reassign-num", "local a=x; a=a*2.5; return a+x*3",
+      {{715827882, 715827883, 7, BC_MULVN, 0},
+       {715827881, 715827883, 7, BC_MULVN, 1}}, 2, 3, NULL}
   };
   lua_State *L = ljt_lua_newstate_openlibs();
   unsigned shape;
@@ -713,13 +881,19 @@ int main(void)
   ljt_lua_dostring(L,
     "assert(stop:send(true,5)); local ok,v=peer:join(5); assert(ok and v)");
   lua_close(L);
-  assert(native_runs == 48 && child_exits == 17 &&
-         same_trace_reuses == 31 && gc_reuses == 7);
+  assert(native_runs == 86 && child_exits == 31 &&
+         same_trace_reuses == 55 && gc_reuses == 12);
   assert(alias_bad > 0);
+  for (unsigned i = 0; i < 6; i++)
+    assert(cset_semantic_bad[i] > 0 &&
+           cset_postra_bad[i] == cset_semantic_bad[i]);
   printf("Lua compound child exits OK: native=%u child-exits=%u same-trace-reuses=%u "
-         "gc-reuses=%u cold-retries=%u semantic-negative=%u postRA-negative=%u aliases=%u\n",
+         "gc-reuses=%u cold-retries=%u semantic-negative=%u postRA-negative=%u aliases=%u "
+         "CSET-negatives-per-pass=%u/%u/%u/%u/%u/%u\n",
          native_runs, child_exits, same_trace_reuses, gc_reuses, cold_retries,
-         semantic_bad, postra_bad, alias_bad);
+         semantic_bad, postra_bad, alias_bad, cset_semantic_bad[0],
+         cset_semantic_bad[1], cset_semantic_bad[2], cset_semantic_bad[3],
+         cset_semantic_bad[4], cset_semantic_bad[5]);
   return 0;
 }
 #else

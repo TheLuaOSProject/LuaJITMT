@@ -141,6 +141,22 @@ local function main()
     {name='nvchain', body='return 100-(x+3)*4',
       ranges={{2147483644,2147483645}, {536870908,536870909},
               {-536870891,-536870890}}},
+    {name='reassign-mul', body='local a=x; a=a+3; return a*2',
+      ranges={{2147483644,2147483645},
+              {1073741820,1073741821}, {1073741819,1073741821}}},
+    {name='repeated-writes',
+      body='local a=x; a=a+3; a=a*2; a=a+5; return a',
+      ranges={{2147483644,2147483645}, {1073741820,1073741821},
+              {1073741818,1073741819}, {1073741817,1073741819}}},
+    {name='old-local-live',
+      body='local a=x; local b=a+3; a=a*3; return b+a',
+      ranges={{2147483644,2147483645}, {715827882,715827883},
+              {536870911,536870912}, {536870910,536870912}}},
+    {name='reassign-num-tail',
+      body='local a=x; a=a+3; return a*2.5',
+      ranges={{2147483644,2147483645}}},
+    {name='reassign-num', body='local a=x; a=a*2.5; return a+x*3',
+      ranges={{715827882,715827883}, {715827881,715827883}}},
   }
   local publications, reuses, cold_calls, overflow_ranges = 0, 0, 0, 0
   for _, shape in ipairs(shapes) do
@@ -153,7 +169,7 @@ local function main()
       'lua-compound-child case=%s published=%d cold_calls=%d overflow_ranges=%d same_trace_reuses=%d result_match=yes\n',
       shape.name, pub, attempts, #shape.ranges, reused))
   end
-  assert(publications == 7 and overflow_ranges == 17 and reuses == 48)
+  assert(publications == 12 and overflow_ranges == 31 and reuses == 86)
   assert(cold_calls >= publications and cold_calls <= publications * 8)
 
   assert(stop:send(true, 5), 'MT peer stop send failed')
