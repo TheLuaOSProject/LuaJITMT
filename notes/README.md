@@ -15,7 +15,13 @@ and reports that are no longer authoritative are retained in
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
-- Latest JIT checkpoint: double, float and U32 producer results feeding fixed
+- Current JIT work: Lua INT values and INT-result CALLM producers feeding all
+  eight fixed C integer kinds, including compact stack arguments. All 24
+  focused fixtures pass the ARM64 assertion profile, with 48 new shapes,
+  432 required native runs, 64 forced exits and independent rejection tests.
+  Full validation is pending. See the
+  [INT argument evidence](arm64-jit-ffi-int-arguments-2026-10-27.md).
+- Latest fully validated JIT checkpoint: double, float and U32 producer results feeding fixed
   integer CALLM arguments, at `51c92374`. All 22 focused fixtures and the
   broader M7 FFI suite pass four ARM64/arm64e assertion/release profiles,
   including 48 new call shapes, 960 required native runs, 96 forced exits and
@@ -369,9 +375,14 @@ available.
   native-only conversion carriers are checked independently before and after
   allocation. Every tested C argument is compared against a permanently
   interpreted oracle, with producer/consumer post-call exits and no replay.
-  Broader INT-result adaptation, enum and bool conversion extensions remain
-  outside this checkpoint. See the
+  INT-result adaptation is addressed by the current work below; enum and bool
+  conversion extensions remain outside this checkpoint. See the
   [numeric CALLM evidence](arm64-jit-callm-numeric-2026-10-27.md).
+- Lua INT arguments and direct INT-result CALLM producers now have independent
+  conversion/source/snapshot proofs for all eight fixed integer kinds. The
+  current focused tests include exact C arguments, native witnesses and forced
+  producer/consumer exits; full validation is pending. See the
+  [INT argument evidence](arm64-jit-ffi-int-arguments-2026-10-27.md).
 - Variadic scalar calls validate the named prefix, exact CARG separator and
   promoted number/boolean/string/nil suffix against the original Lua snapshot.
   Independent post-RA checks include eight-byte unnamed stack slots and spill

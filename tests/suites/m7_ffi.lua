@@ -229,6 +229,9 @@ return function(add)
       local callm_numeric_so = build_shared_library(t,
         t:tmp("lj_t-arm64-jit-callm-numeric.dylib"),
         "t-arm64-jit-callm-numeric-lib.c")
+      local int_args_so = build_shared_library(t,
+        t:tmp("lj_t-arm64-jit-ffi-int-args.dylib"),
+        "t-arm64-jit-ffi-int-args-lib.c")
       local callxs_funcptr_so = build_shared_library(t,
         t:tmp("lj_t-arm64-jit-callxs-funcptr.dylib"),
         "t-arm64-jit-callxs-funcptr-lib.c")
@@ -369,6 +372,15 @@ return function(add)
             build = false,
             cflags = flags,
             env = { LJ_M7_FFI_CALLM_NUMERIC_SO = callm_numeric_so },
+            timeout = "60s"
+          })
+        end
+        for _, name in ipairs({ "ffi-int-args", "ffi-int-args-admission" }) do
+          build_and_run_c(t, t:tmp("lj_t-arm64-jit-" .. name),
+                          "t-arm64-jit-" .. name .. ".c", {
+            build = false,
+            cflags = flags,
+            env = { LJ_M7_FFI_INT_ARGS_SO = int_args_so },
             timeout = "60s"
           })
         end
