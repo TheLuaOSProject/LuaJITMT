@@ -345,6 +345,7 @@ static void test_stack_call_admission(lua_State *L)
   GCtrace *T = NULL;
   IRRef compact_call = 0, narrow8 = 0, narrow_carg = 0;
   IRRef narrow16_carg = 0, narrow16 = 0;
+  IRRef pointer = 0;
   IRRef refs[LJ_ARM64_ABI_MAX_ARGS];
   MSize trace_no;
   IRRef ref;
@@ -395,6 +396,7 @@ static void test_stack_call_admission(lua_State *L)
       compact_call = ref;
       narrow8 = refs[16];
       narrow16 = refs[17];
+      pointer = refs[19];
       narrow_carg = fixture_callxs_carg_for_argument(trace_ir_acq(T), ref,
                                                      abi.nargs, 16);
       narrow16_carg = fixture_callxs_carg_for_argument(trace_ir_acq(T), ref,
@@ -427,6 +429,105 @@ static void test_stack_call_admission(lua_State *L)
   expect_semantic_admit(J, &semantic.trace);
   semantic_j_leave(J, &jsave);
   semantic_clone_free(&semantic);
+
+  /* The compact call mixes native INT conversions with a fixed pointer.
+  ** Keep the pointer tied to its exact saved CData owner and CType guard. */
+  {
+    IRIns payload = ir_load_acq(&view.ir[pointer]);
+    IRRef source = payload.op1, callable, xsave = 0, typeguard = 0;
+    IRRef wrong_type = 0;
+    MSize entry = UINT_MAX, s;
+    SnapEntry *map;
+    unsigned mutation;
+    assert(payload.o == IR_FLOAD && payload.op2 == IRFL_CDATA_PTR &&
+           payload.t.irt == IRT_P64 && source >= REF_FIRST);
+    callable = ir_load_acq(&view.ir[view.ir[compact_call].op2]).op1;
+    assert(callable >= REF_FIRST && callable < pointer && callable != source &&
+           ir_load_acq(&view.ir[callable]).t.irt == (IRT_CDATA|IRT_GUARD));
+    for (ref = REF_FIRST; ref < compact_call; ref++) {
+      IRIns ins = ir_load_acq(&view.ir[ref]);
+      if (ins.o == IR_XSAVE) xsave = ref;
+      if (ref > source && ref < pointer && ins.o == IR_EQ &&
+          ins.t.irt == (IRT_INT|IRT_GUARD) && ins.op1 > source &&
+          ins.op1 < ref && view.ir[ins.op1].o == IR_FLOAD &&
+          view.ir[ins.op1].op1 == source &&
+          view.ir[ins.op1].op2 == IRFL_CDATA_CTYPEID) {
+        assert(typeguard == 0);
+        typeguard = ref;
+      }
+    }
+    for (ref = view.nk; ref < REF_TRUE; ref++) {
+      IRIns k = ir_load_acq(&view.ir[ref]);
+      if (k.o == IR_KINT && k.t.irt == IRT_INT && k.i == CTID_INT32)
+        wrong_type = ref;
+      else if (k.o == IR_KNUM || k.o == IR_KINT64 || k.o == IR_KGC ||
+               k.o == IR_KPTR || k.o == IR_KKPTR)
+        ref++;
+    }
+    assert(xsave != 0 && typeguard != 0 && wrong_type != 0);
+    for (s = 0; s < view.nsnap; s++) {
+      const SnapShot *snap = &view.snap[s];
+      IRIns anchor = view.ir[xsave];
+      MSize pc = (MSize)anchor.op1 | ((MSize)anchor.op2 << 15);
+      MSize ofs, nent, i, slot;
+      BCIns sourceins;
+      if (snap_ref_acq(snap) != xsave) continue;
+      assert(pc > 0 && pc < pt->sizebc);
+      sourceins = bc[pc-1u];
+      assert(bc_op(sourceins) == BC_CALL && bc_c(sourceins) == 22);
+      slot = (MSize)bc_a(sourceins)+3u+2u*LJ_FR2+19u;
+      ofs = snap_mapofs_acq(snap); nent = snap_nent_acq(snap);
+      assert(ofs <= view.nsnapmap && nent <= view.nsnapmap-ofs);
+      for (i = 0; i < nent; i++) {
+        SnapEntry se = view.snapmap[ofs+i];
+        if (snap_slot(se) == slot) {
+          assert(entry == UINT_MAX && se == SNAP(slot, 0, source));
+          entry = ofs+i;
+        }
+      }
+    }
+    assert(entry != UINT_MAX);
+    copy = (IRIns *)calloc(view.nins, sizeof(*copy));
+    map = (SnapEntry *)malloc(view.nsnapmap*sizeof(*map));
+    assert(copy != NULL && map != NULL);
+    for (mutation = 0; mutation < 4; mutation++) {
+      const char *label = mutation == 0 ? "fixed pointer saved owner" :
+        mutation == 1 ? "fixed pointer payload owner" :
+        mutation == 2 ? "fixed pointer scalar CType" :
+                        "fixed pointer missing CType guard";
+      semantic_clone_init(&semantic, T);
+      jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+      expect_semantic_admit(J, &semantic.trace);
+      memcpy(&copy[view.nk], &trace_ir_acq(T)[view.nk],
+             (view.nins-view.nk)*sizeof(*copy));
+      memcpy(map, trace_snapmap_acq(T), view.nsnapmap*sizeof(*map));
+      view.ir = copy;
+      view.snapmap = map;
+      assert(lj_asm_arm64_postra_admit(&view, NULL));
+      if (mutation == 0) {
+        semantic.snapmap[entry] = snap_setref(semantic.snapmap[entry], callable);
+        map[entry] = snap_setref(map[entry], callable);
+      } else if (mutation == 1) {
+        semantic.ir[pointer].op1 = callable;
+        copy[pointer].op1 = callable;
+      } else if (mutation == 2) {
+        semantic.ir[typeguard].op2 = wrong_type;
+        copy[typeguard].op2 = wrong_type;
+      } else {
+        semantic.ir[typeguard].o = copy[typeguard].o = IR_NOP;
+        semantic.ir[typeguard].t.irt = copy[typeguard].t.irt = IRT_NIL;
+        semantic.ir[typeguard].op12 = copy[typeguard].op12 = 0;
+      }
+      expect_semantic_reject_any(J, &semantic.trace, label);
+      assert(!lj_asm_arm64_postra_admit(&view, NULL));
+      semantic_j_leave(J, &jsave);
+      semantic_clone_free(&semantic);
+    }
+    free(map);
+    free(copy);
+    view.ir = trace_ir_acq(T);
+    view.snapmap = trace_snapmap_acq(T);
+  }
 
   assert(trace_has_stack_store(T, A64I_STRB, 0, 0));
   assert(trace_has_stack_store(T, A64I_STRH, 1, 2));
@@ -2063,11 +2164,17 @@ int main(void)
   assert(native_seen[14] >= 200u && calls(14) >= 300u);
   test_callm_admission(L);
   {
-    unsigned id;
+    unsigned id, native_before[4], calls_before[4];
+    for (id = 8; id <= 11; id++) {
+      native_before[id-8u] = native_seen[id];
+      calls_before[id-8u] = calls(id);
+    }
     ljt_lua_dostring(L,
       "assert(__abi_run_stack_matrix(__abi_stack9,__abi_fpr9,__abi_banks,__abi_compact,300))\n");
-    for (id = 8; id <= 11; id++)
-      assert(native_seen[id] >= 200u);
+    for (id = 8; id <= 11; id++) {
+      assert(native_seen[id] >= native_before[id-8u]+200u);
+      assert(calls(id) == calls_before[id-8u]+300u);
+    }
   }
   ljt_lua_dostring(L,
     "assert(__abi_run_float_result(__abi_f32,300))\n"

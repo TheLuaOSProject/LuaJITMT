@@ -1241,6 +1241,9 @@ static int arm64_callxs_source_value(const GCtrace *T, IRRef xsave,
   if (!tail && st == IRT_CDATA && dst.o == IR_FLOAD &&
       dst.op1 == source && dst.op2 == IRFL_CDATA_INT64 &&
       (dst.t.irt == IRT_I64 || dst.t.irt == IRT_U64)) return 1;
+  if (!tail && st == IRT_CDATA && dst.o == IR_FLOAD &&
+      dst.op1 == source && dst.op2 == IRFL_CDATA_PTR &&
+      dst.t.irt == IRT_P64) return 1;
   /* C integer conversion drops the overflow check from an already guarded
   ** Lua arithmetic value. Its operands must still be exactly the same. */
   if (!tail && st == IRT_INT && dt == IRT_INT && irt_isguard(src.t) &&
@@ -1378,7 +1381,45 @@ static int arm64_callxs_u32_result_uses(const jit_State *J, const GCtrace *T,
   return converted == (num != 0);
 }
 
-static int arm64_callxs_vararg_sources(const GCtrace *T, IRRef xsave,
+/* A fixed pointer carrier must read a pointer CData, not reinterpret a
+** scalar payload. Its exact owner is separately bound to the XSAVE slot. */
+static int arm64_callxs_pointer_argument(CTState *cts, const GCtrace *T,
+                                        IRRef value)
+{
+  IRIns load = ir_load_acq(&T->ir[value]), src;
+  IRRef source = load.op1, ref;
+  CTypeID id = 0, rawid;
+  CType ct;
+  CTInfo info;
+  if (load.o != IR_FLOAD || load.op2 != IRFL_CDATA_PTR ||
+      load.t.irt != IRT_P64 || source < REF_FIRST || source >= value)
+    return 0;
+  src = ir_load_acq(&T->ir[source]);
+  if ((src.o != IR_SLOAD && src.o != IR_VLOAD) ||
+      src.t.irt != (IRT_CDATA|IRT_GUARD)) return 0;
+  for (ref = source+1u; ref < value; ref++) {
+    IRIns eq = ir_load_acq(&T->ir[ref]), type;
+    IRRef type_ref, kref;
+    int32_t k;
+    if (eq.o != IR_EQ || eq.t.irt != (IRT_INT|IRT_GUARD)) continue;
+    type_ref = eq.op1; kref = eq.op2;
+    if (type_ref < REF_FIRST) { type_ref = eq.op2; kref = eq.op1; }
+    if (type_ref <= source || type_ref >= ref) continue;
+    type = ir_load_acq(&T->ir[type_ref]);
+    if (type.o != IR_FLOAD || type.op1 != source ||
+        type.op2 != IRFL_CDATA_CTYPEID) continue;
+    if (type.t.irt != IRT_U16 || id ||
+        !arm64_callxs_kint_value(T->ir, T->nk, kref, &k) || k <= 0)
+      return 0;
+    id = (CTypeID)k;
+  }
+  if (!id || !lj_ccall_arm64_raw_type(cts, id, &ct, &rawid)) return 0;
+  info = ctype_info_acq(&ct);
+  return ctype_isptr(info) && !(info & CTF_REF) &&
+         ctype_size_acq(&ct) == sizeof(void *);
+}
+
+static int arm64_callxs_vararg_sources(CTState *cts, const GCtrace *T, IRRef xsave,
     IRRef fpref, BCIns sourceins, uintptr_t returnpc,
     const LJArm64ABISignature *abi, unsigned nargs, const IRRef *values)
 {
@@ -1454,9 +1495,16 @@ static int arm64_callxs_vararg_sources(const GCtrace *T, IRRef xsave,
       (uintptr_t)(footer >> 8) !=
         (uintptr_t)mref_acq(gco2func(obj)->c.pc, const BCIns))
     return 0;
-  for (i = 0; i < nargs; i++)
+  for (i = 0; i < nargs; i++) {
+    IRIns value = ir_load_acq(&T->ir[values[i]]);
+    if (i < abi->nargs && value.o == IR_FLOAD &&
+        value.op2 == IRFL_CDATA_PTR &&
+        (abi->arg[i].kind != LJ_ARM64_ABI_KIND_POINTER ||
+         abi->arg[i].size != sizeof(void *) ||
+         !arm64_callxs_pointer_argument(cts, T, values[i]))) return 0;
     if (!arm64_callxs_source_value(T, xsave, sources[i], values[i],
                                   i >= abi->nargs)) return 0;
+  }
   return 1;
 }
 
@@ -2009,7 +2057,8 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
             ir_load_acq(&T->ir[cdref]).o == IR_VLOAD;
           for (i = 0; i < abi.nargs; i++) {
             IRIns arg = ir_load_acq(&T->ir[values[i]]);
-            if ((arg.o == IR_FLOAD && arg.op2 == IRFL_CDATA_INT64) ||
+            if ((arg.o == IR_FLOAD && (arg.op2 == IRFL_CDATA_INT64 ||
+                                      arg.op2 == IRFL_CDATA_PTR)) ||
                 arm64_callxs_numarg_source(T, values[i], 0) ||
                 arm64_callxs_intarg_source(T, values[i]) ||
                 (abi.arg[i].kind == LJ_ARM64_ABI_KIND_INTEGER &&
@@ -2017,7 +2066,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
                  irt_type(arg.t) == IRT_INT))
               rooted_args = 1;
           }
-          if (rooted_args && !arm64_callxs_vararg_sources(T, xsave, fpref,
+          if (rooted_args && !arm64_callxs_vararg_sources(cts, T, xsave, fpref,
                 sourceins, xsave_returnpc, &abi, actual_count, values)) return 0;
         }
         result_slot = 0;
@@ -4469,6 +4518,8 @@ static int arm64_postra_source_value_matches(const IRIns *ir, IRRef nk,
 	if (source_type == IRT_CDATA && c.o == IR_FLOAD && c.op1 == source &&
 	    c.op2 == IRFL_CDATA_INT64 &&
 	    (c.t.irt == IRT_I64 || c.t.irt == IRT_U64)) return 1;
+	if (source_type == IRT_CDATA && c.o == IR_FLOAD && c.op1 == source &&
+	    c.op2 == IRFL_CDATA_PTR && c.t.irt == IRT_P64) return 1;
 	if (source_type == IRT_INT && irt_type(c.t) == IRT_INT &&
 	    !irt_isguard(c.t)) {
 		IRIns original = ir_load_acq(&ir[source]);
@@ -4564,13 +4615,53 @@ static int arm64_postra_vararg_promoted(const IRIns *ir, IRRef nk,
 	return 0;
 }
 
+/* Independently prove the guarded pointer payload before matching its
+** allocated carrier to the saved Lua argument. References remain closed. */
+static int arm64_postra_pointer_argument(CTState *cts, const GCtrace *T,
+                                        IRRef carrier)
+{
+  IRIns payload = ir_load_acq(&T->ir[carrier]), owner;
+  IRRef source = payload.op1, r;
+  CTypeID id = 0, terminal;
+  CType type;
+  CTInfo info;
+  if (payload.o != IR_FLOAD || payload.op2 != IRFL_CDATA_PTR ||
+      payload.t.irt != IRT_P64 || source < REF_FIRST || source >= carrier)
+    return 0;
+  owner = ir_load_acq(&T->ir[source]);
+  if (owner.t.irt != (IRT_CDATA|IRT_GUARD) ||
+      (owner.o != IR_SLOAD && owner.o != IR_VLOAD)) return 0;
+  for (r = source+1u; r < carrier; r++) {
+    IRIns field = ir_load_acq(&T->ir[r]);
+    IRRef g;
+    if (field.o != IR_FLOAD || field.op1 != source ||
+        field.op2 != IRFL_CDATA_CTYPEID) continue;
+    if (field.t.irt != IRT_U16) return 0;
+    for (g = r+1u; g < carrier; g++) {
+      IRIns guard = ir_load_acq(&T->ir[g]);
+      IRRef kref;
+      int32_t k;
+      if (guard.o != IR_EQ || guard.t.irt != (IRT_INT|IRT_GUARD) ||
+          (guard.op1 != r && guard.op2 != r)) continue;
+      kref = guard.op1 == r ? guard.op2 : guard.op1;
+      if (id || !arm64_callxs_kint_value(T->ir, T->nk, kref, &k) || k <= 0)
+        return 0;
+      id = (CTypeID)k;
+    }
+  }
+  if (!id || !lj_ccall_arm64_raw_type(cts, id, &type, &terminal)) return 0;
+  info = ctype_info_acq(&type);
+  return !(info & CTF_REF) && ctype_isptr(info) &&
+         ctype_size_acq(&type) == sizeof(void *);
+}
+
 /*
 ** Check the real interpreter XSAVE before the CALLXS. `values` is the
 ** normalized physical CARG list (the NIL vararg separator has already been
 ** removed by the caller). Fixed arguments use a bounded set of source-linked
 ** normalizations; each suffix carrier is tied to its exact stack slot.
 */
-static int arm64_postra_vararg_source_proof(const GCtrace *T,
+static int arm64_postra_vararg_source_proof(CTState *cts, const GCtrace *T,
 		IRRef xsave, IRRef call, const BCIns *proto_bc, MSize proto_sizebc,
 		uintptr_t returnpc, BCIns sourceins,
 		IRRef callable_cdata_ref, unsigned fixed_count,
@@ -4643,6 +4734,9 @@ static int arm64_postra_vararg_source_proof(const GCtrace *T,
 			return 0;
 		stype = arm64_callxs_ref_type(T->ir, T->nk, source);
 		if (a < fixed_count) {
+			IRIns carrier = ir_load_acq(&T->ir[values[a]]);
+			if (carrier.o == IR_FLOAD && carrier.op2 == IRFL_CDATA_PTR &&
+			    !arm64_postra_pointer_argument(cts, T, values[a])) return 0;
 			if (!arm64_postra_source_value_matches(T->ir, T->nk,
 			    T->nins, xsave, source, values[a], stype)) return 0;
 		} else if (!arm64_postra_vararg_promoted(T->ir, T->nk,
@@ -5613,7 +5707,8 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	      ir_load_acq(&view->ir[cdref]).o == IR_VLOAD;
 	    for (i = 0; i < abi.nargs; i++) {
 	      IRIns arg = ir_load_acq(&view->ir[values[i]]);
-	      if ((arg.o == IR_FLOAD && arg.op2 == IRFL_CDATA_INT64) ||
+	      if ((arg.o == IR_FLOAD && (arg.op2 == IRFL_CDATA_INT64 ||
+	                               arg.op2 == IRFL_CDATA_PTR)) ||
 	          arm64_postra_numarg_source(view->ir, view->nk, semantic_nins,
 	            values[i], 0) ||
 	          arm64_postra_intarg_source(view->ir, view->nk, semantic_nins,
@@ -5623,7 +5718,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	           irt_type(arg.t) == IRT_INT))
 	        roots_required = 1;
 	    }
-	    if (roots_required && !arm64_postra_vararg_source_proof(&temp,
+	    if (roots_required && !arm64_postra_vararg_source_proof(view->cts, &temp,
 	        layout_xsave, call, view->proto_bc, view->proto_sizebc,
 	        source_returnpc, sourceins, cdref, abi.nargs, actual_count, values))
 	      return 0;

@@ -16,10 +16,12 @@ and reports that are no longer authoritative are retained in
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
 - Current JIT work: Lua INT values and INT-result CALLM producers feeding all
-  eight fixed C integer kinds, including compact stack arguments. All 24
-  focused fixtures pass the ARM64 assertion profile, with 48 new shapes,
-  432 required native runs, 64 forced exits and independent rejection tests.
-  Full validation is pending. See the
+  eight fixed C integer kinds, including compact stack arguments. The first
+  checkpoint passed all 24 focused fixtures in four profiles, with 48 new
+  shapes, 432 required native runs and 64 forced exits. The complete gate
+  exposed a pointer-source proof regression in an older mixed ABI call.
+  Its correction passes the ABI fixture and independent pointer-owner/type
+  rejection checks; renewed full validation is pending. See the
   [INT argument evidence](arm64-jit-ffi-int-arguments-2026-10-27.md).
 - Latest fully validated JIT checkpoint: double, float and U32 producer results feeding fixed
   integer CALLM arguments, at `51c92374`. All 22 focused fixtures and the

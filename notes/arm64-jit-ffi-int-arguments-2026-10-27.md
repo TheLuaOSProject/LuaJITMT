@@ -89,8 +89,38 @@ test the safeguards independently; they are not production failures.
 
 ## Validation status and limits
 
-Full four-profile, complete experimental/bootstrap and ARM64/x64 stock
-validation is pending for this checkpoint. The preceding complete result
+At `43149a7e`, all 24 focused fixtures passed all four ARM64/arm64e
+assertion/release profiles. The complete experimental gate then exposed a
+deterministic regression in the older ABI compact-stack matrix: the new INT
+argument rule activated the complete XSAVE argument proof, whose source
+matcher did not recognize the existing pointer CData's `FLOAD CDATA_PTR`
+carrier. Semantic admission refused the trace before native publication.
+Diagnostic branch instrumentation isolated this to the source proof; the
+INT result-slot check was not the cause. Original evidence is retained in
+`/tmp/ljmt-intargs-experimental-initial-failure.log`,
+`/tmp/ljmt-intargs-abi-first-repro.txt` and
+`/tmp/ljmt-intargs-abi-locate.log`.
+
+Both passes now bind a fixed pointer carrier to its exact saved CData owner.
+Each pass independently derives the preceding guarded CTypeID and requires
+a native-width, non-reference pointer after stable typedef/attribute
+resolution. Fixed pointer arguments always activate this source proof, even
+when no INT conversion or table read is present. Existing GC root and
+allocated-lifetime checks still apply. The ABI fixture now checks native
+and exact helper-count deltas for each stack-matrix callee, so preceding
+CALLM runs cannot satisfy its native witness.
+
+The complete ABI fixture passes with the correction in
+`/tmp/ljmt-intargs-abi-certified.log`. Four new authentic-clone mutations
+independently reject the wrong saved owner, wrong payload owner, scalar
+CType and missing CType guard in both passes. Removing only the exact-owner
+mapping or only the pointer-type restriction from either pass makes the
+corresponding negative fail, recorded in
+`/tmp/ljmt-intargs-pointer-counterfactual.log` and its four per-case logs.
+Candidate source was restored byte-for-byte after these counterfactuals.
+
+Renewed four-profile, complete experimental/bootstrap and ARM64/x64 stock
+validation is pending for the corrected checkpoint. The preceding complete result
 remains `51c92374`, documented in the
 [numeric CALLM evidence](arm64-jit-callm-numeric-2026-10-27.md).
 
