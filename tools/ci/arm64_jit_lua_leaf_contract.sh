@@ -23,6 +23,10 @@ for profile in arm64-assert arm64e-assert arm64-release arm64e-release; do
   lj_ci_compile_fixture "$fixture" "$root/tests/t-arm64-jit-lua-leaf-calls.c"
   lj_ci_run_fixture 60 "$fixture"
   lj_ci_run_lua 60 "$root/tests/t-arm64-jit-lua-leaf-calls.lua"
+  child_fixture=$tmpdir/lua-child-$profile
+  lj_ci_compile_fixture "$child_fixture" "$root/tests/t-arm64-jit-lua-child-exits.c"
+  lj_ci_run_fixture 60 "$child_fixture"
+  lj_ci_run_lua 60 "$root/tests/t-arm64-jit-lua-child-exits.lua"
 done
 lj_ci_restore "$LJ_CI_RESTORE_TARGET_FLAGS" "$LJ_CI_RESTORE_XCFLAGS"
-echo 'arm64_jit_lua_leaf_contract OK: four profiles; native, identity exits, independent admission and ordinary publication/refusal'
+echo 'arm64_jit_lua_leaf_contract OK: four profiles; native, identity/child exits, independent admission and ordinary publication/refusal'

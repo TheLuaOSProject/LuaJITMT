@@ -15,6 +15,11 @@ and reports that are no longer authoritative are retained in
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
+- Candidate child-frame exits: one integer ADD/SUB/MUL in a fixed pure unary
+  Lua leaf, with independently reconstructed caller/child frames and allocated
+  value coexistence. Focused native, malformed-view and counterfactual tests
+  pass; full matrix and main integration are pending. See the
+  [child-exit evidence](arm64-jit-lua-child-exits-2026-10-27.md).
 - Latest fully validated JIT checkpoint: fixed pure unary Lua leaves in scalar
   FORL roots at `a202c982`, with exact caller snapshots and independent admission.
   Each of four ARM64/arm64e assertion/release profiles passes 12 native runs,

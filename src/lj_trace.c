@@ -11898,7 +11898,7 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
       BCReg from = bc_d(ins);
       if (from >= frame || !defined[from]) return 0;
     } else if (op == BC_KSHORT) {
-      /* Literal integers are safe; surviving child overflow exits are not. */
+      /* Snapshot admission separately proves any surviving overflow exits. */
     } else if (op == BC_KNUM) {
       kn = bc_d(ins);
     } else if (op == BC_ADDVV || op == BC_SUBVV || op == BC_MULVV ||
