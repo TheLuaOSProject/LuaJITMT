@@ -3011,7 +3011,7 @@ static int arm64_postra_callxs_snapshot_locations(
 		for (i = 0; i < nent; i++) {
 			SnapEntry se = snapentry_acq(&view->snapmap[ofs+i]);
 			IRRef value = snap_ref(se);
-			IRRef renref;
+			IRRef renref, renamed_after = 0;
 			IRIns source;
 			RegSP rs;
 			Reg reg;
@@ -3028,7 +3028,10 @@ static int arm64_postra_callxs_snapshot_locations(
 			for (renref = view->nins; renref-- > semantic_nins; ) {
 				IRIns ren = ir_load_acq(&view->ir[renref]);
 				if (ren.o != IR_RENAME) break;
-				if (ren.op1 == value && ren.op2 <= s) rs = ren.prev;
+				if (ren.op1 == value && ren.op2 <= s) {
+					rs = ren.prev;
+					renamed_after = snap_ref_acq(&view->snap[ren.op2]);
+				}
 			}
 			if (ra_hasspill(regsp_spill(rs))) {
 			MSize slot = regsp_spill(rs);
@@ -3051,6 +3054,21 @@ static int arm64_postra_callxs_snapshot_locations(
 				if (reg >= RID_MAX_FPR || !rset_test(set, reg) ||
 				    (reg_owner[reg] != 0 && reg_owner[reg] != value))
 					return 0;
+				/* A snapshot-specific location must itself survive calls
+				** since that rename took effect. The base IR allocation
+				** may be preserved while this renamed location is not. */
+				if (renamed_after &&
+				    !(set == RSET_FPR ?
+				      (reg >= RID_D8 && reg <= RID_D15) :
+				      (reg >= RID_X19 && reg <= RID_X28))) {
+					IRRef barrier = value+1u;
+					if (barrier < renamed_after) barrier = renamed_after;
+					for (; barrier <= at && barrier < semantic_nins; barrier++) {
+						IRIns call = ir_load_acq(&view->ir[barrier]);
+						if (call.o == IR_CALLS || call.o == IR_CALLXS)
+							return 0;
+					}
+				}
 				reg_owner[reg] = value;
 			}
 		}

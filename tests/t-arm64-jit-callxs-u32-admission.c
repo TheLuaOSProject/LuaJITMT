@@ -356,7 +356,8 @@ enum Mutation {
   M_CHECKED_ACTIVE,
   M_RENAME_SCOPE,
   M_RENAME_LOCATION,
-  M_RENAME_LATE
+  M_RENAME_LATE,
+  M_RENAME_CLOBBER
 };
 
 static IRRef find_checked_intnum(U32Fixture *fx) {
@@ -693,6 +694,12 @@ static void mutate_rename(U32Fixture *fx, int mode) {
           rename->prev = REGSP(RID_RET, SPS_NONE);
           return;
         }
+        if (mode == 3) {
+          /* D0 is a valid FPR, but CALLXS may clobber it while this carried
+          ** value remains live. */
+          rename->prev = REGSP(RID_D0, SPS_NONE);
+          return;
+        }
         if (mode == 0) {
           rename->op2 = (uint16_t)nsnap;
           return;
@@ -702,6 +709,80 @@ static void mutate_rename(U32Fixture *fx, int mode) {
     }
   }
   assert(!"retained result lacks a snapshot-scoped rename mutation target");
+}
+
+/* Add a later-scope rename for an old numeric result without changing its
+** D14 allocation at snapshots which still cross native CALLXS effects. New
+** rename records are inserted at the head of the trailing suffix:
+* snap_renameref
+** scans that suffix backwards, so this earlier record wins only when its later
+** snapshot scope applies. */
+static MSize insert_postleave_d0_rename(U32Fixture *fx) {
+  IRRef value = fx->convs[0], nins, at, renref = 0;
+  MSize nsnap = trace_nsnap_acq(fx->owner), last_leave = 0, target = nsnap;
+  RegSP d0 = REGSP(RID_D0, SPS_NONE);
+  IRIns added;
+  for (unsigned call = 0; call < fx->ncalls; call++) {
+    for (MSize s = 0; s < nsnap; s++)
+      if (snap_ref_acq(&fx->snap[s]) == fx->leaves[call]) {
+        if (s > last_leave)
+          last_leave = s;
+        break;
+      }
+  }
+  for (MSize s = last_leave + 1u; s < nsnap; s++) {
+    MSize ofs, n, i;
+    int free_d0 = 1;
+    if (!snapshot_has_ref(fx, s, value))
+      continue;
+    ofs = snap_mapofs_acq(&fx->snap[s]);
+    n = snap_nent_acq(&fx->snap[s]);
+    for (i = 0; i < n; i++) {
+      IRRef other = snap_ref(fx->snapmap[ofs + i]);
+      if (other == value || other < REF_FIRST || irref_isk(other))
+        continue;
+      if (snapshot_regsp(fx, other, s) == d0) {
+        free_d0 = 0;
+        break;
+      }
+    }
+    if (free_d0) {
+      target = s;
+      break;
+    }
+  }
+  assert(target < nsnap && target > last_leave);
+  for (IRRef r = semantic_nins(fx->owner); r < trace_nins_acq(fx->owner); r++) {
+    IRIns rename = ir_load_acq(&fx->ir[r]);
+    if (rename.o == IR_RENAME && rename.op1 == value &&
+        rename.op2 <= last_leave) {
+      renref = r;
+      break;
+    }
+  }
+  assert(renref != 0 && "retained result needs an earlier native-live rename");
+  added = ir_load_acq(&fx->ir[renref]);
+  added.op2 = (uint16_t)target;
+  added.prev = d0;
+  nins = trace_nins_acq(&fx->view_owner);
+  at = semantic_nins(&fx->view_owner);
+  while (at < nins) {
+    IRIns nop = ir_load_acq(&fx->ir[at]);
+    if (nop.o != IR_NOP || nop.t.irt != IRT_NIL || nop.op1 || nop.op2 ||
+        nop.prev)
+      break;
+    at++; /* Keep reserved zero NOPs at the suffix boundary. */
+  }
+  assert(at < nins && fx->ir[at].o == IR_RENAME);
+  assert(nins < trace_nins_acq(fx->owner) + 1u);
+  /* The suffix's RENAME operands and all snapshot refs point below at, so
+  ** inserting here leaves their IR references and map geometry unchanged. */
+  for (MSize s = 0; s < nsnap; s++)
+    assert(snap_ref_acq(&fx->snap[s]) < at);
+  memmove(&fx->ir[at + 1u], &fx->ir[at], (size_t)(nins - at) * sizeof(IRIns));
+  fx->ir[at] = added;
+  fx->view_owner.nins = nins + 1u;
+  return target;
 }
 
 static void mutate(U32Fixture *fx, enum Mutation m) {
@@ -897,6 +978,9 @@ static void mutate(U32Fixture *fx, enum Mutation m) {
   case M_RENAME_LATE:
     mutate_rename(fx, 2);
     break;
+  case M_RENAME_CLOBBER:
+    mutate_rename(fx, 3);
+    break;
   case M_BAD_ALLOC:
     fx->ir[call].r = RID_FPRET;
     break;
@@ -914,7 +998,7 @@ static void both(U32Fixture *fx, jit_State *J, enum Mutation m) {
   assert(idx < fx->pt->sizebc && bc_op(saved) == BC_JFORL);
   if (m == M_BAD_ALLOC || m == M_CONV_FPR || m == M_CLOBBER ||
       m == M_SPILL_ALIGN || m == M_SPILL_EXTENT || m == M_RENAME_SCOPE ||
-      m == M_RENAME_LOCATION || m == M_RENAME_LATE) {
+      m == M_RENAME_LOCATION || m == M_RENAME_LATE || m == M_RENAME_CLOBBER) {
     reset_fixture(fx);
     mutate(fx, m);
     {
@@ -1018,6 +1102,13 @@ int main(void) {
   positive(&pair, J);
   positive(&discard, J);
   positive(&retained, J);
+  reset_fixture(&retained);
+  (void)insert_postleave_d0_rename(&retained);
+  active_mutation = -2;
+  {
+    LJArm64PostRAView v = postra_view(&retained);
+    expect_postra(&v, 1);
+  }
   both(&single, J, M_CTYPE);
   both(&single, J, M_CALLTYPE);
   both(&single, J, M_CALLWIDTH);
@@ -1047,6 +1138,7 @@ int main(void) {
   both(&retained, J, M_RENAME_SCOPE);
   both(&retained, J, M_RENAME_LOCATION);
   both(&retained, J, M_RENAME_LATE);
+  both(&retained, J, M_RENAME_CLOBBER);
   free(single.ir);
   free(single.snap);
   free(single.snapmap);

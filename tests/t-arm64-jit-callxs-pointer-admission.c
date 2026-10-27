@@ -681,6 +681,10 @@ static void test_postra(PointerFixture *fx)
 
   view = make_postra_view(fx);
   fx->ir[PX_SEMANTIC_NINS+1u].op1 = PX_R_STRING;
+  /* The old string remains live across native calls. The redundant box
+  ** rename's X0 becomes an unsafe effective location for this other value. */
+  expect_postra(&view, 0);
+  fx->ir[PX_SEMANTIC_NINS+1u].r = fx->ir[PX_R_STRING].r;
   expect_postra(&view, 1);
   fx->ir[PX_SEMANTIC_NINS+1u].r = fx->ir[PX_SEMANTIC_NINS].r;
   expect_postra(&view, 0);
