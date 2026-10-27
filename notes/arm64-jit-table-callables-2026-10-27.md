@@ -75,14 +75,65 @@ passes all seven focused fixtures:
 - Existing scalar and pointer admission regressions pass.
 
 Log: `/tmp/ljmt-table-call-focus.log`. The contract restored the ordinary ARM64
-assertion runtime. Four-profile and broader compatibility validation is pending
-at this initial checkpoint.
+assertion runtime.
 
 The fixtures cache one `ffi.typeof` object when comparing two callable
 identities: parsing the same function-pointer type string twice can allocate
 distinct CType IDs. They also retain the library object for the full lifetime
 of the casts. Interpreter-only first iterations are excluded from native
 pause hooks; an error before trace entry is not evidence of a native exit.
+
+## Frozen checkpoint validation
+
+Source checkpoint `0761fb79e5547bf23fb8cfc8c1b4269d64c339e8` passes all seven
+focused fixtures in all four profiles:
+
+| Profile | Profile ID |
+| --- | --- |
+| ARM64 assertion | `f64e3a8db59b85d49dba4dc72e2e3445f5794b6a7b36ac7cc6d1a3ca4cdacd4e` |
+| arm64e assertion/BTI | `f2042f932d10ce9eb74b89c64455932a6513d31f8cf4c9a412f032e7c209eda7` |
+| ARM64 release | `b3632a4fd62a99aa1ce8a509635ca9c37265f79f22b173f4693d1f3b1573e7ea` |
+| arm64e release/BTI | `dc011d13e9e470bf4cad1a122dcdf670f43b6ec654051a15f836972ea24d83a4` |
+
+The broader M7 scalar CALLXS suite passes in all four profiles, including its
+existing scalar, float, pointer, boxed/fixed I64/U64, U32/CALLM, variadic,
+callback, flush and C++ unwind coverage. Logs:
+`/tmp/ljmt-table-call-four-profile.log` and
+`/tmp/ljmt-table-call-m7-<profile>.log`.
+
+Ordinary ARM64 assertion profile
+`b884fdda38e7adf40b507283693454b510acb1bc613a4d40089e5fe8dd1b5b4a`
+passes nine table-call smoke cases, rooted cells/upvalues, bit operations,
+509 stock source cases and 509 original-bytecode imports. The smoke checks
+exact helper counts, values, errno and each runner's actual JFORL trace number.
+Its first draft incorrectly assumed trace 1 was always reused after a flush;
+that temporary harness assumption was corrected without changing production
+source. Native execution evidence comes from the C fixtures above, rather
+than published trace metadata alone.
+
+Signed x64/Rosetta assertion profile
+`cff9d90b08c2eb9469d631dcba0ae26538ab795bd8be0e2f355a9f0ec6bf2f4f`
+passes both 509-case stock corpora. This is bounded compatibility evidence,
+not a full x64 umbrella or native Intel performance result. The matrix checks
+unchanged source and restores ordinary ARM64 assertion profile
+`e32b9bbb7a2ae98eec54b263baf8039802ab063d5f508d8109adba7de09c6664`.
+Code-sign verification passes; selected test-helper symbols and out-of-line
+atomic imports are absent. Logs: `/tmp/ljmt-table-call-matrix.log` and the
+matching ordinary, stock-source/import and x64 logs. Complete experimental
+and bootstrap umbrellas were not rerun for this target-local increment.
+
+## Main checkout
+
+Main `v2.1` was fast-forwarded to the source checkpoint and rebuilt with the
+ordinary bootstrap/experimental/assertion flags, without test helpers.
+Profile `e1b8247dd7bc9ce35191e244fa13562da667b8eb5e0f4ad9d53f4f9fa4685d4b`
+passes the same nine table-call smoke cases, bit operations, rooted
+cells/upvalues and both 509-case stock corpora. Code-sign and atomic/test-helper
+symbol checks pass. Log: `/tmp/ljmt-table-call-main.log`.
+
+- Runtime SHA-256: `a752a8bac9f412d82d54aee99b57055961daf76d87a0975a9598d145f0e4b2fa`
+- Archive SHA-256: `94899f430ce85418df5ba3f875ecd2c57f171d30b0493da2bfd14b305bfa56cf`
+- Build-signature SHA-256: `1df01456604c0713dc4d2d4019c6b4b958182adbd0b2897fabc9c73e2a7b7f5f`
 
 ## Scope
 
@@ -91,3 +142,9 @@ Lua calls/metamethods, arbitrary table/GC recurrences, side traces with foreign
 effects, aggregate/sret CALLXS, or unsupported argument/result forms. It
 composes the bounded table-hit certificate with the already admitted scalar
 ABI and native-frame protocol.
+
+A next bounded composition is table-loaded owned I64/U64 arguments. Their
+payload proofs currently accept SLOAD or a prior boxed CALLXS result, not the
+certified rooted CData VLOAD. Extending those independent source/CTYPE/use and
+XSAVE proofs remains future work; the table-callable evidence does not certify
+it automatically.

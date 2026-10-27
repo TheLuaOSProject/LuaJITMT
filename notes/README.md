@@ -273,10 +273,11 @@ available.
   [`arm64-jit-ffi-float-2026-10-26.md`](arm64-jit-ffi-float-2026-10-26.md).
 - Shared-table callable reads compose the bounded rooted-hit operation with
   scalar CALLXS in FORL roots. One-level native-width function pointers retain
-  exact outer CType guards and normalized variadic signatures. The initial
-  ARM64 assertion contract covers replacement, active invalidation, pre-frame
+  exact outer CType guards and normalized variadic signatures. The focused
+  contract and broader M7 suite pass all four ARM64/arm64e assertion/release
+  profiles at `0761fb79`, covering replacement, active invalidation, pre-frame
   GC lifetime, zero arguments, string/integer/boolean keys and independent
-  malformed views. See
+  malformed views. ARM64 and signed x64 each pass both 509-case stock corpora. See
   [`arm64-jit-table-callables-2026-10-27.md`](arm64-jit-table-callables-2026-10-27.md).
 - Direct scalar producer `CALL` to consumer `CALLM` chains support nested
   integer, float and double calls with register and stack arguments. Source
