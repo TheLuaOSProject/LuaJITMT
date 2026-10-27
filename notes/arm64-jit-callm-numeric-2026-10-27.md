@@ -52,7 +52,8 @@ sentinel is checked at the C boundary.
 
 Each case runs a base fraction, 15 width-specific values, a forced producer
 POSTCALL exit and reuse, then a forced consumer POSTCALL exit and reuse:
-960 runs of 24 calls to each C function, including 96 forced exits. Values
+960 required runs of 24 calls to each C function, including 96 forced exits.
+Any additional cold attempts receive the same effect checks. Values
 include negative zero, signed fractions, integer width boundaries, huge
 values, NaN and infinities. Separate permanently interpreted prototypes
 provide the exact producer-input and consumer-argument bit oracle. A native
@@ -136,11 +137,75 @@ at the missing native witness as intended. Logs:
 `/tmp/ljmt-scalar-cold-fixed.log` and
 `/tmp/ljmt-scalar-cold-counterfactual.log`. This changes only the test.
 
-## Validation still to complete
+## Frozen checkpoint validation
 
-The renewed frozen four-profile contract, complete experimental/bootstrap
-gates, ordinary compatibility matrix and main-checkout integration have not
-yet been completed for the corrected fixture checkpoint.
+Source checkpoint `51c923747ff0ca4bff4b801ef775c553ea918024` passes all 22
+focused fixtures in all four profiles. Each includes the 960 required native
+runs and 96 forced exits, plus 48 semantic and 48 allocated positives and
+43 semantic and 46 allocated negatives in the new CALLM fixtures. The scalar
+fixture separately reports one injected abort and one cold retry in each
+profile.
+
+| Profile | Profile ID |
+| --- | --- |
+| ARM64 assertion | `1eabb488c3a5a50b73b50acc174aee8c58ec41ca22a73d9596d49906369cb87d` |
+| arm64e/BTI assertion | `9db62191bafc25558c47ed5a8a5cddb058c1640185f62ef6f38066199b368b91` |
+| ARM64 release | `26fb0ddc5c7bbb41a7ec0111a8dacb34fed557fe3f9551d0f4ada9fe3282e739` |
+| arm64e/BTI release | `7127e1fa3471a31df0a371f47fc4cfe3e0971bd9785280ee14a115c111791fba` |
+
+Both complete gates then pass on that unchanged checkpoint:
+
+- `tools/ci/arm64_jit_fail_closed_gate.sh`, including all four broader M7
+  scalar FFI profiles, rooted effects, construction, GC lifetime, trace
+  publication/entry/exit/flush, callbacks and unwind checks.
+- `tools/ci/arm64_bootstrap_gate.sh`, including the 387 applicable stock cases,
+  interpreter GC2 hard assist, TG hooks, coroutine/dead-resume,
+  aggregate/variadic interpreter FFI and callback/errno unwind checks.
+
+Logs: `/tmp/ljmt-callm-numeric-four-profile.log`,
+`/tmp/ljmt-callm-numeric-experimental.log` and
+`/tmp/ljmt-callm-numeric-bootstrap.log`. Both previously failing fixtures pass
+all four broader M7 profiles. The watchdog sampled only the normally
+completing legacy-bytecode fixture. This does not explain the earlier I64
+timeout or identify the original scalar recording interruption.
+
+Ordinary ARM64 assertion profile
+`27674dac5b5e7412801edad6fdafd157139d16930bdb9357cb658967db332624`
+passes 256 new compiled smoke runs without test hooks: five values across
+all 48 CALLM prototypes plus 16 stored-U32-result controls. They require
+exact argument bits/counts/errno, published loops and same-trace reuse.
+All 102 preceding numeric/held-result/scalar-table/nested-read/I64-argument/
+callable smoke runs, bit operations and rooted cells/upvalues pass too.
+The former `abs(fabs(t.value))` boundary now requires compilation and passes,
+together with its NUM identity and stored-result controls.
+
+Both stock source and original-bytecode import corpora pass 509 cases on
+ARM64. Signed x64/Rosetta assertion profile
+`65a63c0e068781089da2fc7a7e282ccf05375c5905df5c4042b70bd778097931`
+passes both 509-case corpora too. This remains bounded compatibility
+evidence, not a complete x64 umbrella or native Intel performance result.
+
+The matrix verifies unchanged source and restores ordinary ARM64 assertion
+profile `d5c47d619fbc10bc864469aa4e97736449b0922743e2bae1431d67e5f10f178a`.
+That runtime repeats the 53 preceding numeric and 256 new CALLM smoke runs.
+Code-sign checks pass; selected test-helper symbols and out-of-line atomic
+imports are absent. Log: `/tmp/ljmt-callm-numeric-matrix.log` and matching
+ordinary/stock/x64 logs.
+
+## Main checkout
+
+The clean main `v2.1` checkout was fast-forwarded to the source checkpoint
+and rebuilt with ordinary bootstrap/experimental/assertion flags and no
+test hooks. Profile
+`bb32d71f4762613b23e5b59f83e8488e3e1051b0420be74cc7ccdf561962bc5b`
+passes all 358 smoke runs, the new CALLM and preceding boundary checks,
+bit operations, rooted cells/upvalues, and both 509-case stock corpora.
+Code-sign and atomic/test-helper symbol checks pass.
+Log: `/tmp/ljmt-callm-numeric-main.log`.
+
+- Runtime SHA-256: `1a5da5385696b7dc8eea3926adffb60cbcb85bda5e90ee0707c4a4014d858987`
+- Archive SHA-256: `df9a19f8f7c2b1804ffb50119000ef51081d8a6c34ac6ca8ef8f6a854f7265f8`
+- Build-signature SHA-256: `6a13a095289312fab80fd08c434e54c6ff4b4741d9b424dae9a358c0b61e5e2d`
 
 ## Limits
 

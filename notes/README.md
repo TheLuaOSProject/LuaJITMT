@@ -15,7 +15,17 @@ and reports that are no longer authoritative are retained in
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
-- Latest JIT checkpoint: ordinary Lua NUM values feeding fixed C
+- Latest JIT checkpoint: double, float and U32 producer results feeding fixed
+  integer CALLM arguments, at `51c92374`. All 22 focused fixtures and the
+  broader M7 FFI suite pass four ARM64/arm64e assertion/release profiles,
+  including 48 new call shapes, 960 required native runs, 96 forced exits and
+  independent semantic/allocated rejection checks. Both complete gates pass;
+  ARM64 and signed x64 pass both 509-case stock corpora. The ordinary main
+  rebuild passes 358 smoke runs and both corpora. The preceding timeout and
+  scalar cold-recording failure remain documented, along with the bounded
+  test-only recovery correction. See the
+  [numeric CALLM evidence](arm64-jit-callm-numeric-2026-10-27.md).
+- Preceding JIT checkpoint: ordinary Lua NUM values feeding fixed C
   integer CALLXS arguments, including all eight signed/unsigned widths and
   compact Darwin stack arguments, at `f05b4658`. All 20 focused fixtures and
   the broader M7 FFI suite pass four ARM64/arm64e assertion/release profiles,
@@ -23,7 +33,8 @@ and reports that are no longer authoritative are retained in
   18-positive/86-semantic-negative/106-allocated-negative admission checks.
   Both complete experimental/bootstrap gates pass; ARM64 and signed x64 pass
   both 509-case stock corpora. The ordinary main rebuild passes 102 smoke
-  runs plus boundary checks. Direct NUM-to-integer CALLM adaptation remains closed.
+  runs plus boundary checks. The CALLM composition gap identified there is
+  addressed by the latest checkpoint.
   See the [numeric-argument evidence](arm64-jit-ffi-numeric-arguments-2026-10-27.md).
 - Preceding JIT checkpoint: scalar CALLXS results held across a later CALLXS
   at `9f5ee143`. All 18 focused fixtures and the broader M7 FFI suite pass
@@ -52,13 +63,15 @@ and reports that are no longer authoritative are retained in
   semantic/post-RA views. Each profile records 344 native observations and
   independent 4-positive/26-negative admission checks.
   See [`arm64-jit-i64-arguments-2026-10-26.md`](arm64-jit-i64-arguments-2026-10-26.md).
-- Latest complete umbrella validation: the numeric fixed-integer argument
-  checkpoint on 2026-10-27, frozen at `f05b4658`.
+- Latest complete umbrella validation: the numeric producer-to-integer CALLM
+  checkpoint on 2026-10-27, frozen at `51c92374`.
   The complete experimental and bootstrap gates passed, including all four
   M7 scalar CALLXS profiles. ARM64 and signed x86-64 each passed both 509-case
   stock source/import corpora. The ordinary main ARM64 rebuild passes both
-  corpora and 102 numeric/held-result/scalar-table/nested-read/I64-argument/
-  callable smoke runs without test helpers. See the
+  corpora and 358 numeric-CALLM/numeric-argument/held-result/scalar-table/
+  nested-read/I64-argument/callable smoke runs without test helpers. See the
+  [numeric CALLM evidence](arm64-jit-callm-numeric-2026-10-27.md).
+  The preceding numeric fixed-argument checkpoint is in the
   [numeric-argument evidence](arm64-jit-ffi-numeric-arguments-2026-10-27.md).
   The preceding complete scalar-table checkpoint is in the
   [scalar-argument evidence](arm64-jit-table-scalar-arguments-2026-10-27.md).
@@ -106,11 +119,11 @@ and reports that are no longer authoritative are retained in
   publication/entry/retirement, native numeric adaptation, and M7 scalar CALLXS
   on ARM64 and arm64e/BTI with both assertion and release runtimes.
 - Native ARM64 source and original-v2 import stock corpora each pass all 509
-  cases at the `f05b4658` checkpoint and its ordinary main rebuild.
+  cases at the `51c92374` checkpoint and its ordinary main rebuild.
 - The complete bootstrap gate passes, including 387 applicable stock cases,
   threaded tmpbuf, Darwin native roots/GC2, ARM64/arm64e callbacks,
   variadic/aggregate interpreter FFI and x86-64 errno unwind.
-- The signed x86-64/Rosetta runtime at `f05b4658` passed both 509-case corpora.
+- The signed x86-64/Rosetta runtime at `51c92374` passed both 509-case corpora.
   The combined gates also ran x86-64 callback-result lifetime and errno unwind.
   Shared rooted-store, raw nil-deletion, upvalue/cell and segment-map race
   fixtures were validated at the earlier local-cell checkpoint. Earlier
@@ -350,6 +363,15 @@ available.
   effects without replay in all four M7 profiles; both ARM64 stock corpora
   pass 509 cases. See
   [`arm64-jit-ffi-callm-2026-10-26.md`](arm64-jit-ffi-callm-2026-10-26.md).
+- Double, float and U32 producers can feed all eight signed/unsigned fixed
+  integer CALLM argument kinds, including compact Darwin stack slots. The
+  exact adjacent CALL/CALLM pair, completed producer, original Lua number and
+  native-only conversion carriers are checked independently before and after
+  allocation. Every tested C argument is compared against a permanently
+  interpreted oracle, with producer/consumer post-call exits and no replay.
+  Broader INT-result adaptation, enum and bool conversion extensions remain
+  outside this checkpoint. See the
+  [numeric CALLM evidence](arm64-jit-callm-numeric-2026-10-27.md).
 - Variadic scalar calls validate the named prefix, exact CARG separator and
   promoted number/boolean/string/nil suffix against the original Lua snapshot.
   Independent post-RA checks include eight-byte unnamed stack slots and spill
