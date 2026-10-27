@@ -38,10 +38,12 @@ run_profile() {
   lj_ci_compile_object "$varargs_object" "$root/tests/t-arm64-jit-ffi-varargs-lib.c"
   i64_object=$tmpdir/table-i64-$profile.o
   lj_ci_compile_object "$i64_object" "$root/tests/t-arm64-jit-table-i64-args-lib.c"
+  callback_object=$tmpdir/table-chains-callback-$profile.o
+  lj_ci_compile_object "$callback_object" "$root/tests/t-arm64-jit-table-chains-callback-lib.c"
   # Compiler and target flags follow the shared profile's word-list contract.
   # shellcheck disable=SC2086
   $LJ_CI_CC $LJ_CI_TARGET_FLAGS -dynamiclib \
-    -mmacosx-version-min="$LJ_CI_MINVER" "$object" "$pointer_object" "$varargs_object" "$i64_object" \
+    -mmacosx-version-min="$LJ_CI_MINVER" "$object" "$pointer_object" "$varargs_object" "$i64_object" "$callback_object" \
     $LJ_CI_LDFLAGS $LJ_CI_TARGET_LDFLAGS -o "$library"
   test "$(lipo -archs "$library")" = "$arch"
   library_sha=$(lj_ci_sha256 "$library")
@@ -50,6 +52,7 @@ run_profile() {
   export LJ_M7_FFI_CALLXS_FUNCPTR_SO="$library"
   export LJ_ARM64_FFI_VARARGS_LIB="$library"
   export LJ_M7_FFI_TABLE_I64_ARGS_SO="$library"
+  export LJ_M7_FFI_TABLE_CHAINS_CALLBACK_SO="$library"
   for name in $cases; do
     fixture=$tmpdir/t-arm64-jit-$name-$profile
     lj_ci_compile_fixture "$fixture" "$root/tests/t-arm64-jit-$name.c"
@@ -59,7 +62,7 @@ run_profile() {
 }
 
 profiles=${LJ_ARM64_TABLE_CALL_PROFILES:-'arm64-assert arm64e-assert arm64-release arm64e-release'}
-cases=${LJ_ARM64_TABLE_CALL_CASES:-'callxs-table callxs-table-admission callxs-table-lifecycle table-i64-args table-i64-args-admission table-i64-args-lifecycle callxs-funcptr ffi-varargs callxs-admission callxs-pointer-admission'}
+cases=${LJ_ARM64_TABLE_CALL_CASES:-'callxs-table callxs-table-admission callxs-table-lifecycle table-i64-args table-i64-args-admission table-i64-args-lifecycle table-chains table-chains-admission table-chains-lifecycle table-chains-callback callxs-funcptr ffi-varargs callxs-admission callxs-pointer-admission'}
 set -f
 for profile in $profiles; do run_profile "$profile"; done
 set +f

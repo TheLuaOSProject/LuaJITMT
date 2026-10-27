@@ -290,6 +290,13 @@ available.
   both corpora and nine argument plus nine callable smoke cases. See
   [`arm64-jit-table-i64-arguments-2026-10-27.md`](arm64-jit-table-i64-arguments-2026-10-27.md)
   for the current validation checkpoint and remaining scope.
+- Nested table-valued hits can feed later rooted reads, table callables and
+  owned I64 arguments. Independent semantic/post-RA checks require live GC
+  roots at every native call, including callback suspension. The focused
+  native tests cover table-edge removal, deferred GC, callback collection,
+  exact XSAVE roots and eventual weak reclamation. See
+  [`arm64-jit-table-chains-2026-10-27.md`](arm64-jit-table-chains-2026-10-27.md)
+  for validation progress and the remaining experimental limits.
 - Direct scalar producer `CALL` to consumer `CALLM` chains support nested
   integer, float and double calls with register and stack arguments. Source
   geometry, final-argument identity and continuation snapshots have independent

@@ -345,11 +345,13 @@ static void semantic_j_leave(jit_State *J, const SemanticJSave *save)
 
 static void expect_semantic_admit(jit_State *J, PointerFixture *fx)
 {
+  static unsigned serial;
   LJArm64IRReject reject;
+  serial++;
   int admitted = lj_asm_arm64_ir_admit(J, &fx->semantic, &reject);
   if (!admitted)
-    fprintf(stderr, "pointer CALLXS semantic positive rejected: "
-	    "reason=%d ref=%u op=%u detail=%u\n", (int)reject.reason,
+    fprintf(stderr, "pointer CALLXS semantic positive #%u rejected: "
+	    "reason=%d ref=%u op=%u detail=%u\n", serial, (int)reject.reason,
 	    (unsigned)reject.ref, (unsigned)reject.op,
 	    (unsigned)reject.detail);
   assert(admitted && reject.reason == LJ_ARM64_IR_REJECT_NONE);
@@ -545,9 +547,11 @@ static void test_semantic(jit_State *J, PointerFixture *fx)
 
   reset_semantic_clone(fx);
   fx->ir[PX_R_RESULT_PHI].op1 = PX_R_RESULT_PRE;
-	/* The result PHI is not an admission role when its operands remain
-	** structurally valid; accept this alternate loop-carried source. */
-	expect_semantic_admit(J, fx);
+  /* This makes the old SLOAD live across the body call, but that call's
+  ** XSAVE overwrites its original slot with BOX_PRE. It is not a rooted
+  ** alternative to the independently materialized boxed PHI input. */
+  expect_semantic_reject(J, fx, LJ_ARM64_IR_REJECT_CALL,
+    PX_R_CALL_BODY, IR_CALLXS, 0);
 
 	reset_semantic_clone(fx);
 	fx->ir[PX_R_INDEX_PHI].op1 = PX_R_CALL_PRE;
@@ -592,6 +596,10 @@ static void test_postra(PointerFixture *fx)
 	 view.spadjust == 16 && view.root_topslot == 11 &&
 	 view.proto_sizebc == fx->pt->sizebc && view.proto_numparams == 3);
   expect_postra(&view, 1);
+
+  view = make_postra_view(fx);
+  fx->ir[PX_R_RESULT_PHI].op1 = PX_R_RESULT_PRE;
+  expect_postra(&view, 0);  /* The newly live old SLOAD has no saved root. */
 
   view = make_postra_view(fx);
   {

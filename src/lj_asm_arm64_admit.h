@@ -637,7 +637,7 @@ static int arm64_callxs_offset_value(const IRIns *ir, IRRef nk,
 
 static int arm64_callxs_replay_setup_op(BCOp op);
 
-/* The CALLXS graph composes only the CData hit-read operation from the
+/* The CALLXS graph composes only the table/CData hit-read operation from the
 ** rooted grammar. Each pass still proves its own current scratch roots,
 ** table source, snapshots and saved callable before using that operation. */
 static int arm64_rooted_ir_effect(const GCtrace *T, IRRef ref,
@@ -1226,7 +1226,7 @@ static int arm64_callxs_vararg_sources(const GCtrace *T, IRRef xsave,
 }
 
 /* A table hit may retry only its own source read, with the table/key restored.
-** The following snapshot carries the fetched CData before any foreign effect. */
+** The following snapshot carries the fetched value before any foreign effect. */
 static int arm64_table_ir_slot(const GCtrace *T, MSize sn, MSize slot,
                                IRRef value)
 {
@@ -1311,6 +1311,139 @@ static int arm64_table_ir_snapshots(const GCtrace *T, const GCproto *pt,
     if (!arm64_callxs_replay_setup_op(
           bc_op(arm64_ir_bc_acq((uintptr_t)proto_bc(pt), s)))) return 0;
   return arm64_table_ir_slot(T, after, 1u+LJ_FR2+bc_a(bc), value);
+}
+
+/* Follow pointer aliases too: a string-data address can outlive the direct
+** use of its GC owner. The SSA graph is backward-only; bound work even for a
+** malformed or unusually deep PHI/ADD tree. */
+static int arm64_callxs_gc_dependency(const IRIns *ir, IRRef nins,
+    IRRef ref, IRRef owner, unsigned *budget)
+{
+  IRIns ins;
+  int a, b;
+  if (ref == owner) return 1;
+  if (ref < REF_FIRST) return 0;
+  if (ref >= nins || *budget == 0) return -1;
+  --*budget;
+  ins = ir_load_acq(&ir[ref]);
+  if (irt_type(ins.t) != IRT_P64) return 0;
+  if (ins.o == IR_FLOAD && ins.op2 == IRFL_CDATA_PTR)
+    return ins.op1 == owner;
+  if (ins.o != IR_ADD && ins.o != IR_PHI) return 0;
+  if (ins.op1 >= ref || ins.op2 >= ref) return -1;
+  a = arm64_callxs_gc_dependency(ir, nins, ins.op1, owner, budget);
+  b = arm64_callxs_gc_dependency(ir, nins, ins.op2, owner, budget);
+  return a < 0 || b < 0 ? -1 : a || b;
+}
+
+/* A callback suspends JIT activity: native registers/spills then cease to be
+** protected by the phase lease. Every live GC value must have an enumerated
+** root in this call's XSAVE, or be an exact identity pinned by the trace. */
+static int arm64_callxs_gc_roots(const GCtrace *T, IRRef call, IRRef xsave,
+    IRRef box, IRRef fp, unsigned nargs, const IRRef *args)
+{
+  IRRef value, ref, loop = 0;
+  MSize s, i, saved = (MSize)-1;
+  if (T->snap == NULL || T->snapmap == NULL) return 0;
+  for (ref = REF_FIRST; ref < T->nins; ref++)
+    if (ir_load_acq(&T->ir[ref]).o == IR_LOOP) loop = ref;
+  for (s = 0; s < T->nsnap; s++) {
+    MSize ofs = snap_mapofs_acq(&T->snap[s]);
+    MSize nent = snap_nent_acq(&T->snap[s]);
+    if (ofs > T->nsnapmap || nent > T->nsnapmap-ofs) return 0;
+    if (snap_ref_acq(&T->snap[s]) == xsave) {
+      if (saved != (MSize)-1 ||
+          snap_count_acq(&T->snap[s]) != SNAPCOUNT_DONE) return 0;
+      saved = s;
+    }
+  }
+  if (saved == (MSize)-1) return 0;
+  for (value = REF_FIRST; value < call; value++) {
+    IRIns ins = ir_load_acq(&T->ir[value]);
+    IRRef start = value < loop && loop < call ? loop : call+1u;
+    int live = 0, rooted = 0;
+    if (!irt_isgcv(ins.t) || irt_type(ins.t) == IRT_P32 ||
+        irt_type(ins.t) == IRT_P64 || value == box) continue;
+    /* Keep callable and pointer/payload argument owners during the call too. */
+    live = ir_load_acq(&T->ir[fp]).op1 == value;
+    for (i = 0; i < nargs && !live; i++) {
+      IRIns arg = ir_load_acq(&T->ir[args[i]]);
+      unsigned budget = 64;
+      int dependency = arm64_callxs_gc_dependency(T->ir, T->nins,
+                                                  args[i], value, &budget);
+      if (dependency < 0) return 0;
+      live = dependency || (arg.o == IR_FLOAD && arg.op1 == value);
+    }
+    for (ref = start; ref < T->nins && !live; ref++) {
+      IRIns use = ir_load_acq(&T->ir[ref]);
+      IRMode mode;
+      unsigned budget = 64;
+      int a, b;
+      if (use.o >= IR__MAX) return 0;
+      mode = lj_ir_mode[use.o];
+      a = irm_op1(mode) == IRMref ? arm64_callxs_gc_dependency(
+        T->ir, T->nins, use.op1, value, &budget) : 0;
+      b = irm_op2(mode) == IRMref ? arm64_callxs_gc_dependency(
+        T->ir, T->nins, use.op2, value, &budget) : 0;
+      if (a < 0 || b < 0) return 0;
+      live = a || b;
+    }
+    for (s = 0; s < T->nsnap && !live; s++) {
+      MSize ofs = snap_mapofs_acq(&T->snap[s]);
+      MSize nent = snap_nent_acq(&T->snap[s]);
+      if (snap_ref_acq(&T->snap[s]) < start) continue;
+      for (i = 0; i < nent && !live; i++) {
+        unsigned budget = 64;
+        int dependency = arm64_callxs_gc_dependency(T->ir, T->nins,
+          snap_ref(snapentry_acq(&T->snapmap[ofs+i])), value, &budget);
+        if (dependency < 0) return 0;
+        live = dependency;
+      }
+    }
+    if (!live) continue;
+    /* A successful identity guard also pins this exact object through KGC. */
+    for (ref = value+1u; ref < xsave && !rooted; ref++) {
+      IRIns eq = ir_load_acq(&T->ir[ref]);
+      IRRef k = eq.op1 == value ? eq.op2 : eq.op2 == value ? eq.op1 : 0;
+      if (eq.o == IR_EQ && eq.t.irt == (irt_type(ins.t)|IRT_GUARD) &&
+          arm64_callxs_const_member(T->ir, T->nk, k)) {
+        IRIns constant = ir_load_acq(&T->ir[k]);
+        rooted = constant.o == IR_KGC &&
+                 constant.t.irt == irt_type(ins.t);
+      }
+    }
+    {
+      MSize ofs = snap_mapofs_acq(&T->snap[saved]);
+      MSize nent = snap_nent_acq(&T->snap[saved]);
+      MSize slots = snap_nslots_acq(&T->snap[saved]);
+      for (i = 0; i < nent && !rooted; i++) {
+        SnapEntry se = snapentry_acq(&T->snapmap[ofs+i]);
+        rooted = snap_slot(se) >= 1u+LJ_FR2 && snap_slot(se) < slots &&
+                 se == SNAP(snap_slot(se), 0, value);
+      }
+      if (rooted) continue;
+      /* Only an unmodified, non-PHI SLOAD can rely on its original slot.
+      ** This grammar has no stack stores/cell operations. Check every XSAVE
+      ** after the load, including the loop backedge, for slot clobbers. */
+      if (ins.o != IR_SLOAD || ins.t.irt != (irt_type(ins.t)|IRT_GUARD) ||
+          ins.op2 != IRSLOAD_TYPECHECK || ins.op1 < 1u+LJ_FR2 ||
+          ins.op1 >= slots) return 0;
+      for (s = 0; s < T->nsnap; s++) {
+        IRRef at = snap_ref_acq(&T->snap[s]);
+        if (at <= value || at >= T->nins ||
+            ir_load_acq(&T->ir[at]).o != IR_XSAVE) continue;
+        ofs = snap_mapofs_acq(&T->snap[s]);
+        nent = snap_nent_acq(&T->snap[s]);
+        for (i = 0; i < nent; i++) {
+          SnapEntry se = snapentry_acq(&T->snapmap[ofs+i]);
+          if (snap_slot(se) == ins.op1 &&
+              se != SNAP(ins.op1, 0, value) &&
+              se != SNAP(ins.op1, SNAP_NORESTORE, value)) return 0;
+        }
+      }
+    }
+  }
+  return 1;
 }
 
 static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
@@ -1454,12 +1587,14 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
         table = ir_load_acq(&T->ir[T->ir[root1].op1]);
         key = arm64_callxs_ref_type(T->ir, nk, T->ir[root2].op1);
         if (T->ir[root1].op1 < REF_FIRST ||
-            table.o != IR_SLOAD || irt_type(table.t) != IRT_TAB ||
-            table.op2 != IRSLOAD_TYPECHECK || !irt_isguard(table.t) ||
+            (table.o != IR_SLOAD && table.o != IR_VLOAD) ||
+            irt_type(table.t) != IRT_TAB || !irt_isguard(table.t) ||
+            (table.o == IR_SLOAD && table.op2 != IRSLOAD_TYPECHECK) ||
             (key != IRT_INT && key != IRT_NUM && key != IRT_STR &&
              key != IRT_FALSE && key != IRT_TRUE && key != IRT_TAB &&
              key != IRT_FUNC && key != IRT_CDATA) ||
-            irt_type(T->ir[ref+2u].t) != IRT_CDATA ||
+            (irt_type(T->ir[ref+2u].t) != IRT_CDATA &&
+             irt_type(T->ir[ref+2u].t) != IRT_TAB) ||
             !arm64_table_ir_snapshots(T, J->pt, ref+2u, root1, root2,
                                      read_floor))
           return 0;
@@ -1626,6 +1761,8 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
         if (result_is_u32 && bc_b(sourceins) != 1)
           result_slot = 1u+LJ_FR2+(MSize)bc_a(sourceins);
       }
+      if (!arm64_callxs_gc_roots(T, ref, xsave, boxref, fpref,
+                                actual_count, values)) return 0;
       for (i = 0; i < abi.nargs; i++) {
 	LJArm64ABIArg *a = &abi.arg[i];
 	if (!arm64_callxs_value_kind(T->ir, values[i], nk, nins, ref,
@@ -1717,7 +1854,9 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
       } else return 0;
       break;
     case IR_VLOAD:
-      if (irt_type(ins.t) == IRT_CDATA) {
+      if (irt_type(ins.t) == IRT_CDATA || irt_type(ins.t) == IRT_TAB) {
+        /* A later nested hit may use this table only after this exact read
+        ** and its destination snapshot have passed the enclosing walk. */
         if (state != CALLXS_CLOSED || ref != readref ||
             ins.op1 != readroot || ins.op2 || !irt_isguard(ins.t)) return 0;
         readref = readroot = 0;
@@ -3295,6 +3434,141 @@ static int arm64_postra_callxs_value_survives(const LJArm64PostRAView *view,
 	return 0;
 }
 
+static int arm64_postra_callxs_gc_dependency(const LJArm64PostRAView *view,
+    IRRef nins, IRRef ref, IRRef object, unsigned *remaining)
+{
+  IRIns node;
+  int left, right;
+  if (ref == object) return 1;
+  if (ref < REF_FIRST) return 0;
+  if (ref >= nins || *remaining == 0) return -1;
+  --*remaining;
+  node = ir_load_acq(&view->ir[ref]);
+  if (irt_type(node.t) != IRT_P64) return 0;
+  switch (node.o) {
+  case IR_FLOAD:
+    return node.op2 == IRFL_CDATA_PTR && node.op1 == object;
+  case IR_ADD: case IR_PHI:
+    if (node.op1 >= ref || node.op2 >= ref) return -1;
+    left = arm64_postra_callxs_gc_dependency(view, nins, node.op1,
+                                            object, remaining);
+    right = arm64_postra_callxs_gc_dependency(view, nins, node.op2,
+                                             object, remaining);
+    return left < 0 || right < 0 ? -1 : left || right;
+  default:
+    return 0;
+  }
+}
+
+/* Independently prove callback-visible GC roots from the allocated trace.
+** snapshot_locations separately checks the full-width, renamed locations
+** from which each materialized XSAVE value is restored. */
+static int arm64_postra_callxs_gc_roots(const LJArm64PostRAView *view,
+    IRRef nins, IRRef call, IRRef save, IRRef result, IRRef fp,
+    unsigned nargs, const IRRef *args)
+{
+  const SnapShot *snapshot = NULL;
+  IRRef r, v, loop = 0;
+  MSize s, i, ofs, nent, slots;
+  if (view->snap == NULL || view->snapmap == NULL) return 0;
+  for (s = 0; s < view->nsnap; s++) {
+    const SnapShot *sn = &view->snap[s];
+    ofs = snap_mapofs_acq(sn);
+    nent = snap_nent_acq(sn);
+    if (ofs > view->nsnapmap || nent > view->nsnapmap-ofs) return 0;
+    if (snap_ref_acq(sn) == save) {
+      if (snapshot || snap_count_acq(sn) != SNAPCOUNT_DONE) return 0;
+      snapshot = sn;
+    }
+  }
+  if (!snapshot) return 0;
+  ofs = snap_mapofs_acq(snapshot);
+  nent = snap_nent_acq(snapshot);
+  slots = snap_nslots_acq(snapshot);
+  for (r = REF_FIRST; r < nins; r++)
+    if (ir_load_acq(&view->ir[r]).o == IR_LOOP) loop = r;
+  for (v = REF_FIRST; v < call; v++) {
+    IRIns source = ir_load_acq(&view->ir[v]);
+    IRRef first = v < loop && loop < call ? loop : call+1u;
+    int needed, found = 0;
+    if (!irt_isgcv(source.t) || irt_type(source.t) == IRT_P32 ||
+        irt_type(source.t) == IRT_P64 || v == result) continue;
+    needed = ir_load_acq(&view->ir[fp]).op1 == v;
+    for (i = 0; i < nargs && !needed; i++) {
+      IRIns carrier = ir_load_acq(&view->ir[args[i]]);
+      unsigned remaining = 64;
+      int uses = arm64_postra_callxs_gc_dependency(view, nins, args[i],
+                                                  v, &remaining);
+      if (uses < 0) return 0;
+      needed = uses || (carrier.o == IR_FLOAD && carrier.op1 == v);
+    }
+    for (r = first; r < nins && !needed; r++) {
+      IRIns use = ir_load_acq(&view->ir[r]);
+      IRMode mode;
+      unsigned remaining = 64;
+      int left, right;
+      if (use.o >= IR__MAX) return 0;
+      mode = lj_ir_mode[use.o];
+      left = irm_op1(mode) == IRMref ? arm64_postra_callxs_gc_dependency(
+        view, nins, use.op1, v, &remaining) : 0;
+      right = irm_op2(mode) == IRMref ? arm64_postra_callxs_gc_dependency(
+        view, nins, use.op2, v, &remaining) : 0;
+      if (left < 0 || right < 0) return 0;
+      needed = left || right;
+    }
+    for (s = 0; s < view->nsnap && !needed; s++) {
+      const SnapShot *sn = &view->snap[s];
+      MSize base = snap_mapofs_acq(sn), count = snap_nent_acq(sn);
+      if (snap_ref_acq(sn) < first) continue;
+      for (i = 0; i < count && !needed; i++) {
+        unsigned remaining = 64;
+        int uses = arm64_postra_callxs_gc_dependency(view, nins,
+          snap_ref(snapentry_acq(&view->snapmap[base+i])), v, &remaining);
+        if (uses < 0) return 0;
+        needed = uses;
+      }
+    }
+    if (!needed) continue;
+    for (i = 0; i < nent && !found; i++) {
+      SnapEntry entry = snapentry_acq(&view->snapmap[ofs+i]);
+      found = snap_slot(entry) >= 1u+LJ_FR2 && snap_slot(entry) < slots &&
+              entry == SNAP(snap_slot(entry), 0, v);
+    }
+    for (r = v+1u; r < save && !found; r++) {
+      IRIns guard = ir_load_acq(&view->ir[r]);
+      IRRef k = guard.op1 == v ? guard.op2 : guard.op2 == v ? guard.op1 : 0;
+      if (guard.o == IR_EQ &&
+          guard.t.irt == (irt_type(source.t)|IRT_GUARD) &&
+          arm64_callxs_const_member(view->ir, view->nk, k)) {
+        IRIns constant = ir_load_acq(&view->ir[k]);
+        found = constant.o == IR_KGC &&
+                constant.t.irt == irt_type(source.t);
+      }
+    }
+    if (found) continue;
+    if (source.o != IR_SLOAD ||
+        source.t.irt != (irt_type(source.t)|IRT_GUARD) ||
+        source.op2 != IRSLOAD_TYPECHECK || source.op1 < 1u+LJ_FR2 ||
+        source.op1 >= slots) return 0;
+    /* An omitted original slot must remain unchanged by every staging save,
+    ** including those later in the loop. Cell stores are outside this graph. */
+    for (s = 0; s < view->nsnap; s++) {
+      const SnapShot *sn = &view->snap[s];
+      IRRef at = snap_ref_acq(sn);
+      MSize base = snap_mapofs_acq(sn), count = snap_nent_acq(sn);
+      if (at <= v || at >= nins ||
+          ir_load_acq(&view->ir[at]).o != IR_XSAVE) continue;
+      for (i = 0; i < count; i++) {
+        SnapEntry entry = snapentry_acq(&view->snapmap[base+i]);
+        if (snap_slot(entry) == source.op1 &&
+            entry != SNAP(source.op1, 0, v) &&
+            entry != SNAP(source.op1, SNAP_NORESTORE, v)) return 0;
+      }
+    }
+  }
+  return 1;
+}
+
 static int arm64_postra_callxs_live_across(const LJArm64PostRAView *view,
 		IRRef semantic_nins, IRRef call, MSize capacity)
 {
@@ -4006,7 +4280,8 @@ static int arm64_postra_table_read_snapshots(const LJArm64PostRAView *v,
   table_ref = tr.op1;
   key_ref = kr.op1;
   table_src = ir_load_acq(&v->ir[table_ref]);
-  if (table_src.o != IR_SLOAD || irt_type(table_src.t) != IRT_TAB ||
+  if ((table_src.o != IR_SLOAD && table_src.o != IR_VLOAD) ||
+      irt_type(table_src.t) != IRT_TAB ||
       !irt_isguard(table_src.t)) return 0;
 
   for (s = 0; s < v->nsnap; s++) {
@@ -4310,6 +4585,8 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    }
 	    if (result_is_u32 && bc_b(sourceins) != 1)
 	      result_slot = 1u+LJ_FR2+(MSize)bc_a(sourceins);
+	    if (!arm64_postra_callxs_gc_roots(view, semantic_nins, ref,
+	          active_xsave, boxref, fpref, actual_count, values)) return 0;
 	    active_call = ref;
 	    protocol = 4;
 	    nc++;
@@ -4389,13 +4666,16 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    r2 = ir_load_acq(&view->ir[current2]);
 	    table = ir_load_acq(&view->ir[r1.op1]);
 	    key = arm64_callxs_ref_type(view->ir, view->nk, r2.op1);
-	    if (r1.op1 < REF_FIRST || table.o != IR_SLOAD ||
+	    if (r1.op1 < REF_FIRST ||
+	        (table.o != IR_SLOAD && table.o != IR_VLOAD) ||
 	        irt_type(table.t) != IRT_TAB ||
-	        table.op2 != IRSLOAD_TYPECHECK || !irt_isguard(table.t) ||
+	        !irt_isguard(table.t) ||
+	        (table.o == IR_SLOAD && table.op2 != IRSLOAD_TYPECHECK) ||
 	        (key != IRT_INT && key != IRT_NUM && key != IRT_STR &&
 	         key != IRT_FALSE && key != IRT_TRUE && key != IRT_TAB &&
 	         key != IRT_FUNC && key != IRT_CDATA) ||
-	        irt_type(ir_load_acq(&view->ir[ref+2u]).t) != IRT_CDATA ||
+	        (irt_type(ir_load_acq(&view->ir[ref+2u]).t) != IRT_CDATA &&
+	         irt_type(ir_load_acq(&view->ir[ref+2u]).t) != IRT_TAB) ||
 	        !arm64_postra_table_read_snapshots(view, semantic_nins,
 	          ref+2u, current1, current2, read_floor))
 	      return 0;
@@ -4480,7 +4760,9 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    }
 	  } else if (ins.o == IR_VLOAD) {
 	    IRIns src;
-	    if (irt_type(ins.t) == IRT_CDATA) {
+	    if (irt_type(ins.t) == IRT_CDATA || irt_type(ins.t) == IRT_TAB) {
+	      /* This independent walk certifies the table result before
+	      ** any later helper can use it as a nested receiver. */
 	      if (protocol != 0 || ref != readvalue ||
 	          ins.op1 != outputroot || ins.op2 || !irt_isguard(ins.t))
 	        return 0;
