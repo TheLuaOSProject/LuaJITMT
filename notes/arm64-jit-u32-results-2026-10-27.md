@@ -103,9 +103,59 @@ unsafe allocation, accepts the preserved-register variant, and retains the
 independent collision negative. Original scalar and pointer fixtures both
 pass. Log: `/tmp/ljmt-u32-rename-green2.log`.
 
-The follow-up is limited to CALLXS allocated snapshot validation. Its final
-focused profiles, all four M7 scalar CALLXS profiles, ordinary ARM64 and x64
-compatibility results will be recorded separately from the initial full gates.
+The follow-up is limited to CALLXS allocated snapshot validation. Frozen
+checkpoint `34265a96b7cfb8613c44f17d8a140f7102a5dcb3` passes the focused
+contract and all four M7 scalar CALLXS profiles:
+
+| Final focused profile | Profile ID |
+| --- | --- |
+| ARM64 assertion | `7140cdbb5fbebc24064fa421351d8dd0b42a1c72daf16c5507033faca985d467` |
+| arm64e assertion/BTI | `f805429e2090f7f5e6eb336b357776f719766728dfd9169198c342b4aacd501a` |
+| ARM64 release | `e4c47306d366cb670c1ba0887e58c0878d20c3e69122eb96a36d561c4bf227e0` |
+| arm64e release/BTI | `f6bca9f8fc598b13e6b3a352e3c4b9eab5c3eb4833c00b36f224e5d80ef25355` |
+
+All four retain the 915 native observations, semantic 4/21 and allocated-view
+5/30 positive/rejection counts. M7 additionally validates the preceding scalar,
+float, variadic, pointer, boxed-I64/U64 and fixed-I64/U64 call paths, callback
+lifecycle, remote flush and C++ unwind under assertion/release and BTI profiles.
+
+Ordinary ARM64 assertion profile
+`0f9c9de334f4e7ccdc042c7b8bfc03c82ab702030bc2796ea87463c143c722f2`
+passes the 26 U32 smoke cases, bitops, rooted cells/upvalues, and both 509-case
+stock source and original-bytecode import corpora. Signed x64/Rosetta assertion
+profile `eb6eccf2fa21324ee1407cefc5681c5b50cbf3f4e08f26954a70a1acfb226e6f`
+also passes both 509-case corpora. Unchanged source is checked, and ordinary
+ARM64 assertion profile
+`bae8ed29b650033f2bb5399c483c6390118d272a74e9123fd000ad836a8c2385`
+is restored without selected test helpers or out-of-line atomic dependencies.
+These x64 checks are targeted compatibility evidence, not a full x64 test
+umbrella or native Intel performance claim.
+
+Logs: `/tmp/ljmt-u32-survival-matrix.log`,
+`/tmp/ljmt-u32-survival-four-profile.log`, the four
+`/tmp/ljmt-u32-survival-m7-<profile>.log` files, and corresponding ordinary,
+stock source/import and x64 source/import logs. The complete experimental and
+bootstrap gates above ran at `0e871779`; after the restrictive rename follow-up,
+the affected four-profile FFI suite and compatibility checks were rerun.
+
+## Main checkout
+
+The main `v2.1` checkout was fast-forwarded to `34265a96` and rebuilt with only
+`LUAJIT_MT_ARM64_BOOTSTRAP`, `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL` and
+`LUA_USE_ASSERT`. Main profile
+`4971e2cb933fefcc20dda437940140d6cf2693f469930bbbd75b3021c68bdba6`
+passes all 26 U32 smoke cases, bitops, rooted cells/upvalues and both 509-case
+source/import corpora. Code-sign verification passes; selected test-hook
+symbols and out-of-line atomic imports are absent. Log:
+`/tmp/ljmt-u32-survival-main.log`.
+
+Main artifacts built at `34265a96`:
+
+- Runtime SHA-256: `f24cab7c1065c4defc2fde0e911b779805511973a7e80c1406d97f88d0618960`.
+- Archive SHA-256: `438d6ba483f3a75660e683abb63678c1b7ca0377abe11ada4e9f4bd2c334ea8b`.
+- Build-signature SHA-256: `3973f2c27ad5dc90f4f3408893d2b77ffdeab43bb2786cf92447fe2f221e2ddd`.
+
+Subsequent validation-note edits leave the tested production source unchanged.
 
 ## Remaining boundaries
 
@@ -113,3 +163,9 @@ U32 CALLM producer/consumer chains remain closed: the existing CALLM source
 proof does not yet bind a converted U32 number as its producer. U32 enum results,
 general 64-bit arithmetic, aggregate/sret results, arbitrary trace shapes and
 full sustained multithreading parity remain outside this increment.
+
+The next bounded FFI extension is to carry the exact certified U32-to-NUM
+result as a CALLM producer. Both validators must retain that converted ref
+across leave and bind the consumer's final argument to it, preserving the
+existing bytecode adjacency, frame, variadic-tail and exact-root proofs. Raw
+U32 carriers and unrelated conversions must remain rejected.
