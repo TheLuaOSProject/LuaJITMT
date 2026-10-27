@@ -15,6 +15,12 @@ and reports that are no longer authoritative are retained in
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
+- In development: exact owned `int32_t`/`uint32_t` fixed arguments from
+  SLOAD and rooted table reads. Eight shapes pass 64 native runs, eight forced
+  exits and independent 8/92 semantic and 8/108 allocated admission checks.
+  Seven counterfactual checks verify the new safeguards. The complete frozen
+  validation matrix is pending; the latest validated checkpoint below remains
+  authoritative. See the [CData32 evidence](arm64-jit-ffi-cdata32-arguments-2026-10-27.md).
 - Latest fully validated JIT checkpoint: Lua INT values and INT-result CALLM
   producers feeding all eight fixed C integer kinds, including compact stack
   arguments, at `a029884d`. All 24 focused fixtures and the broader M7 FFI

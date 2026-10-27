@@ -232,6 +232,9 @@ return function(add)
       local int_args_so = build_shared_library(t,
         t:tmp("lj_t-arm64-jit-ffi-int-args.dylib"),
         "t-arm64-jit-ffi-int-args-lib.c")
+      local cdata32_args_so = build_shared_library(t,
+        t:tmp("lj_t-arm64-jit-ffi-cdata32-args.dylib"),
+        "t-arm64-jit-ffi-cdata32-args-lib.c")
       local callxs_funcptr_so = build_shared_library(t,
         t:tmp("lj_t-arm64-jit-callxs-funcptr.dylib"),
         "t-arm64-jit-callxs-funcptr-lib.c")
@@ -381,6 +384,15 @@ return function(add)
             build = false,
             cflags = flags,
             env = { LJ_M7_FFI_INT_ARGS_SO = int_args_so },
+            timeout = "60s"
+          })
+        end
+        for _, name in ipairs({ "ffi-cdata32-args", "ffi-cdata32-args-admission" }) do
+          build_and_run_c(t, t:tmp("lj_t-arm64-jit-" .. name),
+                          "t-arm64-jit-" .. name .. ".c", {
+            build = false,
+            cflags = flags,
+            env = { LJ_M7_FFI_CDATA32_ARGS_SO = cdata32_args_so },
             timeout = "60s"
           })
         end

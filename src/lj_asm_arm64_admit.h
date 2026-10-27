@@ -944,8 +944,8 @@ static int arm64_callxs_arglist(const IRIns *ir, IRRef nk, IRRef nins,
 ** The enclosing protocol walk proves each native entry, store, leave and
 ** result snapshot; this proof additionally orders the payload read after the
 ** producing ordinary CALL and restricts its uses to fixed ABI arguments. */
-static int arm64_callxs_i64_argument(const jit_State *J, const GCtrace *T,
-                                    IRRef value)
+static int arm64_callxs_cdata_integer_argument(const jit_State *J,
+                                              const GCtrace *T, IRRef value)
 {
   const IRIns *ir = T->ir;
   IRIns load = ir_load_acq(&ir[value]), src;
@@ -953,9 +953,11 @@ static int arm64_callxs_i64_argument(const jit_State *J, const GCtrace *T,
   LJArm64ABIArg scalar;
   CTypeID source_id = 0, terminal;
   IRRef ref, source = load.op1;
-  unsigned uses = 0;
-  if (load.o != IR_FLOAD || load.op2 != IRFL_CDATA_INT64 ||
-      (load.t.irt != IRT_I64 && load.t.irt != IRT_U64) ||
+  unsigned uses = 0, width = load.op2 == IRFL_CDATA_INT64 ? 8u : 4u;
+  if (load.o != IR_FLOAD ||
+      (load.op2 != IRFL_CDATA_INT64 && load.op2 != IRFL_CDATA_INT) ||
+      (width == 8 ? (load.t.irt != IRT_I64 && load.t.irt != IRT_U64) :
+                    (load.t.irt != IRT_INT && load.t.irt != IRT_U32)) ||
       source < REF_FIRST || source >= value) return 0;
   src = ir_load_acq(&ir[source]);
   if (irt_type(src.t) != IRT_CDATA || !irt_isguard(src.t)) return 0;
@@ -982,7 +984,7 @@ static int arm64_callxs_i64_argument(const jit_State *J, const GCtrace *T,
   } else if (src.o == IR_CNEW) {
     IRRef producer, anchor = 0, store = 0, leave = 0, closed = 0;
     BCIns sourceins;
-    if (!arm64_callxs_box_call(cts, ir, T->nk, T->nins, source,
+    if (width != 8 || !arm64_callxs_box_call(cts, ir, T->nk, T->nins, source,
           &producer, &source_id) || producer <= source || producer >= value)
       return 0;
     for (ref = source+1u; ref < value; ref++) {
@@ -1008,8 +1010,22 @@ static int arm64_callxs_i64_argument(const jit_State *J, const GCtrace *T,
   memset(&scalar, 0, sizeof(scalar));
   if (!source_id || !lj_ccall_arm64_scalar_class(cts, source_id, 0,
         &scalar, &terminal) || scalar.kind != LJ_ARM64_ABI_KIND_INTEGER ||
-      scalar.cls != LJ_ARM64_ABI_GPR || scalar.size != 8 ||
-      load.t.irt != (scalar.is_unsigned ? IRT_U64 : IRT_I64)) return 0;
+      scalar.cls != LJ_ARM64_ABI_GPR || scalar.size != width ||
+      load.t.irt != (width == 8 ? (scalar.is_unsigned ? IRT_U64 : IRT_I64) :
+                                (scalar.is_unsigned ? IRT_U32 : IRT_INT)))
+    return 0;
+  /* The CData owns the Lua value. Even a signed 32-bit payload must not
+  ** replace it or another Lua integer in a restorable snapshot. */
+  if (width == 4) {
+    MSize s, i;
+    if (T->snap == NULL || T->snapmap == NULL) return 0;
+    for (s = 0; s < T->nsnap; s++) {
+      MSize ofs = snap_mapofs_acq(&T->snap[s]), n = snap_nent_acq(&T->snap[s]);
+      if (ofs > T->nsnapmap || n > T->nsnapmap-ofs) return 0;
+      for (i = 0; i < n; i++)
+        if (snap_ref(snapentry_acq(&T->snapmap[ofs+i])) == value) return 0;
+    }
+  }
   for (ref = value+1u; ref < T->nins; ref++) {
     IRIns use = ir_load_acq(&ir[ref]);
     IRMode mode;
@@ -1027,7 +1043,7 @@ static int arm64_callxs_i64_argument(const jit_State *J, const GCtrace *T,
       for (i = 0; i < n; i++) if (args[i] == value) {
         if (!arm64_callxs_signature_for_call(cts, ir, T->nk, T->nins,
               ref, &abi, NULL) || i >= abi.nargs ||
-            abi.arg[i].id != terminal || abi.arg[i].size != 8 ||
+            abi.arg[i].id != terminal || abi.arg[i].size != width ||
             abi.arg[i].kind != LJ_ARM64_ABI_KIND_INTEGER ||
             abi.arg[i].is_unsigned != scalar.is_unsigned) return 0;
         uses++;
@@ -1241,6 +1257,9 @@ static int arm64_callxs_source_value(const GCtrace *T, IRRef xsave,
   if (!tail && st == IRT_CDATA && dst.o == IR_FLOAD &&
       dst.op1 == source && dst.op2 == IRFL_CDATA_INT64 &&
       (dst.t.irt == IRT_I64 || dst.t.irt == IRT_U64)) return 1;
+  if (!tail && st == IRT_CDATA && dst.o == IR_FLOAD &&
+      dst.op1 == source && dst.op2 == IRFL_CDATA_INT &&
+      (dst.t.irt == IRT_INT || dst.t.irt == IRT_U32)) return 1;
   if (!tail && st == IRT_CDATA && dst.o == IR_FLOAD &&
       dst.op1 == source && dst.op2 == IRFL_CDATA_PTR &&
       dst.t.irt == IRT_P64) return 1;
@@ -2058,6 +2077,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
           for (i = 0; i < abi.nargs; i++) {
             IRIns arg = ir_load_acq(&T->ir[values[i]]);
             if ((arg.o == IR_FLOAD && (arg.op2 == IRFL_CDATA_INT64 ||
+                                      arg.op2 == IRFL_CDATA_INT ||
                                       arg.op2 == IRFL_CDATA_PTR)) ||
                 arm64_callxs_numarg_source(T, values[i], 0) ||
                 arm64_callxs_intarg_source(T, values[i]) ||
@@ -2155,8 +2175,9 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
       break;
     }
     case IR_FLOAD:
-      if (ins.op2 == IRFL_CDATA_INT64) {
-        if (state != CALLXS_CLOSED || !arm64_callxs_i64_argument(J, T, ref))
+      if (ins.op2 == IRFL_CDATA_INT64 || ins.op2 == IRFL_CDATA_INT) {
+        if (state != CALLXS_CLOSED ||
+            !arm64_callxs_cdata_integer_argument(J, T, ref))
           return 0;
       } else if (ins.op2 == IRFL_CDATA_PTR) {
 	if (ins.op1 < REF_FIRST || ins.op1 >= ref ||
@@ -4192,20 +4213,22 @@ static int arm64_postra_num_constant_is_int(const IRIns *ir, IRRef nk,
 	return ir_load_acq(&ir[numref+1u]).tv.u64 == tv.u64;
 }
 
-/* Reconstruct owned I64 argument provenance independently after allocation.
+/* Reconstruct owned integer argument provenance independently after allocation.
 ** A register/spill carrying payload bits is not the CData root: the caller
 ** separately binds the exact CData source in the pre-native XSAVE. */
-static int arm64_postra_i64_argument(const LJArm64PostRAView *view,
-                                    IRRef nins, IRRef ref)
+static int arm64_postra_cdata_integer_argument(const LJArm64PostRAView *view,
+                                              IRRef nins, IRRef ref)
 {
   const IRIns *ir = view->ir;
   IRIns payload = ir_load_acq(&ir[ref]), box;
   IRRef boxref = payload.op1, r;
   CTypeID id = 0, rawid;
   LJArm64ABIArg scalar;
-  unsigned consumers = 0;
-  if (payload.o != IR_FLOAD || payload.op2 != IRFL_CDATA_INT64 ||
-      (payload.t.irt != IRT_I64 && payload.t.irt != IRT_U64) ||
+  unsigned consumers = 0, width = payload.op2 == IRFL_CDATA_INT64 ? 8u : 4u;
+  if (payload.o != IR_FLOAD ||
+      (payload.op2 != IRFL_CDATA_INT64 && payload.op2 != IRFL_CDATA_INT) ||
+      (width == 8 ? (payload.t.irt != IRT_I64 && payload.t.irt != IRT_U64) :
+                    (payload.t.irt != IRT_INT && payload.t.irt != IRT_U32)) ||
       boxref < REF_FIRST || boxref >= ref) return 0;
   box = ir_load_acq(&ir[boxref]);
   if (irt_type(box.t) != IRT_CDATA || !irt_isguard(box.t)) return 0;
@@ -4235,7 +4258,7 @@ static int arm64_postra_i64_argument(const LJArm64PostRAView *view,
     IRRef stored = 0, producer = 0, anchor = 0, left = 0, done = 0;
     int32_t k;
     BCIns sourceins;
-    if (box.op2 != REF_NIL ||
+    if (width != 8 || box.op2 != REF_NIL ||
         !arm64_callxs_kint_value(ir, view->nk, box.op1, &k) || k <= 0)
       return 0;
     id = (CTypeID)k;
@@ -4280,8 +4303,21 @@ static int arm64_postra_i64_argument(const LJArm64PostRAView *view,
   memset(&scalar, 0, sizeof(scalar));
   if (!id || !lj_ccall_arm64_scalar_class(view->cts, id, 0, &scalar, &rawid) ||
       scalar.cls != LJ_ARM64_ABI_GPR || scalar.kind != LJ_ARM64_ABI_KIND_INTEGER ||
-      scalar.size != 8 ||
-      payload.t.irt != (scalar.is_unsigned ? IRT_U64 : IRT_I64)) return 0;
+      scalar.size != width ||
+      payload.t.irt != (width == 8 ? (scalar.is_unsigned ? IRT_U64 : IRT_I64) :
+                                   (scalar.is_unsigned ? IRT_U32 : IRT_INT)))
+    return 0;
+  if (width == 4) {
+    MSize s, i;
+    if (view->snap == NULL || view->snapmap == NULL) return 0;
+    for (s = 0; s < view->nsnap; s++) {
+      MSize ofs = snap_mapofs_acq(&view->snap[s]);
+      MSize count = snap_nent_acq(&view->snap[s]);
+      if (ofs > view->nsnapmap || count > view->nsnapmap-ofs) return 0;
+      for (i = 0; i < count; i++)
+        if (snap_ref(snapentry_acq(&view->snapmap[ofs+i])) == ref) return 0;
+    }
+  }
   for (r = ref+1u; r < nins; r++) {
     IRIns ins = ir_load_acq(&ir[r]);
     IRMode mode;
@@ -4299,7 +4335,7 @@ static int arm64_postra_i64_argument(const LJArm64PostRAView *view,
         LJArm64ABISignature signature;
         if (!arm64_callxs_signature_for_call(view->cts, ir, view->nk, nins,
               r, &signature, NULL) || a >= signature.nargs ||
-            signature.arg[a].id != rawid || signature.arg[a].size != 8 ||
+            signature.arg[a].id != rawid || signature.arg[a].size != width ||
             signature.arg[a].kind != LJ_ARM64_ABI_KIND_INTEGER ||
             signature.arg[a].is_unsigned != scalar.is_unsigned) return 0;
         consumers++;
@@ -4518,6 +4554,9 @@ static int arm64_postra_source_value_matches(const IRIns *ir, IRRef nk,
 	if (source_type == IRT_CDATA && c.o == IR_FLOAD && c.op1 == source &&
 	    c.op2 == IRFL_CDATA_INT64 &&
 	    (c.t.irt == IRT_I64 || c.t.irt == IRT_U64)) return 1;
+	if (source_type == IRT_CDATA && c.o == IR_FLOAD && c.op1 == source &&
+	    c.op2 == IRFL_CDATA_INT &&
+	    (c.t.irt == IRT_INT || c.t.irt == IRT_U32)) return 1;
 	if (source_type == IRT_CDATA && c.o == IR_FLOAD && c.op1 == source &&
 	    c.op2 == IRFL_CDATA_PTR && c.t.irt == IRT_P64) return 1;
 	if (source_type == IRT_INT && irt_type(c.t) == IRT_INT &&
@@ -5371,9 +5410,10 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    if (ins.op1 >= ref || !arm64_callxs_ref_valid(view->ir, view->nk,
 		semantic_nins, ref, ins.op1))
 	      return 0;
-	    if (ins.op2 == IRFL_CDATA_INT64) {
+	    if (ins.op2 == IRFL_CDATA_INT64 || ins.op2 == IRFL_CDATA_INT) {
 	      if (protocol != 0 ||
-	          !arm64_postra_i64_argument(view, semantic_nins, ref)) return 0;
+	          !arm64_postra_cdata_integer_argument(view, semantic_nins, ref))
+	        return 0;
 	    } else if (ins.op2 == IRFL_CDATA_PTR) {
 	      IRIns src = ir_load_acq(&view->ir[ins.op1]);
 	      if ((src.o != IR_SLOAD && src.o != IR_VLOAD) ||
@@ -5708,6 +5748,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    for (i = 0; i < abi.nargs; i++) {
 	      IRIns arg = ir_load_acq(&view->ir[values[i]]);
 	      if ((arg.o == IR_FLOAD && (arg.op2 == IRFL_CDATA_INT64 ||
+	                               arg.op2 == IRFL_CDATA_INT ||
 	                               arg.op2 == IRFL_CDATA_PTR)) ||
 	          arm64_postra_numarg_source(view->ir, view->nk, semantic_nins,
 	            values[i], 0) ||
