@@ -78,9 +78,57 @@ interpreter effects. Signature and atomic-import checks also pass. Evidence
 is `/tmp/ljmt-cdata32-ordinary-development.log`. Publication is separate from
 the C fixture's native-execution witness.
 
-The complete frozen four-profile, experimental, bootstrap and stock-
-compatibility matrix is still pending. The main checkout
-remains on the fully validated [INT-argument checkpoint](arm64-jit-ffi-int-arguments-2026-10-27.md).
+The complete matrix froze source at
+`dfd8db52f9f68b480ce003a30e465c058e980227` and passed:
+
+- All 26 focused fixtures in ARM64/arm64e assertion/release profiles. Each
+  new runtime fixture requires 64 native runs and eight forced exits; each
+  new admission fixture reports 8/92 semantic and 8/108 allocated cases.
+- The complete experimental gate, including all four broader M7 FFI profiles.
+  All eight runs of the new runtime fixture across the focused and M7
+  matrices completed with zero cold retries.
+- The complete bootstrap gate, including interpreter, GC2, TG, callback,
+  coroutine/dead-resume and stock checks.
+- An ordinary ARM64 assertion build without test hooks: 698 observations
+  comprising 598 preceding cases, 40 new exact CData32 cases and 60 enum
+  refusals. Boundary checks, bitops, rooted cells/upvalues and both 509-case
+  stock source/import corpora also pass. Ordinary publication evidence remains
+  distinct from the C fixtures' native witnesses.
+- A signed x64 assertion build passing both 509-case stock corpora.
+- Restoration of the ordinary ARM64 assertion profile, with repeated numeric,
+  INT, numeric CALLM and CData32 observations, valid signing, no test-helper
+  exports and no undefined atomic-runtime imports. The source stayed frozen.
+
+The focused profile IDs, in ARM64 assertion, arm64e assertion, ARM64 release
+and arm64e release order, are:
+
+```text
+fbeaaddcbd9bf695217e5c742f159a5e0ba6c88628a4697c9b05a913390c7a49
+1a9a3ee03602977c61168791f6ad306d6a6bc52dfff68a90a48f306d749116dc
+22bc113244d2ecbab58ef5ac133ec4bcd56501dce4ee3fbb4cc74c178a8dbf58
+581704a313d74dea0ebb822dbe326d8ec4d70d6359242c1a2765648da086b449
+```
+
+Evidence is in `/tmp/ljmt-cdata32-matrix.log`,
+`/tmp/ljmt-cdata32-four-profile.log`, `/tmp/ljmt-cdata32-experimental.log`,
+`/tmp/ljmt-cdata32-bootstrap.log` and the matching ordinary/stock logs.
+The watchdog sampled the legacy-bytecode-cell fixture once in each complete
+gate; both completed successfully without intervention.
+
+The final ordinary worktree profile is
+`2f55a7d7679b8d533d4e7decf3c321fd43283c77b10bb796fb32e5b25c5da094`.
+Runtime SHA-256 is
+`14cc6609f61a086b9314e8f5cf7f08951e6666f3c785b29b0f91b00be012e854`.
+The clean main checkout was fast-forwarded to the same source. Its independent
+ordinary rebuild passes all 698 observations, boundary checks, bitops, rooted
+cells/upvalues and both 509-case stock corpora, plus signing and helper/import
+checks. Main profile is
+`8b24b318abba028c261caeb105ef637d01ac6d58de8a0bdb7bd33f4246c43d3c`;
+its runtime hash matches the worktree above. Evidence is
+`/tmp/ljmt-cdata32-main.log`.
+
+The preceding complete result is documented in the
+[INT-argument evidence](arm64-jit-ffi-int-arguments-2026-10-27.md).
 
 This extends exact fixed 32-bit CData arguments only. It does not certify enum
 or general CData conversions, arbitrary table PHIs, aggregate calls, general

@@ -15,13 +15,17 @@ and reports that are no longer authoritative are retained in
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
-- In development: exact owned `int32_t`/`uint32_t` fixed arguments from
-  SLOAD and rooted table reads. Eight shapes pass 64 native runs, eight forced
-  exits and independent 8/92 semantic and 8/108 allocated admission checks.
-  Seven counterfactual checks verify the new safeguards. The complete frozen
-  validation matrix is pending; the latest validated checkpoint below remains
-  authoritative. See the [CData32 evidence](arm64-jit-ffi-cdata32-arguments-2026-10-27.md).
-- Latest fully validated JIT checkpoint: Lua INT values and INT-result CALLM
+- Latest fully validated JIT checkpoint: exact owned `int32_t`/`uint32_t`
+  fixed arguments from SLOAD and rooted table reads, at `dfd8db52`.
+  All 26 focused fixtures and the broader M7 FFI suite pass four ARM64/arm64e
+  assertion/release profiles. Eight new shapes require 64 native runs, eight
+  forced exits and independent 8/92 semantic and 8/108 allocated admission
+  checks per profile. Seven counterfactuals verify the new safeguards.
+  Both complete gates and both 509-case stock corpora on ARM64 and signed x64
+  pass. The independent ordinary main rebuild also passes both stock corpora
+  and all 698 observations. See the
+  [CData32 evidence](arm64-jit-ffi-cdata32-arguments-2026-10-27.md).
+- Preceding JIT checkpoint: Lua INT values and INT-result CALLM
   producers feeding all eight fixed C integer kinds, including compact stack
   arguments, at `a029884d`. All 24 focused fixtures and the broader M7 FFI
   suite pass four ARM64/arm64e assertion/release profiles, with 48 new shapes,
@@ -79,13 +83,16 @@ and reports that are no longer authoritative are retained in
   semantic/post-RA views. Each profile records 344 native observations and
   independent 4-positive/26-negative admission checks.
   See [`arm64-jit-i64-arguments-2026-10-26.md`](arm64-jit-i64-arguments-2026-10-26.md).
-- Latest complete umbrella validation: the Lua INT argument and INT-result
-  CALLM checkpoint on 2026-10-27, frozen at `a029884d`.
+- Latest complete umbrella validation: the owned 32-bit CData argument
+  checkpoint on 2026-10-27, frozen at `dfd8db52`.
   The complete experimental and bootstrap gates passed, including all four
   M7 scalar CALLXS profiles. ARM64 and signed x86-64 each passed both 509-case
-  stock source/import corpora. The ordinary main ARM64 rebuild passes both
-  corpora and 598 INT-argument/numeric-CALLM/numeric-argument/held-result/scalar-table/
-  nested-read/I64-argument/callable smoke runs without test helpers. See the
+  stock source/import corpora. The ordinary main ARM64 rebuild passes both corpora
+  and 698 observations: 598 preceding INT/numeric-CALLM/numeric-argument/
+  held-result/scalar-table/nested-read/I64-argument/callable cases, 40 new
+  CData32 cases and 60 enum refusals. See the
+  [CData32 evidence](arm64-jit-ffi-cdata32-arguments-2026-10-27.md).
+  The preceding INT argument checkpoint is in the
   [INT argument evidence](arm64-jit-ffi-int-arguments-2026-10-27.md).
   The preceding numeric CALLM checkpoint is in the
   [numeric CALLM evidence](arm64-jit-callm-numeric-2026-10-27.md).
@@ -137,11 +144,11 @@ and reports that are no longer authoritative are retained in
   publication/entry/retirement, native numeric adaptation, and M7 scalar CALLXS
   on ARM64 and arm64e/BTI with both assertion and release runtimes.
 - Native ARM64 source and original-v2 import stock corpora each pass all 509
-  cases at the `51c92374` checkpoint and its ordinary main rebuild.
+  cases at the `dfd8db52` checkpoint and its ordinary main rebuild.
 - The complete bootstrap gate passes, including 387 applicable stock cases,
   threaded tmpbuf, Darwin native roots/GC2, ARM64/arm64e callbacks,
   variadic/aggregate interpreter FFI and x86-64 errno unwind.
-- The signed x86-64/Rosetta runtime at `51c92374` passed both 509-case corpora.
+- The signed x86-64/Rosetta runtime at `dfd8db52` passed both 509-case corpora.
   The combined gates also ran x86-64 callback-result lifetime and errno unwind.
   Shared rooted-store, raw nil-deletion, upvalue/cell and segment-map race
   fixtures were validated at the earlier local-cell checkpoint. Earlier
@@ -392,9 +399,17 @@ available.
   [numeric CALLM evidence](arm64-jit-callm-numeric-2026-10-27.md).
 - Lua INT arguments and direct INT-result CALLM producers now have independent
   conversion/source/snapshot proofs for all eight fixed integer kinds. The
-  current focused tests include exact C arguments, native witnesses and forced
-  producer/consumer exits; full validation is pending. See the
+  tests include exact C arguments, native witnesses and forced producer/consumer
+  exits. Four focused/full-M7 profiles, both complete gates and ARM64/x64 stock
+  compatibility pass. See the
   [INT argument evidence](arm64-jit-ffi-int-arguments-2026-10-27.md).
+- Exact owned `int32_t`/`uint32_t` CData can feed same-type fixed arguments
+  from guarded SLOAD or rooted table VLOAD, including compact stack arguments.
+  Independent source/type/XSAVE proofs exclude payload bits from Lua snapshots
+  and unrelated operations. Native boundary/no-replay tests, both independent
+  mutation suites and seven counterfactuals pass, with the full matrix above.
+  Enum and general CData conversions remain closed. See the
+  [CData32 evidence](arm64-jit-ffi-cdata32-arguments-2026-10-27.md).
 - Variadic scalar calls validate the named prefix, exact CARG separator and
   promoted number/boolean/string/nil suffix against the original Lua snapshot.
   Independent post-RA checks include eight-byte unnamed stack slots and spill
