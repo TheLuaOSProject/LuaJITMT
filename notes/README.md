@@ -15,10 +15,12 @@ and reports that are no longer authoritative are retained in
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
-- Latest JIT increment: scalar CALLXS results held across a later CALLXS.
-  The focused ARM64 assertion contract passes all 18 fixtures, including
-  four result classes, eight forced post-call exits and 15 malformed
-  allocation rejections. Frozen-checkpoint validation follows in the
+- Latest JIT checkpoint: scalar CALLXS results held across a later CALLXS
+  at `9f5ee143`. All 18 focused fixtures and the broader M7 FFI suite pass
+  four ARM64/arm64e assertion/release profiles, including four result classes,
+  eight forced post-call exits and 15 malformed allocation rejections.
+  ARM64 and signed x64 pass both 509-case stock corpora; the ordinary main
+  rebuild passes 49 smoke runs, boundary checks and both corpora. See the
   [held-result evidence](arm64-jit-held-call-results-2026-10-27.md).
 - Preceding JIT checkpoint: scalar table arguments feeding CALLXS at `df3269d1`.
   All 16 focused fixtures pass in four ARM64/arm64e assertion/release profiles,
@@ -40,13 +42,16 @@ and reports that are no longer authoritative are retained in
   semantic/post-RA views. Each profile records 344 native observations and
   independent 4-positive/26-negative admission checks.
   See [`arm64-jit-i64-arguments-2026-10-26.md`](arm64-jit-i64-arguments-2026-10-26.md).
-- Latest combined runtime validation: the fixed I64/U64 argument checkpoint
-  on 2026-10-26, frozen at `f0c4f574`.
+- Latest complete umbrella validation: the scalar-table argument checkpoint
+  on 2026-10-27, frozen at `df3269d1`.
   The complete experimental and bootstrap gates passed, including all four
   M7 scalar CALLXS profiles. ARM64 and signed x86-64 each passed both 509-case
   stock source/import corpora. The ordinary main ARM64 rebuild passes both
-  corpora, six fixed-argument and nine boxed-result smoke cases without test
-  helpers. See the [fixed-argument evidence](arm64-jit-i64-arguments-2026-10-26.md).
+  corpora and all 34 scalar-table/nested-read/I64-argument/callable smoke runs
+  without test helpers. See the
+  [scalar-argument evidence](arm64-jit-table-scalar-arguments-2026-10-27.md).
+  Earlier fixed I64/U64 argument validation is in the
+  [fixed-argument evidence](arm64-jit-i64-arguments-2026-10-26.md).
   The preceding boxed-result and shared constructor/recovery checkpoint is
   documented in the [boxed-result evidence](arm64-jit-boxed64-results-2026-10-26.md)
   and [eight-profile recovery matrix](gc2-constructor-recovery-2026-10-26.md).
@@ -89,11 +94,11 @@ and reports that are no longer authoritative are retained in
   publication/entry/retirement, native numeric adaptation, and M7 scalar CALLXS
   on ARM64 and arm64e/BTI with both assertion and release runtimes.
 - Native ARM64 source and original-v2 import stock corpora each pass all 509
-  cases at the combined `f0c4f574` checkpoint and its ordinary main rebuild.
+  cases at the `9f5ee143` checkpoint and its ordinary main rebuild.
 - The complete bootstrap gate passes, including 387 applicable stock cases,
   threaded tmpbuf, Darwin native roots/GC2, ARM64/arm64e callbacks,
   variadic/aggregate interpreter FFI and x86-64 errno unwind.
-- The signed x86-64/Rosetta runtime at `f0c4f574` passed both 509-case corpora.
+- The signed x86-64/Rosetta runtime at `9f5ee143` passed both 509-case corpora.
   The combined gates also ran x86-64 callback-result lifetime and errno unwind.
   Shared rooted-store, raw nil-deletion, upvalue/cell and segment-map race
   fixtures were validated at the earlier local-cell checkpoint. Earlier

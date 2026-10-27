@@ -65,13 +65,66 @@ expected `mt_active` to clear after join; it was corrected to respect the
 existing sticky threading latch. No production behavior changed for that
 fixture correction.
 
-## Validation scope and remaining work
+## Frozen checkpoint validation
 
-The frozen-checkpoint matrix and main-checkout rebuild are recorded below
-after completion. The preceding scalar-table checkpoint passed both complete
-experimental/bootstrap umbrellas. This allocation-only increment refreshes
-all four focused and M7 profiles, ordinary runtime cases, and ARM64/x64 stock
-source and import compatibility; it does not claim a new full umbrella run.
+Source checkpoint `9f5ee1430a96324ed04909968b7da957e5807108` passes all 18
+focused fixtures in all four profiles. Each profile checks the four authentic
+semantic/allocated positives, 15 allocated negatives and all eight forced
+post-call exits described above, alongside the existing table-call coverage.
+
+| Profile | Profile ID |
+| --- | --- |
+| ARM64 assertion | `92930edf2e82d644d8b91f1c624d1b5123ca3a82795985dbaa5d43272b88e437` |
+| arm64e/BTI assertion | `85aa15b7992246cae3c8b98a4015ed45a5c33bfef612a3a031cc0e3fc497adc9` |
+| ARM64 release | `a6201fdf7cd71c749282ccb2d84bd3f3159470181fc24b23075f5d837dbe7707` |
+| arm64e/BTI release | `038a2ca80fa9388d7b4546fce29b3413d809b1164a43f8d687b98a464a55b7d8` |
+
+The complete M7 scalar CALLXS suite also passes all four profiles, including
+the new fixtures, existing boxed results, I64 arguments, variadics,
+callbacks, unwind, native-frame lifetime and remote-flush cases. Logs:
+`/tmp/ljmt-held-results-four-profile.log` and
+`/tmp/ljmt-held-results-m7-{arm64,arm64e,arm64-release,arm64e-release}.log`.
+
+Ordinary ARM64 assertion profile
+`d4957573449c85e9a187a6f85423915f7137e6c1e380b083275e644a162f35c3`
+passes 15 held-result runs with exact counts/errno and same-trace reuse.
+Eleven scalar-table, five nested-read, nine I64-argument and nine callable
+runs also pass, as do type-change retry/reuse, bit operations and rooted
+cells/upvalues. Both stock source and original-bytecode import corpora pass
+509 cases. Signed x64/Rosetta assertion profile
+`21b956255114d509f1db2348a66e802e1b518def2a4a24a63158f68fe5e742c3`
+passes both 509-case corpora too. This is bounded compatibility evidence,
+not a complete x64 umbrella or a native Intel performance measurement.
+
+The matrix verifies unchanged source and restores ordinary ARM64 assertion
+profile `92c6da033c2be52e417490a0726626ade430c4ddd75e895344e930a741300e8b`.
+That runtime repeats all 15 held-result runs. The final boundary probe also
+requires the original table-held and accumulated variants to compile while
+fractional NUM-to-C-int narrowing remains correctly interpreted and closed.
+Code-sign checks pass; selected test helpers and out-of-line atomic imports
+are absent. Logs: `/tmp/ljmt-held-results-matrix.log`, matching
+ordinary/stock/x64 logs, and `/tmp/ljmt-held-results-boundaries.log`.
+
+The preceding scalar-table checkpoint passed both complete experimental and
+bootstrap umbrellas. This allocation-only increment refreshes all four
+focused and M7 profiles, ordinary cases, and ARM64/x64 stock compatibility;
+it does not claim a new full umbrella run.
+
+## Main checkout
+
+Main `v2.1` was fast-forwarded to the source checkpoint and rebuilt with
+ordinary bootstrap/experimental/assertion flags and no test hooks. Profile
+`10739c7e7c6261dfea504cc5d499e539ee40495f176c3336ce96088c79ce0de5`
+passes all 49 smoke runs above, the held/narrowing boundary probe, bit
+operations, rooted cells/upvalues, and both 509-case stock corpora.
+Code-sign and atomic/test-helper symbol checks pass.
+Log: `/tmp/ljmt-held-results-main.log`.
+
+- Runtime SHA-256: `572e3ec2d7465aa91791a14b97fa456aaf33a4f7bc29e9a7d5709466319b774e`
+- Archive SHA-256: `932df0bbbb18aac9bbc7c1cc44bc0ea64e429becfe76c034e356a0cc79076bc6`
+- Build-signature SHA-256: `ab26e7c5102e9796be190e8d0c24d62b806ea455cbe4e457973c75b047b9dfba`
+
+## Remaining work
 
 The port remains experimental and incomplete. Fractional NUM-to-C-int
 narrowing, general table PHIs, arbitrary Lua calls/metamethod effects and
