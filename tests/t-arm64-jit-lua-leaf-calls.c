@@ -1,0 +1,302 @@
+/* Native pure Lua leaves, exact caller guard exits, and independent admission.
+** Mutations use private copies of both prototypes, IR and snapshots. */
+#include <stdio.h>
+#if defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__)) && \
+    defined(LUAJIT_MT_ARM64_BOOTSTRAP) && \
+    defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL) && defined(LJ_TRACE_TEST_HELPERS)
+#include <assert.h>
+#include <stdlib.h>
+#include <string.h>
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+#include "lj_asm.h"
+#include "lj_bc.h"
+#include "lj_gc2.h"
+#include "lj_jit.h"
+#include "lj_obj.h"
+#include "lj_snap.h"
+#include "lj_target.h"
+#include "lj_tg.h"
+#include "lj_trace.h"
+#include "lib/lua_fixture_helpers.h"
+
+static unsigned native_runs, semantic_bad, postra_bad, cold_retries;
+
+static GCfunc *global_function(lua_State *L, const char *name)
+{
+  GCfunc *fn;
+  lua_getglobal(L, name);
+  assert(tvisfunc(L->top-1)); fn = funcV(L->top-1);
+  assert(isluafunc(fn)); lua_pop(L, 1);
+  return fn;
+}
+
+static lua_Number invoke(lua_State *L, const char *runner,
+                         const char *leaf, int n)
+{
+  lua_Number result;
+  void *cframe = L->cframe;
+  lua_getglobal(L, runner); lua_getglobal(L, leaf); lua_pushinteger(L, n);
+  ljt_lua_pcall(L, 2, 1, "Lua leaf call");
+  assert(lua_isnumber(L, -1)); result = lua_tonumber(L, -1); lua_pop(L, 1);
+  assert(L->cframe == cframe && lj_tg_load_jit_base(L2TG(L)) == NULL &&
+         !lj_tg_in_native_acq(L2TG(L)));
+  return result;
+}
+
+static GCtrace *root_trace(lua_State *L)
+{
+  GCproto *pt = funcproto(global_function(L, "leaf_run"));
+  BCIns *bc = proto_bc(pt);
+  for (MSize i = 1; i < pt->sizebc; i++) {
+    BCIns ins = (BCIns)la_load32_acq((uint32_t *)&bc[i]);
+    if (bc_op(ins) == BC_JFORL) {
+      GCtrace *T = traceref_safe(L2J(L), bc_d(ins));
+      if (T && trace_runnable_acq(T, bc_d(ins)) && !T->root &&
+          trace_startpt_acq(T) == pt && T->linktype == LJ_TRLINK_LOOP &&
+          T->link == T->traceno) return T;
+    }
+  }
+  return NULL;
+}
+
+static SnapNo identity_exit(const GCtrace *T, IRRef *guardp)
+{
+  for (IRRef r = REF_FIRST; r < T->nins; r++) {
+    IRIns p = ir_load_acq(&T->ir[r]);
+    if (p.o == IR_EQ && p.t.irt == (IRT_FUNC|IRT_GUARD) &&
+        irref_isk(p.op2) && isluafunc(ir_kfunc(&T->ir[p.op2]))) {
+      for (SnapNo s = 0; s < T->nsnap; s++)
+        if (T->snap[s].ref == r) {
+          if (guardp) *guardp = r;
+          return s;
+        }
+    }
+  }
+  assert(0 && "exact Lua identity snapshot missing"); return 0;
+}
+
+static void native_call(lua_State *L, GCtrace *T, const char *leaf,
+                        const char *oracle, int n, int changed)
+{
+  lua_Number expected = invoke(L, "leaf_oracle", oracle, n);
+  lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+  assert(invoke(L, "leaf_run", leaf, n) == expected);
+  assert(root_trace(L) == T && trace_runnable_acq(T, T->traceno));
+  assert(lj_trace_test_root_entry_successes() > 0 &&
+         lj_trace_test_exit_calls() > 0 &&
+         lj_trace_test_first_exit_parent() == T->traceno);
+  if (changed) assert(lj_trace_test_first_exitno() == identity_exit(T, NULL));
+  assert(!trace_nchild_acq(T) && !trace_nextside_acq(T));
+  native_runs++;
+}
+
+static GCproto *copy_proto(const GCproto *pt)
+{
+  size_t bytes = sizeof(GCproto) + pt->sizebc * sizeof(BCIns);
+  GCproto *copy = malloc(bytes);
+  assert(copy); memcpy(copy, pt, bytes); return copy;
+}
+
+typedef struct Fixture {
+  GCtrace *live, copy;
+  GCproto *pt, *leafpt;
+  GCfunc *leaf;
+  IRIns *ir;
+  SnapShot *snap;
+  SnapEntry *map;
+  jit_State *J;
+  LJArm64PostRAView view;
+  IRRef n, guard, kfunc;
+  SnapNo guard_snap;
+  MSize callpos, fnentry, argentry;
+} Fixture;
+
+static void fixture_reset(Fixture *f)
+{
+  GCtrace *T = f->live;
+  GCproto *pt = trace_startpt_acq(T);
+  GCfunc *leaf = ir_kfunc(&T->ir[f->kfunc]);
+  MSize startpos = proto_bcpos(pt, trace_startpc_acq(T));
+  memcpy(f->pt, pt, sizeof(GCproto)+pt->sizebc*sizeof(BCIns));
+  memcpy(f->leafpt, funcproto(leaf),
+         sizeof(GCproto)+funcproto(leaf)->sizebc*sizeof(BCIns));
+  memset(f->leaf, 0, sizeof(*f->leaf));
+  memcpy(f->leaf, leaf, sizeLfunc(0));
+  setmref(f->leaf->l.pc, proto_bc(f->leafpt));
+  memcpy(f->ir+T->nk, T->ir+T->nk, (T->nins-T->nk)*sizeof(IRIns));
+  ir_kgc_store_rel(&f->ir[f->kfunc], obj2gco(f->leaf));
+  memcpy(f->snap, T->snap, T->nsnap*sizeof(SnapShot));
+  memcpy(f->map, T->snapmap, T->nsnapmap*sizeof(SnapEntry));
+  f->copy = *T; f->copy.ir=f->ir; f->copy.snap=f->snap; f->copy.snapmap=f->map;
+  trace_startpt_rel(&f->copy, f->pt);
+  setmref(f->copy.startpc, &proto_bc(f->pt)[startpos]);
+  proto_bc(f->pt)[startpos] = T->startins;
+  for (MSize s=0; s<T->nsnap; s++) {
+    SnapShot *snap=&f->snap[s];
+    uint64_t pcbase;
+    MSize pos=proto_bcpos(pt, snap_pc(&T->snapmap[snap->mapofs+snap->nent]));
+    assert(pos<pt->sizebc);
+    pcbase=(u64ptr(&proto_bc(f->pt)[pos])<<8);
+    memcpy(&f->map[snap->mapofs+snap->nent], &pcbase, sizeof(pcbase));
+  }
+  memset(f->J,0,sizeof(*f->J));
+  f->J->pt=f->pt; f->J->startpc=trace_startpc_acq(&f->copy);
+  f->J->baseslot=1+LJ_FR2;
+  for (IRRef r=REF_FIRST; r<f->n; r++)
+    if (f->ir[r].o==IR_LOOP) f->J->loopref=r;
+  f->view=(LJArm64PostRAView){0};
+  f->view.ir=f->ir; f->view.owner=&f->copy; f->view.owner_private=1;
+  f->view.snap=f->snap; f->view.snapmap=f->map;
+  f->view.proto=f->pt; f->view.proto_bc=proto_bc(f->pt);
+  f->view.startpc=trace_startpc_acq(&f->copy);
+  f->view.nins=T->nins; f->view.nk=T->nk;
+  f->view.nsnap=T->nsnap; f->view.nsnapmap=T->nsnapmap;
+  f->view.spadjust=T->spadjust; f->view.proto_sizebc=f->pt->sizebc;
+  f->view.proto_numparams=f->pt->numparams; f->view.root_topslot=T->topslot;
+  f->view.startins=T->startins;
+}
+
+static int admit(Fixture *f, int allocated)
+{
+  if (allocated) return lj_asm_arm64_postra_admit(&f->view,NULL);
+  f->copy.nins=f->n;
+  return lj_asm_arm64_ir_admit(f->J,&f->copy,NULL);
+}
+
+enum {
+  M_FUNC_SLOT, M_ARG_SLOT, M_CALL_ARITY, M_CALL_RESULTS, M_CALL_SLOT,
+  M_CALLM, M_CALL_PC, M_SNAPSHOT_REF, M_CHILD_PC, M_CHILD_BASE, M_CHILD_FRAME,
+  M_CHILD_TOP, M_GUARD_MISSING, M_GUARD_FORWARD, M_LEAF_ARITY, M_LEAF_UPVALUE,
+  M_LEAF_VARARG, M_LEAF_DISABLED, M_LEAF_HEADER, M_LEAF_EFFECT, M_LEAF_REGISTER,
+  M_LEAF_CONSTANT, M_LEAF_RETURN, M_LEAF_RETURN_SLOT, M_COUNT
+};
+
+static void mutate(Fixture *f, unsigned m)
+{
+  SnapShot *snap=&f->snap[f->guard_snap];
+  BCIns *call=&proto_bc(f->pt)[f->callpos], *leafbc=proto_bc(f->leafpt);
+  uint64_t pcbase;
+  switch (m) {
+  case M_FUNC_SLOT: f->map[f->fnentry]=SNAP(snap_slot(f->map[f->fnentry]),0,f->kfunc); break;
+  case M_ARG_SLOT: f->map[f->argentry]=SNAP(snap_slot(f->map[f->argentry]),0,f->ir[f->guard].op1); break;
+  case M_CALL_ARITY: setbc_c(call,3); break;
+  case M_CALL_RESULTS: setbc_b(call,3); break;
+  case M_CALL_SLOT: setbc_a(call,bc_a(*call)-1u); break;
+  case M_CALLM: setbc_op(call,BC_CALLM); break;
+  case M_CALL_PC:
+    pcbase=u64ptr(call+1)<<8; memcpy(&f->map[snap->mapofs+snap->nent],&pcbase,8); break;
+  case M_SNAPSHOT_REF: snap->ref--; break;
+  case M_CHILD_PC:
+    pcbase=u64ptr(leafbc+1)<<8; memcpy(&f->map[snap->mapofs+snap->nent],&pcbase,8); break;
+  case M_CHILD_BASE:
+    f->map[snap->mapofs+snap->nent]|=2; break;
+  case M_CHILD_FRAME: f->map[f->fnentry]|=SNAP_FRAME; break;
+  case M_CHILD_TOP: snap->topslot++; break;
+  case M_GUARD_MISSING: f->ir[f->guard].t.irt=IRT_FUNC; break;
+  case M_GUARD_FORWARD: f->ir[f->guard].op1=f->guard; break;
+  case M_LEAF_ARITY: f->leafpt->numparams=2; break;
+  case M_LEAF_UPVALUE: f->leafpt->sizeuv=1; break;
+  case M_LEAF_VARARG: f->leafpt->flags|=PROTO_VARARG; break;
+  case M_LEAF_DISABLED: f->leafpt->flags|=PROTO_NOJIT; break;
+  case M_LEAF_HEADER: setbc_op(&leafbc[0],BC_IFUNCF); break;
+  case M_LEAF_EFFECT: leafbc[1]=BCINS_AD(BC_USETV,0,0); break;
+  case M_LEAF_REGISTER: setbc_d(&leafbc[1],f->leafpt->framesize); break;
+  case M_LEAF_CONSTANT: setbc_c(&leafbc[2],f->leafpt->sizekn); break;
+  case M_LEAF_RETURN: setbc_op(&leafbc[f->leafpt->sizebc-1],BC_RET); break;
+  case M_LEAF_RETURN_SLOT: setbc_a(&leafbc[f->leafpt->sizebc-1],f->leafpt->framesize); break;
+  default: assert(0);
+  }
+}
+
+static void admission(GCtrace *T)
+{
+  Fixture f={0};
+  f.live=T; f.guard_snap=identity_exit(T,&f.guard); f.kfunc=T->ir[f.guard].op2;
+  f.n=T->nins;
+  if (T->ir[f.n-1].o==IR_NOP) f.n--;
+  else while (T->ir[f.n-1].o==IR_RENAME) f.n--;
+  f.pt=copy_proto(trace_startpt_acq(T));
+  f.leafpt=copy_proto(funcproto(ir_kfunc(&T->ir[f.kfunc])));
+  f.leaf=calloc(1,sizeof(*f.leaf)); f.J=calloc(1,sizeof(*f.J));
+  f.ir=calloc(T->nins,sizeof(IRIns)); f.snap=malloc(T->nsnap*sizeof(SnapShot));
+  f.map=malloc(T->nsnapmap*sizeof(SnapEntry));
+  assert(f.leaf&&f.J&&f.ir&&f.snap&&f.map);
+  {
+    SnapShot *snap=&T->snap[f.guard_snap];
+    const BCIns *call=snap_pc(&T->snapmap[snap->mapofs+snap->nent]);
+    MSize slot=1u+LJ_FR2+bc_a(*call);
+    assert(bc_op(*call)==BC_CALL && bc_b(*call)==2 && bc_c(*call)==2);
+    f.callpos=proto_bcpos(trace_startpt_acq(T),call);
+    f.fnentry=f.argentry=UINT32_MAX;
+    for (MSize i=0;i<snap->nent;i++) {
+      MSize at=snap->mapofs+i;
+      if (snap_slot(T->snapmap[at])==slot) f.fnentry=at;
+      if (snap_slot(T->snapmap[at])==slot+1u+LJ_FR2) f.argentry=at;
+    }
+    assert(f.fnentry!=UINT32_MAX && f.argentry!=UINT32_MAX);
+  }
+  for (int allocated=0;allocated<2;allocated++) {
+    for (unsigned m=0;m<M_COUNT;m++) {
+      fixture_reset(&f); assert(admit(&f,allocated));
+      fixture_reset(&f); mutate(&f,m);
+      if (admit(&f,allocated)) {
+        fprintf(stderr,"Lua leaf mutation %u accepted by %s\n",m,allocated?"postRA":"semantic");
+        assert(0);
+      }
+      if (allocated) postra_bad++; else semantic_bad++;
+    }
+  }
+  fixture_reset(&f); assert(admit(&f,1));
+  f.ir[f.ir[f.guard].op1].r=RID_D0;
+  assert(!admit(&f,1)); postra_bad++;
+  fixture_reset(&f); assert(admit(&f,1));
+  f.ir[f.ir[f.guard].op1].s=254;
+  assert(!admit(&f,1)); postra_bad++;
+  free(f.pt); free(f.leafpt); free(f.leaf); free(f.J); free(f.ir); free(f.snap); free(f.map);
+}
+
+int main(void)
+{
+  lua_State *L=ljt_lua_newstate_openlibs();
+  const char *bodies[]={"return x*.5+1.25","return 1.25-x*.25","return .5/x+1.25"};
+  ljt_lua_dostring(L,
+    "local th=require('threading'); ready=th.channel(1); stop=th.channel(1); "
+    "peer=assert(th.spawn(function(a,b) assert(a:send(true,5)); assert(select(2,b:recv(60))); return true end,ready,stop)); "
+    "assert(select(2,ready:recv(5))); "
+    "function install_leaf(body) local r='return function(fn,n) local sum=.5; for i=1,n do sum=sum+fn(i+.5) end; return sum end'; "
+    "leaf_run=assert(loadstring(r,'@leaf-run'))(); leaf_oracle=assert(loadstring(r,'@leaf-oracle'))(); "
+    "leaf_a=assert(loadstring('return function(x) '..body..' end','@leaf-a'))(); "
+    "leaf_oracle_a=assert(loadstring('return function(x) '..body..' end','@leaf-oracle-a'))(); "
+    "leaf_b=assert(loadstring('return function(x) return x*.125+2.5 end','@leaf-b'))(); "
+    "leaf_oracle_b=assert(loadstring('return function(x) return x*.125+2.5 end','@leaf-oracle-b'))(); "
+    "jit.off(leaf_oracle,true); jit.off(leaf_oracle_a,true); jit.off(leaf_oracle_b,true); "
+    "jit.flush(); jit.on(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64') end; jit.off(install_leaf,true)");
+  for (unsigned shape=0;shape<sizeof(bodies)/sizeof(bodies[0]);shape++) {
+    GCtrace *T=NULL;
+    lua_getglobal(L,"install_leaf"); lua_pushstring(L,bodies[shape]); ljt_lua_pcall(L,1,0,"install leaf");
+    assert(lj_trace_arm64_lua_leaf(global_function(L,"leaf_a")));
+    for (unsigned attempt=0;attempt<8 && !T;attempt++) {
+      lua_Number expected=invoke(L,"leaf_oracle","leaf_oracle_a",96);
+      assert(invoke(L,"leaf_run","leaf_a",96)==expected);
+      T=root_trace(L); if (attempt) cold_retries++;
+    }
+    assert(T);
+    native_call(L,T,"leaf_a","leaf_oracle_a",96,0);
+    native_call(L,T,"leaf_b","leaf_oracle_b",48,1);
+    native_call(L,T,"leaf_a","leaf_oracle_a",24,0);
+    lua_gc(L,LUA_GCCOLLECT,0);
+    native_call(L,T,"leaf_a","leaf_oracle_a",64,0);
+    admission(T);
+    printf("Lua leaf shape=%u native=4 exact identity exit and same-trace reuse passed\n",shape);
+  }
+  ljt_lua_dostring(L,"assert(stop:send(true,5)); local ok,v=peer:join(5); assert(ok and v)");
+  lua_close(L);
+  printf("Lua leaf calls OK: native=%u semantic-negative=%u postRA-negative=%u cold-retries=%u\n",
+         native_runs,semantic_bad,postra_bad,cold_retries);
+  return 0;
+}
+#else
+int main(void) { puts("t-arm64-jit-lua-leaf-calls SKIP"); return 0; }
+#endif

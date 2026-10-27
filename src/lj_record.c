@@ -1288,6 +1288,15 @@ static void rec_call_setup(jit_State *J, BCReg func, ptrdiff_t nargs)
     functv = &ix.mobjv;
   }
 #if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+  if (isluafunc(funcV(functv)) && lj_trace_arm64_lua_leaf(funcV(functv))) {
+    /* Preserve the exact caller and argument map for an inlined pure leaf's
+    ** identity guard. Later admission still refuses every child-frame exit. */
+    if (bc_op(J->cur.startins) != BC_FORL || J->framedepth != 0 || nargs != 1 ||
+        bc_op(*J->pc) != BC_CALL || bc_b(*J->pc) != 2 || bc_c(*J->pc) != 2)
+      lj_trace_err(J, LJ_TRERR_NYIBC);
+    lj_snap_add(J);
+    J->mergesnap = 0;
+  }
   if (lj_func_ffid_acq(funcV(functv)) == FF_rawset) {
     /* A refused rooted raw store must replay this exact caller CALL with all
     ** three arguments. Preserve this snapshot before installing the C frame. */

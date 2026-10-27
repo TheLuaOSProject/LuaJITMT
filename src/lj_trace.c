@@ -11866,6 +11866,67 @@ void lj_trace_abort_owner_before_park(lua_State *L)
 /* -- Event handling ------------------------------------------------------ */
 
 #if LJ_TARGET_ARM64
+int lj_trace_arm64_lua_leaf(const GCfunc *fn)
+{
+  const GCproto *pt;
+  const BCIns *bc;
+  BCIns words[UINT8_MAX+1u];
+  uint8_t defined[UINT8_MAX+1u] = { 1 };
+  MSize pos, size, frame;
+  if (!fn || !isluafunc(fn)) return 0;
+  pt = funcproto(fn);
+  if (!checkptrGC(obj2gco((GCproto *)pt)) ||
+      pt->gct != (uint32_t)~LJ_TPROTO || pt->numparams != 1 ||
+      pt->sizeuv || pt->sizekgc ||
+      (la_load8_acq(&pt->flags) & (PROTO_CHILD|PROTO_VARARG|PROTO_FFI|PROTO_NOJIT)))
+    return 0;
+  size = pt->sizebc; frame = pt->framesize; bc = proto_bc(pt);
+  if (size < 3 || size > UINT8_MAX || frame < 2 || frame > UINT8_MAX)
+    return 0;
+  for (pos = 0; pos < size; pos++)
+    words[pos] = (BCIns)la_load32_acq((const uint32_t *)&bc[pos]);
+  if (words[0] != BCINS_AD(BC_FUNCF, frame, 0)) return 0;
+  for (pos = 1; pos < size; pos++) {
+    BCIns ins = words[pos];
+    BCOp op = bc_op(ins);
+    BCReg a = bc_a(ins), b = bc_b(ins), c = bc_c(ins);
+    MSize kn = UINT32_MAX;
+    if (a >= frame) return 0;
+    if (pos+1u == size) {
+      if (op != BC_RET1 || bc_d(ins) != 2 || !defined[a]) return 0;
+    } else if (op == BC_CGET || op == BC_MOV) {
+      BCReg from = bc_d(ins);
+      if (from >= frame || !defined[from]) return 0;
+    } else if (op == BC_KSHORT) {
+      /* Literal integers are safe; surviving child overflow exits are not. */
+    } else if (op == BC_KNUM) {
+      kn = bc_d(ins);
+    } else if (op == BC_ADDVV || op == BC_SUBVV || op == BC_MULVV ||
+               op == BC_DIVVV) {
+      if (b >= frame || c >= frame || !defined[b] || !defined[c]) return 0;
+    } else if (op == BC_ADDVN || op == BC_SUBVN || op == BC_MULVN ||
+               op == BC_DIVVN || op == BC_ADDNV || op == BC_SUBNV ||
+               op == BC_MULNV || op == BC_DIVNV) {
+      if (b >= frame || !defined[b]) return 0;
+      kn = c;
+    } else {
+      return 0;  /* No calls, branches, upvalues, boxing or heap access. */
+    }
+    if (kn != UINT32_MAX) {
+      TValue value;
+      if (kn >= pt->sizekn) return 0;
+      proto_knumtv_load_acq(&value, pt, kn);
+      if (!tvisnumber(&value)) return 0;
+    }
+    defined[a] = 1;
+  }
+  /* The admitted body contains no patch sites. Recheck the complete source,
+  ** including the canonical header, rather than borrowing root authority. */
+  for (pos = 0; pos < size; pos++)
+    if ((BCIns)la_load32_acq((const uint32_t *)&bc[pos]) != words[pos]) return 0;
+  return 1;
+}
+
 static void trace_arm64_abort_exact_owner(jit_State *J, lua_State *owner)
 {
   if (owner != NULL && jit_owner_l_acq(J) == owner &&
@@ -11876,6 +11937,52 @@ static void trace_arm64_abort_exact_owner(jit_State *J, lua_State *owner)
 /* Prove that a VM recorder dispatch still belongs to an admitted exact root.
 ** No unproved J->L value is passed to destructive recorder cleanup. */
 #if !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED
+static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
+                                    GCproto *rootpt, GCfunc *fn,
+                                    const BCIns *pc)
+{
+  const TValue *frame = owner->base-1, *caller;
+  const BCIns *returnpc;
+  GCproto *pt = funcproto(fn);
+  BCIns call;
+  MSize base;
+  TRef callee, link;
+  IRRef ref;
+  if (bc_op(J->cur.startins) != BC_FORL || J->framedepth != 1 ||
+      J->retdepth || J->postproc != LJ_POST_NONE || !frame_islua(frame) ||
+      frame_func(frame) != fn || !lj_trace_arm64_lua_leaf(fn)) return 0;
+  returnpc = frame_pc(frame);
+  if (!trace_pc_in_proto_range(returnpc, proto_bc(rootpt), rootpt->sizebc) ||
+      returnpc == proto_bc(rootpt)) return 0;
+  call = (BCIns)la_load32_acq((const uint32_t *)(returnpc-1));
+  if (bc_op(call) != BC_CALL || bc_b(call) != 2 || bc_c(call) != 2 ||
+      (MSize)bc_a(call)+2u+LJ_FR2 > rootpt->framesize) return 0;
+  caller = frame_prevl(frame);
+  if (!isluafunc(frame_func(caller)) || funcproto(frame_func(caller)) != rootpt)
+    return 0;
+  base = 1u+LJ_FR2+bc_a(call)+1u+LJ_FR2;
+  if (base >= LJ_MAX_JSLOTS || J->baseslot != base ||
+      J->base != J->slot+base ||
+      owner->base != caller+1u+bc_a(call)+1u+LJ_FR2) return 0;
+  link = J->slot[base-1u];
+  if ((link & (TREF_FRAME|TREF_CONT)) != TREF_FRAME) return 0;
+  /* snapshot_slots materializes a frame link as a KNUM containing its raw
+  ** return PC. Accept only that exact link or the initial empty marker. */
+  ref = tref_ref(link);
+  if (ref && (!tref_isk(link) || ref < J->cur.nk || ref+1u >= REF_TRUE ||
+              J->cur.ir[ref].o != IR_KNUM ||
+              J->cur.ir[ref+1u].tv.u64 != frame->u64)) return 0;
+  callee = J->slot[base-1u-LJ_FR2];
+  ref = tref_ref(callee);
+  if (!tref_isfunc(callee) || !tref_isk(callee) || ref < J->cur.nk ||
+      ref >= REF_TRUE || J->cur.ir[ref].o != IR_KGC ||
+      ir_kgc_acq(&J->cur.ir[ref]) != obj2gco(fn)) return 0;
+  if (pc == proto_bc(pt))
+    return J->fn && isluafunc(J->fn) && funcproto(J->fn) == rootpt &&
+           J->pt == rootpt && J->pc == returnpc-1 && J->maxslot == 1;
+  return J->fn == fn && J->pt == pt;
+}
+
 static int trace_arm64_root_recorder_preflight(jit_State *J,
 	const BCIns *pc, lua_State **ownerp, GCfunc **fnp)
 {
@@ -11918,8 +12025,9 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
     fn = curr_func(owner);
     if (isluafunc(fn)) {
       pt = funcproto(fn);
-      if (pt != rootpt ||
-	  !trace_pc_in_proto_range(pc, proto_bc(pt), pt->sizebc))
+      if (!trace_pc_in_proto_range(pc, proto_bc(pt), pt->sizebc) ||
+          (pt != rootpt &&
+           !trace_arm64_lua_leaf_frame(J, owner, rootpt, fn, pc)))
 	return 0;
     } else {
 #if LJ_HASJIT_FFI_CALLXS || defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)

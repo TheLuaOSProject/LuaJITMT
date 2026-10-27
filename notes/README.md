@@ -15,6 +15,10 @@ and reports that are no longer authoritative are retained in
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
+- Candidate Lua leaf-call work: fixed pure unary leaves in scalar FORL roots,
+  with exact caller snapshots and independent admission. Focused native and
+  refusal tests pass; full matrix and main integration are pending. See the
+  [leaf-call evidence](arm64-jit-lua-leaf-calls-2026-10-27.md).
 - Latest fully validated JIT checkpoint: exact owned `int32_t`/`uint32_t`
   fixed arguments from SLOAD and rooted table reads, at `dfd8db52`.
   All 26 focused fixtures and the broader M7 FFI suite pass four ARM64/arm64e

@@ -7895,6 +7895,36 @@ static int arm64_side_parent_sload_valid(const LJArm64SideIRView *side,
   return 0;
 }
 
+/* A pure leaf identity guard must restore its exact unary caller CALL. All
+** snapshot PCs/frame extents have already passed the root-only validator;
+** retaining any child-frame exit therefore keeps the trace closed. */
+static int arm64_lua_leaf_ir_snapshot(const jit_State *J, const GCtrace *T,
+                                    IRRef ref, SnapNo s)
+{
+  const IRIns *guard = &T->ir[ref];
+  const SnapShot *snap = &T->snap[s];
+  const BCIns *pc = snap_pc(&T->snapmap[snap->mapofs+snap->nent]);
+  BCIns call = (BCIns)la_load32_acq((const uint32_t *)pc);
+  MSize slot = 1u+LJ_FR2+bc_a(call), i;
+  IRRef fn = 0, arg = 0;
+  if (snap->ref != ref || bc_op(T->startins) != BC_FORL || bc_op(call) != BC_CALL ||
+      bc_b(call) != 2 || bc_c(call) != 2 ||
+      slot+2u+LJ_FR2 > J->pt->framesize+1u+LJ_FR2) return 0;
+  for (i = 0; i < snap->nent; i++) {
+    SnapEntry sn = T->snapmap[snap->mapofs+i];
+    if (snap_slot(sn) == slot) {
+      if (sn & 0x00ff0000u) return 0;
+      fn = snap_ref(sn);
+    } else if (snap_slot(sn) == slot+1u+LJ_FR2) {
+      if (sn & 0x00ff0000u) return 0;
+      arg = snap_ref(sn);
+    }
+  }
+  return fn == guard->op1 &&
+         (arm64_scalar_ir_ref(T, arg, ref, IRT_NUM) ||
+          arm64_scalar_ir_ref(T, arg, ref, IRT_INT));
+}
+
 static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
 				 BCOp rootop, const LJArm64SideIRView *side,
 				 LJArm64IRReject *reject)
@@ -8174,7 +8204,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
     case IR_NE:
       if (type == IRT_FUNC && ir->o == IR_EQ && flags == IRT_GUARD) {
         GCobj *o;
-        /* Specialize only exact supported builtin closures. */
+        /* Lua leaves additionally need the exact caller snapshot below. */
         if (ir->op1 < REF_FIRST ||
             !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_FUNC) ||
             !arm64_scalar_ir_ref(T, ir->op2, ref, IRT_FUNC) ||
@@ -8182,7 +8212,9 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
           goto bad_operand;
         o = ir_kgc_acq(&T->ir[ir->op2]);
         if (o == NULL || !checkptrGC(o) || o->gch.gct != (uint32_t)~LJ_TFUNC ||
-            !arm64_scalar_builtin_ffid(lj_func_ffid_acq(gco2func(o))))
+            (!arm64_scalar_builtin_ffid(lj_func_ffid_acq(gco2func(o))) &&
+             (side || rootop != BC_FORL ||
+              !lj_trace_arm64_lua_leaf(gco2func(o)))))
           goto bad_operand;
         break;
       }
@@ -8394,6 +8426,10 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       goto bad_snapshot;
     while (s + 1 < T->nsnap && T->snap[s + 1].ref <= ref)
       s++;
+    if (ir->o == IR_EQ && ir->t.irt == (IRT_FUNC|IRT_GUARD) &&
+        isluafunc(gco2func(ir_kgc_acq(&T->ir[ir->op2]))) &&
+        !arm64_lua_leaf_ir_snapshot(J, T, ref, s))
+      goto bad_snapshot;
     /* A successful read's type guard resumes after the helper; a refused
     ** read uses the preceding snapshot and must not consume its output. */
     if (ir->o == IR_VLOAD && T->snap[s].ref != ref)
@@ -9457,6 +9493,42 @@ static RegSP arm64_scalar_postra_snapshot_regsp(const LJArm64PostRAView *v,
   return rs;
 }
 
+/* Re-derive the leaf's caller/argument binding from the allocated view. */
+static int arm64_lua_leaf_postra_snapshot(const LJArm64PostRAView *v,
+                                        IRRef ref, MSize s)
+{
+  const GCproto *pt = v->proto;
+  GCtrace *owner = (GCtrace *)v->owner;
+  const SnapShot *snap = &v->snap[s];
+  MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap), i, slot;
+  const BCIns *pc = snap_pc_acq(&v->snapmap[ofs+nent]);
+  BCIns call = (BCIns)la_load32_acq((const uint32_t *)pc);
+  IRIns guard = ir_load_acq(&v->ir[ref]);
+  IRRef fn = 0, arg = 0;
+  if (snap_ref_acq(snap) != ref || !pt || !owner || proto_bc(pt) != v->proto_bc ||
+      pt->sizebc != v->proto_sizebc || pt->framesize != v->root_topslot ||
+      trace_startptgco_acq(owner) != obj2gco((GCproto *)pt) ||
+      trace_startins_acq(owner) != v->startins ||
+      trace_startpc_acq(owner) != v->startpc ||
+      bc_op(v->startins) != BC_FORL || bc_op(call) != BC_CALL ||
+      bc_b(call) != 2 || bc_c(call) != 2) return 0;
+  slot = 1u+LJ_FR2+bc_a(call);
+  if (slot+2u+LJ_FR2 > v->root_topslot+1u+LJ_FR2) return 0;
+  for (i = 0; i < nent; i++) {
+    SnapEntry sn = snapentry_acq(&v->snapmap[ofs+i]);
+    if (snap_slot(sn) == slot) {
+      if (sn & 0x00ff0000u) return 0;
+      fn = snap_ref(sn);
+    } else if (snap_slot(sn) == slot+1u+LJ_FR2) {
+      if (sn & 0x00ff0000u) return 0;
+      arg = snap_ref(sn);
+    }
+  }
+  return fn == guard.op1 &&
+         (arm64_scalar_postra_ref(v, arg, ref, IRT_NUM) ||
+          arm64_scalar_postra_ref(v, arg, ref, IRT_INT));
+}
+
 static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
                                          BCOp rootop,
                                          const LJArm64SideIRView *side,
@@ -9793,7 +9865,9 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
         fn = ir_kgc_load_acq(&v->ir[p.op2]);
         if (fn == NULL || !checkptrGC(fn) ||
             la_load8_acq(&fn->gch.gct) != (uint32_t)~LJ_TFUNC ||
-            !arm64_scalar_builtin_ffid(lj_func_ffid_acq(gco2func(fn))))
+            (!arm64_scalar_builtin_ffid(lj_func_ffid_acq(gco2func(fn))) &&
+             (side || rootop != BC_FORL ||
+              !lj_trace_arm64_lua_leaf(gco2func(fn)))))
           return 0;
         break;
       }
@@ -10102,6 +10176,10 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       return 0;
     while (s + 1 < v->nsnap && snap_ref_acq(&v->snap[s + 1]) <= ref)
       s++;
+    if (ir.o == IR_EQ && ir.t.irt == (IRT_FUNC|IRT_GUARD) &&
+        isluafunc(gco2func(ir_kgc_load_acq(&v->ir[ir.op2]))) &&
+        !arm64_lua_leaf_postra_snapshot(v, ref, s))
+      return 0;
     if (ir.o == IR_VLOAD && snap_ref_acq(&v->snap[s]) != ref)
       return 0;
     if (completed_store && ref > completed_store+1 && irt_isguard(ir.t) &&
