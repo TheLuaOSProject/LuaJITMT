@@ -15,10 +15,12 @@ and reports that are no longer authoritative are retained in
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
-- Latest focused JIT checkpoint: nested table reads feeding CALLXS at
-  `662cd828`, with independent GC root checks across callback suspension.
-  The four-profile contract, broader M7 suite and ordinary main rebuild pass;
-  see the [nested-read evidence](arm64-jit-table-chains-2026-10-27.md).
+- Latest JIT checkpoint: scalar table arguments feeding CALLXS at `df3269d1`.
+  All 16 focused fixtures pass in four ARM64/arm64e assertion/release profiles,
+  both complete experimental/bootstrap gates pass, and ARM64 plus signed x64
+  pass both 509-case stock corpora. The ordinary main rebuild also passes
+  all smoke cases and both corpora. See the
+  [scalar-argument evidence](arm64-jit-table-scalar-arguments-2026-10-27.md).
 - Current review implementation replaces whole-trace templates with operation
   proofs for scalar LOOP/FORL/FUNCF bodies, first scalar side traces, rooted
   scalar reads and existing-key stores, unsunk table construction, and fixed
@@ -309,8 +311,8 @@ available.
 - Scalar values read from shared tables can feed existing fixed integer,
   double and float CALLXS arguments, including canonical booleans and nested
   receivers. Independent source/result and XSAVE argument proofs retain exact
-  provenance. The initial 16-fixture ARM64 assertion contract passes; full
-  frozen-profile validation is pending. See
+  provenance. All 16 focused fixtures pass in four profiles, together with
+  both complete gates and ARM64/x64 stock source and bytecode checks. See
   [`arm64-jit-table-scalar-arguments-2026-10-27.md`](arm64-jit-table-scalar-arguments-2026-10-27.md).
 - Direct scalar producer `CALL` to consumer `CALLM` chains support nested
   integer, float and double calls with register and stack arguments. Source
