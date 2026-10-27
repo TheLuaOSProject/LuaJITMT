@@ -76,6 +76,63 @@ passed again.
 
 Focused logs: `/tmp/ljmt-compound-only.log`,
 `/tmp/ljmt-compound-counterfactual.log` and
-`/tmp/ljmt-compound-restored-focused.log`. The source checkpoint and complete
-matrix results will be recorded after frozen validation; the preceding
-checkpoint remains the latest fully validated main checkout until then.
+`/tmp/ljmt-compound-restored-focused.log`.
+
+## Frozen validation
+
+Source checkpoint `6f38a9c38d1f747bb379ac567011f8ba4ab280b0` passes the
+complete experimental and bootstrap gates. All 26 preceding table/FFI
+fixtures pass in four profiles, as does the complete M7 FFI suite. The three
+Lua leaf contracts pass in ARM64 and arm64e/BTI, with assertions and in release.
+Every profile records the same 48 native invocations, 17 child exits, 686
+semantic negatives, 714 allocated negatives and eight physical conflicts for
+the compound fixture, with zero cold retries. The combined leaf profile
+identities are:
+
+| Profile | Identity |
+| --- | --- |
+| ARM64 assertions | `4b4b955cbcfaa298ac8a4066f0eb33deaedc74746bafd938061d9ba69af026ed` |
+| arm64e/BTI assertions | `ef8576149418594269d1d03025ff75354ab1aa34bb545b110c43e591364ef217` |
+| ARM64 release | `77882b6d8eca879dced4be0d1f3d0d1a8b6e483fe11ee3dd02510a19f31c9923` |
+| arm64e/BTI release | `5e556864b0fd6fdb0689c43e4a4532daaabd7237dd36457d83a5b2547e1e7f99` |
+
+Ordinary ARM64 and signed x64/Rosetta each pass both 509-case stock source and
+original-bytecode import corpora. The ordinary ARM64 build also passes all
+698 preceding observations, the numeric boundaries, bitops, cells, upvalues,
+and all three leaf contracts. The worktree was restored to ordinary ARM64
+assertion mode after the matrix, with frozen source identity verified.
+
+The main `v2.1` checkout was fast-forwarded to the source checkpoint and
+rebuilt independently in ordinary ARM64 assertion mode without test helpers.
+It passes both stock corpora and the same ordinary regressions. Numeric CALLM
+required zero cold retries; the 240 INT observations used 240 candidates.
+All seven compound cases published on their first cold call, with 17 overflow
+ranges and 48 same-trace checks. Those ordinary publication/reuse observations
+do not replace the focused native-entry and exit evidence above.
+
+Both ordinary executables pass codesign verification and contain neither
+exported test helpers nor out-of-line atomic imports. The main profile is
+`0fb9918edcd9f9fd3c3dc41732dff308d5b1564df7609fce3a5e8d52f8f983c1`.
+Main and worktree executable SHA-256 values match:
+`86d2181850e1065560f1364b445238c5859561d03277552374c0cf002f1a1152`.
+Archive and build-signature values differ across checkout paths; archive
+identity is not claimed.
+
+Complete logs: `/tmp/ljmt-compound-matrix.log`,
+`/tmp/ljmt-compound-four-profile.log`, `/tmp/ljmt-compound-experimental.log`,
+`/tmp/ljmt-compound-bootstrap.log` and `/tmp/ljmt-compound-main.log`.
+
+## Next bounded gap
+
+Assignment to an already-defined numeric child local still emits CSET and
+remains excluded by the pure leaf grammar. A bounded extension must prove
+both the old destination and the source are numeric before treating CSET as
+a local copy: the interpreter examines the destination's old tag and can
+otherwise store through an existing closed cell. Function entry does not
+initialize every frame slot, so absence of CHILD/FNEW alone cannot establish
+that property for an undefined destination. Register zero must also remain
+the argument anchor until an independent replacement provenance proof exists.
+Any extension must preserve the added snapshot boundary and continue to
+exclude captured cells, closure construction and nested calls. This is an
+audited next step, not implemented support. General Lua call/return and the
+full ARM64 port remain incomplete.

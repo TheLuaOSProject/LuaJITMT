@@ -15,7 +15,18 @@ and reports that are no longer authoritative are retained in
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
-- Latest fully validated JIT checkpoint: integer child-frame exits at
+- Latest fully validated JIT checkpoint: compound pure Lua leaf child-frame
+  exits at `6f38a9c3`. Each of four ARM64/arm64e assertion/release profiles
+  passes 48 native runs, 17 child overflow exits, 686 semantic and 714
+  allocated negatives, including eight physical conflicts. Both complete
+  gates, all 26 preceding table/FFI fixtures in four profiles, and both
+  509-case stock corpora on ARM64 and signed x64 pass. The independent
+  ordinary main rebuild passes both corpora, all 698 preceding observations,
+  all earlier leaf contracts and seven compound publications/17 overflow
+  ranges/48 exact-trace checks. Local reassignment and general Lua call/return
+  remain excluded. See the
+  [compound child-exit evidence](arm64-jit-lua-compound-exits-2026-10-27.md).
+- Preceding JIT checkpoint: integer child-frame exits at
   `539475c8`, for one ADD/SUB/MUL in a fixed pure unary Lua leaf. Each of four
   ARM64/arm64e assertion/release profiles passes 34 native runs, ten child
   overflow exits, 406 semantic and 435 allocated negatives. Both complete
@@ -23,7 +34,7 @@ and reports that are no longer authoritative are retained in
   both 509-case stock corpora on ARM64 and signed x64 pass. The independent
   ordinary main rebuild passes both corpora, all 698 preceding observations,
   the floating leaf contract and six child publications/eight overflow ranges/
-  28 exact-trace reuses. Compound child arithmetic remains closed. See the
+  28 exact-trace reuses. That checkpoint covered one arithmetic operation. See the
   [child-exit evidence](arm64-jit-lua-child-exits-2026-10-27.md).
 - Preceding JIT checkpoint: fixed pure unary Lua leaves in scalar
   FORL roots at `a202c982`, with exact caller snapshots and independent admission.
@@ -104,8 +115,8 @@ and reports that are no longer authoritative are retained in
   semantic/post-RA views. Each profile records 344 native observations and
   independent 4-positive/26-negative admission checks.
   See [`arm64-jit-i64-arguments-2026-10-26.md`](arm64-jit-i64-arguments-2026-10-26.md).
-- Latest complete umbrella validation: the integer Lua leaf child-exit
-  checkpoint on 2026-10-27, frozen at `539475c8`.
+- Latest complete umbrella validation: the compound Lua leaf child-exit
+  checkpoint on 2026-10-27, frozen at `6f38a9c3`.
   The complete experimental and bootstrap gates passed, including all four
   M7 scalar CALLXS profiles. ARM64 and signed x86-64 each passed both 509-case
   stock source/import corpora. The ordinary main ARM64 rebuild passes both corpora
@@ -113,9 +124,12 @@ and reports that are no longer authoritative are retained in
   held-result/scalar-table/nested-read/I64-argument/callable cases, 40 new
   CData32 cases and 60 enum refusals, plus the floating leaf contract (nine
   publications, nine exact-trace reuses and seven refusal shapes with eight
-  calls each) and the new child contract (six publications, eight overflow
-  ranges and 28 exact-trace reuses). Main and worktree runtime binaries match
-  byte for byte. See the
+  calls each), the single-operation child contract (six publications, eight
+  overflow ranges and 28 exact-trace reuses), and the compound contract (seven
+  publications, 17 overflow ranges and 48 exact-trace checks). Main and
+  worktree runtime binaries match byte for byte. See the
+  [compound child-exit evidence](arm64-jit-lua-compound-exits-2026-10-27.md).
+  The preceding single-operation child checkpoint is in the
   [child-exit evidence](arm64-jit-lua-child-exits-2026-10-27.md).
   The preceding floating leaf checkpoint is in the
   [leaf-call evidence](arm64-jit-lua-leaf-calls-2026-10-27.md).
@@ -173,11 +187,11 @@ and reports that are no longer authoritative are retained in
   publication/entry/retirement, native numeric adaptation, and M7 scalar CALLXS
   on ARM64 and arm64e/BTI with both assertion and release runtimes.
 - Native ARM64 source and original-v2 import stock corpora each pass all 509
-  cases at the `539475c8` checkpoint and its ordinary main rebuild.
+  cases at the `6f38a9c3` checkpoint and its ordinary main rebuild.
 - The complete bootstrap gate passes, including 387 applicable stock cases,
   threaded tmpbuf, Darwin native roots/GC2, ARM64/arm64e callbacks,
   variadic/aggregate interpreter FFI and x86-64 errno unwind.
-- The signed x86-64/Rosetta runtime at `539475c8` passed both 509-case corpora.
+- The signed x86-64/Rosetta runtime at `6f38a9c3` passed both 509-case corpora.
   The combined gates also ran x86-64 callback-result lifetime and errno unwind.
   Shared rooted-store, raw nil-deletion, upvalue/cell and segment-map race
   fixtures were validated at the earlier local-cell checkpoint. Earlier
@@ -262,9 +276,15 @@ available.
   source/operands, return link, caller CALL and frame extent; allocated saved
   values must coexist without conflicting locations. All six VN/NV forms and
   a root with two live numeric accumulators pass native preloop/backedge
-  overflow and reuse tests in four profiles. Compound child arithmetic and
-  general Lua call/return remain excluded. See the
+  overflow and reuse tests in four profiles. See the
   [child-exit evidence](arm64-jit-lua-child-exits-2026-10-27.md).
+- Compound pure unary leaf arithmetic also retains child-frame exits. Both
+  independent passes bind every live child value to the source prefix and
+  resolve the complete body within the current iteration, including CSE,
+  shared snapshots, KSHORT locals and mixed NUM tails. Seven shapes pass
+  native overflow and same-trace reuse checks in four profiles. Child-local
+  reassignment and general Lua call/return remain excluded. See the
+  [compound child-exit evidence](arm64-jit-lua-compound-exits-2026-10-27.md).
 - ARM64 and arm64e/BTI trace publication, authenticated entry and exits,
   retirement, flush/reuse, GDB-JIT preparation, and bounded root/first-side
   entry paths.
