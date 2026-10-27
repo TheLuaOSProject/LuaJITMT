@@ -268,7 +268,8 @@ return function(add)
             timeout = "60s"
           })
         end
-        for _, name in ipairs({ "callxs-u32", "callxs-u32-admission" }) do
+        for _, name in ipairs({ "callxs-u32", "callxs-u32-admission",
+                                "callxs-u32-callm-admission" }) do
           build_and_run_c(t, t:tmp("lj_t-arm64-jit-" .. name),
                           "t-arm64-jit-" .. name .. ".c", {
             build = false,

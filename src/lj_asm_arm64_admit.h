@@ -321,6 +321,13 @@ static int arm64_callxs_value_kind(const IRIns *ir, IRRef ref,
 	 ((value.op2 & IRCONV_CONVMASK) == 0 ||
 	  (value.op2 & IRCONV_CONVMASK) == IRCONV_ANY))) {
       /* This is the recorder's defined integral-to-double conversion. */
+    } else if (kind == LJ_ARM64_ABI_KIND_FLOAT && size == 8 &&
+	       (value.t.irt & ~IRT_ISPHI) == IRT_NUM && from == IRT_U32 &&
+	       value.op2 == ((IRT_NUM << IRCONV_DSH) | IRT_U32) &&
+	       ir_load_acq(&ir[value.op1]).o == IR_CALLXS &&
+	       ir_load_acq(&ir[value.op1]).t.irt == IRT_U32) {
+      /* Both graph walks independently certify this native result's
+      ** conversion and completed lifetime before it is an argument. */
     } else if (kind == LJ_ARM64_ABI_KIND_FLOAT && size == 4 &&
 	       type == IRT_FLOAT &&
 	       (from == IRT_NUM || from == IRT_INT) &&
@@ -1369,9 +1376,9 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	    return 0;
 	  state = CALLXS_CLOSED;
 	  if (producer_pending && producer_scalar) {
-	    completed_producer = producer_call;
+	    completed_producer = result_is_u32 ? number_result : producer_call;
 	    producer_returnpc = xsave_returnpc;
-	    producer_type = call_result_type;
+	    producer_type = result_is_u32 ? IRT_NUM : call_result_type;
 	  } else {
 	    completed_producer = 0;
 	    producer_returnpc = 0;
@@ -1451,7 +1458,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	} else if (sourceop != BC_CALL || bc_c(sourceins) == 0 ||
 		   (unsigned)bc_c(sourceins)-1u != actual_count) return 0;
         {
-          int rooted_args = abi.is_vararg;
+          int rooted_args = abi.is_vararg || sourceop == BC_CALLM;
           for (i = 0; i < abi.nargs; i++) {
             IRIns arg = ir_load_acq(&T->ir[values[i]]);
             if (arg.o == IR_FLOAD && arg.op2 == IRFL_CDATA_INT64)
@@ -1605,9 +1612,9 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	      return 0;
 	    state = CALLXS_CLOSED;
 	    if (producer_pending && producer_scalar) {
-	      completed_producer = producer_call;
+	      completed_producer = result_is_u32 ? number_result : producer_call;
 	      producer_returnpc = xsave_returnpc;
-	      producer_type = call_result_type;
+	      producer_type = result_is_u32 ? IRT_NUM : call_result_type;
 	    } else {
 	      completed_producer = 0;
 	      producer_returnpc = 0;
@@ -4009,8 +4016,9 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	      return 0;
 	    active_leave = 0;
 	    if (producer_pending && producer_scalar) {
-	      completed_producer = producer_call;
+	      completed_producer = result_is_u32 ? number_result : producer_call;
 	      producer_returnpc = xsave_returnpc;
+	      if (result_is_u32) producer_type = IRT_NUM;
 	    } else {
 	      completed_producer = 0;
 	      producer_returnpc = 0;
@@ -4376,7 +4384,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    layout_producer_returnpc = bc_b(sourceins) == 0 ? source_returnpc : 0;
 	  } else return 0;
 	  {
-	    int roots_required = abi.is_vararg;
+	    int roots_required = abi.is_vararg || bc_op(sourceins) == BC_CALLM;
 	    for (i = 0; i < abi.nargs; i++) {
 	      IRIns arg = ir_load_acq(&view->ir[values[i]]);
 	      if (arg.o == IR_FLOAD && arg.op2 == IRFL_CDATA_INT64)

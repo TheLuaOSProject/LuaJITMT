@@ -11,6 +11,7 @@ static int32_t u32_mode;
 static int32_t u32_calls;
 static int32_t u32_alt_calls;
 static int32_t u32_vararg_calls;
+static int32_t u32_callm_calls;
 static int32_t u32_total_calls;
 static int32_t u32_first_errno;
 static int32_t u32_last_errno;
@@ -37,6 +38,7 @@ void lj_callxs_arm64_u32_configure(int32_t mode)
   store_i32(&u32_calls, 0);
   store_i32(&u32_alt_calls, 0);
   store_i32(&u32_vararg_calls, 0);
+  store_i32(&u32_callm_calls, 0);
   store_i32(&u32_total_calls, 0);
   store_i32(&u32_first_errno, 0);
   store_i32(&u32_last_errno, 0);
@@ -46,6 +48,8 @@ int32_t lj_callxs_arm64_u32_count(void) { return load_i32(&u32_calls); }
 int32_t lj_callxs_arm64_u32_alt_count(void) { return load_i32(&u32_alt_calls); }
 int32_t lj_callxs_arm64_u32_vararg_count(void)
 { return load_i32(&u32_vararg_calls); }
+int32_t lj_callxs_arm64_u32_callm_count(void)
+{ return load_i32(&u32_callm_calls); }
 int32_t lj_callxs_arm64_u32_total_count(void)
 { return load_i32(&u32_total_calls); }
 int32_t lj_callxs_arm64_u32_first_errno(void)
@@ -114,4 +118,72 @@ uint32_t lj_callxs_arm64_u32_vararg(int32_t selector, ...)
     return UINT32_C(0);
   return u32_values[((uint32_t)mode + (uint32_t)selector) %
                     (sizeof(u32_values) / sizeof(u32_values[0]))];
+}
+
+uint32_t lj_callxs_arm64_u32_callm_consumer(int32_t selector, ...)
+{
+  va_list ap;
+  double tag, produced;
+  int truth;
+  int32_t mode = load_i32(&u32_mode);
+  uint32_t expected = u32_values[((uint32_t)mode + (uint32_t)selector) %
+                                 (sizeof(u32_values) / sizeof(u32_values[0]))];
+  va_start(ap, selector);
+  tag = va_arg(ap, double);
+  truth = va_arg(ap, int);
+  produced = va_arg(ap, double);
+  va_end(ap);
+  record_call(&u32_callm_calls);
+  if (tag != (double)selector + 0.25 || truth != 1 ||
+      produced != (double)expected)
+    return expected ^ UINT32_C(1);
+  return expected;
+}
+
+uint32_t lj_callxs_arm64_u32_callm_double(int32_t selector, double produced)
+{
+  int32_t mode = load_i32(&u32_mode);
+  uint32_t expected = u32_values[((uint32_t)mode + (uint32_t)selector) %
+                                 (sizeof(u32_values) / sizeof(u32_values[0]))];
+  record_call(&u32_callm_calls);
+  if (produced != (double)expected)
+    return expected ^ UINT32_C(1);
+  return expected;
+}
+
+uint32_t lj_callxs_arm64_u32_callm_float(int32_t selector, float produced)
+{
+  int32_t mode = load_i32(&u32_mode);
+  uint32_t expected = u32_values[((uint32_t)mode + (uint32_t)selector) %
+                                 (sizeof(u32_values) / sizeof(u32_values[0]))];
+  record_call(&u32_callm_calls);
+  if (produced != (float)expected)
+    return expected ^ UINT32_C(1);
+  return expected;
+}
+
+uint32_t lj_callxs_arm64_u32_callm_stack(int32_t selector,
+                                          int32_t s1, int32_t s2,
+                                          int32_t s3, int32_t s4,
+                                          int32_t s5, int32_t s6,
+                                          int32_t s7, int32_t s8, ...)
+{
+  va_list ap;
+  double tag, produced;
+  int truth;
+  int32_t mode = load_i32(&u32_mode);
+  uint32_t expected = u32_values[((uint32_t)mode + (uint32_t)selector) %
+                                 (sizeof(u32_values) / sizeof(u32_values[0]))];
+  va_start(ap, s8);
+  tag = va_arg(ap, double);
+  truth = va_arg(ap, int);
+  produced = va_arg(ap, double);
+  va_end(ap);
+  record_call(&u32_callm_calls);
+  if (s1 != 101 || s2 != 102 || s3 != 103 || s4 != 104 ||
+      s5 != 105 || s6 != 106 || s7 != 107 || s8 != 108 ||
+      tag != (double)selector + 0.25 || truth != 1 ||
+      produced != (double)expected)
+    return expected ^ UINT32_C(1);
+  return expected;
 }

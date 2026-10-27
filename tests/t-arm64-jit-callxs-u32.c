@@ -32,8 +32,13 @@
 
 static uint32_t native_finishes;
 static uint32_t total_native_finishes;
+static uint32_t native_callm_producers;
+static uint32_t native_callm_consumers;
+static uint32_t callm_case;
+static uint32_t forced_native_finishes;
 static uint64_t old_epoch;
 static uint32_t pair_case;
+static void *force_epoch_func;
 static void *expected_func;
 static void *expected_alt_func;
 static TGState *expected_tg;
@@ -86,7 +91,14 @@ static void observe_finish(TGState *tg)
   assert(trace_native_pins_acq(expected_trace) != 0);
   assert(lj_ffi_native_frame_L_acq(frame) == expected_L);
   func = lj_ffi_native_frame_func_acq(frame);
-  if (pair_case)
+  if (callm_case) {
+    if (func == expected_func)
+      native_callm_producers++;
+    else {
+      assert(func == expected_alt_func);
+      native_callm_consumers++;
+    }
+  } else if (pair_case)
     assert(func == expected_func || func == expected_alt_func);
   else
     assert(func == expected_func);
@@ -98,11 +110,15 @@ static void observe_finish(TGState *tg)
 static void force_postcall_epoch(TGState *tg)
 {
   uint64_t epoch;
+  void *func = lj_ffi_native_frame_func_acq(&tg->ffi_native_frame[0]);
   observe_finish(tg);
+  if (force_epoch_func != NULL && func != force_epoch_func)
+    return;
   epoch = lj_tg_hs_epoch_ack_acq(tg);
-  if (native_finishes == 1u)
+  if (forced_native_finishes == 0u)
     old_epoch = epoch;
   assert(epoch != UINT64_MAX);
+  forced_native_finishes++;
   lj_tg_hs_epoch_ack_rel(tg, epoch + 1u);
 }
 
@@ -150,6 +166,41 @@ static GCtrace *find_callxs_trace(jit_State *J, GCproto *pt,
   return NULL;
 }
 
+static GCtrace *find_callm_trace(jit_State *J, GCproto *pt)
+{
+  TraceNo traceno;
+  for (traceno = 1; (MSize)traceno < trace_sizetrace_acq(J); traceno++) {
+    GCtrace *T = traceref_safe(J, traceno);
+    if (T != NULL && trace_runnable_acq(T, traceno) &&
+        trace_root_acq(T) == 0 && trace_startpt_acq(T) == pt &&
+        bc_op(trace_startins_acq(T)) == BC_FORL &&
+        op_count(T, IR_XSAVE) == 4 && op_count(T, IR_CALLXS) == 4)
+      return T;
+  }
+  return NULL;
+}
+
+static int proto_has_callm_producer(lua_State *L, const char *name)
+{
+  GCproto *pt;
+  const BCIns *bc;
+  MSize i;
+  lua_getglobal(L, name);
+  assert(tvisfunc(L->top - 1) && isluafunc(funcV(L->top - 1)));
+  pt = funcproto(funcV(L->top - 1));
+  bc = proto_bc(pt);
+  for (i = 1; i < pt->sizebc; i++) {
+    BCIns ins = (BCIns)la_load32_acq((const uint32_t *)&bc[i]);
+    BCIns prev = (BCIns)la_load32_acq((const uint32_t *)&bc[i - 1]);
+    if (bc_op(ins) == BC_CALLM) {
+      lua_pop(L, 1);
+      return bc_op(prev) == BC_CALL && bc_b(prev) == 0 && bc_c(prev) == 2;
+    }
+  }
+  lua_pop(L, 1);
+  return 0;
+}
+
 static int trace_has_checked_intnum(const GCtrace *T)
 {
   const IRIns *ir = trace_ir_acq(T);
@@ -182,6 +233,14 @@ static int run_driver(lua_State *L, const char *runner,
   lua_getglobal(L, fn);
   lua_pushinteger(L, n);
   return lua_pcall(L, 3, 1, 0);
+}
+
+static int run_callm_driver(lua_State *L, const char *runner, lua_Integer n)
+{
+  lua_getglobal(L, "__u32_callm_driver");
+  lua_getglobal(L, runner);
+  lua_pushinteger(L, n);
+  return lua_pcall(L, 2, 1, 0);
 }
 
 static int direct_call(lua_State *L, const char *fn, int32_t selector)
@@ -266,6 +325,9 @@ static GCtrace *check_run(lua_State *L, jit_State *J, TGState *tg,
   expected_L = L;
   expected_trace = NULL;
   native_finishes = 0;
+  callm_case = 0;
+  force_epoch_func = NULL;
+  forced_native_finishes = 0;
   old_epoch = UINT64_MAX;
   lj_trace_test_reset_exit_stats();
   lj_ffi_native_trace_test_set_finish_hook(force_epoch ?
@@ -317,6 +379,9 @@ static GCtrace *check_retained(lua_State *L, jit_State *J, TGState *tg,
   expected_L = L;
   expected_trace = NULL;
   native_finishes = 0;
+  callm_case = 0;
+  force_epoch_func = NULL;
+  forced_native_finishes = 0;
   old_epoch = UINT64_MAX;
   lj_trace_test_reset_exit_stats();
   lj_ffi_native_trace_test_set_finish_hook(force_epoch ?
@@ -357,6 +422,9 @@ static GCtrace *check_discarded(lua_State *L, jit_State *J, TGState *tg,
   expected_L = L;
   expected_trace = NULL;
   native_finishes = 0;
+  callm_case = 0;
+  force_epoch_func = NULL;
+  forced_native_finishes = 0;
   old_epoch = UINT64_MAX;
   lj_trace_test_reset_exit_stats();
   lj_ffi_native_trace_test_set_finish_hook(force_epoch ?
@@ -397,6 +465,9 @@ static GCtrace *check_threshold_exit(lua_State *L, jit_State *J, TGState *tg,
   expected_L = L;
   expected_trace = NULL;
   native_finishes = 0;
+  callm_case = 0;
+  force_epoch_func = NULL;
+  forced_native_finishes = 0;
   lj_trace_test_reset_exit_stats();
   lj_ffi_native_trace_test_set_finish_hook(observe_finish);
   errno = 0;
@@ -416,6 +487,60 @@ static GCtrace *check_threshold_exit(lua_State *L, jit_State *J, TGState *tg,
   assert(getter(L, "__u32_first_errno") == E2BIG);
   assert(getter(L, "__u32_last_errno") == EDOM);
   assert_clean_native(tg, T);
+  return T;
+}
+
+static GCtrace *check_callm(lua_State *L, jit_State *J, TGState *tg,
+                            const char *runner, const char *consumer,
+                            uint32_t mode, uint32_t n, int force_target)
+{
+  GCtrace *T;
+  int status, observed_errno;
+  configure(L, mode);
+  capture_cfunc(L, "__u32_call", &expected_func);
+  capture_cfunc(L, consumer, &expected_alt_func);
+  pair_case = 0;
+  callm_case = 1;
+  expected_tg = tg;
+  expected_L = L;
+  expected_trace = NULL;
+  native_finishes = 0;
+  native_callm_producers = native_callm_consumers = 0;
+  forced_native_finishes = 0;
+  old_epoch = UINT64_MAX;
+  force_epoch_func = force_target == 1 ? expected_func :
+                     force_target == 2 ? expected_alt_func : NULL;
+  lj_trace_test_reset_exit_stats();
+  lj_ffi_native_trace_test_set_finish_hook(force_target ?
+      force_postcall_epoch : observe_finish);
+  errno = 0;
+  status = run_callm_driver(L, runner, n);
+  observed_errno = errno;
+  lj_ffi_native_trace_test_set_finish_hook(NULL);
+  assert(status == 0 && lua_isnumber(L, -1));
+  assert(lua_tonumber(L, -1) == single_sum(mode, n));
+  lua_pop(L, 1);
+  assert(observed_errno == EDOM);
+  assert(proto_has_callm_producer(L, runner));
+  T = find_callm_trace(J, global_proto(L, runner));
+  assert(T != NULL && expected_trace == T && native_finishes != 0);
+  assert(native_callm_producers != 0);
+  if (force_target != 1)
+    assert(native_callm_consumers != 0);
+  assert(getter(L, "__u32_count") == (lua_Integer)n);
+  assert(getter(L, "__u32_callm_count") == (lua_Integer)n);
+  assert(getter(L, "__u32_total_count") == 2 * (lua_Integer)n);
+  assert(getter(L, "__u32_first_errno") == E2BIG);
+  assert(getter(L, "__u32_last_errno") == EDOM);
+  if (force_target) {
+    assert(old_epoch != UINT64_MAX && forced_native_finishes != 0);
+    lj_tg_hs_epoch_ack_rel(tg, old_epoch);
+    assert(lj_trace_test_exit_calls() == forced_native_finishes);
+  }
+  assert_clean_native(tg, T);
+  callm_case = 0;
+  force_epoch_func = NULL;
+  expected_alt_func = NULL;
   return T;
 }
 
@@ -443,6 +568,7 @@ int main(void)
     "int32_t lj_callxs_arm64_u32_count(void);\n"
     "int32_t lj_callxs_arm64_u32_alt_count(void);\n"
     "int32_t lj_callxs_arm64_u32_vararg_count(void);\n"
+    "int32_t lj_callxs_arm64_u32_callm_count(void);\n"
     "int32_t lj_callxs_arm64_u32_total_count(void);\n"
     "int32_t lj_callxs_arm64_u32_first_errno(void);\n"
     "int32_t lj_callxs_arm64_u32_last_errno(void);\n"
@@ -450,6 +576,10 @@ int main(void)
     "uint32_t lj_callxs_arm64_u32_threshold(int32_t);\n"
     "uint32_t lj_callxs_arm64_u32_alt(int32_t);\n"
     "uint32_t lj_callxs_arm64_u32_vararg(int32_t, ...);\n"
+    "uint32_t lj_callxs_arm64_u32_callm_consumer(int32_t, ...);\n"
+    "uint32_t lj_callxs_arm64_u32_callm_double(int32_t, double);\n"
+    "uint32_t lj_callxs_arm64_u32_callm_float(int32_t, float);\n"
+    "uint32_t lj_callxs_arm64_u32_callm_stack(int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, ...);\n"
     "lj_test_u32_alias lj_callxs_arm64_u32_alias(int32_t);\n"
     "const uint32_t lj_callxs_arm64_u32_const(int32_t);\n"
     "]]\n"
@@ -459,12 +589,17 @@ int main(void)
     "_G.__u32_threshold_call=lib.lj_callxs_arm64_u32_threshold\n"
     "_G.__u32_alt_call=lib.lj_callxs_arm64_u32_alt\n"
     "_G.__u32_vararg_call=lib.lj_callxs_arm64_u32_vararg\n"
+    "_G.__u32_callm_consumer=lib.lj_callxs_arm64_u32_callm_consumer\n"
+    "_G.__u32_callm_double_consumer=lib.lj_callxs_arm64_u32_callm_double\n"
+    "_G.__u32_callm_float_consumer=lib.lj_callxs_arm64_u32_callm_float\n"
+    "_G.__u32_callm_stack_consumer=lib.lj_callxs_arm64_u32_callm_stack\n"
     "_G.__u32_alias_call=lib.lj_callxs_arm64_u32_alias\n"
     "_G.__u32_const_call=lib.lj_callxs_arm64_u32_const\n"
     "function _G.__u32_configure(mode) lib.lj_callxs_arm64_u32_configure(mode) end\n"
     "function _G.__u32_count() return lib.lj_callxs_arm64_u32_count() end\n"
     "function _G.__u32_alt_count() return lib.lj_callxs_arm64_u32_alt_count() end\n"
     "function _G.__u32_vararg_count() return lib.lj_callxs_arm64_u32_vararg_count() end\n"
+    "function _G.__u32_callm_count() return lib.lj_callxs_arm64_u32_callm_count() end\n"
     "function _G.__u32_total_count() return lib.lj_callxs_arm64_u32_total_count() end\n"
     "function _G.__u32_first_errno() return lib.lj_callxs_arm64_u32_first_errno() end\n"
     "function _G.__u32_last_errno() return lib.lj_callxs_arm64_u32_last_errno() end\n"
@@ -476,9 +611,14 @@ int main(void)
     "function _G.__u32_const_run(fn,n) local sum=0.5; for i=1,n do sum=sum+fn(i) end; return sum-0.5 end\n"
     "function _G.__u32_discard_run(fn,n) for i=1,n do fn(i) end; return n end\n"
     "function _G.__u32_threshold_run(fn,n) local sum=0; for i=1,n do sum=sum+fn(i) end; return sum end\n"
+    "function _G.__u32_callm_run(n) local producer,consumer=__u32_call,__u32_callm_consumer; local sum=0.5; for i=1,n do sum=sum+consumer(i,i+0.25,true,producer(i)) end; return sum-0.5 end\n"
+    "function _G.__u32_callm_double_run(n) local producer,consumer=__u32_call,__u32_callm_double_consumer; local sum=0.5; for i=1,n do sum=sum+consumer(i,producer(i)) end; return sum-0.5 end\n"
+    "function _G.__u32_callm_float_run(n) local producer,consumer=__u32_call,__u32_callm_float_consumer; local sum=0.5; for i=1,n do sum=sum+consumer(i,producer(i)) end; return sum-0.5 end\n"
+    "function _G.__u32_callm_stack_run(n) local producer,consumer=__u32_call,__u32_callm_stack_consumer; local sum=0.5; for i=1,n do sum=sum+consumer(i,101,102,103,104,105,106,107,108,i+0.25,true,producer(i)) end; return sum-0.5 end\n"
     "function _G.__u32_direct(fn,selector) set_errno(); return fn(selector) end\n"
     "jit.off(_G.__u32_direct)\n"
     "function _G.__u32_driver(run,fn,n) set_errno(); local result=run(fn,n); return result end\n"
+    "function _G.__u32_callm_driver(run,n) set_errno(); local result=run(n); return result end\n"
     "jit.on(); jit.flush(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=128')\n");
 
   /* Verify each requested boundary/high-bit pattern as an individual Lua
@@ -506,6 +646,25 @@ int main(void)
   /* The U32 result composes with the already-certified promoted suffix. */
   T = check_run(L, J, tg, "__u32_vararg_run", "__u32_vararg_call", 0, 1,
                 2, 31, 0);
+  /* A CALLM consumer receives the producer's U32 as a promoted double tail;
+  ** both calls and all variadic values are checked by the foreign helper. */
+  for (mode = 0; mode < 10; mode++) {
+    uint32_t n = 20u + mode;
+    T = check_callm(L, J, tg, "__u32_callm_run",
+                    "__u32_callm_consumer", mode, n, 0);
+    T = check_callm(L, J, tg, "__u32_callm_double_run",
+                    "__u32_callm_double_consumer", mode, n, 0);
+    T = check_callm(L, J, tg, "__u32_callm_float_run",
+                    "__u32_callm_float_consumer", mode, n, 0);
+    T = check_callm(L, J, tg, "__u32_callm_stack_run",
+                    "__u32_callm_stack_consumer", mode, n, 0);
+  }
+  /* Force postcall exits independently after the producer and the consumer.
+  ** Exact total counts prove neither completed foreign effect is replayed. */
+  T = check_callm(L, J, tg, "__u32_callm_run", "__u32_callm_consumer",
+                  4, 18, 1);
+  T = check_callm(L, J, tg, "__u32_callm_run", "__u32_callm_consumer",
+                  8, 18, 2);
   /* Retained and discarded results both cross a forced POSTCALL exit. */
   T = check_retained(L, J, tg, 8, 24, 1);
   assert(trace_runnable_acq(T, trace_traceno_acq(T)));

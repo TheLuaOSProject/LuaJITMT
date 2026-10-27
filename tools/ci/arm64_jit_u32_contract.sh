@@ -41,7 +41,7 @@ run_profile() {
   library_sha=$(lj_ci_sha256 "$library")
   echo "arm64_jit_u32_contract library=$library_sha profile=$LJ_CI_PROFILE_ID"
   export LJ_M7_FFI_CALLXS_U32_SO="$library"
-  for name in callxs-u32 callxs-u32-admission callxs-admission callxs-pointer-admission; do
+  for name in callxs-u32 callxs-u32-admission callxs-u32-callm-admission callxs-admission callxs-pointer-admission; do
     fixture=$tmpdir/t-arm64-jit-$name-$profile
     lj_ci_compile_fixture "$fixture" "$root/tests/t-arm64-jit-$name.c"
     lj_ci_run_fixture 60 "$fixture"
