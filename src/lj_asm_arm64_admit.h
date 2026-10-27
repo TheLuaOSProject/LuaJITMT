@@ -915,7 +915,10 @@ static int arm64_callxs_i64_argument(const jit_State *J, const GCtrace *T,
       source < REF_FIRST || source >= value) return 0;
   src = ir_load_acq(&ir[source]);
   if (irt_type(src.t) != IRT_CDATA || !irt_isguard(src.t)) return 0;
-  if (src.o == IR_SLOAD) {
+  if (src.o == IR_SLOAD || src.o == IR_VLOAD) {
+    /* The enclosing graph walk certifies every CData VLOAD as the exact
+    ** rooted table hit, with its success guard and retry/result snapshots.
+    ** Retain that source while proving its CType and fixed ABI payload. */
     for (ref = source+1u; ref < value; ref++) {
       IRIns eq = ir_load_acq(&ir[ref]), id;
       IRRef idref, kref;
@@ -3584,7 +3587,10 @@ static int arm64_postra_i64_argument(const LJArm64PostRAView *view,
       boxref < REF_FIRST || boxref >= ref) return 0;
   box = ir_load_acq(&ir[boxref]);
   if (irt_type(box.t) != IRT_CDATA || !irt_isguard(box.t)) return 0;
-  if (box.o == IR_SLOAD) {
+  if (box.o == IR_SLOAD || box.o == IR_VLOAD) {
+    /* This pass independently proves the rooted hit and snapshots for each
+    ** CData VLOAD before reaching its payload. The native caller still binds
+    ** that exact CData source in XSAVE; payload carriers are never roots. */
     for (r = boxref+1u; r < ref; r++) {
       IRIns type = ir_load_acq(&ir[r]);
       IRRef g;

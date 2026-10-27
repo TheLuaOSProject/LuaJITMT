@@ -279,6 +279,13 @@ available.
   GC lifetime, zero arguments, string/integer/boolean keys and independent
   malformed views. ARM64 and signed x64 each pass both 509-case stock corpora. See
   [`arm64-jit-table-callables-2026-10-27.md`](arm64-jit-table-callables-2026-10-27.md).
+- Certified table-hit CData can also supply fixed owned I64/U64 arguments.
+  Both admission passes retain exact CType, signedness, ABI-use and XSAVE
+  source checks; the existing table-read proof supplies scratch and snapshot
+  provenance. Native fixtures cover peer replacement, nine arguments,
+  fixed-prefix varargs, deferred GC and exact native-frame roots. See
+  [`arm64-jit-table-i64-arguments-2026-10-27.md`](arm64-jit-table-i64-arguments-2026-10-27.md)
+  for the current validation checkpoint and remaining scope.
 - Direct scalar producer `CALL` to consumer `CALLM` chains support nested
   integer, float and double calls with register and stack arguments. Source
   geometry, final-argument identity and continuation snapshots have independent

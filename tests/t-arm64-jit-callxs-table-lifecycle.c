@@ -221,6 +221,17 @@ static int call_runner(lua_State *L, lua_Integer n)
   return lua_pcall(L, 2, 1, 0);
 }
 
+static void drain_gc_to_idle(lua_State *L)
+{
+  global_State *g = G(L);
+  uint32_t i;
+  for (i = 0; i < 2000000u &&
+       (gc2_phase_acq(g) != LJ_GC2_IDLE || !lj_gc2_jit_entry_open(g)); i++)
+    (void)lua_gc(L, LUA_GCSTEP, 1);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE && lj_gc2_jit_entry_open(g));
+  assert(lj_tg_load_jit_base(L2TG(L)) == NULL);
+}
+
 static lua_Integer counter(lua_State *L, const char *name)
 {
   lua_Integer value;
@@ -260,6 +271,7 @@ int main(void)
   TGState *tg = L2TG(L);
   GCtrace *T;
   int status;
+  unsigned attempts;
   double expected;
 
   owner_tg = tg;
@@ -357,6 +369,8 @@ int main(void)
     "collectgarbage('collect')\n"
     "assert(__table_lifecycle_weak[1]~=nil)\n"
     "__table_lifecycle_configure()\n");
+  drain_gc_to_idle(L);
+  assert_clean(tg, T);
   assert(tvisnil(&tg->tmptv3));
   la_store32_rel(&pause_armed, 1);
   la_store32_rel(&pause_seen, 0);
@@ -367,21 +381,32 @@ int main(void)
   native_trace = NULL;
   lj_tab_test_set_rooted_gc_read_hook(rooted_read_hook);
   lj_ffi_native_trace_test_set_finish_hook(observe_native_finish);
-  errno = 0;
-  status = call_runner(L, 2);
+  /* Bounded table-hit helpers may refuse entry during concurrent activity.
+  ** Retry a whole two-iteration run only while no pause/native effect occurred;
+  ** the final assertions require the actual lease-to-frame handoff. */
+  for (attempts = 1; attempts <= 32u; attempts++) {
+    drain_gc_to_idle(L);
+    errno = 0;
+    status = call_runner(L, 2);
+    assert(status == LUA_OK && lua_isnumber(L, -1));
+    assert(lua_tonumber(L, -1) == 239.0);
+    lua_pop(L, 1);
+    assert(errno == EDOM);
+    if (la_load32_acq(&pause_seen)) break;
+    assert(native_finishes == 0 && la_load32_acq(&removed_edge) == 0 &&
+           la_load32_acq(&phase_attempted) == 0);
+    assert_clean(tg, T);
+  }
   lj_ffi_native_trace_test_set_finish_hook(NULL);
-  assert(status == LUA_OK && lua_isnumber(L, -1));
-  assert(lua_tonumber(L, -1) == 239.0);
-  lua_pop(L, 1);
-  assert(errno == EDOM);
+  assert(attempts <= 32u);
   assert(la_load32_acq(&pause_seen) == 1);
   assert(la_load32_acq(&removed_edge) == 1);
   assert(la_load32_acq(&phase_attempted) == 1);
   assert(lj_tg_load_jit_base(tg) == NULL);
   assert(target_native == 1u && sentinel_native == 1u);
   assert(native_finishes == 2u);
-  assert(counter(L, "__table_lifecycle_first_count") == 2);
-  assert(counter(L, "__table_lifecycle_second_count") == 2);
+  assert(counter(L, "__table_lifecycle_first_count") == 2*(lua_Integer)attempts);
+  assert(counter(L, "__table_lifecycle_second_count") == 2*(lua_Integer)attempts);
   T = find_trace(J, global_proto(L, "__table_lifecycle_run"));
   assert(T != NULL && T == native_trace);
   assert_clean(tg, T);

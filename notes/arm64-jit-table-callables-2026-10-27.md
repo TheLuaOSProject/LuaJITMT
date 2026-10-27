@@ -148,3 +148,7 @@ payload proofs currently accept SLOAD or a prior boxed CALLXS result, not the
 certified rooted CData VLOAD. Extending those independent source/CTYPE/use and
 XSAVE proofs remains future work; the table-callable evidence does not certify
 it automatically.
+
+The subsequent [table-I64 argument increment](arm64-jit-table-i64-arguments-2026-10-27.md)
+extends and validates that composition separately. The preceding paragraph
+describes the scope of the callable checkpoint above.
