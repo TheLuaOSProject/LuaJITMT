@@ -1,6 +1,6 @@
 # ARM64 integer Lua leaf child-frame exits
 
-This candidate follows the fully validated pure Lua leaf checkpoint `a202c982`
+This checkpoint follows the fully validated pure Lua leaf checkpoint `a202c982`
 (documentation `6cb4c26f`). The full ARM64 port remains incomplete.
 
 ## Scope
@@ -34,7 +34,7 @@ runtime mechanism changes are introduced.
 The C fixture covers six arithmetic operand forms and an additional root with
 two live numeric accumulators. With a live MT peer and independently compiled,
 permanently interpreted oracles, it requires 34 native runs, ten child overflow
-exits, 24 same-trace reuses and seven post-GC reuses. Entry counters and actual
+exits and 24 same-trace reuses, including seven after GC. Entry counters and actual
 first-exit parent/snapshot identify execution; child snapshots are checked for
 the exact PC, base, closure and return link. Addition and multiplication
 exercise backedge exits, and addition also exercises preloop overflow. Stack
@@ -65,6 +65,54 @@ Focused logs: `/tmp/ljmt-child-focused-final.log`,
 `/tmp/ljmt-child-counterfactual.log`, and
 `/tmp/ljmt-child-counterfactual-restored.log`.
 
-The new fixtures are included in all four profiles of the existing Lua leaf
-contract. Full frozen-source validation and main integration remain pending;
-`6cb4c26f` remains the latest fully validated main checkpoint.
+## Complete validation and integration
+
+The source checkpoint is `539475c87ec87da91ce7680d3d2988ee691c63f6`.
+Source stayed frozen through the complete matrix. All four ARM64/arm64e
+assertion/release profiles pass the new 34 native runs, ten child exits,
+406 semantic negatives, 435 allocated negatives and the ordinary child
+contract. The preceding floating leaf native and ordinary contracts also
+pass in each profile. The leaf/child contract profile identities, in ARM64
+assertion, arm64e assertion, ARM64 release and arm64e release order, are:
+
+```
+38d850e3bd08c26ee92b7176d99783e86bb4100e0281b017d7a5c4da801ff199
+29d15ec607517258a8a4aa83a052e5431867450f6e98bc345cbc82f7073ce064
+0daa4968a2ba40f179a1bf450e20fc4fd42746588c45e4114223ec1b2823eab7
+3c0b84e4a0b12300df40c80bc2554ba176e934a911486208456171a0e7a6ed85
+```
+
+All 26 preceding table/FFI fixtures pass all four profiles. Both complete
+experimental/bootstrap gates pass, including the four full M7 scalar CALLXS
+suites. ARM64 and signed x64 each pass both 509-case stock source and original
+bytecode import corpora. The ordinary ARM64 runtime passes the 698 preceding
+observations, boundary/bit-operation/cell/upvalue checks, the floating leaf
+publication/refusal contract and the new child contract. The worktree is
+restored to ordinary ARM64 assertion mode with frozen source identity verified.
+
+The main `v2.1` checkout was fast-forwarded to the source checkpoint and rebuilt
+independently in ordinary ARM64 assertion mode, without test helpers. It passes
+the same ordinary contracts and both 509-case stock corpora. Numeric CALLM
+needed one bounded cold retry; the 240 INT observations used 240 candidates,
+and all six new child cases published on the first cold call. Ordinary
+publication/reuse checks do not replace the focused native execution evidence.
+Both ordinary runtimes pass codesign verification and contain neither exported
+test helpers nor out-of-line atomic imports.
+
+The main profile identity is
+`05486ac11460d297e1f78910584e1b44b4e1f890e5e4bf1ce9f2c50ec18a241b`.
+Main and worktree runtime binaries have identical SHA-256:
+`7dce37e3bb8920c46394b064442010f1fc7672ed0018f76b084dcd39340fb4d8`.
+Archive and profile signatures differ across checkout paths; archive identity
+is not claimed.
+
+Complete logs: `/tmp/ljmt-child-matrix.log`,
+`/tmp/ljmt-child-four-profile.log`, `/tmp/ljmt-child-experimental.log`,
+`/tmp/ljmt-child-bootstrap.log`, and `/tmp/ljmt-child-main.log`.
+The next bounded gap is compound arithmetic inside the pure leaf. An inlined
+child return does not force a caller snapshot: `lj_record_ret` adds its return
+snapshot only for the separate `framedepth == 0` path. Later pure caller
+arithmetic can therefore reuse an earlier child snapshot. Further admission
+must preserve the child temporaries and prove any replay interval remains free
+of effects; it must not assume a mandatory root continuation snapshot.
+General Lua call/return and the full ARM64 port remain incomplete.
