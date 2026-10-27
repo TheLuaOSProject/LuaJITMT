@@ -65,7 +65,52 @@ Focused logs: `/tmp/ljmt-lua-leaf-focused-final.log`,
 `/tmp/ljmt-lua-leaf-counterfactual.log`, and
 `/tmp/ljmt-lua-leaf-counterfactual-restored.log`.
 
-The four-profile contract is registered in the complete experimental gate.
-Full frozen-source validation and main integration are pending for this new
-checkpoint; the preceding CData32 checkpoint remains the latest fully validated
-main build until that validation succeeds.
+## Complete validation and integration
+
+The source checkpoint is `a202c982fc210b3704cbc309a133b670cd4af54e`.
+Source remained frozen throughout the complete matrix. The four-profile leaf
+contract is registered in the experimental gate and passes on ARM64 and
+arm64e/BTI, with assertion and release builds. Each profile passes the 12 native
+runs, 72 semantic and 78 allocated negatives, and the ordinary nine-publication,
+nine-reuse and seven-refusal-shape contract, with zero leaf cold retries.
+
+Leaf profile identities, in ARM64 assertion, arm64e assertion, ARM64 release
+and arm64e release order:
+
+```
+4d55498b0757d03227491c2a18fefe44cf8c6ebc7d31efaafca4ad390c0dbb4d
+5750f6c27401d92cef966192fc4d196620df5717466c647105102d126db4f194
+525ab1500179db018b7406b1e61213c208ac8d5536607b67f6360361e7cfe5e6
+c8fd3d2e2e3b64be4cdc4c6fecfaf29c4dff206f85979b63ecaa64b54079f59b
+```
+
+All 26 preceding focused table/FFI fixtures pass the four profiles. The complete
+experimental and bootstrap gates pass, including all four full M7 scalar
+CALLXS profiles. Ordinary ARM64 without test helpers passes the preceding 698
+observations, boundary, bit-operation, cell and upvalue checks, plus the new
+leaf contract. ARM64 and signed x64 each pass both 509-case stock source and
+original-bytecode import corpora. The worktree was restored to ordinary ARM64
+assertion mode and its source identity and clean state were verified.
+
+After fast-forwarding the main `v2.1` checkout to the source checkpoint, an
+independent ordinary ARM64 rebuild passes the same 698 observations and leaf
+contract, the boundary/cell/upvalue/bit-operation checks, and both 509-case
+stock corpora. The numeric CALLM smoke needed one bounded cold retry, and the
+INT smoke used 241 candidates for 240 observations; the leaf cases all publish
+on the first attempt. These ordinary checks do not replace the focused native
+execution witnesses. Both ordinary runtimes pass codesign verification and
+contain neither test-helper exports nor out-of-line atomic imports.
+
+The main profile identity is
+`80e3fd834aedb76bb0b00f92aebac891a6642bb3345941c1a5a77fa2922f46d8`.
+The main and worktree runtime binaries have the identical SHA-256:
+`9788550d83ce5759bd320546dfc32f61b86b624a6c29d11e003e3239fdaba228`.
+Archive and profile signatures differ across checkout paths; the runtime
+comparison does not claim archive identity.
+
+Complete logs: `/tmp/ljmt-leaf-matrix.log`,
+`/tmp/ljmt-leaf-four-profile.log`, `/tmp/ljmt-leaf-experimental.log`,
+`/tmp/ljmt-leaf-bootstrap.log`, and `/tmp/ljmt-leaf-main.log`.
+The next bounded gap is a child-frame snapshot for integer arithmetic; general
+Lua calls, deeper stacks, varargs, recursion and the full ARM64 port remain
+incomplete.

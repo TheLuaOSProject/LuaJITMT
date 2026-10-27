@@ -15,11 +15,17 @@ and reports that are no longer authoritative are retained in
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
-- Candidate Lua leaf-call work: fixed pure unary leaves in scalar FORL roots,
-  with exact caller snapshots and independent admission. Focused native and
-  refusal tests pass; full matrix and main integration are pending. See the
+- Latest fully validated JIT checkpoint: fixed pure unary Lua leaves in scalar
+  FORL roots at `a202c982`, with exact caller snapshots and independent admission.
+  Each of four ARM64/arm64e assertion/release profiles passes 12 native runs,
+  72 semantic and 78 allocated negatives. Both complete gates, all 26 preceding
+  focused FFI fixtures in four profiles, and both 509-case stock corpora on
+  ARM64 and signed x64 pass. The independent ordinary main rebuild passes both
+  corpora, all 698 preceding observations and the new nine-publication,
+  nine-reuse and seven-refusal-shape contract. Child-frame exits remain closed.
+  See the
   [leaf-call evidence](arm64-jit-lua-leaf-calls-2026-10-27.md).
-- Latest fully validated JIT checkpoint: exact owned `int32_t`/`uint32_t`
+- Preceding JIT checkpoint: exact owned `int32_t`/`uint32_t`
   fixed arguments from SLOAD and rooted table reads, at `dfd8db52`.
   All 26 focused fixtures and the broader M7 FFI suite pass four ARM64/arm64e
   assertion/release profiles. Eight new shapes require 64 native runs, eight
@@ -87,14 +93,18 @@ and reports that are no longer authoritative are retained in
   semantic/post-RA views. Each profile records 344 native observations and
   independent 4-positive/26-negative admission checks.
   See [`arm64-jit-i64-arguments-2026-10-26.md`](arm64-jit-i64-arguments-2026-10-26.md).
-- Latest complete umbrella validation: the owned 32-bit CData argument
-  checkpoint on 2026-10-27, frozen at `dfd8db52`.
+- Latest complete umbrella validation: the fixed pure Lua leaf-call
+  checkpoint on 2026-10-27, frozen at `a202c982`.
   The complete experimental and bootstrap gates passed, including all four
   M7 scalar CALLXS profiles. ARM64 and signed x86-64 each passed both 509-case
   stock source/import corpora. The ordinary main ARM64 rebuild passes both corpora
-  and 698 observations: 598 preceding INT/numeric-CALLM/numeric-argument/
+  and 698 preceding observations: 598 INT/numeric-CALLM/numeric-argument/
   held-result/scalar-table/nested-read/I64-argument/callable cases, 40 new
-  CData32 cases and 60 enum refusals. See the
+  CData32 cases and 60 enum refusals, plus the new leaf contract (nine
+  publications, nine exact-trace reuses and seven refusal shapes with eight
+  calls each). Main and worktree runtime binaries match byte for byte. See the
+  [leaf-call evidence](arm64-jit-lua-leaf-calls-2026-10-27.md).
+  The preceding CData32 argument checkpoint is in the
   [CData32 evidence](arm64-jit-ffi-cdata32-arguments-2026-10-27.md).
   The preceding INT argument checkpoint is in the
   [INT argument evidence](arm64-jit-ffi-int-arguments-2026-10-27.md).
@@ -148,11 +158,11 @@ and reports that are no longer authoritative are retained in
   publication/entry/retirement, native numeric adaptation, and M7 scalar CALLXS
   on ARM64 and arm64e/BTI with both assertion and release runtimes.
 - Native ARM64 source and original-v2 import stock corpora each pass all 509
-  cases at the `dfd8db52` checkpoint and its ordinary main rebuild.
+  cases at the `a202c982` checkpoint and its ordinary main rebuild.
 - The complete bootstrap gate passes, including 387 applicable stock cases,
   threaded tmpbuf, Darwin native roots/GC2, ARM64/arm64e callbacks,
   variadic/aggregate interpreter FFI and x86-64 errno unwind.
-- The signed x86-64/Rosetta runtime at `dfd8db52` passed both 509-case corpora.
+- The signed x86-64/Rosetta runtime at `a202c982` passed both 509-case corpora.
   The combined gates also ran x86-64 callback-result lifetime and errno unwind.
   Shared rooted-store, raw nil-deletion, upvalue/cell and segment-map race
   fixtures were validated at the earlier local-cell checkpoint. Earlier
@@ -227,6 +237,12 @@ available.
 
 ### Bounded native JIT
 
+- Fixed pure unary Lua leaves inline in scalar FORL roots with exact caller
+  CALL snapshots and independently certified callee source, identity and
+  argument restoration. Arithmetic traces retaining only root-frame snapshots
+  pass four native profiles. Integer child-frame overflow exits and general
+  Lua call/return remain excluded. See the
+  [leaf-call evidence](arm64-jit-lua-leaf-calls-2026-10-27.md).
 - ARM64 and arm64e/BTI trace publication, authenticated entry and exits,
   retirement, flush/reuse, GDB-JIT preparation, and bounded root/first-side
   entry paths.
