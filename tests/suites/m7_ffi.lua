@@ -205,6 +205,9 @@ return function(add)
       local callxs_i64_args_so = build_shared_library(t,
         t:tmp("lj_t-arm64-jit-callxs-i64-args.dylib"),
         "t-arm64-jit-callxs-i64-args-lib.c")
+      local callxs_u32_so = build_shared_library(t,
+        t:tmp("lj_t-arm64-jit-callxs-u32.dylib"),
+        "t-arm64-jit-callxs-u32-lib.c")
       local callxs_cpp_so = build_shared_cpp_library(t,
         t:tmp("lj_t-arm64-jit-cpp-callxs-unwind.dylib"),
         "t-arm64-jit-cpp-callxs-unwind-lib.cpp", {
@@ -262,6 +265,15 @@ return function(add)
             build = false,
             cflags = flags,
             env = { LJ_M7_FFI_CALLXS_I64_ARGS_SO = callxs_i64_args_so },
+            timeout = "60s"
+          })
+        end
+        for _, name in ipairs({ "callxs-u32", "callxs-u32-admission" }) do
+          build_and_run_c(t, t:tmp("lj_t-arm64-jit-" .. name),
+                          "t-arm64-jit-" .. name .. ".c", {
+            build = false,
+            cflags = flags,
+            env = { LJ_M7_FFI_CALLXS_U32_SO = callxs_u32_so },
             timeout = "60s"
           })
         end

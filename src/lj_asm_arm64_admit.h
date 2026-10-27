@@ -1035,13 +1035,13 @@ static int arm64_callxs_source_value(const GCtrace *T, IRRef xsave,
 }
 
 /* Read one exact, restorable slot from an effect-boundary snapshot. This is
-** metadata validation only: each admission pass separately derives the box,
+** metadata validation only: each admission pass separately derives the value,
 ** marker, caller slot and frame geometry from its own CALLXS lifecycle.
 ** A zero slot denotes a discarded Lua result: the completed-call snapshot
-** is still mandatory, but it need not retain the native frame's box. */
-static int arm64_callxs_snapshot_box_slot(const SnapShot *snapshots,
+** is still mandatory, but it need not retain the result. */
+static int arm64_callxs_snapshot_value_slot(const SnapShot *snapshots,
     const SnapEntry *map, MSize nsnap, MSize nsnapmap, IRRef at,
-    MSize base, MSize slot, IRRef box, int hidden)
+    MSize base, MSize slot, IRRef value, int hidden)
 {
   const SnapShot *snap = NULL;
   MSize s, ofs, nent, nslots, i;
@@ -1049,7 +1049,7 @@ static int arm64_callxs_snapshot_box_slot(const SnapShot *snapshots,
   SnapEntry footer_words[1+LJ_FR2];
   uint64_t footer;
   if (snapshots == NULL || map == NULL || base < 1u+LJ_FR2 ||
-      base > UINT8_MAX || slot > UINT8_MAX || box < REF_FIRST || box >= at)
+      base > UINT8_MAX || slot > UINT8_MAX || value < REF_FIRST || value >= at)
     return 0;
   for (s = 0; s < nsnap; s++) {
     if (snap_ref_acq(&snapshots[s]) == at) {
@@ -1073,11 +1073,42 @@ static int arm64_callxs_snapshot_box_slot(const SnapShot *snapshots,
   for (i = 0; i < nent; i++) {
     SnapEntry entry = snapentry_acq(&map[ofs+i]);
     if (snap_slot(entry) == slot) {
-      /* A fresh CNEW cannot be an unchanged SLOAD or a NORESTORE value. */
-      if (entry != SNAP(slot, 0, box) || found++) return 0;
+      /* A newly produced value must be restored, never treated as an SLOAD. */
+      if (entry != SNAP(slot, 0, value) || found++) return 0;
     }
   }
   return found == 1;
+}
+
+/* The raw U32 ABI carrier is not a Lua value. Its only admitted consumer is
+** this call's nonthrowing numeric conversion, before native leave. Discarded
+** results may have no conversion after DCE, but still keep their DONE snapshot. */
+static int arm64_callxs_u32_result_uses(const GCtrace *T, IRRef call, IRRef num)
+{
+  IRRef ref;
+  MSize s, i;
+  unsigned converted = 0;
+  if (ir_load_acq(&T->ir[call]).t.irt != IRT_U32 ||
+      T->snap == NULL || T->snapmap == NULL) return 0;
+  for (ref = call+1u; ref < T->nins; ref++) {
+    IRIns use = ir_load_acq(&T->ir[ref]);
+    IRMode mode;
+    if (use.o >= IR__MAX) return 0;
+    mode = lj_ir_mode[use.o];
+    if ((irm_op1(mode) == IRMref && use.op1 == call) ||
+        (irm_op2(mode) == IRMref && use.op2 == call)) {
+      if (ref != num || use.o != IR_CONV || use.op1 != call || converted++)
+        return 0;
+    }
+  }
+  for (s = 0; s < T->nsnap; s++) {
+    MSize ofs = snap_mapofs_acq(&T->snap[s]);
+    MSize nent = snap_nent_acq(&T->snap[s]);
+    if (ofs > T->nsnapmap || nent > T->nsnapmap-ofs) return 0;
+    for (i = 0; i < nent; i++)
+      if (snap_ref(snapentry_acq(&T->snapmap[ofs+i])) == call) return 0;
+  }
+  return converted == (num != 0);
 }
 
 static int arm64_callxs_vararg_sources(const GCtrace *T, IRRef xsave,
@@ -1180,6 +1211,8 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
   CTypeID box_ctype = 0;
   IRType call_result_type = IRT_NIL;
   int result_is_cdata = 0, box_store_seen = 0;
+  int result_is_u32 = 0;
+  IRRef number_result = 0;
   MSize result_slot = 0;
   if (J == NULL || T == NULL || T->ir == NULL || g == NULL)
     return 0;
@@ -1275,9 +1308,15 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	    (!result_is_cdata && (boxref || box_store_seen)))
 	  return 0;
 	if (result_is_cdata &&
-	    !arm64_callxs_snapshot_box_slot(T->snap, T->snapmap,
+	    !arm64_callxs_snapshot_value_slot(T->snap, T->snapmap,
 	      T->nsnap, T->nsnapmap, ref, 1u+LJ_FR2,
 	      result_slot, boxref, 0)) return 0;
+	if (result_is_u32 &&
+	    ((result_slot && !number_result) ||
+	     !arm64_callxs_u32_result_uses(T, call, number_result) ||
+	     !arm64_callxs_snapshot_value_slot(T->snap, T->snapmap,
+	       T->nsnap, T->nsnapmap, ref, 1u+LJ_FR2, result_slot,
+	       number_result ? number_result : call, 0))) return 0;
 	leaves++;
 	leave = ref;
 	state = CALLXS_LEFT;
@@ -1356,6 +1395,10 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
       if (!arm64_callxs_signature_for_call(cts, T->ir, nk, nins,
 	ref, &abi, &fpref))
 	return 0;
+      result_is_u32 = abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER &&
+        abi.result_class == LJ_ARM64_ABI_GPR && abi.result_size == 4 &&
+        abi.result_unsigned;
+      number_result = 0;
 
       if (enterargs[0] != J->ktrace || enterargs[1] != fpref) return 0;
       if (arm64_callxs_result_boxed(&abi) ?
@@ -1422,7 +1465,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
           MSize base = 1u+LJ_FR2+(MSize)bc_a(sourceins)+1u+LJ_FR2;
           /* The meta-call frame holds the callable cdata before its native
           ** arguments. CNEW occupies the next slot, past both. */
-          if (!arm64_callxs_snapshot_box_slot(T->snap, T->snapmap,
+          if (!arm64_callxs_snapshot_value_slot(T->snap, T->snapmap,
                 T->nsnap, T->nsnapmap, xsave, base,
                 base+1u+actual_count, boxref, 1)) return 0;
           /* B=1 discards the result. Otherwise lj_record_ret replaces the
@@ -1430,6 +1473,8 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
           if (bc_b(sourceins) != 1)
             result_slot = 1u+LJ_FR2+(MSize)bc_a(sourceins);
         }
+        if (result_is_u32 && bc_b(sourceins) != 1)
+          result_slot = 1u+LJ_FR2+(MSize)bc_a(sourceins);
       }
       for (i = 0; i < abi.nargs; i++) {
 	LJArm64ABIArg *a = &abi.arg[i];
@@ -1667,12 +1712,24 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	IRIns src;
 	IRType dst = irt_type(ins.t);
 	IRType from = (IRType)(ins.op2 & IRCONV_SRCMASK);
-	if ((ins.t.irt & ~(IRT_TYPE|IRT_ISPHI)) != 0 ||
-	    !arm64_callxs_ref_valid(T->ir, nk, nins, ref, ins.op1))
+	if (!arm64_callxs_ref_valid(T->ir, nk, nins, ref, ins.op1))
 	  return 0;
 	src = ir_load_acq(&T->ir[ins.op1]);
 	if (irt_type(src.t) != from)
 	  return 0;
+	/* The loop optimizer may narrow a numeric result or accumulator. The
+	** exact integerness guard may run only while the native frame is closed. */
+	if (state == CALLXS_CLOSED && ins.t.irt == (IRT_INT|IRT_GUARD) &&
+	    from == IRT_NUM && ins.op2 == (IRCONV_INT_NUM|IRCONV_CHECK))
+	  break;
+	if ((ins.t.irt & ~(IRT_TYPE|IRT_ISPHI)) != 0) return 0;
+	if (dst == IRT_NUM && from == IRT_U32 &&
+	    ins.op2 == ((IRT_NUM << IRCONV_DSH)|IRT_U32) &&
+	    state == CALLXS_ACTIVE && result_is_u32 && ins.op1 == call &&
+	    src.t.irt == IRT_U32 && number_result == 0) {
+	  number_result = ref;
+	  break;
+	}
 	if (dst == IRT_NUM && from == IRT_INT &&
 	    ins.op2 == IRCONV_NUM_INT && ins.t.irt == IRT_NUM)
 	  break;
@@ -2954,6 +3011,7 @@ static int arm64_postra_callxs_snapshot_locations(
 		for (i = 0; i < nent; i++) {
 			SnapEntry se = snapentry_acq(&view->snapmap[ofs+i]);
 			IRRef value = snap_ref(se);
+			IRRef renref;
 			IRIns source;
 			RegSP rs;
 			Reg reg;
@@ -2965,6 +3023,13 @@ static int arm64_postra_callxs_snapshot_locations(
 				return 0;
 			source = ir_load_acq(&view->ir[value]);
 			rs = source.prev;
+			/* Match snap_renameref: a loop-carried result can move to a
+			** different FPR at this exit while the next result is live. */
+			for (renref = view->nins; renref-- > semantic_nins; ) {
+				IRIns ren = ir_load_acq(&view->ir[renref]);
+				if (ren.o != IR_RENAME) break;
+				if (ren.op1 == value && ren.op2 <= s) rs = ren.prev;
+			}
 			if (ra_hasspill(regsp_spill(rs))) {
 			MSize slot = regsp_spill(rs);
 			MSize width = irt_is64(source.t) ? 2u : 1u;
@@ -3622,6 +3687,36 @@ static int arm64_postra_vararg_source_proof(const GCtrace *T,
 	return 1;
 }
 
+/* Independently reject raw U32 values in Lua snapshots and all consumers
+** other than the current native result's exact numeric conversion. */
+static int arm64_postra_u32_result_uses(const LJArm64PostRAView *view,
+    IRRef nins, IRRef call, IRRef converted)
+{
+  MSize s, i;
+  IRRef r;
+  unsigned uses = 0;
+  if (ir_load_acq(&view->ir[call]).t.irt != IRT_U32) return 0;
+  for (s = 0; s < view->nsnap; s++) {
+    MSize ofs = snap_mapofs_acq(&view->snap[s]);
+    MSize count = snap_nent_acq(&view->snap[s]);
+    if (ofs > view->nsnapmap || count > view->nsnapmap-ofs) return 0;
+    for (i = 0; i < count; i++)
+      if (snap_ref(snapentry_acq(&view->snapmap[ofs+i])) == call) return 0;
+  }
+  for (r = call+1u; r < nins; r++) {
+    IRIns ins = ir_load_acq(&view->ir[r]);
+    IRMode mode;
+    if (ins.o >= IR__MAX) return 0;
+    mode = lj_ir_mode[ins.o];
+    if ((irm_op1(mode) == IRMref && ins.op1 == call) ||
+        (irm_op2(mode) == IRMref && ins.op2 == call)) {
+      if (r != converted || ins.o != IR_CONV || ins.op1 != call) return 0;
+      uses++;
+    }
+  }
+  return uses == (converted != 0);
+}
+
 static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	IRRef *semantic_ninsp)
 {
@@ -3633,6 +3728,8 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	IRRef boxref = 0;
 	CTypeID box_ctype = 0;
 	int box_store_seen = 0, result_is_cdata = 0;
+	int result_is_u32 = 0;
+	IRRef number_result = 0;
 	MSize result_slot = 0;
 	uintptr_t xsave_returnpc = 0, producer_returnpc = 0;
 	IRType producer_type = IRT_NIL;
@@ -3843,15 +3940,21 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		 ir_load_acq(&view->ir[enterargs[2]]).o != IR_KNULL ||
 		 arm64_callxs_ref_type(view->ir, view->nk, enterargs[2]) != IRT_CDATA)) return 0;
 	    result_is_cdata = arm64_callxs_result_boxed(&abi);
+	    result_is_u32 = abi.result_class == LJ_ARM64_ABI_GPR &&
+	      abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER &&
+	      abi.result_size == 4 && abi.result_unsigned;
+	    number_result = 0;
 	    result_slot = 0;
 	    if (result_is_cdata) {
 	      MSize base = 1u+LJ_FR2+(MSize)bc_a(sourceins)+1u+LJ_FR2;
-	      if (!arm64_callxs_snapshot_box_slot(view->snap, view->snapmap,
+	      if (!arm64_callxs_snapshot_value_slot(view->snap, view->snapmap,
 		    view->nsnap, view->nsnapmap, active_xsave, base,
 		    base+1u+actual_count, boxref, 1)) return 0;
 	      if (bc_b(sourceins) != 1)
 		result_slot = 1u+LJ_FR2+(MSize)bc_a(sourceins);
 	    }
+	    if (result_is_u32 && bc_b(sourceins) != 1)
+	      result_slot = 1u+LJ_FR2+(MSize)bc_a(sourceins);
 	    active_call = ref;
 	    protocol = 4;
 	    nc++;
@@ -3864,9 +3967,18 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		(!result_is_cdata && (boxref != 0 || box_store_seen)))
 	      return 0;
 	    if (result_is_cdata &&
-		!arm64_callxs_snapshot_box_slot(view->snap, view->snapmap,
+		!arm64_callxs_snapshot_value_slot(view->snap, view->snapmap,
 		  view->nsnap, view->nsnapmap, ref, 1u+LJ_FR2,
 		  result_slot, boxref, 0)) return 0;
+	    if (result_is_u32 &&
+		((result_slot && (!number_result ||
+		  !arm64_postra_callxs_value_survives(view, number_result,
+		    ref, capacity, 0))) ||
+		 !arm64_postra_u32_result_uses(view, semantic_nins,
+		   active_call, number_result) ||
+		 !arm64_callxs_snapshot_value_slot(view->snap, view->snapmap,
+		   view->nsnap, view->nsnapmap, ref, 1u+LJ_FR2, result_slot,
+		   number_result ? number_result : active_call, 0))) return 0;
 	    active_call = 0;
 	    active_leave = ref;
 	    protocol = 5;
@@ -4036,12 +4148,21 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    IRIns src;
 	    IRType dst = irt_type(ins.t);
 	    IRType from = (IRType)(ins.op2 & IRCONV_SRCMASK);
-	    if ((ins.t.irt & ~(IRT_TYPE|IRT_ISPHI)) != 0 ||
-		ins.op1 >= ref || !arm64_callxs_ref_valid(view->ir, view->nk,
+	    if (ins.op1 >= ref || !arm64_callxs_ref_valid(view->ir, view->nk,
 		semantic_nins, ref, ins.op1))
 	      return 0;
 	    src = ir_load_acq(&view->ir[ins.op1]);
-	    if (irt_type(src.t) != from ||
+	    if (irt_type(src.t) != from) return 0;
+	    if (dst == IRT_NUM && from == IRT_U32 &&
+		(ins.t.irt & ~IRT_ISPHI) == IRT_NUM &&
+		ins.op2 == ((IRT_NUM << IRCONV_DSH)|IRT_U32) &&
+		protocol == 4 && result_is_u32 && ins.op1 == active_call &&
+		src.t.irt == IRT_U32 && !number_result) {
+	      number_result = ref;
+	    } else if (protocol == 0 && ins.t.irt == (IRT_INT|IRT_GUARD) &&
+		from == IRT_NUM && ins.op2 == (IRCONV_INT_NUM|IRCONV_CHECK)) {
+	      /* Exact checked NUM narrowing; each source has its own IR proof. */
+	    } else if ((ins.t.irt & ~(IRT_TYPE|IRT_ISPHI)) != 0 ||
 		!((dst == IRT_NUM && from == IRT_INT &&
 		   ins.op2 == IRCONV_NUM_INT &&
 		   ins.t.irt == IRT_NUM) ||
