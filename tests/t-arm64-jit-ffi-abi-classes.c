@@ -1374,10 +1374,16 @@ static void test_callm_float_result_layout(lua_State *L)
   GCtrace *T = NULL;
   TraceVec *tv = tracevec_acq(J);
   LJArm64PostRAView view;
-  IRIns *copy;
-  IRRef ref, result = 0;
+  SemanticClone semantic;
+  SemanticJSave jsave;
+  IRIns *copy, *source_ir_copy;
+  SnapEntry *snapmap;
+  IRRef ref, result = 0, xsave = 0, consumer = 0, producer = 0;
+  IRRef source_num = 0, earlier_num = 0;
+  MSize source_snap = UINT_MAX, source_slot = 0, source_entry = UINT_MAX;
   MSize n, i;
   uintptr_t lo, hi;
+  BCIns sourceins = 0;
   uint32_t move;
   int found = 0;
   const Reg badregs[] = { RID_D7, RID_D16, RID_X19, RID_NONE };
@@ -1407,6 +1413,83 @@ static void test_callm_float_result_layout(lua_State *L)
     .startins = trace_startins_acq(T)
   };
   assert(lj_asm_arm64_postra_admit(&view, NULL));
+  /* The Lua frame stores the rounded numeric result of the inner float
+  ** call, while the outer fixed-float CALLXS folds the narrowing conversion
+  ** back to the original FLOAT producer. Keep these independently checked
+  ** source and carrier identities under malformed-clone tests below. */
+  for (ref = view.nk; ref < view.nins && xsave == 0; ref++) {
+    IRIns ins = ir_load_acq(&view.ir[ref]);
+    uint32_t offset;
+    MSize pos, s;
+    if (ins.o != IR_XSAVE) continue;
+    for (s = 0; s < view.nsnap; s++)
+      if (snap_ref_acq(&view.snap[s]) == ref) break;
+    if (s == view.nsnap) continue;
+    offset = (uint32_t)ins.op1 | ((uint32_t)ins.op2 << 15);
+    pos = offset;
+    if (pos == 0 || pos >= pt->sizebc ||
+        bc_op((BCIns)la_load32_acq((const uint32_t *)&proto_bc(pt)[pos-1u])) !=
+          BC_CALLM) continue;
+    for (n = ref+1u; n < view.nins; n++) {
+      IRIns next = ir_load_acq(&view.ir[n]);
+      if (next.o == IR_XSAVE) break;
+      if (next.o == IR_CALLXS) { consumer = n; break; }
+    }
+    if (consumer == 0) continue;
+    {
+      LJArm64ABISignature abi;
+      IRRef values[LJ_ARM64_ABI_MAX_ARGS];
+      if (!fixture_callxs_signature(view.cts, view.ir, view.nk, view.nins,
+            consumer, global_ctype(L, "__abi_fpr9_float"), &abi, values) ||
+          abi.nargs != 9 || ir_load_acq(&view.ir[values[8]]).o != IR_CALLXS)
+        continue;
+      producer = values[8];
+    }
+    sourceins = (BCIns)la_load32_acq(
+      (const uint32_t *)&proto_bc(pt)[pos-1u]);
+    xsave = ref;
+    source_snap = s;
+  }
+  assert(xsave != 0 && consumer != 0 && producer != 0 &&
+         bc_op(sourceins) == BC_CALLM && source_snap < view.nsnap);
+  {
+    unsigned metaslot = (unsigned)bc_a(sourceins)+1u+LJ_FR2;
+    unsigned frameslot = metaslot+LJ_FR2;
+    unsigned argbase = frameslot+2u;
+    const SnapShot *snap = &view.snap[source_snap];
+    MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap);
+    unsigned slot;
+    assert(ofs <= view.nsnapmap && nent <= view.nsnapmap-ofs);
+    source_slot = argbase+8u;
+    for (i = 0; i < nent; i++) {
+      SnapEntry entry = view.snapmap[ofs+i];
+      if (snap_slot(entry) == source_slot) {
+        assert(source_entry == UINT_MAX);
+        source_entry = ofs+i;
+        source_num = snap_ref(entry);
+      }
+    }
+    slot = argbase+7u;
+    assert(source_entry != UINT_MAX && source_num > view.nk &&
+           source_num < xsave);
+    for (i = 0; i < nent; i++) {
+      SnapEntry entry = view.snapmap[ofs+i];
+      if (snap_slot(entry) == slot) {
+        earlier_num = snap_ref(entry);
+        break;
+      }
+    }
+    assert(earlier_num > view.nk && earlier_num < xsave &&
+           earlier_num != source_num &&
+           irt_type(ir_load_acq(&view.ir[source_num]).t) == IRT_NUM &&
+           irt_type(ir_load_acq(&view.ir[earlier_num]).t) == IRT_NUM);
+    {
+      IRIns widening = ir_load_acq(&view.ir[source_num]);
+      assert(widening.o == IR_CONV && widening.op1 == producer &&
+             widening.t.irt == IRT_NUM &&
+             widening.op2 == ((IRT_NUM << IRCONV_DSH)|IRT_FLOAT));
+    }
+  }
   for (ref = REF_FIRST; ref < view.nins; ref++) {
     IRIns ins = ir_load_acq(&view.ir[ref]);
     if (ins.o == IR_CALLXS && irt_type(ins.t) == IRT_FLOAT &&
@@ -1422,6 +1505,71 @@ static void test_callm_float_result_layout(lua_State *L)
   for (i = 0; i < trace_szmcode_acq(T)/sizeof(MCode); i++)
     if ((uint32_t)trace_mcode_acq(T)[i] == move) found = 1;
   assert(found && trace_has_stack_store(T, A64I_STRs, 2u, 0));
+
+  /* Source-slot substitution and malformed widening conversions are
+  ** checked independently by the semantic walk and the allocated view. */
+  semantic_clone_init(&semantic, T);
+  jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+  expect_semantic_admit(J, &semantic.trace);
+  semantic_j_leave(J, &jsave);
+  semantic_clone_free(&semantic);
+  snapmap = (SnapEntry *)malloc(view.nsnapmap*sizeof(SnapEntry));
+  source_ir_copy = (IRIns *)calloc(view.nins, sizeof(*source_ir_copy));
+  assert(snapmap != NULL && source_ir_copy != NULL);
+  memcpy(snapmap, view.snapmap, view.nsnapmap*sizeof(SnapEntry));
+  memcpy(&source_ir_copy[view.nk], &view.ir[view.nk],
+         (view.nins-view.nk)*sizeof(IRIns));
+  view.ir = source_ir_copy;
+  {
+    SnapEntry original = snapmap[source_entry];
+    semantic_clone_init(&semantic, T);
+    jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+    assert(semantic.snapmap[source_entry] == original);
+    semantic.snapmap[source_entry] = snap_setref(original, earlier_num);
+    expect_semantic_reject_any(J, &semantic.trace,
+                               "CALLM float source snapshot uses wrong NUM");
+    semantic_j_leave(J, &jsave);
+    semantic_clone_free(&semantic);
+    view.snapmap = snapmap;
+    assert(lj_asm_arm64_postra_admit(&view, NULL));
+    snapmap[source_entry] = snap_setref(original, earlier_num);
+    assert(!lj_asm_arm64_postra_admit(&view, NULL));
+    snapmap[source_entry] = original;
+  }
+  {
+    IRIns original = ir_load_acq(&view.ir[source_num]);
+    unsigned mutation;
+    for (mutation = 0; mutation < 3; mutation++) {
+      semantic_clone_init(&semantic, T);
+      jsave = semantic_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+      expect_semantic_admit(J, &semantic.trace);
+      if (mutation == 0)
+        semantic.ir[source_num].op2 = IRCONV_NUM_INT;
+      else if (mutation == 1)
+        semantic.ir[source_num].t.irt = IRT_NUM|IRT_ISPHI;
+      else
+        semantic.ir[source_num].op1 = earlier_num;
+      expect_semantic_reject_any(J, &semantic.trace,
+          mutation == 0 ? "CALLM float widening mode" :
+          mutation == 1 ? "CALLM float widening flags" :
+                          "CALLM float widening input");
+      semantic_j_leave(J, &jsave);
+      semantic_clone_free(&semantic);
+      assert(lj_asm_arm64_postra_admit(&view, NULL));
+      if (mutation == 0)
+        ((IRIns *)view.ir)[source_num].op2 = IRCONV_NUM_INT;
+      else if (mutation == 1)
+        ((IRIns *)view.ir)[source_num].t.irt = IRT_NUM|IRT_ISPHI;
+      else
+        ((IRIns *)view.ir)[source_num].op1 = earlier_num;
+      assert(!lj_asm_arm64_postra_admit(&view, NULL));
+      ((IRIns *)view.ir)[source_num] = original;
+    }
+  }
+  free(snapmap);
+  free(source_ir_copy);
+  view.ir = trace_ir_acq(T);
+  view.snapmap = trace_snapmap_acq(T);
   copy = (IRIns *)calloc(view.nins, sizeof(*copy));
   assert(copy != NULL);
   memcpy(&copy[view.nk], &view.ir[view.nk],

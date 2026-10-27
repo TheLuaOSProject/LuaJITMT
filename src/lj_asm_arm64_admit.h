@@ -1004,6 +1004,11 @@ static int arm64_callxs_source_value(const GCtrace *T, IRRef xsave,
     ** conversion itself. Here its source must be the actual caller value. */
     return 1;
   }
+  /* FLOAT -> NUM -> FLOAT folds back to the original fixed C float. The
+  ** saved Lua argument must still be its exact widening conversion. */
+  if (!tail && src.o == IR_CONV && src.t.irt == IRT_NUM &&
+      src.op1 == value && src.op2 == ((IRT_NUM << IRCONV_DSH)|IRT_FLOAT) &&
+      dst.t.irt == IRT_FLOAT) return 1;
   if ((st == IRT_INT || st == IRT_NUM) && dt == IRT_NUM) {
     if (st == IRT_NUM && source == value) return 1;
     if (st == IRT_INT && dst.o == IR_CONV && dst.op1 == source &&
@@ -3552,6 +3557,14 @@ static int arm64_postra_source_value_matches(const IRIns *ir, IRRef nk,
 	/* Source-linked conversions are separately checked against the exact
 	** conversion table by the enclosing graph validators and ABI classifier. */
 	if (c.o == IR_CONV && c.op1 == source) return 1;
+	if (source_type == IRT_NUM && c.t.irt == IRT_FLOAT) {
+		IRIns original = ir_load_acq(&ir[source]);
+		/* Fixed arguments may reuse the FLOAT input of the exact Lua
+		** widening; promoted NUM tails require carrier == source below. */
+		if (original.o == IR_CONV && original.t.irt == IRT_NUM &&
+		    original.op1 == carrier &&
+		    original.op2 == ((IRT_NUM << IRCONV_DSH)|IRT_FLOAT)) return 1;
+	}
 	if (source_type == IRT_INT && arm64_callxs_const_member(ir, nk, source) &&
 	    ir_load_acq(&ir[source]).o == IR_KINT &&
 	    ir_load_acq(&ir[source]).t.irt == IRT_INT &&
