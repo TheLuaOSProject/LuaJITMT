@@ -68,7 +68,7 @@ local negatives = {
     "local sum=.5; for i=1,n do sum=sum+fn(i+.5,0.25) end; return sum"},
   {"multiple-results", "return x,x+0.5",
     "local sum=.5; for i=1,n do local a,b=fn(i+.5); sum=sum+a+b end; return sum"},
-  {"compound-integer-child-exit", "return (x+3)*2",
+  {"child-local-write", "x=x+3; return x*2",
     "local sum=0; for i=1,n do sum=sum+fn(i) end; return sum"},
 }
 
