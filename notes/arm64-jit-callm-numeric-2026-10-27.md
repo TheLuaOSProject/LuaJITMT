@@ -91,6 +91,16 @@ the allocated pass. Both counterfactual runs fail as intended. Logs:
 `/tmp/ljmt-callm-numeric-postra-counterfactual.log`. The complete candidate
 header was restored byte-for-byte afterward.
 
+The first complete contract run at `74fddbe6` reached an obsolete positive
+in the older CALLXS admission fixture: it replaced the double C result in
+the completed-call snapshot with the loop index and expected acceptance.
+That now correctly fails the exact result proof. The fixture requires
+rejection for the double profile and independently checks the semantic
+pass; its existing INT behavior remains unchanged. The corrected older
+fixture and both new fixtures pass together in the ARM64 assertion profile
+(`/tmp/ljmt-callm-numeric-legacy-snapshot.log`). No production change was
+needed for this correction.
+
 ## Validation still to complete
 
 The frozen four-profile contract, complete experimental/bootstrap gates,

@@ -600,6 +600,16 @@ static void test_semantic(jit_State *J, CallXSFixture *fx)
   reset_semantic_clone(fx);
   expect_semantic_admit(J, fx);
 
+  if (fx->profile == CX_PROFILE_DOUBLE) {
+    reset_semantic_clone(fx);
+    fx->snapmap[CX_BODY_RESULT_MAP] =
+	SNAP(8, 0, profile_ref(fx, CX_R_INDEX_PRE));
+    /* The native-leave result slot must restore this call's NUM result. */
+    expect_semantic_reject(J, fx, LJ_ARM64_IR_REJECT_CALL,
+	profile_ref(fx, CX_R_CALL_BODY), IR_CALLXS, 10);
+    reset_semantic_clone(fx);
+  }
+
   marker = fx->ir[xsavepre];
 	original_site = (uint32_t)marker.op1 |
 	  ((uint32_t)marker.op2 << 15);
@@ -780,8 +790,9 @@ static void test_postra(CallXSFixture *fx)
   assert(fx->snapmap[CX_BODY_RESULT_MAP] ==
 	 SNAP(8, 0, callbody));
   fx->snapmap[CX_BODY_RESULT_MAP] = SNAP(8, 0, indexpre);
-	/* Another allocated, pre-snapshot value is a structurally valid root. */
-	expect_postra(fx, &view, 1);
+  /* NUM results now require the exact caller slot across native leave.
+  ** The older INT result certificate remains structural here. */
+  expect_postra(fx, &view, fx->profile == CX_PROFILE_I32);
 
   view = make_postra_view(fx);
   assert(fx->ir[CX_R_FUNCPTR].r == RID_X20);
