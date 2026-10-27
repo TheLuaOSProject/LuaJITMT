@@ -15,15 +15,17 @@ and reports that are no longer authoritative are retained in
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
-- Current JIT work: Lua INT values and INT-result CALLM producers feeding all
-  eight fixed C integer kinds, including compact stack arguments. The first
-  checkpoint passed all 24 focused fixtures in four profiles, with 48 new
-  shapes, 432 required native runs and 64 forced exits. The complete gate
-  exposed a pointer-source proof regression in an older mixed ABI call.
-  Its correction passes the ABI fixture and independent pointer-owner/type
-  rejection checks; renewed full validation is pending. See the
+- Latest fully validated JIT checkpoint: Lua INT values and INT-result CALLM
+  producers feeding all eight fixed C integer kinds, including compact stack
+  arguments, at `a029884d`. All 24 focused fixtures and the broader M7 FFI
+  suite pass four ARM64/arm64e assertion/release profiles, with 48 new shapes,
+  432 required native runs and 64 forced exits per fixture. A mixed ABI
+  regression exposed by the first complete run is corrected with independent
+  pointer-owner/type proofs and stronger native-count deltas. Both complete
+  gates and both 509-case stock corpora on ARM64 and signed x64 pass. The
+  ordinary main rebuild passes 598 smoke observations and both corpora. See the
   [INT argument evidence](arm64-jit-ffi-int-arguments-2026-10-27.md).
-- Latest fully validated JIT checkpoint: double, float and U32 producer results feeding fixed
+- Preceding JIT checkpoint: double, float and U32 producer results feeding fixed
   integer CALLM arguments, at `51c92374`. All 22 focused fixtures and the
   broader M7 FFI suite pass four ARM64/arm64e assertion/release profiles,
   including 48 new call shapes, 960 required native runs, 96 forced exits and
@@ -71,13 +73,15 @@ and reports that are no longer authoritative are retained in
   semantic/post-RA views. Each profile records 344 native observations and
   independent 4-positive/26-negative admission checks.
   See [`arm64-jit-i64-arguments-2026-10-26.md`](arm64-jit-i64-arguments-2026-10-26.md).
-- Latest complete umbrella validation: the numeric producer-to-integer CALLM
-  checkpoint on 2026-10-27, frozen at `51c92374`.
+- Latest complete umbrella validation: the Lua INT argument and INT-result
+  CALLM checkpoint on 2026-10-27, frozen at `a029884d`.
   The complete experimental and bootstrap gates passed, including all four
   M7 scalar CALLXS profiles. ARM64 and signed x86-64 each passed both 509-case
   stock source/import corpora. The ordinary main ARM64 rebuild passes both
-  corpora and 358 numeric-CALLM/numeric-argument/held-result/scalar-table/
+  corpora and 598 INT-argument/numeric-CALLM/numeric-argument/held-result/scalar-table/
   nested-read/I64-argument/callable smoke runs without test helpers. See the
+  [INT argument evidence](arm64-jit-ffi-int-arguments-2026-10-27.md).
+  The preceding numeric CALLM checkpoint is in the
   [numeric CALLM evidence](arm64-jit-callm-numeric-2026-10-27.md).
   The preceding numeric fixed-argument checkpoint is in the
   [numeric-argument evidence](arm64-jit-ffi-numeric-arguments-2026-10-27.md).

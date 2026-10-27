@@ -119,9 +119,52 @@ corresponding negative fail, recorded in
 `/tmp/ljmt-intargs-pointer-counterfactual.log` and its four per-case logs.
 Candidate source was restored byte-for-byte after these counterfactuals.
 
-Renewed four-profile, complete experimental/bootstrap and ARM64/x64 stock
-validation is pending for the corrected checkpoint. The preceding complete result
-remains `51c92374`, documented in the
+The renewed matrix froze corrected source at
+`a029884dfff3e0c68f0f42b4795d5d3734ab6559` and passed:
+
+- All 24 focused fixtures in all four profiles. Each new runtime fixture
+  requires 432 native runs and 64 forced exits; admission reports 72 positive
+  controls, 464 semantic rejections and 572 allocated rejections per profile.
+- The complete experimental gate, including all four full M7 scalar FFI
+  profiles and their strengthened mixed ABI matrix.
+- The complete bootstrap gate, including interpreter, GC2, stock, TG,
+  coroutine/dead-resume and FFI callback checks.
+- An ordinary ARM64 assertion build without test hooks: 598 smoke
+  observations (240 new INT, 256 numeric CALLM and 102 preceding cases),
+  boundary/refusal checks, bitops, rooted cells/upvalues and both 509-case
+  stock source/import corpora. These ordinary smoke checks require exact
+  values/effects and trace publication; the separate C fixtures supply
+  native-execution evidence.
+- A signed x64 assertion build passing both 509-case stock corpora.
+- Ordinary ARM64 restoration, repeated 53 numeric, 256 numeric CALLM and
+  240 INT observations, signature validation, no test-helper exports and
+  no undefined atomic-runtime imports. The source remained frozen.
+
+The focused profile IDs, in ARM64 assertion, arm64e assertion, ARM64 release
+and arm64e release order, are:
+
+```text
+2d01377756450ab377268edb2b394fa7d2cec550d2af07a54d78734f4061f770
+8c806f8e26709404fccbe1e047a17b510011904f8b37354855e71ff40a9457d1
+dc8ec20992b34bf1a1d9f985450775a39bab6a1a69fa96cf139dc90e26f51df2
+e67f97012a081346b9003cef92a5935a2da63d85b822fd985fb597b2a52dcb28
+```
+
+Evidence is in `/tmp/ljmt-intargs-matrix.log`,
+`/tmp/ljmt-intargs-four-profile.log`, `/tmp/ljmt-intargs-experimental.log`,
+`/tmp/ljmt-intargs-bootstrap.log` and the matching ordinary/stock logs.
+The watchdog sampled the long-running legacy-bytecode-cell fixture once in
+each complete gate; both completed successfully. It did not terminate them.
+
+The clean main checkout was fast-forwarded to the same source and rebuilt
+as an ordinary ARM64 assertion runtime. It independently passes all 598
+smoke observations, boundary checks, bitops/cells/upvalues and both 509-case
+stock corpora, with signing and helper/import checks. Evidence is
+`/tmp/ljmt-intargs-main.log`; main profile is
+`acc8c3a9ae78c0e9c7e4015015f76ae70f2a165c73886cf1f90e776b803499c6`.
+Both main and worktree runtime SHA-256 are
+`812ad93befb8091d25247a5eba71b407bc5481ae2c93d11ee503238fc9958bef`.
+The preceding complete result is documented in the
 [numeric CALLM evidence](arm64-jit-callm-numeric-2026-10-27.md).
 
 This adds the observed INT argument grammar and direct INT-result CALLM
