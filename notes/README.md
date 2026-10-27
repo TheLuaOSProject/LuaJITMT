@@ -271,6 +271,13 @@ available.
   NaN/infinity exits, no-replay and independent malformed-graph checks pass
   across all four M7 profiles. See
   [`arm64-jit-ffi-float-2026-10-26.md`](arm64-jit-ffi-float-2026-10-26.md).
+- Shared-table callable reads compose the bounded rooted-hit operation with
+  scalar CALLXS in FORL roots. One-level native-width function pointers retain
+  exact outer CType guards and normalized variadic signatures. The initial
+  ARM64 assertion contract covers replacement, active invalidation, pre-frame
+  GC lifetime, zero arguments, string/integer/boolean keys and independent
+  malformed views. See
+  [`arm64-jit-table-callables-2026-10-27.md`](arm64-jit-table-callables-2026-10-27.md).
 - Direct scalar producer `CALL` to consumer `CALLM` chains support nested
   integer, float and double calls with register and stack arguments. Source
   geometry, final-argument identity and continuation snapshots have independent

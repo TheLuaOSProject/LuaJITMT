@@ -2493,8 +2493,9 @@ static int crec_call_arm64_admit(jit_State *J, CTState *cts,
   LJArm64ABISignature abi;
   (void)J;
   (void)ct;
-  if (id != cd->ctypeid || !ctype_isfunc(info) ||
-      !lj_ccall_arm64_signature(cts, id, &abi)) {
+  if (!ctype_isfunc(info) ||
+      !lj_ccall_arm64_signature(cts, cd->ctypeid, &abi) ||
+      abi.function_id != id) {
     return 0;
   }
   return 1;

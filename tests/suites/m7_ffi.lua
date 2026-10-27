@@ -208,6 +208,12 @@ return function(add)
       local callxs_u32_so = build_shared_library(t,
         t:tmp("lj_t-arm64-jit-callxs-u32.dylib"),
         "t-arm64-jit-callxs-u32-lib.c")
+      local callxs_table_so = build_shared_library(t,
+        t:tmp("lj_t-arm64-jit-callxs-table.dylib"),
+        "t-arm64-jit-callxs-table-lib.c")
+      local callxs_funcptr_so = build_shared_library(t,
+        t:tmp("lj_t-arm64-jit-callxs-funcptr.dylib"),
+        "t-arm64-jit-callxs-funcptr-lib.c")
       local callxs_cpp_so = build_shared_cpp_library(t,
         t:tmp("lj_t-arm64-jit-cpp-callxs-unwind.dylib"),
         "t-arm64-jit-cpp-callxs-unwind-lib.cpp", {
@@ -278,6 +284,23 @@ return function(add)
             timeout = "60s"
           })
         end
+        for _, name in ipairs({ "callxs-table", "callxs-table-admission",
+                                "callxs-table-lifecycle" }) do
+          build_and_run_c(t, t:tmp("lj_t-arm64-jit-" .. name),
+                          "t-arm64-jit-" .. name .. ".c", {
+            build = false,
+            cflags = flags,
+            env = { LJ_M7_FFI_CALLXS_TABLE_SO = callxs_table_so },
+            timeout = "60s"
+          })
+        end
+        build_and_run_c(t, t:tmp("lj_t-arm64-jit-callxs-funcptr"),
+                        "t-arm64-jit-callxs-funcptr.c", {
+          build = false,
+          cflags = flags,
+          env = { LJ_M7_FFI_CALLXS_FUNCPTR_SO = callxs_funcptr_so },
+          timeout = "60s"
+        })
         build_and_run_cpp(t,
                           t:tmp("lj_t-arm64-jit-cpp-callxs-unwind"),
                           "t-arm64-jit-cpp-callxs-unwind.cpp", {

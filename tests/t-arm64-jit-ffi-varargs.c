@@ -92,7 +92,8 @@ typedef enum VarargMutation {
   VA_MUT_WRONG_FOOTER_PC,
   VA_MUT_WRONG_CDATA_SLOT,
   VA_MUT_NORESTORE_SOURCE,
-  VA_MUT_SHORT_STACK
+  VA_MUT_SHORT_STACK,
+  VA_MUT_WRONG_WRAPPER_ID
 } VarargMutation;
 
 static void vararg_clone_init(VarargSemanticClone *clone, GCtrace *owner)
@@ -268,7 +269,9 @@ static int vararg_signature(CTState *cts, const IRIns *ir, IRRef nk,
     return 0;
   wrapper = fp;
   wrapperid = ir_load_acq(&ir[wrapper.op2]);
-  if (wrapperid.o != IR_KINT || (CTypeID)wrapperid.i != expected)
+  if (wrapperid.o != IR_KINT ||
+      !lj_ccall_arm64_signature(cts, expected, abi) || !abi->is_vararg ||
+      (CTypeID)wrapperid.i != abi->function_id)
     return 0;
   fpref = wrapper.op1;
   fp = ir_load_acq(&ir[fpref]);
@@ -293,7 +296,7 @@ static int vararg_signature(CTState *cts, const IRIns *ir, IRRef nk,
       if (kref < nk || kref >= REF_TRUE) return 0;
       k = ir_load_acq(&ir[kref]);
       if (k.o != IR_KINT || (CTypeID)k.i != expected) continue;
-      if (found || !lj_ccall_arm64_signature(cts, expected, abi)) return 0;
+      if (found) return 0;
       found = 1;
       break;
     }
@@ -489,6 +492,18 @@ static void vararg_mutate(VarargMutation mutation, IRIns *ir,
     break;
   case VA_MUT_SHORT_STACK:
     break;
+  case VA_MUT_WRONG_WRAPPER_ID: {
+    IRIns call = ir_load_acq(&ir[target->call]);
+    IRIns wrapper;
+    assert(call.o == IR_CALLXS && call.op2 < target->call);
+    wrapper = ir_load_acq(&ir[call.op2]);
+    assert(wrapper.o == IR_CARG && wrapper.t.irt == IRT_NIL &&
+           wrapper.op2 < REF_TRUE &&
+           ir_load_acq(&ir[wrapper.op2]).o == IR_KINT &&
+           target->ctype != target->abi.function_id);
+    ir[wrapper.op2].i = (int32_t)target->ctype;
+    break;
+  }
   }
 }
 
@@ -535,18 +550,20 @@ static void vararg_expect_mutation(jit_State *J, const LJArm64PostRAView *base,
   free(ir);
 }
 
-static void test_vararg_admission_clones(lua_State *L)
+static void test_vararg_admission_clones(lua_State *L, const char *runner,
+					 const char *callable,
+					 int pointer_callable)
 {
   jit_State *J = G2J(G(L));
   CTState *cts = ctype_ctsG(G(L));
   GCproto *pt;
   GCtrace *T;
   TraceNo traceno = observed_trace_no[2];
-  CTypeID ctype = vararg_global_ctype(L, "__va_mixed");
+  CTypeID ctype = vararg_global_ctype(L, callable);
   VarargTarget target;
   LJArm64PostRAView view = { 0 };
   int found;
-  lua_getglobal(L, "__va_run_mixed");
+  lua_getglobal(L, runner);
   assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
   pt = funcproto(funcV(L->top-1));
   lua_pop(L, 1);
@@ -560,6 +577,19 @@ static void test_vararg_admission_clones(lua_State *L)
   assert(found && target.abi.is_vararg && target.abi.nargs == 2 &&
          target.actual_count == 8 && target.rawcount == 9 &&
          target.values[target.abi.nargs] == REF_NIL);
+  if (pointer_callable) {
+    CType outer, function;
+    CTypeID normalized;
+    assert(lj_ccall_arm64_raw_type(cts, ctype, &outer, &normalized));
+    assert(ctype_isptr(ctype_info_acq(&outer)) &&
+           !(ctype_info_acq(&outer) & CTF_REF) &&
+           ctype_size_acq(&outer) == sizeof(void *));
+    assert(lj_ccall_arm64_raw_type(cts, ctype_cid(ctype_info_acq(&outer)),
+                                   &function, &normalized));
+    assert(ctype_isfunc(ctype_info_acq(&function)) &&
+           normalized == target.abi.function_id &&
+           ctype != target.abi.function_id);
+  }
   assert(irt_type(ir_load_acq(&trace_ir_acq(T)[target.values[3]]).t) == IRT_NUM &&
          irt_type(ir_load_acq(&trace_ir_acq(T)[target.values[4]]).t) == IRT_NUM);
   view.ir = trace_ir_acq(T);
@@ -604,6 +634,9 @@ static void test_vararg_admission_clones(lua_State *L)
                          VA_MUT_WRONG_TAIL_PROMOTION, "wrong numeric tail promotion");
   vararg_expect_mutation(J, &view, &target,
                          VA_MUT_SWAPPED_SAME_TYPE, "swapped same-typed tail sources");
+  if (pointer_callable)
+    vararg_expect_mutation(J, &view, &target, VA_MUT_WRONG_WRAPPER_ID,
+                           "wrapper uses outer pointer CType ID");
   vararg_expect_mutation(J, &view, &target,
                          VA_MUT_WRONG_FRAME_RETURN, "wrong frame return PC");
   vararg_expect_mutation(J, &view, &target,
@@ -922,6 +955,8 @@ int main(int argc, char **argv)
     "local lib = ffi.load(assert(os.getenv('LJ_ARM64_FFI_VARARGS_LIB')))\n"
     "_G.__va_noextra=lib.arm64_va_noextra\n"
     "_G.__va_mixed=lib.arm64_va_mixed\n"
+    "local mixed_ptr_type=ffi.typeof('double (*)(int32_t,double,...)')\n"
+    "_G.__va_mixed_pointer=ffi.cast(mixed_ptr_type,lib.arm64_va_mixed)\n"
     "_G.__va_gpr=lib.arm64_va_gpr_overflow\n"
     "_G.__va_fpr=lib.arm64_va_fpr_overflow\n"
     "_G.__va_pressure=lib.arm64_va_pressure\n"
@@ -933,6 +968,8 @@ int main(int argc, char **argv)
     " local fn=__va_noextra; for i=1,n do if fn(i)~=i+0.25 then return false end end; return true end\n"
     "function _G.__va_run_mixed(n)\n"
     " local fn=__va_mixed; for i=1,n do if fn(i,i+0.125,i+1,i+0.25,true,'mixed',nil,i+0.5)~=5*i+2.875 then return false end end; return true end\n"
+    "function _G.__va_run_mixed_pointer(n)\n"
+    " local fn=__va_mixed_pointer; for i=1,n do if fn(i,i+0.125,i+1,i+0.25,true,'mixed',nil,i+0.5)~=5*i+2.875 then return false end end; return true end\n"
     "function _G.__va_run_gpr(n)\n"
     " local fn=__va_gpr; for i=1,n do if fn(i,i+1,i+2,i+3,i+4,i+5,i+6,i+7,i+8,i+9,i+0.5,'gpr-tail',nil)~=i+303 then return false end end; return true end\n"
     "function _G.__va_run_fpr(n)\n"
@@ -950,7 +987,10 @@ int main(int argc, char **argv)
 
   assert(require_native(calls, 1, "__va_run_noextra") != 0);
   assert(require_native(calls, 2, "__va_run_mixed") != 0);
-  test_vararg_admission_clones(L);
+  test_vararg_admission_clones(L, "__va_run_mixed", "__va_mixed", 0);
+  assert(require_native(calls, 2, "__va_run_mixed_pointer") != 0);
+  test_vararg_admission_clones(L, "__va_run_mixed_pointer",
+                               "__va_mixed_pointer", 1);
   assert(require_native(calls, 3, "__va_run_gpr") != 0);
   test_fixed_overflow_admission_clones(L);
   assert(require_native(calls, 4, "__va_run_fpr") != 0);

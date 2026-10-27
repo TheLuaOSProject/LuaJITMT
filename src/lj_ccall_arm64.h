@@ -44,6 +44,7 @@ typedef struct LJArm64ABIArg {
 
 typedef struct LJArm64ABISignature {
   LJArm64ABIArg arg[LJ_ARM64_ABI_MAX_ARGS];
+  CTypeID function_id;
   CTypeID result_id;
   uint8_t result_class;
   uint8_t result_kind;
@@ -177,6 +178,15 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
       !lj_ccall_arm64_raw_type(cts, id, &fn, &rawid))
     return 0;
   info = ctype_info_acq(&fn);
+  /* A callable scalar CData may hold a native-width function pointer. Keep
+  ** the guarded outer CType distinct from the resolved function signature;
+  ** the recorder's variadic wrapper carries the latter. */
+  if (ctype_isptr(info)) {
+    if ((info & CTF_REF) || ctype_size_acq(&fn) != sizeof(void *) ||
+        !lj_ccall_arm64_raw_type(cts, ctype_cid(info), &fn, &rawid))
+      return 0;
+    info = ctype_info_acq(&fn);
+  }
   if (!ctype_isfunc(info) ||
       (ctype_cconv(info) != CTCC_CDECL &&
        ctype_cconv(info) != CTCC_STDCALL) ||
@@ -184,6 +194,7 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
     return 0;
   memset(abi, 0, sizeof(*abi));
   memset(&result, 0, sizeof(result));
+  abi->function_id = rawid;
   abi->is_vararg = (uint8_t)((info & CTF_VARARG) != 0);
   abi->result_id = ctype_cid(info);
   if (!lj_ccall_arm64_scalar_class(cts, abi->result_id, 1, &result,
