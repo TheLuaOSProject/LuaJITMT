@@ -159,12 +159,16 @@ Subsequent validation-note edits leave the tested production source unchanged.
 
 ## Remaining boundaries
 
-U32 CALLM producer/consumer chains remain closed: the existing CALLM source
-proof does not yet bind a converted U32 number as its producer. U32 enum results,
+The U32 CALLM boundary below was subsequently opened with independent source
+and lifetime checks; see `arm64-jit-u32-callm-2026-10-27.md` for the implementation,
+folded-float compatibility follow-up and validated checkpoint.
+
+At this checkpoint, U32 CALLM producer/consumer chains remained closed: the
+CALLM source proof did not yet bind a converted U32 number as its producer. U32 enum results,
 general 64-bit arithmetic, aggregate/sret results, arbitrary trace shapes and
 full sustained multithreading parity remain outside this increment.
 
-The next bounded FFI extension is to carry the exact certified U32-to-NUM
+The next bounded FFI extension was to carry the exact certified U32-to-NUM
 result as a CALLM producer. Both validators must retain that converted ref
 across leave and bind the consumer's final argument to it, preserving the
 existing bytecode adjacency, frame, variadic-tail and exact-root proofs. Raw
