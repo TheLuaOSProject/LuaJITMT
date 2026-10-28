@@ -7438,7 +7438,9 @@ static int arm64_string_byte_dynamic_index_ir(const GCtrace *T, IRRef conv)
     if (strref->o != IR_STRREF || strref->t.irt != IRT_PGC ||
         strref->op2 < REF_FIRST || strref->op2 >= ref) continue;
     offset = &T->ir[strref->op2];
-    if (offset->o != IR_ADDOV || offset->op1 != conv) continue;
+    if ((offset->o != IR_ADDOV || offset->op1 != conv) &&
+        (offset->o != IR_ADD ||
+         (offset->op1 != conv && offset->op2 != conv))) continue;
     if (arm64_string_byte_dynamic_bounds_ir(T, ref, strref->op1,
                                             strref->op2))
       return 1;
@@ -7446,11 +7448,11 @@ static int arm64_string_byte_dynamic_index_ir(const GCtrace *T, IRRef conv)
   return 0;
 }
 
-/* Certify the recorder's positive, one-based dynamic-index lowering. Every
-** guard dominates STRREF: index <= len, checked index-1, nonnegative offset,
-** checked requested width, and exact width==1. The same immutable string
-** owns the length load and the byte base. Negative-index lowering is a
-** different grammar and remains closed. */
+/* Certify the recorder's positive or negative one-based dynamic-index
+** lowering. Positive indices need index <= len and checked index-1. Negative
+** indices need index < 0 and use len+index. Both paths prove a nonnegative
+** byte offset, checked requested width, exact width==1, and the same
+** immutable string for the length and byte base. */
 static int arm64_string_byte_dynamic_bounds_ir(const GCtrace *T,
                                                IRRef strref, IRRef str,
                                                IRRef offset)
@@ -7460,18 +7462,34 @@ static int arm64_string_byte_dynamic_bounds_ir(const GCtrace *T,
   GCobj *startpt;
   GCproto *pt;
   IRRef idx, lenref = 0, upper = 0, subref = 0, widthref = 0;
-  IRRef nonneg = 0, ref;
+  IRRef nonneg = 0, negative = 0, endref = 0, ref;
+  int negative_path;
   int32_t k;
   if (!T || strref < REF_FIRST || strref >= T->nins ||
       offset < REF_FIRST || offset >= strref ||
       !arm64_scalar_ir_ref(T, str, strref, IRT_STR))
     return 0;
   sub = &T->ir[offset];
-  if (sub->o != IR_ADDOV || sub->t.irt != (IRT_INT|IRT_GUARD) ||
-      !arm64_ir_kint_value(T, sub->op2, &k) || k != -1 ||
-      sub->op1 < REF_FIRST || sub->op1 >= offset)
-    return 0;
-  idx = sub->op1;
+  negative_path = sub->o == IR_ADD && sub->t.irt == IRT_INT;
+  if (negative_path) {
+    IRRef left = sub->op1, right = sub->op2;
+    int left_len = left >= REF_FIRST && left < offset &&
+      T->ir[left].o == IR_FLOAD && T->ir[left].t.irt == IRT_INT &&
+      T->ir[left].op1 == str && T->ir[left].op2 == IRFL_STR_LEN;
+    int right_len = right >= REF_FIRST && right < offset &&
+      T->ir[right].o == IR_FLOAD && T->ir[right].t.irt == IRT_INT &&
+      T->ir[right].op1 == str && T->ir[right].op2 == IRFL_STR_LEN;
+    if (left_len == right_len) return 0;
+    lenref = left_len ? left : right;
+    idx = left_len ? right : left;
+    if (idx < REF_FIRST || idx >= offset) return 0;
+  } else {
+    if (sub->o != IR_ADDOV || sub->t.irt != (IRT_INT|IRT_GUARD) ||
+        !arm64_ir_kint_value(T, sub->op2, &k) || k != -1 ||
+        sub->op1 < REF_FIRST || sub->op1 >= offset)
+      return 0;
+    idx = sub->op1;
+  }
   if (idx < REF_FIRST || idx >= offset) return 0;
   conv = &T->ir[idx];
   if (conv->o != IR_CONV || conv->t.irt != IRT_INT ||
@@ -7492,24 +7510,39 @@ static int arm64_string_byte_dynamic_bounds_ir(const GCtrace *T,
   pt = gco2pt(startpt);
   if (!arm64_string_byte_call_slots_ir(pt, T->ir[str].op1, source->op1))
     return 0;
-  for (ref = REF_FIRST; ref < offset; ref++) {
-    const IRIns *g = &T->ir[ref];
-    if (g->t.irt != (IRT_INT|IRT_GUARD)) continue;
-    {
-      IRRef len_candidate = g->o == IR_ULE && g->op1 == idx ? g->op2 :
-                            g->o == IR_UGE && g->op2 == idx ? g->op1 : 0;
-      const IRIns *candidate;
-      if (!len_candidate || len_candidate < REF_FIRST || len_candidate >= ref)
-        continue;
-      candidate = &T->ir[len_candidate];
-      if (candidate->o == IR_FLOAD && candidate->t.irt == IRT_INT &&
-          candidate->op1 == str && candidate->op2 == IRFL_STR_LEN) {
-        if (upper) return 0;
-        upper = ref; lenref = len_candidate;
+  if (negative_path) {
+    for (ref = REF_FIRST; ref < offset; ref++) {
+      const IRIns *g = &T->ir[ref];
+      int32_t zero;
+      if (g->t.irt == (IRT_INT|IRT_GUARD) && g->o == IR_LT &&
+          g->op1 == idx && arm64_ir_kint_value(T, g->op2, &zero) &&
+          zero == 0) {
+        if (negative) return 0;
+        negative = ref;
       }
     }
+    if (!negative || negative >= offset) return 0;
+  } else {
+    for (ref = REF_FIRST; ref < offset; ref++) {
+      const IRIns *g = &T->ir[ref];
+      if (g->t.irt != (IRT_INT|IRT_GUARD)) continue;
+      {
+        IRRef len_candidate = g->o == IR_ULE && g->op1 == idx ? g->op2 :
+                              g->o == IR_UGE && g->op2 == idx ? g->op1 : 0;
+        const IRIns *candidate;
+        if (!len_candidate || len_candidate < REF_FIRST ||
+            len_candidate >= ref)
+          continue;
+        candidate = &T->ir[len_candidate];
+        if (candidate->o == IR_FLOAD && candidate->t.irt == IRT_INT &&
+            candidate->op1 == str && candidate->op2 == IRFL_STR_LEN) {
+          if (upper) return 0;
+          upper = ref; lenref = len_candidate;
+        }
+      }
+    }
+    if (!upper || !lenref || lenref >= upper || upper >= offset) return 0;
   }
-  if (!upper || !lenref || lenref >= upper || upper >= offset) return 0;
   for (ref = offset+1u; ref < strref; ref++) {
     const IRIns *g = &T->ir[ref];
     int32_t value;
@@ -7518,7 +7551,18 @@ static int arm64_string_byte_dynamic_bounds_ir(const GCtrace *T,
         arm64_ir_kint_value(T, g->op2, &value) && value == 0) {
       if (nonneg) return 0;
       nonneg = ref;
-    } else if (g->o == IR_SUBOV && g->op1 == idx && g->op2 == offset) {
+    } else if (g->o == IR_SUBOV &&
+               (negative_path ? g->op2 == offset : g->op1 == idx)) {
+      if (negative_path) {
+        const IRIns *end;
+        if (g->op1 <= offset || g->op1 >= ref) continue;
+        end = &T->ir[g->op1];
+        if (end->o != IR_ADD || end->t.irt != IRT_INT ||
+            end->op1 != offset ||
+            !arm64_ir_kint_value(T, end->op2, &value) || value != 1)
+          continue;
+        endref = g->op1;
+      }
       if (subref) return 0;
       subref = ref;
     } else if (g->o == IR_EQ && g->op1 == subref &&
@@ -7530,6 +7574,7 @@ static int arm64_string_byte_dynamic_bounds_ir(const GCtrace *T,
   /* `subref` is itself the guarded subtraction result. Its EQ must follow
   ** it and all three offset/range checks must dominate the load. */
   return nonneg > offset && subref > nonneg && widthref > subref &&
+         (!negative_path || (endref && endref < subref)) &&
          widthref < strref;
 }
 
@@ -10639,7 +10684,8 @@ static int arm64_string_byte_dynamic_bounds_postra(
   GCobj *proto_obj;
   IRIns sub, conv, source, string;
   IRRef idx, lenref = 0, upper = 0, subref = 0, widthref = 0;
-  IRRef nonneg = 0, ref;
+  IRRef nonneg = 0, negative = 0, endref = 0, ref;
+  int negative_path;
   int32_t k;
   if (!v || !v->proto || !v->owner) return 0;
   proto_obj = obj2gco((GCproto *)v->proto);
@@ -10654,10 +10700,28 @@ static int arm64_string_byte_dynamic_bounds_postra(
   owner = (GCtrace *)v->owner;
   if (trace_startptgco_acq(owner) != obj2gco((GCproto *)v->proto)) return 0;
   sub = ir_load_acq(&v->ir[offset]);
-  if (sub.o != IR_ADDOV || sub.t.irt != (IRT_INT|IRT_GUARD) ||
-      !arm64_scalar_postra_kint(v, sub.op2, &k) || k != -1 ||
-      sub.op1 < REF_FIRST || sub.op1 >= offset) return 0;
-  idx = sub.op1;
+  negative_path = sub.o == IR_ADD && sub.t.irt == IRT_INT;
+  if (negative_path) {
+    IRRef left = sub.op1, right = sub.op2;
+    IRIns left_ir, right_ir;
+    int left_len, right_len;
+    if (left < REF_FIRST || left >= offset || right < REF_FIRST ||
+        right >= offset) return 0;
+    left_ir = ir_load_acq(&v->ir[left]);
+    right_ir = ir_load_acq(&v->ir[right]);
+    left_len = left_ir.o == IR_FLOAD && left_ir.t.irt == IRT_INT &&
+      left_ir.op1 == str && left_ir.op2 == IRFL_STR_LEN;
+    right_len = right_ir.o == IR_FLOAD && right_ir.t.irt == IRT_INT &&
+      right_ir.op1 == str && right_ir.op2 == IRFL_STR_LEN;
+    if (left_len == right_len) return 0;
+    lenref = left_len ? left : right;
+    idx = left_len ? right : left;
+  } else {
+    if (sub.o != IR_ADDOV || sub.t.irt != (IRT_INT|IRT_GUARD) ||
+        !arm64_scalar_postra_kint(v, sub.op2, &k) || k != -1 ||
+        sub.op1 < REF_FIRST || sub.op1 >= offset) return 0;
+    idx = sub.op1;
+  }
   conv = ir_load_acq(&v->ir[idx]);
   if (conv.o != IR_CONV || conv.t.irt != IRT_INT ||
       conv.op2 != (IRCONV_INT_NUM|IRCONV_ANY) ||
@@ -10672,24 +10736,37 @@ static int arm64_string_byte_dynamic_bounds_postra(
       string.op2 != IRSLOAD_TYPECHECK ||
       !arm64_string_byte_call_slots_postra(v->proto, string.op1, source.op1))
     return 0;
-  for (ref = REF_FIRST; ref < offset; ref++) {
-    IRIns g = ir_load_acq(&v->ir[ref]);
-    if (g.t.irt != (IRT_INT|IRT_GUARD)) continue;
-    {
-      IRRef len_candidate = g.o == IR_ULE && g.op1 == idx ? g.op2 :
-                            g.o == IR_UGE && g.op2 == idx ? g.op1 : 0;
-      IRIns candidate;
-      if (!len_candidate || len_candidate < REF_FIRST || len_candidate >= ref)
-        continue;
-      candidate = ir_load_acq(&v->ir[len_candidate]);
-      if (candidate.o == IR_FLOAD && candidate.t.irt == IRT_INT &&
-          candidate.op1 == str && candidate.op2 == IRFL_STR_LEN) {
-        if (upper) return 0;
-        upper = ref; lenref = len_candidate;
+  if (negative_path) {
+    for (ref = REF_FIRST; ref < offset; ref++) {
+      IRIns g = ir_load_acq(&v->ir[ref]);
+      if (g.t.irt == (IRT_INT|IRT_GUARD) && g.o == IR_LT &&
+          g.op1 == idx && arm64_scalar_postra_kint(v, g.op2, &k) && k == 0) {
+        if (negative) return 0;
+        negative = ref;
       }
     }
+    if (!negative || negative >= offset) return 0;
+  } else {
+    for (ref = REF_FIRST; ref < offset; ref++) {
+      IRIns g = ir_load_acq(&v->ir[ref]);
+      if (g.t.irt != (IRT_INT|IRT_GUARD)) continue;
+      {
+        IRRef len_candidate = g.o == IR_ULE && g.op1 == idx ? g.op2 :
+                              g.o == IR_UGE && g.op2 == idx ? g.op1 : 0;
+        IRIns candidate;
+        if (!len_candidate || len_candidate < REF_FIRST ||
+            len_candidate >= ref)
+          continue;
+        candidate = ir_load_acq(&v->ir[len_candidate]);
+        if (candidate.o == IR_FLOAD && candidate.t.irt == IRT_INT &&
+            candidate.op1 == str && candidate.op2 == IRFL_STR_LEN) {
+          if (upper) return 0;
+          upper = ref; lenref = len_candidate;
+        }
+      }
+    }
+    if (!upper || !lenref || lenref >= upper || upper >= offset) return 0;
   }
-  if (!upper || !lenref || lenref >= upper || upper >= offset) return 0;
   for (ref = offset+1u; ref < strref; ref++) {
     IRIns g = ir_load_acq(&v->ir[ref]);
     if (g.t.irt != (IRT_INT|IRT_GUARD)) continue;
@@ -10697,7 +10774,18 @@ static int arm64_string_byte_dynamic_bounds_postra(
         arm64_scalar_postra_kint(v, g.op2, &k) && k == 0) {
       if (nonneg) return 0;
       nonneg = ref;
-    } else if (g.o == IR_SUBOV && g.op1 == idx && g.op2 == offset) {
+    } else if (g.o == IR_SUBOV &&
+               (negative_path ? g.op2 == offset : g.op1 == idx)) {
+      if (negative_path) {
+        IRIns end;
+        if (g.op1 <= offset || g.op1 >= ref) continue;
+        end = ir_load_acq(&v->ir[g.op1]);
+        if (end.o != IR_ADD || end.t.irt != IRT_INT ||
+            end.op1 != offset ||
+            !arm64_scalar_postra_kint(v, end.op2, &k) || k != 1)
+          continue;
+        endref = g.op1;
+      }
       if (subref) return 0;
       subref = ref;
     } else if (g.o == IR_EQ && g.op1 == subref &&
@@ -10707,6 +10795,7 @@ static int arm64_string_byte_dynamic_bounds_postra(
     }
   }
   return nonneg > offset && subref > nonneg && widthref > subref &&
+         (!negative_path || (endref && endref < subref)) &&
          widthref < strref;
 }
 
@@ -10725,7 +10814,9 @@ static int arm64_string_byte_dynamic_index_postra(
     if (strref.o != IR_STRREF || strref.t.irt != IRT_PGC ||
         strref.op2 < REF_FIRST || strref.op2 >= ref) continue;
     offset = ir_load_acq(&v->ir[strref.op2]);
-    if (offset.o != IR_ADDOV || offset.op1 != conv) continue;
+    if ((offset.o != IR_ADDOV || offset.op1 != conv) &&
+        (offset.o != IR_ADD ||
+         (offset.op1 != conv && offset.op2 != conv))) continue;
     if (arm64_string_byte_dynamic_bounds_postra(v, ref, strref.op1,
                                                 strref.op2)) return 1;
   }
