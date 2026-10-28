@@ -1301,8 +1301,10 @@ static void rec_call_setup(jit_State *J, BCReg func, ptrdiff_t nargs)
   }
   {
     uint32_t ffid = lj_func_ffid_acq(funcV(functv));
-    if (ffid == FF_math_floor || ffid == FF_math_ceil ||
-        ffid == FF_math_sqrt) {
+    int math_unary = ffid == FF_math_floor || ffid == FF_math_ceil ||
+                     ffid == FF_math_sqrt || ffid == FF_math_abs;
+    int math_minmax = ffid == FF_math_min || ffid == FF_math_max;
+    if (math_unary || math_minmax) {
       BCIns call = (BCIns)la_load32_acq((const uint32_t *)J->pc);
       unsigned callargs;
       if (bc_op(call) == BC_CALL && bc_c(call) != 0)
@@ -1315,7 +1317,9 @@ static void rec_call_setup(jit_State *J, BCReg func, ptrdiff_t nargs)
       ** checked floor/ceil narrowing exits back through the original CALL. */
       if (!J->pt || (bc_op(J->cur.startins) != BC_LOOP &&
                       bc_op(J->cur.startins) != BC_FORL) ||
-          J->framedepth != 0 || nargs != 1 || callargs != 1 ||
+          J->framedepth != 0 ||
+          (math_unary && (nargs != 1 || callargs != 1)) ||
+          (math_minmax && (nargs < 1 || callargs != nargs)) ||
           bc_b(call) > 2)
         lj_trace_err(J, LJ_TRERR_NYIFFU);
       lj_snap_add(J);

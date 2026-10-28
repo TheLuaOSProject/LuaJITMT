@@ -1,6 +1,6 @@
 # Scalar FPMATH admission — 2026-10-28
 
-This isolated source slice admits the ARM64 native scalar math operations
+The integrated FPMATH slice admits the ARM64 native scalar math operations
 `math.floor`, `math.ceil` and `math.sqrt` for a one-argument call recorded in a
 root `LOOP` or `FORL` trace. The recorder validates the exact fast-function
 identity and immutable synthetic bytecode slot, caller/callee argument
@@ -47,7 +47,38 @@ traces and match the interpreter with NaN-aware comparison; the negative and
 infinity loop shapes can exit/re-enter repeatedly, so this is a semantic
 boundary witness, not an exit-free performance claim.
 
-This slice is now integrated and passes the combined experimental gate and
-ordinary ARM64/x64 conformance matrix; see the
-[integrated checkpoint](arm64-parity-checkpoint-2026-10-28.md). It does not
-establish full ARM64 LuaJIT parity or lockless-VM completion.
+## Native ABS, min/max and numeric NEG follow-up
+
+The follow-up source slice also admits the existing ARM64 `FABS`, `FCSEL` and
+`FNEG` lowerings for numeric `IR_ABS`, same-type integer or numeric `IR_MIN` /
+`IR_MAX`, and numeric `IR_NEG`. ABS and NEG must carry the exact aligned
+`GG_State.g.ksimd` mask load for their opcode; the post-RA proof treats that
+load as an unallocated constant and requires that every use is the matching
+operation. MIN/MAX operands remain in source order so the target keeps the VM's
+NaN and signed-zero behavior. Fast-function admission checks exact immutable
+function identity, caller geometry, and result bounds; min/max supports the
+one-argument passthrough and fixed multi-argument calls.
+
+The live-peer native fixture checks captured ABS/MIN/MAX, one- and three-arg
+min/max, integer and numeric min/max, numeric NEG, exact `INT_MIN` ABS
+widening, NaNs in first/middle/last argument positions, infinities, and both
+signed-zero input orders. The composition witness remains the existing
+floor/sqrt trace, and `math_four` now composes floor, sqrt, ABS and three-arg
+min in one native loop. The source gate validates each call's exact immutable
+function slot, caller argument geometry and result bounds independently; it
+does not impose a trace-global fast-function count. Semantic and post-RA
+corruptions cover wrong SIMD mask provenance, forward operands, illegal flags
+and register/spill placement, including attempts to allocate a real mask load
+in a valid FPR or free NUM spill pair. The ordinary companion compares
+ABS/MIN/MAX JIT results with the interpreter across NaN, infinities, signed
+zero and large boundaries.
+
+The focused scalar fixture and ordinary companion passed on native macOS in
+all four arm64/arm64e assertion/release profiles, including successful native
+trace publication while a peer MT remains live. The four-profile string-length
+contract also passed after combining its `IR_FLOAD` admission with the SIMD
+mask proof, exercising the shared semantic and post-RA cases.
+
+The floor/ceil/sqrt FPMATH slice is integrated. Native ABS/min/max/numeric NEG
+is a separate follow-up slice and remains isolated pending integration. Neither
+slice establishes full ARM64 LuaJIT parity or lockless-VM completion.

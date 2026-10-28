@@ -1,5 +1,6 @@
 -- Ordinary Lua companion: compare JIT-enabled results with JIT-off oracles.
-local floor, ceil, sqrt = math.floor, math.ceil, math.sqrt
+local floor, ceil, sqrt, abs = math.floor, math.ceil, math.sqrt, math.abs
+local min, max = math.min, math.max
 local inf, nan = 1/0, 0/0
 local cases = {
   {'floor', floor, {-2.75, -0.25, -0.0, 0.0, 0.25, 2.75,
@@ -50,3 +51,34 @@ for _, case in ipairs(cases) do
   end
   print('ORDINARY', name, 'interpreter/JIT results match')
 end
+local function unary(f, x)
+  local i, y = 0, 0
+  while i < 8 do y = f(x); i = i + 1 end
+  return y
+end
+for _, x in ipairs({-0.0, 0.0, -2.75, 2.75, -2147483648.25,
+                     2147483648.25, -inf, inf, nan}) do
+  jit.off(unary); local expected = unary(abs, x); jit.on(unary)
+  jit.flush(); jit.opt.start('hotloop=1', 'hotexit=1000', 'maxtrace=1')
+  assert(same(unary(abs, x), expected), 'abs mismatch at ' .. x)
+end
+local function ternary(f, a, b, c)
+  local i, y = 0, 0
+  while i < 8 do y = f(a, b, c); i = i + 1 end
+  return y
+end
+for _, op in ipairs({{'min', min}, {'max', max}}) do
+  for _, row in ipairs({
+    {1, 2, 3}, {nan, 1, 2}, {1, nan, 2}, {1, 2, nan},
+    {-0.0, 0.0, 1}, {0.0, -0.0, 1}, {-inf, inf, 0},
+    {2147483648.25, -2147483648.25, 9007199254740994}
+  }) do
+    local name, fn, a, b, c = op[1], op[2], row[1], row[2], row[3]
+    jit.off(ternary); local expected = ternary(fn, a, b, c); jit.on(ternary)
+    jit.flush(); jit.opt.start('hotloop=1', 'hotexit=1000', 'maxtrace=1')
+    local actual = ternary(fn, a, b, c)
+    assert(same(actual, expected), name .. ' mismatch')
+    if actual == 0 then assert(1/actual == 1/expected, name .. ' signed zero mismatch') end
+  end
+end
+print('ORDINARY', 'abs/min/max', 'interpreter/JIT results match')
