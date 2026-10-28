@@ -12,8 +12,10 @@ arithmetic and bodies without overflow snapshots.
 
 This is an admission/recorder change. It adds no runtime lock, GC root scheme,
 TValue representation, assembler write path or x64 special case. General Lua
-call/return and x86_64 parity remain incomplete. The focused assertion profile
-passes; the frozen four-profile and complete gates are pending at this commit.
+call/return and x86_64 parity remain incomplete. Source checkpoint `31e865c0`
+passes all four call profiles and the complete experimental gate. The complete
+bootstrap gate passes on repeat after the retained callback timeout described
+below; that first failure has not been explained or fixed.
 
 ## Independent proofs
 
@@ -91,8 +93,8 @@ The previous five C/Lua leaf/child/compound/argument/sparse suites pass again.
 The original leaf ordinary fixture now expects its extra-argument case to
 publish, leaving five deliberate refusal shapes.
 
-A cdata-return equality consumer remains interpreted across eight attempts,
-with correct results. Its ISEQV comparison aborts in the existing FFI recorder
+A cdata-return equality consumer has no self-linked FORL publication across
+eight attempts, with correct results. Its ISEQV comparison aborts in the existing FFI recorder
 path. The other four cdata argument layouts pass natively. Assigning a
 nonnumeric return to a loop-carried local also encounters the existing child
 RET1-snapshot boundary. These probes do not expand that boundary or claim
@@ -126,6 +128,70 @@ alongside `counterfactuals.log`. The test source uses numeric temporary plus
 CSET for `b=a*3`; the missing nil destination is a live old-tag input after the
 overflow resume, not an arithmetic destination exempt from restoration.
 
+## Frozen matrix and main integration
+
+Frozen source `31e865c06594c1ac43597138ce2b9ad9d31dac9c` passes the complete
+experimental gate, all 26 focused table/FFI fixtures in four profiles, and all
+four combined M7 FFI profiles. Each call profile repeats the 70 shapes,
+504 native invocations, 112 child exits, 70 identity exits, 1,466 semantic and
+1,494 allocated negatives. The complete bootstrap gate passes on repeat with
+unchanged deadlines and assertions; its first timeout remains open below.
+
+| Leaf contract profile | Profile hash prefix |
+| --- | --- |
+| ARM64 assertion | `4b20e5234549` |
+| arm64e assertion with BTI | `b8549f58a5e7` |
+| ARM64 release | `aff882c34d2c` |
+| arm64e release with BTI | `482d836dbb12` |
+
+ARM64 and signed x86_64 each pass both 509-case source and original-bytecode
+import corpora. Ordinary ARM64 passes nine Lua contracts: leaf calls, child
+exits, compound exits, fixed arguments, sparse exits, normalized arguments,
+bitops, rooted cells and rooted upvalues. Signed x64 additionally passes the
+fixed-argument, sparse-child and normalized-argument Lua companions. These
+ordinary results allow interpreter fallback and are separate from native C
+fixture evidence.
+
+`v2.1` was fast-forwarded and independently rebuilt. Main passes both 509-case
+corpora and all nine ordinary Lua contracts. Main and worktree ordinary ARM64
+assertion executables share SHA-256:
+`20fcbe8af5ab1f3035fabe8d25ab7544720201add375db1ba15bf2b78d7ee27a`.
+Both pass signature verification, import no checked compiler atomic helper
+and contain none of the checked test-helper symbols. The final documentation
+commit does not alter the source used for these builds.
+
+Logs are `matrix.log`, `matrix-continuation.log`, `experimental.log`,
+`table-ffi-four-profile.log`, `bootstrap.log`, `bootstrap-retry.log`,
+`*-stock-*.log`, `x64-lua-normalized-args.log` and `main-verify.log` in the
+evidence directory. The first matrix stopped at the bootstrap timeout; the
+continuation reran that complete gate and the remaining checks on the same
+clean, frozen source, then restored the ordinary assertion runtime.
+
+## Unexplained callback timeout
+
+The first bootstrap gate stopped when `t-ffi-callback-auto-unwind.cpp` exceeded
+its unchanged 30-second timeout. The suite reported signal 14, with no fixture
+output or assertion. This is the existing TLS-less C++ callback error-unwind,
+TG detach/reclamation and concurrent-close lifetime test. The original binary
+and failure log are retained in `callback-timeout/`; the binary SHA-256 is
+`0dd5c9798a772315a7b4d51cc44a71438ca7a406f5c6e2e9cd7ecb86c1483e84`.
+
+The exact binary passed 100 repetitions followed by 1,000 more, typically in
+0.07-0.09 seconds. A watchdog would have sampled a run lasting three seconds;
+none did. A complete bootstrap retry also passed, with an external watcher
+ready to sample callback fixtures after five seconds while preserving their
+original 30-second deadline. It observed no stall. There was no production or
+test change between the failed and successful complete bootstrap runs.
+
+This establishes a passing repeat, not a fix or root cause. The affected
+profile has JIT disabled, so the new Lua-call admission code does not execute
+there. The source audit identifies possible waits in first-worker join,
+auto-attach/state ownership, callback unwind/detach, shutdown's live-token
+handshake, or close; it does not identify which wait occurred in the original
+failure. A future recurrence needs a stack capture and callback/TG/shutdown
+state before timeout. The prior rooted-length post-GC witness is a separate
+unexplained observation.
+
 ## Remaining work
 
 Callee branches, nested Lua frames, tail calls, varargs, multiple returns and
@@ -136,3 +202,10 @@ numeric-only restrictions at their historical checkpoints.
 
 The prior rooted-length post-full-GC native-witness failure remains unexplained.
 Later passing matrices and 1,100 isolated repetitions do not establish a fix.
+
+Source review identifies terminal RET1 child snapshots as the next bounded
+return step: independently replay the complete prefix, prove the exact visible
+returned value and its required slot, and retain all caller, frame, source and
+physical-location checks. The current prefix/liveness routines deliberately
+exclude that terminal position. This is a design direction, not implemented
+or native-verified terminal-return snapshot admission.
