@@ -98,6 +98,9 @@ LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
 LJ_ARM64_STRING_LEN_RESTORE_XCFLAGS="$xcflags" \
   sh "$root/tools/ci/arm64_jit_string_len_contract.sh"
 LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+LJ_ARM64_STRING_BYTE_RESTORE_XCFLAGS="$xcflags" \
+  sh "$root/tools/ci/arm64_jit_string_byte_contract.sh"
+LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
   sh "$root/tools/ci/arm64_jit_rooted_store_contract.sh"
 LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
   sh "$root/tools/ci/arm64_jit_rooted_gc_contract.sh"

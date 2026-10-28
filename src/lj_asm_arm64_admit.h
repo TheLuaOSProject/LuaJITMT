@@ -6642,6 +6642,8 @@ static int arm64_ir_forl_shape(const jit_State *J, const GCtrace *T,
 
 static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
                                IRType type);
+static int arm64_string_byte_bounds_ir(const GCtrace *T, IRRef strref,
+                                       IRRef str, IRRef offset);
 
 static int arm64_ir_snapshots(const GCtrace *T, IRRef loopref,
 	IRRef xpollref, MSize root_topslot, const jit_State *J,
@@ -6699,6 +6701,8 @@ static int arm64_ir_snapshots(const GCtrace *T, IRRef loopref,
 	continue;  /* The sole root-frame sentinel carries no object. */
       if (slot < 1 + LJ_FR2 ||
 	  (flags != 0 && flags != SNAP_NORESTORE) ||
+          (ref >= REF_FIRST && ref < snapref &&
+           T->ir[ref].o == IR_XLOAD && T->ir[ref].t.irt == IRT_U8) ||
 	  (!arm64_ir_int_ref(T, ref, snapref, rootop == BC_FORL) &&
 	   !(rootop == BC_FORL &&
 	     (arm64_scalar_ir_ref(T, ref, snapref, IRT_NUM) ||
@@ -7005,7 +7009,8 @@ static int arm64_rooted_gc_type(IRType type)
 ** of this identity-guard capability; their IR still needs its own proof. */
 static int arm64_scalar_builtin_ffid(uint32_t ffid)
 {
-  return ffid == FF_rawset || lj_ff_is_bit_scalar(ffid);
+  return ffid == FF_rawset || ffid == FF_string_byte ||
+         lj_ff_is_bit_scalar(ffid);
 }
 
 /* Recorder-side scalar provenance. Deliberately independent of the immutable
@@ -7029,6 +7034,9 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
   if (value < REF_FIRST || value >= before)
     return 0;
   ir = &T->ir[value];
+  /* XLOAD U8 is zero-extended by LDRB and is safe as a Lua INT operand. */
+  if (type == IRT_INT && irt_type(ir->t) == IRT_U8 && ir->o == IR_XLOAD)
+    return arm64_scalar_ir_ref(T, value, before, IRT_U8);
   if (irt_type(ir->t) != type)
     return 0;
   if (ir->o == IR_CALLS)
@@ -7058,6 +7066,12 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
     return (ir->o == IR_SLOAD || ir->o == IR_VLOAD ||
             (type == IRT_TAB && ir->o == IR_TNEW)) &&
       (ir->t.irt & ~IRT_ISPHI) == (type|IRT_GUARD);
+  if (type == IRT_PGC && ir->o == IR_STRREF)
+    return ir->t.irt == IRT_PGC &&
+      arm64_string_byte_bounds_ir(T, value, ir->op1, ir->op2);
+  if (type == IRT_U8 && ir->o == IR_XLOAD)
+    return ir->t.irt == IRT_U8 && ir->op2 == IRXLOAD_READONLY &&
+      arm64_scalar_ir_ref(T, ir->op1, value, IRT_PGC);
   switch ((IROp)ir->o) {
   case IR_SLOAD:
   case IR_VLOAD:
@@ -7080,6 +7094,78 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
   default:
     return 0;
   }
+}
+
+/* A constant byte offset is safe only with an earlier guard that proves the
+** corresponding one-based position is within the same immutable GCstr. This
+** intentionally does not admit variable offsets or rely on the trailing NUL. */
+static int arm64_string_byte_bounds_ir(const GCtrace *T, IRRef strref,
+                                       IRRef str, IRRef offset)
+{
+  int32_t byte_offset;
+  IRRef ref;
+  int64_t bound;
+  if (!arm64_ir_kint_value(T, offset, &byte_offset) || byte_offset < 0 ||
+      byte_offset == INT32_MAX ||
+      (uint32_t)byte_offset > 4095u - (uint32_t)sizeof(GCstr) ||
+      !arm64_scalar_ir_ref(T, str, strref, IRT_STR))
+    return 0;
+  bound = (int64_t)byte_offset + 1;
+  for (ref = REF_FIRST; ref < strref; ref++) {
+    const IRIns *guard = &T->ir[ref];
+    IRRef lenref, boundref;
+    int32_t guard_bound;
+    if ((guard->o != IR_UGE && guard->o != IR_ULE) ||
+        guard->t.irt != (IRT_INT|IRT_GUARD))
+      continue;
+    lenref = guard->o == IR_UGE ? guard->op1 : guard->op2;
+    boundref = guard->o == IR_UGE ? guard->op2 : guard->op1;
+    if (lenref < REF_FIRST || lenref >= ref ||
+        !arm64_ir_kint_value(T, boundref, &guard_bound) ||
+        guard_bound != (int32_t)bound)
+      continue;
+    {
+      const IRIns *len = &T->ir[lenref];
+      if (len->o == IR_FLOAD && len->t.irt == IRT_INT &&
+          len->op2 == IRFL_STR_LEN && len->op1 == str)
+        return 1;
+    }
+  }
+  return 0;
+}
+
+/* UGE/ULE are admitted only as the exact dominating range guard consumed by
+** a later STRREF. This prevents unrelated unsigned comparisons from opening. */
+static int arm64_string_byte_guard_ir(const GCtrace *T, IRRef guardref)
+{
+  const IRIns *guard;
+  IRRef lenref, boundref, ref;
+  int32_t bound;
+  if (guardref < REF_FIRST || guardref >= T->nins) return 0;
+  guard = &T->ir[guardref];
+  if ((guard->o != IR_UGE && guard->o != IR_ULE) ||
+      guard->t.irt != (IRT_INT|IRT_GUARD)) return 0;
+  lenref = guard->o == IR_UGE ? guard->op1 : guard->op2;
+  boundref = guard->o == IR_UGE ? guard->op2 : guard->op1;
+  if (lenref < REF_FIRST || lenref >= guardref ||
+      !arm64_ir_kint_value(T, boundref, &bound) || bound <= 0 ||
+      (uint32_t)bound > 4096u-(uint32_t)sizeof(GCstr)) return 0;
+  {
+    const IRIns *len = &T->ir[lenref];
+    if (len->o != IR_FLOAD || len->t.irt != IRT_INT ||
+        len->op2 != IRFL_STR_LEN ||
+        !arm64_scalar_ir_ref(T, len->op1, guardref, IRT_STR)) return 0;
+    for (ref = guardref+1u; ref < T->nins; ref++) {
+      const IRIns *strref = &T->ir[ref];
+      int32_t offset;
+      if (strref->o == IR_STRREF && strref->t.irt == IRT_PGC &&
+          strref->op1 == len->op1 &&
+          arm64_ir_kint_value(T, strref->op2, &offset) &&
+          offset == bound-1)
+        return 1;
+    }
+  }
+  return 0;
 }
 
 static int arm64_rooted_upvalue_call(IRCallID id)
@@ -8546,6 +8632,16 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
           !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_STR))
         goto bad_operand;
       break;
+    case IR_STRREF:
+      if (type != IRT_PGC || flags ||
+          !arm64_string_byte_bounds_ir(T, ref, ir->op1, ir->op2))
+        goto bad_operand;
+      break;
+    case IR_XLOAD:
+      if (type != IRT_U8 || flags || ir->op2 != IRXLOAD_READONLY ||
+          !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_PGC))
+        goto bad_operand;
+      break;
     case IR_TMPREF:
       if (type != IRT_PGC || flags) goto bad_type;
       if (ir->op2 == IRTMPREF_IN1 ||
@@ -8651,6 +8747,8 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
     case IR_GE:
     case IR_LE:
     case IR_GT:
+    case IR_UGE:
+    case IR_ULE:
     case IR_EQ:
     case IR_NE:
       if (type == IRT_FUNC && ir->o == IR_EQ && flags == IRT_GUARD) {
@@ -8669,7 +8767,9 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
           goto bad_operand;
         break;
       }
-      if ((type != IRT_INT && type != IRT_NUM) || flags != IRT_GUARD)
+      if ((type != IRT_INT && type != IRT_NUM) || flags != IRT_GUARD ||
+          ((ir->o == IR_UGE || ir->o == IR_ULE) &&
+           !arm64_string_byte_guard_ir(T, ref)))
         goto bad_type;
       /* Guard operands obey SSA order. Check this before inspecting either
       ** reference so malformed forward/self/out-of-range refs stay bounded. */
@@ -8681,7 +8781,8 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
     case IR_CONV:
       if (type == IRT_NUM && !(flags & ~IRT_ISPHI) &&
           ir->op2 == IRCONV_NUM_INT &&
-          arm64_scalar_ir_ref(T, ir->op1, ref, IRT_INT))
+          (arm64_scalar_ir_ref(T, ir->op1, ref, IRT_INT) ||
+           arm64_scalar_ir_ref(T, ir->op1, ref, IRT_U8)))
         break;
       if (type == IRT_INT && (flags & IRT_GUARD) &&
           !(flags & ~(IRT_GUARD | IRT_ISPHI)) &&
@@ -8974,6 +9075,10 @@ static int arm64_scalar_postra_value(IRIns p)
   switch ((IROp)p.o) {
   case IR_FLOAD:
     return p.t.irt == IRT_INT && p.op2 == IRFL_STR_LEN;
+  case IR_STRREF:
+    return p.t.irt == IRT_PGC;
+  case IR_XLOAD:
+    return p.t.irt == IRT_U8 && p.op2 == IRXLOAD_READONLY;
   case IR_BNOT: case IR_BSWAP:
   case IR_BAND: case IR_BOR: case IR_BXOR:
   case IR_BSHL: case IR_BSHR: case IR_BSAR: case IR_BROR:
@@ -9035,6 +9140,9 @@ static int arm64_scalar_postra_ref(const LJArm64PostRAView *v, IRRef ref,
   if (ref < REF_FIRST || ref >= before)
     return 0;
   p = ir_load_acq(&v->ir[ref]);
+  /* Independently retain LDRB's zero-extended integer operand semantics. */
+  if (type == IRT_INT && irt_type(p.t) == IRT_U8 && p.o == IR_XLOAD)
+    return arm64_scalar_postra_ref(v, ref, before, IRT_U8);
   if (type == IRT_FUNC && p.o == IR_SLOAD && p.op1 == 0 &&
       p.t.irt == IRT_FUNC && p.op2 == IRSLOAD_READONLY)
     return 1;
@@ -9194,6 +9302,78 @@ static int arm64_scalar_postra_kint(const LJArm64PostRAView *v, IRRef ref,
   return 1;
 }
 
+/* Independently certify a constant byte offset against an earlier guarded
+** length load for the same string. Dynamic offsets remain fail-closed. */
+static int arm64_string_byte_bounds_postra(const LJArm64PostRAView *v,
+                                            IRRef strref, IRRef str,
+                                            IRRef offset)
+{
+  int32_t byte_offset;
+  IRRef ref;
+  int64_t bound;
+  if (!arm64_scalar_postra_kint(v, offset, &byte_offset) || byte_offset < 0 ||
+      byte_offset == INT32_MAX ||
+      (uint32_t)byte_offset > 4095u - (uint32_t)sizeof(GCstr) ||
+      !arm64_scalar_postra_ref(v, str, strref, IRT_STR))
+    return 0;
+  bound = (int64_t)byte_offset + 1;
+  for (ref = REF_FIRST; ref < strref; ref++) {
+    IRIns guard = ir_load_acq(&v->ir[ref]);
+    IRRef lenref, boundref;
+    int32_t guard_bound;
+    if ((guard.o != IR_UGE && guard.o != IR_ULE) ||
+        guard.t.irt != (IRT_INT|IRT_GUARD))
+      continue;
+    lenref = guard.o == IR_UGE ? guard.op1 : guard.op2;
+    boundref = guard.o == IR_UGE ? guard.op2 : guard.op1;
+    if (lenref < REF_FIRST || lenref >= ref ||
+        !arm64_scalar_postra_kint(v, boundref, &guard_bound) ||
+        guard_bound != (int32_t)bound)
+      continue;
+    {
+      IRIns len = ir_load_acq(&v->ir[lenref]);
+      if (len.o == IR_FLOAD && len.t.irt == IRT_INT &&
+          len.op2 == IRFL_STR_LEN && len.op1 == str &&
+          arm64_scalar_postra_ref(v, lenref, ref, IRT_INT))
+        return 1;
+    }
+  }
+  return 0;
+}
+
+static int arm64_string_byte_guard_postra(const LJArm64PostRAView *v,
+                                          IRRef guardref)
+{
+  IRIns guard;
+  IRRef lenref, boundref, ref;
+  int32_t bound;
+  if (guardref < REF_FIRST || guardref >= v->nins) return 0;
+  guard = ir_load_acq(&v->ir[guardref]);
+  if ((guard.o != IR_UGE && guard.o != IR_ULE) ||
+      guard.t.irt != (IRT_INT|IRT_GUARD)) return 0;
+  lenref = guard.o == IR_UGE ? guard.op1 : guard.op2;
+  boundref = guard.o == IR_UGE ? guard.op2 : guard.op1;
+  if (lenref < REF_FIRST || lenref >= guardref ||
+      !arm64_scalar_postra_kint(v, boundref, &bound) || bound <= 0 ||
+      (uint32_t)bound > 4096u-(uint32_t)sizeof(GCstr)) return 0;
+  {
+    IRIns len = ir_load_acq(&v->ir[lenref]);
+    if (len.o != IR_FLOAD || len.t.irt != IRT_INT ||
+        len.op2 != IRFL_STR_LEN ||
+        !arm64_scalar_postra_ref(v, len.op1, guardref, IRT_STR)) return 0;
+    for (ref = guardref+1u; ref < v->nins; ref++) {
+      IRIns strref = ir_load_acq(&v->ir[ref]);
+      int32_t offset;
+      if (strref.o == IR_STRREF && strref.t.irt == IRT_PGC &&
+          strref.op1 == len.op1 &&
+          arm64_scalar_postra_kint(v, strref.op2, &offset) &&
+          offset == bound-1)
+        return 1;
+    }
+  }
+  return 0;
+}
+
 /* asm_fuseopm consumes at most one unmaterialized shift/double operation.
 ** Its input must have a real location; this is not recursive permission to
 ** erase an arbitrary chain. Match mayfuse's loop boundary at the consumer;
@@ -9346,6 +9526,18 @@ static int arm64_scalar_postra_nolocation(const LJArm64PostRAView *v,
     return 0;
   if (source.o == IR_PHI)
     return 0;
+  if (source.o == IR_STRREF && source.t.irt == IRT_PGC) {
+    int seen = 0;
+    for (ref = value + 1u; ref < end; ref++) {
+      IRIns use = ir_load_acq(&v->ir[ref]);
+      if (use.op1 != value && use.op2 != value) continue;
+      if (use.o != IR_XLOAD || use.op1 != value ||
+          use.t.irt != IRT_U8 || use.op2 != IRXLOAD_READONLY)
+        return 0;
+      seen = 1;
+    }
+    return seen;
+  }
   for (ref = value + 1; ref < end; ref++) {
     IRIns use = ir_load_acq(&v->ir[ref]);
     int used;
@@ -10752,6 +10944,16 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       if (p.t.irt != IRT_INT || p.op2 != IRFL_STR_LEN ||
           !arm64_scalar_postra_ref(v, p.op1, ref, IRT_STR)) return 0;
       break;
+    case IR_STRREF:
+      if (p.t.irt != IRT_PGC ||
+          !arm64_string_byte_bounds_postra(v, ref, p.op1, p.op2))
+        return 0;
+      break;
+    case IR_XLOAD:
+      if (p.t.irt != IRT_U8 || p.op2 != IRXLOAD_READONLY ||
+          !arm64_scalar_postra_ref(v, p.op1, ref, IRT_PGC))
+        return 0;
+      break;
     case IR_TMPREF:
       if (p.t.irt != IRT_PGC || !ra_hasreg(p.r) ||
           !arm64_scalar_postra_register(p.r, IRT_PGC) || ra_hasspill(p.s))
@@ -10868,6 +11070,8 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
     case IR_GE:
     case IR_LE:
     case IR_GT:
+    case IR_UGE:
+    case IR_ULE:
     case IR_EQ:
     case IR_NE:
       if (type == IRT_FUNC && p.o == IR_EQ && flags == IRT_GUARD) {
@@ -10890,7 +11094,9 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
           return 0;
         break;
       }
-      if ((type != IRT_INT && type != IRT_NUM) || flags != IRT_GUARD)
+      if ((type != IRT_INT && type != IRT_NUM) || flags != IRT_GUARD ||
+          ((p.o == IR_UGE || p.o == IR_ULE) &&
+           !arm64_string_byte_guard_postra(v, ref)))
         return 0;
       /* Do not dereference a candidate call until both operands are known to
       ** be valid earlier SSA refs (or constants). */
@@ -10925,7 +11131,8 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
     case IR_CONV:
       if (type == IRT_NUM && (flags & ~IRT_ISPHI) == 0 &&
           p.op2 == IRCONV_NUM_INT &&
-          arm64_scalar_postra_ref(v, p.op1, ref, IRT_INT))
+          (arm64_scalar_postra_ref(v, p.op1, ref, IRT_INT) ||
+           arm64_scalar_postra_ref(v, p.op1, ref, IRT_U8)))
         break;
       if (type == IRT_INT && (flags & IRT_GUARD) &&
           (flags & ~(IRT_GUARD | IRT_ISPHI)) == 0 &&
@@ -10972,11 +11179,11 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
     {
       int value = arm64_scalar_postra_value(p) || p.o == IR_PHI;
       if (ra_hasspill(p.s)) {
-        MSize width = type == IRT_INT ? 1 : 2, slot;
+        MSize width = type == IRT_INT || type == IRT_U8 ? 1 : 2, slot;
         /* Preserve the complete 64-bit NUM, GC pointer or lightuserdata token.
         ** GC pointers additionally rely on the native phase lease until exit
         ** restoration; lightuserdata tokens carry no GC edge. */
-        if (!value || (type != IRT_INT && type != IRT_NUM &&
+        if (!value || (type != IRT_INT && type != IRT_U8 && type != IRT_NUM &&
                        !arm64_rooted_gc_type(type) && type != IRT_LIGHTUD) ||
             p.s < SPS_FIRST || (width == 2 && (p.s & 1)) ||
             (MSize)p.s + width > cap)
@@ -11096,6 +11303,13 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       if (childlink && slot == childlink) continue;
       if (sn == SNAP(1, SNAP_FRAME | SNAP_NORESTORE, REF_NIL))
         continue;
+      if (r >= REF_FIRST && r < at) {
+        IRIns value = ir_load_acq(&v->ir[r]);
+        /* U8 has no direct Lua stack snapshot encoding in this bounded slice.
+        ** It is admitted only as an internal zero-extended arithmetic value. */
+        if (value.o == IR_XLOAD && value.t.irt == IRT_U8)
+          return 0;
+      }
       if ((sn & 0x00ff0000u) == SNAP_NORESTORE) {
         MSize idxslot = 1u + LJ_FR2 + bc_a(v->startins);
         IRIns source;
