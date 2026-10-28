@@ -377,18 +377,27 @@ available.
 
 ### Bounded native JIT
 
-- One numeric comparison with two nonempty forward-only arms and a common
-  join is admitted in pure Lua leaves. Snapshot restoration follows the
-  selected path, with exact comparison polarity and live values, including
-  NaN cold exits. Early returns, empty arms, nested comparisons and multiple
-  arithmetic operations per arm remain unverified or closed; see
-  [branch evidence](arm64-jit-lua-branches-2026-10-28.md).
+- One numeric comparison with two nonempty forward-only arms is admitted in
+  pure Lua leaves, with either a common join or one single-result return per
+  arm. Multiple arithmetic operations per arm are source-replayed. Snapshot
+  restoration follows the selected path with exact comparison polarity and
+  live values, including NaN cold exits. Empty arms and nested comparisons
+  remain outside this proof; see the
+  [later branch checkpoint](arm64-math-dynamic-early-checkpoint-2026-10-28.md).
 - Scalar math and immutable string length/byte operations retain the stock
-  emitter. Byte reads require a positive constant index and exact earlier
-  bounds from the same immutable string; dynamic/negative indices remain
-  closed. See [math evidence](arm64-jit-fpmath-2026-10-28.md),
+  emitter. One-byte reads accept bounded constant and dynamic indices,
+  including negative indices, with exact earlier bounds from the same
+  immutable string. Ranges producing multiple bytes remain outside this
+  proof. See [math evidence](arm64-jit-fpmath-2026-10-28.md),
   [string length](arm64-jit-string-len-2026-10-28.md) and
-  [string byte](arm64-string-byte-contract-2026-10-28.md).
+  [string byte](arm64-string-byte-contract-2026-10-28.md) and
+  [negative-index boundaries](arm64-negative-byte-boundaries-2026-10-28.md).
+- Bounded ordinary nested Lua calls accept parameter-passed and captured
+  function identities. The rooted helper reads captured callees; source
+  replay proves the further call and arithmetic continuation. Only one
+  active child snapshot frame is certified, with exact identity exits and
+  post-GC reuse. See the
+  [captured-call checkpoint](arm64-captured-nested-checkpoint-2026-10-28.md).
 - Fixed pure Lua leaves inline in scalar FORL roots with exact caller CALL
   argument maps and independently certified source/identity. Extra supplied
   arguments are preserved for caller replay; missing formals become nil.
@@ -648,7 +657,7 @@ available.
   unknown. See the [normalization evidence](arm64-jit-lua-normalized-args-2026-10-28.md).
 - General ARM64 JIT IR admission for arbitrary Lua programs, unrestricted
   spill or register layouts, and general root geometries.
-- General Lua call/return, including callee branches, nested frames,
+- General Lua call/return, including unrestricted callee branches and nested frames,
   additional return-side child exits, argument coercions, varargs, tail calls,
   multiple returns and snapshots omitting required argument values. The fixed
   pure leaves above remain a bounded exception.
