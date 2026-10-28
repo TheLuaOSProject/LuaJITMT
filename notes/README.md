@@ -7,7 +7,7 @@ and reports that are no longer authoritative are retained in
 
 ## Status at a glance
 
-- Current branch: `v2.1`.
+- Integrated branch: `v2.1`; current parity continuation: `codex/arm64-parity`.
 - Integrated upstream comparison point: LuaJITMT `v2.1` at `489bb089`.
   See
   [`upstream-refresh-2026-10-22.md`](upstream-refresh-2026-10-22.md) for merge
@@ -18,6 +18,11 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
+- A repeatable [cross-architecture workload inventory](arm64-parity-inventory-2026-10-28.md)
+  now compares interpreter results and observed native root exits. The initial
+  eighteen-workload sample passes 234 result checks on each architecture but
+  has root-exit witnesses in seven ARM64 rows versus sixteen x64 rows. These
+  sampled observations guide the remaining work; they are not a parity claim.
 - Latest source checkpoint: terminal Lua leaf return snapshots at `2cfdc61b`,
   integrated into `v2.1`. Four ARM64/arm64e assertion/release profiles each
   pass 80 cases, 320 native invocations, 80 terminal exits, 1,247 semantic and
