@@ -50,6 +50,14 @@ reject toggled PHI annotations. The final four-profile C/Lua run is
 `carried-four-profile.log` in the evidence directory above. The ordinary
 companion additionally compares repeated calls over its entire edge-value
 matrix; this is result evidence, not a claim that every edge trace compiles.
+The post-RA corruption contract also has a two-helper loop where a NUM
+loop-carried accumulator is snapshotted after a later helper call. It derives
+the live PHI input, later call, snapshot entry and matching `IR_RENAME` from
+the recorded trace, changes only that rename's saved location to caller-clobbered
+D0, and requires admission to refuse it while the unchanged base value and
+restored trace continue to pass. This exercises a snapshot location distinct
+from the value's base allocation. Its final four-profile run is
+`/Users/frityet/Scratch/ljmt-math-helpers-20261028/rename-survival-four-profile.log`.
 The new repeated-call matrix exposed floor's negative-zero normalization in
 the previous ARM64 binary too. Installed stock LuaJIT also loses that zero sign
 under JIT narrowing (its invariant scalar case already does so). Accordingly,
