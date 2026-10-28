@@ -1,16 +1,34 @@
 -- Ordinary Lua companion: compare JIT-enabled results with JIT-off oracles.
 local floor, ceil, sqrt = math.floor, math.ceil, math.sqrt
+local inf, nan = 1/0, 0/0
 local cases = {
-  {'floor', floor, {-2.75, -0.25, 0, 0.25, 2.75, 2147483648.25}},
-  {'ceil', ceil, {-2.75, -0.25, 0, 0.25, 2.75, 2147483648.25}},
-  {'sqrt', sqrt, {0, 0.25, 2.75, 2147483648.25}}
+  {'floor', floor, {-2.75, -0.25, -0.0, 0.0, 0.25, 2.75,
+                    -2147483649.25, -2147483648.0, 2147483647.75,
+                    2147483648.25, 9007199254740994, -inf, inf, nan}},
+  {'ceil', ceil, {-2.75, -0.25, -0.0, 0.0, 0.25, 2.75,
+                  -2147483649.25, -2147483648.0, 2147483647.75,
+                  2147483648.25, 9007199254740994, -inf, inf, nan}},
+  {'sqrt', sqrt, {-2.75, -0.25, -0.0, 0.0, 0.25, 2.75,
+                  -2147483649.25, -2147483648.0, 2147483647.75,
+                  2147483648.25, 9007199254740994, -inf, inf, nan}}
 }
+local function same(a, b)
+  if a ~= a then return b ~= b end
+  if b ~= b or a ~= b then return false end
+  if a == 0 then return 1/a == 1/b end
+  return true
+end
 for _, case in ipairs(cases) do
   local name, fn, starts = case[1], case[2], case[3]
   local function workload(f, n, x)
     local s = 0
     for i = 1, n do s = s + f(x + i) end
     return s
+  end
+  local function scalar(f, n, x)
+    local i, y = 0, 0
+    while i < n do y = f(x); i = i + 1 end
+    return y
   end
   for _, x in ipairs(starts) do
     jit.off(workload)
@@ -19,7 +37,16 @@ for _, case in ipairs(cases) do
     jit.flush()
     jit.opt.start('hotloop=1', 'hotexit=1000', 'maxtrace=1')
     local actual = workload(fn, 8, x)
-    assert(actual == expected, name .. ' mismatch at ' .. x)
+    assert(same(actual, expected), name .. ' mismatch at ' .. x)
+  end
+  for _, x in ipairs(starts) do
+    jit.off(scalar)
+    local expected = scalar(fn, 8, x)
+    jit.on(scalar)
+    jit.flush()
+    jit.opt.start('hotloop=1', 'hotexit=1000', 'maxtrace=1')
+    local actual = scalar(fn, 8, x)
+    assert(same(actual, expected), name .. ' scalar edge mismatch at ' .. x)
   end
   print('ORDINARY', name, 'interpreter/JIT results match')
 end

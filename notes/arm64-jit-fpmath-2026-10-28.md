@@ -37,5 +37,15 @@ ordinary companion matched interpreter and JIT results for all three
 operations. The release fixture build omits LuaJIT assertion hooks to match
 the release archive; select this with `LJ_ARM64_SCALAR_ASSERT=0`.
 
+Follow-up edge checks compare ordinary interpreter and JIT results for NaN,
+positive and negative infinity, signed zero (using reciprocal sign), negative
+sqrt inputs, negative fractional boundaries, both sides of the signed int32
+range, and finite values above exact 32-bit and 53-bit integer boundaries.
+Native floor traces also take both the positive and negative out-of-int32
+guard exits. Negative sqrt and positive-infinity sqrt inputs publish native
+traces and match the interpreter with NaN-aware comparison; the negative and
+infinity loop shapes can exit/re-enter repeatedly, so this is a semantic
+boundary witness, not an exit-free performance claim.
+
 This note describes an isolated implementation proposal, not full ARM64 LuaJIT
 parity or lockless-VM completion.

@@ -150,6 +150,9 @@ run_native('math_floor_guard',math_floor_guard,20,.25)
 probe_changed(math_floor_guard,
               math_floor_guard(6,2147483648.25),
               6,2147483648.25)
+probe_changed(math_floor_guard,
+              math_floor_guard(6,-2147483648.25),
+              6,-2147483648.25)
 -- Force a full collection after the guarded NUM-to-INT exit, then re-enter
 -- the same trace with its original input to check retained roots and code.
 collectgarbage('collect')
@@ -172,6 +175,32 @@ local function math_sqrt(n)
   return s
 end
 run('math_sqrt',math_sqrt,20)
+local function same_number(a,b)
+  if a~=a then return b~=b end
+  if b~=b or a~=b then return false end
+  if a==0 then return 1/a==1/b end
+  return true
+end
+local function math_sqrt_special(n,x)
+  local i,s=0,0
+  while i<n do s=s+sqrt_builtin(x-i*.25); i=i+1 end
+  return s
+end
+local function run_native_special(name,x)
+  jit.off(math_sqrt_special)
+  local expected=math_sqrt_special(12,x)
+  jit.on(math_sqrt_special)
+  jit.flush(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=1','-fma')
+  local result=math_sqrt_special(12,x)
+  assert(same_number(result,expected),name..' interpreter mismatch')
+  probe_reset()
+  result=math_sqrt_special(12,x)
+  assert(same_number(result,expected),name..' native mismatch')
+  probe_check(name)
+end
+jit.off(run_native_special,true)
+run_native_special('math_sqrt_negative',-1)
+run_native_special('math_sqrt_infinity',1/0)
 local function math_parameter(n,fn)
   local s=0
   for i=1,n do s=s+fn(i+.25) end
