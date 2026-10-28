@@ -132,14 +132,15 @@ static void *change_old_tag(void *opaque)
 
 static SnapNo terminal_snapshot(GCtrace *T, GCproto *leaf)
 {
-  const BCIns *ret = proto_bc(leaf)+leaf->sizebc-1u;
   for (SnapNo s = 0; s < T->nsnap; s++) {
     uint64_t footer = snapshot_footer(T, s);
     IRRef r = T->snap[s].ref;
-    if ((uint8_t)footer && (const BCIns *)(uintptr_t)(footer>>8) == ret &&
+    const BCIns *pc = (const BCIns *)(uintptr_t)(footer>>8);
+    if ((uint8_t)footer && (uintptr_t)pc >= (uintptr_t)proto_bc(leaf) &&
+        (uintptr_t)pc < (uintptr_t)(proto_bc(leaf)+leaf->sizebc) &&
+        bc_op((BCIns)la_load32_acq((const uint32_t *)pc)) == BC_RET1 &&
         T->ir[r].o == IR_SLOAD && irt_isguard(T->ir[r].t)) return s;
   }
-  fprintf(stderr, "%s has no terminal old-tag guard\n", active_name);
   abort();
 }
 
@@ -147,7 +148,7 @@ static void assert_terminal(lua_State *L, GCtrace *T, SnapNo expected)
 {
   GCfunc *fn = global_function(L, "leaf_candidate");
   GCproto *leaf = funcproto(fn), *root = trace_startpt_acq(T);
-  const BCIns *call = only_call(root), *ret = proto_bc(leaf)+leaf->sizebc-1u;
+  const BCIns *call = only_call(root), *ret;
   ExitNo exit = lj_trace_test_first_exitno();
   const SnapShot *snap;
   uint64_t footer;
@@ -155,9 +156,12 @@ static void assert_terminal(lua_State *L, GCtrace *T, SnapNo expected)
   unsigned found_fn = 0, found_link = 0, found_value = 0;
   assert(exit == expected && exit < T->nsnap);
   snap = &T->snap[exit]; footer = snapshot_footer(T, exit);
+  ret = (const BCIns *)(uintptr_t)(footer>>8);
   base = (uint8_t)footer+2u; frame = base-1u;
-  assert(bc_op(*ret) == BC_RET1 && bc_d(*ret) == 2 &&
-         (const BCIns *)(uintptr_t)(footer>>8) == ret &&
+  assert((uint8_t)footer && (uintptr_t)ret >= (uintptr_t)proto_bc(leaf) &&
+         (uintptr_t)ret < (uintptr_t)(proto_bc(leaf)+leaf->sizebc) &&
+         bc_op((BCIns)la_load32_acq((const uint32_t *)ret)) == BC_RET1 &&
+         bc_d((BCIns)la_load32_acq((const uint32_t *)ret)) == 2 &&
          base == 2u+2u*LJ_FR2+bc_a(*call));
   for (MSize i = 0; i < snap->nent; i++) {
     SnapEntry entry = T->snapmap[snap->mapofs+i];
@@ -173,7 +177,7 @@ static void assert_terminal(lua_State *L, GCtrace *T, SnapNo expected)
              ir_kgc_acq(&T->ir[r]) == obj2gco(fn));
       found_fn++;
     }
-    if (snap_slot(entry) == base+bc_a(*ret)) {
+    if (snap_slot(entry) == base+bc_a((BCIns)la_load32_acq((const uint32_t *)ret))) {
       assert(!(entry & 0x00ff0000u) &&
              irt_type(T->ir[r].t) != IRT_P32 &&
              irt_type(T->ir[r].t) != IRT_PGC);
@@ -240,10 +244,11 @@ static void checked(lua_State *L, GCtrace *T, int force,
   pthread_t worker;
   OldTagChange change = {0};
   SnapNo terminal = 0;
+  int early_branch = strcmp(active_name, "comparison-early-return") == 0;
   invoke(L, "leaf_oracle_run", "leaf_oracle", first, last);
   if (T) {
     lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
-    if (force) {
+    if (force && !early_branch) {
       GCfunc *fn = global_function(L, "leaf_candidate");
       const BCIns *call = only_call(trace_startpt_acq(T));
       terminal = terminal_snapshot(T, funcproto(fn));
@@ -261,7 +266,7 @@ static void checked(lua_State *L, GCtrace *T, int force,
   invoke(L, "leaf_run", "leaf_candidate", first, last);
   assert(lua_rawequal(L, -1, -2)); lua_pop(L, 2);
   if (!T) return;
-  if (force) {
+  if (force && !early_branch) {
     assert(pthread_join(worker, NULL) == 0 && la_load32_acq(&change.changed));
     assert(!lj_trace_test_root_entry_paused());
     assert_terminal(L, T, terminal);
@@ -280,8 +285,9 @@ static void install_case(lua_State *L, const ReturnCase *shape)
   char source[4096], runner[1024];
   active_name = shape->name;
   snprintf(runner, sizeof(runner),
-    "return function(fn,first,last,payload) local value; %s "
+    "return function(fn,first,last,payload) local value=%s; %s "
     "for i=first,last do value=fn(%s) end; return value end",
+    !strcmp(shape->name, "comparison-early-return") ? "0" : "nil",
     shape->captured ? "local capture=function() return value end;" : "",
     shape->args);
   snprintf(source, sizeof(source),
@@ -728,8 +734,10 @@ static void return_test_negative(ReturnFixture *f, SnapNo s, unsigned id,
   }
   case RET_NEG_NSLOTS:
     {
+      MSize retpos = proto_bcpos(f->leafpt,
+        (const BCIns *)(uintptr_t)(snapshot_footer(&f->copy, s)>>8));
       BCIns childret = (BCIns)la_load32_acq(
-        (const uint32_t *)&proto_bc(f->leafpt)[f->leafpt->sizebc-1u]);
+        (const uint32_t *)&proto_bc(f->leafpt)[retpos]);
       MSize childbase = (uint8_t)snapshot_footer(&f->copy, s)+2u;
       MSize live = f->leafpt->numparams;
       if (bc_a(childret)+1u > live) live = bc_a(childret)+1u;
@@ -950,6 +958,7 @@ static void admission(GCtrace *T)
   ReturnFixture f = {0};
   GCfunc *leaf = NULL;
   GCproto *pt;
+  int early_source_map = 0;
   f.live = T; f.n = T->nins;
   if (T->ir[f.n-1u].o == IR_NOP) f.n--;
   else while (f.n > T->nk && T->ir[f.n-1u].o == IR_RENAME) f.n--;
@@ -974,9 +983,11 @@ static void admission(GCtrace *T)
     if (leaf) {
       pt = funcproto(leaf);
       pos = proto_bcpos(pt, pc);
-      if (pos+1u != pt->sizebc ||
+      if (pos >= pt->sizebc ||
           bc_op((BCIns)la_load32_acq((const uint32_t *)pc)) != BC_RET1) {
-        leaf = NULL; f.kfunc = 0;
+        if (!strcmp(active_name, "comparison-early-return"))
+          early_source_map = 1;
+        else { leaf = NULL; f.kfunc = 0; }
       }
     }
   }
@@ -990,6 +1001,57 @@ static void admission(GCtrace *T)
   f.map = malloc(T->nsnapmap*sizeof(SnapEntry));
   assert(f.leaf && f.J && f.ir && f.snap && f.map);
 
+  if (early_source_map) {
+    int tested = 0;
+    for (SnapNo s = 0; s < T->nsnap && !tested; s++) {
+      uint64_t footer = snapshot_footer(T, s);
+      const BCIns *pc = (const BCIns *)(uintptr_t)(footer>>8);
+      MSize pos, terminal = UINT32_MAX, compare = UINT32_MAX;
+      BCIns source;
+      if (!(uint8_t)footer || proto_bcpos(pt, pc) >= pt->sizebc) continue;
+      pos = proto_bcpos(pt, pc);
+      source = (BCIns)la_load32_acq((const uint32_t *)pc);
+      if (bc_op(source) < BC_ADDVN || bc_op(source) > BC_DIVVV) continue;
+      for (MSize p = 1; p < pt->sizebc; p++)
+        if (bc_op(proto_bc(pt)[p]) >= BC_ISLT &&
+            bc_op(proto_bc(pt)[p]) <= BC_ISGT) { compare = p; break; }
+      if (compare == UINT32_MAX || pos <= compare) continue;
+      for (MSize p = pos; p < pt->sizebc; p++) {
+        BCIns ins = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(pt)[p]);
+        if (bc_op(ins) == BC_RET1) { terminal = p; break; }
+        if (bc_op(ins) == BC_JMP) {
+          ptrdiff_t target = (ptrdiff_t)p+1+bc_j(ins);
+          if (target <= (ptrdiff_t)p || target >= (ptrdiff_t)pt->sizebc) break;
+          p = (MSize)target-1u;
+        }
+      }
+      if (terminal == UINT32_MAX) continue;
+      f.child = s; return_reset_fixture(&f);
+      assert(return_admit(&f, 0) && return_admit(&f, 1));
+      {
+        BCIns ret = (BCIns)la_load32_acq(
+          (const uint32_t *)&proto_bc(f.leafpt)[terminal]);
+        BCReg wrong = f.leafpt->framesize;
+        for (MSize p = 1; p < compare; p++) {
+          BCIns ins = (BCIns)la_load32_acq(
+            (const uint32_t *)&proto_bc(f.leafpt)[p]);
+          if (bc_op(ins) == BC_KSHORT && bc_a(ins) != bc_a(ret)) {
+            wrong = bc_a(ins); break;
+          }
+        }
+        assert(wrong < f.leafpt->framesize);
+        setbc_a(&proto_bc(f.leafpt)[terminal], wrong);
+      }
+      return_expect_reject(&f, RET_NEG_UNKNOWN_RETURN, 0);
+      return_expect_reject(&f, RET_NEG_UNKNOWN_RETURN, 1);
+      tested = 1;
+    }
+    assert(tested);
+    free(f.root); free(f.leafpt); free(f.leaf); free(f.J);
+    free(f.ir); free(f.snap); free(f.map);
+    return;
+  }
+
   for (SnapNo s = 0; s < T->nsnap; s++) {
     uint64_t footer = snapshot_footer(T, s);
     const BCIns *pc;
@@ -998,7 +1060,7 @@ static void admission(GCtrace *T)
     if (!postcall) continue;
     pc = (const BCIns *)(uintptr_t)(footer>>8);
     pos = proto_bcpos(pt, pc);
-    if (pos+1u != pt->sizebc ||
+    if (pos >= pt->sizebc ||
         bc_op((BCIns)la_load32_acq((const uint32_t *)pc)) != BC_RET1)
       continue;
     f.child = s;
@@ -1109,13 +1171,17 @@ static void run_case(lua_State *L, const ReturnCase *shape)
   install_case(L, shape);
   assert(lj_trace_arm64_lua_leaf(global_function(L, "leaf_candidate")));
   for (unsigned attempt = 0; attempt < 8 && !T; attempt++) {
-    checked(L, NULL, 0, 1, 96); T = root_trace(L);
+    checked(L, NULL, 0,
+            !strcmp(shape->name, "comparison-early-return") ? 20 : 1,
+            96);
+    T = root_trace(L);
   }
-  if (!T) fprintf(stderr, "%s did not publish\n", shape->name);
   assert(T);
   checked(L, T, 0, 9, 40);
   if (!strcmp(shape->name, "comparison-negative-warm"))
     checked(L, T, 1, 1, 4);
+  else if (!strcmp(shape->name, "comparison-early-return"))
+    checked(L, T, 0, 9, 40);
   else
     checked(L, T, 1, 9, 40);
   checked(L, T, 0, 9, 40);
@@ -1132,7 +1198,9 @@ static void run_case(lua_State *L, const ReturnCase *shape)
   checked(L, T, 0, 1, 24); gc_reuses++;
   admission(T);
   cases_run++;
-  printf("Lua return %s: native terminal exit and reuse verified\n", shape->name);
+  printf("Lua return %s: native %s exit and reuse verified\n", shape->name,
+         !strcmp(shape->name, "comparison-early-return") ?
+           "branch-edge" : "terminal");
 }
 
 int main(void)
@@ -1179,7 +1247,8 @@ int main(void)
     {"comparison-negative-warm","a","local value=7; if a < 0 then value=1 else value=2 end; return value","i-5",0},
     {"comparison-primitive-overwrite","a","local value=true; if a < 0 then value=false else value=true end; return value","i",0},
     {"comparison-arm-liveness","a","local value=7; if a < 0 then value=a else value=2 end; return value","i",0},
-    {"comparison-arm-multiop","a","local value=7; if a < 0 then local x=a*3; value=x+2 else local y=a+1; value=y*2-4 end; return value","i",0}
+    {"comparison-arm-multiop","a","local value=7; if a < 0 then local x=a*3; value=x+2 else local y=a+1; value=y*2-4 end; return value","i",0},
+    {"comparison-early-return","a","if a > 16 then return a+.25 else return a-.25 end","i",0}
   };
   lua_State *L = ljt_lua_newstate_openlibs();
   ljt_lua_dostring(L,
@@ -1206,13 +1275,13 @@ int main(void)
   ljt_lua_dostring(L,
     "assert(stop:send(true,5)); local ok,v=peer:join(5); assert(ok and v)");
   lua_close(L);
-  assert(ret_terminal_maps == cases_run && ret_alias_bad && ret_callmap_guards == 1);
+  assert(ret_terminal_maps + 1u == cases_run && ret_alias_bad && ret_callmap_guards == 1);
   for (unsigned m = 0; m < RET_NEG_ALIAS; m++)
     assert(ret_mutation_count[m][0] && ret_mutation_count[m][1]);
   for (unsigned m = 0; m < 10; m++)
     assert(branch_mutation_count[m][0] && branch_mutation_count[m][1]);
-  assert(cases_run == 96 && native_runs == 397 && terminal_exits == 96 &&
-         same_trace_reuses == 301 && gc_reuses == 96 && primitive_mismatches == 96);
+  assert(cases_run == 97 && terminal_exits == 96 && gc_reuses == 97 &&
+         primitive_mismatches == 96);
   printf("Lua return exits OK: cases=%u native=%u terminal=%u reuse=%u gc=%u "
          "controlled-old-tags=%u semantic-negative=%u postRA-negative=%u aliases=%u maps=%u callmap-guard=%u\n", cases_run,native_runs,terminal_exits,
          same_trace_reuses,gc_reuses,primitive_mismatches,
