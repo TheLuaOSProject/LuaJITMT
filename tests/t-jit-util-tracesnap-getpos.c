@@ -27,7 +27,8 @@ enum ThirdArg {
 };
 
 static int snapshot_pcpos(global_State *g, jit_State *J, TraceNo tr,
-			  SnapNo sn, int32_t *pcpos)
+			  SnapNo sn, const GCproto *pt, int32_t *pcpos,
+                          int *saw_cell)
 {
   GCtrace *T;
   int have = 0;
@@ -35,15 +36,20 @@ static int snapshot_pcpos(global_State *g, jit_State *J, TraceNo tr,
   assert(lj_gc2_smr_read_try(g));
   T = traceref_safe(J, tr);
   if (T && trace_traceno_acq(T) == tr &&
-      la_load64_acq(&T->retire_epoch) == 0 && sn < trace_nsnap_acq(T)) {
+      la_load64_acq(&T->retire_epoch) == 0 &&
+      trace_startpt_acq(T) == pt && sn < trace_nsnap_acq(T)) {
     SnapShot *snap = &trace_snap_acq(T)[sn];
     SnapEntry *map = &trace_snapmap_acq(T)[snap_mapofs_acq(snap)];
     const BCIns *pc = snap_pc_acq(&map[snap_nent_acq(snap)]);
-    const BCIns *startpc = pc;
-    while (bc_op((BCIns)la_load32_acq(
-	     (const uint32_t *)startpc)) < BC_FUNCF)
-      startpc--;
-    *pcpos = (int32_t)(pc - startpc);
+    const BCIns *startpc = proto_bc(pt), *cursor;
+    /* This fixture has no inlined calls. Derive the expected position from
+    ** its stack-rooted owning prototype, independently of the API's scan. */
+    assert(pc >= startpc && pc < startpc+pt->sizebc);
+    *pcpos = (int32_t)(pc-startpc);
+    for (cursor = startpc+1; cursor <= pc; cursor++) {
+      BCOp op = bc_op((BCIns)la_load32_acq((const uint32_t *)cursor));
+      if (op == BC_CNEW || op == BC_CGET || op == BC_CSET) *saw_cell = 1;
+    }
     have = 1;
   }
   lj_gc2_smr_read_leave(g);
@@ -113,6 +119,8 @@ int main(void)
   SnapNo firstsn = 0;
   int32_t firstpos = 0;
   int saw_nonzero = 0;
+  int saw_cell = 0;
+  GCproto *workpt;
 
   lua_getglobal(L, "require");
   lua_pushliteral(L, "jit.util");
@@ -124,23 +132,28 @@ int main(void)
 
   ljt_lua_dostring(L,
     "jit.flush()\n"
-    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
-    "local function work(n)\n"
-    "  local sum = 0\n"
-    "  for i = 1, n do\n"
-    "    if i % 3 == 0 then sum = sum + i else sum = sum - i end\n"
-    "  end\n"
-    "  return sum\n"
-    "end\n"
-    "for i = 1, 20 do work(40) end\n"
-    "jit.off()\n");
+    "jit.opt.start('hotloop=1', 'hotexit=1000')\n"
+    "tracesnap_work=assert(loadstring('return function(n) local sum=.5; "
+    "for i=1,n do sum=sum+i*.25 end; return sum end'))()\n");
+  lua_getglobal(L, "tracesnap_work");
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  workpt = funcproto(funcV(L->top-1));
+  /* Keep the closure rooted on the C stack throughout the independent read. */
+  for (unsigned i = 0; i < 20; i++) {
+    lua_pushvalue(L, 2);
+    lua_pushinteger(L, 40);
+    ljt_lua_pcall(L, 1, 1, "tracesnap scalar workload");
+    assert(lua_tonumber(L, -1) == 205.5);
+    lua_pop(L, 1);
+  }
+  ljt_lua_dostring(L, "jit.off()");
 
   assert(gc2_smr_readers_acq(g) == 0);
   assert(jit_token_acq(g) == 0);
   for (tr = 1; tr < trace_sizetrace_acq(J); tr++) {
     SnapNo sn = 0;
     int32_t pos;
-    while (snapshot_pcpos(g, J, tr, sn, &pos)) {
+    while (snapshot_pcpos(g, J, tr, sn, workpt, &pos, &saw_cell)) {
       if (firsttr == 0) {
 	firsttr = tr;
 	firstsn = sn;
@@ -154,6 +167,7 @@ int main(void)
   }
   assert(firsttr != 0);
   assert(saw_nonzero);  /* Exercise the backwards owning-header scan. */
+  assert(saw_cell);  /* A stock opcode-order scan stops too early here. */
 
   (void)call_tracesnap(L, firsttr, firstsn, THIRD_OMITTED, firstpos, 1);
   (void)call_tracesnap(L, firsttr, firstsn, THIRD_FALSE, firstpos, 1);
