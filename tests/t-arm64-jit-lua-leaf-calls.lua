@@ -56,6 +56,7 @@ local positives = {
   {"mulnv", "return 0.5*x"},
   {"divnv", "return 0.5/x"},
   {"addvv-local-number", "local bias=0.25; return x+bias"},
+  {"early-return-branch", "if x>0 then return x+0.25 else return x-0.25 end"},
   {"child-argument-write", "x=x+3; return x*2",
     "local sum=0; for i=1,n do sum=sum+fn(i) end; return sum"},
   {"extra-call-argument", "return x+0.25",
@@ -64,7 +65,6 @@ local positives = {
 
 local negatives = {
   {"upvalue", "return x+bias", simple_run, "local bias=0.25;\n"},
-  {"branch", "if x>0 then return x+0.25 else return x-0.25 end", simple_run},
   {"nested-call", "return inner(x)", simple_run,
     "local inner=function(y) return y+0.25 end\n"},
   {"vararg-callee", "return ...", simple_run, nil, true},

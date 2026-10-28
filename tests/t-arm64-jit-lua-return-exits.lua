@@ -261,6 +261,10 @@ local function main()
     name='comparison-arm-multiop', params='a',
     body='local value=7; if a < 0 then local x=a*3; value=x+2 else local y=a+1; value=y*2-4 end; return value',
     args='i', payload=nil, initial=nil, ranges={{-4,4}}}
+  cases[#cases+1] = {
+    name='comparison-early-return', params='a',
+    body='if a > 16 then return a+.25 else return a-.25 end',
+    args='i', payload=nil, initial=nil, ranges={{9,40}}}
   local publications,ranges,reuses,cold = 0,0,0,0
   for _,shape in ipairs(cases) do
     local attempts,nrange,nreuse = run_shape(shape)
@@ -276,7 +280,7 @@ local function main()
   assert(stop:send(true,5),'MT peer stop send failed')
   local joined,result = peer:join(5)
   assert(joined and result,'MT peer did not join cleanly')
-  assert(publications == #cases and #cases == 55 and ranges == 16 and
+  assert(publications == #cases and #cases == 56 and ranges == 17 and
          reuses == #cases*2+2*ranges)
   io.write(string.format(
     'lua-return ordinary OK: publications=%d numeric_ranges=%d same_trace_reuses=%d cold_calls=%d; publication only, no native-execution claim\n',
