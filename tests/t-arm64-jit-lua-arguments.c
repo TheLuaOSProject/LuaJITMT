@@ -444,9 +444,16 @@ static int mutate(ArgFixture *f, unsigned mutation, BCReg nargs,
   case M_CHILD_NORESTORE:
     if (entry0 == UINT32_MAX || (f->map[entry0] & SNAP_NORESTORE)) return 0;
     f->map[entry0] |= SNAP_NORESTORE; break;
-  case M_CHILD_MISSING:
-    if (entry1 == UINT32_MAX) return 0;
-    remove_map_entry(f, f->child, entry1); break;
+  case M_CHILD_MISSING: {
+    uint64_t footer = snapshot_footer(&f->copy, f->child);
+    const BCIns *resume = (const BCIns *)(uintptr_t)(footer>>8);
+    MSize operand = find_map_entry(f->map, snap->mapofs, snap->nent,
+                                   (uint8_t)footer+2u+bc_b(*resume));
+    /* A copied argument may already be dead. Remove an operand read by the
+    ** resume instruction, whose value must be restored even in a sparse map. */
+    assert(operand != UINT32_MAX);
+    remove_map_entry(f, f->child, operand); break;
+  }
   case M_CHILD_WRONG_PARTITION:
     if (entry0 == UINT32_MAX || !other_partition || other_partition[0] == 0 ||
         other_partition[0] == snap_ref(f->map[entry0]) ||

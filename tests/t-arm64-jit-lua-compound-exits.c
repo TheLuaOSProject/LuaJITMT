@@ -550,14 +550,23 @@ static void child_mutate(ChildFixture *f, unsigned m)
     assert(irt_type(f->ir[k].t) ==
            irt_type(f->ir[snap_ref(f->map[local_entry])].t));
     f->map[local_entry] = SNAP(snap_slot(f->map[local_entry]),0,k); break;
-  case C_OMIT_ENTRY:
-    assert(local_entry != UINT32_MAX);
-    memmove(&f->map[local_entry], &f->map[local_entry+1u],
-            (f->copy.nsnapmap-local_entry-1u)*sizeof(SnapEntry));
+  case C_OMIT_ENTRY: {
+    MSize operand = UINT32_MAX;
+    MSize slot = (uint8_t)pcbase+2u+bc_b(leafbc[childpc]);
+    /* Earlier temporaries may be dead. This operand is read immediately
+    ** after the child exit and must remain present in a sparse snapshot. */
+    for (MSize i = 0; i < snap->nent; i++) {
+      MSize at = snap->mapofs+i;
+      if (snap_slot(f->map[at]) == slot) { operand = at; break; }
+    }
+    assert(operand != UINT32_MAX);
+    memmove(&f->map[operand], &f->map[operand+1u],
+            (f->copy.nsnapmap-operand-1u)*sizeof(SnapEntry));
     snap->nent--;
     for (MSize s = f->child+1u; s < f->copy.nsnap; s++) f->snap[s].mapofs--;
     f->copy.nsnapmap--; f->view.nsnapmap--;
     break;
+  }
   case C_CSET_SOURCE:
     assert(csetpc != UINT32_MAX && bc_d(leafbc[csetpc]) != 0);
     setbc_d(&leafbc[csetpc], 0);

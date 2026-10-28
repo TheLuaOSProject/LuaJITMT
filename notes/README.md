@@ -18,6 +18,12 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
+- Latest development: source-proven sparse Lua child snapshots pass the new
+  six-case native fixture (36 invocations and twelve child overflow exits),
+  forty accepted dead-slot removals, 88 semantic and 97 allocated negative
+  checks. Five counterfactual builds verify the new liveness and retained-map
+  boundaries. Complete matrix/main integration is pending. See the
+  [sparse child evidence](arm64-jit-lua-sparse-exits-2026-10-28.md).
 - Latest fully validated source checkpoint: exact fixed numeric Lua argument
   maps and parameter assignments at `43d0a9c9`, plus failure-only rooted-length
   diagnostics at `338d0344`, integrated into `v2.1`. All four ARM64/arm64e

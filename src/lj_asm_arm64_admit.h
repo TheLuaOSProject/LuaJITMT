@@ -8117,15 +8117,62 @@ static int arm64_lua_leaf_ir_prefix(const GCtrace *T, const GCproto *pt,
   return matched;
 }
 
+/* Work backwards from RET1 to the resume PC. Every source read matters even
+** when its result is dead: arithmetic may fail, and CSET reads the old tag
+** before choosing a raw destination or a closed cell. */
+static int arm64_lua_leaf_ir_needed(const GCproto *pt, MSize resume,
+                                    uint8_t *needed)
+{
+  MSize pc = pt->sizebc;
+  if (!resume || resume >= pc-1u) return 0;
+  while (pc-- > resume) {
+    BCIns ins = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(pt)[pc]);
+    BCOp op = bc_op(ins);
+    MSize a = bc_a(ins), b = bc_b(ins), c = bc_c(ins), d = bc_d(ins);
+    if (a >= pt->framesize) return 0;
+    if (pc+1u == pt->sizebc) {
+      if (op != BC_RET1 || d != 2) return 0;
+      needed[a] = 1;
+      continue;
+    }
+    needed[a] = 0;
+    switch (op) {
+    case BC_CSET:
+      needed[a] = 1;  /* The old destination tag is an input. */
+      /* fallthrough */
+    case BC_CGET: case BC_MOV:
+      if (d >= pt->framesize) return 0;
+      needed[d] = 1;
+      break;
+    case BC_KSHORT: case BC_KNUM:
+      break;
+    case BC_ADDVV: case BC_SUBVV: case BC_MULVV: case BC_DIVVV:
+      if (c >= pt->framesize) return 0;
+      needed[c] = 1;
+      /* fallthrough */
+    case BC_ADDVN: case BC_SUBVN: case BC_MULVN: case BC_DIVVN:
+    case BC_ADDNV: case BC_SUBNV: case BC_MULNV: case BC_DIVNV:
+      if (b >= pt->framesize) return 0;
+      needed[b] = 1;
+      break;
+    default:
+      return 0;
+    }
+  }
+  return 1;
+}
+
 /* The incoming caller map owns its CALL. Reconstruct the child source prefix
-** and match every live child slot, independently of its allocation. */
+** and match every mapped child slot, independently of its allocation. Only
+** values with no remaining read before a definition may be omitted. */
 static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
                                     SnapNo s, uint64_t pcbase)
 {
   const SnapShot *snap = &T->snap[s];
-  MSize i, linkslot = 0, base, retpos, pos, extent, live = 0, count = 0;
+  MSize i, linkslot = 0, base, retpos, pos, extent, live = 0;
   IRRef link = 0, callee = 0;
   IRRef saved[UINT8_MAX+1u], args[UINT8_MAX+1u] = {0};
+  uint8_t needed[UINT8_MAX+1u] = {0}, seen[UINT8_MAX+1u] = {0};
   SnapNo caller = s;
   const GCfunc *fn;
   const GCproto *pt;
@@ -8185,6 +8232,7 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
       (uintptr_t)(proto_bc(pt)+pt->sizebc), &pos) || !pos ||
       !arm64_lua_leaf_ir_prefix(T, pt, pos, args, ref,
         ref < J->loopref ? J->loopref : T->nins, saved, &live) ||
+      !arm64_lua_leaf_ir_needed(pt, pos, needed) ||
       base+live > UINT8_MAX || snap->nslots != base+live) return 0;
   extent = base-2u+pt->framesize;
   if (extent < J->pt->framesize) extent = J->pt->framesize;
@@ -8193,12 +8241,13 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
     SnapEntry sn = T->snapmap[snap->mapofs+i];
     MSize slot = snap_slot(sn);
     if (slot >= base) {
-      if (slot-base >= live || !saved[slot-base] ||
+      if (slot-base >= live || seen[slot-base] || !saved[slot-base] ||
           (sn & 0x00ff0000u) || snap_ref(sn) != saved[slot-base]) return 0;
-      count++;
+      seen[slot-base] = 1;
     }
   }
-  if (count != live) return 0;
+  for (i = 0; i < pt->framesize; i++)
+    if (needed[i] && !seen[i]) return 0;
   return linkslot;
 }
 
@@ -10023,6 +10072,50 @@ static int arm64_lua_leaf_postra_prefix(const LJArm64PostRAView *v,
   return found;
 }
 
+/* The allocated pass independently scans forwards for reads before a new
+** definition. Test operands before marking the destination, including aliased
+** arithmetic and CSET's old destination tag. No recorder liveness is used. */
+static int arm64_lua_leaf_postra_needed(const GCproto *pt, MSize resume,
+                                        uint8_t *needed)
+{
+  uint8_t written[UINT8_MAX+1u] = {0};
+  MSize pc;
+  if (!resume || resume+1u >= pt->sizebc) return 0;
+  for (pc = resume; pc < pt->sizebc; pc++) {
+    BCIns ins = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(pt)[pc]);
+    BCOp op = bc_op(ins);
+    MSize dst = bc_a(ins), left = bc_b(ins), right = bc_c(ins);
+    MSize from = bc_d(ins);
+    if (dst >= pt->framesize) return 0;
+    if (pc == pt->sizebc-1u) {
+      if (op != BC_RET1 || from != 2) return 0;
+      if (!written[dst]) needed[dst] = 1;
+    } else if (op == BC_CGET || op == BC_MOV || op == BC_CSET) {
+      if (from >= pt->framesize) return 0;
+      if (!written[from]) needed[from] = 1;
+      if (op == BC_CSET && !written[dst]) needed[dst] = 1;
+    } else if (op == BC_KSHORT || op == BC_KNUM) {
+      /* The literal defines its destination without reading it. */
+    } else {
+      switch (op) {
+      case BC_ADDVN: case BC_SUBVN: case BC_MULVN: case BC_DIVVN:
+      case BC_ADDNV: case BC_SUBNV: case BC_MULNV: case BC_DIVNV:
+        break;
+      case BC_ADDVV: case BC_SUBVV: case BC_MULVV: case BC_DIVVV:
+        if (right >= pt->framesize) return 0;
+        if (!written[right]) needed[right] = 1;
+        break;
+      default:
+        return 0;
+      }
+      if (left >= pt->framesize) return 0;
+      if (!written[left]) needed[left] = 1;
+    }
+    written[dst] = 1;
+  }
+  return 1;
+}
+
 /* Independently reconstruct the two-frame exit from its allocated footer,
 ** source prefix and caller guard. No semantic child-admission result is used. */
 static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
@@ -10030,11 +10123,12 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
 {
   const SnapShot *sn = &v->snap[s];
   MSize base = (uint8_t)pcbase+2u, ofs = snap_mapofs_acq(sn);
-  MSize count = snap_nent_acq(sn), i, pos, extent, live = 0, mapped = 0;
+  MSize count = snap_nent_acq(sn), i, pos, extent, live = 0;
   MSize caller = s;
   IRRef at = snap_ref_acq(sn), function = 0, frame = 0;
   IRRef end = v->nins, loop = 0;
   IRRef saved[UINT8_MAX+1u], args[UINT8_MAX+1u] = {0};
+  uint8_t needed[UINT8_MAX+1u] = {0}, seen[UINT8_MAX+1u] = {0};
   const GCproto *pt;
   const GCfunc *fn;
   const BCIns *retpc;
@@ -10107,6 +10201,7 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
   if (!arm64_ir_pcpos((uintptr_t)(pcbase>>8), (uintptr_t)proto_bc(pt),
       (uintptr_t)(proto_bc(pt)+pt->sizebc), &pos) || !pos ||
       !arm64_lua_leaf_postra_prefix(v, pt, pos, args, at, end, saved, &live) ||
+      !arm64_lua_leaf_postra_needed(pt, pos, needed) ||
       base+live > UINT8_MAX || snap_nslots_acq(sn) != base+live) return 0;
   extent = base-2u+pt->framesize;
   if (extent < v->root_topslot) extent = v->root_topslot;
@@ -10115,12 +10210,35 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
     SnapEntry entry = snapentry_acq(&v->snapmap[ofs+i]);
     MSize slot = snap_slot(entry);
     if (slot < base) continue;
-    if (slot-base >= live || !saved[slot-base] ||
+    if (slot-base >= live || seen[slot-base] || !saved[slot-base] ||
         (entry & 0x00ff0000u) || snap_ref(entry) != saved[slot-base]) return 0;
-    mapped++;
+    seen[slot-base] = 1;
   }
-  if (mapped != live) return 0;
+  for (i = 0; i < pt->framesize; i++)
+    if (needed[i] && !seen[i]) return 0;
   return base-1u;
+}
+
+/* LOOP may eliminate the callee identity guard, leaving the retained CALL
+** map immediately before a child map at the same IR position. asm_snap_prev
+** can only select the latter for native restoration. The former still owns
+** the exact incoming argument values, but needs no physical exit locations. */
+static int arm64_lua_leaf_postra_callmap(const LJArm64PostRAView *v, MSize s)
+{
+  const SnapShot *next;
+  MSize ofs, nent;
+  SnapEntry words[2];
+  uint64_t footer;
+  if (s+1u >= v->nsnap) return 0;
+  next = &v->snap[s+1u];
+  if (snap_ref_acq(next) != snap_ref_acq(&v->snap[s])) return 0;
+  ofs = snap_mapofs_acq(next); nent = snap_nent_acq(next);
+  if (ofs > v->nsnapmap || nent > v->nsnapmap-ofs ||
+      v->nsnapmap-ofs-nent < 2u) return 0;
+  words[0] = snapentry_acq(&v->snapmap[ofs+nent]);
+  words[1] = snapentry_acq(&v->snapmap[ofs+nent+1u]);
+  memcpy(&footer, words, sizeof(footer));
+  return (uint8_t)footer && arm64_lua_leaf_postra_child(v, s+1u, footer);
 }
 
 /* The parent locals and child arguments are live together at this exit.
@@ -10676,6 +10794,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
     IRRef at = snap_ref_acq(snap);
     uint64_t pcbase;
     SnapEntry footer[1 + LJ_FR2];
+    int callmap_only = 0;
     if (at < REF_FIRST || at >= n || at < prevsnap || ofs != expectedofs ||
         ofs > v->nsnapmap || next > v->nsnapmap || next < ofs ||
         nent > next - ofs || next - ofs - nent != 1 + LJ_FR2 ||
@@ -10690,6 +10809,8 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
     } else if (slots > v->root_topslot+1u+LJ_FR2 ||
                snap_topslot_acq(snap) != v->root_topslot) {
       return 0;
+    } else if (!side) {
+      callmap_only = arm64_lua_leaf_postra_callmap(v, s);
     }
     expectedofs = next;
     prevsnap = at;
@@ -10734,7 +10855,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
            !arm64_scalar_postra_ref(v, r, at, IRT_FALSE) &&
            !arm64_scalar_postra_ref(v, r, at, IRT_TRUE)))
         return 0;
-      if (irref_isk(r))
+      if (irref_isk(r) || callmap_only)
         continue;
       p = ir_load_acq(&v->ir[r]);
       rs = arm64_scalar_postra_snapshot_regsp(v, n, r, s);

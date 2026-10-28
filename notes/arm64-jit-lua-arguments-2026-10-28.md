@@ -167,7 +167,9 @@ restored the ordinary ARM64 assertion runtime before integration.
 Exact numeric fixed arity is a bounded extension. Every argument and every
 live child slot must be present in its required map; snapshot construction
 can elide otherwise valid unused parameters and make such a shape remain
-interpreted. Extra/missing arguments, nonnumeric arguments, arbitrary
+interpreted at this checkpoint. The subsequent
+[sparse-child proof](arm64-jit-lua-sparse-exits-2026-10-28.md) removes that
+dead-slot restriction. Extra/missing arguments, nonnumeric arguments, arbitrary
 continuation PCs, child branches, nested calls, tail calls, varargs and
 multiple returns remain outside this proof. General trace topology,
 iterators and broader FFI admission still prevent x86_64 LuaJITMT parity.
