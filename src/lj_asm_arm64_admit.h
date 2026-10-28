@@ -7552,7 +7552,8 @@ static int arm64_string_byte_dynamic_bounds_ir(const GCtrace *T,
       if (nonneg) return 0;
       nonneg = ref;
     } else if (g->o == IR_SUBOV &&
-               (negative_path ? g->op2 == offset : g->op1 == idx)) {
+               (negative_path ? g->op2 == offset :
+                (g->op1 == idx && g->op2 == offset))) {
       if (negative_path) {
         const IRIns *end;
         if (g->op1 <= offset || g->op1 >= ref) continue;
@@ -10775,7 +10776,8 @@ static int arm64_string_byte_dynamic_bounds_postra(
       if (nonneg) return 0;
       nonneg = ref;
     } else if (g.o == IR_SUBOV &&
-               (negative_path ? g.op2 == offset : g.op1 == idx)) {
+               (negative_path ? g.op2 == offset :
+                (g.op1 == idx && g.op2 == offset))) {
       if (negative_path) {
         IRIns end;
         if (g.op1 <= offset || g.op1 >= ref) continue;

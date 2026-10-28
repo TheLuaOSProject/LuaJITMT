@@ -117,7 +117,10 @@ does not admit dynamic values directly into snapshots.
 The C fixture also inserts an unrelated `IRCONV_INT_NUM|IRCONV_ANY` before
 the valid graph and an unrelated unsigned `ULE` guard beside its valid upper
 guard. Both semantic and post-RA proof helpers reject the unrelated nodes
-while continuing to certify the original conversion and upper guard.
+while continuing to certify the original conversion and upper guard. It also
+replaces the positive guarded subtraction's range operand with the valid but
+unrelated string-length integer reference and requires each dynamic-index
+proof to reject it.
 
 The numeric conversion follows ARM64 `FCVTZS` behavior measured on this
 target: NaN converts to zero, positive overflow/infinity saturates to
