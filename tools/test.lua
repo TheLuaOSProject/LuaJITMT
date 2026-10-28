@@ -11,7 +11,9 @@ do
     -- aggregate gates do not depend on the current branch's in-process JIT
     -- stability. Individual tests still launch child LuaJIT processes with the
     -- requested JIT mode.
-    jitmod.off(true, true)
+    -- With no arguments this disables the engine, including modules loaded
+    -- below. off(true, true) only affects this function and its children.
+    jitmod.off()
   end
 end
 
