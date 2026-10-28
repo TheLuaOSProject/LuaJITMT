@@ -112,6 +112,77 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
   assert(loop);
   if (math_proof) assert((fpmath || mathcall || mathop || math_passthrough) &&
                          (!math_builtin || mathguard));
+  if (mathkind && strcmp(mathkind, "math_helpers_snapshot_pair") == 0) {
+    IRRef call, value, chosen_call = 0, chosen_value = 0, chosen_rename = 0;
+    SnapNo chosen_snap = 0;
+    MSize s, i;
+    /* Select from actual SSA and snapshot facts: a NUM value remains in a
+       later snapshot across a helper call, and that snapshot uses a matching
+       allocated rename. */
+    for (call = loop+1u; call < n && !chosen_value; call++) {
+      if (copy[call].o != IR_CALLN &&
+          !(copy[call].o == IR_FPMATH && copy[call].op2 >= IRFPM_LOG))
+        continue;
+      for (value = REF_FIRST; value < call && !chosen_value; value++) {
+        int in_snapshot = 0;
+        if (irt_type(copy[value].t) != IRT_NUM) continue;
+        for (s = 0; s < T->nsnap && !in_snapshot; s++) {
+          IRRef at = snap_ref_acq(&T->snap[s]);
+          MSize ofs = snap_mapofs_acq(&T->snap[s]);
+          MSize nent = snap_nent_acq(&T->snap[s]);
+          if (at <= call) continue;
+          for (i = 0; i < nent; i++)
+            if (snap_ref(snapentry_acq(&map[ofs+i])) == value) {
+              in_snapshot = 1;
+              chosen_snap = (SnapNo)s;
+              break;
+            }
+        }
+        if (!in_snapshot) continue;
+        for (ref = n; ref < T->nins; ref++) {
+          if (copy[ref].o == IR_RENAME && copy[ref].op1 == value &&
+              copy[ref].op2 <= chosen_snap) {
+            chosen_call = call;
+            chosen_value = value;
+            chosen_rename = ref;
+            break;
+          }
+        }
+      }
+    }
+    assert(chosen_call && chosen_value < chosen_call && chosen_rename &&
+           (copy[chosen_call].o == IR_CALLN ||
+            (copy[chosen_call].o == IR_FPMATH &&
+             copy[chosen_call].op2 >= IRFPM_LOG)) &&
+           irt_type(copy[chosen_value].t) == IRT_NUM &&
+           snap_ref_acq(&T->snap[chosen_snap]) > chosen_call &&
+           copy[chosen_rename].op1 == chosen_value &&
+           copy[chosen_rename].prev == T->ir[chosen_rename].prev);
+    {
+      int carried = 0;
+      for (ref = loop+1u; ref < n; ref++)
+        carried |= copy[ref].o == IR_PHI &&
+          irt_type(copy[ref].t) == IRT_NUM &&
+          (copy[ref].op1 == chosen_value || copy[ref].op2 == chosen_value);
+      assert(carried);
+    }
+    {
+      IRIns saved_value = copy[chosen_value];
+      IRIns saved_rename = copy[chosen_rename];
+      /* The snapshot's renamed location must independently survive the
+         helper call even when the value's base allocation is preserved. */
+      copy[chosen_rename].prev = REGSP_HINT(RID_D0);
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[chosen_rename] = saved_rename;
+      assert(memcmp(&copy[chosen_value], &saved_value,
+                    sizeof(saved_value)) == 0);
+      assert(lj_asm_arm64_postra_admit(&v, NULL));
+      printf("MATH loop call=%u PHI-input=%u type=%u snapshot=%u rename=%u call-survival mutation rejected\n",
+             (unsigned)chosen_call, (unsigned)chosen_value,
+             (unsigned)irt_type(copy[chosen_value].t),
+             (unsigned)chosen_snap, (unsigned)chosen_rename);
+    }
+  }
   /* A future consumer has not yet been certified when an earlier absent
      location is examined. Its other operand must be checked before loading. */
   {

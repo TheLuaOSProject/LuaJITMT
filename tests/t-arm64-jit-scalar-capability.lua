@@ -373,6 +373,18 @@ local function helper_composition(n,x)
   return s+t
 end
 run('math_helpers_composed',helper_composition,16,.25)
+local function helper_snapshot_pair(n,x)
+  local i,sum,ret=0,.25,x
+  while i<n do
+    local y=(ret+.5)/1.25
+    sum=sum+sin_builtin(y)
+    local b=cos_builtin(y)
+    ret=y
+    i=i+1
+  end
+  return sum+ret
+end
+run('math_helpers_snapshot_pair',helper_snapshot_pair,16,.25)
 
 assert(release:send(true,5))
 assert(peer:join(5))
