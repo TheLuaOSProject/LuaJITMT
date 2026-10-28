@@ -41,18 +41,18 @@ static void run_chunk(lua_State *L, const char *src)
   }
 }
 
-static lua_Number call_loop(lua_State *L, int table_arg)
+static lua_Number call_loop(lua_State *L, const char *value_global)
 {
   lua_getglobal(L, "string_len_trace");
-  if (table_arg) {
+  if (value_global) {
+    lua_getglobal(L, value_global);
+  } else {
     int i;
     lua_newtable(L);
     for (i = 1; i <= 4; i++) {
       lua_pushinteger(L, i);
       lua_rawseti(L, -2, i);
     }
-  } else {
-    lua_getglobal(L, "string_len_value");
   }
   lua_pushinteger(L, 80);
   if (lua_pcall(L, 2, 1, 0) != LUA_OK) {
@@ -86,6 +86,9 @@ int main(void)
     " return sum\n"
     "end\n"
     "string_len_value=string.rep('gcstr-length-',32)\n"
+    "string_len_empty=''\n"
+    "string_len_embedded_nul='a\\0b\\0c'\n"
+    "string_len_long=string.rep('L',65536)\n"
     "assert(string_len_trace(string_len_value,80)=="
     "#string_len_value*80)\n";
   lua_State *L = luaL_newstate();
@@ -140,10 +143,15 @@ int main(void)
   ** and must not invalidate the native length load or prevent reentry. */
   run_chunk(L, "collectgarbage('collect')");
   entries = lj_trace_test_root_entry_successes();
-  assert(call_loop(L, 0) == (lua_Number)(sizeof("gcstr-length-")-1u)*32u*80u);
+  assert(call_loop(L, "string_len_value") ==
+         (lua_Number)(sizeof("gcstr-length-")-1u)*32u*80u);
+  assert(lj_trace_test_root_entry_successes() > entries);
+  assert(call_loop(L, "string_len_empty") == 0.0);
+  assert(call_loop(L, "string_len_embedded_nul") == 400.0);
+  assert(call_loop(L, "string_len_long") == 65536.0 * 80.0);
   assert(lj_trace_test_root_entry_successes() > entries);
   exits = lj_trace_test_exit_calls();
-  assert(call_loop(L, 1) == 320.0);
+  assert(call_loop(L, NULL) == 320.0);
   assert(lj_trace_test_exit_calls() > exits);
 
   arm64_fixture_init(&f, L, "string_len_trace_clone");

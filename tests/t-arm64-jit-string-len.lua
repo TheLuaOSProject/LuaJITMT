@@ -64,11 +64,18 @@ end
 jit.off(has_length, true)
 assert(has_length(), 'string loop did not retain a native GCstr length load')
 
+local empty = ''
+local embedded_nul = 'a\0b\0c'
+local long = string.rep('L', 65536)
+assert(string_len_trace(empty, 80) == 0)
+assert(string_len_trace(embedded_nul, 80) == 400)
+assert(string_len_trace(long, 80) == 65536 * 80)
+
 -- The argument remains rooted while a full collection runs; reentry must use
 -- the same live trace and return the exact byte length.
 collectgarbage('collect')
-local before = native_exits
 assert(string_len_trace(s, 80) == #s * 80)
+local before = native_exits
 
 -- A table argument must leave the string-specialized trace and keep Lua's
 -- ordinary table length semantics.

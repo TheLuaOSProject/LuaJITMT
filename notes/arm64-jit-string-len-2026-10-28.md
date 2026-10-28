@@ -24,6 +24,16 @@ passed; and `t-arm64-jit-string-len-admission` passed with
 forced-exit witnesses. The suite entry is `m6_jit_string_len_ir` in
 `tests/suites/m6_jit.lua`.
 
+The focused `tools/ci/arm64_jit_string_len_contract.sh` now rebuilds and runs
+the C admission fixture and Lua companion under arm64 and arm64e/BTI, each in
+assertion and release modes. It binds fixture compilation to each archive
+profile and restores the enclosing gate's requested arm64 profile afterward.
+All four profile runs passed. The C fixture checks dynamic, empty, embedded-NUL,
+and 65,536-byte strings, then verifies native reentry after full GC and a native
+exit on a table argument. The Lua companion checks the same length boundaries
+and IR/GC/type-exit semantics; its plain `OK` output is a semantic result and
+does not claim a native entry counter witness.
+
 `string.byte` remains outside this slice. Its recorder emits `IR_STRREF` and
 `IR_XLOAD IRT_U8`, plus per-index bounds guards and potentially several byte
 results. It needs its own source/snapshot and post-RA proof before ARM64
