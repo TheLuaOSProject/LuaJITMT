@@ -12199,8 +12199,9 @@ static int trace_arm64_lua_leaf_returned_call(jit_State *J, lua_State *owner,
   fslot = bc_a(call);
   /* Find the last definition of the function slot. MOV and CGET copy a live
   ** caller TValue; UGET names the exact rooted-upvalue read emitted by the
-  ** recorder. In the latter case, the call slot itself is the live TValue
-  ** root, so do not dereference the shared upvalue cell here. */
+  ** recorder. The return has overwritten the function slot in that case;
+  ** leave value binding to the independent IR proofs without dereferencing
+  ** the shared upvalue cell here. */
   for (i = cp; i-- > 1; ) {
     BCIns ins = (BCIns)la_load32_acq((const uint32_t *)&proto[i]);
     BCOp op = bc_op(ins);

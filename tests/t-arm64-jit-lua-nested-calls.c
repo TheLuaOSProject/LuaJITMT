@@ -614,7 +614,8 @@ int main(void)
     "end end)(nested_capture_f); "
     "function nested_capture_oracle(first,last) local sum=.5; "
     "for i=first,last do sum=sum+((i+0.25)*.5) end; return sum end; "
-    "jit.off(nested_oracle,true); jit.on(); "
+    "jit.off(nested_oracle,true); jit.off(nested_capture_oracle,true); "
+    "jit.on(); "
     "jit.opt.start('hotloop=1','hotexit=1000')");
   for (attempt = 0; attempt < 8 && !T; attempt++) {
     assert(invoke(L, "nested_run", 1, 96) == invoke(L, "nested_oracle", 1, 96));

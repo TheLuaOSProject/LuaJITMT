@@ -11872,8 +11872,7 @@ static int arm64_upvalue_fnroot_postra(const LJArm64PostRAView *v, IRRef root,
   tmp = ir_load_acq(&v->ir[root]);
   if (tmp.o != IR_TMPREF || tmp.t.irt != IRT_PGC || tmp.op2 != mode ||
       (!irref_isk(tmp.op1) &&
-       (tmp.op1 < REF_FIRST || tmp.op1 >= root)) ||
-      !arm64_scalar_postra_ref(v, tmp.op1, root, IRT_FUNC)) return 0;
+       (tmp.op1 < REF_FIRST || tmp.op1 >= root))) return 0;
   /* The context proof below binds this scalar source to its exact function. */
   return arm64_scalar_postra_ref(v, tmp.op1, root, IRT_FUNC);
 }
