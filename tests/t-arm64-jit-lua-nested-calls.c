@@ -256,6 +256,7 @@ static void nested_proof_mutations(lua_State *L, GCtrace *T)
   }
   assert(borrowed_guard && borrowed_function >= REF_FIRST);
   assert(borrowed_constant+1u < REF_TRUE);
+  assert(f.function_ref+1u < REF_TRUE);
   nested_proof_reset(&f, L, T);
   memcpy(&footer, &f.map[f.snap[f.child_snap].mapofs+
                           f.snap[f.child_snap].nent], sizeof(footer));
@@ -269,6 +270,12 @@ static void nested_proof_mutations(lua_State *L, GCtrace *T)
     f.map[funcentry] = SNAP(f.funcslot, 0,
                             wrong_function ? wrong_function : REF_NIL);
     assert(!nested_proof_admit(&f, postra));
+    /* The second GC64 KGC word is payload, not a frame identity constant. */
+    nested_proof_reset(&f, L, T);
+    f.map[funcentry] = SNAP(f.funcslot, 0, f.function_ref+1u);
+    assert(!nested_proof_admit(&f, postra));
+    nested_proof_reset(&f, L, T);
+    assert(nested_proof_admit(&f, postra));
     /* A borrowed callable EQ operand below nk is not an IR constant slot. */
     nested_proof_reset(&f, L, T);
     if (f.ir[borrowed_guard].op1 == borrowed_function)

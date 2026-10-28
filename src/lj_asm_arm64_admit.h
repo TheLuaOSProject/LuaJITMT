@@ -9274,7 +9274,9 @@ static const GCfunc *arm64_lua_leaf_ir_frame_function(const GCtrace *T,
                                                        IRRef fn)
 {
   GCobj *o;
-  if (!T || fn < T->nk || fn >= REF_TRUE || T->ir[fn].o != IR_KGC ||
+  if (!T || !irref_isk(fn) || fn < T->nk || fn >= REF_TRUE ||
+      !arm64_scalar_ir_ref(T, fn, REF_FIRST, IRT_FUNC) ||
+      T->ir[fn].o != IR_KGC ||
       T->ir[fn].t.irt != IRT_FUNC) return NULL;
   o = ir_kgc_acq(&T->ir[fn]);
   if (!o || !checkptrGC(o) || o->gch.gct != (uint32_t)~LJ_TFUNC) return NULL;
@@ -9291,7 +9293,7 @@ static int arm64_lua_leaf_ir_eval(const GCtrace *T, const GCproto *pt,
                                   IRRef end, const GCfunc **ancestors,
                                   MSize depth, IRRef *slots, IRRef *result)
 {
-  const BCIns *bc = proto_bc(pt);
+  const BCIns *bc;
   IRRef state[UINT8_MAX+1u] = {0};
   MSize p, i;
   int captured = 0;
@@ -9299,6 +9301,7 @@ static int arm64_lua_leaf_ir_eval(const GCtrace *T, const GCproto *pt,
       pt->framesize > UINT8_MAX || pt->numparams > pt->framesize ||
       pc < 1u || pc >= pt->sizebc || depth > LJ_ARM64_LUA_MAX_CHILD_FRAMES)
     return 0;
+  bc = proto_bc(pt);
   for (i = 0; i < pt->numparams; i++) state[i] = args[i];
   for (p = 1; p+1u < pt->sizebc; p++) {
     BCIns ins = (BCIns)la_load32_acq((const uint32_t *)&bc[p]);
@@ -9827,7 +9830,7 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
                                     SnapNo s, uint64_t pcbase)
 {
   const SnapShot *snap = &T->snap[s];
-  MSize i, linkslot = 0, base, retpos, leafretpos, pos, extent, live = 0;
+  MSize i, base, retpos, leafretpos, pos, extent, live = 0;
   IRRef link = 0, callee = 0, result = 0;
   IRRef saved[UINT8_MAX+1u], args[UINT8_MAX+1u] = {0};
   uint8_t needed[UINT8_MAX+1u] = {0}, seen[UINT8_MAX+1u] = {0};
@@ -12335,7 +12338,8 @@ static const GCfunc *arm64_lua_leaf_postra_frame_function(
 {
   IRIns value;
   GCobj *o;
-  if (!v || fn < v->nk || fn >= REF_TRUE) return NULL;
+  if (!v || !irref_isk(fn) || fn < v->nk || fn >= REF_TRUE ||
+      !arm64_scalar_postra_ref(v, fn, v->nins, IRT_FUNC)) return NULL;
   value = ir_load_acq(&v->ir[fn]);
   if (value.o != IR_KGC || value.t.irt != IRT_FUNC) return NULL;
   o = ir_kgc_load_acq(&v->ir[fn]);
@@ -12349,7 +12353,7 @@ static int arm64_lua_leaf_postra_eval(const LJArm64PostRAView *v,
                                       const GCfunc **ancestors, MSize depth,
                                       IRRef *slots, IRRef *result)
 {
-  const BCIns *bc = proto_bc(pt);
+  const BCIns *bc;
   IRRef state[UINT8_MAX+1u] = {0};
   MSize p, i;
   int captured = 0;
@@ -12357,6 +12361,7 @@ static int arm64_lua_leaf_postra_eval(const LJArm64PostRAView *v,
       pt->framesize > UINT8_MAX || pt->numparams > pt->framesize ||
       pc < 1u || pc >= pt->sizebc || depth > LJ_ARM64_LUA_MAX_CHILD_FRAMES)
     return 0;
+  bc = proto_bc(pt);
   for (i = 0; i < pt->numparams; i++) state[i] = args[i];
   for (p = 1; p+1u < pt->sizebc; p++) {
     BCIns ins = (BCIns)la_load32_acq((const uint32_t *)&bc[p]);
