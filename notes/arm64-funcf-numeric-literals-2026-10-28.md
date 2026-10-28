@@ -32,8 +32,9 @@ The native fixture runs with a live `threading.spawn` peer attached. Positive
 cases include `x*.5+1.25`, `x*.5+1`, `x+1.25`, `x-1.25`, `1.25-x`,
 `x/1.25`, `1.25/x`, and `1.25+x`. The `x*.5+1` case exercises an integer-valued
 source numeric literal through the KNUM path. Semantic and post-RA negatives
-mutate exact KNUM bits, substitute its payload word as an operand, and use an
-invalid below-pool ref; each is rejected and restored positives are re-admitted.
+mutate exact KNUM bits, substitute its payload word as an operand, use
+`REF_BASE`, use the actual dynamic reference `nk-1`, and use `REF_TRUE`; each is
+rejected and restored positives are re-admitted.
 The integer-valued mutation is covered by the native positive case on both
 profiles.
 

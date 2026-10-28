@@ -1192,6 +1192,7 @@ static void run_scalar_native(const char *name, const char *definition,
 	BCIns liveins;
 	assert(lj_asm_arm64_postra_funcf_entry_admit(
 	  &view, live, &semantic_nins));
+	assert(view.nk > 0);
 	semantic.ir = ir;
 	semantic.nins = semantic_nins;
 	proofJ.parent = 0;
@@ -1229,6 +1230,9 @@ static void run_scalar_native(const char *name, const char *definition,
 	if (operand == 1u) ir[literalop].op1 = (IRRef1)REF_BASE;
 	else ir[literalop].op2 = (IRRef1)REF_BASE;
 	assert(!lj_asm_arm64_ir_admit(&proofJ, &semantic, &reject));
+	if (operand == 1u) ir[literalop].op1 = (IRRef1)(view.nk-1u);
+	else ir[literalop].op2 = (IRRef1)(view.nk-1u);
+	assert(!lj_asm_arm64_ir_admit(&proofJ, &semantic, &reject));
 	if (operand == 1u) ir[literalop].op1 = (IRRef1)REF_TRUE;
 	else ir[literalop].op2 = (IRRef1)REF_TRUE;
 	assert(!lj_asm_arm64_ir_admit(&proofJ, &semantic, &reject));
@@ -1246,6 +1250,9 @@ static void run_scalar_native(const char *name, const char *definition,
 	assert(!lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
 	if (operand == 1u) ir[literalop].op1 = (IRRef1)REF_BASE;
 	else ir[literalop].op2 = (IRRef1)REF_BASE;
+	assert(!lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
+	if (operand == 1u) ir[literalop].op1 = (IRRef1)(view.nk-1u);
+	else ir[literalop].op2 = (IRRef1)(view.nk-1u);
 	assert(!lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
 	if (operand == 1u) ir[literalop].op1 = (IRRef1)REF_TRUE;
 	else ir[literalop].op2 = (IRRef1)REF_TRUE;
