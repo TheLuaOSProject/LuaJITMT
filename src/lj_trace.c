@@ -12276,13 +12276,14 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
   GCproto *pt = funcproto(fn), *parentpt;
   GCfunc *parentfn;
   BCIns call;
-  MSize base, depth = 0, i, nresults;
+  MSize base, depth = 0, i, nresults, framedepth;
   TRef callee, link;
   IRRef ref;
   if (bc_op(J->cur.startins) != BC_FORL || J->framedepth < 1 ||
       J->framedepth > LJ_TRACE_ARM64_MAX_LEAF_DEPTH ||
       J->retdepth || J->postproc != LJ_POST_NONE || !frame_islua(currentframe) ||
       frame_func(currentframe) != fn || !lj_trace_arm64_lua_leaf(fn)) return 0;
+  framedepth = (MSize)J->framedepth;
   currentreturnpc = frame_pc(currentframe);
   currentcaller = frame_prevl(currentframe);
   for (i = 0; i < LJ_TRACE_ARM64_MAX_LEAF_DEPTH; i++) {
@@ -12312,13 +12313,13 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
     calls[i] = call;
     depth++;
     if (parentpt == rootpt) {
-      if (i+1u != J->framedepth) return 0;
+      if (i+1u != framedepth) return 0;
       break;
     }
     if (i+1u >= LJ_TRACE_ARM64_MAX_LEAF_DEPTH) return 0;
     frame = caller;
   }
-  if (depth != J->framedepth || parentpt != rootpt) return 0;
+  if (depth != framedepth || parentpt != rootpt) return 0;
   nresults = trace_arm64_lua_leaf_nresults(pt);
   if (!nresults || (depth > 1u && nresults != 1u)) return 0;
   /* A fixed pair is admitted only for the direct root-to-leaf frame. Every
@@ -12372,10 +12373,10 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
     if (!exact) return 0;
   }
   if (J->fn == frame_func(currentcaller) && J->pt == funcproto(J->fn) &&
-      J->pc == currentreturnpc-1 && J->framedepth == depth &&
+      J->pc == currentreturnpc-1 && framedepth == depth &&
       J->maxslot == bc_c(calls[0])-1u)
     return 1;
-  if (J->framedepth == depth &&
+  if (framedepth == depth &&
       trace_arm64_lua_leaf_returned_call(J, owner, fn, pc)) return 1;
   return J->fn == fn && J->pt == pt;
 }
