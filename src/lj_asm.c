@@ -19,7 +19,7 @@
 #if LJ_HASFFI
 #include "lj_ctype.h"
 #endif
-#if LJ_TARGET_ARM64 && LJ_HASJIT_FFI_CALLXS
+#if LJ_TARGET_ARM64
 #include "lj_ff.h"
 #endif
 #if LJ_TARGET_ARM64 && LJ_TARGET_OSX && LJ_HASFFI
@@ -3312,7 +3312,9 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
 
       postraview.ir = finalir;
       postraview.owner = T;
+#if LJ_HASFFI
       postraview.cts = ctype_ctsG(J2G(J));
+#endif
       postraview.snap = T->snap;
       postraview.snapmap = T->snapmap;
       postraview.proto_bc = proto_bc(J->pt);

@@ -43,8 +43,13 @@ equivalence or full math/JIT parity claim is made.
 
 A separate FFI-disabled build exposed existing ARM64 conditional-include and
 `ctype_ctsG` call-site omissions. The first diagnostic is retained in
-`/Users/frityet/Scratch/ljmt-math-helpers-20261028/noffi.log`; that configuration
-has not passed at this checkpoint. The full combined experimental gate and
-stock corpus will be rerun on the integration branch. General binary math,
+`/Users/frityet/Scratch/ljmt-math-helpers-20261028/noffi.log`. A follow-up makes
+the fast-function definitions available to scalar ARM64 admission without FFI
+and supplies a null CType context when FFI is disabled. The ARM64 assertion
+build with `LUAJIT_DISABLE_FFI` and its ordinary math companion now pass;
+`noffi-fixed.log` in the same directory records this result. This comparison
+checks results, not a native-entry witness for the FFI-disabled configuration.
+The full combined experimental gate and stock corpus will be rerun on the
+integration branch. General binary math,
 multi-result math, nested Lua frames and broader trace topology still require
 their own proofs and tests.
