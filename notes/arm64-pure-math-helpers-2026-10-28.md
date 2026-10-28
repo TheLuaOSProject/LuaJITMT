@@ -50,6 +50,13 @@ reject toggled PHI annotations. The final four-profile C/Lua run is
 `carried-four-profile.log` in the evidence directory above. The ordinary
 companion additionally compares repeated calls over its entire edge-value
 matrix; this is result evidence, not a claim that every edge trace compiles.
+The new repeated-call matrix exposed floor's negative-zero normalization in
+the previous ARM64 binary too. Installed stock LuaJIT also loses that zero sign
+under JIT narrowing (its invariant scalar case already does so). Accordingly,
+the additional floor/ceil recurrence comparisons permit the stock zero-sign
+normalization while retaining exact numeric values and NaN classification;
+the new helper recurrence cases retain exact signed-zero comparisons. This
+is a test-oracle distinction, not a claim to have repaired that stock behavior.
 
 A separate FFI-disabled build exposed existing ARM64 conditional-include and
 `ctype_ctsG` call-site omissions. The first diagnostic is retained in
