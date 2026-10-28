@@ -50,6 +50,8 @@ local positives = {
   {"addvn", "return x+0.25"},
   {"subvn", "return x-0.25"},
   {"mulvn", "return x*0.5"},
+  {"multiple-results", "return x,0.25",
+    "local sum=.5; for i=1,n do local a,b=fn(i+.5); sum=sum+a+b end; return sum"},
   {"divvn", "return x/2"},
   {"addnv", "return 0.25+x"},
   {"subnv", "return 0.25-x"},
@@ -68,8 +70,6 @@ local negatives = {
   {"nested-call", "return inner(x)", simple_run,
     "local inner=function(y) return y+0.25 end\n"},
   {"vararg-callee", "return ...", simple_run, nil, true},
-  {"multiple-results", "return x,x+0.5",
-    "local sum=.5; for i=1,n do local a,b=fn(i+.5); sum=sum+a+b end; return sum"},
 }
 
 local function run_positive(label, body, runner)

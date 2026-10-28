@@ -1289,12 +1289,21 @@ static void rec_call_setup(jit_State *J, BCReg func, ptrdiff_t nargs)
   }
 #if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
   if (isluafunc(funcV(functv)) && lj_trace_arm64_lua_leaf(funcV(functv))) {
+    const GCproto *leaf = funcproto(funcV(functv));
+    BCIns ret = (BCIns)la_load32_acq(
+      (const uint32_t *)&proto_bc(leaf)[leaf->sizebc-1u]);
+    MSize nresults = bc_op(ret) == BC_RET1 && bc_d(ret) == 2u ? 1u :
+                     bc_op(ret) == BC_RET && bc_d(ret) == 3u ? 2u :
+                     bc_op(ret) == BC_RET0 ? 1u : 0u;
     /* Preserve the incoming arguments for identity guards and child exits.
     ** LOOP must copy this map with the same substitutions as the child. */
     if (bc_op(J->cur.startins) != BC_FORL || J->framedepth > 1 ||
-        bc_op(*J->pc) != BC_CALL || bc_b(*J->pc) != 2 ||
+        bc_op(*J->pc) != BC_CALL || !nresults ||
+        bc_b(*J->pc) != nresults+1u ||
+        (nresults == 2u && J->framedepth != 0) ||
         !bc_c(*J->pc) || bc_c(*J->pc) != nargs+1 ||
-        (MSize)bc_a(*J->pc)+bc_c(*J->pc)+LJ_FR2 > J->pt->framesize)
+        (MSize)bc_a(*J->pc)+bc_c(*J->pc)+LJ_FR2 > J->pt->framesize ||
+        (MSize)bc_a(*J->pc)+bc_b(*J->pc)-1u+LJ_FR2 > J->pt->framesize)
       lj_trace_err(J, LJ_TRERR_NYIBC);
     lj_snap_add(J);
     J->mergesnap = 0;
