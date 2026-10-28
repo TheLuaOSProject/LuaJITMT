@@ -333,9 +333,24 @@ run_native('math_four',math_four,20)
 
 
 
+local function run_carried(name,op)
+  local function carried(n,x)
+    local i=0
+    while i<n do x=op(x); i=i+1 end
+    return x
+  end
+  jit.off(carried); local expected=carried(12,.25); jit.on(carried)
+  jit.flush(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=1','-fma')
+  assert(same_number(carried(12,.25),expected),name..' oracle mismatch')
+  probe_reset()
+  assert(same_number(carried(12,.25),expected),name..' native mismatch')
+  probe_check('math_'..name..'_carried')
+end
+jit.off(run_carried,true)
 for _,name in ipairs({'log','log10','exp','sin','cos','tan','asin','acos',
                        'atan','sinh','cosh','tanh'}) do
   local op=math[name]
+  run_carried(name,op)
   local function helper_loop(n,x)
     local s=.25
     for i=1,n do s=s+op(x+i*.001) end

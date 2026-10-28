@@ -36,6 +36,11 @@ for _, case in ipairs(cases) do
     while i < n do y = f(x); i = i + 1 end
     return y
   end
+  local function carried(f, n, x)
+    local i = 0
+    while i < n do x = f(x); i = i + 1 end
+    return x
+  end
   for _, x in ipairs(starts) do
     jit.off(workload)
     local expected = workload(fn, 8, x)
@@ -53,6 +58,14 @@ for _, case in ipairs(cases) do
     jit.opt.start('hotloop=1', 'hotexit=1000', 'maxtrace=1')
     local actual = scalar(fn, 8, x)
     assert(same(actual, expected), name .. ' scalar edge mismatch at ' .. x)
+  end
+  for _, x in ipairs(starts) do
+    jit.off(carried)
+    local expected = carried(fn, 12, x)
+    jit.on(carried)
+    jit.flush()
+    jit.opt.start('hotloop=1', 'hotexit=1000', 'maxtrace=1')
+    assert(same(carried(fn, 12, x), expected), name .. ' carried mismatch at ' .. x)
   end
   print('ORDINARY', name, 'interpreter/JIT results match')
 end
