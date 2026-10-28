@@ -11986,7 +11986,7 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
       if (target <= (ptrdiff_t)pos || target >= (ptrdiff_t)size ||
           bc_a(words[pos]) > frame) return 0;
       next[pos] = (MSize)target;
-    } else if (op == BC_RET1 || op == BC_RET0) {
+    } else if (op == BC_RET1 || op == BC_RET0 || op == BC_RET) {
       next[pos] = UINT32_MAX;
     } else if (op >= BC_ISLT && op <= BC_ISGT) return 0;
     else next[pos] = pos+1u;
@@ -12041,7 +12041,14 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
     if (pos+1u == size) {
       if (early_return && op == BC_RET0) continue;
       if (a >= frame) return 0;
-      if (op != BC_RET1 || bc_d(ins) != 2 || !defined[a]) return 0;
+      if (op == BC_RET1) {
+        if (bc_d(ins) != 2 || !defined[a]) return 0;
+      } else if (op == BC_RET && cmp_pos == UINT32_MAX) {
+        if (bc_d(ins) != 3u || a+1u >= frame ||
+            !defined[a] || !defined[a+1u]) return 0;
+      } else {
+        return 0;
+      }
     } else if (op >= BC_ISLT && op <= BC_ISGT) {
       uint8_t first_defined[UINT8_MAX+1u], second_defined[UINT8_MAX+1u];
       if (bc_a(ins) >= frame ||
@@ -12122,6 +12129,17 @@ static void trace_arm64_abort_exact_owner(jit_State *J, lua_State *owner)
     lj_trace_abort_owner(owner);
 }
 
+/* Number of fixed results in the narrowly admitted pure leaf grammar. */
+static MSize trace_arm64_lua_leaf_nresults(const GCproto *pt)
+{
+  BCIns ret = (BCIns)la_load32_acq(
+    (const uint32_t *)&proto_bc(pt)[pt->sizebc-1u]);
+  if (bc_op(ret) == BC_RET1 && bc_d(ret) == 2u) return 1u;
+  if (bc_op(ret) == BC_RET && bc_d(ret) == 3u) return 2u;
+  if (bc_op(ret) == BC_RET0) return 1u;  /* Source proof binds both paths. */
+  return 0;
+}
+
 /* Prove that a VM recorder dispatch still belongs to an admitted exact root.
 ** No unproved J->L value is passed to destructive recorder cleanup. */
 #if !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED
@@ -12133,7 +12151,7 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
   const BCIns *returnpc;
   GCproto *pt = funcproto(fn);
   BCIns call;
-  MSize base;
+  MSize base, nresults;
   TRef callee, link;
   IRRef ref;
   if (bc_op(J->cur.startins) != BC_FORL || J->framedepth != 1 ||
@@ -12143,8 +12161,11 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
   if (!trace_pc_in_proto_range(returnpc, proto_bc(rootpt), rootpt->sizebc) ||
       returnpc == proto_bc(rootpt)) return 0;
   call = (BCIns)la_load32_acq((const uint32_t *)(returnpc-1));
-  if (bc_op(call) != BC_CALL || bc_b(call) != 2 || !bc_c(call) ||
-      (MSize)bc_a(call)+bc_c(call)+LJ_FR2 > rootpt->framesize) return 0;
+  nresults = trace_arm64_lua_leaf_nresults(pt);
+  if (bc_op(call) != BC_CALL || !nresults ||
+      bc_b(call) != nresults+1u || !bc_c(call) ||
+      (MSize)bc_a(call)+bc_c(call)+LJ_FR2 > rootpt->framesize ||
+      (MSize)bc_a(call)+bc_b(call)-1u+LJ_FR2 > rootpt->framesize) return 0;
   caller = frame_prevl(frame);
   if (!isluafunc(frame_func(caller)) || funcproto(frame_func(caller)) != rootpt)
     return 0;
@@ -12165,11 +12186,13 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
   if (!tref_isfunc(callee) || !tref_isk(callee) || ref < J->cur.nk ||
       ref >= REF_TRUE || J->cur.ir[ref].o != IR_KGC ||
       ir_kgc_acq(&J->cur.ir[ref]) != obj2gco(fn)) return 0;
-  if (pc == proto_bc(pt))
+  if (pc == proto_bc(pt)) {
     return J->fn && isluafunc(J->fn) && funcproto(J->fn) == rootpt &&
            J->pt == rootpt && J->pc == returnpc-1 &&
            J->maxslot == bc_c(call)-1u;
-  return J->fn == fn && J->pt == pt;
+  }
+  if (J->fn == fn && J->pt == pt) return 1;
+  return 0;
 }
 
 static int trace_arm64_root_recorder_preflight(jit_State *J,
