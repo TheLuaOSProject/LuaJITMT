@@ -49,4 +49,4 @@ for profile in arm64-assert arm64e-assert arm64-release arm64e-release; do
   lj_ci_run_lua 60 "$root/tests/t-arm64-jit-lua-return-exits.lua"
 done
 lj_ci_restore "$LJ_CI_RESTORE_TARGET_FLAGS" "$LJ_CI_RESTORE_XCFLAGS"
-echo 'arm64_jit_lua_leaf_contract OK: four profiles; native, identity/single-operation/compound/sparse child exits, normalized fixed arguments, terminal returns and local/parameter assignments, independent admission and ordinary publication/refusal'
+echo 'arm64_jit_lua_leaf_contract OK: four profiles; native, identity/single-operation/compound/sparse child exits, normalized fixed arguments, primitive literals, terminal returns and local/parameter assignments, independent admission and ordinary publication/refusal'

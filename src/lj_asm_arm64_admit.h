@@ -7958,6 +7958,9 @@ static IRRef arm64_lua_leaf_ir_args(const jit_State *J, const GCtrace *T,
     MSize a = bc_a(ins), b = bc_b(ins), c = bc_c(ins);
     if (op == BC_CGET || op == BC_MOV || op == BC_CSET) {
       numeric[a] = numeric[bc_d(ins)];
+    } else if (op == BC_KPRI) {
+      if (bc_d(ins) > 2u) return 0;
+      numeric[a] = 0;
     } else if (op == BC_KNUM || op == BC_KSHORT) {
       numeric[a] = 1;
     } else {
@@ -8113,6 +8116,9 @@ static int arm64_lua_leaf_ir_prefix(const GCtrace *T, const GCproto *pt,
            (value && !arm64_cell_value_ir_ref(T, value, limit)))) return 0;
     } else if (op == BC_KSHORT) {
       value = arm64_lua_leaf_ir_literal(T, (int16_t)bc_d(ins), 0);
+    } else if (op == BC_KPRI) {
+      if (bc_d(ins) > 2u) return 0;
+      value = (IRRef)(REF_NIL-bc_d(ins));
     } else if (op == BC_KNUM) {
       proto_knumtv_load_acq(&k, pt, bc_d(ins));
       value = arm64_lua_leaf_ir_literal(T, numberVnum(&k), 0);
@@ -8198,6 +8204,9 @@ static int arm64_lua_leaf_ir_needed(const GCproto *pt, MSize resume,
       needed[d] = 1;
       break;
     case BC_KSHORT: case BC_KNUM:
+      break;
+    case BC_KPRI:
+      if (d > 2u) return 0;
       break;
     case BC_ADDVV: case BC_SUBVV: case BC_MULVV: case BC_DIVVV:
       if (c >= pt->framesize) return 0;
@@ -10004,6 +10013,9 @@ static IRRef arm64_lua_leaf_postra_args(const LJArm64PostRAView *v,
     switch (bc_op(ins)) {
     case BC_CGET: case BC_CSET: case BC_MOV:
       types[dst] = types[bc_d(ins)]; break;
+    case BC_KPRI:
+      if (bc_d(ins) > 2u) return 0;
+      types[dst] = (IRType)(IRT_NIL+bc_d(ins)); break;
     case BC_KSHORT:
       types[dst] = IRT_INT; break;
     case BC_KNUM:
@@ -10189,6 +10201,9 @@ static int arm64_lua_leaf_postra_prefix(const LJArm64PostRAView *v,
       }
     } else if (op == BC_KSHORT) {
       out = arm64_lua_leaf_postra_literal(v, (int16_t)bc_d(ins), 0);
+    } else if (op == BC_KPRI) {
+      if (bc_d(ins) > 2u) return 0;
+      out = (IRRef)(REF_NIL-bc_d(ins));
     } else if (op == BC_KNUM) {
       proto_knumtv_load_acq(&number, pt, bc_d(ins));
       out = arm64_lua_leaf_postra_literal(v, numberVnum(&number), 0);
@@ -10251,6 +10266,8 @@ static int arm64_lua_leaf_postra_needed(const GCproto *pt, MSize resume,
       if (op == BC_CSET && !written[dst]) needed[dst] = 1;
     } else if (op == BC_KSHORT || op == BC_KNUM) {
       /* The literal defines its destination without reading it. */
+    } else if (op == BC_KPRI) {
+      if (bc_d(ins) > 2u) return 0;
     } else {
       switch (op) {
       case BC_ADDVN: case BC_SUBVN: case BC_MULVN: case BC_DIVVN:

@@ -133,6 +133,19 @@ local function main()
     {name='cdata',value=ffi.new('int[1]',53)},
   }
   local cases = {}
+  for _,literal in ipairs({
+      {name='nil',source='nil',value=nil},
+      {name='false',source='false',value=false},
+      {name='true',source='true',value=true}}) do
+    cases[#cases+1] = {
+      name='return-literal-'..literal.name, params='a',
+      body='local value=1; value='..literal.source..'; return value', args='i',
+      payload=nil, initial=literal.value}
+  end
+  cases[#cases+1] = {
+    name='literal-prefix-overwrite', params='a',
+    body='local flag=true; local n=a+1; a=flag; return a',
+    args='i', payload=nil, initial=true}
   for _,payload in ipairs(payloads) do
     cases[#cases+1] = {
       name='return-arg-'..payload.name, params='a,b', body='return b',
@@ -214,7 +227,7 @@ local function main()
   assert(stop:send(true,5),'MT peer stop send failed')
   local joined,result = peer:join(5)
   assert(joined and result,'MT peer did not join cleanly')
-  assert(publications == #cases and #cases == 39 and ranges == 4 and
+  assert(publications == #cases and #cases == 43 and ranges == 4 and
          reuses == #cases*2+2*ranges)
   io.write(string.format(
     'lua-return ordinary OK: publications=%d numeric_ranges=%d same_trace_reuses=%d cold_calls=%d; publication only, no native-execution claim\n',

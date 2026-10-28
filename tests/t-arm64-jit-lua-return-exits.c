@@ -265,7 +265,7 @@ static unsigned ret_semantic_bad, ret_postra_bad, ret_alias_bad;
 static unsigned ret_terminal_maps, ret_next_map_bad, ret_callmap_guards;
 /* Every semantic mutation must run in both passes; allocation conflicts
 ** and the guarded loop-increment mutation belong to the allocated pass. */
-static unsigned ret_mutation_count[21][2];
+static unsigned ret_mutation_count[24][2];
 
 enum {
   RET_NEG_SWAP = 0,
@@ -287,6 +287,9 @@ enum {
   RET_NEG_DCE_GUARD,
   RET_NEG_NEXT_OMIT,
   RET_NEG_UNKNOWN_RETURN,
+  RET_NEG_KPRI_SWAP,
+  RET_NEG_KPRI_RANGE,
+  RET_NEG_KPRI_ARITH,
   RET_NEG_ALIAS,
   RET_NEG_CALLMAP_GUARD
 };
@@ -603,6 +606,41 @@ static void return_test_negative(ReturnFixture *f, SnapNo s, unsigned id,
     setbc_a(&proto_bc(f->leafpt)[pos], dead);
     break;
   }
+  case RET_NEG_KPRI_RANGE: {
+    MSize p;
+    for (p = 1; p < pos; p++) {
+      BCIns ins = (BCIns)la_load32_acq(
+        (const uint32_t *)&proto_bc(f->leafpt)[p]);
+      if (bc_op(ins) == BC_KPRI) break;
+    }
+    if (p == pos) return;
+    setbc_d(&proto_bc(f->leafpt)[p], 3u);
+    break;
+  }
+  case RET_NEG_KPRI_SWAP: {
+    MSize p;
+    for (p = 1; p < pos; p++)
+      if (bc_op(proto_bc(f->leafpt)[p]) == BC_KPRI) break;
+    if (p == pos) return;
+    setbc_d(&proto_bc(f->leafpt)[p], (bc_d(proto_bc(f->leafpt)[p])+1u)%3u);
+    break;
+  }
+  case RET_NEG_KPRI_ARITH: {
+    MSize p, q;
+    BCReg value;
+    for (p = 1; p < pos; p++)
+      if (bc_op(proto_bc(f->leafpt)[p]) == BC_KPRI) break;
+    if (p == pos) return;
+    value = bc_a(proto_bc(f->leafpt)[p]);
+    for (q = p+1u; q < pos; q++)
+      if (bc_op(proto_bc(f->leafpt)[q]) == BC_CSET) break;
+    if (q == pos) return;
+    setbc_op(&proto_bc(f->leafpt)[q], BC_ADDVV);
+    setbc_a(&proto_bc(f->leafpt)[q], value);
+    setbc_b(&proto_bc(f->leafpt)[q], value);
+    setbc_c(&proto_bc(f->leafpt)[q], value);
+    break;
+  }
   case RET_NEG_DCE_GUARD: {
     IRRef nop = 0, lhs = 0, rhs = 0;
     for (IRRef r = REF_FIRST; r < f->n && !nop; r++) {
@@ -740,6 +778,14 @@ static void admission(GCtrace *T)
       return_test_negative(&f, s, RET_NEG_NEXT_OMIT, postra, RET_NEG_NEXT_OMIT);
       return_test_negative(&f, s, RET_NEG_UNKNOWN_RETURN, postra,
                            RET_NEG_UNKNOWN_RETURN);
+      if (strncmp(active_name, "literal-", 8) == 0) {
+        return_test_negative(&f, s, RET_NEG_KPRI_SWAP, postra,
+                             RET_NEG_KPRI_SWAP);
+        return_test_negative(&f, s, RET_NEG_KPRI_RANGE, postra,
+                             RET_NEG_KPRI_RANGE);
+        return_test_negative(&f, s, RET_NEG_KPRI_ARITH, postra,
+                             RET_NEG_KPRI_ARITH);
+      }
       if (postra)
         return_test_negative(&f, s, RET_NEG_ALIAS, postra, RET_NEG_ALIAS);
       if (strncmp(active_name, "dead-prefix-", 12) == 0)
@@ -819,6 +865,11 @@ int main(void)
     {"dead-overwrite","a,b","local x=a*3; x=b; return x","i,payload",0}
   };
   static const ReturnCase cases[] = {
+    {"literal-nil","a","local value=1; value=nil; return value","i",0},
+    {"literal-false","a","local value=1; value=false; return value","i",0},
+    {"literal-true","a","local value=1; value=true; return value","i",0},
+    {"literal-prefix-overwrite","a",
+      "local flag=true; local n=a+1; a=flag; return a","i",0},
     {"missing","a,b","return b","i",0},
     {"missing-all","a,b","return b","",0},
     {"extra","a,b","return b","i,payload,true,nil",0},
@@ -856,8 +907,8 @@ int main(void)
   assert(ret_terminal_maps == cases_run && ret_alias_bad && ret_callmap_guards == 1);
   for (unsigned m = 0; m < RET_NEG_ALIAS; m++)
     assert(ret_mutation_count[m][0] && ret_mutation_count[m][1]);
-  assert(cases_run == 80 && native_runs == 320 && terminal_exits == 80 &&
-         same_trace_reuses == 240 && gc_reuses == 80 && primitive_mismatches == 80);
+  assert(cases_run == 84 && native_runs == 336 && terminal_exits == 84 &&
+         same_trace_reuses == 252 && gc_reuses == 84 && primitive_mismatches == 84);
   printf("Lua return exits OK: cases=%u native=%u terminal=%u reuse=%u gc=%u "
          "controlled-old-tags=%u semantic-negative=%u postRA-negative=%u aliases=%u maps=%u callmap-guard=%u\n", cases_run,native_runs,terminal_exits,
          same_trace_reuses,gc_reuses,primitive_mismatches,
