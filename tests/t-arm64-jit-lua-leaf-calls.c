@@ -127,6 +127,24 @@ static void fixture_reset(Fixture *f)
   setmref(f->leaf->l.pc, proto_bc(f->leafpt));
   memcpy(f->ir+T->nk, T->ir+T->nk, (T->nins-T->nk)*sizeof(IRIns));
   ir_kgc_store_rel(&f->ir[f->kfunc], obj2gco(f->leaf));
+  for (IRRef r=T->nk; r+1u<T->nins; r++) {
+    const IRIns *constant=&T->ir[r];
+    if (constant->o==IR_KNUM) {
+      uintptr_t pc=(uintptr_t)T->ir[r+1u].tv.u64;
+      const GCproto *owners[2]={pt,funcproto(leaf)};
+      GCproto *copies[2]={f->pt,f->leafpt};
+      for (unsigned p=0;p<2;p++) {
+        uintptr_t lo=(uintptr_t)proto_bc(owners[p]);
+        uintptr_t hi=(uintptr_t)(proto_bc(owners[p])+owners[p]->sizebc);
+        if (pc>=lo && pc<=hi) {
+          MSize pos=(MSize)((pc-lo)/sizeof(BCIns));
+          f->ir[r+1u].tv.u64=u64ptr(&proto_bc(copies[p])[pos]);
+          break;
+        }
+      }
+      r++;
+    }
+  }
   memcpy(f->snap, T->snap, T->nsnap*sizeof(SnapShot));
   memcpy(f->map, T->snapmap, T->nsnapmap*sizeof(SnapEntry));
   f->copy = *T; f->copy.ir=f->ir; f->copy.snap=f->snap; f->copy.snapmap=f->map;
@@ -135,10 +153,19 @@ static void fixture_reset(Fixture *f)
   proto_bc(f->pt)[startpos] = T->startins;
   for (MSize s=0; s<T->nsnap; s++) {
     SnapShot *snap=&f->snap[s];
+    const BCIns *pc=snap_pc(&T->snapmap[snap->mapofs+snap->nent]);
+    const GCproto *liveleaf=funcproto(leaf);
+    uintptr_t at=(uintptr_t)pc, rootlo=(uintptr_t)proto_bc(pt);
+    uintptr_t leaflo=(uintptr_t)proto_bc(liveleaf);
     uint64_t pcbase;
-    MSize pos=proto_bcpos(pt, snap_pc(&T->snapmap[snap->mapofs+snap->nent]));
-    assert(pos<pt->sizebc);
-    pcbase=(u64ptr(&proto_bc(f->pt)[pos])<<8);
+    if (at>=rootlo && at<rootlo+pt->sizebc*sizeof(BCIns)) {
+      MSize pos=(MSize)((at-rootlo)/sizeof(BCIns));
+      pcbase=(u64ptr(&proto_bc(f->pt)[pos])<<8);
+    } else {
+      assert(at>=leaflo && at<leaflo+liveleaf->sizebc*sizeof(BCIns));
+      MSize pos=(MSize)((at-leaflo)/sizeof(BCIns));
+      pcbase=(u64ptr(&proto_bc(f->leafpt)[pos])<<8);
+    }
     memcpy(&f->map[snap->mapofs+snap->nent], &pcbase, sizeof(pcbase));
   }
   memset(f->J,0,sizeof(*f->J));
@@ -169,7 +196,8 @@ enum {
   M_FUNC_SLOT, M_ARG_SLOT, M_CALL_ARITY, M_CALL_RESULTS, M_CALL_SLOT,
   M_CALLM, M_CALL_PC, M_SNAPSHOT_REF, M_CHILD_PC, M_CHILD_BASE, M_CHILD_FRAME,
   M_CHILD_TOP, M_GUARD_MISSING, M_GUARD_FORWARD, M_LEAF_ARITY, M_LEAF_UPVALUE,
-  M_LEAF_VARARG, M_LEAF_DISABLED, M_LEAF_HEADER, M_LEAF_EFFECT, M_LEAF_REGISTER,
+  M_LEAF_VARARG, M_LEAF_DISABLED, M_LEAF_HEADER, M_LEAF_EFFECT, M_RESULT_BIND,
+  M_LEAF_REGISTER,
   M_LEAF_CONSTANT, M_LEAF_RETURN, M_LEAF_RETURN_SLOT, M_COUNT
 };
 
@@ -182,7 +210,7 @@ static void mutate(Fixture *f, unsigned m)
   case M_FUNC_SLOT: f->map[f->fnentry]=SNAP(snap_slot(f->map[f->fnentry]),0,f->kfunc); break;
   case M_ARG_SLOT: f->map[f->argentry]=SNAP(snap_slot(f->map[f->argentry]),0,f->ir[f->guard].op1); break;
   case M_CALL_ARITY: setbc_c(call,3); break;
-  case M_CALL_RESULTS: setbc_b(call,3); break;
+  case M_CALL_RESULTS: setbc_b(call,bc_b(*call)+1u); break;
   case M_CALL_SLOT: setbc_a(call,bc_a(*call)-1u); break;
   case M_CALLM: setbc_op(call,BC_CALLM); break;
   case M_CALL_PC:
@@ -192,8 +220,8 @@ static void mutate(Fixture *f, unsigned m)
     pcbase=u64ptr(leafbc+1)<<8; memcpy(&f->map[snap->mapofs+snap->nent],&pcbase,8); break;
   case M_CHILD_BASE:
     f->map[snap->mapofs+snap->nent]|=2; break;
-  case M_CHILD_FRAME: f->map[f->fnentry]|=SNAP_FRAME; break;
-  case M_CHILD_TOP: snap->topslot++; break;
+  case M_CHILD_FRAME: f->map[f->argentry]|=SNAP_FRAME; break;
+  case M_CHILD_TOP: snap->topslot=(BCReg)(f->pt->framesize+1u+LJ_FR2); break;
   case M_GUARD_MISSING: f->ir[f->guard].t.irt=IRT_FUNC; break;
   case M_GUARD_FORWARD: f->ir[f->guard].op1=f->guard; break;
   case M_LEAF_ARITY: f->leafpt->numparams=2; break;
@@ -202,10 +230,40 @@ static void mutate(Fixture *f, unsigned m)
   case M_LEAF_DISABLED: f->leafpt->flags|=PROTO_NOJIT; break;
   case M_LEAF_HEADER: setbc_op(&leafbc[0],BC_IFUNCF); break;
   case M_LEAF_EFFECT: leafbc[1]=BCINS_AD(BC_USETV,0,0); break;
+  case M_RESULT_BIND: {
+    if (bc_b(*call)==3u) {
+      int found=0;
+      for (MSize pos=f->callpos+1u; pos<f->pt->sizebc; pos++) {
+        BCIns *ins=&proto_bc(f->pt)[pos];
+        if (bc_op(*ins)==BC_CGET && bc_d(*ins)==bc_a(*call)+1u) {
+          setbc_d(ins,bc_a(*call)); found=1; break;
+        }
+        if (bc_op(*ins)==BC_FORL || bc_op(*ins)==BC_JFORL) break;
+      }
+      assert(found);
+    } else {
+      setbc_b(call,3u);
+    }
+    break;
+  }
   case M_LEAF_REGISTER: setbc_d(&leafbc[1],f->leafpt->framesize); break;
-  case M_LEAF_CONSTANT: setbc_c(&leafbc[2],f->leafpt->sizekn); break;
-  case M_LEAF_RETURN: setbc_op(&leafbc[f->leafpt->sizebc-1],BC_RET); break;
-  case M_LEAF_RETURN_SLOT: setbc_a(&leafbc[f->leafpt->sizebc-1],f->leafpt->framesize); break;
+  case M_LEAF_CONSTANT: {
+    BCIns *constant=&leafbc[2];
+    if (bc_op(*constant)==BC_KNUM) setbc_d(constant,f->leafpt->sizekn);
+    else setbc_c(constant,f->leafpt->sizekn);
+    break;
+  }
+  case M_LEAF_RETURN: {
+    BCIns *ret=&leafbc[f->leafpt->sizebc-1];
+    setbc_op(ret,bc_op(*ret)==BC_RET ? BC_RET1 : BC_RET0);
+    break;
+  }
+  case M_LEAF_RETURN_SLOT: {
+    BCIns *ret=&leafbc[f->leafpt->sizebc-1];
+    setbc_a(ret,bc_op(*ret)==BC_RET ? f->leafpt->framesize-1u :
+                                      f->leafpt->framesize);
+    break;
+  }
   default: assert(0);
   }
 }
@@ -227,7 +285,12 @@ static void admission(GCtrace *T)
     SnapShot *snap=&T->snap[f.guard_snap];
     const BCIns *call=snap_pc(&T->snapmap[snap->mapofs+snap->nent]);
     MSize slot=1u+LJ_FR2+bc_a(*call);
-    assert(bc_op(*call)==BC_CALL && bc_b(*call)==2 && bc_c(*call)==2);
+    {
+      BCIns ret=proto_bc(f.leafpt)[f.leafpt->sizebc-1u];
+      unsigned nresults=bc_op(ret)==BC_RET ? 2u : 1u;
+      assert(bc_op(*call)==BC_CALL && bc_b(*call)==nresults+1u &&
+             bc_c(*call)==2);
+    }
     f.callpos=proto_bcpos(trace_startpt_acq(T),call);
     f.fnentry=f.argentry=UINT32_MAX;
     for (MSize i=0;i<snap->nent;i++) {
@@ -239,10 +302,12 @@ static void admission(GCtrace *T)
   }
   for (int allocated=0;allocated<2;allocated++) {
     for (unsigned m=0;m<M_COUNT;m++) {
-      fixture_reset(&f); assert(admit(&f,allocated));
+      fixture_reset(&f);
+      if (!admit(&f,allocated)) {
+        assert(0);
+      }
       fixture_reset(&f); mutate(&f,m);
       if (admit(&f,allocated)) {
-        fprintf(stderr,"Lua leaf mutation %u accepted by %s\n",m,allocated?"postRA":"semantic");
         assert(0);
       }
       if (allocated) postra_bad++; else semantic_bad++;
@@ -260,12 +325,12 @@ static void admission(GCtrace *T)
 int main(void)
 {
   lua_State *L=ljt_lua_newstate_openlibs();
-  const char *bodies[]={"return x*.5+1.25","return 1.25-x*.25","return .5/x+1.25"};
+  const char *bodies[]={"return x*.5+1.25","return 1.25-x*.25","return .5/x+1.25","return x,0.25"};
   ljt_lua_dostring(L,
     "local th=require('threading'); ready=th.channel(1); stop=th.channel(1); "
     "peer=assert(th.spawn(function(a,b) assert(a:send(true,5)); assert(select(2,b:recv(60))); return true end,ready,stop)); "
     "assert(select(2,ready:recv(5))); "
-    "function install_leaf(body) local r='return function(fn,n) local sum=.5; for i=1,n do sum=sum+fn(i+.5) end; return sum end'; "
+    "function install_leaf(body,multi) local r=multi and 'return function(fn,n) local sum=.5; for i=1,n do local a,b=fn(i+.5); sum=sum+a+b end; return sum end' or 'return function(fn,n) local sum=.5; for i=1,n do sum=sum+fn(i+.5) end; return sum end'; "
     "leaf_run=assert(loadstring(r,'@leaf-run'))(); leaf_oracle=assert(loadstring(r,'@leaf-oracle'))(); "
     "leaf_a=assert(loadstring('return function(x) '..body..' end','@leaf-a'))(); "
     "leaf_oracle_a=assert(loadstring('return function(x) '..body..' end','@leaf-oracle-a'))(); "
@@ -275,7 +340,11 @@ int main(void)
     "jit.flush(); jit.on(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64') end; jit.off(install_leaf,true)");
   for (unsigned shape=0;shape<sizeof(bodies)/sizeof(bodies[0]);shape++) {
     GCtrace *T=NULL;
-    lua_getglobal(L,"install_leaf"); lua_pushstring(L,bodies[shape]); ljt_lua_pcall(L,1,0,"install leaf");
+    int multi=shape==3;
+    lua_getglobal(L,"install_leaf"); lua_pushstring(L,bodies[shape]); lua_pushboolean(L,multi); ljt_lua_pcall(L,2,0,"install leaf");
+    if (multi) {
+      ljt_lua_dostring(L,"leaf_b=assert(loadstring('return function(x) return x*.125+2.5,0.125 end','@leaf-b'))(); leaf_oracle_b=assert(loadstring('return function(x) return x*.125+2.5,0.125 end','@leaf-oracle-b'))(); jit.off(leaf_oracle_b,true)");
+    }
     assert(lj_trace_arm64_lua_leaf(global_function(L,"leaf_a")));
     for (unsigned attempt=0;attempt<8 && !T;attempt++) {
       lua_Number expected=invoke(L,"leaf_oracle","leaf_oracle_a",96);

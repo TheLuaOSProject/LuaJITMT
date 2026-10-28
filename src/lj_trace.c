@@ -12077,7 +12077,14 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
     if (pos+1u == size) {
       if (early_return && op == BC_RET0) continue;
       if (a >= frame) return 0;
-      if (op != BC_RET1 || bc_d(ins) != 2 || !defined[a]) return 0;
+      if (op == BC_RET1) {
+        if (bc_d(ins) != 2u || !defined[a]) return 0;
+      } else if (op == BC_RET && cmp_pos == UINT32_MAX) {
+        if (bc_d(ins) != 3u || a+1u >= frame ||
+            !defined[a] || !defined[a+1u]) return 0;
+      } else {
+        return 0;
+      }
     } else if (op >= BC_ISLT && op <= BC_ISGT) {
       uint8_t first_defined[UINT8_MAX+1u], second_defined[UINT8_MAX+1u];
       if (bc_a(ins) >= frame ||
@@ -12152,6 +12159,8 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
     }
   }
   if (pt->sizeuv && !has_upvalue_get) return 0;
+  if (bc_op(words[size-1u]) == BC_RET && bc_d(words[size-1u]) == 3u &&
+      (has_call || pt->sizeuv)) return 0;
   /* The body contains no patch sites. An independently compiled entry may
   ** replace FUNCF with JFUNCF, whose saved source must still be canonical.
   ** Recheck this complete generation without borrowing that trace's verdict. */
@@ -12169,12 +12178,23 @@ static void trace_arm64_abort_exact_owner(jit_State *J, lua_State *owner)
     lj_trace_abort_owner(owner);
 }
 
+/* Fixed result arity in the bounded source leaf grammar. */
+static MSize trace_arm64_lua_leaf_nresults(const GCproto *pt)
+{
+  BCIns ret = (BCIns)la_load32_acq(
+    (const uint32_t *)&proto_bc(pt)[pt->sizebc-1u]);
+  if (bc_op(ret) == BC_RET1 && bc_d(ret) == 2u) return 1u;
+  if (bc_op(ret) == BC_RET && bc_d(ret) == 3u) return 2u;
+  if (bc_op(ret) == BC_RET0) return 1u;  /* Source proof binds both RET1 arms. */
+  return 0;
+}
+
 /* During CALL return, the VM has already popped the child frame while the
 ** recorder still names that child in J->fn/J->pt. Bind that transient state
 ** to the exact CALL immediately before the caller continuation. Keep the
 ** runtime case deliberately small: the callee is copied from a live Lua
-** register and CALL returns one value. Semantic and post-RA admission replay
-** the complete caller result flow independently. */
+** register and CALL returns a fixed source arity. Semantic and post-RA
+** admission replay the complete caller result flow independently. */
 static int trace_arm64_lua_leaf_returned_call(jit_State *J, lua_State *owner,
 	GCfunc *parent, const BCIns *pc)
 {
@@ -12194,8 +12214,14 @@ static int trace_arm64_lua_leaf_returned_call(jit_State *J, lua_State *owner,
 	  frame_func(owner->base-1) != parent) return 0;
   cp = (MSize)(pc-proto)-1u;
   call = (BCIns)la_load32_acq((const uint32_t *)&proto[cp]);
-  if (bc_op(call) != BC_CALL || bc_b(call) != 2 || !bc_c(call) ||
-	  (MSize)bc_a(call)+bc_c(call)+LJ_FR2 > pt->framesize) return 0;
+  {
+    MSize nresults = trace_arm64_lua_leaf_nresults(J->pt);
+    if (!nresults || bc_op(call) != BC_CALL ||
+        bc_b(call) != nresults+1u || !bc_c(call) ||
+	(MSize)bc_a(call)+bc_c(call)+LJ_FR2 > pt->framesize ||
+	(MSize)bc_a(call)+nresults+LJ_FR2 > pt->framesize)
+      return 0;
+  }
   fslot = bc_a(call);
   /* Find the last definition of the function slot. MOV and CGET copy a live
   ** caller TValue; UGET names the exact rooted-upvalue read emitted by the
@@ -12250,7 +12276,7 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
   GCproto *pt = funcproto(fn), *parentpt;
   GCfunc *parentfn;
   BCIns call;
-  MSize base, depth = 0, i;
+  MSize base, depth = 0, i, nresults;
   TRef callee, link;
   IRRef ref;
   if (bc_op(J->cur.startins) != BC_FORL || J->framedepth < 1 ||
@@ -12272,9 +12298,17 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
                                  parentpt->sizebc) ||
         returnpc == proto_bc(parentpt)) return 0;
     call = (BCIns)la_load32_acq((const uint32_t *)(returnpc-1));
-    if (bc_op(call) != BC_CALL || bc_b(call) != 2 || !bc_c(call) ||
+    {
+      MSize nresults = trace_arm64_lua_leaf_nresults(funcproto(currentfn));
+      if (!nresults || bc_op(call) != BC_CALL ||
+          bc_b(call) != nresults+1u ||
+          (nresults == 2u && (i != 0u || J->framedepth != 1u)) ||
+          !bc_c(call) ||
         (MSize)bc_a(call)+bc_c(call)+LJ_FR2 > parentpt->framesize)
-      return 0;
+        return 0;
+      if ((MSize)bc_a(call)+bc_b(call)-1u+LJ_FR2 > parentpt->framesize)
+        return 0;
+    }
     calls[i] = call;
     depth++;
     if (parentpt == rootpt) {
@@ -12285,6 +12319,19 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
     frame = caller;
   }
   if (depth != J->framedepth || parentpt != rootpt) return 0;
+  nresults = trace_arm64_lua_leaf_nresults(pt);
+  if (!nresults || (depth > 1u && nresults != 1u)) return 0;
+  /* A fixed pair is admitted only for the direct root-to-leaf frame. Every
+  ** nested captured call in this checkpoint remains a one-result call. */
+  if (depth == 1u) {
+    call = calls[0];
+    if (bc_b(call) != nresults+1u ||
+        (MSize)bc_a(call)+bc_b(call)-1u+LJ_FR2 > rootpt->framesize)
+      return 0;
+  } else {
+    for (i = 0; i < depth; i++)
+      if (bc_b(calls[i]) != 2u) return 0;
+  }
   base = 1u+LJ_FR2;
   for (i = depth; i-- > 0; )
     base += bc_a(calls[i])+1u+LJ_FR2;
