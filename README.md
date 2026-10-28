@@ -601,7 +601,7 @@ Vectors may be passed to and returned from C functions by value. FFI callbacks w
 
 ## AI usage
 
-This was developed with extensive help with Claude Opus 5 and GPT 5.6 Sol. (This release was written by a human though! 😄)
+This was developed with extensive help with Claude Opus 5, 5.5 and GPT 5.6 Sol, 6 Astra models. (This readme was written by a human though! 😄)
 
 README for LuaJIT 2.1
 ---------------------
