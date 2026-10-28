@@ -264,6 +264,7 @@ local function math_special(n, fn, a, b, c)
   return r
 end
 local function check_math_special(name, fn, a, b, c)
+  print('CASE',name)
   jit.off(math_special); local expected=math_special(12,fn,a,b,c); jit.on(math_special)
   jit.flush(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=1','-fma')
   local actual=math_special(12,fn,a,b,c)
@@ -271,6 +272,7 @@ local function check_math_special(name, fn, a, b, c)
   probe_reset(); actual=math_special(12,fn,a,b,c)
   assert(same_number(actual,expected),name..' native mismatch')
   probe_check(name)
+  return actual
 end
 jit.off(check_math_special,true)
 check_math_special('math_min_nan_left',min_builtin,0/0,1,2)
@@ -283,8 +285,14 @@ check_math_special('math_min_infinities',min_builtin,-1/0,1/0,0)
 check_math_special('math_max_infinities',max_builtin,-1/0,1/0,0)
 check_math_special('math_min_zero_order',min_builtin,-0.0,0.0,1)
 check_math_special('math_min_zero_reverse',min_builtin,0.0,-0.0,1)
-check_math_special('math_max_zero_order',max_builtin,-0.0,0.0,1)
-check_math_special('math_max_zero_reverse',max_builtin,0.0,-0.0,1)
+local max_zero_order = check_math_special('math_max_zero_order',
+                                          max_builtin,-0.0,0.0,-1)
+local max_zero_reverse = check_math_special('math_max_zero_reverse',
+                                            max_builtin,0.0,-0.0,-1)
+assert(max_zero_order == 0 and
+       1/max_zero_order == 1/max_builtin(-0.0,0.0,-1))
+assert(max_zero_reverse == 0 and
+       1/max_zero_reverse == 1/max_builtin(0.0,-0.0,-1))
 assert(1/math_special(12,min_builtin,-0.0,0.0,1)==1/
        min_builtin(-0.0,0.0,1))
 assert(1/math_special(12,min_builtin,0.0,-0.0,1)==1/
@@ -296,8 +304,10 @@ local function numeric_neg(n,x)
   return y
 end
 run_native('numeric_neg',numeric_neg,13,2147483648.25)
-assert(1/numeric_neg(1,0.0)==-math.huge)
-assert(1/numeric_neg(1,-0.0)==math.huge)
+run_native('numeric_neg_zero_positive',numeric_neg,13,0.0)
+assert(1/numeric_neg(13,0.0)==-math.huge)
+run_native('numeric_neg_zero_negative',numeric_neg,13,-0.0)
+assert(1/numeric_neg(13,-0.0)==math.huge)
 
 local function math_parameter(n,fn)
   local s=0

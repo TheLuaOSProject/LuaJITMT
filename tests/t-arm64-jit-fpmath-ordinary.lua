@@ -68,17 +68,26 @@ local function ternary(f, a, b, c)
   return y
 end
 for _, op in ipairs({{'min', min}, {'max', max}}) do
-  for _, row in ipairs({
+  local rows = {
     {1, 2, 3}, {nan, 1, 2}, {1, nan, 2}, {1, 2, nan},
     {-0.0, 0.0, 1}, {0.0, -0.0, 1}, {-inf, inf, 0},
     {2147483648.25, -2147483648.25, 9007199254740994}
-  }) do
+  }
+  if op[1] == 'max' then
+    rows[#rows+1] = {-0.0, 0.0, -1}
+    rows[#rows+1] = {0.0, -0.0, -1}
+  end
+  for _, row in ipairs(rows) do
     local name, fn, a, b, c = op[1], op[2], row[1], row[2], row[3]
     jit.off(ternary); local expected = ternary(fn, a, b, c); jit.on(ternary)
     jit.flush(); jit.opt.start('hotloop=1', 'hotexit=1000', 'maxtrace=1')
     local actual = ternary(fn, a, b, c)
     assert(same(actual, expected), name .. ' mismatch')
     if actual == 0 then assert(1/actual == 1/expected, name .. ' signed zero mismatch') end
+    if name == 'max' and c == -1 then
+      assert(actual == 0, 'max signed-zero result mismatch')
+      assert(1/actual == 1/expected, 'max signed-zero reciprocal mismatch')
+    end
   end
 end
 print('ORDINARY', 'abs/min/max', 'interpreter/JIT results match')
