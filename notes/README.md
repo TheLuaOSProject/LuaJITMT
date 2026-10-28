@@ -18,13 +18,19 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
-- Latest development: source-proven sparse Lua child snapshots pass the new
-  six-case native fixture (36 invocations and twelve child overflow exits),
-  forty accepted dead-slot removals, 88 semantic and 97 allocated negative
-  checks. Five counterfactual builds verify the new liveness and retained-map
-  boundaries. Complete matrix/main integration is pending. See the
+- Latest fully validated source checkpoint: source-proven sparse Lua child
+  snapshots at `2d335d1d`, integrated into `v2.1`. All four ARM64/arm64e
+  assertion/release profiles pass six new shapes, 36 native runs, twelve child
+  overflow exits, forty accepted dead-slot removals, 88 semantic and 97
+  allocated negatives. Five counterfactual builds verify the liveness and
+  retained-map boundaries. Both complete gates, all 26 table/FFI fixtures and
+  the combined M7 FFI suite in four profiles pass. ARM64 and signed x64 each
+  pass both 509-case corpora; x64 also passes the new ordinary sparse-child
+  fixture. Main independently passes both corpora and eight Lua contracts;
+  its ordinary executable matches the worktree's. The earlier post-GC
+  rooted-length native-witness failure remains unexplained. See the
   [sparse child evidence](arm64-jit-lua-sparse-exits-2026-10-28.md).
-- Latest fully validated source checkpoint: exact fixed numeric Lua argument
+- Preceding source checkpoint: exact fixed numeric Lua argument
   maps and parameter assignments at `43d0a9c9`, plus failure-only rooted-length
   diagnostics at `338d0344`, integrated into `v2.1`. All four ARM64/arm64e
   assertion/release profiles pass eleven shapes, 58 native runs, eighteen child
@@ -144,17 +150,18 @@ and reports that are no longer authoritative are retained in
   semantic/post-RA views. Each profile records 344 native observations and
   independent 4-positive/26-negative admission checks.
   See [`arm64-jit-i64-arguments-2026-10-26.md`](arm64-jit-i64-arguments-2026-10-26.md).
-- Latest complete umbrella validation: the fixed numeric Lua argument
-  checkpoint on 2026-10-28, frozen at `338d0344`. The complete experimental
+- Latest complete umbrella validation: the sparse Lua child checkpoint on
+  2026-10-28, frozen at `2d335d1d`. The complete experimental
   and bootstrap gates, all 26 focused table/FFI fixtures in four profiles and
   all four M7 scalar CALLXS profiles pass. ARM64 and signed x86_64 each pass
   both 509-case stock source/import corpora. The ordinary main ARM64 rebuild
-  passes both corpora and seven Lua contracts; the new argument contract has
-  eleven publications, eighteen overflow ranges and 58 exact-trace checks.
+  passes both corpora and eight Lua contracts; the new sparse-child contract
+  has six publications, twelve overflow ranges and 36 exact-trace checks.
   These ordinary checks do not establish native execution of every case.
   Main and worktree executables match byte for byte. See the
-  [argument evidence](arm64-jit-lua-arguments-2026-10-28.md), including the
-  unreproduced initial post-GC native-witness failure.
+  [sparse child evidence](arm64-jit-lua-sparse-exits-2026-10-28.md). The
+  preceding [argument evidence](arm64-jit-lua-arguments-2026-10-28.md) records
+  the unreproduced initial post-GC native-witness failure.
   The preceding compound checkpoint is in the
   [compound child-exit evidence](arm64-jit-lua-compound-exits-2026-10-27.md).
   The preceding single-operation child checkpoint is in the

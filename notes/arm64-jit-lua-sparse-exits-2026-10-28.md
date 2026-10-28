@@ -80,9 +80,42 @@ then rebuilt; all five C/Lua contracts passed. Evidence is retained in
 `counterfactuals.log`, `cf-*.log`, `sparse-strengthened.log` and the source
 copies used for each counterfactual.
 
-The complete frozen matrix and independent main integration are pending at
-this source checkpoint. The earlier rooted-length native-witness failure
-after full GC remains unexplained; this change does not claim to fix it.
+## Frozen matrix and main integration
+
+Source checkpoint `2d335d1d` passes the complete experimental and bootstrap
+gates, all 26 focused table/FFI fixtures in four profiles, and the combined
+M7 FFI suite in four profiles. Each leaf profile repeats the new 36 native
+runs, twelve child exits, forty accepted dead-slot removals, 88 semantic and
+97 allocated negatives, with the same preceding contract counts. The strict
+rooted-length native-witness tests pass on ARM64 and arm64e; the earlier
+post-full-GC failure remains unexplained and is not attributed to this fix.
+
+| Leaf contract profile | Profile hash prefix |
+| --- | --- |
+| ARM64 assertion | `0531ef374d62` |
+| arm64e assertion with BTI | `c981da4f5e87` |
+| ARM64 release | `82f35f2e4144` |
+| arm64e release with BTI | `c315e9c8d9a4` |
+
+ARM64 and signed x86_64 each pass both 509-case source and original-bytecode
+import corpora. The ordinary ARM64 build passes eight Lua contracts: leaf,
+single-child, compound, fixed arguments, sparse children, bitops, local cells
+and upvalues. Signed x64 also passes both the fixed-argument and sparse-child
+Lua companions. Stock and ordinary Lua results permit interpreter fallback;
+they are separate from the native fixture claims above.
+
+`v2.1` was fast-forwarded to the frozen checkpoint and independently rebuilt.
+Main passes both 509-case corpora and all eight ordinary Lua contracts. Main
+and worktree ordinary ARM64 assertion executables have the same SHA-256:
+`e0729ea452bd8e9be72c0389c3d3fa8d4318da44cd4c2748db7b9a098b0db54a`.
+Both pass code-signature verification, import no compiler atomic helper and
+contain none of the checked test-helper symbols. The final documentation
+commit does not alter the source used for these builds.
+
+The complete logs are `matrix.log`, `experimental.log`, `bootstrap.log`,
+`table-ffi-four-profile.log`, `*-stock-*.log`, `x64-lua-sparse-exits.log`
+and `main-verify.log` in the evidence directory above. The matrix verifies
+its frozen source and restores the ordinary assertion runtime before exit.
 
 ## Remaining work
 
@@ -91,3 +124,13 @@ proof. Exact numeric fixed arity is still required. Extra/missing arguments,
 nonnumeric arguments, branches, nested calls, tail calls, varargs and multiple
 returns need further source and frame proofs. General trace topology,
 iterators and broader FFI admission also remain short of x86_64 parity.
+
+The next argument-normalization step must distinguish the supplied CALL
+vector from the callee formal vector. `rec_call_setup` and
+`trace_arm64_lua_leaf_frame` currently require equal counts; stock
+`rec_func_setup` already fills missing formals with nil and trims maxslot to
+numparams. Each independent admission pass will need to retain every supplied
+caller argument for replay while constructing its own normalized formal
+vector. Ignored GC arguments still need the native root/lifetime proof;
+being unused does not by itself authorize them. This is a source audit and
+design direction, not implemented or native-verified normalization.
