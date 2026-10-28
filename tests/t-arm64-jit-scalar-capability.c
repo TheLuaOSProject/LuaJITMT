@@ -47,7 +47,15 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
          mprotect((char *)guarded + mapsize, pagesize, PROT_NONE) == 0);
   copy = (IRIns *)((char *)guarded + mapsize - irbytes);
   SnapEntry *map = malloc(T->nsnapmap * sizeof(*map));
-  IRRef ref, loop = 0, num = 0, knum = 0, fpmath = 0, mathguard = 0, n;
+  IRRef ref, loop = 0, num = 0, knum = 0, fpmath = 0, mathop = 0;
+  IRRef maskload = 0;
+  IRRef mathguard = 0, n;
+  int math_builtin = mathkind && strncmp(mathkind, "math_", 5) == 0;
+  int math_passthrough = mathkind &&
+    (strcmp(mathkind, "math_min_one") == 0 ||
+     strcmp(mathkind, "math_max_one") == 0);
+  int math_proof = math_builtin ||
+                   (mathkind && strcmp(mathkind, "numeric_neg") == 0);
   GCproto *pt = trace_startpt_acq(T);
   assert(copy && map);
   memcpy(copy + T->nk, T->ir + T->nk, (T->nins - T->nk) * sizeof(*copy));
@@ -76,20 +84,31 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
       loop = ref;
     if (copy[ref].o == IR_FPMATH)
       fpmath = ref;
+    if ((copy[ref].o == IR_ABS || copy[ref].o == IR_MIN ||
+         copy[ref].o == IR_MAX ||
+         (copy[ref].o == IR_NEG && irt_type(copy[ref].t) == IRT_NUM)) &&
+        !mathop)
+      mathop = ref;
     if (copy[ref].o == IR_EQ && irt_type(copy[ref].t) == IRT_FUNC &&
         copy[ref].op2 < REF_TRUE && copy[copy[ref].op2].o == IR_KGC)
       mathguard = ref;
     if ((copy[ref].o == IR_ADD || copy[ref].o == IR_SUB) &&
         irt_isnum(copy[ref].t))
       num = ref;
+    if (copy[ref].o == IR_FLOAD && copy[ref].t.irt == IRT_NUM &&
+        copy[ref].op1 == REF_NIL &&
+        (copy[ref].op2 == offsetof(GG_State, g.ksimd)/4u ||
+         copy[ref].op2 == (offsetof(GG_State, g.ksimd) + 16u)/4u))
+      maskload = ref;
   }
   for (ref = T->nk; ref < REF_TRUE; ref++)
     if (copy[ref].o == IR_KNUM) {
       knum = ref;
       break;
     }
-  assert(loop && num);
-  if (mathkind && *mathkind) assert(fpmath && mathguard);
+  assert(loop);
+  if (math_proof) assert((fpmath || mathop || math_passthrough) &&
+                         (!math_builtin || mathguard));
   /* A future consumer has not yet been certified when an earlier absent
      location is examined. Its other operand must be checked before loading. */
   {
@@ -113,47 +132,126 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
       copy[use] = T->ir[use];
     }
   }
-  copy[num].o = IR_ALOAD;
-  assert(!lj_asm_arm64_postra_admit(&v, NULL));
-  copy[num] = T->ir[num];
-  copy[num].o = IR_CALLS;
-  assert(!lj_asm_arm64_postra_admit(&v, NULL));
-  copy[num] = T->ir[num];
-  copy[loop + 1].op1 = 0;
-  assert(!lj_asm_arm64_postra_admit(&v, NULL));
-  copy[loop + 1] = T->ir[loop + 1];
-  copy[num].r = RID_GL;
-  assert(!lj_asm_arm64_postra_admit(&v, NULL));
-  copy[num] = T->ir[num];
-  copy[num].s = SPS_FIRST + 1; /* NUM needs an aligned pair. */
-  assert(!lj_asm_arm64_postra_admit(&v, NULL));
-  copy[num] = T->ir[num];
-  copy[num].op1 = num;
-  assert(!lj_asm_arm64_postra_admit(&v, NULL));
-  copy[num] = T->ir[num];
-  if (knum) {
-    copy[num].op1 = knum + 1;
+  if (num) {
+    copy[num].o = IR_ALOAD;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[num] = T->ir[num];
+    copy[num].o = IR_CALLS;
     assert(!lj_asm_arm64_postra_admit(&v, NULL));
     copy[num] = T->ir[num];
   }
-  if (mathkind && *mathkind) {
+  copy[loop + 1].op1 = 0;
+  assert(!lj_asm_arm64_postra_admit(&v, NULL));
+  copy[loop + 1] = T->ir[loop + 1];
+  if (num) {
+    copy[num].r = RID_GL;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[num] = T->ir[num];
+    copy[num].s = SPS_FIRST + 1; /* NUM needs an aligned pair. */
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[num] = T->ir[num];
+    copy[num].op1 = num;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[num] = T->ir[num];
+    if (knum) {
+      copy[num].op1 = knum + 1;
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[num] = T->ir[num];
+    }
+  }
+  if (fpmath) {
     copy[fpmath].op2 = IRFPM_LOG; /* Helper lowering is not certified. */
     assert(!lj_asm_arm64_postra_admit(&v, NULL));
     copy[fpmath] = T->ir[fpmath];
     copy[fpmath].op1 = n; /* Forward operand must fail before dereference. */
     assert(!lj_asm_arm64_postra_admit(&v, NULL));
     copy[fpmath] = T->ir[fpmath];
-    {
-      const char *wrong = "sin";
-      GCfunc *fn;
-      lua_getglobal(L, "math"); lua_getfield(L, -1, wrong);
-      assert(tvisfunc(L->top - 1)); fn = funcV(L->top - 1);
-      ir_kgc_store_rel(&copy[copy[mathguard].op2], obj2gco(fn));
+  }
+  if (math_builtin && mathguard) {
+    const char *wrong = "sin";
+    GCfunc *fn;
+    lua_getglobal(L, "math"); lua_getfield(L, -1, wrong);
+    assert(tvisfunc(L->top - 1)); fn = funcV(L->top - 1);
+    ir_kgc_store_rel(&copy[copy[mathguard].op2], obj2gco(fn));
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    ir_kgc_store_rel(&copy[copy[mathguard].op2],
+                     ir_kgc_acq(&T->ir[T->ir[mathguard].op2]));
+    lua_pop(L, 2);
+  }
+  if (mathop) {
+    IRIns saved = copy[mathop];
+    if (saved.o == IR_ABS || saved.o == IR_NEG) {
+      copy[mathop].op2 = saved.op1; /* Mask provenance must be exact. */
       assert(!lj_asm_arm64_postra_admit(&v, NULL));
-      ir_kgc_store_rel(&copy[copy[mathguard].op2],
-                       ir_kgc_acq(&T->ir[T->ir[mathguard].op2]));
-      lua_pop(L, 2);
+      copy[mathop] = saved;
+    } else {
+      copy[mathop].op1 = n; /* Forward reference must fail closed. */
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[mathop] = saved;
     }
+    copy[mathop].t.irt |= IRT_GUARD;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[mathop] = saved;
+    if (saved.o == IR_MIN || saved.o == IR_MAX) {
+      copy[mathop].r = RID_GL;
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[mathop] = saved;
+      copy[mathop].s = irt_type(saved.t) == IRT_NUM ? SPS_FIRST + 1 : SPS_LIMIT-1;
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[mathop] = saved;
+    }
+  }
+  if (maskload) {
+    IRIns saved = copy[maskload];
+    MSize slot, framecap, saved_adjust = v.spadjust;
+    uint8_t occupied[SPS_LIMIT] = {0};
+    IRRef other;
+    /* Find an aligned, otherwise free NUM spill pair within this trace's
+       certified frame so rejection specifically exercises mask placement. */
+    for (other = REF_FIRST; other < n; other++) {
+      IRIns ins = copy[other];
+      unsigned width = irt_type(ins.t) == IRT_NUM ? 2u : 1u;
+      if (ra_hasspill(ins.s))
+        for (slot = ins.s; slot < (MSize)ins.s + width && slot < SPS_LIMIT;
+             slot++)
+          occupied[slot] = 1;
+    }
+    assert(saved.r == RID_INIT && !ra_hasspill(saved.s) && saved.s == 0);
+    copy[maskload].r = RID_D0;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[maskload] = saved;
+    for (slot = (SPS_FIRST + 1u) & ~1u;
+         slot + 1u < SPS_LIMIT; slot += 2u)
+      if (!occupied[slot] && !occupied[slot + 1u]) break;
+    assert(slot + 1u < SPS_LIMIT);
+    /* Grow only the test view's legal frame so this is a valid, free NUM
+       spill location; the mask-specific gate must reject it before layout. */
+    framecap = ((slot + 3u) / 4u) * 4u + SPS_FIXED;
+    assert(framecap >= slot + 2u && framecap <= SPS_LIMIT);
+    v.spadjust = sps_scale(framecap - SPS_FIXED);
+    copy[maskload].s = (uint8_t)slot;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[maskload] = saved;
+    v.spadjust = saved_adjust;
+  }
+  if (fpmath) {
+    copy[fpmath].op2 = IRFPM_LOG; /* Helper lowering is not certified. */
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[fpmath] = T->ir[fpmath];
+    copy[fpmath].op1 = n; /* Forward operand must fail before dereference. */
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[fpmath] = T->ir[fpmath];
+  }
+  if (math_builtin && mathguard) {
+    const char *wrong = "sin";
+    GCfunc *fn;
+    lua_getglobal(L, "math"); lua_getfield(L, -1, wrong);
+    assert(tvisfunc(L->top - 1)); fn = funcV(L->top - 1);
+    ir_kgc_store_rel(&copy[copy[mathguard].op2], obj2gco(fn));
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    ir_kgc_store_rel(&copy[copy[mathguard].op2],
+                     ir_kgc_acq(&T->ir[T->ir[mathguard].op2]));
+    lua_pop(L, 2);
   }
 
   {
@@ -175,19 +273,21 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
         copy[integer] = T->ir[integer];
       }
     }
-    copy[num].r = RID_SINK;
-    assert(!lj_asm_arm64_postra_admit(&v, NULL));
-    copy[num] = T->ir[num];
-    copy[num].r = RID_SUNK;
-    assert(!lj_asm_arm64_postra_admit(&v, NULL));
-    copy[num] = T->ir[num];
-    copy[num].r = RID_NONE | RID_GL;
-    assert(!lj_asm_arm64_postra_admit(&v, NULL));
-    copy[num] = T->ir[num];
-    copy[num].r = RID_INIT;
-    copy[num].s = 0;
-    assert(!lj_asm_arm64_postra_admit(&v, NULL));
-    copy[num] = T->ir[num];
+    if (num) {
+      copy[num].r = RID_SINK;
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[num] = T->ir[num];
+      copy[num].r = RID_SUNK;
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[num] = T->ir[num];
+      copy[num].r = RID_NONE | RID_GL;
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[num] = T->ir[num];
+      copy[num].r = RID_INIT;
+      copy[num].s = 0;
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[num] = T->ir[num];
+    }
     if (integer) {
       copy[integer].s = 1;
       assert(!lj_asm_arm64_postra_admit(&v, NULL));
@@ -260,51 +360,80 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
     semantic.sinktags = 0;
     la_store32_rel((uint32_t *)pc, T->startins);
     assert(lj_asm_arm64_ir_admit(fake, &semantic, &reject));
-    copy[num].r = RID_SINK;
-    copy[num].s = 1;
-    assert(lj_asm_arm64_ir_admit(fake, &semantic, &reject));
-    copy[num] = T->ir[num];
+    if (num) {
+      copy[num].r = RID_SINK;
+      copy[num].s = 1;
+      assert(lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[num] = T->ir[num];
+    }
     copy[REF_BASE].r = RID_GL;
     assert(lj_asm_arm64_ir_admit(fake, &semantic, &reject));
     copy[REF_BASE] = T->ir[REF_BASE];
     copy[loop + 1].op1 = 0;
     assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
     copy[loop + 1] = T->ir[loop + 1];
-    copy[num].op1 = num;
-    assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
-    copy[num] = T->ir[num];
-    copy[num].o = IR_ALOAD;
-    assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
-    copy[num] = T->ir[num];
-    copy[num].o = IR_CALLS;
-    assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
-    copy[num] = T->ir[num];
-    copy[num].t.irt |= IRT_GUARD;
-    assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
-    copy[num] = T->ir[num];
-    if (knum) {
-      copy[num].op1 = knum + 1;
+    if (num) {
+      copy[num].op1 = num;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[num] = T->ir[num];
+      copy[num].o = IR_ALOAD;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[num] = T->ir[num];
+      copy[num].o = IR_CALLS;
       assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
       copy[num] = T->ir[num];
     }
-    if (mathkind && *mathkind) {
+    if (num) {
+      copy[num].t.irt |= IRT_GUARD;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[num] = T->ir[num];
+      if (knum) {
+        copy[num].op1 = knum + 1;
+        assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+        copy[num] = T->ir[num];
+      }
+    }
+    if (fpmath) {
       copy[fpmath].op2 = IRFPM_LOG;
       assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
       copy[fpmath] = T->ir[fpmath];
       copy[fpmath].op1 = n;
       assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
       copy[fpmath] = T->ir[fpmath];
-      {
-        const char *wrong = "sin";
-        GCfunc *fn;
-        lua_getglobal(L, "math"); lua_getfield(L, -1, wrong);
-        assert(tvisfunc(L->top - 1)); fn = funcV(L->top - 1);
-        ir_kgc_store_rel(&copy[copy[mathguard].op2], obj2gco(fn));
+    }
+    if (math_builtin && mathguard) {
+      const char *wrong = "sin";
+      GCfunc *fn;
+      lua_getglobal(L, "math"); lua_getfield(L, -1, wrong);
+      assert(tvisfunc(L->top - 1)); fn = funcV(L->top - 1);
+      ir_kgc_store_rel(&copy[copy[mathguard].op2], obj2gco(fn));
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      ir_kgc_store_rel(&copy[copy[mathguard].op2],
+                       ir_kgc_acq(&T->ir[T->ir[mathguard].op2]));
+      lua_pop(L, 2);
+    }
+    if (mathop) {
+      IRIns saved = copy[mathop];
+      if (saved.o == IR_ABS || saved.o == IR_NEG) {
+        copy[mathop].op2 = saved.op1;
         assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
-        ir_kgc_store_rel(&copy[copy[mathguard].op2],
-                         ir_kgc_acq(&T->ir[T->ir[mathguard].op2]));
-        lua_pop(L, 2);
+        copy[mathop] = saved;
+      } else {
+        copy[mathop].op1 = n;
+        assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+        copy[mathop] = saved;
       }
+      copy[mathop].t.irt |= IRT_GUARD;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[mathop] = saved;
+    }
+    if (fpmath) {
+      copy[fpmath].op2 = IRFPM_LOG;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[fpmath] = T->ir[fpmath];
+      copy[fpmath].op1 = n;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[fpmath] = T->ir[fpmath];
     }
     fake->framedepth = 1;
     assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
@@ -343,7 +472,8 @@ static int reset(lua_State *L)
 static int check(lua_State *L)
 {
   const char *mathkind = lua_gettop(L) ? lua_tostring(L, 1) : NULL;
-  if (mathkind && strncmp(mathkind, "math_", 5) != 0) mathkind = NULL;
+  if (mathkind && strncmp(mathkind, "math_", 5) != 0 &&
+      strcmp(mathkind, "numeric_neg") != 0) mathkind = NULL;
   GCtrace *T = traceref_safe(L2J(L), 1);
   IRRef ref;
   unsigned ns = 0, nnum = 0, ntab = 0, ren = 0;

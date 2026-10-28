@@ -186,21 +186,119 @@ local function math_sqrt_special(n,x)
   while i<n do s=s+sqrt_builtin(x-i*.25); i=i+1 end
   return s
 end
-local function run_native_special(name,x)
-  jit.off(math_sqrt_special)
-  local expected=math_sqrt_special(12,x)
-  jit.on(math_sqrt_special)
+local function run_native_special(name,x,op)
+  op=op or sqrt_builtin
+  local function special_loop(n,value)
+    local i,s=0,0
+    while i<n do s=s+op(value-i*.25); i=i+1 end
+    return s
+  end
+  jit.off(special_loop)
+  local expected=special_loop(12,x)
+  jit.on(special_loop)
   jit.flush(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=1','-fma')
-  local result=math_sqrt_special(12,x)
+  local result=special_loop(12,x)
   assert(same_number(result,expected),name..' interpreter mismatch')
   probe_reset()
-  result=math_sqrt_special(12,x)
+  result=special_loop(12,x)
   assert(same_number(result,expected),name..' native mismatch')
   probe_check(name)
 end
 jit.off(run_native_special,true)
 run_native_special('math_sqrt_negative',-1)
 run_native_special('math_sqrt_infinity',1/0)
+run_native_special('math_sqrt_nan',0/0)
+
+local abs_builtin, min_builtin, max_builtin = math.abs, math.min, math.max
+local function math_abs_guard(n,x)
+  local i,s=0,0
+  while i<n do s=s+abs_builtin(x-i*.25); i=i+1 end
+  return s
+end
+run_native('math_abs',math_abs_guard,12,-2.75)
+run_native_special('math_abs_negative',-2147483648.25,abs_builtin)
+run_native_special('math_abs_int_min',-2147483648,abs_builtin)
+local function math_minmax_guard(n,a,b,c)
+  local i,s=0,0
+  while i<n do s=s+min_builtin(a+i*.25,b-i*.125,c+i*.5); i=i+1 end
+  return s
+end
+run_native('math_min',math_minmax_guard,12,-3.25,4.5,8.75)
+local function math_min_int(n,a,b,c)
+  local i,s=0,0
+  while i<n do s=s+min_builtin(a+i,b-i,c+2*i); i=i+1 end
+  return s
+end
+run_native('math_min_int',math_min_int,12,-30,45,80)
+local function math_min_one(n,x)
+  local i,s=0,0
+  while i<n do s=s+min_builtin(x+i*.25); i=i+1 end
+  return s
+end
+run_native('math_min_one',math_min_one,12,-3.25)
+local function math_max_guard(n,a,b,c)
+  local i,s=0,0
+  while i<n do s=s+max_builtin(a+i*.25,b-i*.125,c+i*.5); i=i+1 end
+  return s
+end
+run_native('math_max',math_max_guard,12,-3.25,4.5,8.75)
+local function math_max_int(n,a,b,c)
+  local i,s=0,0
+  while i<n do s=s+max_builtin(a+i,b-i,c+2*i); i=i+1 end
+  return s
+end
+run_native('math_max_int',math_max_int,12,-30,45,80)
+local function math_max_one(n,x)
+  local i,s=0,0
+  while i<n do s=s+max_builtin(x+i*.25); i=i+1 end
+  return s
+end
+run_native('math_max_one',math_max_one,12,-3.25)
+
+-- Scalar math operations preserve the VM's operand-order behavior for NaNs
+-- and signed zero. Each special input still traverses a hot loop and checks
+-- the JIT result against the interpreter result.
+local function math_special(n, fn, a, b, c)
+  local i,r=0,0
+  while i<n do r=fn(a,b,c); i=i+1 end
+  return r
+end
+local function check_math_special(name, fn, a, b, c)
+  jit.off(math_special); local expected=math_special(12,fn,a,b,c); jit.on(math_special)
+  jit.flush(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=1','-fma')
+  local actual=math_special(12,fn,a,b,c)
+  assert(same_number(actual,expected),name..' interpreter mismatch')
+  probe_reset(); actual=math_special(12,fn,a,b,c)
+  assert(same_number(actual,expected),name..' native mismatch')
+  probe_check(name)
+end
+jit.off(check_math_special,true)
+check_math_special('math_min_nan_left',min_builtin,0/0,1,2)
+check_math_special('math_min_nan_middle',min_builtin,1,0/0,2)
+check_math_special('math_min_nan_right',min_builtin,1,2,0/0)
+check_math_special('math_max_nan_left',max_builtin,0/0,1,2)
+check_math_special('math_max_nan_middle',max_builtin,1,0/0,2)
+check_math_special('math_max_nan_right',max_builtin,1,2,0/0)
+check_math_special('math_min_infinities',min_builtin,-1/0,1/0,0)
+check_math_special('math_max_infinities',max_builtin,-1/0,1/0,0)
+check_math_special('math_min_zero_order',min_builtin,-0.0,0.0,1)
+check_math_special('math_min_zero_reverse',min_builtin,0.0,-0.0,1)
+check_math_special('math_max_zero_order',max_builtin,-0.0,0.0,1)
+check_math_special('math_max_zero_reverse',max_builtin,0.0,-0.0,1)
+assert(1/math_special(12,min_builtin,-0.0,0.0,1)==1/
+       min_builtin(-0.0,0.0,1))
+assert(1/math_special(12,min_builtin,0.0,-0.0,1)==1/
+       min_builtin(0.0,-0.0,1))
+
+local function numeric_neg(n,x)
+  local i,y=0,x
+  while i<n do y=-y; i=i+1 end
+  return y
+end
+run_native('numeric_neg',numeric_neg,13,2147483648.25)
+assert(1/numeric_neg(1,0.0)==-math.huge)
+assert(1/numeric_neg(1,-0.0)==math.huge)
+
 local function math_parameter(n,fn)
   local s=0
   for i=1,n do s=s+fn(i+.25) end
@@ -213,6 +311,15 @@ local function math_mixed(n)
   return s
 end
 run('math_mixed',math_mixed,20)
+local function math_four(n)
+  local s=.5
+  for i=1,n do
+    local x=i+.25
+    s=s+floor_builtin(x)+sqrt_builtin(i)+abs_builtin(-x)+min_builtin(x,2)
+  end
+  return s
+end
+run_native('math_four',math_four,20)
 
 
 

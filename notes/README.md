@@ -41,6 +41,17 @@ and reports that are no longer authoritative are retained in
   Main independently passes both corpora and ten ordinary Lua contracts;
   its executable matches the worktree's. See the
   [terminal return evidence](arm64-jit-lua-return-exits-2026-10-28.md).
+- Integrated scalar-math slice: scalar `math.floor`, `math.ceil` and
+  `math.sqrt` calls lower to native ARM64 `IR_FPMATH`; a focused isolated
+  follow-up adds native ABS,
+  min/max, and numeric NEG under independent semantic and post-RA proofs.
+  Captured and parameter-passed builtins, fixed-arity min/max (including its
+  one-argument case), edge semantics, malformed-proof negatives and the
+  earlier guarded floor exit/GC evidence are recorded separately. Both slices
+  pass their native fixtures in all four arm64/arm64e
+  assertion/release profiles; only the ABS/min/max/NEG follow-up remains
+  isolated pending
+  integration; see [scalar FPMATH evidence](arm64-jit-fpmath-2026-10-28.md).
 - Preceding source checkpoint: normalized fixed Lua arguments at `31e865c0`,
   integrated into `v2.1`. Four ARM64/arm64e assertion/release profiles each
   pass 70 shapes, 504 native invocations, 112 child exits, 70 identity exits,

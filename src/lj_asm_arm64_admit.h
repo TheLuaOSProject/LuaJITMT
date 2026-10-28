@@ -7013,7 +7013,9 @@ static int arm64_scalar_builtin_ffid(uint32_t ffid)
 {
   return ffid == FF_rawset || lj_ff_is_bit_scalar(ffid) ||
          ffid == FF_math_floor || ffid == FF_math_ceil ||
-         ffid == FF_math_sqrt || ffid == FF_string_byte;
+         ffid == FF_math_sqrt || ffid == FF_math_abs ||
+         ffid == FF_math_min || ffid == FF_math_max ||
+         ffid == FF_string_byte;
 }
 
 /* Only these math recorders lower to pure ARM64 FP instructions. Other
@@ -7021,6 +7023,35 @@ static int arm64_scalar_builtin_ffid(uint32_t ffid)
 static int arm64_scalar_fpmath(uint32_t op)
 {
   return op == IRFPM_FLOOR || op == IRFPM_CEIL || op == IRFPM_SQRT;
+}
+
+/* ABS and numeric NEG carry exact aligned global SIMD masks in op2. */
+static int arm64_scalar_ksimd_fload(IRIns ir, unsigned index)
+{
+  size_t offset = offsetof(GG_State, g.ksimd) + index*16u;
+  LJ_STATIC_ASSERT((offsetof(GG_State, g.ksimd) & 15u) == 0);
+  return index < LJ_KSIMD__MAX && ir.o == IR_FLOAD &&
+         ir.t.irt == IRT_NUM && ir.op1 == REF_NIL && ir.op2 == offset/4u;
+}
+
+static int arm64_scalar_ksimd_ir_ref(const GCtrace *T, IRRef value,
+                                    IRRef before, unsigned index)
+{
+  return value >= REF_FIRST && value < before &&
+         arm64_scalar_ksimd_fload(T->ir[value], index);
+}
+
+static int arm64_string_byte_xload_ir(const GCtrace *T, IRRef ref)
+{
+  const IRIns *load, *ptr;
+  if (ref < REF_FIRST || ref >= T->nins) return 0;
+  load = &T->ir[ref];
+  if (load->o != IR_XLOAD || load->t.irt != IRT_U8 ||
+      load->op2 != IRXLOAD_READONLY || load->op1 < REF_FIRST ||
+      load->op1 >= ref) return 0;
+  ptr = &T->ir[load->op1];
+  return ptr->o == IR_STRREF && ptr->t.irt == IRT_PGC &&
+         arm64_string_byte_bounds_ir(T, load->op1, ptr->op1, ptr->op2);
 }
 
 /* Recorder-side scalar provenance. Deliberately independent of the immutable
@@ -7080,8 +7111,7 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
     return ir->t.irt == IRT_PGC &&
       arm64_string_byte_bounds_ir(T, value, ir->op1, ir->op2);
   if (type == IRT_U8 && ir->o == IR_XLOAD)
-    return ir->t.irt == IRT_U8 && ir->op2 == IRXLOAD_READONLY &&
-      arm64_scalar_ir_ref(T, ir->op1, value, IRT_PGC);
+    return arm64_string_byte_xload_ir(T, value);
   switch ((IROp)ir->o) {
   case IR_SLOAD:
   case IR_VLOAD:
@@ -7092,6 +7122,9 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
   case IR_SUB:
   case IR_MUL:
   case IR_DIV:
+  case IR_ABS:
+  case IR_MIN:
+  case IR_MAX:
   case IR_FPMATH:
   case IR_CONV:
   case IR_BNOT: case IR_BSWAP:
@@ -8793,13 +8826,6 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
           ir->op2 > LJ_MAX_HBITS)
         goto bad_type;
       break;
-    case IR_FLOAD:
-      /* String length is immutable and the exact GCstr remains rooted by its
-      ** guarded/rooted source or proto constant through the native gate. */
-      if (type != IRT_INT || flags || ir->op2 != IRFL_STR_LEN ||
-          !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_STR))
-        goto bad_operand;
-      break;
     case IR_STRREF:
       if (type != IRT_PGC || flags ||
           !arm64_string_byte_bounds_ir(T, ref, ir->op1, ir->op2))
@@ -8807,7 +8833,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       break;
     case IR_XLOAD:
       if (type != IRT_U8 || flags || ir->op2 != IRXLOAD_READONLY ||
-          !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_PGC))
+          !arm64_string_byte_xload_ir(T, ref))
         goto bad_operand;
       break;
     case IR_TMPREF:
@@ -8891,12 +8917,36 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
           !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_NUM))
         goto bad_operand;
       break;
+    case IR_FLOAD:
+      if (flags ||
+          !((type == IRT_NUM &&
+             (arm64_scalar_ksimd_fload(*ir, 0) ||
+              arm64_scalar_ksimd_fload(*ir, 1))) ||
+            (type == IRT_INT && ir->op2 == IRFL_STR_LEN &&
+             arm64_scalar_ir_ref(T, ir->op1, ref, IRT_STR))))
+        goto bad_operand;
+      break;
+    case IR_ABS:
+      if (type != IRT_NUM || flags ||
+          !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_NUM) ||
+          !arm64_scalar_ksimd_ir_ref(T, ir->op2, ref, 0))
+        goto bad_operand;
+      break;
+    case IR_MIN: case IR_MAX:
+      if ((type != IRT_INT && type != IRT_NUM) || flags)
+        goto bad_type;
+      binary = 1;
+      break;
     case IR_BNOT: case IR_BSWAP:
       if (type != IRT_INT || (flags & ~IRT_ISPHI) || ir->op2 ||
           !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_INT))
         goto bad_operand;
       break;
     case IR_NEG:
+      if (type == IRT_NUM && (flags & ~IRT_ISPHI) == 0 &&
+          arm64_scalar_ir_ref(T, ir->op1, ref, IRT_NUM) &&
+          arm64_scalar_ksimd_ir_ref(T, ir->op2, ref, 1))
+        break;
       /* ARM64 unifies ROL with ROR of the negated 32-bit count. */
       if (type != IRT_INT || (flags & ~IRT_ISPHI) ||
           ir->op2 != ir->op1 ||
@@ -9247,11 +9297,27 @@ static int arm64_scalar_postra_kref(const LJArm64PostRAView *v, IRRef target,
   }
   return 0;
 }
+static int arm64_scalar_ksimd_postra_fload(IRIns p, unsigned index)
+{
+  return index < LJ_KSIMD__MAX && p.o == IR_FLOAD &&
+         p.t.irt == IRT_NUM && p.op1 == REF_NIL &&
+         p.op2 == (offsetof(GG_State, g.ksimd) + index*16u)/4u;
+}
+
+static int arm64_scalar_ksimd_postra_ref(const LJArm64PostRAView *v,
+                                         IRRef value, IRRef before,
+                                         unsigned index)
+{
+  return value >= REF_FIRST && value < before &&
+         arm64_scalar_ksimd_postra_fload(ir_load_acq(&v->ir[value]), index);
+}
 static int arm64_scalar_postra_value(IRIns p)
 {
   switch ((IROp)p.o) {
   case IR_FLOAD:
-    return p.t.irt == IRT_INT && p.op2 == IRFL_STR_LEN;
+    return (p.t.irt == IRT_INT && p.op2 == IRFL_STR_LEN) ||
+           arm64_scalar_ksimd_postra_fload(p, 0) ||
+           arm64_scalar_ksimd_postra_fload(p, 1);
   case IR_STRREF:
     return p.t.irt == IRT_PGC;
   case IR_XLOAD:
@@ -9259,8 +9325,15 @@ static int arm64_scalar_postra_value(IRIns p)
   case IR_BNOT: case IR_BSWAP:
   case IR_BAND: case IR_BOR: case IR_BXOR:
   case IR_BSHL: case IR_BSHR: case IR_BSAR: case IR_BROR:
-  case IR_NEG: case IR_TOBIT:
+  case IR_TOBIT:
     return (p.t.irt & ~IRT_ISPHI) == IRT_INT;
+  case IR_NEG:
+    return (p.t.irt & ~IRT_ISPHI) == IRT_INT ||
+           (p.t.irt & ~IRT_ISPHI) == IRT_NUM;
+  case IR_ABS:
+    return p.t.irt == IRT_NUM;
+  case IR_MIN: case IR_MAX:
+    return p.t.irt == IRT_INT || p.t.irt == IRT_NUM;
   case IR_SLOAD:
   case IR_ADDOV:
   case IR_SUBOV:
@@ -9717,6 +9790,21 @@ static int arm64_scalar_postra_nolocation(const LJArm64PostRAView *v,
 {
   IRIns source = ir_load_acq(&v->ir[value]);
   IRRef ref;
+  if (arm64_scalar_ksimd_postra_fload(source, 0) ||
+      arm64_scalar_ksimd_postra_fload(source, 1)) {
+    unsigned index = arm64_scalar_ksimd_postra_fload(source, 0) ? 0 : 1;
+    if (source.r != RID_INIT || ra_hasspill(source.s) || source.s != 0)
+      return 0;
+    for (ref = value + 1; ref < end; ref++) {
+      IRIns use = ir_load_acq(&v->ir[ref]);
+      if (use.op1 == value || use.op2 == value) {
+        if ((index == 0 && (use.o != IR_ABS || use.op2 != value)) ||
+            (index == 1 && (use.o != IR_NEG || use.op2 != value)))
+          return 0;
+      }
+    }
+    return 1;
+  }
   if (source.r != RID_INIT &&
       !(ra_hashint(source.r) &&
         arm64_scalar_postra_register(ra_gethint(source.r),
@@ -11311,10 +11399,6 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
           p.op2 > LJ_MAX_HBITS)
         return 0;
       break;
-    case IR_FLOAD:
-      if (p.t.irt != IRT_INT || p.op2 != IRFL_STR_LEN ||
-          !arm64_scalar_postra_ref(v, p.op1, ref, IRT_STR)) return 0;
-      break;
     case IR_STRREF:
       if (p.t.irt != IRT_PGC ||
           !arm64_string_byte_bounds_postra(v, ref, p.op1, p.op2))
@@ -11419,12 +11503,37 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
           !arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM))
         return 0;
       break;
+    case IR_FLOAD:
+      if (arm64_scalar_ksimd_postra_fload(p, 0) ||
+          arm64_scalar_ksimd_postra_fload(p, 1)) {
+        if (p.r != RID_INIT || ra_hasspill(p.s) || p.s != 0)
+          return 0;
+      } else if (!(p.t.irt == IRT_INT && p.op2 == IRFL_STR_LEN &&
+                   arm64_scalar_postra_ref(v, p.op1, ref, IRT_STR))) {
+        return 0;
+      }
+      break;
+    case IR_ABS:
+      if (p.t.irt != IRT_NUM ||
+          !arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM) ||
+          !arm64_scalar_ksimd_postra_ref(v, p.op2, ref, 0))
+        return 0;
+      break;
+    case IR_MIN: case IR_MAX:
+      if ((type != IRT_INT && type != IRT_NUM) || flags)
+        return 0;
+      binary = 1;
+      break;
     case IR_BNOT: case IR_BSWAP:
       if (type != IRT_INT || (flags & ~IRT_ISPHI) || p.op2 ||
           !arm64_scalar_postra_ref(v, p.op1, ref, IRT_INT))
         return 0;
       break;
     case IR_NEG:
+      if (type == IRT_NUM && (flags & ~IRT_ISPHI) == 0 &&
+          arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM) &&
+          arm64_scalar_ksimd_postra_ref(v, p.op2, ref, 1))
+        break;
       if (type != IRT_INT || (flags & ~IRT_ISPHI) || p.op2 != p.op1 ||
           !arm64_scalar_postra_ref(v, p.op1, ref, IRT_INT))
         return 0;
