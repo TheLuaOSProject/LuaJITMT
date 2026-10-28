@@ -11866,13 +11866,71 @@ void lj_trace_abort_owner_before_park(lua_State *L)
 /* -- Event handling ------------------------------------------------------ */
 
 #if LJ_TARGET_ARM64
+static int lj_trace_arm64_lua_leaf_range(const GCproto *pt,
+                                         const BCIns *words,
+                                         const MSize *next, MSize first,
+                                         MSize join, MSize size,
+                                         uint8_t *defined)
+{
+  MSize pos = first, steps = 0;
+  while (pos != join && steps++ < size) {
+    BCIns ins = words[pos];
+    BCOp op = bc_op(ins);
+    BCReg a = bc_a(ins), b = bc_b(ins), c = bc_c(ins);
+    MSize kn = UINT32_MAX;
+    if (next[pos] == UINT32_MAX || next[pos] <= pos || next[pos] > join)
+      return 0;
+    if (op == BC_JMP) {
+      if (a > pt->framesize) return 0;
+      pos = next[pos]; continue;
+    }
+    if (a >= pt->framesize || (a < pt->numparams && op != BC_CSET))
+      return 0;
+    if (op == BC_CGET || op == BC_MOV || op == BC_CSET) {
+      BCReg from = bc_d(ins);
+      if (from >= pt->framesize || !defined[from] ||
+          (op == BC_CSET && !defined[a])) return 0;
+    } else if (op == BC_KSHORT) {
+      /* Literal */
+    } else if (op == BC_KPRI) {
+      if (bc_d(ins) > 2u) return 0;
+    } else if (op == BC_KNUM) {
+      kn = bc_d(ins);
+    } else if (op == BC_ADDVV || op == BC_SUBVV || op == BC_MULVV ||
+               op == BC_DIVVV) {
+      if (b >= pt->framesize || c >= pt->framesize ||
+          !defined[b] || !defined[c]) return 0;
+    } else if (op == BC_ADDVN || op == BC_SUBVN || op == BC_MULVN ||
+               op == BC_DIVVN || op == BC_ADDNV || op == BC_SUBNV ||
+               op == BC_MULNV || op == BC_DIVNV) {
+      if (b >= pt->framesize || !defined[b]) return 0;
+      kn = c;
+    } else {
+      return 0;
+    }
+    if (kn != UINT32_MAX) {
+      TValue value;
+      if (kn >= pt->sizekn) return 0;
+      proto_knumtv_load_acq(&value, pt, kn);
+      if (!tvisnumber(&value)) return 0;
+    }
+    defined[a] = 1;
+    pos = next[pos];
+  }
+  return pos == join;
+}
+
 int lj_trace_arm64_lua_leaf(const GCfunc *fn)
 {
   const GCproto *pt;
   const BCIns *bc;
   BCIns words[UINT8_MAX+1u];
   uint8_t defined[UINT8_MAX+1u] = { 0 };
-  MSize pos, size, frame;
+  MSize pos, size, frame, cmp_pos = UINT32_MAX, cond_jump = UINT32_MAX;
+  MSize first_arm = 0, second_arm = 0, join = UINT32_MAX;
+  MSize next[UINT8_MAX+1u];
+  uint8_t first_reach[UINT8_MAX+1u] = {0};
+  uint8_t second_reach[UINT8_MAX+1u] = {0};
   if (!fn || !isluafunc(fn)) return 0;
   pt = funcproto(fn);
   if (!checkptrGC(obj2gco((GCproto *)pt)) ||
@@ -11887,19 +11945,92 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
   memset(defined, 1, pt->numparams);
   for (pos = 0; pos < size; pos++)
     words[pos] = (BCIns)la_load32_acq((const uint32_t *)&bc[pos]);
+  for (pos = 0; pos < size; pos++) next[pos] = UINT32_MAX;
   if (words[0] != BCINS_AD(BC_FUNCF, frame, 0) &&
       !(bc_op(words[0]) == BC_JFUNCF && bc_a(words[0]) == frame &&
         bc_d(words[0]) != 0 &&
         proto_jit_startins_acq(pt, bc) == BCINS_AD(BC_FUNCF, frame, 0)))
     return 0;
+  for (pos = 1; pos+1u < size; pos++) {
+    BCOp op = bc_op(words[pos]);
+    if (op >= BC_ISLT && op <= BC_ISGT) {
+      if (cmp_pos != UINT32_MAX) return 0;
+      cmp_pos = pos;
+    }
+  }
+  if (cmp_pos != UINT32_MAX) {
+    ptrdiff_t target;
+    cond_jump = cmp_pos+1u;
+    if (cond_jump >= size || cmp_pos+2u >= size ||
+        bc_op(words[cond_jump]) != BC_JMP ||
+        bc_a(words[cond_jump]) > frame) return 0;
+    target = (ptrdiff_t)cond_jump+1+bc_j(words[cond_jump]);
+    if (target <= (ptrdiff_t)(cmp_pos+2u) || target >= (ptrdiff_t)size)
+      return 0;
+    first_arm = cmp_pos+2u; second_arm = (MSize)target;
+  } else {
+    for (pos = 1; pos+1u < size; pos++)
+      if (bc_op(words[pos]) == BC_JMP) return 0;
+  }
+  for (pos = 1; pos+1u < size; pos++) {
+    BCOp op = bc_op(words[pos]);
+    ptrdiff_t target;
+    if (pos == cmp_pos || pos == cond_jump) continue;
+    if (op == BC_JMP) {
+      target = (ptrdiff_t)pos+1+bc_j(words[pos]);
+      if (target <= (ptrdiff_t)pos || target >= (ptrdiff_t)size ||
+          bc_a(words[pos]) > frame) return 0;
+      next[pos] = (MSize)target;
+    } else if (op >= BC_ISLT && op <= BC_ISGT) return 0;
+    else next[pos] = pos+1u;
+  }
+  if (cmp_pos != UINT32_MAX) {
+    MSize p;
+    first_reach[first_arm] = 1;
+    second_reach[second_arm] = 1;
+    for (p = first_arm; p < size; p++) {
+      if (next[p] != UINT32_MAX) {
+        if (first_reach[p]) first_reach[next[p]] = 1;
+        if (second_reach[p]) second_reach[next[p]] = 1;
+      }
+    }
+    for (p = first_arm; p < size; p++)
+      if (first_reach[p] && second_reach[p]) { join = p; break; }
+    if (join == UINT32_MAX || join <= second_arm) return 0;
+    for (p = first_arm; p < join; p++)
+      if (first_reach[p] == second_reach[p] || next[p] == UINT32_MAX ||
+          next[p] > join) return 0;
+  }
   for (pos = 1; pos < size; pos++) {
     BCIns ins = words[pos];
     BCOp op = bc_op(ins);
     BCReg a = bc_a(ins), b = bc_b(ins), c = bc_c(ins);
     MSize kn = UINT32_MAX;
-    if (a >= frame) return 0;
     if (pos+1u == size) {
+      if (a >= frame) return 0;
       if (op != BC_RET1 || bc_d(ins) != 2 || !defined[a]) return 0;
+    } else if (op >= BC_ISLT && op <= BC_ISGT) {
+      uint8_t first_defined[UINT8_MAX+1u], second_defined[UINT8_MAX+1u];
+      if (bc_a(ins) >= frame ||
+          bc_d(ins) >= frame || !defined[bc_a(ins)] ||
+          !defined[bc_d(ins)])
+	return 0;
+      memcpy(first_defined, defined, frame);
+      memcpy(second_defined, defined, frame);
+      if (!lj_trace_arm64_lua_leaf_range(pt, words, next, first_arm, join,
+                                          size, first_defined) ||
+          !lj_trace_arm64_lua_leaf_range(pt, words, next, second_arm, join,
+                                          size, second_defined)) return 0;
+      for (MSize reg = 0; reg < frame; reg++)
+        defined[reg] = first_defined[reg] && second_defined[reg];
+      pos = join-1u;
+      continue;
+    } else if (op == BC_JMP) {
+      if (pos != cond_jump)
+        return 0;
+      continue;
+    } else if (a >= frame) {
+	return 0;
     } else if (a < pt->numparams && op != BC_CSET) {
       /* Parameter assignments use the fork's cell-aware CSET. Arithmetic
       ** and copies produce temporaries before that assignment. */

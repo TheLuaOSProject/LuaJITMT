@@ -72,6 +72,7 @@ jit.off(checked, true)
 
 local function run_shape(shape)
   local leaf, run, oracle, oracle_run = install(shape)
+  local payload = shape.payload
   jit.flush()
   jit.on()
   jit.opt.start('hotloop=1', 'hotexit=1000', 'maxtrace=64')
@@ -87,21 +88,22 @@ local function run_shape(shape)
     if trace then break end
   end
   assert(trace, shape.name..': no self-linked JFORL after 8 cold calls')
+  if shape.name == 'comparison-nan' then payload = 0/0 end
 
   local reuses = 0
-  checked(run,leaf,oracle,oracle_run,shape.payload,shape.initial,trace,
+  checked(run,leaf,oracle,oracle_run,payload,shape.initial,trace,
           9,40,shape.name..' normal')
   reuses = reuses+1
   for _,range in ipairs(shape.ranges or {}) do
-    checked(run,leaf,oracle,oracle_run,shape.payload,shape.initial,trace,
+    checked(run,leaf,oracle,oracle_run,payload,shape.initial,trace,
             range[1],range[2],shape.name..' numeric range')
     reuses = reuses+1
-    checked(run,leaf,oracle,oracle_run,shape.payload,shape.initial,trace,
+    checked(run,leaf,oracle,oracle_run,payload,shape.initial,trace,
             9,40,shape.name..' post-range')
     reuses = reuses+1
   end
   collectgarbage('collect')
-  checked(run,leaf,oracle,oracle_run,shape.payload,shape.initial,trace,
+  checked(run,leaf,oracle,oracle_run,payload,shape.initial,trace,
           1,24,shape.name..' post-GC')
   reuses = reuses+1
   return attempts,#(shape.ranges or {}),reuses
@@ -211,7 +213,50 @@ local function main()
     name='numeric-mul-overflow', params='a', body='return a*3', args='i',
     payload=nil, initial=nil,
     ranges={{715827882,715827883},{715827881,715827883}}}
-
+  cases[#cases+1] = {
+    name='comparison-branch', params='a',
+    body='local value=7; if a < 0 then value=1 else value=2 end; return value',
+    args='i', payload=nil, initial=nil, ranges={{-4,4}}}
+  cases[#cases+1] = {
+    name='comparison-le', params='a',
+    body='local value=7; if a <= 0 then value=1 else value=2 end; return value',
+    args='i', payload=nil, initial=nil, ranges={{-4,4}}}
+  cases[#cases+1] = {
+    name='comparison-gt', params='a',
+    body='local value=7; if a > 0 then value=1 else value=2 end; return value',
+    args='i', payload=nil, initial=nil, ranges={{-4,4}}}
+  cases[#cases+1] = {
+    name='comparison-ge', params='a',
+    body='local value=7; if a >= 0 then value=1 else value=2 end; return value',
+    args='i', payload=nil, initial=nil, ranges={{-4,4}}}
+  cases[#cases+1] = {
+    name='comparison-reversed', params='a',
+    body='local value=7; if 0 > a then value=1 else value=2 end; return value',
+    args='i', payload=nil, initial=nil, ranges={{-4,4}}}
+  cases[#cases+1] = {
+    name='comparison-positive-zero', params='a',
+    body='local value=7; if a < 0.0 then value=1 else value=2 end; return value',
+    args='i', payload=nil, initial=nil, ranges={{-4,4}}}
+  cases[#cases+1] = {
+    name='comparison-negative-zero', params='a,b',
+    body='local value=7; if a < b then value=1 else value=2 end; return value',
+    args='i,payload', payload=-0.0, initial=nil, ranges={{-4,4}}}
+  cases[#cases+1] = {
+    name='comparison-nan', params='a,b',
+    body='local value=7; if a < b then value=1 else value=2 end; return value',
+    args='i/100,payload', payload=2.5, initial=nil, ranges={{-4,4}}}
+  cases[#cases+1] = {
+    name='comparison-negative-warm', params='a',
+    body='local value=7; if a < 0 then value=1 else value=2 end; return value',
+    args='i-5', payload=nil, initial=nil, ranges={{10,14}}}
+  cases[#cases+1] = {
+    name='comparison-primitive-overwrite', params='a',
+    body='local value=true; if a < 0 then value=false else value=true end; return value',
+    args='i', payload=nil, initial=nil, ranges={{-4,4}}}
+  cases[#cases+1] = {
+    name='comparison-arm-liveness', params='a',
+    body='local value=7; if a < 0 then value=a else value=2 end; return value',
+    args='i', payload=nil, initial=nil, ranges={{-4,4}}}
   local publications,ranges,reuses,cold = 0,0,0,0
   for _,shape in ipairs(cases) do
     local attempts,nrange,nreuse = run_shape(shape)
@@ -227,7 +272,7 @@ local function main()
   assert(stop:send(true,5),'MT peer stop send failed')
   local joined,result = peer:join(5)
   assert(joined and result,'MT peer did not join cleanly')
-  assert(publications == #cases and #cases == 43 and ranges == 4 and
+  assert(publications == #cases and #cases == 54 and ranges == 15 and
          reuses == #cases*2+2*ranges)
   io.write(string.format(
     'lua-return ordinary OK: publications=%d numeric_ranges=%d same_trace_reuses=%d cold_calls=%d; publication only, no native-execution claim\n',
