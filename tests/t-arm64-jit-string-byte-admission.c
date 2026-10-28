@@ -801,6 +801,26 @@ int main(void)
            f.ir[dynamic_strref].op2 == addov);
     assert(one);
     lenref = f.ir[upper].o == IR_ULE ? f.ir[upper].op2 : f.ir[upper].op1;
+    /* The complete proof must bind both operands of the guarded range
+    ** subtraction, independently in semantic IR and post-RA IR. */
+    assert(lj_asm_arm64_test_string_byte_dynamic_index_ir(&f.semantic, conv));
+    assert(lj_asm_arm64_test_string_byte_dynamic_index_postra(&f.view, conv));
+    {
+      IRRef saved_semantic = f.ir[subov].op2;
+      IRRef saved_postra = f.postra[subov].op2;
+      f.ir[subov].op2 = lenref;
+      assert(!lj_asm_arm64_test_string_byte_dynamic_index_ir(&f.semantic,
+                                                              conv));
+      f.ir[subov].op2 = saved_semantic;
+      f.postra[subov].op2 = lenref;
+      assert(!lj_asm_arm64_test_string_byte_dynamic_index_postra(&f.view,
+                                                                  conv));
+      f.postra[subov].op2 = saved_postra;
+      assert(lj_asm_arm64_test_string_byte_dynamic_index_ir(&f.semantic,
+                                                             conv));
+      assert(lj_asm_arm64_test_string_byte_dynamic_index_postra(&f.view,
+                                                                 conv));
+    }
     {
       LJArm64PostRAView wrong_view = f.view;
       wrong_view.proto = wrong_proto;
