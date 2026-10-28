@@ -26,6 +26,7 @@
 #include "lj_asm.h"
 #include "lj_bc.h"
 #include "lj_gc2.h"
+#include "lj_ctype.h"
 #include "lj_jit.h"
 #include "lj_obj.h"
 #include "lj_target.h"
@@ -33,7 +34,7 @@
 #include "lj_thr.h"
 #include "lj_trace.h"
 
-static void mutate_layout(lua_State *L, GCtrace *T)
+static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
 {
   LJArm64PostRAView v = {0};
   size_t pagesize = (size_t)sysconf(_SC_PAGESIZE);
@@ -46,13 +47,14 @@ static void mutate_layout(lua_State *L, GCtrace *T)
          mprotect((char *)guarded + mapsize, pagesize, PROT_NONE) == 0);
   copy = (IRIns *)((char *)guarded + mapsize - irbytes);
   SnapEntry *map = malloc(T->nsnapmap * sizeof(*map));
-  IRRef ref, loop = 0, num = 0, knum = 0, n;
+  IRRef ref, loop = 0, num = 0, knum = 0, fpmath = 0, mathguard = 0, n;
   GCproto *pt = trace_startpt_acq(T);
   assert(copy && map);
   memcpy(copy + T->nk, T->ir + T->nk, (T->nins - T->nk) * sizeof(*copy));
   memcpy(map, T->snapmap, T->nsnapmap * sizeof(*map));
   v.ir = copy;
   v.owner = T;
+  v.cts = ctype_ctsG(G(L));
   v.snap = T->snap;
   v.snapmap = map;
   v.proto_bc = proto_bc(pt);
@@ -65,10 +67,18 @@ static void mutate_layout(lua_State *L, GCtrace *T)
   v.proto_numparams = pt->numparams;
   v.root_topslot = T->topslot;
   v.startins = T->startins;
+  v.proto = pt;
+  v.startpc = trace_startpc_acq(T);
+  v.base_delta = 0;
   assert(lj_asm_arm64_postra_admit(&v, &n));
   for (ref = REF_FIRST; ref < n; ref++) {
     if (copy[ref].o == IR_LOOP)
       loop = ref;
+    if (copy[ref].o == IR_FPMATH)
+      fpmath = ref;
+    if (copy[ref].o == IR_EQ && irt_type(copy[ref].t) == IRT_FUNC &&
+        copy[ref].op2 < REF_TRUE && copy[copy[ref].op2].o == IR_KGC)
+      mathguard = ref;
     if ((copy[ref].o == IR_ADD || copy[ref].o == IR_SUB) &&
         irt_isnum(copy[ref].t))
       num = ref;
@@ -79,6 +89,7 @@ static void mutate_layout(lua_State *L, GCtrace *T)
       break;
     }
   assert(loop && num);
+  if (mathkind && *mathkind) assert(fpmath && mathguard);
   /* A future consumer has not yet been certified when an earlier absent
      location is examined. Its other operand must be checked before loading. */
   {
@@ -124,6 +135,25 @@ static void mutate_layout(lua_State *L, GCtrace *T)
     copy[num].op1 = knum + 1;
     assert(!lj_asm_arm64_postra_admit(&v, NULL));
     copy[num] = T->ir[num];
+  }
+  if (mathkind && *mathkind) {
+    copy[fpmath].op2 = IRFPM_LOG; /* Helper lowering is not certified. */
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[fpmath] = T->ir[fpmath];
+    copy[fpmath].op1 = n; /* Forward operand must fail before dereference. */
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[fpmath] = T->ir[fpmath];
+    {
+      const char *wrong = "sin";
+      GCfunc *fn;
+      lua_getglobal(L, "math"); lua_getfield(L, -1, wrong);
+      assert(tvisfunc(L->top - 1)); fn = funcV(L->top - 1);
+      ir_kgc_store_rel(&copy[copy[mathguard].op2], obj2gco(fn));
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      ir_kgc_store_rel(&copy[copy[mathguard].op2],
+                       ir_kgc_acq(&T->ir[T->ir[mathguard].op2]));
+      lua_pop(L, 2);
+    }
   }
 
   {
@@ -257,6 +287,25 @@ static void mutate_layout(lua_State *L, GCtrace *T)
       assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
       copy[num] = T->ir[num];
     }
+    if (mathkind && *mathkind) {
+      copy[fpmath].op2 = IRFPM_LOG;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[fpmath] = T->ir[fpmath];
+      copy[fpmath].op1 = n;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[fpmath] = T->ir[fpmath];
+      {
+        const char *wrong = "sin";
+        GCfunc *fn;
+        lua_getglobal(L, "math"); lua_getfield(L, -1, wrong);
+        assert(tvisfunc(L->top - 1)); fn = funcV(L->top - 1);
+        ir_kgc_store_rel(&copy[copy[mathguard].op2], obj2gco(fn));
+        assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+        ir_kgc_store_rel(&copy[copy[mathguard].op2],
+                         ir_kgc_acq(&T->ir[T->ir[mathguard].op2]));
+        lua_pop(L, 2);
+      }
+    }
     fake->framedepth = 1;
     assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
     assert(lj_asm_arm64_postra_admit(&v, NULL));
@@ -293,6 +342,8 @@ static int reset(lua_State *L)
 }
 static int check(lua_State *L)
 {
+  const char *mathkind = lua_gettop(L) ? lua_tostring(L, 1) : NULL;
+  if (mathkind && strncmp(mathkind, "math_", 5) != 0) mathkind = NULL;
   GCtrace *T = traceref_safe(L2J(L), 1);
   IRRef ref;
   unsigned ns = 0, nnum = 0, ntab = 0, ren = 0;
@@ -317,7 +368,7 @@ static int check(lua_State *L)
          lj_trace_test_exit_calls() > 0);
   assert(lj_tg_load_jit_base(L2TG(L)) == NULL);
   assert(lj_tg_in_native_acq(L2TG(L)) == 0);
-  mutate_layout(L, T);
+  mutate_layout(L, T, mathkind);
   return 0;
 }
 typedef enum PostAdmissionRequest {
