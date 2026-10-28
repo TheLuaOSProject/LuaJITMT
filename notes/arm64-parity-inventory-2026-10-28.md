@@ -3,7 +3,9 @@
 `bench/jit-parity.lua` runs identical workloads against independently loaded,
 recursively JIT-disabled interpreter oracles. An attached peer remains live
 throughout each run. Each workload has twelve calls with alternating bounds
-and one call after full GC, for 234 result checks across eighteen workloads.
+and one call after full GC. The original eighteen workloads produce 234 result
+checks; the current twenty-workload harness adds two dynamic-string rows for
+260 checks.
 
 The `texit` observer matches the exiting trace number against the selected
 runner's currently patched JFORL/JLOOP/JITERL bytecode while the event is being
@@ -47,6 +49,16 @@ equivalence or remove iterator/I64 coverage from the full parity goal. The
 other differences identify concrete workloads for subsequent native tests.
 General calls, trace topology, effects, ABI coverage, concurrency, and unwind
 still need their independent contracts and broader comparisons.
+
+The original string rows use literals and can fold away the string operation.
+In particular, the x64 recorder folds `string.byte('abc', 2)` to `98`; its root
+exit witness does not establish a native byte load. Two additional rows now
+pass the string as a runner argument: `string-length-dynamic` and
+`string-byte-dynamic`. Each passes thirteen interpreter comparisons and has a
+selected-root exit witness on the unchanged baseline x64 executable. The
+focused operation fixtures separately require the actual string IR and native
+entry counters; the inventory remains a workload observation, not an operation
+certificate. The original rows are retained for historical comparisons.
 
 Evidence is under `/Users/frityet/Scratch/ljmt-parity-inventory-20261028/`:
 `arm64-baseline.tsv`, `x64-baseline.tsv`, `arm64-primitives.tsv`, and
