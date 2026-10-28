@@ -15,6 +15,7 @@
 #include "lj_tg.h"
 #include "lj_trace.h"
 #include "lj_asm.h"
+#include "lj_ircall.h"
 #include "lib/lua_fixture_helpers.h"
 
 static GCfunc *global_function(lua_State *L, const char *name)
@@ -28,9 +29,9 @@ static GCfunc *global_function(lua_State *L, const char *name)
   return fn;
 }
 
-static GCtrace *root_trace(lua_State *L)
+static GCtrace *root_trace_for(lua_State *L, const char *name)
 {
-  GCproto *pt = funcproto(global_function(L, "nested_run"));
+  GCproto *pt = funcproto(global_function(L, name));
   const BCIns *bc = proto_bc(pt);
   MSize i;
   for (i = 1; i < pt->sizebc; i++) {
@@ -45,6 +46,11 @@ static GCtrace *root_trace(lua_State *L)
     }
   }
   return NULL;
+}
+
+static GCtrace *root_trace(lua_State *L)
+{
+  return root_trace_for(L, "nested_run");
 }
 
 static lua_Number invoke(lua_State *L, const char *name, lua_Integer first,
@@ -67,6 +73,31 @@ static lua_Number invoke(lua_State *L, const char *name, lua_Integer first,
   assert(L->cframe == cframe && lj_tg_load_jit_base(L2TG(L)) == NULL &&
          !lj_tg_in_native_acq(L2TG(L)));
   return value;
+}
+
+static lua_Number invoke_capture(lua_State *L, lua_Integer first,
+                                 lua_Integer last)
+{
+  lua_Number value;
+  void *cframe = L->cframe;
+  lua_getglobal(L, "nested_capture_run");
+  lua_getglobal(L, "nested_capture_f");
+  lua_pushinteger(L, first);
+  lua_pushinteger(L, last);
+  ljt_lua_pcall(L, 3, 1, "captured nested Lua call");
+  assert(lua_isnumber(L, -1));
+  value = lua_tonumber(L, -1);
+  lua_pop(L, 1);
+  assert(L->cframe == cframe && lj_tg_load_jit_base(L2TG(L)) == NULL &&
+         !lj_tg_in_native_acq(L2TG(L)));
+  return value;
+}
+
+static void set_capture_upvalue(lua_State *L, const char *function)
+{
+  lua_getglobal(L, "nested_capture_set_g");
+  lua_getglobal(L, function);
+  ljt_lua_pcall(L, 1, 0, "update captured nested callee");
 }
 
 typedef struct NestedProof {
@@ -189,6 +220,8 @@ static void nested_proof_mutations(lua_State *L, GCtrace *T)
   uint64_t footer;
   IRRef wrong_function = 0;
   IRRef borrowed_guard = 0, borrowed_function = 0, borrowed_constant = 0;
+  IRRef upvalue_call = 0, upvalue_root = 0, upvalue_index = 0;
+  SnapNo upvalue_snap = UINT16_MAX;
   GCfunc *expected_inner = global_function(L, "nested_leaf");
   MSize funcentry, argentry;
   unsigned postra;
@@ -228,7 +261,7 @@ static void nested_proof_mutations(lua_State *L, GCtrace *T)
     }
   }
   assert(f.child_source_fn && f.child_source_fn != NULL);
-  assert(f.child_source->numparams == 2u);
+  assert(f.child_source->numparams >= 1u && f.child_source->numparams <= 2u);
   f.root = nested_copy_proto(f.root_source);
   f.childpt = nested_copy_proto(f.child_source);
   f.child = calloc(1, sizeLfunc(0));
@@ -257,6 +290,40 @@ static void nested_proof_mutations(lua_State *L, GCtrace *T)
   assert(borrowed_guard && borrowed_function >= REF_FIRST);
   assert(borrowed_constant+1u < REF_TRUE);
   assert(f.function_ref+1u < REF_TRUE);
+  if (f.child_source->sizeuv) {
+    for (IRRef r = REF_FIRST; r < T->nins && !upvalue_call; r++) {
+      IRIns call = ir_load_acq(&T->ir[r]);
+      IRIns tail, head;
+      if (call.o != IR_CALLS ||
+          call.op2 != IRCALL_lj_func_getuv_rooted_try ||
+          call.op1 < REF_FIRST || call.op1 >= r) continue;
+      tail = ir_load_acq(&T->ir[call.op1]);
+      if (tail.o != IR_CARG || tail.op1 < REF_FIRST ||
+          tail.op1 >= call.op1) continue;
+      head = ir_load_acq(&T->ir[tail.op1]);
+      if (head.o != IR_CARG || head.op2 < T->nk ||
+          head.op2 >= REF_TRUE || T->ir[head.op2].o != IR_KINT) continue;
+      for (SnapNo s = 0; s < T->nsnap; s++) {
+        const SnapShot *snap = &T->snap[s];
+        const BCIns *pc;
+        if (snap->ref != head.op1 || snap->mapofs > T->nsnapmap ||
+            snap->nent > T->nsnapmap-snap->mapofs ||
+            T->nsnapmap-snap->mapofs-snap->nent < 2u) continue;
+        pc = snap_pc(&T->snapmap[snap->mapofs+snap->nent]);
+        if ((uintptr_t)pc < (uintptr_t)proto_bc(f.child_source) ||
+            (uintptr_t)pc >= (uintptr_t)proto_bc(f.child_source)+
+              f.child_source->sizebc*sizeof(BCIns) ||
+            bc_op((BCIns)la_load32_acq((const uint32_t *)pc)) != BC_UGET ||
+            bc_d((BCIns)la_load32_acq((const uint32_t *)pc)) !=
+              (uint32_t)T->ir[head.op2].i) continue;
+        upvalue_call = r; upvalue_root = head.op1;
+        upvalue_index = head.op2; upvalue_snap = s;
+        break;
+      }
+    }
+    assert(upvalue_call && upvalue_root && upvalue_index &&
+           upvalue_snap != UINT16_MAX);
+  }
   nested_proof_reset(&f, L, T);
   memcpy(&footer, &f.map[f.snap[f.child_snap].mapofs+
                           f.snap[f.child_snap].nent], sizeof(footer));
@@ -328,13 +395,48 @@ static void nested_proof_mutations(lua_State *L, GCtrace *T)
       for (p = callpos+1u; p+1u < f.childpt->sizebc; p++) {
         BCIns ins = (BCIns)la_load32_acq(
           (const uint32_t *)&proto_bc(f.childpt)[p]);
-        if (bc_op(ins) == BC_CGET && bc_a(ins) == 3u &&
+        if (bc_op(ins) == BC_CGET &&
             bc_d(ins) == bc_a(proto_bc(f.childpt)[callpos])) break;
       }
       assert(p+1u < f.childpt->sizebc);
       setbc_d(&proto_bc(f.childpt)[p], 0u);
     }
     assert(!nested_proof_admit(&f, postra));
+    if (f.child_source->sizeuv) {
+      MSize p;
+      /* The rooted helper's exact UGET index is part of source identity. */
+      nested_proof_reset(&f, L, T);
+      f.ir[upvalue_index].i++;
+      assert(!nested_proof_admit(&f, postra));
+      /* The source UGET must name an existing upvalue. */
+      nested_proof_reset(&f, L, T);
+      for (p = 1; p+1u < f.childpt->sizebc; p++)
+        if (bc_op(proto_bc(f.childpt)[p]) == BC_UGET) break;
+      assert(p+1u < f.childpt->sizebc &&
+             bc_d(proto_bc(f.childpt)[p]) < f.childpt->sizeuv);
+      setbc_d(&proto_bc(f.childpt)[p], f.childpt->sizeuv);
+      assert(!nested_proof_admit(&f, postra));
+      /* The pre-read snapshot PC must remain the exact UGET source. */
+      nested_proof_reset(&f, L, T);
+      memcpy(&footer, &f.map[f.snap[upvalue_snap].mapofs+
+                              f.snap[upvalue_snap].nent], sizeof(footer));
+      {
+        const BCIns *pc = (const BCIns *)(uintptr_t)(footer>>8);
+        MSize pos = proto_bcpos(f.childpt, pc);
+        assert(pos+1u < f.childpt->sizebc);
+        footer = (u64ptr(proto_bc(f.childpt)+pos+1u)<<8)|(uint8_t)footer;
+        memcpy(&f.map[f.snap[upvalue_snap].mapofs+
+                       f.snap[upvalue_snap].nent], &footer, sizeof(footer));
+      }
+      assert(!nested_proof_admit(&f, postra));
+      /* Both source and continuation snapshots need an addressable footer. */
+      nested_proof_reset(&f, L, T);
+      f.snap[upvalue_snap].mapofs = (uint16_t)T->nsnapmap;
+      assert(!nested_proof_admit(&f, postra));
+      nested_proof_reset(&f, L, T);
+      f.snap[upvalue_snap+1u].mapofs = (uint16_t)T->nsnapmap;
+      assert(!nested_proof_admit(&f, postra));
+    }
   }
   free(f.root); free(f.childpt); free(f.child); free(f.J);
   free(f.ir); free(f.snap); free(f.map);
@@ -399,6 +501,13 @@ int main(void)
     "return sum end; "
     "function nested_oracle(first,last) local sum=.5; "
     "for i=first,last do sum=sum+(i+0.25) end; return sum end; "
+    "nested_capture_f,nested_capture_set_g=(function(g) "
+    "return function(x) local v=g(x); return v end, "
+    "function(v) g=v end end)(nested_leaf); "
+    "function nested_capture_run(f,first,last) local sum=.5; "
+    "for i=first,last do sum=sum+f(i) end; return sum end; "
+    "function nested_capture_oracle(first,last) local sum=.5; "
+    "for i=first,last do sum=sum+(i+0.25) end; return sum end; "
     "jit.off(nested_oracle,true); jit.on(); "
     "jit.opt.start('hotloop=1','hotexit=1000')");
   for (attempt = 0; attempt < 8 && !T; attempt++) {
@@ -422,6 +531,47 @@ int main(void)
   assert(root_trace(L) == T && lj_trace_test_root_entry_successes() > 0);
   nested_force_identity_exit(L, T, "nested_leaf", "nested_leaf_alt");
   nested_force_identity_exit(L, T, "nested_outer", "nested_outer_alt");
+  {
+    GCtrace *captured = NULL;
+    lua_Number expected = invoke(L, "nested_capture_oracle", 1, 96);
+    GCfunc *f = global_function(L, "nested_capture_f");
+    assert(lj_trace_arm64_lua_leaf(f));
+    for (attempt = 0; attempt < 8 && !captured; attempt++) {
+      assert(invoke_capture(L, 1, 96) == expected);
+      captured = root_trace_for(L, "nested_capture_run");
+    }
+    assert(captured && trace_runnable_acq(captured, captured->traceno));
+    nested_proof_mutations(L, captured);
+    lj_trace_test_root_entry_reset();
+    assert(invoke_capture(L, 9, 40) ==
+           invoke(L, "nested_capture_oracle", 9, 40));
+    assert(root_trace_for(L, "nested_capture_run") == captured &&
+           lj_trace_test_root_entry_successes() > 0 &&
+           !trace_nchild_acq(captured) && !trace_nextside_acq(captured));
+    lua_gc(L, LUA_GCCOLLECT, 0);
+    lj_trace_test_root_entry_reset();
+    assert(invoke_capture(L, 1, 24) ==
+           invoke(L, "nested_capture_oracle", 1, 24));
+    assert(root_trace_for(L, "nested_capture_run") == captured &&
+           trace_runnable_acq(captured, captured->traceno) &&
+           lj_trace_test_root_entry_successes() > 0);
+    {
+      GCfunc *expected = global_function(L, "nested_leaf");
+      SnapNo exit = nested_identity_exit(captured, expected);
+      lua_Number oracle = invoke(L, "nested_capture_oracle", 9, 40);
+      assert(exit != UINT16_MAX);
+      set_capture_upvalue(L, "nested_leaf_alt");
+      lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+      assert(invoke_capture(L, 9, 40) == oracle);
+      assert(root_trace_for(L, "nested_capture_run") == captured &&
+             trace_runnable_acq(captured, captured->traceno) &&
+             lj_trace_test_root_entry_successes() > 0 &&
+             lj_trace_test_exit_calls() > 0 &&
+             lj_trace_test_first_exit_parent() == captured->traceno &&
+             lj_trace_test_first_exitno() == exit);
+      set_capture_upvalue(L, "nested_leaf");
+    }
+  }
   ljt_lua_dostring(L,
     "assert(stop:send(true,5)); local ok,v=peer:join(5); assert(ok and v)");
   lua_close(L);

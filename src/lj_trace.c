@@ -11969,11 +11969,12 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
   uint8_t first_reach[UINT8_MAX+1u] = {0};
   uint8_t second_reach[UINT8_MAX+1u] = {0};
   int has_call = 0;
+  int has_upvalue_get = 0;
   if (!fn || !isluafunc(fn)) return 0;
   pt = funcproto(fn);
   if (!checkptrGC(obj2gco((GCproto *)pt)) ||
       pt->gct != (uint32_t)~LJ_TPROTO ||
-      pt->sizeuv || pt->sizekgc ||
+      pt->sizekgc ||
       (la_load8_acq(&pt->flags) & (PROTO_CHILD|PROTO_VARARG|PROTO_FFI|PROTO_NOJIT)))
     return 0;
   size = pt->sizebc; frame = pt->framesize; bc = proto_bc(pt);
@@ -12108,6 +12109,9 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
       /* Parameter assignments use the fork's cell-aware CSET. Arithmetic
       ** and copies produce temporaries before that assignment. */
       return 0;
+    } else if (op == BC_UGET) {
+      if (bc_d(ins) >= pt->sizeuv) return 0;
+      has_upvalue_get = 1;
     } else if (op == BC_CGET || op == BC_MOV || op == BC_CSET) {
       BCReg from = bc_d(ins);
       if (from >= frame || !defined[from]) return 0;
@@ -12132,7 +12136,7 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
       if (b >= frame || !defined[b]) return 0;
       kn = c;
     } else {
-      return 0;  /* No calls, branches, upvalues, boxing or heap access. */
+      return 0;  /* No upvalue writes, boxing or heap access. */
     }
     if (kn != UINT32_MAX) {
       TValue value;
@@ -12147,6 +12151,7 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
       for (MSize reg = first; reg < end; reg++) defined[reg] = 0;
     }
   }
+  if (pt->sizeuv && !has_upvalue_get) return 0;
   /* The body contains no patch sites. An independently compiled entry may
   ** replace FUNCF with JFUNCF, whose saved source must still be canonical.
   ** Recheck this complete generation without borrowing that trace's verdict. */
@@ -12192,17 +12197,26 @@ static int trace_arm64_lua_leaf_returned_call(jit_State *J, lua_State *owner,
   if (bc_op(call) != BC_CALL || bc_b(call) != 2 || !bc_c(call) ||
 	  (MSize)bc_a(call)+bc_c(call)+LJ_FR2 > pt->framesize) return 0;
   fslot = bc_a(call);
-  /* Compiler argument shuffles are MOV-only in this bounded case. Find the
-  ** last definition of the function slot and require it to copy a function
-  ** still rooted in the caller's live frame. */
+  /* Find the last definition of the function slot. MOV and CGET copy a live
+  ** caller TValue; UGET names the exact rooted-upvalue read emitted by the
+  ** recorder. In the latter case, the call slot itself is the live TValue
+  ** root, so do not dereference the shared upvalue cell here. */
   for (i = cp; i-- > 1; ) {
     BCIns ins = (BCIns)la_load32_acq((const uint32_t *)&proto[i]);
     BCOp op = bc_op(ins);
-    if (op != BC_MOV && op != BC_CGET) {
+    if (op != BC_MOV && op != BC_CGET && op != BC_UGET) {
       return 0;
     }
     if (bc_a(ins) != fslot) continue;
-    source = bc_d(ins);
+    if (op == BC_UGET) {
+      /* The call return overwrites its function register. Keep this runtime
+      ** check source-only; semantic and post-RA walks bind the call guard to
+      ** the exact rooted UGET result and index independently. */
+      return bc_d(ins) < pt->sizeuv;
+    } else {
+      source = bc_d(ins);
+    }
+    if (op == BC_MOV && source == fslot) continue;
     if (source >= pt->framesize) return 0;
     if (op == BC_CGET) {
       TValue *cell = &owner->base[source];

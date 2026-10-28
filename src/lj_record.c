@@ -3086,8 +3086,9 @@ static TRef rec_upvalue_rooted(jit_State *J, uint32_t uv, TRef val)
 {
   TRef fn, root, index, status;
   IRType type;
-  if (J->parent || J->framedepth || J->retdepth ||
-      J->baseslot != 1+LJ_FR2)
+  if (J->parent || J->framedepth > 2 || J->retdepth ||
+      (J->framedepth == 0 && J->baseslot != 1+LJ_FR2) ||
+      (J->framedepth != 0 && (val || bc_op(*J->pc) != BC_UGET)))
     lj_trace_err_info(J, LJ_TRERR_NYIBC);
   type = rec_upvalue_rooted_sample(J, uv);
   fn = getcurrf(J);
