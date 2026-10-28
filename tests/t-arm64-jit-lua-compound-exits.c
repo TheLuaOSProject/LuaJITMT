@@ -770,6 +770,9 @@ static void child_admission(GCtrace *T, const LeafCase *shape)
         IRIns *g;
         IRRef arg, alt;
         int applicable = 1;
+        /* The exact dynamic callee operand can be the frame's original
+        ** function ref; wrong function constants are tested separately. */
+        if (m == C_FUNCTION_VALUE) continue;
         child_reset(&f);
         if (!child_admit(&f, allocated)) {
           fprintf(stderr, "compound original snapshot=%u rejected by %s\n",

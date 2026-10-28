@@ -431,7 +431,7 @@ static void child_mutate(ChildFixture *f, unsigned m)
 static void child_admission(GCtrace *T)
 {
   ChildFixture f = {0};
-  unsigned children = 0;
+  unsigned children = 0, dynamic_function_aliases = 0;
   f.live = T; f.n = T->nins;
   if (T->ir[f.n-1].o == IR_NOP) f.n--;
   else while (T->ir[f.n-1].o == IR_RENAME) f.n--;
@@ -466,6 +466,10 @@ static void child_admission(GCtrace *T)
            f.arg_entry != UINT32_MAX && f.temp_entry != UINT32_MAX);
     for (int allocated = 0; allocated < 2; allocated++) {
       for (unsigned m = 0; m < C_COUNT; m++) {
+        /* The identity-guard operand can itself be the exact saved callee
+        ** reference. This mutation is therefore not intrinsically invalid;
+        ** unrelated frame functions are covered by nested-call mutations. */
+        if (m == C_FUNCTION_VALUE) continue;
         child_reset(&f); assert(child_admit(&f, allocated));
         child_reset(&f); child_mutate(&f, m);
         if (child_admit(&f, allocated)) {
@@ -475,6 +479,16 @@ static void child_admission(GCtrace *T)
         }
         if (allocated) postra_bad++; else semantic_bad++;
       }
+    }
+    /* When the frame slot is exactly the guarded dynamic callee, this is a
+    ** valid source form. Require at least one such nontrivial positive in
+    ** both independent passes; unrelated dynamic identities are negative in
+    ** the nested-call fixture. */
+    child_reset(&f); child_mutate(&f, C_FUNCTION_VALUE);
+    if (child_admit(&f, 0)) {
+      child_reset(&f); child_mutate(&f, C_FUNCTION_VALUE);
+      assert(child_admit(&f, 1));
+      dynamic_function_aliases++;
     }
     child_reset(&f); assert(child_admit(&f, 1));
     {
@@ -518,7 +532,7 @@ static void child_admission(GCtrace *T)
       }
     }
   }
-  assert(children == 2);
+  assert(children == 2 && dynamic_function_aliases > 0);
   free(f.root); free(f.leafpt); free(f.leaf); free(f.J); free(f.ir); free(f.snap); free(f.map);
 }
 
