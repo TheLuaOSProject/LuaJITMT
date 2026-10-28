@@ -80,7 +80,8 @@ static int kint(const IRIns *ir, IRRef nk, IRRef ref, int32_t *value)
       *value = ir[r].i;
       return 1;
     }
-    if (ir[r].o == IR_KNUM || ir[r].o == IR_KGC) r++;
+    if (ir[r].o == IR_KNUM || ir[r].o == IR_KGC ||
+	ir[r].o == IR_KKPTR) r++;
   }
   return 0;
 }
@@ -430,11 +431,21 @@ int main(void)
     unsigned nkkp = 0;
     IRRef k;
     SnapNo sn;
-    for (k = f.semantic.nk; k < REF_TRUE; k++) {
-      if (f.ir[k].o == IR_KKPTR) {
+    for (k = f.semantic.nk; k < REF_TRUE; ) {
+      IROp op = (IROp)f.ir[k].o;
+      if (op == IR_KKPTR) {
         assert(f.ir[k].t.irt == IRT_PGC && f.ir[k].op12 == 0);
         kkp = k;
         nkkp++;
+        k += 1u + LJ_GC64; /* Paired payload is not an IR header. */
+      } else if (op == IR_KGC) {
+        assert(k + LJ_GC64 < REF_TRUE);
+        k += 1u + LJ_GC64;
+      } else if (op == IR_KNUM) {
+        assert(k + 1u < REF_TRUE);
+        k += 2u;
+      } else {
+        k++;
       }
     }
     assert(kkp && nkkp == 1);
