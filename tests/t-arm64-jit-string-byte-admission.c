@@ -672,6 +672,12 @@ int main(void)
                                                              at));
       assert(!lj_asm_arm64_test_string_byte_dynamic_guard_postra(&fake_view,
                                                                  at));
+      fake_ir[at].op2 = 1;
+      fake_postra[at].op2 = 1;
+      assert(!lj_asm_arm64_test_string_byte_dynamic_guard_ir(&fake_semantic,
+                                                             at));
+      assert(!lj_asm_arm64_test_string_byte_dynamic_guard_postra(&fake_view,
+                                                                 at));
       free(fake_postra); free(fake_ir);
     }
 #define REJECT_DYNAMIC(change) do { \
