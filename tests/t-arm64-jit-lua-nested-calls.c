@@ -188,6 +188,8 @@ static void nested_proof_mutations(lua_State *L, GCtrace *T)
   NestedProof f = {0};
   uint64_t footer;
   IRRef wrong_function = 0;
+  IRRef borrowed_guard = 0, borrowed_function = 0, borrowed_constant = 0;
+  GCfunc *expected_inner = global_function(L, "nested_leaf");
   MSize funcentry, argentry;
   unsigned postra;
   f.live = T;
@@ -239,6 +241,21 @@ static void nested_proof_mutations(lua_State *L, GCtrace *T)
     if (T->ir[r].o == IR_KGC || T->ir[r].o == IR_KNUM) r += LJ_GC64;
   }
   assert(wrong_function);
+  for (IRRef r = REF_FIRST; r < T->nins; r++) {
+    IRIns guard = ir_load_acq(&T->ir[r]);
+    IRRef constant;
+    if (guard.o != IR_EQ || guard.t.irt != (IRT_FUNC|IRT_GUARD)) continue;
+    constant = irref_isk(guard.op1) ? guard.op1 : guard.op2;
+    if (!irref_isk(constant) || constant < T->nk || constant >= REF_TRUE ||
+        T->ir[constant].o != IR_KGC ||
+        ir_kgc_acq(&T->ir[constant]) != obj2gco(expected_inner)) continue;
+    borrowed_guard = r;
+    borrowed_constant = constant;
+    borrowed_function = guard.op1 == constant ? guard.op2 : guard.op1;
+    break;
+  }
+  assert(borrowed_guard && borrowed_function >= REF_FIRST);
+  assert(borrowed_constant+1u < REF_TRUE);
   nested_proof_reset(&f, L, T);
   memcpy(&footer, &f.map[f.snap[f.child_snap].mapofs+
                           f.snap[f.child_snap].nent], sizeof(footer));
@@ -251,6 +268,20 @@ static void nested_proof_mutations(lua_State *L, GCtrace *T)
     nested_proof_reset(&f, L, T);
     f.map[funcentry] = SNAP(f.funcslot, 0,
                             wrong_function ? wrong_function : REF_NIL);
+    assert(!nested_proof_admit(&f, postra));
+    /* A borrowed callable EQ operand below nk is not an IR constant slot. */
+    nested_proof_reset(&f, L, T);
+    if (f.ir[borrowed_guard].op1 == borrowed_function)
+      f.ir[borrowed_guard].op2 = (IRRef)(T->nk-1u);
+    else
+      f.ir[borrowed_guard].op1 = (IRRef)(T->nk-1u);
+    assert(!nested_proof_admit(&f, postra));
+    /* A KGC payload word is not an independently addressable constant. */
+    nested_proof_reset(&f, L, T);
+    if (f.ir[borrowed_guard].op1 == borrowed_function)
+      f.ir[borrowed_guard].op2 = (IRRef)(borrowed_constant+1u);
+    else
+      f.ir[borrowed_guard].op1 = (IRRef)(borrowed_constant+1u);
     assert(!nested_proof_admit(&f, postra));
     /* Non-numeric first formal in the child frame (FR2 geometry source). */
     nested_proof_reset(&f, L, T);
@@ -368,16 +399,6 @@ int main(void)
     T = root_trace(L);
   }
   if (!T || !lj_trace_arm64_lua_leaf(global_function(L, "nested_outer"))) {
-    GCproto *pt = funcproto(global_function(L, "nested_outer"));
-    fprintf(stderr, "nested proto gct=%u flags=%u params=%u frame=%u size=%u kn=%u kgc=%u uv=%u header=%u/%u expected=%u check=%d\n",
-      pt->gct, pt->flags, pt->numparams, pt->framesize, pt->sizebc, pt->sizekn,
-      pt->sizekgc, pt->sizeuv, bc_op(proto_bc(pt)[0]), proto_bc(pt)[0],
-      BCINS_AD(BC_FUNCF, pt->framesize, 0), checkptrGC(obj2gco(pt)));
-    fprintf(stderr, "nested trace unavailable: trace=%p outer-admitted=%d\n",
-      (void *)T, lj_trace_arm64_lua_leaf(global_function(L, "nested_outer")));
-    fprintf(stderr, "trace stats: abort-count=%u abort-error=%u root-entry=%u\n",
-      lj_trace_test_abort_count(), (unsigned)lj_trace_test_last_abort_error(),
-      lj_trace_test_root_entry_successes());
     abort();
   }
   nested_proof_mutations(L, T);

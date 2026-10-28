@@ -4,9 +4,11 @@ This checkpoint admits a bounded nested fixed-call case in the experimental
 ARM64 root-recorder path. A loop root may call a pure Lua function with one
 result; that function may call another admitted pure Lua function with one
 result, copy the returned value into its caller continuation, and return it.
-The child function is passed as a parameter. Zero-argument fixed calls remain
-valid (`BC_CALL C=1`); the argument count is always decoded as `C-1`, while
-the one-result requirement is `B=2`.
+The child function is passed as a parameter. The root-to-child call accepts
+zero supplied arguments (`BC_CALL C=1`), covered by the fixed-argument
+contract. The nested source CALL in this tranche requires C>=2 (at least one
+supplied argument); zero-argument nested callees remain closed. The source
+argument count is decoded as C-1, while the one-result requirement is B=2.
 
 The runtime preflight checks the live frame chain and exact source CALLs before
 recording. It does not read a `TUPVAL` body through a raw pointer. The semantic

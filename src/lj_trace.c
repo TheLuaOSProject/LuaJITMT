@@ -12239,7 +12239,7 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
   callee = J->slot[base-1u-LJ_FR2];
   ref = tref_ref(callee);
   if (!tref_isfunc(callee)) return 0;
-  if (tref_isk(callee) && ref != REF_NIL) {
+  if (tref_isk(callee)) {
     if (ref < J->cur.nk || ref >= REF_TRUE ||
         J->cur.ir[ref].o != IR_KGC ||
         ir_kgc_acq(&J->cur.ir[ref]) != obj2gco(fn)) return 0;
@@ -12250,20 +12250,8 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
       IRIns *ir = &J->cur.ir[guard];
       IRRef constant;
       if (ir->o != IR_EQ || ir->t.irt != (IRT_FUNC|IRT_GUARD) ||
-          (ref != REF_NIL && ir->op1 != ref && ir->op2 != ref)) continue;
+          (ir->op1 != ref && ir->op2 != ref)) continue;
       constant = ir->op1 == ref ? ir->op2 : ir->op1;
-      if (ref == REF_NIL) {
-        if (irref_isk(ir->op1) && ir->op1 >= J->cur.nk &&
-            ir->op1 < REF_TRUE &&
-            J->cur.ir[ir->op1].o == IR_KGC &&
-            ir_kgc_acq(&J->cur.ir[ir->op1]) == obj2gco(fn)) exact = 1;
-        if (irref_isk(ir->op2) && ir->op2 >= J->cur.nk &&
-            ir->op2 < REF_TRUE &&
-            J->cur.ir[ir->op2].o == IR_KGC &&
-            ir_kgc_acq(&J->cur.ir[ir->op2]) == obj2gco(fn)) exact = 1;
-        if (exact) break;
-        continue;
-      }
       if (constant >= J->cur.nk && constant < REF_TRUE &&
           J->cur.ir[constant].o == IR_KGC &&
           ir_kgc_acq(&J->cur.ir[constant]) == obj2gco(fn)) {
@@ -12450,9 +12438,8 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
     }
     if (!trace_root_arm64_generation_valid(rootpt, startpc, startins) ||
 	!trace_pc_in_proto_range(startpc, proto_bc(rootpt), rootpt->sizebc) ||
-	(BCIns)la_load32_acq((const uint32_t *)startpc) != startins) {
+	(BCIns)la_load32_acq((const uint32_t *)startpc) != startins)
 	return 0;
-    }
   } else {
     return 0;
   }
