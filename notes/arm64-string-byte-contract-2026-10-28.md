@@ -90,5 +90,38 @@ Evidence is in `/Users/frityet/Scratch/ljmt-folded-byte-20261028/`:
 `arm64-inventory.tsv`, and the main build/companion/corpus/inventory logs.
 The preceding full experimental gate passed at `a4acb620`; it was not repeated
 for this narrow folded-constant follow-up. Neither the sample nor these
-contracts establish full native JIT coverage or x86_64 parity. Dynamic-index
-and negative-specialized byte paths remain closed.
+contracts establish full native JIT coverage or x86_64 parity. At that
+checkpoint, dynamic-index and negative-specialized byte paths remained closed.
+
+## Positive dynamic index
+
+The same bounded read also admits the recorder's positive, one-based dynamic
+index form. Independent semantic and post-RA proofs require the exact numeric
+SLOAD-to-`IRCONV_INT_NUM|IRCONV_ANY` conversion, the exact string SLOAD, an
+unsigned `index <= string.len` guard, checked `index-1`, nonnegative offset,
+checked subtraction, and an exact one-byte range before STRREF. The string and
+index SLOAD slots must resolve from the ordered first and second arguments of
+the function's fixed two-argument `CALL`; only straight-line MOV/CGET
+definitions are followed, and cell-backed argument sources with any CSET in
+the function are refused. The root preflight separately verifies the active
+`FF_string_byte` identity and current caller frame/call shape. The proof does
+not admit negative-index lowering or dynamic values directly into snapshots.
+
+The numeric conversion follows ARM64 `FCVTZS` behavior measured on this
+target: NaN converts to zero, positive overflow/infinity saturates to
+`INT32_MAX`, and negative overflow/infinity saturates to `INT32_MIN`. The
+checked nonnegative guard rejects NaN/zero and negative values. `LJ_MAX_STR` is
+statically required to be below `INT32_MAX`, so a positive saturated index
+fails the unsigned upper-bound check before STRREF. The test exercises
+fractional positive index 2.9 (Lua truncates it to byte index 2), signed zero,
+NaN, both infinities, very large magnitudes, negative, and out-of-range inputs.
+Valid index execution requires native entry; invalid cases require native
+entry and exit before the interpreter produces the expected result/error. The
+fixture keeps a second TG attached through native calls and full GC/re-entry.
+
+The updated profile-bound contract passed arm64 and arm64e assertion and
+release profiles. The combined C fixture reported 101 native entries and 101
+exits across the primary, bounds, and dynamic traces; the literal trace has a
+separate native-entry assertion. The Lua companion verifies fractional
+conversion and ordinary embedded-NUL/negative/out-of-range semantics without
+claiming native coverage.

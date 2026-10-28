@@ -1,5 +1,6 @@
 /* Independent semantic and post-RA admission tests for bounded byte loads. */
 #include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -70,6 +71,25 @@ static int call_loop(lua_State *L, const char *function_global,
   return status;
 }
 
+static int call_dynamic_loop(lua_State *L, const char *function_global,
+                             lua_Number index, lua_Number *out)
+{
+  int status;
+  lua_getglobal(L, function_global);
+  lua_getglobal(L, "string_byte_value");
+  lua_pushinteger(L, 80);
+  lua_pushnumber(L, index);
+  status = lua_pcall(L, 3, 1, 0);
+  if (status == LUA_OK) {
+    assert(lua_isnumber(L, -1));
+    *out = lua_tonumber(L, -1);
+  } else {
+    assert(lua_isstring(L, -1));
+  }
+  lua_pop(L, 1);
+  return status;
+}
+
 static int kint(const IRIns *ir, IRRef nk, IRRef ref, int32_t *value)
 {
   IRRef r;
@@ -99,7 +119,7 @@ int main(void)
     " assert(ready:send(true,5)); assert(select(2,stop:recv(120))); "
     " return true end,string_byte_ready,string_byte_stop))\n"
     "assert(select(2,string_byte_ready:recv(5)),'peer failed to start')\n"
-    "jit.flush(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=4')\n"
+    "jit.flush(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=8')\n"
     "string_byte_trace=function(s,n)\n"
     " local byte=string.byte; local sum=0; "
     "for i=1,n do sum=sum+byte(s,2) end; return sum\n"
@@ -116,6 +136,14 @@ int main(void)
     " local byte=string.byte; local sum=0; "
     "for i=1,n do sum=sum+byte('abc',2) end; return sum\n"
     "end\n"
+    "string_byte_dynamic_trace=function(s,n,index)\n"
+    " local byte=string.byte; local i,sum=1,0; "
+    "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
+    "end\n"
+    "string_byte_dynamic_trace_clone=function(s,n,index)\n"
+    " local byte=string.byte; local i,sum=1,0; "
+    "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
+    "end\n"
     "string_byte_bounds_trace=function(s,n)\n"
     " local byte=string.byte; local i,sum=1,0.5; "
     "while i<=n do sum=sum+byte(s,2); i=i+1 end; return sum\n"
@@ -127,18 +155,20 @@ int main(void)
     "string_byte_long=string.rep('L',65536)\n"
     "assert(string_byte_trace(string_byte_value,80)=="
     "string.byte('gcstr-byte-',2)*80)\n"
+    "assert(string_byte_dynamic_trace(string_byte_value,80,2.9)=="
+    "string.byte('gcstr-byte-',2)*80)\n"
     "assert(string_byte_bounds_trace(string_byte_value,80)=="
     "string.byte('gcstr-byte-',2)*80+0.5)\n";
   lua_State *L = luaL_newstate();
   Arm64TraceFixture f;
-  GCtrace *owner, *bounds_owner;
+  GCtrace *owner, *bounds_owner, *dynamic_owner;
   const IRIns *ir;
   IRRef r, source_ref = 0, len_ref = 0, guard_ref = 0;
   IRRef strref = 0, xload = 0;
   MSize s;
   unsigned mapped_source = 0;
   uint32_t entries, exits;
-  TraceNo bounds_no, literal_no = 0;
+  TraceNo bounds_no, dynamic_no, literal_no = 0;
   int sem_ok, post_ok;
   lua_Number value;
   assert(L != NULL);
@@ -146,7 +176,6 @@ int main(void)
   lj_trace_test_root_entry_reset();
   lj_trace_test_reset_exit_stats();
   run_chunk(L, source);
-
   if (lj_trace_test_root_entry_successes() == 0) {
     TraceNo primary_no, bounds_no;
     lua_getglobal(L, "string_byte_trace");
@@ -233,12 +262,113 @@ int main(void)
          trace_runnable_acq(bounds_owner, bounds_no));
   assert(bc_op(trace_startins_acq(bounds_owner)) == BC_LOOP);
 
+  lua_getglobal(L, "string_byte_dynamic_trace");
+  dynamic_no = proto_trace_acq(funcproto(funcV(L->top-1)));
+  lua_pop(L, 1);
+  dynamic_owner = traceref_safe(L2J(L), dynamic_no);
+  if (dynamic_no == 0 || !dynamic_owner ||
+      !trace_runnable_acq(dynamic_owner, dynamic_no))
+    fprintf(stderr, "dynamic string-byte no native root: trace=%u owner=%p "
+            "starts=%u publishes=%u cleanups=%u aborts=%u error=%u "
+            "entries=%u exits=%u errinfo=%u (ULE=%u ULT=%u GE=%u "
+            "CONV=%u ADDOV=%u)\n", (unsigned)dynamic_no,
+            (void *)dynamic_owner, lj_trace_test_root_entry_startins_calls(),
+            lj_trace_test_root_entry_publishes(),
+            lj_trace_test_root_entry_cleanups(), lj_trace_test_abort_count(),
+            (unsigned)lj_trace_test_last_abort_error(),
+            lj_trace_test_root_entry_successes(), lj_trace_test_exit_calls(),
+            tvisint(&L2J(L)->errinfo) ? (unsigned)intV(&L2J(L)->errinfo) : 0u,
+            (unsigned)IR_ULE, (unsigned)IR_ULT, (unsigned)IR_GE,
+            (unsigned)IR_CONV, (unsigned)IR_ADDOV);
+  assert(dynamic_no != 0 && dynamic_owner &&
+         trace_runnable_acq(dynamic_owner, dynamic_no) &&
+         bc_op(trace_startins_acq(dynamic_owner)) == BC_LOOP);
+
   /* Hold a second TG live while collection and all successful byte loads run. */
   run_chunk(L, "collectgarbage('collect')");
   entries = lj_trace_test_root_entry_successes();
   assert(call_loop(L, "string_byte_trace", "string_byte_value", &value) == LUA_OK &&
          value == 99.0*80.0);
   assert(lj_trace_test_root_entry_successes() > entries);
+  entries = lj_trace_test_root_entry_successes();
+  assert(call_dynamic_loop(L, "string_byte_dynamic_trace", 2.9, &value) ==
+         LUA_OK && value == 99.0*80.0);
+  assert(lj_trace_test_root_entry_successes() > entries);
+  {
+    const IRIns *dynamic_ir = trace_ir_acq(dynamic_owner);
+    IRRef conv = 0, addov = 0, upper = 0, nonneg = 0, width = 0;
+    IRRef subov = 0, dynamic_strref = 0, lenref = 0;
+    IRRef nk = trace_nk_acq(dynamic_owner);
+    for (r = REF_FIRST; r < trace_nins_acq(dynamic_owner); r++) {
+      int32_t k;
+      if (!conv && dynamic_ir[r].o == IR_CONV &&
+          dynamic_ir[r].t.irt == IRT_INT &&
+          dynamic_ir[r].op2 == (IRCONV_INT_NUM|IRCONV_ANY)) conv = r;
+      if (dynamic_ir[r].o == IR_FLOAD && dynamic_ir[r].op2 == IRFL_STR_LEN)
+        lenref = r;
+      if (!addov && dynamic_ir[r].o == IR_ADDOV &&
+          dynamic_ir[r].t.irt == (IRT_INT|IRT_GUARD) && conv &&
+          dynamic_ir[r].op1 == conv &&
+          kint(dynamic_ir, nk, dynamic_ir[r].op2, &k) && k == -1)
+        addov = r;
+      if (!upper && dynamic_ir[r].t.irt == (IRT_INT|IRT_GUARD) &&
+          ((dynamic_ir[r].o == IR_ULE && dynamic_ir[r].op1 == conv &&
+            dynamic_ir[r].op2 == lenref) ||
+           (dynamic_ir[r].o == IR_UGE && dynamic_ir[r].op1 == lenref &&
+            dynamic_ir[r].op2 == conv))) upper = r;
+      if (!nonneg && dynamic_ir[r].o == IR_GE &&
+          dynamic_ir[r].t.irt == (IRT_INT|IRT_GUARD) && addov &&
+          dynamic_ir[r].op1 == addov &&
+          kint(dynamic_ir, nk, dynamic_ir[r].op2, &k) && k == 0)
+        nonneg = r;
+      if (!subov && dynamic_ir[r].o == IR_SUBOV &&
+          dynamic_ir[r].t.irt == (IRT_INT|IRT_GUARD) && addov &&
+          dynamic_ir[r].op1 == conv && dynamic_ir[r].op2 == addov)
+        subov = r;
+      if (!width && dynamic_ir[r].o == IR_EQ &&
+          dynamic_ir[r].t.irt == (IRT_INT|IRT_GUARD) && subov &&
+          dynamic_ir[r].op1 == subov &&
+          kint(dynamic_ir, nk, dynamic_ir[r].op2, &k) && k == 1)
+        width = r;
+      if (dynamic_ir[r].o == IR_STRREF && dynamic_ir[r].op2 == addov)
+        dynamic_strref = r;
+    }
+    assert(conv && addov && upper && nonneg && subov && width &&
+           dynamic_strref && conv < upper && upper < addov &&
+           addov < nonneg && nonneg < subov && subov < width &&
+           width < dynamic_strref);
+    assert(dynamic_ir[addov].op1 == conv &&
+           dynamic_ir[subov].op1 == conv &&
+           dynamic_ir[subov].op2 == addov &&
+           dynamic_ir[nonneg].op1 == addov &&
+           dynamic_ir[dynamic_strref].op2 == addov);
+  }
+  entries = lj_trace_test_root_entry_successes();
+  exits = lj_trace_test_exit_calls();
+  assert(call_dynamic_loop(L, "string_byte_dynamic_trace", 0.0, &value) !=
+         LUA_OK);
+  assert(lj_trace_test_root_entry_successes() > entries &&
+         lj_trace_test_exit_calls() > exits);
+  entries = lj_trace_test_root_entry_successes();
+  exits = lj_trace_test_exit_calls();
+  assert(call_dynamic_loop(L, "string_byte_dynamic_trace", -1.0, &value) ==
+         LUA_OK && value == 45.0*80.0);
+  assert(lj_trace_test_root_entry_successes() > entries &&
+         lj_trace_test_exit_calls() > exits);
+  {
+    const lua_Number invalid[] = { -0.0, NAN, INFINITY, -INFINITY,
+                                   2147483648.0, -2147483649.0,
+                                   1.0e300, -1.0e300 };
+    unsigned n;
+    for (n = 0; n < sizeof(invalid)/sizeof(invalid[0]); n++) {
+      entries = lj_trace_test_root_entry_successes();
+      exits = lj_trace_test_exit_calls();
+      assert(call_dynamic_loop(L, "string_byte_dynamic_trace", invalid[n],
+                               &value) != LUA_OK);
+      assert(lj_trace_test_root_entry_successes() > entries &&
+             lj_trace_test_exit_calls() > exits);
+    }
+  }
   entries = lj_trace_test_root_entry_successes();
   assert(call_loop(L, "string_byte_literal_trace", "string_byte_value",
                    &value) == LUA_OK && value == 98.0*80.0);
@@ -420,6 +550,97 @@ int main(void)
 
   arm64_fixture_reset(&f);
   assert(semantic(&f) && allocated(&f));
+  arm64_fixture_free(&f);
+
+  /* Dynamic-index admission proves conversion, same-string length, guarded
+  ** subtraction, nonnegative offset and exact one-byte width independently. */
+  arm64_fixture_init_trace(&f, L, "string_byte_dynamic_trace_clone",
+                           dynamic_no);
+  f.view.proto = trace_startpt_acq(f.owner);
+  assert(semantic(&f) && allocated(&f));
+  {
+    IRRef conv = 0, upper = 0, lenref = 0, addov = 0, nonneg = 0;
+    IRRef subov = 0, width = 0, dynamic_strref = 0, one = 0;
+    for (r = REF_FIRST; r < f.semantic_nins; r++) {
+      int32_t k;
+      if (!conv && f.ir[r].o == IR_CONV && f.ir[r].t.irt == IRT_INT &&
+          f.ir[r].op2 == (IRCONV_INT_NUM|IRCONV_ANY)) conv = r;
+      if (conv && !addov && f.ir[r].o == IR_ADDOV &&
+          f.ir[r].t.irt == (IRT_INT|IRT_GUARD) && f.ir[r].op1 == conv &&
+          kint(f.ir, f.semantic.nk, f.ir[r].op2, &k) && k == -1)
+        addov = r;
+      if (conv && !upper && f.ir[r].t.irt == (IRT_INT|IRT_GUARD) &&
+          ((f.ir[r].o == IR_ULE && f.ir[r].op1 == conv &&
+            f.ir[r].op2 >= REF_FIRST && f.ir[f.ir[r].op2].o == IR_FLOAD &&
+            f.ir[f.ir[r].op2].op2 == IRFL_STR_LEN) ||
+           (f.ir[r].o == IR_UGE && f.ir[r].op2 == conv &&
+            f.ir[r].op1 >= REF_FIRST && f.ir[f.ir[r].op1].o == IR_FLOAD &&
+            f.ir[f.ir[r].op1].op2 == IRFL_STR_LEN))) upper = r;
+      if (addov && !nonneg && f.ir[r].o == IR_GE &&
+          f.ir[r].t.irt == (IRT_INT|IRT_GUARD) && f.ir[r].op1 == addov &&
+          kint(f.ir, f.semantic.nk, f.ir[r].op2, &k) && k == 0)
+        nonneg = r;
+      if (addov && !subov && f.ir[r].o == IR_SUBOV &&
+          f.ir[r].t.irt == (IRT_INT|IRT_GUARD) && f.ir[r].op1 == conv &&
+          f.ir[r].op2 == addov)
+        subov = r;
+      if (subov && !width && f.ir[r].o == IR_EQ &&
+          f.ir[r].t.irt == (IRT_INT|IRT_GUARD) && f.ir[r].op1 == subov &&
+          kint(f.ir, f.semantic.nk, f.ir[r].op2, &k) && k == 1)
+        width = r, one = f.ir[r].op2;
+      if (addov && f.ir[r].o == IR_STRREF && f.ir[r].op2 == addov)
+        dynamic_strref = r;
+    }
+    assert(conv && upper && addov && nonneg && subov && width &&
+           dynamic_strref && f.ir[subov].op1 == conv &&
+           f.ir[subov].op2 == addov && f.ir[nonneg].op1 == addov &&
+           f.ir[dynamic_strref].op2 == addov);
+    assert(one);
+    lenref = f.ir[upper].o == IR_ULE ? f.ir[upper].op2 : f.ir[upper].op1;
+#define REJECT_DYNAMIC(change) do { \
+  int sem_ok, post_ok; \
+  arm64_fixture_reset(&f); assert(semantic(&f) && allocated(&f)); \
+  change; sem_ok = semantic(&f); post_ok = allocated(&f); \
+  if (sem_ok || post_ok) { \
+    fprintf(stderr, "dynamic string-byte mutation accepted at line %d " \
+                    "(semantic=%d postRA=%d)\\n", __LINE__, sem_ok, post_ok); \
+    abort(); \
+  } \
+} while (0)
+#define REJECT_DYNAMIC_POSTRA(change) do { \
+  arm64_fixture_reset(&f); assert(semantic(&f) && allocated(&f)); \
+  change; assert(semantic(&f)); \
+  if (allocated(&f)) { \
+    fprintf(stderr, "dynamic string-byte postRA mutation accepted at line %d\\n", \
+            __LINE__); \
+    abort(); \
+  } \
+} while (0)
+    REJECT_DYNAMIC(f.ir[conv].op2 = IRCONV_INT_NUM|IRCONV_CHECK;
+                   f.postra[conv].op2 = IRCONV_INT_NUM|IRCONV_CHECK);
+    REJECT_DYNAMIC(f.ir[conv].op1 = f.ir[dynamic_strref].op1;
+                   f.postra[conv].op1 = f.postra[dynamic_strref].op1);
+    REJECT_DYNAMIC(f.ir[upper].op2 = f.ir[upper].op1;
+                   f.postra[upper].op2 = f.postra[upper].op1);
+    REJECT_DYNAMIC(f.ir[lenref].op1 = f.ir[conv].op1;
+                   f.postra[lenref].op1 = f.postra[conv].op1);
+    REJECT_DYNAMIC(f.ir[nonneg].op1 = conv;
+                   f.postra[nonneg].op1 = conv);
+    REJECT_DYNAMIC(f.ir[addov].o = IR_ADD;
+                   f.postra[addov].o = IR_ADD);
+    REJECT_DYNAMIC(f.ir[addov].op2 = f.ir[addov].op1;
+                   f.postra[addov].op2 = f.postra[addov].op1);
+    REJECT_DYNAMIC(f.ir[subov].op1 = f.ir[conv].op1;
+                   f.postra[subov].op1 = f.postra[conv].op1);
+    REJECT_DYNAMIC(f.ir[one].i = 2; f.postra[one].i = 2);
+    REJECT_DYNAMIC(f.ir[dynamic_strref].op2 = conv;
+                   f.postra[dynamic_strref].op2 = conv);
+    REJECT_DYNAMIC(f.ir[dynamic_strref].op1 = f.ir[conv].op1;
+                   f.postra[dynamic_strref].op1 = f.postra[conv].op1);
+    REJECT_DYNAMIC_POSTRA(f.postra[conv].r = RID_D0);
+#undef REJECT_DYNAMIC
+#undef REJECT_DYNAMIC_POSTRA
+  }
   arm64_fixture_free(&f);
 
   /* Constant folding removes the byte load but can leave an unreferenced
