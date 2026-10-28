@@ -25,22 +25,29 @@ reproduction of the earlier serial-arm liveness bug. The ordinary Lua
 companion checks publication and same-trace reuses; it makes no
 native-execution claim.
 
-Fixture exploration also found current closed cases: an `if` with an empty
-arm and a two-arm variant with multiple arithmetic operations did not publish
-in the focused run. The empty-arm case lies outside this two-nonempty-arm CFG
-shape; multi-operation arm admission remains unverified. No broader arithmetic
-branch parity claim is made here.
+The bounded source-path proof also admits a two-arm case with different
+multi-operation arithmetic bodies. Its terminal child snapshot retains a
+trailing slot beyond the selected path's live frontier. For branch snapshots,
+semantic and post-RA checks allow the source-bounded `nslots` extent up to the
+callee frame, with snapshot geometry bounded by `topslot + 1 + LJ_FR2`; every
+mapped child slot still must be unique and match the independently replayed
+source value. Non-branch child snapshots retain exact `nslots` equality. C
+mutations reject a changed returned `SUBOV`, a wrong reference in a high child
+map entry, a duplicate slot, and an out-of-frame slot in both passes. These
+map mutations exercise source binding and slot validation; they do not
+independently classify a retained mapped value as dead. An empty-arm `if`,
+nested comparisons, cycles, backward jumps, and early returns remain outside
+the admitted source grammar.
 
-Focused validation on 2026-10-28 used one ARM64 assert profile with the return
-exit C fixture and ordinary Lua companion. It passed with 95 C cases, 392
-native runs, 95 terminal exits, 297 same-trace reuses, 95 GC reuses, and
-semantic/post-RA negative totals of 1552/1561. The ordinary companion passed
-54 publications, 15 numeric ranges, and 138 same-trace reuses.
-
-The complete leaf contract then passed on ARM64 assert, ARM64e assert, ARM64
-release, and ARM64e release. Each profile reported the same return-exit C
-counts above. Full logs and the recorded script exit status are in
-`/Users/frityet/Scratch/ljmt-arm64-branch-20261028/`.
+Final validation on 2026-10-28 passed the complete leaf contract on ARM64
+assert, ARM64e assert, ARM64 release, and ARM64e release. Each profile reported
+96 return cases, 397 native runs, 96 terminal exits, 301 same-trace reuses, 96
+GC reuses, and semantic/post-RA negative totals of 1578/1588. The ordinary Lua
+companion reported 55 publications, 16 numeric ranges, and 142 same-trace
+reuses per profile. The dynamic-FORL recorder and IR-admission contracts also
+passed; the latter records synthetic integer unsigned guards as a type
+rejection after exact induction-candidate selection. Logs and exit statuses
+are in `/Users/frityet/Scratch/ljmt-arm64-branch-20261028/`.
 
 Integration with the scalar-math and bounded string-byte slices keeps unsigned
 integer comparisons closed except for exact string-byte bounds. The same IR
@@ -48,6 +55,7 @@ opcodes express unordered floating comparisons, which the branch slice needs
 for NaN semantics. Both independent admission passes distinguish these types.
 The existing malformed integer-guard fixture still requires rejection; its
 expected reason changes from unsupported opcode to unsupported type/provenance.
-The combined full experimental gate and ordinary ARM64/x64 stock corpora pass;
-main independently passes the ARM64 companions, corpora and inventory. See the
+Before this multi-operation follow-up, the combined full experimental gate
+and ordinary ARM64/x64 stock corpora passed; main independently passed the
+ARM64 companions, corpora and inventory. See the
 [combined checkpoint](arm64-math-byte-branch-checkpoint-2026-10-28.md).
