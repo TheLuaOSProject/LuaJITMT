@@ -6737,60 +6737,129 @@ static int arm64_string_byte_dynamic_bounds_ir(const GCtrace *T,
                                                IRRef strref, IRRef str,
                                                IRRef offset);
 static int arm64_string_byte_dynamic_index_ir(const GCtrace *T, IRRef conv);
-static int arm64_string_byte_call_slots(const BCIns *bc, MSize sizebc,
-                                        MSize framesize, MSize strslot,
-                                        MSize indexslot)
+static int arm64_string_byte_call_decode(const BCIns *bc, MSize sizebc,
+                                         MSize framesize, MSize pc,
+                                         BCReg source[2], int cell[2])
 {
-  MSize pc, base = 1u+LJ_FR2;
-  unsigned matches = 0;
-  if (!bc || !sizebc || strslot < base || indexslot < base) return 0;
+  BCIns call, arg;
+  unsigned i;
+  if (!bc || pc < 2 || pc >= sizebc) return 0;
+  call = arm64_ir_bc_acq((uintptr_t)bc, pc);
+  if (bc_op(call) != BC_CALL || bc_b(call) != 2 || bc_c(call) != 3 ||
+      (MSize)bc_a(call)+3u+LJ_FR2 > framesize) return 0;
+  for (i = 0; i < 2; i++) {
+    BCReg target = (BCReg)(bc_a(call)+1u+LJ_FR2+i);
+    arg = arm64_ir_bc_acq((uintptr_t)bc, pc-2u+i);
+    if (bc_a(arg) != target ||
+        (bc_op(arg) != BC_MOV && bc_op(arg) != BC_CGET)) return 0;
+    source[i] = bc_d(arg);
+    cell[i] = bc_op(arg) == BC_CGET;
+  }
+  return 1;
+}
+
+/* The source-slot proof is repeated by the semantic and post-RA validators.
+** This shared routine only decodes the exact fixed CALL and its two adjacent
+** argument-copy instructions. */
+static int arm64_string_byte_call_slots_ir(const GCproto *pt, MSize strslot,
+                                           MSize indexslot)
+{
+  const BCIns *bc;
+  MSize pc, sizebc;
+  unsigned calls = 0, matches = 0;
+  if (!pt || strslot < 1u+LJ_FR2 || indexslot < 1u+LJ_FR2) return 0;
+  bc = proto_bc(pt); sizebc = pt->sizebc;
   for (pc = 0; pc < sizebc; pc++) {
     BCIns call = arm64_ir_bc_acq((uintptr_t)bc, pc);
-    BCReg target[2], source[2];
-    int cell[2] = { 0, 0 };
-    unsigned i;
-    int valid = 1;
-    if (bc_op(call) != BC_CALL || bc_b(call) != 2 || bc_c(call) != 3 ||
-        (MSize)bc_a(call)+3u+LJ_FR2 > framesize) continue;
-    /* CALL A stores the function at A, then its first and second arguments
-    ** at A+1+LJ_FR2 and A+2+LJ_FR2. Do not accept arbitrary values in nearby
-    ** slots: the IR sources must resolve to these exact argument registers. */
-    for (i = 0; i < 2; i++) {
-      MSize back;
-      target[i] = (BCReg)(bc_a(call)+1u+LJ_FR2+i);
-      source[i] = target[i];
-      for (back = pc; back > 0; back--) {
-        BCIns prev = arm64_ir_bc_acq((uintptr_t)bc, back-1u);
-        if (bc_a(prev) == target[i]) {
-          if (bc_op(prev) != BC_MOV && bc_op(prev) != BC_CGET)
-            valid = 0;
-          else {
-            source[i] = bc_d(prev);
-            cell[i] = bc_op(prev) == BC_CGET;
-          }
-          break;
-        }
-      }
-      if (source[i] == (BCReg)~0u) valid = 0;
-    }
-    if (!valid || base+(MSize)source[0] != strslot ||
-        base+(MSize)source[1] != indexslot) continue;
-    /* CGET reads a cell. A write anywhere in the function makes the input
-    ** SLOAD potentially stale relative to this call, so reject that shape. */
+    BCReg source[2]; int cell[2];
+    unsigned i; int valid = 1;
+    if (bc_op(call) != BC_CALL || bc_b(call) != 2 || bc_c(call) != 3)
+      continue;
+    calls++;
+    if (!arm64_string_byte_call_decode(bc, sizebc, pt->framesize, pc,
+                                       source, cell)) continue;
+    if (1u+LJ_FR2+(MSize)source[0] != strslot ||
+        1u+LJ_FR2+(MSize)source[1] != indexslot ||
+        source[0] >= pt->numparams || source[1] >= pt->numparams)
+      continue;
     for (i = 0; i < 2 && valid; i++) {
       MSize q;
-      if (!cell[i]) continue;
-      for (q = 0; q < sizebc; q++) {
+      for (q = 0; q < pc; q++) {
+        BCIns ins = arm64_ir_bc_acq((uintptr_t)bc, q);
+        BCOp op = bc_op(ins);
+        BCMode mode = bcmode_a(op);
+        if (((mode == BCMdst || mode == BCMvar) && bc_a(ins) == source[i]) ||
+            ((mode == BCMbase || mode == BCMrbase) &&
+             bc_a(ins) <= source[i])) { valid = 0; break; }
+        if (bcmode_d(op) == BCMjump) {
+          int64_t target = (int64_t)q+1+(int64_t)bc_j(ins);
+          if (target == (int64_t)pc-1 || target == (int64_t)pc) {
+            valid = 0; break;
+          }
+        }
+      }
+      if (cell[i]) for (q = 0; q < sizebc; q++) {
         BCIns ins = arm64_ir_bc_acq((uintptr_t)bc, q);
         if (bc_op(ins) == BC_CSET && bc_a(ins) == source[i]) {
-          valid = 0;
-          break;
+          valid = 0; break;
         }
       }
     }
-    matches += valid;
+    if (!valid) continue;
+    matches++;
   }
-  return matches == 1;
+  return calls == 1 && matches == 1;
+}
+
+static int arm64_string_byte_call_slots_postra(const GCproto *pt,
+                                               MSize strslot,
+                                               MSize indexslot)
+{
+  const BCIns *bc;
+  MSize pc, sizebc;
+  unsigned calls = 0, matches = 0;
+  if (!pt || strslot < 1u+LJ_FR2 || indexslot < 1u+LJ_FR2) return 0;
+  bc = proto_bc(pt); sizebc = pt->sizebc;
+  for (pc = 0; pc < sizebc; pc++) {
+    BCIns call = arm64_ir_bc_acq((uintptr_t)bc, pc);
+    BCReg source[2]; int cell[2];
+    unsigned i; int valid = 1;
+    if (bc_op(call) != BC_CALL || bc_b(call) != 2 || bc_c(call) != 3)
+      continue;
+    calls++;
+    if (!arm64_string_byte_call_decode(bc, sizebc, pt->framesize, pc,
+                                       source, cell)) continue;
+    if (1u+LJ_FR2+(MSize)source[0] != strslot ||
+        1u+LJ_FR2+(MSize)source[1] != indexslot ||
+        source[0] >= pt->numparams || source[1] >= pt->numparams)
+      continue;
+    for (i = 0; i < 2 && valid; i++) {
+      MSize q;
+      for (q = 0; q < pc; q++) {
+        BCIns ins = arm64_ir_bc_acq((uintptr_t)bc, q);
+        BCOp op = bc_op(ins);
+        BCMode mode = bcmode_a(op);
+        if (((mode == BCMdst || mode == BCMvar) && bc_a(ins) == source[i]) ||
+            ((mode == BCMbase || mode == BCMrbase) &&
+             bc_a(ins) <= source[i])) { valid = 0; break; }
+        if (bcmode_d(op) == BCMjump) {
+          int64_t target = (int64_t)q+1+(int64_t)bc_j(ins);
+          if (target == (int64_t)pc-1 || target == (int64_t)pc) {
+            valid = 0; break;
+          }
+        }
+      }
+      if (cell[i]) for (q = 0; q < sizebc; q++) {
+        BCIns ins = arm64_ir_bc_acq((uintptr_t)bc, q);
+        if (bc_op(ins) == BC_CSET && bc_a(ins) == source[i]) {
+          valid = 0; break;
+        }
+      }
+    }
+    if (!valid) continue;
+    matches++;
+  }
+  return calls == 1 && matches == 1;
 }
 
 static int arm64_ir_snapshots(const GCtrace *T, IRRef loopref,
@@ -7360,11 +7429,17 @@ static int arm64_string_byte_bounds_ir(const GCtrace *T, IRRef strref,
 static int arm64_string_byte_dynamic_index_ir(const GCtrace *T, IRRef conv)
 {
   IRRef ref;
-  if (!T || conv < REF_FIRST || conv >= T->nins) return 0;
+  if (!T || conv < REF_FIRST || conv >= T->nins ||
+      T->ir[conv].o != IR_CONV || T->ir[conv].t.irt != IRT_INT ||
+      T->ir[conv].op2 != (IRCONV_INT_NUM|IRCONV_ANY)) return 0;
   for (ref = conv+1u; ref < T->nins; ref++) {
     const IRIns *strref = &T->ir[ref];
-    if (strref->o == IR_STRREF && strref->t.irt == IRT_PGC &&
-        arm64_string_byte_dynamic_bounds_ir(T, ref, strref->op1,
+    const IRIns *offset;
+    if (strref->o != IR_STRREF || strref->t.irt != IRT_PGC ||
+        strref->op2 < REF_FIRST || strref->op2 >= ref) continue;
+    offset = &T->ir[strref->op2];
+    if (offset->o != IR_ADDOV || offset->op1 != conv) continue;
+    if (arm64_string_byte_dynamic_bounds_ir(T, ref, strref->op1,
                                             strref->op2))
       return 1;
   }
@@ -7415,8 +7490,8 @@ static int arm64_string_byte_dynamic_bounds_ir(const GCtrace *T,
   if (!startpt || !checkptrGC(startpt) ||
       startpt->gch.gct != (uint32_t)~LJ_TPROTO) return 0;
   pt = gco2pt(startpt);
-  if (!arm64_string_byte_call_slots(proto_bc(pt), pt->sizebc,
-          pt->framesize, T->ir[str].op1, source->op1)) return 0;
+  if (!arm64_string_byte_call_slots_ir(pt, T->ir[str].op1, source->op1))
+    return 0;
   for (ref = REF_FIRST; ref < offset; ref++) {
     const IRIns *g = &T->ir[ref];
     if (g->t.irt != (IRT_INT|IRT_GUARD)) continue;
@@ -7458,6 +7533,39 @@ static int arm64_string_byte_dynamic_bounds_ir(const GCtrace *T,
          widthref < strref;
 }
 
+static int arm64_string_byte_dynamic_guard_ir(const GCtrace *T,
+                                               IRRef guardref)
+{
+  const IRIns *guard;
+  IRRef ref;
+  if (!T || guardref < REF_FIRST || guardref >= T->nins) return 0;
+  guard = &T->ir[guardref];
+  if ((guard->o != IR_ULE && guard->o != IR_UGE) ||
+      guard->t.irt != (IRT_INT|IRT_GUARD)) return 0;
+  for (ref = guardref+1u; ref < T->nins; ref++) {
+    const IRIns *strref = &T->ir[ref];
+    const IRIns *offset, *len;
+    IRRef idx, lenref;
+    if (strref->o != IR_STRREF || strref->t.irt != IRT_PGC ||
+        strref->op2 < REF_FIRST || strref->op2 >= ref) continue;
+    offset = &T->ir[strref->op2];
+    if (offset->o != IR_ADDOV || guardref >= strref->op2 ||
+        offset->op1 < REF_FIRST ||
+        offset->op1 >= strref->op2) continue;
+    idx = offset->op1;
+    lenref = guard->o == IR_ULE && guard->op1 == idx ? guard->op2 :
+             guard->o == IR_UGE && guard->op2 == idx ? guard->op1 : 0;
+    if (!lenref || lenref >= guardref) continue;
+    len = &T->ir[lenref];
+    if (len->o == IR_FLOAD && len->t.irt == IRT_INT &&
+        len->op1 == strref->op1 && len->op2 == IRFL_STR_LEN &&
+        arm64_string_byte_dynamic_bounds_ir(T, ref, strref->op1,
+                                            strref->op2))
+      return 1;
+  }
+  return 0;
+}
+
 /* UGE/ULE are admitted only as the exact dominating range guard consumed by
 ** a later STRREF. This prevents unrelated unsigned comparisons from opening. */
 static int arm64_string_byte_guard_ir(const GCtrace *T, IRRef guardref)
@@ -7474,21 +7582,7 @@ static int arm64_string_byte_guard_ir(const GCtrace *T, IRRef guardref)
   if (lenref < REF_FIRST || lenref >= guardref ||
       (!arm64_ir_kint_value(T, boundref, &bound) || bound <= 0 ||
        (uint32_t)bound > 4096u-(uint32_t)sizeof(GCstr))) {
-    if (((guard->o == IR_ULE && guard->op2 == lenref) ||
-         (guard->o == IR_UGE && guard->op1 == lenref)) &&
-        ((guard->o == IR_ULE && guard->op1 >= REF_FIRST &&
-          guard->op1 < guardref) ||
-         (guard->o == IR_UGE && guard->op2 >= REF_FIRST &&
-          guard->op2 < guardref))) {
-      for (ref = guardref+1u; ref < T->nins; ref++) {
-        const IRIns *strref = &T->ir[ref];
-        if (strref->o == IR_STRREF && strref->t.irt == IRT_PGC &&
-            arm64_string_byte_dynamic_bounds_ir(T, ref, strref->op1,
-                                                strref->op2))
-          return 1;
-      }
-    }
-    return 0;
+    return arm64_string_byte_dynamic_guard_ir(T, guardref);
   }
   {
     const IRIns *len = &T->ir[lenref];
@@ -10469,9 +10563,9 @@ static int arm64_string_byte_dynamic_bounds_postra(
   if (str < REF_FIRST || str >= strref) return 0;
   string = ir_load_acq(&v->ir[str]);
   if (string.o != IR_SLOAD || string.t.irt != (IRT_STR|IRT_GUARD) ||
-      string.op2 != IRSLOAD_TYPECHECK || !v->proto ||
-      !arm64_string_byte_call_slots(v->proto_bc, v->proto_sizebc,
-          v->proto->framesize, string.op1, source.op1)) return 0;
+      string.op2 != IRSLOAD_TYPECHECK ||
+      !arm64_string_byte_call_slots_postra(v->proto, string.op1, source.op1))
+    return 0;
   for (ref = REF_FIRST; ref < offset; ref++) {
     IRIns g = ir_load_acq(&v->ir[ref]);
     if (g.t.irt != (IRT_INT|IRT_GUARD)) continue;
@@ -10514,10 +10608,49 @@ static int arm64_string_byte_dynamic_index_postra(
     const LJArm64PostRAView *v, IRRef conv)
 {
   IRRef ref;
+  IRIns conversion;
   if (!v || conv < REF_FIRST || conv >= v->nins) return 0;
+  conversion = ir_load_acq(&v->ir[conv]);
+  if (conversion.o != IR_CONV || conversion.t.irt != IRT_INT ||
+      conversion.op2 != (IRCONV_INT_NUM|IRCONV_ANY)) return 0;
   for (ref = conv+1u; ref < v->nins; ref++) {
     IRIns strref = ir_load_acq(&v->ir[ref]);
-    if (strref.o == IR_STRREF && strref.t.irt == IRT_PGC &&
+    IRIns offset;
+    if (strref.o != IR_STRREF || strref.t.irt != IRT_PGC ||
+        strref.op2 < REF_FIRST || strref.op2 >= ref) continue;
+    offset = ir_load_acq(&v->ir[strref.op2]);
+    if (offset.o != IR_ADDOV || offset.op1 != conv) continue;
+    if (arm64_string_byte_dynamic_bounds_postra(v, ref, strref.op1,
+                                                strref.op2)) return 1;
+  }
+  return 0;
+}
+
+static int arm64_string_byte_dynamic_guard_postra(
+    const LJArm64PostRAView *v, IRRef guardref)
+{
+  IRIns guard;
+  IRRef ref;
+  if (!v || guardref < REF_FIRST || guardref >= v->nins) return 0;
+  guard = ir_load_acq(&v->ir[guardref]);
+  if ((guard.o != IR_ULE && guard.o != IR_UGE) ||
+      guard.t.irt != (IRT_INT|IRT_GUARD)) return 0;
+  for (ref = guardref+1u; ref < v->nins; ref++) {
+    IRIns strref = ir_load_acq(&v->ir[ref]), offset, len;
+    IRRef idx, lenref;
+    if (strref.o != IR_STRREF || strref.t.irt != IRT_PGC ||
+        strref.op2 < REF_FIRST || strref.op2 >= ref) continue;
+    offset = ir_load_acq(&v->ir[strref.op2]);
+    if (offset.o != IR_ADDOV || guardref >= strref.op2 ||
+        offset.op1 < REF_FIRST ||
+        offset.op1 >= strref.op2) continue;
+    idx = offset.op1;
+    lenref = guard.o == IR_ULE && guard.op1 == idx ? guard.op2 :
+             guard.o == IR_UGE && guard.op2 == idx ? guard.op1 : 0;
+    if (!lenref || lenref >= guardref) continue;
+    len = ir_load_acq(&v->ir[lenref]);
+    if (len.o == IR_FLOAD && len.t.irt == IRT_INT &&
+        len.op1 == strref.op1 && len.op2 == IRFL_STR_LEN &&
         arm64_string_byte_dynamic_bounds_postra(v, ref, strref.op1,
                                                 strref.op2)) return 1;
   }
@@ -10539,21 +10672,7 @@ static int arm64_string_byte_guard_postra(const LJArm64PostRAView *v,
   if (lenref < REF_FIRST || lenref >= guardref ||
       (!arm64_scalar_postra_kint(v, boundref, &bound) || bound <= 0 ||
        (uint32_t)bound > 4096u-(uint32_t)sizeof(GCstr))) {
-    if (((guard.o == IR_ULE && guard.op2 == lenref) ||
-         (guard.o == IR_UGE && guard.op1 == lenref)) &&
-        ((guard.o == IR_ULE && guard.op1 >= REF_FIRST &&
-          guard.op1 < guardref) ||
-         (guard.o == IR_UGE && guard.op2 >= REF_FIRST &&
-          guard.op2 < guardref))) {
-      for (ref = guardref+1u; ref < v->nins; ref++) {
-        IRIns strref = ir_load_acq(&v->ir[ref]);
-        if (strref.o == IR_STRREF && strref.t.irt == IRT_PGC &&
-            arm64_string_byte_dynamic_bounds_postra(v, ref, strref.op1,
-                                                    strref.op2))
-          return 1;
-      }
-    }
-    return 0;
+    return arm64_string_byte_dynamic_guard_postra(v, guardref);
   }
   {
     IRIns len = ir_load_acq(&v->ir[lenref]);

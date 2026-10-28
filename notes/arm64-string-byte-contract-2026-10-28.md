@@ -101,11 +101,19 @@ SLOAD-to-`IRCONV_INT_NUM|IRCONV_ANY` conversion, the exact string SLOAD, an
 unsigned `index <= string.len` guard, checked `index-1`, nonnegative offset,
 checked subtraction, and an exact one-byte range before STRREF. The string and
 index SLOAD slots must resolve from the ordered first and second arguments of
-the function's fixed two-argument `CALL`; only straight-line MOV/CGET
-definitions are followed, and cell-backed argument sources with any CSET in
-the function are refused. The root preflight separately verifies the active
-`FF_string_byte` identity and current caller frame/call shape. The proof does
-not admit negative-index lowering or dynamic values directly into snapshots.
+the function's unique fixed two-argument `CALL`. Their argument setup must be
+the two adjacent MOV/CGET instructions immediately before it; sources must be
+parameter slots with no writes or branch bypass. The semantic and post-RA
+source-slot checks independently repeat this proof, sharing only the
+bytecode instruction decoder. The root preflight separately verifies the
+active `FF_string_byte` identity and current caller frame/call shape. The proof
+does not admit negative-index lowering or dynamic values directly into
+snapshots.
+
+The C fixture also inserts an unrelated `IRCONV_INT_NUM|IRCONV_ANY` before
+the valid graph and an unrelated unsigned `ULE` guard beside its valid upper
+guard. Both semantic and post-RA proof helpers reject the unrelated nodes
+while continuing to certify the original conversion and upper guard.
 
 The numeric conversion follows ARM64 `FCVTZS` behavior measured on this
 target: NaN converts to zero, positive overflow/infinity saturates to
