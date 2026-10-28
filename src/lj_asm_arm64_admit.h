@@ -8949,7 +8949,7 @@ static int arm64_lua_leaf_type_path(const GCproto *pt,
 ** extra arguments and fill missing parameters with nil. */
 static const GCfunc *arm64_lua_leaf_ir_function(const GCtrace *T, IRRef fn,
                                                 IRRef before, IRRef *guardp);
-static IRRef arm64_lua_leaf_ir_args_at(const jit_State *J, const GCtrace *T,
+static IRRef arm64_lua_leaf_ir_args_at(const GCtrace *T,
                                   SnapNo s, IRRef callee, IRRef *args,
                                   const GCproto *parentpt, MSize framebase)
 {
@@ -9056,7 +9056,7 @@ static IRRef arm64_lua_leaf_ir_args_at(const jit_State *J, const GCtrace *T,
 static IRRef arm64_lua_leaf_ir_args(const jit_State *J, const GCtrace *T,
                                   SnapNo s, IRRef callee, IRRef *args)
 {
-  return arm64_lua_leaf_ir_args_at(J, T, s, callee, args, J->pt,
+  return arm64_lua_leaf_ir_args_at(T, s, callee, args, J->pt,
                                    1u+LJ_FR2);
 }
 
@@ -9079,7 +9079,7 @@ static int arm64_lua_leaf_ir_snapshot(const jit_State *J, const GCtrace *T,
     parentpt = funcproto(parent);
     framebase = frames.child[frames.depth-1u].baseslot;
   }
-  return arm64_lua_leaf_ir_args_at(J, T, s, T->ir[ref].op2, NULL,
+  return arm64_lua_leaf_ir_args_at(T, s, T->ir[ref].op2, NULL,
                                    parentpt, framebase) == T->ir[ref].op1;
 }
 
