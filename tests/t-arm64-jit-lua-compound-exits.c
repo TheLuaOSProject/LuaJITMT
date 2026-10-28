@@ -139,9 +139,11 @@ static void assert_child_exit(lua_State *L, GCtrace *T,
   MSize ofs, nent, i;
   uint64_t pcbase;
   BCReg frame_slot, arg_slot, sum_slot;
+  BCReg kpri_oldtag_slot = 0, kpri_oldtag_source = 0;
   IRRef arg_ref = 0;
   MSize max_child_slot = 0, child_slots = 0;
   int found_frame = 0, found_callee = 0, found_sum = 0;
+  int found_kpri_oldtag = 0;
 
   assert(bc_op(add) == child_op);
   assert(bc_op((BCIns)la_load32_acq((const uint32_t *)call)) == BC_CALL &&
@@ -176,6 +178,55 @@ static void assert_child_exit(lua_State *L, GCtrace *T,
   assert(snap_nslots_acq(snap) >= arg_slot + 1u &&
          snap_nslots_acq(snap) <= arg_slot + leafpt->framesize);
 
+  if (!strcmp(shape->name, "kpri-after-overflow") ||
+      !strcmp(shape->name, "kpri-before-overflow")) {
+    MSize pcpos, childpos = (MSize)(childpc - proto_bc(leafpt));
+    MSize literalpos = 0;
+    for (pcpos = 1; pcpos + 1u < leafpt->sizebc; pcpos++) {
+      BCIns ins = (BCIns)la_load32_acq(
+        (const uint32_t *)&proto_bc(leafpt)[pcpos]);
+      if (bc_op(ins) == BC_KPRI && bc_d(ins) == 1u) {
+        kpri_oldtag_slot = (BCReg)(arg_slot + bc_a(ins));
+        literalpos = pcpos;
+        break;
+      }
+    }
+    assert(literalpos && kpri_oldtag_slot >= arg_slot &&
+           kpri_oldtag_slot < arg_slot + leafpt->framesize);
+    if (literalpos < childpos) {
+      int found_cset = 0;
+      for (pcpos = childpos + 1u; pcpos + 1u < leafpt->sizebc; pcpos++) {
+        BCIns ins = (BCIns)la_load32_acq(
+          (const uint32_t *)&proto_bc(leafpt)[pcpos]);
+        if (bc_op(ins) == BC_CSET &&
+            bc_a(ins) == kpri_oldtag_slot - arg_slot) {
+          kpri_oldtag_source = bc_d(ins);
+          found_cset = 1;
+          break;
+        }
+      }
+      assert(found_cset && kpri_oldtag_source < leafpt->framesize &&
+             bc_a(add) == kpri_oldtag_source);
+    } else {
+      int found_overwrite = 0;
+      assert(!strcmp(shape->name, "kpri-after-overflow"));
+      for (pcpos = literalpos + 1u; pcpos + 1u < leafpt->sizebc; pcpos++) {
+        BCIns ins = (BCIns)la_load32_acq(
+          (const uint32_t *)&proto_bc(leafpt)[pcpos]);
+        if (bc_op(ins) == BC_CSET &&
+            bc_a(ins) == kpri_oldtag_slot - arg_slot) {
+          kpri_oldtag_source = bc_d(ins);
+          found_overwrite = 1;
+          break;
+        }
+      }
+      assert(found_overwrite && kpri_oldtag_source < leafpt->framesize &&
+             bc_op(proto_bc(leafpt)[pcpos-1u]) == BC_MULVN &&
+             bc_a(proto_bc(leafpt)[pcpos-1u]) == kpri_oldtag_source);
+      kpri_oldtag_slot = 0;  /* Not live at this earlier ADDVN exit. */
+    }
+  }
+
   for (i = 0; i < nent; i++) {
     SnapEntry sn = snapentry_acq(&map[i]);
     IRRef ref = snap_ref(sn);
@@ -193,8 +244,14 @@ static void assert_child_exit(lua_State *L, GCtrace *T,
     }
     if (snap_slot(sn) >= arg_slot) {
       assert(!(sn & (SNAP_NORESTORE | SNAP_FRAME)) &&
-             snap_slot(sn) < arg_slot + leafpt->framesize &&
-             (irt_type(ir->t) == IRT_INT || irt_type(ir->t) == IRT_NUM));
+             snap_slot(sn) < arg_slot + leafpt->framesize);
+      if (snap_slot(sn) == kpri_oldtag_slot) {
+        assert(kpri_oldtag_slot && ref == REF_FALSE &&
+               irt_type(ir->t) == IRT_FALSE);
+        found_kpri_oldtag = 1;
+      } else {
+        assert(irt_type(ir->t) == IRT_INT || irt_type(ir->t) == IRT_NUM);
+      }
       child_slots++;
       if (snap_slot(sn) > max_child_slot) max_child_slot = snap_slot(sn);
       if (snap_slot(sn) == arg_slot) arg_ref = ref;
@@ -208,6 +265,8 @@ static void assert_child_exit(lua_State *L, GCtrace *T,
   assert(found_frame && found_callee && found_sum && arg_ref != 0 &&
          max_child_slot + 1u == snap_nslots_acq(snap) &&
          child_slots == max_child_slot - arg_slot + 1u);
+  if (kpri_oldtag_slot)
+    assert(found_kpri_oldtag);
   assert(shape->nchildops >= 2);
   assert(lj_trace_test_root_entry_successes() > 0 &&
          lj_trace_test_exit_calls() > 0 &&
@@ -456,8 +515,10 @@ enum {
   C_CALL_ARITY, C_CALL_A, C_CALL_LINK, C_IDENTITY,
   C_NORESTORE_LOCAL, C_LOCAL_REF, C_CHILD_PC, C_CHILD_PREFIX, C_OMIT_ENTRY,
   C_CSET_SOURCE, C_CSET_DEST, C_CSET_UNDEFINED_DEST,
-  C_CSET_UNDEFINED_SOURCE, C_CSET_OLD_VALUE, C_CSET_NUM_VALUE, C_COUNT
+  C_CSET_UNDEFINED_SOURCE, C_CSET_OLD_VALUE, C_CSET_NUM_VALUE,
+  C_CALLER_RESULT_REF, C_CALLER_RESULT_OMIT, C_CALLER_RESULT_NORESTORE, C_COUNT
 };
+static unsigned caller_result_negatives[3][2];
 
 static void child_mutate(ChildFixture *f, unsigned m)
 {
@@ -565,6 +626,44 @@ static void child_mutate(ChildFixture *f, unsigned m)
     snap->nent--;
     for (MSize s = f->child+1u; s < f->copy.nsnap; s++) f->snap[s].mapofs--;
     f->copy.nsnapmap--; f->view.nsnapmap--;
+    break;
+  }
+  case C_CALLER_RESULT_REF: case C_CALLER_RESULT_OMIT:
+  case C_CALLER_RESULT_NORESTORE: {
+    SnapNo next;
+    SnapShot *rootmap = NULL;
+    MSize entry, sum = UINT32_MAX;
+    BCReg temp = loop_sum_slot(f->root, call);
+    for (const BCIns *pc = call+1; pc < proto_bc(f->root)+f->root->sizebc; pc++) {
+      if (bc_op(*pc) == BC_CSET && bc_d(*pc) == temp) {
+        sum = 1u+LJ_FR2+bc_a(*pc);
+        break;
+      }
+    }
+    assert(sum != UINT32_MAX);
+    for (next = f->child+1u; next < f->copy.nsnap; next++) {
+      uint64_t footer;
+      rootmap = &f->snap[next];
+      memcpy(&footer, &f->map[rootmap->mapofs+rootmap->nent], 8);
+      if (!(uint8_t)footer) break;
+    }
+    assert(next < f->copy.nsnap && rootmap);
+    entry = child_snap_entry(f->map, rootmap->mapofs, rootmap->nent, sum);
+    assert(entry != UINT32_MAX);
+    if (m == C_CALLER_RESULT_REF) {
+      IRRef old = snap_ref(f->map[entry]);
+      IRRef other = child_other_num(f, old);
+      assert(other && old != other);
+      f->map[entry] = SNAP(sum, 0, other);
+    } else if (m == C_CALLER_RESULT_NORESTORE) {
+      f->map[entry] |= SNAP_NORESTORE;
+    } else {
+      memmove(&f->map[entry], &f->map[entry+1u],
+              (f->copy.nsnapmap-entry-1u)*sizeof(SnapEntry));
+      rootmap->nent--;
+      for (SnapNo n = next+1u; n < f->copy.nsnap; n++) f->snap[n].mapofs--;
+      f->copy.nsnapmap--; f->view.nsnapmap--;
+    }
     break;
   }
   case C_CSET_SOURCE:
@@ -690,6 +789,9 @@ static void child_admission(GCtrace *T, const LeafCase *shape)
              irt_type(f.ir[alt].t) !=
              irt_type(f.ir[snap_ref(f.map[local_entry])].t))) applicable = 0;
         if (m == C_GUARD_CONSTANT && !irref_isk(alt)) applicable = 0;
+        if (m == C_CALLEE_COPY &&
+            (bc_op(proto_bc(f.leafpt)[1]) != BC_CGET ||
+             bc_d(proto_bc(f.leafpt)[1]) == 1u)) applicable = 0;
         if (m == C_CHILD_PREFIX) {
           const BCIns *childpc = (const BCIns *)(uintptr_t)(pcbase >> 8);
           MSize p, end = proto_bcpos(live_leafpt, childpc);
@@ -750,6 +852,8 @@ static void child_admission(GCtrace *T, const LeafCase *shape)
           assert(0);
         }
         if (allocated) postra_bad++; else semantic_bad++;
+        if (m >= C_CALLER_RESULT_REF && m <= C_CALLER_RESULT_NORESTORE)
+          caller_result_negatives[m-C_CALLER_RESULT_REF][allocated]++;
         if (m >= C_CSET_SOURCE && m <= C_CSET_NUM_VALUE) {
           unsigned kind = m - C_CSET_SOURCE;
           if (allocated) cset_postra_bad[kind]++;
@@ -898,6 +1002,9 @@ int main(void)
   assert(native_runs == 96 && child_exits == 34 &&
          same_trace_reuses == 62 && gc_reuses == 14);
   assert(alias_bad > 0);
+  for (unsigned i = 0; i < 3; i++)
+    assert(caller_result_negatives[i][0] &&
+           caller_result_negatives[i][0] == caller_result_negatives[i][1]);
   for (unsigned i = 0; i < 6; i++)
     assert(cset_semantic_bad[i] > 0 &&
            cset_postra_bad[i] == cset_semantic_bad[i]);
