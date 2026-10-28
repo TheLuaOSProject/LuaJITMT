@@ -36,8 +36,12 @@ local cases = {
   },
 }
 
-local function compile(source, suffix)
-  return assert(loadstring(source, '@topology-probe'))()
+local function compile(source, oracle)
+  local chunk=assert(loadstring(source, '@topology-probe'))
+  -- Captured sibling helpers belong to the loader's prototype tree.
+  -- Keep them interpreted along with the returned oracle runner.
+  if oracle then jit.off(chunk,true) end
+  return chunk()
 end
 
 local function root_headers(fn)
@@ -137,8 +141,8 @@ local function main()
   io.write('case\tarch\tphase\troot_ids\tpublished_root_linked_sides\tobserved_root_exits\tobserved_other_exits\texit_counts\ttraces\n')
   for _,case in ipairs(cases) do
     jit.flush()
-    local candidate=compile(case.source, '-'..case.name)
-    local oracle=compile(case.source, '-'..case.name..'-oracle')
+    local candidate=compile(case.source, false)
+    local oracle=compile(case.source, true)
     jit.off(oracle,true)
     observed={}
     local known_roots={}

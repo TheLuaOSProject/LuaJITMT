@@ -62,8 +62,13 @@ local cases = {
       for i=1,n do s=s+3LL end; return tonumber(s) end]]},
 }
 
-local function compile(case, suffix)
-  return assert(loadstring(case[2], '@jit-parity-'..case[1]..suffix))()
+local function compile(case, oracle)
+  local suffix=oracle and '-oracle' or ''
+  local chunk=assert(loadstring(case[2], '@jit-parity-'..case[1]..suffix))
+  -- Disable the loader's whole prototype tree before creating closures.
+  -- Disabling only the returned runner misses captured sibling helpers.
+  if oracle then jit.off(chunk,true) end
+  return chunk()
 end
 
 local function root_traces(fn)
@@ -88,7 +93,7 @@ local function same(a,b)
 end
 
 local function sample(case)
-  local candidate,oracle=compile(case,''),compile(case,'-oracle')
+  local candidate,oracle=compile(case,false),compile(case,true)
   local inputs=case[3] or {}
   jit.off(oracle,true)
   local root_exits=0

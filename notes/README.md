@@ -18,6 +18,12 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
+- Latest focused port-branch follow-up: scalar FUNCF numeric literals and
+  the shared tracesnap cell-PC correction at `d9352591a`. Ordinary ARM64/x64
+  stock corpora, the getpos fixture and corrected fully interpreted benchmark
+  oracles pass; the FUNCF contract passes ARM64/arm64e assertion profiles.
+  The complete gate remains at the preceding source below. See the
+  [integration checkpoint](arm64-funcf-integrated-checkpoint-2026-10-28.md).
 - Latest complete port-branch checkpoint: negative dynamic byte indices,
   captured nested Lua calls and fixed two-result leaves at `3e3f3432a`.
   The complete experimental gate, all four M7 FFI profiles, ordinary ARM64/x64

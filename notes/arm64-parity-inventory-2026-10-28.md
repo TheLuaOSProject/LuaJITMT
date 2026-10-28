@@ -7,6 +7,13 @@ and one call after full GC. The original eighteen workloads produce 234 result
 checks; the current twenty-workload harness adds two dynamic-string rows for
 260 checks.
 
+The current harness disables the loader's entire prototype tree before
+creating oracle closures. Earlier revisions disabled only the returned
+runner, which missed captured sibling helper prototypes. Historical native
+candidate witnesses remain valid, but those older reference calls were not
+guaranteed wholly interpreted. The corrected `d9352591a` runtime comparison
+below supersedes that oracle claim.
+
 The `texit` observer matches the exiting trace number against the selected
 runner's currently patched JFORL/JLOOP/JITERL bytecode while the event is being
 delivered. This avoids attributing a retired trace number to a later trace.
@@ -115,3 +122,10 @@ I64 rows remain inconclusive on both targets. The complete experimental gate,
 all four combined M7 FFI profiles, ordinary companions and both stock corpora
 pass at this source; see the
 [combined checkpoint](arm64-captured-multires-checkpoint-2026-10-28.md).
+
+At runtime source `d9352591a`, the corrected oracle harness again passes all
+260 comparisons on each target, with seventeen ARM64 selected-root witnessed
+rows versus eighteen on x64. Varargs remains the sampled difference;
+iterator/I64 remain inconclusive. The scalar FUNCF extension is measured
+separately by the topology probe. See the
+[integration and oracle correction](arm64-funcf-integrated-checkpoint-2026-10-28.md).
