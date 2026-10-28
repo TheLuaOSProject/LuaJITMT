@@ -181,6 +181,11 @@ int main(void)
     " local byte=string.byte; local i,sum=1,0; "
     "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
     "end\n"
+    "string_byte_dynamic_oracle=function(s,n,index)\n"
+    " local byte=string.byte; local i,sum=1,0; "
+    "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
+    "end\n"
+    "jit.off(string_byte_dynamic_oracle,true)\n"
     "string_byte_bounds_trace=function(s,n)\n"
     " local byte=string.byte; local i,sum=1,0.5; "
     "while i<=n do sum=sum+byte(s,2); i=i+1 end; return sum\n"
@@ -469,6 +474,67 @@ int main(void)
       assert(lj_trace_test_root_entry_successes() > entries &&
              lj_trace_test_exit_calls() > exits &&
              lj_trace_test_last_exit_parent() == dynamic_no);
+    }
+  }
+  /* Exercise the negative-origin trace against the interpreter, including
+  ** truncation at the first byte and saturated conversions. Each call must
+  ** enter and exit this selected trace, even when it resumes with an error. */
+  {
+    static const struct {
+      const char *string;
+      lua_Number index;
+    } cases[] = {
+      { "string_byte_value", -1.0 },
+      { "string_byte_value", -2.9 },
+      { "string_byte_value", -240.0 },
+      { "string_byte_value", -240.9 },
+      { "string_byte_value", -241.0 },
+      { "string_byte_value", -2147483648.0 },
+      { "string_byte_value", -2147483649.0 },
+      { "string_byte_value", 2147483647.0 },
+      { "string_byte_value", 2147483648.0 },
+      { "string_byte_value", -1.0e300 },
+      { "string_byte_value", 1.0e300 },
+      { "string_byte_value", -INFINITY },
+      { "string_byte_value", INFINITY },
+      { "string_byte_value", NAN },
+      { "string_byte_value", -0.0 },
+      { "string_byte_value", 0.0 },
+      { "string_byte_value", 2.9 },
+      { "string_byte_short", -1.0 },
+      { "string_byte_short", -1.9 },
+      { "string_byte_short", -2.0 },
+      { "string_byte_empty", -1.0 },
+      { "string_byte_empty", -2147483648.0 },
+      { "string_byte_nul", -1.0 },
+      { "string_byte_nul", -2.9 },
+      { "string_byte_nul", -3.9 },
+      { "string_byte_nul", -4.0 },
+      { "string_byte_long", -65536.9 },
+      { "string_byte_long", -65537.0 }
+    };
+    unsigned n;
+    for (n = 0; n < sizeof(cases)/sizeof(cases[0]); n++) {
+      lua_Number expected = 0.0, actual = 0.0;
+      int expected_status = call_dynamic_loop_value(L,
+          "string_byte_dynamic_oracle", cases[n].string, cases[n].index,
+          &expected);
+      int actual_status;
+      entries = lj_trace_test_root_entry_successes();
+      exits = lj_trace_test_exit_calls();
+      actual_status = call_dynamic_loop_value(L,
+          "string_byte_negative_dynamic_trace", cases[n].string,
+          cases[n].index, &actual);
+      if (actual_status != expected_status ||
+          (actual_status == LUA_OK && actual != expected))
+        fprintf(stderr, "negative byte oracle case=%u index=%.17g "
+                "status=%d/%d value=%.17g/%.17g\n", n, cases[n].index,
+                actual_status, expected_status, actual, expected);
+      assert(actual_status == expected_status &&
+             (actual_status != LUA_OK || actual == expected));
+      assert(lj_trace_test_root_entry_successes() > entries &&
+             lj_trace_test_exit_calls() > exits &&
+             lj_trace_test_last_exit_parent() == negative_no);
     }
   }
   /* The negative form uses len+index. Bind every guard and the one-byte
