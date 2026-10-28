@@ -101,8 +101,24 @@ the focused contracts were rerun.
 Evidence is retained under
 `/Users/frityet/Scratch/ljmt-lua-arguments-20261028`, including
 `focused-restored.log`, `arguments-restored.log`, `counterfactuals.log`,
-the four `cf-*.log` outputs and their build logs. The full profile/gate/corpus
-matrix is pending at this source checkpoint.
+the four `cf-*.log` outputs and their build logs.
+
+The implementation was committed and pushed as `43d0a9c9`. Its first complete
+experimental run passed all four leaf profiles with the counts above, then
+stopped at the rooted-length fixture's post-full-GC native-entry/exit
+assertion. The earlier STOPREQ/native-resume assertion passed. The failed
+run did not capture which native counter was zero or the concurrent GC gate
+state, so its cause is not established. A standalone diagnostic copy passed
+100 repetitions, followed by 500 unchanged-fixture runs paired with 500
+diagnostic-copy runs. Those 1,100 successes do not explain the initial failure.
+
+The rooted-length fixture now prints entry/exit/helper counters, GC phase and
+entry gate, TG request state and function/loop bytecode only on failure. Its
+native assertions remain strict; no retry or interpreter result is accepted
+as native evidence. The diagnostic fixture compiled and passed against the
+same assertion runtime. Original logs are `experimental-initial-failure.log`
+and `matrix-initial-failure.log`; isolated runs are in `tablen-repeat.log`
+and `tablen-paired-repeat.log`. The complete replacement matrix is pending.
 
 ## Remaining limits
 

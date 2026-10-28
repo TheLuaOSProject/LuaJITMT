@@ -438,6 +438,37 @@ static void assert_rooted_len_result(lua_State *L)
   assert(lua_tointeger(L, -1) == 480);
   lua_pop(L, 1);
 }
+
+static void assert_rooted_len_native(lua_State *L, const char *stage)
+{
+  uint32_t publishes = lj_trace_test_root_entry_publishes();
+  uint32_t exits = lj_trace_test_exit_calls();
+  if (!publishes || !exits) {
+    global_State *g = G(L);
+    TGState *tg = L2TG(L);
+    GCproto *pt;
+    fprintf(stderr, "rooted length %s: publishes=%u successes=%u exits=%u "
+      "helpers=%u cleanups=%u startins=%u phase=%u gate=%u open=%d "
+      "req=%u poll=%u flags=%u vmstate=%d\n", stage, publishes,
+      lj_trace_test_root_entry_successes(), exits,
+      lj_tab_test_len_rooted_try_calls(), lj_trace_test_root_entry_cleanups(),
+      lj_trace_test_root_entry_startins_calls(), gc2_phase_acq(g),
+      gc2_jit_phase_gate_acq(g), lj_gc2_jit_entry_open(g),
+      lj_tg_reqmask_acq(tg), lj_tg_poll_acq(tg), lj_tg_flags_acq(tg),
+      lj_tg_vmstate_load_acq(tg));
+    lua_getglobal(L, "rooted_len_trace_call");
+    pt = funcproto(funcV(L->top-1));
+    for (MSize pc = 0; pc < pt->sizebc; pc++) {
+      BCIns ins = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(pt)[pc]);
+      if (!pc || bc_op(ins) == BC_LOOP || bc_op(ins) == BC_ILOOP ||
+          bc_op(ins) == BC_JLOOP)
+        fprintf(stderr, "rooted length source pc=%u ins=%08x flags=%u\n",
+                pc, ins, la_load8_acq(&pt->flags));
+    }
+    lua_pop(L, 1);
+  }
+  assert(publishes > 0 && exits > 0);
+}
 #endif
 
 #if LJ_TARGET_ARM64
@@ -892,8 +923,7 @@ static void exercise_jit_retry_side_exit(lua_State *L)
     lj_trace_test_reset_exit_stats();
     lj_tab_test_reset_len_rooted_try_calls();
     assert_rooted_len_result(L);
-    assert(lj_trace_test_root_entry_publishes() > 0 &&
-	   lj_trace_test_exit_calls() > 0);
+    assert_rooted_len_native(L, "after STOPREQ");
     assert(lj_tab_test_len_rooted_try_calls() > 0);
     assert_clean(L, before);
     assert_wait_state(before_waits);
@@ -906,8 +936,7 @@ static void exercise_jit_retry_side_exit(lua_State *L)
     lj_trace_test_reset_exit_stats();
     lj_tab_test_reset_len_rooted_try_calls();
     assert_rooted_len_result(L);
-    assert(lj_trace_test_root_entry_publishes() > 0 &&
-	   lj_trace_test_exit_calls() > 0);
+    assert_rooted_len_native(L, "after full GC");
     assert(lj_tab_test_len_rooted_try_calls() > 0);
     assert_clean(L, before);
     assert_wait_state(before_waits);
