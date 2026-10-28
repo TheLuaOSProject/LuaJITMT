@@ -906,8 +906,10 @@ LJLIB_CF(jit_util_tracesnap)
     if (getpos) {
       const BCIns *pc = snap_pc_acq(&map[nent]);
       const BCIns *startpc = pc;
-      while (bc_op((BCIns)la_load32_acq(
-	       (const uint32_t *)startpc)) < BC_FUNCF)
+      /* Local cell opcodes follow the function headers in BCDEF. They are
+      ** ordinary instructions, not a boundary of the owning prototype. */
+      while (!bc_isfunc_or_ff(bc_op((BCIns)la_load32_acq(
+	       (const uint32_t *)startpc))))
 	startpc--;
       pcpos = (int32_t)(pc - startpc);
     }
