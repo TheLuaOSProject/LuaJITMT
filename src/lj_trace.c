@@ -12228,16 +12228,29 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
       } else if (lj_ff_is_bit_scalar(ffid) ||
                  ffid == FF_math_floor || ffid == FF_math_ceil ||
                  ffid == FF_math_sqrt || ffid == FF_math_abs ||
-                 ffid == FF_math_min || ffid == FF_math_max) {
+                 ffid == FF_math_min || ffid == FF_math_max ||
+                 ffid == FF_math_log || ffid == FF_math_log10 ||
+                 ffid == FF_math_exp || ffid == FF_math_sin ||
+                 ffid == FF_math_cos || ffid == FF_math_tan ||
+                 ffid == FF_math_asin || ffid == FF_math_acos ||
+                 ffid == FF_math_atan || ffid == FF_math_sinh ||
+                 ffid == FF_math_cosh || ffid == FF_math_tanh) {
 	const BCIns *returnpc;
 	BCIns call;
 	unsigned nargs;
 	unsigned minargs = (ffid >= FF_bit_lshift && ffid <= FF_bit_ror) ? 2 : 1;
         int math_unary = ffid == FF_math_floor || ffid == FF_math_ceil ||
-                         ffid == FF_math_sqrt || ffid == FF_math_abs;
+                         ffid == FF_math_sqrt || ffid == FF_math_abs ||
+                         ffid == FF_math_log10 || ffid == FF_math_exp ||
+                         ffid == FF_math_sin || ffid == FF_math_cos ||
+                         ffid == FF_math_tan || ffid == FF_math_asin ||
+                         ffid == FF_math_acos || ffid == FF_math_atan ||
+                         ffid == FF_math_sinh || ffid == FF_math_cosh ||
+                         ffid == FF_math_tanh;
         int math_minmax = ffid == FF_math_min || ffid == FF_math_max;
 	if (math_minmax) minargs = 1;
-	/* These recorders return a scalar without an external call. Admit an
+	/* These recorders return a scalar. Pure libm helpers retain the native
+	** phase lease and require a separate allocated call-clobber proof. Admit an
 	** ordinary CALL or a CALLM with one trailing scalar from this root.
 	** An all-results return is still exactly one result. Tail calls and
 	** nested Lua frames keep their separate limits. */
@@ -12252,7 +12265,8 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
 	else if (bc_op(call) == BC_CALLM)
 	  nargs = bc_c(call)+1u;
 	else return 0;
-	if (nargs < minargs || (math_unary && nargs != 1) || bc_b(call) > 2 ||
+	if (nargs < minargs || (math_unary && nargs != 1) ||
+            (ffid == FF_math_log && nargs > 2) || bc_b(call) > 2 ||
 	    (MSize)bc_a(call)+nargs+1u+LJ_FR2 > rootpt->framesize ||
 	    (J->postproc == LJ_POST_NONE &&
 	     (J->pc != returnpc-1 || J->framedepth != 1 ||
@@ -12271,7 +12285,13 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
           ffid == FF_math_floor ||
           ffid == FF_math_ceil || ffid == FF_math_sqrt ||
           ffid == FF_math_abs || ffid == FF_math_min ||
-          ffid == FF_math_max) {
+          ffid == FF_math_max || ffid == FF_math_log ||
+          ffid == FF_math_log10 || ffid == FF_math_exp ||
+          ffid == FF_math_sin || ffid == FF_math_cos ||
+          ffid == FF_math_tan || ffid == FF_math_asin ||
+          ffid == FF_math_acos || ffid == FF_math_atan ||
+          ffid == FF_math_sinh || ffid == FF_math_cosh ||
+          ffid == FF_math_tanh) {
 	uintptr_t lo = (uintptr_t)&G2GG(g)->bcff[0], at = (uintptr_t)pc;
 	uintptr_t bytes = sizeof(G2GG(g)->bcff);
 	/* Assembly fast functions use the universe's immutable synthetic

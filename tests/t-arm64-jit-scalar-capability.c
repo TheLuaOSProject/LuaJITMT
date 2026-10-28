@@ -28,6 +28,7 @@
 #include "lj_gc2.h"
 #include "lj_ctype.h"
 #include "lj_jit.h"
+#include "lj_ircall.h"
 #include "lj_obj.h"
 #include "lj_target.h"
 #include "lj_tg.h"
@@ -48,7 +49,7 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
   copy = (IRIns *)((char *)guarded + mapsize - irbytes);
   SnapEntry *map = malloc(T->nsnapmap * sizeof(*map));
   IRRef ref, loop = 0, num = 0, knum = 0, fpmath = 0, mathop = 0;
-  IRRef maskload = 0;
+  IRRef maskload = 0, mathcall = 0;
   IRRef mathguard = 0, n;
   int math_builtin = mathkind && strncmp(mathkind, "math_", 5) == 0;
   int math_passthrough = mathkind &&
@@ -84,6 +85,8 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
       loop = ref;
     if (copy[ref].o == IR_FPMATH)
       fpmath = ref;
+    if (copy[ref].o == IR_CALLN)
+      mathcall = ref;
     if ((copy[ref].o == IR_ABS || copy[ref].o == IR_MIN ||
          copy[ref].o == IR_MAX ||
          (copy[ref].o == IR_NEG && irt_type(copy[ref].t) == IRT_NUM)) &&
@@ -107,7 +110,7 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
       break;
     }
   assert(loop);
-  if (math_proof) assert((fpmath || mathop || math_passthrough) &&
+  if (math_proof) assert((fpmath || mathcall || mathop || math_passthrough) &&
                          (!math_builtin || mathguard));
   /* A future consumer has not yet been certified when an earlier absent
      location is examined. Its other operand must be checked before loading. */
@@ -160,15 +163,61 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
     }
   }
   if (fpmath) {
-    copy[fpmath].op2 = IRFPM_LOG; /* Helper lowering is not certified. */
+    copy[fpmath].op2 = IRFPM_OTHER; /* No generic helper dispatch. */
     assert(!lj_asm_arm64_postra_admit(&v, NULL));
     copy[fpmath] = T->ir[fpmath];
     copy[fpmath].op1 = n; /* Forward operand must fail before dereference. */
     assert(!lj_asm_arm64_postra_admit(&v, NULL));
     copy[fpmath] = T->ir[fpmath];
   }
+  if (mathcall) {
+    IRIns saved = copy[mathcall];
+    copy[mathcall].op2 = IRCALL_lj_prng_u64d;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[mathcall] = saved;
+    copy[mathcall].op1 = n;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[mathcall] = saved;
+    copy[mathcall].t.irt |= IRT_GUARD;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[mathcall] = saved;
+  }
+  if (mathcall || (fpmath && copy[fpmath].op2 >= IRFPM_LOG)) {
+    IRRef call, value;
+    unsigned clobbers = 0;
+    for (call = REF_FIRST; call < n; call++) {
+      IRIns helper = copy[call];
+      if (helper.o != IR_CALLN &&
+          !(helper.o == IR_FPMATH && helper.op2 >= IRFPM_LOG)) continue;
+      for (value = REF_FIRST; value < call; value++) {
+        IRIns saved = copy[value];
+        IRRef use, first = value < loop && loop < call ? loop+1u : call+1u;
+        int live = 0, renamed = 0;
+        if (saved.t.irt != IRT_NUM || saved.o == IR_FLOAD ||
+            saved.o == IR_CONV || saved.o == IR_PHI) continue;
+        for (use = first; use < n; use++) {
+          IRMode mode = lj_ir_mode[copy[use].o];
+          live |= (irm_op1(mode) == IRMref && copy[use].op1 == value) ||
+                  (irm_op2(mode) == IRMref && copy[use].op2 == value);
+        }
+        for (use = n; use < T->nins; use++)
+          renamed |= copy[use].o == IR_RENAME && copy[use].op1 == value;
+        if (!live || renamed) continue;
+        /* Select from SSA liveness, never from the acceptance verdict. A
+           caller-saved NUM without a spill cannot survive this helper. */
+        copy[value].r = RID_D0;
+        copy[value].s = 0;
+        assert(!lj_asm_arm64_postra_admit(&v, NULL));
+        copy[value] = saved;
+        clobbers++;
+      }
+    }
+    if (mathkind && strcmp(mathkind, "math_helpers_composed") == 0)
+      assert(clobbers != 0);
+    printf("MATH caller-saved live-value corruptions=%u\n", clobbers);
+  }
   if (math_builtin && mathguard) {
-    const char *wrong = "sin";
+    const char *wrong = "random";
     GCfunc *fn;
     lua_getglobal(L, "math"); lua_getfield(L, -1, wrong);
     assert(tvisfunc(L->top - 1)); fn = funcV(L->top - 1);
@@ -235,7 +284,7 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
     v.spadjust = saved_adjust;
   }
   if (fpmath) {
-    copy[fpmath].op2 = IRFPM_LOG; /* Helper lowering is not certified. */
+    copy[fpmath].op2 = IRFPM_OTHER; /* No generic helper dispatch. */
     assert(!lj_asm_arm64_postra_admit(&v, NULL));
     copy[fpmath] = T->ir[fpmath];
     copy[fpmath].op1 = n; /* Forward operand must fail before dereference. */
@@ -243,7 +292,7 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
     copy[fpmath] = T->ir[fpmath];
   }
   if (math_builtin && mathguard) {
-    const char *wrong = "sin";
+    const char *wrong = "random";
     GCfunc *fn;
     lua_getglobal(L, "math"); lua_getfield(L, -1, wrong);
     assert(tvisfunc(L->top - 1)); fn = funcV(L->top - 1);
@@ -394,15 +443,27 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
       }
     }
     if (fpmath) {
-      copy[fpmath].op2 = IRFPM_LOG;
+      copy[fpmath].op2 = IRFPM_OTHER;
       assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
       copy[fpmath] = T->ir[fpmath];
       copy[fpmath].op1 = n;
       assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
       copy[fpmath] = T->ir[fpmath];
     }
+    if (mathcall) {
+      IRIns saved = copy[mathcall];
+      copy[mathcall].op2 = IRCALL_lj_prng_u64d;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[mathcall] = saved;
+      copy[mathcall].op1 = n;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[mathcall] = saved;
+      copy[mathcall].t.irt |= IRT_GUARD;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[mathcall] = saved;
+    }
     if (math_builtin && mathguard) {
-      const char *wrong = "sin";
+      const char *wrong = "random";
       GCfunc *fn;
       lua_getglobal(L, "math"); lua_getfield(L, -1, wrong);
       assert(tvisfunc(L->top - 1)); fn = funcV(L->top - 1);
@@ -428,7 +489,7 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
       copy[mathop] = saved;
     }
     if (fpmath) {
-      copy[fpmath].op2 = IRFPM_LOG;
+      copy[fpmath].op2 = IRFPM_OTHER;
       assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
       copy[fpmath] = T->ir[fpmath];
       copy[fpmath].op1 = n;

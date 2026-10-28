@@ -108,7 +108,7 @@ jit.off(negative,true)
 negative('read',function(t) local i,s=0,0 while i<100 do s=s+t.value; i=i+1 end return s end,{value=2})
 negative('write',function(t) local i=0 while i<100 do t.value=i; i=i+1 end return i end,{})
 negative('allocation',function() local i,t=0,{} while i<100 do t={i,t}; i=i+1 end return t end)
-negative('math_call',function(x) local i=0 while i<100 do x=math.sin(x); i=i+1 end return x end,.25)
+negative('math_multi_result',function(x) local i=0 while i<100 do x=math.frexp(x); i=i+1 end return x end,.25)
 
 local names, source = {}, {'local i=0'}
 for i=1,36 do names[i]='x'..i; source[#source+1]='local '..names[i]..'='..i..'.125' end
@@ -332,6 +332,32 @@ end
 run_native('math_four',math_four,20)
 
 
+
+for _,name in ipairs({'log','log10','exp','sin','cos','tan','asin','acos',
+                       'atan','sinh','cosh','tanh'}) do
+  local op=math[name]
+  local function helper_loop(n,x)
+    local s=.25
+    for i=1,n do s=s+op(x+i*.001) end
+    return s
+  end
+  run('math_'..name,helper_loop,12,.25)
+  run_native_special('math_'..name..'_nan',0/0,op)
+  run_native_special('math_'..name..'_infinity',1/0,op)
+end
+local log_builtin,sin_builtin,cos_builtin=math.log,math.sin,math.cos
+local function helper_composition(n,x)
+  local i,s,t=0,.25,.75
+  while i<n do
+    local a=sin_builtin(x+i*.01)
+    local b=cos_builtin(a)
+    s=s+log_builtin(b+2,3)
+    t=t+a*b
+    i=i+1
+  end
+  return s+t
+end
+run('math_helpers_composed',helper_composition,16,.25)
 
 assert(release:send(true,5))
 assert(peer:join(5))
