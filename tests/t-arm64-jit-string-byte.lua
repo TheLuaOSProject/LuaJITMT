@@ -29,6 +29,20 @@ string_byte_literal_trace_clone = function(s, n)
   return sum
 end
 
+string_byte_dynamic_trace = function(s, n, index)
+  local byte = string.byte
+  local i, sum = 1, 0
+  while i <= n do sum = sum + byte(s, index); i = i + 1 end
+  return sum
+end
+
+string_byte_dynamic_trace_clone = function(s, n, index)
+  local byte = string.byte
+  local i, sum = 1, 0
+  while i <= n do sum = sum + byte(s, index); i = i + 1 end
+  return sum
+end
+
 local traced = {}
 local function trace_event(what, traceno, fn)
   if what == 'start' and fn == string_byte_trace then
@@ -41,6 +55,7 @@ jit.attach(trace_event, 'trace')
 
 local s = string.rep('gcstr-byte-', 24)
 assert(string_byte_trace(s, 80) == string.byte('gcstr-byte-', 2) * 80)
+assert(string_byte_dynamic_trace(s, 80, 2.9) == string.byte('gcstr-byte-', 2) * 80)
 assert(string_byte_literal_trace(s, 80) == 98 * 80)
 assert(string_byte_literal_trace_clone(s, 80) == 98 * 80)
 
@@ -69,11 +84,16 @@ collectgarbage('collect')
 assert(string_byte_trace(s, 80) == 99 * 80)
 assert(string_byte_trace('a\0b', 80) == 0)
 assert(string_byte_trace(string.rep('L', 65536), 80) == 76 * 80)
+assert(string_byte_dynamic_trace('a\0b', 80, 2) == 0)
+assert(string_byte_dynamic_trace('abc', 80, 2.9) == 98 * 80)
 assert(string.byte('', 2) == nil)
 assert(string.byte('x', 2) == nil)
 assert(string.byte('abc', 1) == 97)
 assert(string.byte('abc', 4) == nil)
 assert(string.byte('abc', 0) == nil)
+assert(string.byte('abc', -1) == 99)
+assert(string.byte('abc', 4) == nil)
+assert(string.byte('abc', 1e100) == nil)
 assert(not pcall(string_byte_trace, '', 80))
 assert(not pcall(string_byte_trace, {1, 2, 3}, 80))
 
