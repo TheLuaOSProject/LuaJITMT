@@ -7084,6 +7084,9 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
   case IR_BSHL: case IR_BSHR: case IR_BSAR: case IR_BROR:
   case IR_NEG: case IR_TOBIT:
     return 1;
+  case IR_FLOAD:
+    return type == IRT_INT && ir->op2 == IRFL_STR_LEN &&
+           arm64_scalar_ir_ref(T, ir->op1, value, IRT_STR);
   default:
     return 0;
   }
@@ -8703,6 +8706,13 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
           ir->op2 > LJ_MAX_HBITS)
         goto bad_type;
       break;
+    case IR_FLOAD:
+      /* String length is immutable and the exact GCstr remains rooted by its
+      ** guarded/rooted source or proto constant through the native gate. */
+      if (type != IRT_INT || flags || ir->op2 != IRFL_STR_LEN ||
+          !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_STR))
+        goto bad_operand;
+      break;
     case IR_TMPREF:
       if (type != IRT_PGC || flags) goto bad_type;
       if (ir->op2 == IRTMPREF_IN1 ||
@@ -9136,6 +9146,8 @@ static int arm64_scalar_postra_kref(const LJArm64PostRAView *v, IRRef target,
 static int arm64_scalar_postra_value(IRIns p)
 {
   switch ((IROp)p.o) {
+  case IR_FLOAD:
+    return p.t.irt == IRT_INT && p.op2 == IRFL_STR_LEN;
   case IR_BNOT: case IR_BSWAP:
   case IR_BAND: case IR_BOR: case IR_BXOR:
   case IR_BSHL: case IR_BSHR: case IR_BSAR: case IR_BROR:
@@ -11084,6 +11096,10 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
           (flags & ~(IRT_GUARD|IRT_ISPHI)) ||
           p.op2 > LJ_MAX_HBITS)
         return 0;
+      break;
+    case IR_FLOAD:
+      if (p.t.irt != IRT_INT || p.op2 != IRFL_STR_LEN ||
+          !arm64_scalar_postra_ref(v, p.op1, ref, IRT_STR)) return 0;
       break;
     case IR_TMPREF:
       if (p.t.irt != IRT_PGC || !ra_hasreg(p.r) ||
