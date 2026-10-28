@@ -15,6 +15,15 @@ and reports that are no longer authoritative are retained in
 - ARM64 remains opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`.
 - Native ARM64 JIT work additionally requires
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
+- Completion means parity with x86_64 LuaJITMT. The remaining general Lua
+  call/return, trace topology, iterator and FFI restrictions below still
+  prevent that claim.
+- Pending full integration validation: numeric local assignments at
+  `f39cdfe5` and the shared
+  [consumed-poll missed-wake correction](safepoint-consumed-wake-2026-10-28.md).
+  The correction passes seven targeted Darwin profiles; the earlier full
+  local-write matrix timed out and is being replaced, as recorded in the
+  [local-write note](arm64-jit-lua-local-writes-2026-10-27.md).
 - Latest fully validated JIT checkpoint: compound pure Lua leaf child-frame
   exits at `6f38a9c3`. Each of four ARM64/arm64e assertion/release profiles
   passes 48 native runs, 17 child overflow exits, 686 semantic and 714

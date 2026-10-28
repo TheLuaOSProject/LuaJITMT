@@ -89,7 +89,7 @@ int lj_test_completion_ulock_wait(uint32_t op, void *addr, uint64_t value,
                                  uint32_t timeout)
 {
   int watched = ctx.owner && addr == &ctx.owner->poll &&
-    op == UL_COMPARE_AND_WAIT && value == 1 && timeout == 0 &&
+    op == UL_COMPARE_AND_WAIT && value == 1 &&
     la_load32_acq(&ctx.armed);
   int result;
   if (watched) la_store32_rel(&ctx.wait_active, 1);
@@ -187,7 +187,10 @@ static void *observer(void *arg)
                THREAD_BASIC_INFO, (thread_info_t)&info, &count) == KERN_SUCCESS);
       if (info.run_state == TH_STATE_WAITING &&
           la_load32_acq(&p->wait_active)) {
+        /* Keep the scanner paused across several bounded wait retries. */
+        usleep(10000);
         assert(lj_tg_reqmask_acq(p->owner) == 0);
+        assert(lj_tg_poll_acq(p->owner) == 1);
         assert(lj_tg_in_native_acq(p->owner) == 0);
         assert(la_load32_acq(&p->returned) == 0);
         assert(la_load32_acq(&p->cleared) == 0);
@@ -214,8 +217,10 @@ static void *observer(void *arg)
     fclose(f);
     if (sscanf(line, "%ld %llx %llx %llx %llx", &nr, &addr, &op, &val, &timeout_arg) == 5 &&
         nr == SYS_futex && addr == (unsigned long long)(uintptr_t)&p->owner->poll &&
-        op == FUTEX_WAIT_PRIVATE && val == 1 && timeout_arg == 0) {
+        op == FUTEX_WAIT_PRIVATE && val == 1) {
+      usleep(10000);  /* The scanner still owns the completion boundary. */
       assert(lj_tg_reqmask_acq(p->owner) == 0);
+      assert(lj_tg_poll_acq(p->owner) == 1);
       assert(lj_tg_in_native_acq(p->owner) == 0);
       assert(la_load32_acq(&p->returned) == 0);
       assert(la_load32_acq(&p->cleared) == 0);

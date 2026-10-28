@@ -73,8 +73,24 @@ precondition and hits a numeric-constant-index assertion, so it is not counted
 as a graceful-refusal counterfactual. The explicit disabled-model variant
 replaces that experiment. No such mixed configuration is retained.
 
-Logs: `/tmp/ljmt-localwrites-focused.log`,
-`/tmp/ljmt-localwrites-counterfactual.log` and
-`/tmp/ljmt-localwrites-restored-focused.log`. The source checkpoint and full
-matrix are pending; `4ceed755` remains the latest fully validated main checkout
-until integration is recorded.
+The implementation was committed and pushed as `f39cdfe5`. All four
+ARM64/arm64e assertion/release leaf profiles passed the counts above, and all
+26 preceding table/FFI fixtures passed their four profiles. The first full
+experimental gate then timed out in the rooted insertion fixture, running
+`number rawloop numberhash`. The sampled main thread was waiting in
+`lj_safepoint_handshake` from GC2 sweep progress during a trace exit; its peer
+was waiting in `safepoint_ack_tg` from a channel's native leave. The frozen
+matrix therefore did not pass and was not integrated into main.
+
+A subsequent debug-symbol build passed 1,100 repetitions of that insertion
+case without reproducing the timeout. The captured stacks did not include
+the pending/request state needed to identify its cause. The investigation
+found a separately reproducible same-value consumed-poll missed wake; see
+[the safepoint regression](safepoint-consumed-wake-2026-10-28.md). Passing
+repetitions do not explain the original timeout.
+
+The earlier focused logs were temporary `/tmp/ljmt-localwrites-*` files and
+are no longer present after the environment restart. New regression evidence
+is retained under `/Users/frityet/Scratch/ljmt-consumed-wake-20261028`.
+`4ceed755` remains the latest fully validated main checkout until a complete
+replacement matrix and integration are recorded.

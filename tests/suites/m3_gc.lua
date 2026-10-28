@@ -642,6 +642,8 @@ return function(add)
         " -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL" or " -DLUAJIT_DISABLE_JIT")
       build.with_default_build_restore(t, function()
         build.clean_build(t, { xcflags = flags })
+        compile_and_run_c(t, t:tmp("lj_t-safepoint-consumed-wake-darwin"),
+          "t-safepoint-consumed-wake.c", { cflags = flags, timeout = "25s" })
         compile_and_run_c(t, t:tmp("lj_t-arena-huge-tail-darwin"), {
           t:path("tests", "t-arena-huge-tail.c"),
           t:path("tests", "lib", "arena_huge_tail_darwin.c")
@@ -682,6 +684,7 @@ return function(add)
       build.with_default_build_restore(t, function()
         build.clean_build(t, { xcflags = flags })
         local fixtures = {
+          { name = "t-safepoint-consumed-wake", modes = { false }, wraps = {} },
           { name = "t-safepoint-remote-root-completion", modes = { "0", "1", "2", "3", "4", "5" },
             wraps = { "lj_gc2_scan_cycle_owner_tg_roots_native_parked" } },
           { name = "t-safepoint-local-native-duplicate", modes = { false },

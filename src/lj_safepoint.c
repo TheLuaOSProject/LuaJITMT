@@ -198,9 +198,10 @@ static int safepoint_wait_consumed_ack(TGState *tg, uint32_t actions)
   uint32_t poll;
   /* A native-ack leader clears poll only after it finishes applying actions.
   ** If this thread races with that consumed request, it must not resume the VM
-  ** while the leader may still be scanning its Lua stack. New request
-  ** publication wakes poll waiters after storing reqmask, so this can wait for
-  ** either poll clear or a late request without a timeout. */
+  ** while the leader may still be scanning its Lua stack. A late counted
+  ** request can publish reqmask and wake before this thread starts waiting,
+  ** without changing poll from one. Bound the wait so a lost same-value wake
+  ** cannot strand that request while the leader waits for its pending slot. */
   while ((poll = lj_tg_poll_acq(tg)) != 0) {
     global_State *g = tg->gl;
     uint32_t tid = lj_tg_tid_acq(tg);
@@ -228,7 +229,9 @@ static int safepoint_wait_consumed_ack(TGState *tg, uint32_t actions)
       return 0;
     if (lj_tg_reqmask_acq(tg) != 0)
       return 1;
-    lj_tg_poll_futex_wait(tg, poll, -1);
+    safepoint_completion_test_pause(g, tg, gc2_hs_epoch_acq(g),
+      LJ_SAFEPOINT_COMPLETION_TEST_BEFORE_WAIT);
+    lj_tg_poll_futex_wait(tg, poll, 1000000);
   }
   return 0;
 }
@@ -847,6 +850,8 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
     ** completes the remote snapshot before clearing the consumed poll. */
     la_fence_seq();
     lj_tg_poll_futex_wake(tg, 1);
+    safepoint_completion_test_pause(g, tg, epoch,
+      LJ_SAFEPOINT_COMPLETION_TEST_SIGNALED);
     if (lj_safepoint_retire_dead_tg(g, tg) && signaled != 0)
       signaled--;
   }
