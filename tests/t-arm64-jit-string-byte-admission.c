@@ -182,6 +182,7 @@ int main(void)
     "string.byte('gcstr-byte-',2)*80+0.5)\n";
   lua_State *L = luaL_newstate();
   Arm64TraceFixture f;
+  GCproto *wrong_proto;
   GCtrace *owner, *bounds_owner, *dynamic_owner;
   const IRIns *ir;
   IRRef r, source_ref = 0, len_ref = 0, guard_ref = 0;
@@ -304,6 +305,10 @@ int main(void)
   assert(dynamic_no != 0 && dynamic_owner &&
          trace_runnable_acq(dynamic_owner, dynamic_no) &&
          bc_op(trace_startins_acq(dynamic_owner)) == BC_LOOP);
+  lua_getglobal(L, "string_byte_trace");
+  assert(lua_isfunction(L, -1) && isluafunc(funcV(L->top-1)));
+  wrong_proto = funcproto(funcV(L->top-1));
+  lua_pop(L, 1);
 
   /* Hold a second TG live while collection and all successful byte loads run. */
   run_chunk(L, "collectgarbage('collect')");
@@ -619,6 +624,14 @@ int main(void)
     assert(one);
     lenref = f.ir[upper].o == IR_ULE ? f.ir[upper].op2 : f.ir[upper].op1;
     {
+      LJArm64PostRAView wrong_view = f.view;
+      wrong_view.proto = wrong_proto;
+      assert(!lj_asm_arm64_test_string_byte_dynamic_index_postra(
+          &wrong_view, conv));
+      assert(lj_asm_arm64_test_string_byte_dynamic_index_postra(
+          &f.view, conv));
+    }
+    {
       GCtrace fake_semantic = f.semantic;
       LJArm64PostRAView fake_view = f.view;
       IRIns unrelated;
@@ -721,6 +734,7 @@ int main(void)
     REJECT_DYNAMIC(f.ir[dynamic_strref].op1 = f.ir[conv].op1;
                    f.postra[dynamic_strref].op1 = f.postra[conv].op1);
     REJECT_DYNAMIC_POSTRA(f.postra[conv].r = RID_D0);
+    REJECT_DYNAMIC_POSTRA(f.view.proto = wrong_proto);
 #undef REJECT_DYNAMIC
 #undef REJECT_DYNAMIC_POSTRA
   }

@@ -10635,13 +10635,24 @@ static int arm64_string_byte_dynamic_bounds_postra(
     const LJArm64PostRAView *v, IRRef strref, IRRef str, IRRef offset)
 {
   LJ_STATIC_ASSERT(LJ_MAX_STR < INT32_MAX);
+  GCtrace *owner;
+  GCobj *proto_obj;
   IRIns sub, conv, source, string;
   IRRef idx, lenref = 0, upper = 0, subref = 0, widthref = 0;
   IRRef nonneg = 0, ref;
   int32_t k;
-  if (!v || strref < REF_FIRST || strref >= v->nins ||
+  if (!v || !v->proto || !v->owner) return 0;
+  proto_obj = obj2gco((GCproto *)v->proto);
+  if (!checkptrGC(proto_obj) ||
+      proto_obj->gch.gct != (uint32_t)~LJ_TPROTO ||
+      proto_bc(v->proto) != v->proto_bc ||
+      v->proto->sizebc != v->proto_sizebc ||
+      v->proto->framesize != v->root_topslot ||
+      strref < REF_FIRST || strref >= v->nins ||
       offset < REF_FIRST || offset >= strref ||
       !arm64_scalar_postra_ref(v, str, strref, IRT_STR)) return 0;
+  owner = (GCtrace *)v->owner;
+  if (trace_startptgco_acq(owner) != obj2gco((GCproto *)v->proto)) return 0;
   sub = ir_load_acq(&v->ir[offset]);
   if (sub.o != IR_ADDOV || sub.t.irt != (IRT_INT|IRT_GUARD) ||
       !arm64_scalar_postra_kint(v, sub.op2, &k) || k != -1 ||
