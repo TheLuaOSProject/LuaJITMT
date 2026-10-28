@@ -70,9 +70,21 @@ x86_64 assertion profiles, using the final fixture source.
 | x86_64 release | `ce81f390c80c` |
 | ARM64 assertion without JIT | `d70465b41520` |
 
-The x86_64 binaries execute under Rosetta on this Mac. Linux execution and
-the full replacement ARM64/stock matrix have not yet been established for
-this patch.
+The x86_64 binaries execute under Rosetta on this Mac. Linux execution has
+not been established for this patch.
+
+The complete replacement matrix passes at frozen source checkpoint
+`dad7e318`: both experimental and bootstrap gates, all 26 table/FFI fixtures
+in four profiles, the combined M7 scalar FFI suite in four profiles, and both
+509-case stock corpora on ARM64 and signed x86_64. The newly registered race
+fixture also passes inside `m3_darwin_gc2_runtime`. The ordinary ARM64 build
+passes all six leaf/child/compound/bitops/cell/upvalue Lua contracts.
+
+The source checkpoint is integrated into `v2.1`. Its independent main
+rebuild passes both 509-case corpora and the same six ordinary Lua contracts,
+with no checked test-helper symbols or imported compiler atomic helper.
+The main and worktree executable SHA-256 is
+`d8ed08ad42efe5b2eda9840652f2b16af9e0b17916b7a204ea9efa1930314517`.
 
 ## Evidence and limits
 
@@ -84,5 +96,5 @@ the reproduced failure; `fixed-run.log` records the first three passing runs.
 The earlier rooted-insertion timeout had compatible two-thread wait stacks,
 but its exact pending/request state was not captured. This regression proves
 and fixes the independently forced race; it does not establish the cause of
-that earlier timeout. The local-write checkpoint remains unintegrated until
-the complete replacement validation passes.
+that earlier timeout. The later complete replacement validation passes;
+unrestricted ARM64 JIT behavior and x86_64 parity remain unfinished.

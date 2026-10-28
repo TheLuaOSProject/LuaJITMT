@@ -92,5 +92,48 @@ repetitions do not explain the original timeout.
 The earlier focused logs were temporary `/tmp/ljmt-localwrites-*` files and
 are no longer present after the environment restart. New regression evidence
 is retained under `/Users/frityet/Scratch/ljmt-consumed-wake-20261028`.
-`4ceed755` remains the latest fully validated main checkout until a complete
-replacement matrix and integration are recorded.
+
+## Complete replacement validation and integration
+
+The frozen source checkpoint `dad7e318` includes the local-write extension
+and the shared consumed-poll correction. Its replacement matrix passes both
+complete experimental and bootstrap gates, all 26 table/FFI fixtures in four
+profiles, and the combined M7 scalar FFI suite in four profiles. The complete
+rooted-GC contract, including the previously timed-out insertion case, passes
+on ARM64/arm64e assertion/release. Every new compound fixture profile again
+reports 86 native runs, 31 child exits, 55 same-trace reuses, twelve post-GC
+reuses, zero cold retries, 1,374 semantic negatives, 1,432 allocated negatives,
+eighteen physical conflicts and `20/20/8/8/8/2` CSET negatives per pass.
+
+| Leaf contract profile | Profile hash prefix |
+| --- | --- |
+| ARM64 assertion | `07f28cc9bdab` |
+| arm64e assertion with BTI | `671475491c93` |
+| ARM64 release | `602e37a3c2cf` |
+| arm64e release with BTI | `ebaa2ef2abc7` |
+
+ARM64 and signed x86_64 each pass the 509-case source corpus and the 509-case
+original-bytecode import corpus. The ordinary ARM64 build also passes the
+leaf, single-child, compound-child, bitops, local-cell and upvalue Lua
+contracts. This does not imply that every stock case ran natively.
+
+`v2.1` was fast-forwarded to `dad7e318` and independently rebuilt. It passes
+both 509-case corpora and the same six ordinary Lua contracts. The compound
+Lua result is twelve publications, 31 overflow ranges and 86 same-trace
+checks; this ordinary result remains distinct from the native C fixture
+evidence. Main and worktree executables have the same SHA-256:
+`d8ed08ad42efe5b2eda9840652f2b16af9e0b17916b7a204ea9efa1930314517`.
+The ordinary build passes code-signature verification, imports no compiler
+atomic helper, and contains none of the checked test-helper symbols.
+
+Current logs are `matrix.log`, `experimental.log`, `bootstrap.log`,
+`table-ffi-four-profile.log`, the four `*-stock-*.log` corpus logs, and
+`main-verify.log` under the evidence directory above. The complete matrix
+verified that the source checkpoint remained unchanged before restoring the
+ordinary ARM64 assertion build.
+
+The next call-parity work must replace the immutable unary-argument anchor
+with exact caller argument maps that survive LOOP substitution. Multiple
+parameters, modified parameters, branches and nested frames are still
+outside this checkpoint; passing the bounded leaves does not establish
+x86_64 LuaJITMT parity.

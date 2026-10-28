@@ -18,13 +18,21 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
-- Pending full integration validation: numeric local assignments at
-  `f39cdfe5` and the shared
-  [consumed-poll missed-wake correction](safepoint-consumed-wake-2026-10-28.md).
-  The correction passes seven targeted Darwin profiles; the earlier full
-  local-write matrix timed out and is being replaced, as recorded in the
-  [local-write note](arm64-jit-lua-local-writes-2026-10-27.md).
-- Latest fully validated JIT checkpoint: compound pure Lua leaf child-frame
+- Latest fully validated source checkpoint: numeric local assignments
+  (`f39cdfe5`) plus the shared consumed-poll missed-wake correction at
+  `dad7e318`, integrated into `v2.1`. Four ARM64/arm64e assertion/release
+  profiles each pass 86 native runs, 31 child overflow exits, 1,374 semantic
+  and 1,432 allocated negatives, including eighteen physical conflicts.
+  The safepoint correction passes 21 controlled race runs and 77 retained
+  scan/completion holds across seven Darwin profiles, including x86_64 and
+  ARM64 without JIT. Both complete gates, all 26 table/FFI fixtures in four
+  profiles, the combined M7 FFI suite in four profiles, and both 509-case
+  stock corpora on ARM64 and signed x64 pass. The independent ordinary main
+  rebuild passes both corpora and all six leaf/child/compound/bitops/cell/
+  upvalue Lua contracts. The earlier insertion timeout remains unattributed;
+  the replacement matrix passes. See the [local-write evidence](arm64-jit-lua-local-writes-2026-10-27.md)
+  and [safepoint regression](safepoint-consumed-wake-2026-10-28.md).
+- Preceding JIT checkpoint: compound pure Lua leaf child-frame
   exits at `6f38a9c3`. Each of four ARM64/arm64e assertion/release profiles
   passes 48 native runs, 17 child overflow exits, 686 semantic and 714
   allocated negatives, including eight physical conflicts. Both complete
@@ -32,8 +40,8 @@ and reports that are no longer authoritative are retained in
   509-case stock corpora on ARM64 and signed x64 pass. The independent
   ordinary main rebuild passes both corpora, all 698 preceding observations,
   all earlier leaf contracts and seven compound publications/17 overflow
-  ranges/48 exact-trace checks. Local reassignment and general Lua call/return
-  remain excluded. See the
+  ranges/48 exact-trace checks. That checkpoint excluded local reassignment;
+  general Lua call/return remains incomplete. See the
   [compound child-exit evidence](arm64-jit-lua-compound-exits-2026-10-27.md).
 - Preceding JIT checkpoint: integer child-frame exits at
   `539475c8`, for one ADD/SUB/MUL in a fixed pure unary Lua leaf. Each of four
