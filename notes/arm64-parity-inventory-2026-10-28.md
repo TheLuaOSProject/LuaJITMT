@@ -107,3 +107,11 @@ rows versus eighteen on x64. Lua varargs and multiple results remain the
 sampled differences. The [captured-call checkpoint](arm64-captured-nested-checkpoint-2026-10-28.md)
 separates the focused four-profile contracts and stock corpus results from
 the earlier complete gate and unresolved TDUP failure.
+
+At `3e3f3432a`, both targets pass all 260 comparisons and the fixed multiple-
+result leaf adds an ARM64 selected-root witness: seventeen of twenty versus
+eighteen on x64. Varargs is the remaining sampled difference. Iterator and
+I64 rows remain inconclusive on both targets. The complete experimental gate,
+all four combined M7 FFI profiles, ordinary companions and both stock corpora
+pass at this source; see the
+[combined checkpoint](arm64-captured-multires-checkpoint-2026-10-28.md).
