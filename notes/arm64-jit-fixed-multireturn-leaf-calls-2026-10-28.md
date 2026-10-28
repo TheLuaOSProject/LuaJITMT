@@ -49,6 +49,10 @@ The final frozen-source four-profile contract is
 profiles. Each profile reported `native=16`, `semantic-negative=100`,
 `postRA-negative=108`, and `cold-retries=0`; the ordinary companion reported
 13 publications, 13 exact-trace reuses, and three refusal shapes.
+The two exact `bench/jit-parity.lua` inventory samples also passed under the
+experimental ARM64 profile: `leaf-multires` and `nested-leaf` each reported 13
+semantic checks, one live root, and 13 observed exits from that root. Logs are
+`integrated/inventory-slice.log` and `integrated/restore-default.log`.
 
 The targeted CALLXS regression check is `callxs-regression-check.log`. Its
 arm64-assert run passed `callxs-admission`, `callxs-table-admission`, and
