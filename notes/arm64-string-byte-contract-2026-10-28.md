@@ -7,11 +7,11 @@ two-argument, one-result call shape. It verifies the pending caller call and
 frame geometry before the operation reaches the independent IR validators.
 
 The semantic-IR and post-RA checks independently require a readonly `U8`
-`XLOAD` sourced from `STRREF`, with a nonnegative constant byte offset and an
-earlier unsigned guard proving `string.len` for that same guarded string is at
-least `offset + 1`. The current STRREF address form is restricted to its
-unsigned immediate range. Dynamic and negative indices remain refused; this
-does not rely on the trailing NUL byte or Lua's negative-index handling.
+`XLOAD` sourced from `STRREF`, with a nonnegative byte offset and an earlier
+guard proving the requested byte is within that same guarded string. Constant
+offsets use the unsigned immediate range; positive and negative dynamic
+indices use separate conversion and bounds proofs. None of the paths rely on
+the trailing NUL byte.
 For dynamic post-RA bounds, the prototype used to bind the bytecode CALL
 argument slots is checked as a live GCproto, matches `proto_bc` and `sizebc`,
 and matches the trace owner's start prototype. A fixture swaps in a different
@@ -89,8 +89,7 @@ parameter slots with no writes or branch bypass. The semantic and post-RA
 source-slot checks independently repeat this proof, sharing only the
 bytecode instruction decoder. The root preflight separately verifies the
 active `FF_string_byte` identity and current caller frame/call shape. The proof
-does not admit negative-index lowering or dynamic values directly into
-snapshots.
+does not admit dynamic values directly into snapshots.
 
 The C fixture also inserts an unrelated `IRCONV_INT_NUM|IRCONV_ANY` before
 the valid graph and an unrelated unsigned `ULE` guard beside its valid upper
@@ -109,9 +108,32 @@ Valid index execution requires native entry; invalid cases require native
 entry and exit before the interpreter produces the expected result/error. The
 fixture keeps a second TG attached through native calls and full GC/re-entry.
 
+## Negative dynamic index
+
+Negative indices follow the stock recorder's `len + index` path after a
+guarded `index < 0`. The semantic and post-RA proofs independently require
+the same type-checked numeric SLOAD and ANY conversion used by the exact
+two-argument `string.byte` CALL, the exact string SLOAD and its `STR_LEN`
+FLOAD, `len + index` in either canonical operand order, and a dominating
+nonnegative-offset guard. They then require the recorder's one-byte end
+`offset + 1`, guarded subtraction `end - offset`, exact width `1`, and a
+STRREF that uses the proven offset. The end calculation may precede the
+nonnegative guard: with `index < 0` and `string.len <= LJ_MAX_STR < INT32_MAX`,
+both `len + index` and its `+1` remain within signed 32-bit range; the
+nonnegative guard still dominates the subtraction, width check, and load.
+
+The fixture checks that complete graph in both views and rejects mutations to
+the negative guard, length/string or index operands, offset sign check, end
+calculation, subtraction, width, and STRREF offset. It keeps a second TG alive
+through full collection and native re-entry. A short string with index `-2`
+must enter the selected negative root, exit that same trace on its bounds
+guard, then produce the ordinary interpreter error. Positive saturation,
+negative saturation, NaN, infinities, fractional indices, signed zero and
+out-of-range cases remain covered by the positive dynamic fixture's native
+guard exits.
+
 The updated profile-bound contract passed arm64 and arm64e assertion and
-release profiles. The combined C fixture reported 101 native entries and 101
-exits across the primary, bounds, and dynamic traces; the literal trace has a
-separate native-entry assertion. The Lua companion verifies fractional
-conversion and ordinary embedded-NUL/negative/out-of-range semantics without
-claiming native coverage.
+release profiles. The combined C fixture reported 104 native entries and
+104 exits across the literal, constant-offset, and positive/negative dynamic
+traces. The Lua companion verifies ordinary embedded-NUL/negative/out-of-range
+semantics without claiming native coverage.

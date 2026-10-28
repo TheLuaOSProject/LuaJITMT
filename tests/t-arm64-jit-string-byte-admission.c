@@ -71,12 +71,13 @@ static int call_loop(lua_State *L, const char *function_global,
   return status;
 }
 
-static int call_dynamic_loop(lua_State *L, const char *function_global,
-                             lua_Number index, lua_Number *out)
+static int call_dynamic_loop_value(lua_State *L, const char *function_global,
+                                  const char *value_global,
+                                  lua_Number index, lua_Number *out)
 {
   int status;
   lua_getglobal(L, function_global);
-  lua_getglobal(L, "string_byte_value");
+  lua_getglobal(L, value_global);
   lua_pushinteger(L, 80);
   lua_pushnumber(L, index);
   status = lua_pcall(L, 3, 1, 0);
@@ -88,6 +89,13 @@ static int call_dynamic_loop(lua_State *L, const char *function_global,
   }
   lua_pop(L, 1);
   return status;
+}
+
+static int call_dynamic_loop(lua_State *L, const char *function_global,
+                             lua_Number index, lua_Number *out)
+{
+  return call_dynamic_loop_value(L, function_global, "string_byte_value",
+                                 index, out);
 }
 
 static int kint(const IRIns *ir, IRRef nk, IRRef ref, int32_t *value)
@@ -165,6 +173,14 @@ int main(void)
     " local byte=string.byte; local i,sum=1,0; "
     "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
     "end\n"
+    "string_byte_negative_dynamic_trace=function(s,n,index)\n"
+    " local byte=string.byte; local i,sum=1,0; "
+    "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
+    "end\n"
+    "string_byte_negative_dynamic_trace_clone=function(s,n,index)\n"
+    " local byte=string.byte; local i,sum=1,0; "
+    "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
+    "end\n"
     "string_byte_bounds_trace=function(s,n)\n"
     " local byte=string.byte; local i,sum=1,0.5; "
     "while i<=n do sum=sum+byte(s,2); i=i+1 end; return sum\n"
@@ -178,19 +194,21 @@ int main(void)
     "string.byte('gcstr-byte-',2)*80)\n"
     "assert(string_byte_dynamic_trace(string_byte_value,80,2.9)=="
     "string.byte('gcstr-byte-',2)*80)\n"
+    "assert(string_byte_negative_dynamic_trace(string_byte_value,80,-2.9)=="
+    "string.byte('gcstr-byte-',-2)*80)\n"
     "assert(string_byte_bounds_trace(string_byte_value,80)=="
     "string.byte('gcstr-byte-',2)*80+0.5)\n";
   lua_State *L = luaL_newstate();
   Arm64TraceFixture f;
   GCproto *wrong_proto;
-  GCtrace *owner, *bounds_owner, *dynamic_owner;
+  GCtrace *owner, *bounds_owner, *dynamic_owner, *negative_owner;
   const IRIns *ir;
   IRRef r, source_ref = 0, len_ref = 0, guard_ref = 0;
   IRRef strref = 0, xload = 0;
   MSize s;
   unsigned mapped_source = 0;
   uint32_t entries, exits;
-  TraceNo bounds_no, dynamic_no, literal_no = 0;
+  TraceNo bounds_no, dynamic_no, negative_no, literal_no = 0;
   int sem_ok, post_ok;
   lua_Number value;
   assert(L != NULL);
@@ -305,6 +323,28 @@ int main(void)
   assert(dynamic_no != 0 && dynamic_owner &&
          trace_runnable_acq(dynamic_owner, dynamic_no) &&
          bc_op(trace_startins_acq(dynamic_owner)) == BC_LOOP);
+  lua_getglobal(L, "string_byte_negative_dynamic_trace");
+  assert(lua_isfunction(L, -1) && isluafunc(funcV(L->top-1)));
+  negative_no = proto_trace_acq(funcproto(funcV(L->top-1)));
+  lua_pop(L, 1);
+  negative_owner = traceref_safe(L2J(L), negative_no);
+  if (negative_no == 0 || !negative_owner ||
+      !trace_runnable_acq(negative_owner, negative_no))
+    fprintf(stderr, "negative string-byte no native root: trace=%u "
+            "owner=%p starts=%u publishes=%u cleanups=%u aborts=%u "
+            "error=%u errinfo=%u entries=%u exits=%u\n",
+            (unsigned)negative_no,
+            (void *)negative_owner,
+            lj_trace_test_root_entry_startins_calls(),
+            lj_trace_test_root_entry_publishes(),
+            lj_trace_test_root_entry_cleanups(), lj_trace_test_abort_count(),
+            (unsigned)lj_trace_test_last_abort_error(),
+            tvisint(&L2J(L)->errinfo) ? (unsigned)intV(&L2J(L)->errinfo) : 0u,
+            lj_trace_test_root_entry_successes(),
+            lj_trace_test_exit_calls());
+  assert(negative_no != 0 && negative_owner &&
+         trace_runnable_acq(negative_owner, negative_no) &&
+         bc_op(trace_startins_acq(negative_owner)) == BC_LOOP);
   lua_getglobal(L, "string_byte_trace");
   assert(lua_isfunction(L, -1) && isluafunc(funcV(L->top-1)));
   wrong_proto = funcproto(funcV(L->top-1));
@@ -320,6 +360,41 @@ int main(void)
   assert(call_dynamic_loop(L, "string_byte_dynamic_trace", 2.9, &value) ==
          LUA_OK && value == 99.0*80.0);
   assert(lj_trace_test_root_entry_successes() > entries);
+  entries = lj_trace_test_root_entry_successes();
+  {
+    int status = call_dynamic_loop(L, "string_byte_negative_dynamic_trace",
+                                   -2.9, &value);
+    if (status != LUA_OK || value != 101.0*80.0)
+      fprintf(stderr, "negative dynamic byte result status=%d value=%.17g "
+              "expected=%.17g entries=%u exits=%u parent=%u trace=%u\n",
+              status, value, 101.0*80.0,
+              lj_trace_test_root_entry_successes(), lj_trace_test_exit_calls(),
+              (unsigned)lj_trace_test_last_exit_parent(),
+              (unsigned)negative_no);
+    assert(status == LUA_OK && value == 101.0*80.0);
+  }
+  assert(lj_trace_test_root_entry_successes() > entries);
+  {
+    unsigned old_entries = lj_trace_test_root_entry_successes();
+    unsigned old_exits = lj_trace_test_exit_calls();
+    int status = call_dynamic_loop_value(
+        L, "string_byte_negative_dynamic_trace", "string_byte_short", -2,
+        &value);
+    if (status == LUA_OK ||
+        lj_trace_test_root_entry_successes() <= old_entries ||
+        lj_trace_test_exit_calls() <= old_exits ||
+        lj_trace_test_last_exit_parent() != negative_no)
+      fprintf(stderr, "negative string-byte bound exit status=%d "
+              "entries=%u/%u exits=%u/%u last-parent=%u trace=%u\n",
+              status, old_entries, lj_trace_test_root_entry_successes(),
+              old_exits, lj_trace_test_exit_calls(),
+              (unsigned)lj_trace_test_last_exit_parent(),
+              (unsigned)negative_no);
+    assert(status != LUA_OK &&
+           lj_trace_test_root_entry_successes() > old_entries &&
+           lj_trace_test_exit_calls() > old_exits &&
+           lj_trace_test_last_exit_parent() == negative_no);
+  }
   {
     const IRIns *dynamic_ir = trace_ir_acq(dynamic_owner);
     IRRef conv = 0, addov = 0, upper = 0, nonneg = 0, width = 0;
@@ -392,9 +467,112 @@ int main(void)
       assert(call_dynamic_loop(L, "string_byte_dynamic_trace", invalid[n],
                                &value) != LUA_OK);
       assert(lj_trace_test_root_entry_successes() > entries &&
-             lj_trace_test_exit_calls() > exits);
+             lj_trace_test_exit_calls() > exits &&
+             lj_trace_test_last_exit_parent() == dynamic_no);
     }
   }
+  /* The negative form uses len+index. Bind every guard and the one-byte
+  ** width to the same conversion and string in both independent views. */
+  arm64_fixture_init_trace(&f, L, "string_byte_negative_dynamic_trace_clone",
+                           negative_no);
+  f.view.proto = trace_startpt_acq(f.owner);
+  assert(semantic(&f) && allocated(&f));
+  {
+    IRRef conv = 0, string = 0, lenref = 0, negative = 0, offset = 0;
+    IRRef nonneg = 0, endref = 0, subref = 0, width = 0, strref = 0;
+    IRRef one = 0;
+    for (r = REF_FIRST; r < f.semantic_nins; r++) {
+      int32_t k;
+      if (!conv && f.ir[r].o == IR_CONV && f.ir[r].t.irt == IRT_INT &&
+          f.ir[r].op2 == (IRCONV_INT_NUM|IRCONV_ANY)) conv = r;
+      if (!string && f.ir[r].o == IR_SLOAD &&
+          f.ir[r].t.irt == (IRT_STR|IRT_GUARD) &&
+          f.ir[r].op2 == IRSLOAD_TYPECHECK) string = r;
+      if (string && !lenref && f.ir[r].o == IR_FLOAD &&
+          f.ir[r].t.irt == IRT_INT && f.ir[r].op1 == string &&
+          f.ir[r].op2 == IRFL_STR_LEN) lenref = r;
+      if (conv && !negative && f.ir[r].o == IR_LT &&
+          f.ir[r].t.irt == (IRT_INT|IRT_GUARD) && f.ir[r].op1 == conv &&
+          kint(f.ir, f.semantic.nk, f.ir[r].op2, &k) && k == 0)
+        negative = r;
+      if (conv && lenref && !offset && f.ir[r].o == IR_ADD &&
+          f.ir[r].t.irt == IRT_INT &&
+          ((f.ir[r].op1 == lenref && f.ir[r].op2 == conv) ||
+           (f.ir[r].op1 == conv && f.ir[r].op2 == lenref))) offset = r;
+      if (offset && !nonneg && f.ir[r].o == IR_GE &&
+          f.ir[r].t.irt == (IRT_INT|IRT_GUARD) && f.ir[r].op1 == offset &&
+          kint(f.ir, f.semantic.nk, f.ir[r].op2, &k) && k == 0)
+        nonneg = r;
+      if (offset && !endref && f.ir[r].o == IR_ADD &&
+          f.ir[r].t.irt == IRT_INT && f.ir[r].op1 == offset &&
+          kint(f.ir, f.semantic.nk, f.ir[r].op2, &k) && k == 1)
+        endref = r, one = f.ir[r].op2;
+      if (endref && !subref && f.ir[r].o == IR_SUBOV &&
+          f.ir[r].t.irt == (IRT_INT|IRT_GUARD) &&
+          f.ir[r].op1 == endref && f.ir[r].op2 == offset)
+        subref = r;
+      if (subref && !width && f.ir[r].o == IR_EQ &&
+          f.ir[r].t.irt == (IRT_INT|IRT_GUARD) && f.ir[r].op1 == subref &&
+          kint(f.ir, f.semantic.nk, f.ir[r].op2, &k) && k == 1)
+        width = r;
+      if (offset && f.ir[r].o == IR_STRREF &&
+          f.ir[r].t.irt == IRT_PGC && f.ir[r].op2 == offset)
+        strref = r;
+    }
+    assert(conv && string && lenref && negative && offset && nonneg &&
+           endref && subref && width && strref && one);
+    assert(conv < negative && negative < offset && offset < endref &&
+           endref < nonneg && nonneg < subref && subref < width &&
+           width < strref);
+    assert(((f.ir[offset].op1 == lenref && f.ir[offset].op2 == conv) ||
+            (f.ir[offset].op1 == conv && f.ir[offset].op2 == lenref)) &&
+           f.ir[endref].op1 == offset && f.ir[subref].op1 == endref &&
+           f.ir[subref].op2 == offset && f.ir[strref].op2 == offset);
+    {
+      LJArm64PostRAView wrong_view = f.view;
+      wrong_view.proto = wrong_proto;
+      assert(!lj_asm_arm64_test_string_byte_dynamic_index_postra(
+          &wrong_view, conv));
+      assert(lj_asm_arm64_test_string_byte_dynamic_index_postra(
+          &f.view, conv));
+    }
+#define REJECT_NEGATIVE(change) do { \
+  int sem_ok, post_ok; \
+  arm64_fixture_reset(&f); assert(semantic(&f) && allocated(&f)); \
+  change; sem_ok = semantic(&f); post_ok = allocated(&f); \
+  if (sem_ok || post_ok) { \
+    fprintf(stderr, "negative string-byte mutation accepted at line %d " \
+                    "(semantic=%d postRA=%d)\n", __LINE__, sem_ok, post_ok); \
+    abort(); \
+  } \
+} while (0)
+    REJECT_NEGATIVE(f.ir[negative].o = IR_GE;
+                    f.postra[negative].o = IR_GE);
+    REJECT_NEGATIVE(f.ir[negative].op1 = lenref;
+                    f.postra[negative].op1 = lenref);
+    REJECT_NEGATIVE(f.ir[offset].op1 = string;
+                    f.postra[offset].op1 = string);
+    REJECT_NEGATIVE(f.ir[offset].op2 = conv;
+                    f.postra[offset].op2 = conv);
+    REJECT_NEGATIVE(f.ir[lenref].op1 = conv;
+                    f.postra[lenref].op1 = conv);
+    REJECT_NEGATIVE(f.ir[nonneg].op1 = conv;
+                    f.postra[nonneg].op1 = conv);
+    REJECT_NEGATIVE(f.ir[endref].op2 = conv;
+                    f.postra[endref].op2 = conv);
+    REJECT_NEGATIVE(f.ir[subref].op1 = offset;
+                    f.postra[subref].op1 = offset);
+    REJECT_NEGATIVE(f.ir[subref].op2 = conv;
+                    f.postra[subref].op2 = conv);
+    REJECT_NEGATIVE(f.ir[width].op2 = offset;
+                    f.postra[width].op2 = offset);
+    REJECT_NEGATIVE(f.ir[strref].op2 = conv;
+                    f.postra[strref].op2 = conv);
+#undef REJECT_NEGATIVE
+  }
+  arm64_fixture_reset(&f);
+  assert(semantic(&f) && allocated(&f));
+  arm64_fixture_free(&f);
   entries = lj_trace_test_root_entry_successes();
   assert(call_loop(L, "string_byte_literal_trace", "string_byte_value",
                    &value) == LUA_OK && value == 98.0*80.0);
