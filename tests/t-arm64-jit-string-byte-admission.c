@@ -11,6 +11,7 @@
 #include "lj_bc.h"
 #include "lj_ir.h"
 #include "lj_obj.h"
+#include "lj_target.h"
 #include "lj_trace.h"
 #include "lib/arm64_trace_fixture.h"
 
@@ -42,10 +43,11 @@ static void run_chunk(lua_State *L, const char *src)
   }
 }
 
-static int call_loop(lua_State *L, const char *value_global, lua_Number *out)
+static int call_loop(lua_State *L, const char *function_global,
+                     const char *value_global, lua_Number *out)
 {
   int status;
-  lua_getglobal(L, "string_byte_trace");
+  lua_getglobal(L, function_global);
   if (value_global) {
     lua_getglobal(L, value_global);
   } else {
@@ -96,13 +98,17 @@ int main(void)
     " assert(ready:send(true,5)); assert(select(2,stop:recv(120))); "
     " return true end,string_byte_ready,string_byte_stop))\n"
     "assert(select(2,string_byte_ready:recv(5)),'peer failed to start')\n"
-    "jit.flush(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=1')\n"
+    "jit.flush(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=4')\n"
     "string_byte_trace=function(s,n)\n"
-    " local byte=string.byte; local i,sum=1,0; "
-    "while i<=n do sum=sum+byte(s,2); i=i+1 end; return sum\n"
+    " local byte=string.byte; local sum=0; "
+    "for i=1,n do sum=sum+byte(s,2) end; return sum\n"
     "end\n"
     "string_byte_trace_clone=function(s,n)\n"
-    " local byte=string.byte; local i,sum=1,0; "
+    " local byte=string.byte; local sum=0; "
+    "for i=1,n do sum=sum+byte(s,2) end; return sum\n"
+    "end\n"
+    "string_byte_bounds_trace=function(s,n)\n"
+    " local byte=string.byte; local i,sum=1,0.5; "
     "while i<=n do sum=sum+byte(s,2); i=i+1 end; return sum\n"
     "end\n"
     "string_byte_value=string.rep('gcstr-byte-',24)\n"
@@ -111,16 +117,19 @@ int main(void)
     "string_byte_empty=''\n"
     "string_byte_long=string.rep('L',65536)\n"
     "assert(string_byte_trace(string_byte_value,80)=="
-    "string.byte('gcstr-byte-',2)*80)\n";
+    "string.byte('gcstr-byte-',2)*80)\n"
+    "assert(string_byte_bounds_trace(string_byte_value,80)=="
+    "string.byte('gcstr-byte-',2)*80+0.5)\n";
   lua_State *L = luaL_newstate();
   Arm64TraceFixture f;
-  GCtrace *owner;
+  GCtrace *owner, *bounds_owner;
   const IRIns *ir;
   IRRef r, source_ref = 0, len_ref = 0, guard_ref = 0;
   IRRef strref = 0, xload = 0;
   MSize s;
   unsigned mapped_source = 0;
   uint32_t entries, exits;
+  TraceNo bounds_no;
   int sem_ok, post_ok;
   lua_Number value;
   assert(L != NULL);
@@ -129,6 +138,24 @@ int main(void)
   lj_trace_test_reset_exit_stats();
   run_chunk(L, source);
 
+  if (lj_trace_test_root_entry_successes() == 0) {
+    TraceNo primary_no, bounds_no;
+    lua_getglobal(L, "string_byte_trace");
+    primary_no = proto_trace_acq(funcproto(funcV(L->top-1)));
+    lua_pop(L, 1);
+    lua_getglobal(L, "string_byte_bounds_trace");
+    bounds_no = proto_trace_acq(funcproto(funcV(L->top-1)));
+    lua_pop(L, 1);
+    fprintf(stderr, "string-byte no native root: publishes=%u cleanups=%u "
+            "starts=%u aborts=%u error=%u exits=%u traceNos=%u,%u\n",
+            lj_trace_test_root_entry_publishes(),
+            lj_trace_test_root_entry_cleanups(),
+            lj_trace_test_root_entry_startins_calls(),
+            lj_trace_test_abort_count(),
+            (unsigned)lj_trace_test_last_abort_error(),
+            lj_trace_test_exit_calls(), (unsigned)primary_no,
+            (unsigned)bounds_no);
+  }
   assert(lj_trace_test_root_entry_successes() > 0);
   owner = traceref_safe(L2J(L), 1);
   if (!owner || !trace_runnable_acq(owner, 1))
@@ -139,7 +166,7 @@ int main(void)
             owner ? (unsigned)la_load8_acq(&owner->unused1) : 0u,
             lj_trace_test_root_entry_successes());
   assert(owner && trace_runnable_acq(owner, 1));
-  assert(bc_op(trace_startins_acq(owner)) == BC_LOOP);
+  assert(bc_op(trace_startins_acq(owner)) == BC_FORL);
   assert(trace_mcode_acq(owner) != NULL &&
          trace_szmcode_acq(owner) > sizeof(MCode));
   ir = trace_ir_acq(owner);
@@ -188,33 +215,47 @@ int main(void)
     }
   }
   assert(mapped_source > 0);
+  lua_getglobal(L, "string_byte_bounds_trace");
+  assert(lua_isfunction(L, -1) && isluafunc(funcV(L->top-1)));
+  bounds_no = proto_trace_acq(funcproto(funcV(L->top-1)));
+  bounds_owner = traceref_safe(L2J(L), bounds_no);
+  lua_pop(L, 1);
+  assert(bounds_no != 0 && bounds_owner &&
+         trace_runnable_acq(bounds_owner, bounds_no));
+  assert(bc_op(trace_startins_acq(bounds_owner)) == BC_LOOP);
 
   /* Hold a second TG live while collection and all successful byte loads run. */
   run_chunk(L, "collectgarbage('collect')");
   entries = lj_trace_test_root_entry_successes();
-  assert(call_loop(L, "string_byte_value", &value) == LUA_OK &&
+  assert(call_loop(L, "string_byte_trace", "string_byte_value", &value) == LUA_OK &&
          value == 99.0*80.0);
   assert(lj_trace_test_root_entry_successes() > entries);
   entries = lj_trace_test_root_entry_successes();
-  assert(call_loop(L, "string_byte_nul", &value) == LUA_OK && value == 0.0);
+  assert(call_loop(L, "string_byte_trace", "string_byte_nul", &value) == LUA_OK && value == 0.0);
   assert(lj_trace_test_root_entry_successes() > entries);
   entries = lj_trace_test_root_entry_successes();
-  assert(call_loop(L, "string_byte_long", &value) == LUA_OK &&
+  assert(call_loop(L, "string_byte_trace", "string_byte_long", &value) == LUA_OK &&
          value == 76.0*80.0);
   assert(lj_trace_test_root_entry_successes() > entries);
+  entries = lj_trace_test_root_entry_successes();
+  assert(call_loop(L, "string_byte_bounds_trace", "string_byte_value",
+                   &value) == LUA_OK && value == 99.0*80.0+0.5);
+  assert(lj_trace_test_root_entry_successes() > entries);
+  /* A LOOP begins before its body, so bad bounds and type inputs execute its
+  ** certified native guard before interpreter bytecode raises the error. */
   exits = lj_trace_test_exit_calls();
   entries = lj_trace_test_root_entry_successes();
-  assert(call_loop(L, "string_byte_short", &value) != LUA_OK);
+  assert(call_loop(L, "string_byte_bounds_trace", "string_byte_short", &value) != LUA_OK);
   assert(lj_trace_test_root_entry_successes() > entries);
   assert(lj_trace_test_exit_calls() > exits);
   exits = lj_trace_test_exit_calls();
   entries = lj_trace_test_root_entry_successes();
-  assert(call_loop(L, "string_byte_empty", &value) != LUA_OK);
+  assert(call_loop(L, "string_byte_bounds_trace", "string_byte_empty", &value) != LUA_OK);
   assert(lj_trace_test_root_entry_successes() > entries);
   assert(lj_trace_test_exit_calls() > exits);
   exits = lj_trace_test_exit_calls();
   entries = lj_trace_test_root_entry_successes();
-  assert(call_loop(L, NULL, &value) != LUA_OK);
+  assert(call_loop(L, "string_byte_bounds_trace", NULL, &value) != LUA_OK);
   assert(lj_trace_test_root_entry_successes() > entries);
   assert(lj_trace_test_exit_calls() > exits);
 
@@ -249,6 +290,17 @@ int main(void)
     abort(); \
   } \
 } while (0)
+#define REJECT_POSTRA(change) do { \
+  arm64_fixture_reset(&f); \
+  assert(semantic(&f) && allocated(&f)); \
+  change; \
+  assert(semantic(&f)); \
+  if (allocated(&f)) { \
+    fprintf(stderr, "string-byte postRA mutation accepted at line %d\n", \
+            __LINE__); \
+    abort(); \
+  } \
+} while (0)
   REJECT_BOTH(f.ir[xload].t.irt = IRT_I8;
               f.postra[xload].t.irt = IRT_I8);
   REJECT_BOTH(f.ir[xload].op2 = IRXLOAD_VOLATILE;
@@ -261,15 +313,46 @@ int main(void)
               f.postra[guard_ref].op2 = f.postra[guard_ref].op1);
   REJECT_BOTH(f.ir[len_ref].op1 = REF_NIL;
               f.postra[len_ref].op1 = REF_NIL);
+  /* Replace the exact STRREF with a stack TMPREF that is otherwise a
+  ** legitimate PGC producer; byte-load admission must keep its own provenance. */
+  REJECT_BOTH(f.ir[strref].o = IR_TMPREF;
+              f.ir[strref].t.irt = IRT_PGC;
+              f.ir[strref].op1 = source_ref;
+              f.ir[strref].op2 = IRTMPREF_IN2;
+              f.postra[strref].o = IR_TMPREF;
+              f.postra[strref].t.irt = IRT_PGC;
+              f.postra[strref].op1 = source_ref;
+              f.postra[strref].op2 = IRTMPREF_IN2;
+              f.postra[strref].r = RID_X0;
+              f.postra[strref].s = SPS_NONE);
+  REJECT_POSTRA(f.postra[strref].r = RID_D0);
+  REJECT_POSTRA(f.postra[xload].r = RID_D0);
+  REJECT_POSTRA(f.postra[source_ref].r = RID_D0);
+  REJECT_POSTRA(f.postra[source_ref].r = RID_INIT;
+                f.postra[source_ref].s = SPS_NONE);
 #undef REJECT_BOTH
+#undef REJECT_POSTRA
+
+  arm64_fixture_reset(&f);
+  {
+    IRRef phi = 0, loop = 0;
+    for (r = REF_FIRST; r < f.semantic_nins; r++) {
+      if (!loop && f.ir[r].o == IR_LOOP) loop = r;
+      if (!phi && f.ir[r].o == IR_PHI) phi = r;
+    }
+    assert(phi && loop);
+    f.postra[phi].op1 = strref;
+    assert(!allocated(&f));
+  }
 
   /* A byte load is zero-extended for arithmetic, but U8 is not a snapshot
   ** TValue encoding. Both validators must reject direct snapshot escape. */
   {
-    MSize sn, mapidx = SIZE_MAX;
+    MSize sn, mapidx = 0;
+    int found = 0;
     SnapEntry old;
     arm64_fixture_reset(&f);
-    for (sn = 0; sn < f.view.nsnap && mapidx == SIZE_MAX; sn++) {
+    for (sn = 0; sn < f.view.nsnap && !found; sn++) {
       const SnapShot *snap = &f.snaps[sn];
       MSize i;
       if (snap_ref_acq(snap) <= xload) continue;
@@ -277,18 +360,30 @@ int main(void)
         MSize candidate = snap_mapofs_acq(snap)+i;
         if (snap_ref(f.map[candidate]) == source_ref) {
           mapidx = candidate;
+          found = 1;
           break;
         }
       }
     }
-    assert(mapidx != SIZE_MAX);
+    assert(found);
     old = f.map[mapidx];
     f.map[mapidx] = snap_setref(old, xload);
     f.postmap[mapidx] = snap_setref(old, xload);
+    assert(f.semantic.snapmap == f.map &&
+           snap_ref(f.semantic.snapmap[mapidx]) == xload);
     sem_ok = semantic(&f);
     post_ok = allocated(&f);
     f.map[mapidx] = old;
     f.postmap[mapidx] = old;
+    if (sem_ok || post_ok) {
+      fprintf(stderr, "string-byte U8 snapshot mutation accepted "
+              "(semantic=%d postRA=%d) mapidx=%u xload=%u "
+              "snapref=%u mapped=%u opcode=%u type=%u\n", sem_ok,
+              post_ok, (unsigned)mapidx, (unsigned)xload,
+              (unsigned)snap_ref_acq(&f.snaps[sn-1u]),
+              (unsigned)snap_ref(old), (unsigned)f.ir[xload].o,
+              (unsigned)f.ir[xload].t.irt);
+    }
     assert(!sem_ok && !post_ok);
   }
 

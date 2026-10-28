@@ -6699,10 +6699,12 @@ static int arm64_ir_snapshots(const GCtrace *T, IRRef loopref,
 			       ref, IR_XPOLL, (uint16_t)snapno);
       if (sn == SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL))
 	continue;  /* The sole root-frame sentinel carries no object. */
+      if (ref >= REF_FIRST && ref < snapref &&
+          T->ir[ref].o == IR_XLOAD && T->ir[ref].t.irt == IRT_U8)
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+			       ref, IR_XLOAD, (uint16_t)snapno);
       if (slot < 1 + LJ_FR2 ||
 	  (flags != 0 && flags != SNAP_NORESTORE) ||
-          (ref >= REF_FIRST && ref < snapref &&
-           T->ir[ref].o == IR_XLOAD && T->ir[ref].t.irt == IRT_U8) ||
 	  (!arm64_ir_int_ref(T, ref, snapref, rootop == BC_FORL) &&
 	   !(rootop == BC_FORL &&
 	     (arm64_scalar_ir_ref(T, ref, snapref, IRT_NUM) ||
@@ -8954,8 +8956,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
     case IR_CONV:
       if (type == IRT_NUM && !(flags & ~IRT_ISPHI) &&
           ir->op2 == IRCONV_NUM_INT &&
-          (arm64_scalar_ir_ref(T, ir->op1, ref, IRT_INT) ||
-           arm64_scalar_ir_ref(T, ir->op1, ref, IRT_U8)))
+          arm64_scalar_ir_ref(T, ir->op1, ref, IRT_INT))
         break;
       if (type == IRT_INT && (flags & IRT_GUARD) &&
           !(flags & ~(IRT_GUARD | IRT_ISPHI)) &&
@@ -9108,6 +9109,9 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       }
       previous_slot = slot;
       if (childlink && slot == childlink) continue;
+      if (value >= REF_FIRST && value < ref &&
+          T->ir[value].o == IR_XLOAD && T->ir[value].t.irt == IRT_U8)
+	goto bad_snapshot;
       if ((sn & 0x00ff0000u) == SNAP_NORESTORE) {
         MSize idxslot = 1u + LJ_FR2 + bc_a(T->startins);
         const IRIns *source;
@@ -9306,6 +9310,22 @@ static int arm64_scalar_postra_value(IRIns p)
     return 0;
   }
 }
+static int arm64_string_byte_bounds_postra(const LJArm64PostRAView *v,
+                                            IRRef strref, IRRef str,
+                                            IRRef offset);
+static int arm64_string_byte_xload_postra(const LJArm64PostRAView *v,
+                                           IRRef xload)
+{
+  IRIns load, ptr;
+  if (xload < REF_FIRST || xload >= v->nins) return 0;
+  load = ir_load_acq(&v->ir[xload]);
+  if (load.o != IR_XLOAD || load.t.irt != IRT_U8 ||
+      load.op2 != IRXLOAD_READONLY || load.op1 < REF_FIRST ||
+      load.op1 >= xload) return 0;
+  ptr = ir_load_acq(&v->ir[load.op1]);
+  return ptr.o == IR_STRREF && ptr.t.irt == IRT_PGC &&
+         arm64_string_byte_bounds_postra(v, load.op1, ptr.op1, ptr.op2);
+}
 static int arm64_scalar_postra_ref(const LJArm64PostRAView *v, IRRef ref,
                                    IRRef before, IRType type)
 {
@@ -9318,6 +9338,9 @@ static int arm64_scalar_postra_ref(const LJArm64PostRAView *v, IRRef ref,
   /* Independently retain LDRB's zero-extended integer operand semantics. */
   if (type == IRT_INT && irt_type(p.t) == IRT_U8 && p.o == IR_XLOAD)
     return arm64_scalar_postra_ref(v, ref, before, IRT_U8);
+  if (type == IRT_U8 && p.o == IR_XLOAD)
+    return p.t.irt == IRT_U8 && p.op2 == IRXLOAD_READONLY &&
+           arm64_string_byte_xload_postra(v, ref);
   if (type == IRT_FUNC && p.o == IR_SLOAD && p.op1 == 0 &&
       p.t.irt == IRT_FUNC && p.op2 == IRSLOAD_READONLY)
     return 1;
@@ -11299,7 +11322,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       break;
     case IR_XLOAD:
       if (p.t.irt != IRT_U8 || p.op2 != IRXLOAD_READONLY ||
-          !arm64_scalar_postra_ref(v, p.op1, ref, IRT_PGC))
+          !arm64_string_byte_xload_postra(v, ref))
         return 0;
       break;
     case IR_TMPREF:
@@ -11485,8 +11508,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
     case IR_CONV:
       if (type == IRT_NUM && (flags & ~IRT_ISPHI) == 0 &&
           p.op2 == IRCONV_NUM_INT &&
-          (arm64_scalar_postra_ref(v, p.op1, ref, IRT_INT) ||
-           arm64_scalar_postra_ref(v, p.op1, ref, IRT_U8)))
+          arm64_scalar_postra_ref(v, p.op1, ref, IRT_INT))
         break;
       if (type == IRT_INT && (flags & IRT_GUARD) &&
           (flags & ~(IRT_GUARD | IRT_ISPHI)) == 0 &&

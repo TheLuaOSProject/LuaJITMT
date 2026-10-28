@@ -30,16 +30,21 @@ The ARM64 C fixture checks that recorded source and bound identities, checks
 the source remains mapped in snapshots while STRREF/XLOAD do not escape, and
 mutates load type, volatility, pointer source, offset, length source, guard,
 and snapshot mapping independently through semantic and post-RA admission.
-It keeps another TG alive while collecting and re-entering native code. A
-`while` trace starts before its body, allowing too-short, empty, and wrong-type
-arguments to enter the published trace and exercise native guard exits before
-their interpreter errors. Valid dynamic, embedded-NUL, and long strings each
-require a fresh native-entry delta after full GC.
+It also replaces STRREF with a generic PGC TMPREF, mutates pointer, result,
+and base register classes, removes the string base location, and attempts to
+feed the pointer into a loop PHI. It keeps another TG alive while collecting
+and re-entering native code. The integer accumulator uses a `FORL` trace with
+`sum=0`, matching the ordinary benchmark. A separate numeric `while` trace
+starts before its body, allowing too-short, empty, and wrong-type arguments to
+enter the published trace and exercise native guard exits before their
+interpreter errors. Valid dynamic, embedded-NUL, and long strings each require
+a fresh native-entry delta after full GC.
 
 `tests/t-arm64-jit-string-byte.lua` independently checks Lua results, IR
 shape, GC re-entry, empty/short nil results, and invalid-type errors. It is a
 semantic/IR companion; it makes no native-counter claim.
 
 The profile-bound `tools/ci/arm64_jit_string_byte_contract.sh` passed all four
-ARM64 and arm64e assertion/release profiles on 2026-10-28. The suite is also
+ARM64 and arm64e assertion/release profiles after the post-RA pointer and
+snapshot checks on 2026-10-28. The suite is also
 registered in `m6_jit` and the ARM64 fail-closed gate.

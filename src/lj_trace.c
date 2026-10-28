@@ -12133,7 +12133,8 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
 #endif
       }
       ins = (BCIns)la_load32_acq((const uint32_t *)pc);
-      if (lj_ff_is_bit_scalar(ffid) || ffid == FF_math_floor ||
+      if (lj_ff_is_bit_scalar(ffid) || ffid == FF_string_byte ||
+          ffid == FF_math_floor ||
           ffid == FF_math_ceil || ffid == FF_math_sqrt) {
 	uintptr_t lo = (uintptr_t)&G2GG(g)->bcff[0], at = (uintptr_t)pc;
 	uintptr_t bytes = sizeof(G2GG(g)->bcff);
