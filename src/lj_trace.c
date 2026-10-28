@@ -4102,6 +4102,16 @@ static int trace_root_entry_arm64_exit_layout_valid(
   return 1;
 }
 
+static CTState *trace_arm64_cts(global_State *g)
+{
+#if LJ_HASFFI
+  return ctype_ctsG(g);
+#else
+  UNUSED(g);
+  return NULL;
+#endif
+}
+
 static int trace_root_entry_arm64_layout_scan(
 	const TraceArm64LoopView *v, const GCtrace *owner, CTState *cts, BCIns sourceins,
 	int prepublication)
@@ -4179,7 +4189,7 @@ static int trace_arm64_root_certify(jit_State *J, GCtrace *T)
   sourceop = (uint32_t)op + (uint32_t)BC_JLOOP - (uint32_t)BC_LOOP;
   if (!trace_root_entry_loop_view_acq(T, trace_traceno_acq(T),
         trace_startpc_acq(T), pt, sourceop, &v) ||
-      !trace_root_entry_arm64_layout_scan(&v, T, ctype_ctsG(J2G(J)),
+      !trace_root_entry_arm64_layout_scan(&v, T, trace_arm64_cts(J2G(J)),
         (BCIns)la_load32_acq((const uint32_t *)v.startpc), 1)) return 0;
   memset(&cert, 0, sizeof(cert));
   cert.body = T;
@@ -6849,7 +6859,7 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
       !trace_root_entry_start_valid(sourceop, trace_startins_acq(T)) ||
       !trace_root_entry_loop_view_acq(T, traceno, pc, pt, sourceop, &view) ||
       !trace_root_entry_arm64_layout_valid(
-	&view, T, ctype_ctsG(g), sourceins) ||
+	&view, T, trace_arm64_cts(g), sourceins) ||
       !trace_root_entry_first_child_view_acq(
 	J, T, traceno, sourceop, &view, &childview,
 	TRACE_ROOT_ENTRY_SIDE_FULL_AUDIT) ||
