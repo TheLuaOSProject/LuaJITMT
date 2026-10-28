@@ -13,6 +13,11 @@ local cases = {
                   -2147483649.25, -2147483648.0, 2147483647.75,
                   2147483648.25, 9007199254740994, -inf, inf, nan}}
 }
+for _, name in ipairs({'log','log10','exp','sin','cos','tan','asin','acos',
+                       'atan','sinh','cosh','tanh'}) do
+  cases[#cases+1] = {name, math[name], {-inf,-1e300,-2.75,-1,-0.0,0.0,
+                                      1e-300,.25,1,2.75,1e300,inf,nan}}
+end
 local function same(a, b)
   if a ~= a then return b ~= b end
   if b ~= b or a ~= b then return false end

@@ -3309,6 +3309,38 @@ static int arm64_postra_forl_dynamic_shape(const LJArm64PostRAView *view,
   return 1;
 }
 
+/* Darwin AAPCS64 preserved locations, shared only within the allocated
+** certificate. Keep this available when JIT FFI calls are disabled. */
+static int arm64_postra_value_survives_call(const LJArm64PostRAView *view,
+		IRRef value, IRRef call, MSize capacity, unsigned depth)
+{
+	IRIns ins;
+	int fp;
+	if (value < REF_FIRST) return 1;
+	if (value >= call || depth > 32u) return 0;
+	ins = ir_load_acq(&view->ir[value]);
+	if (ins.s != SPS_NONE) {
+		MSize width = irt_is64(ins.t) ? 2u : 1u;
+		MSize end = (MSize)ins.s+width;
+		return arm64_postra_spill_slot(ins.s, capacity) && end <= capacity &&
+		       (width != 2u || (((MSize)ins.s-SPS_FIRST)&1u) == 0);
+	}
+	if (ra_hasreg(ins.r)) {
+		fp = irt_type(ins.t) == IRT_NUM || irt_type(ins.t) == IRT_FLOAT;
+		return fp ? (ins.r >= RID_D8 && ins.r <= RID_D15) :
+			    (ins.r >= RID_X19 && ins.r <= RID_X28);
+	}
+	if (ins.o == IR_CONV)
+		return arm64_postra_value_survives_call(view, ins.op1, call,
+			capacity, depth+1u);
+	if (ins.o == IR_ADD)
+		return arm64_postra_value_survives_call(view, ins.op1, call,
+			capacity, depth+1u) &&
+		       arm64_postra_value_survives_call(view, ins.op2, call,
+			capacity, depth+1u);
+	return 0;
+}
+
 #if LJ_HASJIT_FFI_CALLXS
 static int arm64_callxs_snapshot_frame_pc(const GCtrace *T,
 	MSize ofs, MSize nent,
@@ -3819,35 +3851,6 @@ static int arm64_postra_callxs_result_unused(
 	return 1;
 }
 
-static int arm64_postra_callxs_value_survives(const LJArm64PostRAView *view,
-		IRRef value, IRRef call, MSize capacity, unsigned depth)
-{
-	IRIns ins;
-	int fp;
-	if (value < REF_FIRST) return 1;
-	if (value >= call || depth > 32u) return 0;
-	ins = ir_load_acq(&view->ir[value]);
-	if (ins.s != SPS_NONE) {
-		MSize width = irt_is64(ins.t) ? 2u : 1u;
-		MSize end = (MSize)ins.s+width;
-		return arm64_postra_spill_slot(ins.s, capacity) && end <= capacity &&
-		       (width != 2u || (((MSize)ins.s-SPS_FIRST)&1u) == 0);
-	}
-	if (ra_hasreg(ins.r)) {
-		fp = irt_type(ins.t) == IRT_NUM || irt_type(ins.t) == IRT_FLOAT;
-		return fp ? (ins.r >= RID_D8 && ins.r <= RID_D15) :
-			    (ins.r >= RID_X19 && ins.r <= RID_X28);
-	}
-	if (ins.o == IR_CONV)
-		return arm64_postra_callxs_value_survives(view, ins.op1, call,
-			capacity, depth+1u);
-	if (ins.o == IR_ADD)
-		return arm64_postra_callxs_value_survives(view, ins.op1, call,
-			capacity, depth+1u) &&
-		       arm64_postra_callxs_value_survives(view, ins.op2, call,
-			capacity, depth+1u);
-	return 0;
-}
 
 static int arm64_postra_callxs_gc_dependency(const LJArm64PostRAView *view,
     IRRef nins, IRRef ref, IRRef object, unsigned *remaining)
@@ -4011,7 +4014,7 @@ static int arm64_postra_callxs_live_across(const LJArm64PostRAView *view,
 				}
 		}
 		if (!live) continue;
-		if (!arm64_postra_callxs_value_survives(view, value, call,
+		if (!arm64_postra_value_survives_call(view, value, call,
 			capacity, 0))
 			return 0;
 	}
@@ -5311,7 +5314,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		  result_slot, boxref, 0)) return 0;
 	    if (result_is_u32 &&
 		((result_slot && (!number_result ||
-		  !arm64_postra_callxs_value_survives(view, number_result,
+		  !arm64_postra_value_survives_call(view, number_result,
 		    ref, capacity, 0))) ||
 		 !arm64_postra_u32_result_uses(view, semantic_nins,
 		   active_call, number_result) ||
@@ -5325,7 +5328,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	      if ((result_slot &&
 	           ((irt_type(view->ir[active_call].t) == IRT_FLOAT &&
 	             !number_result) ||
-	            !arm64_postra_callxs_value_survives(view, lua_result,
+	            !arm64_postra_value_survives_call(view, lua_result,
 	              ref, capacity, 0))) ||
 	          !arm64_callxs_snapshot_value_slot(view->snap, view->snapmap,
 	            view->nsnap, view->nsnapmap, ref, 1u+LJ_FR2, result_slot,
@@ -7103,23 +7106,39 @@ static int arm64_rooted_gc_type(IRType type)
          type == IRT_THREAD || type == IRT_UDATA || type == IRT_CDATA;
 }
 
-/* These fast functions record scalar operations without a remaining call.
-** Keep allocation (bit.tohex), cdata arithmetic and other fast functions out
-** of this identity-guard capability; their IR still needs its own proof. */
+/* Exact builtin identities whose operations have independent IR proofs. */
 static int arm64_scalar_builtin_ffid(uint32_t ffid)
 {
   return ffid == FF_rawset || lj_ff_is_bit_scalar(ffid) ||
          ffid == FF_math_floor || ffid == FF_math_ceil ||
          ffid == FF_math_sqrt || ffid == FF_math_abs ||
          ffid == FF_math_min || ffid == FF_math_max ||
-         ffid == FF_string_byte;
+         ffid == FF_string_byte || ffid == FF_math_log ||
+         ffid == FF_math_log10 || ffid == FF_math_exp ||
+         ffid == FF_math_sin || ffid == FF_math_cos || ffid == FF_math_tan ||
+         ffid == FF_math_asin || ffid == FF_math_acos || ffid == FF_math_atan ||
+         ffid == FF_math_sinh || ffid == FF_math_cosh || ffid == FF_math_tanh;
 }
 
-/* Only these math recorders lower to pure ARM64 FP instructions. Other
-** IR_FPMATH sub-ops can call runtime helpers and need separate call proofs. */
+/* Fixed unary, NUM -> NUM helpers. These do not allocate Lua objects, enter
+** the VM, release its native phase lease, or access shared Lua state. */
+static int arm64_scalar_math_call(unsigned id)
+{
+  switch ((IRCallID)id) {
+  case IRCALL_log10: case IRCALL_exp: case IRCALL_sin: case IRCALL_cos:
+  case IRCALL_tan: case IRCALL_asin: case IRCALL_acos: case IRCALL_atan:
+  case IRCALL_sinh: case IRCALL_cosh: case IRCALL_tanh:
+    return 1;
+  default:
+    return 0;
+  }
+}
+
+/* LOG/LOG2 additionally require the allocated call-clobber proof. */
 static int arm64_scalar_fpmath(uint32_t op)
 {
-  return op == IRFPM_FLOOR || op == IRFPM_CEIL || op == IRFPM_SQRT;
+  return op == IRFPM_FLOOR || op == IRFPM_CEIL || op == IRFPM_SQRT ||
+         op == IRFPM_LOG || op == IRFPM_LOG2;
 }
 
 /* ABS and numeric NEG carry exact aligned global SIMD masks in op2. */
@@ -7173,6 +7192,9 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
   if (value < REF_FIRST || value >= before)
     return 0;
   ir = &T->ir[value];
+  if (ir->o == IR_CALLN)
+    return type == IRT_NUM && ir->t.irt == IRT_NUM &&
+           arm64_scalar_math_call(ir->op2);
   /* XLOAD U8 is zero-extended by LDRB and is safe as a Lua INT operand. */
   if (type == IRT_INT && irt_type(ir->t) == IRT_U8 && ir->o == IR_XLOAD)
     return arm64_scalar_ir_ref(T, value, before, IRT_U8);
@@ -9660,6 +9682,12 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       binary = 1;
       break;
     case IR_CALLN:
+      if (side || type != IRT_NUM || flags ||
+          !arm64_scalar_math_call(ir->op2) ||
+          !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_NUM))
+        return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL, ref,
+                               IR_CALLN, ir->op2);
+      break;
     case IR_CALLA:
     case IR_CALLL:
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL, ref, (IROp)ir->o,
@@ -9967,6 +9995,8 @@ static int arm64_scalar_postra_value(IRIns p)
             (p.t.irt & ~IRT_ISPHI) == (irt_type(p.t)|IRT_GUARD));
   case IR_FPMATH:
     return p.t.irt == IRT_NUM && arm64_scalar_fpmath(p.op2);
+  case IR_CALLN:
+    return p.t.irt == IRT_NUM && arm64_scalar_math_call(p.op2);
   case IR_TNEW:
     return (p.t.irt & ~IRT_ISPHI) == (IRT_TAB|IRT_GUARD);
   case IR_TMPREF:
@@ -11044,6 +11074,69 @@ static RegSP arm64_scalar_postra_snapshot_regsp(const LJArm64PostRAView *v,
     if (q.op1 == ref && q.op2 <= s) rs = q.prev;
   }
   return rs;
+}
+
+/* Pure math calls do not enter Lua or release its native GC phase lease.
+** Their only extra machine-state effect is the Darwin AAPCS64 call clobber.
+** Check both ordinary uses (including invariant uses across a loop backedge)
+** and the exact renamed locations used by exits after each call. */
+static int arm64_scalar_math_regsp_survives(RegSP rs, IRType type, MSize cap)
+{
+  MSize spill = regsp_spill(rs), width = type == IRT_INT || type == IRT_U8 ? 1u : 2u;
+  Reg reg = regsp_reg(rs);
+  if (ra_hasspill(spill))
+    return spill >= SPS_FIRST && (width == 1u || !(spill & 1u)) &&
+           spill + width <= cap;
+  return type == IRT_NUM ? reg >= RID_D8 && reg <= RID_D15 :
+                          reg >= RID_X19 && reg <= RID_X28;
+}
+
+static int arm64_scalar_math_live_across(const LJArm64PostRAView *v,
+                                        IRRef n, IRRef loop, IRRef call,
+                                        MSize cap)
+{
+  IRRef value, ref;
+  MSize s, i;
+  for (value = REF_FIRST; value < call; value++) {
+    IRIns source = ir_load_acq(&v->ir[value]);
+    IRRef first = value < loop && loop < call ? loop+1u : call+1u;
+    int needed = 0;
+    if (!arm64_scalar_postra_value(source) ||
+        arm64_scalar_ksimd_postra_fload(source, 0) ||
+        arm64_scalar_ksimd_postra_fload(source, 1)) continue;
+    for (ref = first; ref < n && !needed; ref++) {
+      IRIns use = ir_load_acq(&v->ir[ref]);
+      IRMode mode = lj_ir_mode[use.o];
+      needed = (irm_op1(mode) == IRMref && use.op1 == value) ||
+               (irm_op2(mode) == IRMref && use.op2 == value);
+    }
+    if (needed && !arm64_postra_value_survives_call(v, value, call, cap, 0))
+      return 0;
+    for (s = 0; s < v->nsnap; s++) {
+      const SnapShot *snap = &v->snap[s];
+      MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap);
+      IRRef at = snap_ref_acq(snap);
+      if (at <= call && !(value < loop && loop < call && at > loop)) continue;
+      for (i = 0; i < nent; i++) {
+        SnapEntry entry = snapentry_acq(&v->snapmap[ofs+i]);
+        IRRef material = value;
+        IRIns p = source;
+        RegSP rs;
+        if (snap_ref(entry) != value || (entry & SNAP_NORESTORE)) continue;
+        rs = arm64_scalar_postra_snapshot_regsp(v, n, material, s);
+        if (!ra_hasspill(regsp_spill(rs)) && ra_noreg(regsp_reg(rs)) &&
+            p.o == IR_CONV && p.t.irt == IRT_NUM && p.op2 == IRCONV_NUM_INT) {
+          material = p.op1;
+          if (irref_isk(material)) continue;
+          p = ir_load_acq(&v->ir[material]);
+          rs = arm64_scalar_postra_snapshot_regsp(v, n, material, s);
+        }
+        if (!arm64_scalar_math_regsp_survives(rs, (IRType)irt_type(p.t), cap))
+          return 0;
+      }
+    }
+  }
+  return 1;
 }
 
 /* Re-derive the leaf's caller/argument binding from the allocated view. */
@@ -12209,6 +12302,12 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
           !arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM))
         return 0;
       break;
+    case IR_CALLN:
+      if (side || p.t.irt != IRT_NUM ||
+          !arm64_scalar_math_call(p.op2) ||
+          !arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM))
+        return 0;
+      break;
     case IR_FLOAD:
       if (arm64_scalar_ksimd_postra_fload(p, 0) ||
           arm64_scalar_ksimd_postra_fload(p, 1)) {
@@ -12655,6 +12754,9 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
     }
     if (rootop != BC_FORL && ir.o == IR_SLOAD &&
         ir.op1 >= snap_nslots_acq(&v->snap[s]))
+      return 0;
+    if ((ir.o == IR_CALLN || (ir.o == IR_FPMATH && ir.op2 >= IRFPM_LOG)) &&
+        !arm64_scalar_math_live_across(v, n, loop, ref, cap))
       return 0;
   }
   if (ninsout)
