@@ -107,6 +107,14 @@ int main(void)
     " local byte=string.byte; local sum=0; "
     "for i=1,n do sum=sum+byte(s,2) end; return sum\n"
     "end\n"
+    "string_byte_literal_trace=function(s,n)\n"
+    " local byte=string.byte; local sum=0; "
+    "for i=1,n do sum=sum+byte('abc',2) end; return sum\n"
+    "end\n"
+    "string_byte_literal_trace_clone=function(s,n)\n"
+    " local byte=string.byte; local sum=0; "
+    "for i=1,n do sum=sum+byte('abc',2) end; return sum\n"
+    "end\n"
     "string_byte_bounds_trace=function(s,n)\n"
     " local byte=string.byte; local i,sum=1,0.5; "
     "while i<=n do sum=sum+byte(s,2); i=i+1 end; return sum\n"
@@ -129,7 +137,7 @@ int main(void)
   MSize s;
   unsigned mapped_source = 0;
   uint32_t entries, exits;
-  TraceNo bounds_no;
+  TraceNo bounds_no, literal_no = 0;
   int sem_ok, post_ok;
   lua_Number value;
   assert(L != NULL);
@@ -230,6 +238,28 @@ int main(void)
   assert(call_loop(L, "string_byte_trace", "string_byte_value", &value) == LUA_OK &&
          value == 99.0*80.0);
   assert(lj_trace_test_root_entry_successes() > entries);
+  entries = lj_trace_test_root_entry_successes();
+  assert(call_loop(L, "string_byte_literal_trace", "string_byte_value",
+                   &value) == LUA_OK && value == 98.0*80.0);
+  if (lj_trace_test_root_entry_successes() == entries)
+    fprintf(stderr, "literal string-byte had no native root: publishes=%u "
+            "cleanups=%u aborts=%u error=%u exits=%u\n",
+            lj_trace_test_root_entry_publishes(),
+            lj_trace_test_root_entry_cleanups(),
+            lj_trace_test_abort_count(),
+            (unsigned)lj_trace_test_last_abort_error(),
+            lj_trace_test_exit_calls());
+  assert(lj_trace_test_root_entry_successes() > entries);
+  {
+    GCtrace *literal_owner;
+    lua_getglobal(L, "string_byte_literal_trace");
+    literal_no = proto_trace_acq(funcproto(funcV(L->top-1)));
+    lua_pop(L, 1);
+    literal_owner = traceref_safe(L2J(L), literal_no);
+    assert(literal_no != 0 && literal_owner &&
+           trace_runnable_acq(literal_owner, literal_no) &&
+           bc_op(trace_startins_acq(literal_owner)) == BC_FORL);
+  }
   entries = lj_trace_test_root_entry_successes();
   assert(call_loop(L, "string_byte_trace", "string_byte_nul", &value) == LUA_OK && value == 0.0);
   assert(lj_trace_test_root_entry_successes() > entries);
@@ -387,6 +417,100 @@ int main(void)
     assert(!sem_ok && !post_ok);
   }
 
+  arm64_fixture_reset(&f);
+  assert(semantic(&f) && allocated(&f));
+  arm64_fixture_free(&f);
+
+  /* Constant folding removes the byte load but can leave an unreferenced
+  ** KKPTR for the literal's interior address in the constant pool. */
+  arm64_fixture_init_trace(&f, L, "string_byte_literal_trace_clone", literal_no);
+  assert(semantic(&f) && allocated(&f));
+  {
+    IRRef kkp = 0, payload, add = 0, identity = 0, rename = 0;
+    unsigned nkkp = 0;
+    IRRef k;
+    SnapNo sn;
+    for (k = f.semantic.nk; k < REF_TRUE; k++) {
+      if (f.ir[k].o == IR_KKPTR) {
+        assert(f.ir[k].t.irt == IRT_PGC && f.ir[k].op12 == 0);
+        kkp = k;
+        nkkp++;
+      }
+    }
+    assert(kkp && nkkp == 1);
+    payload = kkp + LJ_GC64;
+    assert(payload < REF_TRUE);
+    for (r = REF_FIRST; r < f.semantic_nins; r++) {
+      if (f.ir[r].o == IR_ADDOV &&
+          ((f.ir[r].op1 == kkp) || (f.ir[r].op2 == kkp)))
+        add = r;
+      if (f.ir[r].o == IR_EQ && f.ir[r].t.irt == (IRT_FUNC|IRT_GUARD))
+        identity = r;
+    }
+    assert(!add && identity);
+    for (sn = 0; sn < f.view.nsnap; sn++) {
+      const SnapShot *snap = &f.snaps[sn];
+      MSize i;
+      for (i = 0; i < snap_nent_acq(snap); i++)
+        assert(snap_ref(f.map[snap_mapofs_acq(snap)+i]) != kkp);
+    }
+
+    /* The dead constant is not a pointer capability: making it an IR or
+    ** snapshot value must be rejected by both independent validators. */
+    for (r = REF_FIRST; r < f.semantic_nins; r++)
+      if (f.ir[r].o == IR_ADDOV) { add = r; break; }
+    assert(add);
+    arm64_fixture_reset(&f);
+    f.ir[add].op2 = kkp;
+    f.postra[add].op2 = kkp;
+    assert(!semantic(&f) && !allocated(&f));
+
+    /* The paired GC64 payload is data, not a constant value either. */
+    arm64_fixture_reset(&f);
+    f.ir[add].op2 = payload;
+    f.postra[add].op2 = payload;
+    assert(!semantic(&f) && !allocated(&f));
+
+    arm64_fixture_reset(&f);
+    {
+      SnapEntry old;
+      MSize mapidx = 0;
+      for (sn = 0; sn < f.view.nsnap; sn++) {
+        if (snap_nent_acq(&f.snaps[sn]) != 0) {
+          mapidx = snap_mapofs_acq(&f.snaps[sn]);
+          break;
+        }
+      }
+      assert(sn < f.view.nsnap);
+      old = f.map[mapidx];
+      f.map[mapidx] = snap_setref(old, kkp);
+      f.postmap[mapidx] = snap_setref(old, kkp);
+      assert(!semantic(&f) && !allocated(&f));
+      f.map[mapidx] = old;
+      f.postmap[mapidx] = old;
+
+      f.map[mapidx] = snap_setref(old, payload);
+      f.postmap[mapidx] = snap_setref(old, payload);
+      assert(!semantic(&f) && !allocated(&f));
+      f.map[mapidx] = old;
+      f.postmap[mapidx] = old;
+    }
+
+    /* Allocator tail renames are absent from the semantic view but must not
+    ** be able to make the paired payload an allocated value. */
+    for (r = f.semantic_nins; r < f.nins; r++)
+      if (f.postra[r].o == IR_RENAME) { rename = r; break; }
+    assert(rename);
+    arm64_fixture_reset(&f);
+    f.postra[rename].op1 = payload;
+    assert(semantic(&f) && !allocated(&f));
+
+    /* A different fast function cannot inherit byte's folded constant. */
+    arm64_fixture_reset(&f);
+    f.ir[identity].op2 = REF_TRUE;
+    f.postra[identity].op2 = REF_TRUE;
+    assert(!semantic(&f) && !allocated(&f));
+  }
   arm64_fixture_reset(&f);
   assert(semantic(&f) && allocated(&f));
   arm64_fixture_free(&f);

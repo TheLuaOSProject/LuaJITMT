@@ -21,8 +21,9 @@ typedef struct Arm64TraceFixture {
   size_t irbytes, snapbytes;
 } Arm64TraceFixture;
 
-static void arm64_fixture_init(Arm64TraceFixture *f, lua_State *L,
-                               const char *clone_global)
+static void arm64_fixture_init_trace(Arm64TraceFixture *f, lua_State *L,
+                                     const char *clone_global,
+                                     TraceNo traceno)
 {
   GCproto *pt, *original;
   IRRef ref, loop = 0;
@@ -30,8 +31,8 @@ static void arm64_fixture_init(Arm64TraceFixture *f, lua_State *L,
   const BCIns *pc;
   size_t mapbytes;
   memset(f, 0, sizeof(*f));
-  f->owner = traceref_safe(L2J(L), 1);
-  assert(f->owner && trace_runnable_acq(f->owner, 1));
+  f->owner = traceref_safe(L2J(L), traceno);
+  assert(f->owner && trace_runnable_acq(f->owner, traceno));
   original = trace_startpt_acq(f->owner);
   lua_getglobal(L, clone_global);
   assert(lua_isfunction(L, -1) && isluafunc(funcV(L->top-1)));
@@ -102,6 +103,12 @@ static void arm64_fixture_init(Arm64TraceFixture *f, lua_State *L,
   f->view.root_topslot = f->owner->topslot;
   f->view.startins = f->owner->startins;
   memcpy(f->ir, f->good, f->irbytes);
+}
+
+static void arm64_fixture_init(Arm64TraceFixture *f, lua_State *L,
+                               const char *clone_global)
+{
+  arm64_fixture_init_trace(f, L, clone_global, 1);
 }
 
 static void arm64_fixture_reset(Arm64TraceFixture *f)

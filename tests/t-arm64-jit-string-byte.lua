@@ -6,12 +6,26 @@ local bit = require('bit')
 
 assert(jit.status(), 'JIT is required')
 jit.flush()
-jit.opt.start('hotloop=1', 'hotexit=1000', 'maxtrace=1')
+jit.opt.start('hotloop=1', 'hotexit=1000', 'maxtrace=4')
 
 string_byte_trace = function(s, n)
   local byte = string.byte
   local i, sum = 1, 0
   while i <= n do sum = sum + byte(s, 2); i = i + 1 end
+  return sum
+end
+
+string_byte_literal_trace = function(s, n)
+  local byte = string.byte
+  local sum = 0
+  for i = 1, n do sum = sum + byte('abc', 2) end
+  return sum
+end
+
+string_byte_literal_trace_clone = function(s, n)
+  local byte = string.byte
+  local sum = 0
+  for i = 1, n do sum = sum + byte('abc', 2) end
   return sum
 end
 
@@ -27,6 +41,8 @@ jit.attach(trace_event, 'trace')
 
 local s = string.rep('gcstr-byte-', 24)
 assert(string_byte_trace(s, 80) == string.byte('gcstr-byte-', 2) * 80)
+assert(string_byte_literal_trace(s, 80) == 98 * 80)
+assert(string_byte_literal_trace_clone(s, 80) == 98 * 80)
 
 local function has_bounded_byte_load()
   local traceno = next(traced)
@@ -55,6 +71,9 @@ assert(string_byte_trace('a\0b', 80) == 0)
 assert(string_byte_trace(string.rep('L', 65536), 80) == 76 * 80)
 assert(string.byte('', 2) == nil)
 assert(string.byte('x', 2) == nil)
+assert(string.byte('abc', 1) == 97)
+assert(string.byte('abc', 4) == nil)
+assert(string.byte('abc', 0) == nil)
 assert(not pcall(string_byte_trace, '', 80))
 assert(not pcall(string_byte_trace, {1, 2, 3}, 80))
 

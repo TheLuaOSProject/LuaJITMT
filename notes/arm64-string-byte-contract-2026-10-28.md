@@ -26,6 +26,27 @@ STRREF string, offset
 XLOAD U8 readonly
 ```
 
+For a literal call such as `string.byte('abc', 2)`, the recorder folds the
+read to integer constant `98` before admission, so that trace has no STRREF or
+XLOAD to certify. The fold can leave an IR_KKPTR constant naming the literal's
+interior byte address. The generic scalar root's semantic and post-RA constant
+scans accept that residue only when neither its IRRef nor its paired GC64
+payload IRRef occurs in any surviving IR operand or snapshot. The post-RA scan
+also examines allocator-tail RENAME operands. Scalar constant resolvers skip
+the paired payload and explicitly refuse to use the KKPTR header as a value.
+If either word becomes live, admission rejects it; this does not admit pointer
+arithmetic, loads, or pointer snapshot state. The runtime result remains the
+ordinary integer constant produced by the recorder.
+
+The native C fixture requires an entry-count increase for the literal loop,
+checks the compiled root shape, and separately mutates the residue and paired
+payload into IR operands, snapshots, and an allocator-tail RENAME. It also
+mutates the function identity guard. The Lua companion compares literal calls
+and first/last/out-of-range indices through ordinary Lua semantics. The
+four-profile contract passed on arm64 and arm64e with assertions enabled and
+disabled; the C fixture reported ten native entries and ten exits, including
+the literal-root entry and bounds exits.
+
 The ARM64 C fixture checks that recorded source and bound identities, checks
 the source remains mapped in snapshots while STRREF/XLOAD do not escape, and
 mutates load type, volatility, pointer source, offset, length source, guard,
