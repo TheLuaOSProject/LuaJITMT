@@ -36,3 +36,28 @@ The old-checkpoint comparison is under
 Next evidence must distinguish actual host trace execution, recorder effects,
 and GC/template lifetime. The port checkpoint is not promoted to `v2.1` on
 these results, and full x86_64 parity remains incomplete.
+
+## Follow-up reproduction probes
+
+An exact `8dc0a6cfe` experimental/assert host was copied outside its build tree
+and checked with `jit.status() == true`. This matters because the M7 selector
+restores `src/luajit` to an interpreter bootstrap build at the end: reusing that
+path for the next run silently changes the host profile. A subsequent M7 run
+from the immutable host, with `MallocScribble=1` and a private temporary
+directory, passed. PID-filtered events showed starts and aborts, no trace-stop
+publication, and no event sourced from `suite_utils.lua`. Other instrumented
+old/new host runs also passed. They do not establish the execution history of
+either original failure.
+
+A closer control-plane probe uses the real `Test:path`, `Test:cc`, `Test:run`
+and fixture-library helper, substitutes successful command execution, allocates
+large strings, and collects fully every 137 iterations. Its 30,000 iterations
+passed all library-value and 90,000-command checks. The observed variant had
+4,758 trace starts, zero stops and 24 abort events; an unobserved variant with
+`hotloop=1` also passed. These are recorder-pressure probes, not native-code
+execution evidence. A separate one-million-iteration fresh-table helper probe
+also passed. No reproducer or runtime fix has been established.
+
+The immutable host and preserved allocator-stress trace are under
+`/Users/frityet/Scratch/ljmt-m7-hosttrace-20261028/`; the control-plane probe and
+its `-trace.log`/`-hot.log` results are in the original evidence directory.
