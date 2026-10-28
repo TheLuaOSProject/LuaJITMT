@@ -1604,7 +1604,7 @@ static void test_positive_and_negative(lua_State *L)
 	 guardno++) {
     make_trace(J);
     fx.ir[R_PRECOND].o = (IROp1)unsigned_guards[guardno];
-    expect_reject(J, LJ_ARM64_IR_REJECT_OPCODE, unsigned_guards[guardno]);
+    expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, unsigned_guards[guardno]);
   }
 
   make_trace(J);

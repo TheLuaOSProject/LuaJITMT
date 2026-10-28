@@ -3038,10 +3038,12 @@ static int arm64_postra_forl_dynamic_shape(const LJArm64PostRAView *view,
     return 0;
   for (ref = REF_FIRST; ref < firstphi; ref++) {
     IRIns ins = ir_load_acq(&ir[ref]);
-    if (ins.o == IR_ADD && ref < loopref && ins.op1 == idxload) {
+    if (ins.o == IR_ADD && ref < loopref && ins.op1 == idxload &&
+	ins.t.irt == (IRT_INT|IRT_ISPHI)) {
       if (preadd != 0) return 0;
       preadd = ref;
-    } else if (ins.o == IR_ADD && ref > xpollref && ins.op1 == preadd) {
+    } else if (ins.o == IR_ADD && ref > xpollref && ins.op1 == preadd &&
+	ins.t.irt == (IRT_INT|IRT_ISPHI)) {
       if (postadd != 0) return 0;
       postadd = ref;
     }
@@ -6435,13 +6437,15 @@ static int arm64_ir_forl_shape(const jit_State *J, const GCtrace *T,
       nuse++;
       useref = ref;
     }
-    if (ir->o == IR_ADD && ref < loopref && ir->op1 == idxload) {
+    if (ir->o == IR_ADD && ref < loopref && ir->op1 == idxload &&
+	ir->t.irt == (IRT_INT|IRT_ISPHI)) {
       if (preadd != 0)
 	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
 			       ref, IR_ADD, 1);
       preadd = ref;
     } else if (ir->o == IR_ADD && ref > xpollref &&
-	       (!firstphi || ref < firstphi) && ir->op1 == preadd) {
+	       (!firstphi || ref < firstphi) && ir->op1 == preadd &&
+	       ir->t.irt == (IRT_INT|IRT_ISPHI)) {
       if (postadd != 0)
 	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
 			       ref, IR_ADD, 2);
@@ -8988,7 +8992,13 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
   live = pt->numparams;
   for (i = pt->numparams; i < pt->framesize; i++)
     if (needed[i] && i+1u > live) live = i+1u;
-  if (base+live > UINT8_MAX || snap->nslots != base+live) return 0;
+  if (base+live > UINT8_MAX) return 0;
+  if (branch.compare == UINT32_MAX) {
+    if (snap->nslots != base+live) return 0;
+  } else if (snap->nslots < base+live ||
+             /* Snapshot nslots includes the FR2 frame-link adjustment. */
+             snap->nslots > snap->topslot+1u+LJ_FR2 ||
+             snap->nslots > base+pt->framesize) return 0;
   if (pos+1u == pt->sizebc) {
     BCIns assign = (BCIns)la_load32_acq((const uint32_t *)retpc);
     const IRIns *guard = &T->ir[ref];
@@ -9051,8 +9061,9 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
     SnapEntry sn = T->snapmap[snap->mapofs+i];
     MSize slot = snap_slot(sn);
     if (slot >= base) {
-      if (slot-base >= live || seen[slot-base] || !saved[slot-base] ||
-          (sn & 0x00ff0000u) || snap_ref(sn) != saved[slot-base]) return 0;
+      if (slot-base >= pt->framesize || seen[slot-base] ||
+          !saved[slot-base] || (sn & 0x00ff0000u) ||
+          snap_ref(sn) != saved[slot-base]) return 0;
       seen[slot-base] = 1;
     }
   }
@@ -11342,9 +11353,12 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
   live = pt->numparams;
   for (i = pt->numparams; i < pt->framesize; i++)
     if (needed[i] && i+1u > live) live = i+1u;
-  if (base+live > UINT8_MAX || snap_nslots_acq(sn) != base+live) {
-    return 0;
-  }
+  if (base+live > UINT8_MAX) return 0;
+  if (branch.compare == UINT32_MAX) {
+    if (snap_nslots_acq(sn) != base+live) return 0;
+  } else if (snap_nslots_acq(sn) < base+live ||
+             snap_nslots_acq(sn) > snap_topslot_acq(sn)+1u+LJ_FR2 ||
+             snap_nslots_acq(sn) > base+pt->framesize) return 0;
   if (pos == pt->sizebc-1u) {
     BCIns continuation = (BCIns)la_load32_acq((const uint32_t *)retpc);
     IRIns check = ir_load_acq(&v->ir[at]);
@@ -11401,7 +11415,8 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
     SnapEntry entry = snapentry_acq(&v->snapmap[ofs+i]);
     MSize slot = snap_slot(entry);
     if (slot < base) continue;
-    if (slot-base >= live || seen[slot-base] || !saved[slot-base] ||
+    if (slot-base >= pt->framesize || seen[slot-base] ||
+        !saved[slot-base] ||
         (entry & 0x00ff0000u) || snap_ref(entry) != saved[slot-base]) return 0;
     seen[slot-base] = 1;
   }

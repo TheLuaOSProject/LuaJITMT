@@ -317,7 +317,7 @@ static unsigned ret_terminal_maps, ret_next_map_bad, ret_callmap_guards;
 /* Every semantic mutation must run in both passes; allocation conflicts
 ** and the guarded loop-increment mutation belong to the allocated pass. */
 static unsigned ret_mutation_count[26][2];
-static unsigned branch_mutation_count[6][2];
+static unsigned branch_mutation_count[10][2];
 
 enum {
   RET_NEG_SWAP = 0,
@@ -349,7 +349,11 @@ enum {
   RET_NEG_BRANCH_POLARITY,
   RET_NEG_BRANCH_FUTURE_MAPOFS,
   RET_NEG_BRANCH_FUTURE_NENT,
-  RET_NEG_BRANCH_OMIT_LIVE
+  RET_NEG_BRANCH_OMIT_LIVE,
+  RET_NEG_BRANCH_ARM_ARITH,
+  RET_NEG_BRANCH_EXTRA_REF,
+  RET_NEG_BRANCH_EXTRA_DUP,
+  RET_NEG_BRANCH_EXTRA_FRAME
 };
 
 static GCproto *return_copy_proto(const GCproto *pt)
@@ -546,6 +550,85 @@ static void return_test_negative(ReturnFixture *f, SnapNo s, unsigned id,
     }
     return;
   }
+  if (which == RET_NEG_BRANCH_ARM_ARITH) {
+    IRRef arith = 0;
+    MSize childbase, slot;
+    BCIns ret;
+    if (postra || strcmp(active_name, "comparison-arm-multiop")) return;
+    /* Pin the mutation to the actual RET1 local, rather than to whichever
+    ** arithmetic opcode happens to be unique in the whole trace. */
+    ret = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(f->leafpt)[
+      f->leafpt->sizebc-1u]);
+    if (bc_op(ret) != BC_RET1) return;
+    childbase = (uint8_t)snapshot_footer(&f->copy, s)+2u;
+    slot = childbase+bc_a(ret);
+    for (MSize i = 0; i < f->snap[s].nent; i++) {
+      SnapEntry entry = f->map[f->snap[s].mapofs+i];
+      if (snap_slot(entry) == slot) {
+        arith = snap_ref(entry);
+        break;
+      }
+    }
+    if (!arith || arith >= f->n || f->ir[arith].o != IR_SUBOV ||
+        (f->ir[arith].t.irt & ~IRT_ISPHI) != (IRT_INT|IRT_GUARD)) return;
+    f->ir[arith].o = IR_ADDOV;
+    return_expect_reject(f, id, 0);
+    return_expect_reject(f, id, 1);
+    return_reset_fixture(f); f->child = s;
+    return;
+  }
+  if (which >= RET_NEG_BRANCH_EXTRA_REF &&
+      which <= RET_NEG_BRANCH_EXTRA_FRAME) {
+    if (postra || strcmp(active_name, "comparison-arm-multiop")) return;
+    /* Find the last retained frame value in a completed arm. Even this extra
+    ** map must match the independently reconstructed source prefix. */
+    for (SnapNo q = 0; q < f->copy.nsnap; q++) {
+      uint64_t edge = snapshot_footer(&f->copy, q);
+      const BCIns *pc = (const BCIns *)(uintptr_t)(edge>>8);
+      MSize pos, childbase, chosen = UINT32_MAX, duplicate = UINT32_MAX;
+      if (!(uint8_t)edge ||
+          (uintptr_t)pc < (uintptr_t)proto_bc(f->leafpt) ||
+          (uintptr_t)pc >= (uintptr_t)(proto_bc(f->leafpt)+f->leafpt->sizebc))
+        continue;
+      pos = proto_bcpos(f->leafpt, pc);
+      if (pos <= 1u || pos+1u >= f->leafpt->sizebc) continue;
+      childbase = (uint8_t)edge+2u;
+      for (MSize i = 0; i < f->snap[q].nent; i++) {
+        SnapEntry entry = f->map[f->snap[q].mapofs+i];
+        MSize slot = snap_slot(entry);
+        if (slot < childbase || slot-childbase >= f->leafpt->framesize)
+          continue;
+        if (chosen == UINT32_MAX ||
+            snap_slot(f->map[f->snap[q].mapofs+chosen]) < slot) {
+          duplicate = chosen;
+          chosen = i;
+        }
+      }
+      if (chosen == UINT32_MAX || duplicate == UINT32_MAX ||
+          snap_slot(f->map[f->snap[q].mapofs+chosen])+1u !=
+            f->snap[q].nslots) continue;
+      return_reset_fixture(f); f->child = s;
+      assert(return_admit(f, 0) && return_admit(f, 1));
+      {
+        SnapEntry *entry = &f->map[f->snap[q].mapofs+chosen];
+        SnapEntry other = f->map[f->snap[q].mapofs+duplicate];
+        if (which == RET_NEG_BRANCH_EXTRA_REF) {
+          *entry = (*entry & 0xffff0000u) | REF_NIL;
+        } else if (which == RET_NEG_BRANCH_EXTRA_DUP) {
+          *entry = (*entry & 0x00ffffffu) |
+                   ((SnapEntry)snap_slot(other) << 24);
+        } else {
+          *entry = (*entry & 0x00ffffffu) |
+                   ((SnapEntry)(childbase+f->leafpt->framesize) << 24);
+        }
+      }
+      return_expect_reject(f, id, 0);
+      return_expect_reject(f, id, 1);
+      return_reset_fixture(f); f->child = s;
+      return;
+    }
+    return;
+  }
   snap = &f->snap[s];
   memcpy(&footer, &f->map[snap->mapofs+snap->nent], sizeof(footer));
   f->childbase = (BCReg)((uint8_t)footer+2u);
@@ -644,8 +727,15 @@ static void return_test_negative(ReturnFixture *f, SnapNo s, unsigned id,
     break;
   }
   case RET_NEG_NSLOTS:
-    assert(snap->nslots > f->childbase+1u);
-    snap->nslots--;
+    {
+      BCIns childret = (BCIns)la_load32_acq(
+        (const uint32_t *)&proto_bc(f->leafpt)[f->leafpt->sizebc-1u]);
+      MSize childbase = (uint8_t)snapshot_footer(&f->copy, s)+2u;
+      MSize live = f->leafpt->numparams;
+      if (bc_a(childret)+1u > live) live = bc_a(childret)+1u;
+      assert(snap->nslots >= childbase+live);
+      snap->nslots = childbase+live-1u;
+    }
     break;
   case RET_NEG_TOPSLOT:
     assert(snap->topslot > 0);
@@ -966,6 +1056,14 @@ static void admission(GCtrace *T)
                              RET_NEG_BRANCH_FUTURE_NENT);
         return_test_negative(&f, s, RET_NEG_BRANCH_OMIT_LIVE, postra,
                              RET_NEG_BRANCH_OMIT_LIVE);
+        return_test_negative(&f, s, RET_NEG_BRANCH_ARM_ARITH, postra,
+                             RET_NEG_BRANCH_ARM_ARITH);
+        return_test_negative(&f, s, RET_NEG_BRANCH_EXTRA_REF, postra,
+                             RET_NEG_BRANCH_EXTRA_REF);
+        return_test_negative(&f, s, RET_NEG_BRANCH_EXTRA_DUP, postra,
+                             RET_NEG_BRANCH_EXTRA_DUP);
+        return_test_negative(&f, s, RET_NEG_BRANCH_EXTRA_FRAME, postra,
+                             RET_NEG_BRANCH_EXTRA_FRAME);
       }
     }
   }
@@ -1080,7 +1178,8 @@ int main(void)
     {"comparison-nan","a,b","local value=7; if a < b then value=1 else value=2 end; return value","i/100,payload",0},
     {"comparison-negative-warm","a","local value=7; if a < 0 then value=1 else value=2 end; return value","i-5",0},
     {"comparison-primitive-overwrite","a","local value=true; if a < 0 then value=false else value=true end; return value","i",0},
-    {"comparison-arm-liveness","a","local value=7; if a < 0 then value=a else value=2 end; return value","i",0}
+    {"comparison-arm-liveness","a","local value=7; if a < 0 then value=a else value=2 end; return value","i",0},
+    {"comparison-arm-multiop","a","local value=7; if a < 0 then local x=a*3; value=x+2 else local y=a+1; value=y*2-4 end; return value","i",0}
   };
   lua_State *L = ljt_lua_newstate_openlibs();
   ljt_lua_dostring(L,
@@ -1110,10 +1209,10 @@ int main(void)
   assert(ret_terminal_maps == cases_run && ret_alias_bad && ret_callmap_guards == 1);
   for (unsigned m = 0; m < RET_NEG_ALIAS; m++)
     assert(ret_mutation_count[m][0] && ret_mutation_count[m][1]);
-  for (unsigned m = 0; m < 6; m++)
+  for (unsigned m = 0; m < 10; m++)
     assert(branch_mutation_count[m][0] && branch_mutation_count[m][1]);
-  assert(cases_run == 95 && native_runs == 392 && terminal_exits == 95 &&
-         same_trace_reuses == 297 && gc_reuses == 95 && primitive_mismatches == 95);
+  assert(cases_run == 96 && native_runs == 397 && terminal_exits == 96 &&
+         same_trace_reuses == 301 && gc_reuses == 96 && primitive_mismatches == 96);
   printf("Lua return exits OK: cases=%u native=%u terminal=%u reuse=%u gc=%u "
          "controlled-old-tags=%u semantic-negative=%u postRA-negative=%u aliases=%u maps=%u callmap-guard=%u\n", cases_run,native_runs,terminal_exits,
          same_trace_reuses,gc_reuses,primitive_mismatches,
