@@ -12,6 +12,11 @@ earlier unsigned guard proving `string.len` for that same guarded string is at
 least `offset + 1`. The current STRREF address form is restricted to its
 unsigned immediate range. Dynamic and negative indices remain refused; this
 does not rely on the trailing NUL byte or Lua's negative-index handling.
+For dynamic post-RA bounds, the prototype used to bind the bytecode CALL
+argument slots is checked as a live GCproto, matches `proto_bc` and `sizebc`,
+and matches the trace owner's start prototype. A fixture swaps in a different
+valid prototype and requires the independent post-RA dynamic-index proof to
+refuse it while the original view continues to pass.
 `LDRB` zero-extends the byte, so the certified U8 value may feed the Lua
 integer/numeric accumulator paths. U8 is not admitted directly into snapshots
 because it has no TValue restoration encoding in this slice.
