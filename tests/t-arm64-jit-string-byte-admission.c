@@ -106,6 +106,27 @@ static int kint(const IRIns *ir, IRRef nk, IRRef ref, int32_t *value)
   return 0;
 }
 
+static IRIns *insert_irref(const IRIns *ir, IRRef nins, IRRef at,
+                           IRIns inserted)
+{
+  IRIns *copy;
+  IRRef ref;
+  assert(at >= REF_FIRST && at < nins);
+  copy = (IRIns *)calloc((size_t)nins+1u, sizeof(IRIns));
+  assert(copy);
+  memcpy(copy, ir, (size_t)at*sizeof(IRIns));
+  copy[at] = inserted;
+  memcpy(copy+at+1u, ir+at, (size_t)(nins-at)*sizeof(IRIns));
+  for (ref = at+1u; ref <= nins; ref++) {
+    IRMode mode = lj_ir_mode[copy[ref].o];
+    if (irm_op1(mode) == IRMref && copy[ref].op1 >= at &&
+        copy[ref].op1 < nins) copy[ref].op1++;
+    if (irm_op2(mode) == IRMref && copy[ref].op2 >= at &&
+        copy[ref].op2 < nins) copy[ref].op2++;
+  }
+  return copy;
+}
+
 int main(void)
 {
   static const char source[] =
@@ -597,6 +618,62 @@ int main(void)
            f.ir[dynamic_strref].op2 == addov);
     assert(one);
     lenref = f.ir[upper].o == IR_ULE ? f.ir[upper].op2 : f.ir[upper].op1;
+    {
+      GCtrace fake_semantic = f.semantic;
+      LJArm64PostRAView fake_view = f.view;
+      IRIns unrelated;
+      IRIns *fake_ir, *fake_postra;
+      IRRef at = conv;
+      memset(&unrelated, 0, sizeof(unrelated));
+      unrelated.o = IR_CONV;
+      unrelated.t.irt = IRT_INT;
+      unrelated.op1 = f.ir[conv].op1;
+      unrelated.op2 = IRCONV_INT_NUM|IRCONV_ANY;
+      fake_ir = insert_irref(f.ir, f.semantic.nins, at, unrelated);
+      fake_postra = insert_irref(f.postra, f.view.nins, at, unrelated);
+      fake_semantic.ir = fake_ir;
+      fake_semantic.nins++;
+      fake_view.ir = fake_postra;
+      fake_view.nins++;
+      /* An unrelated ANY conversion before a real byte graph must not borrow
+      ** the graph's proof. The original conversion remains at conv+1. */
+      assert(!lj_asm_arm64_test_string_byte_dynamic_index_ir(&fake_semantic, at));
+      assert(!lj_asm_arm64_test_string_byte_dynamic_index_postra(&fake_view, at));
+      assert(lj_asm_arm64_test_string_byte_dynamic_index_ir(&fake_semantic,
+                                                            at+1u));
+      assert(lj_asm_arm64_test_string_byte_dynamic_index_postra(&fake_view,
+                                                                at+1u));
+      free(fake_postra); free(fake_ir);
+    }
+    {
+      GCtrace fake_semantic = f.semantic;
+      LJArm64PostRAView fake_view = f.view;
+      IRIns unrelated;
+      IRIns *fake_ir, *fake_postra;
+      IRRef at = f.ir[dynamic_strref].op2;
+      memset(&unrelated, 0, sizeof(unrelated));
+      unrelated.o = IR_ULE;
+      unrelated.t.irt = IRT_INT|IRT_GUARD;
+      unrelated.op1 = f.ir[conv].op1; /* Numeric source, not converted index. */
+      unrelated.op2 = lenref;
+      fake_ir = insert_irref(f.ir, f.semantic.nins, at, unrelated);
+      fake_postra = insert_irref(f.postra, f.view.nins, at, unrelated);
+      fake_semantic.ir = fake_ir;
+      fake_semantic.nins++;
+      fake_view.ir = fake_postra;
+      fake_view.nins++;
+      /* The valid upper guard still certifies the STRREF. An unrelated
+      ** unsigned guard beside it cannot borrow that bound. */
+      assert(lj_asm_arm64_test_string_byte_dynamic_guard_ir(&fake_semantic,
+                                                             upper));
+      assert(lj_asm_arm64_test_string_byte_dynamic_guard_postra(&fake_view,
+                                                                 upper));
+      assert(!lj_asm_arm64_test_string_byte_dynamic_guard_ir(&fake_semantic,
+                                                             at));
+      assert(!lj_asm_arm64_test_string_byte_dynamic_guard_postra(&fake_view,
+                                                                 at));
+      free(fake_postra); free(fake_ir);
+    }
 #define REJECT_DYNAMIC(change) do { \
   int sem_ok, post_ok; \
   arm64_fixture_reset(&f); assert(semantic(&f) && allocated(&f)); \

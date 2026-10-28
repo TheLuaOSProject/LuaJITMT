@@ -49,6 +49,32 @@
 #include "lj_asm_arm64_admit.h"
 #endif
 
+#if LJ_TARGET_ARM64 && defined(LJ_TRACE_TEST_HELPERS)
+int lj_asm_arm64_test_string_byte_dynamic_index_ir(const GCtrace *T,
+							   IRRef conv)
+{
+  return arm64_string_byte_dynamic_index_ir(T, conv);
+}
+
+int lj_asm_arm64_test_string_byte_dynamic_index_postra(
+						const LJArm64PostRAView *view, IRRef conv)
+{
+  return arm64_string_byte_dynamic_index_postra(view, conv);
+}
+
+int lj_asm_arm64_test_string_byte_dynamic_guard_ir(const GCtrace *T,
+							   IRRef guard)
+{
+  return arm64_string_byte_dynamic_guard_ir(T, guard);
+}
+
+int lj_asm_arm64_test_string_byte_dynamic_guard_postra(
+						const LJArm64PostRAView *view, IRRef guard)
+{
+  return arm64_string_byte_dynamic_guard_postra(view, guard);
+}
+#endif
+
 /* -- Assembler state and common macros ----------------------------------- */
 
 /* Assembler state. */
