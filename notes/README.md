@@ -18,10 +18,17 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
+- Latest port-branch checkpoint: native pure math helpers, positive dynamic
+  byte indices and early-return branches at `60d304989`, followed by prototype
+  binding at `15175bb3d`. The complete experimental gate, four M7 FFI profiles,
+  ordinary ARM64/x64 stock corpora and workload inventory pass; the later
+  prototype binding passes its four-profile byte contract. Main remains at
+  `49523abd` while an earlier JIT-enabled harness TDUP crash remains unresolved.
+  See the [checkpoint](arm64-math-dynamic-early-checkpoint-2026-10-28.md).
 - A repeatable [cross-architecture workload inventory](arm64-parity-inventory-2026-10-28.md)
   compares interpreter results and observed native root exits. The current
   twenty-workload sample passes 260 result checks on each architecture, with
-  root-exit witnesses in fourteen ARM64 rows versus eighteen x64 rows. These are
+  root-exit witnesses in fifteen ARM64 port-branch rows versus eighteen x64 rows. These are
   sampled workload observations, not a full-compilation or parity claim.
 - Latest integrated follow-up: folded literal string-byte traces at
   `cdc2b7e2`, with test cleanup at `98e158b8`. Only completely unused pointer

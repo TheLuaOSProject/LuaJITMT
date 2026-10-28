@@ -90,3 +90,13 @@ dynamic-string rows are witnessed on both targets. The four remaining sampled
 differences are early-return branching, nested calls, varargs and multiple
 results. Iterator and I64 rows remain inconclusive on both architectures.
 See the [folded-byte evidence](arm64-string-byte-contract-2026-10-28.md).
+
+## Port-branch follow-up
+
+At `60d304989`, ordinary ARM64 and signed x64 each pass all 260 comparisons.
+Early-return branching adds one ARM64 selected-root witness, giving fifteen
+of twenty rows versus eighteen on x64. Captured nested calls, Lua varargs and
+multiple results remain the sampled differences. Iterator and I64 remain
+inconclusive on both architectures. Main has not been updated to this source;
+the [checkpoint](arm64-math-dynamic-early-checkpoint-2026-10-28.md) records
+validation and the unresolved harness crash separately.
