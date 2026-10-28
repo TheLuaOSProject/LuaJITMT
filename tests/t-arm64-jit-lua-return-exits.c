@@ -317,7 +317,7 @@ static unsigned ret_terminal_maps, ret_next_map_bad, ret_callmap_guards;
 /* Every semantic mutation must run in both passes; allocation conflicts
 ** and the guarded loop-increment mutation belong to the allocated pass. */
 static unsigned ret_mutation_count[26][2];
-static unsigned branch_mutation_count[5][2];
+static unsigned branch_mutation_count[6][2];
 
 enum {
   RET_NEG_SWAP = 0,
@@ -348,7 +348,8 @@ enum {
   RET_NEG_BRANCH_OPERAND,
   RET_NEG_BRANCH_POLARITY,
   RET_NEG_BRANCH_FUTURE_MAPOFS,
-  RET_NEG_BRANCH_FUTURE_NENT
+  RET_NEG_BRANCH_FUTURE_NENT,
+  RET_NEG_BRANCH_OMIT_LIVE
 };
 
 static GCproto *return_copy_proto(const GCproto *pt)
@@ -506,6 +507,42 @@ static void return_test_negative(ReturnFixture *f, SnapNo s, unsigned id,
         return;
       }
       return_reset_fixture(f); f->child = s;
+    }
+    return;
+  }
+  if (which == RET_NEG_BRANCH_OMIT_LIVE) {
+    MSize cmp = UINT32_MAX, target;
+    BCIns jump;
+    if (postra || strcmp(active_name, "comparison-arm-liveness")) return;
+    for (MSize p = 1; p+2u < f->leafpt->sizebc; p++)
+      if (bc_op(proto_bc(f->leafpt)[p]) >= BC_ISLT &&
+          bc_op(proto_bc(f->leafpt)[p]) <= BC_ISGT) { cmp = p; break; }
+    if (cmp == UINT32_MAX) return;
+    jump = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(f->leafpt)[cmp+1u]);
+    if (bc_op(jump) != BC_JMP) return;
+    target = (MSize)((ptrdiff_t)(cmp+2u)+bc_j(jump));
+    for (SnapNo q = 0; q < f->view.nsnap; q++) {
+      uint64_t edge;
+      ptrdiff_t pos;
+      MSize mapped;
+      BCReg childbase, local = 0;
+      return_reset_fixture(f); f->child = s;
+      assert(return_admit(f, 0) && return_admit(f, 1));
+      edge = snapshot_footer(&f->copy, q);
+      if (!(uint8_t)edge) continue;
+      pos = (ptrdiff_t)((const BCIns *)(uintptr_t)(edge>>8)-proto_bc(f->leafpt));
+      if (pos != (ptrdiff_t)(cmp+2u) && pos != (ptrdiff_t)target) continue;
+      childbase = (BCReg)((uint8_t)edge+2u);
+      mapped = return_map_entry(f->map, f->snap[q].mapofs,
+                                f->snap[q].nent,
+                                (BCReg)(childbase+local));
+      if (mapped == UINT32_MAX) continue;
+      return_remove_entry(f, q, mapped);
+      if (!return_admit(f, 0) && !return_admit(f, 1)) {
+        return_expect_reject(f, id, 0);
+        return_expect_reject(f, id, 1);
+        return;
+      }
     }
     return;
   }
@@ -927,6 +964,8 @@ static void admission(GCtrace *T)
                              RET_NEG_BRANCH_FUTURE_MAPOFS);
         return_test_negative(&f, s, RET_NEG_BRANCH_FUTURE_NENT, postra,
                              RET_NEG_BRANCH_FUTURE_NENT);
+        return_test_negative(&f, s, RET_NEG_BRANCH_OMIT_LIVE, postra,
+                             RET_NEG_BRANCH_OMIT_LIVE);
       }
     }
   }
@@ -966,7 +1005,7 @@ static void run_case(lua_State *L, const ReturnCase *shape)
 {
   GCtrace *T = NULL;
   if (!strcmp(shape->name, "comparison-nan"))
-    ljt_lua_dostring(L, "arg_payload=0/0");
+    ljt_lua_dostring(L, "arg_payload=2.5");
   else if (!strcmp(shape->name, "comparison-negative-zero"))
     ljt_lua_dostring(L, "arg_payload=-0.0");
   install_case(L, shape);
@@ -977,11 +1016,19 @@ static void run_case(lua_State *L, const ReturnCase *shape)
   if (!T) fprintf(stderr, "%s did not publish\n", shape->name);
   assert(T);
   checked(L, T, 0, 9, 40);
-  checked(L, T, 1, 9, 40);
+  if (!strcmp(shape->name, "comparison-negative-warm"))
+    checked(L, T, 1, 1, 4);
+  else
+    checked(L, T, 1, 9, 40);
   checked(L, T, 0, 9, 40);
   if (strncmp(shape->name, "comparison-", 11) == 0) {
-    checked(L, T, 0, -4, 4);
-    if (strcmp(shape->name, "comparison-nan")) assert_branch_exit(L, T);
+    int negative_warm = strcmp(shape->name, "comparison-negative-warm") == 0;
+    checked(L, T, 0, negative_warm ? 10 : -4, negative_warm ? 14 : 4);
+    if (!strcmp(shape->name, "comparison-nan")) {
+      ljt_lua_dostring(L, "arg_payload=0/0");
+      checked(L, T, 0, 1, 4);
+    }
+    assert_branch_exit(L, T);
   }
   lua_gc(L, LUA_GCCOLLECT, 0);
   checked(L, T, 0, 1, 24); gc_reuses++;
@@ -1030,7 +1077,10 @@ int main(void)
     {"comparison-reversed","a","local value=7; if 0 > a then value=1 else value=2 end; return value","i",0},
     {"comparison-positive-zero","a","local value=7; if a < 0.0 then value=1 else value=2 end; return value","i",0},
     {"comparison-negative-zero","a,b","local value=7; if a < b then value=1 else value=2 end; return value","i,payload",0},
-    {"comparison-nan","a,b","local value=7; if a < b then value=1 else value=2 end; return value","i,payload",0}
+    {"comparison-nan","a,b","local value=7; if a < b then value=1 else value=2 end; return value","i/100,payload",0},
+    {"comparison-negative-warm","a","local value=7; if a < 0 then value=1 else value=2 end; return value","i-5",0},
+    {"comparison-primitive-overwrite","a","local value=true; if a < 0 then value=false else value=true end; return value","i",0},
+    {"comparison-arm-liveness","a","local value=7; if a < 0 then value=a else value=2 end; return value","i",0}
   };
   lua_State *L = ljt_lua_newstate_openlibs();
   ljt_lua_dostring(L,
@@ -1060,10 +1110,10 @@ int main(void)
   assert(ret_terminal_maps == cases_run && ret_alias_bad && ret_callmap_guards == 1);
   for (unsigned m = 0; m < RET_NEG_ALIAS; m++)
     assert(ret_mutation_count[m][0] && ret_mutation_count[m][1]);
-  for (unsigned m = 0; m < 5; m++)
+  for (unsigned m = 0; m < 6; m++)
     assert(branch_mutation_count[m][0] && branch_mutation_count[m][1]);
-  assert(cases_run == 92 && native_runs == 376 && terminal_exits == 92 &&
-         same_trace_reuses == 284 && gc_reuses == 92 && primitive_mismatches == 92);
+  assert(cases_run == 95 && native_runs == 392 && terminal_exits == 95 &&
+         same_trace_reuses == 297 && gc_reuses == 95 && primitive_mismatches == 95);
   printf("Lua return exits OK: cases=%u native=%u terminal=%u reuse=%u gc=%u "
          "controlled-old-tags=%u semantic-negative=%u postRA-negative=%u aliases=%u maps=%u callmap-guard=%u\n", cases_run,native_runs,terminal_exits,
          same_trace_reuses,gc_reuses,primitive_mismatches,

@@ -8881,15 +8881,19 @@ static int arm64_lua_leaf_ir_needed(const GCproto *pt, MSize resume,
   if (!resume || resume >= pc) return 0;
   if (!arm64_lua_leaf_branch(pt, &branch)) return 0;
   if (branch.compare != UINT32_MAX) {
+    uint8_t *path;
     if (resume < branch.compare) return 0;
     if (resume >= branch.join)
       return arm64_lua_leaf_ir_needed_range(pt, resume, pc, needed);
-    if (resume != branch.first && resume != branch.second &&
-        !branch.first_path[resume] && !branch.second_path[resume]) return 0;
+    if (resume == branch.first || branch.first_path[resume])
+      path = branch.first_path;
+    else if (resume == branch.second || branch.second_path[resume])
+      path = branch.second_path;
+    else return 0;
     memset(needed, 0, pt->framesize);
     if (!arm64_lua_leaf_ir_needed_range(pt, branch.join, pc, needed)) return 0;
     for (MSize p = branch.join; p-- > resume; ) {
-      if ((branch.first_path[p] || branch.second_path[p]) &&
+      if ((p == resume || path[p]) &&
           !arm64_lua_leaf_ir_needed_range(pt, p, p+1u, needed)) return 0;
     }
     return 1;
@@ -11012,21 +11016,25 @@ static int arm64_lua_leaf_postra_needed(const GCproto *pt, MSize resume,
                                         uint8_t *needed)
 {
   uint8_t written[UINT8_MAX+1u] = {0};
+  const uint8_t *path = NULL;
   MSize pc;
   LJArm64LuaLeafBranch branch;
   if (!resume || resume >= pt->sizebc) return 0;
   if (!arm64_lua_leaf_branch(pt, &branch)) return 0;
   if (branch.compare != UINT32_MAX && resume < branch.compare) return 0;
+  if (branch.compare != UINT32_MAX && resume < branch.join) {
+    if (resume == branch.first || branch.first_path[resume])
+      path = branch.first_path;
+    else if (resume == branch.second || branch.second_path[resume])
+      path = branch.second_path;
+    else return 0;
+  }
   for (pc = resume; pc < pt->sizebc; pc++) {
     BCIns ins = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(pt)[pc]);
     BCOp op = bc_op(ins);
     MSize dst = bc_a(ins), left = bc_b(ins), right = bc_c(ins);
     MSize from = bc_d(ins);
-    if (branch.compare != UINT32_MAX && pc < branch.join &&
-        !((resume == branch.first || branch.first_path[resume]) ?
-          branch.first_path[pc] :
-          (resume == branch.second || branch.second_path[resume]) &&
-          branch.second_path[pc]))
+    if (branch.compare != UINT32_MAX && pc < branch.join && !path[pc])
       continue;
     if (op == BC_JMP) {
       if (branch.compare == UINT32_MAX || pc >= branch.join ||
