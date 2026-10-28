@@ -2465,6 +2465,8 @@ static int arm64_ir_int_kref(const GCtrace *T, IRRef target)
     const IRIns *ir = &T->ir[ref];
     if (ref == target)
       return ir->o == IR_KINT && ir->t.irt == IRT_INT;
+    if (ir->o == IR_KNUM || ir->o == IR_KGC || ir->o == IR_KKPTR)
+      ref++; /* Payload words are not independently addressable constants. */
   }
   return 0;
 }
@@ -2526,6 +2528,36 @@ static int arm64_postra_spill_slot(MSize slot, MSize capacity)
   return slot >= SPS_FIRST && slot < capacity && slot < SPS_LIMIT;
 }
 
+static int arm64_postra_constant_unused(const LJArm64PostRAView *view,
+					IRRef kref)
+{
+  IRRef ref;
+  SnapNo s;
+  MSize maxmaps;
+  if (!view || !view->ir || !view->snap || !view->snapmap ||
+      view->nsnap == 0 || view->nsnap > view->nins)
+    return 0;
+  maxmaps = (MSize)view->nsnap * (LJ_MAX_JSLOTS + 1u + LJ_FR2);
+  if (view->nsnapmap > maxmaps) return 0;
+  for (ref = REF_FIRST; ref < view->nins; ref++) {
+    IRIns p = ir_load_acq(&view->ir[ref]);
+    if (p.op1 == kref || p.op2 == kref ||
+	p.op1 == kref+LJ_GC64 || p.op2 == kref+LJ_GC64)
+      return 0;
+  }
+  for (s = 0; s < view->nsnap; s++) {
+    const SnapShot *snap = &view->snap[s];
+    MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap), i;
+    if (ofs > view->nsnapmap || nent > view->nsnapmap-ofs) return 0;
+    for (i = 0; i < nent; i++) {
+      IRRef snapref = snap_ref(snapentry_acq(&view->snapmap[ofs+i]));
+      if (snapref == kref || snapref == kref+LJ_GC64)
+	return 0;
+    }
+  }
+  return 1;
+}
+
 static int arm64_postra_constants(const LJArm64PostRAView *view)
 {
   IRRef ref;
@@ -2551,7 +2583,10 @@ static int arm64_postra_scalar_kref(const LJArm64PostRAView *view,
   for (ref = view->nk; ref < REF_TRUE; ref++) {
     IRIns k = ir_load_acq(&view->ir[ref]);
     if (ref == target)
-      return type == IRT_INT && k.o == IR_KINT && k.t.irt == IRT_INT;
+      return k.o != IR_KKPTR && type == IRT_INT &&
+	 k.o == IR_KINT && k.t.irt == IRT_INT;
+    if (k.o == IR_KNUM || k.o == IR_KGC || k.o == IR_KKPTR)
+      ref++;
   }
   return 0;
 }
@@ -2574,6 +2609,9 @@ static int arm64_ir_funcf_const_ref(const IRIns *ir, IRRef nk,
 	if (ins.o == IR_KNUM) {
 	  if (k == value) return type == IRT_NUM && irt_type(ins.t) == IRT_NUM;
 	  k++;  /* KNUM payload is not an independently addressable constant. */
+	} else if (ins.o == IR_KGC || ins.o == IR_KKPTR) {
+	  if (k == value) return 0;
+	  k++;  /* GC/KKPTR payload is not independently addressable. */
 	} else if (k == value) {
 	  return irt_type(ins.t) == type &&
 		 (ins.o == IR_KINT || ins.o == IR_KPRI);
@@ -2624,6 +2662,8 @@ static int arm64_ir_funcf_short_value(const IRIns *ir, IRRef nk,
 	if (ins.o == IR_KNUM) {
 	  if (k+1u >= REF_TRUE) return 0;
 	  k++;
+	} else if (ins.o == IR_KGC || ins.o == IR_KKPTR) {
+	  k++;  /* GC/KKPTR payload is never a scalar literal. */
 	} else if (ins.o == IR_KINT && ins.t.irt == IRT_INT &&
 		   ins.i == immediate) {
 	  *valuep = k;
@@ -6155,6 +6195,37 @@ static int arm64_ir_int_ref(const GCtrace *T, IRRef ref, IRRef before,
 	 arm64_ir_int_value_op((IROp)ir->o, allow_add);
 }
 
+/* A constant KKPTR may remain after folding an immutable string byte load.
+** It has no executable meaning if no surviving IR operand, allocator rename,
+** or snapshot names it. Keep that residue out of the pointer capability: a
+** live KKPTR is still rejected by both constant validators. */
+static int arm64_ir_kkptr_unused(const GCtrace *T, IRRef kref)
+{
+  IRRef ref;
+  SnapNo s;
+  MSize maxmaps;
+  if (!T || !T->ir || !T->snap || !T->snapmap || T->nsnap == 0 ||
+      T->nsnap > T->nins)
+    return 0;
+  maxmaps = (MSize)T->nsnap * (LJ_MAX_JSLOTS + 1u + LJ_FR2);
+  if (T->nsnapmap > maxmaps) return 0;
+  for (ref = REF_FIRST; ref < T->nins; ref++)
+    if (T->ir[ref].op1 == kref || T->ir[ref].op2 == kref ||
+	T->ir[ref].op1 == kref+LJ_GC64 ||
+	T->ir[ref].op2 == kref+LJ_GC64)
+      return 0;
+  for (s = 0; s < T->nsnap; s++) {
+    const SnapShot *snap = &T->snap[s];
+    MSize ofs = snap->mapofs, nent = snap->nent, i;
+    if (ofs > T->nsnapmap || nent > T->nsnapmap-ofs) return 0;
+    for (i = 0; i < nent; i++)
+      if (snap_ref(T->snapmap[ofs+i]) == kref ||
+	  snap_ref(T->snapmap[ofs+i]) == kref+LJ_GC64)
+	return 0;
+  }
+  return 1;
+}
+
 static int arm64_ir_constants(const GCtrace *T, LJArm64IRReject *reject)
 {
   IRRef ref;
@@ -7088,8 +7159,9 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
       return type == (IRType)(REF_NIL - value);
     for (k = T->nk; k < REF_TRUE; k++) {
       if (k == value)
-        return irt_type(T->ir[k].t) == type;
-      if (T->ir[k].o == IR_KNUM || T->ir[k].o == IR_KGC)
+        return T->ir[k].o != IR_KKPTR && irt_type(T->ir[k].t) == type;
+      if (T->ir[k].o == IR_KNUM || T->ir[k].o == IR_KGC ||
+	  T->ir[k].o == IR_KKPTR)
         k++;
     }
     return 0;
@@ -8378,7 +8450,7 @@ static IRRef arm64_lua_leaf_ir_literal(const GCtrace *T, lua_Number number,
     if (integer && k->o == IR_KINT && number == (lua_Number)k->i) return r;
     if (!integer && k->o == IR_KNUM &&
         T->ir[r+1u].tv.u64 == tv.u64) return r;
-    if (k->o == IR_KNUM || k->o == IR_KGC) r++;
+    if (k->o == IR_KNUM || k->o == IR_KGC || k->o == IR_KKPTR) r++;
   }
   return 0;
 }
@@ -9250,6 +9322,11 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
     const IRIns *k = &T->ir[ref];
     if (k->o == IR_KINT && k->t.irt == IRT_INT)
       continue;
+    if (k->o == IR_KKPTR && k->t.irt == IRT_PGC && k->op12 == 0 &&
+	ref + LJ_GC64 < REF_TRUE && arm64_ir_kkptr_unused(T, ref)) {
+      ref += LJ_GC64; /* Dead folded-string residue, never an IR value. */
+      continue;
+    }
     if (k->o == IR_KGC && arm64_rooted_gc_type((IRType)k->t.irt) && !k->op12 &&
         (!side || k->t.irt == IRT_STR) &&
         ref + LJ_GC64 < REF_TRUE) {
@@ -9818,8 +9895,8 @@ static int arm64_scalar_postra_kref(const LJArm64PostRAView *v, IRRef target,
   for (ref = v->nk; ref < REF_TRUE; ref++) {
     IRIns k = ir_load_acq(&v->ir[ref]);
     if (ref == target)
-      return irt_type(k.t) == type;
-    if (k.o == IR_KNUM || k.o == IR_KGC)
+      return k.o != IR_KKPTR && irt_type(k.t) == type;
+    if (k.o == IR_KNUM || k.o == IR_KGC || k.o == IR_KKPTR)
       ref++;
   }
   return 0;
@@ -11082,7 +11159,7 @@ static IRRef arm64_lua_leaf_postra_literal(const LJArm64PostRAView *v,
       IRIns payload = ir_load_acq(&v->ir[k+1u]);
       if (!integer && payload.tv.u64 == bits.u64) return k;
       k++;
-    } else if (c.o == IR_KGC) {
+    } else if (c.o == IR_KGC || c.o == IR_KKPTR) {
       k++;
     }
   }
@@ -11869,6 +11946,12 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
     IRIns k = ir_load_acq(&v->ir[ref]);
     if (k.o == IR_KINT && k.t.irt == IRT_INT)
       continue;
+    if (k.o == IR_KKPTR && k.t.irt == IRT_PGC && k.op12 == 0 &&
+	ref + LJ_GC64 < REF_TRUE &&
+	arm64_postra_constant_unused(v, ref)) {
+      ref += LJ_GC64; /* Dead folded-string residue, never an IR value. */
+      continue;
+    }
     if (k.o == IR_KGC && arm64_rooted_gc_type((IRType)k.t.irt) && k.op12 == 0 &&
         (!side || k.t.irt == IRT_STR) &&
         ref + LJ_GC64 < REF_TRUE) {
