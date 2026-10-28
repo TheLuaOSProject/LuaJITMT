@@ -18,24 +18,25 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
-- Current focused extension: exact fixed numeric Lua argument maps and
-  parameter assignments. The ARM64 assertion fixture passes eleven shapes,
-  58 native runs, eighteen child exits, 750 semantic and 798 allocated
-  negatives; four counterfactuals fail as intended. Full matrix validation
-  is pending. See the [argument evidence](arm64-jit-lua-arguments-2026-10-28.md).
-- Latest fully validated source checkpoint: numeric local assignments
-  (`f39cdfe5`) plus the shared consumed-poll missed-wake correction at
-  `dad7e318`, integrated into `v2.1`. Four ARM64/arm64e assertion/release
-  profiles each pass 86 native runs, 31 child overflow exits, 1,374 semantic
-  and 1,432 allocated negatives, including eighteen physical conflicts.
-  The safepoint correction passes 21 controlled race runs and 77 retained
-  scan/completion holds across seven Darwin profiles, including x86_64 and
-  ARM64 without JIT. Both complete gates, all 26 table/FFI fixtures in four
-  profiles, the combined M7 FFI suite in four profiles, and both 509-case
-  stock corpora on ARM64 and signed x64 pass. The independent ordinary main
-  rebuild passes both corpora and all six leaf/child/compound/bitops/cell/
-  upvalue Lua contracts. The earlier insertion timeout remains unattributed;
-  the replacement matrix passes. See the [local-write evidence](arm64-jit-lua-local-writes-2026-10-27.md)
+- Latest fully validated source checkpoint: exact fixed numeric Lua argument
+  maps and parameter assignments at `43d0a9c9`, plus failure-only rooted-length
+  diagnostics at `338d0344`, integrated into `v2.1`. All four ARM64/arm64e
+  assertion/release profiles pass eleven shapes, 58 native runs, eighteen child
+  overflow exits, 750 semantic and 798 allocated negatives, including 48
+  physical conflicts. Both complete gates, all 26 table/FFI fixtures in four
+  profiles, and the combined M7 FFI suite in four profiles pass. ARM64 and
+  signed x64 each pass both 509-case stock corpora; x64 also passes the new
+  ordinary Lua argument fixture. The independent main rebuild passes both
+  corpora and all seven ordinary leaf/child/compound/argument/bitops/cell/
+  upvalue contracts. One earlier rooted-length native-witness failure after
+  full GC remains unexplained; 1,100 isolated repetitions and the replacement
+  matrix pass without relaxing its assertions. See the
+  [argument evidence](arm64-jit-lua-arguments-2026-10-28.md).
+- Preceding source checkpoint: numeric local assignments (`f39cdfe5`) and the
+  shared consumed-poll missed-wake correction (`dad7e318`). The correction
+  passed 21 controlled race runs and 77 retained scan/completion holds across
+  seven Darwin profiles. Its earlier insertion timeout remains unattributed.
+  See the [local-write evidence](arm64-jit-lua-local-writes-2026-10-27.md)
   and [safepoint regression](safepoint-consumed-wake-2026-10-28.md).
 - Preceding JIT checkpoint: compound pure Lua leaf child-frame
   exits at `6f38a9c3`. Each of four ARM64/arm64e assertion/release profiles
@@ -137,19 +138,18 @@ and reports that are no longer authoritative are retained in
   semantic/post-RA views. Each profile records 344 native observations and
   independent 4-positive/26-negative admission checks.
   See [`arm64-jit-i64-arguments-2026-10-26.md`](arm64-jit-i64-arguments-2026-10-26.md).
-- Latest complete umbrella validation: the compound Lua leaf child-exit
-  checkpoint on 2026-10-27, frozen at `6f38a9c3`.
-  The complete experimental and bootstrap gates passed, including all four
-  M7 scalar CALLXS profiles. ARM64 and signed x86-64 each passed both 509-case
-  stock source/import corpora. The ordinary main ARM64 rebuild passes both corpora
-  and 698 preceding observations: 598 INT/numeric-CALLM/numeric-argument/
-  held-result/scalar-table/nested-read/I64-argument/callable cases, 40 new
-  CData32 cases and 60 enum refusals, plus the floating leaf contract (nine
-  publications, nine exact-trace reuses and seven refusal shapes with eight
-  calls each), the single-operation child contract (six publications, eight
-  overflow ranges and 28 exact-trace reuses), and the compound contract (seven
-  publications, 17 overflow ranges and 48 exact-trace checks). Main and
-  worktree runtime binaries match byte for byte. See the
+- Latest complete umbrella validation: the fixed numeric Lua argument
+  checkpoint on 2026-10-28, frozen at `338d0344`. The complete experimental
+  and bootstrap gates, all 26 focused table/FFI fixtures in four profiles and
+  all four M7 scalar CALLXS profiles pass. ARM64 and signed x86_64 each pass
+  both 509-case stock source/import corpora. The ordinary main ARM64 rebuild
+  passes both corpora and seven Lua contracts; the new argument contract has
+  eleven publications, eighteen overflow ranges and 58 exact-trace checks.
+  These ordinary checks do not establish native execution of every case.
+  Main and worktree executables match byte for byte. See the
+  [argument evidence](arm64-jit-lua-arguments-2026-10-28.md), including the
+  unreproduced initial post-GC native-witness failure.
+  The preceding compound checkpoint is in the
   [compound child-exit evidence](arm64-jit-lua-compound-exits-2026-10-27.md).
   The preceding single-operation child checkpoint is in the
   [child-exit evidence](arm64-jit-lua-child-exits-2026-10-27.md).
@@ -288,11 +288,12 @@ available.
 
 ### Bounded native JIT
 
-- Fixed pure unary Lua leaves inline in scalar FORL roots with exact caller
-  CALL snapshots and independently certified callee source, identity and
-  argument restoration. Arithmetic traces retaining only root-frame snapshots
-  pass four native profiles. See the
-  [leaf-call evidence](arm64-jit-lua-leaf-calls-2026-10-27.md).
+- Fixed pure numeric Lua leaves inline in scalar FORL roots with exact caller
+  CALL argument maps, independently certified callee source and identity,
+  and zero or multiple fixed parameters, including parameter writes. The
+  source remains bounded linear numeric code; exact arity, one return value
+  and complete required maps remain mandatory. Eleven shapes pass four native
+  profiles. See the [argument evidence](arm64-jit-lua-arguments-2026-10-28.md).
 - One integer ADD/SUB/MUL inside a fixed pure unary leaf can also retain a
   child-frame exit. Both independent admission passes reconstruct the child
   source/operands, return link, caller CALL and frame extent; allocated saved
@@ -300,12 +301,13 @@ available.
   a root with two live numeric accumulators pass native preloop/backedge
   overflow and reuse tests in four profiles. See the
   [child-exit evidence](arm64-jit-lua-child-exits-2026-10-27.md).
-- Compound pure unary leaf arithmetic also retains child-frame exits. Both
+- Compound pure numeric leaf arithmetic retains child-frame exits. Both
   independent passes bind every live child value to the source prefix and
   resolve the complete body within the current iteration, including CSE,
-  shared snapshots, KSHORT locals and mixed NUM tails. Seven shapes pass
-  native overflow and same-trace reuse checks in four profiles. Child-local
-  reassignment and general Lua call/return remain excluded. See the
+  shared snapshots, KSHORT locals, mixed NUM tails and already-defined numeric
+  local assignments. Twelve compound shapes pass 86 native runs and 31 child
+  exits in four profiles. General Lua call/return remains incomplete. See the
+  [local-write evidence](arm64-jit-lua-local-writes-2026-10-27.md) and
   [compound child-exit evidence](arm64-jit-lua-compound-exits-2026-10-27.md).
 - ARM64 and arm64e/BTI trace publication, authenticated entry and exits,
   retirement, flush/reuse, GDB-JIT preparation, and bounded root/first-side
@@ -538,6 +540,11 @@ available.
 
 - General ARM64 JIT IR admission for arbitrary Lua programs, unrestricted
   spill or register layouts, and general root geometries.
+- General Lua call/return, including callee branches, nested frames,
+  nonnumeric or mismatched arguments, varargs, tail calls, multiple returns
+  and snapshots omitting required argument values. The fixed pure numeric
+  leaves above remain a bounded exception.
+- Native ITERL/ITERN roots remain outside the admitted ARM64 root grammar.
 - General table and upvalue JIT reads, writes and traversal, plus sunk/duplicate
   allocation and raw initialization effects. Rooted scalar/GC reads,
   existing-key scalar/GC stores, bounded ordinary/raw insertion, closed closure

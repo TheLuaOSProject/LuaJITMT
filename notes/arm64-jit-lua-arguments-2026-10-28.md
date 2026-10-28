@@ -118,7 +118,49 @@ native assertions remain strict; no retry or interpreter result is accepted
 as native evidence. The diagnostic fixture compiled and passed against the
 same assertion runtime. Original logs are `experimental-initial-failure.log`
 and `matrix-initial-failure.log`; isolated runs are in `tablen-repeat.log`
-and `tablen-paired-repeat.log`. The complete replacement matrix is pending.
+and `tablen-paired-repeat.log`.
+
+## Complete replacement validation and integration
+
+The frozen checkpoint `338d0344` passes the complete experimental and bootstrap
+gates, all 26 focused table/FFI fixtures in four profiles, and the combined M7
+scalar FFI suite in four profiles. All four leaf profiles again report 58
+native runs, eighteen child exits, forty same-trace reuses, eleven post-GC
+reuses, zero cold retries, 750 semantic negatives, 798 allocated negatives
+and 48 physical conflicts. The preceding leaf, single-child and compound
+native fixtures retain their earlier counts. The rooted-length contract
+passes on both ARM64 and arm64e with its strict assertions and new diagnostics.
+The initial failed run remains unexplained.
+
+| Leaf contract profile | Profile hash prefix |
+| --- | --- |
+| ARM64 assertion | `275b78c50f99` |
+| arm64e assertion with BTI | `fb3823b72bac` |
+| ARM64 release | `ebb2bffd8834` |
+| arm64e release with BTI | `7d3a0e272bef` |
+
+ARM64 and signed x86_64 each pass the 509-case source corpus and the 509-case
+original-bytecode import corpus. The ordinary ARM64 runtime also passes
+seven Lua contracts: leaf calls, single-operation child exits, compound
+child exits, fixed arguments, bitops, local cells and upvalues. Signed x64
+passes the same eleven-case fixed-argument Lua fixture, with eighteen overflow
+ranges and 58 exact-trace checks. Stock and ordinary Lua results include
+interpreter fallback and are separate from the native C-fixture evidence.
+
+`v2.1` was fast-forwarded to the frozen checkpoint and independently rebuilt.
+It passes both 509-case corpora and all seven ordinary Lua contracts. Main
+and worktree executables have the same SHA-256:
+`7a9abbfff0ba7380a3ef37abee732a15bbca2c8e7021cd62b48070b12a1e4e72`.
+Both ordinary ARM64 assertion builds pass code-signature verification, import
+no compiler atomic helper, and contain none of the checked test-helper
+symbols. These executables were built at `338d0344`; the final documentation
+commit changes no production source.
+
+Logs are `matrix.log`, `experimental.log`, `bootstrap.log`,
+`table-ffi-four-profile.log`, the four `*-stock-*.log` corpus logs,
+`x64-lua-arguments.log`, and `main-verify.log` in the evidence directory above.
+The matrix verified that its source checkpoint remained unchanged and
+restored the ordinary ARM64 assertion runtime before integration.
 
 ## Remaining limits
 
