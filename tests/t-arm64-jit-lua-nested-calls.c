@@ -29,6 +29,12 @@ static GCfunc *global_function(lua_State *L, const char *name)
   return fn;
 }
 
+static int nested_test_cfunction(lua_State *L)
+{
+  (void)L;
+  return 0;
+}
+
 static GCtrace *root_trace_for(lua_State *L, const char *name)
 {
   GCproto *pt = funcproto(global_function(L, name));
@@ -236,13 +242,18 @@ static void nested_proof_mutations(lua_State *L, GCtrace *T)
   IRRef wrong_function = 0;
   IRRef borrowed_guard = 0, borrowed_function = 0, borrowed_constant = 0;
   IRRef upvalue_call = 0, upvalue_root = 0, upvalue_index = 0;
+  IRRef upvalue_function = 0;
   IRRef root_upvalue_call = 0, root_upvalue_root = 0;
   SnapNo upvalue_snap = UINT16_MAX;
   SnapNo root_upvalue_snap = UINT16_MAX;
   MSize frame_maps[3];
   GCfunc *expected_inner = global_function(L, "nested_leaf");
+  GCfunc *cfunction;
   MSize funcentry, argentry;
   unsigned postra;
+  lua_pushcfunction(L, nested_test_cfunction);
+  cfunction = funcV(L->top-1);
+  assert(iscfunc(cfunction));
   f.live = T;
   nested_frame_map_counts(T, frame_maps);
   fprintf(stderr, "nested frame maps root=%s one=%u two=%u\n",
@@ -348,6 +359,25 @@ static void nested_proof_mutations(lua_State *L, GCtrace *T)
     }
     assert(upvalue_call && upvalue_root && upvalue_index &&
            upvalue_snap != UINT16_MAX);
+    {
+      const SnapShot *snap = &T->snap[upvalue_snap];
+      for (MSize i = 0; i < snap->nent; i++) {
+        SnapEntry entry = T->snapmap[snap->mapofs+i];
+        if ((entry & 0x00ff0000u) == SNAP_FRAME) {
+          MSize funslot = snap_slot(entry)-1u;
+          for (MSize j = 0; j < snap->nent; j++) {
+            SnapEntry fnentry = T->snapmap[snap->mapofs+j];
+            if (snap_slot(fnentry) == funslot &&
+                !(fnentry & 0x00ff0000u))
+              upvalue_function = snap_ref(fnentry);
+          }
+        }
+      }
+    }
+    assert(upvalue_function >= T->nk && upvalue_function < REF_TRUE &&
+           T->ir[upvalue_function].o == IR_KGC &&
+           T->ir[upvalue_function].t.irt == IRT_FUNC);
+    assert(isluafunc(gco2func(ir_kgc_acq(&T->ir[upvalue_function]))));
   }
   if (trace_startpt_acq(T) == funcproto(global_function(L,
       "nested_capture_run"))) {
@@ -542,7 +572,15 @@ static void nested_proof_mutations(lua_State *L, GCtrace *T)
       }
       assert(!nested_proof_admit(&f, postra));
     }
+    if (upvalue_root) {
+      /* A guarded C function is still IRT_FUNC, but its payload cannot be
+      ** interpreted through the Lua GCfunc prototype layout. */
+      nested_proof_reset(&f, L, T);
+      ir_kgc_store_rel(&f.ir[upvalue_function], obj2gco(cfunction));
+      assert(!nested_proof_admit(&f, postra));
+    }
   }
+  lua_pop(L, 1);
   free(f.root); free(f.childpt); free(f.child); free(f.J);
   free(f.ir); free(f.snap); free(f.map);
 }

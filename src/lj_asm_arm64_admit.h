@@ -8668,7 +8668,8 @@ static int arm64_upvalue_ir_context(const jit_State *J, const GCtrace *T,
     ** CALL and guard. Resolve the identity guard here without treating a
     ** dynamic frame value as a standalone source certificate. */
     fn = arm64_lua_leaf_ir_function(T, function, root, NULL);
-    if (!fn || root >= T->nins || T->ir[root].op1 != function ||
+    if (!fn || !isluafunc(fn) || root >= T->nins ||
+        T->ir[root].op1 != function ||
         !arm64_ir_pcpos((uintptr_t)pc, (uintptr_t)proto_bc(funcproto(fn)),
         (uintptr_t)(proto_bc(funcproto(fn))+funcproto(fn)->sizebc), &pos))
       return 0;
@@ -11915,7 +11916,7 @@ static int arm64_upvalue_postra_context(const LJArm64PostRAView *v,
     /* The allocated child proof separately binds this saved value to the
     ** caller's exact CALL and identity guard. */
     fn = arm64_lua_leaf_postra_function(v, function, root, NULL);
-    if (!fn || root >= v->nins ||
+    if (!fn || !isluafunc(fn) || root >= v->nins ||
         ir_load_acq(&v->ir[root]).op1 != function ||
         !arm64_ir_pcpos((uintptr_t)pc,
         (uintptr_t)proto_bc(funcproto(fn)),
