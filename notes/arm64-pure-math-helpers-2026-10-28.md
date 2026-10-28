@@ -54,10 +54,12 @@ The post-RA corruption contract also has a two-helper loop where a NUM
 loop-carried accumulator is snapshotted after a later helper call. It derives
 the live PHI input, later call, snapshot entry and matching `IR_RENAME` from
 the recorded trace, changes only that rename's saved location to caller-clobbered
-D0, and requires admission to refuse it while the unchanged base value and
-restored trace continue to pass. This exercises a snapshot location distinct
-from the value's base allocation. Its final four-profile run is
-`/Users/frityet/Scratch/ljmt-math-helpers-20261028/rename-survival-four-profile.log`.
+D0, and directly requires the call-survival proof and full admission to refuse
+it while the unchanged base value and restored trace continue to pass. D0 is
+encoded as a real allocated register location, not a register hint. This
+exercises a snapshot location distinct from the value's base allocation. Its
+final four-profile run is
+`/Users/frityet/Scratch/ljmt-math-helpers-20261028/rename-survival-four-profile-final.log`.
 The new repeated-call matrix exposed floor's negative-zero normalization in
 the previous ARM64 binary too. Installed stock LuaJIT also loses that zero sign
 under JIT narrowing (its invariant scalar case already does so). Accordingly,

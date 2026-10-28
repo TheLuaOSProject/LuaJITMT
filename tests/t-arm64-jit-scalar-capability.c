@@ -169,9 +169,17 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
     {
       IRIns saved_value = copy[chosen_value];
       IRIns saved_rename = copy[chosen_rename];
+      RegSP volatile_location = REGSP(RID_D0, SPS_NONE);
+      assert(lj_asm_arm64_test_scalar_math_live_across(
+          &v, n, loop, chosen_call));
+      assert(ra_hasreg(regsp_reg(volatile_location)) &&
+             regsp_reg(volatile_location) == RID_D0 &&
+             !ra_hasspill(regsp_spill(volatile_location)));
       /* The snapshot's renamed location must independently survive the
          helper call even when the value's base allocation is preserved. */
-      copy[chosen_rename].prev = REGSP_HINT(RID_D0);
+      copy[chosen_rename].prev = volatile_location;
+      assert(!lj_asm_arm64_test_scalar_math_live_across(
+          &v, n, loop, chosen_call));
       assert(!lj_asm_arm64_postra_admit(&v, NULL));
       copy[chosen_rename] = saved_rename;
       assert(memcmp(&copy[chosen_value], &saved_value,

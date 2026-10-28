@@ -73,6 +73,16 @@ int lj_asm_arm64_test_string_byte_dynamic_guard_postra(
 {
   return arm64_string_byte_dynamic_guard_postra(view, guard);
 }
+
+int lj_asm_arm64_test_scalar_math_live_across(
+	const LJArm64PostRAView *view, IRRef semantic_nins, IRRef loop, IRRef call)
+{
+	MSize capacity;
+	if (!view || (view->spadjust & 15u)) return 0;
+	capacity = SPS_FIXED + view->spadjust / 4u;
+	return arm64_scalar_math_live_across(view, semantic_nins, loop, call,
+					     capacity);
+}
 #endif
 
 /* -- Assembler state and common macros ----------------------------------- */
