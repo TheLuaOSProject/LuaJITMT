@@ -69,3 +69,26 @@ The profile-bound `tools/ci/arm64_jit_string_byte_contract.sh` passed all four
 ARM64 and arm64e assertion/release profiles after the post-RA pointer and
 snapshot checks on 2026-10-28. The suite is also
 registered in `m6_jit` and the ARM64 fail-closed gate.
+
+## Integrated folded-literal follow-up
+
+The dead-pointer-residue change is integrated into `v2.1` at `cdc2b7e2`, with
+test-only constant-walker cleanup at `98e158b8`. No live pointer capability is
+added. The combined source passes the four-profile byte contract (ten native
+entries/exits per C fixture), the ordinary ARM64 IR admission contract, the
+Lua byte companion, and both 509-case stock source/import corpora.
+
+The inventory now passes all 260 result checks and witnesses native selected-
+root exits for both byte rows: fourteen of twenty ARM64 workloads, versus
+eighteen on the unchanged x64 production source. Main is independently rebuilt
+and passes thirteen ordinary companions, both corpora and the same inventory.
+Its ordinary signed executable matches the worktree's restored executable:
+SHA-256 `501dc6956d591963c5318fff95bc4b7c2e243e06d73cb69bdf382e613b20d370`.
+
+Evidence is in `/Users/frityet/Scratch/ljmt-folded-byte-20261028/`:
+`focused.log`, `four-profile-integration.log`, the two ARM64 stock logs,
+`arm64-inventory.tsv`, and the main build/companion/corpus/inventory logs.
+The preceding full experimental gate passed at `a4acb620`; it was not repeated
+for this narrow folded-constant follow-up. Neither the sample nor these
+contracts establish full native JIT coverage or x86_64 parity. Dynamic-index
+and negative-specialized byte paths remain closed.

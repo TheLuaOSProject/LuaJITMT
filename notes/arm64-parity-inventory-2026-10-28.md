@@ -81,3 +81,12 @@ and the independent main rebuild reproduces ARM64's rows. The literal byte and
 early-return branch samples remain unwitnessed; the latter is outside the
 new common-join branch capability. See the
 [math/byte/branch checkpoint](arm64-math-byte-branch-checkpoint-2026-10-28.md).
+
+The folded-literal byte follow-up at `cdc2b7e2`, integrated with test cleanup
+through `98e158b8`, raises ARM64 to fourteen witnessed rows. All 260 result
+checks pass, and main independently reproduces this inventory. The original
+eighteen rows now have twelve witnesses versus sixteen on x64; both added
+dynamic-string rows are witnessed on both targets. The four remaining sampled
+differences are early-return branching, nested calls, varargs and multiple
+results. Iterator and I64 rows remain inconclusive on both architectures.
+See the [folded-byte evidence](arm64-string-byte-contract-2026-10-28.md).

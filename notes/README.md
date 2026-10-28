@@ -21,9 +21,16 @@ and reports that are no longer authoritative are retained in
 - A repeatable [cross-architecture workload inventory](arm64-parity-inventory-2026-10-28.md)
   compares interpreter results and observed native root exits. The current
   twenty-workload sample passes 260 result checks on each architecture, with
-  root-exit witnesses in thirteen ARM64 rows versus eighteen x64 rows. These are
+  root-exit witnesses in fourteen ARM64 rows versus eighteen x64 rows. These are
   sampled workload observations, not a full-compilation or parity claim.
-- Latest integrated checkpoint: native ABS/min/max/numeric NEG, bounded
+- Latest integrated follow-up: folded literal string-byte traces at
+  `cdc2b7e2`, with test cleanup at `98e158b8`. Only completely unused pointer
+  constants and their payloads are tolerated; live pointer use stays closed.
+  The four-profile byte contract, ordinary IR admission, both ARM64 stock
+  corpora and independent main rebuild pass. The full experimental gate was
+  last run on the preceding combined source below. See the
+  [folded-byte evidence](arm64-string-byte-contract-2026-10-28.md).
+- Preceding integrated checkpoint: native ABS/min/max/numeric NEG, bounded
   constant-index string-byte reads and single-comparison Lua leaf branches,
   at production source `a4acb620`, integrated through `8e2679b0`. The complete
   experimental gate and all four combined M7 FFI profiles pass. Ordinary ARM64
