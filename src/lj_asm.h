@@ -186,9 +186,8 @@ LJ_FUNC int lj_asm_arm64_test_string_byte_dynamic_guard_postra(
 LJ_FUNC int lj_asm_arm64_postra_funcf_entry_admit(
 	const LJArm64PostRAView *view, BCIns liveins,
 	IRRef *semantic_ninsp);
-LJ_FUNC int lj_asm_arm64_funcf_bytecode(const BCIns *bc, MSize sizebc,
-	MSize framesize, MSize numparams, BCIns startins, BCIns liveins,
-	int prepublication);
+LJ_FUNC int lj_asm_arm64_funcf_bytecode(const GCproto *pt, BCIns startins,
+	BCIns liveins, int prepublication);
 LJ_FUNC int lj_asm_arm64_side_scalar_ir_admit(const jit_State *J,
 	const GCtrace *child, const LJArm64SideIRView *view,
 	LJArm64IRReject *reject);

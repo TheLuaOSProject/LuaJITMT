@@ -10996,8 +10996,7 @@ static int trace_root_funcf_shape(GCproto *pt, const BCIns *pc,
 	if (!pt || !pc || pc != proto_bc(pt) ||
 	    (pt->flags & PROTO_VARARG) != 0)
 	  return 0;
-	return lj_asm_arm64_funcf_bytecode(proto_bc(pt), pt->sizebc,
-	  pt->framesize, pt->numparams, startins, startins, 1);
+	return lj_asm_arm64_funcf_bytecode(pt, startins, startins, 1);
 }
 
 static int trace_root_arm64_generation_valid(GCproto *pt, const BCIns *pc,

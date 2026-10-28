@@ -71,6 +71,14 @@ for required in \
   '__arm64_funcf_mul' \
   '__arm64_funcf_div' \
   '__arm64_funcf_multi' \
+  '__arm64_funcf_immediate' \
+  '__arm64_funcf_integer_knum' \
+  '__arm64_funcf_addvn' \
+  '__arm64_funcf_subvn' \
+  '__arm64_funcf_subnv' \
+  '__arm64_funcf_divvn' \
+  '__arm64_funcf_divnv' \
+  '__arm64_funcf_addnv' \
   '__arm64_funcf_live_interference' \
   'test_funcf_generation_race' \
   'ir[load].op1++' \
