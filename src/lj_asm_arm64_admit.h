@@ -7507,7 +7507,7 @@ static int arm64_string_byte_dynamic_guard_ir(const GCtrace *T,
     idx = offset->op1;
     lenref = guard->o == IR_ULE && guard->op1 == idx ? guard->op2 :
              guard->o == IR_UGE && guard->op2 == idx ? guard->op1 : 0;
-    if (!lenref || lenref >= guardref) continue;
+    if (!lenref || lenref < REF_FIRST || lenref >= guardref) continue;
     len = &T->ir[lenref];
     if (len->o == IR_FLOAD && len->t.irt == IRT_INT &&
         len->op1 == strref->op1 && len->op2 == IRFL_STR_LEN &&
@@ -10079,7 +10079,7 @@ static int arm64_string_byte_dynamic_guard_postra(
     idx = offset.op1;
     lenref = guard.o == IR_ULE && guard.op1 == idx ? guard.op2 :
              guard.o == IR_UGE && guard.op2 == idx ? guard.op1 : 0;
-    if (!lenref || lenref >= guardref) continue;
+    if (!lenref || lenref < REF_FIRST || lenref >= guardref) continue;
     len = ir_load_acq(&v->ir[lenref]);
     if (len.o == IR_FLOAD && len.t.irt == IRT_INT &&
         len.op1 == strref.op1 && len.op2 == IRFL_STR_LEN &&
