@@ -1121,6 +1121,17 @@ static void test_postra_spill_layout(jit_State *J)
   expect_postra_result(&view, 0);
 }
 
+static void test_integer_unsigned_postra_rejections(jit_State *J)
+{
+  static const IROp guards[] = { IR_ULT, IR_UGE, IR_ULE, IR_UGT };
+  MSize i;
+  for (i = 0; i < sizeof(guards)/sizeof(guards[0]); i++) {
+    LJArm64PostRAView view = make_postra_view(J);
+    fx.ir[R_PRECOND].o = (IROp1)guards[i];
+    expect_postra_result(&view, 0);
+  }
+}
+
 static void test_numeric_postra_layout(jit_State *J)
 {
   LJArm64PostRAView view;
@@ -1901,7 +1912,9 @@ static void test_positive_and_negative(lua_State *L)
 static void test_scalar_capabilities(jit_State *J)
 {
   static const IROp arithmetic[] = { IR_ADD, IR_SUB, IR_MUL, IR_DIV };
-  static const IROp guards[] = { IR_LT, IR_GE, IR_LE, IR_GT, IR_EQ, IR_NE };
+  static const IROp guards[] = {
+    IR_LT, IR_GE, IR_LE, IR_GT, IR_ULT, IR_UGE, IR_ULE, IR_UGT, IR_EQ, IR_NE
+  };
   static const uint64_t constants[] = {
     UINT64_C(0), UINT64_C(0x8000000000000000),
     UINT64_C(0x3fd0000000000000), UINT64_C(0xbff0000000000000),
@@ -2135,6 +2148,7 @@ int main(void)
   J->L = L;
   test_positive_and_negative(L);
   test_postra_spill_layout(J);
+  test_integer_unsigned_postra_rejections(J);
   test_dynamic_forl_positive_and_negative(J);
   test_dynamic_forl_postra_layout(J);
   test_numeric_positive_and_negative(J);
