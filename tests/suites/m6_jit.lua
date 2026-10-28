@@ -71,6 +71,7 @@ local m6_cases = {
   "m6_jit_table_store_helper",
   "m6_jit_rooted_table_len",
   "m6_jit_string_len_ir",
+  "m6_jit_string_byte_ir",
   "m6_jit_rooted_read_ir",
   "m6_jit_rooted_store_ir",
   "m6_jit_raw_nil_store",
@@ -2138,6 +2139,33 @@ assert(exits > 0, "active-MT rooted-length BC_LOOP never entered native code")
         end)
       else
         print("M6 JIT string length requires native ARM64")
+      end
+    end
+  })
+
+  add({
+    name = "m6_jit_string_byte_ir",
+    description = "ARM64 guarded immutable-string byte loads retain GC roots",
+    run = function(t)
+      if jit.os == "OSX" and jit.arch == "arm64" and
+         t.target_arch == "arm64" then
+        with_arm64_jit_profile(t, function()
+          luajit_file(t, t:path("tests", "t-arm64-jit-string-byte.lua"), {
+            lua_path = true,
+            timeout = "60s"
+          })
+          build_and_run_c(t, t:tmp("lj_t-arm64-jit-string-byte-admission"),
+                          "t-arm64-jit-string-byte-admission.c", {
+            build = false,
+            cflags = "-DLUAJIT_MT_ARM64_BOOTSTRAP " ..
+                     "-DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL " ..
+                     "-DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS " ..
+                     "-DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS",
+            timeout = "60s"
+          })
+        end)
+      else
+        print("M6 JIT string byte requires native ARM64")
       end
     end
   })
