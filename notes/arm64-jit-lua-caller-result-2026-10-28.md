@@ -59,5 +59,12 @@ rooted-length fixture with the extended failure diagnostics. The initial
 full experimental gate stopped at the old numeric-only test assertion; a
 complete gate on the final source is still pending at this checkpoint.
 
+Two separate counterfactual builds from `29e3198a` disable only the new
+semantic or post-RA result-binding helper. Each fails at the intended new
+caller-result substitution (`mutation=38`, snapshot 2) in its own pass.
+The archive source is restored after both runs. Evidence is under
+`/Users/frityet/Scratch/ljmt-caller-result-counterfactual-20261028/`, including
+`results.log`, `semantic.log` and `postra.log`.
+
 This closes a return-binding gap and expands bounded primitive-leaf coverage.
 General Lua calls, branches, trace topology and full x86_64 parity remain open.
