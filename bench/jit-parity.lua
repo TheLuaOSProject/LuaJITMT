@@ -49,6 +49,12 @@ local cases = {
     local s=0; local v='abc'; for i=1,n do s=s+#v end; return s end]]},
   {'string-byte', [[local byte=string.byte
     return function(n) local s=0; for i=1,n do s=s+byte('abc',2) end; return s end]]},
+  -- Keep the literal cases above for baseline comparisons. These arguments
+  -- prevent the string operation itself from folding to a numeric constant.
+  {'string-length-dynamic', [[return function(n,v)
+    local s=0; for i=1,n do s=s+#v end; return s end]], {'abc'}},
+  {'string-byte-dynamic', [[local byte=string.byte
+    return function(n,v) local s=0; for i=1,n do s=s+byte(v,2) end; return s end]], {'abc'}},
   {'bit-rotate', [[local ror=require('bit').ror
     return function(n) local s=1; for i=1,n do s=ror(s,3) end; return s end]]},
   {'ffi-i64-arithmetic', [[local ffi=require('ffi')
@@ -83,6 +89,7 @@ end
 
 local function sample(case)
   local candidate,oracle=compile(case,''),compile(case,'-oracle')
+  local inputs=case[3] or {}
   jit.off(oracle,true)
   local root_exits=0
   local function observe(no)
@@ -100,11 +107,13 @@ local function sample(case)
   local ok,err=xpcall(function()
     for iteration=1,12 do
       local n=iteration%2==0 and 64 or 48
-      assert(same(candidate(n),oracle(n)),case[1]..' differs from interpreter')
+      assert(same(candidate(n,unpack(inputs)),oracle(n,unpack(inputs))),
+        case[1]..' differs from interpreter')
       checks=checks+1
     end
     collectgarbage('collect')
-    assert(same(candidate(32),oracle(32)),case[1]..' differs after GC')
+    assert(same(candidate(32,unpack(inputs)),oracle(32,unpack(inputs))),
+      case[1]..' differs after GC')
     checks=checks+1
     for _ in pairs(root_traces(candidate)) do
       root_count=root_count+1

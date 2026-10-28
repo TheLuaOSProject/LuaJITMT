@@ -7027,7 +7027,16 @@ static int arm64_rooted_gc_type(IRType type)
 ** of this identity-guard capability; their IR still needs its own proof. */
 static int arm64_scalar_builtin_ffid(uint32_t ffid)
 {
-  return ffid == FF_rawset || lj_ff_is_bit_scalar(ffid);
+  return ffid == FF_rawset || lj_ff_is_bit_scalar(ffid) ||
+         ffid == FF_math_floor || ffid == FF_math_ceil ||
+         ffid == FF_math_sqrt;
+}
+
+/* Only these math recorders lower to pure ARM64 FP instructions. Other
+** IR_FPMATH sub-ops can call runtime helpers and need separate call proofs. */
+static int arm64_scalar_fpmath(uint32_t op)
+{
+  return op == IRFPM_FLOOR || op == IRFPM_CEIL || op == IRFPM_SQRT;
 }
 
 /* Recorder-side scalar provenance. Deliberately independent of the immutable
@@ -7090,12 +7099,16 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
   case IR_SUB:
   case IR_MUL:
   case IR_DIV:
+  case IR_FPMATH:
   case IR_CONV:
   case IR_BNOT: case IR_BSWAP:
   case IR_BAND: case IR_BOR: case IR_BXOR:
   case IR_BSHL: case IR_BSHR: case IR_BSAR: case IR_BROR:
   case IR_NEG: case IR_TOBIT:
     return 1;
+  case IR_FLOAD:
+    return type == IRT_INT && ir->op2 == IRFL_STR_LEN &&
+           arm64_scalar_ir_ref(T, ir->op1, value, IRT_STR);
   default:
     return 0;
   }
@@ -9214,6 +9227,13 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
           ir->op2 > LJ_MAX_HBITS)
         goto bad_type;
       break;
+    case IR_FLOAD:
+      /* String length is immutable and the exact GCstr remains rooted by its
+      ** guarded/rooted source or proto constant through the native gate. */
+      if (type != IRT_INT || flags || ir->op2 != IRFL_STR_LEN ||
+          !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_STR))
+        goto bad_operand;
+      break;
     case IR_TMPREF:
       if (type != IRT_PGC || flags) goto bad_type;
       if (ir->op2 == IRTMPREF_IN1 ||
@@ -9289,6 +9309,12 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
         goto bad_type;
       binary = 1;
       break;
+    case IR_FPMATH:
+      if (type != IRT_NUM || flags ||
+          !arm64_scalar_fpmath(ir->op2) ||
+          !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_NUM))
+        goto bad_operand;
+      break;
     case IR_BNOT: case IR_BSWAP:
       if (type != IRT_INT || (flags & ~IRT_ISPHI) || ir->op2 ||
           !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_INT))
@@ -9334,7 +9360,8 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
             ir->op2 >= REF_TRUE || T->ir[ir->op2].o != IR_KGC)
           goto bad_operand;
         o = ir_kgc_acq(&T->ir[ir->op2]);
-        if (o == NULL || !checkptrGC(o) || o->gch.gct != (uint32_t)~LJ_TFUNC ||
+        if (o == NULL || !checkptrGC(o) ||
+            o->gch.gct != (uint32_t)~LJ_TFUNC ||
             (!arm64_scalar_builtin_ffid(lj_func_ffid_acq(gco2func(o))) &&
              (side || rootop != BC_FORL ||
               !lj_trace_arm64_lua_leaf(gco2func(o)))))
@@ -9645,6 +9672,8 @@ static int arm64_scalar_postra_kref(const LJArm64PostRAView *v, IRRef target,
 static int arm64_scalar_postra_value(IRIns p)
 {
   switch ((IROp)p.o) {
+  case IR_FLOAD:
+    return p.t.irt == IRT_INT && p.op2 == IRFL_STR_LEN;
   case IR_BNOT: case IR_BSWAP:
   case IR_BAND: case IR_BOR: case IR_BXOR:
   case IR_BSHL: case IR_BSHR: case IR_BSAR: case IR_BROR:
@@ -9666,6 +9695,8 @@ static int arm64_scalar_postra_value(IRIns p)
             (arm64_rooted_gc_type(irt_type(p.t)) ||
              irt_type(p.t) == IRT_LIGHTUD) &&
             (p.t.irt & ~IRT_ISPHI) == (irt_type(p.t)|IRT_GUARD));
+  case IR_FPMATH:
+    return p.t.irt == IRT_NUM && arm64_scalar_fpmath(p.op2);
   case IR_TNEW:
     return (p.t.irt & ~IRT_ISPHI) == (IRT_TAB|IRT_GUARD);
   case IR_TMPREF:
@@ -11669,6 +11700,10 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
           p.op2 > LJ_MAX_HBITS)
         return 0;
       break;
+    case IR_FLOAD:
+      if (p.t.irt != IRT_INT || p.op2 != IRFL_STR_LEN ||
+          !arm64_scalar_postra_ref(v, p.op1, ref, IRT_STR)) return 0;
+      break;
     case IR_TMPREF:
       if (p.t.irt != IRT_PGC || !ra_hasreg(p.r) ||
           !arm64_scalar_postra_register(p.r, IRT_PGC) || ra_hasspill(p.s))
@@ -11756,6 +11791,12 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       if (type != IRT_NUM || (flags & ~IRT_ISPHI))
         return 0;
       binary = 1;
+      break;
+    case IR_FPMATH:
+      if (p.t.irt != IRT_NUM ||
+          !arm64_scalar_fpmath(p.op2) ||
+          !arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM))
+        return 0;
       break;
     case IR_BNOT: case IR_BSWAP:
       if (type != IRT_INT || (flags & ~IRT_ISPHI) || p.op2 ||

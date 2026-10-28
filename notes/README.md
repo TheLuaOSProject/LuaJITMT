@@ -19,19 +19,27 @@ and reports that are no longer authoritative are retained in
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
 - A repeatable [cross-architecture workload inventory](arm64-parity-inventory-2026-10-28.md)
-  now compares interpreter results and observed native root exits. The initial
-  eighteen-workload sample passes 234 result checks on each architecture but
-  has root-exit witnesses in seven ARM64 rows versus sixteen x64 rows. These
-  sampled observations guide the remaining work; they are not a parity claim.
-- Latest source checkpoint: terminal Lua leaf return snapshots at `2cfdc61b`,
+  compares interpreter results and observed native root exits. The current
+  twenty-workload sample passes 260 result checks on each architecture, with
+  root-exit witnesses in twelve ARM64 rows versus eighteen x64 rows. These are
+  sampled workload observations, not a full-compilation or parity claim.
+- Latest integrated checkpoint: primitive Lua leaf locals, exact nonterminal
+  caller-result binding, native scalar floor/ceil/sqrt and immutable string
+  length, through `ba6d4da3`; the expanded inventory is at `14619e46`.
+  The complete experimental gate and four combined M7 FFI profiles pass.
+  Ordinary ARM64 and signed x64 each pass both 509-case stock corpora. Main is
+  independently rebuilt and passes both corpora, twelve Lua companions and
+  the inventory; its executable matches the worktree's. The earlier rooted-
+  length witness and callback timeout remain unexplained. See the
+  [integrated checkpoint evidence](arm64-parity-checkpoint-2026-10-28.md).
+- Preceding source checkpoint: terminal Lua leaf return snapshots at `2cfdc61b`,
   integrated into `v2.1`. Four ARM64/arm64e assertion/release profiles each
   pass 80 cases, 320 native invocations, 80 terminal exits, 1,247 semantic and
   1,256 allocated negatives. Nine counterfactuals fail as intended. The full
   experimental/bootstrap gates, all 26 table/FFI fixtures and four combined
   M7 FFI profiles pass. ARM64 and signed x64 each pass both 509-case corpora.
   Main independently passes both corpora and ten ordinary Lua contracts;
-  its executable matches the worktree's. The earlier rooted-length witness
-  and callback timeout remain unexplained; neither is claimed fixed. See the
+  its executable matches the worktree's. See the
   [terminal return evidence](arm64-jit-lua-return-exits-2026-10-28.md).
 - Preceding source checkpoint: normalized fixed Lua arguments at `31e865c0`,
   integrated into `v2.1`. Four ARM64/arm64e assertion/release profiles each

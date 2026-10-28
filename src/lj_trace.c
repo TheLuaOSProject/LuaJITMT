@@ -12204,11 +12204,15 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
 	    (J->postproc == LJ_POST_NONE &&
 	     (J->pc != returnpc-1 || J->framedepth != 1 || J->maxslot != 3)))
 	  return 0;
-      } else if (lj_ff_is_bit_scalar(ffid)) {
+      } else if (lj_ff_is_bit_scalar(ffid) ||
+                 ffid == FF_math_floor || ffid == FF_math_ceil ||
+                 ffid == FF_math_sqrt) {
 	const BCIns *returnpc;
 	BCIns call;
 	unsigned nargs;
 	unsigned minargs = (ffid >= FF_bit_lshift && ffid <= FF_bit_ror) ? 2 : 1;
+        int math_scalar = ffid == FF_math_floor || ffid == FF_math_ceil ||
+                          ffid == FF_math_sqrt;
 	/* These recorders return a scalar without an external call. Admit an
 	** ordinary CALL or a CALLM with one trailing scalar from this root.
 	** An all-results return is still exactly one result. Tail calls and
@@ -12224,7 +12228,7 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
 	else if (bc_op(call) == BC_CALLM)
 	  nargs = bc_c(call)+1u;
 	else return 0;
-	if (nargs < minargs || bc_b(call) > 2 ||
+	if (nargs < minargs || (math_scalar && nargs != 1) || bc_b(call) > 2 ||
 	    (MSize)bc_a(call)+nargs+1u+LJ_FR2 > rootpt->framesize ||
 	    (J->postproc == LJ_POST_NONE &&
 	     (J->pc != returnpc-1 || J->framedepth != 1 ||
@@ -12239,7 +12243,8 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
 #endif
       }
       ins = (BCIns)la_load32_acq((const uint32_t *)pc);
-      if (lj_ff_is_bit_scalar(ffid)) {
+      if (lj_ff_is_bit_scalar(ffid) || ffid == FF_math_floor ||
+          ffid == FF_math_ceil || ffid == FF_math_sqrt) {
 	uintptr_t lo = (uintptr_t)&G2GG(g)->bcff[0], at = (uintptr_t)pc;
 	uintptr_t bytes = sizeof(G2GG(g)->bcff);
 	/* Assembly fast functions use the universe's immutable synthetic

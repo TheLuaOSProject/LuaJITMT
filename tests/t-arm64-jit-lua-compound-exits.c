@@ -923,6 +923,11 @@ int main(void)
       {{INT_MAX-3, INT_MAX-2, 2, BC_ADDVN, 0},
        {1073741820, 1073741821, 2, BC_ADDVN, 0},
        {1073741819, 1073741821, 2, BC_ADDVN, 1}}, 3, 2, NULL},
+    {"kpri-after-overflow", "local a=x+3; local flag=false; flag=a*2; return flag",
+      {{INT_MAX-3, INT_MAX-2, 2, BC_ADDVN, 0},
+       {1073741820, 1073741821, 5, BC_MULVN, 0}}, 2, 2, NULL},
+    {"kpri-before-overflow", "local flag=false; flag=x+3; return flag*2",
+      {{INT_MAX-3, INT_MAX-2, 3, BC_ADDVN, 0}}, 1, 2, NULL},
     {"chain-locals", "local a=x+3; local b=a*3; local c=x-5; return b+c",
       {{INT_MAX-3, INT_MAX-2, 2, BC_ADDVN, 0},
        {715827879, 715827880, 4, BC_MULVN, 0},
@@ -994,8 +999,8 @@ int main(void)
   ljt_lua_dostring(L,
     "assert(stop:send(true,5)); local ok,v=peer:join(5); assert(ok and v)");
   lua_close(L);
-  assert(native_runs == 86 && child_exits == 31 &&
-         same_trace_reuses == 55 && gc_reuses == 12);
+  assert(native_runs == 96 && child_exits == 34 &&
+         same_trace_reuses == 62 && gc_reuses == 14);
   assert(alias_bad > 0);
   for (unsigned i = 0; i < 3; i++)
     assert(caller_result_negatives[i][0] &&

@@ -126,6 +126,12 @@ local function main()
     {name='chain-two', body='return (x+3)*2',
       ranges={{2147483644,2147483645},
               {1073741820,1073741821}, {1073741819,1073741821}}},
+    {name='kpri-after-overflow',
+      body='local a=x+3; local flag=false; flag=a*2; return flag',
+      ranges={{2147483644,2147483645}, {1073741820,1073741821}}},
+    {name='kpri-before-overflow',
+      body='local flag=false; flag=x+3; return flag*2',
+      ranges={{2147483644,2147483645}}},
     {name='chain-locals',
       body='local a=x+3; local b=a*3; local c=x-5; return b+c',
       ranges={{2147483644,2147483645}, {715827879,715827880},
@@ -169,7 +175,7 @@ local function main()
       'lua-compound-child case=%s published=%d cold_calls=%d overflow_ranges=%d same_trace_reuses=%d result_match=yes\n',
       shape.name, pub, attempts, #shape.ranges, reused))
   end
-  assert(publications == 12 and overflow_ranges == 31 and reuses == 86)
+  assert(publications == 14 and overflow_ranges == 34 and reuses == 96)
   assert(cold_calls >= publications and cold_calls <= publications * 8)
 
   assert(stop:send(true, 5), 'MT peer stop send failed')

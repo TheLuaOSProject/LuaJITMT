@@ -33,8 +33,9 @@ and ordinary Lua companion passed: 84 cases, 336 native invocations, 84
 controlled terminal exits, 252 same-trace reuses, 84 post-GC reuses, 1,320
 semantic negatives, and 1,329 allocated negatives. The Lua companion reports
 43 publications, four numeric ranges, and 94 exact-trace reuses; it makes no
-native-execution claim. The complete gate should be rerun on the final source
-state.
+native-execution claim. The later final-source four-profile run and complete
+experimental gate both pass; see the
+[integrated checkpoint](arm64-parity-checkpoint-2026-10-28.md).
 
 | Profile | Fingerprint prefix |
 | --- | --- |
