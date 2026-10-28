@@ -416,6 +416,7 @@ static void test_funcf_entry_view_preflight(GCtrace *T, GCproto *pt)
   view.snap = trace_snap_acq(T);
   view.snapmap = trace_snapmap_acq(T);
   view.proto_bc = proto_bc(pt);
+  view.proto = pt;
   view.nins = trace_nins_acq(T);
   view.nk = trace_nk_acq(T);
   view.nsnap = trace_nsnap_acq(T);
@@ -997,6 +998,16 @@ static void call_scalar_number(lua_State *L, const char *name,
   lua_pop(L, 1);
 }
 
+static void call_scalar_type_exit(lua_State *L, const char *name)
+{
+  int status;
+  lua_getglobal(L, name);
+  lua_pushstring(L, "not-a-number");
+  status = lua_pcall(L, 1, 1, 0);
+  assert(status != LUA_OK);
+  lua_pop(L, 1);
+}
+
 static void run_scalar_native(const char *name, const char *definition,
 	 lua_Number a, lua_Number b, int nargs, lua_Number want)
 {
@@ -1010,6 +1021,15 @@ static void run_scalar_native(const char *name, const char *definition,
   run_lua(L,
     "collectgarbage('stop'); jit.flush(); jit.on()\n"
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=4')\n");
+  run_lua(L,
+	"local threading=require('threading'); "
+	"_G.__funcf_ready=threading.channel(1); "
+	"_G.__funcf_stop=threading.channel(1); "
+	"_G.__funcf_peer=assert(threading.spawn(function(ready,stop) "
+	"assert(ready:send(true,5)); "
+	"assert(select(2,stop:recv(60))); return true end,"
+	"__funcf_ready,__funcf_stop)); "
+	"assert(select(2,__funcf_ready:recv(5)))\n");
   run_lua(L, definition);
   J = L2J(L);
   pt = global_proto(L, name);
@@ -1021,7 +1041,7 @@ static void run_scalar_native(const char *name, const char *definition,
     }
   }
   if (T == NULL || trace_startins_acq(T) == 0)
-    fprintf(stderr, "FUNCF scalar did not publish: %s\n", name);
+	fprintf(stderr, "FUNCF scalar did not publish: %s\n", name);
   assert(T != NULL && trace_startins_acq(T) != 0);
   assert(bc_op(trace_startins_acq(T)) == BC_FUNCF);
   assert(bc_op((BCIns)la_load32_acq(
@@ -1039,6 +1059,7 @@ static void run_scalar_native(const char *name, const char *definition,
     view.snap = trace_snap_acq(T);
     view.snapmap = trace_snapmap_acq(T);
     view.proto_bc = proto_bc(pt);
+    view.proto = pt;
     view.nins = trace_nins_acq(T);
     view.nk = trace_nk_acq(T);
     view.nsnap = trace_nsnap_acq(T);
@@ -1161,12 +1182,100 @@ static void run_scalar_native(const char *name, const char *definition,
 	ir[mul].r = saved_reg;
 	assert(lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
     }
+    if (strcmp(name, "__arm64_funcf_immediate") == 0) {
+	LJArm64IRReject reject;
+	GCtrace semantic = *T;
+	jit_State proofJ = *J;
+	IRRef semantic_nins, kref, literalop = 0, literalref = 0;
+	IRRef operand, saved_operand;
+	uint64_t saved_bits;
+	BCIns liveins;
+	assert(lj_asm_arm64_postra_funcf_entry_admit(
+	  &view, live, &semantic_nins));
+	semantic.ir = ir;
+	semantic.nins = semantic_nins;
+	proofJ.parent = 0;
+	proofJ.exitno = 0;
+	proofJ.loopref = 0;
+	proofJ.pt = pt;
+	proofJ.startpc = trace_startpc_acq(T);
+	proofJ.baseslot = 1u+LJ_FR2;
+	proofJ.framedepth = 0;
+	proofJ.retdepth = 0;
+	liveins = (BCIns)la_load32_acq((const uint32_t *)proto_bc(pt));
+	la_store32_rel((uint32_t *)(void *)proto_bc(pt), trace_startins_acq(T));
+	assert(lj_asm_arm64_ir_admit(&proofJ, &semantic, &reject));
+	for (kref = view.nk; kref < REF_TRUE; kref++)
+	  if (ir_load_acq(&ir[kref]).o == IR_KNUM) break;
+	assert(kref+1u < REF_TRUE);
+	for (ref = REF_FIRST; ref < semantic_nins; ref++) {
+	  IRIns ins = ir_load_acq(&ir[ref]);
+	  if (ins.op1 == kref || ins.op2 == kref) {
+	    literalop = ref;
+	    literalref = ins.op1 == kref ? ins.op1 : ins.op2;
+	    operand = ins.op1 == kref ? 1u : 2u;
+	    break;
+	  }
+	}
+	assert(literalop != 0 && literalref == kref);
+	saved_bits = ir_knum(&ir[kref])->u64;
+	ir_knum(&ir[kref])->u64 ^= 1u;
+	assert(!lj_asm_arm64_ir_admit(&proofJ, &semantic, &reject));
+	ir_knum(&ir[kref])->u64 = saved_bits;
+	saved_operand = operand == 1u ? ir[ literalop ].op1 : ir[literalop].op2;
+	if (operand == 1u) ir[literalop].op1 = (IRRef1)(kref+1u);
+	else ir[literalop].op2 = (IRRef1)(kref+1u);
+	assert(!lj_asm_arm64_ir_admit(&proofJ, &semantic, &reject));
+	if (operand == 1u) ir[literalop].op1 = (IRRef1)REF_BASE;
+	else ir[literalop].op2 = (IRRef1)REF_BASE;
+	assert(!lj_asm_arm64_ir_admit(&proofJ, &semantic, &reject));
+	if (operand == 1u) ir[literalop].op1 = (IRRef1)REF_TRUE;
+	else ir[literalop].op2 = (IRRef1)REF_TRUE;
+	assert(!lj_asm_arm64_ir_admit(&proofJ, &semantic, &reject));
+	if (operand == 1u) ir[literalop].op1 = (IRRef1)saved_operand;
+	else ir[literalop].op2 = (IRRef1)saved_operand;
+	la_store32_rel((uint32_t *)(void *)proto_bc(pt),
+		trace_startins_acq(T));
+	assert(lj_asm_arm64_ir_admit(&proofJ, &semantic, &reject));
+	la_store32_rel((uint32_t *)(void *)proto_bc(pt), liveins);
+	ir_knum(&ir[kref])->u64 ^= 1u;
+	assert(!lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
+	ir_knum(&ir[kref])->u64 = saved_bits;
+	if (operand == 1u) ir[literalop].op1 = (IRRef1)(kref+1u);
+	else ir[literalop].op2 = (IRRef1)(kref+1u);
+	assert(!lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
+	if (operand == 1u) ir[literalop].op1 = (IRRef1)REF_BASE;
+	else ir[literalop].op2 = (IRRef1)REF_BASE;
+	assert(!lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
+	if (operand == 1u) ir[literalop].op1 = (IRRef1)REF_TRUE;
+	else ir[literalop].op2 = (IRRef1)REF_TRUE;
+	assert(!lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
+	if (operand == 1u) ir[literalop].op1 = (IRRef1)saved_operand;
+	else ir[literalop].op2 = (IRRef1)saved_operand;
+	assert(lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
+    }
   }
+  lj_trace_test_reset_exit_stats();
   lj_trace_test_root_entry_reset();
   call_scalar_number(L, name, a, b, nargs, want);
   assert(lj_trace_test_root_entry_publishes() == 1);
   assert(lj_trace_test_root_entry_cleanups() == 0);
   assert(lj_trace_test_exit_calls() == 0);
+  if (strcmp(name, "__arm64_funcf_immediate") == 0) {
+	lua_gc(L, LUA_GCCOLLECT, 0);
+	assert(trace_runnable_acq(traceref_safe(J, 1), 1));
+	lj_trace_test_root_entry_reset();
+	call_scalar_number(L, name, a, b, nargs, want);
+	assert(lj_trace_test_root_entry_publishes() == 1);
+	lj_trace_test_reset_exit_stats();
+	call_scalar_type_exit(L, name);
+	assert(lj_trace_test_exit_calls() >= 1);
+  }
+
+  run_lua(L,
+	"assert(__funcf_stop:send(true,5)); "
+	"local joined,result=__funcf_peer:join(5); "
+	"assert(joined and result)\n");
   lua_close(L);
 }
 
@@ -1262,6 +1371,30 @@ static void run_scalar_positives(void)
   run_scalar_native("__arm64_funcf_live_interference",
 	"function __arm64_funcf_live_interference(a,b) local x=a+b; local y=x*a; return x+y end\n",
 	3, 2, 2, 20);
+  run_scalar_native("__arm64_funcf_immediate",
+	"function __arm64_funcf_immediate(x) return x*.5+1.25 end\n",
+	11.5, 0, 1, 7.0);
+  run_scalar_native("__arm64_funcf_integer_knum",
+	"function __arm64_funcf_integer_knum(x) return x*.5+1 end\n",
+	11.5, 0, 1, 6.75);
+  run_scalar_native("__arm64_funcf_addvn",
+	"function __arm64_funcf_addvn(x) return x+1.25 end\n",
+	11.5, 0, 1, 12.75);
+  run_scalar_native("__arm64_funcf_subvn",
+	"function __arm64_funcf_subvn(x) return x-1.25 end\n",
+	11.5, 0, 1, 10.25);
+  run_scalar_native("__arm64_funcf_subnv",
+	"function __arm64_funcf_subnv(x) return 1.25-x end\n",
+	11.5, 0, 1, -10.25);
+  run_scalar_native("__arm64_funcf_divvn",
+	"function __arm64_funcf_divvn(x) return x/1.25 end\n",
+	11.5, 0, 1, 9.2);
+  run_scalar_native("__arm64_funcf_divnv",
+	"function __arm64_funcf_divnv(x) return 1.25/x end\n",
+	11.5, 0, 1, 1.25/11.5);
+  run_scalar_native("__arm64_funcf_addnv",
+	"function __arm64_funcf_addnv(x) return 1.25+x end\n",
+	11.5, 0, 1, 12.75);
   run_integer_addov_native();
 }
 

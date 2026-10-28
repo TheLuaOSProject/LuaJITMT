@@ -110,10 +110,13 @@ static BCIns arm64_ir_bc_acq(uintptr_t lo, MSize pos)
 ** fixed-function root. Register state is derived from bytecode definitions:
 ** CGET imports only a real fixed parameter; constants and MOV define local
 ** values, and arithmetic requires values established by this bytecode walk. */
-static int arm64_ir_funcf_bytecode(const BCIns *bc, MSize sizebc,
-	MSize framesize, MSize numparams, BCIns startins, BCIns liveins,
-	int prepublication)
+static int arm64_ir_funcf_bytecode(const GCproto *pt, BCIns startins,
+	BCIns liveins, int prepublication)
 {
+  const BCIns *bc = pt ? proto_bc(pt) : NULL;
+  MSize sizebc = pt ? pt->sizebc : 0;
+  MSize framesize = pt ? pt->framesize : 0;
+  MSize numparams = pt ? pt->numparams : 0;
   uintptr_t lo = (uintptr_t)bc;
   BCIns word, ret;
   BCIns generation[UINT8_MAX+1u];
@@ -179,6 +182,20 @@ static int arm64_ir_funcf_bytecode(const BCIns *bc, MSize sizebc,
 	  numeric[c] == 2)
 	return 0;
       initialized[a] = numeric[a] = 1;
+    } else if (op == BC_ADDVN || op == BC_SUBVN || op == BC_MULVN ||
+	       op == BC_DIVVN || op == BC_ADDNV || op == BC_SUBNV ||
+	       op == BC_MULNV || op == BC_DIVNV) {
+      TValue k;
+      /* Both VN and NV encode the variable in B and the KNUM in C.  NV
+      ** changes the semantic operand order, not the bytecode field layout. */
+      BCReg source = b;
+      MSize kidx = c;
+      if (a >= framesize || source >= framesize || !initialized[source] ||
+	  numeric[source] == 2 || kidx >= pt->sizekn)
+	return 0;
+      proto_knumtv_load_acq(&k, pt, kidx);
+      if (!tvisnumber(&k)) return 0;
+      initialized[a] = numeric[a] = 1;
     } else {
       /* Calls, upvalues, branches, heap access and all other effects are
       ** outside this scalar root certificate. */
@@ -195,12 +212,10 @@ check_generation:
   return 1;
 }
 
-int lj_asm_arm64_funcf_bytecode(const BCIns *bc, MSize sizebc,
-	MSize framesize, MSize numparams, BCIns startins, BCIns liveins,
-	int prepublication)
+int lj_asm_arm64_funcf_bytecode(const GCproto *pt, BCIns startins,
+	BCIns liveins, int prepublication)
 {
-  return arm64_ir_funcf_bytecode(bc, sizebc, framesize, numparams,
-	startins, liveins, prepublication);
+  return arm64_ir_funcf_bytecode(pt, startins, liveins, prepublication);
 }
 
 static int arm64_ir_funcf_slot_source(const BCIns *bc, MSize sizebc,
@@ -274,8 +289,7 @@ static int arm64_ir_start(const jit_State *J, const GCtrace *T,
   } else if (op == BC_FUNCF) {
     if (LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED || pos != 0 ||
 	(pt->flags & PROTO_VARARG) != 0 ||
-	!arm64_ir_funcf_bytecode(proto_bc(pt), pt->sizebc, pt->framesize,
-	  pt->numparams, startins, startins, 1) ||
+	!arm64_ir_funcf_bytecode(pt, startins, startins, 1) ||
 	pt->numparams > (BCReg)(pt->framesize-1u))
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE, REF_BASE,
 			     IR_XPOLL, (uint16_t)op);
@@ -2558,7 +2572,8 @@ static int arm64_postra_constant_unused(const LJArm64PostRAView *view,
   return 1;
 }
 
-static int arm64_postra_constants(const LJArm64PostRAView *view)
+static int arm64_postra_constants(const LJArm64PostRAView *view,
+				  int allow_num)
 {
   IRRef ref;
   for (ref = REF_TRUE; ref <= REF_NIL; ref++) {
@@ -2568,10 +2583,197 @@ static int arm64_postra_constants(const LJArm64PostRAView *view)
   }
   for (ref = view->nk; ref < REF_TRUE; ref++) {
     IRIns k = ir_load_acq(&view->ir[ref]);
-    if (k.o != IR_KINT || k.t.irt != IRT_INT)
-      return 0;
+    if (k.o == IR_KNUM && allow_num && k.t.irt == IRT_NUM) {
+	if (ref+1u >= REF_TRUE) return 0;
+	ref++;
+    } else if (k.o != IR_KINT || k.t.irt != IRT_INT) {
+	return 0;
+    }
   }
   return 1;
+}
+
+/* Independent post-RA resolver for a numeric bytecode literal. It binds the
+** source KNUM bits to an addressable IR_KNUM head and never asks the semantic
+** replay helper whether the operand is valid. */
+static int arm64_postra_funcf_knum_ref(const LJArm64PostRAView *view,
+	MSize index, IRRef *valuep)
+{
+  TValue source;
+  lua_Number number;
+  uint64_t bits;
+  IRRef ref;
+  if (!view || !view->proto || !view->ir || !valuep ||
+	index >= view->proto->sizekn) return 0;
+  proto_knumtv_load_acq(&source, view->proto, index);
+  if (!tvisnumber(&source)) return 0;
+  number = numberVnum(&source);
+  if (sizeof(number) != sizeof(bits)) return 0;
+  memcpy(&bits, &number, sizeof(bits));
+  for (ref = view->nk; ref < REF_TRUE; ref++) {
+	IRIns ins = ir_load_acq(&view->ir[ref]);
+	if (ins.o == IR_KNUM) {
+	  if (ref+1u >= REF_TRUE) return 0;
+	  if (ins.t.irt == IRT_NUM && ir_knum(&view->ir[ref])->u64 == bits) {
+	    *valuep = ref;
+	    return 1;
+	  }
+	  ref++;
+	} else if (ins.o == IR_KGC || ins.o == IR_KKPTR) {
+	  if (ref+1u >= REF_TRUE) return 0;
+	  ref++;
+	}
+  }
+  return 0;
+}
+
+static int arm64_postra_funcf_ref(const LJArm64PostRAView *view,
+	IRRef ref, IRRef before, IRType type)
+{
+  if (ref >= view->nk && ref < REF_TRUE) {
+	IRRef k;
+	for (k = view->nk; k < REF_TRUE; k++) {
+	  IRIns ins = ir_load_acq(&view->ir[k]);
+	  if (k == ref)
+	    return type == IRT_NUM && ins.o == IR_KNUM &&
+		   ins.t.irt == IRT_NUM && k+1u < REF_TRUE;
+	  if (ins.o == IR_KNUM || ins.o == IR_KGC || ins.o == IR_KKPTR) {
+	    if (k+1u >= REF_TRUE) return 0;
+	    k++;
+	  }
+	}
+	return 0;
+  }
+  return arm64_scalar_postra_ref(view, ref, before, type);
+}
+
+static int arm64_postra_funcf_find_value(const LJArm64PostRAView *view,
+	IRRef before, BCOp op, IRRef x, IRRef y, IRRef *valuep)
+{
+  BCOp baseop = op;
+  IRRef ref;
+  if (op == BC_ADDVN || op == BC_ADDNV) baseop = BC_ADDVV;
+  else if (op == BC_SUBVN || op == BC_SUBNV) baseop = BC_SUBVV;
+  else if (op == BC_MULVN || op == BC_MULNV) baseop = BC_MULVV;
+  else if (op == BC_DIVVN || op == BC_DIVNV) baseop = BC_DIVVV;
+  for (ref = REF_FIRST; ref < before; ref++) {
+	IRIns ins = ir_load_acq(&view->ir[ref]);
+	IRType type = irt_type(ins.t);
+	int commutative = baseop == BC_ADDVV || baseop == BC_MULVV;
+	int operands = (ins.op1 == x && ins.op2 == y) ||
+		(commutative && ins.op1 == y && ins.op2 == x);
+	if (!operands) continue;
+	if (baseop == BC_ADDVV && ins.o == IR_ADDOV && type == IRT_INT &&
+	    ins.t.irt == (IRT_INT|IRT_GUARD)) {
+	  *valuep = ref;
+	  return 1;
+	}
+	if (type != IRT_NUM || (ins.t.irt & ~(IRT_TYPE|IRT_ISPHI))) continue;
+	if ((baseop == BC_ADDVV && ins.o == IR_ADD) ||
+	    (baseop == BC_SUBVV && ins.o == IR_SUB) ||
+	    (baseop == BC_MULVV && ins.o == IR_MUL) ||
+	    (baseop == BC_DIVVV && ins.o == IR_DIV)) {
+	  *valuep = ref;
+	  return 1;
+	}
+  }
+  return 0;
+}
+
+static int arm64_postra_funcf_short_ref(const LJArm64PostRAView *view,
+	int16_t value, IRRef *refp)
+{
+  IRRef ref;
+  for (ref = view->nk; ref < REF_TRUE; ref++) {
+	IRIns ins = ir_load_acq(&view->ir[ref]);
+	if (ins.o == IR_KNUM || ins.o == IR_KGC || ins.o == IR_KKPTR) {
+	  if (ref+1u >= REF_TRUE) return 0;
+	  ref++;
+	} else if (ins.o == IR_KINT && ins.t.irt == IRT_INT &&
+		   ins.i == value) {
+	  *refp = ref;
+	  return 1;
+	}
+  }
+  return 0;
+}
+
+/* Independently replay the fixed function's scalar bytecode against allocated
+** IR. This binds VN/NV literals and VV operands to exact sources without
+** relying on semantic snapshot replay for the allocator's operation proof. */
+static int arm64_postra_funcf_source(const LJArm64PostRAView *view,
+	IRRef semantic_nins)
+{
+  IRRef values[UINT8_MAX] = { 0 };
+  uint8_t valid[UINT8_MAX] = { 0 };
+  MSize pos;
+  for (pos = 0; pos < view->proto_numparams; pos++) {
+	IRRef ref;
+	MSize slot = 1u+LJ_FR2+pos;
+	for (ref = REF_FIRST; ref < semantic_nins; ref++) {
+	  IRIns ins = ir_load_acq(&view->ir[ref]);
+	  IRType type = irt_type(ins.t);
+	  if (ins.o == IR_SLOAD && ins.op1 == slot &&
+	      ins.op2 == IRSLOAD_TYPECHECK &&
+	      (type == IRT_INT || type == IRT_NUM) &&
+	      arm64_ir_type_flags(ins.t, type, IRT_GUARD,
+			  IRT_GUARD|IRT_ISPHI)) {
+	    values[pos] = ref;
+	    valid[pos] = 1;
+	    break;
+	  }
+	}
+  }
+  for (pos = 1; pos+1u < view->proto_sizebc; pos++) {
+	BCIns bc = arm64_ir_bc_acq((uintptr_t)view->proto_bc, pos);
+	BCOp op = bc_op(bc);
+	BCReg a = bc_a(bc), b = bc_b(bc), c = bc_c(bc);
+	IRRef value;
+	if (a >= view->root_topslot) return 0;
+	if (op == BC_CGET || op == BC_MOV) {
+	  BCReg src = bc_d(bc);
+	  if (src >= view->root_topslot || !valid[src]) return 0;
+	  values[a] = values[src];
+	  valid[a] = 1;
+	} else if (op == BC_KPRI) {
+	  if (bc_d(bc) > 2u) return 0;
+	  values[a] = (IRRef)(REF_NIL-bc_d(bc));
+	  valid[a] = 1;
+	} else if (op == BC_KSHORT) {
+	  if (!arm64_postra_funcf_short_ref(view, (int16_t)bc_d(bc), &value))
+	    return 0;
+	  values[a] = value;
+	  valid[a] = 1;
+	} else if (op == BC_ADDVV || op == BC_SUBVV || op == BC_MULVV ||
+	   op == BC_DIVVV) {
+	  if (b >= view->root_topslot || c >= view->root_topslot ||
+	      !valid[b] || !valid[c] ||
+	      !arm64_postra_funcf_find_value(view, semantic_nins, op,
+					 values[b], values[c], &value))
+	    return 0;
+	  values[a] = value;
+	  valid[a] = 1;
+	} else if (op == BC_ADDVN || op == BC_SUBVN || op == BC_MULVN ||
+	   op == BC_DIVVN || op == BC_ADDNV || op == BC_SUBNV ||
+	   op == BC_MULNV || op == BC_DIVNV) {
+	  int number_left = op == BC_ADDNV || op == BC_SUBNV ||
+			    op == BC_MULNV || op == BC_DIVNV;
+	  BCReg source = b;
+	  MSize kidx = c;
+	  IRRef constant;
+	  if (source >= view->root_topslot || !valid[source] ||
+	      !arm64_postra_funcf_knum_ref(view, kidx, &constant) ||
+	      !arm64_postra_funcf_find_value(view, semantic_nins, op,
+		number_left ? constant : values[source],
+		number_left ? values[source] : constant, &value)) return 0;
+	  values[a] = value;
+	  valid[a] = 1;
+	} else {
+	  return 0;
+	}
+  }
+  return bc_op(arm64_ir_bc_acq((uintptr_t)view->proto_bc,
+	view->proto_sizebc-1u)) == BC_RET1;
 }
 
 static int arm64_postra_scalar_kref(const LJArm64PostRAView *view,
@@ -2628,26 +2830,65 @@ static int arm64_ir_funcf_find_value(const IRIns *ir, IRRef nins, BCOp op,
 	IRRef x, IRRef y, IRRef *valuep)
 {
   IRRef ref;
+  BCOp baseop = op;
+  if (op == BC_ADDVN || op == BC_ADDNV) baseop = BC_ADDVV;
+  else if (op == BC_SUBVN || op == BC_SUBNV) baseop = BC_SUBVV;
+  else if (op == BC_MULVN || op == BC_MULNV) baseop = BC_MULVV;
+  else if (op == BC_DIVVN || op == BC_DIVNV) baseop = BC_DIVVV;
   for (ref = REF_FIRST; ref < nins; ref++) {
 	IRIns ins = ir_load_acq(&ir[ref]);
 	IRType type = irt_type(ins.t);
-	int commutative = op == BC_ADDVV || op == BC_MULVV;
+	int commutative = baseop == BC_ADDVV || baseop == BC_MULVV;
 	int operands = (ins.op1 == x && ins.op2 == y) ||
 		(commutative && ins.op1 == y && ins.op2 == x);
 	if (!operands) continue;
-	if (op == BC_ADDVV && ins.o == IR_ADDOV && type == IRT_INT &&
+	if (baseop == BC_ADDVV && ins.o == IR_ADDOV && type == IRT_INT &&
 	    ins.t.irt == (IRT_INT|IRT_GUARD)) {
 	  *valuep = ref;
 	  return 1;
 	}
 	if (type != IRT_NUM || (ins.t.irt & ~(IRT_TYPE|IRT_ISPHI)))
 	  continue;
-	if ((op == BC_ADDVV && ins.o == IR_ADD) ||
-	    (op == BC_SUBVV && ins.o == IR_SUB) ||
-	    (op == BC_MULVV && ins.o == IR_MUL) ||
-	    (op == BC_DIVVV && ins.o == IR_DIV)) {
+	if ((baseop == BC_ADDVV && ins.o == IR_ADD) ||
+	    (baseop == BC_SUBVV && ins.o == IR_SUB) ||
+	    (baseop == BC_MULVV && ins.o == IR_MUL) ||
+	    (baseop == BC_DIVVV && ins.o == IR_DIV)) {
 	  *valuep = ref;
 	  return 1;
+	}
+  }
+  return 0;
+}
+
+/* Resolve one source KNUM to its exact recorder constant. Numeric equality
+** is insufficient here: it would merge signed zero and distinct NaN payloads
+** before the bytecode result is rebound through a snapshot. */
+static int arm64_ir_funcf_knum_ref(const IRIns *ir, IRRef nk,
+	const GCproto *pt, MSize index, IRRef *valuep)
+{
+  TValue source;
+  lua_Number number;
+  uint64_t bits;
+  IRRef k;
+  if (!ir || !pt || !valuep || index >= pt->sizekn || nk > REF_TRUE)
+	return 0;
+  proto_knumtv_load_acq(&source, pt, index);
+  if (!tvisnumber(&source)) return 0;
+  number = numberVnum(&source);
+  if (sizeof(number) != sizeof(bits)) return 0;
+  memcpy(&bits, &number, sizeof(bits));
+  for (k = nk; k < REF_TRUE; k++) {
+	IRIns ins = ir_load_acq(&ir[k]);
+	if (ins.o == IR_KNUM) {
+	  if (k+1u >= REF_TRUE) return 0;
+	  if (ins.t.irt == IRT_NUM && ir_knum(&ir[k])->u64 == bits) {
+	    *valuep = k;
+	    return 1;
+	  }
+	  k++;
+	} else if (ins.o == IR_KGC || ins.o == IR_KKPTR) {
+	  if (k+1u >= REF_TRUE) return 0;
+	  k++;
 	}
   }
   return 0;
@@ -2678,7 +2919,7 @@ static int arm64_ir_funcf_short_value(const IRIns *ir, IRRef nk,
 ** local reads copy the current value, so repeated dependency graphs do not
 ** cause recursive/exponential work. */
 static int arm64_ir_funcf_advance(const IRIns *ir, IRRef nins, IRRef nk,
-	const BCIns *bc, MSize sizebc, MSize framesize,
+	const GCproto *pt, const BCIns *bc, MSize sizebc, MSize framesize,
 	MSize target, MSize *posp, IRRef *values,
 	uint8_t *valid)
 {
@@ -2720,6 +2961,21 @@ static int arm64_ir_funcf_advance(const IRIns *ir, IRRef nins, IRRef nk,
 					 &value)) return 0;
 	  values[a] = value;
 	  valid[a] = 1;
+	} else if (op == BC_ADDVN || op == BC_SUBVN || op == BC_MULVN ||
+	   op == BC_DIVVN || op == BC_ADDNV || op == BC_SUBNV ||
+	   op == BC_MULNV || op == BC_DIVNV) {
+	  int number_left = op == BC_ADDNV || op == BC_SUBNV ||
+			    op == BC_MULNV || op == BC_DIVNV;
+	  BCReg source = b;
+	  MSize kidx = c;
+	  IRRef constant;
+	  if (a >= framesize || source >= framesize || !valid[source] ||
+	      !arm64_ir_funcf_knum_ref(ir, nk, pt, kidx, &constant) ||
+	      !arm64_ir_funcf_find_value(ir, nins, op,
+		number_left ? constant : values[source],
+		number_left ? values[source] : constant, &value)) return 0;
+	  values[a] = value;
+	  valid[a] = 1;
 	} else if (op != BC_RET1) {
 	  return 0;
 	}
@@ -2744,7 +3000,8 @@ static int arm64_ir_funcf_result_matches(const BCIns *bc,
 
 static int arm64_ir_funcf_scalar_snapshots(const IRIns *ir, IRRef nins,
 	IRRef nk, const SnapShot *snaps, MSize nsnap,
-	const SnapEntry *snapmap, MSize nsnapmap, const BCIns *proto_bc,
+	const SnapEntry *snapmap, MSize nsnapmap, const GCproto *pt,
+	const BCIns *proto_bc,
 	MSize proto_sizebc, MSize numparams, MSize framesize,
 	MSize baseslot, IRRef pollref, uint8_t base_delta)
 {
@@ -2759,6 +3016,8 @@ static int arm64_ir_funcf_scalar_snapshots(const IRIns *ir, IRRef nins,
   MSize result_slot;
   int saw_result = 0;
   if (!proto_bc || proto_sizebc == 0 || framesize == 0 ||
+	!pt || proto_bc != proto_bc(pt) || proto_sizebc != pt->sizebc ||
+	framesize != pt->framesize || numparams != pt->numparams ||
 	!ir || nins <= REF_FIRST || nk == 0 || !snaps || !snapmap ||
 	!nsnap || !nsnapmap ||
 	proto_sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns)) return 0;
@@ -2825,7 +3084,7 @@ static int arm64_ir_funcf_scalar_snapshots(const IRIns *ir, IRRef nins,
 	    (s+1u == nsnap && pcpos != proto_sizebc-1u))
 	  return 0;
 	previous_pc = pcpos;
-	if (!arm64_ir_funcf_advance(ir, nins, nk, proto_bc, proto_sizebc,
+	if (!arm64_ir_funcf_advance(ir, nins, nk, pt, proto_bc, proto_sizebc,
 	    framesize, pcpos, &bytecode_pos, values, valid))
 	  return 0;
         for (i = 0; i < snap->nent; i++) {
@@ -2865,13 +3124,15 @@ static int arm64_postra_funcf_locations(const LJArm64PostRAView *view,
 	  IRRef index = ref-REF_FIRST;
 	  IRIns ins = ir_load_acq(&view->ir[ref]);
 	  last_ir_use[index] = ref;
-	  if (ins.o == IR_ADDOV || ins.o == IR_ADD || ins.o == IR_SUB ||
-	      ins.o == IR_MUL || ins.o == IR_DIV) {
-	    if (ins.op1 < REF_FIRST || ins.op1 >= ref ||
-		ins.op2 < REF_FIRST || ins.op2 >= ref)
-	      return 0;
-	    last_ir_use[ins.op1-REF_FIRST] = ref;
-	    last_ir_use[ins.op2-REF_FIRST] = ref;
+	if (ins.o == IR_ADDOV || ins.o == IR_ADD || ins.o == IR_SUB ||
+	    ins.o == IR_MUL || ins.o == IR_DIV) {
+	    IRRef operands[2] = { ins.op1, ins.op2 };
+	    unsigned i;
+	    for (i = 0; i < 2u; i++) {
+	      if (irref_isk(operands[i])) continue;
+	      if (operands[i] < REF_FIRST || operands[i] >= ref) return 0;
+	      last_ir_use[operands[i]-REF_FIRST] = ref;
+	    }
 	  }
 	}
 	for (snapno = 0; snapno < view->nsnap; snapno++) {
@@ -2960,11 +3221,15 @@ static int arm64_postra_funcf_admit(const LJArm64PostRAView *view,
 	view->nins <= REF_FIRST || view->nins >= REF_DROP ||
 	view->nk == 0 || view->nk > REF_TRUE || view->nsnap == 0 ||
 	view->nsnapmap == 0 || view->proto_sizebc == 0 ||
-	view->root_topslot == 0 || view->root_topslot > UINT8_MAX ||
+	view->proto == NULL || view->root_topslot == 0 ||
+	view->root_topslot > UINT8_MAX ||
 	view->base_delta != 0 || view->spadjust != 0 ||
-	!arm64_ir_funcf_bytecode(view->proto_bc, view->proto_sizebc,
-	  view->root_topslot, view->proto_numparams, view->startins, liveins,
-	  prepublication) || !arm64_postra_constants(view)) {
+	view->proto_bc != proto_bc(view->proto) ||
+	view->proto_sizebc != view->proto->sizebc ||
+	view->root_topslot != view->proto->framesize ||
+	view->proto_numparams != view->proto->numparams ||
+	!arm64_ir_funcf_bytecode(view->proto, view->startins, liveins,
+	  prepublication) || !arm64_postra_constants(view, 1)) {
 	return 0;
 	}
   semantic_nins = view->nins;
@@ -3000,31 +3265,36 @@ static int arm64_postra_funcf_admit(const LJArm64PostRAView *view,
         return 0;
     } else if (ins.o == IR_ADDOV || ins.o == IR_ADD || ins.o == IR_SUB ||
                ins.o == IR_MUL || ins.o == IR_DIV) {
-      IRIns a, b;
+      IRIns a = {0}, b = {0};
+      int aconst = irref_isk(ins.op1), bconst = irref_isk(ins.op2);
       if ((ins.o == IR_ADDOV ?
            (type != IRT_INT || ins.t.irt != (IRT_INT|IRT_GUARD)) :
            (type != IRT_NUM || (ins.t.irt & ~(IRT_TYPE|IRT_ISPHI)))) ||
-          ins.op1 < REF_FIRST || ins.op1 >= ref ||
-          ins.op2 < REF_FIRST || ins.op2 >= ref)
+          !arm64_postra_funcf_ref(view, ins.op1, ref, type) ||
+          !arm64_postra_funcf_ref(view, ins.op2, ref, type) ||
+          (ins.o == IR_ADDOV && (aconst || bconst)))
         return 0;
-      a = ir_load_acq(&ir[ins.op1]);
-      b = ir_load_acq(&ir[ins.op2]);
-      if (irt_type(a.t) != type || irt_type(b.t) != type ||
-	  ra_hasspill(regsp_spill(a.prev)) ||
-	  ra_hasspill(regsp_spill(b.prev)) ||
-	  !arm64_scalar_postra_register(regsp_reg(a.prev), type) ||
-	  !arm64_scalar_postra_register(regsp_reg(b.prev), type) ||
-	  (ins.op1 != ins.op2 && regsp_reg(a.prev) == regsp_reg(b.prev)) ||
-          !ra_hasreg(ins.r) ||
-          !arm64_scalar_postra_register(ins.r, type) || ra_hasspill(ins.s))
+	  if (!aconst) a = ir_load_acq(&ir[ins.op1]);
+	  if (!bconst) b = ir_load_acq(&ir[ins.op2]);
+	  if ((!aconst && (irt_type(a.t) != type ||
+	      ra_hasspill(regsp_spill(a.prev)) ||
+	      !arm64_scalar_postra_register(regsp_reg(a.prev), type))) ||
+	      (!bconst && (irt_type(b.t) != type ||
+	      ra_hasspill(regsp_spill(b.prev)) ||
+	      !arm64_scalar_postra_register(regsp_reg(b.prev), type))) ||
+	      (!aconst && !bconst && ins.op1 != ins.op2 &&
+	       regsp_reg(a.prev) == regsp_reg(b.prev)) ||
+	      !ra_hasreg(ins.r) ||
+	      !arm64_scalar_postra_register(ins.r, type) || ra_hasspill(ins.s))
         return 0;
     } else {
       return 0;
     }
   }
-  if (!arm64_ir_funcf_scalar_snapshots(ir, semantic_nins, view->nk,
+  if (!arm64_postra_funcf_source(view, semantic_nins) ||
+      !arm64_ir_funcf_scalar_snapshots(ir, semantic_nins, view->nk,
       view->snap, view->nsnap, view->snapmap, view->nsnapmap,
-      view->proto_bc, view->proto_sizebc, view->proto_numparams,
+      view->proto, view->proto_bc, view->proto_sizebc, view->proto_numparams,
       view->root_topslot, 1u+LJ_FR2, pollref,
       view->base_delta) ||
       !arm64_postra_funcf_locations(view, semantic_nins))
@@ -5935,7 +6205,7 @@ static int arm64_postra_nonloop_admit(const LJArm64PostRAView *view,
     return 0;
   if (rootop == BC_FUNCF)
     return arm64_postra_funcf_admit(view, view->startins, 0, semantic_ninsp);
-  if (!arm64_postra_constants(view))
+  if (!arm64_postra_constants(view, 0))
     return 0;
   maxslots = view->root_topslot+1u+LJ_FR2;
   if (rootop == BC_FORL) {
@@ -6231,7 +6501,8 @@ static int arm64_ir_kkptr_unused(const GCtrace *T, IRRef kref)
   return 1;
 }
 
-static int arm64_ir_constants(const GCtrace *T, LJArm64IRReject *reject)
+static int arm64_ir_constants(const GCtrace *T, int allow_num,
+			      LJArm64IRReject *reject)
 {
   IRRef ref;
   if (T->nk > REF_TRUE || T->nk == 0)
@@ -6246,6 +6517,13 @@ static int arm64_ir_constants(const GCtrace *T, LJArm64IRReject *reject)
   }
   for (ref = T->nk; ref < REF_TRUE; ref++) {
     const IRIns *ir = &T->ir[ref];
+    if (ir->o == IR_KNUM && allow_num && ir->t.irt == IRT_NUM) {
+	if (ref+1u >= REF_TRUE)
+	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CONSTANT, ref,
+				 (IROp)ir->o, 0);
+	ref++;
+	continue;
+	}
     if (ir->o != IR_KINT || ir->t.irt != IRT_INT)
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CONSTANT, ref,
 			     (IROp)ir->o, 0);
@@ -6415,8 +6693,7 @@ static int arm64_ir_funcf_shape(const jit_State *J, const GCtrace *T,
   const IRIns *ir = T->ir;
   IRRef ref, poll = 0;
   if (J->loopref != 0 || T->nins <= REF_BASE+1u ||
-      !arm64_ir_funcf_bytecode(proto_bc(pt), pt->sizebc, pt->framesize,
-	pt->numparams, T->startins, T->startins, 1) ||
+      !arm64_ir_funcf_bytecode(pt, T->startins, T->startins, 1) ||
       ir[REF_BASE].o != IR_BASE || ir[REF_BASE].t.irt != IRT_PGC ||
       ir[REF_BASE].op1 != 0 || ir[REF_BASE].op2 != 0)
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
@@ -6455,7 +6732,7 @@ static int arm64_ir_funcf_shape(const jit_State *J, const GCtrace *T,
   }
   if (!poll || !arm64_ir_funcf_scalar_snapshots(ir, T->nins, T->nk,
       T->snap, T->nsnap, T->snapmap, T->nsnapmap,
-      proto_bc(pt), pt->sizebc, pt->numparams, pt->framesize,
+      pt, proto_bc(pt), pt->sizebc, pt->numparams, pt->framesize,
       J->baseslot, poll, (uint8_t)(J->baseslot-2u)))
     goto bad_funcf;
   return 1;
@@ -7071,7 +7348,7 @@ static int arm64_ir_nonloop_admit(const jit_State *J, const GCtrace *T,
     }
   }
 #endif
-  if (!arm64_ir_constants(T, reject))
+  if (!arm64_ir_constants(T, startop == BC_FUNCF, reject))
     return 0;
   if (startop == BC_FUNCF) {
     int ok = arm64_ir_funcf_shape(J, T, pt, reject);
