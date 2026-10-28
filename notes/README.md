@@ -33,6 +33,13 @@ and reports that are no longer authoritative are retained in
   its executable matches the worktree's. The earlier rooted-length witness
   and callback timeout remain unexplained; neither is claimed fixed. See the
   [terminal return evidence](arm64-jit-lua-return-exits-2026-10-28.md).
+- Isolated next slice: scalar `math.floor`, `math.ceil` and `math.sqrt` calls
+  lower to native ARM64 `IR_FPMATH` under the existing independent semantic
+  and post-RA proofs. Captured and parameter-passed builtins, mixed math
+  composition, a guarded floor exit followed by full GC, malformed proof
+  negatives and interpreter/JIT oracle cases pass across native arm64 and
+  arm64e assertion/release profiles. This slice remains isolated pending
+  integration; see [scalar FPMATH evidence](arm64-jit-fpmath-2026-10-28.md).
 - Preceding source checkpoint: normalized fixed Lua arguments at `31e865c0`,
   integrated into `v2.1`. Four ARM64/arm64e assertion/release profiles each
   pass 70 shapes, 504 native invocations, 112 child exits, 70 identity exits,

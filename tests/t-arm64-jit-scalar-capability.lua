@@ -5,7 +5,7 @@ local function run(name,f,...)
   jit.flush(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=1','-fma')
   if name:sub(1,3)=='fma' then jit.opt.start('fma') end
   local result=f(...); assert(result==expected)
-  probe_reset(); result=f(...); assert(result==expected); probe_check(); probe_lifecycle(f,expected,...)
+  probe_reset(); result=f(...); assert(result==expected); probe_check(name); probe_lifecycle(f,expected,...)
 end
 jit.off(run,true)
 run('mixed_intermediates',function(n,a,b)
@@ -116,3 +116,76 @@ source[#source+1]='while i<40 do'
 for i=1,36 do source[#source+1]=names[i]..'='..names[i]..'*1.0001+.125' end
 source[#source+1]='i=i+1 end return '..table.concat(names,',')
 run('numeric_spills',assert(loadstring(table.concat(source,'\n'))))
+
+local threading=require('threading')
+local ready,release=threading.channel(1),threading.channel(1)
+local peer=assert(threading.spawn(function(rdy,rel)
+  assert(rdy:send(true,5))
+  assert(select(2,rel:recv(120)))
+  return true
+end,ready,release))
+assert(select(2,ready:recv(5)))
+
+local floor_builtin=math.floor
+local function math_floor(n)
+  local s=0
+  for i=1,n do s=s+floor_builtin(i+.25) end
+  return s
+end
+run('math_floor',math_floor,20)
+local function math_floor_guard(n,x)
+  local i,s=0,0
+  while i<n do s=s+floor_builtin(i+x); i=i+1 end
+  return s
+end
+local function run_native(name,f,...)
+  print('CASE',name)
+  jit.off(f); local expected=f(...); jit.on(f)
+  jit.flush(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=1','-fma')
+  local result=f(...); assert(result==expected)
+  probe_reset(); result=f(...); assert(result==expected); probe_check(name)
+end
+jit.off(run_native,true)
+run_native('math_floor_guard',math_floor_guard,20,.25)
+probe_changed(math_floor_guard,
+              math_floor_guard(6,2147483648.25),
+              6,2147483648.25)
+-- Force a full collection after the guarded NUM-to-INT exit, then re-enter
+-- the same trace with its original input to check retained roots and code.
+collectgarbage('collect')
+probe_reset()
+assert(math_floor_guard(20,.25)==190)
+probe_check('math_floor_guard')
+
+local ceil_builtin=math.ceil
+local function math_ceil(n)
+  local s=0
+  for i=1,n do s=s+ceil_builtin(i+.25) end
+  return s
+end
+run('math_ceil',math_ceil,20)
+
+local sqrt_builtin=math.sqrt
+local function math_sqrt(n)
+  local s=.5
+  for i=1,n do s=s+sqrt_builtin(i) end
+  return s
+end
+run('math_sqrt',math_sqrt,20)
+local function math_parameter(n,fn)
+  local s=0
+  for i=1,n do s=s+fn(i+.25) end
+  return s
+end
+run('math_parameter',math_parameter,20,floor_builtin)
+local function math_mixed(n)
+  local s=.5
+  for i=1,n do s=s+floor_builtin(i+.25)+sqrt_builtin(i) end
+  return s
+end
+run('math_mixed',math_mixed,20)
+
+
+
+assert(release:send(true,5))
+assert(peer:join(5))
