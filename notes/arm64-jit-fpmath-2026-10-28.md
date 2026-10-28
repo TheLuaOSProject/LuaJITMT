@@ -79,6 +79,7 @@ trace publication while a peer MT remains live. The four-profile string-length
 contract also passed after combining its `IR_FLOAD` admission with the SIMD
 mask proof, exercising the shared semantic and post-RA cases.
 
-The floor/ceil/sqrt FPMATH slice is integrated. Native ABS/min/max/numeric NEG
-is a separate follow-up slice and remains isolated pending integration. Neither
-slice establishes full ARM64 LuaJIT parity or lockless-VM completion.
+The floor/ceil/sqrt and ABS/min/max/numeric NEG slices are integrated into
+`v2.1`. The combined full gate, stock corpora and independent main rebuild pass;
+see the [combined checkpoint](arm64-math-byte-branch-checkpoint-2026-10-28.md).
+Neither slice establishes full ARM64 LuaJIT parity or lockless-VM completion.

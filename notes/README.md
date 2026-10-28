@@ -21,9 +21,17 @@ and reports that are no longer authoritative are retained in
 - A repeatable [cross-architecture workload inventory](arm64-parity-inventory-2026-10-28.md)
   compares interpreter results and observed native root exits. The current
   twenty-workload sample passes 260 result checks on each architecture, with
-  root-exit witnesses in twelve ARM64 rows versus eighteen x64 rows. These are
+  root-exit witnesses in thirteen ARM64 rows versus eighteen x64 rows. These are
   sampled workload observations, not a full-compilation or parity claim.
-- Latest integrated checkpoint: primitive Lua leaf locals, exact nonterminal
+- Latest integrated checkpoint: native ABS/min/max/numeric NEG, bounded
+  constant-index string-byte reads and single-comparison Lua leaf branches,
+  at production source `a4acb620`, integrated through `8e2679b0`. The complete
+  experimental gate and all four combined M7 FFI profiles pass. Ordinary ARM64
+  and signed x64 pass both 509-case stock corpora; main independently passes
+  both corpora, thirteen Lua companions and the inventory. The earlier rooted-
+  length witness and callback timeout remain unexplained. See the
+  [math/byte/branch checkpoint](arm64-math-byte-branch-checkpoint-2026-10-28.md).
+- Preceding integrated checkpoint: primitive Lua leaf locals, exact nonterminal
   caller-result binding, native scalar floor/ceil/sqrt and immutable string
   length, through `ba6d4da3`; the expanded inventory is at `14619e46`.
   The complete experimental gate and four combined M7 FFI profiles pass.
@@ -42,16 +50,14 @@ and reports that are no longer authoritative are retained in
   its executable matches the worktree's. See the
   [terminal return evidence](arm64-jit-lua-return-exits-2026-10-28.md).
 - Integrated scalar-math slice: scalar `math.floor`, `math.ceil` and
-  `math.sqrt` calls lower to native ARM64 `IR_FPMATH`; a focused isolated
+  `math.sqrt` calls lower to native ARM64 `IR_FPMATH`; the integrated
   follow-up adds native ABS,
   min/max, and numeric NEG under independent semantic and post-RA proofs.
   Captured and parameter-passed builtins, fixed-arity min/max (including its
   one-argument case), edge semantics, malformed-proof negatives and the
   earlier guarded floor exit/GC evidence are recorded separately. Both slices
-  pass their native fixtures in all four arm64/arm64e
-  assertion/release profiles; only the ABS/min/max/NEG follow-up remains
-  isolated pending
-  integration; see [scalar FPMATH evidence](arm64-jit-fpmath-2026-10-28.md).
+  pass their native fixtures in all four arm64/arm64e assertion/release
+  profiles; see [scalar FPMATH evidence](arm64-jit-fpmath-2026-10-28.md).
 - Preceding source checkpoint: normalized fixed Lua arguments at `31e865c0`,
   integrated into `v2.1`. Four ARM64/arm64e assertion/release profiles each
   pass 70 shapes, 504 native invocations, 112 child exits, 70 identity exits,
@@ -196,7 +202,11 @@ and reports that are no longer authoritative are retained in
   semantic/post-RA views. Each profile records 344 native observations and
   independent 4-positive/26-negative admission checks.
   See [`arm64-jit-i64-arguments-2026-10-26.md`](arm64-jit-i64-arguments-2026-10-26.md).
-- Latest completed umbrella validation: the normalized Lua argument
+- Latest completed experimental validation is the
+  [math/byte/branch checkpoint](arm64-math-byte-branch-checkpoint-2026-10-28.md).
+  The bootstrap-only gate and separate historical table/FFI matrix were not
+  repeated for that checkpoint.
+- Preceding wider umbrella validation: the normalized Lua argument
   checkpoint on 2026-10-28, frozen at `31e865c0`. The experimental gate,
   all 26 table/FFI fixtures in four profiles and all four combined M7 FFI
   profiles pass. The bootstrap gate passes on repeat; its initial callback
@@ -348,6 +358,18 @@ available.
 
 ### Bounded native JIT
 
+- One numeric comparison with two nonempty forward-only arms and a common
+  join is admitted in pure Lua leaves. Snapshot restoration follows the
+  selected path, with exact comparison polarity and live values, including
+  NaN cold exits. Early returns, empty arms, nested comparisons and multiple
+  arithmetic operations per arm remain unverified or closed; see
+  [branch evidence](arm64-jit-lua-branches-2026-10-28.md).
+- Scalar math and immutable string length/byte operations retain the stock
+  emitter. Byte reads require a positive constant index and exact earlier
+  bounds from the same immutable string; dynamic/negative indices remain
+  closed. See [math evidence](arm64-jit-fpmath-2026-10-28.md),
+  [string length](arm64-jit-string-len-2026-10-28.md) and
+  [string byte](arm64-string-byte-contract-2026-10-28.md).
 - Fixed pure Lua leaves inline in scalar FORL roots with exact caller CALL
   argument maps and independently certified source/identity. Extra supplied
   arguments are preserved for caller replay; missing formals become nil.

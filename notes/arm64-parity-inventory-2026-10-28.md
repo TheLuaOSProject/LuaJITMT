@@ -73,3 +73,11 @@ both string operations on x64, for twelve of twenty versus eighteen of twenty.
 The independent main ARM64 rebuild reproduces the same row outcomes. The
 remaining differences and evidence locations are recorded in the
 [integrated checkpoint](arm64-parity-checkpoint-2026-10-28.md).
+
+At production source `a4acb620`, integrated through `8e2679b0`, ordinary ARM64
+adds a native-root witness for dynamic string byte: thirteen of twenty rows
+versus eighteen on signed x64. All 260 result checks pass on each architecture,
+and the independent main rebuild reproduces ARM64's rows. The literal byte and
+early-return branch samples remain unwitnessed; the latter is outside the
+new common-join branch capability. See the
+[math/byte/branch checkpoint](arm64-math-byte-branch-checkpoint-2026-10-28.md).

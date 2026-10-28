@@ -48,4 +48,6 @@ opcodes express unordered floating comparisons, which the branch slice needs
 for NaN semantics. Both independent admission passes distinguish these types.
 The existing malformed integer-guard fixture still requires rejection; its
 expected reason changes from unsupported opcode to unsupported type/provenance.
-Combined full-gate validation is pending at this integration commit.
+The combined full experimental gate and ordinary ARM64/x64 stock corpora pass;
+main independently passes the ARM64 companions, corpora and inventory. See the
+[combined checkpoint](arm64-math-byte-branch-checkpoint-2026-10-28.md).
