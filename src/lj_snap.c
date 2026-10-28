@@ -272,9 +272,10 @@ void lj_snap_add(jit_State *J)
 {
   MSize nsnap = J->cur.nsnap;
   MSize nsnapmap = J->cur.nsnapmap;
-  /* Preserve exact rooted store continuations, even when argument
-  ** setup for the next call produces no IR. Other snapshots may merge. */
-  if ((nsnap == 0 || !lj_snap_rooted_continuation(J, &J->cur.snap[nsnap-1])) &&
+  /* Preserve rooted continuations and pure Lua incoming arguments even when
+  ** the next snapshot produces no intervening IR. */
+  if ((nsnap == 0 || (!lj_snap_rooted_continuation(J, &J->cur.snap[nsnap-1]) &&
+                     !lj_snap_lua_call(J, &J->cur.snap[nsnap-1]))) &&
       ((nsnap > 0 && J->cur.snap[nsnap-1].ref == J->cur.nins) ||
        (J->mergesnap && !irt_isguard(J->guardemit)))) {
     if (nsnap == 1) {  /* But preserve snap #0 PC. */

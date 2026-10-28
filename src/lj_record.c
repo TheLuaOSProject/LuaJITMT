@@ -1289,10 +1289,12 @@ static void rec_call_setup(jit_State *J, BCReg func, ptrdiff_t nargs)
   }
 #if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
   if (isluafunc(funcV(functv)) && lj_trace_arm64_lua_leaf(funcV(functv))) {
-    /* Preserve the exact caller and argument map for an inlined pure leaf's
-    ** identity guard. Later admission still refuses every child-frame exit. */
-    if (bc_op(J->cur.startins) != BC_FORL || J->framedepth != 0 || nargs != 1 ||
-        bc_op(*J->pc) != BC_CALL || bc_b(*J->pc) != 2 || bc_c(*J->pc) != 2)
+    /* Preserve the incoming arguments for identity guards and child exits.
+    ** LOOP must copy this map with the same substitutions as the child. */
+    if (bc_op(J->cur.startins) != BC_FORL || J->framedepth != 0 ||
+        nargs != funcproto(funcV(functv))->numparams ||
+        bc_op(*J->pc) != BC_CALL || bc_b(*J->pc) != 2 ||
+        bc_c(*J->pc) != nargs+1)
       lj_trace_err(J, LJ_TRERR_NYIBC);
     lj_snap_add(J);
     J->mergesnap = 0;

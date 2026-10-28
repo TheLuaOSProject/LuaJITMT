@@ -25,7 +25,7 @@ LJ_FUNC_NORET void lj_trace_err_info(jit_State *J, TraceError e);
 
 /* Trace management. */
 #if LJ_TARGET_ARM64
-/* Bounded, fixed unary Lua leaf with no shared state or control-flow effects.
+/* Bounded, fixed-arity Lua leaf with no shared state or control-flow effects.
 ** The caller keeps the closure/prototype resident under the recorder token or
 ** the published trace's GC2 lease. Snapshot admission remains separate. */
 LJ_FUNC int lj_trace_arm64_lua_leaf(const GCfunc *fn);

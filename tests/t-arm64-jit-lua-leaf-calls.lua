@@ -56,6 +56,8 @@ local positives = {
   {"mulnv", "return 0.5*x"},
   {"divnv", "return 0.5/x"},
   {"addvv-local-number", "local bias=0.25; return x+bias"},
+  {"child-argument-write", "x=x+3; return x*2",
+    "local sum=0; for i=1,n do sum=sum+fn(i) end; return sum"},
 }
 
 local negatives = {
@@ -68,13 +70,12 @@ local negatives = {
     "local sum=.5; for i=1,n do sum=sum+fn(i+.5,0.25) end; return sum"},
   {"multiple-results", "return x,x+0.5",
     "local sum=.5; for i=1,n do local a,b=fn(i+.5); sum=sum+a+b end; return sum"},
-  {"child-argument-write", "x=x+3; return x*2",
-    "local sum=0; for i=1,n do sum=sum+fn(i) end; return sum"},
 }
 
-local function run_positive(label, body)
-  local leaf, run = compile_pair(label, body, simple_run)
-  local oracle_leaf, oracle_run = compile_pair("oracle-"..label, body, simple_run)
+local function run_positive(label, body, runner)
+  runner = runner or simple_run
+  local leaf, run = compile_pair(label, body, runner)
+  local oracle_leaf, oracle_run = compile_pair("oracle-"..label, body, runner)
   assert(leaf ~= oracle_leaf and run ~= oracle_run)
   jit.off(oracle_leaf, true); jit.off(oracle_run, true)
   local n=48
@@ -151,7 +152,7 @@ end
 jit.off(run_negative, true)
 
 local function main()
-  for _,c in ipairs(positives) do run_positive(c[1],c[2]) end
+  for _,c in ipairs(positives) do run_positive(c[1],c[2],c[3]) end
   for _,c in ipairs(negatives) do run_negative(c) end
 end
 jit.off(compile_pair, true)

@@ -18,6 +18,11 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
+- Current focused extension: exact fixed numeric Lua argument maps and
+  parameter assignments. The ARM64 assertion fixture passes eleven shapes,
+  58 native runs, eighteen child exits, 750 semantic and 798 allocated
+  negatives; four counterfactuals fail as intended. Full matrix validation
+  is pending. See the [argument evidence](arm64-jit-lua-arguments-2026-10-28.md).
 - Latest fully validated source checkpoint: numeric local assignments
   (`f39cdfe5`) plus the shared consumed-poll missed-wake correction at
   `dad7e318`, integrated into `v2.1`. Four ARM64/arm64e assertion/release

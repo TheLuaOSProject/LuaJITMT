@@ -31,6 +31,10 @@ for profile in arm64-assert arm64e-assert arm64-release arm64e-release; do
   lj_ci_compile_fixture "$compound_fixture" "$root/tests/t-arm64-jit-lua-compound-exits.c"
   lj_ci_run_fixture 60 "$compound_fixture"
   lj_ci_run_lua 60 "$root/tests/t-arm64-jit-lua-compound-exits.lua"
+  arguments_fixture=$tmpdir/lua-arguments-$profile
+  lj_ci_compile_fixture "$arguments_fixture" "$root/tests/t-arm64-jit-lua-arguments.c"
+  lj_ci_run_fixture 60 "$arguments_fixture"
+  lj_ci_run_lua 60 "$root/tests/t-arm64-jit-lua-arguments.lua"
 done
 lj_ci_restore "$LJ_CI_RESTORE_TARGET_FLAGS" "$LJ_CI_RESTORE_XCFLAGS"
-echo 'arm64_jit_lua_leaf_contract OK: four profiles; native, identity/single-operation/compound child exits, numeric local assignments, independent admission and ordinary publication/refusal'
+echo 'arm64_jit_lua_leaf_contract OK: four profiles; native, identity/single-operation/compound child exits, fixed arguments and local/parameter assignments, independent admission and ordinary publication/refusal'

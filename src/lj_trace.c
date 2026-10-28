@@ -11871,21 +11871,27 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
   const GCproto *pt;
   const BCIns *bc;
   BCIns words[UINT8_MAX+1u];
-  uint8_t defined[UINT8_MAX+1u] = { 1 };
+  uint8_t defined[UINT8_MAX+1u] = { 0 };
   MSize pos, size, frame;
   if (!fn || !isluafunc(fn)) return 0;
   pt = funcproto(fn);
   if (!checkptrGC(obj2gco((GCproto *)pt)) ||
-      pt->gct != (uint32_t)~LJ_TPROTO || pt->numparams != 1 ||
+      pt->gct != (uint32_t)~LJ_TPROTO ||
       pt->sizeuv || pt->sizekgc ||
       (la_load8_acq(&pt->flags) & (PROTO_CHILD|PROTO_VARARG|PROTO_FFI|PROTO_NOJIT)))
     return 0;
   size = pt->sizebc; frame = pt->framesize; bc = proto_bc(pt);
-  if (size < 3 || size > UINT8_MAX || frame < 2 || frame > UINT8_MAX)
+  if (size < 3 || size > UINT8_MAX || !frame || frame > UINT8_MAX ||
+      pt->numparams > frame)
     return 0;
+  memset(defined, 1, pt->numparams);
   for (pos = 0; pos < size; pos++)
     words[pos] = (BCIns)la_load32_acq((const uint32_t *)&bc[pos]);
-  if (words[0] != BCINS_AD(BC_FUNCF, frame, 0)) return 0;
+  if (words[0] != BCINS_AD(BC_FUNCF, frame, 0) &&
+      !(bc_op(words[0]) == BC_JFUNCF && bc_a(words[0]) == frame &&
+        bc_d(words[0]) != 0 &&
+        proto_jit_startins_acq(pt, bc) == BCINS_AD(BC_FUNCF, frame, 0)))
+    return 0;
   for (pos = 1; pos < size; pos++) {
     BCIns ins = words[pos];
     BCOp op = bc_op(ins);
@@ -11894,13 +11900,17 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
     if (a >= frame) return 0;
     if (pos+1u == size) {
       if (op != BC_RET1 || bc_d(ins) != 2 || !defined[a]) return 0;
+    } else if (a < pt->numparams && op != BC_CSET) {
+      /* Parameter assignments use the fork's cell-aware CSET. Arithmetic
+      ** and copies produce temporaries before that assignment. */
+      return 0;
     } else if (op == BC_CGET || op == BC_MOV || op == BC_CSET) {
       BCReg from = bc_d(ins);
       if (from >= frame || !defined[from]) return 0;
       /* CSET examines the old destination tag before deciding between a raw
       ** local and a closed cell. A preceding numeric definition is required;
-      ** function entry does not clear unused stack slots. Keep arg0 stable. */
-      if (op == BC_CSET && (!a || !defined[a])) return 0;
+      ** function entry does not clear unused stack slots. */
+      if (op == BC_CSET && !defined[a]) return 0;
     } else if (op == BC_KSHORT) {
       /* Snapshot admission separately proves any surviving overflow exits. */
     } else if (op == BC_KNUM) {
@@ -11924,10 +11934,13 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
     }
     defined[a] = 1;
   }
-  /* The admitted body contains no patch sites. Recheck the complete source,
-  ** including the canonical header, rather than borrowing root authority. */
+  /* The body contains no patch sites. An independently compiled entry may
+  ** replace FUNCF with JFUNCF, whose saved source must still be canonical.
+  ** Recheck this complete generation without borrowing that trace's verdict. */
   for (pos = 0; pos < size; pos++)
     if ((BCIns)la_load32_acq((const uint32_t *)&bc[pos]) != words[pos]) return 0;
+  if (bc_op(words[0]) == BC_JFUNCF &&
+      proto_jit_startins_acq(pt, bc) != BCINS_AD(BC_FUNCF, frame, 0)) return 0;
   return 1;
 }
 
@@ -11959,8 +11972,9 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
   if (!trace_pc_in_proto_range(returnpc, proto_bc(rootpt), rootpt->sizebc) ||
       returnpc == proto_bc(rootpt)) return 0;
   call = (BCIns)la_load32_acq((const uint32_t *)(returnpc-1));
-  if (bc_op(call) != BC_CALL || bc_b(call) != 2 || bc_c(call) != 2 ||
-      (MSize)bc_a(call)+2u+LJ_FR2 > rootpt->framesize) return 0;
+  if (bc_op(call) != BC_CALL || bc_b(call) != 2 ||
+      bc_c(call) != (MSize)pt->numparams+1u ||
+      (MSize)bc_a(call)+bc_c(call)+LJ_FR2 > rootpt->framesize) return 0;
   caller = frame_prevl(frame);
   if (!isluafunc(frame_func(caller)) || funcproto(frame_func(caller)) != rootpt)
     return 0;
@@ -11983,7 +11997,8 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
       ir_kgc_acq(&J->cur.ir[ref]) != obj2gco(fn)) return 0;
   if (pc == proto_bc(pt))
     return J->fn && isluafunc(J->fn) && funcproto(J->fn) == rootpt &&
-           J->pt == rootpt && J->pc == returnpc-1 && J->maxslot == 1;
+           J->pt == rootpt && J->pc == returnpc-1 &&
+           J->maxslot == pt->numparams;
   return J->fn == fn && J->pt == pt;
 }
 
