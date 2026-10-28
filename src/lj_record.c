@@ -1292,9 +1292,9 @@ static void rec_call_setup(jit_State *J, BCReg func, ptrdiff_t nargs)
     /* Preserve the incoming arguments for identity guards and child exits.
     ** LOOP must copy this map with the same substitutions as the child. */
     if (bc_op(J->cur.startins) != BC_FORL || J->framedepth != 0 ||
-        nargs != funcproto(funcV(functv))->numparams ||
         bc_op(*J->pc) != BC_CALL || bc_b(*J->pc) != 2 ||
-        bc_c(*J->pc) != nargs+1)
+        !bc_c(*J->pc) || bc_c(*J->pc) != nargs+1 ||
+        (MSize)bc_a(*J->pc)+bc_c(*J->pc)+LJ_FR2 > J->pt->framesize)
       lj_trace_err(J, LJ_TRERR_NYIBC);
     lj_snap_add(J);
     J->mergesnap = 0;

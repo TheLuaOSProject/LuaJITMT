@@ -7896,14 +7896,19 @@ static int arm64_side_parent_sload_valid(const LJArm64SideIRView *side,
   return 0;
 }
 
-/* A pure leaf identity guard must restore its exact fixed-arity caller CALL. */
+/* A pure leaf identity guard must restore every supplied caller argument.
+** Independently normalize the callee formals like rec_func_setup: discard
+** extra arguments and fill missing parameters with nil. */
 static IRRef arm64_lua_leaf_ir_args(const jit_State *J, const GCtrace *T,
                                   SnapNo s, IRRef callee, IRRef *args)
 {
   const SnapShot *snap = &T->snap[s];
   IRRef ref = snap->ref, fn = 0, r;
   const GCfunc *function;
-  MSize slot, i, pos, nargs, count = 0;
+  const GCproto *leaf;
+  MSize slot, i, pos, nargs, nparams, count = 0;
+  uint8_t seen[UINT8_MAX+1u] = {0};
+  uint8_t numeric[UINT8_MAX+1u] = {0};
   uint64_t pcbase;
   BCIns call;
   if (!irref_isk(callee) ||
@@ -7911,7 +7916,7 @@ static IRRef arm64_lua_leaf_ir_args(const jit_State *J, const GCtrace *T,
       T->ir[callee].o != IR_KGC) return 0;
   function = gco2func(ir_kgc_acq(&T->ir[callee]));
   if (!lj_trace_arm64_lua_leaf(function)) return 0;
-  nargs = funcproto(function)->numparams;
+  leaf = funcproto(function); nparams = leaf->numparams;
   memcpy(&pcbase, &T->snapmap[snap->mapofs+snap->nent], sizeof(pcbase));
   if ((uint8_t)pcbase || !arm64_ir_pcpos((uintptr_t)(pcbase>>8),
       (uintptr_t)proto_bc(J->pt),
@@ -7919,8 +7924,11 @@ static IRRef arm64_lua_leaf_ir_args(const jit_State *J, const GCtrace *T,
   call = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(J->pt)[pos]);
   slot = 1u+LJ_FR2+bc_a(call);
   if (bc_op(T->startins) != BC_FORL || bc_op(call) != BC_CALL ||
-      bc_b(call) != 2 || bc_c(call) != nargs+1u ||
-      bc_a(call)+nargs+1u+LJ_FR2 > J->pt->framesize) return 0;
+      bc_b(call) != 2 || !bc_c(call) ||
+      bc_a(call)+bc_c(call)+LJ_FR2 > J->pt->framesize) return 0;
+  nargs = bc_c(call)-1u;
+  if (args)
+    for (i = 0; i < nparams; i++) args[i] = REF_NIL;
   for (i = 0; i < snap->nent; i++) {
     SnapEntry sn = T->snapmap[snap->mapofs+i];
     MSize at = snap_slot(sn);
@@ -7929,14 +7937,35 @@ static IRRef arm64_lua_leaf_ir_args(const jit_State *J, const GCtrace *T,
       fn = snap_ref(sn);
     } else if (at >= slot+1u+LJ_FR2 && at < slot+1u+LJ_FR2+nargs) {
       IRRef arg = snap_ref(sn);
-      if ((sn & 0x00ff0000u) ||
-          (!arm64_scalar_ir_ref(T, arg, ref, IRT_NUM) &&
-           !arm64_scalar_ir_ref(T, arg, ref, IRT_INT))) return 0;
-      if (args) args[at-slot-1u-LJ_FR2] = arg;
+      MSize param = at-slot-1u-LJ_FR2;
+      if ((sn & 0x00ff0000u) || seen[param] ||
+          !arm64_cell_value_ir_ref(T, arg, ref)) return 0;
+      seen[param] = 1;
+      if (param < nparams) {
+        numeric[param] = arm64_scalar_ir_ref(T, arg, ref, IRT_INT) ||
+                         arm64_scalar_ir_ref(T, arg, ref, IRT_NUM);
+        if (args) args[param] = arg;
+      }
       count++;
     }
   }
   if (count != nargs || !arm64_scalar_ir_ref(T, fn, ref, IRT_FUNC)) return 0;
+  /* A leaf with only FP arithmetic has no child overflow snapshot. Prove
+  ** its argument uses here as well, including values overwritten by CSET. */
+  for (i = 1; i+1u < leaf->sizebc; i++) {
+    BCIns ins = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(leaf)[i]);
+    BCOp op = bc_op(ins);
+    MSize a = bc_a(ins), b = bc_b(ins), c = bc_c(ins);
+    if (op == BC_CGET || op == BC_MOV || op == BC_CSET) {
+      numeric[a] = numeric[bc_d(ins)];
+    } else if (op == BC_KNUM || op == BC_KSHORT) {
+      numeric[a] = 1;
+    } else {
+      if (!numeric[b] ||
+          (op >= BC_ADDVV && op <= BC_DIVVV && !numeric[c])) return 0;
+      numeric[a] = 1;
+    }
+  }
   if (fn == callee) return fn;
   for (r = REF_FIRST; r <= ref && r < T->nins; r++) {
     const IRIns *guard = &T->ir[r];
@@ -8077,11 +8106,11 @@ static int arm64_lua_leaf_ir_prefix(const GCtrace *T, const GCproto *pt,
     }
     if (op == BC_CGET || op == BC_MOV || op == BC_CSET) {
       value = slots[bc_d(ins)];
+      /* Exact visible TValue tags exclude internal cells, proving the raw
+      ** assignment path even when the previous value is nil or a GC value. */
       if (op == BC_CSET &&
-          ((!arm64_scalar_ir_ref(T, slots[a], limit, IRT_INT) &&
-            !arm64_scalar_ir_ref(T, slots[a], limit, IRT_NUM)) ||
-           (!arm64_scalar_ir_ref(T, value, limit, IRT_INT) &&
-            !arm64_scalar_ir_ref(T, value, limit, IRT_NUM)))) return 0;
+          (!arm64_cell_value_ir_ref(T, slots[a], limit) ||
+           !arm64_cell_value_ir_ref(T, value, limit))) return 0;
     } else if (op == BC_KSHORT) {
       value = arm64_lua_leaf_ir_literal(T, (int16_t)bc_d(ins), 0);
     } else if (op == BC_KNUM) {
@@ -8212,7 +8241,6 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
   fn = gco2func(ir_kgc_acq(&T->ir[callee]));
   if (!lj_trace_arm64_lua_leaf(fn)) return 0;
   pt = funcproto(fn);
-  if (bc_c(call) != (MSize)pt->numparams+1u) return 0;
   /* The nearest parent map must be this CALL in the same loop iteration.
   ** Its values have undergone the actual LOOP substitution, not an inferred
   ** inverse PHI mapping. Earlier identity guards may dominate both copies. */
@@ -9834,12 +9862,15 @@ static IRRef arm64_lua_leaf_postra_args(const LJArm64PostRAView *v,
   GCtrace *owner = (GCtrace *)v->owner;
   const SnapShot *snap = &v->snap[s];
   MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap), i, slot, pos;
-  MSize nargs, mapped = 0;
+  MSize nargs, nparams, mapped = 0;
+  uint8_t supplied[UINT8_MAX+1u] = {0};
+  IRType types[UINT8_MAX+1u];
   IRRef ref = snap_ref_acq(snap), fn = 0, r;
   IRIns constant;
   SnapEntry footer[2];
   uint64_t pcbase;
   const GCfunc *function;
+  const GCproto *leaf;
   BCIns call;
   if (!pt || !owner || proto_bc(pt) != v->proto_bc ||
       pt->sizebc != v->proto_sizebc || pt->framesize != v->root_topslot ||
@@ -9852,7 +9883,8 @@ static IRRef arm64_lua_leaf_postra_args(const LJArm64PostRAView *v,
   if (constant.o != IR_KGC) return 0;
   function = gco2func(ir_kgc_load_acq(&v->ir[callee]));
   if (!lj_trace_arm64_lua_leaf(function)) return 0;
-  nargs = funcproto(function)->numparams;
+  leaf = funcproto(function); nparams = leaf->numparams;
+  for (i = 0; i < UINT8_MAX+1u; i++) types[i] = IRT_NIL;
   footer[0] = snapentry_acq(&v->snapmap[ofs+nent]);
   footer[1] = snapentry_acq(&v->snapmap[ofs+nent+1u]);
   memcpy(&pcbase, footer, sizeof(pcbase));
@@ -9860,8 +9892,11 @@ static IRRef arm64_lua_leaf_postra_args(const LJArm64PostRAView *v,
       (uintptr_t)v->proto_bc, (uintptr_t)(v->proto_bc+v->proto_sizebc), &pos))
     return 0;
   call = (BCIns)la_load32_acq((const uint32_t *)&v->proto_bc[pos]);
-  if (bc_op(call) != BC_CALL || bc_b(call) != 2 || bc_c(call) != nargs+1u ||
-      bc_a(call)+nargs+1u+LJ_FR2 > v->root_topslot) return 0;
+  if (bc_op(call) != BC_CALL || bc_b(call) != 2 || !bc_c(call) ||
+      bc_a(call)+bc_c(call)+LJ_FR2 > v->root_topslot) return 0;
+  nargs = bc_c(call)-1u;
+  if (args)
+    for (i = 0; i < nparams; i++) args[i] = REF_NIL;
   slot = 1u+LJ_FR2+bc_a(call);
   for (i = 0; i < nent; i++) {
     SnapEntry sn = snapentry_acq(&v->snapmap[ofs+i]);
@@ -9871,14 +9906,38 @@ static IRRef arm64_lua_leaf_postra_args(const LJArm64PostRAView *v,
       fn = snap_ref(sn);
     } else if (at >= slot+1u+LJ_FR2 && at < slot+1u+LJ_FR2+nargs) {
       IRRef value = snap_ref(sn);
-      if ((sn & 0x00ff0000u) ||
-          (!arm64_scalar_postra_ref(v, value, ref, IRT_INT) &&
-           !arm64_scalar_postra_ref(v, value, ref, IRT_NUM))) return 0;
-      if (args) args[at-slot-1u-LJ_FR2] = value;
+      MSize formal = at-slot-1u-LJ_FR2;
+      if ((sn & 0x00ff0000u) || supplied[formal] ||
+          !arm64_cell_value_postra_ref(v, value, ref)) return 0;
+      supplied[formal] = 1;
+      if (formal < nparams) {
+        types[formal] = irt_type(ir_load_acq(&v->ir[value]).t);
+        if (args) args[formal] = value;
+      }
       mapped++;
     }
   }
   if (mapped != nargs || !arm64_scalar_postra_ref(v, fn, ref, IRT_FUNC)) return 0;
+  /* Independently propagate formal types through the complete bounded body;
+  ** not every numeric operation has an executable child snapshot. */
+  for (i = 1; i < leaf->sizebc-1u; i++) {
+    BCIns ins = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(leaf)[i]);
+    MSize dst = bc_a(ins), left = bc_b(ins), right = bc_c(ins);
+    switch (bc_op(ins)) {
+    case BC_CGET: case BC_CSET: case BC_MOV:
+      types[dst] = types[bc_d(ins)]; break;
+    case BC_KSHORT:
+      types[dst] = IRT_INT; break;
+    case BC_KNUM:
+      types[dst] = IRT_NUM; break;
+    default:
+      if (types[left] != IRT_INT && types[left] != IRT_NUM) return 0;
+      if (bc_op(ins) >= BC_ADDVV && bc_op(ins) <= BC_DIVVV &&
+          types[right] != IRT_INT && types[right] != IRT_NUM) return 0;
+      types[dst] = IRT_NUM;
+      break;
+    }
+  }
   if (fn == callee) return fn;
   for (r = REF_FIRST; r <= ref && r < v->nins; r++) {
     IRIns guard = ir_load_acq(&v->ir[r]);
@@ -10048,10 +10107,8 @@ static int arm64_lua_leaf_postra_prefix(const LJArm64PostRAView *v,
       out = values[bc_d(ins)];
       if (op == BC_CSET) {
         IRRef old = values[dst];
-        if ((!arm64_scalar_postra_ref(v, old, limit, IRT_NUM) &&
-             !arm64_scalar_postra_ref(v, old, limit, IRT_INT)) ||
-            (!arm64_scalar_postra_ref(v, out, limit, IRT_NUM) &&
-             !arm64_scalar_postra_ref(v, out, limit, IRT_INT))) return 0;
+        if (!arm64_cell_value_postra_ref(v, old, limit) ||
+            !arm64_cell_value_postra_ref(v, out, limit)) return 0;
       }
     } else if (op == BC_KSHORT) {
       out = arm64_lua_leaf_postra_literal(v, (int16_t)bc_d(ins), 0);
@@ -10175,7 +10232,6 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
   fn = gco2func(ir_kgc_load_acq(&v->ir[function]));
   if (!lj_trace_arm64_lua_leaf(fn)) return 0;
   pt = funcproto(fn);
-  if (bc_c(call) != (MSize)pt->numparams+1u) return 0;
   for (IRRef r = REF_FIRST; r < v->nins; r++) {
     if (ir_load_acq(&v->ir[r]).o == IR_LOOP) {
       loop = r; if (at < r) end = r; break;

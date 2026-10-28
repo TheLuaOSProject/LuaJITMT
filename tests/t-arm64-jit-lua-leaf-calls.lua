@@ -58,6 +58,8 @@ local positives = {
   {"addvv-local-number", "local bias=0.25; return x+bias"},
   {"child-argument-write", "x=x+3; return x*2",
     "local sum=0; for i=1,n do sum=sum+fn(i) end; return sum"},
+  {"extra-call-argument", "return x+0.25",
+    "local sum=.5; for i=1,n do sum=sum+fn(i+.5,0.25) end; return sum"},
 }
 
 local negatives = {
@@ -66,8 +68,6 @@ local negatives = {
   {"nested-call", "return inner(x)", simple_run,
     "local inner=function(y) return y+0.25 end\n"},
   {"vararg-callee", "return ...", simple_run, nil, true},
-  {"extra-call-argument", "return x+0.25",
-    "local sum=.5; for i=1,n do sum=sum+fn(i+.5,0.25) end; return sum"},
   {"multiple-results", "return x,x+0.5",
     "local sum=.5; for i=1,n do local a,b=fn(i+.5); sum=sum+a+b end; return sum"},
 }

@@ -11908,7 +11908,7 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
       BCReg from = bc_d(ins);
       if (from >= frame || !defined[from]) return 0;
       /* CSET examines the old destination tag before deciding between a raw
-      ** local and a closed cell. A preceding numeric definition is required;
+      ** local and a closed cell. A preceding definition is required;
       ** function entry does not clear unused stack slots. */
       if (op == BC_CSET && !defined[a]) return 0;
     } else if (op == BC_KSHORT) {
@@ -11972,8 +11972,7 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
   if (!trace_pc_in_proto_range(returnpc, proto_bc(rootpt), rootpt->sizebc) ||
       returnpc == proto_bc(rootpt)) return 0;
   call = (BCIns)la_load32_acq((const uint32_t *)(returnpc-1));
-  if (bc_op(call) != BC_CALL || bc_b(call) != 2 ||
-      bc_c(call) != (MSize)pt->numparams+1u ||
+  if (bc_op(call) != BC_CALL || bc_b(call) != 2 || !bc_c(call) ||
       (MSize)bc_a(call)+bc_c(call)+LJ_FR2 > rootpt->framesize) return 0;
   caller = frame_prevl(frame);
   if (!isluafunc(frame_func(caller)) || funcproto(frame_func(caller)) != rootpt)
@@ -11998,7 +11997,7 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
   if (pc == proto_bc(pt))
     return J->fn && isluafunc(J->fn) && funcproto(J->fn) == rootpt &&
            J->pt == rootpt && J->pc == returnpc-1 &&
-           J->maxslot == pt->numparams;
+           J->maxslot == bc_c(call)-1u;
   return J->fn == fn && J->pt == pt;
 }
 

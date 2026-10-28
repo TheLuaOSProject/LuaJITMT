@@ -18,6 +18,11 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
+- In progress: normalized fixed Lua arguments, including extra/missing
+  parameters and visible nonnumeric values. The focused assertion fixture
+  passes 70 shapes, 504 native invocations, 112 child exits and 70 identity
+  exits; the full frozen matrix is pending. See the
+  [normalization evidence](arm64-jit-lua-normalized-args-2026-10-28.md).
 - Latest fully validated source checkpoint: source-proven sparse Lua child
   snapshots at `2d335d1d`, integrated into `v2.1`. All four ARM64/arm64e
   assertion/release profiles pass six new shapes, 36 native runs, twelve child
