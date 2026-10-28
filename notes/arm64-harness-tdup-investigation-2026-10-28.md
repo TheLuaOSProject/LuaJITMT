@@ -61,3 +61,23 @@ also passed. No reproducer or runtime fix has been established.
 The immutable host and preserved allocator-stress trace are under
 `/Users/frityet/Scratch/ljmt-m7-hosttrace-20261028/`; the control-plane probe and
 its `-trace.log`/`-hot.log` results are in the original evidence directory.
+
+## Symbolization qualification
+
+The original crash report names image UUID
+`7DAA8AA3-C387-39CF-A110-C7B352529FA3`, with image base `0x100590000` and
+fault PC `0x1005e4354` (offset 344,916). The faulting instruction bytes and
+offset match the source-array acquire load in `lj_tab_dup` (`ldapr x15,[x13]`),
+and the reported source cursor is the fault address `0x100a30000`. However,
+the retained unstripped executable was relinked and has a different UUID.
+Its deeper symbolic stack labels must not be treated as authoritative frames
+from the crashed image. In particular, they do not establish a path through
+the symbolized GC drain/`ldexp` frames. The source-array-load attribution is
+supported by the matching instruction bytes; the cause remains unknown.
+
+A proposed stale array-generation explanation is conditional: table-array
+snapshot acquisition does not pin a generation, but these prototype template
+tables are intended to be immutable and rooted. No observation establishes
+concurrent mutation or retirement of the failing template. No runtime change
+was made from that hypothesis. A ten-million-iteration stress attempt was
+killed before completion and is not a passing result.

@@ -44,3 +44,15 @@ The complete experimental gate and combined M7 matrix were last run at
 intermittent JIT-enabled harness TDUP failure is still unresolved and has no
 runtime fix. Deeper live snapshot chains, general calls/returns, trace
 topology and FFI restrictions remain work toward the parity goal.
+
+## Defensive function-context follow-up
+
+`136685c99` adds an explicit `isluafunc()` precondition before the semantic
+and allocated captured-upvalue context readers use `funcproto()`. The nested
+fixture replaces the saved Lua function with a real C function and verifies
+rejection on all four profiles. A counterfactual run with those two new guards
+removed also rejected the malformed fixture earlier in admission, before the
+context readers were reached. Thus the guards establish a local defensive
+precondition; this experiment did not reproduce an admitted C-function crash.
+Logs are `cfunction-guard-four-profile.log` and
+`cfunction-context-counterfactual.log` in the checkpoint evidence directory.
