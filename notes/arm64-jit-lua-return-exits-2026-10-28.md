@@ -11,8 +11,9 @@ cell-store helper.
 
 The change is confined to ARM64 admission and tests. It adds no recorder,
 assembler, VM, GC2, FFI, locking or executable-memory write mechanism. General
-Lua call/return and x86_64 parity remain incomplete. Full frozen validation and
-main-checkout integration are pending at this source checkpoint.
+Lua call/return and x86_64 parity remain incomplete. Source checkpoint
+`2cfdc61bdb3fc5bf14bc0aebc6d357683a700171` passed the full frozen matrix and
+was fast-forwarded and pushed to `v2.1`. The independent main rebuild passed.
 
 ## Source and allocation proofs
 
@@ -109,14 +110,49 @@ Evidence is retained at:
 `/Users/frityet/Scratch/ljmt-lua-return-exits-20261028`.
 
 Nine separately rebuilt counterfactuals passed their expected-failure checks,
-targeting semantic/allocated caller-output
-binding, old-slot binding, the NOP-only child-map interval, acceptance of dead
-pure SSA results, and the allocated unselectable CALL map. Each failed for its intended malformed-clone or missing-publication reason.
-The production header was restored byte-for-byte and rebuilt; all seven
-C/Lua leaf contracts passed again. Full matrix results will be recorded after
-the frozen checkpoint completes. An older compound mutation that changes an
-arithmetic destination also verifies that a nonterminal prefix cannot lose
-the exact eventual return value.
+targeting semantic/allocated caller-output binding, old-slot binding, the
+NOP-only child-map interval, acceptance of dead pure SSA results, and the
+allocated unselectable CALL map. Each failed for its intended malformed-clone
+or missing-publication reason. The production header was restored byte-for-byte
+and rebuilt; all seven C/Lua leaf contracts passed again. An older compound
+mutation that changes an arithmetic destination also verifies that a
+nonterminal prefix cannot lose the exact eventual return value.
+
+The frozen source checkpoint passed:
+
+- the complete experimental JIT gate, including the seven Lua call contracts;
+- all 26 table/FFI fixtures in four profiles;
+- the combined M7 foreign-call suite in all four profiles;
+- the complete bootstrap gate, on its first run here;
+- both 509-case source/import corpora on ordinary ARM64 and signed x64;
+- ten ordinary ARM64 Lua contracts and the new return companion on x64;
+- signing, helper-symbol absence and lock-based atomic-runtime symbol checks.
+
+Each of the four leaf profiles independently reports the same new totals:
+80 cases, 320 native runs, 80 terminal exits, 240 reuses, 80 full-GC reuses,
+1,247 semantic negatives, 1,256 allocated negatives, eight aliases and one
+allocated guarded-loop-increment mutation. The ordinary companion reports
+39 publications, four overflow ranges and 86 reuses in each profile.
+
+| Leaf profile | Profile fingerprint prefix |
+| --- | --- |
+| ARM64 assertions | `d417ed41f97a` |
+| ARM64e/BTI assertions | `07afad53d969` |
+| ARM64 release | `4c973e7bfc3c` |
+| ARM64e/BTI release | `728865492c03` |
+
+The main checkout independently rebuilt the ordinary ARM64 assertion runtime
+and passed both 509-case corpora, all ten Lua contracts and signing/symbol
+checks. Its executable is byte-identical to the worktree's final ordinary
+runtime, SHA-256:
+
+`dfdbc4e4512efe54f620049281e23d30c057ab766f3ade1d32df8ed6af4cbf66`.
+
+`matrix.log`, `experimental.log`, `table-ffi-four-profile.log`, `bootstrap.log`,
+`counterfactuals.log` and `main-verify.log` retain the complete results. The
+bootstrap watcher reported status zero and zero stalls sampled; it did not
+change the fixture's deadline. No production source changed during the frozen
+matrix or the independent main verification.
 
 ## Remaining limits and retained observations
 
@@ -129,6 +165,12 @@ here.
 
 The earlier rooted-length native-witness failure after full GC and the prior
 callback auto-unwind bootstrap timeout remain unexplained. Their passing
-repetitions do not establish a fix. The bootstrap run will retain its normal
-deadline; an external watcher only captures stacks if that callback fixture
-stalls for more than five seconds.
+repetitions do not establish a fix. The successful bootstrap run retained its normal deadline. Its external
+watcher would capture stacks after a five-second callback stall; none occurred
+in this run.
+
+A source-only follow-up audit identifies primitive KPRI literals inside the
+bounded leaf body as a small next boundary: source recognition, independent
+type propagation, both prefix replays and both liveness walks currently omit
+that bytecode. This is a candidate for subsequent work, not an implemented or
+validated capability in this checkpoint.

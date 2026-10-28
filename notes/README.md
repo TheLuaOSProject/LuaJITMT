@@ -18,7 +18,17 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
-- Latest source checkpoint: normalized fixed Lua arguments at `31e865c0`,
+- Latest source checkpoint: terminal Lua leaf return snapshots at `2cfdc61b`,
+  integrated into `v2.1`. Four ARM64/arm64e assertion/release profiles each
+  pass 80 cases, 320 native invocations, 80 terminal exits, 1,247 semantic and
+  1,256 allocated negatives. Nine counterfactuals fail as intended. The full
+  experimental/bootstrap gates, all 26 table/FFI fixtures and four combined
+  M7 FFI profiles pass. ARM64 and signed x64 each pass both 509-case corpora.
+  Main independently passes both corpora and ten ordinary Lua contracts;
+  its executable matches the worktree's. The earlier rooted-length witness
+  and callback timeout remain unexplained; neither is claimed fixed. See the
+  [terminal return evidence](arm64-jit-lua-return-exits-2026-10-28.md).
+- Preceding source checkpoint: normalized fixed Lua arguments at `31e865c0`,
   integrated into `v2.1`. Four ARM64/arm64e assertion/release profiles each
   pass 70 shapes, 504 native invocations, 112 child exits, 70 identity exits,
   1,466 semantic and 1,494 allocated negatives. Eight counterfactuals fail as
