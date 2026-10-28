@@ -211,6 +211,38 @@ local function main()
     name='numeric-mul-overflow', params='a', body='return a*3', args='i',
     payload=nil, initial=nil,
     ranges={{715827882,715827883},{715827881,715827883}}}
+  cases[#cases+1] = {
+    name='comparison-branch', params='a',
+    body='local value=7; if a < 0 then value=1 else value=2 end; return value',
+    args='i', payload=nil, initial=nil, ranges={{-4,4}}}
+  cases[#cases+1] = {
+    name='comparison-le', params='a',
+    body='local value=7; if a <= 0 then value=1 else value=2 end; return value',
+    args='i', payload=nil, initial=nil, ranges={{-4,4}}}
+  cases[#cases+1] = {
+    name='comparison-gt', params='a',
+    body='local value=7; if a > 0 then value=1 else value=2 end; return value',
+    args='i', payload=nil, initial=nil, ranges={{-4,4}}}
+  cases[#cases+1] = {
+    name='comparison-ge', params='a',
+    body='local value=7; if a >= 0 then value=1 else value=2 end; return value',
+    args='i', payload=nil, initial=nil, ranges={{-4,4}}}
+  cases[#cases+1] = {
+    name='comparison-reversed', params='a',
+    body='local value=7; if 0 > a then value=1 else value=2 end; return value',
+    args='i', payload=nil, initial=nil, ranges={{-4,4}}}
+  cases[#cases+1] = {
+    name='comparison-positive-zero', params='a',
+    body='local value=7; if a < 0.0 then value=1 else value=2 end; return value',
+    args='i', payload=nil, initial=nil, ranges={{-4,4}}}
+  cases[#cases+1] = {
+    name='comparison-negative-zero', params='a,b',
+    body='local value=7; if a < b then value=1 else value=2 end; return value',
+    args='i,payload', payload=-0.0, initial=nil, ranges={{-4,4}}}
+  cases[#cases+1] = {
+    name='comparison-nan', params='a,b',
+    body='local value=7; if a < b then value=1 else value=2 end; return value',
+    args='i,payload', payload=0/0, initial=nil, ranges={{-4,4}}}
 
   local publications,ranges,reuses,cold = 0,0,0,0
   for _,shape in ipairs(cases) do
@@ -227,7 +259,7 @@ local function main()
   assert(stop:send(true,5),'MT peer stop send failed')
   local joined,result = peer:join(5)
   assert(joined and result,'MT peer did not join cleanly')
-  assert(publications == #cases and #cases == 43 and ranges == 4 and
+  assert(publications == #cases and #cases == 51 and ranges == 12 and
          reuses == #cases*2+2*ranges)
   io.write(string.format(
     'lua-return ordinary OK: publications=%d numeric_ranges=%d same_trace_reuses=%d cold_calls=%d; publication only, no native-execution claim\n',
