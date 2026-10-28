@@ -190,6 +190,8 @@ LJ_FUNC int lj_asm_arm64_side_prehead_admit(
 LJ_FUNC int lj_asm_arm64_side_postra_admit(
 	const LJArm64SidePostRAView *view, IRRef *semantic_ninsp);
 #ifdef LJ_TRACE_TEST_HELPERS
+LJ_FUNC int lj_asm_arm64_test_scalar_math_live_across(
+	const LJArm64PostRAView *view, IRRef semantic_nins, IRRef loop, IRRef call);
 LJ_FUNC void lj_asm_arm64_test_force_exitstub_mcode_retry(uint32_t count);
 #ifdef LJ_ARM64_SIDE_ASM_TEST
 enum {
