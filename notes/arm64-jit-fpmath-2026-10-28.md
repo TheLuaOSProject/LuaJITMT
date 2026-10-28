@@ -47,5 +47,7 @@ traces and match the interpreter with NaN-aware comparison; the negative and
 infinity loop shapes can exit/re-enter repeatedly, so this is a semantic
 boundary witness, not an exit-free performance claim.
 
-This note describes an isolated implementation proposal, not full ARM64 LuaJIT
-parity or lockless-VM completion.
+This slice is now integrated and passes the combined experimental gate and
+ordinary ARM64/x64 conformance matrix; see the
+[integrated checkpoint](arm64-parity-checkpoint-2026-10-28.md). It does not
+establish full ARM64 LuaJIT parity or lockless-VM completion.
