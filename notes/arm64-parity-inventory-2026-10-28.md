@@ -100,3 +100,10 @@ multiple results remain the sampled differences. Iterator and I64 remain
 inconclusive on both architectures. Main has not been updated to this source;
 the [checkpoint](arm64-math-dynamic-early-checkpoint-2026-10-28.md) records
 validation and the unresolved harness crash separately.
+
+At `f040711ab`, both architectures still pass all 260 comparisons. Captured
+nested calls add an ARM64 selected-root witness, giving sixteen of twenty
+rows versus eighteen on x64. Lua varargs and multiple results remain the
+sampled differences. The [captured-call checkpoint](arm64-captured-nested-checkpoint-2026-10-28.md)
+separates the focused four-profile contracts and stock corpus results from
+the earlier complete gate and unresolved TDUP failure.
