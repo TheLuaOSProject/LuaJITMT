@@ -41,6 +41,16 @@ recorder remains responsible for selecting the expression's operation; native
 interpreter-oracle tests check the actual recorded results. No general source
 equivalence or full math/JIT parity claim is made.
 
+A follow-up admits NUM FPMATH and unary CALLN results as loop-carried values.
+Both certificates accept only the existing `IRT_ISPHI` annotation and still
+independently require exact agreement between that annotation and the actual
+PHI operands. Twelve repeated-call workloads (`x = op(x)`) now execute natively,
+including NaN-producing domains and overflow to infinity. Both certificates
+reject toggled PHI annotations. The final four-profile C/Lua run is
+`carried-four-profile.log` in the evidence directory above. The ordinary
+companion additionally compares repeated calls over its entire edge-value
+matrix; this is result evidence, not a claim that every edge trace compiles.
+
 A separate FFI-disabled build exposed existing ARM64 conditional-include and
 `ctype_ctsG` call-site omissions. The first diagnostic is retained in
 `/Users/frityet/Scratch/ljmt-math-helpers-20261028/noffi.log`. A follow-up makes

@@ -7193,7 +7193,7 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
     return 0;
   ir = &T->ir[value];
   if (ir->o == IR_CALLN)
-    return type == IRT_NUM && ir->t.irt == IRT_NUM &&
+    return type == IRT_NUM && (ir->t.irt & ~IRT_ISPHI) == IRT_NUM &&
            arm64_scalar_math_call(ir->op2);
   /* XLOAD U8 is zero-extended by LDRB and is safe as a Lua INT operand. */
   if (type == IRT_INT && irt_type(ir->t) == IRT_U8 && ir->o == IR_XLOAD)
@@ -9547,7 +9547,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       binary = 1;
       break;
     case IR_FPMATH:
-      if (type != IRT_NUM || flags ||
+      if (type != IRT_NUM || (flags & ~IRT_ISPHI) ||
           !arm64_scalar_fpmath(ir->op2) ||
           !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_NUM))
         goto bad_operand;
@@ -9682,7 +9682,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       binary = 1;
       break;
     case IR_CALLN:
-      if (side || type != IRT_NUM || flags ||
+      if (side || type != IRT_NUM || (flags & ~IRT_ISPHI) ||
           !arm64_scalar_math_call(ir->op2) ||
           !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_NUM))
         return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL, ref,
@@ -9994,9 +9994,9 @@ static int arm64_scalar_postra_value(IRIns p)
              irt_type(p.t) == IRT_LIGHTUD) &&
             (p.t.irt & ~IRT_ISPHI) == (irt_type(p.t)|IRT_GUARD));
   case IR_FPMATH:
-    return p.t.irt == IRT_NUM && arm64_scalar_fpmath(p.op2);
+    return (p.t.irt & ~IRT_ISPHI) == IRT_NUM && arm64_scalar_fpmath(p.op2);
   case IR_CALLN:
-    return p.t.irt == IRT_NUM && arm64_scalar_math_call(p.op2);
+    return (p.t.irt & ~IRT_ISPHI) == IRT_NUM && arm64_scalar_math_call(p.op2);
   case IR_TNEW:
     return (p.t.irt & ~IRT_ISPHI) == (IRT_TAB|IRT_GUARD);
   case IR_TMPREF:
@@ -12297,13 +12297,13 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       binary = 1;
       break;
     case IR_FPMATH:
-      if (p.t.irt != IRT_NUM ||
+      if ((p.t.irt & ~IRT_ISPHI) != IRT_NUM ||
           !arm64_scalar_fpmath(p.op2) ||
           !arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM))
         return 0;
       break;
     case IR_CALLN:
-      if (side || p.t.irt != IRT_NUM ||
+      if (side || (p.t.irt & ~IRT_ISPHI) != IRT_NUM ||
           !arm64_scalar_math_call(p.op2) ||
           !arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM))
         return 0;

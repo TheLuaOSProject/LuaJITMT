@@ -182,6 +182,12 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
     assert(!lj_asm_arm64_postra_admit(&v, NULL));
     copy[mathcall] = saved;
   }
+  if (mathcall || fpmath) {
+    IRRef value = mathcall ? mathcall : fpmath;
+    copy[value].t.irt ^= IRT_ISPHI;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[value] = T->ir[value];
+  }
   if (mathcall || (fpmath && copy[fpmath].op2 >= IRFPM_LOG)) {
     IRRef call, value;
     unsigned clobbers = 0;
@@ -461,6 +467,12 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
       copy[mathcall].t.irt |= IRT_GUARD;
       assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
       copy[mathcall] = saved;
+    }
+    if (mathcall || fpmath) {
+      IRRef value = mathcall ? mathcall : fpmath;
+      copy[value].t.irt ^= IRT_ISPHI;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[value] = T->ir[value];
     }
     if (math_builtin && mathguard) {
       const char *wrong = "random";
