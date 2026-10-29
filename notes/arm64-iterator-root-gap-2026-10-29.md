@@ -53,3 +53,34 @@ dump for the scalar iterator. The dump is diagnostic only because its TRACE
 observer changes tracing conditions. Runtime/archive/module bundles are the
 immutable `ordinary-fixed/` bundles in
 `/Users/frityet/Scratch/ljmt-funcf-siblings-hfa-integration-20261029/`.
+
+## Recorder-layout diagnostic
+
+An isolated recording-only diagnostic at source `6971c0f16` captured the actual
+ARM64 iterator maps after the ordinary optimizer. It temporarily allowed the
+known iterator source/frame through recording, then unconditionally raised an
+error at the ASM boundary for every ITERL trace. It never assembled, published
+or entered that root. The diagnostic changes were preserved as a patch and
+removed from source immediately after the run. They are not admission proof.
+Evidence is `/Users/frityet/Scratch/ljmt-iterator-record-map-20261029/`, including
+source copies, runtime/archive, source ID, patch, probe and `diagnostic.log`.
+
+For the scalar iterator source above, ITERC is PC15, ITERL PC16, setup JMP PC5
+and body PC6. With root base slot 2 and ITERC A=5, the original hidden triple
+is slots 4/5/6, the copied function/result slot is 7, frame link is 8, and
+child parameters are 9/10. The identity-guard snapshot at PC15 contains the
+updated sum and copied function slot 7, while state/control arguments remain
+implicit inherited loads from original slots 5/6. The control load becomes
+an explicit updated map entry after unrolling. A CALL-style proof requiring
+all copied argument slots in that parent snapshot would reject this legal
+layout, and merely dropping the requirement would lose source binding.
+
+Unlike the sampled x64 numeric trace, this ARM64 run specializes the key as
+an integer. The iterator's `k+1` becomes ADDOV, creating child-frame snapshots
+with base 7 and exact source RET/ADD continuation. The visible result and
+hidden control subsequently alias that ADDOV result in slots 7 and 6. Thus
+the first implementation needs both implicit-triple reconstruction at ITERC
+and the ordinary leaf arithmetic overflow/frame proof; a scalar result type
+alone is insufficient. Parent identity, copied argument geometry, source
+ITERC/ITERL/setup-JMP generation, allocated replay and VM entry after the
+key-to-control copy must all be checked before native publication opens.
