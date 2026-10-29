@@ -9,6 +9,9 @@ local threading = require("threading")
 
 assert(jit.status())
 jit.off(true, true)
+local maxphase=tonumber(arg[1] or "4")
+assert(maxphase and maxphase>=1 and maxphase<=4,
+       "pass maximum warmup phase 1 through 4")
 local source = [[return function(a,b,c,d,n)
   local s=.5
   for i=1,n do
@@ -144,6 +147,7 @@ assert(select(2,ready:recv(5)),"MT peer did not start")
 local phases={ {1,1,1,1}, {2,1,1,1}, {2,2,1,1}, {2,2,2,1} }
 local root,ids,mcode
 for phase,args in ipairs(phases) do
+  if phase>maxphase then break end
   for _=1,100 do
     local got=candidate(args[1],args[2],args[3],args[4],48)
     local want=oracle(args[1],args[2],args[3],args[4],48)
@@ -189,6 +193,7 @@ for phase,args in ipairs(phases) do
     phase,jit.arch,csv(args),csv(ids),csv(chain),describe(rows,ids,mcode),warm_exits,postgc_exits))
   exits={}
 end
+assert(#ids==maxphase, "requested trace depth was not published")
 
 -- Reenter the deepest observed trace after GC on its selected source path.
 collectgarbage("collect")
@@ -197,7 +202,8 @@ local timed_cases={
   {"nested",2,2,1,1}, {"depth3",2,2,2,1}
 }
 jit.opt.start("hotexit=1000000")
-for _,case in ipairs(timed_cases) do
+for i=1,maxphase do
+  local case=timed_cases[i]
   local result
   for _=1,16 do result=candidate(case[2],case[3],case[4],case[5],48) end
   local start=os.clock()

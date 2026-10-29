@@ -5423,7 +5423,7 @@ static int trace_arm64_first_side_loop_generation_valid(
 ** selected map and exit edge belong to the immediate side parent. */
 static int trace_arm64_nested_side_view_acq(jit_State *J, TraceNo parentno,
     ExitNo exitno, const BCIns *continuation,
-	TraceArm64FirstSideLoopView *v)
+    TraceArm64FirstSideLoopView *v)
 {
   TraceVec *tv;
   GCtrace *parent, *root;
@@ -5456,9 +5456,8 @@ static int trace_arm64_nested_side_view_acq(jit_State *J, TraceNo parentno,
       !trace_arm64_side_certificate_valid_held(J, parent) ||
       !trace_arm64_side_graph_direct_ancestor(J, root, rootno,
         trace_nextside_acq(root), trace_nchild_acq(root), parentno,
-        &directno, &rootexit)) {
+        &directno, &rootexit))
     return 0;
-  }
   if (!trace_arm64_first_side_view_acq_mode(
         J, rootno, rootexit, &rootview, 1) ||
       rootview.parent != root || rootview.root_generation == 0) {
@@ -5548,12 +5547,10 @@ static int trace_arm64_nested_side_view_acq(jit_State *J, TraceNo parentno,
     trace_arm64_first_side_pointer_bits(v->exittarget_raw);
   v->fallback_encoding_bits =
     trace_arm64_first_side_pointer_bits(v->fallback_encoding);
-	/* A nested side is published only onto an unused parent exit. The root
-	** allocation list is separately checked below through rootview. */
-	if (v->exittarget_bits != v->fallback_encoding_bits)
-	{
-	  return 0;
-	}
+  /* A nested side is published only onto an unused parent exit. The root
+  ** allocation list is separately checked below through rootview. */
+  if (v->exittarget_bits != v->fallback_encoding_bits)
+    return 0;
   selected = &v->snap[exitno];
   v->mapofs = snap_mapofs_acq(selected);
   v->snapref = snap_ref_acq(selected);
@@ -5802,15 +5799,11 @@ static int trace_arm64_first_side_loop_generation_valid(
 	if (!trace_arm64_root_loop_interval(pt, v->startpc, v->startins,
 	      &header, &start, &end) ||
 	    !trace_pc_in_proto_range(continuation, bc, pt->sizebc))
-	{
 	  return 0;
-	}
 	pos = proto_bcpos(pt, v->startpc);
 	if (proto_bcpos(pt, continuation) < start ||
 	    proto_bcpos(pt, continuation) >= end)
-	{
 	  return 0;
-	}
 	expected = BCINS_AD(BC_JFORL, bc_a(v->startins), parent);
 	live1 = (BCIns)la_load32_acq((const uint32_t *)v->startpc);
 	fori1 = (BCIns)la_load32_acq((const uint32_t *)&bc[header]);
@@ -5820,9 +5813,7 @@ static int trace_arm64_first_side_loop_generation_valid(
 	    bc_op(fori1) != BC_FORI || bc_a(fori1) != bc_a(v->startins) ||
 	    bc_j(fori1) <= 0 ||
 	    (int64_t)header+1+(int64_t)bc_j(fori1) != (int64_t)pos+1)
-	{
 	  return 0;
-	}
 	live2 = (BCIns)la_load32_acq((const uint32_t *)v->startpc);
 	fori2 = (BCIns)la_load32_acq((const uint32_t *)&bc[header]);
 	shadow2 = proto_jit_startins_acq(pt, v->startpc);
@@ -13094,7 +13085,6 @@ uint32_t lj_trace_flushscope_retire_hs(global_State *g, uint64_t epoch)
   TraceNo i;
   uint32_t retired = 0;
   MSize sizetrace = trace_sizetrace_acq(J);
-#if LJ_TARGET_ARM64
   /* This is the post-boundary token-owner half of scoped retirement. Generic
   ** EXIT_TRACES leaders only quiesce native users and abort recording: they may
   ** be unrelated GC workers and must never mutate trace slots on behalf of the
@@ -13104,6 +13094,7 @@ uint32_t lj_trace_flushscope_retire_hs(global_State *g, uint64_t epoch)
   if (!lj_jit_token_held(J))
     return 0;
   lj_gc2_smr_read_enter(g);
+#if LJ_TARGET_ARM64
 	for (i = 1; i < sizetrace; i++) {
 	  GCtrace *root = traceref_safe(J, i);
 	  TraceNo side_no;

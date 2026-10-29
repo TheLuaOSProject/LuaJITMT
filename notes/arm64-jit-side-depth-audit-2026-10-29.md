@@ -51,16 +51,28 @@ ARM64 scalar side adaptation: PASS
 arm64_jit_side_ir_admission_contract OK
 ```
 
-The no-observer timing probe was run three times per revision on the same
-host with matching optimized ARM64 assertion/helper builds and 2,000 calls per
-phase. Root/direct/nested medians at `22d54430f` were 4.557, 4.775, and 4.644
-microseconds per call. At `570d5b942` they were 5.525, 5.669, and 5.668; at
-the current checkpoint they were 5.528, 5.743, and 5.861. Thus the current
-ancestry changes add about 0%, 1%, and 3% over `570d5b942` in this sample.
-The larger 20–26% gap against `22d54430f` spans other parity/runtime changes
-since that baseline and cannot be attributed to this ancestry work. The
-baseline has no depth-3 native path; its depth-3 phase ran interpreted and is
-not comparable. These noisy samples are not a general performance guarantee.
+Timing was rechecked with the same optimized ARM64 assertion/helper build and
+the same runtime source at the base `8e66fc0f5` and current ancestry checkpoint.
+The probe now accepts a maximum warmup phase and asserts the exact published
+chain depth before timing, so both revisions measure the same graph. At phase
+2 (root plus one side), three-run medians for root/direct were 4.080/4.280
+microseconds per call at the base and 4.076/4.311 at the current checkpoint.
+At phase 3 (root plus two side levels), root/direct/nested medians were
+4.563/4.795/4.662 at the base and 4.494/4.750/4.916 at the current
+checkpoint. This puts root and direct within about 1%; nested is about 5%
+slower in this small sample. The deeper phase is measured separately and is
+not compared to a revision that cannot publish that chain. An earlier
+comparison accidentally timed the base at depth two and the final revision at
+depth three; its apparent ~20% root/direct regression was a topology mismatch
+and should be disregarded. All these short measurements are noisy, not a
+general performance guarantee.
+
+The ancestry index and its whole-struct zeroing are only used by side capture,
+admission, publication, and retirement helpers. The fixed 64-row ancestry
+array enlarges `LJArm64SideParentSnapshot` locals on those cold recording and
+assembler paths; it is not allocated or cleared in generated loop execution.
+The ordinary root/direct/nested timing comparison above exercises that emitted
+code path without a measurable root/direct regression in this sample.
 
 Retirement now validates each root-owned side list and walks newest-first.
 Publication prepends each child, so this is descendant-before-ancestor order.
@@ -122,6 +134,14 @@ Validation after the live-cap tests:
 * All builds used AppleClang `-Wall -Wextra -Werror`; only existing unused
   parameter and unused-but-set warnings were suppressed. Full aggregate
   integration remains for the integrating branch.
+
+An x86_64 strict-assert regression also covers the shared scoped-retirement
+reader lease. The test calls `lj_trace_flushscope_retire_hs` while holding the
+recorder token and checks that the SMR reader count returns to its starting
+value. The pre-fix x86_64 binary fails with `lj_gc2_smr_read_leave: gc2 SMR
+reader underflow` (exit 134); the corrected x86_64 and ARM64 binaries both pass.
+The fix keeps the common token-owner check and `lj_gc2_smr_read_enter` before
+the ARM-only retirement walk, matching the unconditional common reader leave.
 
 The source keeps a bounded iterative ancestry walk, no allocation or new lock,
 and a root-owned flattened list. The indexed path rejects malformed chains,
