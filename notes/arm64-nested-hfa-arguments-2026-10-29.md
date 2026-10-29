@@ -1,51 +1,55 @@
-# Nested homogeneous float aggregate CALLXS arguments
+# Nested and array HFA CALLXS arguments
 
-This checkpoint adds bounded Darwin ARM64 HFA arguments made from named
-struct members. Recursive CType traversal uses stable snapshots, tracks active
-type IDs and a depth bound, verifies exact field offsets and aggregate extents,
-and preserves the outer by-value CType identity. The independent semantic and
-post-RA passes validate raw XLOAD offsets, source snapshots, CALLXS mapping and
-physical FPR carriers in their own walks. A named sibling-plus-nested float
-triple now has a live native CALLXS/exit/full-GC-reentry fixture; a named nested
-double quad and 31/32-level depth boundary are classifier fixtures. The nested
-result classifier is tested with both a NULL and non-NULL output descriptor.
+The bounded Darwin ARM64 HFA argument classifier now recursively accepts named
+struct members and fixed-size homogeneous float/double arrays, up to four scalar
+leaves. CType traversal uses stable snapshots, tracks active type IDs and a
+recursion bound, checks each field and element extent/alignment, and preserves
+the outer by-value CType identity. Arrays can nest through structs and
+multidimensional arrays. Anonymous `CTA_SUBTYPE` members remain closed.
 
-Arrays and anonymous `CTA_SUBTYPE` members remain closed. Nested HFA results
-remain closed; the result classifier explicitly rejects nested shapes even
-when its caller omits the output descriptor. Unions, references, VLA/vector
-members, mixed scalar leaves, padding and over-aligned nested wrappers fail
-classification.
+Arrays set the shape's nested marker. The HFA result classifier therefore
+continues to reject nested and array result channels even when called with a
+NULL output descriptor. The gate also rejects VLA, vector, complex, reference,
+union, over-aligned, padded, mixed-leaf, and more-than-four-leaf shapes.
 
-The native pair fixture uses `struct { struct { float lo, hi; } inner; }`; the
-triple fixture uses a sibling scalar plus a named two-float nested member. Both
-check weighted C results against JIT-disabled oracles with a live threading
-peer. The pair case observes selected-root exits, full-GC re-entry and an
-alternate callee exit. The triple case independently observes native entry and
-exit, full-GC re-entry, and semantic/post-RA source and per-member-offset
-corruptions. Signature boundaries cover five leaves, a non-float extra member,
-31 versus 32 nested levels, nested results, unions, over-aligned nested members
-and arrays.
+The native fixture covers both the actual nested-array gap shape
+`struct { struct { float lane[2]; } inner; }` and a sibling-plus-nested named
+float triple. They compare weighted C results with independently JIT-disabled
+oracles while a threading peer remains live. The tests require selected-root
+native entry/exit, full-GC re-entry, and exact effect counts. The array trace is
+also independently corrupted in semantic and post-RA views by changing each
+lane's stride/offset, duplicating a lane, omitting a lane, and changing the
+source snapshot. Classifier cases cover one, two, and four float leaves, four
+double leaves, a fifth-leaf rejection, depth 31/32, over-alignment, complex and
+VLA arrays, anonymous subtype rejection, and nested-result NULL/non-NULL
+descriptor rejection.
 
-Scope correction: the earlier x86_64 witness that motivated this work uses a
-nested float array. Arrays remain explicitly rejected here, so that original
-x64-vs-ARM64 parity gap is still open. The new native triple has named members
-and is a representative extension, not evidence that the array case is closed.
+## Ordinary gap probe
 
-## Validation
+The original saved cross-architecture probe and universal `gap.dylib` were
+rerun. The ARM64 run used the ordinary assertion runtime from this branch, with
+matching `src` Lua modules and no test-helper symbols. The x86_64 run used the
+frozen b1d19 ordinary runtime and its matching module bundle. Both used the
+same probe source and universal C library. Their `nested-sse-arg` row reports
+`roots=1:2`, `selected-exits=25`, and `effects=2752`; all 11 workloads complete
+25 oracle rounds, full-GC reuse, and exact C effect checks.
+
+Evidence, logs, hashes and copied probe source are under
+`/Users/frityet/Scratch/ljmt-hfa-array-ordinary-20261029/`. The saved universal
+library and original probe came from
+`/Users/frityet/Scratch/ljmt-ffi-gap-audit-20261029/`; the frozen x86_64
+runtime is under
+`/Users/frityet/Scratch/ljmt-hfa-multilane-integrated-20261029/ordinary/x86_64`.
+This closes the specific nested float-array argument gap from the earlier
+ordinary audit. Other aggregate classes and HFA result channels remain outside
+this change.
 
 The focused `arm64-assert` run of
-`tools/ci/arm64_jit_integer_aggregate_args_contract.sh` passed after these
-fixtures were added. The integrated four-profile matrix subsequently passed at `bcc552b45`,
-including the ordinary named-pair peer probe in every profile; see
-`arm64-nested-hfa-integration-2026-10-29.md`. The prior nested-HFA four-profile log is
-`/Users/frityet/Scratch/ljmt-nested-hfa-20261029/four-profile.log`.
-The tested worktree was `/Users/frityet/.codex/worktrees/arm64-math/LuaJITMT`.
+`tools/ci/arm64_jit_integer_aggregate_args_contract.sh` passed with the nested
+float triple, array, classifier boundaries, and semantic/post-RA mutations.
+The root will run the four-profile matrix before integration.
 
-The separate ordinary-runtime x86_64 witness that selected this slice remains
-the b1d19 baseline recorded in
-`notes/arm64-ffi-aggregate-next-gap-audit-2026-10-29.md`: nested two-float
-argument, one selected root, two CALLXS nodes, 25 selected-root exits and 2,752
-C effects; ARM64 had no selected-root witness there. The production change is
-ARM64-only. The current four-profile result validates this implementation's
-ARM64 recorder, assembler admission, native entry, exits and GC reuse; it is
-not a refreshed ordinary x86_64 corpus run.
+The preceding named-member checkpoint passed the integrated four-profile
+matrix at `bcc552b45` and was promoted at `8d164b856`, including an ordinary
+named-pair peer probe in every profile. See
+`arm64-nested-hfa-integration-2026-10-29.md` for that prior evidence.

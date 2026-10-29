@@ -10,6 +10,8 @@
 typedef struct { uint32_t lo, hi; } arm64_int_pair;
 typedef struct { float lo, hi; } arm64_float_pair;
 typedef struct { arm64_float_pair inner; } arm64_nested_float_pair;
+typedef struct { float lane[2]; } arm64_float_array_pair;
+typedef struct { arm64_float_array_pair inner; } arm64_nested_array_float_pair;
 typedef struct { float mid, tail; } arm64_float_pair_tail;
 typedef struct { float head; arm64_float_pair_tail nested; } arm64_sibling_nested_float_triple;
 typedef struct { double lo, hi; } arm64_double_pair;
@@ -106,6 +108,7 @@ enum {
   ARM64_NESTED_FLOAT_PAIR_ALT,
   ARM64_SIBLING_NESTED_FLOAT_TRIPLE,
   ARM64_NESTED_DOUBLE_QUAD,
+  ARM64_NESTED_ARRAY_FLOAT_PAIR,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -215,6 +218,14 @@ LJ_EXPORT double arm64_take_nested_double_quad(arm64_nested_double_quad value,
   calls[ARM64_NESTED_DOUBLE_QUAD]++;
   return value.left.lo + value.left.hi*2.0 +
          value.right.lo*3.0 + value.right.hi*4.0 + salt;
+}
+
+LJ_EXPORT double arm64_take_nested_array_float_pair(
+    arm64_nested_array_float_pair value, double salt)
+{
+  calls[ARM64_NESTED_ARRAY_FLOAT_PAIR]++;
+  return (double)value.inner.lane[0] +
+         (double)value.inner.lane[1]*2.0 + salt;
 }
 
 LJ_EXPORT double arm64_take_float_one_double_salt(arm64_float_one value,
