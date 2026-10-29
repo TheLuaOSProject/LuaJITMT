@@ -188,15 +188,25 @@ for phase,args in ipairs(phases) do
   io.write(string.format("phase=%d arch=%s inputs=%s ids=%s chain=%s traces={%s} warm_exits=%s postgc_exits=%s\n",
     phase,jit.arch,csv(args),csv(ids),csv(chain),describe(rows,ids,mcode),warm_exits,postgc_exits))
   exits={}
-  if phase==#phases and #ids==4 then
-    -- Stop recording new exits after the exact three-level graph exists;
-    -- continue exercising its cold edge without changing admission.
-    jit.opt.start("hotexit=1000")
-  end
 end
 
 -- Reenter the deepest observed trace after GC on its selected source path.
 collectgarbage("collect")
+local timed_cases={
+  {"root",1,1,1,1}, {"direct",2,1,1,1},
+  {"nested",2,2,1,1}, {"depth3",2,2,2,1}
+}
+jit.opt.start("hotexit=1000000")
+for _,case in ipairs(timed_cases) do
+  local result
+  for _=1,16 do result=candidate(case[2],case[3],case[4],case[5],48) end
+  local start=os.clock()
+  for _=1,2000 do result=candidate(case[2],case[3],case[4],case[5],48) end
+  local elapsed=os.clock()-start
+  assert(result==oracle(case[2],case[3],case[4],case[5],48),"timed result mismatch")
+  io.write(string.format("timing=%s arch=%s calls=2000 seconds_per_call=%.9f\n",
+    case[1],jit.arch,elapsed/2000))
+end
 for _=1,32 do assert(candidate(2,2,2,2,48)==oracle(2,2,2,2,48)) end
 local rows=traces()
 assert(candidate_rootid()==root and mcode_address(root)==mcode[root])

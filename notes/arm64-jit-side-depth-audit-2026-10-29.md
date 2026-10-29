@@ -119,3 +119,39 @@ wrong ancestor generation, wrong parent exit, duplicate/cycle, missing list
 member, stale mcode identity, and retirement of an ancestor with live
 descendants. Repeat the ordinary peer/GC/native-edge witness before claiming
 parity beyond this sampled depth.
+
+## Isolated implementation checkpoint (not validated for deeper native parity)
+
+An isolated implementation is in progress on branch `codex/arm64-side-ancestry`,
+based on `8e66fc0f5` plus audit commit `b033592bc`. The current source adds a
+bounded 64-entry root-list index for deep ancestry. It captures exact list
+members and generations, follows each sealed `IR_BASE` parent chain iteratively,
+rejects cycles/duplicate members, and requires every parent to occur after its
+newly prepended descendant in list order. A shallow-wide fallback keeps direct
+root children beyond 64 entries eligible. At a full 64-entry list, publication
+checks the current maximum depth and refuses further extension if the list is
+deep; the explicit 64-to-65 regression fixture has not yet been added.
+
+The source builds with AppleClang ARM64, `LUA_USE_ASSERT`, experimental JIT,
+and `LJ_TRACE_TEST_HELPERS`. The ordinary probe still produces only
+root→side→nested-side; it does not yet demonstrate a third side level. Its
+latest no-observer results are in the terminal transcript for this checkpoint;
+the matched x64 witness remains the earlier `x64-final.log`. A temporary Lua
+trace observer was tried and discarded because it changed recorder behavior.
+
+A focused C diagnostic found the current blocker: semantic/post-RA helper
+`arm64_side_immediate_parent_valid()` still requires the copied parent's
+`IR_BASE` to name the canonical root. For the third-level candidate (trace 4,
+immediate parent 3, root 1), topology and copied snapshot checks pass, while
+that direct-parent condition rejects. The fix must carry and independently
+validate the exact immediate-parent ancestry/generation in both semantic and
+post-RA views; simply removing the root-direct condition is unsound. No such
+widening has landed in this checkpoint.
+
+Retirement ordering is not yet ready for review. The current experimental
+ordering still scans the trace vector once per populated depth. Replace that
+with a bounded root-owned newest-first traversal, prove descendant-before-
+ancestor order from the validated list, and add a private ancestor-before-
+descendant reorder rejection before claiming retirement support. No native
+depth-3, cap-boundary, reordered-list, or lifecycle regression result is
+claimed here.
