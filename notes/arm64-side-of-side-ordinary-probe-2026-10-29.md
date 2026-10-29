@@ -127,16 +127,19 @@ the original real map slot/ref and copied source IR, then changes that mapped
 IR to `SLOAD/P32` and requires the full snapshot validator to reject it. The
 contract requires bitmask 15; the ordinary peer fixture itself has no
 captured cell. An earlier test-hook version copied the full IR and map before
-mutating them; direct lifecycle runs sometimes segfaulted, while debugger
-runs did not. That failure was not localized. The current test uses a bounded
-private one-entry map plus copied source IR and passes the complete focused
-contract.
+mutating them; direct lifecycle runs sometimes segfaulted, and some debugger
+runs also caught a copy fault. The matching saved executable and crash report
+now localize that failure to copying `nins` instructions from the biased IR
+base, including the unallocated prefix before `nk`. See
+`test-helper-biased-ir-copy-crash-2026-10-29.md` for the binary evidence and
+its limits. The current test uses a bounded private one-entry map plus copied
+source IR and passes the complete focused contract.
 
 Validation evidence:
 
 - `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/arm64-peer-final.tsv`
 - `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/first-side-cell-proof-contract-final.log`
-- Earlier full-copy test-hook diagnostics are retained in `first-side-cell-proof-contract5.log` through `first-side-cell-proof-contract12.log` and `first-side-cell-proof-lldb*.log`; the full-copy failure remains unexplained.
+- Earlier full-copy test-hook diagnostics are retained in `first-side-cell-proof-contract5.log` through `first-side-cell-proof-contract12.log` and `first-side-cell-proof-lldb*.log`; the later crash-localization note resolves the full-copy failure.
 - `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/x64-peer-final-build.log`
 - Current non-ARM compatibility build: AppleClang `-arch x86_64`, `-DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT`, built successfully after guarding the ARM64 certificate traversal.
 - Current x86_64/Rosetta ordinary peer probe: `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/x64-peer-final.tsv`; it observed nested trace 5 with immediate parent trace 3 and 32 native nested exits after GC. The probe rechecks candidate JFORL ownership, each parent/link relation, and exact mcode addresses after full collections and native re-entry.
