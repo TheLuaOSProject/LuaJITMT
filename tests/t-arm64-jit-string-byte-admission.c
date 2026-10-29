@@ -135,6 +135,84 @@ static IRIns *insert_irref(const IRIns *ir, IRRef nins, IRRef at,
   return copy;
 }
 
+static void test_default_byte(lua_State *L)
+{
+  Arm64TraceFixture f;
+  GCtrace *owner;
+  TraceNo no;
+  MCode *code;
+  MSize codesize;
+  unsigned char *saved;
+  IRRef strref=0, length=0, guard=0;
+  lua_Number actual, expected;
+  const char *values[]={"string_byte_value", "string_byte_short",
+                        "string_byte_default_nul", "string_byte_default_high"};
+  run_chunk(L,
+    "string_byte_default_trace=function(s,n) local byte=string.byte; "
+    "local i,sum=0,.5; while i<n do sum=sum+byte(s); i=i+1 end; return sum end; "
+    "string_byte_default_clone=function(s,n) local byte=string.byte; "
+    "local i,sum=0,.5; while i<n do sum=sum+byte(s); i=i+1 end; return sum end; "
+    "string_byte_default_oracle=function(s,n) local byte=string.byte; "
+    "local i,sum=0,.5; while i<n do sum=sum+byte(s); i=i+1 end; return sum end; "
+    "jit.off(string_byte_default_oracle,true); "
+    "string_byte_default_nul='\\0a'; string_byte_default_high='\\255a'");
+  assert(call_loop(L,"string_byte_default_trace","string_byte_value",&actual)==LUA_OK);
+  lua_getglobal(L,"string_byte_default_trace");
+  no=proto_trace_acq(funcproto(funcV(L->top-1))); lua_pop(L,1);
+  owner=traceref_safe(L2J(L),no);
+  assert(no && owner && trace_runnable_acq(owner,no));
+  code=trace_mcode_acq(owner); codesize=trace_szmcode_acq(owner);
+  assert(code && codesize);
+  saved=(unsigned char *)malloc(codesize); assert(saved);
+  memcpy(saved,code,codesize);
+  for (unsigned phase=0;phase<2;phase++) {
+    if (phase) lua_gc(L,LUA_GCCOLLECT,0);
+    for (unsigned i=0;i<sizeof(values)/sizeof(values[0]);i++) {
+      assert(call_loop(L,"string_byte_default_oracle",values[i],&expected)==LUA_OK);
+      lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+      assert(call_loop(L,"string_byte_default_trace",values[i],&actual)==LUA_OK &&
+             actual==expected);
+      assert(lj_trace_test_root_entry_successes()>0 &&
+             lj_trace_test_exit_calls()>0 && lj_trace_test_last_exit_parent()==no);
+    }
+    assert(trace_runnable_acq(owner,no) && trace_mcode_acq(owner)==code &&
+           trace_szmcode_acq(owner)==codesize && memcmp(saved,code,codesize)==0);
+  }
+  assert(call_loop(L,"string_byte_default_oracle","string_byte_empty",&expected)!=LUA_OK);
+  lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+  assert(call_loop(L,"string_byte_default_trace","string_byte_empty",&actual)!=LUA_OK);
+  assert(lj_trace_test_root_entry_successes()>0 &&
+         lj_trace_test_exit_calls()>0 && lj_trace_test_first_exit_parent()==no);
+  assert(call_loop(L,"string_byte_default_trace","string_byte_value",&actual)==LUA_OK);
+  arm64_fixture_init_trace(&f,L,"string_byte_default_clone",no);
+  assert(semantic(&f) && allocated(&f));
+  for (IRRef r=REF_FIRST;r<f.semantic_nins;r++) {
+    if (f.ir[r].o==IR_STRREF) strref=r;
+    if (f.ir[r].o==IR_FLOAD && f.ir[r].op2==IRFL_STR_LEN) length=r;
+  }
+  assert(strref && length);
+  {
+    int32_t offset;
+    assert(kint(f.ir,f.semantic.nk,f.ir[strref].op2,&offset) && offset==0);
+    for (IRRef r=length+1u;r<strref;r++) {
+      int32_t bound;
+      if (f.ir[r].o==IR_UGE && f.ir[r].op1==length &&
+          kint(f.ir,f.semantic.nk,f.ir[r].op2,&bound) && bound==1) guard=r;
+    }
+  }
+  assert(guard);
+  f.ir[strref].op2=f.ir[guard].op2;
+  f.postra[strref].op2=f.postra[guard].op2;
+  assert(!semantic(&f) && !allocated(&f));
+  arm64_fixture_reset(&f);
+  f.ir[guard].t.irt &= (uint8_t)~IRT_GUARD;
+  f.postra[guard].t.irt &= (uint8_t)~IRT_GUARD;
+  assert(!semantic(&f) && !allocated(&f));
+  arm64_fixture_reset(&f); assert(semantic(&f) && allocated(&f));
+  arm64_fixture_free(&f); lua_pop(L,1); free(saved);
+  puts("default string byte: native entry, NUL/high byte, empty exit, GC/code reuse, two independent bounds negatives");
+}
+
 int main(void)
 {
   static const char source[] =
@@ -1107,6 +1185,7 @@ int main(void)
   arm64_fixture_reset(&f);
   assert(semantic(&f) && allocated(&f));
   arm64_fixture_free(&f);
+  test_default_byte(L);
   run_chunk(L, "assert(string_byte_stop:send(true,5)); "
                "local joined,result=string_byte_peer:join(5); "
                "assert(joined and result)");
