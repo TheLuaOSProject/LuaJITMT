@@ -22,6 +22,10 @@ field offset and result type, and rejects every raw lane reference in snapshots.
 Post-RA admission repeats those checks on allocated IR and additionally requires
 D0-D3 for the corresponding values. The fixture mutates lane tags, lane order,
 store bindings, field offsets, and physical registers in each pass.
+The post-RA walk checks protocol and active-call bounds before loading the
+CALLXS IR record; a private mutation that places HIOP before any call is
+rejected. Assembler result setup also checks liveness across every lane so an
+upper-only use enters the result-register setup path explicitly.
 
 ## Validation
 
@@ -32,7 +36,7 @@ The focused aggregate contract passed all four profiles:
 - `arm64-release`
 - `arm64e-release`
 
-Log: `/Users/frityet/Scratch/ljmt-hfa-multilane-20261029/four-final/four-profile.log`.
+Log: `/Users/frityet/Scratch/ljmt-hfa-multilane-20261029/review-fix/four-profile.log`.
 The contract includes selected-root entry, distinct three/four lane values,
 forced result-signature exits, full-GC reentry, and foreign-effect accounting.
 

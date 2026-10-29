@@ -838,6 +838,17 @@ static void test_live_integer_result_admission(lua_State *L, GCtrace *T,
   copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
   postra = fx.view;
   postra.ir = fx.postra;
+  assert(REF_FIRST < first_call);
+  fx.postra[REF_FIRST].o = IR_HIOP;
+  fx.postra[REF_FIRST].t.irt = IRT_FLOAT;
+  fx.postra[REF_FIRST].op1 = 0;
+  fx.postra[REF_FIRST].op2 = 0;
+  fx.postra[REF_FIRST].r = RID_D0;
+  assert(!lj_asm_arm64_postra_admit(&postra, &postra_nins));
+
+  copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
+  postra = fx.view;
+  postra.ir = fx.postra;
   saved = fx.postmap[slot];
   fx.postmap[slot] = snap_setref(saved, call);
   assert(!lj_asm_arm64_postra_admit(&postra, &postra_nins));

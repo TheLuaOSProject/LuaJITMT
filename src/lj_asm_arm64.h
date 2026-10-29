@@ -606,6 +606,7 @@ static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
 {
   RegSet drop = RSET_SCRATCH;
   int hiop = ((ir+1)->o == IR_HIOP && !irt_isnil((ir+1)->t));
+  int result_used;
   unsigned hfa_lanes = 1;
   IRRef callref = (IRRef)(ir-as->ir);
   while (hfa_lanes < 4 && (ir+hfa_lanes)->o == IR_HIOP &&
@@ -615,6 +616,13 @@ static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
 	 IR((ir+hfa_lanes)->op2)->i == (int32_t)hfa_lanes &&
 	 irt_isfp((ir+hfa_lanes)->t))
     hfa_lanes++;
+  /* A live upper HFA lane can be the only result used after DCE. */
+  result_used = ra_used(ir) || (hiop && ra_used(ir+1));
+  {
+    unsigned lane;
+    for (lane = 1; lane < hfa_lanes; lane++)
+      result_used |= ra_used(ir+lane);
+  }
   if (hfa_lanes > 2 && irt_isfp(ir->t)) {
     unsigned lane;
     for (lane = 1; lane < hfa_lanes; lane++)
@@ -626,7 +634,7 @@ static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
   if (hiop && ra_hasreg((ir+1)->r))
     rset_clear(drop, (ir+1)->r);  /* Dest reg handled below. */
   ra_evictset(as, drop); /* Evictions must be performed first. */
-  if (ra_used(ir) || (hiop && ra_used(ir+1))) {
+  if (result_used) {
     lj_assertA(!irt_ispri(ir->t), "PRI dest");
     if (irt_isfp(ir->t) && hfa_lanes > 1) {
 	unsigned lane;
