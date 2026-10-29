@@ -211,6 +211,8 @@ LJ_FUNC void lj_trace_test_root_entry_retry_restore(BCIns *pc, BCIns ins);
 LJ_FUNC uint32_t lj_trace_test_root_entry_startins_calls(void);
 LJ_FUNC uint32_t lj_trace_test_arm64_side_scalar_copy_contract(
   jit_State *J, TraceNo childno);
+LJ_FUNC uint32_t lj_trace_test_arm64_side_graph_summary(
+  jit_State *J, TraceNo rootno);
 LJ_FUNC uint32_t lj_trace_test_arm64_nested_cell_snapshot_contract(
   jit_State *J, TraceNo parentno);
 #endif

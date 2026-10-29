@@ -4574,6 +4574,17 @@ static int trace_arm64_nested_cell_snapshot_valid(
 
 static int trace_arm64_side_certificate_valid_held(jit_State *J,
 	GCtrace *T);
+static int trace_arm64_side_certificate_sealed_valid_held(jit_State *J,
+	GCtrace *T);
+static int trace_arm64_side_certificate_local_valid_held(jit_State *J,
+	GCtrace *T);
+static MSize trace_arm64_side_certificate_depth_held(jit_State *J,
+	GCtrace *T);
+static int trace_arm64_side_ancestry_capture_held(jit_State *J,
+	TraceNo parentno, TraceNo rootno, uint64_t root_generation,
+	LJArm64SideAncestor *ancestry, uint8_t *ancestry_count);
+static int trace_arm64_side_graph_valid(jit_State *J, GCtrace *root,
+	TraceNo rootno, TraceNo head, MSize count);
 
 static int trace_arm64_root_direct_side_present(jit_State *J, TraceVec *tv,
     GCtrace *root, TraceNo rootno, TraceNo wanted)
@@ -4648,6 +4659,468 @@ static int trace_arm64_root_direct_side_present(jit_State *J, TraceVec *tv,
     trace_nchild_acq(root) == count;
 }
 
+/* Deeper ancestry is uncommon and intentionally out of the direct/nested
+** fast path. Keep its no-allocation membership proof bounded to a small
+** root-owned list and use one indexed list pass rather than rescanning the
+** whole list for every ancestor. */
+#define TRACE_ARM64_SIDE_GRAPH_MAX 64u
+#define TRACE_ARM64_SIDE_GRAPH_HASH 128u
+typedef struct TraceArm64SideGraphIndex {
+  TraceVec *tv;
+  GCtrace *root;
+  TraceNo rootno, head;
+  MSize count;
+  TraceNo member[TRACE_ARM64_SIDE_GRAPH_MAX];
+  TraceNo next[TRACE_ARM64_SIDE_GRAPH_MAX];
+  uint64_t generation[TRACE_ARM64_SIDE_GRAPH_MAX];
+  TraceNo hashkey[TRACE_ARM64_SIDE_GRAPH_HASH];
+  uint8_t hashindex[TRACE_ARM64_SIDE_GRAPH_HASH];
+} TraceArm64SideGraphIndex;
+
+/* Deep ancestry is indexed only while the root list fits the fixed proof
+** bound. At/above that bound, accept only an already validated shallow graph;
+** this preserves wide direct roots and prevents deep 64-to-65 extension. */
+static int trace_arm64_side_graph_extension_allowed(MSize count,
+	MSize maxdepth, MSize childdepth)
+{
+  return count < TRACE_ARM64_SIDE_GRAPH_MAX ||
+	(maxdepth != 0 && maxdepth <= 2u && childdepth != 0 &&
+	 childdepth <= 2u);
+}
+
+static uint32_t trace_arm64_side_graph_hash(TraceNo no)
+{
+  uint32_t x = no;
+  x ^= x >> 16;
+  x *= UINT32_C(0x7feb352d);
+  x ^= x >> 15;
+  x *= UINT32_C(0x846ca68b);
+  x ^= x >> 16;
+  return x & (TRACE_ARM64_SIDE_GRAPH_HASH-1u);
+}
+
+static int trace_arm64_side_graph_find(const TraceArm64SideGraphIndex *g,
+	TraceNo no)
+{
+  uint32_t slot, probes;
+  if (no == 0) return -1;
+  slot = trace_arm64_side_graph_hash(no);
+  for (probes = 0; probes < TRACE_ARM64_SIDE_GRAPH_HASH; probes++) {
+	if (g->hashkey[slot] == 0) return -1;
+	if (g->hashkey[slot] == no)
+	  return (int)g->hashindex[slot]-1;
+	slot = (slot+1u) & (TRACE_ARM64_SIDE_GRAPH_HASH-1u);
+  }
+  return -1;
+}
+
+static int trace_arm64_side_graph_capture(jit_State *J, GCtrace *root,
+	TraceNo rootno, TraceNo head, MSize count, TraceArm64SideGraphIndex *g)
+{
+  TraceNo side_no = head;
+  MSize i;
+  memset(g, 0, sizeof(*g));
+  if (J == NULL || root == NULL || rootno == 0 ||
+	  count > TRACE_ARM64_SIDE_GRAPH_MAX)
+	return 0;
+  g->tv = tracevec_acq(J);
+  if (g->tv == NULL || (MSize)rootno >= g->tv->sizetrace ||
+	  gcref_acq(g->tv->slot[rootno]) != obj2gco(root) ||
+	  trace_traceno_acq(root) != rootno || trace_root_acq(root) != 0 ||
+	  trace_nextside_acq(root) != head || trace_nchild_acq(root) != count ||
+	  (count == 0) != (head == 0))
+	return 0;
+  g->root = root;
+  g->rootno = rootno;
+  g->head = head;
+  g->count = count;
+  for (i = 0; i < count; i++) {
+	GCtrace *side;
+	TraceNo slot;
+	uint32_t probes;
+	if (side_no == 0 || side_no == rootno ||
+	    (MSize)side_no >= g->tv->sizetrace ||
+	    (side = traceref_fromgco_safe(gcref_acq(g->tv->slot[side_no]))) == NULL ||
+	    trace_traceno_acq(side) != side_no || trace_root_acq(side) != rootno ||
+	    trace_nextroot_acq(side) != 0 || trace_nchild_acq(side) != 0 ||
+	    la_load64_acq(&side->arm64_generation) == 0)
+	  return 0;
+	for (probes = 0, slot = trace_arm64_side_graph_hash(side_no);
+	     probes < TRACE_ARM64_SIDE_GRAPH_HASH; probes++,
+	       slot = (slot+1u) & (TRACE_ARM64_SIDE_GRAPH_HASH-1u)) {
+	  if (g->hashkey[slot] == 0) {
+	    g->hashkey[slot] = side_no;
+	    g->hashindex[slot] = (uint8_t)(i+1u);
+	    break;
+	  }
+	  if (g->hashkey[slot] == side_no) return 0;
+	}
+	if (probes == TRACE_ARM64_SIDE_GRAPH_HASH) return 0;
+	g->member[i] = side_no;
+	g->next[i] = trace_nextside_acq(side);
+	g->generation[i] = la_load64_acq(&side->arm64_generation);
+	side_no = g->next[i];
+  }
+  if (side_no != 0) return 0;
+  return 1;
+}
+
+static int trace_arm64_side_graph_path_valid(jit_State *J,
+	const TraceArm64SideGraphIndex *g, TraceNo start, TraceNo *direct,
+	ExitNo *rootexit)
+{
+  uint64_t seen = 0;
+  TraceNo current = start;
+  MSize depth;
+  if (direct != NULL) *direct = 0;
+  if (rootexit != NULL) *rootexit = 0;
+  for (depth = 0; depth < g->count; depth++) {
+	int index = trace_arm64_side_graph_find(g, current);
+	GCtrace *side;
+	const LJArm64SideCertificate *cert;
+	IRIns base;
+	TraceNo parentno;
+	if (index < 0 || (MSize)index >= g->count ||
+	    (seen & (UINT64_C(1) << (unsigned)index)) != 0)
+	  return 0;
+	seen |= UINT64_C(1) << (unsigned)index;
+	side = traceref_fromgco_safe(gcref_acq(g->tv->slot[current]));
+	if (side == NULL || trace_traceno_acq(side) != current ||
+	    trace_root_acq(side) != g->rootno ||
+	    la_load64_acq(&side->arm64_generation) != g->generation[index] ||
+	    !trace_arm64_side_certificate_local_valid_held(J, side) ||
+	    trace_ir_acq(side) == NULL || trace_nins_acq(side) <= REF_BASE ||
+	    trace_nins_acq(side) >= REF_DROP)
+	  return 0;
+	cert = &side->arm64_side_cert;
+	base = ir_load_acq(&trace_ir_acq(side)[REF_BASE]);
+	parentno = (TraceNo)base.op1;
+	if (base.o != IR_BASE || base.t.irt != IRT_PGC ||
+	    parentno == 0 || parentno == current ||
+	    parentno != cert->parentno || (ExitNo)base.op2 != cert->exitno)
+	  return 0;
+	if (parentno == g->rootno) {
+	  if (direct != NULL) *direct = current;
+	  if (rootexit != NULL) *rootexit = cert->exitno;
+	  return 1;
+	}
+	/* Publication prepends each new child to the root-owned list. Thus every
+	** parent must occur after its descendant; this is also the order used by
+	** one-pass descendant-before-ancestor retirement. */
+	{
+	  int parent_index = trace_arm64_side_graph_find(g, parentno);
+	  if (parent_index <= index) return 0;
+	}
+	current = parentno;
+  }
+  return 0;
+}
+
+static int trace_arm64_side_graph_revalidate(jit_State *J,
+	const TraceArm64SideGraphIndex *g)
+{
+  TraceNo side_no = g->head;
+  MSize i;
+  if (tracevec_acq(J) != g->tv ||
+	  gcref_acq(g->tv->slot[g->rootno]) != obj2gco(g->root) ||
+	  trace_nextside_acq(g->root) != g->head ||
+	  trace_nchild_acq(g->root) != g->count)
+	return 0;
+  for (i = 0; i < g->count; i++) {
+	GCtrace *side;
+	if (side_no != g->member[i] ||
+	    (MSize)side_no >= g->tv->sizetrace ||
+	    (side = traceref_fromgco_safe(gcref_acq(g->tv->slot[side_no]))) == NULL ||
+	    trace_traceno_acq(side) != side_no ||
+	    trace_root_acq(side) != g->rootno ||
+	    trace_nextside_acq(side) != g->next[i] ||
+	    la_load64_acq(&side->arm64_generation) != g->generation[i])
+	  return 0;
+	side_no = g->next[i];
+  }
+  return side_no == 0;
+}
+
+static int trace_arm64_side_graph_valid(jit_State *J, GCtrace *root,
+	TraceNo rootno, TraceNo head, MSize count)
+{
+  TraceArm64SideGraphIndex graph;
+  MSize i;
+  if (!trace_arm64_side_graph_capture(
+	J, root, rootno, head, count, &graph))
+	return 0;
+  for (i = 0; i < graph.count; i++) {
+	if (!trace_arm64_side_graph_path_valid(
+	      J, &graph, graph.member[i], NULL, NULL))
+	  return 0;
+  }
+  return trace_arm64_side_graph_revalidate(J, &graph);
+}
+
+/* Return the maximum depth in one captured root-owned list. This is used only
+** at publication when a bounded deep graph is at its capacity; shallow wide
+** roots remain eligible for direct children and retain their wide retirement
+** path. Zero means the list or one of its ancestry paths is malformed. */
+static MSize trace_arm64_side_graph_max_depth(jit_State *J, GCtrace *root,
+	TraceNo rootno, TraceNo head, MSize count)
+{
+  TraceArm64SideGraphIndex graph;
+  MSize i, maxdepth = 0;
+  if (count > TRACE_ARM64_SIDE_GRAPH_MAX) {
+	TraceVec *tv = tracevec_acq(J);
+	TraceNo side_no = head;
+	if (tv == NULL || root == NULL || rootno == 0 ||
+	    (MSize)rootno >= tv->sizetrace ||
+	    count > tv->sizetrace || trace_traceno_acq(root) != rootno ||
+	    trace_root_acq(root) != 0 ||
+	    gcref_acq(tv->slot[rootno]) != obj2gco(root) ||
+	    trace_nchild_acq(root) != count || trace_nextside_acq(root) != head)
+	  return 0;
+	/* The oversized fallback accepts a fully validated depth-one or depth-two
+	** list. Every nested member must find its direct parent later in the
+	** prepend-ordered list. Deeper ancestry remains capped by the index. */
+	for (i = 0; i < count; i++) {
+	  GCtrace *side;
+	  IRIns base;
+	  TraceNo nextside, parentno;
+	  if (side_no == 0 || (MSize)side_no >= tv->sizetrace ||
+	      (side = traceref_fromgco_safe(gcref_acq(tv->slot[side_no]))) == NULL ||
+	      trace_traceno_acq(side) != side_no ||
+	      trace_root_acq(side) != rootno || trace_nchild_acq(side) != 0 ||
+	      trace_nextroot_acq(side) != 0 ||
+	      !trace_arm64_side_certificate_local_valid_held(J, side))
+		return 0;
+	  base = ir_load_acq(&trace_ir_acq(side)[REF_BASE]);
+	  parentno = (TraceNo)base.op1;
+	  if (base.o != IR_BASE || base.t.irt != IRT_PGC || parentno == 0 ||
+	      (ExitNo)base.op2 != side->arm64_side_cert.exitno ||
+	      side->arm64_side_cert.parentno != parentno)
+		return 0;
+	  nextside = trace_nextside_acq(side);
+	  if (parentno != rootno) {
+		TraceNo scan = nextside;
+		GCtrace *parent = NULL;
+		MSize k;
+		if (parentno == side_no || (MSize)parentno >= tv->sizetrace)
+		  return 0;
+		for (k = i+1u; k < count; k++) {
+		  GCtrace *candidate;
+		  if (scan == 0 || (MSize)scan >= tv->sizetrace ||
+		      (candidate = traceref_fromgco_safe(
+			gcref_acq(tv->slot[scan]))) == NULL ||
+		      trace_traceno_acq(candidate) != scan ||
+		      trace_root_acq(candidate) != rootno)
+			return 0;
+		  if (scan == parentno) parent = candidate;
+		  scan = trace_nextside_acq(candidate);
+		}
+		if (parent == NULL ||
+		    !trace_arm64_side_certificate_local_valid_held(J, parent) ||
+		    parent->arm64_side_cert.parentno != rootno)
+		  return 0;
+		{
+		  IRIns parentbase = ir_load_acq(&trace_ir_acq(parent)[REF_BASE]);
+		  if (parentbase.o != IR_BASE || parentbase.t.irt != IRT_PGC ||
+		      (TraceNo)parentbase.op1 != rootno ||
+		      (ExitNo)parentbase.op2 != parent->arm64_side_cert.exitno)
+			return 0;
+		}
+		maxdepth = 2u;
+	  }
+	  if (maxdepth == 0) maxdepth = 1u;
+	  side_no = nextside;
+	}
+	return side_no == 0 && trace_nchild_acq(root) == count &&
+	  trace_nextside_acq(root) == head ? maxdepth : 0u;
+  }
+  if (!trace_arm64_side_graph_capture(J, root, rootno, head, count, &graph))
+	return 0;
+  for (i = 0; i < graph.count; i++) {
+	TraceNo current = graph.member[i];
+	MSize depth;
+	for (depth = 1; depth <= graph.count; depth++) {
+	  int index = trace_arm64_side_graph_find(&graph, current);
+	  GCtrace *side;
+	  TraceNo parentno;
+	  if (index < 0 ||
+	      (side = traceref_fromgco_safe(
+		gcref_acq(graph.tv->slot[current]))) == NULL ||
+	      !trace_arm64_side_certificate_local_valid_held(J, side))
+		return 0;
+	  parentno = side->arm64_side_cert.parentno;
+	  if (parentno == rootno)
+		break;
+	  if (parentno == 0 || parentno == current ||
+	      trace_arm64_side_graph_find(&graph, parentno) < 0)
+		return 0;
+	  current = parentno;
+	}
+	if (depth > graph.count) return 0;
+	if (depth > maxdepth) maxdepth = depth;
+  }
+  return trace_arm64_side_graph_revalidate(J, &graph) ? maxdepth : 0;
+}
+
+/* Validate a root's complete side topology before a destructive walk. Deep
+** graphs fit the indexed certificate; oversized graphs remain accepted only
+** through depth two. This preserves wide direct/nested roots without imposing
+** the deep-graph scratch bound on them. */
+static int trace_arm64_side_graph_retire_valid(jit_State *J, GCtrace *root,
+	TraceNo rootno, TraceNo head, MSize count)
+{
+  if (count <= TRACE_ARM64_SIDE_GRAPH_MAX)
+	return trace_arm64_side_graph_valid(J, root, rootno, head, count);
+  {
+	MSize maxdepth = trace_arm64_side_graph_max_depth(
+	  J, root, rootno, head, count);
+	return maxdepth != 0 && maxdepth <= 2u;
+  }
+}
+
+/* Return whether this side or any source-certified ancestor is scope-pending.
+** The caller validates the whole root list first and owns the recorder token,
+** so topology cannot change during this walk. */
+static int trace_arm64_side_scope_pending_held(jit_State *J,
+	GCtrace *root, TraceNo rootno, GCtrace *side, MSize count)
+{
+  TraceVec *tv = tracevec_acq(J);
+  TraceNo currentno;
+  GCtrace *current = side;
+  MSize depth;
+  if (tv == NULL || root == NULL || side == NULL || rootno == 0 ||
+	  count == 0 || trace_traceno_acq(root) != rootno ||
+	  trace_traceno_acq(side) == 0 || trace_root_acq(side) != rootno)
+	return -1;
+  if (trace_scope_pending_acq(root)) return 1;
+  currentno = trace_traceno_acq(side);
+  for (depth = 0; depth < count; depth++) {
+	TraceNo parentno;
+	if (trace_traceno_acq(current) != currentno ||
+	    trace_root_acq(current) != rootno ||
+	    !trace_arm64_side_certificate_sealed_valid_held(J, current))
+	  return -1;
+	if (trace_scope_pending_acq(current)) return 1;
+	parentno = current->arm64_side_cert.parentno;
+	if (parentno == rootno) return 0;
+	if (parentno == 0 || parentno == currentno ||
+	    (MSize)parentno >= tv->sizetrace)
+	  return -1;
+	current = traceref_fromgco_safe(gcref_acq(tv->slot[parentno]));
+	if (current == NULL) return -1;
+	currentno = parentno;
+  }
+  return -1;
+}
+
+static int trace_arm64_side_graph_direct_ancestor(jit_State *J,
+	GCtrace *root, TraceNo rootno, TraceNo head, MSize count,
+	TraceNo start, TraceNo *direct, ExitNo *rootexit)
+{
+  TraceArm64SideGraphIndex graph;
+  TraceVec *tv;
+  GCtrace *side;
+  IRIns base;
+  if (direct != NULL) *direct = 0;
+  if (rootexit != NULL) *rootexit = 0;
+  if (J == NULL || root == NULL || rootno == 0 || start == 0 ||
+	  direct == NULL || rootexit == NULL ||
+	  (tv = tracevec_acq(J)) == NULL || (MSize)start >= tv->sizetrace ||
+	  (side = traceref_fromgco_safe(gcref_acq(tv->slot[start]))) == NULL ||
+	  trace_traceno_acq(side) != start || trace_root_acq(side) != rootno ||
+	  !trace_arm64_side_certificate_valid_held(J, side))
+	return 0;
+  base = ir_load_acq(&trace_ir_acq(side)[REF_BASE]);
+  if (base.o != IR_BASE || base.t.irt != IRT_PGC ||
+	  (TraceNo)base.op1 != side->arm64_side_cert.parentno ||
+	  (ExitNo)base.op2 != side->arm64_side_cert.exitno)
+	return 0;
+  /* Direct root children need no indexed ancestry copy. This keeps direct
+  ** side recording available even when the root owns a wide shallow list. */
+  if ((TraceNo)base.op1 == rootno) {
+	*direct = start;
+	*rootexit = side->arm64_side_cert.exitno;
+	return 1;
+  }
+  if (count > TRACE_ARM64_SIDE_GRAPH_MAX) {
+	TraceNo parentno = (TraceNo)base.op1;
+	GCtrace *parent;
+	IRIns parentbase;
+	MSize maxdepth = trace_arm64_side_graph_max_depth(
+	  J, root, rootno, head, count);
+	if (maxdepth == 0 || maxdepth > 2u || parentno == rootno ||
+	    (MSize)parentno >= tv->sizetrace ||
+	    (parent = traceref_fromgco_safe(
+	      gcref_acq(tv->slot[parentno]))) == NULL ||
+	    trace_traceno_acq(parent) != parentno ||
+	    trace_root_acq(parent) != rootno ||
+	    !trace_arm64_side_certificate_valid_held(J, parent) ||
+	    parent->arm64_side_cert.parentno != rootno)
+	  return 0;
+	parentbase = ir_load_acq(&trace_ir_acq(parent)[REF_BASE]);
+	if (parentbase.o != IR_BASE || parentbase.t.irt != IRT_PGC ||
+	    (TraceNo)parentbase.op1 != rootno ||
+	    (ExitNo)parentbase.op2 != parent->arm64_side_cert.exitno)
+	  return 0;
+	*direct = parentno;
+	*rootexit = parent->arm64_side_cert.exitno;
+	return 1;
+  }
+  return trace_arm64_side_graph_capture(J, root, rootno, head, count, &graph) &&
+	trace_arm64_side_graph_path_valid(
+	  J, &graph, start, direct, rootexit) &&
+	trace_arm64_side_graph_revalidate(J, &graph);
+}
+
+static int trace_arm64_side_graph_has_ancestor(
+	const TraceArm64SideGraphIndex *g, TraceNo start, TraceNo wanted)
+{
+  TraceNo current = start;
+  MSize depth;
+  for (depth = 0; depth < g->count; depth++) {
+	int index = trace_arm64_side_graph_find(g, current);
+	GCtrace *side;
+	TraceNo parentno;
+	if (index < 0 || (MSize)index >= g->count ||
+	    (side = traceref_fromgco_safe(gcref_acq(g->tv->slot[current]))) == NULL)
+	  return 0;
+	parentno = side->arm64_side_cert.parentno;
+	if (parentno == wanted) return 1;
+	if (parentno == g->rootno) return 0;
+	current = parentno;
+  }
+  return 0;
+}
+
+/* Shallow roots may exceed the indexed deep-graph cap. Keep their retirement
+** path bounded by the root's advertised child count without a fixed-size
+** scratch index. A sealed source certificate authenticates each parent edge. */
+static int trace_arm64_side_chain_has_ancestor(jit_State *J, TraceNo rootno,
+	TraceNo start, TraceNo wanted, MSize bound)
+{
+  TraceVec *tv = tracevec_acq(J);
+  TraceNo current = start;
+  MSize depth;
+  if (tv == NULL || rootno == 0 || start == 0 || wanted == 0)
+	return -1;
+  for (depth = 0; depth < bound; depth++) {
+	GCtrace *side;
+	TraceNo parentno;
+	if ((MSize)current >= tv->sizetrace ||
+	    (side = traceref_fromgco_safe(gcref_acq(tv->slot[current]))) == NULL ||
+	    trace_traceno_acq(side) != current || trace_root_acq(side) != rootno ||
+	    !trace_arm64_side_certificate_local_valid_held(J, side))
+	  return -1;
+	parentno = side->arm64_side_cert.parentno;
+	if (parentno == wanted) return 1;
+	if (parentno == rootno) return 0;
+	if (parentno == 0 || parentno == current ||
+	    (MSize)parentno >= tv->sizetrace)
+	  return -1;
+	current = parentno;
+  }
+  return -1;
+}
+
 /* Capture one selected root snapshot without deriving pointers until all
 ** advertised counts needed for that derivation have been bounded. */
 static int trace_arm64_first_side_view_acq_mode(jit_State *J, TraceNo parent,
@@ -4659,6 +5132,7 @@ static int trace_arm64_first_side_view_acq_mode(jit_State *J, TraceNo parent,
   TraceNo side_no;
   MSize side_i;
   int selected_child_found = 0;
+  int side_graph_checked = 0;
   SnapShot *selected;
   MSize maxsnapmap;
   BCOp rootop;
@@ -4825,15 +5299,24 @@ static int trace_arm64_first_side_view_acq_mode(jit_State *J, TraceNo parent,
             immediate_parent >= tv->sizetrace ||
             trace_root_acq(mid) != parent ||
             !trace_arm64_side_certificate_valid_held(J, mid) ||
-            mid->arm64_side_cert.parentno != parent ||
             mid->arm64_side_cert.rootno != parent ||
-            !trace_arm64_root_direct_side_present(
-              J, tv, T, parent, immediate_parent))
+            !trace_arm64_side_certificate_sealed_valid_held(J, mid))
           return 0;
         midbase = ir_load_acq(&trace_ir_acq(mid)[REF_BASE]);
-        if (midbase.o != IR_BASE || midbase.t.irt != IRT_PGC ||
-            (TraceNo)midbase.op1 != parent)
+        if (midbase.o != IR_BASE || midbase.t.irt != IRT_PGC)
           return 0;
+        if ((TraceNo)midbase.op1 == parent) {
+          if (mid->arm64_side_cert.parentno != parent ||
+              !trace_arm64_root_direct_side_present(
+                J, tv, T, parent, immediate_parent))
+            return 0;
+        } else {
+          if (!side_graph_checked &&
+              !trace_arm64_side_graph_valid(
+                J, T, parent, v->nextside, v->nchild))
+            return 0;
+          side_graph_checked = 1;
+        }
         if (sidechild->arm64_side_cert.parentno != immediate_parent ||
             sidechild->arm64_side_cert.rootno != parent ||
             (ExitNo)childbase.op2 != sidechild->arm64_side_cert.exitno)
@@ -4935,10 +5418,9 @@ static int trace_arm64_first_side_loop_generation_valid(
     TraceArm64FirstSideLoopView *v, TraceNo parent,
     const BCIns *continuation);
 
-/* Build a recorder-parent view for exactly one child-of-a-root side. The root
-** owns loop bytecode and the flattened allocation list; the selected map and
-** exit edge belong to the immediate side parent. IR_BASE below proves that
-** the immediate parent is a direct child of this root. */
+/* Build a recorder-parent view for one root-owned side at bounded ancestry
+** depth. The canonical root owns the flattened allocation list, while the
+** selected map and exit edge belong to the immediate side parent. */
 static int trace_arm64_nested_side_view_acq(jit_State *J, TraceNo parentno,
     ExitNo exitno, const BCIns *continuation,
     TraceArm64FirstSideLoopView *v)
@@ -4947,7 +5429,7 @@ static int trace_arm64_nested_side_view_acq(jit_State *J, TraceNo parentno,
   GCtrace *parent, *root;
   TraceArm64FirstSideLoopView rootview;
   IRIns base;
-  TraceNo rootno;
+  TraceNo rootno, directno;
   ExitNo rootexit;
   MSize maxsnapmap, footer, nent;
   SnapShot *selected;
@@ -4969,17 +5451,20 @@ static int trace_arm64_nested_side_view_acq(jit_State *J, TraceNo parentno,
     return 0;
   base = ir_load_acq(&trace_ir_acq(parent)[REF_BASE]);
   if (base.o != IR_BASE || base.t.irt != IRT_PGC ||
-      (TraceNo)base.op1 != rootno)
+      (TraceNo)base.op1 != parent->arm64_side_cert.parentno ||
+      (ExitNo)base.op2 != parent->arm64_side_cert.exitno ||
+      !trace_arm64_side_certificate_valid_held(J, parent) ||
+      !trace_arm64_side_graph_direct_ancestor(J, root, rootno,
+        trace_nextside_acq(root), trace_nchild_acq(root), parentno,
+        &directno, &rootexit))
     return 0;
-  rootexit = (ExitNo)base.op2;
   if (!trace_arm64_first_side_view_acq_mode(
         J, rootno, rootexit, &rootview, 1) ||
       rootview.parent != root || rootview.root_generation == 0) {
     return 0;
   }
-  if (!trace_arm64_side_certificate_valid_held(J, parent) ||
-      parent->arm64_side_cert.parentno != rootno ||
-      parent->arm64_side_cert.exitno != rootexit) {
+  if (directno == 0 ||
+      !trace_arm64_side_certificate_valid_held(J, parent)) {
     return 0;
   }
   memset(v, 0, sizeof(*v));
@@ -5088,9 +5573,8 @@ static int trace_arm64_nested_side_view_acq(jit_State *J, TraceNo parentno,
       !trace_arm64_nested_cell_snapshot_valid(v, &rootview)) {
     return 0;
   }
-  if (!trace_arm64_first_side_loop_generation_valid(v, rootno, continuation)) {
+  if (!trace_arm64_first_side_loop_generation_valid(v, rootno, continuation))
     return 0;
-  }
   return
     trace_runnable_acq(parent, parentno) && trace_runnable_acq(root, rootno) &&
     tracevec_acq(J) == tv &&
@@ -5760,8 +6244,9 @@ static int trace_arm64_side_parent_asm_owner_exact(jit_State *J,
   uintptr_t basep, stackp, maxstackp;
   TraceNo child;
 
-  if (parent == 0 || continuation == NULL ||
-      !trace_arm64_side_parent_asm_owner_base(J, &L))
+  if (parent == 0 || continuation == NULL)
+    return 0;
+  if (!trace_arm64_side_parent_asm_owner_base(J, &L))
     return 0;
   stack = mref_acq(L->stack, TValue);
   maxstack = mref_acq(L->maxstack, TValue);
@@ -5985,17 +6470,35 @@ int lj_trace_arm64_side_parent_snapshot(jit_State *J,
   if (!trace_arm64_side_parent_revalidate_held(J, &cert, &view) ||
 	view.snap == NULL || view.snapmap == NULL ||
 	(MSize)cert.exitno >= view.nsnap)
+	{
     goto out;
+	}
   if (view.rootbody != view.parent) {
-    IRIns base = ir_load_acq(&view.ir[REF_BASE]);
-    if (base.o != IR_BASE || base.t.irt != IRT_PGC ||
-	(TraceNo)base.op1 != view.rootno ||
-	!trace_arm64_first_side_view_acq_mode(J, view.rootno,
-	  (ExitNo)base.op2, &rootview, 1) ||
+	TraceNo directno;
+	ExitNo rootexit;
+	if (!trace_arm64_side_graph_direct_ancestor(J, view.rootbody,
+	      view.rootno, view.nextside, view.nchild, view.traceno,
+	      &directno, &rootexit) || directno == 0 ||
+	    !trace_arm64_first_side_view_acq_mode(J, view.rootno,
+	      rootexit, &rootview, 1) ||
 	rootview.parent != view.rootbody ||
 	rootview.traceno != view.rootno)
+	  {
       goto out;
+	  }
     rootviewp = &rootview;
+  }
+  if (view.nchild >= TRACE_ARM64_SIDE_GRAPH_MAX) {
+	MSize maxdepth = trace_arm64_side_graph_max_depth(
+	  J, view.rootbody, view.rootno, view.nextside, view.nchild);
+	MSize parentdepth = view.parent == view.rootbody ? 0u :
+	  trace_arm64_side_certificate_depth_held(J, view.parent);
+	MSize childdepth = parentdepth+1u;
+	if (parentdepth == 0u && view.parent != view.rootbody)
+	  goto out;
+	if (!trace_arm64_side_graph_extension_allowed(
+	      view.nchild, maxdepth, childdepth))
+	  goto out;
   }
   src = &view.snap[cert.exitno];
   ofs = snap_mapofs_acq(src);
@@ -6013,6 +6516,13 @@ int lj_trace_arm64_side_parent_snapshot(jit_State *J,
   ** from an arbitrary parent bytecode shape. */
   snapshot->admission = view.admission;
   snapshot->parent_root_nsnap = rootviewp != NULL ? rootview.nsnap : 0;
+  snapshot->root_generation = rootviewp != NULL ? rootview.root_generation :
+	view.root_generation;
+  if (snapshot->root_generation == 0 ||
+	  !trace_arm64_side_ancestry_capture_held(J, view.traceno,
+	    view.rootno, snapshot->root_generation, snapshot->parent_ancestry,
+	    &snapshot->parent_ancestry_count))
+	goto out;
   snapshot->parent_base = ir_load_acq(&view.ir[REF_BASE]);
   snapshot->parent_link = view.link;
   snapshot->parent_root = view.root;
@@ -6032,6 +6542,9 @@ int lj_trace_arm64_side_parent_snapshot(jit_State *J,
 	  goto out;
 	snapshot->parent_root_forl_range_valid = 1;
   }
+  snapshot->parent_generation =
+	la_load64_acq(&view.parent->arm64_generation);
+  if (snapshot->parent_generation == 0) goto out;
   snapshot->parent_nins = view.nins;
   snapshot->parent_nk = view.nk;
   snapshot->parent_nsnap = view.nsnap;
@@ -6550,6 +7063,7 @@ static int trace_arm64_side_publish_child_valid(jit_State *J, GCtrace *T,
   postra.semantic.traceno = cert->child;
   postra.semantic.parent = cert->parent;
   postra.semantic.root = trace_root_acq(T);
+  postra.semantic.root_generation = parentview->root_generation;
   postra.semantic.link = trace_link_acq(T);
   postra.semantic.exitno = cert->exitno;
   postra.semantic.startins = trace_startins_acq(T);
@@ -6564,11 +7078,15 @@ static int trace_arm64_side_publish_child_valid(jit_State *J, GCtrace *T,
 	  TraceArm64FirstSideLoopView parent_rootview;
 	  const TraceArm64FirstSideLoopView *parent_rootviewp = NULL;
 	  if (parentview->rootbody != parentview->parent) {
-	    IRIns parentbase = ir_load_acq(&parentview->ir[REF_BASE]);
-	    if (parentbase.o != IR_BASE || parentbase.t.irt != IRT_PGC ||
-		(TraceNo)parentbase.op1 != parentview->rootno ||
+	    TraceNo directno;
+	    ExitNo rootexit;
+	    if (!trace_arm64_side_graph_direct_ancestor(J,
+		  parentview->rootbody, parentview->rootno,
+		  parentview->nextside, parentview->nchild,
+		  parentview->traceno, &directno, &rootexit) ||
+		directno == 0 ||
 		!trace_arm64_first_side_view_acq_mode(J, parentview->rootno,
-		  (ExitNo)parentbase.op2, &parent_rootview, 1))
+		  rootexit, &parent_rootview, 1))
 	      goto fail_mcode;
 	    parent_rootviewp = &parent_rootview;
 	  }
@@ -6709,6 +7227,10 @@ static int trace_arm64_side_context_from_parent(
   copy->parent_root = 0;
   copy->parent_linktype = LJ_TRLINK_NONE;
   copy->parent_root_nsnap = 0;
+  copy->parent_generation = 0;
+  copy->root_generation = rootview != NULL ? rootview->root_generation :
+	side->root_generation;
+  copy->parent_ancestry_count = 0;
   memset(copy->parent_root_forl, 0, sizeof(copy->parent_root_forl));
   copy->parent_root_forl_mask = 0;
   memset(&copy->parent_root_forl_bound_guard, 0,
@@ -6741,6 +7263,32 @@ static int trace_arm64_side_context_from_parent(
 	  return 0;
     if (bc_op(startins) == BC_FORL)
 	  copy->parent_root_forl_range_valid = 1;
+  }
+	if (copy->root_generation == 0) {
+	  TraceVec *tv = tracevec_acq(J);
+	  GCtrace *rootbody;
+	  if (tv == NULL || side->root == 0 ||
+	      (MSize)side->root >= tv->sizetrace)
+	    return 0;
+	  rootbody = traceref_fromgco_safe(gcref_acq(tv->slot[side->root]));
+	  if (rootbody == NULL || trace_traceno_acq(rootbody) != side->root ||
+	      trace_root_acq(rootbody) != 0)
+	    return 0;
+	  copy->root_generation = la_load64_acq(&rootbody->arm64_generation);
+	}
+  if (copy->root_generation == 0 ||
+	  !trace_arm64_side_ancestry_capture_held(J, side->parent,
+	    side->root, copy->root_generation, copy->parent_ancestry,
+	    &copy->parent_ancestry_count))
+	return 0;
+  {
+	TraceVec *tv = tracevec_acq(J);
+	GCtrace *parent = tv != NULL && (MSize)side->parent < tv->sizetrace ?
+	  traceref_fromgco_safe(gcref_acq(tv->slot[side->parent])) : NULL;
+	if (parent == NULL || trace_traceno_acq(parent) != side->parent)
+	  return 0;
+	copy->parent_generation = la_load64_acq(&parent->arm64_generation);
+	if (copy->parent_generation == 0) return 0;
   }
   memset(&nestedview, 0, sizeof(nestedview));
   if (rootview != NULL) {
@@ -6868,6 +7416,10 @@ static int trace_arm64_side_context_from_parent(
   side->parent_root = copy->parent_root;
   side->parent_linktype = copy->parent_linktype;
   side->parent_root_nsnap = copy->parent_root_nsnap;
+  side->parent_ancestry = copy->parent_ancestry;
+  side->parent_generation = copy->parent_generation;
+  side->root_generation = copy->root_generation;
+  side->parent_ancestry_count = copy->parent_ancestry_count;
   memcpy(side->parent_root_forl, copy->parent_root_forl,
 	 sizeof(side->parent_root_forl));
   side->parent_root_forl_mask = copy->parent_root_forl_mask;
@@ -7146,6 +7698,8 @@ static int trace_arm64_side_certificate_valid_held(jit_State *J,
 	GCtrace *T);
 static int trace_arm64_side_certificate_sealed_valid_held(jit_State *J,
 	GCtrace *T);
+static int trace_arm64_side_certificate_local_valid_held(jit_State *J,
+	GCtrace *T);
 static int trace_arm64_side_parent_edge_valid_held(jit_State *J,
 	GCtrace *child, TraceNo parentno, int allow_pending);
 
@@ -7346,6 +7900,7 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
     unsigned mutation, int *sem_ok, int *post_ok)
 {
   TraceArm64FirstSideLoopView parentview;
+  TraceArm64FirstSideLoopView rootview;
   const TraceArm64FirstSideLoopView *rootviewp = NULL;
   LJArm64SideParentSnapshot parentcopy;
   LJArm64SideIRView side, semside;
@@ -7376,12 +7931,132 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
     return 0;
   if (!lj_gc2_smr_read_try(J2G(J)))
     return 0;
-  if (!trace_arm64_first_side_view_acq_mode(J,
-      (TraceNo)ir_load_acq(&source[REF_BASE]).op1,
-      (ExitNo)ir_load_acq(&source[REF_BASE]).op2, &parentview, 1)) {
+	{
+	  TraceNo parentno = (TraceNo)ir_load_acq(&source[REF_BASE]).op1;
+	  ExitNo parentexit = (ExitNo)ir_load_acq(&source[REF_BASE]).op2;
+	  GCtrace *parentbody = traceref_safe(J, parentno);
+	  int parentview_ok = 0;
+	  if (parentbody != NULL && trace_root_acq(parentbody) == 0) {
+	    parentview_ok = trace_arm64_first_side_view_acq_mode(J, parentno,
+	      parentexit, &parentview, 1);
+	  } else if (parentbody != NULL &&
+		 trace_arm64_side_certificate_valid_held(J, child)) {
+	    TraceVec *tv = tracevec_acq(J);
+	    TraceNo rootno = trace_root_acq(child), directno;
+	    ExitNo rootexit;
+	    GCtrace *rootbody = tv != NULL && (MSize)rootno < tv->sizetrace ?
+	      traceref_safe(J, rootno) : NULL;
+	    int direct_ok = rootbody != NULL &&
+	      trace_arm64_side_graph_direct_ancestor(J, rootbody, rootno,
+	        trace_nextside_acq(rootbody), trace_nchild_acq(rootbody), parentno,
+	        &directno, &rootexit) && directno != 0;
+	    int rootview_ok = 0;
+	    if (direct_ok) {
+	      memset(&rootview, 0, sizeof(rootview));
+	      rootview.tracev = tv;
+	      rootview.parent = rootbody;
+	      rootview.rootbody = rootbody;
+	      rootview.startpt = trace_startptgco_acq(rootbody);
+	      rootview.startpc = trace_startpc_acq(rootbody);
+	      rootview.startins = trace_startins_acq(rootbody);
+	      rootview.ir = trace_ir_acq(rootbody);
+	      rootview.nins = trace_nins_acq(rootbody);
+	      rootview.nk = trace_nk_acq(rootbody);
+	      rootview.snap = trace_snap_acq(rootbody);
+	      rootview.snapmap = trace_snapmap_acq(rootbody);
+	      rootview.mcode = trace_mcode_acq(rootbody);
+	      rootview.exittab = trace_exittab_acq(rootbody);
+	      rootview.exitstub = trace_exitstub_acq(rootbody);
+	      rootview.szmcode = trace_szmcode_acq(rootbody);
+	      rootview.topslot = trace_topslot_acq(rootbody);
+	      rootview.spadjust = trace_spadjust_acq(rootbody);
+	      rootview.nsnap = trace_nsnap_acq(rootbody);
+	      rootview.nsnapmap = trace_nsnapmap_acq(rootbody);
+	      rootview.traceno = rootno;
+	      rootview.rootno = rootno;
+	      rootview.root = 0;
+	      rootview.link = trace_link_acq(rootbody);
+	      rootview.nextside = trace_nextside_acq(rootbody);
+	      rootview.nchild = trace_nchild_acq(rootbody);
+	      rootview.linktype = trace_linktype_acq(rootbody);
+	      rootview.root_generation = la_load64_acq(&rootbody->arm64_generation);
+	      rootview.admission = trace_arm64_admission_acq(rootbody);
+	      rootview.exitno = rootexit;
+	      if (rootview.snap != NULL && rootexit < rootview.nsnap) {
+		SnapShot *rootsnap = &rootview.snap[rootexit];
+		rootview.mapofs = snap_mapofs_acq(rootsnap);
+		rootview.nent = snap_nent_acq(rootsnap);
+		rootview.snapref = snap_ref_acq(rootsnap);
+		rootview.nslots = snap_nslots_acq(rootsnap);
+		rootview.snaptopslot = snap_topslot_acq(rootsnap);
+		rootview.continuationins = (BCIns)la_load32_acq(
+		  (const uint32_t *)rootview.startpc);
+	      }
+	      rootview_ok = rootview.snap != NULL && rootview.exittab != NULL &&
+		rootview.exitno < rootview.nsnap &&
+		rootview.root_generation != 0;
+	      if (rootview_ok) rootviewp = &rootview;
+	    }
+	    parentview_ok = rootview_ok;
+	    if (parentview_ok) {
+	      memset(&parentview, 0, sizeof(parentview));
+	      parentview.tracev = tv;
+	      parentview.parent = parentbody;
+	      parentview.rootbody = rootbody;
+	      parentview.startpt = rootview.startpt;
+	      parentview.startpc = rootview.startpc;
+	      parentview.startins = rootview.startins;
+	      parentview.ir = trace_ir_acq(parentbody);
+	      parentview.nins = trace_nins_acq(parentbody);
+	      parentview.nk = trace_nk_acq(parentbody);
+	      parentview.snap = trace_snap_acq(parentbody);
+	      parentview.snapmap = trace_snapmap_acq(parentbody);
+	      parentview.mcode = trace_mcode_acq(parentbody);
+	      parentview.exittab = trace_exittab_acq(parentbody);
+	      parentview.exitstub = trace_exitstub_acq(parentbody);
+	      parentview.szmcode = trace_szmcode_acq(parentbody);
+	      parentview.topslot = trace_topslot_acq(parentbody);
+	      parentview.nsnap = trace_nsnap_acq(parentbody);
+	      parentview.nsnapmap = trace_nsnapmap_acq(parentbody);
+	      parentview.traceno = parentno;
+	      parentview.root = rootno;
+	      parentview.rootno = rootno;
+	      parentview.link = trace_link_acq(parentbody);
+	      parentview.nextside = rootview.nextside;
+	      parentview.nchild = rootview.nchild;
+	      parentview.linktype = trace_linktype_acq(parentbody);
+	      parentview.root_generation = rootview.root_generation;
+	      parentview.admission = rootview.admission;
+	      parentview.parent_admission = trace_arm64_admission_acq(parentbody);
+	      parentview.flags = la_load8_acq(&parentbody->unused1);
+	      parentview.sinktags = parentbody->sinktags;
+	      parentview.exitno = parentexit;
+	    }
+	  }
+	  if (!parentview_ok) {
     lj_gc2_smr_read_leave(J2G(J));
     return 0;
   }
+	}
+  if (parentview.rootbody != parentview.parent && rootviewp == NULL) {
+    TraceNo directno;
+    ExitNo rootexit;
+    if (!trace_arm64_side_graph_direct_ancestor(J, parentview.rootbody,
+	  parentview.rootno, parentview.nextside, parentview.nchild,
+	  parentview.traceno, &directno, &rootexit) || directno == 0 ||
+	!trace_arm64_first_side_view_acq_mode(J, parentview.rootno, rootexit,
+	  &rootview, 1)) {
+	  lj_gc2_smr_read_leave(J2G(J));
+	  return 0;
+	}
+	rootviewp = &rootview;
+  }
+  memset(&side, 0, sizeof(side));
+  side.parent = (TraceNo)ir_load_acq(&source[REF_BASE]).op1;
+  side.root = trace_root_acq(child);
+  side.traceno = trace_traceno_acq(child);
+  side.exitno = (ExitNo)ir_load_acq(&source[REF_BASE]).op2;
+  side.root_generation = parentview.root_generation;
   ir = (IRIns *)calloc(nins, sizeof(*ir));
   snap = (SnapShot *)malloc(nsnap*sizeof(*snap));
   snapmap = (SnapEntry *)malloc(nsnapmap*sizeof(*snapmap));
@@ -7436,7 +8111,7 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
   side.baseslot = 1u+LJ_FR2;
   side.root_topslot = parentview.topslot;
   side.traceno = trace_traceno_acq(child);
-  side.parent = trace_root_acq(child);
+  side.parent = (TraceNo)ir_load_acq(&source[REF_BASE]).op1;
   side.root = trace_root_acq(child);
   side.link = trace_link_acq(child);
   side.exitno = (ExitNo)ir_load_acq(&source[REF_BASE]).op2;
@@ -7489,6 +8164,34 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
   *post_ok = post_base;
   if (!sem_base || !post_base)
     goto done;
+  if (mutation >= 28 && mutation <= 34) {
+	LJArm64SideAncestor *row;
+	if (side.parent_ancestry_count < 2) goto done;
+	row = (LJArm64SideAncestor *)side.parent_ancestry;
+	if (mutation == 28) {
+	  row[0].parentno = side.root;
+	  row[0].base.op1 = (IRRef1)side.root;
+	  row[0].parent_generation = side.root_generation;
+	} else if (mutation == 29) {
+	  row[0].rootno = (TraceNo)(side.root == 1 ? 2 : 1);
+	} else if (mutation == 30) {
+	  row[0].parent_generation ^= UINT64_C(1);
+	  if (row[0].parent_generation == 0) row[0].parent_generation = 1;
+	} else if (mutation == 31) {
+	  row[0].generation ^= UINT64_C(1);
+	  if (row[0].generation == 0) row[0].generation = 1;
+	} else if (mutation == 32) {
+	  row[0].traceno = side.traceno;
+	} else if (mutation == 33) {
+	  row[1].traceno = row[0].traceno;
+	  row[0].parentno = row[1].traceno;
+	  row[0].base.op1 = (IRRef1)row[0].parentno;
+	  row[0].parent_generation = row[1].generation;
+	} else {
+	  row[side.parent_ancestry_count-1u].parent_nsnap++;
+	}
+	goto validate;
+  }
 
   if (bc_op(semside.parent_startins) == BC_FORL) {
     MSize idxslot = 1u+LJ_FR2+(MSize)bc_a(semside.parent_startins);
@@ -7784,6 +8487,7 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
           parentcopy.map_values[i].ref = ir[forladd].op2;
     }
   }
+validate:
   *sem_ok = lj_asm_arm64_side_scalar_ir_admit(&jcopy, &childcopy,
 	&semside, &reject);
   *post_ok = lj_asm_arm64_side_scalar_postra_admit(&postra, &side, NULL);
@@ -7793,24 +8497,114 @@ done:
   return 1;
 }
 
+static int trace_test_side_graph_reorder_rejected(jit_State *J,
+	GCtrace *child)
+{
+  TraceArm64SideGraphIndex graph;
+  TraceVec *tv;
+  TraceNo rootno, childno, parentno;
+  GCtrace *root;
+  MSize count;
+  int child_index, parent_index;
+  TraceNo tmpno;
+  uint64_t tmpgen;
+  uint32_t slot, probes;
+  if (J == NULL || child == NULL ||
+	  (rootno = trace_root_acq(child)) == 0 ||
+	  (tv = tracevec_acq(J)) == NULL || (MSize)rootno >= tv->sizetrace ||
+	  (root = traceref_fromgco_safe(gcref_acq(tv->slot[rootno]))) == NULL ||
+	  (count = trace_nchild_acq(root)) < 3 ||
+	  !trace_arm64_side_graph_capture(J, root, rootno,
+	    trace_nextside_acq(root), count, &graph))
+	return 0;
+  childno = trace_traceno_acq(child);
+  parentno = child->arm64_side_cert.parentno;
+  child_index = trace_arm64_side_graph_find(&graph, childno);
+  parent_index = trace_arm64_side_graph_find(&graph, parentno);
+  if (child_index < 0 || parent_index <= child_index ||
+	  !trace_arm64_side_graph_path_valid(J, &graph, childno, NULL, NULL))
+	return 0;
+  /* Reorder the private captured view so an immediate ancestor precedes the
+  ** descendant. Update only the private index; the live root list is untouched. */
+  tmpno = graph.member[child_index];
+  graph.member[child_index] = graph.member[parent_index];
+  graph.member[parent_index] = tmpno;
+  tmpgen = graph.generation[child_index];
+  graph.generation[child_index] = graph.generation[parent_index];
+  graph.generation[parent_index] = tmpgen;
+  for (slot = trace_arm64_side_graph_hash(childno), probes = 0;
+	probes < TRACE_ARM64_SIDE_GRAPH_HASH; probes++,
+	  slot = (slot+1u) & (TRACE_ARM64_SIDE_GRAPH_HASH-1u))
+	if (graph.hashkey[slot] == childno) break;
+  if (probes == TRACE_ARM64_SIDE_GRAPH_HASH) return 0;
+  graph.hashindex[slot] = (uint8_t)(parent_index+1);
+  for (slot = trace_arm64_side_graph_hash(parentno), probes = 0;
+	probes < TRACE_ARM64_SIDE_GRAPH_HASH; probes++,
+	  slot = (slot+1u) & (TRACE_ARM64_SIDE_GRAPH_HASH-1u))
+	if (graph.hashkey[slot] == parentno) break;
+  if (probes == TRACE_ARM64_SIDE_GRAPH_HASH) return 0;
+  graph.hashindex[slot] = (uint8_t)(child_index+1);
+  return !trace_arm64_side_graph_path_valid(J, &graph, childno, NULL, NULL);
+}
+
 uint32_t lj_trace_test_arm64_side_scalar_copy_contract(jit_State *J,
     TraceNo childno)
 {
   GCtrace *child = J ? traceref_safe(J, childno) : NULL;
   uint32_t result = 0;
   int sem, post;
+	MSize depth;
   unsigned mutation;
-  if (!child || !trace_runnable_acq(child, childno) ||
-	!trace_test_side_scalar_copy(J, child, 0, &sem, &post) || !sem || !post)
-    return 0;
+	if (!child || !trace_runnable_acq(child, childno))
+	return 0;
+	if (!trace_test_side_scalar_copy(J, child, 0, &sem, &post) || !sem || !post)
+	return 0;
+	if (!lj_gc2_smr_read_try(J2G(J))) return 0;
+	depth = trace_arm64_side_certificate_depth_held(J, child);
+	lj_gc2_smr_read_leave(J2G(J));
   result = 3u;
-  for (mutation = 1; mutation <= 27; mutation++) {
+	if (depth >= 3u &&
+	    trace_arm64_side_graph_extension_allowed(63u, 3u, 4u) &&
+	    trace_arm64_side_graph_extension_allowed(64u, 1u, 1u) &&
+	    trace_arm64_side_graph_extension_allowed(64u, 2u, 2u) &&
+	    !trace_arm64_side_graph_extension_allowed(64u, 2u, 3u) &&
+	    !trace_arm64_side_graph_extension_allowed(64u, 3u, 1u) &&
+	    trace_arm64_side_graph_extension_allowed(65u, 1u, 1u) &&
+	    trace_arm64_side_graph_extension_allowed(65u, 2u, 2u) &&
+	    !trace_arm64_side_graph_extension_allowed(65u, 2u, 3u) &&
+	    !trace_arm64_side_graph_extension_allowed(65u, 3u, 1u))
+	  result |= 1u << 27;
+	if (depth >= 3u && trace_test_side_graph_reorder_rejected(J, child))
+	  result |= 1u << 28;
+	for (mutation = depth >= 3 ? 28u : 1u;
+	     mutation <= (depth >= 3 ? 34u : 27u); mutation++) {
     if (!trace_test_side_scalar_copy(J, child, mutation, &sem, &post))
 	return result;
     if (((mutation == 2 || mutation == 11) && sem && !post) ||
 	((mutation != 2 && mutation != 11) && !sem && !post))
-	result |= 1u << (mutation+1u);
+	    result |= 1u << (mutation >= 31u ? mutation-15u : mutation+1u);
   }
+  return result;
+}
+
+uint32_t lj_trace_test_arm64_side_graph_summary(jit_State *J, TraceNo rootno)
+{
+  GCtrace *root;
+  MSize count, depth;
+  uint32_t result = 0;
+  if (J == NULL || rootno == 0 || !lj_gc2_smr_read_try(J2G(J))) return 0;
+  root = traceref_safe(J, rootno);
+  if (root != NULL && trace_traceno_acq(root) == rootno &&
+	  trace_root_acq(root) == 0 && (count = trace_nchild_acq(root)) != 0) {
+	depth = trace_arm64_side_graph_max_depth(J, root, rootno,
+	  trace_nextside_acq(root), count);
+	if (depth != 0 &&
+	    trace_arm64_side_graph_retire_valid(J, root, rootno,
+	      trace_nextside_acq(root), count))
+	  result = (uint32_t)(count & 0xffffu) |
+	    ((uint32_t)(depth & 0xffffu) << 16);
+  }
+  lj_gc2_smr_read_leave(J2G(J));
   return result;
 }
 #endif
@@ -8126,13 +8920,16 @@ static int trace_root_entry_side_view_acq(jit_State *J,
 ** is visited. */
 static int trace_root_entry_nested_side_member_valid(jit_State *J,
 	GCtrace *root, TraceNo rootno, TraceNo childno,
-	const TraceArm64LoopView *rootview)
+	const TraceArm64LoopView *rootview, int deep_graph_valid)
 {
   TraceVec *tv;
   GCtrace *child, *parent;
   TraceNo parentno;
   IRIns base, parentbase;
   GCArena *arena;
+  MCode **exittab;
+  MCode *fallback;
+  MSize nexits, i;
 
   if (J == NULL || root == NULL || rootview == NULL || childno == 0 ||
 	childno == rootno)
@@ -8184,10 +8981,11 @@ static int trace_root_entry_nested_side_member_valid(jit_State *J,
   if (!trace_runnable_acq(parent, parentno) ||
 	trace_traceno_acq(parent) != parentno ||
 	trace_root_acq(parent) != rootno ||
-	parent->arm64_side_cert.parentno != rootno ||
 	parent->arm64_side_cert.rootno != rootno ||
 	!trace_arm64_side_certificate_valid_held(J, parent) ||
-	!trace_arm64_root_direct_side_present(J, tv, root, rootno, parentno)) {
+	(!deep_graph_valid &&
+	 (parent->arm64_side_cert.parentno != rootno ||
+	  !trace_arm64_root_direct_side_present(J, tv, root, rootno, parentno)))) {
     return 0;
   }
   if (trace_ir_acq(parent) == NULL || trace_nins_acq(parent) <= REF_BASE ||
@@ -8195,9 +8993,29 @@ static int trace_root_entry_nested_side_member_valid(jit_State *J,
     return 0;
   parentbase = ir_load_acq(&trace_ir_acq(parent)[REF_BASE]);
   if (parentbase.o != IR_BASE || parentbase.t.irt != IRT_PGC ||
-	(TraceNo)parentbase.op1 != rootno ||
-	(ExitNo)parentbase.op2 != parent->arm64_side_cert.exitno) {
+	(ExitNo)parentbase.op2 != parent->arm64_side_cert.exitno ||
+	(!deep_graph_valid && (TraceNo)parentbase.op1 != rootno)) {
     return 0;
+  }
+  exittab = trace_exittab_acq(child);
+  nexits = trace_exittab_nslots_acq(child);
+  if (exittab == NULL || trace_exitstub_acq(child) == NULL ||
+	  trace_nsnap_acq(child) == 0 ||
+	  trace_nsnap_acq(child) == ~(MSize)0 ||
+	  nexits != trace_nsnap_acq(child)+1u ||
+	  (uintptr_t)(void *)trace_exitstub_acq(child) <
+	    (uintptr_t)ARM64_EXIT_FALLBACK_WORDS*sizeof(MCode))
+	return 0;
+  fallback = exitstub_trace_fallback_addr_(trace_exitstub_acq(child));
+  for (i = 0; i < nexits; i++) {
+	uintptr_t target_bits = trace_arm64_first_side_pointer_bits(
+	  la_loadptr_acq((void *const *)&exittab[i]));
+	uintptr_t fallback_bits = trace_arm64_first_side_pointer_bits(
+	  trace_exittarget_arm64_encode(J2G(J), fallback));
+	if (target_bits != fallback_bits &&
+	    !trace_root_entry_nested_exit_target_valid(J, root, rootno,
+	      childno, (ExitNo)i, rootview, target_bits))
+	  return 0;
   }
   arena = lj_arena_of(child);
   return arena != NULL && !lj_arena_ishuge(arena) &&
@@ -8227,6 +9045,7 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
   TraceVec *tv = tracevec_acq(J);
   TraceNo childno = rootview->nextside;
   int found_direct = 0;
+  int deep_graph_valid = 0;
   MSize i;
   memset(view, 0, sizeof(*view));
   if (rootview->nchild == 0)
@@ -8255,9 +9074,27 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
 	*view = current;
 	found_direct = 1;
       }
-    } else if (!trace_root_entry_nested_side_member_valid(
-	 J, parent, parentno, childno, rootview)) {
-      return 0;
+    } else {
+      TraceNo immediate = (TraceNo)base.op1;
+      GCtrace *mid = (MSize)immediate < tv->sizetrace ?
+	traceref_fromgco_safe(gcref_acq(tv->slot[immediate])) : NULL;
+      IRIns midbase;
+      if (mid == NULL || trace_ir_acq(mid) == NULL ||
+	  trace_nins_acq(mid) <= REF_BASE ||
+	  trace_nins_acq(mid) >= REF_DROP)
+	return 0;
+      midbase = ir_load_acq(&trace_ir_acq(mid)[REF_BASE]);
+      if (midbase.o != IR_BASE || midbase.t.irt != IRT_PGC)
+	return 0;
+      if ((TraceNo)midbase.op1 != parentno && !deep_graph_valid) {
+	if (!trace_arm64_side_graph_valid(J, parent, parentno,
+	      rootview->nextside, rootview->nchild))
+	  return 0;
+	deep_graph_valid = 1;
+      }
+      if (!trace_root_entry_nested_side_member_valid(
+	    J, parent, parentno, childno, rootview, deep_graph_valid))
+	return 0;
     }
     childno = trace_nextside_acq(child);
   }
@@ -9872,7 +10709,7 @@ static int trace_arm64_side_certificate_valid_held(jit_State *J,
 ** have its fallback exit and a live snapshot count. Validate only the sealed
 ** immutable tuple here; the full certificate validator above deliberately
 ** requires the already-published topology and is reserved for native entry. */
-static int trace_arm64_side_certificate_sealed_valid_held(jit_State *J,
+static int trace_arm64_side_certificate_local_valid_held(jit_State *J,
 	GCtrace *T)
 {
   const LJArm64SideCertificate *c;
@@ -9909,7 +10746,9 @@ static int trace_arm64_side_certificate_sealed_valid_held(jit_State *J,
 	c->linktype != trace_linktype_acq(T) ||
 	c->admission != trace_arm64_admission_acq(T) ||
 	c->sinktags != T->sinktags ||
-	c->startins != trace_startins_acq(T) || c->parentno == 0 ||
+	 c->startins != trace_startins_acq(T) || c->parentno == 0 ||
+	 c->parentno == c->traceno || c->rootno == 0 ||
+	 c->rootno == c->traceno ||
 	c->exitno >= c->parent_nsnap || tv == NULL ||
 	(MSize)c->parentno >= tv->sizetrace)
 	return 0;
@@ -9938,14 +10777,12 @@ static int trace_arm64_side_certificate_sealed_valid_held(jit_State *J,
 	parent->arm64_root_cert.body == parent &&
 	trace_root_acq(parent) == 0;
   } else {
-    /* Establish the bounded ancestry before following the parent seal.
-    ** A malformed self/cyclic certificate must not recurse into itself. */
     parent_generation_valid = trace_root_acq(parent) == c->rootno &&
-	parent->arm64_side_cert.parentno == c->rootno &&
 	parent->arm64_side_cert.rootno == c->rootno &&
-	trace_arm64_side_certificate_sealed_valid_held(J, parent) &&
-	trace_arm64_side_parent_edge_valid_held(
-	  J, parent, c->rootno, 1) &&
+	parent->arm64_side_cert.body == parent &&
+	parent->arm64_side_cert.traceno == trace_traceno_acq(parent) &&
+	parent->arm64_side_cert.parentno != 0 &&
+	parent->arm64_side_cert.parentno != trace_traceno_acq(parent) &&
 	parent_generation == la_load64_acq(&parent->arm64_generation) &&
 	parent_generation == la_load64_acq(&parent->arm64_side_cert.generation);
   }
@@ -9971,6 +10808,172 @@ static int trace_arm64_side_certificate_sealed_valid_held(jit_State *J,
 	trace_snapmap_acq(parent) == c->parent_snapmap &&
 	trace_nsnap_acq(parent) == c->parent_nsnap &&
 	trace_nsnapmap_acq(parent) == c->parent_nsnapmap;
+}
+
+/* Walk sealed parent generations iteratively. Each side certificate binds one
+** immediate parent and exact resume snapshot; the walk must reach the one
+** canonical root within the root-owned child-count bound. This prevents
+** unbounded recursion and rejects parent cycles without allocating state. */
+static int trace_arm64_side_certificate_sealed_valid_held(jit_State *J,
+	GCtrace *T)
+{
+  TraceVec *tv;
+  GCtrace *root, *current;
+  TraceNo rootno;
+  MSize count, depth;
+  if (J == NULL || T == NULL ||
+	  (tv = tracevec_acq(J)) == NULL ||
+	  (rootno = trace_root_acq(T)) == 0 ||
+	  (MSize)rootno >= tv->sizetrace)
+	return 0;
+  root = traceref_fromgco_safe(gcref_acq(tv->slot[rootno]));
+  if (root == NULL || trace_traceno_acq(root) != rootno ||
+	trace_root_acq(root) != 0)
+	return 0;
+  count = trace_nchild_acq(root);
+  if (count > tv->sizetrace || count == ~(MSize)0)
+	return 0;
+  current = T;
+  for (depth = 0; depth <= count; depth++) {
+	const LJArm64SideCertificate *cert;
+	GCtrace *parent;
+	TraceNo currentno, parentno;
+	if (!trace_arm64_side_certificate_local_valid_held(J, current))
+	  return 0;
+	cert = &current->arm64_side_cert;
+	currentno = trace_traceno_acq(current);
+	parentno = cert->parentno;
+	if (parentno == rootno)
+	  return tracevec_acq(J) == tv &&
+	    gcref_acq(tv->slot[rootno]) == obj2gco(root) &&
+	    trace_nchild_acq(root) == count;
+	if (parentno == 0 || parentno == currentno ||
+	    (MSize)parentno >= tv->sizetrace)
+	  return 0;
+	parent = traceref_fromgco_safe(gcref_acq(tv->slot[parentno]));
+	if (parent == NULL || parent != cert->parent ||
+	    trace_traceno_acq(parent) != parentno ||
+	    trace_root_acq(parent) != rootno)
+	  return 0;
+	current = parent;
+  }
+  return 0;
+}
+
+/* Copy the exact immediate-parent ancestry used by the assembler view. Every
+** row comes from a sealed side certificate while the caller holds SMR; the
+** copied IR_BASE and generation pair let semantic and post-RA admission check
+** the chain without following mutable trace storage. */
+static int trace_arm64_side_ancestry_capture_held(jit_State *J,
+	TraceNo parentno, TraceNo rootno, uint64_t root_generation,
+	LJArm64SideAncestor *ancestry, uint8_t *ancestry_count)
+{
+  TraceVec *tv;
+  GCtrace *root, *current;
+  MSize depth;
+  if (J == NULL || parentno == 0 || rootno == 0 || ancestry == NULL ||
+	  ancestry_count == NULL || root_generation == 0 ||
+	  (tv = tracevec_acq(J)) == NULL ||
+	  (MSize)parentno >= tv->sizetrace || (MSize)rootno >= tv->sizetrace)
+	return 0;
+  root = traceref_fromgco_safe(gcref_acq(tv->slot[rootno]));
+  if (root == NULL || trace_traceno_acq(root) != rootno ||
+	  trace_root_acq(root) != 0 ||
+	  la_load64_acq(&root->arm64_generation) != root_generation ||
+	  la_load64_acq(&root->arm64_root_cert.generation) != root_generation ||
+	  root->arm64_root_cert.body != root)
+	return 0;
+  *ancestry_count = 0;
+  if (parentno == rootno)
+	return 1;
+  current = traceref_fromgco_safe(gcref_acq(tv->slot[parentno]));
+  for (depth = 0; depth < LJ_ARM64_SIDE_MAX_ANCESTRY; depth++) {
+	const LJArm64SideCertificate *cert;
+	LJArm64SideAncestor *row = &ancestry[depth];
+	TraceNo currentno, nextno;
+	uint64_t generation, parent_generation;
+	IRIns base;
+	if (current == NULL || trace_traceno_acq(current) != parentno ||
+	    trace_root_acq(current) != rootno ||
+	    !trace_arm64_side_certificate_valid_held(J, current))
+	  return 0;
+	cert = &current->arm64_side_cert;
+	currentno = trace_traceno_acq(current);
+	generation = la_load64_acq(&cert->generation);
+	parent_generation = la_load64_acq(&cert->parent_generation);
+	nextno = cert->parentno;
+	base = ir_load_acq(&trace_ir_acq(current)[REF_BASE]);
+	if (generation == 0 || parent_generation == 0 ||
+	    cert->parent_nsnap == 0 || cert->exitno >= cert->parent_nsnap ||
+	    cert->traceno != currentno || cert->rootno != rootno ||
+	    nextno == 0 || nextno == currentno ||
+	    base.o != IR_BASE || base.t.irt != IRT_PGC ||
+	    (TraceNo)base.op1 != nextno || (ExitNo)base.op2 != cert->exitno)
+	  return 0;
+	row->generation = generation;
+	row->parent_generation = parent_generation;
+	row->parent_nsnap = cert->parent_nsnap;
+	row->base = base;
+	row->traceno = currentno;
+	row->parentno = nextno;
+	row->rootno = rootno;
+	row->exitno = cert->exitno;
+	if (nextno == rootno) {
+	  if (parent_generation != root_generation) return 0;
+	  *ancestry_count = (uint8_t)(depth+1u);
+	  return 1;
+	}
+	if ((MSize)nextno >= tv->sizetrace) return 0;
+	current = traceref_fromgco_safe(gcref_acq(tv->slot[nextno]));
+	if (current == NULL ||
+	    la_load64_acq(&current->arm64_side_cert.generation) !=
+	      parent_generation)
+	  return 0;
+	parentno = nextno;
+  }
+  return 0;
+}
+
+/* Return the certified parent-chain depth for flush ordering. The root-owned
+** child count bounds the walk and the sealed check authenticates every parent
+** generation before the result is used to order destructive retirement. */
+static MSize trace_arm64_side_certificate_depth_held(jit_State *J,
+	GCtrace *T)
+{
+  TraceVec *tv;
+  GCtrace *root;
+  TraceNo rootno, currentno;
+  GCtrace *current;
+  MSize count, depth;
+  if (J == NULL || T == NULL ||
+	  !trace_arm64_side_certificate_sealed_valid_held(J, T) ||
+	  (tv = tracevec_acq(J)) == NULL ||
+	  (rootno = trace_root_acq(T)) == 0 ||
+	  (MSize)rootno >= tv->sizetrace)
+	return 0;
+  root = traceref_fromgco_safe(gcref_acq(tv->slot[rootno]));
+  if (root == NULL || trace_traceno_acq(root) != rootno ||
+	  trace_root_acq(root) != 0)
+	return 0;
+  current = T;
+  currentno = trace_traceno_acq(T);
+  count = trace_nchild_acq(root);
+  if (count == 0 || count > tv->sizetrace)
+	return 0;
+  for (depth = 1; depth <= count; depth++) {
+	TraceNo parentno = current->arm64_side_cert.parentno;
+	if (parentno == rootno)
+	  return depth;
+	if (parentno == 0 || parentno == currentno ||
+	    (MSize)parentno >= tv->sizetrace)
+	  return 0;
+	current = traceref_fromgco_safe(gcref_acq(tv->slot[parentno]));
+	if (current == NULL || trace_traceno_acq(current) != parentno ||
+	    trace_root_acq(current) != rootno)
+	  return 0;
+	currentno = parentno;
+  }
+  return 0;
 }
 
 #if defined(LJ_TRACE_TEST_HELPERS) && \
@@ -11022,6 +12025,7 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
   TraceNo edgeparentno;
   TraceNo side_no, prev_no = 0;
   ExitNo exitno;
+  TraceArm64SideGraphIndex sidegraph;
   MSize mapofs;
   MSize nent;
   MSize nsnapmap;
@@ -11031,6 +12035,7 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
   uint8_t childflags;
   uint8_t parentflags;
   int target_found = 0;
+  int use_sidegraph = 0;
 
   memset(plan, 0, sizeof(*plan));
   if (J == NULL || T == NULL || !lj_jit_token_held(J))
@@ -11104,13 +12109,8 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
   if (parent == NULL || edgeparent == NULL ||
       trace_root_acq(edgeparent) != (edgeparentno == parentno ? 0 : parentno) ||
       (edgeparentno != parentno &&
-       (!trace_arm64_side_certificate_sealed_valid_held(J, edgeparent) ||
-	!trace_arm64_side_parent_edge_valid_held(
-	  J, edgeparent, parentno, 1) ||
-	edgeparent->arm64_side_cert.parentno != parentno ||
-	edgeparent->arm64_side_cert.rootno != parentno ||
-	!trace_arm64_root_direct_side_present(
-	  J, tv, parent, parentno, edgeparentno))))
+	(!trace_arm64_side_certificate_valid_held(J, edgeparent) ||
+	 edgeparent->arm64_side_cert.rootno != parentno)))
     return 0;
   parent_nsnap = trace_nsnap_acq(parent);
   parent_nexits = trace_exittab_nslots_acq(parent);
@@ -11124,6 +12124,26 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
       trace_spadjust_acq(parent) != 0 || parent_nsnap == 0 ||
       parent_nexits != parent_nsnap)
     return 0;
+  if (parent_nchild <= TRACE_ARM64_SIDE_GRAPH_MAX) {
+	if (!trace_arm64_side_graph_capture(
+	      J, parent, parentno, side_no, parent_nchild, &sidegraph))
+	  return 0;
+	for (side_i = 0; side_i < sidegraph.count; side_i++) {
+	  if (!trace_arm64_side_graph_path_valid(
+		J, &sidegraph, sidegraph.member[side_i], NULL, NULL))
+	    return 0;
+	}
+	if (!trace_arm64_side_graph_revalidate(J, &sidegraph))
+	  return 0;
+	use_sidegraph = 1;
+  }
+  if (edgeparentno != parentno &&
+	  (use_sidegraph ?
+	   trace_arm64_side_graph_find(&sidegraph, edgeparentno) < 0 :
+	   (edgeparent->arm64_side_cert.parentno != parentno ||
+	    !trace_arm64_root_direct_side_present(
+	      J, tv, parent, parentno, edgeparentno))))
+	return 0;
   parentflags = la_load8_acq(&parent->unused1);
   if ((parentflags & (uint8_t)~TRACE_SCOPE_FLUSH_PENDING) != 0 ||
 	  trace_arm64_admission_acq(parent) !=
@@ -11212,8 +12232,15 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
         (TraceNo)sidebase.op1 == side_no ||
         (TraceNo)sidebase.op1 >= tv->sizetrace)
       return 0;
-    if (side != T && (TraceNo)sidebase.op1 == childno)
-      return 0;  /* A parent allocation cannot retire before its children. */
+    if (side != T) {
+	int descendant = use_sidegraph ?
+	  trace_arm64_side_graph_has_ancestor(&sidegraph, side_no, childno) :
+	  trace_arm64_side_chain_has_ancestor(
+	    J, parentno, side_no, childno, parent_nchild);
+	if (descendant < 0) return 0;
+	if (descendant)
+	  return 0;  /* A parent allocation cannot retire before descendants. */
+    }
     side_parentno = (TraceNo)sidebase.op1;
     side_parent = traceref_fromgco_safe(gcref_acq(tv->slot[side_parentno]));
     if (!trace_runnable_acq(side_parent, side_parentno) ||
@@ -11229,16 +12256,20 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
     } else {
       IRIns parentbase = ir_load_acq(
 	&trace_ir_acq(side_parent)[REF_BASE]);
-	  if (!trace_arm64_side_certificate_sealed_valid_held(J, side_parent) ||
-	      !trace_arm64_side_parent_edge_valid_held(
-		J, side_parent, parentno, 1) ||
-	  side_parent->arm64_side_cert.parentno != parentno ||
-	  side_parent->arm64_side_cert.rootno != parentno ||
-	  parentbase.o != IR_BASE || parentbase.t.irt != IRT_PGC ||
-	  (TraceNo)parentbase.op1 != parentno ||
-	  !trace_arm64_root_direct_side_present(
-	    J, tv, parent, parentno, side_parentno))
-	return 0;
+	  if (!trace_arm64_side_certificate_valid_held(J, side_parent) ||
+	      side_parent->arm64_side_cert.rootno != parentno ||
+	      parentbase.o != IR_BASE || parentbase.t.irt != IRT_PGC ||
+	      (TraceNo)parentbase.op1 != side_parent->arm64_side_cert.parentno ||
+	      (ExitNo)parentbase.op2 != side_parent->arm64_side_cert.exitno)
+	    return 0;
+	  if (use_sidegraph) {
+	    if (trace_arm64_side_graph_find(&sidegraph, side_parentno) < 0)
+	      return 0;
+	  } else if (side_parent->arm64_side_cert.parentno != parentno ||
+	     !trace_arm64_root_direct_side_present(
+	       J, tv, parent, parentno, side_parentno)) {
+	    return 0;
+	  }
     }
     side_exit = (ExitNo)sidebase.op2;
     sidecode = trace_mcode_acq(side);
@@ -12052,9 +13083,6 @@ uint32_t lj_trace_flushscope_retire_hs(global_State *g, uint64_t epoch)
 {
   jit_State *J = G2J(g);
   TraceNo i;
-#if LJ_TARGET_ARM64
-  int depth;
-#endif
   uint32_t retired = 0;
   MSize sizetrace = trace_sizetrace_acq(J);
   /* This is the post-boundary token-owner half of scoped retirement. Generic
@@ -12067,26 +13095,47 @@ uint32_t lj_trace_flushscope_retire_hs(global_State *g, uint64_t epoch)
     return 0;
   lj_gc2_smr_read_enter(g);
 #if LJ_TARGET_ARM64
-  for (depth = 1; depth >= 0; depth--) {
-  for (i = 1; i < sizetrace; i++) {
-    GCtrace *T = traceref_safe(J, i);
-    if (T && trace_root_acq(T) != 0 && trace_traceno_acq(T) == i) {
-      TraceNo rootno = trace_root_acq(T);
-      GCtrace *root = traceref_safe(J, rootno);
-      int nested = T->arm64_side_cert.parentno != rootno;
-      if (trace_scope_pending_acq(T) ||
-	  (root && trace_traceno_acq(root) == rootno &&
-	   trace_scope_pending_acq(root))) {
-	if (nested != depth)
-	  continue;
-	if (!trace_arm64_side_certificate_sealed_valid_held(J, T))
-	  trace_arm64_first_side_retire_failstop(
-	    J, "scoped ARM64 side certificate was lost before retirement");
-	trace_scope_clear_slot(J, i, T, epoch);
-	retired++;
-      }
-    }
-  }
+	for (i = 1; i < sizetrace; i++) {
+	  GCtrace *root = traceref_safe(J, i);
+	  TraceNo side_no;
+	  MSize count, j;
+	  if (root == NULL || trace_traceno_acq(root) != i ||
+	      trace_root_acq(root) != 0 ||
+	      (count = trace_nchild_acq(root)) == 0)
+	    continue;
+	  side_no = trace_nextside_acq(root);
+	  if (!trace_arm64_side_graph_retire_valid(
+		J, root, i, side_no, count))
+	    trace_arm64_first_side_retire_failstop(
+	      J, "scoped ARM64 root side graph is malformed");
+	  /* Publication prepends each child. A validated list is therefore already
+	  ** in descendant-before-ancestor order; save the successor before unlink. */
+	  for (j = 0; j < count; j++) {
+	    GCtrace *T;
+	    TraceNo next;
+	    int pending;
+	    if (side_no == 0 || (MSize)side_no >= sizetrace)
+	      trace_arm64_first_side_retire_failstop(
+		J, "scoped ARM64 side graph ended early");
+	    T = traceref_safe(J, side_no);
+	    if (T == NULL || trace_traceno_acq(T) != side_no)
+	      trace_arm64_first_side_retire_failstop(
+		J, "scoped ARM64 side slot generation changed");
+	    next = trace_nextside_acq(T);
+	    pending = trace_arm64_side_scope_pending_held(
+	      J, root, i, T, count);
+	    if (pending < 0)
+	      trace_arm64_first_side_retire_failstop(
+		J, "scoped ARM64 side ancestry changed during retirement");
+	    if (pending) {
+	      trace_scope_clear_slot(J, side_no, T, epoch);
+	      retired++;
+	    }
+	    side_no = next;
+	  }
+	  if (side_no != 0)
+	    trace_arm64_first_side_retire_failstop(
+	      J, "scoped ARM64 side graph has trailing members");
   }
 #else
   for (i = 1; i < sizetrace; i++) {
@@ -12269,31 +13318,53 @@ static void trace_flushall_arm64_first_side_prepass(jit_State *J,
 	MSize sizetrace)
 {
   global_State *g = J2G(J);
-	MSize i;
-	int depth;
-	/* The root list is flat, but a nested side's inbound edge lives in its
-	** immediate parent. Detach depth-one children before their parent side. */
-	for (depth = 1; depth >= 0; depth--) {
-	for (i = 1; i < sizetrace; i++) {
-    GCtrace *T = traceref_safe(J, (TraceNo)i);
-    int arm64_edge;
-    if (!T || trace_traceno_acq(T) != (TraceNo)i ||
-	!trace_arm64_first_side_retire_candidate(T) ||
-	la_load64_acq(&T->retire_epoch) != 0)
+  MSize i;
+  /* Each root-owned list is newest-first. Validate the full list before the
+  ** first inverse edge, then retire in that same descendant-before-ancestor
+  ** order. Saving next before disconnect keeps the walk independent of the
+  ** topology mutation performed for the current child. */
+  for (i = 1; i < sizetrace; i++) {
+    GCtrace *root = traceref_safe(J, (TraceNo)i);
+    TraceNo side_no;
+    MSize count, j;
+    if (root == NULL || trace_traceno_acq(root) != (TraceNo)i ||
+	trace_root_acq(root) != 0 || (count = trace_nchild_acq(root)) == 0)
       continue;
-	if (!trace_arm64_side_certificate_sealed_valid_held(J, T))
-	  trace_arm64_first_side_retire_failstop(
-	    J, "full flush lost ARM64 side certificate before ordering");
-	if ((T->arm64_side_cert.parentno != trace_root_acq(T)) != depth)
-	  continue;
-    arm64_edge = trace_arm64_first_side_retire_edge(J, T);
-    if (arm64_edge != TRACE_ARM64_FIRST_SIDE_RETIRE_EXACT)
+    side_no = trace_nextside_acq(root);
+    if (!trace_arm64_side_graph_retire_valid(
+	  J, root, (TraceNo)i, side_no, count))
       trace_arm64_first_side_retire_failstop(
-	J, "full flush could not detach ARM64 first-side edge");
-    trace_retire(g, T);
-    trace_retire_disconnect(J, T);
+	J, "full flush ARM64 root side graph is malformed");
+    for (j = 0; j < count; j++) {
+      GCtrace *T;
+      TraceNo next;
+      int arm64_edge;
+      if (side_no == 0 || (MSize)side_no >= sizetrace)
+	trace_arm64_first_side_retire_failstop(
+	  J, "full flush ARM64 side graph ended early");
+      T = traceref_safe(J, side_no);
+      if (T == NULL || trace_traceno_acq(T) != side_no)
+	trace_arm64_first_side_retire_failstop(
+	  J, "full flush ARM64 side slot generation changed");
+      next = trace_nextside_acq(T);
+      if (trace_arm64_first_side_retire_candidate(T) &&
+	  la_load64_acq(&T->retire_epoch) == 0) {
+	if (trace_arm64_side_certificate_depth_held(J, T) == 0)
+	  trace_arm64_first_side_retire_failstop(
+	    J, "full flush lost ARM64 side certificate during ordered walk");
+	arm64_edge = trace_arm64_first_side_retire_edge(J, T);
+	if (arm64_edge != TRACE_ARM64_FIRST_SIDE_RETIRE_EXACT)
+	  trace_arm64_first_side_retire_failstop(
+	    J, "full flush could not detach ARM64 first-side edge");
+	trace_retire(g, T);
+	trace_retire_disconnect(J, T);
+      }
+      side_no = next;
+    }
+    if (side_no != 0)
+      trace_arm64_first_side_retire_failstop(
+	J, "full flush ARM64 side graph has trailing members");
   }
-	}
 }
 #endif
 
@@ -15203,7 +16274,6 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
   }
 
 #endif
-
   if (!(lj_tg_hookmask_combined_load(g, L2TG(L)) &
 	(HOOK_GC|HOOK_VMEVENT)) &&
       lj_jit_trace_stream_idle(g) &&

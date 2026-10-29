@@ -20,6 +20,7 @@
 #include "lj_bc.h"
 #include "lj_ir.h"
 #include "lj_jit.h"
+#include "lj_obj.h"
 #include "lj_trace.h"
 
 static void run(lua_State *L, const char *source)
@@ -83,6 +84,81 @@ static GCtrace *find_side(lua_State *L, jit_State *J, const char *name,
     }
   }
   return NULL;
+}
+
+static GCtrace *find_root_for_proto(jit_State *J, GCproto *pt)
+{
+  MSize n;
+  for (n = 1; n < trace_sizetrace_acq(J); n++) {
+    GCtrace *T = traceref_safe(J, (TraceNo)n);
+    if (trace_runnable_acq(T, (TraceNo)n) && trace_root_acq(T) == 0 &&
+        trace_startpt_acq(T) == pt &&
+        bc_op(trace_startins_acq(T)) == BC_FORL)
+      return T;
+  }
+  return NULL;
+}
+
+static GCtrace *find_largest_root_for_proto(jit_State *J, GCproto *pt)
+{
+  GCtrace *best = NULL;
+  MSize n;
+  for (n = 1; n < trace_sizetrace_acq(J); n++) {
+    GCtrace *T = traceref_safe(J, (TraceNo)n);
+    if (trace_runnable_acq(T, (TraceNo)n) && trace_root_acq(T) == 0 &&
+        trace_startpt_acq(T) == pt &&
+        bc_op(trace_startins_acq(T)) == BC_FORL &&
+        (best == NULL || trace_nchild_acq(T) > trace_nchild_acq(best)))
+      best = T;
+  }
+  return best;
+}
+
+static MSize side_depth(jit_State *J, GCtrace *T)
+{
+  MSize depth = 0, limit;
+  TraceNo no;
+  TraceVec *tv = tracevec_acq(J);
+  GCtrace *root;
+  if (!tv || !T) return 0;
+  no = trace_traceno_acq(T);
+  root = traceref_safe(J, trace_root_acq(T));
+  if (!trace_runnable_acq(root, trace_root_acq(T))) return 0;
+  limit = trace_nchild_acq(root)+1u;
+  while (trace_root_acq(T) != 0 && depth < limit) {
+    IRIns base = trace_ir_acq(T)[REF_BASE];
+    TraceNo parent = (TraceNo)base.op1;
+    if (base.o != IR_BASE || parent == 0 || parent == no ||
+        (MSize)parent >= tv->sizetrace) return 0;
+    T = traceref_safe(J, parent);
+    if (!trace_runnable_acq(T, parent)) return 0;
+    no = parent;
+    depth++;
+  }
+  return trace_root_acq(T) == 0 ? depth : 0;
+}
+
+static GCtrace *find_deepest_side(lua_State *L, jit_State *J,
+                                  const char *name, MSize minimum_depth)
+{
+  GCproto *pt;
+  GCtrace *deepest = NULL;
+  MSize best = 0, n;
+  lua_getglobal(L, name);
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  pt = funcproto(funcV(L->top-1));
+  lua_pop(L, 1);
+  assert(lj_gc2_smr_read_try(J2G(J)));
+  for (n = 1; n < trace_sizetrace_acq(J); n++) {
+    GCtrace *T = traceref_safe(J, (TraceNo)n);
+    MSize depth;
+    if (!trace_runnable_acq(T, (TraceNo)n) ||
+        trace_startpt_acq(T) != pt || trace_root_acq(T) == 0) continue;
+    depth = side_depth(J, T);
+    if (depth > best) best = depth, deepest = T;
+  }
+  lj_gc2_smr_read_leave(J2G(J));
+  return best >= minimum_depth ? deepest : NULL;
 }
 
 int main(void)
@@ -219,6 +295,233 @@ int main(void)
   ** and preserve ordinary Lua arithmetic errors. */
   run(L, "local ok,err=pcall(kernel,64,true); "
          "assert(not ok and string.find(err,'arithmetic'))");
+
+  /* Reach a third side level using distinct guarded paths, then prove the
+  ** copied immediate-parent chain rejects skipped, foreign-root and stale-
+  ** generation mutations in both independent admission passes. */
+  run(L,
+    "local jit=require('jit'); jit.flush(); jit.on(); "
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=128'); "
+    "depth_kernel=function(a,b,c,d,n) local s=.5 "
+    "for i=1,n do if a==1 then if b==1 then if c==1 then "
+    "if d==1 then s=s+i else s=s+i*.125 end "
+    "else if d==1 then s=s+i*.25 else s=s+i*.0625 end end "
+    "else if c==1 then if d==1 then s=s+i*.5 else s=s+i*.03125 end "
+    "else if d==1 then s=s+i*.125 else s=s+i*.015625 end end end "
+    "else if b==1 then if c==1 then if d==1 then s=s-i "
+    "else s=s-i*.125 end else if d==1 then s=s-i*.25 "
+    "else s=s-i*.0625 end end else if c==1 then if d==1 then "
+    "s=s-i*.5 else s=s-i*.03125 end else if d==1 then "
+    "s=s-i*.125 else s=s-i*.015625 end end end end end "
+    "return s end; "
+    "for k=1,100 do depth_kernel(1,1,1,1,48) end; "
+    "for k=1,100 do depth_kernel(2,1,1,1,48) end; "
+    "for k=1,100 do depth_kernel(2,2,1,1,48) end; "
+    "for k=1,100 do depth_kernel(2,2,2,1,48) end");
+  child = find_deepest_side(L, J, "depth_kernel", 3u);
+  assert(child != NULL);
+  childno = trace_traceno_acq(child);
+  { uint32_t contract = lj_trace_test_arm64_side_scalar_copy_contract(J,
+      childno);
+    const uint32_t ancestry_mutations = 0xf80f0000u;
+    if ((contract & ancestry_mutations) != ancestry_mutations)
+      fprintf(stderr, "ancestry mutations expected=%08x observed=%08x\n",
+              ancestry_mutations, contract);
+    assert((contract & ancestry_mutations) == ancestry_mutations); }
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+	run(L, "for k=1,64 do assert(depth_kernel(2,2,2,1,48)==-146.5) end");
+  assert(lj_trace_test_root_entry_successes() > 0);
+  assert(lj_trace_test_exit_calls() > 0);
+
+  /* Retain the historical wide direct-child path beyond the 64-entry deep
+  ** ancestry index. The real root owns 65 separately selected cold exits;
+  ** the summary helper validates its topology and retirement eligibility. */
+  run(L,
+    "local jit=require('jit'); jit.flush(); jit.on(); "
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=4096',"
+    "'maxside=256','maxrecord=4000'); "
+    "local parts={'return function(z,a,x,n) local s=.5 for i=1,n do "
+    "if z==1 then if a==1 then s=s+i*.001 else s=s+i*.002 end end '}; "
+    "for k=1,65 do parts[#parts+1]="
+    "('if x==%d then s=s+i*0.0001 end '):format(k) end; "
+    "parts[#parts+1]='end return s end'; local body=table.concat(parts); "
+    "wide_kernel=assert(loadstring(body))(); "
+    "wide_oracle=assert(loadstring(body))(); jit.off(wide_oracle,true); "
+    "for i=1,100 do assert(wide_kernel(0,0,0,32)==wide_oracle(0,0,0,32)) end; "
+    "for i=1,20 do assert(wide_kernel(1,1,0,32)==wide_oracle(1,1,0,32)) end; "
+    "for k=1,65 do for i=1,10 do "
+    "assert(wide_kernel(0,0,k,32)==wide_oracle(0,0,k,32)) end end; "
+    "for i=1,20 do assert(wide_kernel(1,2,0,32)==wide_oracle(1,2,0,32)) end; "
+    "collectgarbage('collect'); "
+    "for k=1,65 do assert(wide_kernel(0,0,k,32)==wide_oracle(0,0,k,32)) end; "
+    "for i=1,20 do assert(wide_kernel(1,2,0,32)==wide_oracle(1,2,0,32)) end");
+  lua_getglobal(L, "wide_kernel");
+  assert(lua_isfunction(L, -1));
+  {
+    GCproto *pt = funcproto(funcV(L->top-1));
+    GCtrace *wide_root = find_root_for_proto(J, pt);
+    uint32_t summary;
+    assert(wide_root != NULL && trace_nchild_acq(wide_root) == 67u);
+    summary = lj_trace_test_arm64_side_graph_summary(
+      J, trace_traceno_acq(wide_root));
+    if (summary != ((2u << 16) | 67u))
+      fprintf(stderr, "wide graph summary expected=%#x observed=%#x count=%u\n",
+              (2u << 16) | 67u, summary, trace_nchild_acq(wide_root));
+    assert(summary == ((2u << 16) | 67u));
+    run(L, "collectgarbage('collect'); "
+           "for k=1,65 do assert(wide_kernel(0,0,k,32)==wide_oracle(0,0,k,32)) end; "
+           "for i=1,20 do assert(wide_kernel(1,2,0,32)==wide_oracle(1,2,0,32)) end");
+    assert(lj_trace_test_arm64_side_graph_summary(
+      J, trace_traceno_acq(wide_root)) == summary);
+    run(L, "require('jit').flush(); "
+           "for i=1,100 do assert(wide_kernel(0,0,0,32)==wide_oracle(0,0,0,32)) end; "
+           "for i=1,10 do assert(wide_kernel(1,2,0,32)==wide_oracle(1,2,0,32)) end");
+  }
+  lua_pop(L, 1);
+
+  /* Exercise the prospective-depth cap against a live exact-size graph. The
+  ** rejected attempt must not invalidate either the existing nested side or
+  ** its root-owned list, and an already-published exit must still re-enter. */
+  run(L,
+    "local jit=require('jit'); jit.flush(); jit.on(); "
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=4096',"
+    "'maxside=256','maxrecord=4000'); "
+    "function make_cap_kernel(nx) "
+    "local p={'return function(x,y,w,n) local s=.5 for i=1,n do "
+    "if x==1 then if y==1 then s=s+i*.001 else "
+    "if w==1 then s=s+i*.002 else s=s+i*.003 end end end '}; "
+    "for k=2,nx do p[#p+1]=('if x==%d then s=s+i*0.0001 end '):format(k) end; "
+    "p[#p+1]='end return s end'; local src=table.concat(p); "
+    "local f=assert(loadstring(src))(); local o=assert(loadstring(src))(); "
+    "jit.off(o,true); return f,o end; "
+    "cap_kernel,cap_oracle=make_cap_kernel(63); "
+    "local function check(x,y,w) "
+    "assert(cap_kernel(x,y,w,32)==cap_oracle(x,y,w,32)) end; "
+    "for i=1,100 do check(0,0,0) end; "
+    "for i=1,50 do check(1,1,1) end; "
+    "for i=1,50 do check(1,2,1) end; "
+    "for k=2,63 do for i=1,100 do check(k,0,0) end end; "
+    "for k=2,63 do check(k,0,0) end; "
+    "collectgarbage('collect')");
+  lua_getglobal(L, "cap_kernel");
+  assert(lua_isfunction(L, -1));
+  {
+    GCproto *pt = funcproto(funcV(L->top-1));
+    GCtrace *cap_root = find_largest_root_for_proto(J, pt);
+    TraceNo rootno;
+    MCode *root_mcode;
+    uint32_t summary, successes;
+    if (cap_root == NULL || trace_nchild_acq(cap_root) != 64u)
+      fprintf(stderr, "cap graph expected=64 root=%p count=%u trace_slots=%u\n",
+              (void *)cap_root,
+              cap_root != NULL ? trace_nchild_acq(cap_root) : 0u,
+              (unsigned)trace_sizetrace_acq(J));
+    assert(cap_root != NULL && trace_nchild_acq(cap_root) == 64u);
+    rootno = trace_traceno_acq(cap_root);
+    root_mcode = trace_mcode_acq(cap_root);
+    summary = lj_trace_test_arm64_side_graph_summary(J, rootno);
+    if (summary != ((2u << 16) | 64u))
+      fprintf(stderr, "cap graph summary expected=%#x observed=%#x\n",
+              (2u << 16) | 64u, summary);
+    assert(summary == ((2u << 16) | 64u));
+    successes = lj_trace_test_root_entry_successes();
+    run(L,
+      "for i=1,50 do assert(cap_kernel(1,2,2,32)=="
+      "cap_oracle(1,2,2,32)) end; "
+      "for i=1,50 do assert(cap_kernel(2,0,0,32)=="
+      "cap_oracle(2,0,0,32)) end; collectgarbage('collect')");
+    assert(trace_runnable_acq(cap_root, rootno) &&
+           trace_traceno_acq(cap_root) == rootno &&
+           trace_mcode_acq(cap_root) == root_mcode &&
+           trace_nchild_acq(cap_root) == 64u);
+    assert(lj_trace_test_arm64_side_graph_summary(J, rootno) == summary);
+    assert(lj_trace_test_root_entry_successes() > successes);
+  }
+  lua_pop(L, 1);
+
+  /* A pre-existing depth-three graph at the cap must refuse even a new
+  ** direct sibling. This protects the bounded-index retirement invariant. */
+  run(L,
+    "local jit=require('jit'); jit.flush(); jit.on(); "
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=512',"
+    "'maxside=256','maxrecord=4000'); "
+    "cap_deep_kernel,cap_deep_oracle=make_cap_kernel(63); "
+    "local function check(x,y,w) "
+    "assert(cap_deep_kernel(x,y,w,32)==cap_deep_oracle(x,y,w,32)) end; "
+    "for i=1,100 do check(0,0,0) end; "
+    "for i=1,50 do check(1,1,1) end; "
+    "for i=1,50 do check(1,2,1) end; "
+    "for k=2,62 do for i=1,100 do check(k,0,0) end end; "
+    "for k=2,62 do check(k,0,0) end; "
+    "for i=1,50 do check(1,2,2) end; collectgarbage('collect')");
+  lua_getglobal(L, "cap_deep_kernel");
+  assert(lua_isfunction(L, -1));
+  {
+    GCproto *pt = funcproto(funcV(L->top-1));
+    GCtrace *cap_root = find_largest_root_for_proto(J, pt);
+    TraceNo rootno;
+    MCode *root_mcode;
+    uint32_t summary, successes;
+    if (cap_root == NULL || trace_nchild_acq(cap_root) != 64u)
+      fprintf(stderr, "deep cap graph expected=64 root=%p count=%u trace_slots=%u\n",
+              (void *)cap_root,
+              cap_root != NULL ? trace_nchild_acq(cap_root) : 0u,
+              (unsigned)trace_sizetrace_acq(J));
+    assert(cap_root != NULL && trace_nchild_acq(cap_root) == 64u);
+    rootno = trace_traceno_acq(cap_root);
+    root_mcode = trace_mcode_acq(cap_root);
+    summary = lj_trace_test_arm64_side_graph_summary(J, rootno);
+    if (summary != ((3u << 16) | 64u))
+      fprintf(stderr, "deep cap graph summary expected=%#x observed=%#x\n",
+              (3u << 16) | 64u, summary);
+    assert(summary == ((3u << 16) | 64u));
+    successes = lj_trace_test_root_entry_successes();
+    run(L,
+      "for i=1,50 do assert(cap_deep_kernel(63,0,0,32)=="
+      "cap_deep_oracle(63,0,0,32)) end; "
+      "for i=1,50 do assert(cap_deep_kernel(2,0,0,32)=="
+      "cap_deep_oracle(2,0,0,32)) end; collectgarbage('collect')");
+    assert(trace_runnable_acq(cap_root, rootno) &&
+           trace_traceno_acq(cap_root) == rootno &&
+           trace_mcode_acq(cap_root) == root_mcode &&
+           trace_nchild_acq(cap_root) == 64u);
+    assert(lj_trace_test_arm64_side_graph_summary(J, rootno) == summary);
+    assert(lj_trace_test_root_entry_successes() > successes);
+    {
+      GCtrace *deepest = find_deepest_side(
+        L, J, "cap_deep_kernel", 3u);
+      TraceNo deepestno, parentno;
+      GCtrace *parent;
+      IRIns base;
+      assert(deepest != NULL);
+      deepestno = trace_traceno_acq(deepest);
+      base = trace_ir_acq(deepest)[REF_BASE];
+      assert(base.o == IR_BASE && (TraceNo)base.op1 != rootno);
+      parentno = (TraceNo)base.op1;
+      parent = traceref_safe(J, parentno);
+      assert(parent != NULL && trace_runnable_acq(parent, parentno));
+      assert(lj_trace_flushscope(J, deepestno) == 1u);
+      assert(!trace_runnable_acq(deepest, deepestno) &&
+             trace_runnable_acq(parent, parentno) &&
+             trace_runnable_acq(cap_root, rootno) &&
+             trace_nchild_acq(cap_root) == 63u);
+      assert(lj_trace_test_arm64_side_graph_summary(J, rootno) ==
+             ((2u << 16) | 63u));
+      successes = lj_trace_test_root_entry_successes();
+      run(L,
+        "for i=1,50 do assert(cap_deep_kernel(2,0,0,32)=="
+        "cap_deep_oracle(2,0,0,32)) end; collectgarbage('collect')");
+      assert(trace_mcode_acq(cap_root) == root_mcode &&
+             trace_runnable_acq(parent, parentno) &&
+             trace_runnable_acq(cap_root, rootno) &&
+             trace_nchild_acq(cap_root) == 63u &&
+             lj_trace_test_root_entry_successes() > successes);
+    }
+    assert(lj_trace_flushall_gc(L) == 0);
+    assert(!trace_runnable_acq(cap_root, rootno));
+  }
+  lua_pop(L, 1);
   lua_close(L);
   puts("ARM64 scalar side adaptation: PASS");
   return 0;
