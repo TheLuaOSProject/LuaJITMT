@@ -21,7 +21,9 @@ and reports that are no longer authoritative are retained in
 - Current port checkpoint: `6cce85d6b` integrates bounded one/two/three-result
   Lua CALL-to-CALLM vectors, exact producer and consumer identity exits, and
   the disabled-FUNCF hot-counter fix. Four-profile native contracts and both
-  509-case ordinary stock corpora pass; the complete combined gate is running.
+  509-case ordinary stock corpora pass; the complete combined gate also passes.
+  The gate is pinned to `6cce85d6b`, with ordinary assertion ARM64 restored
+  afterward; see the [gate evidence](arm64-callm-complete-gate-2026-10-29.md).
   Missing/extra consumer parameters, mutable captured consumers, deeper side
   ancestry and indirect composite FFI results remain separate active work.
   See the [CALLM integration evidence](arm64-jit-open-result-callm-2026-10-29.md)
