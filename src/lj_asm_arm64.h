@@ -528,10 +528,28 @@ static int asm_fuseorshift(ASMState *as, IRIns *ir)
 /* Reconstruct the fixed CALLXS ABI plan used by the independent admission
 ** walkers. The plan is transient and only steers this call's argument setup. */
 #if LJ_HASJIT_FFI_CALLXS
-static int asm_callx_abi(ASMState *as, IRIns *ir, LJArm64ABISignature *abi)
+static int asm_callx_abi(ASMState *as, IRIns *ir, const CCallInfo *ci,
+                        LJArm64ABISignature *abi, unsigned stage)
 {
-  return arm64_callxs_signature_for_call(ctype_ctsG(J2G(as->J)), as->ir,
+  int ok;
+  if (ci->flags & CCI_VARARG) return 0;
+  ok = arm64_callxs_signature_for_call(ctype_ctsG(J2G(as->J)), as->ir,
 	 as->T->nk, as->orignins, (IRRef)(ir-as->ir), abi, NULL);
+#if defined(LJ_TRACE_TEST_HELPERS)
+  if (la_load32_acq(&asm_test_callx_abi_failure_stage) == stage) {
+    la_store32_rel(&asm_test_callx_abi_failure_seen, 1);
+    ok = 0;
+  }
+#else
+  UNUSED(stage);
+#endif
+  /* A transient CType read failure must not select flattened lowering: that
+  ** could split a partially spilled HFA even if post-RA admission succeeds. */
+  if (LJ_UNLIKELY(!ok || abi->is_vararg || abi->nargs != CCI_XNARGS(ci))) {
+    setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
+    lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
+  }
+  return 1;
 }
 #endif
 
@@ -694,8 +712,7 @@ static void asm_callx(ASMState *as, IRIns *ir)
   asm_collectargs(as, ir, &ci, args);
 #if LJ_HASJIT_FFI_CALLXS
   {
-    int abiok = asm_callx_abi(as, ir, &abi);
-    if (abiok && !abi.is_vararg && abi.nargs == CCI_XNARGS(&ci)) {
+    if (asm_callx_abi(as, ir, &ci, &abi, 2)) {
       for (i = 0; i < abi.nargs; i++)
 	stack_hfa[i] = (uint8_t)(abi.arg[i].kind ==
 	  LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
@@ -2280,8 +2297,7 @@ static Reg asm_setup_callx_slots(ASMState *as, IRIns *ir,
 				const CCallInfo *ci)
 {
   LJArm64ABISignature abi;
-  if (asm_callx_abi(as, ir, &abi) && !abi.is_vararg &&
-      abi.nargs == CCI_XNARGS(ci)) {
+  if (asm_callx_abi(as, ir, ci, &abi, 1)) {
     MSize nslots = ((MSize)abi.stack_size+3u) >> 2;
     if (nslots > as->evenspill) as->evenspill = (int)nslots;
     return REGSP_HINT(irt_isfp(ir->t) ? RID_FPRET : RID_RET);

@@ -628,9 +628,34 @@ local partial_hfa_candidate = partial_hfa_source()
 local partial_hfa_oracle = partial_hfa_source()
 local partial_hfa_clone = partial_hfa_source()
 jit.off(partial_hfa_oracle, true); jit.off(partial_hfa_clone, true)
+local partial_pair = ffi.new('Arm64FloatPair', 1.25, 2.5)
+local partial_fn = lib.arm64_take_float_pair_partial_stack
+local partial_saved_candidate = hfa_candidate
+-- Losing the ABI plan after semantic admission must abort both stack sizing
+-- and emission. A successful later read cannot repair already split lanes.
+for stage = 1, 2 do
+  local rejected = partial_hfa_source()
+  hfa_candidate = rejected
+  _set_hfa_candidate(rejected)
+  jit.flush(rejected)
+  jit.opt.start('hotloop=1')
+  jit.on(rejected, true)
+  lib.arm64_aggregate_reset()
+  _begin_hfa_witness()
+  _inject_callx_abi_failure(stage)
+  for pass = 1, 8 do
+    assert(rejected(16, partial_fn, partial_pair, 3.75) ==
+           partial_hfa_oracle(16, partial_fn, partial_pair, 3.75),
+           'missing ABI plan changed interpreter results')
+  end
+  assert(_inject_callx_abi_failure(0), 'ABI failure injection was not reached')
+  assert(_hfa_trace_count() == 0 and _hfa_native_count() == 0,
+         'missing ABI plan published or executed a CALLXS root')
+  assert(lib.arm64_aggregate_count(48) == 256,
+         'missing ABI plan lost or replayed call effects')
+end
 _G.__arm64_partial_hfa_stack_candidate = partial_hfa_candidate
 _G.__arm64_partial_hfa_stack_clone = partial_hfa_clone
-local partial_saved_candidate = hfa_candidate
 hfa_candidate = partial_hfa_candidate
 _G.__arm64_float_hfa_candidate = hfa_candidate
 _set_hfa_candidate(hfa_candidate)
@@ -640,8 +665,6 @@ jit.on(hfa_candidate, true)
 exits, hfa_exits = 0, 0
 lib.arm64_aggregate_reset()
 _begin_hfa_witness()
-local partial_pair = ffi.new('Arm64FloatPair', 1.25, 2.5)
-local partial_fn = lib.arm64_take_float_pair_partial_stack
 local partial_native_before = _hfa_native_count()
 for pass = 1, 8 do
   local got = hfa_candidate(16, partial_fn, partial_pair, 3.75)

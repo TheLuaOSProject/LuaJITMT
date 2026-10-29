@@ -116,6 +116,14 @@ static int begin_hfa_witness(lua_State *L)
   return 0;
 }
 
+static int inject_callx_abi_failure(lua_State *L)
+{
+  int stage = (int)luaL_checkinteger(L, 1);
+  assert(stage >= 0 && stage <= 2);
+  lua_pushboolean(L, lj_asm_arm64_test_callx_abi_failure((uint32_t)stage));
+  return 1;
+}
+
 static int get_hfa_trace_count(lua_State *L)
 {
   jit_State *J = G2J(G(L));
@@ -1336,6 +1344,8 @@ int main(int argc, char **argv)
   lua_setglobal(L, "_hfa_native_count");
   lua_pushcfunction(L, begin_hfa_witness);
   lua_setglobal(L, "_begin_hfa_witness");
+  lua_pushcfunction(L, inject_callx_abi_failure);
+  lua_setglobal(L, "_inject_callx_abi_failure");
   lua_pushcfunction(L, get_hfa_trace_count);
   lua_setglobal(L, "_hfa_trace_count");
   lua_pushcfunction(L, get_aggregate_native_width_count);
