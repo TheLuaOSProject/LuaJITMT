@@ -230,6 +230,10 @@ static void asm_arm64_side_ir_view_init(const jit_State *J,
     view->parent_root = parent_snapshot->parent_root;
     view->parent_linktype = parent_snapshot->parent_linktype;
     view->parent_root_nsnap = parent_snapshot->parent_root_nsnap;
+    view->parent_ancestry = parent_snapshot->parent_ancestry;
+    view->parent_generation = parent_snapshot->parent_generation;
+    view->root_generation = parent_snapshot->root_generation;
+    view->parent_ancestry_count = parent_snapshot->parent_ancestry_count;
     memcpy(view->parent_root_forl, parent_snapshot->parent_root_forl,
 	   sizeof(view->parent_root_forl));
     view->parent_root_forl_mask = parent_snapshot->parent_root_forl_mask;
@@ -1075,15 +1079,15 @@ static void ra_left(ASMState *as, Reg dest, IRRef lref)
   }
 }
 #else
-/* Similar to ra_left, except we override any hints. */
-static void ra_leftov(ASMState *as, Reg dest, IRRef lref)
+/* Similar to ra_left, except we override any hints and allow the caller to
+** reserve registers which must survive the move sequence. */
+static void ra_leftovset(ASMState *as, Reg dest, IRRef lref, RegSet allow)
 {
   IRIns *ir = IR(lref);
   Reg left = ir->r;
   if (ra_noreg(left)) {
     ra_sethint(ir->r, dest);  /* Propagate register hint. */
-    left = ra_allocref(as, lref,
-		       (LJ_SOFTFP || dest < RID_MAX_GPR) ? RSET_GPR : RSET_FPR);
+    left = ra_allocref(as, lref, allow);
   }
   ra_noweak(as, left);
   if (dest != left) {
@@ -1095,6 +1099,13 @@ static void ra_leftov(ASMState *as, Reg dest, IRRef lref)
       emit_movrr(as, ir, dest, left);
     }
   }
+}
+
+/* Similar to ra_left, except we override any hints. */
+static void ra_leftov(ASMState *as, Reg dest, IRRef lref)
+{
+  ra_leftovset(as, dest, lref,
+	       (LJ_SOFTFP || dest < RID_MAX_GPR) ? RSET_GPR : RSET_FPR);
 }
 #endif
 

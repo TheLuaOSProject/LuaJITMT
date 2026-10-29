@@ -545,7 +545,9 @@ static int asm_callx_abi(ASMState *as, IRIns *ir, const CCallInfo *ci,
 #endif
   /* A transient CType read failure must not select flattened lowering: that
   ** could split a partially spilled HFA even if post-RA admission succeeds. */
-  if (LJ_UNLIKELY(!ok || abi->is_vararg || abi->nargs != CCI_XNARGS(ci))) {
+  if (LJ_UNLIKELY(!ok || abi->is_vararg ||
+      abi->nargs + (unsigned)arm64_callxs_result_indirect(abi) !=
+        CCI_XNARGS(ci))) {
     setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
     lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
   }
@@ -555,15 +557,36 @@ static int asm_callx_abi(ASMState *as, IRIns *ir, const CCallInfo *ci,
 
 /* Generate a call to a C function. */
 static void asm_gencall_abi(ASMState *as, const CCallInfo *ci, IRRef *args,
-			    const uint16_t *stack_offsets)
+			    const uint16_t *stack_offsets, IRRef sret)
 {
   uint32_t n, nargs = CCI_XNARGS(ci);
   int32_t spofs = 0, spalign = LJ_HASFFI && LJ_TARGET_OSX ? 0 : 7;
   Reg gpr, fpr = REGARG_FIRSTFPR;
+  RegSet gprset = RSET_GPR;
   if (ci->func)
     emit_call(as, ci->func);
+#if !LJ_HASJIT_FFI_CALLXS
+  UNUSED(sret);
+#endif
   for (gpr = REGARG_FIRSTGPR; gpr <= REGARG_LASTGPR; gpr++)
     as->cost[gpr] = REGCOST(~0u, ASMREF_L);
+#if LJ_HASJIT_FFI_CALLXS
+  /* The hidden result pointer is live in X8 across all visible setup. */
+  if (sret) {
+    gprset &= ~RID2RSET(RID_X8);
+    /* ra_alloc1() keeps an existing allocation even when it is outside the
+    ** allowed set. Refuse rather than let a visible value alias the sret
+    ** pointer, including values later spilled to the ABI stack. */
+    for (n = 0; n < nargs; n++) {
+      IRRef ref = args[n];
+      if (ref && !irt_isfp(IR(ref)->t) && ra_hasreg(IR(ref)->r) &&
+          IR(ref)->r == RID_X8) {
+	setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
+	lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
+      }
+    }
+  }
+#endif
   gpr = REGARG_FIRSTGPR;
 #if LJ_HASFFI && LJ_ABI_WIN
   if ((ci->flags & CCI_VARARG)) {
@@ -604,10 +627,10 @@ static void asm_gencall_abi(ASMState *as, const CCallInfo *ci, IRRef *args,
 	if (gpr <= REGARG_LASTGPR) {
 	  lj_assertA(rset_test(as->freeset, gpr),
 		     "reg %d not free", gpr);  /* Must have been evicted. */
-	  ra_leftov(as, gpr, ref);
+	  ra_leftovset(as, gpr, ref, gprset);
 	  gpr++;
-	} else {
-	  Reg r = ra_alloc1(as, ref, RSET_GPR);
+      } else {
+	Reg r = ra_alloc1(as, ref, gprset);
 	  int32_t al = spalign;
 #if LJ_HASFFI && LJ_TARGET_OSX
 	  /* Call operands can retain guard/PHI flags. Size only the base type. */
@@ -633,11 +656,19 @@ static void asm_gencall_abi(ASMState *as, const CCallInfo *ci, IRRef *args,
 #endif
     }
   }
+#if LJ_HASJIT_FFI_CALLXS
+  /* X8 is independent of the visible argument banks. Set it before the
+  ** visible moves execute, so a source allocated in X0-X7 cannot be
+  ** overwritten by argument setup before it is copied to X8. */
+  if (sret) {
+    ra_leftov(as, RID_X8, sret);
+  }
+#endif
 }
 
 static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
 {
-  asm_gencall_abi(as, ci, args, NULL);
+  asm_gencall_abi(as, ci, args, NULL, 0);
 }
 
 /* Setup result reg/sp for call. Evict scratch regs. */
@@ -702,6 +733,7 @@ static void asm_callx(ASMState *as, IRIns *ir)
 {
   IRRef args[CCI_NARGS_MAX*2];
   CCallInfo ci;
+  IRRef sret = 0;
 #if LJ_HASJIT_FFI_CALLXS
   uint16_t stack_offsets[CCI_NARGS_MAX*2];
   LJArm64ABISignature abi;
@@ -714,6 +746,15 @@ static void asm_callx(ASMState *as, IRIns *ir)
   asm_collectargs(as, ir, &ci, args);
 #if LJ_HASJIT_FFI_CALLXS
   if (asm_callx_abi(as, ir, &ci, &abi, 2)) {
+    if (arm64_callxs_result_indirect(&abi)) {
+      if (!CCI_XNARGS(&ci) || args[0] == 0) {
+	setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
+	lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
+      }
+      sret = args[0];
+      for (i = 0; i < abi.nargs; i++) args[i] = args[i+1u];
+      ci.flags = (ci.flags & ~0xffu) | (CCI_NARGS(&ci)-1u);
+    }
     for (i = 0; i < abi.nargs; i++)
       stack_offsets[i] = abi.arg[i].reg == LJ_ARM64_ABI_STACK ?
                         abi.arg[i].stack_offset : UINT16_MAX;
@@ -726,15 +767,24 @@ static void asm_callx(ASMState *as, IRIns *ir)
   if (irref_isk(func)) {  /* Call to constant address. */
     ci.func = (ASMFunction)(ir_k64(irf)->u64);
   } else {  /* Need a non-argument register for indirect calls. */
-    Reg freg = ra_alloc1(as, func, RSET_RANGE(RID_X8, RID_MAX_GPR)-RSET_FIXED);
+    Reg freg = ra_alloc1(as, func,
+      RSET_RANGE(sret ? RID_X9 : RID_X8, RID_MAX_GPR)-RSET_FIXED);
+#if LJ_HASJIT_FFI_CALLXS
+    /* ra_alloc1() may retain a pre-existing allocation outside the allowed
+    ** set, so verify the actual indirect target before emitting the call. */
+    if (sret && freg == RID_X8) {
+      setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
+      lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
+    }
+#endif
     emit_n(as, A64I_BLR_AUTH, freg);
     ci.func = (ASMFunction)(void *)0;
   }
   asm_gencall_abi(as, &ci, args,
 #if LJ_HASJIT_FFI_CALLXS
-		  offsets
+		  offsets, sret
 #else
-		  NULL
+		  NULL, 0
 #endif
 	);
 }

@@ -104,15 +104,25 @@ typedef struct { uint8_t value; } Arm64ByteResult;
 typedef struct { uint16_t value; } Arm64HalfResult;
 typedef struct { uint32_t value; } Arm64WordResult;
 typedef struct { uint64_t value; } Arm64U64Result;
+typedef struct { uint64_t lo, mid, hi; } Arm64U64TripleResult;
+typedef struct { uint64_t lo, mid, hi, tail; } Arm64U64QuadResult;
 typedef struct { uint16_t lo, hi; } Arm64HalfPair;
 typedef struct { Arm64HalfPair half; uint32_t tag; } Arm64NestedIntResult;
 typedef struct { uint32_t tag; float value; } Arm64MixedResult;
 typedef struct { Arm64MixedResult inner; } Arm64NestedMixedResult;
 typedef struct { uint32_t values[2]; } Arm64IntegerArrayResult;
+typedef struct { uint64_t values[3]; } Arm64IntegerArrayResult24;
 typedef struct { void *value; } Arm64PointerMemberResult;
+typedef struct { uint64_t tag; void *value; uint64_t tail; }
+  Arm64PointerMemberSretResult;
 typedef Arm64NestedMixedResult (*Arm64NestedMixedResultFn)(uint32_t);
 typedef Arm64IntegerArrayResult (*Arm64IntegerArrayResultFn)(uint32_t);
+typedef Arm64IntegerArrayResult24 (*Arm64IntegerArrayResult24Fn)(uint32_t);
 typedef Arm64PointerMemberResult (*Arm64PointerMemberResultFn)(uint32_t);
+typedef Arm64PointerMemberSretResult
+  (*Arm64PointerMemberSretResultFn)(uint32_t);
+typedef uint32_t (*Arm64PointerMemberArgFn)(Arm64PointerMemberResult,
+                                            uint32_t);
 typedef struct { float value; } Arm64FloatResult;
 typedef struct { double value; } Arm64DoubleResult;
 typedef struct { float lo, hi; } Arm64FloatPairResult;
@@ -253,8 +263,22 @@ Arm64HalfResult arm64_return_half(uint32_t);
 Arm64WordResult arm64_return_word(uint32_t);
 Arm64WordResultAlias arm64_return_word_alias(uint32_t);
 Arm64U64Result arm64_return_u64(uint32_t);
+Arm64U64TripleResult arm64_return_u64_triple(uint32_t);
+uint32_t arm64_return_u64_triple_count(void);
+Arm64U64QuadResult arm64_return_u64_quad(uint32_t);
+Arm64U64QuadResult arm64_return_u64_quad_alt(uint32_t);
+uint32_t arm64_return_u64_quad_count(void);
+Arm64U64TripleResult arm64_return_u64_triple_many(
+  uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
+  uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);
+Arm64U64TripleResult arm64_return_u64_triple_many_alt(
+  uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
+  uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);
+uint32_t arm64_return_u64_triple_many_count(void);
 Arm64NestedIntResult arm64_return_nested_int(uint32_t);
 Arm64MixedResult arm64_return_mixed(uint32_t);
+Arm64PointerMemberResult arm64_return_pointer_member(uint32_t);
+Arm64PointerMemberResult arm64_return_pointer_member_alt(uint32_t);
 Arm64NestedFloatPair arm64_return_nested_float_pair(uint32_t);
 Arm64NestedArrayFloatPair arm64_return_array_float_pair(uint32_t);
 Arm64SiblingNestedFloatTriple arm64_return_nested_float_triple(uint32_t);
@@ -299,14 +323,23 @@ _G.__arm64_return_byte_fn = lib.arm64_return_byte
 _G.__arm64_return_half_fn = lib.arm64_return_half
 _G.__arm64_return_word_fn = lib.arm64_return_word
 _G.__arm64_return_u64_fn = lib.arm64_return_u64
+_G.__arm64_return_u64_triple_fn = lib.arm64_return_u64_triple
+_G.__arm64_return_u64_triple_many_fn = lib.arm64_return_u64_triple_many
+_G.__arm64_return_u64_triple_many_alt_fn = lib.arm64_return_u64_triple_many_alt
 _G.__arm64_return_nested_int_fn = lib.arm64_return_nested_int
 _G.__arm64_return_mixed_fn = lib.arm64_return_mixed
 _G.__arm64_nested_mixed_result_fn = ffi.cast('Arm64NestedMixedResultFn', nil)
 _G.__arm64_integer_array_result_fn = ffi.cast('Arm64IntegerArrayResultFn', nil)
-_G.__arm64_pointer_member_result_fn = ffi.cast('Arm64PointerMemberResultFn', nil)
+_G.__arm64_integer_array_result24_fn =
+  ffi.cast('Arm64IntegerArrayResult24Fn', nil)
+_G.__arm64_pointer_member_result_fn = lib.arm64_return_pointer_member
+_G.__arm64_pointer_member_sret_result_fn =
+  ffi.cast('Arm64PointerMemberSretResultFn', nil)
+_G.__arm64_pointer_member_arg_fn = ffi.cast('Arm64PointerMemberArgFn', nil)
 _G.__arm64_result_depth31_fn = ffi.cast('Arm64ResultDepth31Fn', nil)
 _G.__arm64_result_depth32_fn = ffi.cast('Arm64ResultDepth32Fn', nil)
 _G.__arm64_nested_int_result_type = ffi.new('Arm64NestedIntResult')
+_G.__arm64_u64_triple_result_type = ffi.new('Arm64U64TripleResult')
 _G.__arm64_mixed_result_type = ffi.new('Arm64MixedResult')
 _G.__arm64_return_float_hfa_fn = lib.arm64_return_float_hfa
 _G.__arm64_return_double_hfa_fn = lib.arm64_return_double_hfa
@@ -1512,6 +1545,9 @@ local function run_integer_result(width, result_type, fn, counter, label, compar
   local result_candidate, result_oracle = make_result_pair(label)
   candidate = result_candidate
   _set_result_candidate(width, result_candidate)
+  if label == 'pointer-member-result' then
+    _set_pointer_result_candidate(result_candidate)
+  end
   _G['__arm64_integer_result_candidate_'..width] = result_candidate
   jit.flush(result_candidate)
   jit.on(result_candidate, true)
@@ -1532,9 +1568,19 @@ local function run_integer_result(width, result_type, fn, counter, label, compar
   local selected_root = next(tracked_exit_roots)
   local code, address, loop = jitutil.tracemc(selected_root)
   assert(code and address and loop, label..' selected root has no machine code')
-  local mismatched = result_candidate(32, lib.arm64_return_scalar, 13)
-  assert(type(mismatched) == 'number',
-         label..' mismatched-result fallback returned the wrong Lua type')
+  local alternate = label == 'pointer-member-result' and
+    lib.arm64_return_pointer_member_alt or lib.arm64_return_scalar
+  local mismatched = result_candidate(32, alternate, 13)
+  if label == 'pointer-member-result' then
+    local alternate_want = result_oracle(32, alternate, 13)
+    assert(ffi.istype(result_type, mismatched) and
+           ffi.istype(result_type, alternate_want) and
+           compare(mismatched, alternate_want),
+           label..' alternate callee returned the wrong opaque pointer bits')
+  else
+    assert(type(mismatched) == 'number',
+           label..' mismatched-result fallback returned the wrong Lua type')
+  end
   assert(exits > 0, label..' selected result root did not force an exit')
   local native_before_gc = _aggregate_result_native_count(width)
   local effect_before_gc = lib.arm64_aggregate_count(counter)
@@ -1548,12 +1594,14 @@ local function run_integer_result(width, result_type, fn, counter, label, compar
   assert(_aggregate_result_native_count(width) > native_before_gc,
          label..' did not re-enter native code after full GC')
   assert(lib.arm64_aggregate_count(counter)-effect_before_gc == 48,
-         label..' native/interpreter effects were replayed after GC')
+         label..' native/interpreter effects were replayed after GC: delta='..
+         tostring(lib.arm64_aggregate_count(counter)-effect_before_gc))
   local code_after, address_after, loop_after = jitutil.tracemc(selected_root)
   assert(roots(result_candidate)[selected_root] and code_after == code and
          address_after == address and loop_after == loop,
          label..' selected root changed across alternate callee/full GC')
-  assert(lib.arm64_aggregate_count(counter)-before_effect == 432,
+  local expected_effects = label == 'pointer-member-result' and 496 or 432
+  assert(lib.arm64_aggregate_count(counter)-before_effect == expected_effects,
          label..' native/interpreter effects were lost or replayed')
 end
 
@@ -1597,6 +1645,170 @@ local function run_hfa_result(width, result_type, fn, counter, label)
   assert(lib.arm64_aggregate_count(counter)-before_effect == 432,
          label..' native/interpreter effects were lost or replayed')
 end
+
+local function run_sret_result()
+  local candidate, oracle = make_result_pair('24-byte integer sret result')
+  _set_sret_candidate(candidate)
+  jit.flush(candidate)
+  jit.on(candidate, true)
+  local before = lib.arm64_return_u64_triple_count()
+  local native_before = _sret_native_count()
+  for pass = 1, 6 do
+    local got = candidate(32, lib.arm64_return_u64_triple, pass*7)
+    local want = oracle(32, lib.arm64_return_u64_triple, pass*7)
+    assert(ffi.istype('Arm64U64TripleResult', got) and
+           ffi.istype('Arm64U64TripleResult', want))
+    assert(got.lo == want.lo and got.mid == want.mid and got.hi == want.hi,
+           '24-byte sret result differs from interpreter')
+  end
+  assert(_sret_native_count() > native_before,
+         '24-byte result had no selected-root native sret CALLXS finish')
+  tracked_exit_roots = roots(candidate)
+  local selected = assert(next(tracked_exit_roots),
+                          '24-byte result loop published no root')
+  local code, address, loop = jitutil.tracemc(selected)
+  assert(code and address and loop)
+  exits = 0
+  local mismatch = candidate(32, lib.arm64_return_scalar, 13)
+  assert(type(mismatch) == 'number' and exits > 0,
+         'changed result signature did not exit the sret root')
+  collectgarbage('collect')
+  local native_after_gc = _sret_native_count()
+  exits = 0
+  local got = candidate(24, lib.arm64_return_u64_triple, 13)
+  local want = oracle(24, lib.arm64_return_u64_triple, 13)
+  assert(ffi.istype('Arm64U64TripleResult', got) and
+         got.lo == want.lo and got.mid == want.mid and got.hi == want.hi)
+  assert(exits > 0, 'selected sret root did not exit after full GC')
+  assert(_sret_native_count() > native_after_gc,
+         'selected sret root did not re-enter native code after full GC')
+  local code_after, address_after, loop_after = jitutil.tracemc(selected)
+  assert(roots(candidate)[selected] and code == code_after and
+         address == address_after and loop == loop_after,
+         'selected sret root changed across GC or alternate result')
+  assert(lib.arm64_return_u64_triple_count()-before == 432,
+         '24-byte sret native/interpreter effects were lost or replayed')
+end
+
+_G.__arm64_run_sret_result = run_sret_result
+
+local function run_sret_quad_result()
+  local candidate, oracle = make_result_pair('32-byte integer sret result')
+  _set_sret_candidate(candidate)
+  jit.flush(candidate)
+  jit.on(candidate, true)
+  local before = lib.arm64_return_u64_quad_count()
+  local native_before = _sret_native_count()
+  for pass = 1, 6 do
+    local got = candidate(32, lib.arm64_return_u64_quad, pass*7)
+    local want = oracle(32, lib.arm64_return_u64_quad, pass*7)
+    assert(ffi.istype('Arm64U64QuadResult', got) and
+           ffi.istype('Arm64U64QuadResult', want))
+    assert(got.lo == want.lo and got.mid == want.mid and
+           got.hi == want.hi and got.tail == want.tail,
+           '32-byte sret result differs from interpreter')
+  end
+  assert(_sret_native_count() > native_before,
+         '32-byte result had no selected-root native CALLXS finish')
+  tracked_exit_roots = roots(candidate)
+  local selected = assert(next(tracked_exit_roots),
+                          '32-byte result loop published no root')
+  local code, address, loop = jitutil.tracemc(selected)
+  assert(code and address and loop)
+  exits = 0
+  local alt = candidate(32, lib.arm64_return_u64_quad_alt, 13)
+  local alt_oracle = oracle(32, lib.arm64_return_u64_quad_alt, 13)
+  assert(alt.lo == alt_oracle.lo and alt.mid == alt_oracle.mid and
+         alt.hi == alt_oracle.hi and alt.tail == alt_oracle.tail and exits > 0,
+         'alternate 32-byte sret callee did not guard and resume correctly')
+  collectgarbage('collect')
+  local native_after_gc = _sret_native_count()
+  exits = 0
+  local got = candidate(24, lib.arm64_return_u64_quad, 13)
+  local want = oracle(24, lib.arm64_return_u64_quad, 13)
+  assert(got.lo == want.lo and got.mid == want.mid and
+         got.hi == want.hi and got.tail == want.tail)
+  assert(exits > 0 and _sret_native_count() > native_after_gc,
+         '32-byte sret did not exit/re-enter after full GC')
+  local code_after, address_after, loop_after = jitutil.tracemc(selected)
+  assert(roots(candidate)[selected] and code == code_after and
+         address == address_after and loop == loop_after,
+         '32-byte sret root changed across GC or alternate result')
+  assert(lib.arm64_return_u64_quad_count()-before == 496,
+         '32-byte sret native/interpreter effects were lost or replayed')
+end
+
+_G.__arm64_run_sret_quad_result = run_sret_quad_result
+
+local function make_sret_many_pair()
+  local source = [[
+return function(n, fn)
+  local result
+  for k = 1, n do result = fn(71, 72, 73, 74, 75, 76, 77, 78, 79, 80) end
+  return result
+end
+]]
+  local candidate_loader = assert(loadstring(source, '@24-byte-sret-many-candidate'))
+  local oracle_loader = assert(loadstring(source, '@24-byte-sret-many-oracle'))
+  local clone_loader = assert(loadstring(source, '@24-byte-sret-many-clone'))
+  jit.off(oracle_loader, true)
+  local candidate, oracle, clone = candidate_loader(), oracle_loader(),
+                                         clone_loader()
+  jit.off(clone, true)
+  _G.__arm64_sret_many_clone = clone
+  return candidate, oracle
+end
+
+local function run_sret_many_result()
+  local candidate, oracle = make_sret_many_pair()
+  _set_sret_candidate(candidate)
+  jit.flush(candidate)
+  jit.on(candidate, true)
+  local before = lib.arm64_return_u64_triple_many_count()
+  local native_before = _sret_native_count()
+  for pass = 1, 6 do
+    local got = candidate(24, lib.arm64_return_u64_triple_many)
+    local want = oracle(24, lib.arm64_return_u64_triple_many)
+    assert(ffi.istype('Arm64U64TripleResult', got) and
+           got.lo == want.lo and got.mid == want.mid and got.hi == want.hi,
+           '10-argument sret result differs from interpreter')
+  end
+  if _sret_native_count() <= native_before then
+    for id in pairs(roots(candidate)) do
+      local info = jitutil.traceinfo(id)
+      io.stderr:write('10-argument sret diagnostic root=', id,
+        ' nins=', tostring(info and info.nins), '\n')
+    end
+  end
+  assert(_sret_native_count() > native_before,
+         '10-argument sret had no selected-root native finish')
+  tracked_exit_roots = roots(candidate)
+  local selected = assert(next(tracked_exit_roots),
+                          '10-argument sret loop published no root')
+  local code, address, loop = jitutil.tracemc(selected)
+  assert(code and address and loop)
+  exits = 0
+  local alt = candidate(24, lib.arm64_return_u64_triple_many_alt)
+  local alt_oracle = oracle(24, lib.arm64_return_u64_triple_many_alt)
+  assert(alt.lo == alt_oracle.lo and alt.mid == alt_oracle.mid and
+         alt.hi == alt_oracle.hi and exits > 0,
+         'alternate 10-argument sret callee did not guard and resume correctly')
+  collectgarbage('collect')
+  local native_after_gc = _sret_native_count()
+  exits = 0
+  local got = candidate(24, lib.arm64_return_u64_triple_many)
+  local want = oracle(24, lib.arm64_return_u64_triple_many)
+  assert(got.lo == want.lo and got.mid == want.mid and got.hi == want.hi)
+  assert(exits > 0 and _sret_native_count() > native_after_gc,
+         '10-argument sret did not exit/re-enter after full GC')
+  local code_after, address_after, loop_after = jitutil.tracemc(selected)
+  assert(roots(candidate)[selected] and code == code_after and
+         address == address_after and loop == loop_after)
+  assert(lib.arm64_return_u64_triple_many_count()-before == 336,
+         '10-argument sret native/interpreter effects were lost or replayed')
+end
+
+_G.__arm64_run_sret_many_result = run_sret_many_result
 
 run_integer_result(1, 'Arm64ByteResult', lib.arm64_return_byte, 15,
                    'one-byte aggregate result')
@@ -2171,12 +2383,16 @@ _G.__arm64_run_small_result_probe = function(which)
         return a.half.lo == b.half.lo and a.half.hi == b.half.hi and
           a.tag == b.tag
       end)
-  else
-    assert(which == 2)
+  elseif which == 2 then
     run_integer_result(8, 'Arm64MixedResult', lib.arm64_return_mixed,
       68, 'mixed-integer-float-result', function(a, b)
         return a.tag == b.tag and a.value == b.value
       end)
+  else
+    assert(which == 3)
+    run_integer_result(8, 'Arm64PointerMemberResult',
+      lib.arm64_return_pointer_member, 74, 'pointer-member-result',
+      function(a, b) return a.value == b.value end)
   end
 end
 

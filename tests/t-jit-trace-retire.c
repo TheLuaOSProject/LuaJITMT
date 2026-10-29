@@ -112,6 +112,18 @@ static void test_trace_stale_startins_candidates(global_State *g, GCproto *pt,
   assert(lj_trace_test_stale_startins_candidate(g, bad) == 0);
 }
 
+static void test_scoped_retire_smr_lease(lua_State *L)
+{
+  global_State *g = G(L);
+  jit_State *J = L2J(L);
+  uint32_t readers = gc2_smr_readers_acq(g);
+  assert(lj_jit_token_try_l(L, J));
+  assert(lj_jit_token_held_l(L, J));
+  assert(lj_trace_flushscope_retire_hs(g, lj_gc2_retire_epoch(g)) == 0);
+  assert(gc2_smr_readers_acq(g) == readers);
+  lj_jit_token_release_l(L, J);
+}
+
 static GCtrace *retired_find(jit_State *J, GCtrace *needle)
 {
   GCtrace *T;
@@ -772,6 +784,7 @@ int main(void)
   g = G(L);
   J = G2J(g);
   assert(trace_retired_head_acq(J) == NULL);
+  test_scoped_retire_smr_lease(L);
   assert(luaL_loadstring(L, "return 1") == 0);
   pt = funcproto(funcV(L->top - 1));
   test_trace_preserve_candidates(g, pt);

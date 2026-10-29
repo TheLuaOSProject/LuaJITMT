@@ -476,6 +476,94 @@ static LJ_AINLINE int mcode_inrange(jit_State *J, uintptr_t addr, size_t sz)
   return addr >= J->mcmin && addr + sz >= J->mcmin && addr + sz <= J->mcmax;
 }
 
+#if LJ_TARGET_ARM64 && LJ_MCODE_MAPJIT
+/* Compute a 64KB-aligned allocation window enclosing all active MCode. The
+** MAP_JIT allocator may ignore a usable hint and return another address. A
+** new area is still safe if the complete active MCode span remains inside one
+** direct-branch range; side links independently check their B26 displacement.
+*/
+static int mcode_range_for_span(uintptr_t lo, uintptr_t hi,
+				uintptr_t *min, uintptr_t *max)
+{
+  uintptr_t range_min, range_max;
+  if (hi < lo || hi - lo > MCODE_RANGE64)
+    return 0;
+  range_min = lo & ~(uintptr_t)0xffffu;
+  if (range_min > UINTPTR_MAX - MCODE_RANGE64)
+    return 0;
+  range_max = range_min + MCODE_RANGE64;
+  if (hi > range_max)
+    return 0;
+  *min = range_min;
+  *max = range_max;
+  return 1;
+}
+
+/* Extend the current allocation window only when every active area and the
+** candidate area fit in the same conservative AArch64 jump span. */
+static int mcode_expandrange(jit_State *J, uintptr_t addr, size_t sz)
+{
+  uintptr_t lo = addr, hi;
+  MCode *area;
+  if (addr > UINTPTR_MAX - sz)
+    return 0;
+  hi = addr + sz;
+  for (area = J->mcarea; area != NULL; area = mcode_area_next_acq(area)) {
+    uintptr_t base = (uintptr_t)(void *)area, end;
+    size_t areasz = ((MCLink *)area)->size;
+    if (base > UINTPTR_MAX - areasz)
+      return 0;
+    end = base + areasz;
+    if (base < lo) lo = base;
+    if (end > hi) hi = end;
+  }
+  if (!mcode_range_for_span(lo, hi, &J->mcmin, &J->mcmax))
+    return 0;
+  return 1;
+}
+
+#ifdef LJ_TRACE_TEST_HELPERS
+static uint32_t mcode_test_arm64_range_extensions;
+
+int lj_mcode_test_arm64_range(uintptr_t lo, uintptr_t hi,
+			      uintptr_t *min, uintptr_t *max)
+{
+  return mcode_range_for_span(lo, hi, min, max);
+}
+
+int lj_mcode_test_arm64_expandrange(uintptr_t offset,
+				    uintptr_t *min, uintptr_t *max)
+{
+  jit_State fake;
+  MCLink first, second;
+  uintptr_t base = (uintptr_t)(void *)&first;
+  if (base > UINTPTR_MAX - offset)
+    return 0;
+  first.next = (MCode *)(void *)&second;
+  first.size = 0x10000u;
+  second.next = NULL;
+  second.size = 0x10000u;
+  fake.mcarea = (MCode *)(void *)&first;
+  fake.mcmin = fake.mcmax = 0;
+  if (!mcode_expandrange(&fake, base + offset, 0x1000u))
+    return 0;
+  *min = fake.mcmin;
+  *max = fake.mcmax;
+  return 1;
+}
+
+void lj_mcode_test_arm64_range_extensions_reset(void)
+{
+  la_store32_rel(&mcode_test_arm64_range_extensions, 0);
+}
+
+uint32_t lj_mcode_test_arm64_range_extensions_count(void)
+{
+  return la_load32_acq(&mcode_test_arm64_range_extensions);
+}
+#endif
+#endif
+
 /* Get memory within a specific jump range in 64 bit mode. */
 static void *mcode_alloc(jit_State *J, size_t sz)
 {
@@ -493,6 +581,15 @@ static void *mcode_alloc(jit_State *J, size_t sz)
     void *p = mcode_alloc_at(J, hint, sz, MCPROT_GEN);
     if (mcode_inrange(J, (uintptr_t)p, sz))
       return p;  /* Success. */
+#if LJ_TARGET_ARM64 && LJ_MCODE_MAPJIT
+    else if (p && J->mcarea &&
+	     mcode_expandrange(J, (uintptr_t)p, sz)) {
+#ifdef LJ_TRACE_TEST_HELPERS
+      la_add32_rlx(&mcode_test_arm64_range_extensions, 1);
+#endif
+      return p;  /* Keep all active MCode within one branch span. */
+    }
+#endif
     else if (p)
 #if LJ_MCODE_DUALMAP
       mcode_free_mapping((MCode *)p, sz);  /* Free badly placed area. */

@@ -92,6 +92,10 @@ lj_trace_arm64_side_parent_revalidate(jit_State *J);
 ** otherwise well-formed sibling chain; restores the live topology afterward. */
 LJ_FUNC int lj_trace_test_arm64_retire_absent_sibling(
 	jit_State *J, TraceNo parent, TraceNo child);
+/* Check strict/scoped pending retirement acceptance and fail-closed behavior
+** after certificate-generation or authenticated-edge corruption. */
+LJ_FUNC uint32_t lj_trace_test_arm64_scoped_retire_proof(
+	jit_State *J, TraceNo root, TraceNo child);
 #endif
 #if defined(LJ_TRACE_TEST_HELPERS) && \
     defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)
@@ -211,6 +215,8 @@ LJ_FUNC void lj_trace_test_root_entry_retry_restore(BCIns *pc, BCIns ins);
 LJ_FUNC uint32_t lj_trace_test_root_entry_startins_calls(void);
 LJ_FUNC uint32_t lj_trace_test_arm64_side_scalar_copy_contract(
   jit_State *J, TraceNo childno);
+LJ_FUNC uint32_t lj_trace_test_arm64_side_graph_summary(
+  jit_State *J, TraceNo rootno);
 LJ_FUNC uint32_t lj_trace_test_arm64_nested_cell_snapshot_contract(
   jit_State *J, TraceNo parentno);
 #endif
