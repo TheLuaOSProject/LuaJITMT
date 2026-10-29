@@ -44,6 +44,8 @@ Logs include `baseline-arm64.log`, `baseline-x86_64.log`, `gap-arm64.log`,
 evidence directory above. A final classifier-only addition exercises NULL
 and non-NULL result descriptors for the one-element array, multidimensional
 float array and four-double array boundaries; `final-boundaries.log` passes
-the assertion ARM64 contract with those added cases. Overall parity remains
-incomplete, including the
-previously identified non-HFA 24-byte indirect result.
+the assertion ARM64 contract with those added cases. The frozen ordinary
+ARM64 runtime at `2553f7724` also passes all 509 stock source tests;
+`immutable.sha256` records its binary/archive and the common probe artifacts.
+Overall parity remains incomplete, including the previously identified
+non-HFA 24-byte indirect result.
