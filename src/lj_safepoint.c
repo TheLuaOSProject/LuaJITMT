@@ -157,6 +157,7 @@ static void safepoint_test_signal_note_before_leader_leave(global_State *g,
 }
 #else
 #define safepoint_test_signal_pause_after_reqmask(tg) ((void)(tg), 0)
+#define safepoint_test_signal_pause_after_poll(tg) ((void)(tg), 0)
 #define safepoint_test_signal_note_resumed_poll(tg, paused) \
   ((void)(tg), (void)(paused))
 #define safepoint_test_signal_note_consumed_clear(tg, epoch) \

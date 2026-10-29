@@ -24,3 +24,10 @@ strict `-Wall -Wextra -Werror` fixture compilation. The ARM64 profile used
 recorder safepoint contract passed. Logs are in
 `/Users/frityet/Scratch/ljmt-recorder-combined-mask-20261029/arm64.log` and
 `/Users/frityet/Scratch/ljmt-recorder-combined-mask-20261029/x64.log`.
+
+The initial `643820cf1` checkpoint omitted the no-test-build macro stub for
+the new after-poll seam, which broke ordinary builds. The stub is restored in
+the follow-up. Clean ordinary AppleClang builds then passed for ARM64 with
+`LUAJIT_MT_ARM64_BOOTSTRAP`, `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`, and
+`LUA_USE_ASSERT`, and for x86_64 with `LUA_USE_ASSERT`; logs are in
+`/Users/frityet/Scratch/ljmt-safepoint-stub-20261029/`.
