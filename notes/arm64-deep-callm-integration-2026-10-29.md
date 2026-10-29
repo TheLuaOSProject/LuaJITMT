@@ -52,11 +52,15 @@ All logs below are under
 
 ## Complete gate
 
-The uninterrupted complete gate is running at pinned `bc0313318` in the
-`ir-admission` checkout, with output `complete-gate.log`; the outer command
-will restore ordinary assertion ARM64 and record `complete-restoration.log`.
-No full-gate result is claimed yet. The promoted continuation remains at
-verified production source `8106cfe53` until this result is available.
+The uninterrupted complete gate passed at pinned `bc0313318` in the
+`ir-admission` checkout (`complete-gate.log`, outer command exit zero).
+It includes all four M7 FFI profiles and actual final VM/recorder safepoint
+runtime fixtures, followed by upvalue identity, JIT cell-loop and native
+coverage fixtures. The final gate result is OK; no contract was skipped.
+`complete-restoration.log` records the successful ordinary assertion ARM64
+rebuild without test helpers, profile
+`0f1d36d18ed37222162de13bad45465ea629d80e81cf0c1d06187b5bbd57a487`.
+This is now the verified source checkpoint for the parity continuation.
 
 Vararg-forwarded Lua tail calls, recursive traces and further FFI/source
 restrictions remain under investigation. Full x86_64 parity is not complete.

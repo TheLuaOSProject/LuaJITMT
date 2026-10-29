@@ -18,21 +18,20 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
-- Current verified production checkpoint: `8106cfe53`. It adds discarded
-  numeric CALLM expressions, canonical scalar iterator early break, and
-  one-pointer-member aggregate FFI arguments to the preceding ancestry,
-  normalized CALLM and composite-result checkpoint `0641fba1e`.
-  The complete combined gate passes, including the strengthened spill/RENAME
-  negatives and actual VM/recorder safepoint runtime execution. Focused
-  contracts pass all four ARM64/arm64e assertion/release profiles; ordinary
-  ARM64 and strict x86_64 pass both 509-case stock corpora. The gate checkout
-  is restored to ordinary assertion ARM64 without test helpers. See the
-  [current integration evidence](arm64-callm-iterator-integration-2026-10-29.md)
-  and [preceding complete checkpoint](arm64-ancestry-complete-gate-2026-10-29.md).
-  Deeper side-list validation, captured open-result producer replay and the
-  transient three-result window are subsequent work outside this gate.
-  General Lua call/return, recursion, protected calls, vararg forwarding and
-  remaining topology/FFI restrictions still prevent a parity claim.
+- Current verified production checkpoint: `bc0313318`. It adds depth-64
+  side-list acquisition, captured open-result producer replay and the bounded
+  zero-formal three-result CALLM window to `8106cfe53`. Existing formal
+  normalization and guard checks remain covered alongside the new cases.
+  The complete combined gate passes, including actual VM/recorder safepoint
+  runtime execution and all four M7 FFI profiles. Focused leaf, open-CALLM
+  exit and side contracts pass all four ARM64/arm64e assertion/release
+  profiles; ordinary ARM64 and strict x86_64 pass both 509-case stock corpora.
+  The gate checkout is restored to ordinary assertion ARM64 without test
+  helpers. See the [current integration evidence](arm64-deep-callm-integration-2026-10-29.md)
+  and [preceding checkpoint](arm64-callm-iterator-integration-2026-10-29.md).
+  Removing the 64-level ancestry limit, general Lua call/return, recursion,
+  protected calls, vararg forwarding and remaining FFI restrictions are
+  subsequent work. Full x86_64 parity is not complete.
 
 ## Earlier checkpoint records
 
