@@ -36,12 +36,13 @@ static GCfunc *global_function(lua_State *L, const char *name)
 }
 
 static lua_Number invoke(lua_State *L, const char *runner,
-                         const char *leaf, int n)
+                         const char *leaf, int n, int limit)
 {
   lua_Number result;
   void *cframe = L->cframe;
   lua_getglobal(L, runner); lua_getglobal(L, leaf); lua_pushinteger(L, n);
-  ljt_lua_pcall(L, 2, 1, "Lua leaf call");
+  lua_pushinteger(L, limit);
+  ljt_lua_pcall(L, 3, 1, "Lua leaf call");
   assert(lua_isnumber(L, -1)); result = lua_tonumber(L, -1); lua_pop(L, 1);
   assert(L->cframe == cframe && lj_tg_load_jit_base(L2TG(L)) == NULL &&
          !lj_tg_in_native_acq(L2TG(L)));
@@ -81,11 +82,19 @@ static SnapNo identity_exit(const GCtrace *T, IRRef *guardp)
 }
 
 static void native_call(lua_State *L, GCtrace *T, const char *leaf,
-                        const char *oracle, int n, int changed)
+                        const char *oracle, int n, int limit, int changed)
 {
-  lua_Number expected = invoke(L, "leaf_oracle", oracle, n);
+  lua_Number expected = invoke(L, "leaf_oracle", oracle, n, limit);
   lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
-  assert(invoke(L, "leaf_run", leaf, n) == expected);
+  assert(invoke(L, "leaf_run", leaf, n, limit) == expected);
+  if (n == 1 && limit == 64) {
+    ExitNo exitno = lj_trace_test_first_exitno();
+    const BCIns *resume = snap_pc_acq(
+      &T->snapmap[T->snap[exitno].mapofs+T->snap[exitno].nent]);
+    GCproto *leafpt = funcproto(global_function(L, leaf));
+    assert(resume == proto_bc(leafpt)+leafpt->sizebc-1u &&
+           bc_op(*resume) == BC_RET0);
+  }
   assert(root_trace(L) == T && trace_runnable_acq(T, T->traceno));
   assert(lj_trace_test_root_entry_successes() > 0 &&
          lj_trace_test_exit_calls() > 0 &&
@@ -198,7 +207,7 @@ static int admit(Fixture *f, int allocated)
 static void admission(GCtrace *T)
 {
   Fixture f={0};
-  MSize loopmap=0, control=0, visible=0, child=0;
+  MSize loopmap=0, control=0, visible=0, child=0, postchild=0, postarg=0;
   IRRef state=0, phi=0;
   LJArm64IteratorSource iter;
   f.live=T; f.guard_snap=identity_exit(T,&f.guard); f.kfunc=T->ir[f.guard].op2;
@@ -219,6 +228,8 @@ static void admission(GCtrace *T)
     uint64_t footer;
     memcpy(&footer,&T->snapmap[T->snap[i].mapofs+T->snap[i].nent],sizeof(footer));
     if ((uint8_t)footer && !child) child=i;
+    if ((uint8_t)footer && T->snap[i].ref>f.J->loopref && !postchild)
+      postchild=i;
   }
   for (MSize i=0;i<T->snap[loopmap].nent;i++) {
     MSize at=T->snap[loopmap].mapofs+i;
@@ -227,12 +238,30 @@ static void admission(GCtrace *T)
   }
   for (IRRef r=REF_FIRST;r<f.n;r++) {
     if (f.ir[r].o==IR_SLOAD && f.ir[r].op1==iter.base-1u+LJ_FR2) state=r;
-    if (f.ir[r].o==IR_PHI && f.ir[r].op1==snap_ref(f.map[control])) phi=r;
+    if (f.ir[r].o==IR_PHI && f.ir[r].op1==snap_ref(f.map[visible]) &&
+        f.ir[r].op2>f.J->loopref && f.ir[r].op2<f.n &&
+        (f.ir[f.ir[r].op2].o==IR_ADD || f.ir[f.ir[r].op2].o==IR_ADDOV)) {
+      assert(!phi); phi=r;
+    }
   }
   assert(loopmap&&control&&visible&&state&&phi);
+  if (postchild) {
+    MSize base=0;
+    for (MSize i=0;i<T->snap[postchild].nent;i++) {
+      MSize at=T->snap[postchild].mapofs+i;
+      SnapEntry e=T->snapmap[at];
+      if ((e&SNAP_FRAME) && (e&0x00ff0000u)==SNAP_FRAME)
+        base=snap_slot(e)+1u;
+    }
+    assert(base);
+    for (MSize i=0;i<T->snap[postchild].nent;i++) {
+      MSize at=T->snap[postchild].mapofs+i;
+      if (snap_slot(T->snapmap[at])==base+1u) postarg=at;
+    }
+  }
   if (!child) child=loopmap; /* NUM iterator has no child overflow map. */
   for (int allocated=0;allocated<2;allocated++) {
-    for (unsigned m=0;m<12;m++) {
+    for (unsigned m=0;m<13;m++) {
       fixture_reset(&f);
       if (!admit(&f,allocated)) {
         LJArm64IRReject reject={0};
@@ -248,18 +277,24 @@ static void admission(GCtrace *T)
       case 2: setbc_op(&proto_bc(f.pt)[iter.setup_pc],BC_ISNEXT); break;
       case 3: f.ir[f.ir[f.guard].op1].op1++; break;
       case 4: f.ir[state].op1++; break;
-      case 5: f.map[control]=(f.map[control]&~0xffffu)|state; break;
-      case 6: f.map[visible]=(f.map[visible]&~0xffffu)|state; break;
-      case 7: f.ir[phi].op2=state; break;
-      case 8: f.snap[loopmap].mapofs=UINT32_MAX; break;
-      case 9: {
+      case 5:
+        assert(postarg);
+        f.map[postarg]=(f.map[postarg]&~0xffffu)|state;
+        break;
+      case 6:
+        f.map[visible]=(f.map[visible]&~0xffffu)|state;
+        break;
+      case 7: f.ir[phi].op1=state; break;
+      case 8: f.ir[phi].op2=state; break;
+      case 9: f.snap[loopmap].mapofs=UINT32_MAX; break;
+      case 10: {
         MSize ofs=f.snap[child].mapofs+f.snap[child].nent;
         uint64_t footer; memcpy(&footer,&f.map[ofs],sizeof(footer));
         footer=(footer&~UINT64_C(255))|1u;
         memcpy(&f.map[ofs],&footer,sizeof(footer)); break;
       }
-      case 10: setbc_d(&proto_bc(f.leafpt)[f.leafpt->sizebc-1u],3); break;
-      case 11: {
+      case 11: setbc_d(&proto_bc(f.leafpt)[f.leafpt->sizebc-1u],3); break;
+      case 12: {
         MSize pc;
         for (pc=iter.body_pc;pc<iter.call_pc;pc++)
           if (bc_op(proto_bc(f.pt)[pc])==BC_CSET) break;
@@ -311,12 +346,12 @@ static void entry_rechecks(lua_State *L, GCtrace *T)
   TGState *tg=L2TG(L);
   EntryRace race={0};
   pthread_t worker;
-  lua_Number expected=invoke(L,"leaf_oracle","oracle_step",1);
+  lua_Number expected=invoke(L,"leaf_oracle","oracle_step",1,0);
   race.tg=tg; race.L=L; race.expected=global_function(L,"leaf_run");
   lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
   lj_trace_test_root_entry_pause(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA);
   assert(pthread_create(&worker,NULL,entry_race,&race)==0);
-  assert(invoke(L,"leaf_run","leaf_step",1)==expected);
+  assert(invoke(L,"leaf_run","leaf_step",1,0)==expected);
   assert(pthread_join(worker,NULL)==0 && la_load32_acq(&race.done));
   assert(lj_trace_test_root_entry_publishes()==1 &&
          lj_trace_test_root_entry_cleanups()==1 &&
@@ -373,13 +408,14 @@ int main(void)
   run(L,
     "jit.off(); jit.opt.start('hotloop=1','hotexit=255','maxtrace=128'); "
     "local source=[[return function(fn,n) local s=.5; "
-      "for k in fn,n,0 do s=s+k; if k>=n then break end end return s end]]; "
+      "for k in fn,n,0 do s=s+k end "
+      "return s end]]; "
     "iter_source=source; leaf_run=assert(loadstring(source))(); "
     "leaf_oracle=assert(loadstring(source))(); jit.off(leaf_oracle,true); "
-    "leaf_step=function(n,k) return k+1 end; "
-    "leaf_other=function(n,k) return k+2 end; "
-    "oracle_step=function(n,k) return k+1 end; "
-    "oracle_other=function(n,k) return k+2 end; "
+    "leaf_step=function(n,k) if k<n then return k+1 end end; "
+    "leaf_other=function(n,k) if k<n then return k+2 end end; "
+    "oracle_step=function(n,k) if k<n then return k+1 end end; "
+    "oracle_other=function(n,k) if k<n then return k+2 end end; "
     "jit.off(oracle_step,true); jit.off(oracle_other,true); "
     "local th=require'threading'; iter_release=th.channel(0); "
     "iter_peer=th.spawn(function(ch) local _,ok=ch:recv(60); assert(ok); "
@@ -390,8 +426,8 @@ int main(void)
       "leaf_run=assert(loadstring(s))(); leaf_oracle=assert(loadstring(s))(); "
       "jit.off(leaf_oracle,true)", "NUM iterator source");
   for (unsigned generation=0;generation<2;generation++) {
-    for (unsigned i=0;i<80;i++) {
-      lua_Number expected=invoke(L,"leaf_oracle","oracle_step",64);
+    for (unsigned i=0;i<1;i++) {
+      lua_Number expected=invoke(L,"leaf_oracle","oracle_step",65,64);
       GCproto *rp=funcproto(global_function(L,"leaf_run"));
       GCproto *lp=funcproto(global_function(L,"leaf_step"));
       /* Target this source edge after a flush. A leaf FUNCF can hash to the
@@ -403,7 +439,7 @@ int main(void)
       for (MSize pc=1;pc<rp->sizebc;pc++)
         if (bc_op(proto_bc(rp)[pc])==BC_ITERL)
           assert(hotcount_setl(G(L),L,proto_bc(rp)+pc+1,HOTCOUNT_CALL));
-      assert(invoke(L,"leaf_run","leaf_step",64)==expected);
+      assert(invoke(L,"leaf_run","leaf_step",65,64)==expected);
     }
     GCtrace *T=root_trace(L);
     if (!T) {
@@ -414,12 +450,19 @@ int main(void)
       BCIns *loop=NULL;
       for (MSize pc=1;pc<rp->sizebc;pc++)
         if (bc_op(proto_bc(rp)[pc])==BC_ITERL) loop=&proto_bc(rp)[pc];
-      assert(loop);
+      if (!loop) {
+        fprintf(stderr,"no ITERL in runner; aborts=%u/%u\\n",
+          (unsigned)lj_trace_test_abort_count(),
+          (unsigned)lj_trace_test_last_abort_error());
+        run(L,"require('jit.bc').dump(leaf_run)","missing ITERL dump");
+        assert(loop);
+      }
       unsigned ri=(u32ptr(loop+1)>>2)&(HOTCOUNT_SIZE-1u);
       unsigned li=(u32ptr(proto_bc(lp)+1)>>2)&(HOTCOUNT_SIZE-1u);
-      fprintf(stderr,"root flags=%u frame=%u leaf flags=%u header=%u jitflags=%u state=%u "
+      fprintf(stderr,"root flags=%u frame=%u leaf flags=%u header=%u jitflags=%u state=%u abort=%u/%u "
         "rootidx=%u leafidx=%u counters=%u/%u tuple=%d\n",rp->flags,rp->framesize,
         lp->flags,bc_op(proto_bc(lp)[0]),jit_flags_acq(L2J(L)),lj_trace_state_load(L2J(L)),
+        (unsigned)lj_trace_test_abort_count(),(unsigned)lj_trace_test_last_abort_error(),
         ri,li,L2TG(L)->hotcount[ri],L2TG(L)->hotcount[li],
         lj_asm_arm64_iterl_tuple(rp,loop,*loop,*loop,1,&tuple));
       run(L,"require('jit.bc').dump(leaf_run); require('jit.bc').dump(leaf_step)",
@@ -430,10 +473,13 @@ int main(void)
     assert(trace_arm64_admission_acq(T)==TRACE_ARM64_ITERL_ADMITTED);
     admission(T);
     entry_rechecks(L,T);
-    for (int n=1;n<=96;n+=5) native_call(L,T,"leaf_step","oracle_step",n,0);
-    native_call(L,T,"leaf_other","oracle_other",64,1);
+    for (int n=1;n<=96;n+=5) native_call(L,T,"leaf_step","oracle_step",n,n-1,0);
+    native_call(L,T,"leaf_other","oracle_other",64,63,1);
+    /* A published RET1+RET0 child now reaches its cold nil arm while the
+    ** containing ITERL root is entered natively. */
+    native_call(L,T,"leaf_step","oracle_step",1,64,0);
     lua_gc(L,LUA_GCCOLLECT,0);
-    native_call(L,T,"leaf_step","oracle_step",96,0);
+    native_call(L,T,"leaf_step","oracle_step",96,95,0);
     run(L,"jit.flush()", "iterator flush");
   }
   }
