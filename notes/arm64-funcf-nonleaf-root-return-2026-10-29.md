@@ -32,9 +32,10 @@ bad-argument phase, after collection with a live MT peer. Standalone output
 was also recorded at `/tmp/funf-arm64-topology.tsv` and
 `/tmp/funf-arm64e-fixed.tsv`.
 
-This validates the one captured-call shape only. It does not establish tail
-calls, recursion, multiple returns, open results, protected calls, or arbitrary
-nonleaf effects.
+This validates the ordinary captured-call shape only. Tail calls, recursion,
+open results, protected calls, and arbitrary nonleaf effects were not covered
+by this initial checkpoint; the narrow tail-return extension is documented
+below.
 
 ## Follow-up scope repair
 
@@ -133,3 +134,48 @@ passed for arm64 and arm64e. Each profile reports 10 exit-free native returns,
 one captured-callee identity exit, 20 semantic mutation rejections, 21 post-RA
 mutation rejections, and two low-loopref rejections. The log is
 `/tmp/funcf-terminal-result-contract.log`.
+
+## Captured one-result tail return
+
+The x86-64 topology probe also publishes the outer `FUNCF` root for a captured
+Lua leaf invoked by `CALLT`. ARM64 now admits one fixed shape: the root has one
+numeric formal, loads one captured leaf, copies the formal into the fixed
+one-argument call slot, tail-calls with one requested result, and returns the
+child's scalar result. The semantic and post-RA proofs bind the exact root
+`CALLT` identity guard and argument snapshot, then independently bind the
+terminal child `RET1` frame marker and returned scalar to the root result slot.
+The recorder preflight confirms the current child's physical frame and exact
+external Lua caller/return-PC/argument geometry after the root frame has been
+replaced. Generic tail calls, variable argument counts, multi-result tail
+calls, and arbitrary child effects remain refused.
+
+The native fixture keeps a live MT peer, compares against an interpreter
+oracle, enters the selected root before and after collection, checks the
+non-numeric type-guard exit and continuation, then re-enters the root. Its
+private cloned-trace test accepts the unmodified trace in both independent
+passes and rejects four mutations in each: substituted child result,
+misplaced result slot, missing terminal result map, and substituted child
+function identity. Each ARM64/ARM64e assertion run reports four semantic and
+four post-RA tail-mutation rejections; the combined fixture reports 13
+exit-free native returns and two captured-callee identity exits. The complete
+`tools/ci/arm64_jit_funcf_record_contract.sh` passed for both profiles with
+the final source. Preserved profile archives, runtimes, fixture executables,
+and topology output are under
+`/Users/frityet/Scratch/runtime-audit-tail-20261029/final-contract-final/lj-arm64-funcf-record.jpxsvn`.
+The fully ordinary ARM64 assertion build, with neither test-helper define,
+also published this `captured-tail-return` root (`nins=12`, `nexit=6`) and
+recorded 81 selected-root exits in its bad-argument phase. Its topology output
+is `/Users/frityet/Scratch/runtime-audit-tail-20261029/ordinary-topology-final.tsv`.
+
+While preparing the copied-trace proof, two test-only clone defects were
+found and corrected. Snapshot footer rebasing now preserves the original raw
+low metadata byte instead of taking the low byte of the PC address. IR copy
+uses the valid biased range `[nk, nins)` rather than copying from the biased
+pointer itself; the previous form read before the IR allocation and produced
+matching `calls-final` crash reports. Ten direct runs of the corrected ARM64
+calls fixture passed. The earlier randomized recorder-fixture segfault is a
+separate observation: its saved ARM64 executable UUID has no matching
+DiagnosticReport, the similarly timed ARM64e report has a different UUID,
+and a same-seed comparison passed on both the parent checkpoint and
+candidate. The final full contract also passed, so that earlier incident
+remains unreproduced and is not attributed to the tail implementation.

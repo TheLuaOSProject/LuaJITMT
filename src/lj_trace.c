@@ -12504,6 +12504,145 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
   return J->fn == fn && J->pt == pt;
 }
 
+/* A terminal CALLT removes the root Lua frame before the recorder dispatches
+** the callee. Certify that one transition from the exact root source and
+** specialized target, then bind the surviving physical frame to the caller
+** CALL which entered that root. The ordinary frame-chain proof above cannot
+** represent this shape because the tail-called root has no physical frame. */
+static int trace_arm64_lua_leaf_tail_frame(jit_State *J, lua_State *owner,
+                                    GCproto *rootpt, GCfunc *fn,
+                                    const BCIns *pc)
+{
+  const TValue *physicalframe, *caller;
+  const BCIns *returnpc;
+  GCproto *pt, *callerpt;
+  GCfunc *callerfn;
+  TValue *stackbase, *stacklimit;
+  uintptr_t stacklo, stackhi, baseaddr, frameaddr, calleraddr;
+  MSize callpos;
+  BCIns outercall, innercall;
+  BCReg outera;
+  TRef callee;
+  IRRef ref, guard;
+  int exact;
+
+  if (!owner || !fn || !isluafunc(fn) || !rootpt || !pc ||
+      J->parent != 0 || J->exitno != 0 || J->framedepth != 0 ||
+      J->retdepth != 0 || J->postproc != LJ_POST_NONE ||
+      J->cur.traceno == 0 || J->cur.root != 0 ||
+      trace_startptgco_acq(&J->cur) != obj2gco(rootpt) ||
+      bc_op(trace_startins_acq(&J->cur)) != BC_FUNCF ||
+      !trace_root_funcf_shape(rootpt, trace_startpc_acq(&J->cur),
+                              trace_startins_acq(&J->cur)))
+    return 0;
+  callpos = rootpt->sizebc-1u;
+
+  pt = funcproto(fn);
+  if (!trace_pc_in_proto_range(pc, proto_bc(pt), pt->sizebc) ||
+      !lj_trace_arm64_lua_leaf(fn) ||
+      trace_arm64_lua_leaf_nresults(pt) != 1u)
+    return 0;
+
+  /* The interpreter's current child frame is the reused root frame. Check
+  ** its stack address before decoding the Lua caller frame below. */
+  stackbase = mref_acq(owner->stack, TValue);
+  stacklimit = mref_acq(owner->maxstack, TValue);
+  stacklo = (uintptr_t)stackbase;
+  stackhi = (uintptr_t)stacklimit;
+  baseaddr = (uintptr_t)owner->base;
+  if (!stackbase || !stacklimit || stackhi <= stacklo ||
+      baseaddr < stacklo || baseaddr >= stackhi ||
+      baseaddr-stacklo < sizeof(TValue) ||
+      (baseaddr-stacklo) % sizeof(TValue) != 0)
+    return 0;
+  frameaddr = baseaddr-sizeof(TValue);
+  physicalframe = (const TValue *)frameaddr;
+  if (frame_type(physicalframe) != FRAME_LUA ||
+      frame_func(physicalframe) != fn)
+    return 0;
+
+  innercall = (BCIns)la_load32_acq(
+    (const uint32_t *)&proto_bc(rootpt)[callpos]);
+  /* The source recognizer fixes one forwarded formal. The CALLT's recorded
+  ** function slot is the exact specialized target, not a free-standing PGC
+  ** value inferred from the surviving C stack. */
+  if (bc_op(innercall) != BC_CALLT || bc_b(innercall) != 0 ||
+      bc_c(innercall) != 2 ||
+      (MSize)bc_a(innercall)+1u+LJ_FR2 >= rootpt->framesize ||
+      J->baseslot < 1u+LJ_FR2 || J->base != J->slot+J->baseslot)
+    return 0;
+  callee = J->base[-1-LJ_FR2];
+  if (!tref_isfunc(callee)) return 0;
+  ref = tref_ref(callee);
+  if (tref_isk(callee)) {
+    if (ref < J->cur.nk || ref >= J->cur.nins ||
+        J->cur.ir[ref].o != IR_KGC ||
+        ir_kgc_acq(&J->cur.ir[ref]) != obj2gco(fn)) return 0;
+  } else {
+    exact = 0;
+    for (guard = REF_FIRST; guard < J->cur.nins; guard++) {
+      IRIns *ir = &J->cur.ir[guard];
+      IRRef constant;
+      if (ir->o != IR_EQ || ir->t.irt != (IRT_FUNC|IRT_GUARD) ||
+          (ir->op1 != ref && ir->op2 != ref)) continue;
+      constant = ir->op1 == ref ? ir->op2 : ir->op1;
+      if (constant >= J->cur.nk && constant < REF_TRUE &&
+          J->cur.ir[constant].o == IR_KGC &&
+          ir_kgc_acq(&J->cur.ir[constant]) == obj2gco(fn)) {
+        exact = 1;
+        break;
+      }
+    }
+    if (!exact) return 0;
+  }
+  /* The root frame is gone, but the outer caller's frame remains. Its
+  ** function slot and first argument must identify the same root invocation
+  ** whose frame was replaced by the tail call. CALLM is allowed only with
+  ** the first argument physically present; the fixed root formal ignores
+  ** any additional arguments exactly as the interpreter does. */
+  returnpc = frame_pc(physicalframe);
+  caller = frame_prevl(physicalframe);
+  calleraddr = (uintptr_t)caller;
+  if (calleraddr < stacklo || calleraddr >= stackhi ||
+      calleraddr-stacklo < (1u+LJ_FR2)*sizeof(TValue) ||
+      (calleraddr-stacklo) % sizeof(TValue) != 0)
+    return 0;
+  callerfn = frame_func(caller);
+  if (!isluafunc(callerfn)) return 0;
+  callerpt = funcproto(callerfn);
+  if (!trace_pc_in_proto_range(returnpc, proto_bc(callerpt),
+                               callerpt->sizebc) ||
+      returnpc == proto_bc(callerpt)) return 0;
+  outercall = (BCIns)la_load32_acq((const uint32_t *)(returnpc-1));
+  if ((bc_op(outercall) != BC_CALL && bc_op(outercall) != BC_CALLM) ||
+      (bc_op(outercall) == BC_CALL &&
+       (bc_b(outercall) != 2 || bc_c(outercall) != 2)) ||
+      (bc_op(outercall) == BC_CALLM && bc_b(outercall) != 0 &&
+       bc_b(outercall) != 2))
+    return 0;
+  outera = bc_a(outercall);
+  if ((MSize)outera+1u+LJ_FR2 >= callerpt->framesize ||
+      (MSize)outera+2u+LJ_FR2 >=
+        (MSize)(stackhi-calleraddr)/sizeof(TValue)) {
+    return 0;
+  }
+  /* CALLT reuses the caller's function slot for the tail-called function.
+  ** The root closure itself is no longer in this physical frame; the exact
+  ** source root and guarded CALLT target above prove how this slot changed. */
+  if (!tvisfunc(&caller[outera+1u]) ||
+      funcV(&caller[outera+1u]) != fn) {
+    return 0;
+  }
+  if (baseaddr != calleraddr+
+        ((uintptr_t)1u+(uintptr_t)outera+1u+(uintptr_t)LJ_FR2)*
+          sizeof(TValue) ||
+      tv_rawload_acq(&owner->base[0]) !=
+        tv_rawload_acq(&caller[outera+2u+LJ_FR2])) {
+    return 0;
+  }
+  return 1;
+}
+
 
 
 static int trace_arm64_root_recorder_preflight(jit_State *J,
@@ -12551,11 +12690,15 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
       pt = funcproto(fn);
       if (!trace_pc_in_proto_range(pc, proto_bc(pt), pt->sizebc))
         return 0;
-      if (pt != rootpt &&
-          !(bc_op(startins) == BC_FUNCF &&
-            trace_arm64_lua_leaf_returned_call(J, owner, fn, pc)) &&
-          !trace_arm64_lua_leaf_frame(J, owner, rootpt, fn, pc))
-        return 0;
+      if (pt != rootpt) {
+        int accepted;
+        accepted = (bc_op(startins) == BC_FUNCF &&
+            trace_arm64_lua_leaf_tail_frame(J, owner, rootpt, fn, pc)) ||
+          (bc_op(startins) == BC_FUNCF &&
+            trace_arm64_lua_leaf_returned_call(J, owner, fn, pc)) ||
+          trace_arm64_lua_leaf_frame(J, owner, rootpt, fn, pc);
+        if (!accepted) return 0;
+      }
     } else {
 #if LJ_HASJIT_FFI_CALLXS || defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
       const BCIns *fnpc = mref_acq(fn->c.pc, const BCIns);
@@ -12826,10 +12969,17 @@ void lj_trace_ins(jit_State *J, const BCIns *pc)
     }
   } else
 #endif
+#if defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+  if (!trace_arm64_root_recorder_preflight(J, pc, &L, &recordfn)) {
+      trace_arm64_abort_exact_owner(J, L);
+      return;
+  }
+#else
   if (!trace_arm64_root_recorder_preflight(J, pc, &L, &recordfn)) {
     trace_arm64_abort_exact_owner(J, L);
     return;
   }
+#endif
 #endif
   /* Note: J->L must already be set. pc is the true bytecode PC here. */
   J->pc = pc;
