@@ -576,6 +576,14 @@ static void expect_nested_root_side(lua_State *L, jit_State *J)
 	   (TraceNo)base.op1 == set.rootno);
   }
   set.parentno = side_no;
+  {
+    uint32_t cell_contract =
+      lj_trace_test_arm64_nested_cell_snapshot_contract(J, set.parentno);
+    if (cell_contract != 7u)
+      fprintf(stderr, "nested cell snapshot contract=%u parent=%u\n",
+        (unsigned)cell_contract, (unsigned)set.parentno);
+    assert(cell_contract == 7u);
+  }
   lua_gc(L, LUA_GCCOLLECT, 0);
 
   lj_trace_test_reset_exittab_stats();

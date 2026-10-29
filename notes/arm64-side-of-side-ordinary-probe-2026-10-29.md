@@ -102,3 +102,38 @@ fixture, whose lookup still insists that the root has exactly one child.
 The current integration branch already has a multiple-child-aware lookup.
 Validation will continue on that integration base, keeping this failure log
 at `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/root-entry.log`.
+
+## Active-peer cell-operation admission follow-up
+
+The strengthened ordinary probe initially failed only while its live MT peer
+was attached. A temporary trace diagnostic showed the nested parent was a
+cell-operation prototype (`proto_cellops=1`) with active shared runtime
+(`mtshared=1`), and `trace_hotside` was dropping every such nested attempt
+before the nested snapshot proof. Removing that blanket veto produced nested
+trace 3 from direct side 2 on ARM64, with the canonical root link still trace
+1; 31 exact nested native exits were observed after full collection and
+re-entry. The candidate uses ordinary local cell operations but has no
+captured upvalues. A separate captured-local getter probe remained
+unpublished, so captured-cell parity is not claimed.
+
+The replacement is bounded to nested snapshots whose source prototype uses
+cell operations. The exact parent map is checked for bounds and supported
+NORESTORE forms; mapped `IRT_P32` SLOADs are refused as cell identities. The
+existing source, semantic, and post-RA checks continue to bind CGET/CSET to
+their rooted helpers. The focused production contract exercises a real
+parent map plus private NORESTORE and P32-source mutations; it passed with
+contract bitmask 7. The P32-source mutation is synthetic, while the ordinary
+peer fixture itself has no captured cell.
+
+Validation evidence:
+
+- `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/arm64-peer-cellmap-fixed.tsv`
+- `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/first-side-cell-proof-contract4.log`
+- `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/x64-peer-build.log` (initially failed before the target guard below)
+- Current non-ARM compatibility build: AppleClang `-arch x86_64`, `-DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT`, built successfully after guarding the ARM64 certificate traversal.
+- Current x86_64/Rosetta ordinary peer probe: `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/x64-peer-after-guard.tsv`; it observed nested trace 5 with immediate parent trace 3 and 32 native nested exits after GC.
+
+The nested retirement walk uses depth-ordered certificate validation only on
+ARM64, where `GCtrace` carries the ARM64 side certificate. Non-ARM targets
+retain the prior generic one-pass scoped retirement behavior. This change
+does not add locks or weaken the nested source/map proof.

@@ -4521,6 +4521,51 @@ static int trace_arm64_first_side_snapshot_valid(
   return 1;
 }
 
+static int trace_arm64_nested_cell_mapref_valid(const IRIns *source);
+
+/* An active-MT nested side may inherit visible locals, but cannot restore a
+** physical local-cell identity as a TValue. Snapshot generation marks such a
+** slot SNAP_NORESTORE. Keep only the exact frame footer and already-proved
+** FORL control slots; also reject mapped P32 SLOADs, which are cell guards.
+** The source and independent IR passes separately bind CGET/CSET effects to
+** rooted cell helpers. */
+static int trace_arm64_nested_cell_snapshot_valid(
+    const TraceArm64FirstSideLoopView *v,
+    const TraceArm64FirstSideLoopView *rootview)
+{
+  GCproto *pt;
+  MSize i;
+  if (v == NULL || v->startpt == NULL || v->ir == NULL ||
+      v->mapofs > v->nsnapmap || v->nent > v->nsnapmap-v->mapofs)
+    return 0;
+  pt = gco2pt(v->startpt);
+  if (!proto_cellops(pt)) return 1;
+  for (i = 0; i < v->nent; i++) {
+    SnapEntry sn = snapentry_acq(&v->snapmap[v->mapofs+i]);
+    IRRef ref = snap_ref(sn);
+    if ((sn & UINT32_C(0x00ff0000)) != 0 &&
+        sn != SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL) &&
+        !(rootview != NULL ?
+          trace_arm64_nested_forl_norestore_valid(v, rootview, sn) :
+          trace_arm64_side_forl_norestore_valid(v->ir, v->nins, v->nk,
+            v->snapref, v->startins, sn)))
+      return 0;
+    if (irref_isk(ref)) continue;
+    if (ref < REF_FIRST || ref >= v->nins) return 0;
+    {
+      IRIns source = ir_load_acq(&v->ir[ref]);
+      if (!trace_arm64_nested_cell_mapref_valid(&source)) return 0;
+    }
+  }
+  return 1;
+}
+
+static int trace_arm64_nested_cell_mapref_valid(const IRIns *source)
+{
+  return source != NULL &&
+    !(source->o == IR_SLOAD && irt_type(source->t) == IRT_P32);
+}
+
 static int trace_arm64_side_certificate_valid_held(jit_State *J,
 	GCtrace *T);
 
@@ -5033,7 +5078,8 @@ static int trace_arm64_nested_side_view_acq(jit_State *J, TraceNo parentno,
   v->footer1 = snapentry_acq(&v->snapmap[v->mapofs+nent+1u]);
 #endif
   v->continuationins = rootview.continuationins;
-  if (!trace_arm64_first_side_snapshot_valid(v, continuation, &rootview)) {
+  if (!trace_arm64_first_side_snapshot_valid(v, continuation, &rootview) ||
+      !trace_arm64_nested_cell_snapshot_valid(v, &rootview)) {
     return 0;
   }
   if (!trace_arm64_first_side_loop_generation_valid(v, rootno, continuation)) {
@@ -5045,6 +5091,90 @@ static int trace_arm64_nested_side_view_acq(jit_State *J, TraceNo parentno,
     gcref_acq(tv->slot[parentno]) == obj2gco(parent) &&
     gcref_acq(tv->slot[rootno]) == obj2gco(root);
 }
+
+#if defined(LJ_TRACE_TEST_HELPERS)
+/* Positive plus private-map/source corruptions for the bounded nested-cell
+** snapshot predicate. Bits 0..2 report the valid map, rejected NORESTORE
+** cell identity, and rejected P32 cell guard source respectively. */
+uint32_t lj_trace_test_arm64_nested_cell_snapshot_contract(
+    jit_State *J, TraceNo parentno)
+{
+  TraceArm64FirstSideLoopView view, bad;
+  GCtrace *parent;
+  TraceVec *tv;
+  SnapShot *snaps;
+  SnapEntry *snapmap;
+  MSize nsnap, nsnapmap, exitno, i;
+  uint32_t result = 0;
+  if (J == NULL || parentno == 0 || (tv = tracevec_acq(J)) == NULL ||
+      (MSize)parentno >= tv->sizetrace ||
+      (parent = traceref_safe(J, parentno)) == NULL ||
+      (nsnap = trace_nsnap_acq(parent)) == 0 ||
+      (snaps = trace_snap_acq(parent)) == NULL ||
+      (snapmap = trace_snapmap_acq(parent)) == NULL)
+    return 0;
+  nsnapmap = trace_nsnapmap_acq(parent);
+  memset(&view, 0, sizeof(view));
+  view.startpt = trace_startptgco_acq(parent);
+  view.ir = trace_ir_acq(parent);
+  view.nins = trace_nins_acq(parent);
+  view.nk = trace_nk_acq(parent);
+  view.snap = snaps;
+  view.snapmap = snapmap;
+  view.nsnap = nsnap;
+  view.nsnapmap = nsnapmap;
+  view.startins = trace_startins_acq(parent);
+  view.topslot = trace_topslot_acq(parent);
+  if (view.startpt == NULL || view.ir == NULL ||
+      !proto_cellops(gco2pt(view.startpt)))
+    return 0;
+  for (exitno = 0; exitno < nsnap; exitno++) {
+    MSize ofs = snap_mapofs_acq(&snaps[exitno]);
+    MSize nent = snap_nent_acq(&snaps[exitno]);
+    if (ofs > nsnapmap || nent > nsnapmap-ofs ||
+        1u+LJ_FR2 > nsnapmap-ofs-nent)
+      return 0;
+    view.exitno = (ExitNo)exitno;
+    view.snapref = snap_ref_acq(&snaps[exitno]);
+    view.mapofs = ofs;
+    view.nent = nent;
+    view.nslots = snap_nslots_acq(&snaps[exitno]);
+    view.snaptopslot = snap_topslot_acq(&snaps[exitno]);
+    if (!trace_arm64_nested_cell_snapshot_valid(&view, NULL))
+      continue;
+    for (i = 0; i < nent; i++) {
+      SnapEntry sn = snapentry_acq(&snapmap[ofs+i]);
+      MSize slot = snap_slot(sn);
+      if ((sn & UINT32_C(0x00ff0000)) == 0 &&
+          slot >= 1u+LJ_FR2 && slot < view.topslot) {
+        break;
+      }
+    }
+    if (i == nent || nent > LJ_MAX_JSLOTS) continue;
+    result |= 1u;
+    {
+      SnapEntry copy[LJ_MAX_JSLOTS];
+      memcpy(copy, &snapmap[ofs], nent*sizeof(*copy));
+      bad = view;
+      bad.snapmap = copy;
+      bad.mapofs = 0;
+      copy[i] |= SNAP_NORESTORE;
+      if (!trace_arm64_nested_cell_snapshot_valid(&bad, NULL))
+        result |= 2u;
+      {
+        IRIns p32source;
+        memset(&p32source, 0, sizeof(p32source));
+        p32source.o = IR_SLOAD;
+        p32source.t.irt = IRT_P32;
+        if (!trace_arm64_nested_cell_mapref_valid(&p32source))
+          result |= 4u;
+      }
+    }
+    if (result == 7u) return result;
+  }
+  return result;
+}
+#endif
 
 static int trace_arm64_side_parent_metadata_view_valid(jit_State *J,
     TraceNo parent, ExitNo exitno, const BCIns *pc, GCproto **ptp,
@@ -11880,7 +12010,9 @@ uint32_t lj_trace_flushscope_retire_hs(global_State *g, uint64_t epoch)
 {
   jit_State *J = G2J(g);
   TraceNo i;
+#if LJ_TARGET_ARM64
   int depth;
+#endif
   uint32_t retired = 0;
   MSize sizetrace = trace_sizetrace_acq(J);
   /* This is the post-boundary token-owner half of scoped retirement. Generic
@@ -11892,6 +12024,7 @@ uint32_t lj_trace_flushscope_retire_hs(global_State *g, uint64_t epoch)
   if (!lj_jit_token_held(J))
     return 0;
   lj_gc2_smr_read_enter(g);
+#if LJ_TARGET_ARM64
   for (depth = 1; depth >= 0; depth--) {
   for (i = 1; i < sizetrace; i++) {
     GCtrace *T = traceref_safe(J, i);
@@ -11913,6 +12046,21 @@ uint32_t lj_trace_flushscope_retire_hs(global_State *g, uint64_t epoch)
     }
   }
   }
+#else
+  for (i = 1; i < sizetrace; i++) {
+    GCtrace *T = traceref_safe(J, i);
+    if (T && trace_root_acq(T) != 0 && trace_traceno_acq(T) == i) {
+      TraceNo rootno = trace_root_acq(T);
+      GCtrace *root = traceref_safe(J, rootno);
+      if (trace_scope_pending_acq(T) ||
+	  (root && trace_traceno_acq(root) == rootno &&
+	   trace_scope_pending_acq(root))) {
+	trace_scope_clear_slot(J, i, T, epoch);
+	retired++;
+      }
+    }
+  }
+#endif
   for (i = 1; i < sizetrace; i++) {
     GCtrace *T = traceref_safe(J, i);
     if (T && trace_root_acq(T) == 0 && trace_traceno_acq(T) == i &&
@@ -14874,19 +15022,8 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
   parentT = traceref_safe(J, parent);
   if (!trace_runnable_acq(parentT, parent) || exitno >= trace_nsnap_acq(parentT))
     goto out;
-  {
-    TraceNo rootno = trace_root_acq(parentT);
-    GCtrace *root = rootno ? traceref_safe(J, rootno) : parentT;
-    GCproto *pt = root ? trace_startpt_acq(root) : NULL;
-    /*
-    ** Root and first-level side traces have the complete original local-cell
-    ** snapshot shape. An active-MT nested side still replays cell operations
-    ** and remains closed until the nested-cell proof is available.
-    */
-    if (rootno != 0 && pt && proto_cellops(pt) &&
-	lj_record_mt_runtime_shared(g, L))
-      goto out;
-  }
+  /* Do not use proto_cellops as a blanket nested-side veto. The nested view
+  ** below proves the exact parent map has no restorable physical cell slot. */
   snap = &trace_snap_acq(parentT)[exitno];
   /* The outer trace-exit check precedes this SMR/metadata acquisition. Close
   ** that window before the first shared snapshot-count CAS. Service remains
