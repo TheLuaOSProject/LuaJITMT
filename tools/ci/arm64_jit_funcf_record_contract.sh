@@ -82,6 +82,7 @@ for required in \
   '__arm64_funcf_addnv' \
   '__arm64_funcf_live_interference' \
   'test_funcf_generation_race' \
+  'test_disabled_unsupported_funcf_hotpatch();' \
   'ir[load].op1++' \
   'ir[result].prev = ir[arg].prev' \
   'ir[right].prev = ir[left].prev' \
