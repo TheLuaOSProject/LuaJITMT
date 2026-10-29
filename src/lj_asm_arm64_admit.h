@@ -395,6 +395,9 @@ static int arm64_callxs_value_kind(const IRIns *ir, IRRef ref,
     } else return 0;
   }
   switch (kind) {
+  case LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER:
+	return !on_stack && size == sizeof(float) && type == IRT_FLOAT &&
+	       value.o == IR_XLOAD && value.op2 == 0;
   case LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE:
 	if (on_stack || value.o != IR_XLOAD || value.op2 != 0) return 0;
 	return (size == 1 && type == IRT_U8) ||
@@ -1182,6 +1185,115 @@ static int arm64_callxs_cdata_integer_aggregate_argument(
   return consumers != 0;
 }
 
+/* Prove one float member extracted from the exact rooted HFA CData. Each
+** XLOAD has one fixed CALLXS consumer and is tied to its field offset and
+** guarded CType identity; the source TValue remains in its original frame. */
+static int arm64_callxs_cdata_float_hfa_member(CTState *cts,
+	const GCtrace *T, IRRef value, IRRef expected_source,
+	const LJArm64ABIArg *arg)
+{
+	const IRIns *ir = T->ir;
+	IRIns load, address, src;
+	LJArm64FloatHFA hfa;
+	LJArm64ABIArg inferred;
+	CTypeID source_id = 0, rawid;
+	IRRef source, ref;
+	unsigned member_index;
+	unsigned consumers = 0;
+	if (T->snap == NULL || T->snapmap == NULL ||
+	    value < REF_FIRST || value >= T->nins) return 0;
+	load = ir_load_acq(&ir[value]);
+	if (load.o != IR_XLOAD || load.t.irt != IRT_FLOAT || load.op2 != 0 ||
+	    load.op1 < REF_FIRST || load.op1 >= value) return 0;
+	address = ir_load_acq(&ir[load.op1]);
+	source = address.op1;
+	{
+	  int64_t offset;
+	  if (address.o != IR_ADD || address.t.irt != IRT_P64 ||
+	      source < REF_FIRST || source >= load.op1 ||
+	      !arm64_callxs_offset_value(ir, T->nk, address.op2, &offset) ||
+	      offset < (int64_t)sizeof(GCcdata) ||
+	      (offset-(int64_t)sizeof(GCcdata))%sizeof(float) != 0 ||
+	      (offset-(int64_t)sizeof(GCcdata))/sizeof(float) >= 2) return 0;
+	  member_index = (unsigned)((offset-(int64_t)sizeof(GCcdata))/sizeof(float));
+	}
+	if (arg != NULL && (arg->kind != LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER ||
+	    arg->member_count != 2 || arg->member_index != member_index)) return 0;
+	src = ir_load_acq(&ir[source]);
+	if ((src.o != IR_SLOAD && src.o != IR_VLOAD) ||
+	    src.t.irt != (IRT_CDATA|IRT_GUARD) ||
+	    (expected_source != 0 && source != expected_source))
+	  return 0;
+	for (ref = source+1u; ref < value; ref++) {
+	  IRIns field = ir_load_acq(&ir[ref]);
+	  IRRef guard;
+	  if (field.o != IR_FLOAD || field.op1 != source ||
+	      field.op2 != IRFL_CDATA_CTYPEID) continue;
+	  if (source_id || field.t.irt != IRT_U16) return 0;
+	  for (guard = ref+1u; guard < value; guard++) {
+	    IRIns eq = ir_load_acq(&ir[guard]);
+	    IRRef kref;
+	    int32_t id;
+	    if (eq.o != IR_EQ || eq.t.irt != (IRT_INT|IRT_GUARD) ||
+		(eq.op1 != ref && eq.op2 != ref)) continue;
+	    kref = eq.op1 == ref ? eq.op2 : eq.op1;
+	    if (!arm64_callxs_kint_value(ir, T->nk, kref, &id) || id <= 0 ||
+		 source_id) return 0;
+	    source_id = (CTypeID)id;
+	  }
+	}
+	if (!source_id || !lj_ccall_arm64_float_hfa_class(cts, source_id,
+	    &hfa, &rawid) || hfa.count != 2 ||
+	    hfa.member_size != sizeof(float)) return 0;
+	{
+	  SnapNo s;
+	  for (s = 0; s < T->nsnap; s++) {
+	    MSize ofs = snap_mapofs_acq(&T->snap[s]);
+	    MSize nent = snap_nent_acq(&T->snap[s]), i;
+	    if (ofs > T->nsnapmap || nent > T->nsnapmap-ofs) return 0;
+	    for (i = 0; i < nent; i++)
+	      if (snap_ref(snapentry_acq(&T->snapmap[ofs+i])) == value) return 0;
+	  }
+	}
+	memset(&inferred, 0, sizeof(inferred));
+	inferred.kind = LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER;
+	inferred.id = rawid;
+	inferred.member_count = hfa.count;
+	inferred.member_index = (uint8_t)member_index;
+	if (arg == NULL) arg = &inferred;
+	if (rawid != arg->id || hfa.count != arg->member_count) return 0;
+	for (ref = value+1u; ref < T->nins; ref++) {
+	  IRIns use = ir_load_acq(&ir[ref]);
+	  IRMode mode;
+	  if (use.o >= IR__MAX) return 0;
+	  mode = lj_ir_mode[use.o];
+	  if ((irm_op1(mode) == IRMref && use.op1 == value) ||
+	      (irm_op2(mode) == IRMref && use.op2 == value)) {
+	    if (use.o != IR_CARG &&
+		!(use.o == IR_CALLXS && use.op1 == value)) return 0;
+	  }
+	  if (use.o == IR_CALLXS) {
+	    LJArm64ABISignature abi;
+	    IRRef values[LJ_ARM64_ABI_MAX_ARGS];
+	    unsigned nargs, i;
+	    if (!arm64_callxs_signature_for_call(cts, ir, T->nk, T->nins,
+		ref, &abi, NULL) ||
+		!arm64_callxs_arglist(ir, T->nk, T->nins, ref, values, &nargs))
+	      return 0;
+	    for (i = 0; i < nargs; i++) if (values[i] == value) {
+	      if (i >= abi.nargs || abi.arg[i].id != arg->id ||
+		  abi.arg[i].kind != LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER ||
+		  abi.arg[i].member_index != arg->member_index ||
+		  !arm64_callxs_value_kind(ir, value, T->nk, T->nins, ref,
+		    LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER, sizeof(float), 0, 0))
+		return 0;
+	      consumers++;
+	    }
+	  }
+	}
+	return consumers == 1;
+}
+
 /* A Lua INT is already a valid fixed 32-bit argument. Smaller register
 ** arguments and 64-bit arguments need the recorder's exact extension;
 ** compact stack arguments retain only their CType-width bits. */
@@ -1573,19 +1685,26 @@ static int arm64_callxs_vararg_sources(CTState *cts, const GCtrace *T, IRRef xsa
 {
   const SnapShot *snapshot = NULL;
   IRRef sources[LJ_ARM64_ABI_MAX_ARGS];
+  IRRef params[LJ_ARM64_ABI_MAX_ARGS];
   IRRef frame = 0, callable = 0, cdata = 0;
   MSize base = 1u+LJ_FR2+(MSize)bc_a(sourceins)+1u+LJ_FR2;
   MSize ofs, nent, nslots, i, prior_slot = 0;
+  unsigned tail_count;
   SnapNo s;
   uint64_t footer;
   SnapEntry footer_words[1+LJ_FR2];
   IRIns fn, pc, fp;
   GCobj *obj;
   if (nargs > LJ_ARM64_ABI_MAX_ARGS || nargs < abi->nargs ||
-      base > UINT8_MAX || base+1u+nargs > UINT8_MAX ||
+      abi->nparams > LJ_ARM64_ABI_MAX_ARGS ||
+      base > UINT8_MAX || base+1u+abi->nparams+(nargs-abi->nargs) > UINT8_MAX ||
       T->snap == NULL || T->snapmap == NULL)
     return 0;
+  tail_count = nargs-abi->nargs;
+  if (tail_count && (!abi->is_vararg || abi->nparams+tail_count >
+	LJ_ARM64_ABI_MAX_ARGS)) return 0;
   memset(sources, 0, sizeof(sources));
+  memset(params, 0, sizeof(params));
   for (s = 0; s < T->nsnap; s++) {
     if (snap_ref_acq(&T->snap[s]) == xsave) {
       if (snapshot != NULL) return 0;
@@ -1597,7 +1716,8 @@ static int arm64_callxs_vararg_sources(CTState *cts, const GCtrace *T, IRRef xsa
   nent = snap_nent_acq(snapshot);
   nslots = snap_nslots_acq(snapshot);
   if (ofs > T->nsnapmap || nent > T->nsnapmap-ofs ||
-      T->nsnapmap-ofs-nent < 1u+LJ_FR2 || base+1u+nargs > nslots)
+      T->nsnapmap-ofs-nent < 1u+LJ_FR2 ||
+      base+1u+abi->nparams+tail_count > nslots)
     return 0;
   for (i = 0; i < 1u+LJ_FR2; i++)
     footer_words[i] = snapentry_acq(&T->snapmap[ofs+nent+i]);
@@ -1619,9 +1739,9 @@ static int arm64_callxs_vararg_sources(CTState *cts, const GCtrace *T, IRRef xsa
     } else if (slot == base) {
       if (flags != 0) return 0;
       cdata = value;
-    } else if (slot > base && slot <= base+nargs) {
+    } else if (slot > base && slot <= base+abi->nparams+tail_count) {
       if (flags != 0) return 0;
-      sources[slot-base-1u] = value;
+      params[slot-base-1u] = value;
     }
   }
   if (!arm64_callxs_const_member(T->ir, T->nk, frame) ||
@@ -1647,16 +1767,31 @@ static int arm64_callxs_vararg_sources(CTState *cts, const GCtrace *T, IRRef xsa
     IRIns value = ir_load_acq(&T->ir[values[i]]);
     int aggregate = i < abi->nargs &&
 	abi->arg[i].kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE;
+    int hfa = i < abi->nargs &&
+	abi->arg[i].kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER;
+    if (i < abi->nargs) {
+      unsigned source_index = abi->arg[i].source_index;
+      if (source_index >= abi->nparams || params[source_index] == 0)
+	return 0;
+      sources[i] = params[source_index];
+    } else {
+      unsigned source_index = abi->nparams+i-abi->nargs;
+      if (source_index >= abi->nparams+tail_count ||
+	  params[source_index] == 0) return 0;
+      sources[i] = params[source_index];
+    }
     if (i < abi->nargs &&
 	aggregate &&
 	!arm64_callxs_cdata_integer_aggregate_argument(cts, T, values[i],
 	  sources[i])) return 0;
+    if (hfa && !arm64_callxs_cdata_float_hfa_member(cts, T, values[i],
+	  sources[i], &abi->arg[i])) return 0;
     if (i < abi->nargs && value.o == IR_FLOAD &&
         value.op2 == IRFL_CDATA_PTR &&
         (abi->arg[i].kind != LJ_ARM64_ABI_KIND_POINTER ||
          abi->arg[i].size != sizeof(void *) ||
          !arm64_callxs_pointer_argument(cts, T, values[i]))) return 0;
-	if (!aggregate && !arm64_callxs_source_value(T, xsave, sources[i],
+	if (!aggregate && !hfa && !arm64_callxs_source_value(T, xsave, sources[i],
 	    values[i], i >= abi->nargs)) return 0;
   }
   return 1;
@@ -2202,19 +2337,20 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 		  carrier.op2 == ((IRT_NUM << IRCONV_DSH)|IRT_FLOAT) &&
 		  carrier.t.irt == IRT_NUM)))) return 0;
 	} else if (sourceop != BC_CALL || bc_c(sourceins) == 0 ||
-		   (unsigned)bc_c(sourceins)-1u != actual_count) return 0;
+		   (unsigned)bc_c(sourceins)-1u != abi.nparams+tail_count) return 0;
         {
           IRRef cdref = ir_load_acq(&T->ir[fpref]).op1;
           /* A folded boolean still needs its exact Lua argument slot, even
           ** though the native carrier is now only a KINT zero or one. */
           int rooted_args = scalar_read || abi.is_vararg || sourceop == BC_CALLM ||
             ir_load_acq(&T->ir[cdref]).o == IR_VLOAD;
-          for (i = 0; i < abi.nargs; i++) {
+            for (i = 0; i < abi.nargs; i++) {
             IRIns arg = ir_load_acq(&T->ir[values[i]]);
             if ((arg.o == IR_FLOAD && (arg.op2 == IRFL_CDATA_INT64 ||
                                       arg.op2 == IRFL_CDATA_INT ||
                                       arg.op2 == IRFL_CDATA_PTR)) ||
                 (abi.arg[i].kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE) ||
+                (abi.arg[i].kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER) ||
                 arm64_callxs_numarg_source(T, values[i], 0) ||
                 arm64_callxs_intarg_source(T, values[i]) ||
                 (abi.arg[i].kind == LJ_ARM64_ABI_KIND_INTEGER &&
@@ -2232,7 +2368,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
           ** arguments. CNEW occupies the next slot, past both. */
           if (!arm64_callxs_snapshot_value_slot(T->snap, T->snapmap,
                 T->nsnap, T->nsnapmap, xsave, base,
-                base+1u+actual_count, boxref, 1)) return 0;
+                base+1u+abi.nparams+tail_count, boxref, 1)) return 0;
           /* B=1 discards the result. Otherwise lj_record_ret replaces the
           ** caller's function slot with this exact box before native leave. */
           if (bc_b(sourceins) != 1)
@@ -2301,7 +2437,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	producer_pending = 1;
 	producer_scalar = !result_is_cdata &&
 	  bc_op(sourceins) == BC_CALL && bc_b(sourceins) == 0 &&
-	  actual_count+1u == (unsigned)bc_c(sourceins) &&
+	  abi.nparams+tail_count+1u == (unsigned)bc_c(sourceins) &&
 	  (abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER ||
 	   abi.result_kind == LJ_ARM64_ABI_KIND_FLOAT ||
 	   abi.result_kind == LJ_ARM64_ABI_KIND_ENUM);
@@ -2338,8 +2474,11 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
       break;
     case IR_XLOAD:
       if (state != CALLXS_CLOSED ||
-	  !arm64_callxs_cdata_integer_aggregate_argument(ctype_ctsG(J2G(J)),
-	    T, ref, 0))
+	  (ins.t.irt == IRT_FLOAT ?
+	   !arm64_callxs_cdata_float_hfa_member(ctype_ctsG(J2G(J)), T,
+	     ref, 0, NULL) :
+	   !arm64_callxs_cdata_integer_aggregate_argument(ctype_ctsG(J2G(J)),
+	     T, ref, 0)))
 	return 0;
       break;
     case IR_VLOAD:
@@ -5253,6 +5392,10 @@ static int arm64_postra_cdata_integer_aggregate_argument(
 ** removed by the caller). Fixed arguments use a bounded set of source-linked
 ** normalizations; each suffix carrier is tied to its exact stack slot.
 */
+static int arm64_postra_cdata_float_hfa_member(CTState *cts,
+		const GCtrace *T, IRRef nins, IRRef value,
+		IRRef expected_source, const LJArm64ABIArg *arg);
+
 static int arm64_postra_vararg_source_proof(CTState *cts, const GCtrace *T,
 		IRRef xsave, IRRef call, const BCIns *proto_bc, MSize proto_sizebc,
 		uintptr_t returnpc, BCIns sourceins,
@@ -5264,7 +5407,7 @@ static int arm64_postra_vararg_source_proof(CTState *cts, const GCtrace *T,
 	BCIns anchored_ins;
 	SnapEntry footer[1+LJ_FR2];
 	MSize index, ofs, nent, next, i;
-	unsigned argbase, metaslot, frameslot, cdataslot, a;
+	unsigned argbase, metaslot, frameslot, cdataslot, source_count, a;
 	IRRef meta_fn, cdata;
 	GCobj *fn;
 	const BCIns *meta_pc;
@@ -5280,6 +5423,9 @@ static int arm64_postra_vararg_source_proof(CTState *cts, const GCtrace *T,
 		return 0;
 	if (!arm64_callxs_signature_for_call(cts, T->ir, T->nk, T->nins,
 	    call, &abi, NULL) || abi.nargs != fixed_count) return 0;
+	source_count = abi.nparams+(actual_count-fixed_count);
+	if (source_count > LJ_ARM64_ABI_MAX_ARGS ||
+	    (actual_count > fixed_count && !abi.is_vararg)) return 0;
 	if (!arm64_callxs_xsave_anchor(T->ir, T->nins, xsave,
 	    proto_bc, proto_sizebc, &anchored_pc, &anchored_ins) ||
 	    anchored_pc != returnpc || anchored_ins != sourceins) return 0;
@@ -5288,9 +5434,9 @@ static int arm64_postra_vararg_source_proof(CTState *cts, const GCtrace *T,
 	frameslot = metaslot+LJ_FR2;
 	cdataslot = frameslot+1u;
 	argbase = cdataslot+1u;
-	if (argbase+actual_count > UINT8_MAX ||
-	    snap_nslots_acq(&T->snap[index]) < argbase+actual_count ||
-	    snap_topslot_acq(&T->snap[index]) < argbase+actual_count-1u) return 0;
+	if (argbase+source_count > UINT8_MAX ||
+	    snap_nslots_acq(&T->snap[index]) < argbase+source_count ||
+	    snap_topslot_acq(&T->snap[index]) < argbase+source_count-1u) return 0;
 	for (i = 0; i < 1u+LJ_FR2; i++)
 		footer[i] = snapentry_acq(&T->snapmap[ofs+nent+i]);
 	memcpy(&footer_pcbase, footer, sizeof(footer_pcbase));
@@ -5322,8 +5468,12 @@ static int arm64_postra_vararg_source_proof(CTState *cts, const GCtrace *T,
 	for (a = 0; a < actual_count; a++) {
 		IRRef source;
 		IRType stype;
+		unsigned source_index = a < fixed_count ?
+		  abi.arg[a].source_index : abi.nparams+a-fixed_count;
 		if (values[a] >= xsave ||
-		    !arm64_postra_snapshot_slot_ref(T, xsave, argbase+a, &source) ||
+		    source_index >= source_count ||
+		    !arm64_postra_snapshot_slot_ref(T, xsave,
+		      argbase+source_index, &source) ||
 		    !arm64_callxs_ref_valid(T->ir, T->nk, T->nins, xsave, source) ||
 		    !arm64_callxs_ref_valid(T->ir, T->nk, T->nins, xsave, values[a]))
 			return 0;
@@ -5335,12 +5485,119 @@ static int arm64_postra_vararg_source_proof(CTState *cts, const GCtrace *T,
 			if (abi.arg[a].kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE) {
 				if (!arm64_postra_cdata_integer_aggregate_argument(cts, T,
 				    T->nins, values[a], source)) return 0;
+			} else if (abi.arg[a].kind ==
+				   LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER) {
+				if (!arm64_postra_cdata_float_hfa_member(cts, T, T->nins,
+				    values[a], source, &abi.arg[a])) return 0;
 			} else if (!arm64_postra_source_value_matches(T->ir, T->nk,
 			    T->nins, xsave, source, values[a], stype)) return 0;
 		} else if (!arm64_postra_vararg_promoted(T->ir, T->nk,
 		    T->nins, xsave, source, values[a], stype)) return 0;
 	}
 	return 1;
+}
+
+/* Independent post-RA proof for one HFA float member. */
+static int arm64_postra_cdata_float_hfa_member(CTState *cts,
+		const GCtrace *T, IRRef nins, IRRef value,
+		IRRef expected_source, const LJArm64ABIArg *arg)
+{
+	const IRIns *ir = T->ir;
+	IRIns load, address, src;
+	LJArm64FloatHFA hfa;
+	LJArm64ABIArg inferred;
+	CTypeID source_id = 0, rawid;
+	IRRef source, r;
+	MSize s, i;
+	unsigned member_index;
+	unsigned calls = 0;
+	if (value < REF_FIRST || value >= nins) return 0;
+	load = ir_load_acq(&ir[value]);
+	if (load.o != IR_XLOAD || load.t.irt != IRT_FLOAT || load.op2 != 0 ||
+	    load.op1 < REF_FIRST || load.op1 >= value) return 0;
+	address = ir_load_acq(&ir[load.op1]);
+	source = address.op1;
+	{
+	  int64_t offset;
+	  if (address.o != IR_ADD || address.t.irt != IRT_P64 ||
+	      source < REF_FIRST || source >= load.op1 ||
+	      !arm64_callxs_offset_value(ir, T->nk, address.op2, &offset) ||
+	      offset < (int64_t)sizeof(GCcdata) ||
+	      (offset-(int64_t)sizeof(GCcdata))%sizeof(float) != 0 ||
+	      (offset-(int64_t)sizeof(GCcdata))/sizeof(float) >= 2) return 0;
+	  member_index = (unsigned)((offset-(int64_t)sizeof(GCcdata))/sizeof(float));
+	}
+	if (arg != NULL && (arg->kind != LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER ||
+	    arg->member_count != 2 || arg->member_index != member_index)) return 0;
+	src = ir_load_acq(&ir[source]);
+	if ((src.o != IR_SLOAD && src.o != IR_VLOAD) ||
+	    src.t.irt != (IRT_CDATA|IRT_GUARD) ||
+	    (expected_source != 0 && source != expected_source))
+	  return 0;
+	for (r = source+1u; r < value; r++) {
+	  IRIns field = ir_load_acq(&ir[r]);
+	  IRRef guard;
+	  if (field.o != IR_FLOAD || field.op1 != source ||
+	      field.op2 != IRFL_CDATA_CTYPEID) continue;
+	  if (source_id || field.t.irt != IRT_U16) return 0;
+	  for (guard = r+1u; guard < value; guard++) {
+	    IRIns eq = ir_load_acq(&ir[guard]);
+	    IRRef kref;
+	    int32_t id;
+	    if (eq.o != IR_EQ || eq.t.irt != (IRT_INT|IRT_GUARD) ||
+		(eq.op1 != r && eq.op2 != r)) continue;
+	    kref = eq.op1 == r ? eq.op2 : eq.op1;
+	    if (!arm64_callxs_kint_value(ir, T->nk, kref, &id) || id <= 0 ||
+		 source_id) return 0;
+	    source_id = (CTypeID)id;
+	  }
+	}
+	if (!source_id || !lj_ccall_arm64_float_hfa_class(cts, source_id,
+	    &hfa, &rawid) || hfa.count != 2 ||
+	    hfa.member_size != sizeof(float)) return 0;
+	memset(&inferred, 0, sizeof(inferred));
+	inferred.kind = LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER;
+	inferred.id = rawid;
+	inferred.member_count = hfa.count;
+	inferred.member_index = (uint8_t)member_index;
+	if (arg == NULL) arg = &inferred;
+	if (rawid != arg->id || hfa.count != arg->member_count) return 0;
+	for (s = 0; s < T->nsnap; s++) {
+	  MSize ofs = snap_mapofs_acq(&T->snap[s]);
+	  MSize nent = snap_nent_acq(&T->snap[s]);
+	  if (ofs > T->nsnapmap || nent > T->nsnapmap-ofs) return 0;
+	  for (i = 0; i < nent; i++)
+	    if (snap_ref(snapentry_acq(&T->snapmap[ofs+i])) == value) return 0;
+	}
+	for (r = value+1u; r < nins; r++) {
+	  IRIns use = ir_load_acq(&ir[r]);
+	  IRMode mode;
+	  if (use.o >= IR__MAX) return 0;
+	  mode = lj_ir_mode[use.o];
+	  if ((irm_op1(mode) == IRMref && use.op1 == value) ||
+	      (irm_op2(mode) == IRMref && use.op2 == value)) {
+	    if (use.o != IR_CARG &&
+		!(use.o == IR_CALLXS && use.op1 == value)) return 0;
+	  }
+	  if (use.o == IR_CALLXS) {
+	    LJArm64ABISignature abi;
+	    IRRef args[LJ_ARM64_ABI_MAX_ARGS];
+	    unsigned count, a;
+	    if (!arm64_callxs_signature_for_call(cts, ir, T->nk, nins,
+		 r, &abi, NULL) ||
+		!arm64_callxs_arglist(ir, T->nk, nins, r, args, &count)) return 0;
+	    for (a = 0; a < count; a++) if (args[a] == value) {
+	      if (a >= abi.nargs || abi.arg[a].id != arg->id ||
+		  abi.arg[a].kind != LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER ||
+		  abi.arg[a].member_index != arg->member_index ||
+		  !arm64_callxs_value_kind(ir, value, T->nk, nins, r,
+		    LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER, sizeof(float), 0, 0))
+		return 0;
+	      calls++;
+	    }
+	  }
+	}
+	return calls == 1;
 }
 
 /* Independently reject raw U32 values in Lua snapshots and all consumers
@@ -5770,12 +6027,13 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		      carrier.op2 == ((IRT_NUM << IRCONV_DSH)|IRT_FLOAT) &&
 		      carrier.t.irt == IRT_NUM)))) return 0;
 	    } else if (bc_op(sourceins) != BC_CALL || bc_c(sourceins) == 0 ||
-		       (unsigned)bc_c(sourceins)-1u != actual_count) return 0;
+		       (unsigned)bc_c(sourceins)-1u != abi.nparams+
+		         (actual_count-abi.nargs)) return 0;
 	    producer_call = ref;
 	    producer_pending = 1;
 	    producer_scalar = !arm64_callxs_result_boxed(&abi) &&
 	      bc_op(sourceins) == BC_CALL && bc_b(sourceins) == 0 &&
-	      actual_count+1u == (unsigned)bc_c(sourceins) &&
+	      abi.nparams+1u == (unsigned)bc_c(sourceins) &&
 	      (abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER ||
 	       abi.result_kind == LJ_ARM64_ABI_KIND_FLOAT ||
 	       abi.result_kind == LJ_ARM64_ABI_KIND_ENUM);
@@ -5797,7 +6055,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	      MSize base = 1u+LJ_FR2+(MSize)bc_a(sourceins)+1u+LJ_FR2;
 	      if (!arm64_callxs_snapshot_value_slot(view->snap, view->snapmap,
 		    view->nsnap, view->nsnapmap, active_xsave, base,
-		    base+1u+actual_count, boxref, 1)) return 0;
+		    base+1u+abi.nparams+(actual_count-abi.nargs), boxref, 1)) return 0;
 	      if (bc_b(sourceins) != 1)
 		result_slot = 1u+LJ_FR2+(MSize)bc_a(sourceins);
 	    }
@@ -5967,9 +6225,15 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	      return 0;
 	  } else if (ins.o == IR_XLOAD) {
 	    if (protocol != 0 ||
-		!arm64_postra_cdata_integer_aggregate_argument(view->cts, &temp,
-		  semantic_nins, ref, 0) || !ra_hasreg(ins.r) ||
-		!arm64_scalar_postra_register(ins.r, irt_type(ins.t))) return 0;
+		!(ins.t.irt == IRT_FLOAT ?
+		  arm64_postra_cdata_float_hfa_member(view->cts, &temp,
+		    semantic_nins, ref, 0, NULL) :
+		  arm64_postra_cdata_integer_aggregate_argument(view->cts, &temp,
+		    semantic_nins, ref, 0)) || !ra_hasreg(ins.r) ||
+		!(irt_isfp(ins.t) ?
+		  ins.r >= RID_MIN_FPR && ins.r < RID_MAX_FPR &&
+		    rset_test(RSET_FPR, ins.r) :
+		  arm64_scalar_postra_register(ins.r, irt_type(ins.t)))) return 0;
 	  } else if (ins.o == IR_FLOAD) {
 	    if (ins.op1 >= ref || !arm64_callxs_ref_valid(view->ir, view->nk,
 		semantic_nins, ref, ins.op1))
@@ -6302,7 +6566,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    layout_producer_returnpc = 0;
 	  } else if (bc_op(sourceins) == BC_CALL) {
 	    if (bc_c(sourceins) == 0 ||
-		(unsigned)bc_c(sourceins)-1u != actual_count) return 0;
+		(unsigned)bc_c(sourceins)-1u != abi.nparams+tail_count) return 0;
 	    layout_producer_returnpc = bc_b(sourceins) == 0 ? source_returnpc : 0;
 	  } else return 0;
 	  {
@@ -6314,7 +6578,8 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	      if ((arg.o == IR_FLOAD && (arg.op2 == IRFL_CDATA_INT64 ||
 	                               arg.op2 == IRFL_CDATA_INT ||
 	                               arg.op2 == IRFL_CDATA_PTR)) ||
-	          abi.arg[i].kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ||
+		          abi.arg[i].kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ||
+		          abi.arg[i].kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER ||
 	          arm64_postra_numarg_source(view->ir, view->nk, semantic_nins,
 	            values[i], 0) ||
 	          arm64_postra_intarg_source(view->ir, view->nk, semantic_nins,

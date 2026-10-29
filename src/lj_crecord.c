@@ -2336,6 +2336,30 @@ static TRef crec_call_arm64_integer_aggregate_arg(jit_State *J, CTState *cts,
   ptr = emitir(IRT(IR_ADD, IRT_PTR), sp, lj_ir_kintp(J, sizeof(GCcdata)));
   return emitir(IRT(IR_XLOAD, type), ptr, 0);
 }
+
+/* Lower the bounded two-float Darwin HFA into its two independent SIMD
+** carriers. The original CData TValue remains the GC root in the Lua frame. */
+static void crec_call_arm64_float_hfa_args(jit_State *J, CTState *cts,
+					   CTypeID did, TRef sp,
+					   cTValue *o, TRef *args,
+					   MSize *nargs)
+{
+  GCcdata *cd = argv2cdata(J, sp, o);
+  CType snapshot;
+  CTypeID rawid;
+  LJArm64FloatHFA hfa;
+  unsigned i;
+  crec_ctype_rawrefid(J, cts, cd->ctypeid, &rawid, &snapshot);
+  if (rawid != did || ctype_isref(ctype_info_acq(&snapshot)) ||
+      !lj_ccall_arm64_float_hfa_class(cts, rawid, &hfa, &rawid) ||
+      hfa.count != 2 || hfa.size != 2*sizeof(float))
+    lj_trace_err(J, LJ_TRERR_NYICONV);
+  for (i = 0; i < hfa.count; i++) {
+    TRef ptr = emitir(IRT(IR_ADD, IRT_PTR), sp,
+		      lj_ir_kintp(J, sizeof(GCcdata)+hfa.offset[i]));
+    args[(*nargs)++] = emitir(IRT(IR_XLOAD, IRT_FLOAT), ptr, 0);
+  }
+}
 #endif
 
 /* Collect scalar and admitted aggregate argument conversions for one
@@ -2354,7 +2378,7 @@ static MSize crec_call_args_collect(jit_State *J, RecordFFData *rd,
   CTypeID fid;
   CTInfo info = ctype_info_acq(ct);
   MSize limit = CCI_NARGS_MAX - reserve;
-  MSize n;
+  MSize n, out = 0;
   TRef tr, *base;
   cTValue *o;
 #if LJ_TARGET_X86
@@ -2386,7 +2410,11 @@ static MSize crec_call_args_collect(jit_State *J, RecordFFData *rd,
     CTSize dsize;
     int fixed = 0, integer_aggregate = 0;
 
+#if LJ_TARGET_ARM64 && LJ_TARGET_OSX
+    if (out >= limit)
+#else
     if (n >= limit)
+#endif
       lj_trace_err(J, LJ_TRERR_NYICALL);
 
     if (fid) {
@@ -2402,8 +2430,8 @@ static MSize crec_call_args_collect(jit_State *J, RecordFFData *rd,
 #if LJ_TARGET_ARM64 && LJ_TARGET_OSX
       if (ngpr >= 0) {
 	ngpr = -1;
-	args[n++] = TREF_NIL;
-	if (n >= limit)
+	args[out++] = TREF_NIL;
+	if (out >= limit)
 	  lj_trace_err(J, LJ_TRERR_NYICALL);
       }
 #endif
@@ -2419,12 +2447,20 @@ static MSize crec_call_args_collect(jit_State *J, RecordFFData *rd,
 	lj_trace_err(J, LJ_TRERR_NYICALL);
       tr = crec_call_sysv_aggregate_arg(J, cts, did, *base, o, at);
 #elif LJ_HASJIT_FFI_CALLXS && LJ_TARGET_ARM64 && LJ_TARGET_OSX
+      LJArm64FloatHFA hfa;
       LJArm64ABIArg aggregate;
       CTypeID rawid;
+      if (fixed && lj_ccall_arm64_float_hfa_class(cts, did, &hfa, &rawid) &&
+	  rawid == did) {
+	if (out+hfa.count > limit)
+	  lj_trace_err(J, LJ_TRERR_NYICALL);
+	crec_call_arm64_float_hfa_args(J, cts, did, *base, o, args, &out);
+	continue;
+      }
       if (!fixed || !lj_ccall_arm64_integer_aggregate_class(cts, did,
 	    &aggregate, &rawid) || rawid != did || aggregate.size != dsize)
 	lj_trace_err(J, LJ_TRERR_NYICALL);
-      tr = crec_call_arm64_integer_aggregate_arg(J, cts, did, *base, o,
+	tr = crec_call_arm64_integer_aggregate_arg(J, cts, did, *base, o,
 	  dsize == 1 ? IRT_U8 : dsize == 2 ? IRT_U16 :
 	  dsize == 4 ? IRT_U32 : IRT_U64);
       integer_aggregate = 1;
@@ -2486,9 +2522,19 @@ static MSize crec_call_args_collect(jit_State *J, RecordFFData *rd,
       ngpr--;
 #endif
     UNUSED(fixed);
+#if LJ_TARGET_ARM64 && LJ_TARGET_OSX
+    args[out++] = tr;
+#else
     args[n] = tr;
+#endif
   }
+  UNUSED(n);
+#if LJ_TARGET_ARM64 && LJ_TARGET_OSX
+  return out;
+#else
+  UNUSED(out);
   return n;
+#endif
 }
 
 /* Emit a collected CARG tree, optionally with one hidden ABI argument first. */
