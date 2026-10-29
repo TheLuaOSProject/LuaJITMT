@@ -1546,7 +1546,8 @@ static int arm64_callxs_cdata_numeric_payload(CTState *cts,
       (info & CTF_BOOL) || (size != 1 && size != 2 && size != 4 && size != 8))
     return 0;
   if (isfp) {
-    if (load.o != IR_XLOAD ||
+    if ((size != sizeof(float) && size != sizeof(double)) ||
+        load.o != IR_XLOAD ||
         load.t.irt != (size == sizeof(float) ? IRT_FLOAT : IRT_NUM)) return 0;
   } else if (size < 4) {
     IRType expected = size == 1 ?
@@ -6119,7 +6120,8 @@ static int arm64_postra_cdata_numeric_payload(CTState *cts,
 	if (!ctype_isnum(info) || ctype_isenum(info) || (info & CTF_BOOL) ||
 	    (size != 1 && size != 2 && size != 4 && size != 8)) return 0;
 	if (isfp) {
-		if (load.o != IR_XLOAD ||
+		if ((size != sizeof(float) && size != sizeof(double)) ||
+		    load.o != IR_XLOAD ||
 		    load.t.irt != (size == sizeof(float) ? IRT_FLOAT : IRT_NUM))
 			return 0;
 	} else if (size < 4) {

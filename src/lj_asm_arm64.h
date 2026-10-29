@@ -533,9 +533,10 @@ static int asm_fuseorshift(ASMState *as, IRIns *ir)
 static int asm_callx_vararg_stack_plan(ASMState *as, const CCallInfo *ci,
 				       const LJArm64ABISignature *abi,
 				       IRRef *args, uint16_t *offsets,
-				       unsigned *sizep)
+				       unsigned *sizep, int *fallbackp)
 {
   unsigned narg = CCI_XNARGS(ci), first, offset = abi->stack_size, i;
+  if (fallbackp) *fallbackp = 0;
   if (abi->nargs > narg) return 0;
   if (abi->nargs == narg) {
     *sizep = offset;
@@ -548,13 +549,35 @@ static int asm_callx_vararg_stack_plan(ASMState *as, const CCallInfo *ci,
     if (args[i] == 0) return 0;
     type = irt_type(as->ir[args[i]].t);
     if (type != IRT_INT && type != IRT_U32 && type != IRT_NUM &&
-	type != IRT_I64 && type != IRT_U64) return 0;
+	type != IRT_I64 && type != IRT_U64) {
+      if (fallbackp) *fallbackp = 1;
+      return 0;
+    }
     offset = (offset+7u)&~7u;
     if (offset > UINT16_MAX-8u) return 0;
     if (offsets) offsets[i] = (uint16_t)offset;
     offset += 8u;
   }
   *sizep = offset;
+  return 1;
+}
+
+/* The legacy flattened path remains valid for ordinary scalar fixed prefixes
+** when an unnamed Lua value is outside this scalar suffix plan. Bank-sensitive
+** aggregate prefixes must use the exact ABI offsets or fail closed. */
+static int asm_callx_vararg_flat_fallback_safe(
+		const LJArm64ABISignature *abi)
+{
+  unsigned i;
+  for (i = 0; i < abi->nargs; i++) {
+	const LJArm64ABIArg *arg = &abi->arg[i];
+	if (arg->kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ||
+	arg->kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER ||
+	(arg->kind != LJ_ARM64_ABI_KIND_INTEGER &&
+	 arg->kind != LJ_ARM64_ABI_KIND_ENUM &&
+	 arg->kind != LJ_ARM64_ABI_KIND_FLOAT &&
+	 arg->kind != LJ_ARM64_ABI_KIND_POINTER)) return 0;
+  }
   return 1;
 }
 
@@ -576,19 +599,28 @@ static int asm_callx_abi(ASMState *as, IRIns *ir, const CCallInfo *ci,
   /* A transient CType read failure must not select flattened lowering: that
   ** could split a partially spilled HFA even if post-RA admission succeeds. */
   if (LJ_UNLIKELY(!ok)) {
-    if (ci->flags & CCI_VARARG) return 0;
     setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
     lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
   }
   if (LJ_UNLIKELY(abi->is_vararg != ((ci->flags & CCI_VARARG) != 0))) {
-    if (ci->flags & CCI_VARARG) return 0;
     setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
     lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
   }
   if (abi->is_vararg) {
     unsigned stack_size;
-    if (!asm_callx_vararg_stack_plan(as, ci, abi, args, NULL, &stack_size))
-      return 0;
+    int fallback = 0;
+    /* The current call marshaler has no separately proven hidden-result
+    ** offset plan for a variadic signature. Keep that combination closed. */
+    if (arm64_callxs_result_indirect(abi)) {
+      setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
+      lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
+    }
+    if (!asm_callx_vararg_stack_plan(as, ci, abi, args, NULL,
+				     &stack_size, &fallback)) {
+      if (fallback && asm_callx_vararg_flat_fallback_safe(abi)) return 0;
+      setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
+      lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
+    }
   } else if (LJ_UNLIKELY(abi->nargs +
 	       (unsigned)arm64_callxs_result_indirect(abi) != CCI_XNARGS(ci))) {
     setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
@@ -805,7 +837,7 @@ static void asm_callx(ASMState *as, IRIns *ir)
     if (abi.is_vararg) {
       unsigned stack_size;
       if (!asm_callx_vararg_stack_plan(as, &ci, &abi, args, stack_offsets,
-					       &stack_size)) {
+					       &stack_size, NULL)) {
 	setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
 	lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
       }
@@ -2404,7 +2436,7 @@ static Reg asm_setup_callx_slots(ASMState *as, IRIns *ir,
   if (asm_callx_abi(as, ir, ci, args, &abi, 1)) {
     stack_size = abi.stack_size;
     if (abi.is_vararg &&
-	!asm_callx_vararg_stack_plan(as, ci, &abi, args, NULL, &stack_size)) {
+	!asm_callx_vararg_stack_plan(as, ci, &abi, args, NULL, &stack_size, NULL)) {
       setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
       lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
     }

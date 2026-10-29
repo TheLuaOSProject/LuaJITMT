@@ -88,6 +88,7 @@ typedef enum VarargMutation {
   VA_MUT_SWAPPED_SAME_TYPE,
   VA_MUT_WRONG_FIXED_SOURCE,
   VA_MUT_WRONG_ADD_CARRIER_OPERAND,
+  VA_MUT_CDATA_SHARED_FIXED_CARRIER,
   VA_MUT_WRONG_FRAME_RETURN,
   VA_MUT_WRONG_FOOTER_PC,
   VA_MUT_WRONG_CDATA_SLOT,
@@ -579,6 +580,18 @@ static void vararg_mutate(VarargMutation mutation, IRIns *ir,
     ir[load.op1] = address;
     break;
   }
+  case VA_MUT_CDATA_SHARED_FIXED_CARRIER: {
+    unsigned tail = target->abi.nargs + 1u;  /* Skip the CARG nil marker. */
+    assert(target->abi.is_vararg && target->abi.nargs == 1u &&
+           tail < target->rawcount && target->values[tail] != REF_NIL &&
+           vararg_cdata_owner(ir, target->values[tail]) != 0);
+    /* Keep the valid tail occurrence, but alias that same scalar carrier into
+    ** the fixed prefix. A tail CType certificate must not authorize this use. */
+    assert(node[1] != 0 && ir_load_acq(&ir[node[1]]).o == IR_CARG &&
+           ir_load_acq(&ir[node[1]]).op1 == target->values[0]);
+    ir[node[1]].op1 = target->values[tail];
+    break;
+  }
   }
 }
 
@@ -832,6 +845,9 @@ static void test_cdata_tail_admission_clones(lua_State *L)
   vararg_expect_mutation(J, &view, &target,
                          VA_MUT_CDATA_WRONG_OWNER,
                          "CData payload owner association");
+  vararg_expect_mutation(J, &view, &target,
+                         VA_MUT_CDATA_SHARED_FIXED_CARRIER,
+                         "vararg carrier also used in fixed prefix");
 }
 
 static void force_varargs_postcall(TGState *tg)
@@ -907,6 +923,56 @@ static void run_case(lua_State *L, const char *name, int n)
   }
   assert(lua_toboolean(L, -1));
   lua_pop(L, 1);
+}
+
+static GCproto *vararg_global_proto(lua_State *L, const char *name)
+{
+  GCproto *pt;
+  lua_getglobal(L, name);
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  pt = funcproto(funcV(L->top-1));
+  lua_pop(L, 1);
+  return pt;
+}
+
+static int vararg_root_callxs_published(jit_State *J, GCproto *pt)
+{
+  TraceNo no;
+  for (no = 1; (MSize)no < trace_sizetrace_acq(J); no++) {
+    GCtrace *T = traceref_safe(J, no);
+    IRRef ref;
+    if (T == NULL || !trace_runnable_acq(T, no) || trace_root_acq(T) != 0 ||
+        trace_startpt_acq(T) != pt ||
+        bc_op(trace_startins_acq(T)) != BC_FORL) continue;
+    for (ref = REF_FIRST; ref < trace_nins_acq(T); ref++)
+      if (ir_load_acq(&trace_ir_acq(T)[ref]).o == IR_CALLXS) return 1;
+  }
+  return 0;
+}
+
+static void test_vararg_abi_failure_stage(lua_State *L, uint32_t stage)
+{
+  jit_State *J = G2J(G(L));
+  GCproto *pt;
+  int saved;
+  char source[192];
+  lua_getglobal(L, "__va_run_cdata");
+  saved = luaL_ref(L, LUA_REGISTRYINDEX);
+  snprintf(source, sizeof(source),
+    "_G.__va_run_cdata=assert(loadstring(string.dump(__va_run_cdata),"
+    "'@callx-abi-failure-%u'))", stage);
+  ljt_lua_dostring(L, source);
+  pt = vararg_global_proto(L, "__va_run_cdata");
+  /* The first call drains the previous observation and arms this stage. */
+  assert(lj_asm_arm64_test_callx_abi_failure(stage) == 0);
+  run_case(L, "__va_run_cdata", VA_ITERS);
+  /* Disable injection and require that the chosen setup/emission stage ran,
+  ** while no legacy-flattened trace escaped after the selected plan failed. */
+  assert(lj_asm_arm64_test_callx_abi_failure(0) == 1);
+  assert(!vararg_root_callxs_published(J, pt));
+  lua_rawgeti(L, LUA_REGISTRYINDEX, saved);
+  lua_setglobal(L, "__va_run_cdata");
+  luaL_unref(L, LUA_REGISTRYINDEX, saved);
 }
 
 static unsigned require_native(ReadCounter calls, unsigned id,
@@ -1158,6 +1224,8 @@ int main(int argc, char **argv)
     assert(call_pc != NULL);
     run_ordinary_postcall(L, calls, call_pc);
   }
+  test_vararg_abi_failure_stage(L, 1);
+  test_vararg_abi_failure_stage(L, 2);
   assert(require_native(calls, 10, "__va_run_cdata") != 0);
   test_cdata_tail_admission_clones(L);
   lj_ffi_native_trace_test_set_finish_hook(NULL);

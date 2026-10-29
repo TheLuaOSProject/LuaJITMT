@@ -32,5 +32,21 @@ Validation on the clean source:
   builds. The variadic fixture proves native calls, exact effects, GC/reuse,
   and independent semantic/post-RA malformed-source/map cases. The CData32
   fixture reports semantic `8/92` and post-RA `8/108` admission outcomes.
-- The broader four-profile M7 CALLXS suite was launched separately after this
-  focused regression passed; its result is pending at this checkpoint.
+- A follow-up regression protects the case where one carrier is used both by a
+  valid variadic suffix and by a malformed fixed-signature argument. Both
+  independent admission passes reject the copied trace; the valid suffix does
+  not grant global permission to its source carrier.
+- The assembler now fails closed if the variadic signature cannot be read,
+  disagrees with the CALLXS variadic flag, or requests an indirect result.
+  The latter remains outside the separately proven hidden-result offset plan.
+  Ordinary Lua-value varargs retain the prior flattened path only when the
+  scalar fixed prefix is ABI-insensitive and the planner identifies an
+  unsupported unnamed Lua value. The existing mixed-value test uses numeric,
+  boolean, string, and nil tail values; the bounded CData extension still
+  accepts only numeric CData tails, so arbitrary pointer-shaped IR is not
+  treated as a numeric tail slot.
+- Focused four-profile validation after these safeguards passed:
+  `LJ_ARM64_TABLE_CALL_CASES='ffi-varargs ffi-cdata32-args-admission' tools/ci/arm64_jit_table_call_contract.sh`.
+  The broader M7 suite also passed all four profiles (ARM64 and ARM64e, each
+  assertion and release). Logs are under
+  `/Users/frityet/Scratch/ljmt-variadic-abi-20261029/m7-final2/`.
