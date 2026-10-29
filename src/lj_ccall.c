@@ -1287,7 +1287,14 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
 #else
     dp = ((uint8_t *)cc->stack) + nsp;
 #endif
-    nsp += CCALL_PACK_STACKARG ? sz : n * CTSIZE_PTR;
+#if LJ_TARGET_ARM64 && LJ_TARGET_OSX
+    /* Non-HFA composites occupy complete eight-byte stack slots even when
+    ** their payload is smaller. Following scalars keep Darwin's packing. */
+    if (ctype_isstruct(dinfo) && !isfp)
+      nsp += n * CTSIZE_PTR;
+    else
+#endif
+      nsp += CCALL_PACK_STACKARG ? sz : n * CTSIZE_PTR;
     if ((int32_t)nsp > CCALL_SIZE_STACK) {  /* Too many arguments. */
     err_nyi:
       lj_err_caller(L, LJ_ERR_FFI_NYICALL);
