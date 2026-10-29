@@ -65,6 +65,31 @@ static lua_Integer call_named(lua_State *L, const char *name,
   return result;
 }
 
+#ifdef LJ_TRACE_TEST_HELPERS
+static lua_Number call_guarded_loop(lua_State *L, const char *name,
+	lua_Number a, lua_Number b, lua_Number c, lua_Integer n)
+{
+  lua_Number result;
+  int status;
+  lua_getglobal(L, name);
+  assert(lua_isfunction(L, -1));
+  lua_pushnumber(L, a);
+  lua_pushnumber(L, b);
+  lua_pushnumber(L, c);
+  lua_pushinteger(L, n);
+  status = lua_pcall(L, 4, 1, 0);
+  if (status != LUA_OK) {
+    fprintf(stderr, "ARM64 production guarded-loop call %s failed: %s\n",
+	    name, lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
+  assert(lua_isnumber(L, -1));
+  result = lua_tonumber(L, -1);
+  lua_pop(L, 1);
+  return result;
+}
+#endif
+
 static lua_Integer call_forl_named(lua_State *L, const char *name,
 	lua_Integer start, lua_Integer stop, lua_Integer mode)
 {
@@ -471,6 +496,13 @@ typedef struct MultiRootSides {
   ExitNo exits[2];
 } MultiRootSides;
 
+typedef struct ThreeRootSides {
+  GCtrace *root;
+  TraceNo rootno;
+  TraceNo ids[3];
+  ExitNo exits[3];
+} ThreeRootSides;
+
 static void record_two_second_sides(lua_State *L, jit_State *J,
 	MultiRootSides *set)
 {
@@ -580,6 +612,111 @@ static void expect_multi_root_siblings(lua_State *L, jit_State *J,
   assert(lj_trace_flushall_gc(L) == 0);
   assert(!trace_runnable_acq(a.root, a.rootno));
   assert(!trace_runnable_acq(b.root, b.rootno));
+  UNUSED(g);
+}
+
+static void expect_three_root_siblings(lua_State *L, jit_State *J,
+	global_State *g)
+{
+  const char *name = "__arm64_first_side_multiroot";
+  const lua_Integer n = 64;
+  GCproto *pt;
+  ThreeRootSides set;
+  GCtrace *middle;
+  MCode *head_code, *tail_code;
+  TraceNo middle_no;
+  ExitNo head_exit, tail_exit;
+  lua_Number expected;
+  unsigned attempt;
+
+  define_probes(L);
+  run_lua(L,
+	"local function f(a,b,c,n) local i,sum=0,.5; "
+	"while i<n do i=i+1; if a==1 then sum=sum+i*.25 end; "
+	"if b==1 then sum=sum-i*.5 end; "
+	"if c==1 then sum=sum+i*.75 end end; return sum end; "
+	"local function oracle(a,b,c,n) local i,sum=0,.5; "
+	"while i<n do i=i+1; if a==1 then sum=sum+i*.25 end; "
+	"if b==1 then sum=sum-i*.5 end; "
+	"if c==1 then sum=sum+i*.75 end end; return sum end; "
+	"jit.off(oracle,true); __arm64_first_side_multiroot=f; "
+	"__arm64_first_side_multiroot_oracle=oracle");
+  pt = named_proto(L, name);
+  expected = call_guarded_loop(L,
+	"__arm64_first_side_multiroot_oracle", 0, 0, 0, n);
+  assert(call_guarded_loop(L, name, 0, 0, 0, n) == expected);
+  set.root = find_root(J, pt, &set.rootno);
+  assert(set.root != NULL && set.rootno != 0);
+  for (attempt = 0; attempt < PRODUCTION_ROOT_ATTEMPTS &&
+	 trace_nchild_acq(set.root) < 1; attempt++)
+    assert(call_guarded_loop(L, name, 1, 0, 0, n) ==
+	   call_guarded_loop(L, "__arm64_first_side_multiroot_oracle",
+	     1, 0, 0, n));
+  assert(trace_nchild_acq(set.root) == 1);
+  for (attempt = 0; attempt < PRODUCTION_ROOT_ATTEMPTS &&
+	 trace_nchild_acq(set.root) < 2; attempt++)
+    assert(call_guarded_loop(L, name, 0, 1, 0, n) ==
+	   call_guarded_loop(L, "__arm64_first_side_multiroot_oracle",
+	     0, 1, 0, n));
+  assert(trace_nchild_acq(set.root) == 2);
+  for (attempt = 0; attempt < PRODUCTION_ROOT_ATTEMPTS &&
+	 trace_nchild_acq(set.root) < 3; attempt++)
+    assert(call_guarded_loop(L, name, 0, 0, 1, n) ==
+	   call_guarded_loop(L, "__arm64_first_side_multiroot_oracle",
+	     0, 0, 1, n));
+  assert(trace_nchild_acq(set.root) == 3);
+  assert(root_child_ids(J, set.root, set.rootno,
+	set.ids, set.exits, 3) == 3);
+  assert(set.exits[0] != set.exits[1] &&
+	 set.exits[0] != set.exits[2] &&
+	 set.exits[1] != set.exits[2]);
+  assert(trace_nextside_acq(traceref_safe(J, set.ids[0])) == set.ids[1] &&
+	 trace_nextside_acq(traceref_safe(J, set.ids[1])) == set.ids[2] &&
+	 trace_nextside_acq(traceref_safe(J, set.ids[2])) == 0);
+
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lj_trace_test_root_entry_reset();
+  assert(call_guarded_loop(L, name, 0, 0, 0, n) == expected);
+  assert(lj_trace_test_root_entry_publishes() > 0 &&
+	 lj_trace_test_root_entry_successes() > 0 &&
+	 lj_trace_test_root_entry_cleanups() == 0);
+  assert(trace_nchild_acq(set.root) == 3);
+
+  middle_no = set.ids[1];
+  middle = traceref_safe(J, middle_no);
+  head_code = trace_mcode_acq(traceref_safe(J, set.ids[0]));
+  tail_code = trace_mcode_acq(traceref_safe(J, set.ids[2]));
+  head_exit = set.exits[0];
+  tail_exit = set.exits[2];
+  assert(lj_trace_flushscope(J, middle_no) == 1u);
+  assert(trace_traceno_acq(middle) == 0 &&
+	 trace_nextside_acq(middle) == 0);
+  assert(trace_nchild_acq(set.root) == 2 &&
+	 trace_nextside_acq(set.root) == set.ids[0] &&
+	 trace_nextside_acq(traceref_safe(J, set.ids[0])) == set.ids[2] &&
+	 trace_nextside_acq(traceref_safe(J, set.ids[2])) == 0);
+  assert(trace_exittarget_arm64_acq(set.root, head_exit) == head_code &&
+	 trace_exittarget_arm64_acq(set.root, tail_exit) == tail_code);
+
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lj_trace_test_root_entry_reset();
+  assert(call_guarded_loop(L, name, 1, 0, 0, n) ==
+	 call_guarded_loop(L, "__arm64_first_side_multiroot_oracle",
+	   1, 0, 0, n));
+  assert(call_guarded_loop(L, name, 0, 0, 1, n) ==
+	 call_guarded_loop(L, "__arm64_first_side_multiroot_oracle",
+	   0, 0, 1, n));
+  assert(lj_trace_test_root_entry_publishes() > 0 &&
+	 lj_trace_test_root_entry_successes() > 0 &&
+	 lj_trace_test_root_entry_cleanups() == 0);
+  assert(trace_runnable_acq(set.root, set.rootno) &&
+	 trace_nchild_acq(set.root) == 2);
+  assert(root_child_ids(J, set.root, set.rootno,
+	set.ids, set.exits, 3) == 2);
+  assert(trace_exittarget_arm64_acq(set.root, head_exit) == head_code &&
+	 trace_exittarget_arm64_acq(set.root, tail_exit) == tail_code);
+  assert(lj_trace_flushall_gc(L) == 0);
+  assert(!trace_runnable_acq(set.root, set.rootno));
   UNUSED(g);
 }
 #endif
@@ -1333,6 +1470,7 @@ static int detailed_main(int argc, char **argv)
 
 #ifdef LJ_TRACE_TEST_HELPERS
   expect_multi_root_siblings(L, J, g);
+  expect_three_root_siblings(L, J, g);
 #endif
 
   assert(gc2_smr_readers_acq(g) == 0);
