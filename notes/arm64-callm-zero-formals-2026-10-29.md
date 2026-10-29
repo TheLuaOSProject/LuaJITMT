@@ -32,6 +32,17 @@ assertion-helper ARM64 checks pass: 40 native leaf runs, 169 semantic negatives,
 `zero-formal-fix.log`; the earlier `zero-formal-debug*.log` files preserve the
 rejected IR. No diagnostic instrumentation remains in source.
 
-The four-profile contracts are pending at this checkpoint. This closes this
-specific discarded terminal calculation; it does not certify arbitrary dead
-expression chains or full general Lua call parity.
+Both complete contracts now pass all four ARM64/arm64e assertion/release
+profiles at `0f3bd3286`: `zero-formal-leaf-four-profile.log` and
+`zero-formal-consumer-four-profile.log` in the same directory. The worktree was
+restored to ordinary assertion ARM64, and all 509 stock source tests plus all
+509 original-v2 bytecode tests pass (`zero-formal-stock-source.log` and
+`zero-formal-stock-bytecode.log`). The ordinary executable, jit modules,
+threading module, source hash and binary hash are retained in `zero-formal-arm64/`.
+
+A follow-up boundary probe confirms a remaining gap for ignored computed
+producer results: `(x*.25+1)*.5` and `.5/x` with extra constant results still
+interpret on ARM64 while x86_64 publishes the selected loop. The script
+`discarded-expression-probe.lua` and both `discarded-expressions-*.log` files
+record this. This checkpoint closes the simple discarded terminal calculation;
+it does not certify arbitrary dead expression DAGs or full general Lua parity.
