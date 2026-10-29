@@ -40,6 +40,8 @@ static GCproto *hfa_candidate_pt;
 static unsigned hfa_native_finishes;
 static GCproto *nested_hfa_candidate_pt;
 static unsigned nested_hfa_native_finishes;
+static GCproto *nested_hfa_extra_candidate_pt;
+static unsigned nested_hfa_extra_native_finishes;
 static GCproto *active_hfa_result_candidate_pt;
 static GCproto *hfa_result_candidate_pt[65];
 static unsigned hfa_result_native_finishes[65];
@@ -78,6 +80,20 @@ static int get_nested_hfa_native_count(lua_State *L)
 {
   UNUSED(L);
   lua_pushinteger(L, (lua_Integer)nested_hfa_native_finishes);
+  return 1;
+}
+
+static int set_nested_hfa_extra_candidate(lua_State *L)
+{
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  nested_hfa_extra_candidate_pt = funcproto(funcV(L->top-1));
+  return 0;
+}
+
+static int get_nested_hfa_extra_native_count(lua_State *L)
+{
+  UNUSED(L);
+  lua_pushinteger(L, (lua_Integer)nested_hfa_extra_native_finishes);
   return 1;
 }
 
@@ -530,6 +546,38 @@ static void assert_float_hfa_multilane_salt_signature(lua_State *L,
 	 !abi.stack_size);
 }
 
+static void assert_nested_float_hfa_multilane_salt_signature(
+    lua_State *L, const char *name, unsigned member_size, unsigned count)
+{
+  LJArm64ABISignature abi;
+  unsigned i;
+  assert(lj_ccall_arm64_signature(ctype_ctsG(G(L)),
+                                 global_cdata_ctype(L, name), &abi));
+  assert(abi.nargs == count+1 && abi.nparams == 2 &&
+         abi.result_class == LJ_ARM64_ABI_FPR &&
+         abi.result_kind == LJ_ARM64_ABI_KIND_FLOAT);
+  for (i = 0; i < count; i++)
+    assert(abi.arg[i].kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
+           abi.arg[i].source_index == 0 && abi.arg[i].member_index == i &&
+           abi.arg[i].member_count == count &&
+           abi.arg[i].size == member_size && abi.arg[i].reg == i);
+  assert(abi.arg[count].kind == LJ_ARM64_ABI_KIND_FLOAT &&
+         abi.arg[count].source_index == 1 && abi.arg[count].reg == count &&
+         !abi.stack_size);
+}
+
+static void assert_nested_hfa_result_null_descriptor_rejected(
+    lua_State *L, const char *name)
+{
+  CTState *cts = ctype_ctsG(G(L));
+  CTypeID id = global_cdata_ctype(L, name);
+  assert(!lj_ccall_arm64_float_hfa_result_class(cts, id, NULL, NULL));
+  {
+    LJArm64FloatHFA result;
+    assert(!lj_ccall_arm64_float_hfa_result_class(cts, id, &result, NULL));
+  }
+}
+
 static void assert_float_hfa_plain_multilane_signature(lua_State *L,
 						       const char *name,
 						       unsigned member_size,
@@ -779,6 +827,19 @@ static void test_aggregate_signatures(lua_State *L)
   assert_float_hfa_signature(L, "__arm64_float_pair_fn");
   assert_float_hfa_salt_signature(L, "__arm64_float_pair_double_salt_fn");
   assert_nested_float_hfa_signature(L, "__arm64_nested_float_pair_fn");
+  assert_nested_float_hfa_multilane_salt_signature(L,
+    "__arm64_sibling_nested_float_triple_fn", sizeof(float), 3);
+  assert_nested_float_hfa_multilane_salt_signature(L,
+    "__arm64_nested_double_quad_fn", sizeof(double), 4);
+  assert_unsupported_aggregate_signature(L, "__arm64_nested_float_quint_fn");
+  assert_unsupported_aggregate_signature(L, "__arm64_nested_float_with_int_fn");
+  assert_nested_hfa_result_null_descriptor_rejected(L,
+    "__arm64_nested_float_triple_result_type");
+  assert_unsupported_aggregate_signature(L,
+    "__arm64_nested_float_triple_result_fn");
+  assert_nested_float_hfa_multilane_salt_signature(L,
+    "__arm64_hfa_depth31_fn", sizeof(float), 1);
+  assert_unsupported_aggregate_signature(L, "__arm64_hfa_depth32_fn");
   assert_unsupported_aggregate_signature(L,
 	 "__arm64_nested_float_pair_result_fn");
   assert_unsupported_aggregate_signature(L,
@@ -1016,7 +1077,8 @@ static void test_live_aggregate_admission_at(lua_State *L, GCtrace *T,
     nconst_pairs = 1;
   }
   if ((load_type == IRT_FLOAT || load_type == IRT_NUM) && load_index != 0 &&
-      strcmp(clone_name, "__arm64_nested_hfa_clone") != 0)
+      strcmp(clone_name, "__arm64_nested_hfa_clone") != 0 &&
+      strcmp(clone_name, "__arm64_sibling_nested_float_triple_clone") != 0)
     stack_hfa_first = find_aggregate_load_index(fx.good, nins, load_type,
 						       load_index-1u);
   typeguard = find_cdata_type_guard(copy, nk, postra_nins, load);
@@ -1498,6 +1560,18 @@ static void observe_native_finish(TGState *tg)
     }
     if (callxs && hfa_loads >= 2) nested_hfa_native_finishes++;
   }
+  if (nested_hfa_extra_candidate_pt != NULL && trace_root_acq(T) == 0 &&
+      trace_startpt_acq(T) == nested_hfa_extra_candidate_pt &&
+      bc_op(trace_startins_acq(T)) == BC_FORL) {
+    unsigned hfa_loads = 0;
+    int callxs = 0;
+    for (ref = REF_BASE; ref < trace_nins_acq(T); ref++) {
+      IRIns ins = ir_load_acq(&trace_ir_acq(T)[ref]);
+      callxs |= ins.o == IR_CALLXS;
+      hfa_loads += ins.o == IR_XLOAD && irt_type(ins.t) == IRT_FLOAT;
+    }
+    if (callxs && hfa_loads >= 3) nested_hfa_extra_native_finishes++;
+  }
   if (active_result_candidate_pt != NULL && trace_root_acq(T) == 0 &&
       trace_startpt_acq(T) == active_result_candidate_pt &&
       bc_op(trace_startins_acq(T)) == BC_FORL) {
@@ -1583,6 +1657,10 @@ int main(int argc, char **argv)
   lua_setglobal(L, "_set_nested_hfa_candidate");
   lua_pushcfunction(L, get_nested_hfa_native_count);
   lua_setglobal(L, "_nested_hfa_native_count");
+  lua_pushcfunction(L, set_nested_hfa_extra_candidate);
+  lua_setglobal(L, "_set_nested_hfa_extra_candidate");
+  lua_pushcfunction(L, get_nested_hfa_extra_native_count);
+  lua_setglobal(L, "_nested_hfa_extra_native_count");
   lua_pushcfunction(L, set_result_candidate);
   lua_setglobal(L, "_set_result_candidate");
   lua_pushcfunction(L, get_result_native_count);
@@ -1861,6 +1939,23 @@ int main(int argc, char **argv)
 	"__arm64_nested_hfa_clone", IRT_FLOAT, 0);
     test_live_aggregate_admission_at(L, T, meta_pc,
 	"__arm64_nested_hfa_clone", IRT_FLOAT, 1);
+  }
+  {
+    GCproto *pt = global_proto(L,
+      "__arm64_sibling_nested_float_triple_candidate");
+    jit_State *J = G2J(G(L));
+    GCtrace *T;
+    assert(pt == nested_hfa_extra_candidate_pt);
+    T = find_aggregate_trace_min_load_count(J, pt, IRT_FLOAT, 3);
+    assert(T != NULL);
+    meta_pc = aggregate_meta_pc(T);
+    assert(meta_pc != NULL);
+    test_live_aggregate_admission_at(L, T, meta_pc,
+      "__arm64_sibling_nested_float_triple_clone", IRT_FLOAT, 0);
+    test_live_aggregate_admission_at(L, T, meta_pc,
+      "__arm64_sibling_nested_float_triple_clone", IRT_FLOAT, 1);
+    test_live_aggregate_admission_at(L, T, meta_pc,
+      "__arm64_sibling_nested_float_triple_clone", IRT_FLOAT, 2);
   }
   lua_getglobal(L, "__arm64_finish_peer");
   assert(lua_pcall(L, 0, 0, 0) == 0);
