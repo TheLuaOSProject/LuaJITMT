@@ -122,7 +122,9 @@ static int arm64_ir_funcf_bytecode(const GCproto *pt, BCIns startins,
   BCIns generation[UINT8_MAX+1u];
   uint8_t initialized[UINT8_MAX+1u] = { 0 };
   uint8_t numeric[UINT8_MAX+1u] = { 0 };
-  MSize pos;
+  uint8_t function[UINT8_MAX+1u] = { 0 };
+  MSize calls = 0;
+  MSize pos, gets = 0;
   LJ_STATIC_ASSERT((sizeof(BCIns) & (sizeof(BCIns)-1)) == 0);
   if (bc == NULL || (lo & (sizeof(BCIns)-1)) != 0 || sizebc < 3 ||
 	sizebc > UINT8_MAX ||
@@ -148,7 +150,7 @@ static int arm64_ir_funcf_bytecode(const GCproto *pt, BCIns startins,
     a = bc_a(word); b = bc_b(word); c = bc_c(word);
     if (op == BC_RET1) {
       if (pos+1u != sizebc || bc_d(word) != 2u || a >= framesize ||
-	  !initialized[a])
+	  !initialized[a] || gets != calls)
 	return 0;
       ret = word;
       goto check_generation;
@@ -175,6 +177,15 @@ static int arm64_ir_funcf_bytecode(const GCproto *pt, BCIns startins,
 	return 0;
       initialized[a] = 1;
       numeric[a] = numeric[src];
+      function[a] = function[src];
+    } else if (op == BC_UGET) {
+      /* A rooted upvalue read can feed one fixed, one-result Lua leaf call.
+      ** The immutable semantic and post-RA walkers later bind this function
+      ** to the exact guarded closure and validate its complete frame map. */
+      if (gets++ != 0u || a >= framesize || bc_d(word) >= pt->sizeuv || calls ||
+          function[a])
+        return 0;
+      initialized[a] = function[a] = 1;
     } else if (op == BC_ADDVV || op == BC_SUBVV || op == BC_MULVV ||
 	       op == BC_DIVVV) {
       if (a >= framesize || b >= framesize || c >= framesize ||
@@ -196,9 +207,19 @@ static int arm64_ir_funcf_bytecode(const GCproto *pt, BCIns startins,
       proto_knumtv_load_acq(&k, pt, kidx);
       if (!tvisnumber(&k)) return 0;
       initialized[a] = numeric[a] = 1;
+    } else if (op == BC_CALL) {
+      BCReg arg = (BCReg)(a+1u+LJ_FR2);
+      /* First slice: exactly one supplied fixed argument, one fixed result,
+      ** and a callee loaded by an earlier UGET in this root function. */
+      if (calls++ != 0u || bc_b(word) != 2u || bc_c(word) != 2u ||
+          a >= framesize || arg >= framesize || !initialized[a] ||
+          !function[a] || !initialized[arg] || numeric[arg] == 2)
+        return 0;
+      initialized[a] = numeric[a] = 1;
+      function[a] = 0;
     } else {
-      /* Calls, upvalues, branches, heap access and all other effects are
-      ** outside this scalar root certificate. */
+      /* Branches, heap access and all other effects are outside this scalar
+      ** root certificate. */
       return 0;
     }
   }
@@ -2698,7 +2719,7 @@ static int arm64_postra_constant_unused(const LJArm64PostRAView *view,
 }
 
 static int arm64_postra_constants(const LJArm64PostRAView *view,
-				  int allow_num)
+				  int allow_num, int allow_func)
 {
   IRRef ref;
   for (ref = REF_TRUE; ref <= REF_NIL; ref++) {
@@ -2709,6 +2730,9 @@ static int arm64_postra_constants(const LJArm64PostRAView *view,
   for (ref = view->nk; ref < REF_TRUE; ref++) {
     IRIns k = ir_load_acq(&view->ir[ref]);
     if (k.o == IR_KNUM && allow_num && k.t.irt == IRT_NUM) {
+	if (ref+1u >= REF_TRUE) return 0;
+	ref++;
+	    } else if (k.o == IR_KGC && allow_func && k.t.irt == IRT_FUNC) {
 	if (ref+1u >= REF_TRUE) return 0;
 	ref++;
     } else if (k.o != IR_KINT || k.t.irt != IRT_INT) {
@@ -3335,12 +3359,20 @@ static int arm64_postra_funcf_locations(const LJArm64PostRAView *view,
   return 1;
 }
 
+static int arm64_ir_funcf_leaf_call_source(const GCproto *pt);
+static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
+				 BCOp rootop, const LJArm64SideIRView *side,
+				 LJArm64IRReject *reject);
+
 static int arm64_postra_funcf_admit(const LJArm64PostRAView *view,
 	BCIns liveins, int prepublication, IRRef *semantic_ninsp)
 {
   const IRIns *ir;
   IRRef ref, pollref, semantic_nins;
   IRIns base, suffix;
+  int leaf_call;
+  if (view == NULL || view->proto == NULL) return 0;
+  leaf_call = arm64_ir_funcf_leaf_call_source(view->proto);
   if (view == NULL || (ir = view->ir) == NULL || view->snap == NULL ||
 	view->snapmap == NULL || view->proto_bc == NULL ||
 	view->nins <= REF_FIRST || view->nins >= REF_DROP ||
@@ -3354,7 +3386,7 @@ static int arm64_postra_funcf_admit(const LJArm64PostRAView *view,
 	view->root_topslot != view->proto->framesize ||
 	view->proto_numparams != view->proto->numparams ||
 	!arm64_ir_funcf_bytecode(view->proto, view->startins, liveins,
-	  prepublication) || !arm64_postra_constants(view, 1)) {
+	  prepublication) || !arm64_postra_constants(view, 1, leaf_call)) {
 	return 0;
 	}
   semantic_nins = view->nins;
@@ -6451,7 +6483,7 @@ static int arm64_postra_nonloop_admit(const LJArm64PostRAView *view,
     return 0;
   if (rootop == BC_FUNCF)
     return arm64_postra_funcf_admit(view, view->startins, 0, semantic_ninsp);
-  if (!arm64_postra_constants(view, 0))
+  if (!arm64_postra_constants(view, 0, 0))
     return 0;
   maxslots = view->root_topslot+1u+LJ_FR2;
   if (rootop == BC_FORL) {
@@ -6748,7 +6780,7 @@ static int arm64_ir_kkptr_unused(const GCtrace *T, IRRef kref)
 }
 
 static int arm64_ir_constants(const GCtrace *T, int allow_num,
-			      LJArm64IRReject *reject)
+			      int allow_func, LJArm64IRReject *reject)
 {
   IRRef ref;
   if (T->nk > REF_TRUE || T->nk == 0)
@@ -6769,6 +6801,13 @@ static int arm64_ir_constants(const GCtrace *T, int allow_num,
 				 (IROp)ir->o, 0);
 	ref++;
 	continue;
+	}
+	if (ir->o == IR_KGC && allow_func && ir->t.irt == IRT_FUNC) {
+	  if (ref+1u >= REF_TRUE)
+	    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CONSTANT, ref,
+				   (IROp)ir->o, 0);
+	  ref++;
+	  continue;
 	}
     if (ir->o != IR_KINT || ir->t.irt != IRT_INT)
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CONSTANT, ref,
@@ -6985,6 +7024,23 @@ static int arm64_ir_funcf_shape(const jit_State *J, const GCtrace *T,
  bad_funcf:
   return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND, ref,
 	(IROp)ir[ref < T->nins ? ref : REF_BASE].o, BC_FUNCF);
+}
+
+/* Distinguish the one fixed CALL grammar from the scalar-only FUNCF path.
+** The detailed source/identity/result proof is performed after the leaf
+** replay helpers are defined; this is only a dispatch predicate. */
+static int arm64_ir_funcf_leaf_call_source(const GCproto *pt)
+{
+  MSize pos, calls = 0, gets = 0;
+  if (!pt || (pt->flags & PROTO_VARARG) || pt->sizebc > UINT8_MAX)
+    return 0;
+  for (pos = 1; pos+1u < pt->sizebc; pos++) {
+    BCIns ins = (BCIns)la_load32_acq(
+      (const uint32_t *)&proto_bc(pt)[pos]);
+    calls += bc_op(ins) == BC_CALL;
+    gets += bc_op(ins) == BC_UGET;
+  }
+  return calls == 1u && gets == 1u;
 }
 
 static int arm64_ir_int_binary(const GCtrace *T, const IRIns *ir,
@@ -7594,9 +7650,12 @@ static int arm64_ir_nonloop_admit(const jit_State *J, const GCtrace *T,
     }
   }
 #endif
-  if (!arm64_ir_constants(T, startop == BC_FUNCF, reject))
+  if (!arm64_ir_constants(T, startop == BC_FUNCF,
+	  startop == BC_FUNCF && arm64_ir_funcf_leaf_call_source(pt), reject))
     return 0;
   if (startop == BC_FUNCF) {
+    if (arm64_ir_funcf_leaf_call_source(pt))
+      return arm64_scalar_ir_admit_mode(J, T, BC_FUNCF, NULL, reject);
     int ok = arm64_ir_funcf_shape(J, T, pt, reject);
     return ok;
   }
@@ -10655,7 +10714,9 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
   IRRef ref = snap->ref;
   int has_call = 0, inline_frame = (uint8_t)pcbase == 0, paired_varg = 0;
   if (lowerlinkp) *lowerlinkp = 0;
-  if (bc_op(T->startins) != BC_FORL ||
+  if ((bc_op(T->startins) != BC_FORL &&
+       !(bc_op(T->startins) == BC_FUNCF && J && J->pt &&
+         arm64_ir_funcf_leaf_call_source(J->pt))) ||
       (!inline_frame && (!(uint8_t)pcbase ||
        !arm64_lua_frame_path_limit(&T->snapmap[snap->mapofs], snap->nent,
                              pcbase, 2u, &frames) || !frames.depth)))
@@ -10930,8 +10991,11 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       !T->traceno || T->nins <= REF_FIRST || T->nins >= REF_DROP || !T->nk ||
       T->nk > REF_TRUE ||
       (!side && (bc_op(T->startins) != rootop ||
-       (rootop != BC_LOOP && rootop != BC_FORL) ||
-       T->link != T->traceno || T->linktype != LJ_TRLINK_LOOP)) ||
+       (rootop != BC_LOOP && rootop != BC_FORL && rootop != BC_FUNCF) ||
+       (rootop == BC_FUNCF ?
+        (T->link != 0 || T->linktype != LJ_TRLINK_RETURN || J->loopref != 0 ||
+         !arm64_ir_funcf_leaf_call_source(J->pt)) :
+        (T->link != T->traceno || T->linktype != LJ_TRLINK_LOOP)))) ||
       J->baseslot != 1 + LJ_FR2 || J->framedepth || J->retdepth ||
       trace_startptgco_acq((GCtrace *)T) != obj2gco(J->pt) ||
       !checkptrGC(obj2gco(J->pt)) || J->pt->gct != (uint32_t)~LJ_TPROTO ||
@@ -11233,7 +11297,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
         if (o == NULL || !checkptrGC(o) ||
             o->gch.gct != (uint32_t)~LJ_TFUNC ||
             (!arm64_scalar_builtin_ffid(lj_func_ffid_acq(gco2func(o))) &&
-             (side || rootop != BC_FORL ||
+             (side || (rootop != BC_FORL && rootop != BC_FUNCF) ||
               !lj_trace_arm64_lua_leaf(gco2func(o)))))
           goto bad_operand;
         break;
@@ -11271,7 +11335,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       loop = ref;
       break;
     case IR_XPOLL:
-	  if (poll || (side ?
+	  if (poll || (rootop == BC_FUNCF ? loop != 0 : side ?
 	      (side->linktype == LJ_TRLINK_ROOT ? loop != 0 :
 	       (!loop || ref != loop + 1)) : (!loop || ref != loop + 1)) ||
           ir->t.irt != (IRT_NIL | IRT_GUARD) || ir->op1 != 1 || ir->op2)
@@ -11365,6 +11429,9 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
   if (side && side->linktype == LJ_TRLINK_ROOT) {
 	if (loop || !poll || J->loopref != 0)
 	  goto bad_poll;
+  } else if (rootop == BC_FUNCF) {
+    if (loop || !poll || J->loopref != 0)
+      goto bad_poll;
   } else if (!loop || poll != loop + 1 || J->loopref != loop) {
 	goto bad_poll;
   }
@@ -11478,7 +11545,8 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
   if (side && side->linktype == LJ_TRLINK_ROOT) {
 	if (loop_snap || poll_snap != poll)
 	  goto bad_snapshot;
-  } else if (!loop_snap || poll_snap != loop) {
+  } else if (rootop == BC_FUNCF ? (loop_snap || !poll_snap || poll_snap >= poll) :
+             (!loop_snap || poll_snap != loop)) {
 	goto bad_snapshot;
   }
   s = 0;
