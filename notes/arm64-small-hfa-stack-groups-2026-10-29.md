@@ -39,8 +39,12 @@ Validation:
   post-RA offset mutations.
 - The ordinary one-float stack peer passed on ARM64 and x86-64/Rosetta using
   `tests/t-ffi-callxs-small-hfa-stack.lua`. Each run checks a direct C result,
-  candidate/interpreter equality, exact C effects, a completed loop trace with
-  CALLXS, and an observed native exit after full GC. The larger mixed
+  keeps a ready MT peer live, disables the harness and interpreter oracle,
+  explicitly enables only the candidate, binds the check to that candidate's
+  self-linked JFORL, verifies CALLXS in that exact root, and counts exits from
+  that root. It also checks candidate/interpreter equality, exact C effects,
+  and the same trace ID plus native-code bytes/address/loop offset after full
+  GC. Both runs observed an exact-root exit. The larger mixed
   one-plus-three-HFA prototype is not admitted by the x64 JIT (`unsupported C
   function type`); this is an ARM-specific correctness expansion, not a measured
   x64 parity gap. The one-float HFA stack call does have matched x64 native
@@ -48,7 +52,10 @@ Validation:
 - `git diff --check` passed. The ordinary peer skips unless run on Darwin ARM64
   or SysV x64 with `LJ_ARM64_INT_AGGREGATE_SO` set.
 
-Evidence is in `/Users/frityet/Scratch/ljmt-small-stack-abi-20261029/`:
+Four-profile evidence is in `/Users/frityet/Scratch/ljmt-small-stack-abi-20261029/`;
+the strengthened ordinary peer logs and rebuild records are in
+`/Users/frityet/Scratch/ljmt-small-hfa-ordinary-20261029/` (`arm64-peer.log`,
+`x64-peer.log`, and `x64-build.log`). Original evidence also includes
 `apple-hfa-caller.s`, `small-hfa-four-profile.log`, `x64-build-final.log`,
 and `x64-peer-final.log`. The contract restores the standard ARM64 assertion
 runtime after its profile matrix.
