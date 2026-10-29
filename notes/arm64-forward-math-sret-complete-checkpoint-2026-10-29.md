@@ -20,6 +20,11 @@ Logs under `/Users/frityet/Scratch/ljmt-deep-callm-integration-20261029`:
 - `forward-math-sret-{arm64,x64}-{build,source,bytecode}.log`: the same frozen
   source also passes all 509 source and all 509 original v2-bytecode cases
   in ordinary assertion ARM64 and strict assertion x86_64 builds.
+- `forward-math-sret-main-build.log`: after promotion to `codex/arm64-parity`,
+  production, tests and CI sources still match `6c46f9bff` exactly. The main
+  parity checkout rebuilds successfully as ordinary assertion ARM64 without
+  test helpers, profile
+  `03430f9f9fd66629949671634e8996dcf06729e5312ad7babb41d1212f952e75`.
 
 This gate does not include the later integer-literal replay fix, CALLXS
 integer accumulator PHI, or default-index string.byte change. Those have
