@@ -12540,29 +12540,17 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
     GCproto *rootpt;
     if (J->cur.traceno == 0 || J->cur.root != 0 || startpt == NULL ||
 	!checkptrGC(startpt) || startpt->gch.gct != (uint32_t)~LJ_TPROTO) {
-#if defined(LJ_TRACE_TEST_HELPERS)
-      GCfunc *dbgfn = curr_func(owner);
-      if (isluafunc(dbgfn) && (funcproto(dbgfn)->flags & PROTO_VARARG))
-#endif
       return 0;
     }
     rootpt = gco2pt(startpt);
     fn = curr_func(owner);
     if (isluafunc(fn)) {
       pt = funcproto(fn);
-      if (!trace_pc_in_proto_range(pc, proto_bc(pt), pt->sizebc)) {
-#if defined(LJ_TRACE_TEST_HELPERS)
-        if (pt->flags & PROTO_VARARG)
-#endif
+      if (!trace_pc_in_proto_range(pc, proto_bc(pt), pt->sizebc))
         return 0;
-      }
       if (pt != rootpt &&
-          !trace_arm64_lua_leaf_frame(J, owner, rootpt, fn, pc)) {
-#if defined(LJ_TRACE_TEST_HELPERS)
-        if (pt->flags & PROTO_VARARG)
-#endif
+          !trace_arm64_lua_leaf_frame(J, owner, rootpt, fn, pc))
         return 0;
-      }
     } else {
 #if LJ_HASJIT_FFI_CALLXS || defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
       const BCIns *fnpc = mref_acq(fn->c.pc, const BCIns);
