@@ -2795,7 +2795,7 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
       memcpy(direct_hfa_offset, result_hfa.offset,
              sizeof(direct_hfa_offset));
       } else {
-	if (!lj_ccall_arm64_integer_aggregate_class(cts, result_id,
+	if (!lj_ccall_arm64_small_aggregate_result_class(cts, result_id,
 	      &result_abi, &raw_result))
 	  lj_trace_err(J, LJ_TRERR_NYICALL);
 	switch (result_abi.size) {

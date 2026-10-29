@@ -31,6 +31,9 @@ typedef struct { uint16_t value; } arm64_half_result;
 typedef struct { uint32_t value; } arm64_word_result;
 typedef arm64_word_result arm64_word_result_alias;
 typedef struct { uint64_t value; } arm64_u64_result;
+typedef struct { uint16_t lo, hi; } arm64_half_pair;
+typedef struct { arm64_half_pair half; uint32_t tag; } arm64_nested_int_result;
+typedef struct { uint32_t tag; float value; } arm64_mixed_result;
 typedef struct { float value; } arm64_float_result;
 typedef struct { double value; } arm64_double_result;
 typedef struct { float lo, hi; } arm64_float_pair_result;
@@ -109,6 +112,8 @@ enum {
   ARM64_SIBLING_NESTED_FLOAT_TRIPLE,
   ARM64_NESTED_DOUBLE_QUAD,
   ARM64_NESTED_ARRAY_FLOAT_PAIR,
+  ARM64_RETURN_NESTED_INT,
+  ARM64_RETURN_MIXED,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -473,6 +478,25 @@ LJ_EXPORT arm64_u64_result arm64_return_u64(uint32_t value)
   arm64_u64_result result;
   calls[ARM64_RETURN_U64]++;
   result.value = UINT64_C(0x1234567800000000) | (uint64_t)value*313u+11u;
+  return result;
+}
+
+LJ_EXPORT arm64_nested_int_result arm64_return_nested_int(uint32_t value)
+{
+  arm64_nested_int_result result;
+  calls[ARM64_RETURN_NESTED_INT]++;
+  result.half.lo = (uint16_t)(value+1u);
+  result.half.hi = (uint16_t)(value+2u);
+  result.tag = value+3u;
+  return result;
+}
+
+LJ_EXPORT arm64_mixed_result arm64_return_mixed(uint32_t value)
+{
+  arm64_mixed_result result;
+  calls[ARM64_RETURN_MIXED]++;
+  result.tag = value+1u;
+  result.value = (float)value+0.5f;
   return result;
 }
 

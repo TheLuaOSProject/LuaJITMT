@@ -392,6 +392,108 @@ static int lj_ccall_arm64_integer_aggregate_class(CTState *cts, CTypeID id,
   return 1;
 }
 
+typedef struct LJArm64SmallResultWalk {
+  CTState *cts;
+  CTypeID active[32];
+  uint8_t leaves;
+  uint8_t integer;
+} LJArm64SmallResultWalk;
+
+/* A small non-HFA result is returned as one opaque GPR payload. Establish
+** that classification from bounded numeric leaves, including named nested
+** structs, without opening the independently checked argument policy. */
+static int lj_ccall_arm64_small_result_walk(LJArm64SmallResultWalk *walk,
+    CTypeID id, unsigned depth, CTSize *sizep)
+{
+  CType ct, field;
+  CTypeID rawid, declared = id, fid;
+  LJArm64ABIArg scalar;
+  CTInfo info;
+  CTSize size, end = 0;
+  unsigned i, start = walk->leaves;
+  if (depth >= 32) return 0;
+  for (i = 0; i < 32; i++) {
+    if (lj_ctype_snapshot(walk->cts, declared, &ct) <= 0) return 0;
+    info = ctype_info_acq(&ct);
+    if (ctype_isattrib(info) && ctype_isxattrib(info, CTA_ALIGN) &&
+        ctype_align(info) > 3) return 0;
+    if (!(ctype_isattrib(info) || ctype_istypedef(info))) break;
+    declared = ctype_cid(info);
+    if (!declared) return 0;
+  }
+  if (i == 32 || !lj_ccall_arm64_raw_type(walk->cts, id, &ct, &rawid))
+    return 0;
+  for (i = 0; i < depth; i++)
+    if (walk->active[i] == rawid) return 0;
+  walk->active[depth] = rawid;
+  info = ctype_info_acq(&ct);
+  size = ctype_size_acq(&ct);
+  if (ctype_isvltype(info) || !size || size > 8 || ctype_align(info) > 3)
+    return 0;
+  if (lj_ccall_arm64_scalar_class(walk->cts, id, 0, &scalar, &rawid)) {
+    if (scalar.kind != LJ_ARM64_ABI_KIND_INTEGER &&
+        scalar.kind != LJ_ARM64_ABI_KIND_ENUM &&
+        scalar.kind != LJ_ARM64_ABI_KIND_FLOAT) return 0;
+    if (walk->leaves >= 8) return 0;
+    walk->leaves++;
+    if (scalar.kind != LJ_ARM64_ABI_KIND_FLOAT) walk->integer = 1;
+    *sizep = size;
+    return 1;
+  }
+  if (!ctype_isstruct(info) || (info & CTF_UNION)) return 0;
+  for (fid = ctype_sib_acq(&ct); fid; ) {
+    CTInfo finfo;
+    CTSize offset, childsize;
+    if (lj_ctype_snapshot(walk->cts, fid, &field) <= 0) return 0;
+    finfo = ctype_info_acq(&field);
+    fid = ctype_sib_acq(&field);
+    offset = ctype_size_acq(&field);
+    if (!ctype_isfield(finfo) || !ctype_cid(finfo) ||
+        offset < end || offset >= size ||
+        !lj_ccall_arm64_small_result_walk(walk, ctype_cid(finfo),
+                                         depth+1u, &childsize) ||
+        childsize > size-offset) return 0;
+    end = offset+childsize;
+  }
+  if (walk->leaves == start) return 0;
+  *sizep = size;
+  return 1;
+}
+
+static int lj_ccall_arm64_small_aggregate_result_class(CTState *cts, CTypeID id,
+    LJArm64ABIArg *arg, CTypeID *rawid)
+{
+  LJArm64SmallResultWalk walk;
+  CType ct;
+  CTypeID raw;
+  CTSize size, checked_size;
+  CTInfo info;
+  if (lj_ccall_arm64_integer_aggregate_class(cts, id, arg, &raw)) {
+    if (rawid) *rawid = raw;
+    return 1;
+  }
+  if (!lj_ccall_arm64_raw_type(cts, id, &ct, &raw)) return 0;
+  info = ctype_info_acq(&ct);
+  size = ctype_size_acq(&ct);
+  if (!ctype_isstruct(info) || (info & (CTF_UNION|CTF_REF|CTF_VLA)) ||
+      (size != 1 && size != 2 && size != 4 && size != 8)) return 0;
+  memset(&walk, 0, sizeof(walk));
+  walk.cts = cts;
+  if (!lj_ccall_arm64_small_result_walk(&walk, id, 0, &checked_size) ||
+      checked_size != size || !walk.integer) return 0;
+  /* An integer/enum leaf excludes all HFA channels. Pure floating nested
+  ** results retain their separate, currently closed classification. */
+  if (rawid) *rawid = raw;
+  if (arg) {
+    arg->cls = LJ_ARM64_ABI_GPR;
+    arg->kind = LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE;
+    arg->size = (uint8_t)size;
+    arg->align = ctype_align(info);
+    arg->is_unsigned = 1;
+  }
+  return 1;
+}
+
 /* Admit tightly laid out Darwin float/double HFAs. Callers select the count
 ** and size limits independently for argument and result registers. */
 static int lj_ccall_arm64_float_hfa_class_limit(CTState *cts, CTypeID id,
@@ -504,7 +606,7 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
       memcpy(abi->result_hfa_offset, hfa.offset,
              sizeof(abi->result_hfa_offset));
     } else {
-      if (!lj_ccall_arm64_integer_aggregate_class(cts,
+      if (!lj_ccall_arm64_small_aggregate_result_class(cts,
 	    abi->result_declared_id, &result, &rawid))
 	return 0;
       result.kind = LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE;

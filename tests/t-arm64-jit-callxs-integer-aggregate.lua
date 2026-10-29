@@ -104,6 +104,15 @@ typedef struct { uint8_t value; } Arm64ByteResult;
 typedef struct { uint16_t value; } Arm64HalfResult;
 typedef struct { uint32_t value; } Arm64WordResult;
 typedef struct { uint64_t value; } Arm64U64Result;
+typedef struct { uint16_t lo, hi; } Arm64HalfPair;
+typedef struct { Arm64HalfPair half; uint32_t tag; } Arm64NestedIntResult;
+typedef struct { uint32_t tag; float value; } Arm64MixedResult;
+typedef struct { Arm64MixedResult inner; } Arm64NestedMixedResult;
+typedef struct { uint32_t values[2]; } Arm64IntegerArrayResult;
+typedef struct { void *value; } Arm64PointerMemberResult;
+typedef Arm64NestedMixedResult (*Arm64NestedMixedResultFn)(uint32_t);
+typedef Arm64IntegerArrayResult (*Arm64IntegerArrayResultFn)(uint32_t);
+typedef Arm64PointerMemberResult (*Arm64PointerMemberResultFn)(uint32_t);
 typedef struct { float value; } Arm64FloatResult;
 typedef struct { double value; } Arm64DoubleResult;
 typedef struct { float lo, hi; } Arm64FloatPairResult;
@@ -244,6 +253,8 @@ Arm64HalfResult arm64_return_half(uint32_t);
 Arm64WordResult arm64_return_word(uint32_t);
 Arm64WordResultAlias arm64_return_word_alias(uint32_t);
 Arm64U64Result arm64_return_u64(uint32_t);
+Arm64NestedIntResult arm64_return_nested_int(uint32_t);
+Arm64MixedResult arm64_return_mixed(uint32_t);
 Arm64FloatResult arm64_return_float_hfa(uint32_t);
 Arm64DoubleResult arm64_return_double_hfa(uint32_t);
 Arm64FloatPairResult arm64_return_float_pair_hfa(uint32_t);
@@ -268,12 +279,31 @@ hfa_depth_decls[#hfa_depth_decls+1] =
   'typedef double (*Arm64HfaDepth31Fn)(Arm64HfaDepth31, double);'
 hfa_depth_decls[#hfa_depth_decls+1] =
   'typedef double (*Arm64HfaDepth32Fn)(Arm64HfaDepth32, double);'
+for depth = 1, 32 do
+  local inner = depth == 1 and 'uint8_t' or
+    ('Arm64ResultDepth'..tostring(depth-1))
+  hfa_depth_decls[#hfa_depth_decls+1] =
+    ('typedef struct { %s inner; } Arm64ResultDepth%d;'):format(inner, depth)
+end
+hfa_depth_decls[#hfa_depth_decls+1] =
+  'typedef Arm64ResultDepth31 (*Arm64ResultDepth31Fn)(uint32_t);'
+hfa_depth_decls[#hfa_depth_decls+1] =
+  'typedef Arm64ResultDepth32 (*Arm64ResultDepth32Fn)(uint32_t);'
 ffi.cdef(table.concat(hfa_depth_decls, '\n'))
 local lib = ffi.load(assert(os.getenv('LJ_ARM64_INT_AGGREGATE_SO')))
 _G.__arm64_return_byte_fn = lib.arm64_return_byte
 _G.__arm64_return_half_fn = lib.arm64_return_half
 _G.__arm64_return_word_fn = lib.arm64_return_word
 _G.__arm64_return_u64_fn = lib.arm64_return_u64
+_G.__arm64_return_nested_int_fn = lib.arm64_return_nested_int
+_G.__arm64_return_mixed_fn = lib.arm64_return_mixed
+_G.__arm64_nested_mixed_result_fn = ffi.cast('Arm64NestedMixedResultFn', nil)
+_G.__arm64_integer_array_result_fn = ffi.cast('Arm64IntegerArrayResultFn', nil)
+_G.__arm64_pointer_member_result_fn = ffi.cast('Arm64PointerMemberResultFn', nil)
+_G.__arm64_result_depth31_fn = ffi.cast('Arm64ResultDepth31Fn', nil)
+_G.__arm64_result_depth32_fn = ffi.cast('Arm64ResultDepth32Fn', nil)
+_G.__arm64_nested_int_result_type = ffi.new('Arm64NestedIntResult')
+_G.__arm64_mixed_result_type = ffi.new('Arm64MixedResult')
 _G.__arm64_return_float_hfa_fn = lib.arm64_return_float_hfa
 _G.__arm64_return_double_hfa_fn = lib.arm64_return_double_hfa
 _G.__arm64_return_float_pair_hfa_fn = lib.arm64_return_float_pair_hfa
@@ -1473,7 +1503,8 @@ end
   return candidate_loader(), oracle_loader()
 end
 
-local function run_integer_result(width, result_type, fn, counter, label)
+local function run_integer_result(width, result_type, fn, counter, label, compare)
+  compare = compare or function(a, b) return a.value == b.value end
   local result_candidate, result_oracle = make_result_pair(label)
   candidate = result_candidate
   _set_result_candidate(width, result_candidate)
@@ -1488,12 +1519,15 @@ local function run_integer_result(width, result_type, fn, counter, label)
     local want = result_oracle(32, fn, pass*7)
     assert(ffi.istype(result_type, got) and ffi.istype(result_type, want),
            label..' returned the wrong declared CData type')
-    assert(got.value == want.value, label..' result differs from interpreter')
+    assert(compare(got, want), label..' result differs from interpreter')
   end
   assert(_aggregate_result_native_count(width) > before_native,
          label..' had no selected-root native CALLXS/CNEW/XSTORE finish')
   tracked_exit_roots = roots(result_candidate)
   assert(next(tracked_exit_roots), label..' published no selected loop root')
+  local selected_root = next(tracked_exit_roots)
+  local code, address, loop = jitutil.tracemc(selected_root)
+  assert(code and address and loop, label..' selected root has no machine code')
   local mismatched = result_candidate(32, lib.arm64_return_scalar, 13)
   assert(type(mismatched) == 'number',
          label..' mismatched-result fallback returned the wrong Lua type')
@@ -1504,13 +1538,17 @@ local function run_integer_result(width, result_type, fn, counter, label)
   exits = 0
   local got = result_candidate(24, fn, 13)
   local want = result_oracle(24, fn, 13)
-  assert(ffi.istype(result_type, got) and got.value == want.value,
+  assert(ffi.istype(result_type, got) and compare(got, want),
          label..' result/root changed after full GC')
   assert(exits > 0, label..' selected result root did not exit after GC')
   assert(_aggregate_result_native_count(width) > native_before_gc,
          label..' did not re-enter native code after full GC')
   assert(lib.arm64_aggregate_count(counter)-effect_before_gc == 48,
          label..' native/interpreter effects were replayed after GC')
+  local code_after, address_after, loop_after = jitutil.tracemc(selected_root)
+  assert(roots(result_candidate)[selected_root] and code_after == code and
+         address_after == address and loop_after == loop,
+         label..' selected root changed across alternate callee/full GC')
   assert(lib.arm64_aggregate_count(counter)-before_effect == 432,
          label..' native/interpreter effects were lost or replayed')
 end
@@ -2109,6 +2147,22 @@ end
   assert(lib.arm64_aggregate_count(66) == 320,
          'nested float array post-GC effects were lost or replayed')
   tracked_exit_roots = nil
+end
+
+_G.__arm64_run_small_result_probe = function(which)
+  if which == 1 then
+    run_integer_result(8, 'Arm64NestedIntResult', lib.arm64_return_nested_int,
+      67, 'nested-integer-result', function(a, b)
+        return a.half.lo == b.half.lo and a.half.hi == b.half.hi and
+          a.tag == b.tag
+      end)
+  else
+    assert(which == 2)
+    run_integer_result(8, 'Arm64MixedResult', lib.arm64_return_mixed,
+      68, 'mixed-integer-float-result', function(a, b)
+        return a.tag == b.tag and a.value == b.value
+      end)
+  end
 end
 
 _G.__arm64_finish_peer = function()

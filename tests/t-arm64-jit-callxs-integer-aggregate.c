@@ -986,6 +986,20 @@ static void test_aggregate_signatures(lua_State *L)
   assert_integer_aggregate_result_signature(L, "__arm64_return_half_fn", 2);
   assert_integer_aggregate_result_signature(L, "__arm64_return_word_fn", 4);
   assert_integer_aggregate_result_signature(L, "__arm64_return_u64_fn", 8);
+  assert_integer_aggregate_result_signature(L, "__arm64_return_nested_int_fn", 8);
+  assert_integer_aggregate_result_signature(L, "__arm64_return_mixed_fn", 8);
+  assert_integer_aggregate_result_signature(L, "__arm64_nested_mixed_result_fn", 8);
+  assert_unsupported_aggregate_signature(L, "__arm64_integer_array_result_fn");
+  assert_unsupported_aggregate_signature(L, "__arm64_pointer_member_result_fn");
+  assert_integer_aggregate_result_signature(L, "__arm64_result_depth31_fn", 1);
+  assert_unsupported_aggregate_signature(L, "__arm64_result_depth32_fn");
+  {
+    CTState *cts = ctype_ctsG(G(L));
+    CTypeID id = global_cdata_ctype(L, "__arm64_nested_int_result_type");
+    assert(lj_ccall_arm64_small_aggregate_result_class(cts, id, NULL, NULL));
+    id = global_cdata_ctype(L, "__arm64_mixed_result_type");
+    assert(lj_ccall_arm64_small_aggregate_result_class(cts, id, NULL, NULL));
+  }
   assert_hfa_result_signature(L, "__arm64_return_float_hfa_fn", 4, 1);
   assert_hfa_result_signature(L, "__arm64_return_double_hfa_fn", 8, 1);
   assert_hfa_result_signature(L, "__arm64_return_float_pair_hfa_fn", 4, 2);
@@ -2093,6 +2107,29 @@ int main(int argc, char **argv)
       "__arm64_nested_array_float_pair_clone", IRT_FLOAT, 0);
     test_live_aggregate_admission_at(L, T, meta_pc,
       "__arm64_nested_array_float_pair_clone", IRT_FLOAT, 1);
+  }
+  {
+    unsigned which;
+    for (which = 1; which <= 2; which++) {
+      GCproto *pt;
+      GCtrace *T;
+      jit_State *J = G2J(G(L));
+      lua_getglobal(L, "__arm64_run_small_result_probe");
+      lua_pushinteger(L, (lua_Integer)which);
+      if (lua_pcall(L, 1, 0, 0) != 0) {
+        fprintf(stderr, "small result probe %u failed: %s\n",
+                which, lua_tostring(L, -1));
+        abort();
+      }
+      pt = global_proto(L, "__arm64_integer_result_candidate_8");
+      assert(pt == result_candidate_pt[8]);
+      T = find_integer_result_trace(J, pt, IRT_U64);
+      assert(T != NULL);
+      meta_pc = aggregate_meta_pc(T);
+      assert(meta_pc != NULL);
+      test_live_integer_result_admission(L, T, meta_pc,
+        "__arm64_integer_result_clone", IRT_U64);
+    }
   }
   lua_getglobal(L, "__arm64_finish_peer");
   assert(lua_pcall(L, 0, 0, 0) == 0);
