@@ -136,6 +136,16 @@ result. Evidence is under
 `leaf-diagnosis.log` captures the original baseline failure, and
 `shadow-{leaf-calls,child-exits,compound-exits,varargs}.log` captures the fixes.
 
+An integration audit found that the physical VARG check formed a potentially
+out-of-range pointer before rejecting a malformed delta. It now validates the
+owner/base address, slot alignment, and encoded byte span using integer
+addresses before constructing the normalized frame pointer. The delta is
+bounded before narrowing it to `MSize`. Apple Clang strict-warning compilation
+of `lj_trace.c` passes for ARM64 and ARM64e with assertions and GDB JIT support;
+the combined runtime matrix is the next integration check. The initial direct
+compiler invocation used Homebrew Clang, which lacks the selected SDK's
+`ptrauth_nop_cast` support for ARM64e; that invocation was not a passing check.
+
 ## Recovery provenance
 
 This isolated candidate was reconstructed after a source cleanup accident from

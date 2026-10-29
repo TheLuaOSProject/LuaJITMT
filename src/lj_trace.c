@@ -12296,14 +12296,14 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
                                     GCproto *rootpt, GCfunc *fn,
                                     const BCIns *pc)
 {
-  const TValue *physicalframe = owner->base-1;
-  const TValue *currentframe = physicalframe, *frame = currentframe;
+  const TValue *physicalframe, *currentframe, *frame;
   const TValue *caller, *currentcaller;
   const BCIns *returnpc, *currentreturnpc;
   GCfunc *currentfn = fn;
   BCIns calls[LJ_TRACE_ARM64_MAX_LEAF_DEPTH];
-  GCproto *pt = funcproto(fn), *parentpt, *currentparentpt;
+  GCproto *pt, *parentpt, *currentparentpt;
   TValue *stackbase, *stacklimit;
+  uintptr_t stacklo, stackhi, baseaddr, frameaddr;
   GCfunc *parentfn;
   BCIns call;
   MSize base = 0, depth = 0, i, nresults, recorded_depth;
@@ -12312,9 +12312,21 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
   int isvarg, varg_setup, frame_slots_live;
   TRef callee, link;
   IRRef ref;
-  if (!owner) return 0;
+  if (!owner || !fn || !isluafunc(fn) || !rootpt || !pc) return 0;
+  pt = funcproto(fn);
   stackbase = mref_acq(owner->stack, TValue);
   stacklimit = mref_acq(owner->maxstack, TValue);
+  stacklo = (uintptr_t)stackbase;
+  stackhi = (uintptr_t)stacklimit;
+  baseaddr = (uintptr_t)owner->base;
+  if (!stackbase || !stacklimit || stackhi <= stacklo ||
+      baseaddr < stacklo || baseaddr >= stackhi ||
+      baseaddr-stacklo < sizeof(TValue) ||
+      (baseaddr-stacklo) % sizeof(TValue) != 0)
+    return 0;
+  frameaddr = baseaddr-sizeof(TValue);
+  physicalframe = (const TValue *)frameaddr;
+  currentframe = physicalframe;
   isvarg = frame_isvarg(physicalframe);
   varg_setup = (la_load8_acq(&pt->flags) & PROTO_VARARG) != 0 &&
                bc_op((BCIns)la_load32_acq((const uint32_t *)pc)) == BC_FUNCV;
@@ -12322,14 +12334,14 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
     /* IFUNCV installs an extra delta frame after the ordinary Lua CALL
     ** header. Normalize only after checking its encoded extent is bounded. */
     ptrdiff_t delta = frame_delta(physicalframe);
+    ptrdiff_t span = frame_sized(physicalframe);
     if (!(la_load8_acq(&pt->flags) & PROTO_VARARG) || pt->numparams != 0 ||
-        delta <= 0 || (MSize)delta > LJ_MAX_JSLOTS ||
-        frame_sized(physicalframe) != delta*(ptrdiff_t)sizeof(TValue) ||
-        physicalframe < stackbase || physicalframe >= stacklimit ||
-        (char *)physicalframe-frame_sized(physicalframe) < (char *)stackbase)
+        delta <= 0 || (uintptr_t)delta > LJ_MAX_JSLOTS ||
+        span != delta*(ptrdiff_t)sizeof(TValue) ||
+        (uintptr_t)span > frameaddr-stacklo)
       return 0;
     vargslots = (MSize)delta;
-    currentframe = frame_prevd(physicalframe);
+    currentframe = (const TValue *)(frameaddr-(uintptr_t)span);
   } else if ((la_load8_acq(&pt->flags) & PROTO_VARARG) && !varg_setup) {
     return 0;  /* Only the pre-rec_func_vararg FUNCV lacks FRAME_VARG. */
   }
