@@ -1282,6 +1282,44 @@ static TRef rec_call_specialize(jit_State *J, GCfunc *fn, TRef tr)
   return kfunc;
 }
 
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+/* Recorder-side source check for the bounded CALL -> CALLM argument window.
+** Result identity and values remain the independent admission gates' job. */
+static int rec_arm64_leaf_callm_pair(const GCproto *pt,
+					     const BCIns *producer,
+					     MSize nresults)
+{
+	uintptr_t pc = (uintptr_t)producer, lo, hi;
+	BCIns call, next;
+	if (!pt || !producer || nresults < 1u ||
+	    nresults > LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS) return 0;
+	lo = (uintptr_t)proto_bc(pt);
+	hi = (uintptr_t)(proto_bc(pt)+pt->sizebc);
+	if (pc < lo || pc >= hi || pc-lo >= pt->sizebc*sizeof(BCIns) ||
+	    hi-pc < 2u*sizeof(BCIns)) return 0;
+	call = (BCIns)la_load32_acq((const uint32_t *)producer);
+	next = (BCIns)la_load32_acq((const uint32_t *)(producer+1));
+	return bc_op(call) == BC_CALL && bc_b(call) == 0u && bc_c(call) > 0u &&
+	       bc_op(next) == BC_CALLM && bc_b(next) == 2u && bc_c(next) == 0u &&
+	       bc_a(call) == bc_a(next)+1u+LJ_FR2 &&
+	       (MSize)bc_a(call)+nresults <= pt->framesize &&
+	       (MSize)bc_a(next)+1u+LJ_FR2+nresults <= pt->framesize;
+}
+
+static int rec_arm64_leaf_callm_consumer(const GCproto *pt,
+					 const BCIns *consumer, MSize nresults)
+{
+	uintptr_t pc = (uintptr_t)consumer, lo, hi;
+	if (!pt || !consumer || nresults < 1u ||
+	    nresults > LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS) return 0;
+	lo = (uintptr_t)proto_bc(pt);
+	hi = (uintptr_t)(proto_bc(pt)+pt->sizebc);
+	if (pc < lo || pc >= hi || pc-lo < sizeof(BCIns)) return 0;
+	return rec_arm64_leaf_callm_pair(pt,
+		(const BCIns *)(pc-sizeof(BCIns)), nresults);
+}
+#endif
+
 /* Record call setup. */
 static void rec_call_setup(jit_State *J, BCReg func, ptrdiff_t nargs)
 {
@@ -1317,10 +1355,18 @@ static void rec_call_setup(jit_State *J, BCReg func, ptrdiff_t nargs)
       (const uint32_t *)&proto_bc(leaf)[leaf->sizebc-1u]);
     MSize nresults = bc_op(ret) == BC_RET1 && bc_d(ret) == 2u ? 1u :
                      bc_op(ret) == BC_RET && bc_d(ret) == 3u ? 2u :
+                     bc_op(ret) == BC_RET && bc_d(ret) == 4u ? 3u :
                      bc_op(ret) == BC_RET0 ? 1u : 0u;
     int iterator = bc_op(J->cur.startins) == BC_ITERL;
     int tail_root = bc_op(J->cur.startins) == BC_FUNCF &&
                     J->framedepth == 0 && bc_op(*J->pc) == BC_CALLT;
+    int open_producer = !tail_root && bc_op(*J->pc) == BC_CALL &&
+      bc_b(*J->pc) == 0u &&
+      nresults <= LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS &&
+      rec_arm64_leaf_callm_pair(J->pt, J->pc, nresults);
+    int open_consumer = !tail_root && bc_op(*J->pc) == BC_CALLM &&
+      bc_b(*J->pc) == 2u && bc_c(*J->pc) == 0u &&
+      rec_arm64_leaf_callm_consumer(J->pt, J->pc, (MSize)nargs);
     LJArm64IteratorSource iter;
     if (iterator && (J->framedepth || nargs != 2 || nresults != 1u ||
         leaf->numparams != 2u || (leaf->flags & PROTO_VARARG) ||
@@ -1334,15 +1380,25 @@ static void rec_call_setup(jit_State *J, BCReg func, ptrdiff_t nargs)
     if ((!iterator && bc_op(J->cur.startins) != BC_FORL &&
 	 (bc_op(J->cur.startins) != BC_FUNCF || J->framedepth != 0)) ||
 	J->framedepth > 1 ||
-        (!iterator && bc_op(*J->pc) != BC_CALL && !tail_root) || !nresults ||
+        (!iterator && bc_op(*J->pc) != BC_CALL && !open_consumer &&
+         !tail_root) || !nresults ||
         (tail_root ? (nresults != 1u || bc_b(*J->pc) != 0u) :
-                     bc_b(*J->pc) != nresults+1u) ||
-        (nresults == 2u && J->framedepth != 0) ||
-        !bc_c(*J->pc) || bc_c(*J->pc) != nargs+1 ||
-        (MSize)bc_a(*J->pc)+bc_c(*J->pc)+LJ_FR2 > J->pt->framesize ||
+         (open_producer ? bc_b(*J->pc) != 0u :
+          (!open_consumer && bc_b(*J->pc) != nresults+1u))) ||
+        (nresults > 1u && J->framedepth != 0) ||
+        (nresults > LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS ||
+         (nresults > 2u && !open_producer)) ||
+        (!open_consumer && (!bc_c(*J->pc) || bc_c(*J->pc) != nargs+1)) ||
         (tail_root ? (MSize)bc_a(*J->pc)+1u+LJ_FR2 > J->pt->framesize :
-	     (MSize)bc_a(*J->pc)+bc_b(*J->pc)-1u+LJ_FR2 >
-	       J->pt->framesize))
+         (open_consumer ? (MSize)bc_a(*J->pc)+nargs+1u+LJ_FR2 :
+          (MSize)bc_a(*J->pc)+bc_c(*J->pc)+LJ_FR2) > J->pt->framesize) ||
+        (open_consumer && (nargs < 1 ||
+         (MSize)nargs > LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS ||
+         nresults != 1u)) ||
+        (open_producer ? (MSize)bc_a(*J->pc)+nresults > J->pt->framesize :
+         (!tail_root && !open_consumer &&
+          (MSize)bc_a(*J->pc)+bc_b(*J->pc)-1u+LJ_FR2 >
+	       J->pt->framesize)))
       lj_trace_err(J, LJ_TRERR_NYIBC);
     lj_snap_add(J);
     J->mergesnap = 0;
