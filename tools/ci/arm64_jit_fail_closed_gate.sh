@@ -240,7 +240,9 @@ done
 
 # Nested contracts select their own profiles. Re-establish this gate's exact
 # profile before the final runtime and linked-fixture checks.
-lj_ci_build_profile arm64 '-arch arm64' "$xcflags" final-runtime
+# Recorder completion hooks are part of the final linked safepoint fixture.
+# Earlier bound contracts retain their original profile above.
+lj_ci_build_profile arm64 '-arch arm64' "$xcflags -DLJ_GC2_TEST_HELPERS" final-runtime
 env LUA_PATH="$lua_path" "$luajit" -e '
 assert(jit.status() == true, "experimental build did not admit JIT APIs")
 local util = require("jit.util")

@@ -5,7 +5,7 @@ local bootstrap_cflags =
 local fail_closed_cflags =
   "-DLUAJIT_MT_ARM64_BOOTSTRAP " ..
   "-DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT " ..
-  "-DLJ_TRACE_TEST_HELPERS"
+  "-DLJ_TRACE_TEST_HELPERS -DLJ_GC2_TEST_HELPERS"
 
 local function native_bootstrap()
   local ok, jitmod = pcall(require, "jit")
@@ -15,10 +15,11 @@ end
 
 local function native_fail_closed_jit()
   local ok, jitmod = pcall(require, "jit")
-  local util_ok, util = pcall(require, "jit.util")
-  return ok and jitmod and util_ok and util and jitmod.os == "OSX" and
-         jitmod.arch == "arm64" and jitmod.status() == true and
-         util.traceinfo(1) == nil
+  -- tools/test.lua deliberately disables its own JIT. Detect the compiled
+  -- capability instead of that control-plane engine state; linked fixtures
+  -- create fresh VMs and exercise their own recorder and safepoints.
+  return ok and jitmod and jitmod.os == "OSX" and jitmod.arch == "arm64" and
+         type(jitmod.opt) == "table" and type(jitmod.opt.start) == "function"
 end
 
 local function skip(name)
@@ -64,7 +65,7 @@ return function(add)
 
   add({
     name = "m5_arm64_jit_fail_closed_safepoint_runtime",
-    description = "ARM64 JIT admission keeps interpreter safepoints live with zero traces",
+    description = "ARM64 experimental JIT interpreter and recorder safepoint regression",
     deps = { "m5_arm64_safepoint_contract" },
     run = function(t)
       if not native_fail_closed_jit() then
