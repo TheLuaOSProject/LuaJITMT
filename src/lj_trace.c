@@ -6804,6 +6804,49 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
 	memcpy(&snapmap[ofs+nent], &badpc, sizeof(badpc));
     }
   }
+  /* Private-copy mutations for direct FORL retry snapshots. They preserve
+  ** the control instruction and mutate only the cold map being admitted. */
+  if (mutation >= 18 && mutation <= 22 && forlguard && forladd) {
+    MSize selected = (MSize)-1, ofs, nent, at = (MSize)-1;
+    MSize idxslot = 1u+LJ_FR2+bc_a(semside.parent_startins);
+    MSize role = mutation == 19 ? FORL_STOP :
+                 mutation == 20 ? FORL_STEP : FORL_EXT;
+    for (MSize s = 1; s < nsnap; s++) {
+      uint64_t pcbase;
+      ofs = snap[s].mapofs; nent = snap[s].nent;
+      if (ofs > nsnapmap || nent > nsnapmap-ofs ||
+          nsnapmap-ofs-nent < 1u+LJ_FR2) goto done;
+      memcpy(&pcbase, &snapmap[ofs+nent], sizeof(pcbase));
+      if ((pcbase >> 8) == (uintptr_t)(proto_bc(pt)+semside.loop_end_pc)) {
+        selected = s;
+        break;
+      }
+    }
+    if (selected == (MSize)-1) goto done;
+    ofs = snap[selected].mapofs; nent = snap[selected].nent;
+    for (i = 0; i < nent; i++)
+      if (snap_slot(snapmap[ofs+i]) == idxslot+role) at = ofs+i;
+    if (at == (MSize)-1) goto done;
+    if (mutation == 18) {
+      snapmap[at] = snap_setref(snapmap[at], forladd);
+    } else if (mutation == 19) {
+      snapmap[at] = snap_setref(snapmap[at], ir[forladd].op1);
+    } else if (mutation == 20) {
+      snapmap[at] = snap_setref(snapmap[at], badstepref);
+    } else if (mutation == 21) {
+      memmove(&snapmap[at], &snapmap[at+1u],
+              (nsnapmap-at-1u)*sizeof(*snapmap));
+      snap[selected].nent--;
+      for (MSize s = selected+1u; s < nsnap; s++) snap[s].mapofs--;
+      childcopy.nsnapmap--;
+      postowner.nsnapmap--;
+      postra.nsnapmap--;
+      semside.nsnapmap--;
+      side.nsnapmap--;
+    } else {
+      snapmap[at] |= SNAP_NORESTORE;
+    }
+  }
   *sem_ok = lj_asm_arm64_side_scalar_ir_admit(&jcopy, &childcopy,
 	&semside, &reject);
   *post_ok = lj_asm_arm64_side_scalar_postra_admit(&postra, &side, NULL);
@@ -6824,7 +6867,7 @@ uint32_t lj_trace_test_arm64_side_scalar_copy_contract(jit_State *J,
 	!trace_test_side_scalar_copy(J, child, 0, &sem, &post) || !sem || !post)
     return 0;
   result = 3u;
-  for (mutation = 1; mutation <= 17; mutation++) {
+  for (mutation = 1; mutation <= 22; mutation++) {
     if (!trace_test_side_scalar_copy(J, child, mutation, &sem, &post))
 	return result;
     if (((mutation == 2 || mutation == 11) && sem && !post) ||
