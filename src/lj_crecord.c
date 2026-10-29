@@ -2465,7 +2465,7 @@ static MSize crec_call_args_collect(jit_State *J, RecordFFData *rd,
       if (!fixed || !lj_ccall_arm64_integer_aggregate_class(cts, did,
 	    &aggregate, &rawid) || rawid != did || aggregate.size != dsize)
 	lj_trace_err(J, LJ_TRERR_NYICALL);
-	tr = crec_call_arm64_integer_aggregate_arg(J, cts, did, *base, o,
+      tr = crec_call_arm64_integer_aggregate_arg(J, cts, did, *base, o,
 	  dsize == 1 ? IRT_U8 : dsize == 2 ? IRT_U16 :
 	  dsize == 4 ? IRT_U32 : IRT_U64);
       integer_aggregate = 1;
@@ -2765,7 +2765,21 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
       /* The hidden payload pointer is the actual ABI result channel. */
       t = IRT_NIL;
     } else if (ctype_isstruct(ctr_info)) {
-#if LJ_TARGET_X64 && !LJ_ABI_WIN
+#if LJ_TARGET_ARM64 && LJ_TARGET_OSX
+      LJArm64ABIArg result_abi;
+      CTypeID raw_result;
+      if (!lj_ccall_arm64_integer_aggregate_class(cts, result_id,
+	    &result_abi, &raw_result))
+	lj_trace_err(J, LJ_TRERR_NYICALL);
+      switch (result_abi.size) {
+      case 1: t = IRT_U8; break;
+      case 2: t = IRT_U16; break;
+      case 4: t = IRT_U32; break;
+      case 8: t = IRT_U64; break;
+      default: lj_trace_err(J, LJ_TRERR_NYICALL);
+      }
+      direct_aggregate_result = 1;
+#elif LJ_TARGET_X64 && !LJ_ABI_WIN
       t = crec_call_sysv_aggregate_type(J, cts, ctr, result_size);
       if (t == IRT_CDATA)
 	lj_trace_err(J, LJ_TRERR_NYICALL);

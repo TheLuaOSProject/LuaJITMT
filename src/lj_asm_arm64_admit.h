@@ -472,16 +472,35 @@ static IRType arm64_callxs_result_type(const LJArm64ABISignature *abi)
     default: return IRT_CDATA;
     }
   }
+  if (abi->result_kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE) {
+    switch (abi->result_size) {
+    case 1: return IRT_U8;
+    case 2: return IRT_U16;
+    case 4: return IRT_U32;
+    case 8: return IRT_U64;
+    default: return IRT_CDATA;
+    }
+  }
   return IRT_CDATA;
 }
 
-/* These scalar ABI results are returned to Lua in a fresh CData root. The
-** argument plan, including promoted variadic arguments, remains independent. */
+/* Native-width scalar boxes and direct one-GPR integer aggregates are returned
+** to Lua in a fresh CData root. The argument plan remains independent. */
 static int arm64_callxs_result_boxed(const LJArm64ABISignature *abi)
 {
-  return abi->result_class == LJ_ARM64_ABI_GPR && abi->result_size == 8 &&
+  return (abi->result_class == LJ_ARM64_ABI_GPR && abi->result_size == 8 &&
     (abi->result_kind == LJ_ARM64_ABI_KIND_POINTER ||
-     abi->result_kind == LJ_ARM64_ABI_KIND_INTEGER);
+     abi->result_kind == LJ_ARM64_ABI_KIND_INTEGER)) ||
+    (abi->result_class == LJ_ARM64_ABI_GPR &&
+     abi->result_kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE &&
+     (abi->result_size == 1 || abi->result_size == 2 ||
+      abi->result_size == 4 || abi->result_size == 8));
+}
+
+static CTypeID arm64_callxs_box_ctype(const LJArm64ABISignature *abi)
+{
+  return abi->result_kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ?
+    abi->result_declared_id : abi->result_id;
 }
 
 static IRRef arm64_callxs_const_next(const IRIns *ir, IRRef ref)
@@ -816,7 +835,7 @@ static int arm64_callxs_box_call(CTState *cts, const IRIns *ir, IRRef nk,
 		if (!arm64_callxs_signature_for_call(cts, ir, nk, nins,
 		      callref, &abi, NULL) ||
 		    !arm64_callxs_result_boxed(&abi) ||
-		    abi.result_id != (CTypeID)ctype ||
+		    arm64_callxs_box_ctype(&abi) != (CTypeID)ctype ||
 		    irt_type(store.t) != arm64_callxs_result_type(&abi) ||
 		    irt_type(ir_load_acq(&ir[callref]).t) !=
 		      arm64_callxs_result_type(&abi) || found != 0)
@@ -1615,6 +1634,23 @@ static int arm64_callxs_snapshot_value_slot(const SnapShot *snapshots,
   return found == 1;
 }
 
+/* Result carrier bits from a direct aggregate GPR return are internal to the
+** CALLXS/XSTORE pair and must never be restored as a Lua scalar. */
+static int arm64_callxs_result_not_snapshotted(const SnapShot *snaps,
+		const SnapEntry *map, MSize nsnap, MSize nsnapmap, IRRef result)
+{
+  MSize s;
+  if (snaps == NULL || map == NULL) return 0;
+  for (s = 0; s < nsnap; s++) {
+    MSize ofs = snap_mapofs_acq(&snaps[s]);
+    MSize nent = snap_nent_acq(&snaps[s]), i;
+    if (ofs > nsnapmap || nent > nsnapmap-ofs) return 0;
+    for (i = 0; i < nent; i++)
+      if (snap_ref(snapentry_acq(&map[ofs+i])) == result) return 0;
+  }
+  return 1;
+}
+
 /* The raw U32 result feeds its Lua NUM conversion and independently checked
 ** fixed integer arguments. Discarded results may have no conversion after
 ** DCE, but still keep their DONE snapshot. */
@@ -2281,7 +2317,8 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 
       if (enterargs[0] != J->ktrace || enterargs[1] != fpref) return 0;
       if (arm64_callxs_result_boxed(&abi) ?
-	  (!boxref || enterargs[2] != boxref || box_ctype != abi.result_id) :
+	  (!boxref || enterargs[2] != boxref ||
+	   box_ctype != arm64_callxs_box_ctype(&abi)) :
 	  (boxref || enterargs[2] < nk || enterargs[2] >= REF_TRUE ||
 	   ir_load_acq(&T->ir[enterargs[2]]).o != IR_KNULL ||
 	   irt_type(ir_load_acq(&T->ir[enterargs[2]]).t) != IRT_CDATA))
@@ -2384,9 +2421,10 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
           if (bc_b(sourceins) != 1)
             result_slot = 1u+LJ_FR2+(MSize)bc_a(sourceins);
         }
-        if ((result_is_u32 || irt_type(ins.t) == IRT_INT ||
-             irt_type(ins.t) == IRT_NUM ||
-             irt_type(ins.t) == IRT_FLOAT) && bc_b(sourceins) != 1)
+	if (!arm64_callxs_result_boxed(&abi) &&
+	    (result_is_u32 || irt_type(ins.t) == IRT_INT ||
+	     irt_type(ins.t) == IRT_NUM ||
+	     irt_type(ins.t) == IRT_FLOAT) && bc_b(sourceins) != 1)
           result_slot = 1u+LJ_FR2+(MSize)bc_a(sourceins);
       }
       if (!arm64_callxs_gc_roots(T, ref, xsave, boxref, fpref,
@@ -2438,6 +2476,9 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	return 0;
       call = ref;
       result_is_cdata = arm64_callxs_result_boxed(&abi);
+      if (abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE &&
+	  !arm64_callxs_result_not_snapshotted(T->snap, T->snapmap,
+	    T->nsnap, T->nsnapmap, ref)) return 0;
       call_result_type = (IRType)irt_type(ins.t);
       {
 	BCIns sourceins;
@@ -4616,7 +4657,7 @@ static int arm64_postra_callxs_cdata_phi(const LJArm64PostRAView *view,
 			if (!arm64_callxs_signature_for_call(view->cts, view->ir,
 			      view->nk, nins, callref, &abi, NULL) ||
 			    !arm64_callxs_result_boxed(&abi) ||
-			    abi.result_id != ctypes[i] ||
+			    arm64_callxs_box_ctype(&abi) != ctypes[i] ||
 			    irt_type(store.t) != arm64_callxs_result_type(&abi) ||
 			    irt_type(ir_load_acq(&view->ir[callref]).t) !=
 			      arm64_callxs_result_type(&abi) ||
@@ -6060,11 +6101,15 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    if (fpref != enterargs[1])
 	      return 0;
 	    if (arm64_callxs_result_boxed(&abi) ?
-		(boxref == 0 || enterargs[2] != boxref || box_ctype != abi.result_id) :
+		(boxref == 0 || enterargs[2] != boxref ||
+		 box_ctype != arm64_callxs_box_ctype(&abi)) :
 		(boxref != 0 || !arm64_callxs_const_member(view->ir, view->nk, enterargs[2]) ||
 		 ir_load_acq(&view->ir[enterargs[2]]).o != IR_KNULL ||
 		 arm64_callxs_ref_type(view->ir, view->nk, enterargs[2]) != IRT_CDATA)) return 0;
 	    result_is_cdata = arm64_callxs_result_boxed(&abi);
+	    if (abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE &&
+		!arm64_callxs_result_not_snapshotted(view->snap, view->snapmap,
+		  view->nsnap, view->nsnapmap, ref)) return 0;
 	    result_is_u32 = abi.result_class == LJ_ARM64_ABI_GPR &&
 	      abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER &&
 	      abi.result_size == 4 && abi.result_unsigned;
@@ -6078,7 +6123,8 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	      if (bc_b(sourceins) != 1)
 		result_slot = 1u+LJ_FR2+(MSize)bc_a(sourceins);
 	    }
-	    if ((result_is_u32 || irt_type(ins.t) == IRT_INT ||
+	    if (!result_is_cdata &&
+	        (result_is_u32 || irt_type(ins.t) == IRT_INT ||
 	         irt_type(ins.t) == IRT_NUM ||
 	         irt_type(ins.t) == IRT_FLOAT) && bc_b(sourceins) != 1)
 	      result_slot = 1u+LJ_FR2+(MSize)bc_a(sourceins);

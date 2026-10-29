@@ -23,6 +23,16 @@ typedef union { uint64_t u; double d; } Arm64MixedUnion;
 typedef struct { uint8_t value; } Arm64Byte;
 typedef struct { uint16_t value; } Arm64Half;
 typedef struct { uint32_t value; } Arm64Word;
+typedef struct { uint8_t value; } Arm64ByteResult;
+typedef struct { uint16_t value; } Arm64HalfResult;
+typedef struct { uint32_t value; } Arm64WordResult;
+typedef struct { uint64_t value; } Arm64U64Result;
+typedef Arm64WordResult Arm64WordResultAlias;
+typedef struct __attribute__((aligned(16))) {
+  uint32_t value;
+} Arm64AlignedResult;
+typedef Arm64WordResultAlias (*Arm64WordResultFn)(uint32_t);
+typedef Arm64AlignedResult (*Arm64AlignedResultFn)(uint32_t);
 typedef struct { uint64_t lo, hi; } Arm64BigPair;
 typedef struct { uint32_t value:5; } Arm64Bitfield;
 void arm64_aggregate_reset(void);
@@ -44,8 +54,20 @@ uint32_t arm64_take_bitfield(Arm64Bitfield);
 uint32_t arm64_take_pair_no_gpr(uint32_t, uint32_t, uint32_t, uint32_t,
                                 uint32_t, uint32_t, uint32_t, uint32_t,
                                 Arm64IntPair);
+Arm64ByteResult arm64_return_byte(uint32_t);
+Arm64HalfResult arm64_return_half(uint32_t);
+Arm64WordResult arm64_return_word(uint32_t);
+Arm64WordResultAlias arm64_return_word_alias(uint32_t);
+Arm64U64Result arm64_return_u64(uint32_t);
+uint32_t arm64_return_scalar(uint32_t);
 ]]
 local lib = ffi.load(assert(os.getenv('LJ_ARM64_INT_AGGREGATE_SO')))
+_G.__arm64_return_byte_fn = lib.arm64_return_byte
+_G.__arm64_return_half_fn = lib.arm64_return_half
+_G.__arm64_return_word_fn = lib.arm64_return_word
+_G.__arm64_return_u64_fn = lib.arm64_return_u64
+_G.__arm64_word_result_alias_fn = ffi.cast('Arm64WordResultFn', nil)
+_G.__arm64_aligned_result_fn = ffi.cast('Arm64AlignedResultFn', nil)
 _G.__arm64_int_pair_fn = lib.arm64_take_int_pair
 _G.__arm64_float_pair_fn = lib.arm64_take_float_pair
 _G.__arm64_float_pair_double_salt_fn = lib.arm64_take_float_pair_double_salt
@@ -234,8 +256,9 @@ local function hfa_roots()
 end
 jit.off(hfa_roots, true)
 local selected, exits, hfa_exits = {}, 0, 0
+local tracked_exit_roots
 local function observe(no, exitno)
-  if roots()[no] then exits = exits + 1 end
+  if (tracked_exit_roots or roots())[no] then exits = exits + 1 end
   if hfa_roots()[no] then hfa_exits = hfa_exits + 1 end
 end
 jit.off(observe, true)
@@ -436,7 +459,91 @@ assert(has_native_aggregate_root(22),
 assert(exits > 0, 'pair aggregate trace did not exit after GC reuse')
 assert(_aggregate_native_width_count(8) > native_before_gc,
   'pair aggregate did not re-enter native code after GC')
-jit.attach(observe)
+jit.attach(observe, 'texit')
+
+local function make_result_pair(label)
+  local candidate_loader = assert(loadstring([[
+return function(n, fn, seed)
+  local result
+  for i = 1, n do result = fn(seed+i) end
+  return result
+end
+]], '@'..label..'-candidate-loader'))
+  local oracle_loader = assert(loadstring([[
+return function(n, fn, seed)
+  local result
+  for i = 1, n do result = fn(seed+i) end
+  return result
+end
+]], '@'..label..'-oracle-loader'))
+  local clone_loader = assert(loadstring([[
+return function(n, fn, seed)
+  local result
+  for i = 1, n do result = fn(seed+i) end
+  return result
+end
+]], '@'..label..'-clone-loader'))
+  jit.off(oracle_loader, true)
+  if not _G.__arm64_integer_result_clone then
+    _G.__arm64_integer_result_clone = clone_loader()
+    jit.off(_G.__arm64_integer_result_clone, true)
+  end
+  return candidate_loader(), oracle_loader()
+end
+
+local function run_integer_result(width, result_type, fn, counter, label)
+  local result_candidate, result_oracle = make_result_pair(label)
+  candidate = result_candidate
+  _set_result_candidate(width, result_candidate)
+  _G['__arm64_integer_result_candidate_'..width] = result_candidate
+  jit.flush(result_candidate)
+  jit.on(result_candidate, true)
+  exits = 0
+  local before_native = _aggregate_result_native_count(width)
+  local before_effect = lib.arm64_aggregate_count(counter)
+  for pass = 1, 6 do
+    local got = result_candidate(32, fn, pass*7)
+    local want = result_oracle(32, fn, pass*7)
+    assert(ffi.istype(result_type, got) and ffi.istype(result_type, want),
+           label..' returned the wrong declared CData type')
+    assert(got.value == want.value, label..' result differs from interpreter')
+  end
+  assert(_aggregate_result_native_count(width) > before_native,
+         label..' had no selected-root native CALLXS/CNEW/XSTORE finish')
+  tracked_exit_roots = roots(result_candidate)
+  assert(next(tracked_exit_roots), label..' published no selected loop root')
+  local mismatched = result_candidate(32, lib.arm64_return_scalar, 13)
+  assert(type(mismatched) == 'number',
+         label..' mismatched-result fallback returned the wrong Lua type')
+  assert(exits > 0, label..' selected result root did not force an exit')
+  local native_before_gc = _aggregate_result_native_count(width)
+  local effect_before_gc = lib.arm64_aggregate_count(counter)
+  collectgarbage('collect')
+  exits = 0
+  local got = result_candidate(24, fn, 13)
+  local want = result_oracle(24, fn, 13)
+  assert(ffi.istype(result_type, got) and got.value == want.value,
+         label..' result/root changed after full GC')
+  assert(exits > 0, label..' selected result root did not exit after GC')
+  assert(_aggregate_result_native_count(width) > native_before_gc,
+         label..' did not re-enter native code after full GC')
+  assert(lib.arm64_aggregate_count(counter)-effect_before_gc == 48,
+         label..' native/interpreter effects were replayed after GC')
+  assert(lib.arm64_aggregate_count(counter)-before_effect == 432,
+         label..' native/interpreter effects were lost or replayed')
+end
+
+run_integer_result(1, 'Arm64ByteResult', lib.arm64_return_byte, 15,
+                   'one-byte aggregate result')
+run_integer_result(2, 'Arm64HalfResult', lib.arm64_return_half, 16,
+                   'two-byte aggregate result')
+run_integer_result(4, 'Arm64WordResult', lib.arm64_return_word, 17,
+                   'four-byte aggregate result')
+run_integer_result(4, 'Arm64WordResultAlias',
+                   lib.arm64_return_word_alias, 20,
+                   'typedef four-byte aggregate result')
+run_integer_result(8, 'Arm64U64Result', lib.arm64_return_u64, 18,
+                   'eight-byte aggregate result')
 
 local candidate_roots = roots()
 for no in pairs(candidate_roots) do

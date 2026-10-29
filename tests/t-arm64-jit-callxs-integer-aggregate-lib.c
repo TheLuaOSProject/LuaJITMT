@@ -16,6 +16,11 @@ typedef struct { uint8_t value; } arm64_byte;
 typedef struct { uint16_t value; } arm64_half;
 typedef struct { uint32_t value; } arm64_word;
 typedef struct { uint64_t lo, hi; } arm64_big_pair;
+typedef struct { uint8_t value; } arm64_byte_result;
+typedef struct { uint16_t value; } arm64_half_result;
+typedef struct { uint32_t value; } arm64_word_result;
+typedef arm64_word_result arm64_word_result_alias;
+typedef struct { uint64_t value; } arm64_u64_result;
 typedef struct { uint32_t value:5; } arm64_bitfield;
 
 enum {
@@ -34,6 +39,12 @@ enum {
   ARM64_FLOAT_ONE_SALT,
   ARM64_DOUBLE_ONE_SALT,
   ARM64_VARARG_I32,
+  ARM64_RETURN_BYTE,
+  ARM64_RETURN_HALF,
+  ARM64_RETURN_WORD,
+  ARM64_RETURN_U64,
+  ARM64_RETURN_SCALAR,
+  ARM64_RETURN_WORD_ALIAS,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -146,4 +157,50 @@ LJ_EXPORT uint32_t arm64_take_pair_no_gpr(uint32_t a, uint32_t b,
 {
   calls[ARM64_PAIR_NO_GPR]++;
   return a+b+c+d+e+f+g+h+value.lo+value.hi;
+}
+
+LJ_EXPORT arm64_byte_result arm64_return_byte(uint32_t value)
+{
+  arm64_byte_result result;
+  calls[ARM64_RETURN_BYTE]++;
+  result.value = (uint8_t)(value*3u+1u);
+  return result;
+}
+
+LJ_EXPORT arm64_half_result arm64_return_half(uint32_t value)
+{
+  arm64_half_result result;
+  calls[ARM64_RETURN_HALF]++;
+  result.value = (uint16_t)(value*17u+3u);
+  return result;
+}
+
+LJ_EXPORT arm64_word_result arm64_return_word(uint32_t value)
+{
+  arm64_word_result result;
+  calls[ARM64_RETURN_WORD]++;
+  result.value = value*101u+7u;
+  return result;
+}
+
+LJ_EXPORT arm64_word_result_alias arm64_return_word_alias(uint32_t value)
+{
+  arm64_word_result_alias result;
+  calls[ARM64_RETURN_WORD_ALIAS]++;
+  result.value = value*101u+7u;
+  return result;
+}
+
+LJ_EXPORT arm64_u64_result arm64_return_u64(uint32_t value)
+{
+  arm64_u64_result result;
+  calls[ARM64_RETURN_U64]++;
+  result.value = UINT64_C(0x1234567800000000) | (uint64_t)value*313u+11u;
+  return result;
+}
+
+LJ_EXPORT uint32_t arm64_return_scalar(uint32_t value)
+{
+  calls[ARM64_RETURN_SCALAR]++;
+  return value+1u;
 }
