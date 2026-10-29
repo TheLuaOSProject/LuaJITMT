@@ -41,5 +41,21 @@ preserve a rejected intermediate classifier: it incorrectly tested the
 type-dependent CTF_REF bit on unsigned numeric leaves. The corrected walk
 uses typed scalar classification and is the version tested above.
 
-Ordinary cross-architecture freezing and integration checks follow this
-checkpoint; overall x86_64 parity remains incomplete.
+## Ordinary runtime and final gate
+
+`tests/t-ffi-callxs-small-composite-results.lua` runs both shapes with no
+private test hooks. The ordinary ARM64 runtime at `7b812d6be` and the frozen
+x86_64 runtime from the earlier `c60f376f9` matrix both pass using the same
+universal C helper library. Each shape retains its exact selected JFORL
+CALLXS root through full GC and an alternate scalar-returning callee, with
+one selected exit after GC and 31 alternate-callee exits. C effects and all
+result fields match the independent interpreted oracle; the live peer joins.
+
+The final aggregate gate includes this ordinary probe in every profile;
+`final-four-profile.log` passes all four profiles. The ordinary ARM64 runtime
+also passes all 509 stock source tests and the interpreter aggregate/variadic
+contract. `immutable.sha256` records the frozen binaries, archive and helper
+library. The original result-gap probe was repeated on frozen x86_64 and
+again shows the 24-byte indirect-result gap, while neither architecture
+publishes a native root for its 16-byte direct-result cases. Overall x86_64
+parity remains incomplete.
