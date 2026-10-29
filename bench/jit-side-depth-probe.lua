@@ -196,6 +196,14 @@ end
 assert(#ids==maxphase, "requested trace depth was not published")
 
 -- Reenter the deepest observed trace after GC on its selected source path.
+-- Once the graph is assembled, also preserve each exact code image. Earlier
+-- phases may legitimately publish new edges while constructing the graph.
+local settled_code={}
+for _,no in ipairs(ids) do
+  local code,addr=util.tracemc(no)
+  assert(code and addr==mcode[no],"settled mcode unavailable")
+  settled_code[no]=code
+end
 collectgarbage("collect")
 local timed_cases={
   {"root",1,1,1,1}, {"direct",2,1,1,1},
@@ -216,6 +224,11 @@ end
 for _=1,32 do assert(candidate(2,2,2,2,48)==oracle(2,2,2,2,48)) end
 local rows=traces()
 assert(candidate_rootid()==root and mcode_address(root)==mcode[root])
+for _,no in ipairs(ids) do
+  local code,addr=util.tracemc(no)
+  assert(code==settled_code[no] and addr==mcode[no],
+         "settled mcode bytes or address changed across GC/reentry")
+end
 for i=2,#ids do
   local no,parentno=ids[i],ids[i-1]
   assert(rows[no] and rows[no].parent==parentno and
