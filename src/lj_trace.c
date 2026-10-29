@@ -12924,7 +12924,10 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
   if (J->framedepth < 1 ||
       J->framedepth > LJ_TRACE_ARM64_MAX_LEAF_DEPTH) return 0;
   recorded_depth = (MSize)J->framedepth;
-  if (bc_op(J->cur.startins) != BC_FORL ||
+  if ((bc_op(J->cur.startins) != BC_FORL &&
+       !(bc_op(J->cur.startins) == BC_FUNCF &&
+         trace_root_funcf_shape(rootpt, trace_startpc_acq(&J->cur),
+                                J->cur.startins))) ||
       J->retdepth || J->postproc != LJ_POST_NONE || !frame_islua(currentframe) ||
       currentframe < stackbase || currentframe >= stacklimit ||
       frame_func(currentframe) != fn || !lj_trace_arm64_lua_leaf(fn)) return 0;
@@ -13117,6 +13120,8 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
       if (!trace_pc_in_proto_range(pc, proto_bc(pt), pt->sizebc))
         return 0;
       if (pt != rootpt &&
+          !(bc_op(startins) == BC_FUNCF &&
+            trace_arm64_lua_leaf_returned_call(J, owner, fn, pc)) &&
           !trace_arm64_lua_leaf_frame(J, owner, rootpt, fn, pc))
         return 0;
     } else {

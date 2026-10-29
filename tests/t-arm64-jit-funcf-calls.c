@@ -292,6 +292,9 @@ int main(void)
     "local target=function(x) return x*.25 end; "
     "funcf_original_target=target; "
     "function set_target(v) target=v end; "
+    "local readonly_target=function(x) return x*.25 end; "
+    "funcf_readonly_candidate=function(x) "
+    "local y=readonly_target(x); return y+.75 end; "
     "funcf_candidate=function(x) local y=target(x); return y+.75 end; "
     "funcf_oracle=function(x) return x*.25+.75 end; "
     "function funcf_run(fn,n) local sum=.5; "
@@ -299,7 +302,8 @@ int main(void)
     "jit.off(funcf_oracle,true); jit.off(funcf_run,true); "
     "jit.off(set_target,true); jit.flush(); jit.opt.start('hotloop=1',"
     "'hotexit=1','maxtrace=128'); jit.on(); "
-    "jit.on(funcf_candidate,true)");
+    "jit.on(funcf_candidate,true); "
+    "jit.on(funcf_readonly_candidate,true)");
   GCfunc *candidate=global_lfunc(L,"funcf_candidate");
   GCtrace *T=NULL;
   for (unsigned i=0;i<8&&!T;i++) {
@@ -348,6 +352,30 @@ int main(void)
   lua_getglobal(L,"c_target"); assert(tvisfunc(L->top-1));
   GCfunc *cfunc=funcV(L->top-1); lua_pop(L,1);
   admission(T,L,cfunc);
+  {
+    GCfunc *readonly=global_lfunc(L,"funcf_readonly_candidate");
+    GCtrace *RT=NULL;
+    for (unsigned i=0;i<8&&!RT;i++) {
+      assert(invoke(L,"funcf_run","funcf_readonly_candidate",80)==
+             invoke(L,"funcf_run","funcf_oracle",80));
+      RT=funcf_trace(L,readonly);
+    }
+    assert(RT && RT->linktype==LJ_TRLINK_RETURN);
+    lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+    assert(invoke(L,"funcf_run","funcf_readonly_candidate",32)==
+           invoke(L,"funcf_run","funcf_oracle",32));
+    assert(lj_trace_test_root_entry_successes()>0 &&
+           lj_trace_test_exit_calls()==0);
+    native_returns++;
+    lua_gc(L,LUA_GCCOLLECT,0);
+    lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+    assert(invoke(L,"funcf_run","funcf_readonly_candidate",16)==
+           invoke(L,"funcf_run","funcf_oracle",16));
+    assert(lj_trace_test_root_entry_successes()>0 &&
+           lj_trace_test_exit_calls()==0);
+    native_returns++;
+    admission(RT,L,cfunc);
+  }
   ljt_lua_dostring(L,"assert(stop:send(true,5)); local ok,v=peer:join(5); "
                      "assert(ok and v)");
   lua_close(L);

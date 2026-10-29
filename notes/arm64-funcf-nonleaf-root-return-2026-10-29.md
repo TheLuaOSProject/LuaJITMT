@@ -51,9 +51,24 @@ snapshots. It confirms semantic and post-RA baseline admission, then rejects
 seven private mutations in each pass: returned-value binding, terminal PC,
 callee-guard PC, CALL argument/result counts, captured C-function identity,
 and a return-slot frame tag. It also verifies that an invalid low `loopref`
-fails closed. Runtime coverage confirms three exit-free native whole-body
-returns across a full collection with a live MT peer and after restoring the
-captured callee, then changes the
-captured callee and observes the exact identity-guard exit before restoring
-and reusing the root. `/tmp/funf-followup-contract-final.log` records the final full
-arm64/arm64e assertion-profile contract run.
+fails closed. Runtime coverage includes both a mutable captured callee and a
+read-only local-function capture. Both execute the whole-body return natively
+before and after collection with a live MT peer; the mutable case also changes
+the captured callee and observes the exact identity-guard exit before
+restoring and reusing the root. The contract's strict preflight runs in both
+arm64 and arm64e assertion profiles at
+`/tmp/funcf-readonly-final-contract.log`. Each profile reports five
+exit-free native returns, one identity exit, 14 semantic and 14 post-RA
+mutation rejections, and two low-loopref rejections across the two captures.
+
+The ordinary no-test-helper build initially refused the read-only FUNCF case.
+Inspection found helper-only conditionals that skipped root-snapshot,
+prototype-PC, and frame-proof failures for non-vararg functions. These
+conditionals are removed, so helper builds enforce the same checks. A narrow
+FUNCF path accepts the exact completed-call continuation only when
+`trace_arm64_lua_leaf_returned_call` binds it to the source CALL; while a child
+frame is active, the existing frame walk also requires the recorded FUNCF
+source shape. The ordinary ARM64 topology probe then passed without test
+helpers: the read-only `nonleaf-function-root-return` row published a return
+trace (`nins=13`, six exits) and recorded 81 selected-root exits on its bad
+argument phase. Evidence is at `/tmp/funcf-nonleaf-fix-topology.tsv`.
