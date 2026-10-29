@@ -25,3 +25,9 @@ relaxation was made. A continuation starting after that contract is running
 against the unchanged production checkpoint; its source and log are retained
 as `resume-source.txt` and `resume-gate.log`. This checkpoint must not be called
 an uninterrupted gate pass or a resolution of profiling liveness.
+
+The unchanged-source continuation has now finished successfully and ends with
+the integrated gate's final OK marker. The original prefix, complete callback
+rerun, and continuation cover the full suite. The original blocked-TG timeout
+remains unexplained; the subsequent passing coverage is a resumed run, not an
+uninterrupted pass. No production changes were made between these runs.
