@@ -8,7 +8,6 @@
 
 /* -- Register allocator extensions --------------------------------------- */
 
-
 /* Allocate a register with a hint. */
 static Reg ra_hintalloc(ASMState *as, IRRef ref, Reg hint, RegSet allow)
 {

@@ -5,17 +5,11 @@
 
 #define lj_record_c
 #define LUA_CORE
-#include <stdio.h>
-#include <string.h>
-
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
 
 #if LJ_HASJIT
-
-#if defined(LUA_USE_ASSERT) && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
-#endif
 
 #include "lj_err.h"
 #include "lj_gc.h"

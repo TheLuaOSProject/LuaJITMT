@@ -14822,7 +14822,6 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
     }
   }
   if (tail_forward) {
-#define FWD_TAIL_FAIL(code) do { (void)(code); return 0; } while (0)
     MSize forwardpos, forward_dest, expected_nslots;
     BCIns varg = (BCIns)la_load32_acq(
       (const uint32_t *)&proto_bc(pt)[2]);
@@ -14833,11 +14832,11 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
         !arm64_ir_pcpos((uintptr_t)(pcbase>>8), (uintptr_t)proto_bc(pt),
           (uintptr_t)(proto_bc(pt)+pt->sizebc), &forwardpos) ||
         (forwardpos != 1u && forwardpos != 3u) ||
-        base-2u+pt->framesize > UINT8_MAX) FWD_TAIL_FAIL(1);
+        base-2u+pt->framesize > UINT8_MAX) return 0;
     if (forwardpos == 1u) {
       expected_nslots = base;
       for (i = 0; i < snap->nent; i++)
-        if (snap_slot(T->snapmap[snap->mapofs+i]) >= base) FWD_TAIL_FAIL(2);
+        if (snap_slot(T->snapmap[snap->mapofs+i]) >= base) return 0;
     } else {
       MSize j, foundfn = 0;
       IRRef targetvalue = arm64_lua_leaf_ir_upvalue(
@@ -14848,39 +14847,38 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
           bc_c(varg) != 0u || bc_a(varg) != 1u+LJ_FR2 ||
           expected_nslots > base+bc_c(call)-1u+1u+LJ_FR2 ||
           snap->nslots != expected_nslots) {
-        FWD_TAIL_FAIL(3);
+        return 0;
       }
       for (i = 0; i < snap->nent; i++) {
         SnapEntry entry = T->snapmap[snap->mapofs+i];
         MSize slot = snap_slot(entry), found = 0;
         if (slot == base) {
           if ((entry & 0x00ff0000u) || snap_ref(entry) != targetvalue)
-            FWD_TAIL_FAIL(4);
+            return 0;
           foundfn++;
         }
         if (slot >= forward_dest && slot < expected_nslots) {
           MSize arg = slot-forward_dest;
           if ((entry & 0x00ff0000u) || snap_ref(entry) != args[arg])
-            FWD_TAIL_FAIL(5);
+            return 0;
           found++;
         }
-        if (found > 1u) FWD_TAIL_FAIL(6);
+        if (found > 1u) return 0;
       }
-      if (foundfn != 1u) FWD_TAIL_FAIL(7);
+      if (foundfn != 1u) return 0;
       for (i = 0; i < forward_nargs; i++) {
         MSize found = 0;
         for (j = 0; j < snap->nent; j++) {
           SnapEntry entry = T->snapmap[snap->mapofs+j];
           if (snap_slot(entry) == forward_dest+i) found++;
         }
-        if (found != 1u) FWD_TAIL_FAIL(8);
+        if (found != 1u) return 0;
       }
     }
-    if (snap->nslots != expected_nslots) FWD_TAIL_FAIL(9);
+    if (snap->nslots != expected_nslots) return 0;
     extent = base-2u+pt->framesize;
     if (extent < J->pt->framesize) extent = J->pt->framesize;
-    if (snap->topslot != extent) FWD_TAIL_FAIL(10);
-#undef FWD_TAIL_FAIL
+    if (snap->topslot != extent) return 0;
     return base-1u;
   }
   if (!arm64_ir_pcpos((uintptr_t)(pcbase>>8), (uintptr_t)proto_bc(pt),
@@ -19717,7 +19715,6 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
   LJArm64IteratorSource iter;
   int has_call = 0, inline_frame = (uint8_t)pcbase == 0, paired_varg = 0;
   int tail_forward = 0;
-#define FWD_POSTRA_CHILD_FAIL() do { return 0; } while (0)
   if (lowerlinkp) *lowerlinkp = 0;
   if (!v->proto || !owner ||
       (!iterator && bc_op(v->startins) != BC_FORL &&
@@ -19728,8 +19725,8 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
       v->proto->framesize != v->root_topslot ||
       trace_startptgco_acq(owner) != obj2gco((GCproto *)v->proto) ||
       trace_startins_acq(owner) != v->startins ||
-      trace_startpc_acq(owner) != v->startpc) FWD_POSTRA_CHILD_FAIL();
-  if (count > UINT8_MAX+1u) FWD_POSTRA_CHILD_FAIL();
+      trace_startpc_acq(owner) != v->startpc) return 0;
+  if (count > UINT8_MAX+1u) return 0;
   for (i = 0; i < count; i++)
     frame_map[i] = snapentry_acq(&v->snapmap[ofs+i]);
   if (inline_frame) {
@@ -19737,20 +19734,20 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
       SnapEntry entry = frame_map[i];
       if (entry & SNAP_FRAME) {
         if (frame || (entry & 0x00ff0000u) != SNAP_FRAME)
-          FWD_POSTRA_CHILD_FAIL();
+          return 0;
         frame = snap_ref(entry);
         base = snap_slot(entry)+1u;
       }
     }
-    if (!frame || base < 2u+2u*LJ_FR2) FWD_POSTRA_CHILD_FAIL();
+    if (!frame || base < 2u+2u*LJ_FR2) return 0;
     for (i = 0; i < count; i++)
       if (snap_slot(frame_map[i]) == base-2u) {
-        if (frame_map[i] & 0x00ff0000u) FWD_POSTRA_CHILD_FAIL();
+        if (frame_map[i] & 0x00ff0000u) return 0;
         function = snap_ref(frame_map[i]);
       }
   } else {
     if (!arm64_lua_frame_path_limit(frame_map, count, pcbase, 2u, &frames) ||
-        !frames.depth) FWD_POSTRA_CHILD_FAIL();
+        !frames.depth) return 0;
     paired_varg = frames.depth == 2u;
     base = frames.child[frames.depth-1u].baseslot;
     frame = frames.child[0].linkref;
@@ -19759,28 +19756,28 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
       vargframe = frames.child[1].linkref;
       if (lowerlinkp) *lowerlinkp = frames.child[0].linkslot;
       if (frames.child[0].funcref != frames.child[1].funcref)
-        FWD_POSTRA_CHILD_FAIL();
+        return 0;
     }
   }
   if (!irref_isk(frame) || frame+1u >= v->nins ||
       !arm64_scalar_postra_ref(v, frame, at, IRT_NUM))
-    FWD_POSTRA_CHILD_FAIL();
+    return 0;
   link = ir_load_acq(&v->ir[frame]);
-  if (link.o != IR_KNUM) FWD_POSTRA_CHILD_FAIL();
+  if (link.o != IR_KNUM) return 0;
   link = ir_load_acq(&v->ir[frame+1u]);
   retpc = (const BCIns *)(uintptr_t)link.tv.u64;
   if (!arm64_ir_pcpos((uintptr_t)retpc, (uintptr_t)v->proto_bc,
-      (uintptr_t)(v->proto_bc+v->proto_sizebc), &pos) || !pos) FWD_POSTRA_CHILD_FAIL();
+      (uintptr_t)(v->proto_bc+v->proto_sizebc), &pos) || !pos) return 0;
   call = (BCIns)la_load32_acq((const uint32_t *)(retpc-1));
   if (iterator && (paired_varg || inline_frame ||
       !lj_asm_arm64_iterl_tuple(v->proto, v->startpc, v->startins,
         v->owner_private ? v->startins :
           BCINS_AD(BC_JITERL, bc_a(v->startins), trace_traceno_acq(owner)),
         v->owner_private, &iter) || pos != iter.loop_pc ||
-      call != iter.callins)) FWD_POSTRA_CHILD_FAIL();
+      call != iter.callins)) return 0;
   if ((!iterator && bc_op(call) != BC_CALL && bc_op(call) != BC_CALLM) ||
       (!bc_c(call) && bc_op(call) != BC_CALLM) ||
-      bc_a(call)+bc_c(call)+LJ_FR2 > v->root_topslot) FWD_POSTRA_CHILD_FAIL();
+      bc_a(call)+bc_c(call)+LJ_FR2 > v->root_topslot) return 0;
   callnargs = bc_op(call) == BC_CALLM ? 0u : bc_c(call)-1u;
   if (inline_frame && !function) {
     SnapNo si;
@@ -19801,7 +19798,7 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
     }
   }
   fn = arm64_lua_leaf_postra_function(v, function, at, NULL);
-  if (!lj_trace_arm64_lua_leaf(fn)) FWD_POSTRA_CHILD_FAIL();
+  if (!lj_trace_arm64_lua_leaf(fn)) return 0;
   pt = funcproto(fn);
   tail_forward = paired_varg && arm64_lua_leaf_forward_source(
       fn, NULL, &forward_target, &forward_nargs);
@@ -19813,9 +19810,9 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
         (vlink = ir_load_acq(&v->ir[vargframe])).o != IR_KNUM || !delta ||
         ir_load_acq(&v->ir[vargframe+1u]).tv.u64 !=
           8u*delta+FRAME_VARG ||
-        base != 2u+2u*LJ_FR2+bc_a(call)+delta) FWD_POSTRA_CHILD_FAIL();
+        base != 2u+2u*LJ_FR2+bc_a(call)+delta) return 0;
   } else if (base != 2u+2u*LJ_FR2+bc_a(call)) {
-    FWD_POSTRA_CHILD_FAIL();
+    return 0;
   }
   nresults = arm64_lua_leaf_return_count(pt);
   if (!tail_forward && (!nresults || (bc_op(call) == BC_CALLM ?
@@ -19828,17 +19825,17 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
        (bc_b(call) != 0u &&
         bc_a(call)+bc_b(call)-1u+LJ_FR2 > v->root_topslot)) ||
       (inline_frame && bc_op(v->startins) != BC_FUNCF && nresults != 2u)))
-    FWD_POSTRA_CHILD_FAIL();
+    return 0;
   if (!tail_forward && nresults > 2u &&
       !(bc_op(call) == BC_CALL && bc_b(call) == 0u &&
         arm64_lua_leaf_callm_pair_source(v->proto, pos-1u, 1, nresults)))
-    FWD_POSTRA_CHILD_FAIL();
+    return 0;
   for (IRRef r = REF_FIRST; r < v->nins; r++) {
     if (ir_load_acq(&v->ir[r]).o == IR_LOOP) {
       loop = r; if (at < r) end = r; break;
     }
   }
-  if (!loop && bc_op(v->startins) != BC_FUNCF) FWD_POSTRA_CHILD_FAIL();
+  if (!loop && bc_op(v->startins) != BC_FUNCF) return 0;
   while (caller) {
     const SnapShot *entry = &v->snap[--caller];
     MSize footerofs = snap_mapofs_acq(entry)+snap_nent_acq(entry);
@@ -19915,13 +19912,13 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
       if (((!iterator || at < loop) &&
           ((const BCIns *)(uintptr_t)(footer>>8) != retpc-1 ||
            (loop && (snap_ref_acq(entry) > loop) != (at > loop)))) ||
-          !args_ok) FWD_POSTRA_CHILD_FAIL();
+          !args_ok) return 0;
       break;
     }
   }
-  if (!caller) FWD_POSTRA_CHILD_FAIL();
+  if (!caller) return 0;
   if (iterator && at > loop &&
-      !arm64_iterl_postra_frame_args(v, sn, &iter, base, args[0], args)) FWD_POSTRA_CHILD_FAIL();
+      !arm64_iterl_postra_frame_args(v, sn, &iter, base, args[0], args)) return 0;
   if (paired_varg) {
     MSize sourcebase = 2u+2u*LJ_FR2+bc_a(call);
     for (i = 0; i < callnargs; i++) {
@@ -19930,11 +19927,11 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
         SnapEntry entry = frame_map[j];
         if (snap_slot(entry) == slot) {
           if ((entry & 0x00ff0000u) || snap_ref(entry) != args[i])
-            FWD_POSTRA_CHILD_FAIL();
+            return 0;
           found++;
         }
       }
-      if (found != 1u) FWD_POSTRA_CHILD_FAIL();
+      if (found != 1u) return 0;
     }
   }
   if (tail_forward) {
@@ -19948,11 +19945,11 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
         !arm64_ir_pcpos((uintptr_t)(pcbase>>8), (uintptr_t)proto_bc(pt),
           (uintptr_t)(proto_bc(pt)+pt->sizebc), &forwardpos) ||
         (forwardpos != 1u && forwardpos != 3u) ||
-        base-2u+pt->framesize > UINT8_MAX) FWD_POSTRA_CHILD_FAIL();
+        base-2u+pt->framesize > UINT8_MAX) return 0;
     if (forwardpos == 1u) {
       expected_nslots = base;
       for (i = 0; i < count; i++)
-        if (snap_slot(frame_map[i]) >= base) FWD_POSTRA_CHILD_FAIL();
+        if (snap_slot(frame_map[i]) >= base) return 0;
     } else {
       MSize foundfn = 0;
       IRRef targetvalue = arm64_lua_leaf_postra_upvalue(
@@ -19962,77 +19959,77 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
       if (!targetvalue || bc_op(varg) != BC_VARG || bc_b(varg) != 0u ||
           bc_c(varg) != 0u || bc_a(varg) != 1u+LJ_FR2 ||
           expected_nslots > base+bc_c(call)-1u+1u+LJ_FR2 ||
-          snap_nslots_acq(sn) != expected_nslots) FWD_POSTRA_CHILD_FAIL();
+          snap_nslots_acq(sn) != expected_nslots) return 0;
       for (i = 0; i < count; i++) {
         SnapEntry entry = frame_map[i];
         MSize slot = snap_slot(entry);
         if (slot == base) {
           if ((entry & 0x00ff0000u) || snap_ref(entry) != targetvalue)
-            FWD_POSTRA_CHILD_FAIL();
+            return 0;
           foundfn++;
         }
         if (slot >= forward_dest && slot < expected_nslots &&
             ((entry & 0x00ff0000u) ||
-             snap_ref(entry) != args[slot-forward_dest])) FWD_POSTRA_CHILD_FAIL();
+             snap_ref(entry) != args[slot-forward_dest])) return 0;
       }
-      if (foundfn != 1u) FWD_POSTRA_CHILD_FAIL();
+      if (foundfn != 1u) return 0;
       for (i = 0; i < forward_nargs; i++) {
         MSize found = 0;
         for (MSize j = 0; j < count; j++)
           if (snap_slot(frame_map[j]) == forward_dest+i) found++;
-        if (found != 1u) FWD_POSTRA_CHILD_FAIL();
+        if (found != 1u) return 0;
       }
     }
-    if (snap_nslots_acq(sn) != expected_nslots) FWD_POSTRA_CHILD_FAIL();
+    if (snap_nslots_acq(sn) != expected_nslots) return 0;
     extent = base-2u+pt->framesize;
     if (extent < v->root_topslot) extent = v->root_topslot;
-    if (snap_topslot_acq(sn) != extent) FWD_POSTRA_CHILD_FAIL();
+    if (snap_topslot_acq(sn) != extent) return 0;
     return base-1u;
   }
   if (!arm64_ir_pcpos((uintptr_t)(pcbase>>8), (uintptr_t)proto_bc(pt),
       (uintptr_t)(proto_bc(pt)+pt->sizebc), &pos) || !pos ||
-      !arm64_lua_leaf_branch(pt, &branch)) FWD_POSTRA_CHILD_FAIL();
+      !arm64_lua_leaf_branch(pt, &branch)) return 0;
   if ((la_load8_acq(&pt->flags) & PROTO_VARARG) && pos <= 1u)
-    FWD_POSTRA_CHILD_FAIL();
+    return 0;
   for (i = 1; i+1u < pt->sizebc; i++)
     if (bc_op((BCIns)la_load32_acq(
         (const uint32_t *)&proto_bc(pt)[i])) == BC_CALL) has_call = 1;
   if (has_call) {
     const GCfunc *ancestors[1];
-    if (nresults != 1u) FWD_POSTRA_CHILD_FAIL();
+    if (nresults != 1u) return 0;
     ancestors[0] = fn;
     if (branch.compare != UINT32_MAX ||
         !arm64_lua_leaf_postra_eval(v, pt, args, pos, at, end, ancestors,
-          1u, saved, &result[0])) FWD_POSTRA_CHILD_FAIL();
+          1u, saved, &result[0])) return 0;
     live = pt->numparams;
     leafretpos = pt->sizebc-1u;
   } else if (!arm64_lua_leaf_postra_prefix(v, pt, pos, args, at, end,
         arm64_lua_leaf_postra_unused(v, s), saved, &live, result, &nresults,
         &leafretpos)) {
-    FWD_POSTRA_CHILD_FAIL();
+    return 0;
   }
   if ((pos == branch.first || pos == branch.second) &&
       !arm64_lua_leaf_postra_branch_guard(v, pt, &branch, saved, at, pos)) {
-    FWD_POSTRA_CHILD_FAIL();
+    return 0;
   }
   if (!arm64_lua_leaf_postra_needed(pt, pos, needed)) {
-    FWD_POSTRA_CHILD_FAIL();
+    return 0;
   }
   live = pt->numparams;
   for (i = pt->numparams; i < pt->framesize; i++)
     if (needed[i] && i+1u > live) live = i+1u;
-  if (base+live > UINT8_MAX) FWD_POSTRA_CHILD_FAIL();
+  if (base+live > UINT8_MAX) return 0;
   if (branch.compare == UINT32_MAX) {
-    if (snap_nslots_acq(sn) != base+live) FWD_POSTRA_CHILD_FAIL();
+    if (snap_nslots_acq(sn) != base+live) return 0;
   } else if (snap_nslots_acq(sn) < base+live ||
              snap_nslots_acq(sn) > snap_topslot_acq(sn)+1u+LJ_FR2 ||
-             snap_nslots_acq(sn) > base+pt->framesize) FWD_POSTRA_CHILD_FAIL();
+             snap_nslots_acq(sn) > base+pt->framesize) return 0;
   if (iterator) {
     if (!(branch.early_return && !nresults &&
           (pos == branch.first || pos == branch.second)) &&
         (nresults != 1u ||
          !arm64_iterl_postra_result(v, s, args[1], result[0], loop)))
-      FWD_POSTRA_CHILD_FAIL();
+      return 0;
   } else if (pos == leafretpos && bc_op(v->startins) != BC_FUNCF) {
     BCIns continuation = (BCIns)la_load32_acq((const uint32_t *)retpc);
     IRIns check = ir_load_acq(&v->ir[at]);
@@ -20044,30 +20041,30 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
     if (bc_op(continuation) != BC_CSET ||
         bc_d(continuation) != bc_a(call) || local >= bc_a(call) ||
         check.o != IR_SLOAD || !irt_isguard(check.t) ||
-        check.op1 != slot || check.op2 != IRSLOAD_TYPECHECK) FWD_POSTRA_CHILD_FAIL();
+        check.op1 != slot || check.op2 != IRSLOAD_TYPECHECK) return 0;
     if (!irt_ispri(check.t) &&
         !arm64_cell_value_postra_ref(v, at, at+1u) &&
         !(arm64_cell_guard_proto(v->proto, slot) &&
-          arm64_cell_guard_postra(v, at))) FWD_POSTRA_CHILD_FAIL();
+          arm64_cell_guard_postra(v, at))) return 0;
     if (s+1u >= v->nsnap || snap_ref_acq(&v->snap[s+1u]) <= at ||
-        snap_ref_acq(&v->snap[s+1u]) >= end) FWD_POSTRA_CHILD_FAIL();
+        snap_ref_acq(&v->snap[s+1u]) >= end) return 0;
     nofs = snap_mapofs_acq(&v->snap[s+1u]);
     nent = snap_nent_acq(&v->snap[s+1u]);
     if (nofs > v->nsnapmap || nent > v->nsnapmap-nofs ||
-        v->nsnapmap-nofs-nent < 2u) FWD_POSTRA_CHILD_FAIL();
+        v->nsnapmap-nofs-nent < 2u) return 0;
     words[0] = snapentry_acq(&v->snapmap[nofs+nent]);
     words[1] = snapentry_acq(&v->snapmap[nofs+nent+1u]);
     memcpy(&footer, words, sizeof(footer));
     if ((uint8_t)footer || !arm64_ir_pcpos((uintptr_t)(footer>>8),
         (uintptr_t)v->proto_bc,
-        (uintptr_t)(v->proto_bc+v->proto_sizebc), &nextpos)) FWD_POSTRA_CHILD_FAIL();
+        (uintptr_t)(v->proto_bc+v->proto_sizebc), &nextpos)) return 0;
     target = slot;
     if (irt_type(check.t) == IRT_P32) {
-      if (nextpos != cpos) FWD_POSTRA_CHILD_FAIL();
+      if (nextpos != cpos) return 0;
       target = bc_a(call)+1u+LJ_FR2;
     } else if (nextpos != cpos+1u &&
                !(cpos+1u < v->proto_sizebc && nextpos == cpos+2u &&
-                 retpc+1 == v->startpc)) FWD_POSTRA_CHILD_FAIL();
+                 retpc+1 == v->startpc)) return 0;
     for (i = 0; i < nent; i++) {
       SnapEntry entry = snapentry_acq(&v->snapmap[nofs+i]);
       if (snap_slot(entry) >= target &&
@@ -20076,19 +20073,19 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
           (const uint32_t *)&proto_bc(pt)[pos]);
         if ((entry & 0x00ff0000u) ||
             snap_ref(entry) != saved[bc_a(ret)+(snap_slot(entry)-target)])
-          FWD_POSTRA_CHILD_FAIL();
+          return 0;
         found++;
       }
     }
-    if (found != (nresults ? nresults : 1u)) FWD_POSTRA_CHILD_FAIL();
+    if (found != (nresults ? nresults : 1u)) return 0;
   } else if (!(branch.early_return &&
                (pos == branch.first || pos == branch.second)) &&
         !arm64_lua_leaf_postra_result(v, caller, s,
         (MSize)(retpc-v->proto_bc), bc_a(call), result, nresults, end,
-        pt, base, function, frame, leafretpos)) FWD_POSTRA_CHILD_FAIL();
+        pt, base, function, frame, leafretpos)) return 0;
   extent = base-2u+pt->framesize;
   if (extent < v->root_topslot) extent = v->root_topslot;
-  if (extent > UINT8_MAX || snap_topslot_acq(sn) != extent) FWD_POSTRA_CHILD_FAIL();
+  if (extent > UINT8_MAX || snap_topslot_acq(sn) != extent) return 0;
   for (i = 0; i < count; i++) {
     SnapEntry entry = snapentry_acq(&v->snapmap[ofs+i]);
     MSize slot = snap_slot(entry);
@@ -20096,16 +20093,15 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
     if (slot-base >= pt->framesize || seen[slot-base] ||
         !saved[slot-base] ||
         (entry & 0x00ff0000u) || snap_ref(entry) != saved[slot-base])
-      FWD_POSTRA_CHILD_FAIL();
+      return 0;
     seen[slot-base] = 1;
   }
   for (i = 0; i < pt->framesize; i++)
-    if (needed[i] && !seen[i]) FWD_POSTRA_CHILD_FAIL();
+    if (needed[i] && !seen[i]) return 0;
   return base-1u;
 
 }
 
-#undef FWD_POSTRA_CHILD_FAIL
 
 static int arm64_postra_funcf_slot_unchanged(const GCproto *pt, MSize slot,
                                               MSize pc);

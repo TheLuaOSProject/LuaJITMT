@@ -15790,8 +15790,7 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
   LJArm64IteratorSource iter;
   TRef callee, link;
   IRRef ref;
-#define FWD_LEAF_FAIL() return 0
-  if (!owner || !fn || !isluafunc(fn) || !rootpt || !pc) FWD_LEAF_FAIL();
+  if (!owner || !fn || !isluafunc(fn) || !rootpt || !pc) return 0;
   pt = funcproto(fn);
   stackbase = mref_acq(owner->stack, TValue);
   stacklimit = mref_acq(owner->maxstack, TValue);
@@ -15802,7 +15801,7 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
       baseaddr < stacklo || baseaddr >= stackhi ||
       baseaddr-stacklo < (1u+LJ_FR2)*sizeof(TValue) ||
       (baseaddr-stacklo) % sizeof(TValue) != 0)
-    FWD_LEAF_FAIL();
+    return 0;
   frameaddr = baseaddr-sizeof(TValue);
   physicalframe = (const TValue *)frameaddr;
   currentframe = physicalframe;
@@ -15818,47 +15817,47 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
         delta <= 0 || (uintptr_t)delta > LJ_MAX_JSLOTS ||
         span != delta*(ptrdiff_t)sizeof(TValue) ||
         (uintptr_t)span > frameaddr-stacklo-LJ_FR2*sizeof(TValue))
-      FWD_LEAF_FAIL();
+      return 0;
     vargslots = (MSize)delta;
     currentframe = (const TValue *)(frameaddr-(uintptr_t)span);
   } else if ((la_load8_acq(&pt->flags) & PROTO_VARARG) && !varg_setup) {
-    FWD_LEAF_FAIL();  /* Only the pre-rec_func_vararg FUNCV lacks FRAME_VARG. */
+    return 0;  /* Only the pre-rec_func_vararg FUNCV lacks FRAME_VARG. */
   }
   frame = currentframe;
   if (J->framedepth < 1 ||
-      J->framedepth > LJ_TRACE_ARM64_MAX_LEAF_DEPTH) FWD_LEAF_FAIL();
+      J->framedepth > LJ_TRACE_ARM64_MAX_LEAF_DEPTH) return 0;
   recorded_depth = (MSize)J->framedepth;
   if (iterator && (recorded_depth != 1u || isvarg || varg_setup ||
       pt->numparams != 2u ||
       !lj_asm_arm64_iterl_tuple(rootpt, trace_startpc_acq(&J->cur),
                               J->cur.startins, J->cur.startins, 1, &iter)))
-    FWD_LEAF_FAIL();
+    return 0;
   if ((!iterator && bc_op(J->cur.startins) != BC_FORL &&
        !(bc_op(J->cur.startins) == BC_FUNCF &&
          trace_root_funcf_shape(rootpt, trace_startpc_acq(&J->cur),
                                 J->cur.startins))) ||
       J->retdepth || J->postproc != LJ_POST_NONE || !frame_islua(currentframe) ||
       currentframe < stackbase || currentframe >= stacklimit ||
-      frame_func(currentframe) != fn || !lj_trace_arm64_lua_leaf(fn)) FWD_LEAF_FAIL();
+      frame_func(currentframe) != fn || !lj_trace_arm64_lua_leaf(fn)) return 0;
   frame_slots_live = !isvarg || varg_setup ||
     bc_op((BCIns)la_load32_acq((const uint32_t *)pc)) == BC_VARG;
   currentreturnpc = frame_pc(currentframe);
   currentcaller = frame_prevl(currentframe);
   if (currentcaller < stackbase || currentcaller >= stacklimit ||
-      !isluafunc(frame_func(currentcaller))) FWD_LEAF_FAIL();
+      !isluafunc(frame_func(currentcaller))) return 0;
   currentparentpt = funcproto(frame_func(currentcaller));
   for (i = 0; i < LJ_TRACE_ARM64_MAX_LEAF_DEPTH; i++) {
-    if (!frame_islua(frame)) FWD_LEAF_FAIL();
+    if (!frame_islua(frame)) return 0;
     currentfn = frame_func(frame);
-    if (!isluafunc(currentfn) || !lj_trace_arm64_lua_leaf(currentfn)) FWD_LEAF_FAIL();
+    if (!isluafunc(currentfn) || !lj_trace_arm64_lua_leaf(currentfn)) return 0;
     returnpc = frame_pc(frame);
     caller = frame_prevl(frame);
-    if (!isluafunc(frame_func(caller))) FWD_LEAF_FAIL();
+    if (!isluafunc(frame_func(caller))) return 0;
     parentfn = frame_func(caller);
     parentpt = funcproto(parentfn);
     if (!trace_pc_in_proto_range(returnpc, proto_bc(parentpt),
                                  parentpt->sizebc) ||
-        returnpc == proto_bc(parentpt)) FWD_LEAF_FAIL();
+        returnpc == proto_bc(parentpt)) return 0;
     call = (BCIns)la_load32_acq((const uint32_t *)(returnpc-1));
     {
 	      MSize nresults = lj_trace_arm64_lua_leaf_nresults(currentfn);
@@ -15885,7 +15884,7 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
            callnargs > LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS ||
            !trace_arm64_lua_leaf_callm_source(parentpt, returnpc-1u,
                                                callnargs)))
-        FWD_LEAF_FAIL();
+        return 0;
       if (!nresults || (iterator ?
           (i != 0u || parentpt != rootpt || nresults != 1u ||
            returnpc-1 != proto_bc(rootpt)+iter.call_pc ||
@@ -15899,13 +15898,13 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
           (!open_consumer && !bc_c(call)) ||
           (MSize)bc_a(call)+callnargs+1u+LJ_FR2 > limit ||
           (open_consumer && consumer_entry && i != 0u))
-        FWD_LEAF_FAIL();
+        return 0;
       if (forwarded && (bc_op(call) != BC_CALL || bc_b(call) != 2u ||
-			callnargs != forwarded_nargs)) FWD_LEAF_FAIL();
+			callnargs != forwarded_nargs)) return 0;
       if (open_producer ?
           (MSize)bc_a(call)+nresults > limit :
           (MSize)bc_a(call)+nresults+LJ_FR2 > parentpt->framesize)
-        FWD_LEAF_FAIL();
+        return 0;
       if (open_producer) open_result_call = 1;
       if (parentpt == rootpt && open_consumer) open_consumer_call = 1;
     }
@@ -15913,16 +15912,16 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
     depth++;
     if (parentpt == rootpt) {
       if (i+1u+(MSize)(isvarg && !varg_setup) != recorded_depth)
-        FWD_LEAF_FAIL();
+        return 0;
       break;
     }
-    if (i+1u >= LJ_TRACE_ARM64_MAX_LEAF_DEPTH) FWD_LEAF_FAIL();
+    if (i+1u >= LJ_TRACE_ARM64_MAX_LEAF_DEPTH) return 0;
     frame = caller;
   }
   if (depth + (MSize)(isvarg && !varg_setup) != recorded_depth ||
-      parentpt != rootpt) FWD_LEAF_FAIL();
+      parentpt != rootpt) return 0;
 	  nresults = lj_trace_arm64_lua_leaf_nresults(fn);
-  if (!nresults || (depth > 1u && nresults != 1u)) FWD_LEAF_FAIL();
+  if (!nresults || (depth > 1u && nresults != 1u)) return 0;
   /* A fixed pair is admitted only for the direct root-to-leaf frame. Every
   ** nested captured call in this checkpoint remains a one-result call. */
   if (depth == 1u) {
@@ -15935,10 +15934,10 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
          (MSize)bc_a(call)+nresults+LJ_FR2) >
           (MSize)rootpt->framesize+
             (open_result_call && bc_c(call) == 1u ? LJ_FR2 : 0u))
-      FWD_LEAF_FAIL();
+      return 0;
   } else {
     for (i = 0; i < depth; i++)
-      if (bc_b(calls[i]) != 2u) FWD_LEAF_FAIL();
+      if (bc_b(calls[i]) != 2u) return 0;
   }
   if (isvarg) {
     MSize expected = bc_c(calls[0])-1u+1u+LJ_FR2;
@@ -15948,7 +15947,7 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
                                  currentparentpt->sizebc) ||
         bc_op((BCIns)la_load32_acq((const uint32_t *)(currentreturnpc-1))) !=
           BC_CALL)
-      FWD_LEAF_FAIL();
+      return 0;
   } else if (varg_setup) {
     /* Preflight sees FUNCV before rec_func_vararg has copied the caller
     ** function/arguments and shifted J->base by this exact synthetic extent. */
@@ -15963,10 +15962,10 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
       J->base != J->slot+jitbase ||
       owner->base != currentcaller+1u+bc_a(calls[0])+1u+LJ_FR2+
                      (isvarg ? vargslots : 0u))
-    FWD_LEAF_FAIL();
+    return 0;
   if (frame_slots_live) {
     link = J->slot[jitbase-1u];
-    if ((link & (TREF_FRAME|TREF_CONT)) != TREF_FRAME) FWD_LEAF_FAIL();
+    if ((link & (TREF_FRAME|TREF_CONT)) != TREF_FRAME) return 0;
     /* snapshot_slots materializes a frame link as a KNUM containing its raw
     ** return PC. Accept only that exact link or the initial empty marker. */
     ref = tref_ref(link);
@@ -15986,21 +15985,21 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
             J->cur.ir[lowerref].o != IR_KNUM ||
             J->cur.ir[lowerref+1u].tv.u64 != currentframe->u64)) ||
           lowerfn != upperfn) {
-        FWD_LEAF_FAIL();
+        return 0;
       }
     } else if (ref && (!tref_isk(link) || ref < J->cur.nk ||
                        ref+1u >= REF_TRUE ||
                        J->cur.ir[ref].o != IR_KNUM ||
                        J->cur.ir[ref+1u].tv.u64 != currentframe->u64)) {
-      FWD_LEAF_FAIL();
+      return 0;
     }
     callee = J->slot[(varg_setup ? jitbase : base)-1u-LJ_FR2];
     ref = tref_ref(callee);
-    if (!tref_isfunc(callee)) FWD_LEAF_FAIL();
+    if (!tref_isfunc(callee)) return 0;
     if (tref_isk(callee)) {
       if (ref < J->cur.nk || ref >= REF_TRUE ||
           J->cur.ir[ref].o != IR_KGC ||
-          ir_kgc_acq(&J->cur.ir[ref]) != obj2gco(fn)) FWD_LEAF_FAIL();
+          ir_kgc_acq(&J->cur.ir[ref]) != obj2gco(fn)) return 0;
     } else {
       IRRef guard;
       int exact = 0;
@@ -16017,7 +16016,7 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
           break;
         }
       }
-      if (!exact) FWD_LEAF_FAIL();
+      if (!exact) return 0;
     }
   }
   if (J->fn == frame_func(currentcaller) && J->pt == funcproto(J->fn) &&
