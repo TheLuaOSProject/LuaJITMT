@@ -743,6 +743,25 @@ static int c_target(lua_State *L)
   lua_pushnumber(L,lua_tonumber(L,1)*.5); return 1;
 }
 
+static void test_pair_output_liveness(GCproto *source)
+{
+  GCproto *pt=copy_proto(source);
+  BCIns *bc=proto_bc(pt);
+  pt->sizebc=4;
+  pt->framesize=5;
+  pt->numparams=3;
+  bc[0]=BCINS_AD(BC_FUNCF,0,0);
+  /* Slot 2 is read before CALL overwrites it as its second result. */
+  bc[1]=BCINS_ABC(BC_ADDVV,0,2,3);
+  bc[2]=BCINS_ABC(BC_CALL,1,3,2);
+  bc[3]=BCINS_AD(BC_RET1,0,2);
+  assert(lj_asm_arm64_test_funcf_postra_needed(pt,1,2)==1);
+  assert(lj_asm_arm64_test_funcf_postra_needed(pt,2,2)==0);
+  assert(lj_asm_arm64_test_funcf_ir_output_slot_changed(pt,2,3)==1);
+  assert(lj_asm_arm64_test_funcf_postra_output_slot_changed(pt,2,3)==1);
+  free(pt);
+}
+
 int main(void)
 {
   lua_State *L=ljt_lua_newstate_openlibs();
@@ -782,6 +801,7 @@ int main(void)
   {
     GCfunc *pair=global_lfunc(L,"funcf_pair_candidate");
     GCtrace *PT=NULL;
+    test_pair_output_liveness(funcproto(pair));
     for (unsigned i=0;i<256&&!PT;i++) {
       assert(invoke(L,"funcf_run","funcf_pair_candidate",80)==
              invoke(L,"funcf_run","funcf_pair_oracle",80));

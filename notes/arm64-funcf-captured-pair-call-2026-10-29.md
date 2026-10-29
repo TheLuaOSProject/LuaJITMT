@@ -16,6 +16,13 @@ and rejects altered child result production, missing/changed return slots,
 wrong arity, source/frame mutations, and allocation mutations. Equal returned
 values remain valid; the proof does not require distinct values.
 
+The allocated snapshot liveness walk is a forward read-before-write scan.
+For a fixed two-result CALL, marking A+1 written must not clear a read of the
+old A+1 value that was already seen earlier in the same resumed bytecode
+range. The walk now preserves that requirement and records the B=3 CALL as a
+write to both A and A+1. The semantic and allocated unchanged-formal checks
+also recognize both CALL destinations.
+
 ## JFUNCF entry stack extent
 
 The native JFUNCF prologue computes `RA = BASE + framesize` and checks it
@@ -46,7 +53,8 @@ regression without weakening loop-entry validation.
 
 - `tools/ci/arm64_jit_funcf_record_contract.sh` passed ARM64 and ARM64e
   assertion profiles. Its C call fixture covers native entry, post-GC reuse,
-  selected-root identity exits, and independent semantic/post-RA mutations.
+  selected-root identity exits, independent semantic/post-RA mutations, and a
+  synthetic pre-call read followed by a second-result overwrite.
 - `tools/ci/arm64_jit_root_entry_contract.sh` passed ARM64/ARM64e assertion
   checks plus its ARM64 release certificate checks, including the low-top
   JLOOP rejection.

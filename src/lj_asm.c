@@ -82,6 +82,30 @@ int lj_asm_arm64_test_scalar_math_live_across(
 	return arm64_scalar_math_live_across(view, semantic_nins, loop, call,
 					     capacity);
 }
+
+int lj_asm_arm64_test_funcf_postra_needed(const GCproto *pt, MSize resume,
+						 MSize slot)
+{
+	uint8_t needed[UINT8_MAX+1u] = {0};
+	if (!pt || pt->framesize > UINT8_MAX || slot >= pt->framesize ||
+	    !arm64_lua_leaf_postra_needed(pt, resume, needed))
+		return -1;
+	return needed[slot] != 0;
+}
+
+int lj_asm_arm64_test_funcf_postra_output_slot_changed(const GCproto *pt,
+						       MSize slot, MSize pc)
+{
+	if (!pt || slot >= pt->framesize || pc >= pt->sizebc) return -1;
+	return !arm64_postra_funcf_slot_unchanged(pt, slot, pc);
+}
+
+int lj_asm_arm64_test_funcf_ir_output_slot_changed(const GCproto *pt,
+						   MSize slot, MSize pc)
+{
+	if (!pt || slot >= pt->framesize || pc >= pt->sizebc) return -1;
+	return !arm64_ir_funcf_slot_unchanged(pt, slot, pc);
+}
 #endif
 
 /* -- Assembler state and common macros ----------------------------------- */

@@ -99,6 +99,10 @@ for required in \
     exit 1
   }
 done
+grep -F 'test_pair_output_liveness' "$funcf_call_source" >/dev/null || {
+  echo "ARM64 FUNCF pair-output liveness regression case missing" >&2
+  exit 1
+}
 
 # Both independent validators derive the returned scalar from bytecode
 # definitions and validate concrete snapshots/allocator state. Runtime
