@@ -1,5 +1,9 @@
 # ARM64 nonleaf FUNCF root prototype (WIP)
 
+Historical prototype only. Later implementation and validation are recorded in
+[the return-root note](arm64-funcf-nonleaf-root-return-2026-10-29.md) and
+[the current integration checkpoint](arm64-funcf-siblings-hfa-checkpoint-2026-10-29.md).
+
 This checkpoint explores the x64 `nonleaf-function-root-return` topology in
 `bench/jit-topology-probe.lua`: a fixed function root reads one captured leaf,
 calls it with one fixed argument, performs a scalar continuation, and returns

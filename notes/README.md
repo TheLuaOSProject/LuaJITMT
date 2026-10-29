@@ -18,6 +18,12 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
+- Active integration: bounded nonleaf FUNCF roots, multiple root-linked side
+  traces and HFA results at `75c83e708`, with later component tests. Ordinary
+  stock corpora and workload checks pass, but captured-function and independent
+  FORL-side topology probes still expose ARM64 gaps. The broad Lua-call
+  contract passes all four profiles after a child-frame rejection repair.
+  See the [current checkpoint](arm64-funcf-siblings-hfa-checkpoint-2026-10-29.md).
 - Latest focused port-branch integration: one-float and one-double HFA
   results at `0af2319d6`. Four component profiles pass; ordinary ARM64/x64
   builds at `63156cc14` both witness the retained argument/result loops and

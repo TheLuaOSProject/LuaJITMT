@@ -1,0 +1,65 @@
+# FUNCF, sibling-side and HFA-result integration
+
+Production source `75c83e708` combines one-member HFA results, a bounded
+nonleaf FUNCF return path, and multiple root-linked scalar side traces.
+Later test-only commits add three-child middle retirement (`5c90229af`) and
+dedicated FUNCF caller-return mutations (`6b16c140c`). These changes are on
+`codex/arm64-parity`; main remains unchanged.
+
+The HFA extension preserves the declared aggregate CType while storing a
+single raw S0/D0 carrier into its result box. Ordinary ARM64 and x64 builds
+both witness retained float/double argument/result loops. The ten aggregate
+rows pass 250 comparisons and 27,520 foreign calls per target, including
+retained-object checks after collection. Two-float results remain x64-only.
+See [HFA results](arm64-hfa-aggregate-results-2026-10-29.md).
+
+The sibling-list extension separates mutable root topology from each child's
+immutable generation/exit certificate. Retirement now requires the target
+child exactly once in the validated list. Component fixtures cover two and
+three children, head/tail/interior retirement, preserved sibling targets,
+full GC and native reuse. Root entry uses the existing TG native-entry lease;
+capture/publication/retirement use their existing token/SMR protection.
+See [multiple sides](arm64-jit-multiple-root-sides-2026-10-29.md).
+
+The nonleaf FUNCF component fixture proves exit-free native returns with a
+live peer, collection, exact captured-callee identity exits, restoration and
+native reuse. Independent semantic and post-RA clones reject seven malformed
+source/return flows each. Its latest dedicated run covers ARM64 and arm64e
+assertion profiles, not release profiles.
+
+Integration first exposed a regression in the existing child-frame tests:
+`C_BASE_ZERO`, snapshot 2, was accepted by post-RA validation at `5dabe994d`.
+The one-result inline-frame relaxation had escaped the new FUNCF scope.
+`75c83e708` restores the previous FORL rules and keeps the new replay within
+FUNCF. The complete Lua-leaf contract then passes all four ARM64/arm64e
+assertion/release profiles, including nested calls, fixed varargs, child exits,
+normalized arguments, fixed two-result returns and their negative mutations.
+The initial failure and successful rerun are preserved in
+`/Users/frityet/Scratch/ljmt-funcf-integrated-20261029/`.
+
+## Ordinary evidence and unresolved gaps
+
+Exact-source ordinary assertion builds at `75c83e708` pass both 509-case
+stock corpora on ARM64 and x64, the snapshot-PC fixture, vararg companion,
+all 260 workload-inventory comparisons and the ten aggregate rows. The
+inventory still has native root-exit witnesses in 18/20 rows on each target.
+
+The ordinary topology matrix does **not** pass as a whole. ARM64 fails the
+required `nonleaf-function-root-return` publication assertion; the preserved
+binary reproduces it. x64 publishes the intended return root. A diagnostic
+copy that disables only that assertion, while retaining all comparisons and
+reporting, lets later cases run. The new two- and three-independent-guard FORL
+cases have native parent-exit witnesses but no ARM64 children; x64 publishes
+two and three distinct children linked to the same root. The passing component
+fixtures therefore establish narrower source shapes, not these ordinary
+topologies. Both differences remain active implementation work.
+
+The ordinary driver stopped at the ARM64 topology failure. A separate resume
+completed x64, and standalone runs completed the remaining ARM64 inventory
+and aggregate checks. The resume driver's generic final success line applies
+to that x64 run only. Source IDs, immutable runtime/archive/module bundles,
+SHA-256 hashes, complete logs and both topology sources are retained under
+`/Users/frityet/Scratch/ljmt-funcf-siblings-hfa-integration-20261029/ordinary/`.
+
+The latest complete experimental gate remains `b549a895b`; no complete gate
+or full parity claim is made for this newer integration.
