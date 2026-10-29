@@ -14,9 +14,14 @@ returns to its own caller. The current child FRAME_LUA edge, prior Lua closure,
 its prototype, and the exact source call authenticate this transition.
 Requiring frame_islua(caller) would reject that valid path.
 
-Combined full-gate and ordinary ARM64/x86-64 stock, imported-bytecode, topology,
-aggregate, and strict GDBJIT compilation validation is pending. Evidence is
-being collected under
+Combined validation is complete at `78e43659b` (production `c41600c86`). The
+full gate passed across the initial run and the continuation described below;
+this was not one uninterrupted run. The ordinary ARM64 and x86-64 builds each
+passed all 509 stock source cases and all 509 imported-bytecode cases, plus
+snapshot-position, varargs, topology, parity-inventory, and aggregate probes.
+Strict GDBJIT compilation passed for both trace and assembler units on ARM64
+and ARM64e. The ordinary ARM64 assertion profile was restored afterward.
+Evidence, frozen executable/archive/library copies, and their hashes are under
 `/Users/frityet/Scratch/ljmt-stack-tail-integrated-20261029/`.
 
 This checkpoint does not establish full architecture parity. Nil-terminated
