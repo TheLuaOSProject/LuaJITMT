@@ -30,7 +30,8 @@ and reports that are no longer authoritative are retained in
   [capacity evidence](arm64-deep-side-capacity-2026-10-29.md) and
   [preceding checkpoint](arm64-deep-callm-integration-2026-10-29.md), whose
   ordinary ARM64 and strict x86_64 source and original-bytecode corpora each
-  pass all 509 cases. Later sparse-snapshot and numeric-cdata variadic FFI
+  pass all 509 cases. The promoted capacity checkpoint independently passes
+  both 509-case corpora on ordinary assertion ARM64. Later sparse-snapshot and numeric-cdata variadic FFI
   changes are undergoing combined validation. General Lua call/return,
   recursion, protected calls, vararg forwarding and remaining FFI
   restrictions are subsequent work. Full x86_64 parity is not complete.
@@ -730,7 +731,9 @@ available.
   additional return-side child exits, argument coercions, varargs, tail calls,
   multiple returns and snapshots omitting required argument values. The fixed
   pure leaves above remain a bounded exception.
-- Native ITERL/ITERN roots remain outside the admitted ARM64 root grammar.
+- General native iterator roots remain incomplete. The bounded canonical
+  scalar ITERL paths and early-break exits described above are admitted;
+  arbitrary iterator calls and ITERN traversal are not established.
 - General table and upvalue JIT reads, writes and traversal, plus sunk/duplicate
   allocation and raw initialization effects. Rooted scalar/GC reads,
   existing-key scalar/GC stores, bounded ordinary/raw insertion, closed closure
@@ -745,9 +748,10 @@ available.
   The historical
   [`GC-value rooting audit`](arm64-gc-value-rooting-audit-2026-10-25.md)
   links to the implemented rooted-value lifetime proof and its limits.
-- General side traces, side-of-side traces, stitches, and production JIT
-  side-exit unwind resolution.
-- ARM64 CALLXS aggregates/sret, unproven variadic cdata forms, vectors, complex results, general
+- General side-trace bodies, stitches, and production JIT side-exit unwind
+  resolution remain incomplete. Certified scalar side-of-side chains and
+  their scoped retirement now extend beyond the former 64-level limit.
+- General ARM64 CALLXS aggregate/sret combinations, unproven variadic cdata forms, vectors, complex results, general
   multires/tail calls, CALLM outside the direct scalar producer shape, and
   unsupported result/IR representations. The admitted scalar
   float conversions do not certify arbitrary float graphs. Boxed I64/U64
