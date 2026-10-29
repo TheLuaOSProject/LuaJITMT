@@ -34,9 +34,12 @@ local peer = assert(threading.spawn(function(r, s)
 end, ready, stop))
 assert(select(2, ready:recv(5)), "MT peer did not become ready")
 
-local function compile_pair(label, leaf_body, run_body, leaf_prefix)
+local function compile_pair(label, leaf_body, run_body, leaf_prefix, zero_formal)
+  local leaf_source = zero_formal and
+    "local leaf=function() " .. leaf_body .. " end\n" or
+    "local leaf=function(x) " .. leaf_body .. " end\n"
   local src = (leaf_prefix or "") ..
-    "local leaf=function(x) " .. leaf_body .. " end\n" ..
+    leaf_source ..
     "local run=function(fn,n) " .. run_body .. " end\n" ..
     "return leaf,run"
   local chunk, err = loadstring(src, "@lua-leaf-" .. label)
@@ -61,6 +64,9 @@ local positives = {
   {"open-result-callm-three", "return x,0.25,0.5",
     "local add3=function(a,b,c) return a+b+c end; " ..
     "local sum=.5; for i=1,n do sum=sum+add3(fn(i+.5)) end; return sum"},
+  {"open-result-callm-three-zero-formal", "return 1.25,0.25,0.5",
+    "local add3=function(a,b,c) return a+b+c end; " ..
+    "local sum=.5; for i=1,n do sum=sum+add3(fn()) end; return sum", nil, true},
   {"divvn", "return x/2"},
   {"addnv", "return 0.25+x"},
   {"subnv", "return 0.25-x"},
@@ -81,10 +87,11 @@ local negatives = {
   {"vararg-callee", "return ...", simple_run, nil, true},
 }
 
-local function run_positive(label, body, runner)
+local function run_positive(label, body, runner, zero_formal)
   runner = runner or simple_run
-  local leaf, run = compile_pair(label, body, runner)
-  local oracle_leaf, oracle_run = compile_pair("oracle-"..label, body, runner)
+  local leaf, run = compile_pair(label, body, runner, nil, zero_formal)
+  local oracle_leaf, oracle_run = compile_pair("oracle-"..label, body, runner,
+                                               nil, zero_formal)
   assert(leaf ~= oracle_leaf and run ~= oracle_run)
   jit.off(oracle_leaf, true); jit.off(oracle_run, true)
   local n=48
@@ -161,7 +168,7 @@ end
 jit.off(run_negative, true)
 
 local function main()
-  for _,c in ipairs(positives) do run_positive(c[1],c[2],c[3]) end
+  for _,c in ipairs(positives) do run_positive(c[1],c[2],c[3],c[4]) end
   for _,c in ipairs(negatives) do run_negative(c) end
 end
 jit.off(compile_pair, true)

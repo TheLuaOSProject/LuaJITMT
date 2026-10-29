@@ -334,8 +334,8 @@ static void admission_open_callm(GCtrace *T, unsigned nresults)
 {
   Fixture f={0};
   MSize callmpos=UINT32_MAX, childslot=UINT32_MAX;
-  MSize producersnap=UINT32_MAX;
-  unsigned found_callmap=0;
+  MSize producersnap=UINT32_MAX, callmapsnap=UINT32_MAX;
+  unsigned found_callmap=0, callmapcount=0;
   f.live=T; f.guard_snap=identity_exit(T,&f.guard); f.kfunc=T->ir[f.guard].op2;
   f.n=T->nins;
   while (f.n>T->nk &&
@@ -365,12 +365,16 @@ static void admission_open_callm(GCtrace *T, unsigned nresults)
     IRIns guard=f.ir[snap->ref];
     if (pc==proto_bc(f.pt)+callmpos && guard.o==IR_EQ &&
         guard.t.irt==(IRT_FUNC|IRT_GUARD)) {
-      MSize slot=1u+LJ_FR2+bc_a(proto_bc(f.pt)[callmpos])+
-                 1u+LJ_FR2+nresults-1u;
-      for (MSize i=0; i<snap->nent; i++) {
-        MSize at=snap->mapofs+i;
-        if (snap_slot(f.map[at])==slot && !(f.map[at]&0x00ff0000u)) {
-          childslot=at; found_callmap++;
+      callmapcount++;
+      if (callmapsnap==UINT32_MAX) {
+        MSize slot=1u+LJ_FR2+bc_a(proto_bc(f.pt)[callmpos])+
+                   1u+LJ_FR2+nresults-1u;
+        callmapsnap=s;
+        for (MSize i=0; i<snap->nent; i++) {
+          MSize at=snap->mapofs+i;
+          if (snap_slot(f.map[at])==slot && !(f.map[at]&0x00ff0000u)) {
+            childslot=at; found_callmap++;
+          }
         }
       }
     }
@@ -380,8 +384,22 @@ static void admission_open_callm(GCtrace *T, unsigned nresults)
       producersnap=s;
     }
   }
-  assert(found_callmap==1u && childslot!=UINT32_MAX &&
-         producersnap!=UINT32_MAX);
+  if (!(found_callmap==1u && callmapcount>=1u && childslot!=UINT32_MAX &&
+        producersnap!=UINT32_MAX)) {
+    assert(found_callmap==1u && callmapcount>=1u &&
+           childslot!=UINT32_MAX && producersnap!=UINT32_MAX);
+  }
+  if (nresults==3u) {
+    SnapShot *snap=&f.snap[callmapsnap];
+    MSize expect=(1u+LJ_FR2)+bc_a(proto_bc(f.pt)[callmpos-1u])+3u;
+    MSize result_end=(MSize)bc_a(proto_bc(f.pt)[callmpos-1u])+3u;
+    MSize source_limit=(MSize)f.pt->framesize+
+      (bc_c(proto_bc(f.pt)[callmpos-1u])==1u ? LJ_FR2 : 0u);
+    assert(result_end>f.pt->framesize && result_end<=source_limit &&
+           snap->topslot==f.pt->framesize && snap->nslots==expect &&
+           snap->nslots>f.pt->framesize+1u+LJ_FR2 &&
+           snap->nslots<LJ_MAX_JSLOTS);
+  }
   for (int postra=0; postra<2; postra++) {
     fixture_reset(&f); assert(admit(&f,postra));
     proto_bc(f.pt)[callmpos]=BCINS_ABC(BC_CALLM,
@@ -404,6 +422,11 @@ static void admission_open_callm(GCtrace *T, unsigned nresults)
     fixture_reset(&f); assert(admit(&f,postra));
     setbc_c(&proto_bc(f.pt)[callmpos],1u);
     assert(!admit(&f,postra));
+    if (nresults==3u) {
+      fixture_reset(&f); assert(admit(&f,postra));
+      setbc_c(&proto_bc(f.pt)[callmpos-1u],2u);
+      assert(!admit(&f,postra));
+    }
     fixture_reset(&f); assert(admit(&f,postra));
     setbc_b(&proto_bc(f.pt)[callmpos-1u],2u);
     assert(!admit(&f,postra));
@@ -415,7 +438,25 @@ static void admission_open_callm(GCtrace *T, unsigned nresults)
     f.map[childslot]=SNAP(snap_slot(f.map[childslot])-1u,0,
                           snap_ref(f.map[childslot]));
     assert(!admit(&f,postra));
-    if (postra) postra_bad+=8u; else semantic_bad+=8u;
+    fixture_reset(&f); assert(admit(&f,postra));
+    setbc_a(&proto_bc(f.pt)[callmpos-1u],
+            bc_a(proto_bc(f.pt)[callmpos-1u])+1u);
+    setbc_a(&proto_bc(f.pt)[callmpos],
+            bc_a(proto_bc(f.pt)[callmpos])+1u);
+    assert(!admit(&f,postra));
+    fixture_reset(&f); assert(admit(&f,postra));
+    f.snap[callmapsnap].nslots--;
+    assert(!admit(&f,postra));
+    if (nresults==3u) {
+      fixture_reset(&f); assert(admit(&f,postra));
+      f.snap[callmapsnap].nslots++;
+      assert(!admit(&f,postra));
+    }
+    fixture_reset(&f); assert(admit(&f,postra));
+    f.snap[callmapsnap].topslot++;
+    assert(!admit(&f,postra));
+    if (postra) postra_bad+=11u+(nresults==3u);
+    else semantic_bad+=11u+(nresults==3u);
   }
   free(f.pt); free(f.leafpt); free(f.leaf); free(f.J);
   free(f.ir); free(f.snap); free(f.map);
@@ -461,60 +502,70 @@ int main(void)
   }
   ljt_lua_dostring(L,
     "install_open_case=function(producer,consumer,parameters) "
-      "leaf_a=assert(loadstring('return function(x) '..producer..' end',"
+      "leaf_a=assert(loadstring('return function() '..producer..' end',"
         "'@open-callm-values'))(); "
-      "leaf_oracle_a=assert(loadstring('return function(x) '..producer..' end',"
+      "leaf_oracle_a=assert(loadstring('return function() '..producer..' end',"
         "'@open-callm-values-oracle'))(); "
-      "local alternate=producer:gsub('return x','return x+.125',1); "
-      "leaf_b=assert(loadstring('return function(x) '..alternate..' end',"
+      "local alternate=producer:gsub('return 1.25','return 1.375',1); "
+      "leaf_b=assert(loadstring('return function() '..alternate..' end',"
         "'@open-callm-alternate'))(); "
-      "leaf_oracle_b=assert(loadstring('return function(x) '..alternate..' end',"
+      "leaf_oracle_b=assert(loadstring('return function() '..alternate..' end',"
         "'@open-callm-alternate-oracle'))(); "
-      "local src='return function(fn,n) local add=function('..parameters..') '..consumer..' end; "
-        "local total=.5; for i=1,n do total=total+add(fn(i+.5)) end; "
-        "return total end'; "
-      "leaf_run=assert(loadstring(src,'@open-callm-run'))(); "
-      "leaf_oracle=assert(loadstring(src,'@open-callm-oracle'))(); "
-      "leaf_run_clone=assert(loadstring(src,'@open-callm-run-clone'))(); "
-      "jit.off(leaf_oracle,true); jit.off(leaf_oracle_a,true); "
-      "jit.off(leaf_oracle_b,true); "
-      "jit.flush(); jit.on(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64') end; "
+      "leaf_c=assert(loadstring('return function('..parameters..') '..consumer..' end',"
+        "'@open-callm-consumer'))(); "
+      "leaf_oracle_c=assert(loadstring('return function('..parameters..') '..consumer..' end',"
+        "'@open-callm-consumer-oracle'))(); "
+      "leaf_c_alt=assert(loadstring('return function('..parameters..') '..consumer..'+.125 end',"
+        "'@open-callm-consumer-alt'))(); "
+      "leaf_oracle_c_alt=assert(loadstring('return function('..parameters..') '..consumer..'+.125 end',"
+        "'@open-callm-consumer-alt-oracle'))(); "
+      "local factory_src='return function(initial) local current=initial; "
+        "return function(fn,n) local total=.5; for i=1,n do "
+        "total=total+current(fn()) end; return total end, "
+        "function(v) current=v end end'; "
+      "local factory=assert(loadstring(factory_src,'@open-callm-factory'))(); "
+      "local oracle_factory=assert(loadstring(factory_src,'@open-callm-factory-oracle'))(); "
+      "leaf_run,leaf_set=factory(leaf_c); "
+      "leaf_oracle,leaf_set_oracle=oracle_factory(leaf_oracle_c); "
+      "jit.flush(); jit.on(); jit.off(leaf_oracle,true); "
+      "jit.off(leaf_oracle_a,true); jit.off(leaf_oracle_b,true); "
+      "jit.off(leaf_oracle_c,true); jit.off(leaf_oracle_c_alt,true); "
+      "jit.off(leaf_set_oracle,true); jit.on(leaf_run,true); jit.on(leaf_c,true); "
+      "jit.on(leaf_c_alt,true); "
+      "jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64') end; "
     "jit.off(install_open_case,true)");
   {
-    const char *producer[] = {"return x", "return x,.25", "return x,.25,.5"};
+    const char *producer[] = {"return 1.25", "return 1.25,.25", "return 1.25,.25,.5"};
     const char *consumer[] = {"return a+1", "return a+b", "return a+b+c"};
     const char *parameters[] = {"a", "a,b", "a,b,c"};
     for (unsigned nresults=1u; nresults<=3u; nresults++) {
     GCtrace *T=NULL;
-    uint32_t rootstarts=lj_trace_test_root_entry_startins_calls();
     lua_getglobal(L,"install_open_case");
     lua_pushstring(L,producer[nresults-1u]);
     lua_pushstring(L,consumer[nresults-1u]);
     lua_pushstring(L,parameters[nresults-1u]);
     ljt_lua_pcall(L,3,0,"install open CALLM case");
+    {
+      GCproto *runpt=funcproto(global_function(L,"leaf_run"));
+      GCproto *oraclept=funcproto(global_function(L,"leaf_oracle"));
+      GCproto *producerpt=funcproto(global_function(L,"leaf_a"));
+      GCproto *oracle_producerpt=funcproto(global_function(L,"leaf_oracle_a"));
+      GCproto *consumerpt=funcproto(global_function(L,"leaf_c"));
+      GCproto *oracle_consumerpt=funcproto(global_function(L,"leaf_oracle_c"));
+      assert(runpt != oraclept &&
+             !(la_load8_acq(&runpt->flags)&PROTO_NOJIT) &&
+             (la_load8_acq(&oraclept->flags)&PROTO_NOJIT) &&
+             producerpt != oracle_producerpt &&
+             consumerpt != oracle_consumerpt &&
+             !(la_load8_acq(&producerpt->flags)&PROTO_NOJIT) &&
+             (la_load8_acq(&oracle_producerpt->flags)&PROTO_NOJIT) &&
+             !(la_load8_acq(&consumerpt->flags)&PROTO_NOJIT) &&
+             (la_load8_acq(&oracle_consumerpt->flags)&PROTO_NOJIT));
+    }
     for (unsigned attempt=0; attempt<8 && !T; attempt++) {
       lua_Number expected=invoke(L,"leaf_oracle","leaf_oracle_a",96);
       assert(invoke(L,"leaf_run","leaf_a",96)==expected);
       T=root_trace(L);
-    }
-    if (!T) {
-      GCproto *runpt=funcproto(global_function(L,"leaf_run"));
-      GCproto *leafpt=funcproto(global_function(L,"leaf_a"));
-      fprintf(stderr,"open CALLM result count=%u no root aborts=%u last=%u "
-        "root-starts=%u jitflags=%08x run-size=%u leaf-size=%u leaf-ret-op=%u leaf-ret-d=%u\n",
-        nresults,(unsigned)lj_trace_test_abort_count(),
-        (unsigned)lj_trace_test_last_abort_error(),
-        (unsigned)(lj_trace_test_root_entry_startins_calls()-rootstarts),
-        (unsigned)L2J(L)->flags,
-        (unsigned)runpt->sizebc,(unsigned)leafpt->sizebc,
-        (unsigned)bc_op(proto_bc(leafpt)[leafpt->sizebc-1u]),
-        (unsigned)bc_d(proto_bc(leafpt)[leafpt->sizebc-1u]));
-      for (MSize p=0; p<runpt->sizebc; p++) {
-        BCIns ins=proto_bc(runpt)[p];
-        fprintf(stderr,"open rootbc pc=%u op=%u a=%u b=%u c=%u\n",
-          (unsigned)p,(unsigned)bc_op(ins),(unsigned)bc_a(ins),
-          (unsigned)bc_b(ins),(unsigned)bc_c(ins));
-      }
     }
     assert(T);
     {
