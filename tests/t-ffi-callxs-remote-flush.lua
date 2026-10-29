@@ -3,6 +3,9 @@ local threading = require("threading")
 
 local scalar_only = jit.arch == "arm64" and jit.os == "OSX" and
                     os.getenv("LJ_M7_FFI_CALLXS_ARM64_SCALAR") == "1"
+local metacall_race_x64 = jit.arch == "x64" and
+  os.getenv("LJ_M7_FFI_CALLXS_METACALL_RACE") == "1"
+local race_only = scalar_only or metacall_race_x64
 if jit.arch ~= "x64" and not scalar_only then
   print("t-ffi-callxs-remote-flush SKIP: unsupported lowering")
   return
@@ -27,7 +30,7 @@ _Bool lj_callxs_flush_bool_maybe_block(int32_t, int32_t);
 local so = assert(os.getenv("LJ_M7_FFI_CALLXS_FLUSH_SO"))
 local lib = ffi.load(so)
 local scalar_fn_mt, scalar_fn_mm, scalar_fn_replacement
-if scalar_only then
+if race_only then
   scalar_fn_mt = debug.getmetatable(
     lib.lj_callxs_flush_identity_maybe_block)
   scalar_fn_mm = rawget(scalar_fn_mt, "__call")
@@ -46,6 +49,9 @@ local worker = threading.spawn(function(ready_ch, start_ch, so_path)
   local vmdef = require("jit.vmdef")
   local scalar_only = jit.arch == "arm64" and jit.os == "OSX" and
                       os.getenv("LJ_M7_FFI_CALLXS_ARM64_SCALAR") == "1"
+  local metacall_race_x64 = jit.arch == "x64" and
+    os.getenv("LJ_M7_FFI_CALLXS_METACALL_RACE") == "1"
+  local race_only = scalar_only or metacall_race_x64
 
   ffi.cdef [[
   void lj_callxs_flush_configure(int32_t, int32_t);
@@ -68,7 +74,7 @@ int32_t lj_callxs_flush_generated_count(void);
     lj_callxs_flush_aggregate_maybe_block(double, int32_t);
   ]]
   local worker_lib = ffi.load(so_path)
-  local scalar_fn = scalar_only and
+  local scalar_fn = race_only and
     worker_lib.lj_callxs_flush_identity_maybe_block or
     worker_lib.lj_callxs_flush_maybe_block
   local pointer_fn, bool_fn, aggregate_fn
@@ -105,6 +111,26 @@ int32_t lj_callxs_flush_generated_count(void);
       if fn(i) ~= i then return false end
     end
     return true
+  end
+
+  local function run_scalar_metacall_race(fn, n)
+    for i = 1, n do
+      if fn(i) ~= i then return false end
+    end
+    return true
+  end
+  local function run_scalar_metacall_reverse_race(fn, n)
+    for i = 1, n do
+      if fn(i) ~= i + 0x100000 then return false end
+    end
+    return true
+  end
+  local function run_scalar_metacall_nonfunction(fn)
+    return pcall(function()
+      local sum = 0
+      for i = 1, 8 do sum = sum + fn(i) end
+      return sum
+    end)
   end
   local function publish_trace_ranges()
     worker_lib.lj_callxs_flush_clear_traces()
@@ -163,19 +189,24 @@ int32_t lj_callxs_flush_generated_count(void);
   end
   jit.off(assert_aggregate, true)
 
-  if scalar_only then jit.on() end
+  if race_only then jit.on() end
   jit.flush()
   jit.opt.start("hotloop=1", "hotexit=1")
-  if scalar_only then
+  if race_only then
     worker_lib.lj_callxs_flush_configure(-2147483647 - 1, 0)
     for _ = 1, 80 do
       assert(run_scalar_arm64(scalar_fn, 8))
     end
     local scalar_xsave = trace_op_count("XSAVE ")
     local scalar_callxs = trace_op_count("CALLXS")
-    assert(scalar_xsave == 2 and scalar_callxs == 2,
-           ("wrong ARM64 scalar CALLXS lifecycle: %d/%d"):format(
-             scalar_xsave, scalar_callxs))
+    if scalar_only then
+      assert(scalar_xsave == 2 and scalar_callxs == 2,
+             ("wrong ARM64 scalar CALLXS lifecycle: %d/%d"):format(
+               scalar_xsave, scalar_callxs))
+    else
+      assert(scalar_xsave > 0 and scalar_callxs > 0,
+             "x64 cdata __call did not publish scalar CALLXS")
+    end
     assert(ready_ch:send({
       phase = "scalar_ready",
       scalar_xsave = scalar_xsave,
@@ -195,15 +226,80 @@ int32_t lj_callxs_flush_generated_count(void);
     assert(ok == true and command == "race_metacall")
     assert(ready_ch:send({ phase = "metacall_race_started" }, 10) == true)
     local alternate_results = 0
-    for _ = 1, 20000 do
-      if not run_scalar_arm64(scalar_fn, 8) then
-        alternate_results = alternate_results + 1
+    if type(call_race_test) == "table" then
+      call_race_test.arm()
+      alternate_results = run_scalar_metacall_race(scalar_fn, 8) and 0 or 1
+    else
+      for _ = 1, 20000 do
+        if not run_scalar_arm64(scalar_fn, 8) then
+          alternate_results = alternate_results + 1
+        end
       end
     end
     assert(ready_ch:send({
       phase = "metacall_race_done",
       alternate_results = alternate_results,
     }, 10) == true)
+
+    if type(call_race_test) == "table" then
+      command, ok = start_ch:recv(10)
+      assert(ok == true and command == "race_metacall_reverse")
+      assert(ready_ch:send({ phase = "metacall_reverse_race_started" }, 10) == true)
+      call_race_test.arm()
+      alternate_results = run_scalar_metacall_reverse_race(scalar_fn, 8) and 0 or 1
+      assert(ready_ch:send({
+        phase = "metacall_reverse_race_done",
+        alternate_results = alternate_results,
+      }, 10) == true)
+
+      command, ok = start_ch:recv(10)
+      assert(ok == true and command == "race_metacall_nonfunction")
+      assert(ready_ch:send({ phase = "metacall_nonfunction_started" }, 10) == true)
+      call_race_test.arm()
+      local error_ok, call_error = run_scalar_metacall_nonfunction(scalar_fn)
+      assert(ready_ch:send({
+        phase = "metacall_nonfunction_done",
+        error_ok = error_ok,
+        call_error = tostring(call_error),
+      }, 10) == true)
+
+      command, ok = start_ch:recv(10)
+      assert(ok == true and command == "rearm_scalar_after_race")
+      local rerecorded_callxs, rerecorded_xsave = 0, 0
+      local function rerecord_trace(what, tr)
+        if what ~= "stop" then return end
+        local info = util.traceinfo(tr)
+        if not info then return end
+        local has_callxs, has_xsave = false, false
+        for ref = 1, info.nins do
+          local _, ot = util.traceir(tr, ref)
+          if ot then
+            local opidx = bit.rshift(ot, 8)
+            local op = vmdef.irnames:sub(opidx * 6 + 1, opidx * 6 + 6)
+            if op == "CALLXS" then has_callxs = true end
+            if op == "XSAVE " then has_xsave = true end
+          end
+        end
+        if has_callxs then
+          local code, addr = util.tracemc(tr)
+          if code and worker_lib.lj_callxs_flush_add_trace(addr, #code) == 1 then
+            rerecorded_callxs = rerecorded_callxs + 1
+            if has_xsave then rerecorded_xsave = rerecorded_xsave + 1 end
+          end
+        end
+      end
+      jit.off(rerecord_trace, true)
+      jit.attach(rerecord_trace, "trace")
+      for _ = 1, 80 do assert(run_scalar_arm64(scalar_fn, 8)) end
+      jit.attach(rerecord_trace)
+      assert(rerecorded_callxs > 0 and rerecorded_xsave > 0,
+             "stable cdata __call did not publish fresh native CALLXS after races")
+      assert(ready_ch:send({
+        phase = "scalar_rerecorded",
+        callxs_traces = rerecorded_callxs,
+        xsave_traces = rerecorded_xsave,
+      }, 10) == true)
+    end
 
     command, ok = start_ch:recv(10)
     assert(ok == true and command == "block_scalar")
@@ -325,7 +421,7 @@ int32_t lj_callxs_flush_generated_count(void);
   }
 end, ready, start, so)
 
-if scalar_only then
+if race_only then
   local scalar_ready, scalar_ready_ok = ready:recv(10)
   if scalar_ready_ok ~= true or type(scalar_ready) ~= "table" then
     local joined, worker_error = worker:join(1)
@@ -333,7 +429,11 @@ if scalar_only then
       tostring(joined), tostring(worker_error)))
   end
   assert(scalar_ready.phase == "scalar_ready")
-  assert(scalar_ready.scalar_xsave == 2 and scalar_ready.scalar_callxs == 2)
+  if scalar_only then
+    assert(scalar_ready.scalar_xsave == 2 and scalar_ready.scalar_callxs == 2)
+  else
+    assert(scalar_ready.scalar_xsave > 0 and scalar_ready.scalar_callxs > 0)
+  end
 
   assert(type(scalar_fn_mt) == "table" and
          type(scalar_fn_mm) == "function")
@@ -344,19 +444,108 @@ if scalar_only then
   assert(guarded.result == false,
          "cdata __call identity guard ignored a stable replacement")
 
+  if type(call_race_test) == "table" then
+    rawset(scalar_fn_mt, "__call", scalar_fn_mm)
+  end
   assert(start:send("race_metacall", 10) == true)
   local race_started, race_started_ok = ready:recv(10)
+  if race_started_ok ~= true or type(race_started) ~= "table" then
+    local joined, worker_error = worker:join(1)
+    error(("worker failed before deterministic metacall seam " ..
+           "(joined=%s): %s"):format(tostring(joined),
+                                     tostring(worker_error)))
+  end
   assert(race_started_ok == true and
          race_started.phase == "metacall_race_started")
-  for i = 1, 20000 do
-    rawset(scalar_fn_mt, "__call",
-           i % 2 == 0 and scalar_fn_replacement or scalar_fn_mm)
+  if type(call_race_test) == "table" then
+    local pause_deadline = threading.now() + 10
+    while not call_race_test.paused() and
+          threading.now() < pause_deadline do
+      threading.sleep(0.001)
+    end
+    assert(call_race_test.paused(),
+           "VM did not reach the post-recorder cdata __call capture seam")
+    rawset(scalar_fn_mt, "__call", scalar_fn_replacement)
+    call_race_test.release()
+  else
+    for i = 1, 20000 do
+      rawset(scalar_fn_mt, "__call",
+             i % 2 == 0 and scalar_fn_replacement or scalar_fn_mm)
+    end
+    rawset(scalar_fn_mt, "__call", scalar_fn_mm)
   end
-  rawset(scalar_fn_mt, "__call", scalar_fn_mm)
   local race_done, race_done_ok = ready:recv(10)
   assert(race_done_ok == true and race_done.phase == "metacall_race_done")
   assert(race_done.alternate_results > 0,
-         "cdata __call race never observed the replacement")
+         "VM did not execute the peer-installed cdata __call replacement")
+  rawset(scalar_fn_mt, "__call", scalar_fn_mm)
+
+  if type(call_race_test) == "table" then
+    rawset(scalar_fn_mt, "__call", scalar_fn_replacement)
+    assert(start:send("race_metacall_reverse", 10) == true)
+    local reverse_started, reverse_started_ok = ready:recv(10)
+    if reverse_started_ok ~= true or type(reverse_started) ~= "table" then
+      local joined, worker_error = worker:join(1)
+      error(("worker failed before reverse deterministic seam " ..
+             "(joined=%s): %s"):format(tostring(joined),
+                                       tostring(worker_error)))
+    end
+    assert(reverse_started.phase == "metacall_reverse_race_started")
+    local pause_deadline = threading.now() + 10
+    while not call_race_test.paused() and
+          threading.now() < pause_deadline do
+      threading.sleep(0.001)
+    end
+    assert(call_race_test.paused(),
+           "VM did not reach reverse post-recorder cdata __call capture seam")
+    rawset(scalar_fn_mt, "__call", scalar_fn_mm)
+    call_race_test.release()
+    local reverse_done, reverse_done_ok = ready:recv(10)
+    assert(reverse_done_ok == true and
+           reverse_done.phase == "metacall_reverse_race_done")
+    assert(reverse_done.alternate_results > 0,
+           "VM did not execute peer-installed C __call after Lua sample")
+    rawset(scalar_fn_mt, "__call", scalar_fn_mm)
+
+    assert(start:send("race_metacall_nonfunction", 10) == true)
+    local error_started, error_started_ok = ready:recv(10)
+    if error_started_ok ~= true or type(error_started) ~= "table" then
+      local joined, worker_error = worker:join(1)
+      error(("worker failed before nonfunction deterministic seam " ..
+             "(joined=%s): %s"):format(tostring(joined),
+                                       tostring(worker_error)))
+    end
+    assert(error_started.phase == "metacall_nonfunction_started")
+    pause_deadline = threading.now() + 10
+    while not call_race_test.paused() and
+          threading.now() < pause_deadline do
+      threading.sleep(0.001)
+    end
+    assert(call_race_test.paused(),
+           "VM did not reach nonfunction post-recorder capture seam")
+    rawset(scalar_fn_mt, "__call", 17)
+    call_race_test.release()
+    local error_done, error_done_ok = ready:recv(10)
+    assert(error_done_ok == true and
+           error_done.phase == "metacall_nonfunction_done")
+    assert(error_done.error_ok == false and
+           error_done.call_error:find("call", 1, true),
+           "mismatched nonfunction __call did not raise the normal call error")
+    rawset(scalar_fn_mt, "__call", scalar_fn_mm)
+
+    -- A second native blocker call must use code published after both aborts.
+    jit.flush()
+    assert(start:send("rearm_scalar_after_race", 10) == true)
+    local rerecorded, rerecorded_ok = ready:recv(10)
+    if rerecorded_ok ~= true or type(rerecorded) ~= "table" then
+      local joined, worker_error = worker:join(1)
+      error(("worker failed while re-recording after metacall races " ..
+             "(joined=%s): %s"):format(tostring(joined),
+                                       tostring(worker_error)))
+    end
+    assert(rerecorded.phase == "scalar_rerecorded" and
+           rerecorded.callxs_traces > 0 and rerecorded.xsave_traces > 0)
+  end
 
   -- Block the eighth call after the already-recorded loop backedge. Its result
   -- needs no GC root, isolating the remote native-frame handshake.
@@ -372,6 +561,10 @@ if scalar_only then
          "generated scalar CALLXS did not enter the blocker")
   assert(lib.lj_callxs_flush_entry_count() == 1,
          "blocking scalar call was entered more than once")
+  if type(call_race_test) == "table" then
+    assert(lib.lj_callxs_flush_generated_count() == 1,
+           "post-race scalar blocker did not run from newly published mcode")
+  end
   assert(lib.lj_callxs_flush_effect_count() == 0,
          "blocking scalar call completed before remote pressure")
 

@@ -25,6 +25,11 @@
 #include "lj_strfmt.h"
 #include "lj_lib.h"
 #include "lj_tg.h"
+#if LJ_HASJIT_FFI_CALLXS
+#include "lj_jit.h"
+#include "lj_dispatch.h"
+#include "lj_trace.h"
+#endif
 
 #if defined(LJ_GC2_TEST_HELPERS)
 static uintptr_t meta_test_mt_capture_target;
@@ -111,6 +116,77 @@ static void meta_test_pause_after_mt_lease(GCtab *mt)
 #endif
 
 /* -- Metamethod handling ------------------------------------------------- */
+
+#if LJ_HASJIT_FFI_CALLXS
+static void meta_clear_pending_cdata_call(jit_State *J)
+{
+  J->pending_cdata_call_pc = NULL;
+  J->pending_cdata_call_pt = NULL;
+  J->pending_cdata_call_target = 0;
+  J->pending_cdata_call_func = 0;
+  J->pending_cdata_call_kind = JIT_CDATA_CALL_NONE;
+}
+
+static void meta_check_pending_cdata_call(lua_State *L, TValue *func,
+						  cTValue *mo)
+{
+  jit_State *J = L2J(L);
+  GCfunc *actual;
+  GCfunc *caller;
+  const BCIns *pc;
+  uintptr_t pcaddr, bcaddr, endaddr;
+  int match = 0;
+  if (J == NULL || !lj_jit_token_held_l(L, J) || jit_owner_l_acq(J) != L)
+    return;
+  if (J->pending_cdata_call_kind == JIT_CDATA_CALL_NONE)
+    return;
+  pc = cframe_Lpc(L) - 1;
+  pcaddr = (uintptr_t)(const void *)pc;
+  bcaddr = J->pending_cdata_call_pt ?
+    (uintptr_t)(const void *)proto_bc(J->pending_cdata_call_pt) : 0;
+  endaddr = J->pending_cdata_call_pt ?
+    bcaddr + J->pending_cdata_call_pt->sizebc * sizeof(BCIns) : 0;
+  /* The pending value belongs to one recorder owner and one CALL frame. */
+  if (J->L != L || lj_trace_state_load(J) != LJ_TRACE_RECORD || !J->pt ||
+      J->pt != J->pending_cdata_call_pt ||
+      (uintptr_t)(const void *)J->pending_cdata_call_pc < bcaddr ||
+      (uintptr_t)(const void *)J->pending_cdata_call_pc >= endaddr ||
+      pc != J->pending_cdata_call_pc || pcaddr < bcaddr || pcaddr >= endaddr ||
+      J->pending_cdata_call_func >= J->pt->framesize ||
+      func != L->base + J->pending_cdata_call_func) {
+    meta_clear_pending_cdata_call(J);
+    lj_trace_abort(G(L));
+    return;
+  }
+  caller = curr_func(L);
+  if (!isluafunc(caller) || funcproto(caller) != J->pending_cdata_call_pt) {
+    meta_clear_pending_cdata_call(J);
+    lj_trace_abort(G(L));
+    return;
+  }
+  actual = tvisfunc(mo) ? funcV(mo) : NULL;
+  if (actual != NULL) {
+    switch (J->pending_cdata_call_kind) {
+    case JIT_CDATA_CALL_EXACT:
+      match = (uintptr_t)(void *)actual == J->pending_cdata_call_target;
+      break;
+    case JIT_CDATA_CALL_PROTO:
+      match = isluafunc(actual) &&
+	      (uintptr_t)(void *)funcproto(actual) == J->pending_cdata_call_target;
+      break;
+    case JIT_CDATA_CALL_FFID:
+      match = !isluafunc(actual) && actual->c.ffid ==
+	      (uint32_t)J->pending_cdata_call_target;
+      break;
+    default:
+      break;
+    }
+  }
+  meta_clear_pending_cdata_call(J);
+  if (!match)
+    lj_trace_abort(G(L));
+}
+#endif
 
 /* String interning of metamethod names for fast indexing. */
 void lj_meta_init(lua_State *L)
@@ -1846,6 +1922,9 @@ void lj_meta_call(lua_State *L, TValue *func, TValue *top)
 {
   TValue motv;
   cTValue *mo = lj_meta_lookuptv(L, &motv, func, MM_call);
+#if LJ_HASJIT_FFI_CALLXS
+  meta_check_pending_cdata_call(L, func, mo);
+#endif
   TValue *p;
   lj_gc_pubroot(L, func);
   lj_gc_pubroot(L, mo);

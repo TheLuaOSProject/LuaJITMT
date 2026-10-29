@@ -61,6 +61,9 @@ LJ_FUNC int lj_record_next(jit_State *J, RecordIndex *ix);
 
 LJ_FUNC void lj_record_ins(jit_State *J);
 LJ_FUNC void lj_record_setup(jit_State *J, BCIns root_iterl);
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_GC2_TEST_HELPERS)
+LJ_FUNC void lj_record_test_arm_cdata_call_capture(void);
+#endif
 #ifdef LJ_TRACE_TEST_HELPERS
 LJ_FUNC TRef lj_record_test_celluv_cnewref(jit_State *J, BCReg slotno);
 LJ_FUNC int lj_record_test_celluv_will_promote(jit_State *J, BCReg slotno);

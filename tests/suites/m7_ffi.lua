@@ -454,6 +454,16 @@ return function(add)
           },
           timeout = "30s"
         })
+        build_and_run_c(t, t:tmp("lj_t-jit-cdata-call-race"),
+                        "t-jit-cdata-call-race.c", {
+          build = false,
+          cflags = flags,
+          env = {
+            LJ_M7_FFI_CALLXS_ARM64_SCALAR = "1",
+            LJ_M7_FFI_CALLXS_FLUSH_SO = callxs_flush_so
+          },
+          timeout = "30s"
+        })
         build_and_run_c(t, t:tmp("lj_t-arm64-jit-callxs-lifecycle"),
                         "t-arm64-jit-callxs-lifecycle.c", {
           build = false,
@@ -511,7 +521,10 @@ return function(add)
     run = function(t)
       local flags = table.concat({
         "-DLUA_USE_ASSERT",
-        "-DLJ_XSAVE_TEST_HELPERS"
+        "-DLJ_XSAVE_TEST_HELPERS",
+        "-DLJ_TRACE_TEST_HELPERS",
+        "-DLJ_GC2_TEST_HELPERS",
+        "-DLJ_TAB_TEST_HELPERS"
       }, " ")
       local callxs_so = build_shared_library(t,
         t:tmp("lj_t-ffi-callxs-authentic.so"),
@@ -527,6 +540,16 @@ return function(add)
         })
         run_luajit_script(t, "t-ffi-callxs-remote-flush.lua", nil, {
           env = { LJ_M7_FFI_CALLXS_FLUSH_SO = callxs_flush_so },
+          timeout = "30s"
+        })
+        build_and_run_c(t, t:tmp("lj_t-ffi-callxs-metacall-race"),
+                        "t-jit-cdata-call-race.c", {
+          build = false,
+          cflags = flags,
+          env = {
+            LJ_M7_FFI_CALLXS_METACALL_RACE = "1",
+            LJ_M7_FFI_CALLXS_FLUSH_SO = callxs_flush_so
+          },
           timeout = "30s"
         })
         build_and_run_c(t, t:tmp("lj_t-ffi-callxs-postcall"),
