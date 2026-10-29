@@ -310,6 +310,29 @@ static void swap_callxs_values(IRIns *ir, IRRef call, IRRef lhs, IRRef rhs)
   assert(found_lhs == 1 && found_rhs == 1);
 }
 
+/* Test-side CARG walk: recover source-order values without calling the
+** production semantic/post-RA decoder. */
+static unsigned test_callxs_values(const IRIns *ir, IRRef call,
+				   IRRef *values, unsigned capacity)
+{
+  IRRef reversed[LJ_ARM64_ABI_MAX_ARGS];
+  IRRef ref = ir[call].op1;
+  unsigned n = 0, i;
+  if (ref == REF_NIL) return 0;
+  for (;;) {
+    if (n == capacity || n == LJ_ARM64_ABI_MAX_ARGS || ref >= call)
+      return 0;
+    if (ir[ref].o != IR_CARG) {
+      reversed[n++] = ref;
+      break;
+    }
+    reversed[n++] = ir[ref].op2;
+    ref = ir[ref].op1;
+  }
+  for (i = 0; i < n; i++) values[i] = reversed[n-i-1u];
+  return n;
+}
+
 static IRRef find_cdata_type_guard(const IRIns *ir, IRRef nk, IRRef nins,
 				   IRRef load)
 {
@@ -752,6 +775,9 @@ static void test_live_aggregate_admission_at(lua_State *L, GCtrace *T,
   jit_State *J;
   IRRef nins, nk, semantic_nins, load, addr, offset, call = 0, typeguard;
   IRRef ktrace = 0, ref;
+  IRRef argvalues[LJ_ARM64_ABI_MAX_ARGS];
+  unsigned argcount = 0;
+  unsigned const_pairs[4], nconst_pairs = 0;
   IRIns *copy;
   IRRef stack_hfa_first = 0;
   LJArm64PostRAView postra;
@@ -822,6 +848,25 @@ static void test_live_aggregate_admission_at(lua_State *L, GCtrace *T,
   for (ref = REF_BASE; ref < semantic_nins; ref++)
     if (copy[ref].o == IR_CALLXS) { call = ref; break; }
   assert(call != 0);
+  if (strcmp(clone_name, "__arm64_narrow_constant_clone") == 0) {
+    argcount = test_callxs_values(copy, call, argvalues,
+				  LJ_ARM64_ABI_MAX_ARGS);
+    assert(argcount == 18);
+    assert(copy[argvalues[8]].o == IR_CONV &&
+	   copy[argvalues[9]].o == IR_CONV &&
+	   copy[argvalues[10]].o == IR_CONV &&
+	   copy[argvalues[11]].o == IR_CONV &&
+	   argvalues[8] != argvalues[9] && argvalues[10] != argvalues[11]);
+    const_pairs[0] = 8; const_pairs[1] = 9;
+    const_pairs[2] = 10; const_pairs[3] = 11;
+    nconst_pairs = 2;
+  } else if (strcmp(clone_name, "__arm64_small_constant_clone") == 0) {
+    argcount = test_callxs_values(copy, call, argvalues,
+				  LJ_ARM64_ABI_MAX_ARGS);
+    assert(argcount == 11 && argvalues[8] != argvalues[10]);
+    const_pairs[0] = 8; const_pairs[1] = 10;
+    nconst_pairs = 1;
+  }
   if ((load_type == IRT_FLOAT || load_type == IRT_NUM) && load_index != 0)
     stack_hfa_first = find_aggregate_load_index(fx.good, nins, load_type,
 						       load_index-1u);
@@ -834,6 +879,21 @@ static void test_live_aggregate_admission_at(lua_State *L, GCtrace *T,
   J->framedepth = J->retdepth = 0;
   J->ktrace = (IRRef1)ktrace;
   assert(semantic_accepts(J, &fx.semantic, copy, nins, semantic_nins));
+  if (nconst_pairs != 0) {
+    unsigned pair;
+    for (pair = 0; pair < nconst_pairs; pair++) {
+      unsigned lhs = const_pairs[2u*pair], rhs = const_pairs[2u*pair+1u];
+      copy_trace_ir(copy, fx.good, nk, nins);
+      swap_callxs_values(copy, call, argvalues[lhs], argvalues[rhs]);
+      assert(!semantic_accepts(J, &fx.semantic, copy, nins,
+			       semantic_nins));
+      copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
+      postra = fx.view;
+      postra.ir = fx.postra;
+      swap_callxs_values(fx.postra, call, argvalues[lhs], argvalues[rhs]);
+      assert(!lj_asm_arm64_postra_admit(&postra, &semantic_nins));
+    }
+  }
   for (snapno = 0; snapno < fx.semantic.nsnap; snapno++)
     if (snap_nent_acq(&fx.snaps[snapno]) != 0) {
       raw_slot = snap_mapofs_acq(&fx.snaps[snapno]);
@@ -1503,6 +1563,24 @@ int main(int argc, char **argv)
     assert(T != NULL);
     meta_pc=aggregate_meta_pc(T); assert(meta_pc != NULL);
     test_live_aggregate_admission(L,T,meta_pc,clone_name,type);
+  }
+  {
+    GCproto *pt = global_proto(L, "__arm64_small_constant_candidate");
+    GCtrace *T = find_aggregate_trace(G2J(G(L)), pt, IRT_U8);
+    assert(T != NULL);
+    meta_pc = aggregate_meta_pc(T);
+    assert(meta_pc != NULL);
+    test_live_aggregate_admission(L, T, meta_pc,
+	"__arm64_small_constant_clone", IRT_U8);
+  }
+  {
+    GCproto *pt = global_proto(L, "__arm64_narrow_constant_candidate");
+    GCtrace *T = find_aggregate_trace(G2J(G(L)), pt, IRT_U8);
+    assert(T != NULL);
+    meta_pc = aggregate_meta_pc(T);
+    assert(meta_pc != NULL);
+    test_live_aggregate_admission(L, T, meta_pc,
+	"__arm64_narrow_constant_clone", IRT_U8);
   }
   {
     GCproto *pt = global_proto(L, "__arm64_float_triple_hfa_candidate");
