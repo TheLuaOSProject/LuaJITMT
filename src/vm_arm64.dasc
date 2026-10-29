@@ -4559,6 +4559,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp_nil CARG1
     |  beq >1				// Stop if iterator returned nil.
     if (op == BC_JITERL) {
+      |.if JIT
       |  str CARG1, [TMP1, #-8]     // Commit the key/control copy before entry.
       |  mov RAw, INSw             // Preserve the consumed full JITERL word.
       |  str BASE, L->base
@@ -4583,6 +4584,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |8:
       |  mov INSw, RAw
       |  b =>BC_JLOOP
+      |.endif
     } else {
       |  add TMP0, PC, RC, lsl #2	// Otherwise save control var + branch.
       |  sub PC, TMP0, #0x20000
