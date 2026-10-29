@@ -214,6 +214,8 @@ build_and_run() {
     run=$((run+1))
   done
   LUAJIT_MCODE_TEST=R lj_ci_run_fixture 120 "$fixture" randomized
+  LUA_PATH="$root/src/?.lua;;" "$root/src/luajit" \
+    "$root/bench/jit-topology-probe.lua" >"$tmpdir/topology-$tag.tsv"
 }
 
 build_and_run arm64 '-arch arm64' "$xcflags" arm64 0 0

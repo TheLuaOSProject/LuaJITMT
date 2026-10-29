@@ -235,6 +235,7 @@ local function main()
   jit.off(exit_observer,true)
   assert(select(2,ready:recv(5)), 'MT peer did not start')
   io.write('case\tarch\tphase\troot_ids\tpublished_root_linked_sides\tobserved_root_exits\tobserved_other_exits\texit_counts\ttraces\n')
+  io.flush()
   for _,case in ipairs(cases) do
     jit.flush()
     local candidate=compile(case.source, false)
@@ -263,9 +264,23 @@ local function main()
       local events={}
       for key,count in pairs(counts) do events[#events+1]=key..'='..count end
       table.sort(events)
+      if case.name == 'nonleaf-function-root-return' then
+        local selected_root=false
+        assert(next(roots), 'nonleaf FUNCF root was not published')
+        for no in pairs(roots) do
+          local info=rows[no]
+          if info and info.linktype == 'return' then selected_root=true end
+        end
+        assert(selected_root, 'published nonleaf root has no return trace')
+        if phase == 2 then
+          assert(root_exits > 0,
+            'nonleaf root did not enter natively and exit on bad argument')
+        end
+      end
       io.write(string.format('%s\t%s\t%d\t%s\t%s\t%d\t%d\t%s\t%s\n',
         case.name,jit.arch,phase,id_list(roots),id_list(sides),
         root_exits,other_exits,table.concat(events,','),describe(rows)))
+      io.flush()
       observed={}
     end
     jit.attach(exit_observer)
