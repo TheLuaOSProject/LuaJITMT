@@ -34,3 +34,24 @@ loop still has no ARM64 runner root, while the preserved x64 run does. The
 recursive Fibonacci and vararg-forwarding rows also remain different. A
 successful interpreter companion or a different admitted CALLM shape does
 not close these gaps.
+
+## Pointer-argument and negative-test integration
+
+`8106cfe53` adds the pointer-member aggregate argument change from
+`5eef347e7` and the test-only spill/RENAME follow-up from `ec41af38c`. The
+combined aggregate contract passes ARM64/arm64e assertion/release profiles
+in `pointer-args-combined-four-profile.log`, then restores ordinary assertion
+ARM64. Both ordinary ARM64 stock corpora pass all 509 cases in
+`pointer-args-combined-stock-{source,bytecode}.log`.
+
+The matching ordinary x86_64 build passes with `-Werror` and both 509-case
+stock corpora. Its profile is
+`0a80b1acb9e5369e890ecd583cf39979cd811503385471c1b1509101a82bfa22`;
+logs are `callm-iterator-pointer-x64-build.log` and
+`callm-iterator-pointer-x64-stock-{source,bytecode}.log`.
+
+A new uninterrupted full gate is running at pinned source `8106cfe53` in
+`ir-admission`, with output `callm-iterator-pointer-complete-gate.log`. Its
+result is not yet claimed. The promoted continuation remains at the prior
+verified production source `0641fba1e`; the transient CALLM window and newer
+captured producer investigation remain separate work.
