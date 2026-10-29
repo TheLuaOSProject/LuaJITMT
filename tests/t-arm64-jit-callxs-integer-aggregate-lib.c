@@ -91,6 +91,10 @@ enum {
   ARM64_BYTE_STACK_ALT,
   ARM64_HALF_STACK_ALT,
   ARM64_WORD_STACK_ALT,
+  ARM64_SMALL_HFA_STACK,
+  ARM64_SMALL_HFA_STACK_ALT,
+  ARM64_FLOAT_TRIPLE_PARTIAL_STACK,
+  ARM64_FLOAT_ONE_STACK_PREFIX,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -219,6 +223,51 @@ LJ_EXPORT double arm64_take_float_pair_partial_stack_alt(double a, double b,
 {
   calls[ARM64_FLOAT_PAIR_PARTIAL_STACK_ALT]++;
   return a+b+c+d+e+f+g+(double)value.lo+2.0*(double)value.hi+salt+1.0;
+}
+
+/* Darwin packs float-sized stack arguments at four-byte boundaries. With
+** eight preceding doubles in v0-v7, prefix occupies stack+0, the one-float
+** HFA stack+4, middle stack+8, the three-float HFA stack+12..20, and suffix
+** stack+24. The scalar terms make each boundary independently observable. */
+LJ_EXPORT double arm64_take_small_hfa_stack(double a, double b, double c,
+    double d, double e, double f, double g, double h, float prefix,
+    arm64_float_one one, float middle, arm64_float_triple triple, float suffix)
+{
+  calls[ARM64_SMALL_HFA_STACK]++;
+  return a+2*b+3*c+4*d+5*e+6*f+7*g+8*h + 9.0*prefix +
+         10.0*(double)one.value + 11.0*middle +
+         12.0*(double)triple.x + 13.0*(double)triple.y +
+         14.0*(double)triple.z + 15.0*suffix;
+}
+
+LJ_EXPORT double arm64_take_small_hfa_stack_alt(double a, double b, double c,
+    double d, double e, double f, double g, double h, float prefix,
+    arm64_float_one one, float middle, arm64_float_triple triple, float suffix)
+{
+  calls[ARM64_SMALL_HFA_STACK_ALT]++;
+  return a+2*b+3*c+4*d+5*e+6*f+7*g+8*h + 9.0*prefix +
+         10.0*(double)one.value + 11.0*middle +
+         12.0*(double)triple.x + 13.0*(double)triple.y +
+         14.0*(double)triple.z + 15.0*suffix + 1.0;
+}
+
+LJ_EXPORT double arm64_take_float_triple_partial_stack(
+    double a, double b, double c, double d, double e, double f, double g,
+    arm64_float_triple value, double salt)
+{
+  calls[ARM64_FLOAT_TRIPLE_PARTIAL_STACK]++;
+  return a+2*b+3*c+4*d+5*e+6*f+7*g +
+         8.0*(double)value.x + 9.0*(double)value.y +
+         10.0*(double)value.z + salt;
+}
+
+LJ_EXPORT double arm64_take_float_one_stack_prefix(
+    double a, double b, double c, double d, double e, double f, double g,
+    double h, float prefix, arm64_float_one one, float suffix)
+{
+  calls[ARM64_FLOAT_ONE_STACK_PREFIX]++;
+  return a+2*b+3*c+4*d+5*e+6*f+7*g+8*h +
+         9.0*prefix + 10.0*(double)one.value + 11.0*suffix;
 }
 
 #define DEFINE_WIDE_HFA_STACK(name, type, members, counter) \
