@@ -8,8 +8,16 @@ jit.off(true, true)
 ffi.cdef[[
 typedef struct { uint32_t lo, hi; } Arm64IntPair;
 typedef struct { float lo, hi; } Arm64FloatPair;
+typedef struct { float value; } Arm64FloatOne;
+typedef struct { double value; } Arm64DoubleOne;
 typedef Arm64FloatPair& Arm64FloatPairRef;
 typedef uint32_t (*Arm64FloatPairVarargFn)(Arm64FloatPair, ...);
+typedef struct { float f; double d; } Arm64MixedFloatHFA;
+typedef struct { double lo, hi; } Arm64DoublePair;
+typedef struct { float a, b, c; } Arm64FloatTriple;
+typedef uint32_t (*Arm64MixedFloatHFAFn)(Arm64MixedFloatHFA);
+typedef uint32_t (*Arm64DoublePairFn)(Arm64DoublePair);
+typedef uint32_t (*Arm64FloatTripleFn)(Arm64FloatTriple);
 typedef struct { Arm64IntPair pair; uint32_t tag; } Arm64NestedPair;
 typedef union { uint64_t u; double d; } Arm64MixedUnion;
 typedef struct { uint8_t value; } Arm64Byte;
@@ -23,6 +31,9 @@ uint32_t arm64_take_int_pair(Arm64IntPair, uint32_t);
 double arm64_take_int_pair_double_salt(Arm64IntPair, uint32_t);
 uint32_t arm64_take_float_pair(Arm64FloatPair);
 double arm64_take_float_pair_double_salt(Arm64FloatPair, double);
+double arm64_take_float_one_double_salt(Arm64FloatOne, double);
+double arm64_take_double_one_double_salt(Arm64DoubleOne, double);
+int32_t arm64_vararg_i32(int32_t, ...);
 uint32_t arm64_take_nested_pair(Arm64NestedPair);
 uint32_t arm64_take_union(Arm64MixedUnion);
 uint32_t arm64_take_byte(Arm64Byte, uint32_t);
@@ -38,6 +49,12 @@ local lib = ffi.load(assert(os.getenv('LJ_ARM64_INT_AGGREGATE_SO')))
 _G.__arm64_int_pair_fn = lib.arm64_take_int_pair
 _G.__arm64_float_pair_fn = lib.arm64_take_float_pair
 _G.__arm64_float_pair_double_salt_fn = lib.arm64_take_float_pair_double_salt
+_G.__arm64_float_one_double_salt_fn = lib.arm64_take_float_one_double_salt
+_G.__arm64_double_one_double_salt_fn = lib.arm64_take_double_one_double_salt
+_G.__arm64_vararg_i32_fn = lib.arm64_vararg_i32
+_G.__arm64_mixed_float_hfa_fn = ffi.cast('Arm64MixedFloatHFAFn', nil)
+_G.__arm64_double_pair_fn = ffi.cast('Arm64DoublePairFn', nil)
+_G.__arm64_float_triple_fn = ffi.cast('Arm64FloatTripleFn', nil)
 _G.__arm64_float_vararg_fn = ffi.cast('Arm64FloatPairVarargFn',
                                       lib.arm64_take_float_pair)
 _G.__arm64_nested_pair_fn = lib.arm64_take_nested_pair
@@ -105,12 +122,88 @@ return function(n, fn, value, salt)
   return sum
 end
 ]], '@float-hfa-clone'))()
+local function hfa_pair()
+  return function(n, fn, value, salt)
+    local sum = 0
+    for i = 1, n do sum = sum + fn(value, salt) end
+    return sum
+  end
+end
+local float_one_candidate = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@float-one-hfa-candidate'))()
+local float_one_oracle_chunk = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@float-one-hfa-oracle'))
+jit.off(float_one_oracle_chunk, true)
+local float_one_oracle = float_one_oracle_chunk()
+local float_one_clone = hfa_pair()
+local double_one_candidate = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@double-one-hfa-candidate'))()
+local double_one_oracle_chunk = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@double-one-hfa-oracle'))
+jit.off(double_one_oracle_chunk, true)
+local double_one_oracle = double_one_oracle_chunk()
+local double_one_clone = hfa_pair()
+local integer_callm_candidate = assert(loadstring([[
+return function(n, producer, consumer, value, aggregate)
+  local sum = 0
+  for i = 1, n do sum = sum + consumer(aggregate, producer(value, 1)) end
+  return sum
+end
+]], '@integer-callm-candidate'))()
+local integer_callm_oracle_chunk = assert(loadstring([[
+return function(n, producer, consumer, value, aggregate)
+  local sum = 0
+  for i = 1, n do sum = sum + consumer(aggregate, producer(value, 1)) end
+  return sum
+end
+]], '@integer-callm-oracle'))
+jit.off(integer_callm_oracle_chunk, true)
+local integer_callm_oracle = integer_callm_oracle_chunk()
+local integer_callm_clone = assert(loadstring([[
+return function(n, producer, consumer, value, aggregate)
+  local sum = 0
+  for i = 1, n do sum = sum + consumer(aggregate, producer(value, 1)) end
+  return sum
+end
+]], '@integer-callm-clone'))()
 jit.off(hfa_oracle, true)
 jit.off(hfa_clone, true)
+jit.off(float_one_oracle, true)
+jit.off(float_one_clone, true)
+jit.off(double_one_oracle, true)
+jit.off(double_one_clone, true)
+jit.off(integer_callm_oracle, true)
+jit.off(integer_callm_clone, true)
 jit.off(hfa_ref_candidate, true)
 _G.__arm64_float_hfa_candidate = hfa_candidate
 _G.__arm64_float_hfa_oracle = hfa_oracle
 _G.__arm64_float_hfa_clone = hfa_clone
+_G.__arm64_float_one_candidate = float_one_candidate
+_G.__arm64_float_one_clone = float_one_clone
+_G.__arm64_double_one_candidate = double_one_candidate
+_G.__arm64_double_one_clone = double_one_clone
+_G.__arm64_integer_callm_candidate = integer_callm_candidate
+_G.__arm64_integer_callm_clone = integer_callm_clone
 _set_hfa_candidate(hfa_candidate)
 jit.on(hfa_ref_candidate, true)
 
@@ -253,6 +346,78 @@ assert(_hfa_native_count() > hfa_before_gc,
 assert(hfa_exits > 0, 'HFA root did not exit after full-GC re-entry')
 assert(lib.arm64_aggregate_count(3) == 320,
   'HFA post-GC effects were lost or replayed')
+
+local function run_one_hfa(candidate_fn, oracle_fn, type_name, ffi_fn, counter,
+			   label)
+  hfa_candidate = candidate_fn
+  _set_hfa_candidate(candidate_fn)
+  jit.flush(candidate_fn)
+  jit.on(candidate_fn, true)
+  exits, hfa_exits = 0, 0
+  lib.arm64_aggregate_reset()
+  _begin_hfa_witness()
+  local value = ffi.new(type_name, 1.25)
+  local before = _hfa_native_count()
+  for pass = 1, 8 do
+    assert(candidate_fn(16, ffi_fn, value, 3.75) ==
+           oracle_fn(16, ffi_fn, value, 3.75), label..' differs from oracle')
+  end
+  assert(_hfa_trace_count() > 0, label..' root was not published')
+  assert(_hfa_native_count() > before, label..' did not finish a native call')
+  assert(hfa_exits > 0, label..' root did not take a native exit')
+  assert(lib.arm64_aggregate_count(counter) == 256,
+	 label..' effects were lost or replayed: counter='..tostring(counter)..
+	 ', value='..tostring(lib.arm64_aggregate_count(counter)))
+  before = _hfa_native_count()
+  collectgarbage('collect')
+  exits, hfa_exits = 0, 0
+  assert(candidate_fn(32, ffi_fn, value, 3.75) ==
+         oracle_fn(32, ffi_fn, value, 3.75), label..' differs after GC')
+  assert(_hfa_trace_count() > 0, label..' root was lost after full GC')
+  assert(_hfa_native_count() > before,
+         label..' did not re-enter native code after full GC')
+  assert(hfa_exits > 0, label..' did not exit after full-GC re-entry')
+  assert(lib.arm64_aggregate_count(counter) == 320,
+         label..' post-GC effects were lost or replayed')
+end
+
+run_one_hfa(float_one_candidate, float_one_oracle, 'Arm64FloatOne',
+	    lib.arm64_take_float_one_double_salt, 12, 'one-float HFA')
+run_one_hfa(double_one_candidate, double_one_oracle, 'Arm64DoubleOne',
+	    lib.arm64_take_double_one_double_salt, 13, 'one-double HFA')
+
+candidate = integer_callm_candidate
+_set_aggregate_candidate(integer_callm_candidate)
+jit.flush(integer_callm_candidate)
+jit.on(integer_callm_candidate, true)
+exits = 0
+lib.arm64_aggregate_reset()
+local integer_callm_pair = ffi.new('Arm64IntPair', 7, 11)
+local integer_callm_native_before = _aggregate_native_width_count(8)
+for pass = 1, 8 do
+  assert(integer_callm_candidate(16, lib.arm64_vararg_i32,
+				 lib.arm64_take_int_pair, 5,
+				 integer_callm_pair) ==
+	 integer_callm_oracle(16, lib.arm64_vararg_i32,
+			       lib.arm64_take_int_pair, 5,
+			       integer_callm_pair),
+	 'scalar vararg producer CALLM differs from oracle')
+end
+assert(exits > 0, 'scalar vararg producer CALLM root did not exit')
+assert(_aggregate_native_width_count(8) > integer_callm_native_before,
+	'scalar vararg producer CALLM did not finish a native aggregate call')
+assert(lib.arm64_aggregate_count(0) == 256,
+       'scalar vararg CALLM consumer effects were lost or replayed')
+assert(lib.arm64_aggregate_count(14) == 256,
+       'scalar vararg CALLM producer effects were lost or replayed')
+candidate = assert(loadstring([[
+return function(n, fn, value)
+  local sum = 0
+  for i = 1, n do sum = sum + fn(value, i) end
+  return sum
+end
+]], '@integer-aggregate-candidate-restored'))()
+_G.__arm64_integer_aggregate_candidate = candidate
 _set_aggregate_candidate(candidate)
 jit.flush(candidate)
 for turn = 1, 24 do
@@ -292,7 +457,7 @@ for no in pairs(candidate_roots) do
 end
 assert(next(selected), 'no selected candidate root contains CALLXS')
 assert(exits > 0, 'selected candidate root did not take a native exit')
-assert(lib.arm64_aggregate_count(0) == 1312,
+assert(lib.arm64_aggregate_count(0) == 1568,
   'integer aggregate effects were lost or replayed: ' ..
   tostring(lib.arm64_aggregate_count(0)))
 assert(lib.arm64_aggregate_count(1) == 1440,

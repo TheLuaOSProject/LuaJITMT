@@ -2337,8 +2337,8 @@ static TRef crec_call_arm64_integer_aggregate_arg(jit_State *J, CTState *cts,
   return emitir(IRT(IR_XLOAD, type), ptr, 0);
 }
 
-/* Lower the bounded two-float Darwin HFA into its two independent SIMD
-** carriers. The original CData TValue remains the GC root in the Lua frame. */
+/* Lower each bounded Darwin HFA member into an independent SIMD carrier.
+** The original CData TValue remains the GC root in the Lua frame. */
 static void crec_call_arm64_float_hfa_args(jit_State *J, CTState *cts,
 					   CTypeID did, TRef sp,
 					   cTValue *o, TRef *args,
@@ -2350,17 +2350,19 @@ static void crec_call_arm64_float_hfa_args(jit_State *J, CTState *cts,
   CTInfo sinfo = ctype_info_acq(src);
   CTypeID rawid;
   LJArm64FloatHFA hfa;
+  IRType type;
   unsigned i;
   crec_ctype_rawrefid(J, cts, cd->ctypeid, &rawid, &raw_snap);
   if (rawid != did || ctype_isref(sinfo) ||
       !ctype_isstruct(ctype_info_acq(&raw_snap)) ||
       !lj_ccall_arm64_float_hfa_class(cts, rawid, &hfa, &rawid) ||
-      hfa.count != 2 || hfa.size != 2*sizeof(float))
+      hfa.count == 0 || hfa.size > 8)
     lj_trace_err(J, LJ_TRERR_NYICONV);
+  type = hfa.member_size == sizeof(float) ? IRT_FLOAT : IRT_NUM;
   for (i = 0; i < hfa.count; i++) {
     TRef ptr = emitir(IRT(IR_ADD, IRT_PTR), sp,
 		      lj_ir_kintp(J, sizeof(GCcdata)+hfa.offset[i]));
-    args[(*nargs)++] = emitir(IRT(IR_XLOAD, IRT_FLOAT), ptr, 0);
+    args[(*nargs)++] = emitir(IRT(IR_XLOAD, type), ptr, 0);
   }
 }
 #endif

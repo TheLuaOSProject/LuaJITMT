@@ -396,7 +396,9 @@ static int arm64_callxs_value_kind(const IRIns *ir, IRRef ref,
   }
   switch (kind) {
   case LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER:
-	return !on_stack && size == sizeof(float) && type == IRT_FLOAT &&
+	return !on_stack &&
+	       ((size == sizeof(float) && type == IRT_FLOAT) ||
+		(size == sizeof(double) && type == IRT_NUM)) &&
 	       value.o == IR_XLOAD && value.op2 == 0;
   case LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE:
 	if (on_stack || value.o != IR_XLOAD || value.op2 != 0) return 0;
@@ -1199,12 +1201,16 @@ static int arm64_callxs_cdata_float_hfa_member(CTState *cts,
 	CTypeID source_id = 0, rawid;
 	IRRef source, ref;
 	unsigned member_index;
+	unsigned member_size;
 	unsigned consumers = 0;
 	if (T->snap == NULL || T->snapmap == NULL ||
 	    value < REF_FIRST || value >= T->nins) return 0;
 	load = ir_load_acq(&ir[value]);
-	if (load.o != IR_XLOAD || load.t.irt != IRT_FLOAT || load.op2 != 0 ||
+	if (load.o != IR_XLOAD ||
+	    (load.t.irt != IRT_FLOAT && load.t.irt != IRT_NUM) ||
+	    load.op2 != 0 ||
 	    load.op1 < REF_FIRST || load.op1 >= value) return 0;
+	member_size = load.t.irt == IRT_FLOAT ? sizeof(float) : sizeof(double);
 	address = ir_load_acq(&ir[load.op1]);
 	source = address.op1;
 	{
@@ -1213,12 +1219,14 @@ static int arm64_callxs_cdata_float_hfa_member(CTState *cts,
 	      source < REF_FIRST || source >= load.op1 ||
 	      !arm64_callxs_offset_value(ir, T->nk, address.op2, &offset) ||
 	      offset < (int64_t)sizeof(GCcdata) ||
-	      (offset-(int64_t)sizeof(GCcdata))%sizeof(float) != 0 ||
-	      (offset-(int64_t)sizeof(GCcdata))/sizeof(float) >= 2) return 0;
-	  member_index = (unsigned)((offset-(int64_t)sizeof(GCcdata))/sizeof(float));
+	      (offset-(int64_t)sizeof(GCcdata))%(int64_t)member_size != 0 ||
+	      (offset-(int64_t)sizeof(GCcdata))/(int64_t)member_size >= 2) return 0;
+	  member_index = (unsigned)((offset-(int64_t)sizeof(GCcdata))/
+			     (int64_t)member_size);
 	}
 	if (arg != NULL && (arg->kind != LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER ||
-	    arg->member_count != 2 || arg->member_index != member_index)) return 0;
+	    arg->size != member_size || arg->member_count == 0 ||
+	    arg->member_count > 2 || arg->member_index != member_index)) return 0;
 	src = ir_load_acq(&ir[source]);
 	if ((src.o != IR_SLOAD && src.o != IR_VLOAD) ||
 	    src.t.irt != (IRT_CDATA|IRT_GUARD) ||
@@ -1243,8 +1251,8 @@ static int arm64_callxs_cdata_float_hfa_member(CTState *cts,
 	  }
 	}
 	if (!source_id || !lj_ccall_arm64_float_hfa_class(cts, source_id,
-	    &hfa, &rawid) || hfa.count != 2 ||
-	    hfa.member_size != sizeof(float)) return 0;
+	    &hfa, &rawid) || hfa.member_size != member_size ||
+	    member_index >= hfa.count) return 0;
 	{
 	  SnapNo s;
 	  for (s = 0; s < T->nsnap; s++) {
@@ -1258,6 +1266,7 @@ static int arm64_callxs_cdata_float_hfa_member(CTState *cts,
 	memset(&inferred, 0, sizeof(inferred));
 	inferred.kind = LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER;
 	inferred.id = rawid;
+	inferred.size = (uint8_t)member_size;
 	inferred.member_count = hfa.count;
 	inferred.member_index = (uint8_t)member_index;
 	if (arg == NULL) arg = &inferred;
@@ -1283,9 +1292,10 @@ static int arm64_callxs_cdata_float_hfa_member(CTState *cts,
 	    for (i = 0; i < nargs; i++) if (values[i] == value) {
 	      if (i >= abi.nargs || abi.arg[i].id != arg->id ||
 		  abi.arg[i].kind != LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER ||
+		  abi.arg[i].size != member_size ||
 		  abi.arg[i].member_index != arg->member_index ||
 		  !arm64_callxs_value_kind(ir, value, T->nk, T->nins, ref,
-		    LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER, sizeof(float), 0, 0))
+		    LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER, member_size, 0, 0))
 		return 0;
 	      consumers++;
 	    }
@@ -2474,7 +2484,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
       break;
     case IR_XLOAD:
       if (state != CALLXS_CLOSED ||
-	  (ins.t.irt == IRT_FLOAT ?
+	  ((ins.t.irt == IRT_FLOAT || ins.t.irt == IRT_NUM) ?
 	   !arm64_callxs_cdata_float_hfa_member(ctype_ctsG(J2G(J)), T,
 	     ref, 0, NULL) :
 	   !arm64_callxs_cdata_integer_aggregate_argument(ctype_ctsG(J2G(J)),
@@ -5510,11 +5520,15 @@ static int arm64_postra_cdata_float_hfa_member(CTState *cts,
 	IRRef source, r;
 	MSize s, i;
 	unsigned member_index;
+	unsigned member_size;
 	unsigned calls = 0;
 	if (value < REF_FIRST || value >= nins) return 0;
 	load = ir_load_acq(&ir[value]);
-	if (load.o != IR_XLOAD || load.t.irt != IRT_FLOAT || load.op2 != 0 ||
+	if (load.o != IR_XLOAD ||
+	    (load.t.irt != IRT_FLOAT && load.t.irt != IRT_NUM) ||
+	    load.op2 != 0 ||
 	    load.op1 < REF_FIRST || load.op1 >= value) return 0;
+	member_size = load.t.irt == IRT_FLOAT ? sizeof(float) : sizeof(double);
 	address = ir_load_acq(&ir[load.op1]);
 	source = address.op1;
 	{
@@ -5523,12 +5537,14 @@ static int arm64_postra_cdata_float_hfa_member(CTState *cts,
 	      source < REF_FIRST || source >= load.op1 ||
 	      !arm64_callxs_offset_value(ir, T->nk, address.op2, &offset) ||
 	      offset < (int64_t)sizeof(GCcdata) ||
-	      (offset-(int64_t)sizeof(GCcdata))%sizeof(float) != 0 ||
-	      (offset-(int64_t)sizeof(GCcdata))/sizeof(float) >= 2) return 0;
-	  member_index = (unsigned)((offset-(int64_t)sizeof(GCcdata))/sizeof(float));
+	      (offset-(int64_t)sizeof(GCcdata))%(int64_t)member_size != 0 ||
+	      (offset-(int64_t)sizeof(GCcdata))/(int64_t)member_size >= 2) return 0;
+	  member_index = (unsigned)((offset-(int64_t)sizeof(GCcdata))/
+			     (int64_t)member_size);
 	}
 	if (arg != NULL && (arg->kind != LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER ||
-	    arg->member_count != 2 || arg->member_index != member_index)) return 0;
+	    arg->size != member_size || arg->member_count == 0 ||
+	    arg->member_count > 2 || arg->member_index != member_index)) return 0;
 	src = ir_load_acq(&ir[source]);
 	if ((src.o != IR_SLOAD && src.o != IR_VLOAD) ||
 	    src.t.irt != (IRT_CDATA|IRT_GUARD) ||
@@ -5553,11 +5569,12 @@ static int arm64_postra_cdata_float_hfa_member(CTState *cts,
 	  }
 	}
 	if (!source_id || !lj_ccall_arm64_float_hfa_class(cts, source_id,
-	    &hfa, &rawid) || hfa.count != 2 ||
-	    hfa.member_size != sizeof(float)) return 0;
+	    &hfa, &rawid) || hfa.member_size != member_size ||
+	    member_index >= hfa.count) return 0;
 	memset(&inferred, 0, sizeof(inferred));
 	inferred.kind = LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER;
 	inferred.id = rawid;
+	inferred.size = (uint8_t)member_size;
 	inferred.member_count = hfa.count;
 	inferred.member_index = (uint8_t)member_index;
 	if (arg == NULL) arg = &inferred;
@@ -5589,9 +5606,10 @@ static int arm64_postra_cdata_float_hfa_member(CTState *cts,
 	    for (a = 0; a < count; a++) if (args[a] == value) {
 	      if (a >= abi.nargs || abi.arg[a].id != arg->id ||
 		  abi.arg[a].kind != LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER ||
+		  abi.arg[a].size != member_size ||
 		  abi.arg[a].member_index != arg->member_index ||
 		  !arm64_callxs_value_kind(ir, value, T->nk, nins, r,
-		    LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER, sizeof(float), 0, 0))
+		    LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER, member_size, 0, 0))
 		return 0;
 	      calls++;
 	    }
@@ -6033,7 +6051,8 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    producer_pending = 1;
 	    producer_scalar = !arm64_callxs_result_boxed(&abi) &&
 	      bc_op(sourceins) == BC_CALL && bc_b(sourceins) == 0 &&
-	      abi.nparams+1u == (unsigned)bc_c(sourceins) &&
+	      abi.nparams+(actual_count-abi.nargs)+1u ==
+		(unsigned)bc_c(sourceins) &&
 	      (abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER ||
 	       abi.result_kind == LJ_ARM64_ABI_KIND_FLOAT ||
 	       abi.result_kind == LJ_ARM64_ABI_KIND_ENUM);
@@ -6225,7 +6244,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	      return 0;
 	  } else if (ins.o == IR_XLOAD) {
 	    if (protocol != 0 ||
-		!(ins.t.irt == IRT_FLOAT ?
+		!((ins.t.irt == IRT_FLOAT || ins.t.irt == IRT_NUM) ?
 		  arm64_postra_cdata_float_hfa_member(view->cts, &temp,
 		    semantic_nins, ref, 0, NULL) :
 		  arm64_postra_cdata_integer_aggregate_argument(view->cts, &temp,
