@@ -19,7 +19,7 @@ evaluator. Every replayed result must appear, in order, in the current
 CALLM guard snapshot at the producer's exact caller-frame slots. No extra
 guard or poll is inserted to manufacture this evidence.
 
-The native C fixture currently exercises the fixed three-result case. It
+The native C fixture exercises fixed one-, two- and three-result cases. It
 checks the runner's selected loop trace and exits, repeats it after full GC
 while an MT peer remains alive, and independently rejects a changed CALLM
 arity, a corrupted CALLM argument-map value, and a producer-footer PC borrowed
@@ -29,10 +29,18 @@ checks publication and exact trace reuse; those results are not counted as
 native execution evidence.
 
 Validation was run through `tools/ci/arm64_jit_lua_leaf_contract.sh`: ARM64
-and arm64e assertion and release profiles. The focused three-result shape has
-actual selected-root entry/exit evidence; the companion's publication checks
-remain separate from that native witness. One- and two-result native entry
-remain unverified because their current fixture runs do not reach root-entry
-preflight (zero entry starts and zero aborts); this is tracked separately from
-the semantic/post-RA admission proof. The producer replay path is bounded to
-fixed return counts one through three.
+and arm64e assertion and release profiles. Each result count has actual
+selected-root entry/exit evidence; the companion's publication checks remain
+separate. The integrated matrix reports 22 native calls, 109 semantic
+negatives and 117 post-allocation negatives per profile, with no cold retries.
+Logs are in `/Users/frityet/Scratch/ljmt-callm-integrated-20261029/`.
+
+The earlier failed one-/two-result C attempts declared every consumer as
+`function(a,b,c)`, while the ordinary companion declared the matching number
+of parameters. The C fixture now matches those ordinary sources. It passes
+all three counts without the separate NOJIT hot-counter fix. The old failures
+were a different case involving missing-parameter normalization; their logs
+remain under `/tmp/open-callm-leaf-contract-countfix2.log`, and that case is
+not covered by this native parity claim. The runtime helper also uses the
+actual bounded argument count instead of demanding room for three slots.
+The producer replay path remains bounded to one through three results.

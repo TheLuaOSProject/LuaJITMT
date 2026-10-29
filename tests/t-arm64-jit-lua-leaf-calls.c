@@ -442,12 +442,12 @@ int main(void)
     printf("Lua leaf shape=%u native=4 exact identity exit and same-trace reuse passed\n",shape);
   }
   ljt_lua_dostring(L,
-    "install_open_case=function(producer,consumer) "
+    "install_open_case=function(producer,consumer,parameters) "
       "leaf_a=assert(loadstring('return function(x) '..producer..' end',"
         "'@open-callm-values'))(); "
       "leaf_oracle_a=assert(loadstring('return function(x) '..producer..' end',"
         "'@open-callm-values-oracle'))(); "
-      "local src='return function(fn,n) local add=function(a,b,c) '..consumer..' end; "
+      "local src='return function(fn,n) local add=function('..parameters..') '..consumer..' end; "
         "local total=.5; for i=1,n do total=total+add(fn(i+.5)) end; "
         "return total end'; "
       "leaf_run=assert(loadstring(src,'@open-callm-run'))(); "
@@ -459,14 +459,15 @@ int main(void)
   {
     const char *producer[] = {"return x", "return x,.25", "return x,.25,.5"};
     const char *consumer[] = {"return a+1", "return a+b", "return a+b+c"};
-    {
-    unsigned nresults=3u;
+    const char *parameters[] = {"a", "a,b", "a,b,c"};
+    for (unsigned nresults=1u; nresults<=3u; nresults++) {
     GCtrace *T=NULL;
     uint32_t rootstarts=lj_trace_test_root_entry_startins_calls();
     lua_getglobal(L,"install_open_case");
     lua_pushstring(L,producer[nresults-1u]);
     lua_pushstring(L,consumer[nresults-1u]);
-    ljt_lua_pcall(L,2,0,"install open CALLM case");
+    lua_pushstring(L,parameters[nresults-1u]);
+    ljt_lua_pcall(L,3,0,"install open CALLM case");
     for (unsigned attempt=0; attempt<8 && !T; attempt++) {
       lua_Number expected=invoke(L,"leaf_oracle","leaf_oracle_a",96);
       assert(invoke(L,"leaf_run","leaf_a",96)==expected);
