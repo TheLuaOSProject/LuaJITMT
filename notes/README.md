@@ -18,21 +18,28 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
-- Current port checkpoint: `6cce85d6b` integrates bounded one/two/three-result
-  Lua CALL-to-CALLM vectors, exact producer and consumer identity exits, and
-  the disabled-FUNCF hot-counter fix. Four-profile native contracts and both
-  509-case ordinary stock corpora pass; the complete combined gate also passes.
-  The gate is pinned to `6cce85d6b`, with ordinary assertion ARM64 restored
-  afterward; see the [gate evidence](arm64-callm-complete-gate-2026-10-29.md).
-  Missing/extra consumer parameters, mutable captured consumers, deeper side
-  ancestry and indirect composite FFI results remain separate active work.
-  See the [CALLM integration evidence](arm64-jit-open-result-callm-2026-10-29.md)
-  and [consumer-exit evidence](arm64-open-callm-consumer-exits-2026-10-29.md).
-  This checkpoint also includes nested/array HFA arguments and results,
-  small nested/mixed integer-containing results, nil-terminated ITERL, and
-  the previously validated direct/nested side support. Earlier checkpoints
-  below describe their evidence at the named revisions, not current limits.
-- Active integration: bounded nonleaf FUNCF roots, multiple root-linked side
+- Current verified production checkpoint: `0641fba1e`, promoted through
+  `f2464d183` to `codex/arm64-parity`. It adds CALLM argument normalization
+  and captured-consumer replay, bounded deeper integer FORL/while side
+  ancestry, ancestor teardown, bounded MAP_JIT range recovery, indirect
+  integer aggregate FFI results, and pointer fields in direct small results.
+  The complete combined gate passes, including actual VM and recorder
+  safepoint runtime execution. All four focused side profiles and both
+  509-case ordinary stock corpora on ARM64 and x86_64 pass. The gate checkout
+  is restored to ordinary assertion ARM64 without test helpers. See the
+  [complete checkpoint evidence](arm64-ancestry-complete-gate-2026-10-29.md).
+  Discarded numeric CALLM expressions, iterator early break, transient
+  three-result windows and pointer-containing FFI arguments are subsequent
+  work and are not covered by this gate. General Lua call/return, recursion,
+  protected calls, vararg forwarding and remaining topology/FFI restrictions
+  still prevent a parity claim.
+
+## Earlier checkpoint records
+
+These entries describe evidence and remaining work at their named revisions.
+The current verified checkpoint above supersedes their status statements.
+
+- Earlier integration: bounded nonleaf FUNCF roots, multiple root-linked side
   traces and HFA results, followed by strict recorder preflight and the
   read-only captured-call fix at `6968c4cac`. Ordinary stock corpora, workload
   checks and the captured-function probe pass; independent FORL-side topology
