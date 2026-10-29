@@ -67,12 +67,12 @@ depth three; its apparent ~20% root/direct regression was a topology mismatch
 and should be disregarded. All these short measurements are noisy, not a
 general performance guarantee.
 
-The ancestry index and its whole-struct zeroing are only used by side capture,
-admission, publication, and retirement helpers. The fixed 64-row ancestry
-array enlarges `LJArm64SideParentSnapshot` locals on those cold recording and
-assembler paths; it is not allocated or cleared in generated loop execution.
-The ordinary root/direct/nested timing comparison above exercises that emitted
-code path without a measurable root/direct regression in this sample.
+The ancestry index is used by side capture, admission, publication, retirement,
+and validation of deeper graphs at native root entry. The fixed 64-row ancestry
+array enlarges `LJArm64SideParentSnapshot` locals, including entry integrity
+audits. These are C validation costs; the generated loop instructions are
+unchanged. The matched root/direct/nested timing comparison above includes the
+entry checks and found no measurable root/direct regression in this sample.
 
 Retirement now validates each root-owned side list and walks newest-first.
 Publication prepends each child, so this is descendant-before-ancestor order.
