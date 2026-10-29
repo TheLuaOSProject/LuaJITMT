@@ -105,3 +105,23 @@ bypass. It identified quadratic suffix scanning on deep large graphs as a
 performance concern to reduce before integration. Large-list limits follow
 the existing trace-number/count representation; a new arbitrary depth cap is
 not introduced. Full integrated gate validation is still pending.
+
+## Large-list membership cost
+
+A follow-up separates complete list/certificate validation from ordered parent
+membership. After the first pass proves exact length and termination, the
+second stops each suffix search at its parent and revalidates the root tuple
+again. Immediate-parent chains therefore have linear membership scanning;
+widely separated mixed branches can still require quadratic searches. Native
+publication also reuses the captured parent's actual depth instead of
+computing every sibling's maximum depth. No locking or shared scratch is used
+by these metadata readers. This is an algorithmic bound, not a speed claim.
+
+The complete expanded side matrix passes again in all four profiles
+(`capacity-linear-four-profile.log`), with ordinary restoration profile
+`74c852e91ca561a40a2f63da680a30c5cbe0dc3e67f8a90dbae6810f544b9cdd`.
+A read-only follow-up review found no additional membership/revalidation
+blocker. Larger-source probes with 133 and 260 branches reveal a separate
+first-side semantic refusal before any deep chain is formed; x64 reaches
+depth 259 on the 260-branch source. Those probes do not test the extended
+ancestry count yet, and the cause is under investigation.
