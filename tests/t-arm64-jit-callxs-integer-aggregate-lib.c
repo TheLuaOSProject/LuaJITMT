@@ -83,6 +83,8 @@ enum {
   ARM64_DOUBLE_TRIPLE_STACK_ALT,
   ARM64_DOUBLE_QUAD_STACK_ALT,
   ARM64_DOUBLE_ONE_STACK_ALT,
+  ARM64_FLOAT_PAIR_PARTIAL_STACK,
+  ARM64_FLOAT_PAIR_PARTIAL_STACK_ALT,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -170,6 +172,28 @@ LJ_EXPORT double arm64_take_float_pair_stack_alt(double a, double b, double c,
 {
   calls[ARM64_FLOAT_PAIR_STACK_ALT]++;
   return a+b+c+d+e+f+g+h+(double)value.lo+2.0*(double)value.hi+salt;
+}
+
+LJ_EXPORT double arm64_take_float_pair_partial_stack(double a, double b,
+						     double c, double d,
+						     double e, double f,
+						     double g,
+						     arm64_float_pair value,
+						     double salt)
+{
+  calls[ARM64_FLOAT_PAIR_PARTIAL_STACK]++;
+  return a+b+c+d+e+f+g+(double)value.lo+2.0*(double)value.hi+salt;
+}
+
+LJ_EXPORT double arm64_take_float_pair_partial_stack_alt(double a, double b,
+							 double c, double d,
+							 double e, double f,
+							 double g,
+							 arm64_float_pair value,
+							 double salt)
+{
+  calls[ARM64_FLOAT_PAIR_PARTIAL_STACK_ALT]++;
+  return a+b+c+d+e+f+g+(double)value.lo+2.0*(double)value.hi+salt+1.0;
 }
 
 #define DEFINE_WIDE_HFA_STACK(name, type, members, counter) \

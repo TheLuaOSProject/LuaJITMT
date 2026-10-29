@@ -2903,7 +2903,11 @@ static void asm_setup_regsp(ASMState *as)
     case IR_CALLXS: {
       CCallInfo ci;
       ci.flags = asm_callx_flags(as, ir);
+#if LJ_TARGET_ARM64 && LJ_HASJIT_FFI_CALLXS
+      ir->prev = asm_setup_callx_slots(as, ir, &ci);
+#else
       ir->prev = asm_setup_call_slots(as, ir, &ci);
+#endif
       if (inloop)
 	as->modset |= RSET_SCRATCH;
       continue;

@@ -432,14 +432,16 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
 	int stack_hfa = nfpr+hfa.count > CCALL_NARG_FPR;
 	if (abi->is_vararg || nargs+hfa.count > LJ_ARM64_ABI_MAX_ARGS)
 	  return 0;
-	/* The interpreter passes an HFA wholly in consecutive FPRs, or wholly
-	** on the stack when its FPR bank is exhausted. The generic emitter can
-	** reproduce the latter without a new argument-group opcode only when no
-	** FPR remains and the aggregate starts/ends on eight-byte boundaries.
-	** Keep partial-bank overflow and implicit group padding closed. */
-	if (stack_hfa && (nfpr != CCALL_NARG_FPR || (hfa.size & 7u) != 0 ||
-	                  (stack_size & 7u) != 0)) return 0;
-	if (stack_hfa) stack_size = (stack_size+7u) & ~7u;
+	/* AAPCS64 places an HFA wholly in consecutive FPRs or wholly on the
+	** stack. If the remaining FPR bank cannot hold the complete group, it is
+	** closed for subsequent FP arguments as well. Keep group padding bounded
+	** to aggregates whose complete stack extent is eight-byte sized. */
+	if (stack_hfa && ((hfa.size & 7u) != 0 || (stack_size & 7u) != 0))
+	  return 0;
+	if (stack_hfa) {
+	  stack_size = (stack_size+7u) & ~7u;
+	  nfpr = CCALL_NARG_FPR;
+	}
 	for (part = 0; part < hfa.count; part++) {
 	  arg = &abi->arg[nargs];
 	  memset(arg, 0, sizeof(*arg));
