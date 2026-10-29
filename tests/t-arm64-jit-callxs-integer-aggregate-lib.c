@@ -73,6 +73,16 @@ enum {
   ARM64_FLOAT_PAIR_STACK_ALT,
   ARM64_INT_PAIR_STACK,
   ARM64_INT_PAIR_STACK_ALT,
+  ARM64_FLOAT_QUAD_STACK,
+  ARM64_DOUBLE_PAIR_STACK,
+  ARM64_DOUBLE_TRIPLE_STACK,
+  ARM64_DOUBLE_QUAD_STACK,
+  ARM64_DOUBLE_ONE_STACK,
+  ARM64_FLOAT_QUAD_STACK_ALT,
+  ARM64_DOUBLE_PAIR_STACK_ALT,
+  ARM64_DOUBLE_TRIPLE_STACK_ALT,
+  ARM64_DOUBLE_QUAD_STACK_ALT,
+  ARM64_DOUBLE_ONE_STACK_ALT,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -161,6 +171,26 @@ LJ_EXPORT double arm64_take_float_pair_stack_alt(double a, double b, double c,
   calls[ARM64_FLOAT_PAIR_STACK_ALT]++;
   return a+b+c+d+e+f+g+h+(double)value.lo+2.0*(double)value.hi+salt;
 }
+
+#define DEFINE_WIDE_HFA_STACK(name, type, members, counter) \
+  LJ_EXPORT double arm64_take_##name##_stack(double a, double b, double c, \
+      double d, double e, double f, double g, double h, type value, double salt) \
+  { calls[counter]++; return a+2*b+3*c+4*d+5*e+6*f+7*g+8*h+(members)+salt; } \
+  LJ_EXPORT double arm64_take_##name##_stack_alt(double a, double b, double c, \
+      double d, double e, double f, double g, double h, type value, double salt) \
+  { calls[counter+5]++; return a+2*b+3*c+4*d+5*e+6*f+7*g+8*h+(members)+salt+1; }
+
+DEFINE_WIDE_HFA_STACK(float_quad, arm64_float_quad_result,
+  value.x+2*value.y+3*value.z+4*value.w, ARM64_FLOAT_QUAD_STACK)
+DEFINE_WIDE_HFA_STACK(double_pair, arm64_double_pair_result,
+  value.lo+2*value.hi, ARM64_DOUBLE_PAIR_STACK)
+DEFINE_WIDE_HFA_STACK(double_triple, arm64_double_triple_result,
+  value.x+2*value.y+3*value.z, ARM64_DOUBLE_TRIPLE_STACK)
+DEFINE_WIDE_HFA_STACK(double_quad, arm64_double_quad_result,
+  value.x+2*value.y+3*value.z+4*value.w, ARM64_DOUBLE_QUAD_STACK)
+DEFINE_WIDE_HFA_STACK(double_one, arm64_double_result,
+  value.value, ARM64_DOUBLE_ONE_STACK)
+#undef DEFINE_WIDE_HFA_STACK
 
 LJ_EXPORT int32_t arm64_vararg_i32(int32_t first, ...)
 {
