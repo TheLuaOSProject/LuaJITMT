@@ -8914,7 +8914,7 @@ static int arm64_side_forl_step_source(const LJArm64SideIRView *side,
   fori = (BCIns)la_load32_acq((const uint32_t *)&side->proto_bc[header]);
   stepins = (BCIns)la_load32_acq((const uint32_t *)&side->proto_bc[header-1u]);
   idxslot = 1u+LJ_FR2+(MSize)bc_a(side->parent_startins);
-  step = (int32_t)bc_d(stepins);
+  step = (int32_t)(int16_t)bc_d(stepins);
   if (bc_op(fori) != BC_FORI ||
 	bc_a(fori) != bc_a(side->parent_startins) ||
 	bc_op(stepins) != BC_KSHORT ||
