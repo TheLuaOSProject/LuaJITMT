@@ -27,6 +27,16 @@ typedef struct { uint8_t value; } Arm64ByteResult;
 typedef struct { uint16_t value; } Arm64HalfResult;
 typedef struct { uint32_t value; } Arm64WordResult;
 typedef struct { uint64_t value; } Arm64U64Result;
+typedef struct { float value; } Arm64FloatResult;
+typedef struct { double value; } Arm64DoubleResult;
+typedef struct __attribute__((aligned(16))) {
+  float value;
+} Arm64AlignedFloatResult;
+typedef Arm64AlignedFloatResult (*Arm64AlignedFloatResultFn)(uint32_t);
+typedef struct __attribute__((aligned(8))) {
+  float value;
+} Arm64PaddedFloatResult;
+typedef Arm64PaddedFloatResult (*Arm64PaddedFloatResultFn)(uint32_t);
 typedef Arm64WordResult Arm64WordResultAlias;
 typedef struct __attribute__((aligned(16))) {
   uint32_t value;
@@ -59,6 +69,8 @@ Arm64HalfResult arm64_return_half(uint32_t);
 Arm64WordResult arm64_return_word(uint32_t);
 Arm64WordResultAlias arm64_return_word_alias(uint32_t);
 Arm64U64Result arm64_return_u64(uint32_t);
+Arm64FloatResult arm64_return_float_hfa(uint32_t);
+Arm64DoubleResult arm64_return_double_hfa(uint32_t);
 uint32_t arm64_return_scalar(uint32_t);
 ]]
 local lib = ffi.load(assert(os.getenv('LJ_ARM64_INT_AGGREGATE_SO')))
@@ -66,6 +78,10 @@ _G.__arm64_return_byte_fn = lib.arm64_return_byte
 _G.__arm64_return_half_fn = lib.arm64_return_half
 _G.__arm64_return_word_fn = lib.arm64_return_word
 _G.__arm64_return_u64_fn = lib.arm64_return_u64
+_G.__arm64_return_float_hfa_fn = lib.arm64_return_float_hfa
+_G.__arm64_return_double_hfa_fn = lib.arm64_return_double_hfa
+_G.__arm64_aligned_float_result_fn = ffi.cast('Arm64AlignedFloatResultFn', nil)
+_G.__arm64_padded_float_result_fn = ffi.cast('Arm64PaddedFloatResultFn', nil)
 _G.__arm64_word_result_alias_fn = ffi.cast('Arm64WordResultFn', nil)
 _G.__arm64_aligned_result_fn = ffi.cast('Arm64AlignedResultFn', nil)
 _G.__arm64_int_pair_fn = lib.arm64_take_int_pair
@@ -533,6 +549,47 @@ local function run_integer_result(width, result_type, fn, counter, label)
          label..' native/interpreter effects were lost or replayed')
 end
 
+local function run_hfa_result(width, result_type, fn, counter, label)
+  local result_candidate, result_oracle = make_result_pair(label)
+  _set_hfa_result_candidate(width, result_candidate)
+  _G['__arm64_hfa_result_candidate_'..width] = result_candidate
+  jit.flush(result_candidate)
+  jit.on(result_candidate, true)
+  exits = 0
+  local before_native = _hfa_result_native_count(width)
+  local before_effect = lib.arm64_aggregate_count(counter)
+  for pass = 1, 6 do
+    local got = result_candidate(32, fn, pass*7)
+    local want = result_oracle(32, fn, pass*7)
+    assert(ffi.istype(result_type, got) and ffi.istype(result_type, want),
+           label..' returned the wrong declared CData type')
+    assert(got.value == want.value, label..' result differs from interpreter')
+  end
+  assert(_hfa_result_native_count(width) > before_native,
+         label..' had no selected-root native CALLXS/CNEW/XSTORE finish')
+  tracked_exit_roots = roots(result_candidate)
+  assert(next(tracked_exit_roots), label..' published no selected loop root')
+  local mismatched = result_candidate(32, lib.arm64_return_scalar, 13)
+  assert(type(mismatched) == 'number',
+         label..' mismatched-result fallback returned the wrong Lua type')
+  assert(exits > 0, label..' selected result root did not force an exit')
+  local native_before_gc = _hfa_result_native_count(width)
+  local effect_before_gc = lib.arm64_aggregate_count(counter)
+  collectgarbage('collect')
+  exits = 0
+  local got = result_candidate(24, fn, 13)
+  local want = result_oracle(24, fn, 13)
+  assert(ffi.istype(result_type, got) and got.value == want.value,
+         label..' result/root changed after full GC')
+  assert(exits > 0, label..' selected result root did not exit after GC')
+  assert(_hfa_result_native_count(width) > native_before_gc,
+         label..' did not re-enter native code after full GC')
+  assert(lib.arm64_aggregate_count(counter)-effect_before_gc == 48,
+         label..' native/interpreter effects were replayed after GC')
+  assert(lib.arm64_aggregate_count(counter)-before_effect == 432,
+         label..' native/interpreter effects were lost or replayed')
+end
+
 run_integer_result(1, 'Arm64ByteResult', lib.arm64_return_byte, 15,
                    'one-byte aggregate result')
 run_integer_result(2, 'Arm64HalfResult', lib.arm64_return_half, 16,
@@ -544,6 +601,10 @@ run_integer_result(4, 'Arm64WordResultAlias',
                    'typedef four-byte aggregate result')
 run_integer_result(8, 'Arm64U64Result', lib.arm64_return_u64, 18,
                    'eight-byte aggregate result')
+run_hfa_result(4, 'Arm64FloatResult', lib.arm64_return_float_hfa, 21,
+               'one-float HFA result')
+run_hfa_result(8, 'Arm64DoubleResult', lib.arm64_return_double_hfa, 22,
+               'one-double HFA result')
 
 local candidate_roots = roots()
 for no in pairs(candidate_roots) do

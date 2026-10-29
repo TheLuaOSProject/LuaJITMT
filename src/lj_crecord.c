@@ -2767,16 +2767,22 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     } else if (ctype_isstruct(ctr_info)) {
 #if LJ_TARGET_ARM64 && LJ_TARGET_OSX
       LJArm64ABIArg result_abi;
+      LJArm64FloatHFA result_hfa;
       CTypeID raw_result;
-      if (!lj_ccall_arm64_integer_aggregate_class(cts, result_id,
-	    &result_abi, &raw_result))
-	lj_trace_err(J, LJ_TRERR_NYICALL);
-      switch (result_abi.size) {
-      case 1: t = IRT_U8; break;
-      case 2: t = IRT_U16; break;
-      case 4: t = IRT_U32; break;
-      case 8: t = IRT_U64; break;
-      default: lj_trace_err(J, LJ_TRERR_NYICALL);
+      if (lj_ccall_arm64_float_hfa_class(cts, result_id,
+	    &result_hfa, &raw_result) && result_hfa.count == 1) {
+	t = result_hfa.member_size == sizeof(float) ? IRT_FLOAT : IRT_NUM;
+      } else {
+	if (!lj_ccall_arm64_integer_aggregate_class(cts, result_id,
+	      &result_abi, &raw_result))
+	  lj_trace_err(J, LJ_TRERR_NYICALL);
+	switch (result_abi.size) {
+	case 1: t = IRT_U8; break;
+	case 2: t = IRT_U16; break;
+	case 4: t = IRT_U32; break;
+	case 8: t = IRT_U64; break;
+	default: lj_trace_err(J, LJ_TRERR_NYICALL);
+	}
       }
       direct_aggregate_result = 1;
 #elif LJ_TARGET_X64 && !LJ_ABI_WIN

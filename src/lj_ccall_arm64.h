@@ -56,6 +56,7 @@ typedef struct LJArm64ABISignature {
   uint8_t result_kind;
   uint8_t result_size;
   uint8_t result_unsigned;
+  uint8_t result_hfa_count;
   uint8_t is_vararg;
   uint8_t nargs;
   uint8_t nparams;
@@ -271,9 +272,26 @@ static int lj_ccall_arm64_float_hfa_class(CTState *cts, CTypeID id,
   CTypeID fid;
   unsigned count = 0;
   CTSize member_size = 0;
+  CTypeID declared_id = id;
+  unsigned depth, declared_align = 0;
+  /* CTA_ALIGN changes aggregate return placement and box geometry. Preserve
+  ** that distinction instead of classifying only the raw field layout. */
+  for (depth = 0; depth < 32; depth++) {
+    CType declared;
+    if (lj_ctype_snapshot(cts, declared_id, &declared) <= 0) return 0;
+    info = ctype_info_acq(&declared);
+    if (ctype_isattrib(info) && ctype_isxattrib(info, CTA_ALIGN) &&
+	declared_align < ctype_align(info))
+      declared_align = ctype_align(info);
+    if (!(ctype_isattrib(info) || ctype_istypedef(info))) break;
+    declared_id = ctype_cid(info);
+    if (declared_id == 0) return 0;
+  }
+  if (depth == 32) return 0;
   if (!lj_ccall_arm64_raw_type(cts, id, &ct, rawid)) return 0;
   info = ctype_info_acq(&ct);
-  if (!ctype_isstruct(info) || (info & CTF_UNION) || ctype_isvltype(info))
+  if (!ctype_isstruct(info) || (info & (CTF_UNION|CTF_REF)) ||
+      ctype_isvltype(info))
     return 0;
   for (fid = ctype_sib_acq(&ct); fid; ) {
     CTInfo finfo;
@@ -299,7 +317,8 @@ static int lj_ccall_arm64_float_hfa_class(CTState *cts, CTypeID id,
   }
   if (count == 0 || ctype_size_acq(&ct) != count*member_size ||
       ctype_align(ctype_info_acq(&ct)) !=
-	(member_size == sizeof(float) ? 2u : 3u)) return 0;
+	(member_size == sizeof(float) ? 2u : 3u) ||
+      declared_align > (member_size == sizeof(float) ? 2u : 3u)) return 0;
   if (hfa != NULL) {
     hfa->count = (uint8_t)count;
     hfa->member_size = (uint8_t)member_size;
@@ -349,11 +368,20 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
   abi->result_id = abi->result_declared_id;
   if (!lj_ccall_arm64_scalar_class(cts, abi->result_declared_id, 1,
                                    &result, &rawid)) {
-    if (!lj_ccall_arm64_integer_aggregate_class(cts,
-          abi->result_declared_id, &result, &rawid))
-      return 0;
-    result.kind = LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE;
-    result.is_unsigned = 1;
+    LJArm64FloatHFA hfa;
+    if (lj_ccall_arm64_float_hfa_class(cts, abi->result_declared_id,
+		&hfa, &rawid) && hfa.count == 1) {
+      result.cls = LJ_ARM64_ABI_FPR;
+      result.kind = LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER;
+      result.size = hfa.member_size;
+      abi->result_hfa_count = hfa.count;
+    } else {
+      if (!lj_ccall_arm64_integer_aggregate_class(cts,
+	    abi->result_declared_id, &result, &rawid))
+	return 0;
+      result.kind = LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE;
+      result.is_unsigned = 1;
+    }
   }
   abi->result_id = rawid;
   abi->result_class = result.cls;
