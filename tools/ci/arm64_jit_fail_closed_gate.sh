@@ -136,6 +136,10 @@ LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
 LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
   sh "$root/tools/ci/arm64_jit_native_forl_contract.sh"
   sh "$root/tools/ci/arm64_jit_forl_boundary_sides_contract.sh"
+LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+  sh "$root/tools/ci/arm64_jit_iterl_source_contract.sh"
+LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+  sh "$root/tools/ci/arm64_jit_iterl_contract.sh"
 
 # The native-loop tranche may be landed independently of this umbrella gate.
 # Run its executable proof automatically once the companion contract exists.

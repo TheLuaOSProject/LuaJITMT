@@ -1,5 +1,5 @@
 
-## Exact source tuple primitive
+# Exact iterator source tuple primitive (2026-10-29)
 
 The next checkpoint adds a shared source-only JMP/ITERC/ITERL decoder. It
 requires the exact complete unpatched generation (or exact JITERL generation
@@ -12,5 +12,7 @@ native recording, assembly, publication, or entry capability by itself.
 nine live-word mutations, six coherent invalid-generation mutations, patched
 word mismatches, and out-of-range/null inputs. The dedicated source contract
 passes on ARM64 and ARM64e without test helpers, then restores the ordinary
-ARM64 build. Evidence is `source-contract-final.log` in the iterator recording
-map evidence directory. Frame, IR, snapshot and entry proofs remain required.
+ARM64 build. Evidence is `source-contract-final.log` under
+`/Users/frityet/Scratch/ljmt-iterator-record-map-20261029/`. Frame, IR, snapshot
+and entry proofs remain required by that source-only checkpoint; the later
+native implementation is recorded in `arm64-native-iterl-2026-10-29.md`.

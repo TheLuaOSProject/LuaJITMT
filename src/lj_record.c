@@ -32,6 +32,9 @@
 #endif
 #include "lj_ir.h"
 #include "lj_jit.h"
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+#include "lj_asm.h"
+#endif
 #include "lj_ircall.h"
 #include "lj_iropt.h"
 #include "lj_trace.h"
@@ -1315,12 +1318,21 @@ static void rec_call_setup(jit_State *J, BCReg func, ptrdiff_t nargs)
     MSize nresults = bc_op(ret) == BC_RET1 && bc_d(ret) == 2u ? 1u :
                      bc_op(ret) == BC_RET && bc_d(ret) == 3u ? 2u :
                      bc_op(ret) == BC_RET0 ? 1u : 0u;
+    int iterator = bc_op(J->cur.startins) == BC_ITERL;
+    LJArm64IteratorSource iter;
+    if (iterator && (J->framedepth || nargs != 2 || nresults != 1u ||
+        leaf->numparams != 2u || (leaf->flags & PROTO_VARARG) ||
+        !lj_asm_arm64_iterl_tuple(J->pt, trace_startpc_acq(&J->cur),
+                                J->cur.startins, J->cur.startins, 1, &iter) ||
+        J->pc != proto_bc(J->pt)+iter.call_pc || *J->pc != iter.callins ||
+        func != iter.base))
+      lj_trace_err(J, LJ_TRERR_NYIBC);
     /* Preserve the incoming arguments for identity guards and child exits.
     ** LOOP must copy this map with the same substitutions as the child. */
-    if ((bc_op(J->cur.startins) != BC_FORL &&
+    if ((!iterator && bc_op(J->cur.startins) != BC_FORL &&
 	 (bc_op(J->cur.startins) != BC_FUNCF || J->framedepth != 0)) ||
 	J->framedepth > 1 ||
-        bc_op(*J->pc) != BC_CALL || !nresults ||
+        (!iterator && bc_op(*J->pc) != BC_CALL) || !nresults ||
         bc_b(*J->pc) != nresults+1u ||
         (nresults == 2u && J->framedepth != 0) ||
         !bc_c(*J->pc) || bc_c(*J->pc) != nargs+1 ||

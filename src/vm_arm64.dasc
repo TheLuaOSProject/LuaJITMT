@@ -4559,7 +4559,29 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp_nil CARG1
     |  beq >1				// Stop if iterator returned nil.
     if (op == BC_JITERL) {
-      |  str CARG1, [TMP1, #-8]
+      |  str CARG1, [TMP1, #-8]     // Commit the key/control copy before entry.
+      |  mov RAw, INSw             // Preserve the consumed full JITERL word.
+      |  str BASE, L->base
+      |  add CARG1, GL, #GG_G2J_HI
+      |  add CARG1, CARG1, #GG_G2J_LO
+      |  sub CARG2, PC, #4
+      |  mov CARG3w, RCw
+      |  mov CARG4, L
+      |  mov CARG5, BASE
+      |  mov CARG6w, INSw
+      |  bl extern lj_trace_enter_root
+      |  ldr BASE, L->base
+      |  cbz CRET1, >8
+      |  cbz CARG2, >8
+#if LJ_ARM64_JIT_ITERL_NATIVE_ENTRY_FAIL_CLOSED
+      |  clear_tg_jit_base
+      |  b >8
+#else
+      |  sub sp, sp, #16
+      |  br_trace_auth CARG2, CRET1
+#endif
+      |8:
+      |  mov INSw, RAw
       |  b =>BC_JLOOP
     } else {
       |  add TMP0, PC, RC, lsl #2	// Otherwise save control var + branch.
