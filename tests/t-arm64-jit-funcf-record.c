@@ -24,6 +24,7 @@
 #include "lj_asm.h"
 #include "lj_bc.h"
 #include "lj_buf.h"
+#include "lj_dispatch.h"
 #include "lj_func.h"
 #include "lj_gc2.h"
 #include "lj_ir.h"
@@ -861,6 +862,70 @@ static void run_positive(void)
   lua_close(L);
 }
 
+/* A disabled unsupported FUNCF still enters through its hot opcode once.
+** Force that exact hashed bucket to underflow, then verify the lazy NOJIT
+** patch prevents every later call from generating another hot event. */
+static void test_disabled_unsupported_funcf_hotpatch(void)
+{
+  const char *name = "__arm64_disabled_unsupported";
+  lua_State *L = luaL_newstate();
+  jit_State *J;
+  GCproto *pt;
+  const BCIns *bc;
+  uint32_t bucket;
+  HotCount after_patch;
+  unsigned i;
+  assert(L != NULL);
+  luaL_openlibs(L);
+  run_lua(L,
+    "collectgarbage('collect'); collectgarbage('stop'); "
+    "jit.flush(); jit.on(); jit.opt.start('hotloop=1')\n"
+    "function __arm64_disabled_unsupported(a,b) return a==b end\n"
+    "jit.off(__arm64_disabled_unsupported,true)\n");
+  J = L2J(L);
+  pt = global_proto(L, name);
+  bc = proto_bc(pt);
+  assert(bc_op((BCIns)la_load32_acq((const uint32_t *)&bc[0])) == BC_FUNCF);
+  assert((pt->flags & PROTO_NOJIT) != 0);
+  bucket = (u32ptr(bc+1) >> 2) & (HOTCOUNT_SIZE-1u);
+  assert(hotcount_setl(G(L), L, bc+1, 1));
+
+  lua_getglobal(L, name);
+  lua_pushinteger(L, 7);
+  lua_pushinteger(L, 7);
+  assert(lua_pcall(L, 2, 1, 0) == LUA_OK);
+  assert(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  assert(bc_op((BCIns)la_load32_acq((const uint32_t *)&bc[0])) == BC_FUNCF);
+  assert(L2TG(L)->hotcount[bucket] == 0);
+  lua_getglobal(L, name);
+  lua_pushinteger(L, 7);
+  lua_pushinteger(L, 7);
+  assert(lua_pcall(L, 2, 1, 0) == LUA_OK);
+  assert(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  if (bc_op((BCIns)la_load32_acq((const uint32_t *)&bc[0])) != BC_IFUNCF)
+    fprintf(stderr, "NOJIT TEST op=%u flags=%x slot=%u counter=%u phase=%u state=%u token=%u\n",
+            (unsigned)bc_op((BCIns)la_load32_acq((const uint32_t *)&bc[0])),
+            (unsigned)pt->flags, bucket, (unsigned)L2TG(L)->hotcount[bucket],
+            (unsigned)gc2_phase_acq(G(L)),
+            (unsigned)lj_trace_state_load(J), (unsigned)jit_token_acq(G(L)));
+  assert(bc_op((BCIns)la_load32_acq((const uint32_t *)&bc[0])) == BC_IFUNCF);
+  assert((pt->flags & PROTO_ILOOP) != 0);
+  after_patch = L2TG(L)->hotcount[bucket];
+  for (i = 0; i < 8; i++) {
+    lua_getglobal(L, name);
+    lua_pushinteger(L, (lua_Integer)i);
+    lua_pushinteger(L, (lua_Integer)i);
+    assert(lua_pcall(L, 2, 1, 0) == LUA_OK);
+    assert(lua_toboolean(L, -1));
+    lua_pop(L, 1);
+  }
+  assert(L2TG(L)->hotcount[bucket] == after_patch);
+  assert(!trace_runnable_acq(traceref_safe(J, 1), 1));
+  lua_close(L);
+}
+
 typedef enum NegativeKind {
   NEG_FALSE,
   NEG_NIL,
@@ -1441,6 +1506,7 @@ int main(int argc, char **argv)
   assert(argc == 2);
   assert(strcmp(argv[1], "default") == 0 ||
 	 strcmp(argv[1], "randomized") == 0);
+  test_disabled_unsupported_funcf_hotpatch();
   run_positive();
   run_scalar_positives();
   run_rejections();
