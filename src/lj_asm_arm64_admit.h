@@ -148,10 +148,17 @@ static int arm64_ir_funcf_bytecode(const GCproto *pt, BCIns startins,
     word = generation[pos];
     op = bc_op(word);
     a = bc_a(word); b = bc_b(word); c = bc_c(word);
-    if (op == BC_RET1) {
-      if (pos+1u != sizebc || bc_d(word) != 2u || a >= framesize ||
-	  !initialized[a] || gets != calls)
+    if (op == BC_RET1 || op == BC_RET) {
+      MSize nresults = op == BC_RET1 && bc_d(word) == 2u ? 1u :
+                       op == BC_RET && bc_d(word) == 3u ? 2u : 0u;
+      MSize result;
+      if (pos+1u != sizebc || !nresults || a+nresults > framesize ||
+	  gets != calls)
 	return 0;
+      for (result = a; result < a+nresults; result++)
+	if (!initialized[result] ||
+	    (nresults == 2u && (numeric[result] == 0 || numeric[result] == 2)))
+	  return 0;
       ret = word;
       goto check_generation;
     }
@@ -2921,8 +2928,15 @@ static int arm64_postra_funcf_source(const LJArm64PostRAView *view,
 	  return 0;
 	}
   }
-  return bc_op(arm64_ir_bc_acq((uintptr_t)view->proto_bc,
-	view->proto_sizebc-1u)) == BC_RET1;
+  {
+    BCIns ret = arm64_ir_bc_acq((uintptr_t)view->proto_bc,
+	view->proto_sizebc-1u);
+    if (bc_op(ret) == BC_RET1 && bc_d(ret) == 2u)
+      return valid[bc_a(ret)];
+    return bc_op(ret) == BC_RET && bc_d(ret) == 3u &&
+	   bc_a(ret)+2u <= view->root_topslot &&
+	   valid[bc_a(ret)] && valid[bc_a(ret)+1u];
+  }
 }
 
 static int arm64_postra_scalar_kref(const LJArm64PostRAView *view,
@@ -3125,7 +3139,7 @@ static int arm64_ir_funcf_advance(const IRIns *ir, IRRef nins, IRRef nk,
 		number_left ? values[source] : constant, &value)) return 0;
 	  values[a] = value;
 	  valid[a] = 1;
-	} else if (op != BC_RET1) {
+	} else if (op != BC_RET1 && op != BC_RET) {
 	  return 0;
 	}
   }
@@ -3135,16 +3149,20 @@ static int arm64_ir_funcf_advance(const IRIns *ir, IRRef nins, IRRef nk,
 
 static int arm64_ir_funcf_result_matches(const BCIns *bc,
 	MSize sizebc, MSize framesize, const IRRef *values,
-	const uint8_t *valid, IRRef value)
+	const uint8_t *valid, MSize slot, IRRef value)
 {
   uintptr_t lo = (uintptr_t)bc;
   BCIns ret;
+  MSize count, reg;
   if (!bc || !values || !valid || sizebc < 2 || sizebc > UINT8_MAX ||
 	(uintptr_t)sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns)) return 0;
   ret = arm64_ir_bc_acq(lo, sizebc-1u);
-  return bc_op(ret) == BC_RET1 && bc_d(ret) == 2u &&
-	bc_a(ret) < framesize && valid[bc_a(ret)] &&
-	values[bc_a(ret)] == value;
+  count = bc_op(ret) == BC_RET1 && bc_d(ret) == 2u ? 1u :
+	  bc_op(ret) == BC_RET && bc_d(ret) == 3u ? 2u : 0u;
+  if (!count || slot < 1u+LJ_FR2+bc_a(ret) ||
+	  slot-(1u+LJ_FR2+bc_a(ret)) >= count) return 0;
+  reg = slot-(1u+LJ_FR2);
+  return reg < framesize && valid[reg] && values[reg] == value;
 }
 
 static int arm64_ir_funcf_scalar_snapshots(const IRIns *ir, IRRef nins,
@@ -3162,8 +3180,8 @@ static int arm64_ir_funcf_scalar_snapshots(const IRIns *ir, IRRef nins,
   MSize previous_pc = 0;
   uintptr_t lo = (uintptr_t)proto_bc, hi;
   BCIns ret;
-  MSize result_slot;
-  int saw_result = 0;
+  MSize result_slot, result_count;
+  unsigned saw_result = 0;
   if (!proto_bc || proto_sizebc == 0 || framesize == 0 ||
 	!pt || proto_bc != proto_bc(pt) || proto_sizebc != pt->sizebc ||
 	framesize != pt->framesize || numparams != pt->numparams ||
@@ -3171,6 +3189,9 @@ static int arm64_ir_funcf_scalar_snapshots(const IRIns *ir, IRRef nins,
 	!nsnap || !nsnapmap ||
 	proto_sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns)) return 0;
   ret = arm64_ir_bc_acq(lo, proto_sizebc-1u);
+  result_count = bc_op(ret) == BC_RET1 && bc_d(ret) == 2u ? 1u :
+	  bc_op(ret) == BC_RET && bc_d(ret) == 3u ? 2u : 0u;
+  if (!result_count || bc_a(ret)+result_count > framesize) return 0;
   result_slot = 1u+LJ_FR2+bc_a(ret);
   hi = lo+(uintptr_t)proto_sizebc*sizeof(BCIns);
   if (hi <= lo) return 0;
@@ -3217,9 +3238,8 @@ static int arm64_ir_funcf_scalar_snapshots(const IRIns *ir, IRRef nins,
 	  return 0;
 	if (irref_isk(value) && !arm64_ir_funcf_const_ref(ir, nk, value, type)) {
 	  return 0; }
-	if (snap_slot(entry) == result_slot && snap->ref == pollref) {
-	  saw_result = 1;
-	}
+	if (snap->ref == pollref && snap_slot(entry) >= result_slot &&
+	    snap_slot(entry) < result_slot+result_count) saw_result++;
 	previous_slot = snap_slot(entry);
     }
     {
@@ -3245,13 +3265,14 @@ static int arm64_ir_funcf_scalar_snapshots(const IRIns *ir, IRRef nins,
               (reg = (BCReg)(slot-(1u+LJ_FR2))) >= framesize ||
               !valid[reg] || values[reg] != value)
             return 0;
-          if (slot == result_slot && snap->ref == pollref &&
+          if (snap->ref == pollref && slot >= result_slot &&
+	      slot < result_slot+result_count &&
 	      !arm64_ir_funcf_result_matches(proto_bc, proto_sizebc,
-		framesize, values, valid, value)) return 0;
+		framesize, values, valid, slot, value)) return 0;
         }
     }
   }
-  return expected == nsnapmap && saw_result &&
+  return expected == nsnapmap && saw_result == result_count &&
 	 snaps[nsnap-1u].ref == pollref;
 }
 

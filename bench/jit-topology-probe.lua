@@ -276,6 +276,18 @@ local function main()
           assert(root_exits > 0,
             'nonleaf root did not enter natively and exit on bad argument')
         end
+      elseif case.name == 'function-two-results' then
+        local selected_root=false
+        assert(next(roots), 'two-result FUNCF root was not published')
+        for no in pairs(roots) do
+          local info=rows[no]
+          if info and info.linktype == 'return' then selected_root=true end
+        end
+        assert(selected_root, 'two-result FUNCF root has no return trace')
+        if phase == 2 then
+          assert(root_exits > 0,
+            'two-result root did not enter natively and exit on bad argument')
+        end
       end
       io.write(string.format('%s\t%s\t%d\t%s\t%s\t%d\t%d\t%s\t%s\n',
         case.name,jit.arch,phase,id_list(roots),id_list(sides),
