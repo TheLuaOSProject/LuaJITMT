@@ -68,3 +68,22 @@ The initial rows are `{arm64,x64}-final.tsv`; the rebuilt rows are
 `x64-small-existing.log` records the existing ABI test. The exploratory larger
 aggregate probes had no selected witnesses on either target and are not used
 to establish a parity gap. No production aggregate admission changed here.
+
+## Integer argument follow-up (2026-10-29)
+
+At runtime source `cbb707874`, the identical probe passes all 125 oracle
+comparisons and 13,760 foreign-call counts on both targets. The integer-pair
+argument now has the same native witness on ARM64 and x86_64: one selected
+loop root, two CALLXS instructions, and 25 selected-root exits. This closes
+the measured integer-argument difference above. The two-float argument still
+has a selected witness only on x86_64. Aggregate-result samples remain
+unwitnessed on both targets, so they remain inconclusive.
+
+The change admits direct integer-only structs of total width 1, 2, 4, or 8
+bytes in one available Darwin argument register; it does not copy the SysV
+classification. Its independent native/corruption contracts and precise
+limits are in the
+[integer-aggregate note](arm64-integer-aggregate-callxs-2026-10-29.md).
+Evidence uses the immutable runtime/module bundles under
+`/Users/frityet/Scratch/ljmt-varargs-integrated-20261029/`, with the universal
+`small-aggregate.dylib` and `{arm64,x86_64}-aggregate.tsv`.
