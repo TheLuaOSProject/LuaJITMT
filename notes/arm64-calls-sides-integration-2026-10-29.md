@@ -24,12 +24,13 @@ callers and callees and explicit numeric oracles. The interpreter and native
 emitter now distinguish payload width from the eight-byte composite slot.
 The mapped CData root proof and runtime synchronization are unchanged.
 
-Each feature's focused profiles passed independently. Combined full-gate and
-ordinary ARM64/x86-64 corpus/topology/aggregate validation is pending under
-`/Users/frityet/Scratch/ljmt-calls-sides-integrated-20261029/`.
-Nil-terminated ITERL, broader call/return forms and further ABI shapes remain
-outside this checkpoint; full architecture parity is not yet established.
-# Selected return-exit pause
+Each feature's focused profiles passed independently. The combined segmented
+gate and ordinary ARM64/x86-64 corpus/topology/aggregate validation subsequently
+completed, together with small HFA stack groups and nil-terminated ITERL; see
+`arm64-abi-iterator-integration-2026-10-29.md` for the final source IDs, evidence
+and scope. Full architecture parity is not yet established.
+
+## Selected return-exit pause
 
 The combined gate at `1c6988a38` passed through the scalar capability contract
 and reached the Lua leaf suite. Its controlled old-tag test paused at the
@@ -48,8 +49,9 @@ profile verified 97 cases, 96 controlled tag mismatches and terminal exits,
 402 native runs, 97 GC reuses and both independent admission-negative sets.
 
 Evidence: `return-pause-diagnostic.log` and `return-selected-pause.log` in the
-integration evidence directory. The complete leaf suite and remaining gate
-are being resumed after this fixture repair.
+integration evidence directory. The complete leaf suite passed after this
+fixture repair; the remaining continuation is recorded below and in the final
+integration note.
 
 ## Preserve the selected numeric adaptation side
 

@@ -60,9 +60,14 @@ repairs target the selected trace and preserve its identity; production
 handshake and cache policies are unchanged. The numeric fixture passed all
 222 default executions after its repair.
 
-The remaining umbrella stages, beginning with the exit contract, are running
-at `3a14f2afc`. This is a segmented validation record across coherent source
-checkpoints, not a claim of one uninterrupted gate run at the final revision.
+The remaining umbrella stages, beginning with the exit contract, passed at
+`3a14f2afc`: root entry/revalidation, live flush/reuse, the generic FFI matrix,
+VM safepoint source/runtime checks and the final upvalue/cell/native-coverage
+checks. `resume-gate.status` is PASS. This is a segmented validation record
+across coherent source checkpoints, not a claim of one uninterrupted gate run
+at the final revision. Later documentation commits do not change the tested
+production implementation. This checkpoint is ready for the main parity
+branch; no required validation remains for the bounded features listed here.
 
 Evidence directories:
 
