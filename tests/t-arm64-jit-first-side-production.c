@@ -100,7 +100,7 @@ static void define_probes(lua_State *L)
   lua_setglobal(L, "__arm64_first_side_opaque_index");
   run_lua(L,
     "jit.flush(); jit.on(); "
-    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=16'); "
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=24'); "
     "local function decoy(n, bias) "
       "local i=0 "
       "while i<n do "
@@ -153,6 +153,15 @@ static void define_probes(lua_State *L)
       "end "
       "return sum "
     "end "
+    "local function forlchildneg(start, n, mode) "
+      "local sum=0 "
+      "for i=start,n,-1 do "
+        "if mode==1 then sum=sum+i "
+        "elseif mode==2 then sum=sum-i "
+        "else sum=sum+i*3 end "
+      "end "
+      "return sum "
+    "end "
     "local opaque=setmetatable({}, {__index=__arm64_first_side_opaque_index}) "
     "local function unsupported(n, bias) "
       "local i=0 "
@@ -168,6 +177,7 @@ static void define_probes(lua_State *L)
     "__arm64_first_side_production_fourth=fourth; "
     "__arm64_first_side_production_loopchild=loopchild; "
     "__arm64_first_side_production_forlchild=forlchild; "
+    "__arm64_first_side_production_forlchildneg=forlchildneg; "
     "__arm64_first_side_production_unsupported=unsupported");
 }
 
@@ -282,7 +292,7 @@ static void set_hotexit(lua_State *L, unsigned threshold)
 }
 
 enum {
-  PRODUCTION_PAIR_COUNT = 6
+  PRODUCTION_PAIR_COUNT = 7
 };
 
 typedef struct ProductionPair {
@@ -299,6 +309,7 @@ typedef struct ProductionPair {
   ExitNo exitno;
   int require_loop_child;
   int require_forl_root;
+  const char *oracle_name;
   lua_Integer root_start;
   lua_Integer side_start;
   lua_Integer native_start;
@@ -792,8 +803,7 @@ static void expect_forl_intmax_boundary(lua_State *L,
   const lua_Integer start = (lua_Integer)INT32_MAX-1;
   const lua_Integer stop = INT32_MAX;
   lua_Integer safe_expected;
-  lua_Integer expected = call_forl_named(L,
-	"__arm64_first_side_production_forl_oracle", start, stop, 2);
+  lua_Integer expected = call_forl_named(L, pair->oracle_name, start, stop, 2);
   assert(expected == -(lua_Integer)2*INT32_MAX+1);
   lj_trace_test_root_entry_reset();
   lj_trace_test_reset_exit_stats();
@@ -811,8 +821,7 @@ static void expect_forl_intmax_boundary(lua_State *L,
   assert(lj_trace_test_last_exitno() < trace_nsnap_acq(pair->root));
   assert(trace_nchild_acq(pair->root) == 1);
   assert(trace_nextside_acq(pair->root) == pair->childno);
-  safe_expected = call_forl_named(L,
-	"__arm64_first_side_production_forl_oracle", start-1, stop-1, 2);
+  safe_expected = call_forl_named(L, pair->oracle_name, start-1, stop-1, 2);
   lj_trace_test_root_entry_reset();
   lj_trace_test_reset_exit_stats();
   assert(call_forl_named(L, pair->name, start-1, stop-1, 2) == safe_expected);
@@ -827,6 +836,50 @@ static void expect_forl_intmax_boundary(lua_State *L,
   assert(lj_trace_test_last_exit_parent() == pair->childno);
   assert(lj_trace_test_first_exitno() < trace_nsnap_acq(pair->child));
   assert(lj_trace_test_last_exitno() < trace_nsnap_acq(pair->child));
+}
+
+static void expect_forl_intmin_boundary(lua_State *L,
+	const ProductionPair *pair)
+{
+  const lua_Integer start = (lua_Integer)INT32_MIN+1;
+  const lua_Integer stop = INT32_MIN;
+  lua_Integer expected = call_forl_named(L, pair->oracle_name, start, stop, 2);
+  assert(expected == -((lua_Integer)2*INT32_MIN+1));
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  assert(call_forl_named(L, pair->name, start, stop, 2) == expected);
+  /* The underflowing stop+step range exits through the root before a child
+  ** entry; interpreter execution preserves the exact Lua integer result. */
+  assert(lj_trace_test_root_entry_publishes() > 0);
+  assert(lj_trace_test_root_entry_successes() > 0);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+  assert(lj_trace_test_exit_calls() > 0);
+  assert(lj_trace_test_first_exit_parent() == pair->rootno);
+  assert(lj_trace_test_last_exit_parent() == pair->rootno);
+  assert(lj_trace_test_first_exitno() < trace_nsnap_acq(pair->root));
+  assert(lj_trace_test_last_exitno() < trace_nsnap_acq(pair->root));
+  assert(trace_nchild_acq(pair->root) == 1);
+  assert(trace_nextside_acq(pair->root) == pair->childno);
+  {
+    lua_Integer safe_start = start+1;
+    lua_Integer safe_stop = stop+1;
+    lua_Integer safe_expected = call_forl_named(L, pair->oracle_name,
+		safe_start, safe_stop, 2);
+    assert(safe_expected == -((lua_Integer)2*INT32_MIN+3));
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_forl_named(L, pair->name, safe_start, safe_stop, 2) ==
+	   safe_expected);
+    /* stop=INT32_MIN+1 satisfies stop+step >= INT32_MIN. */
+    assert(lj_trace_test_root_entry_publishes() > 0);
+    assert(lj_trace_test_root_entry_successes() > 0);
+    assert(lj_trace_test_root_entry_cleanups() == 0);
+    assert(lj_trace_test_exit_calls() > 0);
+    assert(lj_trace_test_first_exit_parent() == pair->childno);
+    assert(lj_trace_test_last_exit_parent() == pair->childno);
+    assert(lj_trace_test_first_exitno() < trace_nsnap_acq(pair->child));
+    assert(lj_trace_test_last_exitno() < trace_nsnap_acq(pair->child));
+  }
 }
 
 static void expect_unsupported_first_side_closed(lua_State *L, jit_State *J,
@@ -932,7 +985,8 @@ static void expect_full_flush(lua_State *L, jit_State *J, global_State *g,
   unsigned i;
   lj_trace_test_reset_retire_publish_calls();
   assert(lj_trace_flushall_gc(L) == 0);
-  assert(lj_trace_test_retire_publish_calls() == 14u);
+  assert(lj_trace_test_retire_publish_calls() ==
+	 2u*PRODUCTION_PAIR_COUNT+2u);
   assert(trace_traceno_acq(decoy) == 0);
   assert(proto_trace_acq(decoy_pt) == 0);
   for (i = 0; i < PRODUCTION_PAIR_COUNT; i++) {
@@ -1008,7 +1062,17 @@ static int detailed_main(int argc, char **argv)
       .side_n = 64, .side_bias = 2, .side_result = -2080,
       .native_n = 64, .native_bias = 2, .native_result = -2080,
       .root_start = 1, .side_start = 1, .native_start = 1,
-      .require_forl_root = 1
+      .require_forl_root = 1,
+      .oracle_name = "__arm64_first_side_production_forl_oracle"
+    },
+    {
+      .name = "__arm64_first_side_production_forlchildneg",
+      .root_n = 1, .root_bias = 1, .root_result = 2080,
+      .side_n = 1, .side_bias = 2, .side_result = -2080,
+      .native_n = 1, .native_bias = 2, .native_result = -2080,
+      .root_start = 64, .side_start = 64, .native_start = 64,
+      .require_forl_root = 1,
+      .oracle_name = "__arm64_first_side_production_forlneg_oracle"
     }
   };
   ProductionPair unsupported = {
@@ -1036,8 +1100,13 @@ static int detailed_main(int argc, char **argv)
 	"local function f(start,n,mode) local sum=0; "
 	"for i=start,n do if mode==1 then sum=sum+i "
 	"elseif mode==2 then sum=sum-i else sum=sum+i*3 end end; "
-	"return sum end; jit.off(f,true); "
-	"__arm64_first_side_production_forl_oracle=f");
+    "return sum end; "
+    "local function fneg(start,n,mode) local sum=0; "
+    "for i=start,n,-1 do if mode==1 then sum=sum+i "
+    "elseif mode==2 then sum=sum-i else sum=sum+i*3 end end; "
+    "return sum end; jit.off(f,true); jit.off(fneg,true); "
+    "__arm64_first_side_production_forl_oracle=f; "
+    "__arm64_first_side_production_forlneg_oracle=fneg");
   start_live_peer(L);
   saved_cframe = L->cframe;
   saved_vmstate = lj_tg_vmstate_load_acq(tg);
@@ -1063,14 +1132,15 @@ static int detailed_main(int argc, char **argv)
   }
   expect_unsupported_first_side_closed(L, J, g, &unsupported);
   assert(unsupported.rootno > pairs[PRODUCTION_PAIR_COUNT-1u].childno);
-  assert(live_trace_count(J) == 14u);
+  assert(live_trace_count(J) == 2u*PRODUCTION_PAIR_COUNT+2u);
 
   expect_quiescent(L, J, g, tg, saved_cframe, saved_vmstate);
   for (j = 0; j < 2; j++)
     for (i = 0; i < PRODUCTION_PAIR_COUNT; i++)
       expect_native_child(L, J, &pairs[i]);
-  expect_forl_intmax_boundary(L, &pairs[PRODUCTION_PAIR_COUNT-1u]);
-  assert(live_trace_count(J) == 14u);
+  expect_forl_intmax_boundary(L, &pairs[PRODUCTION_PAIR_COUNT-2u]);
+  expect_forl_intmin_boundary(L, &pairs[PRODUCTION_PAIR_COUNT-1u]);
+  assert(live_trace_count(J) == 2u*PRODUCTION_PAIR_COUNT+2u);
   for (i = 0; i < PRODUCTION_PAIR_COUNT; i++)
     expect_edge(g, &pairs[i], pairs[i].child_mcode);
   expect_quiescent(L, J, g, tg, saved_cframe, saved_vmstate);

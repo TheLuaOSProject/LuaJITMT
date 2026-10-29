@@ -4852,13 +4852,10 @@ static int trace_arm64_first_side_metadata_view_valid(jit_State *J,
   TraceArm64FirstSideLoopView first, second;
   if (J == NULL || pc == NULL || parent == 0)
     return 0;
-  if (!trace_arm64_first_side_view_acq(J, parent, exitno, &first))
-	return 0;
-  if (!trace_arm64_first_side_snapshot_valid(&first, pc))
-	return 0;
-  if (!trace_arm64_first_side_loop_generation_valid(&first, parent, pc)) {
+  if (!trace_arm64_first_side_view_acq(J, parent, exitno, &first) ||
+      !trace_arm64_first_side_snapshot_valid(&first, pc) ||
+      !trace_arm64_first_side_loop_generation_valid(&first, parent, pc))
     return 0;
-  }
   if (!trace_arm64_first_side_view_acq(J, parent, exitno, &second) ||
       !trace_arm64_first_side_snapshot_valid(&second, pc) ||
       !trace_arm64_first_side_loop_generation_valid(&second, parent, pc) ||
@@ -4965,21 +4962,15 @@ int lj_trace_arm64_first_side_loop_valid(jit_State *J, lua_State *L,
     const BCIns *pc, uint32_t context)
 {
   GCproto *firstpt = NULL, *secondpt = NULL;
-  int ok;
-  ok = context <= LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER &&
-      trace_arm64_first_side_metadata_valid(J, parent, exitno,
-        continuation, &firstpt);
-  if (!ok) return 0;
-  ok = trace_arm64_first_side_context_valid(J, L, firstpt, parent,
-        exitno, continuation, pc, context);
-  if (!ok)
-    return 0;
-  ok = trace_arm64_first_side_metadata_valid(J, parent, exitno,
-        continuation, &secondpt) && firstpt == secondpt;
-  if (!ok) return 0;
-  ok = trace_arm64_first_side_context_valid(J, L, secondpt, parent,
-        exitno, continuation, pc, context);
-  if (!ok)
+  if (context > LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER ||
+      !trace_arm64_first_side_metadata_valid(J, parent, exitno,
+        continuation, &firstpt) ||
+      !trace_arm64_first_side_context_valid(J, L, firstpt, parent,
+        exitno, continuation, pc, context) ||
+      !trace_arm64_first_side_metadata_valid(J, parent, exitno,
+        continuation, &secondpt) || firstpt != secondpt ||
+      !trace_arm64_first_side_context_valid(J, L, secondpt, parent,
+        exitno, continuation, pc, context))
     return 0;
   return 1;
 }
@@ -6603,7 +6594,7 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
     fori = (BCIns)la_load32_acq((const uint32_t *)&semside.proto_bc[header]);
     stepins = (BCIns)la_load32_acq(
       (const uint32_t *)&semside.proto_bc[header-1u]);
-    forlstep = (int32_t)bc_d(stepins);
+    forlstep = (int32_t)(int16_t)bc_d(stepins);
     if (bc_op(fori) != BC_FORI || bc_a(fori) != bc_a(semside.parent_startins) ||
         bc_op(stepins) != BC_KSHORT || bc_a(stepins) != bc_a(fori)+FORL_STEP ||
         forlstep == 0 ||
@@ -13369,12 +13360,10 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
 #if LJ_TARGET_ARM64 && !LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED
   /* Refuse unsupported first sides and every side-of-side before mutating
   ** the selected snapshot count. IDLE proves no recorder token is published. */
-  {
-	int valid = lj_trace_arm64_first_side_loop_valid(
-	  J, L, parent, exitno, pc, pc, LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE);
-	if (!valid) {
-      goto out;
-  }
+  if (!lj_trace_arm64_first_side_loop_valid(
+	J, L, parent, exitno, pc, pc, LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE)) {
+
+    goto out;
   }
 #endif
   if (!(lj_tg_hookmask_combined_load(g, L2TG(L)) &

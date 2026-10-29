@@ -59,9 +59,21 @@ child-local guard. A separate safe near-maximum case,
 `start=INT32_MAX-2, stop=INT32_MAX-1, step=1`, matches the JIT-disabled oracle
 and enters child 13 at child exit 2 on both ARM64 and arm64e. This exercises
 the child-local bound on a safe edge; it does not trigger the bound failure.
-The minimum-bound mirror and an exact child overflow-exit witness remain
-incomplete. Do not describe this WIP as a complete FORL parity capability or
-integrated.
+The default contract repetitions pass the minimum-bound mirror on ARM64 and
+arm64e: smoke once, and each helper mode (`gc-claim`, `scoped`, `full-flush`)
+twice per profile. Log:
+`/Users/frityet/Scratch/ljmt-forl-first-side-20261029-preserved/final-min-bound-reviewed-contract.log`.
+The negative-step source decoder now sign-extends the `KSHORT` immediate;
+prior to that, `-1` was misread as 65535. At exact `INT32_MIN`, the candidate
+matches the oracle and exits through the root. At `INT32_MIN+1`, it matches
+the oracle and exits from the attached child. An exact child overflow-exit
+witness remains unproven. The current root FORL certificate requires its
+same stop-plus-step bound guard before the initial loop comparison; the
+negative-step bound is `stop >= INT32_MIN+1`. Thus exact-MIN inputs leave via
+that root guard before entering the body edge used by the child. The child
+copy still independently proves its own local bound before its comparison,
+but a child-local failing guard has not been dynamically reached. Do not
+describe this WIP as a complete FORL parity capability or integrated.
 
 A previous experiment accepted the child ADD using only the copied parent
 admission token and selected map. That path was closed. The present source has
