@@ -134,7 +134,7 @@ for required in \
   'call_edge(L, name, (lua_Integer)INT32_MIN,' \
   'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA' \
   'race.replacement = BCINS_AD(BC_JFORL, wronga, 1)' \
-  'lj_trace_enter_root(J, pc, 1, L, L->base, live)' \
+  'lj_trace_enter_root(J, pc, 1, L, L->base, live, NULL)' \
   'lj_trace_test_root_entry_cleanups() == 1' \
   'run_lua(L, "jit.flush()")' \
   'trace_startpc_acq(T) == firstpc' \
@@ -208,6 +208,7 @@ for required in \
   '|9:  // Taken integer edge: IDX/EXT are authoritative before admission.' \
   'mov RAw, INSw' \
   'mov CARG6w, INSw' \
+  'mov CARG7, #0' \
   'bl extern lj_trace_enter_root' \
   'sub sp, sp, #16' \
   'br_trace_auth CARG2, CRET1' \

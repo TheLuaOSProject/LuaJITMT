@@ -70,6 +70,16 @@ static void invoke_bad_direct(lua_State *L, const char *fn)
          !lj_tg_in_native_acq(L2TG(L)));
 }
 
+static void invoke_bad_call(lua_State *L, const char *runner, const char *fn)
+{
+  void *cframe=L->cframe;
+  lua_getglobal(L,runner); lua_getglobal(L,fn); lua_pushstring(L,"bad");
+  assert(lua_pcall(L,2,1,0) != 0);
+  lua_pop(L,1);
+  assert(L->cframe==cframe && lj_tg_load_jit_base(L2TG(L))==NULL &&
+         !lj_tg_in_native_acq(L2TG(L)));
+}
+
 static void invoke_pair(lua_State *L, const char *runner, const char *fn,
                         lua_Number x, lua_Number want0, lua_Number want1)
 {
@@ -131,6 +141,7 @@ typedef struct Fixture {
   IRRef n, guard, kfunc, argref;
   SnapNo guard_snap, return_snap;
   MSize callpos, return_entry;
+  IRRef child_second_value;
 } Fixture;
 
 typedef struct MultiFixture {
@@ -592,8 +603,29 @@ static void tail_admission(GCtrace *T, GCfunc *rootfn)
 
 enum {
   M_RETURN_VALUE, M_RETURN_PC, M_CALL_PC, M_CALL_ARITY, M_CALL_RESULT_COUNT,
-  M_CAPTURED_CFUNC, M_RETURN_FRAME, M_COUNT
+  M_CAPTURED_CFUNC, M_RETURN_FRAME, M_CHILD_SECOND_VALUE, M_COUNT
 };
+
+static IRRef child_second_value_ir(GCtrace *T)
+{
+  IRRef r, found=0;
+  for (r=REF_FIRST;r<T->nins;r++) {
+    IRIns ins=ir_load_acq(&T->ir[r]);
+    IRRef refs[2]={ins.op1,ins.op2};
+    int literal=0;
+    if (ins.o!=IR_ADD) continue;
+    for (unsigned i=0;i<2;i++) {
+      IRRef other=refs[i];
+      if (irref_isk(other) && other>=T->nk && other<REF_TRUE &&
+          T->ir[other].o==IR_KNUM &&
+          ir_knum(&T->ir[other])->n==(lua_Number)1.25) literal=1;
+    }
+    if (!literal) continue;
+    if (found) return 0;
+    found=r;
+  }
+  return found;
+}
 
 static void mutate(Fixture *f, unsigned which)
 {
@@ -624,6 +656,10 @@ static void mutate(Fixture *f, unsigned which)
   }
   case M_RETURN_FRAME:
     f->map[f->return_entry]|=SNAP_FRAME;
+    break;
+  case M_CHILD_SECOND_VALUE:
+    assert(f->child_second_value>=REF_FIRST);
+    f->ir[f->child_second_value].op2=f->ir[f->child_second_value].op1;
     break;
   default: assert(0);
   }
@@ -675,8 +711,14 @@ static void admission(GCtrace *T, lua_State *L, GCfunc *cfunc)
     }
   }
   assert(f.return_entry!=UINT32_MAX);
+  f.child_second_value=bc_b(proto_bc(f.pt)[f.callpos])==3u ?
+    child_second_value_ir(T) : 0;
+  if (bc_b(proto_bc(f.pt)[f.callpos])==3u)
+    assert(f.child_second_value>=REF_FIRST);
   for (int postra=0;postra<2;postra++) {
     for (unsigned m=0;m<M_COUNT;m++) {
+      if (m==M_CHILD_SECOND_VALUE && !f.child_second_value)
+        continue;
       fixture_reset(&f);
       assert(admit(&f,postra));
       fixture_reset(&f); mutate(&f,m);
@@ -718,6 +760,10 @@ int main(void)
     "funcf_candidate=function(x) local y=target(x); return y+.75 end; "
     "funcf_multi_candidate=function(x) return x*.5,x+1.25 end; "
     "funcf_multi_oracle=function(x) return x*.5,x+1.25 end; "
+    "local pair_target=function(x) return x*.5,x+1.25 end; "
+    "funcf_pair_candidate=function(x) local a,b=pair_target(x); return a+b end; "
+    "local pair_oracle_target=function(x) return x*.5,x+1.25 end; "
+    "funcf_pair_oracle=function(x) local a,b=pair_oracle_target(x); return a+b end; "
     "function funcf_multi_run(fn,x) return fn(x) end; "
     "funcf_oracle=function(x) return x*.25+.75 end; "
     "function funcf_run(fn,n) local sum=.5; "
@@ -725,11 +771,62 @@ int main(void)
     "jit.off(funcf_oracle,true); jit.off(funcf_run,true); "
     "jit.off(set_target,true); jit.off(funcf_multi_run,true); "
     "jit.off(funcf_multi_oracle,true); jit.flush(); "
+    "jit.off(funcf_pair_oracle,true); "
     "jit.opt.start('hotloop=1',"
     "'hotexit=1','maxtrace=128'); jit.on(); "
     "jit.on(funcf_candidate,true); "
     "jit.on(funcf_readonly_candidate,true); "
-    "jit.on(funcf_multi_candidate,true)");
+    "jit.on(funcf_multi_candidate,true); "
+    "jit.on(funcf_pair_candidate,true)");
+  lua_pushcfunction(L,c_target); lua_setglobal(L,"c_target");
+  {
+    GCfunc *pair=global_lfunc(L,"funcf_pair_candidate");
+    GCtrace *PT=NULL;
+    for (unsigned i=0;i<256&&!PT;i++) {
+      assert(invoke(L,"funcf_run","funcf_pair_candidate",80)==
+             invoke(L,"funcf_run","funcf_pair_oracle",80));
+      PT=funcf_trace(L,pair);
+    }
+    assert(PT && PT->linktype==LJ_TRLINK_RETURN);
+    lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+    assert(invoke(L,"funcf_run","funcf_pair_candidate",32)==
+           invoke(L,"funcf_run","funcf_pair_oracle",32));
+    if (lj_trace_test_root_entry_successes()==0 ||
+        lj_trace_test_exit_calls()!=0)
+      fprintf(stderr,"pair CALL native witness root=%u runnable=%d entries=%u exits=%u\n",
+              PT->traceno,trace_runnable_acq(PT,PT->traceno),
+              lj_trace_test_root_entry_successes(),lj_trace_test_exit_calls());
+    assert(lj_trace_test_root_entry_successes()>0 &&
+           lj_trace_test_exit_calls()==0);
+    native_returns++;
+    lua_gc(L,LUA_GCCOLLECT,0);
+    lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+    assert(invoke(L,"funcf_run","funcf_pair_candidate",16)==
+           invoke(L,"funcf_run","funcf_pair_oracle",16));
+    if (lj_trace_test_root_entry_successes()==0 ||
+        lj_trace_test_exit_calls()!=0)
+      fprintf(stderr,"pair CALL post-GC root=%u runnable=%d entries=%u exits=%u parent=%u exit=%u\n",
+              PT->traceno,trace_runnable_acq(PT,PT->traceno),
+              lj_trace_test_root_entry_successes(),lj_trace_test_exit_calls(),
+              lj_trace_test_first_exit_parent(),lj_trace_test_first_exitno());
+    assert(lj_trace_test_root_entry_successes()>0 &&
+           lj_trace_test_exit_calls()==0);
+    native_returns++;
+    lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+    invoke_bad_call(L,"funcf_multi_run","funcf_pair_candidate");
+    assert(lj_trace_test_root_entry_successes()>0 &&
+           lj_trace_test_exit_calls()>0 &&
+           lj_trace_test_first_exit_parent()==PT->traceno);
+    native_identity_exits++;
+    lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+    assert(invoke(L,"funcf_run","funcf_pair_candidate",16)==
+           invoke(L,"funcf_run","funcf_pair_oracle",16));
+    assert(lj_trace_test_root_entry_successes()>0 &&
+           lj_trace_test_exit_calls()==0);
+    native_returns++;
+    lua_getglobal(L,"c_target"); assert(tvisfunc(L->top-1));
+    admission(PT,L,funcV(L->top-1)); lua_pop(L,1);
+  }
   GCfunc *candidate=global_lfunc(L,"funcf_candidate");
   GCtrace *T=NULL;
   for (unsigned i=0;i<8&&!T;i++) {
@@ -837,6 +934,7 @@ int main(void)
     native_returns++;
     multi_admission(MT);
   }
+
   ljt_lua_dostring(L,"assert(stop:send(true,5)); local ok,v=peer:join(5); "
                      "assert(ok and v)");
   lua_close(L);

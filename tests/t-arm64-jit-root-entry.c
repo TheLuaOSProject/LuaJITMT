@@ -354,7 +354,7 @@ static LJTraceRootEntry test_trace_enter_root(jit_State *J, const BCIns *pc,
   BCReg a = pc != NULL ? bc_a((BCIns)la_load32_acq(
 	(const uint32_t *)pc)) : 0;
   BCIns sourceins = BCINS_AD(sourceop, a, traceno);
-  return lj_trace_enter_root(J, pc, traceno, L, base, sourceins);
+  return lj_trace_enter_root(J, pc, traceno, L, base, sourceins, NULL);
 }
 
 /* Kept out of line for the contract script: its call site proves that Clang's
@@ -366,7 +366,7 @@ GCtrace *lj_test_root_entry_abi_probe(jit_State *J, const BCIns *pc,
 	ASMFunction *targetp)
 {
   LJTraceRootEntry entry =
-    lj_trace_enter_root(J, pc, traceno, L, base, sourceins);
+    lj_trace_enter_root(J, pc, traceno, L, base, sourceins, NULL);
   *targetp = entry.target;
   return entry.trace;
 }
@@ -418,6 +418,7 @@ static void expect_metadata_success(lua_State *L, const BCIns *pc,
   lua_State *saved_tmpbuf_L = sbufL(&L->tg_hint->tmpbuf);
   uint32_t publishes = lj_trace_test_root_entry_publishes();
   uint32_t cleanups = lj_trace_test_root_entry_cleanups();
+  TValue *saved_top = L->top;
   assert(root_entry_metadata_layout_valid(&L2J(L)->cur));
   assert(lj_trace_test_arm64_root_certify(L2J(L), &L2J(L)->cur));
   LJTraceRootEntry entry = test_trace_enter_root(
@@ -433,6 +434,17 @@ static void expect_metadata_success(lua_State *L, const BCIns *pc,
   ** synthetic entry intent just as a native exit would. */
   lj_tg_store_jit_base(L->tg_hint, NULL);
   setsbufL(&L->tg_hint->tmpbuf, saved_tmpbuf_L);
+
+  /* A stale low top is tolerated only for JFUNCF when the VM supplies its
+  ** independently bounds-checked frame extent. Loop entries retain the
+  ** ordinary top-at-or-above-base requirement. */
+  L->top = L->base - 1;
+  expect_reject(test_trace_enter_root(L2J(L), pc, 1, L, L->base,
+	BC_JLOOP));
+  assert(lj_tg_load_jit_base(L->tg_hint) == NULL);
+  assert(lj_trace_test_root_entry_publishes() == publishes + 1u);
+  assert(lj_trace_test_root_entry_cleanups() == cleanups);
+  L->top = saved_top;
 }
 
 static void expect_layout_reject(lua_State *L, const BCIns *pc)
@@ -1059,9 +1071,9 @@ int main(void)
   assert(lj_trace_test_root_entry_cleanups() == 0);
   assert(sbufL(&tg->tmpbuf) == tmpbuf_L);
 
-  /* Every open root-source gate publishes intent before absent metadata
-  ** reaches the one cleanup path. The incompatible JFUNCF/LOOP generation
-  ** must reject after the same lifetime publication, never before it. */
+  /* Every open loop-root gate publishes intent before absent metadata reaches
+  ** the one cleanup path. A JFUNCF-shaped source is rejected before publish
+  ** unless its exact live header and VM-supplied frame extent agree. */
   expect_reject(test_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
                                     BC_JLOOP));
   assert(lj_tg_load_jit_base(tg) == NULL);
@@ -1069,10 +1081,16 @@ int main(void)
   assert(lj_trace_test_root_entry_cleanups() == 1);
   publishes = lj_trace_test_root_entry_publishes();
   cleanups = lj_trace_test_root_entry_cleanups();
-  expect_reject(test_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
-                                    BC_JFUNCF));
-  assert(lj_trace_test_root_entry_publishes() == publishes + 1u);
-  assert(lj_trace_test_root_entry_cleanups() == cleanups + 1u);
+  {
+    BCIns loopins = (BCIns)la_load32_acq(
+	(const uint32_t *)metadata_loop.pc);
+    BCIns fake_funcf = BCINS_AD(BC_JFUNCF, bc_a(loopins), 1);
+    TValue *frame_top = L->base + funcproto(curr_func(L))->framesize;
+    expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L,
+	L->base, fake_funcf, frame_top));
+  }
+  assert(lj_trace_test_root_entry_publishes() == publishes);
+  assert(lj_trace_test_root_entry_cleanups() == cleanups);
   assert(sbufL(&tg->tmpbuf) == tmpbuf_L);
 
   /* A gate owner wins before publication: entry records displacement and does

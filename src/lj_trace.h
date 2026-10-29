@@ -43,7 +43,8 @@ LJ_STATIC_ASSERT(offsetof(LJTraceRootEntry, target) == 8);
 
 LJ_FUNCA LJTraceRootEntry LJ_FASTCALL
 lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
-		    lua_State *L, TValue *base, BCIns sourceins);
+		    lua_State *L, TValue *base, BCIns sourceins,
+		    TValue *frame_top);
 
 /* Read-only first-level ARM64 side-recording checkpoint. The caller must keep
 ** trace metadata resident with either a GC2 SMR reader or the recorder token.
