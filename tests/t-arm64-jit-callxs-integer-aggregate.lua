@@ -107,6 +107,12 @@ uint32_t arm64_take_bitfield(Arm64Bitfield);
 uint32_t arm64_take_pair_no_gpr(uint32_t, uint32_t, uint32_t, uint32_t,
                                 uint32_t, uint32_t, uint32_t, uint32_t,
                                 Arm64IntPair);
+uint32_t arm64_take_pair_stack(uint32_t, uint32_t, uint32_t, uint32_t,
+                                uint32_t, uint32_t, uint32_t, uint32_t,
+                                Arm64IntPair, uint32_t);
+uint32_t arm64_take_pair_stack_alt(uint32_t, uint32_t, uint32_t, uint32_t,
+                                uint32_t, uint32_t, uint32_t, uint32_t,
+                                Arm64IntPair, uint32_t);
 Arm64ByteResult arm64_return_byte(uint32_t);
 Arm64HalfResult arm64_return_half(uint32_t);
 Arm64WordResult arm64_return_word(uint32_t);
@@ -178,6 +184,11 @@ _G.__arm64_word_fn = lib.arm64_take_word
 _G.__arm64_big_pair_fn = lib.arm64_take_big_pair
 _G.__arm64_bitfield_fn = lib.arm64_take_bitfield
 _G.__arm64_pair_no_gpr_fn = lib.arm64_take_pair_no_gpr
+_G.__arm64_pair_stack_fn = lib.arm64_take_pair_stack
+_G.__arm64_word_stack_fn = ffi.cast([[uint32_t (*)(uint32_t,uint32_t,
+  uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,Arm64Word)]], 0)
+_G.__arm64_pair_stack_vararg_fn = ffi.cast([[uint32_t (*)(uint32_t,uint32_t,
+  uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,Arm64IntPair,...)]], 0)
 _G.__arm64_float_pair_stack_fn = lib.arm64_take_float_pair_stack
 
 local candidate = assert(loadstring([[
@@ -565,6 +576,92 @@ tracked_exit_roots = nil
 hfa_candidate = saved_hfa_candidate
 _G.__arm64_float_hfa_candidate = hfa_candidate
 _set_hfa_candidate(hfa_candidate)
+
+
+-- A full-width integer aggregate spills after the eighth GPR.
+local int_stack_candidate = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do
+    sum = sum + fn(1, 2, 3, 4, 5, 6, 7, 8, value, salt)
+  end
+  return sum
+end
+]], '@integer-pair-stack-candidate'))()
+local int_stack_oracle_chunk = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do
+    sum = sum + fn(1, 2, 3, 4, 5, 6, 7, 8, value, salt)
+  end
+  return sum
+end
+]], '@integer-pair-stack-oracle'))
+jit.off(int_stack_oracle_chunk, true)
+local int_stack_oracle = int_stack_oracle_chunk()
+local int_stack_clone_chunk = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do
+    sum = sum + fn(1, 2, 3, 4, 5, 6, 7, 8, value, salt)
+  end
+  return sum
+end
+]], '@integer-pair-stack-clone'))
+jit.off(int_stack_clone_chunk, true)
+local int_stack_clone = int_stack_clone_chunk()
+jit.off(int_stack_oracle, true)
+jit.off(int_stack_clone, true)
+_G.__arm64_integer_pair_stack_candidate = int_stack_candidate
+_G.__arm64_integer_pair_stack_clone = int_stack_clone
+local saved_integer_candidate = candidate
+candidate = int_stack_candidate
+_set_aggregate_candidate(candidate)
+jit.flush(candidate)
+-- Reset hashed warmup counters after the preceding independent probes.
+jit.opt.start('hotloop=1')
+jit.on(candidate, true)
+exits = 0
+lib.arm64_aggregate_reset()
+local stack_pair = ffi.new('Arm64IntPair', 17, 43)
+local stack_fn = lib.arm64_take_pair_stack
+local stack_native_before = _aggregate_native_width_count(8)
+for pass = 1, 8 do
+  assert(candidate(16, stack_fn, stack_pair, 19) ==
+         int_stack_oracle(16, stack_fn, stack_pair, 19),
+         'stack-passed integer pair differs from the interpreter')
+end
+assert(next(roots(candidate)) and
+       _aggregate_native_width_count(8) > stack_native_before,
+       'stack-passed integer pair root did not finish natively: root='..tostring(next(roots(candidate)))..', before='..stack_native_before..', after='.._aggregate_native_width_count(8))
+assert(exits > 0, 'stack-passed integer pair root did not exit natively')
+assert(lib.arm64_aggregate_count(36) == 256,
+       'stack-passed integer pair effects were lost or replayed: ' ..
+       tostring(lib.arm64_aggregate_count(36)))
+stack_native_before = _aggregate_native_width_count(8)
+collectgarbage('collect')
+exits = 0
+assert(candidate(32, stack_fn, stack_pair, 19) ==
+       int_stack_oracle(32, stack_fn, stack_pair, 19),
+       'stack-passed integer pair changed after full GC')
+assert(_aggregate_native_width_count(8) > stack_native_before and exits > 0,
+       'stack-passed integer pair did not re-enter and exit natively after GC')
+assert(lib.arm64_aggregate_count(36) == 320,
+       'stack-passed integer pair post-GC effects were lost or replayed')
+tracked_exit_roots = roots(candidate)
+exits = 0
+assert(candidate(32, lib.arm64_take_pair_stack_alt,
+                     stack_pair, 19) ==
+       int_stack_oracle(32, lib.arm64_take_pair_stack_alt,
+                        stack_pair, 19),
+       'stack-passed integer pair callable-change fallback differs')
+assert(exits > 0, 'stack-passed integer pair callable change did not force an exit')
+assert(lib.arm64_aggregate_count(37) == 64,
+       'stack-passed integer pair callable-change effects were lost or replayed: ' ..
+       tostring(lib.arm64_aggregate_count(37)))
+tracked_exit_roots = nil
+candidate = saved_integer_candidate
+_set_aggregate_candidate(candidate)
 
 
 local function run_one_hfa(candidate_fn, oracle_fn, type_name, ffi_fn, counter,

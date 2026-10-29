@@ -178,7 +178,8 @@ static int lj_ccall_arm64_scalar_class(CTState *cts, CTypeID id,
 }
 
 /* Darwin AAPCS64 passes a non-HFA composite of at most eight bytes in one
-** GPR when one remains. This bounded subset accepts only structs whose
+** GPR when one remains. The signature planner separately handles a full-width
+** composite on the stack. This bounded subset accepts only structs whose
 ** direct members are integer/boolean/enum scalars. It deliberately rejects
 ** unions, nested composites, bitfields, vectors, floating members, refs and
 ** over-aligned shapes until their independent classifications are proved. */
@@ -467,8 +468,18 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
 	arg->source_index = (uint8_t)nparams;
 	arg->member_count = 1;
 	if (arg->kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE) {
-	  if (ngpr >= CCALL_NARG_GPR) return 0;
-	  arg->reg = (uint8_t)ngpr++;
+	  if (ngpr < CCALL_NARG_GPR) {
+	    arg->reg = (uint8_t)ngpr++;
+	  } else {
+	    /* One full-width composite has the same stack alignment and store
+	    ** width as its U64 carrier. Smaller composites need an independently
+	    ** proved ABI padding rule and remain closed here. */
+	    if (abi->is_vararg || arg->size != 8) return 0;
+	    stack_size = (stack_size+7u) & ~7u;
+	    arg->reg = LJ_ARM64_ABI_STACK;
+	    arg->stack_offset = (uint16_t)stack_size;
+	    stack_size += 8u;
+	  }
 	} else if (arg->cls == LJ_ARM64_ABI_FPR && nfpr < CCALL_NARG_FPR) {
 	  arg->reg = (uint8_t)nfpr++;
 	} else if (arg->cls == LJ_ARM64_ABI_GPR && ngpr < CCALL_NARG_GPR) {
