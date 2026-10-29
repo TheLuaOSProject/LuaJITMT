@@ -20,8 +20,18 @@ publication, exact epoch/ack, token ownership, retirement and interpreter
 result assertions remain intact. No production handshake code changed.
 The full focused first-side contract passed with its default two runs per
 helper profile, covering ARM64 and ARM64e gc-claim/scoped/full-flush modes and
-ordinary ARM64 smoke. The wider gate continuation and ordinary comparison
-remain pending.
+ordinary ARM64 smoke. The wider gate continuation from GDBJIT onward passed
+at `fcbe65749`, followed by the ordinary ARM64/x86_64 matrix. This is a
+documented resumed gate, not an uninterrupted full-gate run.
+
+Both ordinary architectures passed 509 stock source tests and 509 imported
+stock bytecode tests, snapshot/getpos, fixed varargs, the topology and parity
+inventories, and the aggregate probe. ARM64 and ARM64e also passed strict
+GDBJIT trace/assembler compilation. Frozen runtimes, archives and aggregate
+libraries plus their hashes are in the `ordinary/` evidence directory.
+The production ABI implementation tested here is `421172380`; `fcbe65749`
+only repairs the fixture ordering described above. Broader call shapes,
+nested side traces and full x86_64 behavior parity remain separate work.
 
 Evidence: `/Users/frityet/Scratch/ljmt-partial-hfa-integrated-20261029/`.
 `initial-full-gate.log` is the strict warning failure; `full-gate.log` is the
@@ -29,3 +39,5 @@ later append/flush fixture failure. `append-readiness-first-side.log` records
 the successful focused run. The `append-failure/` directory preserves the
 runtime/archive and relevant objects remaining after the failed run; the
 temporary fixture itself had already been removed by its script.
+`resume-gate.log`/`resume-gate.status` and `ordinary/check.log`/
+`ordinary.status` record the completed continuation and ordinary matrix.
