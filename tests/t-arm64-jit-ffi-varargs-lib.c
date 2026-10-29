@@ -4,6 +4,10 @@
 #include <stdint.h>
 #include <string.h>
 
+typedef struct VarargSret24 {
+  uint64_t lo, mid, hi;
+} VarargSret24;
+
 typedef void (*va_observer)(unsigned id);
 static va_observer observer;
 static unsigned call_count[12];
@@ -204,4 +208,22 @@ double arm64_va_cdata_tail(uint32_t fixed, ...)
       second_double != 4.5 || second_byte != -9 ||
       unsigned_wide != UINT64_C(0x23456789)) return -10.0;
   return 88.25;
+}
+
+VarargSret24 arm64_va_sret_cdata_tail(uint32_t fixed, ...)
+{
+  va_list ap;
+  int32_t signed_word;
+  double value;
+  VarargSret24 result;
+  note(11);
+  va_start(ap, fixed);
+  signed_word = va_arg(ap, int);
+  value = va_arg(ap, double);
+  va_end(ap);
+  result.lo = fixed == 23 && signed_word == -17 && value == 2.5 ?
+              UINT64_C(0x112233445566) : UINT64_C(0xdeadbeef);
+  result.mid = UINT64_C(0x123456789abc);
+  result.hi = UINT64_C(0x6543210);
+  return result;
 }

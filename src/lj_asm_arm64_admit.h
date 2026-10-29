@@ -968,11 +968,19 @@ static int arm64_callxs_sret_payload(CTState *cts, const IRIns *ir,
 	  int argok = arm64_callxs_arglist(ir,nk,nins,call,values,&nargs);
 	  if (!arm64_callxs_result_indirect(&abi) ||
 	      arm64_callxs_box_ctype(&abi) != boxctype ||
-	      irt_type(callins.t) != IRT_NIL || !argok ||
-	      nargs != (unsigned)abi.nargs+1u || values[0] < REF_FIRST ||
+	      irt_type(callins.t) != IRT_NIL || !argok || nargs == 0 ||
+	      (abi.is_vararg ?
+	       !((nargs == (unsigned)abi.nargs+1u) ||
+		 (nargs > (unsigned)abi.nargs+2u &&
+		  values[abi.nargs+1u] == REF_NIL)) :
+	       nargs != (unsigned)abi.nargs+1u) || values[0] < REF_FIRST ||
 	      values[0] >= call) {
 	    return 0;
 	  }
+	  if (abi.is_vararg && nargs > (unsigned)abi.nargs+1u)
+	    for (i = 1; i < nargs; i++)
+	      if (i != (unsigned)abi.nargs+1u && values[i] == REF_NIL)
+		return 0;
 	}
 	payload = values[0];
 	addr = ir_load_acq(&ir[payload]);
@@ -1125,7 +1133,16 @@ static int arm64_postra_callxs_sret_payload(const LJArm64PostRAView *view,
 	    !arm64_callxs_result_indirect(&abi) ||
 	    arm64_callxs_box_ctype(&abi) != boxctype) return 0;
 	if (!arm64_callxs_arglist(view->ir, view->nk, semantic_nins,
-	      call, values, &nargs) || nargs != (unsigned)abi.nargs+1u) return 0;
+	      call, values, &nargs) || nargs == 0 ||
+	    (abi.is_vararg ?
+	     !((nargs == (unsigned)abi.nargs+1u) ||
+	       (nargs > (unsigned)abi.nargs+2u &&
+		values[abi.nargs+1u] == REF_NIL)) :
+	     nargs != (unsigned)abi.nargs+1u)) return 0;
+	if (abi.is_vararg && nargs > (unsigned)abi.nargs+1u)
+	  for (i = 1; i < nargs; i++)
+	    if (i != (unsigned)abi.nargs+1u && values[i] == REF_NIL)
+	      return 0;
 	payload = values[0];
 	if (payload < REF_FIRST || payload >= call) return 0;
 	addr = ir_load_acq(&view->ir[payload]);
@@ -7695,8 +7712,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	  if (arm64_callxs_result_indirect(&abi)) {
 	    IRIns payload;
 	    IRRef result_box;
-	    if (rawcount != (unsigned)abi.nargs+1u ||
-		rawcount == 0 || values[0] < REF_FIRST || values[0] >= call)
+	    if (rawcount == 0 || values[0] < REF_FIRST || values[0] >= call)
 	      return 0;
 	    payload = ir_load_acq(&view->ir[values[0]]);
 	    result_box = payload.op1;

@@ -30,15 +30,18 @@
 
 typedef void (*InstallObserver)(void (*fn)(unsigned));
 typedef unsigned (*ReadCounter)(unsigned id);
-enum { VA_MAX_ID = 11, VA_ITERS = 24 };
+enum { VA_MAX_ID = 12, VA_ITERS = 24 };
 
 static lua_State *test_L;
 static TGState *test_tg;
 static void *expected_func[VA_MAX_ID];
 static unsigned native_seen[VA_MAX_ID];
 static TraceNo observed_trace_no[VA_MAX_ID];
+static CTypeID expected_sret_type;
 static unsigned finish_target, forced_finishes;
 static uint64_t finish_old_epoch;
+
+static GCproto *vararg_global_proto(lua_State *L, const char *name);
 
 typedef struct VarargSemanticClone {
   GCtrace trace;
@@ -71,7 +74,7 @@ typedef struct VarargTarget {
   IRRef call, xsave;
   IRRef values[LJ_ARM64_ABI_MAX_ARGS];
   IRRef carg_nodes[LJ_ARM64_ABI_MAX_ARGS];
-  unsigned actual_count, rawcount;
+  unsigned actual_count, rawcount, hidden;
   MSize snap_index, mapofs, nent, nslots;
   MSize frame_entry, callable_entry, cdata_entry, source_entry;
   IRRef frame_ref, callable_ref, cdata_ref;
@@ -97,7 +100,9 @@ typedef enum VarargMutation {
   VA_MUT_WRONG_WRAPPER_ID,
   VA_MUT_CDATA_WRONG_SIGNEXT,
   VA_MUT_CDATA_WRONG_CTYPE,
-  VA_MUT_CDATA_WRONG_OWNER
+  VA_MUT_CDATA_WRONG_OWNER,
+  VA_MUT_SRET_WRONG_HIDDEN,
+  VA_MUT_SRET_MOVED_MARKER
 } VarargMutation;
 
 static void vararg_clone_init(VarargSemanticClone *clone, GCtrace *owner)
@@ -381,7 +386,9 @@ static int vararg_find_target(GCtrace *T, GCproto *pt, CTState *cts,
       if (bc_op(sourceins) != BC_CALL || bc_c(sourceins) == 0) continue;
       target->actual_count = (unsigned)bc_c(sourceins)-1u;
       if (target->actual_count <= abi.nargs) continue;
-      rawcount = target->actual_count+1u;
+      target->hidden =
+        abi.result_kind == LJ_ARM64_ABI_KIND_INDIRECT_AGGREGATE ? 1u : 0u;
+      rawcount = target->actual_count+1u+target->hidden;
       if (rawcount > LJ_ARM64_ABI_MAX_ARGS) continue;
       if (!vararg_carg_values(trace_ir_acq(T), nk, nins, call, rawcount,
                               target->values, target->carg_nodes))
@@ -590,6 +597,20 @@ static void vararg_mutate(VarargMutation mutation, IRIns *ir,
     assert(node[1] != 0 && ir_load_acq(&ir[node[1]]).o == IR_CARG &&
            ir_load_acq(&ir[node[1]]).op1 == target->values[0]);
     ir[node[1]].op1 = target->values[tail];
+    break;
+  }
+  case VA_MUT_SRET_WRONG_HIDDEN:
+    assert(target->hidden == 1u && node[1] != 0 &&
+           target->values[0] != target->values[1]);
+    ir[node[1]].op1 = target->values[1];
+    break;
+  case VA_MUT_SRET_MOVED_MARKER: {
+    unsigned marker = target->hidden+target->abi.nargs;
+    assert(target->hidden == 1u && marker+1u < target->rawcount &&
+           ir[node[marker]].op2 == REF_NIL &&
+           ir[node[marker+1u]].op2 != REF_NIL);
+    ir[node[marker]].op2 = target->values[marker+1u];
+    ir[node[marker+1u]].op2 = REF_NIL;
     break;
   }
   }
@@ -850,6 +871,51 @@ static void test_cdata_tail_admission_clones(lua_State *L)
                          "vararg carrier also used in fixed prefix");
 }
 
+static void test_sret_vararg_admission_clones(lua_State *L)
+{
+  jit_State *J = G2J(G(L));
+  CTState *cts = ctype_ctsG(G(L));
+  GCproto *pt = vararg_global_proto(L, "__va_run_sret");
+  GCtrace *T = traceref_safe(J, observed_trace_no[11]);
+  CTypeID ctype = vararg_global_ctype(L, "__va_sret");
+  VarargTarget target;
+  LJArm64PostRAView view = { 0 };
+  VarargSemanticClone semantic;
+  VarargJSave save;
+  assert(T != NULL && vararg_find_target(T, pt, cts, ctype, &target));
+  assert(target.hidden == 1u && target.abi.is_vararg &&
+         target.abi.nargs == 1u && target.actual_count == 3u &&
+         target.rawcount == 5u && target.values[2] == REF_NIL);
+  view.ir = trace_ir_acq(T);
+  view.owner = T;
+  view.cts = cts;
+  view.snap = trace_snap_acq(T);
+  view.snapmap = trace_snapmap_acq(T);
+  view.proto_bc = proto_bc(pt);
+  view.proto = pt;
+  view.startpc = trace_startpc_acq(T);
+  view.nins = trace_nins_acq(T);
+  view.nk = trace_nk_acq(T);
+  view.nsnap = trace_nsnap_acq(T);
+  view.nsnapmap = trace_nsnapmap_acq(T);
+  view.spadjust = trace_spadjust_acq(T);
+  view.proto_sizebc = pt->sizebc;
+  view.proto_numparams = pt->numparams;
+  view.root_topslot = trace_topslot_acq(T);
+  view.startins = trace_startins_acq(T);
+  assert(lj_asm_arm64_postra_admit(&view, NULL));
+  vararg_clone_init(&semantic, T);
+  save = vararg_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+  vararg_semantic_result(J, &semantic.trace, 1,
+                         "variadic indirect-result baseline");
+  vararg_j_leave(J, &save);
+  vararg_clone_free(&semantic);
+  vararg_expect_mutation(J, &view, &target, VA_MUT_SRET_WRONG_HIDDEN,
+                         "variadic sret hidden pointer binding");
+  vararg_expect_mutation(J, &view, &target, VA_MUT_SRET_MOVED_MARKER,
+                         "variadic sret CARG marker position");
+}
+
 static void force_varargs_postcall(TGState *tg)
 {
   assert((lj_ffi_native_frame_sequence_acq(tg) & 1u) != 0);
@@ -882,7 +948,12 @@ static void observe_varargs_call(unsigned id)
   assert((flags & LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED) != 0);
   assert(lj_ffi_native_frame_func_acq(frame) == expected_func[id]);
   assert(lj_ffi_native_frame_L_acq(frame) == lj_tg_load_cur_L(test_tg));
-  assert(lj_ffi_native_frame_result_root_acq(frame) == NULL);
+  if (id == 11) {
+    GCcdata *root = lj_ffi_native_frame_result_root_acq(frame);
+    assert(root != NULL && root->ctypeid == expected_sret_type);
+  } else {
+    assert(lj_ffi_native_frame_result_root_acq(frame) == NULL);
+  }
   trace = lj_ffi_native_frame_trace_acq(frame);
   assert(trace != NULL && trace_native_pins_acq(trace) != 0);
   assert(lj_ffi_native_frame_trace_no_acq(frame) != 0);
@@ -892,6 +963,16 @@ static void observe_varargs_call(unsigned id)
   assert(lj_tg_load_jit_base(test_tg) != NULL);
   assert(lj_tg_vmstate_load_acq(test_tg) ==
          (int32_t)lj_ffi_native_frame_trace_no_acq(frame));
+  if (id == 11) {
+    IRRef ref, nins = trace_nins_acq(trace);
+    int saw_box = 0, saw_sret = 0;
+    for (ref = REF_FIRST; ref < nins; ref++) {
+      IRIns ins = ir_load_acq(&trace_ir_acq(trace)[ref]);
+      if (ins.o == IR_CNEW) saw_box = 1;
+      if (ins.o == IR_CALLXS && irt_type(ins.t) == IRT_NIL) saw_sret = 1;
+    }
+    assert(saw_box && saw_sret);
+  }
   native_seen[id]++;
   if (finish_target == id) {
     finish_target = 0;
@@ -911,6 +992,11 @@ static void run_case(lua_State *L, const char *name, int n)
   ** real Lua caller frame rather than the C fixture's pcall frame. */
   if (strcmp(name, "__va_run_cdata") == 0) {
     lua_getglobal(L, "__va_dispatch_cdata");
+    assert(lua_isfunction(L, -1));
+    lua_pushinteger(L, n);
+    ljt_lua_pcall(L, 1, 1, name);
+  } else if (strcmp(name, "__va_run_sret") == 0) {
+    lua_getglobal(L, "__va_dispatch_sret");
     assert(lua_isfunction(L, -1));
     lua_pushinteger(L, n);
     ljt_lua_pcall(L, 1, 1, name);
@@ -1114,6 +1200,25 @@ static void run_ordinary_postcall(lua_State *L, ReadCounter calls,
   assert((uintptr_t)(pcbase>>8) == (uintptr_t)(call_pc+1));
 }
 
+static void run_sret_postcall(ReadCounter calls)
+{
+  unsigned before_calls = calls(11), before_native = native_seen[11];
+  GCtrace *trace;
+  forced_finishes = 0;
+  finish_target = 11;
+  lj_trace_test_reset_exit_stats();
+  run_case(test_L, "__va_run_sret", 20);
+  lj_ffi_native_trace_test_set_finish_hook(NULL);
+  assert(finish_target == 0 && forced_finishes == 1);
+  lj_tg_hs_epoch_ack_rel(test_tg, finish_old_epoch);
+  assert(calls(11) == before_calls+20u && native_seen[11] > before_native);
+  assert(lj_trace_test_exit_calls() > 0 && lj_tg_in_native_acq(test_tg) == 0 &&
+         lj_tg_load_jit_base(test_tg) == NULL);
+  trace = traceref_safe(G2J(G(test_L)), observed_trace_no[11]);
+  assert(trace != NULL && trace_native_pins_acq(trace) == 0 &&
+         trace_runnable_acq(trace, observed_trace_no[11]));
+}
+
 int main(int argc, char **argv)
 {
   const char *path = getenv("LJ_ARM64_FFI_VARARGS_LIB");
@@ -1145,6 +1250,7 @@ int main(int argc, char **argv)
   expected_func[8] = dlsym(library, "arm64_va_callm_consumer");
   expected_func[9] = dlsym(library, "arm64_va_ordinary_consumer");
   expected_func[10] = dlsym(library, "arm64_va_cdata_tail");
+  expected_func[11] = dlsym(library, "arm64_va_sret_cdata_tail");
   for (i = 1; i < VA_MAX_ID; i++) assert(expected_func[i] != NULL);
   install(observe_varargs_call);
 
@@ -1161,6 +1267,8 @@ int main(int argc, char **argv)
     "double arm64_va_callm_consumer(int32_t, ...);\n"
     "double arm64_va_ordinary_consumer(int32_t, ...);\n"
     "double arm64_va_cdata_tail(uint32_t, ...);\n"
+    "struct arm64_va_sret24 { uint64_t lo,mid,hi; };\n"
+    "struct arm64_va_sret24 arm64_va_sret_cdata_tail(uint32_t, ...);\n"
     "]]\n"
     "local lib = ffi.load(assert(os.getenv('LJ_ARM64_FFI_VARARGS_LIB')))\n"
     "_G.__va_noextra=lib.arm64_va_noextra\n"
@@ -1175,6 +1283,8 @@ int main(int argc, char **argv)
     "_G.__va_callm=lib.arm64_va_callm_consumer\n"
     "_G.__va_ordinary=lib.arm64_va_ordinary_consumer\n"
     "_G.__va_cdata=lib.arm64_va_cdata_tail\n"
+    "_G.__va_sret=lib.arm64_va_sret_cdata_tail\n"
+    "_G.__va_sret_zero=ffi.new('struct arm64_va_sret24')\n"
     "local cda=ffi.new('int8_t',-17); local cdb=ffi.new('float',2.5)\n"
     "local cdc=ffi.new('uint16_t',31); local cdd=ffi.new('double',3.25)\n"
     "local cde=ffi.new('long long',0x12345678); local cdf=ffi.new('int',47)\n"
@@ -1200,10 +1310,23 @@ int main(int argc, char **argv)
     " local fn=__va_ordinary; for i=1,n do if fn(17,i+0.5)~=17+i+0.5 then return false end end; return true end\n"
     "function _G.__va_run_cdata(n,fn,a,b,c,d,e,f,g,h,j)\n"
     " for i=1,n do if fn(23,a,b,c,d,e,f,g,h,j)~=88.25 then return false end end; return true end\n"
+    "function _G.__va_run_sret(n,fn,a,b)\n"
+    " local out; local sum=0.5; for i=1,n do out=fn(23,a,b); sum=sum+i end\n"
+    " return out.lo==0x112233445566 and out.mid==0x123456789abc and out.hi==0x6543210 and sum==n*(n+1)/2+0.5 end\n"
+    "local threading=require('threading')\n"
+    "_G.__va_sret_ready=threading.channel(1); _G.__va_sret_release=threading.channel(1)\n"
+    "_G.__va_sret_peer=assert(threading.spawn(function(ready,release) assert(ready:send(true,5)); assert(select(2,release:recv(120))); return true end,__va_sret_ready,__va_sret_release))\n"
+    "assert(select(2,__va_sret_ready:recv(5)))\n"
+    "function _G.__va_dispatch_sret(n) local got=__va_run_sret(n,__va_sret,cda,cdb); return got end\n"
     "function _G.__va_dispatch(name,n) local got=_G[name](n); return got end\n"
     "function _G.__va_dispatch_cdata(n) local got=__va_run_cdata(n,__va_cdata,cda,cdb,cdc,cdd,cde,cdf,cdg,cdh,cdi); return got end\n"
     "jit.flush(); jit.on(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64')\n");
 
+  assert(mt_active_acq(G(L)) != 0);
+  lua_getglobal(L, "__va_sret_zero");
+  assert(tviscdata(L->top-1));
+  expected_sret_type = cdataV(L->top-1)->ctypeid;
+  lua_pop(L, 1);
   assert(require_native(calls, 1, "__va_run_noextra") != 0);
   assert(require_native(calls, 2, "__va_run_mixed") != 0);
   test_vararg_admission_clones(L, "__va_run_mixed", "__va_mixed", 0);
@@ -1228,6 +1351,24 @@ int main(int argc, char **argv)
   test_vararg_abi_failure_stage(L, 2);
   assert(require_native(calls, 10, "__va_run_cdata") != 0);
   test_cdata_tail_admission_clones(L);
+  run_sret_postcall(calls);
+  test_sret_vararg_admission_clones(L);
+  {
+    unsigned calls_before = calls(11), native_before = native_seen[11];
+    TraceNo selected = observed_trace_no[11];
+    lua_gc(L, LUA_GCCOLLECT, 0);
+    lua_getglobal(L, "__va_dispatch_sret");
+    lua_pushinteger(L, VA_ITERS);
+    ljt_lua_pcall(L, 1, 1, "variadic indirect result after full GC");
+    assert(lua_toboolean(L, -1));
+    lua_pop(L, 1);
+    assert(calls(11) == calls_before+VA_ITERS &&
+           native_seen[11] > native_before &&
+           observed_trace_no[11] == selected && selected != 0 &&
+           traceref_safe(G2J(G(L)), selected) != NULL);
+  }
+  ljt_lua_dostring(L,
+    "assert(__va_sret_release:send(true,5)); assert(__va_sret_peer:join())\n");
   lj_ffi_native_trace_test_set_finish_hook(NULL);
   lua_close(L);
   dlclose(library);
