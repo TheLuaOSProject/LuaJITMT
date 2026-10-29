@@ -87,6 +87,21 @@ static lua_Number invoke_captured(lua_State *L, const char *runner,
   return result;
 }
 
+static lua_Number invoke_captured_named(lua_State *L, const char *runner,
+                                        const char *producer, int n)
+{
+  lua_Number result;
+  TValue *top=L->top, *base=L->base;
+  void *cframe=L->cframe;
+  lua_getglobal(L,runner); lua_getglobal(L,producer); lua_pushinteger(L,n);
+  ljt_lua_pcall(L,2,1,"zero-formal captured producer CALLM exit");
+  assert(lua_isnumber(L,-1)); result=lua_tonumber(L,-1); lua_pop(L,1);
+  assert(L->top==top && L->base==base && L->cframe==cframe &&
+         lj_tg_load_jit_base(L2TG(L))==NULL &&
+         !lj_tg_in_native_acq(L2TG(L)));
+  return result;
+}
+
 static GCtrace *root_trace(lua_State *L)
 {
   GCproto *pt=funcproto(global_function(L,"open_run"));
@@ -645,6 +660,177 @@ static void run_captured_case(lua_State *L,unsigned nresults)
          nresults,(unsigned)exit);
 }
 
+static SnapNo captured_function_snapshot(GCtrace *T, MSize callpos,
+                                         BCReg function_reg)
+{
+  GCproto *pt=trace_startpt_acq(T);
+  SnapNo best=UINT16_MAX;
+  MSize slot=1u+LJ_FR2+function_reg;
+  for (SnapNo s=0;s<T->nsnap;s++) {
+    SnapShot *snap=&T->snap[s];
+    uint64_t footer;
+    unsigned found=0;
+    if (snap->mapofs>T->nsnapmap || snap->nent>T->nsnapmap-snap->mapofs ||
+        T->nsnapmap-snap->mapofs-snap->nent<2u) continue;
+    memcpy(&footer,&T->snapmap[snap->mapofs+snap->nent],sizeof(footer));
+    if ((uint8_t)footer ||
+        (const BCIns *)(uintptr_t)(footer>>8)!=proto_bc(pt)+callpos) continue;
+    for (MSize i=0;i<snap->nent;i++)
+      if (snap_slot(T->snapmap[snap->mapofs+i])==slot) found++;
+    if (found==1u &&
+        (best==UINT16_MAX || snap->ref>T->snap[best].ref)) best=s;
+  }
+  return best;
+}
+
+static void zero_formal_captured_admission_cases(lua_State *L,GCtrace *T,
+                                                  MSize callpos,
+                                                  unsigned nresults)
+{
+  GCproto *pt=trace_startpt_acq(T);
+  CapturedClone c;
+  BCIns *bc=proto_bc(pt);
+  BCIns producer=(BCIns)la_load32_acq((const uint32_t *)&bc[callpos-1u]);
+  SnapNo exit=consumer_identity_exit(T,global_function(L,"zero_consumer_a"),
+                                     callpos);
+  SnapNo replay;
+  MSize mapindex=UINT32_MAX, outindex=UINT32_MAX;
+  assert(exit!=UINT16_MAX && callpos>0u && bc_op(producer)==BC_CALL &&
+         bc_b(producer)==0u && bc_c(producer)==1u);
+  captured_clone_init(&c,T);
+  captured_clone_reset(&c,T);
+  captured_expect(&c,L,T,1,0);
+
+  /* The function-only producer call is a valid fixed zero-argument source. */
+  captured_clone_reset(&c,T);
+  bc_publish((const uint32_t *)&bc[callpos-1u],
+             BCINS_ABC(BC_CALL,bc_a(producer),0u,2u));
+  captured_expect(&c,L,T,0,1);
+  bc_publish((const uint32_t *)&bc[callpos-1u],producer);
+
+  /* The unchanged producer-function formal must be present in the exact
+  ** current-half pre-call map and match its source identity guard. */
+  replay=captured_function_snapshot(T,callpos-1u,bc_a(producer));
+  assert(replay!=UINT16_MAX);
+  for (MSize i=0;i<c.snap[replay].nent;i++)
+    if (snap_slot(c.snapmap[c.snap[replay].mapofs+i])==
+        1u+LJ_FR2+bc_a(producer)) {
+      assert(mapindex==UINT32_MAX); mapindex=c.snap[replay].mapofs+i;
+    }
+  assert(mapindex!=UINT32_MAX);
+  {
+    SnapEntry saved=c.snapmap[mapindex];
+    IRRef source=snap_ref(saved);
+    assert(source>=REF_FIRST && source<T->nins &&
+           ir_load_acq(&T->ir[source]).o==IR_SLOAD);
+    captured_clone_reset(&c,T);
+    c.snapmap[mapindex]=SNAP(snap_slot(saved),0,REF_NIL);
+    captured_expect(&c,L,T,0,2);
+    captured_clone_reset(&c,T);
+    c.ir[source].op1=(uint16_t)(1u+LJ_FR2+pt->numparams);
+    captured_expect(&c,L,T,0,3);
+  }
+
+  /* The source result vector is bound slot by slot at the consumer exit. */
+  {
+    BCIns callm=(BCIns)la_load32_acq((const uint32_t *)&bc[callpos]);
+    MSize slot=1u+LJ_FR2+bc_a(callm)+1u+LJ_FR2;
+    captured_clone_reset(&c,T);
+    for (MSize i=0;i<c.snap[exit].nent;i++)
+      if (snap_slot(c.snapmap[c.snap[exit].mapofs+i])==slot) {
+        assert(outindex==UINT32_MAX); outindex=c.snap[exit].mapofs+i;
+      }
+    assert(outindex!=UINT32_MAX);
+    {
+      SnapEntry saved=c.snapmap[outindex];
+      c.snapmap[outindex]=SNAP(snap_slot(saved),0,REF_NIL);
+      captured_expect(&c,L,T,0,4);
+    }
+  }
+  captured_clone_free(&c);
+  printf("zero-formal captured producer source/map negatives results=%u passed\n",
+         nresults);
+}
+
+static void run_zero_formal_captured_case(lua_State *L,unsigned nresults)
+{
+  static const char *producer[]={"return 1.25", "return 1.25,.25",
+                                 "return 1.25,.25,.5"};
+  GCtrace *T=NULL;
+  GCproto *pt;
+  MSize callpos;
+  SnapNo exit;
+  GCfunc *consumer;
+  MCode *mcode;
+  MSize szmcode;
+  uint64_t generation;
+  void *bytes;
+  lua_Number expected;
+  char install[512];
+  assert(nresults>=1u && nresults<=3u);
+  snprintf(install,sizeof(install),"install_zero_formal_case(%u,\"%s\")",
+           nresults,producer[nresults-1u]);
+  ljt_lua_dostring(L,install);
+  consumer=global_function(L,"zero_consumer_a");
+  pt=funcproto(global_function(L,"zero_run"));
+  callpos=callm_position(pt,nresults);
+  for (unsigned attempt=0;attempt<8u && !T;attempt++) {
+    (void)invoke_captured_named(L,"zero_oracle","zero_oracle_leaf",96);
+    (void)invoke_captured_named(L,"zero_run","zero_leaf",96);
+    T=root_trace_named(L,"zero_run");
+  }
+  assert(T);
+  exit=consumer_identity_exit(T,consumer,callpos);
+  assert(exit!=UINT16_MAX);
+  assert_open_vector_snapshot(T,exit,callpos,nresults);
+  zero_formal_captured_admission_cases(L,T,callpos,nresults);
+  mcode=trace_mcode_acq(T); szmcode=trace_szmcode_acq(T);
+  assert(mcode && szmcode);
+  generation=T->arm64_generation;
+  bytes=malloc(szmcode); assert(bytes); memcpy(bytes,mcode,szmcode);
+  ljt_lua_dostring(L,"zero_set(zero_consumer_b); zero_oracle_set(zero_oracle_consumer_b)");
+  expected=invoke_captured_named(L,"zero_oracle","zero_oracle_leaf",64);
+  lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+  assert(invoke_captured_named(L,"zero_run","zero_leaf",64)==expected);
+  assert(lj_trace_test_root_entry_successes()>0 && lj_trace_test_exit_calls()>0 &&
+         lj_trace_test_first_exit_parent()==T->traceno &&
+         lj_trace_test_first_exitno()==exit);
+  assert(root_trace_named(L,"zero_run")==T && T->arm64_generation==generation &&
+         trace_mcode_acq(T)==mcode && memcmp(trace_mcode_acq(T),bytes,szmcode)==0);
+  ljt_lua_dostring(L,"zero_set(zero_consumer_a); zero_oracle_set(zero_oracle_consumer_a)");
+  lua_gc(L,LUA_GCCOLLECT,0);
+  expected=invoke_captured_named(L,"zero_oracle","zero_oracle_leaf",64);
+  lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+  assert(invoke_captured_named(L,"zero_run","zero_leaf",64)==expected);
+  assert(lj_trace_test_root_entry_successes()>0 &&
+         root_trace_named(L,"zero_run")==T && T->arm64_generation==generation &&
+         trace_mcode_acq(T)==mcode && trace_szmcode_acq(T)==szmcode &&
+         memcmp(trace_mcode_acq(T),bytes,szmcode)==0);
+  free(bytes);
+  printf("zero-formal captured producer results=%u exact-exit=%u native reuse/GC passed\n",
+         nresults,(unsigned)exit);
+}
+
+static void check_zero_formal_three_result_frame_boundary(lua_State *L)
+{
+  GCproto *pt;
+  MSize callpos;
+  BCIns call, callm;
+  ljt_lua_dostring(L,
+    "install_zero_formal_case(3,'return 1.25,.25,.5')");
+  pt=funcproto(global_function(L,"zero_run"));
+  callpos=callm_position(pt,3u);
+  call=(BCIns)la_load32_acq((const uint32_t *)&proto_bc(pt)[callpos-1u]);
+  callm=(BCIns)la_load32_acq((const uint32_t *)&proto_bc(pt)[callpos]);
+  assert(bc_op(call)==BC_CALL && bc_b(call)==0u && bc_c(call)==1u &&
+         bc_op(callm)==BC_CALLM && bc_b(callm)==2u && bc_c(callm)==0u &&
+         bc_a(call)==bc_a(callm)+1u+LJ_FR2 &&
+         (MSize)bc_a(call)+3u>pt->framesize &&
+         lj_trace_arm64_lua_leaf(global_function(L,"zero_leaf")) &&
+         pt->framesize<UINT8_MAX);
+  printf("zero-formal captured producer results=3 remains closed by fixed-frame extent\n");
+}
+
 int main(void)
 {
   lua_State *L=ljt_lua_newstate_openlibs();
@@ -693,9 +879,41 @@ int main(void)
       "jit.on(captured_leaf,true); jit.on(captured_consumer_a,true); "
       "jit.on(captured_consumer_b,true); "
       "jit.flush(); jit.on(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64') end; "
+    "function install_zero_formal_case(n,producer) "
+      "local params=({'a','a,b','a,b,c'})[n]; "
+      "local body=({'return a+1','return a+b+2','return a+b+c+3'})[n]; "
+      "local alt=({'return a+17','return a+101*b+17',"
+        "'return a+101*b+10007*c+17'})[n]; "
+      "local function make_consumer(source,name) return assert(loadstring("
+        "'return function('..params..') '..source..' end',name))() end; "
+      "zero_consumer_a=make_consumer(body,'@zero-formal-consumer-a'); "
+      "zero_consumer_b=make_consumer(alt,'@zero-formal-consumer-b'); "
+      "zero_oracle_consumer_a=make_consumer(body,'@zero-formal-oracle-consumer-a'); "
+      "zero_oracle_consumer_b=make_consumer(alt,'@zero-formal-oracle-consumer-b'); "
+      "local source='local function make(initial) local consumer=initial; "
+        "local function run(fn,count) local total=.5; "
+          "for i=1,count do total=total+consumer(fn()) end; return total end; "
+        "local function set(v) consumer=v end; return run,set end; return make'; "
+      "local make=assert(loadstring(source,'@zero-formal-maker'))(); "
+      "zero_run,zero_set=make(zero_consumer_a); "
+      "zero_oracle,zero_oracle_set=make(zero_oracle_consumer_a); "
+      "zero_leaf=assert(loadstring('return function() '..producer..' end',"
+        "'@zero-formal-producer'))(); "
+      "zero_oracle_leaf=assert(loadstring('return function() '..producer..' end',"
+        "'@zero-formal-oracle-producer'))(); "
+      "jit.off(zero_oracle,true); jit.off(zero_oracle_set,true); "
+      "jit.off(zero_oracle_leaf,true); jit.off(zero_oracle_consumer_a,true); "
+      "jit.off(zero_oracle_consumer_b,true); jit.off(zero_set,true); "
+      "jit.on(zero_run,true); jit.on(zero_leaf,true); "
+      "jit.on(zero_consumer_a,true); jit.on(zero_consumer_b,true); "
+      "jit.flush(); jit.on(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64') end; "
+    "jit.off(install_zero_formal_case,true); "
     "jit.off(install_open_exit_case,true)");
   run_case(L,1); run_case(L,2); run_case(L,3);
   run_captured_case(L,1); run_captured_case(L,2); run_captured_case(L,3);
+  run_zero_formal_captured_case(L,1);
+  run_zero_formal_captured_case(L,2);
+  check_zero_formal_three_result_frame_boundary(L);
   ljt_lua_dostring(L,"assert(stop:send(true,5)); local ok,v=peer:join(5); assert(ok and v)");
   lua_close(L);
   printf("open CALLM consumer exits OK: %u runtime shapes\n",cases_run);
