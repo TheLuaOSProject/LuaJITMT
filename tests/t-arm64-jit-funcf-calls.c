@@ -250,6 +250,21 @@ static int multi_admit(MultiFixture *f, int postra)
   return lj_asm_arm64_ir_admit(f->J,&f->copy,NULL);
 }
 
+static void multi_drop_terminal_result(MultiFixture *f)
+{
+  SnapShot *terminal=&f->snap[f->terminal];
+  MSize end=f->view.nsnapmap;
+  assert(f->terminal+1u==f->view.nsnap &&
+         f->second_entry>=terminal->mapofs &&
+         f->second_entry<terminal->mapofs+terminal->nent &&
+         terminal->nent>0 && f->second_entry<end);
+  memmove(&f->map[f->second_entry],&f->map[f->second_entry+1u],
+          (end-f->second_entry-1u)*sizeof(SnapEntry));
+  terminal->nent--;
+  f->view.nsnapmap--;
+  f->copy.nsnapmap=f->view.nsnapmap;
+}
+
 static void multi_admission(GCtrace *T)
 {
   MultiFixture f={0};
@@ -301,6 +316,14 @@ static void multi_admission(GCtrace *T)
     }
     if (allocated) postra++; else semantic++;
     multi_reset(&f);
+    multi_drop_terminal_result(&f);
+    if (multi_admit(&f,allocated)) {
+      fprintf(stderr,"two-result FUNCF accepted missing terminal result allocated=%d\n",
+              allocated);
+      assert(0);
+    }
+    if (allocated) postra++; else semantic++;
+    multi_reset(&f);
     setbc_d(&proto_bc(f.pt)[f.pt->sizebc-1u],2u);
     if (multi_admit(&f,allocated)) {
       fprintf(stderr,"two-result FUNCF accepted one-result return mutation allocated=%d\n",
@@ -318,18 +341,20 @@ static void multi_admission(GCtrace *T)
         if (snap_slot(entry)==slot-1u) first=value;
         if (snap_slot(entry)==slot) second=value;
       }
-      assert(first>=REF_FIRST && second>=REF_FIRST && first!=second);
-      multi_reset(&f);
-      assert(multi_admit(&f,1));
-      saved=f.ir[second].prev;
-      f.ir[second].prev=f.ir[first].prev;
-      if (multi_admit(&f,1)) {
-        fprintf(stderr,"two-result FUNCF accepted aliased allocated results\n");
-        assert(0);
+      assert(first>=REF_FIRST && second>=REF_FIRST);
+      if (first != second) {
+        multi_reset(&f);
+        assert(multi_admit(&f,1));
+        saved=f.ir[second].prev;
+        f.ir[second].prev=f.ir[first].prev;
+        if (multi_admit(&f,1)) {
+          fprintf(stderr,"two-result FUNCF accepted aliased allocated results\n");
+          assert(0);
+        }
+        f.ir[second].prev=saved;
+        assert(multi_admit(&f,1));
+        postra++;
       }
-      f.ir[second].prev=saved;
-      assert(multi_admit(&f,1));
-      postra++;
     }
   }
   postra_bad+=postra; semantic_bad+=semantic;
@@ -578,6 +603,43 @@ int main(void)
            lj_trace_test_first_exit_parent()==MT->traceno);
     lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
     invoke_pair(L,"funcf_multi_run","funcf_multi_candidate",14.5,7.25,15.75);
+    assert(lj_trace_test_root_entry_successes()>0 &&
+           lj_trace_test_exit_calls()==0);
+    native_returns++;
+    multi_admission(MT);
+  }
+  ljt_lua_dostring(L,"assert(stop:send(true,5)); local ok,v=peer:join(5); "
+                     "assert(ok and v)");
+  lua_close(L);
+  L=ljt_lua_newstate_openlibs();
+  ljt_lua_dostring(L,
+    "local th=require('threading'); ready=th.channel(1); stop=th.channel(1); "
+    "peer=assert(th.spawn(function(a,b) assert(a:send(true,5)); "
+    "assert(select(2,b:recv(90))); return true end,ready,stop)); "
+    "assert(select(2,ready:recv(5))); "
+    "funcf_repeat_candidate=function(x) local y=x*.5; return y,y end; "
+    "funcf_repeat_oracle=function(x) local y=x*.5; return y,y end; "
+    "function funcf_multi_run(fn,x) return fn(x) end; "
+    "jit.off(funcf_repeat_oracle,true); jit.off(funcf_multi_run,true); "
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=128'); jit.on(); "
+    "jit.on(funcf_repeat_candidate,true)");
+  {
+    GCfunc *repeat=global_lfunc(L,"funcf_repeat_candidate");
+    GCtrace *MT=NULL;
+    for (unsigned i=0;i<256&&!MT;i++) {
+      invoke_pair(L,"funcf_multi_run","funcf_repeat_candidate",11.5,5.75,5.75);
+      invoke_pair(L,"funcf_multi_run","funcf_repeat_oracle",11.5,5.75,5.75);
+      MT=funcf_trace(L,repeat);
+    }
+    assert(MT && MT->linktype==LJ_TRLINK_RETURN);
+    lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+    invoke_pair(L,"funcf_multi_run","funcf_repeat_candidate",12.5,6.25,6.25);
+    assert(lj_trace_test_root_entry_successes()>0 &&
+           lj_trace_test_exit_calls()==0);
+    native_returns++;
+    lua_gc(L,LUA_GCCOLLECT,0);
+    lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+    invoke_pair(L,"funcf_multi_run","funcf_repeat_candidate",13.5,6.75,6.75);
     assert(lj_trace_test_root_entry_successes()>0 &&
            lj_trace_test_exit_calls()==0);
     native_returns++;
