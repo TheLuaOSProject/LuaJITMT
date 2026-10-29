@@ -54,6 +54,7 @@ assembler prerequisites. A dependency-only dry run with that header treated
 as changed previously left the recorder up to date; afterward it schedules
 both affected translation units. This is build plumbing only.
 
-A constant byte scalar in the prefix currently retains the older conservative
-JIT refusal; the native witness supplies that scalar through a Lua argument.
-This checkpoint does not claim arbitrary aggregate or full architecture parity.
+A later focused candidate probe at this checkpoint also publishes a root when
+the byte prefix is a literal. The regression/evidence is recorded in
+`notes/arm64-callxs-literal-narrow-stack-regression-2026-10-29.md`. This does
+not claim arbitrary aggregate or full architecture parity.

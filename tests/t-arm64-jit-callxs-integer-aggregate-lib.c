@@ -95,6 +95,8 @@ enum {
   ARM64_SMALL_HFA_STACK_ALT,
   ARM64_FLOAT_TRIPLE_PARTIAL_STACK,
   ARM64_FLOAT_ONE_STACK_PREFIX,
+  ARM64_NARROW_CONSTANT_STACK,
+  ARM64_NARROW_CONSTANT_STACK_ALT,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -118,6 +120,26 @@ SMALL_STACK_ARG(arm64_take_byte_stack_alt, arm64_byte, ARM64_BYTE_STACK_ALT, 17u
 SMALL_STACK_ARG(arm64_take_half_stack_alt, arm64_half, ARM64_HALF_STACK_ALT, 17u)
 SMALL_STACK_ARG(arm64_take_word_stack_alt, arm64_word, ARM64_WORD_STACK_ALT, 17u)
 #undef SMALL_STACK_ARG
+
+/* Alternating narrow constants occupy packed stack bytes/halfwords around a
+** small composite whose stack slot is still eight bytes wide. */
+#define NARROW_CONSTANT_STACK(name, counter, extra) \
+LJ_EXPORT uint32_t name(uint32_t a, uint32_t b, uint32_t c, uint32_t d, \
+    uint32_t e, uint32_t f, uint32_t g, uint32_t h, uint8_t ub, int8_t sb, \
+    uint16_t uh, int16_t sh, arm64_byte value, uint8_t ua, int8_t sa, \
+    uint16_t uh2, int16_t sh2, uint32_t salt) \
+{ \
+  calls[counter]++; \
+  return a+2u*b+3u*c+4u*d+5u*e+6u*f+7u*g+8u*h + \
+         11u*ub+13u*(uint8_t)sb+17u*uh+19u*(uint16_t)sh+ \
+         23u*value.value+29u*ua+31u*(uint8_t)sa+ \
+         37u*uh2+41u*(uint16_t)sh2+43u*salt+(extra); \
+}
+NARROW_CONSTANT_STACK(arm64_take_narrow_constants_stack,
+                     ARM64_NARROW_CONSTANT_STACK, 0u)
+NARROW_CONSTANT_STACK(arm64_take_narrow_constants_stack_alt,
+                     ARM64_NARROW_CONSTANT_STACK_ALT, 17u)
+#undef NARROW_CONSTANT_STACK
 
 LJ_EXPORT void arm64_aggregate_reset(void)
 {

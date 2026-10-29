@@ -164,6 +164,12 @@ uint32_t arm64_take_half_stack_alt(uint32_t,uint32_t,uint32_t,uint32_t,
   uint32_t,uint32_t,uint32_t,uint32_t,uint8_t,Arm64Half,uint32_t);
 uint32_t arm64_take_word_stack_alt(uint32_t,uint32_t,uint32_t,uint32_t,
   uint32_t,uint32_t,uint32_t,uint32_t,uint8_t,Arm64Word,uint32_t);
+uint32_t arm64_take_narrow_constants_stack(uint32_t,uint32_t,uint32_t,uint32_t,
+  uint32_t,uint32_t,uint32_t,uint32_t,uint8_t,int8_t,uint16_t,int16_t,
+  Arm64Byte,uint8_t,int8_t,uint16_t,int16_t,uint32_t);
+uint32_t arm64_take_narrow_constants_stack_alt(uint32_t,uint32_t,uint32_t,uint32_t,
+  uint32_t,uint32_t,uint32_t,uint32_t,uint8_t,int8_t,uint16_t,int16_t,
+  Arm64Byte,uint8_t,int8_t,uint16_t,int16_t,uint32_t);
 Arm64ByteResult arm64_return_byte(uint32_t);
 Arm64HalfResult arm64_return_half(uint32_t);
 Arm64WordResult arm64_return_word(uint32_t);
@@ -1025,6 +1031,106 @@ end
 small_stack_case(1,1,'byte','Arm64Byte',201)
 small_stack_case(2,2,'half','Arm64Half',50123)
 small_stack_case(3,4,'word','Arm64Word',123456789)
+
+-- Match the constant-valued Darwin stack prefix from the topology probe.
+do
+  local source=[[return function(n,fn,v,s)
+    local sum=0
+    for i=1,n do sum=sum+fn(1,2,3,4,5,6,7,8,29,v,s) end
+    return sum
+  end]]
+  local hot,cold,clone=assert(loadstring(source))(),
+    assert(loadstring(source))(),assert(loadstring(source))()
+  jit.off(cold,true); jit.off(clone,true)
+  local saved=candidate
+  candidate=hot; _set_aggregate_candidate(hot)
+  _G.__arm64_small_constant_candidate=hot
+  _G.__arm64_small_constant_clone=clone
+  local fn=lib.arm64_take_byte_stack
+  local alternate=lib.arm64_take_byte_stack_alt
+  local value=ffi.new('Arm64Byte',201)
+  local expected=204+9*29+3*201+5*17
+  assert(fn(1,2,3,4,5,6,7,8,29,value,17)==expected,
+    'constant byte stack interpreter ABI disagrees with C')
+  jit.flush(hot); jit.opt.start('hotloop=1'); jit.on(hot,true)
+  local before_native=_aggregate_native_width_count(1)
+  local before_effect=lib.arm64_aggregate_count(50)
+  exits=0
+  for pass=1,8 do
+    assert(hot(16,fn,value,17)==16*expected)
+    assert(cold(16,fn,value,17)==16*expected)
+  end
+  assert(next(roots(hot)) and _aggregate_native_width_count(1)>before_native and
+         exits>0,'constant byte stack root did not execute natively')
+  assert(lib.arm64_aggregate_count(50)-before_effect==256)
+  before_native=_aggregate_native_width_count(1)
+  before_effect=lib.arm64_aggregate_count(50)
+  collectgarbage('collect'); exits=0
+  assert(hot(32,fn,value,17)==32*expected)
+  assert(cold(32,fn,value,17)==32*expected)
+  assert(_aggregate_native_width_count(1)>before_native and exits>0)
+  assert(lib.arm64_aggregate_count(50)-before_effect==64)
+  tracked_exit_roots=roots(hot); exits=0
+  before_effect=lib.arm64_aggregate_count(53)
+  assert(hot(32,alternate,value,17)==32*(expected+17))
+  assert(cold(32,alternate,value,17)==32*(expected+17))
+  assert(exits>0 and lib.arm64_aggregate_count(53)-before_effect==64)
+  tracked_exit_roots=nil
+  candidate=saved; _set_aggregate_candidate(saved)
+end
+
+-- Fixed narrow literals fold to INT carriers. Their declared byte/halfword
+-- widths must still control stack stores around the aligned composite slot.
+do
+  local source = [[return function(n,fn,v)
+    local sum=0
+    for i=1,n do
+      sum=sum+fn(1,2,3,4,5,6,7,8,165,-7,50000,-12345,
+                 v,91,-11,57635,-23456,17)
+    end
+    return sum
+  end]]
+  local hot, cold, clone = assert(loadstring(source))(),
+    assert(loadstring(source))(), assert(loadstring(source))()
+  jit.off(cold,true); jit.off(clone,true)
+  local saved = candidate
+  candidate=hot; _set_aggregate_candidate(hot)
+  _G.__arm64_narrow_constant_candidate=hot
+  _G.__arm64_narrow_constant_clone=clone
+  local fn=lib.arm64_take_narrow_constants_stack
+  local alternate=lib.arm64_take_narrow_constants_stack_alt
+  local value=ffi.new('Arm64Byte',201)
+  local expected=204+11*165+13*249+17*50000+19*53191+23*201+
+    29*91+31*245+37*57635+41*42080+43*17
+  assert(fn(1,2,3,4,5,6,7,8,165,-7,50000,-12345,
+            value,91,-11,57635,-23456,17)==expected,
+         'narrow constant interpreter stack ABI disagrees with C')
+  jit.flush(hot); jit.opt.start('hotloop=1'); jit.on(hot,true)
+  local before_native=_aggregate_native_width_count(1)
+  local before_effect=lib.arm64_aggregate_count(60)
+  exits=0
+  for pass=1,8 do
+    assert(hot(16,fn,value)==16*expected)
+    assert(cold(16,fn,value)==16*expected)
+  end
+  assert(next(roots(hot)) and _aggregate_native_width_count(1)>before_native and
+         exits>0,'narrow constant stack root did not execute natively')
+  assert(lib.arm64_aggregate_count(60)-before_effect==256)
+  before_native=_aggregate_native_width_count(1)
+  before_effect=lib.arm64_aggregate_count(60)
+  collectgarbage('collect'); exits=0
+  assert(hot(32,fn,value)==32*expected)
+  assert(cold(32,fn,value)==32*expected)
+  assert(_aggregate_native_width_count(1)>before_native and exits>0)
+  assert(lib.arm64_aggregate_count(60)-before_effect==64)
+  tracked_exit_roots=roots(hot); exits=0
+  before_effect=lib.arm64_aggregate_count(61)
+  assert(hot(32,alternate,value)==32*(expected+17))
+  assert(cold(32,alternate,value)==32*(expected+17))
+  assert(exits>0 and lib.arm64_aggregate_count(61)-before_effect==64)
+  tracked_exit_roots=nil
+  candidate=saved; _set_aggregate_candidate(saved)
+end
 
 
 -- Full stack HFAs whose total size is a multiple of the ABI stack slot.
