@@ -195,6 +195,8 @@ LJ_FUNC TGState *lj_jit_owner_tg_l(lua_State *L, jit_State *J);
 #define LJ_TRACE_ROOT_ENTRY_PAUSE_SIDE_PUBLISH 5u
 LJ_FUNC void lj_trace_test_root_entry_reset(void);
 LJ_FUNC void lj_trace_test_root_entry_pause(uint32_t stage);
+/* Optional trace selection for root pauses; zero retains any-entry behavior. */
+LJ_FUNC void lj_trace_test_root_entry_pause_trace(uint32_t stage, TraceNo traceno);
 LJ_FUNC uint32_t lj_trace_test_root_entry_paused(void);
 LJ_FUNC void lj_trace_test_root_entry_release(void);
 LJ_FUNC int lj_trace_test_arm64_root_certify(jit_State *J, GCtrace *T);

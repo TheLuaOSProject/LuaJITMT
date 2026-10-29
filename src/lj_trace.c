@@ -458,6 +458,7 @@ static void trace_test_admission_maybe_clobber_cleanup_oserr(void)
 }
 #if LJ_TARGET_ARM64
 static uint32_t trace_test_root_entry_pause_stage;
+static uint32_t trace_test_root_entry_pause_trace;
 static uint32_t trace_test_root_entry_pause_waiting;
 static uint32_t trace_test_root_entry_pause_release;
 static uint32_t trace_test_root_entry_publish_count;
@@ -470,6 +471,7 @@ static BCIns trace_test_root_entry_retry_restore_ins;
 void lj_trace_test_root_entry_reset(void)
 {
   la_store32_rel(&trace_test_root_entry_pause_stage, 0);
+  la_store32_rel(&trace_test_root_entry_pause_trace, 0);
   la_store32_rel(&trace_test_root_entry_pause_waiting, 0);
   la_store32_rel(&trace_test_root_entry_pause_release, 0);
   la_store32_rel(&trace_test_root_entry_publish_count, 0);
@@ -482,8 +484,14 @@ void lj_trace_test_root_entry_reset(void)
 
 void lj_trace_test_root_entry_pause(uint32_t stage)
 {
+  lj_trace_test_root_entry_pause_trace(stage, 0);
+}
+
+void lj_trace_test_root_entry_pause_trace(uint32_t stage, TraceNo traceno)
+{
   la_store32_rel(&trace_test_root_entry_pause_waiting, 0);
   la_store32_rel(&trace_test_root_entry_pause_release, 0);
+  la_store32_rel(&trace_test_root_entry_pause_trace, traceno);
   la_store32_rel(&trace_test_root_entry_pause_stage, stage);
 }
 
@@ -539,10 +547,13 @@ static void trace_test_root_entry_restore_at_retry(void)
   }
 }
 
-static void trace_test_root_entry_maybe_pause(uint32_t stage)
+static void trace_test_root_entry_maybe_pause(uint32_t stage, TraceNo traceno)
 {
+  uint32_t selected;
   if (la_load32_acq(&trace_test_root_entry_pause_stage) != stage)
     return;
+  selected = la_load32_acq(&trace_test_root_entry_pause_trace);
+  if (selected != 0 && selected != traceno) return;
   la_store32_rel(&trace_test_root_entry_pause_waiting, stage);
   while (la_load32_acq(&trace_test_root_entry_pause_release) == 0)
     la_cpu_pause();
@@ -551,7 +562,9 @@ static void trace_test_root_entry_maybe_pause(uint32_t stage)
 }
 
 #define trace_test_root_entry_pause_at(stage) \
-  trace_test_root_entry_maybe_pause((stage))
+  trace_test_root_entry_maybe_pause((stage), 0)
+#define trace_test_root_entry_pause_for(stage, traceno) \
+  trace_test_root_entry_maybe_pause((stage), (traceno))
 #define trace_test_root_entry_published() \
   ((void)la_add32_acqrel(&trace_test_root_entry_publish_count, 1))
 #define trace_test_root_entry_succeeded() \
@@ -3859,6 +3872,7 @@ int lj_trace_test_proto_pc_candidate(global_State *g, GCobj *o,
 #else
 #if LJ_TARGET_ARM64
 #define trace_test_root_entry_pause_at(stage) ((void)0)
+#define trace_test_root_entry_pause_for(stage, traceno) ((void)0)
 #define trace_test_root_entry_published() ((void)0)
 #define trace_test_root_entry_succeeded() ((void)0)
 #define trace_test_root_entry_cleaned() ((void)0)
@@ -8353,11 +8367,11 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   }
   if (gc2_jit_mark_auto_yield_acq(g) != 0)
     gc2_jit_mark_auto_yield_rel(g, 0);
-  trace_test_root_entry_pause_at(LJ_TRACE_ROOT_ENTRY_PAUSE_PREPUBLISH);
+  trace_test_root_entry_pause_for(LJ_TRACE_ROOT_ENTRY_PAUSE_PREPUBLISH, traceno);
   lj_tg_store_jit_base(tg, base);
   trace_test_root_entry_published();
   la_fence_seq();
-  trace_test_root_entry_pause_at(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTPUBLISH);
+  trace_test_root_entry_pause_for(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTPUBLISH, traceno);
   if (!lj_gc2_jit_entry_open(g)) {
     gc2_jit_sweep_displaced_rel(g, 1);
     goto reject_published;
@@ -8420,7 +8434,7 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
       (uintptr_t)lj_ptr_strip(target) != mcodep)
     goto reject_published;
 #endif
-  trace_test_root_entry_pause_at(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA);
+  trace_test_root_entry_pause_for(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA, traceno);
   if (trace_root_entry_request_pending(tg) ||
       (sourceop == BC_JFUNCF &&
        !trace_arm64_entrybc_matches(&T2->arm64_root_cert, pt)) ||
@@ -8430,7 +8444,7 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   /* Test-only boundary after the final admission recheck. A request published
   ** here must be observed by native XPOLL, not retroactively rejected by this
   ** helper before the VM branches to the already validated target. */
-  trace_test_root_entry_pause_at(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION);
+  trace_test_root_entry_pause_for(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION, traceno);
   setsbufL(&tg->tmpbuf, L);
   trace_test_root_entry_succeeded();
   result.trace = T;

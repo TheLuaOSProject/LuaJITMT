@@ -119,6 +119,13 @@ static void *change_old_tag(void *opaque)
   assert(base);
   fn.u64 = tv_rawload_acq(&base[0]);
   old.u64 = tv_rawload_acq(&base[change->local]);
+  if (!tvisfunc(&fn) || funcV(&fn) != change->leaf) {
+    TValue frame;
+    frame.u64 = tv_rawload_acq(&base[-1-LJ_FR2]);
+    fprintf(stderr, "old-tag pause case=%s base[0]=%016llx expected=%p "
+            "frame=%016llx\n", active_name, (unsigned long long)fn.u64,
+            (void *)change->leaf, (unsigned long long)frame.u64);
+  }
   assert(tvisfunc(&fn) && funcV(&fn) == change->leaf);
   assert(itype2irt(&old) == change->type);
   if (tvisnil(&old)) setboolV(&replacement, 0);
@@ -259,7 +266,8 @@ static void checked(lua_State *L, GCtrace *T, int force,
              check.op2 == IRSLOAD_TYPECHECK);
       change.tg = L2TG(L); change.leaf = fn; change.local = bc_a(call[1]);
       change.type = irt_type(check.t);
-      lj_trace_test_root_entry_pause(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION);
+      lj_trace_test_root_entry_pause_trace(
+        LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION, T->traceno);
       assert(pthread_create(&worker, NULL, change_old_tag, &change) == 0);
     }
   }
