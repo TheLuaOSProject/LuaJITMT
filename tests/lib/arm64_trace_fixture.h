@@ -21,9 +21,10 @@ typedef struct Arm64TraceFixture {
   size_t irbytes, snapbytes;
 } Arm64TraceFixture;
 
-static void arm64_fixture_init_trace(Arm64TraceFixture *f, lua_State *L,
-                                     const char *clone_global,
-                                     TraceNo traceno)
+static void arm64_fixture_init_trace_impl(Arm64TraceFixture *f, lua_State *L,
+                                          const char *clone_global,
+                                          TraceNo traceno,
+                                          const BCIns *external_pc)
 {
   GCproto *pt, *original;
   IRRef ref, loop = 0;
@@ -78,12 +79,20 @@ static void arm64_fixture_init_trace(Arm64TraceFixture *f, lua_State *L,
     SnapShot *snap = &f->snaps[s];
     uint64_t footer;
     const BCIns *oldpc, *newpc;
+    uintptr_t oldaddr, original_lo, original_hi;
     memcpy(&footer, &f->map[snap->mapofs+snap->nent], sizeof(footer));
     oldpc = (const BCIns *)(uintptr_t)(footer >> 8);
-    assert(oldpc >= proto_bc(original) && oldpc < proto_bc(original)+original->sizebc);
-    newpc = proto_bc(pt) + (oldpc-proto_bc(original));
-    footer = ((uint64_t)(uintptr_t)newpc << 8) | (uint8_t)footer;
-    memcpy(&f->map[snap->mapofs+snap->nent], &footer, sizeof(footer));
+    oldaddr = (uintptr_t)(const void *)oldpc;
+    original_lo = (uintptr_t)(const void *)proto_bc(original);
+    original_hi = original_lo+(uintptr_t)original->sizebc*sizeof(BCIns);
+    if (oldaddr >= original_lo && oldaddr < original_hi) {
+      newpc = proto_bc(pt) + (oldpc-proto_bc(original));
+      footer = ((uint64_t)(uintptr_t)newpc << 8) | (uint8_t)footer;
+      memcpy(&f->map[snap->mapofs+snap->nent], &footer, sizeof(footer));
+    } else {
+      assert(external_pc != NULL && oldaddr ==
+	     (uintptr_t)(const void *)external_pc);
+    }
   }
   f->semantic = *f->owner;
   f->semantic.ir = f->ir; f->semantic.snap = f->snaps;
@@ -103,6 +112,58 @@ static void arm64_fixture_init_trace(Arm64TraceFixture *f, lua_State *L,
   f->view.root_topslot = f->owner->topslot;
   f->view.startins = f->owner->startins;
   memcpy(f->ir, f->good, f->irbytes);
+}
+
+static void arm64_fixture_init_trace(Arm64TraceFixture *f, lua_State *L,
+                                     const char *clone_global,
+                                     TraceNo traceno)
+{
+  arm64_fixture_init_trace_impl(f, L, clone_global, traceno, NULL);
+}
+
+/* CALLXS snapshots may contain the exact FFI __call continuation PC. Keep it
+** unchanged while remapping only the cloned root's own bytecode positions. */
+static void arm64_fixture_init_trace_callxs_metapc(Arm64TraceFixture *f,
+                                                   lua_State *L,
+                                                   const char *clone_global,
+                                                   TraceNo traceno,
+                                                   const BCIns *meta_pc)
+{
+  GCproto *original, *clone;
+  uintptr_t lo, hi;
+  SnapNo s;
+  assert(meta_pc != NULL);
+  arm64_fixture_init_trace_impl(f, L, clone_global, traceno, meta_pc);
+  original = trace_startpt_acq(f->owner);
+  clone = trace_startpt_acq(&f->semantic);
+  lo = (uintptr_t)(const void *)proto_bc(original);
+  hi = lo+(uintptr_t)original->sizebc*sizeof(BCIns);
+  /* CALLXS frame snapshots also carry a KNUM PC constant used to bind the
+  ** FFI __call return continuation. Match the private proto clone just as
+  ** the footer PCs above do; leave the separately validated meta_pc intact. */
+  for (s = 0; s < f->owner->nsnap; s++) {
+    SnapShot *snap = &f->snaps[s];
+    MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap), i;
+    for (i = 0; i < nent; i++) {
+      SnapEntry entry = snapentry_acq(&f->map[ofs+i]);
+      IRRef ref = snap_ref(entry);
+      if ((entry & 0x00ff0000u) == SNAP_FRAME && ref >= f->owner->nk &&
+          ref+1u < REF_TRUE && f->good[ref].o == IR_KNUM &&
+          f->good[ref].t.irt == IRT_NUM && f->good[ref].op12 == 0) {
+        uint64_t bits = ir_load_acq(&f->good[ref+1u]).tv.u64;
+        uintptr_t pc = (uintptr_t)bits;
+        if (pc >= lo && pc < hi &&
+            (pc-lo) % sizeof(BCIns) == 0) {
+          pc = (uintptr_t)(const void *)proto_bc(clone) + (pc-lo);
+          f->good[ref+1u].tv.u64 = (uint64_t)pc;
+        }
+      }
+    }
+  }
+  memcpy(f->ir+f->owner->nk, f->good+f->owner->nk,
+         (f->nins-f->owner->nk)*sizeof(IRIns));
+  memcpy(f->postra+f->owner->nk, f->good+f->owner->nk,
+         (f->nins-f->owner->nk)*sizeof(IRIns));
 }
 
 static void arm64_fixture_init(Arm64TraceFixture *f, lua_State *L,

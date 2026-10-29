@@ -395,6 +395,12 @@ static int arm64_callxs_value_kind(const IRIns *ir, IRRef ref,
     } else return 0;
   }
   switch (kind) {
+  case LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE:
+	if (on_stack || value.o != IR_XLOAD || value.op2 != 0) return 0;
+	return (size == 1 && type == IRT_U8) ||
+	       (size == 2 && type == IRT_U16) ||
+	       (size == 4 && type == IRT_U32) ||
+	       (size == 8 && type == IRT_U64);
   case LJ_ARM64_ABI_KIND_INTEGER:
   case LJ_ARM64_ABI_KIND_ENUM:
 	if (size == 8)
@@ -1070,6 +1076,112 @@ static int arm64_callxs_cdata_integer_argument(const jit_State *J,
   return uses != 0;
 }
 
+/* Prove an exact-width, direct by-value integer aggregate carrier. The raw
+** XLOAD may feed only a fixed aggregate argument; its owning CData is separately
+** retained in the source XSAVE and in the call's GC-root proof. */
+static int arm64_callxs_cdata_integer_aggregate_argument(
+	CTState *cts, const GCtrace *T, IRRef value, IRRef expected_source)
+{
+  const IRIns *ir = T->ir;
+  IRIns load, address, src;
+  CTypeID source_id = 0, terminal;
+  CType type;
+  CTInfo info;
+  CTSize size;
+  IRType expected;
+  IRRef source, ref;
+  unsigned consumers = 0;
+  if (T->snap == NULL || T->snapmap == NULL ||
+	value < REF_FIRST || value >= T->nins) return 0;
+  load = ir_load_acq(&ir[value]);
+  if (load.o != IR_XLOAD || load.op2 != 0 || load.op1 < REF_FIRST ||
+      load.op1 >= value) return 0;
+  address = ir_load_acq(&ir[load.op1]);
+  source = address.op1;
+  {
+    int64_t offset;
+    if (address.o != IR_ADD || address.t.irt != IRT_P64 ||
+        source < REF_FIRST || source >= load.op1 ||
+        !arm64_callxs_offset_value(ir, T->nk, address.op2, &offset) ||
+        offset != (int64_t)sizeof(GCcdata)) return 0;
+  }
+  src = ir_load_acq(&ir[source]);
+  if ((src.o != IR_SLOAD && src.o != IR_VLOAD) ||
+      src.t.irt != (IRT_CDATA|IRT_GUARD) ||
+      (expected_source != 0 && source != expected_source)) return 0;
+  for (ref = source+1u; ref < value; ref++) {
+    IRIns field = ir_load_acq(&ir[ref]);
+    IRRef guard;
+    if (field.o != IR_FLOAD || field.op1 != source ||
+	field.op2 != IRFL_CDATA_CTYPEID) continue;
+    if (source_id || field.t.irt != IRT_U16) return 0;
+    for (guard = ref+1u; guard < value; guard++) {
+      IRIns eq = ir_load_acq(&ir[guard]);
+      IRRef kref;
+      int32_t id;
+      if (eq.o != IR_EQ || eq.t.irt != (IRT_INT|IRT_GUARD) ||
+	  (eq.op1 != ref && eq.op2 != ref)) continue;
+      kref = eq.op1 == ref ? eq.op2 : eq.op1;
+      if (!arm64_callxs_kint_value(ir, T->nk, kref, &id) || id <= 0 ||
+	source_id) return 0;
+      source_id = (CTypeID)id;
+    }
+  }
+  if (!source_id || !lj_ccall_arm64_raw_type(cts, source_id, &type,
+	&terminal)) return 0;
+  info = ctype_info_acq(&type);
+  size = ctype_size_acq(&type);
+  if (!ctype_isstruct(info) || ctype_isvltype(info) ||
+      ctype_isref(info) || size == 0 || size > 8) return 0;
+  switch (size) {
+  case 1: expected = IRT_U8; break;
+  case 2: expected = IRT_U16; break;
+  case 4: expected = IRT_U32; break;
+  case 8: expected = IRT_U64; break;
+  default: return 0;
+  }
+  if (load.t.irt != expected) return 0;
+  {
+    LJArm64ABIArg aggregate;
+    if (!lj_ccall_arm64_integer_aggregate_class(cts, source_id,
+	  &aggregate, &terminal) || aggregate.size != size) return 0;
+  }
+  for (ref = 0; ref < T->nsnap; ref++) {
+    MSize ofs = snap_mapofs_acq(&T->snap[ref]);
+    MSize nent = snap_nent_acq(&T->snap[ref]), i;
+    if (ofs > T->nsnapmap || nent > T->nsnapmap-ofs) return 0;
+    for (i = 0; i < nent; i++)
+	if (snap_ref(snapentry_acq(&T->snapmap[ofs+i])) == value) return 0;
+  }
+  for (ref = value+1u; ref < T->nins; ref++) {
+    IRIns use = ir_load_acq(&ir[ref]);
+    IRMode mode;
+    if (use.o >= IR__MAX) return 0;
+    mode = lj_ir_mode[use.o];
+    if (((irm_op1(mode) == IRMref && use.op1 == value) ||
+	 (irm_op2(mode) == IRMref && use.op2 == value)) &&
+	use.o != IR_CARG && !(use.o == IR_CALLXS && use.op1 == value))
+	return 0;
+    if (use.o == IR_CALLXS) {
+	IRRef args[LJ_ARM64_ABI_MAX_ARGS];
+	LJArm64ABISignature abi;
+	unsigned nargs, i;
+	if (!arm64_callxs_arglist(ir, T->nk, T->nins, ref, args, &nargs) ||
+	    !arm64_callxs_signature_for_call(cts, ir, T->nk, T->nins,
+	      ref, &abi, NULL)) return 0;
+	for (i = 0; i < nargs; i++) if (args[i] == value) {
+	  if (i >= abi.nargs ||
+	      abi.arg[i].kind != LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ||
+	      abi.arg[i].id != terminal || abi.arg[i].size != size ||
+	      !arm64_callxs_value_kind(ir, value, T->nk, T->nins, ref,
+		LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE, size, 1, 0)) return 0;
+	  consumers++;
+	}
+    }
+  }
+  return consumers != 0;
+}
+
 /* A Lua INT is already a valid fixed 32-bit argument. Smaller register
 ** arguments and 64-bit arguments need the recorder's exact extension;
 ** compact stack arguments retain only their CType-width bits. */
@@ -1533,13 +1645,19 @@ static int arm64_callxs_vararg_sources(CTState *cts, const GCtrace *T, IRRef xsa
     return 0;
   for (i = 0; i < nargs; i++) {
     IRIns value = ir_load_acq(&T->ir[values[i]]);
+    int aggregate = i < abi->nargs &&
+	abi->arg[i].kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE;
+    if (i < abi->nargs &&
+	aggregate &&
+	!arm64_callxs_cdata_integer_aggregate_argument(cts, T, values[i],
+	  sources[i])) return 0;
     if (i < abi->nargs && value.o == IR_FLOAD &&
         value.op2 == IRFL_CDATA_PTR &&
         (abi->arg[i].kind != LJ_ARM64_ABI_KIND_POINTER ||
          abi->arg[i].size != sizeof(void *) ||
          !arm64_callxs_pointer_argument(cts, T, values[i]))) return 0;
-    if (!arm64_callxs_source_value(T, xsave, sources[i], values[i],
-                                  i >= abi->nargs)) return 0;
+	if (!aggregate && !arm64_callxs_source_value(T, xsave, sources[i],
+	    values[i], i >= abi->nargs)) return 0;
   }
   return 1;
 }
@@ -2096,6 +2214,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
             if ((arg.o == IR_FLOAD && (arg.op2 == IRFL_CDATA_INT64 ||
                                       arg.op2 == IRFL_CDATA_INT ||
                                       arg.op2 == IRFL_CDATA_PTR)) ||
+                (abi.arg[i].kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE) ||
                 arm64_callxs_numarg_source(T, values[i], 0) ||
                 arm64_callxs_intarg_source(T, values[i]) ||
                 (abi.arg[i].kind == LJ_ARM64_ABI_KIND_INTEGER &&
@@ -2216,6 +2335,12 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	    !arm64_callxs_has_equal_guard(T->ir, nins, nk, ref, IRT_TAB))
 	  return 0;
       } else return 0;
+      break;
+    case IR_XLOAD:
+      if (state != CALLXS_CLOSED ||
+	  !arm64_callxs_cdata_integer_aggregate_argument(ctype_ctsG(J2G(J)),
+	    T, ref, 0))
+	return 0;
       break;
     case IR_VLOAD:
       if (irt_type(ins.t) == IRT_CDATA || irt_type(ins.t) == IRT_TAB ||
@@ -5013,6 +5138,115 @@ static int arm64_postra_pointer_argument(CTState *cts, const GCtrace *T,
          ctype_size_acq(&type) == sizeof(void *);
 }
 
+/* Independently reconstruct the one-GPR Darwin carrier for a fixed integer
+** aggregate. Its CData owner stays in the interpreter argument slot; the
+** scalar XLOAD is neither a Lua value nor a GC root. */
+static int arm64_postra_cdata_integer_aggregate_argument(
+		CTState *cts, const GCtrace *T, IRRef nins, IRRef value,
+		IRRef expected_source)
+{
+	const IRIns *ir = T->ir;
+	IRIns load, address, src;
+	CTypeID source_id = 0, terminal;
+	CType type;
+	CTInfo info;
+	CTSize size;
+	IRType expected;
+	IRRef source, ref;
+	unsigned consumers = 0;
+	if (T->snap == NULL || T->snapmap == NULL ||
+	    value < REF_FIRST || value >= nins) return 0;
+	load = ir_load_acq(&ir[value]);
+	if (load.o != IR_XLOAD || load.op2 != 0 || load.op1 < REF_FIRST ||
+	    load.op1 >= value) return 0;
+	address = ir_load_acq(&ir[load.op1]);
+	source = address.op1;
+	if (address.o != IR_ADD || address.t.irt != IRT_P64 ||
+	    source < REF_FIRST || source >= load.op1) return 0;
+	{
+		int64_t offset;
+			if (!arm64_callxs_offset_value(ir, T->nk, address.op2, &offset) ||
+		    offset != (int64_t)sizeof(GCcdata)) return 0;
+	}
+	src = ir_load_acq(&ir[source]);
+	if ((src.o != IR_SLOAD && src.o != IR_VLOAD) ||
+	    src.t.irt != (IRT_CDATA|IRT_GUARD) ||
+	    (expected_source != 0 && source != expected_source)) return 0;
+	for (ref = source+1u; ref < value; ref++) {
+		IRIns field = ir_load_acq(&ir[ref]);
+		IRRef guard;
+		if (field.o != IR_FLOAD || field.op1 != source ||
+		    field.op2 != IRFL_CDATA_CTYPEID) continue;
+		if (source_id || field.t.irt != IRT_U16) return 0;
+		for (guard = ref+1u; guard < value; guard++) {
+			IRIns eq = ir_load_acq(&ir[guard]);
+			IRRef kref;
+			int32_t id;
+			if (eq.o != IR_EQ || eq.t.irt != (IRT_INT|IRT_GUARD) ||
+			    (eq.op1 != ref && eq.op2 != ref)) continue;
+			kref = eq.op1 == ref ? eq.op2 : eq.op1;
+			if (!arm64_callxs_kint_value(ir, T->nk, kref, &id) ||
+			    id <= 0 || source_id) return 0;
+			source_id = (CTypeID)id;
+		}
+	}
+	if (!source_id || !lj_ccall_arm64_raw_type(cts, source_id, &type,
+	    &terminal)) return 0;
+	info = ctype_info_acq(&type);
+	size = ctype_size_acq(&type);
+	if (!ctype_isstruct(info) || ctype_isvltype(info) || ctype_isref(info) ||
+	    size == 0 || size > 8) return 0;
+	switch (size) {
+	case 1: expected = IRT_U8; break;
+	case 2: expected = IRT_U16; break;
+	case 4: expected = IRT_U32; break;
+	case 8: expected = IRT_U64; break;
+	default: return 0;
+	}
+	if (load.t.irt != expected) return 0;
+	{
+		LJArm64ABIArg aggregate;
+		if (!lj_ccall_arm64_integer_aggregate_class(cts, source_id,
+		    &aggregate, &terminal) || aggregate.size != size) return 0;
+	}
+	for (ref = 0; ref < T->nsnap; ref++) {
+		MSize ofs = snap_mapofs_acq(&T->snap[ref]);
+		MSize nent = snap_nent_acq(&T->snap[ref]), i;
+		if (ofs > T->nsnapmap || nent > T->nsnapmap-ofs) return 0;
+		for (i = 0; i < nent; i++)
+			if (snap_ref(snapentry_acq(&T->snapmap[ofs+i])) == value)
+				return 0;
+	}
+	for (ref = value+1u; ref < nins; ref++) {
+		IRIns use = ir_load_acq(&ir[ref]);
+		IRMode mode;
+		if (use.o >= IR__MAX) return 0;
+		mode = lj_ir_mode[use.o];
+		if (((irm_op1(mode) == IRMref && use.op1 == value) ||
+		     (irm_op2(mode) == IRMref && use.op2 == value)) &&
+		    use.o != IR_CARG && !(use.o == IR_CALLXS && use.op1 == value))
+			return 0;
+		if (use.o == IR_CALLXS) {
+			IRRef args[LJ_ARM64_ABI_MAX_ARGS];
+			LJArm64ABISignature abi;
+			unsigned nargs, i;
+			if (!arm64_callxs_arglist(ir, T->nk, nins, ref, args,
+			    &nargs) || !arm64_callxs_signature_for_call(cts, ir,
+			    T->nk, nins, ref, &abi, NULL)) return 0;
+			for (i = 0; i < nargs; i++) if (args[i] == value) {
+				if (i >= abi.nargs ||
+				    abi.arg[i].kind != LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ||
+				    abi.arg[i].id != terminal || abi.arg[i].size != size ||
+				    !arm64_callxs_value_kind(ir, value, T->nk, nins,
+				      ref, LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE, size, 1, 0))
+					return 0;
+				consumers++;
+			}
+		}
+	}
+	return consumers != 0;
+}
+
 /*
 ** Check the real interpreter XSAVE before the CALLXS. `values` is the
 ** normalized physical CARG list (the NIL vararg separator has already been
@@ -5034,6 +5268,7 @@ static int arm64_postra_vararg_source_proof(CTState *cts, const GCtrace *T,
 	IRRef meta_fn, cdata;
 	GCobj *fn;
 	const BCIns *meta_pc;
+	LJArm64ABISignature abi;
 	if (T == NULL || T->ir == NULL || T->snap == NULL ||
 	    T->snapmap == NULL || T->nsnapmap == 0 || proto_bc == NULL ||
 	    proto_sizebc == 0 || values == NULL ||
@@ -5043,6 +5278,8 @@ static int arm64_postra_vararg_source_proof(CTState *cts, const GCtrace *T,
 	    actual_count > LJ_ARM64_ABI_MAX_ARGS ||
 	    !arm64_postra_snapshot_find(T, xsave, &index, &ofs, &nent, &next))
 		return 0;
+	if (!arm64_callxs_signature_for_call(cts, T->ir, T->nk, T->nins,
+	    call, &abi, NULL) || abi.nargs != fixed_count) return 0;
 	if (!arm64_callxs_xsave_anchor(T->ir, T->nins, xsave,
 	    proto_bc, proto_sizebc, &anchored_pc, &anchored_ins) ||
 	    anchored_pc != returnpc || anchored_ins != sourceins) return 0;
@@ -5095,7 +5332,10 @@ static int arm64_postra_vararg_source_proof(CTState *cts, const GCtrace *T,
 			IRIns carrier = ir_load_acq(&T->ir[values[a]]);
 			if (carrier.o == IR_FLOAD && carrier.op2 == IRFL_CDATA_PTR &&
 			    !arm64_postra_pointer_argument(cts, T, values[a])) return 0;
-			if (!arm64_postra_source_value_matches(T->ir, T->nk,
+			if (abi.arg[a].kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE) {
+				if (!arm64_postra_cdata_integer_aggregate_argument(cts, T,
+				    T->nins, values[a], source)) return 0;
+			} else if (!arm64_postra_source_value_matches(T->ir, T->nk,
 			    T->nins, xsave, source, values[a], stype)) return 0;
 		} else if (!arm64_postra_vararg_promoted(T->ir, T->nk,
 		    T->nins, xsave, source, values[a], stype)) return 0;
@@ -5725,6 +5965,11 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	  } else if (ins.o == IR_NOP) {
 	    if (ins.t.irt != IRT_NIL || ins.op1 || ins.op2)
 	      return 0;
+	  } else if (ins.o == IR_XLOAD) {
+	    if (protocol != 0 ||
+		!arm64_postra_cdata_integer_aggregate_argument(view->cts, &temp,
+		  semantic_nins, ref, 0) || !ra_hasreg(ins.r) ||
+		!arm64_scalar_postra_register(ins.r, irt_type(ins.t))) return 0;
 	  } else if (ins.o == IR_FLOAD) {
 	    if (ins.op1 >= ref || !arm64_callxs_ref_valid(view->ir, view->nk,
 		semantic_nins, ref, ins.op1))
@@ -6069,6 +6314,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	      if ((arg.o == IR_FLOAD && (arg.op2 == IRFL_CDATA_INT64 ||
 	                               arg.op2 == IRFL_CDATA_INT ||
 	                               arg.op2 == IRFL_CDATA_PTR)) ||
+	          abi.arg[i].kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ||
 	          arm64_postra_numarg_source(view->ir, view->nk, semantic_nins,
 	            values[i], 0) ||
 	          arm64_postra_intarg_source(view->ir, view->nk, semantic_nins,
