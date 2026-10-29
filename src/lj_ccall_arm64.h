@@ -71,8 +71,103 @@ typedef struct LJArm64FloatHFA {
   uint8_t member_size;
   uint8_t size;
   uint8_t align;
+  uint8_t nested;
   uint8_t offset[4];
 } LJArm64FloatHFA;
+
+typedef struct LJArm64HFAWalk {
+  CTState *cts;
+  CTypeID active[32];
+  uint8_t count;
+  uint8_t member_size;
+  uint8_t offset[4];
+  uint8_t nested;
+} LJArm64HFAWalk;
+
+static int lj_ccall_arm64_raw_type(CTState *cts, CTypeID id,
+				   CType *out, CTypeID *rawid);
+
+/* Recursively flatten bounded named nested structs. Every aggregate must be
+** tightly packed at its natural alignment; arrays, anonymous subtypes, unions,
+** VLA/vector/ref members and over-aligned wrappers stay closed. */
+static int lj_ccall_arm64_hfa_flatten(LJArm64HFAWalk *walk, CTypeID id,
+					      CTSize base, unsigned depth)
+{
+  CType ct, field;
+  CTypeID rawid, declared_id = id, fid;
+  CTInfo info;
+  CTSize size;
+  unsigned wrap, declared_align = 0;
+  unsigned start_count = walk->count;
+  if (depth >= 32 || base > UINT8_MAX) return 0;
+  for (wrap = 0; wrap < 32; wrap++) {
+    if (lj_ctype_snapshot(walk->cts, declared_id, &ct) <= 0) return 0;
+    info = ctype_info_acq(&ct);
+    if (ctype_isattrib(info) && ctype_isxattrib(info, CTA_ALIGN) &&
+	declared_align < ctype_align(info))
+      declared_align = ctype_align(info);
+    if (!(ctype_isattrib(info) || ctype_istypedef(info))) break;
+    declared_id = ctype_cid(info);
+    if (declared_id == 0) return 0;
+  }
+  if (wrap == 32 || !lj_ccall_arm64_raw_type(walk->cts, id, &ct, &rawid))
+    return 0;
+  for (wrap = 0; wrap < depth; wrap++)
+    if (walk->active[wrap] == rawid) return 0;
+  walk->active[depth] = rawid;
+  info = ctype_info_acq(&ct);
+  size = ctype_size_acq(&ct);
+  if (info & (CTF_REF|CTF_VLA)) return 0;
+  if (ctype_isnum(info) && ctype_isfp(info) && !ctype_iscomplex(info)) {
+    unsigned align;
+    if (size != sizeof(float) && size != sizeof(double)) return 0;
+    align = size == sizeof(float) ? 2u : 3u;
+    if (ctype_align(info) != align || declared_align > align ||
+	(walk->member_size && walk->member_size != size) ||
+	walk->count >= 4 || base != walk->count*size)
+      return 0;
+    if (!walk->member_size) walk->member_size = (uint8_t)size;
+    walk->offset[walk->count++] = (uint8_t)base;
+    return 1;
+  }
+  if (ctype_isstruct(info) && !(info & (CTF_UNION|CTF_REF|CTF_VLA)) &&
+      size != 0 && size != CTSIZE_INVALID) {
+    CTSize cursor = 0;
+    if (depth != 0) walk->nested = 1;
+    for (fid = ctype_sib_acq(&ct); fid; ) {
+      CTypeID childid;
+      CTInfo finfo;
+      CTSize offset;
+      if (lj_ctype_snapshot(walk->cts, fid, &field) <= 0) return 0;
+      finfo = ctype_info_acq(&field);
+      fid = ctype_sib_acq(&field);
+      if (!ctype_isfield(finfo)) return 0;
+      childid = ctype_cid(finfo);
+      offset = ctype_size_acq(&field);
+      if (!childid || offset != cursor ||
+	  !lj_ccall_arm64_hfa_flatten(walk, childid, base+offset, depth+1))
+	return 0;
+      {
+	CType child;
+	CTypeID childraw;
+	CTSize childsize;
+	if (!lj_ccall_arm64_raw_type(walk->cts, childid, &child, &childraw))
+	  return 0;
+	childsize = ctype_size_acq(&child);
+	if (!childsize || childsize == CTSIZE_INVALID ||
+	    cursor+childsize > size) return 0;
+	cursor += childsize;
+      }
+    }
+    if (walk->count == start_count || cursor != size ||
+	(walk->count-start_count)*walk->member_size != size ||
+	ctype_align(info) != (walk->member_size == sizeof(float) ? 2u : 3u) ||
+	declared_align > (walk->member_size == sizeof(float) ? 2u : 3u))
+      return 0;
+    return 1;
+  }
+  return 0;
+}
 
 /* Resolve typedef and attribute wrappers using only a stable CType snapshot. */
 static int lj_ccall_arm64_raw_type(CTState *cts, CTypeID id,
@@ -262,74 +357,42 @@ static int lj_ccall_arm64_integer_aggregate_class(CTState *cts, CTypeID id,
   return 1;
 }
 
-/* Admit only direct, tightly laid out Darwin float/double HFA members.
-** Callers select the count and size limits independently for argument and
-** result registers. Nested and array HFA traversal stays closed. */
+/* Admit tightly laid out Darwin float/double HFAs. Callers select the count
+** and size limits independently for argument and result registers. */
 static int lj_ccall_arm64_float_hfa_class_limit(CTState *cts, CTypeID id,
-						       LJArm64FloatHFA *hfa,
-						       CTypeID *rawid,
-						       unsigned max_count,
-						       unsigned max_size)
+				       LJArm64FloatHFA *hfa,
+				       CTypeID *rawid,
+				       unsigned max_count,
+				       unsigned max_size)
 {
-  CType ct, field, member;
+  CType ct;
+  CTypeID rawout;
+  LJArm64HFAWalk walk;
   CTInfo info;
-  CTypeID fid;
-  unsigned count = 0;
-  CTSize member_size = 0;
-  CTypeID declared_id = id;
-  unsigned depth, declared_align = 0;
+  CTSize size;
+  unsigned align;
   if (hfa != NULL) memset(hfa, 0, sizeof(*hfa));
-  /* CTA_ALIGN changes aggregate return placement and box geometry. Preserve
-  ** that distinction instead of classifying only the raw field layout. */
-  for (depth = 0; depth < 32; depth++) {
-    CType declared;
-    if (lj_ctype_snapshot(cts, declared_id, &declared) <= 0) return 0;
-    info = ctype_info_acq(&declared);
-    if (ctype_isattrib(info) && ctype_isxattrib(info, CTA_ALIGN) &&
-	declared_align < ctype_align(info))
-      declared_align = ctype_align(info);
-    if (!(ctype_isattrib(info) || ctype_istypedef(info))) break;
-    declared_id = ctype_cid(info);
-    if (declared_id == 0) return 0;
-  }
-  if (depth == 32) return 0;
-  if (!lj_ccall_arm64_raw_type(cts, id, &ct, rawid)) return 0;
+  memset(&walk, 0, sizeof(walk));
+  walk.cts = cts;
+  if (!lj_ccall_arm64_raw_type(cts, id, &ct, &rawout)) return 0;
   info = ctype_info_acq(&ct);
-  if (!ctype_isstruct(info) || (info & (CTF_UNION|CTF_REF)) ||
-      ctype_isvltype(info))
+  size = ctype_size_acq(&ct);
+  if (!ctype_isstruct(info) || (info & (CTF_UNION|CTF_REF|CTF_VLA)) ||
+      ctype_isvltype(info) || size == 0 || size == CTSIZE_INVALID ||
+      size > max_size || !lj_ccall_arm64_hfa_flatten(&walk, id, 0, 0))
     return 0;
-  for (fid = ctype_sib_acq(&ct); fid; ) {
-    CTInfo finfo;
-    CTSize offset, size;
-    CTypeID child;
-    if (count >= max_count ||
-	lj_ctype_snapshot(cts, fid, &field) <= 0) return 0;
-    finfo = ctype_info_acq(&field);
-    fid = ctype_sib_acq(&field);
-    if (!ctype_isfield(finfo)) return 0;
-    offset = ctype_size_acq(&field);
-    child = ctype_cid(finfo);
-    if (!lj_ccall_arm64_raw_type(cts, child, &member, &child)) return 0;
-    info = ctype_info_acq(&member);
-    size = ctype_size_acq(&member);
-    if (!ctype_isnum(info) || !ctype_isfp(info) || ctype_iscomplex(info) ||
-	(size != sizeof(float) && size != sizeof(double)) ||
-	(member_size != 0 && size != member_size) ||
-	offset != count*size || count*size+size > max_size)
-      return 0;
-    member_size = size;
-    if (hfa != NULL) hfa->offset[count] = (uint8_t)offset;
-    count++;
-  }
-  if (count == 0 || ctype_size_acq(&ct) != count*member_size ||
-      ctype_align(ctype_info_acq(&ct)) !=
-	(member_size == sizeof(float) ? 2u : 3u) ||
-      declared_align > (member_size == sizeof(float) ? 2u : 3u)) return 0;
+  align = walk.member_size == sizeof(float) ? 2u : 3u;
+  if (walk.count == 0 || walk.count > max_count ||
+      size != walk.count*walk.member_size || ctype_align(info) != align)
+    return 0;
+  if (rawid != NULL) *rawid = rawout;
   if (hfa != NULL) {
-    hfa->count = (uint8_t)count;
-    hfa->member_size = (uint8_t)member_size;
-    hfa->size = (uint8_t)(count*member_size);
-    hfa->align = (uint8_t)ctype_align(ctype_info_acq(&ct));
+    hfa->count = walk.count;
+    hfa->member_size = walk.member_size;
+    hfa->size = (uint8_t)size;
+    hfa->align = (uint8_t)ctype_align(info);
+    hfa->nested = walk.nested;
+    memcpy(hfa->offset, walk.offset, sizeof(hfa->offset));
   }
   return 1;
 }
@@ -347,7 +410,13 @@ static int lj_ccall_arm64_float_hfa_result_class(CTState *cts, CTypeID id,
 						 LJArm64FloatHFA *hfa,
 						 CTypeID *rawid)
 {
-  return lj_ccall_arm64_float_hfa_class_limit(cts, id, hfa, rawid, 4, 32);
+  LJArm64FloatHFA local;
+  if (hfa == NULL) hfa = &local;
+  if (!lj_ccall_arm64_float_hfa_class_limit(cts, id, hfa, rawid, 4, 32))
+    return 0;
+  /* Nested-result return channels are still closed independently of the
+  ** flattened argument member lowering. */
+  return !hfa->nested;
 }
 
 /* Classify the fixed prefix in Darwin's independent GPR/FPR banks. For a
