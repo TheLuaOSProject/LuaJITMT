@@ -144,3 +144,18 @@ The corrected root-entry contract passes ARM64 and arm64e assertion profiles
 plus ARM64 release, including the repaired side-adaptation fixture. Output
 is in `root-entry-sibling-contract.log`; `resume-full-gate.log` preserves the
 first continuation. This second repair also changes tests only.
+
+## Completed baseline gate
+
+The final continuation completed successfully at `d263ea418`; the production
+source remained `6968c4cac` throughout both test-only repairs. The full gate
+was completed across the original run, focused repaired contracts, and the
+two continuations, rather than one uninterrupted run. The last log is
+`resume-final-gate.log` and its source manifest is
+`resume-final-gate-source.txt` in the integration evidence directory.
+
+The remainder includes live flush, all four M7 architecture/assertion profiles,
+and the final safepoint, upvalue identity, cell-loop and native-coverage checks.
+Its last line reports `arm64_jit_fail_closed_gate OK`. This establishes the
+strict FUNCF/multiple-sibling baseline before the next result-shape and
+recorder-flush changes; it does not establish whole-fork x64 parity.
