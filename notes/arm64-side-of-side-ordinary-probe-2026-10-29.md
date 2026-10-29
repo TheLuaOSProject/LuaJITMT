@@ -111,7 +111,7 @@ cell-operation prototype (`proto_cellops=1`) with active shared runtime
 (`mtshared=1`), and `trace_hotside` was dropping every such nested attempt
 before the nested snapshot proof. Removing that blanket veto produced nested
 trace 3 from direct side 2 on ARM64, with the canonical root link still trace
-1; 31 exact nested native exits were observed after full collection and
+1; 32 exact nested native exits were observed after full collection and
 re-entry. The candidate uses ordinary local cell operations but has no
 captured upvalues. A separate captured-local getter probe remained
 unpublished, so captured-cell parity is not claimed.
@@ -126,16 +126,17 @@ mutations. The P32-source check first accepts a one-entry private view using
 the original real map slot/ref and copied source IR, then changes that mapped
 IR to `SLOAD/P32` and requires the full snapshot validator to reject it. The
 contract requires bitmask 15; the ordinary peer fixture itself has no
-captured cell. The current focused run reached the separate append/flush race
-fixture after this nested-cell assertion passed; it then hit the independently
-diagnosed test-order timeout (`append-race request timeout`, `pause=0`). The
-preserved log is listed below. Earlier `contract11` completed the full
-first-side matrix before the positive-control bit was added.
+captured cell. An earlier test-hook version copied the full IR and map before
+mutating them; direct lifecycle runs sometimes segfaulted, while debugger
+runs did not. That failure was not localized. The current test uses a bounded
+private one-entry map plus copied source IR and passes the complete focused
+contract.
 
 Validation evidence:
 
 - `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/arm64-peer-final.tsv`
-- `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/first-side-cell-proof-contract12.log`
+- `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/first-side-cell-proof-contract-final.log`
+- Earlier full-copy test-hook diagnostics are retained in `first-side-cell-proof-contract5.log` through `first-side-cell-proof-contract12.log` and `first-side-cell-proof-lldb*.log`; the full-copy failure remains unexplained.
 - `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/x64-peer-final-build.log`
 - Current non-ARM compatibility build: AppleClang `-arch x86_64`, `-DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT`, built successfully after guarding the ARM64 certificate traversal.
 - Current x86_64/Rosetta ordinary peer probe: `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/x64-peer-final.tsv`; it observed nested trace 5 with immediate parent trace 3 and 32 native nested exits after GC. The probe rechecks candidate JFORL ownership, each parent/link relation, and exact mcode addresses after full collections and native re-entry.
