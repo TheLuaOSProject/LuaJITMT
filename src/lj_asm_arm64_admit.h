@@ -9017,7 +9017,7 @@ static int arm64_ir_funcf_slot_unchanged(const GCproto *pt, MSize slot,
   return 1;
 }
 
-static MSize arm64_ir_funcf_open_result_count(const jit_State *J,
+static MSize arm64_ir_funcf_open_result_count(
 	const GCtrace *T, const GCproto *pt, IRRef end)
 {
   MSize pos, producer = UINT32_MAX, upos = UINT32_MAX, nresults;
@@ -9124,7 +9124,7 @@ static int arm64_ir_funcf_leaf_source_replay(const jit_State *J,
     return 0;
   }
   if (open_callm &&
-	(open_nresults = arm64_ir_funcf_open_result_count(J, T, pt, end)) == 0u)
+	(open_nresults = arm64_ir_funcf_open_result_count(T, pt, end)) == 0u)
 	{
 
 	  return 0;
