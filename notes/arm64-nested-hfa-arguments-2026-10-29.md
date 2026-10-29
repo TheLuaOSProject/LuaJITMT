@@ -47,7 +47,8 @@ this change.
 The focused `arm64-assert` run of
 `tools/ci/arm64_jit_integer_aggregate_args_contract.sh` passed with the nested
 float triple, array, classifier boundaries, and semantic/post-RA mutations.
-The root will run the four-profile matrix before integration.
+The integrated four-profile matrix passes, including ordinary named and array
+peer probes in every profile; see `arm64-hfa-array-integration-2026-10-29.md`.
 
 The preceding named-member checkpoint passed the integrated four-profile
 matrix at `bcc552b45` and was promoted at `8d164b856`, including an ordinary

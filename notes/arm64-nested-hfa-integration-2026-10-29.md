@@ -45,6 +45,8 @@ later fixture, contract-wiring, or documentation commits. The biased-IR
 copy crash investigation is closed separately in
 `test-helper-biased-ir-copy-crash-2026-10-29.md`.
 
-This bounded slice is ready for the main parity branch. Nested arrays, open
-Lua result forwarding and deeper side ancestry remain active work; overall
-x86_64 parity is incomplete.
+This named-member slice was promoted at `8d164b856`. The subsequent array
+extension and its validation are recorded in
+`arm64-hfa-array-integration-2026-10-29.md`. Open Lua result forwarding, deeper
+side ancestry and the independently discovered intermittent FUNCF publication
+failure remain active work; overall x86_64 parity is incomplete.

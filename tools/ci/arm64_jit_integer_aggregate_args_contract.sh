@@ -49,6 +49,7 @@ run_profile() {
   lj_ci_run_fixture 60 "$native" \
     "$root/tests/t-arm64-jit-callxs-integer-aggregate.lua"
   lj_ci_run_lua 60 "$root/tests/t-ffi-callxs-nested-hfa.lua"
+  lj_ci_run_lua 60 "$root/tests/t-ffi-callxs-nested-hfa.lua" array
 }
 
 profiles=${LJ_ARM64_INTEGER_AGGREGATE_PROFILES:-'arm64-assert arm64e-assert arm64-release arm64e-release'}

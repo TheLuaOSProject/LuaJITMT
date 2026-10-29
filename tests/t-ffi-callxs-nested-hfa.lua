@@ -20,14 +20,26 @@ end
 ffi.cdef[[
 typedef struct { float lo, hi; } Arm64FloatPair;
 typedef struct { Arm64FloatPair inner; } Arm64NestedFloatPair;
+typedef struct { float lane[2]; } Arm64FloatArrayPair;
+typedef struct { Arm64FloatArrayPair inner; } Arm64NestedArrayFloatPair;
+double arm64_take_nested_array_float_pair(Arm64NestedArrayFloatPair,double);
 double arm64_take_nested_float_pair(Arm64NestedFloatPair,double);
 double arm64_take_nested_float_pair_alt(Arm64NestedFloatPair,double);
 void arm64_aggregate_reset(void);
 uint32_t arm64_aggregate_count(uint32_t);
 ]]
 local lib = ffi.load(assert(os.getenv('LJ_ARM64_INT_AGGREGATE_SO')))
-local fn = lib.arm64_take_nested_float_pair
-local one = ffi.new('Arm64NestedFloatPair', {{1.25, 2.5}})
+local array = arg and arg[1] == 'array'
+local counter = array and 66 or 62
+local fn = array and lib.arm64_take_nested_array_float_pair or
+  lib.arm64_take_nested_float_pair
+local one
+if array then
+  one = ffi.new('Arm64NestedArrayFloatPair')
+  one.inner.lane[0], one.inner.lane[1] = 1.25, 2.5
+else
+  one = ffi.new('Arm64NestedFloatPair', {{1.25, 2.5}})
+end
 
 local function source()
   return assert(loadstring([[
@@ -97,7 +109,7 @@ for pass = 1, 8 do
   assert(candidate(128, fn, one) == oracle(128, fn, one),
          'native candidate differs from interpreted C oracle')
 end
-assert(lib.arm64_aggregate_count(62) == 2048,
+assert(lib.arm64_aggregate_count(counter) == 2048,
        'peer C calls were lost or replayed')
 
 local root_trace = loop_trace(candidate)
@@ -113,14 +125,14 @@ local function texit(no)
 end
 jit.off(texit, true)
 jit.attach(texit, 'texit')
-local before = lib.arm64_aggregate_count(62)
+local before = lib.arm64_aggregate_count(counter)
 local code_before, address_before, loop_before = util.tracemc(root_trace)
 assert(code_before and address_before and loop_before,
        'selected root has no readable native code')
 collectgarbage('collect')
 assert(candidate(32, fn, one) == oracle(32, fn, one),
        'native peer changed after full GC')
-assert(lib.arm64_aggregate_count(62) == before + 64,
+assert(lib.arm64_aggregate_count(counter) == before + 64,
        'peer post-GC effects were lost or replayed')
 assert(exits > 0, 'native peer root did not take an observed exit after GC')
 assert(loop_trace(candidate) == root_trace,
@@ -133,20 +145,23 @@ assert(code_after == code_before and address_after == address_before and
        'selected root native-code identity changed across full GC')
 local after_gc_exits = exits
 exits = 0
-local alt = lib.arm64_take_nested_float_pair_alt
-assert(candidate(32, alt, one) == oracle(32, alt, one),
-       'alternate C callee differs from interpreted oracle')
-assert(lib.arm64_aggregate_count(63) == 64,
-       'alternate C callee effects were lost or replayed')
-assert(exits > 0, 'alternate callee did not exit the selected root')
-assert(loop_trace(candidate) == root_trace,
-       'alternate callee displaced the selected root')
-local final_code, final_address, final_loop = util.tracemc(root_trace)
-assert(final_code == code_before and final_address == address_before and
-       final_loop == loop_before, 'alternate callee changed selected code')
+if not array then
+  local alt = lib.arm64_take_nested_float_pair_alt
+  assert(candidate(32, alt, one) == oracle(32, alt, one),
+         'alternate C callee differs from interpreted oracle')
+  assert(lib.arm64_aggregate_count(63) == 64,
+         'alternate C callee effects were lost or replayed')
+  assert(exits > 0, 'alternate callee did not exit the selected root')
+  assert(loop_trace(candidate) == root_trace,
+         'alternate callee displaced the selected root')
+  local final_code, final_address, final_loop = util.tracemc(root_trace)
+  assert(final_code == code_before and final_address == address_before and
+         final_loop == loop_before, 'alternate callee changed selected code')
+end
 jit.attach(texit)
 assert(peer_release:send(true, 5), 'peer release failed')
 local peer_ok, peer_result = peer:join(5)
 assert(peer_ok and peer_result, 'live MT peer did not join cleanly')
-print('t-ffi-callxs-nested-hfa OK:', jit.arch, 'trace', root_trace,
-      'post-GC-exits', after_gc_exits, 'alternate-exits', exits, 'peer', 'joined')
+print('t-ffi-callxs-nested-hfa OK:', jit.arch, array and 'array' or 'named',
+      'trace', root_trace,
+      'post-GC-exits', after_gc_exits, 'alternate-exits', array and 'n/a' or exits, 'peer', 'joined')
