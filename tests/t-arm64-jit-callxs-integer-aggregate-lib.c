@@ -33,6 +33,7 @@ typedef arm64_word_result arm64_word_result_alias;
 typedef struct { uint64_t value; } arm64_u64_result;
 typedef struct { uint64_t lo, mid, hi; } arm64_u64_triple_result;
 typedef struct { uint64_t lo, mid, hi, tail; } arm64_u64_quad_result;
+typedef struct { void *value; } arm64_pointer_member_result;
 static unsigned calls_u64_triple_many;
 static unsigned calls_u64_triple_many_alt;
 static unsigned calls_u64_quad;
@@ -124,10 +125,12 @@ enum {
   ARM64_RETURN_NESTED_FLOAT_TRIPLE,
   ARM64_RETURN_NESTED_DOUBLE_QUAD,
   ARM64_RETURN_U64_TRIPLE,
+  ARM64_RETURN_POINTER_MEMBER,
   ARM64_AGGREGATE_COUNT
 };
 
 static volatile uint32_t calls[ARM64_AGGREGATE_COUNT];
+static uint64_t pointer_result_slots[2][4];
 
 /* The compact scalar prefix leaves a gap before the eight-byte composite
 ** stack slot; the scalar suffix must begin after that entire slot. */
@@ -580,6 +583,26 @@ LJ_EXPORT arm64_mixed_result arm64_return_mixed(uint32_t value)
   calls[ARM64_RETURN_MIXED]++;
   result.tag = value+1u;
   result.value = (float)value+0.5f;
+  return result;
+}
+
+/* Pointer payloads are returned unchanged in the aggregate's GPR bits. Odd
+** inputs exercise a true null pointer; even inputs exercise stable non-null
+** addresses without making the pointed-to storage a GC object. */
+LJ_EXPORT arm64_pointer_member_result arm64_return_pointer_member(uint32_t value)
+{
+  arm64_pointer_member_result result;
+  calls[ARM64_RETURN_POINTER_MEMBER]++;
+  result.value = (value & 1u) ? NULL : &pointer_result_slots[0][value & 3u];
+  return result;
+}
+
+LJ_EXPORT arm64_pointer_member_result
+arm64_return_pointer_member_alt(uint32_t value)
+{
+  arm64_pointer_member_result result;
+  calls[ARM64_RETURN_POINTER_MEMBER]++;
+  result.value = (value & 1u) ? &pointer_result_slots[1][value & 3u] : NULL;
   return result;
 }
 

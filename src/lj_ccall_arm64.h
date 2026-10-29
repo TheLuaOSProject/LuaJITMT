@@ -397,12 +397,14 @@ typedef struct LJArm64SmallResultWalk {
   CTState *cts;
   CTypeID active[32];
   uint8_t leaves;
-  uint8_t integer;
+  uint8_t non_hfa;
+  uint8_t allow_pointer;  /* Set only for direct one-GPR aggregate results. */
 } LJArm64SmallResultWalk;
 
 /* A small non-HFA result is returned as one opaque GPR payload. Establish
-** that classification from bounded numeric leaves, including named nested
-** structs, without opening the independently checked argument policy. */
+** the classification from bounded scalar leaves, including named nested
+** structs. Pointer leaves are opt-in for the direct result path only; they
+** never widen the independent argument or indirect-result policy. */
 static int lj_ccall_arm64_small_result_walk(LJArm64SmallResultWalk *walk,
     CTypeID id, unsigned depth, CTSize maxsize, CTSize *sizep)
 {
@@ -435,10 +437,12 @@ static int lj_ccall_arm64_small_result_walk(LJArm64SmallResultWalk *walk,
   if (lj_ccall_arm64_scalar_class(walk->cts, id, 0, &scalar, &rawid)) {
     if (scalar.kind != LJ_ARM64_ABI_KIND_INTEGER &&
         scalar.kind != LJ_ARM64_ABI_KIND_ENUM &&
-        scalar.kind != LJ_ARM64_ABI_KIND_FLOAT) return 0;
+        scalar.kind != LJ_ARM64_ABI_KIND_FLOAT &&
+        !(walk->allow_pointer &&
+          scalar.kind == LJ_ARM64_ABI_KIND_POINTER)) return 0;
     if (walk->leaves >= LJ_ARM64_ABI_MAX_ARGS) return 0;
     walk->leaves++;
-    if (scalar.kind != LJ_ARM64_ABI_KIND_FLOAT) walk->integer = 1;
+    if (scalar.kind != LJ_ARM64_ABI_KIND_FLOAT) walk->non_hfa = 1;
     *sizep = size;
     return 1;
   }
@@ -481,10 +485,12 @@ static int lj_ccall_arm64_small_aggregate_result_class(CTState *cts, CTypeID id,
       (size != 1 && size != 2 && size != 4 && size != 8)) return 0;
   memset(&walk, 0, sizeof(walk));
   walk.cts = cts;
+  walk.allow_pointer = 1;
   if (!lj_ccall_arm64_small_result_walk(&walk, id, 0, 8, &checked_size) ||
-      checked_size != size || !walk.integer) return 0;
-  /* An integer/enum leaf excludes all HFA channels. Pure floating nested
-  ** results retain their separate, currently closed classification. */
+      checked_size != size || !walk.non_hfa) return 0;
+  /* An integer/enum/pointer leaf excludes all HFA channels. Keep pointer
+  ** payloads opaque in the same GPR/box path; pure floating nested results
+  ** retain their separate, currently closed classification. */
   if (rawid) *rawid = raw;
   if (arg) {
     arg->cls = LJ_ARM64_ABI_GPR;
@@ -522,7 +528,7 @@ static int lj_ccall_arm64_indirect_aggregate_result_class(CTState *cts,
   walk.cts = cts;
   if (!lj_ccall_arm64_small_result_walk(&walk, id, 0, 32,
                                         &checked_size) ||
-      checked_size != size || !walk.integer)
+      checked_size != size || !walk.non_hfa)
     return 0;
   if (rawid) *rawid = raw;
   if (arg) {
