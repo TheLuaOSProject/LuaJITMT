@@ -22,6 +22,55 @@ local cases = {
     phases = {{11.5, 17.25}, {'bad'}},
   },
   {
+    name = 'captured-tail-return',
+    source = [[local function leaf(x) return x*.25 end
+      return function(x) return leaf(x) end]],
+    phases = {{11.5}, {'bad'}},
+  },
+  {
+    name = 'function-two-results',
+    source = [[return function(x) return x*.5, x+1.25 end]],
+    phases = {{11.5}, {'bad'}},
+  },
+  {
+    name = 'recursive-fibonacci',
+    source = [[local function fib(n)
+      if n<2 then return n end
+      return fib(n-1)+fib(n-2)
+      end
+      return fib]],
+    phases = {{8}, {10}, {'bad'}},
+  },
+  {
+    name = 'protected-leaf',
+    source = [[local function leaf(x) return x*.25 end
+      return function(x) local ok,y=pcall(leaf,x)
+        if ok then return y end; return -1 end]],
+    phases = {{11.5}, {'bad'}},
+  },
+  {
+    name = 'vararg-forward-callm-loop',
+    source = [[local function sum(a,b,c) return a+b+c end
+      local function forward(...) return sum(...) end
+      return function(n)
+        local total=.5
+        for i=1,n do total=total+forward(i,.25,.5) end
+        return total
+      end]],
+    phases = {{48}, {64}},
+  },
+  {
+    name = 'open-result-callm-loop',
+    source = [[local function values(x) return x,.25,.5 end
+      local function sum(a,b,c) return a+b+c end
+      return function(n)
+        local total=.5
+        for i=1,n do total=total+sum(values(i)) end
+        return total
+      end]],
+    phases = {{48}, {64}},
+  },
+  {
     name = 'two-exit-loop-sides',
     source = [[return function(mode,n)
       local sum=0
@@ -94,7 +143,8 @@ local function root_headers(fn)
     if ins then
       local op = bit.band(ins,255)
       local name = vmdef.bcnames:sub(op*6+1,op*6+6)
-      if name == 'JFUNCF' or name == 'JFORL ' or name == 'JLOOP ' or
+      if name == 'JFUNCF' or name == 'JFUNCV' or
+         name == 'JFORL ' or name == 'JLOOP ' or
          name == 'JITERL' then
         local no = bit.rshift(ins,16)
         roots[no]=true

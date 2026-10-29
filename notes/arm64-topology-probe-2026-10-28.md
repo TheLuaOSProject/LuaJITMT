@@ -128,3 +128,34 @@ initial `probe.lua`, `seeded-probe.lua`, their per-target TSVs, and final
 `arm64-expanded.tsv` / `x86_64-expanded.tsv` from the committed expanded probe.
 The latter uses callback-time root classification; raw trace IDs and exit
 numbers remain diagnostic labels rather than generation identities.
+
+## General call controls (2026-10-29)
+
+The probe now includes six more shapes and recognizes a patched JFUNCV header
+as a selected root if one occurs. All twelve shapes pass their interpreted
+result/error comparisons on the immutable `cbb707874` ordinary binaries with
+an attached peer. The new cases separate gaps that remain despite the basic
+twenty-workload inventory having matching 18/20 witnessed rows.
+
+| Shape | ARM64 | x86_64 |
+| --- | --- | --- |
+| Captured tail return | child function executes; no selected outer root | selected outer return root; five type-guard exits |
+| Two-result function entry | no selected witness | selected return root; five type-guard exits |
+| Recursive Fibonacci | no selected witness | `up-recursion` root plus three root-linked sides; root and side exits |
+| Protected leaf call | no selected witness | no selected witness |
+| Vararg forwarding into open CALLM | no selected witness | selected loop root and root-linked side execute |
+| Open returned values into CALLM | no selected witness | selected loop root; five exit witnesses in first phase |
+
+These are topology observations, not independent proofs that every operation
+or result restoration is native. In particular, type-guard exits from a
+function entry do not prove its two-result return restoration. The protected
+call sample is inconclusive on both targets. The recursive sample establishes
+a concrete multiple-side topology on x86_64, unlike the earlier third-branch
+sample where neither target produced an additional side.
+
+Evidence: `/Users/frityet/Scratch/ljmt-general-call-topology-20261029/` contains
+the initial six-case `probe.lua`, its per-target TSVs, and the final
+`{arm64,x86_64}-expanded.tsv` from the committed twelve-case probe. Both use
+callback-time root classification and fully interpreted oracle prototype
+trees. The runtime/module bundles and hashes remain under
+`/Users/frityet/Scratch/ljmt-varargs-integrated-20261029/`.
