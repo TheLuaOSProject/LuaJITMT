@@ -635,9 +635,41 @@ static void expect_nested_root_side(lua_State *L, jit_State *J)
   assert(trace_runnable_acq(set.root, set.rootno) &&
 	 trace_runnable_acq(set.parent, set.parentno) &&
 	 trace_runnable_acq(set.child, set.childno));
+
+  /* Root entry must continue to accept the flattened root-side list after a
+  ** nested member has been prepended. Exercise the root path, then both
+  ** parent edges again after collection, and require native entry/exit
+  ** evidence rather than relying on the Lua oracle alone. */
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  result = call_nested_loop(L, name, 1, 1, 48);
+  assert(result == call_nested_loop(
+	L, "__arm64_first_side_nested_oracle", 1, 1, 48));
+  assert(lj_trace_test_root_entry_publishes() > 0 &&
+	 lj_trace_test_root_entry_successes() > 0 &&
+	 lj_trace_test_root_entry_cleanups() == 0);
+  assert(lj_trace_test_exit_calls() > 0 &&
+	 (lj_trace_test_first_exit_parent() == set.rootno ||
+	  lj_trace_test_last_exit_parent() == set.rootno));
+
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
   result = call_nested_loop(L, name, 2, 2, 48);
   assert(result == call_nested_loop(
 	L, "__arm64_first_side_nested_oracle", 2, 2, 48));
+  assert(lj_trace_test_root_entry_publishes() > 0 &&
+	 lj_trace_test_root_entry_successes() > 0 &&
+	 lj_trace_test_root_entry_cleanups() == 0);
+  /* This call traverses root -> direct side -> nested side. Require the
+  ** terminal native child exit, not merely root entry or a matching result. */
+  assert(lj_trace_test_exit_calls() > 0 &&
+	 lj_trace_test_first_exit_parent() == set.childno &&
+	 lj_trace_test_first_exitno() == set.child_exit &&
+	 lj_trace_test_last_exit_parent() == set.childno &&
+	 lj_trace_test_last_exitno() == set.child_exit);
+  assert(trace_runnable_acq(set.root, set.rootno) &&
+	 trace_runnable_acq(set.parent, set.parentno) &&
+	 trace_runnable_acq(set.child, set.childno));
   assert(lj_trace_flushscope(J, set.childno) == 1u);
   assert(!trace_runnable_acq(set.child, set.childno) &&
 	 trace_runnable_acq(set.parent, set.parentno) &&
@@ -645,9 +677,27 @@ static void expect_nested_root_side(lua_State *L, jit_State *J)
   assert(trace_exittarget_arm64_acq(set.parent, set.child_exit) !=
 	 trace_mcode_acq(set.child));
   lua_gc(L, LUA_GCCOLLECT, 0);
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
   result = call_nested_loop(L, name, 2, 2, 48);
   assert(result == call_nested_loop(
 	L, "__arm64_first_side_nested_oracle", 2, 2, 48));
+  assert(lj_trace_test_root_entry_publishes() > 0 &&
+	 lj_trace_test_root_entry_successes() > 0 &&
+	 lj_trace_test_root_entry_cleanups() == 0);
+  if (lj_trace_test_exit_calls() == 0 ||
+	lj_trace_test_first_exit_parent() != set.parentno ||
+	lj_trace_test_first_exitno() != set.child_exit)
+	fprintf(stderr, "scoped-flushed nested path exits=%u first=(%u,%u) last=(%u,%u) expected parent=%u exit=%u\n",
+	  (unsigned)lj_trace_test_exit_calls(),
+	  (unsigned)lj_trace_test_first_exit_parent(),
+	  (unsigned)lj_trace_test_first_exitno(),
+	  (unsigned)lj_trace_test_last_exit_parent(),
+	  (unsigned)lj_trace_test_last_exitno(),
+	  (unsigned)set.parentno, (unsigned)set.child_exit);
+  assert(lj_trace_test_exit_calls() > 0 &&
+	 lj_trace_test_first_exit_parent() == set.parentno &&
+	 lj_trace_test_first_exitno() == set.child_exit);
   assert(lj_trace_flushall_gc(L) == 0);
   assert(!trace_runnable_acq(set.root, set.rootno));
 }
