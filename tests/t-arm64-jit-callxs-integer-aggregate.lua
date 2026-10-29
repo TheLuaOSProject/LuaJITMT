@@ -8,6 +8,7 @@ jit.off(true, true)
 ffi.cdef[[
 typedef struct { uint32_t lo, hi; } Arm64IntPair;
 typedef struct { float lo, hi; } Arm64FloatPair;
+typedef Arm64FloatPair& Arm64FloatPairRef;
 typedef uint32_t (*Arm64FloatPairVarargFn)(Arm64FloatPair, ...);
 typedef struct { Arm64IntPair pair; uint32_t tag; } Arm64NestedPair;
 typedef union { uint64_t u; double d; } Arm64MixedUnion;
@@ -83,6 +84,13 @@ return function(n, fn, value, salt)
   return sum
 end
 ]], '@float-hfa-candidate'))()
+local hfa_ref_candidate = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@float-hfa-reference-candidate'))()
 local hfa_oracle = assert(loadstring([[
 return function(n, fn, value, salt)
   local sum = 0
@@ -99,10 +107,12 @@ end
 ]], '@float-hfa-clone'))()
 jit.off(hfa_oracle, true)
 jit.off(hfa_clone, true)
+jit.off(hfa_ref_candidate, true)
 _G.__arm64_float_hfa_candidate = hfa_candidate
 _G.__arm64_float_hfa_oracle = hfa_oracle
 _G.__arm64_float_hfa_clone = hfa_clone
 _set_hfa_candidate(hfa_candidate)
+jit.on(hfa_ref_candidate, true)
 
 local pair = ffi.new('Arm64IntPair', 7, 11)
 local byte = ffi.new('Arm64Byte', 7)
@@ -191,6 +201,28 @@ for _, case in ipairs(small_cases) do
     'small aggregate effects were lost or replayed: ' ..
     tostring(lib.arm64_aggregate_count(case[3])))
 end
+jit.flush(hfa_candidate)
+local normal_hfa_candidate = hfa_candidate
+hfa_candidate = hfa_ref_candidate
+_G.__arm64_float_hfa_candidate = hfa_candidate
+_set_hfa_candidate(hfa_candidate)
+local hfa_ref_seed = ffi.new('Arm64FloatPair', 1.25, 2.5)
+local hfa_ref = ffi.cast('Arm64FloatPairRef', hfa_ref_seed)
+lib.arm64_aggregate_reset()
+for pass = 1, 8 do
+  assert(hfa_candidate(16, lib.arm64_take_float_pair_double_salt,
+                       hfa_ref, 3.75) ==
+         hfa_oracle(16, lib.arm64_take_float_pair_double_salt,
+                    hfa_ref, 3.75))
+end
+assert(_hfa_trace_count() == 0,
+  'reference-valued HFA argument published a native root')
+assert(lib.arm64_aggregate_count(3) == 256,
+  'reference-valued HFA fallback effects were lost or replayed')
+
+hfa_candidate = normal_hfa_candidate
+_G.__arm64_float_hfa_candidate = hfa_candidate
+_set_hfa_candidate(hfa_candidate)
 jit.flush(hfa_candidate)
 exits = 0
 lib.arm64_aggregate_reset()
