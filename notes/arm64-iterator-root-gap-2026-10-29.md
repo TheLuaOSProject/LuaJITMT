@@ -84,3 +84,12 @@ and the ordinary leaf arithmetic overflow/frame proof; a scalar result type
 alone is insufficient. Parent identity, copied argument geometry, source
 ITERC/ITERL/setup-JMP generation, allocated replay and VM entry after the
 key-to-control copy must all be checked before native publication opens.
+
+The source worktree was restored clean and its ordinary runtime rebuilt after
+the diagnostic. That rebuild and topology check passed; its immutable bundle
+is `restored-ordinary/` beneath the diagnostic evidence directory, with source
+and SHA-256 manifests. The reusable older FORL diagnostic runner also replaced
+its top-level runtime/archive during that restore. Its earlier logs and source
+copies remain, but those two top-level binaries now correspond to production
+`6971c0f16` (notes revision `b160fbc5c`), not the original prototype.
+`runtime-provenance.json` there records that distinction explicitly.
