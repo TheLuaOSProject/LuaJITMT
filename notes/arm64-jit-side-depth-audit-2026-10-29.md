@@ -22,10 +22,13 @@ aggregate exit-count inference.
 The copied semantic and post-RA side views now carry an immutable ancestry
 chain with each row binding the side generation, immediate parent generation
 and snapshot count, exact `IR_BASE`, trace number, parent number, canonical
-root number, and selected exit. Both admission passes check every row
-independently while retaining the final canonical root link. Private mutations
-for skipped ancestry, a foreign root, and a stale parent generation must fail
-in both passes.
+root number, and selected exit. Each copy also binds the immediate parent's
+generation separately. Both admission passes check every row independently,
+require unique ancestry IDs distinct from the child, and bind the final row's
+parent snapshot count to the canonical root while retaining the final root
+link. Independent private-copy mutations cover skipped ancestry, foreign
+root, stale parent and row generations, child-ID/cycle reuse, and a wrong
+final root snapshot count; all must fail both passes.
 
 The ARM64 ordinary probe now reaches the same chain shape as x64:
 
@@ -48,37 +51,55 @@ ARM64 scalar side adaptation: PASS
 arm64_jit_side_ir_admission_contract OK
 ```
 
-The local no-observer timing sample was about 7.0, 6.4, 5.7, and 5.6
-microseconds per call for root, direct, nested, and depth-3 phases. This is a
-single-run sanity sample, not a comparative performance claim.
+The local no-observer timing probe was run three times per revision on the
+same host, with 2,000 calls per phase. At checkpoint `570d5b942`, medians were
+5.525, 5.669, 5.668, and 5.740 microseconds per call for root, direct,
+nested, and depth-3 phases. With the current wide-depth fallback and ancestry
+checks, medians were 5.165, 5.471, 5.600, and 5.700 microseconds. These noisy
+samples show no measured regression on this probe; they are not a general
+performance guarantee.
 
 Retirement now validates each root-owned side list and walks newest-first.
 Publication prepends each child, so this is descendant-before-ancestor order.
 The traversal saves the successor before unlinking the current node. Deep
-graphs are capped at 64 members; larger roots are accepted only when every
-member is a direct child. At a 64-member list, only another direct child may
-extend the graph; even a depth-2 graph refuses further extension so it cannot
-cross into the oversized direct-only path. Focused admission and depth-3
-peer/GC tests pass after this retirement rewrite. The private graph-view test first accepts the live
+graphs use a 64-member indexed ancestry proof. Larger roots retain direct and
+one-nested-side topology: the fallback checks each nested child's exact direct
+parent later in the prepend-ordered list. New publication at or above the
+index cap also checks the *prospective* child depth, so an existing depth-two
+graph cannot admit its first depth-three member as child 65. The cap policy
+tests exercise prospective depths 1–4 at counts 63, 64, and 65.
+This fallback uses bounded suffix scans for membership, so it has quadratic
+worst-case work for a wide list containing many nested children; it is only
+used beyond the indexed cap and remains a performance point to measure. Depth
+greater than two remains refused beyond the index cap. Focused admission
+and depth-3 peer/GC tests pass after this retirement rewrite. The private graph-view test first accepts the live
 descendant-before-ancestor order, then reorders the immediate ancestor ahead
 of its child and requires the path validator to reject it. A cap-policy unit
-check covers counts 63, 64, and 65: it accepts shallow graphs at and beyond
-the limit and rejects depth greater than two at/above the limit.
+check covers counts 63, 64, and 65: it accepts depth-one/two graphs at and
+beyond the limit and rejects depth greater than two at/above the limit. An
+ordinary ARM64 fixture also constructs a real 67-member root-owned graph with
+maximum depth two: it publishes a direct side first, appends 65 distinct root
+exits, then publishes a new nested child after the list is already oversized.
+It verifies interpreter-equivalent results, preserves the validated summary
+across full GC, and full-flushes before retracing. This exercises depth-two
+admission beyond the cap and wide-list retirement.
 
 ## Limits and remaining tests
 
 This is bounded depth-3 support, not unrestricted side-recorder parity. The
-cap test exercises the policy predicate rather than constructing a live
-64-member trace graph; a real 64-to-65 append fixture and wide-shallow
-lifecycle test remain outstanding. The reorder negative mutates a private
-captured index, not the live list; live-list corruption is rejected by the
-existing full graph validator but has not been exercised through retirement.
-The focused contract does not claim adversarial retirement-race coverage. Full
-multi-profile integration is also still required before integration.
+cap policy and live 67-member depth-two graph are covered, but a live 64-member
+deep graph followed by a refused depth-three append is not constructed. The
+reorder negative mutates a private captured index, not the live list; live-list
+corruption is rejected by the full graph validator but has not been exercised
+through retirement. The focused contract does not claim adversarial
+retirement-race coverage. Both strict ARM64 and arm64e builds and the focused
+native contract pass; the full multi-profile integration remains for the
+integrating branch.
 
 The source keeps a bounded iterative ancestry walk, no allocation or new lock,
-and a root-owned flattened list. It rejects malformed chains, missing or
-foreign ancestors, cycles, stale generations, and invalid root identity.
-Retirement correctness additionally depends on exact-once membership and
-preserving the list's prepend order; tests for those limits remain to be
-added before this checkpoint is ready to integrate.
+and a root-owned flattened list. The indexed path rejects malformed chains,
+missing or foreign ancestors, cycles, stale generations, and invalid root
+identity. The oversized depth-two fallback verifies direct-parent membership
+in prepend order. Retirement correctness depends on exact-once membership and
+preserving that order; the private reorder mutation checks the validator's
+descendant-before-ancestor requirement.

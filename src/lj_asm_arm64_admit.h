@@ -18473,7 +18473,7 @@ static int arm64_side_immediate_parent_valid(
 	const LJArm64SideIRView *side, const GCtrace *owner)
 {
 	IRIns base;
-	MSize i, count;
+	MSize i, j, count;
 	if (!side || !owner || side->parent == 0 || side->root == 0 ||
 	    owner->root != side->root || side->parent == side->traceno ||
 	    side->root_generation == 0 || !side->parent_ancestry ||
@@ -18498,6 +18498,9 @@ static int arm64_side_immediate_parent_valid(
 	    side->parent_ancestry[i+1u].generation : side->root_generation;
 	  if (row->generation == 0 || row->parent_generation == 0 ||
 	      row->traceno == 0 || row->traceno == side->root ||
+	      row->traceno == side->traceno ||
+	      (i == 0 && (side->parent_generation == 0 ||
+		  row->generation != side->parent_generation)) ||
 	      (i == 0 && row->traceno != side->parent) ||
 	      row->rootno != side->root || row->parentno != expected_parent ||
 	      row->parent_generation != expected_parent_generation ||
@@ -18506,7 +18509,14 @@ static int arm64_side_immediate_parent_valid(
 	      (TraceNo)row->base.op1 != row->parentno ||
 	      (ExitNo)row->base.op2 != row->exitno)
 	    return 0;
+	  for (j = 0; j < i; j++)
+	    if (side->parent_ancestry[j].traceno == row->traceno)
+	      return 0;
 	}
+	if (side->parent_root_nsnap == 0 ||
+	    side->parent_ancestry[count-1u].parent_nsnap !=
+	      side->parent_root_nsnap)
+	  return 0;
 	return memcmp(&side->parent_base, &side->parent_ancestry[0].base,
 	  sizeof(IRIns)) == 0;
 }

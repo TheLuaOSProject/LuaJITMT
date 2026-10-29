@@ -20,6 +20,7 @@
 #include "lj_bc.h"
 #include "lj_ir.h"
 #include "lj_jit.h"
+#include "lj_obj.h"
 #include "lj_trace.h"
 
 static void run(lua_State *L, const char *source)
@@ -81,6 +82,19 @@ static GCtrace *find_side(lua_State *L, jit_State *J, const char *name,
       *parentno = (TraceNo)n;
       return selected;
     }
+  }
+  return NULL;
+}
+
+static GCtrace *find_root_for_proto(jit_State *J, GCproto *pt)
+{
+  MSize n;
+  for (n = 1; n < trace_sizetrace_acq(J); n++) {
+    GCtrace *T = traceref_safe(J, (TraceNo)n);
+    if (trace_runnable_acq(T, (TraceNo)n) && trace_root_acq(T) == 0 &&
+        trace_startpt_acq(T) == pt &&
+        bc_op(trace_startins_acq(T)) == BC_FORL)
+      return T;
   }
   return NULL;
 }
@@ -294,7 +308,7 @@ int main(void)
   childno = trace_traceno_acq(child);
   { uint32_t contract = lj_trace_test_arm64_side_scalar_copy_contract(J,
       childno);
-    const uint32_t ancestry_mutations = 0xf8000000u;
+    const uint32_t ancestry_mutations = 0xf80f0000u;
     if ((contract & ancestry_mutations) != ancestry_mutations)
       fprintf(stderr, "ancestry mutations expected=%08x observed=%08x\n",
               ancestry_mutations, contract);
@@ -304,6 +318,52 @@ int main(void)
 	run(L, "for k=1,64 do assert(depth_kernel(2,2,2,1,48)==-146.5) end");
   assert(lj_trace_test_root_entry_successes() > 0);
   assert(lj_trace_test_exit_calls() > 0);
+
+  /* Retain the historical wide direct-child path beyond the 64-entry deep
+  ** ancestry index. The real root owns 65 separately selected cold exits;
+  ** the summary helper validates its topology and retirement eligibility. */
+  run(L,
+    "local jit=require('jit'); jit.flush(); jit.on(); "
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=512',"
+    "'maxside=256','maxrecord=4000'); "
+    "local parts={'return function(z,a,x,n) local s=.5 for i=1,n do "
+    "if z==1 then if a==1 then s=s+i*.001 else s=s+i*.002 end end '}; "
+    "for k=1,65 do parts[#parts+1]="
+    "('if x==%d then s=s+i*0.0001 end '):format(k) end; "
+    "parts[#parts+1]='end return s end'; local body=table.concat(parts); "
+    "wide_kernel=assert(loadstring(body))(); "
+    "wide_oracle=assert(loadstring(body))(); jit.off(wide_oracle,true); "
+    "for i=1,100 do assert(wide_kernel(0,0,0,32)==wide_oracle(0,0,0,32)) end; "
+    "for i=1,20 do assert(wide_kernel(1,1,0,32)==wide_oracle(1,1,0,32)) end; "
+    "for k=1,65 do for i=1,10 do "
+    "assert(wide_kernel(0,0,k,32)==wide_oracle(0,0,k,32)) end end; "
+    "for i=1,20 do assert(wide_kernel(1,2,0,32)==wide_oracle(1,2,0,32)) end; "
+    "collectgarbage('collect'); "
+    "for k=1,65 do assert(wide_kernel(0,0,k,32)==wide_oracle(0,0,k,32)) end; "
+    "for i=1,20 do assert(wide_kernel(1,2,0,32)==wide_oracle(1,2,0,32)) end");
+  lua_getglobal(L, "wide_kernel");
+  assert(lua_isfunction(L, -1));
+  {
+    GCproto *pt = funcproto(funcV(L->top-1));
+    GCtrace *wide_root = find_root_for_proto(J, pt);
+    uint32_t summary;
+    assert(wide_root != NULL && trace_nchild_acq(wide_root) == 67u);
+    summary = lj_trace_test_arm64_side_graph_summary(
+      J, trace_traceno_acq(wide_root));
+    if (summary != ((2u << 16) | 67u))
+      fprintf(stderr, "wide graph summary expected=%#x observed=%#x count=%u\n",
+              (2u << 16) | 67u, summary, trace_nchild_acq(wide_root));
+    assert(summary == ((2u << 16) | 67u));
+    run(L, "collectgarbage('collect'); "
+           "for k=1,65 do assert(wide_kernel(0,0,k,32)==wide_oracle(0,0,k,32)) end; "
+           "for i=1,20 do assert(wide_kernel(1,2,0,32)==wide_oracle(1,2,0,32)) end");
+    assert(lj_trace_test_arm64_side_graph_summary(
+      J, trace_traceno_acq(wide_root)) == summary);
+    run(L, "require('jit').flush(); "
+           "for i=1,100 do assert(wide_kernel(0,0,0,32)==wide_oracle(0,0,0,32)) end; "
+           "for i=1,10 do assert(wide_kernel(1,2,0,32)==wide_oracle(1,2,0,32)) end");
+  }
+  lua_pop(L, 1);
   lua_close(L);
   puts("ARM64 scalar side adaptation: PASS");
   return 0;

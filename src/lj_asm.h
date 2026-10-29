@@ -140,7 +140,7 @@ typedef struct LJArm64SideIRView {
   TraceLink parent_linktype;
   MSize parent_root_nsnap;
   const LJArm64SideAncestor *parent_ancestry;
-  uint64_t root_generation;
+  uint64_t parent_generation, root_generation;
   uint8_t parent_ancestry_count;
   IRIns parent_root_forl[3];
   uint8_t parent_root_forl_mask;
@@ -181,7 +181,7 @@ typedef struct LJArm64SideParentSnapshot {
   TraceLink parent_linktype;
   MSize parent_root_nsnap;
   LJArm64SideAncestor parent_ancestry[LJ_ARM64_SIDE_MAX_ANCESTRY];
-  uint64_t root_generation;
+  uint64_t parent_generation, root_generation;
   uint8_t parent_ancestry_count;
   IRIns parent_root_forl[3];
   uint8_t parent_root_forl_mask;

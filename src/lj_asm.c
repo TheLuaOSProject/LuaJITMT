@@ -231,6 +231,7 @@ static void asm_arm64_side_ir_view_init(const jit_State *J,
     view->parent_linktype = parent_snapshot->parent_linktype;
     view->parent_root_nsnap = parent_snapshot->parent_root_nsnap;
     view->parent_ancestry = parent_snapshot->parent_ancestry;
+    view->parent_generation = parent_snapshot->parent_generation;
     view->root_generation = parent_snapshot->root_generation;
     view->parent_ancestry_count = parent_snapshot->parent_ancestry_count;
     memcpy(view->parent_root_forl, parent_snapshot->parent_root_forl,
