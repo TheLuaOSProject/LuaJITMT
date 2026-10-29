@@ -55,13 +55,15 @@ not assume `requested == available`; tests cover unused padding and truncation.
 
 ## Runtime frame normalization
 
-At FUNCV execution the physical top marker is `FRAME_VARG`; `frame_islua` is
-false there. `frame_prevd` subtracts the VARG-sized delta and reaches the
-ordinary Lua call frame. The recorder has already applied the extra `vframe`
-shift to `J->base`/`J->baseslot`, and `J->framedepth` includes the extra frame.
-Any dispatch ownership check must normalize the physical VARG frame before
-walking parent Lua CALLs while separately validating its exact delta and
-callee copy. Snapshot admission must accept the paired markers only after
+At the initial pre-setup `FUNCV` recorder dispatch, the physical frame can
+still be the ordinary Lua CALL frame. After FUNCV setup, the physical top
+marker is `FRAME_VARG` and `frame_islua` is false there. `frame_prevd`
+subtracts the VARG-sized delta and reaches the ordinary Lua call frame.
+Recorder and VM setup must be distinguished: later recorder state includes
+the extra `vframe` shift in `J->base`/`J->baseslot` and `J->framedepth`.
+The dispatch ownership check normalizes an installed physical VARG frame
+before walking parent Lua CALLs, and separately validates its exact delta
+and callee copy. Snapshot admission accepts the paired markers only after
 semantic and allocated proofs bind both function slots, both frame values,
 the CALL return PC, the VARG bytecode count, the footer/current base, and all
 mapped vararg values.
@@ -90,9 +92,9 @@ Both passes admit the paired frame map only when the lower KNUM is the CALL's
 return PC, the upper KNUM is the exact FRAME_VARG delta, both function slots
 name the same leaf, and the derived upper frame base matches the source CALL.
 
-Runtime admission distinguishes the first `FUNCV` dispatch (physical VM
-FRAME_VARG is present, but the recorder has not yet applied its extra frame
-shift) from later VARG/body dispatches. It bounds the physical delta
+Runtime admission distinguishes the first `FUNCV` dispatch (the ordinary Lua
+frame is allowed before VARG setup) from later VARG/body dispatches requiring
+the installed FRAME_VARG. It bounds the physical delta
 subtraction before walking the frame, then checks the actual CALL-derived
 delta, copied closure identity, JIT frame depth/base, and lower return-PC link.
 The four-profile contract is
