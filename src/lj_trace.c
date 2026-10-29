@@ -4532,7 +4532,8 @@ static int trace_arm64_root_direct_side_present(jit_State *J, TraceVec *tv,
          !trace_scope_pending_acq(side) &&
          (side_epoch == 0 || !trace_retired_link_listed_acq(side) ||
           !trace_native_pin_closed_acq(side))) ||
-        trace_root_acq(side) != rootno)
+        trace_root_acq(side) != rootno || trace_ir_acq(side) == NULL ||
+        trace_nins_acq(side) <= REF_BASE || trace_nins_acq(side) >= REF_DROP)
       return 0;
     base = ir_load_acq(&trace_ir_acq(side)[REF_BASE]);
     if (base.o != IR_BASE || base.t.irt != IRT_PGC ||
@@ -4558,7 +4559,9 @@ static int trace_arm64_root_direct_side_present(jit_State *J, TraceVec *tv,
             !trace_native_pin_closed_acq(mid))) ||
           trace_root_acq(mid) != rootno ||
           mid->arm64_side_cert.parentno != rootno ||
-          mid->arm64_side_cert.rootno != rootno)
+          mid->arm64_side_cert.rootno != rootno ||
+          trace_ir_acq(mid) == NULL || trace_nins_acq(mid) <= REF_BASE ||
+          trace_nins_acq(mid) >= REF_DROP)
         return 0;
       midbase = ir_load_acq(&trace_ir_acq(mid)[REF_BASE]);
       if (midbase.o != IR_BASE || midbase.t.irt != IRT_PGC ||
@@ -6982,6 +6985,7 @@ static int trace_root_entry_nested_exit_target_valid(jit_State *J,
   TraceNo childno = rootview->nextside;
   MSize i, found = 0;
   if (tv == NULL || root == NULL || rootno == 0 || parentno == 0 ||
+	(MSize)rootno >= tv->sizetrace ||
 	rootview->nchild == 0 || rootview->nchild > tv->sizetrace ||
 	gcref_acq(tv->slot[rootno]) != obj2gco(root))
     return 0;
@@ -7973,6 +7977,7 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
     if (childno == 0 || childno == parentno ||
         (MSize)childno >= tv->sizetrace ||
         (child = traceref_fromgco_safe(gcref_acq(tv->slot[childno]))) == NULL ||
+        !trace_runnable_acq(child, childno) ||
         trace_ir_acq(child) == NULL || trace_nins_acq(child) <= REF_BASE ||
         trace_nins_acq(child) >= REF_DROP)
       return 0;
@@ -9649,14 +9654,16 @@ static int trace_arm64_side_certificate_sealed_valid_held(jit_State *J,
 	parent->arm64_root_cert.body == parent &&
 	trace_root_acq(parent) == 0;
   } else {
+    /* Establish the bounded ancestry before following the parent seal.
+    ** A malformed self/cyclic certificate must not recurse into itself. */
     parent_generation_valid = trace_root_acq(parent) == c->rootno &&
+	parent->arm64_side_cert.parentno == c->rootno &&
+	parent->arm64_side_cert.rootno == c->rootno &&
 	trace_arm64_side_certificate_sealed_valid_held(J, parent) &&
 	trace_arm64_side_parent_edge_valid_held(
 	  J, parent, c->rootno, 1) &&
 	parent_generation == la_load64_acq(&parent->arm64_generation) &&
-	parent_generation == la_load64_acq(&parent->arm64_side_cert.generation) &&
-	parent->arm64_side_cert.parentno == c->rootno &&
-	parent->arm64_side_cert.rootno == c->rootno;
+	parent_generation == la_load64_acq(&parent->arm64_side_cert.generation);
   }
   return live_continuation == c->continuationins &&
 	parent_generation_valid &&
