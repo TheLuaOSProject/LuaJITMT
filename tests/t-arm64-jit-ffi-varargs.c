@@ -1011,6 +1011,17 @@ static void run_case(lua_State *L, const char *name, int n)
   lua_pop(L, 1);
 }
 
+static void run_noextra_seed(lua_State *L, int n, lua_Integer seed)
+{
+  lua_getglobal(L, "__va_dispatch_noextra");
+  assert(lua_isfunction(L, -1));
+  lua_pushinteger(L, n);
+  lua_pushinteger(L, seed);
+  ljt_lua_pcall(L, 2, 1, "__va_dispatch_noextra without flush");
+  assert(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+}
+
 static GCproto *vararg_global_proto(lua_State *L, const char *name)
 {
   GCproto *pt;
@@ -1034,6 +1045,100 @@ static int vararg_root_callxs_published(jit_State *J, GCproto *pt)
       if (ir_load_acq(&trace_ir_acq(T)[ref]).o == IR_CALLXS) return 1;
   }
   return 0;
+}
+
+static IRRef vararg_find_guarded_accum(GCtrace *T)
+{
+  IRRef ref, found = 0;
+  assert(T != NULL && T->ir != NULL);
+  for (ref = REF_FIRST; ref < trace_nins_acq(T); ref++) {
+    IRIns ins = ir_load_acq(&trace_ir_acq(T)[ref]);
+    if (ins.o != IR_ADDOV) continue;
+    assert(irt_type(ins.t) == IRT_INT && irt_isguard(ins.t) &&
+           (ins.t.irt & ~(IRT_TYPE|IRT_GUARD|IRT_ISPHI)) == 0);
+    if (found == 0) found = ref;
+  }
+  return found;
+}
+
+static MSize vararg_accum_source(const GCproto *pt, MSize *resume_pc,
+                                MSize *call_pc)
+{
+  const BCIns *bc = proto_bc(pt);
+  MSize i, loop = pt->sizebc, accum = pt->sizebc, call = pt->sizebc;
+  for (i = 0; i < pt->sizebc; i++) {
+    BCOp op = bc_op((BCIns)la_load32_acq((const uint32_t *)&bc[i]));
+    if (op == BC_FORL || op == BC_IFORL || op == BC_JFORL) loop = i;
+  }
+  if (loop == pt->sizebc) return pt->sizebc;
+  for (i = 0; i < loop; i++) {
+    BCIns ins = (BCIns)la_load32_acq((const uint32_t *)&bc[i]);
+    if (bc_op(ins) == BC_CALL) call = i;
+    if (bc_op(ins) == BC_ADDVV &&
+        (bc_a(ins) == bc_b(ins) || bc_a(ins) == bc_c(ins))) accum = i;
+  }
+  if (accum == pt->sizebc || accum == 0 || call >= accum || accum-1u <= call)
+    return pt->sizebc;
+  if (resume_pc) {
+    MSize resume = accum-1u;
+    while (resume > call+1u &&
+           bc_op((BCIns)la_load32_acq((const uint32_t *)&bc[resume-1u])) ==
+             BC_CGET)
+      resume--;
+    *resume_pc = resume;
+  }
+  if (call_pc) *call_pc = call;
+  return accum;
+}
+
+static void test_int_accum_admission_clones(lua_State *L)
+{
+  jit_State *J = G2J(G(L));
+  GCproto *pt = vararg_global_proto(L, "__va_run_noextra");
+  GCtrace *T = traceref_safe(J, observed_trace_no[1]);
+  IRRef addov = vararg_find_guarded_accum(T);
+  LJArm64PostRAView view = { 0 };
+  VarargSemanticClone semantic;
+  VarargJSave save;
+  IRIns *postra_ir;
+  assert(T != NULL && addov != 0 && trace_root_acq(T) == 0 &&
+         trace_startpt_acq(T) == pt && bc_op(trace_startins_acq(T)) == BC_FORL);
+  view.ir = trace_ir_acq(T);
+  view.owner = T;
+  view.cts = ctype_ctsG(G(L));
+  view.snap = trace_snap_acq(T);
+  view.snapmap = trace_snapmap_acq(T);
+  view.proto_bc = proto_bc(pt);
+  view.proto = pt;
+  view.startpc = trace_startpc_acq(T);
+  view.nins = trace_nins_acq(T);
+  view.nk = trace_nk_acq(T);
+  view.nsnap = trace_nsnap_acq(T);
+  view.nsnapmap = trace_nsnapmap_acq(T);
+  view.spadjust = trace_spadjust_acq(T);
+  view.proto_sizebc = pt->sizebc;
+  view.proto_numparams = pt->numparams;
+  view.root_topslot = trace_topslot_acq(T);
+  view.startins = trace_startins_acq(T);
+  assert(lj_asm_arm64_postra_admit(&view, NULL));
+  vararg_clone_init(&semantic, T);
+  save = vararg_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+  vararg_semantic_result(J, &semantic.trace, 1,
+                         "CALLXS with loop-carried integer overflow guard");
+  semantic.ir[addov].t.irt &= (uint8_t)~IRT_GUARD;
+  vararg_semantic_result(J, &semantic.trace, 0,
+                         "CALLXS accumulator ADDOV missing overflow guard");
+  vararg_j_leave(J, &save);
+  vararg_clone_free(&semantic);
+  postra_ir = (IRIns *)calloc(view.nins, sizeof(IRIns));
+  assert(postra_ir != NULL);
+  memcpy(&postra_ir[view.nk], &view.ir[view.nk],
+         (view.nins-view.nk)*sizeof(IRIns));
+  view.ir = postra_ir;
+  assert(lj_asm_arm64_postra_admit(&view, NULL));
+  postra_ir[addov].t.irt &= (uint8_t)~IRT_GUARD;
+  assert(!lj_asm_arm64_postra_admit(&view, NULL));
+  free(postra_ir);
 }
 
 static void test_vararg_abi_failure_stage(lua_State *L, uint32_t stage)
@@ -1290,8 +1395,8 @@ int main(int argc, char **argv)
     "local cde=ffi.new('long long',0x12345678); local cdf=ffi.new('int',47)\n"
     "local cdg=ffi.new('double',4.5); local cdh=ffi.new('int8_t',-9)\n"
     "local cdi=ffi.new('uint64_t',0x23456789)\n"
-    "function _G.__va_run_noextra(n)\n"
-    " local fn=__va_noextra; for i=1,n do if fn(i)~=i+0.25 then return false end end; return true end\n"
+    "function _G.__va_run_noextra(n,seed)\n"
+    " local fn=__va_noextra; local sum=seed; for i=1,n do if fn(i)~=i+0.25 then return false end; sum=sum+i end; return sum==seed+n*(n+1)/2 end\n"
     "function _G.__va_run_mixed(n)\n"
     " local fn=__va_mixed; for i=1,n do if fn(i,i+0.125,i+1,i+0.25,true,'mixed',nil,i+0.5)~=5*i+2.875 then return false end end; return true end\n"
     "function _G.__va_run_mixed_pointer(n)\n"
@@ -1318,7 +1423,8 @@ int main(int argc, char **argv)
     "_G.__va_sret_peer=assert(threading.spawn(function(ready,release) assert(ready:send(true,5)); assert(select(2,release:recv(120))); return true end,__va_sret_ready,__va_sret_release))\n"
     "assert(select(2,__va_sret_ready:recv(5)))\n"
     "function _G.__va_dispatch_sret(n) local got=__va_run_sret(n,__va_sret,cda,cdb); return got end\n"
-    "function _G.__va_dispatch(name,n) local got=_G[name](n); return got end\n"
+    "function _G.__va_dispatch(name,n) local got; if name=='__va_run_noextra' then got=_G[name](n,0) else got=_G[name](n) end; return got end\n"
+    "function _G.__va_dispatch_noextra(n,seed) local got=__va_run_noextra(n,seed); return got end\n"
     "function _G.__va_dispatch_cdata(n) local got=__va_run_cdata(n,__va_cdata,cda,cdb,cdc,cdd,cde,cdf,cdg,cdh,cdi); return got end\n"
     "jit.flush(); jit.on(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64')\n");
 
@@ -1328,6 +1434,41 @@ int main(int argc, char **argv)
   expected_sret_type = cdataV(L->top-1)->ctypeid;
   lua_pop(L, 1);
   assert(require_native(calls, 1, "__va_run_noextra") != 0);
+  test_int_accum_admission_clones(L);
+  {
+    unsigned before_calls = calls(1), before_native = native_seen[1];
+    GCtrace *trace = traceref_safe(G2J(G(L)), observed_trace_no[1]);
+    IRRef addov = vararg_find_guarded_accum(trace);
+    TraceNo rootno = observed_trace_no[1];
+    uint32_t exit_before;
+    uintptr_t pcbase;
+    GCproto *pt = vararg_global_proto(L, "__va_run_noextra");
+    MSize accum_pc, resume_pc, call_pc;
+    assert(trace != NULL && rootno != 0 && addov != 0);
+    accum_pc = vararg_accum_source(pt, &resume_pc, &call_pc);
+    assert(accum_pc < pt->sizebc && call_pc < resume_pc &&
+           bc_op((BCIns)la_load32_acq((const uint32_t *)&proto_bc(pt)[resume_pc])) == BC_CGET &&
+           bc_op((BCIns)la_load32_acq((const uint32_t *)&proto_bc(pt)[accum_pc])) == BC_ADDVV);
+    lj_trace_test_reset_exit_stats();
+    run_noextra_seed(L, VA_ITERS, INT32_MAX);
+    assert(calls(1) == before_calls+VA_ITERS &&
+           native_seen[1] > before_native);
+    assert(lj_trace_test_exit_calls() > 0 &&
+           observed_trace_no[1] == rootno);
+    exit_before = lj_trace_test_first_exitno();
+    assert(lj_trace_test_first_exit_parent() == rootno &&
+           exit_before < trace_nsnap_acq(trace));
+    {
+      const SnapShot *snap = &trace_snap_acq(trace)[exit_before];
+      MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap);
+      assert(ofs <= trace_nsnapmap_acq(trace) &&
+             nent+1u+LJ_FR2 <= trace_nsnapmap_acq(trace)-ofs);
+      memcpy(&pcbase, &trace_snapmap_acq(trace)[ofs+nent], sizeof(pcbase));
+    }
+    assert(snap_ref_acq(&trace_snap_acq(trace)[exit_before])+1u == addov &&
+           (uintptr_t)(pcbase>>8) ==
+             (uintptr_t)(const void *)&proto_bc(pt)[resume_pc]);
+  }
   assert(require_native(calls, 2, "__va_run_mixed") != 0);
   test_vararg_admission_clones(L, "__va_run_mixed", "__va_mixed", 0);
   assert(require_native(calls, 2, "__va_run_mixed_pointer") != 0);
