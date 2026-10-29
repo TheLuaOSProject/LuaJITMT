@@ -41,6 +41,18 @@ the original matched probe source is
 
 The C negative mutates only private IR/snapshot copies. This remains limited
 to pure numeric ADD/SUB/MUL/DIV cones; live operations and other IR kinds stay
-closed. The selected fixture has no trailing RENAME, so rename rejection is
-covered by the admission scan but is not claimed as a separately mutated test
-case.
+closed. A follow-up private postRA mutation gives the terminal ADD an aligned
+two-word spill at slot 4 with the matching 16-byte spill area. Admission
+rejects it; a temporary counterfactual without the `ra_hasspill` check in the
+dead-node predicate admits the same mutation. The test also replaces the
+fixture's final NOP with a well-formed trailing RENAME. A control RENAME to an
+already located unrelated NUM ref passes, while renaming a reachable dead-DAG
+user is rejected; removing only the DAG suffix-rename scan admits that case.
+The native source trace itself ends in NOP, so the rename cases are private
+proof mutations rather than claims about a naturally occurring trace shape.
+
+The focused one-profile ARM64 assertion runs for the new mutations passed at
+`/Users/frityet/Scratch/ljmt-callm-dag-rename-negative.log`. The two isolated
+counterfactual failures are preserved at
+`/Users/frityet/Scratch/ljmt-callm-dag-spill-counterfactual.log` and
+`/Users/frityet/Scratch/ljmt-callm-dag-rename-counterfactual.log`.
