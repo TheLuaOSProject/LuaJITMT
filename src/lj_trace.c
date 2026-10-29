@@ -4521,8 +4521,6 @@ static int trace_arm64_first_side_snapshot_valid(
   return 1;
 }
 
-static int trace_arm64_nested_cell_mapref_valid(const IRIns *source);
-
 /* An active-MT nested side may inherit visible locals, but cannot restore a
 ** physical local-cell identity as a TValue. Snapshot generation marks such a
 ** slot SNAP_NORESTORE. Keep only the exact frame footer and already-proved
@@ -4554,16 +4552,10 @@ static int trace_arm64_nested_cell_snapshot_valid(
     if (ref < REF_FIRST || ref >= v->nins) return 0;
     {
       IRIns source = ir_load_acq(&v->ir[ref]);
-      if (!trace_arm64_nested_cell_mapref_valid(&source)) return 0;
+      if (source.o == IR_SLOAD && irt_type(source.t) == IRT_P32) return 0;
     }
   }
   return 1;
-}
-
-static int trace_arm64_nested_cell_mapref_valid(const IRIns *source)
-{
-  return source != NULL &&
-    !(source->o == IR_SLOAD && irt_type(source->t) == IRT_P32);
 }
 
 static int trace_arm64_side_certificate_valid_held(jit_State *J,
@@ -5094,8 +5086,9 @@ static int trace_arm64_nested_side_view_acq(jit_State *J, TraceNo parentno,
 
 #if defined(LJ_TRACE_TEST_HELPERS)
 /* Positive plus private-map/source corruptions for the bounded nested-cell
-** snapshot predicate. Bits 0..2 report the valid map, rejected NORESTORE
-** cell identity, and rejected P32 cell guard source respectively. */
+** snapshot predicate. Bits 0..3 report the valid parent map, rejected
+** NORESTORE cell identity, rejected mapped P32 source, and accepted private
+** map with the original mapped IR source. */
 uint32_t lj_trace_test_arm64_nested_cell_snapshot_contract(
     jit_State *J, TraceNo parentno)
 {
@@ -5142,18 +5135,18 @@ uint32_t lj_trace_test_arm64_nested_cell_snapshot_contract(
     view.snaptopslot = snap_topslot_acq(&snaps[exitno]);
     if (!trace_arm64_nested_cell_snapshot_valid(&view, NULL))
       continue;
+    if (nent > LJ_MAX_JSLOTS || view.nins >= REF_DROP) continue;
     for (i = 0; i < nent; i++) {
       SnapEntry sn = snapentry_acq(&snapmap[ofs+i]);
       MSize slot = snap_slot(sn);
-      if ((sn & UINT32_C(0x00ff0000)) == 0 &&
-          slot >= 1u+LJ_FR2 && slot < view.topslot) {
-        break;
-      }
-    }
-    if (i == nent || nent > LJ_MAX_JSLOTS) continue;
-    result |= 1u;
-    {
+      IRRef ref = snap_ref(sn);
       SnapEntry copy[LJ_MAX_JSLOTS];
+      IRIns p32source;
+      if ((sn & UINT32_C(0x00ff0000)) != 0 ||
+          slot < 1u+LJ_FR2 || slot >= view.topslot ||
+          ref < REF_FIRST || ref >= view.nins)
+        continue;
+      result |= 1u;
       memcpy(copy, &snapmap[ofs], nent*sizeof(*copy));
       bad = view;
       bad.snapmap = copy;
@@ -5162,15 +5155,36 @@ uint32_t lj_trace_test_arm64_nested_cell_snapshot_contract(
       if (!trace_arm64_nested_cell_snapshot_valid(&bad, NULL))
         result |= 2u;
       {
-        IRIns p32source;
+        SnapEntry p32map[1];
+        IRIns *ircopy = (IRIns *)calloc(ref+1u, sizeof(*ircopy));
+        TraceArm64FirstSideLoopView p32view = view;
+        if (ircopy == NULL) continue;
+        p32map[0] = sn;
         memset(&p32source, 0, sizeof(p32source));
         p32source.o = IR_SLOAD;
         p32source.t.irt = IRT_P32;
-        if (!trace_arm64_nested_cell_mapref_valid(&p32source))
-          result |= 4u;
+        ircopy[ref] = p32source;
+        p32view.ir = ircopy;
+        p32view.nins = ref+1u;
+        p32view.snapmap = p32map;
+        p32view.mapofs = 0;
+        p32view.nent = 1;
+        p32view.nsnapmap = 1;
+        p32view.topslot = slot+1u;
+        ircopy[ref] = ir_load_acq(&view.ir[ref]);
+        if (trace_arm64_nested_cell_snapshot_valid(&p32view, NULL)) {
+          result |= 8u;
+          memset(&p32source, 0, sizeof(p32source));
+          p32source.o = IR_SLOAD;
+          p32source.t.irt = IRT_P32;
+          ircopy[ref] = p32source;
+          if (!trace_arm64_nested_cell_snapshot_valid(&p32view, NULL))
+            result |= 4u;
+        }
+        free(ircopy);
       }
+      if (result == 15u) return result;
     }
-    if (result == 7u) return result;
   }
   return result;
 }

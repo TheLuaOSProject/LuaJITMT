@@ -121,17 +121,24 @@ cell operations. The exact parent map is checked for bounds and supported
 NORESTORE forms; mapped `IRT_P32` SLOADs are refused as cell identities. The
 existing source, semantic, and post-RA checks continue to bind CGET/CSET to
 their rooted helpers. The focused production contract exercises a real
-parent map plus private NORESTORE and P32-source mutations; it passed with
-contract bitmask 7. The P32-source mutation is synthetic, while the ordinary
-peer fixture itself has no captured cell.
+parent map plus independent private NORESTORE and mapped P32-source
+mutations. The P32-source check first accepts a one-entry private view using
+the original real map slot/ref and copied source IR, then changes that mapped
+IR to `SLOAD/P32` and requires the full snapshot validator to reject it. The
+contract requires bitmask 15; the ordinary peer fixture itself has no
+captured cell. The current focused run reached the separate append/flush race
+fixture after this nested-cell assertion passed; it then hit the independently
+diagnosed test-order timeout (`append-race request timeout`, `pause=0`). The
+preserved log is listed below. Earlier `contract11` completed the full
+first-side matrix before the positive-control bit was added.
 
 Validation evidence:
 
-- `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/arm64-peer-cellmap-fixed.tsv`
-- `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/first-side-cell-proof-contract4.log`
-- `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/x64-peer-build.log` (initially failed before the target guard below)
+- `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/arm64-peer-final.tsv`
+- `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/first-side-cell-proof-contract12.log`
+- `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/x64-peer-final-build.log`
 - Current non-ARM compatibility build: AppleClang `-arch x86_64`, `-DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT`, built successfully after guarding the ARM64 certificate traversal.
-- Current x86_64/Rosetta ordinary peer probe: `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/x64-peer-after-guard.tsv`; it observed nested trace 5 with immediate parent trace 3 and 32 native nested exits after GC.
+- Current x86_64/Rosetta ordinary peer probe: `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/ordinary/x64-peer-final.tsv`; it observed nested trace 5 with immediate parent trace 3 and 32 native nested exits after GC. The probe rechecks candidate JFORL ownership, each parent/link relation, and exact mcode addresses after full collections and native re-entry.
 
 The nested retirement walk uses depth-ordered certificate validation only on
 ARM64, where `GCtrace` carries the ARM64 side certificate. Non-ARM targets

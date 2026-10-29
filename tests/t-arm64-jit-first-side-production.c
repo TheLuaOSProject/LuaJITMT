@@ -579,10 +579,10 @@ static void expect_nested_root_side(lua_State *L, jit_State *J)
   {
     uint32_t cell_contract =
       lj_trace_test_arm64_nested_cell_snapshot_contract(J, set.parentno);
-    if (cell_contract != 7u)
+    if (cell_contract != 15u)
       fprintf(stderr, "nested cell snapshot contract=%u parent=%u\n",
         (unsigned)cell_contract, (unsigned)set.parentno);
-    assert(cell_contract == 7u);
+    assert(cell_contract == 15u);
   }
   lua_gc(L, LUA_GCCOLLECT, 0);
 
