@@ -50,6 +50,7 @@ typedef struct LJArm64ABIArg {
 typedef struct LJArm64ABISignature {
   LJArm64ABIArg arg[LJ_ARM64_ABI_MAX_ARGS];
   CTypeID function_id;
+  CTypeID result_declared_id;
   CTypeID result_id;
   uint8_t result_class;
   uint8_t result_kind;
@@ -189,6 +190,25 @@ static int lj_ccall_arm64_integer_aggregate_class(CTState *cts, CTypeID id,
   CTSize size;
   CTSize field_end = 0;
   unsigned fields = 0;
+  CTypeID declared_id = id;
+  unsigned depth;
+  /* Preserve attributes from the public CType: an aligned wrapper can alter
+  ** both the native result channel and the allocation geometry. */
+  for (depth = 0; depth < 32; depth++) {
+    CType declared;
+    if (lj_ctype_snapshot(cts, declared_id, &declared) <= 0) return 0;
+    info = ctype_info_acq(&declared);
+    if (ctype_isattrib(info) && ctype_isxattrib(info, CTA_ALIGN) &&
+	ctype_align(info) > 3)
+      return 0;
+    if (!(ctype_isattrib(info) || ctype_istypedef(info))) {
+      if (ctype_align(info) > 3) return 0;
+      break;
+    }
+    declared_id = ctype_cid(info);
+    if (declared_id == 0) return 0;
+  }
+  if (depth == 32) return 0;
   if (!lj_ccall_arm64_raw_type(cts, id, &ct, rawid)) return 0;
   info = ctype_info_acq(&ct);
   size = ctype_size_acq(&ct);
@@ -325,10 +345,16 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
   memset(&result, 0, sizeof(result));
   abi->function_id = rawid;
   abi->is_vararg = (uint8_t)((info & CTF_VARARG) != 0);
-  abi->result_id = ctype_cid(info);
-  if (!lj_ccall_arm64_scalar_class(cts, abi->result_id, 1, &result,
-				   &rawid))
+  abi->result_declared_id = ctype_cid(info);
+  abi->result_id = abi->result_declared_id;
+  if (!lj_ccall_arm64_scalar_class(cts, abi->result_declared_id, 1,
+                                   &result, &rawid)) {
+    if (!lj_ccall_arm64_integer_aggregate_class(cts,
+          abi->result_declared_id, &result, &rawid))
       return 0;
+    result.kind = LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE;
+    result.is_unsigned = 1;
+  }
   abi->result_id = rawid;
   abi->result_class = result.cls;
   abi->result_kind = result.kind;
