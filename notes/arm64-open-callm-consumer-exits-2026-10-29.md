@@ -22,7 +22,9 @@ native entry into the same trace. It repeats the consumer-B exit and consumer-A
 native reentry after a full collection, with the MT peer still live. The trace
 remains runnable with the same mcode pointer and size throughout. The ordinary
 Lua companion checks the one/two/three-result semantic oracle with both
-consumers; it makes no native-execution claim.
+consumers; it makes no native-execution claim. The C fixture also compares
+the trace's non-reused ARM64 allocation generation and a byte-for-byte mcode
+copy across both exits, GC, and reentry.
 
 Validation: `tools/ci/arm64_jit_open_callm_exits_contract.sh` passed ARM64 and
 arm64e assertion and release profiles. Each profile passed three runtime
