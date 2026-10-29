@@ -63,3 +63,23 @@ mapping failure from retirement-node allocation and the configured-size limit.
 Evidence is retained in `/Users/frityet/Scratch/ljmt-cap-investigation-20261029/`.
 The current component passes do not supersede this blocker or constitute a
 complete combined gate. Main promotion remains held.
+
+## Pointer results and allocation diagnosis
+
+`c35f0f38f` integrates `e1509da33`: pointer fields in direct small aggregate
+results. The combined aggregate contract passes ARM64/arm64e assertion and
+release profiles (`combined-pointer-four-profile.log`) and restores the
+ordinary ARM64 build. This does not widen pointer-containing argument or
+indirect-result admission.
+
+The allocation failure is now localized to `mcode_alloc` range placement, not
+retirement-node allocation or `maxmcode`. On original fixture execution,
+16 advisory MAP_JIT hints all returned the same non-null mapping
+`0x107a10000`, outside the active window `0xfeac0000..0x106ab0000`; it was
+freed each time. With only 192KiB allocated, exhaustion of those probes caused
+MCODEAL and a full trace flush. The window is approximately 128MiB
+(`LJ_TARGET_JUMPRANGE=27`), not 32MiB. A reported errno after successful mmap
+is stale and is not evidence of an mmap syscall failure. Exact evidence is
+`baseline-allocator-sites.log` in the capacity-investigation directory,
+lines 83–101. A range-preserving allocator correction is in progress; this
+component pass does not release the main promotion hold.
