@@ -351,7 +351,7 @@ int main(void)
   childno = trace_traceno_acq(child);
   { uint32_t contract = lj_trace_test_arm64_side_scalar_copy_contract(J,
       childno);
-    const uint32_t ancestry_mutations = 0xf87f0000u;
+    const uint32_t ancestry_mutations = 0xf8ff0000u;
     if ((contract & ancestry_mutations) != ancestry_mutations)
       fprintf(stderr, "ancestry mutations expected=%08x observed=%08x\n",
               ancestry_mutations, contract);

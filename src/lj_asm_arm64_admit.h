@@ -10693,7 +10693,7 @@ static int arm64_side_entry_sload_valid(const LJArm64SideIRView *side,
 	  load->o != IR_SLOAD || load->op2 != IRSLOAD_TYPECHECK ||
 	  load->op1 < 1u+LJ_FR2 || load->op1 >= side->parent_nslots ||
 	  side->parent_nslots > LJ_MAX_JSLOTS ||
-	  side->parent_topslot > side->parent_nslots ||
+	  side->parent_nslots > side->parent_topslot+1u+LJ_FR2 ||
 	  (load->t.irt & ~(IRT_TYPE|IRT_GUARD|IRT_ISPHI)) != 0 ||
 	  !(load->t.irt & IRT_GUARD))
 	return 0;
@@ -19985,6 +19985,9 @@ static int arm64_side_parent_forl_norestore_valid(
 	  source->op2 == (IRSLOAD_READONLY|IRSLOAD_INHERIT);
 }
 
+/* topslot reserves the complete Lua frame; nslots records the current live
+** prefix including its frame header. Dead temporaries can make topslot larger
+** than nslots. Only the live prefix is copied, within the reserved frame. */
 static int arm64_side_parent_snapshot_valid(const LJArm64SideIRView *side)
 {
   uint64_t pcbase;
@@ -20003,7 +20006,7 @@ static int arm64_side_parent_snapshot_valid(const LJArm64SideIRView *side)
 	  snap_topslot_acq(side->parent_snap) != side->parent_topslot ||
 	  side->parent_topslot != side->root_topslot ||
 	  snap_nslots_acq(side->parent_snap) < 1u+LJ_FR2 ||
-	  snap_topslot_acq(side->parent_snap) > snap_nslots_acq(side->parent_snap))
+	  side->parent_nslots > side->parent_topslot+1u+LJ_FR2)
     return 0;
   nent = snap_nent_acq(side->parent_snap);
   if (nent > LJ_MAX_JSLOTS || nent > side->parent_nslots ||
