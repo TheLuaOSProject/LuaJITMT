@@ -566,6 +566,8 @@ static IRType arm64_callxs_result_type(const LJArm64ABISignature *abi)
 {
   if (abi->result_kind == LJ_ARM64_ABI_KIND_VOID)
     return IRT_NIL;
+  if (abi->result_kind == LJ_ARM64_ABI_KIND_INDIRECT_AGGREGATE)
+    return IRT_NIL;
   if (abi->result_kind == LJ_ARM64_ABI_KIND_POINTER)
     return IRT_P64;
   if (abi->result_kind == LJ_ARM64_ABI_KIND_FLOAT)
@@ -599,7 +601,8 @@ static IRType arm64_callxs_result_type(const LJArm64ABISignature *abi)
 ** to Lua in a fresh CData root. The argument plan remains independent. */
 static int arm64_callxs_result_boxed(const LJArm64ABISignature *abi)
 {
-  return (abi->result_class == LJ_ARM64_ABI_GPR && abi->result_size == 8 &&
+  return abi->result_kind == LJ_ARM64_ABI_KIND_INDIRECT_AGGREGATE ||
+    (abi->result_class == LJ_ARM64_ABI_GPR && abi->result_size == 8 &&
     (abi->result_kind == LJ_ARM64_ABI_KIND_POINTER ||
      abi->result_kind == LJ_ARM64_ABI_KIND_INTEGER)) ||
     (abi->result_class == LJ_ARM64_ABI_GPR &&
@@ -612,9 +615,17 @@ static int arm64_callxs_result_boxed(const LJArm64ABISignature *abi)
      (abi->result_size == 4 || abi->result_size == 8));
 }
 
+static int arm64_callxs_result_indirect(const LJArm64ABISignature *abi)
+{
+  return abi->result_class == LJ_ARM64_ABI_NONE &&
+         abi->result_kind == LJ_ARM64_ABI_KIND_INDIRECT_AGGREGATE &&
+         abi->result_size > 16 && abi->result_size <= 32;
+}
+
 static CTypeID arm64_callxs_box_ctype(const LJArm64ABISignature *abi)
 {
-  return (abi->result_kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ||
+  return (abi->result_kind == LJ_ARM64_ABI_KIND_INDIRECT_AGGREGATE ||
+          abi->result_kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ||
           abi->result_kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER) ?
     abi->result_declared_id : abi->result_id;
 }
@@ -917,6 +928,78 @@ static int arm64_callxs_signature_for_call(CTState *cts, const IRIns *ir,
 	return found;
 }
 
+static int arm64_callxs_arglist(const IRIns *ir, IRRef nk, IRRef nins,
+				IRRef call, IRRef *values, unsigned *countp);
+
+/* Independently bind an AAPCS64 hidden result pointer to one CNEW box. The
+** pointer is CARG zero only; visible ABI arguments keep their original order
+** and CType indices. It must not escape into a snapshot or another operation. */
+static int arm64_callxs_sret_payload(CTState *cts, const IRIns *ir,
+		IRRef nk, IRRef nins, IRRef call, IRRef boxref,
+		CTypeID boxctype, IRRef *payloadp)
+{
+	IRRef values[LJ_ARM64_ABI_MAX_ARGS], payload, node;
+	IRIns box, addr, callins;
+	LJArm64ABISignature abi;
+	unsigned nargs, uses = 0, i;
+	int64_t offset = -999;
+	if (boxref < REF_FIRST || boxref >= call ||
+	    (box = ir_load_acq(&ir[boxref])).o != IR_CNEW ||
+	    irt_type(box.t) != IRT_CDATA || !irt_isguard(box.t) ||
+	    box.op2 != REF_NIL || box.op1 < nk ||
+	    !arm64_callxs_kint_value(ir, nk, box.op1, NULL) ||
+	    ir_load_acq(&ir[box.op1]).i != (int32_t)boxctype ||
+	    (callins = ir_load_acq(&ir[call])).o != IR_CALLXS ||
+	    !arm64_callxs_signature_for_call(cts, ir, nk, nins,
+	      call, &abi, NULL)) return 0;
+	{
+	  int argok = arm64_callxs_arglist(ir,nk,nins,call,values,&nargs);
+	  if (!arm64_callxs_result_indirect(&abi) ||
+	      arm64_callxs_box_ctype(&abi) != boxctype ||
+	      irt_type(callins.t) != IRT_NIL || !argok ||
+	      nargs != (unsigned)abi.nargs+1u || values[0] < REF_FIRST ||
+	      values[0] >= call) {
+	    return 0;
+	  }
+	}
+	payload = values[0];
+	addr = ir_load_acq(&ir[payload]);
+	if (addr.o != IR_ADD || irt_type(addr.t) != IRT_P64 ||
+	    (addr.t.irt & ~(IRT_TYPE|IRT_ISPHI)) != 0 || addr.op1 != boxref ||
+	    !arm64_callxs_offset_value(ir, nk, addr.op2, &offset) ||
+	    offset != (int64_t)sizeof(GCcdata)) return 0;
+	for (i = 1; i < nargs; i++) if (values[i] == payload) return 0;
+	/* Reconstruct the chain direction and ensure this box payload is exactly
+	** the first CARG value (or the sole call operand when there are no visible
+	** arguments). */
+	node = callins.op1;
+	while (node >= REF_FIRST && node < call) {
+		IRIns carg = ir_load_acq(&ir[node]);
+		if (carg.o != IR_CARG) break;
+		if (carg.op1 == payload) { node = payload; break; }
+		node = carg.op1;
+	}
+	if (node != payload) {
+	  return 0;
+	}
+	for (node = payload+1u; node < call; node++) {
+		IRIns use = ir_load_acq(&ir[node]);
+	if ((use.o == IR_CARG && (use.op1 == payload || use.op2 == payload)) ||
+	    (use.o == IR_CALLXS && use.op1 == payload)) {
+			if (use.o == IR_CARG && use.op1 != payload) return 0;
+			uses++;
+		} else if (use.op1 == payload || use.op2 == payload) {
+			return 0;
+		}
+	}
+	/* A sole CARG can be elided by the IR builder, leaving CALLXS.op1 as the
+	** pointer itself. Count that direct operand exactly once as well. */
+	if (callins.op1 == payload) uses++;
+	if (uses != 1u) return 0;
+	if (payloadp) *payloadp = payload;
+	return 1;
+}
+
 /* Prove that one CNEW is the root box allocated for one boxed-scalar
 ** CALLXS. The call's XSTORE must use this box and the exact GCcdata payload
 ** offset; the signature's result CType must match the allocation CType. */
@@ -958,6 +1041,15 @@ static int arm64_callxs_box_call(CTState *cts, const IRIns *ir, IRRef nk,
 			return 0;
 		found = callref;
 	}
+	for (ref = REF_FIRST; ref < nins; ref++) {
+		IRIns call = ir_load_acq(&ir[ref]);
+		IRRef payload;
+		if (call.o != IR_CALLXS ||
+		    !arm64_callxs_sret_payload(cts, ir, nk, nins, ref, boxref,
+		      (CTypeID)ctype, &payload)) continue;
+		if (found != 0) return 0;
+		found = ref;
+	}
 	if (found == 0) return 0;
 	if (callrefp) *callrefp = found;
 	if (ctypep) *ctypep = (CTypeID)ctype;
@@ -981,9 +1073,25 @@ static int arm64_callxs_cdata_phi(CTState *cts, const IRIns *ir,
 	for (i = 0; i < 2; i++) {
 		IRIns input = ir_load_acq(&ir[refs[i]]);
 		if (input.o == IR_CNEW) {
-			if (!arm64_callxs_box_call(cts, ir, nk, nins, refs[i],
-			      NULL, &ctypes[i]))
-				return 0;
+			IRRef callref, found = 0;
+			if (arm64_callxs_box_call(cts, ir, nk, nins, refs[i],
+			      NULL, &ctypes[i])) continue;
+			for (callref = refs[i]+1u; callref < ref; callref++) {
+				IRIns call = ir_load_acq(&ir[callref]);
+				LJArm64ABISignature abi;
+				if (call.o != IR_CALLXS ||
+				    !arm64_callxs_signature_for_call(cts, ir, nk, nins,
+				      callref, &abi, NULL) ||
+				    !arm64_callxs_result_indirect(&abi) ||
+				    arm64_callxs_box_ctype(&abi) == 0 ||
+				    !arm64_callxs_sret_payload(cts, ir, nk, nins, callref,
+				      refs[i], arm64_callxs_box_ctype(&abi), NULL))
+					continue;
+				if (found != 0) return 0;
+				found = callref;
+				ctypes[i] = arm64_callxs_box_ctype(&abi);
+			}
+			if (found == 0) return 0;
 		} else if (input.o != IR_SLOAD || irt_type(input.t) != IRT_CDATA ||
 			   !irt_isguard(input.t) || input.op1 < 1u+LJ_FR2 ||
 			   input.op2 & ~(IRSLOAD_PARENT|IRSLOAD_FRAME|IRSLOAD_TYPECHECK|
@@ -991,6 +1099,60 @@ static int arm64_callxs_cdata_phi(CTState *cts, const IRIns *ir,
 	}
 	if (ctypes[0] != 0 && ctypes[1] != 0 && ctypes[0] != ctypes[1])
 		return 0;
+	return 1;
+}
+
+/* Independent allocated-code proof for the Darwin X8 result operand. The
+** semantic walk proves the declared CNEW payload; this pass separately binds
+** the same box and visible CARG window and requires its pointer live in X8 at
+** CALLXS, outside the ordinary X0-X7 argument allocation. */
+static int arm64_postra_callxs_sret_payload(const LJArm64PostRAView *view,
+		IRRef semantic_nins, IRRef call, IRRef boxref, CTypeID boxctype,
+		IRRef *payloadp)
+{
+	IRRef values[LJ_ARM64_ABI_MAX_ARGS], payload, ref;
+	IRIns box, addr, callins;
+	LJArm64ABISignature abi;
+	unsigned nargs, uses = 0, i;
+	int64_t offset = -999;
+	if (view == NULL || view->cts == NULL || boxref < REF_FIRST ||
+	    boxref >= call || call >= semantic_nins) return 0;
+	box = ir_load_acq(&view->ir[boxref]);
+	if (box.o != IR_CNEW || irt_type(box.t) != IRT_CDATA ||
+	    !irt_isguard(box.t) || box.op2 != REF_NIL || box.op1 < view->nk ||
+	    !arm64_callxs_kint_value(view->ir, view->nk, box.op1, NULL) ||
+	    (CTypeID)ir_load_acq(&view->ir[box.op1]).i != boxctype) return 0;
+	callins = ir_load_acq(&view->ir[call]);
+	if (callins.o != IR_CALLXS || irt_type(callins.t) != IRT_NIL ||
+	    !arm64_callxs_signature_for_call(view->cts, view->ir, view->nk,
+	      semantic_nins, call, &abi, NULL) ||
+	    !arm64_callxs_result_indirect(&abi) ||
+	    arm64_callxs_box_ctype(&abi) != boxctype) return 0;
+	if (!arm64_callxs_arglist(view->ir, view->nk, semantic_nins,
+	      call, values, &nargs) || nargs != (unsigned)abi.nargs+1u) return 0;
+	payload = values[0];
+	if (payload < REF_FIRST || payload >= call) return 0;
+	addr = ir_load_acq(&view->ir[payload]);
+	if (addr.o != IR_ADD || irt_type(addr.t) != IRT_P64 ||
+	    (addr.t.irt & ~(IRT_TYPE|IRT_ISPHI)) != 0 || addr.op1 != boxref ||
+	    !arm64_callxs_offset_value(view->ir, view->nk, addr.op2, &offset) ||
+	    offset != (int64_t)sizeof(GCcdata) || !ra_hasreg(addr.r) ||
+	    !rset_test(RSET_GPR, addr.r)) return 0;
+	for (i = 1; i < nargs; i++) {
+		IRIns arg = ir_load_acq(&view->ir[values[i]]);
+		if (values[i] == payload ||
+		    (ra_hasreg(arg.r) && arg.r == RID_X8)) return 0;
+	}
+	for (ref = payload+1u; ref < call; ref++) {
+		IRIns use = ir_load_acq(&view->ir[ref]);
+		if (use.op1 == payload || use.op2 == payload) {
+			if (use.o != IR_CARG || use.op1 != payload) return 0;
+			uses++;
+		}
+	}
+	if (callins.op1 == payload) uses++;
+	if (uses != 1u) return 0;
+	if (payloadp) *payloadp = payload;
 	return 1;
 }
 
@@ -1966,6 +2128,7 @@ static int arm64_callxs_vararg_sources(CTState *cts, const GCtrace *T, IRRef xsa
   return 1;
 }
 
+
 /* A table hit may retry only its own source read, with the table/key restored.
 ** The following snapshot carries the fetched value before any foreign effect. */
 static int arm64_table_ir_slot(const GCtrace *T, MSize sn, MSize slot,
@@ -2210,7 +2373,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
   IRRef boxref = 0;
   CTypeID box_ctype = 0;
   IRType call_result_type = IRT_NIL;
-  int result_is_cdata = 0, box_store_seen = 0;
+  int result_is_cdata = 0, result_is_indirect = 0, box_store_seen = 0;
   unsigned box_store_lanes = 0;
   unsigned result_hfa_count = 0;
   unsigned result_hfa_offset[4] = { 0, 0, 0, 0 };
@@ -2311,7 +2474,8 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	  return 0;
 	if (ref <= call || xsave >= enter || enter >= call)
 	  return 0;
-	if ((result_is_cdata && (!boxref || !box_store_seen)) ||
+	if ((result_is_cdata && (!boxref ||
+	     (result_is_indirect ? box_store_seen : !box_store_seen))) ||
 	    (!result_is_cdata && (boxref || box_store_seen)))
 	  return 0;
 	if (result_hfa_count > 1 &&
@@ -2428,7 +2592,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	  box_store_lanes = 0;
 	  result_hfa_count = 0;
 	  memset(result_hfa_offset, 0, sizeof(result_hfa_offset));
-	  result_is_cdata = 0;
+	  result_is_cdata = result_is_indirect = 0;
 	}
       }
       break;
@@ -2457,6 +2621,16 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	return 0;
       if (!arm64_callxs_arglist(T->ir, nk, nins, ref, values, &rawcount) ||
 	  rawcount > LJ_ARM64_ABI_MAX_ARGS) return 0;
+      result_is_indirect = arm64_callxs_result_indirect(&abi);
+      if (result_is_indirect) {
+	int payload_ok = boxref && arm64_callxs_sret_payload(cts, T->ir,
+	  nk, nins, ref, boxref, box_ctype, NULL);
+	if (!payload_ok || rawcount == 0) {
+	  return 0;
+	}
+	rawcount--;
+	for (i = 0; i < rawcount; i++) values[i] = values[i+1u];
+      }
       if (rawcount > abi.nargs) {
 	if (!abi.is_vararg || rawcount <= abi.nargs+1u ||
 	    values[abi.nargs] != REF_NIL) return 0;
@@ -2769,7 +2943,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	    box_store_lanes = 0;
 	    result_hfa_count = 0;
 	    memset(result_hfa_offset, 0, sizeof(result_hfa_offset));
-	    result_is_cdata = 0;
+	    result_is_cdata = result_is_indirect = 0;
 	  }
       break;
     case IR_LT: case IR_GE: case IR_LE: case IR_GT:
@@ -2817,7 +2991,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
       break;
     }
     case IR_XSTORE:
-      if (state != CALLXS_ACTIVE || !result_is_cdata || !boxref ||
+      if (state != CALLXS_ACTIVE || !result_is_cdata || result_is_indirect || !boxref ||
 	  ins.op1 < REF_FIRST || ins.op1 >= ref)
 	return 0;
       {
@@ -4910,6 +5084,21 @@ static int arm64_postra_callxs_cdata_phi(const LJArm64PostRAView *view,
 		    ctype <= 0)
 			return 0;
 		ctypes[i] = (CTypeID)ctype;
+		for (store_ref = boxrefs[i]+1u; store_ref < ref; store_ref++) {
+			IRIns call = ir_load_acq(&view->ir[store_ref]);
+			LJArm64ABISignature abi;
+			if (call.o != IR_CALLXS ||
+			    !arm64_callxs_signature_for_call(view->cts, view->ir,
+				view->nk, nins, store_ref, &abi, NULL) ||
+			    !arm64_callxs_result_indirect(&abi) ||
+			    arm64_callxs_box_ctype(&abi) != ctypes[i] ||
+			    !arm64_postra_callxs_sret_payload(view, nins, store_ref,
+				boxrefs[i], ctypes[i], NULL))
+				continue;
+			if (found != 0) return 0;
+			found = store_ref;
+		}
+		if (found != 0) continue;
 		for (store_ref = REF_FIRST; store_ref < nins; store_ref++) {
 			IRIns store = ir_load_acq(&view->ir[store_ref]);
 			IRIns payload;
@@ -6148,7 +6337,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	IRRef scalar_read = 0;
 	IRRef boxref = 0;
 	CTypeID box_ctype = 0;
-	int box_store_seen = 0, result_is_cdata = 0;
+	int box_store_seen = 0, result_is_cdata = 0, result_is_indirect = 0;
 	unsigned box_store_lanes = 0;
 	unsigned result_hfa_count = 0, result_hfa_offset[4] = { 0, 0, 0, 0 };
 	int result_is_u32 = 0;
@@ -6312,6 +6501,15 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    if (!arm64_callxs_arglist(view->ir, view->nk, semantic_nins,
 		ref, values, &rawcount) || rawcount > LJ_ARM64_ABI_MAX_ARGS)
 	      return 0;
+	    result_is_indirect = arm64_callxs_result_indirect(&abi);
+	    if (result_is_indirect) {
+	      int payload_ok = boxref && arm64_postra_callxs_sret_payload(view,
+		semantic_nins, ref, boxref, box_ctype, NULL);
+	      if (!payload_ok || rawcount == 0)
+		return 0;
+	      rawcount--;
+	      for (i = 0; i < rawcount; i++) values[i] = values[i+1u];
+	    }
 	    if (rawcount > abi.nargs) {
 	      if (!abi.is_vararg || rawcount <= abi.nargs+1u ||
 		  values[abi.nargs] != REF_NIL) return 0;
@@ -6422,7 +6620,8 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    if (protocol != 4 || ins.op1 != REF_NIL ||
 		irt_type(ins.t) != IRT_INT || !irt_isguard(ins.t) ||
 		ref <= active_call ||
-		(result_is_cdata && (boxref == 0 || !box_store_seen)) ||
+		(result_is_cdata && (boxref == 0 ||
+		 (result_is_indirect ? box_store_seen : !box_store_seen))) ||
 		(!result_is_cdata && (boxref != 0 || box_store_seen)))
 	      return 0;
 	    if (result_hfa_count > 1 &&
@@ -6484,7 +6683,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    box_store_lanes = 0;
 	    result_hfa_count = 0;
 	    memset(result_hfa_offset, 0, sizeof(result_hfa_offset));
-	    result_is_cdata = 0;
+	    result_is_cdata = result_is_indirect = 0;
 	  } else if (ins.o == IR_EQ) {
 	    if (!irt_isguard(ins.t) || ins.op1 >= ref || ins.op2 >= ref ||
 		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref, ins.op1) ||
@@ -6775,7 +6974,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    IRIns payload;
 	    int64_t offset;
 	    unsigned member = 0;
-	    if (protocol != 4 || !result_is_cdata || boxref == 0 ||
+	    if (protocol != 4 || !result_is_cdata || result_is_indirect || boxref == 0 ||
 		ins.op1 >= ref || ins.op2 >= ref ||
 		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref, ins.op1))
 	      return 0;
@@ -6933,6 +7132,21 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	  if (!found_type || !arm64_callxs_arglist(view->ir, view->nk,
 	      semantic_nins, call, values, &rawcount) ||
 	      rawcount > LJ_ARM64_ABI_MAX_ARGS) return 0;
+	  if (arm64_callxs_result_indirect(&abi)) {
+	    IRIns payload;
+	    IRRef result_box;
+	    if (rawcount != (unsigned)abi.nargs+1u ||
+		rawcount == 0 || values[0] < REF_FIRST || values[0] >= call)
+	      return 0;
+	    payload = ir_load_acq(&view->ir[values[0]]);
+	    result_box = payload.op1;
+	    if (payload.o != IR_ADD || irt_type(payload.t) != IRT_P64 ||
+		!arm64_postra_callxs_sret_payload(view, semantic_nins, call,
+		  result_box, arm64_callxs_box_ctype(&abi), NULL))
+	      return 0;
+	    rawcount--;
+	    for (i = 0; i < rawcount; i++) values[i] = values[i+1u];
+	  }
 	  if (rawcount > abi.nargs) {
 	    if (!abi.is_vararg || rawcount <= abi.nargs+1u ||
 		values[abi.nargs] != REF_NIL) return 0;
@@ -7090,6 +7304,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 ** restoration. This is deliberately independent of recorder state: the same
 ** bounded scan runs while assembling and after root entry publishes jit_base
 ** as its trace-body lifetime lease. */
+
 static int arm64_postra_nonloop_admit(const LJArm64PostRAView *view,
 	IRRef *semantic_ninsp)
 {
