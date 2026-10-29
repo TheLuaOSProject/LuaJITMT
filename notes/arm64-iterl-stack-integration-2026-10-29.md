@@ -16,6 +16,15 @@ DynASM JIT condition used by JFORL. The gate was restarted from its beginning
 at that corrected production revision and has passed the no-JIT build stage.
 Its final outcome is still pending at this notes checkpoint.
 
+The corrected run passed through the complete callback/profile contract and
+the scalar FUNCF contract. It then stopped before native-FORL execution on a
+source-text assertion that still expected the old three-way admission-marker
+selector. Test-only commit `69155ed62` updates that assertion to include the
+ITERL marker while preserving the FORL checks. A saved continuation begins
+at the failed native-FORL contract; its production source is unchanged from
+`aa8ec9e2b`. This is resumed coverage, not an uninterrupted gate pass. The
+current passing callback run does not explain the older profiling timeout.
+
 Evidence:
 
 - `/Users/frityet/Scratch/ljmt-hfa-multilane-integrated-20261029/arguments-integrated.log`
