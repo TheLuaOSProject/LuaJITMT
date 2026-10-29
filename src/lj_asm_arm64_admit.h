@@ -18473,20 +18473,42 @@ static int arm64_side_immediate_parent_valid(
 	const LJArm64SideIRView *side, const GCtrace *owner)
 {
 	IRIns base;
+	MSize i, count;
 	if (!side || !owner || side->parent == 0 || side->root == 0 ||
-	    owner->root != side->root || side->parent == side->traceno)
+	    owner->root != side->root || side->parent == side->traceno ||
+	    side->root_generation == 0 || !side->parent_ancestry ||
+	    side->parent_ancestry_count > LJ_ARM64_SIDE_MAX_ANCESTRY ||
+	    side->exitno >= side->parent_nsnap)
 	  return 0;
+	count = side->parent_ancestry_count;
 	if (side->parent == side->root)
-	  return 1;
+	  return count == 0;
+	if (count == 0) return 0;
 	base = ir_load_acq(&side->ir[REF_BASE]);
-	return base.o == IR_BASE && base.t.irt == IRT_PGC &&
-	  (TraceNo)base.op1 == side->parent && (ExitNo)base.op2 == side->exitno &&
-	  side->parent_base.o == IR_BASE &&
-	  side->parent_base.t.irt == IRT_PGC &&
-	  (TraceNo)side->parent_base.op1 == side->root &&
-	  (MSize)side->parent_base.op2 < side->parent_root_nsnap &&
-	  side->parent_root == side->root && side->parent_link == side->root &&
-	  side->parent_linktype == LJ_TRLINK_ROOT;
+	if (base.o != IR_BASE || base.t.irt != IRT_PGC ||
+	    (TraceNo)base.op1 != side->parent || (ExitNo)base.op2 != side->exitno ||
+	    side->parent_root != side->root || side->parent_link != side->root ||
+	    side->parent_linktype != LJ_TRLINK_ROOT)
+	  return 0;
+	for (i = 0; i < count; i++) {
+	  const LJArm64SideAncestor *row = &side->parent_ancestry[i];
+	  TraceNo expected_parent = i+1u < count ?
+	    side->parent_ancestry[i+1u].traceno : side->root;
+	  uint64_t expected_parent_generation = i+1u < count ?
+	    side->parent_ancestry[i+1u].generation : side->root_generation;
+	  if (row->generation == 0 || row->parent_generation == 0 ||
+	      row->traceno == 0 || row->traceno == side->root ||
+	      (i == 0 && row->traceno != side->parent) ||
+	      row->rootno != side->root || row->parentno != expected_parent ||
+	      row->parent_generation != expected_parent_generation ||
+	      row->parent_nsnap == 0 || row->exitno >= row->parent_nsnap ||
+	      row->base.o != IR_BASE || row->base.t.irt != IRT_PGC ||
+	      (TraceNo)row->base.op1 != row->parentno ||
+	      (ExitNo)row->base.op2 != row->exitno)
+	    return 0;
+	}
+	return memcmp(&side->parent_base, &side->parent_ancestry[0].base,
+	  sizeof(IRIns)) == 0;
 }
 
 static int arm64_side_scalar_context_ir(const jit_State *J,

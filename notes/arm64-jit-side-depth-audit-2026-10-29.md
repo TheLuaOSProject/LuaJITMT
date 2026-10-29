@@ -1,157 +1,84 @@
-# ARM64 deeper side-trace depth audit
+# ARM64 deeper side-trace ancestry
 
-## Question and probe
+## Probe and initial gap
 
-This audit asks whether ordinary LuaJIT records a chain deeper than the
-currently supported root → direct side → nested side. It changes no production
-code. `bench/jit-side-depth-probe.lua` uses four independent numeric conditions
-inside a numeric loop. The phases flip one condition at a time:
+`bench/jit-side-depth-probe.lua` uses four independent numeric conditions
+inside a numeric loop. Its phases warm the root, then select three successive
+cold paths. A separate interpreted copy is the oracle; a channel-waiting MT
+peer remains attached. The probe identifies the candidate root from its
+`JFORL`, follows each side's `IR_BASE` `(parent, exit)`, checks final
+`linktype/link`, and records `util.tracemc` identities across full GC and
+reentry.
 
-1. `(a,b,c,d)=(1,1,1,1)` warms the candidate root.
-2. `(2,1,1,1)` selects the root's cold `a` path.
-3. `(2,2,1,1)` selects the next cold `b` path.
-4. `(2,2,2,1)` selects the next cold `c` path.
-5. After full GC, `(2,2,2,2)` changes the deepest `d` guard to force a cold
-   exit from the deepest retained trace.
+The initial assert-enabled x86_64/Rosetta run produced three side levels while
+the initial ARM64 run produced two. The original logs are
+`/Users/frityet/Scratch/ljmt-side-depth-audit-20261029/x64-final.log` and
+`/Users/frityet/Scratch/ljmt-side-depth-audit-20261029/arm64-run1.log`.
+That initial difference was a real source/ancestry admission gap, not an
+aggregate exit-count inference.
 
-The oracle is a separate interpreted copy. A channel-waiting MT peer is live
-from before warmup through the final checks. The probe discovers the exact root
-from the candidate's `JFORL`, reads each trace's `IR_BASE` `(parent, exit)` to
-construct ancestry, and independently checks the final `linktype/link`. It
-captures `util.tracemc` addresses and verifies the same root and child code
-identities after collections and post-GC execution. Once the deepest graph is
-present it raises `hotexit` to avoid recording additional traces while testing
-the deepest cold edge; this changes recording frequency only.
+## Implementation and current evidence
 
-## Evidence
+The copied semantic and post-RA side views now carry an immutable ancestry
+chain with each row binding the side generation, immediate parent generation
+and snapshot count, exact `IR_BASE`, trace number, parent number, canonical
+root number, and selected exit. Both admission passes check every row
+independently while retaining the final canonical root link. Private mutations
+for skipped ancestry, a foreign root, and a stale parent generation must fail
+in both passes.
 
-The assert-enabled x86_64/Rosetta ordinary build produced a three-side chain:
-It was built with `TARGET_FLAGS=-arch x86_64`,
-`XCFLAGS='-DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS'`, and
-`MACOSX_DEPLOYMENT_TARGET=13.0`.
-
-```text
-root 1, loop link 1
-trace 3: IR_BASE=(1, exit 1), final root link 1
-trace 5: IR_BASE=(3, exit 1), final root link 1
-trace 7: IR_BASE=(5, exit 1), final root link 1
-```
-
-All four phase results matched the interpreted oracle. After full GC, the
-unchanged mcode identities remained reachable and the selected deepest cold
-condition produced 1,504 `texit` events from trace 7, exit 1. The peer remained
-attached through this run. Full run:
-
-- `/Users/frityet/Scratch/ljmt-side-depth-audit-20261029/x64-final.log`
-
-The assert-enabled ARM64 ordinary build produced two side levels:
-It was built with `TARGET_FLAGS=-arch arm64`,
-`XCFLAGS='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL
--DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS'`, and deployment target 13.0.
+The ARM64 ordinary probe now reaches the same chain shape as x64:
 
 ```text
-root 1, loop link 1
-trace 2: IR_BASE=(1, exit 1), final root link 1
-trace 3: IR_BASE=(2, exit 1), final root link 1
+root 1
+trace 2: IR_BASE=(1, exit 1)
+trace 3: IR_BASE=(2, exit 1)
+trace 4: IR_BASE=(3, exit 1)
 ```
 
-Trace 3's code identity survived full GC and the peer remained attached. Under
-`(2,2,2,1)`, no child of trace 3 appeared; that phase accumulated 4,700 exits
-from trace 3, exit 1. A post-GC selected-path call and final reentry accumulated
-47 and 1,457 more exits from that same trace/exit respectively, while results
-still matched the interpreted oracle. Thus this source shape shows an actual
-one-level discrepancy in maximum native ancestry (three side levels on x64,
-two on ARM64), rather than merely a difference in aggregate exit counts.
+The peer remained attached. All phase results matched the interpreted oracle;
+trace/mcode identities remained stable through full GC; and the selected
+deepest side produced native exits after GC and reentry. The probe's final
+reentry observed 3,519 deepest-side native exits. The focused native contract
+also passed:
 
-- `/Users/frityet/Scratch/ljmt-side-depth-audit-20261029/arm64-run1.log`
+```text
+tools/ci/arm64_jit_side_ir_admission_contract.sh
+ARM64 scalar side adaptation: PASS
+arm64_jit_side_ir_admission_contract OK
+```
 
-Both logs print process-local mcode addresses. The assertions compare those
-addresses within each process across GC; addresses should not be compared
-between processes. The probe reports ordinary interpreter-equivalent behavior
-and sampled trace topology, not unrestricted side-recorder parity.
+The local no-observer timing sample was about 7.0, 6.4, 5.7, and 5.6
+microseconds per call for root, direct, nested, and depth-3 phases. This is a
+single-run sanity sample, not a comparative performance claim.
 
-## Implementation boundary and ranked generalization plan
+Retirement now validates each root-owned side list and walks newest-first.
+Publication prepends each child, so this is descendant-before-ancestor order.
+The traversal saves the successor before unlinking the current node. Deep
+graphs are capped at 64 members; larger roots are accepted only when every
+member is a direct child. At a 64-member list, only another direct child may
+extend the graph; even a depth-2 graph refuses further extension so it cannot
+cross into the oversized direct-only path. Focused admission and depth-3
+peer/GC tests pass after this retirement rewrite. The private graph-view test first accepts the live
+descendant-before-ancestor order, then reorders the immediate ancestor ahead
+of its child and requires the path validator to reject it. A cap-policy unit
+check covers counts 63, 64, and 65: it accepts shallow graphs at and beyond
+the limit and rejects depth greater than two at/above the limit.
 
-The current C path keeps nested descendants in the root-owned flattened
-`nextside` list. Each descendant's `IR_BASE` records its immediate parent and
-selected parent exit, while the trace's final link remains the canonical root.
-The root-entry walker bounds the list by `nchild`, detects malformed list
-termination, and checks each member's certificate. Its ancestry checks accept
-direct children and one nested level: a nested trace must point to a direct
-root child, and that intermediate child's own `IR_BASE` must point to the root.
-The nested-side source view likewise requires its immediate parent to point
-directly to the root. The sealed certificate stores one parent pointer/number,
-one parent generation, and one selected exit; validation branches between a
-root parent and a single side parent. These are deliberate fail-closed depth
-bounds visible in `trace_arm64_root_direct_side_present`,
-`trace_arm64_first_side_view_acq_mode`, `trace_arm64_nested_side_view_acq`,
-and `trace_arm64_side_certificate_sealed_valid_held`.
+## Limits and remaining tests
 
-Ranked plan before any production widening:
+This is bounded depth-3 support, not unrestricted side-recorder parity. The
+cap test exercises the policy predicate rather than constructing a live
+64-member trace graph; a real 64-to-65 append fixture and wide-shallow
+lifecycle test remain outstanding. The reorder negative mutates a private
+captured index, not the live list; live-list corruption is rejected by the
+existing full graph validator but has not been exercised through retirement.
+The focused contract does not claim adversarial retirement-race coverage. Full
+multi-profile integration is also still required before integration.
 
-1. **Generalize the parent-chain verifier, not admission.** Starting from each
-   list member's exact `IR_BASE`, iteratively follow `(parent, exit)` through
-   sealed certificates until the unique root is reached. Bound path length by
-   the validated root `nchild`; reject repeated trace numbers, self-edges,
-   missing/non-runnable parents, mismatched `IR_BASE.op2`, and any chain member
-   that is not owned by the same root list. Recheck exact parent generation,
-   source continuation, selected snapshot, exit target and mcode identity at
-   every edge. Keep semantic/post-RA source admission unchanged.
-2. **Preserve root ownership and make retirement ancestry-aware.** Descendants
-   should continue to append to one root-owned list; do not give a side trace a
-   separate mutable child list. Retirement must prove exact-once membership
-   and preserve predecessor/successor, reject cycles/duplicate exits, and
-   retire or reject descendants before retiring an ancestor whose certificate
-   they reference. Exercise middle-of-list and ancestor retirement with
-   survivors at multiple depths.
-3. **Measure a bounded entry algorithm before selecting its representation.**
-   Root entry currently validates the flattened list on entry. A naive
-   per-member ancestry walk plus repeated list-membership scans can grow toward
-   quadratic or cubic work as both depth and child count grow. First measure
-   realistic `maxtrace`/list sizes. Prefer a bounded iterative walk with no
-   allocation, lock, recursion proportional to untrusted metadata, or new
-   mutable shared cache. If efficient exact-once cycle detection cannot be
-   shown with existing root-generation/list invariants, retain a documented
-   depth cap and fail closed rather than opening arbitrary cycles.
-
-Any implementation must add private mutations for a skipped/altered ancestor,
-wrong ancestor generation, wrong parent exit, duplicate/cycle, missing list
-member, stale mcode identity, and retirement of an ancestor with live
-descendants. Repeat the ordinary peer/GC/native-edge witness before claiming
-parity beyond this sampled depth.
-
-## Isolated implementation checkpoint (not validated for deeper native parity)
-
-An isolated implementation is in progress on branch `codex/arm64-side-ancestry`,
-based on `8e66fc0f5` plus audit commit `b033592bc`. The current source adds a
-bounded 64-entry root-list index for deep ancestry. It captures exact list
-members and generations, follows each sealed `IR_BASE` parent chain iteratively,
-rejects cycles/duplicate members, and requires every parent to occur after its
-newly prepended descendant in list order. A shallow-wide fallback keeps direct
-root children beyond 64 entries eligible. At a full 64-entry list, publication
-checks the current maximum depth and refuses further extension if the list is
-deep; the explicit 64-to-65 regression fixture has not yet been added.
-
-The source builds with AppleClang ARM64, `LUA_USE_ASSERT`, experimental JIT,
-and `LJ_TRACE_TEST_HELPERS`. The ordinary probe still produces only
-root→side→nested-side; it does not yet demonstrate a third side level. Its
-latest no-observer results are in the terminal transcript for this checkpoint;
-the matched x64 witness remains the earlier `x64-final.log`. A temporary Lua
-trace observer was tried and discarded because it changed recorder behavior.
-
-A focused C diagnostic found the current blocker: semantic/post-RA helper
-`arm64_side_immediate_parent_valid()` still requires the copied parent's
-`IR_BASE` to name the canonical root. For the third-level candidate (trace 4,
-immediate parent 3, root 1), topology and copied snapshot checks pass, while
-that direct-parent condition rejects. The fix must carry and independently
-validate the exact immediate-parent ancestry/generation in both semantic and
-post-RA views; simply removing the root-direct condition is unsound. No such
-widening has landed in this checkpoint.
-
-Retirement ordering is not yet ready for review. The current experimental
-ordering still scans the trace vector once per populated depth. Replace that
-with a bounded root-owned newest-first traversal, prove descendant-before-
-ancestor order from the validated list, and add a private ancestor-before-
-descendant reorder rejection before claiming retirement support. No native
-depth-3, cap-boundary, reordered-list, or lifecycle regression result is
-claimed here.
+The source keeps a bounded iterative ancestry walk, no allocation or new lock,
+and a root-owned flattened list. It rejects malformed chains, missing or
+foreign ancestors, cycles, stale generations, and invalid root identity.
+Retirement correctness additionally depends on exact-once membership and
+preserving the list's prepend order; tests for those limits remain to be
+added before this checkpoint is ready to integrate.
