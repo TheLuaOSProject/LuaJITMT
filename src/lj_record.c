@@ -1273,12 +1273,19 @@ static void rec_call_setup(jit_State *J, BCReg func, ptrdiff_t nargs)
   TValue *functv = &J->L->base[func];
   TRef kfunc, *fbase = &J->base[func];
   ptrdiff_t i;
+#if LJ_HASJIT_FFI_CALLXS
+  int shared_cdata_call = 0;
+#endif
   (void)getslot(J, func); /* Ensure func has a reference. */
   for (i = 1; i <= nargs; i++)
     (void)getslot(J, func+LJ_FR2+i);  /* Ensure all args have a reference. */
   if (!tref_isfunc(fbase[0])) {  /* Resolve __call metamethod. */
     ix.tab = fbase[0];
     copyTV(J->L, &ix.tabv, functv);
+#if LJ_HASJIT_FFI_CALLXS
+    shared_cdata_call = tref_iscdata(ix.tab) &&
+	lj_record_mt_runtime_shared(J2G(J), J->L);
+#endif
     if (!lj_record_mm_lookup(J, &ix, MM_call) || !tref_isfunc(ix.mobj))
       lj_trace_err(J, LJ_TRERR_NOMM);
     for (i = ++nargs; i > LJ_FR2; i--)  /* Shift arguments up. */
@@ -1350,6 +1357,26 @@ static void rec_call_setup(jit_State *J, BCReg func, ptrdiff_t nargs)
   fbase[0] = kfunc;
   fbase[1] = TREF_FRAME;
   J->maxslot = (BCReg)nargs;
+#if LJ_HASJIT_FFI_CALLXS
+  if (shared_cdata_call) {
+    GCfunc *sampled = funcV(functv);
+    J->pending_cdata_call_pc = J->pc;
+    J->pending_cdata_call_pt = J->pt;
+    J->pending_cdata_call_func = func;
+    if (isluafunc(sampled) && !tref_isk(kfunc)) {
+      J->pending_cdata_call_target = (uintptr_t)(void *)funcproto(sampled);
+      J->pending_cdata_call_kind = JIT_CDATA_CALL_PROTO;
+    } else if (!isluafunc(sampled) &&
+               (sampled->c.ffid == FF_coroutine_wrap_aux ||
+                sampled->c.ffid == FF_string_gmatch_aux)) {
+      J->pending_cdata_call_target = sampled->c.ffid;
+      J->pending_cdata_call_kind = JIT_CDATA_CALL_FFID;
+    } else {
+      J->pending_cdata_call_target = (uintptr_t)(void *)sampled;
+      J->pending_cdata_call_kind = JIT_CDATA_CALL_EXACT;
+    }
+  }
+#endif
 }
 
 /* Record call. */
@@ -2222,6 +2249,15 @@ static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t,
 ** metatable replacement path flushes traces; retain the sampled table as a
 ** trace constant and guard its global root before the helper reads its slot. */
 #if LJ_HASJIT_FFI_CALLXS
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_GC2_TEST_HELPERS)
+static uint32_t record_test_cdata_call_capture_armed;
+
+void lj_record_test_arm_cdata_call_capture(void)
+{
+  la_store32_rel(&record_test_cdata_call_capture_armed, 1);
+}
+#endif
+
 static int rec_mm_cdata_call_shared(jit_State *J, RecordIndex *ix, GCtab *mt)
 {
   RecordIndex mix;
@@ -2245,6 +2281,17 @@ static int rec_mm_cdata_call_shared(jit_State *J, RecordIndex *ix, GCtab *mt)
   type = rec_idx_mt_shared_sample(J, &mix, &snap, &kfunc, NULL);
   if (type != IRT_FUNC || !tvisfunc(&snap))
     return 0;
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_GC2_TEST_HELPERS)
+  {
+    uint32_t expect = 1;
+    /* Deterministically pause the subsequent VM-side __call selection after
+    ** this recorder sample. The existing metatable-capture test gate lets a
+    ** peer perform an ordinary shared rawset at that exact interpreter seam. */
+    if (la_cas32(&record_test_cdata_call_capture_armed, &expect, 0,
+		 LA_ACQ_REL, LA_ACQ))
+      lj_meta_test_mt_capture_pause(gcV(&ix->tabv));
+  }
+#endif
   /* CALLXS retains its separately certified lookup/result snapshot grammar. */
   mobj = rec_idx_mt_shared_load(J, &mix, IRT_FUNC, 0, 0);
   lj_assertJ(tref_isfunc(kfunc), "missing rooted cdata __call function");
@@ -4930,6 +4977,14 @@ static ptrdiff_t rec_func_root_nargs(jit_State *J)
 void lj_record_setup(jit_State *J, BCIns root_iterl)
 {
   uint32_t i;
+
+#if LJ_HASJIT_FFI_CALLXS
+  J->pending_cdata_call_pc = NULL;
+  J->pending_cdata_call_pt = NULL;
+  J->pending_cdata_call_target = 0;
+  J->pending_cdata_call_func = 0;
+  J->pending_cdata_call_kind = JIT_CDATA_CALL_NONE;
+#endif
 
   /* Initialize state related to current trace. */
   memset(J->slot, 0, sizeof(J->slot));

@@ -1084,6 +1084,13 @@ LJ_STATIC_ASSERT(sizeof(LJTraceArm64SideParentCert) == 6*sizeof(uint64_t));
 #endif
 
 /* JIT compiler state. */
+enum {
+  JIT_CDATA_CALL_NONE,
+  JIT_CDATA_CALL_EXACT,
+  JIT_CDATA_CALL_PROTO,
+  JIT_CDATA_CALL_FFID
+};
+
 typedef struct jit_State {
   GCtrace cur;		/* Current trace. */
   GCtrace *curfinal;	/* Final address of current trace (set during asm). */
@@ -1202,6 +1209,15 @@ typedef struct jit_State {
   uint64_t trace_pin_release_seq;  /* Atomic final-release notification. */
   uint64_t trace_reclaim_pin_seq;  /* Token-owned trace-scan notification. */
   uint64_t mcode_reclaim_pin_seq;  /* Token-owned mcode-scan notification. */
+#if LJ_HASJIT_FFI_CALLXS
+  /* Exact owner-only pending cdata __call agreement between recorder sampling
+  ** and the interpreter's following VM-side metamethod resolution. */
+  const BCIns *pending_cdata_call_pc;
+  GCproto *pending_cdata_call_pt;
+  uintptr_t pending_cdata_call_target;
+  BCReg pending_cdata_call_func;
+  uint8_t pending_cdata_call_kind;
+#endif
 #if LJ_TARGET_ARM64
   LJTraceArm64SideParentCert arm64_side_parent;
   uint64_t arm64_trace_generation;  /* Recorder-token-owned serial source. */
