@@ -114,3 +114,24 @@ for _, op in ipairs({{'min', min}, {'max', max}}) do
   end
 end
 print('ORDINARY', 'abs/min/max', 'interpreter/JIT results match')
+
+local function binary(n,op,x,y)
+  local i,r=0,.5
+  while i<n do r=op(x,y); i=i+1 end
+  return r
+end
+for _,row in ipairs({
+  {'atan2', {{-0.0,1.25},{0.0,-1.25},{-0.0,-1.25},{-inf,inf},{nan,1.25},{1.25,nan}}},
+  {'pow', {{-0.0,3},{-0.0,-3},{-1.25,.5},{nan,1.25},{1.25,nan},{inf,-1.25},
+           {1e-300,2.5},{1e300,2.5}}},
+  {'ldexp', {{-0.0,3},{.75,-1074},{1.5,1024},{nan,0},{inf,0},
+             {1.25,-2147483648},{1.25,2147483647}}}
+}) do
+  local name,op=row[1],math[row[1]]
+  for _,args in ipairs(row[2]) do
+    jit.off(binary);local expected=binary(8,op,args[1],args[2]);jit.on(binary)
+    jit.flush();jit.opt.start('hotloop=1','hotexit=1000','maxtrace=1')
+    assert(same(binary(8,op,args[1],args[2]),expected),name..' edge mismatch')
+  end
+  print('ORDINARY',name,'binary edge cases match')
+end

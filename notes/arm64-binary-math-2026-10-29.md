@@ -31,3 +31,28 @@ preflight had not yet been extended; its failure is superseded by the second
 run, with exact argument count and synthetic fast-function identity checks.
 Four-profile, special-value and combined-gate validation remain pending.
 This checkpoint does not establish general math or full x86_64 parity.
+
+## Expanded four-profile validation
+
+`binary-math-four-profile-final.log` passes the complete scalar contract for
+ARM64 and arm64e assertion/release builds. New native cases cover negative
+zero, NaN, infinity, underflow and overflow; ordinary edge comparisons also
+cover both signed-zero axes and extreme integer exponents. A composition of
+all three helpers retains live values across calls and independently rejects
+six caller-clobbered allocations per profile. The two admission passes also
+reject a CARG reused as a later numeric operand and a malformed future-user
+opcode before indexing its IR mode. Existing profile/STOPREQ, native unwind,
+GC, flush and all earlier scalar proofs remain in the same passing contract.
+
+Independent read-only review found no concrete safety defect in the typed
+operands, exact builtin entry, CARG use restrictions or call-preservation
+proof. Its suggested future-use negatives were added to the final matrix.
+
+The matrix exits zero, then rebuilds ordinary assertion ARM64 without test
+helpers, profile
+`15611ca843cbd59705f3a9296ec65cd4d35f192ccd7ade7a1134e6e37961c1a6`.
+That runtime observes eight selected exits per eight calls, both before and
+after full GC, for atan2, power and ldexp. The earlier matrix command also
+passed, but its terminal output was truncated; the final log above is the
+complete retained evidence with the additional future-use negatives.
+Combined validation with the latest Lua call changes is still pending.

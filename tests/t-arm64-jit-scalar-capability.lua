@@ -372,6 +372,45 @@ for _,name in ipairs({'atan2','pow','ldexp'}) do
   run('math_'..name..'_after_flush',binary_helper,24,.75,
       name=='ldexp' and -2 or -.75)
 end
+local atan2_builtin,pow_builtin,ldexp_builtin=math.atan2,math.pow,math.ldexp
+local function binary_composition(n,x,y,p)
+  local i,s=0,.5
+  while i<n do
+    local a=atan2_builtin(x+i*.125,y)
+    local b=pow_builtin(a+2.5,y)
+    local c=ldexp_builtin(a,p)
+    s=s+b+c+a
+    i=i+1
+  end
+  return s
+end
+run('math_binary_helpers_composed',binary_composition,12,.75,1.25,3)
+local function binary_special(name,op,x,y)
+  local function kernel(n,a,b)
+    local i,r=0,.5
+    while i<n do r=op(a,b); i=i+1 end
+    return r
+  end
+  jit.off(kernel);local expected=kernel(8,x,y);jit.on(kernel)
+  jit.flush();jit.opt.start('hotloop=1','hotexit=1000','maxtrace=1','-fma')
+  assert(same_number(kernel(8,x,y),expected),name..' warmup')
+  probe_reset()
+  assert(same_number(kernel(8,x,y),expected),name..' native')
+  probe_check('math_'..name)
+  collectgarbage('collect');probe_reset()
+  assert(same_number(kernel(8,x,y),expected),name..' GC reentry')
+  probe_check('math_'..name)
+end
+jit.off(binary_special,true)
+binary_special('atan2_negative_zero',atan2_builtin,-0.0,1.25)
+binary_special('atan2_negative_axis',atan2_builtin,-0.0,-1.25)
+binary_special('atan2_nan',atan2_builtin,0/0,1.25)
+binary_special('pow_negative_zero',pow_builtin,-0.0,3)
+binary_special('pow_nan',pow_builtin,-1.25,.5)
+binary_special('pow_infinity',pow_builtin,1/0,1.25)
+binary_special('ldexp_negative_zero',ldexp_builtin,-0.0,3)
+binary_special('ldexp_underflow',ldexp_builtin,.75,-1074)
+binary_special('ldexp_overflow',ldexp_builtin,1.5,1024)
 local log_builtin,sin_builtin,cos_builtin=math.log,math.sin,math.cos
 local function helper_composition(n,x)
   local i,s,t=0,.25,.75

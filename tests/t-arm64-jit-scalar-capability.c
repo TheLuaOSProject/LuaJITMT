@@ -278,6 +278,16 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
     copy[mathcall].op1 = saved.op1;
     assert(!lj_asm_arm64_postra_admit(&v, NULL));
     copy[mathcall] = T->ir[mathcall];
+    /* A CARG ref is not a numeric value for an unrelated future use. */
+    copy[mathcall].o = IR_ADD;
+    copy[mathcall].op1 = saved.op1;
+    copy[mathcall].op2 = arg;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[mathcall] = T->ir[mathcall];
+    /* Future-user opcode corruption must fail before indexing IR mode. */
+    copy[mathcall].o = IR__MAX;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[mathcall] = T->ir[mathcall];
   }
   if (mathop && (copy[mathop].o == IR_POW || copy[mathop].o == IR_LDEXP)) {
     IRIns saved = copy[mathop];
@@ -327,7 +337,8 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
         clobbers++;
       }
     }
-    if (mathkind && strcmp(mathkind, "math_helpers_composed") == 0)
+    if (mathkind && (strcmp(mathkind, "math_helpers_composed") == 0 ||
+                     strcmp(mathkind, "math_binary_helpers_composed") == 0))
       assert(clobbers != 0);
     printf("MATH caller-saved live-value corruptions=%u\n", clobbers);
   }
@@ -591,6 +602,16 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
       assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
       copy[arg] = saved;
       copy[mathcall].op1 = saved.op1;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[mathcall] = T->ir[mathcall];
+      /* A CARG ref is not a numeric value for an unrelated future use. */
+      copy[mathcall].o = IR_ADD;
+      copy[mathcall].op1 = saved.op1;
+      copy[mathcall].op2 = arg;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[mathcall] = T->ir[mathcall];
+      /* Future-user opcode corruption must fail before indexing IR mode. */
+      copy[mathcall].o = IR__MAX;
       assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
       copy[mathcall] = T->ir[mathcall];
     }
