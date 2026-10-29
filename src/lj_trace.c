@@ -12970,8 +12970,6 @@ static TraceStartResult trace_start(jit_State *J)
     if (bc_op(root_startins) == BC_FORL &&
 	!trace_root_forl_tuple(J->pt, J->pc, root_startins))
       return TRACE_START_RESULT_IDLE;
-    if (!trace_root_arm64_generation_valid(J->pt, J->pc, root_startins))
-      return TRACE_START_RESULT_IDLE;
 #endif
     if (bc_op(root_startins) == BC_ITERN &&
 	!trace_root_itern_tuple(J->pt, J->pc, root_startins, &root_iterl))
@@ -13016,6 +13014,15 @@ static TraceStartResult trace_start(jit_State *J)
     }
     return TRACE_START_RESULT_IDLE;  /* Silently ignored. */
   }
+
+#if LJ_TARGET_ARM64
+  /* Keep the existing lazy NOJIT bytecode patch ahead of the ARM64 root
+  ** capability gate. A disabled FUNCF still reaches its hot opcode once,
+  ** and the VM has already decremented the shared bucket before trace_start. */
+  if (J->parent == 0 &&
+      !trace_root_arm64_generation_valid(J->pt, J->pc, root_startins))
+    return TRACE_START_RESULT_IDLE;
+#endif
 
   /* Get a new trace number. */
   traceno = trace_findfree(J);
@@ -14697,8 +14704,16 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
     if (!trace_pc_in_proto_range(pc, proto_bc(pt), pt->sizebc))
       return 0;
     ins = (BCIns)la_load32_acq((const uint32_t *)pc);
-    if (!trace_root_arm64_generation_valid(pt, pc, ins))
+    /* A PROTO_NOJIT FUNCF reaches this preflight from the hot-call
+    ** dispatcher before trace_start() can lazily patch it to IFUNCF. Let
+    ** only the exact function-entry generation reach that existing patch
+    ** path; JIT-enabled functions still need the full source proof here. */
+    if ((pt->flags & PROTO_NOJIT) != 0 && bc_op(ins) == BC_FUNCF) {
+      if (pc != proto_bc(pt))
+	return 0;
+    } else if (!trace_root_arm64_generation_valid(pt, pc, ins)) {
       return 0;
+    }
   } else if (state == LJ_TRACE_RECORD) {
     GCobj *startpt = trace_startptgco_acq(&J->cur);
     const BCIns *startpc = trace_startpc_acq(&J->cur);
