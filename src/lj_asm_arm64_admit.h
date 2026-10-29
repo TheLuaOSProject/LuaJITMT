@@ -8047,11 +8047,13 @@ static int arm64_ir_funcf_slot_unchanged(const GCproto *pt, MSize slot,
   for (p = 1; p < pc && p+1u < pt->sizebc; p++) {
     BCIns ins = arm64_ir_bc_acq((uintptr_t)proto_bc(pt), p);
     BCOp op = bc_op(ins);
-    if (bc_a(ins) == slot &&
-	(op == BC_CGET || op == BC_MOV || op == BC_CSET ||
-	 op == BC_KSHORT || op == BC_KNUM || op == BC_KPRI ||
-	 op == BC_UGET || op == BC_CALL ||
-	 (op >= BC_ADDVN && op <= BC_DIVVV)))
+	if ((op == BC_CALL &&
+	     (bc_a(ins) == slot ||
+	      (bc_b(ins) == 3u && (MSize)bc_a(ins)+1u == slot))) ||
+	    (bc_a(ins) == slot &&
+	     (op == BC_CGET || op == BC_MOV || op == BC_CSET ||
+	      op == BC_KSHORT || op == BC_KNUM || op == BC_KPRI ||
+	      op == BC_UGET || (op >= BC_ADDVN && op <= BC_DIVVV))))
       return 0;
   }
   return 1;
@@ -16371,8 +16373,6 @@ static int arm64_lua_leaf_postra_needed(const GCproto *pt, MSize resume,
       MSize end = first+bc_c(ins)-1u, arg;
       if ((bc_b(ins) != 2u && bc_b(ins) != 3u) || bc_c(ins) < 2u ||
           dst+bc_c(ins)+LJ_FR2 > pt->framesize) return 0;
-      if (bc_b(ins) == 3u && dst+1u < pt->framesize)
-        needed[dst+1u] = 0;
       if (!written[dst]) needed[dst] = 1;
       for (arg = first; arg < end; arg++)
         if (!written[arg]) needed[arg] = 1;
@@ -16983,11 +16983,13 @@ static int arm64_postra_funcf_slot_unchanged(const GCproto *pt, MSize slot,
 	for (p = 1; p < pc && p+1u < pt->sizebc; p++) {
 	  BCIns ins = arm64_ir_bc_acq((uintptr_t)proto_bc(pt), p);
 	  BCOp op = bc_op(ins);
-	  if (bc_a(ins) == slot &&
-	      (op == BC_CGET || op == BC_MOV || op == BC_CSET ||
-	       op == BC_KSHORT || op == BC_KNUM || op == BC_KPRI ||
-	       op == BC_UGET || op == BC_CALL ||
-	       (op >= BC_ADDVN && op <= BC_DIVVV)))
+	  if ((op == BC_CALL &&
+	       (bc_a(ins) == slot ||
+		(bc_b(ins) == 3u && (MSize)bc_a(ins)+1u == slot))) ||
+	      (bc_a(ins) == slot &&
+	       (op == BC_CGET || op == BC_MOV || op == BC_CSET ||
+		op == BC_KSHORT || op == BC_KNUM || op == BC_KPRI ||
+		op == BC_UGET || (op >= BC_ADDVN && op <= BC_DIVVV))))
 	    return 0;
 	}
 	return 1;

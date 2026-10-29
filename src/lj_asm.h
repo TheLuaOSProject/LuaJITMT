@@ -210,6 +210,12 @@ LJ_FUNC int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
 LJ_FUNC int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
 				      IRRef *semantic_ninsp);
 #if defined(LJ_TRACE_TEST_HELPERS)
+LJ_FUNC int lj_asm_arm64_test_funcf_postra_needed(const GCproto *pt,
+	MSize resume, MSize slot);
+LJ_FUNC int lj_asm_arm64_test_funcf_postra_output_slot_changed(const GCproto *pt,
+	MSize slot, MSize pc);
+LJ_FUNC int lj_asm_arm64_test_funcf_ir_output_slot_changed(const GCproto *pt,
+	MSize slot, MSize pc);
 LJ_FUNC int lj_asm_arm64_test_string_byte_dynamic_index_ir(
 						const GCtrace *T, IRRef conv);
 LJ_FUNC int lj_asm_arm64_test_string_byte_dynamic_index_postra(
