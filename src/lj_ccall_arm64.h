@@ -473,10 +473,9 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
 	  if (ngpr < CCALL_NARG_GPR) {
 	    arg->reg = (uint8_t)ngpr++;
 	  } else {
-	    /* One full-width composite has the same stack alignment and store
-	    ** width as its U64 carrier. Smaller composites need an independently
-	    ** proved ABI padding rule and remain closed here. */
-	    if (abi->is_vararg || arg->size != 8) return 0;
+	    /* A small non-HFA composite occupies one whole eight-byte slot.
+	    ** Only its CType-width payload is read and stored. */
+	    if (abi->is_vararg) return 0;
 	    stack_size = (stack_size+7u) & ~7u;
 	    arg->reg = LJ_ARM64_ABI_STACK;
 	    arg->stack_offset = (uint16_t)stack_size;

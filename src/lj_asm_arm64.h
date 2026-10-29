@@ -555,7 +555,7 @@ static int asm_callx_abi(ASMState *as, IRIns *ir, const CCallInfo *ci,
 
 /* Generate a call to a C function. */
 static void asm_gencall_abi(ASMState *as, const CCallInfo *ci, IRRef *args,
-			    const uint8_t *stack_hfa)
+			    const uint16_t *stack_offsets)
 {
   uint32_t n, nargs = CCI_XNARGS(ci);
   int32_t spofs = 0, spalign = LJ_HASFFI && LJ_TARGET_OSX ? 0 : 7;
@@ -573,8 +573,8 @@ static void asm_gencall_abi(ASMState *as, const CCallInfo *ci, IRRef *args,
   for (n = 0; n < nargs; n++) { /* Setup args. */
     IRRef ref = args[n];
     IRIns *ir = IR(ref);
-    int force_stack = stack_hfa != NULL && stack_hfa[n] != 0;
-    if (force_stack && (n == 0 || stack_hfa[n-1] == 0))
+    int force_stack = stack_offsets != NULL && stack_offsets[n] != UINT16_MAX;
+    if (force_stack && irt_isfp(ir->t))
 	fpr = REGARG_LASTFPR+1;
     if (ref) {
       if (irt_isfp(ir->t)) {
@@ -595,6 +595,7 @@ static void asm_gencall_abi(ASMState *as, const CCallInfo *ci, IRRef *args,
 	  al |= irt_isnum(ir->t) ? 7 : 3;
 #endif
 	  spofs = (spofs + al) & ~al;
+	  if (stack_offsets != NULL) spofs = stack_offsets[n];
 	  if (LJ_BE && al >= 7 && !irt_isnum(ir->t)) spofs += 4, al -= 4;
 	  emit_spstore(as, ir, r, spofs);
 	  spofs += al + 1;
@@ -613,6 +614,7 @@ static void asm_gencall_abi(ASMState *as, const CCallInfo *ci, IRRef *args,
 	  al |= lj_ir_type_size[irt_type(ir->t)] - 1;
 #endif
 	  spofs = (spofs + al) & ~al;
+	  if (stack_offsets != NULL) spofs = stack_offsets[n];
 	  if (al >= 3) {
 	    if (LJ_BE && al >= 7 && !irt_is64(ir->t)) spofs += 4, al -= 4;
 	    emit_spstore(as, ir, r, spofs);
@@ -701,9 +703,9 @@ static void asm_callx(ASMState *as, IRIns *ir)
   IRRef args[CCI_NARGS_MAX*2];
   CCallInfo ci;
 #if LJ_HASJIT_FFI_CALLXS
-  uint8_t stack_hfa[CCI_NARGS_MAX*2] = { 0 };
+  uint16_t stack_offsets[CCI_NARGS_MAX*2];
   LJArm64ABISignature abi;
-  const uint8_t *stack_hfap = NULL;
+  const uint16_t *offsets = NULL;
   unsigned i;
 #endif
   IRRef func;
@@ -711,14 +713,11 @@ static void asm_callx(ASMState *as, IRIns *ir)
   ci.flags = asm_callx_flags(as, ir);
   asm_collectargs(as, ir, &ci, args);
 #if LJ_HASJIT_FFI_CALLXS
-  {
-    if (asm_callx_abi(as, ir, &ci, &abi, 2)) {
-      for (i = 0; i < abi.nargs; i++)
-	stack_hfa[i] = (uint8_t)(abi.arg[i].kind ==
-	  LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
-	  abi.arg[i].reg == LJ_ARM64_ABI_STACK);
-      stack_hfap = stack_hfa;
-    }
+  if (asm_callx_abi(as, ir, &ci, &abi, 2)) {
+    for (i = 0; i < abi.nargs; i++)
+      stack_offsets[i] = abi.arg[i].reg == LJ_ARM64_ABI_STACK ?
+                        abi.arg[i].stack_offset : UINT16_MAX;
+    offsets = stack_offsets;
   }
 #endif
   asm_setupresult(as, ir, &ci);
@@ -733,7 +732,7 @@ static void asm_callx(ASMState *as, IRIns *ir)
   }
   asm_gencall_abi(as, &ci, args,
 #if LJ_HASJIT_FFI_CALLXS
-		  stack_hfap
+		  offsets
 #else
 		  NULL
 #endif

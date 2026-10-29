@@ -85,10 +85,35 @@ enum {
   ARM64_DOUBLE_ONE_STACK_ALT,
   ARM64_FLOAT_PAIR_PARTIAL_STACK,
   ARM64_FLOAT_PAIR_PARTIAL_STACK_ALT,
+  ARM64_BYTE_STACK,
+  ARM64_HALF_STACK,
+  ARM64_WORD_STACK,
+  ARM64_BYTE_STACK_ALT,
+  ARM64_HALF_STACK_ALT,
+  ARM64_WORD_STACK_ALT,
   ARM64_AGGREGATE_COUNT
 };
 
 static volatile uint32_t calls[ARM64_AGGREGATE_COUNT];
+
+/* The compact scalar prefix leaves a gap before the eight-byte composite
+** stack slot; the scalar suffix must begin after that entire slot. */
+#define SMALL_STACK_ARG(name, type, counter, extra) \
+LJ_EXPORT uint32_t name(uint32_t a, uint32_t b, uint32_t c, uint32_t d, \
+    uint32_t e, uint32_t f, uint32_t g, uint32_t h, uint8_t prefix, \
+    type value, uint32_t salt) \
+{ \
+  calls[counter]++; \
+  return a+2u*b+3u*c+4u*d+5u*e+6u*f+7u*g+8u*h + \
+         9u*prefix+3u*value.value+5u*salt+(extra); \
+}
+SMALL_STACK_ARG(arm64_take_byte_stack, arm64_byte, ARM64_BYTE_STACK, 0u)
+SMALL_STACK_ARG(arm64_take_half_stack, arm64_half, ARM64_HALF_STACK, 0u)
+SMALL_STACK_ARG(arm64_take_word_stack, arm64_word, ARM64_WORD_STACK, 0u)
+SMALL_STACK_ARG(arm64_take_byte_stack_alt, arm64_byte, ARM64_BYTE_STACK_ALT, 17u)
+SMALL_STACK_ARG(arm64_take_half_stack_alt, arm64_half, ARM64_HALF_STACK_ALT, 17u)
+SMALL_STACK_ARG(arm64_take_word_stack_alt, arm64_word, ARM64_WORD_STACK_ALT, 17u)
+#undef SMALL_STACK_ARG
 
 LJ_EXPORT void arm64_aggregate_reset(void)
 {

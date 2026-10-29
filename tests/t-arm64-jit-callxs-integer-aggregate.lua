@@ -142,6 +142,18 @@ uint32_t arm64_take_pair_stack(uint32_t, uint32_t, uint32_t, uint32_t,
 uint32_t arm64_take_pair_stack_alt(uint32_t, uint32_t, uint32_t, uint32_t,
                                 uint32_t, uint32_t, uint32_t, uint32_t,
                                 Arm64IntPair, uint32_t);
+uint32_t arm64_take_byte_stack(uint32_t,uint32_t,uint32_t,uint32_t,
+  uint32_t,uint32_t,uint32_t,uint32_t,uint8_t,Arm64Byte,uint32_t);
+uint32_t arm64_take_half_stack(uint32_t,uint32_t,uint32_t,uint32_t,
+  uint32_t,uint32_t,uint32_t,uint32_t,uint8_t,Arm64Half,uint32_t);
+uint32_t arm64_take_word_stack(uint32_t,uint32_t,uint32_t,uint32_t,
+  uint32_t,uint32_t,uint32_t,uint32_t,uint8_t,Arm64Word,uint32_t);
+uint32_t arm64_take_byte_stack_alt(uint32_t,uint32_t,uint32_t,uint32_t,
+  uint32_t,uint32_t,uint32_t,uint32_t,uint8_t,Arm64Byte,uint32_t);
+uint32_t arm64_take_half_stack_alt(uint32_t,uint32_t,uint32_t,uint32_t,
+  uint32_t,uint32_t,uint32_t,uint32_t,uint8_t,Arm64Half,uint32_t);
+uint32_t arm64_take_word_stack_alt(uint32_t,uint32_t,uint32_t,uint32_t,
+  uint32_t,uint32_t,uint32_t,uint32_t,uint8_t,Arm64Word,uint32_t);
 Arm64ByteResult arm64_return_byte(uint32_t);
 Arm64HalfResult arm64_return_half(uint32_t);
 Arm64WordResult arm64_return_word(uint32_t);
@@ -788,6 +800,56 @@ assert(lib.arm64_aggregate_count(37) == 64,
 tracked_exit_roots = nil
 candidate = saved_integer_candidate
 _set_aggregate_candidate(candidate)
+
+-- Darwin packs the scalar prefix but reserves eight bytes for each small
+-- non-HFA composite. Verify both the gap before it and the following scalar.
+local function small_stack_case(index, width, name, typename, seed)
+  local source = [[return function(n,fn,v,s,p)
+    local sum=0
+    for i=1,n do sum=sum+fn(1,2,3,4,5,6,7,8,p,v,s) end
+    return sum
+  end]]
+  local hot = assert(loadstring(source))()
+  local cold = assert(loadstring(source))()
+  local clone = assert(loadstring(source))()
+  jit.off(cold,true); jit.off(clone,true)
+  local saved = candidate
+  candidate = hot; _set_aggregate_candidate(hot)
+  _G['__arm64_small_stack_candidate_'..index] = hot
+  _G['__arm64_small_stack_clone_'..index] = clone
+  local fn = lib['arm64_take_'..name..'_stack']
+  local alternate = lib['arm64_take_'..name..'_stack_alt']
+  _G['__arm64_small_stack_fn_'..index] = fn
+  local value = ffi.new(typename,seed)
+  local expected = 204+9*29+3*seed+5*17
+  assert(fn(1,2,3,4,5,6,7,8,29,value,17) == expected,
+         name..' interpreter stack padding disagrees with C ABI')
+  jit.flush(hot); jit.opt.start('hotloop=1'); jit.on(hot,true)
+  lib.arm64_aggregate_reset(); exits=0
+  local before = _aggregate_native_width_count(width)
+  for pass=1,8 do
+    assert(hot(16,fn,value,17,29)==16*expected)
+    assert(cold(16,fn,value,17,29)==16*expected)
+  end
+  assert(next(roots(hot)) and _aggregate_native_width_count(width)>before and
+         exits>0, name..' padded stack composite did not execute natively')
+  assert(lib.arm64_aggregate_count(49+index)==256)
+  before=_aggregate_native_width_count(width)
+  collectgarbage('collect'); exits=0
+  assert(hot(32,fn,value,17,29)==32*expected)
+  assert(cold(32,fn,value,17,29)==32*expected)
+  assert(_aggregate_native_width_count(width)>before and exits>0)
+  assert(lib.arm64_aggregate_count(49+index)==320)
+  tracked_exit_roots=roots(hot); exits=0
+  assert(hot(32,alternate,value,17,29)==32*(expected+17))
+  assert(cold(32,alternate,value,17,29)==32*(expected+17))
+  assert(exits>0 and lib.arm64_aggregate_count(52+index)==64)
+  tracked_exit_roots=nil
+  candidate=saved; _set_aggregate_candidate(saved)
+end
+small_stack_case(1,1,'byte','Arm64Byte',201)
+small_stack_case(2,2,'half','Arm64Half',50123)
+small_stack_case(3,4,'word','Arm64Word',123456789)
 
 
 -- Full stack HFAs whose total size is a multiple of the ABI stack slot.
