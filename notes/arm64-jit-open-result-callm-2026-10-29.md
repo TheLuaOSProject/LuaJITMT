@@ -71,3 +71,38 @@ the interpreter oracle, publish and execute on x86_64, and do not publish a
 root on this ARM64 checkpoint. The probes and both logs are in the integration
 Scratch directory (`parameter-count-probe.lua`, `parameter-count-*.log`).
 They are not included in the matching-arity parity claim above.
+
+## Captured producer in the topology inventory
+
+The inventory's `open-result-callm-loop` closes a separate producer-root
+binding gap: both `values` and `sum` are captured upvalues, and `values(i)` is
+replayed in the numeric loop. The trace can contain same-source-PC producer
+guards from its warm-up and loop halves. When validating a current-half
+CALLM map, both semantic and post-RA walks now ignore the warm-up-half guard
+and select only the guard after `IR_LOOP`. Replay accepts either the existing
+unchanged formal `SLOAD` source or a `VLOAD` that is present in the loop map
+or reconstructed by the exact rooted `UGET` source sequence; in either case
+the producer CALL slot must equal that exact function ref, and its guard must
+bind the same function constant. The independent post-RA walk performs its
+own allocated-ref and source replay checks.
+
+The native fixture requires the selected FORL root to enter and exit for the
+captured runner, repeats at another bound, then full-GCs and checks native
+reentry, unchanged trace/mcode address, size, bytes and generation. A private
+semantic and post-RA mutation replaces the producer's function slot with the
+valid but different consumer function; both reject. The existing CALLM
+source/arity/result-window mutations also run against this root. An MT peer
+remains live through the fixture. The four-profile leaf contract passes with
+43 native calls, 186 semantic negatives and 197 post-RA negatives per
+profile.
+
+The ordinary no-observer `bench/jit-topology-probe.lua` has one selected root
+on each target for `open-result-callm-loop`. ARM64 records 81 selected-root
+exits in each phase in the local no-helper runtime; the frozen x86_64 runtime
+records 5 in its first phase and 0 in its second. These are selected-root
+counts, not a claim that the traces have identical IR or exit topology. The
+captured ARM runtime and module bundle are in
+`/Users/frityet/Scratch/ljmt-open-callm-ordinary-arm64-20261029/`; matching
+ordinary TSVs are `ljmt-open-callm-topology-arm64-repro.tsv` and
+`ljmt-open-callm-topology-x64.tsv`. The x86_64 runtime is the frozen
+`dae24b46a` bundle at `ljmt-side-ancestry-20261029/dae-x64/`.

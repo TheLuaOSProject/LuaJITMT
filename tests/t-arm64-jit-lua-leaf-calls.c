@@ -23,6 +23,7 @@
 #include "lib/proto_fixture_helpers.h"
 
 static unsigned native_runs, semantic_bad, postra_bad, cold_retries;
+static GCtrace *root_trace(lua_State *L);
 
 static GCfunc *global_function(lua_State *L, const char *name)
 {
@@ -44,6 +45,29 @@ static lua_Number invoke(lua_State *L, const char *runner,
   assert(L->cframe == cframe && lj_tg_load_jit_base(L2TG(L)) == NULL &&
          !lj_tg_in_native_acq(L2TG(L)));
   return result;
+}
+
+static lua_Number invoke_capture(lua_State *L, const char *runner, int n)
+{
+  lua_Number result;
+  lua_getglobal(L, runner); lua_pushinteger(L, n);
+  ljt_lua_pcall(L, 1, 1, "captured open CALLM probe");
+  assert(lua_isnumber(L, -1)); result = lua_tonumber(L, -1); lua_pop(L, 1);
+  return result;
+}
+
+static void native_capture_call(lua_State *L, GCtrace *T, int n)
+{
+  lua_Number expected = invoke_capture(L, "leaf_oracle_run", n);
+  lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+  assert(invoke_capture(L, "leaf_run", n) == expected);
+  assert(root_trace(L) == T && trace_runnable_acq(T, T->traceno));
+  assert(lj_trace_test_root_entry_successes() > 0 &&
+         lj_trace_test_exit_calls() > 0 &&
+         lj_trace_test_first_exit_parent() == T->traceno &&
+         lj_trace_test_first_exitno() < T->nsnap);
+  assert(!trace_nchild_acq(T) && !trace_nextside_acq(T));
+  native_runs++;
 }
 
 static GCtrace *root_trace(lua_State *L)
@@ -335,13 +359,19 @@ static void admission_open_callm(GCtrace *T, unsigned nresults,
 {
   Fixture f={0};
   MSize callmpos=UINT32_MAX, childslot=UINT32_MAX;
+  MSize producerfnentry=UINT32_MAX, producerfnslot;
   MSize producersnap=UINT32_MAX;
-  IRRef callmguard=0;
+  IRRef callmguard=0, loopref=0;
   unsigned found_callmap=0;
   f.live=T;
   f.n=T->nins;
   while (f.n>T->nk &&
          (T->ir[f.n-1u].o==IR_NOP || T->ir[f.n-1u].o==IR_RENAME)) f.n--;
+  for (IRRef r=REF_FIRST; r<f.n; r++)
+    if (T->ir[r].o==IR_LOOP) {
+      assert(!loopref); loopref=r;
+    }
+  assert(loopref);
   f.pt=copy_proto(trace_startpt_acq(T));
   for (MSize p=1; p+1u<f.pt->sizebc; p++)
     if (bc_op(proto_bc(f.pt)[p])==BC_CALLM) {
@@ -368,9 +398,12 @@ static void admission_open_callm(GCtrace *T, unsigned nresults,
       }
       assert(irref_isk(candidate) && candidate>=T->nk &&
              candidate<REF_TRUE && T->ir[candidate].o==IR_KGC &&
-             isluafunc(ir_kfunc(&T->ir[candidate])) && !callmguard);
-      callmguard=ref; f.guard_snap=s;
-      f.kfunc=candidate;
+             isluafunc(ir_kfunc(&T->ir[candidate])));
+      if (callmguard) assert(f.kfunc==candidate);
+      if (!callmguard || ref>callmguard) {
+        callmguard=ref; f.guard_snap=s;
+        f.kfunc=candidate;
+      }
     }
   }
   assert(callmguard && "CALLM's own consumer identity guard is required");
@@ -386,7 +419,8 @@ static void admission_open_callm(GCtrace *T, unsigned nresults,
     const BCIns *pc=snap_pc(&f.map[snap->mapofs+snap->nent]);
     if (snap->ref<REF_FIRST || snap->ref>=T->nins) continue;
     IRIns guard=f.ir[snap->ref];
-    if (pc==proto_bc(f.pt)+callmpos && guard.o==IR_EQ &&
+    if (snap->ref==callmguard && pc==proto_bc(f.pt)+callmpos &&
+        guard.o==IR_EQ &&
         guard.t.irt==(IRT_FUNC|IRT_GUARD)) {
       MSize slot=1u+LJ_FR2+bc_a(proto_bc(f.pt)[callmpos])+
                  1u+LJ_FR2+nresults-1u;
@@ -397,19 +431,35 @@ static void admission_open_callm(GCtrace *T, unsigned nresults,
         }
       }
     }
-    if (pc==proto_bc(f.pt)+callmpos-1u && guard.o==IR_EQ &&
+    if (snap->ref<callmguard && pc==proto_bc(f.pt)+callmpos-1u && guard.o==IR_EQ &&
         guard.t.irt==(IRT_FUNC|IRT_GUARD)) {
-      assert(producersnap==UINT32_MAX);
-      producersnap=s;
+      if (producersnap==UINT32_MAX ||
+          snap->ref>f.snap[producersnap].ref) producersnap=s;
     }
   }
   assert(found_callmap==1u && childslot!=UINT32_MAX &&
          producersnap!=UINT32_MAX);
+  producerfnslot=1u+LJ_FR2+bc_a(proto_bc(f.pt)[callmpos-1u]);
+  for (MSize i=0; i<f.snap[producersnap].nent; i++) {
+    MSize at=f.snap[producersnap].mapofs+i;
+    if (snap_slot(f.map[at])==producerfnslot &&
+        !(f.map[at]&0x00ff0000u)) {
+      assert(producerfnentry==UINT32_MAX);
+      producerfnentry=at;
+    }
+  }
+  assert(producerfnentry!=UINT32_MAX &&
+         snap_ref(f.map[producerfnentry])!=f.kfunc &&
+         T->ir[f.snap[producersnap].ref].o==IR_EQ);
 #define OPEN_RESET() do { \
   fixture_reset(&f); \
   f.leafpt->numparams=(uint8_t)nformals; \
 } while (0)
   for (int postra=0; postra<2; postra++) {
+    OPEN_RESET(); assert(admit(&f,postra));
+    f.map[producerfnentry]=SNAP(producerfnslot,0,f.kfunc);
+    assert(!admit(&f,postra));
+    if (postra) postra_bad++; else semantic_bad++;
     OPEN_RESET(); assert(admit(&f,postra));
     proto_bc(f.pt)[callmpos]=BCINS_ABC(BC_CALLM,
       bc_a(proto_bc(f.pt)[callmpos]),3u,0u);
@@ -634,6 +684,47 @@ int main(void)
       printf("Lua open-result CALLM results=%u formals=%u: native root, GC reuse and independent source/map/normalization refusals passed\n",
            results,(unsigned)nformals[shape]);
     }
+  }
+  ljt_lua_dostring(L,
+    "jit.flush(); local source=[[local function values(x) return x,.25,.5 end "
+      "local function sum(a,b,c) return a+b+c end "
+      "return function(n) local total=.5; for i=1,n do "
+      "total=total+sum(values(i)) end; return total end]]; "
+    "local oracle_loader=assert(loadstring(source,'@captured-callm-oracle')); "
+    "jit.off(oracle_loader,true); leaf_oracle_run=oracle_loader(); "
+    "local candidate_loader=assert(loadstring(source,'@captured-callm-run')); "
+    "leaf_run=candidate_loader(); jit.on(); "
+    "jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64')");
+  {
+    GCtrace *T=NULL;
+    for (unsigned attempt=0;attempt<8 && !T;attempt++) {
+      lua_Number actual=invoke_capture(L,"leaf_run",96);
+      lua_Number expected=invoke_capture(L,"leaf_oracle_run",96);
+      assert(actual==expected);
+      T=root_trace(L);
+    }
+    MCode *code;
+    MSize size;
+    uint64_t generation;
+    void *saved;
+    assert(T && "captured open-result CALLM root must publish");
+    assert(trace_arm64_admission_acq(T) == TRACE_ARM64_INT_FORL_ADMITTED);
+    admission_open_callm(T,3u,3u);
+    code=trace_mcode_acq(T); size=trace_szmcode_acq(T);
+    generation=la_load64_acq(&T->arm64_generation);
+    saved=malloc(size);
+    assert(code && size && generation && saved);
+    memcpy(saved,code,size);
+    native_capture_call(L,T,96);
+    native_capture_call(L,T,48);
+    ljt_lua_dostring(L,"collectgarbage('collect')");
+    native_capture_call(L,T,64);
+    assert(root_trace(L)==T && trace_runnable_acq(T,T->traceno) &&
+           trace_mcode_acq(T)==code && trace_szmcode_acq(T)==size &&
+           la_load64_acq(&T->arm64_generation)==generation &&
+           memcmp(saved,code,size)==0);
+    free(saved);
+    printf("Lua captured open-result CALLM: selected root exits, GC reuse and independent semantic/postRA source/map/arity refusals passed\n");
   }
   ljt_lua_dostring(L,"assert(stop:send(true,5)); local ok,v=peer:join(5); assert(ok and v)");
   lua_close(L);

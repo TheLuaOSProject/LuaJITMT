@@ -13536,20 +13536,30 @@ static int arm64_lua_leaf_ir_open_producer_args(const jit_State *J,
     if (valid[reg]) return 0;
     state[reg] = value; valid[reg] = 1;
   }
-  /* The hoisted guard identifies an unchanged formal. It is the only value
-  ** allowed to seed a root local omitted by this loop snapshot. */
-  if (sourcefn < REF_FIRST || sourcefn >= snap->ref ||
-      sourcefn >= T->nins || T->ir[sourcefn].o != IR_SLOAD ||
-      T->ir[sourcefn].op1 < J->baseslot ||
-      T->ir[sourcefn].op1-J->baseslot >= pt->numparams ||
-      T->ir[sourcefn].t.irt != (IRT_FUNC|IRT_GUARD) ||
-      (T->ir[sourcefn].op2 != IRSLOAD_READONLY &&
-       T->ir[sourcefn].op2 != IRSLOAD_TYPECHECK)) return 0;
-  reg = T->ir[sourcefn].op1-J->baseslot;
-  if (valid[reg]) {
-    if (state[reg] != sourcefn) return 0;
-  } else {
-    state[reg] = sourcefn; valid[reg] = 1;
+  /* A hoisted formal guard may seed an unchanged parameter omitted by this
+  ** loop map. Otherwise require the current map or source replay to provide
+  ** the exact callee value; this covers rooted UGETs in the loop body. */
+  if (sourcefn < REF_FIRST || sourcefn >= T->snap[end].ref ||
+      sourcefn >= T->nins ||
+      !arm64_scalar_ir_ref(T, sourcefn, T->snap[end].ref, IRT_FUNC))
+    return 0;
+  if (T->ir[sourcefn].o == IR_SLOAD) {
+    const IRIns *source = &T->ir[sourcefn];
+    if (sourcefn >= snap->ref || source->op1 < J->baseslot ||
+        source->op1-J->baseslot >= pt->numparams ||
+        source->t.irt != (IRT_FUNC|IRT_GUARD) ||
+        (source->op2 != IRSLOAD_READONLY &&
+         source->op2 != IRSLOAD_TYPECHECK) ||
+        !arm64_ir_funcf_slot_unchanged(pt,
+          source->op1-J->baseslot, callpos)) return 0;
+    reg = source->op1-J->baseslot;
+    if (valid[reg]) {
+      if (state[reg] != sourcefn) return 0;
+    } else {
+      state[reg] = sourcefn; valid[reg] = 1;
+    }
+  } else if (T->ir[sourcefn].o != IR_VLOAD) {
+    return 0;
   }
   bc = proto_bc(pt);
   for (; pos < callpos; pos++) {
@@ -13778,6 +13788,9 @@ static int arm64_lua_leaf_ir_open_result_inputs(const jit_State *J,
           (const BCIns *)(uintptr_t)(footer>>8) != bc+prodpos ||
           entry->ref < REF_FIRST || entry->ref >= T->nins ||
           entry->ref >= T->snap[s].ref) continue;
+      /* A loop-body producer must be authorized by this iteration's
+      ** function guard, never by the warm-up half's same-PC guard. */
+      if (current_half && entry->ref <= J->loopref) continue;
       guard = ir_load_acq(&T->ir[guardref]);
       if (guard.o != IR_EQ || guard.t.irt != (IRT_FUNC|IRT_GUARD)) continue;
       for (k = 0; k < entry->nent; k++) {
@@ -13802,10 +13815,6 @@ static int arm64_lua_leaf_ir_open_result_inputs(const jit_State *J,
       fn = gco2func(o);
       if (!lj_trace_arm64_lua_leaf(fn)) continue;
       leaf = funcproto(fn);
-      if (T->ir[sourcefn].op1 < J->baseslot ||
-          T->ir[sourcefn].op1-J->baseslot >= parentpt->numparams ||
-          (current_half && !arm64_ir_funcf_slot_unchanged(parentpt,
-              T->ir[sourcefn].op1-J->baseslot, prodpos))) continue;
       nresults = arm64_lua_leaf_return_count(leaf);
       if (!nresults || nresults > ARM64_LUA_LEAF_MAX_RESULTS ||
           !arm64_lua_leaf_callm_pair_source(parentpt, prodpos, 1, nresults))
@@ -18283,22 +18292,29 @@ static int arm64_lua_leaf_postra_open_producer_args(
     if (valid[reg]) return 0;
     state[reg] = value; valid[reg] = 1;
   }
-  if (sourcefn < REF_FIRST || sourcefn >= snap_ref_acq(snap) ||
-      sourcefn >= v->nins) return 0;
+  if (sourcefn < REF_FIRST || sourcefn >= snap_ref_acq(&v->snap[end]) ||
+      sourcefn >= v->nins ||
+      !arm64_scalar_postra_ref(v, sourcefn,
+        snap_ref_acq(&v->snap[end]), IRT_FUNC))
+    return 0;
   {
     IRIns source = ir_load_acq(&v->ir[sourcefn]);
-    if (source.o != IR_SLOAD || source.op1 < base ||
-        source.op1-base >= pt->numparams ||
-        source.t.irt != (IRT_FUNC|IRT_GUARD) ||
-        (source.op2 != IRSLOAD_READONLY &&
-         source.op2 != IRSLOAD_TYPECHECK) ||
-        !arm64_postra_funcf_slot_unchanged(pt, source.op1-base, callpos))
+    if (source.o == IR_SLOAD) {
+      if (sourcefn >= snap_ref_acq(snap) ||
+          source.op1 < base || source.op1-base >= pt->numparams ||
+          source.t.irt != (IRT_FUNC|IRT_GUARD) ||
+          (source.op2 != IRSLOAD_READONLY &&
+           source.op2 != IRSLOAD_TYPECHECK) ||
+          !arm64_postra_funcf_slot_unchanged(pt, source.op1-base, callpos))
+        return 0;
+      reg = source.op1-base;
+      if (valid[reg]) {
+        if (state[reg] != sourcefn) return 0;
+      } else {
+        state[reg] = sourcefn; valid[reg] = 1;
+      }
+    } else if (source.o != IR_VLOAD) {
       return 0;
-    reg = source.op1-base;
-    if (valid[reg]) {
-      if (state[reg] != sourcefn) return 0;
-    } else {
-      state[reg] = sourcefn; valid[reg] = 1;
     }
   }
   for (; pos < callpos; pos++) {
@@ -18521,6 +18537,9 @@ static int arm64_lua_leaf_postra_open_result_inputs(
           guardref < REF_FIRST || guardref >= v->nins ||
           guardref >= snap_ref_acq(&v->snap[s]))
         continue;
+      /* A loop-body producer must be authorized by this iteration's
+      ** function guard, never by the warm-up half's same-PC guard. */
+      if (current_half && guardref <= loopref) continue;
       guard = ir_load_acq(&v->ir[guardref]);
       if (guard.o != IR_EQ || guard.t.irt != (IRT_FUNC|IRT_GUARD)) continue;
       for (k = 0; k < nent; k++) {
@@ -18546,13 +18565,9 @@ static int arm64_lua_leaf_postra_open_result_inputs(
       leaf = funcproto(fn);
       {
         IRIns source = ir_load_acq(&v->ir[sourcefn]);
-        if (source.o != IR_SLOAD || source.op1 < 1u+LJ_FR2 ||
-            source.op1-(1u+LJ_FR2) >= parentpt->numparams ||
-            source.t.irt != (IRT_FUNC|IRT_GUARD) ||
-            (source.op2 != IRSLOAD_READONLY &&
-             source.op2 != IRSLOAD_TYPECHECK) ||
-            (current_half && !arm64_postra_funcf_slot_unchanged(parentpt,
-                source.op1-(1u+LJ_FR2), prodpos))) continue;
+        if ((source.o != IR_SLOAD && source.o != IR_VLOAD) ||
+            !arm64_scalar_postra_ref(v, sourcefn,
+              snap_ref_acq(&v->snap[s]), IRT_FUNC)) continue;
       }
       nresults = arm64_lua_leaf_return_count(leaf);
       if (!nresults || nresults > ARM64_LUA_LEAF_MAX_RESULTS ||
