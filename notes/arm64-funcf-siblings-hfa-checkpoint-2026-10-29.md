@@ -63,3 +63,23 @@ SHA-256 hashes, complete logs and both topology sources are retained under
 
 The latest complete experimental gate remains `b549a895b`; no complete gate
 or full parity claim is made for this newer integration.
+
+## Test-profile preflight difference found
+
+An isolated build split at `75c83e708` proves that adding only
+`LJ_TRACE_TEST_HELPERS` makes the read-only captured FUNCF probe pass, while
+adding only `LUAJIT_MCODE_TEST` does not. Source audit found three diagnostic
+exceptions introduced by `b39f6fd03f`: helper builds did not unconditionally
+reject an invalid root generation, an out-of-prototype PC, or failed Lua-frame
+proof. The frame proof still required FORL and rejected the new FUNCF child
+frame in ordinary builds. The exceptions masked that missing proof.
+
+The strict-preflight repair `498f2b098` is integrated separately from the
+FUNCF frame extension. All three profiles must now enforce identical checks;
+the missing FUNCF proof remains active work. Earlier helper-only positives
+and gate passes are historical execution results under those weaker checks,
+not evidence that ordinary recorder preflight admitted the same traces.
+The ordinary stock/inventory/aggregate results above are unaffected by this
+test-only bypass removal. Helper-profile runtime/archive copies, split build
+logs, source IDs and hashes are in the `helpers-arm64/` and `profile-split/`
+subdirectories of the integration evidence directory.
