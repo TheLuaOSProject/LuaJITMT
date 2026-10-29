@@ -129,3 +129,20 @@ rows versus eighteen on x64. Varargs remains the sampled difference;
 iterator/I64 remain inconclusive. The scalar FUNCF extension is measured
 separately by the topology probe. See the
 [integration and oracle correction](arm64-funcf-integrated-checkpoint-2026-10-28.md).
+
+At runtime source `cbb707874`, both targets pass all 260 comparisons and both
+have selected-root witnesses in 18 of 20 rows. Fixed Lua varargs supply the new
+ARM64 witness. Iterator and I64 remain unwitnessed on both targets; this does
+not establish full parity. Both ordinary builds also pass the 509 source and
+509 imported-bytecode stock corpora. The combined Lua-call contract passes all
+four ARM64/ARM64e assertion/release profiles on the integrated source.
+Evidence: `/Users/frityet/Scratch/ljmt-varargs-integrated-20261029/`.
+
+The integrated topology run missed the scalar FUNCF root once. Three isolated
+reruns with that same immutable executable each publish it and observe 81
+type-mismatch exits; three reruns with the earlier `d9352591a` executable do
+the same. Those reruns are under
+`/Users/frityet/Scratch/ljmt-funcf-regression-20261029/`. This variation is not
+a demonstrated lost capability, but the original missing observation is
+retained. FORL side traces remain a measured difference, while integer and
+fractional while-loop samples have root-linked sides on both targets.

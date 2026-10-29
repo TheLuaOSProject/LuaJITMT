@@ -18,7 +18,16 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
-- Latest focused port-branch follow-up: scalar FUNCF numeric literals and
+- Latest focused port-branch follow-up: fixed zero-formal Lua vararg leaves
+  and one-register integer-struct FFI arguments, integrated at `cbb707874`.
+  The combined Lua-call contract passes four ARM64 profiles; ordinary ARM64
+  and x64 each pass both 509-case stock corpora and all 260 inventory checks.
+  The integer-struct FFI contract independently passes four profiles and is
+  wired into the existing M7 builds. A complete integrated gate is in progress
+  at `d0e4ecaa1`; until it finishes, the last complete gate remains below.
+  See the [vararg evidence](arm64-jit-vararg-leaf-design-2026-10-28.md) and
+  [integer-struct evidence](arm64-integer-aggregate-callxs-2026-10-29.md).
+- Preceding focused port-branch follow-up: scalar FUNCF numeric literals and
   the shared tracesnap cell-PC correction at `d9352591a`. Ordinary ARM64/x64
   stock corpora, the getpos fixture and corrected fully interpreted benchmark
   oracles pass; the FUNCF contract passes ARM64/arm64e assertion profiles.
@@ -40,7 +49,7 @@ and reports that are no longer authoritative are retained in
 - A repeatable [cross-architecture workload inventory](arm64-parity-inventory-2026-10-28.md)
   compares interpreter results and observed native root exits. The current
   twenty-workload sample passes 260 result checks on each architecture, with
-  root-exit witnesses in seventeen ARM64 port-branch rows versus eighteen x64 rows. These are
+  root-exit witnesses in eighteen rows on each target. These are
   sampled workload observations, not a full-compilation or parity claim.
 - Latest integrated follow-up: folded literal string-byte traces at
   `cdc2b7e2`, with test cleanup at `98e158b8`. Only completely unused pointer
