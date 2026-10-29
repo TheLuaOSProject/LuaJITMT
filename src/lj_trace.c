@@ -11604,6 +11604,13 @@ static void trace_terminal_release(lua_State *L, jit_State *J)
 {
   global_State *g = J2G(J);
   TGState *tg = L ? L2TG(L) : NULL;
+#if LJ_HASJIT_FFI_CALLXS
+  J->pending_cdata_call_pc = NULL;
+  J->pending_cdata_call_pt = NULL;
+  J->pending_cdata_call_target = 0;
+  J->pending_cdata_call_func = 0;
+  J->pending_cdata_call_kind = JIT_CDATA_CALL_NONE;
+#endif
 #if LJ_TARGET_ARM64 && defined(LUAJIT_USE_GDBJIT)
   GDBJITPrepared *gdbjit_pending_abort = J->gdbjit_pending_abort;
   /* Detach token-private ownership before IDLE exposes J to a new recorder. */
