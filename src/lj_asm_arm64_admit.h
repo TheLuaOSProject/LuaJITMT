@@ -9826,6 +9826,47 @@ static int arm64_side_forl_guard_snapshot_ir(const LJArm64SideIRView *side,
 	arm64_side_forl_retry_pc_valid(side, (uintptr_t)(pcbase >> 8));
 }
 
+/* A cold edge at FORL retries its increment. Bind all four control slots
+** to the inherited pre-update state, including the visible index, so the VM
+** cannot skip or repeat an iteration when it leaves a root-linked child. */
+static int arm64_side_forl_boundary_snapshot_ir(
+    const LJArm64SideIRView *side, const GCtrace *T, const SnapShot *snap)
+{
+  MSize i, idxslot, mask = 0;
+  IRRef oldidx = 0, ext = 0;
+  int32_t step;
+  if (!side || !T || !snap || side->linktype != LJ_TRLINK_ROOT ||
+      !arm64_side_forl_step_source(side, &step) ||
+      snap->mapofs > T->nsnapmap || snap->nent > T->nsnapmap-snap->mapofs)
+    return 0;
+  idxslot = 1u+LJ_FR2+bc_a(side->parent_startins);
+  for (i = 0; i < snap->nent; i++) {
+    SnapEntry entry = T->snapmap[snap->mapofs+i];
+    MSize slot = snap_slot(entry), role;
+    IRRef value = snap_ref(entry);
+    const IRIns *load;
+    if (slot < idxslot || slot > idxslot+FORL_EXT) continue;
+    role = slot-idxslot;
+    if (mask & (1u << role)) return 0;
+    mask |= 1u << role;
+    if (role == FORL_STEP) {
+      int32_t found;
+      if (!arm64_ir_kint_value(T, value, &found) || found != step) return 0;
+      continue;
+    }
+    if (value < REF_FIRST || value >= snap->ref || value >= T->nins)
+      return 0;
+    load = &T->ir[value];
+    if (load->o != IR_SLOAD || load->t.irt != IRT_INT ||
+        load->op1 != (role == FORL_EXT ? idxslot : slot) ||
+        load->op2 != (IRSLOAD_PARENT|IRSLOAD_INHERIT|
+                     (role == FORL_STOP ? IRSLOAD_READONLY : 0))) return 0;
+    if (role == FORL_IDX) oldidx = value;
+    if (role == FORL_EXT) ext = value;
+  }
+  return mask == 15u && oldidx != 0 && ext == oldidx;
+}
+
 static int arm64_side_forl_snapshot_stop_ir(const LJArm64SideIRView *side,
 	const GCtrace *T, IRRef before, SnapEntry sn)
 {
@@ -12369,7 +12410,9 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
 	       side->parent_continuation)) ||
 	       (pcpos < side->loop_start_pc ||
 	        (pcpos >= side->loop_end_pc &&
-	         !(s != 0 && pcpos == side->loop_end_pc+1u))))) {
+	         !(s != 0 && (pcpos == side->loop_end_pc+1u ||
+                   (pcpos == side->loop_end_pc &&
+                    arm64_side_forl_boundary_snapshot_ir(side, T, snap)))))))) {
 	  goto bad_snapshot;
 	}
   }
@@ -12850,6 +12893,47 @@ static int arm64_side_forl_index_add_postra(const LJArm64SideIRView *side,
 	return (uint8_t)pcbase == 0 &&
 	  arm64_side_forl_retry_pc_valid(side, (uintptr_t)(pcbase >> 8));
   }
+}
+
+/* A cold edge at FORL retries its increment. Bind all four control slots
+** to the inherited pre-update state, including the visible index, so the VM
+** cannot skip or repeat an iteration when it leaves a root-linked child. */
+static int arm64_side_forl_boundary_snapshot_postra(
+    const LJArm64SideIRView *side, const LJArm64PostRAView *v, const SnapShot *snap)
+{
+  MSize i, idxslot, mask = 0;
+  IRRef oldidx = 0, ext = 0;
+  int32_t step;
+  if (!side || !v || !snap || side->linktype != LJ_TRLINK_ROOT ||
+      !arm64_side_forl_step_source(side, &step) ||
+      snap->mapofs > v->nsnapmap || snap->nent > v->nsnapmap-snap->mapofs)
+    return 0;
+  idxslot = 1u+LJ_FR2+bc_a(side->parent_startins);
+  for (i = 0; i < snap->nent; i++) {
+    SnapEntry entry = snapentry_acq(&v->snapmap[snap->mapofs+i]);
+    MSize slot = snap_slot(entry), role;
+    IRRef value = snap_ref(entry);
+    IRIns load;
+    if (slot < idxslot || slot > idxslot+FORL_EXT) continue;
+    role = slot-idxslot;
+    if (mask & (1u << role)) return 0;
+    mask |= 1u << role;
+    if (role == FORL_STEP) {
+      int32_t found;
+      if (!arm64_scalar_postra_kint(v, value, &found) || found != step) return 0;
+      continue;
+    }
+    if (value < REF_FIRST || value >= snap->ref || value >= v->nins)
+      return 0;
+    load = ir_load_acq(&v->ir[value]);
+    if (load.o != IR_SLOAD || load.t.irt != IRT_INT ||
+        load.op1 != (role == FORL_EXT ? idxslot : slot) ||
+        load.op2 != (IRSLOAD_PARENT|IRSLOAD_INHERIT|
+                     (role == FORL_STOP ? IRSLOAD_READONLY : 0))) return 0;
+    if (role == FORL_IDX) oldidx = value;
+    if (role == FORL_EXT) ext = value;
+  }
+  return mask == 15u && oldidx != 0 && ext == oldidx;
 }
 
 static int arm64_side_forl_snapshot_stop_postra(
@@ -16274,7 +16358,9 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
 	if (side && ((s == 0 && pos != continuation_pos) ||
 		(pos < side->loop_start_pc ||
 		 (pos >= side->loop_end_pc &&
-		  !(s != 0 && pos == side->loop_end_pc+1u)))))
+		  !(s != 0 && (pos == side->loop_end_pc+1u ||
+                    (pos == side->loop_end_pc &&
+                     arm64_side_forl_boundary_snapshot_postra(side, v, snap))))))))
 	  return 0;
   }
   if (rootop == BC_FUNCF ? (loopsnap || poll_snap != poll) : side ?
