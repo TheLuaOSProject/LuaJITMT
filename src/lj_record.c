@@ -1317,7 +1317,9 @@ static void rec_call_setup(jit_State *J, BCReg func, ptrdiff_t nargs)
                      bc_op(ret) == BC_RET0 ? 1u : 0u;
     /* Preserve the incoming arguments for identity guards and child exits.
     ** LOOP must copy this map with the same substitutions as the child. */
-    if (bc_op(J->cur.startins) != BC_FORL || J->framedepth > 1 ||
+    if ((bc_op(J->cur.startins) != BC_FORL &&
+	 (bc_op(J->cur.startins) != BC_FUNCF || J->framedepth != 0)) ||
+	J->framedepth > 1 ||
         bc_op(*J->pc) != BC_CALL || !nresults ||
         bc_b(*J->pc) != nresults+1u ||
         (nresults == 2u && J->framedepth != 0) ||
