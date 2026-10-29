@@ -330,23 +330,19 @@ static void admission(GCtrace *T)
 /* The open-result CALLM source has a guard-free producer CALL. Its semantic
 ** and allocated proofs must replay that producer from the exact source guard
 ** and bind all returned values into this CALLM's own argument map. */
-static void admission_open_callm(GCtrace *T, unsigned nresults)
+static void admission_open_callm(GCtrace *T, unsigned nresults,
+				 MSize formal_override)
 {
   Fixture f={0};
   MSize callmpos=UINT32_MAX, childslot=UINT32_MAX;
   MSize producersnap=UINT32_MAX;
+  IRRef callmguard=0;
   unsigned found_callmap=0;
-  f.live=T; f.guard_snap=identity_exit(T,&f.guard); f.kfunc=T->ir[f.guard].op2;
+  f.live=T;
   f.n=T->nins;
   while (f.n>T->nk &&
          (T->ir[f.n-1u].o==IR_NOP || T->ir[f.n-1u].o==IR_RENAME)) f.n--;
   f.pt=copy_proto(trace_startpt_acq(T));
-  f.leafpt=copy_proto(funcproto(ir_kfunc(&T->ir[f.kfunc])));
-  f.leaf=calloc(1,sizeof(*f.leaf)); f.J=calloc(1,sizeof(*f.J));
-  f.ir=calloc(T->nins,sizeof(IRIns)); f.snap=malloc(T->nsnap*sizeof(SnapShot));
-  f.map=malloc(T->nsnapmap*sizeof(SnapEntry));
-  assert(f.leaf && f.J && f.ir && f.snap && f.map);
-  fixture_reset(&f);
   for (MSize p=1; p+1u<f.pt->sizebc; p++)
     if (bc_op(proto_bc(f.pt)[p])==BC_CALLM) {
       assert(callmpos==UINT32_MAX); callmpos=p;
@@ -358,6 +354,33 @@ static void admission_open_callm(GCtrace *T, unsigned nresults)
          bc_b(proto_bc(f.pt)[callmpos-1u])==0u &&
          bc_a(proto_bc(f.pt)[callmpos-1u])==
            bc_a(proto_bc(f.pt)[callmpos])+1u+LJ_FR2);
+  for (SnapNo s=0; s<T->nsnap; s++) {
+    const SnapShot *snap=&T->snap[s];
+    const BCIns *pc=snap_pc(&T->snapmap[snap->mapofs+snap->nent]);
+    IRRef ref=snap->ref;
+    if (pc==proto_bc(trace_startpt_acq(T))+callmpos &&
+        ref>=REF_FIRST && ref<T->nins &&
+        T->ir[ref].o==IR_EQ && T->ir[ref].t.irt==(IRT_FUNC|IRT_GUARD)) {
+      IRRef candidate=T->ir[ref].op2;
+      if (!irref_isk(candidate) || candidate<T->nk ||
+          candidate>=REF_TRUE || T->ir[candidate].o!=IR_KGC) {
+        candidate=T->ir[ref].op1;
+      }
+      assert(irref_isk(candidate) && candidate>=T->nk &&
+             candidate<REF_TRUE && T->ir[candidate].o==IR_KGC &&
+             isluafunc(ir_kfunc(&T->ir[candidate])) && !callmguard);
+      callmguard=ref; f.guard_snap=s;
+      f.kfunc=candidate;
+    }
+  }
+  assert(callmguard && "CALLM's own consumer identity guard is required");
+  f.guard=callmguard;
+  f.leafpt=copy_proto(funcproto(ir_kfunc(&T->ir[f.kfunc])));
+  f.leaf=calloc(1,sizeof(*f.leaf)); f.J=calloc(1,sizeof(*f.J));
+  f.ir=calloc(T->nins,sizeof(IRIns)); f.snap=malloc(T->nsnap*sizeof(SnapShot));
+  f.map=malloc(T->nsnapmap*sizeof(SnapEntry));
+  assert(f.leaf && f.J && f.ir && f.snap && f.map);
+  fixture_reset(&f);
   for (SnapNo s=0; s<T->nsnap; s++) {
     SnapShot *snap=&f.snap[s];
     const BCIns *pc=snap_pc(&f.map[snap->mapofs+snap->nent]);
@@ -382,41 +405,80 @@ static void admission_open_callm(GCtrace *T, unsigned nresults)
   }
   assert(found_callmap==1u && childslot!=UINT32_MAX &&
          producersnap!=UINT32_MAX);
+#define OPEN_RESET() do { \
+  fixture_reset(&f); \
+  if (formal_override) f.leafpt->numparams=(uint8_t)formal_override; \
+} while (0)
   for (int postra=0; postra<2; postra++) {
-    fixture_reset(&f); assert(admit(&f,postra));
+    OPEN_RESET(); assert(admit(&f,postra));
     proto_bc(f.pt)[callmpos]=BCINS_ABC(BC_CALLM,
       bc_a(proto_bc(f.pt)[callmpos]),3u,0u);
     assert(!admit(&f,postra));
-    fixture_reset(&f); assert(admit(&f,postra));
+    OPEN_RESET(); assert(admit(&f,postra));
     f.map[childslot]=SNAP(snap_slot(f.map[childslot]),0,REF_NIL);
     assert(!admit(&f,postra));
-    fixture_reset(&f); assert(admit(&f,postra));
+    OPEN_RESET(); assert(admit(&f,postra));
     {
       SnapShot *snap=&f.snap[producersnap];
       uint64_t wrongpc=u64ptr(proto_bc(f.pt)+callmpos)<<8;
       memcpy(&f.map[snap->mapofs+snap->nent],&wrongpc,sizeof(wrongpc));
     }
     assert(!admit(&f,postra));
-    fixture_reset(&f); assert(admit(&f,postra));
+    OPEN_RESET(); assert(admit(&f,postra));
     setbc_a(&proto_bc(f.pt)[callmpos-1u],
             bc_a(proto_bc(f.pt)[callmpos-1u])-1u);
     assert(!admit(&f,postra));
-    fixture_reset(&f); assert(admit(&f,postra));
+    OPEN_RESET(); assert(admit(&f,postra));
     setbc_c(&proto_bc(f.pt)[callmpos],1u);
     assert(!admit(&f,postra));
-    fixture_reset(&f); assert(admit(&f,postra));
+    OPEN_RESET(); assert(admit(&f,postra));
     setbc_b(&proto_bc(f.pt)[callmpos-1u],2u);
     assert(!admit(&f,postra));
-    fixture_reset(&f); assert(admit(&f,postra));
+    OPEN_RESET(); assert(admit(&f,postra));
     proto_bc(f.leafpt)[f.leafpt->sizebc-1u]=BCINS_AD(BC_RET,
       bc_a(proto_bc(f.leafpt)[f.leafpt->sizebc-1u]), nresults==3u ? 3u : 4u);
     assert(!admit(&f,postra));
-    fixture_reset(&f); assert(admit(&f,postra));
+    OPEN_RESET(); assert(admit(&f,postra));
     f.map[childslot]=SNAP(snap_slot(f.map[childslot])-1u,0,
                           snap_ref(f.map[childslot]));
     assert(!admit(&f,postra));
+    if (formal_override) {
+      MSize readarg=nresults<formal_override ? nresults : formal_override;
+      MSize arithmetic=UINT32_MAX;
+      OPEN_RESET(); assert(admit(&f,postra));
+      if (nresults<formal_override) {
+        for (MSize p=1; p+1u<f.leafpt->sizebc; p++) {
+          BCOp op=bc_op(proto_bc(f.leafpt)[p]);
+          if ((op>=BC_ADDVN && op<=BC_DIVVV) ||
+              (op>=BC_ADDNV && op<=BC_DIVNV)) {
+            arithmetic=p; break;
+          }
+        }
+        assert(arithmetic!=UINT32_MAX && readarg<f.leafpt->framesize);
+        BCIns *ins=&proto_bc(f.leafpt)[arithmetic];
+        BCOp op=bc_op(*ins);
+        if (op==BC_ADDVV || op==BC_SUBVV || op==BC_MULVV || op==BC_DIVVV)
+          setbc_c(ins,(BCReg)readarg);
+        else
+          setbc_b(ins,(BCReg)readarg);
+      } else {
+        /* Make the first definition of the first extra slot read its
+        ** incoming value, which a fixed-arity callee cannot observe. */
+        for (MSize p=1; p+1u<f.leafpt->sizebc; p++)
+          if (bc_a(proto_bc(f.leafpt)[p])==readarg) {
+            arithmetic=p; break;
+          }
+        assert(arithmetic!=UINT32_MAX && readarg<f.leafpt->framesize);
+        proto_bc(f.leafpt)[arithmetic]=BCINS_AD(BC_MOV,
+          (BCReg)readarg,(BCReg)readarg);
+      }
+      assert(!admit(&f,postra) &&
+             "an unavailable fixed or extra CALLM argument cannot be read");
+      if (postra) postra_bad++; else semantic_bad++;
+    }
     if (postra) postra_bad+=8u; else semantic_bad+=8u;
   }
+#undef OPEN_RESET
   free(f.pt); free(f.leafpt); free(f.leaf); free(f.J);
   free(f.ir); free(f.snap); free(f.map);
 }
@@ -481,16 +543,22 @@ int main(void)
       "jit.flush(); jit.on(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64') end; "
     "jit.off(install_open_case,true)");
   {
-    const char *producer[] = {"return x", "return x,.25", "return x,.25,.5"};
-    const char *consumer[] = {"return a+1", "return a+b", "return a+b+c"};
-    const char *parameters[] = {"a", "a,b", "a,b,c"};
-    for (unsigned nresults=1u; nresults<=3u; nresults++) {
+    const char *producer[] = {"return x", "return x,.25", "return x,.25,.5",
+      "return x", "return x,.25", "return x,.25,.5", "return x,.25,.5"};
+    const char *consumer[] = {"return a+1", "return a+b", "return a+b+c",
+      "return a+1", "return a+b", "return a+1", "return a+b"};
+    const char *parameters[] = {"a", "a,b", "a,b,c", "a,b,c", "a,b,c",
+      "a", "a,b"};
+    const MSize nresults[] = {1u,2u,3u,1u,2u,3u,3u};
+    const MSize nformals[] = {1u,2u,3u,3u,3u,1u,2u};
+    for (unsigned shape=0; shape<sizeof(nresults)/sizeof(nresults[0]); shape++) {
+    unsigned results=(unsigned)nresults[shape];
     GCtrace *T=NULL;
     uint32_t rootstarts=lj_trace_test_root_entry_startins_calls();
     lua_getglobal(L,"install_open_case");
-    lua_pushstring(L,producer[nresults-1u]);
-    lua_pushstring(L,consumer[nresults-1u]);
-    lua_pushstring(L,parameters[nresults-1u]);
+    lua_pushstring(L,producer[shape]);
+    lua_pushstring(L,consumer[shape]);
+    lua_pushstring(L,parameters[shape]);
     ljt_lua_pcall(L,3,0,"install open CALLM case");
     for (unsigned attempt=0; attempt<8 && !T; attempt++) {
       lua_Number expected=invoke(L,"leaf_oracle","leaf_oracle_a",96);
@@ -502,7 +570,7 @@ int main(void)
       GCproto *leafpt=funcproto(global_function(L,"leaf_a"));
       fprintf(stderr,"open CALLM result count=%u no root aborts=%u last=%u "
         "root-starts=%u jitflags=%08x run-size=%u leaf-size=%u leaf-ret-op=%u leaf-ret-d=%u\n",
-        nresults,(unsigned)lj_trace_test_abort_count(),
+        results,(unsigned)lj_trace_test_abort_count(),
         (unsigned)lj_trace_test_last_abort_error(),
         (unsigned)(lj_trace_test_root_entry_startins_calls()-rootstarts),
         (unsigned)L2J(L)->flags,
@@ -533,9 +601,10 @@ int main(void)
              memcmp(saved,code,size)==0);
       free(saved);
     }
-    admission_open_callm(T,nresults);
-    printf("Lua open-result CALLM results=%u: native root, GC reuse and independent source/map refusals passed\n",
-           nresults);
+      admission_open_callm(T,results,
+        nformals[shape]==results ? 0u : nformals[shape]);
+      printf("Lua open-result CALLM results=%u formals=%u: native root, GC reuse and independent source/map/normalization refusals passed\n",
+           results,(unsigned)nformals[shape]);
     }
   }
   ljt_lua_dostring(L,"assert(stop:send(true,5)); local ok,v=peer:join(5); assert(ok and v)");

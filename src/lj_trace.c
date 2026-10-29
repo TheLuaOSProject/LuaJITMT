@@ -14185,19 +14185,47 @@ static int trace_arm64_lua_leaf_callm_pair(const GCproto *pt,
 	return bc_op(call) == BC_CALL && bc_b(call) == 0u && bc_c(call) > 0u &&
 	       bc_op(next) == BC_CALLM && bc_b(next) == 2u && bc_c(next) == 0u &&
 	       bc_a(call) == bc_a(next)+1u+LJ_FR2 &&
+	       (MSize)bc_a(call)+bc_c(call)+LJ_FR2 <= pt->framesize &&
 	       (MSize)bc_a(call)+nresults <= pt->framesize &&
 	       (MSize)bc_a(next)+1u+LJ_FR2+nresults <= pt->framesize;
+}
+
+/* The consumer CALLM has no encoded argument count. At consumer entry the
+** live recorder maxslot supplies it; after rec_func_setup or after the
+** consumer returns, maxslot has a different meaning. Those later checks use
+** this structural pair only, while semantic and post-RA admission bind the
+** exact result vector independently. */
+static int trace_arm64_lua_leaf_callm_shape(const GCproto *pt,
+						 const BCIns *callpc)
+{
+	uintptr_t p = (uintptr_t)callpc, lo, hi;
+	const BCIns *bc;
+	BCIns call, prev;
+	if (!pt || !callpc) return 0;
+	bc = proto_bc(pt); lo = (uintptr_t)bc;
+	hi = (uintptr_t)(bc+pt->sizebc);
+	if (p < lo || p >= hi || p-lo < sizeof(BCIns) || hi-p < sizeof(BCIns))
+	  return 0;
+	call = (BCIns)la_load32_acq((const uint32_t *)callpc);
+	prev = (BCIns)la_load32_acq((const uint32_t *)(callpc-1));
+	return bc_op(prev) == BC_CALL && bc_b(prev) == 0u && bc_c(prev) > 0u &&
+	       bc_op(call) == BC_CALLM && bc_b(call) == 2u && bc_c(call) == 0u &&
+	       bc_a(prev) == bc_a(call)+1u+LJ_FR2 &&
+	       (MSize)bc_a(prev)+bc_c(prev)+LJ_FR2 <= pt->framesize &&
+	       (MSize)bc_a(call)+1u+LJ_FR2 <= pt->framesize;
 }
 
 static int trace_arm64_lua_leaf_callm_source(const GCproto *pt,
 						 const BCIns *callpc, MSize nresults)
 {
 	uintptr_t p = (uintptr_t)callpc, lo, hi;
-	if (!pt || !callpc || nresults < 1u ||
-	    nresults > LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS) return 0;
+	if (!pt || !callpc) return 0;
 	lo = (uintptr_t)proto_bc(pt);
 	hi = (uintptr_t)(proto_bc(pt)+pt->sizebc);
 	if (p < lo || p >= hi || p-lo < sizeof(BCIns)) return 0;
+	if (nresults == 0u)
+	  return trace_arm64_lua_leaf_callm_shape(pt, callpc);
+	if (nresults > LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS) return 0;
 	return trace_arm64_lua_leaf_callm_pair(pt,
 		(const BCIns *)(p-sizeof(BCIns)), nresults);
 }
@@ -14234,10 +14262,12 @@ static int trace_arm64_lua_leaf_returned_call(jit_State *J, lua_State *owner,
     int open_producer = bc_op(call) == BC_CALL && bc_b(call) == 0u &&
       trace_arm64_lua_leaf_callm_pair(pt, proto+cp, nresults);
     open_consumer = bc_op(call) == BC_CALLM && bc_b(call) == 2u &&
-      bc_c(call) == 0u && J->maxslot >= 1u &&
-      J->maxslot <= LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS &&
-      trace_arm64_lua_leaf_callm_source(pt, proto+cp, J->maxslot);
-    if (open_consumer) nargs = J->maxslot;
+      bc_c(call) == 0u &&
+      trace_arm64_lua_leaf_callm_source(pt, proto+cp, 0u);
+    /* CALLM's input vector has already been consumed when this return
+    ** callback runs. J->maxslot is now the caller's result high-water mark,
+    ** not the argument count, so retain only the minimum CALLM slot bound. */
+    if (open_consumer) nargs = 0u;
     if (!nresults || (bc_op(call) != BC_CALL && !open_consumer) ||
         (!open_producer && !open_consumer && bc_b(call) != nresults+1u) ||
         (open_consumer && nresults != 1u) ||
@@ -14387,17 +14417,24 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
       MSize nresults = trace_arm64_lua_leaf_nresults(funcproto(currentfn));
       int open_producer = bc_op(call) == BC_CALL && bc_b(call) == 0u &&
         trace_arm64_lua_leaf_callm_pair(parentpt, returnpc-1u, nresults);
+      BCOp entryop = bc_op((BCIns)la_load32_acq((const uint32_t *)pc));
+      int consumer_entry = entryop == BC_FUNCF || entryop == BC_JFUNCF;
       int open_consumer = bc_op(call) == BC_CALLM && bc_b(call) == 2u &&
-        bc_c(call) == 0u && pt->numparams >= 1u &&
-        pt->numparams <= LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS &&
-        !(la_load8_acq(&pt->flags) & PROTO_VARARG) &&
-        trace_arm64_lua_leaf_callm_source(parentpt, returnpc-1u,
-                                           pt->numparams);
-      int consumer_entry = bc_op((BCIns)la_load32_acq(
-        (const uint32_t *)pc)) == BC_FUNCF ||
-        bc_op((BCIns)la_load32_acq((const uint32_t *)pc)) == BC_JFUNCF;
-      MSize callnargs = open_consumer ? pt->numparams :
-                        (bc_c(call) ? bc_c(call)-1u : 0u);
+        bc_c(call) == 0u && !(la_load8_acq(&funcproto(currentfn)->flags) &
+                              PROTO_VARARG) &&
+        trace_arm64_lua_leaf_callm_source(parentpt, returnpc-1u, 0u);
+      MSize callnargs, unused_callnargs;
+      callnargs = open_consumer && consumer_entry && i == 0u ?
+                  J->maxslot : 0u;
+      unused_callnargs = open_consumer ? 0u :
+                         (bc_c(call) ? bc_c(call)-1u : 0u);
+      if (!open_consumer) callnargs = unused_callnargs;
+      if (open_consumer && consumer_entry && i == 0u &&
+          (callnargs < 1u ||
+           callnargs > LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS ||
+           !trace_arm64_lua_leaf_callm_source(parentpt, returnpc-1u,
+                                               callnargs)))
+        return 0;
       if (!nresults || (iterator ?
           (i != 0u || parentpt != rootpt || nresults != 1u ||
            returnpc-1 != proto_bc(rootpt)+iter.call_pc ||
@@ -14410,7 +14447,7 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
           (nresults > 2u && !open_producer) ||
           (!open_consumer && !bc_c(call)) ||
           (MSize)bc_a(call)+callnargs+1u+LJ_FR2 > parentpt->framesize ||
-          (open_consumer && consumer_entry && J->maxslot != pt->numparams))
+          (open_consumer && consumer_entry && i != 0u))
         return 0;
       if (open_producer ?
           (MSize)bc_a(call)+nresults > parentpt->framesize :

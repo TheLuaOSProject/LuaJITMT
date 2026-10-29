@@ -147,13 +147,11 @@ static void check_identity_exit(lua_State *L, GCtrace *T, SnapNo expected_exit,
   assert(!trace_nchild_acq(T) && !trace_nextside_acq(T));
 }
 
-static void run_case(lua_State *L, unsigned nresults)
+static void run_case_shape(lua_State *L, unsigned nresults,
+			   const char *params, const char *body,
+			   const char *alternate)
 {
   const char *producer[] = {"return x", "return x,.25", "return x,.25,.5"};
-  const char *consumer[] = {"return a+1", "return a+b+2", "return a+b+c+3"};
-  const char *alternate[] = {"return a+17", "return a+101*b+17",
-                             "return a+101*b+10007*c+17"};
-  const char *params[] = {"a", "a,b", "a,b,c"};
   GCtrace *T=NULL;
   GCproto *pt;
   GCfunc *consumer_a;
@@ -168,8 +166,7 @@ static void run_case(lua_State *L, unsigned nresults)
   assert(nresults>=1u && nresults<=3u);
   snprintf(install,sizeof(install),
     "install_open_exit_case(%u,\"%s\",\"%s\",\"%s\",\"%s\")", nresults,
-    producer[nresults-1u],consumer[nresults-1u],alternate[nresults-1u],
-    params[nresults-1u]);
+    producer[nresults-1u],body,alternate,params);
   ljt_lua_dostring(L,install);
   consumer_a=global_function(L,"open_consumer_a");
   pt=funcproto(global_function(L,"open_run"));
@@ -231,6 +228,20 @@ static void run_case(lua_State *L, unsigned nresults)
          nresults,(unsigned)exit);
 }
 
+static void run_case(lua_State *L, unsigned nresults)
+{
+  static const char *body[] = {
+    "return a+1", "return a+b+2", "return a+b+c+3"
+  };
+  static const char *alternate[] = {
+    "return a+17", "return a+101*b+17", "return a+101*b+10007*c+17"
+  };
+  static const char *params[] = {"a", "a,b", "a,b,c"};
+  assert(nresults >= 1u && nresults <= 3u);
+  run_case_shape(L,nresults,params[nresults-1u],body[nresults-1u],
+                 alternate[nresults-1u]);
+}
+
 int main(void)
 {
   lua_State *L=ljt_lua_newstate_openlibs();
@@ -257,6 +268,14 @@ int main(void)
       "jit.flush(); jit.on(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64') end; "
     "jit.off(install_open_exit_case,true)");
   run_case(L,1); run_case(L,2); run_case(L,3);
+  /* CALLM passes the producer's exact open vector. The callee then pads
+  ** missing fixed parameters with nil or ignores extra arguments, matching
+  ** ordinary Lua call semantics. Keep these four cross-arity shapes separate
+  ** from the original same-arity exit cases above. */
+  run_case_shape(L,1,"a,b,c","return a+1","return a+17");
+  run_case_shape(L,2,"a,b,c","return a+b+2","return a+101*b+17");
+  run_case_shape(L,3,"a","return a+1","return a+17");
+  run_case_shape(L,3,"a,b","return a+b+2","return a+101*b+17");
   ljt_lua_dostring(L,"assert(stop:send(true,5)); local ok,v=peer:join(5); assert(ok and v)");
   lua_close(L);
   printf("open CALLM consumer exits OK: %u runtime shapes\n",cases_run);
