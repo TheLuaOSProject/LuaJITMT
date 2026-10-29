@@ -64,3 +64,22 @@ the canonical root final link to trace 1, with matching candidate/oracle
 results after each collection:
 
 - `/Users/frityet/Scratch/ljmt-side-of-side-20261029/ordinary-probe-final.log`
+
+## Root-entry revalidation
+
+Root entry also had to understand that the root's side list is flattened:
+nested trace 3 is listed beside direct side 2, but `IR_BASE` names side 2.
+Entry now checks each nested member against its immediate parent's sealed
+certificate and selected exit, while direct-side checks allow only the exact
+published nested mcode target for that exit. The root head/count and child
+slot identities are reacquired through the existing jit-base lease; no new
+locking, allocation, or blocking path was added.
+
+The production fixture now repeats root entry after full GC and requires the
+exact nested terminal exit (`trace 3, exit 1`) for the `(outer=2, inner=2)`
+case. After scoped retirement of trace 3 and another collection, it requires
+the surviving direct parent to report the same interpreter exit
+(`trace 2, exit 1`) and confirms the root still enters natively. The focused
+first-side contract passed no-helper ARM64 smoke, ARM64 helper lifecycle modes,
+and arm64e helper lifecycle modes. The fixture's oracle comparisons and exact
+trace/exit counters remain strict.

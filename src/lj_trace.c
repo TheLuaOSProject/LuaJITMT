@@ -6970,6 +6970,54 @@ static int trace_arm64_side_certificate_sealed_valid_held(jit_State *J,
 	GCtrace *T);
 static int trace_arm64_side_parent_edge_valid_held(jit_State *J,
 	GCtrace *child, TraceNo parentno, int allow_pending);
+
+/* A direct side may itself have nested exits patched to nested children.
+** The root owns those children in its flattened side list, but each child's
+** IR_BASE still names this direct side and its selected exit. */
+static int trace_root_entry_nested_exit_target_valid(jit_State *J,
+	GCtrace *root, TraceNo rootno, TraceNo parentno, ExitNo exitno,
+	const TraceArm64LoopView *rootview, uintptr_t target_bits)
+{
+  TraceVec *tv = tracevec_acq(J);
+  TraceNo childno = rootview->nextside;
+  MSize i, found = 0;
+  if (tv == NULL || root == NULL || rootno == 0 || parentno == 0 ||
+	rootview->nchild == 0 || rootview->nchild > tv->sizetrace ||
+	gcref_acq(tv->slot[rootno]) != obj2gco(root))
+    return 0;
+  for (i = 0; i < rootview->nchild; i++) {
+    GCtrace *child;
+    IRIns base;
+    if (childno == 0 || childno == rootno ||
+	(MSize)childno >= tv->sizetrace)
+      return 0;
+    child = traceref_fromgco_safe(gcref_acq(tv->slot[childno]));
+    if (!trace_runnable_acq(child, childno) ||
+	trace_root_acq(child) != rootno || trace_ir_acq(child) == NULL ||
+	trace_nins_acq(child) <= REF_BASE ||
+	trace_nins_acq(child) >= REF_DROP)
+      return 0;
+    base = ir_load_acq(&trace_ir_acq(child)[REF_BASE]);
+    if (base.o != IR_BASE || base.t.irt != IRT_PGC)
+      return 0;
+    if ((TraceNo)base.op1 == parentno && (ExitNo)base.op2 == exitno) {
+	if (!trace_arm64_side_certificate_valid_held(J, child) ||
+	    child->arm64_side_cert.parentno != parentno ||
+	    child->arm64_side_cert.rootno != rootno ||
+	    child->arm64_side_cert.exitno != exitno ||
+	    trace_arm64_first_side_pointer_bits(
+	      trace_exittarget_arm64_encode(J2G(J), trace_mcode_acq(child))) !=
+	      target_bits || ++found != 1)
+	  return 0;
+    }
+    childno = trace_nextside_acq(child);
+  }
+  return found == 1 && childno == 0 &&
+	tracevec_acq(J) == tv &&
+	gcref_acq(tv->slot[rootno]) == obj2gco(root) &&
+	trace_nchild_acq(root) == rootview->nchild &&
+	trace_nextside_acq(root) == rootview->nextside;
+}
 #if defined(LJ_TRACE_TEST_HELPERS) && \
     (defined(LJ_ARM64_SIDE_ASM_TEST) || \
      defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST))
@@ -7636,8 +7684,8 @@ static int trace_root_entry_side_view_acq(jit_State *J,
 	(trace_native_pinword_acq(child) & TRACE_NATIVE_PIN_CLOSED) != 0 ||
 	trace_retired_link_acq(child) != TRACE_RETIRED_LINK_UNLINKED ||
 	!trace_size_checked(g, child, &size, &checked_nsnap) ||
-      checked_nsnap != view->nsnap || !trace_body_refs_valid(g, child, NULL) ||
-      !trace_arm64_side_certificate_valid_held(J, child))
+	checked_nsnap != view->nsnap || !trace_body_refs_valid(g, child, NULL) ||
+	!trace_arm64_side_certificate_valid_held(J, child))
     return 0;
   UNUSED(size);
 
@@ -7665,11 +7713,14 @@ static int trace_root_entry_side_view_acq(jit_State *J,
   nexits = trace_exittab_nslots_acq(child);
   if (nexits != view->nsnap+1u)
     return 0;
-  for (i = 0; i < nexits; i++)
-    if (trace_arm64_first_side_pointer_bits(
-	  la_loadptr_acq((void *const *)&view->exittab[i])) !=
-	fallback_encoding_bits)
+  for (i = 0; i < nexits; i++) {
+    uintptr_t target_bits = trace_arm64_first_side_pointer_bits(
+	la_loadptr_acq((void *const *)&view->exittab[i]));
+    if (target_bits != fallback_encoding_bits &&
+	!trace_root_entry_nested_exit_target_valid(J, parent, parentno,
+	  childno, (ExitNo)i, rootview, target_bits))
       return 0;
+  }
 
 #if LJ_ABI_PAUTH
   {
@@ -7802,6 +7853,104 @@ static int trace_root_entry_side_view_acq(jit_State *J,
 	  view->parent_target_bits;
 }
 
+/* The root owns a flattened sibling list: a nested side is linked beside
+** its direct parent, while IR_BASE names that immediate parent. This pass
+** checks the nested member's sealed edge and its direct parent. The direct
+** parent's complete entry view is checked separately when its own list node
+** is visited. */
+static int trace_root_entry_nested_side_member_valid(jit_State *J,
+	GCtrace *root, TraceNo rootno, TraceNo childno,
+	const TraceArm64LoopView *rootview)
+{
+  TraceVec *tv;
+  GCtrace *child, *parent;
+  TraceNo parentno;
+  IRIns base, parentbase;
+  GCArena *arena;
+
+  if (J == NULL || root == NULL || rootview == NULL || childno == 0 ||
+	childno == rootno)
+    return 0;
+  tv = tracevec_acq(J);
+  if (tv == NULL || (MSize)rootno >= tv->sizetrace ||
+	(MSize)childno >= tv->sizetrace ||
+	gcref_acq(tv->slot[rootno]) != obj2gco(root))
+    return 0;
+  child = traceref_fromgco_safe(gcref_acq(tv->slot[childno]));
+  if (!trace_runnable_acq(child, childno) ||
+	trace_traceno_acq(child) != childno ||
+	trace_root_acq(child) != rootno ||
+	trace_nextroot_acq(child) != 0 || trace_nchild_acq(child) != 0 ||
+	trace_arm64_admission_acq(child) != TRACE_ARM64_INT_SIDE_ADMITTED ||
+	la_load8_acq(&child->unused1) != 0 || trace_spadjust_acq(child) != 0 ||
+	trace_topslot_acq(child) != rootview->topslot ||
+	trace_startptgco_acq(child) != rootview->startpt ||
+	!trace_arm64_side_certificate_valid_held(J, child)) {
+    return 0;
+  }
+  if (trace_ir_acq(child) == NULL || trace_nins_acq(child) <= REF_BASE ||
+	trace_nins_acq(child) >= REF_DROP ||
+	!trace_arm64_side_certificate_sealed_valid_held(J, child))
+    return 0;
+  base = ir_load_acq(&trace_ir_acq(child)[REF_BASE]);
+  if (base.o != IR_BASE || base.t.irt != IRT_PGC ||
+	(TraceNo)base.op1 == 0 || (TraceNo)base.op1 == rootno ||
+	(TraceNo)base.op1 == childno ||
+	(TraceNo)base.op1 >= tv->sizetrace ||
+	(TraceNo)child->arm64_side_cert.parentno != (TraceNo)base.op1 ||
+	child->arm64_side_cert.rootno != rootno ||
+	(ExitNo)base.op2 != child->arm64_side_cert.exitno) {
+    return 0;
+  }
+  parentno = (TraceNo)base.op1;
+  if (!((trace_link_acq(child) == rootno ||
+	 trace_link_acq(child) == parentno) &&
+	 trace_linktype_acq(child) == LJ_TRLINK_ROOT &&
+	 trace_mcloop_acq(child) == 0) &&
+	!(trace_link_acq(child) == childno &&
+	  trace_linktype_acq(child) == LJ_TRLINK_LOOP &&
+	  trace_mcloop_acq(child) != 0 &&
+	  trace_mcloop_acq(child) < trace_szmcode_acq(child) &&
+	  (trace_mcloop_acq(child) & (sizeof(MCode)-1u)) == 0)) {
+    return 0;
+  }
+  parent = traceref_fromgco_safe(gcref_acq(tv->slot[parentno]));
+  if (!trace_runnable_acq(parent, parentno) ||
+	trace_traceno_acq(parent) != parentno ||
+	trace_root_acq(parent) != rootno ||
+	parent->arm64_side_cert.parentno != rootno ||
+	parent->arm64_side_cert.rootno != rootno ||
+	!trace_arm64_side_certificate_valid_held(J, parent) ||
+	!trace_arm64_root_direct_side_present(J, tv, root, rootno, parentno)) {
+    return 0;
+  }
+  if (trace_ir_acq(parent) == NULL || trace_nins_acq(parent) <= REF_BASE ||
+	trace_nins_acq(parent) >= REF_DROP)
+    return 0;
+  parentbase = ir_load_acq(&trace_ir_acq(parent)[REF_BASE]);
+  if (parentbase.o != IR_BASE || parentbase.t.irt != IRT_PGC ||
+	(TraceNo)parentbase.op1 != rootno ||
+	(ExitNo)parentbase.op2 != parent->arm64_side_cert.exitno) {
+    return 0;
+  }
+  arena = lj_arena_of(child);
+  return arena != NULL && !lj_arena_ishuge(arena) &&
+	lj_arena_lifetime_state_acq(arena, lj_arena_cellof(child)) ==
+	  LJ_ARENA_LIFETIME_LIVE &&
+	lj_arena_root_state_acq(arena, lj_arena_cellof(child)) ==
+	  LJ_ARENA_ROOT_MEMBER &&
+	tracevec_acq(J) == tv &&
+	gcref_acq(tv->slot[rootno]) == obj2gco(root) &&
+	gcref_acq(tv->slot[parentno]) == obj2gco(parent) &&
+	gcref_acq(tv->slot[childno]) == obj2gco(child) &&
+	trace_runnable_acq(root, rootno) &&
+	trace_runnable_acq(parent, parentno) &&
+	trace_runnable_acq(child, childno) &&
+	trace_root_acq(child) == rootno &&
+	trace_nextside_acq(root) == rootview->nextside &&
+	trace_nchild_acq(root) == rootview->nchild;
+}
+
 
 static int trace_root_entry_first_child_view_acq(jit_State *J,
 	GCtrace *parent, TraceNo parentno, uint32_t sourceop,
@@ -7811,6 +7960,7 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
   TraceArm64FirstChildEntryView current;
   TraceVec *tv = tracevec_acq(J);
   TraceNo childno = rootview->nextside;
+  int found_direct = 0;
   MSize i;
   memset(view, 0, sizeof(*view));
   if (rootview->nchild == 0)
@@ -7818,16 +7968,33 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
   if (tv == NULL || rootview->nchild > tv->sizetrace || childno == 0)
     return 0;
   for (i = 0; i < rootview->nchild; i++) {
+    GCtrace *child;
+    IRIns base;
     if (childno == 0 || childno == parentno ||
         (MSize)childno >= tv->sizetrace ||
-        !trace_root_entry_side_view_acq(J, parent, parentno, sourceop,
-          childno, rootview, &current, full_audit))
+        (child = traceref_fromgco_safe(gcref_acq(tv->slot[childno]))) == NULL ||
+        trace_ir_acq(child) == NULL || trace_nins_acq(child) <= REF_BASE ||
+        trace_nins_acq(child) >= REF_DROP)
       return 0;
-    if (i == 0)
-      *view = current;
-    childno = current.nextside;
+    base = ir_load_acq(&trace_ir_acq(child)[REF_BASE]);
+    if (base.o != IR_BASE || base.t.irt != IRT_PGC)
+      return 0;
+    if ((TraceNo)base.op1 == parentno) {
+      if (!trace_root_entry_side_view_acq(J, parent, parentno, sourceop,
+	    childno, rootview, &current, full_audit)) {
+	return 0;
+      }
+      if (!found_direct) {
+	*view = current;
+	found_direct = 1;
+      }
+    } else if (!trace_root_entry_nested_side_member_valid(
+	 J, parent, parentno, childno, rootview)) {
+      return 0;
+    }
+    childno = trace_nextside_acq(child);
   }
-  return childno == 0 && tracevec_acq(J) == tv &&
+  return found_direct && childno == 0 && tracevec_acq(J) == tv &&
     trace_nchild_acq(parent) == rootview->nchild &&
     trace_nextside_acq(parent) == rootview->nextside;
 }
