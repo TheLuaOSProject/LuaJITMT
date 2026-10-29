@@ -2787,7 +2787,7 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
       LJArm64ABIArg result_abi;
       LJArm64FloatHFA result_hfa;
       CTypeID raw_result;
-      if (lj_ccall_arm64_float_hfa_class(cts, result_id,
+      if (lj_ccall_arm64_float_hfa_result_class(cts, result_id,
 	    &result_hfa, &raw_result)) {
 	t = result_hfa.member_size == sizeof(float) ? IRT_FLOAT : IRT_NUM;
 	direct_hfa_count = result_hfa.count;

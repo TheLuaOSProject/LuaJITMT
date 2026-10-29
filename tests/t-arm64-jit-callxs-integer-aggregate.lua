@@ -34,6 +34,7 @@ typedef struct __attribute__((aligned(16))) {
   float lo, hi;
 } Arm64AlignedFloatPairResult;
 typedef struct { double lo, hi; } Arm64DoublePairResult;
+typedef Arm64DoublePairResult (*Arm64DoublePairResultFPRFn)(double, uint32_t);
 typedef Arm64AlignedFloatPairResult (*Arm64AlignedFloatPairResultFn)(uint32_t);
 typedef Arm64DoublePairResult (*Arm64DoublePairResultFn)(uint32_t);
 typedef struct __attribute__((aligned(16))) {
@@ -80,6 +81,8 @@ Arm64FloatResult arm64_return_float_hfa(uint32_t);
 Arm64DoubleResult arm64_return_double_hfa(uint32_t);
 Arm64FloatPairResult arm64_return_float_pair_hfa(uint32_t);
 Arm64FloatPairResult arm64_return_float_pair_hfa_fpr(double, uint32_t);
+Arm64DoublePairResult arm64_return_double_pair_hfa(uint32_t);
+Arm64DoublePairResult arm64_return_double_pair_hfa_fpr(double, uint32_t);
 double arm64_return_float_pair_scalar_fpr(double, uint32_t);
 uint32_t arm64_return_scalar(uint32_t);
 ]]
@@ -92,6 +95,9 @@ _G.__arm64_return_float_hfa_fn = lib.arm64_return_float_hfa
 _G.__arm64_return_double_hfa_fn = lib.arm64_return_double_hfa
 _G.__arm64_return_float_pair_hfa_fn = lib.arm64_return_float_pair_hfa
 _G.__arm64_return_float_pair_hfa_fpr_fn = lib.arm64_return_float_pair_hfa_fpr
+_G.__arm64_return_double_pair_hfa_fn = lib.arm64_return_double_pair_hfa
+_G.__arm64_return_double_pair_hfa_fpr_fn =
+  lib.arm64_return_double_pair_hfa_fpr
 _G.__arm64_aligned_float_result_fn = ffi.cast('Arm64AlignedFloatResultFn', nil)
 _G.__arm64_padded_float_result_fn = ffi.cast('Arm64PaddedFloatResultFn', nil)
 _G.__arm64_aligned_float_pair_result_fn =
@@ -682,6 +688,124 @@ for edge, seed in ipairs({-30, -29, -28}) do
   assert(_hfa_result_native_count(12) > native_before,
          'two-float HFA edge-lane case did not execute the selected native root')
 end
+local double_pair_candidate, double_pair_oracle =
+  make_result_pair('two-double HFA result')
+_set_hfa_result_candidate(16, double_pair_candidate)
+_G.__arm64_hfa_result_candidate_16 = double_pair_candidate
+jit.flush(double_pair_candidate)
+jit.on(double_pair_candidate, true)
+local double_pair_native_before = _hfa_result_native_count(16)
+local double_pair_effect_before = lib.arm64_aggregate_count(26)
+for pass = 1, 6 do
+  local got = double_pair_candidate(32, lib.arm64_return_double_pair_hfa,
+                                    pass*7)
+  local want = double_pair_oracle(32, lib.arm64_return_double_pair_hfa,
+                                  pass*7)
+  assert(ffi.istype('Arm64DoublePairResult', got) and
+         ffi.istype('Arm64DoublePairResult', want) and
+         got.lo == want.lo and got.hi == want.hi,
+         'two-double HFA result differs from interpreter/type')
+end
+assert(_hfa_result_native_count(16) > double_pair_native_before,
+       'two-double HFA result had no selected native CALLXS/HIOP finish')
+tracked_exit_roots = roots(double_pair_candidate)
+exits = 0
+assert(type(double_pair_candidate(32, lib.arm64_return_scalar, 13)) == 'number' and
+       exits > 0, 'two-double HFA result did not take a signature exit')
+local double_pair_native_before_gc = _hfa_result_native_count(16)
+local double_pair_effect_before_gc = lib.arm64_aggregate_count(26)
+collectgarbage('collect')
+exits = 0
+local double_pair_got = double_pair_candidate(
+    24, lib.arm64_return_double_pair_hfa, 13)
+local double_pair_want = double_pair_oracle(
+    24, lib.arm64_return_double_pair_hfa, 13)
+assert(ffi.istype('Arm64DoublePairResult', double_pair_got) and
+       double_pair_got.lo == double_pair_want.lo and
+       double_pair_got.hi == double_pair_want.hi and exits > 0 and
+       _hfa_result_native_count(16) > double_pair_native_before_gc,
+       'two-double HFA result failed forced exit/native reentry after GC')
+assert(lib.arm64_aggregate_count(26)-double_pair_effect_before_gc == 48 and
+       lib.arm64_aggregate_count(26)-double_pair_effect_before == 432,
+       'two-double HFA native/interpreter effects were lost or replayed')
+local raw_double_pair_edges = {
+  string.char(0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,128),
+  string.char(0,0,0,0,0,0,240,127, 0,0,0,0,0,0,240,255),
+  string.char(188,154,120,86,52,18,248,127,
+              84,118,152,186,220,254,248,127),
+}
+for edge, seed in ipairs({-30, -29, -28}) do
+  local before = _hfa_result_native_count(16)
+  local got = double_pair_candidate(32, lib.arm64_return_double_pair_hfa,
+                                    seed)
+  local want = double_pair_oracle(32, lib.arm64_return_double_pair_hfa,
+                                  seed)
+  local bytes = ffi.string(got, ffi.sizeof('Arm64DoublePairResult'))
+  assert(bytes == ffi.string(want, ffi.sizeof('Arm64DoublePairResult')) and
+         bytes == raw_double_pair_edges[edge] and
+         _hfa_result_native_count(16) > before,
+         'two-double HFA edge bits lacked oracle/native agreement')
+end
+_set_hfa_result_candidate(16, double_pair_candidate)
+
+local double_fpr_candidate_loader = assert(loadstring([[
+return function(n, fn, seed, bias)
+  local result
+  for i = 1, n do result = fn(bias, seed+i) end
+  return result
+end
+]], '@two-double-HFA-FPR-result-candidate-loader'))
+local double_fpr_oracle_loader = assert(loadstring([[
+return function(n, fn, seed, bias)
+  local result
+  for i = 1, n do result = fn(bias, seed+i) end
+  return result
+end
+]], '@two-double-HFA-FPR-result-oracle-loader'))
+jit.off(double_fpr_oracle_loader, true)
+local double_fpr_candidate, double_fpr_oracle =
+  double_fpr_candidate_loader(), double_fpr_oracle_loader()
+_set_hfa_result_candidate(16, double_fpr_candidate)
+_G.__arm64_hfa_result_candidate_16 = double_fpr_candidate
+jit.flush(double_fpr_candidate)
+jit.on(double_fpr_candidate, true)
+local double_fpr_native_before = _hfa_result_native_count(16)
+local double_fpr_effect_before = lib.arm64_aggregate_count(27)
+for pass = 1, 6 do
+  local got = double_fpr_candidate(32,
+      lib.arm64_return_double_pair_hfa_fpr, pass*7, 1.5)
+  local want = double_fpr_oracle(32,
+      lib.arm64_return_double_pair_hfa_fpr, pass*7, 1.5)
+  assert(ffi.istype('Arm64DoublePairResult', got) and
+         ffi.string(got, ffi.sizeof('Arm64DoublePairResult')) ==
+         ffi.string(want, ffi.sizeof('Arm64DoublePairResult')),
+         'two-double HFA with live D0 argument differs from oracle')
+end
+assert(_hfa_result_native_count(16) > double_fpr_native_before,
+       'two-double HFA with live D0 input did not enter its selected root')
+tracked_exit_roots = roots(double_fpr_candidate)
+exits = 0
+assert(type(double_fpr_candidate(32,
+    lib.arm64_return_float_pair_scalar_fpr, 13, 1.5)) == 'number' and
+    exits > 0, 'two-double HFA FPR-input root did not force a signature exit')
+local double_fpr_before_gc = _hfa_result_native_count(16)
+local double_fpr_effect_before_gc = lib.arm64_aggregate_count(27)
+collectgarbage('collect')
+exits = 0
+local double_fpr_got = double_fpr_candidate(24,
+    lib.arm64_return_double_pair_hfa_fpr, 13, 1.5)
+local double_fpr_want = double_fpr_oracle(24,
+    lib.arm64_return_double_pair_hfa_fpr, 13, 1.5)
+assert(ffi.string(double_fpr_got, ffi.sizeof('Arm64DoublePairResult')) ==
+       ffi.string(double_fpr_want, ffi.sizeof('Arm64DoublePairResult')) and
+       _hfa_result_native_count(16) > double_fpr_before_gc and exits > 0,
+       'two-double HFA FPR-input result failed native GC re-entry/exit')
+assert(lib.arm64_aggregate_count(27)-double_fpr_effect_before_gc == 48 and
+       lib.arm64_aggregate_count(27)-double_fpr_effect_before == 432,
+       'two-double HFA FPR-input effects were lost or replayed')
+_set_hfa_result_candidate(16, double_pair_candidate)
+_G.__arm64_hfa_result_candidate_16 = double_pair_candidate
+
 local fpr_candidate_loader = assert(loadstring([[
 return function(n, fn, seed, bias)
   local result
