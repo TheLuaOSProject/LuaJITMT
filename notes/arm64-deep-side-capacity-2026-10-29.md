@@ -143,3 +143,9 @@ sparse-parent snapshot correction or numeric-cdata variadic FFI changes;
 their combined validation remains separate. General Lua call/return,
 recursion, protected calls and other source/FFI restrictions still prevent a
 full x86_64 parity claim.
+
+The promoted main continuation was independently rebuilt with no test helpers
+(`capacity-main-build.log`), ordinary assertion profile
+`e6a05f3e324a4bd4a8c908b68473f615ed5477219e9a7be17066303dd2ea583b`.
+Its source and original-v2-bytecode stock corpora both pass all 509 cases
+(`capacity-main-source.log` and `capacity-main-bytecode.log`).
