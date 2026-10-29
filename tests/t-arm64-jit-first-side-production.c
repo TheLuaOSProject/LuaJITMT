@@ -755,7 +755,8 @@ static void expect_child_shape(jit_State *J, global_State *g,
   assert(traceref_safe(J, pair->childno) == pair->child);
 #ifdef LJ_TRACE_TEST_HELPERS
   if (pair->require_forl_root) {
-    const uint32_t guard_mutations = (1u<<13)|(1u<<14)|(1u<<15)|(1u<<16);
+    const uint32_t guard_mutations = (1u<<13)|(1u<<14)|(1u<<15)|
+	(1u<<16)|(1u<<17)|(1u<<18);
     assert((lj_trace_test_arm64_side_scalar_copy_contract(J, pair->childno) &
 	    guard_mutations) == guard_mutations);
   }
