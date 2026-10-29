@@ -81,3 +81,36 @@ tables are intended to be immutable and rooted. No observation establishes
 concurrent mutation or retirement of the failing template. No runtime change
 was made from that hypothesis. A ten-million-iteration stress attempt was
 killed before completion and is not a passing result.
+
+## Follow-up: attach/recorder overlap audit (2026-10-29)
+
+The proposed recorder-private-to-attached-thread overlap is not a legal
+concurrent TDUP schedule in the audited source. `rec_idx_bump()` checks
+`lj_record_mt_runtime_shared()` before touching a `BC_TDUP` template
+(`src/lj_record.c:1913-1918`). A new external attachment publishes
+`mt_entering`, but `threading_gc_enter_counted()` calls
+`threading_mt_active_prepare_traces()` before publishing `mt_live` or allowing
+the attached state to execute (`src/lib_threading.c:828-855`). That helper
+acquires the global JIT token and flushes traces before completing. A recorder
+which passed the earlier predicate still owns that token until its recording
+stack returns; an attach begun afterward cannot reach Lua bytecode and execute
+TDUP during that recorder's template mutation. Already-live/entering peers
+make the recorder predicate refuse the mutation. Therefore the earlier
+hypothesis that a legal thread attach races `lj_tab_dup()` against this private
+template resize is withdrawn.
+
+GC2 table traversal also does not establish such a race: it retains its body
+and SMR scopes and uses `lj_tab_array_snapshot_gc_held()` /
+`lj_tab_node_snapshot_gc_held()` for generation access. The raw snapshot in
+`lj_tab_dup()` is not itself proof of a bug when the source is the current
+immutable template generation and the runtime has one mutator. The mismatch
+between first and second snapshots followed by an `lj_assertL` remains a
+conditional bounds concern only if a concurrent template resize can occur;
+no permitted schedule demonstrating that overlap was found.
+
+No deterministic reproducer or runtime fix was made. The October crash remains
+unresolved, and the preserved crash report still does not identify the source
+template or generation. A clean baseline was built from commit `c5d8b87ab` with
+macOS arm64 assertion, bootstrap/experimental JIT, `LJ_TRACE_TEST_HELPERS`, and
+`LJ_TAB_TEST_HELPERS`; its runtime, archive, and source-file SHA-256 manifest
+are preserved in `/Users/frityet/Scratch/ljmt-tdup-race-20261029/baseline/`.
