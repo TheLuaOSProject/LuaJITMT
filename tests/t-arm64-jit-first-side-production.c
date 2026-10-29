@@ -742,6 +742,13 @@ static void expect_child_shape(jit_State *J, global_State *g,
 	 trace_topslot_acq(pair->root));
   expect_edge(g, pair, pair->child_mcode);
   assert(traceref_safe(J, pair->childno) == pair->child);
+#ifdef LJ_TRACE_TEST_HELPERS
+  if (pair->require_forl_root) {
+    const uint32_t guard_mutations = (1u<<13)|(1u<<14)|(1u<<15)|(1u<<16);
+    assert((lj_trace_test_arm64_side_scalar_copy_contract(J, pair->childno) &
+	    guard_mutations) == guard_mutations);
+  }
+#endif
 }
 
 static void expect_native_child(lua_State *L, jit_State *J,
@@ -777,6 +784,32 @@ static void expect_native_child(lua_State *L, jit_State *J,
   assert(live_trace_count(J) == before);
   assert(trace_nchild_acq(pair->child) == 0);
   assert(trace_nextside_acq(pair->child) == 0);
+}
+
+static void expect_forl_intmax_boundary(lua_State *L,
+	const ProductionPair *pair)
+{
+  const lua_Integer start = (lua_Integer)INT32_MAX-1;
+  const lua_Integer stop = INT32_MAX;
+  lua_Integer expected = call_forl_named(L,
+	"__arm64_first_side_production_forl_oracle", start, stop, 2);
+  assert(expected == -(lua_Integer)2*INT32_MAX+1);
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  assert(call_forl_named(L, pair->name, start, stop, 2) == expected);
+  /* The invalid stop+step range is routed through the already-validated root
+  ** exit and interpreter. This is whole-loop boundary evidence, not proof
+  ** that the child-local overflow guard itself executed. */
+  assert(lj_trace_test_root_entry_publishes() > 0);
+  assert(lj_trace_test_root_entry_successes() > 0);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+  assert(lj_trace_test_exit_calls() > 0);
+  assert(lj_trace_test_first_exit_parent() == pair->rootno);
+  assert(lj_trace_test_last_exit_parent() == pair->rootno);
+  assert(lj_trace_test_first_exitno() < trace_nsnap_acq(pair->root));
+  assert(lj_trace_test_last_exitno() < trace_nsnap_acq(pair->root));
+  assert(trace_nchild_acq(pair->root) == 1);
+  assert(trace_nextside_acq(pair->root) == pair->childno);
 }
 
 static void expect_unsupported_first_side_closed(lua_State *L, jit_State *J,
@@ -982,6 +1015,12 @@ static int detailed_main(int argc, char **argv)
   tg = L2TG(L);
   assert(J != NULL && g != NULL && tg != NULL);
   define_probes(L);
+  run_lua(L,
+	"local function f(start,n,mode) local sum=0; "
+	"for i=start,n do if mode==1 then sum=sum+i "
+	"elseif mode==2 then sum=sum-i else sum=sum+i*3 end end; "
+	"return sum end; jit.off(f,true); "
+	"__arm64_first_side_production_forl_oracle=f");
   start_live_peer(L);
   saved_cframe = L->cframe;
   saved_vmstate = lj_tg_vmstate_load_acq(tg);
@@ -1013,6 +1052,7 @@ static int detailed_main(int argc, char **argv)
   for (j = 0; j < 2; j++)
     for (i = 0; i < PRODUCTION_PAIR_COUNT; i++)
       expect_native_child(L, J, &pairs[i]);
+  expect_forl_intmax_boundary(L, &pairs[PRODUCTION_PAIR_COUNT-1u]);
   assert(live_trace_count(J) == 14u);
   for (i = 0; i < PRODUCTION_PAIR_COUNT; i++)
     expect_edge(g, &pairs[i], pairs[i].child_mcode);

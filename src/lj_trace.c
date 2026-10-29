@@ -6461,6 +6461,8 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
   LJArm64SideParentBinding bindings[LJ_MAX_JSLOTS];
   MSize nins, nk, nsnap, nsnapmap, parentmap_n = 0, i;
   IRRef semantic_nins = 0, loopref = 0, arith = 0, sloadref = 0;
+  IRRef forladd = 0, forlcmp = 0, forlguard = 0, badstepref = 0;
+  int32_t forlstep = 0, forlbound = 0;
   GCproto *pt;
   int sem_base, post_base;
 
@@ -6587,6 +6589,109 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
   if (!sem_base || !post_base)
     goto done;
 
+  if (bc_op(semside.parent_startins) == BC_FORL) {
+    MSize idxslot = 1u+LJ_FR2+(MSize)bc_a(semside.parent_startins);
+    MSize stopslot = idxslot+FORL_STOP;
+    MSize stepslot = idxslot+FORL_STEP;
+    MSize header = semside.loop_header_pc;
+    BCIns fori, stepins;
+    int64_t bound64;
+    MSize stepmatches = 0;
+    if (semside.parent_admission != TRACE_ARM64_INT_FORL_ADMITTED ||
+        header == 0 || header >= semside.proto_sizebc)
+      goto done;
+    fori = (BCIns)la_load32_acq((const uint32_t *)&semside.proto_bc[header]);
+    stepins = (BCIns)la_load32_acq(
+      (const uint32_t *)&semside.proto_bc[header-1u]);
+    forlstep = (int32_t)bc_d(stepins);
+    if (bc_op(fori) != BC_FORI || bc_a(fori) != bc_a(semside.parent_startins) ||
+        bc_op(stepins) != BC_KSHORT || bc_a(stepins) != bc_a(fori)+FORL_STEP ||
+        forlstep == 0 ||
+        idxslot+FORL_STEP >= semside.parent_topslot)
+      goto done;
+    for (i = 0; i < semside.parent_nmap_values; i++) {
+      const LJArm64SideParentMapValue *mv = &semside.parent_map_values[i];
+      if (mv->slot == stepslot) {
+        if (++stepmatches != 1 || mv->value.o != IR_KINT ||
+            mv->value.t.irt != IRT_INT || mv->value.i != forlstep)
+          goto done;
+      }
+    }
+    if (stepmatches != 1) goto done;
+    bound64 = forlstep > 0 ? (int64_t)INT32_MAX-forlstep :
+                             (int64_t)INT32_MIN-forlstep;
+    if (bound64 < INT32_MIN || bound64 > INT32_MAX)
+      goto done;
+    forlbound = (int32_t)bound64;
+    for (i = REF_FIRST; i < semantic_nins; i++) {
+      IRIns p = ir_load_acq(&ir[i]);
+      int exact = 0;
+      if (p.o == IR_ADD && p.t.irt == IRT_INT &&
+          irref_isk(p.op2) && p.op2 < REF_TRUE &&
+          ir_load_acq(&ir[p.op2]).o == IR_KINT &&
+          ir_load_acq(&ir[p.op2]).i == forlstep) {
+        IRIns idx;
+        for (MSize m = 0; m < semside.parent_nmap_values; m++)
+          if (semside.parent_map_values[m].slot == stepslot &&
+              semside.parent_map_values[m].ref == p.op2)
+            exact++;
+        idx = p.op1 >= REF_FIRST && p.op1 < i ?
+          ir_load_acq(&ir[p.op1]) : (IRIns){0};
+        exact = exact == 1 && idx.o == IR_SLOAD && idx.op1 == idxslot &&
+          idx.t.irt == IRT_INT &&
+          idx.op2 == (IRSLOAD_PARENT|IRSLOAD_INHERIT);
+      }
+      if (exact) {
+        if (forladd) goto done;
+        forladd = (IRRef)i;
+      }
+    }
+    if (!forladd) goto done;
+    for (i = forladd+1u; i < semantic_nins; i++) {
+      IRIns cmp = ir_load_acq(&ir[i]);
+      if (cmp.o != (forlstep > 0 ? IR_LE : IR_GE) ||
+          cmp.t.irt != (IRT_INT|IRT_GUARD) || cmp.op1 != forladd ||
+          cmp.op2 < REF_FIRST || cmp.op2 >= i)
+        continue;
+      {
+        IRIns stop = ir_load_acq(&ir[cmp.op2]);
+        if (stop.o != IR_SLOAD || stop.op1 != stopslot ||
+            (stop.t.irt & ~IRT_ISPHI) != IRT_INT ||
+            stop.op2 != (IRSLOAD_PARENT|IRSLOAD_READONLY|IRSLOAD_INHERIT))
+          continue;
+      }
+      if (forlcmp) goto done;
+      forlcmp = (IRRef)i;
+      for (IRRef q = forladd+1u; q < forlcmp; q++) {
+        IRIns guard = ir_load_acq(&ir[q]);
+        if (guard.o != (forlstep > 0 ? IR_LE : IR_GE) ||
+            guard.t.irt != (IRT_INT|IRT_GUARD) ||
+            guard.op1 != cmp.op2 ||
+            !irref_isk(guard.op2) || guard.op2 >= REF_TRUE)
+          continue;
+        {
+          IRIns constant = ir_load_acq(&ir[guard.op2]);
+          if (constant.o != IR_KINT || constant.i != forlbound)
+            continue;
+        }
+        if (forlguard) goto done;
+        forlguard = q;
+      }
+    }
+    if (!forlcmp || !forlguard) goto done;
+    for (i = nk; i < REF_TRUE; i++) {
+      int32_t value;
+      if (i != (IRRef)ir[forladd].op2 &&
+          ir_load_acq(&ir[i]).o == IR_KINT &&
+          ((value = ir_load_acq(&ir[i]).i), 1) &&
+          value != forlstep) {
+        badstepref = (IRRef)i;
+        break;
+      }
+    }
+    if (!badstepref) goto done;
+  }
+
   if (mutation == 1) {
     IRIns bad = ir_load_acq(&ir[arith]);
     bad.o = IR_TNEW; bad.t.irt = IRT_TAB; bad.op1 = 0; bad.op2 = 0;
@@ -6640,6 +6745,22 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
     IRIns bad = ir_load_acq(&ir[sloadref]);
     bad.r = RID_NONE;
     ir[sloadref] = bad;
+  } else if (mutation == 12 && forlguard) {
+    IRIns bad = ir_load_acq(&ir[forlguard]);
+    bad.i += forlstep > 0 ? 1 : -1;
+    ir[forlguard] = bad;
+  } else if (mutation == 13 && forlguard) {
+    IRIns bad = ir_load_acq(&ir[forlguard]);
+    bad.o = IR_NOP; bad.t.irt = IRT_NIL; bad.op1 = 0; bad.op2 = 0;
+    ir[forlguard] = bad;
+  } else if (mutation == 14 && forladd && badstepref) {
+    IRIns bad = ir_load_acq(&ir[forladd]);
+    bad.op2 = (IRRef1)badstepref;
+    ir[forladd] = bad;
+  } else if (mutation == 15 && forlguard && forlcmp) {
+    IRIns tmp = ir_load_acq(&ir[forlguard]);
+    ir[forlguard] = ir_load_acq(&ir[forlcmp]);
+    ir[forlcmp] = tmp;
   }
   *sem_ok = lj_asm_arm64_side_scalar_ir_admit(&jcopy, &childcopy,
 	&semside, &reject);
@@ -6661,7 +6782,7 @@ uint32_t lj_trace_test_arm64_side_scalar_copy_contract(jit_State *J,
 	!trace_test_side_scalar_copy(J, child, 0, &sem, &post) || !sem || !post)
     return 0;
   result = 3u;
-  for (mutation = 1; mutation <= 11; mutation++) {
+  for (mutation = 1; mutation <= 15; mutation++) {
     if (!trace_test_side_scalar_copy(J, child, mutation, &sem, &post))
 	return result;
     if (((mutation == 2 || mutation == 11) && sem && !post) ||

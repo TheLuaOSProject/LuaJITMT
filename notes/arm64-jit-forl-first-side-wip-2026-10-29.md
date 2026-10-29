@@ -35,22 +35,33 @@ root-linked child.
 
 ## Current validation status
 
-The focused production contract passed one run of smoke, ARM64 helper, and
-arm64e helper modes, including `gc-claim`, `scoped`, and `full-flush`; the
-ordinary-range FORL child executed native exits. Log:
-`/Users/frityet/Scratch/ljmt-forl-first-side-20261029-preserved/contract-followup.log`.
+The focused production contract passed at default repetition counts for smoke,
+ARM64 helper, and arm64e helper profiles, including `gc-claim`, `scoped`, and
+`full-flush`; the ordinary-range FORL child executed native exits. Log:
+`/Users/frityet/Scratch/ljmt-forl-first-side-20261029-preserved/default-contract.log`.
 The initial cleanup failure was a fixture bug: the new three-argument FORL
 function was called with only two arguments, so its loop was empty and the
 post-token hook never fired. Supplying the exact `(start, stop, mode)` tuple
 restored the original pending-request assertion and cleanup checks; they pass.
 
-Overflow safety is still unproven. A boundary probe with native
-`start=INT32_MAX-1, stop=INT32_MAX, step=1` entered root trace 12 and exited at
-root exit 0; it did not produce an exit from attached child 13, so it did not
-exercise the child's local range guard. The minimum-bound mirror, an exact
-child overflow-exit witness, and ordinary-runtime/concurrency evidence remain
-incomplete. Do not describe this WIP as a complete FORL parity capability or
-integrated.
+The FORL child copy contract now independently rejects four mutations in both
+semantic and post-RA passes: deleting its local stop bound, loosening the bound,
+changing the loop-step operand, and moving the bound check after the loop
+comparison. The test selects the exact update/stop/step/bound relation from the
+copied source and map before applying mutations.
+
+Boundary conformance is checked against a separate explicitly JIT-disabled Lua
+oracle. For `start=INT32_MAX-1, stop=INT32_MAX, step=1`, the native candidate
+returns the exact oracle result; runtime counters identify an exit from root
+trace 12/exit 0, not from attached child 13. Thus this proves whole-loop
+boundary behavior through root fallback/interpreter, not execution of the
+child-local guard. A separate near-maximum safe-stop attempt also exited from
+the parent root instead of producing a child exit. The minimum-bound mirror
+and an exact child overflow-exit witness remain incomplete. The contract does
+exercise the ordinary-range native child with a live peer and GC/retirement/
+reuse checks; those checks have not been repeated on a high-boundary native
+child because none has been observed. Do not describe this WIP as a complete
+FORL parity capability or integrated.
 
 A previous experiment accepted the child ADD using only the copied parent
 admission token and selected map. That path was closed. The present source has
