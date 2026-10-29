@@ -663,12 +663,21 @@ assert(lib.arm64_aggregate_count(23)-pair_effect_before_gc == 48,
        'two-float HFA native/interpreter effects were replayed after GC')
 assert(lib.arm64_aggregate_count(23)-pair_effect_before == 432,
        'two-float HFA native/interpreter effects were lost or replayed')
-for _, seed in ipairs({1, 2, 3}) do
+local raw_pair_edges = {
+  string.char(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80),
+  string.char(0x00, 0x00, 0x80, 0x7f, 0x00, 0x00, 0x80, 0xff),
+  string.char(0x45, 0x23, 0xc1, 0x7f, 0x21, 0x43, 0xc5, 0x7f),
+}
+for edge, seed in ipairs({-30, -29, -28}) do
   local native_before = _hfa_result_native_count(12)
+  -- The final iteration returns special C payloads 2, 3 and 4 while the
+  -- candidate loop remains long enough to enter the selected native root.
   local got = pair_candidate(32, lib.arm64_return_float_pair_hfa, seed)
   local want = pair_oracle(32, lib.arm64_return_float_pair_hfa, seed)
   assert(ffi.string(got, ffi.sizeof('Arm64FloatPairResult')) ==
-         ffi.string(want, ffi.sizeof('Arm64FloatPairResult')),
+         ffi.string(want, ffi.sizeof('Arm64FloatPairResult')) and
+         ffi.string(got, ffi.sizeof('Arm64FloatPairResult')) ==
+         raw_pair_edges[edge],
          'two-float HFA did not preserve exact lane bits')
   assert(_hfa_result_native_count(12) > native_before,
          'two-float HFA edge-lane case did not execute the selected native root')
@@ -734,14 +743,16 @@ assert(type(fpr_mismatch_after_gc) == 'number' and exits > 0,
 assert(lib.arm64_aggregate_count(24)-fpr_effect_before_gc == 48 and
        lib.arm64_aggregate_count(24)-fpr_effect_before == 432,
        'two-float HFA FPR-input effects were lost or replayed')
-for _, seed in ipairs({1, 2, 3}) do
+for edge, seed in ipairs({-30, -29, -28}) do
   local native_before = _hfa_result_native_count(12)
   local got = pair_fpr_candidate(32,
       lib.arm64_return_float_pair_hfa_fpr, seed, 1.5)
   local want = pair_fpr_oracle(32,
       lib.arm64_return_float_pair_hfa_fpr, seed, 1.5)
   assert(ffi.string(got, ffi.sizeof('Arm64FloatPairResult')) ==
-         ffi.string(want, ffi.sizeof('Arm64FloatPairResult')),
+         ffi.string(want, ffi.sizeof('Arm64FloatPairResult')) and
+         ffi.string(got, ffi.sizeof('Arm64FloatPairResult')) ==
+         raw_pair_edges[edge],
          'two-float HFA FPR-input case changed exact lane bits')
   assert(_hfa_result_native_count(12) > native_before,
          'two-float HFA FPR edge case did not execute the native root')
