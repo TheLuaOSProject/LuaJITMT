@@ -113,3 +113,23 @@ preserved under
 `/Users/frityet/Scratch/funcf-two-results-ordinary-20261029`. The ordinary rows
 match the helper build: `nins=5` and 81 selected-root exits for the direct pair,
 and `nins=13` and 81 selected-root exits for the captured one-result root.
+
+## Terminal result-map binding
+
+The two-result snapshot proof now binds both returned slots specifically to
+the final terminal snapshot. Earlier snapshots can share the final poll IR
+reference while carrying different source PCs, so counting result slots across
+all maps could incorrectly combine partial evidence. The terminal map must
+contain each result slot exactly once and map it to the value derived from the
+terminal `RET` source; two slots may legitimately map to the same IR value.
+
+The C contract removes the second terminal map entry while preserving a valid
+map extent and its original footer, and both semantic and post-RA admission
+reject that clone. It also runs `local y=x*.5; return y,y` as a separate
+two-result candidate: the candidate matches an interpreter oracle and enters
+the selected root natively before and after collection with a live peer, and
+its cloned trace passes both admission proofs. The focused assertion contract
+passed for arm64 and arm64e. Each profile reports 10 exit-free native returns,
+one captured-callee identity exit, 20 semantic mutation rejections, 21 post-RA
+mutation rejections, and two low-loopref rejections. The log is
+`/tmp/funcf-terminal-result-contract.log`.
