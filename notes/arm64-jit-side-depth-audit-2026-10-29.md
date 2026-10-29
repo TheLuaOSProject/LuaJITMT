@@ -51,13 +51,16 @@ ARM64 scalar side adaptation: PASS
 arm64_jit_side_ir_admission_contract OK
 ```
 
-The local no-observer timing probe was run three times per revision on the
-same host, with 2,000 calls per phase. At checkpoint `570d5b942`, medians were
-5.525, 5.669, 5.668, and 5.740 microseconds per call for root, direct,
-nested, and depth-3 phases. With the current wide-depth fallback and ancestry
-checks, medians were 5.165, 5.471, 5.600, and 5.700 microseconds. These noisy
-samples show no measured regression on this probe; they are not a general
-performance guarantee.
+The no-observer timing probe was run three times per revision on the same
+host with matching optimized ARM64 assertion/helper builds and 2,000 calls per
+phase. Root/direct/nested medians at `22d54430f` were 4.557, 4.775, and 4.644
+microseconds per call. At `570d5b942` they were 5.525, 5.669, and 5.668; at
+the current checkpoint they were 5.528, 5.743, and 5.861. Thus the current
+ancestry changes add about 0%, 1%, and 3% over `570d5b942` in this sample.
+The larger 20–26% gap against `22d54430f` spans other parity/runtime changes
+since that baseline and cannot be attributed to this ancestry work. The
+baseline has no depth-3 native path; its depth-3 phase ran interpreted and is
+not comparable. These noisy samples are not a general performance guarantee.
 
 Retirement now validates each root-owned side list and walks newest-first.
 Publication prepends each child, so this is descendant-before-ancestor order.
