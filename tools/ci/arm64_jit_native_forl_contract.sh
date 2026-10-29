@@ -172,7 +172,9 @@ for required in \
   'BCIns expected = BCINS_AD((BCOp)sourceop, bc_a(startins), traceno);' \
   'if (sourceins != expected || ins != sourceins)' \
   '(sourceop == (uint32_t)BC_JFUNCF ?' \
-  'TRACE_ARM64_TRUE_FUNCF_ADMITTED : TRACE_ARM64_INT_LOOP_ADMITTED)' \
+  'TRACE_ARM64_TRUE_FUNCF_ADMITTED :' \
+  'sourceop == (uint32_t)BC_JITERL ? TRACE_ARM64_ITERL_ADMITTED :' \
+  'TRACE_ARM64_INT_LOOP_ADMITTED);' \
   'v->admission == expected_admission' \
   'trace_root_entry_loop_geometry(sourceop, pt, pc, v->startins)' \
   'bc_op(startins) != BC_FORL' \
