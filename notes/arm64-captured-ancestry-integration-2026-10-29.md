@@ -83,3 +83,26 @@ is stale and is not evidence of an mmap syscall failure. Exact evidence is
 `baseline-allocator-sites.log` in the capacity-investigation directory,
 lines 83–101. A range-preserving allocator correction is in progress; this
 component pass does not release the main promotion hold.
+
+## Combined allocator and nested-while checkpoint 0641fba1e
+
+`0641fba1e` combines `687227e68` (MAP_JIT range recovery and actual depth-three
+canonical-root scoped teardown) with `ebad021f3` (nested BC_LOOP sides) and the
+pointer-result work. The combined side-admission matrix passes all four
+ARM64/arm64e assertion/release profiles. Each profile passes both nested-while
+fixtures, copied ancestry negatives, the full 64-child capacity graph,
+middle-ancestor teardown, and full canonical-root teardown/reentry.
+`allocator-while-combined-four-profile.log` records the result. These particular
+layouts needed zero dynamic range extensions; the separate positive-path runs
+and conservative range boundary tests are documented in the allocator note.
+
+Ordinary ARM64 and strict `-Werror` x86_64 at this same source pass all 509 stock
+source tests and all 509 original-v2 bytecode tests. The x64 helper build also
+passes `t-jit-trace-retire`. Logs are `allocator-combined-{arm64,x64}-stock-*.log`
+and `allocator-combined-x64-build.log` in the evidence directory above.
+
+The allocation-specific combined matrix blocker is cleared. The full
+`arm64_jit_fail_closed_gate.sh` is running against a pinned `0641fba1e` checkout
+in `ir-admission`; its result is not yet claimed. Promotion waits for that full
+combined result. Subsequent dead-numeric CALLM, transient three-result CALLM,
+and iterator early-break work remains outside this checkpoint.
