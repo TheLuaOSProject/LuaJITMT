@@ -26,6 +26,25 @@ Evidence, including the expected baseline ARM64 failure, full profile log,
 frozen integrated runtime/library and hashes, is preserved at
 `/Users/frityet/Scratch/ljmt-nested-hfa-integrated-20261029/`.
 
-Representative broader nested classifier fixtures are being added before
-this slice is promoted to the main parity branch. Overall x86_64 parity is
-still incomplete.
+## Completed validation and promotion
+
+The fixture expansion from `9799a13cf` is integrated as `bcc552b45`.
+It adds a native sibling-plus-nested float triple with independent source,
+member-offset and allocated-carrier rejection cases, plus classifier checks
+for nested double quads, the four-leaf limit, mixed extra members, depth
+31/32, and result rejection with both NULL and non-NULL descriptors. Review
+also fixed the warmup observer to refresh the selected root table after
+compilation and clear old exit counts.
+
+The final combined four-profile aggregate contract passes, with the ordinary
+named-pair probe now included in every profile. See `aggregate-final-four.log`.
+The ordinary no-helper named-pair run, 509 stock source tests, and interpreter
+aggregate/variadic ABI contract passed on the same production implementation
+before that test-only fixture expansion. No production code changed in the
+later fixture, contract-wiring, or documentation commits. The biased-IR
+copy crash investigation is closed separately in
+`test-helper-biased-ir-copy-crash-2026-10-29.md`.
+
+This bounded slice is ready for the main parity branch. Nested arrays, open
+Lua result forwarding and deeper side ancestry remain active work; overall
+x86_64 parity is incomplete.

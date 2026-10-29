@@ -35,8 +35,9 @@ and is a representative extension, not evidence that the array case is closed.
 
 The focused `arm64-assert` run of
 `tools/ci/arm64_jit_integer_aggregate_args_contract.sh` passed after these
-fixtures were added. The root will run the full four-profile matrix before
-integration. The prior nested-HFA four-profile log is
+fixtures were added. The integrated four-profile matrix subsequently passed at `bcc552b45`,
+including the ordinary named-pair peer probe in every profile; see
+`arm64-nested-hfa-integration-2026-10-29.md`. The prior nested-HFA four-profile log is
 `/Users/frityet/Scratch/ljmt-nested-hfa-20261029/four-profile.log`.
 The tested worktree was `/Users/frityet/.codex/worktrees/arm64-math/LuaJITMT`.
 
