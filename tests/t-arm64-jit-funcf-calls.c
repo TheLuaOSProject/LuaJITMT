@@ -26,6 +26,7 @@
 static unsigned native_returns, native_identity_exits;
 static unsigned semantic_bad, postra_bad, low_loopref_bad;
 static unsigned tail_semantic_bad, tail_postra_bad;
+static unsigned literal_semantic_bad, literal_postra_bad;
 
 static GCfunc *global_lfunc(lua_State *L, const char *name)
 {
@@ -773,6 +774,22 @@ static void open_admission(GCtrace *T, GCfunc *producer, GCfunc *consumer)
     f.map[f.return_entry]=SNAP(snap_slot(f.map[f.return_entry]),0,f.inputref);
     if (open_admit(&f,allocated)) assert(0 && "open CALLM result map mutation admitted");
     if (allocated) postra_count++; else semantic++;
+
+    /* Integer producer literals must still bind their exact source value,
+    ** even when the consumer widens that value to NUM arithmetic. */
+    for (IRRef k=T->nk;k<REF_TRUE;k++) {
+      IRIns constant=ir_load_acq(&T->ir[k]);
+      if (constant.o==IR_KINT && (constant.i==-17 || constant.i==65537)) {
+        open_reset(&f);
+        assert(open_admit(&f,allocated));
+        f.ir[k].i++;
+        if (open_admit(&f,allocated))
+          assert(0 && "open CALLM changed integer literal admitted");
+        if (allocated) literal_postra_bad++; else literal_semantic_bad++;
+      }
+      if (constant.o==IR_KNUM || constant.o==IR_KGC || constant.o==IR_KKPTR)
+        k++;
+    }
   }
   semantic_bad+=semantic; postra_bad+=postra_count;
   free(f.pt); free(f.J); free(f.ir); free(f.snap); free(f.map);
@@ -848,6 +865,38 @@ static void open_native_case(lua_State *L, const char *candidate,
     native_returns++;
   }
   free(saved_bytes);
+}
+
+static void open_integer_literals(lua_State *L)
+{
+  const char *bodies[]={"return x+.5,-17", "return 65537,x+.5"};
+  for (unsigned i=0;i<sizeof(bodies)/sizeof(bodies[0]);i++) {
+    char setup[2048];
+    int n=snprintf(setup,sizeof(setup),
+      "funcf_literal_producer=function(x) %s end; "
+      "funcf_literal_oracle_producer=function(x) %s end; "
+      "funcf_literal_bad_producer=function(x) %s end; "
+      "funcf_literal_oracle_bad_producer=function(x) %s end; "
+      "funcf_literal_consumer=function(a,b) return a+b end; "
+      "funcf_literal_oracle_consumer=function(a,b) return a+b end; "
+      "funcf_literal_candidate=function(producer,consumer,x) "
+      "local y=consumer(producer(x)); return y+.125 end; "
+      "funcf_literal_oracle=function(producer,consumer,x) "
+      "local y=consumer(producer(x)); return y+.125 end; "
+      "jit.off(funcf_literal_oracle,true); "
+      "jit.off(funcf_literal_oracle_producer,true); "
+      "jit.off(funcf_literal_oracle_bad_producer,true); "
+      "jit.off(funcf_literal_oracle_consumer,true); "
+      "jit.on(funcf_literal_candidate,true)",
+      bodies[i],bodies[i],bodies[i],bodies[i]);
+    assert(n>0 && (size_t)n<sizeof(setup));
+    ljt_lua_dostring(L,setup);
+    open_native_case(L,"funcf_literal_candidate","funcf_literal_oracle",
+      "funcf_literal_producer","funcf_literal_consumer",
+      "funcf_literal_oracle_producer","funcf_literal_oracle_consumer",
+      "funcf_literal_bad_producer","funcf_literal_oracle_bad_producer");
+  }
+  assert(literal_semantic_bad==2u && literal_postra_bad==2u);
 }
 
 enum {
@@ -1155,6 +1204,7 @@ int main(void)
     "funcf_open_producer","funcf_open_consumer",
     "funcf_open_oracle_producer","funcf_open_oracle_consumer",
     "funcf_open_bad_producer","funcf_open_oracle_bad_producer");
+  open_integer_literals(L);
   GCfunc *candidate=global_lfunc(L,"funcf_candidate");
   GCtrace *T=NULL;
   for (unsigned i=0;i<8&&!T;i++) {

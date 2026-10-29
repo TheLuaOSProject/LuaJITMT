@@ -13570,7 +13570,7 @@ static int arm64_lua_leaf_ir_eval_multi(const jit_State *J, const GCtrace *T,
           ((state[a] && !arm64_cell_value_ir_ref(T, state[a], before)) ||
            !arm64_cell_value_ir_ref(T, value, before))) return 0;
     } else if (op == BC_KSHORT) {
-      value = arm64_lua_leaf_ir_literal(T, (lua_Number)(int16_t)d, end);
+      value = arm64_lua_leaf_ir_literal(T, (lua_Number)(int16_t)d, 0);
     } else if (op == BC_KPRI) {
       if (d > 2u) return 0;
       value = (IRRef)(REF_NIL-d);
@@ -13578,7 +13578,7 @@ static int arm64_lua_leaf_ir_eval_multi(const jit_State *J, const GCtrace *T,
       if (d >= pt->sizekn) return 0;
       proto_knumtv_load_acq(&k, pt, d);
       if (!tvisnumber(&k)) return 0;
-      value = arm64_lua_leaf_ir_literal(T, numberVnum(&k), end);
+      value = arm64_lua_leaf_ir_literal(T, numberVnum(&k), 0);
     } else if (op == BC_UGET) {
       if (d >= pt->sizeuv) return 0;
       value = arm64_lua_leaf_ir_upvalue(J, T, pt, p, before, end);
@@ -13711,7 +13711,7 @@ static int arm64_lua_leaf_ir_eval_multi(const jit_State *J, const GCtrace *T,
         if (c >= pt->sizekn) return 0;
         proto_knumtv_load_acq(&k, pt, c);
         if (!tvisnumber(&k)) return 0;
-        right = arm64_lua_leaf_ir_literal(T, numberVnum(&k), end);
+        right = arm64_lua_leaf_ir_literal(T, numberVnum(&k), 0);
         if (op == BC_ADDNV || op == BC_SUBNV || op == BC_MULNV ||
             op == BC_DIVNV) { IRRef tmp = left; left = right; right = tmp; }
       }
@@ -15151,14 +15151,12 @@ static int arm64_lua_leaf_ir_open_producer_args(const jit_State *J,
       value = arm64_lua_leaf_ir_upvalue(J, T, pt, pos,
                                         snap->ref, T->snap[end].ref);
     } else if (op == BC_KSHORT) {
-      value = arm64_lua_leaf_ir_literal(T, (lua_Number)(int16_t)d,
-                                        T->snap[end].ref);
+      value = arm64_lua_leaf_ir_literal(T, (lua_Number)(int16_t)d, 0);
     } else if (op == BC_KNUM) {
       if (d >= pt->sizekn) return 0;
       proto_knumtv_load_acq(&k, pt, d);
       if (!tvisnumber(&k)) return 0;
-      value = arm64_lua_leaf_ir_literal(T, numberVnum(&k),
-                                        T->snap[end].ref);
+      value = arm64_lua_leaf_ir_literal(T, numberVnum(&k), 0);
     } else if (op == BC_ADDVV || op == BC_SUBVV || op == BC_MULVV ||
                op == BC_DIVVV || op == BC_ADDVN || op == BC_SUBVN ||
                op == BC_MULVN || op == BC_DIVVN || op == BC_ADDNV ||
@@ -15173,8 +15171,7 @@ static int arm64_lua_leaf_ir_open_producer_args(const jit_State *J,
         if (c >= pt->sizekn) return 0;
         proto_knumtv_load_acq(&k, pt, c);
         if (!tvisnumber(&k)) return 0;
-        right = arm64_lua_leaf_ir_literal(T, numberVnum(&k),
-                                          T->snap[end].ref);
+        right = arm64_lua_leaf_ir_literal(T, numberVnum(&k), 0);
         if (op == BC_ADDNV || op == BC_SUBNV || op == BC_MULNV ||
             op == BC_DIVNV) { IRRef tmp = left; left = right; right = tmp; }
       }
