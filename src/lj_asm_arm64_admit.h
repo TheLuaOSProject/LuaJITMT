@@ -239,6 +239,59 @@ int lj_asm_arm64_funcf_bytecode(const GCproto *pt, BCIns startins,
   return arm64_ir_funcf_bytecode(pt, startins, liveins, prepublication);
 }
 
+/* Decode one exact JMP ... ITERC ITERL source generation. This only proves
+** bytecode geometry; it gives no authority to record, publish or enter native
+** iterator code without the separate frame, IR and allocated-state proofs. */
+int lj_asm_arm64_iterl_tuple(const GCproto *pt, const BCIns *pc,
+    BCIns startins, BCIns liveins, int prepublication,
+    LJArm64IteratorSource *source)
+{
+  uintptr_t lo, hi;
+  MSize loop;
+  int64_t body, setup, target;
+  BCIns call, jump, expected;
+  BCReg base = bc_a(startins);
+  if (!pt || !source || !pc || !arm64_ir_proto_range(pt, &lo, &hi) ||
+      !arm64_ir_pcpos((uintptr_t)pc, lo, hi, &loop) ||
+      loop < 2u || loop+1u >= pt->sizebc || bc_op(startins) != BC_ITERL ||
+      bc_j(startins) >= 0 || base < 3u ||
+      (MSize)base+3u+LJ_FR2 > pt->framesize)
+    return 0;
+  if (prepublication) {
+    if (liveins != startins) return 0;
+    expected = startins;
+  } else {
+    if (bc_op(liveins) != BC_JITERL || bc_a(liveins) != base ||
+        bc_d(liveins) == 0) return 0;
+    expected = liveins;
+  }
+  body = (int64_t)loop+1+(int64_t)bc_j(startins);
+  setup = body-1;
+  if (body <= 1 || body > (int64_t)loop-1 || setup < 1)
+    return 0;
+  call = arm64_ir_bc_acq(lo, loop-1u);
+  jump = arm64_ir_bc_acq(lo, (MSize)setup);
+  target = setup+1+(int64_t)bc_j(jump);
+  if (bc_op(call) != BC_ITERC || bc_a(call) != base ||
+      bc_b(call) != 2 || bc_c(call) != 3 ||
+      bc_op(jump) != BC_JMP || bc_a(jump) != base ||
+      bc_j(jump) <= 0 || target != (int64_t)loop-1)
+    return 0;
+  /* Recheck all mutable words defining the tuple after decoding offsets. */
+  if (arm64_ir_bc_acq(lo, loop) != expected ||
+      arm64_ir_bc_acq(lo, loop-1u) != call ||
+      arm64_ir_bc_acq(lo, (MSize)setup) != jump)
+    return 0;
+  source->body_pc = (MSize)body;
+  source->call_pc = loop-1u;
+  source->loop_pc = loop;
+  source->setup_pc = (MSize)setup;
+  source->callins = call;
+  source->setupins = jump;
+  source->base = base;
+  return 1;
+}
+
 static int arm64_ir_funcf_slot_source(const BCIns *bc, MSize sizebc,
 	MSize numparams, MSize baseslot, MSize slot)
 {
