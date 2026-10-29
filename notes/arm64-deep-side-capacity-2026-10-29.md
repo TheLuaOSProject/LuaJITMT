@@ -125,3 +125,21 @@ blocker. Larger-source probes with 133 and 260 branches reveal a separate
 first-side semantic refusal before any deep chain is formed; x64 reaches
 depth 259 on the 260-branch source. Those probes do not test the extended
 ancestry count yet, and the cause is under investigation.
+
+## Complete integrated gate
+
+The complete gate passes at pinned integration `28c9ec72b`, which contains
+the reusable ancestry storage, capacity extension and two-pass membership
+validation. The final VM and recorder safepoint runtime tests actually ran;
+all four M7 FFI profiles passed and no contract was skipped. The outer
+command exited zero and rebuilt ordinary assertion ARM64 without helpers.
+Evidence is `capacity-complete-gate.log` and
+`capacity-complete-restoration.log` in the integration evidence directory.
+The ordinary restoration profile is
+`6b413f447b6e68b052094d38a337a397c0a6368c125d09f6899f58dd0b1d6adc`.
+
+This is the new verified capacity checkpoint. It does not include the later
+sparse-parent snapshot correction or numeric-cdata variadic FFI changes;
+their combined validation remains separate. General Lua call/return,
+recursion, protected calls and other source/FFI restrictions still prevent a
+full x86_64 parity claim.

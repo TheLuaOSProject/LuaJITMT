@@ -18,20 +18,22 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
-- Current verified production checkpoint: `bc0313318`. It adds depth-64
-  side-list acquisition, captured open-result producer replay and the bounded
-  zero-formal three-result CALLM window to `8106cfe53`. Existing formal
-  normalization and guard checks remain covered alongside the new cases.
-  The complete combined gate passes, including actual VM/recorder safepoint
-  runtime execution and all four M7 FFI profiles. Focused leaf, open-CALLM
-  exit and side contracts pass all four ARM64/arm64e assertion/release
-  profiles; ordinary ARM64 and strict x86_64 pass both 509-case stock corpora.
-  The gate checkout is restored to ordinary assertion ARM64 without test
-  helpers. See the [current integration evidence](arm64-deep-callm-integration-2026-10-29.md)
-  and [preceding checkpoint](arm64-callm-iterator-integration-2026-10-29.md).
-  Removing the 64-level ancestry limit, general Lua call/return, recursion,
-  protected calls, vararg forwarding and remaining FFI restrictions are
-  subsequent work. Full x86_64 parity is not complete.
+- Current verified production checkpoint: `28c9ec72b`. It extends side
+  ancestry beyond the previous 64-level limit, retains inline storage for
+  shallow chains, and reuses recorder-owned storage for deeper chains.
+  Ordered large-list membership validation and descendant-first retirement
+  preserve the lockless architecture. The complete combined gate passes,
+  including actual VM/recorder safepoint runtime execution and all four M7
+  FFI profiles. Focused side contracts pass all four ARM64/arm64e
+  assertion/release profiles through depth 80. The gate checkout is restored
+  to ordinary assertion ARM64 without test helpers. See the
+  [capacity evidence](arm64-deep-side-capacity-2026-10-29.md) and
+  [preceding checkpoint](arm64-deep-callm-integration-2026-10-29.md), whose
+  ordinary ARM64 and strict x86_64 source and original-bytecode corpora each
+  pass all 509 cases. Later sparse-snapshot and numeric-cdata variadic FFI
+  changes are undergoing combined validation. General Lua call/return,
+  recursion, protected calls, vararg forwarding and remaining FFI
+  restrictions are subsequent work. Full x86_64 parity is not complete.
 
 ## Earlier checkpoint records
 
