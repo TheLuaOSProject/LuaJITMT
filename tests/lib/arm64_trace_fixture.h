@@ -123,7 +123,7 @@ static void arm64_fixture_init_trace(Arm64TraceFixture *f, lua_State *L,
 
 /* CALLXS snapshots may contain the exact FFI __call continuation PC. Keep it
 ** unchanged while remapping only the cloned root's own bytecode positions. */
-static void arm64_fixture_init_trace_callxs_metapc(Arm64TraceFixture *f,
+static inline void arm64_fixture_init_trace_callxs_metapc(Arm64TraceFixture *f,
                                                    lua_State *L,
                                                    const char *clone_global,
                                                    TraceNo traceno,
