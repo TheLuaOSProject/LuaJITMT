@@ -167,8 +167,8 @@ for required in \
   'rs = source.prev;' \
   'rs = ren.prev;' \
   'if (!arm64_postra_spill_slot(regsp_spill(rs), capacity))' \
-  'postraview.proto_bc = proto_bc(J->pt);' \
-  'postraview.proto_sizebc = J->pt->sizebc;' \
+  'postraview.proto_bc = proto_bc(arm64_admit_state->pt);' \
+  'postraview.proto_sizebc = arm64_admit_state->pt->sizebc;' \
   'postraview.root_topslot = T->topslot;' \
   'postraview.base_delta = (uint8_t)(J->baseslot-2u);'; do
   case "$required" in

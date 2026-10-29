@@ -22,3 +22,15 @@ being collected under
 This checkpoint does not establish full architecture parity. Nil-terminated
 ITERL, wider side graphs, additional calls/returns, and broader FFI aggregate
 ABI shapes remain separate work.
+
+## First combined gate boundary
+
+The run at `c41600c86` passed the preceding no-JIT/GC2/emitter/spill/FFI
+contracts, then stopped before the IR admission fixture because its source
+check required the former `J->pt` assignment. The tail root intentionally
+uses the pinned trace start prototype via a local admission-state copy.
+Both affected contract scripts now check that path. The semantic-before-
+allocation and post-RA-before-marker shell assertions were made explicitly
+fatal when any predicate fails. This is a test-only correction; production
+source remains `c41600c86`. The continuation starts at the IR admission
+contract, preserving the first log separately.

@@ -64,20 +64,28 @@ awk '/^void lj_asm_trace\(/ { copying = 1 }
      copying && /^#if LJ_TARGET_ARM64 && defined\(LJ_ARM64_EMIT_TEST_HELPERS\)/ {
        exit
      }' "$asm_source" >"$trace_asm"
-admit_line=$(grep -n 'lj_asm_arm64_ir_admit(J, T, &reject)' "$trace_asm" | cut -d: -f1)
+admit_line=$(grep -nF 'arm64_admit_state, T, &reject)' "$trace_asm" | cut -d: -f1)
 nextins_line=$(grep -n 'as->orignins = lj_ir_nextins(J)' "$trace_asm" | cut -d: -f1)
 reserve_line=$(grep -n 'lj_mcode_reserve(J, &as->mcbot)' "$trace_asm" | cut -d: -f1)
-test -n "$admit_line" && test "$admit_line" -lt "$nextins_line" &&
-test "$admit_line" -lt "$reserve_line"
+test -n "$admit_line" && test -n "$nextins_line" &&
+  test -n "$reserve_line" && test "$admit_line" -lt "$nextins_line" &&
+  test "$admit_line" -lt "$reserve_line" || {
+  echo "ARM64 semantic admission must precede scratch growth and mcode reserve" >&2
+  exit 1
+}
 grep -F 'lj_trace_err_info(J, LJ_TRERR_NYIIR);' "$trace_asm" >/dev/null
 for required in \
+  'const jit_State *arm64_admit_state = J;' \
+  'GCobj *startpt = trace_startptgco_acq(T);' \
+  'arm64_root_state.pt = gco2pt(startpt);' \
+  'arm64_admit_state = &arm64_root_state;' \
   'finalview.nins = arm64_semantic_nins;' \
   'postraview.ir = finalir;' \
-  'postraview.proto_bc = proto_bc(J->pt);' \
+  'postraview.proto_bc = proto_bc(arm64_admit_state->pt);' \
   'postraview.nins = finalnins;' \
   'postraview.nk = T->nk;' \
   'postraview.spadjust = T->spadjust;' \
-  'postraview.proto_sizebc = J->pt->sizebc;' \
+  'postraview.proto_sizebc = arm64_admit_state->pt->sizebc;' \
   'postraview.root_topslot = T->topslot;' \
   'postraview.startins = T->startins;' \
   'postraview.base_delta = (uint8_t)(J->baseslot-2u);' \
@@ -98,7 +106,10 @@ postra_line=$(grep -n '!lj_asm_arm64_postra_admit(' "$trace_asm" | cut -d: -f1)
 marker_line=$(grep -n 'trace_arm64_admission_rel(T, TRACE_ARM64_INT_FORL_ADMITTED);' \
   "$trace_asm" | cut -d: -f1)
 test -n "$postra_line" && test -n "$marker_line" &&
-test "$postra_line" -lt "$marker_line"
+  test "$postra_line" -lt "$marker_line" || {
+  echo "ARM64 post-RA admission must precede publication marker" >&2
+  exit 1
+}
 if grep -F 'T->spadjust != 0 || as->evenspill' "$trace_asm" >/dev/null; then
   echo "ARM64 assembly gate still keys spill admission to allocator cursors" >&2
   exit 1
