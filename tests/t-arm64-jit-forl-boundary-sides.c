@@ -57,7 +57,7 @@ static GCtrace *root_for_kernel(lua_State *L)
   return NULL;
 }
 
-static void check_children(lua_State *L)
+static void check_children(lua_State *L, int constantstop)
 {
   jit_State *J = L2J(L);
   GCtrace *root = root_for_kernel(L);
@@ -79,7 +79,7 @@ static void check_children(lua_State *L)
   for (unsigned i = 0; i < 3; i++) {
     GCtrace *child = traceref_safe(J, childno);
     IRIns base;
-    uint32_t contract, required = 3u | (0x7ffu << 13);
+    uint32_t contract, required = 3u | (constantstop ? (0x1fu << 24) : (0x7ffu << 13));
     assert(trace_runnable_acq(child, childno));
     assert(trace_root_acq(child) == rootno);
     assert(trace_startpt_acq(child) == trace_startpt_acq(root));
@@ -100,7 +100,7 @@ static void check_children(lua_State *L)
   assert(childno == 0);
 }
 
-static void native_runs(lua_State *L, int descending)
+static void native_runs(lua_State *L, int reverse_range)
 {
   jit_State *J = L2J(L);
   GCtrace *root = root_for_kernel(L);
@@ -108,7 +108,7 @@ static void native_runs(lua_State *L, int descending)
   for (unsigned mode = 1; mode <= 3; mode++) {
     lj_trace_test_reset_exit_stats();
     lj_trace_test_root_entry_reset();
-    for (unsigned i = 0; i < 40; i++) compare(L, mode, i & 1 ? 48 : descending ? -192 : 256);
+    for (unsigned i = 0; i < 40; i++) compare(L, mode, i & 1 ? 48 : reverse_range ? -192 : 256);
     assert(lj_trace_test_root_entry_successes() > 0);
     assert(lj_trace_test_root_entry_publishes() == lj_trace_test_root_entry_successes());
     assert(lj_trace_test_root_entry_cleanups() == 0);
@@ -126,9 +126,10 @@ static void native_runs(lua_State *L, int descending)
 }
 #endif
 
-static void exercise(lua_State *L, const char *range, int descending)
+static void exercise(lua_State *L, const char *range, int reverse_range, int constantstop)
 {
   char source[2048];
+  (void)constantstop;
   snprintf(source, sizeof(source),
     "local src='return function(x,y,z,n) local sum=.5 for i=%s do "
     "if x==1 then sum=sum+i*.25 end "
@@ -142,15 +143,15 @@ static void exercise(lua_State *L, const char *range, int descending)
     fprintf(stderr, "FORL boundary range=%s generation=%u\n", range, generation);
     if (generation) run(L, "jit.flush()");
     for (unsigned mode = 0; mode <= 3; mode++)
-      for (unsigned i = 0; i < 8; i++) compare(L, mode, descending ? 1 : 64);
+      for (unsigned i = 0; i < 8; i++) compare(L, mode, reverse_range ? 1 : 64);
 #ifdef LJ_TRACE_TEST_HELPERS
-    check_children(L);
-    native_runs(L, descending);
+    check_children(L, constantstop);
+    native_runs(L, reverse_range);
 #endif
     run(L, "collectgarbage('collect')");
 #ifdef LJ_TRACE_TEST_HELPERS
-    check_children(L);
-    native_runs(L, descending);
+    check_children(L, constantstop);
+    native_runs(L, reverse_range);
 #endif
     for (unsigned mode = 0; mode <= 3; mode++) {
       compare(L, mode, 0);
@@ -170,9 +171,12 @@ int main(void)
       "peer=assert(th.spawn(function(r,s) assert(r:send(true,5)); "
       "assert(select(2,s:recv(120))); return true end,ready,stop)); "
       "assert(select(2,ready:recv(5)))");
-  exercise(L, "1,n", 0);
-  exercise(L, "64,n,-1", 1);
-  exercise(L, "1,n,2", 0);
+  exercise(L, "1,n", 0, 0);
+  exercise(L, "64,n,-1", 1, 0);
+  exercise(L, "1,n,2", 0, 0);
+  exercise(L, "n,1,-1", 0, 1);
+  exercise(L, "n,1,-2", 0, 1);
+  exercise(L, "n,64", 1, 1);
   run(L, "assert(stop:send(true,5)); local ok,value=peer:join(5); assert(ok and value)");
   lua_close(L);
   puts("ARM64 FORL boundary siblings: PASS");

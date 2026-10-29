@@ -9897,12 +9897,53 @@ static int arm64_side_forl_snapshot_stop_ir(const LJArm64SideIRView *side,
   return 0;
 }
 
+/* A constant stop folds the runtime range guard. The exact inherited stop
+** still has to prove that every taken loop index can be incremented safely. */
+static int arm64_side_forl_constant_stop_valid(const LJArm64SideIRView *side,
+    IRRef ref, int32_t stop, int32_t step)
+{
+  MSize slot = 1u+LJ_FR2+bc_a(side->parent_startins)+FORL_STOP;
+  MSize matches = 0;
+  int64_t limit = step > 0 ? (int64_t)INT32_MAX-step :
+                             (int64_t)INT32_MIN-step;
+  if (!step || (step > 0 ? (int64_t)stop > limit : (int64_t)stop < limit))
+    return 0;
+  for (MSize i = 0; i < side->parent_nmap_values; i++) {
+    const LJArm64SideParentMapValue *mv = &side->parent_map_values[i];
+    if (mv->slot != slot) continue;
+    if (++matches != 1 || mv->ref != ref || mv->value.o != IR_KINT ||
+        mv->value.t.irt != IRT_INT || mv->value.i != stop) return 0;
+  }
+  return matches == 1;
+}
+
+static int arm64_side_forl_finish_snapshot_ir(const LJArm64SideIRView *side,
+    const GCtrace *T, IRRef compare)
+{
+  MSize selected = (MSize)-1, ofs, nent;
+  MSize idxslot = 1u+LJ_FR2+bc_a(side->parent_startins);
+  uint64_t pcbase;
+  for (MSize i = 0; i < T->nsnap; i++) {
+    if (T->snap[i].ref > compare) break;
+    selected = i;
+  }
+  if (selected == (MSize)-1) return 0;
+  ofs = T->snap[selected].mapofs; nent = T->snap[selected].nent;
+  if (ofs > T->nsnapmap || nent > T->nsnapmap-ofs ||
+      T->nsnapmap-ofs-nent < 1u+LJ_FR2) return 0;
+  for (MSize i = 0; i < nent; i++)
+    if (snap_slot(T->snapmap[ofs+i]) >= idxslot) return 0;
+  memcpy(&pcbase, &T->snapmap[ofs+nent], sizeof(pcbase));
+  return (uint8_t)pcbase == 0 && side->loop_end_pc+1u < side->proto_sizebc &&
+    (pcbase >> 8) == (uintptr_t)(side->proto_bc+side->loop_end_pc+1u);
+}
+
 static int arm64_side_forl_index_add_ir(const LJArm64SideIRView *side,
 	const GCtrace *T, IRRef ref, IRIns add)
 {
   MSize idxslot, stopslot, r;
   int32_t step, source_step;
-  unsigned comparisons = 0, rangeguards = 0;
+  unsigned comparisons = 0, rangeguards = 0, constantstops = 0;
   IRRef rangeguard = 0;
   int64_t bound64;
   if (!side || !T || add.o != IR_ADD || add.t.irt != IRT_INT ||
@@ -9927,7 +9968,15 @@ static int arm64_side_forl_index_add_ir(const LJArm64SideIRView *side,
 	IRIns cmp = T->ir[r];
 	if (cmp.o == (step > 0 ? IR_LE : IR_GE) &&
 	    cmp.t.irt == (IRT_INT|IRT_GUARD) && cmp.op1 == ref &&
-	    cmp.op2 >= REF_FIRST && cmp.op2 < r) {
+	    cmp.op2 < r) {
+      int32_t stopvalue;
+      if (arm64_ir_kint_value(T, cmp.op2, &stopvalue)) {
+        if (!arm64_side_forl_constant_stop_valid(side, cmp.op2, stopvalue, step) ||
+            !arm64_side_forl_finish_snapshot_ir(side, T, (IRRef)r) ||
+            ++comparisons != 1 || ++constantstops != 1) return 0;
+        continue;
+      }
+      if (cmp.op2 < REF_FIRST) return 0;
 	  IRIns stop = T->ir[cmp.op2];
 	  if (stop.o == IR_SLOAD && stop.op1 == stopslot &&
 	      (stop.t.irt & ~IRT_ISPHI) == IRT_INT &&
@@ -9952,9 +10001,10 @@ static int arm64_side_forl_index_add_ir(const LJArm64SideIRView *side,
 	  }
 	}
   }
-  return comparisons == 1 && rangeguards == 1 &&
-	arm64_side_forl_guard_snapshot_ir(side, T, rangeguard, idxslot,
-						 add.op1);
+  return comparisons == 1 &&
+    ((constantstops == 1 && rangeguards == 0) ||
+     (constantstops == 0 && rangeguards == 1 &&
+      arm64_side_forl_guard_snapshot_ir(side, T, rangeguard, idxslot, add.op1)));
 }
 
 /* Syntax-only view of a single acyclic comparison diamond. Each arm is an
@@ -12801,6 +12851,29 @@ static int arm64_scalar_postra_kint(const LJArm64PostRAView *v, IRRef ref,
   return 1;
 }
 
+/* Independently prove the allocated constant-stop comparison exit. */
+static int arm64_side_forl_finish_snapshot_postra(
+    const LJArm64SideIRView *side, const LJArm64PostRAView *v, IRRef compare)
+{
+  MSize selected = (MSize)-1, ofs, nent;
+  MSize idxslot = 1u+LJ_FR2+bc_a(side->parent_startins);
+  uint64_t pcbase;
+  for (MSize i = 0; i < v->nsnap; i++) {
+    if (snap_ref_acq(&v->snap[i]) > compare) break;
+    selected = i;
+  }
+  if (selected == (MSize)-1) return 0;
+  ofs = snap_mapofs_acq(&v->snap[selected]);
+  nent = snap_nent_acq(&v->snap[selected]);
+  if (ofs > v->nsnapmap || nent > v->nsnapmap-ofs ||
+      v->nsnapmap-ofs-nent < 1u+LJ_FR2) return 0;
+  for (MSize i = 0; i < nent; i++)
+    if (snap_slot(snapentry_acq(&v->snapmap[ofs+i])) >= idxslot) return 0;
+  memcpy(&pcbase, &v->snapmap[ofs+nent], sizeof(pcbase));
+  return (uint8_t)pcbase == 0 && side->loop_end_pc+1u < side->proto_sizebc &&
+    (pcbase >> 8) == (uintptr_t)(side->proto_bc+side->loop_end_pc+1u);
+}
+
 /* Allocated replay of the special FORL index update. This separately checks
 ** the copied loop admission, source step, parent map and compare shape; the
 ** generic post-RA walk then proves both operands have valid locations. */
@@ -12809,7 +12882,7 @@ static int arm64_side_forl_index_add_postra(const LJArm64SideIRView *side,
 {
   MSize idxslot, stopslot, r;
   int32_t source_step, step;
-  unsigned comparisons = 0, rangeguards = 0;
+  unsigned comparisons = 0, rangeguards = 0, constantstops = 0;
   IRRef rangeguard = 0;
   int64_t bound64;
   if (!side || !v || add.o != IR_ADD || add.t.irt != IRT_INT ||
@@ -12835,8 +12908,18 @@ static int arm64_side_forl_index_add_postra(const LJArm64SideIRView *side,
 	IRIns cmp = ir_load_acq(&v->ir[r]), stop;
 	if (cmp.o != (step > 0 ? IR_LE : IR_GE) ||
 	    cmp.t.irt != (IRT_INT|IRT_GUARD) || cmp.op1 != ref ||
-	    cmp.op2 < REF_FIRST || cmp.op2 >= r)
+	    cmp.op2 >= r)
 	  continue;
+    {
+      int32_t stopvalue;
+      if (arm64_scalar_postra_kint(v, cmp.op2, &stopvalue)) {
+        if (!arm64_side_forl_constant_stop_valid(side, cmp.op2, stopvalue, step) ||
+            !arm64_side_forl_finish_snapshot_postra(side, v, (IRRef)r) ||
+            ++comparisons != 1 || ++constantstops != 1) return 0;
+        continue;
+      }
+    }
+    if (cmp.op2 < REF_FIRST) return 0;
 	stop = ir_load_acq(&v->ir[cmp.op2]);
 	if (stop.o != IR_SLOAD || stop.op1 != stopslot ||
 	    (stop.t.irt & ~IRT_ISPHI) != IRT_INT ||
@@ -12862,7 +12945,9 @@ static int arm64_side_forl_index_add_postra(const LJArm64SideIRView *side,
 	    return 0;
 	}
   }
-  if (comparisons != 1 || rangeguards != 1) return 0;
+  if (comparisons != 1) return 0;
+  if (constantstops == 1) return rangeguards == 0;
+  if (rangeguards != 1) return 0;
   /* Independently bind the allocated guard's cold edge to the selected
   ** continuation and pre-update index in the concrete trace snapshot. */
   {
