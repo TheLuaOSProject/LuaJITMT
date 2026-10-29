@@ -52,6 +52,15 @@ local positives = {
   {"mulvn", "return x*0.5"},
   {"multiple-results", "return x,0.25",
     "local sum=.5; for i=1,n do local a,b=fn(i+.5); sum=sum+a+b end; return sum"},
+  {"open-result-callm-one", "return x",
+    "local add=function(a) return a+1 end; " ..
+    "local sum=.5; for i=1,n do sum=sum+add(fn(i+.5)) end; return sum"},
+  {"open-result-callm-two", "return x,0.25",
+    "local add=function(a,b) return a+b end; " ..
+    "local sum=.5; for i=1,n do sum=sum+add(fn(i+.5)) end; return sum"},
+  {"open-result-callm-three", "return x,0.25,0.5",
+    "local add3=function(a,b,c) return a+b+c end; " ..
+    "local sum=.5; for i=1,n do sum=sum+add3(fn(i+.5)) end; return sum"},
   {"divvn", "return x/2"},
   {"addnv", "return 0.25+x"},
   {"subnv", "return 0.25-x"},
