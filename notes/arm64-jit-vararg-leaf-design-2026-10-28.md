@@ -146,6 +146,20 @@ the combined runtime matrix is the next integration check. The initial direct
 compiler invocation used Homebrew Clang, which lacks the selected SDK's
 `ptrauth_nop_cast` support for ARM64e; that invocation was not a passing check.
 
+The follow-up at `cbb707874` passes the complete combined four-profile Lua
+contract, including all nine vararg native entries and both sets of ten
+negative mutations in every profile. Ordinary ARM64 and x86_64 each pass 509
+source and 509 imported stock-bytecode tests and all 260 inventory comparisons.
+Both now witness selected native roots in 18 of 20 inventory rows; the vararg
+row supplies the new ARM64 witness. Strict Apple Clang builds of `lj_trace.c`
+and `lj_asm.c` also pass on ARM64/ARM64e. The successful driver and immutable
+runtime/module bundles are in the same evidence directory above.
+
+A final bounds review also reserves the FR2 function slot below both the
+physical and normalized frame markers. The earlier address check reserved only
+the marker, although `frame_func()` reads the preceding slot on FR2 targets.
+This additional lower-bound check will be covered by the full integration gate.
+
 ## Recovery provenance
 
 This isolated candidate was reconstructed after a source cleanup accident from

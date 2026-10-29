@@ -12321,7 +12321,7 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
   baseaddr = (uintptr_t)owner->base;
   if (!stackbase || !stacklimit || stackhi <= stacklo ||
       baseaddr < stacklo || baseaddr >= stackhi ||
-      baseaddr-stacklo < sizeof(TValue) ||
+      baseaddr-stacklo < (1u+LJ_FR2)*sizeof(TValue) ||
       (baseaddr-stacklo) % sizeof(TValue) != 0)
     return 0;
   frameaddr = baseaddr-sizeof(TValue);
@@ -12338,7 +12338,7 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
     if (!(la_load8_acq(&pt->flags) & PROTO_VARARG) || pt->numparams != 0 ||
         delta <= 0 || (uintptr_t)delta > LJ_MAX_JSLOTS ||
         span != delta*(ptrdiff_t)sizeof(TValue) ||
-        (uintptr_t)span > frameaddr-stacklo)
+        (uintptr_t)span > frameaddr-stacklo-LJ_FR2*sizeof(TValue))
       return 0;
     vargslots = (MSize)delta;
     currentframe = (const TValue *)(frameaddr-(uintptr_t)span);
