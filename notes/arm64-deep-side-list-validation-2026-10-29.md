@@ -32,10 +32,19 @@ check. Temporary diagnostic prints were removed from the production diff.
 
 The expanded C fixture builds an integer chain of depth 15 and a fractional
 chain of depth 64 (the existing graph's full 64-child capacity). It validates
-every actual parent exit target, independent copied ancestry negatives,+same generation/address/size/code bytes across GC, selected deepest native
+every actual parent exit target, independent copied ancestry negatives,
+same generation/address/size/code bytes across GC, selected deepest native
 exits with a live peer, and full flush followed by new-generation native
 reentry. The assertion fixture passes in `deep-fixture-flush.log`.
-The four-profile side contract is the next validation step.
+The side contract subsequently passed all four ARM64/arm64e assertion/release
+profiles, including the expanded depth-15/depth-64 fixture, the existing
+capacity and teardown fixtures, and restoration to ordinary assertion ARM64.
+Evidence is `four-profile.log`; the restored profile is
+`7e8512ca2ecabe637fa3c0f07e61a133c4a401e35c0113be88f32693c673663e`.
+The ordinary no-helper runtime then published all 65 bodies (depth 64) and
+observed 32 deepest-side exits over 32 post-GC calls in `ordinary-65.log`.
+Both stock corpora pass all 509 cases in `ordinary-stock-source.log` and
+`ordinary-stock-bytecode.log`.
 
 This does not increase the graph capacity or widen side source/IR admission.
 Full x86_64 parity remains incomplete.
