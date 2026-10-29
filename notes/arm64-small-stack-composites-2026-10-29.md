@@ -49,7 +49,10 @@ Evidence is in `/Users/frityet/Scratch/ljmt-small-stack-abi-20261029/`:
 The baseline runtimes are preserved in the preceding stack/tail ordinary
 matrix. The first local incremental build did not rebuild the recorder after
 the classifier header changed; all successful profile tests used clean builds.
-The missing dependency is being corrected separately.
+The follow-up adds the classifier header to the checked-in recorder and
+assembler prerequisites. A dependency-only dry run with that header treated
+as changed previously left the recorder up to date; afterward it schedules
+both affected translation units. This is build plumbing only.
 
 A constant byte scalar in the prefix currently retains the older conservative
 JIT refusal; the native witness supplies that scalar through a Lua argument.
