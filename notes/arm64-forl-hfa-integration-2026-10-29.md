@@ -55,3 +55,12 @@ races and signed-step edges. The final log is
 `native-forl-capacity-repaired.log`. `native-forl-repaired.log` preserves an
 earlier alternative that suppressed side recording; the committed correction
 instead retains `hotexit=1` and gives the test sufficient trace capacity.
+
+The continuation at `a5513ad15` completed successfully. `resume-gate.log` ends
+with the gate's final OK marker; `resume-gate-source.txt` records its source.
+Together, the original prefix, focused repaired native-FORL contract, and the
+continuation cover the complete integrated gate. This is a resumed run after
+a test-only repair, not an uninterrupted pass. Production source remained
+`5cec5847d` throughout. The continuation includes the new six-range FORL
+boundary-side contract, the later lifecycle contracts, M7, and the final
+runtime/safepoint checks. No whole-fork parity claim is implied.
