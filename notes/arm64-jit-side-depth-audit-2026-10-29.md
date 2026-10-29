@@ -87,14 +87,38 @@ admission beyond the cap and wide-list retirement.
 ## Limits and remaining tests
 
 This is bounded depth-3 support, not unrestricted side-recorder parity. The
-cap policy and live 67-member depth-two graph are covered, but a live 64-member
-deep graph followed by a refused depth-three append is not constructed. The
-reorder negative mutates a private captured index, not the live list; live-list
-corruption is rejected by the full graph validator but has not been exercised
-through retirement. The focused contract does not claim adversarial
-retirement-race coverage. Both strict ARM64 and arm64e builds and the focused
-native contract pass; the full multi-profile integration remains for the
-integrating branch.
+cap tests cover two live boundaries. First, a real 64-member graph whose
+maximum depth is two attempts its first depth-three child; the list remains at
+64/depth two, the root keeps the same mcode, and an existing root exit still
+enters natively after GC. Second, a real depth-three child is published as
+member 64; a new direct sibling is refused, the 64-member graph remains
+runnable, and a subsequent scoped flush of the deepest child leaves its
+immediate parent and root live at 63/depth two. Native reentry and then a full
+flush succeed. The fixtures use a larger trace budget and 100 calls per
+candidate branch to make this many-exit topology stable across all profiles.
+The private reorder negative mutates a captured index, not the live list;
+live-list corruption is rejected by the full graph validator but has not been
+exercised through retirement. The focused tests do not claim adversarial
+retirement-race coverage.
+
+Validation after the live-cap tests:
+
+* `arm64_jit_side_ir_admission_contract.sh` passed on ARM64 and arm64e with
+  assertions enabled and in release mode. These runs include the 67-member
+  wide depth-two graph, both live cap boundaries, GC, scoped deep-descendant
+  retirement, and full flush.
+* `arm64_jit_first_side_production_contract.sh` passed with one repetition on
+  ARM64 and arm64e, including its native publication, GC-claim, scoped
+  retirement, append/flush handshake, and full-flush modes. It passed once
+  with the standard release-style helper flags and once with `LUA_USE_ASSERT`
+  supplied through `CFLAGS`.
+* `arm64_jit_forl_boundary_sides_contract.sh` passed its ordinary, ARM64
+  assertion, arm64e assertion, ARM64 release, and arm64e release profiles.
+  The side-admission fixture itself also passed all four ARM64/arm64e
+  assertion/release combinations after the live-boundary additions.
+* All builds used AppleClang `-Wall -Wextra -Werror`; only existing unused
+  parameter and unused-but-set warnings were suppressed. Full aggregate
+  integration remains for the integrating branch.
 
 The source keeps a bounded iterative ancestry walk, no allocation or new lock,
 and a root-owned flattened list. The indexed path rejects malformed chains,

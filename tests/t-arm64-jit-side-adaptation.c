@@ -99,6 +99,21 @@ static GCtrace *find_root_for_proto(jit_State *J, GCproto *pt)
   return NULL;
 }
 
+static GCtrace *find_largest_root_for_proto(jit_State *J, GCproto *pt)
+{
+  GCtrace *best = NULL;
+  MSize n;
+  for (n = 1; n < trace_sizetrace_acq(J); n++) {
+    GCtrace *T = traceref_safe(J, (TraceNo)n);
+    if (trace_runnable_acq(T, (TraceNo)n) && trace_root_acq(T) == 0 &&
+        trace_startpt_acq(T) == pt &&
+        bc_op(trace_startins_acq(T)) == BC_FORL &&
+        (best == NULL || trace_nchild_acq(T) > trace_nchild_acq(best)))
+      best = T;
+  }
+  return best;
+}
+
 static MSize side_depth(jit_State *J, GCtrace *T)
 {
   MSize depth = 0, limit;
@@ -324,7 +339,7 @@ int main(void)
   ** the summary helper validates its topology and retirement eligibility. */
   run(L,
     "local jit=require('jit'); jit.flush(); jit.on(); "
-    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=512',"
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=4096',"
     "'maxside=256','maxrecord=4000'); "
     "local parts={'return function(z,a,x,n) local s=.5 for i=1,n do "
     "if z==1 then if a==1 then s=s+i*.001 else s=s+i*.002 end end '}; "
@@ -362,6 +377,149 @@ int main(void)
     run(L, "require('jit').flush(); "
            "for i=1,100 do assert(wide_kernel(0,0,0,32)==wide_oracle(0,0,0,32)) end; "
            "for i=1,10 do assert(wide_kernel(1,2,0,32)==wide_oracle(1,2,0,32)) end");
+  }
+  lua_pop(L, 1);
+
+  /* Exercise the prospective-depth cap against a live exact-size graph. The
+  ** rejected attempt must not invalidate either the existing nested side or
+  ** its root-owned list, and an already-published exit must still re-enter. */
+  run(L,
+    "local jit=require('jit'); jit.flush(); jit.on(); "
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=4096',"
+    "'maxside=256','maxrecord=4000'); "
+    "function make_cap_kernel(nx) "
+    "local p={'return function(x,y,w,n) local s=.5 for i=1,n do "
+    "if x==1 then if y==1 then s=s+i*.001 else "
+    "if w==1 then s=s+i*.002 else s=s+i*.003 end end end '}; "
+    "for k=2,nx do p[#p+1]=('if x==%d then s=s+i*0.0001 end '):format(k) end; "
+    "p[#p+1]='end return s end'; local src=table.concat(p); "
+    "local f=assert(loadstring(src))(); local o=assert(loadstring(src))(); "
+    "jit.off(o,true); return f,o end; "
+    "cap_kernel,cap_oracle=make_cap_kernel(63); "
+    "local function check(x,y,w) "
+    "assert(cap_kernel(x,y,w,32)==cap_oracle(x,y,w,32)) end; "
+    "for i=1,100 do check(0,0,0) end; "
+    "for i=1,50 do check(1,1,1) end; "
+    "for i=1,50 do check(1,2,1) end; "
+    "for k=2,63 do for i=1,100 do check(k,0,0) end end; "
+    "for k=2,63 do check(k,0,0) end; "
+    "collectgarbage('collect')");
+  lua_getglobal(L, "cap_kernel");
+  assert(lua_isfunction(L, -1));
+  {
+    GCproto *pt = funcproto(funcV(L->top-1));
+    GCtrace *cap_root = find_largest_root_for_proto(J, pt);
+    TraceNo rootno;
+    MCode *root_mcode;
+    uint32_t summary, successes;
+    if (cap_root == NULL || trace_nchild_acq(cap_root) != 64u)
+      fprintf(stderr, "cap graph expected=64 root=%p count=%u trace_slots=%u\n",
+              (void *)cap_root,
+              cap_root != NULL ? trace_nchild_acq(cap_root) : 0u,
+              (unsigned)trace_sizetrace_acq(J));
+    assert(cap_root != NULL && trace_nchild_acq(cap_root) == 64u);
+    rootno = trace_traceno_acq(cap_root);
+    root_mcode = trace_mcode_acq(cap_root);
+    summary = lj_trace_test_arm64_side_graph_summary(J, rootno);
+    if (summary != ((2u << 16) | 64u))
+      fprintf(stderr, "cap graph summary expected=%#x observed=%#x\n",
+              (2u << 16) | 64u, summary);
+    assert(summary == ((2u << 16) | 64u));
+    successes = lj_trace_test_root_entry_successes();
+    run(L,
+      "for i=1,50 do assert(cap_kernel(1,2,2,32)=="
+      "cap_oracle(1,2,2,32)) end; "
+      "for i=1,50 do assert(cap_kernel(2,0,0,32)=="
+      "cap_oracle(2,0,0,32)) end; collectgarbage('collect')");
+    assert(trace_runnable_acq(cap_root, rootno) &&
+           trace_traceno_acq(cap_root) == rootno &&
+           trace_mcode_acq(cap_root) == root_mcode &&
+           trace_nchild_acq(cap_root) == 64u);
+    assert(lj_trace_test_arm64_side_graph_summary(J, rootno) == summary);
+    assert(lj_trace_test_root_entry_successes() > successes);
+  }
+  lua_pop(L, 1);
+
+  /* A pre-existing depth-three graph at the cap must refuse even a new
+  ** direct sibling. This protects the bounded-index retirement invariant. */
+  run(L,
+    "local jit=require('jit'); jit.flush(); jit.on(); "
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=512',"
+    "'maxside=256','maxrecord=4000'); "
+    "cap_deep_kernel,cap_deep_oracle=make_cap_kernel(63); "
+    "local function check(x,y,w) "
+    "assert(cap_deep_kernel(x,y,w,32)==cap_deep_oracle(x,y,w,32)) end; "
+    "for i=1,100 do check(0,0,0) end; "
+    "for i=1,50 do check(1,1,1) end; "
+    "for i=1,50 do check(1,2,1) end; "
+    "for k=2,62 do for i=1,100 do check(k,0,0) end end; "
+    "for k=2,62 do check(k,0,0) end; "
+    "for i=1,50 do check(1,2,2) end; collectgarbage('collect')");
+  lua_getglobal(L, "cap_deep_kernel");
+  assert(lua_isfunction(L, -1));
+  {
+    GCproto *pt = funcproto(funcV(L->top-1));
+    GCtrace *cap_root = find_largest_root_for_proto(J, pt);
+    TraceNo rootno;
+    MCode *root_mcode;
+    uint32_t summary, successes;
+    if (cap_root == NULL || trace_nchild_acq(cap_root) != 64u)
+      fprintf(stderr, "deep cap graph expected=64 root=%p count=%u trace_slots=%u\n",
+              (void *)cap_root,
+              cap_root != NULL ? trace_nchild_acq(cap_root) : 0u,
+              (unsigned)trace_sizetrace_acq(J));
+    assert(cap_root != NULL && trace_nchild_acq(cap_root) == 64u);
+    rootno = trace_traceno_acq(cap_root);
+    root_mcode = trace_mcode_acq(cap_root);
+    summary = lj_trace_test_arm64_side_graph_summary(J, rootno);
+    if (summary != ((3u << 16) | 64u))
+      fprintf(stderr, "deep cap graph summary expected=%#x observed=%#x\n",
+              (3u << 16) | 64u, summary);
+    assert(summary == ((3u << 16) | 64u));
+    successes = lj_trace_test_root_entry_successes();
+    run(L,
+      "for i=1,50 do assert(cap_deep_kernel(63,0,0,32)=="
+      "cap_deep_oracle(63,0,0,32)) end; "
+      "for i=1,50 do assert(cap_deep_kernel(2,0,0,32)=="
+      "cap_deep_oracle(2,0,0,32)) end; collectgarbage('collect')");
+    assert(trace_runnable_acq(cap_root, rootno) &&
+           trace_traceno_acq(cap_root) == rootno &&
+           trace_mcode_acq(cap_root) == root_mcode &&
+           trace_nchild_acq(cap_root) == 64u);
+    assert(lj_trace_test_arm64_side_graph_summary(J, rootno) == summary);
+    assert(lj_trace_test_root_entry_successes() > successes);
+    {
+      GCtrace *deepest = find_deepest_side(
+        L, J, "cap_deep_kernel", 3u);
+      TraceNo deepestno, parentno;
+      GCtrace *parent;
+      IRIns base;
+      assert(deepest != NULL);
+      deepestno = trace_traceno_acq(deepest);
+      base = trace_ir_acq(deepest)[REF_BASE];
+      assert(base.o == IR_BASE && (TraceNo)base.op1 != rootno);
+      parentno = (TraceNo)base.op1;
+      parent = traceref_safe(J, parentno);
+      assert(parent != NULL && trace_runnable_acq(parent, parentno));
+      assert(lj_trace_flushscope(J, deepestno) == 1u);
+      assert(!trace_runnable_acq(deepest, deepestno) &&
+             trace_runnable_acq(parent, parentno) &&
+             trace_runnable_acq(cap_root, rootno) &&
+             trace_nchild_acq(cap_root) == 63u);
+      assert(lj_trace_test_arm64_side_graph_summary(J, rootno) ==
+             ((2u << 16) | 63u));
+      successes = lj_trace_test_root_entry_successes();
+      run(L,
+        "for i=1,50 do assert(cap_deep_kernel(2,0,0,32)=="
+        "cap_deep_oracle(2,0,0,32)) end; collectgarbage('collect')");
+      assert(trace_mcode_acq(cap_root) == root_mcode &&
+             trace_runnable_acq(parent, parentno) &&
+             trace_runnable_acq(cap_root, rootno) &&
+             trace_nchild_acq(cap_root) == 63u &&
+             lj_trace_test_root_entry_successes() > successes);
+    }
+    assert(lj_trace_flushall_gc(L) == 0);
+    assert(!trace_runnable_acq(cap_root, rootno));
   }
   lua_pop(L, 1);
   lua_close(L);
