@@ -14,6 +14,9 @@ jit.off(true, true)
 ffi.cdef[[
 typedef struct { uint32_t lo, hi; } AggregateIntPair;
 typedef struct { float x, y; } AggregateFloatPair;
+typedef struct { double x, y; } AggregateDoublePair;
+typedef struct { float x, y, z; } AggregateFloatTriple;
+typedef struct { float x, y, z, w; } AggregateFloatQuad;
 typedef struct { uint32_t value; } AggregateWord;
 typedef struct { float value; } AggregateFloat;
 typedef struct { double value; } AggregateDouble;
@@ -22,6 +25,9 @@ uint32_t lj_callxs_sysv_count(uint32_t);
 AggregateIntPair lj_callxs_sysv_make_int(uint32_t);
 uint32_t lj_callxs_sysv_take_int(AggregateIntPair, uint32_t);
 AggregateFloatPair lj_callxs_sysv_make_sse(uint32_t);
+AggregateDoublePair lj_callxs_sysv_make_double_pair(uint32_t);
+AggregateFloatTriple lj_callxs_sysv_make_float_triple(uint32_t);
+AggregateFloatQuad lj_callxs_sysv_make_float_quad(uint32_t);
 double lj_callxs_sysv_take_sse(AggregateFloatPair, double);
 AggregateWord lj_callxs_sysv_step_word(AggregateWord, uint32_t);
 AggregateFloat lj_callxs_sysv_step_float(AggregateFloat, float);
@@ -45,6 +51,17 @@ local cases = {
   {'sse-result-retained', 'last=fn(i); sum=sum+i',
     lib.lj_callxs_sysv_make_sse, false, 2, {'x','y'}, 'AggregateFloatPair',
     function(n) return {n+.25,2*n+.5} end},
+  {'double-pair-result-retained', 'last=fn(i); sum=sum+i',
+    lib.lj_callxs_sysv_make_double_pair, false, 14,
+    {'x','y'}, 'AggregateDoublePair', function(n) return {n+.5,2*n+1} end},
+  {'float-triple-result-retained', 'last=fn(i); sum=sum+i',
+    lib.lj_callxs_sysv_make_float_triple, false, 15,
+    {'x','y','z'}, 'AggregateFloatTriple',
+    function(n) return {n+.25,2*n+.5,3*n+.75} end},
+  {'float-quad-result-retained', 'last=fn(i); sum=sum+i',
+    lib.lj_callxs_sysv_make_float_quad, false, 16,
+    {'x','y','z','w'}, 'AggregateFloatQuad',
+    function(n) return {n+.25,2*n+.5,3*n+.75,4*n+1} end},
   {'word-both-retained', 'last=fn(x,i); sum=sum+i',
     lib.lj_callxs_sysv_step_word, ffi.new('AggregateWord',7), 9,
     {'value'}, 'AggregateWord', function(n) return {7+n} end},

@@ -18,6 +18,19 @@ typedef struct lj_callxs_sysv_sse_pair {
   float y;
 } lj_callxs_sysv_sse_pair;
 
+typedef struct lj_callxs_sysv_double_pair {
+  double x;
+  double y;
+} lj_callxs_sysv_double_pair;
+
+typedef struct lj_callxs_sysv_float_triple {
+  float x, y, z;
+} lj_callxs_sysv_float_triple;
+
+typedef struct lj_callxs_sysv_float_quad {
+  float x, y, z, w;
+} lj_callxs_sysv_float_quad;
+
 typedef struct lj_callxs_sysv_nested_int {
   struct {
     uint16_t lo;
@@ -92,6 +105,9 @@ enum {
   LJ_CALLXS_SYSV_BYTE,
   LJ_CALLXS_SYSV_HALF,
   LJ_CALLXS_SYSV_DOUBLE,
+  LJ_CALLXS_SYSV_MAKE_DOUBLE_PAIR,
+  LJ_CALLXS_SYSV_MAKE_FLOAT_TRIPLE,
+  LJ_CALLXS_SYSV_MAKE_FLOAT_QUAD,
   LJ_CALLXS_SYSV_NCOUNTERS
 };
 
@@ -136,6 +152,39 @@ lj_callxs_sysv_make_sse(uint32_t seed)
   lj_callxs_sysv_counters[LJ_CALLXS_SYSV_MAKE_SSE]++;
   result.x = (float)seed + 0.25f;
   result.y = (float)seed * 2.0f + 0.5f;
+  return result;
+}
+
+LJ_CALLXS_EXPORT lj_callxs_sysv_double_pair
+lj_callxs_sysv_make_double_pair(uint32_t seed)
+{
+  lj_callxs_sysv_double_pair result;
+  lj_callxs_sysv_counters[LJ_CALLXS_SYSV_MAKE_DOUBLE_PAIR]++;
+  result.x = (double)seed + 0.5;
+  result.y = (double)seed * 2.0 + 1.0;
+  return result;
+}
+
+LJ_CALLXS_EXPORT lj_callxs_sysv_float_triple
+lj_callxs_sysv_make_float_triple(uint32_t seed)
+{
+  lj_callxs_sysv_float_triple result;
+  lj_callxs_sysv_counters[LJ_CALLXS_SYSV_MAKE_FLOAT_TRIPLE]++;
+  result.x = (float)seed + 0.25f;
+  result.y = (float)seed * 2.0f + 0.5f;
+  result.z = (float)seed * 3.0f + 0.75f;
+  return result;
+}
+
+LJ_CALLXS_EXPORT lj_callxs_sysv_float_quad
+lj_callxs_sysv_make_float_quad(uint32_t seed)
+{
+  lj_callxs_sysv_float_quad result;
+  lj_callxs_sysv_counters[LJ_CALLXS_SYSV_MAKE_FLOAT_QUAD]++;
+  result.x = (float)seed + 0.25f;
+  result.y = (float)seed * 2.0f + 0.5f;
+  result.z = (float)seed * 3.0f + 0.75f;
+  result.w = (float)seed * 4.0f + 1.0f;
   return result;
 }
 
