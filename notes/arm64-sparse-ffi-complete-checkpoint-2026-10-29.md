@@ -21,3 +21,9 @@ The outer gate-and-restoration command exits zero. This evidence is pinned
 to the named source. It does not include later fixed FUNCF open CALLM,
 CALLMT forwarding, binary math or variadic indirect-result changes. General
 Lua/JIT behavior parity remains incomplete.
+
+After promotion, the main parity checkout at `d87d5281f` was independently
+rebuilt as ordinary assertion ARM64 without helpers. Its production source
+is unchanged from the verified checkpoint. `sparse-ffi-main-build.log`
+records profile
+`334e1a9f4c09497819332f6369ebdefd322fcd8d22ca2a568d281bc23a66da6f`.
