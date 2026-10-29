@@ -21,6 +21,8 @@ typedef struct { uint16_t value; } arm64_half_result;
 typedef struct { uint32_t value; } arm64_word_result;
 typedef arm64_word_result arm64_word_result_alias;
 typedef struct { uint64_t value; } arm64_u64_result;
+typedef struct { float value; } arm64_float_result;
+typedef struct { double value; } arm64_double_result;
 typedef struct { uint32_t value:5; } arm64_bitfield;
 
 enum {
@@ -45,6 +47,8 @@ enum {
   ARM64_RETURN_U64,
   ARM64_RETURN_SCALAR,
   ARM64_RETURN_WORD_ALIAS,
+  ARM64_RETURN_FLOAT_HFA,
+  ARM64_RETURN_DOUBLE_HFA,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -196,6 +200,22 @@ LJ_EXPORT arm64_u64_result arm64_return_u64(uint32_t value)
   arm64_u64_result result;
   calls[ARM64_RETURN_U64]++;
   result.value = UINT64_C(0x1234567800000000) | (uint64_t)value*313u+11u;
+  return result;
+}
+
+LJ_EXPORT arm64_float_result arm64_return_float_hfa(uint32_t value)
+{
+  arm64_float_result result;
+  calls[ARM64_RETURN_FLOAT_HFA]++;
+  result.value = (float)value * 0.5f + 1.25f;
+  return result;
+}
+
+LJ_EXPORT arm64_double_result arm64_return_double_hfa(uint32_t value)
+{
+  arm64_double_result result;
+  calls[ARM64_RETURN_DOUBLE_HFA]++;
+  result.value = (double)value * 0.25 + 2.5;
   return result;
 }
 

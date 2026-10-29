@@ -462,6 +462,9 @@ static IRType arm64_callxs_result_type(const LJArm64ABISignature *abi)
     return IRT_P64;
   if (abi->result_kind == LJ_ARM64_ABI_KIND_FLOAT)
     return abi->result_size == 4 ? IRT_FLOAT : IRT_NUM;
+  if (abi->result_kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
+      abi->result_hfa_count == 1)
+    return abi->result_size == 4 ? IRT_FLOAT : IRT_NUM;
   if (abi->result_kind == LJ_ARM64_ABI_KIND_INTEGER ||
       abi->result_kind == LJ_ARM64_ABI_KIND_ENUM) {
     switch (abi->result_size) {
@@ -494,12 +497,17 @@ static int arm64_callxs_result_boxed(const LJArm64ABISignature *abi)
     (abi->result_class == LJ_ARM64_ABI_GPR &&
      abi->result_kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE &&
      (abi->result_size == 1 || abi->result_size == 2 ||
-      abi->result_size == 4 || abi->result_size == 8));
+      abi->result_size == 4 || abi->result_size == 8)) ||
+    (abi->result_class == LJ_ARM64_ABI_FPR &&
+     abi->result_kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
+     abi->result_hfa_count == 1 &&
+     (abi->result_size == 4 || abi->result_size == 8));
 }
 
 static CTypeID arm64_callxs_box_ctype(const LJArm64ABISignature *abi)
 {
-  return abi->result_kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ?
+  return (abi->result_kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ||
+          abi->result_kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER) ?
     abi->result_declared_id : abi->result_id;
 }
 
@@ -2198,7 +2206,8 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	     !arm64_callxs_snapshot_value_slot(T->snap, T->snapmap,
 	       T->nsnap, T->nsnapmap, ref, 1u+LJ_FR2, result_slot,
 	       number_result ? number_result : call, 0))) return 0;
-	if ((call_result_type == IRT_INT || call_result_type == IRT_NUM ||
+	if (!result_is_cdata &&
+	    (call_result_type == IRT_INT || call_result_type == IRT_NUM ||
 	     call_result_type == IRT_FLOAT) &&
 	    ((result_slot && call_result_type == IRT_FLOAT && !number_result) ||
 	     !arm64_callxs_snapshot_value_slot(T->snap, T->snapmap,
@@ -2476,7 +2485,8 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	return 0;
       call = ref;
       result_is_cdata = arm64_callxs_result_boxed(&abi);
-      if (abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE &&
+      if ((abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ||
+           abi.result_kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER) &&
 	  !arm64_callxs_result_not_snapshotted(T->snap, T->snapmap,
 	    T->nsnap, T->nsnapmap, ref)) return 0;
       call_result_type = (IRType)irt_type(ins.t);
@@ -6107,7 +6117,8 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		 ir_load_acq(&view->ir[enterargs[2]]).o != IR_KNULL ||
 		 arm64_callxs_ref_type(view->ir, view->nk, enterargs[2]) != IRT_CDATA)) return 0;
 	    result_is_cdata = arm64_callxs_result_boxed(&abi);
-	    if (abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE &&
+	    if ((abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ||
+	 abi.result_kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER) &&
 		!arm64_callxs_result_not_snapshotted(view->snap, view->snapmap,
 		  view->nsnap, view->nsnapmap, ref)) return 0;
 	    result_is_u32 = abi.result_class == LJ_ARM64_ABI_GPR &&
@@ -6154,9 +6165,10 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		 !arm64_callxs_snapshot_value_slot(view->snap, view->snapmap,
 		   view->nsnap, view->nsnapmap, ref, 1u+LJ_FR2, result_slot,
 		   number_result ? number_result : active_call, 0))) return 0;
-	    if (irt_type(view->ir[active_call].t) == IRT_INT ||
+	    if (!result_is_cdata &&
+	        (irt_type(view->ir[active_call].t) == IRT_INT ||
 	        irt_type(view->ir[active_call].t) == IRT_NUM ||
-	        irt_type(view->ir[active_call].t) == IRT_FLOAT) {
+	        irt_type(view->ir[active_call].t) == IRT_FLOAT)) {
 	      IRRef lua_result = number_result ? number_result : active_call;
 	      if ((result_slot &&
 	           ((irt_type(view->ir[active_call].t) == IRT_FLOAT &&
