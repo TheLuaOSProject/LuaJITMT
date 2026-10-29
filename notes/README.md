@@ -18,6 +18,18 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
+- Current port checkpoint: `6cce85d6b` integrates bounded one/two/three-result
+  Lua CALL-to-CALLM vectors, exact producer and consumer identity exits, and
+  the disabled-FUNCF hot-counter fix. Four-profile native contracts and both
+  509-case ordinary stock corpora pass; the complete combined gate is running.
+  Missing/extra consumer parameters, mutable captured consumers, deeper side
+  ancestry and indirect composite FFI results remain separate active work.
+  See the [CALLM integration evidence](arm64-jit-open-result-callm-2026-10-29.md)
+  and [consumer-exit evidence](arm64-open-callm-consumer-exits-2026-10-29.md).
+  This checkpoint also includes nested/array HFA arguments and results,
+  small nested/mixed integer-containing results, nil-terminated ITERL, and
+  the previously validated direct/nested side support. Earlier checkpoints
+  below describe their evidence at the named revisions, not current limits.
 - Active integration: bounded nonleaf FUNCF roots, multiple root-linked side
   traces and HFA results, followed by strict recorder preflight and the
   read-only captured-call fix at `6968c4cac`. Ordinary stock corpora, workload
