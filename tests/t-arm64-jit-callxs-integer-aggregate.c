@@ -545,6 +545,104 @@ static void assert_partial_hfa_stack_signature(lua_State *L, const char *name,
 	 abi.arg[7+count].stack_offset == width*count);
 }
 
+static void assert_small_hfa_stack_signature(lua_State *L, const char *name)
+{
+  LJArm64ABISignature abi;
+  unsigned i;
+  assert(lj_ccall_arm64_signature(ctype_ctsG(G(L)),
+         global_cdata_ctype(L, name), &abi));
+  assert(abi.nparams == 13 && abi.nargs == 15 && abi.nfpr == 8 &&
+         abi.stack_size == 28 && abi.result_class == LJ_ARM64_ABI_FPR);
+  for (i = 0; i < 8; i++)
+    assert(abi.arg[i].kind == LJ_ARM64_ABI_KIND_FLOAT &&
+           abi.arg[i].reg == i);
+  assert(abi.arg[8].kind == LJ_ARM64_ABI_KIND_FLOAT &&
+         abi.arg[8].reg == LJ_ARM64_ABI_STACK &&
+         abi.arg[8].stack_offset == 0);
+  assert(abi.arg[9].kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
+         abi.arg[9].member_index == 0 && abi.arg[9].member_count == 1 &&
+         abi.arg[9].source_index == 9 &&
+         abi.arg[9].reg == LJ_ARM64_ABI_STACK &&
+         abi.arg[9].stack_offset == 4);
+  assert(abi.arg[10].kind == LJ_ARM64_ABI_KIND_FLOAT &&
+         abi.arg[10].reg == LJ_ARM64_ABI_STACK &&
+         abi.arg[10].stack_offset == 8);
+  for (i = 0; i < 3; i++)
+    assert(abi.arg[11+i].kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
+           abi.arg[11+i].source_index == 11 &&
+           abi.arg[11+i].member_index == i &&
+           abi.arg[11+i].member_count == 3 &&
+           abi.arg[11+i].reg == LJ_ARM64_ABI_STACK &&
+           abi.arg[11+i].stack_offset == 12+4*i);
+  assert(abi.arg[14].kind == LJ_ARM64_ABI_KIND_FLOAT &&
+         abi.arg[14].reg == LJ_ARM64_ABI_STACK &&
+         abi.arg[14].stack_offset == 24);
+}
+
+static void assert_partial_triple_hfa_stack_signature(lua_State *L,
+						      const char *name)
+{
+  LJArm64ABISignature abi;
+  unsigned i;
+  assert(lj_ccall_arm64_signature(ctype_ctsG(G(L)),
+         global_cdata_ctype(L, name), &abi));
+  assert(abi.nparams == 9 && abi.nargs == 11 && abi.nfpr == 8 &&
+         abi.stack_size == 24 && abi.result_class == LJ_ARM64_ABI_FPR);
+  for (i = 0; i < 7; i++)
+    assert(abi.arg[i].kind == LJ_ARM64_ABI_KIND_FLOAT &&
+           abi.arg[i].reg == i);
+  for (i = 0; i < 3; i++)
+    assert(abi.arg[7+i].kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
+           abi.arg[7+i].source_index == 7 &&
+           abi.arg[7+i].member_index == i && abi.arg[7+i].member_count == 3 &&
+           abi.arg[7+i].reg == LJ_ARM64_ABI_STACK &&
+           abi.arg[7+i].stack_offset == i*4);
+  assert(abi.arg[10].kind == LJ_ARM64_ABI_KIND_FLOAT &&
+         abi.arg[10].source_index == 8 &&
+         abi.arg[10].reg == LJ_ARM64_ABI_STACK &&
+         abi.arg[10].stack_offset == 16);
+}
+
+static void assert_triple_hfa_overflow_signature(lua_State *L,
+						 const char *name)
+{
+  LJArm64ABISignature abi;
+  unsigned i;
+  assert(lj_ccall_arm64_signature(ctype_ctsG(G(L)),
+         global_cdata_ctype(L, name), &abi));
+  assert(abi.nparams == 8 && abi.nargs == 10 && abi.nfpr == 8 &&
+         abi.stack_size == 12 && abi.result_class == LJ_ARM64_ABI_FPR);
+  for (i = 0; i < 7; i++)
+    assert(abi.arg[i].kind == LJ_ARM64_ABI_KIND_FLOAT && abi.arg[i].reg == i);
+  for (i = 0; i < 3; i++)
+    assert(abi.arg[7+i].kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
+           abi.arg[7+i].source_index == 7 &&
+           abi.arg[7+i].member_index == i && abi.arg[7+i].member_count == 3 &&
+           abi.arg[7+i].reg == LJ_ARM64_ABI_STACK &&
+           abi.arg[7+i].stack_offset == i*4);
+}
+
+static void assert_one_hfa_partial_stack_signature(lua_State *L,
+						   const char *name)
+{
+  LJArm64ABISignature abi;
+  unsigned i;
+  assert(lj_ccall_arm64_signature(ctype_ctsG(G(L)),
+         global_cdata_ctype(L, name), &abi));
+  assert(abi.nparams == 11 && abi.nargs == 11 && abi.nfpr == 8 &&
+         abi.stack_size == 12 && abi.result_class == LJ_ARM64_ABI_FPR);
+  for (i = 0; i < 8; i++)
+    assert(abi.arg[i].kind == LJ_ARM64_ABI_KIND_FLOAT && abi.arg[i].reg == i);
+  assert(abi.arg[8].kind == LJ_ARM64_ABI_KIND_FLOAT &&
+         abi.arg[8].reg == LJ_ARM64_ABI_STACK && abi.arg[8].stack_offset == 0);
+  assert(abi.arg[9].kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
+         abi.arg[9].source_index == 9 && abi.arg[9].member_index == 0 &&
+         abi.arg[9].member_count == 1 && abi.arg[9].reg == LJ_ARM64_ABI_STACK &&
+         abi.arg[9].stack_offset == 4);
+  assert(abi.arg[10].kind == LJ_ARM64_ABI_KIND_FLOAT &&
+         abi.arg[10].reg == LJ_ARM64_ABI_STACK && abi.arg[10].stack_offset == 8);
+}
+
 static void assert_hfa_reference_pointer_signature(lua_State *L,
 						    const char *name)
 {
@@ -630,7 +728,8 @@ static void test_aggregate_signatures(lua_State *L)
 	 "__arm64_aligned_double_triple_arg_fn");
   assert_hfa_reference_pointer_signature(L,
 	 "__arm64_float_triple_ref_fn");
-  assert_unsupported_aggregate_signature(L, "__arm64_hfa_fpr_overflow_fn");
+  assert_partial_triple_hfa_stack_signature(L,
+	 "__arm64_float_triple_partial_stack_fn");
   assert_one_hfa_signature(L, "__arm64_float_one_double_salt_fn",
 			   sizeof(float));
   assert_one_hfa_signature(L, "__arm64_double_one_double_salt_fn",
@@ -651,9 +750,15 @@ static void test_aggregate_signatures(lua_State *L)
   assert_partial_hfa_stack_signature(L, "__arm64_partial_hfa_stack_fn", 4, 2);
   assert_partial_hfa_stack_signature(L,
 	 "__arm64_partial_float_quad_stack_fn", 4, 4);
-  assert_unsupported_aggregate_signature(L, "__arm64_float_triple_stack_fn");
-  assert_unsupported_aggregate_signature(L,
+  assert_small_hfa_stack_signature(L, "__arm64_small_hfa_stack_fn");
+  assert_small_hfa_stack_signature(L, "__arm64_small_hfa_stack_alt_fn");
+  assert_partial_triple_hfa_stack_signature(L,
+	 "__arm64_float_triple_partial_stack_fn");
+  assert_triple_hfa_overflow_signature(L, "__arm64_hfa_fpr_overflow_fn");
+  assert_partial_triple_hfa_stack_signature(L,
 	 "__arm64_partial_hfa_stack_unsupported_fn");
+  assert_one_hfa_partial_stack_signature(L,
+	 "__arm64_float_one_stack_prefix_fn");
   assert_unsupported_aggregate_signature(L, "__arm64_nested_pair_fn");
   assert_unsupported_aggregate_signature(L, "__arm64_mixed_union_fn");
   assert_unsupported_aggregate_signature(L, "__arm64_big_pair_fn");
@@ -1469,6 +1574,35 @@ int main(int argc, char **argv)
     assert(meta_pc != NULL);
     test_live_aggregate_admission_at(L, T, meta_pc,
 	"__arm64_partial_hfa_stack_clone", IRT_FLOAT, 1);
+  }
+  {
+    GCproto *pt = global_proto(L, "__arm64_small_hfa_candidate");
+    GCtrace *T = find_aggregate_trace_min_load_count(G2J(G(L)), pt,
+							      IRT_FLOAT, 4);
+    assert(T != NULL);
+    meta_pc = aggregate_meta_pc(T);
+    assert(meta_pc != NULL);
+    test_live_aggregate_admission_at(L, T, meta_pc,
+	"__arm64_small_hfa_clone", IRT_FLOAT, 0);
+  }
+  {
+    GCproto *pt = global_proto(L, "__arm64_one_hfa_stack_candidate");
+    GCtrace *T = find_aggregate_trace(G2J(G(L)), pt, IRT_FLOAT);
+    assert(T != NULL);
+    meta_pc = aggregate_meta_pc(T);
+    assert(meta_pc != NULL);
+    test_live_aggregate_admission(L, T, meta_pc,
+	"__arm64_one_hfa_stack_clone", IRT_FLOAT);
+  }
+  {
+    GCproto *pt = global_proto(L, "__arm64_partial_triple_hfa_candidate");
+    GCtrace *T = find_aggregate_trace_min_load_count(G2J(G(L)), pt,
+							      IRT_FLOAT, 3);
+    assert(T != NULL);
+    meta_pc = aggregate_meta_pc(T);
+    assert(meta_pc != NULL);
+    test_live_aggregate_admission_at(L, T, meta_pc,
+	"__arm64_partial_triple_hfa_clone", IRT_FLOAT, 0);
   }
   for (unsigned i=1;i<=5;i++) {
     char candidate_name[64], clone_name[64];

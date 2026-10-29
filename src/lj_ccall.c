@@ -1275,7 +1275,9 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
     if (CCALL_ALIGN_STACKARG) {  /* Align argument on stack. */
       MSize align = (1u << ctype_align(ccall_struct_align(cts, d, did))) - 1;
 #if LJ_TARGET_ARM64 && LJ_TARGET_OSX
-      isva |= ctype_isstruct(dinfo);
+      /* HFA groups use their natural member alignment in the Darwin stack
+      ** argument area. Other by-value composites retain pointer alignment. */
+      isva |= ctype_isstruct(dinfo) && !isfp;
 #endif
       if (rp || (CCALL_PACK_STACKARG && isva && align < CTSIZE_PTR-1))
 	align = CTSIZE_PTR-1;

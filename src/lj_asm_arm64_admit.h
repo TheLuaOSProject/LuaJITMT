@@ -2604,9 +2604,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
           } else if (a->cls != LJ_ARM64_ABI_GPR ||
                      gpr < CCALL_NARG_GPR) return 0;
           if (width != a->size || width == 0 || width > 8) return 0;
-          if (a->kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ||
-              (a->kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
-               a->member_index == 0))
+          if (a->kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE)
             stack_size = (stack_size+7u) & ~7u;
           stack_size = (stack_size + width-1u) & ~(width-1u);
           if (a->reg != LJ_ARM64_ABI_STACK ||
@@ -7028,9 +7026,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	      } else {
 		if (width == 0 || width > 8 || width != a->size ||
 		    a->reg != LJ_ARM64_ABI_STACK) return 0;
-		if (a->kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ||
-		    (a->kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
-		     a->member_index == 0))
+		if (a->kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE)
 		  bytes = (bytes+7u) & ~7u;
 		bytes = (bytes + width-1u) & ~(width-1u);
 		if (a->stack_offset != bytes) return 0;

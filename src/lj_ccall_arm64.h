@@ -434,12 +434,11 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
 	  return 0;
 	/* AAPCS64 places an HFA wholly in consecutive FPRs or wholly on the
 	** stack. If the remaining FPR bank cannot hold the complete group, it is
-	** closed for subsequent FP arguments as well. Keep group padding bounded
-	** to aggregates whose complete stack extent is eight-byte sized. */
-	if (stack_hfa && ((hfa.size & 7u) != 0 || (stack_size & 7u) != 0))
-	  return 0;
+	** closed for subsequent FP arguments as well. Stack placement uses the
+	** natural alignment of an HFA member (4 for float, 8 for double). */
 	if (stack_hfa) {
-	  stack_size = (stack_size+7u) & ~7u;
+	  unsigned align = 1u << hfa.align;
+	  stack_size = (stack_size+align-1u) & ~(align-1u);
 	  nfpr = CCALL_NARG_FPR;
 	}
 	for (part = 0; part < hfa.count; part++) {

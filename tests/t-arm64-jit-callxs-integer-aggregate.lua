@@ -105,6 +105,16 @@ double arm64_take_float_pair_partial_stack(double, double, double, double,
 double arm64_take_float_pair_partial_stack_alt(double, double, double, double,
                                                double, double, double,
                                                Arm64FloatPair, double);
+double arm64_take_small_hfa_stack(double, double, double, double,
+  double, double, double, double, float, Arm64FloatOne, float,
+  Arm64FloatTriple, float);
+double arm64_take_small_hfa_stack_alt(double, double, double, double,
+  double, double, double, double, float, Arm64FloatOne, float,
+  Arm64FloatTriple, float);
+double arm64_take_float_triple_partial_stack(double, double, double, double,
+  double, double, double, Arm64FloatTriple, double);
+double arm64_take_float_one_stack_prefix(double, double, double, double,
+  double, double, double, double, float, Arm64FloatOne, float);
 double arm64_take_float_quad_stack(double,double,double,double,
   double,double,double,double,Arm64FloatQuadResult,double);
 double arm64_take_float_quad_stack_alt(double,double,double,double,
@@ -234,6 +244,11 @@ _G.__arm64_float_pair_stack_fn = lib.arm64_take_float_pair_stack
 _G.__arm64_partial_hfa_stack_fn = lib.arm64_take_float_pair_partial_stack
 _G.__arm64_partial_hfa_stack_alt_fn =
   lib.arm64_take_float_pair_partial_stack_alt
+_G.__arm64_small_hfa_stack_fn = lib.arm64_take_small_hfa_stack
+_G.__arm64_small_hfa_stack_alt_fn = lib.arm64_take_small_hfa_stack_alt
+_G.__arm64_float_triple_partial_stack_fn =
+  lib.arm64_take_float_triple_partial_stack
+_G.__arm64_float_one_stack_prefix_fn = lib.arm64_take_float_one_stack_prefix
 
 local candidate = assert(loadstring([[
 return function(n, fn, value)
@@ -713,6 +728,166 @@ assert(exits > 0 and lib.arm64_aggregate_count(49) == 64,
 tracked_exit_roots = nil
 hfa_candidate = partial_saved_candidate
 _G.__arm64_float_hfa_candidate = hfa_candidate
+_set_hfa_candidate(hfa_candidate)
+
+-- Eight doubles consume v0-v7. Darwin then packs a scalar float, a one-float
+-- HFA, another scalar, a three-float HFA, and a final scalar at four-byte
+-- stack boundaries. The independent C oracle returns weighted inputs so a
+-- wrong group start or lane offset changes the result.
+local function small_hfa_stack_source()
+  return assert(loadstring([[
+return function(n, fn, one, triple)
+  local sum = .5
+  for i = 1, n do
+    sum = sum + fn(1,2,3,4,5,6,7,8, 1.5, one, 2.5, triple, 3.5)
+  end
+  return sum
+end
+]], '@small-hfa-stack'))()
+end
+local small_hfa_candidate = small_hfa_stack_source()
+local small_hfa_oracle = small_hfa_stack_source()
+local small_hfa_clone = small_hfa_stack_source()
+jit.off(small_hfa_oracle, true); jit.off(small_hfa_clone, true)
+_G.__arm64_small_hfa_candidate = small_hfa_candidate
+_G.__arm64_small_hfa_clone = small_hfa_clone
+local small_one = ffi.new('Arm64FloatOne', 1.25)
+local small_triple = ffi.new('Arm64FloatTriple', 2.25, 3.25, 4.25)
+local small_hfa_fn = lib.arm64_take_small_hfa_stack
+hfa_candidate = small_hfa_candidate
+_set_hfa_candidate(small_hfa_candidate)
+jit.flush(small_hfa_candidate)
+jit.opt.start('hotloop=1', 'hotexit=1000')
+jit.on(small_hfa_candidate, true)
+exits, hfa_exits = 0, 0
+lib.arm64_aggregate_reset()
+_begin_hfa_witness()
+local small_native_before = _hfa_native_count()
+for pass = 1, 8 do
+  assert(small_hfa_candidate(16, small_hfa_fn, small_one, small_triple) ==
+         small_hfa_oracle(16, small_hfa_fn, small_one, small_triple),
+         'small HFA stack groups differ from the C ABI oracle')
+end
+assert(_hfa_trace_count() > 0 and _hfa_native_count() > small_native_before and
+       hfa_exits > 0,
+       'small HFA stack groups did not publish, execute, and exit natively')
+assert(lib.arm64_aggregate_count(56) == 256,
+       'small HFA stack group effects were lost or replayed')
+small_native_before = _hfa_native_count()
+collectgarbage('collect')
+exits, hfa_exits = 0, 0
+assert(small_hfa_candidate(32, small_hfa_fn, small_one, small_triple) ==
+       small_hfa_oracle(32, small_hfa_fn, small_one, small_triple),
+       'small HFA stack groups changed after full GC')
+assert(_hfa_native_count() > small_native_before and hfa_exits > 0,
+       'small HFA stack groups did not re-enter and exit after full GC')
+assert(lib.arm64_aggregate_count(56) == 320,
+       'small HFA stack post-GC effects were lost or replayed')
+hfa_candidate = saved_hfa_candidate
+_set_hfa_candidate(hfa_candidate)
+
+local function one_stack_hfa_source()
+  return assert(loadstring([[
+return function(n, fn, one)
+  local sum=.5
+  for i=1,n do sum=sum+fn(1,2,3,4,5,6,7,8,1.5,one,2.5) end
+  return sum
+end
+]], '@one-float-hfa-stack'))()
+end
+local one_stack_candidate = one_stack_hfa_source()
+local one_stack_oracle = one_stack_hfa_source()
+local one_stack_clone = one_stack_hfa_source()
+jit.off(one_stack_oracle, true); jit.off(one_stack_clone, true)
+_G.__arm64_one_hfa_stack_candidate = one_stack_candidate
+_G.__arm64_one_hfa_stack_clone = one_stack_clone
+local one_stack_fn = lib.arm64_take_float_one_stack_prefix
+local one_stack_value = ffi.new('Arm64FloatOne', 1.25)
+hfa_candidate = one_stack_candidate
+_set_hfa_candidate(one_stack_candidate)
+jit.flush(one_stack_candidate)
+jit.opt.start('hotloop=1', 'hotexit=1000')
+jit.on(one_stack_candidate, true)
+exits, hfa_exits = 0, 0
+lib.arm64_aggregate_reset()
+_begin_hfa_witness()
+local one_stack_native_before = _hfa_native_count()
+for pass = 1, 8 do
+  assert(one_stack_candidate(16, one_stack_fn, one_stack_value) ==
+         one_stack_oracle(16, one_stack_fn, one_stack_value),
+         'one-float HFA between stack scalars differs from C oracle')
+end
+assert(_hfa_trace_count() > 0 and
+       _hfa_native_count() > one_stack_native_before and hfa_exits > 0,
+       'one-float HFA stack case did not execute and exit natively')
+assert(lib.arm64_aggregate_count(59) == 256,
+       'one-float stack HFA effects were lost or replayed')
+one_stack_native_before = _hfa_native_count()
+collectgarbage('collect')
+exits, hfa_exits = 0, 0
+assert(one_stack_candidate(32, one_stack_fn, one_stack_value) ==
+       one_stack_oracle(32, one_stack_fn, one_stack_value),
+       'one-float HFA stack case changed after full GC')
+assert(_hfa_native_count() > one_stack_native_before and hfa_exits > 0,
+       'one-float HFA stack case did not re-enter after GC')
+assert(lib.arm64_aggregate_count(59) == 320,
+       'one-float stack HFA post-GC effects were lost or replayed')
+hfa_candidate = saved_hfa_candidate
+_set_hfa_candidate(hfa_candidate)
+
+local function partial_triple_hfa_source()
+  return assert(loadstring([[
+return function(n, fn, triple, salt)
+  local sum = .5
+  for i = 1, n do
+    sum = sum + fn(1,2,3,4,5,6,7, triple, salt)
+  end
+  return sum
+end
+]], '@partial-triple-hfa-stack'))()
+end
+local partial_triple_candidate = partial_triple_hfa_source()
+local partial_triple_oracle = partial_triple_hfa_source()
+local partial_triple_clone = partial_triple_hfa_source()
+jit.off(partial_triple_oracle, true); jit.off(partial_triple_clone, true)
+_G.__arm64_partial_triple_hfa_candidate = partial_triple_candidate
+_G.__arm64_partial_triple_hfa_clone = partial_triple_clone
+local partial_triple_fn = lib.arm64_take_float_triple_partial_stack
+local partial_triple_value = ffi.new('Arm64FloatTriple', 1.25, 2.5, 3.75)
+hfa_candidate = partial_triple_candidate
+_set_hfa_candidate(partial_triple_candidate)
+jit.flush(partial_triple_candidate)
+jit.opt.start('hotloop=1', 'hotexit=1000')
+jit.on(partial_triple_candidate, true)
+exits, hfa_exits = 0, 0
+lib.arm64_aggregate_reset()
+_begin_hfa_witness()
+local partial_triple_native_before = _hfa_native_count()
+for pass = 1, 8 do
+  assert(partial_triple_candidate(16, partial_triple_fn,
+         partial_triple_value, 3.75) ==
+         partial_triple_oracle(16, partial_triple_fn,
+         partial_triple_value, 3.75),
+         'partially spilled three-float HFA differs from C oracle')
+end
+assert(_hfa_trace_count() > 0 and
+       _hfa_native_count() > partial_triple_native_before and hfa_exits > 0,
+       'partially spilled three-float HFA did not execute natively')
+assert(lib.arm64_aggregate_count(58) == 256,
+       'partial three-float HFA effects were lost or replayed')
+partial_triple_native_before = _hfa_native_count()
+collectgarbage('collect')
+exits, hfa_exits = 0, 0
+assert(partial_triple_candidate(32, partial_triple_fn,
+       partial_triple_value, 3.75) ==
+       partial_triple_oracle(32, partial_triple_fn,
+       partial_triple_value, 3.75),
+       'partially spilled three-float HFA changed after full GC')
+assert(_hfa_native_count() > partial_triple_native_before and hfa_exits > 0,
+       'partially spilled three-float HFA did not re-enter after full GC')
+assert(lib.arm64_aggregate_count(58) == 320,
+       'partial three-float HFA post-GC effects were lost or replayed')
+hfa_candidate = saved_hfa_candidate
 _set_hfa_candidate(hfa_candidate)
 
 
