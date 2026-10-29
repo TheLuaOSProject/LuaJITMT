@@ -14,7 +14,11 @@ carrier, and a valid FPR allocation. The CALLXS-specific fixture mutates type,
 address source, CType guard, field offset, CALLXS binding, physical register,
 spill, raw-XLOAD snapshot publication, and post-RA type; both admission passes
 reject their applicable malformed views. The standalone ABI probe also rejects
-the HFA in a variadic function signature.
+the HFA in a variadic function signature. Before unwrapping a source CData type,
+the recorder retains and checks the source CType's reference flag. A live
+reference-typed HFA candidate is checked against its interpreter oracle and
+asserted to publish no HFA root; the direct by-value candidate remains a
+separate positive.
 
 The permanent Lua fixture keeps a live MT peer attached, requires a published
 HFA root, correlates native finish events to that exact candidate proto, checks

@@ -2345,12 +2345,15 @@ static void crec_call_arm64_float_hfa_args(jit_State *J, CTState *cts,
 					   MSize *nargs)
 {
   GCcdata *cd = argv2cdata(J, sp, o);
-  CType snapshot;
+  CType srcsnap, raw_snap;
+  CType *src = crec_ctype_rawid(J, cts, cd->ctypeid, NULL, &srcsnap);
+  CTInfo sinfo = ctype_info_acq(src);
   CTypeID rawid;
   LJArm64FloatHFA hfa;
   unsigned i;
-  crec_ctype_rawrefid(J, cts, cd->ctypeid, &rawid, &snapshot);
-  if (rawid != did || ctype_isref(ctype_info_acq(&snapshot)) ||
+  crec_ctype_rawrefid(J, cts, cd->ctypeid, &rawid, &raw_snap);
+  if (rawid != did || ctype_isref(sinfo) ||
+      !ctype_isstruct(ctype_info_acq(&raw_snap)) ||
       !lj_ccall_arm64_float_hfa_class(cts, rawid, &hfa, &rawid) ||
       hfa.count != 2 || hfa.size != 2*sizeof(float))
     lj_trace_err(J, LJ_TRERR_NYICONV);
