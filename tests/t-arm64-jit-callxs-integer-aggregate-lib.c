@@ -1,0 +1,116 @@
+#include <stdint.h>
+
+#if defined(_WIN32)
+#define LJ_EXPORT __declspec(dllexport)
+#else
+#define LJ_EXPORT __attribute__((visibility("default")))
+#endif
+
+typedef struct { uint32_t lo, hi; } arm64_int_pair;
+typedef struct { float lo, hi; } arm64_float_pair;
+typedef struct { arm64_int_pair pair; uint32_t tag; } arm64_nested_pair;
+typedef union { uint64_t u; double d; } arm64_mixed_union;
+typedef struct { uint8_t value; } arm64_byte;
+typedef struct { uint16_t value; } arm64_half;
+typedef struct { uint32_t value; } arm64_word;
+typedef struct { uint64_t lo, hi; } arm64_big_pair;
+typedef struct { uint32_t value:5; } arm64_bitfield;
+
+enum {
+  ARM64_INT_PAIR,
+  ARM64_INT_PAIR_DOUBLE_SALT,
+  ARM64_FLOAT_PAIR,
+  ARM64_NESTED_PAIR,
+  ARM64_MIXED_UNION,
+  ARM64_BYTE,
+  ARM64_HALF,
+  ARM64_WORD,
+  ARM64_BIG_PAIR,
+  ARM64_BITFIELD,
+  ARM64_PAIR_NO_GPR,
+  ARM64_AGGREGATE_COUNT
+};
+
+static volatile uint32_t calls[ARM64_AGGREGATE_COUNT];
+
+LJ_EXPORT void arm64_aggregate_reset(void)
+{
+  unsigned i;
+  for (i = 0; i < ARM64_AGGREGATE_COUNT; i++) calls[i] = 0;
+}
+
+LJ_EXPORT uint32_t arm64_aggregate_count(uint32_t which)
+{
+  return which < ARM64_AGGREGATE_COUNT ? calls[which] : UINT32_MAX;
+}
+
+LJ_EXPORT uint32_t arm64_take_int_pair(arm64_int_pair value, uint32_t salt)
+{
+  calls[ARM64_INT_PAIR]++;
+  return value.lo + value.hi * 2u + salt;
+}
+
+LJ_EXPORT double arm64_take_int_pair_double_salt(arm64_int_pair value,
+						 uint32_t salt)
+{
+  calls[ARM64_INT_PAIR_DOUBLE_SALT]++;
+  return (double)value.lo + (double)value.hi * 2.0 + (double)salt;
+}
+
+LJ_EXPORT uint32_t arm64_take_float_pair(arm64_float_pair value)
+{
+  calls[ARM64_FLOAT_PAIR]++;
+  return (uint32_t)value.lo + (uint32_t)value.hi;
+}
+
+LJ_EXPORT uint32_t arm64_take_nested_pair(arm64_nested_pair value)
+{
+  calls[ARM64_NESTED_PAIR]++;
+  return value.pair.lo + value.pair.hi + value.tag;
+}
+
+LJ_EXPORT uint32_t arm64_take_union(arm64_mixed_union value)
+{
+  calls[ARM64_MIXED_UNION]++;
+  return (uint32_t)value.u;
+}
+
+LJ_EXPORT uint32_t arm64_take_byte(arm64_byte value, uint32_t salt)
+{
+  calls[ARM64_BYTE]++;
+  return (uint32_t)value.value + salt;
+}
+
+LJ_EXPORT uint32_t arm64_take_half(arm64_half value, uint32_t salt)
+{
+  calls[ARM64_HALF]++;
+  return (uint32_t)value.value + salt;
+}
+
+LJ_EXPORT uint32_t arm64_take_word(arm64_word value, uint32_t salt)
+{
+  calls[ARM64_WORD]++;
+  return value.value + salt;
+}
+
+LJ_EXPORT uint32_t arm64_take_big_pair(arm64_big_pair value)
+{
+  calls[ARM64_BIG_PAIR]++;
+  return (uint32_t)(value.lo + value.hi);
+}
+
+LJ_EXPORT uint32_t arm64_take_bitfield(arm64_bitfield value)
+{
+  calls[ARM64_BITFIELD]++;
+  return value.value;
+}
+
+LJ_EXPORT uint32_t arm64_take_pair_no_gpr(uint32_t a, uint32_t b,
+					  uint32_t c, uint32_t d,
+					  uint32_t e, uint32_t f,
+					  uint32_t g, uint32_t h,
+					  arm64_int_pair value)
+{
+  calls[ARM64_PAIR_NO_GPR]++;
+  return a+b+c+d+e+f+g+h+value.lo+value.hi;
+}

@@ -2306,6 +2306,38 @@ static TRef crec_call_sysv_aggregate_arg(jit_State *J, CTState *cts,
 #undef CREC_CALL_RCL_MEM
 #endif
 
+#if LJ_HASJIT_FFI_CALLXS && LJ_TARGET_ARM64
+/* Load the exact bytes of a direct by-value integer aggregate. The source
+** CData remains in its Lua frame slot as the GC root; this scalar carrier is
+** only the AAPCS64 low-order GPR payload and never replaces that root. */
+static TRef crec_call_arm64_integer_aggregate_arg(jit_State *J, CTState *cts,
+						 CTypeID did, TRef sp,
+						 cTValue *o, IRType type)
+{
+  GCcdata *cd = argv2cdata(J, sp, o);
+  CType srcsnap, rawsnap;
+  CTypeID rid;
+  CType *src = crec_ctype_rawid(J, cts, cd->ctypeid, NULL, &srcsnap);
+  CTInfo sinfo = ctype_info_acq(src);
+  IRType expected;
+  TRef ptr;
+  crec_ctype_rawrefid(J, cts, cd->ctypeid, &rid, &rawsnap);
+  if (rid != did || ctype_isref(sinfo) ||
+	!ctype_isstruct(ctype_info_acq(&rawsnap)))
+    lj_trace_err(J, LJ_TRERR_NYICONV);
+  switch (ctype_size_acq(&rawsnap)) {
+  case 1: expected = IRT_U8; break;
+  case 2: expected = IRT_U16; break;
+  case 4: expected = IRT_U32; break;
+  case 8: expected = IRT_U64; break;
+  default: lj_trace_err(J, LJ_TRERR_NYICONV); return TREF_NIL;
+  }
+  if (type != expected) lj_trace_err(J, LJ_TRERR_NYICONV);
+  ptr = emitir(IRT(IR_ADD, IRT_PTR), sp, lj_ir_kintp(J, sizeof(GCcdata)));
+  return emitir(IRT(IR_XLOAD, type), ptr, 0);
+}
+#endif
+
 /* Collect scalar and admitted aggregate argument conversions for one
 ** ABI-driven CALLXS.
 ** Building the CARG tree is deliberately separate: indirect aggregate results
@@ -2352,6 +2384,7 @@ static MSize crec_call_args_collect(jit_State *J, RecordFFData *rd,
     CType *d;
     CTInfo dinfo;
     CTSize dsize;
+    int fixed = 0, integer_aggregate = 0;
 
     if (n >= limit)
       lj_trace_err(J, LJ_TRERR_NYICALL);
@@ -2359,6 +2392,7 @@ static MSize crec_call_args_collect(jit_State *J, RecordFFData *rd,
     if (fid) {
       CType *ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
       CTInfo ctfinfo = ctype_info_acq(ctf);
+      fixed = 1;
       fid = ctype_sib_acq(ctf);
       lj_assertJ(ctype_isfield(ctfinfo), "field expected");
       did = ctype_cid(ctfinfo);
@@ -2384,13 +2418,23 @@ static MSize crec_call_args_collect(jit_State *J, RecordFFData *rd,
       if (at == IRT_CDATA)
 	lj_trace_err(J, LJ_TRERR_NYICALL);
       tr = crec_call_sysv_aggregate_arg(J, cts, did, *base, o, at);
+#elif LJ_HASJIT_FFI_CALLXS && LJ_TARGET_ARM64 && LJ_TARGET_OSX
+      LJArm64ABIArg aggregate;
+      CTypeID rawid;
+      if (!fixed || !lj_ccall_arm64_integer_aggregate_class(cts, did,
+	    &aggregate, &rawid) || rawid != did || aggregate.size != dsize)
+	lj_trace_err(J, LJ_TRERR_NYICALL);
+      tr = crec_call_arm64_integer_aggregate_arg(J, cts, did, *base, o,
+	  dsize == 1 ? IRT_U8 : dsize == 2 ? IRT_U16 :
+	  dsize == 4 ? IRT_U32 : IRT_U64);
+      integer_aggregate = 1;
 #else
       lj_trace_err(J, LJ_TRERR_NYICALL);
 #endif
     } else {
       tr = crec_ct_tv(J, d, 0, *base, o);
     }
-    if (ctype_isinteger_or_bool(dinfo)) {
+    if (!integer_aggregate && ctype_isinteger_or_bool(dinfo)) {
 #if LJ_TARGET_ARM64 && LJ_TARGET_OSX
       if (!ngpr) {
 	/* Fixed stack arguments use their unpromoted size on Darwin arm64. */
@@ -2408,7 +2452,8 @@ static MSize crec_call_args_collect(jit_State *J, RecordFFData *rd,
 	  tr = emitconv(tr, IRT_INT, dsize == 1 ? IRT_I8 : IRT_I16,
 			IRCONV_SEXT);
       }
-    } else if (LJ_SOFTFP32 && ctype_isfp(dinfo) && dsize > 4) {
+    } else if (!integer_aggregate && LJ_SOFTFP32 &&
+	       ctype_isfp(dinfo) && dsize > 4) {
       lj_needsplit(J);
     }
 #if LJ_TARGET_X86
@@ -2440,6 +2485,7 @@ static MSize crec_call_args_collect(jit_State *J, RecordFFData *rd,
     if (!ctype_isfp(dinfo) && ngpr)
       ngpr--;
 #endif
+    UNUSED(fixed);
     args[n] = tr;
   }
   return n;

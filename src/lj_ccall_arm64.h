@@ -25,7 +25,8 @@ typedef enum LJArm64ABIKind {
   LJ_ARM64_ABI_KIND_INTEGER,
   LJ_ARM64_ABI_KIND_FLOAT,
   LJ_ARM64_ABI_KIND_POINTER,
-  LJ_ARM64_ABI_KIND_ENUM
+  LJ_ARM64_ABI_KIND_ENUM,
+  LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE
 } LJArm64ABIKind;
 
 #define LJ_ARM64_ABI_MAX_ARGS 32
@@ -160,6 +161,71 @@ static int lj_ccall_arm64_scalar_class(CTState *cts, CTypeID id,
   return 0;
 }
 
+/* Darwin AAPCS64 passes a non-HFA composite of at most eight bytes in one
+** GPR when one remains. This bounded subset accepts only structs whose
+** direct members are integer/boolean/enum scalars. It deliberately rejects
+** unions, nested composites, bitfields, vectors, floating members, refs and
+** over-aligned shapes until their independent classifications are proved. */
+static int lj_ccall_arm64_integer_aggregate_class(CTState *cts, CTypeID id,
+						 LJArm64ABIArg *arg,
+						 CTypeID *rawid)
+{
+  CType ct, field, member, enumbase;
+  CTInfo info;
+  CTypeID fid;
+  CTSize size;
+  CTSize field_end = 0;
+  unsigned fields = 0;
+  if (!lj_ccall_arm64_raw_type(cts, id, &ct, rawid)) return 0;
+  info = ctype_info_acq(&ct);
+  size = ctype_size_acq(&ct);
+  if (!ctype_isstruct(info) || (info & CTF_UNION) || ctype_isvltype(info) ||
+      size == 0 || size == CTSIZE_INVALID ||
+      (size != 1 && size != 2 && size != 4 && size != 8) ||
+      ctype_align(info) > 3)
+    return 0;
+  for (fid = ctype_sib_acq(&ct); fid; ) {
+    CTypeID mid;
+    CTInfo minfo;
+    CTSize msize, offset;
+    if (lj_ctype_snapshot(cts, fid, &field) <= 0) return 0;
+    info = ctype_info_acq(&field);
+    fid = ctype_sib_acq(&field);
+    if (!ctype_isfield(info)) return 0;
+    offset = ctype_size_acq(&field);
+    mid = ctype_cid(info);
+    if (!lj_ccall_arm64_raw_type(cts, mid, &member, &mid)) return 0;
+    minfo = ctype_info_acq(&member);
+    msize = ctype_size_acq(&member);
+    if (ctype_isbitfield(minfo)) return 0;
+    if (ctype_isenum(minfo)) {
+      if (lj_ctype_snapshot(cts, ctype_cid(minfo), &enumbase) <= 0)
+	return 0;
+      minfo = ctype_info_acq(&enumbase);
+      if (!ctype_isinteger_or_bool(minfo) || ctype_isfp(minfo) ||
+	  ctype_size_acq(&enumbase) != msize)
+	return 0;
+    } else if (!ctype_isinteger_or_bool(minfo) || ctype_isfp(minfo)) {
+      return 0;
+    }
+    if (msize == 0 || msize == CTSIZE_INVALID || msize > 8 ||
+	offset < field_end || offset > size || msize > size-offset ||
+	fields >= 8)
+      return 0;
+    field_end = offset+msize;
+    fields++;
+  }
+  if (fields == 0) return 0;
+  if (arg) {
+    arg->cls = LJ_ARM64_ABI_GPR;
+    arg->kind = LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE;
+    arg->size = (uint8_t)size;
+    arg->align = ctype_align(ctype_info_acq(&ct));
+    arg->is_unsigned = 1;
+  }
+  return 1;
+}
+
 /* Classify the fixed prefix in Darwin's independent GPR/FPR banks. For a
 ** variadic function, nargs and arg[] describe only the named fixed prefix;
 ** dynamic promoted tail arguments are classified from the CALLXS IR suffix
@@ -219,10 +285,14 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
     argid = ctype_cid(finfo);
     arg = &abi->arg[nargs];
     memset(arg, 0, sizeof(*arg));
-    if (!lj_ccall_arm64_scalar_class(cts, argid, 0, arg, &rawid))
+    if (!lj_ccall_arm64_scalar_class(cts, argid, 0, arg, &rawid) &&
+        !lj_ccall_arm64_integer_aggregate_class(cts, argid, arg, &rawid))
       return 0;
     arg->id = rawid;
-    if (arg->cls == LJ_ARM64_ABI_FPR && nfpr < CCALL_NARG_FPR) {
+    if (arg->kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE) {
+      if (ngpr >= CCALL_NARG_GPR) return 0;
+      arg->reg = (uint8_t)ngpr++;
+    } else if (arg->cls == LJ_ARM64_ABI_FPR && nfpr < CCALL_NARG_FPR) {
       arg->reg = (uint8_t)nfpr++;
     } else if (arg->cls == LJ_ARM64_ABI_GPR && ngpr < CCALL_NARG_GPR) {
       arg->reg = (uint8_t)ngpr++;
