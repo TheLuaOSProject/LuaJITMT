@@ -1,5 +1,13 @@
 # ARM64/x64 trace-topology probe (2026-10-28)
 
+The original three-shape evidence below used the earlier oracle setup.
+Revision `1abc5959c` disables the loader's whole prototype tree, fixing
+captured sibling helpers that could still compile. The later source also
+matches candidate root exits at callback delivery, before a later collection
+could retire/reuse trace numbers. See the
+[oracle correction](arm64-funcf-integrated-checkpoint-2026-10-28.md) and the
+expanded comparison at the end of this note.
+
 This probe compares three deliberately small trace shapes against an
 independently loaded, recursively JIT-disabled interpreter oracle:
 
@@ -83,3 +91,40 @@ has distinct semantic and post-allocation checks in
 This probe does not alter any admission boundary or infer a refusal reason
 from missing trace rows. It supplies a reproducible workload for future
 targeted diagnosis of generic function-entry and side-topology gaps.
+
+## FORL versus while-loop controls (2026-10-29)
+
+The expanded probe adds an integer `for` loop, an equivalent integer `while`
+loop, and a fractional `while` loop initialized with `sum=.5`. The last case
+avoids an initial INT-to-NUM transition consuming the first available child.
+All six shapes pass their interpreted comparisons on the immutable ordinary
+`d9352591a` ARM64/x86_64 runtime bundles described in the integration note.
+An MT peer remains attached. Each loop has four phases of 80 comparisons
+followed by collection and one further comparison per phase.
+
+| Shape | ARM64 | x86_64 |
+| --- | --- | --- |
+| Integer `for` loop | root executes; no side observed | root-linked side executes |
+| Integer `while` loop | root-linked side executes | root-linked side executes |
+| Fractional `while`, initial sum `.5` | root-linked side executes | root-linked side executes |
+
+The root-linked sides each produce 81 exit callbacks during the first
+alternate-branch phase. A third branch outcome produces exits from that same
+side; no additional side is observed on either architecture. A separate
+fractional `while` experiment initialized with integer zero publishes a
+self-looping ARM64 child during its first phase; later branch outcomes do
+not produce another child. This supports separating initial type evolution
+from NUM arithmetic support, without claiming a general second-side x64 gap.
+
+Source inspection identifies an explicit FORL boundary in the ARM64 parent
+view: it requires `BC_LOOP` and `TRACE_ARM64_INT_LOOP_ADMITTED`. Its loop
+generation/copy helpers use the forward LOOP displacement and backward JMP
+geometry, which cannot be reused as-is for FORL. The FORL tuple, hidden loop
+slots and inherited snapshot/register mappings need separate proof before
+opening that boundary. The control experiments do not change admission.
+
+Evidence: `/Users/frityet/Scratch/ljmt-side-topology-20261029/` contains the
+initial `probe.lua`, `seeded-probe.lua`, their per-target TSVs, and final
+`arm64-expanded.tsv` / `x86_64-expanded.tsv` from the committed expanded probe.
+The latter uses callback-time root classification; raw trace IDs and exit
+numbers remain diagnostic labels rather than generation identities.

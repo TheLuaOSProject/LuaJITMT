@@ -34,6 +34,49 @@ local cases = {
     end]],
     phases = {{1,48}, {2,48}, {3,48}, {2,64}},
   },
+  {
+    name = 'integer-for-sides',
+    source = [[return function(mode,n)
+      local sum=0
+      for i=1,n do
+        if mode==1 then sum=sum+i
+        elseif mode==2 then sum=sum-i
+        else sum=sum+i*3 end
+      end
+      return sum
+    end]],
+    phases = {{1,48}, {2,48}, {3,48}, {2,64}},
+  },
+  {
+    name = 'integer-while-sides',
+    source = [[return function(mode,n)
+      local sum,i=0,1
+      while i<=n do
+        if mode==1 then sum=sum+i
+        elseif mode==2 then sum=sum-i
+        else sum=sum+i*3 end
+        i=i+1
+      end
+      return sum
+    end]],
+    phases = {{1,48}, {2,48}, {3,48}, {2,64}},
+  },
+  {
+    name = 'fractional-while-sides',
+    -- Start with a nonintegral sum so a first INT-to-NUM transition does
+    -- not consume the first side before the alternate branch is heated.
+    source = [[return function(mode,n)
+      local sum,i=.5,1
+      while i<=n do
+        if mode==1 then sum=sum+i*.25
+        elseif mode==2 then sum=sum-i*.5
+        else sum=sum+i*.75 end
+        i=i+1
+      end
+      return sum
+    end]],
+    phases = {{1,48}, {2,48}, {3,48}, {2,64}},
+  },
 }
 
 local function compile(source, oracle)
@@ -129,12 +172,15 @@ local function invoke_pair(candidate, oracle, args)
 end
 
 local function main()
+  local observed,active_candidate={},nil
   local ready,stop=threading.channel(1),threading.channel(1)
   local peer=assert(threading.spawn(function(r,s)
     assert(r:send(true,5)); assert(select(2,s:recv(120))); return true
   end,ready,stop))
   local function exit_observer(no, exitno)
-    observed[#observed+1]={no,exitno}
+    -- Match at delivery; later collection may retire or reuse trace IDs.
+    local roots=root_headers(active_candidate)
+    observed[#observed+1]={no,exitno,roots[no] == true}
   end
   jit.off(exit_observer,true)
   assert(select(2,ready:recv(5)), 'MT peer did not start')
@@ -143,9 +189,9 @@ local function main()
     jit.flush()
     local candidate=compile(case.source, false)
     local oracle=compile(case.source, true)
+    active_candidate=candidate
     jit.off(oracle,true)
     observed={}
-    local known_roots={}
     jit.opt.start('hotloop=1','hotexit=1','maxtrace=128')
     jit.attach(exit_observer,'texit')
     jit.on()
@@ -154,13 +200,12 @@ local function main()
       collectgarbage('collect')
       invoke_pair(candidate,oracle,args)
       local roots=root_headers(candidate)
-      for no in pairs(roots) do known_roots[no]=true end
       local rows=trace_rows()
-      local sides=side_ids(rows,known_roots)
+      local sides=side_ids(rows,roots)
       local root_exits,other_exits=0,0
       local counts={}
       for _,event in ipairs(observed) do
-        if known_roots[event[1]] then root_exits=root_exits+1
+        if event[3] then root_exits=root_exits+1
         else other_exits=other_exits+1 end
         local key=event[1]..':'..event[2]
         counts[key]=(counts[key] or 0)+1
