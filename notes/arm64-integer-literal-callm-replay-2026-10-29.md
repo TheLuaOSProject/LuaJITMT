@@ -42,5 +42,26 @@ Evidence directory:
   restores ordinary assertion ARM64 without helpers, profile
   `6702de125d40816264be34dddd2a1be12e91968dc30e60b9c2657cad7864212c`.
 
-Release and broader Lua-call integration validation remain pending. General
-Lua/JIT parity remains incomplete.
+The production checkpoint is `fb5157fb9`. Independent read-only review found
+no actionable defect in the literal selection or private mutation fixtures.
+Subsequent validation passes:
+
+- `mixed-callm-literal-funcf-release.log`: complete FUNCF recording contract
+  on release ARM64 and arm64e. Together with the assertion run, all four
+  profiles execute the new native positives and both literal mutations.
+- `mixed-callm-literal-leaf-four-profile.log`: complete Lua-call contract on
+  all four profiles, including nested calls, varargs, open result vectors,
+  child exits, sparse maps, argument normalization and multiple returns.
+- `mixed-callm-literal-open-four-profile.log`: complete open-CALLM exit
+  contract on all four profiles, including current-iteration producer
+  arguments, frame/MULTRES restoration, live peer and exact GC/code reuse.
+
+The combined command exits zero and restores ordinary assertion ARM64 without
+test helpers, profile
+`3a2a22d783839ace0e1551282d1207ead2f27f4de513fe92a46cb88dfa8a006d`.
+
+`mixed-callm-addint-{arm64,x64}-dump.log` records the remaining arithmetic
+case: ARM64 records an integer ADDOV with a child-frame overflow snapshot;
+the preserved x64 control records NUM arithmetic. That extra guarded child
+continuation is outside the literal fix. Full combined-gate validation of
+this later fix and general Lua/JIT parity remain incomplete.
