@@ -57,6 +57,7 @@ typedef struct LJArm64ABISignature {
   uint8_t result_size;
   uint8_t result_unsigned;
   uint8_t result_hfa_count;
+  uint8_t result_hfa_offset[2];
   uint8_t is_vararg;
   uint8_t nargs;
   uint8_t nparams;
@@ -274,6 +275,7 @@ static int lj_ccall_arm64_float_hfa_class(CTState *cts, CTypeID id,
   CTSize member_size = 0;
   CTypeID declared_id = id;
   unsigned depth, declared_align = 0;
+  if (hfa != NULL) memset(hfa, 0, sizeof(*hfa));
   /* CTA_ALIGN changes aggregate return placement and box geometry. Preserve
   ** that distinction instead of classifying only the raw field layout. */
   for (depth = 0; depth < 32; depth++) {
@@ -370,11 +372,13 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
                                    &result, &rawid)) {
     LJArm64FloatHFA hfa;
     if (lj_ccall_arm64_float_hfa_class(cts, abi->result_declared_id,
-		&hfa, &rawid) && hfa.count == 1) {
+		&hfa, &rawid)) {
       result.cls = LJ_ARM64_ABI_FPR;
       result.kind = LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER;
       result.size = hfa.member_size;
       abi->result_hfa_count = hfa.count;
+      memcpy(abi->result_hfa_offset, hfa.offset,
+             sizeof(abi->result_hfa_offset));
     } else {
       if (!lj_ccall_arm64_integer_aggregate_class(cts,
 	    abi->result_declared_id, &result, &rawid))

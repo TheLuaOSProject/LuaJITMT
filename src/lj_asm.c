@@ -2946,6 +2946,13 @@ static void asm_setup_regsp(ASMState *as)
 #endif
       /* fallthrough */
       case IR_CALLN: case IR_CALLL: case IR_CALLS: case IR_CALLXS:
+#if LJ_TARGET_ARM64
+        if (irt_isfp((ir-1)->t) && irt_isfp(ir->t)) {
+          (ir-1)->prev = REGSP_HINT(RID_FPRET);
+          ir->prev = REGSP_HINT(RID_D1);
+          continue;
+        }
+#endif
 #if LJ_SOFTFP
       case IR_MIN: case IR_MAX:
 #endif

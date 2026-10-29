@@ -45,6 +45,21 @@
 /* Pass IR on to next optimization in chain (FOLD). */
 #define emitir(ot, a, b)	(lj_ir_set(J, (ot), (a), (b)), lj_opt_fold(J))
 
+#if LJ_TARGET_ARM64 && LJ_TARGET_OSX
+/* HIOP is a paired-result marker consumed by register allocation. Like the
+** split pass, emit it directly so the generic fold dispatcher cannot treat
+** this non-computational IR as an unknown arithmetic operation. */
+static TRef crec_emit_hiresult(jit_State *J, IRType t, TRef lo)
+{
+  TRef hi;
+  lj_ir_set(J, IRT(IR_HIOP, t), lo, lo);
+  hi = lj_ir_emit(J);
+  lj_assertJ(IR(hi & TREF_REFMASK)->o == IR_HIOP,
+             "bad direct HIOP emit %d", IR(hi & TREF_REFMASK)->o);
+  return hi;
+}
+#endif
+
 #define emitconv(a, dt, st, flags) \
   emitir(IRT(IR_CONV, (dt)), (a), (st)|((dt) << 5)|(flags))
 
@@ -2710,6 +2725,9 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     MSize nargs;
     IRType t;
     int boxed_result, direct_aggregate_result, indirect_result, rooted_result;
+#if LJ_TARGET_ARM64 && LJ_TARGET_OSX
+    uint8_t direct_hfa_count = 0, direct_hfa_offset[2] = { 0, 0 };
+#endif
 
 #if !LJ_HASJIT_FFI_CALLXS
     /* Other targets retain the exact interpreter path until their native-frame
@@ -2770,8 +2788,11 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
       LJArm64FloatHFA result_hfa;
       CTypeID raw_result;
       if (lj_ccall_arm64_float_hfa_class(cts, result_id,
-	    &result_hfa, &raw_result) && result_hfa.count == 1) {
+	    &result_hfa, &raw_result)) {
 	t = result_hfa.member_size == sizeof(float) ? IRT_FLOAT : IRT_NUM;
+	direct_hfa_count = result_hfa.count;
+	direct_hfa_offset[0] = result_hfa.offset[0];
+	direct_hfa_offset[1] = result_hfa.offset[1];
       } else {
 	if (!lj_ccall_arm64_integer_aggregate_class(cts, result_id,
 	      &result_abi, &raw_result))
@@ -2886,7 +2907,20 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
       /* The callee filled the rooted payload directly. No post-call helper or
       ** store may precede native leave. */
       tr = result_box;
-    } else if (boxed_result || direct_aggregate_result) {
+    }
+#if LJ_TARGET_ARM64 && LJ_TARGET_OSX
+    else if (direct_hfa_count == 2) {
+      TRef high = crec_emit_hiresult(J, t, tr);
+      TRef lowaddr = emitir(IRT(IR_ADD, IRT_PTR), result_payload,
+			    lj_ir_kintp(J, direct_hfa_offset[0]));
+      TRef highaddr = emitir(IRT(IR_ADD, IRT_PTR), result_payload,
+			     lj_ir_kintp(J, direct_hfa_offset[1]));
+      emitir(IRT(IR_XSTORE, t), lowaddr, tr);
+      emitir(IRT(IR_XSTORE, t), highaddr, high);
+      tr = result_box;
+    }
+#endif
+    else if (boxed_result || direct_aggregate_result) {
       emitir(IRT(IR_XSTORE, t), result_payload, tr);
       tr = result_box;
       if (t == IRT_I64 || t == IRT_U64) lj_needsplit(J);
