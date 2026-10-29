@@ -15,9 +15,17 @@ typedef uint32_t (*Arm64FloatPairVarargFn)(Arm64FloatPair, ...);
 typedef struct { float f; double d; } Arm64MixedFloatHFA;
 typedef struct { double lo, hi; } Arm64DoublePair;
 typedef struct { float a, b, c; } Arm64FloatTriple;
+typedef struct { double x, y, z, w; } Arm64DoubleQuad;
+typedef Arm64FloatTriple& Arm64FloatTripleRef;
 typedef uint32_t (*Arm64MixedFloatHFAFn)(Arm64MixedFloatHFA);
 typedef uint32_t (*Arm64DoublePairFn)(Arm64DoublePair);
 typedef uint32_t (*Arm64FloatTripleFn)(Arm64FloatTriple);
+typedef double (*Arm64FloatTripleSaltFn)(Arm64FloatTriple, double);
+typedef double (*Arm64DoubleQuadSaltFn)(Arm64DoubleQuad, double);
+typedef double (*Arm64FloatTripleRefFn)(Arm64FloatTripleRef, double);
+typedef double (*Arm64FprOverflowFn)(double, double, double, double,
+                                     double, double, double,
+                                     Arm64FloatTriple);
 typedef struct { Arm64IntPair pair; uint32_t tag; } Arm64NestedPair;
 typedef union { uint64_t u; double d; } Arm64MixedUnion;
 typedef struct { uint8_t value; } Arm64Byte;
@@ -39,11 +47,17 @@ typedef struct { float x, y, z, w; } Arm64FloatQuadResult;
 typedef struct { double x, y, z; } Arm64DoubleTripleResult;
 typedef struct { double x, y, z, w; } Arm64DoubleQuadResult;
 typedef struct { double x, y, z, w, v; } Arm64DoubleQuintResult;
+typedef struct { double x, y, z, w, v; } Arm64DoubleQuint;
 typedef struct __attribute__((aligned(16))) {
   double x, y, z;
 } Arm64AlignedDoubleTripleResult;
+typedef struct __attribute__((aligned(16))) {
+  double x, y, z;
+} Arm64AlignedDoubleTriple;
 typedef Arm64DoubleQuintResult (*Arm64DoubleQuintResultFn)(uint32_t);
+typedef double (*Arm64DoubleQuintFn)(Arm64DoubleQuint, double);
 typedef Arm64AlignedDoubleTripleResult (*Arm64AlignedDoubleTripleResultFn)(uint32_t);
+typedef double (*Arm64AlignedDoubleTripleFn)(Arm64AlignedDoubleTriple, double);
 typedef Arm64DoublePairResult (*Arm64DoublePairResultFPRFn)(double, uint32_t);
 typedef Arm64AlignedFloatPairResult (*Arm64AlignedFloatPairResultFn)(uint32_t);
 typedef Arm64DoublePairResult (*Arm64DoublePairResultFn)(uint32_t);
@@ -71,6 +85,8 @@ uint32_t arm64_take_float_pair(Arm64FloatPair);
 double arm64_take_float_pair_double_salt(Arm64FloatPair, double);
 double arm64_take_float_one_double_salt(Arm64FloatOne, double);
 double arm64_take_double_one_double_salt(Arm64DoubleOne, double);
+double arm64_take_float_triple_double_salt(Arm64FloatTriple, double);
+double arm64_take_double_quad_double_salt(Arm64DoubleQuad, double);
 int32_t arm64_vararg_i32(int32_t, ...);
 uint32_t arm64_take_nested_pair(Arm64NestedPair);
 uint32_t arm64_take_union(Arm64MixedUnion);
@@ -120,6 +136,9 @@ _G.__arm64_double_quint_result_fn =
   ffi.cast('Arm64DoubleQuintResultFn', nil)
 _G.__arm64_aligned_double_triple_result_fn =
   ffi.cast('Arm64AlignedDoubleTripleResultFn', nil)
+_G.__arm64_double_quint_arg_fn = ffi.cast('Arm64DoubleQuintFn', nil)
+_G.__arm64_aligned_double_triple_arg_fn =
+  ffi.cast('Arm64AlignedDoubleTripleFn', nil)
 _G.__arm64_aligned_float_result_fn = ffi.cast('Arm64AlignedFloatResultFn', nil)
 _G.__arm64_padded_float_result_fn = ffi.cast('Arm64PaddedFloatResultFn', nil)
 _G.__arm64_aligned_float_pair_result_fn =
@@ -132,6 +151,10 @@ _G.__arm64_float_pair_fn = lib.arm64_take_float_pair
 _G.__arm64_float_pair_double_salt_fn = lib.arm64_take_float_pair_double_salt
 _G.__arm64_float_one_double_salt_fn = lib.arm64_take_float_one_double_salt
 _G.__arm64_double_one_double_salt_fn = lib.arm64_take_double_one_double_salt
+_G.__arm64_float_triple_double_salt_fn = lib.arm64_take_float_triple_double_salt
+_G.__arm64_double_quad_double_salt_fn = lib.arm64_take_double_quad_double_salt
+_G.__arm64_float_triple_ref_fn = ffi.cast('Arm64FloatTripleRefFn', nil)
+_G.__arm64_hfa_fpr_overflow_fn = ffi.cast('Arm64FprOverflowFn', nil)
 _G.__arm64_vararg_i32_fn = lib.arm64_vararg_i32
 _G.__arm64_mixed_float_hfa_fn = ffi.cast('Arm64MixedFloatHFAFn', nil)
 _G.__arm64_double_pair_fn = ffi.cast('Arm64DoublePairFn', nil)
@@ -182,6 +205,20 @@ return function(n, fn, value, salt)
   return sum
 end
 ]], '@float-hfa-candidate'))()
+local hfa_triple_candidate = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@float-triple-hfa-candidate'))()
+local hfa_quad_candidate = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@double-quad-hfa-candidate'))()
 local hfa_ref_candidate = assert(loadstring([[
 return function(n, fn, value, salt)
   local sum = 0
@@ -277,6 +314,8 @@ jit.off(integer_callm_oracle, true)
 jit.off(integer_callm_clone, true)
 jit.off(hfa_ref_candidate, true)
 _G.__arm64_float_hfa_candidate = hfa_candidate
+_G.__arm64_float_triple_hfa_candidate = hfa_triple_candidate
+_G.__arm64_double_quad_hfa_candidate = hfa_quad_candidate
 _G.__arm64_float_hfa_oracle = hfa_oracle
 _G.__arm64_float_hfa_clone = hfa_clone
 _G.__arm64_float_one_candidate = float_one_candidate
@@ -467,6 +506,49 @@ run_one_hfa(float_one_candidate, float_one_oracle, 'Arm64FloatOne',
 	    lib.arm64_take_float_one_double_salt, 12, 'one-float HFA')
 run_one_hfa(double_one_candidate, double_one_oracle, 'Arm64DoubleOne',
 	    lib.arm64_take_double_one_double_salt, 13, 'one-double HFA')
+
+local function run_multilane_hfa_argument(candidate_fn, type_name, ffi_fn,
+					  counter, values, label)
+  hfa_candidate = candidate_fn
+  _set_hfa_candidate(candidate_fn)
+  jit.flush(candidate_fn)
+  jit.on(candidate_fn, true)
+  exits, hfa_exits = 0, 0
+  lib.arm64_aggregate_reset()
+  _begin_hfa_witness()
+  local value = ffi.new(type_name, unpack(values))
+  local before = _hfa_native_count()
+  for pass = 1, 8 do
+    assert(candidate_fn(16, ffi_fn, value, 3.75) ==
+           hfa_oracle(16, ffi_fn, value, 3.75),
+           label..' differs from interpreter oracle')
+  end
+  assert(_hfa_trace_count() > 0, label..' root was not published')
+  assert(_hfa_native_count() > before,
+         label..' did not execute the selected root natively')
+  assert(hfa_exits > 0, label..' did not take a selected-root exit')
+  assert(lib.arm64_aggregate_count(counter) == 256,
+	 label..' effects were lost or replayed: counter='..counter..
+	 ', value='..tostring(lib.arm64_aggregate_count(counter)))
+  before = _hfa_native_count()
+  collectgarbage('collect')
+  exits, hfa_exits = 0, 0
+  assert(candidate_fn(32, ffi_fn, value, 3.75) ==
+         hfa_oracle(32, ffi_fn, value, 3.75),
+         label..' differs after full GC')
+  assert(_hfa_native_count() > before,
+         label..' did not re-enter native code after full GC')
+  assert(hfa_exits > 0, label..' did not exit after full-GC re-entry')
+  assert(lib.arm64_aggregate_count(counter) == 320,
+         label..' post-GC effects were lost or replayed')
+end
+
+run_multilane_hfa_argument(hfa_triple_candidate, 'Arm64FloatTriple',
+	lib.arm64_take_float_triple_double_salt, 32,
+	{1.25, 2.5, 3.75}, 'three-float HFA argument')
+run_multilane_hfa_argument(hfa_quad_candidate, 'Arm64DoubleQuad',
+	lib.arm64_take_double_quad_double_salt, 33,
+	{1.125, 2.25, 3.5, 4.75}, 'four-double HFA argument')
 
 candidate = integer_callm_candidate
 _set_aggregate_candidate(integer_callm_candidate)

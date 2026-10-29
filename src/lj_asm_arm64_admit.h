@@ -1275,13 +1275,13 @@ static int arm64_callxs_cdata_float_hfa_member(CTState *cts,
 	      !arm64_callxs_offset_value(ir, T->nk, address.op2, &offset) ||
 	      offset < (int64_t)sizeof(GCcdata) ||
 	      (offset-(int64_t)sizeof(GCcdata))%(int64_t)member_size != 0 ||
-	      (offset-(int64_t)sizeof(GCcdata))/(int64_t)member_size >= 2) return 0;
+	      (offset-(int64_t)sizeof(GCcdata))/(int64_t)member_size >= 4) return 0;
 	  member_index = (unsigned)((offset-(int64_t)sizeof(GCcdata))/
 			     (int64_t)member_size);
 	}
 	if (arg != NULL && (arg->kind != LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER ||
 	    arg->size != member_size || arg->member_count == 0 ||
-	    arg->member_count > 2 || arg->member_index != member_index)) return 0;
+	    arg->member_count > 4 || arg->member_index != member_index)) return 0;
 	src = ir_load_acq(&ir[source]);
 	if ((src.o != IR_SLOAD && src.o != IR_VLOAD) ||
 	    src.t.irt != (IRT_CDATA|IRT_GUARD) ||
@@ -5713,13 +5713,13 @@ static int arm64_postra_cdata_float_hfa_member(CTState *cts,
 	      !arm64_callxs_offset_value(ir, T->nk, address.op2, &offset) ||
 	      offset < (int64_t)sizeof(GCcdata) ||
 	      (offset-(int64_t)sizeof(GCcdata))%(int64_t)member_size != 0 ||
-	      (offset-(int64_t)sizeof(GCcdata))/(int64_t)member_size >= 2) return 0;
+	      (offset-(int64_t)sizeof(GCcdata))/(int64_t)member_size >= 4) return 0;
 	  member_index = (unsigned)((offset-(int64_t)sizeof(GCcdata))/
 			     (int64_t)member_size);
 	}
 	if (arg != NULL && (arg->kind != LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER ||
 	    arg->size != member_size || arg->member_count == 0 ||
-	    arg->member_count > 2 || arg->member_index != member_index)) return 0;
+	    arg->member_count > 4 || arg->member_index != member_index)) return 0;
 	src = ir_load_acq(&ir[source]);
 	if ((src.o != IR_SLOAD && src.o != IR_VLOAD) ||
 	    src.t.irt != (IRT_CDATA|IRT_GUARD) ||

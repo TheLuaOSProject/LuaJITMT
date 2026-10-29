@@ -2372,7 +2372,7 @@ static void crec_call_arm64_float_hfa_args(jit_State *J, CTState *cts,
   if (rawid != did || ctype_isref(sinfo) ||
       !ctype_isstruct(ctype_info_acq(&raw_snap)) ||
       !lj_ccall_arm64_float_hfa_class(cts, rawid, &hfa, &rawid) ||
-      hfa.count == 0 || hfa.size > 8)
+      hfa.count == 0)
     lj_trace_err(J, LJ_TRERR_NYICONV);
   type = hfa.member_size == sizeof(float) ? IRT_FLOAT : IRT_NUM;
   for (i = 0; i < hfa.count; i++) {
