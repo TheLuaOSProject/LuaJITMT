@@ -33,6 +33,10 @@ LJ_FUNC_NORET void lj_trace_err_info(jit_State *J, TraceError e);
 ** The caller keeps the closure/prototype resident under the recorder token or
 ** the published trace's GC2 lease. Snapshot admission remains separate. */
 LJ_FUNC int lj_trace_arm64_lua_leaf(const GCfunc *fn);
+LJ_FUNC MSize lj_trace_arm64_lua_leaf_nresults(const GCfunc *fn);
+LJ_FUNC int lj_trace_arm64_lua_leaf_forward_call(const GCfunc *forward,
+                                                  const GCfunc *target,
+                                                  MSize nargs);
 
 /* AAPCS64 returns this 16-byte non-HFA aggregate in x0/x1. The ARM64 VM keeps
 ** x0 as the exact trace identity (and PAUTH modifier) and branches through x1

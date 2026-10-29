@@ -82,6 +82,9 @@ run_profile() {
     else
       lj_ci_run_fixture 60 "$fixture"
     fi
+    if test "$name" = ffi-varargs; then
+      lj_ci_run_lua 120 "$root/tests/t-arm64-jit-lua-varargs.lua"
+    fi
   done
   test "$(lj_ci_sha256 "$library")" = "$library_sha"
 }

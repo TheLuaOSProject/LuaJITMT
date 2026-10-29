@@ -73,81 +73,6 @@ static GCtrace *root_trace(lua_State *L)
   return NULL;
 }
 
-static void report_missing_root(lua_State *L, unsigned shape)
-{
-  GCproto *pt=funcproto(global_function(L,"leaf_run"));
-  GCproto *leafpt=funcproto(global_function(L,"leaf"));
-  BCIns *bc=proto_bc(pt);
-  fprintf(stderr,"vararg trace missing shape=%u jit_flags=%08x root_flags=%02x root_sizebc=%u leaf_flags=%02x leaf_sizebc=%u aborts=%u last_abort=%u publish=%u entry=%u\n",
-          shape,(unsigned)L2J(L)->flags,(unsigned)pt->flags,(unsigned)pt->sizebc,
-          (unsigned)leafpt->flags,(unsigned)leafpt->sizebc,
-          (unsigned)lj_trace_test_abort_count(),
-          (unsigned)lj_trace_test_last_abort_error(),
-          (unsigned)lj_trace_test_root_entry_publishes(),
-          (unsigned)lj_trace_test_root_entry_successes());
-  fprintf(stderr,"vararg runner bytecodes:");
-  for (MSize i=0;i<pt->sizebc;i++)
-    fprintf(stderr," %u",(unsigned)bc_op((BCIns)la_load32_acq((uint32_t *)&bc[i])));
-  fprintf(stderr,"\nvararg leaf bytecodes:");
-  for (MSize i=0;i<leafpt->sizebc;i++)
-    fprintf(stderr," %u",(unsigned)bc_op((BCIns)la_load32_acq(
-      (uint32_t *)&proto_bc(leafpt)[i])));
-  fputc('\n',stderr);
-  for (MSize i=1;i<pt->sizebc;i++) {
-    BCIns ins=(BCIns)la_load32_acq((uint32_t *)&bc[i]);
-    if (bc_op(ins)==BC_JFORL) {
-      TraceNo no=bc_d(ins);
-      GCtrace *T=traceref_safe(L2J(L),no);
-      fprintf(stderr,"vararg JFORL pc=%u id=%u trace=%p runnable=%u start=%p linktype=%u link=%u\n",
-              (unsigned)i,(unsigned)no,(void *)T,
-              (unsigned)(T&&trace_runnable_acq(T,no)),
-              (void *)(T?trace_startpt_acq(T):NULL),
-              (unsigned)(T?T->linktype:0u),(unsigned)(T?T->link:0u));
-    }
-  }
-}
-
-static void report_fixed_control(lua_State *L)
-{
-  GCtrace *T=NULL;
-  ljt_lua_dostring(L,
-    "leaf=assert(loadstring('return function(x,y) local z=x+y; return z end',"
-      "'@vararg-fixed-control'))(); "
-    "leaf_oracle=assert(loadstring('return function(x,y) local z=x+y; return z end',"
-      "'@vararg-fixed-control-oracle'))(); "
-    "jit.off(leaf_oracle,true); jit.on(leaf,true); jit.flush(); jit.on(); "
-    "jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64')");
-  for (unsigned attempt=0;attempt<8 && !T;attempt++) {
-    lua_Number expected=invoke(L,"leaf_oracle_run","leaf_oracle",96,20);
-    assert(invoke(L,"leaf_run","leaf",96,20)==expected);
-    T=root_trace(L);
-  }
-  fprintf(stderr,"vararg fixed-formal runner control trace=%p jit_flags=%08x\n",
-          (void *)T,(unsigned)L2J(L)->flags);
-}
-
-static void report_vararg_trace_events(lua_State *L)
-{
-  GCtrace *T=NULL;
-  ljt_lua_dostring(L,
-    "vararg_trace_log=function(what,tr,func,pc,otr,oex) "
-    "io.stderr:write('vararg TRACE ',tostring(what),' id=',tostring(tr),"
-    "' func=',tostring(func),' pc=',tostring(pc),' parent=',tostring(otr),"
-    "' exit=',tostring(oex),'\\n') end; "
-    "jit.attach(vararg_trace_log,'trace'); jit.flush(); jit.on(); "
-    "jit.on(leaf_run,true); jit.on(leaf,true); "
-    "jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64')");
-  for (unsigned attempt=0;attempt<8 && !T;attempt++) {
-    lua_Number expected=invoke(L,"leaf_oracle_run","leaf_oracle",96,20);
-    assert(invoke(L,"leaf_run","leaf",96,20)==expected);
-    T=root_trace(L);
-  }
-  fprintf(stderr,"vararg event-probe trace=%p aborts=%u last_abort=%u\n",
-          (void *)T,(unsigned)lj_trace_test_abort_count(),
-          (unsigned)lj_trace_test_last_abort_error());
-  ljt_lua_dostring(L,"jit.attach(vararg_trace_log)");
-}
-
 static MSize find_slot(const GCtrace *T, const SnapShot *snap, MSize slot)
 {
   MSize i, found = UINT32_MAX;
@@ -170,68 +95,85 @@ static int child_vararg_snapshot(const GCtrace *T, SnapNo s,
   IRRef refs[2];
   MSize slots[2];
   BCIns call, varg;
+  int forward;
   const BCIns *retpc;
   IRRef lowerfn, upperfn;
+#define MAP_FAIL() return 0
   if (snap->mapofs > T->nsnapmap || snap->nent > T->nsnapmap-snap->mapofs ||
-      T->nsnapmap-snap->mapofs-snap->nent < 2u) return 0;
+      T->nsnapmap-snap->mapofs-snap->nent < 2u) MAP_FAIL();
   for (i = 0; i < snap->nent; i++) {
     SnapEntry entry = T->snapmap[snap->mapofs+i];
     if ((entry & 0x00ff0000u) == SNAP_FRAME) {
-      if (nmarker == 2u) return 0;
+      if (nmarker == 2u) MAP_FAIL();
       slots[nmarker] = snap_slot(entry);
       refs[nmarker] = snap_ref(entry); nmarker++;
     }
   }
   if (nmarker != 2u || slots[1] <= slots[0] ||
       slots[0] < 1u+LJ_FR2+1u || slots[1] < slots[0]+2u+LJ_FR2)
-    return 0;
+    MAP_FAIL();
   if (!irref_isk(refs[0]) || refs[0] < T->nk || refs[0] >= REF_TRUE ||
       T->ir[refs[0]].o != IR_KNUM ||
       !irref_isk(refs[1]) || refs[1] < T->nk || refs[1] >= REF_TRUE ||
-      T->ir[refs[1]].o != IR_KNUM) return 0;
+      T->ir[refs[1]].o != IR_KNUM) MAP_FAIL();
   retpc = (const BCIns *)(uintptr_t)T->ir[refs[0]+1u].tv.u64;
   if (!rootpt || retpc <= proto_bc(rootpt) ||
       retpc >= proto_bc(rootpt)+rootpt->sizebc)
-    return 0;
+    MAP_FAIL();
   call = (BCIns)la_load32_acq((const uint32_t *)(retpc-1));
-  if (bc_op(call) != BC_CALL || bc_b(call) != 2u || !bc_c(call)) return 0;
+  if (bc_op(call) != BC_CALL || bc_b(call) != 2u || !bc_c(call)) MAP_FAIL();
   if (T->ir[refs[1]+1u].tv.u64 !=
-      8u*(bc_c(call)-1u+1u+LJ_FR2)+FRAME_VARG) return 0;
+      8u*(bc_c(call)-1u+1u+LJ_FR2)+FRAME_VARG) MAP_FAIL();
   varg = 0;
   {
     MSize lower_entry=find_slot(T,snap,slots[0]-1u);
     MSize upper_entry=find_slot(T,snap,slots[1]-1u);
-    if (lower_entry==UINT32_MAX || upper_entry==UINT32_MAX) return 0;
+    if (lower_entry==UINT32_MAX || upper_entry==UINT32_MAX) MAP_FAIL();
     lowerfn=snap_ref(T->snapmap[lower_entry]);
     upperfn=snap_ref(T->snapmap[upper_entry]);
   }
   if (lowerfn != upperfn || !irref_isk(lowerfn) || lowerfn < T->nk ||
       lowerfn >= REF_TRUE || T->ir[lowerfn].o != IR_KGC ||
-      !isluafunc(ir_kfunc(&T->ir[lowerfn]))) return 0;
+      !isluafunc(ir_kfunc(&T->ir[lowerfn]))) MAP_FAIL();
   {
     const GCproto *leaf = funcproto(ir_kfunc(&T->ir[lowerfn]));
     MSize p;
-    if (!(leaf->flags & PROTO_VARARG) || leaf->numparams != 0 ||
-        bc_op((BCIns)la_load32_acq(
-          (const uint32_t *)&proto_bc(leaf)[1])) != BC_VARG) return 0;
+    if (!(leaf->flags & PROTO_VARARG) || leaf->numparams != 0) MAP_FAIL();
     for (p = 1; p+1u < leaf->sizebc; p++) {
       BCIns word = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(leaf)[p]);
       if (bc_op(word) == BC_VARG) {
-        if (varg) return 0;
+        if (varg) MAP_FAIL();
         varg = word;
       }
     }
-    if (!varg || bc_a(varg) != 0 || bc_b(varg) < 2u || bc_c(varg) != 0)
-      return 0;
+    forward = bc_b(varg) == 0u && leaf->sizebc == 4u &&
+      bc_op((BCIns)la_load32_acq((const uint32_t *)&proto_bc(leaf)[1])) == BC_UGET &&
+      bc_op((BCIns)la_load32_acq((const uint32_t *)&proto_bc(leaf)[3])) == BC_CALLMT &&
+      lj_trace_arm64_lua_leaf(ir_kfunc(&T->ir[lowerfn]));
+    if (!varg || bc_c(varg) != 0 ||
+        (bc_b(varg) == 0u ? !forward : bc_b(varg) < 2u))
+      MAP_FAIL();
   }
   memcpy(&pcbase, &T->snapmap[snap->mapofs+snap->nent], sizeof(pcbase));
-  if ((uint8_t)pcbase+2u != slots[1]+1u) return 0;
+  if ((uint8_t)pcbase+2u != slots[1]+1u) MAP_FAIL();
+  if (forward) {
+    MSize forward_pos;
+    const GCproto *fpt=funcproto(ir_kfunc(&T->ir[lowerfn]));
+    const BCIns *forward_pc=(const BCIns *)(uintptr_t)(pcbase>>8);
+    if (forward_pc<proto_bc(fpt) ||
+        forward_pc>=proto_bc(fpt)+fpt->sizebc) MAP_FAIL();
+    forward_pos=(MSize)(forward_pc-proto_bc(fpt));
+    if (forward_pos != 3u ||
+        (MSize)slots[1]+1u+bc_a(varg)+bc_c(call)-1u > snap->nslots)
+      MAP_FAIL();
+  }
   if (out) {
     out->snap=s; out->lower_marker=slots[0]; out->upper_marker=slots[1];
     out->topslot=snap->topslot; out->lower_func=lowerfn; out->upper_func=upperfn;
     out->lower_pc=refs[0]; out->upper_delta=refs[1]; out->retpc=retpc;
     out->call=call; out->varg=varg; out->nargs=bc_c(call)-1u;
-    out->requested=bc_b(varg)-1u; out->available=out->nargs;
+    out->requested=bc_b(varg) ? bc_b(varg)-1u : out->nargs;
+    out->available=out->nargs;
     out->callerbase=1u+LJ_FR2; out->callfunc=out->callerbase+bc_a(call);
     out->childbase=slots[1]+1u;
     /* All actual arguments are part of the fixed CALL source window, even
@@ -239,22 +181,26 @@ static int child_vararg_snapshot(const GCtrace *T, SnapNo s,
     ** result window; absent requested values are padded with REF_NIL. */
     for (i=0; i<out->available; i++) {
       MSize source=find_slot(T,snap,out->callfunc+1u+LJ_FR2+i);
-      if (source==UINT32_MAX || (T->snapmap[source] & 0x00ff0000u)) return 0;
-      if (i<out->requested) {
+      if (source==UINT32_MAX || (T->snapmap[source] & 0x00ff0000u)) MAP_FAIL();
+      if (i<out->requested && !forward) {
         MSize dest=find_slot(T,snap,out->childbase+bc_a(varg)+i);
         if (dest==UINT32_MAX || (T->snapmap[dest] & 0x00ff0000u) ||
-            snap_ref(T->snapmap[source]) != snap_ref(T->snapmap[dest])) return 0;
+            snap_ref(T->snapmap[source]) != snap_ref(T->snapmap[dest])) MAP_FAIL();
       }
     }
     for (; i<out->requested; i++) {
-      MSize dest=find_slot(T,snap,out->childbase+bc_a(varg)+i);
-      if (dest!=UINT32_MAX &&
-          ((T->snapmap[dest] & 0x00ff0000u) ||
-           snap_ref(T->snapmap[dest])!=REF_NIL)) return 0;
+      if (!forward) {
+        MSize dest=find_slot(T,snap,out->childbase+bc_a(varg)+i);
+        if (dest!=UINT32_MAX &&
+            ((T->snapmap[dest] & 0x00ff0000u) ||
+             snap_ref(T->snapmap[dest])!=REF_NIL)) MAP_FAIL();
+      }
     }
   }
   return 1;
 }
+
+#undef MAP_FAIL
 
 static VarargMap find_vararg_map(const GCtrace *T)
 {
@@ -302,11 +248,30 @@ static void native_call(lua_State *L, GCtrace *T, int n, lua_Integer bias,
   if (expect_child_overflow) guard_exits++;
 }
 
+
+static void assert_forward_trace_bound(lua_State *L, GCtrace *T,
+                                       GCfunc *forward, GCfunc *target,
+                                       MSize nargs)
+{
+  GCproto *runner=funcproto(global_function(L,"leaf_run"));
+  assert(T && forward && target);
+  assert(trace_startpt_acq(T)==runner && T->linktype==LJ_TRLINK_LOOP &&
+         T->link==T->traceno && !T->root);
+  assert(lj_trace_arm64_lua_leaf_forward_call(forward,target,nargs));
+}
+
 static void install_case(lua_State *L, const char *body, const char *runner)
 {
   lua_getglobal(L,"install_vararg_case");
   lua_pushstring(L,body); lua_pushstring(L,runner);
   ljt_lua_pcall(L,2,0,"install fixed vararg case");
+}
+
+static void install_forward_case(lua_State *L, MSize nargs)
+{
+	lua_getglobal(L,"install_vararg_forward_case");
+	lua_pushinteger(L,(lua_Integer)nargs);
+	ljt_lua_pcall(L,1,0,"install fixed vararg forward case");
 }
 
 typedef struct VarargFixture {
@@ -330,14 +295,21 @@ static GCproto *copy_proto(const GCproto *pt)
 static void vararg_fixture_reset(VarargFixture *f, lua_State *L)
 {
   GCtrace *T=f->live;
-  GCproto *root=trace_startpt_acq(T), *leafsource;
+  GCproto *root=trace_startpt_acq(T), *leafsource, *targetsource=NULL;
   GCfunc *source=ir_kfunc(&T->ir[f->source.lower_func]);
   MSize startpos=proto_bcpos(root,trace_startpc_acq(T));
   SnapNo s;
   leafsource=funcproto(source);
+  if (lj_funcL_nupvalues(&source->l)) {
+    TValue target;
+    lj_tv_load_acq(&target,uvval(func_uv_acq(&source->l,0)));
+    assert(tvisfunc(&target) && isluafunc(funcV(&target)));
+    targetsource=funcproto(funcV(&target));
+  }
   ljt_proto_clone_reset(f->pt, root);
   ljt_proto_clone_reset(f->leafpt, leafsource);
-  memset(f->leaf,0,sizeLfunc(0)); memcpy(f->leaf,source,sizeLfunc(0));
+  memset(f->leaf,0,sizeLfunc(lj_funcL_nupvalues(&source->l)));
+  memcpy(f->leaf,source,sizeLfunc(lj_funcL_nupvalues(&source->l)));
   setmref(f->leaf->l.pc,proto_bc(f->leafpt));
   memcpy(f->ir+T->nk,T->ir+T->nk,(T->nins-T->nk)*sizeof(IRIns));
   ir_kgc_store_rel(&f->ir[f->source.lower_func],obj2gco(f->leaf));
@@ -350,9 +322,15 @@ static void vararg_fixture_reset(VarargFixture *f, lua_State *L)
   for (IRRef r=T->nk;r+1u<T->nins;r++) {
     if (T->ir[r].o==IR_KNUM) {
       uintptr_t pc=(uintptr_t)T->ir[r+1u].tv.u64;
-      const GCproto *owners[2]={root,leafsource};
+      const GCproto *owners[3]={root,leafsource,targetsource};
       GCproto *copies[2]={f->pt,f->leafpt};
-      for (unsigned p=0;p<2;p++) {
+      for (unsigned p=0;p<3;p++) {
+        if (p==2u && targetsource) {
+          uintptr_t lo=(uintptr_t)proto_bc(targetsource);
+          uintptr_t hi=(uintptr_t)(proto_bc(targetsource)+targetsource->sizebc);
+          if (pc>=lo && pc<=hi) break;
+          continue;
+        }
         uintptr_t lo=(uintptr_t)proto_bc(owners[p]);
         uintptr_t hi=(uintptr_t)(proto_bc(owners[p])+owners[p]->sizebc);
         if (pc>=lo && pc<=hi) {
@@ -373,14 +351,26 @@ static void vararg_fixture_reset(VarargFixture *f, lua_State *L)
     pc=snap_pc(&T->snapmap[snap->mapofs+snap->nent]); at=(uintptr_t)pc;
     if ((uint8_t)footer) {
       lo=(uintptr_t)proto_bc(leafsource);
-      assert(at>=lo && at<lo+leafsource->sizebc*sizeof(BCIns));
-      pos=(MSize)((at-lo)/sizeof(BCIns));
-      footer=(u64ptr(proto_bc(f->leafpt)+pos)<<8)|(uint8_t)footer;
+      if (at>=lo && at<lo+leafsource->sizebc*sizeof(BCIns)) {
+        pos=(MSize)((at-lo)/sizeof(BCIns));
+        footer=(u64ptr(proto_bc(f->leafpt)+pos)<<8)|(uint8_t)footer;
+      } else if (targetsource && at>=(uintptr_t)proto_bc(targetsource) &&
+          at<(uintptr_t)(proto_bc(targetsource)+targetsource->sizebc)) {
+        /* The inlined tail target remains live and unmodified. */
+      } else {
+        assert(0 && "child footer outside copied forwarder/live target");
+      }
     } else {
       lo=(uintptr_t)proto_bc(root);
-      assert(at>=lo && at<lo+root->sizebc*sizeof(BCIns));
-      pos=(MSize)((at-lo)/sizeof(BCIns));
-      footer=u64ptr(proto_bc(f->pt)+pos)<<8;
+      if (at>=lo && at<lo+root->sizebc*sizeof(BCIns)) {
+        pos=(MSize)((at-lo)/sizeof(BCIns));
+        footer=u64ptr(proto_bc(f->pt)+pos)<<8;
+      } else if (targetsource && at>=(uintptr_t)proto_bc(targetsource) &&
+          at<(uintptr_t)(proto_bc(targetsource)+targetsource->sizebc)) {
+        /* Target source remains live and unmodified in this copied proof. */
+      } else {
+        assert(0 && "snapshot PC outside copied root/forwarder or live target");
+      }
     }
     memcpy(&f->map[snap->mapofs+snap->nent],&footer,sizeof(footer));
   }
@@ -414,25 +404,32 @@ static int vararg_fixture_admit(VarargFixture *f, int postra)
 
 enum { VM_CALL_ARGS, VM_CALL_RESULTS, VM_CALL_PC, VM_VARG_B, VM_VARG_C,
        VM_FRAME_DELTA, VM_FUNCTION, VM_SOURCE_ARGUMENT, VM_DEST_ARGUMENT,
-       VM_FRAME_SLOT, VM_COUNT };
+       VM_FRAME_SLOT, VM_COUNT_BASE, VM_CALLMT_A, VM_CALLMT_B,
+       VM_CALLMT_C, VM_UGET_D, VM_COUNT_FORWARD };
 
 static void vararg_fixture_mutate(VarargFixture *f, unsigned mutation)
 {
   SnapShot *snap=&f->snap[f->source.snap];
   MSize callpos=proto_bcpos(trace_startpt_acq(f->live),f->source.retpc)-1u;
   BCIns *call=&proto_bc(f->pt)[callpos];
-  BCIns *varg=NULL;
-  /* Locate VARG in the copied source rather than relying on a fixed PC. */
-  for (MSize p=1;p+1u<f->leafpt->sizebc;p++)
-    if (bc_op(proto_bc(f->leafpt)[p])==BC_VARG) { varg=&proto_bc(f->leafpt)[p]; break; }
+  BCIns *varg=NULL, *callmt=NULL, *uget=NULL;
+  /* Locate vararg/tail bytecodes in the copied source rather than relying on
+  ** fixed PCs. */
+  for (MSize p=1;p<f->leafpt->sizebc;p++) {
+    BCIns *ins=&proto_bc(f->leafpt)[p];
+    if (bc_op(*ins)==BC_VARG) varg=ins;
+    if (bc_op(*ins)==BC_CALLMT) callmt=ins;
+    if (bc_op(*ins)==BC_UGET) uget=ins;
+  }
   assert(varg);
+  if (mutation>=VM_CALLMT_A) assert(callmt && uget);
   switch (mutation) {
   case VM_CALL_ARGS: setbc_c(call,bc_c(*call)+1u); break;
   case VM_CALL_RESULTS: setbc_b(call,bc_b(*call)+1u); break;
   case VM_CALL_PC:
     f->ir[f->source.lower_pc+1u].tv.u64=u64ptr(call);
     break;
-  case VM_VARG_B: setbc_b(varg,bc_b(*varg)-1u); break;
+  case VM_VARG_B: setbc_b(varg,bc_b(*varg) ? bc_b(*varg)-1u : 2u); break;
   case VM_VARG_C: setbc_c(varg,1u); break;
   case VM_FRAME_DELTA: f->ir[f->source.upper_delta+1u].tv.u64+=8u; break;
   case VM_FUNCTION:
@@ -453,7 +450,8 @@ static void vararg_fixture_mutate(VarargFixture *f, unsigned mutation)
     f->map[f->source_arg[0]]=SNAP(snap_slot(f->map[f->source_arg[0]]),0,REF_NIL);
     break;
   case VM_DEST_ARGUMENT:
-    f->map[f->child_arg[0]]=SNAP(snap_slot(f->map[f->child_arg[0]]),0,REF_NIL);
+    if (bc_b(*varg)==0u) setbc_a(varg,bc_a(*varg)+1u);
+    else f->map[f->child_arg[0]]=SNAP(snap_slot(f->map[f->child_arg[0]]),0,REF_NIL);
     break;
   case VM_FRAME_SLOT:
     for (MSize i=0;i<snap->nent;i++) {
@@ -464,17 +462,23 @@ static void vararg_fixture_mutate(VarargFixture *f, unsigned mutation)
       }
     }
     break;
+  case VM_CALLMT_A: setbc_a(callmt,bc_a(*callmt)+1u); break;
+  case VM_CALLMT_B: setbc_b(callmt,bc_b(*callmt)+1u); break;
+  case VM_CALLMT_C: setbc_c(callmt,bc_c(*callmt)+1u); break;
+  case VM_UGET_D: setbc_d(uget,bc_d(*uget)+1u); break;
   default: assert(0);
   }
 }
 
-static void vararg_admission(lua_State *L, GCtrace *T)
+static void vararg_admission(lua_State *L, GCtrace *T, int forward)
 {
   VarargFixture f={0};
   f.live=T; f.source=find_vararg_map(T); f.nins=T->nins;
   f.pt=copy_proto(trace_startpt_acq(T));
   f.leafpt=copy_proto(funcproto(ir_kfunc(&T->ir[f.source.lower_func])));
-  f.leaf=calloc(1,sizeLfunc(0)); f.J=calloc(1,sizeof(*f.J));
+  f.leaf=calloc(1,sizeLfunc(lj_funcL_nupvalues(
+      &ir_kfunc(&T->ir[f.source.lower_func])->l)));
+  f.J=calloc(1,sizeof(*f.J));
   f.ir=calloc(T->nins,sizeof(IRIns));
   f.snap=malloc(T->nsnap*sizeof(SnapShot));
   f.map=malloc(T->nsnapmap*sizeof(SnapEntry));
@@ -490,13 +494,15 @@ static void vararg_admission(lua_State *L, GCtrace *T)
       if (snap_slot(entry)==f.source.childbase+bc_a(f.source.varg))
         f.child_arg[0]=at;
     }
-    assert(f.source_arg[0]!=UINT32_MAX && f.child_arg[0]!=UINT32_MAX);
+    assert(f.source_arg[0]!=UINT32_MAX &&
+           (bc_b(f.source.varg)==0u || f.child_arg[0]!=UINT32_MAX));
   }
   for (int postra=0;postra<2;postra++) {
     vararg_fixture_reset(&f,L);
     assert(vararg_fixture_admit(&f,postra));
-    for (unsigned m=0;m<VM_COUNT;m++) {
+    for (unsigned m=0;m<(forward ? VM_COUNT_FORWARD : VM_COUNT_BASE);m++) {
       int accepted;
+      if (forward && m==VM_COUNT_BASE) continue;
       vararg_fixture_reset(&f,L); vararg_fixture_mutate(&f,m);
       accepted=vararg_fixture_admit(&f,postra);
       if (accepted) {
@@ -543,7 +549,7 @@ int main(void)
     {"local x,y=...; return x*.5+y",
      "local sum=.5; for i=1,n do sum=sum+fn(i+.5,bias) end; return sum",2,2,0}
   };
-  unsigned shape;
+  unsigned shape, arity;
   ljt_lua_dostring(L,
     "local th=require('threading'); ready=th.channel(1); stop=th.channel(1); "
     "peer=assert(th.spawn(function(a,b) assert(a:send(true,5)); "
@@ -558,7 +564,26 @@ int main(void)
     "jit.off(leaf_oracle_run,true); jit.off(leaf_oracle,true); "
     "jit.flush(); jit.on(); jit.on(leaf_run,true); jit.on(leaf,true); "
     "jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64') end; "
-    "jit.off(install_vararg_case,true)");
+    "make_forward_sum=function(n,name) "
+    "local params=({'a','a,b','a,b,c'})[n]; "
+    "local body=({'local x=a+3; return x','local x=a+b; return x*.5','local x=a+b; x=x+c; return x'})[n]; "
+    "return assert(loadstring('return function('..params..') '..body..' end',name))() end; "
+    "make_forward=function(name,sum) "
+    "return assert(loadstring('return function(sum) return function(...) return sum(...) end end',name))()(sum) end; "
+    "install_vararg_forward_case=function(n) "
+    "local calls=({'fn(i)','fn(i,bias)','fn(i,bias,10)'})[n]; "
+    "local make_sum=function(name) return make_forward_sum(n,name) end; "
+    "sum_leaf=make_sum('@vararg-forward-sum-'..n); sum_oracle=make_sum('@vararg-forward-oracle-sum-'..n); "
+    "leaf=make_forward('@vararg-forward-factory-'..n,sum_leaf); leaf_oracle=make_forward('@vararg-forward-oracle-factory-'..n,sum_oracle); "
+    "local run='local sum=.5; for i=1,n do sum=sum+'..calls..' end; return sum'; "
+    "local src='return function(fn,n,bias) '..run..' end'; "
+    "leaf_run=assert(loadstring(src,'@vararg-forward-run-'..n))(); "
+    "leaf_oracle_run=assert(loadstring(src,'@vararg-forward-oracle-run-'..n))(); "
+    "jit.off(leaf_oracle_run,true); jit.off(leaf_oracle,true); jit.off(sum_oracle,true); "
+    "jit.flush(); jit.on(); jit.on(leaf_run,true); jit.on(leaf,true); jit.on(sum_leaf,true); "
+    "jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64') end; "
+    "jit.off(install_vararg_case,true); jit.off(install_vararg_forward_case,true); "
+    "jit.off(make_forward_sum,true); jit.off(make_forward,true)");
   for (shape=0;shape<sizeof(cases)/sizeof(cases[0]);shape++) {
     GCtrace *T=NULL;
     install_case(L,cases[shape].body,cases[shape].runner);
@@ -572,13 +597,6 @@ int main(void)
       puts("Lua vararg shape=3 primitive boolean result: semantic oracle passed; "
            "native publication remains closed by caller-result grammar");
       continue;
-    }
-    if (!T) {
-      report_missing_root(L,shape);
-      if (shape==0) {
-        report_vararg_trace_events(L);
-        report_fixed_control(L);
-      }
     }
     assert(T);
     if (cases[shape].child_map) {
@@ -595,10 +613,62 @@ int main(void)
     if (shape==0)
       native_call(L,T,8,INT32_MAX,cases[shape].nargs,
                   cases[shape].requested,1,cases[shape].child_map);
-    if (shape==0) vararg_admission(L,T);
+    if (shape==0) vararg_admission(L,T,0);
     printf("Lua vararg shape=%u native=%u %s GC/reuse passed\n",
            shape,shape==0 ? 3u : 2u,
            cases[shape].child_map ? "paired child map" : "root entry only");
+  }
+  for (arity=1;arity<=3;arity++) {
+    GCtrace *T=NULL;
+    GCfunc *forward;
+    install_forward_case(L,arity);
+    forward=global_function(L,"leaf");
+    assert(lj_trace_arm64_lua_leaf(forward));
+    for (unsigned attempt=0;attempt<8 && !T;attempt++) {
+      lua_Number expected=invoke(L,"leaf_oracle_run","leaf_oracle",96,20);
+      assert(invoke(L,"leaf_run","leaf",96,20)==expected);
+      T=root_trace(L);
+    }
+    assert(T);
+    assert_forward_trace_bound(L,T,forward,global_function(L,"sum_leaf"),arity);
+    native_call(L,T,64,20,arity,arity,0,0);
+    vararg_admission(L,T,1);
+    lua_getglobal(L,"make_forward_sum");
+    lua_pushinteger(L,(lua_Integer)arity);
+    lua_pushfstring(L,"@vararg-forward-alt-sum-%d",(int)arity);
+    ljt_lua_pcall(L,2,1,"make alternate vararg target");
+    lua_setglobal(L,"sum_alt");
+    lua_getglobal(L,"make_forward");
+    lua_pushfstring(L,"@vararg-forward-alt-factory-%d",(int)arity);
+    lua_getglobal(L,"sum_alt");
+    ljt_lua_pcall(L,2,1,"make alternate vararg forwarder");
+    lua_setglobal(L,"leaf_alt");
+    lua_getglobal(L,"make_forward_sum");
+    lua_pushinteger(L,(lua_Integer)arity);
+    lua_pushfstring(L,"@vararg-forward-alt-oracle-sum-%d",(int)arity);
+    ljt_lua_pcall(L,2,1,"make alternate vararg oracle target");
+    lua_setglobal(L,"sum_oracle_alt");
+    lua_getglobal(L,"make_forward");
+    lua_pushfstring(L,"@vararg-forward-alt-oracle-factory-%d",(int)arity);
+    lua_getglobal(L,"sum_oracle_alt");
+    ljt_lua_pcall(L,2,1,"make alternate vararg oracle forwarder");
+    lua_setglobal(L,"leaf_oracle_alt");
+    ljt_lua_dostring(L,
+      "leaf_saved=leaf; leaf_oracle_saved=leaf_oracle; "
+      "jit.off(leaf_oracle_alt,true); jit.off(sum_oracle_alt,true); "
+      "leaf=leaf_alt; leaf_oracle=leaf_oracle_alt");
+    native_call(L,T,24,20,arity,arity,0,0);
+    assert(lj_trace_test_exit_calls()>0 &&
+           lj_trace_test_first_exit_parent()==T->traceno);
+    assert(root_trace(L)==T);
+    ljt_lua_dostring(L,
+      "leaf=leaf_saved; leaf_oracle=leaf_oracle_saved; "
+      "leaf_saved=nil; leaf_oracle_saved=nil; "
+      "leaf_alt=nil; leaf_oracle_alt=nil; sum_alt=nil; sum_oracle_alt=nil");
+    lua_gc(L,LUA_GCCOLLECT,0);
+    native_call(L,T,24,20,arity,arity,0,0);
+    printf("Lua vararg-forward target-arity=%u native=3 exact root CALL/target guard, identity exit, GC/reuse passed\n",
+           arity);
   }
   ljt_lua_dostring(L,"assert(stop:send(true,5)); local ok,v=peer:join(5); assert(ok and v)");
   lua_close(L);

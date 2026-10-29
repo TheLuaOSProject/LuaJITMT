@@ -726,9 +726,6 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
   abi->result_kind = result.kind;
   abi->result_size = result.size;
   abi->result_unsigned = result.is_unsigned;
-  if (result.kind == LJ_ARM64_ABI_KIND_INDIRECT_AGGREGATE &&
-      abi->is_vararg)
-    return 0;
   fid = ctype_sib_acq(&fn);
   while (fid != 0) {
     CTypeID argid;

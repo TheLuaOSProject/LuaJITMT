@@ -27,7 +27,7 @@ jit.off(loop_trace, true)
 local ready, stop = threading.channel(1), threading.channel(1)
 local peer = assert(threading.spawn(function(r, s)
   assert(r:send(true, 5))
-  assert(select(2, s:recv(60)))
+  assert(select(2, s:recv(120)))
   return true
 end, ready, stop))
 assert(select(2, ready:recv(5)), "MT peer did not become ready")
@@ -100,10 +100,57 @@ local function run_boundary(label, leaf_source, runner_source)
 end
 jit.off(run_boundary, true)
 
+local function run_sret_case()
+  local path = os.getenv("LJ_ARM64_FFI_VARARGS_LIB")
+  if not path or path == "" then return end
+  local ffi = require("ffi")
+  ffi.cdef[[
+    struct arm64_va_sret24 { uint64_t lo, mid, hi; };
+    struct arm64_va_sret24 arm64_va_sret_cdata_tail(uint32_t, ...);
+  ]]
+  local lib = ffi.load(path)
+  local fn = lib.arm64_va_sret_cdata_tail
+  local a, b = ffi.new("int32_t", -17), ffi.new("double", 2.5)
+  local function make_runner()
+    return assert(loadstring([[
+      return function(fn,a,b,n)
+        local out; local sum=0.5
+        for i=1,n do out=fn(23,a,b); sum=sum+i end
+        return out.lo==0x112233445566 and out.mid==0x123456789abc and
+          out.hi==0x6543210 and sum==n*(n+1)/2+0.5
+      end
+    ]], "@lua-vararg-indirect-result"))()
+  end
+  local run, oracle = make_runner(), make_runner()
+  jit.off(oracle, true)
+  local trace, attempts
+  for attempt = 1, 8 do
+    attempts = attempt
+    local expected = oracle(fn, a, b, 24)
+    jit.flush(); jit.on()
+    jit.opt.start("hotloop=1", "hotexit=1000", "maxtrace=64")
+    assert(run(fn, a, b, 24) == expected,
+      "variadic indirect-result CALLXS differs from interpreter oracle")
+    trace = loop_trace(run)
+    if trace then break end
+  end
+  assert(trace, "variadic indirect-result runner did not publish a loop trace")
+  collectgarbage("collect")
+  assert(run(fn, a, b, 9) == oracle(fn, a, b, 9),
+    "variadic indirect-result result changed after GC/reuse")
+  assert(loop_trace(run) == trace,
+    "variadic indirect-result runner did not reuse the same trace")
+  io.write(string.format(
+    "lua-varargs case=variadic-indirect-result attempts=%d trace=%d oracle_match=yes reuse_same=yes native_claim=no\n",
+    attempts, trace))
+end
+jit.off(run_sret_case, true)
+
 local function main()
   for _, case in ipairs(cases) do run_case(case) end
   run_boundary("open-varg", "return ...",
     "local sum=0; for i=1,n do local a,b=fn(i,.25); sum=sum+a+b end; return sum")
+  run_sret_case()
 end
 jit.off(main, true)
 main()
