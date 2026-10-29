@@ -6469,7 +6469,7 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
   LJArm64SideParentBinding bindings[LJ_MAX_JSLOTS];
   MSize nins, nk, nsnap, nsnapmap, parentmap_n = 0, i;
   IRRef semantic_nins = 0, loopref = 0, arith = 0, sloadref = 0;
-  IRRef forladd = 0, forlcmp = 0, forlguard = 0, badstepref = 0;
+  IRRef forladd = 0, forlcmp = 0, forlguard = 0, badstepref = 0, conststop = 0;
   int32_t forlstep = 0, forlbound = 0;
   GCproto *pt;
   int sem_base, post_base;
@@ -6659,8 +6659,16 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
       IRIns cmp = ir_load_acq(&ir[i]);
       if (cmp.o != (forlstep > 0 ? IR_LE : IR_GE) ||
           cmp.t.irt != (IRT_INT|IRT_GUARD) || cmp.op1 != forladd ||
-          cmp.op2 < REF_FIRST || cmp.op2 >= i)
+          cmp.op2 >= i)
         continue;
+      if (cmp.op2 >= nk && cmp.op2 < REF_TRUE &&
+          ir_load_acq(&ir[cmp.op2]).o == IR_KINT) {
+        if (forlcmp) goto done;
+        forlcmp = (IRRef)i;
+        conststop = cmp.op2;
+        continue;
+      }
+      if (cmp.op2 < REF_FIRST) continue;
       {
         IRIns stop = ir_load_acq(&ir[cmp.op2]);
         if (stop.o != IR_SLOAD || stop.op1 != stopslot ||
@@ -6686,7 +6694,7 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
         forlguard = q;
       }
     }
-    if (!forlcmp || !forlguard) goto done;
+    if (!forlcmp || (!forlguard && !conststop)) goto done;
     for (i = nk; i < REF_TRUE; i++) {
       int32_t value;
       if (i != (IRRef)ir[forladd].op2 &&
@@ -6847,6 +6855,42 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
       snapmap[at] |= SNAP_NORESTORE;
     }
   }
+  if (mutation >= 23 && mutation <= 27 && conststop && forlcmp) {
+    if (mutation == 23) {
+      ir[forlcmp].op2 = ir[forladd].op2;
+    } else if (mutation == 24) {
+      ir[forlcmp].o = IR_NOP;
+      ir[forlcmp].t.irt = IRT_NIL;
+      ir[forlcmp].op12 = 0;
+    } else if (mutation == 25) {
+      int32_t unsafe = forlstep > 0 ? INT32_MAX : INT32_MIN;
+      MSize stopslot = 1u+LJ_FR2+bc_a(semside.parent_startins)+FORL_STOP;
+      ir[conststop].i = unsafe;
+      /* Keep the private parent's value consistent so the independently
+      ** evaluated compile-time overflow bound must still reject it. */
+      for (i = 0; i < parentcopy.nmap_values; i++)
+        if (parentcopy.map_values[i].slot == stopslot)
+          parentcopy.map_values[i].value.i = unsafe;
+    } else if (mutation == 26) {
+      MSize selected = (MSize)-1, ofs, nent;
+      uint64_t badpc;
+      for (i = 0; i < nsnap; i++) {
+        if (snap[i].ref > forlcmp) break;
+        selected = i;
+      }
+      if (selected == (MSize)-1) goto done;
+      ofs = snap[selected].mapofs; nent = snap[selected].nent;
+      if (ofs > nsnapmap || nent > nsnapmap-ofs ||
+          nsnapmap-ofs-nent < 1u+LJ_FR2) goto done;
+      badpc = (uint64_t)(uintptr_t)(proto_bc(pt)+semside.loop_start_pc) << 8;
+      memcpy(&snapmap[ofs+nent], &badpc, sizeof(badpc));
+    } else {
+      MSize stopslot = 1u+LJ_FR2+bc_a(semside.parent_startins)+FORL_STOP;
+      for (i = 0; i < parentcopy.nmap_values; i++)
+        if (parentcopy.map_values[i].slot == stopslot)
+          parentcopy.map_values[i].ref = ir[forladd].op2;
+    }
+  }
   *sem_ok = lj_asm_arm64_side_scalar_ir_admit(&jcopy, &childcopy,
 	&semside, &reject);
   *post_ok = lj_asm_arm64_side_scalar_postra_admit(&postra, &side, NULL);
@@ -6867,7 +6911,7 @@ uint32_t lj_trace_test_arm64_side_scalar_copy_contract(jit_State *J,
 	!trace_test_side_scalar_copy(J, child, 0, &sem, &post) || !sem || !post)
     return 0;
   result = 3u;
-  for (mutation = 1; mutation <= 22; mutation++) {
+  for (mutation = 1; mutation <= 27; mutation++) {
     if (!trace_test_side_scalar_copy(J, child, mutation, &sem, &post))
 	return result;
     if (((mutation == 2 || mutation == 11) && sem && !post) ||

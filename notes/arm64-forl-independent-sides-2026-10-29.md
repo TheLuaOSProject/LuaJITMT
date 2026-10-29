@@ -49,3 +49,39 @@ follow-up work; this checkpoint does not claim it or whole-fork parity.
 
 The full gate now includes the focused boundary contract. The full integrated
 gate is a separate validation step; the profile pass above does not claim it.
+
+## Constant-stop follow-up
+
+The descending constant-limit diagnostic isolated a second refusal in the
+side index ADD proof. Stock optimization folds the stop range guard when
+the limit is constant; the old proof required an inherited stop SLOAD and a
+runtime guard unconditionally. Both independent validators now accept the
+folded shape only when the exact parent stop-map reference and integer value
+match, and the constant satisfies `stop <= INT32_MAX-step` for a positive
+step or `stop >= INT32_MIN-step` for a negative step. Existing parent body
+entry, generation, index and source-step proofs remain required.
+
+The loop-comparison guard must select an exact `FORL+1` snapshot with no
+out-of-scope loop-control slots. This is distinct from the direct-FORL retry
+snapshot above: the comparison has already consumed the increment, and
+execution leaves the loop. Both validators independently select and inspect
+that cold map. Five private-copy mutations reject a wrong comparison limit,
+missing comparison, an unsafe extreme limit with matching copied parent
+value, a cold PC back inside the body, and a changed parent stop reference.
+
+The focused contract passes ordinary ARM64 and all four assertion/release
+ARM64/arm64e helper profiles with six loop ranges: the preceding three plus
+`n,1,-1`, `n,1,-2` and `n,64`. Each constant-stop case requires all three native
+children, both validator baselines and five negatives, interpreter-oracle
+results, bounded native child exits, collection, and flush/reheat. Evidence
+is `/Users/frityet/Scratch/ljmt-forl-constant-stop-20261029/`; the final log is
+`constant-contract-all-profiles-2.log`. The first full-profile attempt stopped
+on an unused fixture parameter in the ordinary strict build; that test-only
+compile issue was corrected before the final complete run.
+
+The no-helper constant-stop topology probe also publishes two/three child
+traces and later exits those children once per call. The matching x64 probe
+uses the saved ordinary `6968c4cac` binary; `x64.log` records its comparison.
+The original refusal, diagnostic IR/snapshots, temporary diagnostic patch,
+clean prototype output, runtime/archive and source copies are preserved in
+the same evidence directory.
