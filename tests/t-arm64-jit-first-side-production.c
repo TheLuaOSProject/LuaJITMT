@@ -513,6 +513,21 @@ static void expect_multi_root_siblings(lua_State *L, jit_State *J,
 
   run_lua(L, "jit.flush(); jit.opt.start('hotloop=1','hotexit=1','maxtrace=24')");
   record_two_second_sides(L, J, &a);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lj_trace_test_root_entry_reset();
+  assert(call_named(L, "__arm64_first_side_production_second", 2, 0) == 2);
+  assert(lj_trace_test_root_entry_publishes() > 0 &&
+	 lj_trace_test_root_entry_successes() > 0 &&
+	 lj_trace_test_root_entry_cleanups() == 0);
+  assert(trace_runnable_acq(a.root, a.rootno) &&
+	 trace_nchild_acq(a.root) == 2 &&
+	 trace_nextside_acq(a.root) == a.ids[0]);
+  assert(root_child_ids(J, a.root, a.rootno,
+	a.ids, a.exits, 2) == 2);
+  assert(lj_trace_test_arm64_retire_absent_sibling(
+	J, a.rootno, a.ids[0]));
+  assert(root_child_ids(J, a.root, a.rootno,
+	a.ids, a.exits, 2) == 2);
 
   /* Root a loses its head and keeps the older sibling native. */
   head = a.ids[0]; tail = a.ids[1];

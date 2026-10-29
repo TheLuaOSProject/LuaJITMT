@@ -25,6 +25,13 @@ the head and then the tail in separate recreated cases, checks that the other
 child and its exit target remain live, forces full GC, re-enters the retained
 child, and finally flushes both roots.
 
+Retirement planning requires the requested child to occur exactly once in the
+validated chain. A test-only negative detaches the target head while retaining
+the other sibling as a valid one-element chain, verifies the retirement plan
+rejects the absent target, and restores the original topology. The two-child
+entry check also runs after full GC and requires successful root entry before
+either child is retired.
+
 Validation command:
 
 ```sh
@@ -35,7 +42,8 @@ JOBS=2 MAKE_JOBS=2 tools/ci/arm64_jit_first_side_production_contract.sh
 
 The run passed the ARM64 production smoke, ARM64 helper GC-claim/scoped/full-
 flush cases, ARM64e helper GC-claim/scoped/full-flush cases, and the restored
-ARM64 helper profile. Full output is preserved at
-`/Users/frityet/Scratch/ljmt-multiside-20261029/multiple-root-sides-final-contract.log`.
+ARM64 helper profile. After adding the absent-child negative, the same full
+profile contract passed again. Its output is preserved at
+`/Users/frityet/Scratch/ljmt-multiside-20261029/multiple-root-sides-membership-contract.log`.
 This validates a two-child workload; the list proof is count-bounded and does
 not impose a two-child production limit.

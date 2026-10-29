@@ -9790,6 +9790,7 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
   MSize parent_nchild, side_i;
   uint8_t childflags;
   uint8_t parentflags;
+  int target_found = 0;
 
   memset(plan, 0, sizeof(*plan));
   if (J == NULL || T == NULL || !lj_jit_token_held(J))
@@ -9953,12 +9954,13 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
       uintptr_t target_bits =
         trace_arm64_first_side_pointer_bits(side_target);
       int pending = trace_scope_pending_acq(T);
-      if (side_exit != exitno ||
+      if (target_found || side_exit != exitno ||
           (retired ? target_bits != plan->fallback_encoding_bits :
            pending ? (target_bits != plan->fallback_encoding_bits &&
                       target_bits != plan->child_encoding_bits) :
                      target_bits != plan->child_encoding_bits))
         return 0;
+      target_found = 1;
       plan->predecessor = prev_no;
       plan->successor = trace_nextside_acq(side);
     } else if (trace_arm64_first_side_pointer_bits(side_target) !=
@@ -9970,7 +9972,7 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
     prev_no = side_no;
     side_no = next;
   }
-  if (side_no != 0 || prev_no == 0 ||
+  if (side_no != 0 || prev_no == 0 || !target_found ||
       trace_nextside_acq(parent) != plan->parent_old_head ||
       trace_nchild_acq(parent) != plan->parent_old_nchild) {
     return 0;
@@ -10009,6 +10011,77 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
     trace_nchild_acq(parent) == plan->parent_old_nchild &&
     la_load64_acq(&parent->retire_epoch) == 0;
 }
+
+#if defined(LJ_TRACE_TEST_HELPERS)
+/* Prove retirement refuses a still-valid child allocation whose parent list
+** no longer names it. Keep the remaining sibling chain structurally valid so
+** the rejection specifically exercises target membership. The caller runs
+** this under the recorder token while the peer is idle. */
+int lj_trace_test_arm64_retire_absent_sibling(
+    jit_State *J, TraceNo parentno, TraceNo childno)
+{
+  TraceArm64FirstSideRetirePlan plan;
+  global_State *g;
+  TraceVec *tv;
+  GCtrace *parent, *child, *successor;
+  TraceNo head, next;
+  uint16_t count, expected_head;
+  int rejected;
+  if (J == NULL || parentno == 0 || childno == 0 ||
+      !lj_jit_token_try(J))
+    return 0;
+  g = J2G(J);
+  if (!lj_gc2_smr_read_try(g)) {
+    lj_jit_token_release(J);
+    return 0;
+  }
+  tv = tracevec_acq(J);
+  if (tv == NULL || (MSize)parentno >= tv->sizetrace ||
+      (MSize)childno >= tv->sizetrace)
+    goto done;
+  parent = traceref_fromgco_safe(gcref_acq(tv->slot[parentno]));
+  child = traceref_fromgco_safe(gcref_acq(tv->slot[childno]));
+  head = parent ? trace_nextside_acq(parent) : 0;
+  count = parent ? trace_nchild_acq(parent) : 0;
+  next = child ? trace_nextside_acq(child) : 0;
+  if (parent == NULL || child == NULL || head != childno || count != 2 ||
+      next == 0 || next == childno || (MSize)next >= tv->sizetrace)
+    goto done;
+  successor = traceref_fromgco_safe(gcref_acq(tv->slot[next]));
+  expected_head = (uint16_t)head;
+  if (successor == NULL || trace_nextside_acq(successor) != 0 ||
+      !trace_nextside_cas_acqrel(parent, &expected_head, next))
+    goto done;
+  {
+    uint16_t expected = count;
+    if (!trace_nchild_cas_acqrel(parent, &expected, (MSize)count-1u)) {
+      uint16_t restore = (uint16_t)next;
+      if (!trace_nextside_cas_acqrel(parent, &restore, childno))
+        abort();
+      goto done;
+    }
+  }
+  rejected = !trace_arm64_first_side_retire_plan(J, child, 0, &plan);
+  {
+    uint16_t expected = (uint16_t)(count-1u);
+    if (!trace_nchild_cas_acqrel(parent, &expected, count))
+      abort();
+    expected = (uint16_t)next;
+    if (!trace_nextside_cas_acqrel(parent, &expected, childno))
+      abort();
+  }
+  if (trace_nextside_acq(parent) != childno ||
+      trace_nchild_acq(parent) != count)
+    abort();
+  lj_gc2_smr_read_leave(g);
+  lj_jit_token_release(J);
+  return rejected;
+done:
+  lj_gc2_smr_read_leave(g);
+  lj_jit_token_release(J);
+  return 0;
+}
+#endif
 
 #if defined(LJ_TRACE_TEST_HELPERS) && defined(LUAJIT_USE_GDBJIT)
 int lj_trace_test_arm64_gdbjit_callback_ready(jit_State *J,
