@@ -1,0 +1,23 @@
+# FFI aggregate parity audit after small integer/HFA CALLXS support
+
+This is a read-only ordinary-runtime comparison. It does not widen recorder or assembler admission. Both immutable runtimes are from `b1d19b91b637df5b2ddcfa1f376973bb00edaa1a`, with assertions enabled and the matching module bundles under `/Users/frityet/Scratch/ljmt-hfa-multilane-integrated-20261029/ordinary/{arm64,x86_64}`. Runtime SHA-256 values are `670ec32de48eacbaeb3e516e8fa84a2af749a59beec98fee2ca0cad5ec7e7939` (ARM64) and `fbc2dbce2c72d98663160697702ffc996af3ed91fade02550c1c164e3f3e00b9` (x86_64). The custom C fixture is a universal dylib; the exact source and probe files are in `/Users/frityet/Scratch/ljmt-ffi-gap-audit-20261029/`.
+
+Each candidate was compared against an independently loaded JIT-disabled function. A live threading peer was started and acknowledged during each shape. For every row, the harness checks 25 candidate/oracle rounds, a full-GC reuse round, and exactly 2,752 C effects. A native witness requires both a selected runner-loop root containing CALLXS and observed exits from that root; arbitrary trace publication is not counted.
+
+## Ranked findings
+
+1. **Nested two-float HFA argument: verified x86_64-only native path, best bounded next slice.** The argument is `struct { struct { float lane[2]; } inner; }`, eight bytes total. x86_64 publishes one selected loop root with two CALLXS nodes and 25 selected-root exits; ARM64 produces no selected-root witness. Both targets pass oracle and effect checks. This is a valid next ARM64 gap: the ARM64 interpreter classifier recursively recognizes arrays and nested struct subtypes (`src/lj_ccall.c:965`), while the recorder classifier `lj_ccall_arm64_float_hfa_class` only accepts direct scalar fields and caps the current direct form at two members (`src/lj_ccall_arm64.h:266`). A bounded recursive CType flattener can preserve exact offsets and member count without opening unions, references, padding, or arbitrary composites.
+
+2. **Nested integer and mixed integer/float aggregate results: verified x86_64-only native paths.** The retained-result probe returns an eight-byte nested integer aggregate and an eight-byte `{uint32_t, float}` aggregate. Each has an x86_64 selected root with two CALLXS nodes and 25 selected exits; ARM64 has no selected-root witness. These are separate result-classification gaps from the HFA argument case. A small direct-result extension would need exact declared CType, root box, payload stores, and snapshot binding. The probes do not establish corresponding native argument support: nested integer and mixed integer/float arguments had no selected-root witness on either target.
+
+3. **24-byte integer aggregate result via sret: verified x86_64-only native path, larger implementation.** The retained `uint64_t[3]` struct result produces one selected x86_64 loop root, two CALLXS nodes, and 25 selected exits, with exact returned CType/fields and C effects. ARM64 has no selected-root witness. x86_64 uses its indirect result path for this size (`src/lj_crecord.c:2567`); the ARM64 classifier currently has no large-composite result class and rejects when neither the one-GPR integer aggregate nor HFA classifier applies (`src/lj_crecord.c:2770`). Darwin AAPCS64 sret uses its own hidden result register/protocol, so this is a distinct, broader result-box and native-lifetime slice.
+
+## Shapes not established as x86_64 gaps
+
+The same bounded probe found no selected-root witness on either target for 16-byte integer arguments/results, 16-byte mixed integer/float arguments/results, or nested integer arguments. Those rows still pass interpreter oracle and effect checks, but absence of a witness does not establish support or refusal. Do not implement them on the assumption that SysV aggregate parsing implies native recorder support.
+
+## Evidence
+
+The CALLXS argument scan is `/Users/frityet/Scratch/ljmt-ffi-gap-audit-20261029/{arm64,x86_64}-probe.log`; retained aggregate-result scan is `{arm64,x86_64}-results.log`. The nested-HFA argument's x86_64 row is `roots=1:2`, `selected-exits=25`, `effects=2752`; its ARM64 counterpart has empty roots and zero selected exits. The nested integer, mixed result, and 24-byte sret x86_64 rows are recorded in the result logs with the same selected-root evidence. Both probes and the universal DSO were run under a 90-second subprocess alarm.
+
+The universal fixture build used Apple clang with `-O2 -Wall -Wextra -Werror -dynamiclib -arch arm64 -arch x86_64`. Source, library and probe hashes are recorded in the evidence directory; no repository source files were changed for this experiment.
