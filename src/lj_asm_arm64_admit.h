@@ -11612,10 +11612,11 @@ static const GCfunc *arm64_lua_leaf_ir_function(const GCtrace *T, IRRef fn,
 /* The hidden iterator triple is not addressable by Lua source locals. Prove
 ** the same property for imported bytecode before reusing a LOOP restart map
 ** as the argument source of the optimized second ITERC. */
-static int arm64_iterl_scalar_body(const GCproto *pt,
-                                  const LJArm64IteratorSource *iter)
+static int arm64_iterl_scalar_body_shape(const GCproto *pt,
+                                  const LJArm64IteratorSource *iter,
+                                  MSize *comparep)
 {
-  MSize pos;
+  MSize pos, compare = 0, jumps[2], njumps = 0;
   for (pos = iter->body_pc; pos < iter->call_pc; pos++) {
     BCIns ins = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(pt)[pos]);
     BCOp op = bc_op(ins);
@@ -11623,16 +11624,59 @@ static int arm64_iterl_scalar_body(const GCproto *pt,
       int64_t target = (int64_t)pos+1+(int64_t)bc_j(ins);
       if (target < (int64_t)iter->body_pc ||
           target > (int64_t)iter->loop_pc+1) return 0;
+      if (njumps == sizeof(jumps)/sizeof(jumps[0])) return 0;
+      jumps[njumps++] = pos;
       continue;
     }
-    if (op == BC_ISLT || op == BC_ISGE || op == BC_ISLE || op == BC_ISGT)
+    if (op == BC_ISLT || op == BC_ISGE || op == BC_ISLE || op == BC_ISGT) {
+      if (compare) return 0;
+      compare = pos;
       continue;
+    }
     if (op != BC_CGET && op != BC_CSET && op != BC_MOV &&
         op != BC_KNUM && op != BC_KSHORT && op != BC_KPRI &&
         !(op >= BC_ADDVN && op <= BC_DIVVV)) return 0;
     if (bc_a(ins) >= iter->base-3u && bc_a(ins) < iter->base) return 0;
   }
+  if (!compare) {
+    if (comparep) *comparep=0;
+    return njumps == 0;
+  }
+  /* The single supported body branch is the compiler's canonical
+  ** `if (k >= n) break` lowering. Its true compare path jumps directly to
+  ** ITERC; the false path executes the break jump after the compare. */
+  if (njumps != 2u || compare < iter->body_pc+2u ||
+      jumps[0] != compare+1u || jumps[1] != compare+2u)
+    return 0;
+  {
+    BCIns keyload = (BCIns)la_load32_acq(
+      (const uint32_t *)&proto_bc(pt)[compare-2u]);
+    BCIns nload = (BCIns)la_load32_acq(
+      (const uint32_t *)&proto_bc(pt)[compare-1u]);
+    BCIns cmp = (BCIns)la_load32_acq(
+      (const uint32_t *)&proto_bc(pt)[compare]);
+    BCIns cont = (BCIns)la_load32_acq(
+      (const uint32_t *)&proto_bc(pt)[jumps[0]]);
+    BCIns brk = (BCIns)la_load32_acq(
+      (const uint32_t *)&proto_bc(pt)[jumps[1]]);
+    int64_t cont_target = (int64_t)jumps[0]+1+(int64_t)bc_j(cont);
+    int64_t break_target = (int64_t)jumps[1]+1+(int64_t)bc_j(brk);
+    if (bc_op(keyload) != BC_CGET || bc_d(keyload) != iter->base ||
+        bc_op(nload) != BC_CGET || bc_d(nload) != 0u ||
+        bc_op(cmp) != BC_ISGT || bc_a(cmp) != bc_a(nload) ||
+        bc_d(cmp) != bc_a(keyload) || bc_op(cont) != BC_JMP ||
+        bc_op(brk) != BC_JMP || cont_target != (int64_t)iter->call_pc ||
+        break_target != (int64_t)iter->loop_pc+1)
+      return 0;
+  }
+  if (comparep) *comparep=compare;
   return 1;
+}
+
+static int arm64_iterl_scalar_body(const GCproto *pt,
+                                  const LJArm64IteratorSource *iter)
+{
+  return arm64_iterl_scalar_body_shape(pt,iter,NULL);
 }
 
 static IRRef arm64_iterl_ir_slot(const GCtrace *T, const SnapShot *snap,
@@ -12984,19 +13028,86 @@ static IRRef arm64_iterl_ir_map_slot(const GCtrace *T, const SnapShot *snap,
   return value;
 }
 
+/* Bind the source-level conditional break to its canonical comparison guard
+** and the exact resume location at the break JMP. */
+static int arm64_iterl_ir_break_guard(const jit_State *J, const GCtrace *T,
+                                      const LJArm64IteratorSource *iter)
+{
+  SnapNo s, guard_snap = UINT16_MAX, loop_snap = UINT16_MAX;
+  IRRef r, guard = 0, visible, control, nvalue;
+  MSize comparisons = 0, source_compare;
+  if (!arm64_iterl_scalar_body_shape(J->pt,iter,&source_compare)) return 0;
+  if (!source_compare) return 1;
+  for (s=0; s<T->nsnap; s++) {
+    if (T->snap[s].ref == J->loopref) loop_snap=s;
+    if (T->snap[s].ref > J->loopref && T->snap[s].ref < T->nins) {
+      const IRIns *ir=&T->ir[T->snap[s].ref];
+      if (ir->o >= IR_LT && ir->o <= IR_GT && irt_isguard(ir->t)) {
+        comparisons++;
+        guard=T->snap[s].ref; guard_snap=s;
+      }
+    }
+  }
+  if (comparisons != 1u || guard_snap == UINT16_MAX ||
+      loop_snap == UINT16_MAX || guard == 0) return 0;
+  visible=arm64_iterl_ir_map_slot(T,&T->snap[loop_snap],
+                                  iter->base+1u+LJ_FR2);
+  control=arm64_iterl_ir_map_slot(T,&T->snap[loop_snap],
+                                  iter->base+LJ_FR2);
+  if (!visible || visible != control) return 0;
+  nvalue=arm64_iterl_ir_slot(T,&T->snap[loop_snap],J->baseslot);
+  if (!nvalue) return 0;
+  {
+    const IRIns *ir=&T->ir[guard];
+    const SnapShot *snap=&T->snap[guard_snap];
+    uint64_t pcbase;
+    IRType type=irt_type(ir->t);
+    if (ir->o != IR_LT || ir->op1 != visible || ir->op2 != nvalue ||
+        (type != IRT_INT && type != IRT_NUM) ||
+        !arm64_scalar_ir_ref(T,visible,guard,type) ||
+        !arm64_scalar_ir_ref(T,nvalue,guard,type) ||
+        snap->mapofs > T->nsnapmap ||
+        snap->nent > T->nsnapmap-snap->mapofs ||
+        T->nsnapmap-snap->mapofs-snap->nent < 2u)
+      return 0;
+    memcpy(&pcbase,&T->snapmap[snap->mapofs+snap->nent],sizeof(pcbase));
+    if ((uint8_t)pcbase ||
+        (const BCIns *)(uintptr_t)(pcbase>>8) !=
+          proto_bc(J->pt)+source_compare+2u ||
+        arm64_iterl_ir_map_slot(T,snap,iter->base+1u+LJ_FR2) != visible ||
+        arm64_iterl_ir_map_slot(T,snap,iter->base+LJ_FR2) != control) {
+      return 0;
+    }
+  }
+  for (r=J->loopref+1u; r<guard; r++)
+    if (T->ir[r].o >= IR_LT && T->ir[r].o <= IR_GT &&
+        irt_isguard(T->ir[r].t) && r != guard)
+      return 0;
+  return 1;
+}
+
 /* Reconstruct child arguments from their own mixed-frame snapshot. The
 ** hidden state is invariant; the child control comes from the preceding
 ** iterator result lineage, not from assuming a caller slot was already
 ** copied at this mixed-frame snapshot. */
 static int arm64_iterl_ir_frame_args(const GCtrace *T, const SnapShot *snap,
                                      const LJArm64IteratorSource *iter,
-                                     MSize base, IRRef *args)
+                                     MSize base, IRRef expected_state,
+                                     IRRef *args)
 {
   IRRef arg0, arg1, state;
   arg0 = arm64_iterl_ir_map_slot(T, snap, base);
   arg1 = arm64_iterl_ir_map_slot(T, snap, base+1u);
   state = arm64_iterl_ir_slot(T, snap, iter->base+LJ_FR2-1u);
-  if (!arg0 || !arg1 || !state || arg0 != state) return 0;
+  /* The state argument is invariant across the iterator calls, but a child
+  ** snapshot may omit its dead formal slot. Reuse only the exact state value
+  ** independently recovered from the caller's LOOP map; the visible control
+  ** argument must remain present in this child frame. */
+  if (!arg1 || !state || !expected_state || state != expected_state ||
+      (arg0 && arg0 != expected_state) ||
+      !arm64_cell_value_ir_ref(T, expected_state, snap->ref) ||
+      !arm64_cell_value_ir_ref(T, arg1, snap->ref)) return 0;
+  arg0 = expected_state;
   args[0] = arg0; args[1] = arg1;
   return 1;
 }
@@ -13065,7 +13176,11 @@ static int arm64_iterl_ir_returns(const jit_State *J, const GCtrace *T)
   IRRef result[ARM64_LUA_LEAF_MAX_RESULTS];
   SnapNo call = 0, loop = 0, s;
   const GCfunc *fn;
+  LJArm64IteratorSource iter;
   MSize live, nresult, retpos;
+  if (!lj_asm_arm64_iterl_tuple(J->pt, trace_startpc_acq((GCtrace *)T),
+                               T->startins,T->startins,1,&iter) ||
+      !arm64_iterl_ir_break_guard(J,T,&iter)) return 0;
   for (r = REF_FIRST; r < J->loopref; r++)
     if (T->ir[r].o == IR_EQ && T->ir[r].t.irt == (IRT_FUNC|IRT_GUARD)) {
       if (guard) return 0;
@@ -13234,7 +13349,9 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
   }
   if (!caller) return 0;
   if (iterator && ref > J->loopref &&
-      !arm64_iterl_ir_frame_args(T, snap, &iter, base, args)) return 0;
+      !arm64_iterl_ir_frame_args(T, snap, &iter, base, args[0], args)) {
+    return 0;
+  }
   if (paired_varg) {
     MSize sourcebase = 2u+2u*LJ_FR2+bc_a(call);
     for (i = 0; i < callnargs; i++) {
@@ -17547,17 +17664,91 @@ static IRRef arm64_iterl_postra_map_slot(const LJArm64PostRAView *v,
   return value;
 }
 
+/* Allocated-view twin of the caller early-break proof. It independently
+** binds the source branch guard, operand refs, loop map and resume footer. */
+static int arm64_iterl_postra_break_guard(const LJArm64PostRAView *v,
+                                          IRRef loop)
+{
+  LJArm64IteratorSource iter;
+  SnapNo s, guard_snap=UINT16_MAX, loop_snap=UINT16_MAX;
+  IRRef r, guard=0, visible, control, nvalue;
+  MSize comparisons=0, source_compare;
+  BCIns liveins;
+  if (!v->owner || !v->proto) return 0;
+  liveins=v->owner_private ? v->startins :
+    BCINS_AD(BC_JITERL,bc_a(v->startins),
+      trace_traceno_acq((GCtrace *)v->owner));
+  if (!lj_asm_arm64_iterl_tuple(v->proto,v->startpc,v->startins,
+      liveins,v->owner_private,&iter) ||
+      !arm64_iterl_scalar_body_shape(v->proto,&iter,&source_compare))
+    return 0;
+  if (!source_compare) return 1;
+  for (s=0; s<v->nsnap; s++) {
+    IRRef at=snap_ref_acq(&v->snap[s]);
+    if (at==loop) loop_snap=s;
+    if (at>loop && at<v->nins) {
+      IRIns ir=ir_load_acq(&v->ir[at]);
+      if (ir.o>=IR_LT && ir.o<=IR_GT && irt_isguard(ir.t)) {
+        comparisons++; guard=at; guard_snap=s;
+      }
+    }
+  }
+  if (comparisons!=1u || guard_snap==UINT16_MAX ||
+      loop_snap==UINT16_MAX || !guard) return 0;
+  visible=arm64_iterl_postra_map_slot(v,&v->snap[loop_snap],
+                                      iter.base+1u+LJ_FR2);
+  control=arm64_iterl_postra_map_slot(v,&v->snap[loop_snap],
+                                      iter.base+LJ_FR2);
+  if (!visible || visible!=control) return 0;
+  nvalue=arm64_iterl_postra_slot(v,&v->snap[loop_snap],
+                                  2u+v->base_delta);
+  if (!nvalue) return 0;
+  {
+    IRIns ir=ir_load_acq(&v->ir[guard]);
+    const SnapShot *snap=&v->snap[guard_snap];
+    MSize ofs=snap_mapofs_acq(snap), nent=snap_nent_acq(snap);
+    SnapEntry footer[2]; uint64_t pcbase;
+    IRType type=irt_type(ir.t);
+    if (ir.o!=IR_LT || ir.op1!=visible || ir.op2!=nvalue ||
+        (type!=IRT_INT && type!=IRT_NUM) ||
+        !arm64_scalar_postra_ref(v,visible,guard,type) ||
+        !arm64_scalar_postra_ref(v,nvalue,guard,type) ||
+        ofs>v->nsnapmap || nent>v->nsnapmap-ofs ||
+        v->nsnapmap-ofs-nent<2u) return 0;
+    footer[0]=snapentry_acq(&v->snapmap[ofs+nent]);
+    footer[1]=snapentry_acq(&v->snapmap[ofs+nent+1u]);
+    memcpy(&pcbase,footer,sizeof(pcbase));
+    if ((uint8_t)pcbase ||
+        (const BCIns *)(uintptr_t)(pcbase>>8)!=
+          v->proto_bc+source_compare+2u ||
+        arm64_iterl_postra_map_slot(v,snap,iter.base+1u+LJ_FR2)!=visible ||
+        arm64_iterl_postra_map_slot(v,snap,iter.base+LJ_FR2)!=control)
+      return 0;
+  }
+  for (r=loop+1u; r<guard; r++) {
+    IRIns ir=ir_load_acq(&v->ir[r]);
+    if (ir.o>=IR_LT && ir.o<=IR_GT && irt_isguard(ir.t) && r!=guard)
+      return 0;
+  }
+  return 1;
+}
+
 static int arm64_iterl_postra_frame_args(const LJArm64PostRAView *v,
                                      const SnapShot *snap,
                                      const LJArm64IteratorSource *iter,
-                                     MSize base, IRRef *args)
+                                     MSize base, IRRef expected_state,
+                                     IRRef *args)
 {
   IRRef arg0, arg1, state;
   arg0 = arm64_iterl_postra_map_slot(v, snap, base);
   arg1 = arm64_iterl_postra_map_slot(v, snap, base+1u);
   state = arm64_iterl_postra_slot(v, snap,
                                   iter->base+LJ_FR2-1u);
-  if (!arg0 || !arg1 || !state || arg0 != state) return 0;
+  if (!arg1 || !state || !expected_state || state != expected_state ||
+      (arg0 && arg0 != expected_state) ||
+      !arm64_cell_value_postra_ref(v, expected_state, snap_ref_acq(snap)) ||
+      !arm64_cell_value_postra_ref(v, arg1, snap_ref_acq(snap))) return 0;
+  arg0 = expected_state;
   args[0] = arg0; args[1] = arg1;
   return 1;
 }
@@ -17629,6 +17820,7 @@ static int arm64_iterl_postra_returns(const LJArm64PostRAView *v, IRRef loop)
   IRRef saved[UINT8_MAX+1u], result[ARM64_LUA_LEAF_MAX_RESULTS];
   MSize call = 0, s, extent, count, retpos;
   const GCfunc *fn;
+  if (!arm64_iterl_postra_break_guard(v,loop)) return 0;
   for (r = REF_FIRST; r < loop; r++) {
     IRIns p = ir_load_acq(&v->ir[r]);
     if (p.o == IR_EQ && p.t.irt == (IRT_FUNC|IRT_GUARD)) {
@@ -17817,7 +18009,7 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
   }
   if (!caller) return 0;
   if (iterator && at > loop &&
-      !arm64_iterl_postra_frame_args(v, sn, &iter, base, args)) return 0;
+      !arm64_iterl_postra_frame_args(v, sn, &iter, base, args[0], args)) return 0;
   if (paired_varg) {
     MSize sourcebase = 2u+2u*LJ_FR2+bc_a(call);
     for (i = 0; i < callnargs; i++) {
