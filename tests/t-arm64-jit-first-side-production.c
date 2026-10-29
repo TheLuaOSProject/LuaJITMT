@@ -774,6 +774,15 @@ static void *release_published_flush(void *arg)
   AppendFlushRace *race = (AppendFlushRace *)arg;
   uint32_t i;
   const uint32_t actions = LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ;
+  /* The coordinator starts before the publisher records its new side. Do
+  ** not spend the request budget (or release the pause on timeout) until
+  ** the worker has observed the actual publication pause and is ready to
+  ** issue the handshake. Otherwise a slow recording can miss the pause. */
+  for (i = 0; i < 10000000u &&
+       la_load32_acq(&race->entering_handshake) == 0; i++)
+    (void)lj_thr_retry_yield(NULL);
+  assert(la_load32_acq(&race->entering_handshake) == 1 &&
+         la_load32_acq(&race->observed_pause) == 1);
   for (i = 0; i < 1000000u; i++) {
     uint64_t epoch = gc2_hs_epoch_acq(race->g);
     uint64_t ack = lj_tg_hs_epoch_ack_acq(race->main_tg);
