@@ -25,6 +25,10 @@ LJ_FUNC_NORET void lj_trace_err_info(jit_State *J, TraceError e);
 
 /* Trace management. */
 #if LJ_TARGET_ARM64
+/* Fixed scalar result vectors shared by recorder, runtime frame checks and
+** independent ARM64 IR admission. Wider/open result shapes remain closed. */
+#define LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS 3u
+
 /* Bounded, fixed-arity Lua leaf with no shared state or control-flow effects.
 ** The caller keeps the closure/prototype resident under the recorder token or
 ** the published trace's GC2 lease. Snapshot admission remains separate. */

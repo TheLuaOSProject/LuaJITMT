@@ -627,6 +627,13 @@ available.
   effects without replay in all four M7 profiles; both ARM64 stock corpora
   pass 509 cases. See
   [`arm64-jit-ffi-callm-2026-10-26.md`](arm64-jit-ffi-callm-2026-10-26.md).
+- A bounded Lua leaf returning one to three fixed results can feed an adjacent
+  `CALLM B=2,C=0` in a loop root. Guard-free producer calls are independently
+  replayed from their exact function guard and bound to the consumer snapshot;
+  dynamic counts and other open-call shapes remain closed. The native fixture
+  exercises the three-result case with selected-root exits, GC/reuse, a live
+  peer, and semantic/post-RA source/map negatives. See
+  [`arm64-jit-open-result-callm-2026-10-29.md`](arm64-jit-open-result-callm-2026-10-29.md).
 - Double, float and U32 producers can feed all eight signed/unsigned fixed
   integer CALLM argument kinds, including compact Darwin stack slots. The
   exact adjacent CALL/CALLM pair, completed producer, original Lua number and
