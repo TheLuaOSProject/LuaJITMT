@@ -841,7 +841,8 @@ static int trace_entry_mark_invalidated(GCtrace *T)
 #define TRACE_ARM64_FIRST_SIDE_RETIRE_EXACT 1
 #define TRACE_ARM64_FIRST_SIDE_RETIRE_RETRY (-1)
 static int trace_arm64_first_side_retire_candidate(const GCtrace *T);
-static int trace_arm64_first_side_retire_edge(jit_State *J, GCtrace *T);
+static int trace_arm64_first_side_retire_edge(jit_State *J, GCtrace *T,
+					      int allow_pending_descendants);
 static int trace_arm64_first_side_retire_topology(jit_State *J, GCtrace *T);
 static void trace_retire_disconnect(jit_State *J, GCtrace *T);
 static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
@@ -3518,7 +3519,7 @@ int LJ_FASTCALL lj_trace_retire_gc_claim(global_State *g, GCtrace *T)
   /* The admitted child also has an inbound machine-code edge which is not
   ** represented by trace_link. Remove that exact raw word before publishing
   ** its retirement descriptor. */
-  arm64_edge = trace_arm64_first_side_retire_edge(J, T);
+  arm64_edge = trace_arm64_first_side_retire_edge(J, T, 0);
   if (arm64_edge == TRACE_ARM64_FIRST_SIDE_RETIRE_RETRY) {
     if (smr)
       lj_gc2_smr_read_leave(g);
@@ -11712,7 +11713,7 @@ int LJ_FASTCALL lj_trace_free_gc(global_State *g, GCtrace *T)
 	  return 0;
 	}
 	smr = 1;
-	arm64_edge = trace_arm64_first_side_retire_edge(J, T);
+	arm64_edge = trace_arm64_first_side_retire_edge(J, T, 0);
 	if (arm64_edge == TRACE_ARM64_FIRST_SIDE_RETIRE_RETRY) {
 	  lj_gc2_smr_read_leave(g);
 	  if (token)
@@ -11942,9 +11943,9 @@ static int trace_arm64_first_side_retire_candidate(const GCtrace *T)
 }
 
 /* A parent's exit may be switched to fallback after it is marked pending,
-** while a descendant still has to be detached. Authenticate that one
-** transition from the child's sealed certificate and the parent's exact
-** fallback encoding; never accept a detached edge for a live parent. */
+** while a descendant still has to be detached. Authenticate the child's
+** sealed certificate and exact parent generation; pending permits only the
+** still-published child target or its exact fallback, never an unknown edge. */
 static int trace_arm64_side_parent_edge_valid_held(jit_State *J,
     GCtrace *child, TraceNo parentno, int allow_pending)
 {
@@ -11965,7 +11966,9 @@ static int trace_arm64_side_parent_edge_valid_held(jit_State *J,
       (tv = tracevec_acq(J)) == NULL ||
       (MSize)parentno >= tv->sizetrace ||
       (parent = traceref_fromgco_safe(gcref_acq(tv->slot[parentno]))) !=
-        cert->parent || !trace_runnable_acq(parent, parentno))
+        cert->parent || trace_traceno_acq(parent) != parentno ||
+      (!trace_runnable_acq(parent, parentno) &&
+       !(allow_pending && trace_scope_pending_acq(parent))))
     return 0;
   exitno = cert->exitno;
   if ((MSize)exitno >= trace_nsnap_acq(parent) ||
@@ -12000,10 +12003,12 @@ static int trace_arm64_side_parent_edge_valid_held(jit_State *J,
 
 /* Reconstruct the exact published first-child generation without changing it.
 ** The caller owns the recorder token and an SMR reader. `retired` selects the
-** two durable endpoints on either side of retire-list publication; pending is
-** an orthogonal entry gate and is admitted in either endpoint. */
+** two durable endpoints on either side of retire-list publication. Scoped
+** mark-phase edge detachment can allow a pending target's descendants to
+** remain listed; body retirement never can. */
 static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
-    int retired, TraceArm64FirstSideRetirePlan *plan)
+    int retired, int allow_pending_descendants,
+    TraceArm64FirstSideRetirePlan *plan)
 {
   global_State *g;
   TraceVec *tv;
@@ -12109,7 +12114,9 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
   if (parent == NULL || edgeparent == NULL ||
       trace_root_acq(edgeparent) != (edgeparentno == parentno ? 0 : parentno) ||
       (edgeparentno != parentno &&
-	(!trace_arm64_side_certificate_valid_held(J, edgeparent) ||
+	(!trace_arm64_side_certificate_sealed_valid_held(J, edgeparent) ||
+	 !trace_arm64_side_parent_edge_valid_held(
+	   J, edgeparent, edgeparent->arm64_side_cert.parentno, 1) ||
 	 edgeparent->arm64_side_cert.rootno != parentno)))
     return 0;
   parent_nsnap = trace_nsnap_acq(parent);
@@ -12220,7 +12227,10 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
         trace_nextroot_acq(side) != 0 ||
         !trace_arm64_side_certificate_sealed_valid_held(J, side))
       return 0;
-    if (side != T && !trace_runnable_acq(side, side_no))
+    /* A pending sibling is still sealed and remains in the root list until
+    ** this boundary. Its exact child/fallback edge is checked below. */
+    if (side != T && !trace_runnable_acq(side, side_no) &&
+        !trace_scope_pending_acq(side))
       return 0;
     if (side != T && (la_load64_acq(&side->retire_epoch) != 0 ||
         trace_retired_link_acq(side) != TRACE_RETIRED_LINK_UNLINKED ||
@@ -12238,25 +12248,46 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
 	  trace_arm64_side_chain_has_ancestor(
 	    J, parentno, side_no, childno, parent_nchild);
 	if (descendant < 0) return 0;
-	if (descendant)
-	  return 0;  /* A parent allocation cannot retire before descendants. */
+	if (descendant &&
+	    (!allow_pending_descendants || !trace_scope_pending_acq(T)))
+	  return 0;  /* Retired bodies always wait until descendants are unlinked. */
     }
     side_parentno = (TraceNo)sidebase.op1;
     side_parent = traceref_fromgco_safe(gcref_acq(tv->slot[side_parentno]));
-    if (!trace_runnable_acq(side_parent, side_parentno) ||
-        trace_root_acq(side_parent) !=
+    if (side_parent == NULL ||
+        trace_traceno_acq(side_parent) != side_parentno)
+      return 0;
+    if (!trace_runnable_acq(side_parent, side_parentno)) {
+      if (!trace_scope_pending_acq(side_parent))
+        return 0;
+      if (side_parentno == parentno) {
+        uint64_t generation = la_load64_acq(&side_parent->arm64_generation);
+        if (generation == 0 || side_parent->arm64_root_cert.body != side_parent ||
+            side_parent->arm64_root_cert.traceno != side_parentno ||
+            la_load64_acq(&side_parent->arm64_root_cert.generation) !=
+              generation)
+          return 0;
+      } else if (!trace_arm64_side_certificate_sealed_valid_held(
+                   J, side_parent)) {
+        return 0;
+      }
+    }
+    if (trace_root_acq(side_parent) !=
 	  (side_parentno == parentno ? 0 : parentno) ||
         (MSize)sidebase.op2 >= trace_exittab_nslots_acq(side_parent) ||
         (MSize)sidebase.op2 >= trace_nsnap_acq(side_parent))
       return 0;
     if (side_parentno == parentno) {
       if ((ExitNo)sidebase.op2 >= parent_nexits ||
-	  !trace_runnable_acq(side_parent, parentno))
+	  (!trace_runnable_acq(side_parent, parentno) &&
+	   !trace_scope_pending_acq(side_parent)))
 	return 0;
     } else {
       IRIns parentbase = ir_load_acq(
 	&trace_ir_acq(side_parent)[REF_BASE]);
-	  if (!trace_arm64_side_certificate_valid_held(J, side_parent) ||
+	  if (!trace_arm64_side_certificate_sealed_valid_held(J, side_parent) ||
+	      !trace_arm64_side_parent_edge_valid_held(
+		J, side_parent, side_parent->arm64_side_cert.parentno, 1) ||
 	      side_parent->arm64_side_cert.rootno != parentno ||
 	      parentbase.o != IR_BASE || parentbase.t.irt != IRT_PGC ||
 	      (TraceNo)parentbase.op1 != side_parent->arm64_side_cert.parentno ||
@@ -12392,7 +12423,7 @@ int lj_trace_test_arm64_retire_absent_sibling(
       goto done;
     }
   }
-  rejected = !trace_arm64_first_side_retire_plan(J, child, 0, &plan);
+  rejected = !trace_arm64_first_side_retire_plan(J, child, 0, 0, &plan);
   {
     uint16_t expected = (uint16_t)(count-1u);
     if (!trace_nchild_cas_acqrel(parent, &expected, count))
@@ -12412,6 +12443,119 @@ done:
   lj_jit_token_release(J);
   return 0;
 }
+
+/* Exercise the scoped-mark retirement plan while one side and its descendant
+** are still linked. The scoped mode must admit this exact pending generation;
+** it must still reject the same graph in strict mode, a changed sealed
+** certificate, and an unrelated but valid native target in the inbound slot.
+** Every mutation is restored before releasing the recorder token/SMR reader. */
+uint32_t lj_trace_test_arm64_scoped_retire_proof(
+    jit_State *J, TraceNo rootno, TraceNo childno)
+{
+  TraceArm64FirstSideRetirePlan plan;
+  TraceVec *tv;
+  GCtrace *root, *child, *wrong;
+  MCode *wrong_code;
+  MCode **edge_slot = NULL;
+  void *saved_target, *wrong_target;
+  uint64_t saved_generation, bad_generation;
+  uint8_t saved_flags;
+  uint32_t result = 0;
+  int marked = 0;
+  global_State *g;
+  if (J == NULL || rootno == 0 || childno == 0 ||
+      !lj_jit_token_try(J))
+    return 0;
+  g = J2G(J);
+  if (!lj_gc2_smr_read_try(g)) {
+    lj_jit_token_release(J);
+    return 0;
+  }
+  tv = tracevec_acq(J);
+  if (tv == NULL || (MSize)rootno >= tv->sizetrace ||
+      (MSize)childno >= tv->sizetrace)
+    goto done;
+  root = traceref_fromgco_safe(gcref_acq(tv->slot[rootno]));
+  child = traceref_fromgco_safe(gcref_acq(tv->slot[childno]));
+  if (root == NULL || child == NULL || trace_root_acq(root) != 0 ||
+      trace_root_acq(child) != rootno ||
+      trace_scope_pending_acq(child) ||
+      !trace_arm64_first_side_retire_candidate(child) ||
+      !trace_arm64_side_certificate_sealed_valid_held(J, child))
+    goto done;
+  saved_flags = la_load8_acq(&child->unused1);
+  saved_generation = la_load64_acq(&child->arm64_side_cert.generation);
+  if (saved_generation == 0 || !trace_scope_mark_pending(child))
+    goto done;
+  marked = 1;
+
+  if (!trace_arm64_first_side_retire_plan(J, child, 0, 0, &plan))
+    result |= 1u;  /* Strict mode keeps descendant order closed. */
+  else
+    goto restore;
+  if (!trace_arm64_first_side_retire_plan(J, child, 0, 1, &plan))
+    goto restore;
+  result |= 2u;  /* The exact scoped pending generation is reconstructible. */
+
+  edge_slot = plan.parent_exitslot;
+  saved_target = la_loadptr_acq((void *const *)edge_slot);
+  wrong = NULL;
+  {
+    TraceNo side_no = plan.parent_old_head;
+    MSize i;
+    for (i = 0; i < plan.parent_old_nchild; i++) {
+      GCtrace *side;
+      if (side_no == 0 || (MSize)side_no >= tv->sizetrace)
+        goto restore;
+      side = traceref_fromgco_safe(gcref_acq(tv->slot[side_no]));
+      if (side == NULL)
+        goto restore;
+      if (side != child) {
+        wrong = side;
+        break;
+      }
+      side_no = trace_nextside_acq(side);
+    }
+  }
+  if (wrong == NULL || (wrong_code = trace_mcode_acq(wrong)) == NULL)
+    goto restore;
+  wrong_target = trace_exittarget_arm64_encode(g, wrong_code);
+  if (trace_arm64_first_side_pointer_bits(wrong_target) ==
+      trace_arm64_first_side_pointer_bits(saved_target))
+    goto restore;
+
+  bad_generation = saved_generation ^ UINT64_C(1);
+  la_store64_rel(&child->arm64_side_cert.generation, bad_generation);
+  if (!trace_arm64_first_side_retire_plan(J, child, 0, 1, &plan))
+    result |= 4u;
+  la_store64_rel(&child->arm64_side_cert.generation, saved_generation);
+  /* Select a different live sibling's valid signed code pointer. The plan
+  ** must reject it even though pointer authentication and allocation are
+  ** valid; only this child's exact code or its authenticated fallback is
+  ** accepted while pending. */
+  la_storeptr_rel((void **)edge_slot, wrong_target);
+  if (!trace_arm64_first_side_retire_plan(J, child, 0, 1, &plan))
+    result |= 8u;
+  la_storeptr_rel((void **)edge_slot, saved_target);
+  if (trace_arm64_first_side_pointer_bits(la_loadptr_acq(
+        (void *const *)edge_slot)) !=
+      trace_arm64_first_side_pointer_bits(saved_target))
+    abort();
+restore:
+  if (edge_slot != NULL)
+    la_storeptr_rel((void **)edge_slot, saved_target);
+  if (la_load64_acq(&child->arm64_side_cert.generation) != saved_generation)
+    la_store64_rel(&child->arm64_side_cert.generation, saved_generation);
+  if (marked)
+    la_store8_rel(&child->unused1, saved_flags);
+  if (la_load8_acq(&child->unused1) != saved_flags ||
+      la_load64_acq(&child->arm64_side_cert.generation) != saved_generation)
+    abort();
+done:
+  lj_gc2_smr_read_leave(g);
+  lj_jit_token_release(J);
+  return result;
+}
 #endif
 
 #if defined(LJ_TRACE_TEST_HELPERS) && defined(LUAJIT_USE_GDBJIT)
@@ -12427,7 +12571,7 @@ int lj_trace_test_arm64_gdbjit_callback_ready(jit_State *J,
   if (!lj_gc2_smr_read_try(g))
     return 0;
   ready = trace_arm64_first_side_retire_plan(
-    J, (GCtrace *)(void *)child, 0, &plan) &&
+	J, (GCtrace *)(void *)child, 0, 0, &plan) &&
     plan.parent == parent && plan.exitno == exitno &&
     plan.raw_target_bits == plan.child_encoding_bits &&
     snap_count_acq(plan.parentsnap) == SNAPCOUNT_DONE &&
@@ -12438,10 +12582,12 @@ int lj_trace_test_arm64_gdbjit_callback_ready(jit_State *J,
 }
 #endif
 
-/* Remove the only native inbound edge before retirement publication. Raw
-** authenticated bits are the authority on arm64e; a same-address word with a
-** stale discriminator is corruption, not an idempotent success. */
-static int trace_arm64_first_side_retire_edge(jit_State *J, GCtrace *T)
+/* Remove the only native inbound edge before retirement publication. Scoped
+** mark may detach a pending ancestor before its descendants, but the strict
+** retirement plan will not unlink that ancestor until descendants are gone.
+** Raw authenticated bits remain authoritative on arm64e. */
+static int trace_arm64_first_side_retire_edge(jit_State *J, GCtrace *T,
+					      int allow_pending_descendants)
 {
   TraceArm64FirstSideRetirePlan plan;
   void *expected;
@@ -12449,7 +12595,8 @@ static int trace_arm64_first_side_retire_edge(jit_State *J, GCtrace *T)
     return TRACE_ARM64_FIRST_SIDE_RETIRE_OTHER;
   if (J == NULL || !lj_jit_token_held(J))
     return TRACE_ARM64_FIRST_SIDE_RETIRE_RETRY;
-  if (!trace_arm64_first_side_retire_plan(J, T, 0, &plan))
+  if (!trace_arm64_first_side_retire_plan(
+	J, T, 0, allow_pending_descendants, &plan))
     trace_arm64_first_side_retire_failstop(
       J, "ARM64 first-side retirement generation was lost");
   if (plan.raw_target_bits == plan.fallback_encoding_bits) {
@@ -12488,7 +12635,7 @@ static int trace_arm64_first_side_retire_topology(jit_State *J, GCtrace *T)
       trace_nextroot_acq(T) == 0 && trace_nextside_acq(T) == 0 &&
       trace_nchild_acq(T) == 0)
     return 1;  /* Synchronous earlier disconnect; former parent may be gone. */
-  if (!trace_arm64_first_side_retire_plan(J, T, 1, &plan))
+  if (!trace_arm64_first_side_retire_plan(J, T, 1, 0, &plan))
     trace_arm64_first_side_retire_failstop(
       J, "retired ARM64 first-side generation/topology was lost");
   if (plan.raw_target_bits != plan.fallback_encoding_bits)
@@ -12551,9 +12698,10 @@ static int trace_arm64_first_side_retire_candidate(const GCtrace *T)
   return 0;
 }
 
-static int trace_arm64_first_side_retire_edge(jit_State *J, GCtrace *T)
+static int trace_arm64_first_side_retire_edge(jit_State *J, GCtrace *T,
+					      int allow_pending_descendants)
 {
-  UNUSED(J); UNUSED(T);
+	UNUSED(J); UNUSED(T); UNUSED(allow_pending_descendants);
   return TRACE_ARM64_FIRST_SIDE_RETIRE_OTHER;
 }
 
@@ -12580,7 +12728,7 @@ static uint32_t trace_flushside(jit_State *J, GCtrace *T, int scoped)
     ** at mark time to close the pending-but-enterable window.
     */
     if (marked) {
-      arm64_edge = trace_arm64_first_side_retire_edge(J, T);
+      arm64_edge = trace_arm64_first_side_retire_edge(J, T, 1);
       if (arm64_edge == TRACE_ARM64_FIRST_SIDE_RETIRE_RETRY)
 	trace_arm64_first_side_retire_failstop(
 	  J, "scoped ARM64 first-side edge retirement refused");
@@ -13066,7 +13214,7 @@ static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
   /* Scoped marking already gates entry and normally detached the exact edge.
   ** Revalidate that authenticated fallback while both generations remain
   ** SMR-pinned, then publish preservation before topology removal. */
-  arm64_edge = trace_arm64_first_side_retire_edge(J, T);
+  arm64_edge = trace_arm64_first_side_retire_edge(J, T, 0);
   if (arm64_edge == TRACE_ARM64_FIRST_SIDE_RETIRE_RETRY)
     trace_arm64_first_side_retire_failstop(
       J, "pending ARM64 first-side retirement generation was lost");
@@ -13352,7 +13500,7 @@ static void trace_flushall_arm64_first_side_prepass(jit_State *J,
 	if (trace_arm64_side_certificate_depth_held(J, T) == 0)
 	  trace_arm64_first_side_retire_failstop(
 	    J, "full flush lost ARM64 side certificate during ordered walk");
-	arm64_edge = trace_arm64_first_side_retire_edge(J, T);
+	arm64_edge = trace_arm64_first_side_retire_edge(J, T, 0);
 	if (arm64_edge != TRACE_ARM64_FIRST_SIDE_RETIRE_EXACT)
 	  trace_arm64_first_side_retire_failstop(
 	    J, "full flush could not detach ARM64 first-side edge");

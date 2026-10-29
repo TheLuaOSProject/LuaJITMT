@@ -334,6 +334,100 @@ int main(void)
   assert(lj_trace_test_root_entry_successes() > 0);
   assert(lj_trace_test_exit_calls() > 0);
 
+  /* Retire a middle ancestor in a real depth-three graph. Its descendant
+  ** must retire with it, while the direct side and canonical root keep their
+  ** published code and generation and remain enterable after full GC. */
+  run(L,
+    "depth_oracle=assert(loadstring(string.dump(depth_kernel))); "
+    "jit.off(depth_oracle,true)");
+  run(L, "assert(depth_kernel(2,1,1,1,48)==-1175.5)");
+  run(L, "assert(depth_oracle(2,1,1,1,48)==-1175.5)");
+  {
+    GCtrace *depth3 = child, *depth2, *depth1, *depth_root;
+    TraceNo depth3no = childno, depth2no, depth1no, depth_rootno;
+    ExitNo direct_exit;
+    MCode *depth_root_code, *depth1_code;
+    uint64_t depth_root_generation, depth1_generation;
+    uint32_t summary;
+    uint32_t scoped_proof;
+    IRIns edge;
+    edge = trace_ir_acq(depth3)[REF_BASE];
+    assert(edge.o == IR_BASE && (TraceNo)edge.op1 != 0);
+    depth2no = (TraceNo)edge.op1;
+    depth2 = traceref_safe(J, depth2no);
+    assert(depth2 != NULL && trace_runnable_acq(depth2, depth2no));
+    edge = trace_ir_acq(depth2)[REF_BASE];
+    assert(edge.o == IR_BASE && (TraceNo)edge.op1 != 0);
+    depth1no = (TraceNo)edge.op1;
+    depth1 = traceref_safe(J, depth1no);
+    assert(depth1 != NULL && trace_runnable_acq(depth1, depth1no));
+    edge = trace_ir_acq(depth1)[REF_BASE];
+    assert(edge.o == IR_BASE && (TraceNo)edge.op1 != 0);
+    depth_rootno = (TraceNo)edge.op1;
+    depth_root = traceref_safe(J, depth_rootno);
+    assert(depth_root != NULL && trace_runnable_acq(depth_root, depth_rootno));
+    assert(trace_root_acq(depth3) == depth_rootno &&
+           trace_root_acq(depth2) == depth_rootno &&
+           trace_root_acq(depth1) == depth_rootno);
+    assert(side_depth(J, depth3) == 3u && side_depth(J, depth2) == 2u &&
+           side_depth(J, depth1) == 1u);
+    assert(trace_nchild_acq(depth_root) == 3u &&
+           trace_nextside_acq(depth_root) == depth3no);
+    summary = lj_trace_test_arm64_side_graph_summary(J, depth_rootno);
+    assert(summary == ((3u << 16) | 3u));
+    scoped_proof = lj_trace_test_arm64_scoped_retire_proof(
+      J, depth_rootno, depth2no);
+    assert(scoped_proof == 15u);
+    edge = trace_ir_acq(depth1)[REF_BASE];
+    direct_exit = (ExitNo)edge.op2;
+    assert(direct_exit < trace_nsnap_acq(depth_root) &&
+           trace_exittarget_arm64_acq(depth_root, direct_exit) ==
+             trace_mcode_acq(depth1));
+    depth_root_code = trace_mcode_acq(depth_root);
+    depth1_code = trace_mcode_acq(depth1);
+    depth_root_generation = depth_root->arm64_generation;
+    depth1_generation = depth1->arm64_generation;
+
+    assert(lj_trace_flushscope(J, depth2no) == 1u);
+    assert(!trace_runnable_acq(depth2, depth2no) &&
+           !trace_runnable_acq(depth3, depth3no));
+    assert(trace_runnable_acq(depth1, depth1no) &&
+           trace_runnable_acq(depth_root, depth_rootno));
+    assert(trace_mcode_acq(depth1) == depth1_code &&
+           trace_mcode_acq(depth_root) == depth_root_code &&
+           depth1->arm64_generation == depth1_generation &&
+           depth_root->arm64_generation == depth_root_generation);
+    assert(trace_nchild_acq(depth_root) == 1u &&
+           trace_nextside_acq(depth_root) == depth1no &&
+           trace_nextside_acq(depth1) == 0);
+    assert(lj_trace_test_arm64_side_graph_summary(J, depth_rootno) ==
+           ((1u << 16) | 1u));
+    assert(trace_exittarget_arm64_acq(depth_root, direct_exit) ==
+           depth1_code);
+
+    lua_gc(L, LUA_GCCOLLECT, 0);
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    run(L,
+      "for k=1,64 do assert(depth_kernel(2,1,1,1,48)=="
+        "depth_oracle(2,1,1,1,48)) end");
+    assert(lj_trace_test_root_entry_publishes() > 0 &&
+           lj_trace_test_root_entry_successes() > 0 &&
+           lj_trace_test_root_entry_cleanups() == 0);
+    assert(lj_trace_test_first_exit_parent() == depth1no &&
+           lj_trace_test_first_exitno() < trace_nsnap_acq(depth1) &&
+           lj_trace_test_exit_calls() > 0);
+    assert(trace_runnable_acq(depth1, depth1no) &&
+           trace_runnable_acq(depth_root, depth_rootno) &&
+           trace_mcode_acq(depth1) == depth1_code &&
+           trace_mcode_acq(depth_root) == depth_root_code &&
+           depth1->arm64_generation == depth1_generation &&
+           depth_root->arm64_generation == depth_root_generation &&
+           trace_nchild_acq(depth_root) == 1u &&
+           lj_trace_test_arm64_side_graph_summary(J, depth_rootno) ==
+             ((1u << 16) | 1u));
+  }
+
   /* Retain the historical wide direct-child path beyond the 64-entry deep
   ** ancestry index. The real root owns 65 separately selected cold exits;
   ** the summary helper validates its topology and retirement eligibility. */
