@@ -3121,6 +3121,8 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
   ASMState *as = &as_;
 #if LJ_TARGET_ARM64
   IRRef arm64_semantic_nins;
+  jit_State arm64_root_state;
+  const jit_State *arm64_admit_state = J;
 #endif
 
   /* Remove nops/renames left over from ASM restart due to LJ_TRERR_MCODELM. */
@@ -3134,6 +3136,20 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
   }
 
 #if LJ_TARGET_ARM64
+  /* A terminal CALLT has already replaced the root function in the VM's
+  ** physical frame by the child. Admission still validates the trace's
+  ** source prototype, which remains pinned by its start-pt and IR roots. */
+  if (bc_op(T->startins) == BC_FUNCF) {
+    GCobj *startpt = trace_startptgco_acq(T);
+    if (!startpt || !checkptrGC(startpt) ||
+	startpt->gch.gct != (uint32_t)~LJ_TPROTO)
+	lj_trace_err(J, LJ_TRERR_NYIIR);
+    if (J->pt != gco2pt(startpt)) {
+      arm64_root_state = *J;
+      arm64_root_state.pt = gco2pt(startpt);
+      arm64_admit_state = &arm64_root_state;
+    }
+  }
   {
     LJArm64IRReject reject;
     if (J->parent != 0) {
@@ -3159,7 +3175,8 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
 #if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
       asm_test_side_probe_capture(J);
 #endif
-    } else if (LJ_UNLIKELY(!lj_asm_arm64_ir_admit(J, T, &reject))) {
+	} else if (LJ_UNLIKELY(!lj_asm_arm64_ir_admit(
+	  arm64_admit_state, T, &reject))) {
       /* Use the established deterministic assembler error. The exact
       ** rejected opcode remains available through errinfo; CALL helper IDs
       ** and shape details are exposed by the pure admission result. */
@@ -3363,7 +3380,8 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
       ** recorder trace; RENAME/NOP capacity lies beyond this semantic view. */
       finalview.ir = finalir;
       finalview.nins = arm64_semantic_nins;
-      if (LJ_UNLIKELY(!lj_asm_arm64_ir_admit(J, &finalview, &reject))) {
+      if (LJ_UNLIKELY(!lj_asm_arm64_ir_admit(
+	    arm64_admit_state, &finalview, &reject))) {
 	setintV(&J->errinfo, (int32_t)reject.op);
 	lj_trace_err_info(J, LJ_TRERR_NYIIR);
       }
@@ -3375,16 +3393,16 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
 #endif
       postraview.snap = T->snap;
       postraview.snapmap = T->snapmap;
-      postraview.proto_bc = proto_bc(J->pt);
-      postraview.proto = J->pt;
+      postraview.proto_bc = proto_bc(arm64_admit_state->pt);
+      postraview.proto = arm64_admit_state->pt;
       postraview.startpc = J->startpc;
       postraview.nins = finalnins;
       postraview.nk = T->nk;
       postraview.nsnap = T->nsnap;
       postraview.nsnapmap = T->nsnapmap;
       postraview.spadjust = T->spadjust;
-      postraview.proto_sizebc = J->pt->sizebc;
-      postraview.proto_numparams = J->pt->numparams;
+      postraview.proto_sizebc = arm64_admit_state->pt->sizebc;
+      postraview.proto_numparams = arm64_admit_state->pt->numparams;
       postraview.root_topslot = T->topslot;
       postraview.startins = T->startins;
       postraview.base_delta = (uint8_t)(J->baseslot-2u);

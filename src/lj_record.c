@@ -1319,6 +1319,8 @@ static void rec_call_setup(jit_State *J, BCReg func, ptrdiff_t nargs)
                      bc_op(ret) == BC_RET && bc_d(ret) == 3u ? 2u :
                      bc_op(ret) == BC_RET0 ? 1u : 0u;
     int iterator = bc_op(J->cur.startins) == BC_ITERL;
+    int tail_root = bc_op(J->cur.startins) == BC_FUNCF &&
+                    J->framedepth == 0 && bc_op(*J->pc) == BC_CALLT;
     LJArm64IteratorSource iter;
     if (iterator && (J->framedepth || nargs != 2 || nresults != 1u ||
         leaf->numparams != 2u || (leaf->flags & PROTO_VARARG) ||
@@ -1332,12 +1334,15 @@ static void rec_call_setup(jit_State *J, BCReg func, ptrdiff_t nargs)
     if ((!iterator && bc_op(J->cur.startins) != BC_FORL &&
 	 (bc_op(J->cur.startins) != BC_FUNCF || J->framedepth != 0)) ||
 	J->framedepth > 1 ||
-        (!iterator && bc_op(*J->pc) != BC_CALL) || !nresults ||
-        bc_b(*J->pc) != nresults+1u ||
+        (!iterator && bc_op(*J->pc) != BC_CALL && !tail_root) || !nresults ||
+        (tail_root ? (nresults != 1u || bc_b(*J->pc) != 0u) :
+                     bc_b(*J->pc) != nresults+1u) ||
         (nresults == 2u && J->framedepth != 0) ||
         !bc_c(*J->pc) || bc_c(*J->pc) != nargs+1 ||
         (MSize)bc_a(*J->pc)+bc_c(*J->pc)+LJ_FR2 > J->pt->framesize ||
-        (MSize)bc_a(*J->pc)+bc_b(*J->pc)-1u+LJ_FR2 > J->pt->framesize)
+        (tail_root ? (MSize)bc_a(*J->pc)+1u+LJ_FR2 > J->pt->framesize :
+	     (MSize)bc_a(*J->pc)+bc_b(*J->pc)-1u+LJ_FR2 >
+	       J->pt->framesize))
       lj_trace_err(J, LJ_TRERR_NYIBC);
     lj_snap_add(J);
     J->mergesnap = 0;
