@@ -24,12 +24,12 @@ otherwise starts at `REF_FIRST`.
 
 ## Validation
 
-`JOBS=2 tools/ci/arm64_jit_funcf_record_contract.sh` passed on arm64 and
-arm64e assertion/release builds. The contract runs the topology probe in each
-profile. The probe's `nonleaf-function-root-return` rows show a selected root
-with a return trace (`nins=13`) and 81 selected-root native exits on the bad
-argument phase, after collection with a live MT peer. Standalone output was
-also recorded at `/tmp/funf-arm64-topology.tsv` and
+`JOBS=2 tools/ci/arm64_jit_funcf_record_contract.sh` passed its arm64 and
+arm64e assertion builds. The contract runs the topology probe in both target
+profiles. The probe's `nonleaf-function-root-return` rows show a selected
+root with a return trace (`nins=13`) and 81 selected-root native exits on the
+bad-argument phase, after collection with a live MT peer. Standalone output
+was also recorded at `/tmp/funf-arm64-topology.tsv` and
 `/tmp/funf-arm64e-fixed.tsv`.
 
 This validates the one captured-call shape only. It does not establish tail
@@ -45,3 +45,15 @@ now restricted to FUNCF roots; generic roots retain their prior one-result
 early-return rule, and inline child frames outside FUNCF still require the
 previous two-result shape. The semantic root-snapshot replay also checks that
 the next map offset does not precede the current offset before subtracting.
+
+A dedicated C fixture clones the actual FUNCF trace, prototype, IR, and
+snapshots. It confirms semantic and post-RA baseline admission, then rejects
+seven private mutations in each pass: returned-value binding, terminal PC,
+callee-guard PC, CALL argument/result counts, captured C-function identity,
+and a return-slot frame tag. It also verifies that an invalid low `loopref`
+fails closed. Runtime coverage confirms three exit-free native whole-body
+returns across a full collection with a live MT peer and after restoring the
+captured callee, then changes the
+captured callee and observes the exact identity-guard exit before restoring
+and reusing the root. `/tmp/funf-followup-contract-final.log` records the final full
+arm64/arm64e assertion-profile contract run.

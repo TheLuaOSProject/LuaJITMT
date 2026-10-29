@@ -13,6 +13,7 @@ root=$LJ_CI_ROOT
 archive=$LJ_CI_ARCHIVE
 vm_object=$root/src/lj_vm.o
 fixture_source=$root/tests/t-arm64-jit-funcf-record.c
+funcf_call_source=$root/tests/t-arm64-jit-funcf-calls.c
 trace_source=$root/src/lj_trace.c
 asm_source=$root/src/lj_asm.c
 admit_source=$root/src/lj_asm_arm64_admit.h
@@ -169,6 +170,8 @@ build_and_run() {
     "-DEXPECT_PAUTH=$pauth" "-DEXPECT_BRANCH=$branch"
   fixture=$tmpdir/t-arm64-jit-funcf-record-$tag
   lj_ci_compile_fixture "$fixture" "$fixture_source"
+  funcf_call_fixture=$tmpdir/t-arm64-jit-funcf-calls-$tag
+  lj_ci_compile_fixture "$funcf_call_fixture" "$funcf_call_source"
   if test "$tag" = arm64; then
     nm "$vm_object" | grep ' U _lj_trace_enter_root$' >/dev/null
     otool -rv "$vm_object" >"$vm_reloc"
@@ -216,6 +219,7 @@ build_and_run() {
   LUAJIT_MCODE_TEST=R lj_ci_run_fixture 120 "$fixture" randomized
   LUA_PATH="$root/src/?.lua;;" "$root/src/luajit" \
     "$root/bench/jit-topology-probe.lua" >"$tmpdir/topology-$tag.tsv"
+  lj_ci_run_fixture 120 "$funcf_call_fixture" default
 }
 
 build_and_run arm64 '-arch arm64' "$xcflags" arm64 0 0
