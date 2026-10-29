@@ -13876,9 +13876,12 @@ static int lj_trace_arm64_lua_leaf_range(const GCproto *pt,
     }
     pos = next[pos];
   }
-  if (terminal != UINT32_MAX && pos == terminal)
+  if (terminal != UINT32_MAX && pos == terminal) {
+    if (bc_op(words[pos]) == BC_RET0)
+      return bc_a(words[pos]) == 0u && bc_d(words[pos]) == 1u;
     return bc_op(words[pos]) == BC_RET1 && bc_d(words[pos]) == 2u &&
            bc_a(words[pos]) < pt->framesize && defined[bc_a(words[pos])];
+  }
   return pos == join;
 }
 
@@ -13891,6 +13894,7 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
   MSize pos, size, frame, cmp_pos = UINT32_MAX, cond_jump = UINT32_MAX;
   MSize first_arm = 0, second_arm = 0, join = UINT32_MAX;
   MSize first_ret = UINT32_MAX, second_ret = UINT32_MAX;
+  MSize first_ret0 = UINT32_MAX, second_ret0 = UINT32_MAX;
   int early_return = 0;
   MSize next[UINT8_MAX+1u];
   uint8_t first_reach[UINT8_MAX+1u] = {0};
@@ -13983,7 +13987,9 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
             next[p] > join) return 0;
     } else {
       unsigned nfirst = 0, nsecond = 0;
-      if (bc_op(words[size-1u]) != BC_RET0) return 0;
+      if (bc_op(words[size-1u]) != BC_RET0 ||
+          bc_a(words[size-1u]) != 0u || bc_d(words[size-1u]) != 1u)
+        return 0;
       for (p = first_arm; p+1u < size; p++) {
         if (first_reach[p] && second_reach[p]) return 0;
         if (first_reach[p]) {
@@ -14002,7 +14008,18 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
           return 0;
         }
       }
-      if (nfirst != 1u || nsecond != 1u || first_ret == second_ret) return 0;
+      if (first_reach[size-1u] && second_reach[size-1u]) return 0;
+      if (first_reach[size-1u]) first_ret0 = size-1u;
+      if (second_reach[size-1u]) second_ret0 = size-1u;
+      if ((first_ret0 != UINT32_MAX && first_arm != size-1u) ||
+          (second_ret0 != UINT32_MAX && second_arm != size-1u)) return 0;
+      if (!((nfirst == 1u && nsecond == 1u &&
+             first_ret0 == UINT32_MAX && second_ret0 == UINT32_MAX &&
+             first_ret != second_ret) ||
+            (nfirst == 1u && nsecond == 0u &&
+             first_ret0 == UINT32_MAX && second_ret0 == size-1u) ||
+            (nfirst == 0u && nsecond == 1u &&
+             first_ret0 == size-1u && second_ret0 == UINT32_MAX))) return 0;
       early_return = 1;
     }
   }
@@ -14031,9 +14048,11 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
       memcpy(first_defined, defined, frame);
       memcpy(second_defined, defined, frame);
       if (!lj_trace_arm64_lua_leaf_range(pt, words, next, first_arm, join,
-              early_return ? first_ret : UINT32_MAX, size, first_defined) ||
+              early_return ? (first_ret != UINT32_MAX ? first_ret : first_ret0) :
+                UINT32_MAX, size, first_defined) ||
           !lj_trace_arm64_lua_leaf_range(pt, words, next, second_arm, join,
-              early_return ? second_ret : UINT32_MAX, size, second_defined))
+              early_return ? (second_ret != UINT32_MAX ? second_ret : second_ret0) :
+                UINT32_MAX, size, second_defined))
         return 0;
       if (early_return) {
         pos = size-2u;
