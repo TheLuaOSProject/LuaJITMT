@@ -1188,8 +1188,9 @@ int main(void)
 	   lj_trace_test_root_entry_cleanups());
     assert(lj_tg_load_jit_base(tg) == NULL && tracevec_acq(J) == NULL);
 
-    /* Preserve the pre-existing JITERL -> JLOOP tail path: it recovers its
-    ** ITERL startins directly and never enters the strict-root helper. */
+    /* JITERL now attempts admission after its key/control copy. With no
+    ** TraceVec it must release every lease and recover the consumed edge
+    ** through JLOOP without repeating the iterator call or control copy. */
     lj_trace_test_root_entry_reset();
     lj_trace_test_force_startins_retry(1);
     lua_createtable(L, 4, 0);
@@ -1200,8 +1201,11 @@ int main(void)
     call_global(L, "__arm64_root_iter", 1, 1);
     assert(lua_tointeger(L, -1) == 30);
     lua_pop(L, 1);
-    assert(lj_trace_test_root_entry_publishes() == 0);
-    assert(lj_trace_test_root_entry_cleanups() == 0);
+    assert(lj_trace_test_root_entry_publishes() != 0);
+    assert(lj_trace_test_root_entry_publishes() ==
+	   lj_trace_test_root_entry_cleanups());
+    assert(lj_trace_test_root_entry_successes() == 0);
+    assert(lj_trace_test_root_entry_startins_calls() != 0);
     assert(lj_tg_load_jit_base(tg) == NULL && tracevec_acq(J) == NULL);
 
     /* Integer JFORL now attempts strict admission after increment/test/store.
