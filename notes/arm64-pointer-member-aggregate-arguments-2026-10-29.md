@@ -1,8 +1,10 @@
 # ARM64 pointer-member aggregate arguments
 
 The ARM64 FFI path now admits one additional fixed by-value argument shape:
-an ordinary naturally aligned eight-byte struct with exactly one `void *`
-member at offset zero. The planner treats its bytes as an opaque U64 GPR
+an ordinary naturally aligned eight-byte struct with exactly one pointer
+member at offset zero. The fixtures use `void *`; classification treats the
+pointer's bytes as opaque and does not depend on its pointee type. The planner
+treats the complete payload as an opaque U64 GPR
 payload. When X0–X7 are already occupied, the same payload occupies one
 eight-byte stack slot; the following scalar starts at the next slot boundary.
 
