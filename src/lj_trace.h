@@ -81,6 +81,13 @@ LJ_FUNC int lj_trace_arm64_side_parent_snapshot(jit_State *J,
 	struct LJArm64SideParentSnapshot *snapshot);
 LJ_FUNC LJTraceArm64SideParentResult
 lj_trace_arm64_side_parent_revalidate(jit_State *J);
+#if defined(LJ_TRACE_TEST_HELPERS) && LJ_TARGET_ARM64 && \
+    LJ_ARM64_JIT_EXIT_TARGET_SLOTS
+/* Verify retirement rejects a valid side allocation detached from its root's
+** otherwise well-formed sibling chain; restores the live topology afterward. */
+LJ_FUNC int lj_trace_test_arm64_retire_absent_sibling(
+	jit_State *J, TraceNo parent, TraceNo child);
+#endif
 #if defined(LJ_TRACE_TEST_HELPERS) && \
     defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)
 enum {
