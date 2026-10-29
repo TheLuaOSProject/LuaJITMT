@@ -32,37 +32,55 @@ static void run(lua_State *L, const char *source)
   }
 }
 
-static GCtrace *find_side(jit_State *J, GCtrace **parentp, TraceNo *parentno)
+static GCtrace *find_side(lua_State *L, jit_State *J, const char *name,
+                         GCtrace **parentp, TraceNo *parentno)
 {
   MSize n;
+  GCproto *pt;
+  lua_getglobal(L, name);
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  pt = funcproto(funcV(L->top-1));
+  lua_pop(L, 1);
   for (n = 1; n < trace_sizetrace_acq(J); n++) {
     GCtrace *p = traceref_safe(J, (TraceNo)n);
     TraceNo childno;
-    GCtrace *child;
-    IRIns base;
+    GCtrace *selected = NULL;
+    MSize count, i;
     if (!trace_runnable_acq(p, (TraceNo)n) ||
-        trace_root_acq(p) != 0 || trace_nchild_acq(p) != 1)
+        trace_root_acq(p) != 0 || trace_startpt_acq(p) != pt)
       continue;
+    count = trace_nchild_acq(p);
+    if (count == 0 || count >= trace_sizetrace_acq(J)) continue;
     childno = trace_nextside_acq(p);
-    child = traceref_safe(J, childno);
-    if (!trace_runnable_acq(child, childno) ||
-        trace_root_acq(child) != (TraceNo)n ||
-        ((trace_linktype_acq(child) == LJ_TRLINK_LOOP &&
-          (trace_link_acq(child) != childno ||
-           trace_mcloop_acq(child) == 0 ||
-           trace_mcloop_acq(child) >= trace_szmcode_acq(child) ||
-           (trace_mcloop_acq(child) & (sizeof(MCode)-1u)) != 0)) ||
-         (trace_linktype_acq(child) == LJ_TRLINK_ROOT &&
-          (trace_link_acq(child) != (TraceNo)n || trace_mcloop_acq(child) != 0)) ||
-         (trace_linktype_acq(child) != LJ_TRLINK_LOOP &&
-          trace_linktype_acq(child) != LJ_TRLINK_ROOT)))
-      continue;
-    base = trace_ir_acq(child)[REF_BASE];
-    if (base.o != IR_BASE || (TraceNo)base.op1 != (TraceNo)n)
-      continue;
-    *parentp = p;
-    *parentno = (TraceNo)n;
-    return child;
+    for (i = 0; i < count; i++) {
+      GCtrace *child = traceref_safe(J, childno);
+      IRIns base;
+      assert(trace_runnable_acq(child, childno));
+      assert(trace_root_acq(child) == (TraceNo)n);
+      base = trace_ir_acq(child)[REF_BASE];
+      assert(base.o == IR_BASE && (TraceNo)base.op1 == (TraceNo)n);
+      assert(base.op2 < trace_nsnap_acq(p));
+      assert(trace_exittarget_arm64_acq(p, (ExitNo)base.op2) ==
+             trace_mcode_acq(child));
+      if (trace_linktype_acq(child) == LJ_TRLINK_LOOP) {
+        assert(trace_link_acq(child) == childno);
+        assert(trace_mcloop_acq(child) > 0 &&
+               trace_mcloop_acq(child) < trace_szmcode_acq(child) &&
+               (trace_mcloop_acq(child) & (sizeof(MCode)-1u)) == 0);
+        selected = child;
+      } else {
+        assert(trace_linktype_acq(child) == LJ_TRLINK_ROOT &&
+               trace_link_acq(child) == (TraceNo)n &&
+               trace_mcloop_acq(child) == 0);
+      }
+      childno = trace_nextside_acq(child);
+    }
+    assert(childno == 0);
+    if (selected) {
+      *parentp = p;
+      *parentno = (TraceNo)n;
+      return selected;
+    }
   }
   return NULL;
 }
@@ -86,10 +104,10 @@ int main(void)
     "while i<=n do sum=sum+step; i=i+1 end return sum end; "
     "for i=1,8 do assert(kernel(64,1)==64) end; "
     "for i=1,8 do assert(kernel(64,1.25)==80) end");
-  child = find_side(J, &parent, &parentno);
+  child = find_side(L, J, "kernel", &parent, &parentno);
   assert(child != NULL);
   childno = trace_traceno_acq(child);
-  assert(trace_nextside_acq(parent) == childno);
+  assert(trace_root_acq(child) == parentno);
   { uint32_t contract = lj_trace_test_arm64_side_scalar_copy_contract(J, childno);
     if (contract != 0x1fffu) fprintf(stderr, "copied side contract=%#x\n", contract);
     assert(contract == 0x1fffu); }
@@ -150,10 +168,10 @@ int main(void)
   run(L, "local jit=require('jit'); jit.flush(); "
          "for i=1,8 do assert(kernel(64,1)==64) end; "
          "for i=1,8 do assert(kernel(64,1.25)==80) end");
-  child = find_side(J, &parent, &parentno);
+  child = find_side(L, J, "kernel", &parent, &parentno);
   assert(child != NULL);
   childno = trace_traceno_acq(child);
-  assert(trace_nextside_acq(parent) == childno);
+  assert(trace_root_acq(child) == parentno);
   { uint32_t contract = lj_trace_test_arm64_side_scalar_copy_contract(J, childno);
     assert(contract == 0x1fffu); }
   base = trace_ir_acq(child)[REF_BASE];
@@ -178,10 +196,10 @@ int main(void)
          "while i<=n do sum=sum+step; i=i+1 end return sum end; "
          "for i=1,8 do assert(overflow_kernel(64,1,0)==64) end; "
          "for i=1,8 do assert(overflow_kernel(64,1,2147483600)==2147483664) end");
-  child = find_side(J, &parent, &parentno);
+  child = find_side(L, J, "overflow_kernel", &parent, &parentno);
   assert(child != NULL);
   childno = trace_traceno_acq(child);
-  assert(trace_nextside_acq(parent) == childno);
+  assert(trace_root_acq(child) == parentno);
   { uint32_t contract = lj_trace_test_arm64_side_scalar_copy_contract(J, childno);
     if (contract != 0x1fffu) fprintf(stderr, "overflow copied contract=%#x\n", contract);
     assert(contract == 0x1fffu); }

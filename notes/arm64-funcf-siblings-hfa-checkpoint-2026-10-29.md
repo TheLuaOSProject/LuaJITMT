@@ -107,7 +107,29 @@ runtime/archive/fixture bundles are in `ordinary-fixed/`; the failed older
 run remains in `ordinary/`.
 
 The independent-guard FORL child-publication difference remains: these rows
-still have x64-only side witnesses despite matching results. The full
-experimental gate is running at `6968c4cac`, with its exact source recorded
-in `full-gate-source.txt` and output in `full-gate.log`. No complete new gate
-pass is recorded yet.
+still have x64-only side witnesses despite matching results.
+
+## Multiple-child fixture repair
+
+The full gate at production source `6968c4cac` reached scalar side adaptation
+and stopped at `t-arm64-jit-side-adaptation.c:182`. The old fixture required
+exactly one child. The overflow case now publishes two valid children: a
+self-linked loop and another child linked to the root. The recorded topology
+was root 1, head 3, then child 2; the fixture rejected it before inspecting
+either child.
+
+The fixture now selects the named kernel's exact prototype, walks the bounded
+sibling list, checks every child's root identity and native parent-exit edge,
+and selects the intended self-linked loop. It retains native-entry/exit bounds,
+copy-mutation checks, full collection, flush/reuse and type-error checks.
+The focused contract passes with the same runtime/archive and production
+source. This is a test correction, with no runtime admission change.
+
+The original gate source/log are `full-gate-source.txt` and `full-gate.log`.
+The failed archive/runtime, original fixture source, a diagnostic fixture
+binary/source, topology log and successful focused rerun are preserved in
+`full-gate-failure/`. The original temporary fixture executable had already
+been removed by contract cleanup; the preserved diagnostic executable was
+relinked against the saved archive. A continuation from the failed contract
+will complete the remaining gate on unchanged production source. No complete
+new gate pass is recorded yet.
