@@ -18,23 +18,23 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
-- Current verified production checkpoint: `28c9ec72b`. It extends side
-  ancestry beyond the previous 64-level limit, retains inline storage for
-  shallow chains, and reuses recorder-owned storage for deeper chains.
-  Ordered large-list membership validation and descendant-first retirement
-  preserve the lockless architecture. The complete combined gate passes,
-  including actual VM/recorder safepoint runtime execution and all four M7
-  FFI profiles. Focused side contracts pass all four ARM64/arm64e
-  assertion/release profiles through depth 80. The gate checkout is restored
-  to ordinary assertion ARM64 without test helpers. See the
-  [capacity evidence](arm64-deep-side-capacity-2026-10-29.md) and
-  [preceding checkpoint](arm64-deep-callm-integration-2026-10-29.md), whose
-  ordinary ARM64 and strict x86_64 source and original-bytecode corpora each
-  pass all 509 cases. The promoted capacity checkpoint independently passes
-  both 509-case corpora on ordinary assertion ARM64. Later sparse-snapshot and numeric-cdata variadic FFI
-  changes are undergoing combined validation. General Lua call/return,
-  recursion, protected calls, vararg forwarding and remaining FFI
-  restrictions are subsequent work. Full x86_64 parity is not complete.
+- Current verified production checkpoint: `0dc7716c8`. It extends the
+  reusable side-ancestry implementation with sparse parent snapshots,
+  tested side depth 260, and numeric-cdata variadic FFI arguments. No locks
+  are added. The complete combined gate passes, including actual
+  VM/recorder safepoint runtime execution and all four M7 FFI profiles.
+  The gate checkout is restored to ordinary assertion ARM64 without test
+  helpers. Ordinary ARM64 and strict x86_64 builds each pass all 509 source
+  cases and all 509 original-bytecode cases. See the
+  [complete gate](arm64-sparse-ffi-complete-checkpoint-2026-10-29.md),
+  [ordinary builds](arm64-sparse-ffi-integration-2026-10-29.md),
+  [sparse frames](arm64-sparse-side-frame-2026-10-29.md) and
+  [capacity evidence](arm64-deep-side-capacity-2026-10-29.md).
+  Later bounded vararg forwarding, fixed-function open-result calls, binary
+  math and variadic indirect FFI results are undergoing combined validation.
+  Floating numeric loops, general Lua call/return, recursion, protected
+  calls and remaining FFI restrictions are active work. Full x86_64 parity
+  is not complete.
 
 ## Earlier checkpoint records
 

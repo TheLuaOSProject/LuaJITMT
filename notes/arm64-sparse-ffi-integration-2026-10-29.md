@@ -24,8 +24,8 @@ Logs are in `/Users/frityet/Scratch/ljmt-deep-callm-integration-20261029`.
   after the x64 run, no test helpers, profile
   `8eba5c8d02c69c548721a6035fb8487ff55e9d66574ee43f5a7161d3e8be4118`.
 
-The complete combined gate is running separately at exactly `0dc7716c8`.
-This note does not promote that source as fully gate-verified yet. Lua vararg
+The complete combined gate subsequently passed at exactly `0dc7716c8`;
+see `arm64-sparse-ffi-complete-checkpoint-2026-10-29.md`. Lua vararg
 forwarding, fixed-function open-result calls, floating-index numeric loops
 and further FFI combinations remain active work. Full x86_64 parity is not
 complete.
