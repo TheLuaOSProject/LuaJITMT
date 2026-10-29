@@ -8,6 +8,15 @@ jit.off(true, true)
 ffi.cdef[[
 typedef struct { uint32_t lo, hi; } Arm64IntPair;
 typedef struct { float lo, hi; } Arm64FloatPair;
+typedef struct { Arm64FloatPair inner; } Arm64NestedFloatPair;
+typedef struct { float lane[2]; } Arm64ArrayFloatPair;
+typedef struct __attribute__((aligned(8))) {
+  float lo, hi;
+} Arm64OverAlignedNestedPair;
+typedef struct { float head; Arm64OverAlignedNestedPair tail; }
+  Arm64NestedOverAlignedPair;
+typedef union { float lo, hi; } Arm64FloatUnion;
+typedef struct { Arm64FloatUnion inner; } Arm64NestedFloatUnion;
 typedef struct { float value; } Arm64FloatOne;
 typedef struct { double value; } Arm64DoubleOne;
 typedef Arm64FloatPair& Arm64FloatPairRef;
@@ -21,6 +30,12 @@ typedef uint32_t (*Arm64MixedFloatHFAFn)(Arm64MixedFloatHFA);
 typedef uint32_t (*Arm64DoublePairFn)(Arm64DoublePair);
 typedef uint32_t (*Arm64FloatTripleFn)(Arm64FloatTriple);
 typedef double (*Arm64FloatTripleSaltFn)(Arm64FloatTriple, double);
+typedef double (*Arm64NestedFloatPairFn)(Arm64NestedFloatPair, double);
+typedef Arm64NestedFloatPair (*Arm64NestedFloatPairResultFn)(uint32_t);
+typedef double (*Arm64NestedOverAlignedPairFn)(Arm64NestedOverAlignedPair,
+                                                double);
+typedef double (*Arm64NestedFloatUnionFn)(Arm64NestedFloatUnion, double);
+typedef double (*Arm64ArrayFloatPairFn)(Arm64ArrayFloatPair, double);
 typedef double (*Arm64DoubleQuadSaltFn)(Arm64DoubleQuad, double);
 typedef double (*Arm64FloatTripleRefFn)(Arm64FloatTripleRef, double);
 typedef double (*Arm64FloatPairStackFn)(double, double, double, double,
@@ -89,6 +104,8 @@ uint32_t arm64_take_int_pair(Arm64IntPair, uint32_t);
 double arm64_take_int_pair_double_salt(Arm64IntPair, uint32_t);
 uint32_t arm64_take_float_pair(Arm64FloatPair);
 double arm64_take_float_pair_double_salt(Arm64FloatPair, double);
+double arm64_take_nested_float_pair(Arm64NestedFloatPair, double);
+double arm64_take_nested_float_pair_alt(Arm64NestedFloatPair, double);
 double arm64_take_float_one_double_salt(Arm64FloatOne, double);
 double arm64_take_double_one_double_salt(Arm64DoubleOne, double);
 double arm64_take_float_triple_double_salt(Arm64FloatTriple, double);
@@ -221,6 +238,15 @@ _G.__arm64_aligned_result_fn = ffi.cast('Arm64AlignedResultFn', nil)
 _G.__arm64_int_pair_fn = lib.arm64_take_int_pair
 _G.__arm64_float_pair_fn = lib.arm64_take_float_pair
 _G.__arm64_float_pair_double_salt_fn = lib.arm64_take_float_pair_double_salt
+_G.__arm64_nested_float_pair_fn = ffi.cast('Arm64NestedFloatPairFn', nil)
+_G.__arm64_nested_float_pair_result_fn =
+  ffi.cast('Arm64NestedFloatPairResultFn', nil)
+_G.__arm64_nested_overaligned_pair_fn =
+  ffi.cast('Arm64NestedOverAlignedPairFn', nil)
+_G.__arm64_nested_float_union_fn =
+  ffi.cast('Arm64NestedFloatUnionFn', nil)
+_G.__arm64_array_float_pair_fn =
+  ffi.cast('Arm64ArrayFloatPairFn', nil)
 _G.__arm64_float_one_double_salt_fn = lib.arm64_take_float_one_double_salt
 _G.__arm64_double_one_double_salt_fn = lib.arm64_take_double_one_double_salt
 _G.__arm64_float_triple_double_salt_fn = lib.arm64_take_float_triple_double_salt
@@ -1790,7 +1816,69 @@ assert(lib.arm64_aggregate_count(1) == 1440,
   'alternate-signature effects were lost or replayed: ' ..
   tostring(lib.arm64_aggregate_count(1)))
 
+_G.__arm64_run_nested_hfa_probe = function()
+  jit.opt.start('maxtrace=128')
+  local nested_hfa_candidate = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@nested-float-hfa-candidate'))()
+  local nested_hfa_clone = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@nested-float-hfa-clone'))()
+  jit.off(nested_hfa_clone, true)
+  _G.__arm64_nested_hfa_clone = nested_hfa_clone
+  _G.__arm64_nested_hfa_candidate = nested_hfa_candidate
+  _set_nested_hfa_candidate(nested_hfa_candidate)
+  tracked_exit_roots = roots(nested_hfa_candidate)
+  jit.on(nested_hfa_candidate, true)
+  lib.arm64_aggregate_reset()
+  local nested_hfa = ffi.new('Arm64NestedFloatPair')
+  nested_hfa.inner.lo, nested_hfa.inner.hi = 1.25, 2.5
+  local nested_hfa_fn = lib.arm64_take_nested_float_pair
+  local nested_native_before = _nested_hfa_native_count()
+  for pass = 1, 8 do
+    assert(nested_hfa_candidate(16, nested_hfa_fn, nested_hfa, 3.75) ==
+           hfa_oracle(16, nested_hfa_fn, nested_hfa, 3.75),
+           'nested HFA argument disagreed with the interpreted oracle')
+  end
+    assert(_nested_hfa_native_count() > nested_native_before and exits > 0,
+         'nested HFA argument did not publish, enter, and exit its native root')
+  assert(lib.arm64_aggregate_count(62) == 256,
+         'nested HFA C effects were lost or replayed')
+  local nested_before_gc = _nested_hfa_native_count()
+  collectgarbage('collect')
+  tracked_exit_roots = roots(nested_hfa_candidate)
+  exits = 0
+  local nested_gc = ffi.new('Arm64NestedFloatPair')
+  nested_gc.inner.lo, nested_gc.inner.hi = 1.25, 2.5
+  assert(nested_hfa_candidate(32, nested_hfa_fn, nested_gc, 3.75) ==
+         hfa_oracle(32, nested_hfa_fn, nested_gc, 3.75))
+  assert(_nested_hfa_native_count() > nested_before_gc and exits > 0,
+         'nested HFA root did not re-enter and exit after full GC: native='..
+         tostring(_nested_hfa_native_count()-nested_before_gc)..
+         ', exits='..tostring(exits))
+  assert(lib.arm64_aggregate_count(62) == 320,
+         'nested HFA post-GC effects were lost or replayed')
+  exits = 0
+  local nested_alt_fn = lib.arm64_take_nested_float_pair_alt
+  assert(nested_hfa_candidate(32, nested_alt_fn, nested_gc, 3.75) ==
+         hfa_oracle(32, nested_alt_fn, nested_gc, 3.75))
+  assert(exits > 0,
+         'nested HFA alternate callee did not exit the exact native root')
+  assert(lib.arm64_aggregate_count(63) == 64,
+         'nested HFA alternate callee effects were lost or replayed')
+  tracked_exit_roots = nil
+end
 
-assert(stop:send(true, 5))
-local joined, result = peer:join(5)
-assert(joined and result, 'live peer did not stop and join')
+_G.__arm64_finish_peer = function()
+  assert(stop:send(true, 5))
+  local joined, result = peer:join(5)
+  assert(joined and result, 'live peer did not stop and join')
+end
