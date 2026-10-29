@@ -77,14 +77,17 @@ They are not included in the matching-arity parity claim above.
 The inventory's `open-result-callm-loop` closes a separate producer-root
 binding gap: both `values` and `sum` are captured upvalues, and `values(i)` is
 replayed in the numeric loop. The trace can contain same-source-PC producer
-guards from its warm-up and loop halves. When validating a current-half
-CALLM map, both semantic and post-RA walks now ignore the warm-up-half guard
-and select only the guard after `IR_LOOP`. Replay accepts either the existing
-unchanged formal `SLOAD` source or a `VLOAD` that is present in the loop map
-or reconstructed by the exact rooted `UGET` source sequence; in either case
-the producer CALL slot must equal that exact function ref, and its guard must
-bind the same function constant. The independent post-RA walk performs its
-own allocated-ref and source replay checks.
+guards from its warm-up and loop halves. For a current-half CALLM map, both
+semantic and post-RA walks ignore an earlier guard for a dynamic producer:
+its `VLOAD` must be present in the current loop map or reconstructed by the
+exact rooted `UGET` source sequence, and authorized by a current-iteration
+function guard. An unchanged formal producer is the bounded exception: its
+exact `SLOAD` must be a guarded function formal, bytecode replay must prove
+the formal slot unchanged through the producer call, and then a hoisted
+pre-LOOP identity guard remains valid. In either case the producer CALL slot
+must equal the exact function ref and its guard must bind the same function
+constant. The independent post-RA walk performs its own allocated-ref and
+source replay checks.
 
 The native fixture requires the selected FORL root to enter and exit for the
 captured runner, repeats at another bound, then full-GCs and checks native
@@ -106,3 +109,14 @@ captured ARM runtime and module bundle are in
 ordinary TSVs are `ljmt-open-callm-topology-arm64-repro.tsv` and
 `ljmt-open-callm-topology-x64.tsv`. The x86_64 runtime is the frozen
 `dae24b46a` bundle at `ljmt-side-ancestry-20261029/dae-x64/`.
+
+The formal-producer regression is covered by
+`tools/ci/arm64_jit_open_callm_exits_contract.sh`: all four ARM64/ARM64e
+assertion/release profiles passed, each with eight ordinary exit shapes and
+three captured exit shapes. This contract includes the unchanged-formal
+producer, captured producer/consumer swaps, cross-arity CALLM cases, and
+semantic/post-RA source and map negatives. Its log is
+`/Users/frityet/Scratch/ljmt-open-callm-exits-followup-20261029/four-profile-fixed.log`.
+The leaf-contract rerun after this follow-up also passed all four profiles
+with 43 native calls, 186 semantic negatives, and 197 post-RA negatives per
+profile; its log is `leaf-four-profile-fixed.log` in the same directory.

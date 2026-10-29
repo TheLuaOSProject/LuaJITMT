@@ -13788,9 +13788,6 @@ static int arm64_lua_leaf_ir_open_result_inputs(const jit_State *J,
           (const BCIns *)(uintptr_t)(footer>>8) != bc+prodpos ||
           entry->ref < REF_FIRST || entry->ref >= T->nins ||
           entry->ref >= T->snap[s].ref) continue;
-      /* A loop-body producer must be authorized by this iteration's
-      ** function guard, never by the warm-up half's same-PC guard. */
-      if (current_half && entry->ref <= J->loopref) continue;
       guard = ir_load_acq(&T->ir[guardref]);
       if (guard.o != IR_EQ || guard.t.irt != (IRT_FUNC|IRT_GUARD)) continue;
       for (k = 0; k < entry->nent; k++) {
@@ -13805,6 +13802,20 @@ static int arm64_lua_leaf_ir_open_result_inputs(const jit_State *J,
       if (foundfn != 1u ||
           (sourcefn != guard.op1 && sourcefn != guard.op2))
         continue;
+      if (current_half &&
+          !arm64_scalar_ir_ref(T, sourcefn, entry->ref, IRT_FUNC))
+        continue;
+      if (current_half && entry->ref <= J->loopref) {
+        IRIns source = T->ir[sourcefn];
+        if (source.o != IR_SLOAD || source.op1 < J->baseslot ||
+            source.op1-J->baseslot >= parentpt->numparams ||
+            source.t.irt != (IRT_FUNC|IRT_GUARD) ||
+            (source.op2 != IRSLOAD_READONLY &&
+             source.op2 != IRSLOAD_TYPECHECK) ||
+            !arm64_ir_funcf_slot_unchanged(parentpt,
+              source.op1-J->baseslot, prodpos))
+          continue;
+      }
       callee = sourcefn == guard.op1 ? guard.op2 : guard.op1;
       if (!irref_isk(callee) || callee < T->nk || callee >= REF_TRUE ||
           T->ir[callee].o != IR_KGC || irt_type(T->ir[callee].t) != IRT_FUNC)
@@ -18537,9 +18548,6 @@ static int arm64_lua_leaf_postra_open_result_inputs(
           guardref < REF_FIRST || guardref >= v->nins ||
           guardref >= snap_ref_acq(&v->snap[s]))
         continue;
-      /* A loop-body producer must be authorized by this iteration's
-      ** function guard, never by the warm-up half's same-PC guard. */
-      if (current_half && guardref <= loopref) continue;
       guard = ir_load_acq(&v->ir[guardref]);
       if (guard.o != IR_EQ || guard.t.irt != (IRT_FUNC|IRT_GUARD)) continue;
       for (k = 0; k < nent; k++) {
@@ -18553,6 +18561,21 @@ static int arm64_lua_leaf_postra_open_result_inputs(
       }
       if (foundfn != 1u ||
           (sourcefn != guard.op1 && sourcefn != guard.op2)) continue;
+      if (current_half &&
+          !arm64_scalar_postra_ref(v, sourcefn, guardref, IRT_FUNC))
+        continue;
+      if (current_half && guardref <= loopref) {
+        IRIns source = ir_load_acq(&v->ir[sourcefn]);
+        MSize base = 1u+LJ_FR2;
+        if (source.o != IR_SLOAD || source.op1 < base ||
+            source.op1-base >= parentpt->numparams ||
+            source.t.irt != (IRT_FUNC|IRT_GUARD) ||
+            (source.op2 != IRSLOAD_READONLY &&
+             source.op2 != IRSLOAD_TYPECHECK) ||
+            !arm64_postra_funcf_slot_unchanged(parentpt,
+              source.op1-base, prodpos))
+          continue;
+      }
       callee = sourcefn == guard.op1 ? guard.op2 : guard.op1;
       if (!irref_isk(callee) || callee < v->nk || callee >= REF_TRUE ||
           ir_load_acq(&v->ir[callee]).o != IR_KGC ||
