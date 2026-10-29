@@ -13694,9 +13694,17 @@ static int arm64_lua_leaf_ir_open_result_inputs(const jit_State *J,
           !arm64_lua_leaf_callm_pair_source(parentpt, prodpos, 1, nresults))
         return 0;
       {
+        IRIns source = T->ir[sourcefn];
+        int zero_formal_source = leaf->numparams == 0u &&
+          bc_op(producer) == BC_CALL && bc_b(producer) == 0u &&
+          bc_c(producer) == 1u &&
+          source.o == IR_SLOAD && source.t.irt == (IRT_FUNC|IRT_GUARD) &&
+          (source.op2 == IRSLOAD_READONLY ||
+           source.op2 == IRSLOAD_TYPECHECK);
         int input_ok = current_half ?
-          arm64_lua_leaf_ir_open_producer_args(J, T, replay, s, parentpt,
-              prodpos, sourcefn, replayargs, leaf->numparams) :
+          (zero_formal_source ||
+           arm64_lua_leaf_ir_open_producer_args(J, T, replay, s, parentpt,
+              prodpos, sourcefn, replayargs, leaf->numparams)) :
           arm64_lua_leaf_ir_args_at(J, T, candidate, callee, producerargs,
               parentpt, framebase) == sourcefn;
         int eval_ok = input_ok &&
@@ -18263,11 +18271,15 @@ static int arm64_lua_leaf_postra_open_result_inputs(
       nresults = arm64_lua_leaf_return_count(leaf);
       if (!nresults || nresults > ARM64_LUA_LEAF_MAX_RESULTS ||
           !arm64_lua_leaf_callm_pair_source(parentpt, prodpos, 1, nresults) ||
-          (current_half ?
+          (current_half && leaf->numparams == 0u &&
+           (bc_op(producer) != BC_CALL || bc_b(producer) != 0u ||
+            bc_c(producer) != 1u)) ||
+          (current_half && leaf->numparams != 0u ?
            !arm64_lua_leaf_postra_open_producer_args(v, replay, s, parentpt,
               prodpos, sourcefn, replayargs, leaf->numparams) :
-           arm64_lua_leaf_postra_args_at(v, candidate, callee, producerargs,
-              parentpt, framebase) != sourcefn) ||
+           (!current_half &&
+            arm64_lua_leaf_postra_args_at(v, candidate, callee,
+              producerargs, parentpt, framebase) != sourcefn)) ||
           !arm64_lua_leaf_postra_eval_multi(v, leaf,
               current_half ? replayargs : producerargs,
               leaf->sizebc-1u, snap_ref_acq(&v->snap[s]),
