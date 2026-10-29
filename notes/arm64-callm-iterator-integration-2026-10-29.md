@@ -73,3 +73,16 @@ in `callm-iterator-pointer-complete-restoration.log` beside the gate log.
 The pinned `ir-admission` checkout is clean. This result supersedes the
 pending-gate statement above; later deep-side-list and CALLM producer work
 remain outside the gate.
+
+## Independent continuation rebuild
+
+After promotion, the `arm64-parity` continuation was independently rebuilt
+from `a6041d77d` as ordinary assertion ARM64 without test helpers. Its profile
+is `2d9dbcc06dcb6fb789f8fdba9ada4271793786675118049d9c5d36262542306d`.
+Both stock suites pass all 509 cases. The dead-terminal, dead-chain and
+dead-division companions each observe 63 selected exits, and the ordinary
+multi-side topology probe completes. Logs are
+`callm-iterator-pointer-main-{build,stock-source,stock-bytecode,dead-numeric,topology}.log`
+in `/Users/frityet/Scratch/ljmt-side-ancestry-20261029/`.
+This confirms the promoted build separately from the pinned full-gate build;
+it does not include the later deep-chain or CALLM producer work.
