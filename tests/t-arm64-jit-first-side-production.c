@@ -791,6 +791,7 @@ static void expect_forl_intmax_boundary(lua_State *L,
 {
   const lua_Integer start = (lua_Integer)INT32_MAX-1;
   const lua_Integer stop = INT32_MAX;
+  lua_Integer safe_expected;
   lua_Integer expected = call_forl_named(L,
 	"__arm64_first_side_production_forl_oracle", start, stop, 2);
   assert(expected == -(lua_Integer)2*INT32_MAX+1);
@@ -810,6 +811,22 @@ static void expect_forl_intmax_boundary(lua_State *L,
   assert(lj_trace_test_last_exitno() < trace_nsnap_acq(pair->root));
   assert(trace_nchild_acq(pair->root) == 1);
   assert(trace_nextside_acq(pair->root) == pair->childno);
+  safe_expected = call_forl_named(L,
+	"__arm64_first_side_production_forl_oracle", start-1, stop-1, 2);
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  assert(call_forl_named(L, pair->name, start-1, stop-1, 2) == safe_expected);
+  /* stop=INT32_MAX-1 satisfies the child guard's stop+step bound. The safe
+  ** near-boundary operation enters the attached child and exits at its
+  ** ordinary in-body snapshot. */
+  assert(lj_trace_test_root_entry_publishes() > 0);
+  assert(lj_trace_test_root_entry_successes() > 0);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+  assert(lj_trace_test_exit_calls() > 0);
+  assert(lj_trace_test_first_exit_parent() == pair->childno);
+  assert(lj_trace_test_last_exit_parent() == pair->childno);
+  assert(lj_trace_test_first_exitno() < trace_nsnap_acq(pair->child));
+  assert(lj_trace_test_last_exitno() < trace_nsnap_acq(pair->child));
 }
 
 static void expect_unsupported_first_side_closed(lua_State *L, jit_State *J,
