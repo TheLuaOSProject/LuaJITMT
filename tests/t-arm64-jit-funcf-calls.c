@@ -11,6 +11,7 @@
 #include "lualib.h"
 #include "lj_asm.h"
 #include "lj_bc.h"
+#include "lj_dispatch.h"
 #include "lj_gc2.h"
 #include "lj_func.h"
 #include "lj_jit.h"
@@ -54,6 +55,21 @@ static lua_Number invoke_direct(lua_State *L, const char *fn, lua_Number x)
   void *cframe=L->cframe;
   lua_getglobal(L,fn); lua_pushnumber(L,x);
   ljt_lua_pcall(L,1,1,"FUNCF direct call");
+  assert(lua_isnumber(L,-1)); result=lua_tonumber(L,-1); lua_pop(L,1);
+  assert(L->cframe==cframe && lj_tg_load_jit_base(L2TG(L))==NULL &&
+         !lj_tg_in_native_acq(L2TG(L)));
+  return result;
+}
+
+static lua_Number invoke_open(lua_State *L, const char *runner,
+			      const char *fn, const char *producer,
+			      const char *consumer, int n)
+{
+  lua_Number result;
+  void *cframe=L->cframe;
+  lua_getglobal(L,runner); lua_getglobal(L,fn);
+  lua_getglobal(L,producer); lua_getglobal(L,consumer); lua_pushinteger(L,n);
+  ljt_lua_pcall(L,4,1,"FUNCF open CALLM runner");
   assert(lua_isnumber(L,-1)); result=lua_tonumber(L,-1); lua_pop(L,1);
   assert(L->cframe==cframe && lj_tg_load_jit_base(L2TG(L))==NULL &&
          !lj_tg_in_native_acq(L2TG(L)));
@@ -156,6 +172,19 @@ typedef struct MultiFixture {
   SnapNo terminal;
   MSize second_entry;
 } MultiFixture;
+
+typedef struct OpenFixture {
+  GCtrace *live, copy;
+  GCproto *pt, *producerpt, *consumerpt;
+  jit_State *J;
+  IRIns *ir;
+  SnapShot *snap;
+  SnapEntry *map;
+  LJArm64PostRAView view;
+  IRRef nins, semantic_nins, inputref;
+  MSize producer_pos, consumer_pos, return_pos, return_entry;
+  SnapNo return_snap;
+} OpenFixture;
 
 typedef struct TailFixture {
   GCtrace *live, copy;
@@ -601,6 +630,226 @@ static void tail_admission(GCtrace *T, GCfunc *rootfn)
   free(f.ir); free(f.snap); free(f.map);
 }
 
+static void open_reset(OpenFixture *f)
+{
+  GCtrace *T=f->live;
+  GCproto *source=trace_startpt_acq(T);
+  MSize start=proto_bcpos(source,trace_startpc_acq(T));
+  uintptr_t rootlo=(uintptr_t)proto_bc(source);
+  uintptr_t roothi=(uintptr_t)(proto_bc(source)+source->sizebc);
+  ljt_proto_clone_reset(f->pt,source);
+  memcpy(f->ir+T->nk,trace_ir_acq(T)+T->nk,
+         (T->nins-T->nk)*sizeof(IRIns));
+  memcpy(f->snap,trace_snap_acq(T),T->nsnap*sizeof(SnapShot));
+  memcpy(f->map,trace_snapmap_acq(T),T->nsnapmap*sizeof(SnapEntry));
+  for (IRRef r=T->nk;r+1u<T->nins;r++) {
+    IRIns *constant=&f->ir[r];
+    if (constant->o==IR_KNUM) {
+      uintptr_t pc=(uintptr_t)f->ir[r+1u].tv.u64;
+      if (pc>=rootlo && pc<=roothi) {
+        MSize pos=(MSize)((pc-rootlo)/sizeof(BCIns));
+        f->ir[r+1u].tv.u64=u64ptr(&proto_bc(f->pt)[pos]);
+      }
+      r++;
+    }
+  }
+  f->copy=*T; f->copy.ir=f->ir; f->copy.snap=f->snap;
+  f->copy.snapmap=f->map;
+  trace_startpt_rel(&f->copy,f->pt);
+  setmref(f->copy.startpc,&proto_bc(f->pt)[start]);
+  proto_bc(f->pt)[start]=T->startins;
+  for (SnapNo s=0;s<T->nsnap;s++) {
+    SnapShot *snap=&f->snap[s];
+    MSize ofs=snap->mapofs+snap->nent;
+    uint64_t pcbase;
+    memcpy(&pcbase,&f->map[ofs],sizeof(pcbase));
+    {
+      const BCIns *pc=(const BCIns *)(uintptr_t)(pcbase>>8);
+      uintptr_t at=(uintptr_t)pc;
+      if (at>=rootlo && at<roothi) {
+        MSize pos=proto_bcpos(source,pc);
+        assert(pos<source->sizebc);
+        pcbase=u64ptr(&proto_bc(f->pt)[pos])<<8;
+        memcpy(&f->map[ofs],&pcbase,sizeof(pcbase));
+      } else {
+        uintptr_t plo=(uintptr_t)proto_bc(f->producerpt);
+        uintptr_t phi=(uintptr_t)(proto_bc(f->producerpt)+f->producerpt->sizebc);
+        uintptr_t clo=(uintptr_t)proto_bc(f->consumerpt);
+        uintptr_t chi=(uintptr_t)(proto_bc(f->consumerpt)+f->consumerpt->sizebc);
+        assert((at>=plo && at<phi) || (at>=clo && at<chi));
+      }
+    }
+  }
+  memset(f->J,0,sizeof(*f->J));
+  f->J->pt=f->pt; f->J->startpc=trace_startpc_acq(&f->copy);
+  f->J->baseslot=1u+LJ_FR2;
+  f->semantic_nins=f->nins;
+  while (f->semantic_nins>REF_FIRST &&
+         (f->ir[f->semantic_nins-1u].o==IR_NOP ||
+          f->ir[f->semantic_nins-1u].o==IR_RENAME))
+    f->semantic_nins--;
+  f->view=(LJArm64PostRAView){0};
+  f->view.ir=f->ir; f->view.owner=&f->copy; f->view.owner_private=1;
+  f->view.snap=f->snap; f->view.snapmap=f->map;
+  f->view.proto=f->pt; f->view.proto_bc=proto_bc(f->pt);
+  f->view.startpc=f->J->startpc; f->view.nins=f->nins;
+  f->view.nk=T->nk; f->view.nsnap=T->nsnap; f->view.nsnapmap=T->nsnapmap;
+  f->view.spadjust=T->spadjust; f->view.proto_sizebc=f->pt->sizebc;
+  f->view.proto_numparams=f->pt->numparams;
+  f->view.root_topslot=T->topslot; f->view.startins=T->startins;
+}
+
+static int open_admit(OpenFixture *f, int postra)
+{
+  if (postra) return lj_asm_arm64_postra_admit(&f->view,NULL);
+  f->copy.nins=f->semantic_nins;
+  return lj_asm_arm64_ir_admit(f->J,&f->copy,NULL);
+}
+
+static void open_admission(GCtrace *T, GCfunc *producer, GCfunc *consumer)
+{
+  OpenFixture f={0};
+  GCproto *source=trace_startpt_acq(T);
+  unsigned semantic=0, postra_count=0;
+  f.live=T; f.nins=T->nins;
+  f.pt=ljt_proto_clone_alloc(source);
+  f.producerpt=funcproto(producer); f.consumerpt=funcproto(consumer);
+  f.J=calloc(1,sizeof(*f.J));
+  f.ir=calloc(f.nins,sizeof(IRIns));
+  f.snap=malloc(T->nsnap*sizeof(SnapShot));
+  f.map=malloc(T->nsnapmap*sizeof(SnapEntry));
+  assert(f.pt && f.J && f.ir && f.snap && f.map);
+  open_reset(&f);
+  f.producer_pos=UINT32_MAX; f.consumer_pos=UINT32_MAX;
+  f.return_pos=f.pt->sizebc-1u; f.return_snap=UINT16_MAX;
+  {
+    IRRef r;
+    for (r=REF_FIRST;r<f.nins;r++) {
+      IRIns ir=ir_load_acq(&f.ir[r]);
+      if (ir.o==IR_SLOAD && ir.op1==1u+LJ_FR2+2u &&
+          (irt_type(ir.t)==IRT_INT || irt_type(ir.t)==IRT_NUM) &&
+          (ir.t.irt&IRT_GUARD)) f.inputref=r;
+    }
+  }
+  for (MSize p=1;p<f.pt->sizebc;p++) {
+    BCIns ins=(BCIns)la_load32_acq((const uint32_t *)&proto_bc(f.pt)[p]);
+    if (bc_op(ins)==BC_CALL && bc_b(ins)==0u) f.producer_pos=p;
+    if (bc_op(ins)==BC_CALLM) f.consumer_pos=p;
+  }
+  assert(f.producer_pos!=UINT32_MAX &&
+         f.consumer_pos==f.producer_pos+1u && f.inputref);
+  f.return_entry=UINT32_MAX;
+  for (SnapNo s=0;s<T->nsnap;s++) {
+    SnapShot *snap=&f.snap[s];
+    const BCIns *pc=snap_pc(&f.map[snap->mapofs+snap->nent]);
+    if (pc==&proto_bc(f.pt)[f.return_pos]) f.return_snap=s;
+  }
+  assert(f.return_snap!=UINT16_MAX);
+  {
+    SnapShot *snap=&f.snap[f.return_snap];
+    BCIns ret=(BCIns)la_load32_acq((const uint32_t *)&proto_bc(f.pt)[f.return_pos]);
+    MSize slot=1u+LJ_FR2+bc_a(ret);
+    for (MSize i=0;i<snap->nent;i++) {
+      MSize at=snap->mapofs+i;
+      if (snap_slot(f.map[at])==slot) {
+        assert(f.return_entry==UINT32_MAX);
+        f.return_entry=at;
+      }
+    }
+  }
+  assert(f.return_entry!=UINT32_MAX && open_admit(&f,0) && open_admit(&f,1));
+  for (int allocated=0;allocated<2;allocated++) {
+    /* Invalid CALLM arity must fail the copied bytecode/source replay in
+    ** each independent walk, before any caller map is trusted. */
+    open_reset(&f);
+    assert(open_admit(&f,allocated));
+    setbc_c(&proto_bc(f.pt)[f.consumer_pos],1u);
+    if (open_admit(&f,allocated)) assert(0 && "open CALLM arity mutation admitted");
+    if (allocated) postra_count++; else semantic++;
+
+    /* The terminal snapshot must preserve the value replayed from RET1. */
+    open_reset(&f);
+    assert(open_admit(&f,allocated));
+    f.map[f.return_entry]=SNAP(snap_slot(f.map[f.return_entry]),0,f.inputref);
+    if (open_admit(&f,allocated)) assert(0 && "open CALLM result map mutation admitted");
+    if (allocated) postra_count++; else semantic++;
+  }
+  semantic_bad+=semantic; postra_bad+=postra_count;
+  free(f.pt); free(f.J); free(f.ir); free(f.snap); free(f.map);
+}
+
+static void open_native_case(lua_State *L, const char *candidate,
+                             const char *oracle, const char *producer,
+                             const char *consumer, const char *oracleproducer,
+                             const char *oracleconsumer,
+                             const char *badproducer, const char *oraclebadproducer)
+{
+  GCfunc *open=global_lfunc(L,candidate);
+  GCtrace *T=NULL;
+  lj_trace_test_reset_exittab_stats();
+  setnilV(&L2J(L)->errinfo);
+  assert(hotcount_setl(G(L),L,proto_bc(funcproto(open))+1,HOTCOUNT_CALL));
+  for (unsigned i=0;i<256&&!T;i++) {
+    lua_Number actual=invoke_open(L,"funcf_open_run",candidate,
+                                  producer,consumer,64);
+    lua_Number expected=invoke_open(L,"funcf_open_run",oracle,
+                                    oracleproducer,oracleconsumer,64);
+    assert(actual==expected);
+    T=funcf_trace(L,open);
+  }
+  if (!T || T->linktype!=LJ_TRLINK_RETURN ||
+      !trace_runnable_acq(T,T->traceno)) {
+    GCproto *pt=funcproto(open);
+    fprintf(stderr,"open CALLM root not native: %s pt=%p size=%u flags=%u bc0=%u aborts=%u last=%u\n",
+      candidate,(void *)pt,(unsigned)pt->sizebc,(unsigned)pt->flags,
+      (unsigned)bc_op(proto_bc(pt)[0]),lj_trace_test_abort_count(),
+      lj_trace_test_last_abort_error());
+    assert(0 && "open CALLM root publication required");
+  }
+  open_admission(T,global_lfunc(L,producer),global_lfunc(L,consumer));
+  MCode *saved_mcode=trace_mcode_acq(T);
+  MSize saved_size=trace_szmcode_acq(T);
+  uint8_t *saved_bytes=(uint8_t *)malloc(saved_size);
+  assert(saved_mcode && saved_size && saved_bytes);
+  memcpy(saved_bytes,saved_mcode,saved_size);
+  lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+  for (int i=0;i<4;i++)
+    assert(invoke_open(L,"funcf_open_run",candidate,producer,consumer,16)==
+           invoke_open(L,"funcf_open_run",oracle,oracleproducer,oracleconsumer,16));
+  assert(lj_trace_test_root_entry_successes()>0 &&
+         lj_trace_test_exit_calls()==0);
+  native_returns++;
+  lua_gc(L,LUA_GCCOLLECT,0);
+  assert(trace_runnable_acq(T,T->traceno) && trace_mcode_acq(T)==saved_mcode &&
+         trace_szmcode_acq(T)==saved_size &&
+         memcmp(saved_bytes,saved_mcode,saved_size)==0);
+  lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+  assert(invoke_open(L,"funcf_open_run",candidate,producer,consumer,16)==
+         invoke_open(L,"funcf_open_run",oracle,oracleproducer,oracleconsumer,16));
+  assert(lj_trace_test_root_entry_successes()>0 &&
+         lj_trace_test_exit_calls()==0);
+  native_returns++;
+  if (badproducer) {
+    lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+    assert(invoke_open(L,"funcf_open_run",candidate,badproducer,consumer,16)==
+           invoke_open(L,"funcf_open_run",oracle,oraclebadproducer,oracleconsumer,16));
+    assert(lj_trace_test_root_entry_successes()>0 &&
+           lj_trace_test_exit_calls()>0 &&
+           lj_trace_test_first_exit_parent()==T->traceno &&
+           lj_trace_test_first_exitno()==function_identity_exit(T,NULL));
+    native_identity_exits++;
+    lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+    assert(invoke_open(L,"funcf_open_run",candidate,producer,consumer,16)==
+           invoke_open(L,"funcf_open_run",oracle,oracleproducer,oracleconsumer,16));
+    assert(lj_trace_test_root_entry_successes()>0 &&
+           lj_trace_test_exit_calls()==0 &&
+           trace_mcode_acq(T)==saved_mcode &&
+           memcmp(saved_bytes,saved_mcode,saved_size)==0);
+    native_returns++;
+  }
+  free(saved_bytes);
+}
+
 enum {
   M_RETURN_VALUE, M_RETURN_PC, M_CALL_PC, M_CALL_ARITY, M_CALL_RESULT_COUNT,
   M_CAPTURED_CFUNC, M_RETURN_FRAME, M_CHILD_SECOND_VALUE, M_COUNT
@@ -784,6 +1033,47 @@ int main(void)
     "local pair_oracle_target=function(x) return x*.5,x+1.25 end; "
     "funcf_pair_oracle=function(x) local a,b=pair_oracle_target(x); return a+b end; "
     "function funcf_multi_run(fn,x) return fn(x) end; "
+    "local open_producer=function(x) return x,.25,.5 end; "
+    "local open_producer_one=function(x) return x+.5 end; "
+    "local open_producer_two=function(x) return x+.5,.25 end; "
+    "local oracle_open_producer=function(x) return x,.25,.5 end; "
+    "local oracle_open_producer_one=function(x) return x+.5 end; "
+    "local oracle_open_producer_two=function(x) return x+.5,.25 end; "
+    "local open_consumer_one=function(a) return a*.5 end; "
+    "local open_consumer_two=function(a,b) return a+b end; "
+    "local open_consumer=function(a,b,c) return a+b+c end; "
+    "local oracle_open_consumer_one=function(a) return a*.5 end; "
+    "local oracle_open_consumer_two=function(a,b) return a+b end; "
+    "local oracle_open_consumer=function(a,b,c) return a+b+c end; "
+    "local open_bad_producer=function(x) return x+.25,.25,.5 end; "
+    "local oracle_open_bad_producer=function(x) return x+.25,.25,.5 end; "
+    "funcf_open_producer=open_producer; funcf_open_consumer=open_consumer; "
+    "funcf_open_producer_one=open_producer_one; "
+    "funcf_open_producer_two=open_producer_two; "
+    "funcf_open_consumer_one=open_consumer_one; "
+    "funcf_open_consumer_two=open_consumer_two; "
+    "funcf_open_oracle_producer=oracle_open_producer; "
+    "funcf_open_oracle_producer_one=oracle_open_producer_one; "
+    "funcf_open_oracle_producer_two=oracle_open_producer_two; "
+    "funcf_open_oracle_consumer=oracle_open_consumer; "
+    "funcf_open_oracle_consumer_one=oracle_open_consumer_one; "
+    "funcf_open_oracle_consumer_two=oracle_open_consumer_two; "
+    "funcf_open_bad_producer=open_bad_producer; "
+    "funcf_open_oracle_bad_producer=oracle_open_bad_producer; "
+    "funcf_open_candidate=function(producer,consumer,x) "
+    "local y=consumer(producer(x)); return y+.125 end; "
+    "funcf_open_candidate_one=function(producer,consumer,x) "
+    "local y=consumer(producer(x)); return y+.125 end; "
+    "funcf_open_candidate_two=function(producer,consumer,x) "
+    "local y=consumer(producer(x)); return y+.125 end; "
+    "funcf_open_oracle=function(producer,consumer,x) "
+    "local y=consumer(producer(x)); return y+.125 end; "
+    "funcf_open_oracle_one=function(producer,consumer,x) "
+    "local y=consumer(producer(x)); return y+.125 end; "
+    "funcf_open_oracle_two=function(producer,consumer,x) "
+    "local y=consumer(producer(x)); return y+.125 end; "
+    "funcf_open_run=function(fn,p,c,n) local sum=0; "
+    "for i=1,n do sum=sum+fn(p,c,i) end; return sum end; "
     "funcf_oracle=function(x) return x*.25+.75 end; "
     "function funcf_run(fn,n) local sum=.5; "
     "for i=1,n do sum=sum+fn(i+.5) end; return sum end; "
@@ -791,12 +1081,20 @@ int main(void)
     "jit.off(set_target,true); jit.off(funcf_multi_run,true); "
     "jit.off(funcf_multi_oracle,true); jit.flush(); "
     "jit.off(funcf_pair_oracle,true); "
+    "jit.off(funcf_open_oracle,true); jit.off(funcf_open_run,true); "
+    "jit.off(funcf_open_oracle_one,true); jit.off(funcf_open_oracle_two,true); "
+    "jit.off(oracle_open_producer_one,true); jit.off(oracle_open_producer_two,true); "
+    "jit.off(oracle_open_producer,true); jit.off(oracle_open_consumer_one,true); "
+    "jit.off(oracle_open_consumer_two,true); jit.off(oracle_open_consumer,true); "
+    "jit.off(oracle_open_bad_producer,true); "
     "jit.opt.start('hotloop=1',"
     "'hotexit=1','maxtrace=128'); jit.on(); "
     "jit.on(funcf_candidate,true); "
     "jit.on(funcf_readonly_candidate,true); "
     "jit.on(funcf_multi_candidate,true); "
-    "jit.on(funcf_pair_candidate,true)");
+    "jit.on(funcf_pair_candidate,true); "
+    "jit.on(funcf_open_candidate,true); "
+    "jit.on(funcf_open_candidate_one,true); jit.on(funcf_open_candidate_two,true)");
   lua_pushcfunction(L,c_target); lua_setglobal(L,"c_target");
   {
     GCfunc *pair=global_lfunc(L,"funcf_pair_candidate");
@@ -847,6 +1145,16 @@ int main(void)
     lua_getglobal(L,"c_target"); assert(tvisfunc(L->top-1));
     admission(PT,L,funcV(L->top-1)); lua_pop(L,1);
   }
+  open_native_case(L,"funcf_open_candidate_one","funcf_open_oracle_one",
+    "funcf_open_producer_one","funcf_open_consumer_one",
+    "funcf_open_oracle_producer_one","funcf_open_oracle_consumer_one",NULL,NULL);
+  open_native_case(L,"funcf_open_candidate_two","funcf_open_oracle_two",
+    "funcf_open_producer_two","funcf_open_consumer_two",
+    "funcf_open_oracle_producer_two","funcf_open_oracle_consumer_two",NULL,NULL);
+  open_native_case(L,"funcf_open_candidate","funcf_open_oracle",
+    "funcf_open_producer","funcf_open_consumer",
+    "funcf_open_oracle_producer","funcf_open_oracle_consumer",
+    "funcf_open_bad_producer","funcf_open_oracle_bad_producer");
   GCfunc *candidate=global_lfunc(L,"funcf_candidate");
   GCtrace *T=NULL;
   for (unsigned i=0;i<8&&!T;i++) {
