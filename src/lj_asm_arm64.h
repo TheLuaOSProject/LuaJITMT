@@ -8,6 +8,7 @@
 
 /* -- Register allocator extensions --------------------------------------- */
 
+
 /* Allocate a register with a hint. */
 static Reg ra_hintalloc(ASMState *as, IRRef ref, Reg hint, RegSet allow)
 {
@@ -528,11 +529,40 @@ static int asm_fuseorshift(ASMState *as, IRIns *ir)
 /* Reconstruct the fixed CALLXS ABI plan used by the independent admission
 ** walkers. The plan is transient and only steers this call's argument setup. */
 #if LJ_HASJIT_FFI_CALLXS
+/* Darwin unnamed scalar arguments use eight-byte stack slots. */
+static int asm_callx_vararg_stack_plan(ASMState *as, const CCallInfo *ci,
+				       const LJArm64ABISignature *abi,
+				       IRRef *args, uint16_t *offsets,
+				       unsigned *sizep)
+{
+  unsigned narg = CCI_XNARGS(ci), first, offset = abi->stack_size, i;
+  if (abi->nargs > narg) return 0;
+  if (abi->nargs == narg) {
+    *sizep = offset;
+    return 1;
+  }
+  if (args[abi->nargs] != 0) return 0;
+  first = abi->nargs+1u;
+  for (i = first; i < narg; i++) {
+    IRType type;
+    if (args[i] == 0) return 0;
+    type = irt_type(as->ir[args[i]].t);
+    if (type != IRT_INT && type != IRT_U32 && type != IRT_NUM &&
+	type != IRT_I64 && type != IRT_U64) return 0;
+    offset = (offset+7u)&~7u;
+    if (offset > UINT16_MAX-8u) return 0;
+    if (offsets) offsets[i] = (uint16_t)offset;
+    offset += 8u;
+  }
+  *sizep = offset;
+  return 1;
+}
+
 static int asm_callx_abi(ASMState *as, IRIns *ir, const CCallInfo *ci,
+                        IRRef *args,
                         LJArm64ABISignature *abi, unsigned stage)
 {
   int ok;
-  if (ci->flags & CCI_VARARG) return 0;
   ok = arm64_callxs_signature_for_call(ctype_ctsG(J2G(as->J)), as->ir,
 	 as->T->nk, as->orignins, (IRRef)(ir-as->ir), abi, NULL);
 #if defined(LJ_TRACE_TEST_HELPERS)
@@ -545,9 +575,22 @@ static int asm_callx_abi(ASMState *as, IRIns *ir, const CCallInfo *ci,
 #endif
   /* A transient CType read failure must not select flattened lowering: that
   ** could split a partially spilled HFA even if post-RA admission succeeds. */
-  if (LJ_UNLIKELY(!ok || abi->is_vararg ||
-      abi->nargs + (unsigned)arm64_callxs_result_indirect(abi) !=
-        CCI_XNARGS(ci))) {
+  if (LJ_UNLIKELY(!ok)) {
+    if (ci->flags & CCI_VARARG) return 0;
+    setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
+    lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
+  }
+  if (LJ_UNLIKELY(abi->is_vararg != ((ci->flags & CCI_VARARG) != 0))) {
+    if (ci->flags & CCI_VARARG) return 0;
+    setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
+    lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
+  }
+  if (abi->is_vararg) {
+    unsigned stack_size;
+    if (!asm_callx_vararg_stack_plan(as, ci, abi, args, NULL, &stack_size))
+      return 0;
+  } else if (LJ_UNLIKELY(abi->nargs +
+	       (unsigned)arm64_callxs_result_indirect(abi) != CCI_XNARGS(ci))) {
     setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
     lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
   }
@@ -745,7 +788,8 @@ static void asm_callx(ASMState *as, IRIns *ir)
   ci.flags = asm_callx_flags(as, ir);
   asm_collectargs(as, ir, &ci, args);
 #if LJ_HASJIT_FFI_CALLXS
-  if (asm_callx_abi(as, ir, &ci, &abi, 2)) {
+  memset(stack_offsets, 0xff, sizeof(stack_offsets));
+  if (asm_callx_abi(as, ir, &ci, args, &abi, 2)) {
     if (arm64_callxs_result_indirect(&abi)) {
       if (!CCI_XNARGS(&ci) || args[0] == 0) {
 	setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
@@ -758,6 +802,14 @@ static void asm_callx(ASMState *as, IRIns *ir)
     for (i = 0; i < abi.nargs; i++)
       stack_offsets[i] = abi.arg[i].reg == LJ_ARM64_ABI_STACK ?
                         abi.arg[i].stack_offset : UINT16_MAX;
+    if (abi.is_vararg) {
+      unsigned stack_size;
+      if (!asm_callx_vararg_stack_plan(as, &ci, &abi, args, stack_offsets,
+					       &stack_size)) {
+	setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
+	lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
+      }
+    }
     offsets = stack_offsets;
   }
 #endif
@@ -2346,8 +2398,17 @@ static Reg asm_setup_callx_slots(ASMState *as, IRIns *ir,
 				const CCallInfo *ci)
 {
   LJArm64ABISignature abi;
-  if (asm_callx_abi(as, ir, ci, &abi, 1)) {
-    int32_t nslots = (int32_t)(((MSize)abi.stack_size+3u) >> 2);
+  IRRef args[CCI_NARGS_MAX*2];
+  unsigned stack_size;
+  asm_collectargs(as, ir, ci, args);
+  if (asm_callx_abi(as, ir, ci, args, &abi, 1)) {
+    stack_size = abi.stack_size;
+    if (abi.is_vararg &&
+	!asm_callx_vararg_stack_plan(as, ci, &abi, args, NULL, &stack_size)) {
+      setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
+      lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
+    }
+    int32_t nslots = (int32_t)(((MSize)stack_size+3u) >> 2);
     if (nslots > as->evenspill) as->evenspill = nslots;
     return REGSP_HINT(irt_isfp(ir->t) ? RID_FPRET : RID_RET);
   }

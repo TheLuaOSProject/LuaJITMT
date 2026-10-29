@@ -6,7 +6,7 @@
 
 typedef void (*va_observer)(unsigned id);
 static va_observer observer;
-static unsigned call_count[10];
+static unsigned call_count[12];
 
 void arm64_va_install_observer(va_observer fn)
 {
@@ -172,4 +172,36 @@ double arm64_va_ordinary_consumer(int32_t fixed, ...)
   va_end(ap);
   return fixed == 17 && value >= 0.5 && value < 100.5 ?
     (double)fixed + value : -9.0;
+}
+
+double arm64_va_cdata_tail(uint32_t fixed, ...)
+{
+  va_list ap;
+  int8_t signed_byte;
+  double promoted_float;
+  uint16_t unsigned_half;
+  double direct_double;
+  long long signed_wide;
+  int32_t signed_word;
+  double second_double;
+  int8_t second_byte;
+  uint64_t unsigned_wide;
+  note(10);
+  va_start(ap, fixed);
+  signed_byte = (int8_t)va_arg(ap, int);
+  promoted_float = va_arg(ap, double);
+  unsigned_half = (uint16_t)va_arg(ap, int);
+  direct_double = va_arg(ap, double);
+  signed_wide = va_arg(ap, long long);
+  signed_word = va_arg(ap, int);
+  second_double = va_arg(ap, double);
+  second_byte = (int8_t)va_arg(ap, int);
+  unsigned_wide = va_arg(ap, uint64_t);
+  va_end(ap);
+  if (fixed != 23 || signed_byte != -17 || promoted_float != 2.5 ||
+      unsigned_half != 31 || direct_double != 3.25 ||
+      signed_wide != 0x12345678LL || signed_word != 47 ||
+      second_double != 4.5 || second_byte != -9 ||
+      unsigned_wide != UINT64_C(0x23456789)) return -10.0;
+  return 88.25;
 }
