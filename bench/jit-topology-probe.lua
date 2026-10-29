@@ -71,6 +71,32 @@ local cases = {
     phases = {{48}, {64}},
   },
   {
+    name = 'independent-two-root-sides',
+    source = [[return function(x,y,n)
+      local sum=.5
+      for i=1,n do
+        if x==1 then sum=sum+i*.25 end
+        if y==1 then sum=sum-i*.5 end
+      end
+      return sum
+    end]],
+    phases = {{0,0,64}, {1,0,64}, {0,1,64}, {1,0,48}, {0,1,48}},
+  },
+  {
+    name = 'independent-three-root-sides',
+    source = [[return function(x,y,z,n)
+      local sum=.5
+      for i=1,n do
+        if x==1 then sum=sum+i*.25 end
+        if y==1 then sum=sum-i*.5 end
+        if z==1 then sum=sum+i*.75 end
+      end
+      return sum
+    end]],
+    phases = {{0,0,0,64}, {1,0,0,64}, {0,1,0,64}, {0,0,1,64},
+      {1,0,0,48}, {0,1,0,48}, {0,0,1,48}},
+  },
+  {
     name = 'two-exit-loop-sides',
     source = [[return function(mode,n)
       local sum=0
