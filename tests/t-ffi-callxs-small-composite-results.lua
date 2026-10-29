@@ -18,15 +18,19 @@ typedef struct { struct { uint16_t lo, hi; } half; uint32_t tag; } SmallNested;
 typedef struct { uint32_t tag; float value; } SmallMixed;
 typedef struct { struct { float lo, hi; } inner; } SmallNestedHFA;
 typedef struct { struct { float lane[2]; } inner; } SmallArrayHFA;
+typedef struct { void *value; } SmallPointerResult;
 SmallNested arm64_return_nested_int(uint32_t);
 SmallMixed arm64_return_mixed(uint32_t);
 SmallNestedHFA arm64_return_nested_float_pair(uint32_t);
 SmallArrayHFA arm64_return_array_float_pair(uint32_t);
+SmallPointerResult arm64_return_pointer_member(uint32_t);
+SmallPointerResult arm64_return_pointer_member_alt(uint32_t);
 uint32_t arm64_return_scalar(uint32_t);
 void arm64_aggregate_reset(void);
 uint32_t arm64_aggregate_count(uint32_t);
 ]]
 local lib = ffi.load(assert(os.getenv('LJ_ARM64_INT_AGGREGATE_SO')))
+local pointer_seen = { null = false, nonnull = false }
 local cases = {
   {'nested', 'SmallNested', lib.arm64_return_nested_int, 67,
    function(v, n)
@@ -40,6 +44,14 @@ local cases = {
    function(v, n)
      return v.inner.lane[0] == n+.25 and v.inner.lane[1] == n+.5
    end},
+  {'pointer-member', 'SmallPointerResult',
+   lib.arm64_return_pointer_member, 74,
+   function(a, b)
+     if a.value == nil then pointer_seen.null = true
+     else pointer_seen.nonnull = true end
+     return true
+   end,
+   lib.arm64_return_pointer_member_alt},
 }
 
 local function source()
@@ -97,11 +109,23 @@ for _, case in ipairs(cases) do
     local b, br = oracle(n, case[3])
     assert(a == b and a == .5+n*(n+1)/2)
     assert(ffi.istype(case[2], ar) and ffi.istype(case[2], br))
-    assert(case[5](ar, n) and case[5](br, n))
+    if case[1] == 'pointer-member' then
+      assert(ar.value == br.value and case[5](ar, n) and case[5](br, n))
+    else
+      assert(case[5](ar, n) and case[5](br, n))
+    end
   end
   jit.off(compare, true)
-  for pass = 1, 8 do compare(64) end
-  assert(lib.arm64_aggregate_count(case[4]) == 1024)
+  for pass = 1, 8 do
+    compare(case[1] == 'pointer-member' and
+            (pass % 2 == 0 and 64 or 63) or 64)
+  end
+  local warm_effects = case[1] == 'pointer-member' and 1016 or 1024
+  assert(lib.arm64_aggregate_count(case[4]) == warm_effects)
+  if case[1] == 'pointer-member' then
+    assert(pointer_seen.null and pointer_seen.nonnull,
+           'pointer result did not preserve both NULL and non-NULL values')
+  end
   local root = assert(loop_trace(candidate), 'result loop did not publish')
   assert(has_callxs(root), 'selected result root has no CALLXS')
   local code, address, loop = util.tracemc(root)
@@ -113,12 +137,19 @@ for _, case in ipairs(cases) do
   collectgarbage('collect')
   compare(32)
   assert(exits > 0, 'selected result root did not exit after GC')
-  assert(lib.arm64_aggregate_count(case[4]) == 1088)
+  assert(lib.arm64_aggregate_count(case[4]) == warm_effects+64)
   local gc_exits = exits
   exits = 0
-  local a, ar = candidate(32, lib.arm64_return_scalar)
-  local b, br = oracle(32, lib.arm64_return_scalar)
-  assert(a == b and ar == br and type(ar) == 'number')
+  local alternate = case[6] or lib.arm64_return_scalar
+  local a, ar = candidate(32, alternate)
+  local b, br = oracle(32, alternate)
+  if case[6] then
+    assert(ffi.istype(case[2], ar) and ffi.istype(case[2], br) and
+           ar.value == br.value and case[5](ar, br),
+           'alternate pointer result disagreed with oracle')
+  else
+    assert(a == b and ar == br and type(ar) == 'number')
+  end
   assert(exits > 0, 'alternate result callee did not exit selected root')
   local code_after, address_after, loop_after = util.tracemc(root)
   assert(loop_trace(candidate) == root and has_callxs(root))

@@ -37,6 +37,7 @@ static unsigned native_sret_finishes;
 static GCproto *aggregate_candidate_pt;
 static GCproto *result_candidate_pt[9];
 static GCproto *active_result_candidate_pt;
+static GCproto *pointer_result_candidate_pt;
 static GCproto *sret_candidate_pt;
 static GCproto *hfa_candidate_pt;
 static unsigned hfa_native_finishes;
@@ -122,6 +123,13 @@ static int set_result_candidate(lua_State *L)
   assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
   active_result_candidate_pt = funcproto(funcV(L->top-1));
   result_candidate_pt[width] = active_result_candidate_pt;
+  return 0;
+}
+
+static int set_pointer_result_candidate(lua_State *L)
+{
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  pointer_result_candidate_pt = funcproto(funcV(L->top-1));
   return 0;
 }
 
@@ -1060,10 +1068,14 @@ static void test_aggregate_signatures(lua_State *L)
   assert_integer_aggregate_result_signature(L, "__arm64_return_u64_fn", 8);
   assert_integer_aggregate_result_signature(L, "__arm64_return_nested_int_fn", 8);
   assert_integer_aggregate_result_signature(L, "__arm64_return_mixed_fn", 8);
+  assert_integer_aggregate_result_signature(L,
+    "__arm64_pointer_member_result_fn", 8);
   assert_integer_aggregate_result_signature(L, "__arm64_nested_mixed_result_fn", 8);
   assert_unsupported_aggregate_signature(L, "__arm64_integer_array_result_fn");
   assert_unsupported_aggregate_signature(L, "__arm64_integer_array_result24_fn");
-  assert_unsupported_aggregate_signature(L, "__arm64_pointer_member_result_fn");
+  assert_unsupported_aggregate_signature(L, "__arm64_pointer_member_arg_fn");
+  assert_unsupported_aggregate_signature(L,
+    "__arm64_pointer_member_sret_result_fn");
   assert_integer_aggregate_result_signature(L, "__arm64_result_depth31_fn", 1);
   assert_unsupported_aggregate_signature(L, "__arm64_result_depth32_fn");
   assert_indirect_aggregate_result_signature(L,
@@ -1071,10 +1083,15 @@ static void test_aggregate_signatures(lua_State *L)
   assert_indirect_aggregate_many_signature(L);
   {
     CTState *cts = ctype_ctsG(G(L));
+    LJArm64ABISignature abi;
     CTypeID id = global_cdata_ctype(L, "__arm64_nested_int_result_type");
     assert(lj_ccall_arm64_small_aggregate_result_class(cts, id, NULL, NULL));
     id = global_cdata_ctype(L, "__arm64_mixed_result_type");
     assert(lj_ccall_arm64_small_aggregate_result_class(cts, id, NULL, NULL));
+    id = global_cdata_ctype(L, "__arm64_pointer_member_result_fn");
+    assert(lj_ccall_arm64_signature(cts, id, &abi));
+    assert(lj_ccall_arm64_small_aggregate_result_class(cts,
+      abi.result_declared_id, NULL, NULL));
   }
   assert_hfa_result_signature(L, "__arm64_return_float_hfa_fn", 4, 1);
   assert_hfa_result_signature(L, "__arm64_return_double_hfa_fn", 8, 1);
@@ -1673,6 +1690,11 @@ static void test_live_integer_result_admission(lua_State *L, GCtrace *T,
   copy_trace_ir(copy, fx.good, nk, nins);
   copy[store].t.irt = type == IRT_U8 ? IRT_U16 : IRT_U8;
   assert(!semantic_accepts(J, &fx.semantic, copy, nins, semantic_nins));
+  if (trace_startpt_acq(T) == pointer_result_candidate_pt) {
+    copy_trace_ir(copy, fx.good, nk, nins);
+    copy[call].t.irt = IRT_PTR;
+    assert(!semantic_accepts(J, &fx.semantic, copy, nins, semantic_nins));
+  }
   copy_trace_ir(copy, fx.good, nk, nins);
   copy[box].op1 = badctype;
   assert(!semantic_accepts(J, &fx.semantic, copy, nins, semantic_nins));
@@ -1747,6 +1769,13 @@ static void test_live_integer_result_admission(lua_State *L, GCtrace *T,
   postra.ir = fx.postra;
   fx.postra[store].t.irt = type == IRT_U8 ? IRT_U16 : IRT_U8;
   assert(!lj_asm_arm64_postra_admit(&postra, &postra_nins));
+	if (trace_startpt_acq(T) == pointer_result_candidate_pt) {
+	  copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
+	  postra = fx.view;
+	  postra.ir = fx.postra;
+	  fx.postra[call].t.irt = IRT_PTR;
+	  assert(!lj_asm_arm64_postra_admit(&postra, &postra_nins));
+	}
 	copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
 	postra = fx.view;
 	postra.ir = fx.postra;
@@ -1839,6 +1868,13 @@ static void test_live_integer_result_admission(lua_State *L, GCtrace *T,
   postra.ir = fx.postra;
   fx.postra[store].op2 = REF_BASE;
   assert(!lj_asm_arm64_postra_admit(&postra, &postra_nins));
+  if (trace_startpt_acq(T) == pointer_result_candidate_pt) {
+    copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
+    postra = fx.view;
+    postra.ir = fx.postra;
+    fx.postra[call].r = RID_D0;
+    assert(!lj_asm_arm64_postra_admit(&postra, &postra_nins));
+  }
 
   fx.J = NULL;
   arm64_fixture_free(&fx);
@@ -2042,6 +2078,8 @@ int main(int argc, char **argv)
   lua_setglobal(L, "_nested_hfa_array_native_count");
   lua_pushcfunction(L, set_result_candidate);
   lua_setglobal(L, "_set_result_candidate");
+  lua_pushcfunction(L, set_pointer_result_candidate);
+  lua_setglobal(L, "_set_pointer_result_candidate");
   lua_pushcfunction(L, set_sret_candidate);
   lua_setglobal(L, "_set_sret_candidate");
   lua_pushcfunction(L, get_sret_native_count);
@@ -2356,7 +2394,7 @@ int main(int argc, char **argv)
   }
   {
     unsigned which;
-    for (which = 1; which <= 2; which++) {
+    for (which = 1; which <= 3; which++) {
       GCproto *pt;
       GCtrace *T;
       jit_State *J = G2J(G(L));
