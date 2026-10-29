@@ -69,6 +69,8 @@ enum {
   ARM64_RETURN_DOUBLE_QUAD_HFA,
   ARM64_FLOAT_TRIPLE_SALT,
   ARM64_DOUBLE_QUAD_SALT,
+  ARM64_FLOAT_PAIR_STACK,
+  ARM64_FLOAT_PAIR_STACK_ALT,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -138,6 +140,24 @@ LJ_EXPORT double arm64_take_double_quad_double_salt(arm64_double_quad value,
 {
   calls[ARM64_DOUBLE_QUAD_SALT]++;
   return value.x + value.y*2.0 + value.z*3.0 + value.w*4.0 + salt;
+}
+
+LJ_EXPORT double arm64_take_float_pair_stack(double a, double b, double c,
+					     double d, double e, double f,
+					     double g, double h,
+					     arm64_float_pair value, double salt)
+{
+  calls[ARM64_FLOAT_PAIR_STACK]++;
+  return a+b+c+d+e+f+g+h+(double)value.lo+2.0*(double)value.hi+salt;
+}
+
+LJ_EXPORT double arm64_take_float_pair_stack_alt(double a, double b, double c,
+						 double d, double e, double f,
+						 double g, double h,
+						 arm64_float_pair value, double salt)
+{
+  calls[ARM64_FLOAT_PAIR_STACK_ALT]++;
+  return a+b+c+d+e+f+g+h+(double)value.lo+2.0*(double)value.hi+salt;
 }
 
 LJ_EXPORT int32_t arm64_vararg_i32(int32_t first, ...)
