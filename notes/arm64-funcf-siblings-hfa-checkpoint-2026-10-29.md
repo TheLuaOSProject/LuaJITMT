@@ -75,7 +75,7 @@ proof. The frame proof still required FORL and rejected the new FUNCF child
 frame in ordinary builds. The exceptions masked that missing proof.
 
 The strict-preflight repair `498f2b098` is integrated separately from the
-FUNCF frame extension. All three profiles must now enforce identical checks;
+FUNCF frame extension. All build profiles must now enforce identical checks;
 the missing FUNCF proof remains active work. Earlier helper-only positives
 and gate passes are historical execution results under those weaker checks,
 not evidence that ordinary recorder preflight admitted the same traces.
@@ -83,3 +83,31 @@ The ordinary stock/inventory/aggregate results above are unaffected by this
 test-only bypass removal. Helper-profile runtime/archive copies, split build
 logs, source IDs and hashes are in the `helpers-arm64/` and `profile-split/`
 subdirectories of the integration evidence directory.
+
+## Strict FUNCF follow-up
+
+`6968c4cac` adds the exact FUNCF child-frame/completed-return path and tests
+both mutable and read-only local captures. The original source/PC/owner and
+frame checks remain unconditional. The component fixture passes ARM64 and
+arm64e assertion builds with five exit-free native returns, one exact identity
+exit, fourteen semantic and fourteen post-RA mutation refusals, and two
+invalid-loop-reference refusals per profile.
+
+After the diagnostic bypass removal, the full Lua-leaf contract independently
+passes all four ARM64/arm64e assertion/release profiles. The log is
+`strict-preflight-lua-leaf.log` at the integration evidence directory.
+
+Ordinary assertion builds at exact source `6968c4cac` pass both 509-case stock
+corpora, snapshot-PC/vararg companions, the twenty-case inventory, ten-case
+aggregate probe and all topology result/error comparisons on ARM64 and x64.
+The previously failing read-only nonleaf root now publishes on ordinary ARM64
+with a return trace and 81 selected-root type-error exits. Strict ARM64/arm64e
+GDBJIT trace/assembler compilation passes. Logs, source ID and immutable
+runtime/archive/fixture bundles are in `ordinary-fixed/`; the failed older
+run remains in `ordinary/`.
+
+The independent-guard FORL child-publication difference remains: these rows
+still have x64-only side witnesses despite matching results. The full
+experimental gate is running at `6968c4cac`, with its exact source recorded
+in `full-gate-source.txt` and output in `full-gate.log`. No complete new gate
+pass is recorded yet.
