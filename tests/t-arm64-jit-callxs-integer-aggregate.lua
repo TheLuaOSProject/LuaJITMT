@@ -26,6 +26,9 @@ typedef double (*Arm64FloatTripleRefFn)(Arm64FloatTripleRef, double);
 typedef double (*Arm64FloatPairStackFn)(double, double, double, double,
                                         double, double, double, double,
                                         Arm64FloatPair, double);
+typedef double (*Arm64FloatPairPartialStackFn)(double, double, double, double,
+                                               double, double, double,
+                                               Arm64FloatPair, double);
 typedef double (*Arm64FprOverflowFn)(double, double, double, double,
                                      double, double, double,
                                      Arm64FloatTriple);
@@ -96,6 +99,12 @@ double arm64_take_float_pair_stack(double, double, double, double,
 double arm64_take_float_pair_stack_alt(double, double, double, double,
                                        double, double, double, double,
                                        Arm64FloatPair, double);
+double arm64_take_float_pair_partial_stack(double, double, double, double,
+                                           double, double, double,
+                                           Arm64FloatPair, double);
+double arm64_take_float_pair_partial_stack_alt(double, double, double, double,
+                                               double, double, double,
+                                               Arm64FloatPair, double);
 double arm64_take_float_quad_stack(double,double,double,double,
   double,double,double,double,Arm64FloatQuadResult,double);
 double arm64_take_float_quad_stack_alt(double,double,double,double,
@@ -210,6 +219,9 @@ _G.__arm64_word_stack_fn = ffi.cast([[uint32_t (*)(uint32_t,uint32_t,
 _G.__arm64_pair_stack_vararg_fn = ffi.cast([[uint32_t (*)(uint32_t,uint32_t,
   uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,Arm64IntPair,...)]], 0)
 _G.__arm64_float_pair_stack_fn = lib.arm64_take_float_pair_stack
+_G.__arm64_partial_hfa_stack_fn = lib.arm64_take_float_pair_partial_stack
+_G.__arm64_partial_hfa_stack_alt_fn =
+  lib.arm64_take_float_pair_partial_stack_alt
 
 local candidate = assert(loadstring([[
 return function(n, fn, value)
@@ -599,6 +611,98 @@ hfa_candidate = saved_hfa_candidate
 _G.__arm64_float_hfa_candidate = hfa_candidate
 _set_hfa_candidate(hfa_candidate)
 
+-- One free FPR is insufficient for this two-lane HFA. AAPCS64 spills both
+-- lanes and closes the FPR bank, so the trailing double is also stack-passed.
+local function partial_hfa_source()
+  return assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do
+    sum = sum + fn(1, 2, 3, 4, 5, 6, 7, value, salt)
+  end
+  return sum
+end
+]], '@partial-float-pair-hfa-stack'))()
+end
+local partial_hfa_candidate = partial_hfa_source()
+local partial_hfa_oracle = partial_hfa_source()
+local partial_hfa_clone = partial_hfa_source()
+jit.off(partial_hfa_oracle, true); jit.off(partial_hfa_clone, true)
+local partial_pair = ffi.new('Arm64FloatPair', 1.25, 2.5)
+local partial_fn = lib.arm64_take_float_pair_partial_stack
+local partial_saved_candidate = hfa_candidate
+-- Losing the ABI plan after semantic admission must abort both stack sizing
+-- and emission. A successful later read cannot repair already split lanes.
+for stage = 1, 2 do
+  local rejected = partial_hfa_source()
+  hfa_candidate = rejected
+  _set_hfa_candidate(rejected)
+  jit.flush(rejected)
+  jit.opt.start('hotloop=1')
+  jit.on(rejected, true)
+  lib.arm64_aggregate_reset()
+  _begin_hfa_witness()
+  _inject_callx_abi_failure(stage)
+  for pass = 1, 8 do
+    assert(rejected(16, partial_fn, partial_pair, 3.75) ==
+           partial_hfa_oracle(16, partial_fn, partial_pair, 3.75),
+           'missing ABI plan changed interpreter results')
+  end
+  assert(_inject_callx_abi_failure(0), 'ABI failure injection was not reached')
+  assert(_hfa_trace_count() == 0 and _hfa_native_count() == 0,
+         'missing ABI plan published or executed a CALLXS root')
+  assert(lib.arm64_aggregate_count(48) == 256,
+         'missing ABI plan lost or replayed call effects')
+end
+_G.__arm64_partial_hfa_stack_candidate = partial_hfa_candidate
+_G.__arm64_partial_hfa_stack_clone = partial_hfa_clone
+hfa_candidate = partial_hfa_candidate
+_G.__arm64_float_hfa_candidate = hfa_candidate
+_set_hfa_candidate(hfa_candidate)
+jit.flush(hfa_candidate)
+jit.opt.start('hotloop=1')
+jit.on(hfa_candidate, true)
+exits, hfa_exits = 0, 0
+lib.arm64_aggregate_reset()
+_begin_hfa_witness()
+local partial_native_before = _hfa_native_count()
+for pass = 1, 8 do
+  local got = hfa_candidate(16, partial_fn, partial_pair, 3.75)
+  local want = partial_hfa_oracle(16, partial_fn, partial_pair, 3.75)
+  assert(got == want,
+         'partially spilled HFA differs from interpreter: got=' ..
+         tostring(got) .. ' want=' .. tostring(want))
+end
+assert(_hfa_trace_count() > 0 and
+       _hfa_native_count() > partial_native_before and hfa_exits > 0,
+       'partially spilled HFA root did not finish and exit natively')
+assert(lib.arm64_aggregate_count(48) == 256,
+       'partial HFA effects were lost or replayed: ' ..
+       tostring(lib.arm64_aggregate_count(48)))
+partial_native_before = _hfa_native_count()
+collectgarbage('collect')
+exits, hfa_exits = 0, 0
+assert(hfa_candidate(32, partial_fn, partial_pair, 3.75) ==
+       partial_hfa_oracle(32, partial_fn, partial_pair, 3.75),
+       'partially spilled HFA changed after full GC')
+assert(_hfa_native_count() > partial_native_before and hfa_exits > 0,
+       'partially spilled HFA did not re-enter after full GC')
+assert(lib.arm64_aggregate_count(48) == 320,
+       'partial HFA post-GC effects were lost or replayed')
+tracked_exit_roots = roots(hfa_candidate)
+exits = 0
+assert(hfa_candidate(32, lib.arm64_take_float_pair_partial_stack_alt,
+                     partial_pair, 3.75) ==
+       partial_hfa_oracle(32,
+         lib.arm64_take_float_pair_partial_stack_alt, partial_pair, 3.75),
+       'partial HFA callable-change fallback differs')
+assert(exits > 0 and lib.arm64_aggregate_count(49) == 64,
+       'partial HFA callable change did not exit or replayed effects')
+tracked_exit_roots = nil
+hfa_candidate = partial_saved_candidate
+_G.__arm64_float_hfa_candidate = hfa_candidate
+_set_hfa_candidate(hfa_candidate)
+
 
 -- A full-width integer aggregate spills after the eighth GPR.
 local int_stack_candidate = assert(loadstring([[
@@ -732,8 +836,10 @@ wide_stack_case(4,'double_quad','Arm64DoubleQuadResult',{1.25,2.5,3.75,4.25})
 wide_stack_case(5,'double_one','Arm64DoubleResult',{1.25})
 _G.__arm64_float_triple_stack_fn=ffi.cast([[double (*)(double,double,double,
   double,double,double,double,double,Arm64FloatTriple,double)]],0)
-_G.__arm64_partial_hfa_stack_fn=ffi.cast([[double (*)(double,double,double,
-  double,double,double,double,Arm64FloatQuadResult,double)]],0)
+_G.__arm64_partial_float_quad_stack_fn=ffi.cast([[double (*)(double,
+  double,double,double,double,double,double,Arm64FloatQuadResult,double)]],0)
+_G.__arm64_partial_hfa_stack_unsupported_fn=ffi.cast([[double (*)(double,
+  double,double,double,double,double,double,Arm64FloatTriple,double)]],0)
 
 
 local function run_one_hfa(candidate_fn, oracle_fn, type_name, ffi_fn, counter,

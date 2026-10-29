@@ -248,6 +248,11 @@ LJ_FUNC int lj_asm_arm64_side_postra_admit(
 LJ_FUNC int lj_asm_arm64_test_scalar_math_live_across(
 	const LJArm64PostRAView *view, IRRef semantic_nins, IRRef loop, IRRef call);
 LJ_FUNC void lj_asm_arm64_test_force_exitstub_mcode_retry(uint32_t count);
+#if LJ_HASJIT_FFI_CALLXS
+/* Inject a missing fixed CALLXS ABI plan: 1=stack sizing, 2=emission, 0=off.
+** Returns whether the previous injection was reached, then resets that bit. */
+LJ_FUNC uint32_t lj_asm_arm64_test_callx_abi_failure(uint32_t stage);
+#endif
 #ifdef LJ_ARM64_SIDE_ASM_TEST
 enum {
   LJ_ARM64_SIDE_ASM_PROBE_CAPTURE = 0x01u,

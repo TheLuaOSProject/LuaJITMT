@@ -116,6 +116,14 @@ static int begin_hfa_witness(lua_State *L)
   return 0;
 }
 
+static int inject_callx_abi_failure(lua_State *L)
+{
+  int stage = (int)luaL_checkinteger(L, 1);
+  assert(stage >= 0 && stage <= 2);
+  lua_pushboolean(L, lj_asm_arm64_test_callx_abi_failure((uint32_t)stage));
+  return 1;
+}
+
 static int get_hfa_trace_count(lua_State *L)
 {
   jit_State *J = G2J(G(L));
@@ -281,6 +289,25 @@ static void mutate_aggregate_offset(IRIns *ir, IRRef offset)
 	assert(ir[offset].o == IR_KINT64 && ir[offset].t.irt == IRT_I64);
     ir[offset+1u].tv.u64++;
   }
+}
+
+static void swap_callxs_values(IRIns *ir, IRRef call, IRRef lhs, IRRef rhs)
+{
+  IRRef ref;
+  unsigned found_lhs = 0, found_rhs = 0;
+  ref = ir[call].op1;
+  while (ref >= REF_FIRST && ref < call && ir[ref].o == IR_CARG) {
+    IRRef previous = ir[ref].op1;
+    if (ir[ref].op2 == lhs) {
+      ir[ref].op2 = rhs;
+      found_lhs++;
+    } else if (ir[ref].op2 == rhs) {
+      ir[ref].op2 = lhs;
+      found_rhs++;
+    }
+    ref = previous;
+  }
+  assert(found_lhs == 1 && found_rhs == 1);
 }
 
 static IRRef find_cdata_type_guard(const IRIns *ir, IRRef nk, IRRef nins,
@@ -466,6 +493,35 @@ static void assert_float_hfa_stack_signature(lua_State *L, const char *name,
 	 abi.arg[8+count].stack_offset == width*count);
 }
 
+static void assert_partial_hfa_stack_signature(lua_State *L, const char *name,
+					       unsigned width, unsigned count)
+{
+  LJArm64ABISignature abi;
+  unsigned i;
+  assert(lj_ccall_arm64_signature(ctype_ctsG(G(L)),
+				 global_cdata_ctype(L, name), &abi));
+  assert(abi.nargs == 8u+count && abi.nparams == 9 && abi.nfpr == 8 &&
+	 abi.stack_size == width*count+8u &&
+	 abi.result_class == LJ_ARM64_ABI_FPR);
+  for (i = 0; i < 7; i++)
+    assert(abi.arg[i].kind == LJ_ARM64_ABI_KIND_FLOAT &&
+	   abi.arg[i].cls == LJ_ARM64_ABI_FPR && abi.arg[i].reg == i);
+  for (i = 0; i < count; i++)
+    assert(abi.arg[7+i].kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
+	   abi.arg[7+i].cls == LJ_ARM64_ABI_FPR &&
+	   abi.arg[7+i].reg == LJ_ARM64_ABI_STACK &&
+	   abi.arg[7+i].source_index == 7 &&
+	   abi.arg[7+i].member_index == i &&
+	   abi.arg[7+i].member_count == count &&
+	   abi.arg[7+i].size == width &&
+	   abi.arg[7+i].stack_offset == i*width);
+  assert(abi.arg[7+count].kind == LJ_ARM64_ABI_KIND_FLOAT &&
+	 abi.arg[7+count].cls == LJ_ARM64_ABI_FPR &&
+	 abi.arg[7+count].reg == LJ_ARM64_ABI_STACK &&
+	 abi.arg[7+count].source_index == 8 &&
+	 abi.arg[7+count].stack_offset == width*count);
+}
+
 static void assert_hfa_reference_pointer_signature(lua_State *L,
 						    const char *name)
 {
@@ -569,8 +625,12 @@ static void test_aggregate_signatures(lua_State *L)
   assert_float_hfa_stack_signature(L, "__arm64_wide_stack_fn_3", 8, 3);
   assert_float_hfa_stack_signature(L, "__arm64_wide_stack_fn_4", 8, 4);
   assert_float_hfa_stack_signature(L, "__arm64_wide_stack_fn_5", 8, 1);
+  assert_partial_hfa_stack_signature(L, "__arm64_partial_hfa_stack_fn", 4, 2);
+  assert_partial_hfa_stack_signature(L,
+	 "__arm64_partial_float_quad_stack_fn", 4, 4);
   assert_unsupported_aggregate_signature(L, "__arm64_float_triple_stack_fn");
-  assert_unsupported_aggregate_signature(L, "__arm64_partial_hfa_stack_fn");
+  assert_unsupported_aggregate_signature(L,
+	 "__arm64_partial_hfa_stack_unsupported_fn");
   assert_unsupported_aggregate_signature(L, "__arm64_nested_pair_fn");
   assert_unsupported_aggregate_signature(L, "__arm64_mixed_union_fn");
   assert_unsupported_aggregate_signature(L, "__arm64_big_pair_fn");
@@ -667,6 +727,7 @@ static void test_live_aggregate_admission_at(lua_State *L, GCtrace *T,
   IRRef nins, nk, semantic_nins, load, addr, offset, call = 0, typeguard;
   IRRef ktrace = 0, ref;
   IRIns *copy;
+  IRRef stack_hfa_first = 0;
   LJArm64PostRAView postra;
   IRRef postra_nins = 0;
   MSize raw_slot = 0;
@@ -735,6 +796,9 @@ static void test_live_aggregate_admission_at(lua_State *L, GCtrace *T,
   for (ref = REF_BASE; ref < semantic_nins; ref++)
     if (copy[ref].o == IR_CALLXS) { call = ref; break; }
   assert(call != 0);
+  if ((load_type == IRT_FLOAT || load_type == IRT_NUM) && load_index != 0)
+    stack_hfa_first = find_aggregate_load_index(fx.good, nins, load_type,
+						       load_index-1u);
   typeguard = find_cdata_type_guard(copy, nk, postra_nins, load);
   assert(fx.J->loopref != 0 && ktrace != 0 && typeguard != 0);
 
@@ -754,6 +818,13 @@ static void test_live_aggregate_admission_at(lua_State *L, GCtrace *T,
   fx.map[raw_slot] = snap_setref(saved_entry, load);
   assert(!semantic_accepts(J, &fx.semantic, copy, nins, semantic_nins));
   fx.map[raw_slot] = saved_entry;
+
+  if (stack_hfa_first != 0) {
+    copy_trace_ir(copy, fx.good, nk, nins);
+    swap_callxs_values(copy, call, stack_hfa_first, load);
+    assert(!semantic_accepts(J, &fx.semantic, copy, nins,
+			     semantic_nins));
+  }
 
   copy_trace_ir(copy, fx.good, nk, nins);
   copy[load].t.irt = IRT_U32;
@@ -778,6 +849,13 @@ static void test_live_aggregate_admission_at(lua_State *L, GCtrace *T,
   fx.postmap[raw_slot] = snap_setref(saved_entry, load);
   assert(!lj_asm_arm64_postra_admit(&postra, &semantic_nins));
   fx.postmap[raw_slot] = saved_entry;
+  if (stack_hfa_first != 0) {
+    copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
+    postra = fx.view;
+    postra.ir = fx.postra;
+    swap_callxs_values(fx.postra, call, stack_hfa_first, load);
+    assert(!lj_asm_arm64_postra_admit(&postra, &semantic_nins));
+  }
   copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
   postra = fx.view;
   postra.ir = fx.postra;
@@ -1266,6 +1344,8 @@ int main(int argc, char **argv)
   lua_setglobal(L, "_hfa_native_count");
   lua_pushcfunction(L, begin_hfa_witness);
   lua_setglobal(L, "_begin_hfa_witness");
+  lua_pushcfunction(L, inject_callx_abi_failure);
+  lua_setglobal(L, "_inject_callx_abi_failure");
   lua_pushcfunction(L, get_hfa_trace_count);
   lua_setglobal(L, "_hfa_trace_count");
   lua_pushcfunction(L, get_aggregate_native_width_count);
@@ -1353,6 +1433,16 @@ int main(int argc, char **argv)
     assert(meta_pc != NULL);
     test_live_aggregate_admission_at(L, T, meta_pc,
 	"__arm64_float_pair_stack_clone", IRT_FLOAT, 1);
+  }
+  {
+    GCproto *pt = global_proto(L, "__arm64_partial_hfa_stack_candidate");
+    jit_State *J = G2J(G(L));
+    GCtrace *T = find_aggregate_trace_min_load_count(J, pt, IRT_FLOAT, 2);
+    assert(T != NULL);
+    meta_pc = aggregate_meta_pc(T);
+    assert(meta_pc != NULL);
+    test_live_aggregate_admission_at(L, T, meta_pc,
+	"__arm64_partial_hfa_stack_clone", IRT_FLOAT, 1);
   }
   for (unsigned i=1;i<=5;i++) {
     char candidate_name[64], clone_name[64];

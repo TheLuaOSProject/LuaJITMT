@@ -2563,13 +2563,39 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
         /* Match the CType plan to the IR carriers consumed by asm_gencall.
         ** In particular, a promoted INT cannot stand for a byte/halfword
         ** stack argument, and exhausting one bank cannot consume the other. */
-        if (a->cls == LJ_ARM64_ABI_FPR && fpr < CCALL_NARG_FPR) {
-          if (a->reg != fpr++) return 0;
-        } else if (a->cls == LJ_ARM64_ABI_GPR && gpr < CCALL_NARG_GPR) {
-          if (a->reg != gpr++) return 0;
+        if (a->reg != LJ_ARM64_ABI_STACK) {
+          if (a->cls == LJ_ARM64_ABI_FPR) {
+            if (fpr >= CCALL_NARG_FPR || a->reg != fpr++) return 0;
+          } else if (a->cls == LJ_ARM64_ABI_GPR) {
+            if (gpr >= CCALL_NARG_GPR || a->reg != gpr++) return 0;
+          } else return 0;
         } else {
           IRIns carrier = ir_load_acq(&T->ir[values[i]]);
           unsigned width = lj_ir_type_size[irt_type(carrier.t)];
+          if (a->cls == LJ_ARM64_ABI_FPR) {
+            if (a->kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER) {
+              unsigned first = i-a->member_index, part;
+              LJArm64ABIArg *head;
+              if (a->member_count == 0 || a->member_index >= a->member_count ||
+                  first > i || first+a->member_count > abi.nargs) return 0;
+              head = &abi.arg[first];
+              for (part = 0; part < a->member_count; part++) {
+                LJArm64ABIArg *member = &abi.arg[first+part];
+                if (member->kind != LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER ||
+                    member->cls != LJ_ARM64_ABI_FPR ||
+                    member->reg != LJ_ARM64_ABI_STACK ||
+                    member->id != head->id ||
+                    member->source_index != head->source_index ||
+                    member->member_count != a->member_count ||
+                    member->member_index != part ||
+                    member->size != head->size ||
+                    member->stack_offset != head->stack_offset+
+                      part*head->size) return 0;
+              }
+              if (fpr < CCALL_NARG_FPR) fpr = CCALL_NARG_FPR;
+            } else if (fpr < CCALL_NARG_FPR) return 0;
+          } else if (a->cls != LJ_ARM64_ABI_GPR ||
+                     gpr < CCALL_NARG_GPR) return 0;
           if (width != a->size || width == 0 || width > 8) return 0;
           if (a->kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
               a->member_index == 0)
@@ -6957,8 +6983,32 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	      unsigned limit = fp ? REGARG_NUMFPR : REGARG_NUMGPR;
 	      if ((fp ? LJ_ARM64_ABI_FPR : LJ_ARM64_ABI_GPR) != a->cls)
 		return 0;
+	      if (fp && a->reg == LJ_ARM64_ABI_STACK) {
+		if (a->kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER) {
+		  unsigned first = guard-a->member_index, part;
+		  LJArm64ABIArg *head;
+		  if (a->member_count == 0 || a->member_index >= a->member_count ||
+		      first > guard || first+a->member_count > abi.nargs) return 0;
+		  head = &abi.arg[first];
+		  for (part = 0; part < a->member_count; part++) {
+		    LJArm64ABIArg *member = &abi.arg[first+part];
+		    if (member->kind != LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER ||
+			member->cls != LJ_ARM64_ABI_FPR ||
+			member->reg != LJ_ARM64_ABI_STACK ||
+			member->id != head->id ||
+			member->source_index != head->source_index ||
+			member->member_count != a->member_count ||
+			member->member_index != part ||
+			member->size != head->size ||
+			member->stack_offset != head->stack_offset+part*head->size)
+		      return 0;
+		  }
+		  if (nfpr < limit) nfpr = limit;
+		} else if (nfpr < limit) return 0;
+	      }
 	      if (*bank < limit) {
-		if (a->reg != (*bank)++) return 0;
+		if (a->reg == LJ_ARM64_ABI_STACK || a->reg != (*bank)++)
+		  return 0;
 	      } else {
 		if (width == 0 || width > 8 || width != a->size ||
 		    a->reg != LJ_ARM64_ABI_STACK) return 0;

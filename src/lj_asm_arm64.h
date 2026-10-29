@@ -525,8 +525,37 @@ static int asm_fuseorshift(ASMState *as, IRIns *ir)
 
 /* -- Calls --------------------------------------------------------------- */
 
+/* Reconstruct the fixed CALLXS ABI plan used by the independent admission
+** walkers. The plan is transient and only steers this call's argument setup. */
+#if LJ_HASJIT_FFI_CALLXS
+static int asm_callx_abi(ASMState *as, IRIns *ir, const CCallInfo *ci,
+                        LJArm64ABISignature *abi, unsigned stage)
+{
+  int ok;
+  if (ci->flags & CCI_VARARG) return 0;
+  ok = arm64_callxs_signature_for_call(ctype_ctsG(J2G(as->J)), as->ir,
+	 as->T->nk, as->orignins, (IRRef)(ir-as->ir), abi, NULL);
+#if defined(LJ_TRACE_TEST_HELPERS)
+  if (la_load32_acq(&asm_test_callx_abi_failure_stage) == stage) {
+    la_store32_rel(&asm_test_callx_abi_failure_seen, 1);
+    ok = 0;
+  }
+#else
+  UNUSED(stage);
+#endif
+  /* A transient CType read failure must not select flattened lowering: that
+  ** could split a partially spilled HFA even if post-RA admission succeeds. */
+  if (LJ_UNLIKELY(!ok || abi->is_vararg || abi->nargs != CCI_XNARGS(ci))) {
+    setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
+    lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
+  }
+  return 1;
+}
+#endif
+
 /* Generate a call to a C function. */
-static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
+static void asm_gencall_abi(ASMState *as, const CCallInfo *ci, IRRef *args,
+			    const uint8_t *stack_hfa)
 {
   uint32_t n, nargs = CCI_XNARGS(ci);
   int32_t spofs = 0, spalign = LJ_HASFFI && LJ_TARGET_OSX ? 0 : 7;
@@ -544,9 +573,12 @@ static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
   for (n = 0; n < nargs; n++) { /* Setup args. */
     IRRef ref = args[n];
     IRIns *ir = IR(ref);
+    int force_stack = stack_hfa != NULL && stack_hfa[n] != 0;
+    if (force_stack && (n == 0 || stack_hfa[n-1] == 0))
+	fpr = REGARG_LASTFPR+1;
     if (ref) {
       if (irt_isfp(ir->t)) {
-	if (fpr <= REGARG_LASTFPR) {
+	if (fpr <= REGARG_LASTFPR && !force_stack) {
 	  lj_assertA(rset_test(as->freeset, fpr),
 		     "reg %d not free", fpr);  /* Must have been evicted. */
 	  ra_leftov(as, fpr, ref);
@@ -599,6 +631,11 @@ static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
 #endif
     }
   }
+}
+
+static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
+{
+  asm_gencall_abi(as, ci, args, NULL);
 }
 
 /* Setup result reg/sp for call. Evict scratch regs. */
@@ -663,10 +700,27 @@ static void asm_callx(ASMState *as, IRIns *ir)
 {
   IRRef args[CCI_NARGS_MAX*2];
   CCallInfo ci;
+#if LJ_HASJIT_FFI_CALLXS
+  uint8_t stack_hfa[CCI_NARGS_MAX*2] = { 0 };
+  LJArm64ABISignature abi;
+  const uint8_t *stack_hfap = NULL;
+  unsigned i;
+#endif
   IRRef func;
   IRIns *irf;
   ci.flags = asm_callx_flags(as, ir);
   asm_collectargs(as, ir, &ci, args);
+#if LJ_HASJIT_FFI_CALLXS
+  {
+    if (asm_callx_abi(as, ir, &ci, &abi, 2)) {
+      for (i = 0; i < abi.nargs; i++)
+	stack_hfa[i] = (uint8_t)(abi.arg[i].kind ==
+	  LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
+	  abi.arg[i].reg == LJ_ARM64_ABI_STACK);
+      stack_hfap = stack_hfa;
+    }
+  }
+#endif
   asm_setupresult(as, ir, &ci);
   func = ir->op2; irf = IR(func);
   if (irf->o == IR_CARG) { func = irf->op1; irf = IR(func); }
@@ -677,7 +731,13 @@ static void asm_callx(ASMState *as, IRIns *ir)
     emit_n(as, A64I_BLR_AUTH, freg);
     ci.func = (ASMFunction)(void *)0;
   }
-  asm_gencall(as, &ci, args);
+  asm_gencall_abi(as, &ci, args,
+#if LJ_HASJIT_FFI_CALLXS
+		  stack_hfap
+#else
+		  NULL
+#endif
+	);
 }
 
 /* -- Returns ------------------------------------------------------------- */
@@ -2228,6 +2288,23 @@ static Reg asm_setup_call_slots(ASMState *as, IRIns *ir, const CCallInfo *ci)
 #endif
   return REGSP_HINT(irt_isfp(ir->t) ? RID_FPRET : RID_RET);
 }
+
+#if LJ_HASJIT_FFI_CALLXS
+/* Reserve the ABI-classified stack extent when CALLXS contains a fixed
+** signature. The generic flattened-carrier estimate cannot see an HFA that
+** spills as one indivisible group with unused FPRs remaining. */
+static Reg asm_setup_callx_slots(ASMState *as, IRIns *ir,
+				const CCallInfo *ci)
+{
+  LJArm64ABISignature abi;
+  if (asm_callx_abi(as, ir, ci, &abi, 1)) {
+    int32_t nslots = (int32_t)(((MSize)abi.stack_size+3u) >> 2);
+    if (nslots > as->evenspill) as->evenspill = nslots;
+    return REGSP_HINT(irt_isfp(ir->t) ? RID_FPRET : RID_RET);
+  }
+  return asm_setup_call_slots(as, ir, ci);
+}
+#endif
 
 static void asm_setup_target(ASMState *as)
 {

@@ -2045,6 +2045,18 @@ static void asm_loop(ASMState *as)
 
 #if LJ_TARGET_ARM64 && defined(LJ_TRACE_TEST_HELPERS)
 static uint32_t asm_test_exitstub_mcode_retry_count;
+#if LJ_HASJIT_FFI_CALLXS
+static uint32_t asm_test_callx_abi_failure_stage;
+static uint32_t asm_test_callx_abi_failure_seen;
+
+uint32_t lj_asm_arm64_test_callx_abi_failure(uint32_t stage)
+{
+  uint32_t seen = la_load32_acq(&asm_test_callx_abi_failure_seen);
+  la_store32_rel(&asm_test_callx_abi_failure_seen, 0);
+  la_store32_rel(&asm_test_callx_abi_failure_stage, stage);
+  return seen;
+}
+#endif
 #ifdef LJ_ARM64_SIDE_ASM_TEST
 static uint32_t asm_test_side_probe_state;
 static LJArm64SideAsmProbe asm_test_side_probe;
@@ -2927,7 +2939,11 @@ static void asm_setup_regsp(ASMState *as)
     case IR_CALLXS: {
       CCallInfo ci;
       ci.flags = asm_callx_flags(as, ir);
+#if LJ_TARGET_ARM64 && LJ_HASJIT_FFI_CALLXS
+      ir->prev = asm_setup_callx_slots(as, ir, &ci);
+#else
       ir->prev = asm_setup_call_slots(as, ir, &ci);
+#endif
       if (inloop)
 	as->modset |= RSET_SCRATCH;
       continue;
