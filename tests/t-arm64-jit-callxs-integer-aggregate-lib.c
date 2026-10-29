@@ -28,6 +28,8 @@ typedef struct { float lo, hi; } arm64_float_pair_result;
 typedef struct { double lo, hi; } arm64_double_pair_result;
 typedef struct { float x, y, z; } arm64_float_triple_result;
 typedef struct { float x, y, z, w; } arm64_float_quad_result;
+typedef struct { double x, y, z; } arm64_double_triple_result;
+typedef struct { double x, y, z, w; } arm64_double_quad_result;
 typedef struct { uint32_t value:5; } arm64_bitfield;
 
 enum {
@@ -61,6 +63,8 @@ enum {
   ARM64_RETURN_DOUBLE_PAIR_HFA_FPR,
   ARM64_RETURN_FLOAT_TRIPLE_HFA,
   ARM64_RETURN_FLOAT_QUAD_HFA,
+  ARM64_RETURN_DOUBLE_TRIPLE_HFA,
+  ARM64_RETURN_DOUBLE_QUAD_HFA,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -336,6 +340,29 @@ arm64_return_float_quad_hfa(uint32_t value)
   result.y = (float)value * 2.0f + 0.5f;
   result.z = (float)value * 3.0f + 0.75f;
   result.w = (float)value * 4.0f + 1.0f;
+  return result;
+}
+
+LJ_EXPORT arm64_double_triple_result
+arm64_return_double_triple_hfa(uint32_t value)
+{
+  arm64_double_triple_result result;
+  calls[ARM64_RETURN_DOUBLE_TRIPLE_HFA]++;
+  result.x = (double)value + 0.125;
+  result.y = (double)value * 2.0 + 0.25;
+  result.z = (double)value * 3.0 + 0.5;
+  return result;
+}
+
+LJ_EXPORT arm64_double_quad_result
+arm64_return_double_quad_hfa(uint32_t value)
+{
+  arm64_double_quad_result result;
+  calls[ARM64_RETURN_DOUBLE_QUAD_HFA]++;
+  result.x = (double)value + 0.125;
+  result.y = (double)value * 2.0 + 0.25;
+  result.z = (double)value * 3.0 + 0.5;
+  result.w = (double)value * 4.0 + 1.0;
   return result;
 }
 
