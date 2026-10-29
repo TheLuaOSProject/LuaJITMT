@@ -7410,6 +7410,8 @@ static int arm64_scalar_postra_register(Reg r, IRType type);
 static int arm64_side_parent_snapshot_valid(const LJArm64SideIRView *side);
 static int arm64_side_scalar_topology(const LJArm64SideIRView *side,
 	const GCtrace *owner);
+static int arm64_side_immediate_parent_valid(
+	const LJArm64SideIRView *side, const GCtrace *owner);
 static int arm64_side_scalar_context_postra(const LJArm64PostRAView *view,
 	const LJArm64SideIRView *side);
 
@@ -7423,13 +7425,13 @@ int lj_asm_arm64_side_prehead_admit(const LJArm64SidePostRAView *view,
 
   if (view == NULL || (ir = view->semantic.ir) == NULL ||
 	!view->owner || view->owner->traceno != view->semantic.traceno ||
-	view->owner->root != view->semantic.parent ||
+	view->owner->root != view->semantic.root ||
 	!arm64_side_scalar_topology(&view->semantic, view->owner) ||
+	!arm64_side_immediate_parent_valid(&view->semantic, view->owner) ||
 	view->owner->sinktags ||
 	view->owner->startins != BCINS_AD(BC_JMP, 0, 0) ||
 	trace_startpc_acq((GCtrace *)view->owner) !=
 	  view->semantic.parent_continuation ||
-	view->semantic.root != view->semantic.parent ||
 	!arm64_side_parent_snapshot_valid(&view->semantic) ||
 	view->nins != view->semantic.nins+1u ||
 	view->orignins != view->semantic.nins ||
@@ -10146,7 +10148,7 @@ static int arm64_scalar_side_geometry_ir(const LJArm64SideIRView *side,
 	int64_t body = (int64_t)end+1+(int64_t)bc_j(side->parent_startins);
 	if (bc_op(h) != BC_FORI || bc_a(h) != bc_a(side->parent_startins) ||
 	    header+1u != side->loop_start_pc ||
-	    back != BCINS_AD(BC_JFORL, bc_a(side->parent_startins), side->parent) ||
+	    back != BCINS_AD(BC_JFORL, bc_a(side->parent_startins), side->root) ||
 	    bc_j(h) <= 0 || (int64_t)header+1+(int64_t)bc_j(h) !=
 	      (int64_t)end+1 || body < 0 || (MSize)body != side->loop_start_pc ||
 	    !arm64_ir_pcpos((uintptr_t)(const void *)side->parent_continuation,
@@ -10157,7 +10159,7 @@ static int arm64_scalar_side_geometry_ir(const LJArm64SideIRView *side,
 	return 1;
   }
   target = (int64_t)end + 1 + (int64_t)bc_j(back);
-  if (bc_op(h) != BC_JLOOP || bc_d(h) != side->parent ||
+  if (bc_op(h) != BC_JLOOP || bc_d(h) != side->root ||
 	  bc_op(back) != BC_JMP || bc_j(back) >= 0 ||
 	  (int64_t)end + 1 + (int64_t)bc_j(back) < 0 ||
 	  target < 0 || (MSize)target != side->loop_start_pc ||
@@ -10247,7 +10249,8 @@ static int arm64_side_parent_sload_valid(const LJArm64SideIRView *side,
 	ref = snap_ref(sn);
 	if ((sn & 0x00ff0000u) == SNAP_NORESTORE) {
 	  MSize idxslot = 1u+LJ_FR2+bc_a(side->parent_startins);
-	  IRIns source;
+	  MSize control;
+	  IRIns source, root_source;
 	  if (i >= side->parent_nmap_values ||
 	      bc_op(side->parent_startins) != BC_FORL ||
 	      (load->op2 != (IRSLOAD_PARENT|IRSLOAD_INHERIT) && !readonly) ||
@@ -10257,7 +10260,17 @@ static int arm64_side_parent_sload_valid(const LJArm64SideIRView *side,
 	  source = side->parent_map_values[i].value;
 	  if (source.o != IR_SLOAD || source.op1 != load->op1)
 	    return 0;
-	  if (load->op1 == idxslot) {
+	  control = load->op1 == idxslot ? 0 :
+	    load->op1 == idxslot+FORL_STOP ? 1 : 2;
+	  if (side->parent != side->root) {
+	    if ((side->parent_root_forl_mask & (1u<<control)) == 0)
+	      return 0;
+	    root_source = side->parent_root_forl[control];
+	    if (root_source.o != IR_SLOAD || root_source.op1 != load->op1 ||
+	        source.t.irt != root_source.t.irt ||
+	        source.op2 != (root_source.op2|IRSLOAD_PARENT))
+	      return 0;
+	  } else if (load->op1 == idxslot) {
 	    if ((source.t.irt & ~IRT_ISPHI) != (IRT_INT|IRT_GUARD) ||
 	        source.op2 != (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT))
 	      return 0;
@@ -10497,6 +10510,95 @@ static int arm64_side_forl_boundary_snapshot_ir(
   return mask == 15u && oldidx != 0 && ext == oldidx;
 }
 
+/* A child-of-side can inherit the already certified root FORL range proof.
+** The immediate-parent snapshot must still map its controls to the exact root
+** sources, and the root stop-bound guard must precede that selected root map. */
+static int arm64_side_forl_root_range_proof(const LJArm64SideIRView *side,
+	int32_t step)
+{
+	MSize idxslot, stopslot;
+	int64_t expected64;
+	IRIns idx, stop, guard, constant;
+	if (!side || side->parent == side->root ||
+	    !side->parent_root_forl_range_valid ||
+	    (side->parent_root_forl_mask & 3u) != 3u ||
+	    side->parent_root_forl_nins <= REF_FIRST ||
+	    side->parent_root_forl_nins >= REF_DROP ||
+	    side->parent_root_forl_bound_guard_ref < REF_FIRST ||
+	    side->parent_root_forl_bound_guard_ref >=
+	      side->parent_root_forl_nins ||
+	    side->parent_root_forl_snapref <=
+	      side->parent_root_forl_bound_guard_ref ||
+	    side->parent_root_forl_snapref >= side->parent_root_forl_nins ||
+	    side->parent_root_forl_stop_ref < REF_FIRST ||
+	    side->parent_root_forl_stop_ref >=
+	      side->parent_root_forl_bound_guard_ref ||
+	    side->parent_root_forl_bound_constant_ref >= REF_TRUE)
+	  return 0;
+	idxslot = 1u+LJ_FR2+(MSize)bc_a(side->parent_startins);
+	stopslot = idxslot+FORL_STOP;
+	idx = side->parent_root_forl[0];
+	stop = side->parent_root_forl[1];
+	if (idx.o != IR_SLOAD || idx.op1 != idxslot ||
+	    (idx.t.irt & ~IRT_ISPHI) != (IRT_INT|IRT_GUARD) ||
+	    idx.op2 != (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT) ||
+	    stop.o != IR_SLOAD || stop.op1 != stopslot ||
+	    stop.t.irt != IRT_INT ||
+	    stop.op2 != (IRSLOAD_READONLY|IRSLOAD_INHERIT) ||
+	    side->parent_root_forl_stop_ref >= side->parent_root_forl_nins)
+	  return 0;
+	expected64 = step > 0 ? (int64_t)INT32_MAX-step :
+	                        (int64_t)INT32_MIN-step;
+	if (step == 0 || expected64 < INT32_MIN || expected64 > INT32_MAX)
+	  return 0;
+	guard = side->parent_root_forl_bound_guard;
+	constant = side->parent_root_forl_bound_constant;
+	return guard.o == (step > 0 ? IR_LE : IR_GE) &&
+	  guard.t.irt == (IRT_INT|IRT_GUARD) &&
+	  guard.op1 == side->parent_root_forl_stop_ref &&
+	  guard.op2 == side->parent_root_forl_bound_constant_ref &&
+	  constant.o == IR_KINT && constant.t.irt == IRT_INT &&
+	  constant.i == (int32_t)expected64;
+}
+
+/* The equality cold edge may be the exact FORL termination edge. In that
+** case the index is dead after the loop, so require it to be absent from the
+** snapshot and bind the footer directly to the instruction after FORL. */
+static int arm64_side_forl_termination_snapshot_ir(
+	const LJArm64SideIRView *side, const GCtrace *T, IRRef guard,
+	MSize idxslot)
+{
+	MSize s, selected = (MSize)-1, ofs, nent, i;
+	uint64_t pcbase;
+	uintptr_t target;
+	if (!side || !T || !T->snap || !T->snapmap ||
+	    side->loop_end_pc+1u >= side->proto_sizebc ||
+	    idxslot >= LJ_MAX_JSLOTS)
+	  return 0;
+	for (s = 0; s < T->nsnap; s++) {
+	  if (T->snap[s].ref > guard) break;
+	  selected = s;
+	}
+	if (selected == (MSize)-1 || T->snap[selected].ref != guard)
+	  return 0;
+	ofs = snap_mapofs_acq(&T->snap[selected]);
+	nent = snap_nent_acq(&T->snap[selected]);
+	if (ofs > T->nsnapmap || nent > T->nsnapmap-ofs ||
+	    T->nsnapmap-ofs-nent < 1u+LJ_FR2)
+	  return 0;
+	for (i = 0; i < nent; i++) {
+	  MSize slot = snap_slot(snapentry_acq(&T->snapmap[ofs+i]));
+	  if (slot == idxslot || slot == idxslot+FORL_STOP ||
+	      slot == idxslot+FORL_STEP)
+	    return 0;
+	}
+	memcpy(&pcbase, &T->snapmap[ofs+nent], sizeof(pcbase));
+	if ((uint8_t)pcbase != 0) return 0;
+	target = (uintptr_t)(pcbase>>8);
+	return target == (uintptr_t)(const void *)
+	  (side->proto_bc+side->loop_end_pc+1u);
+}
+
 static int arm64_side_forl_snapshot_stop_ir(const LJArm64SideIRView *side,
 	const GCtrace *T, IRRef before, SnapEntry sn)
 {
@@ -10573,14 +10675,16 @@ static int arm64_side_forl_index_add_ir(const LJArm64SideIRView *side,
 {
   MSize idxslot, stopslot, r;
   int32_t step, source_step;
-  unsigned comparisons = 0, rangeguards = 0, constantstops = 0;
-  IRRef rangeguard = 0;
+  unsigned comparisons = 0, rangeguards = 0, constantstops = 0, inherited = 0;
+  IRRef rangeguard = 0, inherited_guard = 0;
   int64_t bound64;
   if (!side || !T || add.o != IR_ADD || add.t.irt != IRT_INT ||
 	  !arm64_side_forl_step_source(side, &source_step) ||
 	  !arm64_ir_kint_value(T, add.op2, &step) || step != source_step ||
-	  !arm64_side_forl_step_map_valid(side, add.op2, step))
+      !arm64_side_forl_step_map_valid(side, add.op2, step)) {
     return 0;
+  }
+
   idxslot = 1u+LJ_FR2+(MSize)bc_a(side->parent_startins);
   stopslot = idxslot+FORL_STOP;
   bound64 = step > 0 ? (int64_t)INT32_MAX-step :
@@ -10591,9 +10695,11 @@ static int arm64_side_forl_index_add_ir(const LJArm64SideIRView *side,
 	IRIns idx = T->ir[add.op1];
 	if (idx.o != IR_SLOAD || idx.op1 != idxslot ||
 	    (idx.t.irt & ~IRT_ISPHI) != IRT_INT ||
-	    idx.op2 != (IRSLOAD_PARENT|IRSLOAD_INHERIT))
+	    idx.op2 != (IRSLOAD_PARENT|IRSLOAD_INHERIT)) {
 	  return 0;
+	}
   }
+
   for (r = ref+1u; r < T->nins; r++) {
 	IRIns cmp = T->ir[r];
 	if (cmp.o == (step > 0 ? IR_LE : IR_GE) &&
@@ -10626,15 +10732,27 @@ static int arm64_side_forl_index_add_ir(const LJArm64SideIRView *side,
 	      rangeguard = q;
 	      matched = 1;
 	    }
-	    if (!matched || rangeguard >= r || ++comparisons != 1)
+	    if (matched) {
+	      if (rangeguard >= r || ++comparisons != 1) return 0;
+	    } else if (side->parent != side->root &&
+		       arm64_side_forl_root_range_proof(side, step)) {
+	      if (++inherited != 1) return 0;
+	      inherited_guard = r;
+	    } else {
 	      return 0;
+	    }
 	  }
 	}
   }
-  return comparisons == 1 &&
-    ((constantstops == 1 && rangeguards == 0) ||
-     (constantstops == 0 && rangeguards == 1 &&
-      arm64_side_forl_guard_snapshot_ir(side, T, rangeguard, idxslot, add.op1)));
+  if (comparisons == 1 && inherited == 0)
+    return (constantstops == 1 && rangeguards == 0) ||
+      (constantstops == 0 && rangeguards == 1 &&
+       arm64_side_forl_guard_snapshot_ir(side, T, rangeguard, idxslot, add.op1));
+  return comparisons == 0 && rangeguards == 0 && constantstops == 0 &&
+    inherited == 1 && arm64_side_forl_root_range_proof(side, step) &&
+    (arm64_side_forl_guard_snapshot_ir(side, T, inherited_guard,
+                                     idxslot, add.op1) ||
+     arm64_side_forl_termination_snapshot_ir(side, T, inherited_guard, idxslot));
 }
 
 /* Syntax-only view of a single acyclic comparison diamond. Each arm is an
@@ -12717,8 +12835,9 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
   if (!J || !T || !T->ir || !J->pt ||
       (!side && (J->parent || J->exitno || T->root ||
 	bc_op(T->startins) != rootop)) ||
-      (side && (J->parent != side->parent || J->exitno != side->exitno ||
-	T->root != side->parent || side->root != side->parent ||
+	  (side && (J->parent != side->parent || J->exitno != side->exitno ||
+	T->root != side->root || side->root == 0 ||
+	!arm64_side_immediate_parent_valid(side, T) ||
 	  side->traceno != T->traceno ||
 	  !arm64_side_scalar_topology(side, T) ||
 	T->startins != BCINS_AD(BC_JMP, 0, 0) ||
@@ -13720,6 +13839,122 @@ static int arm64_side_forl_finish_snapshot_postra(
     (pcbase >> 8) == (uintptr_t)(side->proto_bc+side->loop_end_pc+1u);
 }
 
+/* Allocated-pass copy of the inherited root range certificate check. */
+static int arm64_side_forl_root_range_proof_postra(
+	const LJArm64SideIRView *side, int32_t step)
+{
+	MSize idxslot, stopslot;
+	int64_t bound;
+	IRIns idx, stop, guard, constant;
+	if (side == NULL || side->parent == side->root ||
+	    side->parent_root_forl_range_valid != 1u ||
+	    (side->parent_root_forl_mask & 3u) != 3u ||
+	    side->parent_root_forl_nins <= REF_FIRST ||
+	    side->parent_root_forl_nins >= REF_DROP ||
+	    side->parent_root_forl_stop_ref < REF_FIRST ||
+	    side->parent_root_forl_stop_ref >=
+	      side->parent_root_forl_bound_guard_ref ||
+	    side->parent_root_forl_bound_guard_ref >=
+	      side->parent_root_forl_snapref ||
+	    side->parent_root_forl_snapref >= side->parent_root_forl_nins ||
+	    side->parent_root_forl_bound_constant_ref >= REF_TRUE)
+	  return 0;
+	idxslot = 1u+LJ_FR2+(MSize)bc_a(side->parent_startins);
+	stopslot = idxslot+FORL_STOP;
+	idx = side->parent_root_forl[0];
+	stop = side->parent_root_forl[1];
+	if (idx.o != IR_SLOAD || idx.op1 != idxslot ||
+	    idx.t.irt != (IRT_INT|IRT_GUARD) ||
+	    idx.op2 != (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT) ||
+	    stop.o != IR_SLOAD || stop.op1 != stopslot ||
+	    stop.t.irt != IRT_INT ||
+	    stop.op2 != (IRSLOAD_READONLY|IRSLOAD_INHERIT) ||
+	    side->parent_root_forl_stop_ref >= side->parent_root_forl_nins)
+	  return 0;
+	bound = step > 0 ? (int64_t)INT32_MAX-(int64_t)step :
+	                   (int64_t)INT32_MIN-(int64_t)step;
+	if (step == 0 || bound < INT32_MIN || bound > INT32_MAX)
+	  return 0;
+	guard = side->parent_root_forl_bound_guard;
+	constant = side->parent_root_forl_bound_constant;
+	if (guard.o != (step > 0 ? IR_LE : IR_GE) ||
+	    guard.t.irt != (IRT_INT|IRT_GUARD) ||
+	    guard.op1 != side->parent_root_forl_stop_ref ||
+	    guard.op2 != side->parent_root_forl_bound_constant_ref ||
+	    constant.o != IR_KINT || constant.t.irt != IRT_INT ||
+	    constant.i != (int32_t)bound)
+	  return 0;
+	return 1;
+}
+
+static int arm64_side_forl_guard_snapshot_postra(
+	const LJArm64SideIRView *side, const LJArm64PostRAView *v, IRRef guard,
+	MSize idxslot, IRRef oldidx)
+{
+	uint64_t pcbase;
+	MSize s, selected = (MSize)-1, ofs, nent, i, matches = 0;
+	if (!side || !v || !v->snap || !v->snapmap ||
+	    !side->parent_continuation || idxslot >= LJ_MAX_JSLOTS ||
+	    oldidx < REF_FIRST || oldidx >= guard)
+	  return 0;
+	for (s = 0; s < v->nsnap; s++) {
+	  if (v->snap[s].ref > guard) break;
+	  selected = s;
+	}
+	if (selected == (MSize)-1) return 0;
+	ofs = snap_mapofs_acq(&v->snap[selected]);
+	nent = snap_nent_acq(&v->snap[selected]);
+	if (ofs > v->nsnapmap || nent > v->nsnapmap-ofs ||
+	    v->nsnapmap-ofs-nent < 1u+LJ_FR2)
+	  return 0;
+	for (i = 0; i < nent; i++) {
+	  SnapEntry sn = snapentry_acq(&v->snapmap[ofs+i]);
+	  if (snap_slot(sn) == idxslot) {
+	    if (snap_ref(sn) != oldidx) return 0;
+	    matches++;
+	  }
+	}
+	if (matches != 1) return 0;
+	memcpy(&pcbase, &v->snapmap[ofs+nent], sizeof(pcbase));
+	return (uint8_t)pcbase == 0 &&
+	  arm64_side_forl_retry_pc_valid(side, (uintptr_t)(pcbase>>8));
+}
+
+static int arm64_side_forl_termination_snapshot_postra(
+	const LJArm64SideIRView *side, const LJArm64PostRAView *v, IRRef guard,
+	MSize idxslot)
+{
+	MSize s, selected = (MSize)-1, ofs, nent, i;
+	uint64_t pcbase;
+	uintptr_t target;
+	if (side == NULL || v == NULL || v->snap == NULL || v->snapmap == NULL ||
+	    side->loop_end_pc+1u >= side->proto_sizebc ||
+	    idxslot >= LJ_MAX_JSLOTS)
+	  return 0;
+	for (s = 0; s < v->nsnap; s++) {
+	  if (v->snap[s].ref > guard) break;
+	  selected = s;
+	}
+	if (selected == (MSize)-1 || v->snap[selected].ref != guard)
+	  return 0;
+	ofs = snap_mapofs_acq(&v->snap[selected]);
+	nent = snap_nent_acq(&v->snap[selected]);
+	if (ofs > v->nsnapmap || nent > v->nsnapmap-ofs ||
+	    v->nsnapmap-ofs-nent < 1u+LJ_FR2)
+	  return 0;
+	for (i = 0; i < nent; i++) {
+	  MSize slot = snap_slot(snapentry_acq(&v->snapmap[ofs+i]));
+	  if (slot == idxslot || slot == idxslot+FORL_STOP ||
+	      slot == idxslot+FORL_STEP)
+	    return 0;
+	}
+	memcpy(&pcbase, &v->snapmap[ofs+nent], sizeof(pcbase));
+	if ((uint8_t)pcbase != 0) return 0;
+	target = (uintptr_t)(pcbase>>8);
+	return target == (uintptr_t)(const void *)
+	  (side->proto_bc+side->loop_end_pc+1u);
+}
+
 /* Allocated replay of the special FORL index update. This separately checks
 ** the copied loop admission, source step, parent map and compare shape; the
 ** generic post-RA walk then proves both operands have valid locations. */
@@ -13728,8 +13963,8 @@ static int arm64_side_forl_index_add_postra(const LJArm64SideIRView *side,
 {
   MSize idxslot, stopslot, r;
   int32_t source_step, step;
-  unsigned comparisons = 0, rangeguards = 0, constantstops = 0;
-  IRRef rangeguard = 0;
+  unsigned comparisons = 0, rangeguards = 0, constantstops = 0, inherited = 0;
+  IRRef rangeguard = 0, inherited_guard = 0;
   int64_t bound64;
   if (!side || !v || add.o != IR_ADD || add.t.irt != IRT_INT ||
 	  !arm64_side_forl_step_source(side, &source_step) ||
@@ -13787,11 +14022,26 @@ static int arm64_side_forl_index_add_postra(const LJArm64SideIRView *side,
 	    rangeguard = q;
 	    matched = 1;
 	  }
-	  if (!matched || rangeguard >= r || ++comparisons != 1)
+	  if (matched) {
+	    if (rangeguard >= r || ++comparisons != 1) return 0;
+	  } else if (side->parent != side->root &&
+		     arm64_side_forl_root_range_proof_postra(side, step)) {
+	    if (++inherited != 1) return 0;
+	    inherited_guard = r;
+	  } else {
 	    return 0;
+	  }
 	}
   }
-  if (comparisons != 1) return 0;
+  if (comparisons == 0 && rangeguards == 0 && constantstops == 0 &&
+      inherited == 1) {
+    if (!arm64_side_forl_root_range_proof_postra(side, step)) return 0;
+    return arm64_side_forl_guard_snapshot_postra(side, v, inherited_guard,
+                                               idxslot, add.op1) ||
+      arm64_side_forl_termination_snapshot_postra(side, v, inherited_guard,
+                                                 idxslot);
+  }
+  if (comparisons != 1 || inherited != 0) return 0;
   if (constantstops == 1) return rangeguards == 0;
   if (rangeguards != 1) return 0;
   /* Independently bind the allocated guard's cold edge to the selected
@@ -16928,12 +17178,13 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
 	MSize cont;
 
 	if (!owner || v->proto_bc != side->proto_bc ||
-	    owner->traceno != side->traceno || owner->root != side->parent ||
+	    owner->traceno != side->traceno || owner->root != side->root ||
 	    !arm64_side_scalar_topology(side, owner) || owner->sinktags ||
+	    !arm64_side_immediate_parent_valid(side, owner) ||
 	    owner->startins != BCINS_AD(BC_JMP, 0, 0) ||
 	    trace_startpc_acq((GCtrace *)owner) != side->parent_continuation ||
 	    side->parent == 0 ||
-	    side->root != side->parent ||
+	    side->root == 0 ||
 	  v->root_topslot != side->root_topslot ||
 	  !side->parent_snap ||
 	    side->loop_start_pc >= end || end >= side->proto_sizebc ||
@@ -16945,7 +17196,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
 	  target = (int64_t)end+1+(int64_t)bc_j(side->parent_startins);
 	  if (bc_op(h) != BC_FORI || bc_a(h) != bc_a(side->parent_startins) ||
 	      header+1u != side->loop_start_pc ||
-	      back != BCINS_AD(BC_JFORL, bc_a(side->parent_startins), side->parent) ||
+	      back != BCINS_AD(BC_JFORL, bc_a(side->parent_startins), side->root) ||
 	      bc_j(h) <= 0 || (int64_t)header+1+(int64_t)bc_j(h) !=
 		(int64_t)end+1 || target < 0 ||
 	      (MSize)target != side->loop_start_pc ||
@@ -16954,7 +17205,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
 	    return 0;
 	} else {
 	  target = (int64_t)end + 1 + (int64_t)bc_j(back);
-	  if (bc_op(h) != BC_JLOOP || bc_d(h) != side->parent ||
+	  if (bc_op(h) != BC_JLOOP || bc_d(h) != side->root ||
 	      bc_op(back) != BC_JMP || bc_j(back) >= 0 || target < 0 ||
 	      (MSize)target != side->loop_start_pc ||
 	      !arm64_ir_pcpos((uintptr_t)(const void *)side->parent_continuation,
@@ -17736,9 +17987,9 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
 static int arm64_side_parent_forl_norestore_valid(
 	const LJArm64SideIRView *side, MSize i, SnapEntry sn)
 {
-	MSize idxslot, slot;
+	MSize idxslot, slot, control;
 	IRRef ref;
-	const IRIns *source;
+	const IRIns *source, *root_source;
 	if (!side || bc_op(side->parent_startins) != BC_FORL ||
 	    i >= side->parent_nmap_values ||
 	    (sn & 0x00ff0000u) != SNAP_NORESTORE)
@@ -17754,8 +18005,22 @@ static int arm64_side_parent_forl_norestore_valid(
 	  return 0;
 	source = &side->parent_map_values[i].value;
 	if (source->o != IR_SLOAD || source->op1 != slot ||
-	    (source->op2 & (IRSLOAD_CONVERT|IRSLOAD_PARENT)) != 0)
+	    (source->op2 & IRSLOAD_CONVERT) != 0)
 	  return 0;
+	control = slot == idxslot ? 0 :
+	  slot == idxslot+FORL_STOP ? 1 : 2;
+	if (side->parent != side->root) {
+	  if ((source->op2 & IRSLOAD_PARENT) == 0 ||
+	      (side->parent_root_forl_mask & (1u<<control)) == 0)
+	    return 0;
+	  root_source = &side->parent_root_forl[control];
+	  return root_source->o == IR_SLOAD && root_source->op1 == slot &&
+	    source->t.irt == root_source->t.irt &&
+	    source->op2 == (root_source->op2|IRSLOAD_PARENT) &&
+	    (control != 0 ||
+	     (source->t.irt & ~IRT_ISPHI) == (IRT_INT|IRT_GUARD));
+	}
+	if ((source->op2 & IRSLOAD_PARENT) != 0) return 0;
 	if (slot == idxslot)
 	  return (source->t.irt & ~IRT_ISPHI) == (IRT_INT|IRT_GUARD) &&
 	    source->op2 == (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT);
@@ -17841,9 +18106,10 @@ static int arm64_side_scalar_topology(const LJArm64SideIRView *side,
 	uintptr_t lo;
 	if (!side || !owner)
 	  return 0;
-	if (side->link == side->parent && side->linktype == LJ_TRLINK_ROOT &&
-	    owner->link == side->parent && owner->linktype == LJ_TRLINK_ROOT &&
-	    owner->mcloop == 0) {
+	if (side->link == side->root && side->root != 0 &&
+	    side->linktype == LJ_TRLINK_ROOT &&
+	    owner->root == side->root && owner->link == side->root &&
+	    owner->linktype == LJ_TRLINK_ROOT && owner->mcloop == 0) {
 	  if (bc_op(side->parent_startins) == BC_LOOP)
 	    return 1;
 	  lo = (uintptr_t)(const void *)side->proto_bc;
@@ -17861,6 +18127,28 @@ static int arm64_side_scalar_topology(const LJArm64SideIRView *side,
 	    lo+side->proto_sizebc*sizeof(BCIns), &continuation_pos);
 }
 
+/* Nested side-of-side admission remains root-owned. Authenticate both the
+** child's IR_BASE immediate-parent exit and the copied parent's root edge. */
+static int arm64_side_immediate_parent_valid(
+	const LJArm64SideIRView *side, const GCtrace *owner)
+{
+	IRIns base;
+	if (!side || !owner || side->parent == 0 || side->root == 0 ||
+	    owner->root != side->root || side->parent == side->traceno)
+	  return 0;
+	if (side->parent == side->root)
+	  return 1;
+	base = ir_load_acq(&side->ir[REF_BASE]);
+	return base.o == IR_BASE && base.t.irt == IRT_PGC &&
+	  (TraceNo)base.op1 == side->parent && (ExitNo)base.op2 == side->exitno &&
+	  side->parent_base.o == IR_BASE &&
+	  side->parent_base.t.irt == IRT_PGC &&
+	  (TraceNo)side->parent_base.op1 == side->root &&
+	  (MSize)side->parent_base.op2 < side->parent_root_nsnap &&
+	  side->parent_root == side->root && side->parent_link == side->root &&
+	  side->parent_linktype == LJ_TRLINK_ROOT;
+}
+
 static int arm64_side_scalar_context_ir(const jit_State *J,
 	const GCtrace *T, const LJArm64SideIRView *side)
 {
@@ -17871,8 +18159,9 @@ static int arm64_side_scalar_context_ir(const jit_State *J,
 	return J->parent == side->parent &&
 	J->exitno == side->exitno &&
 	J->pt && side->traceno == T->traceno && side->parent != 0 &&
-	side->parent != side->traceno && side->root == side->parent &&
-	T->root == side->parent &&
+	side->parent != side->traceno && side->root != 0 &&
+	T->root == side->root &&
+	arm64_side_immediate_parent_valid(side, T) &&
 	T->startins == BCINS_AD(BC_JMP, 0, 0) &&
 	trace_startptgco_acq((GCtrace *)T) == obj2gco(J->pt) &&
 	trace_startpc_acq((GCtrace *)T) == side->parent_continuation &&
@@ -17892,7 +18181,7 @@ static int arm64_side_scalar_context_postra(const LJArm64PostRAView *v,
 {
   const GCtrace *owner;
   if (!v || !side || !(owner = v->owner) ||
-	  owner->traceno != side->traceno || owner->root != side->parent ||
+	  owner->traceno != side->traceno || owner->root != side->root ||
 	  owner->sinktags || owner->startins != BCINS_AD(BC_JMP, 0, 0) ||
 	  trace_startpc_acq((GCtrace *)owner) != side->parent_continuation ||
 	  v->proto_bc != side->proto_bc || v->proto_sizebc != side->proto_sizebc ||
@@ -17900,7 +18189,8 @@ static int arm64_side_scalar_context_postra(const LJArm64PostRAView *v,
 	  v->snap != side->snap || v->snapmap != side->snapmap ||
 	  v->nsnap != side->nsnap || v->nsnapmap != side->nsnapmap ||
 	  !arm64_side_parent_snapshot_valid(side) ||
-	  !arm64_side_scalar_topology(side, owner))
+	  !arm64_side_scalar_topology(side, owner) ||
+	  !arm64_side_immediate_parent_valid(side, owner))
     return 0;
   return 1;
 }

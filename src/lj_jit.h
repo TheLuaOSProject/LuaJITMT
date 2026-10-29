@@ -1074,13 +1074,15 @@ typedef struct LJTraceArm64SideParentCert {
   TraceVec *tracev;
   GCtrace *body;
   MCode *mcode;
+  MCode *rootmcode;
   const BCIns *continuation;
   BCIns continuationins;
   TraceNo parent;
+  TraceNo root;
   ExitNo exitno;
   TraceNo child;
 } LJTraceArm64SideParentCert;
-LJ_STATIC_ASSERT(sizeof(LJTraceArm64SideParentCert) == 6*sizeof(uint64_t));
+LJ_STATIC_ASSERT(sizeof(LJTraceArm64SideParentCert) == 8*sizeof(uint64_t));
 #endif
 
 /* JIT compiler state. */

@@ -124,6 +124,22 @@ typedef struct LJArm64SideIRView {
   TraceNo traceno;
   TraceNo parent;
   TraceNo root;
+  /* The immediate parent's own root link is copied with its selected map. */
+  IRIns parent_base;
+  TraceNo parent_link;
+  TraceNo parent_root;
+  TraceLink parent_linktype;
+  MSize parent_root_nsnap;
+  IRIns parent_root_forl[3];
+  uint8_t parent_root_forl_mask;
+  IRIns parent_root_forl_bound_guard;
+  IRIns parent_root_forl_bound_constant;
+  IRRef parent_root_forl_bound_guard_ref;
+  IRRef parent_root_forl_bound_constant_ref;
+  IRRef parent_root_forl_stop_ref;
+  IRRef parent_root_forl_snapref;
+  IRRef parent_root_forl_nins;
+  uint8_t parent_root_forl_range_valid;
   TraceNo link;
   ExitNo exitno;
   BCIns startins;
@@ -147,6 +163,21 @@ typedef struct LJArm64SideParentSnapshot {
   MSize nregspmap;
   MSize nslots;
   MSize topslot;
+  IRIns parent_base;
+  TraceNo parent_link;
+  TraceNo parent_root;
+  TraceLink parent_linktype;
+  MSize parent_root_nsnap;
+  IRIns parent_root_forl[3];
+  uint8_t parent_root_forl_mask;
+  IRIns parent_root_forl_bound_guard;
+  IRIns parent_root_forl_bound_constant;
+  IRRef parent_root_forl_bound_guard_ref;
+  IRRef parent_root_forl_bound_constant_ref;
+  IRRef parent_root_forl_stop_ref;
+  IRRef parent_root_forl_snapref;
+  IRRef parent_root_forl_nins;
+  uint8_t parent_root_forl_range_valid;
   const BCIns *continuation;
   /* Root-loop source and bounded executable body interval. */
   BCIns startins;

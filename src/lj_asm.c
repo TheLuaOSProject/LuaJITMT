@@ -200,6 +200,30 @@ static void asm_arm64_side_ir_view_init(const jit_State *J,
   view->traceno = trace_traceno_acq((GCtrace *)T);
   view->parent = parent;
   view->root = trace_root_acq((GCtrace *)T);
+  if (parent_snapshot != NULL) {
+    view->parent_base = parent_snapshot->parent_base;
+    view->parent_link = parent_snapshot->parent_link;
+    view->parent_root = parent_snapshot->parent_root;
+    view->parent_linktype = parent_snapshot->parent_linktype;
+    view->parent_root_nsnap = parent_snapshot->parent_root_nsnap;
+    memcpy(view->parent_root_forl, parent_snapshot->parent_root_forl,
+	   sizeof(view->parent_root_forl));
+    view->parent_root_forl_mask = parent_snapshot->parent_root_forl_mask;
+    view->parent_root_forl_bound_guard =
+	parent_snapshot->parent_root_forl_bound_guard;
+    view->parent_root_forl_bound_constant =
+	parent_snapshot->parent_root_forl_bound_constant;
+    view->parent_root_forl_bound_guard_ref =
+	parent_snapshot->parent_root_forl_bound_guard_ref;
+    view->parent_root_forl_bound_constant_ref =
+	parent_snapshot->parent_root_forl_bound_constant_ref;
+    view->parent_root_forl_stop_ref =
+	parent_snapshot->parent_root_forl_stop_ref;
+    view->parent_root_forl_snapref = parent_snapshot->parent_root_forl_snapref;
+    view->parent_root_forl_nins = parent_snapshot->parent_root_forl_nins;
+    view->parent_root_forl_range_valid =
+	parent_snapshot->parent_root_forl_range_valid;
+  }
   view->link = trace_link_acq((GCtrace *)T);
   view->exitno = exitno;
   view->startins = trace_startins_acq((GCtrace *)T);
@@ -3163,15 +3187,16 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
       asm_arm64_side_parent_result(J,
 	lj_trace_arm64_side_parent_capture(J));
       if (LJ_UNLIKELY(!lj_trace_arm64_side_parent_snapshot(
-	    J, &as->side_parent_snapshot)))
+	J, &as->side_parent_snapshot))) {
 	lj_trace_err(J, LJ_TRERR_RETRY);
+	  }
       asm_arm64_side_ir_view_init(J, T, T->ir, T->nins,
 	J->parent, J->exitno, &as->side_parent_snapshot, &sideview);
-      if (LJ_UNLIKELY(!lj_asm_arm64_side_scalar_ir_admit(
+	if (LJ_UNLIKELY(!lj_asm_arm64_side_scalar_ir_admit(
 	    J, T, &sideview, &reject))) {
-	setintV(&J->errinfo, (int32_t)reject.op);
-	lj_trace_err_info(J, LJ_TRERR_NYIIR);
-      }
+	  setintV(&J->errinfo, (int32_t)reject.op);
+	  lj_trace_err_info(J, LJ_TRERR_NYIIR);
+	}
 #if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
       asm_test_side_probe_capture(J);
 #endif
@@ -3433,14 +3458,20 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
 #if LJ_TARGET_ARM64
   else {
     MCode *certified_parent_mcode = NULL;
+    MCode *tail_target_mcode = NULL;
     MCode *tail_pc;
     if (J->parent != 0) {
       asm_arm64_side_parent_result(J,
 	lj_trace_arm64_side_parent_revalidate(J));
-      if (LJ_UNLIKELY(T->link != J->arm64_side_parent.parent ||
-	    as->parent != J->arm64_side_parent.body))
+      if (T->link == J->arm64_side_parent.parent)
+	tail_target_mcode = J->arm64_side_parent.mcode;
+      else if (T->link == J->arm64_side_parent.root)
+	tail_target_mcode = J->arm64_side_parent.rootmcode;
+      if (LJ_UNLIKELY(tail_target_mcode == NULL ||
+	    as->parent != J->arm64_side_parent.body)) {
 	lj_trace_err(J, LJ_TRERR_RETRY);
-      certified_parent_mcode = J->arm64_side_parent.mcode;
+	}
+      certified_parent_mcode = tail_target_mcode;
     }
     tail_pc = asm_tail_fixup(as, T->link, certified_parent_mcode);
     (void)tail_pc;
