@@ -1,5 +1,12 @@
 # Remote CALLXS flush recorder assertion (2026-10-29)
 
+Follow-up: the legal concurrent lookup race is reproduced deterministically
+and repaired by `49b1f5e6f` on the port branch. See
+[the repair and focused validation](cdata-call-recorder-metacall-race-2026-10-29.md).
+The report below preserves the original failed-gate evidence; the new combined
+gate is tracked in the
+[integration checkpoint](arm64-metacall-aggregate-forl-checkpoint-2026-10-29.md).
+
 The integrated experimental gate is not complete. Its first run at
 `d0e4ecaa1` stopped on an unused optional test-helper warning; after the
 test-only `edb6cd4dc` repair, the resume passed all contracts through live
