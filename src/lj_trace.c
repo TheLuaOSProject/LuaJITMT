@@ -3870,6 +3870,7 @@ static LJ_AINLINE int trace_root_entry_source_valid(uint32_t sourceop)
 {
   return sourceop == (uint32_t)BC_JLOOP ||
 	 sourceop == (uint32_t)BC_JFORL ||
+         sourceop == (uint32_t)BC_JITERL ||
 	 sourceop == (uint32_t)BC_JFUNCF;
 }
 
@@ -3879,6 +3880,8 @@ static LJ_AINLINE int trace_root_entry_source_admitted(uint32_t sourceop)
     return !LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED;
   if (sourceop == (uint32_t)BC_JFORL)
     return !LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED;
+  if (sourceop == (uint32_t)BC_JITERL)
+    return !LJ_ARM64_JIT_ITERL_NATIVE_ENTRY_FAIL_CLOSED;
   if (sourceop == (uint32_t)BC_JFUNCF)
     return !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED;
   return 0;
@@ -3892,6 +3895,8 @@ static LJ_AINLINE int trace_root_entry_start_valid(uint32_t sourceop,
     return op == BC_FUNCF;
   if (sourceop == (uint32_t)BC_JFORL)
     return op == BC_FORL;
+  if (sourceop == (uint32_t)BC_JITERL)
+    return op == BC_ITERL;
   return sourceop == (uint32_t)BC_JLOOP && op == BC_LOOP;
 }
 
@@ -3933,6 +3938,10 @@ static LJ_AINLINE int trace_root_entry_bytecode_valid(const BCIns *pc,
   BCIns expected = BCINS_AD((BCOp)sourceop, bc_a(startins), traceno);
   if (sourceins != expected || ins != sourceins)
     return 0;
+  if (sourceop == (uint32_t)BC_JITERL) {
+    LJArm64IteratorSource iter;
+    return lj_asm_arm64_iterl_tuple(pt, pc, startins, sourceins, 0, &iter);
+  }
   if (sourceop == (uint32_t)BC_JFUNCF)
     return trace_root_entry_funcf_generation_valid(
 	pt, pc, startins, sourceins);
@@ -3953,6 +3962,12 @@ static int trace_root_entry_loop_geometry(uint32_t sourceop,
   if (!trace_pc_in_proto_range(pc, bc, pt->sizebc))
     return 0;
   pos = proto_bcpos(pt, pc);
+  if (sourceop == (uint32_t)BC_JITERL) {
+    LJArm64IteratorSource iter;
+    BCIns live = (BCIns)la_load32_acq((const uint32_t *)pc);
+    return lj_asm_arm64_iterl_tuple(pt, pc, startins, live,
+                                    live == startins, &iter);
+  }
   if (sourceop == (uint32_t)BC_JFUNCF) {
     if (pos != 0 || pt->sizebc < 3 || pt->sizebc > UINT8_MAX ||
 	pt->framesize == 0 ||
@@ -4079,7 +4094,9 @@ static int trace_root_entry_loop_view_acq(const GCtrace *T, TraceNo traceno,
   uint32_t expected_admission = sourceop == (uint32_t)BC_JFORL ?
 	TRACE_ARM64_INT_FORL_ADMITTED :
 	(sourceop == (uint32_t)BC_JFUNCF ?
-	 TRACE_ARM64_TRUE_FUNCF_ADMITTED : TRACE_ARM64_INT_LOOP_ADMITTED);
+	 TRACE_ARM64_TRUE_FUNCF_ADMITTED :
+         sourceop == (uint32_t)BC_JITERL ? TRACE_ARM64_ITERL_ADMITTED :
+         TRACE_ARM64_INT_LOOP_ADMITTED);
   int function_root = sourceop == (uint32_t)BC_JFUNCF;
   v->retire_epoch = la_load64_acq(&T->retire_epoch);
   v->startpt = trace_startptgco_acq((GCtrace *)T);
@@ -4237,7 +4254,7 @@ static int trace_arm64_root_certify(jit_State *J, GCtrace *T)
   uint32_t sourceop;
   uint64_t generation = la_load64_acq(&T->arm64_generation);
   if (!generation || !p || !checkptrGC(p) || p->gch.gct != (uint32_t)~LJ_TPROTO ||
-      (op != BC_LOOP && op != BC_FORL && op != BC_FUNCF)) return 0;
+      (op != BC_LOOP && op != BC_FORL && op != BC_ITERL && op != BC_FUNCF)) return 0;
   pt = gco2pt(p);
   sourceop = (uint32_t)op + (uint32_t)BC_JLOOP - (uint32_t)BC_LOOP;
   if (!trace_root_entry_loop_view_acq(T, trace_traceno_acq(T),
@@ -7325,6 +7342,14 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   if ((uintptr_t)pt->framesize >
 	(maxstackp - basep) / (uintptr_t)sizeof(TValue))
     return result;
+
+  if (sourceop == BC_JITERL) {
+    BCReg a = bc_a(sourceins);
+    TValue key;
+    if (a < 3u || a >= pt->framesize) return result;
+    key.u64 = tv_rawload_acq(&base[a]);
+    if (tvisnil(&key) || key.u64 != tv_rawload_acq(&base[a-1u])) return result;
+  }
 
   if (!lj_gc2_jit_entry_open(g)) {
     gc2_jit_sweep_displaced_rel(g, 1);
@@ -11547,6 +11572,7 @@ static int trace_root_startins_valid(BCIns ins, ExitNo exitno)
   ** passing through lj_trace_hot(). */
   return exitno == 0 &&
          (bc_op(ins) == BC_LOOP ||
+          (bc_op(ins) == BC_ITERL && !LJ_ARM64_JIT_ITERL_RECORDER_FAIL_CLOSED) ||
           (bc_op(ins) == BC_FORL &&
            !LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED) ||
           (bc_op(ins) == BC_FUNCF &&
@@ -11663,6 +11689,11 @@ static int trace_root_arm64_generation_valid(GCproto *pt, const BCIns *pc,
   BCOp op = bc_op(startins);
   if (op == BC_LOOP)
     return 1;
+  if (op == BC_ITERL) {
+    LJArm64IteratorSource source;
+    return !LJ_ARM64_JIT_ITERL_RECORDER_FAIL_CLOSED &&
+      lj_asm_arm64_iterl_tuple(pt, pc, startins, startins, 1, &source);
+  }
   if (op == BC_FORL)
     return !LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED &&
 	   trace_root_forl_tuple(pt, pc, startins);
@@ -12975,6 +13006,8 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
   MSize vargslots = 0;
   MSize jitbase = 0;
   int isvarg, varg_setup, frame_slots_live;
+  int iterator = bc_op(J->cur.startins) == BC_ITERL;
+  LJArm64IteratorSource iter;
   TRef callee, link;
   IRRef ref;
   if (!owner || !fn || !isluafunc(fn) || !rootpt || !pc) return 0;
@@ -13014,7 +13047,12 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
   if (J->framedepth < 1 ||
       J->framedepth > LJ_TRACE_ARM64_MAX_LEAF_DEPTH) return 0;
   recorded_depth = (MSize)J->framedepth;
-  if ((bc_op(J->cur.startins) != BC_FORL &&
+  if (iterator && (recorded_depth != 1u || isvarg || varg_setup ||
+      pt->numparams != 2u ||
+      !lj_asm_arm64_iterl_tuple(rootpt, trace_startpc_acq(&J->cur),
+                              J->cur.startins, J->cur.startins, 1, &iter)))
+    return 0;
+  if ((!iterator && bc_op(J->cur.startins) != BC_FORL &&
        !(bc_op(J->cur.startins) == BC_FUNCF &&
          trace_root_funcf_shape(rootpt, trace_startpc_acq(&J->cur),
                                 J->cur.startins))) ||
@@ -13043,7 +13081,10 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
     call = (BCIns)la_load32_acq((const uint32_t *)(returnpc-1));
     {
       MSize nresults = trace_arm64_lua_leaf_nresults(funcproto(currentfn));
-      if (!nresults || bc_op(call) != BC_CALL ||
+      if (!nresults || (iterator ?
+          (i != 0u || parentpt != rootpt || nresults != 1u ||
+           returnpc-1 != proto_bc(rootpt)+iter.call_pc ||
+           call != iter.callins) : bc_op(call) != BC_CALL) ||
           bc_b(call) != nresults+1u ||
           (nresults == 2u && (i != 0u || recorded_depth != 1u)) ||
           !bc_c(call) ||
@@ -13531,6 +13572,7 @@ static int trace_hot_root_start_valid(const BCIns *pc)
   BCOp op = bc_op((BCIns)la_load32_acq((uint32_t *)pc));
 #if LJ_TARGET_ARM64
   return op == BC_LOOP ||
+         (op == BC_ITERL && !LJ_ARM64_JIT_ITERL_RECORDER_FAIL_CLOSED) ||
 	 (op == BC_FORL && !LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED) ||
 	 (op == BC_FUNCF && !LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED);
 #else

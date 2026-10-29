@@ -3397,6 +3397,8 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
       }
       if (bc_op(T->startins) == BC_FORL)
 	trace_arm64_admission_rel(T, TRACE_ARM64_INT_FORL_ADMITTED);
+      else if (bc_op(T->startins) == BC_ITERL)
+	trace_arm64_admission_rel(T, TRACE_ARM64_ITERL_ADMITTED);
       else if (bc_op(T->startins) == BC_FUNCF)
 	trace_arm64_admission_rel(T, TRACE_ARM64_TRUE_FUNCF_ADMITTED);
       else
