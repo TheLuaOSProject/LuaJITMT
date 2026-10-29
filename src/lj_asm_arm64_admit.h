@@ -12391,7 +12391,7 @@ static int arm64_lua_leaf_forward_source(const GCfunc *forward,
 	target = funcV(&value);
 	targetpt = funcproto(target);
 	if ((la_load8_acq(&targetpt->flags) & PROTO_VARARG) ||
-	    targetpt->numparams != 3u ||
+	    targetpt->numparams < 1u || targetpt->numparams > 3u ||
 	    arm64_lua_leaf_return_count(targetpt) != 1u ||
 	    !lj_trace_arm64_lua_leaf(target)) return 0;
 	if (targetp) *targetp = funcV(&value);
@@ -12757,7 +12757,8 @@ static IRRef arm64_lua_leaf_ir_args_at(const jit_State *J, const GCtrace *T,
   if (arm64_lua_leaf_forward_source(function, NULL, &forward_target,
                                     &forward_nargs)) {
     MSize j, forward_mapped = 0, fnslot, argbase;
-    if (iterator || !forward_target || forward_nargs != 3u || !parentpt ||
+    if (iterator || !forward_target || forward_nargs < 1u ||
+        forward_nargs > 3u || !parentpt ||
         framebase != 1u+LJ_FR2) return 0;
     memcpy(&pcbase, &T->snapmap[snap->mapofs+snap->nent], sizeof(pcbase));
     if (!arm64_ir_pcpos((uintptr_t)(pcbase>>8),
@@ -12816,8 +12817,8 @@ static IRRef arm64_lua_leaf_ir_args_at(const jit_State *J, const GCtrace *T,
     } else {
       call = 0;
     }
-    if (bc_op(call) == BC_CALL && bc_b(call) == 2u && bc_c(call) == 4u &&
-        bc_a(call)+1u+LJ_FR2+3u <= parentpt->framesize &&
+    if (bc_op(call) == BC_CALL && bc_b(call) == 2u &&
+        bc_c(call) >= 2u && bc_c(call) <= 4u &&
         bc_a(call)+bc_c(call)+LJ_FR2 <= parentpt->framesize) {
     fnslot = framebase+bc_a(call);
     argbase = fnslot+1u+LJ_FR2;
@@ -12832,8 +12833,8 @@ static IRRef arm64_lua_leaf_ir_args_at(const jit_State *J, const GCtrace *T,
     }
     if (sourcematches == 1u && sourcefn != function &&
         arm64_lua_leaf_forward_source(sourcefn, NULL, NULL, NULL)) {
-    if (!arm64_lua_leaf_forward_source(sourcefn, function, &target, &nargs) ||
-        target != function || nargs != 3u) return 0;
+      if (!arm64_lua_leaf_forward_source(sourcefn, function, &target, &nargs) ||
+          target != function || nargs != bc_c(call)-1u) return 0;
     for (i = 0; i < nargs; i++) {
       MSize found = 0;
       IRRef value = 0;
@@ -12873,8 +12874,7 @@ static IRRef arm64_lua_leaf_ir_args_at(const jit_State *J, const GCtrace *T,
       current_call = (BCIns)la_load32_acq(
         (const uint32_t *)&proto_bc(parentpt)[currentpos]);
       if (bc_op(current_call) == BC_CALL && bc_b(current_call) == 2u &&
-          bc_c(current_call) == 4u &&
-          bc_a(current_call)+1u+LJ_FR2+3u <= parentpt->framesize &&
+          bc_c(current_call) >= 2u && bc_c(current_call) <= 4u &&
           bc_a(current_call)+bc_c(current_call)+LJ_FR2 <= parentpt->framesize) {
         const GCfunc *forwarder = NULL, *forward_target = NULL;
         IRRef forwardref = 0, forwarded_args[3] = {0};
@@ -12911,7 +12911,7 @@ static IRRef arm64_lua_leaf_ir_args_at(const jit_State *J, const GCtrace *T,
           if (matches != 1u || forwarder == function ||
               !arm64_lua_leaf_forward_source(forwarder, function,
                                                &forward_target, &nargs) ||
-              forward_target != function || nargs != 3u) continue;
+              forward_target != function || nargs != bc_c(current_call)-1u) continue;
           candidate = ss;
           forwardref = candidate_ref;
 
@@ -12921,7 +12921,7 @@ static IRRef arm64_lua_leaf_ir_args_at(const jit_State *J, const GCtrace *T,
                                       forwarded_args, parentpt, framebase)) {
           int exact = 1;
           MSize i;
-          for (i = 0; i < 3u; i++) {
+          for (i = 0; i < nargs; i++) {
             if (!forwarded_args[i] || !arm64_scalar_ir_ref(T, callee, ref,
                                                           IRT_FUNC))
               exact = 0;
@@ -13100,7 +13100,7 @@ static IRRef arm64_lua_leaf_ir_args_at(const jit_State *J, const GCtrace *T,
   {
     const GCfunc *source = arm64_lua_leaf_ir_function(T, fn, ref, NULL);
     if (source && arm64_lua_leaf_forward_source(source, function, NULL, NULL) &&
-        nargs == 3u)
+        nargs >= 1u && nargs <= 3u)
       return fn;
   }
   for (r = REF_FIRST; r <= ref && r < T->nins; r++) {
@@ -14719,8 +14719,9 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
       int args_ok;
       args_ok = arm64_lua_leaf_ir_args(J, T, caller, callee, args) != 0;
       if (!args_ok && !iterator && !paired_varg && s > caller+1u &&
-          pt->numparams == 3u && callnargs == 3u &&
-          bc_op(call) == BC_CALL && bc_b(call) == 2u && bc_c(call) == 4u) {
+          pt->numparams == callnargs && callnargs >= 1u && callnargs <= 3u &&
+          bc_op(call) == BC_CALL && bc_b(call) == 2u &&
+          bc_c(call) == callnargs+1u) {
         SnapNo candidate;
         /* A terminal CALLMT can replace the callable in the root CALL slot
         ** with its UGET target. Recover that edge only from a fully validated
@@ -14729,7 +14730,7 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
           const SnapShot *source = &T->snap[candidate];
           LJArm64LuaFramePath sourceframes;
           uint64_t source_footer;
-          IRRef sourcefnref, sourceargs[3] = {0};
+          IRRef sourcefnref, sourceargs[ARM64_LUA_LEAF_MAX_RESULTS] = {0};
           const GCfunc *sourcefn, *forward_target;
           MSize source_base, i;
           IRRef source_link;
@@ -14775,7 +14776,7 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
 
             continue;
           }
-          for (i = 0; i < 3u; i++) {
+          for (i = 0; i < callnargs; i++) {
             MSize j, found = 0;
             for (j = 0; j < snap->nent; j++) {
               SnapEntry entry = T->snapmap[snap->mapofs+j];
@@ -14786,8 +14787,8 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
             }
             if (!sourceargs[i] || found != 1u) break;
           }
-          if (i != 3u) continue;
-          for (i = 0; i < 3u; i++) args[i] = sourceargs[i];
+          if (i != callnargs) continue;
+          for (i = 0; i < callnargs; i++) args[i] = sourceargs[i];
           args_ok = 1;
         }
       }
@@ -14825,7 +14826,8 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
     MSize forwardpos, forward_dest, expected_nslots;
     BCIns varg = (BCIns)la_load32_acq(
       (const uint32_t *)&proto_bc(pt)[2]);
-    if (!forward_target || forward_nargs != 3u || bc_op(call) != BC_CALL ||
+    if (!forward_target || forward_nargs < 1u || forward_nargs > 3u ||
+        bc_op(call) != BC_CALL ||
         bc_b(call) != 2u || bc_c(call) != forward_nargs+1u ||
         callnargs != forward_nargs ||
         bc_a(call)+1u+LJ_FR2+forward_nargs > J->pt->framesize ||
@@ -18219,7 +18221,8 @@ static IRRef arm64_lua_leaf_postra_args_at(const LJArm64PostRAView *v,
   if (arm64_lua_leaf_forward_source(function, NULL, &forward_target,
                                     &forward_nargs)) {
     MSize j, forward_mapped = 0, fnslot, argbase;
-    if (iterator || !forward_target || forward_nargs != 3u || !parentpt ||
+    if (iterator || !forward_target || forward_nargs < 1u ||
+        forward_nargs > 3u || !parentpt ||
         framebase != 1u+LJ_FR2) { return 0; }
     footer[0] = snapentry_acq(&v->snapmap[ofs+nent]);
     footer[1] = snapentry_acq(&v->snapmap[ofs+nent+1u]);
@@ -18427,7 +18430,7 @@ static IRRef arm64_lua_leaf_postra_args_at(const LJArm64PostRAView *v,
   {
     const GCfunc *source = arm64_lua_leaf_postra_function(v, fn, ref, NULL);
     if (source && arm64_lua_leaf_forward_source(source, function, NULL, NULL) &&
-        nargs == 3u)
+        nargs >= 1u && nargs <= 3u)
       return fn;
   }
   for (r = REF_FIRST; r <= ref && r < v->nins; r++) {
@@ -19848,8 +19851,9 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
     if (!(uint8_t)footer) {
       int args_ok = arm64_lua_leaf_postra_args(v, caller, function, args);
       if (!args_ok && !iterator && !paired_varg && s > caller+1u &&
-          pt->numparams == 3u && callnargs == 3u &&
-          bc_op(call) == BC_CALL && bc_b(call) == 2u && bc_c(call) == 4u) {
+          pt->numparams == callnargs && callnargs >= 1u && callnargs <= 3u &&
+          bc_op(call) == BC_CALL && bc_b(call) == 2u &&
+          bc_c(call) == callnargs+1u) {
         MSize candidate;
 
         for (candidate = caller+1u; candidate < s; candidate++) {
@@ -19858,7 +19862,7 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
           MSize sourcenent = snap_nent_acq(source), sourcebase;
           LJArm64LuaFramePath sourceframes;
           uint64_t source_footer;
-          IRRef sourcefnref, sourceargs[3] = {0}, source_link;
+          IRRef sourcefnref, sourceargs[ARM64_LUA_LEAF_MAX_RESULTS] = {0}, source_link;
           const GCfunc *sourcefn, *forward_target;
           const BCIns *source_retpc;
           MSize i;
@@ -19893,7 +19897,7 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
                                             &sourcebase) ||
               !arm64_lua_leaf_postra_args_at(v,caller,sourcefnref,
                 sourceargs,v->proto,1u+LJ_FR2)) continue;
-          for (i = 0; i < 3u; i++) {
+          for (i = 0; i < callnargs; i++) {
             MSize j, found = 0;
             for (j = 0; j < count; j++) {
               SnapEntry entry = frame_map[j];
@@ -19904,8 +19908,8 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
             }
             if (!sourceargs[i] || found != 1u) break;
           }
-          if (i != 3u) continue;
-          for (i = 0; i < 3u; i++) args[i] = sourceargs[i];
+          if (i != callnargs) continue;
+          for (i = 0; i < callnargs; i++) args[i] = sourceargs[i];
           args_ok = 1;
         }
       }
@@ -19938,7 +19942,8 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
     MSize forwardpos, forward_dest, expected_nslots;
     BCIns varg = (BCIns)la_load32_acq(
       (const uint32_t *)&proto_bc(pt)[2]);
-    if (!forward_target || forward_nargs != 3u || bc_op(call) != BC_CALL ||
+    if (!forward_target || forward_nargs < 1u || forward_nargs > 3u ||
+        bc_op(call) != BC_CALL ||
         bc_b(call) != 2u || bc_c(call) != forward_nargs+1u ||
         callnargs != forward_nargs ||
         bc_a(call)+1u+LJ_FR2+forward_nargs > v->root_topslot ||

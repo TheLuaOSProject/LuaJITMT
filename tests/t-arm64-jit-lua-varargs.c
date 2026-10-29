@@ -250,13 +250,14 @@ static void native_call(lua_State *L, GCtrace *T, int n, lua_Integer bias,
 
 
 static void assert_forward_trace_bound(lua_State *L, GCtrace *T,
-                                       GCfunc *forward, GCfunc *target)
+                                       GCfunc *forward, GCfunc *target,
+                                       MSize nargs)
 {
   GCproto *runner=funcproto(global_function(L,"leaf_run"));
   assert(T && forward && target);
   assert(trace_startpt_acq(T)==runner && T->linktype==LJ_TRLINK_LOOP &&
          T->link==T->traceno && !T->root);
-  assert(lj_trace_arm64_lua_leaf_forward_call(forward,target,3u));
+  assert(lj_trace_arm64_lua_leaf_forward_call(forward,target,nargs));
 }
 
 static void install_case(lua_State *L, const char *body, const char *runner)
@@ -266,10 +267,11 @@ static void install_case(lua_State *L, const char *body, const char *runner)
   ljt_lua_pcall(L,2,0,"install fixed vararg case");
 }
 
-static void install_forward_case(lua_State *L)
+static void install_forward_case(lua_State *L, MSize nargs)
 {
-  ljt_lua_dostring(L,
-    "install_vararg_forward_case();");
+	lua_getglobal(L,"install_vararg_forward_case");
+	lua_pushinteger(L,(lua_Integer)nargs);
+	ljt_lua_pcall(L,1,0,"install fixed vararg forward case");
 }
 
 typedef struct VarargFixture {
@@ -547,7 +549,7 @@ int main(void)
     {"local x,y=...; return x*.5+y",
      "local sum=.5; for i=1,n do sum=sum+fn(i+.5,bias) end; return sum",2,2,0}
   };
-  unsigned shape;
+  unsigned shape, arity;
   ljt_lua_dostring(L,
     "local th=require('threading'); ready=th.channel(1); stop=th.channel(1); "
     "peer=assert(th.spawn(function(a,b) assert(a:send(true,5)); "
@@ -562,19 +564,26 @@ int main(void)
     "jit.off(leaf_oracle_run,true); jit.off(leaf_oracle,true); "
     "jit.flush(); jit.on(); jit.on(leaf_run,true); jit.on(leaf,true); "
     "jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64') end; "
-    "install_vararg_forward_case=function() "
-    "local make_sum=assert(loadstring('return function(a,b,c) local x=a+b; x=x+c; return x end','@vararg-forward-sum'))(); "
-    "local make_forward=assert(loadstring('return function(sum) return function(...) return sum(...) end end','@vararg-forward-factory'))(); "
-    "sum_leaf=make_sum; sum_oracle=make_sum; "
-    "leaf=make_forward(sum_leaf); leaf_oracle=make_forward(sum_oracle); "
-    "local run='local sum=.5; for i=1,n do sum=sum+fn(i,bias,10) end; return sum'; "
+    "make_forward_sum=function(n,name) "
+    "local params=({'a','a,b','a,b,c'})[n]; "
+    "local body=({'local x=a+3; return x','local x=a+b; return x*.5','local x=a+b; x=x+c; return x'})[n]; "
+    "return assert(loadstring('return function('..params..') '..body..' end',name))() end; "
+    "make_forward=function(name,sum) "
+    "return assert(loadstring('return function(sum) return function(...) return sum(...) end end',name))()(sum) end; "
+    "install_vararg_forward_case=function(n) "
+    "local calls=({'fn(i)','fn(i,bias)','fn(i,bias,10)'})[n]; "
+    "local make_sum=function(name) return make_forward_sum(n,name) end; "
+    "sum_leaf=make_sum('@vararg-forward-sum-'..n); sum_oracle=make_sum('@vararg-forward-oracle-sum-'..n); "
+    "leaf=make_forward('@vararg-forward-factory-'..n,sum_leaf); leaf_oracle=make_forward('@vararg-forward-oracle-factory-'..n,sum_oracle); "
+    "local run='local sum=.5; for i=1,n do sum=sum+'..calls..' end; return sum'; "
     "local src='return function(fn,n,bias) '..run..' end'; "
-    "leaf_run=assert(loadstring(src,'@vararg-forward-run'))(); "
-    "leaf_oracle_run=assert(loadstring(src,'@vararg-forward-oracle-run'))(); "
+    "leaf_run=assert(loadstring(src,'@vararg-forward-run-'..n))(); "
+    "leaf_oracle_run=assert(loadstring(src,'@vararg-forward-oracle-run-'..n))(); "
     "jit.off(leaf_oracle_run,true); jit.off(leaf_oracle,true); jit.off(sum_oracle,true); "
     "jit.flush(); jit.on(); jit.on(leaf_run,true); jit.on(leaf,true); jit.on(sum_leaf,true); "
     "jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64') end; "
-    "jit.off(install_vararg_case,true)");
+    "jit.off(install_vararg_case,true); jit.off(install_vararg_forward_case,true); "
+    "jit.off(make_forward_sum,true); jit.off(make_forward,true)");
   for (shape=0;shape<sizeof(cases)/sizeof(cases[0]);shape++) {
     GCtrace *T=NULL;
     install_case(L,cases[shape].body,cases[shape].runner);
@@ -609,10 +618,11 @@ int main(void)
            shape,shape==0 ? 3u : 2u,
            cases[shape].child_map ? "paired child map" : "root entry only");
   }
-  install_forward_case(L);
-  {
+  for (arity=1;arity<=3;arity++) {
     GCtrace *T=NULL;
-    GCfunc *forward=global_function(L,"leaf");
+    GCfunc *forward;
+    install_forward_case(L,arity);
+    forward=global_function(L,"leaf");
     assert(lj_trace_arm64_lua_leaf(forward));
     for (unsigned attempt=0;attempt<8 && !T;attempt++) {
       lua_Number expected=invoke(L,"leaf_oracle_run","leaf_oracle",96,20);
@@ -620,24 +630,45 @@ int main(void)
       T=root_trace(L);
     }
     assert(T);
-    assert_forward_trace_bound(L,T,forward,global_function(L,"sum_leaf"));
-    native_call(L,T,64,20,3u,3u,0,0);
+    assert_forward_trace_bound(L,T,forward,global_function(L,"sum_leaf"),arity);
+    native_call(L,T,64,20,arity,arity,0,0);
     vararg_admission(L,T,1);
+    lua_getglobal(L,"make_forward_sum");
+    lua_pushinteger(L,(lua_Integer)arity);
+    lua_pushfstring(L,"@vararg-forward-alt-sum-%d",(int)arity);
+    ljt_lua_pcall(L,2,1,"make alternate vararg target");
+    lua_setglobal(L,"sum_alt");
+    lua_getglobal(L,"make_forward");
+    lua_pushfstring(L,"@vararg-forward-alt-factory-%d",(int)arity);
+    lua_getglobal(L,"sum_alt");
+    ljt_lua_pcall(L,2,1,"make alternate vararg forwarder");
+    lua_setglobal(L,"leaf_alt");
+    lua_getglobal(L,"make_forward_sum");
+    lua_pushinteger(L,(lua_Integer)arity);
+    lua_pushfstring(L,"@vararg-forward-alt-oracle-sum-%d",(int)arity);
+    ljt_lua_pcall(L,2,1,"make alternate vararg oracle target");
+    lua_setglobal(L,"sum_oracle_alt");
+    lua_getglobal(L,"make_forward");
+    lua_pushfstring(L,"@vararg-forward-alt-oracle-factory-%d",(int)arity);
+    lua_getglobal(L,"sum_oracle_alt");
+    ljt_lua_pcall(L,2,1,"make alternate vararg oracle forwarder");
+    lua_setglobal(L,"leaf_oracle_alt");
     ljt_lua_dostring(L,
       "leaf_saved=leaf; leaf_oracle_saved=leaf_oracle; "
-      "leaf_alt=assert(loadstring('return function(a,b,c) local x=a+b; x=x+c; return x end','@vararg-forward-alt'))(); "
-      "leaf_oracle_alt=assert(loadstring('return function(a,b,c) local x=a+b; x=x+c; return x end','@vararg-forward-alt-oracle'))(); "
-      "jit.off(leaf_alt,true); jit.off(leaf_oracle_alt,true); "
+      "jit.off(leaf_oracle_alt,true); jit.off(sum_oracle_alt,true); "
       "leaf=leaf_alt; leaf_oracle=leaf_oracle_alt");
-    native_call(L,T,24,20,3u,3u,0,0);
+    native_call(L,T,24,20,arity,arity,0,0);
     assert(lj_trace_test_exit_calls()>0 &&
            lj_trace_test_first_exit_parent()==T->traceno);
     assert(root_trace(L)==T);
-    ljt_lua_dostring(L,"leaf=leaf_saved; leaf_oracle=leaf_oracle_saved; leaf_saved=nil; leaf_oracle_saved=nil");
+    ljt_lua_dostring(L,
+      "leaf=leaf_saved; leaf_oracle=leaf_oracle_saved; "
+      "leaf_saved=nil; leaf_oracle_saved=nil; "
+      "leaf_alt=nil; leaf_oracle_alt=nil; sum_alt=nil; sum_oracle_alt=nil");
     lua_gc(L,LUA_GCCOLLECT,0);
-    native_call(L,T,24,20,3u,3u,0,0);
-    printf("Lua vararg-forward shape=5 native=%u exact root CALL/target guard, identity exit, GC/reuse passed\n",
-           3u);
+    native_call(L,T,24,20,arity,arity,0,0);
+    printf("Lua vararg-forward target-arity=%u native=3 exact root CALL/target guard, identity exit, GC/reuse passed\n",
+           arity);
   }
   ljt_lua_dostring(L,"assert(stop:send(true,5)); local ok,v=peer:join(5); assert(ok and v)");
   lua_close(L);
