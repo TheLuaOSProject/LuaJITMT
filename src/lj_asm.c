@@ -221,8 +221,8 @@ static void asm_arm64_side_ir_view_init(const jit_State *J,
     view->parent_nregspmap = parent_snapshot->nregspmap;
     view->parent_nslots = parent_snapshot->nslots;
     view->parent_topslot = parent_snapshot->topslot;
+    view->parent_admission = parent_snapshot->admission;
     view->parent_continuation = parent_snapshot->continuation;
-    view->parent_startins = parent_snapshot->startins;
     view->parent_startins = parent_snapshot->startins;
     view->loop_header_pc = parent_snapshot->loop_header_pc;
     view->loop_start_pc = parent_snapshot->loop_start_pc;

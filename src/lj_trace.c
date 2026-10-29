@@ -4424,6 +4424,9 @@ static int trace_arm64_first_side_mapref_valid(
   return ref >= REF_FIRST && ref < v->nins;
 }
 
+static int trace_arm64_side_forl_norestore_valid(const IRIns *ir,
+	IRRef nins, IRRef nk, IRRef snapref, BCIns startins, SnapEntry sn);
+
 static int trace_arm64_first_side_snapshot_valid(
     const TraceArm64FirstSideLoopView *v, const BCIns *pc)
 {
@@ -4439,8 +4442,8 @@ static int trace_arm64_first_side_snapshot_valid(
 #endif
 
   if (v->nslots < 1u+LJ_FR2 ||
-      v->nslots >= LJ_MAX_JSLOTS || v->snaptopslot > v->nslots ||
-      v->snaptopslot > v->topslot || v->snapref < REF_FIRST ||
+      v->nslots >= LJ_MAX_JSLOTS || v->snaptopslot > v->topslot ||
+      v->snapref < REF_FIRST ||
       v->snapref >= v->nins || v->mapofs > v->nsnapmap ||
       v->nent > v->nsnapmap-v->mapofs ||
       footer > v->nsnapmap-v->mapofs-v->nent ||
@@ -4453,11 +4456,14 @@ static int trace_arm64_first_side_snapshot_valid(
     SnapEntry sn = snapentry_acq(&v->snapmap[v->mapofs+i]);
     BCReg slot = snap_slot(sn);
     IRRef ref = snap_ref(sn);
-    if ((sn & UINT32_C(0x00ff0000)) != 0 || slot >= v->nslots ||
-        (have_previous && slot <= previous) ||
-        !trace_arm64_first_side_mapref_valid(v, ref)) {
+    if ((sn & UINT32_C(0x00ff0000)) != 0 &&
+        sn != SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL) &&
+        !trace_arm64_side_forl_norestore_valid(v->ir, v->nins, v->nk,
+          v->snapref, v->startins, sn))
       return 0;
-    }
+    if (slot >= v->nslots || (have_previous && slot <= previous) ||
+        !trace_arm64_first_side_mapref_valid(v, ref))
+      return 0;
     previous = slot;
     have_previous = 1;
   }
@@ -4517,13 +4523,13 @@ static int trace_arm64_first_side_view_acq_mode(jit_State *J, TraceNo parent,
   v->linktype = trace_linktype_acq(T);
   v->admission = trace_arm64_admission_acq(T);
   v->flags = la_load8_acq(&T->unused1);
-  rootop = bc_op(v->startins);
-  expected_admission = rootop == BC_FORL ? TRACE_ARM64_INT_FORL_ADMITTED :
-	TRACE_ARM64_INT_LOOP_ADMITTED;
   v->sinktags = T->sinktags;
   v->startpt = trace_startptgco_acq(T);
   v->startpc = trace_startpc_acq(T);
   v->startins = trace_startins_acq(T);
+  rootop = bc_op(v->startins);
+  expected_admission = rootop == BC_FORL ? TRACE_ARM64_INT_FORL_ADMITTED :
+	TRACE_ARM64_INT_LOOP_ADMITTED;
   v->ir = trace_ir_acq(T);
   v->nins = trace_nins_acq(T);
   v->nk = trace_nk_acq(T);
@@ -4558,9 +4564,10 @@ static int trace_arm64_first_side_view_acq_mode(jit_State *J, TraceNo parent,
       v->startpt == NULL || !checkptrGC(v->startpt) ||
       v->startpt->gch.gct != (uint32_t)~LJ_TPROTO ||
       v->startpc == NULL ||
-	  !trace_root_entry_loop_geometry(
-	    (uint32_t)rootop+(uint32_t)BC_JLOOP-(uint32_t)BC_LOOP,
-	    gco2pt(v->startpt), v->startpc, v->startins) ||
+      !((rootop == BC_FORL && trace_root_entry_loop_geometry(
+	(uint32_t)BC_JFORL, gco2pt(v->startpt), v->startpc, v->startins)) ||
+	(rootop == BC_LOOP && trace_root_entry_loop_geometry(
+	(uint32_t)BC_JLOOP, gco2pt(v->startpt), v->startpc, v->startins))) ||
       v->ir == NULL || v->nins <= REF_FIRST || v->nins >= REF_DROP ||
       v->nk == 0 || v->nk > REF_TRUE || v->snap == NULL ||
       v->snapmap == NULL || v->mcode == NULL || v->exittab == NULL ||
@@ -4813,10 +4820,13 @@ static int trace_arm64_first_side_metadata_view_valid(jit_State *J,
   TraceArm64FirstSideLoopView first, second;
   if (J == NULL || pc == NULL || parent == 0)
     return 0;
-  if (!trace_arm64_first_side_view_acq(J, parent, exitno, &first) ||
-      !trace_arm64_first_side_snapshot_valid(&first, pc) ||
-      !trace_arm64_first_side_loop_generation_valid(&first, parent, pc))
+  if (!trace_arm64_first_side_view_acq(J, parent, exitno, &first))
+	return 0;
+  if (!trace_arm64_first_side_snapshot_valid(&first, pc))
+	return 0;
+  if (!trace_arm64_first_side_loop_generation_valid(&first, parent, pc)) {
     return 0;
+  }
   if (!trace_arm64_first_side_view_acq(J, parent, exitno, &second) ||
       !trace_arm64_first_side_snapshot_valid(&second, pc) ||
       !trace_arm64_first_side_loop_generation_valid(&second, parent, pc) ||
@@ -4923,15 +4933,21 @@ int lj_trace_arm64_first_side_loop_valid(jit_State *J, lua_State *L,
     const BCIns *pc, uint32_t context)
 {
   GCproto *firstpt = NULL, *secondpt = NULL;
-  if (context > LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER ||
-      !trace_arm64_first_side_metadata_valid(J, parent, exitno,
-        continuation, &firstpt) ||
-      !trace_arm64_first_side_context_valid(J, L, firstpt, parent,
-        exitno, continuation, pc, context) ||
-      !trace_arm64_first_side_metadata_valid(J, parent, exitno,
-        continuation, &secondpt) || firstpt != secondpt ||
-      !trace_arm64_first_side_context_valid(J, L, secondpt, parent,
-        exitno, continuation, pc, context))
+  int ok;
+  ok = context <= LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER &&
+      trace_arm64_first_side_metadata_valid(J, parent, exitno,
+        continuation, &firstpt);
+  if (!ok) return 0;
+  ok = trace_arm64_first_side_context_valid(J, L, firstpt, parent,
+        exitno, continuation, pc, context);
+  if (!ok)
+    return 0;
+  ok = trace_arm64_first_side_metadata_valid(J, parent, exitno,
+        continuation, &secondpt) && firstpt == secondpt;
+  if (!ok) return 0;
+  ok = trace_arm64_first_side_context_valid(J, L, secondpt, parent,
+        exitno, continuation, pc, context);
+  if (!ok)
     return 0;
   return 1;
 }
@@ -5234,6 +5250,11 @@ int lj_trace_arm64_side_parent_snapshot(jit_State *J,
   if (extent > sizeof(snapshot->map)/sizeof(snapshot->map[0]))
     goto out;
   memset(snapshot, 0, sizeof(*snapshot));
+  /* The immutable admission class is the result of both root semantic and
+  ** post-RA FORL proofs, including their stop+step range guard. Preserve it
+  ** with this selected exit so child validators can distinguish that proof
+  ** from an arbitrary parent bytecode shape. */
+  snapshot->admission = view.admission;
   snapshot->parent_nins = view.nins;
   snapshot->parent_nk = view.nk;
   snapshot->parent_nsnap = view.nsnap;
@@ -5266,14 +5287,37 @@ int lj_trace_arm64_side_parent_snapshot(jit_State *J,
 	snapshot->map_values[i].slot = snap_slot(sn);
   }
 	snapshot->startins = view.startins;
-	if (!trace_arm64_root_loop_interval(gco2pt(view.startpt),
-	    view.startpc, view.startins, &snapshot->loop_header_pc,
-	    &snapshot->loop_start_pc, &snapshot->loop_end_pc) ||
-	    proto_bcpos(gco2pt(view.startpt), snapshot->continuation) <
-	      snapshot->loop_start_pc ||
-	    proto_bcpos(gco2pt(view.startpt), snapshot->continuation) >=
-	      snapshot->loop_end_pc)
-	  goto out;
+	if (bc_op(view.startins) == BC_FORL) {
+	  if (!trace_arm64_root_loop_interval(gco2pt(view.startpt),
+	      view.startpc, view.startins, &snapshot->loop_header_pc,
+	      &snapshot->loop_start_pc, &snapshot->loop_end_pc) ||
+	      proto_bcpos(gco2pt(view.startpt), snapshot->continuation) <
+		snapshot->loop_start_pc ||
+	      proto_bcpos(gco2pt(view.startpt), snapshot->continuation) >=
+		snapshot->loop_end_pc)
+	    goto out;
+	} else {
+	  int64_t end;
+	  int64_t target;
+	  BCIns back;
+	  snapshot->loop_header_pc =
+	    proto_bcpos(gco2pt(view.startpt), view.startpc);
+	  snapshot->loop_start_pc = snapshot->loop_header_pc;
+	  end = (int64_t)snapshot->loop_start_pc + (int64_t)bc_j(view.startins);
+	  if (end < 0 || end >= (int64_t)gco2pt(view.startpt)->sizebc)
+	    goto out;
+	  back = (BCIns)la_load32_acq((const uint32_t *)
+	    &proto_bc(gco2pt(view.startpt))[(BCPos)end]);
+	  target = end + 1 + (int64_t)bc_j(back);
+	  if (bc_op(back) != BC_JMP || bc_j(back) >= 0 || target < 0 ||
+	      target >= end || proto_bcpos(gco2pt(view.startpt),
+		snapshot->continuation) < (MSize)target ||
+	      proto_bcpos(gco2pt(view.startpt), snapshot->continuation) >=
+		(MSize)end)
+	    goto out;
+	  snapshot->loop_start_pc = (MSize)target;
+	  snapshot->loop_end_pc = (MSize)end;
+	}
 	if (!trace_arm64_side_parentmap(J, view.parent, cert.exitno,
 	J->cur.ir, J->cur.nins, snapshot->regspmap, snapshot->bindings,
 	&snapshot->nregspmap))
@@ -5524,7 +5568,7 @@ static int trace_arm64_side_context_from_parent(
 	GCproto *pt, const IRIns *parent_ir, IRRef parent_nins, IRRef parent_nk,
 	MSize parent_nsnap, const uint16_t *parent_regspmap,
 	const LJArm64SideParentBinding *parent_bindings,
-	MSize parent_nregspmap, ExitNo exitno);
+	MSize parent_nregspmap, ExitNo exitno, uint32_t parent_admission);
 
 /* Validate a selected parent-map ref while parent IR is protected by the
 ** caller's SMR lease. Constant refs must name starts in the constant pool,
@@ -5738,8 +5782,8 @@ static int trace_arm64_side_publish_child_valid(jit_State *J, GCtrace *T,
 	parentview->nsnap, parentview->nsnapmap, parentview->startpc,
 	parentview->startins, J->pt, parentview->ir, parentview->nins,
 	parentview->nk, parentview->nsnap, parentmap,
-	side_snapshot.bindings, parentmap_n,
-	cert->exitno))
+	side_snapshot.bindings, parentmap_n, cert->exitno,
+	parentview->admission))
 	  {  goto fail_mcode; }
   postra.parentmap = parentmap;
   postra.entry = mcode;
@@ -5817,7 +5861,7 @@ static int trace_arm64_side_context_from_parent(
 	GCproto *pt, const IRIns *parent_ir, IRRef parent_nins, IRRef parent_nk,
 	MSize parent_nsnap, const uint16_t *parent_regspmap,
 	const LJArm64SideParentBinding *parent_bindings,
-	MSize parent_nregspmap, ExitNo exitno)
+	MSize parent_nregspmap, ExitNo exitno, uint32_t parent_admission)
 {
   const SnapShot *src;
   MSize ofs, nent, header, start, end;
@@ -5853,7 +5897,8 @@ static int trace_arm64_side_context_from_parent(
   copy->parent_nsnap = parent_nsnap;
   copy->nregspmap = parent_nregspmap;
   copy->nmap_values = nent;
-  if (copy->nslots < 1u+LJ_FR2 || copy->topslot > copy->nslots ||
+  copy->admission = parent_admission;
+  if (copy->nslots < 1u+LJ_FR2 || copy->topslot != pt->framesize ||
 	copy->nsnapmap > sizeof(copy->map)/sizeof(copy->map[0]) ||
 	copy->nregspmap > sizeof(copy->regspmap)/sizeof(copy->regspmap[0]))
 	return 0;
@@ -5916,11 +5961,29 @@ static int trace_arm64_side_context_from_parent(
   }
 
   copy->continuation = snap_pc_acq(&copy->map[nent]);
-	if (!trace_arm64_root_loop_interval(pt, startpc, startins, &header,
-	    &start, &end) ||
-	    proto_bcpos(pt, copy->continuation) < start ||
-	    proto_bcpos(pt, copy->continuation) >= end)
-	return 0;
+	if (bc_op(startins) == BC_FORL) {
+	  if (!trace_arm64_root_loop_interval(pt, startpc, startins, &header,
+	      &start, &end) || proto_bcpos(pt, copy->continuation) < start ||
+	      proto_bcpos(pt, copy->continuation) >= end)
+	    return 0;
+	} else {
+	  int64_t end64 = (int64_t)proto_bcpos(pt, startpc) +
+	    (int64_t)bc_j(startins);
+	  int64_t target;
+	  BCIns back;
+	  if (end64 < 0 || end64 >= (int64_t)pt->sizebc)
+	    return 0;
+	  end = (MSize)end64;
+	  back = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(pt)[end]);
+	  target = end64 + 1 + (int64_t)bc_j(back);
+	  if (bc_op(back) != BC_JMP || bc_j(back) >= 0 || target < 0 ||
+	      (MSize)target >= end ||
+	      proto_bcpos(pt, copy->continuation) < (MSize)target ||
+	      proto_bcpos(pt, copy->continuation) >= end)
+	    return 0;
+	  header = proto_bcpos(pt, startpc);
+	  start = (MSize)target;
+	}
 
   copy->startins = startins;
   copy->loop_header_pc = header;
@@ -5941,6 +6004,7 @@ static int trace_arm64_side_context_from_parent(
   side->parent_topslot = copy->topslot;
   side->parent_continuation = copy->continuation;
   side->parent_startins = startins;
+  side->parent_admission = copy->admission;
   side->loop_header_pc = header;
 	side->loop_start_pc = start;
   side->loop_end_pc = end;
@@ -6418,7 +6482,7 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
 	  parentview.nsnapmap, parentview.startpc, parentview.startins,
 	  pt, parentview.ir, parentview.nins, parentview.nk,
 	  parentview.nsnap, parentmap, bindings, parentmap_n,
-	  (ExitNo)ir_load_acq(&source[REF_BASE]).op2);
+	  (ExitNo)ir_load_acq(&source[REF_BASE]).op2, parentview.admission);
     if (!ctxok) {
     free(ir); free(snap); free(snapmap);
     lj_gc2_smr_read_leave(J2G(J));
@@ -6842,7 +6906,7 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
 		rootview->nsnap, rootview->nsnapmap, rootview->startpc,
 		rootview->startins, pt, rootview->ir, rootview->nins,
 		rootview->nk, rootview->nsnap, parentmap, side_snapshot.bindings,
-		parentmap_n, parent_exitno))
+		parentmap_n, parent_exitno, rootview->admission))
 		return 0;
 	postra.parentmap = parentmap;
 	postra.entry = view->mcode;
@@ -9581,7 +9645,9 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
     return 0;
   parentflags = la_load8_acq(&parent->unused1);
   if ((parentflags & (uint8_t)~TRACE_SCOPE_FLUSH_PENDING) != 0 ||
-      trace_arm64_admission_acq(parent) != TRACE_ARM64_INT_LOOP_ADMITTED)
+	  trace_arm64_admission_acq(parent) !=
+	    (bc_op(trace_startins_acq(parent)) == BC_FORL ?
+	      TRACE_ARM64_INT_FORL_ADMITTED : TRACE_ARM64_INT_LOOP_ADMITTED))
     return 0;
   startpt = trace_startptgco_acq(T);
   if (startpt == NULL || !checkptrGC(startpt) ||
@@ -13012,10 +13078,12 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
 #if LJ_TARGET_ARM64 && !LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED
   /* Refuse unsupported first sides and every side-of-side before mutating
   ** the selected snapshot count. IDLE proves no recorder token is published. */
-  if (!lj_trace_arm64_first_side_loop_valid(
-	J, L, parent, exitno, pc, pc, LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE)) {
-
-    goto out;
+  {
+	int valid = lj_trace_arm64_first_side_loop_valid(
+	  J, L, parent, exitno, pc, pc, LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE);
+	if (!valid) {
+      goto out;
+  }
   }
 #endif
   if (!(lj_tg_hookmask_combined_load(g, L2TG(L)) &
@@ -13036,12 +13104,10 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
       if (snap_count_cas_acqrel(snap, &count, count + 1u))
 	goto out;
     }
-    if (lj_trace_state_load(J) != LJ_TRACE_IDLE)
-	{
+    if (lj_trace_state_load(J) != LJ_TRACE_IDLE) {
       goto out;
     }
-    if (!lj_jit_token_try_l(L, J))
-	{
+    if (!lj_jit_token_try_l(L, J)) {
       goto out;
     }
     trace_test_side_admission_inject_held(
