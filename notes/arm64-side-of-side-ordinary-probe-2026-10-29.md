@@ -93,3 +93,12 @@ list walkers also bound IR extents before reading IR_BASE and check runnable
 state before the entry walk dereferences a member. These checks add no lock,
 allocation, or SMR reader to native entry. Focused root-entry and first-side
 validation for this follow-up is recorded separately below when complete.
+
+The certificate mutation fixture now also constructs a private copied trace,
+private copied trace vector, and a self-parent certificate and requires
+rejection without publishing any copied slot. The old branch's focused entry
+run passed its root-entry C fixture but stopped in the older adaptation
+fixture, whose lookup still insists that the root has exactly one child.
+The current integration branch already has a multiple-child-aware lookup.
+Validation will continue on that integration base, keeping this failure log
+at `/Users/frityet/Scratch/ljmt-nested-reentry-integration-20261029/root-entry.log`.
