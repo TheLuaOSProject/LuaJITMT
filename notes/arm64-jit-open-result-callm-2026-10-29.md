@@ -20,10 +20,13 @@ CALLM guard snapshot at the producer's exact caller-frame slots. No extra
 guard or poll is inserted to manufacture this evidence.
 
 The native C fixture exercises fixed one-, two- and three-result cases. It
-checks the runner's selected loop trace and exits, repeats it after full GC
-while an MT peer remains alive, and independently rejects a changed CALLM
-arity, a corrupted CALLM argument-map value, and a producer-footer PC borrowed
-from its consumer in semantic and post-RA views. The ordinary Lua companion
+checks the runner's selected loop trace and exits, changes the producer,
+and repeats it after full GC while an MT peer remains alive. The exact code
+address, bytes, size and generation survive those calls. Independent semantic
+and post-allocation mutations reject the CALLM result arity or fixed prefix,
+producer result mode or overlapping destination, producer return count,
+missing/aliased argument-map slots, and a producer-footer PC borrowed from its
+consumer. The ordinary Lua companion
 compares one-, two-, and three-result cases against an interpreted oracle and
 checks publication and exact trace reuse; those results are not counted as
 native execution evidence.
@@ -31,8 +34,8 @@ native execution evidence.
 Validation was run through `tools/ci/arm64_jit_lua_leaf_contract.sh`: ARM64
 and arm64e assertion and release profiles. Each result count has actual
 selected-root entry/exit evidence; the companion's publication checks remain
-separate. The integrated matrix reports 22 native calls, 109 semantic
-negatives and 117 post-allocation negatives per profile, with no cold retries.
+separate. The final matrix reports 25 native calls, 124 semantic
+negatives and 132 post-allocation negatives per profile, with no cold retries.
 Logs are in `/Users/frityet/Scratch/ljmt-callm-integrated-20261029/`.
 
 The earlier failed one-/two-result C attempts declared every consumer as

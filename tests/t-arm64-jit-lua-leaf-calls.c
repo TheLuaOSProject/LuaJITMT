@@ -397,7 +397,25 @@ static void admission_open_callm(GCtrace *T, unsigned nresults)
       memcpy(&f.map[snap->mapofs+snap->nent],&wrongpc,sizeof(wrongpc));
     }
     assert(!admit(&f,postra));
-    if (postra) postra_bad+=3u; else semantic_bad+=3u;
+    fixture_reset(&f); assert(admit(&f,postra));
+    setbc_a(&proto_bc(f.pt)[callmpos-1u],
+            bc_a(proto_bc(f.pt)[callmpos-1u])-1u);
+    assert(!admit(&f,postra));
+    fixture_reset(&f); assert(admit(&f,postra));
+    setbc_c(&proto_bc(f.pt)[callmpos],1u);
+    assert(!admit(&f,postra));
+    fixture_reset(&f); assert(admit(&f,postra));
+    setbc_b(&proto_bc(f.pt)[callmpos-1u],2u);
+    assert(!admit(&f,postra));
+    fixture_reset(&f); assert(admit(&f,postra));
+    proto_bc(f.leafpt)[f.leafpt->sizebc-1u]=BCINS_AD(BC_RET,
+      bc_a(proto_bc(f.leafpt)[f.leafpt->sizebc-1u]), nresults==3u ? 3u : 4u);
+    assert(!admit(&f,postra));
+    fixture_reset(&f); assert(admit(&f,postra));
+    f.map[childslot]=SNAP(snap_slot(f.map[childslot])-1u,0,
+                          snap_ref(f.map[childslot]));
+    assert(!admit(&f,postra));
+    if (postra) postra_bad+=8u; else semantic_bad+=8u;
   }
   free(f.pt); free(f.leafpt); free(f.leaf); free(f.J);
   free(f.ir); free(f.snap); free(f.map);
@@ -447,6 +465,11 @@ int main(void)
         "'@open-callm-values'))(); "
       "leaf_oracle_a=assert(loadstring('return function(x) '..producer..' end',"
         "'@open-callm-values-oracle'))(); "
+      "local alternate=producer:gsub('return x','return x+.125',1); "
+      "leaf_b=assert(loadstring('return function(x) '..alternate..' end',"
+        "'@open-callm-alternate'))(); "
+      "leaf_oracle_b=assert(loadstring('return function(x) '..alternate..' end',"
+        "'@open-callm-alternate-oracle'))(); "
       "local src='return function(fn,n) local add=function('..parameters..') '..consumer..' end; "
         "local total=.5; for i=1,n do total=total+add(fn(i+.5)) end; "
         "return total end'; "
@@ -454,6 +477,7 @@ int main(void)
       "leaf_oracle=assert(loadstring(src,'@open-callm-oracle'))(); "
       "leaf_run_clone=assert(loadstring(src,'@open-callm-run-clone'))(); "
       "jit.off(leaf_oracle,true); jit.off(leaf_oracle_a,true); "
+      "jit.off(leaf_oracle_b,true); "
       "jit.flush(); jit.on(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64') end; "
     "jit.off(install_open_case,true)");
   {
@@ -493,9 +517,22 @@ int main(void)
       }
     }
     assert(T);
-    native_call(L,T,"leaf_a","leaf_oracle_a",96,0);
-    lua_gc(L,LUA_GCCOLLECT,0);
-    native_call(L,T,"leaf_a","leaf_oracle_a",64,0);
+    {
+      MCode *code=trace_mcode_acq(T);
+      MSize size=trace_szmcode_acq(T);
+      uint64_t generation=la_load64_acq(&T->arm64_generation);
+      void *saved=malloc(size);
+      assert(code && size && saved && generation);
+      memcpy(saved,code,size);
+      native_call(L,T,"leaf_a","leaf_oracle_a",96,0);
+      native_call(L,T,"leaf_b","leaf_oracle_b",48,1);
+      lua_gc(L,LUA_GCCOLLECT,0);
+      native_call(L,T,"leaf_a","leaf_oracle_a",64,0);
+      assert(trace_mcode_acq(T)==code && trace_szmcode_acq(T)==size &&
+             la_load64_acq(&T->arm64_generation)==generation &&
+             memcmp(saved,code,size)==0);
+      free(saved);
+    }
     admission_open_callm(T,nresults);
     printf("Lua open-result CALLM results=%u: native root, GC reuse and independent source/map refusals passed\n",
            nresults);
