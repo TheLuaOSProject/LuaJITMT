@@ -5,6 +5,7 @@
     defined(LUAJIT_MT_ARM64_BOOTSTRAP) && \
     defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL) && defined(LJ_TRACE_TEST_HELPERS)
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 #include "lua.h"
 #include "lauxlib.h"
@@ -128,7 +129,8 @@ static void assert_open_vector_snapshot(GCtrace *T, SnapNo exit,
 
 static void check_identity_exit(lua_State *L, GCtrace *T, SnapNo expected_exit,
                                 const char *consumer, MCode *mcode,
-                                MSize szmcode)
+                                MSize szmcode, uint64_t generation,
+                                const void *mcode_bytes)
 {
   lua_Number expected=invoke(L,"open_oracle","open_oracle_leaf",consumer,64);
   lj_trace_test_root_entry_reset();
@@ -139,7 +141,9 @@ static void check_identity_exit(lua_State *L, GCtrace *T, SnapNo expected_exit,
          lj_trace_test_exit_calls()>0 &&
          lj_trace_test_first_exit_parent()==T->traceno &&
          lj_trace_test_first_exitno()==expected_exit);
-  assert(trace_mcode_acq(T)==mcode && trace_szmcode_acq(T)==szmcode);
+  assert(T->arm64_generation==generation &&
+         trace_mcode_acq(T)==mcode && trace_szmcode_acq(T)==szmcode &&
+         memcmp(trace_mcode_acq(T),mcode_bytes,szmcode)==0);
   assert(!trace_nchild_acq(T) && !trace_nextside_acq(T));
 }
 
@@ -157,6 +161,8 @@ static void run_case(lua_State *L, unsigned nresults)
   MSize callmpos;
   MCode *mcode;
   MSize szmcode;
+  uint64_t generation;
+  void *mcode_bytes;
   lua_Number expected;
   char install[1024];
   assert(nresults>=1u && nresults<=3u);
@@ -179,6 +185,10 @@ static void run_case(lua_State *L, unsigned nresults)
   assert_open_vector_snapshot(T,exit,callmpos,nresults);
   mcode=trace_mcode_acq(T); szmcode=trace_szmcode_acq(T);
   assert(mcode!=NULL && szmcode!=0);
+  generation=T->arm64_generation;
+  mcode_bytes=malloc(szmcode);
+  assert(mcode_bytes!=NULL);
+  memcpy(mcode_bytes,mcode,szmcode);
 
   /* The first candidate call must leave native code at its CALLM identity
   ** guard after the producer CALL returned its complete open result vector.
@@ -190,7 +200,9 @@ static void run_case(lua_State *L, unsigned nresults)
          lj_trace_test_exit_calls()>0 &&
          lj_trace_test_first_exit_parent()==T->traceno &&
          lj_trace_test_first_exitno()==exit);
-  assert(trace_mcode_acq(T)==mcode && trace_szmcode_acq(T)==szmcode &&
+  assert(T->arm64_generation==generation &&
+         trace_mcode_acq(T)==mcode && trace_szmcode_acq(T)==szmcode &&
+         memcmp(trace_mcode_acq(T),mcode_bytes,szmcode)==0 &&
          root_trace(L)==T && trace_runnable_acq(T,T->traceno));
   assert(!trace_nchild_acq(T) && !trace_nextside_acq(T));
 
@@ -200,14 +212,20 @@ static void run_case(lua_State *L, unsigned nresults)
   lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
   assert(invoke(L,"open_run","open_leaf","open_consumer_a",64)==expected);
   assert(lj_trace_test_root_entry_successes()>0 && root_trace(L)==T &&
-         trace_mcode_acq(T)==mcode && trace_szmcode_acq(T)==szmcode);
+         T->arm64_generation==generation && trace_mcode_acq(T)==mcode &&
+         trace_szmcode_acq(T)==szmcode &&
+         memcmp(trace_mcode_acq(T),mcode_bytes,szmcode)==0);
   lua_gc(L,LUA_GCCOLLECT,0);
-  check_identity_exit(L,T,exit,"open_consumer_b",mcode,szmcode);
+  check_identity_exit(L,T,exit,"open_consumer_b",mcode,szmcode,
+                      generation,mcode_bytes);
   expected=invoke(L,"open_oracle","open_oracle_leaf","open_consumer_a",64);
   lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
   assert(invoke(L,"open_run","open_leaf","open_consumer_a",64)==expected);
   assert(lj_trace_test_root_entry_successes()>0 && root_trace(L)==T &&
-         trace_mcode_acq(T)==mcode && trace_szmcode_acq(T)==szmcode);
+         T->arm64_generation==generation && trace_mcode_acq(T)==mcode &&
+         trace_szmcode_acq(T)==szmcode &&
+         memcmp(trace_mcode_acq(T),mcode_bytes,szmcode)==0);
+  free(mcode_bytes);
   cases_run++;
   printf("open CALLM consumer exit results=%u exact-exit=%u same-mcode GC/reentry passed\n",
          nresults,(unsigned)exit);
