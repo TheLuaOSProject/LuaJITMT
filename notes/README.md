@@ -18,21 +18,21 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
-- Current verified production checkpoint: `0641fba1e`, promoted through
-  `f2464d183` to `codex/arm64-parity`. It adds CALLM argument normalization
-  and captured-consumer replay, bounded deeper integer FORL/while side
-  ancestry, ancestor teardown, bounded MAP_JIT range recovery, indirect
-  integer aggregate FFI results, and pointer fields in direct small results.
-  The complete combined gate passes, including actual VM and recorder
-  safepoint runtime execution. All four focused side profiles and both
-  509-case ordinary stock corpora on ARM64 and x86_64 pass. The gate checkout
+- Current verified production checkpoint: `8106cfe53`. It adds discarded
+  numeric CALLM expressions, canonical scalar iterator early break, and
+  one-pointer-member aggregate FFI arguments to the preceding ancestry,
+  normalized CALLM and composite-result checkpoint `0641fba1e`.
+  The complete combined gate passes, including the strengthened spill/RENAME
+  negatives and actual VM/recorder safepoint runtime execution. Focused
+  contracts pass all four ARM64/arm64e assertion/release profiles; ordinary
+  ARM64 and strict x86_64 pass both 509-case stock corpora. The gate checkout
   is restored to ordinary assertion ARM64 without test helpers. See the
-  [complete checkpoint evidence](arm64-ancestry-complete-gate-2026-10-29.md).
-  Discarded numeric CALLM expressions, iterator early break, transient
-  three-result windows and pointer-containing FFI arguments are subsequent
-  work and are not covered by this gate. General Lua call/return, recursion,
-  protected calls, vararg forwarding and remaining topology/FFI restrictions
-  still prevent a parity claim.
+  [current integration evidence](arm64-callm-iterator-integration-2026-10-29.md)
+  and [preceding complete checkpoint](arm64-ancestry-complete-gate-2026-10-29.md).
+  Deeper side-list validation, captured open-result producer replay and the
+  transient three-result window are subsequent work outside this gate.
+  General Lua call/return, recursion, protected calls, vararg forwarding and
+  remaining topology/FFI restrictions still prevent a parity claim.
 
 ## Earlier checkpoint records
 

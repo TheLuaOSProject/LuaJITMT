@@ -55,3 +55,21 @@ A new uninterrupted full gate is running at pinned source `8106cfe53` in
 result is not yet claimed. The promoted continuation remains at the prior
 verified production source `0641fba1e`; the transient CALLM window and newer
 captured producer investigation remain separate work.
+
+## Complete gate result
+
+The uninterrupted full gate at `8106cfe53` passed. It ends with
+`arm64_jit_fail_closed_gate OK` and executes both `t-vm-safepoint` and
+`t-jit-recorder-safepoint`, followed by
+`ok m5_arm64_jit_fail_closed_safepoint_runtime`. This includes all four M7
+foreign-call profiles, the new dead-DAG spill/RENAME mutations, and the
+earlier iterator/pointer-argument changes. No skipped safepoint runtime suite
+is counted as execution.
+
+The outer command then rebuilt ordinary assertion ARM64 without test helpers
+and exited zero. The restoration profile is
+`c3b83e733e7da77a4c6551c4271c5a2bb36051c05e91c3b24346954238ac4ed9`, recorded
+in `callm-iterator-pointer-complete-restoration.log` beside the gate log.
+The pinned `ir-admission` checkout is clean. This result supersedes the
+pending-gate statement above; later deep-side-list and CALLM producer work
+remain outside the gate.
