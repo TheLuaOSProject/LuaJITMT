@@ -17,3 +17,21 @@ library and profiles. The standalone aggregate contract remains available for
 isolated work; the full gate does not invoke that additional four-build matrix.
 The integration wiring has passed Lua/shell syntax and whitespace checks;
 integrated runtime results will be recorded after the full gate runs.
+
+An ordinary-build edge probe at `cbb707874` also covers signed-byte minimum,
+signed half/byte fields with padding, a negative enum, bool/int fields with
+padding, `UINT32_MAX`, and a high-bit uint64 payload. On each architecture,
+all six cases pass 25 exact expected-result comparisons and interpreted-oracle
+comparisons, including full GC, with exactly 1,600 foreign calls and 25 selected
+native-root exits per case. This is ordinary ARM64/x86_64 evidence, not an
+additional four-profile helper run. The source, universal library and logs are
+in `/Users/frityet/Scratch/ljmt-int-aggregate-edges-20261029/`.
+
+The initial integrated full gate at `d0e4ecaa1` passed through the combined Lua
+call and numeric-spill contracts, then stopped when the bitops fusion fixture
+included the new optional CALLXS initializer without using it. Strict
+compilation rejected that unused static function. `edb6cd4dc` makes the helper
+`static inline`; no production code changed. The gate is being resumed from
+the failed bitops contract with an explicit fresh profile build, retaining the
+earlier log. Evidence is under
+`/Users/frityet/Scratch/ljmt-vararg-aggregate-full-20261029/`.
