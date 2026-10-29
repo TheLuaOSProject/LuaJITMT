@@ -9876,7 +9876,30 @@ static int trace_arm64_side_certificate_mutation_test_held(jit_State *J,
 	*byte = original;
   }
   T->arm64_side_cert = saved;
-  return trace_arm64_side_certificate_sealed_valid_held(J, T);
+  if (!trace_arm64_side_certificate_sealed_valid_held(J, T)) return 0;
+  {
+    /* A coherent private self-parent view must reject before recursive
+    ** certificate traversal. Never replace a live trace/vector slot. */
+    GCtrace copy = *T;
+    jit_State jcopy = *J;
+    TraceVec *original = tracevec_acq(J), *tv;
+    TraceNo no = trace_traceno_acq(T);
+    int accepted;
+    if (!original || no == 0 || no >= original->sizetrace ||
+        no == saved.rootno) return 0;
+    tv = (TraceVec *)malloc(tracevec_size(original->sizetrace));
+    if (!tv) return 0;
+    memcpy(tv, original, tracevec_size(original->sizetrace));
+    copy.arm64_side_cert.body = &copy;
+    copy.arm64_side_cert.parent = &copy;
+    copy.arm64_side_cert.parentno = no;
+    setgcref(tv->slot[no], obj2gco(&copy));
+    tracevec_rel(&jcopy, tv);
+    accepted = trace_arm64_side_certificate_sealed_valid_held(&jcopy, &copy);
+    free(tv);
+    if (accepted) return 0;
+  }
+  return 1;
 }
 #endif
 
