@@ -5307,10 +5307,20 @@ static int trace_arm64_first_side_view_acq_mode(jit_State *J, TraceNo parent,
         if (midbase.o != IR_BASE || midbase.t.irt != IRT_PGC)
           return 0;
         if ((TraceNo)midbase.op1 == parent) {
-          if (mid->arm64_side_cert.parentno != parent ||
-              !trace_arm64_root_direct_side_present(
-                J, tv, T, parent, immediate_parent))
+          if (mid->arm64_side_cert.parentno != parent)
             return 0;
+          /* The direct-parent fast path validates a shallow allocation list.
+          ** Once another descendant is deeper, use the indexed graph proof
+          ** for this list too. It establishes this exact parent's membership
+          ** through the child's checked edge and validates every ancestry. */
+          if (!side_graph_checked &&
+              !trace_arm64_root_direct_side_present(
+                J, tv, T, parent, immediate_parent)) {
+            if (!trace_arm64_side_graph_valid(
+                  J, T, parent, v->nextside, v->nchild))
+              return 0;
+            side_graph_checked = 1;
+          }
         } else {
           if (!side_graph_checked &&
               !trace_arm64_side_graph_valid(
