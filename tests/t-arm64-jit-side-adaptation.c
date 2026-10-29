@@ -351,7 +351,7 @@ int main(void)
   childno = trace_traceno_acq(child);
   { uint32_t contract = lj_trace_test_arm64_side_scalar_copy_contract(J,
       childno);
-    const uint32_t ancestry_mutations = 0xf80f0000u;
+    const uint32_t ancestry_mutations = 0xf87f0000u;
     if ((contract & ancestry_mutations) != ancestry_mutations)
       fprintf(stderr, "ancestry mutations expected=%08x observed=%08x\n",
               ancestry_mutations, contract);
@@ -502,9 +502,8 @@ int main(void)
   }
   lua_pop(L, 1);
 
-  /* Exercise the prospective-depth cap against a live exact-size graph. The
-  ** rejected attempt must not invalidate either the existing nested side or
-  ** its root-owned list, and an already-published exit must still re-enter. */
+  /* Extend a live 64-child graph with a depth-three member. Existing root
+  ** code and independent siblings must remain runnable across the growth. */
   run(L,
     "local jit=require('jit'); jit.flush(); jit.on(); "
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=4096',"
@@ -556,14 +555,15 @@ int main(void)
     assert(trace_runnable_acq(cap_root, rootno) &&
            trace_traceno_acq(cap_root) == rootno &&
            trace_mcode_acq(cap_root) == root_mcode &&
-           trace_nchild_acq(cap_root) == 64u);
-    assert(lj_trace_test_arm64_side_graph_summary(J, rootno) == summary);
+           trace_nchild_acq(cap_root) == 65u);
+    assert(lj_trace_test_arm64_side_graph_summary(J, rootno) ==
+           ((3u << 16) | 65u));
     assert(lj_trace_test_root_entry_successes() > successes);
   }
   lua_pop(L, 1);
 
-  /* A pre-existing depth-three graph at the cap must refuse even a new
-  ** direct sibling. This protects the bounded-index retirement invariant. */
+  /* A pre-existing depth-three graph can also grow past 64 through a new
+  ** direct sibling. Scoped removal must preserve all independent siblings. */
   lj_mcode_test_arm64_range_extensions_reset();
   run(L,
     "local jit=require('jit'); jit.flush(); jit.on(); "
@@ -610,8 +610,9 @@ int main(void)
     assert(trace_runnable_acq(cap_root, rootno) &&
            trace_traceno_acq(cap_root) == rootno &&
            trace_mcode_acq(cap_root) == root_mcode &&
-           trace_nchild_acq(cap_root) == 64u);
-    assert(lj_trace_test_arm64_side_graph_summary(J, rootno) == summary);
+           trace_nchild_acq(cap_root) == 65u);
+    assert(lj_trace_test_arm64_side_graph_summary(J, rootno) ==
+           ((3u << 16) | 65u));
     assert(lj_trace_test_root_entry_successes() > successes);
     {
       GCtrace *deepest = find_deepest_side(
@@ -630,9 +631,9 @@ int main(void)
       assert(!trace_runnable_acq(deepest, deepestno) &&
              trace_runnable_acq(parent, parentno) &&
              trace_runnable_acq(cap_root, rootno) &&
-             trace_nchild_acq(cap_root) == 63u);
+             trace_nchild_acq(cap_root) == 64u);
       assert(lj_trace_test_arm64_side_graph_summary(J, rootno) ==
-             ((2u << 16) | 63u));
+             ((2u << 16) | 64u));
       successes = lj_trace_test_root_entry_successes();
       run(L,
         "for i=1,50 do assert(cap_deep_kernel(2,0,0,32)=="
@@ -640,7 +641,7 @@ int main(void)
       assert(trace_mcode_acq(cap_root) == root_mcode &&
              trace_runnable_acq(parent, parentno) &&
              trace_runnable_acq(cap_root, rootno) &&
-             trace_nchild_acq(cap_root) == 63u &&
+             trace_nchild_acq(cap_root) == 64u &&
              lj_trace_test_root_entry_successes() > successes);
     }
     assert(lj_trace_flushall_gc(L) == 0);
