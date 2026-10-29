@@ -38,3 +38,8 @@ one transition exit from the direct side and 81 deepest-side exits, replacing
 comparison passing. This is a bounded topology correction, not full JIT parity.
 The unrelated MAP_JIT allocation-range failure still blocks integration
 promotion and complete combined side-gate evidence.
+
+The restored ordinary assertion build also passes all 509 stock source cases
+and all 509 cases compiled as original LuaJIT v2 bytecode. Logs are
+`stock-source.log` and `stock-bytecode.log` in the same directory. The original
+compiler is `/opt/homebrew/bin/luajit`; the bytecode bridge checks the v2 header.
