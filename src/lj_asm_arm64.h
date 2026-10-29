@@ -532,10 +532,14 @@ static int asm_fuseorshift(ASMState *as, IRIns *ir)
 static int asm_callx_vararg_stack_plan(ASMState *as, const CCallInfo *ci,
 				       const LJArm64ABISignature *abi,
 				       IRRef *args, uint16_t *offsets,
-				       unsigned *sizep, int *fallbackp)
+				       unsigned *sizep, int *fallbackp,
+				       unsigned hidden)
 {
   unsigned narg = CCI_XNARGS(ci), first, offset = abi->stack_size, i;
   if (fallbackp) *fallbackp = 0;
+  if (hidden > narg || (hidden && args[0] == 0)) return 0;
+  narg -= hidden;
+  args += hidden;
   if (abi->nargs > narg) return 0;
   if (abi->nargs == narg) {
     *sizep = offset;
@@ -608,15 +612,11 @@ static int asm_callx_abi(ASMState *as, IRIns *ir, const CCallInfo *ci,
   if (abi->is_vararg) {
     unsigned stack_size;
     int fallback = 0;
-    /* The current call marshaler has no separately proven hidden-result
-    ** offset plan for a variadic signature. Keep that combination closed. */
-    if (arm64_callxs_result_indirect(abi)) {
-      setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
-      lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
-    }
+    unsigned hidden = (unsigned)arm64_callxs_result_indirect(abi);
     if (!asm_callx_vararg_stack_plan(as, ci, abi, args, NULL,
-				     &stack_size, &fallback)) {
-      if (fallback && asm_callx_vararg_flat_fallback_safe(abi)) return 0;
+				     &stack_size, &fallback, hidden)) {
+      if (!hidden && fallback &&
+		  asm_callx_vararg_flat_fallback_safe(abi)) return 0;
       setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
       lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
     }
@@ -822,13 +822,14 @@ static void asm_callx(ASMState *as, IRIns *ir)
   memset(stack_offsets, 0xff, sizeof(stack_offsets));
   if (asm_callx_abi(as, ir, &ci, args, &abi, 2)) {
     if (arm64_callxs_result_indirect(&abi)) {
-      if (!CCI_XNARGS(&ci) || args[0] == 0) {
+	uint32_t rawcount = CCI_XNARGS(&ci);
+	if (rawcount == 0 || args[0] == 0) {
 	setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
 	lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
       }
       sret = args[0];
-      for (i = 0; i < abi.nargs; i++) args[i] = args[i+1u];
-      ci.flags = (ci.flags & ~0xffu) | (CCI_NARGS(&ci)-1u);
+      memmove(args, args+1u, (rawcount-1u)*sizeof(IRRef));
+	ci.flags = (ci.flags & ~0xffu) | (rawcount-1u);
     }
     for (i = 0; i < abi.nargs; i++)
       stack_offsets[i] = abi.arg[i].reg == LJ_ARM64_ABI_STACK ?
@@ -836,7 +837,7 @@ static void asm_callx(ASMState *as, IRIns *ir)
     if (abi.is_vararg) {
       unsigned stack_size;
       if (!asm_callx_vararg_stack_plan(as, &ci, &abi, args, stack_offsets,
-					       &stack_size, NULL)) {
+					       &stack_size, NULL, 0)) {
 	setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
 	lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
       }
@@ -2435,7 +2436,8 @@ static Reg asm_setup_callx_slots(ASMState *as, IRIns *ir,
   if (asm_callx_abi(as, ir, ci, args, &abi, 1)) {
     stack_size = abi.stack_size;
     if (abi.is_vararg &&
-	!asm_callx_vararg_stack_plan(as, ci, &abi, args, NULL, &stack_size, NULL)) {
+	!asm_callx_vararg_stack_plan(as, ci, &abi, args, NULL, &stack_size,
+		NULL, (unsigned)arm64_callxs_result_indirect(&abi))) {
       setintV(&as->J->errinfo, (int32_t)IR_CALLXS);
       lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
     }
