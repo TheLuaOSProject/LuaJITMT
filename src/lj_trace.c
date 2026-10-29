@@ -9088,6 +9088,9 @@ static int trace_stop_arm64_first_side(jit_State *J)
     goto rollback;
   }
   smr_held = 1;
+  /* Test-only interleaving at the exact boundary where the publisher owns
+  ** both the recorder token and an SMR reader, before the irreversible suffix. */
+  trace_test_root_entry_pause_at(LJ_TRACE_ROOT_ENTRY_PAUSE_SIDE_PUBLISH);
   if (!trace_arm64_side_publish_initialized_revalidate_held(
 	J, T, &cert, &compact, &plan) ||
 	!trace_arm64_first_side_publish_enabled(J)) {

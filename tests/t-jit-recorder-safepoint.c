@@ -20,6 +20,7 @@
 #include "lj_jit.h"
 #include "lj_profile.h"
 #include "lj_safepoint.h"
+#include "lj_thr.h"
 #include "lj_tg.h"
 #include "lj_trace.h"
 
@@ -371,6 +372,95 @@ static void test_real_counted_before_poll_side_admission(lua_State *L,
 }
 #endif
 
+#if !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED && \
+    !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
+typedef struct RecorderFlushPublisher {
+  global_State *g;
+  TGState *main_tg;
+  lua_State *peer_L;
+  uint32_t attached;
+  uint32_t done;
+  uint32_t result;
+} RecorderFlushPublisher;
+
+static void *recorder_flush_publisher(void *arg)
+{
+  RecorderFlushPublisher *publisher = (RecorderFlushPublisher *)arg;
+  TGState *tg;
+  assert(lj_threading_attach_wait(publisher->peer_L));
+  tg = lj_thr_get_tg();
+  assert(tg != NULL && tg != publisher->main_tg);
+  la_store32_rel(&publisher->attached, 1);
+  while (!lj_trace_test_admission_observer_waiting())
+    (void)lj_thr_retry_yield(NULL);
+  publisher->result = lj_safepoint_handshake(publisher->g,
+	LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ);
+  assert(lj_tg_hs_epoch_ack_acq(tg) ==
+	gc2_hs_epoch_acq(publisher->g));
+  lj_threading_detach(publisher->peer_L, 1);
+  assert(lj_thr_get_tg() == NULL);
+  la_store32_rel(&publisher->done, 1);
+  return NULL;
+}
+
+static void test_protected_trace_state_flush(lua_State *L)
+{
+  global_State *g = G(L);
+  jit_State *J = G2J(g);
+  TGState *tg = L2TG(L);
+  RecorderFlushPublisher publisher;
+  pthread_t thread;
+  lua_State *peer_L;
+  unsigned attempt;
+  uint64_t epoch;
+  int status;
+
+  reset_jit(L);
+  epoch = gc2_hs_epoch_acq(g);
+  memset(&publisher, 0, sizeof(publisher));
+  publisher.g = g;
+  publisher.main_tg = tg;
+  peer_L = lua_newthread(L);
+  assert(peer_L != NULL && lua_gettop(L) > 0);
+  publisher.peer_L = peer_L;
+  lj_trace_test_admission_reset();
+  lj_trace_test_admission_arm(LJ_TRACE_TEST_ADMISSION_TRACE_STATE,
+	LJ_TRACE_TEST_REQUEST_OBSERVE, 0);
+  lj_safepoint_test_signal_pause_arm(tg);
+  assert(pthread_create(&thread, NULL, recorder_flush_publisher,
+		&publisher) == 0);
+  for (attempt = 0; attempt < 1000000u &&
+	 !la_load32_acq(&publisher.attached); attempt++)
+	(void)lj_thr_retry_yield(NULL);
+  assert(la_load32_acq(&publisher.attached) == 1);
+  status = run_hot_loop(L);
+  assert(status == LUA_OK);
+  assert(lj_trace_test_admission_hits() == 1);
+  assert(lj_trace_test_admission_armed() == 0);
+  assert(lj_trace_test_admission_protected_polls() == 1);
+  /* The active protected recorder acknowledges while the real FLUSHJ leader
+  ** is paused. Its cpcall state machine consumes RECERR and releases the token
+  ** before the leader resumes the trace flush. */
+  assert(gc2_hs_epoch_acq(g) == epoch + 1u);
+  assert(lj_tg_hs_epoch_ack_acq(tg) == epoch + 1u);
+  assert(gc2_hs_pending_acq(g) >= 1);
+  assert(lj_tg_reqmask_acq(tg) == 0 && lj_tg_poll_acq(tg) == 0);
+  assert(lj_safepoint_test_signal_paused());
+  assert(la_load32_acq(&publisher.done) == 0);
+  assert_owner_clean(L);
+
+  lj_safepoint_test_signal_pause_release();
+  assert(pthread_join(thread, NULL) == 0);
+  assert(publisher.result >= 1u && la_load32_acq(&publisher.done) == 1);
+  assert(gc2_hs_leader_acq(g) == 0 && gc2_hs_pending_acq(g) == 0);
+  assert(lj_tg_reqmask_acq(tg) == 0 && lj_tg_poll_acq(tg) == 0);
+  assert(lj_trace_state_load(J) == LJ_TRACE_IDLE);
+  assert(jit_token_acq(g) == 0 && jit_owner_l_acq(J) == NULL);
+  lua_pop(L, 1);
+  lj_safepoint_test_signal_pause_reset();
+}
+#endif
+
 static void test_protected_trace_state_stopreq(lua_State *L)
 {
   global_State *g = G(L);
@@ -425,6 +515,7 @@ int main(void)
 #if !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED
   test_late_after_token(L);
   test_late_after_root_token_stopreq(L);
+  test_protected_trace_state_flush(L);
 #if !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
 #if LJ_PROFILE_TGLOCAL
   test_profile_side_pre_admission(L);
