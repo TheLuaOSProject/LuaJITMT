@@ -50,3 +50,25 @@ profile verified 97 cases, 96 controlled tag mismatches and terminal exits,
 Evidence: `return-pause-diagnostic.log` and `return-selected-pause.log` in the
 integration evidence directory. The complete leaf suite and remaining gate
 are being resumed after this fixture repair.
+
+## Preserve the selected numeric adaptation side
+
+The continuation passed through first-side publication/entry/retirement,
+GDBJIT, VM-next, callback result lifetime, FUNCF/FORL/ITERL, and numeric loop
+contracts. The dynamic-argument fixture then failed its required division
+adaptation-child assertion. Its `maxtrace=2, hotexit=1` setup filled both trace
+slots with the root and direct side, then requested another side. The normal
+`trace_findfree`/`trace_start` capacity path requested a full flush. Four warm
+calls alternated between root allocations with child counts 1, 0, 1, 0;
+trace ID 1 was reused and abort counters did not change.
+
+Once that fixture's selected direct child is published, it now raises hotexit
+to stop heating additional sides. It retains the exact child allocation,
+trace number and machine-code address through warmup and the 100-call native
+reuse check. Required native child exits, exact numerical results, lifecycle
+checks and the two-slot budget remain. Production cache/side behavior is
+unchanged. The complete dynamic-argument contract passes on ARM64 and ARM64e
+with direct/randomized placement: 37 modes per process, 222 executions.
+
+Evidence: `numeric-side-diagnostic.log` records the allocation alternation;
+`numeric-side-final.log` records the final identity-bound fixture passing.
