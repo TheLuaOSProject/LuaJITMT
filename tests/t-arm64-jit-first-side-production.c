@@ -504,6 +504,154 @@ static MSize root_child_ids(jit_State *J, GCtrace *root, TraceNo rootno,
   return count;
 }
 
+typedef struct NestedRootSide {
+  GCtrace *root;
+  GCtrace *parent;
+  GCtrace *child;
+  TraceNo rootno;
+  TraceNo parentno;
+  TraceNo childno;
+  ExitNo parent_exit;
+  ExitNo child_exit;
+} NestedRootSide;
+
+static lua_Number call_nested_loop(lua_State *L, const char *name,
+	int outer, int inner, int n)
+{
+  lua_Number result;
+  lua_getglobal(L, name);
+  assert(lua_isfunction(L, -1));
+  lua_pushinteger(L, outer);
+  lua_pushinteger(L, inner);
+  lua_pushinteger(L, n);
+  assert(lua_pcall(L, 3, 1, 0) == LUA_OK);
+  assert(lua_isnumber(L, -1));
+  result = lua_tonumber(L, -1);
+  lua_pop(L, 1);
+  return result;
+}
+
+static void expect_nested_root_side(lua_State *L, jit_State *J)
+{
+  const char *name = "__arm64_first_side_nested";
+  GCproto *pt;
+  NestedRootSide set;
+  TraceNo side_no;
+  MSize count, i;
+  unsigned attempt;
+  lua_Number result;
+
+  run_lua(L,
+	"jit.flush(); jit.opt.start('hotloop=1','hotexit=1','maxtrace=128'); "
+	"local function f(outer,inner,n) local s=.5; for i=1,n do "
+	"if outer==1 then if inner==1 then s=s+i else s=s+i*.25 end "
+	"else if inner==1 then s=s-i else s=s-i*.5 end end end; return s end; "
+	"local function oracle(outer,inner,n) local s=.5; for i=1,n do "
+	"if outer==1 then if inner==1 then s=s+i else s=s+i*.25 end "
+	"else if inner==1 then s=s-i else s=s-i*.5 end end end; return s end; "
+	"jit.off(oracle,true); __arm64_first_side_nested=f; "
+	"__arm64_first_side_nested_oracle=oracle");
+  pt = named_proto(L, name);
+  result = call_nested_loop(L, name, 1, 1, 48);
+  assert(result == call_nested_loop(
+	L, "__arm64_first_side_nested_oracle", 1, 1, 48));
+  memset(&set, 0, sizeof(set));
+  set.root = find_root(J, pt, &set.rootno);
+  assert(set.root != NULL && set.rootno != 0 &&
+	 trace_nchild_acq(set.root) == 0);
+
+  for (attempt = 0; attempt < PRODUCTION_ROOT_ATTEMPTS &&
+	 trace_nchild_acq(set.root) == 0; attempt++) {
+    result = call_nested_loop(L, name, 2, 1, 48);
+    assert(result == call_nested_loop(
+	  L, "__arm64_first_side_nested_oracle", 2, 1, 48));
+  }
+  assert(trace_nchild_acq(set.root) == 1);
+  side_no = trace_nextside_acq(set.root);
+  set.parent = traceref_safe(J, side_no);
+  assert(set.parent != NULL && trace_root_acq(set.parent) == set.rootno);
+  {
+    IRIns base = ir_load_acq(&trace_ir_acq(set.parent)[REF_BASE]);
+    assert(base.o == IR_BASE && base.t.irt == IRT_PGC &&
+	   (TraceNo)base.op1 == set.rootno);
+  }
+  set.parentno = side_no;
+  lua_gc(L, LUA_GCCOLLECT, 0);
+
+  lj_trace_test_reset_exittab_stats();
+  for (attempt = 0; attempt < 256u &&
+	 trace_nchild_acq(set.root) < 2; attempt++) {
+    result = call_nested_loop(L, name, 2, 2, 48);
+    assert(result == call_nested_loop(
+	  L, "__arm64_first_side_nested_oracle", 2, 2, 48));
+  }
+  if (trace_nchild_acq(set.root) != 2) {
+    fprintf(stderr,
+	"nested child publication absent after %u calls: root children=%u, parent=%u snapshots=%u, aborts=%u error=%d\n",
+	(unsigned)attempt, (unsigned)trace_nchild_acq(set.root),
+	(unsigned)set.parentno, (unsigned)trace_nsnap_acq(set.parent),
+	(unsigned)lj_trace_test_abort_count(),
+	(int)lj_trace_test_last_abort_error());
+  }
+  assert(trace_nchild_acq(set.root) == 2);
+  side_no = trace_nextside_acq(set.root);
+  count = trace_nchild_acq(set.root);
+  set.child = NULL;
+  for (i = 0; i < count; i++) {
+    GCtrace *side;
+    IRIns base;
+    assert(side_no != 0 && side_no != set.rootno &&
+	   (MSize)side_no < tracevec_acq(J)->sizetrace);
+    side = traceref_safe(J, side_no);
+    assert(side != NULL && trace_runnable_acq(side, side_no) &&
+	   trace_root_acq(side) == set.rootno &&
+	   trace_link_acq(side) == set.rootno &&
+	   trace_linktype_acq(side) == LJ_TRLINK_ROOT);
+    base = ir_load_acq(&trace_ir_acq(side)[REF_BASE]);
+    assert(base.o == IR_BASE && base.t.irt == IRT_PGC);
+    if ((TraceNo)base.op1 == set.parentno) {
+      assert(set.child == NULL);
+      set.child = side;
+      set.childno = side_no;
+      set.child_exit = (ExitNo)base.op2;
+    } else {
+      assert((TraceNo)base.op1 == set.rootno && set.parent == side);
+      set.parent_exit = (ExitNo)base.op2;
+    }
+    side_no = trace_nextside_acq(side);
+  }
+  assert(side_no == 0 && set.child != NULL);
+  assert(set.child->arm64_side_cert.parentno == set.parentno &&
+	 set.child->arm64_side_cert.rootno == set.rootno &&
+	 set.child->arm64_side_cert.parent == set.parent);
+  assert(set.child_exit < trace_exittab_nslots_acq(set.parent) &&
+	 trace_exittarget_arm64_acq(set.parent, set.child_exit) ==
+	 trace_mcode_acq(set.child));
+  assert(set.parent_exit < trace_exittab_nslots_acq(set.root) &&
+	 trace_exittarget_arm64_acq(set.root, set.parent_exit) ==
+	 trace_mcode_acq(set.parent));
+
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(trace_runnable_acq(set.root, set.rootno) &&
+	 trace_runnable_acq(set.parent, set.parentno) &&
+	 trace_runnable_acq(set.child, set.childno));
+  result = call_nested_loop(L, name, 2, 2, 48);
+  assert(result == call_nested_loop(
+	L, "__arm64_first_side_nested_oracle", 2, 2, 48));
+  assert(lj_trace_flushscope(J, set.childno) == 1u);
+  assert(!trace_runnable_acq(set.child, set.childno) &&
+	 trace_runnable_acq(set.parent, set.parentno) &&
+	 trace_nchild_acq(set.root) == 1);
+  assert(trace_exittarget_arm64_acq(set.parent, set.child_exit) !=
+	 trace_mcode_acq(set.child));
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  result = call_nested_loop(L, name, 2, 2, 48);
+  assert(result == call_nested_loop(
+	L, "__arm64_first_side_nested_oracle", 2, 2, 48));
+  assert(lj_trace_flushall_gc(L) == 0);
+  assert(!trace_runnable_acq(set.root, set.rootno));
+}
+
 typedef struct MultiRootSides {
   GCtrace *root;
   TraceNo rootno;
@@ -1305,8 +1453,12 @@ static void expect_child_shape(jit_State *J, global_State *g,
   if (pair->require_forl_root) {
     const uint32_t guard_mutations = (1u<<13)|(1u<<14)|(1u<<15)|
 	(1u<<16)|(1u<<17)|(1u<<18);
-    assert((lj_trace_test_arm64_side_scalar_copy_contract(J, pair->childno) &
-	    guard_mutations) == guard_mutations);
+    uint32_t observed =
+	lj_trace_test_arm64_side_scalar_copy_contract(J, pair->childno);
+    if ((observed & guard_mutations) != guard_mutations)
+	fprintf(stderr, "FORL side-copy mutation mask expected=%08x observed=%08x\n",
+		guard_mutations, observed);
+    assert((observed & guard_mutations) == guard_mutations);
   }
 #endif
 }
@@ -1645,6 +1797,11 @@ static int detailed_main(int argc, char **argv)
   tg = L2TG(L);
   assert(J != NULL && g != NULL && tg != NULL);
   define_probes(L);
+#ifdef LJ_TRACE_TEST_HELPERS
+  /* Keep nested-side eligibility independent of lifecycle fixtures that
+  ** deliberately perturb trace allocation and GC state. */
+  expect_nested_root_side(L, J);
+#endif
   run_lua(L,
 	"local function f(start,n,mode) local sum=0; "
 	"for i=start,n do if mode==1 then sum=sum+i "

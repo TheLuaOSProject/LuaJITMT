@@ -99,6 +99,14 @@ for phase, args in ipairs(phases) do
     first_side = sides[1]
   end
   local nested = first_side and ids_with_parent(rows, first_side) or {}
+  if phase == 3 then
+    assert(#nested > 0, "nested child trace not observed")
+    for _, no in ipairs(nested) do
+      local info = rows[no].info
+      assert(info.linktype == "root" and info.link == root,
+             "nested child must keep the canonical root final link")
+    end
+  end
   io.write(string.format(
     "phase=%d arch=%s inputs=%d,%d root=%s first_side=%s nested=%s exits=%s\n",
     phase, jit.arch, args[1], args[2], tostring(root),
