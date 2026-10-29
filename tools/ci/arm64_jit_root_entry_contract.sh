@@ -22,17 +22,22 @@ test -f "$root_fixture" && test -f "$side_fixture"
 check_root_entry_order() {
   helper=$tmpdir/entry-helper.c
   child=$tmpdir/entry-child.c
+  siblings=$tmpdir/entry-siblings.c
   equal=$tmpdir/entry-child-equal.c
   awk '/^lj_trace_enter_root\(/ { copy=1 }
        copy { print }
        copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$helper"
-  awk '/^static int trace_root_entry_first_child_view_acq/ { copy=1 }
+  awk '/^static int trace_root_entry_side_view_acq/ { copy=1 }
        copy { print }
        copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$child"
+  awk '/^static int trace_root_entry_first_child_view_acq/ { copy=1 }
+       copy { print }
+       copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$siblings"
   awk '/^static int trace_root_entry_first_child_view_equal/ { copy=1 }
        copy { print }
        copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$equal"
-  test -s "$helper" && test -s "$child" && test -s "$equal"
+  test -s "$helper" && test -s "$child" && test -s "$siblings" &&
+    test -s "$equal"
   line() { grep -nF "$1" "$helper" | sed -n "${2:-1}p" | cut -d: -f1; }
   source_gate=$(line '!trace_root_entry_source_admitted(sourceop)')
   publish=$(line 'lj_tg_store_jit_base(tg, base)')
@@ -94,8 +99,21 @@ check_root_entry_order() {
     grep -F "$required" "$child" >/dev/null
   done
   grep -F 'a->parent_exitno == b->parent_exitno' "$equal" >/dev/null
+  # Every sibling receives the same independent edge/body check. Bound the
+  # traversal by the captured child count and trace-vector capacity, then
+  # require a null terminator and unchanged parent list before entry.
+  for required in 'rootview->nchild > tv->sizetrace' \
+      'for (i = 0; i < rootview->nchild; i++)' \
+      '(MSize)childno >= tv->sizetrace' \
+      '!trace_root_entry_side_view_acq(J, parent, parentno, sourceop,' \
+      'childno = current.nextside;' \
+      'return childno == 0 && tracevec_acq(J) == tv &&' \
+      'trace_nchild_acq(parent) == rootview->nchild' \
+      'trace_nextside_acq(parent) == rootview->nextside'; do
+    grep -F "$required" "$siblings" >/dev/null
+  done
   if grep -E 'lj_gc2_smr|lj_mem_|lj_alloc|lj_err_|lj_vmevent|lj_safepoint' \
-      "$helper" >/dev/null; then
+      "$helper" "$siblings" "$child" >/dev/null; then
     echo "root-entry hot helper gained a blocking or allocating operation" >&2
     exit 1
   fi

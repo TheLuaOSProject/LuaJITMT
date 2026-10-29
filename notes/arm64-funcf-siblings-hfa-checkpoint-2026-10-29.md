@@ -133,3 +133,14 @@ been removed by contract cleanup; the preserved diagnostic executable was
 relinked against the saved archive. A continuation from the failed contract
 will complete the remaining gate on unchanged production source. No complete
 new gate pass is recorded yet.
+
+The first continuation passed through native-loop and exit contracts, then
+stopped in the root-entry source-order check. Multiple-child support moved
+the per-child validation into `trace_root_entry_side_view_acq`; the source
+check still searched the list wrapper for those operations. It now inspects
+the per-child function and separately requires the bounded sibling walk,
+null terminator, unchanged parent topology, and nonallocating entry path.
+The corrected root-entry contract passes ARM64 and arm64e assertion profiles
+plus ARM64 release, including the repaired side-adaptation fixture. Output
+is in `root-entry-sibling-contract.log`; `resume-full-gate.log` preserves the
+first continuation. This second repair also changes tests only.
