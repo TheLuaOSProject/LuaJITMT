@@ -261,12 +261,14 @@ static int lj_ccall_arm64_integer_aggregate_class(CTState *cts, CTypeID id,
   return 1;
 }
 
-/* Admit only direct, tightly laid out Darwin float/double HFAs of one or two
-** members and at most one eightbyte. Nested and array HFA traversal stays
-** outside this scalar carrier path. */
-static int lj_ccall_arm64_float_hfa_class(CTState *cts, CTypeID id,
-					 LJArm64FloatHFA *hfa,
-					 CTypeID *rawid)
+/* Admit only direct, tightly laid out Darwin float/double HFA members.
+** Callers select the count and size limits independently for argument and
+** result registers. Nested and array HFA traversal stays closed. */
+static int lj_ccall_arm64_float_hfa_class_limit(CTState *cts, CTypeID id,
+						       LJArm64FloatHFA *hfa,
+						       CTypeID *rawid,
+						       unsigned max_count,
+						       unsigned max_size)
 {
   CType ct, field, member;
   CTInfo info;
@@ -299,7 +301,8 @@ static int lj_ccall_arm64_float_hfa_class(CTState *cts, CTypeID id,
     CTInfo finfo;
     CTSize offset, size;
     CTypeID child;
-    if (count >= 2 || lj_ctype_snapshot(cts, fid, &field) <= 0) return 0;
+    if (count >= max_count ||
+	lj_ctype_snapshot(cts, fid, &field) <= 0) return 0;
     finfo = ctype_info_acq(&field);
     fid = ctype_sib_acq(&field);
     if (!ctype_isfield(finfo)) return 0;
@@ -311,7 +314,7 @@ static int lj_ccall_arm64_float_hfa_class(CTState *cts, CTypeID id,
     if (!ctype_isnum(info) || !ctype_isfp(info) || ctype_iscomplex(info) ||
 	(size != sizeof(float) && size != sizeof(double)) ||
 	(member_size != 0 && size != member_size) ||
-	offset != count*size || count*size+size > 8)
+	offset != count*size || count*size+size > max_size)
       return 0;
     member_size = size;
     if (hfa != NULL) hfa->offset[count] = (uint8_t)offset;
@@ -328,6 +331,22 @@ static int lj_ccall_arm64_float_hfa_class(CTState *cts, CTypeID id,
     hfa->align = (uint8_t)ctype_align(ctype_info_acq(&ct));
   }
   return 1;
+}
+
+/* Call arguments remain limited to one eightbyte. Result registers D0/D1 can
+** carry a two-double HFA (16 bytes) under the Darwin ARM64 ABI. */
+static int lj_ccall_arm64_float_hfa_class(CTState *cts, CTypeID id,
+					  LJArm64FloatHFA *hfa,
+					  CTypeID *rawid)
+{
+  return lj_ccall_arm64_float_hfa_class_limit(cts, id, hfa, rawid, 2, 8);
+}
+
+static int lj_ccall_arm64_float_hfa_result_class(CTState *cts, CTypeID id,
+						 LJArm64FloatHFA *hfa,
+						 CTypeID *rawid)
+{
+  return lj_ccall_arm64_float_hfa_class_limit(cts, id, hfa, rawid, 2, 16);
 }
 
 /* Classify the fixed prefix in Darwin's independent GPR/FPR banks. For a
@@ -371,7 +390,7 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
   if (!lj_ccall_arm64_scalar_class(cts, abi->result_declared_id, 1,
                                    &result, &rawid)) {
     LJArm64FloatHFA hfa;
-    if (lj_ccall_arm64_float_hfa_class(cts, abi->result_declared_id,
+    if (lj_ccall_arm64_float_hfa_result_class(cts, abi->result_declared_id,
 		&hfa, &rawid)) {
       result.cls = LJ_ARM64_ABI_FPR;
       result.kind = LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER;

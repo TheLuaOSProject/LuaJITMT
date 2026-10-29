@@ -1,10 +1,11 @@
 # ARM64 HFA aggregate results
 
 The Darwin ARM64 CALLXS path supports direct aggregate results containing one
-`float`, one `double`, or two contiguous `float` members. The classifier records
+`float`, one `double`, two contiguous `float` members, or two contiguous
+`double` members. The result-only classifier records
 the exact member count, offsets, member type, and declared CType. One-member
-results use the raw S0/D0 carrier; a two-float result uses an adjacent
-`IR_HIOP` for S1 alongside the ordinary S0 `IR_CALLXS` result. The recorder
+results use the raw S0/D0 carrier; a two-member result uses an adjacent
+`IR_HIOP` for S1/D1 alongside the ordinary S0/D0 `IR_CALLXS` result. The recorder
 stores each raw lane into its exact offset in a fresh CData box before native
 leave. Lua receives the rooted box, never a scalar carrier.
 
@@ -12,7 +13,7 @@ Both semantic and post-RA admission independently check the callable
 signature, result IR type, declared CData box, return snapshot slot, and
 CALLXS-to-XSTORE flow. The raw floating carriers must not appear in any
 snapshot. The ordinary scalar-result snapshot rule is skipped for these boxed
-aggregate results. For two-float results, post-RA admission also checks that
+aggregate results. For two-member results, post-RA admission also checks that
 the allocated result registers are D0 and D1. The HFA classifier rejects
 CData references and declared `CTA_ALIGN` wrappers that exceed natural
 alignment.
@@ -22,14 +23,14 @@ JIT-disabled oracle values and exact returned CData type, witnesses native
 CALLXS/CNEW/XSTORE on the selected candidate root, forces a mismatched-result
 exit, and verifies native re-entry and effect counts after full GC. Private IR
 clones independently reject bad result snapshots, XSTORE types and sources,
-wrong CData types, and—on two-float results—bad high-lane offsets and result
+wrong CData types, and—on paired results—bad high-lane offsets and result
 registers. For scalar and integer aggregate results, a negative substitutes a
 different earlier CALLXS with the same IR type, checking exact result-source
 binding in both independent walks. A loop-unrolled trace exposed stale
 high-lane store state across an `IR_EQ` native-frame close; both independent
 admission walks now reset that state on closure.
 
-The two-float fixture ends a 32-iteration native-root loop with inputs that
+The paired-HFA fixtures end a 32-iteration native-root loop with inputs that
 return distinct raw lane bytes for positive/negative zero, positive/negative
 infinity, and two different NaN payloads. It compares against the independent
 interpreter oracle and explicit expected bytes, and requires a selected-root
@@ -37,11 +38,13 @@ CALLXS/HIOP finish with a live peer.
 
 ## Limits
 
-Only one-float, one-double, and direct two-float results are classified.
-Nested structs, arrays, three-member HFAs, double pairs, padding, unions,
-vectors, and other HFA result layouts remain closed. Over-aligned HFA results
-remain closed. HFA formals in variadic function signatures are rejected; this
-does not open HFA variadic tails, stack-passed HFA values, or stack crossing.
+Only one-float, one-double, direct two-float, and direct two-double results
+are classified. HFA arguments retain the one-eightbyte limit; a two-double
+argument remains closed. Nested structs, arrays, three-member HFAs, padding,
+unions, vectors, and other HFA result layouts remain closed. Over-aligned HFA
+results remain closed. HFA formals in variadic function signatures are
+rejected; this does not open HFA variadic tails, stack-passed HFA values, or
+stack crossing.
 
 ## Validation
 
@@ -61,3 +64,11 @@ reported selected root 2 with two CALLXS, two CNEWs, four XSTOREs, and 25
 selected-root exits at `pc16:CGET`. The directory contains the immutable
 runtime, archive, matching `jit` and `threading.lua` modules, probe and C
 library sources, DSO, output, and SHA-256 manifest.
+
+The two-double result follow-up also passed
+`tools/ci/arm64_jit_integer_aggregate_args_contract.sh` on arm64/arm64e with
+assertions enabled and disabled. Its selected-root fixture checks D0/D1 lane
+bytes (signed zero, infinities, and distinct NaN payloads), a live D0 input,
+an interpreter-disabled oracle, a signature exit, effects, and full-GC
+re-entry. Argument classification remains capped at one eightbyte; the
+existing negative signature test still rejects a two-double HFA argument.

@@ -25,6 +25,7 @@ typedef struct { uint64_t value; } arm64_u64_result;
 typedef struct { float value; } arm64_float_result;
 typedef struct { double value; } arm64_double_result;
 typedef struct { float lo, hi; } arm64_float_pair_result;
+typedef struct { double lo, hi; } arm64_double_pair_result;
 typedef struct { uint32_t value:5; } arm64_bitfield;
 
 enum {
@@ -54,6 +55,8 @@ enum {
   ARM64_RETURN_FLOAT_PAIR_HFA,
   ARM64_RETURN_FLOAT_PAIR_HFA_FPR,
   ARM64_RETURN_FLOAT_PAIR_SCALAR_FPR,
+  ARM64_RETURN_DOUBLE_PAIR_HFA,
+  ARM64_RETURN_DOUBLE_PAIR_HFA_FPR,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -268,6 +271,45 @@ LJ_EXPORT double arm64_return_float_pair_scalar_fpr(double bias,
 {
   calls[ARM64_RETURN_FLOAT_PAIR_SCALAR_FPR]++;
   return bias + (double)value;
+}
+
+LJ_EXPORT arm64_double_pair_result arm64_return_double_pair_hfa(uint32_t value)
+{
+  arm64_double_pair_result result;
+  calls[ARM64_RETURN_DOUBLE_PAIR_HFA]++;
+  if (value >= 2u && value <= 4u) {
+    static const uint64_t lane_bits[3][2] = {
+      { UINT64_C(0x0000000000000000), UINT64_C(0x8000000000000000) },
+      { UINT64_C(0x7ff0000000000000), UINT64_C(0xfff0000000000000) },
+      { UINT64_C(0x7ff8123456789abc), UINT64_C(0x7ff8fedcba987654) }
+    };
+    memcpy(&result.lo, &lane_bits[value-2u][0], sizeof(double));
+    memcpy(&result.hi, &lane_bits[value-2u][1], sizeof(double));
+  } else {
+    result.lo = (double)value * 0.5 + 1.25;
+    result.hi = (double)value * 0.25 + 2.5;
+  }
+  return result;
+}
+
+LJ_EXPORT arm64_double_pair_result arm64_return_double_pair_hfa_fpr(
+    double bias, uint32_t value)
+{
+  arm64_double_pair_result result;
+  calls[ARM64_RETURN_DOUBLE_PAIR_HFA_FPR]++;
+  if (value >= 2u && value <= 4u) {
+    static const uint64_t lane_bits[3][2] = {
+      { UINT64_C(0x0000000000000000), UINT64_C(0x8000000000000000) },
+      { UINT64_C(0x7ff0000000000000), UINT64_C(0xfff0000000000000) },
+      { UINT64_C(0x7ff8123456789abc), UINT64_C(0x7ff8fedcba987654) }
+    };
+    memcpy(&result.lo, &lane_bits[value-2u][0], sizeof(double));
+    memcpy(&result.hi, &lane_bits[value-2u][1], sizeof(double));
+  } else {
+    result.lo = bias + (double)value * 0.5;
+    result.hi = bias - (double)value * 0.25;
+  }
+  return result;
 }
 
 LJ_EXPORT uint32_t arm64_return_scalar(uint32_t value)
