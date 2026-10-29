@@ -668,7 +668,8 @@ static void test_live_integer_result_admission(lua_State *L, GCtrace *T,
   Arm64TraceFixture fx;
   jit_State *J, *fixture_jit;
   GG_State *fakegg;
-  IRRef ref, box = 0, call = 0, store = 0, hiop = 0, storehi = 0;
+	IRRef ref, box = 0, call = 0, first_call = 0, store = 0;
+	IRRef hiop = 0, storehi = 0;
   IRRef ktrace = 0, badctype = 0, wrong_offset = 0;
   IRRef nk = T->nk, nins = T->nins, semantic_nins;
   IRIns *copy;
@@ -697,7 +698,10 @@ static void test_live_integer_result_admission(lua_State *L, GCtrace *T,
   for (ref = REF_FIRST; ref < semantic_nins; ref++) {
     IRIns ins = ir_load_acq(&copy[ref]);
     if (ins.o == IR_CNEW) box = ref;
-    if (ins.o == IR_CALLXS && irt_type(ins.t) == type) call = ref;
+	  if (ins.o == IR_CALLXS && irt_type(ins.t) == type) {
+	    if (!first_call) first_call = ref;
+	    call = ref;
+	  }
     if (ins.o == IR_HIOP && call && ref == call+1u) hiop = ref;
   }
   for (ref = REF_FIRST; ref < semantic_nins; ref++) {
@@ -705,7 +709,7 @@ static void test_live_integer_result_admission(lua_State *L, GCtrace *T,
     if (ins.o == IR_XSTORE && ins.op2 == call) store = ref;
     if (ins.o == IR_XSTORE && hiop && ins.op2 == hiop) storehi = ref;
   }
-  assert(box && call && store);
+	  assert(box && call && first_call && call != first_call && store);
   if (T->ir[call+1u].o == IR_HIOP)
     assert(hiop == call+1u && storehi != 0);
   for (ref = nk; ref < REF_TRUE; ref = next_constant(copy, ref)) {
@@ -760,6 +764,9 @@ static void test_live_integer_result_admission(lua_State *L, GCtrace *T,
   copy_trace_ir(copy, fx.good, nk, nins);
   copy[store].op2 = REF_BASE;
   assert(!semantic_accepts(J, &fx.semantic, copy, nins, semantic_nins));
+  copy_trace_ir(copy, fx.good, nk, nins);
+  copy[store].op2 = first_call;
+  assert(!semantic_accepts(J, &fx.semantic, copy, nins, semantic_nins));
   if (hiop) {
     copy_trace_ir(copy, fx.good, nk, nins);
     copy[hiop].op1 = REF_BASE;
@@ -784,6 +791,11 @@ static void test_live_integer_result_admission(lua_State *L, GCtrace *T,
   postra.ir = fx.postra;
   fx.postra[store].t.irt = type == IRT_U8 ? IRT_U16 : IRT_U8;
   assert(!lj_asm_arm64_postra_admit(&postra, &postra_nins));
+	copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
+	postra = fx.view;
+	postra.ir = fx.postra;
+	fx.postra[store].op2 = first_call;
+	assert(!lj_asm_arm64_postra_admit(&postra, &postra_nins));
   if (hiop) {
     copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
     postra = fx.view;

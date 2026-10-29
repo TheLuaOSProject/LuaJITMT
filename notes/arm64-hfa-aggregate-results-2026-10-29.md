@@ -23,14 +23,17 @@ CALLXS/CNEW/XSTORE on the selected candidate root, forces a mismatched-result
 exit, and verifies native re-entry and effect counts after full GC. Private IR
 clones independently reject bad result snapshots, XSTORE types and sources,
 wrong CData types, and—on two-float results—bad high-lane offsets and result
-registers. A loop-unrolled trace exposed stale high-lane store state across an
-`IR_EQ` native-frame close; both independent admission walks now reset that
-state on closure.
+registers. For scalar and integer aggregate results, a negative substitutes a
+different earlier CALLXS with the same IR type, checking exact result-source
+binding in both independent walks. A loop-unrolled trace exposed stale
+high-lane store state across an `IR_EQ` native-frame close; both independent
+admission walks now reset that state on closure.
 
-The two-float fixture uses distinct lanes and compares exact output bytes for
-positive/negative zero, positive/negative infinity, and two different NaN
-payloads. It requires a selected-root native CALLXS/HIOP finish with a live
-peer and verifies native re-entry and CData bits after full GC.
+The two-float fixture ends a 32-iteration native-root loop with inputs that
+return distinct raw lane bytes for positive/negative zero, positive/negative
+infinity, and two different NaN payloads. It compares against the independent
+interpreter oracle and explicit expected bytes, and requires a selected-root
+CALLXS/HIOP finish with a live peer.
 
 ## Limits
 
@@ -44,8 +47,17 @@ does not open HFA variadic tails, stack-passed HFA values, or stack crossing.
 
 `tools/ci/arm64_jit_integer_aggregate_args_contract.sh` passed all four native
 macOS profiles: arm64 and arm64e, with and without assertions. The final run
-log is `/Users/frityet/Scratch/ljmt-hfa-pair-crash-20261029/final-four-profile.log`.
+log after the source-binding and raw-bit test corrections is
+`/Users/frityet/Scratch/ljmt-hfa-pair-crash-20261029/followup-four-profile-2.log`.
 
 A strict Darwin x86_64 build with `CFLAGS=-Werror` passed. Its log is
 `/Users/frityet/Scratch/ljmt-hfa-pair-crash-20261029/x64-strict2.log`. This is
 compile compatibility evidence only, not an x86_64 runtime HFA claim.
+
+The ordinary ARM64 ten-case probe used the no-test-helper build at
+`/Users/frityet/Scratch/ljmt-hfa-pair-crash-20261029/ordinary-arm64/`. Its
+`sse-result-retained` row (two-float result) passed 25 oracle comparisons and
+reported selected root 2 with two CALLXS, two CNEWs, four XSTOREs, and 25
+selected-root exits at `pc16:CGET`. The directory contains the immutable
+runtime, archive, matching `jit` and `threading.lua` modules, probe and C
+library sources, DSO, output, and SHA-256 manifest.

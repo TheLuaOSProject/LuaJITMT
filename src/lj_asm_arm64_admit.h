@@ -2685,7 +2685,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	    member = 1;
 	  else return 0;
 	  if (ins.op2 != (member == 0 ? call : call+1u)) return 0;
-	} else if (offset != (int64_t)sizeof(GCcdata)) {
+	} else if (offset != (int64_t)sizeof(GCcdata) || ins.op2 != call) {
 	  return 0;
 	}
 	if (ins.op2 >= ref ||
