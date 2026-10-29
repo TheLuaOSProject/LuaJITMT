@@ -424,8 +424,7 @@ static int arm64_callxs_value_kind(const IRIns *ir, IRRef ref,
   }
   switch (kind) {
   case LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER:
-	return !on_stack &&
-	       ((size == sizeof(float) && type == IRT_FLOAT) ||
+	return ((size == sizeof(float) && type == IRT_FLOAT) ||
 		(size == sizeof(double) && type == IRT_NUM)) &&
 	       value.o == IR_XLOAD && value.op2 == 0;
   case LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE:
@@ -1350,7 +1349,8 @@ static int arm64_callxs_cdata_float_hfa_member(CTState *cts,
 		  abi.arg[i].size != member_size ||
 		  abi.arg[i].member_index != arg->member_index ||
 		  !arm64_callxs_value_kind(ir, value, T->nk, T->nins, ref,
-		    LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER, member_size, 0, 0))
+			LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER, member_size, 0,
+			abi.arg[i].reg == LJ_ARM64_ABI_STACK))
 		return 0;
 	      consumers++;
 	    }
@@ -2496,6 +2496,9 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
           IRIns carrier = ir_load_acq(&T->ir[values[i]]);
           unsigned width = lj_ir_type_size[irt_type(carrier.t)];
           if (width != a->size || width == 0 || width > 8) return 0;
+          if (a->kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
+              a->member_index == 0)
+            stack_size = (stack_size+7u) & ~7u;
           stack_size = (stack_size + width-1u) & ~(width-1u);
           if (a->reg != LJ_ARM64_ABI_STACK ||
               a->stack_offset != stack_size) return 0;
@@ -5784,7 +5787,8 @@ static int arm64_postra_cdata_float_hfa_member(CTState *cts,
 		  abi.arg[a].size != member_size ||
 		  abi.arg[a].member_index != arg->member_index ||
 		  !arm64_callxs_value_kind(ir, value, T->nk, nins, r,
-		    LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER, member_size, 0, 0))
+			LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER, member_size, 0,
+			abi.arg[a].reg == LJ_ARM64_ABI_STACK))
 		return 0;
 	      calls++;
 	    }
@@ -6860,6 +6864,9 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	      } else {
 		if (width == 0 || width > 8 || width != a->size ||
 		    a->reg != LJ_ARM64_ABI_STACK) return 0;
+		if (a->kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
+		    a->member_index == 0)
+		  bytes = (bytes+7u) & ~7u;
 		bytes = (bytes + width-1u) & ~(width-1u);
 		if (a->stack_offset != bytes) return 0;
 		bytes += width;

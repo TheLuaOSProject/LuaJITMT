@@ -428,21 +428,33 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
       if (nparams >= LJ_ARM64_ABI_MAX_ARGS) return 0;
       if (lj_ccall_arm64_float_hfa_class(cts, argid, &hfa, &rawid)) {
 	unsigned part;
-	if (abi->is_vararg || nfpr+hfa.count > CCALL_NARG_FPR ||
-	    nargs+hfa.count > LJ_ARM64_ABI_MAX_ARGS)
+	int stack_hfa = nfpr+hfa.count > CCALL_NARG_FPR;
+	if (abi->is_vararg || nargs+hfa.count > LJ_ARM64_ABI_MAX_ARGS)
 	  return 0;
+	/* The interpreter passes an HFA wholly in consecutive FPRs, or wholly
+	** on the stack when its FPR bank is exhausted. The generic emitter can
+	** reproduce the latter without a new argument-group opcode only when no
+	** FPR remains before the HFA. Keep partial-bank overflow closed. */
+	if (stack_hfa && (nfpr != CCALL_NARG_FPR || hfa.count != 2 ||
+		          hfa.member_size != sizeof(float) || hfa.size != 8 ||
+	                  (stack_size & 7u) != 0)) return 0;
+	if (stack_hfa) stack_size = (stack_size+7u) & ~7u;
 	for (part = 0; part < hfa.count; part++) {
 	  arg = &abi->arg[nargs];
 	  memset(arg, 0, sizeof(*arg));
 	  arg->id = rawid;
 	  arg->cls = LJ_ARM64_ABI_FPR;
 	  arg->kind = LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER;
-	  arg->reg = (uint8_t)nfpr++;
+	  arg->reg = stack_hfa ? LJ_ARM64_ABI_STACK : (uint8_t)nfpr++;
 	  arg->size = hfa.member_size;
 	  arg->align = hfa.align;
 	  arg->source_index = (uint8_t)nparams;
 	  arg->member_index = (uint8_t)part;
 	  arg->member_count = hfa.count;
+	  if (stack_hfa) {
+	    arg->stack_offset = (uint16_t)stack_size;
+	    stack_size += hfa.member_size;
+	  }
 	  nargs++;
 	}
       } else {

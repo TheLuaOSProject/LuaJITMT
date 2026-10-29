@@ -421,6 +421,30 @@ static void assert_float_hfa_plain_multilane_signature(lua_State *L,
   assert(!abi.stack_size);
 }
 
+static void assert_float_hfa_stack_signature(lua_State *L, const char *name)
+{
+  LJArm64ABISignature abi;
+  unsigned i;
+  assert(lj_ccall_arm64_signature(ctype_ctsG(G(L)),
+				 global_cdata_ctype(L, name), &abi));
+  assert(abi.nargs == 11 && abi.nparams == 10 && abi.nfpr == 8 &&
+	 abi.stack_size == 16 && abi.result_class == LJ_ARM64_ABI_FPR);
+  for (i = 0; i < 8; i++)
+    assert(abi.arg[i].kind == LJ_ARM64_ABI_KIND_FLOAT &&
+	   abi.arg[i].cls == LJ_ARM64_ABI_FPR && abi.arg[i].reg == i);
+  for (i = 0; i < 2; i++)
+    assert(abi.arg[8+i].kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
+	   abi.arg[8+i].cls == LJ_ARM64_ABI_FPR &&
+	   abi.arg[8+i].reg == LJ_ARM64_ABI_STACK &&
+	   abi.arg[8+i].member_index == i &&
+	   abi.arg[8+i].member_count == 2 &&
+	   abi.arg[8+i].stack_offset == i*sizeof(float));
+  assert(abi.arg[10].kind == LJ_ARM64_ABI_KIND_FLOAT &&
+	 abi.arg[10].cls == LJ_ARM64_ABI_FPR &&
+	 abi.arg[10].reg == LJ_ARM64_ABI_STACK &&
+	 abi.arg[10].stack_offset == 8);
+}
+
 static void assert_hfa_reference_pointer_signature(lua_State *L,
 						    const char *name)
 {
@@ -518,6 +542,7 @@ static void test_aggregate_signatures(lua_State *L)
 	 "__arm64_double_pair_fn", sizeof(double), 2);
   assert_float_hfa_plain_multilane_signature(L,
 	 "__arm64_float_triple_fn", sizeof(float), 3);
+  assert_float_hfa_stack_signature(L, "__arm64_float_pair_stack_fn");
   assert_unsupported_aggregate_signature(L, "__arm64_nested_pair_fn");
   assert_unsupported_aggregate_signature(L, "__arm64_mixed_union_fn");
   assert_unsupported_aggregate_signature(L, "__arm64_big_pair_fn");
@@ -1286,6 +1311,16 @@ int main(int argc, char **argv)
     assert(meta_pc != NULL);
     test_live_aggregate_admission(L, T, meta_pc,
 	"__arm64_float_hfa_clone", IRT_FLOAT);
+  }
+  {
+    GCproto *pt = global_proto(L, "__arm64_float_pair_stack_candidate");
+    jit_State *J = G2J(G(L));
+    GCtrace *T = find_aggregate_trace_min_load_count(J, pt, IRT_FLOAT, 2);
+    assert(T != NULL);
+    meta_pc = aggregate_meta_pc(T);
+    assert(meta_pc != NULL);
+    test_live_aggregate_admission_at(L, T, meta_pc,
+	"__arm64_float_pair_stack_clone", IRT_FLOAT, 1);
   }
   {
     GCproto *pt = global_proto(L, "__arm64_float_triple_hfa_candidate");

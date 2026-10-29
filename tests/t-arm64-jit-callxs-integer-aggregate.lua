@@ -23,6 +23,9 @@ typedef uint32_t (*Arm64FloatTripleFn)(Arm64FloatTriple);
 typedef double (*Arm64FloatTripleSaltFn)(Arm64FloatTriple, double);
 typedef double (*Arm64DoubleQuadSaltFn)(Arm64DoubleQuad, double);
 typedef double (*Arm64FloatTripleRefFn)(Arm64FloatTripleRef, double);
+typedef double (*Arm64FloatPairStackFn)(double, double, double, double,
+                                        double, double, double, double,
+                                        Arm64FloatPair, double);
 typedef double (*Arm64FprOverflowFn)(double, double, double, double,
                                      double, double, double,
                                      Arm64FloatTriple);
@@ -87,6 +90,12 @@ double arm64_take_float_one_double_salt(Arm64FloatOne, double);
 double arm64_take_double_one_double_salt(Arm64DoubleOne, double);
 double arm64_take_float_triple_double_salt(Arm64FloatTriple, double);
 double arm64_take_double_quad_double_salt(Arm64DoubleQuad, double);
+double arm64_take_float_pair_stack(double, double, double, double,
+                                   double, double, double, double,
+                                   Arm64FloatPair, double);
+double arm64_take_float_pair_stack_alt(double, double, double, double,
+                                       double, double, double, double,
+                                       Arm64FloatPair, double);
 int32_t arm64_vararg_i32(int32_t, ...);
 uint32_t arm64_take_nested_pair(Arm64NestedPair);
 uint32_t arm64_take_union(Arm64MixedUnion);
@@ -169,6 +178,7 @@ _G.__arm64_word_fn = lib.arm64_take_word
 _G.__arm64_big_pair_fn = lib.arm64_take_big_pair
 _G.__arm64_bitfield_fn = lib.arm64_take_bitfield
 _G.__arm64_pair_no_gpr_fn = lib.arm64_take_pair_no_gpr
+_G.__arm64_float_pair_stack_fn = lib.arm64_take_float_pair_stack
 
 local candidate = assert(loadstring([[
 return function(n, fn, value)
@@ -467,6 +477,95 @@ assert(_hfa_native_count() > hfa_before_gc,
 assert(hfa_exits > 0, 'HFA root did not exit after full-GC re-entry')
 assert(lib.arm64_aggregate_count(3) == 320,
   'HFA post-GC effects were lost or replayed')
+
+-- Darwin passes an HFA wholly on the stack when all FPRs are consumed.
+-- Keep the added candidate setup adjacent to this probe, after the baseline
+-- two-float HFA root checks.
+local hfa_stack_candidate = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do
+    sum = sum + fn(1, 2, 3, 4, 5, 6, 7, 8, value, salt)
+  end
+  return sum
+end
+]], '@float-pair-hfa-stack-candidate'))()
+local hfa_stack_oracle_chunk = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do
+    sum = sum + fn(1, 2, 3, 4, 5, 6, 7, 8, value, salt)
+  end
+  return sum
+end
+]], '@float-pair-hfa-stack-oracle'))
+jit.off(hfa_stack_oracle_chunk, true)
+local hfa_stack_oracle = hfa_stack_oracle_chunk()
+local hfa_stack_clone_chunk = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do
+    sum = sum + fn(1, 2, 3, 4, 5, 6, 7, 8, value, salt)
+  end
+  return sum
+end
+]], '@float-pair-hfa-stack-clone'))
+jit.off(hfa_stack_clone_chunk, true)
+local hfa_stack_clone = hfa_stack_clone_chunk()
+jit.off(hfa_stack_oracle, true)
+jit.off(hfa_stack_clone, true)
+_G.__arm64_float_pair_stack_candidate = hfa_stack_candidate
+_G.__arm64_float_pair_stack_clone = hfa_stack_clone
+local saved_hfa_candidate = hfa_candidate
+hfa_candidate = hfa_stack_candidate
+_G.__arm64_float_hfa_candidate = hfa_candidate
+_set_hfa_candidate(hfa_candidate)
+jit.flush(hfa_candidate)
+jit.on(hfa_candidate, true)
+exits, hfa_exits = 0, 0
+lib.arm64_aggregate_reset()
+_begin_hfa_witness()
+local stack_pair = ffi.new('Arm64FloatPair', 1.25, 2.5)
+local stack_fn = lib.arm64_take_float_pair_stack
+local stack_native_before = _hfa_native_count()
+for pass = 1, 8 do
+  assert(hfa_candidate(16, stack_fn, stack_pair, 3.75) ==
+         hfa_stack_oracle(16, stack_fn, stack_pair, 3.75),
+         'stack-passed HFA differs from the interpreter')
+end
+assert(_hfa_trace_count() > 0 and
+       _hfa_native_count() > stack_native_before,
+       'stack-passed HFA root did not finish natively')
+assert(hfa_exits > 0, 'stack-passed HFA root did not exit natively')
+assert(lib.arm64_aggregate_count(34) == 256,
+       'stack-passed HFA effects were lost or replayed: ' ..
+       tostring(lib.arm64_aggregate_count(34)))
+stack_native_before = _hfa_native_count()
+collectgarbage('collect')
+exits, hfa_exits = 0, 0
+assert(hfa_candidate(32, stack_fn, stack_pair, 3.75) ==
+       hfa_stack_oracle(32, stack_fn, stack_pair, 3.75),
+       'stack-passed HFA changed after full GC')
+assert(_hfa_native_count() > stack_native_before and hfa_exits > 0,
+       'stack-passed HFA did not re-enter and exit natively after GC')
+assert(lib.arm64_aggregate_count(34) == 320,
+       'stack-passed HFA post-GC effects were lost or replayed')
+tracked_exit_roots = roots(hfa_candidate)
+exits = 0
+assert(hfa_candidate(32, lib.arm64_take_float_pair_stack_alt,
+                     stack_pair, 3.75) ==
+       hfa_stack_oracle(32, lib.arm64_take_float_pair_stack_alt,
+                        stack_pair, 3.75),
+       'stack-passed HFA callable-change fallback differs')
+assert(exits > 0, 'stack-passed HFA callable change did not force an exit')
+assert(lib.arm64_aggregate_count(35) == 64,
+       'stack-passed HFA callable-change effects were lost or replayed: ' ..
+       tostring(lib.arm64_aggregate_count(35)))
+tracked_exit_roots = nil
+hfa_candidate = saved_hfa_candidate
+_G.__arm64_float_hfa_candidate = hfa_candidate
+_set_hfa_candidate(hfa_candidate)
+
 
 local function run_one_hfa(candidate_fn, oracle_fn, type_name, ffi_fn, counter,
 			   label)
@@ -1072,6 +1171,7 @@ assert(lib.arm64_aggregate_count(0) == 1568,
 assert(lib.arm64_aggregate_count(1) == 1440,
   'alternate-signature effects were lost or replayed: ' ..
   tostring(lib.arm64_aggregate_count(1)))
+
 
 assert(stop:send(true, 5))
 local joined, result = peer:join(5)
