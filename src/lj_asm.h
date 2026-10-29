@@ -112,6 +112,8 @@ typedef struct LJArm64SideIRView {
   MSize parent_nslots;
   MSize parent_topslot;
   const BCIns *parent_continuation;
+  /* The root loop can be headed by BC_LOOP or bounded by a paired FORI/FORL. */
+  BCIns parent_startins;
   MSize loop_header_pc;
   MSize loop_start_pc;
   MSize loop_end_pc;
@@ -144,7 +146,8 @@ typedef struct LJArm64SideParentSnapshot {
   MSize nslots;
   MSize topslot;
   const BCIns *continuation;
-  /* Parent BC_LOOP marker and its body interval [backedge target, backedge). */
+  /* Root-loop source and bounded executable body interval. */
+  BCIns startins;
   MSize loop_header_pc;
   MSize loop_start_pc;
   MSize loop_end_pc;

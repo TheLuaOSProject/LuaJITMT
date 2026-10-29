@@ -3992,6 +3992,58 @@ static int trace_root_entry_loop_geometry(uint32_t sourceop,
 	 target <= (int64_t)pos && target < (int64_t)pt->sizebc;
 }
 
+/* Derive the source interval of a root loop from its original entry
+** instruction. FORL is a backward jump at the end of the body; unlike LOOP,
+** it has no forward header-to-backedge displacement. */
+static int trace_arm64_root_loop_interval(const GCproto *pt,
+	const BCIns *pc, BCIns startins, MSize *headerp, MSize *startp,
+	MSize *endp)
+{
+  const BCIns *bc;
+  BCPos pos;
+  int64_t end, start;
+  BCIns back;
+  if (pt == NULL || pc == NULL || pt->sizebc == 0)
+	return 0;
+  bc = proto_bc(pt);
+  if (!trace_pc_in_proto_range(pc, bc, pt->sizebc))
+	return 0;
+  pos = proto_bcpos(pt, pc);
+  if (bc_op(startins) == BC_LOOP) {
+	end = (int64_t)pos+(int64_t)bc_j(startins);
+	if (bc_j(startins) <= 0 || end < 0 || end >= (int64_t)pt->sizebc)
+	  return 0;
+	back = (BCIns)la_load32_acq((const uint32_t *)&bc[(BCPos)end]);
+	start = end+1+(int64_t)bc_j(back);
+	if (bc_op(back) != BC_JMP || bc_j(back) >= 0 || start < 0 ||
+	    start >= end || start > (int64_t)pos)
+	  return 0;
+	if (headerp) *headerp = pos;
+	if (startp) *startp = (MSize)start;
+	if (endp) *endp = (MSize)end;
+	return 1;
+  }
+  if (bc_op(startins) == BC_FORL) {
+	int64_t body = (int64_t)pos+1+(int64_t)bc_j(startins);
+	int64_t foripos = body-1;
+	BCIns fori;
+	if (bc_j(startins) >= 0 || body <= 0 || body > (int64_t)pos ||
+	    foripos < 0 || foripos >= (int64_t)pt->sizebc)
+	  return 0;
+	fori = (BCIns)la_load32_acq((const uint32_t *)&bc[(BCPos)foripos]);
+	if (bc_op(fori) != BC_FORI || bc_a(fori) != bc_a(startins) ||
+	    bc_j(fori) <= 0 || foripos+1+(int64_t)bc_j(fori) !=
+	    (int64_t)pos+1 ||
+	    (BCIns)la_load32_acq((const uint32_t *)&bc[(BCPos)foripos]) != fori)
+	  return 0;
+	if (headerp) *headerp = (MSize)foripos;
+	if (startp) *startp = (MSize)body;
+	if (endp) *endp = pos;
+	return 1;
+  }
+  return 0;
+}
+
 typedef struct TraceArm64LoopView {
   uint64_t retire_epoch;
   GCobj *startpt;
@@ -4057,7 +4109,8 @@ static int trace_root_entry_loop_view_acq(const GCtrace *T, TraceNo traceno,
   return v->retire_epoch == 0 && v->traceno == traceno &&
 	 trace_root_acq(T) == 0 &&
 	 ((v->nextside == 0 && v->nchild == 0) ||
-	  (sourceop == (uint32_t)BC_JLOOP && v->nextside != 0 &&
+	  ((sourceop == (uint32_t)BC_JLOOP ||
+	    sourceop == (uint32_t)BC_JFORL) && v->nextside != 0 &&
 	   v->nextside != traceno && v->nchild == 1)) &&
 	 (function_root ?
 	  (v->link == 0 && v->linktype == LJ_TRLINK_RETURN &&
@@ -4437,6 +4490,8 @@ static int trace_arm64_first_side_view_acq_mode(jit_State *J, TraceNo parent,
   GCtrace *sidechild = NULL;
   SnapShot *selected;
   MSize maxsnapmap;
+  BCOp rootop;
+  uint32_t expected_admission;
   uintptr_t mcodep, bodyend, fallbackp, gatesz;
   const MSize footer = 1u + LJ_FR2;
 
@@ -4462,6 +4517,9 @@ static int trace_arm64_first_side_view_acq_mode(jit_State *J, TraceNo parent,
   v->linktype = trace_linktype_acq(T);
   v->admission = trace_arm64_admission_acq(T);
   v->flags = la_load8_acq(&T->unused1);
+  rootop = bc_op(v->startins);
+  expected_admission = rootop == BC_FORL ? TRACE_ARM64_INT_FORL_ADMITTED :
+	TRACE_ARM64_INT_LOOP_ADMITTED;
   v->sinktags = T->sinktags;
   v->startpt = trace_startptgco_acq(T);
   v->startpc = trace_startpc_acq(T);
@@ -4489,16 +4547,20 @@ static int trace_arm64_first_side_view_acq_mode(jit_State *J, TraceNo parent,
   ** child. The child grammar binds itself to this selected exit and reachable
   ** loop interval instead of an example prototype's exact bytecode offsets. */
   if (v->retire_epoch != 0 || v->traceno != parent || v->root != 0 ||
+      (rootop != BC_LOOP && rootop != BC_FORL) ||
       v->link != parent || v->linktype != LJ_TRLINK_LOOP ||
       (v->nchild != 0 && (!allow_published_child || v->nchild != 1 ||
 	v->nextside == 0 || (MSize)v->nextside >= tv->sizetrace)) ||
       (v->nextside != 0 && !allow_published_child) ||
-      v->admission != TRACE_ARM64_INT_LOOP_ADMITTED ||
+      v->admission != expected_admission ||
       (v->flags & TRACE_EXITTAB_MCODE) != 0 ||
       (v->flags & TRACE_ENTRY_GATED) != 0 ||
       v->startpt == NULL || !checkptrGC(v->startpt) ||
       v->startpt->gch.gct != (uint32_t)~LJ_TPROTO ||
-      v->startpc == NULL || bc_op(v->startins) != BC_LOOP ||
+      v->startpc == NULL ||
+	  !trace_root_entry_loop_geometry(
+	    (uint32_t)rootop+(uint32_t)BC_JLOOP-(uint32_t)BC_LOOP,
+	    gco2pt(v->startpt), v->startpc, v->startins) ||
       v->ir == NULL || v->nins <= REF_FIRST || v->nins >= REF_DROP ||
       v->nk == 0 || v->nk > REF_TRUE || v->snap == NULL ||
       v->snapmap == NULL || v->mcode == NULL || v->exittab == NULL ||
@@ -4703,6 +4765,41 @@ static int trace_arm64_first_side_loop_generation_valid(
     TraceArm64FirstSideLoopView *v, TraceNo parent,
     const BCIns *continuation)
 {
+  GCproto *pt = gco2pt(v->startpt);
+  if (bc_op(v->startins) == BC_FORL) {
+	MSize header, start, end;
+	const BCIns *bc = proto_bc(pt);
+	BCIns expected, live1, live2, fori1, fori2, shadow1, shadow2;
+	BCIns cont1, cont2;
+	BCPos pos;
+	if (!trace_arm64_root_loop_interval(pt, v->startpc, v->startins,
+	      &header, &start, &end) ||
+	    !trace_pc_in_proto_range(continuation, bc, pt->sizebc))
+	  return 0;
+	pos = proto_bcpos(pt, v->startpc);
+	if (proto_bcpos(pt, continuation) < start ||
+	    proto_bcpos(pt, continuation) >= end)
+	  return 0;
+	expected = BCINS_AD(BC_JFORL, bc_a(v->startins), parent);
+	live1 = (BCIns)la_load32_acq((const uint32_t *)v->startpc);
+	fori1 = (BCIns)la_load32_acq((const uint32_t *)&bc[header]);
+	shadow1 = proto_jit_startins_acq(pt, v->startpc);
+	cont1 = (BCIns)la_load32_acq((const uint32_t *)continuation);
+	if (live1 != expected || shadow1 != v->startins ||
+	    bc_op(fori1) != BC_FORI || bc_a(fori1) != bc_a(v->startins) ||
+	    bc_j(fori1) <= 0 ||
+	    (int64_t)header+1+(int64_t)bc_j(fori1) != (int64_t)pos+1)
+	  return 0;
+	live2 = (BCIns)la_load32_acq((const uint32_t *)v->startpc);
+	fori2 = (BCIns)la_load32_acq((const uint32_t *)&bc[header]);
+	shadow2 = proto_jit_startins_acq(pt, v->startpc);
+	cont2 = (BCIns)la_load32_acq((const uint32_t *)continuation);
+	if (live2 != live1 || fori2 != fori1 || shadow2 != shadow1 ||
+	    cont1 != cont2)
+	  return 0;
+	v->continuationins = cont2;
+	return 1;
+  }
   if (!trace_arm64_loop_generation_valid(gco2pt(v->startpt), v->startpc,
 	 v->startins, parent, continuation, &v->continuationins))
     return 0;
@@ -4837,6 +4934,38 @@ int lj_trace_arm64_first_side_loop_valid(jit_State *J, lua_State *L,
         exitno, continuation, pc, context))
     return 0;
   return 1;
+}
+
+/* FORL control slots can be marked NORESTORE only while their exact source
+** SLOAD remains part of the selected root snapshot. Do not treat this as a
+** generic permission to copy arbitrary marked values into a side. */
+static int trace_arm64_side_forl_norestore_valid(const IRIns *ir,
+	IRRef nins, IRRef nk, IRRef snapref, BCIns startins, SnapEntry sn)
+{
+  MSize idxslot, slot;
+  IRRef ref;
+  IRIns source;
+  if (ir == NULL || bc_op(startins) != BC_FORL ||
+	  (sn & 0x00ff0000u) != SNAP_NORESTORE)
+	return 0;
+  slot = snap_slot(sn);
+  idxslot = 1u+LJ_FR2+(MSize)bc_a(startins);
+  if (slot != idxslot && slot != idxslot+FORL_STOP &&
+	  slot != idxslot+FORL_STEP)
+	return 0;
+  ref = snap_ref(sn);
+  if (irref_isk(ref) || ref < REF_FIRST || ref >= snapref ||
+	  ref >= nins || ref >= REF_DROP || nk == 0 || nk > REF_TRUE)
+	return 0;
+  source = ir_load_acq(&ir[ref]);
+  if (source.o != IR_SLOAD || source.op1 != slot ||
+	  (source.op2 & (IRSLOAD_CONVERT|IRSLOAD_PARENT)) != 0)
+	return 0;
+  if (slot == idxslot)
+	return (source.t.irt & ~IRT_ISPHI) == (IRT_INT|IRT_GUARD) &&
+	  source.op2 == (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT);
+  return source.t.irt == IRT_INT &&
+	source.op2 == (IRSLOAD_READONLY|IRSLOAD_INHERIT);
 }
 
 /* The certificate is useful only while the exact recorder owner retains the
@@ -5127,39 +5256,28 @@ int lj_trace_arm64_side_parent_snapshot(jit_State *J,
 	IRRef ref = snap_ref(sn);
 	if (sn == SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL))
 	  continue;
-	if ((sn & 0x00ff0000u) ||
+	if (((sn & 0x00ff0000u) &&
+	     !trace_arm64_side_forl_norestore_valid(trace_ir_acq(view.parent),
+	       view.nins, view.nk, snap_ref_acq(src), view.startins, sn)) ||
 	    !trace_arm64_side_parent_ref_copy(trace_ir_acq(view.parent),
 	      view.nins, view.nk, snap_ref_acq(src), ref,
 	      &snapshot->map_values[i]))
 	  goto out;
 	snapshot->map_values[i].slot = snap_slot(sn);
   }
-  snapshot->loop_header_pc =
-	proto_bcpos(gco2pt(view.startpt), view.startpc);
+	snapshot->startins = view.startins;
+	if (!trace_arm64_root_loop_interval(gco2pt(view.startpt),
+	    view.startpc, view.startins, &snapshot->loop_header_pc,
+	    &snapshot->loop_start_pc, &snapshot->loop_end_pc) ||
+	    proto_bcpos(gco2pt(view.startpt), snapshot->continuation) <
+	      snapshot->loop_start_pc ||
+	    proto_bcpos(gco2pt(view.startpt), snapshot->continuation) >=
+	      snapshot->loop_end_pc)
+	  goto out;
 	if (!trace_arm64_side_parentmap(J, view.parent, cert.exitno,
 	J->cur.ir, J->cur.nins, snapshot->regspmap, snapshot->bindings,
 	&snapshot->nregspmap))
 	goto out;
-  snapshot->loop_start_pc = proto_bcpos(gco2pt(view.startpt), view.startpc);
-  {
-	int64_t end = (int64_t)snapshot->loop_start_pc +
-	  (int64_t)bc_j(view.startins);
-	int64_t target;
-	BCIns back;
-	if (end < 0 || end >= (int64_t)gco2pt(view.startpt)->sizebc)
-	  goto out;
-	back = (BCIns)la_load32_acq((const uint32_t *)
-	  &proto_bc(gco2pt(view.startpt))[(BCPos)end]);
-	target = end + 1 + (int64_t)bc_j(back);
-	if (bc_op(back) != BC_JMP || bc_j(back) >= 0 || target < 0 ||
-	    target >= end)
-	  goto out;
-	/* The scalar walk covers executable loop-body bytecodes, including the
-	** actual side entry at the backedge target. The parent BC_LOOP marker is
-	** still validated independently from the resident parent trace. */
-	snapshot->loop_start_pc = (MSize)target;
-	snapshot->loop_end_pc = (MSize)end;
-  }
   ok = trace_arm64_side_parent_revalidate_held(J, &cert, NULL);
 out:
   lj_gc2_smr_read_leave(g);
@@ -5702,9 +5820,7 @@ static int trace_arm64_side_context_from_parent(
 	MSize parent_nregspmap, ExitNo exitno)
 {
   const SnapShot *src;
-  MSize ofs, nent, header, end;
-  int64_t end64, target;
-  BCIns back;
+  MSize ofs, nent, header, start, end;
   if (!side || !copy || !pt || !parent_ir || !parent_nins || !parent_nk ||
 	!parent_nsnap || !snaps || !snapmap || (MSize)exitno >= nsnap ||
 	parent_nsnap != nsnap || parent_nregspmap > LJ_MAX_JSLOTS ||
@@ -5751,7 +5867,9 @@ static int trace_arm64_side_context_from_parent(
 	    return 0;
 	  if (sn == SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL))
 	    continue;
-	  if ((sn & 0x00ff0000u) ||
+	  if (((sn & 0x00ff0000u) &&
+	       !trace_arm64_side_forl_norestore_valid(parent_ir, parent_nins,
+		 parent_nk, snap_ref_acq(src), startins, sn)) ||
 	      !trace_arm64_side_parent_ref_copy(parent_ir, parent_nins,
 		parent_nk, snap_ref_acq(src), ref,
 		&copy->map_values[i]))
@@ -5798,21 +5916,15 @@ static int trace_arm64_side_context_from_parent(
   }
 
   copy->continuation = snap_pc_acq(&copy->map[nent]);
-  header = proto_bcpos(pt, startpc);
-  end64 = (int64_t)header + (int64_t)bc_j(startins);
-  if (end64 < 0 || end64 >= (int64_t)pt->sizebc)
-	return 0;
-  end = (MSize)end64;
-  back = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(pt)[end]);
-  target = (int64_t)end + 1 + (int64_t)bc_j(back);
-  if (bc_op(back) != BC_JMP || bc_j(back) >= 0 || target < 0 ||
-	(MSize)target >= end ||
-	proto_bcpos(pt, copy->continuation) < (MSize)target ||
-	proto_bcpos(pt, copy->continuation) >= end)
+	if (!trace_arm64_root_loop_interval(pt, startpc, startins, &header,
+	    &start, &end) ||
+	    proto_bcpos(pt, copy->continuation) < start ||
+	    proto_bcpos(pt, copy->continuation) >= end)
 	return 0;
 
+  copy->startins = startins;
   copy->loop_header_pc = header;
-  copy->loop_start_pc = (MSize)target;
+	copy->loop_start_pc = start;
   copy->loop_end_pc = end;
   side->parent_snap = &copy->snap;
   side->parent_snapmap = copy->map;
@@ -5828,8 +5940,9 @@ static int trace_arm64_side_context_from_parent(
   side->parent_nslots = copy->nslots;
   side->parent_topslot = copy->topslot;
   side->parent_continuation = copy->continuation;
+  side->parent_startins = startins;
   side->loop_header_pc = header;
-  side->loop_start_pc = (MSize)target;
+	side->loop_start_pc = start;
   side->loop_end_pc = end;
   return 1;
 }
