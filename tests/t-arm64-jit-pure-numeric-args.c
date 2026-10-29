@@ -1916,9 +1916,15 @@ static void expect_scalar_native(lua_State *L,
   GCtrace *root = traceref_safe(J, rootno);
   GCtrace *child = expect_scalar_trace_child(L, profile->name);
   TraceNo childno = child ? trace_traceno_acq(child) : 0;
+  MCode *childmcode = child ? trace_mcode_acq(child) : NULL;
   int i;
 
   assert(rootno != 0 && trace_runnable_acq(root, rootno));
+  if (require_child_native && !childno)
+    fprintf(stderr, "missing required scalar child: %s root=%u nchild=%u "
+            "aborts=%u last=%u\n", profile->name, (unsigned)rootno,
+            (unsigned)trace_nchild_acq(root), lj_trace_test_abort_count(),
+            (unsigned)lj_trace_test_last_abort_error());
   if (require_child_native)
     assert(childno != 0);
   lj_trace_test_root_entry_reset();
@@ -1926,6 +1932,13 @@ static void expect_scalar_native(lua_State *L,
   for (i = 0; i < 100; i++)
     assert(call_triple(L, profile->name, call->x, call->limit, call->step,
 	  integer_x, integer_limit, integer_step) == call->result);
+  if (require_child_native) {
+    assert(traceref_safe(J, rootno) == root &&
+           trace_runnable_acq(root, rootno));
+    assert(expect_scalar_trace_child(L, profile->name) == child &&
+           trace_traceno_acq(child) == childno &&
+           trace_mcode_acq(child) == childmcode);
+  }
   assert(lj_trace_test_root_entry_publishes() > 0);
   assert(lj_trace_test_root_entry_successes() > 0);
   assert(lj_trace_test_root_entry_cleanups() == 0);
@@ -3126,9 +3139,25 @@ static void test_int_step_positive_and_guard_exits(
   ** operand types with a complete loop before requiring native admission. */
   load_numeric_args_function(L, profile);
   call = data->integer_x;
-  for (i = 0; i < 4; i++)
-    assert(call_triple(L, profile->name, call.x, call.limit, call.step,
-          1, 0, 1) == call.result);
+  {
+    GCtrace *adapted = NULL;
+    for (i = 0; i < 4; i++) {
+      assert(call_triple(L, profile->name, call.x, call.limit, call.step,
+            1, 0, 1) == call.result);
+      if (profile == &div_profile && !adapted) {
+        adapted = expect_scalar_trace_child(L, profile->name);
+        /* This case measures one INT-to-NUM adaptation side. Once it is
+        ** published, stop heating its terminal exit: a new nested attempt
+        ** would exhaust this fixture's two-slot trace budget and flush the
+        ** very root/child pair whose native reuse is checked below. */
+        if (adapted) run_lua(L, "jit.opt.start('hotexit=1000')");
+      }
+    }
+    if (profile == &div_profile) {
+      assert(adapted != NULL);
+      assert(expect_scalar_trace_child(L, profile->name) == adapted);
+    }
+  }
   T = expect_scalar_trace_child(L, profile->name);
   (void)T;
   expect_scalar_native(L, profile, &call, 1, 0, 1,
