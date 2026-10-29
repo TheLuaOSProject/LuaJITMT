@@ -34,3 +34,32 @@ All named logs above are under
 `/Users/frityet/Scratch/ljmt-side-ancestry-20261029/`. Full parity remains
 incomplete. The independent indirect-FFI-result and zero-formal captured-
 producer branches are not included in this integration point.
+
+## Subsequent component integration at 45fc76a31
+
+`bbde96c5f` integrates indirect 17–32-byte FFI aggregate returns through
+`c3c77156a`; its aggregate contract passes all four profiles in
+`combined-indirect-ffi-four-profile.log`. `45fc76a31` then integrates
+`693b161ff` for captured zero-formal producers with one or two results. Both
+the complete Lua leaf and open-CALLM consumer contracts pass four profiles in
+`combined-ffi-zero-producer-leaf-four-profile.log` and
+`combined-zero-producer-consumer-four-profile.log`.
+
+Ordinary assertion ARM64 and strict assertion x86_64 builds at `45fc76a31`
+pass both 509-case stock corpora. The x64 helper build also passes
+`t-jit-trace-retire`. Logs use the `combined-ffi-zero-` prefix in the same
+evidence directory. The ordinary ARM64 depth-three probe preserves the settled
+code bytes across GC/reentry and observes 3520 deepest-side exits. The topology
+probe matches its interpreted results, but does not establish native topology
+parity: for example, the fractional while-loop phase three still uses one ARM64
+side and repeated exits where the matched x64 probe formed two sides.
+
+The wide-graph failure remains unresolved. Isolated repeated runs at the older
+combined source `dae24b46a` show count3 before and after GC, with an MCODEAL abort
+that flushes all traces; successful runs instead observe a recoverable MCODELM.
+The failing cases have only 256KiB total MCode with a 2MiB configured limit, so
+raising `maxmcode` is not yet justified. Investigation is separating range
+mapping failure from retirement-node allocation and the configured-size limit.
+Evidence is retained in `/Users/frityet/Scratch/ljmt-cap-investigation-20261029/`.
+The current component passes do not supersede this blocker or constitute a
+complete combined gate. Main promotion remains held.
