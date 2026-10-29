@@ -25,6 +25,7 @@
 #include "lib/proto_fixture_helpers.h"
 
 static unsigned native_runs, semantic_bad, postra_bad;
+static GCtrace *root_trace(lua_State *L);
 
 static GCfunc *global_function(lua_State *L, const char *name)
 {
@@ -47,6 +48,67 @@ static lua_Number invoke(lua_State *L, const char *runner,
   assert(L->cframe == cframe && lj_tg_load_jit_base(L2TG(L)) == NULL &&
          !lj_tg_in_native_acq(L2TG(L)));
   return result;
+}
+
+static int invoke_one(lua_State *L, const char *name, int bad, int n,
+                      lua_Number *result, const char **error)
+{
+  void *cframe=L->cframe;
+  int status;
+  lua_getglobal(L,name);
+  if (bad) lua_pushliteral(L,"bad"); else lua_pushinteger(L,n);
+  status=lua_pcall(L,1,1,0);
+  if (status==0) {
+    assert(lua_isnumber(L,-1)); *result=lua_tonumber(L,-1);
+    if (error) *error=NULL;
+  } else {
+    if (error) *error=lua_tostring(L,-1);
+  }
+  lua_pop(L,1);
+  assert(L->cframe==cframe && lj_tg_load_jit_base(L2TG(L))==NULL &&
+         !lj_tg_in_native_acq(L2TG(L)));
+  return status;
+}
+
+static void native_one(lua_State *L, GCtrace *T, int bad, int n)
+{
+  lua_Number actual=0, expected=0;
+  const char *actual_error=NULL, *expected_error=NULL;
+  int actual_status, expected_status;
+  expected_status=invoke_one(L,"leaf_oracle",bad,n,&expected,&expected_error);
+  lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+  actual_status=invoke_one(L,"leaf_run",bad,n,&actual,&actual_error);
+  assert(actual_status==expected_status);
+  if (actual_status) {
+    assert(actual_error && expected_error &&
+           strcmp(actual_error,expected_error)==0);
+  } else {
+    assert(actual==expected);
+  }
+  assert(root_trace(L)==T && trace_runnable_acq(T,T->traceno));
+  assert(lj_trace_test_root_entry_successes()>0 &&
+         lj_trace_test_exit_calls()>0 &&
+         lj_trace_test_first_exit_parent()==T->traceno);
+  if (!bad) {
+    GCproto *pt=trace_startpt_acq(T);
+    LJArm64IteratorSource iter;
+    const BCIns *resume;
+    MSize cmp;
+    ExitNo exitno=lj_trace_test_first_exitno();
+    BCIns startins=trace_startins_acq(T);
+    BCIns liveins=(BCIns)la_load32_acq(
+      (const uint32_t *)trace_startpc_acq(T));
+    assert(lj_asm_arm64_iterl_tuple(pt,trace_startpc_acq(T),
+      startins,liveins,0,&iter));
+    for (cmp=iter.body_pc; cmp<iter.call_pc &&
+         bc_op(proto_bc(pt)[cmp])!=BC_ISGT; cmp++) {}
+    assert(cmp+2u<iter.call_pc && exitno<T->nsnap);
+    resume=snap_pc_acq(
+      &T->snapmap[T->snap[exitno].mapofs+T->snap[exitno].nent]);
+    assert(resume==proto_bc(pt)+cmp+2u && bc_op(*resume)==BC_JMP);
+  }
+  assert(!trace_nchild_acq(T) && !trace_nextside_acq(T));
+  native_runs++;
 }
 
 static GCtrace *root_trace(lua_State *L)
@@ -260,8 +322,12 @@ static void admission(GCtrace *T)
     }
   }
   if (!child) child=loopmap; /* NUM iterator has no child overflow map. */
-  for (int allocated=0;allocated<2;allocated++) {
-    for (unsigned m=0;m<14;m++) {
+  {
+    int has_break=0;
+    for (MSize pc=iter.body_pc;pc<iter.call_pc;pc++)
+      has_break |= bc_op(proto_bc(f.pt)[pc])==BC_ISGT;
+    for (int allocated=0;allocated<2;allocated++) {
+    for (unsigned m=0;m<14u+(has_break?2u:0u);m++) {
       fixture_reset(&f);
       if (!admit(&f,allocated)) {
         LJArm64IRReject reject={0};
@@ -305,6 +371,25 @@ static void admission(GCtrace *T)
         assert(control && snap_ref(f.map[control]) != state);
         f.map[control]=(f.map[control]&~0xffffu)|state;
         break;
+      case 14: {
+        int found=0;
+        for (MSize pc=iter.body_pc;pc<iter.call_pc;pc++)
+          if (bc_op(proto_bc(f.pt)[pc])==BC_ISGT) {
+            setbc_op(&proto_bc(f.pt)[pc],BC_ISGE); found=1; break;
+          }
+        assert(found); break;
+      }
+      case 15: {
+        int found=0;
+        for (MSize pc=iter.body_pc;pc<iter.call_pc;pc++)
+          if (bc_op(proto_bc(f.pt)[pc])==BC_JMP &&
+              (int64_t)pc+1+(int64_t)bc_j(proto_bc(f.pt)[pc])==
+              (int64_t)iter.call_pc) {
+            setbc_j(&proto_bc(f.pt)[pc],bc_j(proto_bc(f.pt)[pc])+1);
+            found=1; break;
+          }
+        assert(found); break;
+      }
       }
       if (admit(&f,allocated)) {
         fprintf(stderr,"iterator accepted mutation %u postra=%d\n",m,allocated);
@@ -312,6 +397,7 @@ static void admission(GCtrace *T)
       }
       if (allocated) postra_bad++; else semantic_bad++;
     }
+  }
   }
   free(f.pt); free(f.leafpt); free(f.leaf); free(f.J);
   free(f.ir); free(f.snap); free(f.map);
@@ -486,6 +572,43 @@ int main(void)
     native_call(L,T,"leaf_step","oracle_step",96,95,0);
     run(L,"jit.flush()", "iterator flush");
   }
+  }
+  run(L,
+    "jit.flush(); jit.on(); "
+    "local source=[[local function iter(n,k) return k+1 end "
+      "return function(n) local sum=.5; "
+      "for k in iter,n,0 do sum=sum+k; if k>=n then break end end; "
+      "return sum end]]; "
+    "local oracle_loader=assert(loadstring(source)); "
+    "jit.off(oracle_loader,true); leaf_oracle=oracle_loader(); "
+    "local candidate_loader=assert(loadstring(source)); "
+    "leaf_run=candidate_loader()",
+    "early-break ITERL source");
+  {
+    GCproto *rp=funcproto(global_function(L,"leaf_run"));
+    assert(hotcount_setl(G(L),L,proto_bc(rp)+1,65535));
+    for (MSize pc=1;pc<rp->sizebc;pc++)
+      if (bc_op(proto_bc(rp)[pc])==BC_ITERL)
+        assert(hotcount_setl(G(L),L,proto_bc(rp)+pc+1,HOTCOUNT_CALL));
+    (void)invoke_one(L,"leaf_run",0,64,(lua_Number[1]){0},NULL);
+  }
+  {
+    GCtrace *T=root_trace(L);
+    if (!T || trace_arm64_admission_acq(T)!=TRACE_ARM64_ITERL_ADMITTED)
+      fprintf(stderr,"early-break missing root=%p admission=%u abort=%u/%u\n",
+        (void *)T,T?(unsigned)trace_arm64_admission_acq(T):0u,
+        (unsigned)lj_trace_test_abort_count(),
+        (unsigned)lj_trace_test_last_abort_error());
+    assert(T && trace_arm64_admission_acq(T)==TRACE_ARM64_ITERL_ADMITTED);
+    admission(T);
+    native_one(L,T,0,64);
+    native_one(L,T,0,0);
+    native_one(L,T,0,1);
+    native_one(L,T,0,96);
+    native_one(L,T,1,0);
+    lua_gc(L,LUA_GCCOLLECT,0);
+    native_one(L,T,0,96);
+    run(L,"jit.flush()","early-break iterator flush");
   }
   run(L,"assert(iter_release:send(true,5)); "
     "local ok,value=iter_peer:join(5); assert(ok and value)","iterator peer join");
