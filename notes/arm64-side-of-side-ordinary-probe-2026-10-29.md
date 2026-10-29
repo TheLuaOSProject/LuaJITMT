@@ -83,3 +83,13 @@ the surviving direct parent to report the same interpreter exit
 first-side contract passed no-helper ARM64 smoke, ARM64 helper lifecycle modes,
 and arm64e helper lifecycle modes. The fixture's oracle comparisons and exact
 trace/exit counters remain strict.
+
+## Bounded certificate traversal review
+
+A follow-up review moved the immediate parent's direct-root certificate checks
+before recursive seal validation. This enforces the one-level ancestry bound
+before following a certificate, including malformed cyclic views. The root
+list walkers also bound IR extents before reading IR_BASE and check runnable
+state before the entry walk dereferences a member. These checks add no lock,
+allocation, or SMR reader to native entry. Focused root-entry and first-side
+validation for this follow-up is recorded separately below when complete.
