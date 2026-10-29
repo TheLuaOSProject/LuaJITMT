@@ -2298,8 +2298,8 @@ static Reg asm_setup_callx_slots(ASMState *as, IRIns *ir,
 {
   LJArm64ABISignature abi;
   if (asm_callx_abi(as, ir, ci, &abi, 1)) {
-    MSize nslots = ((MSize)abi.stack_size+3u) >> 2;
-    if (nslots > as->evenspill) as->evenspill = (int)nslots;
+    int32_t nslots = (int32_t)(((MSize)abi.stack_size+3u) >> 2);
+    if (nslots > as->evenspill) as->evenspill = nslots;
     return REGSP_HINT(irt_isfp(ir->t) ? RID_FPRET : RID_RET);
   }
   return asm_setup_call_slots(as, ir, ci);
