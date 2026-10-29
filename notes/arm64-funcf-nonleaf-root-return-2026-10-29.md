@@ -35,3 +35,13 @@ also recorded at `/tmp/funf-arm64-topology.tsv` and
 This validates the one captured-call shape only. It does not establish tail
 calls, recursion, multiple returns, open results, protected calls, or arbitrary
 nonleaf effects.
+
+## Follow-up scope repair
+
+The first integration attempt let the new one-result inline-frame handling
+fall through the generic FORL child-exit validators. A private `C_BASE_ZERO`
+mutation then passed post-RA admission. The one-result continuation replay is
+now restricted to FUNCF roots; generic roots retain their prior one-result
+early-return rule, and inline child frames outside FUNCF still require the
+previous two-result shape. The semantic root-snapshot replay also checks that
+the next map offset does not precede the current offset before subtracting.
