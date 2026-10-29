@@ -27,7 +27,7 @@ static void run(lua_State *L, const char *source)
   }
 }
 
-enum { MAX_WHILE_BODIES = 81 };
+enum { MAX_WHILE_BODIES = 261 };
 
 static void check_case(lua_State *L, int fractional, unsigned bodies)
 {
@@ -44,17 +44,17 @@ static void check_case(lua_State *L, int fractional, unsigned bodies)
   assert(bodies >= 4u && bodies <= MAX_WHILE_BODIES);
   int written = snprintf(source, sizeof(source),
     "local jit=require('jit'); jit.off(true,true); jit.flush(); jit.on(); "
-    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=256','maxside=1000'); "
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=1024','maxside=1000','maxrecord=10000','maxirconst=2000','maxsnap=4000'); "
     "local parts={'return function(mode,n) local s,i=%s,1 while i<=n do '}; "
     "for m=1,%u do parts[#parts+1]=(m==1 and 'if ' or 'elseif ').."
     "'mode=='..m..' then s=s+i*'..tostring(m/%u)..' ' end; "
     "parts[#parts+1]='else s=s-i*%s end i=i+1 end return s end'; "
     "kernel=assert(loadstring(table.concat(parts)))(); "
     "oracle=assert(loadstring(string.dump(kernel))); jit.off(oracle,true); "
-    "for mode=1,%u do for k=1,80 do "
+    "for mode=1,%u do for k=1,%u do "
     "assert(kernel(mode,48)==oracle(mode,48)) end end",
     fractional ? ".5" : "0", bodies-1u, fractional ? 128u : 1u,
-    fractional ? "1.25" : "5", bodies);
+    fractional ? "1.25" : "5", bodies, bodies > 81u ? 3u : 80u);
   assert(written > 0 && (size_t)written < sizeof(source));
   run(L, source);
   lua_getglobal(L, "kernel");
@@ -71,6 +71,14 @@ static void check_case(lua_State *L, int fractional, unsigned bodies)
     }
   }
   assert(root != NULL && trace_nchild_acq(root) == bodies-1u);
+  if (bodies > 81u) {
+    int sparse_parent = 0;
+    for (n = 0; n < trace_nsnap_acq(root); n++) {
+      SnapShot *snap = &trace_snap_acq(root)[n];
+      if (snap_topslot_acq(snap) > snap_nslots_acq(snap)) sparse_parent = 1;
+    }
+    assert(sparse_parent);  /* Frame reservation exceeds this live map. */
+  }
   ids[0] = trace_traceno_acq(root);
   chain[0] = root;
   /* The flattened list is newest-first; each IR_BASE names its immediate
@@ -108,7 +116,7 @@ static void check_case(lua_State *L, int fractional, unsigned bodies)
   {
     uint32_t contract = lj_trace_test_arm64_side_scalar_copy_contract(
       J, ids[bodies-1u]);
-    const uint32_t required = 0xf87f0003u;
+    const uint32_t required = 0xf8ff0003u;
     if ((contract & required) != required)
       fprintf(stderr, "while copy contract expected=%08x actual=%08x\n",
               required, contract);
@@ -206,7 +214,7 @@ int main(void)
   luaL_openlibs(L);
   run(L, "local t=require('threading'); ready,stop=t.channel(1),t.channel(1); "
          "peer=assert(t.spawn(function(r,s) assert(r:send(true,5)); "
-         "assert(select(2,s:recv(120))); return true end,ready,stop)); "
+         "assert(select(2,s:recv(600))); return true end,ready,stop)); "
          "assert(select(2,ready:recv(5)))");
   check_case(L, 0, 16u);
   check_case(L, 1, 65u);
@@ -219,6 +227,13 @@ int main(void)
     check_case(L, 1, 81u);
     assert(L2J(L)->arm64_side_ancestry == storage &&
            L2J(L)->arm64_side_ancestry_size == capacity);
+  }
+  {
+    MSize previous = L2J(L)->arm64_side_ancestry_size;
+    check_case(L, 1, 133u);
+    assert(L2J(L)->arm64_side_ancestry_size > previous);
+    check_case(L, 1, 261u);
+    assert(L2J(L)->arm64_side_ancestry_size >= 259u);
   }
   run(L, "assert(stop:send(true,5)); assert(peer:join())");
   lua_close(L);

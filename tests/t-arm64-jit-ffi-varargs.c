@@ -30,7 +30,7 @@
 
 typedef void (*InstallObserver)(void (*fn)(unsigned));
 typedef unsigned (*ReadCounter)(unsigned id);
-enum { VA_MAX_ID = 10, VA_ITERS = 24 };
+enum { VA_MAX_ID = 11, VA_ITERS = 24 };
 
 static lua_State *test_L;
 static TGState *test_tg;
@@ -88,12 +88,16 @@ typedef enum VarargMutation {
   VA_MUT_SWAPPED_SAME_TYPE,
   VA_MUT_WRONG_FIXED_SOURCE,
   VA_MUT_WRONG_ADD_CARRIER_OPERAND,
+  VA_MUT_CDATA_SHARED_FIXED_CARRIER,
   VA_MUT_WRONG_FRAME_RETURN,
   VA_MUT_WRONG_FOOTER_PC,
   VA_MUT_WRONG_CDATA_SLOT,
   VA_MUT_NORESTORE_SOURCE,
   VA_MUT_SHORT_STACK,
-  VA_MUT_WRONG_WRAPPER_ID
+  VA_MUT_WRONG_WRAPPER_ID,
+  VA_MUT_CDATA_WRONG_SIGNEXT,
+  VA_MUT_CDATA_WRONG_CTYPE,
+  VA_MUT_CDATA_WRONG_OWNER
 } VarargMutation;
 
 static void vararg_clone_init(VarargSemanticClone *clone, GCtrace *owner)
@@ -237,6 +241,43 @@ static int vararg_carg_values(const IRIns *ir, IRRef nk, IRRef nins,
   nodes[0] = 0;
   values[0] = ref;
   return 1;
+}
+
+static IRRef vararg_cdata_owner(IRIns *ir, IRRef carrier)
+{
+  IRIns value = ir_load_acq(&ir[carrier]);
+  IRRef loadref = value.o == IR_CONV ? value.op1 : carrier;
+  IRIns load = ir_load_acq(&ir[loadref]);
+  IRIns address;
+  assert(load.o == IR_XLOAD && load.op1 < loadref);
+  address = ir_load_acq(&ir[load.op1]);
+  assert(address.o == IR_ADD && address.op1 < load.op1);
+  return address.op1;
+}
+
+static IRRef vararg_cdata_type_constant(IRIns *ir, IRRef owner, IRRef carrier)
+{
+  IRRef ref;
+  IRRef loadref = ir_load_acq(&ir[carrier]).o == IR_CONV ?
+                  ir_load_acq(&ir[carrier]).op1 : carrier;
+  for (ref = owner+1u; ref < loadref; ref++) {
+    IRIns field = ir_load_acq(&ir[ref]);
+    IRRef guard;
+    if (field.o != IR_FLOAD || field.op1 != owner ||
+        field.op2 != IRFL_CDATA_CTYPEID || field.t.irt != IRT_U16)
+      continue;
+    for (guard = ref+1u; guard < loadref; guard++) {
+      IRIns eq = ir_load_acq(&ir[guard]);
+      IRRef kref;
+      if (eq.o != IR_EQ || !irt_isguard(eq.t) ||
+          (eq.op1 != ref && eq.op2 != ref)) continue;
+      kref = eq.op1 == ref ? eq.op2 : eq.op1;
+      if (kref >= REF_TRUE) continue;
+      assert(ir_load_acq(&ir[kref]).o == IR_KINT);
+      return kref;
+    }
+  }
+  return 0;
 }
 
 static CTypeID vararg_global_ctype(lua_State *L, const char *name)
@@ -504,6 +545,53 @@ static void vararg_mutate(VarargMutation mutation, IRIns *ir,
     ir[wrapper.op2].i = (int32_t)target->ctype;
     break;
   }
+  case VA_MUT_CDATA_WRONG_SIGNEXT: {
+    IRRef carrier_ref = value[target->abi.nargs+1u];
+    IRIns carrier = ir_load_acq(&ir[carrier_ref]);
+    assert(carrier.o == IR_CONV && carrier.t.irt == IRT_INT &&
+           (carrier.op2 & IRCONV_SEXT) != 0);
+    carrier.op2 ^= IRCONV_SEXT;
+    ir[carrier_ref] = carrier;
+    break;
+  }
+  case VA_MUT_CDATA_WRONG_CTYPE: {
+    IRRef first = value[target->abi.nargs+1u];
+    IRRef second = value[target->abi.nargs+2u];
+    IRRef first_owner = vararg_cdata_owner(ir, first);
+    IRRef second_owner = vararg_cdata_owner(ir, second);
+    IRRef first_id = vararg_cdata_type_constant(ir, first_owner, first);
+    IRRef second_id = vararg_cdata_type_constant(ir, second_owner, second);
+    assert(first_id != 0 && second_id != 0 &&
+           ir_load_acq(&ir[first_id]).i != ir_load_acq(&ir[second_id]).i);
+    ir[first_id].i = ir_load_acq(&ir[second_id]).i;
+    break;
+  }
+  case VA_MUT_CDATA_WRONG_OWNER: {
+    IRRef first = value[target->abi.nargs+1u];
+    IRRef second = value[target->abi.nargs+2u];
+    IRRef first_load = ir_load_acq(&ir[first]).o == IR_CONV ?
+                       ir_load_acq(&ir[first]).op1 : first;
+    IRRef second_owner = vararg_cdata_owner(ir, second);
+    IRIns load = ir_load_acq(&ir[first_load]);
+    IRIns address = ir_load_acq(&ir[load.op1]);
+    assert(load.o == IR_XLOAD && address.o == IR_ADD &&
+           address.op1 != second_owner);
+    address.op1 = second_owner;
+    ir[load.op1] = address;
+    break;
+  }
+  case VA_MUT_CDATA_SHARED_FIXED_CARRIER: {
+    unsigned tail = target->abi.nargs + 1u;  /* Skip the CARG nil marker. */
+    assert(target->abi.is_vararg && target->abi.nargs == 1u &&
+           tail < target->rawcount && target->values[tail] != REF_NIL &&
+           vararg_cdata_owner(ir, target->values[tail]) != 0);
+    /* Keep the valid tail occurrence, but alias that same scalar carrier into
+    ** the fixed prefix. A tail CType certificate must not authorize this use. */
+    assert(node[1] != 0 && ir_load_acq(&ir[node[1]]).o == IR_CARG &&
+           ir_load_acq(&ir[node[1]]).op1 == target->values[0]);
+    ir[node[1]].op1 = target->values[tail];
+    break;
+  }
   }
 }
 
@@ -703,6 +791,65 @@ static void test_fixed_overflow_admission_clones(lua_State *L)
                          "changed unchecked ADD carrier operand");
 }
 
+static void test_cdata_tail_admission_clones(lua_State *L)
+{
+  jit_State *J = G2J(G(L));
+  CTState *cts = ctype_ctsG(G(L));
+  GCproto *pt;
+  GCtrace *T;
+  CTypeID ctype = vararg_global_ctype(L, "__va_cdata");
+  VarargTarget target;
+  LJArm64PostRAView view = { 0 };
+  VarargSemanticClone semantic;
+  VarargJSave save;
+  lua_getglobal(L, "__va_run_cdata");
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  pt = funcproto(funcV(L->top-1));
+  lua_pop(L, 1);
+  T = traceref_safe(J, observed_trace_no[10]);
+  assert(T != NULL && vararg_find_target(T, pt, cts, ctype, &target));
+  assert(target.abi.is_vararg && target.abi.nargs == 1 &&
+         target.actual_count == 10 && target.rawcount == 11 &&
+         target.values[1] == REF_NIL);
+  assert(irt_type(ir_load_acq(&trace_ir_acq(T)[target.values[2]]).t) ==
+         IRT_INT);
+  view.ir = trace_ir_acq(T);
+  view.owner = T;
+  view.cts = cts;
+  view.snap = trace_snap_acq(T);
+  view.snapmap = trace_snapmap_acq(T);
+  view.proto_bc = proto_bc(pt);
+  view.proto = pt;
+  view.startpc = trace_startpc_acq(T);
+  view.nins = trace_nins_acq(T);
+  view.nk = trace_nk_acq(T);
+  view.nsnap = trace_nsnap_acq(T);
+  view.nsnapmap = trace_nsnapmap_acq(T);
+  view.spadjust = trace_spadjust_acq(T);
+  view.proto_sizebc = pt->sizebc;
+  view.proto_numparams = pt->numparams;
+  view.root_topslot = trace_topslot_acq(T);
+  view.startins = trace_startins_acq(T);
+  assert(lj_asm_arm64_postra_admit(&view, NULL));
+  vararg_clone_init(&semantic, T);
+  save = vararg_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+  vararg_semantic_result(J, &semantic.trace, 1, "CData vararg baseline");
+  vararg_j_leave(J, &save);
+  vararg_clone_free(&semantic);
+  vararg_expect_mutation(J, &view, &target,
+                         VA_MUT_CDATA_WRONG_SIGNEXT,
+                         "CData signed narrow promotion");
+  vararg_expect_mutation(J, &view, &target,
+                         VA_MUT_CDATA_WRONG_CTYPE,
+                         "CData tail CType width and kind");
+  vararg_expect_mutation(J, &view, &target,
+                         VA_MUT_CDATA_WRONG_OWNER,
+                         "CData payload owner association");
+  vararg_expect_mutation(J, &view, &target,
+                         VA_MUT_CDATA_SHARED_FIXED_CARRIER,
+                         "vararg carrier also used in fixed prefix");
+}
+
 static void force_varargs_postcall(TGState *tg)
 {
   assert((lj_ffi_native_frame_sequence_acq(tg) & 1u) != 0);
@@ -762,13 +909,70 @@ static void run_case(lua_State *L, const char *name, int n)
   ljt_lua_pcall(L, 0, 0, "jit.flush before varargs case");
   /* Enter the runner from a non-tail Lua call so the recorder sees its
   ** real Lua caller frame rather than the C fixture's pcall frame. */
-  lua_getglobal(L, "__va_dispatch");
-  assert(lua_isfunction(L, -1));
-  lua_pushstring(L, name);
-  lua_pushinteger(L, n);
-  ljt_lua_pcall(L, 2, 1, name);
+  if (strcmp(name, "__va_run_cdata") == 0) {
+    lua_getglobal(L, "__va_dispatch_cdata");
+    assert(lua_isfunction(L, -1));
+    lua_pushinteger(L, n);
+    ljt_lua_pcall(L, 1, 1, name);
+  } else {
+    lua_getglobal(L, "__va_dispatch");
+    assert(lua_isfunction(L, -1));
+    lua_pushstring(L, name);
+    lua_pushinteger(L, n);
+    ljt_lua_pcall(L, 2, 1, name);
+  }
   assert(lua_toboolean(L, -1));
   lua_pop(L, 1);
+}
+
+static GCproto *vararg_global_proto(lua_State *L, const char *name)
+{
+  GCproto *pt;
+  lua_getglobal(L, name);
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  pt = funcproto(funcV(L->top-1));
+  lua_pop(L, 1);
+  return pt;
+}
+
+static int vararg_root_callxs_published(jit_State *J, GCproto *pt)
+{
+  TraceNo no;
+  for (no = 1; (MSize)no < trace_sizetrace_acq(J); no++) {
+    GCtrace *T = traceref_safe(J, no);
+    IRRef ref;
+    if (T == NULL || !trace_runnable_acq(T, no) || trace_root_acq(T) != 0 ||
+        trace_startpt_acq(T) != pt ||
+        bc_op(trace_startins_acq(T)) != BC_FORL) continue;
+    for (ref = REF_FIRST; ref < trace_nins_acq(T); ref++)
+      if (ir_load_acq(&trace_ir_acq(T)[ref]).o == IR_CALLXS) return 1;
+  }
+  return 0;
+}
+
+static void test_vararg_abi_failure_stage(lua_State *L, uint32_t stage)
+{
+  jit_State *J = G2J(G(L));
+  GCproto *pt;
+  int saved;
+  char source[192];
+  lua_getglobal(L, "__va_run_cdata");
+  saved = luaL_ref(L, LUA_REGISTRYINDEX);
+  snprintf(source, sizeof(source),
+    "_G.__va_run_cdata=assert(loadstring(string.dump(__va_run_cdata),"
+    "'@callx-abi-failure-%u'))", stage);
+  ljt_lua_dostring(L, source);
+  pt = vararg_global_proto(L, "__va_run_cdata");
+  /* The first call drains the previous observation and arms this stage. */
+  assert(lj_asm_arm64_test_callx_abi_failure(stage) == 0);
+  run_case(L, "__va_run_cdata", VA_ITERS);
+  /* Disable injection and require that the chosen setup/emission stage ran,
+  ** while no legacy-flattened trace escaped after the selected plan failed. */
+  assert(lj_asm_arm64_test_callx_abi_failure(0) == 1);
+  assert(!vararg_root_callxs_published(J, pt));
+  lua_rawgeti(L, LUA_REGISTRYINDEX, saved);
+  lua_setglobal(L, "__va_run_cdata");
+  luaL_unref(L, LUA_REGISTRYINDEX, saved);
 }
 
 static unsigned require_native(ReadCounter calls, unsigned id,
@@ -778,6 +982,10 @@ static unsigned require_native(ReadCounter calls, unsigned id,
   unsigned before_native = native_seen[id];
   run_case(test_L, runner, VA_ITERS);
   assert(calls(id) == before_calls+VA_ITERS);
+  if (!(native_seen[id] > before_native))
+    fprintf(stderr, "varargs native witness missing: runner=%s id=%u calls=%u->%u native=%u->%u\n",
+            runner, id, before_calls, calls(id), before_native,
+            native_seen[id]);
   assert(native_seen[id] > before_native);
   assert(observed_trace_no[id] != 0 &&
          traceref_safe(G2J(G(test_L)), observed_trace_no[id]) != NULL);
@@ -936,6 +1144,7 @@ int main(int argc, char **argv)
   expected_func[7] = dlsym(library, "arm64_va_lua_producer");
   expected_func[8] = dlsym(library, "arm64_va_callm_consumer");
   expected_func[9] = dlsym(library, "arm64_va_ordinary_consumer");
+  expected_func[10] = dlsym(library, "arm64_va_cdata_tail");
   for (i = 1; i < VA_MAX_ID; i++) assert(expected_func[i] != NULL);
   install(observe_varargs_call);
 
@@ -951,6 +1160,7 @@ int main(int argc, char **argv)
     "double arm64_va_lua_producer(int32_t);\n"
     "double arm64_va_callm_consumer(int32_t, ...);\n"
     "double arm64_va_ordinary_consumer(int32_t, ...);\n"
+    "double arm64_va_cdata_tail(uint32_t, ...);\n"
     "]]\n"
     "local lib = ffi.load(assert(os.getenv('LJ_ARM64_FFI_VARARGS_LIB')))\n"
     "_G.__va_noextra=lib.arm64_va_noextra\n"
@@ -964,6 +1174,12 @@ int main(int argc, char **argv)
     "_G.__va_producer=lib.arm64_va_lua_producer\n"
     "_G.__va_callm=lib.arm64_va_callm_consumer\n"
     "_G.__va_ordinary=lib.arm64_va_ordinary_consumer\n"
+    "_G.__va_cdata=lib.arm64_va_cdata_tail\n"
+    "local cda=ffi.new('int8_t',-17); local cdb=ffi.new('float',2.5)\n"
+    "local cdc=ffi.new('uint16_t',31); local cdd=ffi.new('double',3.25)\n"
+    "local cde=ffi.new('long long',0x12345678); local cdf=ffi.new('int',47)\n"
+    "local cdg=ffi.new('double',4.5); local cdh=ffi.new('int8_t',-9)\n"
+    "local cdi=ffi.new('uint64_t',0x23456789)\n"
     "function _G.__va_run_noextra(n)\n"
     " local fn=__va_noextra; for i=1,n do if fn(i)~=i+0.25 then return false end end; return true end\n"
     "function _G.__va_run_mixed(n)\n"
@@ -982,7 +1198,10 @@ int main(int argc, char **argv)
     " local consumer,producer=__va_callm,__va_producer; for i=1,n do if consumer(17,producer(i))~=17+i+0.5 then return false end end; return true end\n"
     "function _G.__va_run_ordinary(n)\n"
     " local fn=__va_ordinary; for i=1,n do if fn(17,i+0.5)~=17+i+0.5 then return false end end; return true end\n"
+    "function _G.__va_run_cdata(n,fn,a,b,c,d,e,f,g,h,j)\n"
+    " for i=1,n do if fn(23,a,b,c,d,e,f,g,h,j)~=88.25 then return false end end; return true end\n"
     "function _G.__va_dispatch(name,n) local got=_G[name](n); return got end\n"
+    "function _G.__va_dispatch_cdata(n) local got=__va_run_cdata(n,__va_cdata,cda,cdb,cdc,cdd,cde,cdf,cdg,cdh,cdi); return got end\n"
     "jit.flush(); jit.on(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64')\n");
 
   assert(require_native(calls, 1, "__va_run_noextra") != 0);
@@ -1005,6 +1224,10 @@ int main(int argc, char **argv)
     assert(call_pc != NULL);
     run_ordinary_postcall(L, calls, call_pc);
   }
+  test_vararg_abi_failure_stage(L, 1);
+  test_vararg_abi_failure_stage(L, 2);
+  assert(require_native(calls, 10, "__va_run_cdata") != 0);
+  test_cdata_tail_admission_clones(L);
   lj_ffi_native_trace_test_set_finish_hook(NULL);
   lua_close(L);
   dlclose(library);

@@ -484,6 +484,18 @@ static int arm64_callxs_value_kind(const IRIns *ir, IRRef ref,
                    value.op2 == ((IRT_INT << IRCONV_DSH)|IRT_U32)) ||
                   (size == 8 && type == (is_unsigned ? IRT_U64 : IRT_I64) &&
                    value.op2 == ((IRT_I64 << IRCONV_DSH)|IRT_U32)))) ||
+                (on_stack && size == 4 && from == IRT_I8 &&
+                 type == IRT_INT && value.t.irt == IRT_INT &&
+                 value.op2 == ((IRT_INT << IRCONV_DSH)|IRT_I8|IRCONV_SEXT)) ||
+                (on_stack && size == 4 && from == IRT_U8 &&
+                 type == IRT_INT && value.t.irt == IRT_INT &&
+                 value.op2 == ((IRT_INT << IRCONV_DSH)|IRT_U8)) ||
+                (on_stack && size == 4 && from == IRT_I16 &&
+                 type == IRT_INT && value.t.irt == IRT_INT &&
+                 value.op2 == ((IRT_INT << IRCONV_DSH)|IRT_I16|IRCONV_SEXT)) ||
+                (on_stack && size == 4 && from == IRT_U16 &&
+                 type == IRT_INT && value.t.irt == IRT_INT &&
+                 value.op2 == ((IRT_INT << IRCONV_DSH)|IRT_U16)) ||
                 (!on_stack && (size == 1 || size == 2) &&
                  from == IRT_INT && value.t.irt == IRT_INT &&
                  value.op2 == ((IRT_INT << IRCONV_DSH) |
@@ -1469,6 +1481,173 @@ static int arm64_callxs_cdata_integer_aggregate_argument(
   return consumers != 0;
 }
 
+/* A numeric scalar CData suffix is read from its rooted owner, then promoted
+** according to C's default argument promotions before it reaches the stack
+** tail. This helper certifies only the exact payload read and CType; the
+** caller separately binds the resulting carrier to one XSAVE suffix slot. */
+static int arm64_callxs_cdata_numeric_payload(CTState *cts,
+    const GCtrace *T, IRRef value, IRRef expected_owner, CTypeID *idp,
+    CTSize *sizep, int *floatp, int *unsignedp)
+{
+  const IRIns *ir = T->ir;
+  IRIns load, address, owner;
+  IRRef source, typeid = 0, r;
+  CTypeID id = 0, terminal;
+  CType type;
+  CTInfo info;
+  CTSize size;
+  int isfp;
+  if (value < REF_FIRST || value >= T->nins) return 0;
+  load = ir_load_acq(&ir[value]);
+  if (load.o == IR_XLOAD) {
+    int64_t offset;
+    if (load.op2 != 0 || load.op1 < REF_FIRST || load.op1 >= value)
+      return 0;
+    address = ir_load_acq(&ir[load.op1]);
+    source = address.op1;
+    if (address.o != IR_ADD || address.t.irt != IRT_P64 ||
+        source < REF_FIRST || source >= load.op1 ||
+        !arm64_callxs_offset_value(ir, T->nk, address.op2, &offset) ||
+        offset != (int64_t)sizeof(GCcdata)) return 0;
+  } else if (load.o == IR_FLOAD &&
+             (load.op2 == IRFL_CDATA_INT ||
+              load.op2 == IRFL_CDATA_INT64)) {
+    source = load.op1;
+    if (source < REF_FIRST || source >= value) return 0;
+  } else return 0;
+  if (expected_owner && source != expected_owner) return 0;
+  owner = ir_load_acq(&ir[source]);
+  if ((owner.o != IR_SLOAD && owner.o != IR_VLOAD) ||
+      owner.t.irt != (IRT_CDATA|IRT_GUARD)) return 0;
+  for (r = source+1u; r < value; r++) {
+    IRIns field = ir_load_acq(&ir[r]);
+    IRRef g;
+    if (field.o != IR_FLOAD || field.op1 != source ||
+        field.op2 != IRFL_CDATA_CTYPEID) continue;
+    if (field.t.irt != IRT_U16 || typeid) return 0;
+    for (g = r+1u; g < value; g++) {
+      IRIns guard = ir_load_acq(&ir[g]);
+      IRRef kref;
+      int32_t k;
+      if (guard.o != IR_EQ || guard.t.irt != (IRT_INT|IRT_GUARD) ||
+          (guard.op1 != r && guard.op2 != r)) continue;
+      kref = guard.op1 == r ? guard.op2 : guard.op1;
+      if (!arm64_callxs_kint_value(ir, T->nk, kref, &k) || k <= 0 || id)
+        return 0;
+      id = (CTypeID)k;
+      typeid = r;
+    }
+  }
+  if (!id || !lj_ccall_arm64_raw_type(cts, id, &type, &terminal)) return 0;
+  info = ctype_info_acq(&type);
+  size = ctype_size_acq(&type);
+  isfp = ctype_isfp(info);
+  if (!ctype_isnum(info) || ctype_isenum(info) ||
+      (info & CTF_BOOL) || (size != 1 && size != 2 && size != 4 && size != 8))
+    return 0;
+  if (isfp) {
+    if ((size != sizeof(float) && size != sizeof(double)) ||
+        load.o != IR_XLOAD ||
+        load.t.irt != (size == sizeof(float) ? IRT_FLOAT : IRT_NUM)) return 0;
+  } else if (size < 4) {
+    IRType expected = size == 1 ?
+      ((info & CTF_UNSIGNED) ? IRT_U8 : IRT_I8) :
+      ((info & CTF_UNSIGNED) ? IRT_U16 : IRT_I16);
+    if (load.o != IR_XLOAD || load.t.irt != expected) return 0;
+  } else if (size == 4) {
+    IRType expected = (info & CTF_UNSIGNED) ? IRT_U32 : IRT_INT;
+    if (load.o != IR_FLOAD || load.op2 != IRFL_CDATA_INT ||
+        load.t.irt != expected) return 0;
+  } else {
+    IRType expected = (info & CTF_UNSIGNED) ? IRT_U64 : IRT_I64;
+    if (load.o != IR_FLOAD || load.op2 != IRFL_CDATA_INT64 ||
+        load.t.irt != expected) return 0;
+  }
+  if (idp) *idp = id;
+  if (sizep) *sizep = size;
+  if (floatp) *floatp = isfp;
+  if (unsignedp) *unsignedp = (info & CTF_UNSIGNED) != 0;
+  return 1;
+}
+
+static int arm64_callxs_cdata_numeric_load_owner(const GCtrace *T,
+		IRRef loadref, IRRef *ownerp)
+{
+	IRIns load, address;
+	IRRef owner;
+	if (loadref < REF_FIRST || loadref >= T->nins) return 0;
+	load = ir_load_acq(&T->ir[loadref]);
+	if (load.o == IR_XLOAD) {
+		if (load.op1 < REF_FIRST || load.op1 >= loadref) return 0;
+		address = ir_load_acq(&T->ir[load.op1]);
+		if (address.o != IR_ADD || address.t.irt != IRT_P64 ||
+		    address.op1 < REF_FIRST || address.op1 >= load.op1) return 0;
+		owner = address.op1;
+	} else if (load.o == IR_FLOAD &&
+		   (load.op2 == IRFL_CDATA_INT ||
+		    load.op2 == IRFL_CDATA_INT64)) {
+		owner = load.op1;
+	} else return 0;
+	if (owner < REF_FIRST || owner >= loadref) return 0;
+	if (ownerp) *ownerp = owner;
+	return 1;
+}
+
+static int arm64_callxs_cdata_numeric_promoted(CTState *cts,
+    const GCtrace *T, IRRef source, IRRef carrier)
+{
+  IRIns value, payload;
+  IRRef loadref;
+  CTSize size;
+  int isfp, is_unsigned;
+  if (!arm64_callxs_ref_valid(T->ir, T->nk, T->nins, carrier, source) ||
+      !arm64_callxs_ref_valid(T->ir, T->nk, T->nins, T->nins, carrier))
+    return 0;
+  value = ir_load_acq(&T->ir[carrier]);
+  loadref = carrier;
+  if (value.o == IR_CONV) {
+    loadref = value.op1;
+    if (loadref < REF_FIRST || loadref >= carrier) return 0;
+    payload = ir_load_acq(&T->ir[loadref]);
+  } else payload = value;
+  if (!arm64_callxs_cdata_numeric_payload(cts, T, loadref, source, NULL,
+        &size, &isfp, &is_unsigned)) return 0;
+  if (isfp) {
+    if (size == sizeof(double)) {
+      if (carrier != loadref || value.t.irt != IRT_NUM) return 0;
+    } else if (value.o != IR_CONV || value.t.irt != IRT_NUM ||
+        value.op1 != loadref || value.op2 !=
+          ((IRT_NUM << IRCONV_DSH)|IRT_FLOAT)) return 0;
+  } else if (size < 4) {
+    IRType from = (IRType)irt_type(payload.t);
+    unsigned conv = (IRT_INT << IRCONV_DSH) | from |
+      (is_unsigned ? 0 : IRCONV_SEXT);
+    if (value.o != IR_CONV || value.t.irt != IRT_INT ||
+        value.op1 != loadref || value.op2 != conv) return 0;
+  } else if (carrier != loadref ||
+      (size == 4 && value.t.irt != (is_unsigned ? IRT_U32 : IRT_INT)) ||
+      (size == 8 && value.t.irt != (is_unsigned ? IRT_U64 : IRT_I64))) {
+    return 0;
+  }
+  /* Neither the raw payload nor its promoted native carrier is a Lua value
+  ** or a GC root. The original owner remains in its exact XSAVE source slot. */
+  if (T->snap == NULL || T->snapmap == NULL) return 0;
+  {
+    MSize s;
+    for (s = 0; s < T->nsnap; s++) {
+      MSize ofs = snap_mapofs_acq(&T->snap[s]);
+      MSize nent = snap_nent_acq(&T->snap[s]), i;
+      if (ofs > T->nsnapmap || nent > T->nsnapmap-ofs) return 0;
+      for (i = 0; i < nent; i++) {
+        IRRef snapref = snap_ref(snapentry_acq(&T->snapmap[ofs+i]));
+        if (snapref == loadref || (carrier != loadref && snapref == carrier))
+          return 0;
+      }
+    }
+  }
+  return 1;
+}
+
 /* Prove one float member extracted from the exact rooted HFA CData. Each
 ** XLOAD has one fixed CALLXS consumer and is tied to its field offset and
 ** guarded CType identity; the source TValue remains in its original frame. */
@@ -1996,7 +2175,8 @@ static int arm64_callxs_pointer_argument(CTState *cts, const GCtrace *T,
 
 static int arm64_callxs_vararg_sources(CTState *cts, const GCtrace *T, IRRef xsave,
     IRRef fpref, BCIns sourceins, uintptr_t returnpc,
-    const LJArm64ABISignature *abi, unsigned nargs, const IRRef *values)
+    const LJArm64ABISignature *abi, unsigned nargs, const IRRef *values,
+    IRRef *sourcep)
 {
   const SnapShot *snapshot = NULL;
   IRRef sources[LJ_ARM64_ABI_MAX_ARGS];
@@ -2087,12 +2267,12 @@ static int arm64_callxs_vararg_sources(CTState *cts, const GCtrace *T, IRRef xsa
     if (i < abi->nargs) {
       unsigned source_index = abi->arg[i].source_index;
       if (source_index >= abi->nparams || params[source_index] == 0)
-	return 0;
+        return 0;
       sources[i] = params[source_index];
     } else {
       unsigned source_index = abi->nparams+i-abi->nargs;
       if (source_index >= abi->nparams+tail_count ||
-	  params[source_index] == 0) return 0;
+          params[source_index] == 0) return 0;
       sources[i] = params[source_index];
     }
     if (i < abi->nargs &&
@@ -2106,10 +2286,79 @@ static int arm64_callxs_vararg_sources(CTState *cts, const GCtrace *T, IRRef xsa
         (abi->arg[i].kind != LJ_ARM64_ABI_KIND_POINTER ||
          abi->arg[i].size != sizeof(void *) ||
          !arm64_callxs_pointer_argument(cts, T, values[i]))) return 0;
-	if (!aggregate && !hfa && !arm64_callxs_source_value(T, xsave, sources[i],
-	    values[i], i >= abi->nargs)) return 0;
+    if (!aggregate && !hfa) {
+      if (i >= abi->nargs &&
+          arm64_callxs_ref_type(T->ir, T->nk, sources[i]) == IRT_CDATA) {
+        if (!arm64_callxs_cdata_numeric_promoted(cts, T, sources[i], values[i]))
+          return 0;
+      } else {
+        if (!arm64_callxs_source_value(T, xsave, sources[i], values[i], i >= abi->nargs))
+          return 0;
+      }
+    }
   }
+  if (sourcep) memcpy(sourcep, sources, nargs*sizeof(IRRef));
   return 1;
+}
+
+#define ARM64_CDATA_NUMERIC_CANDIDATES (2u*LJ_ARM64_ABI_MAX_ARGS)
+
+/* CData payload values are globally visible to the two independent graph
+** walks, but their CType proof is useful here only if the same guarded owner
+** is also consumed by an exact, source-validated variadic suffix. */
+static int arm64_callxs_numeric_owner_add(IRRef *owners, MSize *count,
+		IRRef owner)
+{
+	MSize i;
+	for (i = 0; i < *count; i++) if (owners[i] == owner) return 1;
+	if (*count >= ARM64_CDATA_NUMERIC_CANDIDATES) return 0;
+	owners[(*count)++] = owner;
+	return 1;
+}
+
+static int arm64_callxs_numeric_owner_has(const IRRef *owners, MSize count,
+		IRRef owner)
+{
+	MSize i;
+	for (i = 0; i < count; i++) if (owners[i] == owner) return 1;
+	return 0;
+}
+
+static int arm64_callxs_numeric_refs_add(IRRef *refs, MSize *count,
+		IRRef ref)
+{
+	MSize i;
+	for (i = 0; i < *count; i++) if (refs[i] == ref) return 1;
+	if (*count >= ARM64_CDATA_NUMERIC_CANDIDATES) return 0;
+	refs[(*count)++] = ref;
+	return 1;
+}
+
+static int arm64_callxs_cdata_numeric_carrier(CTState *cts,
+    const GCtrace *T, IRRef carrier)
+{
+  IRIns value = ir_load_acq(&T->ir[carrier]);
+  IRRef loadref = value.o == IR_CONV ? value.op1 : carrier, owner;
+  IRIns payload;
+  if (loadref < REF_FIRST || loadref >= T->nins) return 0;
+  payload = ir_load_acq(&T->ir[loadref]);
+  if (payload.o == IR_XLOAD) {
+    IRIns address;
+    if (payload.op1 < REF_FIRST || payload.op1 >= loadref) return 0;
+    address = ir_load_acq(&T->ir[payload.op1]);
+    if (address.o != IR_ADD) return 0;
+    owner = address.op1;
+  } else if (payload.o == IR_FLOAD) owner = payload.op1;
+  else return 0;
+  return arm64_callxs_cdata_numeric_promoted(cts, T, owner, carrier);
+}
+
+static int arm64_callxs_cdata_numeric_payload_suffix(CTState *cts,
+		const GCtrace *T, IRRef loadref)
+{
+	CTSize size;
+	return arm64_callxs_cdata_numeric_payload(cts, T, loadref, 0,
+		NULL, &size, NULL, NULL);
 }
 
 
@@ -2348,6 +2597,10 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
   IRRef enterargs[3] = { 0, 0, 0 };
   IRRef root1 = 0, root2 = 0, readref = 0, readroot = 0;
   IRRef scalar_read = 0;
+  IRRef cdata_candidate[ARM64_CDATA_NUMERIC_CANDIDATES];
+  IRRef cdata_owner[ARM64_CDATA_NUMERIC_CANDIDATES];
+  IRRef cdata_suffix_owner[ARM64_CDATA_NUMERIC_CANDIDATES];
+  MSize ncandidate = 0, nowner = 0, nsuffix_owner = 0;
   unsigned state = CALLXS_CLOSED, calls = 0, enters = 0, leaves = 0;
   IRRef producer_call = 0, completed_producer = 0;
   uintptr_t xsave_returnpc = 0, producer_returnpc = 0, read_floor = 0;
@@ -2628,6 +2881,16 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	for (i = 0; i < actual_count; i++)
 	  if (values[i] == REF_NIL) return 0;
       }
+      /* A payload/carrier already proven as a variadic numeric value cannot
+      ** also satisfy an unrelated fixed parameter in another CALLXS. */
+      for (i = 0; i < actual_count; i++) {
+	MSize c;
+	if (i >= abi.nargs && abi.is_vararg) continue;
+	for (c = 0; c < ncandidate; c++)
+	  if (values[i] == cdata_candidate[c]) {
+	    return 0;
+	  }
+      }
       tail_count = actual_count-abi.nargs;
       {
 	BCIns sourceins;
@@ -2677,6 +2940,7 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 		   (unsigned)bc_c(sourceins)-1u != abi.nparams+tail_count) return 0;
         {
           IRRef cdref = ir_load_acq(&T->ir[fpref]).op1;
+          IRRef source_values[LJ_ARM64_ABI_MAX_ARGS];
           /* A folded boolean still needs its exact Lua argument slot, even
           ** though the native carrier is now only a KINT zero or one. */
           int rooted_args = scalar_read || abi.is_vararg || sourceop == BC_CALLM ||
@@ -2696,7 +2960,24 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
               rooted_args = 1;
           }
           if (rooted_args && !arm64_callxs_vararg_sources(cts, T, xsave, fpref,
-                sourceins, xsave_returnpc, &abi, actual_count, values)) return 0;
+                sourceins, xsave_returnpc, &abi, actual_count, values,
+                source_values)) {
+	    return 0;
+	  }
+          if (rooted_args && abi.is_vararg) {
+	    for (i = abi.nargs; i < actual_count; i++) {
+	      IRRef owner;
+		if (arm64_callxs_ref_type(T->ir, nk, source_values[i]) != IRT_CDATA)
+		continue;
+	      if (!arm64_callxs_numeric_owner_add(cdata_suffix_owner,
+		    &nsuffix_owner, source_values[i])) return 0;
+	      if (!arm64_callxs_cdata_numeric_load_owner(T,
+		    ir_load_acq(&T->ir[values[i]]).o == IR_CONV ?
+		      ir_load_acq(&T->ir[values[i]]).op1 : values[i], &owner)) return 0;
+	      if (!arm64_callxs_numeric_owner_add(cdata_suffix_owner,
+		    &nsuffix_owner, owner)) return 0;
+	    }
+          }
         }
         result_slot = 0;
         if (arm64_callxs_result_boxed(&abi)) {
@@ -2777,12 +3058,19 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	  IRType type = arm64_callxs_ref_type(T->ir, nk, values[i]);
 	  LJArm64ABIKind kind;
 	  unsigned width;
-	  if (type == IRT_NUM) kind = LJ_ARM64_ABI_KIND_FLOAT, width = 8;
-	  else if (type == IRT_INT) kind = LJ_ARM64_ABI_KIND_INTEGER, width = 4;
-	  else if (type == IRT_P64) kind = LJ_ARM64_ABI_KIND_POINTER, width = 8;
+          int is_unsigned = 0;
+      if (type == IRT_NUM) kind = LJ_ARM64_ABI_KIND_FLOAT, width = 8;
+      else if (type == IRT_INT || type == IRT_U32) {
+	kind = LJ_ARM64_ABI_KIND_INTEGER, width = 4;
+        is_unsigned = type == IRT_U32;
+      } else if (type == IRT_I64 || type == IRT_U64) {
+	kind = LJ_ARM64_ABI_KIND_INTEGER, width = 8;
+        is_unsigned = type == IRT_U64;
+      }
+      else if (type == IRT_P64) kind = LJ_ARM64_ABI_KIND_POINTER, width = 8;
 	  else return 0;
 	  if (!arm64_callxs_value_kind(T->ir, values[i], nk, nins, ref,
-		kind, width, 0, 1)) return 0;
+		kind, width, is_unsigned, 1)) return 0;
 	  stack_size += 8u;
 	}
       }
@@ -2823,9 +3111,17 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
     }
     case IR_FLOAD:
       if (ins.op2 == IRFL_CDATA_INT64 || ins.op2 == IRFL_CDATA_INT) {
-        if (state != CALLXS_CLOSED ||
-            !arm64_callxs_cdata_integer_argument(J, T, ref))
-          return 0;
+      if (state != CALLXS_CLOSED) return 0;
+      if (!arm64_callxs_cdata_integer_argument(J, T, ref)) {
+	IRRef owner;
+	if (!arm64_callxs_cdata_numeric_payload_suffix(
+	      ctype_ctsG(J2G(J)), T, ref)) return 0;
+	if (!arm64_callxs_cdata_numeric_load_owner(T, ref, &owner) ||
+	    !arm64_callxs_numeric_refs_add(cdata_candidate, &ncandidate, ref) ||
+	    !arm64_callxs_numeric_owner_add(cdata_owner, &nowner, owner)) {
+	  return 0;
+	}
+      }
       } else if (ins.op2 == IRFL_CDATA_PTR) {
 	if (ins.op1 < REF_FIRST || ins.op1 >= ref ||
 	    (ir_load_acq(&T->ir[ins.op1]).o != IR_SLOAD &&
@@ -2848,13 +3144,20 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
       } else return 0;
       break;
     case IR_XLOAD:
-      if (state != CALLXS_CLOSED ||
-	  ((ins.t.irt == IRT_FLOAT || ins.t.irt == IRT_NUM) ?
-	   !arm64_callxs_cdata_float_hfa_member(ctype_ctsG(J2G(J)), T,
-	     ref, 0, NULL) :
-	   !arm64_callxs_cdata_integer_aggregate_argument(ctype_ctsG(J2G(J)),
-	     T, ref, 0)))
-	return 0;
+      if (state != CALLXS_CLOSED) return 0;
+      if (arm64_callxs_cdata_numeric_payload_suffix(ctype_ctsG(J2G(J)), T,
+	    ref)) {
+	IRRef owner;
+	if (!arm64_callxs_cdata_numeric_load_owner(T, ref, &owner) ||
+	    !arm64_callxs_numeric_refs_add(cdata_candidate, &ncandidate, ref) ||
+	    !arm64_callxs_numeric_owner_add(cdata_owner, &nowner, owner)) {
+	  return 0;
+	}
+      } else if ((ins.t.irt == IRT_FLOAT || ins.t.irt == IRT_NUM) ?
+	 !arm64_callxs_cdata_float_hfa_member(ctype_ctsG(J2G(J)), T,
+	   ref, 0, NULL) :
+	 !arm64_callxs_cdata_integer_aggregate_argument(ctype_ctsG(J2G(J)),
+	   T, ref, 0)) return 0;
       break;
     case IR_VLOAD:
       if (irt_type(ins.t) == IRT_CDATA || irt_type(ins.t) == IRT_TAB ||
@@ -3069,6 +3372,18 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	    return 0;
 	  break;
 	}
+	{
+	  int cdata_carrier = state == CALLXS_CLOSED &&
+	    arm64_callxs_cdata_numeric_carrier(ctype_ctsG(J2G(J)), T, ref);
+	  if (cdata_carrier) {
+	  IRRef owner = 0, loadref = ins.op1;
+	  if (!arm64_callxs_cdata_numeric_load_owner(T, loadref, &owner) ||
+	      !arm64_callxs_numeric_refs_add(cdata_candidate, &ncandidate, ref) ||
+	      !arm64_callxs_numeric_refs_add(cdata_candidate, &ncandidate, loadref) ||
+	      !arm64_callxs_numeric_owner_add(cdata_owner, &nowner, owner)) return 0;
+	  break;
+	  }
+	}
 	if (irt_type(src.t) != from)
 	  return 0;
 	/* The loop optimizer may narrow a numeric result or accumulator. The
@@ -3136,6 +3451,11 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
       calls != leaves || !ctype_seen || !g->loop || !g->poll ||
       g->poll <= g->loop)
     return 0;
+  for (ref = 0; ref < nowner; ref++)
+    if (!arm64_callxs_numeric_owner_has(cdata_suffix_owner,
+	  nsuffix_owner, cdata_owner[ref])) {
+	  return 0;
+	}
   return 1;
 }
 
@@ -4748,9 +5068,10 @@ static int arm64_ir_callxs_shape(const jit_State *J, const GCtrace *T,
 	const GCproto *pt, LJArm64IRReject *reject)
 {
   LJArm64CallXSGraph graph;
-  if (!arm64_callxs_ir_graph(J, T, &graph))
+  if (!arm64_callxs_ir_graph(J, T, &graph)) {
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
 	REF_BASE, IR_CALLXS, 12);
+  }
   if (J->loopref != graph.loop)
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
 	graph.loop, IR_XSAVE, 51);
@@ -5735,6 +6056,153 @@ static int arm64_postra_vararg_promoted(const IRIns *ir, IRRef nk,
 	return 0;
 }
 
+/* Allocated-pass reconstruction of a scalar CData suffix read. Keep this
+** proof separate from the semantic pass: it uses the allocated IR view and
+** re-derives the exact CType, owner, payload offset and promotion. */
+static int arm64_postra_cdata_numeric_payload(CTState *cts,
+		const GCtrace *T, IRRef value,
+		IRRef expected_owner, CTypeID *idp, CTSize *sizep,
+		int *floatp, int *unsignedp)
+{
+	const IRIns *ir = T->ir;
+	IRIns load, address, owner;
+	IRRef source, typeid = 0, r;
+	CTypeID id = 0, terminal;
+	CType type;
+	CTInfo info;
+	CTSize size;
+	int isfp;
+	if (value < REF_FIRST || value >= T->nins) return 0;
+	load = ir_load_acq(&ir[value]);
+	if (load.o == IR_XLOAD) {
+		int64_t offset;
+		if (load.op2 != 0 || load.op1 < REF_FIRST || load.op1 >= value)
+			return 0;
+		address = ir_load_acq(&ir[load.op1]);
+		source = address.op1;
+		if (address.o != IR_ADD || address.t.irt != IRT_P64 ||
+		    source < REF_FIRST || source >= load.op1 ||
+		    !arm64_callxs_offset_value(ir, T->nk, address.op2, &offset) ||
+		    offset != (int64_t)sizeof(GCcdata)) return 0;
+	} else if (load.o == IR_FLOAD &&
+		   (load.op2 == IRFL_CDATA_INT ||
+		    load.op2 == IRFL_CDATA_INT64)) {
+		source = load.op1;
+		if (source < REF_FIRST || source >= value) return 0;
+	} else return 0;
+	if (expected_owner && source != expected_owner) return 0;
+	owner = ir_load_acq(&ir[source]);
+	if ((owner.o != IR_SLOAD && owner.o != IR_VLOAD) ||
+	    owner.t.irt != (IRT_CDATA|IRT_GUARD)) return 0;
+	for (r = source+1u; r < value; r++) {
+		IRIns field = ir_load_acq(&ir[r]);
+		IRRef g;
+		if (field.o != IR_FLOAD || field.op1 != source ||
+		    field.op2 != IRFL_CDATA_CTYPEID) continue;
+		if (field.t.irt != IRT_U16 || typeid) return 0;
+		for (g = r+1u; g < value; g++) {
+			IRIns guard = ir_load_acq(&ir[g]);
+			IRRef kref;
+			int32_t k;
+			if (guard.o != IR_EQ || guard.t.irt != (IRT_INT|IRT_GUARD) ||
+			    (guard.op1 != r && guard.op2 != r)) continue;
+			kref = guard.op1 == r ? guard.op2 : guard.op1;
+			if (!arm64_callxs_kint_value(ir, T->nk, kref, &k) ||
+			    k <= 0 || id) return 0;
+			id = (CTypeID)k;
+			typeid = r;
+		}
+	}
+	if (!id || !lj_ccall_arm64_raw_type(cts, id, &type, &terminal)) return 0;
+	info = ctype_info_acq(&type);
+	size = ctype_size_acq(&type);
+	isfp = ctype_isfp(info);
+	if (!ctype_isnum(info) || ctype_isenum(info) || (info & CTF_BOOL) ||
+	    (size != 1 && size != 2 && size != 4 && size != 8)) return 0;
+	if (isfp) {
+		if ((size != sizeof(float) && size != sizeof(double)) ||
+		    load.o != IR_XLOAD ||
+		    load.t.irt != (size == sizeof(float) ? IRT_FLOAT : IRT_NUM))
+			return 0;
+	} else if (size < 4) {
+		IRType expected = size == 1 ?
+			((info & CTF_UNSIGNED) ? IRT_U8 : IRT_I8) :
+			((info & CTF_UNSIGNED) ? IRT_U16 : IRT_I16);
+		if (load.o != IR_XLOAD || load.t.irt != expected) return 0;
+	} else if (size == 4) {
+		if (load.o != IR_FLOAD || load.op2 != IRFL_CDATA_INT ||
+		    load.t.irt != ((info & CTF_UNSIGNED) ? IRT_U32 : IRT_INT))
+			return 0;
+	} else if (load.o != IR_FLOAD || load.op2 != IRFL_CDATA_INT64 ||
+		   load.t.irt != ((info & CTF_UNSIGNED) ? IRT_U64 : IRT_I64)) {
+		return 0;
+	}
+	if (idp) *idp = id;
+	if (sizep) *sizep = size;
+	if (floatp) *floatp = isfp;
+	if (unsignedp) *unsignedp = (info & CTF_UNSIGNED) != 0;
+	return 1;
+}
+
+static int arm64_postra_cdata_numeric_promoted(CTState *cts,
+		const GCtrace *T, IRRef source,
+		IRRef carrier)
+{
+	const IRIns *ir = T->ir;
+	IRIns value, payload;
+	IRRef loadref;
+	CTSize size;
+	int isfp, is_unsigned;
+	if (!arm64_callxs_ref_valid(ir, T->nk, T->nins, carrier, source) ||
+	    !arm64_callxs_ref_valid(ir, T->nk, T->nins, T->nins, carrier))
+		return 0;
+	value = ir_load_acq(&ir[carrier]);
+	loadref = carrier;
+	if (value.o == IR_CONV) {
+		loadref = value.op1;
+		if (loadref < REF_FIRST || loadref >= carrier) return 0;
+		payload = ir_load_acq(&ir[loadref]);
+	} else payload = value;
+	if (!arm64_postra_cdata_numeric_payload(cts, T, loadref,
+	      source, NULL, &size, &isfp, &is_unsigned)) return 0;
+	if (isfp) {
+		if (size == sizeof(double)) {
+			if (carrier != loadref || value.t.irt != IRT_NUM) return 0;
+		} else if (value.o != IR_CONV || value.t.irt != IRT_NUM ||
+			   value.op1 != loadref || value.op2 !=
+			     ((IRT_NUM << IRCONV_DSH)|IRT_FLOAT)) return 0;
+	} else if (size < 4) {
+		IRType from = (IRType)irt_type(payload.t);
+		unsigned conv = (IRT_INT << IRCONV_DSH) | from |
+			(is_unsigned ? 0 : IRCONV_SEXT);
+		if (value.o != IR_CONV || value.t.irt != IRT_INT ||
+		    value.op1 != loadref || value.op2 != conv) return 0;
+	} else if (carrier != loadref ||
+		   (size == 4 && value.t.irt !=
+		    (is_unsigned ? IRT_U32 : IRT_INT)) ||
+		   (size == 8 && value.t.irt !=
+		    (is_unsigned ? IRT_U64 : IRT_I64))) {
+		return 0;
+	}
+	if (T->snap == NULL || T->snapmap == NULL) return 0;
+	{
+		MSize s;
+		for (s = 0; s < T->nsnap; s++) {
+			MSize ofs = snap_mapofs_acq(&T->snap[s]);
+			MSize nent = snap_nent_acq(&T->snap[s]), i;
+			if (ofs > T->nsnapmap || nent > T->nsnapmap-ofs)
+				return 0;
+			for (i = 0; i < nent; i++) {
+				IRRef snapref = snap_ref(snapentry_acq(
+					&T->snapmap[ofs+i]));
+				if (snapref == loadref ||
+				    (carrier != loadref && snapref == carrier)) return 0;
+			}
+		}
+	}
+	return 1;
+}
+
 /* Independently prove the guarded pointer payload before matching its
 ** allocated carrier to the saved Lua argument. References remain closed. */
 static int arm64_postra_pointer_argument(CTState *cts, const GCtrace *T,
@@ -5899,7 +6367,7 @@ static int arm64_postra_vararg_source_proof(CTState *cts, const GCtrace *T,
 		IRRef xsave, IRRef call, const BCIns *proto_bc, MSize proto_sizebc,
 		uintptr_t returnpc, BCIns sourceins,
 		IRRef callable_cdata_ref, unsigned fixed_count,
-		unsigned actual_count, const IRRef *values)
+		unsigned actual_count, const IRRef *values, IRRef *sourcep)
 {
 	uint64_t frame_pc, footer_pcbase;
 	uintptr_t anchored_pc;
@@ -5907,7 +6375,7 @@ static int arm64_postra_vararg_source_proof(CTState *cts, const GCtrace *T,
 	SnapEntry footer[1+LJ_FR2];
 	MSize index, ofs, nent, next, i;
 	unsigned argbase, metaslot, frameslot, cdataslot, source_count, a;
-	IRRef meta_fn, cdata;
+	IRRef meta_fn, cdata, sources[LJ_ARM64_ABI_MAX_ARGS];
 	GCobj *fn;
 	const BCIns *meta_pc;
 	LJArm64ABISignature abi;
@@ -5976,6 +6444,7 @@ static int arm64_postra_vararg_source_proof(CTState *cts, const GCtrace *T,
 		    !arm64_callxs_ref_valid(T->ir, T->nk, T->nins, xsave, source) ||
 		    !arm64_callxs_ref_valid(T->ir, T->nk, T->nins, xsave, values[a]))
 			return 0;
+		sources[a] = source;
 		stype = arm64_callxs_ref_type(T->ir, T->nk, source);
 		if (a < fixed_count) {
 			IRIns carrier = ir_load_acq(&T->ir[values[a]]);
@@ -5990,10 +6459,78 @@ static int arm64_postra_vararg_source_proof(CTState *cts, const GCtrace *T,
 				    values[a], source, &abi.arg[a])) return 0;
 			} else if (!arm64_postra_source_value_matches(T->ir, T->nk,
 			    T->nins, xsave, source, values[a], stype)) return 0;
+		} else if (stype == IRT_CDATA) {
+			if (!arm64_postra_cdata_numeric_promoted(cts, T, source,
+			    values[a])) {
+				return 0;
+			}
 		} else if (!arm64_postra_vararg_promoted(T->ir, T->nk,
 		    T->nins, xsave, source, values[a], stype)) return 0;
 	}
+	if (sourcep) memcpy(sourcep, sources, actual_count*sizeof(IRRef));
 	return 1;
+}
+
+static int arm64_postra_cdata_numeric_load_owner(const GCtrace *T,
+		IRRef loadref, IRRef *ownerp)
+{
+	IRIns load, address;
+	IRRef owner;
+	if (loadref < REF_FIRST || loadref >= T->nins) return 0;
+	load = ir_load_acq(&T->ir[loadref]);
+	if (load.o == IR_XLOAD) {
+		if (load.op1 < REF_FIRST || load.op1 >= loadref) return 0;
+		address = ir_load_acq(&T->ir[load.op1]);
+		if (address.o != IR_ADD || address.t.irt != IRT_P64 ||
+		    address.op1 < REF_FIRST || address.op1 >= load.op1) return 0;
+		owner = address.op1;
+	} else if (load.o == IR_FLOAD &&
+		   (load.op2 == IRFL_CDATA_INT ||
+		    load.op2 == IRFL_CDATA_INT64)) {
+		owner = load.op1;
+	} else return 0;
+	if (owner < REF_FIRST || owner >= loadref) return 0;
+	if (ownerp) *ownerp = owner;
+	return 1;
+}
+
+/* Independent allocated-view binding for CData numeric conversions. The
+** carrier must be a value in the validated variadic suffix, and its payload
+** may have no arithmetic, snapshot, or second-call consumer. */
+static int arm64_postra_cdata_numeric_suffix(CTState *cts,
+		const GCtrace *T, IRRef loadref, IRRef required_carrier)
+{
+	IRIns value, payload, address;
+	IRRef owner, carrier = required_carrier ? required_carrier : loadref;
+	if (loadref < REF_FIRST || loadref >= T->nins ||
+	    carrier < REF_FIRST || carrier >= T->nins) return 0;
+	value = ir_load_acq(&T->ir[carrier]);
+	if (value.o == IR_CONV && (value.op1 != loadref || value.op1 >= carrier))
+		return 0;
+	payload = ir_load_acq(&T->ir[loadref]);
+	if (payload.o == IR_XLOAD) {
+		if (payload.op1 < REF_FIRST || payload.op1 >= loadref) return 0;
+		address = ir_load_acq(&T->ir[payload.op1]);
+		if (address.o != IR_ADD) return 0;
+		owner = address.op1;
+	} else if (payload.o == IR_FLOAD) owner = payload.op1;
+	else return 0;
+	return arm64_postra_cdata_numeric_promoted(cts, T, owner, carrier);
+}
+
+static int arm64_postra_cdata_numeric_carrier(CTState *cts,
+		const GCtrace *T, IRRef carrier)
+{
+	IRIns value = ir_load_acq(&T->ir[carrier]);
+	IRRef loadref = value.o == IR_CONV ? value.op1 : carrier;
+	return arm64_postra_cdata_numeric_suffix(cts, T, loadref, carrier);
+}
+
+static int arm64_postra_cdata_numeric_payload_suffix(CTState *cts,
+		const GCtrace *T, IRRef loadref)
+{
+	return arm64_postra_cdata_numeric_payload(cts, T, loadref, 0,
+		NULL, NULL, NULL, NULL);
 }
 
 /* Independent post-RA proof for one HFA float member. */
@@ -6319,6 +6856,10 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	IRRef lookupargs[3] = { 0, 0, 0 };
 	IRRef current1 = 0, current2 = 0, readvalue = 0, outputroot = 0;
 	IRRef scalar_read = 0;
+	IRRef cdata_candidate[ARM64_CDATA_NUMERIC_CANDIDATES];
+	IRRef cdata_owner[ARM64_CDATA_NUMERIC_CANDIDATES];
+	IRRef cdata_suffix_owner[ARM64_CDATA_NUMERIC_CANDIDATES];
+	MSize ncandidate = 0, nowner = 0, nsuffix_owner = 0;
 	IRRef boxref = 0;
 	CTypeID box_ctype = 0;
 	int box_store_seen = 0, result_is_cdata = 0, result_is_indirect = 0;
@@ -6762,24 +7303,48 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    if (ins.t.irt != IRT_NIL || ins.op1 || ins.op2)
 	      return 0;
 	  } else if (ins.o == IR_XLOAD) {
+	    int numeric_payload = arm64_postra_cdata_numeric_payload_suffix(
+	      view->cts, &temp, ref);
+	    IRRef owner;
 	    if (protocol != 0 ||
-		!((ins.t.irt == IRT_FLOAT || ins.t.irt == IRT_NUM) ?
-		  arm64_postra_cdata_float_hfa_member(view->cts, &temp,
+		(!numeric_payload &&
+		 ((ins.t.irt == IRT_FLOAT || ins.t.irt == IRT_NUM) ?
+		  !arm64_postra_cdata_float_hfa_member(view->cts, &temp,
 		    semantic_nins, ref, 0, NULL) :
-		  arm64_postra_cdata_integer_aggregate_argument(view->cts, &temp,
-		    semantic_nins, ref, 0)) || !ra_hasreg(ins.r) ||
+		  !arm64_postra_cdata_integer_aggregate_argument(view->cts, &temp,
+		    semantic_nins, ref, 0))) || !ra_hasreg(ins.r) ||
 		!(irt_isfp(ins.t) ?
 		  ins.r >= RID_MIN_FPR && ins.r < RID_MAX_FPR &&
 		    rset_test(RSET_FPR, ins.r) :
-		  arm64_scalar_postra_register(ins.r, irt_type(ins.t)))) return 0;
+		  arm64_scalar_postra_register(ins.r, irt_type(ins.t)))) {
+	      return 0;
+	    }
+	    if (numeric_payload &&
+		(!arm64_postra_cdata_numeric_load_owner(&temp, ref, &owner) ||
+		 !arm64_callxs_numeric_refs_add(cdata_candidate, &ncandidate, ref) ||
+		 !arm64_callxs_numeric_owner_add(cdata_owner, &nowner, owner))) {
+	      return 0;
+	    }
 	  } else if (ins.o == IR_FLOAD) {
 	    if (ins.op1 >= ref || !arm64_callxs_ref_valid(view->ir, view->nk,
 		semantic_nins, ref, ins.op1))
 	      return 0;
 	    if (ins.op2 == IRFL_CDATA_INT64 || ins.op2 == IRFL_CDATA_INT) {
+	      int numeric_payload = arm64_postra_cdata_numeric_payload_suffix(
+		view->cts, &temp, ref);
+	      int fixed_integer_argument =
+		arm64_postra_cdata_integer_argument(view, semantic_nins, ref);
+	      IRRef owner;
 	      if (protocol != 0 ||
-	          !arm64_postra_cdata_integer_argument(view, semantic_nins, ref))
+	          (!fixed_integer_argument && !numeric_payload)) {
 	        return 0;
+	      }
+	      if (!fixed_integer_argument && numeric_payload &&
+		  (!arm64_postra_cdata_numeric_load_owner(&temp, ref, &owner) ||
+		   !arm64_callxs_numeric_refs_add(cdata_candidate, &ncandidate, ref) ||
+		   !arm64_callxs_numeric_owner_add(cdata_owner, &nowner, owner))) {
+		return 0;
+	      }
 	    } else if (ins.op2 == IRFL_CDATA_PTR) {
 	      IRIns src = ir_load_acq(&view->ir[ins.op1]);
 	      if ((src.o != IR_SLOAD && src.o != IR_VLOAD) ||
@@ -6894,6 +7459,16 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    if (!numeric_arg && !integer_arg && irt_type(src.t) != from) return 0;
 	    if (numeric_arg || integer_arg) {
 	      /* Exact fixed-argument chain, including its native-only uses. */
+	    } else if (protocol == 0 &&
+		arm64_postra_cdata_numeric_carrier(view->cts, &temp, ref)) {
+	      IRRef owner = 0, loadref = ins.op1;
+	      if (!arm64_postra_cdata_numeric_load_owner(&temp, loadref, &owner) ||
+		  !arm64_callxs_numeric_refs_add(cdata_candidate, &ncandidate, ref) ||
+		  !arm64_callxs_numeric_refs_add(cdata_candidate, &ncandidate, loadref) ||
+		  !arm64_callxs_numeric_owner_add(cdata_owner, &nowner, owner)) {
+		return 0;
+	      }
+		  /* Exact CData default promotion, bound to its rooted source slot. */
 	    } else if (dst == IRT_NUM && from == IRT_U32 &&
 		(ins.t.irt & ~IRT_ISPHI) == IRT_NUM &&
 		ins.op2 == ((IRT_NUM << IRCONV_DSH)|IRT_U32) &&
@@ -7048,6 +7623,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	  IRRef values[LJ_ARM64_ABI_MAX_ARGS];
 	  unsigned ngpr = 0, nfpr = 0, bytes = 0;
 	  unsigned rawcount, actual_count, tail_count, i;
+	  IRRef source_values[LJ_ARM64_ABI_MAX_ARGS];
 	  int32_t wrapper_id = 0;
 	  BCIns sourceins;
 	  uintptr_t source_returnpc;
@@ -7144,6 +7720,14 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    for (i = 0; i < actual_count; i++)
 	      if (values[i] == REF_NIL) return 0;
 	  }
+	  for (i = 0; i < actual_count; i++) {
+	    MSize candidate;
+	    if (i >= abi.nargs && abi.is_vararg) continue;
+	    for (candidate = 0; candidate < ncandidate; candidate++)
+	      if (values[i] == cdata_candidate[candidate]) {
+		return 0;
+	      }
+	  }
 	  tail_count = actual_count-abi.nargs;
 	  if (bc_op(sourceins) == BC_CALLM) {
 	    if (layout_producer_returnpc == 0 ||
@@ -7177,8 +7761,26 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    }
 	    if (roots_required && !arm64_postra_vararg_source_proof(view->cts, &temp,
 	        layout_xsave, call, view->proto_bc, view->proto_sizebc,
-	        source_returnpc, sourceins, cdref, abi.nargs, actual_count, values))
+	        source_returnpc, sourceins, cdref, abi.nargs, actual_count, values,
+	        source_values)) {
 	      return 0;
+	    }
+	    if (roots_required && abi.is_vararg) {
+	      for (i = abi.nargs; i < actual_count; i++) {
+		IRRef owner;
+		if (arm64_callxs_ref_type(view->ir, view->nk,
+		      source_values[i]) != IRT_CDATA) continue;
+		if (!arm64_callxs_numeric_owner_add(cdata_suffix_owner,
+		      &nsuffix_owner, source_values[i])) return 0;
+		if (!arm64_postra_cdata_numeric_load_owner(&temp,
+		      ir_load_acq(&view->ir[values[i]]).o == IR_CONV ?
+	        ir_load_acq(&view->ir[values[i]]).op1 : values[i], &owner)) {
+		  return 0;
+		}
+		if (!arm64_callxs_numeric_owner_add(cdata_suffix_owner,
+		      &nsuffix_owner, owner)) return 0;
+	      }
+	    }
 	  }
 	  layout_xsave = 0;
 	  for (guard = 0; guard < abi.nargs; guard++) {
@@ -7239,12 +7841,19 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	      IRType type = arm64_callxs_ref_type(view->ir, view->nk, values[i]);
 	      LJArm64ABIKind kind;
 	      unsigned width;
+              int is_unsigned = 0;
 	      if (type == IRT_NUM) kind = LJ_ARM64_ABI_KIND_FLOAT, width = 8;
-	      else if (type == IRT_INT) kind = LJ_ARM64_ABI_KIND_INTEGER, width = 4;
+	      else if (type == IRT_INT || type == IRT_U32) {
+		kind = LJ_ARM64_ABI_KIND_INTEGER, width = 4;
+		is_unsigned = type == IRT_U32;
+	      } else if (type == IRT_I64 || type == IRT_U64) {
+		kind = LJ_ARM64_ABI_KIND_INTEGER, width = 8;
+		is_unsigned = type == IRT_U64;
+	      }
 	      else if (type == IRT_P64) kind = LJ_ARM64_ABI_KIND_POINTER, width = 8;
 	      else return 0;
 	      if (!arm64_callxs_value_kind(view->ir, values[i], view->nk,
-		  semantic_nins, call, kind, width, 0, 1)) return 0;
+		  semantic_nins, call, kind, width, is_unsigned, 1)) return 0;
 	      bytes += 8u;
 	    }
 	  }
@@ -7267,6 +7876,11 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	  if (!arm64_postra_callxs_live_across(view, semantic_nins, call, capacity))
 	    return 0;
 	}
+	for (ref = 0; ref < nowner; ref++)
+	  if (!arm64_callxs_numeric_owner_has(cdata_suffix_owner,
+		nsuffix_owner, cdata_owner[ref])) {
+	    return 0;
+	  }
 	if (layout_xsave != 0) return 0;
 	/* The assembler reserves the largest outgoing area before allocating
 	** any spills. A call may overwrite that entire area, including dead
@@ -7319,8 +7933,9 @@ static int arm64_postra_nonloop_admit(const LJArm64PostRAView *view,
   if (bc_op(view->startins) == BC_FORL) {
     IRRef callref;
     for (callref = REF_BASE; callref < view->nins; callref++) {
-      if (ir_load_acq(&view->ir[callref]).o == IR_CALLXS)
-	return arm64_postra_callxs_generic(view, semantic_ninsp);
+      if (ir_load_acq(&view->ir[callref]).o == IR_CALLXS) {
+		return arm64_postra_callxs_generic(view, semantic_ninsp);
+      }
     }
   }
 #endif
@@ -10693,7 +11308,7 @@ static int arm64_side_entry_sload_valid(const LJArm64SideIRView *side,
 	  load->o != IR_SLOAD || load->op2 != IRSLOAD_TYPECHECK ||
 	  load->op1 < 1u+LJ_FR2 || load->op1 >= side->parent_nslots ||
 	  side->parent_nslots > LJ_MAX_JSLOTS ||
-	  side->parent_topslot > side->parent_nslots ||
+	  side->parent_nslots > side->parent_topslot+1u+LJ_FR2 ||
 	  (load->t.irt & ~(IRT_TYPE|IRT_GUARD|IRT_ISPHI)) != 0 ||
 	  !(load->t.irt & IRT_GUARD))
 	return 0;
@@ -19985,6 +20600,9 @@ static int arm64_side_parent_forl_norestore_valid(
 	  source->op2 == (IRSLOAD_READONLY|IRSLOAD_INHERIT);
 }
 
+/* topslot reserves the complete Lua frame; nslots records the current live
+** prefix including its frame header. Dead temporaries can make topslot larger
+** than nslots. Only the live prefix is copied, within the reserved frame. */
 static int arm64_side_parent_snapshot_valid(const LJArm64SideIRView *side)
 {
   uint64_t pcbase;
@@ -20003,7 +20621,7 @@ static int arm64_side_parent_snapshot_valid(const LJArm64SideIRView *side)
 	  snap_topslot_acq(side->parent_snap) != side->parent_topslot ||
 	  side->parent_topslot != side->root_topslot ||
 	  snap_nslots_acq(side->parent_snap) < 1u+LJ_FR2 ||
-	  snap_topslot_acq(side->parent_snap) > snap_nslots_acq(side->parent_snap))
+	  side->parent_nslots > side->parent_topslot+1u+LJ_FR2)
     return 0;
   nent = snap_nent_acq(side->parent_snap);
   if (nent > LJ_MAX_JSLOTS || nent > side->parent_nslots ||
