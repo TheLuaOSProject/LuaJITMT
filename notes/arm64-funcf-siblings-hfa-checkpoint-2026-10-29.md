@@ -159,3 +159,15 @@ and the final safepoint, upvalue identity, cell-loop and native-coverage checks.
 Its last line reports `arm64_jit_fail_closed_gate OK`. This establishes the
 strict FUNCF/multiple-sibling baseline before the next result-shape and
 recorder-flush changes; it does not establish whole-fork x64 parity.
+
+## Integrated two-result and recorder-flush gate
+
+The complete gate passed in one uninterrupted run at
+`42f751357154284bfaa0fb430103b029a670900b`, including the two-result FUNCF
+proof, two-float HFA result path, and protected-recorder FLUSHJ deferral.
+The source manifest is `combined-result-flush-source.txt` and full log is
+`combined-result-flush-gate.log` in the same evidence directory.
+
+The new constant-limit FORL and broader HFA work is not included in this
+pass. The combined-mask recorder follow-up is also a later test change with
+its own explicit ARM64/x64 evidence.
