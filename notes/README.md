@@ -18,7 +18,12 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
-- Latest port-branch integration: recorder metacall race repair, direct small
+- Latest focused port-branch integration: one-float and one-double HFA
+  results at `0af2319d6`. Four component profiles pass; ordinary ARM64/x64
+  builds at `63156cc14` both witness the retained argument/result loops and
+  pass all ten aggregate probe rows. See the
+  [HFA-result evidence](arm64-hfa-aggregate-results-2026-10-29.md).
+- Latest complete port-branch integration: recorder metacall race repair, direct small
   HFA arguments, one-register integer-struct results and a root-linked integer
   FORL side at `b549a895b`. The complete combined experimental gate, all four
   M7 FFI profiles, and both ordinary ARM64/x64 stock corpora pass. See the
@@ -61,7 +66,7 @@ and reports that are no longer authoritative are retained in
 - The separate [aggregate probe](arm64-aggregate-native-gap-2026-10-28.md)
   now witnesses x64 loops returning and retaining small integer/float structs.
   The integer/word result gap is closed in the latest component probe; ARM64
-  still interprets the two-float result shape. All eight rows pass their
+  still interprets the two-float result shape. All ten current rows pass their
   result/effect checks on both targets; the returned objects survive GC.
 - Latest integrated follow-up: folded literal string-byte traces at
   `cdc2b7e2`, with test cleanup at `98e158b8`. Only completely unused pointer
