@@ -35,13 +35,16 @@ Integrated logs and immutable artifacts are under
 `/Users/frityet/Scratch/ljmt-hfa-arrays-integrated-20261029/`; the original-gap
 rerun is under `/Users/frityet/Scratch/ljmt-hfa-array-ordinary-20261029/`.
 
-## Outstanding independent issue
+## Independently resolved publication issue
 
 Repeated unchanged-main topology runs at `8d164b856` exposed intermittent
 absence of the captured pair-call or nonleaf FUNCF root: four of five strict
 runs failed, while one passed. This also occurs without the experimental
 CALLM changes. Evidence is in
-`/Users/frityet/Scratch/ljmt-callm-pair-review-20261029/`. The failure remains
-under investigation; prior successful single topology runs do not establish
-deterministic publication. The HFA-specific native tests above are separate.
-Overall x86_64 parity remains incomplete.
+`/Users/frityet/Scratch/ljmt-callm-pair-review-20261029/`. The cause was an
+unsupported disabled function reaching ARM64 source preflight before the
+existing NOJIT entry patch, repeatedly disturbing a colliding hotcount bucket.
+Commit `10c064925` fixes that ordering, with a deterministic regression and
+five successful ordinary topology runs on each architecture. See
+`arm64-nojit-funcf-hotcount-2026-10-29.md` for the evidence. The HFA-specific
+native tests above are separate. Overall x86_64 parity remains incomplete.

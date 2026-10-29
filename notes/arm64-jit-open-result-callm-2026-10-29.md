@@ -47,3 +47,27 @@ remain under `/tmp/open-callm-leaf-contract-countfix2.log`, and that case is
 not covered by this native parity claim. The runtime helper also uses the
 actual bounded argument count instead of demanding room for three slots.
 The producer replay path remains bounded to one through three results.
+
+## Combined integration
+
+The CALLM checkpoint combined with the NOJIT hot-counter fix at `f759b42a3`
+passes the FUNCF contract and the full four-profile Lua leaf contract. The
+restored ordinary runtime passes all 509 stock source tests and all 509 tests
+through original-v2 bytecode import. Five consecutive ordinary topology runs
+pass; the original `open-result-callm-loop` has the selected loop root and 81
+selected-root exits in each measured phase. The runtime, source revision and
+hash are frozen in `ljmt-callm-integrated-20261029/arm64/` under Scratch.
+
+The separate consumer-identity exit fixture binds the exact CALLM guard after
+the producer completes, checks its complete restorable vector, and exercises
+interpreter continuation and native reentry with unchanged code bytes,
+address, size and generation across full GC. See
+`arm64-open-callm-consumer-exits-2026-10-29.md`.
+
+An exact ordinary comparison also identifies four remaining coverage gaps:
+one/two results passed to a consumer with three declared parameters, and three
+results passed to a consumer with one/two parameters. All four are correct by
+the interpreter oracle, publish and execute on x86_64, and do not publish a
+root on this ARM64 checkpoint. The probes and both logs are in the integration
+Scratch directory (`parameter-count-probe.lua`, `parameter-count-*.log`).
+They are not included in the matching-arity parity claim above.

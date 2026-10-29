@@ -29,6 +29,6 @@ copy across both exits, GC, and reentry.
 Validation: `tools/ci/arm64_jit_open_callm_exits_contract.sh` passed ARM64 and
 arm64e assertion and release profiles. Each profile passed three runtime
 shapes and three ordinary oracle cases. The exact log is
-`/Users/frityet/Scratch/ljmt-open-callm-consumer-exit-20261029/focused-4.log`.
+`/Users/frityet/Scratch/ljmt-open-callm-consumer-exit-20261029/focused-5.log`.
 The fixture is parameterized-consumer coverage; it does not claim a mutable
 captured-cell consumer path.
