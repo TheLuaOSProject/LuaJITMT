@@ -8,6 +8,7 @@ jit.off(true, true)
 ffi.cdef[[
 typedef struct { uint32_t lo, hi; } Arm64IntPair;
 typedef struct { float lo, hi; } Arm64FloatPair;
+typedef uint32_t (*Arm64FloatPairVarargFn)(Arm64FloatPair, ...);
 typedef struct { Arm64IntPair pair; uint32_t tag; } Arm64NestedPair;
 typedef union { uint64_t u; double d; } Arm64MixedUnion;
 typedef struct { uint8_t value; } Arm64Byte;
@@ -20,6 +21,7 @@ uint32_t arm64_aggregate_count(uint32_t);
 uint32_t arm64_take_int_pair(Arm64IntPair, uint32_t);
 double arm64_take_int_pair_double_salt(Arm64IntPair, uint32_t);
 uint32_t arm64_take_float_pair(Arm64FloatPair);
+double arm64_take_float_pair_double_salt(Arm64FloatPair, double);
 uint32_t arm64_take_nested_pair(Arm64NestedPair);
 uint32_t arm64_take_union(Arm64MixedUnion);
 uint32_t arm64_take_byte(Arm64Byte, uint32_t);
@@ -34,6 +36,9 @@ uint32_t arm64_take_pair_no_gpr(uint32_t, uint32_t, uint32_t, uint32_t,
 local lib = ffi.load(assert(os.getenv('LJ_ARM64_INT_AGGREGATE_SO')))
 _G.__arm64_int_pair_fn = lib.arm64_take_int_pair
 _G.__arm64_float_pair_fn = lib.arm64_take_float_pair
+_G.__arm64_float_pair_double_salt_fn = lib.arm64_take_float_pair_double_salt
+_G.__arm64_float_vararg_fn = ffi.cast('Arm64FloatPairVarargFn',
+                                      lib.arm64_take_float_pair)
 _G.__arm64_nested_pair_fn = lib.arm64_take_nested_pair
 _G.__arm64_mixed_union_fn = lib.arm64_take_union
 _G.__arm64_byte_fn = lib.arm64_take_byte
@@ -71,16 +76,45 @@ _G.__arm64_integer_aggregate_clone = clone
 _G.__arm64_integer_aggregate_oracle = oracle
 _set_aggregate_candidate(candidate)
 
+local hfa_candidate = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@float-hfa-candidate'))()
+local hfa_oracle = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@float-hfa-oracle'))()
+local hfa_clone = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@float-hfa-clone'))()
+jit.off(hfa_oracle, true)
+jit.off(hfa_clone, true)
+_G.__arm64_float_hfa_candidate = hfa_candidate
+_G.__arm64_float_hfa_oracle = hfa_oracle
+_G.__arm64_float_hfa_clone = hfa_clone
+_set_hfa_candidate(hfa_candidate)
+
 local pair = ffi.new('Arm64IntPair', 7, 11)
 local byte = ffi.new('Arm64Byte', 7)
 local half = ffi.new('Arm64Half', 701)
 local word = ffi.new('Arm64Word', 70001)
 local fn = lib.arm64_take_int_pair
 local alt = lib.arm64_take_int_pair_double_salt
-local function roots()
+local function roots(fn)
+  fn = fn or candidate
   local found = {}
-  for pc = 0, jitutil.funcinfo(candidate).bytecodes-1 do
-    local ins = jitutil.funcbc(candidate, pc)
+  for pc = 0, jitutil.funcinfo(fn).bytecodes-1 do
+    local ins = jitutil.funcbc(fn, pc)
     if ins then
       local op = bit.band(ins, 255)
       local name = vmdef.bcnames:sub(op*6+1, op*6+6)
@@ -92,9 +126,14 @@ local function roots()
   return found
 end
 jit.off(roots, true)
-local selected, exits = {}, 0
-local function observe(no)
+local function hfa_roots()
+  return roots(hfa_candidate)
+end
+jit.off(hfa_roots, true)
+local selected, exits, hfa_exits = {}, 0, 0
+local function observe(no, exitno)
   if roots()[no] then exits = exits + 1 end
+  if hfa_roots()[no] then hfa_exits = hfa_exits + 1 end
 end
 jit.off(observe, true)
 
@@ -109,7 +148,8 @@ assert(select(2, ready:recv(5)), 'live peer did not start')
 jit.flush()
 jit.opt.start('hotloop=1', 'hotexit=1000', 'maxtrace=64')
 jit.attach(observe, 'texit')
-jit.on()
+jit.on(hfa_candidate, true)
+jit.on(candidate, true)
 lib.arm64_aggregate_reset()
 local function has_native_aggregate_root(xload_type)
   for no in pairs(roots()) do
@@ -133,9 +173,9 @@ local function has_native_aggregate_root(xload_type)
 end
 jit.off(has_native_aggregate_root, true)
 local small_cases = {
-  { lib.arm64_take_byte, byte, 5, 16 },
-  { lib.arm64_take_half, half, 6, 18 },
-  { lib.arm64_take_word, word, 7, 20 },
+  { lib.arm64_take_byte, byte, 6, 16 },
+  { lib.arm64_take_half, half, 7, 18 },
+  { lib.arm64_take_word, word, 8, 20 },
 }
 for _, case in ipairs(small_cases) do
   jit.flush(candidate)
@@ -151,6 +191,37 @@ for _, case in ipairs(small_cases) do
     'small aggregate effects were lost or replayed: ' ..
     tostring(lib.arm64_aggregate_count(case[3])))
 end
+jit.flush(hfa_candidate)
+exits = 0
+lib.arm64_aggregate_reset()
+_begin_hfa_witness()
+local hfa_seed = ffi.new('Arm64FloatPair', 1.25, 2.5)
+local hfa_fn = lib.arm64_take_float_pair_double_salt
+for pass = 1, 8 do
+  assert(hfa_candidate(16, hfa_fn, hfa_seed, 3.75) ==
+         hfa_oracle(16, hfa_fn, hfa_seed, 3.75))
+end
+assert(hfa_exits > 0, 'HFA root did not take a native exit')
+assert(_hfa_trace_count() > 0, 'HFA native root was not published')
+assert(_hfa_native_count() > 0, 'HFA root did not finish a native call')
+assert(lib.arm64_aggregate_count(3) == 256,
+  'HFA warm native/interpreter effects were lost or replayed')
+local hfa_before_gc = _hfa_native_count()
+collectgarbage('collect')
+exits = 0
+hfa_exits = 0
+local hfa_pair = ffi.new('Arm64FloatPair', 1.25, 2.5)
+assert(hfa_candidate(32, lib.arm64_take_float_pair_double_salt,
+                     hfa_pair, 3.75) ==
+       hfa_oracle(32, lib.arm64_take_float_pair_double_salt,
+                  hfa_pair, 3.75))
+assert(_hfa_trace_count() > 0, 'HFA root was lost after full GC')
+assert(_hfa_native_count() > hfa_before_gc,
+  'HFA root did not re-enter native code after full GC')
+assert(hfa_exits > 0, 'HFA root did not exit after full-GC re-entry')
+assert(lib.arm64_aggregate_count(3) == 320,
+  'HFA post-GC effects were lost or replayed')
+_set_aggregate_candidate(candidate)
 jit.flush(candidate)
 for turn = 1, 24 do
   local n = turn % 2 == 0 and 48 or 64

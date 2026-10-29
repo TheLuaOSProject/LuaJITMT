@@ -26,7 +26,8 @@ typedef enum LJArm64ABIKind {
   LJ_ARM64_ABI_KIND_FLOAT,
   LJ_ARM64_ABI_KIND_POINTER,
   LJ_ARM64_ABI_KIND_ENUM,
-  LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE
+  LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE,
+  LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER
 } LJArm64ABIKind;
 
 #define LJ_ARM64_ABI_MAX_ARGS 32
@@ -40,6 +41,9 @@ typedef struct LJArm64ABIArg {
   uint8_t size;
   uint8_t align;
   uint8_t is_unsigned;
+  uint8_t source_index;
+  uint8_t member_index;
+  uint8_t member_count;
   uint16_t stack_offset;
 } LJArm64ABIArg;
 
@@ -53,10 +57,19 @@ typedef struct LJArm64ABISignature {
   uint8_t result_unsigned;
   uint8_t is_vararg;
   uint8_t nargs;
+  uint8_t nparams;
   uint8_t ngpr;
   uint8_t nfpr;
   uint16_t stack_size;
 } LJArm64ABISignature;
+
+typedef struct LJArm64FloatHFA {
+  uint8_t count;
+  uint8_t member_size;
+  uint8_t size;
+  uint8_t align;
+  uint8_t offset[4];
+} LJArm64FloatHFA;
 
 /* Resolve typedef and attribute wrappers using only a stable CType snapshot. */
 static int lj_ccall_arm64_raw_type(CTState *cts, CTypeID id,
@@ -226,6 +239,51 @@ static int lj_ccall_arm64_integer_aggregate_class(CTState *cts, CTypeID id,
   return 1;
 }
 
+/* Keep the first ARM64 JIT HFA increment to the demonstrated two-float,
+** tightly laid out Darwin shape. This is enough to exercise the two-SIMD
+** register allocation without importing nested/array HFA traversal. */
+static int lj_ccall_arm64_float_hfa_class(CTState *cts, CTypeID id,
+					 LJArm64FloatHFA *hfa,
+					 CTypeID *rawid)
+{
+  CType ct, field, member;
+  CTInfo info;
+  CTypeID fid;
+  unsigned count = 0;
+  if (!lj_ccall_arm64_raw_type(cts, id, &ct, rawid)) return 0;
+  info = ctype_info_acq(&ct);
+  if (!ctype_isstruct(info) || (info & CTF_UNION) || ctype_isvltype(info) ||
+	ctype_size_acq(&ct) != 2u*sizeof(float) || ctype_align(info) != 2)
+    return 0;
+  for (fid = ctype_sib_acq(&ct); fid; ) {
+    CTInfo finfo;
+    CTSize offset, size;
+    CTypeID child;
+    if (count >= 2 || lj_ctype_snapshot(cts, fid, &field) <= 0) return 0;
+    finfo = ctype_info_acq(&field);
+    fid = ctype_sib_acq(&field);
+    if (!ctype_isfield(finfo)) return 0;
+    offset = ctype_size_acq(&field);
+    child = ctype_cid(finfo);
+    if (!lj_ccall_arm64_raw_type(cts, child, &member, &child)) return 0;
+    info = ctype_info_acq(&member);
+    size = ctype_size_acq(&member);
+    if (!ctype_isnum(info) || !ctype_isfp(info) || ctype_iscomplex(info) ||
+	size != sizeof(float) || offset != count*sizeof(float))
+      return 0;
+    if (hfa != NULL) hfa->offset[count] = (uint8_t)offset;
+    count++;
+  }
+  if (count != 2) return 0;
+  if (hfa != NULL) {
+    hfa->count = (uint8_t)count;
+    hfa->member_size = sizeof(float);
+    hfa->size = 2u*sizeof(float);
+    hfa->align = 2;
+  }
+  return 1;
+}
+
 /* Classify the fixed prefix in Darwin's independent GPR/FPR banks. For a
 ** variadic function, nargs and arg[] describe only the named fixed prefix;
 ** dynamic promoted tail arguments are classified from the CALLXS IR suffix
@@ -238,7 +296,7 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
   CType fn, field;
   CTInfo info;
   CTypeID rawid, fid;
-  unsigned nargs = 0, ngpr = 0, nfpr = 0, stack_size = 0;
+  unsigned nargs = 0, nparams = 0, ngpr = 0, nfpr = 0, stack_size = 0;
   LJArm64ABIArg result;
   if (cts == NULL || abi == NULL ||
       !lj_ccall_arm64_raw_type(cts, id, &fn, &rawid))
@@ -283,38 +341,67 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
     if (!ctype_isfield(finfo))
       return 0;
     argid = ctype_cid(finfo);
-    arg = &abi->arg[nargs];
-    memset(arg, 0, sizeof(*arg));
-    if (!lj_ccall_arm64_scalar_class(cts, argid, 0, arg, &rawid) &&
-        !lj_ccall_arm64_integer_aggregate_class(cts, argid, arg, &rawid))
-      return 0;
-    arg->id = rawid;
-    if (arg->kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE) {
-      if (ngpr >= CCALL_NARG_GPR) return 0;
-      arg->reg = (uint8_t)ngpr++;
-    } else if (arg->cls == LJ_ARM64_ABI_FPR && nfpr < CCALL_NARG_FPR) {
-      arg->reg = (uint8_t)nfpr++;
-    } else if (arg->cls == LJ_ARM64_ABI_GPR && ngpr < CCALL_NARG_GPR) {
-      arg->reg = (uint8_t)ngpr++;
-    } else {
-      unsigned mask = arg->size-1u;
-      /* Over-aligned carriers need their own lowering. Do not silently
-      ** substitute the ordinary scalar IR alignment for a different CType. */
-      if (arg->size == 0 || arg->size > 8 ||
-          (arg->size & mask) != 0 || arg->align > 3 ||
-          (1u << arg->align) != arg->size)
-        return 0;
-      stack_size = (stack_size + mask) & ~mask;
-      arg->reg = LJ_ARM64_ABI_STACK;
-      arg->stack_offset = (uint16_t)stack_size;
-      stack_size += arg->size;
+    {
+      LJArm64FloatHFA hfa;
+      if (nparams >= LJ_ARM64_ABI_MAX_ARGS) return 0;
+      if (lj_ccall_arm64_float_hfa_class(cts, argid, &hfa, &rawid)) {
+	unsigned part;
+	if (abi->is_vararg || nfpr+hfa.count > CCALL_NARG_FPR ||
+	    nargs+hfa.count > LJ_ARM64_ABI_MAX_ARGS)
+	  return 0;
+	for (part = 0; part < hfa.count; part++) {
+	  arg = &abi->arg[nargs];
+	  memset(arg, 0, sizeof(*arg));
+	  arg->id = rawid;
+	  arg->cls = LJ_ARM64_ABI_FPR;
+	  arg->kind = LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER;
+	  arg->reg = (uint8_t)nfpr++;
+	  arg->size = hfa.member_size;
+	  arg->align = hfa.align;
+	  arg->source_index = (uint8_t)nparams;
+	  arg->member_index = (uint8_t)part;
+	  arg->member_count = hfa.count;
+	  nargs++;
+	}
+      } else {
+	arg = &abi->arg[nargs];
+	memset(arg, 0, sizeof(*arg));
+	if (!lj_ccall_arm64_scalar_class(cts, argid, 0, arg, &rawid) &&
+	    !lj_ccall_arm64_integer_aggregate_class(cts, argid, arg, &rawid))
+	  return 0;
+	arg->id = rawid;
+	arg->source_index = (uint8_t)nparams;
+	arg->member_count = 1;
+	if (arg->kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE) {
+	  if (ngpr >= CCALL_NARG_GPR) return 0;
+	  arg->reg = (uint8_t)ngpr++;
+	} else if (arg->cls == LJ_ARM64_ABI_FPR && nfpr < CCALL_NARG_FPR) {
+	  arg->reg = (uint8_t)nfpr++;
+	} else if (arg->cls == LJ_ARM64_ABI_GPR && ngpr < CCALL_NARG_GPR) {
+	  arg->reg = (uint8_t)ngpr++;
+	} else {
+	  unsigned mask = arg->size-1u;
+	  /* Over-aligned carriers need their own lowering. Do not silently
+	  ** substitute the ordinary scalar IR alignment for a different CType. */
+	  if (arg->size == 0 || arg->size > 8 ||
+	      (arg->size & mask) != 0 || arg->align > 3 ||
+	      (1u << arg->align) != arg->size)
+	    return 0;
+	  stack_size = (stack_size + mask) & ~mask;
+	  arg->reg = LJ_ARM64_ABI_STACK;
+	  arg->stack_offset = (uint16_t)stack_size;
+	  stack_size += arg->size;
+	}
+	nargs++;
+      }
+      nparams++;
     }
-    nargs++;
     fid = ctype_sib_acq(&field);
   }
-  if (nargs != ctype_size_acq(&fn))
+  if (nparams != ctype_size_acq(&fn))
     return 0;
   abi->nargs = (uint8_t)nargs;
+  abi->nparams = (uint8_t)nparams;
   abi->ngpr = (uint8_t)ngpr;
   abi->nfpr = (uint8_t)nfpr;
   abi->stack_size = (uint16_t)stack_size;

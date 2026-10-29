@@ -20,6 +20,7 @@ enum {
   ARM64_INT_PAIR,
   ARM64_INT_PAIR_DOUBLE_SALT,
   ARM64_FLOAT_PAIR,
+  ARM64_FLOAT_PAIR_SALT,
   ARM64_NESTED_PAIR,
   ARM64_MIXED_UNION,
   ARM64_BYTE,
@@ -61,6 +62,13 @@ LJ_EXPORT uint32_t arm64_take_float_pair(arm64_float_pair value)
 {
   calls[ARM64_FLOAT_PAIR]++;
   return (uint32_t)value.lo + (uint32_t)value.hi;
+}
+
+LJ_EXPORT double arm64_take_float_pair_double_salt(arm64_float_pair value,
+						    double salt)
+{
+  calls[ARM64_FLOAT_PAIR_SALT]++;
+  return (double)value.lo + (double)value.hi*2.0 + salt;
 }
 
 LJ_EXPORT uint32_t arm64_take_nested_pair(arm64_nested_pair value)
