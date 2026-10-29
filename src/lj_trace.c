@@ -4731,11 +4731,44 @@ static int trace_arm64_loop_generation_valid(GCproto *pt,
   BCPos continuationpos;
 
   if (!trace_pc_in_proto_range(startpc, bc, pt->sizebc) ||
-      !trace_pc_in_proto_range(continuation, bc, pt->sizebc) ||
-      bc_op(startins) != BC_LOOP || bc_j(startins) <= 0 ||
-      (MSize)bc_a(startins) > (MSize)pt->framesize)
+      !trace_pc_in_proto_range(continuation, bc, pt->sizebc))
     return 0;
   startpos = proto_bcpos(pt, startpc);
+  continuationpos = proto_bcpos(pt, continuation);
+  if (bc_op(startins) == BC_FORL) {
+    int64_t bodypos = (int64_t)startpos+1+(int64_t)bc_j(startins);
+    int64_t foripos = bodypos-1;
+    BCIns fori1, fori2;
+    if (bc_j(startins) >= 0 || bodypos <= 0 || bodypos > (int64_t)startpos ||
+	foripos < 0 || foripos >= (int64_t)pt->sizebc ||
+	(MSize)bc_a(startins)+FORL_EXT >= (MSize)pt->framesize ||
+	(int64_t)continuationpos < bodypos ||
+	(int64_t)continuationpos >= (int64_t)startpos)
+      return 0;
+    live1 = (BCIns)la_load32_acq((const uint32_t *)startpc);
+    fori1 = (BCIns)la_load32_acq((const uint32_t *)&bc[(BCPos)foripos]);
+    shadow1 = proto_jit_startins_acq(pt, startpc);
+    continuation1 = (BCIns)la_load32_acq((const uint32_t *)continuation);
+    expected = BCINS_AD(BC_JFORL, bc_a(startins), parent);
+    if (live1 != expected || shadow1 != startins ||
+	bc_op(fori1) != BC_FORI || bc_a(fori1) != bc_a(startins) ||
+	bc_j(fori1) <= 0 || foripos+1+(int64_t)bc_j(fori1) !=
+	(int64_t)startpos+1)
+      return 0;
+    live2 = (BCIns)la_load32_acq((const uint32_t *)startpc);
+    fori2 = (BCIns)la_load32_acq((const uint32_t *)&bc[(BCPos)foripos]);
+    shadow2 = proto_jit_startins_acq(pt, startpc);
+    continuation2 = (BCIns)la_load32_acq((const uint32_t *)continuation);
+    if (live2 != live1 || fori2 != fori1 || shadow2 != shadow1 ||
+	continuation1 != continuation2)
+      return 0;
+    if (continuationinsp)
+      *continuationinsp = continuation2;
+    return 1;
+  }
+  if (bc_op(startins) != BC_LOOP || bc_j(startins) <= 0 ||
+      (MSize)bc_a(startins) > (MSize)pt->framesize)
+    return 0;
   endpos = (int64_t)startpos + (int64_t)bc_j(startins);
   if (endpos < 0 || endpos >= (int64_t)pt->sizebc)
     return 0;
@@ -4749,7 +4782,6 @@ static int trace_arm64_loop_generation_valid(GCproto *pt,
   shadow1 = proto_jit_startins_acq(pt, startpc);
   expected = BCINS_AD(BC_JLOOP, bc_a(startins), parent);
   target = endpos + 1 + (int64_t)bc_j(back1);
-  continuationpos = proto_bcpos(pt, continuation);
   if (live1 != expected || shadow1 != startins || bc_op(back1) != BC_JMP ||
       bc_j(back1) >= 0 || target < 0 || target > (int64_t)startpos ||
       target >= (int64_t)pt->sizebc ||
@@ -6691,15 +6723,18 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
   uint16_t parentmap[LJ_MAX_JSLOTS];
   MSize parentmap_n;
   uintptr_t mcodep, fallbackp, fallback_encoding_bits;
+  int root_forl = sourceop == (uint32_t)BC_JFORL;
 
   memset(view, 0, sizeof(*view));
   if (rootview->nchild == 0)
     return rootview->nextside == 0;
-  if (sourceop != (uint32_t)BC_JLOOP || rootview->nchild != 1 ||
+  if ((sourceop != (uint32_t)BC_JLOOP && !root_forl) ||
+      rootview->nchild != 1 ||
 	rootview->nextside == 0 || rootview->nextside == parentno ||
 	rootview->traceno != parentno ||
-	rootview->admission != TRACE_ARM64_INT_LOOP_ADMITTED ||
-	bc_op(rootview->startins) != BC_LOOP ||
+	rootview->admission != (root_forl ? TRACE_ARM64_INT_FORL_ADMITTED :
+	 TRACE_ARM64_INT_LOOP_ADMITTED) ||
+	bc_op(rootview->startins) != (root_forl ? BC_FORL : BC_LOOP) ||
 	rootview->startpt == NULL)
     return 0;
   pt = gco2pt(rootview->startpt);

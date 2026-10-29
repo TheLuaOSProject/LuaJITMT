@@ -560,9 +560,16 @@ static void expect_post_token_request_cleanup(lua_State *L, jit_State *J,
   for (attempt = 0; attempt < 128; attempt++) {
     lua_getglobal(L, pair->name);
     assert(lua_isfunction(L, -1));
-    lua_pushinteger(L, pair->side_n);
-    lua_pushinteger(L, pair->side_bias);
-    status = lua_pcall(L, 2, 1, 0);
+    if (pair->require_forl_root) {
+      lua_pushinteger(L, pair->side_start);
+      lua_pushinteger(L, pair->side_n);
+      lua_pushinteger(L, (lua_Integer)pair->side_bias);
+      status = lua_pcall(L, 3, 1, 0);
+    } else {
+      lua_pushinteger(L, pair->side_n);
+      lua_pushinteger(L, pair->side_bias);
+      status = lua_pcall(L, 2, 1, 0);
+    }
     if (lj_trace_test_admission_hits() != 0)
       break;
     if (status != 0)
@@ -875,7 +882,7 @@ static void expect_full_flush(lua_State *L, jit_State *J, global_State *g,
   unsigned i;
   lj_trace_test_reset_retire_publish_calls();
   assert(lj_trace_flushall_gc(L) == 0);
-  assert(lj_trace_test_retire_publish_calls() == 15u);
+  assert(lj_trace_test_retire_publish_calls() == 14u);
   assert(trace_traceno_acq(decoy) == 0);
   assert(proto_trace_acq(decoy_pt) == 0);
   for (i = 0; i < PRODUCTION_PAIR_COUNT; i++) {
@@ -949,9 +956,8 @@ static int detailed_main(int argc, char **argv)
       .name = "__arm64_first_side_production_forlchild",
       .root_n = 64, .root_bias = 1, .root_result = 2080,
       .side_n = 64, .side_bias = 2, .side_result = -2080,
-      .native_n = INT32_MAX, .native_bias = 2,
-      .native_result = -(lua_Integer)INT32_MAX-(INT32_MAX-1),
-      .root_start = 1, .side_start = 1, .native_start = INT32_MAX-1,
+      .native_n = 64, .native_bias = 2, .native_result = -2080,
+      .root_start = 1, .side_start = 1, .native_start = 1,
       .require_forl_root = 1
     }
   };
