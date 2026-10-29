@@ -65,10 +65,16 @@ subdirectory of the combined evidence directory below. The independent
 validation checkout was the existing `arm64-math` worktree, detached at the
 tested commit, so the full gate's profile builds were not interrupted.
 
-The full experimental gate is running from `b549a895b`; no complete integrated
-pass is recorded yet. Its driver, source identifier and logs are under
+The full experimental gate completed successfully from `b549a895b`. Its final
+success marker is at line 19515 of `experimental.log`; all four ARM64/arm64e
+assertion/release M7 FFI runs passed, including the deterministic cdata-call
+race harness and aggregate contract. The gate also passed its FORL-side
+publication/retirement, GC, source/import, and native coverage checks.
+The saved driver uses `set -eu`; the process has finished and the final marker
+follows its ordinary profile restoration. Its source identifier, driver and
+complete logs are under
 `/Users/frityet/Scratch/ljmt-metacall-hfa-forl-integration-20261029/`.
-The previous complete gate remains `3e3f3432a`.
+This supersedes `3e3f3432a` as the latest complete port-branch gate.
 
 This is a port-branch checkpoint, not full x86_64 parity or a main-branch merge.
 General Lua calls/returns, recursive/multiple-side topologies and additional

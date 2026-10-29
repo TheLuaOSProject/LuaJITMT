@@ -20,8 +20,8 @@ and reports that are no longer authoritative are retained in
   prevent that claim.
 - Latest port-branch integration: recorder metacall race repair, direct small
   HFA arguments, one-register integer-struct results and a root-linked integer
-  FORL side at `b549a895b`. The component contracts pass; the complete combined
-  experimental gate is running. See the
+  FORL side at `b549a895b`. The complete combined experimental gate, all four
+  M7 FFI profiles, and both ordinary ARM64/x64 stock corpora pass. See the
   [integration checkpoint](arm64-metacall-aggregate-forl-checkpoint-2026-10-29.md).
 - Latest focused port-branch follow-up: fixed zero-formal Lua vararg leaves
   and one-register integer-struct FFI arguments, integrated at `cbb707874`.
@@ -31,7 +31,7 @@ and reports that are no longer authoritative are retained in
   wired into the existing M7 builds. The integrated gate at `d0e4ecaa1`,
   resumed after a test-helper warning repair, reached M7 but hit a reproducible
   [remote metacall recorder assertion](arm64-remote-metacall-race-2026-10-29.md).
-  The last complete gate remains below.
+  The metacall repair and complete rerun are recorded in the latest checkpoint.
   See the [vararg evidence](arm64-jit-vararg-leaf-design-2026-10-28.md) and
   [integer-struct evidence](arm64-integer-aggregate-callxs-2026-10-29.md).
 - Preceding focused port-branch follow-up: scalar FUNCF numeric literals and
@@ -40,7 +40,7 @@ and reports that are no longer authoritative are retained in
   oracles pass; the FUNCF contract passes ARM64/arm64e assertion profiles.
   The complete gate remains at the preceding source below. See the
   [integration checkpoint](arm64-funcf-integrated-checkpoint-2026-10-28.md).
-- Latest complete port-branch checkpoint: negative dynamic byte indices,
+- Preceding complete port-branch checkpoint: negative dynamic byte indices,
   captured nested Lua calls and fixed two-result leaves at `3e3f3432a`.
   The complete experimental gate, all four M7 FFI profiles, ordinary ARM64/x64
   stock corpora and inventory pass. Only one active child snapshot frame is
