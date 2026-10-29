@@ -32,6 +32,11 @@ rejects the absent target, and restores the original topology. The two-child
 entry check also runs after full GC and requires successful root entry before
 either child is retired.
 
+A separate three-guard loop creates three children at distinct root exits. The
+helper retires the middle child, checks the predecessor and successor links
+and both native exit targets, forces full GC, and natively re-enters both
+survivors before flushing the root.
+
 Validation command:
 
 ```sh
@@ -40,10 +45,10 @@ LJ_ARM64_FIRST_SIDE_PRODUCTION_PAUTH_RUNS=1 \
 JOBS=2 MAKE_JOBS=2 tools/ci/arm64_jit_first_side_production_contract.sh
 ```
 
-The run passed the ARM64 production smoke, ARM64 helper GC-claim/scoped/full-
-flush cases, ARM64e helper GC-claim/scoped/full-flush cases, and the restored
-ARM64 helper profile. After adding the absent-child negative, the same full
-profile contract passed again. Its output is preserved at
-`/Users/frityet/Scratch/ljmt-multiside-20261029/multiple-root-sides-membership-contract.log`.
-This validates a two-child workload; the list proof is count-bounded and does
-not impose a two-child production limit.
+The contract passed the ARM64 production smoke, ARM64 helper GC-claim/scoped/
+full-flush cases, ARM64e helper GC-claim/scoped/full-flush cases, and restored
+ARM64 helper profile with both the absent-child negative and three-child
+middle-retirement fixture. Output is preserved at
+`/Users/frityet/Scratch/ljmt-multiside-20261029/three-sibling-middle-retire-contract.log`.
+The list proof is count-bounded and does not impose a two- or three-child
+production limit.
