@@ -88,7 +88,8 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
     if (copy[ref].o == IR_CALLN)
       mathcall = ref;
     if ((copy[ref].o == IR_ABS || copy[ref].o == IR_MIN ||
-         copy[ref].o == IR_MAX ||
+         copy[ref].o == IR_MAX || copy[ref].o == IR_POW ||
+         copy[ref].o == IR_LDEXP ||
          (copy[ref].o == IR_NEG && irt_type(copy[ref].t) == IRT_NUM)) &&
         !mathop)
       mathop = ref;
@@ -261,19 +262,58 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
     assert(!lj_asm_arm64_postra_admit(&v, NULL));
     copy[mathcall] = saved;
   }
+  if (mathcall && copy[mathcall].op2 == IRCALL_atan2) {
+    IRRef arg = copy[mathcall].op1;
+    IRIns saved = copy[arg];
+    assert(saved.o == IR_CARG && saved.t.irt == IRT_NIL);
+    copy[arg].op1 = arg;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[arg] = saved;
+    copy[arg].op2 = REF_NIL;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[arg] = saved;
+    copy[arg].t.irt = IRT_NUM;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[arg] = saved;
+    copy[mathcall].op1 = saved.op1;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[mathcall] = T->ir[mathcall];
+    /* A CARG ref is not a numeric value for an unrelated future use. */
+    copy[mathcall].o = IR_ADD;
+    copy[mathcall].op1 = saved.op1;
+    copy[mathcall].op2 = arg;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[mathcall] = T->ir[mathcall];
+    /* Future-user opcode corruption must fail before indexing IR mode. */
+    copy[mathcall].o = IR__MAX;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[mathcall] = T->ir[mathcall];
+  }
+  if (mathop && (copy[mathop].o == IR_POW || copy[mathop].o == IR_LDEXP)) {
+    IRIns saved = copy[mathop];
+    copy[mathop].op2 = REF_NIL;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[mathop] = saved;
+    copy[mathop].t.irt = IRT_I64;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[mathop] = saved;
+  }
+
   if (mathcall || fpmath) {
     IRRef value = mathcall ? mathcall : fpmath;
     copy[value].t.irt ^= IRT_ISPHI;
     assert(!lj_asm_arm64_postra_admit(&v, NULL));
     copy[value] = T->ir[value];
   }
-  if (mathcall || (fpmath && copy[fpmath].op2 >= IRFPM_LOG)) {
+  if (mathcall || (mathop && (copy[mathop].o == IR_POW ||
+                            copy[mathop].o == IR_LDEXP)) ||
+      (fpmath && copy[fpmath].op2 >= IRFPM_LOG)) {
     IRRef call, value;
     unsigned clobbers = 0;
     for (call = REF_FIRST; call < n; call++) {
       IRIns helper = copy[call];
-      if (helper.o != IR_CALLN &&
-          !(helper.o == IR_FPMATH && helper.op2 >= IRFPM_LOG)) continue;
+      if (helper.o != IR_CALLN && helper.o != IR_POW &&
+          helper.o != IR_LDEXP && !(helper.o == IR_FPMATH && helper.op2 >= IRFPM_LOG)) continue;
       for (value = REF_FIRST; value < call; value++) {
         IRIns saved = copy[value];
         IRRef use, first = value < loop && loop < call ? loop+1u : call+1u;
@@ -297,7 +337,8 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
         clobbers++;
       }
     }
-    if (mathkind && strcmp(mathkind, "math_helpers_composed") == 0)
+    if (mathkind && (strcmp(mathkind, "math_helpers_composed") == 0 ||
+                     strcmp(mathkind, "math_binary_helpers_composed") == 0))
       assert(clobbers != 0);
     printf("MATH caller-saved live-value corruptions=%u\n", clobbers);
   }
@@ -547,6 +588,43 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
       assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
       copy[mathcall] = saved;
     }
+    if (mathcall && copy[mathcall].op2 == IRCALL_atan2) {
+      IRRef arg = copy[mathcall].op1;
+      IRIns saved = copy[arg];
+      assert(saved.o == IR_CARG && saved.t.irt == IRT_NIL);
+      copy[arg].op1 = arg;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[arg] = saved;
+      copy[arg].op2 = REF_NIL;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[arg] = saved;
+      copy[arg].t.irt = IRT_NUM;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[arg] = saved;
+      copy[mathcall].op1 = saved.op1;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[mathcall] = T->ir[mathcall];
+      /* A CARG ref is not a numeric value for an unrelated future use. */
+      copy[mathcall].o = IR_ADD;
+      copy[mathcall].op1 = saved.op1;
+      copy[mathcall].op2 = arg;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[mathcall] = T->ir[mathcall];
+      /* Future-user opcode corruption must fail before indexing IR mode. */
+      copy[mathcall].o = IR__MAX;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[mathcall] = T->ir[mathcall];
+    }
+    if (mathop && (copy[mathop].o == IR_POW || copy[mathop].o == IR_LDEXP)) {
+      IRIns saved = copy[mathop];
+      copy[mathop].op2 = REF_NIL;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[mathop] = saved;
+      copy[mathop].t.irt = IRT_I64;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[mathop] = saved;
+    }
+
     if (mathcall || fpmath) {
       IRRef value = mathcall ? mathcall : fpmath;
       copy[value].t.irt ^= IRT_ISPHI;

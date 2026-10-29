@@ -16316,7 +16316,9 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
                  ffid == FF_math_cos || ffid == FF_math_tan ||
                  ffid == FF_math_asin || ffid == FF_math_acos ||
                  ffid == FF_math_atan || ffid == FF_math_sinh ||
-                 ffid == FF_math_cosh || ffid == FF_math_tanh) {
+                 ffid == FF_math_cosh || ffid == FF_math_tanh ||
+                 ffid == FF_math_atan2 || ffid == FF_math_pow ||
+                 ffid == FF_math_ldexp) {
 	const BCIns *returnpc;
 	BCIns call;
 	unsigned nargs;
@@ -16329,6 +16331,8 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
                          ffid == FF_math_acos || ffid == FF_math_atan ||
                          ffid == FF_math_sinh || ffid == FF_math_cosh ||
                          ffid == FF_math_tanh;
+        int math_binary = ffid == FF_math_atan2 || ffid == FF_math_pow ||
+                          ffid == FF_math_ldexp;
         int math_minmax = ffid == FF_math_min || ffid == FF_math_max;
 	if (math_minmax) minargs = 1;
 	/* These recorders return a scalar. Pure libm helpers retain the native
@@ -16348,6 +16352,7 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
 	  nargs = bc_c(call)+1u;
 	else return 0;
 	if (nargs < minargs || (math_unary && nargs != 1) ||
+            (math_binary && nargs != 2) ||
             (ffid == FF_math_log && nargs > 2) || bc_b(call) > 2 ||
 	    (MSize)bc_a(call)+nargs+1u+LJ_FR2 > rootpt->framesize ||
 	    (J->postproc == LJ_POST_NONE &&
@@ -16374,7 +16379,8 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
           ffid == FF_math_tan || ffid == FF_math_asin ||
           ffid == FF_math_acos || ffid == FF_math_atan ||
           ffid == FF_math_sinh || ffid == FF_math_cosh ||
-          ffid == FF_math_tanh) {
+          ffid == FF_math_tanh || ffid == FF_math_atan2 ||
+          ffid == FF_math_pow || ffid == FF_math_ldexp) {
 	uintptr_t lo = (uintptr_t)&G2GG(g)->bcff[0], at = (uintptr_t)pc;
 	uintptr_t bytes = sizeof(G2GG(g)->bcff);
 	/* Assembly fast functions use the universe's immutable synthetic

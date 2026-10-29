@@ -10226,10 +10226,11 @@ static int arm64_scalar_builtin_ffid(uint32_t ffid)
          ffid == FF_math_log10 || ffid == FF_math_exp ||
          ffid == FF_math_sin || ffid == FF_math_cos || ffid == FF_math_tan ||
          ffid == FF_math_asin || ffid == FF_math_acos || ffid == FF_math_atan ||
-         ffid == FF_math_sinh || ffid == FF_math_cosh || ffid == FF_math_tanh;
+         ffid == FF_math_sinh || ffid == FF_math_cosh || ffid == FF_math_tanh ||
+         ffid == FF_math_atan2 || ffid == FF_math_pow || ffid == FF_math_ldexp;
 }
 
-/* Fixed unary, NUM -> NUM helpers. These do not allocate Lua objects, enter
+/* Fixed numeric libm helpers. These do not allocate Lua objects, enter
 ** the VM, release its native phase lease, or access shared Lua state. */
 static int arm64_scalar_math_call(unsigned id)
 {
@@ -10238,6 +10239,8 @@ static int arm64_scalar_math_call(unsigned id)
   case IRCALL_tan: case IRCALL_asin: case IRCALL_acos: case IRCALL_atan:
   case IRCALL_sinh: case IRCALL_cosh: case IRCALL_tanh:
     return 1;
+  case IRCALL_atan2:
+    return 2;
   default:
     return 0;
   }
@@ -10354,6 +10357,8 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
   case IR_ABS:
   case IR_MIN:
   case IR_MAX:
+  case IR_POW:
+  case IR_LDEXP:
   case IR_FPMATH:
   case IR_CONV:
   case IR_BNOT: case IR_BSWAP:
@@ -10367,6 +10372,42 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
   default:
     return 0;
   }
+}
+
+/* A binary libm CARG is a pair of NUM values, not a general call chain.
+** Every use must be an exact two-argument helper call; it cannot be reused
+** by a rooted-effect helper or become a Lua snapshot value. */
+static int arm64_scalar_math_carg_ir(const GCtrace *T, IRRef ref)
+{
+  const IRIns *arg = &T->ir[ref];
+  IRRef r;
+  unsigned uses = 0;
+  if (arg->o != IR_CARG || arg->t.irt != IRT_NIL ||
+      !arm64_scalar_ir_ref(T, arg->op1, ref, IRT_NUM) ||
+      !arm64_scalar_ir_ref(T, arg->op2, ref, IRT_NUM)) return 0;
+  for (r = ref+1u; r < T->nins; r++) {
+    const IRIns *use = &T->ir[r];
+    IRMode mode;
+    if (use->o >= IR__MAX) return 0;
+    mode = lj_ir_mode[use->o];
+    int op1 = irm_op1(mode) == IRMref && use->op1 == ref;
+    int op2 = irm_op2(mode) == IRMref && use->op2 == ref;
+    if (!op1 && !op2) continue;
+    if (!op1 || op2 || use->o != IR_CALLN ||
+        arm64_scalar_math_call(use->op2) != 2u ||
+        (use->t.irt & ~IRT_ISPHI) != IRT_NUM) return 0;
+    uses++;
+  }
+  return uses != 0;
+}
+
+static int arm64_scalar_math_args_ir(const GCtrace *T, IRRef call)
+{
+  const IRIns *ir = &T->ir[call];
+  int nargs = arm64_scalar_math_call(ir->op2);
+  if (nargs == 1) return arm64_scalar_ir_ref(T, ir->op1, call, IRT_NUM);
+  return nargs == 2 && ir->op1 >= REF_FIRST && ir->op1 < call &&
+         arm64_scalar_math_carg_ir(T, ir->op1);
 }
 
 /* A constant byte offset is safe only with an earlier guard that proves the
@@ -15669,6 +15710,15 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
         goto bad_type;
       binary = 1;
       break;
+    case IR_POW:
+      if (type != IRT_NUM || (flags & ~IRT_ISPHI)) goto bad_type;
+      binary = 1;
+      break;
+    case IR_LDEXP:
+      if (type != IRT_NUM || (flags & ~IRT_ISPHI) ||
+          !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_NUM) ||
+          !arm64_scalar_ir_ref(T, ir->op2, ref, IRT_INT)) goto bad_operand;
+      break;
     case IR_FPMATH:
       if (type != IRT_NUM || (flags & ~IRT_ISPHI) ||
           !arm64_scalar_fpmath(ir->op2) ||
@@ -15811,8 +15861,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       break;
     case IR_CALLN:
       if (side || type != IRT_NUM || (flags & ~IRT_ISPHI) ||
-          !arm64_scalar_math_call(ir->op2) ||
-          !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_NUM))
+          !arm64_scalar_math_args_ir(T, ref))
         return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL, ref,
                                IR_CALLN, ir->op2);
       break;
@@ -15823,6 +15872,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
     case IR_CARG:
       if (type != IRT_NIL || flags || ir->op1 >= ref)
         goto bad_operand;
+      if (!side && arm64_scalar_math_carg_ir(T, ref)) break;
       if (ir->op1 == REF_BASE && arm64_cell_head_carg_ir(T, ref))
         break;
       if (ir->op1 < REF_FIRST ||
@@ -16206,6 +16256,8 @@ static int arm64_scalar_postra_value(IRIns p)
             (arm64_rooted_gc_type(irt_type(p.t)) ||
              irt_type(p.t) == IRT_LIGHTUD) &&
             (p.t.irt & ~IRT_ISPHI) == (irt_type(p.t)|IRT_GUARD));
+  case IR_POW: case IR_LDEXP:
+    return (p.t.irt & ~IRT_ISPHI) == IRT_NUM;
   case IR_FPMATH:
     return (p.t.irt & ~IRT_ISPHI) == IRT_NUM && arm64_scalar_fpmath(p.op2);
   case IR_CALLN:
@@ -18078,6 +18130,44 @@ static int arm64_scalar_math_regsp_survives(RegSP rs, IRType type, MSize cap)
            spill + width <= cap;
   return type == IRT_NUM ? reg >= RID_D8 && reg <= RID_D15 :
                           reg >= RID_X19 && reg <= RID_X28;
+}
+
+/* Reconstruct binary helper arguments from the allocated view independently
+** of semantic admission. CARG itself has no value or allocation. */
+static int arm64_scalar_math_carg_postra(const LJArm64PostRAView *v,
+                                        IRRef ref, IRRef n)
+{
+  IRIns arg = ir_load_acq(&v->ir[ref]);
+  IRRef r;
+  unsigned uses = 0;
+  if (arg.o != IR_CARG || arg.t.irt != IRT_NIL ||
+      !arm64_scalar_postra_ref(v, arg.op1, ref, IRT_NUM) ||
+      !arm64_scalar_postra_ref(v, arg.op2, ref, IRT_NUM)) return 0;
+  for (r = ref+1u; r < n; r++) {
+    IRIns use = ir_load_acq(&v->ir[r]);
+    IRMode mode;
+    if (use.o >= IR__MAX) return 0;
+    mode = lj_ir_mode[use.o];
+    int op1 = irm_op1(mode) == IRMref && use.op1 == ref;
+    int op2 = irm_op2(mode) == IRMref && use.op2 == ref;
+    if (!op1 && !op2) continue;
+    if (!op1 || op2 || use.o != IR_CALLN ||
+        arm64_scalar_math_call(use.op2) != 2u ||
+        (use.t.irt & ~IRT_ISPHI) != IRT_NUM) return 0;
+    uses++;
+  }
+  return uses != 0;
+}
+
+static int arm64_scalar_math_args_postra(const LJArm64PostRAView *v,
+                                        IRRef call, IRRef n)
+{
+  IRIns ir = ir_load_acq(&v->ir[call]);
+  int nargs = arm64_scalar_math_call(ir.op2);
+  if (nargs == 1)
+    return arm64_scalar_postra_ref(v, ir.op1, call, IRT_NUM);
+  return nargs == 2 && ir.op1 >= REF_FIRST && ir.op1 < call &&
+         arm64_scalar_math_carg_postra(v, ir.op1, n);
 }
 
 static int arm64_scalar_math_live_across(const LJArm64PostRAView *v,
@@ -21246,6 +21336,15 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
         return 0;
       binary = 1;
       break;
+    case IR_POW:
+      if (type != IRT_NUM || (flags & ~IRT_ISPHI)) return 0;
+      binary = 1;
+      break;
+    case IR_LDEXP:
+      if (type != IRT_NUM || (flags & ~IRT_ISPHI) ||
+          !arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM) ||
+          !arm64_scalar_postra_ref(v, p.op2, ref, IRT_INT)) return 0;
+      break;
     case IR_FPMATH:
       if ((p.t.irt & ~IRT_ISPHI) != IRT_NUM ||
           !arm64_scalar_fpmath(p.op2) ||
@@ -21254,8 +21353,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       break;
     case IR_CALLN:
       if (side || (p.t.irt & ~IRT_ISPHI) != IRT_NUM ||
-          !arm64_scalar_math_call(p.op2) ||
-          !arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM))
+          !arm64_scalar_math_args_postra(v, ref, n))
         return 0;
       break;
     case IR_FLOAD:
@@ -21350,6 +21448,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       break;
     case IR_CARG:
       if (p.t.irt != IRT_NIL || p.op1 >= ref) return 0;
+      if (!side && arm64_scalar_math_carg_postra(v, ref, n)) break;
       if (p.op1 == REF_BASE && arm64_cell_head_carg_postra(v, ref)) break;
       if (p.op1 < REF_FIRST) return 0;
       {
@@ -21780,7 +21879,8 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
     if (rootop != BC_FORL && ir.o == IR_SLOAD &&
         ir.op1 >= snap_nslots_acq(&v->snap[s]))
       return 0;
-    if ((ir.o == IR_CALLN || (ir.o == IR_FPMATH && ir.op2 >= IRFPM_LOG)) &&
+    if ((ir.o == IR_CALLN || ir.o == IR_POW || ir.o == IR_LDEXP ||
+         (ir.o == IR_FPMATH && ir.op2 >= IRFPM_LOG)) &&
         !arm64_scalar_math_live_across(v, n, loop, ref, cap))
       return 0;
   }
