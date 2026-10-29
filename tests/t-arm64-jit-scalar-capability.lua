@@ -360,6 +360,18 @@ for _,name in ipairs({'log','log10','exp','sin','cos','tan','asin','acos',
   run_native_special('math_'..name..'_nan',0/0,op)
   run_native_special('math_'..name..'_infinity',1/0,op)
 end
+for _,name in ipairs({'atan2','pow','ldexp'}) do
+  local op=math[name]
+  local function binary_helper(n,x,y)
+    local i,s=0,.5
+    while i<n do s=s+op(x+i*.125,y); i=i+1 end
+    return s
+  end
+  run('math_'..name,binary_helper,24,.75,name=='ldexp' and 3 or 1.25)
+  probe_flush()
+  run('math_'..name..'_after_flush',binary_helper,24,.75,
+      name=='ldexp' and -2 or -.75)
+end
 local log_builtin,sin_builtin,cos_builtin=math.log,math.sin,math.cos
 local function helper_composition(n,x)
   local i,s,t=0,.25,.75
