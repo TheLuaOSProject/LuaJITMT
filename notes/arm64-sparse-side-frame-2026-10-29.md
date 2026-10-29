@@ -48,5 +48,7 @@ Logs are in `/Users/frityet/Scratch/ljmt-deep-callm-integration-20261029`.
   therefore keeps the original last branch for reentry.
 
 This closes the measured sparse-parent refusal and extends the tested chain
-depth. Full combined validation of this change with the newer FFI work is
-still pending. General Lua/JIT behavior parity is not complete.
+depth. Full combined validation with numeric-cdata variadic FFI has since
+passed at `0dc7716c8`; see
+`arm64-sparse-ffi-complete-checkpoint-2026-10-29.md`. General Lua/JIT behavior
+parity is not complete.
