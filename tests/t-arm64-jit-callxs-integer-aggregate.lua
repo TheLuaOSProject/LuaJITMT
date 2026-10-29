@@ -9,6 +9,17 @@ ffi.cdef[[
 typedef struct { uint32_t lo, hi; } Arm64IntPair;
 typedef struct { float lo, hi; } Arm64FloatPair;
 typedef struct { Arm64FloatPair inner; } Arm64NestedFloatPair;
+typedef struct { float mid, tail; } Arm64FloatPairTail;
+typedef struct { float head; Arm64FloatPairTail nested; }
+  Arm64SiblingNestedFloatTriple;
+typedef struct { double lo, hi; } Arm64DoublePairLeaf;
+typedef struct { Arm64DoublePairLeaf left, right; } Arm64NestedDoubleQuad;
+typedef struct { Arm64FloatPair inner; float tail; }
+  Arm64NestedFloatTripleResult;
+typedef struct { Arm64FloatPair inner; float tail; int extra; }
+  Arm64NestedFloatWithInt;
+typedef struct { Arm64FloatPair inner; float a, b, c; }
+  Arm64NestedFloatQuint;
 typedef struct { float lane[2]; } Arm64ArrayFloatPair;
 typedef struct __attribute__((aligned(8))) {
   float lo, hi;
@@ -31,6 +42,12 @@ typedef uint32_t (*Arm64DoublePairFn)(Arm64DoublePair);
 typedef uint32_t (*Arm64FloatTripleFn)(Arm64FloatTriple);
 typedef double (*Arm64FloatTripleSaltFn)(Arm64FloatTriple, double);
 typedef double (*Arm64NestedFloatPairFn)(Arm64NestedFloatPair, double);
+typedef double (*Arm64SiblingNestedFloatTripleFn)(
+  Arm64SiblingNestedFloatTriple, double);
+typedef double (*Arm64NestedDoubleQuadFn)(Arm64NestedDoubleQuad, double);
+typedef Arm64NestedFloatTripleResult (*Arm64NestedFloatTripleResultFn)(uint32_t);
+typedef double (*Arm64NestedFloatWithIntFn)(Arm64NestedFloatWithInt, double);
+typedef double (*Arm64NestedFloatQuintFn)(Arm64NestedFloatQuint, double);
 typedef Arm64NestedFloatPair (*Arm64NestedFloatPairResultFn)(uint32_t);
 typedef double (*Arm64NestedOverAlignedPairFn)(Arm64NestedOverAlignedPair,
                                                 double);
@@ -106,6 +123,9 @@ uint32_t arm64_take_float_pair(Arm64FloatPair);
 double arm64_take_float_pair_double_salt(Arm64FloatPair, double);
 double arm64_take_nested_float_pair(Arm64NestedFloatPair, double);
 double arm64_take_nested_float_pair_alt(Arm64NestedFloatPair, double);
+double arm64_take_sibling_nested_float_triple(
+  Arm64SiblingNestedFloatTriple, double);
+double arm64_take_nested_double_quad(Arm64NestedDoubleQuad, double);
 double arm64_take_float_one_double_salt(Arm64FloatOne, double);
 double arm64_take_double_one_double_salt(Arm64DoubleOne, double);
 double arm64_take_float_triple_double_salt(Arm64FloatTriple, double);
@@ -205,6 +225,18 @@ Arm64DoubleQuadResult arm64_return_double_quad_hfa(uint32_t);
 double arm64_return_float_pair_scalar_fpr(double, uint32_t);
 uint32_t arm64_return_scalar(uint32_t);
 ]]
+local hfa_depth_decls = {}
+for depth = 1, 33 do
+  local inner = depth == 1 and 'float' or
+    ('Arm64HfaDepth' .. tostring(depth-1))
+  hfa_depth_decls[#hfa_depth_decls+1] =
+    ('typedef struct { %s inner; } Arm64HfaDepth%d;'):format(inner, depth)
+end
+hfa_depth_decls[#hfa_depth_decls+1] =
+  'typedef double (*Arm64HfaDepth31Fn)(Arm64HfaDepth31, double);'
+hfa_depth_decls[#hfa_depth_decls+1] =
+  'typedef double (*Arm64HfaDepth32Fn)(Arm64HfaDepth32, double);'
+ffi.cdef(table.concat(hfa_depth_decls, '\n'))
 local lib = ffi.load(assert(os.getenv('LJ_ARM64_INT_AGGREGATE_SO')))
 _G.__arm64_return_byte_fn = lib.arm64_return_byte
 _G.__arm64_return_half_fn = lib.arm64_return_half
@@ -239,6 +271,17 @@ _G.__arm64_int_pair_fn = lib.arm64_take_int_pair
 _G.__arm64_float_pair_fn = lib.arm64_take_float_pair
 _G.__arm64_float_pair_double_salt_fn = lib.arm64_take_float_pair_double_salt
 _G.__arm64_nested_float_pair_fn = ffi.cast('Arm64NestedFloatPairFn', nil)
+_G.__arm64_sibling_nested_float_triple_fn = lib.arm64_take_sibling_nested_float_triple
+_G.__arm64_nested_double_quad_fn = lib.arm64_take_nested_double_quad
+_G.__arm64_nested_float_triple_result_type = ffi.new('Arm64NestedFloatTripleResult')
+_G.__arm64_nested_float_triple_result_fn =
+  ffi.cast('Arm64NestedFloatTripleResultFn', nil)
+_G.__arm64_nested_float_with_int_fn =
+  ffi.cast('Arm64NestedFloatWithIntFn', nil)
+_G.__arm64_nested_float_quint_fn =
+  ffi.cast('Arm64NestedFloatQuintFn', nil)
+_G.__arm64_hfa_depth31_fn = ffi.cast('Arm64HfaDepth31Fn', nil)
+_G.__arm64_hfa_depth32_fn = ffi.cast('Arm64HfaDepth32Fn', nil)
 _G.__arm64_nested_float_pair_result_fn =
   ffi.cast('Arm64NestedFloatPairResultFn', nil)
 _G.__arm64_nested_overaligned_pair_fn =
@@ -1837,6 +1880,7 @@ end
   _G.__arm64_nested_hfa_candidate = nested_hfa_candidate
   _set_nested_hfa_candidate(nested_hfa_candidate)
   tracked_exit_roots = roots(nested_hfa_candidate)
+  exits = 0
   jit.on(nested_hfa_candidate, true)
   lib.arm64_aggregate_reset()
   local nested_hfa = ffi.new('Arm64NestedFloatPair')
@@ -1844,6 +1888,7 @@ end
   local nested_hfa_fn = lib.arm64_take_nested_float_pair
   local nested_native_before = _nested_hfa_native_count()
   for pass = 1, 8 do
+    tracked_exit_roots = roots(nested_hfa_candidate)
     assert(nested_hfa_candidate(16, nested_hfa_fn, nested_hfa, 3.75) ==
            hfa_oracle(16, nested_hfa_fn, nested_hfa, 3.75),
            'nested HFA argument disagreed with the interpreted oracle')
@@ -1874,6 +1919,73 @@ end
          'nested HFA alternate callee did not exit the exact native root')
   assert(lib.arm64_aggregate_count(63) == 64,
          'nested HFA alternate callee effects were lost or replayed')
+  local extra_candidate_chunk = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@sibling-nested-float-triple-candidate'))
+  local extra_oracle_chunk = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@sibling-nested-float-triple-oracle'))
+  local extra_clone_chunk = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@sibling-nested-float-triple-clone'))
+  jit.off(extra_oracle_chunk, true)
+  jit.off(extra_clone_chunk, true)
+  local extra_candidate = extra_candidate_chunk()
+  local extra_oracle = extra_oracle_chunk()
+  local extra_clone = extra_clone_chunk()
+  _G.__arm64_sibling_nested_float_triple_candidate = extra_candidate
+  _G.__arm64_sibling_nested_float_triple_clone = extra_clone
+  _set_nested_hfa_extra_candidate(extra_candidate)
+  tracked_exit_roots = roots(extra_candidate)
+  exits = 0
+  jit.on(extra_candidate, true)
+  local triple = ffi.new('Arm64SiblingNestedFloatTriple')
+  triple.head, triple.nested.mid, triple.nested.tail = 1.25, 2.5, 3.75
+  local triple_fn = lib.arm64_take_sibling_nested_float_triple
+  for pass = 1, 8 do
+    tracked_exit_roots = roots(extra_candidate)
+    assert(extra_candidate(16, triple_fn, triple, 4.5) ==
+           extra_oracle(16, triple_fn, triple, 4.5),
+           'sibling/nested float triple disagreed with interpreted oracle')
+  end
+  if _nested_hfa_extra_native_count() == 0 or exits == 0 then
+    local trace_summary = {}
+    for no in pairs(roots(extra_candidate)) do
+      local info = jitutil.traceinfo(no)
+      trace_summary[#trace_summary+1] = tostring(no)..':'..
+        (info and tostring(info.nins) or 'missing')
+    end
+    error('sibling/nested float triple lacked native witness: finish='..
+      tostring(_nested_hfa_extra_native_count())..', exits='..tostring(exits)..
+      ', traces='..table.concat(trace_summary, ',')..', effects='..
+      tostring(lib.arm64_aggregate_count(64)))
+  end
+  assert(lib.arm64_aggregate_count(64) == 256,
+         'sibling/nested float triple C effects were lost or replayed')
+  local triple_before_gc = _nested_hfa_extra_native_count()
+  collectgarbage('collect')
+  tracked_exit_roots = roots(extra_candidate)
+  exits = 0
+  triple = ffi.new('Arm64SiblingNestedFloatTriple')
+  triple.head, triple.nested.mid, triple.nested.tail = 1.25, 2.5, 3.75
+  assert(extra_candidate(32, triple_fn, triple, 4.5) ==
+         extra_oracle(32, triple_fn, triple, 4.5))
+  assert(_nested_hfa_extra_native_count() > triple_before_gc and exits > 0,
+         'sibling/nested float triple failed post-GC native re-entry/exit')
+  assert(lib.arm64_aggregate_count(64) == 320,
+         'sibling/nested float triple post-GC effects were lost or replayed')
   tracked_exit_roots = nil
 end
 
