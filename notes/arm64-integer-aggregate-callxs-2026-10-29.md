@@ -9,3 +9,11 @@ The semantic and post-register-allocation admission walks independently bind the
 Validation: `tools/ci/arm64_jit_integer_aggregate_args_contract.sh` passed `arm64-assert`, `arm64e-assert`, `arm64-release`, and `arm64e-release` on the current branch. The contract runs the independent scalar CALLXS admission fixture before the new aggregate fixture in each profile. A separate macOS x86_64 GC64 full build passed with normal warnings. `lj_crecord.c` and `lj_asm.o` also compiled with `-Wall -Wextra -Werror`; the global strict build stopped on the pre-existing `lj_api.c:879` unused-but-set `topofs` warning. Full ARM64 profile output: `/Users/frityet/Scratch/ljmt-int-aggregate-20261029/final/four-profile.log`.
 
 The private CALLXS fixture copies only the readable `[nk,nins)` biased IR range. An earlier test-fixture version copied from the biased `T->ir` base and crashed in `memmove`; the final helper avoids reading below `nk`. For clone-based CALLXS negatives, the narrow test-only initializer remaps root-owned SNAP_FRAME KNUM continuation PCs alongside snapshot footers, while preserving only the independently derived FFI `__call` meta_pc. Its semantic fixture J is embedded in a private `GG_State` so `J2G(J)` remains valid; no production J2G behavior was changed.
+
+Integration runs the new fixture inside the existing `m7_ffi_callxs_arm64_scalar`
+profile, so the full experimental gate covers it in its four existing FFI
+builds. The focused table-call contract also includes it using its shared
+library and profiles. The standalone aggregate contract remains available for
+isolated work; the full gate does not invoke that additional four-build matrix.
+The integration wiring has passed Lua/shell syntax and whitespace checks;
+integrated runtime results will be recorded after the full gate runs.

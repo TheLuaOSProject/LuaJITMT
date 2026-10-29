@@ -235,6 +235,9 @@ return function(add)
       local cdata32_args_so = build_shared_library(t,
         t:tmp("lj_t-arm64-jit-ffi-cdata32-args.dylib"),
         "t-arm64-jit-ffi-cdata32-args-lib.c")
+      local integer_aggregate_so = build_shared_library(t,
+        t:tmp("lj_t-arm64-jit-callxs-integer-aggregate.dylib"),
+        "t-arm64-jit-callxs-integer-aggregate-lib.c")
       local callxs_funcptr_so = build_shared_library(t,
         t:tmp("lj_t-arm64-jit-callxs-funcptr.dylib"),
         "t-arm64-jit-callxs-funcptr-lib.c")
@@ -401,6 +404,18 @@ return function(add)
           build = false,
           cflags = flags,
           env = { LJ_M7_FFI_CALLXS_FUNCPTR_SO = callxs_funcptr_so },
+          timeout = "60s"
+        })
+        local integer_aggregate = t:tmp("lj_t-arm64-jit-callxs-integer-aggregate")
+        t:cc(integer_aggregate,
+             { t:path("tests", "t-arm64-jit-callxs-integer-aggregate.c") }, {
+          cflags = flags,
+          link_luajit = true,
+          libs = utils.luajit_fixture_libs({})
+        })
+        t:run({ integer_aggregate,
+                t:path("tests", "t-arm64-jit-callxs-integer-aggregate.lua") }, {
+          env = { LJ_ARM64_INT_AGGREGATE_SO = integer_aggregate_so },
           timeout = "60s"
         })
         build_and_run_cpp(t,

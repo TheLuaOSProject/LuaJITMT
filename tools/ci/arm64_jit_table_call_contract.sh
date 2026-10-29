@@ -52,10 +52,12 @@ run_profile() {
   lj_ci_compile_object "$int_args_object" "$root/tests/t-arm64-jit-ffi-int-args-lib.c"
   cdata32_args_object=$tmpdir/cdata32-args-$profile.o
   lj_ci_compile_object "$cdata32_args_object" "$root/tests/t-arm64-jit-ffi-cdata32-args-lib.c"
+  integer_aggregate_object=$tmpdir/integer-aggregate-$profile.o
+  lj_ci_compile_object "$integer_aggregate_object" "$root/tests/t-arm64-jit-callxs-integer-aggregate-lib.c"
   # Compiler and target flags follow the shared profile's word-list contract.
   # shellcheck disable=SC2086
   $LJ_CI_CC $LJ_CI_TARGET_FLAGS -dynamiclib \
-    -mmacosx-version-min="$LJ_CI_MINVER" "$object" "$pointer_object" "$varargs_object" "$i64_object" "$callback_object" "$scalar_object" "$held_object" "$numeric_object" "$callm_numeric_object" "$int_args_object" "$cdata32_args_object" \
+    -mmacosx-version-min="$LJ_CI_MINVER" "$object" "$pointer_object" "$varargs_object" "$i64_object" "$callback_object" "$scalar_object" "$held_object" "$numeric_object" "$callm_numeric_object" "$int_args_object" "$cdata32_args_object" "$integer_aggregate_object" \
     $LJ_CI_LDFLAGS $LJ_CI_TARGET_LDFLAGS -o "$library"
   test "$(lipo -archs "$library")" = "$arch"
   library_sha=$(lj_ci_sha256 "$library")
@@ -71,16 +73,21 @@ run_profile() {
   export LJ_M7_FFI_CALLM_NUMERIC_SO="$library"
   export LJ_M7_FFI_INT_ARGS_SO="$library"
   export LJ_M7_FFI_CDATA32_ARGS_SO="$library"
+  export LJ_ARM64_INT_AGGREGATE_SO="$library"
   for name in $cases; do
     fixture=$tmpdir/t-arm64-jit-$name-$profile
     lj_ci_compile_fixture "$fixture" "$root/tests/t-arm64-jit-$name.c"
-    lj_ci_run_fixture 60 "$fixture"
+    if test "$name" = callxs-integer-aggregate; then
+      lj_ci_run_fixture 60 "$fixture" "$root/tests/t-arm64-jit-callxs-integer-aggregate.lua"
+    else
+      lj_ci_run_fixture 60 "$fixture"
+    fi
   done
   test "$(lj_ci_sha256 "$library")" = "$library_sha"
 }
 
 profiles=${LJ_ARM64_TABLE_CALL_PROFILES:-'arm64-assert arm64e-assert arm64-release arm64e-release'}
-cases=${LJ_ARM64_TABLE_CALL_CASES:-'callxs-table callxs-table-admission callxs-table-lifecycle table-i64-args table-i64-args-admission table-i64-args-lifecycle table-chains table-chains-admission table-chains-lifecycle table-chains-callback table-scalar-args table-scalar-args-admission callxs-held-results callxs-held-results-admission ffi-numeric-args ffi-numeric-args-admission callm-numeric callm-numeric-admission ffi-int-args ffi-int-args-admission ffi-cdata32-args ffi-cdata32-args-admission callxs-funcptr ffi-varargs callxs-admission callxs-pointer-admission'}
+cases=${LJ_ARM64_TABLE_CALL_CASES:-'callxs-table callxs-table-admission callxs-table-lifecycle table-i64-args table-i64-args-admission table-i64-args-lifecycle table-chains table-chains-admission table-chains-lifecycle table-chains-callback table-scalar-args table-scalar-args-admission callxs-held-results callxs-held-results-admission ffi-numeric-args ffi-numeric-args-admission callm-numeric callm-numeric-admission ffi-int-args ffi-int-args-admission ffi-cdata32-args ffi-cdata32-args-admission callxs-integer-aggregate callxs-funcptr ffi-varargs callxs-admission callxs-pointer-admission'}
 set -f
 for profile in $profiles; do run_profile "$profile"; done
 set +f
