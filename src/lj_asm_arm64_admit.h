@@ -9521,6 +9521,74 @@ static int arm64_side_forl_step_map_valid(const LJArm64SideIRView *side,
   return matches == 1;
 }
 
+/* The child range guard runs after the body arithmetic and increment. Its
+** cold edge may restart at the loop instruction itself, or at an in-body JMP
+** that directly reaches that instruction; restarting at the child entry would
+** repeat the completed body and apply its effects twice. */
+static int arm64_side_forl_retry_pc_valid(const LJArm64SideIRView *side,
+	uintptr_t pc)
+{
+  uintptr_t lo, hi;
+  MSize pos;
+  BCIns retry;
+  if (!side || !side->proto_bc || !pc ||
+	  side->loop_end_pc >= side->proto_sizebc)
+	return 0;
+  lo = (uintptr_t)(const void *)side->proto_bc;
+  if (!lo || side->proto_sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns))
+	return 0;
+  hi = lo+side->proto_sizebc*sizeof(BCIns);
+  if (!arm64_ir_pcpos(pc, lo, hi, &pos)) return 0;
+  retry = (BCIns)la_load32_acq(
+	(const uint32_t *)&side->proto_bc[side->loop_end_pc]);
+  if (bc_op(retry) != BC_JFORL) return 0;
+  if (pos == side->loop_end_pc) return 1;
+  if (pos < side->loop_start_pc || pos >= side->loop_end_pc) return 0;
+  {
+	BCIns jump = (BCIns)la_load32_acq((const uint32_t *)&side->proto_bc[pos]);
+	int64_t target;
+	if (bc_op(jump) != BC_JMP) return 0;
+	target = (int64_t)pos+1+(int64_t)bc_j(jump);
+	return target >= 0 && (MSize)target == side->loop_end_pc;
+  }
+}
+
+/* A child-local range guard must retry the source loop boundary with the
+** pre-update loop index. The loop ADD is evaluated before this guard, so
+** checking only its operands and ordering would permit a cold snapshot to
+** resume with the wrapped ADD result. */
+static int arm64_side_forl_guard_snapshot_ir(const LJArm64SideIRView *side,
+	const GCtrace *T, IRRef guard, MSize idxslot, IRRef oldidx)
+{
+  uint64_t pcbase;
+  MSize s, selected = (MSize)-1, ofs, nent, i, matches = 0;
+  if (!side || !T || !T->snap || !T->snapmap ||
+	  !side->parent_continuation || idxslot >= LJ_MAX_JSLOTS ||
+	  oldidx < REF_FIRST || oldidx >= guard)
+	return 0;
+  for (s = 0; s < T->nsnap; s++) {
+	if (T->snap[s].ref > guard) break;
+	selected = s;
+  }
+  if (selected == (MSize)-1) return 0;
+  ofs = snap_mapofs_acq(&T->snap[selected]);
+  nent = snap_nent_acq(&T->snap[selected]);
+  if (ofs > T->nsnapmap || nent > T->nsnapmap-ofs ||
+	  T->nsnapmap-ofs-nent < 1u+LJ_FR2)
+	return 0;
+  memcpy(&pcbase, &T->snapmap[ofs+nent], sizeof(pcbase));
+  for (i = 0; i < nent; i++) {
+	SnapEntry sn = snapentry_acq(&T->snapmap[ofs+i]);
+	if (snap_slot(sn) == idxslot) {
+	  if (snap_ref(sn) != oldidx) return 0;
+	  matches++;
+	}
+  }
+  if (matches != 1) return 0;
+  return (uint8_t)pcbase == 0 &&
+	arm64_side_forl_retry_pc_valid(side, (uintptr_t)(pcbase >> 8));
+}
+
 static int arm64_side_forl_snapshot_stop_ir(const LJArm64SideIRView *side,
 	const GCtrace *T, IRRef before, SnapEntry sn)
 {
@@ -9606,7 +9674,9 @@ static int arm64_side_forl_index_add_ir(const LJArm64SideIRView *side,
 	  }
 	}
   }
-  return comparisons == 1 && rangeguards == 1;
+  return comparisons == 1 && rangeguards == 1 &&
+	arm64_side_forl_guard_snapshot_ir(side, T, rangeguard, idxslot,
+						 add.op1);
 }
 
 /* Syntax-only view of a single acyclic comparison diamond. Each arm is an
@@ -12478,7 +12548,37 @@ static int arm64_side_forl_index_add_postra(const LJArm64SideIRView *side,
 	    return 0;
 	}
   }
-  return comparisons == 1 && rangeguards == 1;
+  if (comparisons != 1 || rangeguards != 1) return 0;
+  /* Independently bind the allocated guard's cold edge to the selected
+  ** continuation and pre-update index in the concrete trace snapshot. */
+  {
+	uint64_t pcbase;
+	MSize s, selected = (MSize)-1, ofs, nent, i, matches = 0;
+	if (!v->snap || !v->snapmap || !side->parent_continuation ||
+	    idxslot >= LJ_MAX_JSLOTS || add.op1 < REF_FIRST || add.op1 >= ref)
+	  return 0;
+	for (s = 0; s < v->nsnap; s++) {
+	  if (v->snap[s].ref > rangeguard) break;
+	  selected = s;
+	}
+	if (selected == (MSize)-1) return 0;
+	ofs = snap_mapofs_acq(&v->snap[selected]);
+	nent = snap_nent_acq(&v->snap[selected]);
+	if (ofs > v->nsnapmap || nent > v->nsnapmap-ofs ||
+	    v->nsnapmap-ofs-nent < 1u+LJ_FR2)
+	  return 0;
+	for (i = 0; i < nent; i++) {
+	  SnapEntry sn = snapentry_acq(&v->snapmap[ofs+i]);
+	  if (snap_slot(sn) == idxslot) {
+	    if (snap_ref(sn) != add.op1) return 0;
+	    matches++;
+	  }
+	}
+	if (matches != 1) return 0;
+	memcpy(&pcbase, &v->snapmap[ofs+nent], sizeof(pcbase));
+	return (uint8_t)pcbase == 0 &&
+	  arm64_side_forl_retry_pc_valid(side, (uintptr_t)(pcbase >> 8));
+  }
 }
 
 static int arm64_side_forl_snapshot_stop_postra(

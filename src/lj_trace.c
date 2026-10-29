@@ -6752,6 +6752,40 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
     IRIns tmp = ir_load_acq(&ir[forlguard]);
     ir[forlguard] = ir_load_acq(&ir[forlcmp]);
     ir[forlcmp] = tmp;
+  } else if ((mutation == 16 || mutation == 17) && forlguard && forladd) {
+    MSize s, selected = (MSize)-1, idxslot =
+	1u+LJ_FR2+bc_a(semside.parent_startins);
+    for (s = 0; s < nsnap; s++) {
+	if (snap[s].ref > forlguard) break;
+	selected = s;
+    }
+    if (selected == (MSize)-1) goto done;
+    if (mutation == 16) {
+	MSize ofs = snap_mapofs_acq(&snap[selected]);
+	MSize nent = snap_nent_acq(&snap[selected]);
+	int found = 0;
+	if (ofs > nsnapmap || nent > nsnapmap-ofs) goto done;
+	for (i = 0; i < nent; i++) {
+	  SnapEntry sn = snapmap[ofs+i];
+	  if (snap_slot(sn) == idxslot) {
+	    snapmap[ofs+i] = snap_setref(sn, forladd);
+	    found++;
+	  }
+	}
+	if (found != 1) goto done;
+    } else {
+	MSize ofs = snap_mapofs_acq(&snap[selected]);
+	MSize nent = snap_nent_acq(&snap[selected]);
+	uint64_t badpc;
+	if (ofs > nsnapmap || nent > nsnapmap-ofs ||
+	    nsnapmap-ofs-nent < 1u+LJ_FR2 ||
+	    (const BCIns *)semside.parent_continuation + 1 >=
+	      proto_bc(pt)+pt->sizebc)
+	  goto done;
+	badpc = (uint64_t)(uintptr_t)
+	  ((const BCIns *)semside.parent_continuation + 1) << 8;
+	memcpy(&snapmap[ofs+nent], &badpc, sizeof(badpc));
+    }
   }
   *sem_ok = lj_asm_arm64_side_scalar_ir_admit(&jcopy, &childcopy,
 	&semside, &reject);
@@ -6773,7 +6807,7 @@ uint32_t lj_trace_test_arm64_side_scalar_copy_contract(jit_State *J,
 	!trace_test_side_scalar_copy(J, child, 0, &sem, &post) || !sem || !post)
     return 0;
   result = 3u;
-  for (mutation = 1; mutation <= 15; mutation++) {
+  for (mutation = 1; mutation <= 17; mutation++) {
     if (!trace_test_side_scalar_copy(J, child, mutation, &sem, &post))
 	return result;
     if (((mutation == 2 || mutation == 11) && sem && !post) ||
