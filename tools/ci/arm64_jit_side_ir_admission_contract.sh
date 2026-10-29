@@ -59,7 +59,10 @@ if test -z "${LJ_ARM64_SIDE_PROFILES+x}"; then
   done
   lj_ci_require_symbols lj_trace_test_exit_calls lj_trace_test_root_entry_publishes \
     lj_trace_test_root_entry_successes lj_trace_test_root_entry_cleanups \
-    lj_trace_test_arm64_side_scalar_copy_contract
+  lj_trace_test_arm64_side_scalar_copy_contract \
+  lj_mcode_test_arm64_range lj_mcode_test_arm64_expandrange \
+  lj_mcode_test_arm64_range_extensions_reset \
+  lj_mcode_test_arm64_range_extensions_count
   fixture=$tmpdir/t-arm64-jit-side-adaptation-bound
   lj_ci_compile_fixture "$fixture" "$fixture_source"
   lj_ci_run_fixture 90 "$fixture"
@@ -80,7 +83,10 @@ else
     lj_ci_build_profile "$arch" "$target_flags" "$xcflags" "$profile"
     lj_ci_require_symbols lj_trace_test_exit_calls lj_trace_test_root_entry_publishes \
       lj_trace_test_root_entry_successes lj_trace_test_root_entry_cleanups \
-      lj_trace_test_arm64_side_scalar_copy_contract
+      lj_trace_test_arm64_side_scalar_copy_contract \
+      lj_mcode_test_arm64_range lj_mcode_test_arm64_expandrange \
+      lj_mcode_test_arm64_range_extensions_reset \
+      lj_mcode_test_arm64_range_extensions_count
     fixture=$tmpdir/t-arm64-jit-side-adaptation-$profile
     lj_ci_compile_fixture "$fixture" "$fixture_source"
     lj_ci_run_fixture 90 "$fixture"

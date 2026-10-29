@@ -23,6 +23,13 @@
 #include "lj_obj.h"
 #include "lj_trace.h"
 
+extern int lj_mcode_test_arm64_range(uintptr_t lo, uintptr_t hi,
+				     uintptr_t *min, uintptr_t *max);
+extern int lj_mcode_test_arm64_expandrange(uintptr_t offset,
+					   uintptr_t *min, uintptr_t *max);
+extern void lj_mcode_test_arm64_range_extensions_reset(void);
+extern uint32_t lj_mcode_test_arm64_range_extensions_count(void);
+
 static void run(lua_State *L, const char *source)
 {
   int status = luaL_dostring(L, source);
@@ -169,6 +176,27 @@ int main(void)
   TraceNo parentno, childno;
   IRIns base;
   ExitNo exitno;
+  {
+    const uintptr_t range = ((uintptr_t)1 << LJ_TARGET_JUMPRANGE) - 0x10000u;
+    const uintptr_t base = (uintptr_t)0x100000000ull;
+    uintptr_t min, max;
+    assert(lj_mcode_test_arm64_range(base, base + range, &min, &max));
+    assert(min == base && max == base + range);
+    assert(lj_mcode_test_arm64_range(base + 0x1234u,
+				       base + range - 0x10000u,
+				       &min, &max));
+    assert(min <= base + 0x1234u &&
+	   max >= base + range - 0x10000u);
+    assert(!lj_mcode_test_arm64_range(base, base + range + 1u,
+				      &min, &max));
+    assert(!lj_mcode_test_arm64_range(base + 1u, base, &min, &max));
+    assert(!lj_mcode_test_arm64_range(UINTPTR_MAX - 0x1000u,
+				      UINTPTR_MAX, &min, &max));
+    assert(lj_mcode_test_arm64_expandrange(range / 2u, &min, &max));
+    assert(max - min == range);
+    assert(!lj_mcode_test_arm64_expandrange(range + 0x10000u,
+					    &min, &max));
+  }
   assert(L != NULL);
   luaL_openlibs(L);
   J = L2J(L);
@@ -536,6 +564,7 @@ int main(void)
 
   /* A pre-existing depth-three graph at the cap must refuse even a new
   ** direct sibling. This protects the bounded-index retirement invariant. */
+  lj_mcode_test_arm64_range_extensions_reset();
   run(L,
     "local jit=require('jit'); jit.flush(); jit.on(); "
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=512',"
@@ -570,6 +599,8 @@ int main(void)
       fprintf(stderr, "deep cap graph summary expected=%#x observed=%#x\n",
               (3u << 16) | 64u, summary);
     assert(summary == ((3u << 16) | 64u));
+    printf("ARM64 MAP_JIT range extensions during cap graph: %u\n",
+	   lj_mcode_test_arm64_range_extensions_count());
     successes = lj_trace_test_root_entry_successes();
     run(L,
       "for i=1,50 do assert(cap_deep_kernel(63,0,0,32)=="
@@ -614,6 +645,77 @@ int main(void)
     }
     assert(lj_trace_flushall_gc(L) == 0);
     assert(!trace_runnable_acq(cap_root, rootno));
+  }
+
+  /* Exercise canonical-root scoped teardown with a full depth-three chain
+  ** still linked. This runs last so the temporary prototype's hot counters
+  ** cannot perturb the independent wide-capacity fixtures above. */
+  run(L,
+    "root_flush_kernel=assert(loadstring(string.dump(depth_kernel))); "
+    "root_flush_oracle=assert(loadstring(string.dump(root_flush_kernel))); "
+    "local jit=require('jit'); jit.off(root_flush_oracle,true); "
+    "jit.on(root_flush_kernel,true); "
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=128'); "
+    "for k=1,100 do assert(root_flush_kernel(1,1,1,1,48)=="
+      "root_flush_oracle(1,1,1,1,48)) end; "
+    "for k=1,100 do assert(root_flush_kernel(2,1,1,1,48)=="
+      "root_flush_oracle(2,1,1,1,48)) end; "
+    "for k=1,100 do assert(root_flush_kernel(2,2,1,1,48)=="
+      "root_flush_oracle(2,2,1,1,48)) end; "
+    "for k=1,100 do assert(root_flush_kernel(2,2,2,1,48)=="
+      "root_flush_oracle(2,2,2,1,48)) end");
+  {
+    GCtrace *root, *side3, *side2, *side1;
+    TraceNo rootno, side3no, side2no, side1no;
+    GCproto *pt;
+    IRIns edge;
+    uint64_t root_generation;
+    side3 = find_deepest_side(L, J, "root_flush_kernel", 3u);
+    assert(side3 != NULL);
+    edge = trace_ir_acq(side3)[REF_BASE];
+    assert(edge.o == IR_BASE && (TraceNo)edge.op1 != 0);
+    side2 = traceref_safe(J, (TraceNo)edge.op1);
+    assert(side2 != NULL);
+    edge = trace_ir_acq(side2)[REF_BASE];
+    assert(edge.o == IR_BASE && (TraceNo)edge.op1 != 0);
+    side1 = traceref_safe(J, (TraceNo)edge.op1);
+    assert(side1 != NULL);
+    edge = trace_ir_acq(side1)[REF_BASE];
+    assert(edge.o == IR_BASE && (TraceNo)edge.op1 != 0);
+    rootno = (TraceNo)edge.op1;
+    root = traceref_safe(J, rootno);
+    assert(root != NULL && trace_nchild_acq(root) == 3u &&
+           side_depth(J, side3) == 3u && side_depth(J, side2) == 2u &&
+           side_depth(J, side1) == 1u);
+    side3no = trace_traceno_acq(side3);
+    side2no = trace_traceno_acq(side2);
+    side1no = trace_traceno_acq(side1);
+    pt = trace_startpt_acq(root);
+    root_generation = root->arm64_generation;
+    assert(lj_trace_test_arm64_side_graph_summary(J, rootno) ==
+           ((3u << 16) | 3u));
+
+    assert(lj_trace_flushscope(J, rootno) == 1u);
+    assert(!trace_runnable_acq(root, rootno) &&
+           !trace_runnable_acq(side3, side3no) &&
+           !trace_runnable_acq(side2, side2no) &&
+           !trace_runnable_acq(side1, side1no));
+    run(L,
+      "jit.off(root_flush_kernel,true); "
+      "for k=1,32 do assert(root_flush_kernel(2,2,2,1,48)=="
+        "root_flush_oracle(2,2,2,1,48)) end; "
+      "collectgarbage('collect'); "
+      "jit.on(root_flush_kernel,true)");
+    lj_trace_test_root_entry_reset();
+    run(L,
+      "for k=1,128 do assert(root_flush_kernel(2,2,2,1,48)=="
+        "root_flush_oracle(2,2,2,1,48)) end");
+    {
+      GCtrace *reentry = find_root_for_proto(J, pt);
+      assert(reentry != NULL && trace_mcode_acq(reentry) != NULL &&
+             reentry->arm64_generation != root_generation &&
+             lj_trace_test_root_entry_successes() > 0);
+    }
   }
   lua_pop(L, 1);
   lua_close(L);
