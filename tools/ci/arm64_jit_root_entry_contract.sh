@@ -106,8 +106,11 @@ check_root_entry_order() {
       'for (i = 0; i < rootview->nchild; i++)' \
       '(MSize)childno >= tv->sizetrace' \
       '!trace_root_entry_side_view_acq(J, parent, parentno, sourceop,' \
-      'childno = current.nextside;' \
-      'return childno == 0 && tracevec_acq(J) == tv &&' \
+      'base = ir_load_acq(&trace_ir_acq(child)[REF_BASE]);' \
+      'if ((TraceNo)base.op1 == parentno)' \
+      '!trace_root_entry_nested_side_member_valid(' \
+      'childno = trace_nextside_acq(child);' \
+      'return found_direct && childno == 0 && tracevec_acq(J) == tv &&' \
       'trace_nchild_acq(parent) == rootview->nchild' \
       'trace_nextside_acq(parent) == rootview->nextside'; do
     grep -F "$required" "$siblings" >/dev/null
