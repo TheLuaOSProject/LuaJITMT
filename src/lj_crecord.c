@@ -2478,7 +2478,7 @@ static MSize crec_call_args_collect(jit_State *J, RecordFFData *rd,
 	crec_call_arm64_float_hfa_args(J, cts, did, *base, o, args, &out);
 	continue;
       }
-      if (!fixed || !lj_ccall_arm64_integer_aggregate_class(cts, did,
+      if (!fixed || !lj_ccall_arm64_aggregate_argument_class(cts, did,
 	    &aggregate, &rawid) || rawid != did || aggregate.size != dsize)
 	lj_trace_err(J, LJ_TRERR_NYICALL);
       tr = crec_call_arm64_integer_aggregate_arg(J, cts, did, *base, o,

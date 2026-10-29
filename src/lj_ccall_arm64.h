@@ -393,6 +393,72 @@ static int lj_ccall_arm64_integer_aggregate_class(CTState *cts, CTypeID id,
   return 1;
 }
 
+/* A single pointer member is a Darwin non-HFA eight-byte GPR argument. Keep
+** this argument-only exception separate from integer aggregates and result
+** classification: the whole payload remains opaque, and the source CData
+** stays rooted in its original Lua frame slot. */
+static int lj_ccall_arm64_pointer_aggregate_arg_class(CTState *cts,
+							     CTypeID id,
+							     LJArm64ABIArg *arg,
+							     CTypeID *rawid)
+{
+  CType ct, field, member;
+  CTypeID declared_id = id, fid, member_id;
+  CTInfo info;
+  CTSize size;
+  unsigned depth;
+  for (depth = 0; depth < 32; depth++) {
+    CType declared;
+    if (lj_ctype_snapshot(cts, declared_id, &declared) <= 0) return 0;
+    info = ctype_info_acq(&declared);
+    if (ctype_isattrib(info) && ctype_isxattrib(info, CTA_ALIGN) &&
+	ctype_align(info) > 3) return 0;
+    if (!(ctype_isattrib(info) || ctype_istypedef(info))) {
+      if (ctype_align(info) > 3) return 0;
+      break;
+    }
+    declared_id = ctype_cid(info);
+    if (declared_id == 0) return 0;
+  }
+  if (depth == 32 || !lj_ccall_arm64_raw_type(cts, id, &ct, rawid))
+    return 0;
+  info = ctype_info_acq(&ct);
+  size = ctype_size_acq(&ct);
+  if (!ctype_isstruct(info) || (info & (CTF_UNION|CTF_REF|CTF_VLA)) ||
+      ctype_isvltype(info) || size != sizeof(void *) || ctype_align(info) != 3)
+    return 0;
+  fid = ctype_sib_acq(&ct);
+  if (fid == 0 || lj_ctype_snapshot(cts, fid, &field) <= 0) return 0;
+  info = ctype_info_acq(&field);
+  if (!ctype_isfield(info) || ctype_isbitfield(info) ||
+      ctype_size_acq(&field) != 0) return 0;
+  member_id = ctype_cid(info);
+  if (!lj_ccall_arm64_raw_type(cts, member_id, &member, &member_id))
+    return 0;
+  info = ctype_info_acq(&member);
+  if (!ctype_isptr(info) || ctype_isref(info) ||
+      ctype_size_acq(&member) != sizeof(void *) ||
+      ctype_align(info) != 3 || ctype_sib_acq(&field) != 0) return 0;
+  if (arg) {
+    arg->cls = LJ_ARM64_ABI_GPR;
+    arg->kind = LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE;
+    arg->size = (uint8_t)size;
+    arg->align = ctype_align(ctype_info_acq(&ct));
+    arg->is_unsigned = 1;
+  }
+  return 1;
+}
+
+/* Union of the independently bounded by-value composite argument classes.
+** Result classification deliberately uses its own helpers. */
+static int lj_ccall_arm64_aggregate_argument_class(CTState *cts, CTypeID id,
+							   LJArm64ABIArg *arg,
+							   CTypeID *rawid)
+{
+  return lj_ccall_arm64_integer_aggregate_class(cts, id, arg, rawid) ||
+    lj_ccall_arm64_pointer_aggregate_arg_class(cts, id, arg, rawid);
+}
+
 typedef struct LJArm64SmallResultWalk {
   CTState *cts;
   CTypeID active[32];
@@ -714,7 +780,7 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
 	arg = &abi->arg[nargs];
 	memset(arg, 0, sizeof(*arg));
 	if (!lj_ccall_arm64_scalar_class(cts, argid, 0, arg, &rawid) &&
-	    !lj_ccall_arm64_integer_aggregate_class(cts, argid, arg, &rawid))
+	    !lj_ccall_arm64_aggregate_argument_class(cts, argid, arg, &rawid))
 	  return 0;
 	arg->id = rawid;
 	arg->source_index = (uint8_t)nparams;

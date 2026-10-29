@@ -126,6 +126,9 @@ enum {
   ARM64_RETURN_NESTED_DOUBLE_QUAD,
   ARM64_RETURN_U64_TRIPLE,
   ARM64_RETURN_POINTER_MEMBER,
+  ARM64_POINTER_MEMBER_ARG,
+  ARM64_POINTER_MEMBER_ARG_ALT,
+  ARM64_POINTER_MEMBER_STACK_ARG,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -604,6 +607,47 @@ arm64_return_pointer_member_alt(uint32_t value)
   calls[ARM64_RETURN_POINTER_MEMBER]++;
   result.value = (value & 1u) ? &pointer_result_slots[1][value & 3u] : NULL;
   return result;
+}
+
+/* Pointer-member arguments are consumed as opaque eight-byte ABI payloads.
+** These functions deliberately do not dereference the pointer. */
+LJ_EXPORT uint32_t arm64_take_pointer_member_arg(
+	arm64_pointer_member_result value, uint32_t salt)
+{
+  calls[ARM64_POINTER_MEMBER_ARG]++;
+  return (uint32_t)(uintptr_t)value.value ^ salt;
+}
+
+LJ_EXPORT uint32_t arm64_take_pointer_member_arg_alt(
+	arm64_pointer_member_result value, uint32_t salt)
+{
+  calls[ARM64_POINTER_MEMBER_ARG_ALT]++;
+  return ((uint32_t)(uintptr_t)value.value + salt) ^ 0x31415926u;
+}
+
+LJ_EXPORT uint32_t arm64_pointer_member_arg_count(void)
+{
+  return calls[ARM64_POINTER_MEMBER_ARG];
+}
+
+LJ_EXPORT uint32_t arm64_pointer_member_arg_alt_count(void)
+{
+  return calls[ARM64_POINTER_MEMBER_ARG_ALT];
+}
+
+LJ_EXPORT uint32_t arm64_take_pointer_member_stack_arg(
+	uint32_t a, uint32_t b, uint32_t c, uint32_t d,
+	uint32_t e, uint32_t f, uint32_t g, uint32_t h,
+	arm64_pointer_member_result value, uint32_t salt)
+{
+  calls[ARM64_POINTER_MEMBER_STACK_ARG]++;
+  return (a+2u*b+3u*c+4u*d+5u*e+6u*f+7u*g+8u*h+
+	  9u*(uint32_t)(uintptr_t)value.value) ^ salt;
+}
+
+LJ_EXPORT uint32_t arm64_pointer_member_stack_arg_count(void)
+{
+  return calls[ARM64_POINTER_MEMBER_STACK_ARG];
 }
 
 LJ_EXPORT arm64_nested_float_pair arm64_return_nested_float_pair(uint32_t n)
