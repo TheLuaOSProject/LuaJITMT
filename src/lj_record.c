@@ -57,6 +57,8 @@
 /* Emit raw IR without passing through optimizations. */
 #define emitir_raw(ot, a, b)	(lj_ir_set(J, (ot), (a), (b)), lj_ir_emit(J))
 
+static GCtrace *rec_traceref_live(jit_State *J, TraceNo traceno);
+
 static LJ_AINLINE void rec_copy_runtime_tv(jit_State *J, TValue *dst,
 					   const TValue *src)
 {
@@ -720,6 +722,17 @@ static void rec_for_loop(jit_State *J, const BCIns *fori, ScEvEntry *scev,
 		    IRSLOAD_INHERIT + tc + (J->scev.start << 16));
   if (!init)
     J->base[ra+FORL_IDX] = idx = emitir(IRT(IR_ADD, t), idx, step);
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+  /* A first-side trace can reach this update from a body continuation before
+  ** its parent FORL range guard. Re-establish the constant-step stop bound
+  ** before the update result is consumed by the loop comparison. */
+  if (!init && J->parent && t == IRT_INT && tref_isk(step) &&
+      tref_isint(step) && IR(tref_ref(step))->i != 0) {
+    GCtrace *parent = rec_traceref_live(J, J->parent);
+    if (parent && bc_op(trace_startins_acq(parent)) == BC_FORL)
+      rec_for_check(J, t, dir, stop, step, 1);
+  }
+#endif
   J->base[ra+FORL_EXT] = idx;
   scev->idx = tref_ref(idx);
   setmref(scev->pc, fori);

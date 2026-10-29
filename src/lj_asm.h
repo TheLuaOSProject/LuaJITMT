@@ -111,6 +111,7 @@ typedef struct LJArm64SideIRView {
   MSize parent_nregspmap;
   MSize parent_nslots;
   MSize parent_topslot;
+  uint32_t parent_admission;
   const BCIns *parent_continuation;
   /* The root loop can be headed by BC_LOOP or bounded by a paired FORI/FORL. */
   BCIns parent_startins;
@@ -138,6 +139,7 @@ typedef struct LJArm64SideParentSnapshot {
   uint16_t regspmap[LJ_MAX_JSLOTS];
   LJArm64SideParentBinding bindings[LJ_MAX_JSLOTS];
   MSize nmap_values;
+  uint32_t admission;
   IRRef parent_nins;
   IRRef parent_nk;
   MSize parent_nsnap;
