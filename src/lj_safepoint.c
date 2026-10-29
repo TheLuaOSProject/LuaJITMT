@@ -27,6 +27,7 @@
 #ifdef LJ_TRACE_TEST_HELPERS
 static TGState *safepoint_test_signal_pause_tg;
 static uint32_t safepoint_test_signal_pause_armed;
+static uint32_t safepoint_test_signal_pause_stage;
 static uint32_t safepoint_test_signal_pause_waiting;
 static uint32_t safepoint_test_signal_pause_release;
 static uint32_t safepoint_test_signal_resumed_poll_store_count;
@@ -37,6 +38,7 @@ void lj_safepoint_test_signal_pause_reset(void)
 {
   la_storeptr_rel((void **)&safepoint_test_signal_pause_tg, NULL);
   la_store32_rel(&safepoint_test_signal_pause_armed, 0);
+  la_store32_rel(&safepoint_test_signal_pause_stage, 0);
   la_store32_rel(&safepoint_test_signal_pause_waiting, 0);
   la_store32_rel(&safepoint_test_signal_pause_release, 0);
   la_store32_rel(&safepoint_test_signal_resumed_poll_store_count, 0);
@@ -50,6 +52,17 @@ void lj_safepoint_test_signal_pause_arm(TGState *tg)
     return;
   lj_safepoint_test_signal_pause_reset();
   la_storeptr_rel((void **)&safepoint_test_signal_pause_tg, tg);
+  la_store32_rel(&safepoint_test_signal_pause_stage, 1);
+  la_store32_rel(&safepoint_test_signal_pause_armed, 1);
+}
+
+void lj_safepoint_test_signal_pause_arm_after_poll(TGState *tg)
+{
+  if (!tg)
+    return;
+  lj_safepoint_test_signal_pause_reset();
+  la_storeptr_rel((void **)&safepoint_test_signal_pause_tg, tg);
+  la_store32_rel(&safepoint_test_signal_pause_stage, 2);
   la_store32_rel(&safepoint_test_signal_pause_armed, 1);
 }
 
@@ -83,7 +96,23 @@ static int safepoint_test_signal_pause_after_reqmask(TGState *tg)
   TGState *target = (TGState *)la_loadptr_acq(
 	(void *const *)&safepoint_test_signal_pause_tg);
   uint32_t armed = 1;
-  if (target != tg ||
+  if (target != tg || la_load32_acq(&safepoint_test_signal_pause_stage) != 1 ||
+      !la_cas32(&safepoint_test_signal_pause_armed, &armed, 0,
+		LA_ACQ_REL, LA_ACQ))
+    return 0;
+  la_store32_rel(&safepoint_test_signal_pause_waiting, 1);
+  while (la_load32_acq(&safepoint_test_signal_pause_release) == 0)
+    la_cpu_pause();
+  la_store32_rel(&safepoint_test_signal_pause_waiting, 0);
+  return 1;
+}
+
+static int safepoint_test_signal_pause_after_poll(TGState *tg)
+{
+  TGState *target = (TGState *)la_loadptr_acq(
+	(void *const *)&safepoint_test_signal_pause_tg);
+  uint32_t armed = 1;
+  if (target != tg || la_load32_acq(&safepoint_test_signal_pause_stage) != 2 ||
       !la_cas32(&safepoint_test_signal_pause_armed, &armed, 0,
 		LA_ACQ_REL, LA_ACQ))
     return 0;
@@ -859,6 +888,8 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
     {
       int test_paused = safepoint_test_signal_pause_after_reqmask(tg);
       lj_tg_poll_rel(tg, 1);  /* 05 section 5.4.2 signal word. */
+      if (!test_paused)
+	test_paused = safepoint_test_signal_pause_after_poll(tg);
       safepoint_test_signal_note_resumed_poll(tg, test_paused);
     }
     /* Paired with the native owner close->poll fence. This is the Dekker edge

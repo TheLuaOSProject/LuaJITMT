@@ -47,6 +47,7 @@ LJ_FUNCA uint32_t lj_native_leave_l(lua_State *L, LJNativeFrame *frame);
 #ifdef LJ_TRACE_TEST_HELPERS
 LJ_FUNC void lj_safepoint_test_signal_pause_reset(void);
 LJ_FUNC void lj_safepoint_test_signal_pause_arm(TGState *tg);
+LJ_FUNC void lj_safepoint_test_signal_pause_arm_after_poll(TGState *tg);
 LJ_FUNC uint32_t lj_safepoint_test_signal_paused(void);
 LJ_FUNC void lj_safepoint_test_signal_pause_release(void);
 LJ_FUNC uint32_t lj_safepoint_test_signal_resumed_poll_stores(void);

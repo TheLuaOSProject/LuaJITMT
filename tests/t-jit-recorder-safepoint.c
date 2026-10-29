@@ -372,8 +372,7 @@ static void test_real_counted_before_poll_side_admission(lua_State *L,
 }
 #endif
 
-#if !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED && \
-    !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
+#if !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED
 typedef struct RecorderFlushPublisher {
   global_State *g;
   TGState *main_tg;
@@ -401,8 +400,11 @@ static void recorder_flush_completion_hook(global_State *g, TGState *tg,
   ** holding the same combined action mask. */
   if (lj_tg_poll_acq(tg) != 0 && lj_tg_reqmask_acq(tg) == 0 &&
       lj_trace_state_load(G2J(g)) == LJ_TRACE_IDLE && jit_token_acq(g) == 0 &&
-      gc2_hs_actions_acq(g) == recorder_flush_wait_actions)
+      gc2_hs_actions_acq(g) == recorder_flush_wait_actions) {
+    assert(lj_safepoint_test_signal_paused());
     (void)la_add32_rlx(&recorder_flush_before_wait, 1);
+    lj_safepoint_test_signal_pause_release();
+  }
 }
 
 static void *recorder_flush_publisher(void *arg)
@@ -455,7 +457,10 @@ static void test_protected_trace_state_flush(lua_State *L, uint32_t actions,
   recorder_flush_main_tg = tg;
   if (verify_consumed_retry)
     lj_safepoint_test_completion_hook(recorder_flush_completion_hook);
-  lj_safepoint_test_signal_pause_arm(tg);
+  if (verify_consumed_retry)
+    lj_safepoint_test_signal_pause_arm_after_poll(tg);
+  else
+    lj_safepoint_test_signal_pause_arm(tg);
   assert(pthread_create(&thread, NULL, recorder_flush_publisher,
 		&publisher) == 0);
   for (attempt = 0; attempt < 1000000u &&
@@ -472,13 +477,22 @@ static void test_protected_trace_state_flush(lua_State *L, uint32_t actions,
   ** before the leader resumes the trace flush. */
   assert(gc2_hs_epoch_acq(g) == epoch + 1u);
   assert(lj_tg_hs_epoch_ack_acq(tg) == epoch + 1u);
-  assert(gc2_hs_pending_acq(g) >= 1);
-  assert(lj_tg_reqmask_acq(tg) == 0 && lj_tg_poll_acq(tg) == 0);
-  assert(lj_safepoint_test_signal_paused());
-  assert(la_load32_acq(&publisher.done) == 0);
+  if (verify_consumed_retry) {
+    assert(recorder_flush_before_wait != 0);
+    assert(la_load32_acq(&publisher.done) == 1);
+    assert(gc2_hs_pending_acq(g) == 0);
+    assert(gc2_hs_leader_acq(g) == 0);
+    assert(lj_tg_reqmask_acq(tg) == 0 && lj_tg_poll_acq(tg) == 0);
+  } else {
+    assert(gc2_hs_pending_acq(g) >= 1);
+    assert(lj_tg_reqmask_acq(tg) == 0 && lj_tg_poll_acq(tg) == 0);
+    assert(lj_safepoint_test_signal_paused());
+    assert(la_load32_acq(&publisher.done) == 0);
+  }
   assert_owner_clean(L);
 
-  lj_safepoint_test_signal_pause_release();
+  if (!verify_consumed_retry)
+    lj_safepoint_test_signal_pause_release();
   assert(pthread_join(thread, NULL) == 0);
   assert(publisher.result >= 1u && la_load32_acq(&publisher.done) == 1);
   assert(gc2_hs_leader_acq(g) == 0 && gc2_hs_pending_acq(g) == 0);
@@ -486,7 +500,6 @@ static void test_protected_trace_state_flush(lua_State *L, uint32_t actions,
   assert(lj_trace_state_load(J) == LJ_TRACE_IDLE);
   assert(jit_token_acq(g) == 0 && jit_owner_l_acq(J) == NULL);
   if (verify_consumed_retry) {
-    assert(recorder_flush_before_wait != 0);
     lj_safepoint_test_completion_hook(NULL);
   }
   lua_pop(L, 1);
@@ -535,11 +548,26 @@ static void test_protected_trace_state_stopreq(lua_State *L)
 }
 #endif
 
-int main(void)
+int main(int argc, char **argv)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
   TGState *tg = L2TG(L);
   assert(tg != NULL && lj_tg_owns_state_acq(tg, L));
+
+  if (argc == 2 && strcmp(argv[1], "flush-only") == 0) {
+#if !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED
+    test_protected_trace_state_flush(L,
+	LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ, 0);
+    test_protected_trace_state_flush(L,
+	LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ|
+	LJ_GC2_HS_SCAN_OWNER_ROOTS|LJ_GC2_HS_FLUSH_SSB, 1);
+#else
+    assert(!"flush-only requires recorder-enabled root admission");
+#endif
+    lua_close(L);
+    puts("t-jit-recorder-safepoint flush-only OK");
+    return 0;
+  }
 
   test_counted_entry_before_hotcount(L);
 #if LJ_PROFILE_TGLOCAL
@@ -548,12 +576,12 @@ int main(void)
 #if !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED
   test_late_after_token(L);
   test_late_after_root_token_stopreq(L);
-#if !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
   test_protected_trace_state_flush(L,
 	LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ, 0);
   test_protected_trace_state_flush(L,
 	LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ|
 	LJ_GC2_HS_SCAN_OWNER_ROOTS|LJ_GC2_HS_FLUSH_SSB, 1);
+#if !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
 #if LJ_PROFILE_TGLOCAL
   test_profile_side_pre_admission(L);
 #endif
