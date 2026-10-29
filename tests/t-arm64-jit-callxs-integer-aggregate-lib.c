@@ -31,6 +31,11 @@ typedef struct { uint16_t value; } arm64_half_result;
 typedef struct { uint32_t value; } arm64_word_result;
 typedef arm64_word_result arm64_word_result_alias;
 typedef struct { uint64_t value; } arm64_u64_result;
+typedef struct { uint64_t lo, mid, hi; } arm64_u64_triple_result;
+typedef struct { uint64_t lo, mid, hi, tail; } arm64_u64_quad_result;
+static unsigned calls_u64_triple_many;
+static unsigned calls_u64_triple_many_alt;
+static unsigned calls_u64_quad;
 typedef struct { uint16_t lo, hi; } arm64_half_pair;
 typedef struct { arm64_half_pair half; uint32_t tag; } arm64_nested_int_result;
 typedef struct { uint32_t tag; float value; } arm64_mixed_result;
@@ -118,6 +123,7 @@ enum {
   ARM64_RETURN_ARRAY_FLOAT_PAIR,
   ARM64_RETURN_NESTED_FLOAT_TRIPLE,
   ARM64_RETURN_NESTED_DOUBLE_QUAD,
+  ARM64_RETURN_U64_TRIPLE,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -483,6 +489,79 @@ LJ_EXPORT arm64_u64_result arm64_return_u64(uint32_t value)
   calls[ARM64_RETURN_U64]++;
   result.value = UINT64_C(0x1234567800000000) | (uint64_t)value*313u+11u;
   return result;
+}
+
+LJ_EXPORT arm64_u64_triple_result arm64_return_u64_triple(uint32_t value)
+{
+  arm64_u64_triple_result result;
+  calls[ARM64_RETURN_U64_TRIPLE]++;
+  result.lo = UINT64_C(0x1020304000000000) | (uint64_t)value*13u+1u;
+  result.mid = UINT64_C(0x5060708000000000) | (uint64_t)value*17u+2u;
+  result.hi = UINT64_C(0x90a0b0c000000000) | (uint64_t)value*19u+3u;
+  return result;
+}
+
+LJ_EXPORT uint32_t arm64_return_u64_triple_count(void)
+{
+  return calls[ARM64_RETURN_U64_TRIPLE];
+}
+
+LJ_EXPORT arm64_u64_quad_result arm64_return_u64_quad(uint32_t value)
+{
+  arm64_u64_quad_result result;
+  calls_u64_quad++;
+  result.lo = UINT64_C(0x1029384700000000) | (uint64_t)value*7u+1u;
+  result.mid = UINT64_C(0x5061728300000000) | (uint64_t)value*11u+2u;
+  result.hi = UINT64_C(0x90a1b2c300000000) | (uint64_t)value*13u+3u;
+  result.tail = UINT64_C(0xd0e1f20300000000) | (uint64_t)value*17u+4u;
+  return result;
+}
+
+LJ_EXPORT arm64_u64_quad_result arm64_return_u64_quad_alt(uint32_t value)
+{
+  arm64_u64_quad_result result;
+  calls_u64_quad++;
+  result.lo = UINT64_C(0x2130495800000000) | (uint64_t)value*19u+5u;
+  result.mid = UINT64_C(0x6172839400000000) | (uint64_t)value*23u+6u;
+  result.hi = UINT64_C(0xa1b2c3d400000000) | (uint64_t)value*29u+7u;
+  result.tail = UINT64_C(0xe1f2031400000000) | (uint64_t)value*31u+8u;
+  return result;
+}
+
+LJ_EXPORT uint32_t arm64_return_u64_quad_count(void)
+{
+  return calls_u64_quad;
+}
+
+LJ_EXPORT arm64_u64_triple_result arm64_return_u64_triple_many(
+    uint32_t a, uint32_t b, uint32_t c, uint32_t d, uint32_t e,
+    uint32_t f, uint32_t g, uint32_t h, uint32_t i, uint32_t j)
+{
+  arm64_u64_triple_result result;
+  uint64_t sum = (uint64_t)a + b + c + d + e + f + g + h + i + j;
+  calls_u64_triple_many++;
+  result.lo = UINT64_C(0x1122334400000000) | sum*3u+1u;
+  result.mid = UINT64_C(0x5566778800000000) | sum*5u+2u;
+  result.hi = UINT64_C(0x99aabbcc00000000) | sum*7u+3u;
+  return result;
+}
+
+LJ_EXPORT arm64_u64_triple_result arm64_return_u64_triple_many_alt(
+    uint32_t a, uint32_t b, uint32_t c, uint32_t d, uint32_t e,
+    uint32_t f, uint32_t g, uint32_t h, uint32_t i, uint32_t j)
+{
+  arm64_u64_triple_result result;
+  uint64_t sum = (uint64_t)a + b + c + d + e + f + g + h + i + j;
+  calls_u64_triple_many_alt++;
+  result.lo = UINT64_C(0x2233445500000000) | sum*11u+4u;
+  result.mid = UINT64_C(0x6677889900000000) | sum*13u+5u;
+  result.hi = UINT64_C(0xaabbccdd00000000) | sum*17u+6u;
+  return result;
+}
+
+LJ_EXPORT uint32_t arm64_return_u64_triple_many_count(void)
+{
+  return calls_u64_triple_many;
 }
 
 LJ_EXPORT arm64_nested_int_result arm64_return_nested_int(uint32_t value)

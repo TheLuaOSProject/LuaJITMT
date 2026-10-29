@@ -2580,8 +2580,10 @@ static TRef crec_call_args_emit(jit_State *J, const TRef *args, MSize n,
 ** eightbyte classification, while small Win64 aggregates may return in RAX;
 ** leave both classes to the interpreter until multi-register lowering exists.
 */
-static int crec_call_indirect_struct_result(CTInfo info, CTSize size)
+static int crec_call_indirect_struct_result(CTState *cts, CTypeID id,
+					    CTInfo info, CTSize size)
 {
+  UNUSED(cts); UNUSED(id);
   if (!ctype_isstruct(info) || ctype_isvltype(info) || size == 0 ||
       size == CTSIZE_INVALID)
     return 0;
@@ -2591,7 +2593,10 @@ static int crec_call_indirect_struct_result(CTInfo info, CTSize size)
 #else
   return size > 16;
 #endif
+#elif LJ_TARGET_ARM64 && LJ_TARGET_OSX
+  return lj_ccall_arm64_indirect_aggregate_result_class(cts, id, NULL, NULL);
 #else
+  UNUSED(cts); UNUSED(id);
   return 0;
 #endif
 }
@@ -2775,7 +2780,8 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     /* Enum children live in the relocatable CType table too. Even rejected
     ** result classes must use the recorder's snapshot/retry reader contract. */
     t = crec_ct2irt_snapshot(J, cts, ctr);
-    indirect_result = crec_call_indirect_struct_result(ctr_info, result_size);
+    indirect_result = crec_call_indirect_struct_result(cts, result_id,
+						ctr_info, result_size);
     direct_aggregate_result = 0;
     if (ctype_isvoid(ctr_info)) {
       t = IRT_NIL;
