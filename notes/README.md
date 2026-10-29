@@ -23,8 +23,10 @@ and reports that are no longer authoritative are retained in
   The combined Lua-call contract passes four ARM64 profiles; ordinary ARM64
   and x64 each pass both 509-case stock corpora and all 260 inventory checks.
   The integer-struct FFI contract independently passes four profiles and is
-  wired into the existing M7 builds. A complete integrated gate is in progress
-  at `d0e4ecaa1`; until it finishes, the last complete gate remains below.
+  wired into the existing M7 builds. The integrated gate at `d0e4ecaa1`,
+  resumed after a test-helper warning repair, reached M7 but hit a reproducible
+  [remote metacall recorder assertion](arm64-remote-metacall-race-2026-10-29.md).
+  The last complete gate remains below.
   See the [vararg evidence](arm64-jit-vararg-leaf-design-2026-10-28.md) and
   [integer-struct evidence](arm64-integer-aggregate-callxs-2026-10-29.md).
 - Preceding focused port-branch follow-up: scalar FUNCF numeric literals and
