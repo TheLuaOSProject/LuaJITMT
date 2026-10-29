@@ -15097,6 +15097,30 @@ static int arm64_scalar_postra_int_fusion(const LJArm64PostRAView *v,
 
 /* A missing location is legal only for an unused scalar or a proven target
 ** fusion at every use. Snapshot sources are checked separately after renames. */
+/* DCE may leave a pure numeric terminal in the retained IR after dropping
+** its machine code. Its inputs likewise need no carrier for this use. A
+** downstream IR user (including a fused operation) disqualifies the terminal;
+** snapshot locations are independently checked by the complete allocated pass. */
+static int arm64_scalar_postra_dead_terminal(const LJArm64PostRAView *v,
+                                             IRRef value, IRRef end)
+{
+  IRIns source = ir_load_acq(&v->ir[value]);
+  IRRef ref;
+  if (source.t.irt != IRT_NUM || ra_hasreg(source.r) ||
+      ra_hasspill(source.s) ||
+      (source.o != IR_ADD && source.o != IR_SUB &&
+       source.o != IR_MUL && source.o != IR_DIV))
+    return 0;
+  for (ref = value+1u; ref < end; ref++) {
+    IRIns use = ir_load_acq(&v->ir[ref]);
+    IRMode mode = lj_ir_mode[use.o];
+    if ((irm_op1(mode) == IRMref && use.op1 == value) ||
+        (irm_op2(mode) == IRMref && use.op2 == value))
+      return 0;
+  }
+  return 1;
+}
+
 static int arm64_scalar_postra_nolocation(const LJArm64PostRAView *v,
                                           IRRef value, IRRef end, IRRef loop)
 {
@@ -15154,6 +15178,8 @@ static int arm64_scalar_postra_nolocation(const LJArm64PostRAView *v,
       break;
     }
     if (!used)
+      continue;
+    if (arm64_scalar_postra_dead_terminal(v, ref, end))
       continue;
     if (source.t.irt == IRT_INT &&
         arm64_scalar_postra_int_fusion(v, value, ref, loop))

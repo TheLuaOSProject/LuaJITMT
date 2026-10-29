@@ -276,6 +276,7 @@ int main(void)
   run_case_shape(L,2,"a,b,c","return a+b+2","return a+101*b+17");
   run_case_shape(L,3,"a","return a+1","return a+17");
   run_case_shape(L,3,"a,b","return a+b+2","return a+101*b+17");
+  run_case_shape(L,3,"","return 1.25","return 17.25");
   ljt_lua_dostring(L,"assert(stop:send(true,5)); local ok,v=peer:join(5); assert(ok and v)");
   lua_close(L);
   printf("open CALLM consumer exits OK: %u runtime shapes\n",cases_run);

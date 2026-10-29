@@ -331,7 +331,7 @@ static void admission(GCtrace *T)
 ** and allocated proofs must replay that producer from the exact source guard
 ** and bind all returned values into this CALLM's own argument map. */
 static void admission_open_callm(GCtrace *T, unsigned nresults,
-				 MSize formal_override)
+				 MSize nformals)
 {
   Fixture f={0};
   MSize callmpos=UINT32_MAX, childslot=UINT32_MAX;
@@ -407,7 +407,7 @@ static void admission_open_callm(GCtrace *T, unsigned nresults,
          producersnap!=UINT32_MAX);
 #define OPEN_RESET() do { \
   fixture_reset(&f); \
-  if (formal_override) f.leafpt->numparams=(uint8_t)formal_override; \
+  f.leafpt->numparams=(uint8_t)nformals; \
 } while (0)
   for (int postra=0; postra<2; postra++) {
     OPEN_RESET(); assert(admit(&f,postra));
@@ -442,11 +442,11 @@ static void admission_open_callm(GCtrace *T, unsigned nresults,
     f.map[childslot]=SNAP(snap_slot(f.map[childslot])-1u,0,
                           snap_ref(f.map[childslot]));
     assert(!admit(&f,postra));
-    if (formal_override) {
-      MSize readarg=nresults<formal_override ? nresults : formal_override;
+    if (nformals != nresults) {
+      MSize readarg=nresults<nformals ? nresults : nformals;
       MSize arithmetic=UINT32_MAX;
       OPEN_RESET(); assert(admit(&f,postra));
-      if (nresults<formal_override) {
+      if (nresults<nformals) {
         for (MSize p=1; p+1u<f.leafpt->sizebc; p++) {
           BCOp op=bc_op(proto_bc(f.leafpt)[p]);
           if ((op>=BC_ADDVN && op<=BC_DIVVV) ||
@@ -475,6 +475,33 @@ static void admission_open_callm(GCtrace *T, unsigned nresults,
       assert(!admit(&f,postra) &&
              "an unavailable fixed or extra CALLM argument cannot be read");
       if (postra) postra_bad++; else semantic_bad++;
+    }
+    if (postra && !nformals) {
+      IRRef discarded=0, terminal=0, native=0;
+      OPEN_RESET(); assert(admit(&f,1));
+      for (IRRef r=REF_FIRST; r<f.n; r++) {
+        IRIns p=f.ir[r];
+        if (p.o==IR_CONV && p.t.irt==IRT_NUM &&
+            ra_noreg(p.r) && !ra_hasspill(p.s)) discarded=r;
+        if (discarded && p.o==IR_ADD && p.t.irt==IRT_NUM &&
+            p.op1==discarded && ra_noreg(p.r) && !ra_hasspill(p.s))
+          terminal=r;
+        if (terminal && p.o==IR_ADD && irt_isnum(p.t) && ra_hasreg(p.r))
+          native=r;
+      }
+      assert(discarded && terminal && native);
+      /* A native arithmetic consumer still requires its input carrier. */
+      f.ir[terminal].r=RID_D0;
+      assert(!admit(&f,1));
+      OPEN_RESET(); assert(admit(&f,1));
+      /* A terminal with a downstream native user cannot be treated as dead,
+      ** even if its own register assignment was lost or forged. */
+      f.ir[native].op1=terminal;
+      assert(!admit(&f,1));
+      OPEN_RESET(); assert(admit(&f,1));
+      f.ir[terminal].s=SPS_FIRST;
+      assert(!admit(&f,1));
+      postra_bad+=3u;
     }
     if (postra) postra_bad+=8u; else semantic_bad+=8u;
   }
@@ -544,13 +571,14 @@ int main(void)
     "jit.off(install_open_case,true)");
   {
     const char *producer[] = {"return x", "return x,.25", "return x,.25,.5",
-      "return x", "return x,.25", "return x,.25,.5", "return x,.25,.5"};
+      "return x", "return x,.25", "return x,.25,.5", "return x,.25,.5",
+      "return x,.25,.5"};
     const char *consumer[] = {"return a+1", "return a+b", "return a+b+c",
-      "return a+1", "return a+b", "return a+1", "return a+b"};
+      "return a+1", "return a+b", "return a+1", "return a+b", "return 1.25"};
     const char *parameters[] = {"a", "a,b", "a,b,c", "a,b,c", "a,b,c",
-      "a", "a,b"};
-    const MSize nresults[] = {1u,2u,3u,1u,2u,3u,3u};
-    const MSize nformals[] = {1u,2u,3u,3u,3u,1u,2u};
+      "a", "a,b", ""};
+    const MSize nresults[] = {1u,2u,3u,1u,2u,3u,3u,3u};
+    const MSize nformals[] = {1u,2u,3u,3u,3u,1u,2u,0u};
     for (unsigned shape=0; shape<sizeof(nresults)/sizeof(nresults[0]); shape++) {
     unsigned results=(unsigned)nresults[shape];
     GCtrace *T=NULL;
@@ -602,7 +630,7 @@ int main(void)
       free(saved);
     }
       admission_open_callm(T,results,
-        nformals[shape]==results ? 0u : nformals[shape]);
+        nformals[shape]);
       printf("Lua open-result CALLM results=%u formals=%u: native root, GC reuse and independent source/map/normalization refusals passed\n",
            results,(unsigned)nformals[shape]);
     }
