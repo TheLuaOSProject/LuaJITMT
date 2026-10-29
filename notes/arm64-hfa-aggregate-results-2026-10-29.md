@@ -1,39 +1,51 @@
-# ARM64 one-member HFA results
+# ARM64 HFA aggregate results
 
-The Darwin ARM64 CALLXS path now supports direct aggregate results containing
-exactly one `float` or one `double`. The classifier records the result as an
-FPR `FLOAT_HFA_MEMBER` with count one; the recorder stores the returned raw
-S0/D0 carrier into a fresh CData box whose CType ID is the declared aggregate
-type. The Lua result is that CData box. A two-member HFA result remains closed:
-AAPCS64 returns its members separately in S0/S1, while the current IR_CALLXS
-result and assembler expose only one FPR result.
+The Darwin ARM64 CALLXS path supports direct aggregate results containing one
+`float`, one `double`, or two contiguous `float` members. The classifier records
+the exact member count, offsets, member type, and declared CType. One-member
+results use the raw S0/D0 carrier; a two-float result uses an adjacent
+`IR_HIOP` for S1 alongside the ordinary S0 `IR_CALLXS` result. The recorder
+stores each raw lane into its exact offset in a fresh CData box before native
+leave. Lua receives the rooted box, never a scalar carrier.
 
-Both semantic and post-RA admission independently check the exact callable
-signature, result IR type, declared CData box, return snapshot slot, and the
-CALLXS-to-XSTORE flow. The raw floating carrier must not appear in any
-snapshot. The ordinary scalar-result snapshot rule is skipped for this boxed
-aggregate result in both walks. The HFA classifier also rejects CData
-references and declared CTA_ALIGN wrappers with alignment above the member's
-natural alignment.
+Both semantic and post-RA admission independently check the callable
+signature, result IR type, declared CData box, return snapshot slot, and
+CALLXS-to-XSTORE flow. The raw floating carriers must not appear in any
+snapshot. The ordinary scalar-result snapshot rule is skipped for these boxed
+aggregate results. For two-float results, post-RA admission also checks that
+the allocated result registers are D0 and D1. The HFA classifier rejects
+CData references and declared `CTA_ALIGN` wrappers that exceed natural
+alignment.
 
-The existing integer-aggregate CALLXS contract now includes `float` and
-`double` HFA results. Each case compares candidate and JIT-disabled oracle
-values and exact returned CData type, witnesses native CALLXS/CNEW/XSTORE on
-the selected candidate root, forces a mismatched-result exit, and verifies
-native re-entry and effect counts after full GC. Private IR clones independently
-reject a raw result snapshot, wrong XSTORE type, wrong CData CType, and wrong
-XSTORE source in semantic and post-RA admission. An over-aligned HFA result
-signature is required to remain closed.
+The existing integer-aggregate CALLXS contract compares candidate and
+JIT-disabled oracle values and exact returned CData type, witnesses native
+CALLXS/CNEW/XSTORE on the selected candidate root, forces a mismatched-result
+exit, and verifies native re-entry and effect counts after full GC. Private IR
+clones independently reject bad result snapshots, XSTORE types and sources,
+wrong CData types, and—on two-float results—bad high-lane offsets and result
+registers. A loop-unrolled trace exposed stale high-lane store state across an
+`IR_EQ` native-frame close; both independent admission walks now reset that
+state on closure.
 
-Validation command:
+The two-float fixture uses distinct lanes and compares exact output bytes for
+positive/negative zero, positive/negative infinity, and two different NaN
+payloads. It requires a selected-root native CALLXS/HIOP finish with a live
+peer and verifies native re-entry and CData bits after full GC.
 
-```sh
-LJ_ARM64_INTEGER_AGGREGATE_PROFILES='arm64-assert arm64e-assert arm64-release arm64e-release' \
-  tools/ci/arm64_jit_integer_aggregate_args_contract.sh
-```
+## Limits
 
-All four profiles passed on native macOS ARM64. The captured log is
-`/Users/frityet/Scratch/ljmt-hfa-results-20261029/four-profile.log`. The
-contract's three expected fail-closed trace aborts per profile are existing
-negative probes; the script completed successfully and restored the ordinary
-ARM64 assertion build. No lock or shared mutable register state was added.
+Only one-float, one-double, and direct two-float results are classified.
+Nested structs, arrays, three-member HFAs, double pairs, padding, unions,
+vectors, and other HFA result layouts remain closed. Over-aligned HFA results
+remain closed. HFA formals in variadic function signatures are rejected; this
+does not open HFA variadic tails, stack-passed HFA values, or stack crossing.
+
+## Validation
+
+`tools/ci/arm64_jit_integer_aggregate_args_contract.sh` passed all four native
+macOS profiles: arm64 and arm64e, with and without assertions. The final run
+log is `/Users/frityet/Scratch/ljmt-hfa-pair-crash-20261029/final-four-profile.log`.
+
+A strict Darwin x86_64 build with `CFLAGS=-Werror` passed. Its log is
+`/Users/frityet/Scratch/ljmt-hfa-pair-crash-20261029/x64-strict2.log`. This is
+compile compatibility evidence only, not an x86_64 runtime HFA claim.

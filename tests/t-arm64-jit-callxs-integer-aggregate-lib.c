@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <string.h>
 
 #if defined(_WIN32)
 #define LJ_EXPORT __declspec(dllexport)
@@ -23,6 +24,7 @@ typedef arm64_word_result arm64_word_result_alias;
 typedef struct { uint64_t value; } arm64_u64_result;
 typedef struct { float value; } arm64_float_result;
 typedef struct { double value; } arm64_double_result;
+typedef struct { float lo, hi; } arm64_float_pair_result;
 typedef struct { uint32_t value:5; } arm64_bitfield;
 
 enum {
@@ -49,6 +51,9 @@ enum {
   ARM64_RETURN_WORD_ALIAS,
   ARM64_RETURN_FLOAT_HFA,
   ARM64_RETURN_DOUBLE_HFA,
+  ARM64_RETURN_FLOAT_PAIR_HFA,
+  ARM64_RETURN_FLOAT_PAIR_HFA_FPR,
+  ARM64_RETURN_FLOAT_PAIR_SCALAR_FPR,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -217,6 +222,52 @@ LJ_EXPORT arm64_double_result arm64_return_double_hfa(uint32_t value)
   calls[ARM64_RETURN_DOUBLE_HFA]++;
   result.value = (double)value * 0.25 + 2.5;
   return result;
+}
+
+LJ_EXPORT arm64_float_pair_result arm64_return_float_pair_hfa(uint32_t value)
+{
+  arm64_float_pair_result result;
+  calls[ARM64_RETURN_FLOAT_PAIR_HFA]++;
+  if (value >= 2u && value <= 4u) {
+    static const uint32_t lane_bits[3][2] = {
+      { 0x00000000u, 0x80000000u },
+      { 0x7f800000u, 0xff800000u },
+      { 0x7fc12345u, 0x7fc54321u }
+    };
+    memcpy(&result.lo, &lane_bits[value-2u][0], sizeof(float));
+    memcpy(&result.hi, &lane_bits[value-2u][1], sizeof(float));
+  } else {
+    result.lo = (float)value * 0.5f + 1.25f;
+    result.hi = (float)value * 0.25f + 2.5f;
+  }
+  return result;
+}
+
+LJ_EXPORT arm64_float_pair_result arm64_return_float_pair_hfa_fpr(
+    double bias, uint32_t value)
+{
+  arm64_float_pair_result result;
+  calls[ARM64_RETURN_FLOAT_PAIR_HFA_FPR]++;
+  if (value >= 2u && value <= 4u) {
+    static const uint32_t lane_bits[3][2] = {
+      { 0x00000000u, 0x80000000u },
+      { 0x7f800000u, 0xff800000u },
+      { 0x7fc12345u, 0x7fc54321u }
+    };
+    memcpy(&result.lo, &lane_bits[value-2u][0], sizeof(float));
+    memcpy(&result.hi, &lane_bits[value-2u][1], sizeof(float));
+  } else {
+    result.lo = (float)bias + (float)value * 0.5f;
+    result.hi = (float)bias - (float)value * 0.25f;
+  }
+  return result;
+}
+
+LJ_EXPORT double arm64_return_float_pair_scalar_fpr(double bias,
+                                                     uint32_t value)
+{
+  calls[ARM64_RETURN_FLOAT_PAIR_SCALAR_FPR]++;
+  return bias + (double)value;
 }
 
 LJ_EXPORT uint32_t arm64_return_scalar(uint32_t value)

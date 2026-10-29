@@ -611,9 +611,12 @@ static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
   if (hiop && ra_hasreg((ir+1)->r))
     rset_clear(drop, (ir+1)->r);  /* Dest reg handled below. */
   ra_evictset(as, drop); /* Evictions must be performed first. */
-  if (ra_used(ir)) {
+  if (ra_used(ir) || (hiop && ra_used(ir+1))) {
     lj_assertA(!irt_ispri(ir->t), "PRI dest");
-    if (irt_isfp(ir->t)) {
+    if (irt_isfp(ir->t) && hiop && irt_isfp((ir+1)->t)) {
+	if (ra_used(ir)) ra_destreg(as, ir, RID_FPRET);
+	if (ra_used(ir+1)) ra_destreg(as, ir+1, RID_D1);
+    } else if (irt_isfp(ir->t)) {
       if (ci->flags & CCI_CASTU64) {
 	Reg dest = ra_dest(as, ir, RSET_FPR) & 31;
 	emit_dn(as, irt_isnum(ir->t) ? A64I_FMOV_D_R : A64I_FMOV_S_R,
@@ -1830,8 +1833,12 @@ static void asm_hiop(ASMState *as, IRIns *ir)
   case IR_CALLL:
   case IR_CALLS:
   case IR_CALLXS:
-    if (!uselo)
+    if (irt_isfp((ir-1)->t) && irt_isfp(ir->t)) {
+      if (!uselo)
+	ra_allocref(as, ir->op1, RID2RSET(RID_FPRET));
+    } else if (!uselo) {
       ra_allocref(as, ir->op1, RID2RSET(RID_RETLO));  /* Mark lo op as used. */
+    }
     break;
   default: lj_assertA(0, "bad HIOP for op %d", (ir-1)->o); break;
   }

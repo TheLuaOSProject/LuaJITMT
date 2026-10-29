@@ -29,6 +29,13 @@ typedef struct { uint32_t value; } Arm64WordResult;
 typedef struct { uint64_t value; } Arm64U64Result;
 typedef struct { float value; } Arm64FloatResult;
 typedef struct { double value; } Arm64DoubleResult;
+typedef struct { float lo, hi; } Arm64FloatPairResult;
+typedef struct __attribute__((aligned(16))) {
+  float lo, hi;
+} Arm64AlignedFloatPairResult;
+typedef struct { double lo, hi; } Arm64DoublePairResult;
+typedef Arm64AlignedFloatPairResult (*Arm64AlignedFloatPairResultFn)(uint32_t);
+typedef Arm64DoublePairResult (*Arm64DoublePairResultFn)(uint32_t);
 typedef struct __attribute__((aligned(16))) {
   float value;
 } Arm64AlignedFloatResult;
@@ -71,6 +78,9 @@ Arm64WordResultAlias arm64_return_word_alias(uint32_t);
 Arm64U64Result arm64_return_u64(uint32_t);
 Arm64FloatResult arm64_return_float_hfa(uint32_t);
 Arm64DoubleResult arm64_return_double_hfa(uint32_t);
+Arm64FloatPairResult arm64_return_float_pair_hfa(uint32_t);
+Arm64FloatPairResult arm64_return_float_pair_hfa_fpr(double, uint32_t);
+double arm64_return_float_pair_scalar_fpr(double, uint32_t);
 uint32_t arm64_return_scalar(uint32_t);
 ]]
 local lib = ffi.load(assert(os.getenv('LJ_ARM64_INT_AGGREGATE_SO')))
@@ -80,8 +90,13 @@ _G.__arm64_return_word_fn = lib.arm64_return_word
 _G.__arm64_return_u64_fn = lib.arm64_return_u64
 _G.__arm64_return_float_hfa_fn = lib.arm64_return_float_hfa
 _G.__arm64_return_double_hfa_fn = lib.arm64_return_double_hfa
+_G.__arm64_return_float_pair_hfa_fn = lib.arm64_return_float_pair_hfa
+_G.__arm64_return_float_pair_hfa_fpr_fn = lib.arm64_return_float_pair_hfa_fpr
 _G.__arm64_aligned_float_result_fn = ffi.cast('Arm64AlignedFloatResultFn', nil)
 _G.__arm64_padded_float_result_fn = ffi.cast('Arm64PaddedFloatResultFn', nil)
+_G.__arm64_aligned_float_pair_result_fn =
+  ffi.cast('Arm64AlignedFloatPairResultFn', nil)
+_G.__arm64_double_pair_result_fn = ffi.cast('Arm64DoublePairResultFn', nil)
 _G.__arm64_word_result_alias_fn = ffi.cast('Arm64WordResultFn', nil)
 _G.__arm64_aligned_result_fn = ffi.cast('Arm64AlignedResultFn', nil)
 _G.__arm64_int_pair_fn = lib.arm64_take_int_pair
@@ -605,6 +620,134 @@ run_hfa_result(4, 'Arm64FloatResult', lib.arm64_return_float_hfa, 21,
                'one-float HFA result')
 run_hfa_result(8, 'Arm64DoubleResult', lib.arm64_return_double_hfa, 22,
                'one-double HFA result')
+local pair_candidate, pair_oracle = make_result_pair('two-float HFA result')
+_set_hfa_result_candidate(12, pair_candidate)
+_G.__arm64_hfa_result_candidate_12 = pair_candidate
+jit.flush(pair_candidate)
+jit.on(pair_candidate, true)
+local pair_before = _hfa_result_native_count(12)
+local pair_effect_before = lib.arm64_aggregate_count(23)
+for pass = 1, 6 do
+  local got = pair_candidate(32, lib.arm64_return_float_pair_hfa, pass*7)
+  local want = pair_oracle(32, lib.arm64_return_float_pair_hfa, pass*7)
+  assert(ffi.istype('Arm64FloatPairResult', got) and
+         ffi.istype('Arm64FloatPairResult', want),
+         'two-float HFA returned the wrong declared CData type')
+  assert(got.lo == want.lo and got.hi == want.hi,
+         'two-float HFA result differs from interpreter')
+end
+assert(_hfa_result_native_count(12) > pair_before,
+       'two-float HFA had no selected-root native CALLXS/HIOP finish')
+tracked_exit_roots = roots(pair_candidate)
+exits = 0
+local pair_mismatch = pair_candidate(32, lib.arm64_return_scalar, 13)
+assert(type(pair_mismatch) == 'number',
+       'two-float HFA mismatched-result fallback returned the wrong Lua type')
+assert(exits > 0, 'two-float HFA selected result root did not force an exit')
+local pair_native_before_gc = _hfa_result_native_count(12)
+local pair_effect_before_gc = lib.arm64_aggregate_count(23)
+collectgarbage('collect')
+exits = 0
+local pair_got = pair_candidate(24, lib.arm64_return_float_pair_hfa, 13)
+local pair_want = pair_oracle(24, lib.arm64_return_float_pair_hfa, 13)
+assert(ffi.istype('Arm64FloatPairResult', pair_got) and
+       pair_got.lo == pair_want.lo and pair_got.hi == pair_want.hi,
+       'two-float HFA result/root changed after full GC')
+assert(_hfa_result_native_count(12) > pair_native_before_gc,
+       'two-float HFA did not re-enter native code after full GC')
+tracked_exit_roots = roots(pair_candidate)
+local pair_mismatch_after_gc = pair_candidate(32, lib.arm64_return_scalar, 15)
+assert(type(pair_mismatch_after_gc) == 'number' and exits > 0,
+       'two-float HFA did not take a forced exit after GC')
+assert(lib.arm64_aggregate_count(23)-pair_effect_before_gc == 48,
+       'two-float HFA native/interpreter effects were replayed after GC')
+assert(lib.arm64_aggregate_count(23)-pair_effect_before == 432,
+       'two-float HFA native/interpreter effects were lost or replayed')
+for _, seed in ipairs({1, 2, 3}) do
+  local native_before = _hfa_result_native_count(12)
+  local got = pair_candidate(32, lib.arm64_return_float_pair_hfa, seed)
+  local want = pair_oracle(32, lib.arm64_return_float_pair_hfa, seed)
+  assert(ffi.string(got, ffi.sizeof('Arm64FloatPairResult')) ==
+         ffi.string(want, ffi.sizeof('Arm64FloatPairResult')),
+         'two-float HFA did not preserve exact lane bits')
+  assert(_hfa_result_native_count(12) > native_before,
+         'two-float HFA edge-lane case did not execute the selected native root')
+end
+local fpr_candidate_loader = assert(loadstring([[
+return function(n, fn, seed, bias)
+  local result
+  for i = 1, n do result = fn(bias, seed+i) end
+  return result
+end
+]], '@two-float-HFA-FPR-result-candidate-loader'))
+local fpr_oracle_loader = assert(loadstring([[
+return function(n, fn, seed, bias)
+  local result
+  for i = 1, n do result = fn(bias, seed+i) end
+  return result
+end
+]], '@two-float-HFA-FPR-result-oracle-loader'))
+jit.off(fpr_oracle_loader, true)
+local pair_fpr_candidate, pair_fpr_oracle = fpr_candidate_loader(),
+                                                    fpr_oracle_loader()
+_set_hfa_result_candidate(12, pair_fpr_candidate)
+_G.__arm64_hfa_result_candidate_12 = pair_fpr_candidate
+jit.flush(pair_fpr_candidate)
+jit.on(pair_fpr_candidate, true)
+local fpr_before = _hfa_result_native_count(12)
+local fpr_effect_before = lib.arm64_aggregate_count(24)
+for pass = 1, 6 do
+  local got = pair_fpr_candidate(32, lib.arm64_return_float_pair_hfa_fpr,
+                                 pass*7, 1.5)
+  local want = pair_fpr_oracle(32, lib.arm64_return_float_pair_hfa_fpr,
+                               pass*7, 1.5)
+  assert(ffi.istype('Arm64FloatPairResult', got) and
+         ffi.string(got, ffi.sizeof('Arm64FloatPairResult')) ==
+         ffi.string(want, ffi.sizeof('Arm64FloatPairResult')),
+         'two-float HFA with FPR argument differs from interpreter')
+end
+assert(_hfa_result_native_count(12) > fpr_before,
+       'two-float HFA with a live D0 argument had no native root')
+tracked_exit_roots = roots(pair_fpr_candidate)
+exits = 0
+local fpr_mismatch = pair_fpr_candidate(32,
+    lib.arm64_return_float_pair_scalar_fpr, 13, 1.5)
+assert(type(fpr_mismatch) == 'number' and exits > 0,
+       'two-float HFA FPR-input root did not force a signature exit')
+local fpr_native_before_gc = _hfa_result_native_count(12)
+local fpr_effect_before_gc = lib.arm64_aggregate_count(24)
+collectgarbage('collect')
+exits = 0
+local fpr_got = pair_fpr_candidate(24,
+    lib.arm64_return_float_pair_hfa_fpr, 13, 1.5)
+local fpr_want = pair_fpr_oracle(24,
+    lib.arm64_return_float_pair_hfa_fpr, 13, 1.5)
+assert(ffi.string(fpr_got, ffi.sizeof('Arm64FloatPairResult')) ==
+       ffi.string(fpr_want, ffi.sizeof('Arm64FloatPairResult')) and
+       _hfa_result_native_count(12) > fpr_native_before_gc,
+       'two-float HFA with FPR argument did not re-enter after GC')
+tracked_exit_roots = roots(pair_fpr_candidate)
+local fpr_mismatch_after_gc = pair_fpr_candidate(32,
+    lib.arm64_return_float_pair_scalar_fpr, 15, 1.5)
+assert(type(fpr_mismatch_after_gc) == 'number' and exits > 0,
+       'two-float HFA FPR-input root did not force an exit after GC')
+assert(lib.arm64_aggregate_count(24)-fpr_effect_before_gc == 48 and
+       lib.arm64_aggregate_count(24)-fpr_effect_before == 432,
+       'two-float HFA FPR-input effects were lost or replayed')
+for _, seed in ipairs({1, 2, 3}) do
+  local native_before = _hfa_result_native_count(12)
+  local got = pair_fpr_candidate(32,
+      lib.arm64_return_float_pair_hfa_fpr, seed, 1.5)
+  local want = pair_fpr_oracle(32,
+      lib.arm64_return_float_pair_hfa_fpr, seed, 1.5)
+  assert(ffi.string(got, ffi.sizeof('Arm64FloatPairResult')) ==
+         ffi.string(want, ffi.sizeof('Arm64FloatPairResult')),
+         'two-float HFA FPR-input case changed exact lane bits')
+  assert(_hfa_result_native_count(12) > native_before,
+         'two-float HFA FPR edge case did not execute the native root')
+end
+_set_hfa_result_candidate(12, pair_candidate)
+_G.__arm64_hfa_result_candidate_12 = pair_candidate
 
 local candidate_roots = roots()
 for no in pairs(candidate_roots) do
