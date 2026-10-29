@@ -53,4 +53,11 @@ LJ_ARM64_TABLE_CALL_CASES=ffi-varargs \
 ```
 
 All four helper profiles passed the varargs C fixture and ordinary Lua
-companion. The broader M7 gate remains a separate integration check.
+companion. The full `tools/ci/arm64_jit_fail_closed_gate.sh` then passed on
+this commit, including the final VM and recorder safepoint checks and the
+ARM64e release CALLXS lifecycle cases. Its complete log is
+`/Users/frityet/Scratch/ljmt-vararg-sret-20261029/arm64-vararg-sret-m7-gate.log`;
+the final line is `arm64_jit_fail_closed_gate OK`. After the gate, the worktree
+was rebuilt and restored to the ordinary ARM64 assert profile
+(`-DLUA_USE_ASSERT`, without test helpers), profile ID
+`306b8543b199aa506791f41c38c0bee5fab3d9a1d42b2ea3507f1ee11bb187ac`.
