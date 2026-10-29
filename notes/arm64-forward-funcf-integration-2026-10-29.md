@@ -49,5 +49,11 @@ See `forward-funcf-math-strict-build.log` and
 
 The later merge `b1a8d3270` adds fixed forwarding arities one through three
 and variadic indirect FFI results. Those features passed their independent
-four-profile contracts; combined validation is still pending. None of these
-bounded results establishes general x86_64 parity.
+four-profile contracts. At documentation checkpoint `6c46f9bff`, ordinary
+assertion ARM64 and strict assertion x86_64 each pass all 509 source and all
+509 original v2-bytecode cases. The `forward-math-sret-{arm64,x64}-` build,
+source and bytecode logs record these runs. The outer command exits zero
+and restores ordinary assertion ARM64 without test helpers, profile
+`880de035709cb8f99f56b6b6ec581edf64f3e34afb69a3515657ed49d0f690bd`.
+The complete gate is running separately at frozen `6c46f9bff`.
+None of these bounded results establishes general x86_64 parity.
