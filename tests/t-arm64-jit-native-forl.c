@@ -357,9 +357,12 @@ static void test_signed_step_edges(int negative)
   luaL_openlibs(L);
   J = L2J(L);
   assert(J != NULL && L2TG(L) != NULL);
+  /* Leave capacity for admitted child traces while testing this exact root
+  ** generation. A tiny cache may legitimately flush it during overflow exits,
+  ** before the saved-root race and explicit flush/reuse checks below. */
   run_lua(L,
     "jit.flush(); jit.on(); "
-    "jit.opt.start('hotloop=2','hotexit=1','maxtrace=2'); "
+    "jit.opt.start('hotloop=2','hotexit=1','maxtrace=128'); "
     "function __arm64_native_forl_pos_edge(first, stop) "
       "local c=0 "
       "for i=first,stop,1 do c=c+1 end "
@@ -432,9 +435,12 @@ int main(void)
   saved_cframe = L->cframe;
   saved_vmstate = lj_tg_vmstate_load_acq(tg);
 
+  /* Leave capacity for admitted child traces while testing this exact root
+  ** generation. A tiny cache may legitimately flush it during overflow exits,
+  ** before the saved-root race and explicit flush/reuse checks below. */
   run_lua(L,
     "jit.flush(); jit.on(); "
-    "jit.opt.start('hotloop=2','hotexit=1','maxtrace=2'); "
+    "jit.opt.start('hotloop=2','hotexit=1','maxtrace=128'); "
     "function __arm64_native_forl(n, seed) "
       "local s=seed "
       "for i=1,n do s=s+i end "
