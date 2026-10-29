@@ -6528,7 +6528,8 @@ int lj_trace_arm64_side_parent_snapshot(jit_State *J,
   snapshot->parent_link = view.link;
   snapshot->parent_root = view.root;
   snapshot->parent_linktype = view.linktype;
-  if (rootviewp != NULL && !trace_arm64_nested_forl_sources(rootviewp,
+  if (rootviewp != NULL && bc_op(view.startins) == BC_FORL &&
+      !trace_arm64_nested_forl_sources(rootviewp,
 	 snapshot->parent_root_forl, &snapshot->parent_root_forl_mask))
 	  goto out;
   if (rootviewp != NULL && bc_op(view.startins) == BC_FORL) {
@@ -7249,7 +7250,8 @@ static int trace_arm64_side_context_from_parent(
     copy->parent_root = rootview->traceno;
     copy->parent_linktype = LJ_TRLINK_ROOT;
     copy->parent_root_nsnap = rootview->nsnap;
-    if (!trace_arm64_nested_forl_sources(rootview,
+    if (bc_op(startins) == BC_FORL &&
+        !trace_arm64_nested_forl_sources(rootview,
 	  copy->parent_root_forl, &copy->parent_root_forl_mask))
 	  return 0;
     if (bc_op(startins) == BC_FORL &&

@@ -11,6 +11,7 @@ lj_ci_profile_init "$root" arm64_jit_side_ir_admission_contract
 lj_ci_tmpdir lj-arm64-side-admission
 tmpdir=$LJ_CI_TMPDIR
 fixture_source=$root/tests/t-arm64-jit-side-adaptation.c
+while_source=$root/tests/t-arm64-jit-while-side-adaptation.c
 asm_source=$root/src/lj_asm.c
 admit_source=$root/src/lj_asm_arm64_admit.h
 base_flags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLJ_TRACE_TEST_HELPERS'
@@ -60,6 +61,9 @@ if test -z "${LJ_ARM64_SIDE_PROFILES+x}"; then
   lj_ci_require_symbols lj_trace_test_exit_calls lj_trace_test_root_entry_publishes \
     lj_trace_test_root_entry_successes lj_trace_test_root_entry_cleanups \
     lj_trace_test_arm64_side_scalar_copy_contract
+  while_fixture=$tmpdir/t-arm64-jit-while-side-adaptation-bound
+  lj_ci_compile_fixture "$while_fixture" "$while_source"
+  lj_ci_run_fixture 90 "$while_fixture"
   fixture=$tmpdir/t-arm64-jit-side-adaptation-bound
   lj_ci_compile_fixture "$fixture" "$fixture_source"
   lj_ci_run_fixture 90 "$fixture"
@@ -81,6 +85,9 @@ else
     lj_ci_require_symbols lj_trace_test_exit_calls lj_trace_test_root_entry_publishes \
       lj_trace_test_root_entry_successes lj_trace_test_root_entry_cleanups \
       lj_trace_test_arm64_side_scalar_copy_contract
+    while_fixture=$tmpdir/t-arm64-jit-while-side-adaptation-$profile
+    lj_ci_compile_fixture "$while_fixture" "$while_source"
+    lj_ci_run_fixture 90 "$while_fixture"
     fixture=$tmpdir/t-arm64-jit-side-adaptation-$profile
     lj_ci_compile_fixture "$fixture" "$fixture_source"
     lj_ci_run_fixture 90 "$fixture"
