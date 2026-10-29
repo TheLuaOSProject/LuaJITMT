@@ -150,7 +150,10 @@ check_vm_entry_order() {
     sed -n '1p' | cut -d: -f1)
   test -n "$copy" && test -n "$call" && test -n "$reserve" &&
     test -n "$branch" && test "$copy" -lt "$call" &&
-    test "$call" -lt "$reserve" && test "$reserve" -lt "$branch"
+    test "$call" -lt "$reserve" && test "$reserve" -lt "$branch" || {
+    echo "JITERL key copy, entry call and native branch ordering changed" >&2
+    exit 1
+  }
   grep -E 'b[[:space:]]+_lj_BC_JLOOP$' "$iterl" >/dev/null
   if test "$tag" = arm64e; then
     grep -E 'braa[[:space:]]+x1, x0$' "$iterl" >/dev/null
@@ -167,10 +170,13 @@ check_vm_entry_order() {
   call=$(grep -nE 'bl[[:space:]]+0x' "$loop" | sed -n '1p' | cut -d: -f1)
   reserve=$(grep -nE 'sub[[:space:]]+sp, sp, #0x10' "$loop" |
     sed -n '1p' | cut -d: -f1)
-  branch=$(grep -nE 'br(a|aa)[[:space:]]+x1' "$loop" |
+  branch=$(grep -nE 'br(a|aa)?[[:space:]]+x1' "$loop" |
     sed -n '1p' | cut -d: -f1)
   test -n "$call" && test -n "$reserve" && test -n "$branch" &&
-    test "$call" -lt "$reserve" && test "$reserve" -lt "$branch"
+    test "$call" -lt "$reserve" && test "$reserve" -lt "$branch" || {
+    echo "JLOOP entry call and native branch ordering changed" >&2
+    exit 1
+  }
   if grep -E 'stlr[[:space:]]+xzr, \[x14\]' "$loop" >/dev/null; then
     echo "open JLOOP unexpectedly clears its entry lease" >&2
     exit 1
