@@ -1456,6 +1456,8 @@ int main(int argc, char **argv)
     assert(lj_trace_test_exit_calls() > 0 &&
            observed_trace_no[1] == rootno);
     exit_before = lj_trace_test_first_exitno();
+    assert(lj_trace_test_first_exit_parent() == rootno &&
+           exit_before < trace_nsnap_acq(trace));
     {
       const SnapShot *snap = &trace_snap_acq(trace)[exit_before];
       MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap);
@@ -1463,9 +1465,7 @@ int main(int argc, char **argv)
              nent+1u+LJ_FR2 <= trace_nsnapmap_acq(trace)-ofs);
       memcpy(&pcbase, &trace_snapmap_acq(trace)[ofs+nent], sizeof(pcbase));
     }
-    assert(lj_trace_test_first_exit_parent() == rootno &&
-           exit_before < trace_nsnap_acq(trace) &&
-           snap_ref_acq(&trace_snap_acq(trace)[exit_before])+1u == addov &&
+    assert(snap_ref_acq(&trace_snap_acq(trace)[exit_before])+1u == addov &&
            (uintptr_t)(pcbase>>8) ==
              (uintptr_t)(const void *)&proto_bc(pt)[resume_pc]);
   }

@@ -823,7 +823,10 @@ static int arm64_callxs_int_overflow_shape(const IRIns *ir, IRRef nk,
 		IRRef nins, IRRef ref, const IRIns *ins)
 {
 	return (ins->o == IR_ADDOV || ins->o == IR_SUBOV || ins->o == IR_MULOV) &&
-	    arm64_ir_type_flags(ins->t, IRT_INT, IRT_GUARD, IRT_GUARD|IRT_ISPHI) &&
+	    (ins->o == IR_ADDOV ?
+	      arm64_ir_type_flags(ins->t, IRT_INT, IRT_GUARD,
+				  IRT_GUARD|IRT_ISPHI) :
+	      ins->t.irt == (IRT_INT|IRT_GUARD)) &&
 	    ins->op1 < ref && ins->op2 < ref &&
 	    arm64_callxs_ref_valid(ir, nk, nins, ref, ins->op1) &&
 	    arm64_callxs_ref_valid(ir, nk, nins, ref, ins->op2) &&
