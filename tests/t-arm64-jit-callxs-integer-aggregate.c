@@ -87,7 +87,7 @@ static int set_hfa_result_candidate(lua_State *L)
 {
   int width = (int)luaL_checkinteger(L, 1);
 	assert(width == 4 || width == 8 || width == 12 || width == 16 ||
-	       width == 32 || width == 64);
+	       width == 24 || width == 32 || width == 40 || width == 64);
   assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
   active_hfa_result_candidate_pt = funcproto(funcV(L->top-1));
   hfa_result_candidate_pt[width] = active_hfa_result_candidate_pt;
@@ -98,7 +98,7 @@ static int get_hfa_result_native_count(lua_State *L)
 {
   int width = (int)luaL_checkinteger(L, 1);
 	assert(width == 4 || width == 8 || width == 12 || width == 16 ||
-	       width == 32 || width == 64);
+	       width == 24 || width == 32 || width == 40 || width == 64);
   lua_pushinteger(L, (lua_Integer)hfa_result_native_finishes[width]);
   return 1;
 }
@@ -441,6 +441,11 @@ static void test_aggregate_signatures(lua_State *L)
   assert_hfa_result_signature(L, "__arm64_return_double_pair_hfa_fn", 8, 2);
   assert_hfa_result_signature(L, "__arm64_return_float_triple_hfa_fn", 4, 3);
   assert_hfa_result_signature(L, "__arm64_return_float_quad_hfa_fn", 4, 4);
+  assert_hfa_result_signature(L, "__arm64_return_double_triple_hfa_fn", 8, 3);
+  assert_hfa_result_signature(L, "__arm64_return_double_quad_hfa_fn", 8, 4);
+  assert_unsupported_aggregate_signature(L, "__arm64_double_quint_result_fn");
+  assert_unsupported_aggregate_signature(L,
+      "__arm64_aligned_double_triple_result_fn");
   assert_unsupported_aggregate_signature(L,
       "__arm64_aligned_float_pair_result_fn");
   assert_hfa_result_signature(L, "__arm64_double_pair_result_fn", 8, 2);
@@ -1067,6 +1072,12 @@ static void observe_native_finish(TGState *tg)
       else if (hiops == 3*calls && stores == 4*calls &&
 	       result_type == IRT_FLOAT)
 	hfa_result_native_finishes[64]++;
+      else if (hiops == 2*calls && stores == 3*calls &&
+	       result_type == IRT_NUM)
+	hfa_result_native_finishes[24]++;
+      else if (hiops == 3*calls && stores == 4*calls &&
+	       result_type == IRT_NUM)
+	hfa_result_native_finishes[40]++;
       else if (hiops == 0 && stores == calls)
         hfa_result_native_finishes[result_type == IRT_FLOAT ? 4 : 8]++;
     }
@@ -1144,9 +1155,9 @@ int main(int argc, char **argv)
     }
   }
   {
-    static const unsigned widths[] = { 4, 8, 12, 16, 32, 64 };
+    static const unsigned widths[] = { 4, 8, 12, 16, 24, 32, 40, 64 };
     static const IRType types[] = { IRT_FLOAT, IRT_NUM, IRT_FLOAT, IRT_NUM,
-				    IRT_FLOAT, IRT_FLOAT };
+				    IRT_NUM, IRT_FLOAT, IRT_NUM, IRT_FLOAT };
     unsigned i;
     jit_State *J = G2J(G(L));
     for (i = 0; i < sizeof(widths)/sizeof(widths[0]); i++) {

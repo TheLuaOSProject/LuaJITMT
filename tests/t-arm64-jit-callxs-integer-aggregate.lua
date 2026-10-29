@@ -36,6 +36,14 @@ typedef struct __attribute__((aligned(16))) {
 typedef struct { double lo, hi; } Arm64DoublePairResult;
 typedef struct { float x, y, z; } Arm64FloatTripleResult;
 typedef struct { float x, y, z, w; } Arm64FloatQuadResult;
+typedef struct { double x, y, z; } Arm64DoubleTripleResult;
+typedef struct { double x, y, z, w; } Arm64DoubleQuadResult;
+typedef struct { double x, y, z, w, v; } Arm64DoubleQuintResult;
+typedef struct __attribute__((aligned(16))) {
+  double x, y, z;
+} Arm64AlignedDoubleTripleResult;
+typedef Arm64DoubleQuintResult (*Arm64DoubleQuintResultFn)(uint32_t);
+typedef Arm64AlignedDoubleTripleResult (*Arm64AlignedDoubleTripleResultFn)(uint32_t);
 typedef Arm64DoublePairResult (*Arm64DoublePairResultFPRFn)(double, uint32_t);
 typedef Arm64AlignedFloatPairResult (*Arm64AlignedFloatPairResultFn)(uint32_t);
 typedef Arm64DoublePairResult (*Arm64DoublePairResultFn)(uint32_t);
@@ -87,6 +95,8 @@ Arm64DoublePairResult arm64_return_double_pair_hfa(uint32_t);
 Arm64DoublePairResult arm64_return_double_pair_hfa_fpr(double, uint32_t);
 Arm64FloatTripleResult arm64_return_float_triple_hfa(uint32_t);
 Arm64FloatQuadResult arm64_return_float_quad_hfa(uint32_t);
+Arm64DoubleTripleResult arm64_return_double_triple_hfa(uint32_t);
+Arm64DoubleQuadResult arm64_return_double_quad_hfa(uint32_t);
 double arm64_return_float_pair_scalar_fpr(double, uint32_t);
 uint32_t arm64_return_scalar(uint32_t);
 ]]
@@ -104,6 +114,12 @@ _G.__arm64_return_double_pair_hfa_fpr_fn =
   lib.arm64_return_double_pair_hfa_fpr
 _G.__arm64_return_float_triple_hfa_fn = lib.arm64_return_float_triple_hfa
 _G.__arm64_return_float_quad_hfa_fn = lib.arm64_return_float_quad_hfa
+_G.__arm64_return_double_triple_hfa_fn = lib.arm64_return_double_triple_hfa
+_G.__arm64_return_double_quad_hfa_fn = lib.arm64_return_double_quad_hfa
+_G.__arm64_double_quint_result_fn =
+  ffi.cast('Arm64DoubleQuintResultFn', nil)
+_G.__arm64_aligned_double_triple_result_fn =
+  ffi.cast('Arm64AlignedDoubleTripleResultFn', nil)
 _G.__arm64_aligned_float_result_fn = ffi.cast('Arm64AlignedFloatResultFn', nil)
 _G.__arm64_padded_float_result_fn = ffi.cast('Arm64PaddedFloatResultFn', nil)
 _G.__arm64_aligned_float_pair_result_fn =
@@ -683,6 +699,14 @@ run_multi_hfa_result(64, 'Arm64FloatQuadResult',
   lib.arm64_return_float_quad_hfa, 29, {'x','y','z','w'},
   function(n) return {n+.25, 2*n+.5, 3*n+.75, 4*n+1} end,
   'four-float HFA result')
+run_multi_hfa_result(24, 'Arm64DoubleTripleResult',
+  lib.arm64_return_double_triple_hfa, 30, {'x','y','z'},
+  function(n) return {n+.125, 2*n+.25, 3*n+.5} end,
+  'three-double HFA result')
+run_multi_hfa_result(40, 'Arm64DoubleQuadResult',
+  lib.arm64_return_double_quad_hfa, 31, {'x','y','z','w'},
+  function(n) return {n+.125, 2*n+.25, 3*n+.5, 4*n+1} end,
+  'four-double HFA result')
 local pair_candidate, pair_oracle = make_result_pair('two-float HFA result')
 _set_hfa_result_candidate(12, pair_candidate)
 _G.__arm64_hfa_result_candidate_12 = pair_candidate

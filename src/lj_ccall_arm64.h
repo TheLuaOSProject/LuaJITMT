@@ -333,8 +333,8 @@ static int lj_ccall_arm64_float_hfa_class_limit(CTState *cts, CTypeID id,
   return 1;
 }
 
-/* Call arguments remain limited to one eightbyte. Result registers D0/D1 can
-** carry a two-double HFA (16 bytes) under the Darwin ARM64 ABI. */
+/* Call arguments remain limited to one eightbyte. Result registers D0-D3 can
+** carry a four-double HFA (32 bytes) under the Darwin ARM64 ABI. */
 static int lj_ccall_arm64_float_hfa_class(CTState *cts, CTypeID id,
 					  LJArm64FloatHFA *hfa,
 					  CTypeID *rawid)
@@ -346,7 +346,7 @@ static int lj_ccall_arm64_float_hfa_result_class(CTState *cts, CTypeID id,
 						 LJArm64FloatHFA *hfa,
 						 CTypeID *rawid)
 {
-  return lj_ccall_arm64_float_hfa_class_limit(cts, id, hfa, rawid, 4, 16);
+  return lj_ccall_arm64_float_hfa_class_limit(cts, id, hfa, rawid, 4, 32);
 }
 
 /* Classify the fixed prefix in Darwin's independent GPR/FPR banks. For a
