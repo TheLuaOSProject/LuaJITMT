@@ -314,7 +314,7 @@ static void test_full_word_recheck(lua_State *L, GCfunc *fn, GCtrace *T)
 
   /* First prove that this exact real trace/frame pair is admissible. */
   lj_trace_test_root_entry_reset();
-  entry = lj_trace_enter_root(J, pc, 1, L, L->base, live);
+  entry = lj_trace_enter_root(J, pc, 1, L, L->base, live, NULL);
   assert(entry.trace == T && entry.target != NULL);
   assert((uintptr_t)lj_ptr_strip(entry.target) ==
 	 (uintptr_t)(void *)trace_mcode_acq(T));
@@ -328,7 +328,7 @@ static void test_full_word_recheck(lua_State *L, GCfunc *fn, GCtrace *T)
   lj_trace_test_root_entry_reset();
   lj_trace_test_root_entry_pause(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA);
   assert(pthread_create(&worker, NULL, mutate_full_word, &race) == 0);
-  entry = lj_trace_enter_root(J, pc, 1, L, L->base, live);
+  entry = lj_trace_enter_root(J, pc, 1, L, L->base, live, NULL);
   assert(entry.trace == NULL && entry.target == NULL);
   assert(pthread_join(worker, NULL) == 0);
   assert(la_load32_acq(&race.saw_pause) == 1);

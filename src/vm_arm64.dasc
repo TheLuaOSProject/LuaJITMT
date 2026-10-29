@@ -67,6 +67,7 @@
 |.define CARG4,		x3
 |.define CARG5,		x4
 |.define CARG6,		x5
+|.define CARG7,		x6
 |.define CARG1w,	w0
 |.define CARG2w,	w1
 |.define CARG3w,	w2
@@ -4523,6 +4524,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  mov CARG4, L
       |  mov CARG5, BASE
       |  mov CARG6w, INSw
+      |  mov CARG7, #0
       |  bl extern lj_trace_enter_root
       |  ldr BASE, L->base
       |  cbz CRET1, >8
@@ -4570,6 +4572,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  mov CARG4, L
       |  mov CARG5, BASE
       |  mov CARG6w, INSw
+      |  mov CARG7, #0
       |  bl extern lj_trace_enter_root
       |  ldr BASE, L->base
       |  cbz CRET1, >8
@@ -4631,6 +4634,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov CARG4, L
     |  mov CARG5, BASE
     |  mov CARG6w, INSw
+    |  mov CARG7, #0
     |  bl extern lj_trace_enter_root
     |  ldr BASE, L->base
     |  cbz CRET1, >1
@@ -4768,6 +4772,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  mov CARG4, L
       |  mov CARG5, BASE
       |  mov CARG6w, INSw
+      |  mov CARG7, RA
       |  bl extern lj_trace_enter_root
       |  ldr BASE, L->base
       |  cbz CRET1, >4

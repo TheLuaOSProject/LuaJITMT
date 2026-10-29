@@ -430,11 +430,13 @@ static void test_funcf_entry_view_preflight(GCtrace *T, GCproto *pt)
   assert(!lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
 }
 
-static LJTraceRootEntry invoke_funcf_entry_helper(lua_State *L, GCfunc *fn,
-	GCtrace *T)
+static LJTraceRootEntry invoke_funcf_entry_helper_top(lua_State *L,
+	GCfunc *fn, GCtrace *T, int stale_top, int bad_frame_top)
 {
   TGState *tg = L2TG(L);
   TValue saved_func;
+  TValue *saved_top = L->top;
+  TValue *frame_top = L->base + funcproto(fn)->framesize;
   int32_t saved_vmstate = lj_tg_vmstate_load_acq(tg);
   lua_State *saved_tmpbuf_L = sbufL(&tg->tmpbuf);
   const BCIns *pc = trace_startpc_acq(T);
@@ -444,9 +446,13 @@ static LJTraceRootEntry invoke_funcf_entry_helper(lua_State *L, GCfunc *fn,
   copyTV(L, &saved_func, L->base-2);
   setfuncV(L, L->base-2, fn);
   assert(curr_func(L) == fn);
+  if (stale_top)
+    L->top = L->base - 1;
+  if (bad_frame_top)
+    frame_top--;
   lj_tg_vmstate_store_rel(tg, (int32_t)~LJ_VMST_INTERP);
   entry = lj_trace_enter_root(L2J(L), pc, trace_traceno_acq(T),
-	L, L->base, live);
+	L, L->base, live, frame_top);
   if (entry.trace != NULL) {
     assert(entry.trace == T && entry.target != NULL);
     assert((uintptr_t)lj_ptr_strip(entry.target) ==
@@ -457,8 +463,32 @@ static LJTraceRootEntry invoke_funcf_entry_helper(lua_State *L, GCfunc *fn,
   assert(lj_tg_load_jit_base(tg) == NULL);
   setsbufL(&tg->tmpbuf, saved_tmpbuf_L);
   lj_tg_vmstate_store_rel(tg, saved_vmstate);
+  L->top = saved_top;
   copyTV(L, L->base-2, &saved_func);
   return entry;
+}
+
+static LJTraceRootEntry invoke_funcf_entry_helper(lua_State *L, GCfunc *fn,
+	GCtrace *T)
+{
+  return invoke_funcf_entry_helper_top(L, fn, T, 0, 0);
+}
+
+static void test_funcf_stale_top_geometry(lua_State *L, GCfunc *fn,
+	GCtrace *T)
+{
+  LJTraceRootEntry entry;
+  lj_trace_test_root_entry_reset();
+  entry = invoke_funcf_entry_helper_top(L, fn, T, 1, 0);
+  assert(entry.trace == T && entry.target != NULL);
+  assert(lj_trace_test_root_entry_publishes() == 1);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+
+  lj_trace_test_root_entry_reset();
+  entry = invoke_funcf_entry_helper_top(L, fn, T, 1, 1);
+  assert(entry.trace == NULL && entry.target == NULL);
+  assert(lj_trace_test_root_entry_publishes() == 0);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
 }
 
 static void expect_funcf_entry_reject(lua_State *L, GCfunc *fn, GCtrace *T)
@@ -798,6 +828,7 @@ static void run_positive(void)
   assert(T == expect_published_true(L, pt, startins));
   test_funcf_entry_view_preflight(T, pt);
   expect_native_jfuncf_calls(L, "__arm64_funcf_true");
+  test_funcf_stale_top_geometry(L, fn, T);
   test_funcf_metadata_certificate(L, fn, T);
   test_funcf_body_certificate(L, fn, T);
   test_funcf_generation_race(L, fn, T, (BCIns *)&proto_bc(pt)[0],

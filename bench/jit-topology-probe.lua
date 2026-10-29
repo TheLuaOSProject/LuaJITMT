@@ -22,6 +22,12 @@ local cases = {
     phases = {{11.5, 17.25}, {'bad'}},
   },
   {
+    name = 'captured-two-result-call',
+    source = [[local function child(x) return x*.5, x+1.25 end
+      return function(x) local a,b=child(x); return a+b end]],
+    phases = {{11.5, 17.25}, {'bad'}},
+  },
+  {
     name = 'captured-tail-return',
     source = [[local function leaf(x) return x*.25 end
       return function(x) return leaf(x) end]],
@@ -329,6 +335,18 @@ local function main()
         if phase == 2 then
           assert(root_exits > 0,
             'nonleaf root did not enter natively and exit on bad argument')
+        end
+      elseif case.name == 'captured-two-result-call' then
+        local selected_root=false
+        assert(next(roots), 'captured pair-call FUNCF root was not published')
+        for no in pairs(roots) do
+          local info=rows[no]
+          if info and info.linktype == 'return' then selected_root=true end
+        end
+        assert(selected_root, 'captured pair-call root has no return trace')
+        if phase == 2 then
+          assert(root_exits > 0,
+            'captured pair-call root did not enter natively and exit on bad argument')
         end
       elseif case.name == 'function-two-results' then
         local selected_root=false

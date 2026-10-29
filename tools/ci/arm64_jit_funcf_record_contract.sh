@@ -90,6 +90,8 @@ for required in \
   'TRACE_ARM64_TRUE_FUNCF_ADMITTED' \
   'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA' \
   'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION' \
+  'test_funcf_stale_top_geometry' \
+  'bad_frame_top' \
   'test_funcf_native_xpoll' \
   'test_funcf_native_stopreq'; do
   grep -F "$required" "$fixture_source" >/dev/null || {
@@ -142,6 +144,7 @@ grep -F 'lj_asm_arm64_postra_funcf_entry_admit(' "$trace_source" >/dev/null
 grep -F 'sourceins == v->startins' "$trace_source" >/dev/null
 grep -F '&& prepublication)' "$trace_source" >/dev/null
 grep -F 'sourceop == (uint32_t)BC_JFUNCF' "$trace_source" >/dev/null
+grep -F 'frame_topp != expected_top' "$trace_source" >/dev/null
 grep -F 'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED' "$vm_source" >/dev/null
 awk '/case BC_JFUNCF:/ { seen++; if (seen == 2) copy=1 }
      copy { print }
@@ -149,6 +152,7 @@ awk '/case BC_JFUNCF:/ { seen++; if (seen == 2) copy=1 }
   "$vm_source" >"$jfuncf_source"
 for required in \
   'bl extern lj_trace_enter_root' \
+  'mov CARG7, RA' \
   'sub sp, sp, #16' \
   'br_trace_auth CARG2, CRET1'; do
   grep -F "$required" "$jfuncf_source" >/dev/null || {

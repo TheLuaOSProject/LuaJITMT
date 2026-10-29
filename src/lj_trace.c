@@ -7284,13 +7284,14 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
 ** must recover the branch from its preserved consumed instruction. */
 LJTraceRootEntry LJ_FASTCALL
 lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
-		    lua_State *L, TValue *base, BCIns sourceins)
+		    lua_State *L, TValue *base, BCIns sourceins,
+		    TValue *frame_top)
 {
   LJTraceRootEntry result = { NULL, NULL };
   global_State *g;
   TGState *tg;
   TValue *stack, *maxstack, *top;
-  uintptr_t basep, stackp, maxstackp, topp, mcodep;
+  uintptr_t basep, stackp, maxstackp, topp, frame_topp, mcodep;
   TraceVec *tv, *tv2;
   GCtrace *T, *T2;
   GCfunc *fn;
@@ -7324,13 +7325,16 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   stackp = (uintptr_t)(void *)stack;
   maxstackp = (uintptr_t)(void *)maxstack;
   topp = (uintptr_t)(void *)top;
+  frame_topp = (uintptr_t)(void *)frame_top;
   if (stack == NULL || maxstack == NULL || maxstackp <= stackp ||
       basep < stackp ||
       basep - stackp < (uintptr_t)(1 + LJ_FR2) * sizeof(TValue) ||
       basep >= maxstackp ||
-      top == NULL || topp < basep || topp > maxstackp ||
+      top == NULL || topp < stackp || topp > maxstackp ||
       (basep-stackp) % sizeof(TValue) != 0 ||
       (topp-stackp) % sizeof(TValue) != 0 ||
+      (sourceop != (uint32_t)BC_JFUNCF &&
+       (topp < basep || frame_top != NULL)) ||
       lj_tg_load_jit_base(tg) != NULL ||
       lj_tg_vmstate_load_acq(tg) != (int32_t)~LJ_VMST_INTERP ||
       lj_tg_in_native_acq(tg) != 0 || trace_root_entry_request_pending(tg))
@@ -7342,6 +7346,16 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   if ((uintptr_t)pt->framesize >
 	(maxstackp - basep) / (uintptr_t)sizeof(TValue))
     return result;
+  if (sourceop == (uint32_t)BC_JFUNCF) {
+    uintptr_t expected_top = basep +
+	(uintptr_t)pt->framesize * (uintptr_t)sizeof(TValue);
+    BCIns expected_ins = BCINS_AD(BC_JFUNCF, pt->framesize, traceno);
+    if (frame_top == NULL || frame_topp != expected_top ||
+	frame_topp > maxstackp || (frame_topp-stackp) % sizeof(TValue) != 0 ||
+	pc != proto_bc(pt) || sourceins != expected_ins ||
+	(BCIns)la_load32_acq((const uint32_t *)pc) != sourceins)
+      return result;
+  }
 
   if (sourceop == BC_JITERL) {
     BCReg a = bc_a(sourceins);
