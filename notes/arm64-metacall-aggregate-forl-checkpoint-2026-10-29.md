@@ -41,6 +41,30 @@ structurally checked, not dynamically reached. See the
 
 ## Combined validation
 
+Ordinary assertion builds of the exact integrated source `b549a895b` pass
+all 509 stock source cases and all 509 imported stock-bytecode cases on both
+ARM64 and x86_64. The snapshot-PC fixture, vararg companion, twelve-case
+topology probe, twenty-workload inventory and eight-case aggregate probe also
+pass on both targets. The inventory has 260 result checks and selected-root
+exit witnesses in 18/20 rows on each target. The ARM64 topology probe witnesses
+root 1 and root-linked side 2 in the integer-FORL alternate branch. The
+aggregate probe witnesses the two-float argument and retained integer/word
+results natively on ARM64; the retained two-float result remains x64-only.
+Strict ARM64/arm64e assertion/GDBJIT compilation of the combined trace and
+assembler units passes with warnings treated as errors.
+
+The unchanged pre-fix remote-flush Lua test, extracted from `1487ee15b`, also
+passes against both ordinary integrated runtimes. On ARM64 this includes the
+original 20,000-iteration metacall replacement stress; x64 follows its existing
+boxed/bool/sret remote-flush path. The dedicated deterministic metacall test
+separately supplies x64 race coverage, as described above.
+
+The ordinary driver, source ID, logs, universal fixture library, immutable
+runtime/archive/module bundles and SHA-256 hashes are in the `ordinary/`
+subdirectory of the combined evidence directory below. The independent
+validation checkout was the existing `arm64-math` worktree, detached at the
+tested commit, so the full gate's profile builds were not interrupted.
+
 The full experimental gate is running from `b549a895b`; no complete integrated
 pass is recorded yet. Its driver, source identifier and logs are under
 `/Users/frityet/Scratch/ljmt-metacall-hfa-forl-integration-20261029/`.
