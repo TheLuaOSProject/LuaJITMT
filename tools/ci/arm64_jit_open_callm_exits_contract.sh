@@ -25,4 +25,4 @@ for profile in arm64-assert arm64e-assert arm64-release arm64e-release; do
   lj_ci_run_lua 60 "$root/tests/t-arm64-jit-open-callm-exits.lua"
 done
 lj_ci_restore "$LJ_CI_RESTORE_TARGET_FLAGS" "$LJ_CI_RESTORE_XCFLAGS"
-echo 'arm64_jit_open_callm_exits_contract OK: consumer identity exits after open CALLM producers, interpreter continuation, frame/MULTRES restoration, exact selected code reuse across GC, live peer, and ARM64/ARM64e assertion/release profiles'
+echo 'arm64_jit_open_callm_exits_contract OK: open CALLM consumer identity exits, captured current-iteration producer arguments, interpreter continuation, frame/MULTRES restoration, source/IR/map negatives, exact selected code reuse across GC, live peer, and ARM64/ARM64e assertion/release profiles'

@@ -41,6 +41,35 @@ end
 
 local function main()
   for n=1,3 do run_case(n,cases[n]) end
+  for n,case in ipairs(cases) do
+    local function consumer(body)
+      return assert(loadstring("return function("..case[4]..") "..body.." end", "@captured-open-callm-consumer"))()
+    end
+    local a,b=consumer(case[2]),consumer(case[3])
+    local function make_runner(initial)
+      local current=initial
+      local function run(fn,count)
+        local total=.5
+        for i=1,count do total=total+current(fn(i+.5)) end
+        return total
+      end
+      local function set(value) current=value end
+      return run,set
+    end
+    local candidate,set_candidate=make_runner(a)
+    local oracle,set_oracle=make_runner(a)
+    local producer=assert(loadstring("return function(x) "..case[1].." end",
+                                    "@captured-open-callm-producer"))()
+    jit.off(a,true); jit.off(b,true)
+    jit.off(candidate,true); jit.off(set_candidate,true)
+    jit.off(oracle,true); jit.off(set_oracle,true); jit.off(producer,true)
+    assert(candidate(producer,64)==oracle(producer,64))
+    set_candidate(b); set_oracle(b)
+    assert(candidate(producer,64)==oracle(producer,64))
+    set_candidate(a); set_oracle(a)
+    assert(candidate(producer,64)==oracle(producer,64))
+    io.write(string.format("captured open CALLM interpreter results=%d consumer swaps matched\n",n))
+  end
 end
 jit.off(run_case,true); jit.off(main,true)
 main()
