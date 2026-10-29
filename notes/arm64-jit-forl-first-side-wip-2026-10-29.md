@@ -55,13 +55,13 @@ oracle. For `start=INT32_MAX-1, stop=INT32_MAX, step=1`, the native candidate
 returns the exact oracle result; runtime counters identify an exit from root
 trace 12/exit 0, not from attached child 13. Thus this proves whole-loop
 boundary behavior through root fallback/interpreter, not execution of the
-child-local guard. A separate near-maximum safe-stop attempt also exited from
-the parent root instead of producing a child exit. The minimum-bound mirror
-and an exact child overflow-exit witness remain incomplete. The contract does
-exercise the ordinary-range native child with a live peer and GC/retirement/
-reuse checks; those checks have not been repeated on a high-boundary native
-child because none has been observed. Do not describe this WIP as a complete
-FORL parity capability or integrated.
+child-local guard. A separate safe near-maximum case,
+`start=INT32_MAX-2, stop=INT32_MAX-1, step=1`, matches the JIT-disabled oracle
+and enters child 13 at child exit 2 on both ARM64 and arm64e. This exercises
+the child-local bound on a safe edge; it does not trigger the bound failure.
+The minimum-bound mirror and an exact child overflow-exit witness remain
+incomplete. Do not describe this WIP as a complete FORL parity capability or
+integrated.
 
 A previous experiment accepted the child ADD using only the copied parent
 admission token and selected map. That path was closed. The present source has
