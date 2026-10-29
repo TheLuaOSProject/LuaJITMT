@@ -53,6 +53,10 @@ and reports that are no longer authoritative are retained in
   twenty-workload sample passes 260 result checks on each architecture, with
   root-exit witnesses in eighteen rows on each target. These are
   sampled workload observations, not a full-compilation or parity claim.
+- The separate [aggregate probe](arm64-aggregate-native-gap-2026-10-28.md)
+  now witnesses x64 loops returning and retaining small integer/float structs.
+  ARM64 still interprets those result shapes. All eight rows pass their
+  result/effect checks on both targets; the returned objects survive GC.
 - Latest integrated follow-up: folded literal string-byte traces at
   `cdc2b7e2`, with test cleanup at `98e158b8`. Only completely unused pointer
   constants and their payloads are tolerated; live pointer use stays closed.

@@ -35,6 +35,15 @@ local cases = {
     lib.lj_callxs_sysv_take_sse, ffi.new('AggregateFloatPair',1.25,2.5), 3},
   {'word-both', 'local v=fn(x,i); sum=sum+v.value',
     lib.lj_callxs_sysv_step_word, ffi.new('AggregateWord',7), 9},
+  {'int-result-retained', 'last=fn(i); sum=sum+i',
+    lib.lj_callxs_sysv_make_int, false, 0, {'lo','hi'}, 'AggregateIntPair',
+    function(n) return {3*n+1,5*n+2} end},
+  {'sse-result-retained', 'last=fn(i); sum=sum+i',
+    lib.lj_callxs_sysv_make_sse, false, 2, {'x','y'}, 'AggregateFloatPair',
+    function(n) return {n+.25,2*n+.5} end},
+  {'word-both-retained', 'last=fn(x,i); sum=sum+i',
+    lib.lj_callxs_sysv_step_word, ffi.new('AggregateWord',7), 9,
+    {'value'}, 'AggregateWord', function(n) return {7+n} end},
 }
 
 local function roots(fn)
@@ -53,11 +62,33 @@ local function roots(fn)
 end
 
 local function sample(case)
-  local source = 'return function(n,fn,x) local sum=.5; for i=1,n do '..
-    case[2]..' end; return sum end'
+  local source = 'return function(n,fn,x) local sum=.5; '..
+    (case[6] and 'local last; ' or '')..'for i=1,n do '..
+    case[2]..' end; return sum'..(case[6] and ',last' or '')..' end'
   local candidate = assert(loadstring(source,'@aggregate-probe'))()
   local oracle = assert(loadstring(source,'@aggregate-probe'))()
   jit.off(oracle,true)
+  local retained = {}
+  local function check_result(a,b,expected)
+    assert(ffi.istype(case[7],a) and ffi.istype(case[7],b),
+      case[1]..' returned the wrong aggregate type')
+    for i,field in ipairs(case[6]) do
+      assert(a[field] == expected[i] and b[field] == expected[i],
+        case[1]..' returned the wrong '..field)
+    end
+  end
+  local function compare(n)
+    local a,ar = candidate(n,case[3],case[4])
+    local b,br = oracle(n,case[3],case[4])
+    assert(a == b, case[1]..' differs from interpreter')
+    if case[6] then
+      local expected = case[8](n)
+      check_result(ar,br,expected)
+      retained[#retained+1] = {ar,br,expected}
+    end
+  end
+  jit.off(check_result,true)
+  jit.off(compare,true)
   local exits,resumes = {},{}
   local function observe(no,exitno)
     -- Match the patched runner at delivery, before a trace ID can be reused.
@@ -83,14 +114,18 @@ local function sample(case)
   local ok,err = xpcall(function()
     for iteration=1,24 do
       local n = iteration%2 == 0 and 48 or 64
-      assert(candidate(n,case[3],case[4]) == oracle(n,case[3],case[4]),
-        case[1]..' differs from interpreter')
+      compare(n)
       calls = calls+2*n
     end
     collectgarbage('collect')
-    assert(candidate(32,case[3],case[4]) == oracle(32,case[3],case[4]),
-      case[1]..' differs after GC')
+    compare(32)
     calls = calls+64
+    if case[6] then
+      collectgarbage('collect')
+      for _,pair in ipairs(retained) do
+        check_result(pair[1],pair[2],pair[3])
+      end
+    end
     assert(lib.lj_callxs_sysv_count(case[5]) == calls,
       case[1]..' omitted or replayed a foreign call')
   end,debug.traceback)
@@ -100,17 +135,19 @@ local function sample(case)
   for no in pairs(roots(candidate)) do
     local info = util.traceinfo(no)
     if info then
-      local callxs = 0
+      local callxs,cnew,xstore = 0,0,0
       for ref=1,info.nins do
         local _,ot = util.traceir(no,ref)
         if ot then
           local pos = 6*bit.rshift(ot,8)
-          if vmdef.irnames:sub(pos+1,pos+6) == 'CALLXS' then
-            callxs = callxs+1
-          end
+          local op = vmdef.irnames:sub(pos+1,pos+6)
+          if op == 'CALLXS' then callxs = callxs+1 end
+          if op == 'CNEW  ' then cnew = cnew+1 end
+          if op == 'XSTORE' then xstore = xstore+1 end
         end
       end
-      rows[#rows+1] = no..':CALLXS='..callxs..':link='..info.linktype
+      rows[#rows+1] = no..':CALLXS='..callxs..':CNEW='..cnew..
+        ':XSTORE='..xstore..':link='..info.linktype
     end
   end
   for key,count in pairs(exits) do

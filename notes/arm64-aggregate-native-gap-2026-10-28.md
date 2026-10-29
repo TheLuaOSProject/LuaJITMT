@@ -87,3 +87,31 @@ limits are in the
 Evidence uses the immutable runtime/module bundles under
 `/Users/frityet/Scratch/ljmt-varargs-integrated-20261029/`, with the universal
 `small-aggregate.dylib` and `{arm64,x86_64}-aggregate.tsv`.
+
+## Retained result follow-up (2026-10-29)
+
+The probe now separates aggregate return lowering from field reads within the
+recorded loop. Three added cases retain `last=fn(...)`, accumulate a scalar
+loop sum, and return `last` to the JIT-disabled harness. The harness checks the
+exact CType and every field against independently calculated C-fixture results,
+as well as the separately interpreted candidate. It retains all 50 result
+objects per case through a full collection and checks their fields again.
+The original five rows remain, including their inconclusive combined
+result-plus-field-access workloads.
+
+With the same immutable `cbb707874` ARM64/x64 runtimes, all eight cases pass
+200 oracle comparisons and exactly 22,016 foreign calls per architecture.
+Each new x64 row has a selected loop root containing two CALLXS, two CNEW and
+two XSTORE operations, and 25 selected-root exits. ARM64 has no selected-root
+witness in those three rows. The return shapes are the two-uint32 struct, the
+two-float struct, and the one-uint32 struct also passed as an argument. This
+establishes a native result-lowering gap without relying on the earlier
+unwitnessed workloads or arbitrary published traces.
+
+The x64 result exits resume at `CGET`: bytecode position 16 for the integer
+and float pairs (IR reference 58), and position 17 for the word (reference 66).
+Evidence is under
+`/Users/frityet/Scratch/ljmt-aggregate-result-probe-20261029/`:
+`{arm64,x86_64}-expanded.tsv` records the committed eight-case probe; the
+discard and retained exploratory programs/logs are preserved separately.
+This follow-up changes only the probe and notes, not production admission.
