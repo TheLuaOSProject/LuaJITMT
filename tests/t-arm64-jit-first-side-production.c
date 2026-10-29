@@ -162,6 +162,20 @@ static void define_probes(lua_State *L)
       "end "
       "return sum "
     "end "
+    "local function multisibling(start,n,mode) "
+      "local sum=0; for i=start,n do "
+        "if mode==1 then sum=sum+i "
+        "elseif mode==2 then sum=sum-i "
+        "else sum=sum+i*3 end "
+      "end; return sum end; "
+    "local function multisibling2(start,n,mode) "
+      "local sum=0; for i=start,n do "
+        "if mode==1 then sum=sum+i "
+        "elseif mode==2 then sum=sum-i "
+        "else sum=sum+i*3 end "
+      "end; return sum end; "
+    "__arm64_first_side_multisibling=multisibling; "
+    "__arm64_first_side_multisibling2=multisibling2; "
     "local opaque=setmetatable({}, {__index=__arm64_first_side_opaque_index}) "
     "local function unsupported(n, bias) "
       "local i=0 "
@@ -250,17 +264,23 @@ static int smoke_main(void)
   assert(call_named(L, "__arm64_first_side_production_third", 3, 0) == 3);
   run_lua(L,
     "local util=require('jit.util'); local live, roots, sides=0,0,0; "
+    "local childcount={}; "
     "for tr=1,32 do local i=util.traceinfo(tr); if i then "
       "live=live+1; "
       "if i.linktype=='loop' then roots=roots+1 "
-      "elseif i.linktype=='root' then sides=sides+1 end "
+      "elseif i.linktype=='root' then sides=sides+1; "
+        "childcount[i.link]=(childcount[i.link] or 0)+1 end "
     "end end; "
+    "local multis=0; for _,n in pairs(childcount) do "
+      "assert(n<=2, 'unexpected third root-linked side'); "
+      "if n==2 then multis=multis+1 end end; "
     "if live~=14 then for tr=1,32 do local i=util.traceinfo(tr); "
       "if i then io.stderr:write('trace ',tr,' link=',i.link, "
         "' type=',i.linktype,' exit=',i.nexit,'\\n') end end end; "
     "assert(live==14, 'expected fourteen production traces, got '..live); "
     "assert(roots==9, 'expected nine loop traces, got '..roots); "
-    "assert(sides==5, 'expected five root-linked first sides, got '..sides)");
+    "assert(sides==5, 'expected five root-linked sides, got '..sides); "
+    "assert(multis==1, 'expected one root with two root-linked sides, got '..multis)");
 
   lua_close(L);
   puts("t-arm64-jit-first-side-production smoke OK");
@@ -405,6 +425,149 @@ static uint32_t live_trace_count(jit_State *J)
       count++;
   return count;
 }
+
+#ifdef LJ_TRACE_TEST_HELPERS
+static MSize root_child_ids(jit_State *J, GCtrace *root, TraceNo rootno,
+	TraceNo *ids, ExitNo *exits, MSize capacity)
+{
+  TraceVec *tv = tracevec_acq(J);
+  TraceNo childno = trace_nextside_acq(root);
+  MSize count = trace_nchild_acq(root), i;
+  assert(tv != NULL && count <= capacity && count <= tv->sizetrace);
+  for (i = 0; i < count; i++) {
+    GCtrace *child;
+    IRIns base;
+    ExitNo exitno;
+    MSize k;
+    assert(childno != 0 && childno != rootno &&
+	   (MSize)childno < tv->sizetrace);
+    child = traceref_safe(J, childno);
+    assert(trace_runnable_acq(child, childno));
+    assert(trace_root_acq(child) == rootno &&
+	   trace_linktype_acq(child) == LJ_TRLINK_ROOT &&
+	   trace_link_acq(child) == rootno);
+    base = ir_load_acq(&trace_ir_acq(child)[REF_BASE]);
+    assert(base.o == IR_BASE && base.t.irt == IRT_PGC &&
+	   (TraceNo)base.op1 == rootno);
+    exitno = (ExitNo)base.op2;
+    assert(exitno < trace_nsnap_acq(root));
+    for (k = 0; k < i; k++) assert(exits[k] != exitno);
+    assert(trace_exittarget_arm64_acq(root, exitno) ==
+	   trace_mcode_acq(child));
+    ids[i] = childno;
+    exits[i] = exitno;
+    childno = trace_nextside_acq(child);
+  }
+  assert(childno == 0);
+  assert(trace_nchild_acq(root) == count &&
+	 trace_nextside_acq(root) == (count ? ids[0] : 0));
+  return count;
+}
+
+typedef struct MultiRootSides {
+  GCtrace *root;
+  TraceNo rootno;
+  TraceNo ids[2];
+  ExitNo exits[2];
+} MultiRootSides;
+
+static void record_two_second_sides(lua_State *L, jit_State *J,
+	MultiRootSides *set)
+{
+  const char *name = "__arm64_first_side_production_second";
+  GCproto *pt;
+  unsigned attempt;
+
+  /* Replay the same counter-allocation prelude as smoke_main. The second
+  ** side is a distinct guard exit, and its root slot depends on preceding
+  ** hot loops consuming their ordinary trace counters. */
+  define_probes(L);
+  pt = named_proto(L, name);
+  assert(call_named(L, "__arm64_first_side_production_fourth", 3, 0) == 4);
+  assert(call_named(L, "__arm64_first_side_production_fourth", 3, 0) == 4);
+  for (attempt = 0; attempt < 4; attempt++)
+    assert(call_named(L, "__arm64_first_side_production_fourth", 5, 0) == 6);
+  for (attempt = 0; attempt < PRODUCTION_ROOT_ATTEMPTS; attempt++)
+    assert(call_named(L, "__arm64_first_side_production_unsupported", 4, 0) == 6);
+  assert(call_named(L, "__arm64_first_side_production_decoy", 3, 0) == 3);
+  assert(call_named(L, "__arm64_first_side_production_first", 3, 0) == 3);
+  assert(call_named(L, "__arm64_first_side_production_first", 3, 1) == 4);
+  assert(call_named(L, "__arm64_first_side_production_first", 3, 1) == 4);
+  assert(call_named(L, name, 3, 0) == 3);
+  assert(call_named(L, name, 3, 0) == 3);
+  set->root = find_root(J, pt, &set->rootno);
+  assert(set->root != NULL && set->rootno != 0);
+  assert(call_named(L, name, 2, 0) == 2);
+  assert(trace_nchild_acq(set->root) >= 2);
+  assert(root_child_ids(J, set->root, set->rootno,
+	set->ids, set->exits, 2) == 2);
+  assert(set->exits[0] != set->exits[1]);
+}
+
+static void expect_multi_root_siblings(lua_State *L, jit_State *J,
+	global_State *g)
+{
+  MultiRootSides a, b;
+  GCtrace *retired;
+  TraceNo head, tail;
+
+  run_lua(L, "jit.flush(); jit.opt.start('hotloop=1','hotexit=1','maxtrace=24')");
+  record_two_second_sides(L, J, &a);
+
+  /* Root a loses its head and keeps the older sibling native. */
+  head = a.ids[0]; tail = a.ids[1];
+  retired = traceref_safe(J, head);
+  assert(trace_nextside_acq(traceref_safe(J, tail)) == 0);
+  assert(lj_trace_flushscope(J, head) == 1u);
+  assert(trace_nchild_acq(a.root) == 1 &&
+	 trace_nextside_acq(a.root) == tail);
+  assert(trace_traceno_acq(retired) == 0 &&
+	 trace_nextside_acq(retired) == 0);
+  assert(trace_exittarget_arm64_acq(a.root, a.exits[1]) ==
+	 trace_mcode_acq(traceref_safe(J, tail)));
+
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lj_trace_test_root_entry_reset();
+  assert(call_named(L, "__arm64_first_side_production_second", 2, 0) == 2);
+  assert(lj_trace_test_root_entry_publishes() > 0 &&
+	 lj_trace_test_root_entry_successes() > 0 &&
+	 lj_trace_test_root_entry_cleanups() == 0);
+  assert(trace_runnable_acq(a.root, a.rootno) &&
+	 trace_nchild_acq(a.root) == 1 &&
+	 trace_nextside_acq(a.root) == a.ids[1]);
+
+  /* Rebuild the same two-exit topology and remove its tail while the head
+  ** remains live. */
+  run_lua(L, "jit.flush()");
+  record_two_second_sides(L, J, &b);
+  head = b.ids[0]; tail = b.ids[1];
+  retired = traceref_safe(J, tail);
+  assert(trace_nextside_acq(traceref_safe(J, head)) == tail);
+  assert(lj_trace_flushscope(J, tail) == 1u);
+  assert(trace_nchild_acq(b.root) == 1 &&
+	 trace_nextside_acq(b.root) == head &&
+	 trace_nextside_acq(traceref_safe(J, head)) == 0);
+  assert(trace_traceno_acq(retired) == 0 &&
+	 trace_nextside_acq(retired) == 0);
+  assert(trace_exittarget_arm64_acq(b.root, b.exits[0]) ==
+	 trace_mcode_acq(traceref_safe(J, head)));
+
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lj_trace_test_root_entry_reset();
+  assert(call_named(L, "__arm64_first_side_production_second", 2, 0) == 2);
+  assert(lj_trace_test_root_entry_publishes() > 0 &&
+	 lj_trace_test_root_entry_successes() > 0 &&
+	 lj_trace_test_root_entry_cleanups() == 0);
+  assert(trace_runnable_acq(b.root, b.rootno) &&
+	 trace_nchild_acq(b.root) == 1 &&
+	 trace_nextside_acq(b.root) == b.ids[0]);
+
+  assert(lj_trace_flushall_gc(L) == 0);
+  assert(!trace_runnable_acq(a.root, a.rootno));
+  assert(!trace_runnable_acq(b.root, b.rootno));
+  UNUSED(g);
+}
+#endif
 
 static const BCIns *selected_continuation(const GCtrace *T, ExitNo exitno)
 {
@@ -1152,6 +1315,10 @@ static int detailed_main(int argc, char **argv)
     expect_scoped(J, g, pairs);
   else
     expect_gc_claim(J, g, pairs);
+
+#ifdef LJ_TRACE_TEST_HELPERS
+  expect_multi_root_siblings(L, J, g);
+#endif
 
   assert(gc2_smr_readers_acq(g) == 0);
   assert(jit_token_acq(g) == 0);

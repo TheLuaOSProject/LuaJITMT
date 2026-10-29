@@ -421,9 +421,8 @@ typedef struct LJArm64SideCertificate {
   MSize parent_nins, parent_nk, parent_nsnap, parent_nsnapmap;
   MSize parent_szmcode, parent_mcloop, parent_spadjust, parent_topslot;
   BCIns startins, continuationins;
-  TraceNo traceno, rootno, link, nextroot, nextside, nchild;
+  TraceNo traceno, rootno, link, nextroot, nchild;
   TraceNo parentno, parent_root, parent_link, parent_nextroot;
-  TraceNo parent_nextside, parent_nchild;
   uint32_t admission, parent_admission;
   uint8_t linktype, parent_linktype, sinktags, parent_sinktags;
   ExitNo exitno;
