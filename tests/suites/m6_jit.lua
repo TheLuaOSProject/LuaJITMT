@@ -924,10 +924,12 @@ assert(util.traceinfo(1), "Lua tailcall loop did not trace")
       t:run({ "sh", t:path("tools", "ci",
                             "jit_recorder_safepoint_contract.sh") },
             { timeout = "15s" })
-      clean_build(t, build.trace_helper_build_opts({ quiet = true }))
+      clean_build(t, build.trace_helper_build_opts({ quiet = true,
+        xcflags = "-DLJ_TRACE_TEST_HELPERS -DLJ_GC2_TEST_HELPERS" }))
       build_and_run_c(t, t:tmp("lj_t-jit-recorder-safepoint"),
                       "t-jit-recorder-safepoint.c",
                       build.trace_helper_c_opts({
+        cflags = "-DLJ_TRACE_TEST_HELPERS -DLJ_GC2_TEST_HELPERS",
         build = false,
         timeout = "30s"
       }))
