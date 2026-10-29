@@ -64,3 +64,13 @@ This is now the verified source checkpoint for the parity continuation.
 
 Vararg-forwarded Lua tail calls, recursive traces and further FFI/source
 restrictions remain under investigation. Full x86_64 parity is not complete.
+
+## Independent continuation rebuild
+
+After promotion, the main parity checkout was independently rebuilt as
+ordinary assertion ARM64 without test helpers (`main-build.log`), profile
+`1f8b5e602290bdc19ea6bee64e5b3b6815167848eafe5b2181e07dabc4bfdb53`.
+Both its source and original-v2-bytecode stock corpora pass all 509 cases
+(`main-stock-source.log`, `main-stock-bytecode.log`). The bytecode wrapper was
+rerun from its required `tests/stock/test` directory after the initial command
+failed to locate `test.lua`; that invocation was not a conformance failure.
