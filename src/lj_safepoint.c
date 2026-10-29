@@ -205,6 +205,23 @@ static int safepoint_wait_consumed_ack(TGState *tg, uint32_t actions)
   while ((poll = lj_tg_poll_acq(tg)) != 0) {
     global_State *g = tg->gl;
     uint32_t tid = lj_tg_tid_acq(tg);
+#if LJ_HASJIT
+    /* EXIT_TRACES marks an owner-local recorder asynchronously aborted, except
+    ** at PUBLISH where the irreversible suffix must finish. Let the protected
+    ** trace-state machine consume RECERR or complete PUBLISH and release the
+    ** token before waiting for the flush leader, which needs that same token.
+    ** Keep poll armed so the next interpreter/native-return boundary still
+    ** waits for the global action to finish. */
+    if ((actions & LJ_GC2_HS_EXIT_TRACES) &&
+	tg == lj_thr_get_tg_fallback(g)) {
+      lua_State *owner = lj_tg_load_cur_L(tg);
+      jit_State *J = G2J(g);
+      TraceState state = lj_trace_state_load(J);
+      if (owner && lj_jit_token_held_l(owner, J) &&
+	  (lj_trace_state_aborted(state) || state == LJ_TRACE_PUBLISH))
+	return 0;
+    }
+#endif
     /* A trace-flush leader can re-enter native boundaries while it runs
     ** leader-owned actions such as JIT dump events. It must not wait for its
     ** own consumed poll: only the leader can clear that poll after the action

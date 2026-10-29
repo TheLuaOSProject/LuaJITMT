@@ -8,6 +8,7 @@
 */
 
 #include <assert.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -325,6 +326,7 @@ static int smoke_main(void)
 #include "lj_snap.h"
 #include "lj_safepoint.h"
 #include "lj_target.h"
+#include "lj_thr.h"
 #include "lj_tg.h"
 #include "lj_trace.h"
 
@@ -451,6 +453,19 @@ static uint32_t live_trace_count(jit_State *J)
   return count;
 }
 
+static int trace_generation_runnable(jit_State *J, uint64_t generation)
+{
+  TraceNo traceno;
+  TraceVec *tv = tracevec_acq(J);
+  for (traceno = 1; tv != NULL && (MSize)traceno < tv->sizetrace; traceno++) {
+    GCtrace *T = traceref_safe(J, traceno);
+    if (T != NULL && T->arm64_generation == generation &&
+	trace_runnable_acq(T, traceno))
+      return 1;
+  }
+  return 0;
+}
+
 #ifdef LJ_TRACE_TEST_HELPERS
 static MSize root_child_ids(jit_State *J, GCtrace *root, TraceNo rootno,
 	TraceNo *ids, ExitNo *exits, MSize capacity)
@@ -503,6 +518,116 @@ typedef struct ThreeRootSides {
   ExitNo exits[3];
 } ThreeRootSides;
 
+typedef struct AppendFlushRace {
+  lua_State *peer_L;
+  global_State *g;
+  TGState *main_tg;
+  uint64_t epoch;
+  uint32_t attached, go, observed_pause, entering_handshake;
+  uint32_t request_published, released, detached, handshake_status;
+  uint32_t token_released;
+} AppendFlushRace;
+
+static void *handshake_flush_during_append(void *arg)
+{
+  AppendFlushRace *race = (AppendFlushRace *)arg;
+  uint32_t i;
+  const uint32_t actions = LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ;
+  TGState *tg;
+  assert(lj_threading_attach_wait(race->peer_L));
+  tg = lj_thr_get_tg();
+  assert(tg != NULL && tg != race->main_tg);
+  la_store32_rel(&race->attached, 1);
+  for (i = 0; i < 10000000u && la_load32_acq(&race->go) == 0; i++)
+    (void)lj_thr_retry_yield(NULL);
+  assert(la_load32_acq(&race->go) == 1);
+  for (i = 0; i < 10000000u; i++) {
+    if (lj_trace_test_root_entry_paused() ==
+	LJ_TRACE_ROOT_ENTRY_PAUSE_SIDE_PUBLISH) {
+      la_store32_rel(&race->observed_pause, 1);
+      break;
+    }
+    (void)lj_thr_retry_yield(NULL);
+  }
+  assert(la_load32_acq(&race->observed_pause) == 1);
+  assert(gc2_hs_epoch_acq(race->g) == race->epoch);
+  la_store32_rel(&race->entering_handshake, 1);
+  race->handshake_status = lj_gc2_handshake(race->g, actions);
+  assert(gc2_hs_epoch_acq(race->g) == race->epoch+1u);
+  assert(lj_tg_hs_epoch_ack_acq(tg) == race->epoch+1u);
+  assert(lj_tg_reqmask_acq(race->main_tg) == 0);
+  assert(lj_tg_poll_acq(race->main_tg) == 0);
+  lj_threading_detach(race->peer_L, 1);
+  assert(lj_thr_get_tg() == NULL);
+  la_store32_rel(&race->detached, 1);
+  return NULL;
+}
+
+static void *release_published_flush(void *arg)
+{
+  AppendFlushRace *race = (AppendFlushRace *)arg;
+  uint32_t i;
+  const uint32_t actions = LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ;
+  for (i = 0; i < 1000000u; i++) {
+    uint64_t epoch = gc2_hs_epoch_acq(race->g);
+    uint64_t ack = lj_tg_hs_epoch_ack_acq(race->main_tg);
+    uint32_t reqmask = lj_tg_reqmask_acq(race->main_tg);
+    if (epoch > race->epoch+1u)
+      break;
+    /* A recorder TG may take the ordinary remote ACK path before the
+    ** coordinator samples reqmask. Its exact epoch acknowledgement is an
+    ** equally strong witness that the real request reached that TG. */
+    if (epoch == race->epoch+1u &&
+	(reqmask == actions || ack == race->epoch+1u)) {
+      la_store32_rel(&race->request_published, 1);
+      break;
+    }
+    la_cpu_pause();
+  }
+  if (la_load32_acq(&race->request_published) == 0)
+    fprintf(stderr, "append-race request timeout epoch=%llu/%llu ack=%llu pending=%u actions=%x leader=%u reqmask=%x poll=%u attached=%u pause=%u entering=%u\n",
+	    (unsigned long long)gc2_hs_epoch_acq(race->g),
+	    (unsigned long long)(race->epoch+1u),
+	    (unsigned long long)lj_tg_hs_epoch_ack_acq(race->main_tg),
+	    gc2_hs_pending_acq(race->g), gc2_hs_actions_acq(race->g),
+	    gc2_hs_leader_acq(race->g), lj_tg_reqmask_acq(race->main_tg),
+	    lj_tg_poll_acq(race->main_tg),
+	    la_load32_acq(&race->attached),
+	    la_load32_acq(&race->observed_pause),
+	    la_load32_acq(&race->entering_handshake));
+  if (la_load32_acq(&race->request_published) == 0) {
+    lj_trace_test_root_entry_release();
+    la_store32_rel(&race->released, 1);
+    return NULL;
+  }
+  assert(la_load32_acq(&race->request_published) == 1);
+  assert(gc2_hs_actions_acq(race->g) == actions);
+  assert(lj_tg_hs_epoch_ack_acq(race->main_tg) == race->epoch ||
+	 lj_tg_hs_epoch_ack_acq(race->main_tg) == race->epoch+1u);
+  assert(jit_token_acq(race->g) != 0 &&
+	 gc2_smr_readers_acq(race->g) != 0);
+  lj_trace_test_root_entry_release();
+  la_store32_rel(&race->released, 1);
+  for (i = 0; i < 1000000u; i++) {
+    if (jit_token_acq(race->g) == 0 &&
+	gc2_smr_readers_acq(race->g) == 0) {
+      la_store32_rel(&race->token_released, 1);
+      break;
+    }
+    la_cpu_pause();
+  }
+  if (la_load32_acq(&race->token_released) == 0)
+    fprintf(stderr, "append-race token held after pause release state=%d pending=%u leader=%u ack=%llu reqmask=%x vm=%d readers=%u owner=%p\n",
+	    (int)lj_trace_state_load(G2J(race->g)),
+	    gc2_hs_pending_acq(race->g), gc2_hs_leader_acq(race->g),
+	    (unsigned long long)lj_tg_hs_epoch_ack_acq(race->main_tg),
+	    lj_tg_reqmask_acq(race->main_tg),
+	    (int)lj_tg_vmstate_load_acq(race->main_tg),
+	    gc2_smr_readers_acq(race->g),
+	    (void *)(uintptr_t)jit_token_acq(race->g));
+  return NULL;
+}
+
 static void record_two_second_sides(lua_State *L, jit_State *J,
 	MultiRootSides *set)
 {
@@ -534,6 +659,114 @@ static void record_two_second_sides(lua_State *L, jit_State *J,
   assert(root_child_ids(J, set->root, set->rootno,
 	set->ids, set->exits, 2) == 2);
   assert(set->exits[0] != set->exits[1]);
+}
+
+static void expect_append_flush_race(lua_State *L, jit_State *J,
+	global_State *g, TGState *tg)
+{
+	const char *name = "__arm64_first_side_append_race";
+	const lua_Integer n = 64;
+  GCproto *pt;
+  GCtrace *root;
+  TraceNo rootno, old_ids[2];
+  ExitNo old_exits[2];
+  MSize old_count;
+	uint64_t root_generation, child_generation;
+	GCtrace *old_child;
+  AppendFlushRace race;
+  pthread_t worker, coordinator;
+  lua_State *peer_L;
+  unsigned attempt;
+	lua_Number expected;
+
+  define_probes(L);
+	run_lua(L,
+	  "jit.flush(); jit.opt.start('hotloop=1','hotexit=1','maxtrace=24'); "
+	  "local function f(a,b,c,n) local i,sum=0,.5; "
+	  "while i<n do i=i+1; if a==1 then sum=sum+i*.25 end; "
+	  "if b==1 then sum=sum-i*.5 end; "
+	  "if c==1 then sum=sum+i*.75 end end; return sum end; "
+	  "local function oracle(a,b,c,n) local i,sum=0,.5; "
+	  "while i<n do i=i+1; if a==1 then sum=sum+i*.25 end; "
+	  "if b==1 then sum=sum-i*.5 end; "
+	  "if c==1 then sum=sum+i*.75 end end; return sum end; "
+	  "jit.off(oracle,true); __arm64_first_side_append_race=f; "
+	  "__arm64_first_side_append_race_oracle=oracle");
+  pt = named_proto(L, name);
+	expected = call_guarded_loop(L,
+	  "__arm64_first_side_append_race_oracle", 0, 0, 0, n);
+	assert(call_guarded_loop(L, name, 0, 0, 0, n) == expected);
+  root = find_root(J, pt, &rootno);
+	assert(root != NULL && rootno != 0 && trace_nchild_acq(root) == 0);
+	for (attempt = 0; attempt < PRODUCTION_ROOT_ATTEMPTS &&
+	     trace_nchild_acq(root) < 1; attempt++)
+	  assert(call_guarded_loop(L, name, 1, 0, 0, n) ==
+		 call_guarded_loop(L, "__arm64_first_side_append_race_oracle",
+		   1, 0, 0, n));
+	assert(trace_nchild_acq(root) == 1);
+  old_count = root_child_ids(J, root, rootno, old_ids, old_exits, 2);
+  assert(old_count == 1);
+	root_generation = root->arm64_generation;
+	old_child = traceref_safe(J, old_ids[0]);
+	child_generation = old_child->arm64_generation;
+
+  memset(&race, 0, sizeof(race));
+	/* Keep the post-handshake interpreter continuation from immediately
+	** recording a replacement root after FLUSHJ retires this generation. */
+	run_lua(L, "jit.opt.start('hotloop=100000')");
+	/* The first-side topology tests used a separate idle peer. Retire it before
+	** this isolated handshake so the attached flush peer is the only participant
+	** besides the publisher TG. */
+	stop_live_peer(L);
+	run_lua(L, "__arm64_first_side_peer_stop=function() end");
+	peer_L = lua_newthread(L);
+	assert(peer_L != NULL && lua_gettop(L) > 0);
+	race.peer_L = peer_L;
+  race.g = g;
+	race.main_tg = tg;
+  race.epoch = gc2_hs_epoch_acq(g);
+  assert(gc2_hs_pending_acq(g) == 0 && gc2_hs_leader_acq(g) == 0);
+  assert(lj_tg_hs_epoch_ack_acq(tg) == race.epoch);
+  assert(lj_tg_reqmask_acq(tg) == 0 && lj_tg_poll_acq(tg) == 0);
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_root_entry_pause(LJ_TRACE_ROOT_ENTRY_PAUSE_SIDE_PUBLISH);
+  assert(pthread_create(&worker, NULL,
+	handshake_flush_during_append, &race) == 0);
+	for (attempt = 0; attempt < PRODUCTION_ROOT_ATTEMPTS*1000u &&
+	     la_load32_acq(&race.attached) == 0; attempt++)
+	  (void)lj_thr_retry_yield(NULL);
+	assert(la_load32_acq(&race.attached) == 1);
+	assert(pthread_create(&coordinator, NULL,
+	  release_published_flush, &race) == 0);
+	la_store32_rel(&race.go, 1);
+	assert(call_guarded_loop(L, name, 0, 1, 0, n) ==
+	       call_guarded_loop(L, "__arm64_first_side_append_race_oracle",
+		 0, 1, 0, n));
+  assert(pthread_join(worker, NULL) == 0);
+  assert(pthread_join(coordinator, NULL) == 0);
+  assert(la_load32_acq(&race.request_published) == 1);
+  assert(race.handshake_status >= 1u);
+  assert(la_load32_acq(&race.released) == 1 &&
+	 la_load32_acq(&race.detached) == 1 &&
+	 la_load32_acq(&race.token_released) == 1);
+  assert(gc2_hs_epoch_acq(g) == race.epoch+1u &&
+	 lj_tg_hs_epoch_ack_acq(tg) == race.epoch+1u);
+  assert(gc2_hs_pending_acq(g) == 0 &&
+	 lj_tg_reqmask_acq(tg) == 0 && lj_tg_poll_acq(tg) == 0);
+  assert(jit_token_acq(g) == 0 && gc2_smr_readers_acq(g) == 0);
+	assert(!trace_generation_runnable(J, root_generation));
+	assert(!trace_generation_runnable(J, child_generation));
+  for (attempt = 0; attempt < old_count; attempt++) {
+    GCtrace *old_child = traceref_safe(J, old_ids[attempt]);
+    if (old_child != NULL)
+      assert(!trace_runnable_acq(old_child, old_ids[attempt]));
+  }
+  /* The pending FLUSHJ completed after the append transaction released its
+  ** token; interpreted execution still observes the source result. */
+	assert(call_guarded_loop(L, name, 0, 1, 0, n) ==
+	       call_guarded_loop(L, "__arm64_first_side_append_race_oracle",
+		 0, 1, 0, n));
+	lua_pop(L, 1);
 }
 
 static void expect_multi_root_siblings(lua_State *L, jit_State *J,
@@ -1471,6 +1704,7 @@ static int detailed_main(int argc, char **argv)
 #ifdef LJ_TRACE_TEST_HELPERS
   expect_multi_root_siblings(L, J, g);
   expect_three_root_siblings(L, J, g);
+  expect_append_flush_race(L, J, g, tg);
 #endif
 
   assert(gc2_smr_readers_acq(g) == 0);

@@ -14,6 +14,8 @@ trace_ins=$tmpdir/trace-ins.c
 hotcall=$tmpdir/hotcall.c
 signal_late=$tmpdir/signal-late.c
 handshake=$tmpdir/handshake.c
+ack_tg=$tmpdir/ack-tg.c
+wait_ack=$tmpdir/wait-ack.c
 
 sed -n '/void LJ_FASTCALL lj_trace_hot/,/static void trace_hotside/p' \
   "$root/src/lj_trace.c" >"$trace_hot"
@@ -33,6 +35,10 @@ sed -n '/static uint32_t safepoint_signal_late/,/static int safepoint_native_ack
   "$root/src/lj_safepoint.c" >"$signal_late"
 sed -n '/uint32_t lj_safepoint_handshake/,/^}/p' \
   "$root/src/lj_safepoint.c" >"$handshake"
+sed -n '/static uint32_t safepoint_ack_tg/,/^}/p' \
+  "$root/src/lj_safepoint.c" >"$ack_tg"
+sed -n '/static int safepoint_wait_consumed_ack/,/^}/p' \
+  "$root/src/lj_safepoint.c" >"$wait_ack"
 
 line_of() {
   file=$1
@@ -92,6 +98,27 @@ state_ack=$(line_of "$trace_state" 'lj_safepoint_ack_check(L)' 1)
 state_machine=$(line_of "$trace_state" 'do {' 1)
 test -n "$state_ack" && test -n "$state_machine"
 test "$state_ack" -lt "$state_machine"
+
+# An owner holding an active recorder cannot wait for the FLUSHJ leader that
+# itself needs the recorder token. The checked acknowledgement marks the
+# protected recorder asynchronously aborted, skips only that local wait, and
+# leaves cpcall to consume RECERR and release its own state.
+grep -F 'actions & LJ_GC2_HS_EXIT_TRACES' "$wait_ack" >/dev/null
+grep -F 'tg == lj_thr_get_tg_fallback(g)' "$wait_ack" >/dev/null
+grep -F 'lj_jit_token_held_l(owner, J)' "$wait_ack" >/dev/null
+defer_abort=$(line_of "$wait_ack" \
+  'lj_trace_state_aborted(state)' 1)
+defer_publish=$(line_of "$wait_ack" 'state == LJ_TRACE_PUBLISH' 1)
+normal_wait=$(line_of "$wait_ack" 'lj_tg_poll_futex_wait(tg, poll, 1000000)' 1)
+test -n "$defer_abort" && test -n "$defer_publish" && \
+  test -n "$normal_wait"
+test "$defer_abort" -lt "$normal_wait"
+test "$defer_publish" -lt "$normal_wait"
+if grep -F 'safepoint_clear_poll' "$wait_ack" >/dev/null; then
+  echo "recorder FLUSHJ deferral must keep the consumed poll armed" >&2
+  exit 1
+fi
+test "$(grep -Fc 'safepoint_wait_consumed_ack(tg,' "$ack_tg")" -ge 3
 
 if grep -F 'trace_poll_pending' "$root/src/lj_trace.c" >/dev/null; then
   echo "side admission regressed to the poll-only predicate" >&2

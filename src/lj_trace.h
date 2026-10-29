@@ -191,6 +191,7 @@ LJ_FUNC TGState *lj_jit_owner_tg_l(lua_State *L, jit_State *J);
 #define LJ_TRACE_ROOT_ENTRY_PAUSE_POSTPUBLISH 2u
 #define LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA 3u
 #define LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION 4u
+#define LJ_TRACE_ROOT_ENTRY_PAUSE_SIDE_PUBLISH 5u
 LJ_FUNC void lj_trace_test_root_entry_reset(void);
 LJ_FUNC void lj_trace_test_root_entry_pause(uint32_t stage);
 LJ_FUNC uint32_t lj_trace_test_root_entry_paused(void);
