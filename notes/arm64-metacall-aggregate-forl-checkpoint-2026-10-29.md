@@ -71,7 +71,7 @@ assertion/release M7 FFI runs passed, including the deterministic cdata-call
 race harness and aggregate contract. The gate also passed its FORL-side
 publication/retirement, GC, source/import, and native coverage checks.
 The saved driver uses `set -eu`; the process has finished and the final marker
-follows its ordinary profile restoration. Its source identifier, driver and
+follows its gate profile restoration. Its source identifier, driver and
 complete logs are under
 `/Users/frityet/Scratch/ljmt-metacall-hfa-forl-integration-20261029/`.
 This supersedes `3e3f3432a` as the latest complete port-branch gate.

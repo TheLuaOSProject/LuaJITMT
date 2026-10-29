@@ -45,6 +45,10 @@ typedef struct lj_callxs_sysv_float {
   float value;
 } lj_callxs_sysv_float;
 
+typedef struct lj_callxs_sysv_double {
+  double value;
+} lj_callxs_sysv_double;
+
 typedef struct lj_callxs_sysv_byte {
   uint8_t value;
 } lj_callxs_sysv_byte;
@@ -87,6 +91,7 @@ enum {
   LJ_CALLXS_SYSV_REPLAY_PROBE,
   LJ_CALLXS_SYSV_BYTE,
   LJ_CALLXS_SYSV_HALF,
+  LJ_CALLXS_SYSV_DOUBLE,
   LJ_CALLXS_SYSV_NCOUNTERS
 };
 
@@ -200,6 +205,14 @@ LJ_CALLXS_EXPORT lj_callxs_sysv_float
 lj_callxs_sysv_step_float(lj_callxs_sysv_float value, float delta)
 {
   lj_callxs_sysv_counters[LJ_CALLXS_SYSV_FLOAT]++;
+  value.value += delta;
+  return value;
+}
+
+LJ_CALLXS_EXPORT lj_callxs_sysv_double
+lj_callxs_sysv_step_double(lj_callxs_sysv_double value, double delta)
+{
+  lj_callxs_sysv_counters[LJ_CALLXS_SYSV_DOUBLE]++;
   value.value += delta;
   return value;
 }
