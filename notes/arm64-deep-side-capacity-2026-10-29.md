@@ -72,3 +72,36 @@ The ARM64 assertion side-admission contract passed with this preparation
 ordinary profile was restored. The publication capacity policy is unchanged
 in this checkpoint; the larger allocation path has not yet been exercised by
 a native chain and this is not a capacity-parity claim.
+
+## Native capacity extension
+
+The 64-row graph index remains the small-list path. Larger lists now validate
+exact root membership, immutable parent generations and prepend order without
+allocating in metadata readers. Non-root parents must occur after each child
+in the root-owned list, so cycles and reordered ancestry are rejected. Native
+entry, assembler snapshots and descendant-first retirement use the larger
+proof; no recorder lock or VM/FFI lock was introduced.
+
+The first ordinary probe (`arm64-capacity70-open.log`) reaches 70 native
+bodies, depth 69, with three deepest exits on the three mode-70 calls and eight
+after-GC deepest exits on eight further calls. This closes the matched probe's
+old ARM64 depth-64 stop; it does not claim equal x64 trace topology or speed.
+
+`capacity-four-profile.log` passes the expanded side contract in all four
+ARM64/arm64e assertion/release profiles. It covers depth 15, 64, 69 and 80;
+code/generation stability through GC; exact native deepest exits; large-list
+leaf and ancestor scoped teardown; full flush/reentry; reuse of reserved
+ancestry storage; and existing wide-root scenarios that now grow past the old
+64-child refusal boundary. Private-copy negatives include late-chain
+generation corruption, insufficient capacity, and capacity above the trace
+number representation. The final ordinary restoration profile is
+`0a57a2f1b36da2be6f9ac5f9bcd8744bdd5f1d1838072e431db5e11b45dd1be9`.
+The previous assertion-only run correctly stopped at a historical fixture
+expectation that a valid extension must be refused; that expectation was
+updated, not the result/error or malformed-ancestry oracles.
+
+An independent read-only review found no concrete membership or SMR/lifetime
+bypass. It identified quadratic suffix scanning on deep large graphs as a
+performance concern to reduce before integration. Large-list limits follow
+the existing trace-number/count representation; a new arbitrary depth cap is
+not introduced. Full integrated gate validation is still pending.

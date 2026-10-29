@@ -27,7 +27,7 @@ static void run(lua_State *L, const char *source)
   }
 }
 
-enum { MAX_WHILE_BODIES = 65 };
+enum { MAX_WHILE_BODIES = 81 };
 
 static void check_case(lua_State *L, int fractional, unsigned bodies)
 {
@@ -44,7 +44,7 @@ static void check_case(lua_State *L, int fractional, unsigned bodies)
   assert(bodies >= 4u && bodies <= MAX_WHILE_BODIES);
   int written = snprintf(source, sizeof(source),
     "local jit=require('jit'); jit.off(true,true); jit.flush(); jit.on(); "
-    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=128'); "
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=256','maxside=1000'); "
     "local parts={'return function(mode,n) local s,i=%s,1 while i<=n do '}; "
     "for m=1,%u do parts[#parts+1]=(m==1 and 'if ' or 'elseif ').."
     "'mode=='..m..' then s=s+i*'..tostring(m/%u)..' ' end; "
@@ -108,7 +108,7 @@ static void check_case(lua_State *L, int fractional, unsigned bodies)
   {
     uint32_t contract = lj_trace_test_arm64_side_scalar_copy_contract(
       J, ids[bodies-1u]);
-    const uint32_t required = 0xf80f0003u;
+    const uint32_t required = 0xf87f0003u;
     if ((contract & required) != required)
       fprintf(stderr, "while copy contract expected=%08x actual=%08x\n",
               required, contract);
@@ -142,6 +142,34 @@ static void check_case(lua_State *L, int fractional, unsigned bodies)
     free(code[k]);
   }
   lj_gc2_smr_read_leave(J2G(J));
+  if (bodies > 65u) {
+    /* Retire a deep leaf and then a still-linked ancestor while both graphs
+    ** exceed the inline index. Descendants retire before their parent; the
+    ** preserved prefix keeps its exact code and generations. */
+    assert(lj_trace_flushscope(J, ids[bodies-1u]) == 1u);
+    assert(lj_trace_test_arm64_side_graph_summary(J, ids[0]) ==
+           (((bodies-2u) << 16) | (bodies-2u)));
+    assert(lj_trace_flushscope(J, ids[66]) == 1u);
+    assert(lj_trace_test_arm64_side_graph_summary(J, ids[0]) ==
+           ((65u << 16) | 65u));
+    assert(lj_gc2_smr_read_try(J2G(J)));
+    for (k = 0; k < bodies; k++) {
+      GCtrace *T = traceref_safe(J, ids[k]);
+      if (k <= 65u) {
+        assert(T == chain[k] && trace_runnable_acq(T, ids[k]) &&
+               trace_mcode_acq(T) == addresses[k] &&
+               la_load64_acq(&T->arm64_generation) == generations[k]);
+      } else {
+        assert(!trace_runnable_acq(T, ids[k]));
+      }
+    }
+    lj_gc2_smr_read_leave(J2G(J));
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    run(L, "for k=1,32 do assert(kernel(66,48)==oracle(66,48)) end");
+    assert(lj_trace_test_root_entry_successes() > 0 &&
+           lj_trace_test_first_exit_parent() == ids[65]);
+  }
   run(L, "jit.flush()");
   assert(lj_gc2_smr_read_try(J2G(J)));
   for (k = 0; k < bodies; k++)
@@ -182,6 +210,16 @@ int main(void)
          "assert(select(2,ready:recv(5)))");
   check_case(L, 0, 16u);
   check_case(L, 1, 65u);
+  assert(L2J(L)->arm64_side_ancestry == NULL);
+  check_case(L, 0, 70u);
+  {
+    struct LJArm64SideAncestor *storage = L2J(L)->arm64_side_ancestry;
+    MSize capacity = L2J(L)->arm64_side_ancestry_size;
+    assert(storage && capacity >= 68u);
+    check_case(L, 1, 81u);
+    assert(L2J(L)->arm64_side_ancestry == storage &&
+           L2J(L)->arm64_side_ancestry_size == capacity);
+  }
   run(L, "assert(stop:send(true,5)); assert(peer:join())");
   lua_close(L);
   puts("nested while side adaptation OK");
