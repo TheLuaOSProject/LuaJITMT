@@ -15494,12 +15494,9 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
         bc_c(call) == 0u && !(la_load8_acq(&funcproto(currentfn)->flags) &
                               PROTO_VARARG) &&
         trace_arm64_lua_leaf_callm_source(parentpt, returnpc-1u, 0u);
-      MSize callnargs, unused_callnargs;
-      callnargs = open_consumer && consumer_entry && i == 0u ?
-                  J->maxslot : 0u;
-      unused_callnargs = open_consumer ? 0u :
-                         (bc_c(call) ? bc_c(call)-1u : 0u);
-      if (!open_consumer) callnargs = unused_callnargs;
+      MSize callnargs = open_consumer ?
+        (consumer_entry && i == 0u ? J->maxslot : 0u) :
+        (bc_c(call) ? bc_c(call)-1u : 0u);
       if (open_consumer && consumer_entry && i == 0u &&
           (callnargs < 1u ||
            callnargs > LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS ||

@@ -3,8 +3,8 @@
 The CALLM consumer's actual argument vector is the producer's complete open
 result vector. Its fixed-formal frame is normalized separately: missing
 formals are nil-padded and extra actual values are ignored by a non-vararg
-callee. The recorder preflight had incorrectly used `pt->numparams` (the root
-function's formal count) as the CALLM argument count, required it to equal
+callee. The recorder preflight had incorrectly used the fixed-formal count
+`pt->numparams` as the CALLM argument count, required it to equal
 `J->maxslot` at consumer entry, and used the post-return `J->maxslot` as though
 it still described input arguments.
 
@@ -51,5 +51,6 @@ Focused evidence:
   — full leaf contract, including all four profiles, seven open-CALLM source
   arities, and independent semantic/post-RA mutation checks.
 
-The slice does not cover a mutable captured consumer whose per-iteration
-identity guard is CSE-removed; that is a separate source/IR provenance case.
+The slice does not cover a mutable captured consumer whose producer's
+loop-invariant identity guard and snapshot are removed from the loop body by
+CSE; that is a separate source/IR provenance case.
