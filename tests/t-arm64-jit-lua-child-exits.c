@@ -21,6 +21,7 @@
 #include "lj_tg.h"
 #include "lj_trace.h"
 #include "lib/lua_fixture_helpers.h"
+#include "lib/proto_fixture_helpers.h"
 
 typedef struct LeafCase {
   const char *name;
@@ -272,9 +273,7 @@ static GCtrace *train_case(lua_State *L, const LeafCase *shape)
 
 static GCproto *copy_proto(const GCproto *pt)
 {
-  size_t bytes = sizeof(GCproto)+pt->sizebc*sizeof(BCIns);
-  GCproto *copy = malloc(bytes);
-  assert(copy); memcpy(copy, pt, bytes); return copy;
+  return ljt_proto_clone_alloc(pt);
 }
 
 typedef struct ChildFixture {
@@ -298,8 +297,8 @@ static void child_reset(ChildFixture *f)
   GCfunc *leaf = ir_kfunc(&T->ir[f->kfunc]);
   GCproto *pt = funcproto(leaf);
   MSize start = proto_bcpos(root, trace_startpc_acq(T));
-  memcpy(f->root, root, sizeof(GCproto)+root->sizebc*sizeof(BCIns));
-  memcpy(f->leafpt, pt, sizeof(GCproto)+pt->sizebc*sizeof(BCIns));
+  ljt_proto_clone_reset(f->root, root);
+  ljt_proto_clone_reset(f->leafpt, pt);
   memset(f->leaf, 0, sizeof(*f->leaf));
   memcpy(f->leaf, leaf, sizeLfunc(0));
   setmref(f->leaf->l.pc, proto_bc(f->leafpt));

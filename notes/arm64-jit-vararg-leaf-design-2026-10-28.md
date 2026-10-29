@@ -115,6 +115,27 @@ The same four-profile matrix passed the existing leaf regression contract at
 `/Users/frityet/Scratch/ljmt-varargs-recovery-20261028/leaf-regression.log`,
 covering fixed, nested, sparse, primitive, multi-result, and return paths.
 
+## Integration with compiled function entries
+
+After integration at `a96146b46`, the first combined leaf run stopped at the
+old leaf fixture's positive semantic re-admission. Native live calls had
+passed. The independently compiled child now had a `JFUNCF` header, but the
+test copied only its prototype header/bytecode and retained the original
+prototype's `jit_startins` pointer. Production correctly requires that source
+shadow to be co-located with the owning prototype's bytecode.
+
+The leaf, child, compound and vararg fixtures now copy the complete prototype
+storage and rebase that shadow pointer on every private reset. Other
+references retain separately rooted source objects. The production generation
+check is unchanged. All four affected C fixtures pass against the integrated
+ARM64 assertion/helper build: 16/34/96/9 native invocations respectively,
+with their existing semantic/allocated negatives and child-exit checks.
+This focused run is not a complete integrated four-profile or stock-corpus
+result. Evidence is under
+`/Users/frityet/Scratch/ljmt-varargs-integrated-20261029/`:
+`leaf-diagnosis.log` captures the original baseline failure, and
+`shadow-{leaf-calls,child-exits,compound-exits,varargs}.log` captures the fixes.
+
 ## Recovery provenance
 
 This isolated candidate was reconstructed after a source cleanup accident from

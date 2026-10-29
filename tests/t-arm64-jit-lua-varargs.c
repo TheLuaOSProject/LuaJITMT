@@ -21,6 +21,7 @@
 #include "lj_tg.h"
 #include "lj_trace.h"
 #include "lib/lua_fixture_helpers.h"
+#include "lib/proto_fixture_helpers.h"
 
 static unsigned native_entries, guard_exits, semantic_bad, postra_bad;
 
@@ -323,9 +324,7 @@ typedef struct VarargFixture {
 
 static GCproto *copy_proto(const GCproto *pt)
 {
-  size_t bytes=sizeof(GCproto)+pt->sizebc*sizeof(BCIns);
-  GCproto *copy=malloc(bytes);
-  assert(copy); memcpy(copy,pt,bytes); return copy;
+  return ljt_proto_clone_alloc(pt);
 }
 
 static void vararg_fixture_reset(VarargFixture *f, lua_State *L)
@@ -336,9 +335,8 @@ static void vararg_fixture_reset(VarargFixture *f, lua_State *L)
   MSize startpos=proto_bcpos(root,trace_startpc_acq(T));
   SnapNo s;
   leafsource=funcproto(source);
-  memcpy(f->pt,root,sizeof(GCproto)+root->sizebc*sizeof(BCIns));
-  memcpy(f->leafpt,leafsource,
-         sizeof(GCproto)+leafsource->sizebc*sizeof(BCIns));
+  ljt_proto_clone_reset(f->pt, root);
+  ljt_proto_clone_reset(f->leafpt, leafsource);
   memset(f->leaf,0,sizeLfunc(0)); memcpy(f->leaf,source,sizeLfunc(0));
   setmref(f->leaf->l.pc,proto_bc(f->leafpt));
   memcpy(f->ir+T->nk,T->ir+T->nk,(T->nins-T->nk)*sizeof(IRIns));

@@ -20,6 +20,7 @@
 #include "lj_tg.h"
 #include "lj_trace.h"
 #include "lib/lua_fixture_helpers.h"
+#include "lib/proto_fixture_helpers.h"
 
 static unsigned native_runs, semantic_bad, postra_bad, cold_retries;
 
@@ -94,9 +95,7 @@ static void native_call(lua_State *L, GCtrace *T, const char *leaf,
 
 static GCproto *copy_proto(const GCproto *pt)
 {
-  size_t bytes = sizeof(GCproto) + pt->sizebc * sizeof(BCIns);
-  GCproto *copy = malloc(bytes);
-  assert(copy); memcpy(copy, pt, bytes); return copy;
+  return ljt_proto_clone_alloc(pt);
 }
 
 typedef struct Fixture {
@@ -119,9 +118,8 @@ static void fixture_reset(Fixture *f)
   GCproto *pt = trace_startpt_acq(T);
   GCfunc *leaf = ir_kfunc(&T->ir[f->kfunc]);
   MSize startpos = proto_bcpos(pt, trace_startpc_acq(T));
-  memcpy(f->pt, pt, sizeof(GCproto)+pt->sizebc*sizeof(BCIns));
-  memcpy(f->leafpt, funcproto(leaf),
-         sizeof(GCproto)+funcproto(leaf)->sizebc*sizeof(BCIns));
+  ljt_proto_clone_reset(f->pt, pt);
+  ljt_proto_clone_reset(f->leafpt, funcproto(leaf));
   memset(f->leaf, 0, sizeof(*f->leaf));
   memcpy(f->leaf, leaf, sizeLfunc(0));
   setmref(f->leaf->l.pc, proto_bc(f->leafpt));
@@ -304,6 +302,13 @@ static void admission(GCtrace *T)
     for (unsigned m=0;m<M_COUNT;m++) {
       fixture_reset(&f);
       if (!admit(&f,allocated)) {
+        LJArm64IRReject reject = {0};
+        if (!allocated) (void)lj_asm_arm64_ir_admit(f.J,&f.copy,&reject);
+        fprintf(stderr,"leaf baseline rejected postra=%d mutation=%u header=%u "
+                "reason=%u ref=%u op=%u detail=%u\n",allocated,m,
+                (unsigned)bc_op(proto_bc(f.leafpt)[0]),
+                (unsigned)reject.reason,(unsigned)reject.ref,
+                (unsigned)reject.op,(unsigned)reject.detail);
         assert(0);
       }
       fixture_reset(&f); mutate(&f,m);
