@@ -6539,12 +6539,15 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    boxref = ref;
 	    box_ctype = (CTypeID)ir_load_acq(&view->ir[ins.op1]).i;
 	  } else if (ins.o == IR_HIOP) {
-	    IRIns low = ir_load_acq(&view->ir[active_call]);
-	    IRRef lane = ref-active_call;
+	    IRIns low;
+	    IRRef lane;
 	    int32_t lane_tag;
 	    if (protocol != 4 || result_hfa_count < 2 ||
-		lane == 0 || lane >= result_hfa_count ||
-		ins.op1 != active_call ||
+		active_call < REF_FIRST || active_call >= ref ||
+		ref-active_call >= result_hfa_count) return 0;
+	    lane = ref-active_call;
+	    low = ir_load_acq(&view->ir[active_call]);
+	    if (lane == 0 || ins.op1 != active_call ||
 		!arm64_callxs_kint_value(view->ir, view->nk, ins.op2,
 		                         &lane_tag) || lane_tag != (int32_t)lane ||
 		!irt_isfp(ins.t) ||
