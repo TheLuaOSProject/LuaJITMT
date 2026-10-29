@@ -1429,7 +1429,7 @@ static int arm64_callxs_cdata_integer_aggregate_argument(
   if (load.t.irt != expected) return 0;
   {
     LJArm64ABIArg aggregate;
-    if (!lj_ccall_arm64_integer_aggregate_class(cts, source_id,
+    if (!lj_ccall_arm64_aggregate_argument_class(cts, source_id,
 	  &aggregate, &terminal) || aggregate.size != size) return 0;
   }
   for (ref = 0; ref < T->nsnap; ref++) {
@@ -5843,7 +5843,7 @@ static int arm64_postra_cdata_integer_aggregate_argument(
 	if (load.t.irt != expected) return 0;
 	{
 		LJArm64ABIArg aggregate;
-		if (!lj_ccall_arm64_integer_aggregate_class(cts, source_id,
+		if (!lj_ccall_arm64_aggregate_argument_class(cts, source_id,
 		    &aggregate, &terminal) || aggregate.size != size) return 0;
 	}
 	for (ref = 0; ref < T->nsnap; ref++) {

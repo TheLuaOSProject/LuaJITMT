@@ -35,6 +35,10 @@ static unsigned native_width_finishes[9];
 static unsigned native_result_finishes[9];
 static unsigned native_sret_finishes;
 static GCproto *aggregate_candidate_pt;
+static GCproto *pointer_arg_candidate_pt;
+static unsigned pointer_arg_native_finishes;
+static GCproto *pointer_arg_stack_candidate_pt;
+static unsigned pointer_arg_stack_native_finishes;
 static GCproto *result_candidate_pt[9];
 static GCproto *active_result_candidate_pt;
 static GCproto *pointer_result_candidate_pt;
@@ -65,6 +69,34 @@ static int set_aggregate_candidate(lua_State *L)
   assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
   aggregate_candidate_pt = funcproto(funcV(L->top-1));
   return 0;
+}
+
+static int set_pointer_arg_candidate(lua_State *L)
+{
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  pointer_arg_candidate_pt = funcproto(funcV(L->top-1));
+  return 0;
+}
+
+static int get_pointer_arg_native_count(lua_State *L)
+{
+  UNUSED(L);
+  lua_pushinteger(L, (lua_Integer)pointer_arg_native_finishes);
+  return 1;
+}
+
+static int set_pointer_arg_stack_candidate(lua_State *L)
+{
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  pointer_arg_stack_candidate_pt = funcproto(funcV(L->top-1));
+  return 0;
+}
+
+static int get_pointer_arg_stack_native_count(lua_State *L)
+{
+  UNUSED(L);
+  lua_pushinteger(L, (lua_Integer)pointer_arg_stack_native_finishes);
+  return 1;
 }
 
 static int set_hfa_candidate(lua_State *L)
@@ -532,6 +564,26 @@ static void assert_integer_stack_signature(lua_State *L, const char *name,
   if (trailing)
     assert(abi.arg[9].reg==LJ_ARM64_ABI_STACK && abi.arg[9].stack_offset==8 &&
            abi.arg[9].size==4 && abi.arg[9].kind==LJ_ARM64_ABI_KIND_INTEGER);
+}
+
+static void assert_pointer_member_stack_signature(lua_State *L,
+							  const char *name)
+{
+  LJArm64ABISignature abi;
+  unsigned i;
+  assert(lj_ccall_arm64_signature(ctype_ctsG(G(L)),
+	global_cdata_ctype(L, name), &abi));
+  assert(abi.nargs == 10 && abi.nparams == 10 && abi.ngpr == 8 &&
+	 !abi.nfpr && abi.stack_size == 12);
+  for (i = 0; i < 8; i++)
+    assert(abi.arg[i].kind == LJ_ARM64_ABI_KIND_INTEGER &&
+	   abi.arg[i].reg == i && abi.arg[i].size == 4);
+  assert(abi.arg[8].kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE &&
+	 abi.arg[8].reg == LJ_ARM64_ABI_STACK && abi.arg[8].size == 8 &&
+	 abi.arg[8].stack_offset == 0);
+  assert(abi.arg[9].kind == LJ_ARM64_ABI_KIND_INTEGER &&
+	 abi.arg[9].reg == LJ_ARM64_ABI_STACK && abi.arg[9].size == 4 &&
+	 abi.arg[9].stack_offset == 8);
 }
 
 static void assert_padded_integer_stack_signature(lua_State *L,
@@ -1073,7 +1125,13 @@ static void test_aggregate_signatures(lua_State *L)
   assert_integer_aggregate_result_signature(L, "__arm64_nested_mixed_result_fn", 8);
   assert_unsupported_aggregate_signature(L, "__arm64_integer_array_result_fn");
   assert_unsupported_aggregate_signature(L, "__arm64_integer_array_result24_fn");
-  assert_unsupported_aggregate_signature(L, "__arm64_pointer_member_arg_fn");
+  assert_aggregate_signature(L, "__arm64_pointer_member_arg_fn", 8);
+  assert_pointer_member_stack_signature(L,
+	"__arm64_pointer_member_stack_arg_fn");
+  assert_unsupported_aggregate_signature(L,
+    "__arm64_pointer_member_pair_arg_fn");
+  assert_unsupported_aggregate_signature(L,
+    "__arm64_pointer_member_union_arg_fn");
   assert_unsupported_aggregate_signature(L,
     "__arm64_pointer_member_sret_result_fn");
   assert_integer_aggregate_result_signature(L, "__arm64_result_depth31_fn", 1);
@@ -1283,6 +1341,25 @@ static void test_live_aggregate_admission_at(lua_State *L, GCtrace *T,
   J->framedepth = J->retdepth = 0;
   J->ktrace = (IRRef1)ktrace;
   assert(semantic_accepts(J, &fx.semantic, copy, nins, semantic_nins));
+  if (trace_startpt_acq(T) == pointer_arg_candidate_pt) {
+    CTypeID wrong_type = global_cdata_ctype(L, "__arm64_integer_pair_arg_type");
+    IRIns guard = ir_load_acq(&copy[typeguard]);
+    IRRef typeidref = ir_load_acq(&copy[guard.op1]).o == IR_KINT ?
+	guard.op1 : guard.op2;
+    assert(ir_load_acq(&copy[typeidref]).o == IR_KINT && wrong_type != 0);
+    copy_trace_ir(copy, fx.good, nk, nins);
+    copy[typeidref].i = (int32_t)wrong_type;
+    assert(!semantic_accepts(J, &fx.semantic, copy, nins, semantic_nins));
+    copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
+    postra = fx.view;
+    postra.ir = fx.postra;
+    guard = ir_load_acq(&fx.postra[typeguard]);
+    typeidref = ir_load_acq(&fx.postra[guard.op1]).o == IR_KINT ?
+	guard.op1 : guard.op2;
+    assert(ir_load_acq(&fx.postra[typeidref]).o == IR_KINT);
+    fx.postra[typeidref].i = (int32_t)wrong_type;
+    assert(!lj_asm_arm64_postra_admit(&postra, &postra_nins));
+  }
   if (strcmp(clone_name, "__arm64_nested_array_float_pair_clone") == 0) {
     IRRef lane0 = find_aggregate_load_index(fx.good, nins, IRT_FLOAT, 0);
     IRRef lane1 = find_aggregate_load_index(fx.good, nins, IRT_FLOAT, 1);
@@ -1934,6 +2011,28 @@ static void observe_native_finish(TGState *tg)
       native_width_finishes[8] += widths[8];
     }
   }
+  if (pointer_arg_candidate_pt != NULL && trace_root_acq(T) == 0 &&
+      trace_startpt_acq(T) == pointer_arg_candidate_pt &&
+      bc_op(trace_startins_acq(T)) == BC_FORL) {
+    int has_call = 0, has_u64 = 0;
+    for (ref = REF_BASE; ref < trace_nins_acq(T); ref++) {
+      IRIns ins = ir_load_acq(&trace_ir_acq(T)[ref]);
+      has_call |= ins.o == IR_CALLXS;
+      has_u64 |= ins.o == IR_XLOAD && ins.t.irt == IRT_U64;
+    }
+    if (has_call && has_u64) pointer_arg_native_finishes++;
+  }
+  if (pointer_arg_stack_candidate_pt != NULL && trace_root_acq(T) == 0 &&
+      trace_startpt_acq(T) == pointer_arg_stack_candidate_pt &&
+      bc_op(trace_startins_acq(T)) == BC_FORL) {
+    int has_call = 0, has_u64 = 0;
+    for (ref = REF_BASE; ref < trace_nins_acq(T); ref++) {
+      IRIns ins = ir_load_acq(&trace_ir_acq(T)[ref]);
+      has_call |= ins.o == IR_CALLXS;
+      has_u64 |= ins.o == IR_XLOAD && ins.t.irt == IRT_U64;
+    }
+    if (has_call && has_u64) pointer_arg_stack_native_finishes++;
+  }
   if (hfa_candidate_pt != NULL && trace_root_acq(T) == 0 &&
       trace_startpt_acq(T) == hfa_candidate_pt &&
       bc_op(trace_startins_acq(T)) == BC_FORL) {
@@ -2062,6 +2161,14 @@ int main(int argc, char **argv)
   lj_ffi_native_trace_test_set_finish_hook(observe_native_finish);
   lua_pushcfunction(L, set_aggregate_candidate);
   lua_setglobal(L, "_set_aggregate_candidate");
+  lua_pushcfunction(L, set_pointer_arg_candidate);
+  lua_setglobal(L, "_set_pointer_member_arg_candidate");
+  lua_pushcfunction(L, get_pointer_arg_native_count);
+  lua_setglobal(L, "_pointer_member_arg_native_count");
+  lua_pushcfunction(L, set_pointer_arg_stack_candidate);
+  lua_setglobal(L, "_set_pointer_member_stack_arg_candidate");
+  lua_pushcfunction(L, get_pointer_arg_stack_native_count);
+  lua_setglobal(L, "_pointer_member_stack_arg_native_count");
   lua_pushcfunction(L, set_hfa_candidate);
   lua_setglobal(L, "_set_hfa_candidate");
   lua_pushcfunction(L, set_nested_hfa_candidate);
@@ -2117,6 +2224,36 @@ int main(int argc, char **argv)
 	        (int32_t)intV(&G2J(G(L))->errinfo));
       assert(0);
     }
+  }
+  lua_getglobal(L, "__arm64_run_pointer_member_arg_probe");
+  if (lua_pcall(L, 0, 0, 0) != 0) {
+    fprintf(stderr, "pointer-member argument probe failed: %s\n",
+            lua_tostring(L, -1));
+    abort();
+  }
+  {
+    GCproto *pt = global_proto(L, "__arm64_pointer_member_arg_candidate");
+    GCtrace *T = find_aggregate_trace(G2J(G(L)), pt, IRT_U64);
+    assert(pt == pointer_arg_candidate_pt && T != NULL);
+    meta_pc = aggregate_meta_pc(T);
+    assert(meta_pc != NULL);
+    test_live_aggregate_admission(L, T, meta_pc,
+      "__arm64_pointer_member_arg_clone", IRT_U64);
+  }
+  lua_getglobal(L, "__arm64_run_pointer_member_stack_arg_probe");
+  if (lua_pcall(L, 0, 0, 0) != 0) {
+    fprintf(stderr, "pointer-member stack argument probe failed: %s\n",
+            lua_tostring(L, -1));
+    abort();
+  }
+  {
+    GCproto *pt = global_proto(L, "__arm64_pointer_member_stack_arg_candidate");
+    GCtrace *T = find_aggregate_trace(G2J(G(L)), pt, IRT_U64);
+    assert(pt == pointer_arg_stack_candidate_pt && T != NULL);
+    meta_pc = aggregate_meta_pc(T);
+    assert(meta_pc != NULL);
+    test_live_aggregate_admission(L, T, meta_pc,
+      "__arm64_pointer_member_stack_arg_clone", IRT_U64);
   }
   assert(native_width_finishes[1] && native_width_finishes[2] &&
 	 native_width_finishes[4] && native_width_finishes[8]);

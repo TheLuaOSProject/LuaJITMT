@@ -113,6 +113,8 @@ typedef struct { Arm64MixedResult inner; } Arm64NestedMixedResult;
 typedef struct { uint32_t values[2]; } Arm64IntegerArrayResult;
 typedef struct { uint64_t values[3]; } Arm64IntegerArrayResult24;
 typedef struct { void *value; } Arm64PointerMemberResult;
+typedef struct { void *value; uint32_t tag; } Arm64PointerMemberPairArg;
+typedef union { void *value; uint64_t bits; } Arm64PointerMemberUnionArg;
 typedef struct { uint64_t tag; void *value; uint64_t tail; }
   Arm64PointerMemberSretResult;
 typedef Arm64NestedMixedResult (*Arm64NestedMixedResultFn)(uint32_t);
@@ -123,6 +125,13 @@ typedef Arm64PointerMemberSretResult
   (*Arm64PointerMemberSretResultFn)(uint32_t);
 typedef uint32_t (*Arm64PointerMemberArgFn)(Arm64PointerMemberResult,
                                             uint32_t);
+typedef uint32_t (*Arm64PointerMemberStackArgFn)(uint32_t, uint32_t, uint32_t,
+  uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
+  Arm64PointerMemberResult, uint32_t);
+typedef uint32_t (*Arm64PointerMemberPairArgFn)(Arm64PointerMemberPairArg,
+                                                uint32_t);
+typedef uint32_t (*Arm64PointerMemberUnionArgFn)(Arm64PointerMemberUnionArg,
+                                                 uint32_t);
 typedef struct { float value; } Arm64FloatResult;
 typedef struct { double value; } Arm64DoubleResult;
 typedef struct { float lo, hi; } Arm64FloatPairResult;
@@ -295,6 +304,15 @@ Arm64DoubleTripleResult arm64_return_double_triple_hfa(uint32_t);
 Arm64DoubleQuadResult arm64_return_double_quad_hfa(uint32_t);
 double arm64_return_float_pair_scalar_fpr(double, uint32_t);
 uint32_t arm64_return_scalar(uint32_t);
+uint32_t arm64_take_pointer_member_arg(Arm64PointerMemberResult, uint32_t);
+uint32_t arm64_take_pointer_member_arg_alt(Arm64PointerMemberResult,
+                                           uint32_t);
+uint32_t arm64_take_pointer_member_stack_arg(uint32_t, uint32_t, uint32_t,
+  uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
+  Arm64PointerMemberResult, uint32_t);
+uint32_t arm64_pointer_member_arg_count(void);
+uint32_t arm64_pointer_member_arg_alt_count(void);
+uint32_t arm64_pointer_member_stack_arg_count(void);
 ]]
 local hfa_depth_decls = {}
 for depth = 1, 33 do
@@ -335,7 +353,16 @@ _G.__arm64_integer_array_result24_fn =
 _G.__arm64_pointer_member_result_fn = lib.arm64_return_pointer_member
 _G.__arm64_pointer_member_sret_result_fn =
   ffi.cast('Arm64PointerMemberSretResultFn', nil)
-_G.__arm64_pointer_member_arg_fn = ffi.cast('Arm64PointerMemberArgFn', nil)
+_G.__arm64_pointer_member_arg_fn = lib.arm64_take_pointer_member_arg
+_G.__arm64_pointer_member_arg_alt_fn = lib.arm64_take_pointer_member_arg_alt
+_G.__arm64_pointer_member_stack_arg_fn =
+  ffi.cast('Arm64PointerMemberStackArgFn', lib.arm64_take_pointer_member_stack_arg)
+_G.__arm64_pointer_member_pair_arg_fn =
+  ffi.cast('Arm64PointerMemberPairArgFn', nil)
+_G.__arm64_pointer_member_union_arg_fn =
+  ffi.cast('Arm64PointerMemberUnionArgFn', nil)
+_G.__arm64_pointer_member_arg_type = ffi.new('Arm64PointerMemberResult')
+_G.__arm64_integer_pair_arg_type = ffi.new('Arm64IntPair')
 _G.__arm64_result_depth31_fn = ffi.cast('Arm64ResultDepth31Fn', nil)
 _G.__arm64_result_depth32_fn = ffi.cast('Arm64ResultDepth32Fn', nil)
 _G.__arm64_nested_int_result_type = ffi.new('Arm64NestedIntResult')
@@ -2423,6 +2450,168 @@ _G.__arm64_run_nested_hfa_result_probe = function(which)
       function(n) return {n+.125, n+.25, n+.5, n+1} end,
       'nested-double-quad-result')
   end
+end
+
+_G.__arm64_run_pointer_member_arg_probe = function()
+  local candidate_loader = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = .5
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@pointer-member-arg-candidate'))
+  local oracle_loader = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = .5
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@pointer-member-arg-oracle'))
+  local clone_loader = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = .5
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@pointer-member-arg-clone'))
+  local pointer_candidate, oracle = candidate_loader(), oracle_loader()
+  local clone = clone_loader()
+  jit.off(oracle, true)
+  jit.off(clone, true)
+  _G.__arm64_pointer_member_arg_candidate = pointer_candidate
+  _G.__arm64_pointer_member_arg_clone = clone
+  _set_pointer_member_arg_candidate(pointer_candidate)
+  jit.flush(pointer_candidate)
+  jit.on(pointer_candidate, true)
+  jit.opt.start('hotloop=1', 'hotexit=1000')
+  local pointer_values = {
+    ffi.new('Arm64PointerMemberResult', ffi.cast('void *', 0x12345678)),
+    ffi.new('Arm64PointerMemberResult', ffi.cast('void *', 0)),
+  }
+  local native_before = _pointer_member_arg_native_count()
+  local arg_before = lib.arm64_pointer_member_arg_count()
+  tracked_exit_roots = nil
+  exits = 0
+  for pass = 1, 8 do
+    local value = pointer_values[(pass % 2)+1]
+    local got = pointer_candidate(16, lib.arm64_take_pointer_member_arg, value, 37)
+    local want = oracle(16, lib.arm64_take_pointer_member_arg, value, 37)
+    assert(got == want, 'pointer-member argument differs from the C oracle')
+  end
+  assert(next(roots(pointer_candidate)), 'pointer-member argument root was not published')
+  tracked_exit_roots = roots(pointer_candidate)
+  exits = 0
+  for pass = 1, 4 do
+    local value = pointer_values[(pass % 2)+1]
+    assert(pointer_candidate(16, lib.arm64_take_pointer_member_arg, value, 37) ==
+           oracle(16, lib.arm64_take_pointer_member_arg, value, 37),
+      'pointer-member native re-entry differs from the C oracle')
+  end
+  assert(_pointer_member_arg_native_count() > native_before and exits > 0,
+    'pointer-member argument did not execute and exit through native CALLXS')
+  assert(lib.arm64_pointer_member_arg_count()-arg_before == 384,
+    'pointer-member argument native/interpreter effects were lost or replayed')
+  tracked_exit_roots = roots(pointer_candidate)
+  local selected = next(tracked_exit_roots)
+  local code, address, loop = jitutil.tracemc(selected)
+  assert(code and address and loop, 'pointer-member selected root has no code')
+  local alt_before = lib.arm64_pointer_member_arg_alt_count()
+  exits = 0
+  local alt_value = pointer_values[1]
+  assert(pointer_candidate(16, lib.arm64_take_pointer_member_arg_alt,
+                   alt_value, 41) ==
+         oracle(16, lib.arm64_take_pointer_member_arg_alt, alt_value, 41),
+    'alternate pointer-member argument differs from the C oracle')
+  assert(exits > 0 and lib.arm64_pointer_member_arg_alt_count()-alt_before == 32,
+    'alternate pointer-member callable did not exit cleanly')
+  local native_after_alt = _pointer_member_arg_native_count()
+  local arg_after_alt = lib.arm64_pointer_member_arg_count()
+  collectgarbage('collect')
+  exits = 0
+  local value = pointer_values[2]
+  assert(pointer_candidate(24, lib.arm64_take_pointer_member_arg, value, 53) ==
+         oracle(24, lib.arm64_take_pointer_member_arg, value, 53),
+    'NULL pointer-member argument changed after full GC')
+  assert(exits > 0 and _pointer_member_arg_native_count() > native_after_alt,
+    'pointer-member selected root did not re-enter after full GC')
+  assert(lib.arm64_pointer_member_arg_count()-arg_after_alt == 48,
+    'post-GC pointer-member native/interpreter effects were lost or replayed')
+  local code_after, address_after, loop_after = jitutil.tracemc(selected)
+  assert(roots(pointer_candidate)[selected] and code_after == code and
+         address_after == address and loop_after == loop,
+    'pointer-member selected root/code changed after alternate call or GC')
+  tracked_exit_roots = nil
+end
+
+_G.__arm64_run_pointer_member_stack_arg_probe = function()
+  local source = [[
+return function(n, fn, value)
+  local sum = .5
+  for i = 1, n do
+    sum = sum + fn(1,2,3,4,5,6,7,8, value, 37+i)
+  end
+  return sum
+end
+]]
+  local candidate = assert(loadstring(source, '@pointer-member-stack-candidate'))()
+  local oracle_chunk = assert(loadstring(source, '@pointer-member-stack-oracle'))
+  local clone = assert(loadstring(source, '@pointer-member-stack-clone'))()
+  jit.off(oracle_chunk, true)
+  local oracle = oracle_chunk()
+  jit.off(oracle, true)
+  jit.off(clone, true)
+  _G.__arm64_pointer_member_stack_arg_candidate = candidate
+  _G.__arm64_pointer_member_stack_arg_clone = clone
+  _set_pointer_member_stack_arg_candidate(candidate)
+  jit.flush(candidate)
+  jit.on(candidate, true)
+  jit.opt.start('hotloop=1', 'hotexit=1000')
+  local values = {
+    ffi.new('Arm64PointerMemberResult', ffi.cast('void *', 0x76543210)),
+    ffi.new('Arm64PointerMemberResult', ffi.cast('void *', 0)),
+  }
+  local native_before = _pointer_member_stack_arg_native_count()
+  local effects_before = lib.arm64_pointer_member_stack_arg_count()
+  for pass = 1, 8 do
+    local value = values[(pass % 2)+1]
+    assert(candidate(16, lib.arm64_take_pointer_member_stack_arg, value) ==
+           oracle(16, lib.arm64_take_pointer_member_stack_arg, value),
+      'stack-passed pointer member differs from the C oracle')
+  end
+  local selected_roots = roots(candidate)
+  assert(next(selected_roots), 'stack-passed pointer member root was not published')
+  tracked_exit_roots = selected_roots
+  exits = 0
+  for pass = 1, 4 do
+    local value = values[(pass % 2)+1]
+    assert(candidate(16, lib.arm64_take_pointer_member_stack_arg, value) ==
+           oracle(16, lib.arm64_take_pointer_member_stack_arg, value),
+      'stack-passed pointer member native re-entry differs from the C oracle')
+  end
+  assert(_pointer_member_stack_arg_native_count() > native_before and exits > 0,
+    'stack-passed pointer member did not execute and exit through native CALLXS')
+  assert(lib.arm64_pointer_member_stack_arg_count()-effects_before == 384,
+    'stack-passed pointer-member effects were lost or replayed')
+  local selected = next(selected_roots)
+  local code, address, loop = jitutil.tracemc(selected)
+  assert(code and address and loop, 'stack-passed pointer member root has no code')
+  local native_after_gc = _pointer_member_stack_arg_native_count()
+  effects_before = lib.arm64_pointer_member_stack_arg_count()
+  collectgarbage('collect')
+  exits = 0
+  local nilvalue = values[2]
+  assert(candidate(24, lib.arm64_take_pointer_member_stack_arg, nilvalue) ==
+         oracle(24, lib.arm64_take_pointer_member_stack_arg, nilvalue),
+    'NULL stack-passed pointer member changed after full GC')
+  assert(_pointer_member_stack_arg_native_count() > native_after_gc and exits > 0,
+    'stack-passed pointer-member root did not re-enter and exit after GC')
+  assert(lib.arm64_pointer_member_stack_arg_count()-effects_before == 48,
+    'post-GC stack-passed pointer-member effects were lost or replayed')
+  local code_after, address_after, loop_after = jitutil.tracemc(selected)
+  assert(roots(candidate)[selected] and code_after == code and
+         address_after == address and loop_after == loop,
+    'stack-passed pointer-member root/code changed after full GC')
+  tracked_exit_roots = nil
 end
 
 _G.__arm64_finish_peer = function()
