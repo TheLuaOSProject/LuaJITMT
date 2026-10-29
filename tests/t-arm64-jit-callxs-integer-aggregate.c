@@ -39,8 +39,17 @@ static GCproto *active_result_candidate_pt;
 static GCproto *hfa_candidate_pt;
 static unsigned hfa_native_finishes;
 static GCproto *active_hfa_result_candidate_pt;
-static GCproto *hfa_result_candidate_pt[17];
-static unsigned hfa_result_native_finishes[17];
+static GCproto *hfa_result_candidate_pt[65];
+static unsigned hfa_result_native_finishes[65];
+
+static int fixture_error_handler(lua_State *L)
+{
+  lua_getglobal(L, "debug");
+  lua_getfield(L, -1, "traceback");
+  lua_pushvalue(L, 1);
+  lua_call(L, 1, 1);
+  return 1;
+}
 
 static int set_aggregate_candidate(lua_State *L)
 {
@@ -77,7 +86,8 @@ static int get_result_native_count(lua_State *L)
 static int set_hfa_result_candidate(lua_State *L)
 {
   int width = (int)luaL_checkinteger(L, 1);
-	assert(width == 4 || width == 8 || width == 12 || width == 16);
+	assert(width == 4 || width == 8 || width == 12 || width == 16 ||
+	       width == 32 || width == 64);
   assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
   active_hfa_result_candidate_pt = funcproto(funcV(L->top-1));
   hfa_result_candidate_pt[width] = active_hfa_result_candidate_pt;
@@ -87,7 +97,8 @@ static int set_hfa_result_candidate(lua_State *L)
 static int get_hfa_result_native_count(lua_State *L)
 {
   int width = (int)luaL_checkinteger(L, 1);
-	assert(width == 4 || width == 8 || width == 12 || width == 16);
+	assert(width == 4 || width == 8 || width == 12 || width == 16 ||
+	       width == 32 || width == 64);
   lua_pushinteger(L, (lua_Integer)hfa_result_native_finishes[width]);
   return 1;
 }
@@ -387,14 +398,15 @@ static void assert_hfa_result_signature(lua_State *L, const char *name,
 					unsigned member_size, unsigned count)
 {
   LJArm64ABISignature abi;
+  unsigned i;
   assert(lj_ccall_arm64_signature(ctype_ctsG(G(L)),
 				 global_cdata_ctype(L, name), &abi));
   assert(abi.result_class == LJ_ARM64_ABI_FPR &&
 	 abi.result_kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
 	 abi.result_hfa_count == count && abi.result_size == member_size &&
-	 abi.result_hfa_offset[0] == 0 &&
-	 (count != 2 || abi.result_hfa_offset[1] == member_size) &&
 	 abi.result_declared_id != 0 && abi.result_id != 0);
+  for (i = 0; i < count; i++)
+    assert(abi.result_hfa_offset[i] == i*member_size);
 }
 
 static void test_aggregate_signatures(lua_State *L)
@@ -427,6 +439,8 @@ static void test_aggregate_signatures(lua_State *L)
   assert_hfa_result_signature(L, "__arm64_return_double_hfa_fn", 8, 1);
   assert_hfa_result_signature(L, "__arm64_return_float_pair_hfa_fn", 4, 2);
   assert_hfa_result_signature(L, "__arm64_return_double_pair_hfa_fn", 8, 2);
+  assert_hfa_result_signature(L, "__arm64_return_float_triple_hfa_fn", 4, 3);
+  assert_hfa_result_signature(L, "__arm64_return_float_quad_hfa_fn", 4, 4);
   assert_unsupported_aggregate_signature(L,
       "__arm64_aligned_float_pair_result_fn");
   assert_hfa_result_signature(L, "__arm64_double_pair_result_fn", 8, 2);
@@ -672,7 +686,8 @@ static void test_live_integer_result_admission(lua_State *L, GCtrace *T,
   jit_State *J, *fixture_jit;
   GG_State *fakegg;
 	IRRef ref, box = 0, call = 0, first_call = 0, store = 0;
-	IRRef hiop = 0, storehi = 0;
+	IRRef hiop = 0, storehi = 0, hiop2 = 0, storehi2 = 0;
+	IRRef hiop3 = 0, storehi3 = 0;
   IRRef ktrace = 0, badctype = 0, wrong_offset = 0;
   IRRef nk = T->nk, nins = T->nins, semantic_nins;
   IRIns *copy;
@@ -706,15 +721,23 @@ static void test_live_integer_result_admission(lua_State *L, GCtrace *T,
 	    call = ref;
 	  }
     if (ins.o == IR_HIOP && call && ref == call+1u) hiop = ref;
+    if (ins.o == IR_HIOP && call && ref == call+2u) hiop2 = ref;
+    if (ins.o == IR_HIOP && call && ref == call+3u) hiop3 = ref;
   }
   for (ref = REF_FIRST; ref < semantic_nins; ref++) {
     IRIns ins = ir_load_acq(&copy[ref]);
     if (ins.o == IR_XSTORE && ins.op2 == call) store = ref;
     if (ins.o == IR_XSTORE && hiop && ins.op2 == hiop) storehi = ref;
+    if (ins.o == IR_XSTORE && hiop2 && ins.op2 == hiop2) storehi2 = ref;
+    if (ins.o == IR_XSTORE && hiop3 && ins.op2 == hiop3) storehi3 = ref;
   }
 	  assert(box && call && first_call && call != first_call && store);
   if (T->ir[call+1u].o == IR_HIOP)
     assert(hiop == call+1u && storehi != 0);
+  if (T->ir[call+2u].o == IR_HIOP)
+    assert(hiop2 == call+2u && storehi2 != 0);
+  if (T->ir[call+3u].o == IR_HIOP)
+    assert(hiop3 == call+3u && storehi3 != 0);
   for (ref = nk; ref < REF_TRUE; ref = next_constant(copy, ref)) {
     IRIns constant = ir_load_acq(&copy[ref]);
     if (constant.o == IR_KGC && constant.t.irt == IRT_P64 &&
@@ -775,10 +798,40 @@ static void test_live_integer_result_admission(lua_State *L, GCtrace *T,
     copy[hiop].op1 = REF_BASE;
     assert(!semantic_accepts(J, &fx.semantic, copy, nins, semantic_nins));
     copy_trace_ir(copy, fx.good, nk, nins);
+    copy[hiop].op2 = REF_BASE;
+    assert(!semantic_accepts(J, &fx.semantic, copy, nins, semantic_nins));
+    copy_trace_ir(copy, fx.good, nk, nins);
     copy[storehi].op2 = call;
     assert(!semantic_accepts(J, &fx.semantic, copy, nins, semantic_nins));
     copy_trace_ir(copy, fx.good, nk, nins);
     copy[copy[storehi].op1].op2 = wrong_offset;
+    assert(!semantic_accepts(J, &fx.semantic, copy, nins, semantic_nins));
+  }
+  if (hiop2) {
+    copy_trace_ir(copy, fx.good, nk, nins);
+    saved = fx.map[slot];
+    fx.map[slot] = snap_setref(saved, hiop2);
+    assert(!semantic_accepts(J, &fx.semantic, copy, nins, semantic_nins));
+    fx.map[slot] = saved;
+    copy_trace_ir(copy, fx.good, nk, nins);
+    copy[hiop2].op2 = REF_BASE;
+    assert(!semantic_accepts(J, &fx.semantic, copy, nins, semantic_nins));
+    if (hiop3) {
+      copy_trace_ir(copy, fx.good, nk, nins);
+      copy[hiop3].op2 = copy[hiop2].op2;
+      assert(!semantic_accepts(J, &fx.semantic, copy, nins, semantic_nins));
+    }
+    copy_trace_ir(copy, fx.good, nk, nins);
+    copy[copy[storehi2].op1].op2 = wrong_offset;
+    assert(!semantic_accepts(J, &fx.semantic, copy, nins, semantic_nins));
+    copy_trace_ir(copy, fx.good, nk, nins);
+    copy[storehi2].op2 = hiop;
+    assert(!semantic_accepts(J, &fx.semantic, copy, nins, semantic_nins));
+  }
+  if (hiop3) {
+    copy_trace_ir(copy, fx.good, nk, nins);
+    copy[hiop2].op2 = fx.good[hiop3].op2;
+    copy[hiop3].op2 = fx.good[hiop2].op2;
     assert(!semantic_accepts(J, &fx.semantic, copy, nins, semantic_nins));
   }
 
@@ -808,6 +861,11 @@ static void test_live_integer_result_admission(lua_State *L, GCtrace *T,
     copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
     postra = fx.view;
     postra.ir = fx.postra;
+    fx.postra[hiop].op2 = REF_BASE;
+    assert(!lj_asm_arm64_postra_admit(&postra, &postra_nins));
+    copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
+    postra = fx.view;
+    postra.ir = fx.postra;
     fx.postra[storehi].op2 = call;
     assert(!lj_asm_arm64_postra_admit(&postra, &postra_nins));
     copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
@@ -824,6 +882,51 @@ static void test_live_integer_result_admission(lua_State *L, GCtrace *T,
     postra = fx.view;
     postra.ir = fx.postra;
     fx.postra[hiop].r = RID_D2;
+    assert(!lj_asm_arm64_postra_admit(&postra, &postra_nins));
+  }
+  if (hiop2) {
+    copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
+    postra = fx.view;
+    postra.ir = fx.postra;
+    saved = fx.postmap[slot];
+    fx.postmap[slot] = snap_setref(saved, hiop2);
+    assert(!lj_asm_arm64_postra_admit(&postra, &postra_nins));
+    fx.postmap[slot] = saved;
+    copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
+    postra = fx.view;
+    postra.ir = fx.postra;
+    fx.postra[hiop2].r = RID_D4;
+    assert(!lj_asm_arm64_postra_admit(&postra, &postra_nins));
+    copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
+    postra = fx.view;
+    postra.ir = fx.postra;
+    fx.postra[hiop2].op2 = REF_BASE;
+    assert(!lj_asm_arm64_postra_admit(&postra, &postra_nins));
+    copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
+    postra = fx.view;
+    postra.ir = fx.postra;
+    fx.postra[storehi2].op2 = hiop;
+    assert(!lj_asm_arm64_postra_admit(&postra, &postra_nins));
+  }
+  if (hiop3) {
+    copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
+    postra = fx.view;
+    postra.ir = fx.postra;
+    fx.postra[hiop3].r = RID_D4;
+    assert(!lj_asm_arm64_postra_admit(&postra, &postra_nins));
+    copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
+    postra = fx.view;
+    postra.ir = fx.postra;
+    fx.postra[hiop3].op2 = fx.postra[hiop2].op2;
+    assert(!lj_asm_arm64_postra_admit(&postra, &postra_nins));
+    copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
+    postra = fx.view;
+    postra.ir = fx.postra;
+    {
+      IRRef lane_tag = fx.postra[hiop2].op2;
+      fx.postra[hiop2].op2 = fx.postra[hiop3].op2;
+      fx.postra[hiop3].op2 = lane_tag;
+    }
     assert(!lj_asm_arm64_postra_admit(&postra, &postra_nins));
   }
   copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
@@ -947,6 +1050,12 @@ static void observe_native_finish(TGState *tg)
         hfa_result_native_finishes[12]++;
       else if (hiops == calls && stores == 2*calls && result_type == IRT_NUM)
         hfa_result_native_finishes[16]++;
+      else if (hiops == 2*calls && stores == 3*calls &&
+	       result_type == IRT_FLOAT)
+	hfa_result_native_finishes[32]++;
+      else if (hiops == 3*calls && stores == 4*calls &&
+	       result_type == IRT_FLOAT)
+	hfa_result_native_finishes[64]++;
       else if (hiops == 0 && stores == calls)
         hfa_result_native_finishes[result_type == IRT_FLOAT ? 4 : 8]++;
     }
@@ -982,15 +1091,23 @@ int main(int argc, char **argv)
   lua_setglobal(L, "_hfa_trace_count");
   lua_pushcfunction(L, get_aggregate_native_width_count);
   lua_setglobal(L, "_aggregate_native_width_count");
-  if (luaL_dofile(L, argv[1]) != 0) {
-    const char *error = lua_tostring(L, -1);
+  lua_pushcfunction(L, fixture_error_handler);
+  {
+    int errfunc = lua_gettop(L);
+    int status = luaL_loadfile(L, argv[1]);
+    if (status == 0) status = lua_pcall(L, 0, 0, errfunc);
+    if (status != 0) {
+      const char *error = lua_tostring(L, -1);
     fprintf(stderr, "integer aggregate Lua fixture failed: %s\n",
 	    error ? error : "(non-string error)");
-    assert(0);
+      fprintf(stderr, "trace abort count=%u last=%u\n",
+	      lj_trace_test_abort_count(),
+	      (unsigned)lj_trace_test_last_abort_error());
+      fprintf(stderr, "trace errinfo=%d\n",
+	      (int32_t)intV(&G2J(G(L))->errinfo));
+      assert(0);
+    }
   }
-  fprintf(stderr, "trace abort count=%u last=%u\n",
-          lj_trace_test_abort_count(),
-          (unsigned)lj_trace_test_last_abort_error());
   assert(native_width_finishes[1] && native_width_finishes[2] &&
 	 native_width_finishes[4] && native_width_finishes[8]);
   test_aggregate_signatures(L);
@@ -1016,8 +1133,9 @@ int main(int argc, char **argv)
     }
   }
   {
-    static const unsigned widths[] = { 4, 8, 12, 16 };
-    static const IRType types[] = { IRT_FLOAT, IRT_NUM, IRT_FLOAT, IRT_NUM };
+    static const unsigned widths[] = { 4, 8, 12, 16, 32, 64 };
+    static const IRType types[] = { IRT_FLOAT, IRT_NUM, IRT_FLOAT, IRT_NUM,
+				    IRT_FLOAT, IRT_FLOAT };
     unsigned i;
     jit_State *J = G2J(G(L));
     for (i = 0; i < sizeof(widths)/sizeof(widths[0]); i++) {

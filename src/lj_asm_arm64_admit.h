@@ -491,7 +491,7 @@ static IRType arm64_callxs_result_type(const LJArm64ABISignature *abi)
   if (abi->result_kind == LJ_ARM64_ABI_KIND_FLOAT)
     return abi->result_size == 4 ? IRT_FLOAT : IRT_NUM;
   if (abi->result_kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
-      (abi->result_hfa_count == 1 || abi->result_hfa_count == 2))
+      abi->result_hfa_count >= 1 && abi->result_hfa_count <= 4)
     return abi->result_size == 4 ? IRT_FLOAT : IRT_NUM;
   if (abi->result_kind == LJ_ARM64_ABI_KIND_INTEGER ||
       abi->result_kind == LJ_ARM64_ABI_KIND_ENUM) {
@@ -528,7 +528,7 @@ static int arm64_callxs_result_boxed(const LJArm64ABISignature *abi)
       abi->result_size == 4 || abi->result_size == 8)) ||
     (abi->result_class == LJ_ARM64_ABI_FPR &&
      abi->result_kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
-     (abi->result_hfa_count == 1 || abi->result_hfa_count == 2) &&
+     (abi->result_hfa_count >= 1 && abi->result_hfa_count <= 4) &&
      (abi->result_size == 4 || abi->result_size == 8));
 }
 
@@ -1684,7 +1684,8 @@ static int arm64_callxs_result_not_snapshotted(const SnapShot *snaps,
     if (ofs > nsnapmap || nent > nsnapmap-ofs) return 0;
     for (i = 0; i < nent; i++) {
       IRRef snapref = snap_ref(snapentry_acq(&map[ofs+i]));
-      if (snapref == result || (result_hi != 0 && snapref == result_hi))
+      if (snapref == result ||
+	  (result_hi != 0 && snapref > result && snapref <= result_hi))
         return 0;
     }
   }
@@ -2127,9 +2128,10 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
   IRRef boxref = 0;
   CTypeID box_ctype = 0;
   IRType call_result_type = IRT_NIL;
-  int result_is_cdata = 0, box_store_seen = 0, box_store_hi_seen = 0;
+  int result_is_cdata = 0, box_store_seen = 0;
+  unsigned box_store_lanes = 0;
   unsigned result_hfa_count = 0;
-  unsigned result_hfa_offset[2] = { 0, 0 };
+  unsigned result_hfa_offset[4] = { 0, 0, 0, 0 };
   int result_is_u32 = 0;
   IRRef number_result = 0;
   MSize result_slot = 0;
@@ -2230,7 +2232,8 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	if ((result_is_cdata && (!boxref || !box_store_seen)) ||
 	    (!result_is_cdata && (boxref || box_store_seen)))
 	  return 0;
-	if (result_hfa_count == 2 && !box_store_hi_seen) return 0;
+	if (result_hfa_count > 1 &&
+	    box_store_lanes != ((1u << result_hfa_count)-1u)) return 0;
 	if (result_is_cdata &&
 	    !arm64_callxs_snapshot_value_slot(T->snap, T->snapmap,
 	      T->nsnap, T->nsnapmap, ref, 1u+LJ_FR2,
@@ -2340,9 +2343,9 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	  boxref = 0;
 	  box_ctype = 0;
 	  box_store_seen = 0;
-	  box_store_hi_seen = 0;
+	  box_store_lanes = 0;
 	  result_hfa_count = 0;
-	  result_hfa_offset[0] = result_hfa_offset[1] = 0;
+	  memset(result_hfa_offset, 0, sizeof(result_hfa_offset));
 	  result_is_cdata = 0;
 	}
       }
@@ -2524,13 +2527,14 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
       call = ref;
       result_is_cdata = arm64_callxs_result_boxed(&abi);
       result_hfa_count = abi.result_hfa_count;
-      result_hfa_offset[0] = abi.result_hfa_offset[0];
-      result_hfa_offset[1] = abi.result_hfa_offset[1];
+      for (i = 0; i < 4; i++)
+	result_hfa_offset[i] = abi.result_hfa_offset[i];
       if ((abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ||
            abi.result_kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER) &&
 	      !arm64_callxs_result_not_snapshotted(T->snap, T->snapmap,
 	    T->nsnap, T->nsnapmap, ref,
-	    abi.result_hfa_count == 2 ? ref+1u : 0)) return 0;
+	    abi.result_hfa_count > 1 ?
+	      ref+abi.result_hfa_count-1u : 0)) return 0;
       call_result_type = (IRType)irt_type(ins.t);
       {
 	BCIns sourceins;
@@ -2652,9 +2656,9 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	    boxref = 0;
 	    box_ctype = 0;
 	    box_store_seen = 0;
-	    box_store_hi_seen = 0;
+	    box_store_lanes = 0;
 	    result_hfa_count = 0;
-	    result_hfa_offset[0] = result_hfa_offset[1] = 0;
+	    memset(result_hfa_offset, 0, sizeof(result_hfa_offset));
 	    result_is_cdata = 0;
 	  }
       break;
@@ -2688,12 +2692,20 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	  !arm64_callxs_ref_valid(T->ir, nk, nins, ref, ins.op2))
 	  return 0;
       break;
-    case IR_HIOP:
-      if (state != CALLXS_ACTIVE || result_hfa_count != 2 ||
-	  ref != call+1u || ins.op1 != call || ins.op2 != call ||
-	  ins.t.irt != (unsigned)call_result_type)
-	return 0;
+    case IR_HIOP: {
+	unsigned lane;
+	int32_t lane_tag;
+	if (state != CALLXS_ACTIVE || result_hfa_count < 2 ||
+	    ref <= call || ref >= call+result_hfa_count ||
+	    ins.op1 != call ||
+	    !arm64_callxs_kint_value(T->ir, nk, ins.op2, &lane_tag) ||
+	    ins.t.irt != (unsigned)call_result_type)
+	  return 0;
+	lane = ref-call;
+	if (lane == 0 || lane >= result_hfa_count || lane_tag != (int32_t)lane)
+	  return 0;
       break;
+    }
     case IR_XSTORE:
       if (state != CALLXS_ACTIVE || !result_is_cdata || !boxref ||
 	  ins.op1 < REF_FIRST || ins.op1 >= ref)
@@ -2706,27 +2718,24 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	    payload.op1 != boxref ||
 	    !arm64_callxs_offset_value(T->ir, nk, payload.op2, &offset) ||
 	    offset < (int64_t)sizeof(GCcdata)) return 0;
-	if (result_hfa_count == 2) {
-	  if (offset == (int64_t)sizeof(GCcdata)+result_hfa_offset[0])
-	    member = 0;
-	  else if (offset == (int64_t)sizeof(GCcdata)+result_hfa_offset[1])
-	    member = 1;
-	  else return 0;
-	  if (ins.op2 != (member == 0 ? call : call+1u)) return 0;
+	if (result_hfa_count > 1) {
+	  for (member = 0; member < result_hfa_count; member++)
+	    if (offset == (int64_t)sizeof(GCcdata)+result_hfa_offset[member])
+	      break;
+	  if (member == result_hfa_count || ins.op2 != call+member) return 0;
 	} else if (offset != (int64_t)sizeof(GCcdata) || ins.op2 != call) {
 	  return 0;
 	}
 	if (ins.op2 >= ref ||
-	    (result_hfa_count == 2 && member == 1 &&
+	    (result_hfa_count > 1 && member > 0 &&
 	     ir_load_acq(&T->ir[ins.op2]).o != IR_HIOP) ||
 	    irt_type(ins.t) != call_result_type) return 0;
 	if (member == 0) {
 	  if (box_store_seen) return 0;
 	  box_store_seen = 1;
-	} else {
-	  if (box_store_hi_seen) return 0;
-	  box_store_hi_seen = 1;
 	}
+	if (member >= 4 || (box_store_lanes & (1u << member))) return 0;
+	box_store_lanes |= 1u << member;
       }
       break;
     case IR_SLOAD:
@@ -5997,8 +6006,9 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	IRRef scalar_read = 0;
 	IRRef boxref = 0;
 	CTypeID box_ctype = 0;
-	int box_store_seen = 0, box_store_hi_seen = 0, result_is_cdata = 0;
-	unsigned result_hfa_count = 0, result_hfa_offset[2] = { 0, 0 };
+	int box_store_seen = 0, result_is_cdata = 0;
+	unsigned box_store_lanes = 0;
+	unsigned result_hfa_count = 0, result_hfa_offset[4] = { 0, 0, 0, 0 };
 	int result_is_u32 = 0;
 	IRRef number_result = 0;
 	MSize result_slot = 0;
@@ -6234,13 +6244,14 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		 arm64_callxs_ref_type(view->ir, view->nk, enterargs[2]) != IRT_CDATA)) return 0;
 	    result_is_cdata = arm64_callxs_result_boxed(&abi);
 	    result_hfa_count = abi.result_hfa_count;
-	    result_hfa_offset[0] = abi.result_hfa_offset[0];
-	    result_hfa_offset[1] = abi.result_hfa_offset[1];
+	    for (i = 0; i < 4; i++)
+	      result_hfa_offset[i] = abi.result_hfa_offset[i];
 	    if ((abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ||
 	 abi.result_kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER) &&
 		!arm64_callxs_result_not_snapshotted(view->snap, view->snapmap,
 		  view->nsnap, view->nsnapmap, ref,
-		  abi.result_hfa_count == 2 ? ref+1u : 0)) return 0;
+		  abi.result_hfa_count > 1 ?
+		    ref+abi.result_hfa_count-1u : 0)) return 0;
 	    result_is_u32 = abi.result_class == LJ_ARM64_ABI_GPR &&
 	      abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER &&
 	      abi.result_size == 4 && abi.result_unsigned;
@@ -6272,7 +6283,8 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		(result_is_cdata && (boxref == 0 || !box_store_seen)) ||
 		(!result_is_cdata && (boxref != 0 || box_store_seen)))
 	      return 0;
-	    if (result_hfa_count == 2 && !box_store_hi_seen) return 0;
+	    if (result_hfa_count > 1 &&
+		box_store_lanes != ((1u << result_hfa_count)-1u)) return 0;
 	    if (result_is_cdata &&
 		!arm64_callxs_snapshot_value_slot(view->snap, view->snapmap,
 		  view->nsnap, view->nsnapmap, ref, 1u+LJ_FR2,
@@ -6327,9 +6339,9 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    boxref = 0;
 	    box_ctype = 0;
 	    box_store_seen = 0;
-	    box_store_hi_seen = 0;
+	    box_store_lanes = 0;
 	    result_hfa_count = 0;
-	    result_hfa_offset[0] = result_hfa_offset[1] = 0;
+	    memset(result_hfa_offset, 0, sizeof(result_hfa_offset));
 	    result_is_cdata = 0;
 	  } else if (ins.o == IR_EQ) {
 	    if (!irt_isguard(ins.t) || ins.op1 >= ref || ins.op2 >= ref ||
@@ -6601,13 +6613,18 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    box_ctype = (CTypeID)ir_load_acq(&view->ir[ins.op1]).i;
 	  } else if (ins.o == IR_HIOP) {
 	    IRIns low = ir_load_acq(&view->ir[active_call]);
-	    if (protocol != 4 || result_hfa_count != 2 ||
-		ref != active_call+1u || ins.op1 != active_call ||
-		ins.op2 != active_call || !irt_isfp(ins.t) ||
+	    IRRef lane = ref-active_call;
+	    int32_t lane_tag;
+	    if (protocol != 4 || result_hfa_count < 2 ||
+		lane == 0 || lane >= result_hfa_count ||
+		ins.op1 != active_call ||
+		!arm64_callxs_kint_value(view->ir, view->nk, ins.op2,
+		                         &lane_tag) || lane_tag != (int32_t)lane ||
+		!irt_isfp(ins.t) ||
 		irt_type(ins.t) != irt_type(low.t) ||
 		(ins.t.irt & ~(IRT_TYPE|IRT_ISPHI)) != 0 ||
 		!ra_hasreg(low.r) || low.r != RID_FPRET ||
-		!ra_hasreg(ins.r) || ins.r != RID_D1)
+		!ra_hasreg(ins.r) || ins.r != (Reg)(RID_D0+lane))
 	      return 0;
 	  } else if (ins.o == IR_XSTORE) {
 	    IRIns payload;
@@ -6623,24 +6640,22 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		!arm64_callxs_offset_value(view->ir, view->nk, payload.op2, &offset) ||
 		irt_type(ins.t) != irt_type(ir_load_acq(&view->ir[active_call]).t))
 	      return 0;
-	    if (result_hfa_count == 2) {
-	      if (offset == (int64_t)sizeof(GCcdata)+result_hfa_offset[0])
-		member = 0;
-	      else if (offset == (int64_t)sizeof(GCcdata)+result_hfa_offset[1])
-		member = 1;
-	      else return 0;
-	      if (ins.op2 != (member == 0 ? active_call : active_call+1u) ||
-		 (member == 1 &&
-		  ir_load_acq(&view->ir[ins.op2]).o != IR_HIOP)) return 0;
+	    if (result_hfa_count > 1) {
+	      for (member = 0; member < result_hfa_count; member++)
+		if (offset == (int64_t)sizeof(GCcdata)+
+		    result_hfa_offset[member]) break;
+	      if (member == result_hfa_count ||
+		  ins.op2 != active_call+member ||
+		  (member > 0 &&
+		   ir_load_acq(&view->ir[ins.op2]).o != IR_HIOP)) return 0;
 	    } else if (offset != (int64_t)sizeof(GCcdata) ||
 		ins.op2 != active_call) return 0;
 	    if (member == 0) {
 	      if (box_store_seen) return 0;
 	      box_store_seen = 1;
-	    } else {
-	      if (box_store_hi_seen) return 0;
-	      box_store_hi_seen = 1;
 	    }
+	    if (member >= 4 || (box_store_lanes & (1u << member))) return 0;
+	    box_store_lanes |= 1u << member;
 	  } else if (ins.o == IR_LT || ins.o == IR_GE || ins.o == IR_LE || ins.o == IR_GT) {
 	    IRType t1, t2;
 	    if (ins.t.irt != (IRT_INT|IRT_GUARD) || ins.op1 >= ref || ins.op2 >= ref ||

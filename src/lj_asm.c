@@ -40,7 +40,6 @@
 #include "lj_vm.h"
 #include "lj_target.h"
 #include "lj_prng.h"
-
 #ifdef LUA_USE_ASSERT
 #include <stdio.h>
 #endif
@@ -2928,6 +2927,20 @@ static void asm_setup_regsp(ASMState *as)
       continue;
       }
     case IR_HIOP:
+#if LJ_TARGET_ARM64
+      if (irt_isfp(ir->t) && ir->op1 >= REF_FIRST &&
+	  ir->op1 < (IRRef)(ir-as->ir) &&
+	  irref_isk(ir->op2) && IR(ir->op2)->o == IR_KINT &&
+	  IR(ir->op2)->i == (int32_t)((IRRef)(ir-as->ir)-ir->op1) &&
+	  as->ir[ir->op1].o == IR_CALLXS &&
+	  irt_isfp(as->ir[ir->op1].t) &&
+	  (IRRef)(ir-as->ir)-ir->op1 < 4) {
+	IRRef lane = (IRRef)(ir-as->ir)-ir->op1;
+	as->ir[ir->op1].prev = REGSP_HINT(RID_FPRET);
+	ir->prev = REGSP_HINT((Reg)(RID_D0+lane));
+	continue;
+      }
+#endif
       switch ((ir-1)->o) {
 #if LJ_SOFTFP && LJ_TARGET_ARM
       case IR_SLOAD: case IR_ALOAD: case IR_HLOAD: case IR_ULOAD: case IR_VLOAD:

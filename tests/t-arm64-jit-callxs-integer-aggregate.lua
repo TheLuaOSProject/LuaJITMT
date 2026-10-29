@@ -34,6 +34,8 @@ typedef struct __attribute__((aligned(16))) {
   float lo, hi;
 } Arm64AlignedFloatPairResult;
 typedef struct { double lo, hi; } Arm64DoublePairResult;
+typedef struct { float x, y, z; } Arm64FloatTripleResult;
+typedef struct { float x, y, z, w; } Arm64FloatQuadResult;
 typedef Arm64DoublePairResult (*Arm64DoublePairResultFPRFn)(double, uint32_t);
 typedef Arm64AlignedFloatPairResult (*Arm64AlignedFloatPairResultFn)(uint32_t);
 typedef Arm64DoublePairResult (*Arm64DoublePairResultFn)(uint32_t);
@@ -83,6 +85,8 @@ Arm64FloatPairResult arm64_return_float_pair_hfa(uint32_t);
 Arm64FloatPairResult arm64_return_float_pair_hfa_fpr(double, uint32_t);
 Arm64DoublePairResult arm64_return_double_pair_hfa(uint32_t);
 Arm64DoublePairResult arm64_return_double_pair_hfa_fpr(double, uint32_t);
+Arm64FloatTripleResult arm64_return_float_triple_hfa(uint32_t);
+Arm64FloatQuadResult arm64_return_float_quad_hfa(uint32_t);
 double arm64_return_float_pair_scalar_fpr(double, uint32_t);
 uint32_t arm64_return_scalar(uint32_t);
 ]]
@@ -98,6 +102,8 @@ _G.__arm64_return_float_pair_hfa_fpr_fn = lib.arm64_return_float_pair_hfa_fpr
 _G.__arm64_return_double_pair_hfa_fn = lib.arm64_return_double_pair_hfa
 _G.__arm64_return_double_pair_hfa_fpr_fn =
   lib.arm64_return_double_pair_hfa_fpr
+_G.__arm64_return_float_triple_hfa_fn = lib.arm64_return_float_triple_hfa
+_G.__arm64_return_float_quad_hfa_fn = lib.arm64_return_float_quad_hfa
 _G.__arm64_aligned_float_result_fn = ffi.cast('Arm64AlignedFloatResultFn', nil)
 _G.__arm64_padded_float_result_fn = ffi.cast('Arm64PaddedFloatResultFn', nil)
 _G.__arm64_aligned_float_pair_result_fn =
@@ -626,6 +632,57 @@ run_hfa_result(4, 'Arm64FloatResult', lib.arm64_return_float_hfa, 21,
                'one-float HFA result')
 run_hfa_result(8, 'Arm64DoubleResult', lib.arm64_return_double_hfa, 22,
                'one-double HFA result')
+local function run_multi_hfa_result(width, result_type, fn, counter, fields,
+                                    expected, label)
+  local candidate, oracle = make_result_pair(label)
+  _set_hfa_result_candidate(width, candidate)
+  _G['__arm64_hfa_result_candidate_'..width] = candidate
+  jit.flush(candidate)
+  jit.on(candidate, true)
+  local native_before = _hfa_result_native_count(width)
+  local effects_before = lib.arm64_aggregate_count(counter)
+  for pass = 1, 6 do
+    local got = candidate(32, fn, pass*7)
+    local want = oracle(32, fn, pass*7)
+    assert(ffi.istype(result_type, got) and ffi.istype(result_type, want),
+           label..' returned the wrong declared CType')
+    for i, field in ipairs(fields) do
+      assert(got[field] == want[field], label..' lane '..field..' differs')
+    end
+  end
+  assert(_hfa_result_native_count(width) > native_before,
+         label..' had no selected-root native entry')
+  tracked_exit_roots = roots(candidate)
+  exits = 0
+  local mismatch = candidate(32, lib.arm64_return_scalar, 13)
+  assert(type(mismatch) == 'number' and exits > 0,
+         label..' did not take a result-signature exit')
+  local after_gc = _hfa_result_native_count(width)
+  local effects_after_gc = lib.arm64_aggregate_count(counter)
+  collectgarbage('collect')
+  exits = 0
+  local got = candidate(24, fn, 13)
+  local want = oracle(24, fn, 13)
+  assert(ffi.istype(result_type, got) and exits > 0 and
+         _hfa_result_native_count(width) > after_gc,
+         label..' failed native reentry/exit after full GC')
+  for i, field in ipairs(fields) do
+    assert(got[field] == want[field] and
+           got[field] == expected(37)[i],
+           label..' lane '..field..' changed after full GC')
+  end
+  assert(lib.arm64_aggregate_count(counter)-effects_after_gc == 48 and
+         lib.arm64_aggregate_count(counter)-effects_before == 432,
+         label..' native/interpreter effects were lost or replayed')
+end
+run_multi_hfa_result(32, 'Arm64FloatTripleResult',
+  lib.arm64_return_float_triple_hfa, 28, {'x','y','z'},
+  function(n) return {n+.25, 2*n+.5, 3*n+.75} end,
+  'three-float HFA result')
+run_multi_hfa_result(64, 'Arm64FloatQuadResult',
+  lib.arm64_return_float_quad_hfa, 29, {'x','y','z','w'},
+  function(n) return {n+.25, 2*n+.5, 3*n+.75, 4*n+1} end,
+  'four-float HFA result')
 local pair_candidate, pair_oracle = make_result_pair('two-float HFA result')
 _set_hfa_result_candidate(12, pair_candidate)
 _G.__arm64_hfa_result_candidate_12 = pair_candidate

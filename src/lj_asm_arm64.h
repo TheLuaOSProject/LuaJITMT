@@ -606,6 +606,21 @@ static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
 {
   RegSet drop = RSET_SCRATCH;
   int hiop = ((ir+1)->o == IR_HIOP && !irt_isnil((ir+1)->t));
+  unsigned hfa_lanes = 1;
+  IRRef callref = (IRRef)(ir-as->ir);
+  while (hfa_lanes < 4 && (ir+hfa_lanes)->o == IR_HIOP &&
+	 (ir+hfa_lanes)->op1 == callref &&
+	 irref_isk((ir+hfa_lanes)->op2) &&
+	 IR((ir+hfa_lanes)->op2)->o == IR_KINT &&
+	 IR((ir+hfa_lanes)->op2)->i == (int32_t)hfa_lanes &&
+	 irt_isfp((ir+hfa_lanes)->t))
+    hfa_lanes++;
+  if (hfa_lanes > 2 && irt_isfp(ir->t)) {
+    unsigned lane;
+    for (lane = 1; lane < hfa_lanes; lane++)
+      if (ra_hasreg((ir+lane)->r))
+        rset_clear(drop, (ir+lane)->r);
+  }
   if (ra_hasreg(ir->r))
     rset_clear(drop, ir->r); /* Dest reg handled below. */
   if (hiop && ra_hasreg((ir+1)->r))
@@ -613,9 +628,12 @@ static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
   ra_evictset(as, drop); /* Evictions must be performed first. */
   if (ra_used(ir) || (hiop && ra_used(ir+1))) {
     lj_assertA(!irt_ispri(ir->t), "PRI dest");
-    if (irt_isfp(ir->t) && hiop && irt_isfp((ir+1)->t)) {
+    if (irt_isfp(ir->t) && hfa_lanes > 1) {
+	unsigned lane;
 	if (ra_used(ir)) ra_destreg(as, ir, RID_FPRET);
-	if (ra_used(ir+1)) ra_destreg(as, ir+1, RID_D1);
+	for (lane = 1; lane < hfa_lanes; lane++)
+	  if (ra_used(ir+lane))
+	    ra_destreg(as, ir+lane, (Reg)(RID_D0+lane));
     } else if (irt_isfp(ir->t)) {
       if (ci->flags & CCI_CASTU64) {
 	Reg dest = ra_dest(as, ir, RSET_FPR) & 31;
@@ -1828,6 +1846,19 @@ static void asm_hiop(ASMState *as, IRIns *ir)
   int uselo = ra_used(ir-1), usehi = ra_used(ir);  /* Loword/hiword used? */
   if (LJ_UNLIKELY(!(as->flags & JIT_F_OPT_DCE))) uselo = usehi = 1;
   if (!usehi) return;  /* Skip unused hiword op for all remaining ops. */
+  if (irt_isfp(ir->t) && ir->op1 >= REF_FIRST &&
+      ir->op1 < (IRRef)(ir-as->ir)) {
+    IRRef rootref = ir->op1;
+    IRIns *root = &as->ir[rootref];
+    IRRef lane = (IRRef)(ir-as->ir)-rootref;
+    if (root->o == IR_CALLXS && lane >= 1 && lane < 4 &&
+	irt_isfp(root->t) && irref_isk(ir->op2) &&
+	IR(ir->op2)->o == IR_KINT &&
+	IR(ir->op2)->i == (int32_t)lane) {
+      if (!uselo) ra_allocref(as, rootref, RID2RSET(RID_FPRET));
+      return;
+    }
+  }
   switch ((ir-1)->o) {
   case IR_CALLN:
   case IR_CALLL:
