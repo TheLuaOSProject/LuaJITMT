@@ -9275,6 +9275,20 @@ static int arm64_scalar_side_geometry_ir(const LJArm64SideIRView *side,
   end = side->loop_end_pc;
   h = (BCIns)la_load32_acq((const uint32_t *)&side->proto_bc[header]);
   back = (BCIns)la_load32_acq((const uint32_t *)&side->proto_bc[end]);
+  if (bc_op(side->parent_startins) == BC_FORL) {
+	int64_t body = (int64_t)end+1+(int64_t)bc_j(side->parent_startins);
+	if (bc_op(h) != BC_FORI || bc_a(h) != bc_a(side->parent_startins) ||
+	    header+1u != side->loop_start_pc ||
+	    back != BCINS_AD(BC_JFORL, bc_a(side->parent_startins), side->parent) ||
+	    bc_j(h) <= 0 || (int64_t)header+1+(int64_t)bc_j(h) !=
+	      (int64_t)end+1 || body < 0 || (MSize)body != side->loop_start_pc ||
+	    !arm64_ir_pcpos((uintptr_t)(const void *)side->parent_continuation,
+	      lo, hi, &cont) || cont < (MSize)body || cont >= end)
+	  return 0;
+	if (continuation_pos)
+	  *continuation_pos = cont;
+	return 1;
+  }
   target = (int64_t)end + 1 + (int64_t)bc_j(back);
   if (bc_op(h) != BC_JLOOP || bc_d(h) != side->parent ||
 	  bc_op(back) != BC_JMP || bc_j(back) >= 0 ||
@@ -14772,13 +14786,26 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
 	  return 0;
 	h = (BCIns)la_load32_acq((const uint32_t *)&side->proto_bc[header]);
 	back = (BCIns)la_load32_acq((const uint32_t *)&side->proto_bc[end]);
-	target = (int64_t)end + 1 + (int64_t)bc_j(back);
-	if (bc_op(h) != BC_JLOOP || bc_d(h) != side->parent ||
-	    bc_op(back) != BC_JMP || bc_j(back) >= 0 || target < 0 ||
-	    (MSize)target != side->loop_start_pc ||
-	    !arm64_ir_pcpos((uintptr_t)(const void *)side->parent_continuation,
-	      lo, hi, &cont) || cont < (MSize)target || cont >= end)
-	  return 0;
+	if (bc_op(side->parent_startins) == BC_FORL) {
+	  target = (int64_t)end+1+(int64_t)bc_j(side->parent_startins);
+	  if (bc_op(h) != BC_FORI || bc_a(h) != bc_a(side->parent_startins) ||
+	      header+1u != side->loop_start_pc ||
+	      back != BCINS_AD(BC_JFORL, bc_a(side->parent_startins), side->parent) ||
+	      bc_j(h) <= 0 || (int64_t)header+1+(int64_t)bc_j(h) !=
+		(int64_t)end+1 || target < 0 ||
+	      (MSize)target != side->loop_start_pc ||
+	      !arm64_ir_pcpos((uintptr_t)(const void *)side->parent_continuation,
+		lo, hi, &cont) || cont < (MSize)target || cont >= end)
+	    return 0;
+	} else {
+	  target = (int64_t)end + 1 + (int64_t)bc_j(back);
+	  if (bc_op(h) != BC_JLOOP || bc_d(h) != side->parent ||
+	      bc_op(back) != BC_JMP || bc_j(back) >= 0 || target < 0 ||
+	      (MSize)target != side->loop_start_pc ||
+	      !arm64_ir_pcpos((uintptr_t)(const void *)side->parent_continuation,
+		lo, hi, &cont) || cont < (MSize)target || cont >= end)
+	    return 0;
+	}
 	continuation_pos = cont;
 
   }
@@ -15517,6 +15544,36 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
     *ninsout = n;
   return 1;
 }
+static int arm64_side_parent_forl_norestore_valid(
+	const LJArm64SideIRView *side, MSize i, SnapEntry sn)
+{
+	MSize idxslot, slot;
+	IRRef ref;
+	const IRIns *source;
+	if (!side || bc_op(side->parent_startins) != BC_FORL ||
+	    i >= side->parent_nmap_values ||
+	    (sn & 0x00ff0000u) != SNAP_NORESTORE)
+	  return 0;
+	slot = snap_slot(sn);
+	idxslot = 1u+LJ_FR2+(MSize)bc_a(side->parent_startins);
+	if (slot != idxslot && slot != idxslot+FORL_STOP &&
+	    slot != idxslot+FORL_STEP)
+	  return 0;
+	ref = snap_ref(sn);
+	if (side->parent_map_values[i].slot != slot ||
+	    side->parent_map_values[i].ref != ref || irref_isk(ref))
+	  return 0;
+	source = &side->parent_map_values[i].value;
+	if (source->o != IR_SLOAD || source->op1 != slot ||
+	    (source->op2 & (IRSLOAD_CONVERT|IRSLOAD_PARENT)) != 0)
+	  return 0;
+	if (slot == idxslot)
+	  return (source->t.irt & ~IRT_ISPHI) == (IRT_INT|IRT_GUARD) &&
+	    source->op2 == (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT);
+	return source->t.irt == IRT_INT &&
+	  source->op2 == (IRSLOAD_READONLY|IRSLOAD_INHERIT);
+}
+
 static int arm64_side_parent_snapshot_valid(const LJArm64SideIRView *side)
 {
   uint64_t pcbase;
@@ -15551,7 +15608,8 @@ static int arm64_side_parent_snapshot_valid(const LJArm64SideIRView *side)
 	    (i && snap_slot(sn) <=
 	       snap_slot(snapentry_acq(&side->parent_snapmap[i-1]))) ||
 	    (sn != SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL) &&
-	     (sn & 0x00ff0000u)))
+	     (sn & 0x00ff0000u) &&
+	     !arm64_side_parent_forl_norestore_valid(side, i, sn)))
 	  return 0;
 	if (sn == SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL))
 	  continue;
@@ -15596,8 +15654,13 @@ static int arm64_side_scalar_topology(const LJArm64SideIRView *side,
 	  return 0;
 	if (side->link == side->parent && side->linktype == LJ_TRLINK_ROOT &&
 	    owner->link == side->parent && owner->linktype == LJ_TRLINK_ROOT &&
-	    owner->mcloop == 0)
-	  return 1;
+	    owner->mcloop == 0) {
+	  lo = (uintptr_t)(const void *)side->proto_bc;
+	  return lo != 0 &&
+	    side->proto_sizebc <= (UINTPTR_MAX-lo)/sizeof(BCIns) &&
+	    arm64_scalar_side_geometry_ir(side, lo,
+	      lo+side->proto_sizebc*sizeof(BCIns), &continuation_pos);
+	}
 	lo = (uintptr_t)(const void *)side->proto_bc;
 	if (side->link != side->traceno || side->linktype != LJ_TRLINK_LOOP ||
 	    owner->link != side->traceno || owner->linktype != LJ_TRLINK_LOOP || !lo ||
