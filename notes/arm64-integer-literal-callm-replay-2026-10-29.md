@@ -65,3 +65,9 @@ case: ARM64 records an integer ADDOV with a child-frame overflow snapshot;
 the preserved x64 control records NUM arithmetic. That extra guarded child
 continuation is outside the literal fix. Full combined-gate validation of
 this later fix and general Lua/JIT parity remain incomplete.
+
+The final ordinary ARM64 build also passes all 509 source cases and all 509
+original v2-bytecode cases (`mixed-callm-literal-stock-{source,bytecode}.log`).
+The final selected-exit probe retains the same results and remaining refusal
+(`mixed-callm-literal-final-probe.log`). The strict IR admission contract,
+including arm64e BTI compilation, passes in `mixed-callm-literal-strict-ir.log`.
