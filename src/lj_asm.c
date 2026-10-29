@@ -3175,7 +3175,7 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
 #if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
       asm_test_side_probe_capture(J);
 #endif
-	} else if (LJ_UNLIKELY(!lj_asm_arm64_ir_admit(
+    } else if (LJ_UNLIKELY(!lj_asm_arm64_ir_admit(
 	  arm64_admit_state, T, &reject))) {
       /* Use the established deterministic assembler error. The exact
       ** rejected opcode remains available through errinfo; CALL helper IDs

@@ -13668,17 +13668,10 @@ void lj_trace_ins(jit_State *J, const BCIns *pc)
     }
   } else
 #endif
-#if defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
-  if (!trace_arm64_root_recorder_preflight(J, pc, &L, &recordfn)) {
-      trace_arm64_abort_exact_owner(J, L);
-      return;
-  }
-#else
   if (!trace_arm64_root_recorder_preflight(J, pc, &L, &recordfn)) {
     trace_arm64_abort_exact_owner(J, L);
     return;
   }
-#endif
 #endif
   /* Note: J->L must already be set. pc is the true bytecode PC here. */
   J->pc = pc;
