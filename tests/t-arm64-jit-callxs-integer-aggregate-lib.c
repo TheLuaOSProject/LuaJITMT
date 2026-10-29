@@ -9,6 +9,8 @@
 
 typedef struct { uint32_t lo, hi; } arm64_int_pair;
 typedef struct { float lo, hi; } arm64_float_pair;
+typedef struct { float x, y, z; } arm64_float_triple;
+typedef struct { double x, y, z, w; } arm64_double_quad;
 typedef struct { float value; } arm64_float_one;
 typedef struct { double value; } arm64_double_one;
 typedef struct { arm64_int_pair pair; uint32_t tag; } arm64_nested_pair;
@@ -65,6 +67,8 @@ enum {
   ARM64_RETURN_FLOAT_QUAD_HFA,
   ARM64_RETURN_DOUBLE_TRIPLE_HFA,
   ARM64_RETURN_DOUBLE_QUAD_HFA,
+  ARM64_FLOAT_TRIPLE_SALT,
+  ARM64_DOUBLE_QUAD_SALT,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -119,6 +123,21 @@ LJ_EXPORT double arm64_take_double_one_double_salt(arm64_double_one value,
 {
   calls[ARM64_DOUBLE_ONE_SALT]++;
   return value.value + salt;
+}
+
+LJ_EXPORT double arm64_take_float_triple_double_salt(arm64_float_triple value,
+						     double salt)
+{
+  calls[ARM64_FLOAT_TRIPLE_SALT]++;
+  return (double)value.x + (double)value.y*2.0 +
+	 (double)value.z*3.0 + salt;
+}
+
+LJ_EXPORT double arm64_take_double_quad_double_salt(arm64_double_quad value,
+						     double salt)
+{
+  calls[ARM64_DOUBLE_QUAD_SALT]++;
+  return value.x + value.y*2.0 + value.z*3.0 + value.w*4.0 + salt;
 }
 
 LJ_EXPORT int32_t arm64_vararg_i32(int32_t first, ...)
