@@ -105,6 +105,7 @@ typedef struct { uint16_t value; } Arm64HalfResult;
 typedef struct { uint32_t value; } Arm64WordResult;
 typedef struct { uint64_t value; } Arm64U64Result;
 typedef struct { uint64_t lo, mid, hi; } Arm64U64TripleResult;
+typedef struct { uint64_t lo, mid, hi, tail; } Arm64U64QuadResult;
 typedef struct { uint16_t lo, hi; } Arm64HalfPair;
 typedef struct { Arm64HalfPair half; uint32_t tag; } Arm64NestedIntResult;
 typedef struct { uint32_t tag; float value; } Arm64MixedResult;
@@ -258,6 +259,9 @@ Arm64WordResultAlias arm64_return_word_alias(uint32_t);
 Arm64U64Result arm64_return_u64(uint32_t);
 Arm64U64TripleResult arm64_return_u64_triple(uint32_t);
 uint32_t arm64_return_u64_triple_count(void);
+Arm64U64QuadResult arm64_return_u64_quad(uint32_t);
+Arm64U64QuadResult arm64_return_u64_quad_alt(uint32_t);
+uint32_t arm64_return_u64_quad_count(void);
 Arm64U64TripleResult arm64_return_u64_triple_many(
   uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
   uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);
@@ -1661,6 +1665,54 @@ local function run_sret_result()
 end
 
 _G.__arm64_run_sret_result = run_sret_result
+
+local function run_sret_quad_result()
+  local candidate, oracle = make_result_pair('32-byte integer sret result')
+  _set_sret_candidate(candidate)
+  jit.flush(candidate)
+  jit.on(candidate, true)
+  local before = lib.arm64_return_u64_quad_count()
+  local native_before = _sret_native_count()
+  for pass = 1, 6 do
+    local got = candidate(32, lib.arm64_return_u64_quad, pass*7)
+    local want = oracle(32, lib.arm64_return_u64_quad, pass*7)
+    assert(ffi.istype('Arm64U64QuadResult', got) and
+           ffi.istype('Arm64U64QuadResult', want))
+    assert(got.lo == want.lo and got.mid == want.mid and
+           got.hi == want.hi and got.tail == want.tail,
+           '32-byte sret result differs from interpreter')
+  end
+  assert(_sret_native_count() > native_before,
+         '32-byte result had no selected-root native CALLXS finish')
+  tracked_exit_roots = roots(candidate)
+  local selected = assert(next(tracked_exit_roots),
+                          '32-byte result loop published no root')
+  local code, address, loop = jitutil.tracemc(selected)
+  assert(code and address and loop)
+  exits = 0
+  local alt = candidate(32, lib.arm64_return_u64_quad_alt, 13)
+  local alt_oracle = oracle(32, lib.arm64_return_u64_quad_alt, 13)
+  assert(alt.lo == alt_oracle.lo and alt.mid == alt_oracle.mid and
+         alt.hi == alt_oracle.hi and alt.tail == alt_oracle.tail and exits > 0,
+         'alternate 32-byte sret callee did not guard and resume correctly')
+  collectgarbage('collect')
+  local native_after_gc = _sret_native_count()
+  exits = 0
+  local got = candidate(24, lib.arm64_return_u64_quad, 13)
+  local want = oracle(24, lib.arm64_return_u64_quad, 13)
+  assert(got.lo == want.lo and got.mid == want.mid and
+         got.hi == want.hi and got.tail == want.tail)
+  assert(exits > 0 and _sret_native_count() > native_after_gc,
+         '32-byte sret did not exit/re-enter after full GC')
+  local code_after, address_after, loop_after = jitutil.tracemc(selected)
+  assert(roots(candidate)[selected] and code == code_after and
+         address == address_after and loop == loop_after,
+         '32-byte sret root changed across GC or alternate result')
+  assert(lib.arm64_return_u64_quad_count()-before == 496,
+         '32-byte sret native/interpreter effects were lost or replayed')
+end
+
+_G.__arm64_run_sret_quad_result = run_sret_quad_result
 
 local function make_sret_many_pair()
   local source = [[

@@ -32,6 +32,29 @@ proofs, then independently reject wrong result snapshot refs, CNEW CType,
 payload base/offset, removed or reordered hidden argument, wrong CALLXS result
 type, wrong post-RA payload class, and an X8 alias for a visible GPR argument.
 
-Validation: `tools/ci/arm64_jit_integer_aggregate_args_contract.sh` passed all
-four ARM64/arm64e assert and release profiles after the final fixture changes;
-full log: `/Users/frityet/Scratch/sret-profile-tmp/final-four-profile7.log`.
+The checked-in native fixture also covers a 32-byte `{uint64_t lo, mid, hi,
+tail;}` return, including an alternate dynamic callee, full-GC exit/re-entry,
+selected-root finish counts, stable code identity, interpreter comparison, and
+exact C-side effect count.
+
+Validation:
+
+- The profile-bound native contract passed arm64 and arm64e assert and release
+  configurations after adding 32-byte result coverage. Log:
+  `/Users/frityet/Scratch/sret-profile-tmp/final-four-profile-ordinary-followup.log`.
+- Separate ordinary builds (no trace/assembler/GC test-helper flags) passed
+  matched 24-byte, 32-byte, and 24-byte/10-visible-argument probes on ARM64 and
+  x86_64. Each case used a live peer, dynamic alternate callee, full GC, exact
+  result and C-effect checks, a selected root containing CALLXS, selected-root
+  exits, and unchanged mcode identity across GC and alternate calls. ARM64
+  rows: roots 1/2/1, nins 62/62/75; x86_64 rows: roots 1/2/1, nins 67/67/75;
+  each reported 38 selected-root exits and 512 C calls. Logs:
+  `/Users/frityet/Scratch/sret-profile-tmp/ordinary-arm64-probe-final.log` and
+  `/Users/frityet/Scratch/sret-profile-tmp/ordinary-x86_64-probe-final.log`.
+- Ordinary ARM64 was built from this worktree with
+  `-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT`
+  and no test-helper flags. Its runtime SHA-256 is
+  `680255525d48defca133822873fda43926ee2326a3c1b31d98815998f422fd39`.
+  The ordinary x86_64 runtime was copied read-only from worktree revision
+  `dae24b46aad9d4fc1d36cdce5b94d49d05d4743a` and has SHA-256
+  `5998c9d47d84d717619d0ef50e339550c9cbe361fd2cbf3fcf8a6fadc4cfe04c`.

@@ -1073,25 +1073,8 @@ static int arm64_callxs_cdata_phi(CTState *cts, const IRIns *ir,
 	for (i = 0; i < 2; i++) {
 		IRIns input = ir_load_acq(&ir[refs[i]]);
 		if (input.o == IR_CNEW) {
-			IRRef callref, found = 0;
-			if (arm64_callxs_box_call(cts, ir, nk, nins, refs[i],
-			      NULL, &ctypes[i])) continue;
-			for (callref = refs[i]+1u; callref < ref; callref++) {
-				IRIns call = ir_load_acq(&ir[callref]);
-				LJArm64ABISignature abi;
-				if (call.o != IR_CALLXS ||
-				    !arm64_callxs_signature_for_call(cts, ir, nk, nins,
-				      callref, &abi, NULL) ||
-				    !arm64_callxs_result_indirect(&abi) ||
-				    arm64_callxs_box_ctype(&abi) == 0 ||
-				    !arm64_callxs_sret_payload(cts, ir, nk, nins, callref,
-				      refs[i], arm64_callxs_box_ctype(&abi), NULL))
-					continue;
-				if (found != 0) return 0;
-				found = callref;
-				ctypes[i] = arm64_callxs_box_ctype(&abi);
-			}
-			if (found == 0) return 0;
+			if (!arm64_callxs_box_call(cts, ir, nk, nins, refs[i],
+			      NULL, &ctypes[i])) return 0;
 		} else if (input.o != IR_SLOAD || irt_type(input.t) != IRT_CDATA ||
 			   !irt_isguard(input.t) || input.op1 < 1u+LJ_FR2 ||
 			   input.op2 & ~(IRSLOAD_PARENT|IRSLOAD_FRAME|IRSLOAD_TYPECHECK|
@@ -1104,8 +1087,9 @@ static int arm64_callxs_cdata_phi(CTState *cts, const IRIns *ir,
 
 /* Independent allocated-code proof for the Darwin X8 result operand. The
 ** semantic walk proves the declared CNEW payload; this pass separately binds
-** the same box and visible CARG window and requires its pointer live in X8 at
-** CALLXS, outside the ordinary X0-X7 argument allocation. */
+** the same box and visible CARG window, requires the payload pointer in a GPR,
+** and rejects visible arguments that alias X8. The emitter transfers the
+** payload pointer to X8 while preserving the ordinary X0-X7 argument bank. */
 static int arm64_postra_callxs_sret_payload(const LJArm64PostRAView *view,
 		IRRef semantic_nins, IRRef call, IRRef boxref, CTypeID boxctype,
 		IRRef *payloadp)

@@ -2416,6 +2416,17 @@ int main(int argc, char **argv)
     }
     assert(status == 0);
   }
+  lua_getglobal(L, "__arm64_run_sret_quad_result");
+  {
+    int status = lua_pcall(L, 0, 0, 0);
+    if (status != 0) {
+      fprintf(stderr, "32-byte sret result probe failed: %s (aborts=%u last=%u errinfo=%d)\n",
+              lua_tostring(L, -1), lj_trace_test_abort_count(),
+              (unsigned)lj_trace_test_last_abort_error(),
+              tvisint(&G2J(G(L))->errinfo) ? (int32_t)intV(&G2J(G(L))->errinfo) : -1);
+    }
+    assert(status == 0);
+  }
   lua_getglobal(L, "__arm64_run_sret_many_result");
   {
 	unsigned aborts_before = lj_trace_test_abort_count();
