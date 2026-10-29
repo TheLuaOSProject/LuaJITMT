@@ -15404,6 +15404,7 @@ static int trace_arm64_lua_leaf_callm_pair(const GCproto *pt,
 {
 	const BCIns *bc;
 	uintptr_t p = (uintptr_t)producer, lo, hi;
+	MSize limit;
 	BCIns call, next;
 	if (!pt || !producer || nresults < 1u ||
 	    nresults > LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS) return 0;
@@ -15413,12 +15414,14 @@ static int trace_arm64_lua_leaf_callm_pair(const GCproto *pt,
 	    hi-p < 2u*sizeof(BCIns)) return 0;
 	call = (BCIns)la_load32_acq((const uint32_t *)producer);
 	next = (BCIns)la_load32_acq((const uint32_t *)(producer+1));
-	return bc_op(call) == BC_CALL && bc_b(call) == 0u && bc_c(call) > 0u &&
-	       bc_op(next) == BC_CALLM && bc_b(next) == 2u && bc_c(next) == 0u &&
-	       bc_a(call) == bc_a(next)+1u+LJ_FR2 &&
-	       (MSize)bc_a(call)+bc_c(call)+LJ_FR2 <= pt->framesize &&
-	       (MSize)bc_a(call)+nresults <= pt->framesize &&
-	       (MSize)bc_a(next)+1u+LJ_FR2+nresults <= pt->framesize;
+	if (bc_op(call) != BC_CALL || bc_b(call) != 0u || !bc_c(call) ||
+	    bc_op(next) != BC_CALLM || bc_b(next) != 2u || bc_c(next) != 0u ||
+	    bc_a(call) != bc_a(next)+1u+LJ_FR2 ||
+	    (MSize)bc_a(call)+bc_c(call)+LJ_FR2 > pt->framesize) return 0;
+	limit = (MSize)pt->framesize+(bc_c(call) == 1u ? LJ_FR2 : 0u);
+	return (MSize)bc_a(call)+nresults <= limit &&
+	       (MSize)bc_a(next)+1u+LJ_FR2+nresults <= limit &&
+	       1u+LJ_FR2+(MSize)bc_a(call)+nresults < LJ_MAX_JSLOTS;
 }
 
 /* The consumer CALLM has no encoded argument count. At consumer entry the
@@ -15490,6 +15493,7 @@ static int trace_arm64_lua_leaf_returned_call(jit_State *J, lua_State *owner,
   {
     MSize nresults = trace_arm64_lua_leaf_nresults(J->pt);
     MSize nargs = bc_c(call) ? bc_c(call)-1u : 0u;
+    MSize limit;
     int open_producer = bc_op(call) == BC_CALL && bc_b(call) == 0u &&
       trace_arm64_lua_leaf_callm_pair(pt, proto+cp, nresults);
     open_consumer = bc_op(call) == BC_CALLM && bc_b(call) == 2u &&
@@ -15499,11 +15503,15 @@ static int trace_arm64_lua_leaf_returned_call(jit_State *J, lua_State *owner,
     ** callback runs. J->maxslot is now the caller's result high-water mark,
     ** not the argument count, so retain only the minimum CALLM slot bound. */
     if (open_consumer) nargs = 0u;
+    limit = (MSize)pt->framesize+
+      ((open_producer && bc_c(call) == 1u) ||
+       (open_consumer && bc_c((BCIns)la_load32_acq(
+          (const uint32_t *)&proto[cp-1u])) == 1u) ? LJ_FR2 : 0u);
     if (!nresults || (bc_op(call) != BC_CALL && !open_consumer) ||
         (!open_producer && !open_consumer && bc_b(call) != nresults+1u) ||
         (open_consumer && nresults != 1u) ||
         (nresults > 2u && !open_producer) ||
-	(MSize)bc_a(call)+nargs+1u+LJ_FR2 > pt->framesize ||
+	(MSize)bc_a(call)+nargs+1u+LJ_FR2 > limit ||
 	(open_producer ? (MSize)bc_a(call)+nresults :
 	 (MSize)bc_a(call)+nresults+LJ_FR2) > pt->framesize)
       return 0;
@@ -15657,6 +15665,10 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
       MSize callnargs = open_consumer ?
         (consumer_entry && i == 0u ? J->maxslot : 0u) :
         (bc_c(call) ? bc_c(call)-1u : 0u);
+      MSize limit = (MSize)parentpt->framesize+
+        ((open_producer && bc_c(call) == 1u) ||
+         (open_consumer && bc_c((BCIns)la_load32_acq(
+            (const uint32_t *)(returnpc-2u))) == 1u) ? LJ_FR2 : 0u);
       if (open_consumer && consumer_entry && i == 0u &&
           (callnargs < 1u ||
            callnargs > LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS ||
@@ -15674,11 +15686,11 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
           (nresults > 1u && (i != 0u || recorded_depth != 1u)) ||
           (nresults > 2u && !open_producer) ||
           (!open_consumer && !bc_c(call)) ||
-          (MSize)bc_a(call)+callnargs+1u+LJ_FR2 > parentpt->framesize ||
+          (MSize)bc_a(call)+callnargs+1u+LJ_FR2 > limit ||
           (open_consumer && consumer_entry && i != 0u))
         return 0;
       if (open_producer ?
-          (MSize)bc_a(call)+nresults > parentpt->framesize :
+          (MSize)bc_a(call)+nresults > limit :
           (MSize)bc_a(call)+nresults+LJ_FR2 > parentpt->framesize)
         return 0;
       if (open_producer) open_result_call = 1;
@@ -15707,7 +15719,9 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
            nresults <= LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS &&
            open_result_call)) ||
         (open_result_call ? (MSize)bc_a(call)+nresults :
-         (MSize)bc_a(call)+nresults+LJ_FR2) > rootpt->framesize)
+         (MSize)bc_a(call)+nresults+LJ_FR2) >
+          (MSize)rootpt->framesize+
+            (open_result_call && bc_c(call) == 1u ? LJ_FR2 : 0u))
       return 0;
   } else {
     for (i = 0; i < depth; i++)

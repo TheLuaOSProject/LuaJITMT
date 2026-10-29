@@ -8879,6 +8879,67 @@ static int arm64_string_byte_call_slots_postra(const GCproto *pt,
   return calls == 1 && matches == 1;
 }
 
+static int arm64_lua_leaf_callm_pair_source(const GCproto *pt, MSize pos,
+                                            int producer, MSize nresults);
+static int arm64_lua_leaf_ir_open_result_inputs(const jit_State *J,
+                                                const GCtrace *T, SnapNo s,
+                                                const GCproto *parentpt,
+                                                MSize framebase, MSize callpos,
+                                                const IRRef *args,
+                                                MSize *nargsp);
+
+/* A C=1 producer has a dynamic result window. For this fixed three-result
+** case, derive its transient end from the producer A slot and return count;
+** the only extra source-frame slot is the frame-link extent (LJ_FR2). The
+** existing VM stack reserve covers this bounded transient slot. */
+static int arm64_ir_callm_transient_triplet(const jit_State *J,
+                                            const GCtrace *T, SnapNo s,
+                                            const GCproto *pt,
+                                            MSize root_topslot)
+{
+  const SnapShot *snap;
+  MSize pos, i, proda, base, expect, nresults = 0;
+  uint64_t footer;
+  BCIns call, producer;
+  if (!J || !T || !pt || s >= T->nsnap) return 0;
+  snap = &T->snap[s];
+  if (snap->topslot != root_topslot || root_topslot != pt->framesize ||
+      snap->mapofs > T->nsnapmap || snap->nent > T->nsnapmap-snap->mapofs ||
+      T->nsnapmap-snap->mapofs-snap->nent < 1u+LJ_FR2) return 0;
+  memcpy(&footer, &T->snapmap[snap->mapofs+snap->nent], sizeof(footer));
+  if ((uint8_t)footer || !arm64_ir_pcpos((uintptr_t)(footer>>8),
+      (uintptr_t)proto_bc(pt),
+      (uintptr_t)(proto_bc(pt)+pt->sizebc), &pos) || !pos) return 0;
+  call = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(pt)[pos]);
+  producer = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(pt)[pos-1u]);
+  if (bc_op(call) != BC_CALLM || bc_b(call) != 2u || bc_c(call) != 0u ||
+      bc_op(producer) != BC_CALL || bc_b(producer) != 0u ||
+      bc_c(producer) != 1u ||
+      !arm64_lua_leaf_callm_pair_source(pt, pos-1u, 1, 3u) ||
+      (MSize)bc_a(producer)+3u <= pt->framesize ||
+      (MSize)bc_a(producer)+3u > pt->framesize+LJ_FR2 ||
+      !arm64_lua_leaf_ir_open_result_inputs(J,T,s,pt,1u+LJ_FR2,pos,
+                                             NULL,&nresults) ||
+      nresults != 3u) return 0;
+  proda = bc_a(producer);
+  base = 1u+LJ_FR2;
+  expect = base+proda+3u;
+  if (expect >= LJ_MAX_JSLOTS || expect > UINT8_MAX ||
+      snap->nslots != expect) return 0;
+  for (i = 0; i < 3u; i++) {
+    MSize j, found = 0, slot = base+proda+i;
+    for (j = 0; j < snap->nent; j++) {
+      SnapEntry entry = T->snapmap[snap->mapofs+j];
+      if (snap_slot(entry) == slot) {
+        if ((entry & 0x00ff0000u) || slot >= snap->nslots) return 0;
+        found++;
+      }
+    }
+    if (found != 1u) return 0;
+  }
+  return 1;
+}
+
 static int arm64_ir_snapshots(const GCtrace *T, IRRef loopref,
 	IRRef xpollref, MSize root_topslot, const jit_State *J,
 	uintptr_t proto_lo, uintptr_t proto_hi, BCOp rootop,
@@ -8912,8 +8973,10 @@ static int arm64_ir_snapshots(const GCtrace *T, IRRef loopref,
 	mapofs != expected_mapofs || nextofs < mapofs ||
 	nent > nextofs - mapofs ||
 	nextofs - mapofs - nent != 1u + LJ_FR2 ||
-	nslots < 1u + LJ_FR2 || topslot != root_topslot ||
-	nslots > root_topslot + 1u + LJ_FR2)
+	 nslots < 1u + LJ_FR2 || topslot != root_topslot ||
+	 (nslots > root_topslot + 1u + LJ_FR2 &&
+	  !arm64_ir_callm_transient_triplet(J,T,snapno,J->pt,
+	                                    root_topslot)))
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
 			     snapref, IR_XPOLL, (uint16_t)snapno);
     expected_mapofs = nextofs;
@@ -11404,8 +11467,11 @@ static int arm64_lua_leaf_callm_pair_source(const GCproto *pt, MSize pos,
   proda = bc_a(call);
   cona = bc_a(next);
   if (proda != cona+1u+LJ_FR2 ||
-      (producer && proda+nresults > pt->framesize) ||
-      (producer && cona+1u+LJ_FR2+nresults > pt->framesize) ||
+      (producer && proda+nresults > pt->framesize+
+          (bc_c(call) == 1u ? LJ_FR2 : 0u)) ||
+      (producer && cona+1u+LJ_FR2+nresults > pt->framesize+
+          (bc_c(call) == 1u ? LJ_FR2 : 0u)) ||
+      (producer && 1u+LJ_FR2+proda+nresults >= LJ_MAX_JSLOTS) ||
       cona+1u+LJ_FR2 > pt->framesize ||
       (!producer && proda > pt->framesize))
     return 0;
@@ -11786,7 +11852,8 @@ static IRRef arm64_lua_leaf_ir_args_at(const jit_State *J, const GCtrace *T,
         (!open_consumer && !bc_c(call)) ||
         bc_a(call)+bc_c(call)+LJ_FR2 > parentpt->framesize ||
         (open_producer ? bc_a(call)+nresults :
-          bc_a(call)+bc_b(call)-1u+LJ_FR2) > parentpt->framesize)
+          bc_a(call)+bc_b(call)-1u+LJ_FR2) >
+          parentpt->framesize+(open_producer ? LJ_FR2 : 0u))
       return 0;
     nargs = open_consumer ? 0u : bc_c(call)-1u;
     if (open_consumer &&
@@ -11794,8 +11861,8 @@ static IRRef arm64_lua_leaf_ir_args_at(const jit_State *J, const GCtrace *T,
              framebase, pos, NULL, &open_nargs) ||
          !open_nargs || open_nargs > ARM64_LUA_LEAF_MAX_RESULTS)) return 0;
     if (open_consumer) nargs = open_nargs;
-    if (open_consumer &&
-        bc_a(call)+nargs+1u+LJ_FR2 > parentpt->framesize) return 0;
+    if (open_consumer && bc_a(call)+nargs+1u+LJ_FR2 >
+        parentpt->framesize+LJ_FR2) return 0;
   }
   if (args) {
     MSize init = nparams;
@@ -14414,9 +14481,14 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
           arm64_ir_funcf_tail_result_map(J, T, s, pcbase);
         if (!tail_result_map && (side || !(inlineleaflink =
               arm64_lua_leaf_ir_child(J, T, s, pcbase, &lowerlink)) ||
-            snap->nslots > maxslots || snap->topslot >= maxslots))
+            (snap->nslots > maxslots &&
+             !arm64_ir_callm_transient_triplet(J,T,s,J->pt,
+                                                J->pt->framesize)) ||
+            snap->topslot >= maxslots))
           goto bad_snapshot;
-      } else if (snap->nslots > maxslots ||
+      } else if ((snap->nslots > maxslots &&
+                  !arm64_ir_callm_transient_triplet(J,T,s,J->pt,
+                                                     J->pt->framesize)) ||
                  snap->topslot != J->pt->framesize) {
         goto bad_snapshot;
       }
@@ -16726,7 +16798,8 @@ static IRRef arm64_lua_leaf_postra_args_at(const LJArm64PostRAView *v,
         (!open_consumer && !bc_c(call)) ||
         bc_a(call)+bc_c(call)+LJ_FR2 > parentpt->framesize ||
         (open_producer ? bc_a(call)+nresults :
-          bc_a(call)+bc_b(call)-1u+LJ_FR2) > parentpt->framesize)
+          bc_a(call)+bc_b(call)-1u+LJ_FR2) >
+          parentpt->framesize+(open_producer ? LJ_FR2 : 0u))
       return 0;
     nargs = open_consumer ? 0u : bc_c(call)-1u;
     if (open_consumer &&
@@ -16734,8 +16807,8 @@ static IRRef arm64_lua_leaf_postra_args_at(const LJArm64PostRAView *v,
              framebase, pos, &open_nargs) ||
          !open_nargs || open_nargs > ARM64_LUA_LEAF_MAX_RESULTS)) return 0;
     if (open_consumer) nargs = open_nargs;
-    if (open_consumer &&
-        bc_a(call)+nargs+1u+LJ_FR2 > parentpt->framesize) return 0;
+    if (open_consumer && bc_a(call)+nargs+1u+LJ_FR2 >
+        parentpt->framesize+LJ_FR2) return 0;
   }
   if (args) {
     MSize init = nparams;
@@ -16871,6 +16944,54 @@ static int arm64_lua_leaf_postra_snapshot(const LJArm64PostRAView *v,
     }
     return 1;
   }
+}
+
+/* Allocated-view copy of the narrowly extended transient CALLM snapshot.
+** It independently re-reads the footer, exact adjacent source pair, result
+** slots and stack-index ceiling after register allocation. */
+static int arm64_lua_leaf_postra_callm_transient_triplet(
+                                      const LJArm64PostRAView *v, MSize s)
+{
+  const SnapShot *snap;
+  MSize pos, i, proda, base, expect, ofs, nent, nresults = 0;
+  uint64_t footer;
+  BCIns call, producer;
+  if (!v || !v->proto || s >= v->nsnap) return 0;
+  snap = &v->snap[s]; ofs = snap_mapofs_acq(snap); nent = snap_nent_acq(snap);
+  if (snap_topslot_acq(snap) != v->proto->framesize ||
+      snap_topslot_acq(snap) != v->root_topslot ||
+      ofs > v->nsnapmap || nent > v->nsnapmap-ofs ||
+      v->nsnapmap-ofs-nent < 1u+LJ_FR2) return 0;
+  memcpy(&footer, &v->snapmap[ofs+nent], sizeof(footer));
+  if ((uint8_t)footer || !arm64_ir_pcpos((uintptr_t)(footer>>8),
+      (uintptr_t)v->proto_bc,
+      (uintptr_t)(v->proto_bc+v->proto_sizebc), &pos) || !pos) return 0;
+  call = arm64_ir_bc_acq((uintptr_t)v->proto_bc, pos);
+  producer = arm64_ir_bc_acq((uintptr_t)v->proto_bc, pos-1u);
+  if (bc_op(call) != BC_CALLM || bc_b(call) != 2u || bc_c(call) != 0u ||
+      bc_op(producer) != BC_CALL || bc_b(producer) != 0u ||
+      bc_c(producer) != 1u ||
+      !arm64_lua_leaf_callm_pair_source(v->proto, pos-1u, 1, 3u) ||
+      (MSize)bc_a(producer)+3u <= v->proto->framesize ||
+      (MSize)bc_a(producer)+3u > v->proto->framesize+LJ_FR2 ||
+      !arm64_lua_leaf_postra_open_result_inputs(v,s,v->proto,
+          1u+LJ_FR2,pos,&nresults) || nresults != 3u) return 0;
+  proda = bc_a(producer); base = 1u+LJ_FR2;
+  expect = base+proda+3u;
+  if (expect >= LJ_MAX_JSLOTS || expect > UINT8_MAX ||
+      snap_nslots_acq(snap) != expect) return 0;
+  for (i = 0; i < 3u; i++) {
+    MSize j, found = 0, slot = base+proda+i;
+    for (j = 0; j < nent; j++) {
+      SnapEntry entry = snapentry_acq(&v->snapmap[ofs+j]);
+      if (snap_slot(entry) == slot) {
+        if ((entry & 0x00ff0000u) || slot >= snap_nslots_acq(snap)) return 0;
+        found++;
+      }
+    }
+    if (found != 1u) return 0;
+  }
+  return 1;
 }
 
 /* Allocated-view literal and expression resolution deliberately do not use
@@ -19603,7 +19724,8 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
                                   &lowerlink))))
         return 0;
       map_only = 0;
-    } else if (slots > v->root_topslot+1u+LJ_FR2 ||
+    } else if ((slots > v->root_topslot+1u+LJ_FR2 &&
+                !arm64_lua_leaf_postra_callm_transient_triplet(v, s)) ||
                snap_topslot_acq(snap) != v->root_topslot) {
       return 0;
     } else if (!side) {

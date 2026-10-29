@@ -1302,8 +1302,11 @@ static int rec_arm64_leaf_callm_pair(const GCproto *pt,
 	return bc_op(call) == BC_CALL && bc_b(call) == 0u && bc_c(call) > 0u &&
 	       bc_op(next) == BC_CALLM && bc_b(next) == 2u && bc_c(next) == 0u &&
 	       bc_a(call) == bc_a(next)+1u+LJ_FR2 &&
-	       (MSize)bc_a(call)+nresults <= pt->framesize &&
-	       (MSize)bc_a(next)+1u+LJ_FR2+nresults <= pt->framesize;
+	       (MSize)bc_a(call)+nresults <= pt->framesize+
+	         (bc_c(call) == 1u ? LJ_FR2 : 0u) &&
+	       (MSize)bc_a(next)+1u+LJ_FR2+nresults <= pt->framesize+
+	         (bc_c(call) == 1u ? LJ_FR2 : 0u) &&
+	       1u+LJ_FR2+(MSize)bc_a(call)+nresults < LJ_MAX_JSLOTS;
 }
 
 static int rec_arm64_leaf_callm_consumer(const GCproto *pt,
@@ -1390,12 +1393,16 @@ static void rec_call_setup(jit_State *J, BCReg func, ptrdiff_t nargs)
          (nresults > 2u && !open_producer)) ||
         (!open_consumer && (!bc_c(*J->pc) || bc_c(*J->pc) != nargs+1)) ||
         (tail_root ? (MSize)bc_a(*J->pc)+1u+LJ_FR2 > J->pt->framesize :
-         (open_consumer ? (MSize)bc_a(*J->pc)+nargs+1u+LJ_FR2 :
-          (MSize)bc_a(*J->pc)+bc_c(*J->pc)+LJ_FR2) > J->pt->framesize) ||
+        (open_consumer ? (MSize)bc_a(*J->pc)+nargs+1u+LJ_FR2 :
+         (MSize)bc_a(*J->pc)+bc_c(*J->pc)+LJ_FR2) >
+          J->pt->framesize+(open_consumer && J->pc > proto_bc(J->pt) &&
+            bc_c((BCIns)la_load32_acq((const uint32_t *)(J->pc-1u))) == 1u ?
+            LJ_FR2 : 0u)) ||
         (open_consumer && (nargs < 1 ||
          (MSize)nargs > LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS ||
          nresults != 1u)) ||
-        (open_producer ? (MSize)bc_a(*J->pc)+nresults > J->pt->framesize :
+        (open_producer ? (MSize)bc_a(*J->pc)+nresults >
+         J->pt->framesize+(bc_c(*J->pc) == 1u ? LJ_FR2 : 0u) :
          (!tail_root && !open_consumer &&
           (MSize)bc_a(*J->pc)+bc_b(*J->pc)-1u+LJ_FR2 >
 	       J->pt->framesize)))
