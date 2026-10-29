@@ -72,3 +72,44 @@ source shape. The ordinary ARM64 topology probe then passed without test
 helpers: the read-only `nonleaf-function-root-return` row published a return
 trace (`nins=13`, six exits) and recorded 81 selected-root exits on its bad
 argument phase. Evidence is at `/tmp/funcf-nonleaf-fix-topology.tsv`.
+
+## Direct two-result FUNCF root
+
+The direct pure-scalar root case from the x86-64 topology probe is now admitted:
+`return x*.5, x+1.25`. Its terminal `RET D=3` must name two initialized numeric
+locals inside the source frame. The semantic bytecode-to-snapshot walk and the
+independent allocated-source walk both derive the two result slots from the
+terminal opcode and require both exact values in the final root snapshot.
+The existing one-result captured-call source remains on its separate replay
+path; this does not open multiple-result child calls, open-result calls, or
+tail calls.
+
+The C contract keeps a live MT peer and checks both returned values against an
+interpreter oracle, native entry before and after full collection, a native
+type-guard exit with interpreter error propagation, and native reuse after the
+error. Its private trace clone is accepted by both proofs, while replacing the
+second returned value with the input and changing the RET D field from 3 to 2
+are each rejected independently in semantic and post-RA admission. A separate
+post-RA mutation aliases the two simultaneously live result registers and is
+rejected, while the unmodified allocation remains accepted. Across the existing
+one-result and new two-result cases the fixture reports eight exit-free native
+returns, one captured-callee identity exit, 16 semantic mutation rejections,
+and 17 post-RA mutation rejections in each profile.
+
+Validation passed `tools/ci/arm64_jit_funcf_record_contract.sh` with helper
+instrumentation in arm64 and arm64e assertion profiles. It also passed with
+`LJ_ARM64_FUNCF_XCFLAGS` set to the MCODE_TEST-only flags (no trace test
+helpers); the resulting topology rows show the two-result root at `nins=5`
+and 81 selected-root exits on the bad-type phase. Evidence is in
+`/tmp/funcf-two-results-contract.log`,
+`/tmp/funcf-two-results-mcode-only-contract.log`, and
+`/tmp/funcf-two-results-mcode-topology.tsv`. The profile split was limited to
+assertion builds; no release-profile claim is made here.
+
+A fully ordinary assertion build with neither `LJ_TRACE_TEST_HELPERS` nor
+`LUAJIT_MCODE_TEST` also passed the topology probe. Its runtime, archive,
+generated Lua modules, relevant source files, source diff, and probe output are
+preserved under
+`/Users/frityet/Scratch/funcf-two-results-ordinary-20261029`. The ordinary rows
+match the helper build: `nins=5` and 81 selected-root exits for the direct pair,
+and `nins=13` and 81 selected-root exits for the captured one-result root.

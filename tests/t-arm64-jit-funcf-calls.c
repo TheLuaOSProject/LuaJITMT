@@ -47,6 +47,19 @@ static lua_Number invoke(lua_State *L, const char *runner, const char *fn,
   return result;
 }
 
+static void invoke_pair(lua_State *L, const char *runner, const char *fn,
+                        lua_Number x, lua_Number want0, lua_Number want1)
+{
+  void *cframe=L->cframe;
+  lua_getglobal(L,runner); lua_getglobal(L,fn); lua_pushnumber(L,x);
+  ljt_lua_pcall(L,2,2,"FUNCF two-result runner");
+  assert(lua_isnumber(L,-2) && lua_tonumber(L,-2)==want0);
+  assert(lua_isnumber(L,-1) && lua_tonumber(L,-1)==want1);
+  lua_pop(L,2);
+  assert(L->cframe==cframe && lj_tg_load_jit_base(L2TG(L))==NULL &&
+         !lj_tg_in_native_acq(L2TG(L)));
+}
+
 static GCtrace *funcf_trace(lua_State *L, GCfunc *fn)
 {
   GCproto *pt=funcproto(fn);
@@ -96,6 +109,19 @@ typedef struct Fixture {
   SnapNo guard_snap, return_snap;
   MSize callpos, return_entry;
 } Fixture;
+
+typedef struct MultiFixture {
+  GCtrace *live, copy;
+  GCproto *pt;
+  jit_State *J;
+  IRIns *ir;
+  SnapShot *snap;
+  SnapEntry *map;
+  LJArm64PostRAView view;
+  IRRef nins, semantic_nins, argref;
+  SnapNo terminal;
+  MSize second_entry;
+} MultiFixture;
 
 static GCproto *copy_proto(const GCproto *pt)
 {
@@ -168,6 +194,146 @@ static int admit(Fixture *f, int postra)
   if (postra) return lj_asm_arm64_postra_admit(&f->view,NULL);
   f->copy.nins=f->n;
   return lj_asm_arm64_ir_admit(f->J,&f->copy,NULL);
+}
+
+static void multi_reset(MultiFixture *f)
+{
+  GCproto *source=trace_startpt_acq(f->live);
+  MSize start=proto_bcpos(source,trace_startpc_acq(f->live));
+  ljt_proto_clone_reset(f->pt,source);
+  memcpy(f->ir+f->live->nk,trace_ir_acq(f->live)+f->live->nk,
+         (f->nins-f->live->nk)*sizeof(IRIns));
+  memcpy(f->snap,trace_snap_acq(f->live),f->live->nsnap*sizeof(SnapShot));
+  memcpy(f->map,trace_snapmap_acq(f->live),
+         f->live->nsnapmap*sizeof(SnapEntry));
+  f->copy=*f->live; f->copy.ir=f->ir; f->copy.snap=f->snap;
+  f->copy.snapmap=f->map;
+  trace_startpt_rel(&f->copy,f->pt);
+  setmref(f->copy.startpc,&proto_bc(f->pt)[start]);
+  proto_bc(f->pt)[start]=f->live->startins;
+  for (SnapNo s=0;s<f->live->nsnap;s++) {
+    SnapShot *snap=&f->snap[s];
+    MSize ofs=snap->mapofs+snap->nent;
+    uint64_t pcbase;
+    memcpy(&pcbase,&f->map[ofs],sizeof(pcbase));
+    {
+      const BCIns *pc=(const BCIns *)(uintptr_t)(pcbase>>8);
+      MSize pos=proto_bcpos(source,pc);
+      assert(pos<source->sizebc);
+      pcbase=u64ptr(&proto_bc(f->pt)[pos])<<8;
+      memcpy(&f->map[ofs],&pcbase,sizeof(pcbase));
+    }
+  }
+  f->J->pt=f->pt; f->J->startpc=trace_startpc_acq(&f->copy);
+  f->J->baseslot=1u+LJ_FR2; f->J->parent=0; f->J->exitno=0;
+  f->J->loopref=0; f->J->framedepth=0; f->J->retdepth=0;
+  f->semantic_nins=f->nins;
+  while (f->semantic_nins>REF_FIRST &&
+         (f->ir[f->semantic_nins-1u].o==IR_NOP ||
+          f->ir[f->semantic_nins-1u].o==IR_RENAME))
+    f->semantic_nins--;
+  f->view=(LJArm64PostRAView){0};
+  f->view.ir=f->ir; f->view.owner=&f->copy; f->view.owner_private=1;
+  f->view.snap=f->snap; f->view.snapmap=f->map; f->view.proto=f->pt;
+  f->view.proto_bc=proto_bc(f->pt); f->view.startpc=f->J->startpc;
+  f->view.nins=f->nins; f->view.nk=f->live->nk;
+  f->view.nsnap=f->live->nsnap; f->view.nsnapmap=f->live->nsnapmap;
+  f->view.spadjust=f->live->spadjust; f->view.proto_sizebc=f->pt->sizebc;
+  f->view.proto_numparams=f->pt->numparams;
+  f->view.root_topslot=f->live->topslot; f->view.startins=f->live->startins;
+}
+
+static int multi_admit(MultiFixture *f, int postra)
+{
+  if (postra) return lj_asm_arm64_postra_admit(&f->view,NULL);
+  f->copy.nins=f->semantic_nins;
+  return lj_asm_arm64_ir_admit(f->J,&f->copy,NULL);
+}
+
+static void multi_admission(GCtrace *T)
+{
+  MultiFixture f={0};
+  GCproto *source=trace_startpt_acq(T);
+  BCIns ret;
+  MSize slot;
+  unsigned semantic=0, postra=0;
+  f.live=T; f.nins=T->nins;
+  f.pt=ljt_proto_clone_alloc(source);
+  assert(f.pt);
+  f.J=calloc(1,sizeof(*f.J));
+  f.ir=calloc(f.nins,sizeof(IRIns));
+  f.snap=malloc(T->nsnap*sizeof(SnapShot));
+  f.map=malloc(T->nsnapmap*sizeof(SnapEntry));
+  assert(f.J && f.ir && f.snap && f.map);
+  multi_reset(&f);
+  assert(source->sizebc==f.pt->sizebc && source->framesize==f.pt->framesize);
+  ret=(BCIns)la_load32_acq((const uint32_t *)&proto_bc(f.pt)[f.pt->sizebc-1u]);
+  assert(bc_op(ret)==BC_RET && bc_d(ret)==3u);
+  slot=1u+LJ_FR2+bc_a(ret)+1u;
+  f.terminal=UINT16_MAX; f.second_entry=UINT32_MAX; f.argref=0;
+  for (SnapNo s=0;s<T->nsnap;s++) {
+    uint64_t pcbase;
+    SnapShot *snap=&f.snap[s];
+    memcpy(&pcbase,&f.map[snap->mapofs+snap->nent],sizeof(pcbase));
+    if (!(uint8_t)pcbase &&
+        (const BCIns *)(uintptr_t)(pcbase>>8)==
+          &proto_bc(f.pt)[f.pt->sizebc-1u]) f.terminal=s;
+  }
+  assert(f.terminal!=UINT16_MAX);
+  for (MSize i=0;i<f.snap[f.terminal].nent;i++) {
+    MSize at=f.snap[f.terminal].mapofs+i;
+    if (snap_slot(f.map[at])==slot) f.second_entry=at;
+  }
+  for (IRRef r=REF_FIRST;r<f.nins;r++) {
+    IRIns ins=ir_load_acq(&f.ir[r]);
+    if (ins.o==IR_SLOAD && ins.op1==1u+LJ_FR2 &&
+        irt_type(ins.t)==IRT_NUM && (ins.t.irt&IRT_GUARD)) f.argref=r;
+  }
+  assert(f.second_entry!=UINT32_MAX && f.argref);
+  for (int allocated=0;allocated<2;allocated++) {
+    multi_reset(&f); assert(multi_admit(&f,allocated));
+    multi_reset(&f);
+    f.map[f.second_entry]=SNAP(slot,0,f.argref);
+    if (multi_admit(&f,allocated)) {
+      fprintf(stderr,"two-result FUNCF accepted substituted second return allocated=%d\n",
+              allocated);
+      assert(0);
+    }
+    if (allocated) postra++; else semantic++;
+    multi_reset(&f);
+    setbc_d(&proto_bc(f.pt)[f.pt->sizebc-1u],2u);
+    if (multi_admit(&f,allocated)) {
+      fprintf(stderr,"two-result FUNCF accepted one-result return mutation allocated=%d\n",
+              allocated);
+      assert(0);
+    }
+    if (allocated) postra++; else semantic++;
+    if (allocated) {
+      IRRef first=0, second=0;
+      RegSP saved;
+      SnapShot *terminal=&f.snap[f.terminal];
+      for (MSize i=0;i<terminal->nent;i++) {
+        SnapEntry entry=f.map[terminal->mapofs+i];
+        IRRef value=snap_ref(entry);
+        if (snap_slot(entry)==slot-1u) first=value;
+        if (snap_slot(entry)==slot) second=value;
+      }
+      assert(first>=REF_FIRST && second>=REF_FIRST && first!=second);
+      multi_reset(&f);
+      assert(multi_admit(&f,1));
+      saved=f.ir[second].prev;
+      f.ir[second].prev=f.ir[first].prev;
+      if (multi_admit(&f,1)) {
+        fprintf(stderr,"two-result FUNCF accepted aliased allocated results\n");
+        assert(0);
+      }
+      f.ir[second].prev=saved;
+      assert(multi_admit(&f,1));
+      postra++;
+    }
+  }
+  postra_bad+=postra; semantic_bad+=semantic;
+  free(f.pt); free(f.J); free(f.ir); free(f.snap); free(f.map);
 }
 
 enum {
@@ -296,14 +462,20 @@ int main(void)
     "funcf_readonly_candidate=function(x) "
     "local y=readonly_target(x); return y+.75 end; "
     "funcf_candidate=function(x) local y=target(x); return y+.75 end; "
+    "funcf_multi_candidate=function(x) return x*.5,x+1.25 end; "
+    "funcf_multi_oracle=function(x) return x*.5,x+1.25 end; "
+    "function funcf_multi_run(fn,x) return fn(x) end; "
     "funcf_oracle=function(x) return x*.25+.75 end; "
     "function funcf_run(fn,n) local sum=.5; "
     "for i=1,n do sum=sum+fn(i+.5) end; return sum end; "
     "jit.off(funcf_oracle,true); jit.off(funcf_run,true); "
-    "jit.off(set_target,true); jit.flush(); jit.opt.start('hotloop=1',"
+    "jit.off(set_target,true); jit.off(funcf_multi_run,true); "
+    "jit.off(funcf_multi_oracle,true); jit.flush(); "
+    "jit.opt.start('hotloop=1',"
     "'hotexit=1','maxtrace=128'); jit.on(); "
     "jit.on(funcf_candidate,true); "
-    "jit.on(funcf_readonly_candidate,true)");
+    "jit.on(funcf_readonly_candidate,true); "
+    "jit.on(funcf_multi_candidate,true)");
   GCfunc *candidate=global_lfunc(L,"funcf_candidate");
   GCtrace *T=NULL;
   for (unsigned i=0;i<8&&!T;i++) {
@@ -375,6 +547,41 @@ int main(void)
            lj_trace_test_exit_calls()==0);
     native_returns++;
     admission(RT,L,cfunc);
+  }
+  {
+    GCfunc *multi=global_lfunc(L,"funcf_multi_candidate");
+    GCtrace *MT=NULL;
+    for (unsigned i=0;i<256&&!MT;i++) {
+      invoke_pair(L,"funcf_multi_run","funcf_multi_candidate",11.5,5.75,12.75);
+      invoke_pair(L,"funcf_multi_run","funcf_multi_oracle",11.5,5.75,12.75);
+      MT=funcf_trace(L,multi);
+    }
+    assert(MT && MT->linktype==LJ_TRLINK_RETURN);
+    lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+    invoke_pair(L,"funcf_multi_run","funcf_multi_candidate",12.5,6.25,13.75);
+    assert(lj_trace_test_root_entry_successes()>0 &&
+           lj_trace_test_exit_calls()==0);
+    native_returns++;
+    lua_gc(L,LUA_GCCOLLECT,0);
+    lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+    invoke_pair(L,"funcf_multi_run","funcf_multi_candidate",13.5,6.75,14.75);
+    assert(lj_trace_test_root_entry_successes()>0 &&
+           lj_trace_test_exit_calls()==0);
+    native_returns++;
+    lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+    lua_getglobal(L,"funcf_multi_run");
+    lua_getglobal(L,"funcf_multi_candidate"); lua_pushstring(L,"bad");
+    assert(lua_pcall(L,2,2,0)!=LUA_OK);
+    lua_pop(L,1);
+    assert(lj_trace_test_root_entry_successes()>0 &&
+           lj_trace_test_exit_calls()>0 &&
+           lj_trace_test_first_exit_parent()==MT->traceno);
+    lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+    invoke_pair(L,"funcf_multi_run","funcf_multi_candidate",14.5,7.25,15.75);
+    assert(lj_trace_test_root_entry_successes()>0 &&
+           lj_trace_test_exit_calls()==0);
+    native_returns++;
+    multi_admission(MT);
   }
   ljt_lua_dostring(L,"assert(stop:send(true,5)); local ok,v=peer:join(5); "
                      "assert(ok and v)");
