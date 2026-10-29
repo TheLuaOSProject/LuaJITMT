@@ -71,6 +71,34 @@ local cases = {
     phases = {{48}, {64}},
   },
   {
+    name = 'scalar-iterator-root',
+    -- The only loop in this runner is ITERC/ITERL. A helper FUNCF trace
+    -- cannot count as a runner-root witness because root_headers binds
+    -- trace IDs to the runner's own patched bytecode.
+    source = [[local function iter(n,k) return k+1 end
+      return function(n)
+        local sum=.5
+        for k in iter,n,0 do
+          sum=sum+k
+          if k>=n then break end
+        end
+        return sum
+      end]],
+    phases = {{64}, {'bad'}, {0}, {1}, {96}},
+  },
+  {
+    name = 'nil-terminated-iterator-root',
+    source = [[local function iter(n,k)
+      if k<n then return k+1 end
+      end
+      return function(n)
+        local sum=.5
+        for k in iter,n,0 do sum=sum+k end
+        return sum
+      end]],
+    phases = {{64}, {'bad'}, {0}, {1}, {96}},
+  },
+  {
     name = 'independent-two-root-sides',
     source = [[return function(x,y,n)
       local sum=.5
