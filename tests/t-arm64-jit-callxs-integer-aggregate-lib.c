@@ -114,6 +114,10 @@ enum {
   ARM64_NESTED_ARRAY_FLOAT_PAIR,
   ARM64_RETURN_NESTED_INT,
   ARM64_RETURN_MIXED,
+  ARM64_RETURN_NESTED_FLOAT_PAIR,
+  ARM64_RETURN_ARRAY_FLOAT_PAIR,
+  ARM64_RETURN_NESTED_FLOAT_TRIPLE,
+  ARM64_RETURN_NESTED_DOUBLE_QUAD,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -497,6 +501,36 @@ LJ_EXPORT arm64_mixed_result arm64_return_mixed(uint32_t value)
   calls[ARM64_RETURN_MIXED]++;
   result.tag = value+1u;
   result.value = (float)value+0.5f;
+  return result;
+}
+
+LJ_EXPORT arm64_nested_float_pair arm64_return_nested_float_pair(uint32_t n)
+{
+  arm64_nested_float_pair result = {{(float)n+.25f, (float)n+.5f}};
+  calls[ARM64_RETURN_NESTED_FLOAT_PAIR]++;
+  return result;
+}
+
+LJ_EXPORT arm64_nested_array_float_pair arm64_return_array_float_pair(uint32_t n)
+{
+  arm64_nested_array_float_pair result = {{{(float)n+.25f, (float)n+.5f}}};
+  calls[ARM64_RETURN_ARRAY_FLOAT_PAIR]++;
+  return result;
+}
+
+LJ_EXPORT arm64_sibling_nested_float_triple arm64_return_nested_float_triple(uint32_t n)
+{
+  arm64_sibling_nested_float_triple result = {
+    (float)n+.25f, {(float)n+.5f, (float)n+.75f}};
+  calls[ARM64_RETURN_NESTED_FLOAT_TRIPLE]++;
+  return result;
+}
+
+LJ_EXPORT arm64_nested_double_quad arm64_return_nested_double_quad(uint32_t n)
+{
+  arm64_nested_double_quad result = {
+    {(double)n+.125, (double)n+.25}, {(double)n+.5, (double)n+1.0}};
+  calls[ARM64_RETURN_NESTED_DOUBLE_QUAD]++;
   return result;
 }
 

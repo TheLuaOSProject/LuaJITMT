@@ -90,7 +90,7 @@ static int lj_ccall_arm64_raw_type(CTState *cts, CTypeID id,
 /* Recursively flatten bounded named structs and fixed-size arrays. Every
 ** aggregate must be tightly packed at natural alignment; anonymous subtypes,
 ** unions, VLA/vector/complex/ref members and over-aligned wrappers stay closed.
-** The nested bit also keeps these new argument shapes out of result channels. */
+** The same exact leaf offsets describe argument and result channels. */
 static int lj_ccall_arm64_hfa_flatten(LJArm64HFAWalk *walk, CTypeID id,
 					      CTSize base, unsigned depth)
 {
@@ -547,13 +547,7 @@ static int lj_ccall_arm64_float_hfa_result_class(CTState *cts, CTypeID id,
 						 LJArm64FloatHFA *hfa,
 						 CTypeID *rawid)
 {
-  LJArm64FloatHFA local;
-  if (hfa == NULL) hfa = &local;
-  if (!lj_ccall_arm64_float_hfa_class_limit(cts, id, hfa, rawid, 4, 32))
-    return 0;
-  /* Nested-result return channels are still closed independently of the
-  ** flattened argument member lowering. */
-  return !hfa->nested;
+  return lj_ccall_arm64_float_hfa_class_limit(cts, id, hfa, rawid, 4, 32);
 }
 
 /* Classify the fixed prefix in Darwin's independent GPR/FPR banks. For a

@@ -255,6 +255,10 @@ Arm64WordResultAlias arm64_return_word_alias(uint32_t);
 Arm64U64Result arm64_return_u64(uint32_t);
 Arm64NestedIntResult arm64_return_nested_int(uint32_t);
 Arm64MixedResult arm64_return_mixed(uint32_t);
+Arm64NestedFloatPair arm64_return_nested_float_pair(uint32_t);
+Arm64NestedArrayFloatPair arm64_return_array_float_pair(uint32_t);
+Arm64SiblingNestedFloatTriple arm64_return_nested_float_triple(uint32_t);
+Arm64NestedDoubleQuad arm64_return_nested_double_quad(uint32_t);
 Arm64FloatResult arm64_return_float_hfa(uint32_t);
 Arm64DoubleResult arm64_return_double_hfa(uint32_t);
 Arm64FloatPairResult arm64_return_float_pair_hfa(uint32_t);
@@ -1611,6 +1615,9 @@ run_hfa_result(8, 'Arm64DoubleResult', lib.arm64_return_double_hfa, 22,
                'one-double HFA result')
 local function run_multi_hfa_result(width, result_type, fn, counter, fields,
                                     expected, label)
+  local function value(v, field)
+    return type(field) == 'function' and field(v) or v[field]
+  end
   local candidate, oracle = make_result_pair(label)
   _set_hfa_result_candidate(width, candidate)
   _G['__arm64_hfa_result_candidate_'..width] = candidate
@@ -1624,12 +1631,16 @@ local function run_multi_hfa_result(width, result_type, fn, counter, fields,
     assert(ffi.istype(result_type, got) and ffi.istype(result_type, want),
            label..' returned the wrong declared CType')
     for i, field in ipairs(fields) do
-      assert(got[field] == want[field], label..' lane '..field..' differs')
+      assert(value(got, field) == value(want, field),
+             label..' lane '..i..' differs')
     end
   end
   assert(_hfa_result_native_count(width) > native_before,
          label..' had no selected-root native entry')
   tracked_exit_roots = roots(candidate)
+  local selected_root = assert(next(tracked_exit_roots))
+  local code, address, loop = jitutil.tracemc(selected_root)
+  assert(code and address and loop)
   exits = 0
   local mismatch = candidate(32, lib.arm64_return_scalar, 13)
   assert(type(mismatch) == 'number' and exits > 0,
@@ -1644,13 +1655,17 @@ local function run_multi_hfa_result(width, result_type, fn, counter, fields,
          _hfa_result_native_count(width) > after_gc,
          label..' failed native reentry/exit after full GC')
   for i, field in ipairs(fields) do
-    assert(got[field] == want[field] and
-           got[field] == expected(37)[i],
-           label..' lane '..field..' changed after full GC')
+    assert(value(got, field) == value(want, field) and
+           value(got, field) == expected(37)[i],
+           label..' lane '..i..' changed after full GC')
   end
   assert(lib.arm64_aggregate_count(counter)-effects_after_gc == 48 and
          lib.arm64_aggregate_count(counter)-effects_before == 432,
          label..' native/interpreter effects were lost or replayed')
+  local code_after, address_after, loop_after = jitutil.tracemc(selected_root)
+  assert(roots(candidate)[selected_root] and code_after == code and
+         address_after == address and loop_after == loop,
+         label..' selected root changed across alternate callee/full GC')
 end
 run_multi_hfa_result(32, 'Arm64FloatTripleResult',
   lib.arm64_return_float_triple_hfa, 28, {'x','y','z'},
@@ -2162,6 +2177,35 @@ _G.__arm64_run_small_result_probe = function(which)
       68, 'mixed-integer-float-result', function(a, b)
         return a.tag == b.tag and a.value == b.value
       end)
+  end
+end
+
+_G.__arm64_run_nested_hfa_result_probe = function(which)
+  if which == 1 then
+    run_multi_hfa_result(12, 'Arm64NestedFloatPair',
+      lib.arm64_return_nested_float_pair, 69,
+      {function(v) return v.inner.lo end, function(v) return v.inner.hi end},
+      function(n) return {n+.25, n+.5} end, 'nested-float-pair-result')
+  elseif which == 2 then
+    run_multi_hfa_result(12, 'Arm64NestedArrayFloatPair',
+      lib.arm64_return_array_float_pair, 70,
+      {function(v) return v.inner.lane[0] end,
+       function(v) return v.inner.lane[1] end},
+      function(n) return {n+.25, n+.5} end, 'array-float-pair-result')
+  elseif which == 3 then
+    run_multi_hfa_result(32, 'Arm64SiblingNestedFloatTriple',
+      lib.arm64_return_nested_float_triple, 71,
+      {'head', function(v) return v.nested.mid end,
+       function(v) return v.nested.tail end},
+      function(n) return {n+.25, n+.5, n+.75} end, 'nested-float-triple-result')
+  else
+    assert(which == 4)
+    run_multi_hfa_result(40, 'Arm64NestedDoubleQuad',
+      lib.arm64_return_nested_double_quad, 72,
+      {function(v) return v.left.lo end, function(v) return v.left.hi end,
+       function(v) return v.right.lo end, function(v) return v.right.hi end},
+      function(n) return {n+.125, n+.25, n+.5, n+1} end,
+      'nested-double-quad-result')
   end
 end
 

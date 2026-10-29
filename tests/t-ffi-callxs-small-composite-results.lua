@@ -16,8 +16,12 @@ end
 ffi.cdef[[
 typedef struct { struct { uint16_t lo, hi; } half; uint32_t tag; } SmallNested;
 typedef struct { uint32_t tag; float value; } SmallMixed;
+typedef struct { struct { float lo, hi; } inner; } SmallNestedHFA;
+typedef struct { struct { float lane[2]; } inner; } SmallArrayHFA;
 SmallNested arm64_return_nested_int(uint32_t);
 SmallMixed arm64_return_mixed(uint32_t);
+SmallNestedHFA arm64_return_nested_float_pair(uint32_t);
+SmallArrayHFA arm64_return_array_float_pair(uint32_t);
 uint32_t arm64_return_scalar(uint32_t);
 void arm64_aggregate_reset(void);
 uint32_t arm64_aggregate_count(uint32_t);
@@ -30,6 +34,12 @@ local cases = {
    end},
   {'mixed', 'SmallMixed', lib.arm64_return_mixed, 68,
    function(v, n) return v.tag == n+1 and v.value == n+.5 end},
+  {'nested-hfa', 'SmallNestedHFA', lib.arm64_return_nested_float_pair, 69,
+   function(v, n) return v.inner.lo == n+.25 and v.inner.hi == n+.5 end},
+  {'array-hfa', 'SmallArrayHFA', lib.arm64_return_array_float_pair, 70,
+   function(v, n)
+     return v.inner.lane[0] == n+.25 and v.inner.lane[1] == n+.5
+   end},
 }
 
 local function source()
