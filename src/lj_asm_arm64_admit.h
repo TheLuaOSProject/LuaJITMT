@@ -15474,26 +15474,112 @@ static int arm64_scalar_postra_int_fusion(const LJArm64PostRAView *v,
 
 /* A missing location is legal only for an unused scalar or a proven target
 ** fusion at every use. Snapshot sources are checked separately after renames. */
-/* DCE may leave a pure numeric terminal in the retained IR after dropping
-** its machine code. Its inputs likewise need no carrier for this use. A
-** downstream IR user (including a fused operation) disqualifies the terminal;
-** snapshot locations are independently checked by the complete allocated pass. */
-static int arm64_scalar_postra_dead_terminal(const LJArm64PostRAView *v,
-                                             IRRef value, IRRef end)
+static int arm64_scalar_postra_dead_numeric_node(const LJArm64PostRAView *v,
+                                                 IRRef value)
 {
-  IRIns source = ir_load_acq(&v->ir[value]);
-  IRRef ref;
+  IRIns source;
+  if (!v || !v->ir || value < REF_FIRST || value >= v->nins)
+    return 0;
+  source = ir_load_acq(&v->ir[value]);
   if (source.t.irt != IRT_NUM || ra_hasreg(source.r) ||
       ra_hasspill(source.s) ||
       (source.o != IR_ADD && source.o != IR_SUB &&
        source.o != IR_MUL && source.o != IR_DIV))
     return 0;
+  return 1;
+}
+
+static int arm64_scalar_postra_dead_numeric_terminal(
+                                                const LJArm64PostRAView *v,
+                                                IRRef value, IRRef end)
+{
+  IRRef ref;
+  MSize s;
+  if (!v || !v->ir || !v->snap || !v->snapmap || value < REF_FIRST ||
+      value >= end || end > v->nins ||
+      !arm64_scalar_postra_dead_numeric_node(v, value)) return 0;
   for (ref = value+1u; ref < end; ref++) {
     IRIns use = ir_load_acq(&v->ir[ref]);
-    IRMode mode = lj_ir_mode[use.o];
+    IRMode mode;
+    if (use.o >= IR__MAX) return 0;
+    mode = lj_ir_mode[use.o];
     if ((irm_op1(mode) == IRMref && use.op1 == value) ||
-        (irm_op2(mode) == IRMref && use.op2 == value))
+        (irm_op2(mode) == IRMref && use.op2 == value)) return 0;
+  }
+  for (s = 0; s < v->nsnap; s++) {
+    const SnapShot *snap = &v->snap[s];
+    MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap), i;
+    if (ofs > v->nsnapmap || nent > v->nsnapmap-ofs) return 0;
+    for (i = 0; i < nent; i++)
+      if (snap_ref(snapentry_acq(&v->snapmap[ofs+i])) == value) return 0;
+  }
+  for (ref = end; ref < v->nins; ref++) {
+    IRIns rename = ir_load_acq(&v->ir[ref]);
+    if (rename.o == IR_RENAME && rename.op1 == value) return 0;
+  }
+  return 1;
+}
+
+/* DCE can leave a complete numeric expression DAG in the retained IR after
+** dropping its machine code. Build the transitive use cone in SSA order and
+** allow it only when every reachable user is itself an unlocated, unspilled
+** pure NUM arithmetic node. Any live/fused user, snapshot entry, or rename
+** rejects the cone. The fixed bitmap spans the complete IRRef domain, so the
+** proof has no expression-depth limit and uses bounded stack space. */
+static int arm64_scalar_postra_dead_numeric_dag(const LJArm64PostRAView *v,
+                                                IRRef value, MSize end)
+{
+  uint8_t reachable[(REF_DROP-REF_FIRST+8u)/8u] = {0};
+  IRRef ref;
+  MSize s;
+  int found_user = 0;
+  if (!v || !v->ir || !v->snap || !v->snapmap || value < REF_FIRST ||
+      value >= end || end > REF_DROP || end > v->nins)
+    return 0;
+  reachable[(value-REF_FIRST)>>3] |=
+      (uint8_t)(1u << ((value-REF_FIRST)&7u));
+  for (ref = value+1u; ref < end; ref++) {
+    IRIns use = ir_load_acq(&v->ir[ref]);
+    IRMode mode;
+    int reaches;
+    if (use.o >= IR__MAX) return 0;
+    mode = lj_ir_mode[use.o];
+    reaches = 0;
+    if (irm_op1(mode) == IRMref && use.op1 >= REF_FIRST && use.op1 < end)
+      reaches = !!(reachable[(use.op1-REF_FIRST)>>3] &
+          (uint8_t)(1u << ((use.op1-REF_FIRST)&7u)));
+    if (!reaches && irm_op2(mode) == IRMref && use.op2 >= REF_FIRST &&
+        use.op2 < end)
+      reaches = !!(reachable[(use.op2-REF_FIRST)>>3] &
+          (uint8_t)(1u << ((use.op2-REF_FIRST)&7u)));
+    if (use.o == IR_RENAME && use.op1 >= REF_FIRST && use.op1 < end &&
+        (reachable[(use.op1-REF_FIRST)>>3] &
+         (uint8_t)(1u << ((use.op1-REF_FIRST)&7u))))
       return 0;
+    if (!reaches) continue;
+    if (!arm64_scalar_postra_dead_numeric_node(v, ref)) return 0;
+    reachable[(ref-REF_FIRST)>>3] |=
+        (uint8_t)(1u << ((ref-REF_FIRST)&7u));
+    found_user = 1;
+  }
+  if (!found_user) return 0;
+  for (s = 0; s < v->nsnap; s++) {
+    const SnapShot *snap = &v->snap[s];
+    MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap), i;
+    if (ofs > v->nsnapmap || nent > v->nsnapmap-ofs) return 0;
+    for (i = 0; i < nent; i++) {
+      IRRef r = snap_ref(snapentry_acq(&v->snapmap[ofs+i]));
+      if (r >= REF_FIRST && r < end &&
+          (reachable[(r-REF_FIRST)>>3] &
+           (uint8_t)(1u << ((r-REF_FIRST)&7u)))) return 0;
+    }
+  }
+  for (ref = end; ref < v->nins; ref++) {
+    IRIns rename = ir_load_acq(&v->ir[ref]);
+    if (rename.o == IR_RENAME && rename.op1 >= REF_FIRST &&
+        rename.op1 < end &&
+        (reachable[(rename.op1-REF_FIRST)>>3] &
+         (uint8_t)(1u << ((rename.op1-REF_FIRST)&7u)))) return 0;
   }
   return 1;
 }
@@ -15503,6 +15589,7 @@ static int arm64_scalar_postra_nolocation(const LJArm64PostRAView *v,
 {
   IRIns source = ir_load_acq(&v->ir[value]);
   IRRef ref;
+  int tried_dead_dag = 0;
   if (arm64_scalar_ksimd_postra_fload(source, 0) ||
       arm64_scalar_ksimd_postra_fload(source, 1)) {
     unsigned index = arm64_scalar_ksimd_postra_fload(source, 0) ? 0 : 1;
@@ -15556,8 +15643,15 @@ static int arm64_scalar_postra_nolocation(const LJArm64PostRAView *v,
     }
     if (!used)
       continue;
-    if (arm64_scalar_postra_dead_terminal(v, ref, end))
+    if (arm64_scalar_postra_dead_numeric_terminal(v, ref, end))
       continue;
+    /* The transitive cone is relatively uncommon and uses a fixed IR-domain
+    ** bitmap. Attempt it lazily only when the current missing-location value
+    ** feeds an unlocated pure NUM arithmetic node. */
+    if (!tried_dead_dag && arm64_scalar_postra_dead_numeric_node(v, ref)) {
+      tried_dead_dag = 1;
+      if (arm64_scalar_postra_dead_numeric_dag(v, value, end)) return 1;
+    }
     if (source.t.irt == IRT_INT &&
         arm64_scalar_postra_int_fusion(v, value, ref, loop))
       continue;

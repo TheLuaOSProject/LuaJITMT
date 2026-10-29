@@ -87,6 +87,8 @@ LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
   sh "$root/tools/ci/arm64_jit_lua_leaf_contract.sh"
 LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
   sh "$root/tools/ci/arm64_jit_open_callm_exits_contract.sh"
+LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+  sh "$root/tools/ci/arm64_jit_callm_dead_numeric_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_numeric_spills_contract.sh"
 LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
   sh "$root/tools/ci/arm64_jit_bitops_contract.sh"
