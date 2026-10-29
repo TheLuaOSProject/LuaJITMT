@@ -486,7 +486,8 @@ static int arm64_callxs_value_kind(const IRIns *ir, IRRef ref,
 		(size == sizeof(double) && type == IRT_NUM)) &&
 	       value.o == IR_XLOAD && value.op2 == 0;
   case LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE:
-	if (on_stack || value.o != IR_XLOAD || value.op2 != 0) return 0;
+	if ((on_stack && size != 8) || value.o != IR_XLOAD || value.op2 != 0)
+	  return 0;
 	return (size == 1 && type == IRT_U8) ||
 	       (size == 2 && type == IRT_U16) ||
 	       (size == 4 && type == IRT_U32) ||
@@ -1291,7 +1292,8 @@ static int arm64_callxs_cdata_integer_aggregate_argument(
 	      abi.arg[i].kind != LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ||
 	      abi.arg[i].id != terminal || abi.arg[i].size != size ||
 	      !arm64_callxs_value_kind(ir, value, T->nk, T->nins, ref,
-		LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE, size, 1, 0)) return 0;
+		LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE, size, 1,
+		abi.arg[i].reg == LJ_ARM64_ABI_STACK)) return 0;
 	  consumers++;
 	}
     }
@@ -5623,7 +5625,8 @@ static int arm64_postra_cdata_integer_aggregate_argument(
 				    abi.arg[i].kind != LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ||
 				    abi.arg[i].id != terminal || abi.arg[i].size != size ||
 				    !arm64_callxs_value_kind(ir, value, T->nk, nins,
-				      ref, LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE, size, 1, 0))
+				      ref, LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE, size, 1,
+				      abi.arg[i].reg == LJ_ARM64_ABI_STACK))
 					return 0;
 				consumers++;
 			}

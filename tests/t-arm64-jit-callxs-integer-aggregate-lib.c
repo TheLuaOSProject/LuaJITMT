@@ -71,6 +71,8 @@ enum {
   ARM64_DOUBLE_QUAD_SALT,
   ARM64_FLOAT_PAIR_STACK,
   ARM64_FLOAT_PAIR_STACK_ALT,
+  ARM64_INT_PAIR_STACK,
+  ARM64_INT_PAIR_STACK_ALT,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -216,6 +218,22 @@ LJ_EXPORT uint32_t arm64_take_pair_no_gpr(uint32_t a, uint32_t b,
 {
   calls[ARM64_PAIR_NO_GPR]++;
   return a+b+c+d+e+f+g+h+value.lo+value.hi;
+}
+
+LJ_EXPORT uint32_t arm64_take_pair_stack(uint32_t a, uint32_t b,
+    uint32_t c, uint32_t d, uint32_t e, uint32_t f, uint32_t g, uint32_t h,
+    arm64_int_pair value, uint32_t salt)
+{
+  calls[ARM64_INT_PAIR_STACK]++;
+  return a+b+c+d+e+f+g+h+value.lo+value.hi*2u+salt;
+}
+
+LJ_EXPORT uint32_t arm64_take_pair_stack_alt(uint32_t a, uint32_t b,
+    uint32_t c, uint32_t d, uint32_t e, uint32_t f, uint32_t g, uint32_t h,
+    arm64_int_pair value, uint32_t salt)
+{
+  calls[ARM64_INT_PAIR_STACK_ALT]++;
+  return a+b+c+d+e+f+g+h+value.lo*2u+value.hi+salt;
 }
 
 LJ_EXPORT arm64_byte_result arm64_return_byte(uint32_t value)

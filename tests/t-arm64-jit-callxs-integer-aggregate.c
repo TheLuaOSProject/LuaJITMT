@@ -345,6 +345,26 @@ static void assert_unsupported_aggregate_signature(lua_State *L,
   }
 }
 
+static void assert_integer_stack_signature(lua_State *L, const char *name,
+                                            unsigned trailing)
+{
+  LJArm64ABISignature abi;
+  unsigned i;
+  assert(lj_ccall_arm64_signature(ctype_ctsG(G(L)),
+         global_cdata_ctype(L,name),&abi));
+  assert(abi.nargs==9u+trailing && abi.nparams==abi.nargs && abi.ngpr==8u &&
+         !abi.nfpr && abi.stack_size==8u+4u*trailing);
+  for (i=0;i<8u;i++)
+    assert(abi.arg[i].reg==i && abi.arg[i].size==4u &&
+           abi.arg[i].kind==LJ_ARM64_ABI_KIND_INTEGER);
+  assert(abi.arg[8].reg==LJ_ARM64_ABI_STACK && abi.arg[8].stack_offset==0 &&
+         abi.arg[8].size==8 &&
+         abi.arg[8].kind==LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE);
+  if (trailing)
+    assert(abi.arg[9].reg==LJ_ARM64_ABI_STACK && abi.arg[9].stack_offset==8 &&
+           abi.arg[9].size==4 && abi.arg[9].kind==LJ_ARM64_ABI_KIND_INTEGER);
+}
+
 static void assert_float_hfa_signature(lua_State *L, const char *name)
 {
   LJArm64ABISignature abi;
@@ -547,7 +567,10 @@ static void test_aggregate_signatures(lua_State *L)
   assert_unsupported_aggregate_signature(L, "__arm64_mixed_union_fn");
   assert_unsupported_aggregate_signature(L, "__arm64_big_pair_fn");
   assert_unsupported_aggregate_signature(L, "__arm64_bitfield_fn");
-  assert_unsupported_aggregate_signature(L, "__arm64_pair_no_gpr_fn");
+  assert_integer_stack_signature(L, "__arm64_pair_no_gpr_fn", 0);
+  assert_integer_stack_signature(L, "__arm64_pair_stack_fn", 1);
+  assert_unsupported_aggregate_signature(L, "__arm64_word_stack_fn");
+  assert_unsupported_aggregate_signature(L, "__arm64_pair_stack_vararg_fn");
   assert_integer_aggregate_result_signature(L, "__arm64_return_byte_fn", 1);
   assert_integer_aggregate_result_signature(L, "__arm64_return_half_fn", 2);
   assert_integer_aggregate_result_signature(L, "__arm64_return_word_fn", 4);
@@ -1251,8 +1274,9 @@ int main(int argc, char **argv)
       fprintf(stderr, "trace abort count=%u last=%u\n",
 	      lj_trace_test_abort_count(),
 	      (unsigned)lj_trace_test_last_abort_error());
-      fprintf(stderr, "trace errinfo=%d\n",
-	      (int32_t)intV(&G2J(G(L))->errinfo));
+      if (tvisint(&G2J(G(L))->errinfo))
+        fprintf(stderr, "trace errinfo=%d\n",
+	        (int32_t)intV(&G2J(G(L))->errinfo));
       assert(0);
     }
   }
@@ -1321,6 +1345,15 @@ int main(int argc, char **argv)
     assert(meta_pc != NULL);
     test_live_aggregate_admission_at(L, T, meta_pc,
 	"__arm64_float_pair_stack_clone", IRT_FLOAT, 1);
+  }
+  {
+    GCproto *pt = global_proto(L, "__arm64_integer_pair_stack_candidate");
+    GCtrace *T = find_aggregate_trace(G2J(G(L)), pt, IRT_U64);
+    assert(T != NULL);
+    meta_pc = aggregate_meta_pc(T);
+    assert(meta_pc != NULL);
+    test_live_aggregate_admission(L,T,meta_pc,
+      "__arm64_integer_pair_stack_clone",IRT_U64);
   }
   {
     GCproto *pt = global_proto(L, "__arm64_float_triple_hfa_candidate");
