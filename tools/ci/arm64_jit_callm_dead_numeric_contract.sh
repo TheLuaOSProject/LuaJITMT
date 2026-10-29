@@ -25,4 +25,4 @@ for profile in arm64-assert arm64e-assert arm64-release arm64e-release; do
   lj_ci_run_lua 90 "$root/tests/t-arm64-jit-lua-dead-numeric.lua"
 done
 lj_ci_restore "$LJ_CI_RESTORE_TARGET_FLAGS" "$LJ_CI_RESTORE_XCFLAGS"
-echo 'arm64_jit_callm_dead_numeric_contract OK: four profiles; dead numeric terminal/chain/division CALLM roots, selected native exits across GC with live peer, same-code reuse, independent snapshot binding and allocated-user rejection'
+echo 'arm64_jit_callm_dead_numeric_contract OK: four profiles; dead numeric terminal/chain/division CALLM roots, selected native exits across GC with live peer, same-code reuse, independent snapshot binding and allocated/spilled/renamed-user rejection'

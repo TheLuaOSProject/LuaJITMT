@@ -171,6 +171,48 @@ static void run_proof_mutations(lua_State *L, GCtrace *T)
   f.postra[dag_live].r=RID_D0;
   assert(!lj_asm_arm64_postra_admit(&f.view,NULL)); postra_bad++;
   f.postra[dag_live]=f.good[dag_live];
+  {
+    MSize oldadjust=f.view.spadjust;
+    IRIns save=f.postra[dag_live];
+    f.postra[dag_live].r=RID_INIT;
+    f.postra[dag_live].s=4;  /* aligned two-word NUM spill, beyond SPS_FIXED. */
+    f.view.spadjust=16;
+    if (lj_asm_arm64_postra_admit(&f.view,NULL)) {
+      fprintf(stderr,"spilled dead ADD unexpectedly admitted\n");
+      abort();
+    }
+    postra_bad++;
+    f.postra[dag_live]=save;
+    f.view.spadjust=oldadjust;
+  }
+  {
+    IRRef live=0;
+    IRIns ren, save=f.postra[f.semantic_nins];
+    for(IRRef r=REF_FIRST;r<f.semantic_nins;r++) {
+      IRIns p=f.postra[r];
+      if(p.t.irt==IRT_NUM && ra_hasreg(p.r) && !ra_hasspill(p.s) &&
+         (p.o==IR_ADD || p.o==IR_SUB || p.o==IR_MUL || p.o==IR_DIV)) {
+        live=r; break;
+      }
+    }
+    assert(live && f.semantic_nins+1u==f.view.nins && save.o==IR_NOP);
+    memset(&ren,0,sizeof(ren));
+    ren.o=IR_RENAME; ren.t.irt=IRT_NIL; ren.op1=live;
+    ren.op2=0; ren.r=f.postra[live].r; ren.s=SPS_NONE;
+    f.postra[f.semantic_nins]=ren;
+    if (!lj_asm_arm64_postra_admit(&f.view,NULL)) {
+      fprintf(stderr,"positive unrelated RENAME control rejected\n");
+      abort();
+    }
+    ren.op1=dag_user; ren.r=RID_D0;
+    f.postra[f.semantic_nins]=ren;
+    if (lj_asm_arm64_postra_admit(&f.view,NULL)) {
+      fprintf(stderr,"trailing RENAME of dead DAG user unexpectedly admitted\n");
+      abort();
+    }
+    f.postra[f.semantic_nins]=save;
+    postra_bad++;
+  }
   arm64_fixture_reset(&f);
   assert(lj_asm_arm64_ir_admit(f.J,&f.semantic,NULL) &&
          lj_asm_arm64_postra_admit(&f.view,NULL));
