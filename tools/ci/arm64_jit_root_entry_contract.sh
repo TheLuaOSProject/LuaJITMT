@@ -126,8 +126,9 @@ check_vm_entry_order() {
   reloc=$tmpdir/vm-$tag.reloc
   loop=$tmpdir/vm-$tag-loop.txt
   funcf=$tmpdir/vm-$tag-funcf.txt
+  iterl=$tmpdir/vm-$tag-iterl.txt
   otool -rv "$vm" >"$reloc"
-  test "$(grep -c 'BR26.*_lj_trace_enter_root$' "$reloc")" = 3
+  test "$(grep -c 'BR26.*_lj_trace_enter_root$' "$reloc")" = 4
   otool -tvV "$vm" >"$disasm"
   awk '/^_lj_BC_JLOOP:/ { copy=1 }
        copy { print }
@@ -136,6 +137,26 @@ check_vm_entry_order() {
        copy { print }
        copy && /^_lj_BC_JFUNCV:/ { exit }' "$disasm" >"$funcf"
   test -s "$loop" && test -s "$funcf"
+  awk '/^_lj_BC_JITERL:/ { copy=1 }
+       copy { print }
+       copy && /^_lj_BC_LOOP:/ { exit }' "$disasm" >"$iterl"
+  test -s "$iterl"
+  copy=$(grep -nE 'stur[[:space:]]+x0, \[x9, #-0x8\]' "$iterl" |
+    sed -n '1p' | cut -d: -f1)
+  call=$(grep -nE 'bl[[:space:]]+0x' "$iterl" | sed -n '1p' | cut -d: -f1)
+  reserve=$(grep -nE 'sub[[:space:]]+sp, sp, #0x10' "$iterl" |
+    sed -n '1p' | cut -d: -f1)
+  branch=$(grep -nE 'br(a|aa)?[[:space:]]+x1' "$iterl" |
+    sed -n '1p' | cut -d: -f1)
+  test -n "$copy" && test -n "$call" && test -n "$reserve" &&
+    test -n "$branch" && test "$copy" -lt "$call" &&
+    test "$call" -lt "$reserve" && test "$reserve" -lt "$branch"
+  grep -E 'b[[:space:]]+_lj_BC_JLOOP$' "$iterl" >/dev/null
+  if test "$tag" = arm64e; then
+    grep -E 'braa[[:space:]]+x1, x0$' "$iterl" >/dev/null
+  else
+    grep -E 'br[[:space:]]+x1$' "$iterl" >/dev/null
+  fi
   if test "$tag" = arm64e; then
     grep -E 'bti[[:space:]]+j' "$loop" >/dev/null
     grep -E 'braa[[:space:]]+x1, x0$' "$loop" >/dev/null
