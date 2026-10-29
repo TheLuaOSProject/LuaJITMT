@@ -11,8 +11,11 @@ stack reservation. The emitter places every member of a stack HFA on the
 stack, then places later FP arguments there too. Semantic and post-RA admission
 independently check the grouped members, source type and identity, stack
 offsets, register-bank exhaustion, and carrier widths. Reservation uses the
-classifier's complete stack extent, including following arguments. Unsupported
-or variable-arity signatures retain the prior conservative fallback/refusal.
+classifier's complete stack extent, including following arguments. Fixed calls
+require a valid, matching plan at both stack reservation and emission. A failed
+reconstruction aborts compilation; generic flattened lowering would split an
+HFA if a transient read failed here but a later admission read succeeded.
+Variable-arity calls retain their existing separate lowering and admission.
 
 The native parity witness uses seven scalar double arguments, a two-float
 HFA, then a trailing double. ARM64 must spill the complete HFA despite V7
@@ -41,3 +44,21 @@ Validation on the frozen source:
   Captured log: `/Users/frityet/Scratch/ljmt-hfa-partial-bank-20261029/final-x64-native-peer.log`.
 - The x86_64 executable and aggregate library were built from this source
   checkpoint; `src/luajit` reported architecture `x86_64`.
+
+## Independent review: required emission plan
+
+The initial emitter treated signature reconstruction as optional. This could
+silently select the old per-carrier layout after a transient CType read failure.
+The review fix makes the fixed-call plan mandatory in both assembler stages.
+Test-only fault injection loses that plan separately at stack sizing and at
+emission after semantic admission. Each case reaches the injection, publishes
+no selected CALLXS root, executes no native selected calls, preserves the
+interpreter result, and performs all 256 expected fixture effects exactly once.
+Fresh positive candidates then exercise ordinary native compilation/re-entry.
+
+The complete aggregate contract passed again on ARM64 and ARM64e, assertion
+and release profiles, including both fault stages. Evidence:
+`/Users/frityet/Scratch/ljmt-hfa-partial-bank-20261029/required-plan-four-profiles.log`.
+The changes affect ARM64 assembly only; no runtime entry lock or allocation was
+added. The grouped-spill rule is specified by AAPCS64 Stage C.2-C.6:
+https://github.com/ARM-software/abi-aa/blob/main/aapcs64/aapcs64.rst
