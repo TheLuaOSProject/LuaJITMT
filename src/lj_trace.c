@@ -14183,16 +14183,16 @@ static int trace_arm64_lua_leaf_callm_pair(const GCproto *pt,
 }
 
 static int trace_arm64_lua_leaf_callm_source(const GCproto *pt,
-						 const BCIns *callpc)
+						 const BCIns *callpc, MSize nresults)
 {
 	uintptr_t p = (uintptr_t)callpc, lo, hi;
-	if (!pt || !callpc) return 0;
+	if (!pt || !callpc || nresults < 1u ||
+	    nresults > LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS) return 0;
 	lo = (uintptr_t)proto_bc(pt);
 	hi = (uintptr_t)(proto_bc(pt)+pt->sizebc);
 	if (p < lo || p >= hi || p-lo < sizeof(BCIns)) return 0;
 	return trace_arm64_lua_leaf_callm_pair(pt,
-		(const BCIns *)(p-sizeof(BCIns)),
-		LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS);
+		(const BCIns *)(p-sizeof(BCIns)), nresults);
 }
 
 /* During CALL return, the VM has already popped the child frame while the
@@ -14229,7 +14229,7 @@ static int trace_arm64_lua_leaf_returned_call(jit_State *J, lua_State *owner,
     open_consumer = bc_op(call) == BC_CALLM && bc_b(call) == 2u &&
       bc_c(call) == 0u && J->maxslot >= 1u &&
       J->maxslot <= LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS &&
-      trace_arm64_lua_leaf_callm_source(pt, proto+cp);
+      trace_arm64_lua_leaf_callm_source(pt, proto+cp, J->maxslot);
     if (open_consumer) nargs = J->maxslot;
     if (!nresults || (bc_op(call) != BC_CALL && !open_consumer) ||
         (!open_producer && !open_consumer && bc_b(call) != nresults+1u) ||
@@ -14384,7 +14384,8 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
         bc_c(call) == 0u && pt->numparams >= 1u &&
         pt->numparams <= LJ_TRACE_ARM64_LUA_LEAF_MAX_RESULTS &&
         !(la_load8_acq(&pt->flags) & PROTO_VARARG) &&
-        trace_arm64_lua_leaf_callm_source(parentpt, returnpc-1u);
+        trace_arm64_lua_leaf_callm_source(parentpt, returnpc-1u,
+                                           pt->numparams);
       int consumer_entry = bc_op((BCIns)la_load32_acq(
         (const uint32_t *)pc)) == BC_FUNCF ||
         bc_op((BCIns)la_load32_acq((const uint32_t *)pc)) == BC_JFUNCF;
