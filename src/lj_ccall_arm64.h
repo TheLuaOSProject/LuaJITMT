@@ -435,9 +435,9 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
 	/* The interpreter passes an HFA wholly in consecutive FPRs, or wholly
 	** on the stack when its FPR bank is exhausted. The generic emitter can
 	** reproduce the latter without a new argument-group opcode only when no
-	** FPR remains before the HFA. Keep partial-bank overflow closed. */
-	if (stack_hfa && (nfpr != CCALL_NARG_FPR || hfa.count != 2 ||
-		          hfa.member_size != sizeof(float) || hfa.size != 8 ||
+	** FPR remains and the aggregate starts/ends on eight-byte boundaries.
+	** Keep partial-bank overflow and implicit group padding closed. */
+	if (stack_hfa && (nfpr != CCALL_NARG_FPR || (hfa.size & 7u) != 0 ||
 	                  (stack_size & 7u) != 0)) return 0;
 	if (stack_hfa) stack_size = (stack_size+7u) & ~7u;
 	for (part = 0; part < hfa.count; part++) {

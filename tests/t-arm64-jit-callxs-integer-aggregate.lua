@@ -96,6 +96,26 @@ double arm64_take_float_pair_stack(double, double, double, double,
 double arm64_take_float_pair_stack_alt(double, double, double, double,
                                        double, double, double, double,
                                        Arm64FloatPair, double);
+double arm64_take_float_quad_stack(double,double,double,double,
+  double,double,double,double,Arm64FloatQuadResult,double);
+double arm64_take_float_quad_stack_alt(double,double,double,double,
+  double,double,double,double,Arm64FloatQuadResult,double);
+double arm64_take_double_pair_stack(double,double,double,double,
+  double,double,double,double,Arm64DoublePairResult,double);
+double arm64_take_double_pair_stack_alt(double,double,double,double,
+  double,double,double,double,Arm64DoublePairResult,double);
+double arm64_take_double_triple_stack(double,double,double,double,
+  double,double,double,double,Arm64DoubleTripleResult,double);
+double arm64_take_double_triple_stack_alt(double,double,double,double,
+  double,double,double,double,Arm64DoubleTripleResult,double);
+double arm64_take_double_quad_stack(double,double,double,double,
+  double,double,double,double,Arm64DoubleQuadResult,double);
+double arm64_take_double_quad_stack_alt(double,double,double,double,
+  double,double,double,double,Arm64DoubleQuadResult,double);
+double arm64_take_double_one_stack(double,double,double,double,
+  double,double,double,double,Arm64DoubleResult,double);
+double arm64_take_double_one_stack_alt(double,double,double,double,
+  double,double,double,double,Arm64DoubleResult,double);
 int32_t arm64_vararg_i32(int32_t, ...);
 uint32_t arm64_take_nested_pair(Arm64NestedPair);
 uint32_t arm64_take_union(Arm64MixedUnion);
@@ -532,6 +552,8 @@ hfa_candidate = hfa_stack_candidate
 _G.__arm64_float_hfa_candidate = hfa_candidate
 _set_hfa_candidate(hfa_candidate)
 jit.flush(hfa_candidate)
+-- Keep earlier rejected-call penalties out of this independent warmup.
+jit.opt.start('hotloop=1')
 jit.on(hfa_candidate, true)
 exits, hfa_exits = 0, 0
 lib.arm64_aggregate_reset()
@@ -662,6 +684,56 @@ assert(lib.arm64_aggregate_count(37) == 64,
 tracked_exit_roots = nil
 candidate = saved_integer_candidate
 _set_aggregate_candidate(candidate)
+
+
+-- Full stack HFAs whose total size is a multiple of the ABI stack slot.
+local function wide_stack_case(index, symbol, type_name, members)
+  local source=[[return function(n,fn,value,salt)
+    local sum=0
+    for i=1,n do sum=sum+fn(1,2,3,4,5,6,7,8,value,salt) end
+    return sum
+  end]]
+  local fn=lib['arm64_take_'..symbol..'_stack']
+  local alternate=lib['arm64_take_'..symbol..'_stack_alt']
+  local hot=assert(loadstring(source))()
+  local cold=assert(loadstring(source))()
+  local clone=assert(loadstring(source))()
+  jit.off(cold,true); jit.off(clone,true)
+  _G['__arm64_wide_stack_candidate_'..index]=hot
+  _G['__arm64_wide_stack_clone_'..index]=clone
+  _G['__arm64_wide_stack_fn_'..index]=fn
+  local saved=hfa_candidate
+  hfa_candidate=hot; _set_hfa_candidate(hot)
+  jit.opt.start('hotloop=1'); jit.on(hot,true)
+  local value=ffi.new(type_name,unpack(members))
+  lib.arm64_aggregate_reset(); _begin_hfa_witness()
+  exits,hfa_exits=0,0
+  for pass=1,8 do
+    assert(hot(16,fn,value,3.75)==cold(16,fn,value,3.75))
+  end
+  assert(_hfa_trace_count()>0 and _hfa_native_count()>0 and hfa_exits>0,
+    symbol..' stack root requires native finish and selected exit')
+  assert(lib.arm64_aggregate_count(37+index)==256)
+  local before=_hfa_native_count()
+  collectgarbage('collect'); hfa_exits=0
+  assert(hot(32,fn,value,3.75)==cold(32,fn,value,3.75))
+  assert(_hfa_native_count()>before and hfa_exits>0)
+  assert(lib.arm64_aggregate_count(37+index)==320)
+  tracked_exit_roots=roots(hot); exits=0
+  assert(hot(32,alternate,value,3.75)==cold(32,alternate,value,3.75))
+  assert(exits>0 and lib.arm64_aggregate_count(42+index)==64)
+  tracked_exit_roots=nil
+  hfa_candidate=saved; _set_hfa_candidate(saved)
+end
+wide_stack_case(1,'float_quad','Arm64FloatQuadResult',{1.25,2.5,3.75,4.25})
+wide_stack_case(2,'double_pair','Arm64DoublePairResult',{1.25,2.5})
+wide_stack_case(3,'double_triple','Arm64DoubleTripleResult',{1.25,2.5,3.75})
+wide_stack_case(4,'double_quad','Arm64DoubleQuadResult',{1.25,2.5,3.75,4.25})
+wide_stack_case(5,'double_one','Arm64DoubleResult',{1.25})
+_G.__arm64_float_triple_stack_fn=ffi.cast([[double (*)(double,double,double,
+  double,double,double,double,double,Arm64FloatTriple,double)]],0)
+_G.__arm64_partial_hfa_stack_fn=ffi.cast([[double (*)(double,double,double,
+  double,double,double,double,Arm64FloatQuadResult,double)]],0)
 
 
 local function run_one_hfa(candidate_fn, oracle_fn, type_name, ffi_fn, counter,
