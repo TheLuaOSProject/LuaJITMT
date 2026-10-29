@@ -8255,7 +8255,7 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
   *post_ok = post_base;
   if (!sem_base || !post_base)
     goto done;
-  if (mutation >= 28 && mutation <= 37) {
+  if (mutation >= 28 && mutation <= 38) {
 	LJArm64SideAncestor *row;
 	if (side.parent_ancestry_count < 2) goto done;
 	row = (LJArm64SideAncestor *)side.parent_ancestry;
@@ -8287,9 +8287,14 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
         } else if (mutation == 36) {
           side.parent_ancestry_capacity = semside.parent_ancestry_capacity =
             side.parent_ancestry_count-1u;
-        } else {
+        } else if (mutation == 37) {
           side.parent_ancestry_capacity = semside.parent_ancestry_capacity =
             (MSize)UINT16_MAX+1u;
+        } else {
+          MSize badslots = side.parent_topslot+2u+LJ_FR2;
+          if (badslots > UINT8_MAX) goto done;
+          parentcopy.snap.nslots = (uint8_t)badslots;
+          side.parent_nslots = semside.parent_nslots = badslots;
 	}
 	goto validate;
   }
@@ -8699,7 +8704,7 @@ uint32_t lj_trace_test_arm64_side_scalar_copy_contract(jit_State *J,
 	if (depth >= 3u && trace_test_side_graph_reorder_rejected(J, child))
 	  result |= 1u << 28;
 	for (mutation = depth >= 3 ? 28u : 1u;
-	     mutation <= (depth >= 3 ? 37u : 27u); mutation++) {
+	     mutation <= (depth >= 3 ? 38u : 27u); mutation++) {
     if (!trace_test_side_scalar_copy(J, child, mutation, &sem, &post))
 	return result;
     if (((mutation == 2 || mutation == 11) && sem && !post) ||
