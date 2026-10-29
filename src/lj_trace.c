@@ -15285,7 +15285,7 @@ static int trace_arm64_lua_leaf_forward_source(const GCfunc *fn,
 	target = funcV(&value);
 	targetpt = funcproto(target);
 	if ((la_load8_acq(&targetpt->flags) & PROTO_VARARG) ||
-	    targetpt->numparams != 3u ||
+	    targetpt->numparams < 1u || targetpt->numparams > 3u ||
 	    (MSize)bc_a(callmt)+1u+LJ_FR2+targetpt->numparams >= LJ_MAX_JSLOTS ||
 	    !lj_trace_arm64_lua_leaf(target)) return 0;
 	if (targetp) *targetp = target;
@@ -15323,7 +15323,8 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
   if (isvararg && size > 1u &&
       bc_op((BCIns)la_load32_acq((const uint32_t *)&bc[1])) != BC_VARG) {
     MSize nargs;
-    if (!trace_arm64_lua_leaf_forward_source(fn, NULL, &nargs) || nargs != 3u)
+    if (!trace_arm64_lua_leaf_forward_source(fn, NULL, &nargs) ||
+	nargs < 1u || nargs > 3u)
       return 0;
     forward_varg = 1;
   }
@@ -15588,7 +15589,7 @@ MSize lj_trace_arm64_lua_leaf_nresults(const GCfunc *fn)
 	nresults = trace_arm64_lua_leaf_nresults(funcproto(fn));
 	if (nresults) return nresults;
 	if (!trace_arm64_lua_leaf_forward_source(fn, &target, &nargs) ||
-	    nargs != 3u) return 0;
+	    nargs < 1u || nargs > 3u) return 0;
 	return trace_arm64_lua_leaf_nresults(funcproto(target));
 }
 
@@ -15598,7 +15599,7 @@ int lj_trace_arm64_lua_leaf_forward_call(const GCfunc *forward,
 {
 	const GCfunc *source_target;
 	MSize source_nargs;
-	return nargs == 3u &&
+	return nargs >= 1u && nargs <= 3u &&
 	       trace_arm64_lua_leaf_forward_source(forward, &source_target,
 	                                            &source_nargs) &&
 	       source_target == target && source_nargs == nargs;
@@ -16039,22 +16040,25 @@ static int trace_arm64_lua_leaf_frame(jit_State *J, lua_State *owner,
       bc_a((BCIns)la_load32_acq((const uint32_t *)J->pc)) == 0u &&
       bc_b((BCIns)la_load32_acq((const uint32_t *)J->pc)) == 0u &&
       bc_c((BCIns)la_load32_acq((const uint32_t *)J->pc)) == 0u &&
-      J->framedepth == 1 && J->maxslot == 3u &&
+      J->framedepth == 1 && J->maxslot == funcproto(fn)->numparams &&
       bc_op(calls[0]) == BC_CALL && bc_b(calls[0]) == 2u &&
-      bc_c(calls[0]) == 4u &&
-      (MSize)bc_a(calls[0])+1u+LJ_FR2+3u <= rootpt->framesize &&
-      currentcaller+bc_a(calls[0])+2u+LJ_FR2+3u <= stacklimit &&
+      bc_c(calls[0]) == funcproto(fn)->numparams+1u &&
+      (MSize)bc_a(calls[0])+1u+LJ_FR2+funcproto(fn)->numparams <=
+	rootpt->framesize &&
+      currentcaller+bc_a(calls[0])+2u+LJ_FR2+funcproto(fn)->numparams <=
+	stacklimit &&
       tvisfunc(&currentcaller[bc_a(calls[0])+1u]) &&
       funcV(&currentcaller[bc_a(calls[0])+1u]) == fn &&
-      lj_trace_arm64_lua_leaf_forward_call(J->fn, fn, 3u) &&
-      (uintptr_t)owner->base + 3u*sizeof(TValue) <= stackhi &&
-      tv_rawload_acq(&owner->base[0]) ==
-        tv_rawload_acq(&currentcaller[bc_a(calls[0])+2u+LJ_FR2]) &&
-      tv_rawload_acq(&owner->base[1]) ==
-        tv_rawload_acq(&currentcaller[bc_a(calls[0])+3u+LJ_FR2]) &&
-      tv_rawload_acq(&owner->base[2]) ==
-        tv_rawload_acq(&currentcaller[bc_a(calls[0])+4u+LJ_FR2]))
-    return 1;
+      lj_trace_arm64_lua_leaf_forward_call(J->fn, fn,
+					    funcproto(fn)->numparams) &&
+      (uintptr_t)owner->base + funcproto(fn)->numparams*sizeof(TValue) <= stackhi) {
+    MSize i;
+    for (i = 0; i < funcproto(fn)->numparams; i++)
+      if (tv_rawload_acq(&owner->base[i]) !=
+          tv_rawload_acq(&currentcaller[bc_a(calls[0])+2u+LJ_FR2+i]))
+        break;
+    if (i == funcproto(fn)->numparams) return 1;
+  }
   return J->fn == fn && J->pt == pt;
 }
 
