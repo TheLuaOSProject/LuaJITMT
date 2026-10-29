@@ -20,7 +20,27 @@ typedef struct { Arm64FloatPair inner; float tail; int extra; }
   Arm64NestedFloatWithInt;
 typedef struct { Arm64FloatPair inner; float a, b, c; }
   Arm64NestedFloatQuint;
+typedef struct { float lane[1]; } Arm64ArrayFloatOne;
+typedef struct { Arm64ArrayFloatOne inner; } Arm64NestedArrayFloatOne;
 typedef struct { float lane[2]; } Arm64ArrayFloatPair;
+typedef struct { Arm64ArrayFloatPair inner; } Arm64NestedArrayFloatPair;
+typedef struct { float lane[2][2]; } Arm64FloatGridFour;
+typedef struct { Arm64FloatGridFour inner; } Arm64NestedFloatGridFour;
+typedef struct { double lane[4]; } Arm64DoubleArrayQuad;
+typedef struct { Arm64DoubleArrayQuad inner; } Arm64NestedDoubleArrayQuad;
+typedef struct { float lane[5]; } Arm64FloatArrayQuint;
+typedef struct __attribute__((aligned(16))) {
+  float lane[4];
+} Arm64OverAlignedFloatArrayQuad;
+typedef struct { Arm64OverAlignedFloatArrayQuad inner; }
+  Arm64NestedOverAlignedFloatArrayQuad;
+typedef struct { struct { float lane[2]; }; }
+  Arm64AnonymousArrayPair;
+typedef struct { Arm64ArrayFloatPair inner; }
+  Arm64NestedArrayFloatPairResult;
+typedef double _Complex Arm64ComplexDouble;
+typedef struct { Arm64ComplexDouble value; } Arm64ComplexArrayMember;
+typedef struct { float lane[?]; } Arm64VlaFloatArray;
 typedef struct __attribute__((aligned(8))) {
   float lo, hi;
 } Arm64OverAlignedNestedPair;
@@ -45,6 +65,17 @@ typedef double (*Arm64NestedFloatPairFn)(Arm64NestedFloatPair, double);
 typedef double (*Arm64SiblingNestedFloatTripleFn)(
   Arm64SiblingNestedFloatTriple, double);
 typedef double (*Arm64NestedDoubleQuadFn)(Arm64NestedDoubleQuad, double);
+typedef double (*Arm64NestedArrayFloatPairFn)(Arm64NestedArrayFloatPair, double);
+typedef double (*Arm64NestedArrayFloatOneFn)(Arm64NestedArrayFloatOne, double);
+typedef double (*Arm64NestedFloatGridFourFn)(Arm64NestedFloatGridFour, double);
+typedef double (*Arm64NestedDoubleArrayQuadFn)(Arm64NestedDoubleArrayQuad, double);
+typedef double (*Arm64FloatArrayQuintFn)(Arm64FloatArrayQuint, double);
+typedef double (*Arm64NestedOverAlignedFloatArrayQuadFn)(
+  Arm64NestedOverAlignedFloatArrayQuad, double);
+typedef double (*Arm64AnonymousArrayPairFn)(Arm64AnonymousArrayPair, double);
+typedef double (*Arm64ComplexArrayMemberFn)(Arm64ComplexArrayMember, double);
+typedef double (*Arm64VlaFloatArrayFn)(Arm64VlaFloatArray, double);
+typedef Arm64NestedArrayFloatPairResult (*Arm64NestedArrayFloatPairResultFn)(uint32_t);
 typedef Arm64NestedFloatTripleResult (*Arm64NestedFloatTripleResultFn)(uint32_t);
 typedef double (*Arm64NestedFloatWithIntFn)(Arm64NestedFloatWithInt, double);
 typedef double (*Arm64NestedFloatQuintFn)(Arm64NestedFloatQuint, double);
@@ -126,6 +157,7 @@ double arm64_take_nested_float_pair_alt(Arm64NestedFloatPair, double);
 double arm64_take_sibling_nested_float_triple(
   Arm64SiblingNestedFloatTriple, double);
 double arm64_take_nested_double_quad(Arm64NestedDoubleQuad, double);
+double arm64_take_nested_array_float_pair(Arm64NestedArrayFloatPair, double);
 double arm64_take_float_one_double_salt(Arm64FloatOne, double);
 double arm64_take_double_one_double_salt(Arm64DoubleOne, double);
 double arm64_take_float_triple_double_salt(Arm64FloatTriple, double);
@@ -273,6 +305,29 @@ _G.__arm64_float_pair_double_salt_fn = lib.arm64_take_float_pair_double_salt
 _G.__arm64_nested_float_pair_fn = ffi.cast('Arm64NestedFloatPairFn', nil)
 _G.__arm64_sibling_nested_float_triple_fn = lib.arm64_take_sibling_nested_float_triple
 _G.__arm64_nested_double_quad_fn = lib.arm64_take_nested_double_quad
+_G.__arm64_nested_array_float_pair_fn = lib.arm64_take_nested_array_float_pair
+_G.__arm64_nested_array_float_one_fn =
+  ffi.cast('Arm64NestedArrayFloatOneFn', nil)
+_G.__arm64_nested_array_float_one_type = ffi.new('Arm64NestedArrayFloatOne')
+_G.__arm64_nested_array_float_pair_type = ffi.new('Arm64NestedArrayFloatPair')
+_G.__arm64_nested_float_grid_four_type = ffi.new('Arm64NestedFloatGridFour')
+_G.__arm64_nested_double_array_quad_type = ffi.new('Arm64NestedDoubleArrayQuad')
+_G.__arm64_nested_array_float_pair_result_type =
+  ffi.new('Arm64NestedArrayFloatPairResult')
+_G.__arm64_nested_array_float_pair_result_fn =
+  ffi.cast('Arm64NestedArrayFloatPairResultFn', nil)
+_G.__arm64_nested_float_grid_four_fn =
+  ffi.cast('Arm64NestedFloatGridFourFn', nil)
+_G.__arm64_nested_double_array_quad_fn =
+  ffi.cast('Arm64NestedDoubleArrayQuadFn', nil)
+_G.__arm64_float_array_quint_fn = ffi.cast('Arm64FloatArrayQuintFn', nil)
+_G.__arm64_nested_overaligned_float_array_quad_fn =
+  ffi.cast('Arm64NestedOverAlignedFloatArrayQuadFn', nil)
+_G.__arm64_anonymous_array_pair_fn =
+  ffi.cast('Arm64AnonymousArrayPairFn', nil)
+_G.__arm64_complex_array_member_fn =
+  ffi.cast('Arm64ComplexArrayMemberFn', nil)
+_G.__arm64_vla_float_array_fn = ffi.cast('Arm64VlaFloatArrayFn', nil)
 _G.__arm64_nested_float_triple_result_type = ffi.new('Arm64NestedFloatTripleResult')
 _G.__arm64_nested_float_triple_result_fn =
   ffi.cast('Arm64NestedFloatTripleResultFn', nil)
@@ -1986,6 +2041,73 @@ end
          'sibling/nested float triple failed post-GC native re-entry/exit')
   assert(lib.arm64_aggregate_count(64) == 320,
          'sibling/nested float triple post-GC effects were lost or replayed')
+  local array_candidate_chunk = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@nested-float-array-pair-candidate'))
+  local array_oracle_chunk = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@nested-float-array-pair-oracle'))
+  local array_clone_chunk = assert(loadstring([[
+return function(n, fn, value, salt)
+  local sum = 0
+  for i = 1, n do sum = sum + fn(value, salt) end
+  return sum
+end
+]], '@nested-float-array-pair-clone'))
+  jit.off(array_oracle_chunk, true)
+  jit.off(array_clone_chunk, true)
+  local array_candidate = array_candidate_chunk()
+  local array_oracle = array_oracle_chunk()
+  local array_clone = array_clone_chunk()
+  _G.__arm64_nested_array_float_pair_candidate = array_candidate
+  _G.__arm64_nested_array_float_pair_clone = array_clone
+  _set_nested_hfa_array_candidate(array_candidate)
+  tracked_exit_roots = roots(array_candidate)
+  exits = 0
+  jit.on(array_candidate, true)
+  local array_pair = ffi.new('Arm64NestedArrayFloatPair')
+  array_pair.inner.lane[0], array_pair.inner.lane[1] = 1.25, 2.5
+  local array_fn = lib.arm64_take_nested_array_float_pair
+  for pass = 1, 8 do
+    tracked_exit_roots = roots(array_candidate)
+    assert(array_candidate(16, array_fn, array_pair, 3.75) ==
+           array_oracle(16, array_fn, array_pair, 3.75),
+           'nested float array disagreed with interpreted oracle')
+  end
+  if _nested_hfa_array_native_count() == 0 or exits == 0 then
+    local trace_summary = {}
+    for no in pairs(roots(array_candidate)) do
+      local info = jitutil.traceinfo(no)
+      trace_summary[#trace_summary+1] = tostring(no)..':'..
+        (info and tostring(info.nins) or 'missing')
+    end
+    error('nested float array lacked native witness: finish='..
+      tostring(_nested_hfa_array_native_count())..', exits='..tostring(exits)..
+      ', traces='..table.concat(trace_summary, ',')..', effects='..
+      tostring(lib.arm64_aggregate_count(66)))
+  end
+  assert(lib.arm64_aggregate_count(66) == 256,
+         'nested float array C effects were lost or replayed')
+  local array_before_gc = _nested_hfa_array_native_count()
+  collectgarbage('collect')
+  tracked_exit_roots = roots(array_candidate)
+  exits = 0
+  array_pair = ffi.new('Arm64NestedArrayFloatPair')
+  array_pair.inner.lane[0], array_pair.inner.lane[1] = 1.25, 2.5
+  assert(array_candidate(32, array_fn, array_pair, 3.75) ==
+         array_oracle(32, array_fn, array_pair, 3.75))
+  assert(_nested_hfa_array_native_count() > array_before_gc and exits > 0,
+         'nested float array failed post-GC native re-entry/exit')
+  assert(lib.arm64_aggregate_count(66) == 320,
+         'nested float array post-GC effects were lost or replayed')
   tracked_exit_roots = nil
 end
 

@@ -87,9 +87,10 @@ typedef struct LJArm64HFAWalk {
 static int lj_ccall_arm64_raw_type(CTState *cts, CTypeID id,
 				   CType *out, CTypeID *rawid);
 
-/* Recursively flatten bounded named nested structs. Every aggregate must be
-** tightly packed at its natural alignment; arrays, anonymous subtypes, unions,
-** VLA/vector/ref members and over-aligned wrappers stay closed. */
+/* Recursively flatten bounded named structs and fixed-size arrays. Every
+** aggregate must be tightly packed at natural alignment; anonymous subtypes,
+** unions, VLA/vector/complex/ref members and over-aligned wrappers stay closed.
+** The nested bit also keeps these new argument shapes out of result channels. */
 static int lj_ccall_arm64_hfa_flatten(LJArm64HFAWalk *walk, CTypeID id,
 					      CTSize base, unsigned depth)
 {
@@ -118,6 +119,40 @@ static int lj_ccall_arm64_hfa_flatten(LJArm64HFAWalk *walk, CTypeID id,
   info = ctype_info_acq(&ct);
   size = ctype_size_acq(&ct);
   if (info & (CTF_REF|CTF_VLA)) return 0;
+  if (ctype_isarray(info)) {
+    CType element;
+    CTypeID elementid = ctype_cid(info), elementraw;
+    CTInfo elementinfo;
+    CTSize elementsize, count, i;
+    unsigned elementalign;
+    if ((info & (CTF_VLA|CTF_VECTOR|CTF_COMPLEX)) ||
+        ctype_isvltype(info) || !elementid || size == 0 ||
+        size == CTSIZE_INVALID ||
+        !lj_ccall_arm64_raw_type(walk->cts, elementid, &element,
+                                 &elementraw))
+      return 0;
+    elementinfo = ctype_info_acq(&element);
+    elementsize = ctype_size_acq(&element);
+    elementalign = ctype_align(elementinfo);
+    if (ctype_iscomplex(elementinfo) || ctype_isvltype(elementinfo) ||
+        elementsize == 0 ||
+        elementsize == CTSIZE_INVALID || size % elementsize != 0 ||
+        ctype_align(info) != elementalign || declared_align > elementalign)
+      return 0;
+    count = size / elementsize;
+    if (count == 0 || count > 4 ||
+        (walk->member_size && size / walk->member_size > 4))
+      return 0;
+    walk->nested = 1;
+    for (i = 0; i < count; i++)
+      if (!lj_ccall_arm64_hfa_flatten(walk, elementid,
+                                      base+i*elementsize, depth+1))
+        return 0;
+    if (walk->count == start_count ||
+        (walk->count-start_count)*walk->member_size != size)
+      return 0;
+    return 1;
+  }
   if (ctype_isnum(info) && ctype_isfp(info) && !ctype_iscomplex(info)) {
     unsigned align;
     if (size != sizeof(float) && size != sizeof(double)) return 0;
