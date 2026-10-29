@@ -261,7 +261,7 @@ static void admission(GCtrace *T)
   }
   if (!child) child=loopmap; /* NUM iterator has no child overflow map. */
   for (int allocated=0;allocated<2;allocated++) {
-    for (unsigned m=0;m<13;m++) {
+    for (unsigned m=0;m<14;m++) {
       fixture_reset(&f);
       if (!admit(&f,allocated)) {
         LJArm64IRReject reject={0};
@@ -301,6 +301,10 @@ static void admission(GCtrace *T)
         assert(pc<iter.call_pc);
         setbc_a(&proto_bc(f.pt)[pc],iter.base-2u); break;
       }
+      case 13:
+        assert(control && snap_ref(f.map[control]) != state);
+        f.map[control]=(f.map[control]&~0xffffu)|state;
+        break;
       }
       if (admit(&f,allocated)) {
         fprintf(stderr,"iterator accepted mutation %u postra=%d\n",m,allocated);

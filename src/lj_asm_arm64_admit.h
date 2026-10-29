@@ -12672,8 +12672,9 @@ static IRRef arm64_iterl_ir_map_slot(const GCtrace *T, const SnapShot *snap,
 }
 
 /* Reconstruct child arguments from their own mixed-frame snapshot. The
-** hidden state is invariant; caller control is checked against the prior
-** return's PHI, not the potentially dead caller stack slot. */
+** hidden state is invariant; the child control comes from the preceding
+** iterator result lineage, not from assuming a caller slot was already
+** copied at this mixed-frame snapshot. */
 static int arm64_iterl_ir_frame_args(const GCtrace *T, const SnapShot *snap,
                                      const LJArm64IteratorSource *iter,
                                      MSize base, IRRef *args)
@@ -12687,10 +12688,10 @@ static int arm64_iterl_ir_frame_args(const GCtrace *T, const SnapShot *snap,
   return 1;
 }
 
-/* ITERL reads the loop-visible bytecode register A; relative to the top
-** frame its absolute snapshot slot is A+1+LJ_FR2. Bind that live body value
-** to the first result or later child input. The distinct A-1 control slot is
-** dead until ITERL's nil test/copy completes. */
+/* At the LOOP body footer, ITERL has already tested the visible register A
+** and copied it into hidden control A-1. The body reads A and the next
+** ITERC consumes A-1, so both exact, unflagged snapshot slots must carry the
+** same value. */
 static int arm64_iterl_ir_result(const jit_State *J, const GCtrace *T,
                                  SnapNo child, IRRef input, IRRef result)
 {
@@ -12700,7 +12701,7 @@ static int arm64_iterl_ir_result(const jit_State *J, const GCtrace *T,
   MSize loopref = J->loopref;
   uint64_t footer;
   const SnapShot *loopmap = NULL;
-  IRRef visible;
+  IRRef visible, control;
   if (!lj_asm_arm64_iterl_tuple(J->pt, trace_startpc_acq((GCtrace *)T),
                                T->startins, T->startins, 1, &iter) ||
       !arm64_iterl_scalar_body(J->pt, &iter)) return 0;
@@ -12719,7 +12720,10 @@ static int arm64_iterl_ir_result(const jit_State *J, const GCtrace *T,
        !arm64_scalar_ir_ref(T, result, T->nins, IRT_NUM))) return 0;
   visible = arm64_iterl_ir_map_slot(T, loopmap,
                                     iter.base+1u+LJ_FR2);
-  if (!visible) return 0;
+  control = arm64_iterl_ir_map_slot(T, loopmap, iter.base+LJ_FR2);
+  if (!visible || visible != control ||
+      (!arm64_scalar_ir_ref(T, control, loopref, IRT_INT) &&
+       !arm64_scalar_ir_ref(T, control, loopref, IRT_NUM))) return 0;
   if (T->snap[child].ref < loopref) {
     int ok = visible == result && (!input ||
       arm64_scalar_ir_ref(T, input, loopref, IRT_INT) ||
@@ -16764,8 +16768,8 @@ static int arm64_iterl_postra_frame_args(const LJArm64PostRAView *v,
 }
 
 /* Independently validate the exact LOOP footer and the source-ordered
-** previous-input/current-result PHI. ITERL's contiguous nil-test/copy makes
-** the caller control slot dead until its overwrite. */
+** previous-input/current-result PHI. At this body footer ITERL has copied
+** visible A into hidden control A-1, which the next ITERC consumes. */
 static int arm64_iterl_postra_result(const LJArm64PostRAView *v,
                                      MSize child, IRRef input, IRRef result,
                                      IRRef loop)
@@ -16775,7 +16779,7 @@ static int arm64_iterl_postra_result(const LJArm64PostRAView *v,
   MSize s, ofs, nent;
   IRRef r, phiref = 0;
   SnapEntry words[2];
-  IRRef visible;
+  IRRef visible, control;
   uint64_t footer;
   if (!v->owner || !lj_asm_arm64_iterl_tuple(v->proto, v->startpc,
       v->startins, v->owner_private ? v->startins : BCINS_AD(BC_JITERL,
@@ -16800,7 +16804,10 @@ static int arm64_iterl_postra_result(const LJArm64PostRAView *v,
       v->proto_bc+iter.body_pc) return 0;
   visible = arm64_iterl_postra_map_slot(v, sn,
                                         iter.base+1u+LJ_FR2);
-  if (!visible) return 0;
+  control = arm64_iterl_postra_map_slot(v, sn, iter.base+LJ_FR2);
+  if (!visible || visible != control ||
+      (!arm64_scalar_postra_ref(v, control, loop, IRT_INT) &&
+       !arm64_scalar_postra_ref(v, control, loop, IRT_NUM))) return 0;
   if (snap_ref_acq(&v->snap[child]) < loop) {
     return visible == result && (!input ||
       arm64_scalar_postra_ref(v,input,loop,IRT_INT) ||
