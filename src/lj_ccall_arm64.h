@@ -239,9 +239,9 @@ static int lj_ccall_arm64_integer_aggregate_class(CTState *cts, CTypeID id,
   return 1;
 }
 
-/* Keep the first ARM64 JIT HFA increment to the demonstrated two-float,
-** tightly laid out Darwin shape. This is enough to exercise the two-SIMD
-** register allocation without importing nested/array HFA traversal. */
+/* Admit only direct, tightly laid out Darwin float/double HFAs of one or two
+** members and at most one eightbyte. Nested and array HFA traversal stays
+** outside this scalar carrier path. */
 static int lj_ccall_arm64_float_hfa_class(CTState *cts, CTypeID id,
 					 LJArm64FloatHFA *hfa,
 					 CTypeID *rawid)
@@ -250,10 +250,10 @@ static int lj_ccall_arm64_float_hfa_class(CTState *cts, CTypeID id,
   CTInfo info;
   CTypeID fid;
   unsigned count = 0;
+  CTSize member_size = 0;
   if (!lj_ccall_arm64_raw_type(cts, id, &ct, rawid)) return 0;
   info = ctype_info_acq(&ct);
-  if (!ctype_isstruct(info) || (info & CTF_UNION) || ctype_isvltype(info) ||
-	ctype_size_acq(&ct) != 2u*sizeof(float) || ctype_align(info) != 2)
+  if (!ctype_isstruct(info) || (info & CTF_UNION) || ctype_isvltype(info))
     return 0;
   for (fid = ctype_sib_acq(&ct); fid; ) {
     CTInfo finfo;
@@ -269,17 +269,22 @@ static int lj_ccall_arm64_float_hfa_class(CTState *cts, CTypeID id,
     info = ctype_info_acq(&member);
     size = ctype_size_acq(&member);
     if (!ctype_isnum(info) || !ctype_isfp(info) || ctype_iscomplex(info) ||
-	size != sizeof(float) || offset != count*sizeof(float))
+	(size != sizeof(float) && size != sizeof(double)) ||
+	(member_size != 0 && size != member_size) ||
+	offset != count*size || count*size+size > 8)
       return 0;
+    member_size = size;
     if (hfa != NULL) hfa->offset[count] = (uint8_t)offset;
     count++;
   }
-  if (count != 2) return 0;
+  if (count == 0 || ctype_size_acq(&ct) != count*member_size ||
+      ctype_align(ctype_info_acq(&ct)) !=
+	(member_size == sizeof(float) ? 2u : 3u)) return 0;
   if (hfa != NULL) {
     hfa->count = (uint8_t)count;
-    hfa->member_size = sizeof(float);
-    hfa->size = 2u*sizeof(float);
-    hfa->align = 2;
+    hfa->member_size = (uint8_t)member_size;
+    hfa->size = (uint8_t)(count*member_size);
+    hfa->align = (uint8_t)ctype_align(ctype_info_acq(&ct));
   }
   return 1;
 }

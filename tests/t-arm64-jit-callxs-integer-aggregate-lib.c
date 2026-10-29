@@ -8,6 +8,8 @@
 
 typedef struct { uint32_t lo, hi; } arm64_int_pair;
 typedef struct { float lo, hi; } arm64_float_pair;
+typedef struct { float value; } arm64_float_one;
+typedef struct { double value; } arm64_double_one;
 typedef struct { arm64_int_pair pair; uint32_t tag; } arm64_nested_pair;
 typedef union { uint64_t u; double d; } arm64_mixed_union;
 typedef struct { uint8_t value; } arm64_byte;
@@ -29,6 +31,9 @@ enum {
   ARM64_BIG_PAIR,
   ARM64_BITFIELD,
   ARM64_PAIR_NO_GPR,
+  ARM64_FLOAT_ONE_SALT,
+  ARM64_DOUBLE_ONE_SALT,
+  ARM64_VARARG_I32,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -69,6 +74,26 @@ LJ_EXPORT double arm64_take_float_pair_double_salt(arm64_float_pair value,
 {
   calls[ARM64_FLOAT_PAIR_SALT]++;
   return (double)value.lo + (double)value.hi*2.0 + salt;
+}
+
+LJ_EXPORT double arm64_take_float_one_double_salt(arm64_float_one value,
+						   double salt)
+{
+  calls[ARM64_FLOAT_ONE_SALT]++;
+  return (double)value.value + salt;
+}
+
+LJ_EXPORT double arm64_take_double_one_double_salt(arm64_double_one value,
+						    double salt)
+{
+  calls[ARM64_DOUBLE_ONE_SALT]++;
+  return value.value + salt;
+}
+
+LJ_EXPORT int32_t arm64_vararg_i32(int32_t first, ...)
+{
+  calls[ARM64_VARARG_I32]++;
+  return first;
 }
 
 LJ_EXPORT uint32_t arm64_take_nested_pair(arm64_nested_pair value)

@@ -71,16 +71,17 @@ static int get_hfa_trace_count(lua_State *L)
   for (no = 1; (MSize)no < trace_sizetrace_acq(J); no++) {
     GCtrace *T = traceref_safe(J, no);
     IRRef ref;
-    unsigned floats = 0, calls = 0;
+    unsigned members = 0, calls = 0;
     if (T == NULL || !trace_runnable_acq(T, no) ||
 	trace_root_acq(T) != 0 || trace_startpt_acq(T) != hfa_candidate_pt)
       continue;
     for (ref = REF_BASE; ref < trace_nins_acq(T); ref++) {
       IRIns ins = ir_load_acq(&trace_ir_acq(T)[ref]);
-      floats += ins.o == IR_XLOAD && irt_type(ins.t) == IRT_FLOAT;
+      members += ins.o == IR_XLOAD &&
+	(irt_type(ins.t) == IRT_FLOAT || irt_type(ins.t) == IRT_NUM);
       calls += ins.o == IR_CALLXS;
     }
-    if (floats >= 2 && calls) count++;
+    if (members != 0 && calls) count++;
   }
   lua_pushinteger(L, (lua_Integer)count);
   return 1;
@@ -300,6 +301,33 @@ static void assert_float_hfa_salt_signature(lua_State *L, const char *name)
 	 !abi.stack_size);
 }
 
+static void assert_one_hfa_signature(lua_State *L, const char *name,
+				     unsigned member_size)
+{
+  LJArm64ABISignature abi;
+  assert(lj_ccall_arm64_signature(ctype_ctsG(G(L)),
+				 global_cdata_ctype(L, name), &abi));
+  assert(abi.nargs == 2 && abi.nparams == 2 &&
+	 abi.result_class == LJ_ARM64_ABI_FPR &&
+	 abi.arg[0].kind == LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER &&
+	 abi.arg[0].source_index == 0 && abi.arg[0].member_index == 0 &&
+	 abi.arg[0].member_count == 1 && abi.arg[0].size == member_size &&
+	 abi.arg[0].reg == 0 &&
+	 abi.arg[1].kind == LJ_ARM64_ABI_KIND_FLOAT &&
+	 abi.arg[1].source_index == 1 && abi.arg[1].reg == 1 &&
+	 !abi.stack_size);
+}
+
+static void assert_vararg_scalar_signature(lua_State *L, const char *name)
+{
+  LJArm64ABISignature abi;
+  assert(lj_ccall_arm64_signature(ctype_ctsG(G(L)),
+				 global_cdata_ctype(L, name), &abi));
+  assert(abi.is_vararg && abi.nparams == 1 && abi.nargs == 1 &&
+	 abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER &&
+	 abi.result_size == sizeof(int32_t));
+}
+
 static void test_aggregate_signatures(lua_State *L)
 {
   assert_aggregate_signature(L, "__arm64_int_pair_fn", 8);
@@ -308,7 +336,15 @@ static void test_aggregate_signatures(lua_State *L)
   assert_aggregate_signature(L, "__arm64_word_fn", 4);
   assert_float_hfa_signature(L, "__arm64_float_pair_fn");
   assert_float_hfa_salt_signature(L, "__arm64_float_pair_double_salt_fn");
+  assert_one_hfa_signature(L, "__arm64_float_one_double_salt_fn",
+			   sizeof(float));
+  assert_one_hfa_signature(L, "__arm64_double_one_double_salt_fn",
+			   sizeof(double));
+  assert_vararg_scalar_signature(L, "__arm64_vararg_i32_fn");
   assert_unsupported_aggregate_signature(L, "__arm64_float_vararg_fn");
+  assert_unsupported_aggregate_signature(L, "__arm64_mixed_float_hfa_fn");
+  assert_unsupported_aggregate_signature(L, "__arm64_double_pair_fn");
+  assert_unsupported_aggregate_signature(L, "__arm64_float_triple_fn");
   assert_unsupported_aggregate_signature(L, "__arm64_nested_pair_fn");
   assert_unsupported_aggregate_signature(L, "__arm64_mixed_union_fn");
   assert_unsupported_aggregate_signature(L, "__arm64_big_pair_fn");
@@ -485,7 +521,8 @@ static void test_live_aggregate_admission(lua_State *L, GCtrace *T,
   copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
   postra = fx.view;
   postra.ir = fx.postra;
-	fx.postra[load].r = load_type == IRT_FLOAT ? RID_X0 : RID_D0;
+	fx.postra[load].r = (load_type == IRT_FLOAT || load_type == IRT_NUM) ?
+	  RID_X0 : RID_D0;
   assert(!lj_asm_arm64_postra_admit(&postra, &semantic_nins));
   copy_trace_ir(fx.postra, trace_ir_acq(T), nk, nins);
   postra = fx.view;
@@ -556,14 +593,15 @@ static void observe_native_finish(TGState *tg)
   if (hfa_candidate_pt != NULL && trace_root_acq(T) == 0 &&
       trace_startpt_acq(T) == hfa_candidate_pt &&
       bc_op(trace_startins_acq(T)) == BC_FORL) {
-    unsigned float_loads = 0;
+    unsigned hfa_loads = 0;
     int callxs = 0;
     for (ref = REF_BASE; ref < trace_nins_acq(T); ref++) {
       IRIns ins = ir_load_acq(&trace_ir_acq(T)[ref]);
       callxs |= ins.o == IR_CALLXS;
-      float_loads += ins.o == IR_XLOAD && irt_type(ins.t) == IRT_FLOAT;
+	  hfa_loads += ins.o == IR_XLOAD &&
+	    (irt_type(ins.t) == IRT_FLOAT || irt_type(ins.t) == IRT_NUM);
     }
-    if (callxs && float_loads >= 2) hfa_native_finishes++;
+    if (callxs && hfa_loads != 0) hfa_native_finishes++;
   }
   native_finishes++;
 }
@@ -604,11 +642,46 @@ int main(int argc, char **argv)
     GCproto *pt = global_proto(L, "__arm64_float_hfa_candidate");
     jit_State *J = G2J(G(L));
     GCtrace *T = find_aggregate_trace(J, pt, IRT_FLOAT);
-    assert(pt == hfa_candidate_pt && T != NULL);
+    assert(T != NULL);
     meta_pc = aggregate_meta_pc(T);
     assert(meta_pc != NULL);
     test_live_aggregate_admission(L, T, meta_pc,
 	"__arm64_float_hfa_clone", IRT_FLOAT);
+  }
+  {
+    GCproto *pt = global_proto(L, "__arm64_float_one_candidate");
+    jit_State *J = G2J(G(L));
+    GCtrace *T = find_aggregate_trace(J, pt, IRT_FLOAT);
+    assert(T != NULL);
+    meta_pc = aggregate_meta_pc(T);
+    assert(meta_pc != NULL);
+    test_live_aggregate_admission(L, T, meta_pc,
+	"__arm64_float_one_clone", IRT_FLOAT);
+  }
+  {
+    GCproto *pt = global_proto(L, "__arm64_double_one_candidate");
+    jit_State *J = G2J(G(L));
+    GCtrace *T = find_aggregate_trace(J, pt, IRT_NUM);
+    assert(T != NULL);
+    meta_pc = aggregate_meta_pc(T);
+    assert(meta_pc != NULL);
+    test_live_aggregate_admission(L, T, meta_pc,
+	"__arm64_double_one_clone", IRT_NUM);
+  }
+  {
+    GCproto *pt = global_proto(L, "__arm64_integer_callm_candidate");
+    jit_State *J = G2J(G(L));
+    GCtrace *T = find_aggregate_trace(J, pt, IRT_U64);
+    IRRef ref;
+    unsigned calls = 0;
+    assert(T != NULL);
+    for (ref = REF_BASE; ref < trace_nins_acq(T); ref++)
+	if (ir_load_acq(&trace_ir_acq(T)[ref]).o == IR_CALLXS) calls++;
+    assert(calls >= 2);
+    meta_pc = aggregate_meta_pc(T);
+    assert(meta_pc != NULL);
+    test_live_aggregate_admission(L, T, meta_pc,
+	"__arm64_integer_callm_clone", IRT_U64);
   }
   {
     GCproto *pt = global_proto(L, "__arm64_integer_aggregate_candidate");
