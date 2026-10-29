@@ -57,3 +57,18 @@ No production capacity change is included yet. Required validation includes
 negatives beyond the old bound, ordinary matched x64 behavior, full GC and
 exact code reuse, middle/root teardown and repeated native reentry, plus all
 four ARM64 profiles and the existing wide shallow graph cases.
+
+## Copied ancestry storage preparation
+
+The assembler snapshot now retains its inline 64-row storage for ordinary
+chains and can select recorder-owned reusable storage for a deeper chain.
+Reservation occurs outside the SMR read section and the exact parent view is
+revalidated after reacquiring it. The allocation is based on parent depth,
+not sibling-list width, and is released with the JIT state. Private-copy
+admission tests detach large ancestry rows before mutating them.
+
+The ARM64 assertion side-admission contract passed with this preparation
+(`capacity-storage-assert.log` in the integration evidence directory), and the
+ordinary profile was restored. The publication capacity policy is unchanged
+in this checkpoint; the larger allocation path has not yet been exercised by
+a native chain and this is not a capacity-parity claim.

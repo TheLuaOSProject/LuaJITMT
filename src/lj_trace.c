@@ -4583,7 +4583,8 @@ static MSize trace_arm64_side_certificate_depth_held(jit_State *J,
 	GCtrace *T);
 static int trace_arm64_side_ancestry_capture_held(jit_State *J,
 	TraceNo parentno, TraceNo rootno, uint64_t root_generation,
-	LJArm64SideAncestor *ancestry, uint8_t *ancestry_count);
+	LJArm64SideAncestor *ancestry, MSize ancestry_capacity,
+	uint16_t *ancestry_count);
 static int trace_arm64_side_graph_valid(jit_State *J, GCtrace *root,
 	TraceNo rootno, TraceNo head, MSize count);
 
@@ -6460,6 +6461,22 @@ static int trace_arm64_side_parent_ref_copy(const IRIns *ir, IRRef nins,
 	IRRef nk, IRRef snapref, IRRef ref,
 	LJArm64SideParentMapValue *value);
 
+/* Small parent chains stay in the caller's inline snapshot. Larger chains
+** use recorder-owned storage reserved before taking the capture reader. */
+static int trace_arm64_side_ancestry_storage(jit_State *J,
+    LJArm64SideParentSnapshot *snapshot, MSize needed)
+{
+  snapshot->parent_ancestry = snapshot->parent_ancestry_inline;
+  snapshot->parent_ancestry_capacity = LJ_ARM64_SIDE_MAX_ANCESTRY;
+  if (needed > LJ_ARM64_SIDE_MAX_ANCESTRY) {
+    if (needed > UINT16_MAX || !J->arm64_side_ancestry ||
+        J->arm64_side_ancestry_size < needed) return 0;
+    snapshot->parent_ancestry = J->arm64_side_ancestry;
+    snapshot->parent_ancestry_capacity = J->arm64_side_ancestry_size;
+  }
+  return 1;
+}
+
 int lj_trace_arm64_side_parent_snapshot(jit_State *J,
 	LJArm64SideParentSnapshot *snapshot)
 {
@@ -6467,7 +6484,7 @@ int lj_trace_arm64_side_parent_snapshot(jit_State *J,
   TraceArm64FirstSideLoopView view, rootview;
   const TraceArm64FirstSideLoopView *rootviewp = NULL;
   const SnapShot *src;
-  MSize ofs, nent, extent, i;
+  MSize ofs, nent, extent, i, ancestry_needed;
   global_State *g;
   int ok = 0;
 
@@ -6484,6 +6501,29 @@ int lj_trace_arm64_side_parent_snapshot(jit_State *J,
 	{
     goto out;
 	}
+  ancestry_needed = view.parent == view.rootbody ? 0u :
+    trace_arm64_side_certificate_depth_held(J, view.parent);
+  if (ancestry_needed == 0 && view.parent != view.rootbody) goto out;
+  if (ancestry_needed > LJ_ARM64_SIDE_MAX_ANCESTRY &&
+      ancestry_needed > J->arm64_side_ancestry_size) {
+    MSize needed = ancestry_needed;
+    if (needed > UINT16_MAX) goto out;
+    needed = needed <= UINT16_MAX/2u ? needed*2u : UINT16_MAX;
+    lj_gc2_smr_read_leave(g);
+    J->arm64_side_ancestry = (LJArm64SideAncestor *)lj_mem_realloc(J->L,
+      J->arm64_side_ancestry,
+      (MSize)(J->arm64_side_ancestry_size*sizeof(LJArm64SideAncestor)),
+      (MSize)(needed*sizeof(LJArm64SideAncestor)));
+    J->arm64_side_ancestry_size = needed;
+    if (!lj_gc2_smr_read_try(g)) return 0;
+    if (!trace_arm64_side_parent_revalidate_held(J, &cert, &view) ||
+        view.snap == NULL || view.snapmap == NULL ||
+        (MSize)cert.exitno >= view.nsnap) goto out;
+    ancestry_needed = view.parent == view.rootbody ? 0u :
+      trace_arm64_side_certificate_depth_held(J, view.parent);
+    if ((ancestry_needed == 0 && view.parent != view.rootbody) ||
+        ancestry_needed > J->arm64_side_ancestry_size) goto out;
+  }
   if (view.rootbody != view.parent) {
 	TraceNo directno;
 	ExitNo rootexit;
@@ -6530,8 +6570,10 @@ int lj_trace_arm64_side_parent_snapshot(jit_State *J,
   snapshot->root_generation = rootviewp != NULL ? rootview.root_generation :
 	view.root_generation;
   if (snapshot->root_generation == 0 ||
+      !trace_arm64_side_ancestry_storage(J, snapshot, ancestry_needed) ||
 	  !trace_arm64_side_ancestry_capture_held(J, view.traceno,
 	    view.rootno, snapshot->root_generation, snapshot->parent_ancestry,
+            snapshot->parent_ancestry_capacity,
 	    &snapshot->parent_ancestry_count))
 	goto out;
   snapshot->parent_base = ir_load_acq(&view.ir[REF_BASE]);
@@ -7289,9 +7331,19 @@ static int trace_arm64_side_context_from_parent(
 	    return 0;
 	  copy->root_generation = la_load64_acq(&rootbody->arm64_generation);
 	}
+  {
+    GCtrace *parent = traceref_safe(J, side->parent);
+    MSize needed;
+    if (!parent) return 0;
+    needed = side->parent == side->root ? 0u :
+      trace_arm64_side_certificate_depth_held(J, parent);
+    if ((needed == 0 && side->parent != side->root) ||
+        !trace_arm64_side_ancestry_storage(J, copy, needed)) return 0;
+  }
   if (copy->root_generation == 0 ||
 	  !trace_arm64_side_ancestry_capture_held(J, side->parent,
 	    side->root, copy->root_generation, copy->parent_ancestry,
+            copy->parent_ancestry_capacity,
 	    &copy->parent_ancestry_count))
 	return 0;
   {
@@ -7433,6 +7485,7 @@ static int trace_arm64_side_context_from_parent(
   side->parent_generation = copy->parent_generation;
   side->root_generation = copy->root_generation;
   side->parent_ancestry_count = copy->parent_ancestry_count;
+  side->parent_ancestry_capacity = copy->parent_ancestry_capacity;
   memcpy(side->parent_root_forl, copy->parent_root_forl,
 	 sizeof(side->parent_root_forl));
   side->parent_root_forl_mask = copy->parent_root_forl_mask;
@@ -7924,6 +7977,7 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
   IRIns *source, *ir;
   SnapShot *snap;
   SnapEntry *snapmap;
+  LJArm64SideAncestor *ancestry_copy = NULL;
   uint16_t parentmap[LJ_MAX_JSLOTS];
   LJArm64SideParentBinding bindings[LJ_MAX_JSLOTS];
   MSize nins, nk, nsnap, nsnapmap, parentmap_n = 0, i;
@@ -8111,6 +8165,18 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
     lj_gc2_smr_read_leave(J2G(J));
     return 0;
     }
+  }
+  if (parentcopy.parent_ancestry_count > LJ_ARM64_SIDE_MAX_ANCESTRY) {
+    size_t bytes = parentcopy.parent_ancestry_count*sizeof(LJArm64SideAncestor);
+    ancestry_copy = (LJArm64SideAncestor *)malloc(bytes);
+    if (!ancestry_copy) {
+      free(ir); free(snap); free(snapmap);
+      lj_gc2_smr_read_leave(J2G(J));
+      return 0;
+    }
+    memcpy(ancestry_copy, parentcopy.parent_ancestry, bytes);
+    side.parent_ancestry = ancestry_copy;
+    side.parent_ancestry_capacity = parentcopy.parent_ancestry_count;
   }
   side.ir = ir;
   side.snap = snap;
@@ -8505,6 +8571,7 @@ validate:
 	&semside, &reject);
   *post_ok = lj_asm_arm64_side_scalar_postra_admit(&postra, &side, NULL);
 done:
+  free(ancestry_copy);
   free(ir); free(snap); free(snapmap);
   lj_gc2_smr_read_leave(J2G(J));
   return 1;
@@ -10879,11 +10946,12 @@ static int trace_arm64_side_certificate_sealed_valid_held(jit_State *J,
 ** the chain without following mutable trace storage. */
 static int trace_arm64_side_ancestry_capture_held(jit_State *J,
 	TraceNo parentno, TraceNo rootno, uint64_t root_generation,
-	LJArm64SideAncestor *ancestry, uint8_t *ancestry_count)
+	LJArm64SideAncestor *ancestry, MSize ancestry_capacity,
+	uint16_t *ancestry_count)
 {
   TraceVec *tv;
   GCtrace *root, *current;
-  MSize depth;
+  MSize depth, count;
   if (J == NULL || parentno == 0 || rootno == 0 || ancestry == NULL ||
 	  ancestry_count == NULL || root_generation == 0 ||
 	  (tv = tracevec_acq(J)) == NULL ||
@@ -10896,11 +10964,13 @@ static int trace_arm64_side_ancestry_capture_held(jit_State *J,
 	  la_load64_acq(&root->arm64_root_cert.generation) != root_generation ||
 	  root->arm64_root_cert.body != root)
 	return 0;
+  count = trace_nchild_acq(root);
+  if (ancestry_capacity > UINT16_MAX || count > tv->sizetrace) return 0;
   *ancestry_count = 0;
   if (parentno == rootno)
 	return 1;
   current = traceref_fromgco_safe(gcref_acq(tv->slot[parentno]));
-  for (depth = 0; depth < LJ_ARM64_SIDE_MAX_ANCESTRY; depth++) {
+  for (depth = 0; depth < ancestry_capacity && depth < count; depth++) {
 	const LJArm64SideCertificate *cert;
 	LJArm64SideAncestor *row = &ancestry[depth];
 	TraceNo currentno, nextno;
@@ -10933,7 +11003,7 @@ static int trace_arm64_side_ancestry_capture_held(jit_State *J,
 	row->exitno = cert->exitno;
 	if (nextno == rootno) {
 	  if (parent_generation != root_generation) return 0;
-	  *ancestry_count = (uint8_t)(depth+1u);
+	  *ancestry_count = (uint16_t)(depth+1u);
 	  return 1;
 	}
 	if ((MSize)nextno >= tv->sizetrace) return 0;
@@ -13898,6 +13968,10 @@ void lj_trace_freestate(global_State *g)
 		 "live trace remained at VM close");
     }
   }
+#endif
+#if LJ_TARGET_ARM64
+  lj_mem_freevec(g, J->arm64_side_ancestry, J->arm64_side_ancestry_size,
+    LJArm64SideAncestor);
 #endif
   lj_mem_freevec(g, J->snapmapbuf, J->sizesnapmap, SnapEntry);
   lj_mem_freevec(g, J->snapbuf, J->sizesnap, SnapShot);

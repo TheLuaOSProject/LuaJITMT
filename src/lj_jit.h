@@ -1222,6 +1222,8 @@ typedef struct jit_State {
 #endif
 #if LJ_TARGET_ARM64
   LJTraceArm64SideParentCert arm64_side_parent;
+  struct LJArm64SideAncestor *arm64_side_ancestry;  /* Token-private scratch. */
+  MSize arm64_side_ancestry_size;
   uint64_t arm64_trace_generation;  /* Recorder-token-owned serial source. */
 #endif
 } jit_State;

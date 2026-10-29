@@ -20094,7 +20094,8 @@ static int arm64_side_immediate_parent_valid(
 	if (!side || !owner || side->parent == 0 || side->root == 0 ||
 	    owner->root != side->root || side->parent == side->traceno ||
 	    side->root_generation == 0 || !side->parent_ancestry ||
-	    side->parent_ancestry_count > LJ_ARM64_SIDE_MAX_ANCESTRY ||
+	    side->parent_ancestry_count > side->parent_ancestry_capacity ||
+	    side->parent_ancestry_capacity > UINT16_MAX ||
 	    side->exitno >= side->parent_nsnap)
 	  return 0;
 	count = side->parent_ancestry_count;
