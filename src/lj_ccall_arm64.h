@@ -57,7 +57,7 @@ typedef struct LJArm64ABISignature {
   uint8_t result_size;
   uint8_t result_unsigned;
   uint8_t result_hfa_count;
-  uint8_t result_hfa_offset[2];
+  uint8_t result_hfa_offset[4];
   uint8_t is_vararg;
   uint8_t nargs;
   uint8_t nparams;
@@ -346,7 +346,7 @@ static int lj_ccall_arm64_float_hfa_result_class(CTState *cts, CTypeID id,
 						 LJArm64FloatHFA *hfa,
 						 CTypeID *rawid)
 {
-  return lj_ccall_arm64_float_hfa_class_limit(cts, id, hfa, rawid, 2, 16);
+  return lj_ccall_arm64_float_hfa_class_limit(cts, id, hfa, rawid, 4, 16);
 }
 
 /* Classify the fixed prefix in Darwin's independent GPR/FPR banks. For a

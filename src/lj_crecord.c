@@ -46,17 +46,18 @@
 #define emitir(ot, a, b)	(lj_ir_set(J, (ot), (a), (b)), lj_opt_fold(J))
 
 #if LJ_TARGET_ARM64 && LJ_TARGET_OSX
-/* HIOP is a paired-result marker consumed by register allocation. Like the
-** split pass, emit it directly so the generic fold dispatcher cannot treat
-** this non-computational IR as an unknown arithmetic operation. */
-static TRef crec_emit_hiresult(jit_State *J, IRType t, TRef lo)
+/* HIOPs form a contiguous result-lane group after CALLXS. Emit them directly
+** so the generic fold dispatcher cannot treat these markers as arithmetic. */
+static TRef crec_emit_hfa_result_lane(jit_State *J, IRType t, TRef call,
+				      unsigned laneidx)
 {
-  TRef hi;
-  lj_ir_set(J, IRT(IR_HIOP, t), lo, lo);
-  hi = lj_ir_emit(J);
-  lj_assertJ(IR(hi & TREF_REFMASK)->o == IR_HIOP,
-             "bad direct HIOP emit %d", IR(hi & TREF_REFMASK)->o);
-  return hi;
+  TRef lane;
+  lj_ir_set(J, IRT(IR_HIOP, t), call,
+	    lj_ir_kint(J, (int32_t)laneidx));
+  lane = lj_ir_emit(J);
+  lj_assertJ(IR(lane & TREF_REFMASK)->o == IR_HIOP,
+             "bad direct HIOP emit %d", IR(lane & TREF_REFMASK)->o);
+  return lane;
 }
 #endif
 
@@ -2726,7 +2727,7 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     IRType t;
     int boxed_result, direct_aggregate_result, indirect_result, rooted_result;
 #if LJ_TARGET_ARM64 && LJ_TARGET_OSX
-    uint8_t direct_hfa_count = 0, direct_hfa_offset[2] = { 0, 0 };
+    uint8_t direct_hfa_count = 0, direct_hfa_offset[4] = { 0, 0, 0, 0 };
 #endif
 
 #if !LJ_HASJIT_FFI_CALLXS
@@ -2791,8 +2792,8 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
 	    &result_hfa, &raw_result)) {
 	t = result_hfa.member_size == sizeof(float) ? IRT_FLOAT : IRT_NUM;
 	direct_hfa_count = result_hfa.count;
-	direct_hfa_offset[0] = result_hfa.offset[0];
-	direct_hfa_offset[1] = result_hfa.offset[1];
+      memcpy(direct_hfa_offset, result_hfa.offset,
+             sizeof(direct_hfa_offset));
       } else {
 	if (!lj_ccall_arm64_integer_aggregate_class(cts, result_id,
 	      &result_abi, &raw_result))
@@ -2909,14 +2910,17 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
       tr = result_box;
     }
 #if LJ_TARGET_ARM64 && LJ_TARGET_OSX
-    else if (direct_hfa_count == 2) {
-      TRef high = crec_emit_hiresult(J, t, tr);
-      TRef lowaddr = emitir(IRT(IR_ADD, IRT_PTR), result_payload,
-			    lj_ir_kintp(J, direct_hfa_offset[0]));
-      TRef highaddr = emitir(IRT(IR_ADD, IRT_PTR), result_payload,
-			     lj_ir_kintp(J, direct_hfa_offset[1]));
-      emitir(IRT(IR_XSTORE, t), lowaddr, tr);
-      emitir(IRT(IR_XSTORE, t), highaddr, high);
+    else if (direct_hfa_count > 1) {
+      TRef lanes[4];
+      unsigned lane;
+      lanes[0] = tr;
+      for (lane = 1; lane < direct_hfa_count; lane++)
+        lanes[lane] = crec_emit_hfa_result_lane(J, t, tr, lane);
+      for (lane = 0; lane < direct_hfa_count; lane++) {
+        TRef addr = emitir(IRT(IR_ADD, IRT_PTR), result_payload,
+                           lj_ir_kintp(J, direct_hfa_offset[lane]));
+        emitir(IRT(IR_XSTORE, t), addr, lanes[lane]);
+      }
       tr = result_box;
     }
 #endif
