@@ -15,6 +15,14 @@ Together these establish `0 <= first-1 < end <= length` before STRREF. The
 existing source, snapshot, allocation, and byte-load checks remain in force.
 No emitted instructions or runtime synchronization were added.
 
+The follow-up binds each conversion check to the exact first or end reference
+in this range and each unsigned-guard check to the exact `end <= length`
+guard. This prevents an unrelated conversion or guard from borrowing a valid
+range certificate. It also requires the normalization and nonnegative guards
+to precede the checked width operation. The source CALL proof scans all
+bytecode jumps and refuses a branch into the middle of the three-instruction
+argument setup while allowing entry at the setup's first instruction.
+
 ## Validation
 
 - `tools/ci/arm64_jit_string_byte_contract.sh` passed assertion and release
@@ -42,10 +50,15 @@ No emitted instructions or runtime synchronization were added.
   `...-arm64-bytecode-20261030.log`,
   `...-x64-source-20261030.log`, and `...-x64-bytecode-20261030.log`.
 - The final four-profile contract log is
-  `/Users/frityet/Scratch/ljmt-byte-start-end-final-contract-20261030.log`.
+  `/Users/frityet/Scratch/ljmt-byte-start-end-bound-followup-contract6-20261030.log`.
   An earlier fixture-only failure was caused by omitting the original proto
   from the allocated view; the fixture now supplies it, matching the other
   post-RA admission fixtures.
+- After certificate-binding hardening, the ordinary selected-root probe was
+  repeated on ARM64 and frozen x86_64. Logs are
+  `/Users/frityet/Scratch/ljmt-byte-start-end-bound-followup-arm64-ordinary-20261030.log`
+  and
+  `/Users/frityet/Scratch/ljmt-byte-start-end-bound-followup-x86_64-ordinary-20261030.log`.
 
 This is a bounded positive-range proof, not general dynamic range parity. The
 full combined gate has not been run on this isolated follow-up.

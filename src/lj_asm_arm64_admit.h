@@ -10043,7 +10043,9 @@ static int arm64_string_byte_bounds_ir(const GCtrace *T, IRRef strref,
                                        IRRef str, IRRef offset);
 static int arm64_string_byte_dynamic_range_ir(const GCtrace *T,
                                                IRRef strref, IRRef str,
-                                               IRRef offset);
+                                               IRRef offset,
+                                               IRRef expected_index,
+                                               IRRef expected_guard);
 static int arm64_string_byte_dynamic_bounds_ir(const GCtrace *T,
                                                IRRef strref, IRRef str,
                                                IRRef offset);
@@ -10218,11 +10220,6 @@ static int arm64_string_byte_call_range_slots(const GCproto *pt,
         if (((mode == BCMdst || mode == BCMvar) && bc_a(ins) == source[i]) ||
             ((mode == BCMbase || mode == BCMrbase) &&
              bc_a(ins) <= source[i])) { valid = 0; break; }
-        if (bcmode_d(op) == BCMjump) {
-          int64_t target = (int64_t)q+1+(int64_t)bc_j(ins);
-          if (target == (int64_t)pc-2 || target == (int64_t)pc-1 ||
-              target == (int64_t)pc) { valid = 0; break; }
-        }
       }
       if (cell[i]) for (q = 0; q < sizebc; q++) {
         BCIns ins = arm64_ir_bc_acq((uintptr_t)bc, q);
@@ -10231,10 +10228,32 @@ static int arm64_string_byte_call_range_slots(const GCproto *pt,
         }
       }
     }
+    for (q = 0; q < sizebc && valid; q++) {
+      BCIns ins = arm64_ir_bc_acq((uintptr_t)bc, q);
+      if (bcmode_d(bc_op(ins)) == BCMjump) {
+        int64_t target = (int64_t)q+1+(int64_t)bc_j(ins);
+        if (target == (int64_t)pc-2 || target == (int64_t)pc-1 ||
+            target == (int64_t)pc) valid = 0;
+      }
+    }
     if (valid) matches++;
   }
   return calls == 1u && matches == 1u;
 }
+
+#if defined(LJ_TRACE_TEST_HELPERS)
+int lj_trace_test_arm64_string_byte_range_call_slots(const GCproto *pt,
+                                                      MSize strslot,
+                                                      MSize firstslot,
+                                                      MSize lastslot);
+int lj_trace_test_arm64_string_byte_range_index_ir(const GCtrace *T,
+                                                    IRRef index);
+int lj_trace_test_arm64_string_byte_range_guard_ir(const GCtrace *T,
+                                                    IRRef guard);
+int lj_trace_test_arm64_string_byte_range_ir(const GCtrace *T,
+    IRRef strref, IRRef str, IRRef offset, IRRef expected_index,
+    IRRef expected_guard);
+#endif
 
 static int arm64_lua_leaf_callm_pair_source(const GCproto *pt, MSize pos,
                                             int producer, MSize nresults);
@@ -10965,7 +10984,7 @@ static int arm64_string_byte_bounds_ir(const GCtrace *T, IRRef strref,
       (uint32_t)byte_offset > 4095u - (uint32_t)sizeof(GCstr) ||
       !arm64_scalar_ir_ref(T, str, strref, IRT_STR))
     return arm64_string_byte_dynamic_bounds_ir(T, strref, str, offset) ||
-           arm64_string_byte_dynamic_range_ir(T, strref, str, offset);
+           arm64_string_byte_dynamic_range_ir(T, strref, str, offset, 0, 0);
   bound = (int64_t)byte_offset + 1;
   for (ref = REF_FIRST; ref < strref; ref++) {
     const IRIns *guard = &T->ir[ref];
@@ -11010,7 +11029,7 @@ static int arm64_string_byte_dynamic_index_ir(const GCtrace *T, IRRef conv)
     int32_t displacement;
     if (strref->o != IR_STRREF || strref->t.irt != IRT_PGC) continue;
     if (arm64_string_byte_dynamic_range_ir(T, ref, strref->op1,
-                                           strref->op2)) return 1;
+                                           strref->op2, conv, 0)) return 1;
     /* The same truncating conversion is valid for a positive range end.
     ** Its checked width relation must prove this constant byte is in range. */
     if (arm64_ir_kint_value(T, strref->op2, &displacement)) {
@@ -11040,7 +11059,7 @@ static int arm64_string_byte_dynamic_index_ir(const GCtrace *T, IRRef conv)
                                             strref->op2))
       return 1;
     if (arm64_string_byte_dynamic_range_ir(T, ref, strref->op1,
-                                           strref->op2)) return 1;
+                                           strref->op2, conv, 0)) return 1;
   }
   return 0;
 }
@@ -11213,7 +11232,9 @@ static int arm64_string_byte_index_slot_ir(const GCtrace *T, IRRef index,
 ** prove 0<=offset<end<=len before STRREF. */
 static int arm64_string_byte_dynamic_range_ir(const GCtrace *T,
                                                IRRef strref, IRRef str,
-                                               IRRef offset)
+                                               IRRef offset,
+                                               IRRef expected_index,
+                                               IRRef expected_guard)
 {
   const IRIns *ptr, *string;
   GCobj *startpt;
@@ -11260,16 +11281,20 @@ static int arm64_string_byte_dynamic_range_ir(const GCtrace *T,
       IRRef end = guard->o == IR_UGE && guard->op1 == lenref ? guard->op2 :
                   guard->o == IR_ULE && guard->op2 == lenref ? guard->op1 : 0;
       if (guard->t.irt != (IRT_INT|IRT_GUARD) || !end || end >= upper ||
+          (expected_guard && expected_guard != upper) ||
           !arm64_string_byte_index_slot_ir(T, end, upper, &lastslot) ||
           !arm64_string_byte_call_range_slots(pt, string->op1,
                                               firstslot, lastslot)) continue;
+      if (expected_index && expected_index != firstref &&
+          expected_index != end) continue;
       for (subref = (firstref > end ? firstref : end)+1u;
            subref < strref; subref++) {
         const IRIns *sub = &T->ir[subref];
         IRRef width;
         int32_t width_value;
         if (sub->o != IR_SUBOV || sub->t.irt != (IRT_INT|IRT_GUARD) ||
-            sub->op1 != end || sub->op2 != offset) continue;
+            sub->op1 != end || sub->op2 != offset || offset >= subref ||
+            nonneg >= subref || offset >= nonneg) continue;
         for (width = subref+1u; width < strref; width++) {
           const IRIns *eq = &T->ir[width];
           if (eq->o == IR_EQ && eq->t.irt == (IRT_INT|IRT_GUARD) &&
@@ -11299,7 +11324,7 @@ static int arm64_string_byte_dynamic_guard_ir(const GCtrace *T,
     if (strref->o != IR_STRREF || strref->t.irt != IRT_PGC ||
         strref->op2 < REF_FIRST || strref->op2 >= ref) continue;
     if (arm64_string_byte_dynamic_range_ir(T, ref, strref->op1,
-                                           strref->op2)) return 1;
+                                           strref->op2, 0, guardref)) return 1;
     offset = &T->ir[strref->op2];
     if (offset->o != IR_ADDOV || guardref >= strref->op2 ||
         offset->op1 < REF_FIRST ||
@@ -11317,6 +11342,36 @@ static int arm64_string_byte_dynamic_guard_ir(const GCtrace *T,
   }
   return 0;
 }
+
+#if defined(LJ_TRACE_TEST_HELPERS)
+int lj_trace_test_arm64_string_byte_range_call_slots(const GCproto *pt,
+                                                      MSize strslot,
+                                                      MSize firstslot,
+                                                      MSize lastslot)
+{
+  return arm64_string_byte_call_range_slots(pt, strslot, firstslot, lastslot);
+}
+
+int lj_trace_test_arm64_string_byte_range_index_ir(const GCtrace *T,
+                                                    IRRef index)
+{
+  return arm64_string_byte_dynamic_index_ir(T, index);
+}
+
+int lj_trace_test_arm64_string_byte_range_guard_ir(const GCtrace *T,
+                                                    IRRef guard)
+{
+  return arm64_string_byte_dynamic_guard_ir(T, guard);
+}
+
+int lj_trace_test_arm64_string_byte_range_ir(const GCtrace *T,
+    IRRef strref, IRRef str, IRRef offset, IRRef expected_index,
+    IRRef expected_guard)
+{
+  return arm64_string_byte_dynamic_range_ir(T, strref, str, offset,
+                                             expected_index, expected_guard);
+}
+#endif
 
 /* UGE/ULE are admitted only as a sufficient dominating range guard consumed by
 ** a later STRREF. This prevents unrelated unsigned comparisons from opening. */
@@ -17003,7 +17058,8 @@ static int arm64_string_byte_bounds_postra(const LJArm64PostRAView *v,
                                             IRRef strref, IRRef str,
                                             IRRef offset);
 static int arm64_string_byte_dynamic_range_postra(
-    const LJArm64PostRAView *v, IRRef strref, IRRef str, IRRef offset);
+    const LJArm64PostRAView *v, IRRef strref, IRRef str, IRRef offset,
+    IRRef expected_index, IRRef expected_guard);
 static int arm64_string_byte_dynamic_bounds_postra(
     const LJArm64PostRAView *v, IRRef strref, IRRef str, IRRef offset);
 static int arm64_string_byte_dynamic_index_postra(
@@ -17621,7 +17677,8 @@ static int arm64_string_byte_bounds_postra(const LJArm64PostRAView *v,
       (uint32_t)byte_offset > 4095u - (uint32_t)sizeof(GCstr) ||
       !arm64_scalar_postra_ref(v, str, strref, IRT_STR))
     return arm64_string_byte_dynamic_bounds_postra(v, strref, str, offset) ||
-           arm64_string_byte_dynamic_range_postra(v, strref, str, offset);
+           arm64_string_byte_dynamic_range_postra(v, strref, str, offset,
+                                                  0, 0);
   bound = (int64_t)byte_offset + 1;
   for (ref = REF_FIRST; ref < strref; ref++) {
     IRIns guard = ir_load_acq(&v->ir[ref]);
@@ -17805,7 +17862,8 @@ static int arm64_string_byte_index_slot_postra(const LJArm64PostRAView *v,
 
 /* Allocated-pass replay of the exact positive dynamic range relation. */
 static int arm64_string_byte_dynamic_range_postra(
-    const LJArm64PostRAView *v, IRRef strref, IRRef str, IRRef offset)
+    const LJArm64PostRAView *v, IRRef strref, IRRef str, IRRef offset,
+    IRRef expected_index, IRRef expected_guard)
 {
   GCtrace *owner;
   GCobj *proto_obj;
@@ -17857,16 +17915,20 @@ static int arm64_string_byte_dynamic_range_postra(
       IRRef end = guard.o == IR_UGE && guard.op1 == lenref ? guard.op2 :
                   guard.o == IR_ULE && guard.op2 == lenref ? guard.op1 : 0;
       if (guard.t.irt != (IRT_INT|IRT_GUARD) || !end || end >= upper ||
+          (expected_guard && expected_guard != upper) ||
           !arm64_string_byte_index_slot_postra(v, end, upper, &lastslot) ||
           !arm64_string_byte_call_range_slots(v->proto, string.op1,
                                               firstslot, lastslot)) continue;
+      if (expected_index && expected_index != firstref &&
+          expected_index != end) continue;
       for (subref = (firstref > end ? firstref : end)+1u;
            subref < strref; subref++) {
         IRIns sub = ir_load_acq(&v->ir[subref]);
         IRRef width;
         int32_t width_value;
         if (sub.o != IR_SUBOV || sub.t.irt != (IRT_INT|IRT_GUARD) ||
-            sub.op1 != end || sub.op2 != offset) continue;
+            sub.op1 != end || sub.op2 != offset || offset >= subref ||
+            nonneg >= subref || offset >= nonneg) continue;
         for (width = subref+1u; width < strref; width++) {
           IRIns eq = ir_load_acq(&v->ir[width]);
           if (eq.o == IR_EQ && eq.t.irt == (IRT_INT|IRT_GUARD) &&
@@ -17901,7 +17963,7 @@ static int arm64_string_byte_dynamic_index_postra(
     int32_t displacement;
     if (strref.o != IR_STRREF || strref.t.irt != IRT_PGC) continue;
     if (arm64_string_byte_dynamic_range_postra(v, ref, strref.op1,
-                                               strref.op2)) return 1;
+                                               strref.op2, conv, 0)) return 1;
     if (arm64_scalar_postra_kint(v, strref.op2, &displacement)) {
       IRRef upper;
       if (arm64_string_byte_negative_end_postra(v, ref, strref.op1,
@@ -17928,7 +17990,7 @@ static int arm64_string_byte_dynamic_index_postra(
     if (arm64_string_byte_dynamic_bounds_postra(v, ref, strref.op1,
                                                 strref.op2)) return 1;
     if (arm64_string_byte_dynamic_range_postra(v, ref, strref.op1,
-                                               strref.op2)) return 1;
+                                               strref.op2, conv, 0)) return 1;
   }
   return 0;
 }
@@ -17948,7 +18010,7 @@ static int arm64_string_byte_dynamic_guard_postra(
     if (strref.o != IR_STRREF || strref.t.irt != IRT_PGC ||
         strref.op2 < REF_FIRST || strref.op2 >= ref) continue;
     if (arm64_string_byte_dynamic_range_postra(v, ref, strref.op1,
-                                               strref.op2)) return 1;
+                                               strref.op2, 0, guardref)) return 1;
     offset = ir_load_acq(&v->ir[strref.op2]);
     if (offset.o != IR_ADDOV || guardref >= strref.op2 ||
         offset.op1 < REF_FIRST ||
@@ -17965,6 +18027,37 @@ static int arm64_string_byte_dynamic_guard_postra(
   }
   return 0;
 }
+
+#if defined(LJ_TRACE_TEST_HELPERS)
+int lj_trace_test_arm64_string_byte_range_index_postra(
+    const LJArm64PostRAView *v, IRRef index);
+int lj_trace_test_arm64_string_byte_range_guard_postra(
+    const LJArm64PostRAView *v, IRRef guard);
+int lj_trace_test_arm64_string_byte_range_postra(
+    const LJArm64PostRAView *v, IRRef strref, IRRef str, IRRef offset,
+    IRRef expected_index, IRRef expected_guard);
+
+int lj_trace_test_arm64_string_byte_range_index_postra(
+    const LJArm64PostRAView *v, IRRef index)
+{
+  return arm64_string_byte_dynamic_index_postra(v, index);
+}
+
+int lj_trace_test_arm64_string_byte_range_guard_postra(
+    const LJArm64PostRAView *v, IRRef guard)
+{
+  return arm64_string_byte_dynamic_guard_postra(v, guard);
+}
+
+int lj_trace_test_arm64_string_byte_range_postra(
+    const LJArm64PostRAView *v, IRRef strref, IRRef str, IRRef offset,
+    IRRef expected_index, IRRef expected_guard)
+{
+  return arm64_string_byte_dynamic_range_postra(v, strref, str, offset,
+                                                expected_index,
+                                                expected_guard);
+}
+#endif
 
 static int arm64_string_byte_guard_postra(const LJArm64PostRAView *v,
                                           IRRef guardref)
