@@ -226,3 +226,18 @@ runtimes, archives, JIT modules, source revision and hashes. Ordinary ARM64
 restoration profile is
 `ac5a80d62d2f8408e8a33ed3836874d93342da7efb44ae1ce5515064a4a04308`.
 The complete gate remains a separate running validation.
+
+The later negative-literal substring extension (`39dceb685`) is merged
+separately from that frozen gate. Review found no production blocker: both
+passes derive a nonpositive end adjustment from the actual signed literal,
+bind the same string length, require checked subtraction of a nonzero start
+offset and prove a nonnegative width before STRREF. The integration contract
+passes all four profiles, with additional tests for exact zero-length and
+adjacent boundaries, invalid physical placement of the dynamic width, and
+READY publication of all nonempty negative-range result lengths. The native
+negative-while publication counts are 3, 39, 39 and 3 respectively.
+Evidence, source-parent and the integration test patch are in
+`/Users/frityet/Scratch/ljmt-negative-substring-integration-20261030/`.
+Ordinary assertion ARM64 restoration profile is
+`c411fa90194ed66fd063c4f1a9ffa72624dc66e295bcea42ad4e4348d6bf0dbd`.
+This later extension is not covered by the running `503c8ba2f` full gate.

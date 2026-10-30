@@ -13,6 +13,7 @@
 static lua_State *test_L;
 static unsigned native_string_matches;
 static unsigned native_string_publications;
+static int negative_case;
 
 static void string_publish(lua_State *L, GCstr *str)
 {
@@ -20,7 +21,7 @@ static void string_publish(lua_State *L, GCstr *str)
   if (L != test_L || !lj_tg_load_jit_base(L2TG(L))) return;
   assert(lj_tg_jit_active_acq(L2TG(L)));
   assert(str->gct == (uint8_t)~LJ_TSTR);
-  if (str->len != 3u) return;
+  assert(negative_case ? str->len > 0u : str->len == 3u);
   arena = lj_arena_of(str);
   assert(!lj_arena_ishuge(arena));
   assert(lj_arena_ready_get(arena, lj_arena_cellof(str)));
@@ -37,7 +38,7 @@ static void string_match(lua_State *L, GCRef *link, GCobj *object,
   if (L != test_L || !lj_tg_load_jit_base(L2TG(L))) return;
   assert(lj_tg_jit_active_acq(L2TG(L)));
   assert(str->gct == (uint8_t)~LJ_TSTR);
-  if (str->len != 3u) return;
+  assert(negative_case ? str->len > 0u : str->len == 3u);
   arena = lj_arena_of(str);
   assert(!lj_arena_ishuge(arena));
   assert(lj_arena_ready_get(arena, lj_arena_cellof(str)));
@@ -74,6 +75,7 @@ int main(int argc, char **argv)
   (void)arm64_fixture_init;
   assert(L && argc == 3);
   negative = strncmp(argv[2], "negative-", 9u) == 0;
+  negative_case = negative;
   luaL_openlibs(L);
   test_L = L;
   lj_str_test_set_match_hook(string_match);
@@ -85,7 +87,8 @@ int main(int argc, char **argv)
   lj_str_test_set_match_hook(NULL);
   lj_str_test_set_publish_hook(NULL);
   assert(native_string_matches > 0u);
-  if (!strcmp(argv[2], "while")) assert(native_string_publications > 0u);
+  if (!strcmp(argv[2], "while") || !strcmp(argv[2], "negative-while"))
+    assert(native_string_publications > 0u);
   lua_getglobal(L, "substring_trace_no");
   no = (TraceNo)lua_tointeger(L,-1); lua_pop(L,1);
   assert(no);
@@ -213,6 +216,14 @@ int main(int argc, char **argv)
     assert(semantic(&f) && !allocated(&f));
   }
   arm64_fixture_reset(&f);
+  if (negative) {
+    IRRef widthref = f.ir[allocation].op2;
+    assert(widthref >= REF_FIRST && widthref < pointer);
+    f.postra[widthref].r = RID_D0;
+    f.postra[widthref].s = SPS_NONE;
+    assert(semantic(&f) && !allocated(&f));
+    arm64_fixture_reset(&f);
+  }
   f.postra[allocation].r = RID_D0;
   assert(semantic(&f) && !allocated(&f));
   arm64_fixture_reset(&f);
