@@ -269,6 +269,14 @@ local function main()
     name='comparison-sequential-early-return', params='a',
     body='if a < 0 then return a*-1 end; if a > 10 then return a*.5 end; return a+.25',
     args='i', payload=nil, initial=nil, ranges={{-4,4},{10,14}}}
+  cases[#cases+1] = {
+    name='comparison-sequential-three', params='a',
+    body='if a < 0 then return a*-1 end; local b=a+100; if b > 150 then return b*.5 end; local c=a*2; if c > 60 then return c*.25 end; return a+.25',
+    args='i', payload=nil, initial=nil, ranges={{-4,-2},{60,62},{30,32}}}
+  cases[#cases+1] = {
+    name='comparison-sequential-four', params='a',
+    body='if a < 0 then return a*-1 end; local b=a+100; if b > 150 then return b*.5 end; local c=a*2; if c > 60 then return c*.25 end; local d=a+1; if d > 11 then return d*3 end; return a+.25',
+    args='i', payload=nil, initial=nil, ranges={{-4,-2},{60,62},{40,42},{15,17}}}
   local publications,ranges,reuses,cold = 0,0,0,0
   for _,shape in ipairs(cases) do
     local attempts,nrange,nreuse = run_shape(shape)
@@ -284,7 +292,7 @@ local function main()
   assert(stop:send(true,5),'MT peer stop send failed')
   local joined,result = peer:join(5)
   assert(joined and result,'MT peer did not join cleanly')
-  assert(publications == #cases and #cases == 57 and ranges == 19 and
+  assert(publications == #cases and #cases == 59 and ranges == 26 and
          reuses == #cases*2+2*ranges)
   io.write(string.format(
     'lua-return ordinary OK: publications=%d numeric_ranges=%d same_trace_reuses=%d cold_calls=%d; publication only, no native-execution claim\n',

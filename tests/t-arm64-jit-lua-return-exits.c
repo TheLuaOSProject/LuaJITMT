@@ -29,6 +29,7 @@ typedef struct ReturnCase {
 
 static const char *active_name;
 static unsigned cases_run, native_runs, terminal_exits, same_trace_reuses;
+static int return_is_sequential(const char *name);
 static unsigned gc_reuses, primitive_mismatches;
 
 static GCfunc *global_function(lua_State *L, const char *name)
@@ -247,7 +248,7 @@ static void checked(lua_State *L, GCtrace *T, int force,
   OldTagChange change = {0};
   SnapNo terminal = 0;
   int early_branch = strcmp(active_name, "comparison-early-return") == 0 ||
-    strncmp(active_name, "comparison-sequential-early-return", 34) == 0;
+    return_is_sequential(active_name);
   invoke(L, "leaf_oracle_run", "leaf_oracle", first, last);
   if (T) {
     lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
@@ -371,7 +372,9 @@ enum {
   RET_NEG_BRANCH_WRONG_LOCAL,
   RET_NEG_BRANCH_WRONG_REF,
   RET_NEG_BRANCH_SOURCE_TYPE,
-  RET_NEG_BRANCH_SECOND_OPERAND
+  RET_NEG_BRANCH_SECOND_OPERAND,
+  RET_NEG_BRANCH_NSLOTS_LOW,
+  RET_NEG_BRANCH_NSLOTS_HIGH
 };
 
 static GCproto *return_copy_proto(const GCproto *pt)
@@ -489,6 +492,11 @@ static int return_admit(ReturnFixture *f, int postra)
   return lj_asm_arm64_ir_admit(f->J, &f->copy, NULL);
 }
 
+static int return_is_sequential(const char *name)
+{
+  return strncmp(name, "comparison-sequential-", 22) == 0;
+}
+
 static void return_expect_reject(ReturnFixture *f, unsigned id, int postra)
 {
   if (return_admit(f, postra)) {
@@ -541,7 +549,7 @@ static void return_test_negative(ReturnFixture *f, SnapNo s, unsigned id,
     uint64_t edge;
     const BCIns *pc;
     MSize resume, compare = UINT32_MAX;
-    if (strncmp(active_name, "comparison-sequential-early-return", 34)) return;
+    if (!return_is_sequential(active_name)) return;
     edge = snapshot_footer(&f->copy, s);
     if (!(uint8_t)edge) return;
     pc = (const BCIns *)(uintptr_t)(edge>>8);
@@ -557,6 +565,25 @@ static void return_test_negative(ReturnFixture *f, SnapNo s, unsigned id,
     if (compare == UINT32_MAX) return;
     setbc_d(&proto_bc(f->leafpt)[compare],
             bc_a(proto_bc(f->leafpt)[compare]));
+    return_expect_reject(f, id, postra);
+    return;
+  }
+  if (which == RET_NEG_BRANCH_NSLOTS_LOW ||
+      which == RET_NEG_BRANCH_NSLOTS_HIGH) {
+    MSize base;
+    if (!return_is_sequential(active_name) &&
+        strncmp(active_name, "comparison-", 11) != 0) return;
+    footer = snapshot_footer(&f->copy, s);
+    snap = &f->snap[s];
+    base = (uint8_t)footer+2u;
+    if (!(uint8_t)footer || s == 4u || base >= snap->nslots) return;
+    if (which == RET_NEG_BRANCH_NSLOTS_LOW) {
+      snap->nslots = (uint8_t)base;
+    } else {
+      MSize malformed = snap->topslot+2u+LJ_FR2;
+      if (malformed > UINT8_MAX) return;
+      snap->nslots = (uint8_t)malformed;
+    }
     return_expect_reject(f, id, postra);
     return;
   }
@@ -1088,7 +1115,7 @@ static void admission(GCtrace *T)
       if (pos >= pt->sizebc ||
           bc_op((BCIns)la_load32_acq((const uint32_t *)pc)) != BC_RET1) {
         if (!strcmp(active_name, "comparison-early-return") ||
-            !strcmp(active_name, "comparison-sequential-early-return"))
+            return_is_sequential(active_name))
           early_source_map = 1;
         else if (!strcmp(active_name, "comparison-empty-arm") &&
                  pos > 1u && pos+1u < pt->sizebc)
@@ -1258,7 +1285,24 @@ static void admission(GCtrace *T)
       tested = 1;
     }
     assert(tested);
-    if (strncmp(active_name, "comparison-sequential-early-return", 34) == 0) {
+    {
+      int geometry_tested = 0;
+      for (SnapNo s = 0; s < T->nsnap && !geometry_tested; s++) {
+        uint64_t footer = snapshot_footer(T, s);
+        MSize base = (uint8_t)footer+2u;
+        if (!(uint8_t)footer || s == 4u || base >= T->snap[s].nslots)
+          continue;
+        for (int postra = 0; postra < 2; postra++) {
+          return_test_negative(&f, s, RET_NEG_BRANCH_NSLOTS_LOW, postra,
+                               RET_NEG_BRANCH_NSLOTS_LOW);
+          return_test_negative(&f, s, RET_NEG_BRANCH_NSLOTS_HIGH, postra,
+                               RET_NEG_BRANCH_NSLOTS_HIGH);
+        }
+        geometry_tested = 1;
+      }
+      assert(geometry_tested);
+    }
+    if (return_is_sequential(active_name)) {
       MSize compares[4], ncompare = 0;
       int branch_tested = 0;
       for (MSize p = 1; p+2u < pt->sizebc; p++) {
@@ -1269,7 +1313,7 @@ static void admission(GCtrace *T)
           compares[ncompare++] = p;
         }
       }
-      assert(ncompare == 2u);
+      assert(ncompare >= 2u && ncompare <= 4u);
       for (SnapNo s = 0; s < T->nsnap && !branch_tested; s++) {
         uint64_t edge = snapshot_footer(T, s);
         const BCIns *resume_pc = (const BCIns *)(uintptr_t)(edge>>8);
@@ -1279,7 +1323,8 @@ static void admission(GCtrace *T)
             (uintptr_t)resume_pc >= (uintptr_t)(proto_bc(pt)+pt->sizebc))
           continue;
         resume = proto_bcpos(pt, resume_pc);
-        if (resume < compares[1]+2u || resume >= pt->sizebc-1u) continue;
+        if (s == 4u || resume < compares[1]+2u ||
+            resume >= pt->sizebc-1u) continue;
         for (MSize i = 0; i < T->snap[s].nent; i++) {
           SnapEntry entry = T->snapmap[T->snap[s].mapofs+i];
           IRRef value = snap_ref(entry);
@@ -1293,6 +1338,12 @@ static void admission(GCtrace *T)
         for (int postra = 0; postra < 2; postra++)
           return_test_negative(&f, s, RET_NEG_BRANCH_SECOND_OPERAND,
                                postra, RET_NEG_BRANCH_SECOND_OPERAND);
+        for (int postra = 0; postra < 2; postra++) {
+          return_test_negative(&f, s, RET_NEG_BRANCH_NSLOTS_LOW,
+                               postra, RET_NEG_BRANCH_NSLOTS_LOW);
+          return_test_negative(&f, s, RET_NEG_BRANCH_NSLOTS_HIGH,
+                               postra, RET_NEG_BRANCH_NSLOTS_HIGH);
+        }
         branch_tested = 1;
       }
       assert(branch_tested);
@@ -1417,6 +1468,7 @@ static void admission(GCtrace *T)
 static void run_case(lua_State *L, const ReturnCase *shape)
 {
   GCtrace *T = NULL;
+  unsigned low_mutations, high_mutations;
   if (!strcmp(shape->name, "comparison-nan"))
     ljt_lua_dostring(L, "arg_payload=2.5");
   else if (!strcmp(shape->name, "comparison-negative-zero"))
@@ -1443,10 +1495,20 @@ static void run_case(lua_State *L, const ReturnCase *shape)
   if (strncmp(shape->name, "comparison-", 11) == 0) {
     int negative_warm = strcmp(shape->name, "comparison-negative-warm") == 0;
     checked(L, T, 0, negative_warm ? 10 : -4, negative_warm ? 14 : 4);
-    if (strncmp(shape->name, "comparison-sequential-early-return", 34) == 0) {
-      assert_branch_exit(L, T);
-      checked(L, T, 0, 12, 14);
-      assert_branch_exit(L, T);
+    if (return_is_sequential(shape->name)) {
+      if (!strcmp(shape->name, "comparison-sequential-early-return")) {
+        checked(L, T, 0, -4, -2); assert_branch_exit(L, T);
+        checked(L, T, 0, 12, 14); assert_branch_exit(L, T);
+      } else if (!strcmp(shape->name, "comparison-sequential-three")) {
+        checked(L, T, 0, -4, -2); assert_branch_exit(L, T);
+        checked(L, T, 0, 60, 62); assert_branch_exit(L, T);
+        checked(L, T, 0, 30, 32); assert_branch_exit(L, T);
+      } else {
+        checked(L, T, 0, -4, -2); assert_branch_exit(L, T);
+        checked(L, T, 0, 60, 62); assert_branch_exit(L, T);
+        checked(L, T, 0, 40, 42); assert_branch_exit(L, T);
+        checked(L, T, 0, 15, 17); assert_branch_exit(L, T);
+      }
     }
     if (!strcmp(shape->name, "comparison-nan")) {
       ljt_lua_dostring(L, "arg_payload=0/0");
@@ -1456,15 +1518,30 @@ static void run_case(lua_State *L, const ReturnCase *shape)
   }
   lua_gc(L, LUA_GCCOLLECT, 0);
   checked(L, T, 0, 1, 24); gc_reuses++;
+  low_mutations = branch_mutation_count[
+    RET_NEG_BRANCH_NSLOTS_LOW-RET_NEG_BRANCH_TARGET][0];
+  high_mutations = branch_mutation_count[
+    RET_NEG_BRANCH_NSLOTS_HIGH-RET_NEG_BRANCH_TARGET][0];
   admission(T);
-  if (strncmp(shape->name, "comparison-sequential-early-return", 34) == 0)
+  if (!strcmp(shape->name, "comparison-early-return"))
+    assert(branch_mutation_count[
+             RET_NEG_BRANCH_NSLOTS_LOW-RET_NEG_BRANCH_TARGET][0] >
+             low_mutations &&
+           branch_mutation_count[
+             RET_NEG_BRANCH_NSLOTS_LOW-RET_NEG_BRANCH_TARGET][1] > 0u &&
+           branch_mutation_count[
+             RET_NEG_BRANCH_NSLOTS_HIGH-RET_NEG_BRANCH_TARGET][0] >
+             high_mutations &&
+           branch_mutation_count[
+             RET_NEG_BRANCH_NSLOTS_HIGH-RET_NEG_BRANCH_TARGET][1] > 0u);
+  if (return_is_sequential(shape->name))
     assert(branch_mutation_count[RET_NEG_BRANCH_SECOND_OPERAND-
                                  RET_NEG_BRANCH_TARGET][0] > 0u &&
            branch_mutation_count[RET_NEG_BRANCH_SECOND_OPERAND-
                                  RET_NEG_BRANCH_TARGET][1] > 0u);
   cases_run++;
   printf("Lua return %s: native %s exit and reuse verified\n", shape->name,
-         strncmp(shape->name, "comparison-sequential-early-return", 34) == 0 ?
+         return_is_sequential(shape->name) ?
            "sequential branch" :
            (!strcmp(shape->name, "comparison-early-return") ?
              "branch-edge" : "terminal"));
@@ -1519,6 +1596,12 @@ int main(void)
     {"comparison-early-return","a","if a > 16 then return a+.25 else return a-.25 end","i",0},
     {"comparison-sequential-early-return","a",
       "if a < 0 then return a*-1 end; if a > 10 then return a*.5 end; return a+.25",
+      "i",0},
+    {"comparison-sequential-three","a",
+      "if a < 0 then return a*-1 end; local b=a+100; if b > 150 then return b*.5 end; local c=a*2; if c > 60 then return c*.25 end; return a+.25",
+      "i",0},
+    {"comparison-sequential-four","a",
+      "if a < 0 then return a*-1 end; local b=a+100; if b > 150 then return b*.5 end; local c=a*2; if c > 60 then return c*.25 end; local d=a+1; if d > 11 then return d*3 end; return a+.25",
       "i",0}
   };
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -1544,17 +1627,23 @@ int main(void)
   }
   for (unsigned k = 0; k < sizeof(cases)/sizeof(cases[0]); k++) run_case(L, &cases[k]);
   ljt_lua_dostring(L,
+    "leaf_overcap=function(a) if a<0 then return -a end; "
+    "if a>40 then return a end; if a>30 then return a end; "
+    "if a>20 then return a end; if a>10 then return a end; return a end; "
+    "assert(leaf_overcap(-3)==3 and leaf_overcap(5)==5)");
+  assert(!lj_trace_arm64_lua_leaf(global_function(L, "leaf_overcap")));
+  ljt_lua_dostring(L,
     "assert(stop:send(true,5)); local ok,v=peer:join(5); assert(ok and v)");
   lua_close(L);
   assert(ret_terminal_maps + ret_join_maps + ret_sequential_maps + 1u ==
            cases_run &&
-         ret_sequential_maps == 1u &&
+         ret_sequential_maps == 3u &&
          ret_join_maps == 1 && ret_alias_bad && ret_callmap_guards == 1);
   for (unsigned m = 0; m < RET_NEG_ALIAS; m++)
     assert(ret_mutation_count[m][0] && ret_mutation_count[m][1]);
-  for (unsigned m = 0; m < 13; m++)
+  for (unsigned m = 0; m < 15; m++)
     assert(branch_mutation_count[m][0] && branch_mutation_count[m][1]);
-  assert(cases_run == 99 && terminal_exits == 96 && gc_reuses == 99 &&
+  assert(cases_run == 101 && terminal_exits == 96 && gc_reuses == 101 &&
          primitive_mismatches == 96);
   printf("Lua return exits OK: cases=%u native=%u terminal=%u terminal-maps=%u "
          "join-maps=%u sequential-maps=%u join-semantic-negative=%u join-postRA-negative=%u "
