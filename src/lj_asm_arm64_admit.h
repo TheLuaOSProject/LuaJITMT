@@ -956,6 +956,12 @@ static int arm64_rooted_ir_effect(const GCtrace *T, IRRef ref,
 static int arm64_rooted_postra_effect(const LJArm64PostRAView *v, IRRef n,
                                      IRRef ref, IRRef root1, IRRef root2,
                                      IRRef root3);
+static int arm64_upvalue_ir_source(const jit_State *J, const GCtrace *T,
+                                  IRRef ref, SnapNo s, IRRef root1,
+                                  IRRef root2);
+static int arm64_upvalue_postra_snapshots(const LJArm64PostRAView *v,
+                                         IRRef ref, MSize s, IRRef root1,
+                                         IRRef root2);
 
 /* Reconstruct the ABI for the concrete cdata/function pointer consumed by a
 ** CALLXS. A trace may call unrelated function cdata values with different
@@ -2687,6 +2693,12 @@ static int arm64_callxs_gc_roots(const GCtrace *T, IRRef call, IRRef xsave,
         rooted = snap_slot(se) >= 1u+LJ_FR2 && snap_slot(se) < slots &&
                  se == SNAP(snap_slot(se), 0, value);
       }
+      /* SLOAD slot zero is the active Lua frame's immutable current function,
+      ** not a local slot in XSAVE. The native-frame GC2 scan validates and
+      ** marks frame_func(base-1) while the CALLXS lease owns this stack. */
+      if (!rooted && ins.o == IR_SLOAD && ins.op1 == 0 &&
+	  ins.t.irt == IRT_FUNC && ins.op2 == IRSLOAD_READONLY)
+	rooted = 1;
       if (rooted) continue;
       /* Only an unmodified, non-PHI SLOAD can rely on its original slot.
       ** This grammar has no stack stores/cell operations. Check every XSAVE
@@ -2906,6 +2918,17 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	      !arm64_callxs_ref_valid(T->ir, nk, nins, ref, a1.op1))
 	    return 0;
 	}
+      } else if (ins.op2 == IRCALL_lj_func_getuv_rooted_try) {
+	SnapNo s;
+	unsigned matches = 0;
+	int effect = arm64_rooted_ir_effect(T, ref, root1, 0, 0);
+	if (state != CALLXS_CLOSED || !root1 || root2 || effect != 4)
+	  return 0;
+	for (s = 0; s < T->nsnap; s++)
+	  if (arm64_upvalue_ir_source(J, T, ref, s, root1, 0)) matches++;
+	if (matches != 1u) return 0;
+	readref = ref+2u;
+	readroot = root1;
       } else return 0;
       root1 = root2 = 0;
       break;
@@ -3435,6 +3458,12 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
       }
       break;
     case IR_SLOAD:
+      /* The current closure is a readonly implicit frame root at slot zero.
+      ** Its use for captured upvalues is separately bound to the exact UGET
+      ** source by arm64_upvalue_ir_source and the rooted helper proof. */
+      if (ins.t.irt == IRT_FUNC && ins.op1 == 0 &&
+	  ins.op2 == IRSLOAD_READONLY)
+	break;
       /* SLOAD operands are frame-slot and load-mode immediates, not SSA refs. */
       if (ins.op1 < 1u+LJ_FR2 || ins.op1 >= J->pt->framesize ||
           (ins.op2 & ~(IRSLOAD_PARENT|IRSLOAD_FRAME|IRSLOAD_TYPECHECK|
@@ -5593,6 +5622,11 @@ static int arm64_postra_callxs_gc_roots(const LJArm64PostRAView *view,
                 constant.t.irt == irt_type(source.t);
       }
     }
+    /* Independently mirror the semantic implicit-frame-root rule. GC2 marks
+    ** the validated current frame function from base-1 for ACTIVE CALLXS. */
+    if (!found && source.o == IR_SLOAD && source.op1 == 0 &&
+	source.t.irt == IRT_FUNC && source.op2 == IRSLOAD_READONLY)
+	found = 1;
     if (found) continue;
     if (source.o != IR_SLOAD ||
         source.t.irt != (irt_type(source.t)|IRT_GUARD) ||
@@ -7194,7 +7228,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	IRType producer_type = IRT_NIL;
 	int producer_pending = 0, producer_scalar = 0;
 	unsigned protocol = 0, nc = 0, nx = 0, nloop = 0, npoll = 0;
-	MSize capacity, highest = 0, outgoing = 0;
+	MSize capacity, highest = 0, outgoing = 0, s;
 	IRRef layout_xsave = 0;
 	uintptr_t layout_producer_returnpc = 0;
 	GCtrace temp;
@@ -7548,6 +7582,19 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		  arm64_callxs_ref_type(view->ir, view->nk, ins.op2)))
 	      return 0;
 	  } else if (ins.o == IR_CALLS &&
+		     ins.op2 == IRCALL_lj_func_getuv_rooted_try) {
+	    unsigned matches = 0;
+	    if (protocol != 0 || !current1 || current2 ||
+		arm64_rooted_postra_effect(view, semantic_nins, ref,
+		  current1, 0, 0) != 4)
+	      return 0;
+	    for (s = 0; s < view->nsnap; s++)
+	      if (arm64_upvalue_postra_snapshots(view, ref, s, current1, 0))
+		matches++;
+	    if (matches != 1u) return 0;
+	    readvalue = ref+2u;
+	    outputroot = current1;
+	  } else if (ins.o == IR_CALLS &&
 	             (ins.op2 == IRCALL_lj_tab_gettv_rooted_hit_try ||
 	              ins.op2 == IRCALL_lj_tab_getscalar_rooted_try)) {
 	    IRIns table, r1, r2;
@@ -7735,6 +7782,11 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		!arm64_callxs_ref_valid(view->ir, view->nk, semantic_nins, ref, ins.op2))
 	      return 0;
 	  } else if (ins.o == IR_SLOAD) {
+	    /* Match the semantic current-function root exactly. The upvalue helper
+	    ** source proof independently binds it to this function's UGET. */
+	    if (ins.t.irt == IRT_FUNC && ins.op1 == 0 &&
+		ins.op2 == IRSLOAD_READONLY)
+	      continue;
 	    if (ins.op1 < 1u+LJ_FR2 || ins.op1 >= pt->framesize ||
 		(ins.op2 & ~(IRSLOAD_PARENT|IRSLOAD_FRAME|IRSLOAD_TYPECHECK|
 		 IRSLOAD_CONVERT|IRSLOAD_READONLY|IRSLOAD_INHERIT|IRSLOAD_KEYINDEX)) != 0 ||
