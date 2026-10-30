@@ -11838,6 +11838,7 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
   case IR_ABS:
   case IR_MIN:
   case IR_MAX:
+  case IR_MOD:
   case IR_POW:
   case IR_LDEXP:
   case IR_FPMATH:
@@ -11853,6 +11854,27 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
   default:
     return 0;
   }
+}
+
+/* Integer modulo uses the stock leaf lj_vm_modi helper. A nonzero constant
+** divisor or a preceding guard on this exact SSA value excludes division by
+** zero; the NUM fallback remains the recorder's ordinary arithmetic graph. */
+static int arm64_scalar_mod_ir(const GCtrace *T, IRRef ref)
+{
+  IRRef divisor = T->ir[ref].op2, r;
+  if (!arm64_scalar_ir_ref(T, T->ir[ref].op1, ref, IRT_INT) ||
+      !arm64_scalar_ir_ref(T, divisor, ref, IRT_INT)) return 0;
+  if (irref_isk(divisor))
+    return T->ir[divisor].o == IR_KINT && T->ir[divisor].i != 0;
+  for (r = divisor+1u; r < ref; r++) {
+    const IRIns *guard = &T->ir[r];
+    if (guard->o == IR_NE && guard->t.irt == (IRT_INT|IRT_GUARD) &&
+        guard->op1 == divisor && irref_isk(guard->op2) &&
+        arm64_scalar_ir_ref(T, guard->op2, r, IRT_INT) &&
+        T->ir[guard->op2].o == IR_KINT && T->ir[guard->op2].i == 0)
+      return 1;
+  }
+  return 0;
 }
 
 /* A binary libm CARG is a pair of NUM values, not a general call chain.
@@ -19067,6 +19089,10 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
         goto bad_type;
       binary = 1;
       break;
+    case IR_MOD:
+      if (side || type != IRT_INT || (flags & ~IRT_ISPHI) ||
+          !arm64_scalar_mod_ir(T, ref)) goto bad_operand;
+      break;
     case IR_POW:
       if (type != IRT_NUM || (flags & ~IRT_ISPHI)) goto bad_type;
       binary = 1;
@@ -19660,6 +19686,8 @@ static int arm64_scalar_postra_value(IRIns p)
             (arm64_rooted_gc_type(irt_type(p.t)) ||
              irt_type(p.t) == IRT_LIGHTUD) &&
             (p.t.irt & ~IRT_ISPHI) == (irt_type(p.t)|IRT_GUARD));
+  case IR_MOD:
+    return (p.t.irt & ~IRT_ISPHI) == IRT_INT;
   case IR_POW: case IR_LDEXP:
     return (p.t.irt & ~IRT_ISPHI) == IRT_NUM;
   case IR_FPMATH:
@@ -19837,6 +19865,29 @@ static int arm64_scalar_postra_ref(const LJArm64PostRAView *v, IRRef ref,
             (type == IRT_TAB && p.o == IR_TNEW)) &&
            (p.t.irt & ~IRT_ISPHI) == (type|IRT_GUARD)));
 }
+/* Recheck exact divisor provenance from immutable allocated IR. */
+static int arm64_scalar_mod_postra(const LJArm64PostRAView *v, IRRef ref)
+{
+  IRIns mod = ir_load_acq(&v->ir[ref]);
+  IRRef r;
+  if (!arm64_scalar_postra_ref(v, mod.op1, ref, IRT_INT) ||
+      !arm64_scalar_postra_ref(v, mod.op2, ref, IRT_INT)) return 0;
+  if (irref_isk(mod.op2)) {
+    IRIns divisor = ir_load_acq(&v->ir[mod.op2]);
+    return divisor.o == IR_KINT && divisor.i != 0;
+  }
+  for (r = mod.op2+1u; r < ref; r++) {
+    IRIns guard = ir_load_acq(&v->ir[r]);
+    if (guard.o == IR_NE && guard.t.irt == (IRT_INT|IRT_GUARD) &&
+        guard.op1 == mod.op2 && irref_isk(guard.op2) &&
+        arm64_scalar_postra_kref(v, guard.op2, IRT_INT)) {
+      IRIns zero = ir_load_acq(&v->ir[guard.op2]);
+      if (zero.o == IR_KINT && zero.i == 0) return 1;
+    }
+  }
+  return 0;
+}
+
 static int arm64_scalar_postra_gc_ref(const LJArm64PostRAView *v, IRRef ref,
                                       IRRef before)
 {
@@ -26756,6 +26807,10 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
         return 0;
       binary = 1;
       break;
+    case IR_MOD:
+      if (side || type != IRT_INT || (flags & ~IRT_ISPHI) ||
+          !arm64_scalar_mod_postra(v, ref)) return 0;
+      break;
     case IR_POW:
       if (type != IRT_NUM || (flags & ~IRT_ISPHI)) return 0;
       binary = 1;
@@ -27325,7 +27380,8 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
     if (rootop != BC_FORL && ir.o == IR_SLOAD &&
         ir.op1 >= snap_nslots_acq(&v->snap[s]))
       return 0;
-    if ((ir.o == IR_SNEW || ir.o == IR_TOSTR || ir.o == IR_CALLN || ir.o == IR_POW || ir.o == IR_LDEXP ||
+    if ((ir.o == IR_SNEW || ir.o == IR_TOSTR || ir.o == IR_CALLN || ir.o == IR_MOD ||
+         ir.o == IR_POW || ir.o == IR_LDEXP ||
          (ir.o == IR_CALLS &&
           ir.op2 == IRCALL_lj_buf_tmp_reset) ||
          (ir.o == IR_FPMATH && ir.op2 >= IRFPM_LOG)) &&
