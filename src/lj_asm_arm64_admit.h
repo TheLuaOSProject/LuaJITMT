@@ -546,7 +546,8 @@ static int arm64_callxs_value_kind(const IRIns *ir, IRRef ref,
                ((size == 8 && from == IRT_INT &&
                  type == (is_unsigned ? IRT_U64 : IRT_I64) &&
                  value.t.irt == type &&
-                 value.op2 == ((type << IRCONV_DSH)|IRT_INT|IRCONV_SEXT)) ||
+                 (value.op2 == ((type << IRCONV_DSH)|IRT_INT|IRCONV_SEXT) ||
+                  value.op2 == ((type << IRCONV_DSH)|IRT_INT))) ||
                 (size == 8 && from == IRT_NUM &&
                  type == (is_unsigned ? IRT_U64 : IRT_I64) &&
                  value.t.irt == type &&
@@ -1920,9 +1921,176 @@ static IRRef arm64_callxs_intarg_source(const GCtrace *T, IRRef carrier)
       ((c.t.irt == IRT_U8 || c.t.irt == IRT_U16) &&
        c.op2 == ((c.t.irt<<IRCONV_DSH)|IRT_INT)) ||
       ((c.t.irt == IRT_I64 || c.t.irt == IRT_U64) &&
-       c.op2 == ((c.t.irt<<IRCONV_DSH)|IRT_INT|IRCONV_SEXT)))
+       (c.op2 == ((c.t.irt<<IRCONV_DSH)|IRT_INT|IRCONV_SEXT) ||
+        c.op2 == ((c.t.irt<<IRCONV_DSH)|IRT_INT))))
     return c.op1;
   return 0;
+}
+
+static int arm64_ir_forl_shape(const jit_State *J, const GCtrace *T,
+	IRRef loopref, IRRef xpollref, IRRef firstphi, int *dynamic_stepp,
+	int allow_wrapping, LJArm64IRReject *reject);
+static int arm64_ir_kint_value(const GCtrace *T, IRRef ref, int32_t *valuep);
+
+/* Check the immutable source geometry needed to infer a nonnegative FORL
+** index. Besides the adjacent initializer words, reject control-flow edges
+** that enter after initialization and writes to the hidden loop tuple. */
+static int arm64_callxs_forl_nonnegative_source(const GCproto *pt,
+	const BCIns *startpc, BCIns startins, MSize *loopposp, MSize *forip,
+	int32_t *stepvaluep)
+{
+  uintptr_t lo, hi;
+  MSize looppos, foripos, bodypos, pos, initpos, ctrlhi;
+  BCIns live;
+  int64_t target;
+  if (!pt || !startpc || bc_op(startins) != BC_FORL ||
+	  !arm64_ir_proto_range(pt, &lo, &hi) ||
+	  !arm64_ir_pcpos((uintptr_t)startpc, lo, hi, &looppos)) return 0;
+  live = arm64_ir_bc_acq(lo, looppos);
+  if (live != startins) {
+	BCIns shadow = proto_jit_startins_acq(pt, startpc);
+	if (shadow != startins ||
+	    (bc_op(live) != BC_JFORL && bc_op(live) != BC_IFORL) ||
+	    bc_a(live) != bc_a(startins) || bc_d(live) == 0) return 0;
+  }
+  if (bc_j(startins) >= 0 || (int64_t)looppos+bc_j(startins) <= 0)
+	return 0;
+  foripos = (MSize)((int64_t)looppos+bc_j(startins));
+  if (foripos < 3u || foripos >= pt->sizebc) return 0;
+  {
+	BCIns fori = arm64_ir_bc_acq(lo, foripos);
+	BCIns init = arm64_ir_bc_acq(lo, foripos-3u);
+	BCIns stop = arm64_ir_bc_acq(lo, foripos-2u);
+	BCIns step = arm64_ir_bc_acq(lo, foripos-1u);
+	if (bc_op(fori) != BC_FORI || bc_a(fori) != bc_a(startins) ||
+	    bc_j(fori) <= 0 || (int64_t)foripos+1+bc_j(fori) !=
+	      (int64_t)looppos+1 ||
+	    bc_op(init) != BC_KSHORT || bc_a(init) != bc_a(fori) ||
+	    (int16_t)bc_d(init) < 0 ||
+	    bc_a(stop) != (BCReg)(bc_a(fori)+1u) ||
+	    (bc_op(stop) != BC_CGET && bc_op(stop) != BC_KSHORT) ||
+	    bc_op(step) != BC_KSHORT ||
+	    bc_a(step) != (BCReg)(bc_a(fori)+FORL_STEP) ||
+	    (int16_t)bc_d(step) <= 0) return 0;
+	if (stepvaluep) *stepvaluep = (int16_t)bc_d(step);
+  }
+  initpos = foripos-3u;
+  bodypos = foripos+1u;
+  ctrlhi = (MSize)bc_a(startins)+FORL_STEP;
+  if (bodypos > looppos) return 0;
+  for (pos = 0; pos < pt->sizebc; pos++) {
+	BCIns ins = pos == looppos ? startins : arm64_ir_bc_acq(lo, pos);
+	BCOp op = bc_op(ins);
+	if (op == BC_JFORI || op == BC_JFORL || op == BC_IFORL) {
+	  BCIns shadow = proto_jit_startins_acq(pt,
+		(const BCIns *)(const void *)(lo+pos*sizeof(BCIns)));
+	  if (shadow == 0 || bc_a(shadow) != bc_a(ins) ||
+	      (op == BC_JFORI && bc_op(shadow) != BC_FORI) ||
+	      ((op == BC_JFORL || op == BC_IFORL) && bc_op(shadow) != BC_FORL))
+		return 0;
+	  ins = shadow;
+	  op = bc_op(ins);
+	}
+	if (op >= BC__MAX) return 0;
+	if (bcmode_d(op) == BCMjump) {
+	  target = (int64_t)pos+1+(int64_t)bc_j(ins);
+	  if (target < 0 || target >= (int64_t)pt->sizebc ||
+	      (target > (int64_t)initpos && target <= (int64_t)foripos) ||
+	      (target >= (int64_t)bodypos && target <= (int64_t)looppos &&
+	       !(pos >= bodypos && pos <= looppos))) return 0;
+	} else if (op <= BC_ISNUM) {
+	  /* Conditional bytecodes skip exactly their following instruction. */
+	  target = (int64_t)pos+2;
+	  if (target < (int64_t)pt->sizebc &&
+	      ((target > (int64_t)initpos && target <= (int64_t)foripos) ||
+	       (target >= (int64_t)bodypos && target <= (int64_t)looppos &&
+	        !(pos >= bodypos && pos <= looppos)))) return 0;
+	}
+	if (pos >= bodypos && pos < looppos) {
+	  BCMode amode = bcmode_a(op);
+	  BCReg a = bc_a(ins);
+	  if ((amode == BCMdst && a >= bc_a(startins) && a <= ctrlhi) ||
+	      (amode == BCMbase && a <= ctrlhi) ||
+	      (op == BC_CSET && a >= bc_a(startins) && a <= ctrlhi)) return 0;
+	}
+  }
+  if (loopposp) *loopposp = looppos;
+  if (forip) *forip = foripos;
+  return 1;
+}
+
+/* A zero-extension of an INT loop index is equivalent to the original
+** sign-extension only when the root's exact FORI/FORL recurrence and source
+** control-flow proof establish a nonnegative index on every admitted path. */
+static int arm64_callxs_forl_nonnegative_index(const jit_State *J,
+	const GCtrace *T, IRRef source)
+{
+  MSize looppos, foripos, idxslot;
+  IRRef ref, idxload = 0, loopref = 0, pollref = 0, firstphi = 0;
+  IRRef preadd = 0, postadd = 0, indexphi = 0;
+  int32_t stepvalue, source_step;
+  int dynamic_step = 0;
+  int64_t step_signed;
+  if (J == NULL || T == NULL || T->ir == NULL || J->pt == NULL ||
+	    source < REF_FIRST || source >= T->nins || bc_op(T->startins) != BC_FORL ||
+	    !arm64_callxs_forl_nonnegative_source(J->pt,
+	      trace_startpc_acq((GCtrace *)T), T->startins, &looppos, &foripos,
+	      &source_step))
+	return 0;
+  idxslot = 1u+LJ_FR2+(MSize)bc_a(T->startins);
+  for (ref = REF_FIRST; ref < T->nins; ref++) {
+    IRIns ins = ir_load_acq(&T->ir[ref]);
+    if (ins.o == IR_LOOP) loopref = ref;
+    else if (ins.o == IR_XPOLL) pollref = ref;
+    else if (ins.o == IR_PHI && firstphi == 0) firstphi = ref;
+    if (ins.o == IR_SLOAD && ins.op1 == idxslot) {
+      if (idxload != 0) return 0;
+      idxload = ref;
+    }
+  }
+  if (idxload == 0 || loopref == 0 || pollref == 0 || firstphi == 0)
+    return 0;
+  if (!arm64_ir_forl_shape(J, T, loopref, pollref, firstphi,
+		&dynamic_step, 0, NULL)) return 0;
+	if (dynamic_step) return 0;
+  for (ref = REF_FIRST; ref < loopref; ref++) {
+    IRIns ins = ir_load_acq(&T->ir[ref]);
+    if (ins.o == IR_ADD && ins.op1 == idxload &&
+	ins.t.irt == (IRT_INT|IRT_ISPHI)) {
+      if (preadd != 0) return 0;
+      preadd = ref;
+    }
+  }
+  for (ref = pollref+1u; firstphi > ref && ref < T->nins; ref++) {
+    IRIns ins = ir_load_acq(&T->ir[ref]);
+    if (ins.o == IR_ADD && ins.op1 == preadd &&
+	ins.t.irt == (IRT_INT|IRT_ISPHI)) {
+      if (postadd != 0) return 0;
+      postadd = ref;
+    }
+  }
+  if (firstphi) {
+    for (ref = firstphi; ref < T->nins && T->ir[ref].o == IR_PHI; ref++) {
+      IRIns phi = ir_load_acq(&T->ir[ref]);
+      if (phi.op1 == preadd && phi.op2 == postadd) {
+	if (indexphi != 0) return 0;
+	indexphi = ref;
+      }
+    }
+  }
+  if (idxload == 0 || T->ir[idxload].o != IR_SLOAD ||
+	  T->ir[idxload].op1 != idxslot ||
+	  (T->ir[idxload].op2 & (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT)) !=
+	    (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT) ||
+	  (T->ir[idxload].t.irt & ~(IRT_ISPHI)) != (IRT_INT|IRT_GUARD) ||
+	  preadd == 0 || postadd == 0 || indexphi == 0 ||
+	  (source != idxload && source != preadd && source != postadd &&
+	   source != indexphi))
+    return 0;
+  if (preadd == 0 || !arm64_ir_kint_value(T, T->ir[preadd].op2,
+	  &stepvalue)) return 0;
+  step_signed = stepvalue;
+  return step_signed > 0 && step_signed == source_step;
 }
 
 /* Derived carriers may feed only named integer ABI positions. The original
@@ -1933,7 +2101,13 @@ static int arm64_callxs_intarg_member(const jit_State *J, const GCtrace *T,
   IRRef r;
   MSize s, i;
   unsigned uses = 0;
+  IRIns carrier;
   if (!arm64_callxs_intarg_source(T, value)) return 0;
+  carrier = ir_load_acq(&T->ir[value]);
+  if ((carrier.t.irt == IRT_I64 || carrier.t.irt == IRT_U64) &&
+      carrier.op2 == ((carrier.t.irt<<IRCONV_DSH)|IRT_INT) &&
+      !arm64_callxs_forl_nonnegative_index(J, T, carrier.op1))
+    return 0;
   for (s = 0; s < T->nsnap; s++) {
     MSize ofs = snap_mapofs_acq(&T->snap[s]), n = snap_nent_acq(&T->snap[s]);
     if (ofs > T->nsnapmap || n > T->nsnapmap-ofs) return 0;
@@ -3584,6 +3758,12 @@ static int arm64_callxs_ir_graph(const jit_State *J, const GCtrace *T,
 	if (dst == IRT_NUM && from == IRT_FLOAT &&
 	    ins.op2 == ((IRT_NUM << IRCONV_DSH)|IRT_FLOAT) &&
 	    ins.t.irt == IRT_NUM)
+	  break;
+	if ((dst == IRT_I64 || dst == IRT_U64) && from == IRT_INT &&
+	    (ins.op2 == ((dst << IRCONV_DSH)|IRT_INT|IRCONV_SEXT) ||
+	     (ins.op2 == ((dst << IRCONV_DSH)|IRT_INT) &&
+	      arm64_callxs_forl_nonnegative_index(J, T, ins.op1))) &&
+	    ins.t.irt == dst)
 	  break;
 	return 0;
       }
@@ -5399,18 +5579,18 @@ static int arm64_ir_callxs_shape(const jit_State *J, const GCtrace *T,
 	const GCproto *pt, LJArm64IRReject *reject)
 {
   LJArm64CallXSGraph graph;
-  if (!arm64_callxs_ir_graph(J, T, &graph)) {
-    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
-	REF_BASE, IR_CALLXS, 12);
-  }
-  if (J->loopref != graph.loop)
+  if (!arm64_callxs_ir_graph(J, T, &graph))
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL, REF_BASE,
+		   IR_CALLXS, 12);
+  if (J->loopref != graph.loop) {
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
 	graph.loop, IR_XSAVE, 51);
-  if (!arm64_callxs_snapshot_bounds(T, pt))
+  }
+  if (!arm64_callxs_snapshot_bounds(T, pt)) {
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
 	graph.loop, IR_XSAVE, 52);
-  if (!arm64_ir_guard_snapshots(T, reject))
-    return 0;
+  }
+  if (!arm64_ir_guard_snapshots(T, reject)) return 0;
   return 1;
 }
 
@@ -6123,12 +6303,117 @@ static IRRef arm64_postra_intarg_source(const IRIns *ir, IRRef nk, IRRef nins,
     if (c.op2 != (mode|IRT_INT)) return 0;
     break;
   case IRT_I64: case IRT_U64:
-    if (c.op2 != (mode|IRT_INT|IRCONV_SEXT)) return 0;
+    if (c.op2 != (mode|IRT_INT|IRCONV_SEXT) &&
+        c.op2 != (mode|IRT_INT)) return 0;
     break;
   default:
     return 0;
   }
   return c.op1;
+}
+
+/* Independent allocated-state counterpart to the bounded FORI/FORL range
+** proof. It reads the allocated semantic IR, source prototype and start PC. */
+static int arm64_postra_forl_nonnegative_index(
+	const LJArm64PostRAView *view, IRRef semantic_nins, IRRef source)
+{
+  uintptr_t lo, hi;
+  GCproto *pt;
+  MSize looppos, foripos, idxslot;
+  BCIns startins, loopins;
+  IRRef ref, idxload = 0, loopref = 0, pollref = 0, firstphi = 0;
+  IRRef preadd = 0, postadd = 0, indexphi = 0;
+  int32_t stepvalue, source_step;
+  int dynamic_step = 0;
+  if (view == NULL || view->ir == NULL || view->proto == NULL ||
+	  view->proto_bc == NULL || view->owner == NULL ||
+	  view->startpc == NULL || view->proto_sizebc == 0 ||
+	  source < REF_FIRST || source >= semantic_nins ||
+	  bc_op(view->startins) != BC_FORL) return 0;
+  pt = (GCproto *)view->proto;
+  /* Bind the independently supplied source view to the trusted trace owner
+  ** before dereferencing the prototype or its colocated bytecode/shadow. */
+  if (!checkptrGC(obj2gco(pt)) ||
+	  trace_startptgco_acq((GCtrace *)view->owner) != obj2gco(pt)) return 0;
+  if (pt->gct != (uint8_t)~LJ_TPROTO ||
+	  proto_bc(pt) != view->proto_bc || pt->sizebc != view->proto_sizebc ||
+	  pt->numparams != view->proto_numparams) return 0;
+  lo = (uintptr_t)view->proto_bc;
+  if ((uintptr_t)view->proto_sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns)) return 0;
+  hi = lo+(uintptr_t)view->proto_sizebc*sizeof(BCIns);
+  if (hi <= lo || !arm64_ir_pcpos((uintptr_t)view->startpc, lo, hi, &looppos))
+	  return 0;
+  startins = view->startins;
+  loopins = arm64_ir_bc_acq(lo, looppos);
+  if (view->owner_private) {
+    if (loopins != startins) return 0;
+  } else {
+    GCtrace *owner = (GCtrace *)view->owner;
+    BCIns shadow;
+    if (owner == NULL || trace_traceno_acq(owner) == 0 ||
+	trace_startpc_acq(owner) != view->startpc ||
+	trace_startptgco_acq(owner) != obj2gco(pt)) return 0;
+    shadow = proto_jit_startins_acq(pt, view->startpc);
+    if (shadow != startins || bc_op(loopins) != BC_JFORL ||
+	bc_a(loopins) != bc_a(shadow) ||
+	bc_d(loopins) != trace_traceno_acq(owner)) return 0;
+    loopins = shadow;
+  }
+  if (loopins != startins ||
+	  !arm64_callxs_forl_nonnegative_source(pt, view->startpc,
+	    startins, &looppos, &foripos, &source_step)) return 0;
+  idxslot = 1u+LJ_FR2+(MSize)bc_a(startins);
+  for (ref = REF_FIRST; ref < semantic_nins; ref++) {
+	IRIns ins = ir_load_acq(&view->ir[ref]);
+	if (ins.o == IR_LOOP) loopref = ref;
+	else if (ins.o == IR_XPOLL) pollref = ref;
+	else if (ins.o == IR_PHI && firstphi == 0) firstphi = ref;
+	if (ins.o == IR_SLOAD && ins.op1 == idxslot) {
+	  if (idxload != 0) return 0;
+	  idxload = ref;
+	}
+  }
+  if (idxload == 0 || loopref == 0 || pollref == 0 || firstphi == 0 ||
+	  !arm64_postra_forl_dynamic_shape(view, semantic_nins,
+		&dynamic_step, 0) || dynamic_step) return 0;
+  for (ref = REF_FIRST; ref < loopref; ref++) {
+	IRIns ins = ir_load_acq(&view->ir[ref]);
+	if (ins.o == IR_ADD && ins.op1 == idxload &&
+	    ins.t.irt == (IRT_INT|IRT_ISPHI)) {
+	  if (preadd != 0) return 0;
+	  preadd = ref;
+	}
+  }
+  for (ref = pollref+1u; firstphi > ref && ref < semantic_nins; ref++) {
+	IRIns ins = ir_load_acq(&view->ir[ref]);
+	if (ins.o == IR_ADD && ins.op1 == preadd &&
+	    ins.t.irt == (IRT_INT|IRT_ISPHI)) {
+	  if (postadd != 0) return 0;
+	  postadd = ref;
+	}
+  }
+  for (ref = firstphi; ref < semantic_nins &&
+	  ir_load_acq(&view->ir[ref]).o == IR_PHI; ref++) {
+	IRIns phi = ir_load_acq(&view->ir[ref]);
+	if (phi.op1 == preadd && phi.op2 == postadd) {
+	  if (indexphi != 0) return 0;
+	  indexphi = ref;
+	}
+  }
+  {
+	IRIns idx = idxload ? ir_load_acq(&view->ir[idxload]) : (IRIns){ 0 };
+	if (idxload == 0 || idx.o != IR_SLOAD || idx.op1 != idxslot ||
+	    (idx.op2 & (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT)) !=
+	      (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT) ||
+	    (idx.t.irt & ~IRT_ISPHI) != (IRT_INT|IRT_GUARD) ||
+	    preadd == 0 || postadd == 0 || indexphi == 0 ||
+	    (source != idxload && source != preadd && source != postadd &&
+	     source != indexphi)) return 0;
+  }
+  if (preadd == 0 ||
+	  !arm64_callxs_kint_value(view->ir, view->nk,
+		ir_load_acq(&view->ir[preadd]).op2, &stepvalue)) return 0;
+  return stepvalue > 0 && stepvalue == source_step;
 }
 
 static int arm64_postra_intarg_member(const LJArm64PostRAView *view,
@@ -6137,7 +6422,12 @@ static int arm64_postra_intarg_member(const LJArm64PostRAView *view,
   IRRef ref;
   MSize s, e;
   unsigned consumers = 0;
+  IRIns carrier;
   if (!arm64_postra_intarg_source(view->ir, view->nk, nins, value)) return 0;
+  carrier = ir_load_acq(&view->ir[value]);
+  if ((carrier.t.irt == IRT_I64 || carrier.t.irt == IRT_U64) &&
+      carrier.op2 == ((carrier.t.irt<<IRCONV_DSH)|IRT_INT) &&
+      !arm64_postra_forl_nonnegative_index(view, nins, carrier.op1)) return 0;
   for (s = 0; s < view->nsnap; s++) {
     MSize ofs = snap_mapofs_acq(&view->snap[s]);
     MSize n = snap_nent_acq(&view->snap[s]);
@@ -7879,6 +8169,15 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	    } else if (protocol == 0 && ins.t.irt == (IRT_INT|IRT_GUARD) &&
 		from == IRT_NUM && ins.op2 == (IRCONV_INT_NUM|IRCONV_CHECK)) {
 	      /* Exact checked NUM narrowing; each source has its own IR proof. */
+	    } else if (protocol == 0 &&
+		(ins.t.irt == IRT_I64 || ins.t.irt == IRT_U64) &&
+		from == IRT_INT &&
+		(ins.op2 == ((ins.t.irt << IRCONV_DSH)|IRT_INT|IRCONV_SEXT) ||
+		 (ins.op2 == ((ins.t.irt << IRCONV_DSH)|IRT_INT) &&
+		  arm64_postra_forl_nonnegative_index(view, semantic_nins,
+		    ins.op1)))) {
+	      /* Signed conversions preserve sign extension; the no-SEXT form is
+	      ** separately admitted only for the proven nonnegative loop index. */
 	    } else if ((ins.t.irt & ~(IRT_TYPE|IRT_ISPHI)) != 0 ||
 		!((dst == IRT_NUM && from == IRT_INT &&
 		   ins.op2 == IRCONV_NUM_INT &&

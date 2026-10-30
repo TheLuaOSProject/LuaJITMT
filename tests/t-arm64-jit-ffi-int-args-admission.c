@@ -96,7 +96,13 @@ enum Mutation {
   M_LITERAL_TYPE,
   M_LITERAL_FLOAT,
   M_LITERAL_OPERAND,
-  M_LITERAL_PAYLOAD
+  M_LITERAL_PAYLOAD,
+  M_FORL_INITIALIZER,
+  M_FORL_STEP,
+  M_FORL_BYPASS_INITIALIZER,
+  M_FORL_CONTROL_WRITE,
+  M_FORL_CSET_CONTROL_WRITE,
+  M_FORL_BAD_OPCODE
 };
 
 static unsigned semantic_ok, semantic_bad, postra_ok, postra_bad;
@@ -487,6 +493,27 @@ static int postra_accept(IntFixture *fx)
   return lj_asm_arm64_postra_admit(&v, NULL);
 }
 
+static void assert_postra_forl_view_rejects_incoherent_source(IntFixture *fx)
+{
+  LJArm64PostRAView v = postra_view(fx);
+  assert(fx->form == 4 && fx->source != 0);
+  assert(lj_asm_arm64_postra_admit(&v, NULL));
+  v.proto_bc++;
+  assert(!lj_asm_arm64_postra_admit(&v, NULL));
+  v = postra_view(fx);
+  v.proto_sizebc--;
+  assert(!lj_asm_arm64_postra_admit(&v, NULL));
+  v = postra_view(fx);
+  v.proto = NULL;
+  assert(!lj_asm_arm64_postra_admit(&v, NULL));
+  v = postra_view(fx);
+  v.proto_numparams++;
+  assert(!lj_asm_arm64_postra_admit(&v, NULL));
+  v = postra_view(fx);
+  v.startpc++;
+  assert(!lj_asm_arm64_postra_admit(&v, NULL));
+}
+
 static void assert_abi(lua_State *L, unsigned kind, unsigned stack)
 {
   char name[48];
@@ -576,6 +603,64 @@ static void mutate(IntFixture *fx, enum Mutation m)
   case M_LITERAL_PAYLOAD:
     fx->ir[fx->carrier+1u].tv.u64 ^= UINT64_C(1);
     break;
+  case M_FORL_INITIALIZER:
+  case M_FORL_STEP: {
+    const BCIns *pc = trace_startpc_acq(fx->owner);
+    BCIns start = trace_startins_acq(fx->owner);
+    MSize pos = proto_bcpos(fx->pt, pc);
+    MSize foripos = (MSize)((int64_t)pos + bc_j(start));
+    BCIns *word = (BCIns *)(uintptr_t)&proto_bc(fx->pt)[
+        foripos - (m == M_FORL_INITIALIZER ? 3u : 1u)];
+    BCIns old = loadbc(word);
+    assert(fx->form == 4 && bc_op(start) == BC_FORL &&
+           bc_op(old) == BC_KSHORT);
+    bc_publish((const uint32_t *)word,
+               BCINS_AD(BC_KSHORT, bc_a(old),
+                        m == M_FORL_INITIALIZER ? -1 : 0));
+    break;
+  }
+  case M_FORL_BYPASS_INITIALIZER:
+  case M_FORL_CONTROL_WRITE: {
+    BCIns start = trace_startins_acq(fx->owner);
+    MSize looppos = proto_bcpos(fx->pt, trace_startpc_acq(fx->owner));
+    MSize foripos = (MSize)((int64_t)looppos + bc_j(start));
+    BCIns *word;
+    assert(fx->form == 4 && bc_op(start) == BC_FORL && foripos >= 4u);
+    if (m == M_FORL_BYPASS_INITIALIZER) {
+      MSize from = foripos-4u, body = foripos+1u;
+      word = (BCIns *)(uintptr_t)&proto_bc(fx->pt)[from];
+      bc_publish((const uint32_t *)word,
+                 BCINS_AJ(BC_JMP, 0,
+                          (ptrdiff_t)body-(ptrdiff_t)from-1));
+    } else {
+      word = (BCIns *)(uintptr_t)&proto_bc(fx->pt)[foripos+1u];
+      bc_publish((const uint32_t *)word,
+                 BCINS_AD(BC_KSHORT, bc_a(start)+FORL_IDX, 7));
+    }
+    break;
+  }
+  case M_FORL_CSET_CONTROL_WRITE: {
+    BCIns start = trace_startins_acq(fx->owner);
+    MSize looppos = proto_bcpos(fx->pt, trace_startpc_acq(fx->owner));
+    MSize foripos = (MSize)((int64_t)looppos + bc_j(start));
+    BCIns *word = (BCIns *)(uintptr_t)&proto_bc(fx->pt)[foripos+1u];
+    assert(fx->form == 4 && bc_op(start) == BC_FORL &&
+           bc_op(loadbc(word)) != BC_CSET);
+    bc_publish((const uint32_t *)word,
+               BCINS_AD(BC_CSET, bc_a(start)+FORL_IDX,
+                        bc_a(start)+FORL_STOP));
+    break;
+  }
+  case M_FORL_BAD_OPCODE: {
+    BCIns start = trace_startins_acq(fx->owner);
+    MSize looppos = proto_bcpos(fx->pt, trace_startpc_acq(fx->owner));
+    MSize foripos = (MSize)((int64_t)looppos + bc_j(start));
+    BCIns *word = (BCIns *)(uintptr_t)&proto_bc(fx->pt)[foripos+1u];
+    assert(fx->form == 4 && bc_op(start) == BC_FORL);
+    bc_publish((const uint32_t *)word,
+               BCINS_AD((BCOp)0xff, bc_a(start), 0));
+    break;
+  }
   case M_SOURCE:
     other = find_other_int(fx);
     assert(other);
@@ -764,14 +849,37 @@ static void expect_both(IntFixture *fx, enum Mutation m)
   const BCIns *mutpc = NULL;
   BCIns original = 0;
   int changes_bytecode;
-  changes_bytecode = (m == M_CALLM_SOURCE_PC || m == M_CALLM_ARG_COUNT);
+  changes_bytecode = (m == M_CALLM_SOURCE_PC || m == M_CALLM_ARG_COUNT ||
+                      m == M_FORL_INITIALIZER || m == M_FORL_STEP ||
+                      m == M_FORL_BYPASS_INITIALIZER ||
+                      m == M_FORL_CONTROL_WRITE ||
+                      m == M_FORL_CSET_CONTROL_WRITE ||
+                      m == M_FORL_BAD_OPCODE);
   if (changes_bytecode) {
-    (void)source_ins(fx, fx->ncalls - 1u, &mutpc);
-    mutpc--;
+    if (m == M_FORL_INITIALIZER || m == M_FORL_STEP)
+      mutpc = trace_startpc_acq(fx->owner) + bc_j(trace_startins_acq(fx->owner)) -
+          (m == M_FORL_INITIALIZER ? 3 : 1);
+    else if (m == M_FORL_BYPASS_INITIALIZER ||
+             m == M_FORL_CONTROL_WRITE ||
+             m == M_FORL_CSET_CONTROL_WRITE || m == M_FORL_BAD_OPCODE) {
+      MSize looppos = proto_bcpos(fx->pt, trace_startpc_acq(fx->owner));
+      MSize foripos = (MSize)((int64_t)looppos +
+                              bc_j(trace_startins_acq(fx->owner)));
+      mutpc = proto_bc(fx->pt) +
+          (m == M_FORL_BYPASS_INITIALIZER ? foripos-4u : foripos+1u);
+    }
+    else {
+      (void)source_ins(fx, fx->ncalls - 1u, &mutpc);
+      mutpc--;
+    }
     original = loadbc(mutpc);
   }
   reset_fixture(fx);
   mutate(fx, m);
+  if (m == M_FORL_INITIALIZER || m == M_FORL_STEP ||
+      m == M_FORL_BYPASS_INITIALIZER || m == M_FORL_CONTROL_WRITE ||
+      m == M_FORL_CSET_CONTROL_WRITE || m == M_FORL_BAD_OPCODE)
+    assert(loadbc(mutpc) != original);
   if (semantic_accept(fx)) {
     fprintf(stderr, "INT semantic accepted mutation %d form%u kind%u stack%u\n",
             m, fx->form, fx->kind, fx->stack);
@@ -831,7 +939,7 @@ static void run_runner(lua_State *L, const char *name)
   char consumer[80];
   unsigned kind = 0, form = 0, stack = 0;
   assert(sscanf(name, "__int_arg_run_k%u_f%u_s%u", &kind, &form, &stack) == 3);
-  assert(kind < KINDS && form <= FORMS && stack < 2);
+  assert(kind < KINDS && form <= FORMS + 1u && stack < 2);
   snprintf(consumer, sizeof(consumer), "__int_arg_%s%s", stack ? "stack_" : "",
            kind_name[kind]);
   lua_getglobal(L, "__int_arg_configure");
@@ -873,6 +981,8 @@ static void test_case(lua_State *L, jit_State *J, const char *runner,
   reset_fixture(&fx);
   assert(postra_accept(&fx));
   postra_ok++;
+  if (form == 4)
+    assert_postra_forl_view_rejects_incoherent_source(&fx);
   /* Exercise provenance separately for each source family, then the encoded
   ** integer conversion modes across the signed/unsigned width matrix. */
   /* The pre-existing direct signed-i32 SLOAD path does not require a rooted
@@ -880,7 +990,7 @@ static void test_case(lua_State *L, jit_State *J, const char *runner,
   * */
   if (!(form == 1 && kind == 4 && !stack))
     expect_both(&fx, M_SOURCE);
-  if (kind != 4 && kind != 5)
+  if (kind != 4 && kind != 5 && form != 4)
     expect_both(&fx, M_CONV_MODE);
   if (kind != 4 && kind != 5)
     expect_both(&fx, M_CONV_TYPE);
@@ -918,6 +1028,14 @@ static void test_case(lua_State *L, jit_State *J, const char *runner,
     expect_both(&fx, M_PRODUCER_DONE_TRUNCATED);
     expect_both(&fx, M_CALLM_SOURCE_PC);
     expect_both(&fx, M_CALLM_ARG_COUNT);
+  }
+  if (form == 4) {
+    expect_both(&fx, M_FORL_INITIALIZER);
+    expect_both(&fx, M_FORL_STEP);
+    expect_both(&fx, M_FORL_BYPASS_INITIALIZER);
+    expect_both(&fx, M_FORL_CONTROL_WRITE);
+    expect_both(&fx, M_FORL_CSET_CONTROL_WRITE);
+    expect_both(&fx, M_FORL_BAD_OPCODE);
   }
   reset_fixture(&fx);
   fx.ir[fx.carrier].r = RID_D0;
@@ -1008,7 +1126,7 @@ int main(void)
       "0) end\n"
       "function __int_arg_install(id,form,stack,k,literal) local x=(form==0 and "
       "'t.value' or 'v'); if form==2 then x='p('..x..')' end; "
-      "if form==3 then x=tostring(literal) end; local a=stack "
+      "if form==3 then x=tostring(literal) end; if form==4 then x='i' end; local a=stack "
       "and ('101,102,103,104,105,106,107,108,31,-505,1985229328,'..x) or x; "
       "local b='local sum=.5; for i=1,n do sum=sum+c('..a..') end; return "
       "sum-.5'; local p='t,v,c,p,n'; "
@@ -1053,6 +1171,20 @@ int main(void)
         snprintf(runner, sizeof(runner), "__int_arg_run_%s", id);
         test_literal_case(L, J, runner, kind, stack);
       }
+    }
+  for (unsigned kind = 6; kind < KINDS; kind++)
+    for (unsigned stack = 0; stack < 2; stack++) {
+      char id[64], runner[96];
+      snprintf(id, sizeof(id), "k%u_f4_s%u", kind, stack);
+      lua_getglobal(L, "__int_arg_install");
+      lua_pushstring(L, id);
+      lua_pushinteger(L, 4);
+      lua_pushboolean(L, stack);
+      lua_pushinteger(L, kind);
+      lua_pushnil(L);
+      assert(lua_pcall(L, 5, 0, 0) == LUA_OK);
+      snprintf(runner, sizeof(runner), "__int_arg_run_%s", id);
+      test_case(L, J, runner, 4, kind, stack);
     }
   ljt_lua_dostring(L, "assert(__int_arg_stop:send(true,5)); local "
                       "ok,v=__int_arg_peer:join(5); assert(ok and v)");
