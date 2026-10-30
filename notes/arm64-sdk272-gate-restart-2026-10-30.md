@@ -24,3 +24,16 @@ The last complete passing source checkpoint remains `9ebec6139`, promoted on
 `codex/arm64-parity` with an independent ordinary rebuild. Its evidence belongs
 to the preceding toolchain. Do not promote the newer source on the basis of
 the interrupted `f752aa882` run.
+
+## Restart completion
+
+The frozen `74a48b1b8` run has now completed successfully with Xcode 27.2:
+all four combined M7 FFI profiles, the full experimental gate, and the actual
+VM/recorder safepoint runtime checks passed. The outer runner reported
+`gate exit=0; restore exit=0`. Ordinary assertion ARM64 was restored with
+profile `0b949a87a07a0d0551b2125cb12dd9d4949b79aa85954e2d4dafc809c757ed0a`.
+This supersedes the preceding paragraph's last-complete-checkpoint statement
+for validation evidence; promotion can use this successful source rather than
+the interrupted run. The later numeric-concat checkpoint `68c122f2a` has its
+own independently frozen complete gate still running. Integer formatting,
+modulo and child-return witness follow-ups are later focused checkpoints.
