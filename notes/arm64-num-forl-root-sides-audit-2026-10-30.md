@@ -54,3 +54,16 @@ must make both reject. This is direct coverage of the boundary subproof: the
 ordinary captured child trace has no snapshot at that FORL boundary footer.
 The fixture passed all four ARM64/arm64e assertion/release profiles in
 `/Users/frityet/Scratch/ljmt-num-forl-sides-20261030/step-payload-fourprofiles-final.log`.
+
+The final pushed source commit `58aa535542b12469dd9794dbb6e52290d7b6670`
+was also rebuilt as an ordinary ARM64 runtime without test helpers. Its SHA-256
+is `668d78f6c9b5fb30d8199e39c011760ea02c0207cfe8d0aecfa4f59095c77fa3`; both
+stock source and original-v2-bytecode corpora passed 509 cases. The refreshed
+numeric side probe preserved the ARM64 root/side IDs and native exit counts:
+phase two observed one root exit and 81 side exits, with side #2 reused after
+GC and the explicit flush check. Bundle and logs are in
+`/Users/frityet/Scratch/ljmt-num-forl-sides-20261030/arm64-ordinary-58aa-r1`
+and the adjacent `arm64-58aa-{stock-source,stock-bytecode,numeric-peer}.log`
+files. The prior frozen x86_64 ordinary runtime remains the comparison because
+the follow-up changes only ARM64 boundary proof and fixture code; no new x86_64
+runtime was built for this commit.
