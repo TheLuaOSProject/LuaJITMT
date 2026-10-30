@@ -68,9 +68,25 @@ if rooted_upvalue_admission then
   local fn = (mode == 'get' and read) or (mode == 'get-forl' and read_for) or
              (mode == 'store' and write) or write_for
   if mode == 'no-peer-string-sub-forl' or
-     mode == 'no-peer-string-sub-while' then
+     mode == 'no-peer-string-sub-while' or
+     mode == 'no-peer-math-sin-forl' or
+     mode == 'no-peer-string-byte-forl' then
     local sub = string.sub
-    if mode == 'no-peer-string-sub-forl' then
+    if mode == 'no-peer-math-sin-forl' then
+      local sin = math.sin
+      fn = function(n, x)
+        local sum = 0
+        for i=1,n do sum = sum + sin(x + i * 0.125) end
+        return sum
+      end
+    elseif mode == 'no-peer-string-byte-forl' then
+      local byte = string.byte
+      fn = function(s, n)
+        local sum = 0
+        for i=1,n do sum = sum + byte(s, 1) end
+        return sum
+      end
+    elseif mode == 'no-peer-string-sub-forl' then
       fn = function(s, n)
         local observed = s
         for _ = 1, n do observed = sub(s, -4, -5) end
@@ -89,7 +105,9 @@ if rooted_upvalue_admission then
   end
   assert(mode == 'get' or mode == 'store' or mode == 'get-forl' or
          mode == 'store-forl' or mode == 'no-peer-string-sub-forl' or
-         mode == 'no-peer-string-sub-while' or literal)
+         mode == 'no-peer-string-sub-while' or
+         mode == 'no-peer-math-sin-forl' or
+         mode == 'no-peer-string-byte-forl' or literal)
   if literal then
     fn = assert(loadstring('local value; return function(n) '..
       'local i=0; while i<n do value='..literal[1]..
@@ -108,6 +126,13 @@ if rooted_upvalue_admission then
     if mode == 'no-peer-string-sub-forl' or
        mode == 'no-peer-string-sub-while' then
       assert(fn('a\0\255bcdef', 32) == '')
+    elseif mode == 'no-peer-math-sin-forl' then
+      local expected = 0
+      for i=1,32 do expected = expected + math.sin(1.25+i*0.125) end
+      assert(math.abs(fn(32, 1.25)-expected) < 1e-12)
+    elseif mode == 'no-peer-string-byte-forl' then
+      local sample = string.char(128, 1, 127, 0, 255)
+      assert(fn(sample, 32) == 128*32)
     elseif mode == 'get' or mode == 'get-forl' then assert(fn(32) == 1.25)
     elseif literal then assert(fn(32) == literal[2])
     else assert(fn(1.25, 32) == 1.25) end

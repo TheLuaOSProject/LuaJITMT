@@ -3332,23 +3332,16 @@ static TRef rec_upvalue_rooted(jit_State *J, uint32_t uv, TRef val)
   return lj_record_vload(J, root, 0, type);
 }
 
-/* Keep the exact captured string.sub fast-function cell on the rooted IR
-** path even before a peer TG exists. This is a recorder normalization, not
-** permission to emit raw UREFC on ARM64: the closed-cell helper re-resolves
-** the current value, and the existing FF/source certificate guards the call.
-*/
-static int rec_upvalue_rooted_sub_nopeer(jit_State *J, uint32_t uv,
-					 GCupval *uvp, TRef val)
+/* Normalize closed root-context UGETs through the enumerated rooted path even
+** before a peer TG exists. This does not admit raw UREFC on ARM64: the helper
+** re-reads the current cell, while type/source admission remains responsible
+** for deciding which uses of that value can be compiled. */
+static int rec_upvalue_rooted_nopeer(jit_State *J, uint32_t uv,
+				     GCupval *uvp, TRef val)
 {
-  cTValue *tv;
-  GCfunc *fn;
-  if (val || J->parent || J->framedepth != 0 || J->retdepth != 0 ||
-      bc_op(*J->pc) != BC_UGET || uv >= J->pt->sizeuv || !uvp->closed)
-    return 0;
-  tv = uvval(uvp);
-  if (!tvisfunc(tv)) return 0;
-  fn = funcV(tv);
-  return !isluafunc(fn) && lj_func_ffid_acq(fn) == FF_string_sub;
+	return !val && !J->parent && J->framedepth == 0 && J->retdepth == 0 &&
+	       bc_op(*J->pc) == BC_UGET && uv < J->pt->sizeuv && uvp &&
+	       uvp->closed;
 }
 #endif
 
@@ -3366,7 +3359,7 @@ static TRef rec_upvalue(jit_State *J, uint32_t uv, TRef val)
 #endif
   uvp = func_uv_acq(&J->fn->l, uv);
 #if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
-  if (rec_upvalue_rooted_sub_nopeer(J, uv, uvp, val))
+  if (rec_upvalue_rooted_nopeer(J, uv, uvp, val))
     return rec_upvalue_rooted(J, uv, val);
 #endif
   fn = getcurrf(J);

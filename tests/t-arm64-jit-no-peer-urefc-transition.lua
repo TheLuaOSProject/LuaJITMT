@@ -22,9 +22,9 @@ jit.flush()
 jit.on(f, true)
 jit.opt.start('hotloop=1', 'hotexit=1000', 'maxtrace=16')
 
-local function root_id()
-  for pc = 0, util.funcinfo(f).bytecodes-1 do
-    local ins = util.funcbc(f, pc)
+local function root_id(fn)
+  for pc = 0, util.funcinfo(fn).bytecodes-1 do
+    local ins = util.funcbc(fn, pc)
     if ins then
       local op = bit.band(ins, 0xff)
       local name = vmdef.bcnames:sub(op*6+1, op*6+6)
@@ -35,8 +35,8 @@ local function root_id()
   end
 end
 
-local function check_root(label)
-  local no, loopop = root_id()
+local function check_root(label, fn)
+  local no, loopop = root_id(fn or f)
   assert(no, label..': missing loop root')
   local info = util.traceinfo(no)
   assert(info, label..': root is not published')
@@ -61,17 +61,45 @@ local function run_many(value, expected_value, n)
 end
 
 run_many(sample, expected, 80)
-local first, firstop = check_root('no-peer')
+local first, firstop = check_root('no-peer', f)
+local function make_numeric_reader()
+  local value = 17
+  local function read(n)
+    local out = value
+    for i = 1, n do out = value end
+    return out
+  end
+  local function write(v) value = v end
+  return read, write
+end
+local read_number, write_number = make_numeric_reader()
+jit.on(read_number, true)
+for _ = 1, 40 do assert(read_number(80) == 17) end
+local number_root = assert(root_id(read_number), 'missing no-peer numeric root')
+local number_info = assert(util.traceinfo(number_root))
+local number_get = false
+for ref = 1, number_info.nins do
+  local _, op, _, id = util.traceir(number_root, ref)
+  local opname = op and vmdef.irnames:sub(bit.rshift(op, 8)*6+1,
+                                           bit.rshift(op, 8)*6+6)
+  number_get = number_get or
+    (opname == 'CALLS ' and vmdef.ircall[id] == 'lj_func_getuv_rooted_try')
+end
+assert(number_get, 'numeric no-peer root missing rooted helper')
 local exits = 0
+local number_exits = 0
 local function onexit(no)
   if no == first then exits = exits + 1 end
+  if no == number_root then number_exits = number_exits + 1 end
 end
 jit.off(onexit, true)
 jit.attach(onexit, 'texit')
 collectgarbage('collect')
 run_many(sample, expected, 80)
+for _ = 1, 40 do assert(read_number(80) == 17) end
 jit.attach(onexit)
 assert(exits > 0, 'no-peer root did not execute after GC')
+assert(number_exits > 0, 'no-peer numeric root did not execute after GC')
 
 -- The helper reloads the exact closed cell. Changing it between entries must
 -- produce the new function's result, and restoring it must restore string.sub.
@@ -83,6 +111,10 @@ debug.setupvalue(f, 1, string.sub)
 run_many(sample, expected, 80)
 collectgarbage('collect')
 run_many(sample, expected, 80)
+write_number('changed-type')
+for _ = 1, 8 do assert(read_number(80) == 'changed-type') end
+write_number(17)
+for _ = 1, 8 do assert(read_number(80) == 17) end
 
 -- The first peer activation retires no-peer traces before shared recording.
 local ready, release = threading.channel(1), threading.channel(1)
@@ -94,18 +126,27 @@ end, ready, release))
 assert(select(2, ready:recv(5)))
 assert(util.traceinfo(first) == nil,
        'no-peer trace remained published after first peer activation')
+assert(util.traceinfo(number_root) == nil,
+       'no-peer numeric trace remained published after peer activation')
 run_many(sample, expected, 80)
-local second = check_root('active-peer')
+for _ = 1, 40 do assert(read_number(80) == 17) end
+local second = check_root('active-peer', f)
+local second_number = check_root('active-peer-numeric', read_number)
 local peer_exits = 0
+local peer_number_exits = 0
 local function on_peer_exit(no)
   if no == second then peer_exits = peer_exits + 1 end
+  if no == second_number then peer_number_exits = peer_number_exits + 1 end
 end
 jit.off(on_peer_exit, true)
 jit.attach(on_peer_exit, 'texit')
 collectgarbage('collect')
 run_many(sample, expected, 80)
+for _ = 1, 40 do assert(read_number(80) == 17) end
 jit.attach(on_peer_exit)
 assert(peer_exits > 0, 'rooted peer trace did not execute after GC')
+assert(peer_number_exits > 0,
+       'rooted peer numeric trace did not execute after GC')
 assert(release:send(true, 5))
 local ok, result = peer:join(5)
 assert(ok and result)
