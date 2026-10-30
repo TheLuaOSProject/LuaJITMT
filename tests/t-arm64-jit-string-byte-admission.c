@@ -134,6 +134,28 @@ static int call_u8_snapshot_loop(lua_State *L, const char *function_global,
   return status;
 }
 
+static int call_fixed_pair_loop(lua_State *L, const char *function_global,
+                                const char *value_global,
+                                lua_Integer ka, lua_Integer kb,
+                                lua_Number *out)
+{
+  int status;
+  lua_getglobal(L, function_global);
+  lua_getglobal(L, value_global);
+  lua_pushinteger(L, 80);
+  lua_pushinteger(L, ka);
+  lua_pushinteger(L, kb);
+  status = lua_pcall(L, 4, 1, 0);
+  if (status == LUA_OK) {
+    assert(lua_isnumber(L, -1));
+    *out = lua_tonumber(L, -1);
+  } else {
+    assert(lua_isstring(L, -1));
+  }
+  lua_pop(L, 1);
+  return status;
+}
+
 static int call_dynamic_loop(lua_State *L, const char *function_global,
                              lua_Number index, lua_Number *out)
 {
@@ -545,7 +567,11 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
   assert(call_multiple_loop(L,mode,recorded_first,recorded_end,"string_byte_multi_trace","string_byte_multi_value",
                    &actual)==LUA_OK && actual==.5+80*weighted);
   lua_getglobal(L,"string_byte_multi_trace");
-  no=proto_trace_acq(funcproto(funcV(L->top-1)));lua_pop(L,1);
+  {
+    GCproto *pt = funcproto(funcV(L->top-1));
+    no=proto_trace_acq(pt);
+  }
+  lua_pop(L,1);
   owner=traceref_safe(L2J(L),no);
   assert(no && owner && trace_runnable_acq(owner,no));
   code=trace_mcode_acq(owner);codesize=trace_szmcode_acq(owner);
@@ -1784,6 +1810,261 @@ static void test_u8_snapshot(lua_State *L)
          (unsigned)no);
 }
 
+static void test_fixed_pair_u8_snapshot(lua_State *L)
+{
+  Arm64TraceFixture f;
+  GCtrace *owner;
+  GCproto *clonept, *viewpt;
+  TraceNo no;
+  IRRef lanes[2] = { 0, 0 }, offsets[2] = { 0, 0 }, bound = 0, r;
+  MSize callpc = 0, mapidx[2] = { 0, 0 };
+  BCReg calla = 0;
+  SnapEntry lane_entry[2];
+  int have_map[2] = { 0, 0 };
+  MCode *code;
+  size_t codesize;
+  unsigned char *saved;
+  lua_Number actual, expected;
+  uint32_t before, exits;
+
+  run_chunk(L,
+    "string_byte_fixed_pair_value=string.rep('gcstr-byte-',24); "
+    "assert(string_byte_fixed_pair_trace(string_byte_fixed_pair_value,80,"
+    "103,99)==16160); "
+    "assert(string_byte_fixed_pair_oracle(string_byte_fixed_pair_value,"
+    "80,103,99)==16160)");
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  assert(call_fixed_pair_loop(L, "string_byte_fixed_pair_trace",
+      "string_byte_fixed_pair_value", 103, 99, &actual) == LUA_OK &&
+      actual == 16160);
+  lua_getglobal(L, "string_byte_fixed_pair_trace");
+  assert(lua_isfunction(L, -1) && isluafunc(funcV(L->top-1)));
+  no = proto_trace_acq(funcproto(funcV(L->top-1)));
+  lua_pop(L, 1);
+  owner = traceref_safe(L2J(L), no);
+  if (!no || !owner || !trace_runnable_acq(owner, no) ||
+      bc_op(trace_startins_acq(owner)) != BC_FORL)
+    fprintf(stderr, "fixed-pair U8 trace missing: trace=%u owner=%p "
+            "starts=%u publishes=%u cleanup=%u aborts=%u err=%u entries=%u\n",
+            (unsigned)no, (void *)owner,
+            lj_trace_test_root_entry_startins_calls(),
+            lj_trace_test_root_entry_publishes(),
+            lj_trace_test_root_entry_cleanups(), lj_trace_test_abort_count(),
+            (unsigned)lj_trace_test_last_abort_error(),
+            lj_trace_test_root_entry_successes());
+  assert(no && owner && trace_runnable_acq(owner, no) &&
+         bc_op(trace_startins_acq(owner)) == BC_FORL);
+  code = trace_mcode_acq(owner); codesize = trace_szmcode_acq(owner);
+  assert(code && codesize);
+  saved = (unsigned char *)malloc(codesize); assert(saved);
+  memcpy(saved, code, codesize);
+  before = lj_trace_test_root_entry_successes();
+  exits = lj_trace_test_exit_calls();
+  assert(call_fixed_pair_loop(L, "string_byte_fixed_pair_trace",
+      "string_byte_fixed_pair_value", 0, 0, &actual) == LUA_OK);
+  assert(call_fixed_pair_loop(L, "string_byte_fixed_pair_oracle",
+      "string_byte_fixed_pair_value", 0, 0, &expected) == LUA_OK &&
+      actual == expected);
+  assert(lj_trace_test_root_entry_successes() > before &&
+         lj_trace_test_exit_calls() > exits &&
+         lj_trace_test_last_exit_parent() == no);
+  assert(call_fixed_pair_loop(L, "string_byte_fixed_pair_trace",
+      "string_byte_fixed_pair_value", 103, 99, &actual) == LUA_OK &&
+      actual == 16160);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  before = lj_trace_test_root_entry_successes();
+  exits = lj_trace_test_exit_calls();
+  assert(call_fixed_pair_loop(L, "string_byte_fixed_pair_trace",
+      "string_byte_fixed_pair_value", 0, 0, &actual) == LUA_OK);
+  assert(call_fixed_pair_loop(L, "string_byte_fixed_pair_oracle",
+      "string_byte_fixed_pair_value", 0, 0, &expected) == LUA_OK &&
+      actual == expected);
+  assert(lj_trace_test_root_entry_successes() > before &&
+         lj_trace_test_exit_calls() > exits &&
+         lj_trace_test_last_exit_parent() == no &&
+         trace_runnable_acq(owner, no) && trace_mcode_acq(owner) == code &&
+         trace_szmcode_acq(owner) == codesize &&
+         memcmp(saved, code, codesize) == 0);
+
+  lua_getglobal(L, "string_byte_fixed_pair_clone");
+  arm64_fixture_init_trace(&f, L, "string_byte_fixed_pair_clone", no);
+  viewpt = trace_startpt_acq(f.owner);
+  clonept = trace_startpt_acq(&f.semantic);
+  f.view.proto = viewpt;
+  assert(semantic(&f) && allocated(&f));
+  {
+    unsigned calls = 0;
+    for (MSize pc = 0; pc < clonept->sizebc; pc++) {
+      BCIns ins = proto_bc(clonept)[pc];
+      if (bc_op(ins) == BC_CALL && bc_b(ins) == 3u && bc_c(ins) == 4u) {
+        calls++;
+        callpc = pc;
+        calla = bc_a(ins);
+      }
+    }
+    assert(calls == 1u && callpc >= 3u);
+  }
+  for (r = REF_FIRST; r < f.semantic_nins; r++) {
+    IRIns ir = f.ir[r];
+    if (ir.o == IR_XLOAD && ir.t.irt == IRT_U8 &&
+        ir.op2 == IRXLOAD_READONLY && ir.op1 >= REF_FIRST &&
+        ir.op1 < r) {
+      IRIns ptr = f.ir[ir.op1];
+      int32_t offset;
+      if (ptr.o != IR_STRREF || ptr.op2 < f.semantic.nk ||
+          !kint(f.ir, f.semantic.nk, ptr.op2, &offset) ||
+          offset < 0 || offset > 1) continue;
+      assert(!lanes[offset]);
+      lanes[offset] = r;
+      offsets[offset] = ptr.op2;
+    }
+  }
+  assert(lanes[0] && lanes[1]);
+  for (SnapNo sn = 0; sn < f.view.nsnap; sn++) {
+    const SnapShot *snap = &f.snaps[sn];
+    for (MSize i = 0; i < snap_nent_acq(snap); i++) {
+      MSize candidate = snap_mapofs_acq(snap)+i;
+      SnapEntry entry = f.map[candidate];
+      for (unsigned lane = 0; lane < 2; lane++) {
+        if (snap_ref(entry) == lanes[lane] &&
+            (entry & (SNAP_FRAME|SNAP_NORESTORE)) == 0 &&
+            snap_slot(entry)-1u-LJ_FR2 == (MSize)calla+lane) {
+          mapidx[lane] = candidate;
+          lane_entry[lane] = entry;
+          have_map[lane] = 1;
+        }
+      }
+    }
+  }
+  assert(have_map[0] && have_map[1]);
+  assert(semantic(&f) && allocated(&f));
+
+  /* The second byte needs length >= 2, not merely an in-range first byte. */
+  for (r = REF_FIRST; r < f.semantic_nins; r++) {
+    int32_t value;
+    if (f.ir[r].o == IR_UGE && f.ir[r].t.irt == (IRT_INT|IRT_GUARD) &&
+        f.ir[r].op1 >= REF_FIRST && f.ir[r].op1 < r &&
+        f.ir[f.ir[r].op1].o == IR_FLOAD &&
+        f.ir[f.ir[r].op1].op2 == IRFL_STR_LEN &&
+        kint(f.ir, f.semantic.nk, f.ir[r].op2, &value) && value == 2) {
+      bound = f.ir[r].op2;
+      break;
+    }
+  }
+  assert(bound);
+  {
+    int32_t original = f.ir[bound].i;
+    f.ir[bound].i = 1;
+    assert(!semantic(&f));
+    f.ir[bound].i = original;
+    assert(semantic(&f) && allocated(&f));
+    f.postra[bound].i = 1;
+    assert(semantic(&f) && !allocated(&f));
+    f.postra[bound].i = original;
+  }
+  arm64_fixture_reset(&f);
+  assert(semantic(&f) && allocated(&f));
+
+  /* The lane-to-output mapping is independently checked in both passes. */
+  f.map[mapidx[0]] = snap_with_slot(lane_entry[0], snap_slot(lane_entry[0])+1u);
+  assert(!semantic(&f));
+  f.map[mapidx[0]] = lane_entry[0];
+  f.postmap[mapidx[1]] = snap_with_slot(lane_entry[1], snap_slot(lane_entry[1])-1u);
+  assert(semantic(&f) && !allocated(&f));
+  f.postmap[mapidx[1]] = lane_entry[1];
+  arm64_fixture_reset(&f);
+
+  /* Changing the second STRREF to lane zero must not reuse lane-zero bounds. */
+  {
+    IRRef second = f.ir[lanes[1]].op1;
+    assert(second);
+    assert(f.ir[second].o == IR_STRREF && f.ir[second].op2 == offsets[1]);
+    f.ir[second].op2 = offsets[0];
+    assert(!semantic(&f));
+    f.ir[second].op2 = offsets[1];
+    assert(semantic(&f) && allocated(&f));
+    f.postra[second].op2 = offsets[0];
+    assert(semantic(&f) && !allocated(&f));
+    f.postra[second].op2 = offsets[1];
+  }
+  arm64_fixture_reset(&f);
+
+  /* Exact literal argument values bind byte offsets zero and one. */
+  {
+    BCIns *bc = (BCIns *)(uintptr_t)proto_bc(clonept);
+    BCIns first = bc[callpc-2u], saved_first = first;
+    f.view.proto = clonept;
+    bc[callpc-2u] = BCINS_AD(BC_KSHORT, bc_a(first), 2);
+    arm64_fixture_reset(&f);
+    assert(!semantic(&f));
+    bc[callpc-2u] = saved_first;
+    f.view.proto = viewpt;
+    arm64_fixture_reset(&f);
+    assert(semantic(&f) && allocated(&f));
+    f.view.proto = clonept;
+    bc[callpc-1u] = BCINS_AD(BC_KSHORT, bc_a(bc[callpc-1u]), 1);
+    arm64_fixture_reset(&f);
+    assert(!allocated(&f));
+    bc[callpc-1u] = BCINS_AD(BC_KSHORT, bc_a(bc[callpc-1u]), 2);
+    f.view.proto = viewpt;
+  }
+  arm64_fixture_reset(&f);
+  assert(semantic(&f) && allocated(&f));
+
+  /* An implicit comparison skip into either argument setup is a bypass. */
+  {
+    BCIns *bc = (BCIns *)(uintptr_t)proto_bc(clonept);
+    BCIns old = bc[callpc-4u];
+    f.view.proto = clonept;
+    bc[callpc-4u] = BCINS_AD(BC_ISLT, 0, 0); /* skips callpc-2 */
+    arm64_fixture_reset(&f);
+    assert(!semantic(&f));
+    bc[callpc-4u] = old;
+    f.view.proto = viewpt;
+    arm64_fixture_reset(&f);
+    assert(semantic(&f) && allocated(&f));
+    f.view.proto = clonept;
+    bc[callpc-4u] = BCINS_AD(BC_ISLT, 0, 0);
+    arm64_fixture_reset(&f);
+    assert(!allocated(&f));
+    bc[callpc-4u] = old;
+    f.view.proto = viewpt;
+  }
+  arm64_fixture_reset(&f);
+  assert(semantic(&f) && allocated(&f));
+
+  /* A predecessor that jumps over CALL must not make its raw result appear
+  ** to be defined at a later snapshot. */
+  {
+    BCIns *bc = (BCIns *)(uintptr_t)proto_bc(clonept);
+    BCIns old;
+    assert(callpc >= 5u);
+    old = bc[callpc-5u];
+    f.view.proto = clonept;
+    bc[callpc-5u] = BCINS_AD(BC_JMP, 0, 5); /* target is callpc+1 */
+    arm64_fixture_reset(&f);
+    assert(!semantic(&f));
+    bc[callpc-5u] = old;
+    f.view.proto = viewpt;
+    arm64_fixture_reset(&f);
+    assert(semantic(&f) && allocated(&f));
+    f.view.proto = clonept;
+    bc[callpc-5u] = BCINS_AD(BC_JMP, 0, 5);
+    arm64_fixture_reset(&f);
+    assert(!allocated(&f));
+    bc[callpc-5u] = old;
+    f.view.proto = viewpt;
+  }
+  arm64_fixture_reset(&f);
+  assert(semantic(&f) && allocated(&f));
+  arm64_fixture_free(&f);
+  lua_pop(L, 1);
+  free(saved);
+  printf("string.byte fixed pair raw U8 snapshots: root %u, both lanes, cold exits, full GC/reuse, source/offset/map/bypass mutations\n",
+         (unsigned)no);
+}
+
 int main(void)
 {
   static const char source[] =
@@ -1840,6 +2121,26 @@ int main(void)
     "if a==k then sum=sum+a*1.25 else sum=sum+a*2.25 end; "
     "i=i+1 end; return sum\n"
     "end\n"
+    "string_byte_fixed_pair_trace=function(s,n,ka,kb)\n"
+    " local byte=string.byte; local sum=0; "
+    "for i=1,n do local a,b=byte(s,1,2); "
+    "if a==ka then sum=sum+a else sum=sum+a*2 end; "
+    "if b==kb then sum=sum+b else sum=sum+b*2 end end; return sum\n"
+    "end\n"
+    "string_byte_fixed_pair_clone=function(s,n,ka,kb)\n"
+    " local byte=string.byte; local sum=0; "
+    "for i=1,n do local a,b=byte(s,1,2); "
+    "if a==ka then sum=sum+a else sum=sum+a*2 end; "
+    "if b==kb then sum=sum+b else sum=sum+b*2 end end; return sum\n"
+    "end\n"
+    "string_byte_fixed_pair_oracle=function(s,n,ka,kb)\n"
+    " local byte=string.byte; local sum=0; "
+    "for i=1,n do local a,b=byte(s,1,2); "
+    "if a==ka then sum=sum+a else sum=sum+a*2 end; "
+    "if b==kb then sum=sum+b else sum=sum+b*2 end end; return sum\n"
+    "end\n"
+    "jit.off(string_byte_fixed_pair_oracle,true)\n"
+    "string_byte_fixed_pair_value=string.rep('gcstr-byte-',24)\n"
     "string_byte_negative_dynamic_trace=function(s,n,index)\n"
     " local byte=string.byte; local i,sum=1,0; "
     "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
@@ -3022,6 +3323,7 @@ int main(void)
   test_dynamic_range_byte(L,4,0);
   test_dynamic_range_byte(L,4.9,1);
   test_u8_snapshot(L);
+  test_fixed_pair_u8_snapshot(L);
   test_integer_dynamic_index(L,0);
   test_integer_dynamic_index(L,1);
   test_dynamic_range_byte(L,-2,0);
