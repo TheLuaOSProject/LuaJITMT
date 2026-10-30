@@ -144,3 +144,57 @@ is `cf33d7e6c672ab0d111d8413b05f30264c2b0307430c9aabcace424da4d64b47`.
 The component's final ordinary live-peer probes witness both architectures'
 selected XLOAD loop, 84 exact-root exits and unchanged code identity after GC.
 This snapshot proof does not yet cover raw bytes from multiple-result CALLs.
+
+The combined ordinary matrix passed at notes/merge revision `e9ab0f3e0`, whose
+production and fixtures match `8123b7a3d`, now frozen for the next complete
+gate. ARM64 assertions and strict bare-`-Werror` x86_64 assertions each pass
+509 source cases, 509 v2-bytecode cases, 260 workload semantic checks,
+topology/expanded probes, the existing ninety fixed/dynamic-positive byte
+rows, forty dynamic-negative byte rows, the live-peer raw-U8 snapshot witness
+and twelve FFI-index rows. The matrix and immutable binaries are in
+`/Users/frityet/Scratch/ljmt-byte-snapshots-forl-ordinary-20261030/`.
+It restored ordinary ARM64 assertions with profile
+`a06917bc816592b6e6fce721e780f8ab7b0a063ea72ee0a5f8ed11878cc157c9`.
+The full gate at `8123b7a3d` subsequently passed, including all four M7 FFI
+profiles and final VM/recorder safepoint runtime checks. Its outer runner
+returned `gate exit=0; restore exit=0`. Evidence is in
+`/Users/frityet/Scratch/ljmt-byte-snapshots-forl-complete-20261030/`;
+ordinary assertion ARM64 restoration profile is
+`f494b9ee6ebf7e0f479566b7ce9fa9bc266097c454f90812f5b903d52dc0fb3a`.
+
+Mixed-sign multiple byte ranges (`77611f594`) are integrated at `7d8370786`.
+The semantic header insertion conflict was resolved by preserving the
+complete U8 snapshot and mixed-sign proof pairs from their immutable parents;
+their bodies were mechanically compared after the merge. The combined byte
+contract passes ARM64/ARM64e assertions and release. Its source record and
+log are `mixed-sign-multiple-integration-source.txt` and
+`mixed-sign-multiple-integration-four-profiles.log` under
+`/Users/frityet/Scratch/ljmt-wide-byte-ffi-complete-20261030/`.
+Ordinary assertion ARM64 restoration profile is
+`7902fce7b6f0088462b593c270b292d8b91cd3e2ea1b260cb329acf75e3e1217`.
+This later addition is not part of the completed `8123b7a3d` full gate.
+
+Positive literal substring allocation (`aca64562a`, ordinary evidence
+`c8dc88d3f`, fresh-publication coverage `c74c9ee21`) is integrated at
+`4b494fcc1`. Both header merges were clean. The component passes all four
+profiles, both ordinary 509-case stock corpora, 260 workload checks and
+sixteen substring rows per architecture. The test-only publication hook
+also positively witnesses newly interned strings from native while-loop
+code in every profile, with the new object's READY bit set. See
+[`arm64-jit-string-sub-constant-2026-10-30.md`](arm64-jit-string-sub-constant-2026-10-30.md).
+
+A separate read-only allocation review found no remaining blocker: the
+existing SNEW emitter prepares the snapshot before `lj_str_new`, the source
+formal remains rooted while the JIT/native thread's stack capacity is scanned,
+and the allocated pass includes SNEW in live-across-call checks. No ordinary
+allocator, emitter or locking behavior changes. The combined source at
+`4b494fcc1` is frozen separately for the next complete gate; until that run
+passes the promoted complete checkpoint remains `8123b7a3d`.
+
+The first combined gate at `4b494fcc1` stopped at the synthetic malformed
+SNEW case in `t-arm64-jit-ir-admission.c`: it still rejected the instruction,
+but now reports an operand-proof failure rather than an unsupported opcode.
+The fixture expectation is updated to that reason, retaining the rejection.
+The failed full log and successful ordinary restoration remain in
+`/Users/frityet/Scratch/ljmt-mixed-byte-substring-complete-20261030/`.
+This failed attempt is not counted as a complete gate pass.

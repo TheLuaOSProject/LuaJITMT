@@ -1634,7 +1634,8 @@ static void test_positive_and_negative(lua_State *L)
 
   make_trace(J);
   setir(R_SUM1, IR_SNEW, IRT_STR, R_A, R_B);
-  expect_reject(J, LJ_ARM64_IR_REJECT_OPCODE, IR_SNEW);
+  /* SNEW is admitted only with the exact source-bound substring proof. */
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_SNEW);
 
   make_trace(J);
   setir(R_SUM1, IR_BUFHDR, IRT_PGC, R_A, 0);

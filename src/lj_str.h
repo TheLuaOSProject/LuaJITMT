@@ -759,9 +759,11 @@ typedef void (*LJStrTestMatchHook)(lua_State *L, GCRef *link,
 typedef void (*LJStrTestCanonHook)(lua_State *L, GCstr *str,
 				   StrCanonRec *rec, uint32_t stage);
 typedef void (*LJStrTestReclaimHook)(global_State *g, uint32_t stage);
+typedef void (*LJStrTestPublishHook)(lua_State *L, GCstr *str);
 LJ_FUNC void lj_str_test_set_match_hook(LJStrTestMatchHook hook);
 LJ_FUNC void lj_str_test_set_canon_hook(LJStrTestCanonHook hook);
 LJ_FUNC void lj_str_test_set_reclaim_hook(LJStrTestReclaimHook hook);
+LJ_FUNC void lj_str_test_set_publish_hook(LJStrTestPublishHook hook);
 LJ_FUNC uint32_t lj_str_test_id_refills(void);
 LJ_FUNC void lj_str_test_reset_id_refills(void);
 LJ_FUNC uint32_t lj_str_test_num_refills(void);
