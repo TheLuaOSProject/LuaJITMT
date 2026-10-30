@@ -368,9 +368,9 @@ int main(void)
       /* Bits for the INT-only link-kind and SLOAD-flag no-op mutations are
       ** intentionally absent; the four numeric update/bound/source/snapshot
       ** mutations are the high bits and must reject in both passes. */
-      if (contract != 0x1fdefu)
+      if (contract != 0x3fdefu)
         fprintf(stderr, "numeric FORL copied contract=%#x\n", contract);
-      assert(contract == 0x1fdefu);
+      assert(contract == 0x3fdefu);
     }
     lj_trace_test_reset_exit_stats();
     run(L, "for k=1,100 do assert(numeric_side_kernel(2,48)==-1163.5) end; "
@@ -421,7 +421,7 @@ int main(void)
     assert(trace_arm64_admission_acq(numeric_side) ==
            TRACE_ARM64_INT_SIDE_ADMITTED);
     assert(lj_trace_test_arm64_side_scalar_copy_contract(
-	J, trace_traceno_acq(numeric_side)) == 0x1fdefu);
+	J, trace_traceno_acq(numeric_side)) == 0x3fdefu);
     lj_trace_test_reset_exit_stats();
     run(L, "for k=1,100 do assert(numeric_side_desc_kernel(2,.5)==-1163.5) end; "
            "collectgarbage('collect'); "

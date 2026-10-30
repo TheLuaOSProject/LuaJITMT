@@ -11919,6 +11919,7 @@ static int arm64_side_parent_sload_valid(const LJArm64SideIRView *side,
   MSize i, nent;
   IRRef ref;
   IRType type;
+  IRType forl_type;
   RegSP rs;
   int readonly, no_restore;
   if (!side || !load || !side->parent_snap || !side->parent_map_values ||
@@ -11932,6 +11933,7 @@ static int arm64_side_parent_sload_valid(const LJArm64SideIRView *side,
 	return 0;
   readonly = load->op2 ==
 	(IRSLOAD_PARENT|IRSLOAD_READONLY|IRSLOAD_INHERIT);
+  forl_type = side->parent_num_forl_valid ? IRT_NUM : IRT_INT;
   no_restore = 0;
   nent = snap_nent_acq(side->parent_snap);
   for (i = 0; i < nent; i++) {
@@ -11963,13 +11965,12 @@ static int arm64_side_parent_sload_valid(const LJArm64SideIRView *side,
 	        source.op2 != (root_source.op2|IRSLOAD_PARENT))
 	      return 0;
 	  } else if (load->op1 == idxslot) {
-	    if ((source.t.irt & ~IRT_ISPHI) !=
-		((irt_type(source.t) == IRT_NUM ? IRT_NUM : IRT_INT)|IRT_GUARD) ||
+	    if (irt_type(source.t) != forl_type ||
+		(source.t.irt & ~IRT_ISPHI) != (forl_type|IRT_GUARD) ||
 	        source.op2 != (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT))
 	      return 0;
-	  } else if ((irt_type(source.t) != IRT_INT &&
-		      irt_type(source.t) != IRT_NUM) ||
-		     source.t.irt != irt_type(source.t) ||
+	  } else if (irt_type(source.t) != forl_type ||
+		     source.t.irt != forl_type ||
 	             source.op2 != (IRSLOAD_READONLY|IRSLOAD_INHERIT)) {
 	    return 0;
 	  }
@@ -12341,6 +12342,7 @@ static int arm64_side_forl_boundary_snapshot_ir(
       (side->parent_num_forl_valid ?
        !arm64_side_forl_num_step_source(side, &numstep) :
        !arm64_side_forl_step_source(side, &step)) ||
+      T->nins <= REF_FIRST ||
       snap->mapofs > T->nsnapmap || snap->nent > T->nsnapmap-snap->mapofs)
     return 0;
   numeric = side->parent_num_forl_valid;
@@ -12356,13 +12358,12 @@ static int arm64_side_forl_boundary_snapshot_ir(
     mask |= 1u << role;
     if (role == FORL_STEP) {
       if (numeric) {
-	IRIns k;
 	if (!irref_isk(value) || value < T->nk || value >= REF_TRUE ||
-	    value >= snap->ref || value >= T->nins)
+	    value >= snap->ref || value >= T->nins-1u ||
+	    !arm64_scalar_ir_ref(T, value, snap->ref, IRT_NUM))
 	  return 0;
-	k = T->ir[value];
-	if (k.o != IR_KNUM || k.t.irt != IRT_NUM ||
-	    ir_knum(&k)->n != numstep)
+	if (T->ir[value].o != IR_KNUM || T->ir[value].t.irt != IRT_NUM ||
+	    ir_knum(&T->ir[value])->n != numstep)
 	  return 0;
       } else {
 	int32_t found;
@@ -17359,6 +17360,7 @@ static int arm64_side_forl_boundary_snapshot_postra(
       (side->parent_num_forl_valid ?
        !arm64_side_forl_num_step_source(side, &numstep) :
        !arm64_side_forl_step_source(side, &step)) ||
+      v->nins <= REF_FIRST ||
       snap->mapofs > v->nsnapmap || snap->nent > v->nsnapmap-snap->mapofs)
     return 0;
   numeric = side->parent_num_forl_valid;
@@ -17374,14 +17376,13 @@ static int arm64_side_forl_boundary_snapshot_postra(
     mask |= 1u << role;
     if (role == FORL_STEP) {
       if (numeric) {
-	IRIns k;
 	if (!irref_isk(value) || value < v->nk || value >= REF_TRUE ||
-	    value >= snap->ref || value >= v->nins ||
+	    value >= snap->ref || value >= v->nins-1u ||
 	    !arm64_scalar_postra_kref(v, value, IRT_NUM))
 	  return 0;
-	k = ir_load_acq(&v->ir[value]);
-	if (k.o != IR_KNUM || k.t.irt != IRT_NUM ||
-	    ir_knum(&k)->n != numstep)
+	if (ir_load_acq(&v->ir[value]).o != IR_KNUM ||
+	    ir_load_acq(&v->ir[value]).t.irt != IRT_NUM ||
+	    ir_knum(&v->ir[value])->n != numstep)
 	  return 0;
       } else {
 	int32_t found;

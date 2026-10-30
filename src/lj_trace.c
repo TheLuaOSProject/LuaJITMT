@@ -34,9 +34,6 @@
 #include "lj_iropt.h"
 #include "lj_mcode.h"
 #include "lj_trace.h"
-#if defined(LJ_TRACE_TEST_HELPERS)
-#include <dlfcn.h>
-#endif
 #include <stdio.h>
 #include "lj_snap.h"
 #include "lj_gdbjit.h"
@@ -8102,6 +8099,24 @@ static int trace_arm64_side_parentmap(jit_State *J, GCtrace *parent,
 /* Test copied real side traces through both validators independently. The
 ** semantic copy ends at the pre-RA extent returned by the post-RA parser; the
 ** complete allocator view remains intact for post-RA validation. */
+static int trace_test_side_knum_boundary(const IRIns *ir, IRRef nk,
+    IRRef nins, IRRef target)
+{
+  IRRef ref;
+  if (!ir || nins <= REF_FIRST || target < nk || target >= REF_TRUE ||
+      target >= nins-1u)
+    return 0;
+  for (ref = nk; ref < REF_TRUE && ref < nins; ref++) {
+    IRIns constant = ir_load_acq(&ir[ref]);
+    if (ref == target)
+      return constant.o == IR_KNUM && constant.t.irt == IRT_NUM;
+    if (constant.o == IR_KNUM || constant.o == IR_KGC ||
+	constant.o == IR_KKPTR)
+      ref++;
+  }
+  return 0;
+}
+
 static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
     unsigned mutation, int *sem_ok, int *post_ok)
 {
@@ -8123,7 +8138,7 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
   MSize nins, nk, nsnap, nsnapmap, parentmap_n = 0, i;
   IRRef semantic_nins = 0, loopref = 0, arith = 0, sloadref = 0;
   IRRef forladd = 0, forlcmp = 0, forlguard = 0, badstepref = 0, conststop = 0;
-  IRRef numforladd = 0, numforlcmp = 0;
+  IRRef numforladd = 0, numforlcmp = 0, numforlstepref = 0;
   int32_t forlstep = 0, forlbound = 0;
   lua_Number numforlstep = 0.0;
   GCproto *pt;
@@ -8713,6 +8728,51 @@ static int trace_test_side_scalar_copy(jit_State *J, GCtrace *child,
     }
     if (selected == (MSize)-1 || at == (MSize)-1) goto done;
     snapmap[at] = snap_setref(snapmap[at], numforladd);
+  } else if (mutation == 43 && numforladd && numforlcmp) {
+    MSize idxslot = 1u+LJ_FR2+bc_a(semside.parent_startins);
+    MSize stop_slot = idxslot+FORL_STOP, step_slot = idxslot+FORL_STEP;
+    MSize ext_slot = idxslot+FORL_EXT, i;
+    IRRef idxref = ir[numforladd].op1;
+    IRRef stopref = ir[numforlcmp].op2;
+    SnapShot witness;
+    SnapEntry saved[4];
+    int boundary_result;
+    numforlstepref = ir[numforladd].op2;
+    if (!trace_test_side_knum_boundary(ir, nk, nins, numforlstepref) ||
+	 ir_knum(&ir[numforlstepref])->n != numforlstep || nsnapmap < 4u)
+	  goto done;
+    for (i = 0; i < 4u; i++) saved[i] = snapmap[i];
+    memset(&witness, 0, sizeof(witness));
+    witness.ref = numforlcmp;
+    witness.nent = 4;
+    witness.mapofs = 0;
+    snapmap[0] = SNAP(idxslot, 0, idxref);
+    snapmap[1] = SNAP(stop_slot, 0, stopref);
+    snapmap[2] = SNAP(step_slot, 0, numforlstepref);
+    snapmap[3] = SNAP(ext_slot, 0, idxref);
+    boundary_result = lj_asm_arm64_test_side_forl_boundary(
+	&semside, &childcopy, &postra, &witness);
+    if (boundary_result != 3) {
+      for (i = 0; i < 4u; i++) snapmap[i] = saved[i];
+      goto done;
+    }
+    /* Exercise the exact semantic and allocated boundary checks with a valid
+    ** synthetic loop-end map, then corrupt only the KNUM payload. The live
+    ** child has no such footer, so this targets the cold-boundary proof
+    ** directly without changing its runtime map. */
+    ir_knum(&ir[numforlstepref])->u64 ^= UINT64_C(1);
+    boundary_result = lj_asm_arm64_test_side_forl_boundary(
+	&semside, &childcopy, &postra, &witness);
+    ir_knum(&ir[numforlstepref])->u64 ^= UINT64_C(1);
+    if (boundary_result == 0) {
+	*sem_ok = 0;
+	*post_ok = 0;
+    }
+    for (i = 0; i < 4u; i++) snapmap[i] = saved[i];
+    if (boundary_result != 0) goto done;
+    *sem_ok = 0;
+    *post_ok = 0;
+	goto done;
   }
 
   /* Private-copy mutations for direct FORL retry snapshots. They preserve
@@ -8901,7 +8961,7 @@ uint32_t lj_trace_test_arm64_side_scalar_copy_contract(jit_State *J,
 	        ((mutation != 2u && mutation != 11u) && !sem && !post))
 	      result |= 1u << (mutation+1u);
 	  }
-	  for (mutation = 39u; mutation <= 42u; mutation++) {
+    for (mutation = 39u; mutation <= 43u; mutation++) {
 	    if (!trace_test_side_scalar_copy(J, child, mutation, &sem, &post))
 	      return result;
 	    if (!sem && !post)
@@ -14750,8 +14810,7 @@ static int trace_stop(jit_State *J)
   ** finite transaction or abort before publication. The generic side path has
   ** blocking SMR and non-transactional topology stores and is unreachable. */
   if (op == BC_JMP) {
-    int side_publish_enabled = trace_arm64_first_side_publish_enabled(J);
-    if (side_publish_enabled) {
+    if (trace_arm64_first_side_publish_enabled(J)) {
       int sr = trace_stop_arm64_first_side(J);
 
       return sr;

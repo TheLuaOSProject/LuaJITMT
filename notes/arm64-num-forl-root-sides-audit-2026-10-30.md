@@ -31,3 +31,26 @@ The initial native side exposed one cleanup mismatch too: first-side retirement 
 ## Cross-target compile
 
 The strict x86_64 build completed for the touched sources using `-Wall -Wextra -Werror`. Two unrelated existing warnings prevented a completely unmodified warning-as-error build: unused parameters in `lj_str.c` and an unused-but-set `topofs` in `lj_api.c`. The successful retry suppressed only those two warning classes. Full command output, including the initial attempts, is `/Users/frityet/Scratch/ljmt-num-forl-sides-20261030/strict-x64-build.log`.
+
+After removing unused diagnostic residue, ordinary assertion ARM64 and ordinary
+x86_64 each pass all 509 stock source tests and all 509 tests imported from
+original v2 bytecode. Matching runtime and JIT module bundles, hashes, and logs
+are in `/Users/frityet/Scratch/ljmt-num-forl-sides-20261030/{arm64,x86_64}-ordinary`
+and the corresponding `*-stock-{source,bytecode}.log` files. The identical
+no-observer numeric FORL runner also passes its independent JIT-off oracle and
+live-peer checks on both targets. ARM64 publishes root #1 and side #2, then
+reuses side #2 after GC and validates explicit flush teardown; x86_64 publishes
+root #1 and side #3.
+Phase-two observed 1 root exit plus 81 side exits on ARM64 and 1 root exit plus
+5 side exits on x86_64. Exit counts differ, while both runs match the oracle.
+Exact topology output is in `arm64-numeric-side-peer.log` and
+`x86_64-numeric-side-peer.log`.
+
+The cold FORL boundary snapshot proof reads the KNUM payload from the validated
+constant pair in the original IR view. A private fixture constructs the exact
+four-slot boundary map from the authenticated NUM FORL refs and requires both
+independent validators to accept it; flipping one bit in the step KNUM payload
+must make both reject. This is direct coverage of the boundary subproof: the
+ordinary captured child trace has no snapshot at that FORL boundary footer.
+The fixture passed all four ARM64/arm64e assertion/release profiles in
+`/Users/frityet/Scratch/ljmt-num-forl-sides-20261030/step-payload-fourprofiles-final.log`.

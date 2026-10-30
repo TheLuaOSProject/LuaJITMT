@@ -7,9 +7,6 @@
 #define LUA_CORE
 
 #include "lj_obj.h"
-#if defined(LJ_TRACE_TEST_HELPERS)
-#include <stdio.h>
-#endif
 
 #if LJ_HASJIT
 
@@ -84,6 +81,15 @@ int lj_asm_arm64_test_scalar_math_live_across(
 	capacity = SPS_FIXED + view->spadjust / 4u;
 	return arm64_scalar_math_live_across(view, semantic_nins, loop, call,
 					     capacity);
+}
+
+int lj_asm_arm64_test_side_forl_boundary(
+	const LJArm64SideIRView *side, const GCtrace *T,
+	const LJArm64PostRAView *view, const SnapShot *snap)
+{
+	int semantic = arm64_side_forl_boundary_snapshot_ir(side, T, snap);
+	int postra = arm64_side_forl_boundary_snapshot_postra(side, view, snap);
+	return (semantic ? 1 : 0) | (postra ? 2 : 0);
 }
 
 int lj_asm_arm64_test_funcf_postra_needed(const GCproto *pt, MSize resume,

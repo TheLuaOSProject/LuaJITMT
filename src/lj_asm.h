@@ -284,6 +284,9 @@ LJ_FUNC int lj_asm_arm64_side_postra_admit(
 #ifdef LJ_TRACE_TEST_HELPERS
 LJ_FUNC int lj_asm_arm64_test_scalar_math_live_across(
 	const LJArm64PostRAView *view, IRRef semantic_nins, IRRef loop, IRRef call);
+LJ_FUNC int lj_asm_arm64_test_side_forl_boundary(
+	const LJArm64SideIRView *side, const GCtrace *T,
+	const LJArm64PostRAView *view, const SnapShot *snap);
 LJ_FUNC void lj_asm_arm64_test_force_exitstub_mcode_retry(uint32_t count);
 #if LJ_HASJIT_FFI_CALLXS
 /* Inject a missing fixed CALLXS ABI plan: 1=stack sizing, 2=emission, 0=off.
