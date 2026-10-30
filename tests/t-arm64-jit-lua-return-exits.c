@@ -202,42 +202,37 @@ static void assert_branch_exit(lua_State *L, GCtrace *T)
   ExitNo exit = lj_trace_test_first_exitno();
   uint64_t footer;
   BCIns cmp, jump;
-  MSize compare = UINT32_MAX, cold;
+  MSize cold;
   assert(exit < T->nsnap);
-  for (MSize p = 1; p+1u < leaf->sizebc; p++) {
-    cmp = (BCIns)la_load32_acq((const uint32_t *)&bc[p]);
-    if (bc_op(cmp) >= BC_ISLT && bc_op(cmp) <= BC_ISGT) {
-      compare = p; branch = &bc[p]; break;
-    }
-  }
-  assert(branch && compare+1u < leaf->sizebc);
-  jump = (BCIns)la_load32_acq((const uint32_t *)&bc[compare+1u]);
-  assert(bc_op(jump) == BC_JMP);
-  /* Bind the exact observed guard polarity to its source edge. Numeric
-  ** guards retain Lua's unordered relation bits when the recorder flips an
-  ** observed-false predicate; canonicalization may also swap operands. */
-  {
-    IRIns guard = T->ir[T->snap[exit].ref];
-    BCOp sourceop = bc_op(*branch);
-    IROp op = (IROp)((int)sourceop-(int)BC_ISLT+(int)IR_LT);
-    IROp candidate[2];
-    unsigned i, found = 0;
-    int cond = 0;
-    if (irt_type(guard.t) == IRT_NUM && (op & 1)) op = (IROp)(op^4);
-    candidate[0] = op;
-    candidate[1] = (IROp)(op^(irt_type(guard.t) == IRT_NUM ? 5 : 1));
-    for (i = 0; i < 2; i++)
-      if (guard.o == candidate[i] || guard.o == (IROp)(candidate[i]^3)) {
-        cond = ((int)sourceop ^ (int)candidate[i]) & 1;
-        found++;
-      }
-    assert(found == 1);
-    cold = cond ? (MSize)((ptrdiff_t)(compare+2u)+bc_j(jump)) : compare+2u;
-  }
   footer = snapshot_footer(T, exit);
-  assert((uint8_t)footer &&
-         (const BCIns *)(uintptr_t)(footer>>8) == &bc[cold] &&
-         cold < leaf->sizebc-1u);
+  {
+    const BCIns *coldpc = (const BCIns *)(uintptr_t)(footer>>8);
+    IRIns guard = T->ir[T->snap[exit].ref];
+    unsigned matches = 0;
+    for (MSize p = 1; p+2u < leaf->sizebc; p++) {
+      IROp op, candidate[2];
+      unsigned i;
+      int cond;
+      cmp = (BCIns)la_load32_acq((const uint32_t *)&bc[p]);
+      if (bc_op(cmp) < BC_ISLT || bc_op(cmp) > BC_ISGT) continue;
+      jump = (BCIns)la_load32_acq((const uint32_t *)&bc[p+1u]);
+      if (bc_op(jump) != BC_JMP) continue;
+      op = (IROp)((int)bc_op(cmp)-(int)BC_ISLT+(int)IR_LT);
+      if (irt_type(guard.t) == IRT_NUM && (op & 1)) op = (IROp)(op^4);
+      candidate[0] = op;
+      candidate[1] = (IROp)(op^(irt_type(guard.t) == IRT_NUM ? 5 : 1));
+      for (i = 0; i < 2; i++)
+        if (guard.o == candidate[i] || guard.o == (IROp)(candidate[i]^3)) {
+          cond = ((int)bc_op(cmp) ^ (int)candidate[i]) & 1;
+          cold = cond ? (MSize)((ptrdiff_t)(p+2u)+bc_j(jump)) : p+2u;
+          if (coldpc == &bc[cold]) {
+            branch = &bc[p]; matches++;
+          }
+        }
+    }
+    assert(matches == 1u && branch && (uint8_t)footer &&
+           cold < leaf->sizebc-1u);
+  }
   assert(T->ir[T->snap[exit].ref].o >= IR_LT &&
          T->ir[T->snap[exit].ref].o <= IR_UGT &&
          irt_isguard(T->ir[T->snap[exit].ref].t));
@@ -251,7 +246,8 @@ static void checked(lua_State *L, GCtrace *T, int force,
   pthread_t worker;
   OldTagChange change = {0};
   SnapNo terminal = 0;
-  int early_branch = strcmp(active_name, "comparison-early-return") == 0;
+  int early_branch = strcmp(active_name, "comparison-early-return") == 0 ||
+    strncmp(active_name, "comparison-sequential-early-return", 34) == 0;
   invoke(L, "leaf_oracle_run", "leaf_oracle", first, last);
   if (T) {
     lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
@@ -327,7 +323,8 @@ typedef struct ReturnFixture {
 } ReturnFixture;
 
 static unsigned ret_semantic_bad, ret_postra_bad, ret_alias_bad;
-static unsigned ret_terminal_maps, ret_join_maps, ret_next_map_bad;
+static unsigned ret_terminal_maps, ret_join_maps, ret_sequential_maps;
+static unsigned ret_next_map_bad;
 static unsigned ret_callmap_guards, ret_join_semantic_bad, ret_join_postra_bad;
 /* Every semantic mutation must run in both passes; allocation conflicts
 ** and the guarded loop-increment mutation belong to the allocated pass. */
@@ -373,7 +370,8 @@ enum {
   RET_NEG_BRANCH_EXTRA_FRAME,
   RET_NEG_BRANCH_WRONG_LOCAL,
   RET_NEG_BRANCH_WRONG_REF,
-  RET_NEG_BRANCH_SOURCE_TYPE
+  RET_NEG_BRANCH_SOURCE_TYPE,
+  RET_NEG_BRANCH_SECOND_OPERAND
 };
 
 static GCproto *return_copy_proto(const GCproto *pt)
@@ -537,6 +535,29 @@ static void return_test_negative(ReturnFixture *f, SnapNo s, unsigned id,
       }
       return_reset_fixture(f); f->child = s;
     }
+    return;
+  }
+  if (which == RET_NEG_BRANCH_SECOND_OPERAND) {
+    uint64_t edge;
+    const BCIns *pc;
+    MSize resume, compare = UINT32_MAX;
+    if (strncmp(active_name, "comparison-sequential-early-return", 34)) return;
+    edge = snapshot_footer(&f->copy, s);
+    if (!(uint8_t)edge) return;
+    pc = (const BCIns *)(uintptr_t)(edge>>8);
+    if ((uintptr_t)pc < (uintptr_t)proto_bc(f->leafpt) ||
+        (uintptr_t)pc >= (uintptr_t)(proto_bc(f->leafpt)+f->leafpt->sizebc))
+      return;
+    resume = proto_bcpos(f->leafpt, pc);
+    for (MSize p = 1; p+2u <= resume; p++) {
+      BCIns ins = (BCIns)la_load32_acq(
+        (const uint32_t *)&proto_bc(f->leafpt)[p]);
+      if (bc_op(ins) >= BC_ISLT && bc_op(ins) <= BC_ISGT) compare = p;
+    }
+    if (compare == UINT32_MAX) return;
+    setbc_d(&proto_bc(f->leafpt)[compare],
+            bc_a(proto_bc(f->leafpt)[compare]));
+    return_expect_reject(f, id, postra);
     return;
   }
   if (which == RET_NEG_BRANCH_OMIT_LIVE) {
@@ -1066,7 +1087,8 @@ static void admission(GCtrace *T)
       pos = proto_bcpos(pt, pc);
       if (pos >= pt->sizebc ||
           bc_op((BCIns)la_load32_acq((const uint32_t *)pc)) != BC_RET1) {
-        if (!strcmp(active_name, "comparison-early-return"))
+        if (!strcmp(active_name, "comparison-early-return") ||
+            !strcmp(active_name, "comparison-sequential-early-return"))
           early_source_map = 1;
         else if (!strcmp(active_name, "comparison-empty-arm") &&
                  pos > 1u && pos+1u < pt->sizebc)
@@ -1236,6 +1258,46 @@ static void admission(GCtrace *T)
       tested = 1;
     }
     assert(tested);
+    if (strncmp(active_name, "comparison-sequential-early-return", 34) == 0) {
+      MSize compares[4], ncompare = 0;
+      int branch_tested = 0;
+      for (MSize p = 1; p+2u < pt->sizebc; p++) {
+        BCOp op = bc_op((BCIns)la_load32_acq(
+          (const uint32_t *)&proto_bc(pt)[p]));
+        if (op >= BC_ISLT && op <= BC_ISGT) {
+          assert(ncompare < sizeof(compares)/sizeof(compares[0]));
+          compares[ncompare++] = p;
+        }
+      }
+      assert(ncompare == 2u);
+      for (SnapNo s = 0; s < T->nsnap && !branch_tested; s++) {
+        uint64_t edge = snapshot_footer(T, s);
+        const BCIns *resume_pc = (const BCIns *)(uintptr_t)(edge>>8);
+        MSize resume, base = (uint8_t)edge+2u;
+        int has_leaf = 0;
+        if (!(uint8_t)edge || (uintptr_t)resume_pc < (uintptr_t)proto_bc(pt) ||
+            (uintptr_t)resume_pc >= (uintptr_t)(proto_bc(pt)+pt->sizebc))
+          continue;
+        resume = proto_bcpos(pt, resume_pc);
+        if (resume < compares[1]+2u || resume >= pt->sizebc-1u) continue;
+        for (MSize i = 0; i < T->snap[s].nent; i++) {
+          SnapEntry entry = T->snapmap[T->snap[s].mapofs+i];
+          IRRef value = snap_ref(entry);
+          if (snap_slot(entry) == base-2u && !(entry & 0x00ff0000u) &&
+              value < T->nins && T->ir[value].o == IR_KGC &&
+              ir_kgc_acq(&T->ir[value]) == obj2gco(leaf)) has_leaf = 1;
+        }
+        if (!has_leaf) continue;
+        f.child = s; return_reset_fixture(&f); f.child = s;
+        assert(return_admit(&f, 0) && return_admit(&f, 1));
+        for (int postra = 0; postra < 2; postra++)
+          return_test_negative(&f, s, RET_NEG_BRANCH_SECOND_OPERAND,
+                               postra, RET_NEG_BRANCH_SECOND_OPERAND);
+        branch_tested = 1;
+      }
+      assert(branch_tested);
+      ret_sequential_maps++;
+    }
     free(f.root); free(f.leafpt); free(f.leaf); free(f.J);
     free(f.ir); free(f.snap); free(f.map);
     return;
@@ -1315,6 +1377,8 @@ static void admission(GCtrace *T)
                              RET_NEG_BRANCH_EXTRA_DUP);
         return_test_negative(&f, s, RET_NEG_BRANCH_EXTRA_FRAME, postra,
                              RET_NEG_BRANCH_EXTRA_FRAME);
+        return_test_negative(&f, s, RET_NEG_BRANCH_SECOND_OPERAND, postra,
+                             RET_NEG_BRANCH_SECOND_OPERAND);
       }
     }
   }
@@ -1379,6 +1443,11 @@ static void run_case(lua_State *L, const ReturnCase *shape)
   if (strncmp(shape->name, "comparison-", 11) == 0) {
     int negative_warm = strcmp(shape->name, "comparison-negative-warm") == 0;
     checked(L, T, 0, negative_warm ? 10 : -4, negative_warm ? 14 : 4);
+    if (strncmp(shape->name, "comparison-sequential-early-return", 34) == 0) {
+      assert_branch_exit(L, T);
+      checked(L, T, 0, 12, 14);
+      assert_branch_exit(L, T);
+    }
     if (!strcmp(shape->name, "comparison-nan")) {
       ljt_lua_dostring(L, "arg_payload=0/0");
       checked(L, T, 0, 1, 4);
@@ -1388,10 +1457,17 @@ static void run_case(lua_State *L, const ReturnCase *shape)
   lua_gc(L, LUA_GCCOLLECT, 0);
   checked(L, T, 0, 1, 24); gc_reuses++;
   admission(T);
+  if (strncmp(shape->name, "comparison-sequential-early-return", 34) == 0)
+    assert(branch_mutation_count[RET_NEG_BRANCH_SECOND_OPERAND-
+                                 RET_NEG_BRANCH_TARGET][0] > 0u &&
+           branch_mutation_count[RET_NEG_BRANCH_SECOND_OPERAND-
+                                 RET_NEG_BRANCH_TARGET][1] > 0u);
   cases_run++;
   printf("Lua return %s: native %s exit and reuse verified\n", shape->name,
-         !strcmp(shape->name, "comparison-early-return") ?
-           "branch-edge" : "terminal");
+         strncmp(shape->name, "comparison-sequential-early-return", 34) == 0 ?
+           "sequential branch" :
+           (!strcmp(shape->name, "comparison-early-return") ?
+             "branch-edge" : "terminal"));
 }
 
 int main(void)
@@ -1440,7 +1516,10 @@ int main(void)
     {"comparison-arm-liveness","a","local value=7; if a < 0 then value=a else value=2 end; return value","i",0},
     {"comparison-arm-multiop","a","local value=7; if a < 0 then local x=a*3; value=x+2 else local y=a+1; value=y*2-4 end; return value","i",0},
     {"comparison-empty-arm","a","if a < 0 then a=a+.5 end; return a+.25","i",0},
-    {"comparison-early-return","a","if a > 16 then return a+.25 else return a-.25 end","i",0}
+    {"comparison-early-return","a","if a > 16 then return a+.25 else return a-.25 end","i",0},
+    {"comparison-sequential-early-return","a",
+      "if a < 0 then return a*-1 end; if a > 10 then return a*.5 end; return a+.25",
+      "i",0}
   };
   lua_State *L = ljt_lua_newstate_openlibs();
   ljt_lua_dostring(L,
@@ -1467,19 +1546,22 @@ int main(void)
   ljt_lua_dostring(L,
     "assert(stop:send(true,5)); local ok,v=peer:join(5); assert(ok and v)");
   lua_close(L);
-  assert(ret_terminal_maps + ret_join_maps + 1u == cases_run &&
+  assert(ret_terminal_maps + ret_join_maps + ret_sequential_maps + 1u ==
+           cases_run &&
+         ret_sequential_maps == 1u &&
          ret_join_maps == 1 && ret_alias_bad && ret_callmap_guards == 1);
   for (unsigned m = 0; m < RET_NEG_ALIAS; m++)
     assert(ret_mutation_count[m][0] && ret_mutation_count[m][1]);
   for (unsigned m = 0; m < 13; m++)
     assert(branch_mutation_count[m][0] && branch_mutation_count[m][1]);
-  assert(cases_run == 98 && terminal_exits == 96 && gc_reuses == 98 &&
+  assert(cases_run == 99 && terminal_exits == 96 && gc_reuses == 99 &&
          primitive_mismatches == 96);
   printf("Lua return exits OK: cases=%u native=%u terminal=%u terminal-maps=%u "
-         "join-maps=%u join-semantic-negative=%u join-postRA-negative=%u "
+         "join-maps=%u sequential-maps=%u join-semantic-negative=%u join-postRA-negative=%u "
          "reuse=%u gc=%u controlled-old-tags=%u semantic-negative=%u "
          "postRA-negative=%u aliases=%u callmap-guard=%u\n", cases_run,native_runs,terminal_exits,
-         ret_terminal_maps, ret_join_maps, ret_join_semantic_bad,
+         ret_terminal_maps, ret_join_maps, ret_sequential_maps,
+         ret_join_semantic_bad,
          ret_join_postra_bad,
          same_trace_reuses,gc_reuses,primitive_mismatches,
          ret_semantic_bad,ret_postra_bad,ret_alias_bad,ret_callmap_guards);

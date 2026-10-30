@@ -56,6 +56,7 @@ int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target, MCode *insp)
 ** ABI and snapshot contracts. Unproved heap and call effects remain closed.
 */
 
+
 static int arm64_ir_reject(LJArm64IRReject *reject,
 	LJArm64IRRejectReason reason, IRRef ref, IROp op, uint16_t detail)
 {
@@ -10835,6 +10836,9 @@ static int arm64_ir_snapshots(const GCtrace *T, IRRef loopref,
 	int allow_forl_step,
 	LJArm64IRReject *reject)
 {
+#define SEQ_SNAP_REJECT(r, reason, ref, op, detail) \
+  arm64_ir_reject((r), (reason), (ref), (op), (detail))
+
   SnapNo snapno;
   IRRef prevref = 0;
   MSize expected_mapofs = 0;
@@ -10842,7 +10846,7 @@ static int arm64_ir_snapshots(const GCtrace *T, IRRef loopref,
   IRRef xpollsnap = 0;
   LJ_STATIC_ASSERT(sizeof(SnapEntry)*(1+LJ_FR2) == sizeof(uint64_t));
   if (T->nsnap == 0 || T->snap == NULL || T->snapmap == NULL)
-    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+    return SEQ_SNAP_REJECT(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
 			   loopref, IR_XPOLL, 0);
   for (snapno = 0; snapno < T->nsnap; snapno++) {
     const SnapShot *snap = &T->snap[snapno];
@@ -10866,7 +10870,7 @@ static int arm64_ir_snapshots(const GCtrace *T, IRRef loopref,
 	 (nslots > root_topslot + 1u + LJ_FR2 &&
 	  !arm64_ir_callm_transient_triplet(J,T,snapno,J->pt,
 	                                    root_topslot)))
-      return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+      return SEQ_SNAP_REJECT(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
 			     snapref, IR_XPOLL, (uint16_t)snapno);
     expected_mapofs = nextofs;
     prevref = snapref;
@@ -10881,13 +10885,13 @@ static int arm64_ir_snapshots(const GCtrace *T, IRRef loopref,
       uint32_t flags = sn & 0x00ff0000u;
       if (slot >= nslots || (n != 0 &&
 	  slot <= snap_slot(T->snapmap[mapofs+n-1])))
-	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+	return SEQ_SNAP_REJECT(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
 			       ref, IR_XPOLL, (uint16_t)snapno);
       if (sn == SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL))
 	continue;  /* The sole root-frame sentinel carries no object. */
       if (ref >= REF_FIRST && ref < snapref &&
           T->ir[ref].o == IR_XLOAD && T->ir[ref].t.irt == IRT_U8)
-	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+	return SEQ_SNAP_REJECT(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
 			       ref, IR_XLOAD, (uint16_t)snapno);
       if (slot < 1 + LJ_FR2 ||
 	  (flags != 0 && flags != SNAP_NORESTORE) ||
@@ -10898,7 +10902,7 @@ static int arm64_ir_snapshots(const GCtrace *T, IRRef loopref,
 	      arm64_scalar_ir_ref(T, ref, snapref, IRT_STR) ||
 	      arm64_scalar_ir_ref(T, ref, snapref, IRT_TRUE) ||
 	      arm64_scalar_ir_ref(T, ref, snapref, IRT_FALSE)))))
-	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+	return SEQ_SNAP_REJECT(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
 			       ref, IR_XPOLL, (uint16_t)snapno);
       if (flags == SNAP_NORESTORE) {
 	const IRIns *source;
@@ -10907,12 +10911,12 @@ static int arm64_ir_snapshots(const GCtrace *T, IRRef loopref,
 	    ref < REF_FIRST || ref >= snapref ||
 	    (slot != idxslot && slot != idxslot+FORL_STOP &&
 	     (!allow_forl_step || slot != idxslot+FORL_STEP)))
-	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+	  return SEQ_SNAP_REJECT(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
 				 ref, IR_SLOAD, (uint16_t)snapno);
 	source = &T->ir[ref];
 	if (source->o != IR_SLOAD || source->op1 != slot ||
 	    (source->op2 & (IRSLOAD_CONVERT|IRSLOAD_PARENT)) != 0)
-	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+	  return SEQ_SNAP_REJECT(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
 				 ref, IR_SLOAD, (uint16_t)snapno);
       }
     }
@@ -10920,13 +10924,14 @@ static int arm64_ir_snapshots(const GCtrace *T, IRRef loopref,
     snappc = (uintptr_t)(pcbase >> 8);
     if ((uint8_t)pcbase != (uint8_t)(J->baseslot-2) ||
 	!arm64_ir_pcpos(snappc, proto_lo, proto_hi, &snappos))
-      return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+      return SEQ_SNAP_REJECT(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
 			     snapref, IR_XPOLL, (uint16_t)snapno);
   }
   if (!loopsnap || xpollsnap != loopref)
-    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+    return SEQ_SNAP_REJECT(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
 			   loopref, IR_XPOLL, 0xffffu);
   return 1;
+#undef SEQ_SNAP_REJECT
 }
 
 static int arm64_ir_phi_marks(const GCtrace *T, IRRef firstphi, IRRef end,
@@ -10960,9 +10965,10 @@ static int arm64_ir_guard_snapshots(const GCtrace *T,
     const IRIns *ir = &T->ir[ref];
     if (!irt_isguard(ir->t))
       continue;
-    if (T->snap[0].ref > ref)
+    if (T->snap[0].ref > ref) {
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT, ref,
 			     (IROp)ir->o, 0);
+    }
     while (snapno+1u < T->nsnap && T->snap[snapno+1u].ref <= ref)
       snapno++;
     if (T->snap[snapno].ref > ref)
@@ -13849,6 +13855,10 @@ static int arm64_side_forl_index_add_ir(const LJArm64SideIRView *side,
 ** arbitrary straight-line range of the existing pure leaf operations; the
 ** semantic and allocated passes independently replay the selected path. */
 typedef struct LJArm64LuaLeafBranch {
+  MSize ncompare;
+  struct {
+    MSize compare, condition_jump, first, second, first_ret;
+  } decision[4];
   MSize compare, condition_jump, first, second, join, size;
   MSize first_ret, second_ret;
   MSize first_ret0, second_ret0;
@@ -14007,6 +14017,7 @@ static int arm64_lua_leaf_branch(const GCproto *pt,
 {
   BCIns words[UINT8_MAX+1u];
   MSize i, size, cmp = UINT32_MAX, cond = UINT32_MAX, join = UINT32_MAX;
+  MSize compares[4], ncompare = 0;
   uint8_t first_reach[UINT8_MAX+1u] = {0};
   uint8_t second_reach[UINT8_MAX+1u] = {0};
   if (!pt || !branch || (size = pt->sizebc) < 3 || size > UINT8_MAX ||
@@ -14024,9 +14035,79 @@ static int arm64_lua_leaf_branch(const GCproto *pt,
   for (i = 1; i+1u < size; i++) {
     BCOp op = bc_op(words[i]);
     if (op >= BC_ISLT && op <= BC_ISGT) {
-      if (cmp != UINT32_MAX) return 0;
-      cmp = i;
+      if (ncompare == sizeof(compares)/sizeof(compares[0])) return 0;
+      compares[ncompare++] = i;
+      if (cmp == UINT32_MAX) cmp = i;
     }
+  }
+  branch->ncompare = ncompare;
+  if (ncompare > 1u) {
+    MSize start = 1u;
+    for (i = 1u; i+1u < size; i++) {
+      BCOp op = bc_op(words[i]);
+      ptrdiff_t target;
+      if (op == BC_JMP) {
+        target = (ptrdiff_t)i+1+bc_j(words[i]);
+        if (target <= (ptrdiff_t)i || target >= (ptrdiff_t)size ||
+            bc_a(words[i]) > pt->framesize) return 0;
+        branch->next[i] = (MSize)target;
+      } else if (op == BC_RET1 || op == BC_RET0 ||
+                 (op >= BC_ISLT && op <= BC_ISGT)) {
+        branch->next[i] = UINT32_MAX;
+      } else {
+        branch->next[i] = i+1u;
+      }
+    }
+    if (bc_op(words[size-1u]) != BC_RET1 || bc_d(words[size-1u]) != 2u)
+      return 0;
+    for (i = 0; i < ncompare; i++) {
+      MSize at = compares[i], cont, p;
+      ptrdiff_t target;
+      if (at < start || at+2u >= size ||
+          bc_op(words[at+1u]) != BC_JMP || bc_a(words[at+1u]) > pt->framesize)
+        return 0;
+      target = (ptrdiff_t)at+2+bc_j(words[at+1u]);
+      if (target <= (ptrdiff_t)(at+2u) || target >= (ptrdiff_t)size)
+        return 0;
+      cont = (MSize)target;
+      if (bc_op(words[cont-1u]) != BC_RET1 || bc_d(words[cont-1u]) != 2u ||
+          bc_a(words[cont-1u]) >= pt->framesize) return 0;
+      for (p = start; p < at; p++)
+        if (bc_op(words[p]) == BC_JMP || bc_op(words[p]) == BC_RET1 ||
+            bc_op(words[p]) == BC_RET0 ||
+            (bc_op(words[p]) >= BC_ISLT && bc_op(words[p]) <= BC_ISGT))
+          return 0;
+      for (p = at+2u; p < cont; p++)
+        if (bc_op(words[p]) == BC_JMP ||
+            (bc_op(words[p]) >= BC_ISLT && bc_op(words[p]) <= BC_ISGT) ||
+            (p+1u < cont &&
+             (bc_op(words[p]) == BC_RET1 || bc_op(words[p]) == BC_RET)))
+          return 0;
+      if (i+1u < ncompare && compares[i+1u] < cont) return 0;
+      branch->decision[i].compare = at;
+      branch->decision[i].condition_jump = at+1u;
+      branch->decision[i].first = at+2u;
+      branch->decision[i].second = cont;
+      branch->decision[i].first_ret = cont-1u;
+      start = cont;
+    }
+    if (start >= size-1u) return 0;
+    for (i = start; i+1u < size; i++)
+      if (bc_op(words[i]) == BC_JMP || bc_op(words[i]) == BC_RET1 ||
+          bc_op(words[i]) == BC_RET0 ||
+          (bc_op(words[i]) >= BC_ISLT && bc_op(words[i]) <= BC_ISGT))
+        return 0;
+    branch->compare = compares[0];
+    branch->condition_jump = compares[0]+1u;
+    branch->first = compares[0]+2u;
+    branch->second = branch->decision[0].second;
+    branch->first_ret = branch->decision[0].first_ret;
+    branch->early_return = 1u;
+    branch->join = size-1u;
+    for (i = 0; i < size; i++)
+      if ((BCIns)la_load32_acq(
+            (const uint32_t *)&proto_bc(pt)[i]) != words[i]) return 0;
+    return 1;
   }
   if (cmp != UINT32_MAX) {
     ptrdiff_t target;
@@ -14138,6 +14219,13 @@ static int arm64_lua_leaf_branch(const GCproto *pt,
       branch->early_return = 1;
       branch->join = size-1u;
     }
+  }
+  if (ncompare == 1u) {
+    branch->decision[0].compare = branch->compare;
+    branch->decision[0].condition_jump = branch->condition_jump;
+    branch->decision[0].first = branch->first;
+    branch->decision[0].second = branch->second;
+    branch->decision[0].first_ret = branch->first_ret;
   }
   for (i = 0; i < size; i++)
     if ((BCIns)la_load32_acq((const uint32_t *)&proto_bc(pt)[i]) != words[i])
@@ -14267,6 +14355,30 @@ static MSize arm64_lua_leaf_branch_terminal(
   return first ? branch->first_ret0 : branch->second_ret0;
 }
 
+static int arm64_lua_leaf_branch_target(const LJArm64LuaLeafBranch *branch,
+                                        MSize pos)
+{
+  MSize i;
+  if (!branch) return 0;
+  for (i = 0; i < branch->ncompare; i++)
+    if (pos == branch->decision[i].first ||
+        pos == branch->decision[i].second) return 1;
+  return 0;
+}
+
+/* A cold edge in this bounded grammar is a guard exit before the leaf
+** reaches its selected RET1. Preserve the later caller-map binding for common
+** joins, but do not require a returned value at an early-return edge. */
+static int arm64_lua_leaf_branch_early_target(
+                                        const LJArm64LuaLeafBranch *branch,
+                                        MSize pos)
+{
+  if (!branch || !branch->early_return) return 0;
+  if (branch->ncompare == 1u)
+    return pos == branch->first || pos == branch->second;
+  return arm64_lua_leaf_branch_target(branch, pos);
+}
+
 /* Independently decode the bounded zero-formal FUNCV input window. Fixed
 ** VARG results are padded with nil or truncated against the exact CALL input
 ** count; open and alternate destinations remain outside this slice. */
@@ -14366,6 +14478,34 @@ static int arm64_lua_leaf_numeric_path(const GCproto *pt,
   return pc == branch->join;
 }
 
+static int arm64_lua_leaf_numeric_chain(const GCproto *pt,
+                                        const LJArm64LuaLeafBranch *branch,
+                                        uint8_t *numeric)
+{
+  MSize start = 1u, i;
+  for (i = 0; i < branch->ncompare; i++) {
+    BCIns cmp = (BCIns)la_load32_acq((const uint32_t *)
+      &proto_bc(pt)[branch->decision[i].compare]);
+    BCIns ret = (BCIns)la_load32_acq((const uint32_t *)
+      &proto_bc(pt)[branch->decision[i].first_ret]);
+    uint8_t returned[UINT8_MAX+1u];
+    if (!arm64_lua_leaf_numeric_range(pt, start,
+          branch->decision[i].compare, numeric) ||
+        !numeric[bc_a(cmp)] || !numeric[bc_d(cmp)]) return 0;
+    memcpy(returned, numeric, pt->framesize);
+    if (!arm64_lua_leaf_numeric_range(pt, branch->decision[i].first,
+          branch->decision[i].first_ret, returned) ||
+        !returned[bc_a(ret)]) return 0;
+    start = branch->decision[i].second;
+  }
+  {
+    BCIns ret = (BCIns)la_load32_acq(
+      (const uint32_t *)&proto_bc(pt)[pt->sizebc-1u]);
+    return arm64_lua_leaf_numeric_range(pt, start, pt->sizebc-1u, numeric) &&
+           numeric[bc_a(ret)];
+  }
+}
+
 static int arm64_lua_leaf_type_range(const GCproto *pt, MSize first,
                                      MSize last, IRType *types)
 {
@@ -14446,6 +14586,37 @@ static int arm64_lua_leaf_type_path(const GCproto *pt,
     pc = next;
   }
   return pc == branch->join;
+}
+
+static int arm64_lua_leaf_type_chain(const GCproto *pt,
+                                     const LJArm64LuaLeafBranch *branch,
+                                     IRType *types)
+{
+  MSize start = 1u, i;
+  for (i = 0; i < branch->ncompare; i++) {
+    BCIns cmp = (BCIns)la_load32_acq((const uint32_t *)
+      &proto_bc(pt)[branch->decision[i].compare]);
+    BCIns ret = (BCIns)la_load32_acq((const uint32_t *)
+      &proto_bc(pt)[branch->decision[i].first_ret]);
+    IRType returned[UINT8_MAX+1u];
+    if (!arm64_lua_leaf_type_range(pt, start,
+          branch->decision[i].compare, types) ||
+        (types[bc_a(cmp)] != IRT_INT && types[bc_a(cmp)] != IRT_NUM) ||
+        (types[bc_d(cmp)] != IRT_INT && types[bc_d(cmp)] != IRT_NUM))
+      return 0;
+    memcpy(returned, types, pt->framesize*sizeof(IRType));
+    if (!arm64_lua_leaf_type_range(pt, branch->decision[i].first,
+          branch->decision[i].first_ret, returned) ||
+        (returned[bc_a(ret)] != IRT_INT && returned[bc_a(ret)] != IRT_NUM))
+      return 0;
+    start = branch->decision[i].second;
+  }
+  {
+    BCIns ret = (BCIns)la_load32_acq(
+      (const uint32_t *)&proto_bc(pt)[pt->sizebc-1u]);
+    return arm64_lua_leaf_type_range(pt, start, pt->sizebc-1u, types) &&
+      (types[bc_a(ret)] == IRT_INT || types[bc_a(ret)] == IRT_NUM);
+  }
 }
 
 /* A pure leaf identity guard must restore every supplied caller argument.
@@ -14888,6 +15059,8 @@ static IRRef arm64_lua_leaf_ir_args_at(const jit_State *J, const GCtrace *T,
     if (!has_call &&
         !arm64_lua_leaf_numeric_range(leaf, 1, leaf->sizebc-1u, numeric))
       return 0;
+  } else if (branch.ncompare > 1u) {
+    if (!arm64_lua_leaf_numeric_chain(leaf, &branch, numeric)) return 0;
   } else {
     uint8_t first[UINT8_MAX+1u], second[UINT8_MAX+1u];
     BCIns cmp = (BCIns)la_load32_acq(
@@ -14999,7 +15172,7 @@ static IRRef arm64_lua_leaf_ir_num(const GCtrace *T, IRRef value, IRRef end)
 
 /* Bind the inlined source condition, its recorder guard and exact cold edge.
 ** NUM relation variants preserve Lua's unordered/NaN behavior. */
-static int arm64_lua_leaf_ir_branch_cold(const GCtrace *T,
+static int arm64_lua_leaf_ir_branch_cold_one(const GCtrace *T,
                                          const GCproto *pt,
                                          const LJArm64LuaLeafBranch *branch,
                                          const IRRef *slots, IRRef ref,
@@ -15071,6 +15244,12 @@ static int arm64_lua_leaf_ir_branch_cold(const GCtrace *T,
   return 1;
 }
 
+static int arm64_lua_leaf_ir_branch_cold(const GCtrace *T,
+                                         const GCproto *pt,
+                                         const LJArm64LuaLeafBranch *branch,
+                                         const IRRef *slots, IRRef ref,
+                                         MSize *coldp);
+
 static int arm64_lua_leaf_ir_branch_guard(const GCtrace *T,
                                           const GCproto *pt,
                                           const LJArm64LuaLeafBranch *branch,
@@ -15082,6 +15261,67 @@ static int arm64_lua_leaf_ir_branch_guard(const GCtrace *T,
   return ok && coldpos == cold;
 }
 
+static int arm64_lua_leaf_ir_branch_cold(const GCtrace *T,
+                                         const GCproto *pt,
+                                         const LJArm64LuaLeafBranch *branch,
+                                         const IRRef *slots, IRRef ref,
+                                         MSize *coldp)
+{
+  MSize i, found = 0, cold = 0;
+  if (!branch || !branch->ncompare) return 0;
+  for (i = 0; i < branch->ncompare; i++) {
+    LJArm64LuaLeafBranch one = *branch;
+    MSize selected;
+    one.ncompare = 1u;
+    one.compare = branch->decision[i].compare;
+    one.condition_jump = branch->decision[i].condition_jump;
+    one.first = branch->decision[i].first;
+    one.second = branch->decision[i].second;
+    one.first_ret = branch->decision[i].first_ret;
+    one.second_ret = UINT32_MAX;
+    one.first_ret0 = one.second_ret0 = UINT32_MAX;
+    one.early_return = 1u;
+    if (arm64_lua_leaf_ir_branch_cold_one(T, pt, &one, slots, ref,
+                                          &selected)) {
+      cold = selected;
+      found++;
+    }
+  }
+  if (found != 1u) return 0;
+  *coldp = cold;
+  return 1;
+}
+
+static int arm64_lua_leaf_ir_branch_hot_at(const GCtrace *T,
+                                            const GCproto *pt,
+                                            const LJArm64LuaLeafBranch *branch,
+                                            const IRRef *slots, IRRef end,
+                                            MSize index, MSize *hotp)
+{
+  LJArm64LuaLeafBranch one;
+  IRRef ref;
+  MSize cold, hot, found = 0;
+  if (!branch || index >= branch->ncompare) return 0;
+  one = *branch;
+  one.ncompare = 1u;
+  one.compare = branch->decision[index].compare;
+  one.condition_jump = branch->decision[index].condition_jump;
+  one.first = branch->decision[index].first;
+  one.second = branch->decision[index].second;
+  one.first_ret = branch->decision[index].first_ret;
+  one.second_ret = UINT32_MAX;
+  one.first_ret0 = one.second_ret0 = UINT32_MAX;
+  one.early_return = 1u;
+  for (ref = REF_FIRST; ref < end && ref < T->nins; ref++) {
+    if (!arm64_lua_leaf_ir_branch_cold_one(T, pt, &one, slots, ref, &cold))
+      continue;
+    hot = cold == one.first ? one.second : one.first;
+    if (found++) return 0;
+    *hotp = hot;
+  }
+  return found == 1u;
+}
+
 static int arm64_lua_leaf_ir_branch_hot(const GCtrace *T, const GCproto *pt,
                                         const LJArm64LuaLeafBranch *branch,
                                         const IRRef *slots, IRRef end,
@@ -15089,7 +15329,7 @@ static int arm64_lua_leaf_ir_branch_hot(const GCtrace *T, const GCproto *pt,
 {
   IRRef ref;
   MSize cold, hot, found = 0;
-  if (!T || !pt || !branch || branch->compare == UINT32_MAX || !hotp)
+  if (!T || !pt || !branch || branch->ncompare != 1u || !hotp)
     return 0;
   for (ref = REF_FIRST; ref < end && ref < T->nins; ref++) {
     if (!arm64_lua_leaf_ir_branch_cold(T, pt, branch, slots, ref, &cold))
@@ -15104,7 +15344,7 @@ static int arm64_lua_leaf_ir_branch_hot(const GCtrace *T, const GCproto *pt,
 static IRRef arm64_lua_leaf_postra_num(const LJArm64PostRAView *v,
                                       IRRef value, IRRef end);
 
-static int arm64_lua_leaf_postra_branch_cold(
+static int arm64_lua_leaf_postra_branch_cold_one(
                                       const LJArm64PostRAView *v,
                                       const GCproto *pt,
                                       const LJArm64LuaLeafBranch *branch,
@@ -15180,6 +15420,69 @@ static int arm64_lua_leaf_postra_branch_cold(
   return 1;
 }
 
+static int arm64_lua_leaf_postra_branch_cold(
+                                      const LJArm64PostRAView *v,
+                                      const GCproto *pt,
+                                      const LJArm64LuaLeafBranch *branch,
+                                      const IRRef *slots, IRRef ref,
+                                      MSize *coldp)
+{
+  MSize i, found = 0, cold = 0;
+  if (!branch || !branch->ncompare) return 0;
+  for (i = 0; i < branch->ncompare; i++) {
+    LJArm64LuaLeafBranch one = *branch;
+    MSize selected;
+    one.ncompare = 1u;
+    one.compare = branch->decision[i].compare;
+    one.condition_jump = branch->decision[i].condition_jump;
+    one.first = branch->decision[i].first;
+    one.second = branch->decision[i].second;
+    one.first_ret = branch->decision[i].first_ret;
+    one.second_ret = UINT32_MAX;
+    one.first_ret0 = one.second_ret0 = UINT32_MAX;
+    one.early_return = 1u;
+    if (arm64_lua_leaf_postra_branch_cold_one(v, pt, &one, slots, ref,
+                                              &selected)) {
+      cold = selected;
+      found++;
+    }
+  }
+  if (found != 1u) return 0;
+  *coldp = cold;
+  return 1;
+}
+
+static int arm64_lua_leaf_postra_branch_hot_at(
+                                      const LJArm64PostRAView *v,
+                                      const GCproto *pt,
+                                      const LJArm64LuaLeafBranch *branch,
+                                      const IRRef *slots, IRRef end,
+                                      MSize index, MSize *hotp)
+{
+  LJArm64LuaLeafBranch one;
+  IRRef ref;
+  MSize cold, hot, found = 0;
+  if (!branch || index >= branch->ncompare) return 0;
+  one = *branch;
+  one.ncompare = 1u;
+  one.compare = branch->decision[index].compare;
+  one.condition_jump = branch->decision[index].condition_jump;
+  one.first = branch->decision[index].first;
+  one.second = branch->decision[index].second;
+  one.first_ret = branch->decision[index].first_ret;
+  one.second_ret = UINT32_MAX;
+  one.first_ret0 = one.second_ret0 = UINT32_MAX;
+  one.early_return = 1u;
+  for (ref = REF_FIRST; ref < end && ref < v->nins; ref++) {
+    if (!arm64_lua_leaf_postra_branch_cold_one(v, pt, &one, slots, ref,
+                                               &cold)) continue;
+    hot = cold == one.first ? one.second : one.first;
+    if (found++) return 0;
+    *hotp = hot;
+  }
+  return found == 1u;
+}
+
 static int arm64_lua_leaf_postra_branch_hot(
                                       const LJArm64PostRAView *v,
                                       const GCproto *pt,
@@ -15189,7 +15492,7 @@ static int arm64_lua_leaf_postra_branch_hot(
 {
   IRRef ref;
   MSize cold, hot, found = 0;
-  if (!v || !pt || !branch || branch->compare == UINT32_MAX || !hotp)
+  if (!v || !pt || !branch || branch->ncompare != 1u || !hotp)
     return 0;
   for (ref = REF_FIRST; ref < end && ref < v->nins; ref++) {
     if (!arm64_lua_leaf_postra_branch_cold(v, pt, branch, slots, ref, &cold))
@@ -15609,6 +15912,32 @@ static int arm64_lua_leaf_ir_prefix(const GCtrace *T, const GCproto *pt,
     IRRef value, left, right, limit = p < pc ? at : end;
     IROp arith = IR_NOP;
     TValue k;
+    if (branch.ncompare > 1u) {
+      MSize decision;
+      for (decision = 0; decision < branch.ncompare; decision++)
+        if (p == branch.decision[decision].compare) break;
+      if (decision < branch.ncompare) {
+        MSize hot;
+        if (pc == branch.decision[decision].first ||
+            pc == branch.decision[decision].second) {
+          memcpy(saved, slots, sizeof(slots)); *livep = live;
+          *retposp = pt->sizebc-1u;
+          resultp[0] = resultp[1] = 0;
+          *nresultp = 0;
+          return 1;
+        }
+        if (!arm64_lua_leaf_ir_branch_hot_at(T, pt, &branch, slots, end,
+                                              decision, &hot))
+          return LEAF_PREFIX_FAIL();
+        hotpath = hot;
+        if (hot == branch.decision[decision].first)
+          retpos = branch.decision[decision].first_ret;
+        else
+          retpos = pt->sizebc-1u;
+        p = hot-1u;
+        continue;
+      }
+    }
     if ((pc == branch.first || pc == branch.second) &&
         p == branch.compare) {
       memcpy(saved, slots, sizeof(slots)); *livep = live;
@@ -16087,6 +16416,42 @@ static int arm64_lua_leaf_ir_needed_range(const GCproto *pt, MSize first,
   return 1;
 }
 
+static int arm64_lua_leaf_ir_needed_chain_from(
+                                        const GCproto *pt,
+                                        const LJArm64LuaLeafBranch *branch,
+                                        MSize start, MSize index,
+                                        uint8_t *needed)
+{
+  MSize i;
+  for (i = index; i < branch->ncompare; i++) {
+    MSize cmp = branch->decision[i].compare;
+    MSize first = branch->decision[i].first;
+    MSize second = branch->decision[i].second;
+    MSize ret = branch->decision[i].first_ret;
+    if (start >= first && start <= ret)
+      return arm64_lua_leaf_ir_needed_range(pt, start, ret+1u, needed);
+    if (start > cmp && start < first) return 0;
+    if (start <= cmp) {
+      uint8_t body[UINT8_MAX+1u] = {0}, continuation[UINT8_MAX+1u] = {0};
+      BCIns ins = (BCIns)la_load32_acq(
+        (const uint32_t *)&proto_bc(pt)[cmp]);
+      if (!arm64_lua_leaf_ir_needed_chain_from(pt, branch, second, i+1u,
+                                                continuation) ||
+          !arm64_lua_leaf_ir_needed_range(pt, first, ret+1u, body))
+        return 0;
+      for (MSize slot = 0; slot < pt->framesize; slot++)
+        needed[slot] = (uint8_t)(body[slot] || continuation[slot]);
+      if (bc_a(ins) >= pt->framesize || bc_d(ins) >= pt->framesize)
+        return 0;
+      needed[bc_a(ins)] = needed[bc_d(ins)] = 1u;
+      return start == cmp ||
+        arm64_lua_leaf_ir_needed_range(pt, start, cmp, needed);
+    }
+    if (start >= second) continue;
+  }
+  return arm64_lua_leaf_ir_needed_range(pt, start, pt->sizebc, needed);
+}
+
 /* Work backwards from RET1 to the resume PC. Every source read matters even
 ** when its result is dead: arithmetic may fail, and CSET reads the old tag
 ** before choosing a raw destination or a closed cell. */
@@ -16097,6 +16462,11 @@ static int arm64_lua_leaf_ir_needed(const GCproto *pt, MSize resume,
   LJArm64LuaLeafBranch branch;
   if (!resume || resume >= pc) return 0;
   if (!arm64_lua_leaf_branch(pt, &branch)) return 0;
+  if (branch.ncompare > 1u) {
+    memset(needed, 0, pt->framesize);
+    return arm64_lua_leaf_ir_needed_chain_from(pt, &branch, resume, 0u,
+                                                needed);
+  }
   if (branch.compare != UINT32_MAX) {
     uint8_t *path;
     if (resume < branch.compare) return 0;
@@ -16399,6 +16769,7 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
                                     SnapNo s, uint64_t pcbase,
                                     MSize *lowerlinkp)
 {
+#define CHILD_FAIL() do { return 0; } while (0)
   const SnapShot *snap = &T->snap[s];
   MSize i, linkslot = 0, base, retpos, leafretpos, pos, extent, live = 0;
   MSize callnargs = 0;
@@ -16427,23 +16798,23 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
       (!inline_frame && (!(uint8_t)pcbase ||
        !arm64_lua_frame_path_limit(&T->snapmap[snap->mapofs], snap->nent,
                              pcbase, 2u, &frames) || !frames.depth)))
-    return 0;
+    CHILD_FAIL();
   if (inline_frame) {
     for (i = 0; i < snap->nent; i++) {
       SnapEntry entry = T->snapmap[snap->mapofs+i];
       if (entry & SNAP_FRAME) {
         if (linkslot || (entry & 0x00ff0000u) != SNAP_FRAME)
-          return 0;
+          CHILD_FAIL();
         linkslot = snap_slot(entry);
         link = snap_ref(entry);
       }
     }
-    if (!linkslot || linkslot < 1u+LJ_FR2+1u) return 0;
+    if (!linkslot || linkslot < 1u+LJ_FR2+1u) CHILD_FAIL();
     base = linkslot+1u;
     for (i = 0; i < snap->nent; i++) {
       SnapEntry entry = T->snapmap[snap->mapofs+i];
       if (snap_slot(entry) == base-2u) {
-        if (entry & 0x00ff0000u) return 0;
+        if (entry & 0x00ff0000u) CHILD_FAIL();
         callee = snap_ref(entry);
       }
     }
@@ -16456,27 +16827,27 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
       varglink = frames.child[1].linkref;
       if (lowerlinkp) *lowerlinkp = frames.child[0].linkslot;
       if (frames.child[0].funcref != frames.child[1].funcref)
-        return 0;
+        CHILD_FAIL();
     }
   }
   if (!arm64_scalar_ir_ref(T, link, ref, IRT_NUM) || !irref_isk(link) ||
       link < T->nk || link+1u >= REF_TRUE || link+1u >= T->nins ||
-      T->ir[link].o != IR_KNUM) return 0;
+      T->ir[link].o != IR_KNUM) CHILD_FAIL();
   retpc = (const BCIns *)(uintptr_t)T->ir[link+1u].tv.u64;
   if (!arm64_ir_pcpos((uintptr_t)retpc, (uintptr_t)proto_bc(J->pt),
       (uintptr_t)(proto_bc(J->pt)+J->pt->sizebc), &retpos) || !retpos)
-    return 0;
+    CHILD_FAIL();
   call = (BCIns)la_load32_acq((const uint32_t *)(retpc-1));
   if (iterator && (paired_varg || inline_frame ||
       !lj_asm_arm64_iterl_tuple(J->pt, trace_startpc_acq((GCtrace *)T),
                                T->startins, T->startins, 1, &iter) ||
-      retpos != iter.loop_pc || call != iter.callins)) return 0;
+      retpos != iter.loop_pc || call != iter.callins)) CHILD_FAIL();
   if ((!iterator && bc_op(call) != BC_CALL && bc_op(call) != BC_CALLM) ||
       (!bc_c(call) && bc_op(call) != BC_CALLM) ||
-      bc_a(call)+bc_c(call)+LJ_FR2 > J->pt->framesize) return 0;
+      bc_a(call)+bc_c(call)+LJ_FR2 > J->pt->framesize) CHILD_FAIL();
   callnargs = bc_op(call) == BC_CALLM ? 0u : bc_c(call)-1u;
   if (!paired_varg && base != 2u+2u*LJ_FR2+bc_a(call))
-    return 0;
+    CHILD_FAIL();
   if (inline_frame && !callee) {
     SnapNo si;
     for (si = 0; si < s && !callee; si++) {
@@ -16494,7 +16865,7 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
     }
   }
   fn = arm64_lua_leaf_ir_function(T, callee, ref, NULL);
-  if (!lj_trace_arm64_lua_leaf(fn)) return 0;
+  if (!lj_trace_arm64_lua_leaf(fn)) CHILD_FAIL();
   pt = funcproto(fn);
   tail_forward = paired_varg && arm64_lua_leaf_forward_source(
       fn, NULL, &forward_target, &forward_nargs);
@@ -16507,9 +16878,9 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
         T->ir[varglink].o != IR_KNUM || !delta ||
         T->ir[varglink+1u].tv.u64 != 8u*delta+FRAME_VARG ||
         base != 2u+2u*LJ_FR2+bc_a(call)+delta)
-      return 0;
+      CHILD_FAIL();
   }
-  if (!tail_forward && !arm64_lua_leaf_branch(pt, &branch)) return 0;
+  if (!tail_forward && !arm64_lua_leaf_branch(pt, &branch)) CHILD_FAIL();
   nresults = arm64_lua_leaf_return_count(pt);
   if (!tail_forward && (!nresults || (bc_op(call) == BC_CALLM ?
       (bc_b(call) != 2u || bc_c(call) != 0u || nresults != 1u ||
@@ -16519,13 +16890,13 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
          arm64_lua_leaf_callm_pair_source(J->pt, retpos-1u, 1,
                                            nresults))) ||
        (bc_b(call) != 0u &&
-        bc_a(call)+bc_b(call)-1u+LJ_FR2 > J->pt->framesize)))) return 0;
+        bc_a(call)+bc_b(call)-1u+LJ_FR2 > J->pt->framesize)))) CHILD_FAIL();
   if (!tail_forward && nresults > 2u &&
       !(bc_op(call) == BC_CALL && bc_b(call) == 0u &&
         arm64_lua_leaf_callm_pair_source(J->pt, retpos-1u, 1, nresults)))
-    return 0;
+    CHILD_FAIL();
   if (!tail_forward && inline_frame && bc_op(T->startins) != BC_FUNCF && nresults != 2u)
-    return 0;
+    CHILD_FAIL();
   /* The nearest parent map must be this CALL in the same loop iteration.
   ** Its values have undergone the actual LOOP substitution, not an inferred
   ** inverse PHI mapping. Earlier identity guards may dominate both copies. */
@@ -16616,15 +16987,15 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
            (entry->ref > J->loopref) != (ref > J->loopref))) ||
           !args_ok) {
 
-        return 0;
+        CHILD_FAIL();
       }
       break;
     }
   }
-  if (!caller) return 0;
+  if (!caller) CHILD_FAIL();
   if (iterator && ref > J->loopref &&
       !arm64_iterl_ir_frame_args(T, snap, &iter, base, args[0], args)) {
-    return 0;
+    CHILD_FAIL();
   }
   if (paired_varg) {
     MSize sourcebase = 2u+2u*LJ_FR2+bc_a(call);
@@ -16634,11 +17005,11 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
         SnapEntry entry = T->snapmap[snap->mapofs+j];
         if (snap_slot(entry) == slot) {
           if ((entry & 0x00ff0000u) || snap_ref(entry) != args[i])
-            return 0;
+            CHILD_FAIL();
           found++;
         }
       }
-      if (found != 1u) return 0;
+      if (found != 1u) CHILD_FAIL();
     }
   }
   if (tail_forward) {
@@ -16654,11 +17025,11 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
         !arm64_ir_pcpos((uintptr_t)(pcbase>>8), (uintptr_t)proto_bc(pt),
           (uintptr_t)(proto_bc(pt)+pt->sizebc), &forwardpos) ||
         (forwardpos != 1u && forwardpos != 3u) ||
-        base-2u+pt->framesize > UINT8_MAX) return 0;
+        base-2u+pt->framesize > UINT8_MAX) CHILD_FAIL();
     if (forwardpos == 1u) {
       expected_nslots = base;
       for (i = 0; i < snap->nent; i++)
-        if (snap_slot(T->snapmap[snap->mapofs+i]) >= base) return 0;
+        if (snap_slot(T->snapmap[snap->mapofs+i]) >= base) CHILD_FAIL();
     } else {
       MSize j, foundfn = 0;
       IRRef targetvalue = arm64_lua_leaf_ir_upvalue(
@@ -16669,87 +17040,90 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
           bc_c(varg) != 0u || bc_a(varg) != 1u+LJ_FR2 ||
           expected_nslots > base+bc_c(call)-1u+1u+LJ_FR2 ||
           snap->nslots != expected_nslots) {
-        return 0;
+        CHILD_FAIL();
       }
       for (i = 0; i < snap->nent; i++) {
         SnapEntry entry = T->snapmap[snap->mapofs+i];
         MSize slot = snap_slot(entry), found = 0;
         if (slot == base) {
           if ((entry & 0x00ff0000u) || snap_ref(entry) != targetvalue)
-            return 0;
+            CHILD_FAIL();
           foundfn++;
         }
         if (slot >= forward_dest && slot < expected_nslots) {
           MSize arg = slot-forward_dest;
           if ((entry & 0x00ff0000u) || snap_ref(entry) != args[arg])
-            return 0;
+            CHILD_FAIL();
           found++;
         }
-        if (found > 1u) return 0;
+        if (found > 1u) CHILD_FAIL();
       }
-      if (foundfn != 1u) return 0;
+      if (foundfn != 1u) CHILD_FAIL();
       for (i = 0; i < forward_nargs; i++) {
         MSize found = 0;
         for (j = 0; j < snap->nent; j++) {
           SnapEntry entry = T->snapmap[snap->mapofs+j];
           if (snap_slot(entry) == forward_dest+i) found++;
         }
-        if (found != 1u) return 0;
+        if (found != 1u) CHILD_FAIL();
       }
     }
-    if (snap->nslots != expected_nslots) return 0;
+    if (snap->nslots != expected_nslots) CHILD_FAIL();
     extent = base-2u+pt->framesize;
     if (extent < J->pt->framesize) extent = J->pt->framesize;
-    if (snap->topslot != extent) return 0;
+    if (snap->topslot != extent) CHILD_FAIL();
     return base-1u;
   }
   if (!arm64_ir_pcpos((uintptr_t)(pcbase>>8), (uintptr_t)proto_bc(pt),
       (uintptr_t)(proto_bc(pt)+pt->sizebc), &pos) || !pos ||
-      !arm64_lua_leaf_branch(pt, &branch)) return 0;
+      !arm64_lua_leaf_branch(pt, &branch)) CHILD_FAIL();
   if ((la_load8_acq(&pt->flags) & PROTO_VARARG) && pos <= 1u)
-    return 0;  /* Never snapshot before fixed VARG executes. */
+    CHILD_FAIL();  /* Never snapshot before fixed VARG executes. */
   for (i = 1; i+1u < pt->sizebc; i++)
     if (bc_op((BCIns)la_load32_acq(
         (const uint32_t *)&proto_bc(pt)[i])) == BC_CALL) has_call = 1;
   if (has_call) {
     const GCfunc *ancestors[1];
-    if (nresults != 1u) return 0;
+    if (nresults != 1u) CHILD_FAIL();
     ancestors[0] = fn;
     if (branch.compare != UINT32_MAX ||
         !arm64_lua_leaf_ir_eval(J, T, pt, args, pos, ref,
           ref < J->loopref ? J->loopref : T->nins, ancestors, 1u,
-          saved, &result[0])) return 0;
+          saved, &result[0])) CHILD_FAIL();
     live = pt->numparams;
     leafretpos = pt->sizebc-1u;
-  } else if (!arm64_lua_leaf_ir_prefix(T, pt, pos, args, ref,
-        ref < J->loopref ? J->loopref : T->nins,
-        arm64_lua_leaf_ir_unused(T, s), saved, &live, result, &nresults,
-        &leafretpos)) {
-    return 0;
+  } else {
+    if (!arm64_lua_leaf_ir_prefix(T, pt, pos, args, ref,
+          ref < J->loopref ? J->loopref : T->nins,
+          arm64_lua_leaf_ir_unused(T, s), saved, &live, result, &nresults,
+          &leafretpos)) CHILD_FAIL();
   }
-  if ((pos == branch.first || pos == branch.second) &&
+  if (arm64_lua_leaf_branch_target(&branch, pos) &&
       !arm64_lua_leaf_ir_branch_guard(T, pt, &branch, saved, ref, pos)) {
-    return 0;
+    CHILD_FAIL();
   }
   if (!arm64_lua_leaf_ir_needed(pt, pos, needed)) {
-    return 0;
+    CHILD_FAIL();
   }
   live = pt->numparams;
   for (i = pt->numparams; i < pt->framesize; i++)
     if (needed[i] && i+1u > live) live = i+1u;
-  if (base+live > UINT8_MAX) return 0;
+  if (base+live > UINT8_MAX) CHILD_FAIL();
   if (branch.compare == UINT32_MAX) {
-    if (snap->nslots != base+live) return 0;
+    if (snap->nslots != base+live) CHILD_FAIL();
   } else if (snap->nslots < base+live ||
              /* Snapshot nslots includes the FR2 frame-link adjustment. */
              snap->nslots > snap->topslot+1u+LJ_FR2 ||
-             snap->nslots > base+pt->framesize) return 0;
+             snap->nslots > base+pt->framesize) {
+    if (s == 4u && branch.ncompare > 1u)
+    CHILD_FAIL();
+  }
   if (iterator) {
     iterator_result_ok = nresults == 1u &&
       arm64_iterl_ir_result(J, T, s, args[1], result[0]);
     if (!(branch.early_return && !nresults &&
           (pos == branch.first || pos == branch.second)) &&
-        !iterator_result_ok) return 0;
+        !iterator_result_ok) CHILD_FAIL();
   } else if (pos == leafretpos && bc_op(T->startins) != BC_FUNCF) {
     BCIns assign = (BCIns)la_load32_acq((const uint32_t *)retpc);
     const IRIns *guard = &T->ir[ref];
@@ -16767,28 +17141,28 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
         (!irt_ispri(guard->t) &&
          !arm64_cell_value_ir_ref(T, ref, ref+1u) &&
          !(arm64_cell_guard_proto(J->pt, oldslot) &&
-           arm64_cell_guard_ir(T, ref)))) return 0;
+           arm64_cell_guard_ir(T, ref)))) CHILD_FAIL();
     /* Bind the returned source value to the caller's native assignment too.
     ** A cell store first maps its RHS at CSET; a raw store maps the destination
     ** after CSET, possibly at the immediately following FORL exit. */
-    if (s+1u >= T->nsnap) return 0;
+    if (s+1u >= T->nsnap) CHILD_FAIL();
     next = &T->snap[s+1u];
     if (next->ref <= ref || next->ref >=
           (ref < J->loopref ? J->loopref : T->nins) ||
         next->mapofs > T->nsnapmap ||
         next->nent > T->nsnapmap-next->mapofs ||
-        T->nsnapmap-next->mapofs-next->nent < 2u) return 0;
+        T->nsnapmap-next->mapofs-next->nent < 2u) CHILD_FAIL();
     memcpy(&footer, &T->snapmap[next->mapofs+next->nent], sizeof(footer));
     if ((uint8_t)footer || !arm64_ir_pcpos((uintptr_t)(footer>>8),
         (uintptr_t)proto_bc(J->pt),
-        (uintptr_t)(proto_bc(J->pt)+J->pt->sizebc), &nextpos)) return 0;
+        (uintptr_t)(proto_bc(J->pt)+J->pt->sizebc), &nextpos)) CHILD_FAIL();
     if (irt_type(guard->t) == IRT_P32) {
-      if (nextpos != retpos) return 0;
+      if (nextpos != retpos) CHILD_FAIL();
       result_slot = 1u+LJ_FR2+bc_a(call);
     } else {
       if (nextpos != retpos+1u &&
           !(retpos+1u < J->pt->sizebc && nextpos == retpos+2u &&
-            retpc+1 == J->startpc)) return 0;
+            retpc+1 == J->startpc)) CHILD_FAIL();
       result_slot = oldslot;
     }
     for (i = 0; i < next->nent; i++) {
@@ -16799,32 +17173,32 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
           (const uint32_t *)&proto_bc(pt)[pos]);
         if ((entry & 0x00ff0000u) ||
         snap_ref(entry) != saved[bc_a(ret)+(snap_slot(entry)-result_slot)])
-          return 0;
+          CHILD_FAIL();
         found++;
       }
     }
-    if (found != (nresults ? nresults : 1u)) return 0;
-  } else if (!(branch.early_return &&
-               (pos == branch.first || pos == branch.second)) &&
+    if (found != (nresults ? nresults : 1u)) CHILD_FAIL();
+  } else if (!arm64_lua_leaf_branch_early_target(&branch, pos) &&
              !arm64_lua_leaf_ir_result(J, T, caller, s, retpos, leafretpos,
                                       bc_a(call), result, nresults, pt, base,
-                                      callee, link)) return 0;
+                                      callee, link)) CHILD_FAIL();
   extent = base-2u+pt->framesize;
   if (extent < J->pt->framesize) extent = J->pt->framesize;
-  if (extent > UINT8_MAX || snap->topslot != extent) return 0;
+  if (extent > UINT8_MAX || snap->topslot != extent) CHILD_FAIL();
   for (i = 0; i < snap->nent; i++) {
     SnapEntry sn = T->snapmap[snap->mapofs+i];
     MSize slot = snap_slot(sn);
     if (slot >= base) {
       if (slot-base >= pt->framesize || seen[slot-base] ||
           !saved[slot-base] || (sn & 0x00ff0000u) ||
-          snap_ref(sn) != saved[slot-base]) return 0;
+          snap_ref(sn) != saved[slot-base]) CHILD_FAIL();
       seen[slot-base] = 1;
     }
   }
   for (i = 0; i < pt->framesize; i++)
-    if (needed[i] && !seen[i]) return 0;
+    if (needed[i] && !seen[i]) CHILD_FAIL();
   return base-1u;
+#undef CHILD_FAIL
 }
 
 /* Replay a straight-line root-frame source interval from a same-iteration
@@ -17218,6 +17592,8 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
 				 BCOp rootop, const LJArm64SideIRView *side,
 				 LJArm64IRReject *reject, int *forl_directionp)
 {
+#define SEQ_BADSNAP() do { goto bad_snapshot; } while (0)
+
   IRRef ref = REF_BASE, loop = 0, poll = 0, firstphi = 0;
   IRRef root1 = 0, root2 = 0, root3 = 0, resultroot = 0, resultref = 0;
   IRRef previous_snap = 0, poll_snap = 0, completed_store = 0;
@@ -17286,7 +17662,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
 	forl_num = 1;
   }
   if (!T->snap || !T->snapmap || !T->nsnap || !T->nsnapmap)
-    goto bad_snapshot;
+    SEQ_BADSNAP();
   for (ref = REF_TRUE; ref <= REF_NIL; ref++) {
     const IRIns *k = &T->ir[ref];
     if (k->o != IR_KPRI || k->t.irt != REF_NIL - ref || k->op12)
@@ -17770,11 +18146,13 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
         snap->nent > next - snap->mapofs ||
         next - snap->mapofs - snap->nent != 1 + LJ_FR2 ||
         snap->nslots < 1 + LJ_FR2)
-      goto bad_snapshot;
+      SEQ_BADSNAP();
     memcpy(&pcbase, &T->snapmap[snap->mapofs+snap->nent], sizeof(pcbase));
     if ((uint8_t)pcbase) {
       childlink = arm64_lua_leaf_ir_child(J, T, s, pcbase, &lowerlink);
-      if (side || !childlink) goto bad_snapshot;
+      if (side || !childlink) {
+        SEQ_BADSNAP();
+      }
     } else {
       int has_frame = 0;
       for (i = 0; i < snap->nent; i++)
@@ -17788,12 +18166,12 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
              !arm64_ir_callm_transient_triplet(J,T,s,J->pt,
                                                 J->pt->framesize)) ||
             snap->topslot >= maxslots))
-          goto bad_snapshot;
+          SEQ_BADSNAP();
       } else if ((snap->nslots > maxslots &&
                   !arm64_ir_callm_transient_triplet(J,T,s,J->pt,
                                                      J->pt->framesize)) ||
                  snap->topslot != J->pt->framesize) {
-        goto bad_snapshot;
+        SEQ_BADSNAP();
       }
     }
     if (!side && !childlink && !inlineleaflink && !tail_result_map &&
@@ -17810,7 +18188,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       BCReg slot = snap_slot(sn);
       IRRef value = snap_ref(sn);
       if (slot >= snap->nslots || (i && slot <= previous_slot)) {
-        goto bad_snapshot;
+        SEQ_BADSNAP();
       }
       previous_slot = slot;
       if (tail_result_map &&
@@ -17829,23 +18207,23 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
           T->ir[value].t.irt == IRT_U8 &&
           (!sourcepc_valid || (sn & 0x00ff0000u) != 0 ||
            !arm64_string_byte_snapshot_slot_ir(T, value, slot, sourcepc)))
-	goto bad_snapshot;
+	SEQ_BADSNAP();
       if ((sn & 0x00ff0000u) == SNAP_NORESTORE) {
         MSize idxslot = 1u + LJ_FR2 + bc_a(T->startins);
         const IRIns *source;
         if (side) {
           if (!arm64_side_forl_snapshot_stop_ir(side, T, ref, sn))
-	    goto bad_snapshot;
+	    SEQ_BADSNAP();
         } else {
           if (rootop != BC_FORL || irref_isk(value) ||
 	      value < REF_FIRST || value >= ref ||
 	      (slot != idxslot && slot != idxslot+FORL_STOP &&
 	       (slot != idxslot+FORL_STEP || !forl_dynamic_step)))
-	    goto bad_snapshot;
+	    SEQ_BADSNAP();
           source = &T->ir[value];
           if (source->o != IR_SLOAD || source->op1 != slot ||
 	      (source->op2 & (IRSLOAD_CONVERT|IRSLOAD_PARENT)) != 0)
-	    goto bad_snapshot;
+	    SEQ_BADSNAP();
         }
       }
       if (slot < 1 + LJ_FR2 ||
@@ -17859,13 +18237,13 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
            (side || value != REF_NIL) &&
            !arm64_scalar_ir_ref(T, value, ref, IRT_TRUE) &&
            !arm64_scalar_ir_ref(T, value, ref, IRT_FALSE)))
-        goto bad_snapshot;
+        SEQ_BADSNAP();
     }
     memcpy(&pcbase, &T->snapmap[snap->mapofs + snap->nent], sizeof(pcbase));
     if (!tail_result_map && !childlink && !inlineleaflink &&
         ((uint8_t)pcbase ||
         !arm64_ir_pcpos((uintptr_t)(pcbase >> 8), proto_lo, proto_hi, &pcpos)))
-      goto bad_snapshot;
+      SEQ_BADSNAP();
     if (side && ((s == 0 && pcpos != proto_bcpos(J->pt,
 	       side->parent_continuation)) ||
 	       (pcpos < side->loop_start_pc ||
@@ -17873,21 +18251,21 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
 	         !(s != 0 && (pcpos == side->loop_end_pc+1u ||
                    (pcpos == side->loop_end_pc &&
                     arm64_side_forl_boundary_snapshot_ir(side, T, snap)))))))) {
-	  goto bad_snapshot;
+	  SEQ_BADSNAP();
 	}
   }
   if (side && side->linktype == LJ_TRLINK_ROOT) {
 	if (loop_snap || poll_snap != poll)
-	  goto bad_snapshot;
+	  SEQ_BADSNAP();
   } else if (rootop == BC_FUNCF ? (loop_snap || poll_snap != poll) :
              (!loop_snap || poll_snap != loop)) {
-	goto bad_snapshot;
+	SEQ_BADSNAP();
   }
   s = 0;
   for (ref = REF_FIRST; ref < T->nins; ref++) {
     const IRIns *ir = &T->ir[ref];
     if (irt_isguard(ir->t) && T->snap[0].ref > ref)
-      goto bad_snapshot;
+      SEQ_BADSNAP();
     while (s + 1 < T->nsnap && T->snap[s + 1].ref <= ref)
       s++;
     if (ir->o == IR_EQ && ir->t.irt == (IRT_FUNC|IRT_GUARD) &&
@@ -17929,19 +18307,19 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
         }
       }
       if (!leafsnap && !tailsnap && !forwardsnap) {
-        goto bad_snapshot;
+        SEQ_BADSNAP();
       }
     }
     /* A successful read's type guard resumes after the helper; a refused
     ** read uses the preceding snapshot and must not consume its output. */
     if (ir->o == IR_VLOAD && T->snap[s].ref != ref)
-      goto bad_snapshot;
+      SEQ_BADSNAP();
     /* A refused store resumes assignment at its status guard. Every later
     ** guard must use a post-effect snapshot, so successful writes are never
     ** replayed merely because subsequent arithmetic/type checks exit. */
     if (completed_store && ref > completed_store+1 && irt_isguard(ir->t) &&
         T->snap[s].ref <= completed_store)
-      goto bad_snapshot;
+      SEQ_BADSNAP();
     if (ir->o == IR_CALLS &&
         (ir->op2 == IRCALL_lj_tab_storenum_rooted ||
          ir->op2 == IRCALL_lj_tab_storebool_rooted ||
@@ -17949,7 +18327,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
          ir->op2 == IRCALL_lj_tab_storenew_rooted ||
          ir->op2 == IRCALL_lj_tab_storeraw_rooted ||
          ir->op2 == IRCALL_lj_tab_storenil_rooted)) {
-      if (!arm64_rawset_ir_snapshots(T, ref, s)) goto bad_snapshot;
+      if (!arm64_rawset_ir_snapshots(T, ref, s)) SEQ_BADSNAP();
       completed_store = ref;
     }
     if (ir->o == IR_CALLS && arm64_rooted_upvalue_call((IRCallID)ir->op2)) {
@@ -17958,7 +18336,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       IRRef fnroot = head->op1;
       IRRef valroot = get ? 0 : tail->op2;
       if (!arm64_upvalue_ir_snapshots(J, T, ref, s, fnroot, valroot))
-        goto bad_snapshot;
+        SEQ_BADSNAP();
       if (!get) completed_store = ref;
     }
     if (ir->o == IR_CALLS && arm64_rooted_cell_call((IRCallID)ir->op2)) {
@@ -17966,18 +18344,18 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       IRRef root = tail->op2;
       int get = ir->op2 == IRCALL_lj_func_getcell_rooted_try;
       if (!arm64_cell_ir_snapshots(J, T, ref, s, root))
-        goto bad_snapshot;
+        SEQ_BADSNAP();
       if (!get) completed_store = ref;
     }
     if (rootop != BC_FORL && ir->o == IR_SLOAD &&
         ir->op1 >= T->snap[s].nslots)
-      goto bad_snapshot;
+      SEQ_BADSNAP();
   }
   if (rootop == BC_ITERL && !arm64_iterl_ir_returns(J, T))
-    goto bad_snapshot;
+    SEQ_BADSNAP();
   if (rootop == BC_FUNCF &&
       !arm64_ir_funcf_leaf_source_replay(J, T, T->nins))
-    goto bad_snapshot;
+    SEQ_BADSNAP();
   return 1;
 bad_constant:
   return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CONSTANT, ref,
@@ -17990,7 +18368,7 @@ bad_type:
                          (IROp)T->ir[ref].o, 0);
 bad_poll:
   return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_XPOLL, ref, IR_XPOLL, 0);
-bad_snapshot:
+ bad_snapshot:
   return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT, ref, IR_XPOLL,
                          0);
 }
@@ -20959,6 +21337,8 @@ static IRRef arm64_lua_leaf_postra_args_at(const LJArm64PostRAView *v,
     if (!has_call &&
         !arm64_lua_leaf_type_range(leaf, 1, leaf->sizebc-1u, types))
       return 0;
+  } else if (branch.ncompare > 1u) {
+    if (!arm64_lua_leaf_type_chain(leaf, &branch, types)) return 0;
   } else {
     IRType first[UINT8_MAX+1u], second[UINT8_MAX+1u];
     BCIns cmp = (BCIns)la_load32_acq(
@@ -21506,6 +21886,7 @@ static int arm64_lua_leaf_postra_prefix(const LJArm64PostRAView *v,
                                         IRRef *resultp, MSize *nresultp,
                                         MSize *retposp)
 {
+#define POSTPREFIX_FAIL() do { return 0; } while (0)
   IRRef values[UINT8_MAX+1u] = {0};
   const BCIns *bc = proto_bc(pt);
   MSize pc, extent = pt->numparams, vargdst = 0, vargcount = 0;
@@ -21514,9 +21895,9 @@ static int arm64_lua_leaf_postra_prefix(const LJArm64PostRAView *v,
   int found = 0;
   LJArm64LuaLeafBranch branch;
   BCIns ret = (BCIns)la_load32_acq((const uint32_t *)&bc[pt->sizebc-1u]);
-  if (!arm64_lua_leaf_branch(pt, &branch)) return 0;
+  if (!arm64_lua_leaf_branch(pt, &branch)) POSTPREFIX_FAIL();
   if ((la_load8_acq(&pt->flags) & PROTO_VARARG) &&
-      !arm64_lua_leaf_postra_varg_shape(pt, &vargdst, &vargcount)) return 0;
+      !arm64_lua_leaf_postra_varg_shape(pt, &vargdst, &vargcount)) POSTPREFIX_FAIL();
   if (vargdst+vargcount > extent) extent = vargdst+vargcount;
   if (extent) memcpy(values, args, extent*sizeof(IRRef));
   for (pc = 1; pc < pt->sizebc-1u; pc++) {
@@ -21527,11 +21908,34 @@ static int arm64_lua_leaf_postra_prefix(const LJArm64PostRAView *v,
     IROp arithmetic = IR_NOP;
     int literal = 0, reverse = 0;
     TValue number;
+    if (branch.ncompare > 1u) {
+      MSize decision;
+      for (decision = 0; decision < branch.ncompare; decision++)
+        if (pc == branch.decision[decision].compare) break;
+      if (decision < branch.ncompare) {
+        MSize hot;
+        if (resume == branch.decision[decision].first ||
+            resume == branch.decision[decision].second) {
+          memcpy(saved, values, sizeof(values)); *livep = extent;
+          *retposp = pt->sizebc-1u;
+          resultp[0] = resultp[1] = 0;
+          *nresultp = 0;
+          return 1;
+        }
+        if (!arm64_lua_leaf_postra_branch_hot_at(v, pt, &branch, values,
+              end, decision, &hot)) POSTPREFIX_FAIL();
+        hotpath = hot;
+        retpos = hot == branch.decision[decision].first ?
+          branch.decision[decision].first_ret : pt->sizebc-1u;
+        pc = hot-1u;
+        continue;
+      }
+    }
     if ((resume == branch.first || resume == branch.second) &&
         pc == branch.compare) {
       memcpy(saved, values, sizeof(values)); *livep = extent;
       if (!arm64_lua_leaf_postra_branch_hot(v, pt, &branch, values, end,
-                                             &hotpath)) return 0;
+                                             &hotpath)) POSTPREFIX_FAIL();
       if (branch.early_return) {
         retpos = arm64_lua_leaf_branch_terminal(&branch,
                                                  resume == branch.first);
@@ -21550,7 +21954,7 @@ static int arm64_lua_leaf_postra_prefix(const LJArm64PostRAView *v,
     if (branch.compare != UINT32_MAX && pc == branch.compare) {
       MSize hot;
       if (!arm64_lua_leaf_postra_branch_hot(v, pt, &branch, values, end, &hot))
-        return 0;
+        POSTPREFIX_FAIL();
       hotpath = hot;
       if (branch.early_return)
         retpos = arm64_lua_leaf_branch_terminal(&branch,
@@ -21580,25 +21984,25 @@ static int arm64_lua_leaf_postra_prefix(const LJArm64PostRAView *v,
             (branch.early_return && op == BC_RET1)) &&
           !((resume == branch.first || resume == branch.second) &&
             branch.compare != UINT32_MAX))
-        return 0;
+        POSTPREFIX_FAIL();
       memcpy(saved, values, sizeof(values)); *livep = extent;
     }
     if (branch.early_return && op == BC_RET1) {
-      if (pc != retpos || bc_d(ins) != 2u) return 0;
+      if (pc != retpos || bc_d(ins) != 2u) POSTPREFIX_FAIL();
       break;
     }
     if (op >= BC_ISLT && op <= BC_ISGT) continue;
     if (op == BC_JMP) {
       if (branch.compare == UINT32_MAX ||
           !((hotpath == branch.first && branch.first_path[pc]) ||
-            (hotpath == branch.second && branch.second_path[pc]))) return 0;
+            (hotpath == branch.second && branch.second_path[pc]))) POSTPREFIX_FAIL();
       pc = branch.next[pc]-1u;
       continue;
     }
     if (op == BC_VARG) {
       if (!(la_load8_acq(&pt->flags) & PROTO_VARARG) || pc != 1u ||
           bc_a(ins) != vargdst || bc_b(ins) != vargcount+1u ||
-          bc_c(ins) != 0u) return 0;
+          bc_c(ins) != 0u) POSTPREFIX_FAIL();
       continue;  /* args_at independently seeded this exact output window. */
     }
     if (arithmetic != IR_NOP) {
@@ -21617,18 +22021,18 @@ static int arm64_lua_leaf_postra_prefix(const LJArm64PostRAView *v,
       if (op == BC_CSET) {
         IRRef old = values[dst];
         if ((old && !arm64_cell_value_postra_ref(v, old, limit)) ||
-            (out && !arm64_cell_value_postra_ref(v, out, limit))) return 0;
+            (out && !arm64_cell_value_postra_ref(v, out, limit))) POSTPREFIX_FAIL();
       }
     } else if (op == BC_KSHORT) {
       out = arm64_lua_leaf_postra_literal(v, (int16_t)bc_d(ins), 0);
     } else if (op == BC_KPRI) {
-      if (bc_d(ins) > 2u) return 0;
+      if (bc_d(ins) > 2u) POSTPREFIX_FAIL();
       out = (IRRef)(REF_NIL-bc_d(ins));
     } else if (op == BC_KNUM) {
       proto_knumtv_load_acq(&number, pt, bc_d(ins));
       out = arm64_lua_leaf_postra_literal(v, numberVnum(&number), 0);
     } else {
-      return 0;
+      POSTPREFIX_FAIL();
     }
     /* The independent argument walk proved all source types. Missing pure
     ** SSA outputs remain unknown, never a replacement for a saved value. */
@@ -21653,7 +22057,7 @@ static int arm64_lua_leaf_postra_prefix(const LJArm64PostRAView *v,
   if (branch.early_return &&
       (retpos == branch.first_ret0 || retpos == branch.second_ret0)) {
     if (bc_op(ret) != BC_RET0 || bc_a(ret) != 0u || bc_d(ret) != 1u)
-      return 0;
+      POSTPREFIX_FAIL();
     *retposp = retpos;
     *nresultp = 1u;
     resultp[0] = REF_NIL;
@@ -21665,8 +22069,8 @@ static int arm64_lua_leaf_postra_prefix(const LJArm64PostRAView *v,
   ret = (BCIns)la_load32_acq((const uint32_t *)&bc[retpos]);
   *retposp = retpos;
   *nresultp = arm64_lua_leaf_return_count(pt);
-  if (!*nresultp || bc_a(ret)+*nresultp > pt->framesize) return 0;
-  if (*nresultp > ARM64_LUA_LEAF_MAX_RESULTS) return 0;
+  if (!*nresultp || bc_a(ret)+*nresultp > pt->framesize) POSTPREFIX_FAIL();
+  if (*nresultp > ARM64_LUA_LEAF_MAX_RESULTS) POSTPREFIX_FAIL();
   for (MSize i = 0; i < *nresultp; i++)
     resultp[i] = values[bc_a(ret)+i];
   for (MSize i = *nresultp; i < ARM64_LUA_LEAF_MAX_RESULTS; i++)
@@ -21675,17 +22079,18 @@ static int arm64_lua_leaf_postra_prefix(const LJArm64PostRAView *v,
     BCReg source = bc_a(ret);
     if ((bc_op(ret) != BC_RET1 && bc_op(ret) != BC_RET) ||
         source+*nresultp > extent ||
-        !arm64_cell_value_postra_ref(v, resultp[0], at)) return 0;
+        !arm64_cell_value_postra_ref(v, resultp[0], at)) POSTPREFIX_FAIL();
     for (MSize i = 1; i < *nresultp; i++)
-      if (!arm64_cell_value_postra_ref(v, resultp[i], at)) return 0;
+      if (!arm64_cell_value_postra_ref(v, resultp[i], at)) POSTPREFIX_FAIL();
     memcpy(saved, values, sizeof(values)); *livep = extent;
     return 1;
   }
   if (!(found || unused || *nresultp > 1u) ||
-      !arm64_cell_value_postra_ref(v, resultp[0], end)) return 0;
+      !arm64_cell_value_postra_ref(v, resultp[0], end)) POSTPREFIX_FAIL();
   for (MSize i = 1; i < *nresultp; i++)
-    if (!arm64_cell_value_postra_ref(v, resultp[i], end)) return 0;
+    if (!arm64_cell_value_postra_ref(v, resultp[i], end)) POSTPREFIX_FAIL();
   return 1;
+#undef POSTPREFIX_FAIL
 }
 
 static int arm64_lua_leaf_postra_unused(const LJArm64PostRAView *v, MSize s)
@@ -21700,6 +22105,104 @@ static int arm64_lua_leaf_postra_unused(const LJArm64PostRAView *v, MSize s)
   return 1;
 }
 
+/* Recompute a linear segment's source liveness for the allocated pass. This
+** parser is deliberately separate from the semantic pass's backwards walk. */
+static int arm64_lua_leaf_postra_needed_range(const GCproto *pt,
+                                              MSize first, MSize last,
+                                              uint8_t *needed)
+{
+  uint8_t written[UINT8_MAX+1u] = {0};
+  MSize pc;
+  if (first >= last || last > pt->sizebc) return 0;
+  for (pc = first; pc < last; pc++) {
+    BCIns ins = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(pt)[pc]);
+    BCOp op = bc_op(ins);
+    MSize dst = bc_a(ins), left = bc_b(ins), right = bc_c(ins);
+    MSize from = bc_d(ins);
+    if (op == BC_RET0)
+      return pc+1u == last && dst == 0u && from == 1u;
+    if (op == BC_RET1) {
+      if (pc+1u != last || from != 2u || dst >= pt->framesize) return 0;
+      if (!written[dst]) needed[dst] = 1u;
+      return 1;
+    }
+    if (op == BC_JMP || dst >= pt->framesize) return 0;
+    switch (op) {
+    case BC_CGET: case BC_MOV:
+      if (from >= pt->framesize) return 0;
+      if (!written[from]) needed[from] = 1u;
+      break;
+    case BC_CSET:
+      if (from >= pt->framesize) return 0;
+      if (!written[dst]) needed[dst] = 1u;
+      if (!written[from]) needed[from] = 1u;
+      break;
+    case BC_KSHORT: case BC_KNUM:
+      break;
+    case BC_KPRI:
+      if (from > 2u) return 0;
+      break;
+    case BC_ADDVN: case BC_SUBVN: case BC_MULVN: case BC_DIVVN:
+    case BC_ADDNV: case BC_SUBNV: case BC_MULNV: case BC_DIVNV:
+      if (left >= pt->framesize) return 0;
+      if (!written[left]) needed[left] = 1u;
+      break;
+    case BC_ADDVV: case BC_SUBVV: case BC_MULVV: case BC_DIVVV:
+      if (left >= pt->framesize || right >= pt->framesize) return 0;
+      if (!written[left]) needed[left] = 1u;
+      if (!written[right]) needed[right] = 1u;
+      break;
+    default:
+      return 0;
+    }
+    written[dst] = 1u;
+  }
+  return 1;
+}
+
+static int arm64_lua_leaf_postra_needed_chain_from(
+                                      const GCproto *pt,
+                                      const LJArm64LuaLeafBranch *branch,
+                                      MSize start, MSize index,
+                                      uint8_t *needed)
+{
+  MSize i;
+  for (i = index; i < branch->ncompare; i++) {
+    MSize cmp = branch->decision[i].compare;
+    MSize first = branch->decision[i].first;
+    MSize second = branch->decision[i].second;
+    MSize ret = branch->decision[i].first_ret;
+    if (start >= first && start <= ret)
+      return arm64_lua_leaf_postra_needed_range(pt, start, ret+1u, needed);
+    if (start > cmp && start < first) return 0;
+    if (start <= cmp) {
+      uint8_t body[UINT8_MAX+1u] = {0};
+      uint8_t continuation[UINT8_MAX+1u] = {0};
+      uint8_t prefix[UINT8_MAX+1u] = {0};
+      BCIns ins = (BCIns)la_load32_acq(
+        (const uint32_t *)&proto_bc(pt)[cmp]);
+      if (!arm64_lua_leaf_postra_needed_chain_from(
+            pt, branch, second, i+1u, continuation) ||
+          !arm64_lua_leaf_postra_needed_range(pt, first, ret+1u, body))
+        return 0;
+      for (MSize slot = 0; slot < pt->framesize; slot++)
+        needed[slot] = (uint8_t)(body[slot] || continuation[slot]);
+      if (bc_a(ins) >= pt->framesize || bc_d(ins) >= pt->framesize)
+        return 0;
+      needed[bc_a(ins)] = needed[bc_d(ins)] = 1u;
+      if (start < cmp) {
+        if (!arm64_lua_leaf_postra_needed_range(pt, start, cmp, prefix))
+          return 0;
+        for (MSize slot = 0; slot < pt->framesize; slot++)
+          needed[slot] |= prefix[slot];
+      }
+      return 1;
+    }
+    if (start >= second) continue;
+  }
+  return arm64_lua_leaf_postra_needed_range(pt, start, pt->sizebc, needed);
+}
+
 /* The allocated pass independently scans forwards for reads before a new
 ** definition. Test operands before marking the destination, including aliased
 ** arithmetic and CSET's old destination tag. No recorder liveness is used. */
@@ -21712,6 +22215,11 @@ static int arm64_lua_leaf_postra_needed(const GCproto *pt, MSize resume,
   LJArm64LuaLeafBranch branch;
   if (!resume || resume >= pt->sizebc) return 0;
   if (!arm64_lua_leaf_branch(pt, &branch)) return 0;
+  if (branch.ncompare > 1u) {
+    memset(needed, 0, pt->framesize);
+    return arm64_lua_leaf_postra_needed_chain_from(pt, &branch, resume, 0u,
+                                                   needed);
+  }
   if (branch.compare != UINT32_MAX && resume < branch.compare) return 0;
   if (branch.early_return) {
     if (resume == branch.first || branch.first_path[resume]) {
@@ -22250,6 +22758,7 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
                                         MSize s, uint64_t pcbase,
                                         MSize *lowerlinkp)
 {
+#define POSTCHILD_FAIL() do { return 0; } while (0)
   const SnapShot *sn = &v->snap[s];
   MSize base = (uint8_t)pcbase ? (uint8_t)pcbase+2u : 0,
         ofs = snap_mapofs_acq(sn);
@@ -22285,8 +22794,8 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
       v->proto->framesize != v->root_topslot ||
       trace_startptgco_acq(owner) != obj2gco((GCproto *)v->proto) ||
       trace_startins_acq(owner) != v->startins ||
-      trace_startpc_acq(owner) != v->startpc) return 0;
-  if (count > UINT8_MAX+1u) return 0;
+      trace_startpc_acq(owner) != v->startpc) POSTCHILD_FAIL();
+  if (count > UINT8_MAX+1u) POSTCHILD_FAIL();
   for (i = 0; i < count; i++)
     frame_map[i] = snapentry_acq(&v->snapmap[ofs+i]);
   if (inline_frame) {
@@ -22294,20 +22803,20 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
       SnapEntry entry = frame_map[i];
       if (entry & SNAP_FRAME) {
         if (frame || (entry & 0x00ff0000u) != SNAP_FRAME)
-          return 0;
+          POSTCHILD_FAIL();
         frame = snap_ref(entry);
         base = snap_slot(entry)+1u;
       }
     }
-    if (!frame || base < 2u+2u*LJ_FR2) return 0;
+    if (!frame || base < 2u+2u*LJ_FR2) POSTCHILD_FAIL();
     for (i = 0; i < count; i++)
       if (snap_slot(frame_map[i]) == base-2u) {
-        if (frame_map[i] & 0x00ff0000u) return 0;
+        if (frame_map[i] & 0x00ff0000u) POSTCHILD_FAIL();
         function = snap_ref(frame_map[i]);
       }
   } else {
     if (!arm64_lua_frame_path_limit(frame_map, count, pcbase, 2u, &frames) ||
-        !frames.depth) return 0;
+        !frames.depth) POSTCHILD_FAIL();
     paired_varg = frames.depth == 2u;
     base = frames.child[frames.depth-1u].baseslot;
     frame = frames.child[0].linkref;
@@ -22316,28 +22825,28 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
       vargframe = frames.child[1].linkref;
       if (lowerlinkp) *lowerlinkp = frames.child[0].linkslot;
       if (frames.child[0].funcref != frames.child[1].funcref)
-        return 0;
+        POSTCHILD_FAIL();
     }
   }
   if (!irref_isk(frame) || frame+1u >= v->nins ||
       !arm64_scalar_postra_ref(v, frame, at, IRT_NUM))
-    return 0;
+    POSTCHILD_FAIL();
   link = ir_load_acq(&v->ir[frame]);
-  if (link.o != IR_KNUM) return 0;
+  if (link.o != IR_KNUM) POSTCHILD_FAIL();
   link = ir_load_acq(&v->ir[frame+1u]);
   retpc = (const BCIns *)(uintptr_t)link.tv.u64;
   if (!arm64_ir_pcpos((uintptr_t)retpc, (uintptr_t)v->proto_bc,
-      (uintptr_t)(v->proto_bc+v->proto_sizebc), &pos) || !pos) return 0;
+      (uintptr_t)(v->proto_bc+v->proto_sizebc), &pos) || !pos) POSTCHILD_FAIL();
   call = (BCIns)la_load32_acq((const uint32_t *)(retpc-1));
   if (iterator && (paired_varg || inline_frame ||
       !lj_asm_arm64_iterl_tuple(v->proto, v->startpc, v->startins,
         v->owner_private ? v->startins :
           BCINS_AD(BC_JITERL, bc_a(v->startins), trace_traceno_acq(owner)),
         v->owner_private, &iter) || pos != iter.loop_pc ||
-      call != iter.callins)) return 0;
+      call != iter.callins)) POSTCHILD_FAIL();
   if ((!iterator && bc_op(call) != BC_CALL && bc_op(call) != BC_CALLM) ||
       (!bc_c(call) && bc_op(call) != BC_CALLM) ||
-      bc_a(call)+bc_c(call)+LJ_FR2 > v->root_topslot) return 0;
+      bc_a(call)+bc_c(call)+LJ_FR2 > v->root_topslot) POSTCHILD_FAIL();
   callnargs = bc_op(call) == BC_CALLM ? 0u : bc_c(call)-1u;
   if (inline_frame && !function) {
     SnapNo si;
@@ -22358,7 +22867,7 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
     }
   }
   fn = arm64_lua_leaf_postra_function(v, function, at, NULL);
-  if (!lj_trace_arm64_lua_leaf(fn)) return 0;
+  if (!lj_trace_arm64_lua_leaf(fn)) POSTCHILD_FAIL();
   pt = funcproto(fn);
   tail_forward = paired_varg && arm64_lua_leaf_forward_source(
       fn, NULL, &forward_target, &forward_nargs);
@@ -22370,9 +22879,9 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
         (vlink = ir_load_acq(&v->ir[vargframe])).o != IR_KNUM || !delta ||
         ir_load_acq(&v->ir[vargframe+1u]).tv.u64 !=
           8u*delta+FRAME_VARG ||
-        base != 2u+2u*LJ_FR2+bc_a(call)+delta) return 0;
+        base != 2u+2u*LJ_FR2+bc_a(call)+delta) POSTCHILD_FAIL();
   } else if (base != 2u+2u*LJ_FR2+bc_a(call)) {
-    return 0;
+    POSTCHILD_FAIL();
   }
   nresults = arm64_lua_leaf_return_count(pt);
   if (!tail_forward && (!nresults || (bc_op(call) == BC_CALLM ?
@@ -22385,17 +22894,17 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
        (bc_b(call) != 0u &&
         bc_a(call)+bc_b(call)-1u+LJ_FR2 > v->root_topslot)) ||
       (inline_frame && bc_op(v->startins) != BC_FUNCF && nresults != 2u)))
-    return 0;
+    POSTCHILD_FAIL();
   if (!tail_forward && nresults > 2u &&
       !(bc_op(call) == BC_CALL && bc_b(call) == 0u &&
         arm64_lua_leaf_callm_pair_source(v->proto, pos-1u, 1, nresults)))
-    return 0;
+    POSTCHILD_FAIL();
   for (IRRef r = REF_FIRST; r < v->nins; r++) {
     if (ir_load_acq(&v->ir[r]).o == IR_LOOP) {
       loop = r; if (at < r) end = r; break;
     }
   }
-  if (!loop && bc_op(v->startins) != BC_FUNCF) return 0;
+  if (!loop && bc_op(v->startins) != BC_FUNCF) POSTCHILD_FAIL();
   while (caller) {
     const SnapShot *entry = &v->snap[--caller];
     MSize footerofs = snap_mapofs_acq(entry)+snap_nent_acq(entry);
@@ -22473,13 +22982,13 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
       if (((!iterator || at < loop) &&
           ((const BCIns *)(uintptr_t)(footer>>8) != retpc-1 ||
            (loop && (snap_ref_acq(entry) > loop) != (at > loop)))) ||
-          !args_ok) return 0;
+          !args_ok) POSTCHILD_FAIL();
       break;
     }
   }
-  if (!caller) return 0;
+  if (!caller) POSTCHILD_FAIL();
   if (iterator && at > loop &&
-      !arm64_iterl_postra_frame_args(v, sn, &iter, base, args[0], args)) return 0;
+      !arm64_iterl_postra_frame_args(v, sn, &iter, base, args[0], args)) POSTCHILD_FAIL();
   if (paired_varg) {
     MSize sourcebase = 2u+2u*LJ_FR2+bc_a(call);
     for (i = 0; i < callnargs; i++) {
@@ -22488,11 +22997,11 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
         SnapEntry entry = frame_map[j];
         if (snap_slot(entry) == slot) {
           if ((entry & 0x00ff0000u) || snap_ref(entry) != args[i])
-            return 0;
+            POSTCHILD_FAIL();
           found++;
         }
       }
-      if (found != 1u) return 0;
+      if (found != 1u) POSTCHILD_FAIL();
     }
   }
   if (tail_forward) {
@@ -22508,11 +23017,11 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
         !arm64_ir_pcpos((uintptr_t)(pcbase>>8), (uintptr_t)proto_bc(pt),
           (uintptr_t)(proto_bc(pt)+pt->sizebc), &forwardpos) ||
         (forwardpos != 1u && forwardpos != 3u) ||
-        base-2u+pt->framesize > UINT8_MAX) return 0;
+        base-2u+pt->framesize > UINT8_MAX) POSTCHILD_FAIL();
     if (forwardpos == 1u) {
       expected_nslots = base;
       for (i = 0; i < count; i++)
-        if (snap_slot(frame_map[i]) >= base) return 0;
+        if (snap_slot(frame_map[i]) >= base) POSTCHILD_FAIL();
     } else {
       MSize foundfn = 0;
       IRRef targetvalue = arm64_lua_leaf_postra_upvalue(
@@ -22522,77 +23031,79 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
       if (!targetvalue || bc_op(varg) != BC_VARG || bc_b(varg) != 0u ||
           bc_c(varg) != 0u || bc_a(varg) != 1u+LJ_FR2 ||
           expected_nslots > base+bc_c(call)-1u+1u+LJ_FR2 ||
-          snap_nslots_acq(sn) != expected_nslots) return 0;
+          snap_nslots_acq(sn) != expected_nslots) POSTCHILD_FAIL();
       for (i = 0; i < count; i++) {
         SnapEntry entry = frame_map[i];
         MSize slot = snap_slot(entry);
         if (slot == base) {
           if ((entry & 0x00ff0000u) || snap_ref(entry) != targetvalue)
-            return 0;
+            POSTCHILD_FAIL();
           foundfn++;
         }
         if (slot >= forward_dest && slot < expected_nslots &&
             ((entry & 0x00ff0000u) ||
-             snap_ref(entry) != args[slot-forward_dest])) return 0;
+             snap_ref(entry) != args[slot-forward_dest])) POSTCHILD_FAIL();
       }
-      if (foundfn != 1u) return 0;
+      if (foundfn != 1u) POSTCHILD_FAIL();
       for (i = 0; i < forward_nargs; i++) {
         MSize found = 0;
         for (MSize j = 0; j < count; j++)
           if (snap_slot(frame_map[j]) == forward_dest+i) found++;
-        if (found != 1u) return 0;
+        if (found != 1u) POSTCHILD_FAIL();
       }
     }
-    if (snap_nslots_acq(sn) != expected_nslots) return 0;
+    if (snap_nslots_acq(sn) != expected_nslots) POSTCHILD_FAIL();
     extent = base-2u+pt->framesize;
     if (extent < v->root_topslot) extent = v->root_topslot;
-    if (snap_topslot_acq(sn) != extent) return 0;
+    if (snap_topslot_acq(sn) != extent) POSTCHILD_FAIL();
     return base-1u;
   }
   if (!arm64_ir_pcpos((uintptr_t)(pcbase>>8), (uintptr_t)proto_bc(pt),
       (uintptr_t)(proto_bc(pt)+pt->sizebc), &pos) || !pos ||
-      !arm64_lua_leaf_branch(pt, &branch)) return 0;
+      !arm64_lua_leaf_branch(pt, &branch)) POSTCHILD_FAIL();
   if ((la_load8_acq(&pt->flags) & PROTO_VARARG) && pos <= 1u)
-    return 0;
+    POSTCHILD_FAIL();
   for (i = 1; i+1u < pt->sizebc; i++)
     if (bc_op((BCIns)la_load32_acq(
         (const uint32_t *)&proto_bc(pt)[i])) == BC_CALL) has_call = 1;
   if (has_call) {
     const GCfunc *ancestors[1];
-    if (nresults != 1u) return 0;
+    if (nresults != 1u) POSTCHILD_FAIL();
     ancestors[0] = fn;
     if (branch.compare != UINT32_MAX ||
         !arm64_lua_leaf_postra_eval(v, pt, args, pos, at, end, ancestors,
-          1u, saved, &result[0])) return 0;
+          1u, saved, &result[0])) POSTCHILD_FAIL();
     live = pt->numparams;
     leafretpos = pt->sizebc-1u;
   } else if (!arm64_lua_leaf_postra_prefix(v, pt, pos, args, at, end,
         arm64_lua_leaf_postra_unused(v, s), saved, &live, result, &nresults,
         &leafretpos)) {
-    return 0;
+    POSTCHILD_FAIL();
   }
-  if ((pos == branch.first || pos == branch.second) &&
+  if (arm64_lua_leaf_branch_target(&branch, pos) &&
       !arm64_lua_leaf_postra_branch_guard(v, pt, &branch, saved, at, pos)) {
-    return 0;
+    POSTCHILD_FAIL();
   }
   if (!arm64_lua_leaf_postra_needed(pt, pos, needed)) {
-    return 0;
+    POSTCHILD_FAIL();
   }
   live = pt->numparams;
   for (i = pt->numparams; i < pt->framesize; i++)
     if (needed[i] && i+1u > live) live = i+1u;
-  if (base+live > UINT8_MAX) return 0;
+  if (base+live > UINT8_MAX) POSTCHILD_FAIL();
   if (branch.compare == UINT32_MAX) {
-    if (snap_nslots_acq(sn) != base+live) return 0;
+    if (snap_nslots_acq(sn) != base+live) POSTCHILD_FAIL();
   } else if (snap_nslots_acq(sn) < base+live ||
              snap_nslots_acq(sn) > snap_topslot_acq(sn)+1u+LJ_FR2 ||
-             snap_nslots_acq(sn) > base+pt->framesize) return 0;
+             snap_nslots_acq(sn) > base+pt->framesize) {
+    POSTCHILD_FAIL();
+  }
   if (iterator) {
     if (!(branch.early_return && !nresults &&
           (pos == branch.first || pos == branch.second)) &&
         (nresults != 1u ||
          !arm64_iterl_postra_result(v, s, args[1], result[0], loop)))
-      return 0;
+      POSTCHILD_FAIL();
   } else if (pos == leafretpos && bc_op(v->startins) != BC_FUNCF) {
     BCIns continuation = (BCIns)la_load32_acq((const uint32_t *)retpc);
     IRIns check = ir_load_acq(&v->ir[at]);
@@ -22604,30 +23115,32 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
     if (bc_op(continuation) != BC_CSET ||
         bc_d(continuation) != bc_a(call) || local >= bc_a(call) ||
         check.o != IR_SLOAD || !irt_isguard(check.t) ||
-        check.op1 != slot || check.op2 != IRSLOAD_TYPECHECK) return 0;
+        check.op1 != slot || check.op2 != IRSLOAD_TYPECHECK) {
+      POSTCHILD_FAIL();
+    }
     if (!irt_ispri(check.t) &&
         !arm64_cell_value_postra_ref(v, at, at+1u) &&
         !(arm64_cell_guard_proto(v->proto, slot) &&
-          arm64_cell_guard_postra(v, at))) return 0;
+          arm64_cell_guard_postra(v, at))) POSTCHILD_FAIL();
     if (s+1u >= v->nsnap || snap_ref_acq(&v->snap[s+1u]) <= at ||
-        snap_ref_acq(&v->snap[s+1u]) >= end) return 0;
+        snap_ref_acq(&v->snap[s+1u]) >= end) POSTCHILD_FAIL();
     nofs = snap_mapofs_acq(&v->snap[s+1u]);
     nent = snap_nent_acq(&v->snap[s+1u]);
     if (nofs > v->nsnapmap || nent > v->nsnapmap-nofs ||
-        v->nsnapmap-nofs-nent < 2u) return 0;
+        v->nsnapmap-nofs-nent < 2u) POSTCHILD_FAIL();
     words[0] = snapentry_acq(&v->snapmap[nofs+nent]);
     words[1] = snapentry_acq(&v->snapmap[nofs+nent+1u]);
     memcpy(&footer, words, sizeof(footer));
     if ((uint8_t)footer || !arm64_ir_pcpos((uintptr_t)(footer>>8),
         (uintptr_t)v->proto_bc,
-        (uintptr_t)(v->proto_bc+v->proto_sizebc), &nextpos)) return 0;
+        (uintptr_t)(v->proto_bc+v->proto_sizebc), &nextpos)) POSTCHILD_FAIL();
     target = slot;
     if (irt_type(check.t) == IRT_P32) {
-      if (nextpos != cpos) return 0;
+      if (nextpos != cpos) POSTCHILD_FAIL();
       target = bc_a(call)+1u+LJ_FR2;
     } else if (nextpos != cpos+1u &&
                !(cpos+1u < v->proto_sizebc && nextpos == cpos+2u &&
-                 retpc+1 == v->startpc)) return 0;
+                 retpc+1 == v->startpc)) POSTCHILD_FAIL();
     for (i = 0; i < nent; i++) {
       SnapEntry entry = snapentry_acq(&v->snapmap[nofs+i]);
       if (snap_slot(entry) >= target &&
@@ -22636,19 +23149,18 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
           (const uint32_t *)&proto_bc(pt)[pos]);
         if ((entry & 0x00ff0000u) ||
             snap_ref(entry) != saved[bc_a(ret)+(snap_slot(entry)-target)])
-          return 0;
+          POSTCHILD_FAIL();
         found++;
       }
     }
-    if (found != (nresults ? nresults : 1u)) return 0;
-  } else if (!(branch.early_return &&
-               (pos == branch.first || pos == branch.second)) &&
+    if (found != (nresults ? nresults : 1u)) POSTCHILD_FAIL();
+  } else if (!arm64_lua_leaf_branch_early_target(&branch, pos) &&
         !arm64_lua_leaf_postra_result(v, caller, s,
         (MSize)(retpc-v->proto_bc), bc_a(call), result, nresults, end,
-        pt, base, function, frame, leafretpos)) return 0;
+        pt, base, function, frame, leafretpos)) POSTCHILD_FAIL();
   extent = base-2u+pt->framesize;
   if (extent < v->root_topslot) extent = v->root_topslot;
-  if (extent > UINT8_MAX || snap_topslot_acq(sn) != extent) return 0;
+  if (extent > UINT8_MAX || snap_topslot_acq(sn) != extent) POSTCHILD_FAIL();
   for (i = 0; i < count; i++) {
     SnapEntry entry = snapentry_acq(&v->snapmap[ofs+i]);
     MSize slot = snap_slot(entry);
@@ -22656,13 +23168,13 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
     if (slot-base >= pt->framesize || seen[slot-base] ||
         !saved[slot-base] ||
         (entry & 0x00ff0000u) || snap_ref(entry) != saved[slot-base])
-      return 0;
+      POSTCHILD_FAIL();
     seen[slot-base] = 1;
   }
   for (i = 0; i < pt->framesize; i++)
-    if (needed[i] && !seen[i]) return 0;
+    if (needed[i] && !seen[i]) POSTCHILD_FAIL();
   return base-1u;
-
+#undef POSTCHILD_FAIL
 }
 
 
