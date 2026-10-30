@@ -19,13 +19,19 @@ assert(select(2, ready:recv(5)))
 
 local negative = substring_fixture_kind and
                  substring_fixture_kind:sub(1, 9) == 'negative-'
+local default_end = substring_fixture_kind == 'default-end'
 local kinds = substring_fixture_kind and {
-  negative and substring_fixture_kind:sub(10) or substring_fixture_kind
+  negative and substring_fixture_kind:sub(10) or
+  (default_end and 'forl' or substring_fixture_kind)
 } or {'forl', 'while'}
+if default_end then kinds = {'forl', 'while'} end
 local starts = negative and {1, 2} or
-               (substring_fixture_kind and {2} or {1, 2})
+               (default_end and {1, 2} or
+                (substring_fixture_kind and {2} or {1, 2}))
 local widths = negative and {-1, -2, -4} or
+               (default_end and {0} or
                (substring_fixture_kind and {3} or {1, 2, 3, 8})
+               )
 for _, kind in ipairs(kinds) do
   for _, first in ipairs(starts) do
     for _, width in ipairs(widths) do
@@ -37,7 +43,10 @@ for _, kind in ipairs(kinds) do
       -- before any interpreter iteration interns the same substring.
       local last = negative and width or (first+width-1)
       local source = 'local sub=string.sub;return function(s,n)local r=s;' ..
-        loop .. 'r=sub(s,' .. first .. ',' .. last .. ') end;return r end'
+        loop .. 'r=' .. (default_end and
+          ('sub(s,' .. first .. ')') or
+          ('sub(s,' .. first .. ',' .. last .. ')')) ..
+        ' end;return r end'
       local f = assert(loadstring(source, '@substring-native-candidate'))()
       local chunk = assert(loadstring(source, '@substring-native-oracle'))
       jit.off(chunk, true)
@@ -95,7 +104,8 @@ for _, kind in ipairs(kinds) do
         end
         assert(exits > before, 'no selected root exits ' .. kind ..
           ' first=' .. first .. ' width=' .. width .. ' phase=' .. phase)
-        local boundary = negative and (first-last-2) or (first+width-1)
+        local boundary = negative and (first-last-2) or
+                         (default_end and #s or first+width-1)
         for _, value in ipairs({'', 'x', 'xy',
                                 s:sub(1, math.max(0, boundary-1)),
                                 s:sub(1, boundary), s:sub(1, boundary+1),
@@ -115,7 +125,8 @@ for _, kind in ipairs(kinds) do
       local fresh = {}
       assert(stop:send('gc', 5))
       for i = 1, 48 do
-        local input = string.char(i, 93, first, (i*7)%256) .. s
+        local input = default_end and (s .. string.char(i)) or
+                      (string.char(i, 93, first, (i*7)%256) .. s)
         local actual, expected = f(input, 80), oracle(input, 80)
         assert(actual == expected)
         fresh[i] = {actual, expected}

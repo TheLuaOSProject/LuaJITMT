@@ -14,6 +14,7 @@ static lua_State *test_L;
 static unsigned native_string_matches;
 static unsigned native_string_publications;
 static int negative_case;
+static int dynamic_end_case;
 
 static void string_publish(lua_State *L, GCstr *str)
 {
@@ -21,7 +22,7 @@ static void string_publish(lua_State *L, GCstr *str)
   if (L != test_L || !lj_tg_load_jit_base(L2TG(L))) return;
   assert(lj_tg_jit_active_acq(L2TG(L)));
   assert(str->gct == (uint8_t)~LJ_TSTR);
-  assert(negative_case ? str->len > 0u : str->len == 3u);
+  assert((negative_case || dynamic_end_case) ? str->len > 0u : str->len == 3u);
   arena = lj_arena_of(str);
   assert(!lj_arena_ishuge(arena));
   assert(lj_arena_ready_get(arena, lj_arena_cellof(str)));
@@ -38,7 +39,7 @@ static void string_match(lua_State *L, GCRef *link, GCobj *object,
   if (L != test_L || !lj_tg_load_jit_base(L2TG(L))) return;
   assert(lj_tg_jit_active_acq(L2TG(L)));
   assert(str->gct == (uint8_t)~LJ_TSTR);
-  assert(negative_case ? str->len > 0u : str->len == 3u);
+  assert((negative_case || dynamic_end_case) ? str->len > 0u : str->len == 3u);
   arena = lj_arena_of(str);
   assert(!lj_arena_ishuge(arena));
   assert(lj_arena_ready_get(arena, lj_arena_cellof(str)));
@@ -71,11 +72,13 @@ int main(int argc, char **argv)
   IRRef firstguard = 0, lastguard = 0;
   TraceNo no;
   GCobj *byte;
-  int negative;
+  int negative, default_end;
   (void)arm64_fixture_init;
   assert(L && argc == 3);
   negative = strncmp(argv[2], "negative-", 9u) == 0;
+  default_end = strcmp(argv[2], "default-end") == 0;
   negative_case = negative;
+  dynamic_end_case = default_end;
   luaL_openlibs(L);
   test_L = L;
   lj_str_test_set_match_hook(string_match);
@@ -100,7 +103,7 @@ int main(int argc, char **argv)
     IRIns p = f.ir[r];
     if (p.o == IR_STRREF) pointer = r;
     if (p.o == IR_SNEW) allocation = r;
-    if ((p.o == (negative ? IR_GE : IR_UGE)) &&
+    if ((p.o == ((negative || dynamic_end_case) ? IR_GE : IR_UGE)) &&
         p.t.irt == (IRT_INT|IRT_GUARD)) bound = r;
     if (p.o == IR_FLOAD && p.op2 == IRFL_STR_LEN) len = r;
     if (negative && p.o == IR_ADD && p.t.irt == IRT_INT &&
@@ -169,7 +172,7 @@ int main(int argc, char **argv)
     GCtrace private_owner = *f.owner;
     GCproto *private_proto = trace_startpt_acq(&f.semantic);
     BCIns *bc = proto_bc(private_proto);
-    MSize callpc = 0, pc;
+    MSize callpc = 0, pc, setup;
     trace_startpt_rel(&private_owner, private_proto);
     setmref(private_owner.startpc, trace_startpc_acq(&f.semantic));
     f.view.owner = &private_owner;
@@ -181,29 +184,37 @@ int main(int argc, char **argv)
     assert(semantic(&f) && allocated(&f));
     for (pc = 1; pc < private_proto->sizebc; pc++)
       if (bc_op(bc[pc]) == BC_CALL) { assert(!callpc); callpc = pc; }
-    assert(callpc >= 3u);
-    for (unsigned mode = 0; mode < 4u; mode++) {
-      MSize at = callpc-(mode < 3u ? mode+1u : 0u);
-      BCIns saved = bc[at], changed = saved;
-      if (mode == 0u) setbc_d(&changed, bc_d(saved)-1u);
-      else if (mode == 1u) setbc_d(&changed, 0u);
-      else if (mode == 2u) setbc_d(&changed, bc_d(saved)+1u);
-      else setbc_b(&changed, 3u);
-      la_store32_rel((uint32_t *)&bc[at], changed);
-      assert(!semantic(&f));
-      assert(!allocated(&f));
-      la_store32_rel((uint32_t *)&bc[at], saved);
-      assert(semantic(&f) && allocated(&f));
+    assert(callpc >= (default_end ? 2u : 3u));
+    setup = callpc-(bc_c(bc[callpc]) == 3u ? 2u : 3u);
+    {
+      MSize nsetup = callpc-setup;
+      for (unsigned mode = 0; mode < nsetup+2u; mode++) {
+        MSize at = mode < nsetup ? callpc-1u-mode : callpc;
+        BCIns saved = bc[at], changed = saved;
+        if (mode == 0u) setbc_d(&changed, bc_d(saved)-1u);
+        else if (mode == 1u)
+          setbc_d(&changed, nsetup == 2u ? bc_d(saved)+1u : 0u);
+        else if (mode == 2u && nsetup == 3u)
+          setbc_d(&changed, bc_d(saved)+1u);
+        else if (mode < nsetup) setbc_d(&changed, bc_d(saved)+1u);
+        else if (mode == nsetup) setbc_b(&changed, 3u);
+        else setbc_c(&changed, bc_c(saved) == 3u ? 4u : 3u);
+        la_store32_rel((uint32_t *)&bc[at], changed);
+        assert(!semantic(&f));
+        assert(!allocated(&f));
+        la_store32_rel((uint32_t *)&bc[at], saved);
+        assert(semantic(&f) && allocated(&f));
+      }
     }
     {
       BCIns saved, changed;
-      assert(callpc >= 4u);
-      saved = bc[callpc-4u];
+      assert(setup >= 1u);
+      saved = bc[setup-1u];
       changed = BCINS_AD(BC_ISLT, 0, 1);
-      la_store32_rel((uint32_t *)&bc[callpc-4u], changed);
+      la_store32_rel((uint32_t *)&bc[setup-1u], changed);
       assert(!semantic(&f));
       assert(!allocated(&f));
-      la_store32_rel((uint32_t *)&bc[callpc-4u], saved);
+      la_store32_rel((uint32_t *)&bc[setup-1u], saved);
       assert(semantic(&f) && allocated(&f));
     }
     f.view = original_view;

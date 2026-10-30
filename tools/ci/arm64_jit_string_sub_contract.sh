@@ -20,6 +20,7 @@ build_and_run() {
   LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" while
   LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" negative-forl
   LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" negative-while
+  LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" default-end
   LUA_PATH="$root/src/?.lua;;" lj_ci_run_lua 120 "$root/tests/t-arm64-jit-string-sub.lua"
 }
 build_and_run arm64 '-arch arm64' "$base -DLUA_USE_ASSERT" arm64-assert
