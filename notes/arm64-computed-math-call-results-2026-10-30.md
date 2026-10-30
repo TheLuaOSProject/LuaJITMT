@@ -44,11 +44,17 @@ unchanged. Other calls, non-loop values, values without a matching snapshot,
 and malformed rename sources or locations remain rejected.
 
 The scalar capability fixture includes the computed-result loop and mutates
-the rename source, snapshot ordinal, and resolved location to D0. Each
-mutation independently fails the focused liveness check and full post-RA
-admission; the restored control is admitted. The ordinary Lua companion
-checks the result against interpreted `math.sin`, observes native selected
-root entry and exit, forces full GC, and re-enters the same root.
+the rename source, snapshot ordinal, resolved location to D0, invalid spill
+location, and PHI into an ordinary arithmetic consumer. Each mutation
+independently fails the focused liveness check and full post-RA admission; the
+restored control is admitted. The post-RA exception is limited to a pre-loop
+numeric CALLN value used exactly once as the initial operand of a numeric PHI
+whose backedge operand is the body CALLN. It also requires the allocator's
+general snapshot resolver to return the same RegSP as the exact loop-snapshot
+rename. Other ordinary uses retain the existing generic call-survival rule.
+The ordinary Lua companion checks the result against interpreted `math.sin`,
+observes native selected-root entry and exit, forces full GC, and re-enters the
+same root.
 
 ## Validation
 
@@ -72,3 +78,17 @@ An ordinary x86_64 build from the same source also ran the matched standalone
 probe: FORL and while each selected root 1 and observed 10 exits. Its profile
 and output are `math-computed-result-x64-build.log` and
 `math-computed-result-x64-probe.log`.
+
+After the loop-use tightening, the four-profile rerun is recorded in
+`computed-result-followup-four-profiles.log` in the same Scratch directory.
+The restored no-helper ARM64 build (profile
+`b888871ab9caface252d3cea382e3f2873d625b386879e08c39651abcc0bf024`, archive
+SHA-256 `1c1bae5430bac48761a1fe5d90d46ee812235fa6e76065a367dfc3d142fe2067`,
+runtime SHA-256 `a61be8f223a917938c3da2106e1f5e26b17c3d2c84a958dcd50ba36da12f1dce`)
+ran `sin-stable-num.lua` with `LUA_PATH=src/?.lua;;`. Both FORL and while
+selected root 1, produced 166/168 matching selected-root exits across the two
+numeric phases, retained identical machine code across post-GC reentry, and
+matched their JIT-disabled peers for the tested input set. The peer was
+started before compilation and remained live through both phases. The frozen
+ordinary x86_64 run of the same probe is in `x86_64-sin-stable-num.log`; both
+loop forms selected root 1 and produced 10 exits.

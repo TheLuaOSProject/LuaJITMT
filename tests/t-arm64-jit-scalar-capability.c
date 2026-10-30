@@ -256,9 +256,20 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
       assert(!lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, call));
       assert(!lj_asm_arm64_postra_admit(&v, NULL));
       copy[rename] = saved;
+      {
+        IRIns saved_phi = copy[phi];
+        copy[phi].o = IR_ADD;
+        assert(!lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, call));
+        assert(!lj_asm_arm64_postra_admit(&v, NULL));
+        copy[phi] = saved_phi;
+      }
+      copy[rename].prev = REGSP(RID_NONE, SPS_FIRST-1u);
+      assert(!lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, call));
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[rename] = saved;
       assert(lj_asm_arm64_postra_admit(&v, NULL));
     }
-    printf("MATH computed-result CALLN=%u loop-PHI=%u rename=%u; source/snapshot/location mutations rejected\n",
+    printf("MATH computed-result CALLN=%u loop-PHI=%u rename=%u; source/snapshot/location/ordinary-use mutations rejected\n",
            (unsigned)call, (unsigned)phi, (unsigned)rename);
   }
   /* A future consumer has not yet been certified when an earlier absent
