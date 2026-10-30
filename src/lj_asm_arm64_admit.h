@@ -25164,7 +25164,9 @@ static int arm64_scalar_identity_postra(const LJArm64PostRAView *v,
   for (pos = 0; pos < v->proto_sizebc; pos++) {
     BCIns ins = arm64_ir_bc_acq((uintptr_t)v->proto_bc, pos);
     BCOp op = bc_op(ins);
-    if (op == BC_CALL || op == BC_CALLM || op == BC_CALLMT || op == BC_CALLT) {
+    if (op >= BC__MAX) return 0;
+    if (op == BC_CALL || op == BC_CALLM || op == BC_CALLMT || op == BC_CALLT ||
+        op == BC_ITERC || op == BC_ITERN) {
       source_calls++;
       if (op != BC_CALL || bc_b(ins) != 2u || bc_c(ins) != 2u) return 0;
       call = ins; callpos = pos; callcount++;

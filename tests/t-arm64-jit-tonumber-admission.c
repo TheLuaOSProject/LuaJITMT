@@ -227,6 +227,12 @@ static void test_wrong_cell_source(lua_State *L, const char *clone_name,
     mutatepos = callpos-1u;
     saved = proto_bc(pt)[mutatepos];
     proto_bc(pt)[mutatepos] = BCINS_ABC(BC_ISLT, 0, 0, 0);
+  } else if (mutation >= 7u) {
+    assert(callpos >= 2u);
+    mutatepos = callpos-2u;
+    saved = proto_bc(pt)[mutatepos];
+    proto_bc(pt)[mutatepos] = BCINS_ABC(
+      mutation == 7u ? BC_ITERC : BC_ITERN, 0, 2, 2);
   } else {
     mutatepos = callpos;
     saved = proto_bc(pt)[mutatepos];
@@ -448,7 +454,7 @@ static void positive_form(lua_State *L, const char *fnname, BCOp op,
     unsigned mutation;
     const char *clone = op == BC_LOOP ? "tonumber_while_clone" :
                                         "tonumber_for_clone";
-    for (mutation = 0; mutation < 7u; mutation++)
+    for (mutation = 0; mutation < 9u; mutation++)
       test_wrong_cell_source(L, clone, no, mutation);
     test_wrong_terminal_cell_snapshot(L, clone, no);
     test_bad_terminal_footer_and_layout(L, clone, no);
