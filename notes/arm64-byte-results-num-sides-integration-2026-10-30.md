@@ -518,3 +518,34 @@ hashes and logs: `/Users/frityet/Scratch/ljmt-no-peer-upvalue-ordinary-20261030/
 Ordinary ARM64 restore profile:
 `3254e2ae7826da1851590cbb114854c5132dc5c83da7b7a62d79e64d18743c5c`.
 This slice is outside the still-running complete gate at `f752aa882`.
+
+## Closed root-context upvalues on the refreshed SDK
+
+At `74a48b1b8`, the no-peer recorder normalization is generic for closed
+root-context UGETs, reusing the existing rooted helper and independent typed
+admission. The root merge retains the non-vacuous peer-retirement checks,
+adds native code identity through GC for both captured-function and numeric
+cell roots, disables the test harness/oracles recursively before enabling
+candidates, and makes byte/sub replacement functions return visibly different
+results. No raw UREFC/ULOAD or unsupported operation admission was opened.
+
+On Xcode 27.2/macOS SDK 27.2, the integrated rooted-upvalue contract passes
+all four ARM64/arm64e assertion/release profiles. The ordinary ARM64 rebuild
+also passed, profile
+`149b8ff00a04a3d744241000c7183bb3ae13322ca7d4436f7fca510e9382d21a`.
+Evidence: `/Users/frityet/Scratch/ljmt-closed-upvalue-integrated-sdk272-20261030/`.
+
+The exact-source ordinary ARM64/strict-x64 matrix passes both 509-case stock
+corpora, all preceding comparisons, nine closed-cell value/type cases and
+three captured builtin cases. ARM64 witnesses use rooted helpers with no
+UREFC; x64 keeps its existing raw representation. The scalar rows observe
+31 selected exits after collection, builtin rows 32; these counts are
+execution witnesses, not performance comparisons. The strengthened peer
+transition also passes. Evidence and matching binaries/modules:
+`/Users/frityet/Scratch/ljmt-closed-upvalue-ordinary-sdk272-20261030/`.
+Ordinary restore profile:
+`af033c43c939492cf6efae86bdb9693082562ba30e3be661efee19c9440f9f25`.
+
+The prior full gate at `f752aa882` stopped when its SDK path disappeared;
+see `arm64-sdk272-gate-restart-2026-10-30.md`. A new full gate is frozen at
+`74a48b1b8`. The last promoted complete checkpoint is still `9ebec6139`.
