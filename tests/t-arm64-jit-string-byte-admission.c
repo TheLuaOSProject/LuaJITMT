@@ -135,9 +135,11 @@ static IRIns *insert_irref(const IRIns *ir, IRRef nins, IRRef at,
   return copy;
 }
 
-static void test_default_byte(lua_State *L)
+static void test_fixed_byte_call(lua_State *L, const char *arguments,
+                                 int32_t expected_offset, int32_t expected_bound)
 {
   Arm64TraceFixture f;
+  char source[1536];
   GCtrace *owner;
   TraceNo no;
   MCode *code;
@@ -145,17 +147,21 @@ static void test_default_byte(lua_State *L)
   unsigned char *saved;
   IRRef strref=0, length=0, guard=0;
   lua_Number actual, expected;
-  const char *values[]={"string_byte_value", "string_byte_short",
+  const char *values[]={"string_byte_value", "string_byte_fixed_exact",
                         "string_byte_default_nul", "string_byte_default_high"};
-  run_chunk(L,
+  snprintf(source,sizeof(source),
+    "jit.flush(); "
     "string_byte_default_trace=function(s,n) local byte=string.byte; "
-    "local i,sum=0,.5; while i<n do sum=sum+byte(s); i=i+1 end; return sum end; "
+    "local i,sum=0,.5; while i<n do sum=sum+byte(s%s); i=i+1 end; return sum end; "
     "string_byte_default_clone=function(s,n) local byte=string.byte; "
-    "local i,sum=0,.5; while i<n do sum=sum+byte(s); i=i+1 end; return sum end; "
+    "local i,sum=0,.5; while i<n do sum=sum+byte(s%s); i=i+1 end; return sum end; "
     "string_byte_default_oracle=function(s,n) local byte=string.byte; "
-    "local i,sum=0,.5; while i<n do sum=sum+byte(s); i=i+1 end; return sum end; "
+    "local i,sum=0,.5; while i<n do sum=sum+byte(s%s); i=i+1 end; return sum end; "
     "jit.off(string_byte_default_oracle,true); "
-    "string_byte_default_nul='\\0a'; string_byte_default_high='\\255a'");
+    "string_byte_fixed_exact='ab'; "
+    "string_byte_default_nul='\\0\\0a'; string_byte_default_high='\\255\\255a'",
+    arguments,arguments,arguments);
+  run_chunk(L,source);
   assert(call_loop(L,"string_byte_default_trace","string_byte_value",&actual)==LUA_OK);
   lua_getglobal(L,"string_byte_default_trace");
   no=proto_trace_acq(funcproto(funcV(L->top-1))); lua_pop(L,1);
@@ -193,11 +199,13 @@ static void test_default_byte(lua_State *L)
   assert(strref && length);
   {
     int32_t offset;
-    assert(kint(f.ir,f.semantic.nk,f.ir[strref].op2,&offset) && offset==0);
+    assert(kint(f.ir,f.semantic.nk,f.ir[strref].op2,&offset) &&
+           offset==expected_offset);
     for (IRRef r=length+1u;r<strref;r++) {
       int32_t bound;
       if (f.ir[r].o==IR_UGE && f.ir[r].op1==length &&
-          kint(f.ir,f.semantic.nk,f.ir[r].op2,&bound) && bound==1) guard=r;
+          kint(f.ir,f.semantic.nk,f.ir[r].op2,&bound) &&
+          bound==expected_bound) guard=r;
     }
   }
   assert(guard);
@@ -208,9 +216,15 @@ static void test_default_byte(lua_State *L)
   f.ir[guard].t.irt &= (uint8_t)~IRT_GUARD;
   f.postra[guard].t.irt &= (uint8_t)~IRT_GUARD;
   assert(!semantic(&f) && !allocated(&f));
+  arm64_fixture_reset(&f);
+  /* A bound at the offset itself does not prove that byte is in the string. */
+  f.ir[guard].op2=f.ir[strref].op2;
+  f.postra[guard].op2=f.postra[strref].op2;
+  assert(!semantic(&f) && !allocated(&f));
   arm64_fixture_reset(&f); assert(semantic(&f) && allocated(&f));
   arm64_fixture_free(&f); lua_pop(L,1); free(saved);
-  puts("default string byte: native entry, NUL/high byte, empty exit, GC/code reuse, two independent bounds negatives");
+  printf("string.byte(s%s): native entry, NUL/high byte, empty exit, "
+         "GC/code reuse, three independent bounds negatives\n", arguments);
 }
 
 int main(void)
@@ -1185,7 +1199,10 @@ int main(void)
   arm64_fixture_reset(&f);
   assert(semantic(&f) && allocated(&f));
   arm64_fixture_free(&f);
-  test_default_byte(L);
+  test_fixed_byte_call(L,"",0,1);
+  test_fixed_byte_call(L,",2,2",1,2);
+  test_fixed_byte_call(L,",2,4",1,4);
+  test_fixed_byte_call(L,",2,nil",1,2);
   run_chunk(L, "assert(string_byte_stop:send(true,5)); "
                "local joined,result=string_byte_peer:join(5); "
                "assert(joined and result)");
