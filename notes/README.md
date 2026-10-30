@@ -18,22 +18,22 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
-- Current verified production checkpoint: `89226814d`. It adds NUM FORL
-  root direction support, guarded FUNCF producer-child overflow exits,
-  integer-literal CALLM replay, FFI integer accumulator PHIs and default/fixed
-  positive string.byte ranges to `6c46f9bff`. No locks are added.
-  The complete combined gate passes, including actual VM/recorder safepoint
-  runtime execution and all four M7 FFI profiles. The gate checkout is
-  restored to ordinary assertion ARM64 without test helpers. Ordinary ARM64
-  and strict x86_64 builds each pass all 509 source cases and all 509 original
+- Current verified production checkpoint: `ff86407a1`. It adds guarded integer
+  bodies in NUM FORL roots, constant negative byte indices, dynamic positive
+  byte ends and named aggregate prefixes in variadic aggregate-return FFI calls
+  to `89226814d`. No locks are added. The complete combined gate passes,
+  including actual VM/recorder safepoint runtime execution and all four M7
+  FFI profiles. The gate checkout is restored to ordinary assertion ARM64
+  without test helpers. Ordinary ARM64 and strict x86_64 builds of identical
+  production code each pass all 509 source cases and all 509 original
   v2-bytecode cases. See the
-  [complete checkpoint](arm64-num-child-byte-complete-checkpoint-2026-10-30.md),
-  [ordinary evidence](arm64-num-child-byte-ordinary-checkpoint-2026-10-30.md),
-  and [preceding checkpoint](arm64-forward-math-sret-complete-checkpoint-2026-10-29.md).
-  Later NUM-loop integer bodies, negative/dynamic byte bounds and variadic
-  aggregate-prefix FFI have separate focused validation. NUM loop children,
-  wider forwarding, general Lua call/return, recursion, protected calls and
-  remaining FFI restrictions are active work. Full x86_64 parity is not complete.
+  [complete checkpoint](arm64-byte-num-prefix-complete-checkpoint-2026-10-30.md)
+  and [preceding checkpoint](arm64-num-child-byte-complete-checkpoint-2026-10-30.md).
+  Later wider forwarding, integer byte indices, numeric/negative byte ends,
+  captured FFI prefixes and folded 64-bit literal arguments have separate
+  focused validation. NUM loop children, general Lua call/return, recursion,
+  protected calls and remaining FFI restrictions are active work.
+  Full x86_64 parity is not complete.
 
 ## Earlier checkpoint records
 
