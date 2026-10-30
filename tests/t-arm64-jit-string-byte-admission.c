@@ -372,7 +372,8 @@ static int call_range_loop(lua_State *L, const char *fn, const char *string,
   return status;
 }
 
-static void test_dynamic_range_byte(lua_State *L, int recorded_end)
+static void test_dynamic_range_byte(lua_State *L, lua_Number recorded_end,
+                                    int numeric_end)
 {
   Arm64TraceFixture f;
   TraceNo no;
@@ -380,7 +381,7 @@ static void test_dynamic_range_byte(lua_State *L, int recorded_end)
   MCode *code;
   MSize codesize;
   unsigned char *saved;
-  IRRef length=0, upper=0, difference=0, width=0, pointer=0;
+  IRRef length=0, upper=0, end=0, difference=0, width=0, pointer=0;
   lua_Number actual=0, expected=0;
   static const struct { const char *string; lua_Number last; int numeric; } cases[]={
     {"string_byte_value",2,0}, {"string_byte_value",4,0},
@@ -389,6 +390,9 @@ static void test_dynamic_range_byte(lua_State *L, int recorded_end)
     {"string_byte_value",INT32_MAX,0}, {"string_byte_value",4.9,1},
     {"string_byte_value",NAN,1}, {"string_byte_value",INFINITY,1},
     {"string_byte_value",-INFINITY,1}, {"string_byte_short",4,0},
+    {"string_byte_value",2147483648.0,1},
+    {"string_byte_value",-2147483649.0,1},
+    {"string_byte_value",1.0e300,1}, {"string_byte_value",-1.0e300,1},
     {"string_byte_empty",4,0}, {"string_byte_default_nul",2,0},
     {"string_byte_default_high",2,0}, {"string_byte_long",65536,0}
   };
@@ -402,7 +406,7 @@ static void test_dynamic_range_byte(lua_State *L, int recorded_end)
     "local i,sum=0,.5; while i<n do sum=sum+byte(s,2,last); i=i+1 end; return sum end; "
     "jit.off(string_byte_range_oracle,true)");
   assert(call_range_loop(L,"string_byte_range_trace","string_byte_value",
-                         recorded_end,0,&actual)==LUA_OK);
+                         recorded_end,numeric_end,&actual)==LUA_OK);
   lua_getglobal(L,"string_byte_range_trace");
   no=proto_trace_acq(funcproto(funcV(L->top-1))); lua_pop(L,1);
   owner=traceref_safe(L2J(L),no);
@@ -425,7 +429,7 @@ static void test_dynamic_range_byte(lua_State *L, int recorded_end)
              lj_trace_test_exit_calls()>0 && lj_trace_test_first_exit_parent()==no);
     }
     assert(call_range_loop(L,"string_byte_range_trace","string_byte_value",
-                           recorded_end,0,&actual)==LUA_OK);
+                           recorded_end,numeric_end,&actual)==LUA_OK);
     assert(trace_runnable_acq(owner,no) && trace_mcode_acq(owner)==code &&
            trace_szmcode_acq(owner)==codesize && memcmp(saved,code,codesize)==0);
   }
@@ -433,13 +437,16 @@ static void test_dynamic_range_byte(lua_State *L, int recorded_end)
   assert(semantic(&f) && allocated(&f));
   for (IRRef r=REF_FIRST;r<f.semantic_nins;r++) {
     if (f.ir[r].o==IR_FLOAD && f.ir[r].op2==IRFL_STR_LEN) length=r;
-    if (length && f.ir[r].o==IR_UGE && f.ir[r].op1==length) upper=r;
-    if (upper && f.ir[r].o==IR_SUBOV && f.ir[r].op1==f.ir[upper].op2)
+    if (length && f.ir[r].o==IR_UGE && f.ir[r].op1==length)
+      upper=r, end=f.ir[r].op2;
+    if (length && f.ir[r].o==IR_ULE && f.ir[r].op2==length)
+      upper=r, end=f.ir[r].op1;
+    if (upper && f.ir[r].o==IR_SUBOV && f.ir[r].op1==end)
       difference=r;
     if (difference && f.ir[r].o==IR_EQ && f.ir[r].op1==difference) width=r;
     if (f.ir[r].o==IR_STRREF) pointer=r;
   }
-  assert(length && upper && difference && width && pointer &&
+  assert(length && upper && end && difference && width && pointer &&
          length<upper && upper<difference && difference<width && width<pointer);
 #define REJECT_RANGE(change) do { \
   arm64_fixture_reset(&f); assert(semantic(&f) && allocated(&f)); \
@@ -453,14 +460,13 @@ static void test_dynamic_range_byte(lua_State *L, int recorded_end)
   REJECT_RANGE(f.ir[width].t.irt &= (uint8_t)~IRT_GUARD;
                f.postra[width].t.irt &= (uint8_t)~IRT_GUARD);
   REJECT_RANGE(f.ir[difference].op1=length; f.postra[difference].op1=length);
-  REJECT_RANGE(f.ir[pointer].op2=f.ir[upper].op2;
-               f.postra[pointer].op2=f.postra[upper].op2);
+  REJECT_RANGE(f.ir[pointer].op2=end; f.postra[pointer].op2=end);
   REJECT_RANGE(f.ir[f.ir[width].op2].i=0;
                f.postra[f.postra[width].op2].i=0);
 #undef REJECT_RANGE
   arm64_fixture_reset(&f); assert(semantic(&f) && allocated(&f));
   arm64_fixture_free(&f); lua_pop(L,1); free(saved);
-  printf("string.byte(s,2,last=%d): native entry, range/type/empty exits, "
+  printf("string.byte(s,2,last=%g): native entry, range/type/empty exits, "
          "GC/code reuse, six independent range negatives\n",recorded_end);
 }
 
@@ -1649,8 +1655,9 @@ int main(void)
   test_fixed_byte_call(L,",2,4",1,4);
   test_fixed_byte_call(L,",2,nil",1,2);
   test_fixed_byte_call(L,",2,last",1,2);
-  test_dynamic_range_byte(L,2);
-  test_dynamic_range_byte(L,4);
+  test_dynamic_range_byte(L,2,0);
+  test_dynamic_range_byte(L,4,0);
+  test_dynamic_range_byte(L,4.9,1);
   run_chunk(L, "assert(string_byte_stop:send(true,5)); "
                "local joined,result=string_byte_peer:join(5); "
                "assert(joined and result)");
