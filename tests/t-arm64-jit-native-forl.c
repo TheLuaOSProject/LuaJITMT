@@ -1,8 +1,9 @@
 /*
 ** Native macOS ARM64 entry contract for admitted integer BC_FORL roots.
 ** Entry is permitted only from a taken integer JFORL edge, after the VM has
-** incremented, tested and stored both IDX and EXT. The shared FP JFORL path
-** must keep using branch-only stale-startins recovery.
+** incremented, tested and stored both IDX and EXT. FP JFORL edges also enter
+** through the helper with a sign-derived mode; rejected roots use branch-only
+** stale-startins recovery.
 */
 
 #include <assert.h>
@@ -314,7 +315,7 @@ static void test_full_word_recheck(lua_State *L, GCfunc *fn, GCtrace *T)
 
   /* First prove that this exact real trace/frame pair is admissible. */
   lj_trace_test_root_entry_reset();
-  entry = lj_trace_enter_root(J, pc, 1, L, L->base, live, NULL);
+  entry = lj_trace_enter_root(J, pc, 1, L, L->base, live, NULL, 0);
   assert(entry.trace == T && entry.target != NULL);
   assert((uintptr_t)lj_ptr_strip(entry.target) ==
 	 (uintptr_t)(void *)trace_mcode_acq(T));
@@ -328,7 +329,7 @@ static void test_full_word_recheck(lua_State *L, GCfunc *fn, GCtrace *T)
   lj_trace_test_root_entry_reset();
   lj_trace_test_root_entry_pause(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA);
   assert(pthread_create(&worker, NULL, mutate_full_word, &race) == 0);
-  entry = lj_trace_enter_root(J, pc, 1, L, L->base, live, NULL);
+  entry = lj_trace_enter_root(J, pc, 1, L, L->base, live, NULL, 0);
   assert(entry.trace == NULL && entry.target == NULL);
   assert(pthread_join(worker, NULL) == 0);
   assert(la_load32_acq(&race.saw_pause) == 1);
@@ -477,11 +478,17 @@ int main(void)
   assert(lj_trace_test_root_entry_startins_calls() == 0);
 
   /* The same patched JFORL executes its number path for a fractional stop.
-  ** Both taken FP edges remain branch-only and cannot publish native intent. */
+  ** Taken FP edges make a mode-specific attempt; this integer root must reject
+  ** each one and clear its lease before the branch-only recovery. */
   lj_trace_test_root_entry_reset();
   lj_trace_test_reset_exit_stats();
   assert(call_forl_number_stop(L, 3.5, 0) == 6.0);
-  expect_no_native_activity(L);
+  assert(lj_trace_test_root_entry_publishes() != 0);
+  assert(lj_trace_test_root_entry_cleanups() ==
+	 lj_trace_test_root_entry_publishes());
+  assert(lj_trace_test_exit_calls() == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(lj_tg_load_jit_base(tg) == NULL);
   assert(lj_trace_test_root_entry_startins_calls() == 2);
 
   /* i=1 leaves s at INT32_MAX. The native preheader addition overflows on i=2

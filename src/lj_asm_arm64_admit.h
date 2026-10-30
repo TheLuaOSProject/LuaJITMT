@@ -8,6 +8,9 @@
 
 static int arm64_scalar_postra_ref(const LJArm64PostRAView *v, IRRef ref,
                                    IRRef before, IRType type);
+static int arm64_scalar_postra_kref(const LJArm64PostRAView *v, IRRef target,
+                                    IRType type);
+static int arm64_scalar_postra_register(Reg r, IRType type);
 static int arm64_ir_funcf_open_callm_leaf_source(const GCproto *pt,
 						 MSize *retposp);
 
@@ -604,7 +607,10 @@ static int arm64_callxs_value_kind(const IRIns *ir, IRRef ref,
   case LJ_ARM64_ABI_KIND_INTEGER:
   case LJ_ARM64_ABI_KIND_ENUM:
 	if (size == 8)
-	  return type == (is_unsigned ? IRT_U64 : IRT_I64);
+	  /* The constant interner uses IRT_I64 for every KINT64 bit pattern.
+	  ** A fixed uint64_t consumes those same 64 bits without conversion. */
+	  return type == (is_unsigned ? IRT_U64 : IRT_I64) ||
+	    (is_unsigned && value.o == IR_KINT64 && value.t.irt == IRT_I64);
 	if (size == 4)
 	  /* Fixed uint32_t consumes the low word of a Lua INT. Enums retain
 	  ** their existing carrier boundary; KINT keeps its signed IR tag. */
@@ -2095,6 +2101,13 @@ static int arm64_callxs_source_value(const GCtrace *T, IRRef xsave,
   if (!tail && source == value) return 1;
   if (!tail && st == IRT_NUM &&
       arm64_callxs_numarg_source(T, value, 0) == source) return 1;
+  /* Folding preserves a Lua INT's signed conversion to the complete native
+  ** 64-bit bit pattern, including conversion to an unsigned fixed CType. */
+  if (!tail && src.o == IR_KINT && src.t.irt == IRT_INT &&
+      dst.o == IR_KINT64 && dst.t.irt == IRT_I64 && dst.op12 == 0 &&
+      value+1u < REF_TRUE &&
+      ir_load_acq(&T->ir[value+1u]).tv.u64 == (uint64_t)(int64_t)src.i)
+    return 1;
   if (!tail && st == IRT_CDATA && dst.o == IR_FLOAD &&
       dst.op1 == source && dst.op2 == IRFL_CDATA_INT64 &&
       (dst.t.irt == IRT_I64 || dst.t.irt == IRT_U64)) return 1;
@@ -3666,6 +3679,167 @@ static int arm64_ir_sload_layout(IRIns ir, BCOp rootop, MSize forl_idxslot,
 	 ir.op2 == IRSLOAD_TYPECHECK;
 }
 
+/* NUM FORL has no integer overflow guard: the VM and native path both use
+** IEEE-754 addition and ordered comparisons. Keep its loop-carried proof
+** separate from the integer range/ADDOV proof below. */
+static int arm64_ir_forl_num_sload(IRIns ir, MSize slot, MSize maxslots,
+				   int guarded)
+{
+  if (ir.o != IR_SLOAD || ir.op1 != slot || ir.op1 < 1u+LJ_FR2 ||
+	  ir.op1 >= maxslots ||
+	  (guarded ? ((ir.t.irt & ~IRT_ISPHI) != (IRT_NUM|IRT_GUARD)) :
+	             ir.t.irt != IRT_NUM))
+    return 0;
+  return ir.op2 == (guarded ? (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT) :
+			   (IRSLOAD_READONLY|IRSLOAD_INHERIT));
+}
+
+static int arm64_postra_forl_num_sload(IRIns ir, MSize slot, MSize maxslots,
+				       int guarded);
+
+static int arm64_postra_forl_num_sload(IRIns ir, MSize slot, MSize maxslots,
+				       int guarded)
+{
+  if (ir.o != IR_SLOAD || ir.op1 != slot || ir.op1 < 1u+LJ_FR2 ||
+	  ir.op1 >= maxslots ||
+	  (guarded ? ((ir.t.irt & ~IRT_ISPHI) != (IRT_NUM|IRT_GUARD)) :
+	             ir.t.irt != IRT_NUM))
+    return 0;
+  return ir.op2 == (guarded ? (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT) :
+			   (IRSLOAD_READONLY|IRSLOAD_INHERIT));
+}
+
+static int arm64_postra_forl_num_shape(const LJArm64PostRAView *view,
+						IRRef n, int *dynamic_stepp,
+						int *ascendingp)
+{
+  const IRIns *ir = view->ir;
+  MSize idxslot = 1u+LJ_FR2+bc_a(view->startins);
+  MSize stopslot = idxslot+FORL_STOP, stepslot = idxslot+FORL_STEP;
+  MSize maxslots = view->root_topslot+1u+LJ_FR2;
+  IRRef ref, idx = 0, stop = 0, step = 0, loop = 0, poll = 0, firstphi = 0;
+  IRRef pre = 0, post = 0, precmp = 0, postcmp = 0, direction = 0, phi = 0;
+  unsigned nidx = 0, nstop = 0, nstep = 0, nloop = 0, npoll = 0;
+  IRIns p, q, c, d;
+  IROp cmpop;
+  *dynamic_stepp = 0;
+  *ascendingp = 0;
+  for (ref = REF_FIRST; ref < n; ref++) {
+    IRIns x = ir_load_acq(&ir[ref]);
+    if (x.o == IR_SLOAD && x.op1 == idxslot) { idx = ref; nidx++; }
+    if (x.o == IR_SLOAD && x.op1 == stopslot) { stop = ref; nstop++; }
+    if (x.o == IR_SLOAD && x.op1 == stepslot) { step = ref; nstep++; }
+    if (x.o == IR_LOOP) { loop = ref; nloop++; }
+    if (x.o == IR_XPOLL) { poll = ref; npoll++; }
+    if (x.o == IR_PHI && !firstphi) firstphi = ref;
+  }
+  if (nidx != 1u || nstop > 1u || nstep > 1u || nloop != 1u || npoll != 1u ||
+      poll != loop+1u || !firstphi ||
+      !arm64_postra_forl_num_sload(ir_load_acq(&ir[idx]), idxslot, maxslots, 1))
+    return 0;
+  for (ref = REF_FIRST; ref < n; ref++) {
+    IRIns x = ir_load_acq(&ir[ref]);
+    if (x.o == IR_ADD && x.t.irt == (IRT_NUM|IRT_ISPHI) &&
+        x.op1 == idx && ref < loop) { if (pre) return 0; pre = ref; }
+    if (x.o == IR_ADD && x.t.irt == (IRT_NUM|IRT_ISPHI) && pre &&
+        x.op1 == pre && x.op2 == ir_load_acq(&ir[pre]).op2 &&
+        ref > poll && ref < firstphi) {
+      if (post) return 0; post = ref;
+    }
+  }
+  if (!pre || !post) return 0;
+  p = ir_load_acq(&ir[pre]); q = ir_load_acq(&ir[post]);
+  if (p.op1 != idx || q.op1 != pre || p.op2 != q.op2 ||
+      !arm64_scalar_postra_ref(view, p.op2, pre, IRT_NUM)) return 0;
+  for (ref = pre+1u; ref < loop; ref++) {
+    IRIns x = ir_load_acq(&ir[ref]);
+    if ((x.o == IR_LE || x.o == IR_GE) && x.t.irt == (IRT_NUM|IRT_GUARD) &&
+        x.op1 == pre) { if (precmp) return 0; precmp = ref; }
+  }
+  if (!precmp) return 0;
+  c = ir_load_acq(&ir[precmp]);
+  for (ref = poll+1u; ref < firstphi; ref++) {
+    IRIns x = ir_load_acq(&ir[ref]);
+    if ((x.o == IR_LE || x.o == IR_GE) && x.t.irt == (IRT_NUM|IRT_GUARD) &&
+        x.op1 == post && x.op2 == c.op2) {
+      if (postcmp) return 0; postcmp = ref;
+    }
+  }
+  if (!postcmp) return 0;
+  d = ir_load_acq(&ir[postcmp]);
+  if (nstep) {
+    IRIns zero;
+    IRRef zref = 0;
+    if (step < REF_FIRST || step >= idx || step >= pre || !nstop ||
+        c.op2 != stop ||
+        stop >= pre || stop == step || p.op2 != step ||
+        !arm64_postra_forl_num_sload(ir_load_acq(&ir[stop]), stopslot,
+                                     maxslots, 0) ||
+        !arm64_postra_forl_num_sload(ir_load_acq(&ir[step]), stepslot,
+                                     maxslots, 0)) return 0;
+    for (ref = step+1u; ref < idx; ref++) {
+      IRIns x = ir_load_acq(&ir[ref]);
+      if ((x.o == IR_GE || x.o == IR_LT) && x.t.irt == (IRT_NUM|IRT_GUARD) &&
+          x.op1 == step && arm64_scalar_postra_kref(view, x.op2, IRT_NUM)) {
+        IRIns k = ir_load_acq(&ir[x.op2]);
+        if (k.o == IR_KNUM && ir_knum(&ir[x.op2])->n == 0.0) {
+          if (direction) return 0; direction = ref; zref = x.op2;
+        }
+      }
+    }
+    UNUSED(zref);
+    if (!direction) return 0;
+    zero = ir_load_acq(&ir[direction]);
+    cmpop = zero.o == IR_GE ? IR_LE : IR_GE;
+    *ascendingp = zero.o == IR_GE;
+    *dynamic_stepp = 1;
+  } else {
+    lua_Number stepval;
+    if (nstop > 1u || !arm64_scalar_postra_kref(view, p.op2, IRT_NUM))
+      return 0;
+    {
+      IRIns k = ir_load_acq(&ir[p.op2]);
+      if (k.o != IR_KNUM) return 0;
+      stepval = ir_knum(&ir[p.op2])->n;
+    }
+    if (!(stepval > 0.0 || stepval < 0.0)) return 0;
+    cmpop = stepval > 0.0 ? IR_LE : IR_GE;
+    *ascendingp = stepval > 0.0;
+    if (nstop) {
+      if (c.op2 != stop ||
+          !arm64_postra_forl_num_sload(ir_load_acq(&ir[stop]),
+                                       stopslot, maxslots, 0)) return 0;
+    } else if (!arm64_scalar_postra_kref(view, c.op2, IRT_NUM) ||
+               ir_load_acq(&ir[c.op2]).o != IR_KNUM) return 0;
+  }
+  if (c.o != cmpop || d.o != cmpop || c.op2 != d.op2 ||
+      !arm64_scalar_postra_ref(view, c.op2, precmp, IRT_NUM)) return 0;
+  for (ref = firstphi; ref < n; ref++) {
+    IRIns x = ir_load_acq(&ir[ref]);
+    if (x.o == IR_PHI && x.op1 == pre && x.op2 == post) {
+      if (phi) return 0; phi = ref;
+    }
+  }
+  if (!phi) return 0;
+  p = ir_load_acq(&ir[idx]); q = ir_load_acq(&ir[pre]); c = ir_load_acq(&ir[post]);
+  d = ir_load_acq(&ir[phi]);
+  if (p.s != SPS_NONE || !ra_hasreg(p.r) ||
+      !arm64_scalar_postra_register(p.r, IRT_NUM) ||
+      q.s != SPS_NONE || !ra_hasreg(q.r) ||
+      !arm64_scalar_postra_register(q.r, IRT_NUM) ||
+      c.s != SPS_NONE || !ra_hasreg(c.r) ||
+      !arm64_scalar_postra_register(c.r, IRT_NUM) ||
+      d.t.irt != IRT_NUM || d.s != SPS_NONE || d.r != q.r || d.r != c.r ||
+      (nstop && (ir_load_acq(&ir[stop]).s != SPS_NONE ||
+       !ra_hasreg(ir_load_acq(&ir[stop]).r) ||
+       !arm64_scalar_postra_register(ir_load_acq(&ir[stop]).r, IRT_NUM))) ||
+      (nstep && (ir_load_acq(&ir[step]).s != SPS_NONE ||
+       !ra_hasreg(ir_load_acq(&ir[step]).r) ||
+       !arm64_scalar_postra_register(ir_load_acq(&ir[step]).r, IRT_NUM))))
+    return 0;
+  return 1;
+}
+
 static int arm64_postra_int_value(IRIns ir, BCOp rootop,
 	MSize forl_idxslot, MSize maxslots)
 {
@@ -4409,11 +4583,11 @@ static int arm64_postra_funcf_tail_result_map(
 					 MSize s, uint64_t pcbase);
 static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
 				 BCOp rootop, const LJArm64SideIRView *side,
-				 LJArm64IRReject *reject);
+				 LJArm64IRReject *reject, int *forl_directionp);
 static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *view,
 					 BCOp rootop,
 					 const LJArm64SideIRView *side,
-					 IRRef *ninsout);
+					 IRRef *ninsout, int *forl_directionp);
 static int arm64_postra_funcf_leaf_source(const LJArm64PostRAView *view,
 						 IRRef semantic_nins);
 static int arm64_postra_funcf_tail_source_replay(
@@ -4448,7 +4622,7 @@ static int arm64_postra_funcf_admit(const LJArm64PostRAView *view,
 	}
   if (leaf_call) {
     int generic_ok = arm64_scalar_postra_admit_mode(view, BC_FUNCF, NULL,
-                                                   &generic_nins);
+							   &generic_nins, NULL);
 	if (!generic_ok) return 0;
     {
       int source_ok = arm64_postra_funcf_leaf_source(view, generic_nins);
@@ -6124,6 +6298,17 @@ static int arm64_postra_source_value_matches(const IRIns *ir, IRRef nk,
 	if (!arm64_callxs_ref_valid(ir, nk, nins, call, source) ||
 	    !arm64_callxs_ref_valid(ir, nk, nins, call, carrier)) return 0;
 	if (carrier == source) return 1;
+	/* Independently check the folded signed INT extension's full payload;
+	** KINT64's IRT_I64 tag also represents unsigned fixed argument bits. */
+	if (source_type == IRT_INT) {
+		IRIns original = ir_load_acq(&ir[source]);
+		IRIns constant = ir_load_acq(&ir[carrier]);
+		if (original.o == IR_KINT && original.t.irt == IRT_INT &&
+		    constant.o == IR_KINT64 && constant.t.irt == IRT_I64 &&
+		    constant.op12 == 0 && carrier+1u < REF_TRUE &&
+		    ir_load_acq(&ir[carrier+1u]).tv.u64 ==
+		      (uint64_t)(int64_t)original.i) return 1;
+	}
 	if (source_type == IRT_NUM &&
 	    arm64_postra_numarg_source(ir, nk, nins, carrier, 0) == source) return 1;
 	if (carrier == REF_TRUE || carrier == REF_FALSE || carrier == REF_NIL)
@@ -8778,6 +8963,23 @@ static int arm64_ir_funcf_open_callm_leaf_source(const GCproto *pt,
   return 1;
 }
 
+static int arm64_ir_funcf_open_producer_pos(const GCproto *pt, MSize *posp)
+{
+  MSize pos, found = UINT32_MAX;
+  if (!pt || !posp || !arm64_ir_funcf_open_callm_leaf_source(pt, NULL))
+    return 0;
+  for (pos = 1; pos+1u < pt->sizebc; pos++) {
+    BCIns ins = arm64_ir_bc_acq((uintptr_t)proto_bc(pt), pos);
+    if (bc_op(ins) == BC_CALL && bc_b(ins) == 0u) {
+      if (found != UINT32_MAX) return 0;
+      found = pos;
+    }
+  }
+  if (found == UINT32_MAX) return 0;
+  *posp = found;
+  return 1;
+}
+
 /* Exact one-argument CALLT source for a scalar captured leaf. The argument
 ** must be copied from the sole fixed parameter into the ABI call window; the
 ** returned value resumes into the CALLT function/result slot. */
@@ -9056,6 +9258,24 @@ static int arm64_lua_leaf_ir_needed(const GCproto *pt, MSize resume,
 static int arm64_ir_funcf_open_needed(const GCproto *pt, MSize resume,
 	MSize nresults, uint8_t *needed);
 
+#define LJ_ARM64_LUA_MAX_CHILD_FRAMES 2u
+typedef struct LJArm64LuaFrameRow {
+  MSize linkslot, baseslot, funcslot;
+  IRRef linkref, funcref;
+} LJArm64LuaFrameRow;
+typedef struct LJArm64LuaFramePath {
+  uint8_t depth;
+  LJArm64LuaFrameRow child[LJ_ARM64_LUA_MAX_CHILD_FRAMES];
+} LJArm64LuaFramePath;
+static int arm64_lua_frame_path_limit(const SnapEntry *map, MSize nent,
+                                      uint64_t pcbase, MSize maxdepth,
+                                      LJArm64LuaFramePath *path);
+static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
+                                    SnapNo s, uint64_t pcbase,
+                                    MSize *lowerlinkp);
+static int arm64_lua_leaf_ir_snapshot(const jit_State *J, const GCtrace *T,
+                                      IRRef ref, SnapNo s);
+
 /* The current nonleaf FUNCF slice has one captured callee, one fixed
 ** one-argument/one-result CALL and one scalar RET1. */
 static int arm64_ir_funcf_one_result_leaf_source(const GCproto *pt,
@@ -9241,6 +9461,7 @@ static int arm64_ir_funcf_leaf_source_replay(const jit_State *J,
   MSize retpos, p, s, open_nresults = 0;
   int open_callm = arm64_ir_funcf_open_callm_leaf_source(pt, &retpos);
   unsigned return_maps = 0;
+  MSize producerpos = 0;
 	if (arm64_ir_funcf_tail_one_result_source(pt, NULL)) {
 	  return arm64_ir_funcf_tail_source_replay(J, T, end);
 	}
@@ -9257,6 +9478,8 @@ static int arm64_ir_funcf_leaf_source_replay(const jit_State *J,
 
 	  return 0;
 	}
+  if (open_callm && !arm64_ir_funcf_open_producer_pos(pt, &producerpos))
+    return 0;
   for (p = 0; p < pt->numparams; p++) {
     IRRef r, found = 0;
     MSize slot = J->baseslot+p;
@@ -9285,8 +9508,11 @@ static int arm64_ir_funcf_leaf_source_replay(const jit_State *J,
   for (s = 0; s < T->nsnap; s++) {
     const SnapShot *snap = &T->snap[s];
     MSize next = s+1u < T->nsnap ? T->snap[s+1u].mapofs : T->nsnapmap;
-    MSize i, pcpos = 0;
+    MSize i, pcpos = 0, childbase = UINT32_MAX;
     uint64_t pcbase;
+    LJArm64LuaFramePath frames = {0};
+    unsigned childmarkers = 0;
+    int child_snapshot = 0;
     IRRef source[UINT8_MAX+1u] = {0}, result = 0;
     uint8_t needed[UINT8_MAX+1u] = {0}, seen[UINT8_MAX+1u] = {0};
     if (snap->mapofs > T->nsnapmap || next < snap->mapofs ||
@@ -9297,11 +9523,31 @@ static int arm64_ir_funcf_leaf_source_replay(const jit_State *J,
       return 0;
     }
     memcpy(&pcbase, &T->snapmap[snap->mapofs+snap->nent], sizeof(pcbase));
-    if ((uint8_t)pcbase ||
-	!arm64_ir_pcpos((uintptr_t)(pcbase>>8),
+    if ((uint8_t)pcbase) {
+      IRRef linkref;
+      uintptr_t returnpc;
+      if (!open_callm ||
+          !arm64_lua_frame_path_limit(&T->snapmap[snap->mapofs],
+            snap->nent, pcbase, 1u, &frames) || frames.depth != 1u ||
+          !(childbase = frames.child[0].baseslot) ||
+          childbase <= J->baseslot ||
+          childbase-J->baseslot > pt->framesize+LJ_FR2 ||
+          !arm64_lua_leaf_ir_child(J, T, (SnapNo)s, pcbase, NULL)) {
+        return 0;
+      }
+      linkref = frames.child[0].linkref;
+      if (linkref < T->nk || linkref+1u >= REF_TRUE ||
+          linkref+1u >= T->nins || T->ir[linkref].o != IR_KNUM ||
+          T->ir[linkref+1u].tv.u64 < sizeof(BCIns)) return 0;
+      returnpc = (uintptr_t)T->ir[linkref+1u].tv.u64;
+      if (returnpc != (uintptr_t)(proto_bc(pt)+producerpos+1u)) {
+        return 0;
+      }
+      pcpos = producerpos;
+      child_snapshot = 1;
+    } else if (!arm64_ir_pcpos((uintptr_t)(pcbase>>8),
 	  (uintptr_t)proto_bc(pt),
 	  (uintptr_t)(proto_bc(pt)+pt->sizebc), &pcpos)) {
-
       return 0;
     }
     if (!arm64_lua_leaf_ir_eval(J, T, pt, args, pcpos, snap->ref, end,
@@ -9309,8 +9555,9 @@ static int arm64_ir_funcf_leaf_source_replay(const jit_State *J,
 
       return 0;
     }
-    if (!(open_callm ? arm64_ir_funcf_open_needed(pt, pcpos, open_nresults,
-	                                         needed) :
+    if (!(open_callm ? arm64_ir_funcf_open_needed(pt,
+                                                 child_snapshot ? producerpos-1u : pcpos,
+                                                 open_nresults, needed) :
 	              arm64_lua_leaf_ir_needed(pt, pcpos, needed))) {
 
 	  return 0;
@@ -9318,26 +9565,57 @@ static int arm64_ir_funcf_leaf_source_replay(const jit_State *J,
     for (i = 0; i < snap->nent; i++) {
       SnapEntry entry = T->snapmap[snap->mapofs+i];
       MSize slot = snap_slot(entry), local;
+      if (child_snapshot && slot >= childbase) continue;
+      if (child_snapshot && (entry & SNAP_FRAME)) {
+        if ((entry & 0x00ff0000u) != SNAP_FRAME ||
+            slot != frames.child[0].linkslot ||
+            snap_ref(entry) != frames.child[0].linkref ||
+            ++childmarkers != 1u) return 0;
+        continue;
+      }
       if (entry & (SNAP_FRAME|SNAP_NORESTORE)) {
-
         return 0;
       }
       if (slot < J->baseslot || slot-J->baseslot >=
 	  pt->framesize+(open_callm ? LJ_FR2 : 0u)) continue;
       local = slot-J->baseslot;
       if (source[local] && snap_ref(entry) != source[local]) {
-
-        return 0;
+        MSize producer_slot;
+        IRRef guardref = 0;
+        const GCfunc *sourcefn, *mappedfn;
+        SnapNo guard_snap = UINT16_MAX;
+        unsigned guards = 0;
+        if (!child_snapshot) return 0;
+        producer_slot = J->baseslot + bc_a(arm64_ir_bc_acq(
+          (uintptr_t)proto_bc(pt), producerpos));
+        if (slot != producer_slot || !irref_isk(snap_ref(entry)) ||
+            snap_ref(entry) < T->nk || snap_ref(entry) >= REF_TRUE ||
+            T->ir[snap_ref(entry)].o != IR_KGC ||
+            !(sourcefn = arm64_lua_leaf_ir_function(T, source[local],
+              snap->ref, &guardref)) || !guardref || guardref >= snap->ref ||
+            !(mappedfn = arm64_lua_leaf_ir_function(T, snap_ref(entry),
+              snap->ref, NULL)) || sourcefn != mappedfn)
+          return 0;
+        for (SnapNo gs = 0; gs < T->nsnap; gs++)
+          if (T->snap[gs].ref == guardref) {
+            if (guard_snap == UINT16_MAX) guard_snap = gs;
+            guards++;
+          }
+        if (guards != 1u || guard_snap == UINT16_MAX ||
+            !arm64_lua_leaf_ir_snapshot(J, T, guardref, guard_snap))
+          return 0;
       }
       if (needed[local]) {
 	if (!source[local] || seen[local]) {
-
           return 0;
         }
 	seen[local] = 1;
       }
     }
-    for (i = 0; i < pt->framesize+(open_callm ? LJ_FR2 : 0u); i++)
+    if (child_snapshot && childmarkers != 1u) return 0;
+    for (i = 0; i < pt->framesize+(open_callm ? LJ_FR2 : 0u); i++) {
+      if (child_snapshot && i >= childbase-J->baseslot && needed[i])
+        return 0;
       if (needed[i] && !seen[i] &&
 	  !(i < pt->numparams && arm64_ir_funcf_slot_unchanged(pt, i, pcpos))) {
         {
@@ -9345,6 +9623,7 @@ static int arm64_ir_funcf_leaf_source_replay(const jit_State *J,
           return 0;
         }
       }
+    }
     if (pcpos == retpos) {
       BCIns ret = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(pt)[retpos]);
       unsigned found = 0;
@@ -9772,6 +10051,118 @@ static int arm64_ir_forl_shape(const jit_State *J, const GCtrace *T,
   return 1;
 }
 
+/* Independent source-IR proof for the floating FORL recurrence. There is no
+** integer overflow check on this path; the step's ordered sign test chooses
+** the matching ordered loop comparison, so NaN steps fail before entry. */
+static int arm64_ir_forl_num_shape(const jit_State *J, const GCtrace *T,
+				   IRRef loop, IRRef poll, IRRef firstphi,
+				   int *dynamic_stepp, int *ascendingp)
+{
+  MSize idxslot = 1u+LJ_FR2+bc_a(T->startins);
+  MSize stopslot = idxslot+FORL_STOP, stepslot = idxslot+FORL_STEP;
+  IRRef ref, idx = 0, stop = 0, step = 0, pre = 0, post = 0;
+  IRRef precmp = 0, postcmp = 0, direction = 0, phi = 0;
+  unsigned nidx = 0, nstop = 0, nstep = 0, nloop = 0, npoll = 0;
+  IRIns p, q, c, d;
+  IROp cmpop;
+  UNUSED(J);
+  *dynamic_stepp = 0;
+  *ascendingp = 0;
+  for (ref = REF_FIRST; ref < T->nins; ref++) {
+    const IRIns *x = &T->ir[ref];
+    if (x->o == IR_SLOAD && x->op1 == idxslot) { idx = ref; nidx++; }
+    if (x->o == IR_SLOAD && x->op1 == stopslot) { stop = ref; nstop++; }
+    if (x->o == IR_SLOAD && x->op1 == stepslot) { step = ref; nstep++; }
+    if (x->o == IR_LOOP) nloop++;
+    if (x->o == IR_XPOLL) npoll++;
+  }
+  if (nidx != 1u || nstop > 1u || nstep > 1u || nloop != 1u || npoll != 1u ||
+      poll != loop+1u || !firstphi ||
+      (T->ir[idx].t.irt & ~IRT_ISPHI) != (IRT_NUM|IRT_GUARD) ||
+      T->ir[idx].op2 != (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT)) return 0;
+  for (ref = REF_FIRST; ref < firstphi; ref++) {
+    const IRIns *x = &T->ir[ref];
+    if (x->o == IR_ADD && x->t.irt == (IRT_NUM|IRT_ISPHI) &&
+	x->op1 == idx && ref < loop) { if (pre) return 0; pre = ref; }
+    if (x->o == IR_ADD && x->t.irt == (IRT_NUM|IRT_ISPHI) && pre &&
+	x->op1 == pre && x->op2 == T->ir[pre].op2 && ref > poll) {
+      if (post) return 0; post = ref;
+    }
+  }
+  if (!pre || !post) return 0;
+  p = T->ir[pre]; q = T->ir[post];
+  if (p.op1 != idx || q.op1 != pre || p.op2 != q.op2 ||
+      !arm64_scalar_ir_ref(T, p.op2, pre, IRT_NUM)) return 0;
+  for (ref = pre+1u; ref < loop; ref++) {
+    const IRIns *x = &T->ir[ref];
+    if ((x->o == IR_LE || x->o == IR_GE) &&
+	x->t.irt == (IRT_NUM|IRT_GUARD) && x->op1 == pre) {
+      if (precmp) return 0; precmp = ref;
+    }
+  }
+  if (!precmp) return 0;
+  c = T->ir[precmp];
+  for (ref = poll+1u; ref < firstphi; ref++) {
+    const IRIns *x = &T->ir[ref];
+    if ((x->o == IR_LE || x->o == IR_GE) &&
+	x->t.irt == (IRT_NUM|IRT_GUARD) && x->op1 == post && x->op2 == c.op2) {
+      if (postcmp) return 0; postcmp = ref;
+    }
+  }
+  if (!postcmp) return 0;
+  d = T->ir[postcmp];
+  if (nstep) {
+    if (!nstop || p.op2 != step || c.op2 != stop ||
+        step >= pre || stop >= pre ||
+        stop == step || step >= idx ||
+	T->ir[stop].t.irt != IRT_NUM ||
+	T->ir[stop].op2 != (IRSLOAD_READONLY|IRSLOAD_INHERIT) ||
+	T->ir[step].t.irt != IRT_NUM ||
+	T->ir[step].op2 != (IRSLOAD_READONLY|IRSLOAD_INHERIT)) return 0;
+    for (ref = step+1u; ref < idx; ref++) {
+      const IRIns *x = &T->ir[ref];
+      if ((x->o == IR_GE || x->o == IR_LT) &&
+	  x->t.irt == (IRT_NUM|IRT_GUARD) && x->op1 == step &&
+	  arm64_scalar_ir_ref(T, x->op2, ref, IRT_NUM) &&
+	  irref_isk(x->op2) && T->ir[x->op2].o == IR_KNUM &&
+	  ir_knum(&T->ir[x->op2])->n == 0.0) {
+	if (direction) return 0; direction = ref;
+      }
+    }
+    if (!direction) return 0;
+    cmpop = T->ir[direction].o == IR_GE ? IR_LE : IR_GE;
+    *ascendingp = T->ir[direction].o == IR_GE;
+    *dynamic_stepp = 1;
+  } else {
+    lua_Number value;
+    if (!irref_isk(p.op2) || !arm64_scalar_ir_ref(T, p.op2, pre, IRT_NUM) ||
+	T->ir[p.op2].o != IR_KNUM) return 0;
+    value = ir_knum(&T->ir[p.op2])->n;
+    if (!(value > 0.0 || value < 0.0)) return 0;
+    cmpop = value > 0.0 ? IR_LE : IR_GE;
+    *ascendingp = value > 0.0;
+    if (nstop) {
+      if (c.op2 != stop || T->ir[stop].t.irt != IRT_NUM ||
+	  T->ir[stop].op2 != (IRSLOAD_READONLY|IRSLOAD_INHERIT)) return 0;
+    } else if (!irref_isk(c.op2) ||
+	       !arm64_scalar_ir_ref(T, c.op2, precmp, IRT_NUM) ||
+	       T->ir[c.op2].o != IR_KNUM) return 0;
+  }
+  if (c.o != cmpop || d.o != cmpop || c.op1 != pre || d.op1 != post ||
+      c.op2 != d.op2 || !arm64_scalar_ir_ref(T, c.op2, precmp, IRT_NUM))
+    return 0;
+  for (ref = firstphi; ref < T->nins; ref++) {
+    const IRIns *x = &T->ir[ref];
+    if (x->o == IR_PHI && x->op1 == pre && x->op2 == post) {
+	if (phi) return 0; phi = ref;
+    }
+  }
+  if (phi && T->ir[phi].t.irt == IRT_NUM) {
+    return 1;
+  }
+  return 0;
+}
+
 static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
                                IRType type);
 static int arm64_string_byte_bounds_ir(const GCtrace *T, IRRef strref,
@@ -9779,6 +10170,8 @@ static int arm64_string_byte_bounds_ir(const GCtrace *T, IRRef strref,
 static int arm64_string_byte_dynamic_bounds_ir(const GCtrace *T,
                                                IRRef strref, IRRef str,
                                                IRRef offset);
+static int arm64_string_byte_constant_negative_bounds_ir(
+    const GCtrace *T, IRRef strref, IRRef str, IRRef offset);
 static int arm64_string_byte_dynamic_index_ir(const GCtrace *T, IRRef conv);
 static int arm64_string_byte_call_decode(const BCIns *bc, MSize sizebc,
                                          MSize framesize, MSize pc,
@@ -9901,6 +10294,82 @@ static int arm64_string_byte_call_slots_postra(const GCproto *pt,
     }
     if (!valid) continue;
     matches++;
+  }
+  return calls == 1 && matches == 1;
+}
+
+/* Match CALL byte(s, literal-negative-index), optionally with an explicit
+** equivalent end. The three-argument forms are accepted only when the end is
+** the identical negative KSHORT or nil; dynamic and unequal ends stay closed. */
+static int arm64_string_byte_call_literal_slots(const GCproto *pt,
+                                                 MSize strslot,
+                                                 int32_t index)
+{
+  const BCIns *bc;
+  MSize pc, sizebc;
+  unsigned calls = 0, matches = 0;
+  if (!pt || index >= 0 || strslot < 1u+LJ_FR2) return 0;
+  bc = proto_bc(pt); sizebc = pt->sizebc;
+  for (pc = 0; pc < sizebc; pc++) {
+    BCIns call = arm64_ir_bc_acq((uintptr_t)bc, pc);
+    BCIns argstr, argidx, argend = 0;
+    BCReg source;
+    unsigned nargs;
+    MSize q;
+    int valid = 1, cell;
+    if (bc_op(call) != BC_CALL || bc_b(call) != 2 ||
+        (bc_c(call) != 3 && bc_c(call) != 4))
+      continue;
+    calls++;
+    nargs = bc_c(call)-1u;
+    if (pc < nargs+1u ||
+        (MSize)bc_a(call)+nargs+1u+LJ_FR2 > pt->framesize) continue;
+    argstr = arm64_ir_bc_acq((uintptr_t)bc, pc-nargs);
+    argidx = arm64_ir_bc_acq((uintptr_t)bc, pc-nargs+1u);
+    if ((bc_op(argstr) != BC_MOV && bc_op(argstr) != BC_CGET) ||
+        bc_a(argstr) != (BCReg)(bc_a(call)+1u+LJ_FR2) ||
+        bc_op(argidx) != BC_KSHORT ||
+        bc_a(argidx) != (BCReg)(bc_a(call)+2u+LJ_FR2) ||
+        (int32_t)(int16_t)bc_d(argidx) != index)
+      continue;
+    if (nargs == 3u) {
+      argend = arm64_ir_bc_acq((uintptr_t)bc, pc-1u);
+      if (bc_a(argend) != (BCReg)(bc_a(call)+3u+LJ_FR2) ||
+          !((bc_op(argend) == BC_KSHORT &&
+             (int32_t)(int16_t)bc_d(argend) == index) ||
+            (bc_op(argend) == BC_KPRI && bc_d(argend) == 0u)))
+        continue;
+    }
+    source = bc_d(argstr);
+    cell = bc_op(argstr) == BC_CGET;
+    if (source >= pt->numparams ||
+        1u+LJ_FR2+(MSize)source != strslot)
+      continue;
+    for (q = 0; q < pc && valid; q++) {
+      BCIns ins = arm64_ir_bc_acq((uintptr_t)bc, q);
+      BCOp op = bc_op(ins);
+      BCMode mode = bcmode_a(op);
+      if (((mode == BCMdst || mode == BCMvar) && bc_a(ins) == source) ||
+          ((mode == BCMbase || mode == BCMrbase) && bc_a(ins) <= source)) {
+        valid = 0;
+        break;
+      }
+      if (bcmode_d(op) == BCMjump) {
+        int64_t target = (int64_t)q+1+(int64_t)bc_j(ins);
+        if (target >= (int64_t)(pc-nargs) && target <= (int64_t)pc) {
+          valid = 0;
+          break;
+        }
+      }
+    }
+    if (cell) for (q = 0; q < sizebc; q++) {
+      BCIns ins = arm64_ir_bc_acq((uintptr_t)bc, q);
+      if (bc_op(ins) == BC_CSET && bc_a(ins) == source) {
+        valid = 0;
+        break;
+      }
+    }
+    if (valid) matches++;
   }
   return calls == 1 && matches == 1;
 }
@@ -10182,7 +10651,7 @@ static int arm64_ir_nonloop_admit(const jit_State *J, const GCtrace *T,
     return 0;
   if (startop == BC_FUNCF) {
     if (arm64_ir_funcf_leaf_call_source(pt))
-      return arm64_scalar_ir_admit_mode(J, T, BC_FUNCF, NULL, reject);
+      return arm64_scalar_ir_admit_mode(J, T, BC_FUNCF, NULL, reject, NULL);
     int ok = arm64_ir_funcf_shape(J, T, pt, reject);
     return ok;
   }
@@ -10538,8 +11007,90 @@ static int arm64_scalar_math_args_ir(const GCtrace *T, IRRef call)
          arm64_scalar_math_carg_ir(T, ir->op1);
 }
 
+/* A checked end-offset subtraction and positive width equality prove
+** offset < end. The caller separately proves end <= the same string's
+** length, either by an unsigned guard or negative-end normalization. */
+static int arm64_string_byte_width_ir(const GCtrace *T, IRRef end,
+                                      IRRef after, IRRef strref, int32_t offset)
+{
+  IRRef subref, eqref;
+  if (offset < 0) return 0;
+  for (subref = after+1u; subref < strref; subref++) {
+    const IRIns *sub = &T->ir[subref];
+    int32_t base;
+    if (sub->o != IR_SUBOV || sub->t.irt != (IRT_INT|IRT_GUARD) ||
+        sub->op1 != end ||
+        !arm64_ir_kint_value(T, sub->op2, &base) || base != offset)
+      continue;
+    for (eqref = subref+1u; eqref < strref; eqref++) {
+      const IRIns *eq = &T->ir[eqref];
+      int32_t width;
+      if (eq->o == IR_EQ && eq->t.irt == (IRT_INT|IRT_GUARD) &&
+          eq->op1 == subref &&
+          arm64_ir_kint_value(T, eq->op2, &width) && width > 0)
+        return 1;
+    }
+  }
+  return 0;
+}
+
+static int arm64_string_byte_range_ir(const GCtrace *T, IRRef guardref,
+                                      IRRef strref, int32_t offset)
+{
+  const IRIns *guard = &T->ir[guardref];
+  IRRef end;
+  if (guard->t.irt != (IRT_INT|IRT_GUARD) ||
+      (guard->o != IR_UGE && guard->o != IR_ULE)) return 0;
+  end = guard->o == IR_UGE ? guard->op2 : guard->op1;
+  return end >= REF_FIRST && end < guardref &&
+    arm64_scalar_ir_ref(T, end, guardref, IRT_INT) &&
+    arm64_string_byte_width_ir(T, end, guardref, strref, offset);
+}
+
+/* With index < 0, len+index+1 <= len. LJ_MAX_STR also excludes overflow in
+** both additions. A later checked positive width proves offset < end. */
+static int arm64_string_byte_negative_end_ir(const GCtrace *T, IRRef strref,
+                                            IRRef str, int32_t offset,
+                                            IRRef expected_index)
+{
+  IRRef endref;
+  LJ_STATIC_ASSERT(LJ_MAX_STR < INT32_MAX);
+  for (endref = REF_FIRST; endref < strref; endref++) {
+    const IRIns *end = &T->ir[endref], *sum, *len;
+    IRRef lenref, index, guardref;
+    int32_t one;
+    if (end->o != IR_ADD || end->t.irt != IRT_INT ||
+        end->op1 < REF_FIRST || end->op1 >= endref ||
+        !arm64_ir_kint_value(T, end->op2, &one) || one != 1) continue;
+    sum = &T->ir[end->op1];
+    if (sum->o != IR_ADD || sum->t.irt != IRT_INT ||
+        sum->op1 < REF_FIRST || sum->op1 >= end->op1 ||
+        sum->op2 < REF_FIRST || sum->op2 >= end->op1) continue;
+    lenref = sum->op1; index = sum->op2;
+    if (T->ir[lenref].o != IR_FLOAD) {
+      lenref = sum->op2; index = sum->op1;
+    }
+    len = &T->ir[lenref];
+    if (len->o != IR_FLOAD || len->t.irt != IRT_INT ||
+        len->op2 != IRFL_STR_LEN || len->op1 != str ||
+        (expected_index && index != expected_index) ||
+        !arm64_scalar_ir_ref(T, index, end->op1, IRT_INT)) continue;
+    for (guardref = index+1u; guardref < end->op1; guardref++) {
+      const IRIns *guard = &T->ir[guardref];
+      int32_t zero;
+      if (guard->o == IR_LT && guard->t.irt == (IRT_INT|IRT_GUARD) &&
+          guard->op1 == index &&
+          arm64_ir_kint_value(T, guard->op2, &zero) && zero == 0 &&
+          arm64_string_byte_width_ir(T, endref, endref, strref, offset))
+        return 1;
+    }
+  }
+  return 0;
+}
+
 /* A constant byte offset is safe only with an earlier guard that proves the
-** corresponding one-based position is within the same immutable GCstr. This
+** corresponding one-based position or a later position is within the same
+** immutable GCstr. This
 ** intentionally does not admit variable offsets or rely on the trailing NUL. */
 static int arm64_string_byte_bounds_ir(const GCtrace *T, IRRef strref,
                                        IRRef str, IRRef offset)
@@ -10550,8 +11101,11 @@ static int arm64_string_byte_bounds_ir(const GCtrace *T, IRRef strref,
   if (!arm64_ir_kint_value(T, offset, &byte_offset) || byte_offset < 0 ||
       byte_offset == INT32_MAX ||
       (uint32_t)byte_offset > 4095u - (uint32_t)sizeof(GCstr) ||
-      !arm64_scalar_ir_ref(T, str, strref, IRT_STR))
+      !arm64_scalar_ir_ref(T, str, strref, IRT_STR)) {
+    if (arm64_string_byte_constant_negative_bounds_ir(T, strref, str,
+                                                       offset)) return 1;
     return arm64_string_byte_dynamic_bounds_ir(T, strref, str, offset);
+  }
   bound = (int64_t)byte_offset + 1;
   for (ref = REF_FIRST; ref < strref; ref++) {
     const IRIns *guard = &T->ir[ref];
@@ -10563,8 +11117,9 @@ static int arm64_string_byte_bounds_ir(const GCtrace *T, IRRef strref,
     lenref = guard->o == IR_UGE ? guard->op1 : guard->op2;
     boundref = guard->o == IR_UGE ? guard->op2 : guard->op1;
     if (lenref < REF_FIRST || lenref >= ref ||
-        !arm64_ir_kint_value(T, boundref, &guard_bound) ||
-        guard_bound != (int32_t)bound)
+        !(arm64_ir_kint_value(T, boundref, &guard_bound) ?
+          guard_bound >= (int32_t)bound :
+          arm64_string_byte_range_ir(T, ref, strref, byte_offset)))
       continue;
     {
       const IRIns *len = &T->ir[lenref];
@@ -10573,20 +11128,139 @@ static int arm64_string_byte_bounds_ir(const GCtrace *T, IRRef strref,
         return 1;
     }
   }
-  return 0;
+  return arm64_string_byte_negative_end_ir(T, strref, str, byte_offset, 0);
+}
+
+/* Certify the fixed negative index lowering (len+index, with a one-byte
+** exclusive end). The bytecode call must supply the same negative KSHORT,
+** the lower-bound guard and checked width must dominate STRREF, and the
+** string-length load must use the exact guarded source string. */
+static int arm64_string_byte_constant_negative_bounds_ir(
+    const GCtrace *T, IRRef strref, IRRef str, IRRef offset)
+{
+  const IRIns *string, *off, *len;
+  GCobj *startpt;
+  GCproto *pt;
+  IRRef lenref, indexref, endref = 0, nonneg = 0, subref = 0, widthref = 0;
+  IRRef ref;
+  int32_t index, endindex;
+  unsigned nend = 0, nnonneg = 0, nsub = 0, nwidth = 0;
+  int left_len, right_len;
+  if (!T || strref < REF_FIRST || strref >= T->nins ||
+      offset < REF_FIRST || offset >= strref || str < REF_FIRST ||
+      str >= strref || !arm64_scalar_ir_ref(T, str, strref, IRT_STR))
+    return 0;
+  string = &T->ir[str];
+  off = &T->ir[offset];
+  if (string->o != IR_SLOAD || string->t.irt != (IRT_STR|IRT_GUARD) ||
+      string->op2 != IRSLOAD_TYPECHECK || off->o != IR_ADD ||
+      off->t.irt != IRT_INT)
+    return 0;
+  left_len = off->op1 >= REF_FIRST && off->op1 < offset &&
+      T->ir[off->op1].o == IR_FLOAD &&
+      T->ir[off->op1].t.irt == IRT_INT &&
+      T->ir[off->op1].op1 == str && T->ir[off->op1].op2 == IRFL_STR_LEN;
+  right_len = off->op2 >= REF_FIRST && off->op2 < offset &&
+      T->ir[off->op2].o == IR_FLOAD &&
+      T->ir[off->op2].t.irt == IRT_INT &&
+      T->ir[off->op2].op1 == str && T->ir[off->op2].op2 == IRFL_STR_LEN;
+  if (left_len == right_len) return 0;
+  lenref = left_len ? off->op1 : off->op2;
+  indexref = left_len ? off->op2 : off->op1;
+  if (!arm64_ir_kint_value(T, indexref, &index) || index >= 0)
+    return 0;
+  endindex = index + 1;
+  startpt = trace_startptgco_acq((GCtrace *)T);
+  if (!startpt || !checkptrGC(startpt) ||
+      startpt->gch.gct != (uint32_t)~LJ_TPROTO)
+    return 0;
+  pt = gco2pt(startpt);
+  if (!arm64_string_byte_call_literal_slots(pt, string->op1, index))
+    return 0;
+  len = &T->ir[lenref];
+  if (len->o != IR_FLOAD || len->t.irt != IRT_INT ||
+      len->op1 != str || len->op2 != IRFL_STR_LEN)
+    return 0;
+  if (endindex == 0) endref = lenref;
+  for (ref = REF_FIRST; ref < strref; ref++) {
+    const IRIns *g = &T->ir[ref];
+    int32_t value;
+    if (endindex != 0 && g->o == IR_ADD && g->t.irt == IRT_INT &&
+        ((g->op1 == lenref && arm64_ir_kint_value(T, g->op2, &value) &&
+          value == endindex) ||
+         (g->op2 == lenref && arm64_ir_kint_value(T, g->op1, &value) &&
+          value == endindex))) {
+      if (endref) return 0;
+      endref = ref;
+      nend++;
+    } else if (g->o == IR_GE && g->t.irt == (IRT_INT|IRT_GUARD) &&
+               g->op1 == offset &&
+               arm64_ir_kint_value(T, g->op2, &value) && value == 0) {
+      if (nonneg) return 0;
+      nonneg = ref;
+      nnonneg++;
+    } else if (g->o == IR_SUBOV &&
+               g->t.irt == (IRT_INT|IRT_GUARD) && endref &&
+               g->op1 == endref && g->op2 == offset) {
+      if (subref) return 0;
+      subref = ref;
+      nsub++;
+    } else if (g->o == IR_EQ &&
+               g->t.irt == (IRT_INT|IRT_GUARD) && subref &&
+               g->op1 == subref &&
+               arm64_ir_kint_value(T, g->op2, &value) && value == 1) {
+      if (widthref) return 0;
+      widthref = ref;
+      nwidth++;
+    }
+  }
+  return ((endindex == 0 && nend == 0 && endref == lenref) ||
+          (endindex != 0 && nend == 1 && endref != lenref)) &&
+         nnonneg == 1 && nsub == 1 && nwidth == 1 && offset < nonneg &&
+         endref < nonneg && endref < subref && nonneg < subref &&
+         subref < widthref &&
+         widthref < strref;
 }
 
 static int arm64_string_byte_dynamic_index_ir(const GCtrace *T, IRRef conv)
 {
   IRRef ref;
-  if (!T || conv < REF_FIRST || conv >= T->nins ||
-      T->ir[conv].o != IR_CONV || T->ir[conv].t.irt != IRT_INT ||
-      T->ir[conv].op2 != (IRCONV_INT_NUM|IRCONV_ANY)) return 0;
+  const IRIns *index;
+  if (!T || conv < REF_FIRST || conv >= T->nins) return 0;
+  index = &T->ir[conv];
+  if (index->o == IR_SLOAD && index->t.irt == (IRT_INT|IRT_GUARD)) {
+    if (index->op2 != IRSLOAD_TYPECHECK ||
+        !arm64_scalar_ir_ref(T, conv, conv+1u, IRT_INT)) return 0;
+  } else if (index->o != IR_CONV || index->t.irt != IRT_INT ||
+             index->op2 != (IRCONV_INT_NUM|IRCONV_ANY)) {
+    return 0;
+  }
   for (ref = conv+1u; ref < T->nins; ref++) {
     const IRIns *strref = &T->ir[ref];
     const IRIns *offset;
-    if (strref->o != IR_STRREF || strref->t.irt != IRT_PGC ||
-        strref->op2 < REF_FIRST || strref->op2 >= ref) continue;
+    int32_t displacement;
+    if (strref->o != IR_STRREF || strref->t.irt != IRT_PGC) continue;
+    /* The same truncating conversion is valid for a positive range end.
+    ** Its checked width relation must prove this constant byte is in range. */
+    if (arm64_ir_kint_value(T, strref->op2, &displacement)) {
+      IRRef upper;
+      if (arm64_string_byte_negative_end_ir(T, ref, strref->op1,
+                                            displacement, conv)) return 1;
+      for (upper = conv+1u; upper < ref; upper++) {
+        const IRIns *guard = &T->ir[upper];
+        IRRef lenref = guard->o == IR_UGE && guard->op2 == conv ?
+          guard->op1 : guard->o == IR_ULE && guard->op1 == conv ?
+          guard->op2 : 0;
+        if (lenref >= REF_FIRST && lenref < upper &&
+            T->ir[lenref].o == IR_FLOAD && T->ir[lenref].t.irt == IRT_INT &&
+            T->ir[lenref].op2 == IRFL_STR_LEN &&
+            T->ir[lenref].op1 == strref->op1 &&
+            arm64_string_byte_range_ir(T, upper, ref, displacement))
+          return 1;
+      }
+      continue;
+    }
+    if (strref->op2 < REF_FIRST || strref->op2 >= ref) continue;
     offset = &T->ir[strref->op2];
     if ((offset->o != IR_ADDOV || offset->op1 != conv) &&
         (offset->o != IR_ADD ||
@@ -10642,14 +11316,19 @@ static int arm64_string_byte_dynamic_bounds_ir(const GCtrace *T,
   }
   if (idx < REF_FIRST || idx >= offset) return 0;
   conv = &T->ir[idx];
-  if (conv->o != IR_CONV || conv->t.irt != IRT_INT ||
-      conv->op2 != (IRCONV_INT_NUM|IRCONV_ANY) ||
-      conv->op1 < REF_FIRST || conv->op1 >= idx)
-    return 0;
-  source = &T->ir[conv->op1];
-  if (source->o != IR_SLOAD || source->t.irt != (IRT_NUM|IRT_GUARD) ||
-      source->op2 != IRSLOAD_TYPECHECK)
-    return 0;
+  if (conv->o == IR_SLOAD && conv->t.irt == (IRT_INT|IRT_GUARD)) {
+    if (!arm64_scalar_ir_ref(T, idx, offset, IRT_INT)) return 0;
+    source = conv;
+  } else {
+    if (conv->o != IR_CONV || conv->t.irt != IRT_INT ||
+        conv->op2 != (IRCONV_INT_NUM|IRCONV_ANY) ||
+        conv->op1 < REF_FIRST || conv->op1 >= idx)
+      return 0;
+    source = &T->ir[conv->op1];
+    if (source->o != IR_SLOAD || source->t.irt != (IRT_NUM|IRT_GUARD))
+      return 0;
+  }
+  if (source->op2 != IRSLOAD_TYPECHECK) return 0;
   if (str < REF_FIRST || str >= strref || T->ir[str].o != IR_SLOAD ||
       T->ir[str].t.irt != (IRT_STR|IRT_GUARD) ||
       T->ir[str].op2 != IRSLOAD_TYPECHECK)
@@ -10762,7 +11441,7 @@ static int arm64_string_byte_dynamic_guard_ir(const GCtrace *T,
   return 0;
 }
 
-/* UGE/ULE are admitted only as the exact dominating range guard consumed by
+/* UGE/ULE are admitted only as a sufficient dominating range guard consumed by
 ** a later STRREF. This prevents unrelated unsigned comparisons from opening. */
 static int arm64_string_byte_guard_ir(const GCtrace *T, IRRef guardref)
 {
@@ -10775,6 +11454,23 @@ static int arm64_string_byte_guard_ir(const GCtrace *T, IRRef guardref)
       guard->t.irt != (IRT_INT|IRT_GUARD)) return 0;
   lenref = guard->o == IR_UGE ? guard->op1 : guard->op2;
   boundref = guard->o == IR_UGE ? guard->op2 : guard->op1;
+  if (lenref >= REF_FIRST && lenref < guardref &&
+      !arm64_ir_kint_value(T, boundref, &bound)) {
+    const IRIns *len = &T->ir[lenref];
+    if (len->o == IR_FLOAD && len->t.irt == IRT_INT &&
+        len->op2 == IRFL_STR_LEN &&
+        arm64_scalar_ir_ref(T, len->op1, guardref, IRT_STR)) {
+      for (ref = guardref+1u; ref < T->nins; ref++) {
+        const IRIns *strref = &T->ir[ref];
+        int32_t offset;
+        if (strref->o == IR_STRREF && strref->t.irt == IRT_PGC &&
+            strref->op1 == len->op1 &&
+            arm64_ir_kint_value(T, strref->op2, &offset) &&
+            arm64_string_byte_range_ir(T, guardref, ref, offset))
+          return 1;
+      }
+    }
+  }
   if (lenref < REF_FIRST || lenref >= guardref ||
       (!arm64_ir_kint_value(T, boundref, &bound) || bound <= 0 ||
        (uint32_t)bound > 4096u-(uint32_t)sizeof(GCstr))) {
@@ -10791,7 +11487,7 @@ static int arm64_string_byte_guard_ir(const GCtrace *T, IRRef guardref)
       if (strref->o == IR_STRREF && strref->t.irt == IRT_PGC &&
           strref->op1 == len->op1 &&
           arm64_ir_kint_value(T, strref->op2, &offset) &&
-          offset == bound-1)
+          offset >= 0 && offset < bound)
         return 1;
     }
   }
@@ -12200,17 +12896,6 @@ typedef struct LJArm64LuaLeafBranch {
 /* Bounded, syntax-only view of the inline Lua frames in one snapshot. The
 ** semantic and post-RA passes resolve and validate each function/link value
 ** independently after decoding these slot relationships. */
-#define LJ_ARM64_LUA_MAX_CHILD_FRAMES 2u
-typedef struct LJArm64LuaFrameRow {
-  MSize linkslot, baseslot, funcslot;
-  IRRef linkref, funcref;
-} LJArm64LuaFrameRow;
-
-typedef struct LJArm64LuaFramePath {
-  uint8_t depth;
-  LJArm64LuaFrameRow child[LJ_ARM64_LUA_MAX_CHILD_FRAMES];
-} LJArm64LuaFramePath;
-
 static int arm64_lua_frame_path_limit(const SnapEntry *map, MSize nent,
                                       uint64_t pcbase, MSize maxdepth,
                                       LJArm64LuaFramePath *path)
@@ -12551,7 +13236,7 @@ static int arm64_lua_leaf_forward_source(const GCfunc *forward,
 	    bc_c(callmt) == 0u)) return 0;
 	a = bc_a(callmt);
 	if (bc_a(uget) != a || bc_a(varg) != a+1u+LJ_FR2 ||
-	    (MSize)a+1u+LJ_FR2+3u >= LJ_MAX_JSLOTS) return 0;
+	    (MSize)a+1u+LJ_FR2 >= LJ_MAX_JSLOTS) return 0;
 	uv = func_uv_acq(&forward->l, bc_d(uget));
 	if (!lj_uv_immutable(uv)) return 0;
 	lj_tv_load_acq(&value, uvval(uv));
@@ -12560,7 +13245,8 @@ static int arm64_lua_leaf_forward_source(const GCfunc *forward,
 	target = funcV(&value);
 	targetpt = funcproto(target);
 	if ((la_load8_acq(&targetpt->flags) & PROTO_VARARG) ||
-	    targetpt->numparams < 1u || targetpt->numparams > 3u ||
+	    targetpt->numparams < 1u || targetpt->numparams > LJ_MAX_JSLOTS ||
+	    (MSize)a+1u+LJ_FR2+targetpt->numparams >= LJ_MAX_JSLOTS ||
 	    arm64_lua_leaf_return_count(targetpt) != 1u ||
 	    !lj_trace_arm64_lua_leaf(target)) return 0;
 	if (targetp) *targetp = funcV(&value);
@@ -12927,7 +13613,7 @@ static IRRef arm64_lua_leaf_ir_args_at(const jit_State *J, const GCtrace *T,
                                     &forward_nargs)) {
     MSize j, forward_mapped = 0, fnslot, argbase;
     if (iterator || !forward_target || forward_nargs < 1u ||
-        forward_nargs > 3u || !parentpt ||
+        forward_nargs > LJ_MAX_JSLOTS || !parentpt ||
         framebase != 1u+LJ_FR2) return 0;
     memcpy(&pcbase, &T->snapmap[snap->mapofs+snap->nent], sizeof(pcbase));
     if (!arm64_ir_pcpos((uintptr_t)(pcbase>>8),
@@ -13269,7 +13955,7 @@ static IRRef arm64_lua_leaf_ir_args_at(const jit_State *J, const GCtrace *T,
   {
     const GCfunc *source = arm64_lua_leaf_ir_function(T, fn, ref, NULL);
     if (source && arm64_lua_leaf_forward_source(source, function, NULL, NULL) &&
-        nargs >= 1u && nargs <= 3u)
+        nargs >= 1u && nargs <= LJ_MAX_JSLOTS)
       return fn;
   }
   for (r = REF_FIRST; r <= ref && r < T->nins; r++) {
@@ -14888,7 +15574,8 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
       int args_ok;
       args_ok = arm64_lua_leaf_ir_args(J, T, caller, callee, args) != 0;
       if (!args_ok && !iterator && !paired_varg && s > caller+1u &&
-          pt->numparams == callnargs && callnargs >= 1u && callnargs <= 3u &&
+          pt->numparams == callnargs && callnargs >= 1u &&
+          callnargs <= LJ_MAX_JSLOTS &&
           bc_op(call) == BC_CALL && bc_b(call) == 2u &&
           bc_c(call) == callnargs+1u) {
         SnapNo candidate;
@@ -14899,7 +15586,7 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
           const SnapShot *source = &T->snap[candidate];
           LJArm64LuaFramePath sourceframes;
           uint64_t source_footer;
-          IRRef sourcefnref, sourceargs[ARM64_LUA_LEAF_MAX_RESULTS] = {0};
+          IRRef sourcefnref;
           const GCfunc *sourcefn, *forward_target;
           MSize source_base, i;
           IRRef source_link;
@@ -14941,7 +15628,7 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
               continue;
           }
           if (!arm64_lua_leaf_ir_args_at(J, T, caller, sourcefnref,
-                sourceargs, J->pt, 1u+LJ_FR2)) {
+                args, J->pt, 1u+LJ_FR2)) {
 
             continue;
           }
@@ -14951,13 +15638,12 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
               SnapEntry entry = T->snapmap[snap->mapofs+j];
               if (snap_slot(entry) != base+i) continue;
               if ((entry & 0x00ff0000u) ||
-                  snap_ref(entry) != sourceargs[i]) break;
+                  snap_ref(entry) != args[i]) break;
               found++;
             }
-            if (!sourceargs[i] || found != 1u) break;
+            if (!args[i] || found != 1u) break;
           }
           if (i != callnargs) continue;
-          for (i = 0; i < callnargs; i++) args[i] = sourceargs[i];
           args_ok = 1;
         }
       }
@@ -14995,7 +15681,8 @@ static MSize arm64_lua_leaf_ir_child(const jit_State *J, const GCtrace *T,
     MSize forwardpos, forward_dest, expected_nslots;
     BCIns varg = (BCIns)la_load32_acq(
       (const uint32_t *)&proto_bc(pt)[2]);
-    if (!forward_target || forward_nargs < 1u || forward_nargs > 3u ||
+    if (!forward_target || forward_nargs < 1u ||
+        forward_nargs > LJ_MAX_JSLOTS ||
         bc_op(call) != BC_CALL ||
         bc_b(call) != 2u || bc_c(call) != forward_nargs+1u ||
         callnargs != forward_nargs ||
@@ -15565,7 +16252,7 @@ static int arm64_lua_leaf_ir_open_result_inputs(const jit_State *J,
 
 static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
 				 BCOp rootop, const LJArm64SideIRView *side,
-				 LJArm64IRReject *reject)
+				 LJArm64IRReject *reject, int *forl_directionp)
 {
   IRRef ref = REF_BASE, loop = 0, poll = 0, firstphi = 0;
   IRRef root1 = 0, root2 = 0, root3 = 0, resultroot = 0, resultref = 0;
@@ -15573,7 +16260,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
   MSize expected_ofs = 0, maxslots;
   uintptr_t proto_lo, proto_hi;
   unsigned nphi = 0, loop_snap = 0, nforl_side_add = 0;
-  int forl_dynamic_step = 0;
+  int forl_dynamic_step = 0, forl_num = 0, forl_num_ascending = 0;
   MSize parent_sload = 0;
   SnapNo s;
   if (reject) {
@@ -15582,6 +16269,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
     reject->op = IR_NOP;
     reject->detail = LJ_ARM64_IR_CALL_NONE;
   }
+  if (forl_directionp) *forl_directionp = 0;
   if (!J || !T || !T->ir || !J->pt ||
       (!side && (J->parent || J->exitno || T->root ||
 	bc_op(T->startins) != rootop)) ||
@@ -15625,6 +16313,13 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
   if (rootop == BC_FORL &&
       (MSize)bc_a(T->startins) + FORL_EXT >= J->pt->framesize)
     goto bad_operand;
+  if (rootop == BC_FORL) {
+    MSize idxslot = 1u+LJ_FR2+bc_a(T->startins);
+    for (ref = REF_FIRST; ref < T->nins; ref++)
+      if (T->ir[ref].o == IR_SLOAD && T->ir[ref].op1 == idxslot &&
+	  irt_type(T->ir[ref].t) == IRT_NUM)
+	forl_num = 1;
+  }
   if (!T->snap || !T->snapmap || !T->nsnap || !T->nsnapmap)
     goto bad_snapshot;
   for (ref = REF_TRUE; ref <= REF_NIL; ref++) {
@@ -15711,16 +16406,21 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
         break;
       if (rootop == BC_FORL &&
           ir->op1 == 1u + LJ_FR2 + bc_a(T->startins)) {
-        if ((ir->t.irt & ~IRT_ISPHI) != (IRT_INT|IRT_GUARD) ||
-            ir->op2 != (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT))
+        if (forl_num ? !arm64_ir_forl_num_sload(*ir,
+                                                1u+LJ_FR2+bc_a(T->startins),
+                                                maxslots, 1) :
+            ((ir->t.irt & ~IRT_ISPHI) != (IRT_INT|IRT_GUARD) ||
+             ir->op2 != (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT)))
           goto bad_type;
         break;
       }
       if (rootop == BC_FORL &&
           (ir->op1 == 1u + LJ_FR2 + bc_a(T->startins) + FORL_STOP ||
            ir->op1 == 1u + LJ_FR2 + bc_a(T->startins) + FORL_STEP)) {
-        if (ir->t.irt != IRT_INT ||
-            ir->op2 != (IRSLOAD_READONLY|IRSLOAD_INHERIT))
+        if (forl_num ? !arm64_ir_forl_num_sload(*ir, ir->op1,
+                                                maxslots, 0) :
+            (ir->t.irt != IRT_INT ||
+             ir->op2 != (IRSLOAD_READONLY|IRSLOAD_INHERIT)))
           goto bad_type;
         break;
       }
@@ -16071,9 +16771,13 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       goto bad_type;
   }
   if (rootop == BC_FORL) {
-    if (!arm64_ir_forl_shape(J, T, loop, poll, firstphi, &forl_dynamic_step,
-                             1, reject))
+    if (!(forl_num ? arm64_ir_forl_num_shape(J, T, loop, poll, firstphi,
+	       &forl_dynamic_step, &forl_num_ascending) :
+	   arm64_ir_forl_shape(J, T, loop, poll, firstphi, &forl_dynamic_step,
+                             1, reject)))
       return 0;
+    if (forl_num && forl_directionp)
+      *forl_directionp = forl_num_ascending ? 1 : -1;
   }
   for (s = 0; s < T->nsnap; s++) {
     const SnapShot *snap = &T->snap[s];
@@ -16310,7 +17014,7 @@ bad_snapshot:
 static int arm64_scalar_ir_admit(const jit_State *J, const GCtrace *T,
                                  LJArm64IRReject *reject)
 {
-  return arm64_scalar_ir_admit_mode(J, T, BC_LOOP, NULL, reject);
+  return arm64_scalar_ir_admit_mode(J, T, BC_LOOP, NULL, reject, NULL);
 }
 
 /* Immutable allocator-side certificate. It rechecks scalar provenance and
@@ -16423,6 +17127,8 @@ static int arm64_scalar_postra_value(IRIns p)
 static int arm64_string_byte_bounds_postra(const LJArm64PostRAView *v,
                                             IRRef strref, IRRef str,
                                             IRRef offset);
+static int arm64_string_byte_constant_negative_bounds_postra(
+    const LJArm64PostRAView *v, IRRef strref, IRRef str, IRRef offset);
 static int arm64_string_byte_dynamic_bounds_postra(
     const LJArm64PostRAView *v, IRRef strref, IRRef str, IRRef offset);
 static int arm64_string_byte_dynamic_index_postra(
@@ -16946,6 +17652,86 @@ static int arm64_side_forl_snapshot_stop_postra(
   return 0;
 }
 
+/* Independently bind the allocated dynamic-end range guards. The checked
+** subtraction excludes signed wraparound before the positive width test. */
+static int arm64_string_byte_width_postra(const LJArm64PostRAView *v,
+                                          IRRef last, IRRef after, IRRef pointer,
+                                          int32_t displacement)
+{
+  IRRef difference, check;
+  if (displacement < 0) return 0;
+  for (difference = after+1u; difference < pointer; difference++) {
+    IRIns sub = ir_load_acq(&v->ir[difference]);
+    int32_t base;
+    if (sub.o != IR_SUBOV || sub.t.irt != (IRT_INT|IRT_GUARD) ||
+        sub.op1 != last ||
+        !arm64_scalar_postra_kint(v, sub.op2, &base) ||
+        base != displacement) continue;
+    for (check = difference+1u; check < pointer; check++) {
+      IRIns eq = ir_load_acq(&v->ir[check]);
+      int32_t count;
+      if (eq.o == IR_EQ && eq.t.irt == (IRT_INT|IRT_GUARD) &&
+          eq.op1 == difference &&
+          arm64_scalar_postra_kint(v, eq.op2, &count) && count > 0)
+        return 1;
+    }
+  }
+  return 0;
+}
+
+static int arm64_string_byte_range_postra(const LJArm64PostRAView *v,
+                                          IRRef upper, IRRef pointer,
+                                          int32_t displacement)
+{
+  IRIns cmp = ir_load_acq(&v->ir[upper]);
+  IRRef last;
+  if (cmp.t.irt != (IRT_INT|IRT_GUARD) ||
+      (cmp.o != IR_ULE && cmp.o != IR_UGE)) return 0;
+  last = cmp.o == IR_ULE ? cmp.op1 : cmp.op2;
+  return last >= REF_FIRST && last < upper &&
+    arm64_scalar_postra_ref(v, last, upper, IRT_INT) &&
+    arm64_string_byte_width_postra(v, last, upper, pointer, displacement);
+}
+
+/* Re-derive negative-end normalization and its non-wrapping upper bound from
+** the allocated IR, independently of semantic admission. */
+static int arm64_string_byte_negative_end_postra(const LJArm64PostRAView *v,
+    IRRef pointer, IRRef string, int32_t displacement, IRRef expected_index)
+{
+  IRRef last;
+  LJ_STATIC_ASSERT(LJ_MAX_STR < INT32_MAX);
+  for (last = REF_FIRST; last < pointer; last++) {
+    IRIns end = ir_load_acq(&v->ir[last]), add, length;
+    IRRef lenref, index, negative;
+    int32_t k;
+    if (end.o != IR_ADD || end.t.irt != IRT_INT ||
+        end.op1 < REF_FIRST || end.op1 >= last ||
+        !arm64_scalar_postra_kint(v, end.op2, &k) || k != 1) continue;
+    add = ir_load_acq(&v->ir[end.op1]);
+    if (add.o != IR_ADD || add.t.irt != IRT_INT ||
+        add.op1 < REF_FIRST || add.op1 >= end.op1 ||
+        add.op2 < REF_FIRST || add.op2 >= end.op1) continue;
+    lenref = add.op1; index = add.op2;
+    length = ir_load_acq(&v->ir[lenref]);
+    if (length.o != IR_FLOAD) {
+      lenref = add.op2; index = add.op1;
+      length = ir_load_acq(&v->ir[lenref]);
+    }
+    if (length.o != IR_FLOAD || length.t.irt != IRT_INT ||
+        length.op2 != IRFL_STR_LEN || length.op1 != string ||
+        (expected_index && expected_index != index) ||
+        !arm64_scalar_postra_ref(v, index, end.op1, IRT_INT)) continue;
+    for (negative = index+1u; negative < end.op1; negative++) {
+      IRIns guard = ir_load_acq(&v->ir[negative]);
+      if (guard.o == IR_LT && guard.t.irt == (IRT_INT|IRT_GUARD) &&
+          guard.op1 == index && arm64_scalar_postra_kint(v, guard.op2, &k) &&
+          k == 0 && arm64_string_byte_width_postra(v, last, last, pointer,
+                                                  displacement)) return 1;
+    }
+  }
+  return 0;
+}
+
 /* Independently certify a constant byte offset against an earlier guarded
 ** length load for the same string. Dynamic offsets remain fail-closed. */
 static int arm64_string_byte_bounds_postra(const LJArm64PostRAView *v,
@@ -16958,8 +17744,11 @@ static int arm64_string_byte_bounds_postra(const LJArm64PostRAView *v,
   if (!arm64_scalar_postra_kint(v, offset, &byte_offset) || byte_offset < 0 ||
       byte_offset == INT32_MAX ||
       (uint32_t)byte_offset > 4095u - (uint32_t)sizeof(GCstr) ||
-      !arm64_scalar_postra_ref(v, str, strref, IRT_STR))
+      !arm64_scalar_postra_ref(v, str, strref, IRT_STR)) {
+    if (arm64_string_byte_constant_negative_bounds_postra(v, strref, str,
+                                                           offset)) return 1;
     return arm64_string_byte_dynamic_bounds_postra(v, strref, str, offset);
+  }
   bound = (int64_t)byte_offset + 1;
   for (ref = REF_FIRST; ref < strref; ref++) {
     IRIns guard = ir_load_acq(&v->ir[ref]);
@@ -16971,8 +17760,9 @@ static int arm64_string_byte_bounds_postra(const LJArm64PostRAView *v,
     lenref = guard.o == IR_UGE ? guard.op1 : guard.op2;
     boundref = guard.o == IR_UGE ? guard.op2 : guard.op1;
     if (lenref < REF_FIRST || lenref >= ref ||
-        !arm64_scalar_postra_kint(v, boundref, &guard_bound) ||
-        guard_bound != (int32_t)bound)
+        !(arm64_scalar_postra_kint(v, boundref, &guard_bound) ?
+          guard_bound >= (int32_t)bound :
+          arm64_string_byte_range_postra(v, ref, strref, byte_offset)))
       continue;
     {
       IRIns len = ir_load_acq(&v->ir[lenref]);
@@ -16982,7 +17772,102 @@ static int arm64_string_byte_bounds_postra(const LJArm64PostRAView *v,
         return 1;
     }
   }
-  return 0;
+  return arm64_string_byte_negative_end_postra(v, strref, str, byte_offset, 0);
+}
+
+static int arm64_string_byte_constant_negative_bounds_postra(
+    const LJArm64PostRAView *v, IRRef strref, IRRef str, IRRef offset)
+{
+  GCtrace *owner;
+  GCobj *proto_obj;
+  IRIns string, off, len;
+  GCproto *pt;
+  IRRef lenref, indexref, endref = 0, nonneg = 0, subref = 0, widthref = 0;
+  IRRef ref;
+  int32_t index, endindex;
+  unsigned nend = 0, nnonneg = 0, nsub = 0, nwidth = 0;
+  int left_len, right_len;
+  if (!v || !v->proto || !v->owner) return 0;
+  proto_obj = obj2gco((GCproto *)v->proto);
+  if (!checkptrGC(proto_obj) ||
+      proto_obj->gch.gct != (uint32_t)~LJ_TPROTO ||
+      proto_bc(v->proto) != v->proto_bc ||
+      v->proto->sizebc != v->proto_sizebc ||
+      v->proto->framesize != v->root_topslot ||
+      strref < REF_FIRST || strref >= v->nins ||
+      offset < REF_FIRST || offset >= strref || str < REF_FIRST ||
+      str >= strref || !arm64_scalar_postra_ref(v, str, strref, IRT_STR))
+    return 0;
+  owner = (GCtrace *)v->owner;
+  if (trace_startptgco_acq(owner) != obj2gco((GCproto *)v->proto)) return 0;
+  string = ir_load_acq(&v->ir[str]);
+  off = ir_load_acq(&v->ir[offset]);
+  if (string.o != IR_SLOAD || string.t.irt != (IRT_STR|IRT_GUARD) ||
+      string.op2 != IRSLOAD_TYPECHECK || off.o != IR_ADD ||
+      off.t.irt != IRT_INT)
+    return 0;
+  left_len = off.op1 >= REF_FIRST && off.op1 < offset &&
+      ir_load_acq(&v->ir[off.op1]).o == IR_FLOAD &&
+      ir_load_acq(&v->ir[off.op1]).t.irt == IRT_INT &&
+      ir_load_acq(&v->ir[off.op1]).op1 == str &&
+      ir_load_acq(&v->ir[off.op1]).op2 == IRFL_STR_LEN;
+  right_len = off.op2 >= REF_FIRST && off.op2 < offset &&
+      ir_load_acq(&v->ir[off.op2]).o == IR_FLOAD &&
+      ir_load_acq(&v->ir[off.op2]).t.irt == IRT_INT &&
+      ir_load_acq(&v->ir[off.op2]).op1 == str &&
+      ir_load_acq(&v->ir[off.op2]).op2 == IRFL_STR_LEN;
+  if (left_len == right_len) return 0;
+  lenref = left_len ? off.op1 : off.op2;
+  indexref = left_len ? off.op2 : off.op1;
+  if (!arm64_scalar_postra_kint(v, indexref, &index) || index >= 0)
+    return 0;
+  endindex = index + 1;
+  pt = (GCproto *)v->proto;
+  if (!arm64_string_byte_call_literal_slots(pt, string.op1, index)) return 0;
+  len = ir_load_acq(&v->ir[lenref]);
+  if (len.o != IR_FLOAD || len.t.irt != IRT_INT ||
+      len.op1 != str || len.op2 != IRFL_STR_LEN)
+    return 0;
+  if (endindex == 0) endref = lenref;
+  for (ref = REF_FIRST; ref < strref; ref++) {
+    IRIns g = ir_load_acq(&v->ir[ref]);
+    int32_t value;
+    if (endindex != 0 && g.o == IR_ADD && g.t.irt == IRT_INT &&
+        ((g.op1 == lenref &&
+          arm64_scalar_postra_kint(v, g.op2, &value) &&
+          value == endindex) ||
+         (g.op2 == lenref &&
+          arm64_scalar_postra_kint(v, g.op1, &value) &&
+          value == endindex))) {
+      if (endref) return 0;
+      endref = ref;
+      nend++;
+    } else if (g.o == IR_GE && g.t.irt == (IRT_INT|IRT_GUARD) &&
+               g.op1 == offset &&
+               arm64_scalar_postra_kint(v, g.op2, &value) && value == 0) {
+      if (nonneg) return 0;
+      nonneg = ref;
+      nnonneg++;
+    } else if (g.o == IR_SUBOV &&
+               g.t.irt == (IRT_INT|IRT_GUARD) && endref &&
+               g.op1 == endref && g.op2 == offset) {
+      if (subref) return 0;
+      subref = ref;
+      nsub++;
+    } else if (g.o == IR_EQ && g.t.irt == (IRT_INT|IRT_GUARD) &&
+               subref && g.op1 == subref &&
+               arm64_scalar_postra_kint(v, g.op2, &value) && value == 1) {
+      if (widthref) return 0;
+      widthref = ref;
+      nwidth++;
+    }
+  }
+  return ((endindex == 0 && nend == 0 && endref == lenref) ||
+          (endindex != 0 && nend == 1 && endref != lenref)) &&
+         nnonneg == 1 && nsub == 1 && nwidth == 1 && offset < nonneg &&
+         endref < nonneg && endref < subref && nonneg < subref &&
+         subref < widthref &&
+         widthref < strref;
 }
 
 static int arm64_string_byte_dynamic_bounds_postra(
@@ -17032,13 +17917,18 @@ static int arm64_string_byte_dynamic_bounds_postra(
     idx = sub.op1;
   }
   conv = ir_load_acq(&v->ir[idx]);
-  if (conv.o != IR_CONV || conv.t.irt != IRT_INT ||
-      conv.op2 != (IRCONV_INT_NUM|IRCONV_ANY) ||
-      conv.op1 < REF_FIRST || conv.op1 >= idx) return 0;
-  source = ir_load_acq(&v->ir[conv.op1]);
-  if (source.o != IR_SLOAD || source.t.irt != (IRT_NUM|IRT_GUARD) ||
-      source.op2 != IRSLOAD_TYPECHECK ||
-      !arm64_scalar_postra_ref(v, conv.op1, idx, IRT_NUM)) return 0;
+  if (conv.o == IR_SLOAD && conv.t.irt == (IRT_INT|IRT_GUARD)) {
+    if (!arm64_scalar_postra_ref(v, idx, offset, IRT_INT)) return 0;
+    source = conv;
+  } else {
+    if (conv.o != IR_CONV || conv.t.irt != IRT_INT ||
+        conv.op2 != (IRCONV_INT_NUM|IRCONV_ANY) ||
+        conv.op1 < REF_FIRST || conv.op1 >= idx) return 0;
+    source = ir_load_acq(&v->ir[conv.op1]);
+    if (source.o != IR_SLOAD || source.t.irt != (IRT_NUM|IRT_GUARD) ||
+        !arm64_scalar_postra_ref(v, conv.op1, idx, IRT_NUM)) return 0;
+  }
+  if (source.op2 != IRSLOAD_TYPECHECK) return 0;
   if (str < REF_FIRST || str >= strref) return 0;
   string = ir_load_acq(&v->ir[str]);
   if (string.o != IR_SLOAD || string.t.irt != (IRT_STR|IRT_GUARD) ||
@@ -17116,13 +18006,38 @@ static int arm64_string_byte_dynamic_index_postra(
   IRIns conversion;
   if (!v || conv < REF_FIRST || conv >= v->nins) return 0;
   conversion = ir_load_acq(&v->ir[conv]);
-  if (conversion.o != IR_CONV || conversion.t.irt != IRT_INT ||
-      conversion.op2 != (IRCONV_INT_NUM|IRCONV_ANY)) return 0;
+  if (conversion.o == IR_SLOAD &&
+      conversion.t.irt == (IRT_INT|IRT_GUARD)) {
+    if (conversion.op2 != IRSLOAD_TYPECHECK ||
+        !arm64_scalar_postra_ref(v, conv, conv+1u, IRT_INT)) return 0;
+  } else if (conversion.o != IR_CONV || conversion.t.irt != IRT_INT ||
+             conversion.op2 != (IRCONV_INT_NUM|IRCONV_ANY)) {
+    return 0;
+  }
   for (ref = conv+1u; ref < v->nins; ref++) {
     IRIns strref = ir_load_acq(&v->ir[ref]);
     IRIns offset;
-    if (strref.o != IR_STRREF || strref.t.irt != IRT_PGC ||
-        strref.op2 < REF_FIRST || strref.op2 >= ref) continue;
+    int32_t displacement;
+    if (strref.o != IR_STRREF || strref.t.irt != IRT_PGC) continue;
+    if (arm64_scalar_postra_kint(v, strref.op2, &displacement)) {
+      IRRef upper;
+      if (arm64_string_byte_negative_end_postra(v, ref, strref.op1,
+                                                displacement, conv)) return 1;
+      for (upper = conv+1u; upper < ref; upper++) {
+        IRIns guard = ir_load_acq(&v->ir[upper]);
+        IRRef lenref = guard.o == IR_ULE && guard.op1 == conv ?
+          guard.op2 : guard.o == IR_UGE && guard.op2 == conv ? guard.op1 : 0;
+        if (lenref >= REF_FIRST && lenref < upper) {
+          IRIns len = ir_load_acq(&v->ir[lenref]);
+          if (len.o == IR_FLOAD && len.t.irt == IRT_INT &&
+              len.op2 == IRFL_STR_LEN && len.op1 == strref.op1 &&
+              arm64_string_byte_range_postra(v, upper, ref, displacement))
+            return 1;
+        }
+      }
+      continue;
+    }
+    if (strref.op2 < REF_FIRST || strref.op2 >= ref) continue;
     offset = ir_load_acq(&v->ir[strref.op2]);
     if ((offset.o != IR_ADDOV || offset.op1 != conv) &&
         (offset.o != IR_ADD ||
@@ -17176,6 +18091,23 @@ static int arm64_string_byte_guard_postra(const LJArm64PostRAView *v,
       guard.t.irt != (IRT_INT|IRT_GUARD)) return 0;
   lenref = guard.o == IR_UGE ? guard.op1 : guard.op2;
   boundref = guard.o == IR_UGE ? guard.op2 : guard.op1;
+  if (lenref >= REF_FIRST && lenref < guardref &&
+      !arm64_scalar_postra_kint(v, boundref, &bound)) {
+    IRIns len = ir_load_acq(&v->ir[lenref]);
+    if (len.o == IR_FLOAD && len.t.irt == IRT_INT &&
+        len.op2 == IRFL_STR_LEN &&
+        arm64_scalar_postra_ref(v, len.op1, guardref, IRT_STR)) {
+      for (ref = guardref+1u; ref < v->nins; ref++) {
+        IRIns strref = ir_load_acq(&v->ir[ref]);
+        int32_t offset;
+        if (strref.o == IR_STRREF && strref.t.irt == IRT_PGC &&
+            strref.op1 == len.op1 &&
+            arm64_scalar_postra_kint(v, strref.op2, &offset) &&
+            arm64_string_byte_range_postra(v, guardref, ref, offset))
+          return 1;
+      }
+    }
+  }
   if (lenref < REF_FIRST || lenref >= guardref ||
       (!arm64_scalar_postra_kint(v, boundref, &bound) || bound <= 0 ||
        (uint32_t)bound > 4096u-(uint32_t)sizeof(GCstr))) {
@@ -17192,7 +18124,7 @@ static int arm64_string_byte_guard_postra(const LJArm64PostRAView *v,
       if (strref.o == IR_STRREF && strref.t.irt == IRT_PGC &&
           strref.op1 == len.op1 &&
           arm64_scalar_postra_kint(v, strref.op2, &offset) &&
-          offset == bound-1)
+          offset >= 0 && offset < bound)
         return 1;
     }
   }
@@ -18437,7 +19369,7 @@ static IRRef arm64_lua_leaf_postra_args_at(const LJArm64PostRAView *v,
                                     &forward_nargs)) {
     MSize j, forward_mapped = 0, fnslot, argbase;
     if (iterator || !forward_target || forward_nargs < 1u ||
-        forward_nargs > 3u || !parentpt ||
+        forward_nargs > LJ_MAX_JSLOTS || !parentpt ||
         framebase != 1u+LJ_FR2) { return 0; }
     footer[0] = snapentry_acq(&v->snapmap[ofs+nent]);
     footer[1] = snapentry_acq(&v->snapmap[ofs+nent+1u]);
@@ -18645,7 +19577,7 @@ static IRRef arm64_lua_leaf_postra_args_at(const LJArm64PostRAView *v,
   {
     const GCfunc *source = arm64_lua_leaf_postra_function(v, fn, ref, NULL);
     if (source && arm64_lua_leaf_forward_source(source, function, NULL, NULL) &&
-        nargs >= 1u && nargs <= 3u)
+        nargs >= 1u && nargs <= LJ_MAX_JSLOTS)
       return fn;
   }
   for (r = REF_FIRST; r <= ref && r < v->nins; r++) {
@@ -20066,7 +20998,8 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
     if (!(uint8_t)footer) {
       int args_ok = arm64_lua_leaf_postra_args(v, caller, function, args);
       if (!args_ok && !iterator && !paired_varg && s > caller+1u &&
-          pt->numparams == callnargs && callnargs >= 1u && callnargs <= 3u &&
+          pt->numparams == callnargs && callnargs >= 1u &&
+          callnargs <= LJ_MAX_JSLOTS &&
           bc_op(call) == BC_CALL && bc_b(call) == 2u &&
           bc_c(call) == callnargs+1u) {
         MSize candidate;
@@ -20077,7 +21010,7 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
           MSize sourcenent = snap_nent_acq(source), sourcebase;
           LJArm64LuaFramePath sourceframes;
           uint64_t source_footer;
-          IRRef sourcefnref, sourceargs[ARM64_LUA_LEAF_MAX_RESULTS] = {0}, source_link;
+          IRRef sourcefnref, source_link;
           const GCfunc *sourcefn, *forward_target;
           const BCIns *source_retpc;
           MSize i;
@@ -20111,20 +21044,19 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
               !arm64_lua_leaf_postra_child(v,candidate,source_footer,
                                             &sourcebase) ||
               !arm64_lua_leaf_postra_args_at(v,caller,sourcefnref,
-                sourceargs,v->proto,1u+LJ_FR2)) continue;
+                args,v->proto,1u+LJ_FR2)) continue;
           for (i = 0; i < callnargs; i++) {
             MSize j, found = 0;
             for (j = 0; j < count; j++) {
               SnapEntry entry = frame_map[j];
               if (snap_slot(entry) != base+i) continue;
               if ((entry & 0x00ff0000u) ||
-                  snap_ref(entry) != sourceargs[i]) break;
+                  snap_ref(entry) != args[i]) break;
               found++;
             }
-            if (!sourceargs[i] || found != 1u) break;
+            if (!args[i] || found != 1u) break;
           }
           if (i != callnargs) continue;
-          for (i = 0; i < callnargs; i++) args[i] = sourceargs[i];
           args_ok = 1;
         }
       }
@@ -20157,7 +21089,8 @@ static MSize arm64_lua_leaf_postra_child(const LJArm64PostRAView *v,
     MSize forwardpos, forward_dest, expected_nslots;
     BCIns varg = (BCIns)la_load32_acq(
       (const uint32_t *)&proto_bc(pt)[2]);
-    if (!forward_target || forward_nargs < 1u || forward_nargs > 3u ||
+    if (!forward_target || forward_nargs < 1u ||
+        forward_nargs > LJ_MAX_JSLOTS ||
         bc_op(call) != BC_CALL ||
         bc_b(call) != 2u || bc_c(call) != forward_nargs+1u ||
         callnargs != forward_nargs ||
@@ -20806,7 +21739,7 @@ static int arm64_postra_funcf_leaf_source(const LJArm64PostRAView *v,
 {
 	IRRef args[UINT8_MAX+1u] = {0};
 	const GCfunc *ancestors[LJ_ARM64_LUA_MAX_CHILD_FRAMES+1u] = {0};
-	MSize retpos, p, s, open_nresults = 0;
+	MSize retpos, p, s, open_nresults = 0, producerpos = 0;
 	int open_callm;
 	unsigned return_maps = 0;
 	open_callm = v && v->proto &&
@@ -20824,6 +21757,8 @@ static int arm64_postra_funcf_leaf_source(const LJArm64PostRAView *v,
 	if (open_callm &&
 	    (open_nresults = arm64_postra_funcf_open_result_count(v, v->proto,
 		semantic_nins)) == 0u) return 0;
+	if (open_callm &&
+	    !arm64_ir_funcf_open_producer_pos(v->proto, &producerpos)) return 0;
 	for (p = 0; p < v->proto_numparams; p++) {
 	  IRRef ref, found = 0;
 	  MSize slot = 1u+LJ_FR2+p;
@@ -20846,40 +21781,101 @@ static int arm64_postra_funcf_leaf_source(const LJArm64PostRAView *v,
 	for (s = 0; s < v->nsnap; s++) {
 	  const SnapShot *snap = &v->snap[s];
 	  MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap), i, pcpos;
+	  MSize childbase = UINT32_MAX;
 	  uint64_t pcbase;
+	  LJArm64LuaFramePath frames = {0};
+	  unsigned childmarkers = 0;
+	  int child_snapshot = 0;
 	  IRRef source[UINT8_MAX+1u] = {0}, result = 0;
 	  uint8_t needed[UINT8_MAX+1u] = {0}, seen[UINT8_MAX+1u] = {0};
 	  if (ofs > v->nsnapmap || nent > v->nsnapmap-ofs ||
 	      v->nsnapmap-ofs-nent < 1u+LJ_FR2) return 0;
 	  memcpy(&pcbase, &v->snapmap[ofs+nent], sizeof(pcbase));
-	  if ((uint8_t)pcbase ||
-	      !arm64_ir_pcpos((uintptr_t)(pcbase>>8),
+	  if ((uint8_t)pcbase) {
+	    IRRef linkref;
+	    uintptr_t returnpc;
+	    if (!open_callm ||
+		!arm64_lua_frame_path_limit(&v->snapmap[ofs], nent, pcbase, 1u,
+		  &frames) || frames.depth != 1u ||
+		!(childbase = frames.child[0].baseslot) ||
+		childbase <= 1u+LJ_FR2 ||
+		childbase-(1u+LJ_FR2) > v->proto->framesize+LJ_FR2 ||
+		!arm64_lua_leaf_postra_child(v, (MSize)s, pcbase, NULL)) return 0;
+	    linkref = frames.child[0].linkref;
+	    if (linkref < v->nk || linkref+1u >= REF_TRUE ||
+		linkref+1u >= v->nins ||
+		ir_load_acq(&v->ir[linkref]).o != IR_KNUM) return 0;
+	    returnpc = (uintptr_t)ir_load_acq(&v->ir[linkref+1u]).tv.u64;
+	    if (returnpc != (uintptr_t)(v->proto_bc+producerpos+1u)) return 0;
+	    pcpos = producerpos;
+	    child_snapshot = 1;
+	  } else if (!arm64_ir_pcpos((uintptr_t)(pcbase>>8),
 		(uintptr_t)v->proto_bc,
-		(uintptr_t)(v->proto_bc+v->proto_sizebc), &pcpos) ||
-	      !arm64_lua_leaf_postra_eval(v, v->proto, args, pcpos,
+		(uintptr_t)(v->proto_bc+v->proto_sizebc), &pcpos)) return 0;
+	  if (!arm64_lua_leaf_postra_eval(v, v->proto, args, pcpos,
 		snap_ref_acq(snap), semantic_nins, ancestors, 0, source, &result) ||
-	      !(open_callm ? arm64_postra_funcf_open_needed(v->proto, pcpos,
+	      !(open_callm ? arm64_postra_funcf_open_needed(v->proto,
+						 child_snapshot ? producerpos-1u : pcpos,
 						 open_nresults, needed) :
 		arm64_lua_leaf_postra_needed(v->proto, pcpos, needed))) return 0;
 	  for (i = 0; i < nent; i++) {
 	    SnapEntry entry = snapentry_acq(&v->snapmap[ofs+i]);
 	    MSize slot = snap_slot(entry), local;
+	    if (child_snapshot && slot >= childbase) continue;
+	    if (child_snapshot && (entry & SNAP_FRAME)) {
+	      if ((entry & 0x00ff0000u) != SNAP_FRAME ||
+		  slot != frames.child[0].linkslot ||
+		  snap_ref(entry) != frames.child[0].linkref ||
+		  ++childmarkers != 1u) return 0;
+	      continue;
+	    }
 	    if (entry & (SNAP_FRAME|SNAP_NORESTORE)) return 0;
 	    if (slot < 1u+LJ_FR2 ||
 		slot-(1u+LJ_FR2) >=
 		  v->proto->framesize+(open_callm ? LJ_FR2 : 0u))
 	      continue;
 	    local = slot-(1u+LJ_FR2);
-	    if (source[local] && snap_ref(entry) != source[local]) return 0;
+	    if (source[local] && snap_ref(entry) != source[local]) {
+	      MSize producer_slot;
+	      IRRef guardref = 0;
+	      const GCfunc *sourcefn, *mappedfn;
+	      SnapNo guard_snap = UINT16_MAX;
+	      unsigned guards = 0;
+	      IRRef mapped = snap_ref(entry);
+	      if (!child_snapshot) return 0;
+	      producer_slot = 1u+LJ_FR2+bc_a(arm64_ir_bc_acq(
+	        (uintptr_t)v->proto_bc, producerpos));
+	      if (slot != producer_slot || !irref_isk(mapped) || mapped < v->nk ||
+	          mapped >= REF_TRUE ||
+		  ir_load_acq(&v->ir[mapped]).o != IR_KGC ||
+		  !(sourcefn = arm64_lua_leaf_postra_function(v, source[local],
+		    snap_ref_acq(snap), &guardref)) || !guardref ||
+		  guardref >= snap_ref_acq(snap) ||
+		  !(mappedfn = arm64_lua_leaf_postra_function(v, mapped,
+		    snap_ref_acq(snap), NULL)) || sourcefn != mappedfn)
+		return 0;
+	      for (MSize gs = 0; gs < v->nsnap; gs++)
+		if (snap_ref_acq(&v->snap[gs]) == guardref) {
+		  if (guard_snap == UINT16_MAX) guard_snap = (SnapNo)gs;
+		  guards++;
+		}
+	      if (guards != 1u || guard_snap == UINT16_MAX ||
+	          !arm64_lua_leaf_postra_snapshot(v, guardref, guard_snap))
+		return 0;
+	    }
 	    if (needed[local]) {
 	      if (!source[local] || seen[local]) return 0;
 	      seen[local] = 1;
 	    }
 	  }
-	  for (i = 0; i < v->proto->framesize+(open_callm ? LJ_FR2 : 0u); i++)
+	  if (child_snapshot && childmarkers != 1u) return 0;
+	  for (i = 0; i < v->proto->framesize+(open_callm ? LJ_FR2 : 0u); i++) {
+	    if (child_snapshot && i >= childbase-(1u+LJ_FR2) && needed[i])
+		return 0;
 	    if (needed[i] && !seen[i] &&
 		!(i < v->proto_numparams &&
 		  arm64_postra_funcf_slot_unchanged(v->proto, i, pcpos))) return 0;
+	  }
 	  if (pcpos == retpos) {
 	    BCIns ret = arm64_ir_bc_acq((uintptr_t)v->proto_bc, retpos);
 	    unsigned found = 0;
@@ -20896,7 +21892,8 @@ static int arm64_postra_funcf_leaf_source(const LJArm64PostRAView *v,
 	    return_maps++;
 	  }
 	}
-	return return_maps == 1u;
+	if (return_maps != 1u) return 0;
+	return 1;
 }
 
 /* Allocated counterpart to the terminal CALLT frame/result proof. This walk
@@ -21133,7 +22130,8 @@ static int arm64_lua_leaf_postra_locations(const LJArm64PostRAView *v,
 static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
                                          BCOp rootop,
                                          const LJArm64SideIRView *side,
-                                         IRRef *ninsout)
+                                         IRRef *ninsout,
+                                         int *forl_directionp)
 {
   IRRef ref, n, loop = 0, poll = 0, firstphi = 0;
   IRRef root1 = 0, root2 = 0, root3 = 0, resultroot = 0, resultref = 0;
@@ -21143,7 +22141,8 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
   MSize parent_sload = 0;
   SnapNo loopsnapno = 0;
   IRRef1 spillowner[SPS_LIMIT];
-  int spillowners_initialized = 0, forl_dynamic_step = 0;
+  int spillowners_initialized = 0, forl_dynamic_step = 0, forl_num = 0;
+  int forl_num_ascending = 0;
   unsigned nforl_side_add = 0;
   uintptr_t lo, hi;
   if (!v || !v->ir || !v->snap || !v->snapmap || !v->proto_bc ||
@@ -21155,6 +22154,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
         !(rootop == BC_FUNCF &&
           arm64_ir_funcf_leaf_call_source(v->proto))))) || !v->proto_sizebc)
     return 0;
+  if (forl_directionp) *forl_directionp = 0;
   lo = (uintptr_t)v->proto_bc;
   if ((lo & 3u) || v->proto_sizebc > (UINTPTR_MAX - lo) / sizeof(BCIns))
     return 0;
@@ -21266,9 +22266,22 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
           v->owner_private, &iter)) return 0;
   }
   if (rootop == BC_FORL) {
-    if ((MSize)bc_a(v->startins) + FORL_EXT >= v->root_topslot ||
-        !arm64_postra_forl_dynamic_shape(v, n, &forl_dynamic_step, 1))
+    if ((MSize)bc_a(v->startins) + FORL_EXT >= v->root_topslot)
       return 0;
+    {
+      MSize idxslot = 1u+LJ_FR2+bc_a(v->startins);
+      for (ref = REF_FIRST; ref < n; ref++) {
+        IRIns x = ir_load_acq(&v->ir[ref]);
+        if (x.o == IR_SLOAD && x.op1 == idxslot &&
+            irt_type(x.t) == IRT_NUM) forl_num = 1;
+      }
+    }
+    if (!(forl_num ? arm64_postra_forl_num_shape(v, n, &forl_dynamic_step,
+						 &forl_num_ascending) :
+          arm64_postra_forl_dynamic_shape(v, n, &forl_dynamic_step, 1)))
+      return 0;
+    if (forl_num && forl_directionp)
+      *forl_directionp = forl_num_ascending ? 1 : -1;
   }
   {
     IRIns base = ir_load_acq(&v->ir[REF_BASE]);
@@ -21331,20 +22344,21 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
         break;
       if (rootop == BC_FORL &&
           p.op1 == 1u + LJ_FR2 + bc_a(v->startins)) {
-        if ((p.t.irt & ~IRT_ISPHI) != (IRT_INT|IRT_GUARD) ||
+        if ((forl_num ? (p.t.irt & ~IRT_ISPHI) != (IRT_NUM|IRT_GUARD) :
+             (p.t.irt & ~IRT_ISPHI) != (IRT_INT|IRT_GUARD)) ||
             p.op2 != (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT) ||
             p.s != SPS_NONE || !ra_hasreg(p.r) ||
-            !arm64_scalar_postra_register(p.r, IRT_INT))
+            !arm64_scalar_postra_register(p.r, forl_num ? IRT_NUM : IRT_INT))
           return 0;
         break;
       }
       if (rootop == BC_FORL &&
           (p.op1 == 1u + LJ_FR2 + bc_a(v->startins) + FORL_STOP ||
            p.op1 == 1u + LJ_FR2 + bc_a(v->startins) + FORL_STEP)) {
-        if (p.t.irt != IRT_INT ||
+        if ((forl_num ? p.t.irt != IRT_NUM : p.t.irt != IRT_INT) ||
             p.op2 != (IRSLOAD_READONLY|IRSLOAD_INHERIT) ||
             p.s != SPS_NONE || !ra_hasreg(p.r) ||
-            !arm64_scalar_postra_register(p.r, IRT_INT))
+            !arm64_scalar_postra_register(p.r, forl_num ? IRT_NUM : IRT_INT))
           return 0;
         break;
       }
@@ -22273,7 +23287,7 @@ int lj_asm_arm64_side_scalar_ir_admit(const jit_State *J, const GCtrace *T,
 	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE, REF_BASE,
 			       IR_LOOP, 0);
 	}
-  return arm64_scalar_ir_admit_mode(J, T, BC_LOOP, side, reject);
+  return arm64_scalar_ir_admit_mode(J, T, BC_LOOP, side, reject, NULL);
 }
 
 int lj_asm_arm64_side_scalar_postra_admit(const LJArm64PostRAView *view,
@@ -22281,12 +23295,14 @@ int lj_asm_arm64_side_scalar_postra_admit(const LJArm64PostRAView *view,
 {
   if (!arm64_side_scalar_context_postra(view, side))
 	return 0;
-  return arm64_scalar_postra_admit_mode(view, BC_LOOP, side, semantic_ninsp);
+  return arm64_scalar_postra_admit_mode(view, BC_LOOP, side, semantic_ninsp,
+					       NULL);
 }
 
-int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
-			  LJArm64IRReject *reject)
+int lj_asm_arm64_forl_ir_admit(const jit_State *J, const GCtrace *T,
+			       LJArm64IRReject *reject, int *directionp)
 {
+  if (directionp) *directionp = 0;
 #if LJ_HASJIT_FFI_CALLXS
   /* FFI effects require their own call/ABI proof in addition to scalar
   ** operands. Select that proof by effect, never by constant-pool layout. */
@@ -22298,17 +23314,27 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
         return arm64_ir_nonloop_admit(J, T, reject);
   }
 #endif
+  if (T && bc_op(T->startins) == BC_FORL)
+    return arm64_scalar_ir_admit_mode(J, T, BC_FORL, NULL, reject,
+					      directionp);
   if (T && bc_op(T->startins) == BC_LOOP)
     return arm64_scalar_ir_admit(J, T, reject);
-  if (T && bc_op(T->startins) == BC_FORL)
-    return arm64_scalar_ir_admit_mode(J, T, BC_FORL, NULL, reject);
   if (T && bc_op(T->startins) == BC_ITERL)
-    return arm64_scalar_ir_admit_mode(J, T, BC_ITERL, NULL, reject);
+    return arm64_scalar_ir_admit_mode(J, T, BC_ITERL, NULL, reject, NULL);
   return arm64_ir_nonloop_admit(J, T, reject);
 }
-int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
-                              IRRef *semantic_ninsp)
+
+int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
+			  LJArm64IRReject *reject)
 {
+  return lj_asm_arm64_forl_ir_admit(J, T, reject, NULL);
+}
+
+int lj_asm_arm64_forl_postra_admit(const LJArm64PostRAView *view,
+				   IRRef *semantic_ninsp,
+				   int *directionp)
+{
+  if (directionp) *directionp = 0;
 #if LJ_HASJIT_FFI_CALLXS
   if (view && view->ir && view->nins > REF_FIRST && view->nins < REF_DROP &&
       bc_op(view->startins) == BC_FORL) {
@@ -22320,13 +23346,22 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
 #endif
   if (view && bc_op(view->startins) == BC_LOOP)
   {
-    return arm64_scalar_postra_admit_mode(view, BC_LOOP, NULL, semantic_ninsp);
+    return arm64_scalar_postra_admit_mode(view, BC_LOOP, NULL, semantic_ninsp,
+					       NULL);
   }
   if (view && bc_op(view->startins) == BC_FORL)
-    return arm64_scalar_postra_admit_mode(view, BC_FORL, NULL, semantic_ninsp);
+    return arm64_scalar_postra_admit_mode(view, BC_FORL, NULL, semantic_ninsp,
+					       directionp);
   if (view && bc_op(view->startins) == BC_ITERL)
-    return arm64_scalar_postra_admit_mode(view, BC_ITERL, NULL, semantic_ninsp);
+    return arm64_scalar_postra_admit_mode(view, BC_ITERL, NULL, semantic_ninsp,
+					       NULL);
   return arm64_postra_nonloop_admit(view, semantic_ninsp);
+}
+
+int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
+			      IRRef *semantic_ninsp)
+{
+  return lj_asm_arm64_forl_postra_admit(view, semantic_ninsp, NULL);
 }
 
 #endif

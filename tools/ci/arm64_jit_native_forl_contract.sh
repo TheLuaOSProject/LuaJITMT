@@ -105,7 +105,7 @@ pauth_forl_disasm=$tmpdir/forl-arm64e.disasm
 restore_needed=1
 
 # The executable fixture separates the four semantic boundaries: taken
-# integer entry, false integer edge, FP branch-only recovery and post-update
+# integer entry, false integer edge, mode-checked FP rejection and post-update
 # overflow recovery. It also races an A-only bytecode generation change after
 # both metadata views, then flushes and reuses trace slot 1.
 for required in \
@@ -134,7 +134,7 @@ for required in \
   'call_edge(L, name, (lua_Integer)INT32_MIN,' \
   'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA' \
   'race.replacement = BCINS_AD(BC_JFORL, wronga, 1)' \
-  'lj_trace_enter_root(J, pc, 1, L, L->base, live, NULL)' \
+  'lj_trace_enter_root(J, pc, 1, L, L->base, live, NULL, 0)' \
   'lj_trace_test_root_entry_cleanups() == 1' \
   'run_lua(L, "jit.flush()")' \
   'trace_startpc_acq(T) == firstpc' \
@@ -205,7 +205,7 @@ for required in \
   'str TMP0, FOR_IDX' \
   'str TMP0, FOR_EXT' \
   'ble >9' \
-  '|9:  // Taken integer edge: IDX/EXT are authoritative before admission.' \
+  '|9:  // Taken loop edge: IDX/EXT are authoritative before admission.' \
   'mov RAw, INSw' \
   'mov CARG6w, INSw' \
   'mov CARG7, #0' \
@@ -239,14 +239,17 @@ test "$ext_line" -lt "$taken_line" && test "$taken_line" -lt "$entry_line" &&
 test "$entry_line" -lt "$reserve_line" && test "$reserve_line" -lt "$branch_line"
 test "$(grep -Fc 'bl extern lj_trace_enter_root' "$forl_vm")" = 1
 
-# Both FP JFORL signs still tail straight to the branch-only recovery label.
-# No helper, native frame or authenticated branch may appear in that FP slice.
+# Both FP JFORL signs select a direction mode before converging on the shared
+# admission helper. The helper call remains unique and the ordinary fallback
+# still reaches the branch-only recovery label.
 awk '/\|5:  \/\/ FP loop\./ { copy=1 }
-     copy && /^    if \(op == BC_JFORL\) \{/ { exit }
-     copy { print }' "$forl_vm" >"$fp_vm"
-test "$(grep -Fc 'bls =>BC_JLOOP' "$fp_vm")" = 2
-if grep -E 'lj_trace_enter_root|sub sp, sp|br_trace_auth' "$fp_vm" >/dev/null; then
-  echo "ARM64 FP JFORL path gained native entry" >&2
+     copy { print }
+     copy && /\|9:  \/\/ Taken loop edge:/ { exit }' "$forl_vm" >"$fp_vm"
+grep -F 'mov CARG8, #1' "$fp_vm" >/dev/null
+grep -F 'mov CARG8, #2' "$fp_vm" >/dev/null
+grep -F 'bls >9' "$fp_vm" >/dev/null
+if test "$(grep -Fc 'bl extern lj_trace_enter_root' "$forl_vm")" != 1; then
+  echo "ARM64 JFORL paths do not share one native entry helper" >&2
   exit 1
 fi
 
@@ -363,4 +366,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
     XCFLAGS="$xcflags"
 restore_needed=0
 
-echo "arm64_jit_native_forl_contract OK: post-update integer JFORL native entry verified on ARM64/ARM64e; FP stayed branch-only"
+echo "arm64_jit_native_forl_contract OK: integer and signed-mode NUM JFORL entry verified on ARM64/ARM64e"

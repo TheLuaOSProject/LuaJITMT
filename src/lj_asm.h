@@ -225,8 +225,14 @@ typedef struct LJArm64SidePostRAView {
 
 LJ_FUNC int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
 				   LJArm64IRReject *reject);
+LJ_FUNC int lj_asm_arm64_forl_ir_admit(const jit_State *J, const GCtrace *T,
+				      LJArm64IRReject *reject,
+				      int *directionp);
 LJ_FUNC int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
 				      IRRef *semantic_ninsp);
+LJ_FUNC int lj_asm_arm64_forl_postra_admit(
+				      const LJArm64PostRAView *view,
+				      IRRef *semantic_ninsp, int *directionp);
 #if defined(LJ_TRACE_TEST_HELPERS)
 LJ_FUNC int lj_asm_arm64_test_funcf_postra_needed(const GCproto *pt,
 	MSize resume, MSize slot);

@@ -3197,6 +3197,7 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
   ASMState *as = &as_;
 #if LJ_TARGET_ARM64
   IRRef arm64_semantic_nins;
+  int arm64_forl_direction = 0, arm64_postra_forl_direction = 0;
   jit_State arm64_root_state;
   const jit_State *arm64_admit_state = J;
 #endif
@@ -3457,8 +3458,10 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
       ** recorder trace; RENAME/NOP capacity lies beyond this semantic view. */
       finalview.ir = finalir;
       finalview.nins = arm64_semantic_nins;
-      if (LJ_UNLIKELY(!lj_asm_arm64_ir_admit(
-	    arm64_admit_state, &finalview, &reject))) {
+      if (LJ_UNLIKELY(!(bc_op(T->startins) == BC_FORL ?
+	lj_asm_arm64_forl_ir_admit(arm64_admit_state, &finalview,
+				   &reject, &arm64_forl_direction) :
+	lj_asm_arm64_ir_admit(arm64_admit_state, &finalview, &reject)))) {
 	setintV(&J->errinfo, (int32_t)reject.op);
 	lj_trace_err_info(J, LJ_TRERR_NYIIR);
       }
@@ -3484,14 +3487,22 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
       postraview.startins = T->startins;
       postraview.base_delta = (uint8_t)(J->baseslot-2u);
       postraview.owner_private = 1;
-      if (LJ_UNLIKELY(!lj_asm_arm64_postra_admit(
-	    &postraview, &validated_semantic_nins) ||
+      if (LJ_UNLIKELY(!(bc_op(T->startins) == BC_FORL ?
+	lj_asm_arm64_forl_postra_admit(&postraview,
+				       &validated_semantic_nins,
+				       &arm64_postra_forl_direction) :
+	lj_asm_arm64_postra_admit(&postraview, &validated_semantic_nins)) ||
+	  arm64_postra_forl_direction != arm64_forl_direction ||
 	  validated_semantic_nins != arm64_semantic_nins)) {
 	setintV(&J->errinfo, (int32_t)IR_RENAME);
 	lj_trace_err_info(J, LJ_TRERR_NYIIR);
       }
       if (bc_op(T->startins) == BC_FORL)
-	trace_arm64_admission_rel(T, TRACE_ARM64_INT_FORL_ADMITTED);
+	trace_arm64_admission_rel(T, arm64_forl_direction == 0 ?
+	  TRACE_ARM64_INT_FORL_ADMITTED :
+	  (TRACE_ARM64_NUM_FORL_ADMITTED |
+	   (arm64_forl_direction > 0 ? TRACE_ARM64_NUM_FORL_ASCENDING :
+	    TRACE_ARM64_NUM_FORL_DESCENDING)));
       else if (bc_op(T->startins) == BC_ITERL)
 	trace_arm64_admission_rel(T, TRACE_ARM64_ITERL_ADMITTED);
       else if (bc_op(T->startins) == BC_FUNCF)

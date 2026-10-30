@@ -25,9 +25,9 @@ so the combined source was validated before further integration. In
 The whole sequence exits zero and restores ordinary assertion ARM64 without
 test helpers, final profile
 `0b34717ca5485f9d6b28cf1a10161f56285198b5d469e4bb185f6b79f2e7cce4`.
-The full gate for these newer Lua changes remains pending. The separate full
-gate at preceding sparse/FFI source `0dc7716c8` has passed; it must not be
-attributed to this integration.
+The full gate subsequently passes at combined source `6c46f9bff`; see
+`arm64-forward-math-sret-complete-checkpoint-2026-10-29.md`. The preceding
+sparse/FFI gate at `0dc7716c8` is separate evidence.
 
 ## Ordinary combined validation
 
@@ -55,5 +55,6 @@ assertion ARM64 and strict assertion x86_64 each pass all 509 source and all
 source and bytecode logs record these runs. The outer command exits zero
 and restores ordinary assertion ARM64 without test helpers, profile
 `880de035709cb8f99f56b6b6ec581edf64f3e34afb69a3515657ed49d0f690bd`.
-The complete gate is running separately at frozen `6c46f9bff`.
+The complete gate subsequently passes at frozen `6c46f9bff`, with all four
+M7 profiles and actual final VM/recorder safepoint runtime checks.
 None of these bounded results establishes general x86_64 parity.

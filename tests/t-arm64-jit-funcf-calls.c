@@ -4,6 +4,7 @@
     defined(LUAJIT_MT_ARM64_BOOTSTRAP) && \
     defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL) && defined(LJ_TRACE_TEST_HELPERS)
 #include <assert.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include "lua.h"
@@ -27,6 +28,7 @@ static unsigned native_returns, native_identity_exits;
 static unsigned semantic_bad, postra_bad, low_loopref_bad;
 static unsigned tail_semantic_bad, tail_postra_bad;
 static unsigned literal_semantic_bad, literal_postra_bad;
+static unsigned childframe_semantic_bad, childframe_postra_bad;
 
 static GCfunc *global_lfunc(lua_State *L, const char *name)
 {
@@ -75,6 +77,21 @@ static lua_Number invoke_open(lua_State *L, const char *runner,
   assert(L->cframe==cframe && lj_tg_load_jit_base(L2TG(L))==NULL &&
          !lj_tg_in_native_acq(L2TG(L)));
   return result;
+}
+
+static lua_Number invoke_open_direct(lua_State *L, const char *candidate,
+				     const char *producer,
+				     const char *consumer, lua_Integer x)
+{
+	lua_Number result;
+	void *cframe=L->cframe;
+	lua_getglobal(L,candidate); lua_getglobal(L,producer);
+	lua_getglobal(L,consumer); lua_pushinteger(L,x);
+	ljt_lua_pcall(L,3,1,"FUNCF direct open CALLM");
+	assert(lua_isnumber(L,-1)); result=lua_tonumber(L,-1); lua_pop(L,1);
+	assert(L->cframe==cframe && lj_tg_load_jit_base(L2TG(L))==NULL &&
+	       !lj_tg_in_native_acq(L2TG(L)));
+	return result;
 }
 
 static void invoke_bad_direct(lua_State *L, const char *fn)
@@ -707,6 +724,143 @@ static int open_admit(OpenFixture *f, int postra)
   return lj_asm_arm64_ir_admit(f->J,&f->copy,NULL);
 }
 
+static SnapNo open_addov_child_snapshot(const GCtrace *T,
+					const GCproto *producerpt)
+{
+	SnapNo found=UINT16_MAX;
+	for (SnapNo s=0;s<T->nsnap;s++) {
+	  const SnapShot *snap=&T->snap[s];
+	  uint64_t footer;
+	  IRRef ref=snap_ref_acq(snap);
+	  const BCIns *pc;
+	  uintptr_t address, lo, hi;
+	  if (snap->mapofs>T->nsnapmap || snap->nent>T->nsnapmap-snap->mapofs ||
+	      T->nsnapmap-snap->mapofs-snap->nent<1u+LJ_FR2) continue;
+	  memcpy(&footer,&T->snapmap[snap->mapofs+snap->nent],sizeof(footer));
+	  if (!(uint8_t)footer || ref<REF_FIRST || ref>=T->nins ||
+	      ir_load_acq(&T->ir[ref]).o!=IR_ADDOV) continue;
+	  pc=snap_pc(&T->snapmap[snap->mapofs+snap->nent]);
+	  address=(uintptr_t)pc; lo=(uintptr_t)proto_bc(producerpt);
+	  hi=(uintptr_t)(proto_bc(producerpt)+producerpt->sizebc);
+	  if (address<lo || address>=hi || (address-lo)%sizeof(BCIns)) continue;
+	  assert(bc_op((BCIns)la_load32_acq((const uint32_t *)pc))==BC_ADDVN);
+	  assert(found==UINT16_MAX && "ambiguous child ADDOV snapshot");
+	  found=s;
+	}
+	return found;
+}
+
+static IRRef open_kgc_function_ref(const OpenFixture *f, GCfunc *fn)
+{
+	IRRef found=0;
+	for (IRRef r=f->live->nk;r<REF_TRUE;) {
+	  IRIns ins=ir_load_acq(&f->ir[r]);
+	  if (ins.o==IR_KGC && ir_kgc_load_acq(&f->ir[r])==obj2gco(fn)) {
+	    assert(!found && "duplicate function constant in copied trace");
+	    found=r;
+	  }
+	  if (ins.o==IR_KNUM || ins.o==IR_KINT64 ||
+	      (LJ_GC64 && (ins.o==IR_KGC || ins.o==IR_KPTR ||
+			   ins.o==IR_KKPTR))) {
+	    assert(r+1u<REF_TRUE && "truncated two-word IR constant");
+	    r+=2u;
+	  } else if (ins.o==IR_KINT || ins.o==IR_KGC || ins.o==IR_KPTR ||
+		     ins.o==IR_KKPTR || ins.o==IR_KPRI || ins.o==IR_KNULL) {
+	    r++;
+	  } else {
+	    assert(0 && "unexpected non-constant in IR constant range");
+	    return 0;
+	  }
+	}
+	return found;
+}
+
+static void open_child_addov_admission(OpenFixture *f, GCfunc *consumer)
+{
+	GCtrace *T=f->live;
+	SnapNo child=open_addov_child_snapshot(T,f->producerpt);
+	MSize marker=UINT32_MAX, producer_call=UINT32_MAX;
+	MSize child_func_slot, producer_slot;
+	IRRef consumer_ref;
+	unsigned sem=0, post=0;
+	assert(child!=UINT16_MAX);
+	consumer_ref=open_kgc_function_ref(f,consumer);
+	assert(consumer_ref);
+	for (MSize p=1;p<f->pt->sizebc;p++) {
+	  BCIns ins=(BCIns)la_load32_acq(
+	    (const uint32_t *)&proto_bc(f->pt)[p]);
+	  if (bc_op(ins)==BC_CALL && bc_b(ins)==0u) {
+	    assert(producer_call==UINT32_MAX);
+	    producer_call=p;
+	  }
+	}
+	assert(producer_call!=UINT32_MAX);
+	producer_slot=1u+LJ_FR2+bc_a((BCIns)la_load32_acq(
+	  (const uint32_t *)&proto_bc(f->pt)[producer_call]));
+	for (MSize i=0;i<f->snap[child].nent;i++) {
+	  SnapEntry entry=f->map[f->snap[child].mapofs+i];
+	  if ((entry&0x00ff0000u)==SNAP_FRAME) {
+	    assert(marker==UINT32_MAX);
+	    marker=f->snap[child].mapofs+i;
+	  }
+	}
+	assert(marker!=UINT32_MAX);
+	child_func_slot=snap_slot(f->map[marker])-1u;
+	assert(child_func_slot>1u+LJ_FR2 && producer_slot==child_func_slot);
+
+	for (int allocated=0;allocated<2;allocated++) {
+	  IRRef linkref;
+	  uint64_t saved_pc;
+	  MSize at=UINT32_MAX;
+	  open_reset(f);
+	  assert(open_admit(f,allocated));
+	  linkref=snap_ref(f->map[marker]);
+	  assert(linkref>=f->live->nk && linkref+1u<f->nins &&
+	         f->ir[linkref].o==IR_KNUM);
+	  saved_pc=f->ir[linkref+1u].tv.u64;
+	  open_reset(f);
+	  f->ir[linkref+1u].tv.u64=u64ptr(proto_bc(f->producerpt)+1u);
+	  if (open_admit(f,allocated))
+	    assert(0 && "FUNCF child accepted a changed child return PC");
+	  f->ir[linkref+1u].tv.u64=saved_pc;
+	  if (allocated) post++; else sem++;
+
+	  open_reset(f);
+	  assert(open_admit(f,allocated));
+	  for (MSize i=0;i<f->snap[child].nent;i++)
+	    if (snap_slot(f->map[f->snap[child].mapofs+i])==child_func_slot) {
+	      assert(at==UINT32_MAX); at=f->snap[child].mapofs+i;
+	    }
+	  assert(at!=UINT32_MAX);
+	  f->map[at]=SNAP(child_func_slot,0,consumer_ref);
+	  if (open_admit(f,allocated))
+	    assert(0 && "FUNCF child accepted a substituted callee/root slot");
+	  if (allocated) post++; else sem++;
+
+	  open_reset(f);
+	  assert(open_admit(f,allocated));
+	  {
+	    unsigned changed=0;
+	    for (MSize i=0;i<f->snap[child].nent;i++) {
+	      MSize mapat=f->snap[child].mapofs+i;
+	      SnapEntry entry=f->map[mapat];
+	      if (snap_slot(entry)!=child_func_slot &&
+	          snap_ref(entry)==f->inputref) {
+	        assert(!(entry&(SNAP_FRAME|SNAP_NORESTORE)));
+	        f->map[mapat]=SNAP(snap_slot(entry),0,REF_NIL);
+	        changed++;
+	      }
+	    }
+	    assert(changed>0);
+	  }
+	  if (open_admit(f,allocated))
+	    assert(0 && "FUNCF child accepted a changed root-derived child argument");
+	  if (allocated) post++; else sem++;
+	}
+	assert(sem==3u && post==3u);
+	childframe_semantic_bad+=sem; childframe_postra_bad+=post;
+}
+
 static void open_admission(GCtrace *T, GCfunc *producer, GCfunc *consumer)
 {
   OpenFixture f={0};
@@ -759,6 +913,8 @@ static void open_admission(GCtrace *T, GCfunc *producer, GCfunc *consumer)
     }
   }
   assert(f.return_entry!=UINT32_MAX && open_admit(&f,0) && open_admit(&f,1));
+  if (open_addov_child_snapshot(T,f.producerpt)!=UINT16_MAX)
+    open_child_addov_admission(&f,consumer);
   for (int allocated=0;allocated<2;allocated++) {
     /* Invalid CALLM arity must fail the copied bytecode/source replay in
     ** each independent walk, before any caller map is trusted. */
@@ -869,7 +1025,8 @@ static void open_native_case(lua_State *L, const char *candidate,
 
 static void open_integer_literals(lua_State *L)
 {
-  const char *bodies[]={"return x+.5,-17", "return 65537,x+.5"};
+  const char *bodies[]={"return x+.5,-17", "return 65537,x+.5",
+			"return x+1,.25"};
   for (unsigned i=0;i<sizeof(bodies)/sizeof(bodies[0]);i++) {
     char setup[2048];
     int n=snprintf(setup,sizeof(setup),
@@ -895,6 +1052,66 @@ static void open_integer_literals(lua_State *L)
       "funcf_literal_producer","funcf_literal_consumer",
       "funcf_literal_oracle_producer","funcf_literal_oracle_consumer",
       "funcf_literal_bad_producer","funcf_literal_oracle_bad_producer");
+    if (i==2u) {
+	GCfunc *candidate=global_lfunc(L,"funcf_literal_candidate");
+	GCfunc *producer=global_lfunc(L,"funcf_literal_producer");
+	GCtrace *T=funcf_trace(L,candidate);
+	SnapNo child;
+	MCode *mcode;
+	MSize szmcode;
+	uint64_t generation;
+	uint8_t *saved;
+	lua_Number expected;
+	assert(T && T->linktype==LJ_TRLINK_RETURN);
+	child=open_addov_child_snapshot(T,funcproto(producer));
+	assert(child!=UINT16_MAX &&
+	       ir_load_acq(&T->ir[snap_ref_acq(&T->snap[child])]).o==IR_ADDOV);
+	mcode=trace_mcode_acq(T); szmcode=trace_szmcode_acq(T);
+	generation=T->arm64_generation;
+	assert(mcode && szmcode);
+	saved=(uint8_t *)malloc(szmcode); assert(saved);
+	memcpy(saved,mcode,szmcode);
+	expected=invoke_open_direct(L,"funcf_literal_oracle",
+	  "funcf_literal_oracle_producer","funcf_literal_oracle_consumer",
+	  (lua_Integer)INT_MAX-1);
+	lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+	assert(invoke_open_direct(L,"funcf_literal_candidate",
+	  "funcf_literal_producer","funcf_literal_consumer",
+	  (lua_Integer)INT_MAX-1)==expected);
+	assert(lj_trace_test_root_entry_successes()>0 &&
+	       lj_trace_test_exit_calls()==0 && funcf_trace(L,candidate)==T);
+	expected=invoke_open_direct(L,"funcf_literal_oracle",
+	  "funcf_literal_oracle_producer","funcf_literal_oracle_consumer",
+	  (lua_Integer)INT_MAX);
+	lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+	assert(invoke_open_direct(L,"funcf_literal_candidate",
+	  "funcf_literal_producer","funcf_literal_consumer",
+	  (lua_Integer)INT_MAX)==expected);
+	assert(lj_trace_test_root_entry_successes()>0 &&
+	       lj_trace_test_exit_calls()==1u &&
+	       lj_trace_test_first_exit_parent()==T->traceno &&
+	       lj_trace_test_first_exitno()==child && funcf_trace(L,candidate)==T);
+	assert(T->arm64_generation==generation && trace_mcode_acq(T)==mcode &&
+	       trace_szmcode_acq(T)==szmcode &&
+	       memcmp(saved,mcode,szmcode)==0);
+	lua_gc(L,LUA_GCCOLLECT,0);
+	expected=invoke_open_direct(L,"funcf_literal_oracle",
+	  "funcf_literal_oracle_producer","funcf_literal_oracle_consumer",
+	  (lua_Integer)INT_MAX);
+	lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+	assert(invoke_open_direct(L,"funcf_literal_candidate",
+	  "funcf_literal_producer","funcf_literal_consumer",
+	  (lua_Integer)INT_MAX)==expected);
+	assert(lj_trace_test_root_entry_successes()>0 &&
+	       lj_trace_test_exit_calls()==1u &&
+	       lj_trace_test_first_exit_parent()==T->traceno &&
+	       lj_trace_test_first_exitno()==child && funcf_trace(L,candidate)==T &&
+	       trace_mcode_acq(T)==mcode && trace_szmcode_acq(T)==szmcode &&
+	       memcmp(saved,mcode,szmcode)==0);
+	free(saved);
+	printf("FUNCF child ADDOV open CALLM exact overflow exit=%u GC/reentry passed\n",
+	       (unsigned)child);
+    }
   }
   assert(literal_semantic_bad==2u && literal_postra_bad==2u);
 }
@@ -1205,6 +1422,7 @@ int main(void)
     "funcf_open_oracle_producer","funcf_open_oracle_consumer",
     "funcf_open_bad_producer","funcf_open_oracle_bad_producer");
   open_integer_literals(L);
+  assert(childframe_semantic_bad==3u && childframe_postra_bad==3u);
   GCfunc *candidate=global_lfunc(L,"funcf_candidate");
   GCtrace *T=NULL;
   for (unsigned i=0;i<8&&!T;i++) {

@@ -488,6 +488,9 @@ typedef struct GCtrace {
 #define TRACE_ARM64_TRUE_FUNCF_ADMITTED	0x40
 #define TRACE_ARM64_INT_SIDE_ADMITTED	0x80
 #define TRACE_ARM64_ITERL_ADMITTED	0x100
+#define TRACE_ARM64_NUM_FORL_ADMITTED	0x200
+#define TRACE_ARM64_NUM_FORL_ASCENDING	0x400
+#define TRACE_ARM64_NUM_FORL_DESCENDING	0x800
 #define TRACE_RETIRE_PENDING		0x10
 #if LJ_TARGET_ARM64
 /* Keep target admission separate from common mutable trace lifecycle flags.

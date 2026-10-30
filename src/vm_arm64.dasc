@@ -68,6 +68,7 @@
 |.define CARG5,		x4
 |.define CARG6,		x5
 |.define CARG7,		x6
+|.define CARG8,		x7
 |.define CARG1w,	w0
 |.define CARG2w,	w1
 |.define CARG3w,	w2
@@ -4422,6 +4423,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  add RA, BASE, RA, lsl #3
     |  ldp CARG1, CARG2, FOR_IDX		// CARG1 = IDX, CARG2 = STOP
     |   ldr CARG3, FOR_STEP			// CARG3 = STEP
+    if (op == BC_JFORL) {
+      |   mov CARG8, #0			// Integer post-update entry mode.
+    }
     if (op != BC_JFORL) {
       |   add RC, PC, RC, lsl #2
       |   sub RC, RC, #0x20000
@@ -4481,6 +4485,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  fadd d0, d0, d2
     }
     |  tbnz CARG3, #63, >7
+    if (op == BC_JFORL) {
+      |  mov CARG8, #1			// NUM ascending post-update entry mode.
+    }
     |  fcmp d0, d1
     |6:
     if (vk) {
@@ -4496,7 +4503,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     } else if (op == BC_IFORL) {
       |  csel PC, RC, PC, ls
     } else {
-      |  bls =>BC_JLOOP
+      |  bls >9
     }
     if (op == BC_IFORL) {
       |  bls >8				// Poll only on the taken backedge.
@@ -4504,6 +4511,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  b <2
     |
     |7:  // Invert check for negative step.
+    if (op == BC_JFORL) {
+      |  mov CARG8, #2			// NUM descending post-update entry mode.
+    }
     |  fcmp d1, d0
     |  b <6
     if (op == BC_IFORL) {
@@ -4514,7 +4524,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     }
     if (op == BC_JFORL) {
       |.if JIT
-      |9:  // Taken integer edge: IDX/EXT are authoritative before admission.
+      |9:  // Taken loop edge: IDX/EXT are authoritative before admission.
       |  mov RAw, INSw			// Preserve the consumed full JFORL word.
       |  str BASE, L->base
       |  add CARG1, GL, #GG_G2J_HI
@@ -4525,6 +4535,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  mov CARG5, BASE
       |  mov CARG6w, INSw
       |  mov CARG7, #0
+      |  // CARG8 is set by the selected JFORL edge path.
       |  bl extern lj_trace_enter_root
       |  ldr BASE, L->base
       |  cbz CRET1, >8
@@ -4573,6 +4584,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  mov CARG5, BASE
       |  mov CARG6w, INSw
       |  mov CARG7, #0
+      |  mov CARG8, #0
       |  bl extern lj_trace_enter_root
       |  ldr BASE, L->base
       |  cbz CRET1, >8
@@ -4635,6 +4647,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov CARG5, BASE
     |  mov CARG6w, INSw
     |  mov CARG7, #0
+    |  mov CARG8, #0
     |  bl extern lj_trace_enter_root
     |  ldr BASE, L->base
     |  cbz CRET1, >1
@@ -4773,6 +4786,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  mov CARG5, BASE
       |  mov CARG6w, INSw
       |  mov CARG7, RA
+      |  mov CARG8, #0
       |  bl extern lj_trace_enter_root
       |  ldr BASE, L->base
       |  cbz CRET1, >4

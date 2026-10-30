@@ -18,23 +18,22 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
-- Current verified production checkpoint: `0dc7716c8`. It extends the
-  reusable side-ancestry implementation with sparse parent snapshots,
-  tested side depth 260, and numeric-cdata variadic FFI arguments. No locks
-  are added. The complete combined gate passes, including actual
-  VM/recorder safepoint runtime execution and all four M7 FFI profiles.
-  The gate checkout is restored to ordinary assertion ARM64 without test
-  helpers. Ordinary ARM64 and strict x86_64 builds each pass all 509 source
-  cases and all 509 original-bytecode cases. See the
-  [complete gate](arm64-sparse-ffi-complete-checkpoint-2026-10-29.md),
-  [ordinary builds](arm64-sparse-ffi-integration-2026-10-29.md),
-  [sparse frames](arm64-sparse-side-frame-2026-10-29.md) and
-  [capacity evidence](arm64-deep-side-capacity-2026-10-29.md).
-  Later bounded vararg forwarding, fixed-function open-result calls, binary
-  math and variadic indirect FFI results are undergoing combined validation.
-  Floating numeric loops, general Lua call/return, recursion, protected
-  calls and remaining FFI restrictions are active work. Full x86_64 parity
-  is not complete.
+- Current verified production checkpoint: `89226814d`. It adds NUM FORL
+  root direction support, guarded FUNCF producer-child overflow exits,
+  integer-literal CALLM replay, FFI integer accumulator PHIs and default/fixed
+  positive string.byte ranges to `6c46f9bff`. No locks are added.
+  The complete combined gate passes, including actual VM/recorder safepoint
+  runtime execution and all four M7 FFI profiles. The gate checkout is
+  restored to ordinary assertion ARM64 without test helpers. Ordinary ARM64
+  and strict x86_64 builds each pass all 509 source cases and all 509 original
+  v2-bytecode cases. See the
+  [complete checkpoint](arm64-num-child-byte-complete-checkpoint-2026-10-30.md),
+  [ordinary evidence](arm64-num-child-byte-ordinary-checkpoint-2026-10-30.md),
+  and [preceding checkpoint](arm64-forward-math-sret-complete-checkpoint-2026-10-29.md).
+  Later NUM-loop integer bodies, negative/dynamic byte bounds and variadic
+  aggregate-prefix FFI have separate focused validation. NUM loop children,
+  wider forwarding, general Lua call/return, recursion, protected calls and
+  remaining FFI restrictions are active work. Full x86_64 parity is not complete.
 
 ## Earlier checkpoint records
 
