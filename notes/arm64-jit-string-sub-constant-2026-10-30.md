@@ -1,9 +1,12 @@
 # Bounded native substring allocation
 
-The ARM64 scalar LOOP/FORL path now admits `string.sub(s, first, last)` with
-one guarded formal string, positive literal bounds, a nonempty fixed result,
-one fixed three-argument/one-result CALL and one corresponding `IR_SNEW`.
-The last literal must fit a positive signed KSHORT. No emitter, allocator,
+The ARM64 scalar LOOP/FORL path admits `string.sub(s, first, last)` with
+one guarded formal string, a positive literal first argument, one fixed
+three-argument/one-result CALL and one corresponding `IR_SNEW`. The initial
+slice accepts positive literal end bounds with a nonempty fixed result; a
+follow-up also accepts negative literal end bounds when the recorder derives
+the result width from that same string's length. Positive endpoints fit a
+positive signed KSHORT; negative endpoints fit a signed KSHORT. No emitter, allocator,
 interning or snapshot-restoration behavior changes, and no locks are added.
 
 The existing ARM64 SNEW emitter prepares the allocation snapshot and calls
@@ -75,6 +78,41 @@ JIT modules, binaries, archives and SHA-256 files. It restores ordinary
 assertion ARM64 with profile
 `b78389a60e617b5927aee49becb901755962d3330bfd57d3990149451248057b`.
 
-This is a bounded admission slice. Dynamic/negative/empty substring results,
-other source shapes, broader string allocation and general Lua call/return
+This is a bounded admission slice. Variable endpoints, omitted bounds,
+unrelated source shapes, broader string allocation and general Lua call/return
 topology remain outside it; full x86_64 parity is still incomplete.
+
+## Negative literal end bounds
+
+The source decoder now reports the exact signed KSHORT endpoint while keeping
+the fixed CALL, formal string slot, copied argument positions and no-bypass
+bytecode geometry checks shared by both proof passes. For a negative endpoint
+`last`, semantic and post-RA admission independently require the exact same
+string's `STR_LEN`, `end = len + (last + 1)` (or `len` for `last == -1`),
+`width = end - (first - 1)` when the start offset is nonzero, and a dominating
+`GE width, 0` guard before `STRREF`. For start one, the width is `end` itself.
+Since the endpoint adjustment is nonpositive and the checked width is bounded
+by the string length, the result extent cannot run past the string. KSHORT
+limits keep the intermediate arithmetic away from signed overflow; `SUBOV`
+and the nonnegative guard remain required for the computed width. Empty
+results are valid when the guard permits width zero.
+
+The C fixture adds independent semantic and post-RA mutations for the length
+adjustment, start subtraction, width guard, source literals, CALL arity,
+conditional source bypass and allocation/source references. The existing Lua
+oracle, live peer, GC/code-identity checks and native selected-root exits now
+also cover `first` values 1 and 2 with `last` values -1, -2 and -4 in both
+LOOP and FORL forms.
+
+The final four-profile contract log is
+`/Users/frityet/Scratch/ljmt-string-sub-negative-end-20261030/final-four-profiles.log`.
+Ordinary no-helper matched probes and Lua oracle/peer-GC runs are in
+`/Users/frityet/Scratch/ljmt-string-sub-negative-end-20261030/ordinary/`.
+The ordinary ARM64 binary hash is
+`a56b6435761987436e39b7080af422a26161c8cf958ee3a04ee277b40cad6bf9`; the
+x86-64 hash is
+`2028af1cb148ae10390b2364493bd2aa6424dd2a01fcdfb8989534052444b815`.
+All twelve negative-end rows had exact selected-root exits on both targets:
+x86-64 recorded eight exits per row; ARM64 recorded seven FORL exits and
+eight while-loop exits per row. The Lua oracle/peer-GC runs repeated all
+twelve negative rows after collection and checked machine-code identity.
