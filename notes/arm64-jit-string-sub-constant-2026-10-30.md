@@ -38,6 +38,24 @@ active and checks the returned GCstr arena READY bit. This witnesses the
 existing-string helper path: interpreter warmup can intern the result first,
 so it is not proof of a fresh allocation originating inside native code.
 
+A subsequent test-only hook observes successful fresh-string publication
+immediately after the string-table CAS. It is compiled only with
+`LJ_STR_TEST_HELPERS`, does no work when unset, and changes no ordinary runtime
+behavior. The C fixture requires a fresh publication in the while-loop case
+with the native frame active and the new GCstr READY bit set. The initial
+result is a string to keep its type guard stable. The FORL case still usually
+interns its result during the first interpreted iteration and only requires
+the existing-string native helper witness.
+
+`stable-publication-four-profiles.log` passes all four profiles, with fresh
+native while publications of 1, 40, 1 and 45 respectively. Counts vary with
+collection and entry paths; each profile positively witnesses the required
+fresh-publication event. Both ordinary architectures also pass all sixteen
+rows of the final fixture (`stable-result-ordinary-arm64.log` and
+`stable-result-ordinary-x86_64.log`); the x86_64 run uses the immutable ordinary
+runtime below and matching JIT modules. Final ordinary ARM64 restoration is
+`c307fca23a214c0d9b674b2f7e6efaafe9f7179363adaf87189d30bb58a63563`.
+
 Evidence is in
 `/Users/frityet/Scratch/ljmt-string-sub-constant-20261030/`.
 `final-four-profiles.log` is the final component run, including source-skip

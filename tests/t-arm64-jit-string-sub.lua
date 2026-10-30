@@ -27,7 +27,9 @@ for _, kind in ipairs(kinds) do
       jit.opt.start('hotloop=1', 'hotexit=1000', 'maxtrace=64')
       local loop = kind == 'forl' and 'for i=1,n do ' or
                    'local i=0;while i<n do i=i+1;'
-      local source = 'local sub=string.sub;return function(s,n)local r;' ..
+      -- Keep the initial result tag stable so a while-loop entry can allocate
+      -- before any interpreter iteration interns the same substring.
+      local source = 'local sub=string.sub;return function(s,n)local r=s;' ..
         loop .. 'r=sub(s,' .. first .. ',' .. (first+width-1) ..
         ') end;return r end'
       local f = assert(loadstring(source, '@substring-native-candidate'))()
@@ -94,8 +96,8 @@ for _, kind in ipairs(kinds) do
         assert(c == code and a == addr and l == loopoffset)
       end
 
-      -- Retain results while the peer requests collection. Native entry is
-      -- witnessed above; interpreter warmup can intern a result first.
+      -- Retain results while the peer requests collection. The C companion
+      -- separately observes fresh native publication in the while-loop case.
       local fresh = {}
       assert(stop:send('gc', 5))
       for i = 1, 48 do

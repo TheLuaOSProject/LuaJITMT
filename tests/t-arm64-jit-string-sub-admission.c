@@ -11,6 +11,19 @@
 
 static lua_State *test_L;
 static unsigned native_string_matches;
+static unsigned native_string_publications;
+
+static void string_publish(lua_State *L, GCstr *str)
+{
+  GCArena *arena;
+  if (L != test_L || !lj_tg_load_jit_base(L2TG(L))) return;
+  assert(lj_tg_jit_active_acq(L2TG(L)));
+  assert(str->gct == (uint8_t)~LJ_TSTR && str->len == 3u);
+  arena = lj_arena_of(str);
+  assert(!lj_arena_ishuge(arena));
+  assert(lj_arena_ready_get(arena, lj_arena_cellof(str)));
+  native_string_publications++;
+}
 
 static void string_match(lua_State *L, GCRef *link, GCobj *object,
                          uintptr_t observed, uint32_t stage)
@@ -58,12 +71,15 @@ int main(int argc, char **argv)
   luaL_openlibs(L);
   test_L = L;
   lj_str_test_set_match_hook(string_match);
+  lj_str_test_set_publish_hook(string_publish);
   lua_pushstring(L, argv[2]); lua_setglobal(L, "substring_fixture_kind");
   if (luaL_dofile(L, argv[1])) {
     fprintf(stderr, "%s\n", lua_tostring(L,-1)); abort();
   }
   lj_str_test_set_match_hook(NULL);
+  lj_str_test_set_publish_hook(NULL);
   assert(native_string_matches > 0u);
+  if (!strcmp(argv[2], "while")) assert(native_string_publications > 0u);
   lua_getglobal(L, "substring_trace_no");
   no = (TraceNo)lua_tointeger(L,-1); lua_pop(L,1);
   assert(no);
@@ -184,5 +200,7 @@ int main(int argc, char **argv)
   arm64_fixture_free(&f);
   lua_close(L);
   printf("substring admission OK: %s bounds, callee, snapshots and allocation\n", argv[2]);
+  printf("substring native helper: %s matches=%u fresh_publications=%u\n",
+         argv[2], native_string_matches, native_string_publications);
   return 0;
 }
