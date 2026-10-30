@@ -399,3 +399,13 @@ The preceding complete gate at `52efb731e` passed and was promoted to main.
 A new complete gate is frozen at `9ebec6139`, including sequential leaves,
 numeric identities, zero-first substrings and fixed-pair byte snapshots. It
 excludes the in-progress negative-first substring and child-side work.
+
+
+The captured substring callee was separately audited after the fixed-pair
+byte source-lineage repair. Replacing its UGET callee setup with KPRI nil is
+already rejected independently by both semantic and allocated validation for
+FORL, LOOP and omitted-end forms. `144843efa` retains those counterfactuals
+as assertions; no production change was needed. Diagnostic and asserted
+fixture logs are under
+`/Users/frityet/Scratch/ljmt-substring-call-lineage-audit-20261030/`.
+This test-only follow-up is outside the frozen `9ebec6139` complete gate.
