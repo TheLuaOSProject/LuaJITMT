@@ -23,7 +23,9 @@ factory/observer/oracle functions interpreted, and observes only `texit`.
 On ARM64 the selected runner `JFORL` traces were reused with 20 selected-root
 exits for each of arities 4, 8, 16 and 32. The saved x86_64 binary selected
 and reused its runner loop roots for the same source, with 1,899 selected-root
-exits per case. The primary logs are
+exits per case. Those exit counts reflect the different warm/reuse sequences;
+they prove the selected roots executed and remained reusable, not equal trace
+topology. The primary logs are
 `/Users/frityet/Scratch/ljmt-vararg-forward-wide-observer-arm64.log` and
 `/Users/frityet/Scratch/ljmt-vararg-forward-wide-observer-x64.log`.
 
