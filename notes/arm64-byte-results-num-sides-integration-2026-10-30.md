@@ -212,3 +212,17 @@ Retry evidence is in the preceding full-gate directory under
 `retry-503c8ba2f/`; the matrix is in
 `/Users/frityet/Scratch/ljmt-mixed-byte-substring-tostring-ordinary-20261030/`.
 Neither run is recorded as passed until its final result is available.
+
+The ordinary matrix at `503c8ba2f` subsequently passed on both targets.
+ARM64 assertions and strict bare-`-Werror` x86_64 assertions each pass both
+509-case stock corpora, 260 workload semantic checks, topology/expanded
+probes, the preceding fixed/dynamic byte and twelve FFI-index rows, all
+eighty mixed-sign byte rows, sixteen substring rows and both string-tostring
+forms. The raw-U8 live-peer test still witnesses 84 selected-root exits and
+unchanged code after GC. Ordinary tostring observes 167/159 selected while/for
+root exits on ARM64; both architectures retain code identity and match the
+interpreted oracle with a live peer. The matrix directory retains matching
+runtimes, archives, JIT modules, source revision and hashes. Ordinary ARM64
+restoration profile is
+`ac5a80d62d2f8408e8a33ed3836874d93342da7efb44ae1ce5515064a4a04308`.
+The complete gate remains a separate running validation.
