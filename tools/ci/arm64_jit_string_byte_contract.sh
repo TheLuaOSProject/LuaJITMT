@@ -20,6 +20,20 @@ lj_ci_set_restore "$LJ_CI_RESTORE_TARGET_FLAGS" "$restore_xcflags"
 fixture_source=$root/tests/t-arm64-jit-string-byte-admission.c
 lua_source=$root/tests/t-arm64-jit-string-byte.lua
 test -f "$fixture_source" && test -f "$lua_source"
+for required in \
+  'arm64_string_byte_constant_negative_bounds_ir' \
+  'arm64_string_byte_constant_negative_bounds_postra' \
+  'string_byte_call_literal_slots' \
+  'string_byte_negative_constant_trace' \
+  'call_negative_constant_loop' \
+  'test_negative_constant_variant' \
+  'nine semantic/post-RA source/range negatives'; do
+  grep -F "$required" "$fixture_source" "$lua_source" \
+    "$root/src/lj_asm_arm64_admit.h" >/dev/null || {
+    echo "ARM64 constant-negative string.byte proof lost required case: $required" >&2
+    exit 1
+  }
+done
 
 build_and_run() {
   arch=$1
