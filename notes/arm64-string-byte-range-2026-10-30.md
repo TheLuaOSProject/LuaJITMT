@@ -42,3 +42,24 @@ Evidence under `/Users/frityet/Scratch/ljmt-deep-callm-integration-20261029`:
 
 This is focused evidence for the range extension. The next combined gate
 and full x86_64 behavior parity remain separate work.
+
+## Review follow-up
+
+The range-length `SUBOV`/`EQ` proof was checked separately because a dynamic
+end below the start must return no values. `range-byte-dynamic-end-arm64.log`
+and `range-byte-dynamic-end-x64.log` show that integer, fractional and negative
+numeric ends, plus a shared dynamic start/end, remain refused on ARM64 while
+the x64 roots execute. `range-byte-dynamic-end-dump.log` records the dynamic
+end's unsigned length comparison, range-length subtraction and equality; its
+ARM64 admission fails before assembly. The new fixed positive-end cases fold
+that subtraction/equality to constants, so they do not rely on an unproven
+dynamic range guard.
+
+A parameter whose observed value is nil does compile, with its nil type
+guard. The fixture now tests that specialization against later ends 1, 4 and
+-2. Each call enters and exits the selected native root, agrees with the
+JIT-disabled oracle (including the empty-range error), and preserves the code
+for subsequent nil reuse. The updated complete four-profile contract passes
+in `range-byte-nil-end-four-profile.log`, restoring ordinary ARM64 profile
+`71da45282b5aa0f6500e8b34bdcb3d9f8cc59ef6f164ce25ef8427489bf4c4f4`.
+This follow-up changes tests only, not production code.
