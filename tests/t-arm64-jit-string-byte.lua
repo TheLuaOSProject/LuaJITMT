@@ -97,7 +97,7 @@ local traced = {}
 local function trace_event(what, traceno, fn)
   if what == 'start' and
      (fn == string_byte_trace or fn == string_byte_fixed_pair_trace) then
-    traced[traceno] = true
+    traced[traceno] = fn
   elseif what == 'abort' then
     traced[traceno] = nil
   end
@@ -117,7 +117,7 @@ assert(string_byte_fixed_pair_trace(s, 80, 0, 0) ==
 local function has_fixed_pair_trace()
   for traceno in pairs(traced) do
     local info = util.traceinfo(traceno)
-    if info then
+    if info and traced[traceno] == string_byte_fixed_pair_trace then
       local raw = 0
       for ref = 1, info.nins do
         local _, typedop = util.traceir(traceno, ref)
@@ -136,7 +136,10 @@ jit.off(has_fixed_pair_trace, true)
 assert(has_fixed_pair_trace(), 'two-result byte trace omitted its raw loads')
 
 local function has_bounded_byte_load()
-  local traceno = next(traced)
+  local traceno
+  for no, fn in pairs(traced) do
+    if fn == string_byte_trace then traceno = no; break end
+  end
   if not traceno then return false end
   local info = util.traceinfo(traceno)
   if not info then return false end
