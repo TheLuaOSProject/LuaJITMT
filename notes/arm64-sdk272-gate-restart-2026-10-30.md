@@ -25,15 +25,12 @@ The last complete passing source checkpoint remains `9ebec6139`, promoted on
 to the preceding toolchain. Do not promote the newer source on the basis of
 the interrupted `f752aa882` run.
 
-## Restart completion
+## Successful replacement gates
 
-The frozen `74a48b1b8` run has now completed successfully with Xcode 27.2:
-all four combined M7 FFI profiles, the full experimental gate, and the actual
-VM/recorder safepoint runtime checks passed. The outer runner reported
-`gate exit=0; restore exit=0`. Ordinary assertion ARM64 was restored with
-profile `0b949a87a07a0d0551b2125cb12dd9d4949b79aa85954e2d4dafc809c757ed0a`.
-This supersedes the preceding paragraph's last-complete-checkpoint statement
-for validation evidence; promotion can use this successful source rather than
-the interrupted run. The later numeric-concat checkpoint `68c122f2a` has its
-own independently frozen complete gate still running. Integer formatting,
-modulo and child-return witness follow-ups are later focused checkpoints.
+The frozen `74a48b1b8` replacement gate and the later `68c122f2a` numeric
+concatenation gate both complete with all four M7 profiles and actual
+safepoint runtime tests. Both outer runners report gate/restore exit 0.
+The main parity branch now promotes `68c122f2a`; see the
+[named complete checkpoint](arm64-numeric-concat-closed-upvalue-complete-checkpoint-2026-10-30.md)
+for exact profiles and evidence. This supersedes the earlier last-complete
+checkpoint statement above without changing the interrupted run's outcome.

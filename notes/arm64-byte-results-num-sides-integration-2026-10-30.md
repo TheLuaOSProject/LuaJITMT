@@ -612,3 +612,26 @@ valid-marker, payload-forged-as-KNUM, and wrong-slot controls. It passes the
 four-profile leaf contract in the agent checkout. `1aee08aa7` removes unrelated
 formatting churn without changing behavior. These later checkpoints do not
 extend the frozen `43bd1ca75` combined evidence to an unrun complete gate.
+
+## Combined integer modulo, formatting and child-witness validation
+
+`f4ee0176d` integrates INT modulo `29eb99e92` with the integer-formatting and
+child-return recording source. The merge preserves both test families in the
+shared scalar fixture; its only conflicts were test-helper insertion points
+and case-name selection. The combined scalar/NUM+INT publication contract
+passes all four ARM64/arm64e assertion/release profiles, restoring ordinary
+ARM64 at `b85955d8af84e9eb61d90978c0721661cec7cfe9b61e97b034f274f4503b7977`.
+
+At that same frozen source, fresh ordinary ARM64 and strict x86_64 builds pass
+both 509-case stock corpora and the complete prior ordinary matrix, augmented
+with INT concatenation and the four native modulo rows. Logs, scripts, saved
+runtime/JIT-module bundles and hashes are in
+`/Users/frityet/Scratch/ljmt-modulo-concat-child-integrated-20261030/`.
+Final ordinary ARM64 restoration is
+`ac110df66682cfc6605041f3b8def2181d41cc7dd77bb06f0365a0f2365dec31`.
+
+The main parity branch now promotes full-gate-verified source `68c122f2a`,
+with an independent ordinary rebuild recorded through `70bc26286`. The full
+gate frozen at `505069708` (integer concatenation and child-return witnesses,
+excluding modulo) is still running. Later unary-leaf, character-string and
+modulo-result allocation work is not included in these frozen results.
