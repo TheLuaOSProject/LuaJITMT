@@ -884,6 +884,7 @@ static int api_vm_prepare_entry_claimed(lua_State *L, lua_State *errL,
     return LUA_OK;
   }
   topofs = savestack(L, L->top);
+  UNUSED(topofs);  /* Only consumed by the error-value assertion below. */
   cframe = L->cframe;
   lj_state_resumeboundary_begin(claim, &boundary);
   status = lj_vm_cpcall(L, NULL, ud, cp);
