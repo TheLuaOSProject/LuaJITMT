@@ -21933,6 +21933,45 @@ static int arm64_scalar_math_regsp_survives(RegSP rs, IRType type, MSize cap)
                           reg >= RID_X19 && reg <= RID_X28;
 }
 
+/* A call result produced before IR_LOOP can be a PHI's incoming value for
+** the next iteration. The allocator may move that value to a preserved
+** register at the exact loop snapshot before the next body call. Validate
+** that specific rename rather than judging the original CALLN result's
+** caller-clobbered register. */
+static int arm64_scalar_math_loop_value_survives(
+                                      const LJArm64PostRAView *v, IRRef n,
+                                      IRRef value, IRRef loop, IRRef call,
+                                      MSize cap)
+{
+  IRRef ref;
+  MSize s, loop_snap = 0;
+  unsigned nsnap = 0, nrename = 0;
+  RegSP rs;
+  IRType type;
+  if (!v || !v->snap || !v->ir || value >= loop || loop >= call ||
+      loop < REF_FIRST || n > v->nins)
+    return 0;
+  if (ir_load_acq(&v->ir[loop]).o != IR_LOOP) return 0;
+  for (s = 0; s < v->nsnap; s++) {
+    if (snap_ref_acq(&v->snap[s]) == loop) {
+      loop_snap = s;
+      nsnap++;
+    }
+  }
+  if (nsnap != 1u) return 0;
+  for (ref = n; ref < v->nins; ref++) {
+    IRIns ren = ir_load_acq(&v->ir[ref]);
+    if (ren.o != IR_RENAME || ren.op1 != value || ren.op2 != loop_snap)
+      continue;
+    if (++nrename != 1u || ren.t.irt != IRT_NIL || ren.s != SPS_NONE)
+      return 0;
+  }
+  if (nrename != 1u) return 0;
+  rs = arm64_scalar_postra_snapshot_regsp(v, n, value, loop_snap);
+  type = (IRType)irt_type(ir_load_acq(&v->ir[value]).t);
+  return arm64_scalar_math_regsp_survives(rs, type, cap);
+}
+
 /* Reconstruct binary helper arguments from the allocated view independently
 ** of semantic admission. CARG itself has no value or allocation. */
 static int arm64_scalar_math_carg_postra(const LJArm64PostRAView *v,
@@ -21990,7 +22029,8 @@ static int arm64_scalar_math_live_across(const LJArm64PostRAView *v,
       needed = (irm_op1(mode) == IRMref && use.op1 == value) ||
                (irm_op2(mode) == IRMref && use.op2 == value);
     }
-    if (needed && !arm64_postra_value_survives_call(v, value, call, cap, 0))
+    if (needed && !arm64_postra_value_survives_call(v, value, call, cap, 0) &&
+        !arm64_scalar_math_loop_value_survives(v, n, value, loop, call, cap))
       return 0;
     for (s = 0; s < v->nsnap; s++) {
       const SnapShot *snap = &v->snap[s];
