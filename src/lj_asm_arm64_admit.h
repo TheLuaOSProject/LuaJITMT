@@ -12054,6 +12054,157 @@ static int arm64_string_byte_snapshot_slot_ir(const GCtrace *T, IRRef value,
   return 1;
 }
 
+/* Mixed-sign multi-result ranges have one end expressed in the caller's
+** positive coordinate system and the other normalized against string length. */
+static int arm64_string_byte_mixed_range_ir(const GCtrace *T,
+    IRRef strref, IRRef str, IRRef offset, IRRef expected_index,
+    IRRef expected_guard)
+{
+  IRRef base = offset, first, lenref = 0;
+  MSize firstslot;
+  int32_t displacement = 0, minus_one;
+  int negative_first;
+  const IRIns *string;
+  GCobj *startpt;
+  GCproto *pt;
+  LJ_STATIC_ASSERT(LJ_MAX_STR < INT32_MAX);
+  if (!T || strref < REF_FIRST || strref >= T->nins ||
+      offset < REF_FIRST || offset >= strref || str < REF_FIRST ||
+      str >= strref || !arm64_scalar_ir_ref(T, str, strref, IRT_STR))
+    return 0;
+  if (T->ir[offset].o == IR_ADD && T->ir[offset].t.irt == IRT_INT &&
+      T->ir[offset].op1 >= REF_FIRST && T->ir[offset].op1 < offset &&
+      arm64_ir_kint_value(T, T->ir[offset].op2, &displacement)) {
+    if (displacement < 0) return 0;
+    base = T->ir[offset].op1;
+  }
+  if (base < REF_FIRST || base >= strref) return 0;
+  if (T->ir[base].o == IR_ADDOV &&
+      T->ir[base].t.irt == (IRT_INT|IRT_GUARD) &&
+      T->ir[base].op1 >= REF_FIRST && T->ir[base].op1 < base &&
+      arm64_ir_kint_value(T, T->ir[base].op2, &minus_one) &&
+      minus_one == -1) {
+    negative_first = 0;
+    first = T->ir[base].op1;
+  } else if (T->ir[base].o == IR_ADD &&
+             T->ir[base].t.irt == IRT_INT) {
+    IRIns norm = T->ir[base];
+    IRRef left = norm.op1, right = norm.op2;
+    int left_len = left >= REF_FIRST && left < base &&
+      T->ir[left].o == IR_FLOAD && T->ir[left].t.irt == IRT_INT &&
+      T->ir[left].op1 == str && T->ir[left].op2 == IRFL_STR_LEN;
+    int right_len = right >= REF_FIRST && right < base &&
+      T->ir[right].o == IR_FLOAD && T->ir[right].t.irt == IRT_INT &&
+      T->ir[right].op1 == str && T->ir[right].op2 == IRFL_STR_LEN;
+    if (left_len == right_len) return 0;
+    negative_first = 1;
+    lenref = left_len ? left : right;
+    first = left_len ? right : left;
+  } else return 0;
+  if (first < REF_FIRST || first >= base ||
+      !arm64_string_byte_index_slot_ir(T, first, base, &firstslot))
+    return 0;
+  string = &T->ir[str];
+  if (string->o != IR_SLOAD || string->t.irt != (IRT_STR|IRT_GUARD) ||
+      string->op2 != IRSLOAD_TYPECHECK) return 0;
+  startpt = trace_startptgco_acq((GCtrace *)T);
+  if (!startpt || !checkptrGC(startpt) ||
+      startpt->gch.gct != (uint32_t)~LJ_TPROTO) return 0;
+  pt = gco2pt(startpt);
+  for (IRRef end = REF_FIRST; end < strref; end++) {
+    IRRef last = end, lastslot, negfirst = 0, neglast = 0;
+    IRRef upper = 0, nonneg = 0;
+    for (IRRef subref = end+1u; subref < strref; subref++) {
+      IRIns sub = T->ir[subref];
+      if (sub.o != IR_SUBOV || sub.t.irt != (IRT_INT|IRT_GUARD) ||
+          end >= subref || sub.op1 != end || sub.op2 != base) continue;
+      if (negative_first) {
+        if (end >= REF_FIRST && end < subref &&
+            arm64_string_byte_index_slot_ir(T, end, subref, &lastslot) &&
+            arm64_string_byte_call_range_slots(pt, string->op1,
+                                                firstslot, lastslot)) {
+          for (IRRef ref = lenref+1u; ref < subref; ref++) {
+            IRIns guard = T->ir[ref];
+            if (guard.t.irt == (IRT_INT|IRT_GUARD) &&
+                ((guard.o == IR_UGE && guard.op1 == lenref &&
+                  guard.op2 == end) ||
+                 (guard.o == IR_ULE && guard.op1 == end &&
+                  guard.op2 == lenref))) upper = ref;
+          }
+        }
+      } else {
+        IRIns endins = T->ir[end];
+        IRRef inner;
+        int32_t one;
+        if (endins.o != IR_ADD || endins.t.irt != IRT_INT ||
+            endins.op1 < REF_FIRST || endins.op1 >= end ||
+            !arm64_ir_kint_value(T, endins.op2, &one) || one != 1)
+          continue;
+        inner = endins.op1;
+        if (inner < REF_FIRST || inner >= end ||
+            T->ir[inner].o != IR_ADD || T->ir[inner].t.irt != IRT_INT)
+          continue;
+        {
+          IRIns sum = T->ir[inner];
+          IRRef left = sum.op1, right = sum.op2;
+          int left_len = left >= REF_FIRST && left < inner &&
+            T->ir[left].o == IR_FLOAD && T->ir[left].t.irt == IRT_INT &&
+            T->ir[left].op1 == str && T->ir[left].op2 == IRFL_STR_LEN;
+          int right_len = right >= REF_FIRST && right < inner &&
+            T->ir[right].o == IR_FLOAD && T->ir[right].t.irt == IRT_INT &&
+            T->ir[right].op1 == str && T->ir[right].op2 == IRFL_STR_LEN;
+          if (left_len == right_len) continue;
+          lenref = left_len ? left : right;
+          last = left_len ? right : left;
+        }
+        if (last < REF_FIRST || last >= inner ||
+            !arm64_string_byte_index_slot_ir(T, last, inner, &lastslot))
+          continue;
+        if (!arm64_string_byte_call_range_slots(pt, string->op1,
+                                                 firstslot, lastslot)) continue;
+        for (IRRef ref = last+1u; ref < inner; ref++) {
+          IRIns guard = T->ir[ref];
+          if (guard.o == IR_LT && guard.t.irt == (IRT_INT|IRT_GUARD) &&
+              guard.op1 == last && arm64_ir_kint_value(T, guard.op2, &one) &&
+              one == 0) neglast = ref;
+        }
+      }
+      if (expected_index && expected_index != first &&
+          expected_index != last) continue;
+      if (negative_first) {
+        for (IRRef ref = first+1u; ref < base; ref++) {
+          IRIns guard = T->ir[ref];
+          int32_t zero;
+          if (guard.o == IR_LT && guard.t.irt == (IRT_INT|IRT_GUARD) &&
+              guard.op1 == first &&
+              arm64_ir_kint_value(T, guard.op2, &zero) && zero == 0)
+            negfirst = ref;
+        }
+      }
+      for (IRRef ref = base+1u; ref < subref; ref++) {
+        IRIns guard = T->ir[ref];
+        int32_t zero;
+        if (guard.o == IR_GE && guard.t.irt == (IRT_INT|IRT_GUARD) &&
+            guard.op1 == base && arm64_ir_kint_value(T, guard.op2, &zero) &&
+            zero == 0) nonneg = ref;
+      }
+      if (!nonneg || (negative_first ? (!negfirst || !upper) : !neglast) ||
+          (expected_guard && expected_guard != upper &&
+           expected_guard != nonneg && expected_guard != negfirst &&
+           expected_guard != neglast)) continue;
+      for (IRRef width = subref+1u; width < strref; width++) {
+        IRIns eq = T->ir[width];
+        int32_t nwidth;
+        if (eq.o == IR_EQ && eq.t.irt == (IRT_INT|IRT_GUARD) &&
+            eq.op1 == subref &&
+            arm64_ir_kint_value(T, eq.op2, &nwidth) && nwidth > 0 &&
+            displacement < nwidth) return 1;
+      }
+    }
+  }
+  return 0;
+}
+
 /* Positive dynamic ranges normalize first to first-1. The exact CALL source
 ** slots, end<=len guard, nonnegative offset, and positive checked width jointly
 ** prove 0<=base<end<=len before STRREF. Later bytes may add a nonnegative
@@ -12079,6 +12230,9 @@ static int arm64_string_byte_dynamic_range_ir(const GCtrace *T,
     return 0;
   if (arm64_string_byte_negative_range_ir(T, strref, str, offset,
                                           expected_index, expected_guard))
+    return 1;
+  if (arm64_string_byte_mixed_range_ir(T, strref, str, offset,
+                                       expected_index, expected_guard))
     return 1;
   ptr = &T->ir[offset];
   if (ptr->o == IR_ADD && ptr->t.irt == IRT_INT) {
@@ -19260,6 +19414,175 @@ static int arm64_string_byte_negative_range_postra(
   return 0;
 }
 
+/* Allocated-pass replay of the two mixed-sign multireturn normalizations. */
+static int arm64_string_byte_mixed_range_postra(
+    const LJArm64PostRAView *v, IRRef strref, IRRef str, IRRef offset,
+    IRRef expected_index, IRRef expected_guard)
+{
+  GCtrace *owner;
+  GCobj *proto_obj;
+  IRIns string;
+  IRRef base = offset, first, lenref = 0;
+  MSize firstslot;
+  int32_t displacement = 0, minus_one;
+  int negative_first;
+  LJ_STATIC_ASSERT(LJ_MAX_STR < INT32_MAX);
+  if (!v || !v->proto || !v->owner) return 0;
+  proto_obj = obj2gco((GCproto *)v->proto);
+  if (!checkptrGC(proto_obj) ||
+      proto_obj->gch.gct != (uint32_t)~LJ_TPROTO ||
+      proto_bc(v->proto) != v->proto_bc ||
+      v->proto->sizebc != v->proto_sizebc ||
+      v->proto->framesize != v->root_topslot ||
+      strref < REF_FIRST || strref >= v->nins ||
+      offset < REF_FIRST || offset >= strref || str < REF_FIRST ||
+      str >= strref || !arm64_scalar_postra_ref(v, str, strref, IRT_STR))
+    return 0;
+  owner = (GCtrace *)v->owner;
+  if (trace_startptgco_acq(owner) != proto_obj) return 0;
+  {
+    IRIns ptr = ir_load_acq(&v->ir[offset]);
+    if (ptr.o == IR_ADD && ptr.t.irt == IRT_INT &&
+        ptr.op1 >= REF_FIRST && ptr.op1 < offset &&
+        arm64_scalar_postra_kint(v, ptr.op2, &displacement)) {
+      if (displacement < 0) return 0;
+      base = ptr.op1;
+    }
+  }
+  if (base < REF_FIRST || base >= strref) return 0;
+  {
+    IRIns baseins = ir_load_acq(&v->ir[base]);
+    if (baseins.o == IR_ADDOV &&
+        baseins.t.irt == (IRT_INT|IRT_GUARD) &&
+        baseins.op1 >= REF_FIRST && baseins.op1 < base &&
+        arm64_scalar_postra_kint(v, baseins.op2, &minus_one) &&
+        minus_one == -1) {
+      negative_first = 0;
+      first = baseins.op1;
+    } else if (baseins.o == IR_ADD && baseins.t.irt == IRT_INT) {
+      IRRef left = baseins.op1, right = baseins.op2;
+      IRIns leftins, rightins;
+      int left_len, right_len;
+      if (left < REF_FIRST || left >= base ||
+          right < REF_FIRST || right >= base) return 0;
+      leftins = ir_load_acq(&v->ir[left]);
+      rightins = ir_load_acq(&v->ir[right]);
+      left_len = leftins.o == IR_FLOAD && leftins.t.irt == IRT_INT &&
+        leftins.op1 == str && leftins.op2 == IRFL_STR_LEN;
+      right_len = rightins.o == IR_FLOAD && rightins.t.irt == IRT_INT &&
+        rightins.op1 == str && rightins.op2 == IRFL_STR_LEN;
+      if (left_len == right_len) return 0;
+      negative_first = 1;
+      lenref = left_len ? left : right;
+      first = left_len ? right : left;
+    } else return 0;
+  }
+  if (first < REF_FIRST || first >= base ||
+      !arm64_string_byte_index_slot_postra(v, first, base, &firstslot))
+    return 0;
+  string = ir_load_acq(&v->ir[str]);
+  if (string.o != IR_SLOAD || string.t.irt != (IRT_STR|IRT_GUARD) ||
+      string.op2 != IRSLOAD_TYPECHECK) return 0;
+  for (IRRef end = REF_FIRST; end < strref; end++) {
+    IRRef last = end, lastslot, negfirst = 0, neglast = 0;
+    IRRef upper = 0, nonneg = 0;
+    for (IRRef subref = end+1u; subref < strref; subref++) {
+      IRIns sub = ir_load_acq(&v->ir[subref]);
+      if (sub.o != IR_SUBOV || sub.t.irt != (IRT_INT|IRT_GUARD) ||
+          end >= subref || sub.op1 != end || sub.op2 != base) continue;
+      if (negative_first) {
+        if (end >= REF_FIRST && end < subref &&
+            arm64_string_byte_index_slot_postra(v, end, subref, &lastslot) &&
+            arm64_string_byte_call_range_slots(v->proto, string.op1,
+                                                firstslot, lastslot)) {
+          for (IRRef ref = lenref+1u; ref < subref; ref++) {
+            IRIns guard = ir_load_acq(&v->ir[ref]);
+            if (guard.t.irt == (IRT_INT|IRT_GUARD) &&
+                ((guard.o == IR_UGE && guard.op1 == lenref &&
+                  guard.op2 == end) ||
+                 (guard.o == IR_ULE && guard.op1 == end &&
+                  guard.op2 == lenref))) upper = ref;
+          }
+        }
+      } else {
+        IRIns endins = ir_load_acq(&v->ir[end]);
+        IRRef inner;
+        int32_t one;
+        if (endins.o != IR_ADD || endins.t.irt != IRT_INT ||
+            endins.op1 < REF_FIRST || endins.op1 >= end ||
+            !arm64_scalar_postra_kint(v, endins.op2, &one) || one != 1)
+          continue;
+        inner = endins.op1;
+        if (inner < REF_FIRST || inner >= end) continue;
+        {
+          IRIns innerins = ir_load_acq(&v->ir[inner]);
+          IRRef left = innerins.op1, right = innerins.op2;
+          IRIns leftins, rightins;
+          int left_len, right_len;
+          if (innerins.o != IR_ADD || innerins.t.irt != IRT_INT ||
+              left < REF_FIRST || left >= inner ||
+              right < REF_FIRST || right >= inner) continue;
+          leftins = ir_load_acq(&v->ir[left]);
+          rightins = ir_load_acq(&v->ir[right]);
+          left_len = leftins.o == IR_FLOAD && leftins.t.irt == IRT_INT &&
+            leftins.op1 == str && leftins.op2 == IRFL_STR_LEN;
+          right_len = rightins.o == IR_FLOAD && rightins.t.irt == IRT_INT &&
+            rightins.op1 == str && rightins.op2 == IRFL_STR_LEN;
+          if (left_len == right_len) continue;
+          lenref = left_len ? left : right;
+          last = left_len ? right : left;
+        }
+        if (last < REF_FIRST || last >= inner ||
+            !arm64_string_byte_index_slot_postra(v, last, inner, &lastslot) ||
+            !arm64_string_byte_call_range_slots(v->proto, string.op1,
+                                                 firstslot, lastslot))
+          continue;
+        for (IRRef ref = last+1u; ref < inner; ref++) {
+          IRIns guard = ir_load_acq(&v->ir[ref]);
+          int32_t zero;
+          if (guard.o == IR_LT && guard.t.irt == (IRT_INT|IRT_GUARD) &&
+              guard.op1 == last &&
+              arm64_scalar_postra_kint(v, guard.op2, &zero) && zero == 0)
+            neglast = ref;
+        }
+      }
+      if (expected_index && expected_index != first &&
+          expected_index != last) continue;
+      if (negative_first) {
+        for (IRRef ref = first+1u; ref < base; ref++) {
+          IRIns guard = ir_load_acq(&v->ir[ref]);
+          int32_t zero;
+          if (guard.o == IR_LT && guard.t.irt == (IRT_INT|IRT_GUARD) &&
+              guard.op1 == first &&
+              arm64_scalar_postra_kint(v, guard.op2, &zero) && zero == 0)
+            negfirst = ref;
+        }
+      }
+      for (IRRef ref = base+1u; ref < subref; ref++) {
+        IRIns guard = ir_load_acq(&v->ir[ref]);
+        int32_t zero;
+        if (guard.o == IR_GE && guard.t.irt == (IRT_INT|IRT_GUARD) &&
+            guard.op1 == base &&
+            arm64_scalar_postra_kint(v, guard.op2, &zero) && zero == 0)
+          nonneg = ref;
+      }
+      if (!nonneg || (negative_first ? (!negfirst || !upper) : !neglast) ||
+          (expected_guard && expected_guard != upper &&
+           expected_guard != nonneg && expected_guard != negfirst &&
+           expected_guard != neglast)) continue;
+      for (IRRef width = subref+1u; width < strref; width++) {
+        IRIns eq = ir_load_acq(&v->ir[width]);
+        int32_t nwidth;
+        if (eq.o == IR_EQ && eq.t.irt == (IRT_INT|IRT_GUARD) &&
+            eq.op1 == subref &&
+            arm64_scalar_postra_kint(v, eq.op2, &nwidth) && nwidth > 0 &&
+            displacement < nwidth) return 1;
+      }
+    }
+  }
+  return 0;
+}
+
 /* Allocated-pass replay of the exact positive dynamic range relation. */
 static int arm64_string_byte_dynamic_range_postra(
     const LJArm64PostRAView *v, IRRef strref, IRRef str, IRRef offset,
@@ -19285,6 +19608,9 @@ static int arm64_string_byte_dynamic_range_postra(
     return 0;
   if (arm64_string_byte_negative_range_postra(v, strref, str, offset,
                                                expected_index, expected_guard))
+    return 1;
+  if (arm64_string_byte_mixed_range_postra(v, strref, str, offset,
+                                            expected_index, expected_guard))
     return 1;
   owner = (GCtrace *)v->owner;
   if (trace_startptgco_acq(owner) != obj2gco((GCproto *)v->proto)) return 0;
