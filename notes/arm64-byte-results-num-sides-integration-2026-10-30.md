@@ -446,3 +446,15 @@ root exits after peer collection and code identity for all 12 combinations.
 Ordinary ARM64 restore profile:
 `514842a131ac00670c11e88d40d45d87acf4c70fbc065f6dc8024a2516f7fdb4`.
 The complete gate remains frozen at `9ebec6139`, excluding these later slices.
+
+
+The computed-sin exit-count difference was isolated to number mode rather
+than a new port defect. `lj_arch.h` defaults x64 to single-number mode and
+ARM64 to dual-number mode. In the input-resolved probe, integer zero causes
+79/80 guard-0 exits on ARM64 FORL/LOOP, while default x64 has one loop-end exit.
+An additional strict ordinary x64 build of exact `f752aa882` with
+`LUAJIT_NUMMODE=2` reproduces the ARM64 79/80 guard-0 exits and 83/84 phase
+totals, with matching results and retained code across GC. That isolated
+configuration comparison is saved in the ordinary evidence directory's
+`x86_64-dualnum/` bundle and `*-computed-math-exit-inputs.log` files. It does
+not replace the default x64 matrix or establish performance parity.
