@@ -13342,7 +13342,7 @@ static int arm64_lua_leaf_branch(const GCproto *pt,
     for (p = cmp+2u; p < size; p++)
       if (first_reach[p] && second_reach[p]) { join = p; break; }
     if (join != UINT32_MAX) {
-      if (join <= branch->second) return 0;
+      if (join < branch->second) return 0;
       branch->join = join;
       for (p = cmp+2u; p < join; p++) {
         if (first_reach[p] == second_reach[p]) return 0;
@@ -19947,8 +19947,12 @@ static IRRef arm64_lua_leaf_postra_args_at(const LJArm64PostRAView *v,
         !arm64_lua_leaf_type_path(leaf, &branch, branch.second, second))
       return 0;
     if (!branch.early_return) {
-      for (i = 0; i < leaf->framesize; i++)
-        types[i] = first[i] == second[i] ? first[i] : IRT_NIL;
+      for (i = 0; i < leaf->framesize; i++) {
+        IRType a = first[i], b = second[i];
+        types[i] = a == b ? a :
+          ((a == IRT_INT || a == IRT_NUM) &&
+           (b == IRT_INT || b == IRT_NUM) ? IRT_NUM : IRT_NIL);
+      }
       if (!arm64_lua_leaf_type_range(leaf, branch.join,
                                      leaf->sizebc-1u, types)) return 0;
     }
