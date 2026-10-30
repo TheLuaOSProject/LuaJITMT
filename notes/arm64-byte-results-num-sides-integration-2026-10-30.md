@@ -312,3 +312,29 @@ hashes and logs are in
 
 The complete gate running separately at `52efb731e` does not include this
 later sequential slice. Main remains at the complete `503c8ba2f` checkpoint.
+
+## Numeric identity integration
+
+Integrated `5837b8a31` and added independent extra-iterator-call rejection
+plus the newly allowed `tonumber` wrong-callee case in the existing string
+`tostring` fixture at `95b555931`. The shared exact one-argument identity proof
+retains separate semantic/post-RA source replay and exact numeric SLOAD type.
+Integer floor/ceil and one-argument bit conversions remain valid only for
+INT identity; one-argument min/max preserve both INT and NUM identities.
+
+The tonumber, tostring and complete Lua-call contracts all pass four profiles
+at this source. Logs are in
+`/Users/frityet/Scratch/ljmt-tonumber-sequential-integration-20261030/`.
+The ordinary ARM64/strict-x86_64 matrix passes both 509-case corpora and every
+prior workload/byte/FFI/string/sequential probe. It additionally witnesses 24
+native identity rows per architecture: INT/NUM while/FORL for tonumber,
+min/max, and INT while/FORL for floor/ceil/tobit/band/bor/bxor. Every row has
+selected-root exits before/after full GC, unchanged code and a live peer;
+the optional-base and numeric-edge semantic companion passes too.
+Binaries, matching JIT modules, archives, hashes and logs are in
+`/Users/frityet/Scratch/ljmt-tonumber-sequential-ordinary-20261030/`.
+Ordinary ARM64 was restored with profile
+`167f846de67078a70b64e782ed59231b2554674d8093b13b3080454b5086d298`.
+This later integration is outside the complete gate currently frozen at
+`52efb731e`; the latest completed broad production checkpoint remains
+`503c8ba2f`.
