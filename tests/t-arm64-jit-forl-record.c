@@ -792,6 +792,188 @@ static void run_numeric(void)
   lua_close(L);
 }
 
+static lua_Number call_num_int(lua_State *L, const char *name,
+			      lua_Number n, lua_Integer c)
+{
+  int status;
+  lua_Number result;
+  void *cframe = L->cframe;
+  lua_getglobal(L, name);
+  lua_pushnumber(L, n);
+  lua_pushinteger(L, c);
+  status = lua_pcall(L, 2, 1, 0);
+  if (status != LUA_OK) {
+    fprintf(stderr, "ARM64 NUM/INT FORL call failed: %s\n",
+	    lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
+  assert(lua_isnumber(L, -1));
+  result = lua_tonumber(L, -1);
+  lua_pop(L, 1);
+  assert(L->cframe == cframe);
+  return result;
+}
+
+/* A NUM FORL index and an independently guarded INT accumulator share the
+** same root. This exercises the generic scalar integer arithmetic proof in
+** a numeric loop without relaxing the NUM index recurrence. */
+static void run_numeric_int_accumulator(void)
+{
+  lua_State *L = luaL_newstate();
+  GCproto *pt;
+  GCtrace *T;
+  MCode *mcode;
+  NumericForlAdmissionCopy copy;
+  IRRef ref, intphi = 0, intsload = 0, numidx = 0;
+  IRRef loop = 0, postadd = 0;
+  IRRef semantic_nins;
+  int direction;
+  const BCIns *sourcepc;
+  BCIns savedpc;
+  assert(L != NULL);
+  luaL_openlibs(L);
+  run_lua(L,
+    "jit.opt.start('hotloop=2','hotexit=1000','maxtrace=128')\n"
+    "function __arm64_forl_numeric_intacc(n, c)\n"
+    "  for i = 0.5, n, 0.5 do c = c + 1 end\n"
+    "  return c\n"
+    "end\n"
+    "function __arm64_forl_numeric_intacc_oracle(n, c)\n"
+    "  for i = 0.5, n, 0.5 do c = c + 1 end\n"
+    "  return c\n"
+    "end\n");
+  run_lua(L, "jit.off(__arm64_forl_numeric_intacc_oracle, true)\n");
+  pt = global_proto(L, "__arm64_forl_numeric_intacc");
+  reset_native_activity();
+  assert(call_num_int(L, "__arm64_forl_numeric_intacc", 3.5, 0) ==
+	 call_num_int(L, "__arm64_forl_numeric_intacc_oracle", 3.5, 0));
+  T = expect_published_forl(L, pt);
+  assert(trace_arm64_admission_acq(T) ==
+	 (TRACE_ARM64_NUM_FORL_ADMITTED | TRACE_ARM64_NUM_FORL_ASCENDING));
+  expect_native_entry();
+
+  /* A detached INT PHI violates the existing loop-value/type-map proof. */
+  sourcepc = trace_startpc_acq(T);
+  savedpc = (BCIns)la_load32_acq((const uint32_t *)sourcepc);
+  la_store32_rel((uint32_t *)(void *)sourcepc, T->startins);
+  numeric_forl_admission_copy_init(&copy, L, T);
+  for (ref = REF_FIRST; ref < copy.semantic_nins; ref++) {
+    if (copy.ir[ref].o == IR_PHI && copy.ir[ref].t.irt == IRT_INT) {
+      assert(!intphi);
+      intphi = ref;
+    }
+    if (copy.ir[ref].o == IR_SLOAD && irt_type(copy.ir[ref].t) == IRT_INT &&
+        copy.ir[ref].op1 != 1u+LJ_FR2+bc_a(T->startins)) {
+      assert(!intsload);
+      intsload = ref;
+    }
+  }
+  assert(intphi && intsload && copy.ir[intphi].op1 != intsload &&
+         copy.ir[intphi].op2 != intsload);
+  copy.ir[intphi].op2 = (IRRef1)intsload;
+  assert(!lj_asm_arm64_forl_ir_admit(&copy.J, &copy.trace, NULL,
+				      &direction));
+  assert(!lj_asm_arm64_forl_postra_admit(&copy.post, &semantic_nins,
+						 &direction));
+  numeric_forl_admission_copy_free(&copy);
+
+  /* Generic integer arithmetic independently refuses a NUM operand. */
+  numeric_forl_admission_copy_init(&copy, L, T);
+  for (ref = REF_FIRST; ref < copy.semantic_nins; ref++) {
+    if (copy.ir[ref].o == IR_LOOP) loop = ref;
+    if (copy.ir[ref].o == IR_SLOAD &&
+        irt_type(copy.ir[ref].t) == IRT_NUM &&
+        copy.ir[ref].op1 == 1u+LJ_FR2+bc_a(T->startins))
+      numidx = ref;
+    if (copy.ir[ref].o == IR_SLOAD && irt_type(copy.ir[ref].t) == IRT_INT &&
+        copy.ir[ref].op1 != 1u+LJ_FR2+bc_a(T->startins))
+      intsload = ref;
+  }
+  assert(loop && intsload && numidx);
+  for (ref = loop+1u; ref < copy.semantic_nins; ref++)
+    if (copy.ir[ref].o == IR_ADDOV) { assert(!postadd); postadd = ref; }
+  assert(postadd && irref_isk(copy.ir[postadd].op2));
+  copy.ir[postadd].op2 = (IRRef1)numidx;
+  assert(!lj_asm_arm64_forl_ir_admit(&copy.J, &copy.trace, NULL,
+				      &direction));
+  numeric_forl_admission_copy_free(&copy);
+
+  numeric_forl_admission_copy_init(&copy, L, T);
+  intphi = intsload = numidx = loop = postadd = 0;
+  for (ref = REF_FIRST; ref < copy.semantic_nins; ref++) {
+    if (copy.ir[ref].o == IR_PHI && copy.ir[ref].t.irt == IRT_INT) {
+      assert(!intphi);
+      intphi = ref;
+    }
+    if (copy.ir[ref].o == IR_SLOAD && irt_type(copy.ir[ref].t) == IRT_INT &&
+        copy.ir[ref].op1 != 1u+LJ_FR2+bc_a(T->startins)) {
+      assert(!intsload);
+      intsload = ref;
+    }
+    if (copy.ir[ref].o == IR_SLOAD &&
+        irt_type(copy.ir[ref].t) == IRT_NUM &&
+        copy.ir[ref].op1 == 1u+LJ_FR2+bc_a(T->startins))
+      numidx = ref;
+    if (copy.ir[ref].o == IR_LOOP) loop = ref;
+  }
+  assert(loop && intsload && numidx);
+  for (ref = loop+1u; ref < copy.semantic_nins; ref++)
+    if (copy.ir[ref].o == IR_ADDOV) { assert(!postadd); postadd = ref; }
+  assert(postadd && irref_isk(copy.ir[postadd].op2));
+  copy.ir[postadd].op2 = (IRRef1)numidx;
+  assert(!lj_asm_arm64_forl_postra_admit(&copy.post, &semantic_nins,
+					 &direction));
+  numeric_forl_admission_copy_free(&copy);
+
+  numeric_forl_admission_copy_init(&copy, L, T);
+  loop = postadd = 0;
+  for (ref = REF_FIRST; ref < copy.semantic_nins; ref++)
+    if (copy.ir[ref].o == IR_LOOP) loop = ref;
+  assert(loop);
+  for (ref = loop+1u; ref < copy.semantic_nins; ref++)
+    if (copy.ir[ref].o == IR_ADDOV) { assert(!postadd); postadd = ref; }
+  assert(postadd && irt_isguard(copy.ir[postadd].t));
+  copy.ir[postadd].t.irt &= (uint8_t)~IRT_GUARD;
+  assert(!lj_asm_arm64_forl_ir_admit(&copy.J, &copy.trace, NULL,
+				      &direction));
+  numeric_forl_admission_copy_free(&copy);
+
+  numeric_forl_admission_copy_init(&copy, L, T);
+  loop = postadd = 0;
+  for (ref = REF_FIRST; ref < copy.semantic_nins; ref++)
+    if (copy.ir[ref].o == IR_LOOP) loop = ref;
+  assert(loop);
+  for (ref = loop+1u; ref < copy.semantic_nins; ref++)
+    if (copy.ir[ref].o == IR_ADDOV) { assert(!postadd); postadd = ref; }
+  assert(postadd && irt_isguard(copy.ir[postadd].t));
+  copy.ir[postadd].t.irt &= (uint8_t)~IRT_GUARD;
+  assert(!lj_asm_arm64_forl_postra_admit(&copy.post, &semantic_nins,
+					 &direction));
+  numeric_forl_admission_copy_free(&copy);
+  la_store32_rel((uint32_t *)(void *)sourcepc, savedpc);
+
+  mcode = trace_mcode_acq(T);
+  run_lua(L, "collectgarbage('collect')\n");
+  reset_native_activity();
+  assert(call_num_int(L, "__arm64_forl_numeric_intacc", 3.5, 0) ==
+	 call_num_int(L, "__arm64_forl_numeric_intacc_oracle", 3.5, 0));
+  assert(expect_published_forl(L, pt) == T);
+  assert(trace_mcode_acq(T) == mcode);
+  expect_native_entry();
+
+  /* The first body update reaches INT32_MAX; the second overflows. The guard
+  ** must exit to bytecode with its old value and let the interpreter widen. */
+  reset_native_activity();
+  assert(call_num_int(L, "__arm64_forl_numeric_intacc", 1.0,
+		      (lua_Integer)INT32_MAX-1) ==
+	 call_num_int(L, "__arm64_forl_numeric_intacc_oracle", 1.0,
+		      (lua_Integer)INT32_MAX-1));
+  assert(call_num_int(L, "__arm64_forl_numeric_intacc_oracle", 1.0,
+		      (lua_Integer)INT32_MAX-1) == (lua_Number)INT32_MAX+1.0);
+  expect_native_entry();
+  lua_close(L);
+}
+
 static void expect_mode_rejected(TGState *tg);
 static GCtrace *expect_published_forl(lua_State *L, GCproto *pt);
 static void expect_branch_only(void);
@@ -1229,6 +1411,7 @@ int main(void)
   run_dynamic(0);
   run_dynamic(1);
   run_numeric();
+  run_numeric_int_accumulator();
   run_numeric_dynamic(0);
   run_numeric_dynamic(1);
   run_rejections();
