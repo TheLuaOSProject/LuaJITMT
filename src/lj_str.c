@@ -142,6 +142,12 @@ static uint32_t str_test_num_refills;
 static LJStrTestMatchHook str_test_match_hook;
 static LJStrTestCanonHook str_test_canon_hook;
 static LJStrTestReclaimHook str_test_reclaim_hook;
+static LJStrTestPublishHook str_test_publish_hook;
+
+void lj_str_test_set_publish_hook(LJStrTestPublishHook hook)
+{
+  str_test_publish_hook = hook;
+}
 
 void lj_str_test_set_match_hook(LJStrTestMatchHook hook)
 {
@@ -1118,6 +1124,9 @@ retry_insert_lookup:
 	u = headu;
 	if (lj_str_link_cas_acqrel(head, &u, want)) {  /* Intern linearization. */
 	  grow = strnum_publish_success(g, L2TG(L), mask);
+#ifdef LJ_STR_TEST_HELPERS
+          if (str_test_publish_hook) str_test_publish_hook(L, news);
+#endif
 	  break;
 	}
       }
