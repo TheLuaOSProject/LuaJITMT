@@ -1659,7 +1659,11 @@ static void test_positive_and_negative(lua_State *L)
 
   make_trace(J);
   setir(R_SUM1, IR_MOD, IRT_INT, R_A, K_STEP);
-  /* INT modulo is supported, but this NUM dividend is not an INT operand. */
+  /* The operation is supported, but this PHI input lacks IRT_ISPHI. */
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_MOD);
+
+  make_trace(J);
+  setir(R_SUM1, IR_MOD, IRT_INT|IRT_ISPHI, R_A, K_ZERO);
   expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_MOD);
 
   make_trace(J);
