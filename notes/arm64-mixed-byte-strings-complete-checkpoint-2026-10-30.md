@@ -39,3 +39,7 @@ Promotion covers this frozen source only. Negative and omitted-end substring
 ranges, fixed-pair raw U8 snapshots and sequential leaf branches are later
 work. General Lua calls/returns, recursion, protected calls, remaining FFI
 forms and broader trace topology still prevent full x86_64 parity.
+
+After promotion, the main checkout independently rebuilt ordinary assertion
+ARM64 without test helpers. `main-ordinary-build.log` records success and
+profile `53b44719891a85287024d767f51067e1fcc58e0a622ab52182dc35f392a42776`.
