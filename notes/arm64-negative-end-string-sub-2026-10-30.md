@@ -1,0 +1,20 @@
+# ARM64 `string.sub` explicit negative end
+
+## Scope
+
+ARM64 now admits the bounded fixed-call forms `string.sub(s, first, last)` where both `first` and `last` are negative KSHORT literals, `first` is in the signed 16-bit range, and `last` is in that range. For example, `string.sub(s, -4, -2)` selects three bytes. The existing omitted-end form remains `last = -1`. The accepted trace must contain the same guarded string load, its string-length FLOAD, the normalized start `len + first`, a nonnegative-start guard, the normalized exclusive end (`len` for `last = -1`, otherwise `len + last + 1`), guarded `SUBOV(end, start)`, a nonnegative-width guard, and the matching `STRREF`/`SNEW` pair. Semantic and post-RA passes reconstruct the source and IR relationships independently. The allocator and emitter are unchanged.
+
+Dynamic endpoints, unrelated length values, nonliteral endpoints, and source/control-flow shapes that do not meet the bounded grammar remain interpreted. The range proof follows the VM's inclusive end-index semantics. Reversed endpoint cases such as `string.sub(s, -4, -5)` are tested with the candidate JIT enabled against an interpreted oracle. The ordinary x86_64 candidate publishes JFORL/JLOOP roots for these cases; ordinary ARM64 does not. Neither case requires a fresh native string publication for its empty result.
+
+## Evidence
+
+The exact d87 ordinary baseline had no ARM64 loop root for explicit negative ends `-2`, `-3`, or `-4`; the matching x86_64 baseline published roots. Current ordinary builds were made from this branch's candidate source with no test-helper flags:
+
+- Base: commit `d87ab9d981ba399c676ad114a7ab3c2203b7bf99`. The initial ordinary candidate's recorded source-diff digest is `6d5a8575c95704154162017a9da70f82546dd534f59ce3354131569fa39d70d3` (a diff digest, not a commit ID); the follow-up test-only changes are included in the final revision.
+- ARM64 flags: `-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT`
+- x86_64 flags: `-DLUA_USE_ASSERT`
+- Both architectures published and executed selected JLOOP/JFORL roots for endpoint pairs `-1/-1`, `-4/-2`, `-4/-3`, `-4/-4`, `-32768/-32768`, `-32768/-32767`, and `-32768/-16385` in both loop forms. Each row checked the interpreter oracle, selected-root exits after peer GC, boundary lengths, cold type/error behavior, SNEW presence, and stable machine-code identity. The last pair returns 16,384 payload bytes, for which `lj_str_size` crosses the HugeTab threshold due to the GCstr header. The final candidate ordinary logs also check reversed endpoints `-4/-5` and `-4/-6` against the interpreter without requesting or requiring native roots.
+- Candidate binary hashes, build logs, modules, and per-architecture output are preserved under `/Users/frityet/Scratch/ljmt-negative-first-substring-20261030/negative-end-candidate-ordinary/`. Final ordinary runs are `arm64-probe-final.log`, `x86_64-probe-final.log`, `arm64-fallback-jit-on.log`, and `x86_64-fallback-jit-on.log`.
+- Four-profile assertion/release ARM64 and arm64e contract passed after follow-up cases were added. It covers native positive paths, peer/GC behavior, boundaries, and independent semantic and post-RA mutations for source endpoint, same-string length/end calculation, lower bound, SUBOV operands, snapshot/footer, and allocation/register shape. Reversed endpoint cases `-4/-5` (zero width) and `-4/-6` (negative width) run with candidate JIT enabled, compare against an interpreted oracle, and assert no fresh native string publication. The ordinary candidate probe records x86_64 JFORL/JLOOP roots and no ARM64 root for these two modes. HugeTab readiness is checked when `lj_str_size(payload_length)`, including the GCstr header, exceeds the threshold; the `-32768/-16385` case verifies this with a 16,384-byte payload. Log: `/Users/frityet/Scratch/ljmt-negative-first-substring-20261030/negative-end-four-profile-final.log`.
+
+The earlier d87 baseline binaries and logs are preserved under `/Users/frityet/Scratch/ljmt-negative-first-substring-20261030/d87-ordinary/`; the matched probe and pre-change IR dump are in the parent evidence directory.

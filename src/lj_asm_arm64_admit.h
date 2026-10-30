@@ -10545,12 +10545,13 @@ static int arm64_string_sub_source(const GCproto *pt, MSize strslot,
   return calls == 1u && matches == 1u;
 }
 
-/* Decode the bounded suffix form sub(s, negative_first [, -1]). The VM
-** normalizes a negative first index from the same string length used by the
-** allocation proof below. */
+/* Decode the bounded suffix form sub(s, negative_first [, negative_last]).
+** The VM normalizes both negative indices from the same string length used by
+** the allocation proof below. */
 static int arm64_string_sub_negative_first_source(const GCproto *pt,
                                                    MSize strslot,
                                                    int32_t first,
+                                                   int32_t *lastp,
                                                    MSize *callpc,
                                                    BCReg *calla)
 {
@@ -10565,6 +10566,7 @@ static int arm64_string_sub_negative_first_source(const GCproto *pt,
     BCOp op = bc_op(call);
     MSize q, setup;
     int valid = 1;
+    int32_t last = -1;
     if (op >= BC__MAX) return 0;
     if (op != BC_CALL && op != BC_CALLM && op != BC_CALLT && op != BC_CALLMT)
       continue;
@@ -10586,7 +10588,8 @@ static int arm64_string_sub_negative_first_source(const GCproto *pt,
       c = arm64_ir_bc_acq((uintptr_t)bc, setup+2u);
       if (bc_op(c) != BC_KSHORT ||
           bc_a(c) != bc_a(call)+3u+LJ_FR2 ||
-          (int16_t)bc_d(c) != -1) continue;
+          (int16_t)bc_d(c) >= 0) continue;
+      last = (int16_t)bc_d(c);
     }
     for (q = 0; q < pt->sizebc; q++) {
       BCIns ins = arm64_ir_bc_acq((uintptr_t)bc, q);
@@ -10600,7 +10603,7 @@ static int arm64_string_sub_negative_first_source(const GCproto *pt,
       }
     }
     if (!valid) continue;
-    *callpc = pc; *calla = bc_a(call); matches++;
+    *lastp = last; *callpc = pc; *calla = bc_a(call); matches++;
   }
   return calls == 1u && matches == 1u;
 }
@@ -11906,7 +11909,7 @@ static int arm64_string_sub_bounds_ir(const GCtrace *T, IRRef pointer)
   IRIns ptr, str;
   IRRef r, alloc = 0, negative_lenref = 0;
   int32_t offset, width = 0, lastarg = 0;
-  int32_t negative_first = 0;
+  int32_t negative_first = 0, negative_last = -1;
   MSize callpc, sn;
   BCReg calla;
   int bounded = 0, identity = 0;
@@ -11963,15 +11966,37 @@ static int arm64_string_sub_bounds_ir(const GCtrace *T, IRRef pointer)
   if (!alloc) return 0;
   if (negative_first) {
     IRRef widthref = T->ir[alloc].op2;
-    IRRef q;
+    IRRef q, endref = 0;
+    int32_t delta;
     unsigned width_guards = 0;
     if (widthref < REF_FIRST || widthref >= alloc ||
         !arm64_string_sub_negative_first_source(pt, str.op1, negative_first,
+                                                &negative_last,
                                                 &callpc, &calla) ||
         !arm64_scalar_ir_ref(T, ptr.op2, pointer, IRT_INT)) return 0;
+    delta = negative_last+1;
+    if (delta == 0) {
+      endref = negative_lenref;
+    } else {
+      for (q = negative_lenref+1u; q < widthref; q++) {
+        IRIns add = T->ir[q];
+        int32_t k;
+        if (add.o != IR_ADD || add.t.irt != IRT_INT) continue;
+        if (add.op1 == negative_lenref &&
+            arm64_ir_kint_value(T, add.op2, &k) && k == delta) {
+          if (endref) return 0;
+          endref = q;
+        } else if (add.op2 == negative_lenref &&
+                   arm64_ir_kint_value(T, add.op1, &k) && k == delta) {
+          if (endref) return 0;
+          endref = q;
+        }
+      }
+      if (!endref) return 0;
+    }
     if (widthref >= REF_FIRST && T->ir[widthref].o == IR_SUBOV &&
         T->ir[widthref].t.irt == (IRT_INT|IRT_GUARD) &&
-        T->ir[widthref].op1 == negative_lenref &&
+        T->ir[widthref].op1 == endref &&
         T->ir[widthref].op2 == ptr.op2) {
       for (q = widthref+1u; q < pointer; q++) {
         IRIns guard = T->ir[q];
@@ -20232,7 +20257,7 @@ static int arm64_string_sub_bounds_postra(const LJArm64PostRAView *v, IRRef poin
   IRIns ptr, str;
   IRRef r, alloc = 0, negative_lenref = 0;
   int32_t offset, width = 0, lastarg = 0;
-  int32_t negative_first = 0;
+  int32_t negative_first = 0, negative_last = -1;
   MSize callpc, sn;
   BCReg calla;
   int bounded = 0, identity = 0;
@@ -20293,16 +20318,38 @@ static int arm64_string_sub_bounds_postra(const LJArm64PostRAView *v, IRRef poin
   if (!alloc) return 0;
   if (negative_first) {
     IRRef widthref = ir_load_acq(&v->ir[alloc]).op2;
-    IRRef q;
+    IRRef q, endref = 0;
+    int32_t delta;
     unsigned width_guards = 0;
     if (widthref < REF_FIRST || widthref >= alloc ||
         !arm64_string_sub_negative_first_source(pt, str.op1, negative_first,
+                                                &negative_last,
                                                 &callpc, &calla) ||
         !arm64_scalar_postra_ref(v, ptr.op2, pointer, IRT_INT)) return 0;
+    delta = negative_last+1;
+    if (delta == 0) {
+      endref = negative_lenref;
+    } else {
+      for (q = negative_lenref+1u; q < widthref; q++) {
+        IRIns add = ir_load_acq(&v->ir[q]);
+        int32_t k;
+        if (add.o != IR_ADD || add.t.irt != IRT_INT) continue;
+        if (add.op1 == negative_lenref &&
+            arm64_scalar_postra_kint(v, add.op2, &k) && k == delta) {
+          if (endref) return 0;
+          endref = q;
+        } else if (add.op2 == negative_lenref &&
+                   arm64_scalar_postra_kint(v, add.op1, &k) && k == delta) {
+          if (endref) return 0;
+          endref = q;
+        }
+      }
+      if (!endref) return 0;
+    }
     {
       IRIns sub = ir_load_acq(&v->ir[widthref]);
       if (sub.o == IR_SUBOV && sub.t.irt == (IRT_INT|IRT_GUARD) &&
-          sub.op1 == negative_lenref && sub.op2 == ptr.op2) {
+          sub.op1 == endref && sub.op2 == ptr.op2) {
         for (q = widthref+1u; q < pointer; q++) {
           IRIns guard = ir_load_acq(&v->ir[q]);
           int32_t zero;

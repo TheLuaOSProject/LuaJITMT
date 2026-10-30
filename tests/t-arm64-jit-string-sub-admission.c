@@ -18,14 +18,21 @@ static unsigned native_string_publications;
 static int negative_case;
 static int negative_first_case;
 static int negative_first_magnitude;
+static int negative_first_last_magnitude = 1;
+static int negative_first_output_width;
 static int dynamic_end_case;
 static int zero_first_case;
 
 static void assert_string_ready(lua_State *L, GCstr *str, GCArena *arena)
 {
+  int expected_huge = negative_first_case &&
+                      negative_first_output_width > 0 &&
+                      lj_str_size((MSize)negative_first_output_width) >
+                        LJ_HUGE_THRESHOLD;
+  if (expected_huge) assert(lj_arena_ishuge(arena));
   if (lj_arena_ishuge(arena)) {
     LJHugeInfo info;
-    assert(negative_first_case && negative_first_magnitude == 32768);
+    assert(expected_huge && negative_first_magnitude == 32768);
     assert(lj_arena_hugetab_lookup(&L2TG(L)->huge, str, &info));
     assert((info.flags & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY)) ==
            (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY));
@@ -41,6 +48,9 @@ static void string_publish(lua_State *L, GCstr *str)
   assert(lj_tg_jit_active_acq(L2TG(L)));
   assert(str->gct == (uint8_t)~LJ_TSTR);
   assert((negative_case || dynamic_end_case) ? str->len > 0u : str->len == 3u);
+  if (negative_first_case)
+    assert(negative_first_output_width > 0 &&
+           str->len == (uint32_t)negative_first_output_width);
   arena = lj_arena_of(str);
   assert_string_ready(L, str, arena);
   native_string_publications++;
@@ -95,9 +105,24 @@ int main(int argc, char **argv)
   negative_first_case = strncmp(argv[2], "negative-first-", 15u) == 0;
   if (negative_first_case) {
     const char *value = argv[2]+15u;
+    char *end;
+    long first_value;
     if (strncmp(value, "default-", 8u) == 0) value += 8u;
-    negative_first_magnitude = atoi(value);
+    else if (strncmp(value, "last-", 5u) == 0) value += 5u;
+    first_value = strtol(value, &end, 10);
+    if (end == value) abort();
+    negative_first_magnitude = (int)first_value;
+    if (strncmp(argv[2]+15u, "last-", 5u) == 0) {
+      char *last_end;
+      long last_value;
+      assert(*end == '-');
+      last_value = strtol(end+1, &last_end, 10);
+      if (last_end == end+1) abort();
+      negative_first_last_magnitude = (int)last_value;
+    }
     assert(negative_first_magnitude > 0);
+    negative_first_output_width = negative_first_magnitude-
+                                  negative_first_last_magnitude+1;
   }
   default_end = strstr(argv[2], "default-end") != NULL;
   zero_first_case = strncmp(argv[2], "zero-", 5u) == 0;
@@ -113,10 +138,17 @@ int main(int argc, char **argv)
   }
   lj_str_test_set_match_hook(NULL);
   lj_str_test_set_publish_hook(NULL);
+  if (negative_first_case && negative_first_output_width <= 0) {
+    assert(native_string_publications == 0u);
+    fprintf(stderr, "substring candidate-JIT check OK: %s width=%d, fresh publications=%u\n",
+            argv[2], negative_first_output_width, native_string_publications);
+    lua_close(L);
+    return 0;
+  }
   assert(native_string_matches > 0u);
   if (((strstr(argv[2], "while") && !(negative && zero_first_case)) ||
        (default_end && !zero_first_case)) &&
-      !(negative_first_case && negative_first_magnitude == 1))
+      !(negative_first_case && negative_first_output_width <= 1))
     assert(native_string_publications > 0u);
   lua_getglobal(L, "substring_trace_no");
   no = (TraceNo)lua_tointeger(L,-1); lua_pop(L,1);
@@ -137,12 +169,20 @@ int main(int argc, char **argv)
     if (negative && p.o == IR_SUBOV && p.t.irt == (IRT_INT|IRT_GUARD))
       subcalc = r;
     if (negative_first_case && p.o == IR_GE &&
-        p.t.irt == (IRT_INT|IRT_GUARD) && p.op1 == endcalc)
+        p.t.irt == (IRT_INT|IRT_GUARD) && pointer && p.op1 == f.ir[pointer].op2)
       lowerguard = r;
     if (p.o == IR_EQ && p.t.irt == (IRT_FUNC|IRT_GUARD)) {
       if (!firstguard) firstguard = r;
       lastguard = r;
     }
+  }
+  if (negative_first_case) {
+    assert(subcalc && pointer);
+    endcalc = f.ir[subcalc].op1;
+    lowerguard = 0;
+    for (r = endcalc+1u; r < pointer; r++)
+      if (f.ir[r].o == IR_GE && f.ir[r].t.irt == (IRT_INT|IRT_GUARD) &&
+          f.ir[r].op1 == f.ir[pointer].op2) lowerguard = r;
   }
   assert(pointer && allocation && bound && len && firstguard &&
          lastguard > allocation);
@@ -170,14 +210,43 @@ int main(int argc, char **argv)
   REJECT(BOTH(bound, op2, len));
   REJECT(BOTH(len, op2, IRFL_TAB_ASIZE));
   if (negative && !zero_first_case) {
-    assert(endcalc && subcalc &&
-           (negative_first_case ?
-             (f.ir[subcalc].op1 == len && f.ir[subcalc].op2 == endcalc) :
-             f.ir[subcalc].op1 == endcalc));
-    if (f.ir[endcalc].op1 == len)
-      REJECT(BOTH(endcalc, op2, f.ir[pointer].op2));
-    else
-      REJECT(BOTH(endcalc, op1, f.ir[pointer].op2));
+    assert(endcalc && subcalc);
+    if (negative_first_case) {
+      IRRef startref = f.ir[pointer].op2;
+      assert(f.ir[subcalc].op2 == startref);
+      if (endcalc == len) {
+        assert(negative_first_last_magnitude == 1);
+        REJECT(BOTH(endcalc, op1, startref));
+      } else {
+        IRIns end = f.ir[endcalc];
+        assert(end.o == IR_ADD && end.t.irt == IRT_INT);
+        assert((end.op1 == len && end.op2 != startref) ||
+               (end.op2 == len && end.op1 != startref));
+        {
+          IRIns start = f.ir[startref];
+          IRRef start_constant, end_constant;
+          assert(start.o == IR_ADD && start.t.irt == IRT_INT);
+          start_constant = start.op1 == len ? start.op2 : start.op1;
+          end_constant = end.op1 == len ? end.op2 : end.op1;
+          assert(start_constant != end_constant);
+          if (end.op1 == len)
+            REJECT(BOTH(endcalc, op2, start_constant));
+          else
+            REJECT(BOTH(endcalc, op1, start_constant));
+        }
+        if (end.op1 == len)
+          REJECT(BOTH(endcalc, op2, startref));
+        else
+          REJECT(BOTH(endcalc, op1, startref));
+      }
+      REJECT(BOTH(subcalc, op1, endcalc == len ? startref : len));
+    } else {
+      assert(f.ir[subcalc].op1 == endcalc);
+      if (f.ir[endcalc].op1 == len)
+        REJECT(BOTH(endcalc, op2, f.ir[pointer].op2));
+      else
+        REJECT(BOTH(endcalc, op1, f.ir[pointer].op2));
+    }
     REJECT(BOTH(subcalc, op2, f.ir[bound].op2));
   }
   if (negative_first_case) {
