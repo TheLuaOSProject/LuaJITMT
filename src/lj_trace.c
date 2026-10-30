@@ -15705,7 +15705,7 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
     }
     for (p = first_arm; p < size; p++)
       if (first_reach[p] && second_reach[p]) { join = p; break; }
-    if (join != UINT32_MAX && join <= second_arm) return 0;
+    if (join != UINT32_MAX && join < second_arm) return 0;
     if (join != UINT32_MAX) {
       for (p = first_arm; p < join; p++)
         if (first_reach[p] == second_reach[p] || next[p] == UINT32_MAX ||
