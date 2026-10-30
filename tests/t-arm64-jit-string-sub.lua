@@ -21,21 +21,30 @@ local zero_first = substring_fixture_kind and
                    substring_fixture_kind:sub(1, 5) == 'zero-'
 local fixture_body = zero_first and substring_fixture_kind:sub(6) or
                      substring_fixture_kind
+local negative_first = fixture_body and
+                       fixture_body:sub(1, 15) == 'negative-first-'
 local negative = fixture_body and fixture_body:sub(1, 9) == 'negative-'
-local default_end = fixture_body == 'default-end'
-local fixture_kind = negative and fixture_body:sub(10) or fixture_body
+local default_end = fixture_body == 'default-end' or
+                    (negative_first and
+                     fixture_body:sub(16, 23) == 'default-')
+local fixture_kind = negative_first and
+                      (default_end and fixture_body:sub(24) or
+                       fixture_body:sub(16)) or
+                      (negative and fixture_body:sub(10) or fixture_body)
 local kinds = substring_fixture_kind and {
-  default_end and 'forl' or fixture_kind
+  fixture_kind
 } or {'forl', 'while'}
 if default_end then kinds = {'forl', 'while'} end
-local starts = zero_first and {0} or
+local starts = negative_first and {-4} or
+               (zero_first and {0} or
                (negative and {1, 2} or
                (default_end and {1, 2} or
-                (substring_fixture_kind and {2} or {1, 2})))
-local widths = negative and {-1, -2, -4} or
+                (substring_fixture_kind and {2} or {1, 2}))))
+local widths = negative_first and {-1} or
+               (negative and {-1, -2, -4} or
                (default_end and {0} or
                (substring_fixture_kind and {3} or {1, 2, 3, 8})
-               )
+               ))
 for _, kind in ipairs(kinds) do
   for _, first in ipairs(starts) do
     for _, width in ipairs(widths) do
@@ -62,7 +71,9 @@ for _, kind in ipairs(kinds) do
       end
 
       local s, root
-      if negative then
+      if negative_first then
+        s = 'a\0\255bcdefghijklmnopqrstuvwxyz'
+      elseif negative then
         s = ('a\0\255bcdef'):sub(1, first+1-width)
       else
         s = 'a\0\255bcdefghijklmnopqrstuvwxyz'
@@ -108,8 +119,10 @@ for _, kind in ipairs(kinds) do
         end
         assert(exits > before, 'no selected root exits ' .. kind ..
           ' first=' .. first .. ' width=' .. width .. ' phase=' .. phase)
-        local boundary = negative and (first-last-2) or
+        local boundary = negative_first and 4 or
+                         (negative and (first-last-2) or
                          (default_end and #s or first+width-1)
+                         )
         for _, value in ipairs({'', 'x', 'xy',
                                 s:sub(1, math.max(0, boundary-1)),
                                 s:sub(1, boundary), s:sub(1, boundary+1),
@@ -130,7 +143,7 @@ for _, kind in ipairs(kinds) do
       assert(stop:send('gc', 5))
       for i = 1, 48 do
         local input = default_end and (s .. kind .. string.char(i)) or
-                      (string.char(i, 93, first, (i*7)%256) .. s)
+                      (string.char(i, 93, math.abs(first)%256, (i*7)%256) .. s)
         local actual, expected = f(input, 80), oracle(input, 80)
         assert(actual == expected)
         fresh[i] = {actual, expected}

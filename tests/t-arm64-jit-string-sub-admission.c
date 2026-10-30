@@ -14,6 +14,7 @@ static lua_State *test_L;
 static unsigned native_string_matches;
 static unsigned native_string_publications;
 static int negative_case;
+static int negative_first_case;
 static int dynamic_end_case;
 static int zero_first_case;
 
@@ -69,7 +70,7 @@ int main(int argc, char **argv)
   lua_State *L = luaL_newstate();
   Arm64TraceFixture f;
   IRRef r, pointer = 0, allocation = 0, bound = 0, len = 0;
-  IRRef endcalc = 0, subcalc = 0;
+  IRRef endcalc = 0, subcalc = 0, lowerguard = 0;
   IRRef firstguard = 0, lastguard = 0;
   TraceNo no;
   GCobj *byte;
@@ -77,6 +78,7 @@ int main(int argc, char **argv)
   (void)arm64_fixture_init;
   assert(L && argc == 3);
   negative = strstr(argv[2], "negative-") != NULL;
+  negative_first_case = strncmp(argv[2], "negative-first-", 15u) == 0;
   default_end = strstr(argv[2], "default-end") != NULL;
   zero_first_case = strncmp(argv[2], "zero-", 5u) == 0;
   negative_case = negative;
@@ -113,6 +115,9 @@ int main(int argc, char **argv)
         (p.op1 == len || p.op2 == len)) endcalc = r;
     if (negative && p.o == IR_SUBOV && p.t.irt == (IRT_INT|IRT_GUARD))
       subcalc = r;
+    if (negative_first_case && p.o == IR_GE &&
+        p.t.irt == (IRT_INT|IRT_GUARD) && p.op1 == endcalc)
+      lowerguard = r;
     if (p.o == IR_EQ && p.t.irt == (IRT_FUNC|IRT_GUARD)) {
       if (!firstguard) firstguard = r;
       lastguard = r;
@@ -144,12 +149,20 @@ int main(int argc, char **argv)
   REJECT(BOTH(bound, op2, len));
   REJECT(BOTH(len, op2, IRFL_TAB_ASIZE));
   if (negative && !zero_first_case) {
-    assert(endcalc && subcalc && f.ir[subcalc].op1 == endcalc);
+    assert(endcalc && subcalc &&
+           (negative_first_case ?
+             (f.ir[subcalc].op1 == len && f.ir[subcalc].op2 == endcalc) :
+             f.ir[subcalc].op1 == endcalc));
     if (f.ir[endcalc].op1 == len)
       REJECT(BOTH(endcalc, op2, f.ir[pointer].op2));
     else
       REJECT(BOTH(endcalc, op1, f.ir[pointer].op2));
     REJECT(BOTH(subcalc, op2, f.ir[bound].op2));
+  }
+  if (negative_first_case) {
+    assert(lowerguard && lowerguard > endcalc && lowerguard < pointer);
+    REJECT(BOTH(lowerguard, o, IR_UGE));
+    REJECT(BOTH(lowerguard, op2, f.ir[endcalc].op2));
   }
   lua_getglobal(L, "string"); lua_getfield(L, -1, "byte");
   byte = obj2gco(funcV(L->top-1));

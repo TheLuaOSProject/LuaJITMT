@@ -20,6 +20,10 @@ build_and_run() {
   LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" while
   LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" negative-forl
   LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" negative-while
+  LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" negative-first-forl
+  LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" negative-first-while
+  LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" negative-first-default-forl
+  LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" negative-first-default-while
   LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" default-end
   LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" zero-forl
   LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" zero-while

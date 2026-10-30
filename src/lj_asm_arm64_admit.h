@@ -10545,6 +10545,66 @@ static int arm64_string_sub_source(const GCproto *pt, MSize strslot,
   return calls == 1u && matches == 1u;
 }
 
+/* Decode the bounded suffix form sub(s, negative_first [, -1]). The VM
+** normalizes a negative first index from the same string length used by the
+** allocation proof below. */
+static int arm64_string_sub_negative_first_source(const GCproto *pt,
+                                                   MSize strslot,
+                                                   int32_t first,
+                                                   MSize *callpc,
+                                                   BCReg *calla)
+{
+  MSize pc, calls = 0, matches = 0;
+  const BCIns *bc;
+  if (!pt || strslot < 1u+LJ_FR2 ||
+      strslot-1u-LJ_FR2 >= pt->numparams || first >= 0 ||
+      first < INT16_MIN || pt->sizebc < 4u) return 0;
+  bc = proto_bc(pt);
+  for (pc = 1; pc < pt->sizebc; pc++) {
+    BCIns call = arm64_ir_bc_acq((uintptr_t)bc, pc), a, b, c;
+    BCOp op = bc_op(call);
+    MSize q, setup;
+    int valid = 1;
+    if (op >= BC__MAX) return 0;
+    if (op != BC_CALL && op != BC_CALLM && op != BC_CALLT && op != BC_CALLMT)
+      continue;
+    calls++;
+    if (op != BC_CALL || bc_b(call) != 2u ||
+        (bc_c(call) != 3u && bc_c(call) != 4u) ||
+        (MSize)bc_a(call)+(bc_c(call) == 3u ? 3u : 4u)+LJ_FR2 >
+          pt->framesize) continue;
+    if (pc < (bc_c(call) == 3u ? 2u : 3u)) continue;
+    setup = pc-(bc_c(call) == 3u ? 2u : 3u);
+    a = arm64_ir_bc_acq((uintptr_t)bc, setup);
+    b = arm64_ir_bc_acq((uintptr_t)bc, setup+1u);
+    if ((bc_op(a) != BC_MOV && bc_op(a) != BC_CGET) ||
+        bc_a(a) != bc_a(call)+1u+LJ_FR2 ||
+        bc_d(a) != strslot-1u-LJ_FR2 ||
+        bc_op(b) != BC_KSHORT || bc_a(b) != bc_a(call)+2u+LJ_FR2 ||
+        (int16_t)bc_d(b) != first) continue;
+    if (bc_c(call) == 4u) {
+      c = arm64_ir_bc_acq((uintptr_t)bc, setup+2u);
+      if (bc_op(c) != BC_KSHORT ||
+          bc_a(c) != bc_a(call)+3u+LJ_FR2 ||
+          (int16_t)bc_d(c) != -1) continue;
+    }
+    for (q = 0; q < pt->sizebc; q++) {
+      BCIns ins = arm64_ir_bc_acq((uintptr_t)bc, q);
+      BCOp jump = bc_op(ins);
+      if (jump >= BC__MAX) return 0;
+      if (bcmode_d(jump) == BCMjump) {
+        int64_t target = (int64_t)q+1+bc_j(ins);
+        if (target > (int64_t)setup && target <= (int64_t)pc) valid = 0;
+      } else if (jump <= BC_ISNUM && q+2u > setup && q+2u <= pc) {
+        valid = 0;
+      }
+    }
+    if (!valid) continue;
+    *callpc = pc; *calla = bc_a(call); matches++;
+  }
+  return calls == 1u && matches == 1u;
+}
+
 static int arm64_string_sub_bounds_ir(const GCtrace *T, IRRef pointer);
 static int arm64_string_byte_bounds_ir(const GCtrace *T, IRRef strref,
                                        IRRef str, IRRef offset);
@@ -11779,8 +11839,9 @@ static int arm64_string_sub_bounds_ir(const GCtrace *T, IRRef pointer)
   GCobj *obj;
   GCproto *pt;
   IRIns ptr, str;
-  IRRef r, alloc = 0;
+  IRRef r, alloc = 0, negative_lenref = 0;
   int32_t offset, width = 0, lastarg = 0;
+  int32_t negative_first = 0;
   MSize callpc, sn;
   BCReg calla;
   int bounded = 0, identity = 0;
@@ -11791,8 +11852,39 @@ static int arm64_string_sub_bounds_ir(const GCtrace *T, IRRef pointer)
   pt = gco2pt(obj);
   ptr = T->ir[pointer];
   if (ptr.o != IR_STRREF || ptr.t.irt != IRT_PGC ||
-      ptr.op1 < REF_FIRST || ptr.op1 >= pointer ||
-      !arm64_ir_kint_value(T, ptr.op2, &offset) || offset < 0) return 0;
+      ptr.op1 < REF_FIRST || ptr.op1 >= pointer) return 0;
+  if (!arm64_ir_kint_value(T, ptr.op2, &offset)) {
+    IRIns index;
+    IRRef lenref, constant, q;
+    int32_t first;
+    unsigned lower_guards = 0;
+    if (ptr.op2 < REF_FIRST || ptr.op2 >= pointer) return 0;
+    index = T->ir[ptr.op2];
+    if (index.o != IR_ADD || index.t.irt != IRT_INT) return 0;
+    if (index.op1 >= REF_FIRST && index.op1 < ptr.op2 &&
+        T->ir[index.op1].o == IR_FLOAD) {
+      lenref = index.op1; constant = index.op2;
+    } else if (index.op2 >= REF_FIRST && index.op2 < ptr.op2 &&
+               T->ir[index.op2].o == IR_FLOAD) {
+      lenref = index.op2; constant = index.op1;
+    } else return 0;
+    if (lenref < REF_FIRST || T->ir[lenref].o != IR_FLOAD ||
+        T->ir[lenref].t.irt != IRT_INT ||
+        T->ir[lenref].op1 != ptr.op1 ||
+        T->ir[lenref].op2 != IRFL_STR_LEN ||
+        !arm64_ir_kint_value(T, constant, &first) || first >= 0 ||
+        first < INT16_MIN) return 0;
+    for (q = ptr.op2+1u; q < pointer; q++) {
+      IRIns guard = T->ir[q];
+      int32_t zero;
+      if (guard.o == IR_GE && guard.t.irt == (IRT_INT|IRT_GUARD) &&
+          guard.op1 == ptr.op2 && arm64_ir_kint_value(T, guard.op2, &zero) &&
+          zero == 0) lower_guards++;
+    }
+    if (lower_guards != 1u) return 0;
+    negative_first = first;
+    negative_lenref = lenref;
+  } else if (offset < 0) return 0;
   str = T->ir[ptr.op1];
   if (str.o != IR_SLOAD || str.t.irt != (IRT_STR|IRT_GUARD) ||
       str.op2 != IRSLOAD_TYPECHECK) return 0;
@@ -11804,7 +11896,30 @@ static int arm64_string_sub_bounds_ir(const GCtrace *T, IRRef pointer)
     }
   }
   if (!alloc) return 0;
-  if (!arm64_ir_kint_value(T, T->ir[alloc].op2, &width)) {
+  if (negative_first) {
+    IRRef widthref = T->ir[alloc].op2;
+    IRRef q;
+    unsigned width_guards = 0;
+    if (widthref < REF_FIRST || widthref >= alloc ||
+        !arm64_string_sub_negative_first_source(pt, str.op1, negative_first,
+                                                &callpc, &calla) ||
+        !arm64_scalar_ir_ref(T, ptr.op2, pointer, IRT_INT)) return 0;
+    if (widthref >= REF_FIRST && T->ir[widthref].o == IR_SUBOV &&
+        T->ir[widthref].t.irt == (IRT_INT|IRT_GUARD) &&
+        T->ir[widthref].op1 == negative_lenref &&
+        T->ir[widthref].op2 == ptr.op2) {
+      for (q = widthref+1u; q < pointer; q++) {
+        IRIns guard = T->ir[q];
+        int32_t zero;
+        if (guard.o == IR_GE && guard.t.irt == (IRT_INT|IRT_GUARD) &&
+            guard.op1 == widthref &&
+            arm64_ir_kint_value(T, guard.op2, &zero) && zero == 0)
+          width_guards++;
+      }
+    }
+    if (width_guards != 1u) return 0;
+    bounded = 1;
+  } else if (!arm64_ir_kint_value(T, T->ir[alloc].op2, &width)) {
     IRRef lenref = 0, endref = 0, widthref = T->ir[alloc].op2;
     IRRef q;
     int32_t delta = 0;
@@ -19756,8 +19871,9 @@ static int arm64_string_sub_bounds_postra(const LJArm64PostRAView *v, IRRef poin
 {
   const GCproto *pt;
   IRIns ptr, str;
-  IRRef r, alloc = 0;
+  IRRef r, alloc = 0, negative_lenref = 0;
   int32_t offset, width = 0, lastarg = 0;
+  int32_t negative_first = 0;
   MSize callpc, sn;
   BCReg calla;
   int bounded = 0, identity = 0;
@@ -19769,8 +19885,42 @@ static int arm64_string_sub_bounds_postra(const LJArm64PostRAView *v, IRRef poin
       pt->framesize != v->root_topslot) return 0;
   ptr = ir_load_acq(&v->ir[pointer]);
   if (ptr.o != IR_STRREF || ptr.t.irt != IRT_PGC ||
-      ptr.op1 < REF_FIRST || ptr.op1 >= pointer ||
-      !arm64_scalar_postra_kint(v, ptr.op2, &offset) || offset < 0) return 0;
+      ptr.op1 < REF_FIRST || ptr.op1 >= pointer) return 0;
+  if (!arm64_scalar_postra_kint(v, ptr.op2, &offset)) {
+    IRIns index;
+    IRRef lenref, constant, q;
+    int32_t first;
+    unsigned lower_guards = 0;
+    if (ptr.op2 < REF_FIRST || ptr.op2 >= pointer) return 0;
+    index = ir_load_acq(&v->ir[ptr.op2]);
+    if (index.o != IR_ADD || index.t.irt != IRT_INT) return 0;
+    if (index.op1 >= REF_FIRST && index.op1 < ptr.op2 &&
+        ir_load_acq(&v->ir[index.op1]).o == IR_FLOAD) {
+      lenref = index.op1; constant = index.op2;
+    } else if (index.op2 >= REF_FIRST && index.op2 < ptr.op2 &&
+               ir_load_acq(&v->ir[index.op2]).o == IR_FLOAD) {
+      lenref = index.op2; constant = index.op1;
+    } else return 0;
+    {
+      IRIns len = ir_load_acq(&v->ir[lenref]);
+      if (lenref < REF_FIRST || len.o != IR_FLOAD ||
+          len.t.irt != IRT_INT || len.op1 != ptr.op1 ||
+          len.op2 != IRFL_STR_LEN ||
+          !arm64_scalar_postra_kint(v, constant, &first) || first >= 0 ||
+          first < INT16_MIN) return 0;
+    }
+    for (q = ptr.op2+1u; q < pointer; q++) {
+      IRIns guard = ir_load_acq(&v->ir[q]);
+      int32_t zero;
+      if (guard.o == IR_GE && guard.t.irt == (IRT_INT|IRT_GUARD) &&
+          guard.op1 == ptr.op2 &&
+          arm64_scalar_postra_kint(v, guard.op2, &zero) && zero == 0)
+        lower_guards++;
+    }
+    if (lower_guards != 1u) return 0;
+    negative_first = first;
+    negative_lenref = lenref;
+  } else if (offset < 0) return 0;
   str = ir_load_acq(&v->ir[ptr.op1]);
   if (str.o != IR_SLOAD || str.t.irt != (IRT_STR|IRT_GUARD) ||
       str.op2 != IRSLOAD_TYPECHECK) return 0;
@@ -19782,7 +19932,31 @@ static int arm64_string_sub_bounds_postra(const LJArm64PostRAView *v, IRRef poin
     }
   }
   if (!alloc) return 0;
-  if (!arm64_scalar_postra_kint(v, ir_load_acq(&v->ir[alloc]).op2, &width)) {
+  if (negative_first) {
+    IRRef widthref = ir_load_acq(&v->ir[alloc]).op2;
+    IRRef q;
+    unsigned width_guards = 0;
+    if (widthref < REF_FIRST || widthref >= alloc ||
+        !arm64_string_sub_negative_first_source(pt, str.op1, negative_first,
+                                                &callpc, &calla) ||
+        !arm64_scalar_postra_ref(v, ptr.op2, pointer, IRT_INT)) return 0;
+    {
+      IRIns sub = ir_load_acq(&v->ir[widthref]);
+      if (sub.o == IR_SUBOV && sub.t.irt == (IRT_INT|IRT_GUARD) &&
+          sub.op1 == negative_lenref && sub.op2 == ptr.op2) {
+        for (q = widthref+1u; q < pointer; q++) {
+          IRIns guard = ir_load_acq(&v->ir[q]);
+          int32_t zero;
+          if (guard.o == IR_GE && guard.t.irt == (IRT_INT|IRT_GUARD) &&
+              guard.op1 == widthref &&
+              arm64_scalar_postra_kint(v, guard.op2, &zero) && zero == 0)
+            width_guards++;
+        }
+      }
+    }
+    if (width_guards != 1u) return 0;
+    bounded = 1;
+  } else if (!arm64_scalar_postra_kint(v, ir_load_acq(&v->ir[alloc]).op2, &width)) {
     IRRef lenref = 0, endref = 0;
     IRRef widthref = ir_load_acq(&v->ir[alloc]).op2;
     IRRef q;
