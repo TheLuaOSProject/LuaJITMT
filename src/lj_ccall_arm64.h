@@ -787,8 +787,9 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
 	    arg->reg = (uint8_t)ngpr++;
 	  } else {
 	    /* A small non-HFA composite occupies one whole eight-byte slot.
-	    ** Only its CType-width payload is read and stored. */
-	    if (abi->is_vararg) return 0;
+	    ** Only its CType-width payload is read and stored. This is a named
+	    ** fixed-prefix parameter, even on a variadic function; the anonymous
+	    ** suffix is planned separately. */
 	    stack_size = (stack_size+7u) & ~7u;
 	    arg->reg = LJ_ARM64_ABI_STACK;
 	    arg->stack_offset = (uint16_t)stack_size;

@@ -1455,11 +1455,25 @@ static int arm64_callxs_cdata_integer_argument(const jit_State *J,
       IRRef args[LJ_ARM64_ABI_MAX_ARGS];
       LJArm64ABISignature abi;
       unsigned n, i;
-      if (!arm64_callxs_arglist(ir, T->nk, T->nins, ref, args, &n)) return 0;
+      if (!arm64_callxs_arglist(ir, T->nk, T->nins, ref, args, &n) ||
+          !arm64_callxs_signature_for_call(cts, ir, T->nk, T->nins,
+            ref, &abi, NULL)) return 0;
+      if (arm64_callxs_result_indirect(&abi)) {
+        IRIns resultptr;
+        IRRef boxref;
+        if (n == 0 || args[0] < REF_FIRST || args[0] >= ref) return 0;
+        resultptr = ir_load_acq(&ir[args[0]]);
+        boxref = resultptr.op1;
+        if (resultptr.o != IR_ADD || boxref < REF_FIRST ||
+            boxref >= args[0] ||
+            !arm64_callxs_sret_payload(cts, ir, T->nk, T->nins, ref,
+              boxref, arm64_callxs_box_ctype(&abi), NULL)) return 0;
+        n--;
+        for (i = 0; i < n; i++) args[i] = args[i+1u];
+      }
       for (i = 0; i < n; i++) if (args[i] == value) {
-        if (!arm64_callxs_signature_for_call(cts, ir, T->nk, T->nins,
-              ref, &abi, NULL) || i >= abi.nargs ||
-            abi.arg[i].id != terminal || abi.arg[i].size != width ||
+        if (i >= abi.nargs || abi.arg[i].id != terminal ||
+            abi.arg[i].size != width ||
             abi.arg[i].kind != LJ_ARM64_ABI_KIND_INTEGER ||
             abi.arg[i].is_unsigned != scalar.is_unsigned) return 0;
         uses++;
@@ -1562,6 +1576,19 @@ static int arm64_callxs_cdata_integer_aggregate_argument(
 	if (!arm64_callxs_arglist(ir, T->nk, T->nins, ref, args, &nargs) ||
 	    !arm64_callxs_signature_for_call(cts, ir, T->nk, T->nins,
 	      ref, &abi, NULL)) return 0;
+	if (arm64_callxs_result_indirect(&abi)) {
+	  IRIns payload;
+	  IRRef boxref;
+	  if (nargs == 0 || args[0] < REF_FIRST || args[0] >= ref) return 0;
+	  payload = ir_load_acq(&ir[args[0]]);
+	  boxref = payload.op1;
+	  if (payload.o != IR_ADD || boxref < REF_FIRST ||
+	      boxref >= args[0] ||
+	      !arm64_callxs_sret_payload(cts, ir, T->nk, T->nins, ref,
+		boxref, arm64_callxs_box_ctype(&abi), NULL)) return 0;
+	  nargs--;
+	  for (i = 0; i < nargs; i++) args[i] = args[i+1u];
+	}
 	for (i = 0; i < nargs; i++) if (args[i] == value) {
 	  if (i >= abi.nargs ||
 	      abi.arg[i].kind != LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ||
@@ -5833,12 +5860,26 @@ static int arm64_postra_cdata_integer_argument(const LJArm64PostRAView *view,
     if (ins.o == IR_CALLXS) {
       IRRef values[LJ_ARM64_ABI_MAX_ARGS];
       unsigned count, a;
-      if (!arm64_callxs_arglist(ir, view->nk, nins, r, values, &count)) return 0;
+      LJArm64ABISignature signature;
+      if (!arm64_callxs_arglist(ir, view->nk, nins, r, values, &count) ||
+          !arm64_callxs_signature_for_call(view->cts, ir, view->nk, nins,
+            r, &signature, NULL)) return 0;
+      if (arm64_callxs_result_indirect(&signature)) {
+        IRIns resultptr;
+        IRRef boxref;
+        if (count == 0 || values[0] < REF_FIRST || values[0] >= r) return 0;
+        resultptr = ir_load_acq(&ir[values[0]]);
+        boxref = resultptr.op1;
+        if (resultptr.o != IR_ADD || boxref < REF_FIRST ||
+            boxref >= values[0] ||
+            !arm64_postra_callxs_sret_payload(view, nins, r, boxref,
+              arm64_callxs_box_ctype(&signature), NULL)) return 0;
+        count--;
+        for (a = 0; a < count; a++) values[a] = values[a+1u];
+      }
       for (a = 0; a < count; a++) if (values[a] == ref) {
-        LJArm64ABISignature signature;
-        if (!arm64_callxs_signature_for_call(view->cts, ir, view->nk, nins,
-              r, &signature, NULL) || a >= signature.nargs ||
-            signature.arg[a].id != rawid || signature.arg[a].size != width ||
+        if (a >= signature.nargs || signature.arg[a].id != rawid ||
+            signature.arg[a].size != width ||
             signature.arg[a].kind != LJ_ARM64_ABI_KIND_INTEGER ||
             signature.arg[a].is_unsigned != scalar.is_unsigned) return 0;
         consumers++;
@@ -6348,7 +6389,8 @@ static int arm64_postra_pointer_argument(CTState *cts, const GCtrace *T,
 ** aggregate. Its CData owner stays in the interpreter argument slot; the
 ** scalar XLOAD is neither a Lua value nor a GC root. */
 static int arm64_postra_cdata_integer_aggregate_argument(
-		CTState *cts, const GCtrace *T, IRRef nins, IRRef value,
+		const LJArm64PostRAView *view, CTState *cts, const GCtrace *T,
+		IRRef nins, IRRef value,
 		IRRef expected_source)
 {
 	const IRIns *ir = T->ir;
@@ -6439,6 +6481,20 @@ static int arm64_postra_cdata_integer_aggregate_argument(
 			if (!arm64_callxs_arglist(ir, T->nk, nins, ref, args,
 			    &nargs) || !arm64_callxs_signature_for_call(cts, ir,
 			    T->nk, nins, ref, &abi, NULL)) return 0;
+			if (arm64_callxs_result_indirect(&abi)) {
+				IRIns payload;
+				IRRef boxref;
+				if (nargs == 0 || args[0] < REF_FIRST || args[0] >= ref)
+					return 0;
+				payload = ir_load_acq(&ir[args[0]]);
+				boxref = payload.op1;
+				if (payload.o != IR_ADD || boxref < REF_FIRST ||
+				    boxref >= args[0] ||
+				    !arm64_postra_callxs_sret_payload(view, nins, ref,
+				      boxref, arm64_callxs_box_ctype(&abi), NULL)) return 0;
+				nargs--;
+				for (i = 0; i < nargs; i++) args[i] = args[i+1u];
+			}
 			for (i = 0; i < nargs; i++) if (args[i] == value) {
 				if (i >= abi.nargs ||
 				    abi.arg[i].kind != LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE ||
@@ -6464,7 +6520,8 @@ static int arm64_postra_cdata_float_hfa_member(CTState *cts,
 		const GCtrace *T, IRRef nins, IRRef value,
 		IRRef expected_source, const LJArm64ABIArg *arg);
 
-static int arm64_postra_vararg_source_proof(CTState *cts, const GCtrace *T,
+static int arm64_postra_vararg_source_proof(const LJArm64PostRAView *view,
+		CTState *cts, const GCtrace *T,
 		IRRef xsave, IRRef call, const BCIns *proto_bc, MSize proto_sizebc,
 		uintptr_t returnpc, BCIns sourceins,
 		IRRef callable_cdata_ref, unsigned fixed_count,
@@ -6552,8 +6609,8 @@ static int arm64_postra_vararg_source_proof(CTState *cts, const GCtrace *T,
 			if (carrier.o == IR_FLOAD && carrier.op2 == IRFL_CDATA_PTR &&
 			    !arm64_postra_pointer_argument(cts, T, values[a])) return 0;
 			if (abi.arg[a].kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE) {
-				if (!arm64_postra_cdata_integer_aggregate_argument(cts, T,
-				    T->nins, values[a], source)) return 0;
+				if (!arm64_postra_cdata_integer_aggregate_argument(view, cts,
+				    T, T->nins, values[a], source)) return 0;
 			} else if (abi.arg[a].kind ==
 				   LJ_ARM64_ABI_KIND_FLOAT_HFA_MEMBER) {
 				if (!arm64_postra_cdata_float_hfa_member(cts, T, T->nins,
@@ -7412,8 +7469,8 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		 ((ins.t.irt == IRT_FLOAT || ins.t.irt == IRT_NUM) ?
 		  !arm64_postra_cdata_float_hfa_member(view->cts, &temp,
 		    semantic_nins, ref, 0, NULL) :
-		  !arm64_postra_cdata_integer_aggregate_argument(view->cts, &temp,
-		    semantic_nins, ref, 0))) || !ra_hasreg(ins.r) ||
+			  !arm64_postra_cdata_integer_aggregate_argument(view, view->cts,
+			    &temp, semantic_nins, ref, 0))) || !ra_hasreg(ins.r) ||
 		!(irt_isfp(ins.t) ?
 		  ins.r >= RID_MIN_FPR && ins.r < RID_MAX_FPR &&
 		    rset_test(RSET_FPR, ins.r) :
@@ -7859,7 +7916,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	           irt_type(arg.t) == IRT_INT))
 	        roots_required = 1;
 	    }
-	    if (roots_required && !arm64_postra_vararg_source_proof(view->cts, &temp,
+	    if (roots_required && !arm64_postra_vararg_source_proof(view, view->cts, &temp,
 	        layout_xsave, call, view->proto_bc, view->proto_sizebc,
 	        source_returnpc, sourceins, cdref, abi.nargs, actual_count, values,
 	        source_values)) {
