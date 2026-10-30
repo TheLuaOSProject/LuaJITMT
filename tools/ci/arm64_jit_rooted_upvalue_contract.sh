@@ -26,10 +26,12 @@ run_profile() {
   for mode in get store get-forl store-forl literal-string literal-number \
               literal-integer literal-double-integer literal-zero literal-negzero \
               literal-nil literal-false literal-true \
-              no-peer-string-sub-forl no-peer-string-sub-while; do
+              no-peer-string-sub-forl no-peer-string-sub-while \
+              no-peer-math-sin-forl no-peer-string-byte-forl; do
     lj_ci_run_fixture 120 "$admission" "$root/tests/t-arm64-jit-rooted-upvalues.lua" "$mode"
   done
   lj_ci_run_lua 120 "$root/tests/t-arm64-jit-no-peer-urefc-transition.lua"
+  lj_ci_run_lua 120 "$root/tests/t-arm64-jit-no-peer-closed-ugget.lua"
   lj_ci_run_lua 120 "$root/tests/t-arm64-jit-rooted-upvalues.lua"
 }
 run_profile arm64 '-arch arm64' "$flags -DLUA_USE_ASSERT" arm64-assert
