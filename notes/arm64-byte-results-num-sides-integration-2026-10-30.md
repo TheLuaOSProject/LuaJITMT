@@ -549,3 +549,40 @@ Ordinary restore profile:
 The prior full gate at `f752aa882` stopped when its SDK path disappeared;
 see `arm64-sdk272-gate-restart-2026-10-30.md`. A new full gate is frozen at
 `74a48b1b8`. The last promoted complete checkpoint is still `9ebec6139`.
+
+## Numeric concatenation integration
+
+At `68c122f2a`, bounded NUM-input TOSTR and the exact unused-result per-thread
+buffer reset are integrated. The numeric CALLN loop-RENAME helper was restored
+byte-for-byte to its preceding implementation, removing unreachable STR
+branches left after the speculative STR-specific exception was disabled.
+TOSTR uses the existing generic preserved-register/spill proof. The future-use
+opcode bounds check remains. No formatter or emitter was changed.
+
+The integrated numeric-concat contract passes all four ARM64/arm64e
+assertion/release profiles on SDK27.2. Every fresh-publication run observes
+79 strings under published `jit_base`, including the exact new final string
+once, READY/traversable arena state, and a normal loop continuation exit.
+The separate `in_native` depth counter can be zero in generated trace helper
+calls and is not used as the trace-lease witness. Ordinary ARM64 restore:
+`39ff8a1619fa90ff13766f1731e4ca21e919a242c8d0294124a432424e9ed938`.
+Evidence: `/Users/frityet/Scratch/ljmt-numeric-concat-integrated-sdk272-20261030/`.
+
+The exact-source ordinary ARM64/strict-x64 matrix passes both 509-case stock
+corpora and all preceding probes. The numeric-concat probe now requires
+self-linked roots, nonempty native code, TOSTR presence, selected exits in
+both phases, code identity after GC and exact output against the interpreted
+oracle, including infinities/NaN and cold wrong-type calls. Each architecture
+observes 18 selected exits in both FORL/while forms. Evidence and matching
+binary/module bundles:
+`/Users/frityet/Scratch/ljmt-numeric-concat-ordinary-sdk272-20261030/`.
+Ordinary ARM64 restore:
+`e26d7ace1aa5097ec0bbfac56d3749e203a1f532841eec54268fd4488a7b3b06`.
+
+A second complete gate is frozen at `68c122f2a` in the previously idle clean
+`arm64-strings` checkout, while the earlier `74a48b1b8` SDK27.2 gate continues
+in `arm64-branches`. Its evidence is under
+`/Users/frityet/Scratch/ljmt-numeric-concat-complete-sdk272-20261030/`.
+Both complete gates remain pending; the promoted main checkpoint is still
+`9ebec6139`. Integer formatting, unary Lua leaves and child-side publication
+work remain outside these frozen sources.
