@@ -90,7 +90,8 @@ int main(int argc, char **argv)
   lj_str_test_set_match_hook(NULL);
   lj_str_test_set_publish_hook(NULL);
   assert(native_string_matches > 0u);
-  if (!strcmp(argv[2], "while") || !strcmp(argv[2], "negative-while"))
+  if (!strcmp(argv[2], "while") || !strcmp(argv[2], "negative-while") ||
+      default_end)
     assert(native_string_publications > 0u);
   lua_getglobal(L, "substring_trace_no");
   no = (TraceNo)lua_tointeger(L,-1); lua_pop(L,1);
@@ -186,6 +187,39 @@ int main(int argc, char **argv)
       if (bc_op(bc[pc]) == BC_CALL) { assert(!callpc); callpc = pc; }
     assert(callpc >= (default_end ? 2u : 3u));
     setup = callpc-(bc_c(bc[callpc]) == 3u ? 2u : 3u);
+    if (default_end) {
+      unsigned tested = 0;
+      size_t mapbytes = f.view.nsnapmap*sizeof(SnapEntry);
+      SnapEntry *postcopy = (SnapEntry *)malloc(mapbytes);
+      assert(postcopy);
+      memcpy(postcopy, f.map, mapbytes);
+      f.view.snapmap = postcopy;
+      assert(semantic(&f) && allocated(&f));
+      for (SnapNo s = 0; s < f.view.nsnap; s++) {
+        const SnapShot *snap = &f.snaps[s];
+        IRRef at = snap_ref_acq(snap);
+        MSize footer = snap_mapofs_acq(snap)+snap_nent_acq(snap);
+        uint64_t saved, changed;
+        if (at >= f.semantic_nins || f.ir[at].o != IR_EQ ||
+            f.ir[at].t.irt != (IRT_FUNC|IRT_GUARD)) continue;
+        memcpy(&saved, &f.map[footer], sizeof(saved));
+        /* With CALL.C=3, CALL-2 is the string copy, not a pure literal
+        ** suffix. A guard cannot resume there using the post-copy map. */
+        changed = (uint64_t)(uintptr_t)(bc+callpc-2u) << 8;
+        assert(changed != saved);
+        memcpy(&f.map[footer], &changed, sizeof(changed));
+        assert(!semantic(&f) && allocated(&f));
+        memcpy(&f.map[footer], &saved, sizeof(saved));
+        memcpy(&postcopy[footer], &changed, sizeof(changed));
+        assert(semantic(&f) && !allocated(&f));
+        memcpy(&postcopy[footer], &saved, sizeof(saved));
+        assert(semantic(&f) && allocated(&f));
+        tested++;
+      }
+      assert(tested >= 2u);
+      f.view.snapmap = f.map;
+      free(postcopy);
+    }
     {
       MSize nsetup = callpc-setup;
       for (unsigned mode = 0; mode < nsetup+2u; mode++) {
@@ -227,7 +261,7 @@ int main(int argc, char **argv)
     assert(semantic(&f) && !allocated(&f));
   }
   arm64_fixture_reset(&f);
-  if (negative) {
+  if (negative || default_end) {
     IRRef widthref = f.ir[allocation].op2;
     assert(widthref >= REF_FIRST && widthref < pointer);
     f.postra[widthref].r = RID_D0;
