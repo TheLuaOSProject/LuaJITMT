@@ -1551,17 +1551,20 @@ static void run_captured_upvalue_lifecycle(ReadCounter calls)
   assert(invoke_gpr8_sret_once(test_L));
   if (!(calls(id) == before_calls+VA_ITERS &&
         native_seen[id] == before_native &&
-        lj_trace_test_exit_calls() > 0)) {
+        lj_trace_test_exit_calls() > 0 &&
+        lj_trace_test_first_exit_parent() == selected)) {
     trace = traceref_safe(G2J(G(test_L)), selected);
-    fprintf(stderr, "captured-upvalue changed call: calls=%u/%u native=%u/%u exits=%u trace=%u runnable=%d same_mcode=%d\n",
+    fprintf(stderr, "captured-upvalue changed call: calls=%u/%u native=%u/%u exits=%u first_parent=%u selected=%u runnable=%d same_mcode=%d\n",
             before_calls, calls(id), before_native, native_seen[id],
-            lj_trace_test_exit_calls(), selected,
+            lj_trace_test_exit_calls(), lj_trace_test_first_exit_parent(),
+            selected,
             trace != NULL && trace_runnable_acq(trace, selected),
             trace != NULL && trace->mcode == mcode);
   }
   assert(calls(id) == before_calls+VA_ITERS &&
          native_seen[id] == before_native &&
-         lj_trace_test_exit_calls() > 0);
+         lj_trace_test_exit_calls() > 0 &&
+         lj_trace_test_first_exit_parent() == selected);
   assert(lj_tg_in_native_acq(test_tg) == 0 &&
          lj_tg_load_jit_base(test_tg) == NULL);
 
