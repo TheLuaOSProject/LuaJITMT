@@ -367,3 +367,35 @@ binaries; those logs have the `corrected-boundary` suffix. This test-only edit
 does not change the production revision validated above. The complete gate
 running at `52efb731e` excludes this later slice, sequential leaves and numeric
 identity; the latest completed broad checkpoint remains `503c8ba2f`.
+
+
+## Fixed-pair raw byte snapshot integration
+
+Integrated `569e7ff5c` and tied the Lua companion's raw-load witnesses to the
+intended function at `9ebec6139`. The exact two-result `byte(s,1,2)` source
+CALL now independently binds its callee copy to the guarded function SLOAD,
+its argument window and two result lanes. Wrong builtin, changed callee copy,
+skipped setup, result-copy bypass, lower bound, lane and footer/map mutants
+are rejected in both passes. No allocator, emitter or locking change is added.
+
+The full byte contract passes all four native profiles at this integration.
+Log: `/Users/frityet/Scratch/ljmt-byte-pair-identity-integration-20261030/four-profiles.log`.
+Ordinary ARM64 restore profile:
+`84f644c927bb11d9d15923265d24fe9ac60d5e71113994f0cef6cd3dc95619a9`.
+The exact-source ordinary ARM64/strict-x86_64 matrix passes both 509-case stock
+corpora and every preceding inventory, byte, FFI, substring, sequential-leaf
+and numeric-identity probe. Saved evidence is under
+`/Users/frityet/Scratch/ljmt-byte-pair-identity-ordinary-20261030/`.
+Its fixed-pair probe witnesses selected root 1, two raw loads and 5,249 root
+exits per architecture, including post-peer-GC execution. Both architectures
+match short, empty, NUL/high-byte, wrong-type and independent branch outcomes.
+The probe asserts root/code identity after GC and those edge cases, rather
+than only printing it. It starts the peer before compilation; starting a
+thread afterward had retired the earlier exploratory trace.
+Ordinary ARM64 restore profile:
+`7358f693d5166ef42b8040544b5255bf1074b9027ffbf0542ac3a574c72341c0`.
+
+The preceding complete gate at `52efb731e` passed and was promoted to main.
+A new complete gate is frozen at `9ebec6139`, including sequential leaves,
+numeric identities, zero-first substrings and fixed-pair byte snapshots. It
+excludes the in-progress negative-first substring and child-side work.
