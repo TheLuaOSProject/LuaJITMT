@@ -18,19 +18,18 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
-- Current verified production checkpoint: `789c1e229`. It adds bounded multiple
-  byte results, numeric and negative byte ends, root-linked NUM FORL children,
-  empty-arm Lua leaves, wider forwarding, captured variadic prefixes and
-  folded I64/U64 arguments to `ff86407a1`. No locks are added. The complete combined gate passes,
+- Current verified production checkpoint: `8123b7a3d`. It adds dynamic
+  positive-first and negative-first multiple byte results, bounded raw U8
+  snapshots and nonnegative FORL I64/U64 argument widening to `789c1e229`.
+  No locks are added. The complete combined gate passes,
   including actual VM/recorder safepoint runtime execution and all four M7
   FFI profiles. The gate checkout is restored to ordinary assertion ARM64
-  without test helpers. Ordinary ARM64 and strict x86_64 builds before the
-  test-helper-only capture correction each pass all 509 source cases and all
-  509 original v2-bytecode cases. See the
-  [complete checkpoint](arm64-byte-results-num-sides-complete-checkpoint-2026-10-30.md)
-  and [preceding checkpoint](arm64-byte-num-prefix-complete-checkpoint-2026-10-30.md).
-  Later dynamic-positive-first multiple-byte results and nonnegative FORL
-  I64/U64 argument widening have separate focused validation. General Lua
+  without test helpers. Ordinary ARM64 and strict x86_64 builds of the same
+  production and fixtures each pass all 509 source cases and all 509 original
+  v2-bytecode cases. See the
+  [complete checkpoint](arm64-byte-snapshots-forl-complete-checkpoint-2026-10-30.md)
+  and [preceding checkpoint](arm64-byte-results-num-sides-complete-checkpoint-2026-10-30.md).
+  Later mixed-sign byte ranges have separate focused validation. General Lua
   call/return, recursion, protected calls and remaining FFI restrictions are active work.
   Full x86_64 parity is not complete.
 
