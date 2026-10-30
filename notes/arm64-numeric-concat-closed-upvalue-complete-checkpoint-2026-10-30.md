@@ -39,3 +39,14 @@ Later INT TOSTR, INT modulo and child-return witness changes are excluded
 from this frozen run. General calls/returns, child-frame side publication,
 recursion, protected calls and remaining iterator/FFI restrictions stay open.
 An independent rebuild of the promoted main parity checkout follows.
+
+## Independent promoted-checkout rebuild
+
+The promoted `codex/arm64-parity` checkout at `9f53b4019` was rebuilt from
+scratch as ordinary assertion ARM64 without test helpers. Both 509-case stock
+corpora and the complete preceding ordinary ARM64 matrix pass, including
+negative/both-negative substrings, computed math, no-peer transition and
+closed-upvalue cases, and required native numeric concatenation. Evidence:
+`/Users/frityet/Scratch/ljmt-numeric-concat-main-rebuild-20261030/`.
+The final ordinary restoration profile is
+`8b9265fa2089f7380ba5402bf53c559faf3faf0ef5481e71b150e85bee7e0e61`.
