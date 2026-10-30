@@ -16601,6 +16601,20 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
 	    (J->postproc == LJ_POST_NONE &&
 	     (J->pc != returnpc-1 || J->framedepth != 1 || J->maxslot != 3)))
 	  return 0;
+      } else if (ffid == FF_string_sub) {
+        const BCIns *returnpc;
+        BCIns call;
+        if ((bc_op(startins) != BC_LOOP && bc_op(startins) != BC_FORL) ||
+            !frame_islua(owner->base-1)) return 0;
+        returnpc = frame_pc(owner->base-1);
+        if (!trace_pc_in_proto_range(returnpc, proto_bc(rootpt), rootpt->sizebc) ||
+            returnpc == proto_bc(rootpt)) return 0;
+        call = (BCIns)la_load32_acq((const uint32_t *)(returnpc-1));
+        if (bc_op(call) != BC_CALL || bc_b(call) != 2u || bc_c(call) != 4u ||
+            (MSize)bc_a(call)+4u+LJ_FR2 > rootpt->framesize ||
+            (J->postproc == LJ_POST_NONE &&
+             (J->pc != returnpc-1 || J->framedepth != 1 || J->maxslot != 3)))
+          return 0;
       } else if (ffid == FF_string_byte) {
 	const BCIns *returnpc;
 	BCIns call;
@@ -16687,6 +16701,7 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
       }
       ins = (BCIns)la_load32_acq((const uint32_t *)pc);
       if (lj_ff_is_bit_scalar(ffid) || ffid == FF_string_byte ||
+          ffid == FF_string_sub ||
           ffid == FF_math_floor ||
           ffid == FF_math_ceil || ffid == FF_math_sqrt ||
           ffid == FF_math_abs || ffid == FF_math_min ||

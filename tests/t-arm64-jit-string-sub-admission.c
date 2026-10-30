@@ -1,0 +1,188 @@
+#include <stdio.h>
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+#include "lj_obj.h"
+#include "lj_ff.h"
+#include "lj_target.h"
+#include "lj_str.h"
+#include "lj_arena.h"
+#include "lib/arm64_trace_fixture.h"
+
+static lua_State *test_L;
+static unsigned native_string_matches;
+
+static void string_match(lua_State *L, GCRef *link, GCobj *object,
+                         uintptr_t observed, uint32_t stage)
+{
+  GCArena *arena;
+  GCstr *str = gco2str(object);
+  UNUSED(link); UNUSED(observed);
+  if (stage != LJ_STR_TEST_MATCH_AFTER_COMPARE) return;
+  if (L != test_L || !lj_tg_load_jit_base(L2TG(L))) return;
+  assert(lj_tg_jit_active_acq(L2TG(L)));
+  assert(str->gct == (uint8_t)~LJ_TSTR && str->len == 3u);
+  arena = lj_arena_of(str);
+  assert(!lj_arena_ishuge(arena));
+  assert(lj_arena_ready_get(arena, lj_arena_cellof(str)));
+  native_string_matches++;
+}
+
+static int semantic(Arm64TraceFixture *f)
+{
+  LJArm64IRReject why;
+  int direction;
+  int ok = bc_op(f->semantic.startins) == BC_FORL ?
+    lj_asm_arm64_forl_ir_admit(f->J, &f->semantic, &why, &direction) :
+    lj_asm_arm64_ir_admit(f->J, &f->semantic, &why);
+  return ok;
+}
+static int allocated(Arm64TraceFixture *f)
+{
+  IRRef end;
+  int direction;
+  return bc_op(f->view.startins) == BC_FORL ?
+    lj_asm_arm64_forl_postra_admit(&f->view, &end, &direction) :
+    lj_asm_arm64_postra_admit(&f->view, &end);
+}
+int main(int argc, char **argv)
+{
+  lua_State *L = luaL_newstate();
+  Arm64TraceFixture f;
+  IRRef r, pointer = 0, allocation = 0, bound = 0, len = 0;
+  IRRef firstguard = 0, lastguard = 0;
+  TraceNo no;
+  GCobj *byte;
+  (void)arm64_fixture_init;
+  assert(L && argc == 3);
+  luaL_openlibs(L);
+  test_L = L;
+  lj_str_test_set_match_hook(string_match);
+  lua_pushstring(L, argv[2]); lua_setglobal(L, "substring_fixture_kind");
+  if (luaL_dofile(L, argv[1])) {
+    fprintf(stderr, "%s\n", lua_tostring(L,-1)); abort();
+  }
+  lj_str_test_set_match_hook(NULL);
+  assert(native_string_matches > 0u);
+  lua_getglobal(L, "substring_trace_no");
+  no = (TraceNo)lua_tointeger(L,-1); lua_pop(L,1);
+  assert(no);
+  arm64_fixture_init_trace(&f, L, "substring_trace_clone", no);
+  f.view.proto = trace_startpt_acq(f.owner);
+  f.view.startpc = trace_startpc_acq(f.owner);
+  assert(semantic(&f) && allocated(&f));
+  for (r = REF_FIRST; r < f.semantic_nins; r++) {
+    IRIns p = f.ir[r];
+    if (p.o == IR_STRREF) pointer = r;
+    if (p.o == IR_SNEW) allocation = r;
+    if (p.o == IR_UGE && p.t.irt == (IRT_INT|IRT_GUARD)) bound = r;
+    if (p.o == IR_FLOAD && p.op2 == IRFL_STR_LEN) len = r;
+    if (p.o == IR_EQ && p.t.irt == (IRT_FUNC|IRT_GUARD)) {
+      if (!firstguard) firstguard = r;
+      lastguard = r;
+    }
+  }
+  assert(pointer && allocation && bound && len && firstguard &&
+         lastguard > allocation);
+#define BOTH(ref, field, value) \
+  f.ir[ref].field = (value); f.postra[ref].field = (value)
+#define REJECT(change) do { \
+  arm64_fixture_reset(&f); assert(semantic(&f) && allocated(&f)); \
+  change; \
+  if (semantic(&f) || allocated(&f)) { \
+    fprintf(stderr, "substring mutation accepted at line %d\n", __LINE__); \
+    abort(); \
+  } \
+} while (0)
+  REJECT(BOTH(pointer, op1, pointer));
+  REJECT(BOTH(pointer, op2, f.ir[allocation].op2));
+  REJECT(BOTH(allocation, op1, len));
+  REJECT(BOTH(allocation, op2, f.ir[pointer].op2));
+  REJECT(BOTH(allocation, t.irt, IRT_STR|IRT_GUARD));
+  REJECT(BOTH(allocation, o, IR_XSNEW));
+  REJECT(BOTH(bound, o, IR_ULT));
+  REJECT(BOTH(bound, op2, f.ir[pointer].op2));
+  REJECT(BOTH(len, op2, IRFL_TAB_ASIZE));
+  lua_getglobal(L, "string"); lua_getfield(L, -1, "byte");
+  byte = obj2gco(funcV(L->top-1));
+  REJECT(ir_kgc_store_rel(&f.ir[f.ir[firstguard].op2], byte);
+         ir_kgc_store_rel(&f.postra[f.postra[firstguard].op2], byte));
+  arm64_fixture_reset(&f);
+  {
+    IRRef oldnk = f.semantic.nk, fresh = oldnk-2u;
+    assert(oldnk > 2u);
+    f.semantic.nk = f.view.nk = fresh;
+    ir_kgc_publish(&f.ir[fresh], byte, IRT_FUNC);
+    ir_kgc_publish(&f.postra[fresh], byte, IRT_FUNC);
+    assert(semantic(&f) && allocated(&f));
+    /* Keep the allocation's initial guard intact, changing only the later
+    ** repeated CALL guard. The result must not survive the wrong callee. */
+    BOTH(lastguard, op2, fresh);
+    assert(!semantic(&f) && !allocated(&f));
+    f.semantic.nk = f.view.nk = oldnk;
+  }
+  arm64_fixture_reset(&f);
+  {
+    LJArm64PostRAView original_view = f.view;
+    GCtrace private_owner = *f.owner;
+    GCproto *private_proto = trace_startpt_acq(&f.semantic);
+    BCIns *bc = proto_bc(private_proto);
+    MSize callpc = 0, pc;
+    trace_startpt_rel(&private_owner, private_proto);
+    setmref(private_owner.startpc, trace_startpc_acq(&f.semantic));
+    f.view.owner = &private_owner;
+    f.view.proto = private_proto;
+    f.view.proto_bc = bc;
+    f.view.startpc = trace_startpc_acq(&f.semantic);
+    f.view.snapmap = f.map;
+    f.view.owner_private = 1;
+    assert(semantic(&f) && allocated(&f));
+    for (pc = 1; pc < private_proto->sizebc; pc++)
+      if (bc_op(bc[pc]) == BC_CALL) { assert(!callpc); callpc = pc; }
+    assert(callpc >= 3u);
+    for (unsigned mode = 0; mode < 4u; mode++) {
+      MSize at = callpc-(mode < 3u ? mode+1u : 0u);
+      BCIns saved = bc[at], changed = saved;
+      if (mode == 0u) setbc_d(&changed, bc_d(saved)-1u);
+      else if (mode == 1u) setbc_d(&changed, 0u);
+      else if (mode == 2u) setbc_d(&changed, bc_d(saved)+1u);
+      else setbc_b(&changed, 3u);
+      la_store32_rel((uint32_t *)&bc[at], changed);
+      assert(!semantic(&f) && !allocated(&f));
+      la_store32_rel((uint32_t *)&bc[at], saved);
+      assert(semantic(&f) && allocated(&f));
+    }
+    {
+      BCIns saved, changed;
+      assert(callpc >= 4u);
+      saved = bc[callpc-4u];
+      changed = BCINS_AD(BC_ISLT, 0, 1);
+      la_store32_rel((uint32_t *)&bc[callpc-4u], changed);
+      assert(!semantic(&f) && !allocated(&f));
+      la_store32_rel((uint32_t *)&bc[callpc-4u], saved);
+      assert(semantic(&f) && allocated(&f));
+    }
+    f.view = original_view;
+  }
+  arm64_fixture_reset(&f);
+  {
+    IRRef source = f.ir[pointer].op1;
+    f.postra[source].r = RID_X0;
+    f.postra[source].s = SPS_NONE;
+    assert(semantic(&f) && !allocated(&f));
+  }
+  arm64_fixture_reset(&f);
+  f.postra[allocation].r = RID_D0;
+  assert(semantic(&f) && !allocated(&f));
+  arm64_fixture_reset(&f);
+  f.postra[allocation].s = SPS_FIRST+1;
+  f.view.spadjust = 16;
+  assert(semantic(&f) && !allocated(&f));
+  f.view.spadjust = f.owner->spadjust;
+  arm64_fixture_reset(&f);
+  assert(semantic(&f) && allocated(&f));
+  arm64_fixture_free(&f);
+  lua_close(L);
+  printf("substring admission OK: %s bounds, callee, snapshots and allocation\n", argv[2]);
+  return 0;
+}
