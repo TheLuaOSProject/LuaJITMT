@@ -37,7 +37,10 @@ evidence. Four-profile contract evidence is in
 the initial 108-mutation run. Review restored the previously skipped VARG
 destination corruption test in `00de6d8f6`; the full four-profile varargs
 contract then passed with 115 semantic and 115 post-RA rejections per profile.
-That follow-up was captured in the tool session, without a separate log file.
+That initial follow-up was captured in the tool session. The broader
+integrated Lua-leaf contract at `481959ce6` subsequently passed all four
+profiles, including all 115 mutations, with a durable log at
+`/Users/frityet/Scratch/ljmt-wide-numeric-byte-integration-20261030/lua-leaf-four-profiles.log`.
 
 The focused contract and ordinary probes used source base `a2b20c5` plus the
 uncommitted source/test diff whose SHA-256 is
