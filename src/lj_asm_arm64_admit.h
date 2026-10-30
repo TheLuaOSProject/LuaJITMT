@@ -21950,12 +21950,15 @@ static int arm64_scalar_math_loop_value_survives(
   RegSP loop_rs = REGSP(RID_NONE, 0);
   IRType type;
   unsigned nphi = 0, nuse = 0;
+  IRIns body;
   if (!v || !v->snap || !v->ir || value < REF_FIRST || value >= loop ||
       loop < REF_FIRST || loop >= call || call >= n || n > v->nins ||
       value >= v->nins || ir_load_acq(&v->ir[value]).o != IR_CALLN ||
       irt_type(ir_load_acq(&v->ir[value]).t) != IRT_NUM)
     return 0;
   if (ir_load_acq(&v->ir[loop]).o != IR_LOOP) return 0;
+  body = ir_load_acq(&v->ir[call]);
+  if (body.o != IR_CALLN || irt_type(body.t) != IRT_NUM) return 0;
   for (s = 0; s < v->nsnap; s++) {
     if (snap_ref_acq(&v->snap[s]) == loop) {
       loop_snap = s;
@@ -21992,7 +21995,9 @@ static int arm64_scalar_math_loop_value_survives(
   }
   if (nuse != 1u || nphi != 1u) return 0;
   rs = arm64_scalar_postra_snapshot_regsp(v, n, value, loop_snap);
-  if (rs != loop_rs) return 0;
+  if (rs != loop_rs || ra_hasspill(regsp_spill(rs)) ||
+      regsp_reg(rs) < RID_D8 || regsp_reg(rs) > RID_D15)
+    return 0;
   type = (IRType)irt_type(ir_load_acq(&v->ir[value]).t);
   return arm64_scalar_math_regsp_survives(rs, type, cap);
 }
