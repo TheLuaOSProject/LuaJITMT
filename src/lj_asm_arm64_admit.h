@@ -10172,9 +10172,9 @@ static int arm64_string_byte_call_slots_postra(const GCproto *pt,
   return calls == 1 && matches == 1;
 }
 
-/* Match only CALL byte(s, literal-negative-index): exactly two fixed source
-** arguments, with the string copied from a formal and the index supplied by
-** the adjacent KSHORT. This deliberately excludes an explicit/dynamic end. */
+/* Match CALL byte(s, literal-negative-index), optionally with an explicit
+** equivalent end. The three-argument forms are accepted only when the end is
+** the identical negative KSHORT or nil; dynamic and unequal ends stay closed. */
 static int arm64_string_byte_call_literal_slots(const GCproto *pt,
                                                  MSize strslot,
                                                  int32_t index)
@@ -10186,23 +10186,34 @@ static int arm64_string_byte_call_literal_slots(const GCproto *pt,
   bc = proto_bc(pt); sizebc = pt->sizebc;
   for (pc = 0; pc < sizebc; pc++) {
     BCIns call = arm64_ir_bc_acq((uintptr_t)bc, pc);
-    BCIns argstr, argidx;
+    BCIns argstr, argidx, argend = 0;
     BCReg source;
+    unsigned nargs;
     MSize q;
     int valid = 1, cell;
-    if (bc_op(call) != BC_CALL || bc_b(call) != 2 || bc_c(call) != 3)
+    if (bc_op(call) != BC_CALL || bc_b(call) != 2 ||
+        (bc_c(call) != 3 && bc_c(call) != 4))
       continue;
     calls++;
-    if (pc < 2u ||
-        (MSize)bc_a(call)+3u+LJ_FR2 > pt->framesize) continue;
-    argstr = arm64_ir_bc_acq((uintptr_t)bc, pc-2u);
-    argidx = arm64_ir_bc_acq((uintptr_t)bc, pc-1u);
+    nargs = bc_c(call)-1u;
+    if (pc < nargs+1u ||
+        (MSize)bc_a(call)+nargs+1u+LJ_FR2 > pt->framesize) continue;
+    argstr = arm64_ir_bc_acq((uintptr_t)bc, pc-nargs);
+    argidx = arm64_ir_bc_acq((uintptr_t)bc, pc-nargs+1u);
     if ((bc_op(argstr) != BC_MOV && bc_op(argstr) != BC_CGET) ||
         bc_a(argstr) != (BCReg)(bc_a(call)+1u+LJ_FR2) ||
         bc_op(argidx) != BC_KSHORT ||
         bc_a(argidx) != (BCReg)(bc_a(call)+2u+LJ_FR2) ||
         (int32_t)(int16_t)bc_d(argidx) != index)
       continue;
+    if (nargs == 3u) {
+      argend = arm64_ir_bc_acq((uintptr_t)bc, pc-1u);
+      if (bc_a(argend) != (BCReg)(bc_a(call)+3u+LJ_FR2) ||
+          !((bc_op(argend) == BC_KSHORT &&
+             (int32_t)(int16_t)bc_d(argend) == index) ||
+            (bc_op(argend) == BC_KPRI && bc_d(argend) == 0u)))
+        continue;
+    }
     source = bc_d(argstr);
     cell = bc_op(argstr) == BC_CGET;
     if (source >= pt->numparams ||
@@ -10219,8 +10230,7 @@ static int arm64_string_byte_call_literal_slots(const GCproto *pt,
       }
       if (bcmode_d(op) == BCMjump) {
         int64_t target = (int64_t)q+1+(int64_t)bc_j(ins);
-        if (target == (int64_t)pc-2 || target == (int64_t)pc-1 ||
-            target == (int64_t)pc) {
+        if (target >= (int64_t)(pc-nargs) && target <= (int64_t)pc) {
           valid = 0;
           break;
         }
@@ -10963,10 +10973,11 @@ static int arm64_string_byte_constant_negative_bounds_ir(
   if (len->o != IR_FLOAD || len->t.irt != IRT_INT ||
       len->op1 != str || len->op2 != IRFL_STR_LEN)
     return 0;
+  if (endindex == 0) endref = lenref;
   for (ref = REF_FIRST; ref < strref; ref++) {
     const IRIns *g = &T->ir[ref];
     int32_t value;
-    if (g->o == IR_ADD && g->t.irt == IRT_INT &&
+    if (endindex != 0 && g->o == IR_ADD && g->t.irt == IRT_INT &&
         ((g->op1 == lenref && arm64_ir_kint_value(T, g->op2, &value) &&
           value == endindex) ||
          (g->op2 == lenref && arm64_ir_kint_value(T, g->op1, &value) &&
@@ -10995,8 +11006,11 @@ static int arm64_string_byte_constant_negative_bounds_ir(
       nwidth++;
     }
   }
-  return nend == 1 && nnonneg == 1 && nsub == 1 && nwidth == 1 &&
-         endref < nonneg && nonneg < subref && subref < widthref &&
+  return ((endindex == 0 && nend == 0 && endref == lenref) ||
+          (endindex != 0 && nend == 1 && endref != lenref)) &&
+         nnonneg == 1 && nsub == 1 && nwidth == 1 && offset < nonneg &&
+         endref < nonneg && endref < subref && nonneg < subref &&
+         subref < widthref &&
          widthref < strref;
 }
 
@@ -17473,10 +17487,11 @@ static int arm64_string_byte_constant_negative_bounds_postra(
   if (len.o != IR_FLOAD || len.t.irt != IRT_INT ||
       len.op1 != str || len.op2 != IRFL_STR_LEN)
     return 0;
+  if (endindex == 0) endref = lenref;
   for (ref = REF_FIRST; ref < strref; ref++) {
     IRIns g = ir_load_acq(&v->ir[ref]);
     int32_t value;
-    if (g.o == IR_ADD && g.t.irt == IRT_INT &&
+    if (endindex != 0 && g.o == IR_ADD && g.t.irt == IRT_INT &&
         ((g.op1 == lenref &&
           arm64_scalar_postra_kint(v, g.op2, &value) &&
           value == endindex) ||
@@ -17506,8 +17521,11 @@ static int arm64_string_byte_constant_negative_bounds_postra(
       nwidth++;
     }
   }
-  return nend == 1 && nnonneg == 1 && nsub == 1 && nwidth == 1 &&
-         endref < nonneg && nonneg < subref && subref < widthref &&
+  return ((endindex == 0 && nend == 0 && endref == lenref) ||
+          (endindex != 0 && nend == 1 && endref != lenref)) &&
+         nnonneg == 1 && nsub == 1 && nwidth == 1 && offset < nonneg &&
+         endref < nonneg && endref < subref && nonneg < subref &&
+         subref < widthref &&
          widthref < strref;
 }
 

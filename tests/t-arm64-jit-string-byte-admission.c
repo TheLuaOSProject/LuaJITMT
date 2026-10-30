@@ -118,6 +118,98 @@ static int call_negative_constant_loop(lua_State *L, const char *function_global
   return status;
 }
 
+static void test_negative_constant_variant(lua_State *L, const char *name,
+                                           const char *args,
+                                           const char *value_global)
+{
+  char source[2048], trace_name[96], oracle_name[96];
+  GCtrace *owner;
+  TraceNo no;
+  MCode *code;
+  MSize codesize;
+  unsigned char *saved;
+  lua_Number actual = 0.0, expected = 0.0;
+  snprintf(trace_name, sizeof(trace_name), "string_byte_%s_trace", name);
+  snprintf(oracle_name, sizeof(oracle_name), "string_byte_%s_oracle", name);
+  snprintf(source, sizeof(source),
+    "jit.flush(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=8'); "
+    "%s=function(byte,s,n) local i,sum=0,.5; "
+    "while i<n do sum=sum+byte(s%s); i=i+1 end; return sum end; "
+    "%s=function(byte,s,n) local i,sum=0,.5; "
+    "while i<n do sum=sum+byte(s%s); i=i+1 end; return sum end; "
+    "jit.off(%s,true)", trace_name, args, oracle_name, args, oracle_name);
+  run_chunk(L, source);
+  assert(call_negative_constant_loop(L, trace_name, value_global, &actual) ==
+         LUA_OK);
+  lua_getglobal(L, trace_name);
+  assert(lua_isfunction(L, -1) && isluafunc(funcV(L->top-1)));
+  no = proto_trace_acq(funcproto(funcV(L->top-1)));
+  lua_pop(L, 1);
+  owner = traceref_safe(L2J(L), no);
+  assert(no && owner && trace_runnable_acq(owner, no) &&
+         bc_op(trace_startins_acq(owner)) == BC_LOOP);
+  code = trace_mcode_acq(owner);
+  codesize = trace_szmcode_acq(owner);
+  assert(code && codesize);
+  saved = (unsigned char *)malloc(codesize);
+  assert(saved);
+  memcpy(saved, code, codesize);
+  {
+    static const char *const values[] = {
+      "string_byte_negative_constant_value",
+      "string_byte_negative_constant_nul",
+      "string_byte_negative_constant_high",
+      "string_byte_negative_constant_pair"
+    };
+    unsigned i;
+    for (i = 0; i < sizeof(values)/sizeof(values[0]); i++) {
+      unsigned entries;
+      assert(call_negative_constant_loop(L, oracle_name, values[i],
+                                         &expected) == LUA_OK);
+      lj_trace_test_reset_exit_stats();
+      entries = lj_trace_test_root_entry_successes();
+      assert(call_negative_constant_loop(L, trace_name, values[i], &actual) ==
+             LUA_OK && actual == expected);
+      assert(lj_trace_test_root_entry_successes() > entries);
+    }
+  }
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(call_negative_constant_loop(L, oracle_name, value_global,
+                                     &expected) == LUA_OK);
+  lj_trace_test_reset_exit_stats();
+  {
+    unsigned entries = lj_trace_test_root_entry_successes();
+    assert(call_negative_constant_loop(L, trace_name, value_global, &actual) ==
+           LUA_OK && actual == expected);
+    assert(lj_trace_test_root_entry_successes() > entries);
+  }
+  assert(trace_runnable_acq(owner, no) && trace_mcode_acq(owner) == code &&
+         trace_szmcode_acq(owner) == codesize &&
+         memcmp(saved, code, codesize) == 0);
+  if (strcmp(name, "negative_one") == 0) {
+    assert(call_negative_constant_loop(L, oracle_name,
+        "string_byte_negative_constant_short", &expected) == LUA_OK);
+    lj_trace_test_reset_exit_stats();
+    assert(call_negative_constant_loop(L, trace_name,
+        "string_byte_negative_constant_short", &actual) == LUA_OK &&
+        actual == expected);
+  } else {
+    assert(call_negative_constant_loop(L, oracle_name,
+        "string_byte_negative_constant_short", &actual) != LUA_OK);
+    lj_trace_test_reset_exit_stats();
+    assert(call_negative_constant_loop(L, trace_name,
+        "string_byte_negative_constant_short", &actual) != LUA_OK);
+  }
+  assert(call_negative_constant_loop(L, oracle_name,
+      "string_byte_negative_constant_empty", &actual) != LUA_OK);
+  lj_trace_test_reset_exit_stats();
+  assert(call_negative_constant_loop(L, trace_name,
+      "string_byte_negative_constant_empty", &actual) != LUA_OK);
+  assert(lj_trace_test_exit_calls() > 0 &&
+         lj_trace_test_first_exit_parent() == no);
+  free(saved);
+}
+
 static int kint(const IRIns *ir, IRRef nk, IRRef ref, int32_t *value)
 {
   IRRef r;
@@ -1441,6 +1533,12 @@ int main(void)
   arm64_fixture_reset(&f);
   assert(semantic(&f) && allocated(&f));
   arm64_fixture_free(&f);
+  test_negative_constant_variant(L, "negative_one", ",-1",
+      "string_byte_negative_constant_value");
+  test_negative_constant_variant(L, "same_end", ",-2,-2",
+      "string_byte_negative_constant_value");
+  test_negative_constant_variant(L, "nil_end", ",-2,nil",
+      "string_byte_negative_constant_value");
   test_fixed_byte_call(L,"",0,1);
   test_fixed_byte_call(L,",2,2",1,2);
   test_fixed_byte_call(L,",2,4",1,4);
