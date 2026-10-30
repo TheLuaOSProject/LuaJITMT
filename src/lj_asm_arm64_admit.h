@@ -11290,7 +11290,7 @@ static int arm64_rooted_gc_type(IRType type)
 static int arm64_scalar_builtin_ffid(uint32_t ffid)
 {
   return ffid == FF_rawset || lj_ff_is_bit_scalar(ffid) ||
-         ffid == FF_tostring ||
+         ffid == FF_tostring || ffid == FF_tonumber ||
          ffid == FF_math_floor || ffid == FF_math_ceil ||
          ffid == FF_math_sqrt || ffid == FF_math_abs ||
          ffid == FF_math_min || ffid == FF_math_max ||
@@ -11302,18 +11302,44 @@ static int arm64_scalar_builtin_ffid(uint32_t ffid)
          ffid == FF_math_atan2 || ffid == FF_math_pow || ffid == FF_math_ldexp;
 }
 
-/* Prove the recorder's exact string-input tostring identity result. A dynamic
+static int arm64_scalar_identity_arg_ir(const GCtrace *T, IRRef argref,
+                                        int numeric)
+{
+  IRIns arg;
+  if (argref < REF_FIRST || argref >= T->nins) return 0;
+  arg = ir_load_acq(&T->ir[argref]);
+  if (arg.o != IR_SLOAD || !(arg.t.irt & IRT_GUARD) ||
+      arg.op2 != IRSLOAD_TYPECHECK) return 0;
+  if (!numeric) return arg.t.irt == (IRT_STR|IRT_GUARD);
+  return arg.t.irt == (IRT_INT|IRT_GUARD) ||
+         arg.t.irt == (IRT_NUM|IRT_GUARD);
+}
+
+static int arm64_scalar_identity_arg_postra(const LJArm64PostRAView *v,
+                                            IRRef argref, int numeric)
+{
+  IRIns arg;
+  if (!v || !v->ir || argref < REF_FIRST || argref >= v->nins) return 0;
+  arg = ir_load_acq(&v->ir[argref]);
+  if (arg.o != IR_SLOAD || !(arg.t.irt & IRT_GUARD) ||
+      arg.op2 != IRSLOAD_TYPECHECK) return 0;
+  if (!numeric) return arg.t.irt == (IRT_STR|IRT_GUARD);
+  return arg.t.irt == (IRT_INT|IRT_GUARD) ||
+         arg.t.irt == (IRT_NUM|IRT_GUARD);
+}
+
+/* Prove an exact one-argument builtin identity result. A dynamic
 ** CALL's function guard is not enough by itself: a different builtin could
 ** satisfy a mutated KGC guard while the trace still returns the input. Bind
-** the one-argument CALL at its source snapshot to a guarded string argument,
+** the one-argument CALL at its source snapshot to a guarded argument,
 ** then prove the exact source cell flow from CALL result through CSET to the
 ** terminal CGET/RET1. The terminal map is before CGET and need not materialize
 ** the returned register. Its saved cell slot must contain the exact guarded
-** argument reference returned by recff_tostring's string case. */
-static int arm64_scalar_tostring_cell_result_ir(const jit_State *J,
+** argument reference returned by the builtin's proven identity case. */
+static int arm64_scalar_identity_cell_result_ir(const jit_State *J,
                                                const GCtrace *T,
                                                BCIns call, MSize callpos,
-                                               IRRef argref)
+                                               IRRef argref, int numeric)
 {
   const GCproto *pt = J->pt;
   const SnapShot *terminal;
@@ -11393,15 +11419,15 @@ static int arm64_scalar_tostring_cell_result_ir(const jit_State *J,
            target < (int64_t)footerpos)) return 0;
     }
   }
-  /* recff_tostring's string case leaves the argument TRef in base[0]. The
-  ** CALL snapshot binds that ref; CSET stores it, and the terminal snapshot
-  ** binds the cell slot to argref before CGET/RET1 reads it. */
-  return source_stores == 1u && argref < T->nins &&
-         T->ir[argref].o == IR_SLOAD && T->ir[argref].t.irt == (IRT_STR|IRT_GUARD);
+  /* The CALL snapshot binds the guarded argument TRef; CSET stores it, and
+  ** the terminal snapshot binds the cell slot to argref before CGET/RET1. */
+  return source_stores == 1u &&
+         arm64_scalar_identity_arg_ir(T, argref, numeric);
 }
 
-static int arm64_scalar_tostring_identity_ir(const jit_State *J,
-						 const GCtrace *T, IRRef fnref)
+static int arm64_scalar_identity_ir(const jit_State *J,
+					    const GCtrace *T, IRRef fnref,
+					    int numeric, IRType *argtypep)
 {
   const GCproto *pt;
   BCIns call = 0;
@@ -11458,13 +11484,14 @@ static int arm64_scalar_tostring_identity_ir(const jit_State *J,
     }
     if (nfn != 1u || nargs != 1u) goto fail;
   }
-  if (!callfn || callfn != fnref || !argref || argref >= T->nins ||
-      T->ir[argref].o != IR_SLOAD ||
-      T->ir[argref].t.irt != (IRT_STR|IRT_GUARD) ||
-      T->ir[argref].op2 != IRSLOAD_TYPECHECK) {
+  if (!callfn || callfn != fnref || !argref ||
+      !arm64_scalar_identity_arg_ir(T, argref, numeric)) {
     goto fail;
   }
-  return arm64_scalar_tostring_cell_result_ir(J, T, call, callpos, argref);
+  if (!arm64_scalar_identity_cell_result_ir(J, T, call, callpos,
+                                             argref, numeric)) goto fail;
+  if (argtypep) *argtypep = T->ir[argref].t.irt;
+  return 1;
 fail:
   return 0;
 }
@@ -18168,9 +18195,23 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
           goto bad_operand;
         ffid = lj_func_ffid_acq(gco2func(o));
         {
-          int identity_shape = arm64_scalar_tostring_identity_ir(J, T, ir->op1);
-          if ((identity_shape && ffid != FF_tostring) ||
-              (ffid == FF_tostring && !identity_shape) ||
+          IRType numeric_identity_type = IRT_NIL;
+          int string_identity = arm64_scalar_identity_ir(J, T, ir->op1,
+                                                         0, NULL);
+          int numeric_identity = arm64_scalar_identity_ir(J, T, ir->op1,
+                                                          1, &numeric_identity_type);
+          int int_identity_builtin =
+              (ffid == FF_math_floor || ffid == FF_math_ceil ||
+               ffid == FF_bit_tobit || ffid == FF_bit_band ||
+               ffid == FF_bit_bor || ffid == FF_bit_bxor) &&
+              numeric_identity_type == (IRT_INT|IRT_GUARD);
+          int numeric_passthrough = ffid == FF_tonumber ||
+                                    ffid == FF_math_min || ffid == FF_math_max ||
+                                    int_identity_builtin;
+          if ((string_identity && ffid != FF_tostring) ||
+              (ffid == FF_tostring && !string_identity) ||
+              (numeric_identity && !numeric_passthrough) ||
+              (ffid == FF_tonumber && !numeric_identity) ||
             (!arm64_scalar_builtin_ffid(ffid) &&
              (side || (rootop != BC_FORL && rootop != BC_ITERL && rootop != BC_FUNCF) ||
               !lj_trace_arm64_lua_leaf(gco2func(o)))))
@@ -24459,8 +24500,9 @@ static int arm64_lua_leaf_postra_locations(const LJArm64PostRAView *v,
 }
 
 /* Independent allocator-view counterpart to the semantic source proof above. */
-static int arm64_scalar_tostring_cell_result_postra(
-    const LJArm64PostRAView *v, BCIns call, MSize callpos, IRRef argref)
+static int arm64_scalar_identity_cell_result_postra(
+    const LJArm64PostRAView *v, BCIns call, MSize callpos, IRRef argref,
+    int numeric)
 {
   const GCproto *pt = v->proto;
   const SnapShot *terminal;
@@ -24543,16 +24585,13 @@ static int arm64_scalar_tostring_cell_result_postra(
            target < (int64_t)footerpos)) return 0;
     }
   }
-  {
-    IRIns arg = ir_load_acq(&v->ir[argref]);
-    return source_stores == 1u && arg.o == IR_SLOAD &&
-           arg.t.irt == (IRT_STR|IRT_GUARD) &&
-           arg.op2 == IRSLOAD_TYPECHECK;
-  }
+  return source_stores == 1u &&
+         arm64_scalar_identity_arg_postra(v, argref, numeric);
 }
 
-static int arm64_scalar_tostring_identity_postra(const LJArm64PostRAView *v,
-						 IRRef fnref)
+static int arm64_scalar_identity_postra(const LJArm64PostRAView *v,
+						 IRRef fnref, int numeric,
+						 IRType *argtypep)
 {
   const GCproto *pt;
   BCIns call = 0;
@@ -24618,12 +24657,11 @@ static int arm64_scalar_tostring_identity_postra(const LJArm64PostRAView *v,
     if (nfn != 1u || nargs != 1u) return 0;
   }
   if (!callfn || callfn != fnref || !argref || argref >= v->nins) return 0;
-  {
-    IRIns arg = ir_load_acq(&v->ir[argref]);
-    if (arg.o != IR_SLOAD || arg.t.irt != (IRT_STR|IRT_GUARD) ||
-	arg.op2 != IRSLOAD_TYPECHECK) return 0;
-  }
-  return arm64_scalar_tostring_cell_result_postra(v, call, callpos, argref);
+  if (!arm64_scalar_identity_arg_postra(v, argref, numeric)) return 0;
+  if (!arm64_scalar_identity_cell_result_postra(v, call, callpos,
+                                                argref, numeric)) return 0;
+  if (argtypep) *argtypep = ir_load_acq(&v->ir[argref]).t.irt;
+  return 1;
 }
 
 static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
@@ -25089,9 +25127,23 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
           return 0;
         ffid = lj_func_ffid_acq(gco2func(fn));
         {
-          int identity_shape = arm64_scalar_tostring_identity_postra(v, p.op1);
-          if ((identity_shape && ffid != FF_tostring) ||
-              (ffid == FF_tostring && !identity_shape) ||
+          IRType numeric_identity_type = IRT_NIL;
+          int string_identity = arm64_scalar_identity_postra(v, p.op1,
+                                                             0, NULL);
+          int numeric_identity = arm64_scalar_identity_postra(v, p.op1,
+                                                              1, &numeric_identity_type);
+          int int_identity_builtin =
+              (ffid == FF_math_floor || ffid == FF_math_ceil ||
+               ffid == FF_bit_tobit || ffid == FF_bit_band ||
+               ffid == FF_bit_bor || ffid == FF_bit_bxor) &&
+              numeric_identity_type == (IRT_INT|IRT_GUARD);
+          int numeric_passthrough = ffid == FF_tonumber ||
+                                    ffid == FF_math_min || ffid == FF_math_max ||
+                                    int_identity_builtin;
+          if ((string_identity && ffid != FF_tostring) ||
+              (ffid == FF_tostring && !string_identity) ||
+              (numeric_identity && !numeric_passthrough) ||
+              (ffid == FF_tonumber && !numeric_identity) ||
             (!arm64_scalar_builtin_ffid(ffid) &&
             (side || (rootop != BC_FORL && rootop != BC_ITERL && rootop != BC_FUNCF) ||
               !lj_trace_arm64_lua_leaf(gco2func(fn)))))
