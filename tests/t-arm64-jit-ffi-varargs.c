@@ -1164,10 +1164,13 @@ static void run_case(lua_State *L, const char *name, int n)
     ljt_lua_pcall(L, 1, 1, name);
   } else if (strcmp(name, "__va_run_sret") == 0 ||
              strcmp(name, "__va_run_sret_intagg") == 0 ||
-             strcmp(name, "__va_run_sret_gpr8_intagg") == 0) {
+             strcmp(name, "__va_run_sret_gpr8_intagg") == 0 ||
+             strcmp(name, "__va_run_sret_gpr8_literal") == 0) {
     const char *dispatch = strcmp(name, "__va_run_sret") == 0 ?
       "__va_dispatch_sret" : strcmp(name, "__va_run_sret_intagg") == 0 ?
-      "__va_dispatch_sret_intagg" : "__va_dispatch_sret_gpr8_intagg";
+      "__va_dispatch_sret_intagg" :
+      strcmp(name, "__va_run_sret_gpr8_literal") == 0 ?
+      "__va_dispatch_sret_gpr8_literal" : "__va_dispatch_sret_gpr8_intagg";
     lua_getglobal(L, dispatch);
     assert(lua_isfunction(L, -1));
     lua_pushinteger(L, n);
@@ -1719,6 +1722,9 @@ int main(int argc, char **argv)
     " local out; local sum=0.5; for i=1,n do out=fn(u0,u1,u2,u3,u4,u5,u6,u7,pair,7,a,b); sum=sum+i end\n"
     " return out.lo==(u0+u1+u2+u3+u4+u5+u6+u7+15) and out.mid==20 and out.hi==0x4004000000000000 and sum==n*(n+1)/2+0.5 end\n"
     "function _G.__va_set_gpr8_u0(v,narrow) u0=ffi.new(narrow and 'uint32_t' or 'uint64_t',v) end\n"
+    "function _G.__va_run_sret_gpr8_literal(n,fn,pair,a,b)\n"
+    " local out; local sum=0.5; for i=1,n do out=fn(1,2,3,4,5,6,7,8,pair,7,a,b); sum=sum+i end\n"
+    " return out.lo==51 and out.mid==20 and out.hi==0x4004000000000000 and sum==n*(n+1)/2+0.5 end\n"
     "local threading=require('threading')\n"
     "_G.__va_sret_ready=threading.channel(1); _G.__va_sret_release=threading.channel(1)\n"
     "_G.__va_sret_peer=assert(threading.spawn(function(ready,release) assert(ready:send(true,5)); assert(select(2,release:recv(120))); return true end,__va_sret_ready,__va_sret_release))\n"
@@ -1726,10 +1732,11 @@ int main(int argc, char **argv)
     "function _G.__va_dispatch_sret(n) local got=__va_run_sret(n,__va_sret,cda,cdb); return got end\n"
     "function _G.__va_dispatch_sret_intagg(n) local got=__va_run_sret_intagg(n,__va_sret_intagg,pair,cda,cdb); return got end\n"
     "function _G.__va_dispatch_sret_gpr8_intagg(n) local got=__va_run_sret_gpr8_intagg(n,__va_sret_gpr8_intagg,pair,cda,cdb); return got end\n"
+    "function _G.__va_dispatch_sret_gpr8_literal(n) local got=__va_run_sret_gpr8_literal(n,__va_sret_gpr8_intagg,pair,cda,cdb); return got end\n"
     "function _G.__va_dispatch(name,n) local got; if name=='__va_run_noextra' then got=_G[name](n,0) else got=_G[name](n) end; return got end\n"
     "function _G.__va_dispatch_noextra(n,seed) local got=__va_run_noextra(n,seed); return got end\n"
     "function _G.__va_dispatch_cdata(n) local got=__va_run_cdata(n,__va_cdata,cda,cdb,cdc,cdd,cde,cdf,cdg,cdh,cdi); return got end\n"
-    "jit.flush(); jit.on(); jit.on(__va_run_sret_intagg,true); jit.on(__va_run_sret_gpr8_intagg,true); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64')\n");
+    "jit.flush(); jit.on(); jit.on(__va_run_sret_intagg,true); jit.on(__va_run_sret_gpr8_intagg,true); jit.on(__va_run_sret_gpr8_literal,true); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64')\n");
 
   assert(mt_active_acq(G(L)) != 0);
   lua_getglobal(L, "__va_sret_zero");
@@ -1746,6 +1753,8 @@ int main(int argc, char **argv)
   run_sret_prefix_after_gc(calls, 13,
                            "__va_dispatch_sret_gpr8_intagg");
   run_captured_upvalue_lifecycle(calls);
+  assert(require_native(calls, 13, "__va_run_sret_gpr8_literal") != 0);
+  run_sret_prefix_after_gc(calls, 13, "__va_dispatch_sret_gpr8_literal");
   assert(require_native(calls, 1, "__va_run_noextra") != 0);
   test_int_accum_admission_clones(L);
   {
