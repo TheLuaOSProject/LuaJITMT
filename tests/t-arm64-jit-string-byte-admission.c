@@ -1131,10 +1131,13 @@ static void test_integer_dynamic_index(lua_State *L, int negative)
 static void test_u8_snapshot(lua_State *L)
 {
   Arm64TraceFixture f;
+  GCproto *clonept, *viewpt;
   TraceNo no;
   GCtrace *owner;
+  BCIns *clonebc;
   MCode *code;
-  MSize codesize, snapno = 0, mapidx = 0;
+  MSize codesize, snapno = 0, mapidx = 0, callpc = 0;
+  BCReg calla = 0;
   unsigned char *saved;
   unsigned phase;
   IRRef xload = 0, r;
@@ -1205,7 +1208,22 @@ static void test_u8_snapshot(lua_State *L)
   lua_getglobal(L, "string_byte_u8_snapshot_clone");
   arm64_fixture_init_trace(&f, L, "string_byte_u8_snapshot_clone", no);
   f.view.proto = trace_startpt_acq(f.owner);
+  viewpt = (GCproto *)f.view.proto;
   assert(semantic(&f) && allocated(&f));
+  clonept = trace_startpt_acq(&f.semantic);
+  clonebc = (BCIns *)(uintptr_t)proto_bc(clonept);
+  {
+    unsigned calls = 0;
+    for (MSize pc = 0; pc < clonept->sizebc; pc++) {
+      BCIns ins = clonebc[pc];
+      if (bc_op(ins) == BC_CALL && bc_b(ins) == 2 && bc_c(ins) == 3) {
+        calls++;
+        callpc = pc;
+        calla = bc_a(ins);
+      }
+    }
+    assert(calls == 1u);
+  }
   for (r = REF_FIRST; r < f.semantic_nins; r++)
     if (f.ir[r].o == IR_XLOAD && f.ir[r].t.irt == IRT_U8) xload = r;
   assert(xload);
@@ -1224,6 +1242,114 @@ static void test_u8_snapshot(lua_State *L)
     }
   }
   assert(found);
+
+  /* The real exit maps the direct CALL output slot after its immediate copy. */
+  {
+    int direct = 0;
+    BCIns copy = clonebc[callpc+1u];
+    assert((bc_op(copy) == BC_CGET || bc_op(copy) == BC_MOV) &&
+           bc_d(copy) == calla && bc_a(copy) != calla);
+    for (SnapNo sn = 0; sn < f.view.nsnap; sn++) {
+      const SnapShot *snap = &f.snaps[sn];
+      uint64_t footer;
+      MSize snappc;
+      memcpy(&footer, &f.map[snap_mapofs_acq(snap)+snap_nent_acq(snap)],
+             sizeof(footer));
+      {
+        const BCIns *pc = (const BCIns *)(uintptr_t)(footer >> 8);
+        uintptr_t lo = (uintptr_t)(const void *)proto_bc(clonept);
+        uintptr_t addr = (uintptr_t)(const void *)pc;
+        assert(addr >= lo && addr < lo+clonept->sizebc*sizeof(BCIns));
+        snappc = (MSize)((addr-lo)/sizeof(BCIns));
+      }
+      for (MSize i = 0; i < snap_nent_acq(snap); i++) {
+        SnapEntry entry = f.map[snap_mapofs_acq(snap)+i];
+        MSize reg;
+        if (snap_ref(entry) != xload ||
+            (entry & (SNAP_FRAME|SNAP_NORESTORE))) continue;
+        reg = snap_slot(entry)-1u-LJ_FR2;
+        if (reg == calla && snappc > callpc+1u) direct = 1;
+      }
+    }
+    assert(direct);
+
+    /* KNIL range writes before each saved result must invalidate the direct
+    ** CALL output provenance, in both independent readers. */
+    {
+      BCIns old = clonebc[callpc+1u];
+      f.view.proto = clonept;
+      clonebc[callpc+1u] = BCINS_AD(BC_KNIL, calla, 0);
+      arm64_fixture_reset(&f);
+      assert(!semantic(&f));
+      clonebc[callpc+1u] = old;
+      f.view.proto = viewpt;
+      arm64_fixture_reset(&f);
+      assert(semantic(&f) && allocated(&f));
+      f.view.proto = clonept;
+      clonebc[callpc+1u] = BCINS_AD(BC_KNIL, calla, 0);
+      arm64_fixture_reset(&f);
+      assert(!allocated(&f));
+      clonebc[callpc+1u] = old;
+      f.view.proto = viewpt;
+      arm64_fixture_reset(&f);
+      assert(semantic(&f) && allocated(&f));
+    }
+    {
+      BCIns old = clonebc[callpc+2u];
+      f.view.proto = clonept;
+      clonebc[callpc+2u] = BCINS_AD(BC_KNIL, calla, 0);
+      arm64_fixture_reset(&f);
+      assert(!semantic(&f));
+      clonebc[callpc+2u] = old;
+      f.view.proto = viewpt;
+      arm64_fixture_reset(&f);
+      assert(semantic(&f) && allocated(&f));
+      f.view.proto = clonept;
+      clonebc[callpc+2u] = BCINS_AD(BC_KNIL, calla, 0);
+      arm64_fixture_reset(&f);
+      assert(!allocated(&f));
+      clonebc[callpc+2u] = old;
+      f.view.proto = viewpt;
+      arm64_fixture_reset(&f);
+      assert(semantic(&f) && allocated(&f));
+    }
+    /* Neither a pre-CALL forward edge nor a post-CALL backedge may enter the
+    ** saved interval after skipping the value definition. */
+    for (phase = 0; phase < 2; phase++) {
+      MSize q = phase ? clonept->sizebc : 0;
+      BCIns old;
+      if (!phase) {
+        for (; q < clonept->sizebc; q++)
+          if (q < callpc && bc_op(clonebc[q]) == BC_JMP) break;
+      } else {
+        for (q = clonept->sizebc; q > callpc+1u; q--)
+          if (bc_op(clonebc[q-1u]) == BC_JMP) { q--; break; }
+      }
+      assert(q < clonept->sizebc &&
+             (phase ? q > callpc : q < callpc) &&
+             bc_op(clonebc[q]) == BC_JMP);
+      old = clonebc[q];
+      f.view.proto = clonept;
+      clonebc[q] = BCINS_AJ(BC_JMP, bc_a(old),
+          (BCPos)((int32_t)(callpc+(phase ? 2u : 1u))-(int32_t)(q+1u)));
+      arm64_fixture_reset(&f);
+      assert(!semantic(&f));
+      clonebc[q] = old;
+      f.view.proto = viewpt;
+      arm64_fixture_reset(&f);
+      assert(semantic(&f) && allocated(&f));
+      f.view.proto = clonept;
+      clonebc[q] = BCINS_AJ(BC_JMP, bc_a(old),
+          (BCPos)((int32_t)(callpc+(phase ? 2u : 1u))-(int32_t)(q+1u)));
+      arm64_fixture_reset(&f);
+      assert(!allocated(&f));
+      clonebc[q] = old;
+      f.view.proto = viewpt;
+      arm64_fixture_reset(&f);
+      assert(semantic(&f) && allocated(&f));
+    }
+    f.view.proto = viewpt;
+  }
 
   /* Each view accepts the captured exact map first. Then mutate one side at a
   ** time, so semantic and allocated proofs cannot borrow each other's state. */

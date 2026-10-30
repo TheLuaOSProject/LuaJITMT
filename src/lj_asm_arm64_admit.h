@@ -11595,12 +11595,31 @@ static int arm64_string_byte_snapshot_slot_ir(const GCtrace *T, IRRef value,
                                         &callpc, &calla) ||
       callpc >= snappc || snappc > pt->sizebc)
     return 0;
+  /* No earlier predecessor or backedge may enter after the defining CALL
+  ** into the saved interval. A forward join from the executed CALL path is
+  ** safe because it does not bypass the definition. */
+  for (q = 0; q < pt->sizebc; q++) {
+    BCIns ins = arm64_ir_bc_acq((uintptr_t)proto_bc(pt), q);
+    BCOp op = bc_op(ins);
+    if (op >= BC__MAX) return 0;
+    if (bcmode_d(op) == BCMjump) {
+      int64_t target = (int64_t)q+1+(int64_t)bc_j(ins);
+      if (target > (int64_t)callpc && target <= (int64_t)snappc &&
+          (q < callpc || (q > callpc && (int64_t)q >= target)))
+        return 0;
+    }
+  }
   reg = slot-1u-LJ_FR2;
   if (reg == calla) {
     for (q = callpc+1u; q < snappc; q++) {
       BCIns ins = arm64_ir_bc_acq((uintptr_t)proto_bc(pt), q);
-      BCMode mode = bcmode_a(bc_op(ins));
-      if ((mode == BCMdst || mode == BCMvar) && bc_a(ins) == calla)
+      BCOp op = bc_op(ins);
+      BCMode mode;
+      if (op >= BC__MAX) return 0;
+      mode = bcmode_a(op);
+      if ((mode == BCMdst && bc_a(ins) == calla) ||
+          (mode == BCMvar && bc_a(ins) == calla) ||
+          (mode == BCMbase && bc_a(ins) <= calla))
         return 0;
     }
     return 1;
@@ -11614,8 +11633,13 @@ static int arm64_string_byte_snapshot_slot_ir(const GCtrace *T, IRRef value,
     return 0;
   for (q = callpc+2u; q < snappc; q++) {
     BCIns ins = arm64_ir_bc_acq((uintptr_t)proto_bc(pt), q);
-    BCMode mode = bcmode_a(bc_op(ins));
-    if ((mode == BCMdst || mode == BCMvar) && bc_a(ins) == reg)
+    BCOp op = bc_op(ins);
+    BCMode mode;
+    if (op >= BC__MAX) return 0;
+    mode = bcmode_a(op);
+    if ((mode == BCMdst && bc_a(ins) == reg) ||
+        (mode == BCMvar && bc_a(ins) == reg) ||
+        (mode == BCMbase && bc_a(ins) <= reg))
       return 0;
   }
   return 1;
@@ -18414,12 +18438,29 @@ static int arm64_string_byte_snapshot_slot_postra(
                                             &callpc, &calla) ||
       callpc >= snappc || snappc > pt->sizebc)
     return 0;
+  /* Allocated-pass copy of the source-PC jump-entry check. */
+  for (q = 0; q < pt->sizebc; q++) {
+    BCIns ins = arm64_ir_bc_acq((uintptr_t)proto_bc(pt), q);
+    BCOp op = bc_op(ins);
+    if (op >= BC__MAX) return 0;
+    if (bcmode_d(op) == BCMjump) {
+      int64_t target = (int64_t)q+1+(int64_t)bc_j(ins);
+      if (target > (int64_t)callpc && target <= (int64_t)snappc &&
+          (q < callpc || (q > callpc && (int64_t)q >= target)))
+        return 0;
+    }
+  }
   reg = slot-1u-LJ_FR2;
   if (reg == calla) {
     for (q = callpc+1u; q < snappc; q++) {
       BCIns ins = arm64_ir_bc_acq((uintptr_t)proto_bc(pt), q);
-      BCMode mode = bcmode_a(bc_op(ins));
-      if ((mode == BCMdst || mode == BCMvar) && bc_a(ins) == calla)
+      BCOp op = bc_op(ins);
+      BCMode mode;
+      if (op >= BC__MAX) return 0;
+      mode = bcmode_a(op);
+      if ((mode == BCMdst && bc_a(ins) == calla) ||
+          (mode == BCMvar && bc_a(ins) == calla) ||
+          (mode == BCMbase && bc_a(ins) <= calla))
         return 0;
     }
     return 1;
@@ -18433,8 +18474,13 @@ static int arm64_string_byte_snapshot_slot_postra(
     return 0;
   for (q = callpc+2u; q < snappc; q++) {
     BCIns ins = arm64_ir_bc_acq((uintptr_t)proto_bc(pt), q);
-    BCMode mode = bcmode_a(bc_op(ins));
-    if ((mode == BCMdst || mode == BCMvar) && bc_a(ins) == reg)
+    BCOp op = bc_op(ins);
+    BCMode mode;
+    if (op >= BC__MAX) return 0;
+    mode = bcmode_a(op);
+    if ((mode == BCMdst && bc_a(ins) == reg) ||
+        (mode == BCMvar && bc_a(ins) == reg) ||
+        (mode == BCMbase && bc_a(ins) <= reg))
       return 0;
   }
   return 1;
