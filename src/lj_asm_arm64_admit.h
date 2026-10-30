@@ -10934,6 +10934,39 @@ static int arm64_scalar_math_args_ir(const GCtrace *T, IRRef call)
          arm64_scalar_math_carg_ir(T, ir->op1);
 }
 
+/* A dynamic range end can bound a constant byte offset. The unsigned length
+** check, checked end-offset subtraction and positive width equality must all
+** dominate STRREF. Together they imply 0 <= offset < end <= string length,
+** including when an end argument changes after recording. */
+static int arm64_string_byte_range_ir(const GCtrace *T, IRRef guardref,
+                                      IRRef strref, int32_t offset)
+{
+  const IRIns *guard = &T->ir[guardref];
+  IRRef end, subref, eqref;
+  if (offset < 0 || guard->t.irt != (IRT_INT|IRT_GUARD) ||
+      (guard->o != IR_UGE && guard->o != IR_ULE)) return 0;
+  end = guard->o == IR_UGE ? guard->op2 : guard->op1;
+  if (end < REF_FIRST || end >= guardref ||
+      !arm64_scalar_ir_ref(T, end, guardref, IRT_INT)) return 0;
+  for (subref = guardref+1u; subref < strref; subref++) {
+    const IRIns *sub = &T->ir[subref];
+    int32_t base;
+    if (sub->o != IR_SUBOV || sub->t.irt != (IRT_INT|IRT_GUARD) ||
+        sub->op1 != end ||
+        !arm64_ir_kint_value(T, sub->op2, &base) || base != offset)
+      continue;
+    for (eqref = subref+1u; eqref < strref; eqref++) {
+      const IRIns *eq = &T->ir[eqref];
+      int32_t width;
+      if (eq->o == IR_EQ && eq->t.irt == (IRT_INT|IRT_GUARD) &&
+          eq->op1 == subref &&
+          arm64_ir_kint_value(T, eq->op2, &width) && width > 0)
+        return 1;
+    }
+  }
+  return 0;
+}
+
 /* A constant byte offset is safe only with an earlier guard that proves the
 ** corresponding one-based position or a later position is within the same
 ** immutable GCstr. This
@@ -10963,8 +10996,9 @@ static int arm64_string_byte_bounds_ir(const GCtrace *T, IRRef strref,
     lenref = guard->o == IR_UGE ? guard->op1 : guard->op2;
     boundref = guard->o == IR_UGE ? guard->op2 : guard->op1;
     if (lenref < REF_FIRST || lenref >= ref ||
-        !arm64_ir_kint_value(T, boundref, &guard_bound) ||
-        guard_bound < (int32_t)bound)
+        !(arm64_ir_kint_value(T, boundref, &guard_bound) ?
+          guard_bound >= (int32_t)bound :
+          arm64_string_byte_range_ir(T, ref, strref, byte_offset)))
       continue;
     {
       const IRIns *len = &T->ir[lenref];
@@ -11266,6 +11300,23 @@ static int arm64_string_byte_guard_ir(const GCtrace *T, IRRef guardref)
       guard->t.irt != (IRT_INT|IRT_GUARD)) return 0;
   lenref = guard->o == IR_UGE ? guard->op1 : guard->op2;
   boundref = guard->o == IR_UGE ? guard->op2 : guard->op1;
+  if (lenref >= REF_FIRST && lenref < guardref &&
+      !arm64_ir_kint_value(T, boundref, &bound)) {
+    const IRIns *len = &T->ir[lenref];
+    if (len->o == IR_FLOAD && len->t.irt == IRT_INT &&
+        len->op2 == IRFL_STR_LEN &&
+        arm64_scalar_ir_ref(T, len->op1, guardref, IRT_STR)) {
+      for (ref = guardref+1u; ref < T->nins; ref++) {
+        const IRIns *strref = &T->ir[ref];
+        int32_t offset;
+        if (strref->o == IR_STRREF && strref->t.irt == IRT_PGC &&
+            strref->op1 == len->op1 &&
+            arm64_ir_kint_value(T, strref->op2, &offset) &&
+            arm64_string_byte_range_ir(T, guardref, ref, offset))
+          return 1;
+      }
+    }
+  }
   if (lenref < REF_FIRST || lenref >= guardref ||
       (!arm64_ir_kint_value(T, boundref, &bound) || bound <= 0 ||
        (uint32_t)bound > 4096u-(uint32_t)sizeof(GCstr))) {
@@ -17445,6 +17496,38 @@ static int arm64_side_forl_snapshot_stop_postra(
   return 0;
 }
 
+/* Independently bind the allocated dynamic-end range guards. The checked
+** subtraction excludes signed wraparound before the positive width test. */
+static int arm64_string_byte_range_postra(const LJArm64PostRAView *v,
+                                          IRRef upper, IRRef pointer,
+                                          int32_t displacement)
+{
+  IRIns cmp = ir_load_acq(&v->ir[upper]);
+  IRRef last, difference, check;
+  if (displacement < 0 || cmp.t.irt != (IRT_INT|IRT_GUARD) ||
+      (cmp.o != IR_ULE && cmp.o != IR_UGE)) return 0;
+  last = cmp.o == IR_ULE ? cmp.op1 : cmp.op2;
+  if (last < REF_FIRST || last >= upper ||
+      !arm64_scalar_postra_ref(v, last, upper, IRT_INT)) return 0;
+  for (difference = upper+1u; difference < pointer; difference++) {
+    IRIns sub = ir_load_acq(&v->ir[difference]);
+    int32_t base;
+    if (sub.o != IR_SUBOV || sub.t.irt != (IRT_INT|IRT_GUARD) ||
+        sub.op1 != last ||
+        !arm64_scalar_postra_kint(v, sub.op2, &base) ||
+        base != displacement) continue;
+    for (check = difference+1u; check < pointer; check++) {
+      IRIns eq = ir_load_acq(&v->ir[check]);
+      int32_t count;
+      if (eq.o == IR_EQ && eq.t.irt == (IRT_INT|IRT_GUARD) &&
+          eq.op1 == difference &&
+          arm64_scalar_postra_kint(v, eq.op2, &count) && count > 0)
+        return 1;
+    }
+  }
+  return 0;
+}
+
 /* Independently certify a constant byte offset against an earlier guarded
 ** length load for the same string. Dynamic offsets remain fail-closed. */
 static int arm64_string_byte_bounds_postra(const LJArm64PostRAView *v,
@@ -17473,8 +17556,9 @@ static int arm64_string_byte_bounds_postra(const LJArm64PostRAView *v,
     lenref = guard.o == IR_UGE ? guard.op1 : guard.op2;
     boundref = guard.o == IR_UGE ? guard.op2 : guard.op1;
     if (lenref < REF_FIRST || lenref >= ref ||
-        !arm64_scalar_postra_kint(v, boundref, &guard_bound) ||
-        guard_bound < (int32_t)bound)
+        !(arm64_scalar_postra_kint(v, boundref, &guard_bound) ?
+          guard_bound >= (int32_t)bound :
+          arm64_string_byte_range_postra(v, ref, strref, byte_offset)))
       continue;
     {
       IRIns len = ir_load_acq(&v->ir[lenref]);
@@ -17773,6 +17857,23 @@ static int arm64_string_byte_guard_postra(const LJArm64PostRAView *v,
       guard.t.irt != (IRT_INT|IRT_GUARD)) return 0;
   lenref = guard.o == IR_UGE ? guard.op1 : guard.op2;
   boundref = guard.o == IR_UGE ? guard.op2 : guard.op1;
+  if (lenref >= REF_FIRST && lenref < guardref &&
+      !arm64_scalar_postra_kint(v, boundref, &bound)) {
+    IRIns len = ir_load_acq(&v->ir[lenref]);
+    if (len.o == IR_FLOAD && len.t.irt == IRT_INT &&
+        len.op2 == IRFL_STR_LEN &&
+        arm64_scalar_postra_ref(v, len.op1, guardref, IRT_STR)) {
+      for (ref = guardref+1u; ref < v->nins; ref++) {
+        IRIns strref = ir_load_acq(&v->ir[ref]);
+        int32_t offset;
+        if (strref.o == IR_STRREF && strref.t.irt == IRT_PGC &&
+            strref.op1 == len.op1 &&
+            arm64_scalar_postra_kint(v, strref.op2, &offset) &&
+            arm64_string_byte_range_postra(v, guardref, ref, offset))
+          return 1;
+      }
+    }
+  }
   if (lenref < REF_FIRST || lenref >= guardref ||
       (!arm64_scalar_postra_kint(v, boundref, &bound) || bound <= 0 ||
        (uint32_t)bound > 4096u-(uint32_t)sizeof(GCstr))) {
