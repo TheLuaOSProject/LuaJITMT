@@ -431,9 +431,11 @@ static int call_multiple_loop(lua_State *L, unsigned mode, lua_Number first,
                                lua_Number *out)
 {
   int status;
-  int first_numeric = mode == 6u || mode == 8u || mode == 10u;
+  int first_numeric = mode == 6u || mode == 8u || mode == 10u ||
+                      mode == 12u || mode == 14u;
   int last_numeric = mode == 2u || mode == 4u || mode == 6u ||
-                     mode == 9u || mode == 10u;
+                     mode == 9u || mode == 10u || mode == 13u ||
+                     mode == 14u;
   if (!mode) return call_loop(L,fn,string,out);
   lua_getglobal(L,fn);
   if (string) lua_getglobal(L,string);
@@ -466,10 +468,11 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
   IRRef r, loadref=0, lastptr=0, widthguard=0;
   IRRef first_negative=0, last_negative=0, base_nonnegative=0;
   IRRef width_difference=0, difference_guard=0;
-  IRRef range_first=0, range_last=0, negative_len=0;
+  IRRef range_first=0, range_last=0, negative_len=0, mixed_sign_guard=0;
   lua_Number actual=0, expected=0, weighted=0, recorded_first=first, recorded_end;
-  int negative_range = mode >= 7u;
-  assert(width>=2 && width<=16 && first>=1 && first<=2 && mode<=10);
+  int negative_range = mode >= 7u && mode <= 10u;
+  int mixed_range = mode >= 11u && mode <= 14u;
+  assert(width>=2 && width<=16 && first>=1 && first<=2 && mode<=14);
   recorded_end=first+width-1u;
   if (mode==3 || mode==4) recorded_end-=(lua_Number)sizeof(bytes)+1;
   if (mode==6) recorded_first+=.9;
@@ -478,6 +481,10 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
   if (negative_range) {
     recorded_first -= (lua_Number)sizeof(bytes)+1;
     recorded_end -= (lua_Number)sizeof(bytes)+1;
+  } else if (mixed_range && mode <= 12u) {
+    recorded_end = (lua_Number)first + width - (lua_Number)sizeof(bytes) - 2;
+  } else if (mixed_range) {
+    recorded_first = (lua_Number)first - (lua_Number)sizeof(bytes) - 1;
   }
   if (mode) strcpy(endarg,"last");
   else snprintf(endarg,sizeof(endarg),"%u",first+width-1u);
@@ -600,6 +607,51 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
                  lj_trace_test_first_exit_parent()==no);
         }
       }
+      if (mixed_range) {
+        const struct { lua_Number first, last; } mixed_bounds[]={
+          {recorded_first+1,recorded_end},
+          {recorded_first,recorded_end+1},
+          {recorded_first-1,recorded_end},
+          {recorded_first,recorded_end-1},
+          {0,recorded_end}, {recorded_first,0},
+          {recorded_first,recorded_end+2}
+        };
+        for (i=0;i<sizeof(mixed_bounds)/sizeof(mixed_bounds[0]);i++) {
+          int want=call_multiple_loop(L,mode,mixed_bounds[i].first,
+            mixed_bounds[i].last,"string_byte_multi_oracle",
+            "string_byte_multi_value",&expected), got;
+          lj_trace_test_root_entry_reset();lj_trace_test_reset_exit_stats();
+          got=call_multiple_loop(L,mode,mixed_bounds[i].first,
+            mixed_bounds[i].last,"string_byte_multi_trace",
+            "string_byte_multi_value",&actual);
+          assert(got==want && (got!=LUA_OK || actual==expected));
+          assert(lj_trace_test_root_entry_successes()>0 &&
+                 lj_trace_test_exit_calls()>0 &&
+                 lj_trace_test_first_exit_parent()==no);
+        }
+        if (mode==12u || mode==14u) {
+          int want=call_multiple_loop(L,mode,NAN,recorded_end,
+            "string_byte_multi_oracle","string_byte_multi_value",&expected);
+          lj_trace_test_root_entry_reset();lj_trace_test_reset_exit_stats();
+          int got=call_multiple_loop(L,mode,NAN,recorded_end,
+            "string_byte_multi_trace","string_byte_multi_value",&actual);
+          assert(got==want && (got!=LUA_OK || actual==expected));
+          assert(lj_trace_test_root_entry_successes()>0 &&
+                 lj_trace_test_exit_calls()>0 &&
+                 lj_trace_test_first_exit_parent()==no);
+        }
+        if (mode==13u || mode==14u) {
+          int want=call_multiple_loop(L,mode,recorded_first,NAN,
+            "string_byte_multi_oracle","string_byte_multi_value",&expected);
+          lj_trace_test_root_entry_reset();lj_trace_test_reset_exit_stats();
+          int got=call_multiple_loop(L,mode,recorded_first,NAN,
+            "string_byte_multi_trace","string_byte_multi_value",&actual);
+          assert(got==want && (got!=LUA_OK || actual==expected));
+          assert(lj_trace_test_root_entry_successes()>0 &&
+                 lj_trace_test_exit_calls()>0 &&
+                 lj_trace_test_first_exit_parent()==no);
+        }
+      }
     }
     assert(call_multiple_loop(L,mode,recorded_first,recorded_end,"string_byte_multi_trace","string_byte_multi_value",
                      &actual)==LUA_OK && actual==.5+80*weighted);
@@ -668,6 +720,70 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
                  lj_trace_test_arm64_string_byte_range_postra(&f.view,r,
                    f.postra[r].op1,at,range_first,0));
         }
+        if (mixed_range && !range_first) {
+          IRRef subref=f.ir[widthguard].op1;
+          IRRef endref=f.ir[subref].op1;
+          assert(subref>=REF_FIRST && f.ir[subref].o==IR_SUBOV &&
+                 f.ir[subref].op2==base && f.ir[subref].op1==endref);
+          width_difference=subref;
+          difference_guard=subref;
+          if (mode<=12u) {
+            IRRef inner,last;
+            assert(f.ir[base].o==IR_ADDOV &&
+                   kint(f.ir,f.semantic.nk,f.ir[base].op2,&k) && k==-1);
+            range_first=f.ir[base].op1;
+            assert(endref>=REF_FIRST && f.ir[endref].o==IR_ADD &&
+                   kint(f.ir,f.semantic.nk,f.ir[endref].op2,&k) && k==1);
+            inner=f.ir[endref].op1;
+            assert(inner>=REF_FIRST && f.ir[inner].o==IR_ADD);
+            if (f.ir[inner].op1>=REF_FIRST &&
+                f.ir[f.ir[inner].op1].o==IR_FLOAD) {
+              negative_len=f.ir[inner].op1;last=f.ir[inner].op2;
+            } else {
+              negative_len=f.ir[inner].op2;last=f.ir[inner].op1;
+            }
+            assert(f.ir[negative_len].o==IR_FLOAD &&
+                   f.ir[negative_len].op1==f.ir[r].op1 &&
+                   f.ir[negative_len].op2==IRFL_STR_LEN);
+            range_last=last;
+            for (q=last+1u;q<inner;q++)
+              if (f.ir[q].o==IR_LT && f.ir[q].t.irt==(IRT_INT|IRT_GUARD) &&
+                  f.ir[q].op1==last &&
+                  kint(f.ir,f.semantic.nk,f.ir[q].op2,&k) && k==0)
+                mixed_sign_guard=q;
+          } else {
+            IRRef left=f.ir[base].op1,right=f.ir[base].op2;
+            if (left>=REF_FIRST && f.ir[left].o==IR_FLOAD) {
+              negative_len=left;range_first=right;
+            } else { negative_len=right;range_first=left; }
+            assert(f.ir[negative_len].o==IR_FLOAD &&
+                   f.ir[negative_len].op1==f.ir[r].op1 &&
+                   f.ir[negative_len].op2==IRFL_STR_LEN);
+            range_last=endref;
+            for (q=range_first+1u;q<base;q++)
+              if (f.ir[q].o==IR_LT && f.ir[q].t.irt==(IRT_INT|IRT_GUARD) &&
+                  f.ir[q].op1==range_first &&
+                  kint(f.ir,f.semantic.nk,f.ir[q].op2,&k) && k==0)
+                mixed_sign_guard=q;
+          }
+          for (q=(mode>=13u ? negative_len+1u : base+1u);
+              q<subref;q++) {
+            if (f.ir[q].o==IR_GE && f.ir[q].t.irt==(IRT_INT|IRT_GUARD) &&
+                f.ir[q].op1==base && kint(f.ir,f.semantic.nk,f.ir[q].op2,&k) &&
+                k==0) base_nonnegative=q;
+            if (mode>=13u && f.ir[q].t.irt==(IRT_INT|IRT_GUARD) &&
+                ((f.ir[q].o==IR_UGE && f.ir[q].op1==negative_len &&
+                  f.ir[q].op2==endref) ||
+                 (f.ir[q].o==IR_ULE && f.ir[q].op1==endref &&
+                  f.ir[q].op2==negative_len))) last_negative=q;
+          }
+          assert(mixed_sign_guard && base_nonnegative && negative_len &&
+                 range_first && range_last &&
+                 lj_trace_test_arm64_string_byte_range_ir(&f.semantic,r,
+                   f.ir[r].op1,at,range_first,0) &&
+                 lj_trace_test_arm64_string_byte_range_postra(&f.view,r,
+                   f.postra[r].op1,at,range_first,0));
+        }
         if (at==base) offset=0;
         else {
           assert(at>=REF_FIRST && at<r && f.ir[at].o==IR_ADD &&
@@ -675,7 +791,7 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
                  kint(f.ir,f.semantic.nk,f.ir[at].op2,&offset));
         }
         assert(offset>=0 && offset<(int32_t)width);
-        if (negative_range)
+        if (negative_range || mixed_range)
           assert(lj_trace_test_arm64_string_byte_range_ir(&f.semantic,r,
                      f.ir[r].op1,at,range_first,0) &&
                  lj_trace_test_arm64_string_byte_range_postra(&f.view,r,
@@ -758,6 +874,34 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
     REJECT_NEG_MULTI(f.ir[range_first].op1=f.ir[range_last].op1;
                      f.postra[range_first].op1=f.postra[range_last].op1);
 #undef REJECT_NEG_MULTI
+    arm64_fixture_reset(&f); assert(semantic(&f) && allocated(&f));
+  }
+  if (mixed_range) {
+    assert(mixed_sign_guard && base_nonnegative && width_difference &&
+           difference_guard && range_first && range_last && negative_len);
+#define REJECT_MIXED_MULTI(change) do { \
+    arm64_fixture_reset(&f); assert(semantic(&f) && allocated(&f)); \
+    change; assert(!semantic(&f) && !allocated(&f)); \
+  } while (0)
+    REJECT_MIXED_MULTI(f.ir[mixed_sign_guard].o=IR_GE;
+                       f.postra[mixed_sign_guard].o=IR_GE);
+    REJECT_MIXED_MULTI(f.ir[base_nonnegative].o=IR_GT;
+                       f.postra[base_nonnegative].o=IR_GT);
+    REJECT_MIXED_MULTI(f.ir[width_difference].op2=range_first;
+                       f.postra[width_difference].op2=range_first);
+    assert(difference_guard+1u<f.semantic.nins);
+    REJECT_MIXED_MULTI(f.ir[difference_guard].op1=difference_guard+1u;
+                       f.postra[difference_guard].op1=difference_guard+1u);
+    REJECT_MIXED_MULTI(f.ir[negative_len].op1=range_first;
+                       f.postra[negative_len].op1=range_first);
+    REJECT_MIXED_MULTI(f.ir[range_first].op1=f.ir[range_last].op1;
+                       f.postra[range_first].op1=f.postra[range_last].op1);
+    if (mode>=13u) {
+      assert(last_negative);
+      REJECT_MIXED_MULTI(f.ir[last_negative].op2=range_first;
+                         f.postra[last_negative].op2=range_first);
+    }
+#undef REJECT_MIXED_MULTI
     arm64_fixture_reset(&f); assert(semantic(&f) && allocated(&f));
   }
   if (mode>=5) {
@@ -2537,6 +2681,13 @@ int main(void)
     }
   }
   for (unsigned mode=7;mode<=10;mode++) {
+    static const unsigned widths[]={2,3,4,8,16};
+    for (unsigned wi=0;wi<sizeof(widths)/sizeof(widths[0]);wi++) {
+      test_fixed_multiple_bytes(L,widths[wi],1,mode);
+      test_fixed_multiple_bytes(L,widths[wi],2,mode);
+    }
+  }
+  for (unsigned mode=11;mode<=14;mode++) {
     static const unsigned widths[]={2,3,4,8,16};
     for (unsigned wi=0;wi<sizeof(widths)/sizeof(widths[0]);wi++) {
       test_fixed_multiple_bytes(L,widths[wi],1,mode);
