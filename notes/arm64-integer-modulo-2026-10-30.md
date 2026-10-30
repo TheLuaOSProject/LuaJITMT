@@ -66,3 +66,7 @@ ordinary ARM64 restoration is profile
 `538243f3090ccf12d84e157ae88411395f274a2e98ed4205701b237520d64e30`.
 This supersedes the initial pending-validation paragraph. The result-local
 allocation gap is still open; no complete-gate or full-parity claim is made.
+
+## Broad rejection-contract expectation
+
+The full gate at `4f8f43da5` stopped in the pre-existing IR rejection suite: its malformed INT MOD with a NUM dividend expected the old blanket opcode refusal. The independently validated INT-MOD implementation correctly rejects the malformed operand (`LJ_ARM64_IR_REJECT_OPERAND`). Updated that expectation and retained the malformed graph unchanged. The failed gate is not passing evidence; its ordinary restoration completed successfully. A targeted four-profile rejection-contract run precedes the full rerun.
