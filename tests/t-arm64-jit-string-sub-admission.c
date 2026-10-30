@@ -9,6 +9,7 @@
 #include "lj_target.h"
 #include "lj_str.h"
 #include "lj_arena.h"
+#include "lj_tg.h"
 #include "lib/arm64_trace_fixture.h"
 
 static lua_State *test_L;
@@ -20,6 +21,19 @@ static int negative_first_magnitude;
 static int dynamic_end_case;
 static int zero_first_case;
 
+static void assert_string_ready(lua_State *L, GCstr *str, GCArena *arena)
+{
+  if (lj_arena_ishuge(arena)) {
+    LJHugeInfo info;
+    assert(negative_first_case && negative_first_magnitude == 32768);
+    assert(lj_arena_hugetab_lookup(&L2TG(L)->huge, str, &info));
+    assert((info.flags & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY)) ==
+           (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY));
+  } else {
+    assert(lj_arena_ready_get(arena, lj_arena_cellof(str)));
+  }
+}
+
 static void string_publish(lua_State *L, GCstr *str)
 {
   GCArena *arena;
@@ -28,10 +42,7 @@ static void string_publish(lua_State *L, GCstr *str)
   assert(str->gct == (uint8_t)~LJ_TSTR);
   assert((negative_case || dynamic_end_case) ? str->len > 0u : str->len == 3u);
   arena = lj_arena_of(str);
-  if (lj_arena_ishuge(arena))
-    assert(negative_first_case && negative_first_magnitude == 32768);
-  else
-    assert(lj_arena_ready_get(arena, lj_arena_cellof(str)));
+  assert_string_ready(L, str, arena);
   native_string_publications++;
 }
 
@@ -47,10 +58,7 @@ static void string_match(lua_State *L, GCRef *link, GCobj *object,
   assert(str->gct == (uint8_t)~LJ_TSTR);
   assert((negative_case || dynamic_end_case) ? str->len > 0u : str->len == 3u);
   arena = lj_arena_of(str);
-  if (lj_arena_ishuge(arena))
-    assert(negative_first_case && negative_first_magnitude == 32768);
-  else
-    assert(lj_arena_ready_get(arena, lj_arena_cellof(str)));
+  assert_string_ready(L, str, arena);
   native_string_matches++;
 }
 

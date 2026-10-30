@@ -40,7 +40,7 @@ end
 local kinds = substring_fixture_kind and {
   fixture_kind
 } or {'forl', 'while'}
-if default_end then kinds = {'forl', 'while'} end
+if fixture_body == 'default-end' then kinds = {'forl', 'while'} end
 local starts = negative_first and {negative_first_index} or
                (zero_first and {0} or
                (negative and {1, 2} or
@@ -128,9 +128,10 @@ for _, kind in ipairs(kinds) do
         assert(exits > before, 'no selected root exits ' .. kind ..
           ' first=' .. first .. ' width=' .. width .. ' phase=' .. phase)
         local boundary = negative_first and -first or
+                         (zero_first and (math.max(1, first)+width-1) or
                          (negative and (first-last-2) or
                          (default_end and #s or first+width-1)
-                         )
+                         ))
         for _, value in ipairs({'', 'x', 'xy',
                                 s:sub(1, math.max(0, boundary-1)),
                                 s:sub(1, boundary), s:sub(1, boundary+1),

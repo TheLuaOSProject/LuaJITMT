@@ -14,7 +14,7 @@ the length field of the same guarded source string, and requires the dominating
 `index >= 0` guard. The allocation width must be the guarded `IR_SUBOV`
 `length - index`, followed by `width >= 0`. Semantic and post-RA admission
 check these relationships independently. The bytecode decoder binds the exact
-one-argument `string.sub` CALL, setup copies, endpoint arity/literal, frame
+source `string.sub` CALL, setup copies, endpoint arity/literal, frame
 slots, and rejects control-flow edges that bypass the setup.
 
 Inputs shorter than the absolute first index take the normal guard exit and
@@ -27,7 +27,9 @@ other endpoint literals remain outside this slice.
 
 For first index `-32768`, successful results use the large-arena allocation
 path. The fixture permits that path only for this tested case; its ordinary
-small-cell readiness assertion remains active for smaller results. The
+small-cell readiness assertion remains active for smaller results. For huge
+strings it verifies the matching HugeTab entry is traversable and has the
+published `LJ_HUGEF_READY` bit. The
 single-byte result at first index `-1` may already be interned, so a fresh
 publication is required for while forms except that one-byte case. All forms
 still require native match and selected-root exits.
@@ -55,6 +57,9 @@ Validation:
 - Expanded four-profile output, including the three index values and fresh
   publication checks:
   `/Users/frityet/Scratch/ljmt-negative-first-substring-20261030/final-expanded-four-profile.log`.
+- After correcting named-loop selection for the omitted-end cases and checking
+  HugeTab readiness, the final four-profile rerun passed at:
+  `/Users/frityet/Scratch/ljmt-negative-first-substring-20261030/final-corrections-four-profile.log`.
 - The native fixture includes independent semantic and post-RA mutations for
   the lower-bound guard and a different same-typed string length source, in
   addition to source literal/arity, map, footer, allocation, and location
