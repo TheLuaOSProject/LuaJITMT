@@ -100,7 +100,9 @@ enum Mutation {
   M_FORL_INITIALIZER,
   M_FORL_STEP,
   M_FORL_BYPASS_INITIALIZER,
-  M_FORL_CONTROL_WRITE
+  M_FORL_CONTROL_WRITE,
+  M_FORL_CSET_CONTROL_WRITE,
+  M_FORL_BAD_OPCODE
 };
 
 static unsigned semantic_ok, semantic_bad, postra_ok, postra_bad;
@@ -637,6 +639,28 @@ static void mutate(IntFixture *fx, enum Mutation m)
     }
     break;
   }
+  case M_FORL_CSET_CONTROL_WRITE: {
+    BCIns start = trace_startins_acq(fx->owner);
+    MSize looppos = proto_bcpos(fx->pt, trace_startpc_acq(fx->owner));
+    MSize foripos = (MSize)((int64_t)looppos + bc_j(start));
+    BCIns *word = (BCIns *)(uintptr_t)&proto_bc(fx->pt)[foripos+1u];
+    assert(fx->form == 4 && bc_op(start) == BC_FORL &&
+           bc_op(loadbc(word)) != BC_CSET);
+    bc_publish((const uint32_t *)word,
+               BCINS_AD(BC_CSET, bc_a(start)+FORL_IDX,
+                        bc_a(start)+FORL_STOP));
+    break;
+  }
+  case M_FORL_BAD_OPCODE: {
+    BCIns start = trace_startins_acq(fx->owner);
+    MSize looppos = proto_bcpos(fx->pt, trace_startpc_acq(fx->owner));
+    MSize foripos = (MSize)((int64_t)looppos + bc_j(start));
+    BCIns *word = (BCIns *)(uintptr_t)&proto_bc(fx->pt)[foripos+1u];
+    assert(fx->form == 4 && bc_op(start) == BC_FORL);
+    bc_publish((const uint32_t *)word,
+               BCINS_AD((BCOp)0xff, bc_a(start), 0));
+    break;
+  }
   case M_SOURCE:
     other = find_other_int(fx);
     assert(other);
@@ -828,13 +852,16 @@ static void expect_both(IntFixture *fx, enum Mutation m)
   changes_bytecode = (m == M_CALLM_SOURCE_PC || m == M_CALLM_ARG_COUNT ||
                       m == M_FORL_INITIALIZER || m == M_FORL_STEP ||
                       m == M_FORL_BYPASS_INITIALIZER ||
-                      m == M_FORL_CONTROL_WRITE);
+                      m == M_FORL_CONTROL_WRITE ||
+                      m == M_FORL_CSET_CONTROL_WRITE ||
+                      m == M_FORL_BAD_OPCODE);
   if (changes_bytecode) {
     if (m == M_FORL_INITIALIZER || m == M_FORL_STEP)
       mutpc = trace_startpc_acq(fx->owner) + bc_j(trace_startins_acq(fx->owner)) -
           (m == M_FORL_INITIALIZER ? 3 : 1);
     else if (m == M_FORL_BYPASS_INITIALIZER ||
-             m == M_FORL_CONTROL_WRITE) {
+             m == M_FORL_CONTROL_WRITE ||
+             m == M_FORL_CSET_CONTROL_WRITE || m == M_FORL_BAD_OPCODE) {
       MSize looppos = proto_bcpos(fx->pt, trace_startpc_acq(fx->owner));
       MSize foripos = (MSize)((int64_t)looppos +
                               bc_j(trace_startins_acq(fx->owner)));
@@ -850,7 +877,8 @@ static void expect_both(IntFixture *fx, enum Mutation m)
   reset_fixture(fx);
   mutate(fx, m);
   if (m == M_FORL_INITIALIZER || m == M_FORL_STEP ||
-      m == M_FORL_BYPASS_INITIALIZER || m == M_FORL_CONTROL_WRITE)
+      m == M_FORL_BYPASS_INITIALIZER || m == M_FORL_CONTROL_WRITE ||
+      m == M_FORL_CSET_CONTROL_WRITE || m == M_FORL_BAD_OPCODE)
     assert(loadbc(mutpc) != original);
   if (semantic_accept(fx)) {
     fprintf(stderr, "INT semantic accepted mutation %d form%u kind%u stack%u\n",
@@ -1006,6 +1034,8 @@ static void test_case(lua_State *L, jit_State *J, const char *runner,
     expect_both(&fx, M_FORL_STEP);
     expect_both(&fx, M_FORL_BYPASS_INITIALIZER);
     expect_both(&fx, M_FORL_CONTROL_WRITE);
+    expect_both(&fx, M_FORL_CSET_CONTROL_WRITE);
+    expect_both(&fx, M_FORL_BAD_OPCODE);
   }
   reset_fixture(&fx);
   fx.ir[fx.carrier].r = RID_D0;

@@ -1991,6 +1991,7 @@ static int arm64_callxs_forl_nonnegative_source(const GCproto *pt,
 	  ins = shadow;
 	  op = bc_op(ins);
 	}
+	if (op >= BC__MAX) return 0;
 	if (bcmode_d(op) == BCMjump) {
 	  target = (int64_t)pos+1+(int64_t)bc_j(ins);
 	  if (target < 0 || target >= (int64_t)pt->sizebc ||
@@ -2009,7 +2010,8 @@ static int arm64_callxs_forl_nonnegative_source(const GCproto *pt,
 	  BCMode amode = bcmode_a(op);
 	  BCReg a = bc_a(ins);
 	  if ((amode == BCMdst && a >= bc_a(startins) && a <= ctrlhi) ||
-	      (amode == BCMbase && a <= ctrlhi)) return 0;
+	      (amode == BCMbase && a <= ctrlhi) ||
+	      (op == BC_CSET && a >= bc_a(startins) && a <= ctrlhi)) return 0;
 	}
   }
   if (loopposp) *loopposp = looppos;
