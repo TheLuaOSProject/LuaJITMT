@@ -38,3 +38,14 @@ This gate excludes the later sequential-leaf, numeric-identity, zero-first,
 fixed-pair byte and negative-first substring work. General call/return and
 trace topology restrictions remain; this is an incremental verified
 checkpoint, not full x86_64 parity.
+
+
+## Independent promoted-branch rebuild
+
+After promotion at `2a62b2f64`, the main parity checkout independently rebuilt
+ordinary assertion ARM64 with no test helpers. It passed both 509-case stock
+corpora and the positive, negative-end and omitted-end substring Lua modes.
+Its build profile is
+`4ac15c8da8f8b2fbdc8353d5cf4a48c1c47254d45172dac8001cc3a9d4bb1b26`.
+The `main-build.log`, `main-source.log`, `main-bytecode.log` and `main-*.log`
+substring results are saved alongside the complete-gate evidence above.
