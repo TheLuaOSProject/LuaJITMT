@@ -244,6 +244,13 @@ local function integer_tostr_boundary(n,x)
 end
 run('integer_tostr_min',integer_tostr_boundary,20,-2147483648)
 run('integer_tostr_max',integer_tostr_boundary,20,2147483647)
+local char=string.char
+local function char_tostr_forl(n,x)
+  local out=''
+  for i=1,n do out=char(i+x) end
+  return out
+end
+run('char_tostr_forl',char_tostr_forl,48,64)
 local function integer_concat_overflow(n,x)
   local out=''
   for i=1,n do out=''..(x+i) end

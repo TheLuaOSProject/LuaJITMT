@@ -83,6 +83,19 @@ static int native_begin_numeric(lua_State *L)
   return 0;
 }
 
+static int native_begin_char(lua_State *L)
+{
+  unsigned value = (unsigned)luaL_checkinteger(L, 1);
+  assert(value <= 255u && !watching);
+  expected_text[0] = (char)value;
+  expected_len = 1;
+  lease_publications = inactive_publications = expected_publications = 0;
+  expected_under_lease = 0;
+  entries_before = lj_trace_test_root_entry_successes();
+  watching = 1;
+  return 0;
+}
+
 static int native_finish(lua_State *L)
 {
   uint32_t entries_after;
@@ -109,6 +122,7 @@ int main(int argc, char **argv)
   test_L = L;
   lua_pushcfunction(L, native_begin_int); lua_setglobal(L, "native_begin_int");
   lua_pushcfunction(L, native_begin_numeric); lua_setglobal(L, "native_begin_numeric");
+  lua_pushcfunction(L, native_begin_char); lua_setglobal(L, "native_begin_char");
   lua_pushcfunction(L, native_finish); lua_setglobal(L, "native_finish");
   lj_str_test_set_publish_hook(numeric_concat_publish);
   if (luaL_dofile(L, argv[1]) != LUA_OK) {

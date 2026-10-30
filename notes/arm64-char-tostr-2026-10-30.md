@@ -1,0 +1,14 @@
+# ARM64 `string.char` formatter admission
+
+This checkpoint admits the one-byte `IR_TOSTR` CHAR path for the fixed one-argument `string.char` call shape. The semantic and post-RA passes independently bind the formatter input to the immediately preceding `ULE input, 255` guard and require its exact `IR_KINT 255` bound. Root preflight restricts the source to fixed `CALL B=2,C=2` under the existing LOOP/FORL frame geometry. Other `string.char` arities and shapes remain closed.
+
+Loop-carried output is admitted through the existing `arm64_scalar_math_loop_value_survives` proof. For STR CHAR values it requires a unique loop snapshot, one restorable snapshot-map occurrence of the incoming string, one matching loop-snapshot RENAME, the exact STR PHI with that value as its incoming operand and the CHAR TOSTR as its backedge, and the resolved rename location to match the snapshot location. The location must be a preserved GPR or a valid aligned in-frame spill. Tests independently corrupt the PHI, body use, RENAME location, mapped source, and `SNAP_NORESTORE` flag. The existing numeric CALLN path retains its D8–D15 restriction.
+
+## Validation
+
+- `tools/ci/arm64_jit_numeric_tostr_contract.sh` passed all four profiles: arm64/arm64e assertion and release. It includes independent semantic/post-RA mutations, native CHAR publication, selected-root exits, GC reuse, and existing numeric/integer TOSTR regressions. Log: `/Users/frityet/Scratch/ljmt-char-tostr-probe-20261030/char-final-four-profiles.log`.
+- The native publication fixture observes a fresh byte-255 string under the active JIT lease, then checks selected-root exits and code identity across full GC. A zero byte is checked against the interpreted oracle; this is not claimed as a fresh native allocation witness.
+- Ordinary ARM64 probe: roots 1/2 and 13 selected-root exits for `char-index` / `char-offset`; both matched the JIT-disabled oracle through live-peer GC. Cold `string.char` inputs 0 and 255 succeeded; 256 and -1 errored; 1.5 matched the interpreter. Runtime and modules: `/Users/frityet/Scratch/ljmt-char-tostr-probe-20261030/arm64-ordinary-final/`. Probe log: `/Users/frityet/Scratch/ljmt-char-tostr-probe-20261030/ordinary-arm64-final.log`.
+- Strict ordinary x86_64 build used `-Werror` and passed the same probe: roots 1/3 and 6 selected-root exits; matching cold-boundary behavior and JIT-disabled oracle. Runtime and modules: `/Users/frityet/Scratch/ljmt-char-tostr-probe-20261030/x86_64-strict-final/`. Probe log: `/Users/frityet/Scratch/ljmt-char-tostr-probe-20261030/ordinary-x86_64-final.log`.
+
+The saved ordinary binaries were built from base commit `beba660685a96ede633a97a4cffaadfb1714e9ae`; the ARM64 and x86_64 runtime hashes and build settings are recorded in each bundle's `binary.sha256` and `source.txt`.
