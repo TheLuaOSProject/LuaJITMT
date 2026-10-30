@@ -17,9 +17,21 @@ local peer = assert(threading.spawn(function(r, s)
 end, ready, stop))
 assert(select(2, ready:recv(5)))
 
-local kinds = substring_fixture_kind and {substring_fixture_kind} or {'forl', 'while'}
-local starts = substring_fixture_kind and {2} or {1, 2}
-local widths = substring_fixture_kind and {3} or {1, 2, 3, 8}
+local negative = substring_fixture_kind and
+                 substring_fixture_kind:sub(1, 9) == 'negative-'
+local default_end = substring_fixture_kind == 'default-end'
+local kinds = substring_fixture_kind and {
+  negative and substring_fixture_kind:sub(10) or
+  (default_end and 'forl' or substring_fixture_kind)
+} or {'forl', 'while'}
+if default_end then kinds = {'forl', 'while'} end
+local starts = negative and {1, 2} or
+               (default_end and {1, 2} or
+                (substring_fixture_kind and {2} or {1, 2}))
+local widths = negative and {-1, -2, -4} or
+               (default_end and {0} or
+               (substring_fixture_kind and {3} or {1, 2, 3, 8})
+               )
 for _, kind in ipairs(kinds) do
   for _, first in ipairs(starts) do
     for _, width in ipairs(widths) do
@@ -29,9 +41,12 @@ for _, kind in ipairs(kinds) do
                    'local i=0;while i<n do i=i+1;'
       -- Keep the initial result tag stable so a while-loop entry can allocate
       -- before any interpreter iteration interns the same substring.
+      local last = negative and width or (first+width-1)
       local source = 'local sub=string.sub;return function(s,n)local r=s;' ..
-        loop .. 'r=sub(s,' .. first .. ',' .. (first+width-1) ..
-        ') end;return r end'
+        loop .. 'r=' .. (default_end and
+          ('sub(s,' .. first .. ')') or
+          ('sub(s,' .. first .. ',' .. last .. ')')) ..
+        ' end;return r end'
       local f = assert(loadstring(source, '@substring-native-candidate'))()
       local chunk = assert(loadstring(source, '@substring-native-oracle'))
       jit.off(chunk, true)
@@ -42,7 +57,12 @@ for _, kind in ipairs(kinds) do
         substring_trace_clone = assert(loadstring(source))()
       end
 
-      local s, root = 'a\0\255bcdefghijklmnopqrstuvwxyz'
+      local s, root
+      if negative then
+        s = ('a\0\255bcdef'):sub(1, first+1-width)
+      else
+        s = 'a\0\255bcdefghijklmnopqrstuvwxyz'
+      end
       for i = 1, 8 do assert(f(s, 80) == oracle(s, 80)) end
       for pc = 0, util.funcinfo(f).bytecodes-1 do
         local ins = util.funcbc(f, pc)
@@ -84,7 +104,11 @@ for _, kind in ipairs(kinds) do
         end
         assert(exits > before, 'no selected root exits ' .. kind ..
           ' first=' .. first .. ' width=' .. width .. ' phase=' .. phase)
-        for _, value in ipairs({'', 'x', 'xy', s:sub(1, first+width-1),
+        local boundary = negative and (first-last-2) or
+                         (default_end and #s or first+width-1)
+        for _, value in ipairs({'', 'x', 'xy',
+                                s:sub(1, math.max(0, boundary-1)),
+                                s:sub(1, boundary), s:sub(1, boundary+1),
                                 false, {}, 12345}) do
           local ok, actual = pcall(f, value, 80)
           local expected_ok, expected = pcall(oracle, value, 80)
@@ -101,7 +125,8 @@ for _, kind in ipairs(kinds) do
       local fresh = {}
       assert(stop:send('gc', 5))
       for i = 1, 48 do
-        local input = string.char(i, 93, first, (i*7)%256) .. s
+        local input = default_end and (s .. kind .. string.char(i)) or
+                      (string.char(i, 93, first, (i*7)%256) .. s)
         local actual, expected = f(input, 80), oracle(input, 80)
         assert(actual == expected)
         fresh[i] = {actual, expected}
@@ -115,7 +140,7 @@ for _, kind in ipairs(kinds) do
       jit.attach(exit)
       for _, value in ipairs(kept) do assert(value == oracle(s, 80)) end
       if substring_fixture_kind then substring_trace_no = root end
-      print(jit.arch, kind, first, width, 'root=' .. root, 'exits=' .. exits)
+      print(jit.arch, kind, first, last, 'root=' .. root, 'exits=' .. exits)
     end
   end
 end

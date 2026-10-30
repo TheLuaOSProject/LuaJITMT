@@ -16610,10 +16610,12 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
         if (!trace_pc_in_proto_range(returnpc, proto_bc(rootpt), rootpt->sizebc) ||
             returnpc == proto_bc(rootpt)) return 0;
         call = (BCIns)la_load32_acq((const uint32_t *)(returnpc-1));
-        if (bc_op(call) != BC_CALL || bc_b(call) != 2u || bc_c(call) != 4u ||
-            (MSize)bc_a(call)+4u+LJ_FR2 > rootpt->framesize ||
+        if (bc_op(call) != BC_CALL || bc_b(call) != 2u ||
+            (bc_c(call) != 3u && bc_c(call) != 4u) ||
+            (MSize)bc_a(call)+bc_c(call)+LJ_FR2 > rootpt->framesize ||
             (J->postproc == LJ_POST_NONE &&
-             (J->pc != returnpc-1 || J->framedepth != 1 || J->maxslot != 3)))
+             (J->pc != returnpc-1 || J->framedepth != 1 ||
+              J->maxslot != bc_c(call)-1u)))
           return 0;
       } else if (ffid == FF_string_byte) {
 	const BCIns *returnpc;

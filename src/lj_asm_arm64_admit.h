@@ -10464,52 +10464,77 @@ static int arm64_ir_forl_num_shape(const jit_State *J, const GCtrace *T,
 
 static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
                                IRType type);
-/* Decode one fixed substring CALL with a formal string and positive literal
-** bounds. This routine shares source geometry only; each IR pass separately
-** binds its function guard, argument snapshot, bounds and allocation. */
+/* Decode one fixed substring CALL with a formal string and literal bounds.
+** An expected width of zero selects a negative literal end, including the
+** omitted-end form whose stock default is -1. The IR passes independently
+** prove the resulting dynamic width. */
 static int arm64_string_sub_source(const GCproto *pt, MSize strslot,
                                     int32_t offset, int32_t width,
-                                    MSize *callpc, BCReg *calla)
+                                    int32_t *lastargp, MSize *callpc,
+                                    BCReg *calla)
 {
   MSize pc, calls = 0, matches = 0;
   const BCIns *bc;
   if (!pt || strslot < 1u+LJ_FR2 ||
-      strslot-1u-LJ_FR2 >= pt->numparams || offset < 0 || width <= 0 ||
-      (int64_t)offset+width > INT16_MAX || pt->sizebc < 5u)
+      strslot-1u-LJ_FR2 >= pt->numparams || offset < 0 ||
+      offset >= INT16_MAX || width < 0 ||
+      (width && (int64_t)offset+width > INT16_MAX) || pt->sizebc < 5u)
     return 0;
   bc = proto_bc(pt);
   for (pc = 1; pc < pt->sizebc; pc++) {
     BCIns call = arm64_ir_bc_acq((uintptr_t)bc, pc), a, b, c;
     BCOp op = bc_op(call);
-    MSize q;
+    MSize q, setup;
     int valid = 1;
     if (op >= BC__MAX) return 0;
     if (op != BC_CALL && op != BC_CALLM && op != BC_CALLT && op != BC_CALLMT)
       continue;
     calls++;
-    if (op != BC_CALL || bc_b(call) != 2u || bc_c(call) != 4u || pc < 3u ||
-        (MSize)bc_a(call)+4u+LJ_FR2 > pt->framesize) continue;
-    a = arm64_ir_bc_acq((uintptr_t)bc, pc-3u);
-    b = arm64_ir_bc_acq((uintptr_t)bc, pc-2u);
-    c = arm64_ir_bc_acq((uintptr_t)bc, pc-1u);
-    if ((bc_op(a) != BC_MOV && bc_op(a) != BC_CGET) ||
-        bc_a(a) != bc_a(call)+1u+LJ_FR2 ||
-        bc_d(a) != strslot-1u-LJ_FR2 ||
-        bc_op(b) != BC_KSHORT || bc_a(b) != bc_a(call)+2u+LJ_FR2 ||
-        (int16_t)bc_d(b) != offset+1 ||
-        bc_op(c) != BC_KSHORT || bc_a(c) != bc_a(call)+3u+LJ_FR2 ||
-        (int16_t)bc_d(c) != offset+width) continue;
+    if (op != BC_CALL || bc_b(call) != 2u ||
+        (bc_c(call) != 3u && bc_c(call) != 4u) ||
+        (width && bc_c(call) != 4u)) continue;
+    if (bc_c(call) == 3u) {
+      /* Two explicit arguments: source string and first index. The VM supplies
+      ** the default last index (-1); no synthetic frame slot is read. */
+      if (width || pc < 2u ||
+          (MSize)bc_a(call)+3u+LJ_FR2 > pt->framesize) continue;
+      setup = pc-2u;
+      a = arm64_ir_bc_acq((uintptr_t)bc, setup);
+      b = arm64_ir_bc_acq((uintptr_t)bc, setup+1u);
+      if ((bc_op(a) != BC_MOV && bc_op(a) != BC_CGET) ||
+          bc_a(a) != bc_a(call)+1u+LJ_FR2 ||
+          bc_d(a) != strslot-1u-LJ_FR2 ||
+          bc_op(b) != BC_KSHORT || bc_a(b) != bc_a(call)+2u+LJ_FR2 ||
+          (int16_t)bc_d(b) != offset+1) continue;
+      if (lastargp) *lastargp = -1;
+    } else {
+      if (pc < 3u ||
+          (MSize)bc_a(call)+4u+LJ_FR2 > pt->framesize) continue;
+      setup = pc-3u;
+      a = arm64_ir_bc_acq((uintptr_t)bc, setup);
+      b = arm64_ir_bc_acq((uintptr_t)bc, setup+1u);
+      c = arm64_ir_bc_acq((uintptr_t)bc, setup+2u);
+      if ((bc_op(a) != BC_MOV && bc_op(a) != BC_CGET) ||
+          bc_a(a) != bc_a(call)+1u+LJ_FR2 ||
+          bc_d(a) != strslot-1u-LJ_FR2 ||
+          bc_op(b) != BC_KSHORT || bc_a(b) != bc_a(call)+2u+LJ_FR2 ||
+          (int16_t)bc_d(b) != offset+1 ||
+          bc_op(c) != BC_KSHORT || bc_a(c) != bc_a(call)+3u+LJ_FR2 ||
+          (width ? (int16_t)bc_d(c) != offset+width :
+                   (int16_t)bc_d(c) >= 0)) continue;
+      if (lastargp) *lastargp = (int16_t)bc_d(c);
+    }
     for (q = 0; q < pt->sizebc; q++) {
       BCIns ins = arm64_ir_bc_acq((uintptr_t)bc, q);
       BCOp jump = bc_op(ins);
       if (jump >= BC__MAX) return 0;
       if (bcmode_d(jump) == BCMjump) {
         int64_t target = (int64_t)q+1+bc_j(ins);
-        if (target > (int64_t)pc-3 && target <= (int64_t)pc) valid = 0;
+        if (target > (int64_t)setup && target <= (int64_t)pc) valid = 0;
       } else if (jump <= BC_ISNUM) {
         /* A test can skip the string copy without an explicit jump. */
         MSize target = q+2u;
-        if (target > pc-3u && target <= pc) valid = 0;
+        if (target > setup && target <= pc) valid = 0;
       }
     }
     if (!valid) continue;
@@ -11719,14 +11744,14 @@ static int arm64_string_byte_negative_end_ir(const GCtrace *T, IRRef strref,
   return 0;
 }
 
-/* Exact positive-literal substring allocation and source-call proof. */
+/* Exact literal-source substring allocation and extent proof. */
 static int arm64_string_sub_bounds_ir(const GCtrace *T, IRRef pointer)
 {
   GCobj *obj;
   GCproto *pt;
   IRIns ptr, str;
   IRRef r, alloc = 0;
-  int32_t offset, width = 0;
+  int32_t offset, width = 0, lastarg = 0;
   MSize callpc, sn;
   BCReg calla;
   int bounded = 0, identity = 0;
@@ -11745,23 +11770,89 @@ static int arm64_string_sub_bounds_ir(const GCtrace *T, IRRef pointer)
   for (r = pointer+1u; r < T->nins; r++) {
     IRIns use = T->ir[r];
     if (use.o == IR_SNEW && use.op1 == pointer) {
-      if (alloc || (use.t.irt & ~IRT_ISPHI) != IRT_STR ||
-          !arm64_ir_kint_value(T, use.op2, &width) || width <= 0) return 0;
+      if (alloc || (use.t.irt & ~IRT_ISPHI) != IRT_STR) return 0;
       alloc = r;
     }
   }
-  if (!alloc || !arm64_string_sub_source(pt, str.op1, offset, width,
-                                        &callpc, &calla)) return 0;
-  for (r = ptr.op1+1u; r < pointer; r++) {
-    IRIns guard = T->ir[r], len;
-    int32_t bound;
-    if (guard.o != IR_UGE || guard.t.irt != (IRT_INT|IRT_GUARD) ||
-        guard.op1 < REF_FIRST || guard.op1 >= r ||
-        !arm64_ir_kint_value(T, guard.op2, &bound) ||
-        (int64_t)bound != (int64_t)offset+width) continue;
-    len = T->ir[guard.op1];
-    if (len.o == IR_FLOAD && len.t.irt == IRT_INT &&
-        len.op1 == ptr.op1 && len.op2 == IRFL_STR_LEN) bounded = 1;
+  if (!alloc) return 0;
+  if (!arm64_ir_kint_value(T, T->ir[alloc].op2, &width)) {
+    IRRef lenref = 0, endref = 0, widthref = T->ir[alloc].op2;
+    IRRef q;
+    int32_t delta = 0;
+    int have_width = 0, have_guard = 0;
+    if (widthref < REF_FIRST || widthref >= alloc || offset < 0 ||
+        !arm64_string_sub_source(pt, str.op1, offset, 0, &lastarg,
+                                 &callpc, &calla) || lastarg >= 0)
+      return 0;
+    for (q = ptr.op1+1u; q < pointer; q++) {
+      IRIns len = T->ir[q];
+      if (len.o == IR_FLOAD && len.t.irt == IRT_INT &&
+          len.op1 == ptr.op1 && len.op2 == IRFL_STR_LEN) {
+        if (lenref) return 0;
+        lenref = q;
+      }
+    }
+    if (!lenref) return 0;
+    delta = lastarg+1;
+    if (delta == 0) {
+      endref = lenref;
+    } else {
+      for (q = lenref+1u; q < pointer; q++) {
+        IRIns add = T->ir[q];
+        int32_t k;
+        if (add.o != IR_ADD || add.t.irt != IRT_INT) continue;
+        if (add.op1 == lenref && arm64_ir_kint_value(T, add.op2, &k) &&
+            k == delta) {
+          if (endref) return 0;
+          endref = q;
+        } else if (add.op2 == lenref &&
+                   arm64_ir_kint_value(T, add.op1, &k) && k == delta) {
+          if (endref) return 0;
+          endref = q;
+        }
+      }
+      if (!endref) return 0;
+    }
+    if (offset == 0) {
+      if (widthref != endref) return 0;
+      have_width = 1;
+    } else {
+      for (q = endref+1u; q < pointer; q++) {
+        IRIns sub = T->ir[q];
+        int32_t k;
+        if (sub.o == IR_SUBOV && sub.t.irt == (IRT_INT|IRT_GUARD) &&
+            sub.op1 == endref && arm64_ir_kint_value(T, sub.op2, &k) &&
+            k == offset) {
+          if (q != widthref || have_width) return 0;
+          have_width = 1;
+        }
+      }
+    }
+    if (!have_width) return 0;
+    for (q = widthref+1u; q < pointer; q++) {
+      IRIns guard = T->ir[q];
+      int32_t k;
+      if (guard.o == IR_GE && guard.t.irt == (IRT_INT|IRT_GUARD) &&
+          guard.op1 == widthref && arm64_ir_kint_value(T, guard.op2, &k) &&
+          k == 0) have_guard++;
+    }
+    if (have_guard != 1u) return 0;
+    bounded = 1;
+  } else {
+    if (width <= 0 ||
+        !arm64_string_sub_source(pt, str.op1, offset, width, &lastarg,
+                                 &callpc, &calla)) return 0;
+    for (r = ptr.op1+1u; r < pointer; r++) {
+      IRIns guard = T->ir[r], len;
+      int32_t bound;
+      if (guard.o != IR_UGE || guard.t.irt != (IRT_INT|IRT_GUARD) ||
+          guard.op1 < REF_FIRST || guard.op1 >= r ||
+          !arm64_ir_kint_value(T, guard.op2, &bound) ||
+          (int64_t)bound != (int64_t)offset+width) continue;
+      len = T->ir[guard.op1];
+      if (len.o == IR_FLOAD && len.t.irt == IRT_INT &&
+          len.op1 == ptr.op1 && len.op2 == IRFL_STR_LEN) bounded = 1;
+    }
   }
   if (!bounded) return 0;
   for (sn = 0; sn < T->nsnap; sn++) {
@@ -11776,17 +11867,22 @@ static int arm64_string_sub_bounds_ir(const GCtrace *T, IRRef pointer)
     if (ofs > T->nsnapmap || count > T->nsnapmap-ofs ||
         T->nsnapmap-ofs-count < 1u+LJ_FR2 || at < REF_FIRST ||
         at >= T->nins) continue;
+    guard = T->ir[at];
+    if (guard.o != IR_EQ || guard.t.irt != (IRT_FUNC|IRT_GUARD)) continue;
     memcpy(&footer, &T->snapmap[ofs+count], sizeof(footer));
     /* The folded literal arguments may leave the guard snapshot at either
     ** KSHORT before CALL. Source decoding proves that whole suffix is pure
-    ** and preserves the already copied function and string argument. */
-    if ((uint8_t)footer ||
-        ((const BCIns *)(uintptr_t)(footer>>8) != proto_bc(pt)+callpc &&
-         (const BCIns *)(uintptr_t)(footer>>8) != proto_bc(pt)+callpc-1u &&
-         (const BCIns *)(uintptr_t)(footer>>8) != proto_bc(pt)+callpc-2u))
-      continue;
-    guard = T->ir[at];
-    if (guard.o != IR_EQ || guard.t.irt != (IRT_FUNC|IRT_GUARD)) continue;
+    ** and preserves the already copied function and string argument. The
+    ** unique source CALL binds every function guard, so a later guard with
+    ** a malformed footer must not be skipped after an earlier one matched. */
+    {
+      const BCIns *footerpc = (const BCIns *)(uintptr_t)(footer>>8);
+      MSize callc = bc_c(arm64_ir_bc_acq((uintptr_t)proto_bc(pt), callpc));
+      if ((uint8_t)footer ||
+          (footerpc != proto_bc(pt)+callpc &&
+           footerpc != proto_bc(pt)+callpc-1u &&
+           (callc == 3u || footerpc != proto_bc(pt)+callpc-2u))) return 0;
+    }
     if (guard.op1 < REF_FIRST || guard.op1 >= at ||
         !irref_isk(guard.op2) || guard.op2 < T->nk ||
         guard.op2 >= REF_TRUE || T->ir[guard.op2].o != IR_KGC ||
@@ -19244,13 +19340,13 @@ static int arm64_string_byte_negative_end_postra(const LJArm64PostRAView *v,
   return 0;
 }
 
-/* Exact positive-literal substring allocation and source-call proof. */
+/* Independent literal-source substring allocation and extent proof. */
 static int arm64_string_sub_bounds_postra(const LJArm64PostRAView *v, IRRef pointer)
 {
   const GCproto *pt;
   IRIns ptr, str;
   IRRef r, alloc = 0;
-  int32_t offset, width = 0;
+  int32_t offset, width = 0, lastarg = 0;
   MSize callpc, sn;
   BCReg calla;
   int bounded = 0, identity = 0;
@@ -19270,23 +19366,90 @@ static int arm64_string_sub_bounds_postra(const LJArm64PostRAView *v, IRRef poin
   for (r = pointer+1u; r < v->nins; r++) {
     IRIns use = ir_load_acq(&v->ir[r]);
     if (use.o == IR_SNEW && use.op1 == pointer) {
-      if (alloc || (use.t.irt & ~IRT_ISPHI) != IRT_STR ||
-          !arm64_scalar_postra_kint(v, use.op2, &width) || width <= 0) return 0;
+      if (alloc || (use.t.irt & ~IRT_ISPHI) != IRT_STR) return 0;
       alloc = r;
     }
   }
-  if (!alloc || !arm64_string_sub_source(pt, str.op1, offset, width,
-                                        &callpc, &calla)) return 0;
-  for (r = ptr.op1+1u; r < pointer; r++) {
-    IRIns guard = ir_load_acq(&v->ir[r]), len;
-    int32_t bound;
-    if (guard.o != IR_UGE || guard.t.irt != (IRT_INT|IRT_GUARD) ||
-        guard.op1 < REF_FIRST || guard.op1 >= r ||
-        !arm64_scalar_postra_kint(v, guard.op2, &bound) ||
-        (int64_t)bound != (int64_t)offset+width) continue;
-    len = ir_load_acq(&v->ir[guard.op1]);
-    if (len.o == IR_FLOAD && len.t.irt == IRT_INT &&
-        len.op1 == ptr.op1 && len.op2 == IRFL_STR_LEN) bounded = 1;
+  if (!alloc) return 0;
+  if (!arm64_scalar_postra_kint(v, ir_load_acq(&v->ir[alloc]).op2, &width)) {
+    IRRef lenref = 0, endref = 0;
+    IRRef widthref = ir_load_acq(&v->ir[alloc]).op2;
+    IRRef q;
+    int32_t delta = 0;
+    int have_width = 0, have_guard = 0;
+    if (widthref < REF_FIRST || widthref >= alloc || offset < 0 ||
+        !arm64_string_sub_source(pt, str.op1, offset, 0, &lastarg,
+                                 &callpc, &calla) || lastarg >= 0)
+      return 0;
+    for (q = ptr.op1+1u; q < pointer; q++) {
+      IRIns len = ir_load_acq(&v->ir[q]);
+      if (len.o == IR_FLOAD && len.t.irt == IRT_INT &&
+          len.op1 == ptr.op1 && len.op2 == IRFL_STR_LEN) {
+        if (lenref) return 0;
+        lenref = q;
+      }
+    }
+    if (!lenref) return 0;
+    delta = lastarg+1;
+    if (delta == 0) {
+      endref = lenref;
+    } else {
+      for (q = lenref+1u; q < pointer; q++) {
+        IRIns add = ir_load_acq(&v->ir[q]);
+        int32_t k;
+        if (add.o != IR_ADD || add.t.irt != IRT_INT) continue;
+        if (add.op1 == lenref && arm64_scalar_postra_kint(v, add.op2, &k) &&
+            k == delta) {
+          if (endref) return 0;
+          endref = q;
+        } else if (add.op2 == lenref &&
+                   arm64_scalar_postra_kint(v, add.op1, &k) && k == delta) {
+          if (endref) return 0;
+          endref = q;
+        }
+      }
+      if (!endref) return 0;
+    }
+    if (offset == 0) {
+      if (widthref != endref) return 0;
+      have_width = 1;
+    } else {
+      for (q = endref+1u; q < pointer; q++) {
+        IRIns sub = ir_load_acq(&v->ir[q]);
+        int32_t k;
+        if (sub.o == IR_SUBOV && sub.t.irt == (IRT_INT|IRT_GUARD) &&
+            sub.op1 == endref && arm64_scalar_postra_kint(v, sub.op2, &k) &&
+            k == offset) {
+          if (q != widthref || have_width) return 0;
+          have_width = 1;
+        }
+      }
+    }
+    if (!have_width) return 0;
+    for (q = widthref+1u; q < pointer; q++) {
+      IRIns guard = ir_load_acq(&v->ir[q]);
+      int32_t k;
+      if (guard.o == IR_GE && guard.t.irt == (IRT_INT|IRT_GUARD) &&
+          guard.op1 == widthref && arm64_scalar_postra_kint(v, guard.op2, &k) &&
+          k == 0) have_guard++;
+    }
+    if (have_guard != 1u) return 0;
+    bounded = 1;
+  } else {
+    if (width <= 0 ||
+        !arm64_string_sub_source(pt, str.op1, offset, width, &lastarg,
+                                 &callpc, &calla)) return 0;
+    for (r = ptr.op1+1u; r < pointer; r++) {
+      IRIns guard = ir_load_acq(&v->ir[r]), len;
+      int32_t bound;
+      if (guard.o != IR_UGE || guard.t.irt != (IRT_INT|IRT_GUARD) ||
+          guard.op1 < REF_FIRST || guard.op1 >= r ||
+          !arm64_scalar_postra_kint(v, guard.op2, &bound) ||
+          (int64_t)bound != (int64_t)offset+width) continue;
+      len = ir_load_acq(&v->ir[guard.op1]);
+      if (len.o == IR_FLOAD && len.t.irt == IRT_INT &&
+          len.op1 == ptr.op1 && len.op2 == IRFL_STR_LEN) bounded = 1;
+    }
   }
   if (!bounded) return 0;
   for (sn = 0; sn < v->nsnap; sn++) {
@@ -19301,6 +19464,8 @@ static int arm64_string_sub_bounds_postra(const LJArm64PostRAView *v, IRRef poin
     if (ofs > v->nsnapmap || count > v->nsnapmap-ofs ||
         v->nsnapmap-ofs-count < 1u+LJ_FR2 || at < REF_FIRST ||
         at >= v->nins) continue;
+    guard = ir_load_acq(&v->ir[at]);
+    if (guard.o != IR_EQ || guard.t.irt != (IRT_FUNC|IRT_GUARD)) continue;
     {
       SnapEntry words[1+LJ_FR2];
       for (i = 0; i < 1u+LJ_FR2; i++)
@@ -19309,14 +19474,17 @@ static int arm64_string_sub_bounds_postra(const LJArm64PostRAView *v, IRRef poin
     }
     /* The folded literal arguments may leave the guard snapshot at either
     ** KSHORT before CALL. Source decoding proves that whole suffix is pure
-    ** and preserves the already copied function and string argument. */
-    if ((uint8_t)footer ||
-        ((const BCIns *)(uintptr_t)(footer>>8) != proto_bc(pt)+callpc &&
-         (const BCIns *)(uintptr_t)(footer>>8) != proto_bc(pt)+callpc-1u &&
-         (const BCIns *)(uintptr_t)(footer>>8) != proto_bc(pt)+callpc-2u))
-      continue;
-    guard = ir_load_acq(&v->ir[at]);
-    if (guard.o != IR_EQ || guard.t.irt != (IRT_FUNC|IRT_GUARD)) continue;
+    ** and preserves the already copied function and string argument. The
+    ** unique source CALL binds every function guard, so a later guard with
+    ** a malformed footer must not be skipped after an earlier one matched. */
+    {
+      const BCIns *footerpc = (const BCIns *)(uintptr_t)(footer>>8);
+      MSize callc = bc_c(arm64_ir_bc_acq((uintptr_t)proto_bc(pt), callpc));
+      if ((uint8_t)footer ||
+          (footerpc != proto_bc(pt)+callpc &&
+           footerpc != proto_bc(pt)+callpc-1u &&
+           (callc == 3u || footerpc != proto_bc(pt)+callpc-2u))) return 0;
+    }
     if (guard.op1 < REF_FIRST || guard.op1 >= at ||
         !irref_isk(guard.op2) || guard.op2 < v->nk ||
         guard.op2 >= REF_TRUE || ir_load_acq(&v->ir[guard.op2]).o != IR_KGC ||

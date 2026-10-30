@@ -198,3 +198,58 @@ The fixture expectation is updated to that reason, retaining the rejection.
 The failed full log and successful ordinary restoration remain in
 `/Users/frityet/Scratch/ljmt-mixed-byte-substring-complete-20261030/`.
 This failed attempt is not counted as a complete gate pass.
+
+The retry also includes the reviewed string-input `tostring` identity path
+through `9e37151c`. Its independent proof now requires the terminal saved cell
+to contain the exact guarded CALL argument, rejects every substituted
+admitted builtin and checks cell overwrites and control-flow bypasses. The
+component's final four-profile run passes. A preflight merge conflict was
+resolved by retaining both `FF_string_sub` and `FF_tostring` synthetic-bytecode
+checks. The integration adds `string.sub` to the tostring replacement
+mutations and wires its four-profile contract into the complete gate.
+Source `503c8ba2f` is frozen for the retry and a matched ordinary matrix.
+Retry evidence is in the preceding full-gate directory under
+`retry-503c8ba2f/`; the matrix is in
+`/Users/frityet/Scratch/ljmt-mixed-byte-substring-tostring-ordinary-20261030/`.
+Neither run is recorded as passed until its final result is available.
+
+The ordinary matrix at `503c8ba2f` subsequently passed on both targets.
+ARM64 assertions and strict bare-`-Werror` x86_64 assertions each pass both
+509-case stock corpora, 260 workload semantic checks, topology/expanded
+probes, the preceding fixed/dynamic byte and twelve FFI-index rows, all
+eighty mixed-sign byte rows, sixteen substring rows and both string-tostring
+forms. The raw-U8 live-peer test still witnesses 84 selected-root exits and
+unchanged code after GC. Ordinary tostring observes 167/159 selected while/for
+root exits on ARM64; both architectures retain code identity and match the
+interpreted oracle with a live peer. The matrix directory retains matching
+runtimes, archives, JIT modules, source revision and hashes. Ordinary ARM64
+restoration profile is
+`ac5a80d62d2f8408e8a33ed3836874d93342da7efb44ae1ce5515064a4a04308`.
+The complete gate remains a separate running validation.
+
+The later negative-literal substring extension (`39dceb685`) is merged
+separately from that frozen gate. Review found no production blocker: both
+passes derive a nonpositive end adjustment from the actual signed literal,
+bind the same string length, require checked subtraction of a nonzero start
+offset and prove a nonnegative width before STRREF. The integration contract
+passes all four profiles, with additional tests for exact zero-length and
+adjacent boundaries, invalid physical placement of the dynamic width, and
+READY publication of all nonempty negative-range result lengths. The native
+negative-while publication counts are 3, 39, 39 and 3 respectively.
+Evidence, source-parent and the integration test patch are in
+`/Users/frityet/Scratch/ljmt-negative-substring-integration-20261030/`.
+Ordinary assertion ARM64 restoration profile is
+`c411fa90194ed66fd063c4f1a9ffa72624dc66e295bcea42ad4e4348d6bf0dbd`.
+This later extension is not covered by the running `503c8ba2f` full gate.
+
+The full ordinary matrix at `ea0db2046` also passes. Both ordinary ARM64 and
+strict bare-`-Werror` x86_64 pass both 509-case stock corpora, the preceding
+workload/byte/FFI/tostring matrix, sixteen positive substring rows, twelve
+negative substring rows and six additional extreme-literal rows. The latter
+combine starts 1/32767 with ends -1/-32768 and use 72,000-byte strings;
+selected-root exits, exact empty/adjacent boundaries, retained values and
+code identity after GC all pass with a live peer. Evidence and immutable
+matching runtimes are in
+`/Users/frityet/Scratch/ljmt-negative-substring-ordinary-20261030/`.
+Ordinary ARM64 restoration profile is
+`e0faf4ac7609028ce632b43148799b24b8f4e0c9319da36d81fd70345deb5ab0`.
