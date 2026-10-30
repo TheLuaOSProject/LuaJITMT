@@ -1,8 +1,8 @@
 # ARM64 child-frame side transition audit (2026-10-30)
 
 This is a diagnostic checkpoint for the isolated `codex/arm64-seq-child-side`
-worktree, based on `d06f48e13`. It does not claim child-frame side publication
-or change the production admission boundary.
+worktree, based on `821fff928`. It does not claim child-frame side publication
+or open the production publication boundary.
 
 ## Observed transition
 
@@ -82,3 +82,66 @@ include `IR_RETF`. A complete cross-proto implementation therefore needs an
 independent bounded child-to-root source/frame certificate in semantic and
 post-RA paths; changing only the recorder preflight is insufficient. Until that
 proof and native entry/exit/GC evidence exist, the safe result is refusal.
+
+## Captured return boundary checkpoint
+
+The source/frame entry proof now checks the caller bytecode's exact fixed
+one-result `CALL` using its separate LuaJIT B (result count) and C (argument
+count) fields: this bounded case requires B=2 and C=2. It verifies the live
+child frame's callable and argument window, the copied parent snapshot's
+`SNAP_FRAME` KNUM payload, and the exact PC/base footer before allowing the
+IDLE/CLAIM entry checks to pass. The full caller bytecode is scanned for
+invalid jumps and jumps that could enter after the captured upvalue load and
+bypass the call target definition.
+
+At `lj_record_ret`, a token-private child-return certificate is captured only
+for a represented one-result pure leaf returning through that same exact
+CALL. It records child/caller function and proto identity, child RET1 PC,
+caller CALL/return PCs, parent generation/trace/exit identity, result refs,
+and the split IR position. That record is evidence only: it is not yet consumed
+by side-owner or semantic/post-RA admission, and it does not authorize
+publication. The ASM owner still requires the existing single-proto source and
+link shape, so the ordinary reachable same-SSA probe continues to publish no
+child side on ARM64. x64 is only a compile-time control for this ARM64 fixture.
+
+The focused ARM64 assertion fixture passed on Xcode clang with
+`MacOSX27.2.sdk`: native=34, child exits=10, same-trace reuse=24, GC reuse=7,
+semantic negatives=392, post-RA negatives=421, and one captured return
+certificate. The x86_64 assertion build and fixture skip also passed; it does
+not validate ARM64 behavior. Logs are
+`/Users/frityet/Scratch/ljmt-seq-child-side-20261030/arm64-capture-final.log`
+and `x64-compile-check.log`. The earlier MacOSX27.0 SDK resolution failure is
+toolchain evidence only and is superseded by these SDK27.2 runs.
+
+## Constant-reference boundary review
+
+An independent review found that the guarded-call proof read KGC and KINT
+references by numeric range alone. It now walks the addressable constant table,
+skipping paired payload words and requiring each pair to fit below both
+`REF_TRUE` and the captured IR extent before the production proof dereferences
+the selected constant. A focused fixture checks valid KGC/KNUM/KINT heads,
+rejects paired payload aliases, and rejects a KGC head at `REF_TRUE-1` whose
+payload would cross the constant boundary. The
+four-profile Lua leaf contract passed again on Xcode clang with SDK 27.2;
+its durable log is
+`/Users/frityet/Scratch/ljmt-seq-child-side-20261030/constant-bounds-final-four-profile.log`.
+
+The strict Xcode clang x86-64 Darwin build also passed and produced an x86_64
+binary; its log is
+`/Users/frityet/Scratch/ljmt-seq-child-side-20261030/x64-constant-bound-build.log`.
+The new constant walker is within the ARM64 experimental section. An earlier
+x86-64 build attempt failed before compilation because the Makefile selected
+the host architecture before the target SDK and deployment variables were set;
+that failed attempt is superseded by the recorded build. The temporary OWNER
+diagnostics were removed after capturing the return transition, and ordinary
+execution still demonstrates root-only publication. No side publication is
+enabled by this follow-up.
+
+The certificate now also carries the current side trace number, and every later
+`lj_record_ret` clears the preceding witness before considering a new return.
+This prevents a transition record from being borrowed by another trace or
+surviving a second return in the same recording. The copied child-frame marker
+now uses the same addressable KNUM-head proof before reading its payload.
+The follow-up four-profile leaf run passed with the same native, exit, reuse,
+GC, semantic-negative, post-RA-negative, and certificate counts; log:
+`/Users/frityet/Scratch/ljmt-seq-child-side-20261030/child-return-trace-binding-four-profile.log`.

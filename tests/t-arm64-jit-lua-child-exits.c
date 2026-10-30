@@ -36,6 +36,44 @@ typedef struct LeafCase {
 static unsigned native_runs, child_exits, same_trace_reuses;
 static unsigned gc_reuses, cold_retries;
 static unsigned semantic_bad, postra_bad, alias_bad;
+static unsigned return_certificates;
+
+static void constant_boundary_checks(void)
+{
+  IRIns *ir = (IRIns *)calloc(REF_FIRST+16u, sizeof(IRIns));
+  IRRef nk = REF_TRUE-8u;
+  IRRef nins = REF_FIRST+16u;
+  IRRef boundary = REF_TRUE-1u;
+  assert(ir != NULL && nk < REF_TRUE && nins > REF_FIRST);
+  ir[nk].o = IR_KNUM;
+  ir[nk+1u].o = IR_KNUM;
+  ir[nk+2u].o = IR_KGC;
+  ir[nk+3u].o = IR_KGC;
+  ir[nk+4u].o = IR_KKPTR;
+  ir[nk+5u].o = IR_KKPTR;
+  ir[nk+6u].o = IR_KINT;
+  ir[nk+6u].i = 0;
+  ir[boundary].o = IR_KGC;
+  assert(lj_trace_test_arm64_first_side_constant_head(
+           ir, nins, nk, nk, IR_KNUM));
+  assert(!lj_trace_test_arm64_first_side_constant_head(
+           ir, nins, nk, nk+1u, IR_KNUM));
+  assert(lj_trace_test_arm64_first_side_constant_head(
+           ir, nins, nk, nk+2u, IR_KGC));
+  assert(!lj_trace_test_arm64_first_side_constant_head(
+           ir, nins, nk, nk+3u, IR_KGC));
+  assert(lj_trace_test_arm64_first_side_constant_head(
+           ir, nins, nk, nk+4u, IR_KKPTR));
+  assert(!lj_trace_test_arm64_first_side_constant_head(
+           ir, nins, nk, nk+5u, IR_KKPTR));
+  assert(lj_trace_test_arm64_first_side_constant_head(
+           ir, nins, nk, nk+6u, IR_KINT));
+  assert(!lj_trace_test_arm64_first_side_constant_head(
+           ir, nins, nk, nk-1u, IR_KINT));
+  assert(!lj_trace_test_arm64_first_side_constant_head(
+           ir, nins, nk, boundary, IR_KGC));
+  free(ir);
+}
 
 static GCfunc *global_function(lua_State *L, const char *name)
 {
@@ -215,10 +253,31 @@ static void native_range(lua_State *L, GCtrace *T, const LeafCase *shape,
 {
   lua_Number expected = invoke_range(L, "leaf_oracle_run", "leaf_oracle",
                                     first, last);
+  lj_trace_test_arm64_child_return_reset();
   lj_trace_test_root_entry_reset();
   lj_trace_test_reset_exit_stats();
   assert(invoke_range(L, "leaf_run", "leaf_candidate", first, last) ==
          expected);
+  if (lj_trace_test_arm64_child_return_count() != 0) {
+    LJArm64ChildReturnCert cert;
+    assert(lj_trace_test_arm64_child_return_read(&cert));
+    assert(cert.valid && cert.nresults == 1 && cert.parentno == T->traceno &&
+           cert.parent_generation != 0 && cert.caller_callpc != NULL &&
+           cert.caller_returnpc == cert.caller_callpc+1 &&
+           cert.childpt != NULL && cert.callerpt == trace_startpt_acq(T) &&
+           cert.childfn != NULL && cert.callerfn != NULL &&
+           cert.child_startpc != NULL && cert.child_retpc != NULL &&
+           cert.caller_result_slot < cert.callerpt->framesize &&
+           cert.child_baseslot != 0 && cert.split_nins > REF_FIRST &&
+           cert.child_result == cert.caller_result);
+    assert(bc_op((BCIns)la_load32_acq(
+             (const uint32_t *)cert.caller_callpc)) == BC_CALL &&
+           bc_c((BCIns)la_load32_acq(
+             (const uint32_t *)cert.caller_callpc)) == 2 &&
+           bc_op((BCIns)la_load32_acq(
+             (const uint32_t *)cert.child_retpc)) == BC_RET1);
+    return_certificates++;
+  }
   assert(root_trace(L) == T && trace_runnable_acq(T, T->traceno));
   assert(lj_trace_test_root_entry_successes() > 0 &&
          lj_trace_test_exit_calls() > 0 &&
@@ -269,6 +328,63 @@ static GCtrace *train_case(lua_State *L, const LeafCase *shape)
   (void)shape;
   assert(T != NULL);
   return T;
+}
+
+/* Force the interpreter side-exit counter low enough to observe a real
+** child-frame side recording attempt. Publication remains subject to the
+** production admission gate; this only verifies that record_ret captures a
+** source/frame boundary before that later gate runs. */
+static void observe_child_return_certificate(lua_State *L)
+{
+  GCtrace *T;
+  LJArm64ChildReturnCert cert;
+
+  lj_trace_test_arm64_child_return_reset();
+  ljt_lua_dostring(L,
+    "jit.off(true,true); "
+      "local source=[=[local f=function(a) if a>20 then return a*.25 end; "
+      "if a>10 then return a*.5 end; if a<0 then return a*-1 end; "
+      "return a+.25 end; return function(x,n) local sum=.5; "
+      "for i=1,n do sum=sum+f(x) end; return sum end]=]; "
+      "local function compile(name) return assert(loadstring(source,name))() end; "
+      "jit.off(compile,true); leaf_run=compile('@reachable-ssa-candidate'); "
+      "leaf_oracle_run=compile('@reachable-ssa-oracle'); "
+      "jit.off(leaf_oracle_run,true); "
+      "jit.flush(); jit.on(); jit.opt.start('hotloop=1','hotexit=1','maxtrace=64'); "
+      "assert(leaf_run(5,96)==leaf_oracle_run(5,96)); "
+      "for _,x in ipairs({30,15,-3,5}) do "
+      "assert(leaf_run(x,32)==leaf_oracle_run(x,32)) end");
+  T = root_trace(L);
+  assert(T != NULL && trace_runnable_acq(T, T->traceno));
+  if (lj_trace_test_arm64_child_return_count() == 0)
+    fprintf(stderr, "child-return cert absent: aborts=%u last=%d side-gates=%u "
+            "root-children=%u captures=%u exit-calls=%u root-entry=%u first=%u/%u\n",
+            lj_trace_test_abort_count(),
+            (int)lj_trace_test_last_abort_error(),
+            lj_trace_test_admission_side_gate_blocks(),
+            trace_nchild_acq(T), lj_trace_test_arm64_child_return_count(),
+            lj_trace_test_exit_calls(),
+            lj_trace_test_root_entry_successes(),
+            lj_trace_test_first_exit_parent(), lj_trace_test_first_exitno());
+  assert(lj_trace_test_arm64_child_return_count() != 0 &&
+         lj_trace_test_arm64_child_return_read(&cert));
+  assert(cert.valid && cert.nresults == 1 && cert.parentno == T->traceno &&
+         cert.traceno != 0 && cert.traceno != cert.parentno &&
+         cert.parent_generation != 0 && cert.caller_callpc != NULL &&
+         cert.caller_returnpc == cert.caller_callpc+1 &&
+         isluafunc(cert.childfn) &&
+         cert.childpt == funcproto(cert.childfn) &&
+         cert.callerpt == trace_startpt_acq(T) &&
+         cert.caller_result_slot < cert.callerpt->framesize &&
+         cert.split_nins > REF_FIRST && cert.child_result == cert.caller_result);
+  assert(bc_op((BCIns)la_load32_acq(
+           (const uint32_t *)cert.caller_callpc)) == BC_CALL &&
+         bc_c((BCIns)la_load32_acq(
+           (const uint32_t *)cert.caller_callpc)) == 2 &&
+         bc_op((BCIns)la_load32_acq(
+           (const uint32_t *)cert.child_retpc)) == BC_RET1);
+  return_certificates++;
+  printf("Lua child return certificate captured from the forced child-return probe; publication remains gated\n");
 }
 
 static GCproto *copy_proto(const GCproto *pt)
@@ -558,11 +674,13 @@ int main(void)
   lua_State *L = ljt_lua_newstate_openlibs();
   unsigned shape;
   assert(LJ_FR2 == 1);
+  constant_boundary_checks();
   ljt_lua_dostring(L,
     "local th=require('threading'); ready=th.channel(1); stop=th.channel(1); "
     "peer=assert(th.spawn(function(r,s) assert(r:send(true,5)); "
     "assert(select(2,s:recv(60))); return true end,ready,stop)); "
     "assert(select(2,ready:recv(5)))");
+  observe_child_return_certificate(L);
   for (shape = 0; shape < sizeof(cases)/sizeof(cases[0]); shape++) {
     const LeafCase *c = &cases[shape];
     GCtrace *T;
@@ -587,9 +705,10 @@ int main(void)
   lua_close(L);
   assert(alias_bad > 0);
   printf("Lua child exits OK: native=%u child-exits=%u same-trace-reuses=%u "
-         "gc-reuses=%u cold-retries=%u semantic-negative=%u postRA-negative=%u aliases=%u\n",
+         "gc-reuses=%u cold-retries=%u semantic-negative=%u postRA-negative=%u "
+         "aliases=%u return-certs=%u\n",
          native_runs, child_exits, same_trace_reuses, gc_reuses, cold_retries,
-         semantic_bad, postra_bad, alias_bad);
+         semantic_bad, postra_bad, alias_bad, return_certificates);
   return 0;
 }
 #else
