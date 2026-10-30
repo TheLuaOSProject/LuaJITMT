@@ -436,6 +436,20 @@ local function helper_snapshot_pair(n,x)
   return sum+ret
 end
 run('math_helpers_snapshot_pair',helper_snapshot_pair,16,.25)
+local function math_computed_result(n,x)
+  local i,r=0,.5
+  while i<n do
+    i=i+1
+    r=sin_builtin(x+i*.25)
+  end
+  return r
+end
+run_native('math_computed_result',math_computed_result,20,4.75)
+collectgarbage('collect')
+probe_reset()
+assert(same_number(math_computed_result(20,4.75),
+                   math.sin(4.75+20*.25)))
+probe_check('math_computed_result')
 
 assert(release:send(true,5))
 assert(peer:join(5))

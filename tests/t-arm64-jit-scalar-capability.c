@@ -192,6 +192,97 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
              (unsigned)chosen_snap, (unsigned)chosen_rename);
     }
   }
+  if (mathkind && strcmp(mathkind, "math_computed_result") == 0) {
+    IRRef call = 0, value = 0, phi = 0, rename = 0, alternate = 0;
+    SnapNo loop_snap = 0, other_snap = 0;
+    unsigned loop_snaps = 0, other_snaps = 0;
+    MSize s;
+    for (ref = loop+1u; ref < n; ref++)
+      if (copy[ref].o == IR_CALLN && irt_type(copy[ref].t) == IRT_NUM) {
+        call = ref;
+        break;
+      }
+    for (ref = REF_FIRST; ref < loop; ref++)
+      if (copy[ref].o == IR_CALLN && irt_type(copy[ref].t) == IRT_NUM) {
+        value = ref;
+        break;
+      }
+    for (ref = loop+1u; ref < n; ref++)
+      if (copy[ref].o == IR_PHI && irt_type(copy[ref].t) == IRT_NUM &&
+          copy[ref].op1 == value && copy[ref].op2 == call) {
+        phi = ref;
+        break;
+      }
+    for (s = 0; s < T->nsnap; s++)
+      if (snap_ref_acq(&T->snap[s]) == loop) {
+        loop_snap = (SnapNo)s;
+        loop_snaps++;
+      }
+    for (s = 0; s < T->nsnap; s++)
+      if (s != loop_snap) { other_snap = (SnapNo)s; other_snaps++; break; }
+    for (ref = n; ref < T->nins; ref++)
+      if (copy[ref].o == IR_RENAME && copy[ref].op1 == value &&
+          copy[ref].op2 == loop_snap) {
+        assert(rename == 0);
+        rename = ref;
+      }
+    assert(call && value && phi && rename && loop_snaps == 1u &&
+           other_snaps == 1u && loop_snap < T->nsnap &&
+           call > loop && value < loop && copy[phi].op1 == value &&
+           copy[phi].op2 == call && copy[rename].op1 == value &&
+           copy[rename].op2 == loop_snap &&
+           lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, call));
+    for (ref = REF_FIRST; ref < loop; ref++)
+      if (ref != value && irt_type(copy[ref].t) == IRT_NUM &&
+          (copy[ref].o == IR_SLOAD || copy[ref].o == IR_ADD ||
+           copy[ref].o == IR_SUB || copy[ref].o == IR_MUL ||
+           copy[ref].o == IR_DIV)) {
+        alternate = ref;
+        break;
+      }
+    assert(alternate);
+    {
+      IRIns saved = copy[rename];
+      copy[rename].op1 = alternate;
+      assert(!lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, call));
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[rename] = saved;
+      copy[rename].op2 = other_snap;
+      assert(copy[rename].op2 != loop_snap);
+      assert(!lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, call));
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[rename] = saved;
+      copy[rename].prev = REGSP(RID_D0, SPS_NONE);
+      assert(!lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, call));
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[rename] = saved;
+      {
+        IRIns saved_phi = copy[phi];
+        copy[phi].o = IR_ADD;
+        assert(!lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, call));
+        assert(!lj_asm_arm64_postra_admit(&v, NULL));
+        copy[phi] = saved_phi;
+      }
+      {
+        IRIns saved_body = copy[call];
+        copy[call].o = IR_FPMATH;
+        assert(!lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, call));
+        assert(!lj_asm_arm64_postra_admit(&v, NULL));
+        copy[call] = saved_body;
+        copy[call].t.irt = IRT_INT;
+        assert(!lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, call));
+        assert(!lj_asm_arm64_postra_admit(&v, NULL));
+        copy[call] = saved_body;
+      }
+      copy[rename].prev = REGSP(RID_NONE, SPS_FIRST-1u);
+      assert(!lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, call));
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[rename] = saved;
+      assert(lj_asm_arm64_postra_admit(&v, NULL));
+    }
+    printf("MATH computed-result CALLN=%u loop-PHI=%u rename=%u; body-call/source/snapshot/location/ordinary-use mutations rejected\n",
+           (unsigned)call, (unsigned)phi, (unsigned)rename);
+  }
   /* A future consumer has not yet been certified when an earlier absent
      location is examined. Its other operand must be checked before loading. */
   {

@@ -22785,6 +22785,75 @@ static int arm64_scalar_math_regsp_survives(RegSP rs, IRType type, MSize cap)
                           reg >= RID_X19 && reg <= RID_X28;
 }
 
+/* A call result produced before IR_LOOP can be a PHI's incoming value for
+** the next iteration. The allocator may move that value to a preserved
+** register at the exact loop snapshot before the next body call. Validate
+** that specific rename rather than judging the original CALLN result's
+** caller-clobbered register. */
+static int arm64_scalar_math_loop_value_survives(
+                                      const LJArm64PostRAView *v, IRRef n,
+                                      IRRef value, IRRef loop, IRRef call,
+                                      MSize cap)
+{
+  IRRef ref;
+  MSize s, loop_snap = 0;
+  unsigned nsnap = 0, nrename = 0;
+  RegSP rs;
+  RegSP loop_rs = REGSP(RID_NONE, 0);
+  IRType type;
+  unsigned nphi = 0, nuse = 0;
+  IRIns body;
+  if (!v || !v->snap || !v->ir || value < REF_FIRST || value >= loop ||
+      loop < REF_FIRST || loop >= call || call >= n || n > v->nins ||
+      value >= v->nins || ir_load_acq(&v->ir[value]).o != IR_CALLN ||
+      irt_type(ir_load_acq(&v->ir[value]).t) != IRT_NUM)
+    return 0;
+  if (ir_load_acq(&v->ir[loop]).o != IR_LOOP) return 0;
+  body = ir_load_acq(&v->ir[call]);
+  if (body.o != IR_CALLN || irt_type(body.t) != IRT_NUM) return 0;
+  for (s = 0; s < v->nsnap; s++) {
+    if (snap_ref_acq(&v->snap[s]) == loop) {
+      loop_snap = s;
+      nsnap++;
+    }
+  }
+  if (nsnap != 1u) return 0;
+  for (ref = n; ref < v->nins; ref++) {
+    IRIns ren = ir_load_acq(&v->ir[ref]);
+    if (ren.o != IR_RENAME || ren.op1 != value || ren.op2 != loop_snap)
+      continue;
+    if (++nrename != 1u || ren.t.irt != IRT_NIL || ren.s != SPS_NONE)
+      return 0;
+    loop_rs = ren.prev;
+  }
+  if (nrename != 1u) return 0;
+  /* This exception is only for the initial CALLN value flowing into the
+  ** loop PHI whose backedge is the body CALLN. It cannot cover an ordinary
+  ** post-loop computation that happens to share the same snapshot rename. */
+  for (ref = loop+1u; ref < n; ref++) {
+    IRIns use = ir_load_acq(&v->ir[ref]);
+    IRMode mode;
+    int op1, op2;
+    if (use.o >= IR__MAX) return 0;
+    mode = lj_ir_mode[use.o];
+    op1 = irm_op1(mode) == IRMref && use.op1 == value;
+    op2 = irm_op2(mode) == IRMref && use.op2 == value;
+    if (!op1 && !op2) continue;
+    nuse++;
+    if (use.o != IR_PHI || !op1 || op2 || use.op2 != call ||
+        irt_type(use.t) != IRT_NUM)
+      return 0;
+    nphi++;
+  }
+  if (nuse != 1u || nphi != 1u) return 0;
+  rs = arm64_scalar_postra_snapshot_regsp(v, n, value, loop_snap);
+  if (rs != loop_rs || ra_hasspill(regsp_spill(rs)) ||
+      regsp_reg(rs) < RID_D8 || regsp_reg(rs) > RID_D15)
+    return 0;
+  type = (IRType)irt_type(ir_load_acq(&v->ir[value]).t);
+  return arm64_scalar_math_regsp_survives(rs, type, cap);
+}
+
 /* Reconstruct binary helper arguments from the allocated view independently
 ** of semantic admission. CARG itself has no value or allocation. */
 static int arm64_scalar_math_carg_postra(const LJArm64PostRAView *v,
@@ -22842,7 +22911,8 @@ static int arm64_scalar_math_live_across(const LJArm64PostRAView *v,
       needed = (irm_op1(mode) == IRMref && use.op1 == value) ||
                (irm_op2(mode) == IRMref && use.op2 == value);
     }
-    if (needed && !arm64_postra_value_survives_call(v, value, call, cap, 0))
+    if (needed && !arm64_postra_value_survives_call(v, value, call, cap, 0) &&
+        !arm64_scalar_math_loop_value_survives(v, n, value, loop, call, cap))
       return 0;
     for (s = 0; s < v->nsnap; s++) {
       const SnapShot *snap = &v->snap[s];
