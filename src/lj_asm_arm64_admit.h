@@ -14055,7 +14055,8 @@ static int arm64_lua_leaf_branch(const GCproto *pt,
         branch->next[i] = i+1u;
       }
     }
-    if (bc_op(words[size-1u]) != BC_RET1 || bc_d(words[size-1u]) != 2u)
+    if (bc_op(words[size-1u]) != BC_RET1 || bc_d(words[size-1u]) != 2u ||
+        bc_a(words[size-1u]) >= pt->framesize)
       return 0;
     for (i = 0; i < ncompare; i++) {
       MSize at = compares[i], cont, p;

@@ -330,7 +330,7 @@ static unsigned ret_callmap_guards, ret_join_semantic_bad, ret_join_postra_bad;
 /* Every semantic mutation must run in both passes; allocation conflicts
 ** and the guarded loop-increment mutation belong to the allocated pass. */
 static unsigned ret_mutation_count[26][2];
-static unsigned branch_mutation_count[16][2];
+static unsigned branch_mutation_count[20][2];
 static unsigned join_mutation_count[13][2];
 static int join_snapshot_test;
 
@@ -374,7 +374,8 @@ enum {
   RET_NEG_BRANCH_SOURCE_TYPE,
   RET_NEG_BRANCH_SECOND_OPERAND,
   RET_NEG_BRANCH_NSLOTS_LOW,
-  RET_NEG_BRANCH_NSLOTS_HIGH
+  RET_NEG_BRANCH_NSLOTS_HIGH,
+  RET_NEG_BRANCH_FINAL_RET_A
 };
 
 static GCproto *return_copy_proto(const GCproto *pt)
@@ -565,6 +566,17 @@ static void return_test_negative(ReturnFixture *f, SnapNo s, unsigned id,
     if (compare == UINT32_MAX) return;
     setbc_d(&proto_bc(f->leafpt)[compare],
             bc_a(proto_bc(f->leafpt)[compare]));
+    return_expect_reject(f, id, postra);
+    return;
+  }
+  if (which == RET_NEG_BRANCH_FINAL_RET_A) {
+    BCIns ret;
+    if (!return_is_sequential(active_name)) return;
+    ret = (BCIns)la_load32_acq(
+      (const uint32_t *)&proto_bc(f->leafpt)[f->leafpt->sizebc-1u]);
+    assert(bc_op(ret) == BC_RET1 && bc_a(ret) < f->leafpt->framesize);
+    setbc_a(&proto_bc(f->leafpt)[f->leafpt->sizebc-1u],
+            f->leafpt->framesize);
     return_expect_reject(f, id, postra);
     return;
   }
@@ -1343,6 +1355,8 @@ static void admission(GCtrace *T)
                                postra, RET_NEG_BRANCH_NSLOTS_LOW);
           return_test_negative(&f, s, RET_NEG_BRANCH_NSLOTS_HIGH,
                                postra, RET_NEG_BRANCH_NSLOTS_HIGH);
+          return_test_negative(&f, s, RET_NEG_BRANCH_FINAL_RET_A,
+                               postra, RET_NEG_BRANCH_FINAL_RET_A);
         }
         branch_tested = 1;
       }
@@ -1641,7 +1655,7 @@ int main(void)
          ret_join_maps == 1 && ret_alias_bad && ret_callmap_guards == 1);
   for (unsigned m = 0; m < RET_NEG_ALIAS; m++)
     assert(ret_mutation_count[m][0] && ret_mutation_count[m][1]);
-  for (unsigned m = 0; m < 15; m++)
+  for (unsigned m = 0; m < 17; m++)
     assert(branch_mutation_count[m][0] && branch_mutation_count[m][1]);
   assert(cases_run == 101 && terminal_exits == 96 && gc_reuses == 101 &&
          primitive_mismatches == 96);
