@@ -61,3 +61,22 @@ hashes are in
 `ordinary-matrix.sh` finished with `ordinary matrix passed at 8b3cf5a57`.
 The ordinary ARM64 restoration profile was
 `a2f8c31052621c9c536f3b876d51ebe50f0b86bbfffe423808583bc175083c15`.
+
+## Dynamic first/end integration
+
+The capture-fixture correction was integrated at `789c1e229`, the source for
+the new full gate in
+`/Users/frityet/Scratch/ljmt-byte-results-num-sides-complete-20261030/`.
+That gate remains running as of this note. Its source excludes the following
+later byte extension.
+
+Source `0f22ba712` merges `eec23e603`: fixed multiple byte results with dynamic
+positive first/end parameters and the exact stock adjacent-ADD/STRREF fusion
+proof. The integrated byte contract passed all four profiles, including cold
+NaN/infinity/extreme-bound cases and independent allocation mutations.
+Evidence is `dynamic-start-multiple-integration-source.txt` and
+`dynamic-start-multiple-integration-four-profiles.log` in the earlier
+wide-byte-FFI directory. It restored ordinary ARM64 assertions, profile
+`af78e57c5048f444e8e1a7d9c6ce09eab3cad42e37d6e6097bc95e2c8f69bf1a`.
+The component note records its ordinary forty-row matched ARM64/x86_64 probe
+and both 509-case stock corpora on each architecture.
