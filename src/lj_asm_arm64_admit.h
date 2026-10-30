@@ -1932,50 +1932,110 @@ static int arm64_ir_forl_shape(const jit_State *J, const GCtrace *T,
 	int allow_wrapping, LJArm64IRReject *reject);
 static int arm64_ir_kint_value(const GCtrace *T, IRRef ref, int32_t *valuep);
 
+/* Check the immutable source geometry needed to infer a nonnegative FORL
+** index. Besides the adjacent initializer words, reject control-flow edges
+** that enter after initialization and writes to the hidden loop tuple. */
+static int arm64_callxs_forl_nonnegative_source(const GCproto *pt,
+	const BCIns *startpc, BCIns startins, MSize *loopposp, MSize *forip,
+	int32_t *stepvaluep)
+{
+  uintptr_t lo, hi;
+  MSize looppos, foripos, bodypos, pos, initpos, ctrlhi;
+  BCIns live;
+  int64_t target;
+  if (!pt || !startpc || bc_op(startins) != BC_FORL ||
+	  !arm64_ir_proto_range(pt, &lo, &hi) ||
+	  !arm64_ir_pcpos((uintptr_t)startpc, lo, hi, &looppos)) return 0;
+  live = arm64_ir_bc_acq(lo, looppos);
+  if (live != startins) {
+	BCIns shadow = proto_jit_startins_acq(pt, startpc);
+	if (shadow != startins ||
+	    (bc_op(live) != BC_JFORL && bc_op(live) != BC_IFORL) ||
+	    bc_a(live) != bc_a(startins) || bc_d(live) == 0) return 0;
+  }
+  if (bc_j(startins) >= 0 || (int64_t)looppos+bc_j(startins) <= 0)
+	return 0;
+  foripos = (MSize)((int64_t)looppos+bc_j(startins));
+  if (foripos < 3u || foripos >= pt->sizebc) return 0;
+  {
+	BCIns fori = arm64_ir_bc_acq(lo, foripos);
+	BCIns init = arm64_ir_bc_acq(lo, foripos-3u);
+	BCIns stop = arm64_ir_bc_acq(lo, foripos-2u);
+	BCIns step = arm64_ir_bc_acq(lo, foripos-1u);
+	if (bc_op(fori) != BC_FORI || bc_a(fori) != bc_a(startins) ||
+	    bc_j(fori) <= 0 || (int64_t)foripos+1+bc_j(fori) !=
+	      (int64_t)looppos+1 ||
+	    bc_op(init) != BC_KSHORT || bc_a(init) != bc_a(fori) ||
+	    (int16_t)bc_d(init) < 0 ||
+	    bc_a(stop) != (BCReg)(bc_a(fori)+1u) ||
+	    (bc_op(stop) != BC_CGET && bc_op(stop) != BC_KSHORT) ||
+	    bc_op(step) != BC_KSHORT ||
+	    bc_a(step) != (BCReg)(bc_a(fori)+FORL_STEP) ||
+	    (int16_t)bc_d(step) <= 0) return 0;
+	if (stepvaluep) *stepvaluep = (int16_t)bc_d(step);
+  }
+  initpos = foripos-3u;
+  bodypos = foripos+1u;
+  ctrlhi = (MSize)bc_a(startins)+FORL_STEP;
+  if (bodypos > looppos) return 0;
+  for (pos = 0; pos < pt->sizebc; pos++) {
+	BCIns ins = pos == looppos ? startins : arm64_ir_bc_acq(lo, pos);
+	BCOp op = bc_op(ins);
+	if (op == BC_JFORI || op == BC_JFORL || op == BC_IFORL) {
+	  BCIns shadow = proto_jit_startins_acq(pt,
+		(const BCIns *)(const void *)(lo+pos*sizeof(BCIns)));
+	  if (shadow == 0 || bc_a(shadow) != bc_a(ins) ||
+	      (op == BC_JFORI && bc_op(shadow) != BC_FORI) ||
+	      ((op == BC_JFORL || op == BC_IFORL) && bc_op(shadow) != BC_FORL))
+		return 0;
+	  ins = shadow;
+	  op = bc_op(ins);
+	}
+	if (bcmode_d(op) == BCMjump) {
+	  target = (int64_t)pos+1+(int64_t)bc_j(ins);
+	  if (target < 0 || target >= (int64_t)pt->sizebc ||
+	      (target > (int64_t)initpos && target <= (int64_t)foripos) ||
+	      (target >= (int64_t)bodypos && target <= (int64_t)looppos &&
+	       !(pos >= bodypos && pos <= looppos))) return 0;
+	} else if (op <= BC_ISNUM) {
+	  /* Conditional bytecodes skip exactly their following instruction. */
+	  target = (int64_t)pos+2;
+	  if (target < (int64_t)pt->sizebc &&
+	      ((target > (int64_t)initpos && target <= (int64_t)foripos) ||
+	       (target >= (int64_t)bodypos && target <= (int64_t)looppos &&
+	        !(pos >= bodypos && pos <= looppos)))) return 0;
+	}
+	if (pos >= bodypos && pos < looppos) {
+	  BCMode amode = bcmode_a(op);
+	  BCReg a = bc_a(ins);
+	  if ((amode == BCMdst && a >= bc_a(startins) && a <= ctrlhi) ||
+	      (amode == BCMbase && a <= ctrlhi)) return 0;
+	}
+  }
+  if (loopposp) *loopposp = looppos;
+  if (forip) *forip = foripos;
+  return 1;
+}
+
 /* A zero-extension of an INT loop index is equivalent to the original
-** sign-extension only when the root's exact FORI/FORL recurrence proves the
-** index never becomes negative. Keep this proof on the canonical static
-** positive-initializer/positive-step source shape. */
+** sign-extension only when the root's exact FORI/FORL recurrence and source
+** control-flow proof establish a nonnegative index on every admitted path. */
 static int arm64_callxs_forl_nonnegative_index(const jit_State *J,
 	const GCtrace *T, IRRef source)
 {
-  uintptr_t lo, hi;
   MSize looppos, foripos, idxslot;
-  BCIns startins, loopins, fori, init, stop, step;
   IRRef ref, idxload = 0, loopref = 0, pollref = 0, firstphi = 0;
   IRRef preadd = 0, postadd = 0, indexphi = 0;
-  int32_t stepvalue;
+  int32_t stepvalue, source_step;
   int dynamic_step = 0;
   int64_t step_signed;
   if (J == NULL || T == NULL || T->ir == NULL || J->pt == NULL ||
 	    source < REF_FIRST || source >= T->nins || bc_op(T->startins) != BC_FORL ||
-	    !arm64_ir_proto_range(J->pt, &lo, &hi)) return 0;
-	if (!arm64_ir_pcpos((uintptr_t)trace_startpc_acq((GCtrace *)T),
-		  lo, hi, &looppos)) return 0;
-  startins = T->startins;
-  loopins = arm64_ir_bc_acq(lo, looppos);
-  if (loopins != startins || bc_j(loopins) >= 0 ||
-	  (int64_t)looppos + bc_j(loopins) <= 0)
-    return 0;
-  foripos = (MSize)((int64_t)looppos + bc_j(loopins));
-  if (foripos < 3u || foripos >= J->pt->sizebc)
-    return 0;
-  fori = arm64_ir_bc_acq(lo, foripos);
-  if (bc_op(fori) != BC_FORI || bc_a(fori) != bc_a(startins) ||
-	  bc_j(fori) <= 0 || (int64_t)foripos+1+bc_j(fori) !=
-		(int64_t)looppos+1)
-    return 0;
-  init = arm64_ir_bc_acq(lo, foripos-3u);
-  stop = arm64_ir_bc_acq(lo, foripos-2u);
-  step = arm64_ir_bc_acq(lo, foripos-1u);
-  if (bc_op(init) != BC_KSHORT || bc_a(init) != bc_a(fori) ||
-	  (int16_t)bc_d(init) < 0 || bc_a(stop) != (BCReg)(bc_a(fori)+1u) ||
-	  (bc_op(stop) != BC_CGET && bc_op(stop) != BC_KSHORT) ||
-	  bc_op(step) != BC_KSHORT ||
-	  bc_a(step) != (BCReg)(bc_a(fori)+FORL_STEP) ||
-	  (int16_t)bc_d(step) <= 0)
-    return 0;
-  idxslot = 1u+LJ_FR2+(MSize)bc_a(startins);
+	    !arm64_callxs_forl_nonnegative_source(J->pt,
+	      trace_startpc_acq((GCtrace *)T), T->startins, &looppos, &foripos,
+	      &source_step))
+	return 0;
+  idxslot = 1u+LJ_FR2+(MSize)bc_a(T->startins);
   for (ref = REF_FIRST; ref < T->nins; ref++) {
     IRIns ins = ir_load_acq(&T->ir[ref]);
     if (ins.o == IR_LOOP) loopref = ref;
@@ -2028,7 +2088,7 @@ static int arm64_callxs_forl_nonnegative_index(const jit_State *J,
   if (preadd == 0 || !arm64_ir_kint_value(T, T->ir[preadd].op2,
 	  &stepvalue)) return 0;
   step_signed = stepvalue;
-  return step_signed > 0 && step_signed == (int16_t)bc_d(step);
+  return step_signed > 0 && step_signed == source_step;
 }
 
 /* Derived carriers may feed only named integer ABI positions. The original
@@ -5518,8 +5578,8 @@ static int arm64_ir_callxs_shape(const jit_State *J, const GCtrace *T,
 {
   LJArm64CallXSGraph graph;
   if (!arm64_callxs_ir_graph(J, T, &graph))
-    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
-	REF_BASE, IR_CALLXS, 12);
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL, REF_BASE,
+		   IR_CALLXS, 12);
   if (J->loopref != graph.loop) {
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
 	graph.loop, IR_XSAVE, 51);
@@ -6258,16 +6318,24 @@ static int arm64_postra_forl_nonnegative_index(
   uintptr_t lo, hi;
   GCproto *pt;
   MSize looppos, foripos, idxslot;
-  BCIns startins, loopins, fori, init, stop, step;
+  BCIns startins, loopins;
   IRRef ref, idxload = 0, loopref = 0, pollref = 0, firstphi = 0;
   IRRef preadd = 0, postadd = 0, indexphi = 0;
-  int32_t stepvalue;
+  int32_t stepvalue, source_step;
   int dynamic_step = 0;
-  if (view == NULL || view->ir == NULL || view->proto_bc == NULL ||
+  if (view == NULL || view->ir == NULL || view->proto == NULL ||
+	  view->proto_bc == NULL || view->owner == NULL ||
 	  view->startpc == NULL || view->proto_sizebc == 0 ||
 	  source < REF_FIRST || source >= semantic_nins ||
 	  bc_op(view->startins) != BC_FORL) return 0;
   pt = (GCproto *)view->proto;
+  /* Bind the independently supplied source view to the trusted trace owner
+  ** before dereferencing the prototype or its colocated bytecode/shadow. */
+  if (!checkptrGC(obj2gco(pt)) ||
+	  trace_startptgco_acq((GCtrace *)view->owner) != obj2gco(pt)) return 0;
+  if (pt->gct != (uint8_t)~LJ_TPROTO ||
+	  proto_bc(pt) != view->proto_bc || pt->sizebc != view->proto_sizebc ||
+	  pt->numparams != view->proto_numparams) return 0;
   lo = (uintptr_t)view->proto_bc;
   if ((uintptr_t)view->proto_sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns)) return 0;
   hi = lo+(uintptr_t)view->proto_sizebc*sizeof(BCIns);
@@ -6289,24 +6357,9 @@ static int arm64_postra_forl_nonnegative_index(
 	bc_d(loopins) != trace_traceno_acq(owner)) return 0;
     loopins = shadow;
   }
-  if (loopins != startins || bc_j(loopins) >= 0 ||
-	  (int64_t)looppos+bc_j(loopins) <= 0) return 0;
-  foripos = (MSize)((int64_t)looppos+bc_j(loopins));
-  if (foripos < 3u || foripos >= view->proto_sizebc) return 0;
-  fori = arm64_ir_bc_acq(lo, foripos);
-  if (bc_op(fori) != BC_FORI || bc_a(fori) != bc_a(startins) ||
-	  bc_j(fori) <= 0 || (int64_t)foripos+1+bc_j(fori) !=
-		(int64_t)looppos+1) return 0;
-  init = arm64_ir_bc_acq(lo, foripos-3u);
-  stop = arm64_ir_bc_acq(lo, foripos-2u);
-  step = arm64_ir_bc_acq(lo, foripos-1u);
-  if (bc_op(init) != BC_KSHORT || bc_a(init) != bc_a(fori) ||
-	  (int16_t)bc_d(init) < 0 || bc_a(stop) != (BCReg)(bc_a(fori)+1u) ||
-	  (bc_op(stop) != BC_CGET && bc_op(stop) != BC_KSHORT) ||
-	  bc_op(step) != BC_KSHORT ||
-	  bc_a(step) != (BCReg)(bc_a(fori)+FORL_STEP) ||
-	  (int16_t)bc_d(step) <= 0)
-	  return 0;
+  if (loopins != startins ||
+	  !arm64_callxs_forl_nonnegative_source(pt, view->startpc,
+	    startins, &looppos, &foripos, &source_step)) return 0;
   idxslot = 1u+LJ_FR2+(MSize)bc_a(startins);
   for (ref = REF_FIRST; ref < semantic_nins; ref++) {
 	IRIns ins = ir_load_acq(&view->ir[ref]);
@@ -6358,7 +6411,7 @@ static int arm64_postra_forl_nonnegative_index(
   if (preadd == 0 ||
 	  !arm64_callxs_kint_value(view->ir, view->nk,
 		ir_load_acq(&view->ir[preadd]).op2, &stepvalue)) return 0;
-  return stepvalue > 0 && stepvalue == (int16_t)bc_d(step);
+  return stepvalue > 0 && stepvalue == source_step;
 }
 
 static int arm64_postra_intarg_member(const LJArm64PostRAView *view,
@@ -8121,8 +8174,8 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 		 (ins.op2 == ((ins.t.irt << IRCONV_DSH)|IRT_INT) &&
 		  arm64_postra_forl_nonnegative_index(view, semantic_nins,
 		    ins.op1)))) {
-	      /* C conversion from a signed Lua INT to either signed or unsigned
-	      ** 64-bit integer uses the same sign-extended two's-complement bits. */
+	      /* Signed conversions preserve sign extension; the no-SEXT form is
+	      ** separately admitted only for the proven nonnegative loop index. */
 	    } else if ((ins.t.irt & ~(IRT_TYPE|IRT_ISPHI)) != 0 ||
 		!((dst == IRT_NUM && from == IRT_INT &&
 		   ins.op2 == IRCONV_NUM_INT &&
@@ -8423,7 +8476,7 @@ static int arm64_postra_callxs_generic(const LJArm64PostRAView *view,
 	  layout_xsave = 0;
 	  for (guard = 0; guard < abi.nargs; guard++) {
 	    LJArm64ABIArg *a = &abi.arg[guard];
-    if (!arm64_callxs_value_kind(view->ir, values[guard], view->nk,
+	    if (!arm64_callxs_value_kind(view->ir, values[guard], view->nk,
 		semantic_nins, call,
 		(LJArm64ABIKind)a->kind, a->size, a->is_unsigned,
 		a->reg == LJ_ARM64_ABI_STACK)) return 0;

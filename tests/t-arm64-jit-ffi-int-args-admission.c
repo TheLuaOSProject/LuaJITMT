@@ -98,7 +98,9 @@ enum Mutation {
   M_LITERAL_OPERAND,
   M_LITERAL_PAYLOAD,
   M_FORL_INITIALIZER,
-  M_FORL_STEP
+  M_FORL_STEP,
+  M_FORL_BYPASS_INITIALIZER,
+  M_FORL_CONTROL_WRITE
 };
 
 static unsigned semantic_ok, semantic_bad, postra_ok, postra_bad;
@@ -489,6 +491,27 @@ static int postra_accept(IntFixture *fx)
   return lj_asm_arm64_postra_admit(&v, NULL);
 }
 
+static void assert_postra_forl_view_rejects_incoherent_source(IntFixture *fx)
+{
+  LJArm64PostRAView v = postra_view(fx);
+  assert(fx->form == 4 && fx->source != 0);
+  assert(lj_asm_arm64_postra_admit(&v, NULL));
+  v.proto_bc++;
+  assert(!lj_asm_arm64_postra_admit(&v, NULL));
+  v = postra_view(fx);
+  v.proto_sizebc--;
+  assert(!lj_asm_arm64_postra_admit(&v, NULL));
+  v = postra_view(fx);
+  v.proto = NULL;
+  assert(!lj_asm_arm64_postra_admit(&v, NULL));
+  v = postra_view(fx);
+  v.proto_numparams++;
+  assert(!lj_asm_arm64_postra_admit(&v, NULL));
+  v = postra_view(fx);
+  v.startpc++;
+  assert(!lj_asm_arm64_postra_admit(&v, NULL));
+}
+
 static void assert_abi(lua_State *L, unsigned kind, unsigned stack)
 {
   char name[48];
@@ -592,6 +615,26 @@ static void mutate(IntFixture *fx, enum Mutation m)
     bc_publish((const uint32_t *)word,
                BCINS_AD(BC_KSHORT, bc_a(old),
                         m == M_FORL_INITIALIZER ? -1 : 0));
+    break;
+  }
+  case M_FORL_BYPASS_INITIALIZER:
+  case M_FORL_CONTROL_WRITE: {
+    BCIns start = trace_startins_acq(fx->owner);
+    MSize looppos = proto_bcpos(fx->pt, trace_startpc_acq(fx->owner));
+    MSize foripos = (MSize)((int64_t)looppos + bc_j(start));
+    BCIns *word;
+    assert(fx->form == 4 && bc_op(start) == BC_FORL && foripos >= 4u);
+    if (m == M_FORL_BYPASS_INITIALIZER) {
+      MSize from = foripos-4u, body = foripos+1u;
+      word = (BCIns *)(uintptr_t)&proto_bc(fx->pt)[from];
+      bc_publish((const uint32_t *)word,
+                 BCINS_AJ(BC_JMP, 0,
+                          (ptrdiff_t)body-(ptrdiff_t)from-1));
+    } else {
+      word = (BCIns *)(uintptr_t)&proto_bc(fx->pt)[foripos+1u];
+      bc_publish((const uint32_t *)word,
+                 BCINS_AD(BC_KSHORT, bc_a(start)+FORL_IDX, 7));
+    }
     break;
   }
   case M_SOURCE:
@@ -783,11 +826,21 @@ static void expect_both(IntFixture *fx, enum Mutation m)
   BCIns original = 0;
   int changes_bytecode;
   changes_bytecode = (m == M_CALLM_SOURCE_PC || m == M_CALLM_ARG_COUNT ||
-                      m == M_FORL_INITIALIZER || m == M_FORL_STEP);
+                      m == M_FORL_INITIALIZER || m == M_FORL_STEP ||
+                      m == M_FORL_BYPASS_INITIALIZER ||
+                      m == M_FORL_CONTROL_WRITE);
   if (changes_bytecode) {
     if (m == M_FORL_INITIALIZER || m == M_FORL_STEP)
       mutpc = trace_startpc_acq(fx->owner) + bc_j(trace_startins_acq(fx->owner)) -
           (m == M_FORL_INITIALIZER ? 3 : 1);
+    else if (m == M_FORL_BYPASS_INITIALIZER ||
+             m == M_FORL_CONTROL_WRITE) {
+      MSize looppos = proto_bcpos(fx->pt, trace_startpc_acq(fx->owner));
+      MSize foripos = (MSize)((int64_t)looppos +
+                              bc_j(trace_startins_acq(fx->owner)));
+      mutpc = proto_bc(fx->pt) +
+          (m == M_FORL_BYPASS_INITIALIZER ? foripos-4u : foripos+1u);
+    }
     else {
       (void)source_ins(fx, fx->ncalls - 1u, &mutpc);
       mutpc--;
@@ -796,7 +849,8 @@ static void expect_both(IntFixture *fx, enum Mutation m)
   }
   reset_fixture(fx);
   mutate(fx, m);
-  if (m == M_FORL_INITIALIZER || m == M_FORL_STEP)
+  if (m == M_FORL_INITIALIZER || m == M_FORL_STEP ||
+      m == M_FORL_BYPASS_INITIALIZER || m == M_FORL_CONTROL_WRITE)
     assert(loadbc(mutpc) != original);
   if (semantic_accept(fx)) {
     fprintf(stderr, "INT semantic accepted mutation %d form%u kind%u stack%u\n",
@@ -899,6 +953,8 @@ static void test_case(lua_State *L, jit_State *J, const char *runner,
   reset_fixture(&fx);
   assert(postra_accept(&fx));
   postra_ok++;
+  if (form == 4)
+    assert_postra_forl_view_rejects_incoherent_source(&fx);
   /* Exercise provenance separately for each source family, then the encoded
   ** integer conversion modes across the signed/unsigned width matrix. */
   /* The pre-existing direct signed-i32 SLOAD path does not require a rooted
@@ -948,6 +1004,8 @@ static void test_case(lua_State *L, jit_State *J, const char *runner,
   if (form == 4) {
     expect_both(&fx, M_FORL_INITIALIZER);
     expect_both(&fx, M_FORL_STEP);
+    expect_both(&fx, M_FORL_BYPASS_INITIALIZER);
+    expect_both(&fx, M_FORL_CONTROL_WRITE);
   }
   reset_fixture(&fx);
   fx.ir[fx.carrier].r = RID_D0;
