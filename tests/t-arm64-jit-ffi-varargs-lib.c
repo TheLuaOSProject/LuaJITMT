@@ -8,9 +8,13 @@ typedef struct VarargSret24 {
   uint64_t lo, mid, hi;
 } VarargSret24;
 
+typedef struct VarargIntPair8 {
+  uint32_t a, b;
+} VarargIntPair8;
+
 typedef void (*va_observer)(unsigned id);
 static va_observer observer;
-static unsigned call_count[12];
+static unsigned call_count[14];
 
 void arm64_va_install_observer(va_observer fn)
 {
@@ -225,5 +229,48 @@ VarargSret24 arm64_va_sret_cdata_tail(uint32_t fixed, ...)
               UINT64_C(0x112233445566) : UINT64_C(0xdeadbeef);
   result.mid = UINT64_C(0x123456789abc);
   result.hi = UINT64_C(0x6543210);
+  return result;
+}
+
+VarargSret24 arm64_va_sret_intagg_prefix(VarargIntPair8 pair,
+                                         int32_t fixed, ...)
+{
+  va_list ap;
+  int32_t signed_word;
+  double value;
+  VarargSret24 result;
+  note(12);
+  va_start(ap, fixed);
+  signed_word = va_arg(ap, int);
+  value = va_arg(ap, double);
+  va_end(ap);
+  result.lo = pair.a == 3 && pair.b == 5 && fixed == 7 &&
+              signed_word == -17 && value == 2.5 ? 15u : UINT64_C(0xdeadbeef);
+  result.mid = UINT64_C(20);
+  result.hi = UINT64_C(0x4004000000000000);
+  return result;
+}
+
+VarargSret24 arm64_va_sret_gpr8_intagg_prefix(
+    uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
+    uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
+    VarargIntPair8 pair, int32_t fixed, ...)
+{
+  va_list ap;
+  int32_t signed_word;
+  double value;
+  VarargSret24 result;
+  note(13);
+  va_start(ap, fixed);
+  signed_word = va_arg(ap, int);
+  value = va_arg(ap, double);
+  va_end(ap);
+  result.lo = a0 == 1 && a1 == 2 && a2 == 3 && a3 == 4 &&
+              a4 == 5 && a5 == 6 && a6 == 7 && a7 == 8 &&
+              pair.a == 3 && pair.b == 5 && fixed == 7 &&
+              signed_word == -17 && value == 2.5 ? 51u :
+              UINT64_C(0xdeadbeef);
+  result.mid = UINT64_C(20);
+  result.hi = UINT64_C(0x4004000000000000);
   return result;
 }

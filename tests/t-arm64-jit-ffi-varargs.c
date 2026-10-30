@@ -30,7 +30,7 @@
 
 typedef void (*InstallObserver)(void (*fn)(unsigned));
 typedef unsigned (*ReadCounter)(unsigned id);
-enum { VA_MAX_ID = 12, VA_ITERS = 24 };
+enum { VA_MAX_ID = 14, VA_ITERS = 24 };
 
 static lua_State *test_L;
 static TGState *test_tg;
@@ -102,7 +102,8 @@ typedef enum VarargMutation {
   VA_MUT_CDATA_WRONG_CTYPE,
   VA_MUT_CDATA_WRONG_OWNER,
   VA_MUT_SRET_WRONG_HIDDEN,
-  VA_MUT_SRET_MOVED_MARKER
+  VA_MUT_SRET_MOVED_MARKER,
+  VA_MUT_SRET_WRONG_AGGREGATE_SOURCE
 } VarargMutation;
 
 static void vararg_clone_init(VarargSemanticClone *clone, GCtrace *owner)
@@ -602,6 +603,7 @@ static void vararg_mutate(VarargMutation mutation, IRIns *ir,
   case VA_MUT_SRET_WRONG_HIDDEN:
     assert(target->hidden == 1u && node[1] != 0 &&
            target->values[0] != target->values[1]);
+    assert(ir_load_acq(&ir[node[1]]).op1 == target->values[0]);
     ir[node[1]].op1 = target->values[1];
     break;
   case VA_MUT_SRET_MOVED_MARKER: {
@@ -611,6 +613,33 @@ static void vararg_mutate(VarargMutation mutation, IRIns *ir,
            ir[node[marker+1u]].op2 != REF_NIL);
     ir[node[marker]].op2 = target->values[marker+1u];
     ir[node[marker+1u]].op2 = REF_NIL;
+    break;
+  }
+  case VA_MUT_SRET_WRONG_AGGREGATE_SOURCE: {
+    unsigned aggregate;
+    unsigned tail = target->hidden + target->abi.nargs + 1u;
+    unsigned alternate;
+    assert(target->hidden == 1u && target->abi.nargs >= 2u);
+    for (aggregate = 0; aggregate < target->abi.nargs; aggregate++)
+      if (target->abi.arg[aggregate].kind ==
+          LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE)
+        break;
+    assert(aggregate < target->abi.nargs);
+    for (alternate = 0; alternate < target->abi.nargs; alternate++)
+      if (alternate != aggregate &&
+          target->abi.arg[alternate].kind == LJ_ARM64_ABI_KIND_INTEGER &&
+          target->abi.arg[alternate].size ==
+            target->abi.arg[aggregate].size &&
+          target->abi.arg[alternate].is_unsigned ==
+            target->abi.arg[aggregate].is_unsigned)
+        break;
+    aggregate += target->hidden;
+    if (alternate < target->abi.nargs) alternate += target->hidden;
+    else alternate = tail;
+    assert(target->values[aggregate] != target->values[alternate]);
+    assert(node[aggregate] != 0 &&
+           ir_load_acq(&ir[node[aggregate]]).o == IR_CARG);
+    ir[node[aggregate]].op2 = target->values[alternate];
     break;
   }
   }
@@ -916,6 +945,60 @@ static void test_sret_vararg_admission_clones(lua_State *L)
                          "variadic sret CARG marker position");
 }
 
+static void test_sret_prefix_admission_clones(lua_State *L,
+                                               const char *runner,
+                                               const char *callable,
+                                               unsigned id,
+                                               unsigned nargs,
+                                               unsigned actual_count)
+{
+  jit_State *J = G2J(G(L));
+  CTState *cts = ctype_ctsG(G(L));
+  GCproto *pt = vararg_global_proto(L, runner);
+  GCtrace *T = traceref_safe(J, observed_trace_no[id]);
+  CTypeID ctype = vararg_global_ctype(L, callable);
+  VarargTarget target;
+  LJArm64PostRAView view = { 0 };
+  VarargSemanticClone semantic;
+  VarargJSave save;
+  assert(T != NULL && vararg_find_target(T, pt, cts, ctype, &target));
+  assert(target.hidden == 1u && target.abi.is_vararg &&
+         target.abi.nargs == nargs && target.actual_count == actual_count &&
+         target.rawcount == actual_count+2u &&
+         target.values[nargs+1u] == REF_NIL);
+  view.ir = trace_ir_acq(T);
+  view.owner = T;
+  view.cts = cts;
+  view.snap = trace_snap_acq(T);
+  view.snapmap = trace_snapmap_acq(T);
+  view.proto_bc = proto_bc(pt);
+  view.proto = pt;
+  view.startpc = trace_startpc_acq(T);
+  view.nins = trace_nins_acq(T);
+  view.nk = trace_nk_acq(T);
+  view.nsnap = trace_nsnap_acq(T);
+  view.nsnapmap = trace_nsnapmap_acq(T);
+  view.spadjust = trace_spadjust_acq(T);
+  view.proto_sizebc = pt->sizebc;
+  view.proto_numparams = pt->numparams;
+  view.root_topslot = trace_topslot_acq(T);
+  view.startins = trace_startins_acq(T);
+  assert(lj_asm_arm64_postra_admit(&view, NULL));
+  vararg_clone_init(&semantic, T);
+  save = vararg_j_enter(J, pt, &semantic.trace, semantic.ktrace);
+  vararg_semantic_result(J, &semantic.trace, 1,
+                         "variadic aggregate-prefix baseline");
+  vararg_j_leave(J, &save);
+  vararg_clone_free(&semantic);
+  vararg_expect_mutation(J, &view, &target, VA_MUT_SRET_WRONG_HIDDEN,
+                         "aggregate-prefix wrong hidden sret pointer");
+  vararg_expect_mutation(J, &view, &target, VA_MUT_SRET_MOVED_MARKER,
+                         "aggregate-prefix moved vararg marker");
+  vararg_expect_mutation(J, &view, &target,
+                         VA_MUT_SRET_WRONG_AGGREGATE_SOURCE,
+                         "aggregate-prefix fixed CARG source mismatch");
+}
+
 static void force_varargs_postcall(TGState *tg)
 {
   assert((lj_ffi_native_frame_sequence_acq(tg) & 1u) != 0);
@@ -948,7 +1031,7 @@ static void observe_varargs_call(unsigned id)
   assert((flags & LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED) != 0);
   assert(lj_ffi_native_frame_func_acq(frame) == expected_func[id]);
   assert(lj_ffi_native_frame_L_acq(frame) == lj_tg_load_cur_L(test_tg));
-  if (id == 11) {
+  if (id >= 11) {
     GCcdata *root = lj_ffi_native_frame_result_root_acq(frame);
     assert(root != NULL && root->ctypeid == expected_sret_type);
   } else {
@@ -963,7 +1046,7 @@ static void observe_varargs_call(unsigned id)
   assert(lj_tg_load_jit_base(test_tg) != NULL);
   assert(lj_tg_vmstate_load_acq(test_tg) ==
          (int32_t)lj_ffi_native_frame_trace_no_acq(frame));
-  if (id == 11) {
+  if (id >= 11) {
     IRRef ref, nins = trace_nins_acq(trace);
     int saw_box = 0, saw_sret = 0;
     for (ref = REF_FIRST; ref < nins; ref++) {
@@ -995,8 +1078,13 @@ static void run_case(lua_State *L, const char *name, int n)
     assert(lua_isfunction(L, -1));
     lua_pushinteger(L, n);
     ljt_lua_pcall(L, 1, 1, name);
-  } else if (strcmp(name, "__va_run_sret") == 0) {
-    lua_getglobal(L, "__va_dispatch_sret");
+  } else if (strcmp(name, "__va_run_sret") == 0 ||
+             strcmp(name, "__va_run_sret_intagg") == 0 ||
+             strcmp(name, "__va_run_sret_gpr8_intagg") == 0) {
+    const char *dispatch = strcmp(name, "__va_run_sret") == 0 ?
+      "__va_dispatch_sret" : strcmp(name, "__va_run_sret_intagg") == 0 ?
+      "__va_dispatch_sret_intagg" : "__va_dispatch_sret_gpr8_intagg";
+    lua_getglobal(L, dispatch);
     assert(lua_isfunction(L, -1));
     lua_pushinteger(L, n);
     ljt_lua_pcall(L, 1, 1, name);
@@ -1173,10 +1261,23 @@ static unsigned require_native(ReadCounter calls, unsigned id,
   unsigned before_native = native_seen[id];
   run_case(test_L, runner, VA_ITERS);
   assert(calls(id) == before_calls+VA_ITERS);
-  if (!(native_seen[id] > before_native))
+  if (!(native_seen[id] > before_native)) {
+    jit_State *J = G2J(G(test_L));
+    GCproto *pt = vararg_global_proto(test_L, runner);
     fprintf(stderr, "varargs native witness missing: runner=%s id=%u calls=%u->%u native=%u->%u\n",
             runner, id, before_calls, calls(id), before_native,
             native_seen[id]);
+    fprintf(stderr, "  proto=%p sizebc=%u flags=%x traces=%u jitflags=%x published_callxs=%d\n",
+            (void *)pt, pt->sizebc, pt->flags, trace_sizetrace_acq(J),
+            J->flags, vararg_root_callxs_published(J, pt));
+    for (TraceNo no = 1; (MSize)no < trace_sizetrace_acq(J); no++) {
+      GCtrace *T = traceref_safe(J, no);
+      if (T != NULL && trace_startpt_acq(T) == pt)
+        fprintf(stderr, "  trace=%u runnable=%u root=%u linktype=%u link=%u startop=%u nins=%u\n",
+                no, trace_runnable_acq(T, no), trace_root_acq(T), T->linktype,
+                T->link, bc_op(trace_startins_acq(T)), trace_nins_acq(T));
+    }
+  }
   assert(native_seen[id] > before_native);
   assert(observed_trace_no[id] != 0 &&
          traceref_safe(G2J(G(test_L)), observed_trace_no[id]) != NULL);
@@ -1324,6 +1425,32 @@ static void run_sret_postcall(ReadCounter calls)
          trace_runnable_acq(trace, observed_trace_no[11]));
 }
 
+static void run_sret_prefix_after_gc(ReadCounter calls, unsigned id,
+                                     const char *dispatch)
+{
+  unsigned before_calls = calls(id), before_native = native_seen[id];
+  TraceNo selected = observed_trace_no[id];
+  GCtrace *trace;
+  assert(selected != 0);
+  lj_trace_test_reset_exit_stats();
+  lua_gc(test_L, LUA_GCCOLLECT, 0);
+  lua_getglobal(test_L, dispatch);
+  lua_pushinteger(test_L, VA_ITERS);
+  ljt_lua_pcall(test_L, 1, 1, "aggregate-prefix sret after full GC");
+  assert(lua_toboolean(test_L, -1));
+  lua_pop(test_L, 1);
+  assert(calls(id) == before_calls+VA_ITERS &&
+         native_seen[id] > before_native &&
+         observed_trace_no[id] == selected &&
+         traceref_safe(G2J(G(test_L)), selected) != NULL);
+  assert(lj_trace_test_exit_calls() > 0 &&
+         lj_tg_in_native_acq(test_tg) == 0 &&
+         lj_tg_load_jit_base(test_tg) == NULL);
+  trace = traceref_safe(G2J(G(test_L)), selected);
+  assert(trace != NULL && trace_native_pins_acq(trace) == 0 &&
+         trace_runnable_acq(trace, selected));
+}
+
 int main(int argc, char **argv)
 {
   const char *path = getenv("LJ_ARM64_FFI_VARARGS_LIB");
@@ -1356,6 +1483,8 @@ int main(int argc, char **argv)
   expected_func[9] = dlsym(library, "arm64_va_ordinary_consumer");
   expected_func[10] = dlsym(library, "arm64_va_cdata_tail");
   expected_func[11] = dlsym(library, "arm64_va_sret_cdata_tail");
+  expected_func[12] = dlsym(library, "arm64_va_sret_intagg_prefix");
+  expected_func[13] = dlsym(library, "arm64_va_sret_gpr8_intagg_prefix");
   for (i = 1; i < VA_MAX_ID; i++) assert(expected_func[i] != NULL);
   install(observe_varargs_call);
 
@@ -1373,7 +1502,10 @@ int main(int argc, char **argv)
     "double arm64_va_ordinary_consumer(int32_t, ...);\n"
     "double arm64_va_cdata_tail(uint32_t, ...);\n"
     "struct arm64_va_sret24 { uint64_t lo,mid,hi; };\n"
+    "typedef struct { uint32_t a,b; } Arm64VaPair8;\n"
     "struct arm64_va_sret24 arm64_va_sret_cdata_tail(uint32_t, ...);\n"
+    "struct arm64_va_sret24 arm64_va_sret_intagg_prefix(Arm64VaPair8,int32_t,...);\n"
+    "struct arm64_va_sret24 arm64_va_sret_gpr8_intagg_prefix(uint64_t,uint64_t,uint64_t,uint64_t,uint64_t,uint64_t,uint64_t,uint64_t,Arm64VaPair8,int32_t,...);\n"
     "]]\n"
     "local lib = ffi.load(assert(os.getenv('LJ_ARM64_FFI_VARARGS_LIB')))\n"
     "_G.__va_noextra=lib.arm64_va_noextra\n"
@@ -1389,7 +1521,12 @@ int main(int argc, char **argv)
     "_G.__va_ordinary=lib.arm64_va_ordinary_consumer\n"
     "_G.__va_cdata=lib.arm64_va_cdata_tail\n"
     "_G.__va_sret=lib.arm64_va_sret_cdata_tail\n"
+    "_G.__va_sret_intagg=lib.arm64_va_sret_intagg_prefix\n"
+    "_G.__va_sret_gpr8_intagg=lib.arm64_va_sret_gpr8_intagg_prefix\n"
     "_G.__va_sret_zero=ffi.new('struct arm64_va_sret24')\n"
+    "local pair=ffi.new('Arm64VaPair8',3,5)\n"
+    "local u0=ffi.new('uint64_t',1); local u1=ffi.new('uint64_t',2); local u2=ffi.new('uint64_t',3); local u3=ffi.new('uint64_t',4)\n"
+    "local u4=ffi.new('uint64_t',5); local u5=ffi.new('uint64_t',6); local u6=ffi.new('uint64_t',7); local u7=ffi.new('uint64_t',8)\n"
     "local cda=ffi.new('int8_t',-17); local cdb=ffi.new('float',2.5)\n"
     "local cdc=ffi.new('uint16_t',31); local cdd=ffi.new('double',3.25)\n"
     "local cde=ffi.new('long long',0x12345678); local cdf=ffi.new('int',47)\n"
@@ -1418,21 +1555,38 @@ int main(int argc, char **argv)
     "function _G.__va_run_sret(n,fn,a,b)\n"
     " local out; local sum=0.5; for i=1,n do out=fn(23,a,b); sum=sum+i end\n"
     " return out.lo==0x112233445566 and out.mid==0x123456789abc and out.hi==0x6543210 and sum==n*(n+1)/2+0.5 end\n"
+    "function _G.__va_run_sret_intagg(n,fn,pair,a,b)\n"
+    " local out; local sum=0.5; for i=1,n do out=fn(pair,7,a,b); sum=sum+i end\n"
+    " return out.lo==15 and out.mid==20 and out.hi==0x4004000000000000 and sum==n*(n+1)/2+0.5 end\n"
+    "function _G.__va_run_sret_gpr8_intagg(n,fn,pair,a,b,u0,u1,u2,u3,u4,u5,u6,u7)\n"
+    " local out; local sum=0.5; for i=1,n do out=fn(u0,u1,u2,u3,u4,u5,u6,u7,pair,7,a,b); sum=sum+i end\n"
+    " return out.lo==51 and out.mid==20 and out.hi==0x4004000000000000 and sum==n*(n+1)/2+0.5 end\n"
     "local threading=require('threading')\n"
     "_G.__va_sret_ready=threading.channel(1); _G.__va_sret_release=threading.channel(1)\n"
     "_G.__va_sret_peer=assert(threading.spawn(function(ready,release) assert(ready:send(true,5)); assert(select(2,release:recv(120))); return true end,__va_sret_ready,__va_sret_release))\n"
     "assert(select(2,__va_sret_ready:recv(5)))\n"
     "function _G.__va_dispatch_sret(n) local got=__va_run_sret(n,__va_sret,cda,cdb); return got end\n"
+    "function _G.__va_dispatch_sret_intagg(n) local got=__va_run_sret_intagg(n,__va_sret_intagg,pair,cda,cdb); return got end\n"
+    "function _G.__va_dispatch_sret_gpr8_intagg(n) local got=__va_run_sret_gpr8_intagg(n,__va_sret_gpr8_intagg,pair,cda,cdb,u0,u1,u2,u3,u4,u5,u6,u7); return got end\n"
     "function _G.__va_dispatch(name,n) local got; if name=='__va_run_noextra' then got=_G[name](n,0) else got=_G[name](n) end; return got end\n"
     "function _G.__va_dispatch_noextra(n,seed) local got=__va_run_noextra(n,seed); return got end\n"
     "function _G.__va_dispatch_cdata(n) local got=__va_run_cdata(n,__va_cdata,cda,cdb,cdc,cdd,cde,cdf,cdg,cdh,cdi); return got end\n"
-    "jit.flush(); jit.on(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64')\n");
+    "jit.flush(); jit.on(); jit.on(__va_run_sret_intagg,true); jit.on(__va_run_sret_gpr8_intagg,true); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64')\n");
 
   assert(mt_active_acq(G(L)) != 0);
   lua_getglobal(L, "__va_sret_zero");
   assert(tviscdata(L->top-1));
   expected_sret_type = cdataV(L->top-1)->ctypeid;
   lua_pop(L, 1);
+  assert(require_native(calls, 12, "__va_run_sret_intagg") != 0);
+  test_sret_prefix_admission_clones(L, "__va_run_sret_intagg",
+                                    "__va_sret_intagg", 12, 2, 4);
+  run_sret_prefix_after_gc(calls, 12, "__va_dispatch_sret_intagg");
+  assert(require_native(calls, 13, "__va_run_sret_gpr8_intagg") != 0);
+  test_sret_prefix_admission_clones(L, "__va_run_sret_gpr8_intagg",
+                                    "__va_sret_gpr8_intagg", 13, 10, 12);
+  run_sret_prefix_after_gc(calls, 13,
+                           "__va_dispatch_sret_gpr8_intagg");
   assert(require_native(calls, 1, "__va_run_noextra") != 0);
   test_int_accum_admission_clones(L);
   {
