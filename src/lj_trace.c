@@ -16313,9 +16313,9 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
 	const BCIns *returnpc;
 	BCIns call;
 	unsigned nargs;
-	/* string.byte's recorder reads one string and optional start/end indices,
-	** and returns exactly one scalar to this loop. The length/offset guards
-	** are separately checked in semantic IR and post-RA admission. */
+	/* string.byte's recorder reads one string and optional start/end indices.
+	** Fixed results must fit the caller frame. Each byte's length/offset
+	** guards are separately checked in semantic IR and post-RA admission. */
 	if ((bc_op(startins) != BC_LOOP && bc_op(startins) != BC_FORL) ||
 	    !frame_islua(owner->base-1)) return 0;
 	returnpc = frame_pc(owner->base-1);
@@ -16323,7 +16323,8 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
 	    returnpc == proto_bc(rootpt)) return 0;
 	call = (BCIns)la_load32_acq((const uint32_t *)(returnpc-1));
 	if (bc_op(call) != BC_CALL ||
-	    bc_c(call) < 2 || bc_c(call) > 4 || bc_b(call) != 2)
+	    bc_c(call) < 2 || bc_c(call) > 4 || bc_b(call) < 2 ||
+	    (MSize)bc_a(call)+bc_b(call)-1u > rootpt->framesize)
 	  return 0;
 	nargs = bc_c(call)-1u;
 	if (nargs < 1 || nargs > 3 ||

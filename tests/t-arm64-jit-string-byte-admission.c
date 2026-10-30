@@ -422,6 +422,127 @@ static void test_fixed_byte_call(lua_State *L, const char *arguments,
          "GC/code reuse, three independent bounds negatives\n", arguments);
 }
 
+
+/* Fixed multiple returns still use one independent bounds proof per byte.
+** Distinct weighted values expose dropped, duplicated or permuted results. */
+static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
+                                      unsigned first)
+{
+  Arm64TraceFixture f;
+  char body[4096], source[14000], bytes[40];
+  size_t used;
+  GCtrace *owner;
+  TraceNo no;
+  MCode *code;
+  MSize codesize;
+  unsigned char *saved;
+  unsigned i, phase, pointers=0, loads=0, snapshot_checks=0;
+  IRRef r, loadref=0;
+  lua_Number actual=0, expected=0, weighted=0;
+  assert(width>=2 && width<=16 && first>=1 && first<=2);
+  for (i=0;i<sizeof(bytes);i++) bytes[i]=(char)((i*37u+128u)&255u);
+  bytes[first-1u]=0;
+  for (i=0;i<width;i++)
+    weighted+=(lua_Number)(unsigned char)bytes[first-1u+i]*(i+1.25);
+  lua_pushlstring(L,bytes,sizeof(bytes));
+  lua_setglobal(L,"string_byte_multi_value");
+  lua_pushlstring(L,bytes,first+width-1u);
+  lua_setglobal(L,"string_byte_multi_exact");
+  lua_pushlstring(L,bytes,first+width-2u);
+  lua_setglobal(L,"string_byte_multi_short");
+  used=(size_t)snprintf(body,sizeof(body),
+    "function(s,n) local byte=string.byte;local sum,i=.5,0;while i<n do i=i+1;local ");
+  for (i=0;i<width;i++)
+    used+=(size_t)snprintf(body+used,sizeof(body)-used,"%sb%u",i ? "," : "",i);
+  used+=(size_t)snprintf(body+used,sizeof(body)-used,
+    "=byte(s,%u,%u);sum=sum",first,first+width-1u);
+  for (i=0;i<width;i++)
+    used+=(size_t)snprintf(body+used,sizeof(body)-used,"+b%u*%u.25",i,i+1u);
+  used+=(size_t)snprintf(body+used,sizeof(body)-used," end;return sum end");
+  assert(used<sizeof(body));
+  assert(snprintf(source,sizeof(source),
+    "jit.flush();string_byte_multi_trace=%s;string_byte_multi_clone=%s;"
+    "string_byte_multi_oracle=%s;jit.off(string_byte_multi_oracle,true)",
+    body,body,body)<(int)sizeof(source));
+  run_chunk(L,source);
+  assert(call_loop(L,"string_byte_multi_trace","string_byte_multi_value",
+                   &actual)==LUA_OK && actual==.5+80*weighted);
+  lua_getglobal(L,"string_byte_multi_trace");
+  no=proto_trace_acq(funcproto(funcV(L->top-1)));lua_pop(L,1);
+  owner=traceref_safe(L2J(L),no);
+  assert(no && owner && trace_runnable_acq(owner,no));
+  code=trace_mcode_acq(owner);codesize=trace_szmcode_acq(owner);
+  assert(code && codesize);
+  saved=(unsigned char *)malloc(codesize);assert(saved);
+  memcpy(saved,code,codesize);
+  for (phase=0;phase<2;phase++) {
+    const char *values[]={"string_byte_multi_value","string_byte_multi_exact",
+                           "string_byte_multi_short","string_byte_empty",NULL};
+    if (phase) lua_gc(L,LUA_GCCOLLECT,0);
+    for (i=0;i<sizeof(values)/sizeof(values[0]);i++) {
+      int want=call_loop(L,"string_byte_multi_oracle",values[i],&expected);
+      int got;
+      lj_trace_test_root_entry_reset();lj_trace_test_reset_exit_stats();
+      got=call_loop(L,"string_byte_multi_trace",values[i],&actual);
+      assert(got==want && (got!=LUA_OK || actual==expected));
+      assert(lj_trace_test_root_entry_successes()>0 &&
+             lj_trace_test_exit_calls()>0 &&
+             lj_trace_test_first_exit_parent()==no);
+    }
+    assert(call_loop(L,"string_byte_multi_trace","string_byte_multi_value",
+                     &actual)==LUA_OK && actual==.5+80*weighted);
+    assert(trace_runnable_acq(owner,no) && trace_mcode_acq(owner)==code &&
+           trace_szmcode_acq(owner)==codesize && memcmp(saved,code,codesize)==0);
+  }
+  arm64_fixture_init_trace(&f,L,"string_byte_multi_clone",no);
+  assert(semantic(&f) && allocated(&f));
+  for (r=REF_FIRST;r<f.semantic_nins;r++) {
+    if (f.ir[r].o==IR_STRREF) {
+      IRRef q, bound=0;
+      int32_t offset;
+      assert(kint(f.ir,f.semantic.nk,f.ir[r].op2,&offset) &&
+             offset>=(int32_t)first-1 && offset<(int32_t)(first+width-1u));
+      for (q=REF_FIRST;q<r;q++) {
+        if (f.ir[q].o==IR_UGE && f.ir[q].op1>=REF_FIRST &&
+            f.ir[f.ir[q].op1].o==IR_FLOAD &&
+            f.ir[f.ir[q].op1].op1==f.ir[r].op1) bound=f.ir[q].op2;
+      }
+      assert(bound);
+      f.ir[r].op2=bound;f.postra[r].op2=bound;
+      assert(!semantic(&f) && !allocated(&f));
+      arm64_fixture_reset(&f);
+      pointers++;
+    } else if (f.ir[r].o==IR_XLOAD) {
+      assert(f.ir[r].t.irt==IRT_U8 && f.ir[r].op2==IRXLOAD_READONLY);
+      f.ir[r].op2=0;f.postra[r].op2=0;
+      assert(!semantic(&f) && !allocated(&f));
+      arm64_fixture_reset(&f);
+      if (!loadref) loadref=r;
+      loads++;
+    }
+  }
+  assert(pointers>=width && loads==pointers && loadref);
+  /* Raw U8 values are still excluded from Lua snapshot restoration. */
+  for (SnapNo sn=0;sn<f.view.nsnap;sn++) {
+    SnapShot *snap=&f.snaps[sn];
+    if (snap->ref>loadref && snap->nent>2u) {
+      MSize at=snap->mapofs+snap->nent-1u;
+      SnapEntry old=f.map[at], postold=f.postmap[at];
+      f.map[at]=snap_setref(old,loadref);
+      f.postmap[at]=snap_setref(postold,loadref);
+      assert(!semantic(&f) && !allocated(&f));
+      f.map[at]=old;f.postmap[at]=postold;
+      snapshot_checks++;
+      break;
+    }
+  }
+  assert(snapshot_checks==1u);
+  arm64_fixture_reset(&f);assert(semantic(&f) && allocated(&f));
+  arm64_fixture_free(&f);lua_pop(L,1);free(saved);
+  printf("string.byte fixed %u results from %u: native weighted bytes, short/type exits, GC/code reuse, %u per-byte proof mutations\n",
+         width,first,pointers+loads);
+}
+
 static int call_range_loop(lua_State *L, const char *fn, const char *string,
                            lua_Number last, int numeric, lua_Number *value)
 {
@@ -2151,6 +2272,11 @@ int main(void)
   test_dynamic_start_end_byte(L,0,1);
   test_dynamic_start_end_byte(L,1,0);
   test_dynamic_start_end_byte(L,1,1);
+  for (unsigned width=2;width<=16;width*=2) {
+    test_fixed_multiple_bytes(L,width,1);
+    test_fixed_multiple_bytes(L,width,2);
+  }
+  test_fixed_multiple_bytes(L,3,1);
   run_chunk(L, "assert(string_byte_stop:send(true,5)); "
                "local joined,result=string_byte_peer:join(5); "
                "assert(joined and result)");
