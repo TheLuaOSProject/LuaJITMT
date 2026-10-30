@@ -253,3 +253,37 @@ matching runtimes are in
 `/Users/frityet/Scratch/ljmt-negative-substring-ordinary-20261030/`.
 Ordinary ARM64 restoration profile is
 `e0faf4ac7609028ce632b43148799b24b8f4e0c9319da36d81fd70345deb5ab0`.
+
+## Omitted-end substring integration and repeated guard footers
+
+Integrated `0d4f49c90` at `4c022da0f`; production/test checkpoint `52efb731e`
+adds omitted-end substring calls and strengthens every repeated CALL-guard
+footer. The new malformed-footer fixture initially exposed that a later
+invalid resume PC could be skipped after an earlier valid guard had matched.
+Both independent passes now reject that case. Tests mutate the string-copy
+resume PC and low footer tag independently in semantic and allocated maps,
+with unmodified private-owner controls, for both C3 and C4 arities.
+
+The first fresh-publication extension used identical samples for FORL and
+LOOP in one process; FORL had already interned the later samples. Inputs now
+include the loop kind, preserving the requirement for fresh native
+publication. Both earlier failing logs are retained, without weakening the
+assertions, in
+`/Users/frityet/Scratch/ljmt-default-substring-integration-20261030/`.
+The final four-profile log passes positive, negative and omitted-end ranges;
+the latter reports fresh native publication counts 1, 37, 36 and 40.
+The ordinary ARM64 restore profile is
+`72500d79fa1f97038a6326c91f1a9bc693ca5e25d15741f30a6e545c38815ae4`.
+
+The exact `52efb731e` ordinary matrix passes on ARM64 and strict x86_64,
+including both 509-case corpora, 260 semantic checks, the prior byte/FFI/
+string/tostring matrix, all four omitted-end cases, six negative literal
+extreme cases and six omitted-end extreme cases (first=1, 2, 32767 under
+FORL and LOOP). The native probes retain interpreter oracles, live peers,
+selected-root exits and code identity across GC. Immutable binaries, matching
+JIT modules, archives, hashes and logs are saved in
+`/Users/frityet/Scratch/ljmt-default-substring-ordinary-20261030/`.
+Ordinary assertion ARM64 was restored with profile
+`e095cba669dc8eb8e785e0d09b6908887ba0a8ac0b2e35b1a8f1c56eb81b074b`.
+The complete gate is starting separately at this frozen source; the verified
+main production checkpoint remains `503c8ba2f` until that gate completes.
