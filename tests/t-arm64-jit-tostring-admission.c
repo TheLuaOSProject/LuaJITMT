@@ -334,7 +334,7 @@ static void positive_form(lua_State *L, const char *fnname, BCOp op)
     "tostring_bad_asin", "tostring_bad_acos", "tostring_bad_atan",
     "tostring_bad_sinh", "tostring_bad_cosh", "tostring_bad_tanh",
     "tostring_bad_atan2", "tostring_bad_pow", "tostring_bad_ldexp",
-    "tostring_bad_byte", "tostring_replacement"
+    "tostring_bad_byte", "tostring_bad_sub", "tostring_replacement"
   };
   const char *out;
   size_t outlen;
@@ -463,7 +463,8 @@ int main(void)
     "tostring_bad_atan=math.atan; tostring_bad_sinh=math.sinh; "
     "tostring_bad_cosh=math.cosh; tostring_bad_tanh=math.tanh; "
     "tostring_bad_atan2=math.atan2; tostring_bad_pow=math.pow; "
-    "tostring_bad_ldexp=math.ldexp; tostring_bad_byte=string.byte\n"
+    "tostring_bad_ldexp=math.ldexp; tostring_bad_byte=string.byte; "
+    "tostring_bad_sub=string.sub\n"
     "tostring_table=setmetatable({}, {__tostring=function() "
     "tostring_side_effects=tostring_side_effects+1; return 'table-tostring' end})\n"
     "tostring_error_table=setmetatable({}, {__tostring=function() "

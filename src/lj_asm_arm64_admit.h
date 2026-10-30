@@ -5,10 +5,6 @@
 
 #ifndef _LJ_ASM_ARM64_ADMIT_H
 #define _LJ_ASM_ARM64_ADMIT_H
-static int arm64_cell_ir_snapshots(const jit_State *J, const GCtrace *T,
-                                   IRRef ref, SnapNo s, IRRef root1);
-static int arm64_cell_postra_snapshots(const LJArm64PostRAView *v,
-                                       IRRef ref, MSize s, IRRef root1);
 
 static int arm64_scalar_postra_ref(const LJArm64PostRAView *v, IRRef ref,
                                    IRRef before, IRType type);
@@ -11287,8 +11283,8 @@ static int arm64_scalar_builtin_ffid(uint32_t ffid)
 ** the one-argument CALL at its source snapshot to a guarded string argument,
 ** then prove the exact source cell flow from CALL result through CSET to the
 ** terminal CGET/RET1. The terminal map is before CGET and need not materialize
-** the returned slot; the identity result follows from recff_tostring's
-** string case, which leaves J->base[0] unchanged. */
+** the returned register. Its saved cell slot must contain the exact guarded
+** argument reference returned by recff_tostring's string case. */
 static int arm64_scalar_tostring_cell_result_ir(const jit_State *J,
                                                const GCtrace *T,
                                                BCIns call, MSize callpos,
