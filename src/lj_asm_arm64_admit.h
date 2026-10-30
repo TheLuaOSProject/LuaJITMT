@@ -6,6 +6,11 @@
 #ifndef _LJ_ASM_ARM64_ADMIT_H
 #define _LJ_ASM_ARM64_ADMIT_H
 
+static int arm64_cell_ir_snapshots(const jit_State *J, const GCtrace *T,
+                                   IRRef ref, SnapNo s, IRRef root1);
+static int arm64_cell_postra_snapshots(const LJArm64PostRAView *v,
+                                       IRRef ref, MSize s, IRRef root1);
+
 static int arm64_scalar_postra_ref(const LJArm64PostRAView *v, IRRef ref,
                                    IRRef before, IRType type);
 static int arm64_scalar_postra_kref(const LJArm64PostRAView *v, IRRef target,
@@ -10902,6 +10907,7 @@ static int arm64_rooted_gc_type(IRType type)
 static int arm64_scalar_builtin_ffid(uint32_t ffid)
 {
   return ffid == FF_rawset || lj_ff_is_bit_scalar(ffid) ||
+         ffid == FF_tostring ||
          ffid == FF_math_floor || ffid == FF_math_ceil ||
          ffid == FF_math_sqrt || ffid == FF_math_abs ||
          ffid == FF_math_min || ffid == FF_math_max ||
@@ -10911,6 +10917,138 @@ static int arm64_scalar_builtin_ffid(uint32_t ffid)
          ffid == FF_math_asin || ffid == FF_math_acos || ffid == FF_math_atan ||
          ffid == FF_math_sinh || ffid == FF_math_cosh || ffid == FF_math_tanh ||
          ffid == FF_math_atan2 || ffid == FF_math_pow || ffid == FF_math_ldexp;
+}
+
+/* Prove the recorder's exact string-input tostring identity result. A dynamic
+** CALL's function guard is not enough by itself: a different builtin could
+** satisfy a mutated KGC guard while the trace still returns the input. Bind
+** the one-argument CALL at its source snapshot to a guarded string argument,
+** then require the CALL result to be stored in the unique cell returned by
+** the terminal CGET/RET1 sequence. */
+static int arm64_scalar_tostring_cell_result_ir(const jit_State *J,
+                                               const GCtrace *T,
+                                               BCIns call, MSize callpos,
+                                               IRRef argref)
+{
+  const GCproto *pt = J->pt;
+  const SnapShot *terminal;
+  MSize ofs, nent, footerpos, cell, p;
+  uint64_t footer;
+  uintptr_t lo, pcaddr, hi;
+  BCIns get, set;
+  unsigned source_stores = 0;
+  if (!pt || !T->nsnap || pt->sizebc == 0 || callpos+1u >= pt->sizebc ||
+      gcref(T->startpt) != obj2gco((GCproto *)pt)) return 0;
+  terminal = &T->snap[T->nsnap-1u];
+  ofs = terminal->mapofs; nent = terminal->nent;
+  if (ofs > T->nsnapmap || nent > T->nsnapmap-ofs ||
+      T->nsnapmap-ofs-nent < 1u+LJ_FR2) return 0;
+  memcpy(&footer, &T->snapmap[ofs+nent], sizeof(footer));
+  pcaddr = (uintptr_t)(footer >> 8);
+  lo = (uintptr_t)(const void *)proto_bc(pt);
+  if (pt->sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns)) return 0;
+  hi = lo+(uintptr_t)pt->sizebc*sizeof(BCIns);
+  if (pcaddr < lo || pcaddr >= hi || ((pcaddr-lo)%sizeof(BCIns)) != 0)
+    return 0;
+  footerpos = (MSize)((pcaddr-lo)/sizeof(BCIns));
+  get = arm64_ir_bc_acq(lo, footerpos);
+  if (bc_op(get) != BC_CGET || footerpos+2u != pt->sizebc ||
+      bc_op(arm64_ir_bc_acq(lo, footerpos+1u)) != BC_RET1 ||
+      bc_d(arm64_ir_bc_acq(lo, footerpos+1u)) != 2u ||
+      bc_a(arm64_ir_bc_acq(lo, footerpos+1u)) != bc_a(get))
+    return 0;
+  cell = bc_d(get);
+  if (cell >= pt->framesize) return 0;
+  set = arm64_ir_bc_acq(lo, callpos+1u);
+  if (bc_op(set) != BC_CSET || bc_a(set) != cell ||
+      bc_c(set) != bc_a(call)) return 0;
+  for (p = 0; p < pt->sizebc; p++) {
+    BCIns ins = arm64_ir_bc_acq(lo, p);
+    if (bc_op(ins) == BC_CSET && bc_a(ins) == cell) {
+      source_stores++;
+      if (p != callpos+1u) return 0;
+    }
+  }
+  for (p = callpos+2u; p < footerpos; p++) {
+    BCIns ins = arm64_ir_bc_acq(lo, p);
+    BCOp op = bc_op(ins);
+    if (op >= BC__MAX ||
+        (bc_a(ins) == cell && (bcmode_a(op) == BCMdst || op == BC_CNEW)))
+      return 0;
+  }
+  /* recff_tostring returns its string input unchanged. The adjacent CSET
+  ** stores that result, and the unique terminal CGET/RET1 reads the same cell. */
+  return source_stores == 1u && argref < T->nins &&
+         T->ir[argref].o == IR_SLOAD && T->ir[argref].t.irt == (IRT_STR|IRT_GUARD);
+}
+
+static int arm64_scalar_tostring_identity_ir(const jit_State *J,
+						 const GCtrace *T, IRRef fnref)
+{
+  const GCproto *pt;
+  BCIns call = 0;
+  MSize callpos = 0, pos, callcount = 0, source_calls = 0, fnslot = 0, argslt = 0;
+  IRRef callfn = 0, argref = 0;
+  SnapNo s;
+  if (!J || !T || !T->snap || !T->snapmap || !T->nsnap || !T->nsnapmap ||
+      !J->pt ||
+      fnref < REF_FIRST || fnref >= T->nins) goto fail;
+  pt = J->pt;
+  if (!checkptrGC(obj2gco((GCproto *)pt)) ||
+      pt->gct != (uint32_t)~LJ_TPROTO || !pt->sizebc) goto fail;
+  for (pos = 0; pos < pt->sizebc; pos++) {
+    BCIns ins = arm64_ir_bc_acq((uintptr_t)proto_bc(pt), pos);
+    BCOp op = bc_op(ins);
+    if (op == BC_CALL || op == BC_CALLM || op == BC_CALLMT || op == BC_CALLT) {
+      source_calls++;
+      if (op != BC_CALL || bc_b(ins) != 2u || bc_c(ins) != 2u) goto fail;
+      call = ins; callpos = pos; callcount++;
+    }
+  }
+  if (callcount != 1u || source_calls != 1u ||
+      (MSize)bc_a(call)+2u+2u*LJ_FR2 >= pt->framesize+1u+LJ_FR2)
+    goto fail;
+  fnslot = (MSize)bc_a(call)+1u+LJ_FR2;
+  argslt = (MSize)bc_a(call)+2u+2u*LJ_FR2;
+  for (s = 0; s < T->nsnap; s++) {
+    const SnapShot *snap = &T->snap[s];
+    MSize next = s+1u < T->nsnap ? T->snap[s+1u].mapofs : T->nsnapmap;
+    MSize i, nfn = 0, nargs = 0;
+    uint64_t footer;
+    uintptr_t lo = (uintptr_t)(const void *)proto_bc(pt);
+    uintptr_t hi;
+    if (snap->mapofs > T->nsnapmap || next > T->nsnapmap ||
+        next < snap->mapofs || snap->nent > next-snap->mapofs ||
+        next-snap->mapofs-snap->nent < 1u+LJ_FR2 ||
+        pt->sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns)) goto fail;
+    memcpy(&footer, &T->snapmap[snap->mapofs+snap->nent], sizeof(footer));
+    hi = lo+(uintptr_t)pt->sizebc*sizeof(BCIns);
+    if ((uintptr_t)(footer >> 8) < lo ||
+        (uintptr_t)(footer >> 8) >= hi ||
+        ((uintptr_t)(footer >> 8)-lo) % sizeof(BCIns) != 0 ||
+        (uintptr_t)(footer >> 8) != lo+(uintptr_t)callpos*sizeof(BCIns))
+      continue;
+    if (callfn) goto fail;
+    for (i = 0; i < snap->nent; i++) {
+      SnapEntry e = T->snapmap[snap->mapofs+i];
+      if ((e & 0x00ff0000u) != 0) continue;
+      if (snap_slot(e) == fnslot) { callfn = snap_ref(e); nfn++; }
+      if (snap_slot(e) == argslt) { argref = snap_ref(e); nargs++; }
+    }
+    if (nfn != 1u || nargs != 1u) goto fail;
+  }
+  if (!callfn || callfn != fnref || !argref || argref >= T->nins ||
+      T->ir[argref].o != IR_SLOAD ||
+      T->ir[argref].t.irt != (IRT_STR|IRT_GUARD) ||
+      T->ir[argref].op2 != IRSLOAD_TYPECHECK) {
+    goto fail;
+  }
+  return arm64_scalar_tostring_cell_result_ir(J, T, call, callpos, argref);
+fail:
+#if defined(LJ_TRACE_TEST_HELPERS)
+  (void)callcount;
+#endif
+  return 0;
 }
 
 /* Fixed numeric libm helpers. These do not allocate Lua objects, enter
@@ -16866,6 +17004,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
     case IR_NE:
       if (type == IRT_FUNC && ir->o == IR_EQ && flags == IRT_GUARD) {
         GCobj *o;
+        uint32_t ffid;
         /* Lua leaves additionally need the exact caller snapshot below. */
         if (ir->op1 < REF_FIRST ||
             !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_FUNC) ||
@@ -16874,8 +17013,14 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
           goto bad_operand;
         o = ir_kgc_acq(&T->ir[ir->op2]);
         if (o == NULL || !checkptrGC(o) ||
-            o->gch.gct != (uint32_t)~LJ_TFUNC ||
-            (!arm64_scalar_builtin_ffid(lj_func_ffid_acq(gco2func(o))) &&
+            o->gch.gct != (uint32_t)~LJ_TFUNC)
+          goto bad_operand;
+        ffid = lj_func_ffid_acq(gco2func(o));
+        if ((ffid == FF_tostring &&
+             !arm64_scalar_tostring_identity_ir(J, T, ir->op1)) ||
+            (ffid == FF_string_byte &&
+             arm64_scalar_tostring_identity_ir(J, T, ir->op1)) ||
+            (!arm64_scalar_builtin_ffid(ffid) &&
              (side || (rootop != BC_FORL && rootop != BC_ITERL && rootop != BC_FUNCF) ||
               !lj_trace_arm64_lua_leaf(gco2func(o)))))
           goto bad_operand;
@@ -22560,6 +22705,131 @@ static int arm64_lua_leaf_postra_locations(const LJArm64PostRAView *v,
   return 1;
 }
 
+/* Independent allocator-view counterpart to the semantic source proof above. */
+static int arm64_scalar_tostring_cell_result_postra(
+    const LJArm64PostRAView *v, BCIns call, MSize callpos, IRRef argref)
+{
+  const GCproto *pt = v->proto;
+  const SnapShot *terminal;
+  MSize ofs, nent, footerpos, cell, p;
+  uint64_t footer;
+  uintptr_t lo, pcaddr, hi;
+  BCIns get, set;
+  unsigned source_stores = 0;
+  if (!pt || !v->nsnap || callpos+1u >= pt->sizebc) return 0;
+  terminal = &v->snap[v->nsnap-1u];
+  ofs = snap_mapofs_acq(terminal); nent = snap_nent_acq(terminal);
+  if (ofs > v->nsnapmap || nent > v->nsnapmap-ofs ||
+      v->nsnapmap-ofs-nent < 1u+LJ_FR2) return 0;
+  memcpy(&footer, &v->snapmap[ofs+nent], sizeof(footer));
+  pcaddr = (uintptr_t)(footer >> 8);
+  lo = (uintptr_t)(const void *)v->proto_bc;
+  if (pt->sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns)) return 0;
+  hi = lo+(uintptr_t)pt->sizebc*sizeof(BCIns);
+  if (pcaddr < lo || pcaddr >= hi || ((pcaddr-lo)%sizeof(BCIns)) != 0)
+    return 0;
+  footerpos = (MSize)((pcaddr-lo)/sizeof(BCIns));
+  get = arm64_ir_bc_acq(lo, footerpos);
+  if (bc_op(get) != BC_CGET || footerpos+2u != pt->sizebc ||
+      bc_op(arm64_ir_bc_acq(lo, footerpos+1u)) != BC_RET1 ||
+      bc_d(arm64_ir_bc_acq(lo, footerpos+1u)) != 2u ||
+      bc_a(arm64_ir_bc_acq(lo, footerpos+1u)) != bc_a(get))
+    return 0;
+  cell = bc_d(get);
+  if (cell >= pt->framesize) return 0;
+  set = arm64_ir_bc_acq(lo, callpos+1u);
+  if (bc_op(set) != BC_CSET || bc_a(set) != cell ||
+      bc_c(set) != bc_a(call)) return 0;
+  for (p = 0; p < pt->sizebc; p++) {
+    BCIns ins = arm64_ir_bc_acq(lo, p);
+    if (bc_op(ins) == BC_CSET && bc_a(ins) == cell) {
+      source_stores++;
+      if (p != callpos+1u) return 0;
+    }
+  }
+  for (p = callpos+2u; p < footerpos; p++) {
+    BCIns ins = arm64_ir_bc_acq(lo, p);
+    BCOp op = bc_op(ins);
+    if (op >= BC__MAX ||
+        (bc_a(ins) == cell && (bcmode_a(op) == BCMdst || op == BC_CNEW)))
+      return 0;
+  }
+  {
+    IRIns arg = ir_load_acq(&v->ir[argref]);
+    return source_stores == 1u && arg.o == IR_SLOAD &&
+           arg.t.irt == (IRT_STR|IRT_GUARD) &&
+           arg.op2 == IRSLOAD_TYPECHECK;
+  }
+}
+
+static int arm64_scalar_tostring_identity_postra(const LJArm64PostRAView *v,
+						 IRRef fnref)
+{
+  const GCproto *pt;
+  BCIns call = 0;
+  MSize callpos = 0, pos, callcount = 0, source_calls = 0, fnslot, argslt;
+  IRRef callfn = 0, argref = 0;
+  SnapNo s;
+  if (!v || !v->proto || !v->proto_bc || !v->snap || !v->snapmap ||
+      !v->nsnap || !v->nsnapmap || !v->ir ||
+      fnref < REF_FIRST || fnref >= v->nins ||
+      !checkptrGC(obj2gco(v->proto)) ||
+      v->proto->gct != (uint32_t)~LJ_TPROTO ||
+      proto_bc(v->proto) != v->proto_bc ||
+      v->proto_sizebc != v->proto->sizebc || !v->proto_sizebc)
+    return 0;
+  pt = v->proto;
+  for (pos = 0; pos < v->proto_sizebc; pos++) {
+    BCIns ins = arm64_ir_bc_acq((uintptr_t)v->proto_bc, pos);
+    BCOp op = bc_op(ins);
+    if (op == BC_CALL || op == BC_CALLM || op == BC_CALLMT || op == BC_CALLT) {
+      source_calls++;
+      if (op != BC_CALL || bc_b(ins) != 2u || bc_c(ins) != 2u) return 0;
+      call = ins; callpos = pos; callcount++;
+    }
+  }
+  if (callcount != 1u || source_calls != 1u ||
+      (MSize)bc_a(call)+2u+2u*LJ_FR2 >= pt->framesize+1u+LJ_FR2)
+    return 0;
+  fnslot = (MSize)bc_a(call)+1u+LJ_FR2;
+  argslt = (MSize)bc_a(call)+2u+2u*LJ_FR2;
+  for (s = 0; s < v->nsnap; s++) {
+    const SnapShot *snap = &v->snap[s];
+    MSize next = s+1u < v->nsnap ? snap_mapofs_acq(&v->snap[s+1u]) :
+								v->nsnapmap;
+    MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap);
+    MSize i, nfn = 0, nargs = 0;
+    uint64_t footer;
+    uintptr_t lo = (uintptr_t)(const void *)v->proto_bc;
+    uintptr_t hi;
+    if (ofs > v->nsnapmap || next > v->nsnapmap || next < ofs ||
+        nent > next-ofs || next-ofs-nent < 1u+LJ_FR2 ||
+        pt->sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns)) return 0;
+    memcpy(&footer, &v->snapmap[ofs+nent], sizeof(footer));
+    hi = lo+(uintptr_t)pt->sizebc*sizeof(BCIns);
+    if ((uintptr_t)(footer >> 8) < lo ||
+        (uintptr_t)(footer >> 8) >= hi ||
+        ((uintptr_t)(footer >> 8)-lo) % sizeof(BCIns) != 0 ||
+        (uintptr_t)(footer >> 8) != lo+(uintptr_t)callpos*sizeof(BCIns))
+      continue;
+    if (callfn) return 0;
+    for (i = 0; i < nent; i++) {
+      SnapEntry e = snapentry_acq(&v->snapmap[ofs+i]);
+      if ((e & 0x00ff0000u) != 0) continue;
+      if (snap_slot(e) == fnslot) { callfn = snap_ref(e); nfn++; }
+      if (snap_slot(e) == argslt) { argref = snap_ref(e); nargs++; }
+    }
+    if (nfn != 1u || nargs != 1u) return 0;
+  }
+  if (!callfn || callfn != fnref || !argref || argref >= v->nins) return 0;
+  {
+    IRIns arg = ir_load_acq(&v->ir[argref]);
+    if (arg.o != IR_SLOAD || arg.t.irt != (IRT_STR|IRT_GUARD) ||
+	arg.op2 != IRSLOAD_TYPECHECK) return 0;
+  }
+  return arm64_scalar_tostring_cell_result_postra(v, call, callpos, argref);
+}
+
 static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
                                          BCOp rootop,
                                          const LJArm64SideIRView *side,
@@ -22995,6 +23265,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       if (type == IRT_FUNC && p.o == IR_EQ && flags == IRT_GUARD) {
         IRIns k;
         GCobj *fn;
+        uint32_t ffid;
         /* Recheck function provenance independently after allocation. */
         if (p.op1 < REF_FIRST ||
             !arm64_scalar_postra_ref(v, p.op1, ref, IRT_FUNC) ||
@@ -23005,8 +23276,14 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
         if (k.o != IR_KGC) return 0;
         fn = ir_kgc_load_acq(&v->ir[p.op2]);
         if (fn == NULL || !checkptrGC(fn) ||
-            la_load8_acq(&fn->gch.gct) != (uint32_t)~LJ_TFUNC ||
-            (!arm64_scalar_builtin_ffid(lj_func_ffid_acq(gco2func(fn))) &&
+            la_load8_acq(&fn->gch.gct) != (uint32_t)~LJ_TFUNC)
+          return 0;
+        ffid = lj_func_ffid_acq(gco2func(fn));
+        if ((ffid == FF_tostring &&
+             !arm64_scalar_tostring_identity_postra(v, p.op1)) ||
+            (ffid == FF_string_byte &&
+             arm64_scalar_tostring_identity_postra(v, p.op1)) ||
+            (!arm64_scalar_builtin_ffid(ffid) &&
             (side || (rootop != BC_FORL && rootop != BC_ITERL && rootop != BC_FUNCF) ||
               !lj_trace_arm64_lua_leaf(gco2func(fn)))))
           return 0;
