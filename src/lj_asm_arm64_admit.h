@@ -11557,9 +11557,10 @@ static int arm64_string_byte_negative_range_ir(const GCtrace *T,
     return 0;
   if (T->ir[offset].o == IR_ADD && T->ir[offset].t.irt == IRT_INT &&
       T->ir[offset].op1 >= REF_FIRST && T->ir[offset].op1 < offset &&
-      arm64_ir_kint_value(T, T->ir[offset].op2, &displacement) &&
-      displacement >= 0)
+      arm64_ir_kint_value(T, T->ir[offset].op2, &displacement)) {
+    if (displacement < 0) return 0;
     base = T->ir[offset].op1;
+  }
   if (base < REF_FIRST || base >= strref || T->ir[base].o != IR_ADD ||
       T->ir[base].t.irt != IRT_INT) return 0;
   {
@@ -11627,7 +11628,8 @@ static int arm64_string_byte_negative_range_ir(const GCtrace *T,
           guard.op1 == base && arm64_ir_kint_value(T, guard.op2, &zero) &&
           zero == 0) nonnegative_base = ref;
       if (guard.o == IR_SUBOV && guard.t.irt == (IRT_INT|IRT_GUARD) &&
-          guard.op1 == endref && guard.op2 == base) difference = ref;
+          endref < ref && guard.op1 == endref && guard.op2 == base)
+        difference = ref;
     }
     if (!nonnegative_base || !difference ||
         negative_first >= base || negative_last >= inner ||
@@ -18425,22 +18427,33 @@ static int arm64_string_byte_negative_range_postra(
     return 0;
   owner = (GCtrace *)v->owner;
   if (trace_startptgco_acq(owner) != proto_obj) return 0;
-  if (v->ir[offset].o == IR_ADD && v->ir[offset].t.irt == IRT_INT &&
-      v->ir[offset].op1 >= REF_FIRST && v->ir[offset].op1 < offset &&
-      arm64_scalar_postra_kint(v, v->ir[offset].op2, &displacement) &&
-      displacement >= 0)
-    base = v->ir[offset].op1;
-  if (base < REF_FIRST || base >= strref || v->ir[base].o != IR_ADD ||
-      v->ir[base].t.irt != IRT_INT) return 0;
+  {
+    IRIns ptr = ir_load_acq(&v->ir[offset]);
+    if (ptr.o == IR_ADD && ptr.t.irt == IRT_INT &&
+        ptr.op1 >= REF_FIRST && ptr.op1 < offset &&
+        arm64_scalar_postra_kint(v, ptr.op2, &displacement)) {
+      if (displacement < 0) return 0;
+      base = ptr.op1;
+    }
+  }
+  if (base < REF_FIRST || base >= strref) return 0;
+  {
+    IRIns norm = ir_load_acq(&v->ir[base]);
+    if (norm.o != IR_ADD || norm.t.irt != IRT_INT) return 0;
+  }
   {
     IRIns norm = ir_load_acq(&v->ir[base]);
     IRRef left = norm.op1, right = norm.op2;
-    int left_len = left >= REF_FIRST && left < base &&
-      v->ir[left].o == IR_FLOAD && v->ir[left].t.irt == IRT_INT &&
-      v->ir[left].op1 == str && v->ir[left].op2 == IRFL_STR_LEN;
-    int right_len = right >= REF_FIRST && right < base &&
-      v->ir[right].o == IR_FLOAD && v->ir[right].t.irt == IRT_INT &&
-      v->ir[right].op1 == str && v->ir[right].op2 == IRFL_STR_LEN;
+    IRIns leftins, rightins;
+    int left_len, right_len;
+    if (left < REF_FIRST || left >= base ||
+        right < REF_FIRST || right >= base) return 0;
+    leftins = ir_load_acq(&v->ir[left]);
+    rightins = ir_load_acq(&v->ir[right]);
+    left_len = leftins.o == IR_FLOAD && leftins.t.irt == IRT_INT &&
+      leftins.op1 == str && leftins.op2 == IRFL_STR_LEN;
+    right_len = rightins.o == IR_FLOAD && rightins.t.irt == IRT_INT &&
+      rightins.op1 == str && rightins.op2 == IRFL_STR_LEN;
     if (left_len == right_len) return 0;
     lenref = left_len ? left : right;
     first = left_len ? right : left;
@@ -18494,7 +18507,8 @@ static int arm64_string_byte_negative_range_postra(
           guard.op1 == base && arm64_scalar_postra_kint(v, guard.op2, &zero) &&
           zero == 0) nonnegative_base = ref;
       if (guard.o == IR_SUBOV && guard.t.irt == (IRT_INT|IRT_GUARD) &&
-          guard.op1 == endref && guard.op2 == base) difference = ref;
+          endref < ref && guard.op1 == endref && guard.op2 == base)
+        difference = ref;
     }
     if (!nonnegative_base || !difference ||
         negative_first >= base || negative_last >= inner ||

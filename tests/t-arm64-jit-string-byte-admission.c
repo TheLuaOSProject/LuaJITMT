@@ -465,7 +465,8 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
   unsigned i, phase, pointers=0, loads=0, snapshot_checks=0;
   IRRef r, loadref=0, lastptr=0, widthguard=0;
   IRRef first_negative=0, last_negative=0, base_nonnegative=0;
-  IRRef width_difference=0, range_first=0, range_last=0, negative_len=0;
+  IRRef width_difference=0, difference_guard=0;
+  IRRef range_first=0, range_last=0, negative_len=0;
   lua_Number actual=0, expected=0, weighted=0, recorded_first=first, recorded_end;
   int negative_range = mode >= 7u;
   assert(width>=2 && width<=16 && first>=1 && first<=2 && mode<=10);
@@ -651,13 +652,17 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
             if (f.ir[q].o==IR_LT && f.ir[q].t.irt==(IRT_INT|IRT_GUARD) &&
                 f.ir[q].op1==last && kint(f.ir,f.semantic.nk,f.ir[q].op2,&k) &&
                 k==0) last_negative=q;
-          for (q=base+1u;q<r;q++)
+          for (q=base+1u;q<r;q++) {
             if (f.ir[q].o==IR_GE && f.ir[q].t.irt==(IRT_INT|IRT_GUARD) &&
                 f.ir[q].op1==base && kint(f.ir,f.semantic.nk,f.ir[q].op2,&k) &&
                 k==0) base_nonnegative=q;
+            if (f.ir[q].o==IR_SUBOV && f.ir[q].t.irt==(IRT_INT|IRT_GUARD) &&
+                f.ir[q].op1==endref && f.ir[q].op2==base)
+              difference_guard=q;
+          }
           width_difference=f.ir[widthguard].op1;
           assert(first_negative && last_negative && base_nonnegative &&
-                 width_difference &&
+                 width_difference && difference_guard &&
                  lj_trace_test_arm64_string_byte_range_ir(&f.semantic,r,
                    f.ir[r].op1,at,range_first,0) &&
                  lj_trace_test_arm64_string_byte_range_postra(&f.view,r,
@@ -731,7 +736,8 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
   }
   if (negative_range) {
     assert(first_negative && last_negative && base_nonnegative &&
-           width_difference && range_first && range_last && negative_len);
+           width_difference && difference_guard && range_first && range_last &&
+           negative_len);
 #define REJECT_NEG_MULTI(change) do { \
     arm64_fixture_reset(&f); assert(semantic(&f) && allocated(&f)); \
     change; assert(!semantic(&f) && !allocated(&f)); \
@@ -742,6 +748,9 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
                      f.postra[last_negative].op1=range_first);
     REJECT_NEG_MULTI(f.ir[width_difference].op2=range_first;
                      f.postra[width_difference].op2=range_first);
+    assert(difference_guard+1u<f.semantic.nins);
+    REJECT_NEG_MULTI(f.ir[difference_guard].op1=difference_guard+1u;
+                     f.postra[difference_guard].op1=difference_guard+1u);
     REJECT_NEG_MULTI(f.ir[base_nonnegative].o=IR_GT;
                      f.postra[base_nonnegative].o=IR_GT);
     REJECT_NEG_MULTI(f.ir[negative_len].op1=range_first;
