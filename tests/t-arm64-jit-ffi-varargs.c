@@ -616,13 +616,30 @@ static void vararg_mutate(VarargMutation mutation, IRIns *ir,
     break;
   }
   case VA_MUT_SRET_WRONG_AGGREGATE_SOURCE: {
-    unsigned aggregate = target->hidden;
+    unsigned aggregate;
     unsigned tail = target->hidden + target->abi.nargs + 1u;
-    assert(target->hidden == 1u && target->abi.nargs >= 2u &&
-           target->values[aggregate] != target->values[tail]);
+    unsigned alternate;
+    assert(target->hidden == 1u && target->abi.nargs >= 2u);
+    for (aggregate = 0; aggregate < target->abi.nargs; aggregate++)
+      if (target->abi.arg[aggregate].kind ==
+          LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE)
+        break;
+    assert(aggregate < target->abi.nargs);
+    for (alternate = 0; alternate < target->abi.nargs; alternate++)
+      if (alternate != aggregate &&
+          target->abi.arg[alternate].kind == LJ_ARM64_ABI_KIND_INTEGER &&
+          target->abi.arg[alternate].size ==
+            target->abi.arg[aggregate].size &&
+          target->abi.arg[alternate].is_unsigned ==
+            target->abi.arg[aggregate].is_unsigned)
+        break;
+    aggregate += target->hidden;
+    if (alternate < target->abi.nargs) alternate += target->hidden;
+    else alternate = tail;
+    assert(target->values[aggregate] != target->values[alternate]);
     assert(node[aggregate] != 0 &&
            ir_load_acq(&ir[node[aggregate]]).o == IR_CARG);
-    ir[node[aggregate]].op2 = target->values[tail];
+    ir[node[aggregate]].op2 = target->values[alternate];
     break;
   }
   }
