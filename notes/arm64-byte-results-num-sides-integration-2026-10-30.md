@@ -190,3 +190,11 @@ and the allocated pass includes SNEW in live-across-call checks. No ordinary
 allocator, emitter or locking behavior changes. The combined source at
 `4b494fcc1` is frozen separately for the next complete gate; until that run
 passes the promoted complete checkpoint remains `8123b7a3d`.
+
+The first combined gate at `4b494fcc1` stopped at the synthetic malformed
+SNEW case in `t-arm64-jit-ir-admission.c`: it still rejected the instruction,
+but now reports an operand-proof failure rather than an unsupported opcode.
+The fixture expectation is updated to that reason, retaining the rejection.
+The failed full log and successful ordinary restoration remain in
+`/Users/frityet/Scratch/ljmt-mixed-byte-substring-complete-20261030/`.
+This failed attempt is not counted as a complete gate pass.
