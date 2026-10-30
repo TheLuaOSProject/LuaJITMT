@@ -173,3 +173,20 @@ log are `mixed-sign-multiple-integration-source.txt` and
 Ordinary assertion ARM64 restoration profile is
 `7902fce7b6f0088462b593c270b292d8b91cd3e2ea1b260cb329acf75e3e1217`.
 This later addition is not part of the completed `8123b7a3d` full gate.
+
+Positive literal substring allocation (`aca64562a`, ordinary evidence
+`c8dc88d3f`, fresh-publication coverage `c74c9ee21`) is integrated at
+`4b494fcc1`. Both header merges were clean. The component passes all four
+profiles, both ordinary 509-case stock corpora, 260 workload checks and
+sixteen substring rows per architecture. The test-only publication hook
+also positively witnesses newly interned strings from native while-loop
+code in every profile, with the new object's READY bit set. See
+[`arm64-jit-string-sub-constant-2026-10-30.md`](arm64-jit-string-sub-constant-2026-10-30.md).
+
+A separate read-only allocation review found no remaining blocker: the
+existing SNEW emitter prepares the snapshot before `lj_str_new`, the source
+formal remains rooted while the JIT/native thread's stack capacity is scanned,
+and the allocated pass includes SNEW in live-across-call checks. No ordinary
+allocator, emitter or locking behavior changes. The combined source at
+`4b494fcc1` is frozen separately for the next complete gate; until that run
+passes the promoted complete checkpoint remains `8123b7a3d`.
