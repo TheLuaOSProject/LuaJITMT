@@ -10430,7 +10430,8 @@ static int arm64_scalar_math_args_ir(const GCtrace *T, IRRef call)
 }
 
 /* A constant byte offset is safe only with an earlier guard that proves the
-** corresponding one-based position is within the same immutable GCstr. This
+** corresponding one-based position or a later position is within the same
+** immutable GCstr. This
 ** intentionally does not admit variable offsets or rely on the trailing NUL. */
 static int arm64_string_byte_bounds_ir(const GCtrace *T, IRRef strref,
                                        IRRef str, IRRef offset)
@@ -10455,7 +10456,7 @@ static int arm64_string_byte_bounds_ir(const GCtrace *T, IRRef strref,
     boundref = guard->o == IR_UGE ? guard->op2 : guard->op1;
     if (lenref < REF_FIRST || lenref >= ref ||
         !arm64_ir_kint_value(T, boundref, &guard_bound) ||
-        guard_bound != (int32_t)bound)
+        guard_bound < (int32_t)bound)
       continue;
     {
       const IRIns *len = &T->ir[lenref];
@@ -10653,7 +10654,7 @@ static int arm64_string_byte_dynamic_guard_ir(const GCtrace *T,
   return 0;
 }
 
-/* UGE/ULE are admitted only as the exact dominating range guard consumed by
+/* UGE/ULE are admitted only as a sufficient dominating range guard consumed by
 ** a later STRREF. This prevents unrelated unsigned comparisons from opening. */
 static int arm64_string_byte_guard_ir(const GCtrace *T, IRRef guardref)
 {
@@ -10682,7 +10683,7 @@ static int arm64_string_byte_guard_ir(const GCtrace *T, IRRef guardref)
       if (strref->o == IR_STRREF && strref->t.irt == IRT_PGC &&
           strref->op1 == len->op1 &&
           arm64_ir_kint_value(T, strref->op2, &offset) &&
-          offset == bound-1)
+          offset >= 0 && offset < bound)
         return 1;
     }
   }
@@ -16863,7 +16864,7 @@ static int arm64_string_byte_bounds_postra(const LJArm64PostRAView *v,
     boundref = guard.o == IR_UGE ? guard.op2 : guard.op1;
     if (lenref < REF_FIRST || lenref >= ref ||
         !arm64_scalar_postra_kint(v, boundref, &guard_bound) ||
-        guard_bound != (int32_t)bound)
+        guard_bound < (int32_t)bound)
       continue;
     {
       IRIns len = ir_load_acq(&v->ir[lenref]);
@@ -17083,7 +17084,7 @@ static int arm64_string_byte_guard_postra(const LJArm64PostRAView *v,
       if (strref.o == IR_STRREF && strref.t.irt == IRT_PGC &&
           strref.op1 == len.op1 &&
           arm64_scalar_postra_kint(v, strref.op2, &offset) &&
-          offset == bound-1)
+          offset >= 0 && offset < bound)
         return 1;
     }
   }
