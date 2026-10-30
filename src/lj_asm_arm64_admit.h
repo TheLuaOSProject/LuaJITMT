@@ -607,7 +607,10 @@ static int arm64_callxs_value_kind(const IRIns *ir, IRRef ref,
   case LJ_ARM64_ABI_KIND_INTEGER:
   case LJ_ARM64_ABI_KIND_ENUM:
 	if (size == 8)
-	  return type == (is_unsigned ? IRT_U64 : IRT_I64);
+	  /* The constant interner uses IRT_I64 for every KINT64 bit pattern.
+	  ** A fixed uint64_t consumes those same 64 bits without conversion. */
+	  return type == (is_unsigned ? IRT_U64 : IRT_I64) ||
+	    (is_unsigned && value.o == IR_KINT64 && value.t.irt == IRT_I64);
 	if (size == 4)
 	  /* Fixed uint32_t consumes the low word of a Lua INT. Enums retain
 	  ** their existing carrier boundary; KINT keeps its signed IR tag. */
@@ -2092,6 +2095,13 @@ static int arm64_callxs_source_value(const GCtrace *T, IRRef xsave,
   if (!tail && source == value) return 1;
   if (!tail && st == IRT_NUM &&
       arm64_callxs_numarg_source(T, value, 0) == source) return 1;
+  /* Folding preserves a Lua INT's signed conversion to the complete native
+  ** 64-bit bit pattern, including conversion to an unsigned fixed CType. */
+  if (!tail && src.o == IR_KINT && src.t.irt == IRT_INT &&
+      dst.o == IR_KINT64 && dst.t.irt == IRT_I64 && dst.op12 == 0 &&
+      value+1u < REF_TRUE &&
+      ir_load_acq(&T->ir[value+1u]).tv.u64 == (uint64_t)(int64_t)src.i)
+    return 1;
   if (!tail && st == IRT_CDATA && dst.o == IR_FLOAD &&
       dst.op1 == source && dst.op2 == IRFL_CDATA_INT64 &&
       (dst.t.irt == IRT_I64 || dst.t.irt == IRT_U64)) return 1;
@@ -6254,6 +6264,17 @@ static int arm64_postra_source_value_matches(const IRIns *ir, IRRef nk,
 	if (!arm64_callxs_ref_valid(ir, nk, nins, call, source) ||
 	    !arm64_callxs_ref_valid(ir, nk, nins, call, carrier)) return 0;
 	if (carrier == source) return 1;
+	/* Independently check the folded signed INT extension's full payload;
+	** KINT64's IRT_I64 tag also represents unsigned fixed argument bits. */
+	if (source_type == IRT_INT) {
+		IRIns original = ir_load_acq(&ir[source]);
+		IRIns constant = ir_load_acq(&ir[carrier]);
+		if (original.o == IR_KINT && original.t.irt == IRT_INT &&
+		    constant.o == IR_KINT64 && constant.t.irt == IRT_I64 &&
+		    constant.op12 == 0 && carrier+1u < REF_TRUE &&
+		    ir_load_acq(&ir[carrier+1u]).tv.u64 ==
+		      (uint64_t)(int64_t)original.i) return 1;
+	}
 	if (source_type == IRT_NUM &&
 	    arm64_postra_numarg_source(ir, nk, nins, carrier, 0) == source) return 1;
 	if (carrier == REF_TRUE || carrier == REF_FALSE || carrier == REF_NIL)
