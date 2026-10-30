@@ -58,3 +58,20 @@ high-byte, empty, numeric, boolean, table `__tostring`, replacement-function,
 and throwing `__tostring` inputs. A full GC preserved each selected trace and
 its machine-code bytes. The captured results are in each architecture's
 `probe.log`; binary hashes are in `runtime.sha256`.
+
+## Admission-proof hardening follow-up
+
+The semantic and post-RA proofs now bind the terminal snapshot's cell slot to
+the exact string argument reference saved by the matching `CALL` snapshot. The
+terminal snapshot is before `CGET`, so the cell slot is the value restored on
+exit; there is no pre-`CGET` return-register mapping to validate. The source
+walk also rejects `KNIL`/`VARG` writes to that cell and jumps or conditional
+skip edges into the protected call/store sequence. Footer reads are bounded,
+post-RA reads use acquire loads, and the footer's low frame byte must be zero.
+Only a string-input `tostring` identity shape may use the generic builtin guard;
+private-clone mutations substituting every other admitted builtin are rejected
+by both independent proofs.
+
+The final follow-up contract passed all four ARM64/arm64e assert/release
+profiles, including the new source and terminal-snapshot mutations. Log:
+`/Users/frityet/Scratch/ljmt-tostring-review-20261030/followup-final.log`.

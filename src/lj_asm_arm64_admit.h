@@ -10940,12 +10940,13 @@ static int arm64_scalar_tostring_cell_result_ir(const jit_State *J,
   unsigned source_stores = 0;
   unsigned cell_maps = 0;
   if (!pt || !T->nsnap || pt->sizebc == 0 || callpos+1u >= pt->sizebc ||
-      gcref(T->startpt) != obj2gco((GCproto *)pt)) return 0;
+      trace_startptgco_acq((GCtrace *)T) != obj2gco((GCproto *)pt)) return 0;
   terminal = &T->snap[T->nsnap-1u];
   ofs = terminal->mapofs; nent = terminal->nent;
   if (ofs > T->nsnapmap || nent > T->nsnapmap-ofs ||
       T->nsnapmap-ofs-nent < 1u+LJ_FR2) return 0;
   memcpy(&footer, &T->snapmap[ofs+nent], sizeof(footer));
+  if ((uint8_t)footer != 0) return 0;
   pcaddr = (uintptr_t)(footer >> 8);
   lo = (uintptr_t)(const void *)proto_bc(pt);
   if (pt->sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns)) return 0;
@@ -11057,6 +11058,7 @@ static int arm64_scalar_tostring_identity_ir(const jit_State *J,
         next-snap->mapofs-snap->nent < 1u+LJ_FR2 ||
         pt->sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns)) goto fail;
     memcpy(&footer, &T->snapmap[snap->mapofs+snap->nent], sizeof(footer));
+    if ((uint8_t)footer != 0) continue;
     hi = lo+(uintptr_t)pt->sizebc*sizeof(BCIns);
     if ((uintptr_t)(footer >> 8) < lo ||
         (uintptr_t)(footer >> 8) >= hi ||
@@ -22760,6 +22762,7 @@ static int arm64_scalar_tostring_cell_result_postra(
   for (i = 0; i < 1u+LJ_FR2; i++)
     footer_words[i] = snapentry_acq(&v->snapmap[ofs+nent+i]);
   memcpy(&footer, footer_words, sizeof(footer));
+  if ((uint8_t)footer != 0) return 0;
   pcaddr = (uintptr_t)(footer >> 8);
   lo = (uintptr_t)(const void *)v->proto_bc;
   if (pt->sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns)) return 0;
@@ -22871,12 +22874,16 @@ static int arm64_scalar_tostring_identity_postra(const LJArm64PostRAView *v,
     MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap);
     MSize i, nfn = 0, nargs = 0;
     uint64_t footer;
+    SnapEntry footer_words[1+LJ_FR2];
     uintptr_t lo = (uintptr_t)(const void *)v->proto_bc;
     uintptr_t hi;
     if (ofs > v->nsnapmap || next > v->nsnapmap || next < ofs ||
         nent > next-ofs || next-ofs-nent < 1u+LJ_FR2 ||
         pt->sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns)) return 0;
-    memcpy(&footer, &v->snapmap[ofs+nent], sizeof(footer));
+    for (i = 0; i < 1u+LJ_FR2; i++)
+      footer_words[i] = snapentry_acq(&v->snapmap[ofs+nent+i]);
+    memcpy(&footer, footer_words, sizeof(footer));
+    if ((uint8_t)footer != 0) continue;
     hi = lo+(uintptr_t)pt->sizebc*sizeof(BCIns);
     if ((uintptr_t)(footer >> 8) < lo ||
         (uintptr_t)(footer >> 8) >= hi ||

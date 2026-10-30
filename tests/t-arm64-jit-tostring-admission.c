@@ -148,12 +148,12 @@ static void test_wrong_builtin_constant(lua_State *L, const char *wrong_name,
 }
 
 static void test_wrong_cell_source(lua_State *L, const char *clone_name,
-                                  TraceNo no)
+                                  TraceNo no, unsigned mutation)
 {
   Arm64TraceFixture f;
   GCproto *pt;
-  MSize p, callpos = 0;
-  BCIns call = 0, set;
+  MSize p, callpos = 0, edgepos = 0, mutatepos = 0;
+  BCIns call = 0, set, saved;
   BCReg replacement;
   if (no == 1)
     arm64_fixture_init(&f, L, clone_name);
@@ -176,13 +176,125 @@ static void test_wrong_cell_source(lua_State *L, const char *clone_name,
   assert(call != 0 && callpos+1u < pt->sizebc);
   set = proto_bc(pt)[callpos+1u];
   assert(bc_op(set) == BC_CSET && bc_c(set) == bc_a(call));
-  replacement = (BCReg)(bc_c(set)+1u);
-  if (replacement >= pt->framesize) replacement = 0;
-  assert(replacement != bc_a(call));
-  proto_bc(pt)[callpos+1u] = BCINS_ABC(BC_CSET, bc_a(set), 0, replacement);
+  if (mutation == 0u) {
+    replacement = (BCReg)(bc_c(set)+1u);
+    if (replacement >= pt->framesize) replacement = 0;
+    assert(replacement != bc_a(call));
+    mutatepos = callpos+1u;
+    saved = proto_bc(pt)[mutatepos];
+    proto_bc(pt)[mutatepos] = BCINS_ABC(BC_CSET, bc_a(set), 0, replacement);
+  } else if (mutation == 1u || mutation == 2u) {
+    BCReg cell = bc_a(set);
+    MSize footerpos = pt->sizebc-2u;
+    assert(callpos+2u < footerpos);
+    mutatepos = callpos+2u;
+    saved = proto_bc(pt)[mutatepos];
+    if (mutation == 1u)
+      proto_bc(pt)[mutatepos] = BCINS_AD(BC_KNIL, cell, cell);
+    else
+      proto_bc(pt)[mutatepos] = BCINS_ABC(BC_VARG, cell, 0, 0);
+  } else if (mutation == 3u) {
+    for (p = 0; p < pt->sizebc; p++) {
+      if (p != callpos &&
+          bcmode_d(bc_op(proto_bc(pt)[p])) == BCMjump) {
+        edgepos = p;
+        break;
+      }
+    }
+    assert(edgepos != 0);
+    mutatepos = edgepos;
+    saved = proto_bc(pt)[mutatepos];
+    proto_bc(pt)[mutatepos] = BCINS_AJ(bc_op(saved), bc_a(saved),
+      (int32_t)(callpos+1u)-(int32_t)(edgepos+1u));
+  } else {
+    assert(callpos > 0u);
+    mutatepos = callpos-1u;
+    saved = proto_bc(pt)[mutatepos];
+    proto_bc(pt)[mutatepos] = BCINS_ABC(BC_ISLT, 0, 0, 0);
+  }
   arm64_fixture_reset(&f);
   assert(!semantic_fixture(&f));
   arm64_fixture_reset(&f);
+  assert(!postra_fixture(&f));
+  proto_bc(pt)[mutatepos] = saved;
+  arm64_fixture_free(&f);
+}
+
+static void test_wrong_terminal_cell_snapshot(lua_State *L,
+                                               const char *clone_name,
+                                               TraceNo no)
+{
+  Arm64TraceFixture f;
+  GCproto *pt;
+  GCtrace *T;
+  IRRef fnref = 0, argref = 0;
+  IRRef constant;
+  BCIns call = 0, get;
+  MSize callpos = 0, i, ofs, nent, cell, target_slot;
+  SnapNo s, terminal;
+  SnapEntry *semantic_entry = NULL, *postra_entry = NULL;
+  if (no == 1)
+    arm64_fixture_init(&f, L, clone_name);
+  else
+    arm64_fixture_init_trace(&f, L, clone_name, no);
+  memcpy(f.postmap, f.map, trace_nsnapmap_acq(f.owner) * sizeof(SnapEntry));
+  f.view.proto = f.J->pt;
+  f.view.proto_bc = proto_bc(f.J->pt);
+  f.view.startpc = f.J->startpc;
+  f.view.owner_private = 1;
+  T = f.owner;
+  pt = f.J->pt;
+  constant = tostring_guard_constant(T);
+  assert(constant != 0);
+  for (i = T->nk; i < T->nins; i++) {
+    IRIns guard = ir_load_acq(&T->ir[i]);
+    if (guard.o == IR_EQ && guard.t.irt == (IRT_FUNC|IRT_GUARD) &&
+        guard.op2 == constant) { fnref = guard.op1; break; }
+  }
+  assert(fnref != 0);
+  for (i = 0; i < pt->sizebc; i++) {
+    if (bc_op(proto_bc(pt)[i]) == BC_CALL) {
+      assert(call == 0);
+      call = proto_bc(pt)[i]; callpos = i;
+    }
+  }
+  assert(call != 0);
+  terminal = (SnapNo)(T->nsnap-1u);
+  get = proto_bc(pt)[pt->sizebc-2u];
+  assert(bc_op(get) == BC_CGET);
+  cell = bc_d(get);
+  target_slot = 1u+LJ_FR2+cell;
+  for (s = 0; s < T->nsnap; s++) {
+    SnapShot *snap = &f.snaps[s];
+    uint64_t footer;
+    MSize sofs = snap->mapofs, snent = snap->nent;
+    if (sofs > T->nsnapmap || snent > T->nsnapmap-sofs ||
+        T->nsnapmap-sofs-snent < 1u+LJ_FR2) abort();
+    memcpy(&footer, &f.map[sofs+snent], sizeof(footer));
+    if ((uintptr_t)(footer >> 8) !=
+        (uintptr_t)(const void *)(proto_bc(pt)+callpos)) continue;
+    for (i = 0; i < snent; i++) {
+      SnapEntry *entry = &f.map[sofs+i];
+      if (( *entry & 0x00ff0000u) != 0) continue;
+      if (snap_slot(*entry) == 1u+LJ_FR2+bc_a(call)+1u+LJ_FR2)
+        argref = snap_ref(*entry);
+    }
+  }
+  assert(argref != 0);
+  ofs = f.snaps[terminal].mapofs; nent = f.snaps[terminal].nent;
+  for (i = 0; i < nent; i++) {
+    SnapEntry *a = &f.map[ofs+i], *b = &f.postmap[ofs+i];
+    if (snap_slot(*a) == target_slot && (*a & 0x00ff0000u) == 0) {
+      assert(snap_ref(*a) == argref);
+      semantic_entry = a; postra_entry = b;
+    }
+  }
+  assert(semantic_entry && postra_entry && semantic_fixture(&f) &&
+         postra_fixture(&f));
+  *semantic_entry = snap_setref(*semantic_entry, fnref);
+  assert(!semantic_fixture(&f));
+  *semantic_entry = snap_setref(*semantic_entry, argref);
+  *postra_entry = snap_setref(*postra_entry, fnref);
   assert(!postra_fixture(&f));
   arm64_fixture_free(&f);
 }
@@ -247,8 +359,14 @@ static void positive_form(lua_State *L, const char *fnname, BCOp op)
     for (i = 0; i < sizeof(wrong_builtins)/sizeof(wrong_builtins[0]); i++)
       test_wrong_builtin_constant(L, wrong_builtins[i], clone, no);
   }
-  test_wrong_cell_source(L,
-      op == BC_LOOP ? "tostring_while_clone" : "tostring_for_clone", no);
+  {
+    unsigned mutation;
+    const char *clone = op == BC_LOOP ? "tostring_while_clone" :
+                                        "tostring_for_clone";
+    for (mutation = 0; mutation < 5u; mutation++)
+      test_wrong_cell_source(L, clone, no, mutation);
+    test_wrong_terminal_cell_snapshot(L, clone, no);
+  }
   T = traceref_safe(L2J(L), no);
   code = trace_mcode_acq(T);
   codesz = trace_szmcode_acq(T);
