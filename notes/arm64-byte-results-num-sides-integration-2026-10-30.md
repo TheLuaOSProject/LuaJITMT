@@ -33,8 +33,9 @@ See `complete-gate.log`, `gate-restoration.log`,
 `cdata-race-replay-*` files only contain attempts to invoke already-removed
 temporary executables and are not test runs.
 
-The main parity branch remains at its full-gate-tested `ff86407a1` production
-checkpoint. Later focused results are not a full x86_64 parity claim.
+The main parity branch has subsequently promoted the full-gate-tested
+`789c1e229` checkpoint described below. Later focused results are not a full
+x86_64 parity claim.
 
 ## Empty-arm integration and ordinary matrix
 
@@ -61,3 +62,85 @@ hashes are in
 `ordinary-matrix.sh` finished with `ordinary matrix passed at 8b3cf5a57`.
 The ordinary ARM64 restoration profile was
 `a2f8c31052621c9c536f3b876d51ebe50f0b86bbfffe423808583bc175083c15`.
+
+## Dynamic first/end integration
+
+The capture-fixture correction was integrated at `789c1e229`, the source for
+the new full gate in
+`/Users/frityet/Scratch/ljmt-byte-results-num-sides-complete-20261030/`.
+That gate passed with `gate exit=0; restore exit=0`. Its ordinary ARM64
+restoration profile is
+`b875c2070dd756928f88b4ac421837f3d7bc5a3d72f1cc2073abd750add5e27c`.
+Its source excludes the following later byte extension.
+
+Source `0f22ba712` merges `eec23e603`: fixed multiple byte results with dynamic
+positive first/end parameters and the exact stock adjacent-ADD/STRREF fusion
+proof. The integrated byte contract passed all four profiles, including cold
+NaN/infinity/extreme-bound cases and independent allocation mutations.
+Evidence is `dynamic-start-multiple-integration-source.txt` and
+`dynamic-start-multiple-integration-four-profiles.log` in the earlier
+wide-byte-FFI directory. It restored ordinary ARM64 assertions, profile
+`af78e57c5048f444e8e1a7d9c6ce09eab3cad42e37d6e6097bc95e2c8f69bf1a`.
+The component note records its ordinary forty-row matched ARM64/x86_64 probe
+and both 509-case stock corpora on each architecture.
+
+## Nonnegative FORL index arguments
+
+Integrated source `140d1f21d` adds the source-proven FORL index widening from
+`069c49fdd`. It admits the optimizer's non-sign-extending I64/U64 conversion
+only for independently proven nonnegative induction values, including source
+control-flow, initialization, hidden-slot writes and exact argument uses.
+Explicit CSET writes and invalid source opcodes are rejected. The native
+fixture checks the actual C argument bits, including the ninth stack argument.
+
+All 27 combined FFI fixtures pass on ARM64 and ARM64e assertion and release
+profiles. Evidence is `forl-index-integration-source.txt` and
+`forl-index-integration-four-profiles.log` in the wide-byte-FFI directory.
+The ordinary ARM64 restoration profile is
+`7c71a4675a94dfc2063e8668a5f12de5829b54fbb705927f5dc8802d7c6d3017`.
+
+The same source passed the ordinary ARM64 assertion and strict bare-`-Werror`
+x86_64 assertion matrix in
+`/Users/frityet/Scratch/ljmt-forl-index-byte-ordinary-20261030/`.
+Each architecture passed 509 source and 509 original v2-bytecode cases,
+260 workload semantic checks, topology probes, ten fixed, forty dynamic-end
+and forty dynamic-first/end multiple-byte rows. Eighteen of the twenty
+workload rows have native root-exit witnesses. All twelve FFI index rows
+match their result and call-count oracles; the direct I64/U64 loop rows
+require a selected native root and eight observed exits both before and
+after GC. Frozen executables, matching JIT modules, archives and hashes are
+retained alongside the logs and `ordinary-matrix.sh`.
+The matrix completed successfully and restored ordinary ARM64 assertions,
+profile `989b7fa27cbc79d1a765557428f7d18de999824a73e91ce86760e4b0146fcc0b`.
+This combined source is newer than the full-gate checkpoint `789c1e229`.
+
+## Negative bounds and raw byte snapshots
+
+Source `4f08d4b13` integrates the reviewed negative-dynamic-first/end multiple
+byte proof from `e43f3b1f0`. Each normalized bound is tied to its exact source
+parameter and string length; the sign, base, checked width and per-byte
+displacement guards are replayed independently. Review added acquire reads
+in the allocated pass and explicit rejection of forward width references and
+negative displacements. The integrated byte contract passed all four profiles,
+restoring ordinary ARM64 with profile
+`19b8b38bb9d8bddee08c0b7f23677b6e6c97aa1174e562984554a8092ee8da62`.
+Evidence is `negative-start-multiple-integration-source.txt` and
+`negative-start-multiple-integration-four-profiles.log` in the wide-byte-FFI
+directory above.
+
+Source `0a2ad9886` additionally integrates raw U8 snapshot restoration from
+`240e0668c`. A snapshot may restore a byte only into the exact one-result
+dynamic-positive-index CALL output slot or its immediate copy. Both validators
+reject source writes that clobber it, range writes, jumps bypassing its
+definition, unrelated slots and invalid allocated locations. Existing integer
+snapshot restoration handles the zero-extended byte; no emitter or restoration
+change was needed. The merge preserves both complete new proof pairs exactly.
+
+The combined byte contract passed all four profiles, including native
+execution, peer activity, GC, boundary exits and independent source/map/layout
+mutations. Evidence is `u8-snapshot-integration-source.txt` and
+`u8-snapshot-integration-four-profiles.log`; ordinary ARM64 restoration profile
+is `cf33d7e6c672ab0d111d8413b05f30264c2b0307430c9aabcace424da4d64b47`.
+The component's final ordinary live-peer probes witness both architectures'
+selected XLOAD loop, 84 exact-root exits and unchanged code identity after GC.
+This snapshot proof does not yet cover raw bytes from multiple-result CALLs.

@@ -95,8 +95,9 @@ static GCtrace *find_loop_trace(jit_State *J, GCproto *pt)
     if (T && trace_runnable_acq(T, no) && trace_root_acq(T) == 0 &&
         trace_startpt_acq(T) == pt && bc_op(trace_startins_acq(T)) == BC_FORL &&
         op_count(T, IR_CALLXS) > 0 &&
-        op_count(T, IR_CALLXS) == op_count(T, IR_XSAVE))
+        op_count(T, IR_CALLXS) == op_count(T, IR_XSAVE)) {
       return T;
+    }
   }
   return NULL;
 }
@@ -460,7 +461,9 @@ int main(void)
       L,
       "local ffi=require('ffi')\n"
       "ffi.cdef[[void lj_ffi_int_configure(int32_t,int32_t); void "
-      "lj_ffi_int_expect_enable(int32_t); void lj_ffi_int_save_expected(void); "
+      "lj_ffi_int_expect_enable(int32_t); void "
+      "lj_ffi_int_expect_sequence(int32_t); "
+      "void lj_ffi_int_save_expected(void); "
       "int32_t lj_ffi_int_mismatch_count(void); int32_t "
       "lj_ffi_int_count(int32_t); int32_t lj_ffi_int_producer_count(void); "
       "int32_t lj_ffi_int_first_errno(int32_t); int32_t "
@@ -498,6 +501,8 @@ int main(void)
       "0) end\n"
       "function __int_arg_expect_enable(v) lib.lj_ffi_int_expect_enable(v and "
       "1 or 0) end\n"
+      "function __int_arg_expect_sequence(v) "
+      "lib.lj_ffi_int_expect_sequence(v and 1 or 0) end\n"
       "function __int_arg_save_expected() lib.lj_ffi_int_save_expected() end\n"
       "function __int_arg_mismatch_count() return "
       "lib.lj_ffi_int_mismatch_count() end\n"
@@ -517,6 +522,7 @@ int main(void)
       "function __int_arg_install(id,form,stack,literal)\n"
       " local v=(form==0 and 't.value' or 'v'); if form==2 then v='p('..v..')' "
       "end\n"
+      " if form==3 then v='i' end\n"
       " if literal~=nil then v=tostring(literal) end\n"
       " local arg=stack and "
       "('101,102,103,104,105,106,107,108,31,-505,1985229328,'..v) or v\n"
@@ -587,6 +593,47 @@ int main(void)
           invoke_case(L, J, tg, k, (int)f, (int)s, id, -1, 2);
       }
   assert(nseen == KINDS * FORMS * 2 && noracle == KINDS * FORMS * 2);
+  /* A FORL body may pass its current INT index to a fixed 64-bit CALLXS
+  ** argument. Exercise signed and unsigned positions, then reuse after GC. */
+  for (k = 6; k < KINDS; k++)
+    for (s = 0; s < 2; s++) {
+      snprintf(id, sizeof(id), "forl_k%u_s%u", k, s);
+      lua_getglobal(L, "__int_arg_install");
+      lua_pushstring(L, id);
+      lua_pushinteger(L, 3);
+      lua_pushboolean(L, s);
+      assert(lua_pcall(L, 3, 0, 0) == LUA_OK);
+      lua_getglobal(L, "__int_arg_expect_sequence");
+      lua_pushboolean(L, 1);
+      assert(lua_pcall(L, 1, 0, 0) == LUA_OK);
+      invoke_case(L, J, tg, k, 3, (int)s, id, 1, 1);
+      lua_gc(L, LUA_GCCOLLECT, 0);
+      invoke_case(L, J, tg, k, 3, (int)s, id, 1, 0);
+      lua_getglobal(L, "__int_arg_expect_sequence");
+      lua_pushboolean(L, 0);
+      assert(lua_pcall(L, 1, 0, 0) == LUA_OK);
+      /* FORI must skip the root entirely when the live limit is below the
+      ** positive initializer; no unsigned conversion or C call may occur. */
+      call_configure(L, k, (int)s);
+      lua_getglobal(L, "__int_arg_expect_enable");
+      lua_pushboolean(L, 0);
+      assert(lua_pcall(L, 1, 0, 0) == LUA_OK);
+      lua_getglobal(L, "__int_arg_driver");
+      {
+        char runner[96];
+        snprintf(runner, sizeof(runner), "__int_arg_run_%s", id);
+        lua_getglobal(L, runner);
+      }
+      lua_getglobal(L, "__int_arg_table");
+      lua_pushinteger(L, 1);
+      lua_getglobal(L, s ? "__int_arg_stack_u64" : "__int_arg_i64");
+      lua_getglobal(L, "__int_arg_producer");
+      lua_pushinteger(L, -1);
+      assert(lua_pcall(L, 6, 1, 0) == LUA_OK);
+      assert(lua_isnumber(L, -1) && lua_tonumber(L, -1) == 0.0);
+      lua_pop(L, 1);
+      assert(get_int(L, "__int_arg_count", (int)k) == 0);
+    }
   /* KINT64 constants retain the interner's signed IR tag for both C types.
   ** Compare their exact captured bits with the interpreted conversion in
   ** register and compact-stack positions, including POSTCALL no-replay. */
@@ -610,8 +657,8 @@ int main(void)
              "ok,v=__int_arg_peer:join(5); assert(ok and v)");
   assert(mt_active_acq(g) != 0);
   lua_close(L);
-  assert(required_runs == 528 && forced_runs == 88);
-  printf("t-arm64-jit-ffi-int-args OK: 72 native shapes, %u runs, "
+  assert(required_runs == 544 && forced_runs == 92);
+  printf("t-arm64-jit-ffi-int-args OK: 76 native shapes, %u runs, "
          "%u forced exits, %u cold retries\n",
          required_runs, forced_runs, cold_retries);
   return 0;

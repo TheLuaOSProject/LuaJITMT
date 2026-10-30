@@ -52,6 +52,11 @@ static int allocated(Arm64TraceFixture *f)
   return lj_asm_arm64_postra_admit(&f->view, &end);
 }
 
+static SnapEntry snap_with_slot(SnapEntry entry, MSize slot)
+{
+  return (entry & 0x00ffffffu) | ((SnapEntry)slot << 24);
+}
+
 static void run_chunk(lua_State *L, const char *src)
 {
   if (luaL_dostring(L, src) != LUA_OK) {
@@ -98,6 +103,27 @@ static int call_dynamic_loop_value(lua_State *L, const char *function_global,
   lua_pushinteger(L, 80);
   lua_pushnumber(L, index);
   status = lua_pcall(L, 3, 1, 0);
+  if (status == LUA_OK) {
+    assert(lua_isnumber(L, -1));
+    *out = lua_tonumber(L, -1);
+  } else {
+    assert(lua_isstring(L, -1));
+  }
+  lua_pop(L, 1);
+  return status;
+}
+
+static int call_u8_snapshot_loop(lua_State *L, const char *function_global,
+                                 const char *value_global, lua_Number index,
+                                 lua_Integer key, lua_Number *out)
+{
+  int status;
+  lua_getglobal(L, function_global);
+  lua_getglobal(L, value_global);
+  lua_pushinteger(L, 80);
+  lua_pushnumber(L, index);
+  lua_pushinteger(L, key);
+  status = lua_pcall(L, 4, 1, 0);
   if (status == LUA_OK) {
     assert(lua_isnumber(L, -1));
     *out = lua_tonumber(L, -1);
@@ -425,19 +451,27 @@ static void test_fixed_byte_call(lua_State *L, const char *arguments,
 
 /* Fixed multiple returns still use one independent bounds proof per byte.
 ** Distinct weighted values expose dropped, duplicated or permuted results. */
-static int call_multiple_loop(lua_State *L, unsigned mode, lua_Number last,
+static int call_multiple_loop(lua_State *L, unsigned mode, lua_Number first,
+                               lua_Number last,
                                const char *fn, const char *string,
                                lua_Number *out)
 {
   int status;
+  int first_numeric = mode == 6u || mode == 8u || mode == 10u;
+  int last_numeric = mode == 2u || mode == 4u || mode == 6u ||
+                     mode == 9u || mode == 10u;
   if (!mode) return call_loop(L,fn,string,out);
   lua_getglobal(L,fn);
   if (string) lua_getglobal(L,string);
   else lua_newtable(L);
   lua_pushinteger(L,80);
-  if (mode==2 || mode==4) lua_pushnumber(L,last);
+  if (mode>=5) {
+    if (first_numeric) lua_pushnumber(L,first);
+    else lua_pushinteger(L,(lua_Integer)first);
+  }
+  if (last_numeric) lua_pushnumber(L,last);
   else lua_pushinteger(L,(lua_Integer)last);
-  status=lua_pcall(L,3,1,0);
+  status=lua_pcall(L,mode>=5 ? 4 : 3,1,0);
   if (status==LUA_OK) { assert(lua_isnumber(L,-1)); *out=lua_tonumber(L,-1); }
   lua_pop(L,1);
   return status;
@@ -447,7 +481,7 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
                                       unsigned first, unsigned mode)
 {
   Arm64TraceFixture f;
-  char body[4096], source[14000], bytes[40], endarg[20];
+  char body[4096], source[14000], bytes[40], firstarg[20], endarg[20];
   size_t used;
   GCtrace *owner;
   TraceNo no;
@@ -456,14 +490,25 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
   unsigned char *saved;
   unsigned i, phase, pointers=0, loads=0, snapshot_checks=0;
   IRRef r, loadref=0, lastptr=0, widthguard=0;
-  lua_Number actual=0, expected=0, weighted=0, recorded_end;
-  assert(width>=2 && width<=16 && first>=1 && first<=2 && mode<=4);
+  IRRef first_negative=0, last_negative=0, base_nonnegative=0;
+  IRRef width_difference=0, difference_guard=0;
+  IRRef range_first=0, range_last=0, negative_len=0;
+  lua_Number actual=0, expected=0, weighted=0, recorded_first=first, recorded_end;
+  int negative_range = mode >= 7u;
+  assert(width>=2 && width<=16 && first>=1 && first<=2 && mode<=10);
   recorded_end=first+width-1u;
-  if (mode>=3) recorded_end-=(lua_Number)sizeof(bytes)+1;
-  if (mode==2) recorded_end+=.9;
+  if (mode==3 || mode==4) recorded_end-=(lua_Number)sizeof(bytes)+1;
+  if (mode==6) recorded_first+=.9;
+  if (mode==2 || mode==6) recorded_end+=.9;
   if (mode==4) recorded_end-=.9;
+  if (negative_range) {
+    recorded_first -= (lua_Number)sizeof(bytes)+1;
+    recorded_end -= (lua_Number)sizeof(bytes)+1;
+  }
   if (mode) strcpy(endarg,"last");
   else snprintf(endarg,sizeof(endarg),"%u",first+width-1u);
+  if (mode>=5) strcpy(firstarg,"first");
+  else snprintf(firstarg,sizeof(firstarg),"%u",first);
   for (i=0;i<sizeof(bytes);i++) bytes[i]=(char)((i*37u+128u)&255u);
   bytes[first-1u]=0;
   for (i=0;i<width;i++)
@@ -476,11 +521,11 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
   lua_setglobal(L,"string_byte_multi_short");
   used=(size_t)snprintf(body,sizeof(body),
     "function(s,n%s) local byte=string.byte;local sum,i=.5,0;while i<n do i=i+1;local ",
-    mode ? ",last" : "");
+    mode>=5 ? ",first,last" : mode ? ",last" : "");
   for (i=0;i<width;i++)
     used+=(size_t)snprintf(body+used,sizeof(body)-used,"%sb%u",i ? "," : "",i);
   used+=(size_t)snprintf(body+used,sizeof(body)-used,
-    "=byte(s,%u,%s);sum=sum",first,endarg);
+    "=byte(s,%s,%s);sum=sum",firstarg,endarg);
   for (i=0;i<width;i++)
     used+=(size_t)snprintf(body+used,sizeof(body)-used,"+b%u*%u.25",i,i+1u);
   used+=(size_t)snprintf(body+used,sizeof(body)-used," end;return sum end");
@@ -490,7 +535,7 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
     "string_byte_multi_oracle=%s;jit.off(string_byte_multi_oracle,true)",
     body,body,body)<(int)sizeof(source));
   run_chunk(L,source);
-  assert(call_multiple_loop(L,mode,recorded_end,"string_byte_multi_trace","string_byte_multi_value",
+  assert(call_multiple_loop(L,mode,recorded_first,recorded_end,"string_byte_multi_trace","string_byte_multi_value",
                    &actual)==LUA_OK && actual==.5+80*weighted);
   lua_getglobal(L,"string_byte_multi_trace");
   no=proto_trace_acq(funcproto(funcV(L->top-1)));lua_pop(L,1);
@@ -505,21 +550,90 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
                            "string_byte_multi_short","string_byte_empty",NULL};
     if (phase) lua_gc(L,LUA_GCCOLLECT,0);
     for (i=0;i<sizeof(values)/sizeof(values[0]);i++) {
-      int want=call_multiple_loop(L,mode,recorded_end,"string_byte_multi_oracle",values[i],&expected);
+      int want=call_multiple_loop(L,mode,recorded_first,recorded_end,"string_byte_multi_oracle",values[i],&expected);
       int got;
       lj_trace_test_root_entry_reset();lj_trace_test_reset_exit_stats();
-      got=call_multiple_loop(L,mode,recorded_end,"string_byte_multi_trace",values[i],&actual);
+      got=call_multiple_loop(L,mode,recorded_first,recorded_end,"string_byte_multi_trace",values[i],&actual);
       assert(got==want && (got!=LUA_OK || actual==expected));
       assert(lj_trace_test_root_entry_successes()>0 &&
              lj_trace_test_exit_calls()>0 &&
              lj_trace_test_first_exit_parent()==no);
     }
-    assert(call_multiple_loop(L,mode,recorded_end,"string_byte_multi_trace","string_byte_multi_value",
+    if (mode>=5) {
+      const struct { lua_Number first, last; unsigned mode; } bounds[]={
+        {first+1,first+width-1u,5}, {first,first+width,5},
+        {0,first+width-1u,5}, {-1,first+width-1u,5}, {first,-1,5},
+        {INT32_MIN,first+width-1u,5}, {INT32_MAX,first+width-1u,5},
+        {first+.9,first+width-1u+.9,6},
+        {NAN,first+width-1u,6}, {first,NAN,6},
+        {INFINITY,first+width-1u,6}, {-INFINITY,first+width-1u,6},
+        {first,INFINITY,6}, {first,-INFINITY,6},
+        {1.0e300,first+width-1u,6}, {-1.0e300,first+width-1u,6}
+      };
+      for (i=0;i<sizeof(bounds)/sizeof(bounds[0]);i++) {
+        int want=call_multiple_loop(L,bounds[i].mode,bounds[i].first,
+          bounds[i].last,"string_byte_multi_oracle","string_byte_multi_value",
+          &expected), got;
+        lj_trace_test_root_entry_reset();lj_trace_test_reset_exit_stats();
+        got=call_multiple_loop(L,bounds[i].mode,bounds[i].first,bounds[i].last,
+          "string_byte_multi_trace","string_byte_multi_value",&actual);
+        assert(got==want && (got!=LUA_OK || actual==expected));
+        assert(lj_trace_test_root_entry_successes()>0 &&
+               lj_trace_test_exit_calls()>0 &&
+               lj_trace_test_first_exit_parent()==no);
+      }
+      if (negative_range) {
+        const struct { lua_Number first, last; } negative_bounds[]={
+          {recorded_first+1,recorded_end},
+          {recorded_first,recorded_end+1},
+          {0,recorded_end}, {recorded_first,0},
+          {1,recorded_end}, {recorded_first,1},
+          {-1,-1}, {-40,-39}
+        };
+        for (i=0;i<sizeof(negative_bounds)/sizeof(negative_bounds[0]);i++) {
+          int want=call_multiple_loop(L,mode,negative_bounds[i].first,
+            negative_bounds[i].last,"string_byte_multi_oracle",
+            "string_byte_multi_value",&expected), got;
+          lj_trace_test_root_entry_reset();lj_trace_test_reset_exit_stats();
+          got=call_multiple_loop(L,mode,negative_bounds[i].first,
+            negative_bounds[i].last,"string_byte_multi_trace",
+            "string_byte_multi_value",&actual);
+          assert(got==want && (got!=LUA_OK || actual==expected));
+          assert(lj_trace_test_root_entry_successes()>0 &&
+                 lj_trace_test_exit_calls()>0 &&
+                 lj_trace_test_first_exit_parent()==no);
+        }
+        if (mode==8u || mode==10u) {
+          int want=call_multiple_loop(L,mode,NAN,recorded_end,
+            "string_byte_multi_oracle","string_byte_multi_value",&expected);
+          lj_trace_test_root_entry_reset();lj_trace_test_reset_exit_stats();
+          int got=call_multiple_loop(L,mode,NAN,recorded_end,
+            "string_byte_multi_trace","string_byte_multi_value",&actual);
+          assert(got==want && (got!=LUA_OK || actual==expected));
+          assert(lj_trace_test_root_entry_successes()>0 &&
+                 lj_trace_test_exit_calls()>0 &&
+                 lj_trace_test_first_exit_parent()==no);
+        }
+        if (mode==9u || mode==10u) {
+          int want=call_multiple_loop(L,mode,recorded_first,NAN,
+            "string_byte_multi_oracle","string_byte_multi_value",&expected);
+          lj_trace_test_root_entry_reset();lj_trace_test_reset_exit_stats();
+          int got=call_multiple_loop(L,mode,recorded_first,NAN,
+            "string_byte_multi_trace","string_byte_multi_value",&actual);
+          assert(got==want && (got!=LUA_OK || actual==expected));
+          assert(lj_trace_test_root_entry_successes()>0 &&
+                 lj_trace_test_exit_calls()>0 &&
+                 lj_trace_test_first_exit_parent()==no);
+        }
+      }
+    }
+    assert(call_multiple_loop(L,mode,recorded_first,recorded_end,"string_byte_multi_trace","string_byte_multi_value",
                      &actual)==LUA_OK && actual==.5+80*weighted);
     assert(trace_runnable_acq(owner,no) && trace_mcode_acq(owner)==code &&
            trace_szmcode_acq(owner)==codesize && memcmp(saved,code,codesize)==0);
   }
   arm64_fixture_init_trace(&f,L,"string_byte_multi_clone",no);
+  if (mode>=5) f.view.proto=trace_startpt_acq(f.owner);
   assert(semantic(&f) && allocated(&f));
   for (r=REF_FIRST;r<f.semantic_nins;r++) {
     int32_t k;
@@ -529,8 +643,73 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
     if (f.ir[r].o==IR_STRREF) {
       IRRef q, bound=0;
       int32_t offset;
-      assert(kint(f.ir,f.semantic.nk,f.ir[r].op2,&offset) &&
-             offset>=(int32_t)first-1 && offset<(int32_t)(first+width-1u));
+      if (mode>=5) {
+        IRRef base, at=f.ir[r].op2;
+        assert(widthguard && f.ir[f.ir[widthguard].op1].o==IR_SUBOV);
+        base=f.ir[f.ir[widthguard].op1].op2;
+        if (negative_range && !range_first) {
+          IRRef lenref, endref=f.ir[f.ir[widthguard].op1].op1;
+          IRRef inner, sum, last, first;
+          assert(base>=REF_FIRST && f.ir[base].o==IR_ADD &&
+                 f.ir[base].t.irt==IRT_INT);
+          if (f.ir[base].op1>=REF_FIRST &&
+              f.ir[f.ir[base].op1].o==IR_FLOAD) {
+            lenref=f.ir[base].op1; first=f.ir[base].op2;
+          } else {
+            lenref=f.ir[base].op2; first=f.ir[base].op1;
+          }
+          assert(lenref>=REF_FIRST && f.ir[lenref].o==IR_FLOAD &&
+                 f.ir[lenref].op1==f.ir[r].op1 &&
+                 f.ir[lenref].op2==IRFL_STR_LEN);
+          negative_len=lenref;
+          assert(endref>=REF_FIRST && f.ir[endref].o==IR_ADD &&
+                 kint(f.ir,f.semantic.nk,f.ir[endref].op2,&k) && k==1);
+          inner=f.ir[endref].op1;
+          assert(inner>=REF_FIRST && f.ir[inner].o==IR_ADD);
+          sum=inner;
+          if (f.ir[sum].op1==lenref) last=f.ir[sum].op2;
+          else { assert(f.ir[sum].op2==lenref); last=f.ir[sum].op1; }
+          range_first=first; range_last=last;
+          for (q=REF_FIRST;q<base;q++)
+            if (f.ir[q].o==IR_LT && f.ir[q].t.irt==(IRT_INT|IRT_GUARD) &&
+                f.ir[q].op1==first && kint(f.ir,f.semantic.nk,f.ir[q].op2,&k) &&
+                k==0) first_negative=q;
+          for (q=REF_FIRST;q<f.ir[endref].op1;q++)
+            if (f.ir[q].o==IR_LT && f.ir[q].t.irt==(IRT_INT|IRT_GUARD) &&
+                f.ir[q].op1==last && kint(f.ir,f.semantic.nk,f.ir[q].op2,&k) &&
+                k==0) last_negative=q;
+          for (q=base+1u;q<r;q++) {
+            if (f.ir[q].o==IR_GE && f.ir[q].t.irt==(IRT_INT|IRT_GUARD) &&
+                f.ir[q].op1==base && kint(f.ir,f.semantic.nk,f.ir[q].op2,&k) &&
+                k==0) base_nonnegative=q;
+            if (f.ir[q].o==IR_SUBOV && f.ir[q].t.irt==(IRT_INT|IRT_GUARD) &&
+                f.ir[q].op1==endref && f.ir[q].op2==base)
+              difference_guard=q;
+          }
+          width_difference=f.ir[widthguard].op1;
+          assert(first_negative && last_negative && base_nonnegative &&
+                 width_difference && difference_guard &&
+                 lj_trace_test_arm64_string_byte_range_ir(&f.semantic,r,
+                   f.ir[r].op1,at,range_first,0) &&
+                 lj_trace_test_arm64_string_byte_range_postra(&f.view,r,
+                   f.postra[r].op1,at,range_first,0));
+        }
+        if (at==base) offset=0;
+        else {
+          assert(at>=REF_FIRST && at<r && f.ir[at].o==IR_ADD &&
+                 f.ir[at].op1==base &&
+                 kint(f.ir,f.semantic.nk,f.ir[at].op2,&offset));
+        }
+        assert(offset>=0 && offset<(int32_t)width);
+        if (negative_range)
+          assert(lj_trace_test_arm64_string_byte_range_ir(&f.semantic,r,
+                     f.ir[r].op1,at,range_first,0) &&
+                 lj_trace_test_arm64_string_byte_range_postra(&f.view,r,
+                     f.postra[r].op1,at,range_first,0));
+      } else {
+        assert(kint(f.ir,f.semantic.nk,f.ir[r].op2,&offset) &&
+               offset>=(int32_t)first-1 && offset<(int32_t)(first+width-1u));
+      }
       for (q=REF_FIRST;q<r;q++) {
         IRRef length=f.ir[q].o==IR_UGE ? f.ir[q].op1 :
                      f.ir[q].o==IR_ULE ? f.ir[q].op2 : 0;
@@ -539,7 +718,7 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
           bound=f.ir[q].o==IR_UGE ? f.ir[q].op2 : f.ir[q].op1;
       }
       assert(bound || mode>=3);
-      if (offset==(int32_t)(first+width-2u)) lastptr=r;
+      if (offset==(int32_t)(mode>=5 ? width-1u : first+width-2u)) lastptr=r;
       if (!bound) bound=REF_TRUE;
       f.ir[r].op2=bound;f.postra[r].op2=bound;
       assert(!semantic(&f) && !allocated(&f));
@@ -566,14 +745,61 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
     f.semantic.nk=f.view.nk=newref;
     memset(&f.ir[newref],0,sizeof(IRIns));
     f.ir[newref].o=IR_KINT;f.ir[newref].t.irt=IRT_INT;
-    f.ir[newref].i=(int32_t)(first+width-2u);
+    f.ir[newref].i=(int32_t)(mode>=5 ? width-1u : first+width-2u);
     f.postra[newref]=f.ir[newref];
-    f.ir[lastptr].op2=f.postra[lastptr].op2=newref;
+    if (mode>=5) {
+      IRRef add=f.ir[lastptr].op2;
+      assert(f.ir[add].o==IR_ADD);
+      f.ir[add].op2=f.postra[add].op2=newref;
+    } else {
+      f.ir[lastptr].op2=f.postra[lastptr].op2=newref;
+    }
     assert(semantic(&f) && allocated(&f));
     f.ir[newref].i++;f.postra[newref].i++;
     assert(!semantic(&f) && !allocated(&f));
     f.semantic.nk=f.view.nk=oldnk;
     arm64_fixture_reset(&f);
+  }
+  if (negative_range) {
+    assert(first_negative && last_negative && base_nonnegative &&
+           width_difference && difference_guard && range_first && range_last &&
+           negative_len);
+#define REJECT_NEG_MULTI(change) do { \
+    arm64_fixture_reset(&f); assert(semantic(&f) && allocated(&f)); \
+    change; assert(!semantic(&f) && !allocated(&f)); \
+  } while (0)
+    REJECT_NEG_MULTI(f.ir[first_negative].o=IR_GE;
+                     f.postra[first_negative].o=IR_GE);
+    REJECT_NEG_MULTI(f.ir[last_negative].op1=range_first;
+                     f.postra[last_negative].op1=range_first);
+    REJECT_NEG_MULTI(f.ir[width_difference].op2=range_first;
+                     f.postra[width_difference].op2=range_first);
+    assert(difference_guard+1u<f.semantic.nins);
+    REJECT_NEG_MULTI(f.ir[difference_guard].op1=difference_guard+1u;
+                     f.postra[difference_guard].op1=difference_guard+1u);
+    REJECT_NEG_MULTI(f.ir[base_nonnegative].o=IR_GT;
+                     f.postra[base_nonnegative].o=IR_GT);
+    REJECT_NEG_MULTI(f.ir[negative_len].op1=range_first;
+                     f.postra[negative_len].op1=range_first);
+    REJECT_NEG_MULTI(f.ir[range_first].op1=f.ir[range_last].op1;
+                     f.postra[range_first].op1=f.postra[range_last].op1);
+#undef REJECT_NEG_MULTI
+    arm64_fixture_reset(&f); assert(semantic(&f) && allocated(&f));
+  }
+  if (mode>=5) {
+    IRRef add=f.ir[lastptr].op2, base=f.ir[add].op1;
+    assert(f.ir[add].o==IR_ADD && lastptr==add+1u &&
+           !ra_hasreg(f.postra[add].r) && !ra_hasspill(f.postra[add].s));
+    /* The absent ADD result is valid only for the adjacent fused STRREF;
+    ** allocating that pointer cannot certify the same missing result. */
+    f.postra[lastptr].r=RID_X19;
+    assert(semantic(&f) && !allocated(&f));
+    arm64_fixture_reset(&f);
+    /* Its checked base must have an actual register or spill location. */
+    f.postra[base].r=RID_INIT;f.postra[base].s=SPS_NONE;
+    assert(semantic(&f) && !allocated(&f));
+    arm64_fixture_reset(&f);
+    assert(semantic(&f) && allocated(&f));
   }
   /* Raw U8 values are still excluded from Lua snapshot restoration. */
   for (SnapNo sn=0;sn<f.view.nsnap;sn++) {
@@ -1099,6 +1325,321 @@ static void test_integer_dynamic_index(lua_State *L, int negative)
          negative ? "negative-" : "", (unsigned)no);
 }
 
+/* Exercise a real raw-U8 snapshot at the comparison exit after string.byte.
+** This is deliberately separate from the arithmetic-only dynamic index case:
+** the comparison keeps the byte result live in the cold snapshot. */
+static void test_u8_snapshot(lua_State *L)
+{
+  Arm64TraceFixture f;
+  GCproto *clonept, *viewpt;
+  TraceNo no;
+  GCtrace *owner;
+  BCIns *clonebc;
+  MCode *code;
+  MSize codesize, snapno = 0, mapidx = 0, callpc = 0;
+  BCReg calla = 0;
+  unsigned char *saved;
+  unsigned phase;
+  IRRef xload = 0, r;
+  int found = 0;
+  lua_Number actual = 0.0, expected = 0.0;
+  static const struct { const char *value; lua_Number index; lua_Integer key; }
+    cases[] = {
+      { "string_byte_value", 2, 99 },
+      { "string_byte_value", 2, 0 },
+      { "string_byte_nul", 2, 0 },
+      { "string_byte_value", 2.9, 99 },
+      { "string_byte_short", 2, 99 },
+      { "string_byte_empty", 2, 99 }
+    };
+
+  run_chunk(L, "jit.flush(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=8')");
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  assert(call_u8_snapshot_loop(L, "string_byte_u8_snapshot_trace",
+                               "string_byte_value", 2, 99, &actual) == LUA_OK);
+  lua_getglobal(L, "string_byte_u8_snapshot_trace");
+  assert(lua_isfunction(L, -1) && isluafunc(funcV(L->top-1)));
+  no = proto_trace_acq(funcproto(funcV(L->top-1)));
+  lua_pop(L, 1);
+  owner = traceref_safe(L2J(L), no);
+  if (!no || !owner || !trace_runnable_acq(owner, no) ||
+      bc_op(trace_startins_acq(owner)) != BC_LOOP)
+    fprintf(stderr, "U8 snapshot candidate did not publish: trace=%u owner=%p "
+            "starts=%u publishes=%u cleanup=%u aborts=%u err=%u entries=%u\n",
+            (unsigned)no, (void *)owner,
+            lj_trace_test_root_entry_startins_calls(),
+            lj_trace_test_root_entry_publishes(),
+            lj_trace_test_root_entry_cleanups(), lj_trace_test_abort_count(),
+            (unsigned)lj_trace_test_last_abort_error(),
+            lj_trace_test_root_entry_successes());
+  assert(no && owner && trace_runnable_acq(owner, no) &&
+         bc_op(trace_startins_acq(owner)) == BC_LOOP);
+  code = trace_mcode_acq(owner); codesize = trace_szmcode_acq(owner);
+  assert(code && codesize);
+  saved = (unsigned char *)malloc(codesize); assert(saved);
+  memcpy(saved, code, codesize);
+
+  for (phase = 0; phase < 2; phase++) {
+    if (phase) lua_gc(L, LUA_GCCOLLECT, 0);
+    for (size_t i = 0; i < sizeof(cases)/sizeof(cases[0]); i++) {
+      int expected_status = call_u8_snapshot_loop(L,
+          "string_byte_u8_snapshot_oracle", cases[i].value,
+          cases[i].index, cases[i].key, &expected);
+      uint32_t entries = lj_trace_test_root_entry_successes();
+      uint32_t exits = lj_trace_test_exit_calls();
+      int actual_status = call_u8_snapshot_loop(L,
+          "string_byte_u8_snapshot_trace", cases[i].value,
+          cases[i].index, cases[i].key, &actual);
+      assert(actual_status == expected_status &&
+             (actual_status != LUA_OK || actual == expected));
+      assert(lj_trace_test_root_entry_successes() > entries &&
+             lj_trace_test_exit_calls() > exits &&
+             lj_trace_test_last_exit_parent() == no);
+    }
+    assert(call_u8_snapshot_loop(L, "string_byte_u8_snapshot_trace",
+                                 "string_byte_value", 2, 99,
+                                 &actual) == LUA_OK);
+    assert(trace_runnable_acq(owner, no) && trace_mcode_acq(owner) == code &&
+           trace_szmcode_acq(owner) == codesize &&
+           memcmp(saved, code, codesize) == 0);
+  }
+
+  lua_getglobal(L, "string_byte_u8_snapshot_clone");
+  arm64_fixture_init_trace(&f, L, "string_byte_u8_snapshot_clone", no);
+  f.view.proto = trace_startpt_acq(f.owner);
+  viewpt = (GCproto *)f.view.proto;
+  assert(semantic(&f) && allocated(&f));
+  clonept = trace_startpt_acq(&f.semantic);
+  clonebc = (BCIns *)(uintptr_t)proto_bc(clonept);
+  {
+    unsigned calls = 0;
+    for (MSize pc = 0; pc < clonept->sizebc; pc++) {
+      BCIns ins = clonebc[pc];
+      if (bc_op(ins) == BC_CALL && bc_b(ins) == 2 && bc_c(ins) == 3) {
+        calls++;
+        callpc = pc;
+        calla = bc_a(ins);
+      }
+    }
+    assert(calls == 1u);
+  }
+  for (r = REF_FIRST; r < f.semantic_nins; r++)
+    if (f.ir[r].o == IR_XLOAD && f.ir[r].t.irt == IRT_U8) xload = r;
+  assert(xload);
+  for (SnapNo sn = 0; sn < f.view.nsnap && !found; sn++) {
+    const SnapShot *snap = &f.snaps[sn];
+    for (MSize i = 0; i < snap_nent_acq(snap); i++) {
+      MSize candidate = snap_mapofs_acq(snap) + i;
+      SnapEntry entry = f.map[candidate];
+      if (snap_ref(entry) == xload) {
+        assert((entry & (SNAP_FRAME|SNAP_NORESTORE)) == 0);
+        snapno = sn;
+        mapidx = candidate;
+        found = 1;
+        break;
+      }
+    }
+  }
+  assert(found);
+
+  /* The real exit maps the direct CALL output slot after its immediate copy. */
+  {
+    int direct = 0;
+    BCIns copy = clonebc[callpc+1u];
+    assert((bc_op(copy) == BC_CGET || bc_op(copy) == BC_MOV) &&
+           bc_d(copy) == calla && bc_a(copy) != calla);
+    for (SnapNo sn = 0; sn < f.view.nsnap; sn++) {
+      const SnapShot *snap = &f.snaps[sn];
+      uint64_t footer;
+      MSize snappc;
+      memcpy(&footer, &f.map[snap_mapofs_acq(snap)+snap_nent_acq(snap)],
+             sizeof(footer));
+      {
+        const BCIns *pc = (const BCIns *)(uintptr_t)(footer >> 8);
+        uintptr_t lo = (uintptr_t)(const void *)proto_bc(clonept);
+        uintptr_t addr = (uintptr_t)(const void *)pc;
+        assert(addr >= lo && addr < lo+clonept->sizebc*sizeof(BCIns));
+        snappc = (MSize)((addr-lo)/sizeof(BCIns));
+      }
+      for (MSize i = 0; i < snap_nent_acq(snap); i++) {
+        SnapEntry entry = f.map[snap_mapofs_acq(snap)+i];
+        MSize reg;
+        if (snap_ref(entry) != xload ||
+            (entry & (SNAP_FRAME|SNAP_NORESTORE))) continue;
+        reg = snap_slot(entry)-1u-LJ_FR2;
+        if (reg == calla && snappc > callpc+1u) direct = 1;
+      }
+    }
+    assert(direct);
+
+    /* KNIL range writes before each saved result must invalidate the direct
+    ** CALL output provenance, in both independent readers. */
+    {
+      BCIns old = clonebc[callpc+1u];
+      f.view.proto = clonept;
+      clonebc[callpc+1u] = BCINS_AD(BC_KNIL, calla, 0);
+      arm64_fixture_reset(&f);
+      assert(!semantic(&f));
+      clonebc[callpc+1u] = old;
+      f.view.proto = viewpt;
+      arm64_fixture_reset(&f);
+      assert(semantic(&f) && allocated(&f));
+      f.view.proto = clonept;
+      clonebc[callpc+1u] = BCINS_AD(BC_KNIL, calla, 0);
+      arm64_fixture_reset(&f);
+      assert(!allocated(&f));
+      clonebc[callpc+1u] = old;
+      f.view.proto = viewpt;
+      arm64_fixture_reset(&f);
+      assert(semantic(&f) && allocated(&f));
+    }
+    {
+      BCIns old = clonebc[callpc+2u];
+      f.view.proto = clonept;
+      clonebc[callpc+2u] = BCINS_AD(BC_KNIL, calla, 0);
+      arm64_fixture_reset(&f);
+      assert(!semantic(&f));
+      clonebc[callpc+2u] = old;
+      f.view.proto = viewpt;
+      arm64_fixture_reset(&f);
+      assert(semantic(&f) && allocated(&f));
+      f.view.proto = clonept;
+      clonebc[callpc+2u] = BCINS_AD(BC_KNIL, calla, 0);
+      arm64_fixture_reset(&f);
+      assert(!allocated(&f));
+      clonebc[callpc+2u] = old;
+      f.view.proto = viewpt;
+      arm64_fixture_reset(&f);
+      assert(semantic(&f) && allocated(&f));
+    }
+    /* Neither a pre-CALL forward edge nor a post-CALL backedge may enter the
+    ** saved interval after skipping the value definition. */
+    for (phase = 0; phase < 2; phase++) {
+      MSize q = phase ? clonept->sizebc : 0;
+      BCIns old;
+      if (!phase) {
+        for (; q < clonept->sizebc; q++)
+          if (q < callpc && bc_op(clonebc[q]) == BC_JMP) break;
+      } else {
+        for (q = clonept->sizebc; q > callpc+1u; q--)
+          if (bc_op(clonebc[q-1u]) == BC_JMP) { q--; break; }
+      }
+      assert(q < clonept->sizebc &&
+             (phase ? q > callpc : q < callpc) &&
+             bc_op(clonebc[q]) == BC_JMP);
+      old = clonebc[q];
+      f.view.proto = clonept;
+      clonebc[q] = BCINS_AJ(BC_JMP, bc_a(old),
+          (BCPos)((int32_t)(callpc+(phase ? 2u : 1u))-(int32_t)(q+1u)));
+      arm64_fixture_reset(&f);
+      assert(!semantic(&f));
+      clonebc[q] = old;
+      f.view.proto = viewpt;
+      arm64_fixture_reset(&f);
+      assert(semantic(&f) && allocated(&f));
+      f.view.proto = clonept;
+      clonebc[q] = BCINS_AJ(BC_JMP, bc_a(old),
+          (BCPos)((int32_t)(callpc+(phase ? 2u : 1u))-(int32_t)(q+1u)));
+      arm64_fixture_reset(&f);
+      assert(!allocated(&f));
+      clonebc[q] = old;
+      f.view.proto = viewpt;
+      arm64_fixture_reset(&f);
+      assert(semantic(&f) && allocated(&f));
+    }
+    f.view.proto = viewpt;
+  }
+
+  /* Each view accepts the captured exact map first. Then mutate one side at a
+  ** time, so semantic and allocated proofs cannot borrow each other's state. */
+  {
+    SnapEntry old = f.map[mapidx], postold = f.postmap[mapidx];
+    MSize prev = 0, next = snap_nslots_acq(&f.snaps[snapno]);
+    MSize i = mapidx - snap_mapofs_acq(&f.snaps[snapno]);
+    MSize other_slot = snap_slot(old);
+    if (i) prev = snap_slot(f.map[mapidx-1u]);
+    if (i+1u < snap_nent_acq(&f.snaps[snapno]))
+      next = snap_slot(f.map[mapidx+1u]);
+    if (snap_slot(old)+1u < next) other_slot++;
+    else if (snap_slot(old) > prev+1u) other_slot--;
+    else assert(!"U8 snapshot has no adjacent unmapped slot");
+    f.map[mapidx] = snap_with_slot(old, other_slot);
+    assert(!semantic(&f) && allocated(&f));
+    f.map[mapidx] = old;
+    f.postmap[mapidx] = snap_with_slot(postold, other_slot);
+    assert(semantic(&f) && !allocated(&f));
+    f.postmap[mapidx] = postold;
+  }
+  {
+    IRIns old = f.postra[xload];
+    f.postra[xload].r = RID_D0;
+    f.postra[xload].s = SPS_NONE;
+    assert(semantic(&f) && !allocated(&f));
+    f.postra[xload] = old;
+  }
+  {
+    IRIns old = f.postra[xload];
+    MSize oldadjust = f.view.spadjust, slot = 0, highest = 0;
+    /* Build a private, internally consistent one-slot spill assignment at
+    ** the end of an aligned spill block. This exercises U8's exact spill
+    ** width and lack of 64-bit alignment independently of allocator luck. */
+    for (MSize candidate = SPS_FIXED + 1u; candidate + 1u < SPS_LIMIT;
+         candidate += 2u) {
+      MSize high = candidate + 1u;
+      int free_slot = 1;
+      for (IRRef q = REF_FIRST; q < f.view.nins; q++) {
+        IRIns ins = f.postra[q];
+        MSize width, end;
+        if (!ra_hasspill(ins.s)) continue;
+        width = irt_type(ins.t) == IRT_INT || irt_type(ins.t) == IRT_U8 ?
+                1u : 2u;
+        end = (MSize)ins.s + width;
+        if (ins.s <= candidate && candidate < end) free_slot = 0;
+        if (candidate <= ins.s && ins.s < candidate + 1u) free_slot = 0;
+        if (end > high) high = end;
+      }
+      if (free_slot && high == candidate + 1u &&
+          SPS_FIXED + sps_align(high) == candidate + 1u) {
+        slot = candidate;
+        highest = high;
+        break;
+      }
+    }
+    assert(slot && (slot & 1u) && highest == slot + 1u);
+    f.postra[xload].r = RID_INIT;
+    f.postra[xload].s = (uint8_t)slot;
+    f.postra[xload].prev = REGSP(RID_INIT, slot);
+    f.view.spadjust = sps_scale(sps_align(highest));
+    assert(semantic(&f) && allocated(&f));
+    f.postra[xload].s = UINT8_MAX;
+    f.postra[xload].prev = REGSP(RID_INIT, UINT8_MAX);
+    assert(semantic(&f) && !allocated(&f));
+    f.postra[xload] = old;
+    f.view.spadjust = oldadjust;
+  }
+  {
+    IRRef rename = 0;
+    for (r = f.semantic_nins; r < f.nins; r++)
+      if (f.postra[r].o == IR_RENAME) { rename = r; break; }
+    assert(rename);
+    {
+      IRIns old = f.postra[rename];
+      f.postra[rename].op1 = xload;
+      f.postra[rename].r = RID_D0;
+      assert(semantic(&f) && !allocated(&f));
+      f.postra[rename] = old;
+    }
+  }
+  arm64_fixture_reset(&f);
+  assert(semantic(&f) && allocated(&f));
+  arm64_fixture_free(&f);
+  lua_pop(L, 1);
+  free(saved);
+  printf("string.byte raw U8 snapshot: native root %u, cold/type/bounds exits, GC/code reuse, independent source/postRA mutations\n",
+         (unsigned)no);
+}
+
 int main(void)
 {
   static const char source[] =
@@ -1136,6 +1677,24 @@ int main(void)
     "string_byte_dynamic_trace_clone=function(s,n,index)\n"
     " local byte=string.byte; local i,sum=1,0; "
     "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
+    "end\n"
+    "string_byte_u8_snapshot_trace=function(s,n,index,k)\n"
+    " local byte=string.byte; local i,sum=1,.5; "
+    "while i<=n do local a=byte(s,index); "
+    "if a==k then sum=sum+a*1.25 else sum=sum+a*2.25 end; "
+    "i=i+1 end; return sum\n"
+    "end\n"
+    "string_byte_u8_snapshot_clone=function(s,n,index,k)\n"
+    " local byte=string.byte; local i,sum=1,.5; "
+    "while i<=n do local a=byte(s,index); "
+    "if a==k then sum=sum+a*1.25 else sum=sum+a*2.25 end; "
+    "i=i+1 end; return sum\n"
+    "end\n"
+    "string_byte_u8_snapshot_oracle=function(s,n,index,k)\n"
+    " local byte=string.byte; local i,sum=1,.5; "
+    "while i<=n do local a=byte(s,index); "
+    "if a==k then sum=sum+a*1.25 else sum=sum+a*2.25 end; "
+    "i=i+1 end; return sum\n"
     "end\n"
     "string_byte_negative_dynamic_trace=function(s,n,index)\n"
     " local byte=string.byte; local i,sum=1,0; "
@@ -1191,6 +1750,7 @@ int main(void)
     "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
     "end\n"
     "jit.off(string_byte_dynamic_oracle,true)\n"
+    "jit.off(string_byte_u8_snapshot_oracle,true)\n"
     "jit.off(string_byte_integer_oracle,true); "
     "jit.off(string_byte_integer_negative_oracle,true)\n"
     "string_byte_bounds_trace=function(s,n)\n"
@@ -2317,6 +2877,7 @@ int main(void)
   test_dynamic_range_byte(L,2,0);
   test_dynamic_range_byte(L,4,0);
   test_dynamic_range_byte(L,4.9,1);
+  test_u8_snapshot(L);
   test_integer_dynamic_index(L,0);
   test_integer_dynamic_index(L,1);
   test_dynamic_range_byte(L,-2,0);
@@ -2330,10 +2891,17 @@ int main(void)
     test_fixed_multiple_bytes(L,width,2,0);
   }
   test_fixed_multiple_bytes(L,3,1,0);
-  for (unsigned mode=1;mode<=4;mode++) {
+  for (unsigned mode=1;mode<=6;mode++) {
     for (unsigned width=2;width<=16;width*=2) {
       test_fixed_multiple_bytes(L,width,1,mode);
       test_fixed_multiple_bytes(L,width,2,mode);
+    }
+  }
+  for (unsigned mode=7;mode<=10;mode++) {
+    static const unsigned widths[]={2,3,4,8,16};
+    for (unsigned wi=0;wi<sizeof(widths)/sizeof(widths[0]);wi++) {
+      test_fixed_multiple_bytes(L,widths[wi],1,mode);
+      test_fixed_multiple_bytes(L,widths[wi],2,mode);
     }
   }
   run_chunk(L, "assert(string_byte_stop:send(true,5)); "

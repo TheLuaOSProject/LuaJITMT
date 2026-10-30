@@ -4,7 +4,7 @@ The M7 race fixture previously gave `run_scalar_metacall_race` eight calls after
 
 The fixture now retries the exact race helper at most eight times. Each attempt flushes traces and resets `hotloop=1`/`hotexit=1`. Forward and reverse helpers run 64 calls per attempt; the nonfunction helper runs its existing eight-call protected loop. A retry stops as soon as the test hook is consumed. The original 10-second parent seam deadline and the forward, reverse, and nonfunction mutation assertions remain in place. A timeout aborts both hooks, releases a worker if it is paused, and reports recorder entry/sample/consume plus VM capture call/match/pause counts. No trace observer is used to drive the race.
 
-The recorder and VM counters are compiled only with `LJ_TRACE_TEST_HELPERS` and `LJ_GC2_TEST_HELPERS`. Recorder counts distinguish entry from a successfully sampled Lua function and from consuming the test hook. VM counts distinguish capture hook invocation, matching the exact target cdata, and entering the pause. A separate abort helper disables future pauses and releases an already paused worker so a failed test can join cleanly.
+The recorder counters require both `LJ_TRACE_TEST_HELPERS` and `LJ_GC2_TEST_HELPERS`; the VM counters use the existing `LJ_GC2_TEST_HELPERS` guard. Recorder counts distinguish entry from a successfully sampled Lua function and from consuming the test hook. VM counts distinguish capture hook invocation, matching the exact target cdata, and entering the pause. A separate abort helper disables future pauses and releases an already paused worker so a failed test can join cleanly.
 
 ## Validation
 

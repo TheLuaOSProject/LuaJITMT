@@ -5,10 +5,12 @@
 
 enum { INTARG_KINDS = 8, INTARG_SLOTS = 8 };
 
-static int32_t current_kind, current_stack, expected_active, mismatches;
+static int32_t current_kind, current_stack, expected_active, expected_sequence;
+static int32_t mismatches;
 static int32_t calls[INTARG_KINDS], first_errno[INTARG_KINDS];
 static int32_t last_errno[INTARG_KINDS];
 static uint64_t captured[INTARG_KINDS][INTARG_SLOTS];
+static uint64_t first_captured[INTARG_KINDS];
 static uint64_t expected[INTARG_SLOTS];
 static int32_t producer_calls, producer_first_errno, producer_last_errno;
 static uint32_t producer_captured[INTARG_SLOTS], producer_expected;
@@ -55,6 +57,7 @@ void lj_ffi_int_configure(int32_t kind, int32_t stack)
     st32(&calls[i], 0);
     st32(&first_errno[i], 0);
     st32(&last_errno[i], 0);
+    st64(&first_captured[i], 0);
     for (j = 0; j < INTARG_SLOTS; j++)
       st64(&captured[i][j], 0);
   }
@@ -63,6 +66,10 @@ void lj_ffi_int_configure(int32_t kind, int32_t stack)
 void lj_ffi_int_expect_enable(int32_t active)
 {
   st32(&expected_active, active != 0);
+}
+void lj_ffi_int_expect_sequence(int32_t active)
+{
+  st32(&expected_sequence, active != 0);
 }
 int32_t lj_ffi_int_mismatch_count(void) { return ld32(&mismatches); }
 int32_t lj_ffi_int_count(int32_t kind)
@@ -91,7 +98,8 @@ void lj_ffi_int_save_expected(void)
 {
   int32_t k = ld32(&current_kind);
   unsigned i;
-  st64(&expected[0], ld64(&captured[k][0]));
+  st64(&expected[0], ld32(&expected_sequence) ?
+	ld64(&first_captured[k]) : ld64(&captured[k][0]));
   for (i = 1; i < INTARG_SLOTS; i++)
     st64(&expected[i], ld64(&captured[k][i]));
   st32u(&producer_expected, ld32u(&producer_captured[0]));
@@ -127,12 +135,19 @@ static double record(unsigned kind, uint64_t bits, const int32_t *prefix,
       (void)__atomic_add_fetch(&mismatches, 1, __ATOMIC_ACQ_REL);
   }
   index = __atomic_fetch_add(&calls[kind], 1, __ATOMIC_ACQ_REL);
-  if (index == 0)
+  if (index == 0) {
     st32(&first_errno[kind], incoming);
+    st64(&first_captured[kind], bits);
+  }
   st32(&last_errno[kind], incoming);
   st64(&captured[kind][(uint32_t)index % INTARG_SLOTS], bits);
-  if (ld32(&expected_active) && bits != ld64(&expected[0]))
-    (void)__atomic_add_fetch(&mismatches, 1, __ATOMIC_ACQ_REL);
+  if (ld32(&expected_active)) {
+    uint64_t want = ld64(&expected[0]);
+    if (ld32(&expected_sequence)) want += (uint32_t)index;
+    if (bits != want) {
+      (void)__atomic_add_fetch(&mismatches, 1, __ATOMIC_ACQ_REL);
+    }
+  }
   errno = EDOM;
   return 1.25;
 }
