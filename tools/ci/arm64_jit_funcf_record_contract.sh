@@ -104,6 +104,20 @@ grep -F 'test_pair_output_liveness' "$funcf_call_source" >/dev/null || {
   echo "ARM64 FUNCF pair-output liveness regression case missing" >&2
   exit 1
 }
+for required in \
+  'return x+1,.25' \
+  'open_child_addov_admission' \
+  'FUNCF child accepted a changed child return PC' \
+  'FUNCF child accepted a substituted callee/root slot' \
+  'FUNCF child accepted a changed root-derived child argument' \
+  'open_addov_child_snapshot' \
+  'lj_trace_test_first_exitno()==child' \
+  'childframe_semantic_bad==3u && childframe_postra_bad==3u'; do
+  grep -F "$required" "$funcf_call_source" >/dev/null || {
+    echo "ARM64 FUNCF child-overflow proof lost required case: $required" >&2
+    exit 1
+  }
+done
 
 # Both independent validators derive the returned scalar from bytecode
 # definitions and validate concrete snapshots/allocator state. Runtime
