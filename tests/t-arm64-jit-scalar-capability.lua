@@ -320,6 +320,20 @@ assert(1/math_special(12,min_builtin,-0.0,0.0,1)==1/
 assert(1/math_special(12,min_builtin,0.0,-0.0,1)==1/
        min_builtin(0.0,-0.0,1))
 
+local function integer_mod_constant(n,x)
+  local i,s=0,.5
+  while i<n do s=s+(x+i)%7; i=i+1 end
+  return s
+end
+local function integer_mod_dynamic(n,x,d)
+  local i,s=0,.5
+  while i<n do s=s+(x+i)%d; i=i+1 end
+  return s
+end
+run('integer_mod_constant',integer_mod_constant,32,8)
+run('integer_mod_dynamic',integer_mod_dynamic,32,8,7)
+run('integer_mod_negative',integer_mod_dynamic,32,-80,-7)
+
 local function numeric_neg(n,x)
   local i,y=0,x
   while i<n do y=-y; i=i+1 end

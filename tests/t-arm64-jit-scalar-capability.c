@@ -35,6 +35,97 @@
 #include "lj_thr.h"
 #include "lj_trace.h"
 
+static int modulo_admits(jit_State *J, GCtrace *T,
+                          const LJArm64PostRAView *v)
+{
+  LJArm64IRReject reject;
+  return J ? lj_asm_arm64_ir_admit(J, T, &reject) :
+             lj_asm_arm64_postra_admit(v, NULL);
+}
+
+/* Mutate one private trace copy; each pass must reject on its own. */
+static void mutate_modulo(jit_State *J, GCtrace *T, LJArm64PostRAView *v,
+                           IRRef n, IRRef loop)
+{
+  IRIns *copy = J ? T->ir : (IRIns *)(void *)v->ir;
+  IRRef r, mod = 0, zero = 0, number = 0, guard = 0;
+  IRIns saved;
+  for (r = REF_FIRST; r < n; r++)
+    if (copy[r].o == IR_MOD) { mod = r; break; }
+  for (r = v->nk; r < REF_TRUE; r++) {
+    IRIns k = copy[r];
+    if (k.o == IR_KINT && k.i == 0) zero = r;
+    if (k.o == IR_KNUM) number = r;
+    if (k.o == IR_KNUM || k.o == IR_KGC || k.o == IR_KKPTR) r++;
+  }
+  for (r = REF_FIRST; r < mod && !number; r++)
+    if (irt_type(copy[r].t) == IRT_NUM) number = r;
+  assert(mod && number && (copy[mod].t.irt & ~IRT_ISPHI) == IRT_INT &&
+         modulo_admits(J, T, v));
+  saved = copy[mod];
+  copy[mod].t.irt = IRT_NUM;
+  assert(!modulo_admits(J, T, v));
+  copy[mod] = saved;
+  copy[mod].t.irt = IRT_INT|IRT_GUARD;
+  assert(!modulo_admits(J, T, v));
+  copy[mod] = saved;
+  copy[mod].op1 = number;
+  assert(!modulo_admits(J, T, v));
+  copy[mod] = saved;
+  copy[mod].op2 = number;
+  assert(!modulo_admits(J, T, v));
+  copy[mod] = saved;
+  copy[mod].op1 = n;
+  assert(!modulo_admits(J, T, v));
+  copy[mod] = saved;
+  copy[mod].op2 = n;
+  assert(!modulo_admits(J, T, v));
+  copy[mod] = saved;
+  if (irref_isk(saved.op2)) {
+    IRIns divisor = copy[saved.op2];
+    assert(divisor.o == IR_KINT && divisor.i != 0);
+    copy[saved.op2].i = 0;
+    assert(!modulo_admits(J, T, v));
+    copy[saved.op2] = divisor;
+  } else {
+    assert(zero);
+    copy[mod].op2 = zero;
+    assert(!modulo_admits(J, T, v));
+    copy[mod] = saved;
+    for (r = saved.op2+1u; r < mod; r++)
+      if (copy[r].o == IR_NE && copy[r].t.irt == (IRT_INT|IRT_GUARD) &&
+          copy[r].op1 == saved.op2 && copy[r].op2 == zero) {
+        assert(!guard); guard = r;
+      }
+    assert(guard);
+    IRIns saved_guard = copy[guard];
+    copy[guard].o = IR_EQ;
+    assert(!modulo_admits(J, T, v));
+    copy[guard] = saved_guard;
+    copy[guard].op1 = saved.op1;
+    assert(saved.op1 != saved.op2 && !modulo_admits(J, T, v));
+    copy[guard] = saved_guard;
+    copy[guard].t.irt = IRT_INT;
+    assert(!modulo_admits(J, T, v));
+    copy[guard] = saved_guard;
+    IRIns zero_value = copy[zero];
+    copy[zero].i = 1;
+    assert(!modulo_admits(J, T, v));
+    copy[zero] = zero_value;
+    if (!J) {
+      IRIns divisor = copy[saved.op2];
+      assert(lj_asm_arm64_test_scalar_math_live_across(v, n, loop, mod));
+      copy[saved.op2].prev = REGSP(RID_X0, SPS_NONE);
+      assert(!lj_asm_arm64_test_scalar_math_live_across(v, n, loop, mod));
+      assert(!modulo_admits(J, T, v));
+      copy[saved.op2] = divisor;
+    }
+  }
+  assert(modulo_admits(J, T, v));
+  printf("MOD %s: INT operands, nonzero divisor and call survival; malformed proofs rejected dynamic=%d\n",
+         J ? "semantic" : "postRA", !irref_isk(saved.op2));
+}
+
 static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
 {
   LJArm64PostRAView v = {0};
@@ -124,6 +215,8 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
       break;
     }
   assert(loop);
+  if (mathkind && strncmp(mathkind, "integer_mod", 11) == 0)
+    mutate_modulo(NULL, T, &v, n, loop);
   if (math_proof) assert((fpmath || mathcall || mathop || math_passthrough) &&
                          (!math_builtin || mathguard));
   if (mathkind && strcmp(mathkind, "math_helpers_snapshot_pair") == 0) {
@@ -743,6 +836,8 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
     semantic.sinktags = 0;
     la_store32_rel((uint32_t *)pc, T->startins);
     assert(lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+    if (mathkind && strncmp(mathkind, "integer_mod", 11) == 0)
+      mutate_modulo(fake, &semantic, &v, n, loop);
     if (mathkind && strncmp(mathkind, "numeric_tostr", 13) == 0) {
       IRIns saved, saved_lref, saved_reset;
       IRRef source_tostr = 0, body_tostr = 0, tostr_phi = 0;
@@ -1001,6 +1096,7 @@ static int check(lua_State *L)
   const char *mathkind = lua_gettop(L) ? lua_tostring(L, 1) : NULL;
   if (mathkind && strncmp(mathkind, "math_", 5) != 0 &&
       strcmp(mathkind, "numeric_neg") != 0 &&
+      strncmp(mathkind, "integer_mod", 11) != 0 &&
       strncmp(mathkind, "numeric_tostr", 13) != 0) mathkind = NULL;
   GCtrace *T = traceref_safe(L2J(L), 1);
   IRRef ref;
