@@ -126,6 +126,69 @@ static void mutate_modulo(jit_State *J, GCtrace *T, LJArm64PostRAView *v,
          J ? "semantic" : "postRA", !irref_isk(saved.op2));
 }
 
+static void mutate_modulo_phi(LJArm64PostRAView *v, IRRef n, IRRef loop)
+{
+  IRIns *copy = (IRIns *)(void *)v->ir;
+  IRRef ref, source=0, call=0, phi=0, rename=0;
+  MSize snap, loopsnap=0, count=0;
+  IRIns saved;
+  for (ref=loop+1u; ref<n; ref++) {
+    IRIns q=copy[ref];
+    if (q.o==IR_PHI && q.t.irt==IRT_INT && q.op1<loop &&
+        q.op1>=REF_FIRST && q.op2>loop && q.op2<ref &&
+        copy[q.op1].o==IR_MOD && copy[q.op2].o==IR_MOD) {
+      assert(!phi);phi=ref;source=q.op1;call=q.op2;
+    }
+  }
+  assert(phi && source && call);
+  for (snap=0;snap<v->nsnap;snap++)
+    if (snap_ref_acq(&v->snap[snap])==loop) {loopsnap=snap;count++;}
+  assert(count==1);
+  for (ref=n;ref<v->nins;ref++)
+    if (copy[ref].o==IR_RENAME && copy[ref].op1==source &&
+        copy[ref].op2==loopsnap) {assert(!rename);rename=ref;}
+  assert(rename && copy[rename].r>=RID_X19 && copy[rename].r<=RID_X28);
+  assert(lj_asm_arm64_test_scalar_math_live_across(v,n,loop,call));
+  saved=copy[rename];
+  copy[rename].prev=REGSP(RID_X0,SPS_NONE);
+  assert(!lj_asm_arm64_test_scalar_math_live_across(v,n,loop,call));
+  assert(!lj_asm_arm64_postra_admit(v,NULL));
+  copy[rename]=saved;
+  copy[rename].op2=loopsnap==0?1:0;
+  assert(copy[rename].op2<v->nsnap);
+  assert(!lj_asm_arm64_test_scalar_math_live_across(v,n,loop,call));
+  assert(!lj_asm_arm64_postra_admit(v,NULL));
+  copy[rename]=saved;
+  copy[rename].op1=copy[call].op1;
+  assert(copy[rename].op1!=source);
+  assert(!lj_asm_arm64_test_scalar_math_live_across(v,n,loop,call));
+  copy[rename]=saved;
+  saved=copy[source];
+  copy[source].o=IR_ADD;
+  assert(!lj_asm_arm64_test_scalar_math_live_across(v,n,loop,call));
+  assert(!lj_asm_arm64_postra_admit(v,NULL));
+  copy[source]=saved;
+  saved=copy[call];
+  copy[call].op1=source;  /* Introduce a real body use outside the PHI. */
+  assert(!lj_asm_arm64_test_scalar_math_live_across(v,n,loop,call));
+  assert(!lj_asm_arm64_postra_admit(v,NULL));
+  copy[call]=saved;
+  copy[call].t.irt=IRT_NUM;
+  assert(!lj_asm_arm64_test_scalar_math_live_across(v,n,loop,call));
+  assert(!lj_asm_arm64_postra_admit(v,NULL));
+  copy[call]=saved;
+  saved=copy[phi];
+  copy[phi].op1=call;
+  assert(!lj_asm_arm64_postra_admit(v,NULL));
+  copy[phi]=saved;
+  copy[phi].op2=source;
+  assert(!lj_asm_arm64_postra_admit(v,NULL));
+  copy[phi]=saved;
+  assert(lj_asm_arm64_postra_admit(v,NULL));
+  printf("MOD loop result=%u body=%u PHI=%u snapshot=%u rename=%u: exact preserved-location and extra-use mutations rejected\n",
+         source,call,phi,(unsigned)loopsnap,rename);
+}
+
 static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
 {
   LJArm64PostRAView v = {0};
@@ -217,6 +280,8 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
   assert(loop);
   if (mathkind && strncmp(mathkind, "integer_mod", 11) == 0)
     mutate_modulo(NULL, T, &v, n, loop);
+  if (mathkind && strncmp(mathkind, "integer_mod_result", 18) == 0)
+    mutate_modulo_phi(&v, n, loop);
   if (math_proof) assert((fpmath || mathcall || mathop || math_passthrough) &&
                          (!math_builtin || mathguard));
   if (mathkind && strcmp(mathkind, "math_helpers_snapshot_pair") == 0) {

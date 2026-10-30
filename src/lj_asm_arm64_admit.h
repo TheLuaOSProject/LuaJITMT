@@ -23060,11 +23060,10 @@ static int arm64_scalar_math_regsp_survives(RegSP rs, IRType type, MSize cap)
                           reg >= RID_X19 && reg <= RID_X28;
 }
 
-/* A CALLN result produced before IR_LOOP can be a PHI's incoming value for
-** the next iteration. The allocator may move that value to a preserved
-** register at the exact loop snapshot before the next body call. Validate
-** that specific rename rather than judging the original CALLN result's
-** caller-clobbered register. */
+/* A pure helper result produced before IR_LOOP can be a PHI's incoming
+** value for the next iteration. The allocator may move that value to a
+** preserved register at the exact loop snapshot before the next body call.
+** Validate that specific rename rather than the original result register. */
 static int arm64_scalar_math_loop_value_survives(
                                       const LJArm64PostRAView *v, IRRef n,
                                       IRRef value, IRRef loop, IRRef call,
@@ -23077,15 +23076,19 @@ static int arm64_scalar_math_loop_value_survives(
   RegSP loop_rs = REGSP(RID_NONE, 0);
   IRType type;
   unsigned nphi = 0, nuse = 0;
-  IRIns body;
+  IRIns source, body;
   if (!v || !v->snap || !v->ir || value < REF_FIRST || value >= loop ||
       loop < REF_FIRST || loop >= call || call >= n || n > v->nins ||
-      value >= v->nins || ir_load_acq(&v->ir[value]).o != IR_CALLN ||
-      irt_type(ir_load_acq(&v->ir[value]).t) != IRT_NUM)
+      value >= v->nins)
     return 0;
   if (ir_load_acq(&v->ir[loop]).o != IR_LOOP) return 0;
+  source = ir_load_acq(&v->ir[value]);
   body = ir_load_acq(&v->ir[call]);
-  if (body.o != IR_CALLN || irt_type(body.t) != IRT_NUM) return 0;
+  type = (IRType)irt_type(source.t);
+  if (irt_type(body.t) != type ||
+      !((source.o == IR_CALLN && body.o == IR_CALLN && type == IRT_NUM) ||
+        (source.o == IR_MOD && body.o == IR_MOD && type == IRT_INT)))
+    return 0;
   for (s = 0; s < v->nsnap; s++) {
     if (snap_ref_acq(&v->snap[s]) == loop) {
       loop_snap = s;
@@ -23102,9 +23105,9 @@ static int arm64_scalar_math_loop_value_survives(
     loop_rs = ren.prev;
   }
   if (nrename != 1u) return 0;
-  /* This exception is only for the initial CALLN value flowing into the
-  ** loop PHI whose backedge is the body CALLN. It cannot cover an ordinary
-  ** post-loop computation that happens to share the same snapshot rename. */
+  /* Only the initial helper value flowing into the loop PHI whose backedge
+  ** is the same helper family is covered. An ordinary later computation
+  ** sharing this snapshot rename is not covered. */
   for (ref = loop+1u; ref < n; ref++) {
     IRIns use = ir_load_acq(&v->ir[ref]);
     IRMode mode;
@@ -23116,16 +23119,13 @@ static int arm64_scalar_math_loop_value_survives(
     if (!op1 && !op2) continue;
     nuse++;
     if (use.o != IR_PHI || !op1 || op2 || use.op2 != call ||
-        irt_type(use.t) != IRT_NUM)
+        irt_type(use.t) != type)
       return 0;
     nphi++;
   }
   if (nuse != 1u || nphi != 1u) return 0;
   rs = arm64_scalar_postra_snapshot_regsp(v, n, value, loop_snap);
-  if (rs != loop_rs || ra_hasspill(regsp_spill(rs)) ||
-      regsp_reg(rs) < RID_D8 || regsp_reg(rs) > RID_D15)
-    return 0;
-  type = (IRType)irt_type(ir_load_acq(&v->ir[value]).t);
+  if (rs != loop_rs || ra_hasspill(regsp_spill(rs))) return 0;
   return arm64_scalar_math_regsp_survives(rs, type, cap);
 }
 

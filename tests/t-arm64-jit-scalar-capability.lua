@@ -334,6 +334,13 @@ run('integer_mod_constant',integer_mod_constant,32,8)
 run('integer_mod_dynamic',integer_mod_dynamic,32,8,7)
 run('integer_mod_negative',integer_mod_dynamic,32,-80,-7)
 
+local function integer_mod_result(n,x,d)
+  local i,sum,result=0,.5,0
+  while i<n do result=(x+i)%d; sum=sum+result; i=i+1 end
+  return sum+result
+end
+run('integer_mod_result_dynamic',integer_mod_result,32,8,7)
+
 local function numeric_neg(n,x)
   local i,y=0,x
   while i<n do y=-y; i=i+1 end
