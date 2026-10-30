@@ -144,3 +144,16 @@ is `cf33d7e6c672ab0d111d8413b05f30264c2b0307430c9aabcace424da4d64b47`.
 The component's final ordinary live-peer probes witness both architectures'
 selected XLOAD loop, 84 exact-root exits and unchanged code identity after GC.
 This snapshot proof does not yet cover raw bytes from multiple-result CALLs.
+
+The combined ordinary matrix passed at notes/merge revision `e9ab0f3e0`, whose
+production and fixtures match `8123b7a3d`, now frozen for the next complete
+gate. ARM64 assertions and strict bare-`-Werror` x86_64 assertions each pass
+509 source cases, 509 v2-bytecode cases, 260 workload semantic checks,
+topology/expanded probes, the existing ninety fixed/dynamic-positive byte
+rows, forty dynamic-negative byte rows, the live-peer raw-U8 snapshot witness
+and twelve FFI-index rows. The matrix and immutable binaries are in
+`/Users/frityet/Scratch/ljmt-byte-snapshots-forl-ordinary-20261030/`.
+It restored ordinary ARM64 assertions with profile
+`a06917bc816592b6e6fce721e780f8ab7b0a063ea72ee0a5f8ed11878cc157c9`.
+The full gate at `8123b7a3d` is separately in progress; focused and ordinary
+matrix success does not replace its result.
