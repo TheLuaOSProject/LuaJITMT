@@ -635,3 +635,9 @@ with an independent ordinary rebuild recorded through `70bc26286`. The full
 gate frozen at `505069708` (integer concatenation and child-return witnesses,
 excluding modulo) is still running. Later unary-leaf, character-string and
 modulo-result allocation work is not included in these frozen results.
+
+## Retained modulo results and integrated unary validation
+
+Merged `72f03e07a` after its four-profile and fresh ordinary ARM64/strict-x86_64 checks passed; the detailed evidence is in `arm64-integer-modulo-result-preservation-2026-10-30.md`. The merge retained the INT concat fixtures and existing child-return witness work.
+
+The integrated unary source `de8516eab` passed all four leaf-contract profiles, including the added full-width D-operand mutation that sets bit 8 while preserving the low byte. Evidence: `/Users/frityet/Scratch/ljmt-unary-integrated-20261030/four-profile.log`; ordinary restoration fingerprint `88d42e9d7f8528b2a5197d1147773a8f6ac4d182edd3048bfd3cd8ea6f071b5c`. An independent fresh ordinary unary run remains separate. These are component and integration checks, not full parity.
