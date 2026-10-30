@@ -56,7 +56,6 @@ int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target, MCode *insp)
 ** ABI and snapshot contracts. Unproved heap and call effects remain closed.
 */
 
-
 static int arm64_ir_reject(LJArm64IRReject *reject,
 	LJArm64IRRejectReason reason, IRRef ref, IROp op, uint16_t detail)
 {
@@ -10916,7 +10915,6 @@ static int arm64_ir_snapshots(const GCtrace *T, IRRef loopref,
 	int allow_forl_step,
 	LJArm64IRReject *reject)
 {
-
   SnapNo snapno;
   IRRef prevref = 0;
   MSize expected_mapofs = 0;
@@ -11042,10 +11040,9 @@ static int arm64_ir_guard_snapshots(const GCtrace *T,
     const IRIns *ir = &T->ir[ref];
     if (!irt_isguard(ir->t))
       continue;
-    if (T->snap[0].ref > ref) {
+    if (T->snap[0].ref > ref)
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT, ref,
 			     (IROp)ir->o, 0);
-    }
     while (snapno+1u < T->nsnap && T->snap[snapno+1u].ref <= ref)
       snapno++;
     if (T->snap[snapno].ref > ref)
@@ -18153,7 +18150,6 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
 				 BCOp rootop, const LJArm64SideIRView *side,
 				 LJArm64IRReject *reject, int *forl_directionp)
 {
-
   IRRef ref = REF_BASE, loop = 0, poll = 0, firstphi = 0;
   IRRef root1 = 0, root2 = 0, root3 = 0, resultroot = 0, resultref = 0;
   IRRef previous_snap = 0, poll_snap = 0, completed_store = 0;
@@ -18942,7 +18938,7 @@ bad_type:
                          (IROp)T->ir[ref].o, 0);
 bad_poll:
   return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_XPOLL, ref, IR_XPOLL, 0);
- bad_snapshot:
+bad_snapshot:
   return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT, ref, IR_XPOLL,
                          0);
 }
