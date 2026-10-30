@@ -4,13 +4,16 @@ local vmdef, bit = require('jit.vmdef'), require('bit')
 local ffi, threading = require('ffi'), require('threading')
 assert(jit.arch == 'arm64' and jit.status())
 
-local ready, release = threading.channel(1), threading.channel(1)
-local peer = assert(threading.spawn(function(rdy, rel)
-  assert(rdy:send(true, 5))
-  assert(select(2, rel:recv(120)))
-  return true
-end, ready, release))
-assert(select(2, ready:recv(5)))
+local ready, release, peer
+if not rooted_upvalue_no_peer then
+  ready, release = threading.channel(1), threading.channel(1)
+  peer = assert(threading.spawn(function(rdy, rel)
+    assert(rdy:send(true, 5))
+    assert(select(2, rel:recv(120)))
+    return true
+  end, ready, release))
+  assert(select(2, ready:recv(5)))
+end
 
 local function make_cell(initial)
   local value = initial
@@ -64,8 +67,29 @@ if rooted_upvalue_admission then
   local literal = literals[mode]
   local fn = (mode == 'get' and read) or (mode == 'get-forl' and read_for) or
              (mode == 'store' and write) or write_for
+  if mode == 'no-peer-string-sub-forl' or
+     mode == 'no-peer-string-sub-while' then
+    local sub = string.sub
+    if mode == 'no-peer-string-sub-forl' then
+      fn = function(s, n)
+        local observed = s
+        for _ = 1, n do observed = sub(s, -4, -5) end
+        return observed
+      end
+    else
+      fn = function(s, n)
+        local i, observed = 0, s
+        while i < n do
+          observed = sub(s, -4, -5)
+          i = i + 1
+        end
+        return observed
+      end
+    end
+  end
   assert(mode == 'get' or mode == 'store' or mode == 'get-forl' or
-         mode == 'store-forl' or literal)
+         mode == 'store-forl' or mode == 'no-peer-string-sub-forl' or
+         mode == 'no-peer-string-sub-while' or literal)
   if literal then
     fn = assert(loadstring('local value; return function(n) '..
       'local i=0; while i<n do value='..literal[1]..
@@ -81,13 +105,18 @@ if rooted_upvalue_admission then
   jit.on(fn, true)
   jit.opt.start('hotloop=1', 'hotexit=1000', 'maxtrace=4')
   for _ = 1, 20 do
-    if mode == 'get' or mode == 'get-forl' then assert(fn(32) == 1.25)
+    if mode == 'no-peer-string-sub-forl' or
+       mode == 'no-peer-string-sub-while' then
+      assert(fn('a\0\255bcdef', 32) == '')
+    elseif mode == 'get' or mode == 'get-forl' then assert(fn(32) == 1.25)
     elseif literal then assert(fn(32) == literal[2])
     else assert(fn(1.25, 32) == 1.25) end
   end
-  assert(release:send(true, 5))
-  local ok, result = peer:join(5)
-  assert(ok and result)
+  if peer then
+    assert(release:send(true, 5))
+    local ok, result = peer:join(5)
+    assert(ok and result)
+  end
   print('t-arm64-jit-rooted-upvalues admission selectors ready')
   return
 end
