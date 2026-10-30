@@ -753,11 +753,23 @@ static SnapNo open_addov_child_snapshot(const GCtrace *T,
 static IRRef open_kgc_function_ref(const OpenFixture *f, GCfunc *fn)
 {
 	IRRef found=0;
-	for (IRRef r=f->live->nk;r<REF_TRUE;r++) {
+	for (IRRef r=f->live->nk;r<REF_TRUE;) {
 	  IRIns ins=ir_load_acq(&f->ir[r]);
 	  if (ins.o==IR_KGC && ir_kgc_load_acq(&f->ir[r])==obj2gco(fn)) {
 	    assert(!found && "duplicate function constant in copied trace");
 	    found=r;
+	  }
+	  if (ins.o==IR_KNUM || ins.o==IR_KINT64 ||
+	      (LJ_GC64 && (ins.o==IR_KGC || ins.o==IR_KPTR ||
+			   ins.o==IR_KKPTR))) {
+	    assert(r+1u<REF_TRUE && "truncated two-word IR constant");
+	    r+=2u;
+	  } else if (ins.o==IR_KINT || ins.o==IR_KGC || ins.o==IR_KPTR ||
+		     ins.o==IR_KKPTR || ins.o==IR_KPRI || ins.o==IR_KNULL) {
+	    r++;
+	  } else {
+	    assert(0 && "unexpected non-constant in IR constant range");
+	    return 0;
 	  }
 	}
 	return found;
