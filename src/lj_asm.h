@@ -153,6 +153,11 @@ typedef struct LJArm64SideIRView {
   IRRef parent_root_forl_snapref;
   IRRef parent_root_forl_nins;
   uint8_t parent_root_forl_range_valid;
+  /* A NUM FORL side reuses the root's already certified literal step. The
+  ** value is copied while the root body is protected and remains tied to
+  ** parent_generation/root_generation. Dynamic steps stay closed here. */
+  lua_Number parent_num_forl_step;
+  uint8_t parent_num_forl_valid;
   TraceNo link;
   ExitNo exitno;
   BCIns startins;
@@ -196,6 +201,8 @@ typedef struct LJArm64SideParentSnapshot {
   IRRef parent_root_forl_snapref;
   IRRef parent_root_forl_nins;
   uint8_t parent_root_forl_range_valid;
+  lua_Number parent_num_forl_step;
+  uint8_t parent_num_forl_valid;
   const BCIns *continuation;
   /* Root-loop source and bounded executable body interval. */
   BCIns startins;
@@ -277,6 +284,9 @@ LJ_FUNC int lj_asm_arm64_side_postra_admit(
 #ifdef LJ_TRACE_TEST_HELPERS
 LJ_FUNC int lj_asm_arm64_test_scalar_math_live_across(
 	const LJArm64PostRAView *view, IRRef semantic_nins, IRRef loop, IRRef call);
+LJ_FUNC int lj_asm_arm64_test_side_forl_boundary(
+	const LJArm64SideIRView *side, const GCtrace *T,
+	const LJArm64PostRAView *view, const SnapShot *snap);
 LJ_FUNC void lj_asm_arm64_test_force_exitstub_mcode_retry(uint32_t count);
 #if LJ_HASJIT_FFI_CALLXS
 /* Inject a missing fixed CALLXS ABI plan: 1=stack sizing, 2=emission, 0=off.

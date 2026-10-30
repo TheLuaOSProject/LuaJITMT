@@ -12593,6 +12593,7 @@ static int arm64_side_parent_sload_valid(const LJArm64SideIRView *side,
   MSize i, nent;
   IRRef ref;
   IRType type;
+  IRType forl_type;
   RegSP rs;
   int readonly, no_restore;
   if (!side || !load || !side->parent_snap || !side->parent_map_values ||
@@ -12606,6 +12607,7 @@ static int arm64_side_parent_sload_valid(const LJArm64SideIRView *side,
 	return 0;
   readonly = load->op2 ==
 	(IRSLOAD_PARENT|IRSLOAD_READONLY|IRSLOAD_INHERIT);
+  forl_type = side->parent_num_forl_valid ? IRT_NUM : IRT_INT;
   no_restore = 0;
   nent = snap_nent_acq(side->parent_snap);
   for (i = 0; i < nent; i++) {
@@ -12637,10 +12639,12 @@ static int arm64_side_parent_sload_valid(const LJArm64SideIRView *side,
 	        source.op2 != (root_source.op2|IRSLOAD_PARENT))
 	      return 0;
 	  } else if (load->op1 == idxslot) {
-	    if ((source.t.irt & ~IRT_ISPHI) != (IRT_INT|IRT_GUARD) ||
+	    if (irt_type(source.t) != forl_type ||
+		(source.t.irt & ~IRT_ISPHI) != (forl_type|IRT_GUARD) ||
 	        source.op2 != (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT))
 	      return 0;
-	  } else if (source.t.irt != IRT_INT ||
+	  } else if (irt_type(source.t) != forl_type ||
+		     source.t.irt != forl_type ||
 	             source.op2 != (IRSLOAD_READONLY|IRSLOAD_INHERIT)) {
 	    return 0;
 	  }
@@ -12748,6 +12752,168 @@ static int arm64_side_forl_step_source(const LJArm64SideIRView *side,
   return 1;
 }
 
+/* First-generation NUM FORL sides inherit only a literal, already certified
+** root step. Keep dynamic steps and descendants closed until their control
+** value is carried by an equally exact snapshot proof. */
+static int arm64_side_forl_num_step_source(const LJArm64SideIRView *side,
+	lua_Number *stepp)
+{
+  uint32_t admission;
+  int ascending;
+  lua_Number step;
+  MSize idxslot, header;
+  BCIns fori, back;
+  if (!side || !stepp || side->parent != side->root ||
+	  side->parent_num_forl_valid != 1u ||
+	  side->parent_generation == 0 || side->root_generation == 0 ||
+	  bc_op(side->parent_startins) != BC_FORL || !side->proto_bc ||
+	  side->loop_header_pc == 0 ||
+	  side->loop_header_pc >= side->proto_sizebc ||
+	  side->loop_end_pc >= side->proto_sizebc)
+	return 0;
+  admission = side->parent_admission;
+  if (admission == (TRACE_ARM64_NUM_FORL_ADMITTED|
+		    TRACE_ARM64_NUM_FORL_ASCENDING))
+	ascending = 1;
+  else if (admission == (TRACE_ARM64_NUM_FORL_ADMITTED|
+			 TRACE_ARM64_NUM_FORL_DESCENDING))
+	ascending = 0;
+  else
+	return 0;
+  step = side->parent_num_forl_step;
+  header = side->loop_header_pc;
+  fori = (BCIns)la_load32_acq((const uint32_t *)&side->proto_bc[header]);
+  back = (BCIns)la_load32_acq(
+	(const uint32_t *)&side->proto_bc[side->loop_end_pc]);
+  idxslot = 1u+LJ_FR2+(MSize)bc_a(side->parent_startins);
+  if (bc_op(fori) != BC_FORI ||
+	  bc_a(fori) != bc_a(side->parent_startins) ||
+	  back != BCINS_AD(BC_JFORL, bc_a(side->parent_startins), side->root) ||
+	  idxslot+FORL_EXT >= side->root_topslot ||
+	  !(step > 0.0 || step < 0.0) ||
+	  ((step > 0.0) != ascending))
+	return 0;
+  *stepp = step;
+  return 1;
+}
+
+/* Prove the numeric index update and direction-matched stop test executed by
+** this root-linked child. User arithmetic may also contain NUM ADDs; only an
+** update rooted in the inherited index with the parent's certified step and
+** exact inherited stop receives loop-control authority. */
+static int arm64_side_forl_num_index_add_ir(const LJArm64SideIRView *side,
+	const GCtrace *T, IRRef ref, IRIns add)
+{
+  MSize idxslot, stopslot, ordinal, matches = 0;
+  IRType cmpop_type;
+  IROp cmpop;
+  lua_Number step;
+  unsigned comparisons = 0;
+  if (!side || !T || add.o != IR_ADD || add.t.irt != IRT_NUM ||
+	  !arm64_side_forl_num_step_source(side, &step) ||
+	  !arm64_scalar_ir_ref(T, add.op2, ref, IRT_NUM) ||
+	  add.op2 < T->nk || add.op2 >= REF_TRUE ||
+	  T->ir[add.op2].o != IR_KNUM ||
+	  ir_knum(&T->ir[add.op2])->n != step ||
+	  add.op1 < REF_FIRST || add.op1 >= ref)
+	return 0;
+  idxslot = 1u+LJ_FR2+(MSize)bc_a(side->parent_startins);
+  stopslot = idxslot+FORL_STOP;
+  {
+	IRIns idx = T->ir[add.op1];
+	if (idx.o != IR_SLOAD || idx.op1 != idxslot ||
+	    idx.t.irt != IRT_NUM ||
+	    idx.op2 != (IRSLOAD_PARENT|IRSLOAD_INHERIT))
+	  return 0;
+  }
+  for (ordinal = 0; ordinal < side->parent_nregspmap; ordinal++) {
+	if (side->parent_bindings[ordinal].slot == idxslot)
+	  matches++;
+	}
+	if (matches != 1u) {
+	  return 0;
+	}
+	for (ordinal = 0; ordinal < side->parent_nregspmap; ordinal++) {
+	if (side->parent_bindings[ordinal].slot == idxslot &&
+	    arm64_side_parent_sload_valid(side, &T->ir[add.op1], ordinal))
+	  matches = 2u;
+	}
+	if (matches != 2u) {
+	  return 0;
+	}
+  cmpop = step > 0.0 ? IR_LE : IR_GE;
+  cmpop_type = IRT_NUM|IRT_GUARD;
+  for (ordinal = ref+1u; ordinal < T->nins; ordinal++) {
+	IRIns cmp = T->ir[ordinal], stop;
+	if (cmp.o != cmpop || cmp.t.irt != cmpop_type || cmp.op1 != ref ||
+	    cmp.op2 < REF_FIRST || cmp.op2 >= ordinal)
+	  continue;
+	stop = T->ir[cmp.op2];
+	if (stop.o != IR_SLOAD || stop.op1 != stopslot ||
+	    stop.t.irt != IRT_NUM ||
+	    stop.op2 != (IRSLOAD_PARENT|IRSLOAD_READONLY|IRSLOAD_INHERIT))
+	  continue;
+	for (matches = 0; matches < side->parent_nregspmap; matches++)
+	  if (side->parent_bindings[matches].slot == stopslot &&
+	      arm64_side_parent_sload_valid(side, &stop, matches))
+	    comparisons++;
+  }
+  return comparisons == 1u;
+}
+
+static int arm64_side_forl_num_index_add_postra(
+	const LJArm64SideIRView *side, const LJArm64PostRAView *v,
+	IRRef ref, IRIns add, IRRef n)
+{
+  MSize idxslot, stopslot, ordinal, matches = 0;
+  IROp cmpop;
+  lua_Number step;
+  unsigned comparisons = 0;
+  if (!side || !v || add.o != IR_ADD || add.t.irt != IRT_NUM ||
+	  !arm64_side_forl_num_step_source(side, &step) ||
+	  !arm64_scalar_postra_ref(v, add.op2, add.op2, IRT_NUM) ||
+	  !arm64_scalar_postra_kref(v, add.op2, IRT_NUM) ||
+	  ir_load_acq(&v->ir[add.op2]).o != IR_KNUM ||
+	  ir_knum(&v->ir[add.op2])->n != step ||
+	  add.op1 < REF_FIRST || add.op1 >= ref)
+	return 0;
+  idxslot = 1u+LJ_FR2+(MSize)bc_a(side->parent_startins);
+  stopslot = idxslot+FORL_STOP;
+  {
+	IRIns idx = ir_load_acq(&v->ir[add.op1]);
+	if (idx.o != IR_SLOAD || idx.op1 != idxslot ||
+	    idx.t.irt != IRT_NUM ||
+	    idx.op2 != (IRSLOAD_PARENT|IRSLOAD_INHERIT))
+	  return 0;
+  }
+  for (ordinal = 0; ordinal < side->parent_nregspmap; ordinal++)
+	if (side->parent_bindings[ordinal].slot == idxslot)
+	  matches++;
+  if (matches != 1u) return 0;
+  for (ordinal = 0; ordinal < side->parent_nregspmap; ordinal++)
+	if (side->parent_bindings[ordinal].slot == idxslot &&
+	    arm64_side_parent_sload_valid(side, &v->ir[add.op1], ordinal))
+	  matches = 2u;
+  if (matches != 2u) return 0;
+  cmpop = step > 0.0 ? IR_LE : IR_GE;
+  for (ordinal = ref+1u; ordinal < n; ordinal++) {
+	IRIns cmp = ir_load_acq(&v->ir[ordinal]), stop;
+	if (cmp.o != cmpop || cmp.t.irt != (IRT_NUM|IRT_GUARD) ||
+	    cmp.op1 != ref || cmp.op2 < REF_FIRST || cmp.op2 >= ordinal)
+	  continue;
+	stop = ir_load_acq(&v->ir[cmp.op2]);
+	if (stop.o != IR_SLOAD || stop.op1 != stopslot ||
+	    stop.t.irt != IRT_NUM ||
+	    stop.op2 != (IRSLOAD_PARENT|IRSLOAD_READONLY|IRSLOAD_INHERIT))
+	  continue;
+	for (matches = 0; matches < side->parent_nregspmap; matches++)
+	  if (side->parent_bindings[matches].slot == stopslot &&
+	      arm64_side_parent_sload_valid(side, &stop, matches))
+	    comparisons++;
+  }
+  return comparisons == 1u;
+}
+
 static int arm64_side_forl_step_map_valid(const LJArm64SideIRView *side,
 	IRRef stepref, int32_t step)
 {
@@ -12844,10 +13010,16 @@ static int arm64_side_forl_boundary_snapshot_ir(
   MSize i, idxslot, mask = 0;
   IRRef oldidx = 0, ext = 0;
   int32_t step;
+  lua_Number numstep;
+  int numeric;
   if (!side || !T || !snap || side->linktype != LJ_TRLINK_ROOT ||
-      !arm64_side_forl_step_source(side, &step) ||
+      (side->parent_num_forl_valid ?
+       !arm64_side_forl_num_step_source(side, &numstep) :
+       !arm64_side_forl_step_source(side, &step)) ||
+      T->nins <= REF_FIRST ||
       snap->mapofs > T->nsnapmap || snap->nent > T->nsnapmap-snap->mapofs)
     return 0;
+  numeric = side->parent_num_forl_valid;
   idxslot = 1u+LJ_FR2+bc_a(side->parent_startins);
   for (i = 0; i < snap->nent; i++) {
     SnapEntry entry = T->snapmap[snap->mapofs+i];
@@ -12859,14 +13031,26 @@ static int arm64_side_forl_boundary_snapshot_ir(
     if (mask & (1u << role)) return 0;
     mask |= 1u << role;
     if (role == FORL_STEP) {
-      int32_t found;
-      if (!arm64_ir_kint_value(T, value, &found) || found != step) return 0;
+      if (numeric) {
+	if (!irref_isk(value) || value < T->nk || value >= REF_TRUE ||
+	    value >= snap->ref || value >= T->nins-1u ||
+	    !arm64_scalar_ir_ref(T, value, snap->ref, IRT_NUM))
+	  return 0;
+	if (T->ir[value].o != IR_KNUM || T->ir[value].t.irt != IRT_NUM ||
+	    ir_knum(&T->ir[value])->n != numstep)
+	  return 0;
+      } else {
+	int32_t found;
+	if (!arm64_ir_kint_value(T, value, &found) || found != step)
+	  return 0;
+      }
       continue;
     }
     if (value < REF_FIRST || value >= snap->ref || value >= T->nins)
       return 0;
     load = &T->ir[value];
-    if (load->o != IR_SLOAD || load->t.irt != IRT_INT ||
+    if (load->o != IR_SLOAD || load->t.irt !=
+	(numeric ? IRT_NUM : IRT_INT) ||
         load->op1 != (role == FORL_EXT ? idxslot : slot) ||
         load->op2 != (IRSLOAD_PARENT|IRSLOAD_INHERIT|
                      (role == FORL_STOP ? IRSLOAD_READONLY : 0))) return 0;
@@ -12970,19 +13154,26 @@ static int arm64_side_forl_snapshot_stop_ir(const LJArm64SideIRView *side,
 {
   MSize idxslot, slot, ordinal, matches = 0;
   int32_t step;
+  IRType type;
   IRRef value = snap_ref(sn);
   IRIns load;
+  lua_Number numstep;
   if (!side || !T || (sn & 0x00ff0000u) != SNAP_NORESTORE ||
-	  !arm64_side_forl_step_source(side, &step))
+	  (side->parent_num_forl_valid ?
+	   !arm64_side_forl_num_step_source(side, &numstep) :
+	   !arm64_side_forl_step_source(side, &step)))
 	return 0;
+  UNUSED(step);
+  UNUSED(numstep);
   idxslot = 1u+LJ_FR2+(MSize)bc_a(side->parent_startins);
   slot = snap_slot(sn);
   if (slot != idxslot+FORL_STOP || value < REF_FIRST || value >= before ||
 	  value >= T->nins)
 	return 0;
   load = T->ir[value];
+  type = side->parent_num_forl_valid ? IRT_NUM : IRT_INT;
   if (load.o != IR_SLOAD || load.op1 != slot ||
-	  (load.t.irt & ~IRT_ISPHI) != IRT_INT ||
+	  (load.t.irt & ~IRT_ISPHI) != type ||
 	  load.op2 != (IRSLOAD_PARENT|IRSLOAD_READONLY|IRSLOAD_INHERIT))
 	return 0;
   for (ordinal = 0; ordinal < side->parent_nregspmap; ordinal++)
@@ -16500,6 +16691,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
   MSize expected_ofs = 0, maxslots;
   uintptr_t proto_lo, proto_hi;
   unsigned nphi = 0, loop_snap = 0, nforl_side_add = 0;
+  unsigned nforl_num_side_add = 0;
   int forl_dynamic_step = 0, forl_num = 0, forl_num_ascending = 0;
   MSize parent_sload = 0;
   SnapNo s;
@@ -16750,6 +16942,12 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
     case IR_ADD:
       /* The stock bit narrowing pass uses wrapping INT ADD/SUB. These are
       ** pure 32-bit operations, distinct from guarded Lua arithmetic. */
+      if (type == IRT_NUM && side && side->parent_num_forl_valid &&
+	  arm64_side_forl_num_index_add_ir(side, T, ref, *ir)) {
+	if (++nforl_num_side_add != 1u) goto bad_operand;
+	binary = 1;
+	break;
+      }
       if (type == IRT_INT && side &&
           arm64_side_forl_index_add_ir(side, T, ref, *ir)) {
         if (++nforl_side_add != 1u) goto bad_operand;
@@ -16992,6 +17190,11 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
   if (side && parent_sload != side->parent_nregspmap)
 	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND, REF_BASE,
 			       IR_SLOAD, (uint16_t)parent_sload);
+  if (side && side->parent_num_forl_valid &&
+	nforl_num_side_add != 1u) {
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND, REF_BASE,
+			       IR_ADD, 39);
+	}
   ref = loop;
   if (side && side->linktype == LJ_TRLINK_ROOT) {
 	if (loop || !poll || J->loopref != 0)
@@ -17832,10 +18035,16 @@ static int arm64_side_forl_boundary_snapshot_postra(
   MSize i, idxslot, mask = 0;
   IRRef oldidx = 0, ext = 0;
   int32_t step;
+  lua_Number numstep;
+  int numeric;
   if (!side || !v || !snap || side->linktype != LJ_TRLINK_ROOT ||
-      !arm64_side_forl_step_source(side, &step) ||
+      (side->parent_num_forl_valid ?
+       !arm64_side_forl_num_step_source(side, &numstep) :
+       !arm64_side_forl_step_source(side, &step)) ||
+      v->nins <= REF_FIRST ||
       snap->mapofs > v->nsnapmap || snap->nent > v->nsnapmap-snap->mapofs)
     return 0;
+  numeric = side->parent_num_forl_valid;
   idxslot = 1u+LJ_FR2+bc_a(side->parent_startins);
   for (i = 0; i < snap->nent; i++) {
     SnapEntry entry = snapentry_acq(&v->snapmap[snap->mapofs+i]);
@@ -17847,14 +18056,27 @@ static int arm64_side_forl_boundary_snapshot_postra(
     if (mask & (1u << role)) return 0;
     mask |= 1u << role;
     if (role == FORL_STEP) {
-      int32_t found;
-      if (!arm64_scalar_postra_kint(v, value, &found) || found != step) return 0;
+      if (numeric) {
+	if (!irref_isk(value) || value < v->nk || value >= REF_TRUE ||
+	    value >= snap->ref || value >= v->nins-1u ||
+	    !arm64_scalar_postra_kref(v, value, IRT_NUM))
+	  return 0;
+	if (ir_load_acq(&v->ir[value]).o != IR_KNUM ||
+	    ir_load_acq(&v->ir[value]).t.irt != IRT_NUM ||
+	    ir_knum(&v->ir[value])->n != numstep)
+	  return 0;
+      } else {
+	int32_t found;
+	if (!arm64_scalar_postra_kint(v, value, &found) || found != step)
+	  return 0;
+      }
       continue;
     }
     if (value < REF_FIRST || value >= snap->ref || value >= v->nins)
       return 0;
     load = ir_load_acq(&v->ir[value]);
-    if (load.o != IR_SLOAD || load.t.irt != IRT_INT ||
+    if (load.o != IR_SLOAD || load.t.irt !=
+	(numeric ? IRT_NUM : IRT_INT) ||
         load.op1 != (role == FORL_EXT ? idxslot : slot) ||
         load.op2 != (IRSLOAD_PARENT|IRSLOAD_INHERIT|
                      (role == FORL_STOP ? IRSLOAD_READONLY : 0))) return 0;
@@ -17870,19 +18092,26 @@ static int arm64_side_forl_snapshot_stop_postra(
 {
   MSize idxslot, slot, ordinal, matches = 0;
   int32_t step;
+  lua_Number numstep;
+  IRType type;
   IRRef value = snap_ref(sn);
   IRIns load;
   if (!side || !v || (sn & 0x00ff0000u) != SNAP_NORESTORE ||
-	  !arm64_side_forl_step_source(side, &step))
+	  (side->parent_num_forl_valid ?
+	   !arm64_side_forl_num_step_source(side, &numstep) :
+	   !arm64_side_forl_step_source(side, &step)))
 	return 0;
+  UNUSED(step);
+  UNUSED(numstep);
   idxslot = 1u+LJ_FR2+(MSize)bc_a(side->parent_startins);
   slot = snap_slot(sn);
   if (slot != idxslot+FORL_STOP || value < REF_FIRST || value >= before ||
 	  value >= v->nins)
 	return 0;
   load = ir_load_acq(&v->ir[value]);
+	type = side->parent_num_forl_valid ? IRT_NUM : IRT_INT;
   if (load.o != IR_SLOAD || load.op1 != slot ||
-	  (load.t.irt & ~IRT_ISPHI) != IRT_INT ||
+	  (load.t.irt & ~IRT_ISPHI) != type ||
 	  load.op2 != (IRSLOAD_PARENT|IRSLOAD_READONLY|IRSLOAD_INHERIT))
 	return 0;
   for (ordinal = 0; ordinal < side->parent_nregspmap; ordinal++)
@@ -22542,6 +22771,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
   int spillowners_initialized = 0, forl_dynamic_step = 0, forl_num = 0;
   int forl_num_ascending = 0;
   unsigned nforl_side_add = 0;
+  unsigned nforl_num_side_add = 0;
   uintptr_t lo, hi;
   if (!v || !v->ir || !v->snap || !v->snapmap || !v->proto_bc ||
       v->nins <= REF_FIRST || v->nins >= REF_DROP || !v->nk ||
@@ -22851,6 +23081,12 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       binary = 1;
       break;
     case IR_ADD:
+      if (type == IRT_NUM && side && side->parent_num_forl_valid &&
+	  arm64_side_forl_num_index_add_postra(side, v, ref, p, n)) {
+	if (++nforl_num_side_add != 1u) return 0;
+	binary = 1;
+	break;
+      }
       if (type == IRT_INT && side &&
           arm64_side_forl_index_add_postra(side, v, ref, p, n)) {
         if (++nforl_side_add != 1u) return 0;
@@ -23111,6 +23347,9 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
   }
 
   if (side && parent_sload != side->parent_nregspmap)
+	return 0;
+  if (side && side->parent_num_forl_valid &&
+	nforl_num_side_add != 1u)
 	return 0;
   if (rootop == BC_FUNCF ? (loop != 0 || poll == 0) : side ?
 	(side->linktype == LJ_TRLINK_ROOT ? (loop != 0 || poll == 0) :
@@ -23437,14 +23676,27 @@ static int arm64_side_parent_forl_norestore_valid(
 	MSize idxslot, slot, control;
 	IRRef ref;
 	const IRIns *source, *root_source;
+	lua_Number numstep;
+	IRType type;
 	if (!side || bc_op(side->parent_startins) != BC_FORL ||
 	    i >= side->parent_nmap_values ||
 	    (sn & 0x00ff0000u) != SNAP_NORESTORE)
 	  return 0;
+	type = side->parent_num_forl_valid ? IRT_NUM : IRT_INT;
+	if (side->parent_num_forl_valid &&
+	    !arm64_side_forl_num_step_source(side, &numstep))
+	  return 0;
+	UNUSED(numstep);
 	slot = snap_slot(sn);
 	idxslot = 1u+LJ_FR2+(MSize)bc_a(side->parent_startins);
 	if (slot != idxslot && slot != idxslot+FORL_STOP &&
 	    slot != idxslot+FORL_STEP)
+	  return 0;
+	control = slot == idxslot ? 0 :
+	  slot == idxslot+FORL_STOP ? 1 : 2;
+	/* This bounded extension admits only the literal NUM step certified by the
+	** root; a step slot represented by a runtime SLOAD is a dynamic step. */
+	if (side->parent_num_forl_valid && control == 2)
 	  return 0;
 	ref = snap_ref(sn);
 	if (side->parent_map_values[i].slot != slot ||
@@ -23454,8 +23706,6 @@ static int arm64_side_parent_forl_norestore_valid(
 	if (source->o != IR_SLOAD || source->op1 != slot ||
 	    (source->op2 & IRSLOAD_CONVERT) != 0)
 	  return 0;
-	control = slot == idxslot ? 0 :
-	  slot == idxslot+FORL_STOP ? 1 : 2;
 	if (side->parent != side->root) {
 	  if ((source->op2 & IRSLOAD_PARENT) == 0 ||
 	      (side->parent_root_forl_mask & (1u<<control)) == 0)
@@ -23465,13 +23715,13 @@ static int arm64_side_parent_forl_norestore_valid(
 	    source->t.irt == root_source->t.irt &&
 	    source->op2 == (root_source->op2|IRSLOAD_PARENT) &&
 	    (control != 0 ||
-	     (source->t.irt & ~IRT_ISPHI) == (IRT_INT|IRT_GUARD));
+	     (source->t.irt & ~IRT_ISPHI) == (type|IRT_GUARD));
 	}
 	if ((source->op2 & IRSLOAD_PARENT) != 0) return 0;
 	if (slot == idxslot)
-	  return (source->t.irt & ~IRT_ISPHI) == (IRT_INT|IRT_GUARD) &&
+	  return (source->t.irt & ~IRT_ISPHI) == (type|IRT_GUARD) &&
 	    source->op2 == (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT);
-	return source->t.irt == IRT_INT &&
+	return source->t.irt == type &&
 	  source->op2 == (IRSLOAD_READONLY|IRSLOAD_INHERIT);
 }
 
