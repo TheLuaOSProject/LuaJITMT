@@ -198,3 +198,17 @@ The fixture expectation is updated to that reason, retaining the rejection.
 The failed full log and successful ordinary restoration remain in
 `/Users/frityet/Scratch/ljmt-mixed-byte-substring-complete-20261030/`.
 This failed attempt is not counted as a complete gate pass.
+
+The retry also includes the reviewed string-input `tostring` identity path
+through `9e37151c`. Its independent proof now requires the terminal saved cell
+to contain the exact guarded CALL argument, rejects every substituted
+admitted builtin and checks cell overwrites and control-flow bypasses. The
+component's final four-profile run passes. A preflight merge conflict was
+resolved by retaining both `FF_string_sub` and `FF_tostring` synthetic-bytecode
+checks. The integration adds `string.sub` to the tostring replacement
+mutations and wires its four-profile contract into the complete gate.
+Source `503c8ba2f` is frozen for the retry and a matched ordinary matrix.
+Retry evidence is in the preceding full-gate directory under
+`retry-503c8ba2f/`; the matrix is in
+`/Users/frityet/Scratch/ljmt-mixed-byte-substring-tostring-ordinary-20261030/`.
+Neither run is recorded as passed until its final result is available.
