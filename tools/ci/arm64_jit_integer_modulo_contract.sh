@@ -26,8 +26,8 @@ for profile in $profiles; do
   lj_ci_compile_fixture "$fixture" "$root/tests/t-arm64-jit-scalar-capability.c"
   lj_ci_run_fixture 180 "$fixture" "$root/tests/t-arm64-jit-scalar-capability.lua"
   LUA_PATH="$root/src/?.lua;$root/etc/?.lua;;" \
-    lj_ci_run_fixture 120 "$root/src/luajit" \
-      "$root/tests/t-arm64-jit-integer-modulo.lua"
+    perl -MTime::HiRes=alarm -e 'alarm shift; exec @ARGV; die "exec: $!\n"' \
+      120 "$root/src/luajit" "$root/tests/t-arm64-jit-integer-modulo.lua"
 done
 lj_ci_restore "$LJ_CI_RESTORE_TARGET_FLAGS" "$LJ_CI_RESTORE_XCFLAGS"
 echo "arm64_jit_integer_modulo_contract OK: profiles=$profiles; INT modulo, exact nonzero divisor proofs, independent admission mutations, native exits, edge oracles and GC"

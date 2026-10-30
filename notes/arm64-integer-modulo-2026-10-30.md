@@ -37,3 +37,10 @@ RENAME shape. It is retained as `ordinary-modulo-result-pair.lua` and
 closed. All four profiles and ordinary x64 validation remain pending at this
 initial source checkpoint. The new focused contract runs those four ARM
 profiles and is included in the complete gate.
+
+The first focused four-profile wrapper stopped after its passing assertion
+scalar fixture because `lj_ci_run_fixture` requires a compiled fixture's
+`.profile` sidecar; the ordinary Lua runtime has no such sidecar. The wrapper
+now uses a bounded direct runtime invocation after the profile-matched build.
+This was runner setup, before the ordinary probe executed, not a runtime
+failure. The original log remains in `modulo-final/four-profile.log`.
