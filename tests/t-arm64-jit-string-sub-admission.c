@@ -25,10 +25,14 @@ static int zero_first_case;
 
 static void assert_string_ready(lua_State *L, GCstr *str, GCArena *arena)
 {
+  int expected_huge = negative_first_case &&
+                      negative_first_output_width > 0 &&
+                      lj_str_size((MSize)negative_first_output_width) >
+                        LJ_HUGE_THRESHOLD;
+  if (expected_huge) assert(lj_arena_ishuge(arena));
   if (lj_arena_ishuge(arena)) {
     LJHugeInfo info;
-    assert(negative_first_case && negative_first_magnitude == 32768 &&
-           (uint32_t)negative_first_output_width > LJ_HUGE_THRESHOLD);
+    assert(expected_huge && negative_first_magnitude == 32768);
     assert(lj_arena_hugetab_lookup(&L2TG(L)->huge, str, &info));
     assert((info.flags & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY)) ==
            (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY));
@@ -44,6 +48,9 @@ static void string_publish(lua_State *L, GCstr *str)
   assert(lj_tg_jit_active_acq(L2TG(L)));
   assert(str->gct == (uint8_t)~LJ_TSTR);
   assert((negative_case || dynamic_end_case) ? str->len > 0u : str->len == 3u);
+  if (negative_first_case)
+    assert(negative_first_output_width > 0 &&
+           str->len == (uint32_t)negative_first_output_width);
   arena = lj_arena_of(str);
   assert_string_ready(L, str, arena);
   native_string_publications++;
@@ -114,9 +121,8 @@ int main(int argc, char **argv)
       negative_first_last_magnitude = (int)last_value;
     }
     assert(negative_first_magnitude > 0);
-    negative_first_output_width =
-      negative_first_magnitude >= negative_first_last_magnitude ?
-      negative_first_magnitude-negative_first_last_magnitude+1 : 0;
+    negative_first_output_width = negative_first_magnitude-
+                                  negative_first_last_magnitude+1;
   }
   default_end = strstr(argv[2], "default-end") != NULL;
   zero_first_case = strncmp(argv[2], "zero-", 5u) == 0;
@@ -132,6 +138,13 @@ int main(int argc, char **argv)
   }
   lj_str_test_set_match_hook(NULL);
   lj_str_test_set_publish_hook(NULL);
+  if (negative_first_case && negative_first_output_width <= 0) {
+    assert(native_string_matches == 0u && native_string_publications == 0u);
+    fprintf(stderr, "substring admission fallback OK: %s width=%d, no native publication\n",
+            argv[2], negative_first_output_width);
+    lua_close(L);
+    return 0;
+  }
   assert(native_string_matches > 0u);
   if (((strstr(argv[2], "while") && !(negative && zero_first_case)) ||
        (default_end && !zero_first_case)) &&

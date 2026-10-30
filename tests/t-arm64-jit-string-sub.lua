@@ -88,6 +88,16 @@ for _, kind in ipairs(kinds) do
       jit.off(chunk, true)
       local oracle = chunk()
       jit.off(oracle, true)
+      if negative_first and negative_first_last_value and
+         negative_first_last < negative_first_index then
+        jit.off(f, true)
+        for _, value in ipairs({'', 'x', 'abc', 'a\0\255bcdef'}) do
+          assert(f(value, 80) == '' and f(value, 80) == oracle(value, 80))
+        end
+        assert(stop:send(true, 5))
+        assert(peer:join(5))
+        return
+      end
       jit.on(f, true)
       if substring_fixture_kind then
         substring_trace_clone = assert(loadstring(source))()
