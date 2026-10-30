@@ -287,3 +287,28 @@ Ordinary assertion ARM64 was restored with profile
 `e095cba669dc8eb8e785e0d09b6908887ba0a8ac0b2e35b1a8f1c56eb81b074b`.
 The complete gate is starting separately at this frozen source; the verified
 main production checkpoint remains `503c8ba2f` until that gate completes.
+
+## Sequential leaf integration
+
+Integrated the corrected sequential-leaf chain checkpoint `d06f48e13` and
+removed diagnostic formatting residue at `4c9cc207e`. Its full Lua-call
+contract passes all four profiles, including the original one-comparison
+cases, two/three/four comparison positives, five-comparison refusal and
+independent malformed snapshot-size/final-return-slot controls. Log:
+`/Users/frityet/Scratch/ljmt-sequential-strings-integration-20261030/four-profiles.log`.
+Ordinary ARM64 restore profile:
+`9872504bbad39a0a7970549c9c5de1ef1ecc49fac197ed49fb164dc9d6763b81`.
+
+The exact-source ordinary ARM64/strict-x86_64 matrix passes both stock corpora
+and the full preceding workload/byte/FFI/string matrix. Its sequential probe
+explicitly disables both the oracle runner and its captured leaf function,
+then checks neither was patched to a JIT entry. Both architectures match all
+2/3/4-decision results and expected cold resume PCs, retain native root/mcode
+identity across full GC, and run with a live peer. The earlier expanded probe
+only explicitly disabled the runner; this integrated evidence closes that
+oracle-independence limitation. Saved matching binaries/modules, archives,
+hashes and logs are in
+`/Users/frityet/Scratch/ljmt-sequential-strings-ordinary-20261030/`.
+
+The complete gate running separately at `52efb731e` does not include this
+later sequential slice. Main remains at the complete `503c8ba2f` checkpoint.
