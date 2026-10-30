@@ -41,3 +41,7 @@ negative byte ends, integer byte indices, captured FFI prefixes and folded
 64-bit literals on the later integration branch are not covered by this full
 gate. Numeric loop children, general calls/returns, recursion, protected
 calls, remaining FFI forms and broader topology still prevent full parity.
+
+After promotion, the main `codex/arm64-parity` checkout also rebuilt as
+ordinary assertion ARM64 without helper defines. Evidence:
+`main-ordinary-build.log` in the same directory.
