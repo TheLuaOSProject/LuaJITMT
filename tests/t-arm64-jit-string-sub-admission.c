@@ -139,9 +139,9 @@ int main(int argc, char **argv)
   lj_str_test_set_match_hook(NULL);
   lj_str_test_set_publish_hook(NULL);
   if (negative_first_case && negative_first_output_width <= 0) {
-    assert(native_string_matches == 0u && native_string_publications == 0u);
-    fprintf(stderr, "substring admission fallback OK: %s width=%d, no native publication\n",
-            argv[2], negative_first_output_width);
+    assert(native_string_publications == 0u);
+    fprintf(stderr, "substring candidate-JIT check OK: %s width=%d, fresh publications=%u\n",
+            argv[2], negative_first_output_width, native_string_publications);
     lua_close(L);
     return 0;
   }

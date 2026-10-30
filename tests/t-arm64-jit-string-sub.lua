@@ -90,12 +90,31 @@ for _, kind in ipairs(kinds) do
       jit.off(oracle, true)
       if negative_first and negative_first_last_value and
          negative_first_last < negative_first_index then
-        jit.off(f, true)
-        for _, value in ipairs({'', 'x', 'abc', 'a\0\255bcdef'}) do
-          assert(f(value, 80) == '' and f(value, 80) == oracle(value, 80))
+        jit.on(f, true)
+        local s = 'a\0\255bcdef'
+        for i = 1, 80 do
+          assert(f(s, 80) == '' and f(s, 80) == oracle(s, 80))
+        end
+        for _, value in ipairs({'', 'x', 'abc', false, {}, 12345}) do
+          local ok, actual = pcall(f, value, 80)
+          local expected_ok, expected = pcall(oracle, value, 80)
+          assert(ok == expected_ok and (not ok or actual == expected))
+        end
+        local root
+        for pc = 0, util.funcinfo(f).bytecodes-1 do
+          local ins = util.funcbc(f, pc)
+          if ins then
+            local op = bit.band(ins, 255)
+            local name = vmdef.bcnames:sub(op*6+1, op*6+6)
+            if name == 'JLOOP ' or name == 'JFORL ' then
+              root = bit.rshift(ins, 16)
+            end
+          end
         end
         assert(stop:send(true, 5))
         assert(peer:join(5))
+        print(jit.arch, kind, 'reversed-end fallback', -first, -last,
+              'candidate-JIT-on', 'root=' .. tostring(root))
         return
       end
       jit.on(f, true)
