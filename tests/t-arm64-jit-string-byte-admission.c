@@ -52,6 +52,11 @@ static int allocated(Arm64TraceFixture *f)
   return lj_asm_arm64_postra_admit(&f->view, &end);
 }
 
+static SnapEntry snap_with_slot(SnapEntry entry, MSize slot)
+{
+  return (entry & 0x00ffffffu) | ((SnapEntry)slot << 24);
+}
+
 static void run_chunk(lua_State *L, const char *src)
 {
   if (luaL_dostring(L, src) != LUA_OK) {
@@ -98,6 +103,27 @@ static int call_dynamic_loop_value(lua_State *L, const char *function_global,
   lua_pushinteger(L, 80);
   lua_pushnumber(L, index);
   status = lua_pcall(L, 3, 1, 0);
+  if (status == LUA_OK) {
+    assert(lua_isnumber(L, -1));
+    *out = lua_tonumber(L, -1);
+  } else {
+    assert(lua_isstring(L, -1));
+  }
+  lua_pop(L, 1);
+  return status;
+}
+
+static int call_u8_snapshot_loop(lua_State *L, const char *function_global,
+                                 const char *value_global, lua_Number index,
+                                 lua_Integer key, lua_Number *out)
+{
+  int status;
+  lua_getglobal(L, function_global);
+  lua_getglobal(L, value_global);
+  lua_pushinteger(L, 80);
+  lua_pushnumber(L, index);
+  lua_pushinteger(L, key);
+  status = lua_pcall(L, 4, 1, 0);
   if (status == LUA_OK) {
     assert(lua_isnumber(L, -1));
     *out = lua_tonumber(L, -1);
@@ -1299,6 +1325,321 @@ static void test_integer_dynamic_index(lua_State *L, int negative)
          negative ? "negative-" : "", (unsigned)no);
 }
 
+/* Exercise a real raw-U8 snapshot at the comparison exit after string.byte.
+** This is deliberately separate from the arithmetic-only dynamic index case:
+** the comparison keeps the byte result live in the cold snapshot. */
+static void test_u8_snapshot(lua_State *L)
+{
+  Arm64TraceFixture f;
+  GCproto *clonept, *viewpt;
+  TraceNo no;
+  GCtrace *owner;
+  BCIns *clonebc;
+  MCode *code;
+  MSize codesize, snapno = 0, mapidx = 0, callpc = 0;
+  BCReg calla = 0;
+  unsigned char *saved;
+  unsigned phase;
+  IRRef xload = 0, r;
+  int found = 0;
+  lua_Number actual = 0.0, expected = 0.0;
+  static const struct { const char *value; lua_Number index; lua_Integer key; }
+    cases[] = {
+      { "string_byte_value", 2, 99 },
+      { "string_byte_value", 2, 0 },
+      { "string_byte_nul", 2, 0 },
+      { "string_byte_value", 2.9, 99 },
+      { "string_byte_short", 2, 99 },
+      { "string_byte_empty", 2, 99 }
+    };
+
+  run_chunk(L, "jit.flush(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=8')");
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  assert(call_u8_snapshot_loop(L, "string_byte_u8_snapshot_trace",
+                               "string_byte_value", 2, 99, &actual) == LUA_OK);
+  lua_getglobal(L, "string_byte_u8_snapshot_trace");
+  assert(lua_isfunction(L, -1) && isluafunc(funcV(L->top-1)));
+  no = proto_trace_acq(funcproto(funcV(L->top-1)));
+  lua_pop(L, 1);
+  owner = traceref_safe(L2J(L), no);
+  if (!no || !owner || !trace_runnable_acq(owner, no) ||
+      bc_op(trace_startins_acq(owner)) != BC_LOOP)
+    fprintf(stderr, "U8 snapshot candidate did not publish: trace=%u owner=%p "
+            "starts=%u publishes=%u cleanup=%u aborts=%u err=%u entries=%u\n",
+            (unsigned)no, (void *)owner,
+            lj_trace_test_root_entry_startins_calls(),
+            lj_trace_test_root_entry_publishes(),
+            lj_trace_test_root_entry_cleanups(), lj_trace_test_abort_count(),
+            (unsigned)lj_trace_test_last_abort_error(),
+            lj_trace_test_root_entry_successes());
+  assert(no && owner && trace_runnable_acq(owner, no) &&
+         bc_op(trace_startins_acq(owner)) == BC_LOOP);
+  code = trace_mcode_acq(owner); codesize = trace_szmcode_acq(owner);
+  assert(code && codesize);
+  saved = (unsigned char *)malloc(codesize); assert(saved);
+  memcpy(saved, code, codesize);
+
+  for (phase = 0; phase < 2; phase++) {
+    if (phase) lua_gc(L, LUA_GCCOLLECT, 0);
+    for (size_t i = 0; i < sizeof(cases)/sizeof(cases[0]); i++) {
+      int expected_status = call_u8_snapshot_loop(L,
+          "string_byte_u8_snapshot_oracle", cases[i].value,
+          cases[i].index, cases[i].key, &expected);
+      uint32_t entries = lj_trace_test_root_entry_successes();
+      uint32_t exits = lj_trace_test_exit_calls();
+      int actual_status = call_u8_snapshot_loop(L,
+          "string_byte_u8_snapshot_trace", cases[i].value,
+          cases[i].index, cases[i].key, &actual);
+      assert(actual_status == expected_status &&
+             (actual_status != LUA_OK || actual == expected));
+      assert(lj_trace_test_root_entry_successes() > entries &&
+             lj_trace_test_exit_calls() > exits &&
+             lj_trace_test_last_exit_parent() == no);
+    }
+    assert(call_u8_snapshot_loop(L, "string_byte_u8_snapshot_trace",
+                                 "string_byte_value", 2, 99,
+                                 &actual) == LUA_OK);
+    assert(trace_runnable_acq(owner, no) && trace_mcode_acq(owner) == code &&
+           trace_szmcode_acq(owner) == codesize &&
+           memcmp(saved, code, codesize) == 0);
+  }
+
+  lua_getglobal(L, "string_byte_u8_snapshot_clone");
+  arm64_fixture_init_trace(&f, L, "string_byte_u8_snapshot_clone", no);
+  f.view.proto = trace_startpt_acq(f.owner);
+  viewpt = (GCproto *)f.view.proto;
+  assert(semantic(&f) && allocated(&f));
+  clonept = trace_startpt_acq(&f.semantic);
+  clonebc = (BCIns *)(uintptr_t)proto_bc(clonept);
+  {
+    unsigned calls = 0;
+    for (MSize pc = 0; pc < clonept->sizebc; pc++) {
+      BCIns ins = clonebc[pc];
+      if (bc_op(ins) == BC_CALL && bc_b(ins) == 2 && bc_c(ins) == 3) {
+        calls++;
+        callpc = pc;
+        calla = bc_a(ins);
+      }
+    }
+    assert(calls == 1u);
+  }
+  for (r = REF_FIRST; r < f.semantic_nins; r++)
+    if (f.ir[r].o == IR_XLOAD && f.ir[r].t.irt == IRT_U8) xload = r;
+  assert(xload);
+  for (SnapNo sn = 0; sn < f.view.nsnap && !found; sn++) {
+    const SnapShot *snap = &f.snaps[sn];
+    for (MSize i = 0; i < snap_nent_acq(snap); i++) {
+      MSize candidate = snap_mapofs_acq(snap) + i;
+      SnapEntry entry = f.map[candidate];
+      if (snap_ref(entry) == xload) {
+        assert((entry & (SNAP_FRAME|SNAP_NORESTORE)) == 0);
+        snapno = sn;
+        mapidx = candidate;
+        found = 1;
+        break;
+      }
+    }
+  }
+  assert(found);
+
+  /* The real exit maps the direct CALL output slot after its immediate copy. */
+  {
+    int direct = 0;
+    BCIns copy = clonebc[callpc+1u];
+    assert((bc_op(copy) == BC_CGET || bc_op(copy) == BC_MOV) &&
+           bc_d(copy) == calla && bc_a(copy) != calla);
+    for (SnapNo sn = 0; sn < f.view.nsnap; sn++) {
+      const SnapShot *snap = &f.snaps[sn];
+      uint64_t footer;
+      MSize snappc;
+      memcpy(&footer, &f.map[snap_mapofs_acq(snap)+snap_nent_acq(snap)],
+             sizeof(footer));
+      {
+        const BCIns *pc = (const BCIns *)(uintptr_t)(footer >> 8);
+        uintptr_t lo = (uintptr_t)(const void *)proto_bc(clonept);
+        uintptr_t addr = (uintptr_t)(const void *)pc;
+        assert(addr >= lo && addr < lo+clonept->sizebc*sizeof(BCIns));
+        snappc = (MSize)((addr-lo)/sizeof(BCIns));
+      }
+      for (MSize i = 0; i < snap_nent_acq(snap); i++) {
+        SnapEntry entry = f.map[snap_mapofs_acq(snap)+i];
+        MSize reg;
+        if (snap_ref(entry) != xload ||
+            (entry & (SNAP_FRAME|SNAP_NORESTORE))) continue;
+        reg = snap_slot(entry)-1u-LJ_FR2;
+        if (reg == calla && snappc > callpc+1u) direct = 1;
+      }
+    }
+    assert(direct);
+
+    /* KNIL range writes before each saved result must invalidate the direct
+    ** CALL output provenance, in both independent readers. */
+    {
+      BCIns old = clonebc[callpc+1u];
+      f.view.proto = clonept;
+      clonebc[callpc+1u] = BCINS_AD(BC_KNIL, calla, 0);
+      arm64_fixture_reset(&f);
+      assert(!semantic(&f));
+      clonebc[callpc+1u] = old;
+      f.view.proto = viewpt;
+      arm64_fixture_reset(&f);
+      assert(semantic(&f) && allocated(&f));
+      f.view.proto = clonept;
+      clonebc[callpc+1u] = BCINS_AD(BC_KNIL, calla, 0);
+      arm64_fixture_reset(&f);
+      assert(!allocated(&f));
+      clonebc[callpc+1u] = old;
+      f.view.proto = viewpt;
+      arm64_fixture_reset(&f);
+      assert(semantic(&f) && allocated(&f));
+    }
+    {
+      BCIns old = clonebc[callpc+2u];
+      f.view.proto = clonept;
+      clonebc[callpc+2u] = BCINS_AD(BC_KNIL, calla, 0);
+      arm64_fixture_reset(&f);
+      assert(!semantic(&f));
+      clonebc[callpc+2u] = old;
+      f.view.proto = viewpt;
+      arm64_fixture_reset(&f);
+      assert(semantic(&f) && allocated(&f));
+      f.view.proto = clonept;
+      clonebc[callpc+2u] = BCINS_AD(BC_KNIL, calla, 0);
+      arm64_fixture_reset(&f);
+      assert(!allocated(&f));
+      clonebc[callpc+2u] = old;
+      f.view.proto = viewpt;
+      arm64_fixture_reset(&f);
+      assert(semantic(&f) && allocated(&f));
+    }
+    /* Neither a pre-CALL forward edge nor a post-CALL backedge may enter the
+    ** saved interval after skipping the value definition. */
+    for (phase = 0; phase < 2; phase++) {
+      MSize q = phase ? clonept->sizebc : 0;
+      BCIns old;
+      if (!phase) {
+        for (; q < clonept->sizebc; q++)
+          if (q < callpc && bc_op(clonebc[q]) == BC_JMP) break;
+      } else {
+        for (q = clonept->sizebc; q > callpc+1u; q--)
+          if (bc_op(clonebc[q-1u]) == BC_JMP) { q--; break; }
+      }
+      assert(q < clonept->sizebc &&
+             (phase ? q > callpc : q < callpc) &&
+             bc_op(clonebc[q]) == BC_JMP);
+      old = clonebc[q];
+      f.view.proto = clonept;
+      clonebc[q] = BCINS_AJ(BC_JMP, bc_a(old),
+          (BCPos)((int32_t)(callpc+(phase ? 2u : 1u))-(int32_t)(q+1u)));
+      arm64_fixture_reset(&f);
+      assert(!semantic(&f));
+      clonebc[q] = old;
+      f.view.proto = viewpt;
+      arm64_fixture_reset(&f);
+      assert(semantic(&f) && allocated(&f));
+      f.view.proto = clonept;
+      clonebc[q] = BCINS_AJ(BC_JMP, bc_a(old),
+          (BCPos)((int32_t)(callpc+(phase ? 2u : 1u))-(int32_t)(q+1u)));
+      arm64_fixture_reset(&f);
+      assert(!allocated(&f));
+      clonebc[q] = old;
+      f.view.proto = viewpt;
+      arm64_fixture_reset(&f);
+      assert(semantic(&f) && allocated(&f));
+    }
+    f.view.proto = viewpt;
+  }
+
+  /* Each view accepts the captured exact map first. Then mutate one side at a
+  ** time, so semantic and allocated proofs cannot borrow each other's state. */
+  {
+    SnapEntry old = f.map[mapidx], postold = f.postmap[mapidx];
+    MSize prev = 0, next = snap_nslots_acq(&f.snaps[snapno]);
+    MSize i = mapidx - snap_mapofs_acq(&f.snaps[snapno]);
+    MSize other_slot = snap_slot(old);
+    if (i) prev = snap_slot(f.map[mapidx-1u]);
+    if (i+1u < snap_nent_acq(&f.snaps[snapno]))
+      next = snap_slot(f.map[mapidx+1u]);
+    if (snap_slot(old)+1u < next) other_slot++;
+    else if (snap_slot(old) > prev+1u) other_slot--;
+    else assert(!"U8 snapshot has no adjacent unmapped slot");
+    f.map[mapidx] = snap_with_slot(old, other_slot);
+    assert(!semantic(&f) && allocated(&f));
+    f.map[mapidx] = old;
+    f.postmap[mapidx] = snap_with_slot(postold, other_slot);
+    assert(semantic(&f) && !allocated(&f));
+    f.postmap[mapidx] = postold;
+  }
+  {
+    IRIns old = f.postra[xload];
+    f.postra[xload].r = RID_D0;
+    f.postra[xload].s = SPS_NONE;
+    assert(semantic(&f) && !allocated(&f));
+    f.postra[xload] = old;
+  }
+  {
+    IRIns old = f.postra[xload];
+    MSize oldadjust = f.view.spadjust, slot = 0, highest = 0;
+    /* Build a private, internally consistent one-slot spill assignment at
+    ** the end of an aligned spill block. This exercises U8's exact spill
+    ** width and lack of 64-bit alignment independently of allocator luck. */
+    for (MSize candidate = SPS_FIXED + 1u; candidate + 1u < SPS_LIMIT;
+         candidate += 2u) {
+      MSize high = candidate + 1u;
+      int free_slot = 1;
+      for (IRRef q = REF_FIRST; q < f.view.nins; q++) {
+        IRIns ins = f.postra[q];
+        MSize width, end;
+        if (!ra_hasspill(ins.s)) continue;
+        width = irt_type(ins.t) == IRT_INT || irt_type(ins.t) == IRT_U8 ?
+                1u : 2u;
+        end = (MSize)ins.s + width;
+        if (ins.s <= candidate && candidate < end) free_slot = 0;
+        if (candidate <= ins.s && ins.s < candidate + 1u) free_slot = 0;
+        if (end > high) high = end;
+      }
+      if (free_slot && high == candidate + 1u &&
+          SPS_FIXED + sps_align(high) == candidate + 1u) {
+        slot = candidate;
+        highest = high;
+        break;
+      }
+    }
+    assert(slot && (slot & 1u) && highest == slot + 1u);
+    f.postra[xload].r = RID_INIT;
+    f.postra[xload].s = (uint8_t)slot;
+    f.postra[xload].prev = REGSP(RID_INIT, slot);
+    f.view.spadjust = sps_scale(sps_align(highest));
+    assert(semantic(&f) && allocated(&f));
+    f.postra[xload].s = UINT8_MAX;
+    f.postra[xload].prev = REGSP(RID_INIT, UINT8_MAX);
+    assert(semantic(&f) && !allocated(&f));
+    f.postra[xload] = old;
+    f.view.spadjust = oldadjust;
+  }
+  {
+    IRRef rename = 0;
+    for (r = f.semantic_nins; r < f.nins; r++)
+      if (f.postra[r].o == IR_RENAME) { rename = r; break; }
+    assert(rename);
+    {
+      IRIns old = f.postra[rename];
+      f.postra[rename].op1 = xload;
+      f.postra[rename].r = RID_D0;
+      assert(semantic(&f) && !allocated(&f));
+      f.postra[rename] = old;
+    }
+  }
+  arm64_fixture_reset(&f);
+  assert(semantic(&f) && allocated(&f));
+  arm64_fixture_free(&f);
+  lua_pop(L, 1);
+  free(saved);
+  printf("string.byte raw U8 snapshot: native root %u, cold/type/bounds exits, GC/code reuse, independent source/postRA mutations\n",
+         (unsigned)no);
+}
+
 int main(void)
 {
   static const char source[] =
@@ -1336,6 +1677,24 @@ int main(void)
     "string_byte_dynamic_trace_clone=function(s,n,index)\n"
     " local byte=string.byte; local i,sum=1,0; "
     "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
+    "end\n"
+    "string_byte_u8_snapshot_trace=function(s,n,index,k)\n"
+    " local byte=string.byte; local i,sum=1,.5; "
+    "while i<=n do local a=byte(s,index); "
+    "if a==k then sum=sum+a*1.25 else sum=sum+a*2.25 end; "
+    "i=i+1 end; return sum\n"
+    "end\n"
+    "string_byte_u8_snapshot_clone=function(s,n,index,k)\n"
+    " local byte=string.byte; local i,sum=1,.5; "
+    "while i<=n do local a=byte(s,index); "
+    "if a==k then sum=sum+a*1.25 else sum=sum+a*2.25 end; "
+    "i=i+1 end; return sum\n"
+    "end\n"
+    "string_byte_u8_snapshot_oracle=function(s,n,index,k)\n"
+    " local byte=string.byte; local i,sum=1,.5; "
+    "while i<=n do local a=byte(s,index); "
+    "if a==k then sum=sum+a*1.25 else sum=sum+a*2.25 end; "
+    "i=i+1 end; return sum\n"
     "end\n"
     "string_byte_negative_dynamic_trace=function(s,n,index)\n"
     " local byte=string.byte; local i,sum=1,0; "
@@ -1391,6 +1750,7 @@ int main(void)
     "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
     "end\n"
     "jit.off(string_byte_dynamic_oracle,true)\n"
+    "jit.off(string_byte_u8_snapshot_oracle,true)\n"
     "jit.off(string_byte_integer_oracle,true); "
     "jit.off(string_byte_integer_negative_oracle,true)\n"
     "string_byte_bounds_trace=function(s,n)\n"
@@ -2517,6 +2877,7 @@ int main(void)
   test_dynamic_range_byte(L,2,0);
   test_dynamic_range_byte(L,4,0);
   test_dynamic_range_byte(L,4.9,1);
+  test_u8_snapshot(L);
   test_integer_dynamic_index(L,0);
   test_integer_dynamic_index(L,1);
   test_dynamic_range_byte(L,-2,0);
