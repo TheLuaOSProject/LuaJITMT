@@ -241,3 +241,15 @@ Evidence, source-parent and the integration test patch are in
 Ordinary assertion ARM64 restoration profile is
 `c411fa90194ed66fd063c4f1a9ffa72624dc66e295bcea42ad4e4348d6bf0dbd`.
 This later extension is not covered by the running `503c8ba2f` full gate.
+
+The full ordinary matrix at `ea0db2046` also passes. Both ordinary ARM64 and
+strict bare-`-Werror` x86_64 pass both 509-case stock corpora, the preceding
+workload/byte/FFI/tostring matrix, sixteen positive substring rows, twelve
+negative substring rows and six additional extreme-literal rows. The latter
+combine starts 1/32767 with ends -1/-32768 and use 72,000-byte strings;
+selected-root exits, exact empty/adjacent boundaries, retained values and
+code identity after GC all pass with a live peer. Evidence and immutable
+matching runtimes are in
+`/Users/frityet/Scratch/ljmt-negative-substring-ordinary-20261030/`.
+Ordinary ARM64 restoration profile is
+`e0faf4ac7609028ce632b43148799b24b8f4e0c9319da36d81fd70345deb5ab0`.
