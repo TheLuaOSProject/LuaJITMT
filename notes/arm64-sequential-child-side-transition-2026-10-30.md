@@ -136,3 +136,12 @@ that failed attempt is superseded by the recorded build. The temporary OWNER
 diagnostics were removed after capturing the return transition, and ordinary
 execution still demonstrates root-only publication. No side publication is
 enabled by this follow-up.
+
+The certificate now also carries the current side trace number, and every later
+`lj_record_ret` clears the preceding witness before considering a new return.
+This prevents a transition record from being borrowed by another trace or
+surviving a second return in the same recording. The copied child-frame marker
+now uses the same addressable KNUM-head proof before reading its payload.
+The follow-up four-profile leaf run passed with the same native, exit, reuse,
+GC, semantic-negative, post-RA-negative, and certificate counts; log:
+`/Users/frityet/Scratch/ljmt-seq-child-side-20261030/child-return-trace-binding-four-profile.log`.

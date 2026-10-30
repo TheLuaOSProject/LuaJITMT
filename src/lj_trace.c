@@ -6377,7 +6377,8 @@ static int trace_arm64_first_side_child_frame_valid(jit_State *J,
 	(sn & UINT32_C(0x00ff0000)) != SNAP_FRAME)
       return 0;
     ref = snap_ref(sn);
-    if (!irref_isk(ref) || ref < view->nk || ref >= REF_TRUE ||
+    if (!irref_isk(ref) ||
+	!trace_arm64_first_side_constant_head(view, ref, IR_KNUM) ||
 	ref+1u >= view->nins || ref+1u >= REF_TRUE)
       return 0;
     head = ir_load_acq(&view->ir[ref]);

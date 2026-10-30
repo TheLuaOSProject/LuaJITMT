@@ -391,7 +391,7 @@ typedef struct LJArm64ChildReturnCert {
   const BCIns *caller_callpc, *caller_returnpc;
   uint64_t parent_generation;
   IRRef split_nins, child_result, caller_result;
-  TraceNo parentno;
+  TraceNo parentno, traceno;
   ExitNo exitno;
   BCReg caller_result_slot, child_baseslot;
   uint8_t nresults, valid;

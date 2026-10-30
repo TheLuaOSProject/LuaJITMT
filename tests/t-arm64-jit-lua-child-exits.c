@@ -369,6 +369,7 @@ static void observe_child_return_certificate(lua_State *L)
   assert(lj_trace_test_arm64_child_return_count() != 0 &&
          lj_trace_test_arm64_child_return_read(&cert));
   assert(cert.valid && cert.nresults == 1 && cert.parentno == T->traceno &&
+         cert.traceno != 0 && cert.traceno != cert.parentno &&
          cert.parent_generation != 0 && cert.caller_callpc != NULL &&
          cert.caller_returnpc == cert.caller_callpc+1 &&
          isluafunc(cert.childfn) &&

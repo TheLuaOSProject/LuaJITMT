@@ -1628,11 +1628,13 @@ static void rec_arm64_child_return_capture(jit_State *J, BCReg rbase,
   c.child_result = tref_ref(child_result);
   c.caller_result = tref_ref(caller_result);
   c.parentno = J->parent;
+  c.traceno = trace_traceno_acq(&J->cur);
   c.exitno = J->exitno;
   c.caller_result_slot = cbase;
   c.child_baseslot = J->baseslot;
   c.nresults = 1;
-  if (c.parent_generation == 0 || c.split_nins <= REF_FIRST ||
+  if (c.parent_generation == 0 || c.traceno == 0 ||
+      c.traceno == c.parentno || c.split_nins <= REF_FIRST ||
       c.split_nins >= REF_DROP || c.child_result >= c.split_nins ||
       c.caller_result >= c.split_nins ||
       c.child_result != c.caller_result ||
@@ -1652,6 +1654,8 @@ void lj_record_ret(jit_State *J, BCReg rbase, ptrdiff_t gotresults)
   TValue *frame = J->L->base - 1;
 #if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
   TRef child_result = TREF_NIL;
+  /* Any later return supersedes the single-transition witness. */
+  memset(&J->arm64_child_return, 0, sizeof(J->arm64_child_return));
 #endif
   ptrdiff_t i;
   BCReg baseadj = 0;
