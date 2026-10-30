@@ -322,7 +322,7 @@ static TraceNo check_root(lua_State *L, const char *fnname, BCOp expected)
 static void positive_form(lua_State *L, const char *fnname, BCOp op)
 {
   static const char *wrong_builtins[] = {
-    "tostring_bad_rawset",
+    "tostring_bad_rawset", "tostring_bad_tonumber",
     "tostring_bad_tobit", "tostring_bad_band", "tostring_bad_bor",
     "tostring_bad_bxor", "tostring_bad_bnot", "tostring_bad_bswap",
     "tostring_bad_lshift", "tostring_bad_rshift", "tostring_bad_arshift",
@@ -447,7 +447,7 @@ int main(void)
     "assert(select(2,tostring_ready:recv(5)))\n"
     "jit.flush(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=8')\n"
     "tostring_builtin=tostring; tostring_side_effects=0\n"
-    "tostring_bad_rawset=rawset; tostring_bad_tobit=bit.tobit; "
+    "tostring_bad_rawset=rawset; tostring_bad_tonumber=tonumber; tostring_bad_tobit=bit.tobit; "
     "tostring_bad_band=bit.band; tostring_bad_bor=bit.bor; "
     "tostring_bad_bxor=bit.bxor; tostring_bad_bnot=bit.bnot; "
     "tostring_bad_bswap=bit.bswap; tostring_bad_lshift=bit.lshift; "

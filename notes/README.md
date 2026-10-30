@@ -18,19 +18,19 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
-- Current verified production checkpoint: `52efb731e`. It adds bounded
-  negative-literal ends and omitted-end string.sub calls to `503c8ba2f`, with
-  every repeated function-guard snapshot bound to its exact CALL suffix.
-  No locks are added. The complete combined gate passes, including actual
-  VM/recorder safepoint runtime execution and all four M7 FFI profiles, and
-  restores ordinary assertion ARM64 without test helpers. Matching ordinary
-  ARM64 and strict x86_64 builds pass both 509-case stock corpora and the
-  expanded native workload matrix. See the
-  [complete substring checkpoint](arm64-negative-default-substrings-complete-checkpoint-2026-10-30.md)
-  and [preceding checkpoint](arm64-mixed-byte-strings-complete-checkpoint-2026-10-30.md).
-  Sequential leaf branches, numeric identities, zero-first substrings and
-  fixed-pair byte snapshots have later focused integration evidence. General
-  Lua calls/returns, recursion, protected calls and remaining FFI restrictions
+- Current verified production checkpoint: `9ebec6139`. It adds sequential
+  pure Lua leaf branches, numeric identity builtins, zero-first substrings and
+  guarded fixed-pair byte snapshots to `52efb731e`. No locks are added. The
+  complete combined gate passes, including all four M7 FFI profiles and actual
+  VM/recorder safepoint runtime execution, and restores ordinary assertion
+  ARM64 without test helpers. Matching ordinary ARM64 and strict x86_64
+  builds pass both 509-case stock corpora and the expanded native matrix.
+  See the
+  [complete sequential/identity/byte checkpoint](arm64-sequential-identity-byte-complete-checkpoint-2026-10-30.md)
+  and [preceding substring checkpoint](arm64-negative-default-substrings-complete-checkpoint-2026-10-30.md).
+  Negative-first substrings and computed math-result preservation have later
+  focused integration evidence. Child-frame side traces, general Lua
+  calls/returns, recursion, protected calls and remaining FFI restrictions
   still prevent full x86_64 parity.
 
 ## Earlier checkpoint records

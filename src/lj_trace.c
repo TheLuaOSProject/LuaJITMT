@@ -15554,6 +15554,87 @@ static int lj_trace_arm64_lua_leaf_range(const GCproto *pt,
   return pos == join;
 }
 
+/* Bounded straight-line decision chains. Every comparison has one pure
+** early-return arm and one forward continuation to the next comparison (or
+** final return). Keeping this grammar separate leaves the established single
+** diamond proof unchanged. */
+static int lj_trace_arm64_lua_leaf_chain(const GCproto *pt,
+                                         const BCIns *words,
+                                         MSize *next, MSize size,
+                                         uint8_t *defined)
+{
+  MSize cmp[4], ncmp = 0, p, start = 1u, i;
+  if (size < 3u || bc_op(words[size-1u]) != BC_RET1 ||
+      bc_d(words[size-1u]) != 2u || pt->sizeuv ||
+      (la_load8_acq(&pt->flags) & PROTO_VARARG)) return 0;
+  for (p = 1u; p+1u < size; p++) {
+    BCOp op = bc_op(words[p]);
+    if (op >= BC_ISLT && op <= BC_ISGT) {
+      if (ncmp == sizeof(cmp)/sizeof(cmp[0])) return 0;
+      cmp[ncmp++] = p;
+    } else if (op == BC_CALL || op == BC_UGET) {
+      return 0;
+    }
+  }
+  if (ncmp < 2u) return 0;
+  /* The ordinary one-diamond recognizer builds successors later. The chain
+  ** path needs its own bounded forward-successor map before replaying ranges. */
+  for (p = 1u; p+1u < size; p++) {
+    BCOp op = bc_op(words[p]);
+    if (op == BC_JMP) {
+      ptrdiff_t target = (ptrdiff_t)p+1+bc_j(words[p]);
+      if (target <= (ptrdiff_t)p || target >= (ptrdiff_t)size ||
+          bc_a(words[p]) > pt->framesize) return 0;
+      next[p] = (MSize)target;
+    } else if ((op >= BC_ISLT && op <= BC_ISGT) ||
+               op == BC_RET1 || op == BC_RET0) {
+      next[p] = UINT32_MAX;
+    } else {
+      next[p] = p+1u;
+    }
+  }
+  for (i = 0; i < ncmp; i++) {
+    MSize at = cmp[i], continuation, retpos;
+    BCIns compare = words[at], jump;
+    ptrdiff_t target;
+    uint8_t returned[UINT8_MAX+1u];
+    if (at < start || at+2u >= size ||
+        !lj_trace_arm64_lua_leaf_range(pt, words, next, start, at,
+                                       UINT32_MAX, size, defined)) return 0;
+    if (bc_a(compare) >= pt->framesize || bc_d(compare) >= pt->framesize ||
+        !defined[bc_a(compare)] || !defined[bc_d(compare)]) return 0;
+    jump = words[at+1u];
+    if (bc_op(jump) != BC_JMP || bc_a(jump) > pt->framesize) return 0;
+    target = (ptrdiff_t)at+2+bc_j(jump);
+    if (target <= (ptrdiff_t)(at+2u) || target >= (ptrdiff_t)size)
+      return 0;
+    continuation = (MSize)target;
+    retpos = continuation-1u;
+    if (bc_op(words[retpos]) != BC_RET1 || bc_d(words[retpos]) != 2u ||
+        bc_a(words[retpos]) >= pt->framesize) return 0;
+    for (p = at+2u; p < continuation; p++)
+      if (bc_op(words[p]) == BC_JMP ||
+          (bc_op(words[p]) >= BC_ISLT && bc_op(words[p]) <= BC_ISGT) ||
+          (p+1u < continuation &&
+           (bc_op(words[p]) == BC_RET1 || bc_op(words[p]) == BC_RET)))
+        return 0;
+    memcpy(returned, defined, pt->framesize);
+    if (!lj_trace_arm64_lua_leaf_range(pt, words, next, at+2u, retpos,
+                                       retpos, size, returned) ||
+        !returned[bc_a(words[retpos])]) return 0;
+    if (i+1u < ncmp) {
+      if (cmp[i+1u] < continuation) return 0;
+      start = continuation;
+    } else {
+      if (continuation > size-1u ||
+          !lj_trace_arm64_lua_leaf_range(pt, words, next, continuation,
+              size-1u, UINT32_MAX, size, defined) ||
+          !defined[bc_a(words[size-1u])]) return 0;
+    }
+  }
+  return 1;
+}
+
 /* Bounded source for a zero-formal vararg tail forwarder. The immutable
 ** closure cell fixes the target; the caller still supplies and snapshots the
 ** exact fixed argument window. */
@@ -15620,6 +15701,7 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
   uint8_t second_reach[UINT8_MAX+1u] = {0};
   int has_call = 0;
   int has_upvalue_get = 0;
+  MSize ncompare = 0;
   int isvararg;
   int forward_varg = 0;
   if (!fn || !isluafunc(fn)) return 0;
@@ -15660,9 +15742,18 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
     BCOp op = bc_op(words[pos]);
     if (op == BC_CALL) has_call = 1;
     if (op >= BC_ISLT && op <= BC_ISGT) {
-      if (cmp_pos != UINT32_MAX) return 0;
+      ncompare++;
+      if (cmp_pos != UINT32_MAX) continue;
       cmp_pos = pos;
     }
+  }
+  if (ncompare > 1u) {
+    if (has_call || !lj_trace_arm64_lua_leaf_chain(pt, words, next, size,
+                                                   defined)) return 0;
+    for (pos = 0; pos < size; pos++)
+      if ((BCIns)la_load32_acq((const uint32_t *)&bc[pos]) != words[pos])
+        return 0;
+    return 1;
   }
   if (cmp_pos != UINT32_MAX) {
     if (has_call) return 0;
@@ -16657,6 +16748,23 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
 	    (J->postproc == LJ_POST_NONE &&
 	     (J->pc != returnpc-1 || J->framedepth != 1 || J->maxslot != 1)))
 	  return 0;
+      } else if (ffid == FF_tonumber) {
+	const BCIns *returnpc;
+	BCIns call;
+	/* Only one numeric argument is an identity operation in recff_tonumber.
+	** String parsing, cdata conversion, and the optional-base form retain
+	** their existing interpreter/recorder behavior. */
+	if ((bc_op(startins) != BC_LOOP && bc_op(startins) != BC_FORL) ||
+	    !frame_islua(owner->base-1)) return 0;
+	returnpc = frame_pc(owner->base-1);
+	if (!trace_pc_in_proto_range(returnpc, proto_bc(rootpt), rootpt->sizebc) ||
+	    returnpc == proto_bc(rootpt)) return 0;
+	call = (BCIns)la_load32_acq((const uint32_t *)(returnpc-1));
+	if (bc_op(call) != BC_CALL || bc_b(call) != 2u || bc_c(call) != 2u ||
+	    (MSize)bc_a(call)+2u+LJ_FR2 > rootpt->framesize ||
+	    (J->postproc == LJ_POST_NONE &&
+	     (J->pc != returnpc-1 || J->framedepth != 1 || J->maxslot != 1)))
+	  return 0;
       } else if (lj_ff_is_bit_scalar(ffid) ||
                  ffid == FF_math_floor || ffid == FF_math_ceil ||
                  ffid == FF_math_sqrt || ffid == FF_math_abs ||
@@ -16721,6 +16829,7 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
       ins = (BCIns)la_load32_acq((const uint32_t *)pc);
       if (lj_ff_is_bit_scalar(ffid) || ffid == FF_string_byte ||
           ffid == FF_string_sub || ffid == FF_tostring ||
+          ffid == FF_tonumber ||
           ffid == FF_math_floor ||
           ffid == FF_math_ceil || ffid == FF_math_sqrt ||
           ffid == FF_math_abs || ffid == FF_math_min ||

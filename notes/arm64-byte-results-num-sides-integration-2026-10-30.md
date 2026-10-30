@@ -253,3 +253,117 @@ matching runtimes are in
 `/Users/frityet/Scratch/ljmt-negative-substring-ordinary-20261030/`.
 Ordinary ARM64 restoration profile is
 `e0faf4ac7609028ce632b43148799b24b8f4e0c9319da36d81fd70345deb5ab0`.
+
+## Omitted-end substring integration and repeated guard footers
+
+Integrated `0d4f49c90` at `4c022da0f`; production/test checkpoint `52efb731e`
+adds omitted-end substring calls and strengthens every repeated CALL-guard
+footer. The new malformed-footer fixture initially exposed that a later
+invalid resume PC could be skipped after an earlier valid guard had matched.
+Both independent passes now reject that case. Tests mutate the string-copy
+resume PC and low footer tag independently in semantic and allocated maps,
+with unmodified private-owner controls, for both C3 and C4 arities.
+
+The first fresh-publication extension used identical samples for FORL and
+LOOP in one process; FORL had already interned the later samples. Inputs now
+include the loop kind, preserving the requirement for fresh native
+publication. Both earlier failing logs are retained, without weakening the
+assertions, in
+`/Users/frityet/Scratch/ljmt-default-substring-integration-20261030/`.
+The final four-profile log passes positive, negative and omitted-end ranges;
+the latter reports fresh native publication counts 1, 37, 36 and 40.
+The ordinary ARM64 restore profile is
+`72500d79fa1f97038a6326c91f1a9bc693ca5e25d15741f30a6e545c38815ae4`.
+
+The exact `52efb731e` ordinary matrix passes on ARM64 and strict x86_64,
+including both 509-case corpora, 260 semantic checks, the prior byte/FFI/
+string/tostring matrix, all four omitted-end cases, six negative literal
+extreme cases and six omitted-end extreme cases (first=1, 2, 32767 under
+FORL and LOOP). The native probes retain interpreter oracles, live peers,
+selected-root exits and code identity across GC. Immutable binaries, matching
+JIT modules, archives, hashes and logs are saved in
+`/Users/frityet/Scratch/ljmt-default-substring-ordinary-20261030/`.
+Ordinary assertion ARM64 was restored with profile
+`e095cba669dc8eb8e785e0d09b6908887ba0a8ac0b2e35b1a8f1c56eb81b074b`.
+The complete gate is starting separately at this frozen source; the verified
+main production checkpoint remains `503c8ba2f` until that gate completes.
+
+## Sequential leaf integration
+
+Integrated the corrected sequential-leaf chain checkpoint `d06f48e13` and
+removed diagnostic formatting residue at `4c9cc207e`. Its full Lua-call
+contract passes all four profiles, including the original one-comparison
+cases, two/three/four comparison positives, five-comparison refusal and
+independent malformed snapshot-size/final-return-slot controls. Log:
+`/Users/frityet/Scratch/ljmt-sequential-strings-integration-20261030/four-profiles.log`.
+Ordinary ARM64 restore profile:
+`9872504bbad39a0a7970549c9c5de1ef1ecc49fac197ed49fb164dc9d6763b81`.
+
+The exact-source ordinary ARM64/strict-x86_64 matrix passes both stock corpora
+and the full preceding workload/byte/FFI/string matrix. Its sequential probe
+explicitly disables both the oracle runner and its captured leaf function,
+then checks neither was patched to a JIT entry. Both architectures match all
+2/3/4-decision results and expected cold resume PCs, retain native root/mcode
+identity across full GC, and run with a live peer. The earlier expanded probe
+only explicitly disabled the runner; this integrated evidence closes that
+oracle-independence limitation. Saved matching binaries/modules, archives,
+hashes and logs are in
+`/Users/frityet/Scratch/ljmt-sequential-strings-ordinary-20261030/`.
+
+The complete gate running separately at `52efb731e` does not include this
+later sequential slice. Main remains at the complete `503c8ba2f` checkpoint.
+
+## Numeric identity integration
+
+Integrated `5837b8a31` and added independent extra-iterator-call rejection
+plus the newly allowed `tonumber` wrong-callee case in the existing string
+`tostring` fixture at `95b555931`. The shared exact one-argument identity proof
+retains separate semantic/post-RA source replay and exact numeric SLOAD type.
+Integer floor/ceil and one-argument bit conversions remain valid only for
+INT identity; one-argument min/max preserve both INT and NUM identities.
+
+The tonumber, tostring and complete Lua-call contracts all pass four profiles
+at this source. Logs are in
+`/Users/frityet/Scratch/ljmt-tonumber-sequential-integration-20261030/`.
+The ordinary ARM64/strict-x86_64 matrix passes both 509-case corpora and every
+prior workload/byte/FFI/string/sequential probe. It additionally witnesses 24
+native identity rows per architecture: INT/NUM while/FORL for tonumber,
+min/max, and INT while/FORL for floor/ceil/tobit/band/bor/bxor. Every row has
+selected-root exits before/after full GC, unchanged code and a live peer;
+the optional-base and numeric-edge semantic companion passes too.
+Binaries, matching JIT modules, archives, hashes and logs are in
+`/Users/frityet/Scratch/ljmt-tonumber-sequential-ordinary-20261030/`.
+Ordinary ARM64 was restored with profile
+`167f846de67078a70b64e782ed59231b2554674d8093b13b3080454b5086d298`.
+This later integration is outside the complete gate currently frozen at
+`52efb731e`; the latest completed broad production checkpoint remains
+`503c8ba2f`.
+
+
+## Zero-first substring integration
+
+Integrated the bounded zero-first source normalization at `9cc11ead8`.
+The complete string.sub contract passed all four native profiles, including
+positive, negative-end and omitted-end zero-first modes. Log:
+`/Users/frityet/Scratch/ljmt-zero-substring-identity-integration-20261030/four-profiles.log`.
+Its ordinary ARM64 restore profile was
+`fad7d2643dbb96f4326c3826f62de2e8cc53f74dfea3808e1bd8e7bc36dfdc22`.
+
+The exact-source ordinary ARM64/strict-x86_64 matrix also passed both 509-case
+stock corpora and every preceding workload/byte/FFI/string/sequential/identity
+probe. It adds 16 native zero-first substring rows on each architecture;
+interpreter oracle results, selected-root exits, code identity across full GC,
+and live-peer execution agree. Saved binaries, matching JIT modules, archives,
+hashes and logs are in
+`/Users/frityet/Scratch/ljmt-zero-substring-identity-ordinary-20261030/`.
+Ordinary ARM64 was restored with profile
+`f2c9eeabb7de69be21f8f4b6e98d816ffb0d81a0e30bdea030e84b4f0b65cbb6`.
+
+Review then corrected the Lua component's cold input boundary calculation to
+use `max(1, first)`, matching the normalized source offset. The saved ordinary
+zero-first probe already used this correction. The corrected component Lua
+probe subsequently passed all ten fixture modes on both saved ordinary
+binaries; those logs have the `corrected-boundary` suffix. This test-only edit
+does not change the production revision validated above. The complete gate
+running at `52efb731e` excludes this later slice, sequential leaves and numeric
+identity; the latest completed broad checkpoint remains `503c8ba2f`.

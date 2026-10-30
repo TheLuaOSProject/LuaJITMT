@@ -29,7 +29,12 @@ for required in \
   'test_negative_constant_variant' \
   'arm64_string_byte_snapshot_slot_ir' \
   'arm64_string_byte_snapshot_slot_postra' \
+  'arm64_string_byte_fixed_pair_snapshot_ir' \
+  'arm64_string_byte_fixed_pair_snapshot_postra' \
+  'arm64_string_byte_source_window_valid' \
   'test_u8_snapshot' \
+  'test_fixed_pair_u8_snapshot' \
+  'string_byte_fixed_pair_trace' \
   'string_byte_u8_snapshot_trace' \
   'nine semantic/post-RA source/range negatives'; do
   grep -F "$required" "$fixture_source" "$lua_source" \

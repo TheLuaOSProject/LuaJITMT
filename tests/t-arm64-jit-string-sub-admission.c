@@ -15,6 +15,7 @@ static unsigned native_string_matches;
 static unsigned native_string_publications;
 static int negative_case;
 static int dynamic_end_case;
+static int zero_first_case;
 
 static void string_publish(lua_State *L, GCstr *str)
 {
@@ -75,8 +76,9 @@ int main(int argc, char **argv)
   int negative, default_end;
   (void)arm64_fixture_init;
   assert(L && argc == 3);
-  negative = strncmp(argv[2], "negative-", 9u) == 0;
-  default_end = strcmp(argv[2], "default-end") == 0;
+  negative = strstr(argv[2], "negative-") != NULL;
+  default_end = strstr(argv[2], "default-end") != NULL;
+  zero_first_case = strncmp(argv[2], "zero-", 5u) == 0;
   negative_case = negative;
   dynamic_end_case = default_end;
   luaL_openlibs(L);
@@ -90,8 +92,8 @@ int main(int argc, char **argv)
   lj_str_test_set_match_hook(NULL);
   lj_str_test_set_publish_hook(NULL);
   assert(native_string_matches > 0u);
-  if (!strcmp(argv[2], "while") || !strcmp(argv[2], "negative-while") ||
-      default_end)
+  if ((strstr(argv[2], "while") && !(negative && zero_first_case)) ||
+      (default_end && !zero_first_case))
     assert(native_string_publications > 0u);
   lua_getglobal(L, "substring_trace_no");
   no = (TraceNo)lua_tointeger(L,-1); lua_pop(L,1);
@@ -139,9 +141,9 @@ int main(int argc, char **argv)
   REJECT(BOTH(allocation, t.irt, IRT_STR|IRT_GUARD));
   REJECT(BOTH(allocation, o, IR_XSNEW));
   REJECT(BOTH(bound, o, negative ? IR_UGE : IR_ULT));
-  REJECT(BOTH(bound, op2, f.ir[pointer].op2));
+  REJECT(BOTH(bound, op2, len));
   REJECT(BOTH(len, op2, IRFL_TAB_ASIZE));
-  if (negative) {
+  if (negative && !zero_first_case) {
     assert(endcalc && subcalc && f.ir[subcalc].op1 == endcalc);
     if (f.ir[endcalc].op1 == len)
       REJECT(BOTH(endcalc, op2, f.ir[pointer].op2));
@@ -187,6 +189,16 @@ int main(int argc, char **argv)
       if (bc_op(bc[pc]) == BC_CALL) { assert(!callpc); callpc = pc; }
     assert(callpc >= (default_end ? 2u : 3u));
     setup = callpc-(bc_c(bc[callpc]) == 3u ? 2u : 3u);
+    if (zero_first_case) {
+      MSize firstpc = callpc-(bc_c(bc[callpc]) == 3u ? 1u : 2u);
+      BCIns saved = bc[firstpc], one = saved;
+      assert(bc_op(saved) == BC_KSHORT && (int16_t)bc_d(saved) == 0);
+      setbc_d(&one, 1);
+      la_store32_rel((uint32_t *)&bc[firstpc], one);
+      assert(semantic(&f) && allocated(&f)); /* 0 and 1 both clamp to 1. */
+      la_store32_rel((uint32_t *)&bc[firstpc], saved);
+      assert(semantic(&f) && allocated(&f));
+    }
     {
       unsigned tested = 0;
       size_t mapbytes = f.view.nsnapmap*sizeof(SnapEntry);
@@ -229,9 +241,11 @@ int main(int argc, char **argv)
       for (unsigned mode = 0; mode < nsetup+2u; mode++) {
         MSize at = mode < nsetup ? callpc-1u-mode : callpc;
         BCIns saved = bc[at], changed = saved;
-        if (mode == 0u) setbc_d(&changed, bc_d(saved)-1u);
+        if (mode == 0u)
+          setbc_d(&changed, zero_first_case ? -1 : bc_d(saved)-1u);
         else if (mode == 1u)
-          setbc_d(&changed, nsetup == 2u ? bc_d(saved)+1u : 0u);
+          setbc_d(&changed, zero_first_case && nsetup == 3u ? -1 :
+                  (nsetup == 2u ? bc_d(saved)+1u : 0u));
         else if (mode == 2u && nsetup == 3u)
           setbc_d(&changed, bc_d(saved)+1u);
         else if (mode < nsetup) setbc_d(&changed, bc_d(saved)+1u);
