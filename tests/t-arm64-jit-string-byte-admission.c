@@ -140,6 +140,7 @@ static void test_fixed_byte_call(lua_State *L, const char *arguments,
 {
   Arm64TraceFixture f;
   char source[1536];
+  const char *parameter = strstr(arguments,"last") ? ",last" : "";
   GCtrace *owner;
   TraceNo no;
   MCode *code;
@@ -147,20 +148,21 @@ static void test_fixed_byte_call(lua_State *L, const char *arguments,
   unsigned char *saved;
   IRRef strref=0, length=0, guard=0;
   lua_Number actual, expected;
-  const char *values[]={"string_byte_value", "string_byte_fixed_exact",
+  const char *values[]={"string_byte_value", expected_offset == 0 ?
+                        "string_byte_short" : "string_byte_fixed_exact",
                         "string_byte_default_nul", "string_byte_default_high"};
   snprintf(source,sizeof(source),
     "jit.flush(); "
-    "string_byte_default_trace=function(s,n) local byte=string.byte; "
+    "string_byte_default_trace=function(s,n%s) local byte=string.byte; "
     "local i,sum=0,.5; while i<n do sum=sum+byte(s%s); i=i+1 end; return sum end; "
-    "string_byte_default_clone=function(s,n) local byte=string.byte; "
+    "string_byte_default_clone=function(s,n%s) local byte=string.byte; "
     "local i,sum=0,.5; while i<n do sum=sum+byte(s%s); i=i+1 end; return sum end; "
-    "string_byte_default_oracle=function(s,n) local byte=string.byte; "
+    "string_byte_default_oracle=function(s,n%s) local byte=string.byte; "
     "local i,sum=0,.5; while i<n do sum=sum+byte(s%s); i=i+1 end; return sum end; "
     "jit.off(string_byte_default_oracle,true); "
     "string_byte_fixed_exact='ab'; "
     "string_byte_default_nul='\\0\\0a'; string_byte_default_high='\\255\\255a'",
-    arguments,arguments,arguments);
+    parameter,arguments,parameter,arguments,parameter,arguments);
   run_chunk(L,source);
   assert(call_loop(L,"string_byte_default_trace","string_byte_value",&actual)==LUA_OK);
   lua_getglobal(L,"string_byte_default_trace");
@@ -190,6 +192,24 @@ static void test_fixed_byte_call(lua_State *L, const char *arguments,
   assert(lj_trace_test_root_entry_successes()>0 &&
          lj_trace_test_exit_calls()>0 && lj_trace_test_first_exit_parent()==no);
   assert(call_loop(L,"string_byte_default_trace","string_byte_value",&actual)==LUA_OK);
+  if (*parameter) {
+    const lua_Number ends[] = { 1.0, 4.0, -2.0 };
+    for (unsigned i=0;i<sizeof(ends)/sizeof(ends[0]);i++) {
+      int expected_status=call_dynamic_loop_value(L,
+          "string_byte_default_oracle","string_byte_value",ends[i],&expected);
+      int actual_status;
+      lj_trace_test_root_entry_reset(); lj_trace_test_reset_exit_stats();
+      actual_status=call_dynamic_loop_value(L,"string_byte_default_trace",
+          "string_byte_value",ends[i],&actual);
+      assert(actual_status==expected_status &&
+             (actual_status!=LUA_OK || actual==expected));
+      assert(lj_trace_test_root_entry_successes()>0 &&
+             lj_trace_test_exit_calls()>0 && lj_trace_test_first_exit_parent()==no);
+    }
+    assert(call_loop(L,"string_byte_default_trace","string_byte_value",&actual)==LUA_OK);
+    assert(trace_runnable_acq(owner,no) && trace_mcode_acq(owner)==code &&
+           trace_szmcode_acq(owner)==codesize && memcmp(saved,code,codesize)==0);
+  }
   arm64_fixture_init_trace(&f,L,"string_byte_default_clone",no);
   assert(semantic(&f) && allocated(&f));
   for (IRRef r=REF_FIRST;r<f.semantic_nins;r++) {
@@ -1203,6 +1223,7 @@ int main(void)
   test_fixed_byte_call(L,",2,2",1,2);
   test_fixed_byte_call(L,",2,4",1,4);
   test_fixed_byte_call(L,",2,nil",1,2);
+  test_fixed_byte_call(L,",2,last",1,2);
   run_chunk(L, "assert(string_byte_stop:send(true,5)); "
                "local joined,result=string_byte_peer:join(5); "
                "assert(joined and result)");
