@@ -514,9 +514,10 @@ int main(void)
       "lib.lj_ffi_int_producer_last_errno() end\n"
       "local function mk(params,body,name) return assert(loadstring('return "
       "function('..params..') '..body..' end','@'..name))() end\n"
-      "function __int_arg_install(id,form,stack)\n"
+      "function __int_arg_install(id,form,stack,literal)\n"
       " local v=(form==0 and 't.value' or 'v'); if form==2 then v='p('..v..')' "
       "end\n"
+      " if literal~=nil then v=tostring(literal) end\n"
       " local arg=stack and "
       "('101,102,103,104,105,106,107,108,31,-505,1985229328,'..v) or v\n"
       " local body='local sum=.5; for i=1,n do sum=sum+c('..arg..') end; "
@@ -586,12 +587,31 @@ int main(void)
           invoke_case(L, J, tg, k, (int)f, (int)s, id, -1, 2);
       }
   assert(nseen == KINDS * FORMS * 2 && noracle == KINDS * FORMS * 2);
+  /* KINT64 constants retain the interner's signed IR tag for both C types.
+  ** Compare their exact captured bits with the interpreted conversion in
+  ** register and compact-stack positions, including POSTCALL no-replay. */
+  for (k = 6; k < KINDS; k++) {
+    static const lua_Integer literal[] = {-1, -129, INT32_MAX, INT32_MIN, 0, 1};
+    for (s = 0; s < 2; s++)
+      for (unsigned vi = 0; vi < sizeof(literal)/sizeof(literal[0]); vi++) {
+        snprintf(id, sizeof(id), "literal_k%u_s%u_v%u", k, s, vi);
+        lua_getglobal(L, "__int_arg_install");
+        lua_pushstring(L, id);
+        lua_pushinteger(L, 1);
+        lua_pushboolean(L, s);
+        lua_pushinteger(L, literal[vi]);
+        assert(lua_pcall(L, 4, 0, 0) == LUA_OK);
+        invoke_case(L, J, tg, k, 1, (int)s, id, literal[vi], 1);
+        lua_gc(L, LUA_GCCOLLECT, 0);
+        invoke_case(L, J, tg, k, 1, (int)s, id, literal[vi], 0);
+      }
+  }
   run_lua(L, "assert(__int_arg_release:send(true,5)); local "
              "ok,v=__int_arg_peer:join(5); assert(ok and v)");
   assert(mt_active_acq(g) != 0);
   lua_close(L);
-  assert(required_runs == 432 && forced_runs == 64);
-  printf("t-arm64-jit-ffi-int-args OK: 48 native shapes, %u runs, "
+  assert(required_runs == 528 && forced_runs == 88);
+  printf("t-arm64-jit-ffi-int-args OK: 72 native shapes, %u runs, "
          "%u forced exits, %u cold retries\n",
          required_runs, forced_runs, cold_retries);
   return 0;
