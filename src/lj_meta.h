@@ -20,6 +20,11 @@ LJ_FUNC cTValue *lj_meta_lookuptv(lua_State *L, TValue *out,
 				  cTValue *o, MMS mm);
 #if defined(LJ_GC2_TEST_HELPERS)
 LJ_FUNC void lj_meta_test_mt_capture_pause(GCobj *target);
+LJ_FUNC void lj_meta_test_mt_capture_reset(void);
+LJ_FUNC void lj_meta_test_mt_capture_abort(void);
+LJ_FUNC uint32_t lj_meta_test_mt_capture_calls(void);
+LJ_FUNC uint32_t lj_meta_test_mt_capture_matches(void);
+LJ_FUNC uint32_t lj_meta_test_mt_capture_pauses(void);
 LJ_FUNC uint32_t lj_meta_test_mt_capture_paused(void);
 LJ_FUNC void lj_meta_test_mt_capture_release(void);
 LJ_FUNC void lj_meta_test_mt_lease_pause(GCobj *target);

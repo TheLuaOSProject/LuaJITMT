@@ -2353,10 +2353,42 @@ static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t,
 #if LJ_HASJIT_FFI_CALLXS
 #if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_GC2_TEST_HELPERS)
 static uint32_t record_test_cdata_call_capture_armed;
+static uint32_t record_test_cdata_call_capture_entries;
+static uint32_t record_test_cdata_call_capture_samples;
+static uint32_t record_test_cdata_call_capture_consumed;
 
 void lj_record_test_arm_cdata_call_capture(void)
 {
+  la_store32_rel(&record_test_cdata_call_capture_entries, 0);
+  la_store32_rel(&record_test_cdata_call_capture_samples, 0);
+  la_store32_rel(&record_test_cdata_call_capture_consumed, 0);
   la_store32_rel(&record_test_cdata_call_capture_armed, 1);
+}
+
+void lj_record_test_abort_cdata_call_capture(void)
+{
+  la_store32_rel(&record_test_cdata_call_capture_armed, 0);
+  lj_meta_test_mt_capture_abort();
+}
+
+uint32_t lj_record_test_cdata_call_capture_entries(void)
+{
+  return la_load32_acq(&record_test_cdata_call_capture_entries);
+}
+
+uint32_t lj_record_test_cdata_call_capture_samples(void)
+{
+  return la_load32_acq(&record_test_cdata_call_capture_samples);
+}
+
+uint32_t lj_record_test_cdata_call_capture_consumed(void)
+{
+  return la_load32_acq(&record_test_cdata_call_capture_consumed);
+}
+
+uint32_t lj_record_test_cdata_call_capture_armed(void)
+{
+  return la_load32_acq(&record_test_cdata_call_capture_armed);
 }
 #endif
 
@@ -2367,6 +2399,9 @@ static int rec_mm_cdata_call_shared(jit_State *J, RecordIndex *ix, GCtab *mt)
   GCstr *mmstr;
   TRef kfunc, kmt, mtref, mobj;
   IRType type;
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_GC2_TEST_HELPERS)
+  (void)la_add32_acqrel(&record_test_cdata_call_capture_entries, 1);
+#endif
   if (mt == NULL)
     return 0;
   mmstr = mmname_str(J2G(J), MM_call);
@@ -2381,6 +2416,10 @@ static int rec_mm_cdata_call_shared(jit_State *J, RecordIndex *ix, GCtab *mt)
   mix.val = 0;
   mix.idxchain = 0;
   type = rec_idx_mt_shared_sample(J, &mix, &snap, &kfunc, NULL);
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_GC2_TEST_HELPERS)
+  if (type == IRT_FUNC && tvisfunc(&snap))
+    (void)la_add32_acqrel(&record_test_cdata_call_capture_samples, 1);
+#endif
   if (type != IRT_FUNC || !tvisfunc(&snap))
     return 0;
 #if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_GC2_TEST_HELPERS)
@@ -2390,8 +2429,10 @@ static int rec_mm_cdata_call_shared(jit_State *J, RecordIndex *ix, GCtab *mt)
     ** this recorder sample. The existing metatable-capture test gate lets a
     ** peer perform an ordinary shared rawset at that exact interpreter seam. */
     if (la_cas32(&record_test_cdata_call_capture_armed, &expect, 0,
-		 LA_ACQ_REL, LA_ACQ))
+		 LA_ACQ_REL, LA_ACQ)) {
+      (void)la_add32_acqrel(&record_test_cdata_call_capture_consumed, 1);
       lj_meta_test_mt_capture_pause(gcV(&ix->tabv));
+    }
   }
 #endif
   /* CALLXS retains its separately certified lookup/result snapshot grammar. */

@@ -36,6 +36,9 @@ static uintptr_t meta_test_mt_capture_target;
 static uint32_t meta_test_mt_capture_armed;
 static uint32_t meta_test_mt_capture_paused;
 static uint32_t meta_test_mt_capture_release;
+static uint32_t meta_test_mt_capture_calls;
+static uint32_t meta_test_mt_capture_matches;
+static uint32_t meta_test_mt_capture_pauses;
 static uintptr_t meta_test_mt_lease_target;
 static uint32_t meta_test_mt_lease_armed;
 static uint32_t meta_test_mt_lease_paused;
@@ -48,6 +51,39 @@ void lj_meta_test_mt_capture_pause(GCobj *target)
   la_storeuptr_rel(&meta_test_mt_capture_target,
 		   (uintptr_t)(void *)target);
   la_store32_rel(&meta_test_mt_capture_armed, target != NULL);
+}
+
+void lj_meta_test_mt_capture_reset(void)
+{
+  la_store32_rel(&meta_test_mt_capture_release, 1);
+  la_store32_rel(&meta_test_mt_capture_paused, 0);
+  la_store32_rel(&meta_test_mt_capture_armed, 0);
+  la_storeuptr_rel(&meta_test_mt_capture_target, 0);
+  la_store32_rel(&meta_test_mt_capture_calls, 0);
+  la_store32_rel(&meta_test_mt_capture_matches, 0);
+  la_store32_rel(&meta_test_mt_capture_pauses, 0);
+}
+
+void lj_meta_test_mt_capture_abort(void)
+{
+  la_store32_rel(&meta_test_mt_capture_armed, 0);
+  la_storeuptr_rel(&meta_test_mt_capture_target, 0);
+  la_store32_rel(&meta_test_mt_capture_release, 1);
+}
+
+uint32_t lj_meta_test_mt_capture_calls(void)
+{
+  return la_load32_acq(&meta_test_mt_capture_calls);
+}
+
+uint32_t lj_meta_test_mt_capture_matches(void)
+{
+  return la_load32_acq(&meta_test_mt_capture_matches);
+}
+
+uint32_t lj_meta_test_mt_capture_pauses(void)
+{
+  return la_load32_acq(&meta_test_mt_capture_pauses);
 }
 
 uint32_t lj_meta_test_mt_capture_paused(void)
@@ -81,12 +117,17 @@ void lj_meta_test_mt_lease_release(void)
 static void meta_test_pause_after_mt_capture(cTValue *o, GCtab *mt)
 {
   uint32_t expect = 1;
+  if (!la_load32_acq(&meta_test_mt_capture_armed)) return;
+  (void)la_add32_acqrel(&meta_test_mt_capture_calls, 1);
   if (!mt || !tvisgcv(o) ||
       (GCobj *)(void *)la_loaduptr_acq(&meta_test_mt_capture_target) !=
-	gcV(o) ||
-      !la_cas32(&meta_test_mt_capture_armed, &expect, 0,
+	gcV(o))
+    return;
+  (void)la_add32_acqrel(&meta_test_mt_capture_matches, 1);
+  if (!la_cas32(&meta_test_mt_capture_armed, &expect, 0,
 		LA_ACQ_REL, LA_ACQ))
     return;
+  (void)la_add32_acqrel(&meta_test_mt_capture_pauses, 1);
   la_store32_rel(&meta_test_mt_capture_paused, 1);
   while (la_load32_acq(&meta_test_mt_capture_release) == 0)
     la_cpu_pause();

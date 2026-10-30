@@ -132,6 +132,25 @@ int32_t lj_callxs_flush_generated_count(void);
       return sum
     end)
   end
+  local function run_until_cdata_capture(run, expected)
+    call_race_test.arm()
+    local attempts = 0
+    for attempt = 1, 8 do
+      attempts = attempt
+      jit.flush()
+      jit.opt.start("hotloop=1", "hotexit=1")
+      local result, extra = run(scalar_fn, 64)
+      local state = call_race_test.state()
+      if not state.recorder_armed or state.recorder_consumed > 0 then
+        return result, attempts, state, extra
+      end
+      if result ~= expected then
+        return result, attempts, state, extra
+      end
+    end
+    return nil, attempts, call_race_test.state()
+  end
+  jit.off(run_until_cdata_capture, true)
   local function publish_trace_ranges()
     worker_lib.lj_callxs_flush_clear_traces()
     local count = 0
@@ -226,9 +245,12 @@ int32_t lj_callxs_flush_generated_count(void);
     assert(ok == true and command == "race_metacall")
     assert(ready_ch:send({ phase = "metacall_race_started" }, 10) == true)
     local alternate_results = 0
+    local capture_state, capture_attempts
     if type(call_race_test) == "table" then
-      call_race_test.arm()
-      alternate_results = run_scalar_metacall_race(scalar_fn, 8) and 0 or 1
+      local result
+      result, capture_attempts, capture_state =
+        run_until_cdata_capture(run_scalar_metacall_race, true)
+      alternate_results = result and 0 or 1
     else
       for _ = 1, 20000 do
         if not run_scalar_arm64(scalar_fn, 8) then
@@ -239,31 +261,56 @@ int32_t lj_callxs_flush_generated_count(void);
     assert(ready_ch:send({
       phase = "metacall_race_done",
       alternate_results = alternate_results,
+      capture_attempts = capture_attempts,
+      capture_state = capture_state,
     }, 10) == true)
 
     if type(call_race_test) == "table" then
       command, ok = start_ch:recv(10)
+      if ok == true and command == "abort_race" then
+        assert(ready_ch:send({ phase = "metacall_race_aborted" }, 10) == true)
+        return { scalar = false }
+      end
       assert(ok == true and command == "race_metacall_reverse")
       assert(ready_ch:send({ phase = "metacall_reverse_race_started" }, 10) == true)
-      call_race_test.arm()
-      alternate_results = run_scalar_metacall_reverse_race(scalar_fn, 8) and 0 or 1
+      local result
+      result, capture_attempts, capture_state =
+        run_until_cdata_capture(run_scalar_metacall_reverse_race, true)
+      alternate_results = result and 0 or 1
       assert(ready_ch:send({
         phase = "metacall_reverse_race_done",
         alternate_results = alternate_results,
+        capture_attempts = capture_attempts,
+        capture_state = capture_state,
       }, 10) == true)
 
       command, ok = start_ch:recv(10)
+      if ok == true and command == "abort_race" then
+        assert(ready_ch:send({ phase = "metacall_race_aborted" }, 10) == true)
+        return { scalar = false }
+      end
       assert(ok == true and command == "race_metacall_nonfunction")
       assert(ready_ch:send({ phase = "metacall_nonfunction_started" }, 10) == true)
-      call_race_test.arm()
-      local error_ok, call_error = run_scalar_metacall_nonfunction(scalar_fn)
+      local nonfunction_run = function(fn)
+        return run_scalar_metacall_nonfunction(fn)
+      end
+      jit.off(nonfunction_run, true)
+      local error_ok, call_error
+      error_ok, capture_attempts, capture_state, call_error =
+        run_until_cdata_capture(nonfunction_run, true)
       assert(ready_ch:send({
         phase = "metacall_nonfunction_done",
         error_ok = error_ok,
         call_error = tostring(call_error),
+        capture_attempts = capture_attempts,
+        capture_state = capture_state,
       }, 10) == true)
 
       command, ok = start_ch:recv(10)
+      if ok == true and command == "abort_race" then
+        assert(ready_ch:send({ phase = "metacall_race_aborted" }, 10) == true)
+        return { scalar = false }
+      end
       assert(ok == true and command == "rearm_scalar_after_race")
       local rerecorded_callxs, rerecorded_xsave = 0, 0
       local function rerecord_trace(what, tr)
@@ -437,6 +484,55 @@ if race_only then
 
   assert(type(scalar_fn_mt) == "table" and
          type(scalar_fn_mm) == "function")
+  local function capture_state_text(state, attempts)
+    if type(state) ~= "table" then return "no recorder state" end
+    return ("attempts=%s recorder=%s/%s/%s armed=%s vm=%s/%s/%s"):format(
+      tostring(attempts), tostring(state.recorder_entries),
+      tostring(state.recorder_samples), tostring(state.recorder_consumed),
+      tostring(state.recorder_armed), tostring(state.vm_capture_calls),
+      tostring(state.vm_capture_matches), tostring(state.vm_capture_pauses))
+  end
+  local function await_capture_seam(done_phase, label)
+    local pause_deadline = threading.now() + 10
+    local early_done
+    while not call_race_test.paused() and threading.now() < pause_deadline do
+      early_done = ready:recv(0.001)
+      if type(early_done) == "table" and early_done.phase == done_phase then
+        break
+      end
+    end
+    if call_race_test.paused() then return end
+    call_race_test.abort()
+    local done, done_ok
+    if type(early_done) == "table" and early_done.phase == done_phase then
+      done, done_ok = early_done, true
+    else
+      done, done_ok = ready:recv(10)
+    end
+    if type(done) == "table" and done.phase == done_phase then
+      call_race_test.abort()
+      assert(start:send("abort_race", 10) == true)
+      local aborted, aborted_ok = ready:recv(10)
+      assert(aborted_ok == true and type(aborted) == "table" and
+             aborted.phase == "metacall_race_aborted",
+             "worker failed to acknowledge race abort")
+      error(("VM did not reach %s after %s; %s"):format(
+        label, done_phase, capture_state_text(done.capture_state,
+                                              done.capture_attempts)))
+    end
+    error(("VM did not reach %s within 10s (worker completion=%s): %s"):format(
+      label, tostring(done_ok), capture_state_text(call_race_test.state(),
+                                                    "timeout")))
+  end
+  local function assert_capture_witness(done, label)
+    local state = done.capture_state
+    assert(type(state) == "table" and state.recorder_consumed == 1 and
+           state.vm_capture_matches == 1 and state.vm_capture_pauses == 1,
+           ("%s missed its exact recorder-to-VM seam: %s"):format(
+             label, capture_state_text(state, done.capture_attempts)))
+    print(("cdata __call capture %s: %s"):format(
+      label, capture_state_text(state, done.capture_attempts)))
+  end
   rawset(scalar_fn_mt, "__call", scalar_fn_replacement)
   assert(start:send("guard_metacall", 10) == true)
   local guarded, guarded_ok = ready:recv(10)
@@ -458,13 +554,8 @@ if race_only then
   assert(race_started_ok == true and
          race_started.phase == "metacall_race_started")
   if type(call_race_test) == "table" then
-    local pause_deadline = threading.now() + 10
-    while not call_race_test.paused() and
-          threading.now() < pause_deadline do
-      threading.sleep(0.001)
-    end
-    assert(call_race_test.paused(),
-           "VM did not reach the post-recorder cdata __call capture seam")
+    await_capture_seam("metacall_race_done",
+                       "post-recorder cdata __call capture seam")
     rawset(scalar_fn_mt, "__call", scalar_fn_replacement)
     call_race_test.release()
   else
@@ -476,6 +567,9 @@ if race_only then
   end
   local race_done, race_done_ok = ready:recv(10)
   assert(race_done_ok == true and race_done.phase == "metacall_race_done")
+  if type(call_race_test) == "table" then
+    assert_capture_witness(race_done, "forward cdata __call capture")
+  end
   assert(race_done.alternate_results > 0,
          "VM did not execute the peer-installed cdata __call replacement")
   rawset(scalar_fn_mt, "__call", scalar_fn_mm)
@@ -491,18 +585,14 @@ if race_only then
                                        tostring(worker_error)))
     end
     assert(reverse_started.phase == "metacall_reverse_race_started")
-    local pause_deadline = threading.now() + 10
-    while not call_race_test.paused() and
-          threading.now() < pause_deadline do
-      threading.sleep(0.001)
-    end
-    assert(call_race_test.paused(),
-           "VM did not reach reverse post-recorder cdata __call capture seam")
+    await_capture_seam("metacall_reverse_race_done",
+                       "reverse post-recorder cdata __call capture seam")
     rawset(scalar_fn_mt, "__call", scalar_fn_mm)
     call_race_test.release()
     local reverse_done, reverse_done_ok = ready:recv(10)
     assert(reverse_done_ok == true and
            reverse_done.phase == "metacall_reverse_race_done")
+    assert_capture_witness(reverse_done, "reverse cdata __call capture")
     assert(reverse_done.alternate_results > 0,
            "VM did not execute peer-installed C __call after Lua sample")
     rawset(scalar_fn_mt, "__call", scalar_fn_mm)
@@ -516,18 +606,14 @@ if race_only then
                                        tostring(worker_error)))
     end
     assert(error_started.phase == "metacall_nonfunction_started")
-    pause_deadline = threading.now() + 10
-    while not call_race_test.paused() and
-          threading.now() < pause_deadline do
-      threading.sleep(0.001)
-    end
-    assert(call_race_test.paused(),
-           "VM did not reach nonfunction post-recorder capture seam")
+    await_capture_seam("metacall_nonfunction_done",
+                       "nonfunction post-recorder capture seam")
     rawset(scalar_fn_mt, "__call", 17)
     call_race_test.release()
     local error_done, error_done_ok = ready:recv(10)
     assert(error_done_ok == true and
            error_done.phase == "metacall_nonfunction_done")
+    assert_capture_witness(error_done, "nonfunction cdata __call capture")
     assert(error_done.error_ok == false and
            error_done.call_error:find("call", 1, true),
            "mismatched nonfunction __call did not raise the normal call error")
