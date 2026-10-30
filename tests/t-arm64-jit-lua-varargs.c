@@ -545,7 +545,7 @@ static void vararg_admission(lua_State *L, GCtrace *T, int forward)
     assert(vararg_fixture_admit(&f,postra));
     for (unsigned m=0;m<(forward ? VM_COUNT_FORWARD : VM_COUNT_BASE);m++) {
       int accepted;
-      if (forward && (m==VM_COUNT_BASE || m==VM_DEST_ARGUMENT)) continue;
+      if (forward && m==VM_COUNT_BASE) continue;
       vararg_fixture_reset(&f,L); vararg_fixture_mutate(&f,m);
       accepted=vararg_fixture_admit(&f,postra);
       if (accepted) {
