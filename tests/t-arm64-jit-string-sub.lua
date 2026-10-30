@@ -125,7 +125,7 @@ for _, kind in ipairs(kinds) do
       local fresh = {}
       assert(stop:send('gc', 5))
       for i = 1, 48 do
-        local input = default_end and (s .. string.char(i)) or
+        local input = default_end and (s .. kind .. string.char(i)) or
                       (string.char(i, 93, first, (i*7)%256) .. s)
         local actual, expected = f(input, 80), oracle(input, 80)
         assert(actual == expected)
