@@ -26,6 +26,10 @@ the full run, and `gate-restoration.log` records the ordinary restoration.
 Notes added after the frozen revision do not change production, tests, or CI
 scripts; that equality was checked before promotion.
 
+After promotion, the main `codex/arm64-parity` checkout also rebuilt
+successfully as ordinary assertion ARM64 without helper defines. Its log is
+`main-ordinary-build.log` in the same evidence directory.
+
 This checkpoint does not establish full x86_64 parity. Later NUM-loop integer
 bodies, constant-negative and dynamic-positive byte ends, and variadic sret
 aggregate-prefix cases are separate changes under validation. NUM loop child
