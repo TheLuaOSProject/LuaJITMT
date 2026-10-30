@@ -39,7 +39,11 @@ local function check_root(label)
   local no, loopop = root_id()
   assert(no, label..': missing loop root')
   local info = util.traceinfo(no)
-  assert(info, label..': root is not published')
+  assert(info and info.linktype == 'loop' and info.link == no,
+         label..': loop root is not published')
+  local code, address, offset = util.tracemc(no)
+  assert(code and #code > 0 and address and offset,
+         label..': loop root has no native code')
   local rooted, raw = 0, 0
   for ref = 1, info.nins do
     local _, op, _, id = util.traceir(no, ref)
@@ -53,15 +57,24 @@ local function check_root(label)
   end
   assert(rooted > 0 and raw == 0,
          label..': expected rooted helper, got helper/raw='..rooted..'/'..raw)
-  return no, loopop
+  return no, loopop, code, address, offset
 end
+
+local function unchanged(no, code, address, offset)
+  local current, at, loop = util.tracemc(no)
+  assert(current == code and at == address and loop == offset,
+         'loop machine code changed across GC')
+end
+jit.off(root_id, true)
+jit.off(check_root, true)
+jit.off(unchanged, true)
 
 local function run_many(value, expected_value, n)
   for _ = 1, 40 do assert(f(value, n) == expected_value) end
 end
 
 run_many(sample, expected, 80)
-local first, firstop = check_root('no-peer')
+local first, firstop, firstcode, firstaddr, firstoffset = check_root('no-peer')
 local exits = 0
 local function onexit(no)
   if no == first then exits = exits + 1 end
@@ -72,6 +85,7 @@ collectgarbage('collect')
 run_many(sample, expected, 80)
 jit.attach(onexit)
 assert(exits > 0, 'no-peer root did not execute after GC')
+unchanged(first, firstcode, firstaddr, firstoffset)
 
 -- The helper reloads the exact closed cell. Changing it between entries must
 -- produce the new function's result, and restoring it must restore string.sub.
@@ -85,17 +99,22 @@ collectgarbage('collect')
 run_many(sample, expected, 80)
 
 -- The first peer activation retires no-peer traces before shared recording.
+-- Bind a currently published root after the callee-mutation roundtrip, so an
+-- earlier invalidation cannot make this retirement check pass vacuously.
+local retiring = check_root('before-peer-start')
 local ready, release = threading.channel(1), threading.channel(1)
+assert(root_id() == retiring and util.traceinfo(retiring),
+       'no-peer root missing immediately before peer activation')
 local peer = assert(threading.spawn(function(rdy, rel)
   assert(rdy:send(true, 5))
   assert(select(2, rel:recv(120)))
   return true
 end, ready, release))
 assert(select(2, ready:recv(5)))
-assert(util.traceinfo(first) == nil,
+assert(util.traceinfo(retiring) == nil,
        'no-peer trace remained published after first peer activation')
 run_many(sample, expected, 80)
-local second = check_root('active-peer')
+local second, _, secondcode, secondaddr, secondoffset = check_root('active-peer')
 local peer_exits = 0
 local function on_peer_exit(no)
   if no == second then peer_exits = peer_exits + 1 end
@@ -106,6 +125,7 @@ collectgarbage('collect')
 run_many(sample, expected, 80)
 jit.attach(on_peer_exit)
 assert(peer_exits > 0, 'rooted peer trace did not execute after GC')
+unchanged(second, secondcode, secondaddr, secondoffset)
 assert(release:send(true, 5))
 local ok, result = peer:join(5)
 assert(ok and result)

@@ -103,3 +103,11 @@ admission remain outside it. Any future raw UREFC proof must separately bind
 the current closure, upvalue index, exact UGET and typed ULOAD to source, and
 cover native lifetime across XPOLL with the GC2 phase/root proof; a register or
 spill is not itself a root.
+
+The integrated transition test additionally requires a self-linked loop root
+with nonempty machine code, verifies code identity across each GC phase, and
+binds the currently published no-peer root immediately before peer startup.
+This prevents a prior callee-mutation invalidation from making the retirement
+assertion pass vacuously. The strengthened test passes on the ordinary
+`67da4e268` candidate (40 selected exits in each phase); this preliminary run
+is saved under `/Users/frityet/Scratch/ljmt-no-peer-upvalue-integrated-20261030/`.
