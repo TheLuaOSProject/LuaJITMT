@@ -155,5 +155,21 @@ and twelve FFI-index rows. The matrix and immutable binaries are in
 `/Users/frityet/Scratch/ljmt-byte-snapshots-forl-ordinary-20261030/`.
 It restored ordinary ARM64 assertions with profile
 `a06917bc816592b6e6fce721e780f8ab7b0a063ea72ee0a5f8ed11878cc157c9`.
-The full gate at `8123b7a3d` is separately in progress; focused and ordinary
-matrix success does not replace its result.
+The full gate at `8123b7a3d` subsequently passed, including all four M7 FFI
+profiles and final VM/recorder safepoint runtime checks. Its outer runner
+returned `gate exit=0; restore exit=0`. Evidence is in
+`/Users/frityet/Scratch/ljmt-byte-snapshots-forl-complete-20261030/`;
+ordinary assertion ARM64 restoration profile is
+`f494b9ee6ebf7e0f479566b7ce9fa9bc266097c454f90812f5b903d52dc0fb3a`.
+
+Mixed-sign multiple byte ranges (`77611f594`) are integrated at `7d8370786`.
+The semantic header insertion conflict was resolved by preserving the
+complete U8 snapshot and mixed-sign proof pairs from their immutable parents;
+their bodies were mechanically compared after the merge. The combined byte
+contract passes ARM64/ARM64e assertions and release. Its source record and
+log are `mixed-sign-multiple-integration-source.txt` and
+`mixed-sign-multiple-integration-four-profiles.log` under
+`/Users/frityet/Scratch/ljmt-wide-byte-ffi-complete-20261030/`.
+Ordinary assertion ARM64 restoration profile is
+`7902fce7b6f0088462b593c270b292d8b91cd3e2ea1b260cb329acf75e3e1217`.
+This later addition is not part of the completed `8123b7a3d` full gate.
