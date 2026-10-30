@@ -11092,27 +11092,37 @@ static int arm64_scalar_math_args_ir(const GCtrace *T, IRRef call)
          arm64_scalar_math_carg_ir(T, ir->op1);
 }
 
-/* A checked end-offset subtraction and positive width equality prove
-** offset < end. The caller separately proves end <= the same string's
-** length, either by an unsigned guard or negative-end normalization. */
+/* A checked end-base subtraction and positive width equality prove each
+** constant offset in [base, base+width) is below end. The zero-base
+** subtraction can fold to end itself. The caller separately proves end is
+** within the same string by an unsigned guard or negative-end normalization. */
 static int arm64_string_byte_width_ir(const GCtrace *T, IRRef end,
                                       IRRef after, IRRef strref, int32_t offset)
 {
   IRRef subref, eqref;
   if (offset < 0) return 0;
+  for (eqref = after+1u; eqref < strref; eqref++) {
+    const IRIns *eq = &T->ir[eqref];
+    int32_t end_value;
+    if (eq->o == IR_EQ && eq->t.irt == (IRT_INT|IRT_GUARD) &&
+        eq->op1 == end && arm64_ir_kint_value(T, eq->op2, &end_value) &&
+        offset < end_value) return 1;
+  }
   for (subref = after+1u; subref < strref; subref++) {
     const IRIns *sub = &T->ir[subref];
     int32_t base;
     if (sub->o != IR_SUBOV || sub->t.irt != (IRT_INT|IRT_GUARD) ||
         sub->op1 != end ||
-        !arm64_ir_kint_value(T, sub->op2, &base) || base != offset)
+        !arm64_ir_kint_value(T, sub->op2, &base) || base < 0 ||
+        offset < base)
       continue;
     for (eqref = subref+1u; eqref < strref; eqref++) {
       const IRIns *eq = &T->ir[eqref];
       int32_t width;
       if (eq->o == IR_EQ && eq->t.irt == (IRT_INT|IRT_GUARD) &&
           eq->op1 == subref &&
-          arm64_ir_kint_value(T, eq->op2, &width) && width > 0)
+          arm64_ir_kint_value(T, eq->op2, &width) && width > 0 &&
+          (int64_t)offset-(int64_t)base < (int64_t)width)
         return 1;
     }
   }
@@ -17893,19 +17903,27 @@ static int arm64_string_byte_width_postra(const LJArm64PostRAView *v,
 {
   IRRef difference, check;
   if (displacement < 0) return 0;
+  for (check = after+1u; check < pointer; check++) {
+    IRIns eq = ir_load_acq(&v->ir[check]);
+    int32_t end_value;
+    if (eq.o == IR_EQ && eq.t.irt == (IRT_INT|IRT_GUARD) &&
+        eq.op1 == last && arm64_scalar_postra_kint(v, eq.op2, &end_value) &&
+        displacement < end_value) return 1;
+  }
   for (difference = after+1u; difference < pointer; difference++) {
     IRIns sub = ir_load_acq(&v->ir[difference]);
     int32_t base;
     if (sub.o != IR_SUBOV || sub.t.irt != (IRT_INT|IRT_GUARD) ||
         sub.op1 != last ||
         !arm64_scalar_postra_kint(v, sub.op2, &base) ||
-        base != displacement) continue;
+        base < 0 || displacement < base) continue;
     for (check = difference+1u; check < pointer; check++) {
       IRIns eq = ir_load_acq(&v->ir[check]);
       int32_t count;
       if (eq.o == IR_EQ && eq.t.irt == (IRT_INT|IRT_GUARD) &&
           eq.op1 == difference &&
-          arm64_scalar_postra_kint(v, eq.op2, &count) && count > 0)
+          arm64_scalar_postra_kint(v, eq.op2, &count) && count > 0 &&
+          (int64_t)displacement-(int64_t)base < (int64_t)count)
         return 1;
     }
   }

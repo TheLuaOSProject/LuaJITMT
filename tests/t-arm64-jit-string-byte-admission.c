@@ -425,11 +425,29 @@ static void test_fixed_byte_call(lua_State *L, const char *arguments,
 
 /* Fixed multiple returns still use one independent bounds proof per byte.
 ** Distinct weighted values expose dropped, duplicated or permuted results. */
+static int call_multiple_loop(lua_State *L, unsigned mode, lua_Number last,
+                               const char *fn, const char *string,
+                               lua_Number *out)
+{
+  int status;
+  if (!mode) return call_loop(L,fn,string,out);
+  lua_getglobal(L,fn);
+  if (string) lua_getglobal(L,string);
+  else lua_newtable(L);
+  lua_pushinteger(L,80);
+  if (mode==2 || mode==4) lua_pushnumber(L,last);
+  else lua_pushinteger(L,(lua_Integer)last);
+  status=lua_pcall(L,3,1,0);
+  if (status==LUA_OK) { assert(lua_isnumber(L,-1)); *out=lua_tonumber(L,-1); }
+  lua_pop(L,1);
+  return status;
+}
+
 static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
-                                      unsigned first)
+                                      unsigned first, unsigned mode)
 {
   Arm64TraceFixture f;
-  char body[4096], source[14000], bytes[40];
+  char body[4096], source[14000], bytes[40], endarg[20];
   size_t used;
   GCtrace *owner;
   TraceNo no;
@@ -437,9 +455,15 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
   MSize codesize;
   unsigned char *saved;
   unsigned i, phase, pointers=0, loads=0, snapshot_checks=0;
-  IRRef r, loadref=0;
-  lua_Number actual=0, expected=0, weighted=0;
-  assert(width>=2 && width<=16 && first>=1 && first<=2);
+  IRRef r, loadref=0, lastptr=0, widthguard=0;
+  lua_Number actual=0, expected=0, weighted=0, recorded_end;
+  assert(width>=2 && width<=16 && first>=1 && first<=2 && mode<=4);
+  recorded_end=first+width-1u;
+  if (mode>=3) recorded_end-=(lua_Number)sizeof(bytes)+1;
+  if (mode==2) recorded_end+=.9;
+  if (mode==4) recorded_end-=.9;
+  if (mode) strcpy(endarg,"last");
+  else snprintf(endarg,sizeof(endarg),"%u",first+width-1u);
   for (i=0;i<sizeof(bytes);i++) bytes[i]=(char)((i*37u+128u)&255u);
   bytes[first-1u]=0;
   for (i=0;i<width;i++)
@@ -451,11 +475,12 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
   lua_pushlstring(L,bytes,first+width-2u);
   lua_setglobal(L,"string_byte_multi_short");
   used=(size_t)snprintf(body,sizeof(body),
-    "function(s,n) local byte=string.byte;local sum,i=.5,0;while i<n do i=i+1;local ");
+    "function(s,n%s) local byte=string.byte;local sum,i=.5,0;while i<n do i=i+1;local ",
+    mode ? ",last" : "");
   for (i=0;i<width;i++)
     used+=(size_t)snprintf(body+used,sizeof(body)-used,"%sb%u",i ? "," : "",i);
   used+=(size_t)snprintf(body+used,sizeof(body)-used,
-    "=byte(s,%u,%u);sum=sum",first,first+width-1u);
+    "=byte(s,%u,%s);sum=sum",first,endarg);
   for (i=0;i<width;i++)
     used+=(size_t)snprintf(body+used,sizeof(body)-used,"+b%u*%u.25",i,i+1u);
   used+=(size_t)snprintf(body+used,sizeof(body)-used," end;return sum end");
@@ -465,7 +490,7 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
     "string_byte_multi_oracle=%s;jit.off(string_byte_multi_oracle,true)",
     body,body,body)<(int)sizeof(source));
   run_chunk(L,source);
-  assert(call_loop(L,"string_byte_multi_trace","string_byte_multi_value",
+  assert(call_multiple_loop(L,mode,recorded_end,"string_byte_multi_trace","string_byte_multi_value",
                    &actual)==LUA_OK && actual==.5+80*weighted);
   lua_getglobal(L,"string_byte_multi_trace");
   no=proto_trace_acq(funcproto(funcV(L->top-1)));lua_pop(L,1);
@@ -480,16 +505,16 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
                            "string_byte_multi_short","string_byte_empty",NULL};
     if (phase) lua_gc(L,LUA_GCCOLLECT,0);
     for (i=0;i<sizeof(values)/sizeof(values[0]);i++) {
-      int want=call_loop(L,"string_byte_multi_oracle",values[i],&expected);
+      int want=call_multiple_loop(L,mode,recorded_end,"string_byte_multi_oracle",values[i],&expected);
       int got;
       lj_trace_test_root_entry_reset();lj_trace_test_reset_exit_stats();
-      got=call_loop(L,"string_byte_multi_trace",values[i],&actual);
+      got=call_multiple_loop(L,mode,recorded_end,"string_byte_multi_trace",values[i],&actual);
       assert(got==want && (got!=LUA_OK || actual==expected));
       assert(lj_trace_test_root_entry_successes()>0 &&
              lj_trace_test_exit_calls()>0 &&
              lj_trace_test_first_exit_parent()==no);
     }
-    assert(call_loop(L,"string_byte_multi_trace","string_byte_multi_value",
+    assert(call_multiple_loop(L,mode,recorded_end,"string_byte_multi_trace","string_byte_multi_value",
                      &actual)==LUA_OK && actual==.5+80*weighted);
     assert(trace_runnable_acq(owner,no) && trace_mcode_acq(owner)==code &&
            trace_szmcode_acq(owner)==codesize && memcmp(saved,code,codesize)==0);
@@ -497,17 +522,25 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
   arm64_fixture_init_trace(&f,L,"string_byte_multi_clone",no);
   assert(semantic(&f) && allocated(&f));
   for (r=REF_FIRST;r<f.semantic_nins;r++) {
+    int32_t k;
+    if (mode && f.ir[r].o==IR_EQ && f.ir[r].t.irt==(IRT_INT|IRT_GUARD) &&
+        kint(f.ir,f.semantic.nk,f.ir[r].op2,&k) && k==(int32_t)width)
+      widthguard=r;
     if (f.ir[r].o==IR_STRREF) {
       IRRef q, bound=0;
       int32_t offset;
       assert(kint(f.ir,f.semantic.nk,f.ir[r].op2,&offset) &&
              offset>=(int32_t)first-1 && offset<(int32_t)(first+width-1u));
       for (q=REF_FIRST;q<r;q++) {
-        if (f.ir[q].o==IR_UGE && f.ir[q].op1>=REF_FIRST &&
-            f.ir[f.ir[q].op1].o==IR_FLOAD &&
-            f.ir[f.ir[q].op1].op1==f.ir[r].op1) bound=f.ir[q].op2;
+        IRRef length=f.ir[q].o==IR_UGE ? f.ir[q].op1 :
+                     f.ir[q].o==IR_ULE ? f.ir[q].op2 : 0;
+        if (length>=REF_FIRST && f.ir[length].o==IR_FLOAD &&
+            f.ir[length].op1==f.ir[r].op1)
+          bound=f.ir[q].o==IR_UGE ? f.ir[q].op2 : f.ir[q].op1;
       }
-      assert(bound);
+      assert(bound || mode>=3);
+      if (offset==(int32_t)(first+width-2u)) lastptr=r;
+      if (!bound) bound=REF_TRUE;
       f.ir[r].op2=bound;f.postra[r].op2=bound;
       assert(!semantic(&f) && !allocated(&f));
       arm64_fixture_reset(&f);
@@ -521,7 +554,27 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
       loads++;
     }
   }
-  assert(pointers>=width && loads==pointers && loadref);
+  assert(pointers>=width && loads==pointers && loadref && lastptr);
+  if (mode) {
+    IRRef oldnk=f.semantic.nk, newref=oldnk-1u;
+    assert(widthguard && oldnk>1u && f.view.nk==oldnk);
+    f.ir[widthguard].o=IR_NE;f.postra[widthguard].o=IR_NE;
+    assert(!semantic(&f) && !allocated(&f));
+    arm64_fixture_reset(&f);
+    /* A separate constant avoids mutating an aliased width/base literal.
+    ** Admit the valid last byte, then refuse exactly one byte past it. */
+    f.semantic.nk=f.view.nk=newref;
+    memset(&f.ir[newref],0,sizeof(IRIns));
+    f.ir[newref].o=IR_KINT;f.ir[newref].t.irt=IRT_INT;
+    f.ir[newref].i=(int32_t)(first+width-2u);
+    f.postra[newref]=f.ir[newref];
+    f.ir[lastptr].op2=f.postra[lastptr].op2=newref;
+    assert(semantic(&f) && allocated(&f));
+    f.ir[newref].i++;f.postra[newref].i++;
+    assert(!semantic(&f) && !allocated(&f));
+    f.semantic.nk=f.view.nk=oldnk;
+    arm64_fixture_reset(&f);
+  }
   /* Raw U8 values are still excluded from Lua snapshot restoration. */
   for (SnapNo sn=0;sn<f.view.nsnap;sn++) {
     SnapShot *snap=&f.snaps[sn];
@@ -539,8 +592,8 @@ static void test_fixed_multiple_bytes(lua_State *L, unsigned width,
   assert(snapshot_checks==1u);
   arm64_fixture_reset(&f);assert(semantic(&f) && allocated(&f));
   arm64_fixture_free(&f);lua_pop(L,1);free(saved);
-  printf("string.byte fixed %u results from %u: native weighted bytes, short/type exits, GC/code reuse, %u per-byte proof mutations\n",
-         width,first,pointers+loads);
+  printf("string.byte mode %u, %u results from %u: native weighted bytes, short/type exits, GC/code reuse, %u per-byte proof mutations\n",
+         mode,width,first,pointers+loads);
 }
 
 static int call_range_loop(lua_State *L, const char *fn, const char *string,
@@ -2273,10 +2326,16 @@ int main(void)
   test_dynamic_start_end_byte(L,1,0);
   test_dynamic_start_end_byte(L,1,1);
   for (unsigned width=2;width<=16;width*=2) {
-    test_fixed_multiple_bytes(L,width,1);
-    test_fixed_multiple_bytes(L,width,2);
+    test_fixed_multiple_bytes(L,width,1,0);
+    test_fixed_multiple_bytes(L,width,2,0);
   }
-  test_fixed_multiple_bytes(L,3,1);
+  test_fixed_multiple_bytes(L,3,1,0);
+  for (unsigned mode=1;mode<=4;mode++) {
+    for (unsigned width=2;width<=16;width*=2) {
+      test_fixed_multiple_bytes(L,width,1,mode);
+      test_fixed_multiple_bytes(L,width,2,mode);
+    }
+  }
   run_chunk(L, "assert(string_byte_stop:send(true,5)); "
                "local joined,result=string_byte_peer:join(5); "
                "assert(joined and result)");
