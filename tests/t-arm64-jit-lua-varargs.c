@@ -274,6 +274,44 @@ static void install_forward_case(lua_State *L, MSize nargs)
 	ljt_lua_pcall(L,1,0,"install fixed vararg forward case");
 }
 
+static void install_forward_cap_case(lua_State *L, MSize nargs, MSize padding)
+{
+	lua_getglobal(L,"install_vararg_forward_case");
+	lua_pushinteger(L,(lua_Integer)nargs);
+	lua_pushinteger(L,(lua_Integer)padding);
+	ljt_lua_pcall(L,2,0,"install near-cap vararg forward case");
+}
+
+static void assert_forward_cap_refusal(lua_State *L, MSize nargs)
+{
+	GCfunc *forward=global_function(L,"leaf");
+	GCproto *runner=funcproto(global_function(L,"leaf_run"));
+	BCIns call=0;
+	MSize p, callend;
+	lua_Number expected=invoke(L,"leaf_oracle_run","leaf_oracle",16,20);
+	assert(lj_trace_arm64_lua_leaf(forward));
+	assert(lj_trace_arm64_lua_leaf_forward_call(forward,
+	  global_function(L,"sum_leaf"),nargs));
+	for (p=1;p<runner->sizebc;p++) {
+		BCIns ins=(BCIns)la_load32_acq(
+		  (const uint32_t *)&proto_bc(runner)[p]);
+		if (bc_op(ins)==BC_CALL && bc_c(ins)==nargs+1u) {
+			assert(!call); call=ins;
+		}
+	}
+	assert(call);
+	callend=(MSize)bc_a(call)+bc_c(call)+LJ_FR2;
+	assert(callend<=runner->framesize &&
+	       LJ_MAX_JSLOTS-callend<=1u);
+	for (unsigned attempt=0;attempt<8;attempt++) {
+		assert(invoke(L,"leaf_run","leaf",16,20)==expected);
+		assert(!root_trace(L));
+	}
+	printf("Lua vararg-forward target-arity=%u near-cap frame-end=%u/%u "
+	       "interpreted fallback and oracle passed\n",
+	       (unsigned)nargs,(unsigned)callend,(unsigned)LJ_MAX_JSLOTS);
+}
+
 typedef struct VarargFixture {
   GCtrace *live, copy;
   GCproto *pt, *leafpt;
@@ -405,7 +443,7 @@ static int vararg_fixture_admit(VarargFixture *f, int postra)
 enum { VM_CALL_ARGS, VM_CALL_RESULTS, VM_CALL_PC, VM_VARG_B, VM_VARG_C,
        VM_FRAME_DELTA, VM_FUNCTION, VM_SOURCE_ARGUMENT, VM_DEST_ARGUMENT,
        VM_FRAME_SLOT, VM_COUNT_BASE, VM_CALLMT_A, VM_CALLMT_B,
-       VM_CALLMT_C, VM_UGET_D, VM_COUNT_FORWARD };
+       VM_CALLMT_C, VM_UGET_D, VM_SOURCE_LAST_ARGUMENT, VM_COUNT_FORWARD };
 
 static void vararg_fixture_mutate(VarargFixture *f, unsigned mutation)
 {
@@ -449,6 +487,9 @@ static void vararg_fixture_mutate(VarargFixture *f, unsigned mutation)
   case VM_SOURCE_ARGUMENT:
     f->map[f->source_arg[0]]=SNAP(snap_slot(f->map[f->source_arg[0]]),0,REF_NIL);
     break;
+  case VM_SOURCE_LAST_ARGUMENT:
+    f->map[f->source_arg[1]]=SNAP(snap_slot(f->map[f->source_arg[1]]),0,REF_NIL);
+    break;
   case VM_DEST_ARGUMENT:
     if (bc_b(*varg)==0u) setbc_a(varg,bc_a(*varg)+1u);
     else f->map[f->child_arg[0]]=SNAP(snap_slot(f->map[f->child_arg[0]]),0,REF_NIL);
@@ -486,15 +527,17 @@ static void vararg_admission(lua_State *L, GCtrace *T, int forward)
   vararg_fixture_reset(&f,L);
   {
     SnapShot *snap=&f.snap[f.source.snap];
-    f.source_arg[0]=f.child_arg[0]=UINT32_MAX;
+    f.source_arg[0]=f.source_arg[1]=f.child_arg[0]=UINT32_MAX;
     for (MSize i=0;i<snap->nent;i++) {
       MSize at=snap->mapofs+i; SnapEntry entry=f.map[at];
       if (snap_slot(entry)==f.source.callfunc+1u+LJ_FR2)
         f.source_arg[0]=at;
+      if (snap_slot(entry)==f.source.callfunc+LJ_FR2+f.source.nargs)
+        f.source_arg[1]=at;
       if (snap_slot(entry)==f.source.childbase+bc_a(f.source.varg))
         f.child_arg[0]=at;
     }
-    assert(f.source_arg[0]!=UINT32_MAX &&
+    assert(f.source_arg[0]!=UINT32_MAX && f.source_arg[1]!=UINT32_MAX &&
            (bc_b(f.source.varg)==0u || f.child_arg[0]!=UINT32_MAX));
   }
   for (int postra=0;postra<2;postra++) {
@@ -506,8 +549,10 @@ static void vararg_admission(lua_State *L, GCtrace *T, int forward)
       vararg_fixture_reset(&f,L); vararg_fixture_mutate(&f,m);
       accepted=vararg_fixture_admit(&f,postra);
       if (accepted) {
-        if (m==VM_SOURCE_ARGUMENT || m==VM_DEST_ARGUMENT) {
-          MSize at=m==VM_SOURCE_ARGUMENT ? f.source_arg[0] : f.child_arg[0];
+        if (m==VM_SOURCE_ARGUMENT || m==VM_SOURCE_LAST_ARGUMENT ||
+            m==VM_DEST_ARGUMENT) {
+          MSize at=m==VM_SOURCE_LAST_ARGUMENT ? f.source_arg[1] :
+                   m==VM_SOURCE_ARGUMENT ? f.source_arg[0] : f.child_arg[0];
           SnapEntry before=f.live->snapmap[f.live->snap[f.source.snap].mapofs+
                                            (at-f.snap[f.source.snap].mapofs)];
           fprintf(stderr,"vararg negative accepted shape=0 postra=%d mutation=%u snap=%u mapofs=%u slot=%u ref=%u before_slot=%u before_ref=%u childbase=%u\n",
@@ -565,18 +610,23 @@ int main(void)
     "jit.flush(); jit.on(); jit.on(leaf_run,true); jit.on(leaf,true); "
     "jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64') end; "
     "make_forward_sum=function(n,name) "
-    "local params=({'a','a,b','a,b,c'})[n]; "
-    "local body=({'local x=a+3; return x','local x=a+b; return x*.5','local x=a+b; x=x+c; return x'})[n]; "
-    "return assert(loadstring('return function('..params..') '..body..' end',name))() end; "
+    "local params,values={},{}; for i=1,n do params[i]='a'..i; values[i]=params[i] end; "
+    "local body='return '..table.concat(values,'+'); "
+    "if n==1 then body='return a1+3' elseif n==2 then body='return (a1+a2)*.5' "
+    "elseif n==3 then body='local x=a1+a2; x=x+a3; return x' "
+    "elseif n>=128 then body='return a1' end; "
+    "return assert(loadstring('return function('..table.concat(params,',')..') '..body..' end',name))() end; "
     "make_forward=function(name,sum) "
     "return assert(loadstring('return function(sum) return function(...) return sum(...) end end',name))()(sum) end; "
-    "install_vararg_forward_case=function(n) "
-    "local calls=({'fn(i)','fn(i,bias)','fn(i,bias,10)'})[n]; "
+    "install_vararg_forward_case=function(n,padding) "
+    "local args={'i'}; for i=2,n do args[i]=i==2 and 'bias' or tostring(i+7) end; "
+    "local calls='fn('..table.concat(args,',')..')'; "
     "local make_sum=function(name) return make_forward_sum(n,name) end; "
     "sum_leaf=make_sum('@vararg-forward-sum-'..n); sum_oracle=make_sum('@vararg-forward-oracle-sum-'..n); "
     "leaf=make_forward('@vararg-forward-factory-'..n,sum_leaf); leaf_oracle=make_forward('@vararg-forward-oracle-factory-'..n,sum_oracle); "
     "local run='local sum=.5; for i=1,n do sum=sum+'..calls..' end; return sum'; "
-    "local src='return function(fn,n,bias) '..run..' end'; "
+    "local runnerparams={'fn','n','bias'}; for i=1,padding or 0 do runnerparams[#runnerparams+1]='d'..i end; "
+    "local src='return function('..table.concat(runnerparams,',')..') '..run..' end'; "
     "leaf_run=assert(loadstring(src,'@vararg-forward-run-'..n))(); "
     "leaf_oracle_run=assert(loadstring(src,'@vararg-forward-oracle-run-'..n))(); "
     "jit.off(leaf_oracle_run,true); jit.off(leaf_oracle,true); jit.off(sum_oracle,true); "
@@ -618,7 +668,10 @@ int main(void)
            shape,shape==0 ? 3u : 2u,
            cases[shape].child_map ? "paired child map" : "root entry only");
   }
-  for (arity=1;arity<=3;arity++) {
+  {
+   static const MSize arities[]={1u,2u,3u,4u,8u,16u,32u};
+   for (unsigned ai=0;ai<sizeof(arities)/sizeof(arities[0]);ai++) {
+    arity=arities[ai];
     GCtrace *T=NULL;
     GCfunc *forward;
     install_forward_case(L,arity);
@@ -669,7 +722,10 @@ int main(void)
     native_call(L,T,24,20,arity,arity,0,0);
     printf("Lua vararg-forward target-arity=%u native=3 exact root CALL/target guard, identity exit, GC/reuse passed\n",
            arity);
+   }
   }
+  install_forward_cap_case(L,198u,40u);
+  assert_forward_cap_refusal(L,198u);
   ljt_lua_dostring(L,"assert(stop:send(true,5)); local ok,v=peer:join(5); assert(ok and v)");
   lua_close(L);
   printf("Lua varargs native OK: entries=%u exact-child-overflow-exits=%u semantic-negative=%u postRA-negative=%u paired-frame maps, padding/truncation, primitive output, GC/reuse/peer passed\n",
