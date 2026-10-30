@@ -1,10 +1,11 @@
 /*
-** macOS ARM64 recorder/publication contract for integer FORL.
-** Integer JFORL edges may enter the certified native root after updating IDX
-** and EXT; numeric FP edges retain branch-only recovery.
+** macOS ARM64 recorder/publication contract for scalar FORL.
+** Integer and NUM JFORL roots enter their certified native paths after the
+** VM update; integer overflow recovery remains independently covered.
 */
 
 #include <assert.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -23,6 +24,7 @@
 #include "lj_bc.h"
 #include "lj_func.h"
 #include "lj_ir.h"
+#include "lj_asm.h"
 #include "lj_jit.h"
 #include "lj_snap.h"
 #include "lj_target.h"
@@ -173,6 +175,52 @@ static lua_Number callnum1(lua_State *L, const char *name, lua_Number arg)
   return result;
 }
 
+static lua_Number callnum3(lua_State *L, const char *name, lua_Number a,
+	lua_Number b, lua_Number c)
+{
+  int status;
+  lua_Number result;
+  void *cframe = L->cframe;
+  lua_getglobal(L, name);
+  lua_pushnumber(L, a);
+  lua_pushnumber(L, b);
+  lua_pushnumber(L, c);
+  status = lua_pcall(L, 3, 1, 0);
+  if (status != LUA_OK) {
+    fprintf(stderr, "ARM64 dynamic NUM FORL call failed: %s\n",
+	    lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
+  assert(lua_isnumber(L, -1));
+  result = lua_tonumber(L, -1);
+  lua_pop(L, 1);
+  assert(L->cframe == cframe);
+  return result;
+}
+
+static lua_Number callint3num(lua_State *L, const char *name,
+	lua_Integer a, lua_Integer b, lua_Integer c)
+{
+  int status;
+  lua_Number result;
+  void *cframe = L->cframe;
+  lua_getglobal(L, name);
+  lua_pushinteger(L, a);
+  lua_pushinteger(L, b);
+  lua_pushinteger(L, c);
+  status = lua_pcall(L, 3, 1, 0);
+  if (status != LUA_OK) {
+    fprintf(stderr, "ARM64 INT FORL transition failed: %s\n",
+	    lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
+  assert(lua_isnumber(L, -1));
+  result = lua_tonumber(L, -1);
+  lua_pop(L, 1);
+  assert(L->cframe == cframe);
+  return result;
+}
+
 static lua_Integer call3(lua_State *L, const char *name, lua_Integer a,
 	lua_Integer b, lua_Integer step)
 {
@@ -217,6 +265,10 @@ static lua_Integer call2(lua_State *L, const char *name, lua_Integer a,
   assert(L->cframe == cframe);
   return result;
 }
+
+static GCtrace *expect_published_forl(lua_State *L, GCproto *pt);
+static void expect_native_entry(void);
+static void reset_native_activity(void);
 
 static IRRef find_kint(const GCtrace *T, int32_t value)
 {
@@ -460,6 +512,397 @@ static void expect_dynamic_snapshots(const GCtrace *T,
   assert(map[29] == SNAP(5, 0, D_SUM_BODY));
 }
 
+static void expect_numeric_forl_shape(const GCtrace *T)
+{
+  IRIns *ir = trace_ir_acq(T);
+  MSize idxslot = 1u+LJ_FR2+bc_a(trace_startins_acq(T));
+  IRRef ref, idx = 0, pre = 0, post = 0, loop = 0, poll = 0;
+  IRRef precmp = 0, postcmp = 0, phi = 0;
+  for (ref = REF_FIRST; ref < trace_nins_acq(T); ref++) {
+    IRIns x = ir[ref];
+    if (x.o == IR_SLOAD && x.op1 == idxslot) {
+      assert(idx == 0 && x.t.irt == (IRT_NUM|IRT_GUARD));
+      assert(x.op2 == (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT));
+      idx = ref;
+    }
+    if (x.o == IR_LOOP) { assert(loop == 0); loop = ref; }
+    if (x.o == IR_XPOLL) { assert(poll == 0); poll = ref; }
+  }
+  assert(idx && loop && poll == loop+1u);
+  for (ref = REF_FIRST; ref < trace_nins_acq(T); ref++) {
+    IRIns x = ir[ref];
+    if (x.o == IR_ADD && x.t.irt == (IRT_NUM|IRT_ISPHI) &&
+        x.op1 == idx && ref < loop) { assert(pre == 0); pre = ref; }
+    if (x.o == IR_ADD && x.t.irt == (IRT_NUM|IRT_ISPHI) && pre &&
+        x.op1 == pre && x.op2 == ir[pre].op2 && ref > poll) {
+      assert(post == 0); post = ref;
+    }
+  }
+  assert(pre && post && ir[post].op2 == ir[pre].op2);
+  assert(ir[ir[pre].op2].o == IR_KNUM);
+  for (ref = pre+1u; ref < loop; ref++)
+    if ((ir[ref].o == IR_LE || ir[ref].o == IR_GE) &&
+        ir[ref].t.irt == (IRT_NUM|IRT_GUARD) && ir[ref].op1 == pre) {
+      assert(precmp == 0); precmp = ref;
+    }
+  for (ref = poll+1u; ref < trace_nins_acq(T); ref++)
+    if ((ir[ref].o == IR_LE || ir[ref].o == IR_GE) &&
+        ir[ref].t.irt == (IRT_NUM|IRT_GUARD) && ir[ref].op1 == post &&
+        ir[ref].op2 == ir[precmp].op2) {
+      assert(postcmp == 0); postcmp = ref;
+    }
+  assert(precmp && postcmp && ir[precmp].o == IR_LE &&
+         ir[postcmp].o == IR_LE && ir[precmp].op2 == ir[postcmp].op2);
+  for (ref = postcmp+1u; ref < trace_nins_acq(T); ref++)
+    if (ir[ref].o == IR_PHI && ir[ref].op1 == pre && ir[ref].op2 == post) {
+      assert(phi == 0); phi = ref;
+    }
+  assert(phi && ir[phi].t.irt == IRT_NUM);
+}
+
+typedef struct NumericForlAdmissionCopy {
+  GCtrace trace;
+  jit_State J;
+  IRIns *ir;
+  SnapShot *snap;
+  SnapEntry *snapmap;
+  LJArm64PostRAView post;
+  IRRef semantic_nins;
+} NumericForlAdmissionCopy;
+
+static void numeric_forl_admission_copy_init(NumericForlAdmissionCopy *copy,
+					     lua_State *L, const GCtrace *source)
+{
+  GCproto *pt = trace_startpt_acq((GCtrace *)source);
+  IRRef ref, loop = 0, semantic_nins = 0;
+  assert(copy && source && pt);
+  memset(copy, 0, sizeof(*copy));
+  copy->trace = *source;
+  copy->ir = calloc(source->nins, sizeof(*copy->ir));
+  copy->snap = malloc(source->nsnap * sizeof(*copy->snap));
+  copy->snapmap = malloc(source->nsnapmap * sizeof(*copy->snapmap));
+  assert(copy->ir && copy->snap && copy->snapmap);
+  /* T->ir is biased; only [nk,nins) is an allocated range. */
+  memcpy(copy->ir + source->nk, trace_ir_acq(source) + source->nk,
+         (size_t)(source->nins - source->nk) * sizeof(*copy->ir));
+  memcpy(copy->snap, trace_snap_acq((GCtrace *)source),
+         source->nsnap * sizeof(*copy->snap));
+  memcpy(copy->snapmap, trace_snapmap_acq((GCtrace *)source),
+         source->nsnapmap * sizeof(*copy->snapmap));
+  copy->trace.ir = copy->ir;
+  copy->trace.snap = copy->snap;
+  copy->trace.snapmap = copy->snapmap;
+  for (ref = REF_FIRST; ref < source->nins; ref++)
+    if (copy->ir[ref].o == IR_LOOP) { assert(!loop); loop = ref; }
+  assert(loop);
+  copy->J = *L2J(L);
+  copy->J.pt = pt;
+  copy->J.loopref = loop;
+  copy->J.startpc = (BCIns *)(void *)trace_startpc_acq((GCtrace *)source);
+
+  copy->post.ir = copy->ir;
+  copy->post.owner = &copy->trace;
+  copy->post.snap = copy->snap;
+  copy->post.snapmap = copy->snapmap;
+  copy->post.proto = pt;
+  copy->post.proto_bc = proto_bc(pt);
+  copy->post.startpc = copy->J.startpc;
+  copy->post.nins = source->nins;
+  copy->post.nk = source->nk;
+  copy->post.nsnap = source->nsnap;
+  copy->post.nsnapmap = source->nsnapmap;
+  copy->post.spadjust = source->spadjust;
+  copy->post.proto_sizebc = pt->sizebc;
+  copy->post.proto_numparams = pt->numparams;
+  copy->post.root_topslot = pt->framesize;
+  copy->post.startins = source->startins;
+  copy->post.base_delta = 0;
+  assert(lj_asm_arm64_forl_postra_admit(&copy->post, &semantic_nins, NULL));
+  assert(semantic_nins > REF_FIRST && semantic_nins <= source->nins);
+  copy->semantic_nins = semantic_nins;
+  copy->trace.nins = semantic_nins;
+}
+
+static void numeric_forl_admission_copy_free(NumericForlAdmissionCopy *copy)
+{
+  free(copy->ir);
+  free(copy->snap);
+  free(copy->snapmap);
+}
+
+/* Each validator independently rejects a dynamic NUM loop whose ordered
+** comparator uses a different, valid NUM SLOAD as its bound. */
+static void test_numeric_forl_bound_binding(lua_State *L, const GCtrace *T)
+{
+  NumericForlAdmissionCopy copy;
+  IRRef ref, idx = 0, stop = 0, pre = 0, post = 0, loop = 0;
+  IRRef precmp = 0, postcmp = 0;
+  MSize idxslot = 1u+LJ_FR2+bc_a(T->startins);
+  const BCIns *sourcepc = trace_startpc_acq((GCtrace *)T);
+  BCIns savedpc = (BCIns)la_load32_acq((const uint32_t *)sourcepc);
+  IRRef semantic_nins;
+  int direction;
+  LJArm64IRReject reject;
+  /* The published prototype has JFORL installed. Admission replays the
+  ** original FORL source instruction while this synchronous test owns Lua. */
+  la_store32_rel((uint32_t *)(void *)sourcepc, T->startins);
+  numeric_forl_admission_copy_init(&copy, L, T);
+  for (ref = REF_FIRST; ref < copy.post.nins; ref++) {
+    IRIns x = copy.ir[ref];
+    if (x.o == IR_LOOP) loop = ref;
+    if (x.o == IR_SLOAD && x.op1 == idxslot &&
+        x.t.irt == (IRT_NUM|IRT_GUARD)) idx = ref;
+    if (x.o == IR_SLOAD && x.op1 == idxslot+FORL_STOP &&
+        x.t.irt == IRT_NUM) stop = ref;
+  }
+  assert(loop && idx);
+  for (ref = REF_FIRST; ref < loop; ref++) {
+    IRIns x = copy.ir[ref];
+    if (x.o == IR_ADD && x.t.irt == (IRT_NUM|IRT_ISPHI) &&
+        x.op1 == idx) pre = ref;
+    if ((x.o == IR_LE || x.o == IR_GE) &&
+        x.t.irt == (IRT_NUM|IRT_GUARD) && x.op1 == pre && pre)
+      precmp = ref;
+  }
+  for (ref = loop+2u; ref < copy.post.nins; ref++) {
+    IRIns x = copy.ir[ref];
+    if (x.o == IR_ADD && x.t.irt == (IRT_NUM|IRT_ISPHI) &&
+        x.op1 == pre) post = ref;
+    if ((x.o == IR_LE || x.o == IR_GE) &&
+        x.t.irt == (IRT_NUM|IRT_GUARD) && x.op1 == post && post)
+      postcmp = ref;
+  }
+  assert(pre && post && precmp && postcmp);
+  if (!(stop == copy.ir[precmp].op2 && stop >= REF_FIRST && stop < pre &&
+        stop != idx && copy.ir[stop].o == IR_SLOAD &&
+        copy.ir[stop].t.irt == IRT_NUM)) {
+    fprintf(stderr, "NUM FORL bound fixture: idxslot=%u idx=%u stop=%u pre=%u cmp=%u op2=%u\n",
+            (unsigned)idxslot, (unsigned)idx, (unsigned)stop,
+            (unsigned)pre, (unsigned)precmp,
+            (unsigned)copy.ir[precmp].op2);
+    fprintf(stderr, "  predicates: eq=%d ref=%d before=%d distinct=%d op=%u type=%u wanttype=%u\n",
+            stop == copy.ir[precmp].op2, stop > REF_FIRST, stop < pre,
+            stop != idx, (unsigned)copy.ir[stop].o,
+            (unsigned)copy.ir[stop].t.irt, (unsigned)IRT_NUM);
+    for (ref = REF_FIRST; ref < loop; ref++) {
+      IRIns x = copy.ir[ref];
+      if (x.o == IR_SLOAD || x.o == IR_LE || x.o == IR_GE ||
+          (x.o == IR_ADD && irt_type(x.t) == IRT_NUM))
+        fprintf(stderr, "  r%u op=%u type=%u op1=%u op2=%u\n",
+                (unsigned)ref, (unsigned)x.o, (unsigned)x.t.irt,
+                (unsigned)x.op1, (unsigned)x.op2);
+    }
+    abort();
+  }
+
+  /* Prove both independent authorities accept the untouched real trace. */
+  if (!lj_asm_arm64_forl_ir_admit(&copy.J, &copy.trace, &reject, &direction)) {
+    fprintf(stderr, "NUM FORL private semantic baseline reject=%u ref=%u op=%u detail=%u nins=%u sem=%u start=%u\n",
+            (unsigned)reject.reason, (unsigned)reject.ref,
+            (unsigned)reject.op, (unsigned)reject.detail,
+            (unsigned)copy.post.nins, (unsigned)copy.semantic_nins,
+            (unsigned)bc_op(copy.trace.startins));
+    abort();
+  }
+  assert(direction == 1 || direction == -1);
+  assert(lj_asm_arm64_forl_postra_admit(&copy.post, &semantic_nins,
+                                        &direction));
+  assert(direction == 1 || direction == -1);
+
+  /* The alternative is another in-range, guarded NUM SLOAD, not malformed
+  ** IR. Keep semantic and allocated copies independently mutated. */
+  copy.ir[precmp].op2 = (IRRef1)idx;
+  copy.ir[postcmp].op2 = (IRRef1)idx;
+  assert(!lj_asm_arm64_forl_ir_admit(&copy.J, &copy.trace, NULL, &direction));
+  numeric_forl_admission_copy_free(&copy);
+
+  numeric_forl_admission_copy_init(&copy, L, T);
+  for (ref = REF_FIRST; ref < copy.post.nins; ref++) {
+    IRIns x = copy.ir[ref];
+    if (x.o == IR_LOOP) loop = ref;
+    if (x.o == IR_SLOAD && x.op1 == idxslot &&
+        x.t.irt == (IRT_NUM|IRT_GUARD)) idx = ref;
+  }
+  pre = precmp = 0;
+  for (ref = REF_FIRST; ref < loop; ref++) {
+    IRIns x = copy.ir[ref];
+    if (x.o == IR_ADD && x.t.irt == (IRT_NUM|IRT_ISPHI) &&
+        x.op1 == idx) pre = ref;
+    if ((x.o == IR_LE || x.o == IR_GE) &&
+        x.t.irt == (IRT_NUM|IRT_GUARD) && x.op1 == pre && pre)
+      precmp = ref;
+  }
+  assert(pre && precmp && copy.ir[precmp].op2 == stop);
+  post = postcmp = 0;
+  for (ref = loop+2u; ref < copy.post.nins; ref++) {
+    IRIns x = copy.ir[ref];
+    if (x.o == IR_ADD && x.t.irt == (IRT_NUM|IRT_ISPHI) &&
+        x.op1 == pre) post = ref;
+    if ((x.o == IR_LE || x.o == IR_GE) &&
+        x.t.irt == (IRT_NUM|IRT_GUARD) && x.op1 == post && post)
+      postcmp = ref;
+  }
+  assert(post && postcmp && copy.ir[postcmp].op2 == stop);
+  copy.ir[precmp].op2 = (IRRef1)idx;
+  copy.ir[postcmp].op2 = (IRRef1)idx;
+  copy.trace.nins = copy.post.nins;
+  assert(!lj_asm_arm64_forl_postra_admit(&copy.post, &semantic_nins,
+                                         &direction));
+  numeric_forl_admission_copy_free(&copy);
+  la_store32_rel((uint32_t *)(void *)sourcepc, savedpc);
+}
+
+static void run_numeric(void)
+{
+  lua_State *L = luaL_newstate();
+  GCproto *pt;
+  GCtrace *T;
+  assert(L != NULL);
+  luaL_openlibs(L);
+  run_lua(L,
+    "jit.opt.start('hotloop=2','hotexit=1000','maxtrace=128')\n"
+    "function __arm64_forl_numeric(n)\n"
+    "  local s = 0.0\n"
+    "  for i = 0.5, n, 0.5 do s = s + i end\n"
+    "  return s\n"
+    "end\n");
+  pt = global_proto(L, "__arm64_forl_numeric");
+  reset_native_activity();
+  assert(callnum1(L, "__arm64_forl_numeric", 3.5) == 14.0);
+  T = expect_published_forl(L, pt);
+  assert(trace_arm64_admission_acq(T) ==
+	 (TRACE_ARM64_NUM_FORL_ADMITTED | TRACE_ARM64_NUM_FORL_ASCENDING));
+  expect_numeric_forl_shape(T);
+  expect_native_entry();
+  assert(lj_trace_test_root_entry_startins_calls() == 0);
+
+  /* Terminal exits restore the loop through the exact NUM comparison map. */
+  reset_native_activity();
+  assert(callnum1(L, "__arm64_forl_numeric", 4.5) == 22.5);
+  expect_native_entry();
+  assert(lj_trace_test_root_entry_startins_calls() == 0);
+  run_lua(L, "collectgarbage('collect')\n");
+  reset_native_activity();
+  assert(callnum1(L, "__arm64_forl_numeric", 3.5) == 14.0);
+  T = expect_published_forl(L, pt);
+  assert(trace_arm64_admission_acq(T) ==
+	 (TRACE_ARM64_NUM_FORL_ADMITTED | TRACE_ARM64_NUM_FORL_ASCENDING));
+  expect_numeric_forl_shape(T);
+  expect_native_entry();
+  lua_close(L);
+}
+
+static void expect_mode_rejected(TGState *tg);
+static GCtrace *expect_published_forl(lua_State *L, GCproto *pt);
+static void expect_branch_only(void);
+static void expect_native_entry(void);
+static void reset_native_activity(void);
+
+static void run_numeric_dynamic(int negative)
+{
+  lua_State *L = luaL_newstate();
+  GCproto *pt;
+  GCtrace *T;
+  lua_Number start = negative ? 4.5 : 0.5;
+  lua_Number stop = negative ? 0.5 : 3.5;
+  lua_Number step = negative ? -0.5 : 0.5;
+  assert(L != NULL);
+  luaL_openlibs(L);
+  run_lua(L,
+    "jit.opt.start('hotloop=2','hotexit=1000','maxtrace=128')\n"
+    "function __arm64_forl_numeric_dynamic(start, stop, step)\n"
+    "  local s = 0.0\n"
+    "  for i = start, stop, step do s = s + i end\n"
+    "  return s\n"
+    "end\n"
+    "function __arm64_forl_numeric_oracle(start, stop, step)\n"
+    "  local s = 0.0\n"
+    "  for i = start, stop, step do s = s + i end\n"
+    "  return s\n"
+    "end\n");
+  run_lua(L, "jit.off(__arm64_forl_numeric_oracle, true)\n");
+  pt = global_proto(L, "__arm64_forl_numeric_dynamic");
+  reset_native_activity();
+  assert(callnum3(L, "__arm64_forl_numeric_dynamic", start, stop, step) ==
+	 (negative ? 22.5 : 14.0));
+  T = expect_published_forl(L, pt);
+  assert(trace_arm64_admission_acq(T) ==
+	 (TRACE_ARM64_NUM_FORL_ADMITTED |
+	  (negative ? TRACE_ARM64_NUM_FORL_DESCENDING :
+		      TRACE_ARM64_NUM_FORL_ASCENDING)));
+  test_numeric_forl_bound_binding(L, T);
+  expect_native_entry();
+  assert(lj_trace_test_root_entry_startins_calls() == 0);
+
+  reset_native_activity();
+  stop = negative ? -0.5 : 4.5;
+  assert(callnum3(L, "__arm64_forl_numeric_dynamic", start, stop, step) ==
+	 (negative ? 22.0 : 22.5));
+  expect_native_entry();
+  assert(lj_trace_test_root_entry_startins_calls() == 0);
+  run_lua(L, "collectgarbage('collect')\n");
+  reset_native_activity();
+  stop = negative ? 0.5 : 3.5;
+  assert(callnum3(L, "__arm64_forl_numeric_dynamic", start, stop, step) ==
+	 (negative ? 22.5 : 14.0));
+  T = expect_published_forl(L, pt);
+  assert(trace_arm64_admission_acq(T) ==
+	 (TRACE_ARM64_NUM_FORL_ADMITTED |
+	  (negative ? TRACE_ARM64_NUM_FORL_DESCENDING :
+		      TRACE_ARM64_NUM_FORL_ASCENDING)));
+  expect_native_entry();
+  if (!negative) {
+    reset_native_activity();
+	assert(callint3num(L, "__arm64_forl_numeric_dynamic", 1, 5, 1) ==
+	   15.0);
+    assert(lj_trace_test_root_entry_publishes() != 0);
+    assert(lj_trace_test_root_entry_cleanups() ==
+	   lj_trace_test_root_entry_publishes());
+    assert(lj_trace_test_exit_calls() == 0);
+    assert(trace_runnable_acq(T, 1));
+    /* The VM chooses a descending edge for this call. The previously
+    ** compiled ascending root must be cleaned up before it can transfer. */
+    reset_native_activity();
+    assert(callnum3(L, "__arm64_forl_numeric_dynamic", 4.5, 0.5, -0.5) ==
+	   callnum3(L, "__arm64_forl_numeric_oracle", 4.5, 0.5, -0.5));
+    expect_mode_rejected(L2TG(L));
+    assert(trace_runnable_acq(T, 1));
+  } else {
+    /* And an ascending edge cannot enter a descending-specialized root. */
+    reset_native_activity();
+    assert(callnum3(L, "__arm64_forl_numeric_dynamic", 0.5, 3.5, 0.5) ==
+	   callnum3(L, "__arm64_forl_numeric_oracle", 0.5, 3.5, 0.5));
+    expect_mode_rejected(L2TG(L));
+    assert(trace_runnable_acq(T, 1));
+  }
+  /* These IEEE edge cases terminate before a native backedge. FORL chooses
+  ** its direction from the step sign bit, so -0 follows the descending arm. */
+  reset_native_activity();
+  assert(callnum3(L, "__arm64_forl_numeric_dynamic", 2.5, 1.5, 0.0) ==
+	 callnum3(L, "__arm64_forl_numeric_oracle", 2.5, 1.5, 0.0));
+  assert(callnum3(L, "__arm64_forl_numeric_dynamic", 0.5, 3.5, -0.0) ==
+	 callnum3(L, "__arm64_forl_numeric_oracle", 0.5, 3.5, -0.0));
+  assert(callnum3(L, "__arm64_forl_numeric_dynamic", 0.5, NAN, 0.5) ==
+	 callnum3(L, "__arm64_forl_numeric_oracle", 0.5, NAN, 0.5));
+  {
+    lua_Number nan_step = negative ? -NAN : NAN;
+    lua_Number nan_start = negative ? 0.5 : 2.5;
+    lua_Number nan_stop = negative ? 3.5 : 1.5;
+    assert(callnum3(L, "__arm64_forl_numeric_dynamic", nan_start, nan_stop,
+		    nan_step) ==
+	   callnum3(L, "__arm64_forl_numeric_oracle", nan_start, nan_stop,
+		    nan_step));
+  }
+  assert(callnum3(L, "__arm64_forl_numeric_dynamic", 0.5, 3.5,
+		  INFINITY) ==
+	 callnum3(L, "__arm64_forl_numeric_oracle", 0.5, 3.5, INFINITY));
+  assert(callnum3(L, "__arm64_forl_numeric_dynamic", 4.5, 0.5,
+		  -INFINITY) ==
+	 callnum3(L, "__arm64_forl_numeric_oracle", 4.5, 0.5, -INFINITY));
+  expect_branch_only();
+  lua_close(L);
+}
+
 static GCtrace *expect_published_forl(lua_State *L, GCproto *pt)
 {
   jit_State *J = L2J(L);
@@ -475,7 +918,11 @@ static GCtrace *expect_published_forl(lua_State *L, GCproto *pt)
   assert(trace_nextside_acq(T) == 0);
   assert(trace_startpt_acq(T) == pt);
   flags = trace_arm64_admission_acq(T);
-  assert((flags & TRACE_ARM64_INT_FORL_ADMITTED) != 0);
+  assert(flags == TRACE_ARM64_INT_FORL_ADMITTED ||
+         flags == (TRACE_ARM64_NUM_FORL_ADMITTED |
+		   TRACE_ARM64_NUM_FORL_ASCENDING) ||
+         flags == (TRACE_ARM64_NUM_FORL_ADMITTED |
+		   TRACE_ARM64_NUM_FORL_DESCENDING));
   assert((flags & TRACE_ARM64_INT_LOOP_ADMITTED) == 0);
   assert((la_load8_acq(&T->unused1) & TRACE_ENTRY_GATED) == 0);
   assert(trace_mcode_acq(T) != NULL);
@@ -493,6 +940,16 @@ static void expect_branch_only(void)
   assert(lj_trace_test_root_entry_publishes() == 0);
   assert(lj_trace_test_root_entry_cleanups() == 0);
   assert(lj_trace_test_exit_calls() == 0);
+}
+
+static void expect_mode_rejected(TGState *tg)
+{
+  assert(lj_trace_test_root_entry_publishes() != 0);
+  assert(lj_trace_test_root_entry_cleanups() ==
+	 lj_trace_test_root_entry_publishes());
+  assert(lj_trace_test_exit_calls() == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(lj_tg_load_jit_base(tg) == NULL);
 }
 
 static void expect_native_entry(void)
@@ -540,11 +997,11 @@ static void run_positive(void)
   expect_native_entry();
   assert(lj_trace_test_root_entry_startins_calls() == 0);
 
-  /* A later numeric STOP takes the FP JFORL edge. Stage 1 must keep that
-  ** edge on branch-only recovery even though the integer trace is published. */
+  /* A NUM edge cannot enter the earlier INT specialization; the exact mode
+  ** mismatch is rejected and the already-tested edge is recovered. */
   reset_native_activity();
   assert(callnum1(L, "__arm64_forl_positive", 3.5) == 6.0);
-  expect_branch_only();
+  expect_mode_rejected(L2TG(L));
   assert(lj_trace_test_root_entry_startins_calls() == 2);
 
   run_lua(L, "jit.flush()\n");
@@ -771,9 +1228,12 @@ int main(void)
   run_negative_dynamic_stop();
   run_dynamic(0);
   run_dynamic(1);
+  run_numeric();
+  run_numeric_dynamic(0);
+  run_numeric_dynamic(1);
   run_rejections();
-  puts("arm64_jit_forl_record OK: constant and variable-step roots "
-       "published and entered; FP stayed branch-only");
+  puts("arm64_jit_forl_record OK: integer and NUM FORL roots published "
+       "and entered");
   return 0;
 }
 

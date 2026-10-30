@@ -463,12 +463,12 @@ static void entry_rechecks(lua_State *L, GCtrace *T)
     setintV(&L->base[a],1); setintV(&L->base[a-1u],1);
     lj_tg_vmstate_store_rel(tg,(int32_t)~LJ_VMST_INTERP);
     lj_trace_test_root_entry_reset();
-    entry=lj_trace_enter_root(L2J(L),pc,T->traceno,L,L->base,live,NULL);
+    entry=lj_trace_enter_root(L2J(L),pc,T->traceno,L,L->base,live,NULL,0);
     assert(entry.trace==T && entry.target);
     lj_tg_store_jit_base(tg,NULL);
     /* The wrong consumed key/control state cannot acquire native authority. */
     setintV(&L->base[a-1u],2);
-    entry=lj_trace_enter_root(L2J(L),pc,T->traceno,L,L->base,live,NULL);
+    entry=lj_trace_enter_root(L2J(L),pc,T->traceno,L,L->base,live,NULL,0);
     assert(!entry.trace && !entry.target && !lj_tg_load_jit_base(tg));
     setintV(&L->base[a-1u],1);
     race=(EntryRace){0}; race.pc=pc; race.L=L; race.expected=fn;
@@ -476,7 +476,7 @@ static void entry_rechecks(lua_State *L, GCtrace *T)
     lj_trace_test_root_entry_reset();
     lj_trace_test_root_entry_pause(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA);
     assert(pthread_create(&worker,NULL,entry_race,&race)==0);
-    entry=lj_trace_enter_root(L2J(L),pc,T->traceno,L,L->base,live,NULL);
+    entry=lj_trace_enter_root(L2J(L),pc,T->traceno,L,L->base,live,NULL,0);
     assert(pthread_join(worker,NULL)==0 && la_load32_acq(&race.done));
     assert(!entry.trace && !entry.target && !lj_tg_load_jit_base(tg) &&
            lj_trace_test_root_entry_cleanups()==1);
