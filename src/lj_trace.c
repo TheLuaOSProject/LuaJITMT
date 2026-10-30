@@ -113,6 +113,10 @@ static uint32_t trace_test_exittab_last_free_nslots;
 static uint32_t trace_test_mcode_retry_count;
 static uint32_t trace_test_abort_count;
 static uint32_t trace_test_last_abort_error_code;
+#if LJ_TARGET_ARM64
+static uint32_t trace_test_arm64_child_return_captures;
+static LJArm64ChildReturnCert trace_test_arm64_child_return_last;
+#endif
 #if LJ_TARGET_ARM64 && defined(LUAJIT_USE_GDBJIT)
 static uint32_t trace_test_arm64_gdbjit_post_prepare_rollback;
 static uint32_t trace_test_arm64_gdbjit_post_prepare_traceno;
@@ -208,6 +212,38 @@ TraceError lj_trace_test_last_abort_error(void)
 {
   return (TraceError)la_load32_acq(&trace_test_last_abort_error_code);
 }
+
+#if LJ_TARGET_ARM64
+void lj_trace_test_arm64_child_return_reset(void)
+{
+  memset(&trace_test_arm64_child_return_last, 0,
+         sizeof(trace_test_arm64_child_return_last));
+  la_store32_rel(&trace_test_arm64_child_return_captures, 0);
+}
+
+void lj_trace_test_arm64_child_return_note(
+    const LJArm64ChildReturnCert *cert)
+{
+  if (cert == NULL || !cert->valid) return;
+  memcpy(&trace_test_arm64_child_return_last, cert,
+         sizeof(trace_test_arm64_child_return_last));
+  (void)la_add32_acqrel(&trace_test_arm64_child_return_captures, 1);
+}
+
+uint32_t lj_trace_test_arm64_child_return_count(void)
+{
+  return la_load32_acq(&trace_test_arm64_child_return_captures);
+}
+
+int lj_trace_test_arm64_child_return_read(LJArm64ChildReturnCert *cert)
+{
+  if (cert == NULL ||
+      la_load32_acq(&trace_test_arm64_child_return_captures) == 0)
+    return 0;
+  memcpy(cert, &trace_test_arm64_child_return_last, sizeof(*cert));
+  return 1;
+}
+#endif
 
 #define trace_test_note_abort_error(e) \
   (la_store32_rel(&trace_test_last_abort_error_code, (uint32_t)(e)), \
@@ -4527,7 +4563,8 @@ static int trace_arm64_nested_forl_norestore_valid(
 
 static int trace_arm64_first_side_snapshot_valid(
     const TraceArm64FirstSideLoopView *v, const BCIns *pc,
-    const TraceArm64FirstSideLoopView *rootview)
+    const TraceArm64FirstSideLoopView *rootview, int child_frame,
+    MSize child_base, MSize child_top)
 {
   MSize i;
   BCReg previous = 0;
@@ -4541,7 +4578,9 @@ static int trace_arm64_first_side_snapshot_valid(
 #endif
 
   if (v->nslots < 1u+LJ_FR2 ||
-      v->nslots >= LJ_MAX_JSLOTS || v->snaptopslot > v->topslot ||
+      v->nslots >= LJ_MAX_JSLOTS ||
+      (child_frame ? v->snaptopslot != child_top :
+                     v->snaptopslot > v->topslot) ||
       v->snapref < REF_FIRST ||
       v->snapref >= v->nins || v->mapofs > v->nsnapmap ||
       v->nent > v->nsnapmap-v->mapofs ||
@@ -4557,6 +4596,8 @@ static int trace_arm64_first_side_snapshot_valid(
     IRRef ref = snap_ref(sn);
     if ((sn & UINT32_C(0x00ff0000)) != 0 &&
         sn != SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL) &&
+        !(child_frame && slot == v->topslot &&
+	  (sn & UINT32_C(0x00ff0000)) == SNAP_FRAME) &&
         !(rootview != NULL ?
           trace_arm64_nested_forl_norestore_valid(v, rootview, sn) :
           trace_arm64_side_forl_norestore_valid(v->ir, v->nins, v->nk,
@@ -4570,12 +4611,11 @@ static int trace_arm64_first_side_snapshot_valid(
     previous = slot;
     have_previous = 1;
   }
-
 #if LJ_FR2
   rawpc[0] = v->footer0;
   rawpc[1] = v->footer1;
   memcpy(&pcbase, rawpc, sizeof(pcbase));
-  if ((uint8_t)pcbase != 0 ||
+  if ((uint8_t)pcbase != (child_frame ? child_base : 0) ||
       (const BCIns *)(uintptr_t)(pcbase >> 8) != pc) {
     return 0;
   }
@@ -5680,7 +5720,8 @@ static int trace_arm64_nested_side_view_acq(jit_State *J, TraceNo parentno,
   v->footer1 = snapentry_acq(&v->snapmap[v->mapofs+nent+1u]);
 #endif
   v->continuationins = rootview.continuationins;
-  if (!trace_arm64_first_side_snapshot_valid(v, continuation, &rootview) ||
+  if (!trace_arm64_first_side_snapshot_valid(v, continuation, &rootview,
+	      0, 0, 0) ||
       !trace_arm64_nested_cell_snapshot_valid(v, &rootview)) {
     return 0;
   }
@@ -5941,14 +5982,182 @@ static int trace_arm64_first_side_loop_generation_valid(
   return 1;
 }
 
+static int trace_arm64_first_side_child_frame_valid(jit_State *J,
+    lua_State *L, GCproto *rootpt, GCfunc *fn, const BCIns *pc,
+    const BCIns *snapshotpc, TraceNo parent, ExitNo exitno,
+    const TraceArm64FirstSideLoopView *view, const BCIns **callpcp,
+    MSize *childbasep, MSize *childtopp, MSize *basebytep,
+    GCproto **childptp);
+
+/* Recover a child closure after its physical frame has returned. The parent
+** trace must contain the exact rooted-upvalue read and function identity
+** guard, and the source CALL target must still be defined by that same UGET.
+** This certificate is only for the recorded child/root transition; it does
+** not authorize a cross-prototype trace by itself. */
+static int trace_arm64_first_side_guarded_call_valid(
+    const TraceArm64FirstSideLoopView *view, GCproto *rootpt,
+    const BCIns *callpc, GCfunc *childfn)
+{
+  GCtrace *T;
+  BCIns call;
+  BCReg target;
+  MSize callpos, ugetpos, uv, pos;
+  IRRef r;
+  int found = 0;
+  if (view == NULL || (T = view->parent) == NULL || rootpt == NULL ||
+      childfn == NULL || !isluafunc(childfn) || view->ir == NULL ||
+      view->nins <= REF_FIRST || callpc == NULL ||
+      trace_startptgco_acq(T) != obj2gco(rootpt) ||
+      !trace_pc_in_proto_range(callpc, proto_bc(rootpt), rootpt->sizebc))
+    return 0;
+  call = (BCIns)la_load32_acq((const uint32_t *)callpc);
+  if (bc_op(call) != BC_CALL || bc_b(call) != 2u || bc_c(call) != 2u ||
+      funcproto(childfn)->numparams > (MSize)bc_c(call)-1u)
+    return 0;
+  callpos = proto_bcpos(rootpt, callpc);
+  target = bc_a(call);
+  ugetpos = UINT32_MAX;
+  uv = UINT32_MAX;
+  /* Find the nearest definition of CALL.A. Only a direct UGET is supported;
+  ** calls, open assignments, and base-window writes are ambiguous here. */
+  for (pos = callpos; pos > 0; ) {
+    BCIns ins;
+    BCOp op;
+    BCMode mode;
+    pos--;
+    ins = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(rootpt)[pos]);
+    op = bc_op(ins);
+    if (op >= BC__MAX)
+      return 0;
+    mode = bcmode_a(op);
+    if (mode == BCMdst && bc_a(ins) == target) {
+      if (op != BC_UGET) return 0;
+      ugetpos = pos;
+      uv = bc_d(ins);
+      break;
+    }
+    if ((mode == BCMbase || mode == BCMvar) && bc_a(ins) <= target)
+      return 0;
+  }
+  if (ugetpos == UINT32_MAX || uv >= rootpt->sizeuv)
+    return 0;
+  /* No branch from elsewhere in the caller may enter after the UGET and
+  ** bypass the identity-carrying function definition. */
+  for (pos = 0; pos < rootpt->sizebc; pos++) {
+    BCIns ins = (BCIns)la_load32_acq((const uint32_t *)&proto_bc(rootpt)[pos]);
+    BCOp op = bc_op(ins);
+    ptrdiff_t targetpc;
+    if (op >= BC__MAX)
+      return 0;
+    if (bcmode_d(op) != BCMjump)
+      continue;
+    targetpc = (ptrdiff_t)pos + 1 + (ptrdiff_t)bc_j(ins);
+    if (targetpc < 0 || targetpc >= (ptrdiff_t)rootpt->sizebc)
+      return 0;
+    if (targetpc > (ptrdiff_t)ugetpos && targetpc <= (ptrdiff_t)callpos)
+      return 0;
+  }
+
+  for (r = REF_FIRST; r < view->nins; r++) {
+    IRIns guard = ir_load_acq(&view->ir[r]);
+    IRRef value, constant;
+    IRIns load, tmp, rootfn;
+    MSize rooted_reads = 0;
+    IRRef q;
+    SnapNo s;
+    int guard_at_call = 0;
+    if (guard.o != IR_EQ || guard.t.irt != (IRT_FUNC|IRT_GUARD))
+      continue;
+    if (irref_isk(guard.op1) && guard.op1 >= view->nk &&
+        guard.op1 < REF_TRUE && view->ir[guard.op1].o == IR_KGC &&
+        ir_kgc_acq(&view->ir[guard.op1]) == obj2gco(childfn)) {
+      constant = guard.op1;
+      value = guard.op2;
+    } else if (irref_isk(guard.op2) && guard.op2 >= view->nk &&
+               guard.op2 < REF_TRUE && view->ir[guard.op2].o == IR_KGC &&
+               ir_kgc_acq(&view->ir[guard.op2]) == obj2gco(childfn)) {
+      constant = guard.op2;
+      value = guard.op1;
+    } else {
+      continue;
+    }
+    UNUSED(constant);
+    if (view->snap == NULL || view->snapmap == NULL)
+      return 0;
+    for (s = 0; s < view->nsnap; s++) {
+      const SnapShot *snap = &view->snap[s];
+      MSize ofs = snap->mapofs;
+      if (snap->ref != r || ofs > view->nsnapmap ||
+          snap->nent > view->nsnapmap-ofs ||
+          view->nsnapmap-ofs-snap->nent < 1u+LJ_FR2)
+        continue;
+      if (snap_pc(&view->snapmap[ofs+snap->nent]) == callpc) {
+        guard_at_call = 1;
+        break;
+      }
+    }
+    if (!guard_at_call)
+      continue;
+    if (value < REF_FIRST || value >= r || value >= view->nins)
+      return 0;
+    load = ir_load_acq(&view->ir[value]);
+    if (load.o != IR_VLOAD || irt_type(load.t) != IRT_FUNC ||
+        !irt_isguard(load.t) ||
+        (load.t.irt & ~(IRT_TYPE|IRT_GUARD|IRT_ISPHI)) ||
+        load.op2 != uv || load.op1 < REF_FIRST || load.op1 >= value) {
+      return 0;
+    }
+    tmp = ir_load_acq(&view->ir[load.op1]);
+    if (tmp.o != IR_TMPREF || tmp.op1 < REF_FIRST || tmp.op1 >= load.op1)
+      return 0;
+    rootfn = ir_load_acq(&view->ir[tmp.op1]);
+    if (rootfn.o != IR_SLOAD || rootfn.t.irt != IRT_FUNC ||
+        rootfn.op1 != 0u || rootfn.op2 != IRSLOAD_READONLY)
+      return 0;
+    for (q = REF_FIRST; q < value; q++) {
+      IRIns fetch = ir_load_acq(&view->ir[q]);
+      IRIns arg;
+      IRRef z;
+      int guarded_nonnull = 0;
+      if (fetch.o != IR_CALLS ||
+          fetch.op2 != IRCALL_lj_func_getuv_rooted_try ||
+          fetch.op1 < REF_FIRST || fetch.op1 >= q)
+        continue;
+      arg = ir_load_acq(&view->ir[fetch.op1]);
+      if (arg.o != IR_CARG || arg.op2 != load.op1)
+        continue;
+      for (z = q+1u; z < value; z++) {
+        IRIns check = ir_load_acq(&view->ir[z]);
+        if (check.o == IR_NE && irt_isguard(check.t) &&
+            check.op1 == q && irref_isk(check.op2) &&
+            check.op2 < REF_TRUE && view->ir[check.op2].o == IR_KINT &&
+            view->ir[check.op2].i == 0) {
+          guarded_nonnull = 1;
+          break;
+        }
+      }
+      if (guarded_nonnull) rooted_reads++;
+    }
+    if (rooted_reads) found++;
+  }
+  return found != 0;
+}
+
 static int trace_arm64_first_side_metadata_view_valid(jit_State *J,
-    TraceNo parent, ExitNo exitno, const BCIns *pc, GCproto **ptp,
+    lua_State *L, TraceNo parent, ExitNo exitno, const BCIns *pc,
+    GCproto **rootptp, GCproto **sideptp,
     TraceArm64FirstSideLoopView *viewp)
 {
   TraceArm64FirstSideLoopView first, second;
   TraceVec *tv;
   GCtrace *parentT;
-  if (J == NULL || pc == NULL || parent == 0)
+  const BCIns *first_continuation, *second_continuation;
+  MSize first_marker, second_marker;
+  MSize first_child_base = 0, second_child_base = 0;
+  MSize first_child_top = 0, second_child_top = 0;
+  GCproto *first_sidept = NULL;
+  int first_child, second_child;
+  if (J == NULL || L == NULL || pc == NULL || parent == 0)
     return 0;
   tv = tracevec_acq(J);
   if (tv == NULL || (MSize)parent >= tv->sizetrace)
@@ -5956,47 +6165,250 @@ static int trace_arm64_first_side_metadata_view_valid(jit_State *J,
   parentT = traceref_fromgco_safe(gcref_acq(tv->slot[parent]));
   if (!trace_runnable_acq(parentT, parent))
     return 0;
-  if (trace_root_acq(parentT) != 0)
-    return trace_arm64_side_parent_metadata_view_valid(
-      J, parent, exitno, pc, ptp, viewp);
-  if (!trace_arm64_first_side_view_acq(J, parent, exitno, &first) ||
-      !trace_arm64_first_side_snapshot_valid(&first, pc, NULL) ||
-      !trace_arm64_first_side_loop_generation_valid(&first, parent, pc))
+  if (trace_root_acq(parentT) != 0) {
+    GCproto *pt = NULL;
+    int ok = trace_arm64_side_parent_metadata_view_valid(
+      J, parent, exitno, pc, &pt, viewp);
+    if (ok && rootptp) *rootptp = pt;
+    if (ok && sideptp) *sideptp = pt;
+    return ok;
+  }
+  if (!trace_arm64_first_side_view_acq(J, parent, exitno, &first)) {
     return 0;
-  if (!trace_arm64_first_side_view_acq(J, parent, exitno, &second) ||
-      !trace_arm64_first_side_snapshot_valid(&second, pc, NULL) ||
-      !trace_arm64_first_side_loop_generation_valid(&second, parent, pc) ||
+  }
+  first_continuation = pc;
+  first_child = trace_arm64_first_side_child_frame_valid(
+    J, L, gco2pt(first.startpt), curr_func(L), pc, pc, parent, exitno,
+    &first, &first_continuation, &first_child_base, &first_child_top,
+    &first_marker, &first_sidept);
+  if (first_child < 0 ||
+      (first_child == 0 && !trace_pc_in_proto_range(pc,
+	proto_bc(gco2pt(first.startpt)), gco2pt(first.startpt)->sizebc))) {
+    return 0;
+  }
+  if (!trace_arm64_first_side_snapshot_valid(
+	&first, pc, NULL, first_child == 1, first_marker, first_child_top)) {
+    return 0;
+  }
+  if (!trace_arm64_first_side_loop_generation_valid(
+	&first, parent, first_continuation)) {
+    return 0;
+  }
+  if (!trace_arm64_first_side_view_acq(J, parent, exitno, &second))
+    return 0;
+  second_continuation = pc;
+  second_child = trace_arm64_first_side_child_frame_valid(
+    J, L, gco2pt(second.startpt), curr_func(L), pc, pc, parent, exitno,
+    &second, &second_continuation, &second_child_base, &second_child_top,
+    &second_marker, NULL);
+  if (second_child < 0 || first_child != second_child ||
+      (second_child == 1 && (first_continuation != second_continuation ||
+			     first_marker != second_marker ||
+			     first_child_base != second_child_base ||
+			     first_child_top != second_child_top)) ||
+      (second_child == 0 && !trace_pc_in_proto_range(pc,
+	proto_bc(gco2pt(second.startpt)), gco2pt(second.startpt)->sizebc)) ||
+      !trace_arm64_first_side_snapshot_valid(
+	&second, pc, NULL, second_child == 1, second_marker, second_child_top) ||
+      !trace_arm64_first_side_loop_generation_valid(
+	&second, parent, second_continuation) ||
       !trace_arm64_first_side_view_equal(&first, &second))
     return 0;
-  if (ptp)
-    *ptp = gco2pt(first.startpt);
+  if (rootptp)
+    *rootptp = gco2pt(first.startpt);
+  if (sideptp)
+    *sideptp = first_child == 1 ? first_sidept : gco2pt(first.startpt);
   if (viewp)
     *viewp = second;
   return 1;
 }
 
 static int trace_arm64_first_side_metadata_valid(jit_State *J,
-    TraceNo parent, ExitNo exitno, const BCIns *pc, GCproto **ptp)
+    lua_State *L, TraceNo parent, ExitNo exitno, const BCIns *pc,
+    GCproto **rootptp, GCproto **sideptp)
 {
   return trace_arm64_first_side_metadata_view_valid(
-    J, parent, exitno, pc, ptp, NULL);
+    J, L, parent, exitno, pc, rootptp, sideptp, NULL);
+}
+
+/* A loop snapshot may resume inside a fixed one-result leaf that the root
+** recorder inlined. Authenticate that child frame from the exact root CALL,
+** live physical frame, and copied snapshot frame marker before allowing a
+** side recorder to start at the child's PC. */
+static int trace_arm64_first_side_child_frame_valid(jit_State *J,
+    lua_State *L, GCproto *rootpt, GCfunc *fn, const BCIns *pc,
+    const BCIns *snapshotpc, TraceNo parent, ExitNo exitno,
+    const TraceArm64FirstSideLoopView *view, const BCIns **callpcp,
+    MSize *childbasep, MSize *childtopp, MSize *basebytep,
+    GCproto **childptp)
+{
+  GCproto *pt, *callerpt;
+  GCfunc *callerfn;
+  const TValue *frame, *caller;
+  const BCIns *returnpc, *callpc;
+  TValue *stack, *limit;
+  uintptr_t stacklo, stackhi, baseaddr, frameaddr, calleraddr;
+  BCIns call1, call2;
+  MSize nargs, i, childbase, childtop, footerbase;
+  MSize frame_markers = 0;
+  MSize loop_header, loop_start, loop_end;
+  int guarded_call;
+
+  if (J == NULL || L == NULL || rootpt == NULL || fn == NULL ||
+      !isluafunc(fn) || pc == NULL || snapshotpc == NULL ||
+      !lj_trace_arm64_lua_leaf(fn) ||
+      lj_trace_arm64_lua_leaf_nresults(fn) != 1u ||
+      !(pt = funcproto(fn)) ||
+      (la_load8_acq(&pt->flags) & PROTO_VARARG) != 0 ||
+      !trace_pc_in_proto_range(pc, proto_bc(pt), pt->sizebc) ||
+      view == NULL || callpcp == NULL || childbasep == NULL ||
+      childtopp == NULL || basebytep == NULL ||
+      view->rootbody != view->parent || view->rootno != parent ||
+      view->exitno != exitno || view->startpt == NULL ||
+      gco2pt(view->startpt) != rootpt || bc_op(view->startins) != BC_FORL ||
+      !trace_arm64_root_loop_interval(rootpt, view->startpc, view->startins,
+				      &loop_header, &loop_start, &loop_end))
+    return 0;
+  UNUSED(loop_header);
+
+  stack = mref_acq(L->stack, TValue);
+  limit = mref_acq(L->maxstack, TValue);
+  stacklo = (uintptr_t)stack;
+  stackhi = (uintptr_t)limit;
+  baseaddr = (uintptr_t)L->base;
+  if (stack == NULL || limit == NULL || stackhi <= stacklo ||
+      baseaddr < stacklo + sizeof(TValue) || baseaddr >= stackhi ||
+      (baseaddr-stacklo) % sizeof(TValue) != 0)
+    return 0;
+  frameaddr = baseaddr-sizeof(TValue);
+  frame = (const TValue *)frameaddr;
+  if (!frame_islua(frame) || frame_func(frame) != fn)
+    return 0;
+  caller = frame_prevl(frame);
+  calleraddr = (uintptr_t)(const void *)caller;
+  if (calleraddr < stacklo || calleraddr >= stackhi ||
+      !frame_islua(caller) || !isluafunc(frame_func(caller)))
+    return 0;
+  callerfn = frame_func(caller);
+  callerpt = funcproto(callerfn);
+  if (callerpt != rootpt)
+    return 0;
+  returnpc = frame_pc(frame);
+  if (!trace_pc_in_proto_range(returnpc, proto_bc(rootpt), rootpt->sizebc) ||
+      returnpc == proto_bc(rootpt))
+    return 0;
+  callpc = returnpc-1u;
+  if (!trace_pc_in_proto_range(callpc, proto_bc(rootpt), rootpt->sizebc))
+    return 0;
+  call1 = (BCIns)la_load32_acq((const uint32_t *)callpc);
+  if (bc_op(call1) != BC_CALL || bc_b(call1) != 2u ||
+      bc_c(call1) != 2u || pt->numparams > (MSize)bc_c(call1)-1u)
+    return 0;
+  guarded_call = trace_arm64_first_side_guarded_call_valid(
+    view, rootpt, callpc, fn);
+  if (!guarded_call)
+    return 0;
+  nargs = bc_c(call1)-1u;
+  if ((MSize)bc_a(call1)+nargs+1u+LJ_FR2 > rootpt->framesize ||
+      (MSize)bc_a(call1)+2u+LJ_FR2 > rootpt->framesize ||
+      (uintptr_t)(const void *)(caller+bc_a(call1)+1u) > stackhi ||
+      !tvisfunc(caller+bc_a(call1)+1u) ||
+      funcV(caller+bc_a(call1)+1u) != fn ||
+      (uintptr_t)(const void *)(caller+bc_a(call1)+2u+LJ_FR2+nargs) >
+	stackhi ||
+      L->base != caller+1u+bc_a(call1)+1u+LJ_FR2 ||
+      proto_bcpos(rootpt, callpc) < loop_start ||
+      proto_bcpos(rootpt, callpc) >= loop_end)
+    return 0;
+  /* The base equation above binds the physical argument window to the exact
+  ** CALL.A/C window; do not compare the same addresses as a value proof. */
+
+  /* The child frame link is represented by the exact SNAP_FRAME at the
+  ** parent's frame extent. Its KNUM payload must equal the live Lua frame. */
+  for (i = 0; i < view->nent; i++) {
+    SnapEntry sn = snapentry_acq(&view->snapmap[view->mapofs+i]);
+    IRRef ref;
+    IRIns head, payload;
+    if ((sn & SNAP_FRAME) == 0 ||
+	sn == SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL))
+      continue;
+    frame_markers++;
+    if (frame_markers != 1u || snap_slot(sn) != rootpt->framesize ||
+	(sn & UINT32_C(0x00ff0000)) != SNAP_FRAME)
+      return 0;
+    ref = snap_ref(sn);
+    if (!irref_isk(ref) || ref < view->nk || ref >= REF_TRUE ||
+	ref+1u >= view->nins || ref+1u >= REF_TRUE)
+      return 0;
+    head = ir_load_acq(&view->ir[ref]);
+    payload = ir_load_acq(&view->ir[ref+1u]);
+    if (head.o != IR_KNUM || payload.tv.u64 != frame->u64)
+      return 0;
+  }
+  if (frame_markers != 1u)
+    return 0;
+
+  /* snapshot_framelinks stores the active frame's base in the FR2 footer
+  ** and computes topslot from the largest live frame in this root/child
+  ** pair. Derive both from the actual CALL and callee prototype. */
+  childbase = (MSize)(1u+LJ_FR2) + (MSize)bc_a(call1) + 1u + LJ_FR2;
+  footerbase = childbase - 2u;
+  childtop = (MSize)bc_a(call1)+1u+LJ_FR2+(MSize)pt->framesize;
+  if (childtop < (MSize)rootpt->framesize)
+    childtop = rootpt->framesize;
+  if (childbase > LJ_MAX_JSLOTS || childtop > LJ_MAX_JSLOTS ||
+      view->nslots > childbase+(MSize)pt->framesize ||
+      view->snaptopslot != childtop)
+    return 0;
+#if LJ_FR2
+  {
+    SnapEntry rawpc[2];
+    uint64_t pcbase;
+    rawpc[0] = view->footer0;
+    rawpc[1] = view->footer1;
+    memcpy(&pcbase, rawpc, sizeof(pcbase));
+    if ((uint8_t)pcbase != footerbase ||
+        (const BCIns *)(uintptr_t)(pcbase >> 8) != snapshotpc)
+      return 0;
+  }
+#else
+  if ((const BCIns *)(uintptr_t)view->footer0 != snapshotpc)
+    return 0;
+#endif
+  call2 = (BCIns)la_load32_acq((const uint32_t *)callpc);
+  if (call2 != call1)
+    return 0;
+  *callpcp = callpc;
+  *childbasep = childbase;
+  *childtopp = childtop;
+  *basebytep = footerbase;
+  if (childptp)
+    *childptp = pt;
+  return 1;
 }
 
 static int trace_arm64_first_side_context_valid(jit_State *J, lua_State *L,
-    GCproto *pt, TraceNo parent, ExitNo exitno,
+    GCproto *pt, GCproto *rootpt, TraceNo parent, ExitNo exitno,
     const BCIns *continuation, const BCIns *pc, uint32_t context)
 {
   global_State *g;
   TGState *tg;
   GCfunc *fn;
+  TraceVec *source_tv;
+  GCtrace *source_parent;
   TraceState state;
+  TraceArm64FirstSideLoopView sourceview;
+  const BCIns *sourcecallpc = NULL;
+  MSize sourcechildbase = 0, sourcechildtop = 0, sourcebasebyte = 0;
+  GCproto *sourcechildpt = NULL;
+  int child_side = 0;
   TValue *stack, *maxstack;
   uintptr_t basep, stackp, maxstackp;
   TraceNo rootno = parent;
 
   if (context == LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA)
     return 1;
-  if (J == NULL || L == NULL || pt == NULL || pc == NULL)
+  if (J == NULL || L == NULL || pt == NULL || rootpt == NULL || pc == NULL)
     return 0;
   g = G(L);
   tg = L->tg_hint;
@@ -6013,12 +6425,43 @@ static int trace_arm64_first_side_context_valid(jit_State *J, lua_State *L,
       basep < stackp+(uintptr_t)(1u+LJ_FR2)*sizeof(TValue) ||
       basep >= maxstackp || (basep-stackp) % sizeof(TValue) != 0 ||
       (lj_tg_hookmask_combined_load(g, tg) & (HOOK_GC|HOOK_VMEVENT)) != 0 ||
-      trace_root_entry_request_pending(tg) || !lj_jit_trace_stream_idle(g))
+      trace_root_entry_request_pending(tg) || !lj_jit_trace_stream_idle(g)) {
     return 0;
+  }
   fn = curr_func(L);
-  if (!isluafunc(fn) || funcproto(fn) != pt ||
-      !trace_pc_in_proto_range(pc, proto_bc(pt), pt->sizebc))
+  if (!isluafunc(fn))
     return 0;
+  source_tv = tracevec_acq(J);
+  if (source_tv == NULL || (MSize)parent >= source_tv->sizetrace)
+    return 0;
+  source_parent = traceref_fromgco_safe(
+    gcref_acq(source_tv->slot[parent]));
+  if (!trace_runnable_acq(source_parent, parent))
+    return 0;
+  if (trace_root_acq(source_parent) == 0) {
+    if (!trace_arm64_first_side_view_acq(J, parent, exitno, &sourceview))
+      return 0;
+	if (funcproto(fn) == rootpt) {
+	  if (pt != rootpt ||
+	      !trace_pc_in_proto_range(pc, proto_bc(rootpt), rootpt->sizebc))
+	    return 0;
+	} else if (!trace_arm64_first_side_child_frame_valid(
+	    J, L, rootpt, fn, pc, continuation, parent, exitno, &sourceview,
+	    &sourcecallpc, &sourcechildbase, &sourcechildtop, &sourcebasebyte,
+	    &sourcechildpt) || sourcechildpt != pt) {
+      return 0;
+    } else {
+      child_side = 1;
+    }
+  } else if (funcproto(fn) != pt || funcproto(fn) != rootpt ||
+             !trace_pc_in_proto_range(pc, proto_bc(pt), pt->sizebc)) {
+    return 0;
+  }
+  UNUSED(sourcecallpc);
+  UNUSED(sourcechildbase);
+  UNUSED(sourcechildtop);
+  UNUSED(sourcebasebyte);
+  UNUSED(sourcechildpt);
   if (context == LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER) {
     TraceVec *tv = tracevec_acq(J);
     GCtrace *parentT;
@@ -6058,11 +6501,20 @@ static int trace_arm64_first_side_context_valid(jit_State *J, lua_State *L,
         return 0;
     } else {
       GCobj *curpt = trace_startptgco_acq(&J->cur);
-      if (J->pt != pt || J->fn != fn || J->framedepth != 0 ||
+      int frame_geometry_valid =
+	child_side ?
+	  ((J->framedepth == 0 &&
+	    J->baseslot == (BCReg)(1u+LJ_FR2)) ||
+	   (J->framedepth == 1 &&
+	    J->baseslot == (BCReg)sourcechildbase)) :
+	  (J->framedepth == 0 &&
+	   J->baseslot == (BCReg)(1u+LJ_FR2));
+      if (J->pt != pt || J->fn != fn ||
+	  !frame_geometry_valid ||
           J->retdepth != 0 || trace_root_acq(&J->cur) != rootno ||
           trace_traceno_acq(&J->cur) == 0 ||
           trace_traceno_acq(&J->cur) == parent ||
-          J->baseslot != (BCReg)(1+LJ_FR2) || curpt != obj2gco(pt) ||
+          curpt != obj2gco(pt) ||
           trace_startpc_acq(&J->cur) != continuation ||
           trace_startins_acq(&J->cur) != BCINS_AD(BC_JMP, 0, 0))
         return 0;
@@ -6081,16 +6533,18 @@ int lj_trace_arm64_first_side_loop_valid(jit_State *J, lua_State *L,
     const BCIns *pc, uint32_t context)
 {
   GCproto *firstpt = NULL, *secondpt = NULL;
+  GCproto *firstrootpt = NULL, *secondrootpt = NULL;
   int a, b, c, d;
   a = context <= LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER &&
-    trace_arm64_first_side_metadata_valid(J, parent, exitno,
-      continuation, &firstpt);
-  b = a && trace_arm64_first_side_context_valid(J, L, firstpt, parent,
-      exitno, continuation, pc, context);
-  c = b && trace_arm64_first_side_metadata_valid(J, parent, exitno,
-      continuation, &secondpt) && firstpt == secondpt;
-  d = c && trace_arm64_first_side_context_valid(J, L, secondpt, parent,
-      exitno, continuation, pc, context);
+    trace_arm64_first_side_metadata_valid(J, L, parent, exitno,
+      continuation, &firstrootpt, &firstpt);
+  b = a && trace_arm64_first_side_context_valid(J, L, firstpt, firstrootpt,
+      parent, exitno, continuation, pc, context);
+  c = b && trace_arm64_first_side_metadata_valid(J, L, parent, exitno,
+      continuation, &secondrootpt, &secondpt) && firstpt == secondpt &&
+      firstrootpt == secondrootpt;
+  d = c && trace_arm64_first_side_context_valid(J, L, secondpt, secondrootpt,
+      parent, exitno, continuation, pc, context);
   if (!d) {
     return 0;
   }
@@ -6109,29 +6563,34 @@ static int trace_arm64_side_forl_norestore_valid(const IRIns *ir,
   IRIns source;
   IRType type;
   if (ir == NULL || bc_op(startins) != BC_FORL ||
-	  (sn & 0x00ff0000u) != SNAP_NORESTORE)
+	  (sn & 0x00ff0000u) != SNAP_NORESTORE) {
 	return 0;
+	}
   if (admission != TRACE_ARM64_INT_FORL_ADMITTED &&
 	  admission != (TRACE_ARM64_NUM_FORL_ADMITTED|
 			TRACE_ARM64_NUM_FORL_ASCENDING) &&
 	  admission != (TRACE_ARM64_NUM_FORL_ADMITTED|
-			TRACE_ARM64_NUM_FORL_DESCENDING))
+				  TRACE_ARM64_NUM_FORL_DESCENDING)) {
 	return 0;
+	}
   type = admission == TRACE_ARM64_INT_FORL_ADMITTED ? IRT_INT : IRT_NUM;
   slot = snap_slot(sn);
   idxslot = 1u+LJ_FR2+(MSize)bc_a(startins);
   if (slot != idxslot && slot != idxslot+FORL_STOP &&
-	  slot != idxslot+FORL_STEP)
+	  slot != idxslot+FORL_STEP) {
 	return 0;
+	}
   ref = snap_ref(sn);
   if (irref_isk(ref) || ref < REF_FIRST || ref >= snapref ||
-	  ref >= nins || ref >= REF_DROP || nk == 0 || nk > REF_TRUE)
+	  ref >= nins || ref >= REF_DROP || nk == 0 || nk > REF_TRUE) {
 	return 0;
+	}
   source = ir_load_acq(&ir[ref]);
   if (source.o != IR_SLOAD || source.op1 != slot ||
 	  (source.op2 & (IRSLOAD_CONVERT|IRSLOAD_PARENT)) != 0 ||
-	  irt_type(source.t) != type)
+	  irt_type(source.t) != type) {
 	return 0;
+	}
   if (slot == idxslot) {
 	return (source.t.irt & ~IRT_ISPHI) == (type|IRT_GUARD) &&
 	  source.op2 == (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT);
@@ -6446,9 +6905,8 @@ lj_trace_arm64_side_parent_capture(jit_State *J)
 
   if (J == NULL)
     return result;
-  if (!trace_arm64_side_parent_asm_owner_base(J, NULL)) {
+  if (!trace_arm64_side_parent_asm_owner_base(J, NULL))
     return result;
-  }
   /* Failed authorized capture never leaves a partial or replayable
   ** predecessor. Authenticate the private owner before clearing it. */
   lj_trace_arm64_side_parent_clear(J);
@@ -6457,18 +6915,17 @@ lj_trace_arm64_side_parent_capture(jit_State *J)
   exitno = J->exitno;
   continuation = trace_startpc_acq(&J->cur);
   if (!trace_arm64_side_parent_asm_owner_exact(
-        J, parent, exitno, continuation)) {
+        J, parent, exitno, continuation))
     return result;
-  }
   g = J2G(J);
   if (!lj_gc2_smr_read_try(g))
     return LJ_TRACE_ARM64_SIDE_PARENT_SMR_RETRY;
   if (!trace_arm64_side_parent_asm_owner_exact(
-        J, parent, exitno, continuation)) {
+        J, parent, exitno, continuation))
     goto out;
-  }
   if (!trace_arm64_first_side_metadata_view_valid(
-        J, parent, exitno, continuation, NULL, &view)) {
+	J, jit_owner_l_acq(J), parent, exitno, continuation,
+	NULL, NULL, &view)) {
     goto out;
   }
   if (view.tracev == NULL || view.parent == NULL || view.mcode == NULL ||
@@ -6477,13 +6934,11 @@ lj_trace_arm64_side_parent_capture(jit_State *J)
       child == view.rootno ||
       (MSize)child >= view.tracev->sizetrace ||
       gcref_acq(view.tracev->slot[child]) !=
-	(const GCobj *)LJ_TRACE_PENDING) {
+        (const GCobj *)LJ_TRACE_PENDING)
     goto out;
-  }
   if (!trace_arm64_side_parent_asm_owner_exact(
-        J, parent, exitno, continuation)) {
+        J, parent, exitno, continuation))
     goto out;
-  }
   local.tracev = view.tracev;
   local.body = view.parent;
   local.mcode = view.mcode;
@@ -6521,7 +6976,8 @@ static int trace_arm64_side_parent_revalidate_held(jit_State *J,
         J, local->parent, local->exitno, local->continuation))
     return 0;
   if (!trace_arm64_first_side_metadata_view_valid(
-        J, local->parent, local->exitno, local->continuation, NULL, &view))
+	J, jit_owner_l_acq(J), local->parent, local->exitno,
+	local->continuation, NULL, NULL, &view))
     return 0;
   if (view.tracev != local->tracev || view.parent != local->body ||
       view.rootno != local->root || view.mcode != local->mcode ||
@@ -11776,6 +12232,9 @@ static int trace_stop_arm64_first_side(jit_State *J)
     J->gdbjit_pending_abort = NULL;
 #endif
   trace_arm64_first_side_publish_test_complete(J, plan.childno);
+#if LJ_TARGET_ARM64
+  memset(&J->arm64_child_return, 0, sizeof(J->arm64_child_return));
+#endif
   /* Match generic trace_stop() bookkeeping. A TRACE callback was proved
   ** absent and reserved before publication; PERFTOOLS remains compile-time
   ** excluded from this canary. */
@@ -15024,6 +15483,7 @@ static TraceAbortResult trace_abort(jit_State *J)
   /* Close the exact ASM-attempt identity before mcode/scratch teardown. An
   ** MCODELM restart is a new attempt and must capture a fresh certificate. */
   lj_trace_arm64_side_parent_clear(J);
+  memset(&J->arm64_child_return, 0, sizeof(J->arm64_child_return));
 #endif
   J->postproc = LJ_POST_NONE;
   J->root_startins_pending = 0;
@@ -15200,6 +15660,7 @@ static void trace_terminal_release(lua_State *L, jit_State *J)
   /* A completed first-side transaction moved its one-shot seam to DONE.
   ** Every other terminal path converts a retained ACTIVE claim to ABORTED. */
   trace_arm64_first_side_publish_test_cancel(J);
+  memset(&J->arm64_child_return, 0, sizeof(J->arm64_child_return));
   /* Successful/abort transactions must close their exact identity before the
   ** generic terminal transition. Keep a defensive release-build clear so a
   ** stale dormant value can never cross IDLE or token handoff. */

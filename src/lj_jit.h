@@ -381,6 +381,22 @@ typedef enum {
 } TraceLink;
 
 #if LJ_TARGET_ARM64
+/* Token-private witness for a represented one-result child returning into
+** the exact root CALL slot while recording an ARM64 side trace. This is a
+** source/frame boundary record, not admission authority by itself. */
+typedef struct LJArm64ChildReturnCert {
+  const GCproto *childpt, *callerpt;
+  const GCfunc *childfn, *callerfn;
+  const BCIns *child_startpc, *child_retpc;
+  const BCIns *caller_callpc, *caller_returnpc;
+  uint64_t parent_generation;
+  IRRef split_nins, child_result, caller_result;
+  TraceNo parentno;
+  ExitNo exitno;
+  BCReg caller_result_slot, child_baseslot;
+  uint8_t nresults, valid;
+} LJArm64ChildReturnCert;
+
 /* Publication-time proof of the immutable root body. This is an exact tuple,
 ** not a hash: entry compares it while holding the native lifetime lease. */
 typedef struct LJArm64RootCertificate {
@@ -1224,6 +1240,7 @@ typedef struct jit_State {
   uint8_t pending_cdata_call_kind;
 #endif
 #if LJ_TARGET_ARM64
+  LJArm64ChildReturnCert arm64_child_return;
   LJTraceArm64SideParentCert arm64_side_parent;
   struct LJArm64SideAncestor *arm64_side_ancestry;  /* Token-private scratch. */
   MSize arm64_side_ancestry_size;
