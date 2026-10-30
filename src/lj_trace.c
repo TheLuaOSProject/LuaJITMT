@@ -15304,7 +15304,7 @@ static int trace_arm64_lua_leaf_forward_source(const GCfunc *fn,
 	target = funcV(&value);
 	targetpt = funcproto(target);
 	if ((la_load8_acq(&targetpt->flags) & PROTO_VARARG) ||
-	    targetpt->numparams < 1u || targetpt->numparams > 3u ||
+	    targetpt->numparams < 1u || targetpt->numparams > LJ_MAX_JSLOTS ||
 	    (MSize)bc_a(callmt)+1u+LJ_FR2+targetpt->numparams >= LJ_MAX_JSLOTS ||
 	    !lj_trace_arm64_lua_leaf(target)) return 0;
 	if (targetp) *targetp = target;
@@ -15343,7 +15343,7 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
       bc_op((BCIns)la_load32_acq((const uint32_t *)&bc[1])) != BC_VARG) {
     MSize nargs;
     if (!trace_arm64_lua_leaf_forward_source(fn, NULL, &nargs) ||
-	nargs < 1u || nargs > 3u)
+	nargs < 1u || nargs > LJ_MAX_JSLOTS)
       return 0;
     forward_varg = 1;
   }
@@ -15608,7 +15608,7 @@ MSize lj_trace_arm64_lua_leaf_nresults(const GCfunc *fn)
 	nresults = trace_arm64_lua_leaf_nresults(funcproto(fn));
 	if (nresults) return nresults;
 	if (!trace_arm64_lua_leaf_forward_source(fn, &target, &nargs) ||
-	    nargs < 1u || nargs > 3u) return 0;
+	    nargs < 1u || nargs > LJ_MAX_JSLOTS) return 0;
 	return trace_arm64_lua_leaf_nresults(funcproto(target));
 }
 
@@ -15618,7 +15618,7 @@ int lj_trace_arm64_lua_leaf_forward_call(const GCfunc *forward,
 {
 	const GCfunc *source_target;
 	MSize source_nargs;
-	return nargs >= 1u && nargs <= 3u &&
+	return nargs >= 1u && nargs <= LJ_MAX_JSLOTS &&
 	       trace_arm64_lua_leaf_forward_source(forward, &source_target,
 	                                            &source_nargs) &&
 	       source_target == target && source_nargs == nargs;
