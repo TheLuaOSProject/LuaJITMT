@@ -92,7 +92,11 @@ enum Mutation {
   M_CALLM_ARG_COUNT,
   M_RAW_SOURCE,
   M_FIXED_SENTINEL,
-  M_CARRIER_SNAPSHOT
+  M_CARRIER_SNAPSHOT,
+  M_LITERAL_TYPE,
+  M_LITERAL_FLOAT,
+  M_LITERAL_OPERAND,
+  M_LITERAL_PAYLOAD
 };
 
 static unsigned semantic_ok, semantic_bad, postra_ok, postra_bad;
@@ -311,6 +315,8 @@ static void locate_target(IntFixture *fx)
   }
   fx->source = root;
   assert(irt_type(ir_load_acq(&fx->ir[root]).t) == IRT_INT ||
+         (fx->form == 3 && fx->ir[root].o == IR_KINT64 &&
+          fx->ir[root].t.irt == IRT_I64) ||
          (fx->form == 2 && root == fx->producer));
   {
     IRRef i;
@@ -341,7 +347,12 @@ static void locate_target(IntFixture *fx)
       IRRef staged;
       assert(
           snapshot_slot(fx, fx->xsnap, fx->arg_slot, &fx->arg_entry, &staged));
-      assert(staged == root);
+      if (fx->form == 3) {
+        assert(fx->ir[staged].o == IR_KINT &&
+               fx->ir[staged].t.irt == IRT_INT &&
+               fx->ir[root+1u].tv.u64 == (uint64_t)(int64_t)fx->ir[staged].i);
+        fx->source = staged;
+      } else assert(staged == root);
     }
     assert(!(fx->snapmap[fx->arg_entry] & SNAP_NORESTORE));
   }
@@ -552,6 +563,19 @@ static void mutate(IntFixture *fx, enum Mutation m)
     r = ir_load_acq(&fx->ir[r]).op1;
   }
   switch (m) {
+  case M_LITERAL_TYPE:
+    fx->ir[fx->carrier].t.irt = IRT_P64;
+    break;
+  case M_LITERAL_FLOAT:
+    fx->ir[fx->carrier].o = IR_KNUM;
+    fx->ir[fx->carrier].t.irt = IRT_NUM;
+    break;
+  case M_LITERAL_OPERAND:
+    replace_selected_arg(fx, REF_TRUE);
+    break;
+  case M_LITERAL_PAYLOAD:
+    fx->ir[fx->carrier+1u].tv.u64 ^= UINT64_C(1);
+    break;
   case M_SOURCE:
     other = find_other_int(fx);
     assert(other);
@@ -807,7 +831,7 @@ static void run_runner(lua_State *L, const char *name)
   char consumer[80];
   unsigned kind = 0, form = 0, stack = 0;
   assert(sscanf(name, "__int_arg_run_k%u_f%u_s%u", &kind, &form, &stack) == 3);
-  assert(kind < KINDS && form < FORMS && stack < 2);
+  assert(kind < KINDS && form <= FORMS && stack < 2);
   snprintf(consumer, sizeof(consumer), "__int_arg_%s%s", stack ? "stack_" : "",
            kind_name[kind]);
   lua_getglobal(L, "__int_arg_configure");
@@ -921,6 +945,28 @@ static void test_case(lua_State *L, jit_State *J, const char *runner,
   free_fixture(&fx);
 }
 
+static void test_literal_case(lua_State *L, jit_State *J, const char *runner,
+                              unsigned kind, unsigned stack)
+{
+  IntFixture fx = {0};
+  GCproto *pt = global_proto(L, runner);
+  for (unsigned attempt = 0; attempt < 8 && !find_trace(J, pt, 2); attempt++) {
+    ljt_lua_dostring(L, "jit.opt.start('hotloop=1','hotexit=1000')");
+    run_runner(L, runner);
+  }
+  capture(&fx, L, J, runner, 3, kind, stack, 2);
+  assert(semantic_accept(&fx)); semantic_ok++;
+  reset_fixture(&fx);
+  assert(postra_accept(&fx)); postra_ok++;
+  expect_both(&fx, M_LITERAL_TYPE);
+  expect_both(&fx, M_LITERAL_FLOAT);
+  expect_both(&fx, M_LITERAL_OPERAND);
+  /* The compact-stack grammar binds all argument carriers to their source
+  ** snapshot; a different full-width constant must not satisfy that proof. */
+  if (stack) expect_both(&fx, M_LITERAL_PAYLOAD);
+  free_fixture(&fx);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -960,8 +1006,9 @@ int main(void)
       "_G.__int_arg_table={value=-129}\n"
       "function __int_arg_configure(k,s) lib.lj_ffi_int_configure(k,s and 1 or "
       "0) end\n"
-      "function __int_arg_install(id,form,stack,k) local x=(form==0 and "
-      "'t.value' or 'v'); if form==2 then x='p('..x..')' end; local a=stack "
+      "function __int_arg_install(id,form,stack,k,literal) local x=(form==0 and "
+      "'t.value' or 'v'); if form==2 then x='p('..x..')' end; "
+      "if form==3 then x=tostring(literal) end; local a=stack "
       "and ('101,102,103,104,105,106,107,108,31,-505,1985229328,'..x) or x; "
       "local b='local sum=.5; for i=1,n do sum=sum+c('..a..') end; return "
       "sum-.5'; local p='t,v,c,p,n'; "
@@ -990,6 +1037,23 @@ int main(void)
         snprintf(runner, sizeof(runner), "__int_arg_run_%s", id);
         test_case(L, J, runner, form, kind, stack);
       }
+  for (unsigned kind = 6; kind < KINDS; kind++)
+    for (unsigned stack = 0; stack < 2; stack++) {
+      static const lua_Integer value[] = {-129, INT32_MIN, INT32_MAX, 1};
+      for (unsigned vi = 0; vi < sizeof(value)/sizeof(value[0]); vi++) {
+        char id[64], runner[96];
+        snprintf(id, sizeof(id), "k%u_f3_s%u_v%u", kind, stack, vi);
+        lua_getglobal(L, "__int_arg_install");
+        lua_pushstring(L, id);
+        lua_pushinteger(L, 3);
+        lua_pushboolean(L, stack);
+        lua_pushinteger(L, kind);
+        lua_pushinteger(L, value[vi]);
+        assert(lua_pcall(L, 5, 0, 0) == LUA_OK);
+        snprintf(runner, sizeof(runner), "__int_arg_run_%s", id);
+        test_literal_case(L, J, runner, kind, stack);
+      }
+    }
   ljt_lua_dostring(L, "assert(__int_arg_stop:send(true,5)); local "
                       "ok,v=__int_arg_peer:join(5); assert(ok and v)");
   lua_close(L);

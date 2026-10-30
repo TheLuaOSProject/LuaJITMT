@@ -265,10 +265,11 @@ VarargSret24 arm64_va_sret_gpr8_intagg_prefix(
   signed_word = va_arg(ap, int);
   value = va_arg(ap, double);
   va_end(ap);
-  result.lo = a0 == 1 && a1 == 2 && a2 == 3 && a3 == 4 &&
-              a4 == 5 && a5 == 6 && a6 == 7 && a7 == 8 &&
+  result.lo = a1 == 2 && a2 == 3 && a3 == 4 && a4 == 5 &&
+              a5 == 6 && a6 == 7 && a7 == 8 &&
               pair.a == 3 && pair.b == 5 && fixed == 7 &&
-              signed_word == -17 && value == 2.5 ? 51u :
+              signed_word == -17 && value == 2.5 ?
+              a0+50u :
               UINT64_C(0xdeadbeef);
   result.mid = UINT64_C(20);
   result.hi = UINT64_C(0x4004000000000000);

@@ -22,6 +22,7 @@
 #include "lj_ccall_arm64.h"
 #include "lj_ctype.h"
 #include "lj_ir.h"
+#include "lj_ircall.h"
 #include "lj_jit.h"
 #include "lj_tg.h"
 #include "lj_target.h"
@@ -103,8 +104,35 @@ typedef enum VarargMutation {
   VA_MUT_CDATA_WRONG_OWNER,
   VA_MUT_SRET_WRONG_HIDDEN,
   VA_MUT_SRET_MOVED_MARKER,
-  VA_MUT_SRET_WRONG_AGGREGATE_SOURCE
+  VA_MUT_SRET_WRONG_AGGREGATE_SOURCE,
+  VA_MUT_UPVALUE_WRONG_CURRENT_FUNCTION,
+  VA_MUT_UPVALUE_WRONG_INDEX,
+  VA_MUT_UPVALUE_MISSING_ROOT_LEASE
 } VarargMutation;
+
+static IRRef vararg_current_function_root(IRIns *ir, IRRef nins)
+{
+  IRRef ref;
+  for (ref = REF_FIRST; ref < nins; ref++) {
+    IRIns ins = ir_load_acq(&ir[ref]);
+    if (ins.o == IR_SLOAD && ins.t.irt == IRT_FUNC && ins.op1 == 0 &&
+        ins.op2 == IRSLOAD_READONLY)
+      return ref;
+  }
+  return 0;
+}
+
+static IRRef vararg_first_upvalue_read(IRIns *ir, IRRef nins)
+{
+  IRRef ref;
+  for (ref = REF_FIRST; ref < nins; ref++) {
+    IRIns ins = ir_load_acq(&ir[ref]);
+    if (ins.o == IR_CALLS &&
+        ins.op2 == IRCALL_lj_func_getuv_rooted_try)
+      return ref;
+  }
+  return 0;
+}
 
 static void vararg_clone_init(VarargSemanticClone *clone, GCtrace *owner)
 {
@@ -642,6 +670,51 @@ static void vararg_mutate(VarargMutation mutation, IRIns *ir,
     ir[node[aggregate]].op2 = target->values[alternate];
     break;
   }
+  case VA_MUT_UPVALUE_WRONG_CURRENT_FUNCTION: {
+    IRRef root = vararg_current_function_root(ir,
+      trace_nins_acq(target->trace));
+    assert(root != 0);
+    /* Keep a structurally valid readonly FUNC load, but point it at a local
+    ** frame slot. Only the exact current-function root may own UGET. */
+    ir[root].op1 = 1u+LJ_FR2;
+    break;
+  }
+  case VA_MUT_UPVALUE_WRONG_INDEX: {
+    IRRef call = vararg_first_upvalue_read(ir, trace_nins_acq(target->trace));
+    IRIns effect, tail, head;
+    IRRef next = 0, ref;
+    int32_t oldindex;
+    assert(call != 0);
+    effect = ir_load_acq(&ir[call]);
+    tail = ir_load_acq(&ir[effect.op1]);
+    head = ir_load_acq(&ir[tail.op1]);
+    assert(tail.o == IR_CARG && head.o == IR_CARG &&
+           ir_load_acq(&ir[head.op2]).o == IR_KINT &&
+           target->proto->sizeuv > 1u);
+    oldindex = ir_load_acq(&ir[head.op2]).i;
+    for (ref = target->trace->nk; ref < REF_TRUE; ref++) {
+      IRIns k = ir_load_acq(&ir[ref]);
+      if (k.o == IR_KINT && k.t.irt == IRT_INT &&
+          k.i == (oldindex+1) % target->proto->sizeuv) {
+        next = ref;
+        break;
+      }
+    }
+    assert(next != 0 && next != head.op2);
+    ir[tail.op1].op2 = next;
+    break;
+  }
+  case VA_MUT_UPVALUE_MISSING_ROOT_LEASE: {
+    IRRef call = vararg_first_upvalue_read(ir, trace_nins_acq(target->trace));
+    IRIns effect, tail;
+    assert(call != 0);
+    effect = ir_load_acq(&ir[call]);
+    tail = ir_load_acq(&ir[effect.op1]);
+    assert(tail.o == IR_CARG && tail.op2 != REF_NIL);
+    tail.op2 = REF_NIL;
+    ir[effect.op1] = tail;
+    break;
+  }
   }
 }
 
@@ -997,6 +1070,17 @@ static void test_sret_prefix_admission_clones(lua_State *L,
   vararg_expect_mutation(J, &view, &target,
                          VA_MUT_SRET_WRONG_AGGREGATE_SOURCE,
                          "aggregate-prefix fixed CARG source mismatch");
+  if (id == 13) {
+    vararg_expect_mutation(J, &view, &target,
+      VA_MUT_UPVALUE_WRONG_CURRENT_FUNCTION,
+      "captured CData upvalue uses wrong current-function root");
+    vararg_expect_mutation(J, &view, &target,
+      VA_MUT_UPVALUE_WRONG_INDEX,
+      "captured CData upvalue uses wrong source index");
+    vararg_expect_mutation(J, &view, &target,
+      VA_MUT_UPVALUE_MISSING_ROOT_LEASE,
+      "captured CData upvalue helper lacks root lease");
+  }
 }
 
 static void force_varargs_postcall(TGState *tg)
@@ -1080,10 +1164,13 @@ static void run_case(lua_State *L, const char *name, int n)
     ljt_lua_pcall(L, 1, 1, name);
   } else if (strcmp(name, "__va_run_sret") == 0 ||
              strcmp(name, "__va_run_sret_intagg") == 0 ||
-             strcmp(name, "__va_run_sret_gpr8_intagg") == 0) {
+             strcmp(name, "__va_run_sret_gpr8_intagg") == 0 ||
+             strcmp(name, "__va_run_sret_gpr8_literal") == 0) {
     const char *dispatch = strcmp(name, "__va_run_sret") == 0 ?
       "__va_dispatch_sret" : strcmp(name, "__va_run_sret_intagg") == 0 ?
-      "__va_dispatch_sret_intagg" : "__va_dispatch_sret_gpr8_intagg";
+      "__va_dispatch_sret_intagg" :
+      strcmp(name, "__va_run_sret_gpr8_literal") == 0 ?
+      "__va_dispatch_sret_gpr8_literal" : "__va_dispatch_sret_gpr8_intagg";
     lua_getglobal(L, dispatch);
     assert(lua_isfunction(L, -1));
     lua_pushinteger(L, n);
@@ -1425,6 +1512,79 @@ static void run_sret_postcall(ReadCounter calls)
          trace_runnable_acq(trace, observed_trace_no[11]));
 }
 
+static int invoke_gpr8_sret_once(lua_State *L)
+{
+  lua_getglobal(L, "__va_dispatch_sret_gpr8_intagg");
+  assert(lua_isfunction(L, -1));
+  lua_pushinteger(L, VA_ITERS);
+  ljt_lua_pcall(L, 1, 1, "captured-upvalue sret call");
+  {
+    int result = lua_toboolean(L, -1);
+    lua_pop(L, 1);
+    return result;
+  }
+}
+
+static void set_gpr8_u0(lua_State *L, lua_Integer value, int narrow)
+{
+  lua_getglobal(L, "__va_set_gpr8_u0");
+  assert(lua_isfunction(L, -1));
+  lua_pushinteger(L, value);
+  lua_pushboolean(L, narrow);
+  ljt_lua_pcall(L, 2, 0, "mutate captured CData upvalue");
+}
+
+static void run_captured_upvalue_lifecycle(ReadCounter calls)
+{
+  const unsigned id = 13;
+  TraceNo selected = observed_trace_no[id];
+  GCtrace *trace = traceref_safe(G2J(G(test_L)), selected);
+  MCode *mcode;
+  unsigned before_calls, before_native;
+  assert(selected != 0 && trace != NULL && trace_runnable_acq(trace, selected));
+  mcode = trace->mcode;
+
+  /* A type-changing CData upvalue update must leave the compiled path at a
+  ** cold exit; the interpreted continuation then calls C exactly once with
+  ** the new value and returns the matching aggregate result. */
+  before_calls = calls(id);
+  before_native = native_seen[id];
+  lj_trace_test_reset_exit_stats();
+  set_gpr8_u0(test_L, 10, 1);
+  assert(invoke_gpr8_sret_once(test_L));
+  if (!(calls(id) == before_calls+VA_ITERS &&
+        native_seen[id] == before_native &&
+        lj_trace_test_exit_calls() > 0 &&
+        lj_trace_test_first_exit_parent() == selected)) {
+    trace = traceref_safe(G2J(G(test_L)), selected);
+    fprintf(stderr, "captured-upvalue changed call: calls=%u/%u native=%u/%u exits=%u first_parent=%u selected=%u runnable=%d same_mcode=%d\n",
+            before_calls, calls(id), before_native, native_seen[id],
+            lj_trace_test_exit_calls(), lj_trace_test_first_exit_parent(),
+            selected,
+            trace != NULL && trace_runnable_acq(trace, selected),
+            trace != NULL && trace->mcode == mcode);
+  }
+  assert(calls(id) == before_calls+VA_ITERS &&
+         native_seen[id] == before_native &&
+         lj_trace_test_exit_calls() > 0 &&
+         lj_trace_test_first_exit_parent() == selected);
+  assert(lj_tg_in_native_acq(test_tg) == 0 &&
+         lj_tg_load_jit_base(test_tg) == NULL);
+
+  /* GC sees the new CData through the mutable upvalue cell. Restoring the
+  ** original type/value must re-enter the same published machine code. */
+  lua_gc(test_L, LUA_GCCOLLECT, 0);
+  set_gpr8_u0(test_L, 1, 0);
+  before_calls = calls(id);
+  before_native = native_seen[id];
+  assert(invoke_gpr8_sret_once(test_L));
+  trace = traceref_safe(G2J(G(test_L)), selected);
+  assert(calls(id) == before_calls+VA_ITERS && native_seen[id] > before_native &&
+         observed_trace_no[id] == selected && trace != NULL &&
+         trace_runnable_acq(trace, selected) && trace->mcode == mcode &&
+         trace_native_pins_acq(trace) == 0);
+}
+
 static void run_sret_prefix_after_gc(ReadCounter calls, unsigned id,
                                      const char *dispatch)
 {
@@ -1558,8 +1718,12 @@ int main(int argc, char **argv)
     "function _G.__va_run_sret_intagg(n,fn,pair,a,b)\n"
     " local out; local sum=0.5; for i=1,n do out=fn(pair,7,a,b); sum=sum+i end\n"
     " return out.lo==15 and out.mid==20 and out.hi==0x4004000000000000 and sum==n*(n+1)/2+0.5 end\n"
-    "function _G.__va_run_sret_gpr8_intagg(n,fn,pair,a,b,u0,u1,u2,u3,u4,u5,u6,u7)\n"
+    "function _G.__va_run_sret_gpr8_intagg(n,fn,pair,a,b)\n"
     " local out; local sum=0.5; for i=1,n do out=fn(u0,u1,u2,u3,u4,u5,u6,u7,pair,7,a,b); sum=sum+i end\n"
+    " return out.lo==(u0+u1+u2+u3+u4+u5+u6+u7+15) and out.mid==20 and out.hi==0x4004000000000000 and sum==n*(n+1)/2+0.5 end\n"
+    "function _G.__va_set_gpr8_u0(v,narrow) u0=ffi.new(narrow and 'uint32_t' or 'uint64_t',v) end\n"
+    "function _G.__va_run_sret_gpr8_literal(n,fn,pair,a,b)\n"
+    " local out; local sum=0.5; for i=1,n do out=fn(1,2,3,4,5,6,7,8,pair,7,a,b); sum=sum+i end\n"
     " return out.lo==51 and out.mid==20 and out.hi==0x4004000000000000 and sum==n*(n+1)/2+0.5 end\n"
     "local threading=require('threading')\n"
     "_G.__va_sret_ready=threading.channel(1); _G.__va_sret_release=threading.channel(1)\n"
@@ -1567,11 +1731,12 @@ int main(int argc, char **argv)
     "assert(select(2,__va_sret_ready:recv(5)))\n"
     "function _G.__va_dispatch_sret(n) local got=__va_run_sret(n,__va_sret,cda,cdb); return got end\n"
     "function _G.__va_dispatch_sret_intagg(n) local got=__va_run_sret_intagg(n,__va_sret_intagg,pair,cda,cdb); return got end\n"
-    "function _G.__va_dispatch_sret_gpr8_intagg(n) local got=__va_run_sret_gpr8_intagg(n,__va_sret_gpr8_intagg,pair,cda,cdb,u0,u1,u2,u3,u4,u5,u6,u7); return got end\n"
+    "function _G.__va_dispatch_sret_gpr8_intagg(n) local got=__va_run_sret_gpr8_intagg(n,__va_sret_gpr8_intagg,pair,cda,cdb); return got end\n"
+    "function _G.__va_dispatch_sret_gpr8_literal(n) local got=__va_run_sret_gpr8_literal(n,__va_sret_gpr8_intagg,pair,cda,cdb); return got end\n"
     "function _G.__va_dispatch(name,n) local got; if name=='__va_run_noextra' then got=_G[name](n,0) else got=_G[name](n) end; return got end\n"
     "function _G.__va_dispatch_noextra(n,seed) local got=__va_run_noextra(n,seed); return got end\n"
     "function _G.__va_dispatch_cdata(n) local got=__va_run_cdata(n,__va_cdata,cda,cdb,cdc,cdd,cde,cdf,cdg,cdh,cdi); return got end\n"
-    "jit.flush(); jit.on(); jit.on(__va_run_sret_intagg,true); jit.on(__va_run_sret_gpr8_intagg,true); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64')\n");
+    "jit.flush(); jit.on(); jit.on(__va_run_sret_intagg,true); jit.on(__va_run_sret_gpr8_intagg,true); jit.on(__va_run_sret_gpr8_literal,true); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=64')\n");
 
   assert(mt_active_acq(G(L)) != 0);
   lua_getglobal(L, "__va_sret_zero");
@@ -1587,6 +1752,9 @@ int main(int argc, char **argv)
                                     "__va_sret_gpr8_intagg", 13, 10, 12);
   run_sret_prefix_after_gc(calls, 13,
                            "__va_dispatch_sret_gpr8_intagg");
+  run_captured_upvalue_lifecycle(calls);
+  assert(require_native(calls, 13, "__va_run_sret_gpr8_literal") != 0);
+  run_sret_prefix_after_gc(calls, 13, "__va_dispatch_sret_gpr8_literal");
   assert(require_native(calls, 1, "__va_run_noextra") != 0);
   test_int_accum_admission_clones(L);
   {

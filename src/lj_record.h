@@ -63,6 +63,11 @@ LJ_FUNC void lj_record_ins(jit_State *J);
 LJ_FUNC void lj_record_setup(jit_State *J, BCIns root_iterl);
 #if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_GC2_TEST_HELPERS)
 LJ_FUNC void lj_record_test_arm_cdata_call_capture(void);
+LJ_FUNC void lj_record_test_abort_cdata_call_capture(void);
+LJ_FUNC uint32_t lj_record_test_cdata_call_capture_entries(void);
+LJ_FUNC uint32_t lj_record_test_cdata_call_capture_samples(void);
+LJ_FUNC uint32_t lj_record_test_cdata_call_capture_consumed(void);
+LJ_FUNC uint32_t lj_record_test_cdata_call_capture_armed(void);
 #endif
 #ifdef LJ_TRACE_TEST_HELPERS
 LJ_FUNC TRef lj_record_test_celluv_cnewref(jit_State *J, BCReg slotno);
