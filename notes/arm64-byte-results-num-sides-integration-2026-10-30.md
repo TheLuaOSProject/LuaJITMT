@@ -409,3 +409,40 @@ as assertions; no production change was needed. Diagnostic and asserted
 fixture logs are under
 `/Users/frityet/Scratch/ljmt-substring-call-lineage-audit-20261030/`.
 This test-only follow-up is outside the frozen `9ebec6139` complete gate.
+
+
+## Negative-first suffix and computed math integration
+
+At `f752aa882`, integrated `d87ab9d98` (negative literal first index with
+omitted or explicit -1 end) and `20db5e293` (computed math result preservation
+through the exact loop PHI). The substring fixture merge preserves normalized
+zero-first boundaries and derives negative-first boundaries from `-first`.
+The large -32768 result path checks HugeTab TRAVERSABLE and READY state;
+named negative-first default-end modes now test their named loop form.
+The math exception requires a preloop numeric CALLN, a body numeric CALLN,
+exactly one matching numeric PHI use, and the exact loop-snapshot RENAME to a
+preserved FP register. Other ordinary consumers keep the existing rule.
+
+Both integrated scalar and substring contracts passed all four ARM64/arm64e
+assertion/release profiles. Logs are in
+`/Users/frityet/Scratch/ljmt-negative-first-math-integration-20261030/`.
+Ordinary restores: scalar
+`1f7216335ceed820730f4fd129ccca431915c3f60adb4625ef5fcfca87ca848c`,
+substring
+`879b1a55d2e5ca9b8dffbf476197012601e938eb3aa8dfd33c7294be38911310`.
+
+The exact-source ordinary ARM64/strict-x86_64 matrix passes both stock corpora
+and all previous probes, plus 12 negative-first index/arity/loop combinations
+and computed-sin results in both loop forms. Saved binaries, JIT modules,
+archives and hashes are in
+`/Users/frityet/Scratch/ljmt-negative-first-math-ordinary-20261030/`.
+The stricter `computed-math-required.lua` probe additionally requires an actual
+loop root, nonempty mcode and increasing selected-root exits in each phase,
+including after GC. ARM64 FORL/while observed 83/84 exits in each phase; x64
+observed 5/5. Both retain identical code and match interpreted outputs. These
+counts prove selected native execution, not equal compilation coverage or
+performance for every input type. Negative-first probes assert SNEW, selected
+root exits after peer collection and code identity for all 12 combinations.
+Ordinary ARM64 restore profile:
+`514842a131ac00670c11e88d40d45d87acf4c70fbc065f6dc8024a2516f7fdb4`.
+The complete gate remains frozen at `9ebec6139`, excluding these later slices.
