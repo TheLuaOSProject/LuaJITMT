@@ -3653,7 +3653,7 @@ static int arm64_postra_forl_num_shape(const LJArm64PostRAView *view,
   MSize maxslots = view->root_topslot+1u+LJ_FR2;
   IRRef ref, idx = 0, stop = 0, step = 0, loop = 0, poll = 0, firstphi = 0;
   IRRef pre = 0, post = 0, precmp = 0, postcmp = 0, direction = 0, phi = 0;
-  unsigned nidx = 0, nstop = 0, nstep = 0, nloop = 0, npoll = 0, nuse = 0;
+  unsigned nidx = 0, nstop = 0, nstep = 0, nloop = 0, npoll = 0;
   IRIns p, q, c, d;
   IROp cmpop;
   *dynamic_stepp = 0;
@@ -3666,11 +3666,9 @@ static int arm64_postra_forl_num_shape(const LJArm64PostRAView *view,
     if (x.o == IR_LOOP) { loop = ref; nloop++; }
     if (x.o == IR_XPOLL) { poll = ref; npoll++; }
     if (x.o == IR_PHI && !firstphi) firstphi = ref;
-    if (x.o == IR_USE || x.o == IR_ADDOV || x.o == IR_SUBOV ||
-	x.o == IR_MULOV) nuse++;
   }
   if (nidx != 1u || nstop > 1u || nstep > 1u || nloop != 1u || npoll != 1u ||
-      poll != loop+1u || !firstphi || nuse ||
+      poll != loop+1u || !firstphi ||
       !arm64_postra_forl_num_sload(ir_load_acq(&ir[idx]), idxslot, maxslots, 1))
     return 0;
   for (ref = REF_FIRST; ref < n; ref++) {
@@ -9934,7 +9932,7 @@ static int arm64_ir_forl_num_shape(const jit_State *J, const GCtrace *T,
   MSize stopslot = idxslot+FORL_STOP, stepslot = idxslot+FORL_STEP;
   IRRef ref, idx = 0, stop = 0, step = 0, pre = 0, post = 0;
   IRRef precmp = 0, postcmp = 0, direction = 0, phi = 0;
-  unsigned nidx = 0, nstop = 0, nstep = 0, nuse = 0, nloop = 0, npoll = 0;
+  unsigned nidx = 0, nstop = 0, nstep = 0, nloop = 0, npoll = 0;
   IRIns p, q, c, d;
   IROp cmpop;
   UNUSED(J);
@@ -9947,11 +9945,9 @@ static int arm64_ir_forl_num_shape(const jit_State *J, const GCtrace *T,
     if (x->o == IR_SLOAD && x->op1 == stepslot) { step = ref; nstep++; }
     if (x->o == IR_LOOP) nloop++;
     if (x->o == IR_XPOLL) npoll++;
-    if (x->o == IR_USE || x->o == IR_ADDOV || x->o == IR_SUBOV ||
-	x->o == IR_MULOV) nuse++;
   }
   if (nidx != 1u || nstop > 1u || nstep > 1u || nloop != 1u || npoll != 1u ||
-      poll != loop+1u || !firstphi || nuse ||
+      poll != loop+1u || !firstphi ||
       (T->ir[idx].t.irt & ~IRT_ISPHI) != (IRT_NUM|IRT_GUARD) ||
       T->ir[idx].op2 != (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT)) return 0;
   for (ref = REF_FIRST; ref < firstphi; ref++) {
