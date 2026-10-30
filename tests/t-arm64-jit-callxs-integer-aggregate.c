@@ -566,6 +566,19 @@ static void assert_integer_stack_signature(lua_State *L, const char *name,
            abi.arg[9].size==4 && abi.arg[9].kind==LJ_ARM64_ABI_KIND_INTEGER);
 }
 
+static void assert_variadic_integer_stack_signature(lua_State *L)
+{
+  LJArm64ABISignature abi;
+  const char *name = "__arm64_pair_stack_vararg_fn";
+  /* The signature describes the named prefix only. Anonymous arguments are
+  ** independently laid out by the CALLXS variadic proof and runtime fixture. */
+  assert_integer_stack_signature(L, name, 0, 8);
+  assert(lj_ccall_arm64_signature(ctype_ctsG(G(L)),
+                                 global_cdata_ctype(L, name), &abi));
+  assert(abi.is_vararg && abi.nargs == 9u && abi.nparams == 9u &&
+         abi.stack_size == 8u);
+}
+
 static void assert_pointer_member_stack_signature(lua_State *L,
 							  const char *name)
 {
@@ -1113,7 +1126,7 @@ static void test_aggregate_signatures(lua_State *L)
   assert_padded_integer_stack_signature(L, "__arm64_small_stack_fn_1", 1);
   assert_padded_integer_stack_signature(L, "__arm64_small_stack_fn_2", 2);
   assert_padded_integer_stack_signature(L, "__arm64_small_stack_fn_3", 4);
-  assert_unsupported_aggregate_signature(L, "__arm64_pair_stack_vararg_fn");
+  assert_variadic_integer_stack_signature(L);
   assert_integer_aggregate_result_signature(L, "__arm64_return_byte_fn", 1);
   assert_integer_aggregate_result_signature(L, "__arm64_return_half_fn", 2);
   assert_integer_aggregate_result_signature(L, "__arm64_return_word_fn", 4);
