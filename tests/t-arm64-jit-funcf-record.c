@@ -453,7 +453,7 @@ static LJTraceRootEntry invoke_funcf_entry_helper_top(lua_State *L,
     frame_top--;
   lj_tg_vmstate_store_rel(tg, (int32_t)~LJ_VMST_INTERP);
   entry = lj_trace_enter_root(L2J(L), pc, trace_traceno_acq(T),
-	L, L->base, live, frame_top);
+	L, L->base, live, frame_top, 0);
   if (entry.trace != NULL) {
     assert(entry.trace == T && entry.target != NULL);
     assert((uintptr_t)lj_ptr_strip(entry.target) ==

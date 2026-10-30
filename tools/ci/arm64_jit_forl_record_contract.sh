@@ -73,8 +73,8 @@ int profile_check;
 EOF
 
 # Freeze the recorder/publication proof independently from the native-entry
-# contract. Integer roots enter their certified target; FP JFORL remains on
-# branch-only recovery.
+# contract. INT roots and direction-certified NUM roots enter their target;
+# unsupported or mismatched entries retain branch-only recovery.
 for required in \
   'LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED' \
   'LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED' \
@@ -112,6 +112,17 @@ for required in \
     exit 1
   }
 done
+grep -F 'TRACE_ARM64_NUM_FORL_ADMITTED' "$asm_source" >/dev/null
+grep -F 'TRACE_ARM64_NUM_FORL_ASCENDING' "$asm_source" >/dev/null
+grep -F 'TRACE_ARM64_NUM_FORL_DESCENDING' "$asm_source" >/dev/null
+grep -F 'mov CARG8, #1' "$vm_source" >/dev/null
+grep -F 'mov CARG8, #2' "$vm_source" >/dev/null
+grep -F '(entry_mode == 1u' "$trace_source" >/dev/null
+grep -F '(entry_mode == 2u' "$trace_source" >/dev/null
+grep -F 'arm64_postra_forl_direction != arm64_forl_direction' \
+  "$asm_source" >/dev/null
+grep -F 'assert(lj_tg_load_jit_base(tg) == NULL);' \
+  "$fixture_source" >/dev/null
 
 # The recorder must validate the exact FORI/FORL tuple on initial capture and
 # on both START and RECORD ingress generations.
@@ -142,7 +153,8 @@ test "$(grep -Fc 'trace_root_forl_tuple(' "$trace_source")" -eq 3
 # instruction counts or adjacency: unrelated scalar operations may compose
 # with the same control graph.
 for required in \
-  'trace_arm64_admission_rel(T, TRACE_ARM64_INT_FORL_ADMITTED);' \
+  'trace_arm64_admission_rel(T, arm64_forl_direction == 0 ?' \
+  'TRACE_ARM64_NUM_FORL_ADMITTED' \
   'trace_arm64_admission_rel(T, TRACE_ARM64_TRUE_FUNCF_ADMITTED);' \
   'trace_arm64_admission_rel(T, TRACE_ARM64_INT_LOOP_ADMITTED);'; do
   grep -F "$required" "$asm_source" >/dev/null
@@ -165,13 +177,15 @@ test "$save_line" -lt "$sidecar_line" && test "$sidecar_line" -lt "$cas_line"
 grep -F 'Leave FORI unpatched.' "$trace_stop" >/dev/null
 
 # JFORL still performs its update/test before native admission. The integer
-# taken edge has one dedicated helper and the two FP signs still tail through
-# label 5, whose recovery must remain branch-only.
+# taken edge and supported NUM edge join one helper; rejected entries retain
+# the separately audited branch-only recovery at label 5.
 awk '/^  case BC_JFORI:/ { seen++; if (seen == 2) copy=1 }
      copy { print }
      copy && /^  case BC_ITERL:/ { exit }' "$vm_source" >"$forl_vm"
-# JFORI, both FP signs and the integer-helper rejection each have one tail.
-test "$(grep -Fc '=>BC_JLOOP' "$forl_vm")" -eq 4
+# JFORI and helper-rejection paths retain direct tails. The NUM taken edge
+# joins the helper after its update and ordered comparison.
+test "$(grep -Fc '=>BC_JLOOP' "$forl_vm")" -eq 3
+grep -F 'bls >9' "$forl_vm" >/dev/null
 test "$(grep -Fc 'bl extern lj_trace_enter_root' "$forl_vm")" -eq 1
 grep -F 'str TMP0, FOR_IDX' "$forl_vm" >/dev/null
 grep -F 'str TMP0, FOR_EXT' "$forl_vm" >/dev/null
@@ -242,4 +256,4 @@ build_and_run arm64 '-arch arm64' "$xcflags" arm64 0 0
 build_and_run arm64e '-arch arm64e -mbranch-protection=bti' \
   "$pauth_xcflags" arm64e 1 1
 lj_ci_restore "$restore_target" "$restore_xcflags"
-echo "arm64_jit_forl_record_contract OK: bounded FORL roots published and entered on ARM64/ARM64e; FP stayed branch-only"
+echo "arm64_jit_forl_record_contract OK: bounded INT and direction-certified NUM FORL roots entered on ARM64/ARM64e"

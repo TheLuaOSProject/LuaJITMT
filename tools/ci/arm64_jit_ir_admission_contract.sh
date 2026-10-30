@@ -89,10 +89,12 @@ for required in \
   'postraview.root_topslot = T->topslot;' \
   'postraview.startins = T->startins;' \
   'postraview.base_delta = (uint8_t)(J->baseslot-2u);' \
-  '!lj_asm_arm64_postra_admit(' \
+  'lj_asm_arm64_forl_postra_admit(&postraview,' \
+  'arm64_postra_forl_direction != arm64_forl_direction' \
   'validated_semantic_nins != arm64_semantic_nins' \
   'if (bc_op(T->startins) == BC_FORL)' \
-  'trace_arm64_admission_rel(T, TRACE_ARM64_INT_FORL_ADMITTED);' \
+  'TRACE_ARM64_INT_FORL_ADMITTED' \
+  'TRACE_ARM64_NUM_FORL_ADMITTED' \
   'else if (bc_op(T->startins) == BC_FUNCF)' \
   'trace_arm64_admission_rel(T, TRACE_ARM64_TRUE_FUNCF_ADMITTED);' \
   'trace_arm64_admission_rel(T, TRACE_ARM64_INT_LOOP_ADMITTED);'; do
@@ -102,8 +104,9 @@ for required in \
   }
 done
 
-postra_line=$(grep -n '!lj_asm_arm64_postra_admit(' "$trace_asm" | cut -d: -f1)
-marker_line=$(grep -n 'trace_arm64_admission_rel(T, TRACE_ARM64_INT_FORL_ADMITTED);' \
+postra_line=$(grep -n 'lj_asm_arm64_forl_postra_admit(&postraview,' \
+  "$trace_asm" | cut -d: -f1)
+marker_line=$(grep -n 'trace_arm64_admission_rel(T, arm64_forl_direction == 0 ?' \
   "$trace_asm" | cut -d: -f1)
 test -n "$postra_line" && test -n "$marker_line" &&
   test "$postra_line" -lt "$marker_line" || {

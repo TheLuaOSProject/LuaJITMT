@@ -4106,8 +4106,14 @@ static int trace_root_entry_loop_view_acq(const GCtrace *T, TraceNo traceno,
 	const BCIns *pc, const GCproto *pt, uint32_t sourceop,
 	TraceArm64LoopView *v)
 {
+  uint32_t observed_admission = trace_arm64_admission_acq(T);
   uint32_t expected_admission = sourceop == (uint32_t)BC_JFORL ?
-	TRACE_ARM64_INT_FORL_ADMITTED :
+	(observed_admission == TRACE_ARM64_INT_FORL_ADMITTED ?
+	 TRACE_ARM64_INT_FORL_ADMITTED :
+	 (observed_admission == (TRACE_ARM64_NUM_FORL_ADMITTED |
+	  TRACE_ARM64_NUM_FORL_ASCENDING) ||
+	  observed_admission == (TRACE_ARM64_NUM_FORL_ADMITTED |
+	  TRACE_ARM64_NUM_FORL_DESCENDING) ? observed_admission : 0)) :
 	(sourceop == (uint32_t)BC_JFUNCF ?
 	 TRACE_ARM64_TRUE_FUNCF_ADMITTED :
          sourceop == (uint32_t)BC_JITERL ? TRACE_ARM64_ITERL_ADMITTED :
@@ -4160,6 +4166,7 @@ static int trace_root_entry_loop_view_acq(const GCtrace *T, TraceNo traceno,
 	 v->nk > 0 && v->nk <= REF_TRUE &&
 	 v->snap != NULL && v->snapmap != NULL && v->nsnap != 0 &&
 	 v->nsnapmap != 0 &&
+	 expected_admission != 0 &&
 	 v->admission == expected_admission &&
 	 (!function_root || v->flags == 0) &&
 	 (v->flags & TRACE_ENTRY_GATED) == 0;
@@ -9245,7 +9252,7 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
 LJTraceRootEntry LJ_FASTCALL
 lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
 		    lua_State *L, TValue *base, BCIns sourceins,
-		    TValue *frame_top)
+		    TValue *frame_top, uint32_t entry_mode)
 {
   LJTraceRootEntry result = { NULL, NULL };
   global_State *g;
@@ -9268,6 +9275,7 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
 
   if (J == NULL || pc == NULL || L == NULL || base == NULL || traceno == 0 ||
       (TraceNo)bc_d(sourceins) != traceno ||
+      (sourceop == (uint32_t)BC_JFORL ? entry_mode > 2u : entry_mode != 0u) ||
       !trace_root_entry_source_valid(sourceop) ||
       !trace_root_entry_source_admitted(sourceop) ||
       ((uintptr_t)(const void *)pc & (sizeof(BCIns)-1u)) != 0)
@@ -9347,6 +9355,17 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   if (!trace_runnable_acq(T, traceno) ||
       !trace_root_entry_start_valid(sourceop, trace_startins_acq(T)) ||
       !trace_root_entry_loop_view_acq(T, traceno, pc, pt, sourceop, &view) ||
+      (sourceop == (uint32_t)BC_JFORL &&
+       ((entry_mode == 0u &&
+	 view.admission != TRACE_ARM64_INT_FORL_ADMITTED) ||
+	(entry_mode == 1u &&
+	 (view.admission != (TRACE_ARM64_NUM_FORL_ADMITTED |
+			     TRACE_ARM64_NUM_FORL_ASCENDING) ||
+	  view.nchild != 0 || view.nextside != 0)) ||
+	(entry_mode == 2u &&
+	 (view.admission != (TRACE_ARM64_NUM_FORL_ADMITTED |
+			     TRACE_ARM64_NUM_FORL_DESCENDING) ||
+	  view.nchild != 0 || view.nextside != 0)))) ||
       !trace_root_entry_arm64_layout_valid(
 	&view, T, trace_arm64_cts(g), sourceins) ||
       !trace_root_entry_first_child_view_acq(

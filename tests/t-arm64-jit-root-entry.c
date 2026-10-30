@@ -354,7 +354,7 @@ static LJTraceRootEntry test_trace_enter_root(jit_State *J, const BCIns *pc,
   BCReg a = pc != NULL ? bc_a((BCIns)la_load32_acq(
 	(const uint32_t *)pc)) : 0;
   BCIns sourceins = BCINS_AD(sourceop, a, traceno);
-  return lj_trace_enter_root(J, pc, traceno, L, base, sourceins, NULL);
+  return lj_trace_enter_root(J, pc, traceno, L, base, sourceins, NULL, 0);
 }
 
 /* Kept out of line for the contract script: its call site proves that Clang's
@@ -366,7 +366,7 @@ GCtrace *lj_test_root_entry_abi_probe(jit_State *J, const BCIns *pc,
 	ASMFunction *targetp)
 {
   LJTraceRootEntry entry =
-    lj_trace_enter_root(J, pc, traceno, L, base, sourceins, NULL);
+    lj_trace_enter_root(J, pc, traceno, L, base, sourceins, NULL, 0);
   *targetp = entry.target;
   return entry.trace;
 }
@@ -1087,7 +1087,7 @@ int main(void)
     BCIns fake_funcf = BCINS_AD(BC_JFUNCF, bc_a(loopins), 1);
     TValue *frame_top = L->base + funcproto(curr_func(L))->framesize;
     expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L,
-	L->base, fake_funcf, frame_top));
+	L->base, fake_funcf, frame_top, 0));
   }
   assert(lj_trace_test_root_entry_publishes() == publishes);
   assert(lj_trace_test_root_entry_cleanups() == cleanups);
@@ -1244,14 +1244,16 @@ int main(void)
     call_global(L, "__arm64_root_jforl", 1, 1);
     assert(lua_tonumber(L, -1) == 1234.0);
     lua_pop(L, 1);
-    assert(lj_trace_test_root_entry_publishes() == 0);
-    assert(lj_trace_test_root_entry_cleanups() == 0);
+    assert(lj_trace_test_root_entry_publishes() != 0);
+    assert(lj_trace_test_root_entry_publishes() ==
+	   lj_trace_test_root_entry_cleanups());
+    assert(lj_trace_test_root_entry_successes() == 0);
     assert(lj_trace_test_root_entry_startins_calls() != 0);
 
     /* A synthetic paired JFORI reaches the same JFORL PC before executing the
     ** first body. Branch-only recovery must neither skip i=1 nor double-step
-    ** later JFORL edges. Its later integer JFORL edges attempt admission, but
-    ** the FP variant remains wholly branch-only. */
+    ** later JFORL edges. NUM edges use their VM direction mode, then reject
+    ** because this test removed TraceVec. */
     lj_trace_test_root_entry_reset();
     lj_trace_test_force_startins_retry(1);
     lua_pushinteger(L, 4);
@@ -1267,8 +1269,10 @@ int main(void)
     call_global(L, "__arm64_root_jfori", 1, 1);
     assert(lua_tonumber(L, -1) == 1234.0);
     lua_pop(L, 1);
-    assert(lj_trace_test_root_entry_publishes() == 0);
-    assert(lj_trace_test_root_entry_cleanups() == 0);
+    assert(lj_trace_test_root_entry_publishes() != 0);
+    assert(lj_trace_test_root_entry_publishes() ==
+	   lj_trace_test_root_entry_cleanups());
+    assert(lj_trace_test_root_entry_successes() == 0);
     assert(lj_trace_test_root_entry_startins_calls() != 0);
     assert(lj_tg_load_jit_base(tg) == NULL && tracevec_acq(J) == NULL);
 
