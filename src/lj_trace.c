@@ -6028,6 +6028,39 @@ int lj_trace_test_arm64_first_side_constant_head(const IRIns *ir,
 }
 #endif
 
+/* Validate the exact frame marker consumed by the child-frame proof. */
+static int trace_arm64_first_side_frame_marker_valid(
+    const TraceArm64FirstSideLoopView *view, SnapEntry sn, MSize frameslot,
+    uint64_t framebits)
+{
+  IRRef ref = snap_ref(sn);
+  IRIns payload;
+  if ((sn & SNAP_FRAME) == 0 ||
+      sn == SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL) ||
+      snap_slot(sn) != frameslot ||
+      (sn & UINT32_C(0x00ff0000)) != SNAP_FRAME || !irref_isk(ref) ||
+      !trace_arm64_first_side_constant_head(view, ref, IR_KNUM) ||
+      ref+1u >= view->nins || ref+1u >= REF_TRUE)
+    return 0;
+  payload = ir_load_acq(&view->ir[ref+1u]);
+  return payload.tv.u64 == framebits;
+}
+
+#if defined(LJ_TRACE_TEST_HELPERS)
+int lj_trace_test_arm64_first_side_frame_marker(const IRIns *ir,
+    IRRef nins, IRRef nk, IRRef ref, BCReg markerslot, BCReg frameslot,
+    uint64_t framebits)
+{
+  TraceArm64FirstSideLoopView view;
+  memset(&view, 0, sizeof(view));
+  view.ir = (IRIns *)(void *)ir;
+  view.nins = nins;
+  view.nk = nk;
+  return trace_arm64_first_side_frame_marker_valid(
+    &view, SNAP(markerslot, SNAP_FRAME, ref), frameslot, framebits);
+}
+#endif
+
 /* Recover a child closure after its physical frame has returned. The parent
 ** trace must contain the exact rooted-upvalue read and function identity
 ** guard, and the source CALL target must still be defined by that same UGET.
@@ -6367,23 +6400,13 @@ static int trace_arm64_first_side_child_frame_valid(jit_State *J,
   ** parent's frame extent. Its KNUM payload must equal the live Lua frame. */
   for (i = 0; i < view->nent; i++) {
     SnapEntry sn = snapentry_acq(&view->snapmap[view->mapofs+i]);
-    IRRef ref;
-    IRIns head, payload;
     if ((sn & SNAP_FRAME) == 0 ||
 	sn == SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL))
       continue;
     frame_markers++;
-    if (frame_markers != 1u || snap_slot(sn) != rootpt->framesize ||
-	(sn & UINT32_C(0x00ff0000)) != SNAP_FRAME)
-      return 0;
-    ref = snap_ref(sn);
-    if (!irref_isk(ref) ||
-	!trace_arm64_first_side_constant_head(view, ref, IR_KNUM) ||
-	ref+1u >= view->nins || ref+1u >= REF_TRUE)
-      return 0;
-    head = ir_load_acq(&view->ir[ref]);
-    payload = ir_load_acq(&view->ir[ref+1u]);
-    if (head.o != IR_KNUM || payload.tv.u64 != frame->u64)
+	if (frame_markers != 1u ||
+	    !trace_arm64_first_side_frame_marker_valid(
+	      view, sn, rootpt->framesize, frame->u64))
       return 0;
   }
   if (frame_markers != 1u)
@@ -6604,34 +6627,29 @@ static int trace_arm64_side_forl_norestore_valid(const IRIns *ir,
   IRIns source;
   IRType type;
   if (ir == NULL || bc_op(startins) != BC_FORL ||
-	  (sn & 0x00ff0000u) != SNAP_NORESTORE) {
+	  (sn & 0x00ff0000u) != SNAP_NORESTORE)
 	return 0;
-	}
   if (admission != TRACE_ARM64_INT_FORL_ADMITTED &&
 	  admission != (TRACE_ARM64_NUM_FORL_ADMITTED|
 			TRACE_ARM64_NUM_FORL_ASCENDING) &&
 	  admission != (TRACE_ARM64_NUM_FORL_ADMITTED|
-				  TRACE_ARM64_NUM_FORL_DESCENDING)) {
+			TRACE_ARM64_NUM_FORL_DESCENDING))
 	return 0;
-	}
   type = admission == TRACE_ARM64_INT_FORL_ADMITTED ? IRT_INT : IRT_NUM;
   slot = snap_slot(sn);
   idxslot = 1u+LJ_FR2+(MSize)bc_a(startins);
   if (slot != idxslot && slot != idxslot+FORL_STOP &&
-	  slot != idxslot+FORL_STEP) {
+	  slot != idxslot+FORL_STEP)
 	return 0;
-	}
   ref = snap_ref(sn);
   if (irref_isk(ref) || ref < REF_FIRST || ref >= snapref ||
-	  ref >= nins || ref >= REF_DROP || nk == 0 || nk > REF_TRUE) {
+	  ref >= nins || ref >= REF_DROP || nk == 0 || nk > REF_TRUE)
 	return 0;
-	}
   source = ir_load_acq(&ir[ref]);
   if (source.o != IR_SLOAD || source.op1 != slot ||
 	  (source.op2 & (IRSLOAD_CONVERT|IRSLOAD_PARENT)) != 0 ||
-	  irt_type(source.t) != type) {
+	  irt_type(source.t) != type)
 	return 0;
-	}
   if (slot == idxslot) {
 	return (source.t.irt & ~IRT_ISPHI) == (type|IRT_GUARD) &&
 	  source.op2 == (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT);
@@ -6975,7 +6993,7 @@ lj_trace_arm64_side_parent_capture(jit_State *J)
       child == view.rootno ||
       (MSize)child >= view.tracev->sizetrace ||
       gcref_acq(view.tracev->slot[child]) !=
-        (const GCobj *)LJ_TRACE_PENDING)
+	(const GCobj *)LJ_TRACE_PENDING)
     goto out;
   if (!trace_arm64_side_parent_asm_owner_exact(
         J, parent, exitno, continuation))

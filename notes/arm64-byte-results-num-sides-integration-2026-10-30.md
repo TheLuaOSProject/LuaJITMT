@@ -586,3 +586,29 @@ in `arm64-branches`. Its evidence is under
 Both complete gates remain pending; the promoted main checkpoint is still
 `9ebec6139`. Integer formatting, unary Lua leaves and child-side publication
 work remain outside these frozen sources.
+
+## Integer formatting and child-return recording integration
+
+`ad7cc73aa` integrates the INT TOSTR admission from `beba66068`, followed by
+`43bd1ca75` integrating child-return recording through `f1784218f`. These
+changes are committed and pushed. The child work records and validates a
+specific child-to-caller boundary, including parent generation, side trace
+number, source CALL/RET, and exact frame geometry. It does not authorize a
+cross-prototype side publication; that remains pending independent admission.
+
+At frozen `43bd1ca75`, both the numeric/integer TOSTR contract and Lua leaf
+contract pass all four ARM64/arm64e assertion/release profiles. The former
+observes exact fresh NUM and INT strings published under the native trace
+lease; the latter retains native/child-exit/certificate and mutation checks.
+Evidence: `/Users/frityet/Scratch/ljmt-int-concat-child-witness-integrated-20261030/`.
+The TOSTR contract restores ordinary ARM64 at profile
+`660b748b951dd250151b3ff3fcd93316d3f9cad103385fda7bfa09b9e50e4e2f`; the leaf
+contract restores ordinary ARM64 at
+`f0120a721f657907a011148c7166bd5b96553e80e21d2673c9738751ec764d6a`.
+An additional explicit ordinary restoration is recorded in the same directory.
+
+The follow-up `351c125ad` extracts the exact frame-marker consumer and adds
+valid-marker, payload-forged-as-KNUM, and wrong-slot controls. It passes the
+four-profile leaf contract in the agent checkout. `1aee08aa7` removes unrelated
+formatting churn without changing behavior. These later checkpoints do not
+extend the frozen `43bd1ca75` combined evidence to an unrun complete gate.

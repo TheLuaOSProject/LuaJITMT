@@ -142,6 +142,9 @@ The certificate now also carries the current side trace number, and every later
 This prevents a transition record from being borrowed by another trace or
 surviving a second return in the same recording. The copied child-frame marker
 now uses the same addressable KNUM-head proof before reading its payload.
-The follow-up four-profile leaf run passed with the same native, exit, reuse,
-GC, semantic-negative, post-RA-negative, and certificate counts; log:
-`/Users/frityet/Scratch/ljmt-seq-child-side-20261030/child-return-trace-binding-four-profile.log`.
+The SNAP_FRAME consumer is factored into a helper that checks marker slot/flags,
+the addressable KNUM head, and exact frame payload. Its fixture accepts a valid
+marker and rejects a payload word forged to resemble a KNUM head and a marker
+with the wrong frame slot. The four-profile leaf contract passed after this
+consumer-level regression was added; log:
+`/Users/frityet/Scratch/ljmt-seq-child-side-20261030/frame-marker-consumer-four-profile.log`.
