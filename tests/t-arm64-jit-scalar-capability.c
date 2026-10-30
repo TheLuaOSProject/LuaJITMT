@@ -39,7 +39,8 @@ static int scalar_tostr_kind(const char *kind)
 {
   return kind != NULL &&
     (strncmp(kind, "numeric_tostr", 13) == 0 ||
-     strncmp(kind, "integer_tostr", 13) == 0);
+     strncmp(kind, "integer_tostr", 13) == 0 ||
+     strncmp(kind, "char_tostr", 10) == 0);
 }
 
 static int scalar_integer_tostr_kind(const char *kind)
@@ -201,6 +202,11 @@ static void mutate_modulo_phi(LJArm64PostRAView *v, IRRef n, IRRef loop)
          source,call,phi,(unsigned)loopsnap,rename);
 }
 
+static int scalar_char_tostr_kind(const char *kind)
+{
+  return kind != NULL && strncmp(kind, "char_tostr", 10) == 0;
+}
+
 static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
 {
   LJArm64PostRAView v = {0};
@@ -225,9 +231,10 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
      strcmp(mathkind, "math_max_one") == 0);
   int math_proof = math_builtin ||
                    (mathkind && strcmp(mathkind, "numeric_neg") == 0);
-  int tostr_mode = scalar_integer_tostr_kind(mathkind) ?
-    IRTOSTR_INT : IRTOSTR_NUM;
-  IRType tostr_input_type = scalar_integer_tostr_kind(mathkind) ?
+  int tostr_mode = scalar_char_tostr_kind(mathkind) ? IRTOSTR_CHAR :
+    scalar_integer_tostr_kind(mathkind) ? IRTOSTR_INT : IRTOSTR_NUM;
+  IRType tostr_input_type = (scalar_integer_tostr_kind(mathkind) ||
+                             scalar_char_tostr_kind(mathkind)) ?
     IRT_INT : IRT_NUM;
   GCproto *pt = trace_startpt_acq(T);
   assert(copy && map && snaps);
@@ -380,10 +387,11 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
     }
   }
   if (scalar_tostr_kind(mathkind)) {
-    IRIns saved, saved_lref, saved_reset;
+    IRIns saved, saved_lref, saved_reset, saved_guard;
     IRRef source_tostr = 0, body_tostr = 0, tostr_phi = 0;
     MSize mapidx;
     MSize badsnap;
+    IRRef other_kint = 0;
     SnapEntry saved_map;
     SnapShot saved_snap;
     assert(tostr && intref && tostr < n &&
@@ -391,54 +399,80 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
            copy[tostr].op2 == tostr_mode && copy[tostr].op1 < tostr &&
            irt_type(copy[copy[tostr].op1].t) == tostr_input_type);
     saved = copy[tostr];
-    copy[tostr].op2 = tostr_mode == IRTOSTR_INT ?
-      IRTOSTR_NUM : IRTOSTR_INT;
+    copy[tostr].op2 = tostr_mode == IRTOSTR_NUM ?
+      IRTOSTR_INT : IRTOSTR_NUM;
     assert(!lj_asm_arm64_postra_admit(&v, NULL));
     copy[tostr] = saved;
-    copy[tostr].op2 = IRTOSTR_CHAR;
+    copy[tostr].op2 = tostr_mode == IRTOSTR_CHAR ?
+      IRTOSTR_INT : IRTOSTR_CHAR;
     assert(!lj_asm_arm64_postra_admit(&v, NULL));
     copy[tostr] = saved;
-    copy[tostr].op1 = tostr_mode == IRTOSTR_INT ? REF_NIL : intref;
+    copy[tostr].op1 = tostr_mode == IRTOSTR_NUM ? intref : REF_NIL;
     assert(!lj_asm_arm64_postra_admit(&v, NULL));
     copy[tostr] = saved;
     copy[tostr].op1 = n;
     assert(!lj_asm_arm64_postra_admit(&v, NULL));
     copy[tostr] = saved;
-    assert(lref && tmpreset && copy[lref].t.irt == IRT_THREAD &&
-           copy[tmpreset].t.irt == IRT_PGC && copy[tmpreset].op1 == lref);
-    saved_lref = copy[lref];
-    saved_reset = copy[tmpreset];
-    copy[tmpreset].op2 = IRCALL_lj_buf_tmp_reset + 1u;
-    assert(!lj_asm_arm64_postra_admit(&v, NULL));
-    copy[tmpreset] = saved_reset;
-    copy[tmpreset].op1 = intref;
-    assert(!lj_asm_arm64_postra_admit(&v, NULL));
-    copy[tmpreset] = saved_reset;
-    copy[tmpreset].t.irt = IRT_INT;
-    assert(!lj_asm_arm64_postra_admit(&v, NULL));
-    copy[tmpreset] = saved_reset;
-    copy[lref].op1 = 1;
-    assert(!lj_asm_arm64_postra_admit(&v, NULL));
-    copy[lref] = saved_lref;
-    copy[lref].t.irt = IRT_PTR;
-    assert(!lj_asm_arm64_postra_admit(&v, NULL));
-    copy[lref] = saved_lref;
-    for (mapidx = 0; mapidx < T->nsnapmap; mapidx++)
-      if (snap_ref(map[mapidx]) == tostr) break;
-    assert(mapidx < T->nsnapmap);
-    saved_map = map[mapidx];
-    map[mapidx] = snap_setref(saved_map, tmpreset);
-    assert(!lj_asm_arm64_postra_admit(&v, NULL));
-    map[mapidx] = snap_setref(saved_map, lref);
-    assert(!lj_asm_arm64_postra_admit(&v, NULL));
-    map[mapidx] = saved_map;
-    for (badsnap = 0; badsnap < T->nsnap; badsnap++)
-      if (snap_nent_acq(&snaps[badsnap]) != 0) break;
-    assert(badsnap < T->nsnap);
-    saved_snap = snaps[badsnap];
-    snaps[badsnap].mapofs = (uint32_t)T->nsnapmap;
-    assert(!lj_asm_arm64_postra_admit(&v, NULL));
-    snaps[badsnap] = saved_snap;
+    if (tostr_mode == IRTOSTR_CHAR) {
+      IRRef k;
+      assert(tostr > REF_FIRST && copy[tostr-1u].o == IR_ULE &&
+             copy[tostr-1u].op1 == copy[tostr].op1);
+      saved_guard = copy[tostr-1u];
+      copy[tostr-1u].o = IR_ULT;
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[tostr-1u] = saved_guard;
+      copy[tostr-1u].op1 = intref;
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[tostr-1u] = saved_guard;
+      for (k = T->nk; k < REF_TRUE; k++)
+        if (copy[k].o == IR_KINT && copy[k].i != 255) {
+          other_kint = k;
+          break;
+        }
+      assert(other_kint);
+      copy[tostr-1u].op2 = other_kint;
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[tostr-1u] = saved_guard;
+    }
+    if (tostr_mode != IRTOSTR_CHAR) {
+      assert(lref && tmpreset && copy[lref].t.irt == IRT_THREAD &&
+             copy[tmpreset].t.irt == IRT_PGC && copy[tmpreset].op1 == lref);
+      saved_lref = copy[lref];
+      saved_reset = copy[tmpreset];
+      copy[tmpreset].op2 = IRCALL_lj_buf_tmp_reset + 1u;
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[tmpreset] = saved_reset;
+      copy[tmpreset].op1 = intref;
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[tmpreset] = saved_reset;
+      copy[tmpreset].t.irt = IRT_INT;
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[tmpreset] = saved_reset;
+      copy[lref].op1 = 1;
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[lref] = saved_lref;
+      copy[lref].t.irt = IRT_PTR;
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[lref] = saved_lref;
+      for (mapidx = 0; mapidx < T->nsnapmap; mapidx++)
+        if (snap_ref(map[mapidx]) == tostr) break;
+      assert(mapidx < T->nsnapmap);
+      saved_map = map[mapidx];
+      map[mapidx] = snap_setref(saved_map, tmpreset);
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      map[mapidx] = snap_setref(saved_map, lref);
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      map[mapidx] = saved_map;
+      for (badsnap = 0; badsnap < T->nsnap; badsnap++)
+        if (snap_nent_acq(&snaps[badsnap]) != 0) break;
+      assert(badsnap < T->nsnap);
+      saved_snap = snaps[badsnap];
+      snaps[badsnap].mapofs = (uint32_t)T->nsnapmap;
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      snaps[badsnap] = saved_snap;
+    } else {
+      assert(!lref && !tmpreset);
+    }
     assert(lj_asm_arm64_postra_admit(&v, NULL));
     for (ref = REF_FIRST; ref < loop; ref++)
       if (copy[ref].o == IR_TOSTR && copy[ref].op2 == tostr_mode &&
@@ -460,13 +494,72 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
         copy[tostr_phi].op2 == body_tostr &&
         lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, body_tostr)) {
       IRIns saved_source = copy[source_tostr];
+      IRIns saved_body = copy[body_tostr];
       IRIns saved_phi = copy[tostr_phi];
+      IRRef rename_ref = 0;
+      MSize loop_snap = 0;
+      unsigned loop_snap_count = 0;
+      MSize si;
+      for (si = 0; si < v.nsnap; si++)
+        if (snap_ref_acq(&v.snap[si]) == loop) {
+          loop_snap = si;
+          loop_snap_count++;
+        }
+      assert(loop_snap_count == 1);
+      for (ref = n; ref < v.nins; ref++)
+        if (copy[ref].o == IR_RENAME && copy[ref].op1 == source_tostr &&
+            copy[ref].op2 == loop_snap) {
+          if (!rename_ref) rename_ref = ref;
+        }
+      assert(rename_ref != 0);
+      if (tostr_mode == IRTOSTR_CHAR)
+        assert(lj_asm_arm64_test_scalar_math_loop_value_survives(
+          &v, n, source_tostr, loop, body_tostr));
       copy[source_tostr].s = SPS_NONE;
       copy[source_tostr].r = RID_X0;
-      assert(!lj_asm_arm64_test_scalar_math_live_across(
-        &v, n, loop, body_tostr));
-      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      if (tostr_mode == IRTOSTR_CHAR) {
+        /* The incoming local may be caller-clobbered: the exact LOOP
+           snapshot rename, not this pre-loop allocation, carries the STR. */
+        assert(lj_asm_arm64_test_scalar_math_loop_value_survives(
+          &v, n, source_tostr, loop, body_tostr));
+      } else {
+        assert(!lj_asm_arm64_test_scalar_math_live_across(
+          &v, n, loop, body_tostr));
+        assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      }
       copy[source_tostr] = saved_source;
+      copy[body_tostr].op1 = source_tostr;
+      if (tostr_mode == IRTOSTR_CHAR)
+        assert(!lj_asm_arm64_test_scalar_math_loop_value_survives(
+          &v, n, source_tostr, loop, body_tostr));
+      copy[body_tostr] = saved_body;
+      {
+        IRIns saved_rename = copy[rename_ref];
+        copy[rename_ref].prev = REGSP(RID_D0, 0);
+        if (tostr_mode == IRTOSTR_CHAR)
+          assert(!lj_asm_arm64_test_scalar_math_loop_value_survives(
+            &v, n, source_tostr, loop, body_tostr));
+        copy[rename_ref] = saved_rename;
+      }
+      if (tostr_mode == IRTOSTR_CHAR) {
+        MSize ofs = snap_mapofs_acq(&v.snap[loop_snap]);
+        MSize nent = snap_nent_acq(&v.snap[loop_snap]);
+        for (mapidx = 0; mapidx < nent; mapidx++)
+          if (snap_ref(snapentry_acq(&v.snapmap[ofs+mapidx])) ==
+              source_tostr) break;
+        assert(mapidx < nent);
+        {
+          SnapEntry saved_entry = map[ofs+mapidx];
+          map[ofs+mapidx] = snap_setref(saved_entry, REF_NIL);
+          assert(!lj_asm_arm64_test_scalar_math_loop_value_survives(
+            &v, n, source_tostr, loop, body_tostr));
+          map[ofs+mapidx] = saved_entry;
+          map[ofs+mapidx] = (SnapEntry)(saved_entry|SNAP_NORESTORE);
+          assert(!lj_asm_arm64_test_scalar_math_loop_value_survives(
+            &v, n, source_tostr, loop, body_tostr));
+          map[ofs+mapidx] = saved_entry;
+        }
+      }
       copy[tostr_phi].op1 = body_tostr;
       assert(!lj_asm_arm64_postra_admit(&v, NULL));
       copy[tostr_phi] = saved_phi;
@@ -923,65 +1016,93 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
     if (mathkind && strncmp(mathkind, "integer_mod", 11) == 0)
       mutate_modulo(fake, &semantic, &v, n, loop);
     if (scalar_tostr_kind(mathkind)) {
-      IRIns saved, saved_lref, saved_reset;
+      IRIns saved, saved_lref, saved_reset, saved_guard;
       IRRef source_tostr = 0, body_tostr = 0, tostr_phi = 0;
       MSize mapidx;
       MSize badsnap;
+      IRRef other_kint = 0;
       SnapEntry saved_map;
       SnapShot saved_snap;
-      assert(tostr && intref && lref && tmpreset &&
+      assert(tostr && intref &&
+             (tostr_mode == IRTOSTR_CHAR || (lref && tmpreset)) &&
              (copy[tostr].t.irt & ~IRT_ISPHI) == IRT_STR &&
              copy[tostr].op2 == tostr_mode && copy[tostr].op1 < tostr &&
              irt_type(copy[copy[tostr].op1].t) == tostr_input_type);
       saved = copy[tostr];
-      copy[tostr].op2 = tostr_mode == IRTOSTR_INT ?
-        IRTOSTR_NUM : IRTOSTR_INT;
+      copy[tostr].op2 = tostr_mode == IRTOSTR_NUM ?
+        IRTOSTR_INT : IRTOSTR_NUM;
       assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
       copy[tostr] = saved;
-      copy[tostr].op2 = IRTOSTR_CHAR;
+      copy[tostr].op2 = tostr_mode == IRTOSTR_CHAR ?
+        IRTOSTR_INT : IRTOSTR_CHAR;
       assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
       copy[tostr] = saved;
-      copy[tostr].op1 = tostr_mode == IRTOSTR_INT ? REF_NIL : intref;
+      copy[tostr].op1 = tostr_mode == IRTOSTR_NUM ? intref : REF_NIL;
       assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
       copy[tostr] = saved;
       copy[tostr].op1 = n;
       assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
       copy[tostr] = saved;
-      assert(copy[lref].t.irt == IRT_THREAD && copy[tmpreset].t.irt == IRT_PGC &&
-             copy[tmpreset].op1 == lref);
-      saved_lref = copy[lref];
-      saved_reset = copy[tmpreset];
-      copy[tmpreset].op2 = IRCALL_lj_buf_tmp_reset + 1u;
-      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
-      copy[tmpreset] = saved_reset;
-      copy[tmpreset].op1 = intref;
-      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
-      copy[tmpreset] = saved_reset;
-      copy[tmpreset].t.irt = IRT_INT;
-      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
-      copy[tmpreset] = saved_reset;
-      copy[lref].op1 = 1;
-      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
-      copy[lref] = saved_lref;
-      copy[lref].t.irt = IRT_PTR;
-      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
-      copy[lref] = saved_lref;
-      for (mapidx = 0; mapidx < T->nsnapmap; mapidx++)
-        if (snap_ref(map[mapidx]) == tostr) break;
-      assert(mapidx < T->nsnapmap);
-      saved_map = map[mapidx];
-      map[mapidx] = snap_setref(saved_map, tmpreset);
-      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
-      map[mapidx] = snap_setref(saved_map, lref);
-      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
-      map[mapidx] = saved_map;
-      for (badsnap = 0; badsnap < T->nsnap; badsnap++)
-        if (snap_nent_acq(&snaps[badsnap]) != 0) break;
-      assert(badsnap < T->nsnap);
-      saved_snap = snaps[badsnap];
-      snaps[badsnap].mapofs = (uint32_t)T->nsnapmap;
-      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
-      snaps[badsnap] = saved_snap;
+      if (tostr_mode == IRTOSTR_CHAR) {
+        IRRef k;
+        assert(tostr > REF_FIRST && copy[tostr-1u].o == IR_ULE &&
+               copy[tostr-1u].op1 == copy[tostr].op1);
+        saved_guard = copy[tostr-1u];
+        copy[tostr-1u].o = IR_ULT;
+        assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+        copy[tostr-1u] = saved_guard;
+        copy[tostr-1u].op1 = intref;
+        assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+        copy[tostr-1u] = saved_guard;
+        for (k = T->nk; k < REF_TRUE; k++)
+          if (copy[k].o == IR_KINT && copy[k].i != 255) {
+            other_kint = k;
+            break;
+          }
+        assert(other_kint);
+        copy[tostr-1u].op2 = other_kint;
+        assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+        copy[tostr-1u] = saved_guard;
+      }
+      if (tostr_mode != IRTOSTR_CHAR) {
+        assert(lref && tmpreset && copy[lref].t.irt == IRT_THREAD &&
+               copy[tmpreset].t.irt == IRT_PGC && copy[tmpreset].op1 == lref);
+        saved_lref = copy[lref];
+        saved_reset = copy[tmpreset];
+        copy[tmpreset].op2 = IRCALL_lj_buf_tmp_reset + 1u;
+        assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+        copy[tmpreset] = saved_reset;
+        copy[tmpreset].op1 = intref;
+        assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+        copy[tmpreset] = saved_reset;
+        copy[tmpreset].t.irt = IRT_INT;
+        assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+        copy[tmpreset] = saved_reset;
+        copy[lref].op1 = 1;
+        assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+        copy[lref] = saved_lref;
+        copy[lref].t.irt = IRT_PTR;
+        assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+        copy[lref] = saved_lref;
+        for (mapidx = 0; mapidx < T->nsnapmap; mapidx++)
+          if (snap_ref(map[mapidx]) == tostr) break;
+        assert(mapidx < T->nsnapmap);
+        saved_map = map[mapidx];
+        map[mapidx] = snap_setref(saved_map, tmpreset);
+        assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+        map[mapidx] = snap_setref(saved_map, lref);
+        assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+        map[mapidx] = saved_map;
+        for (badsnap = 0; badsnap < T->nsnap; badsnap++)
+          if (snap_nent_acq(&snaps[badsnap]) != 0) break;
+        assert(badsnap < T->nsnap);
+        saved_snap = snaps[badsnap];
+        snaps[badsnap].mapofs = (uint32_t)T->nsnapmap;
+        assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+        snaps[badsnap] = saved_snap;
+      } else {
+        assert(!lref && !tmpreset);
+      }
       for (ref = REF_FIRST; ref < loop; ref++)
         if (copy[ref].o == IR_TOSTR && copy[ref].op2 == tostr_mode &&
             (copy[ref].t.irt & ~IRT_ISPHI) == IRT_STR)

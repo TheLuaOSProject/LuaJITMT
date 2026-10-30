@@ -83,6 +83,17 @@ int lj_asm_arm64_test_scalar_math_live_across(
 					     capacity);
 }
 
+int lj_asm_arm64_test_scalar_math_loop_value_survives(
+	const LJArm64PostRAView *view, IRRef semantic_nins, IRRef value,
+	IRRef loop, IRRef call)
+{
+	MSize capacity;
+	if (!view || (view->spadjust & 15u)) return 0;
+	capacity = SPS_FIXED + view->spadjust / 4u;
+	return arm64_scalar_math_loop_value_survives(view, semantic_nins, value,
+						     loop, call, capacity);
+}
+
 int lj_asm_arm64_test_side_forl_boundary(
 	const LJArm64SideIRView *side, const GCtrace *T,
 	const LJArm64PostRAView *view, const SnapShot *snap)

@@ -284,6 +284,9 @@ LJ_FUNC int lj_asm_arm64_side_postra_admit(
 #ifdef LJ_TRACE_TEST_HELPERS
 LJ_FUNC int lj_asm_arm64_test_scalar_math_live_across(
 	const LJArm64PostRAView *view, IRRef semantic_nins, IRRef loop, IRRef call);
+LJ_FUNC int lj_asm_arm64_test_scalar_math_loop_value_survives(
+	const LJArm64PostRAView *view, IRRef semantic_nins, IRRef value,
+	IRRef loop, IRRef call);
 LJ_FUNC int lj_asm_arm64_test_side_forl_boundary(
 	const LJArm64SideIRView *side, const GCtrace *T,
 	const LJArm64PostRAView *view, const SnapShot *snap);

@@ -641,3 +641,9 @@ modulo-result allocation work is not included in these frozen results.
 Merged `72f03e07a` after its four-profile and fresh ordinary ARM64/strict-x86_64 checks passed; the detailed evidence is in `arm64-integer-modulo-result-preservation-2026-10-30.md`. The merge retained the INT concat fixtures and existing child-return witness work.
 
 The integrated unary source `de8516eab` passed all four leaf-contract profiles, including the added full-width D-operand mutation that sets bit 8 while preserving the low byte. Evidence: `/Users/frityet/Scratch/ljmt-unary-integrated-20261030/four-profile.log`; ordinary restoration fingerprint `88d42e9d7f8528b2a5197d1147773a8f6ac4d182edd3048bfd3cd8ea6f071b5c`. An independent fresh ordinary unary run remains separate. These are component and integration checks, not full parity.
+
+## Guarded CHAR formatter integration
+
+Merged `cdcfb2551` after its independent four-profile and ordinary ARM64/strict-x86_64 checks. The shared loop-result validator combines exact CALLN/NUM, MOD/INT and CHAR-TOSTR/STR producer/backedge pairs; original numeric register-only restrictions remain. Only the CHAR string case permits the existing bounded spill proof and additionally requires one restorable source in the exact loop snapshot. MOD and CHAR mutation fixtures are both retained. A combined formatting/modulo regression run is required for this merge before promotion.
+
+Fresh ordinary unary checks of `de8516eab` also completed independently: both 509-case stock corpora on both architectures, direct unary companion, and a separate actual-child probe with the selected caller function identity guard and numeric NEG. The actual-child probe covers alternate closure exits, original reentry, live peer, oracle and GC/code identity. Evidence: `/Users/frityet/Scratch/ljmt-unary-ordinary-de8516eab/`.
