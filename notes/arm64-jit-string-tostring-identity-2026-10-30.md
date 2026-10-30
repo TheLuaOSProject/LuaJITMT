@@ -35,3 +35,26 @@ and Lua fixtures passed on 2026-10-30:
 
 Numeric formatting, `__tostring` metamethod execution, tail calls, and any
 other `tostring` call shape remain interpreted.
+
+## Ordinary matched runtime confirmation
+
+A second matched probe ran against the committed source without trace or mcode
+observers. The ARM64 runtime was built from `49d879b6097395a5b8a9e6720d6d13564b1b42e9`
+with `TARGET_FLAGS='-arch arm64'` and
+`XCFLAGS='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT'`.
+The strict x86-64 runtime used the same source with
+`TARGET_FLAGS='-arch x86_64'` and `XCFLAGS='-DLUA_USE_ASSERT -Werror'`.
+Both binaries and matching `jit`/`etc` Lua modules, the probe, and output logs
+are preserved under `/Users/frityet/Scratch/ljmt-tostring-ordinary-20261030/`.
+The probe's `texit` callback classified exits against the selected runner's
+encoded JLOOP/JFORL root IDs; it did not install a TRACE observer. A live
+threading peer remained attached through both forms and was joined at the end.
+
+Both architectures selected JLOOP root 1 (14 IR instructions) and JFORL root 2
+(15 IR instructions). Exact-root exits occurred in each form: ARM64 recorded
+166 and 159 selected-root exits; x86-64 recorded 168 and 160. Each run compared
+the candidate with a separately compiled JIT-disabled oracle for embedded-NUL,
+high-byte, empty, numeric, boolean, table `__tostring`, replacement-function,
+and throwing `__tostring` inputs. A full GC preserved each selected trace and
+its machine-code bytes. The captured results are in each architecture's
+`probe.log`; binary hashes are in `runtime.sha256`.
