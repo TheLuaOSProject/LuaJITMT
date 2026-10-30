@@ -27,6 +27,10 @@ for required in \
   'string_byte_negative_constant_trace' \
   'call_negative_constant_loop' \
   'test_negative_constant_variant' \
+  'arm64_string_byte_snapshot_slot_ir' \
+  'arm64_string_byte_snapshot_slot_postra' \
+  'test_u8_snapshot' \
+  'string_byte_u8_snapshot_trace' \
   'nine semantic/post-RA source/range negatives'; do
   grep -F "$required" "$fixture_source" "$lua_source" \
     "$root/src/lj_asm_arm64_admit.h" >/dev/null || {
