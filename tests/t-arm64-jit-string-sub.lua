@@ -23,17 +23,33 @@ local fixture_body = zero_first and substring_fixture_kind:sub(6) or
                      substring_fixture_kind
 local negative_first = fixture_body and
                        fixture_body:sub(1, 15) == 'negative-first-'
-local negative_first_value = negative_first and
-  fixture_body:match('^negative%-first%-default%-(%d+)%-') or
-  (negative_first and fixture_body:match('^negative%-first%-(%d+)%-'))
+local negative_first_value, negative_first_last_value, negative_first_kind
+if negative_first then
+  local first_value, last_value, kind =
+    fixture_body:match('^negative%-first%-last%-(%d+)%-(%d+)%-(%w+)$')
+  if first_value then
+    negative_first_value, negative_first_last_value, negative_first_kind =
+      first_value, last_value, kind
+  else
+    first_value, kind = fixture_body:match('^negative%-first%-default%-(%d+)%-(%w+)$')
+    if first_value then
+      negative_first_value, negative_first_last_value, negative_first_kind =
+        first_value, '1', kind
+    else
+      first_value, kind = fixture_body:match('^negative%-first%-(%d+)%-(%w+)$')
+      negative_first_value, negative_first_last_value, negative_first_kind =
+        first_value, '1', kind
+    end
+  end
+end
 local negative_first_index = negative_first_value and -tonumber(negative_first_value)
+local negative_first_last = negative_first_last_value and -tonumber(negative_first_last_value)
 local negative = fixture_body and fixture_body:sub(1, 9) == 'negative-'
 local default_end = fixture_body == 'default-end' or
                     (negative_first and fixture_body:find('^negative%-first%-default%-') ~= nil)
 local fixture_kind = fixture_body
 if negative_first then
-  fixture_kind = fixture_body:match('^negative%-first%-default%-%d+%-(.*)') or
-                 fixture_body:match('^negative%-first%-%d+%-(.*)')
+  fixture_kind = negative_first_kind
 elseif negative then
   fixture_kind = fixture_body:sub(10)
 end
@@ -46,7 +62,7 @@ local starts = negative_first and {negative_first_index} or
                (negative and {1, 2} or
                (default_end and {1, 2} or
                 (substring_fixture_kind and {2} or {1, 2}))))
-local widths = negative_first and {-1} or
+local widths = negative_first and {negative_first_last} or
                (negative and {-1, -2, -4} or
                (default_end and {0} or
                (substring_fixture_kind and {3} or {1, 2, 3, 8})
@@ -60,7 +76,8 @@ for _, kind in ipairs(kinds) do
                    'local i=0;while i<n do i=i+1;'
       -- Keep the initial result tag stable so a while-loop entry can allocate
       -- before any interpreter iteration interns the same substring.
-      local last = negative and width or (math.max(1, first)+width-1)
+      local last = negative_first and negative_first_last or
+                   (negative and width or (math.max(1, first)+width-1))
       local source = 'local sub=string.sub;return function(s,n)local r=s;' ..
         loop .. 'r=' .. (default_end and
           ('sub(s,' .. first .. ')') or
