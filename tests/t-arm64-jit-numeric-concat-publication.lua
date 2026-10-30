@@ -61,7 +61,7 @@ jit.attach(exit, 'texit')
 
 collectgarbage('collect')
 assert(candidate(80, 4.75) == oracle(80, 4.75))
-native_begin()
+native_begin_numeric()
 local result = candidate(80, 100000.125)
 local publications = native_finish()
 jit.attach(exit)

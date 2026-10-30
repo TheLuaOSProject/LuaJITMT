@@ -231,6 +231,31 @@ run('numeric_tostr_positive_infinity',numeric_tostr_special,12,1/0)
 run('numeric_tostr_negative_infinity',numeric_tostr_special,12,-1/0)
 run('numeric_tostr_nan',numeric_tostr_special,12,0/0)
 
+local function integer_tostr_forl(n)
+  local out=''
+  for i=1,n do out=''..i end
+  return out
+end
+run('integer_tostr_forl',integer_tostr_forl,20)
+local function integer_tostr_boundary(n,x)
+  local out=''
+  for i=1,n do out=''..x end
+  return out
+end
+run('integer_tostr_min',integer_tostr_boundary,20,-2147483648)
+run('integer_tostr_max',integer_tostr_boundary,20,2147483647)
+local function integer_concat_overflow(n,x)
+  local out=''
+  for i=1,n do out=''..(x+i) end
+  return out
+end
+jit.off(integer_concat_overflow)
+local integer_overflow_expected=integer_concat_overflow(4,2147483646)
+jit.on(integer_concat_overflow)
+jit.flush(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=1')
+for i=1,4 do assert(integer_concat_overflow(4,2147483646)==integer_overflow_expected) end
+print('INTEGER concat overflow interpreter/JIT oracle value='..integer_overflow_expected)
+
 local abs_builtin, min_builtin, max_builtin = math.abs, math.min, math.max
 local function math_abs_guard(n,x)
   local i,s=0,0

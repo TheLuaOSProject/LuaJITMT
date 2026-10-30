@@ -26,6 +26,8 @@ static lua_State *test_L;
 static unsigned watching, lease_publications, inactive_publications;
 static unsigned expected_publications, expected_under_lease;
 static uint32_t entries_before;
+static char expected_text[64];
+static size_t expected_len;
 
 static void numeric_concat_publish(lua_State *L, GCstr *str)
 {
@@ -34,8 +36,8 @@ static void numeric_concat_publish(lua_State *L, GCstr *str)
   if (!watching) return;
   assert(L == test_L);
   has_base = lj_tg_load_jit_base(L2TG(L)) != NULL;
-  if (str->len == sizeof("100020.125")-1u &&
-      memcmp(strdata(str), "100020.125", sizeof("100020.125")-1u) == 0) {
+  if (str->len == expected_len &&
+      memcmp(strdata(str), expected_text, expected_len) == 0) {
     expected_publications++;
     if (has_base) expected_under_lease++;
   }
@@ -52,10 +54,28 @@ static void numeric_concat_publish(lua_State *L, GCstr *str)
   lease_publications++;
 }
 
-static int native_begin(lua_State *L)
+static int native_begin_int(lua_State *L)
 {
+  int32_t value = (int32_t)luaL_checkinteger(L, 1);
+  int len;
+  assert(!watching);
+  len = snprintf(expected_text, sizeof(expected_text), "%d", value);
+  assert(len > 0 && (size_t)len < sizeof(expected_text));
+  expected_len = (size_t)len;
+  lease_publications = inactive_publications = expected_publications = 0;
+  expected_under_lease = 0;
+  entries_before = lj_trace_test_root_entry_successes();
+  watching = 1;
+  return 0;
+}
+
+static int native_begin_numeric(lua_State *L)
+{
+  static const char expected[] = "100020.125";
   (void)L;
   assert(!watching);
+  memcpy(expected_text, expected, sizeof(expected));
+  expected_len = sizeof(expected) - 1u;
   lease_publications = inactive_publications = expected_publications = 0;
   expected_under_lease = 0;
   entries_before = lj_trace_test_root_entry_successes();
@@ -87,7 +107,8 @@ int main(int argc, char **argv)
   assert(L && argc == 2);
   luaL_openlibs(L);
   test_L = L;
-  lua_pushcfunction(L, native_begin); lua_setglobal(L, "native_begin");
+  lua_pushcfunction(L, native_begin_int); lua_setglobal(L, "native_begin_int");
+  lua_pushcfunction(L, native_begin_numeric); lua_setglobal(L, "native_begin_numeric");
   lua_pushcfunction(L, native_finish); lua_setglobal(L, "native_finish");
   lj_str_test_set_publish_hook(numeric_concat_publish);
   if (luaL_dofile(L, argv[1]) != LUA_OK) {
@@ -96,7 +117,7 @@ int main(int argc, char **argv)
   }
   lj_str_test_set_publish_hook(NULL);
   assert(!watching && expected_publications == 1 && expected_under_lease == 1);
-  printf("NUMERIC CONCAT fresh string published under TOSTR trace lease: matches=%u publications=%u\n",
+  printf("CONCAT fresh string published under TOSTR trace lease: matches=%u publications=%u\n",
          expected_publications, lease_publications);
   lua_close(L);
   return 0;

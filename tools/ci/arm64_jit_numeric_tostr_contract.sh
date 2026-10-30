@@ -31,6 +31,9 @@ for profile in $profiles; do
   LUA_PATH="$root/src/?.lua;$root/etc/?.lua;;" \
     lj_ci_run_fixture 120 "$publication_fixture" \
       "$root/tests/t-arm64-jit-numeric-concat-publication.lua"
+  LUA_PATH="$root/src/?.lua;$root/etc/?.lua;;" \
+    lj_ci_run_fixture 120 "$publication_fixture" \
+      "$root/tests/t-arm64-jit-integer-concat-publication.lua"
 done
 lj_ci_restore "$LJ_CI_RESTORE_TARGET_FLAGS" "$LJ_CI_RESTORE_XCFLAGS"
-echo "arm64_jit_numeric_tostr_contract OK: profiles=$profiles; numeric-only TOSTR modes, independent admission mutations, fresh-string publication, exits and GC"
+echo "arm64_jit_numeric_tostr_contract OK: profiles=$profiles; numeric/integer TOSTR modes, independent admission mutations, fresh-string publication, exits and GC"
