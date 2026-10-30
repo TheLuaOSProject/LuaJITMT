@@ -10465,8 +10465,9 @@ static int arm64_ir_forl_num_shape(const jit_State *J, const GCtrace *T,
 static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
                                IRType type);
 /* Decode one fixed substring CALL with a formal string and literal bounds.
-** An expected width of zero selects a negative literal end; the IR passes
-** independently prove the resulting dynamic width. */
+** An expected width of zero selects a negative literal end, including the
+** omitted-end form whose stock default is -1. The IR passes independently
+** prove the resulting dynamic width. */
 static int arm64_string_sub_source(const GCproto *pt, MSize strslot,
                                     int32_t offset, int32_t width,
                                     int32_t *lastargp, MSize *callpc,
@@ -10483,40 +10484,60 @@ static int arm64_string_sub_source(const GCproto *pt, MSize strslot,
   for (pc = 1; pc < pt->sizebc; pc++) {
     BCIns call = arm64_ir_bc_acq((uintptr_t)bc, pc), a, b, c;
     BCOp op = bc_op(call);
-    MSize q;
+    MSize q, setup;
     int valid = 1;
     if (op >= BC__MAX) return 0;
     if (op != BC_CALL && op != BC_CALLM && op != BC_CALLT && op != BC_CALLMT)
       continue;
     calls++;
-    if (op != BC_CALL || bc_b(call) != 2u || bc_c(call) != 4u || pc < 3u ||
-        (MSize)bc_a(call)+4u+LJ_FR2 > pt->framesize) continue;
-    a = arm64_ir_bc_acq((uintptr_t)bc, pc-3u);
-    b = arm64_ir_bc_acq((uintptr_t)bc, pc-2u);
-    c = arm64_ir_bc_acq((uintptr_t)bc, pc-1u);
-    if ((bc_op(a) != BC_MOV && bc_op(a) != BC_CGET) ||
-        bc_a(a) != bc_a(call)+1u+LJ_FR2 ||
-        bc_d(a) != strslot-1u-LJ_FR2 ||
-        bc_op(b) != BC_KSHORT || bc_a(b) != bc_a(call)+2u+LJ_FR2 ||
-        (int16_t)bc_d(b) != offset+1 ||
-        bc_op(c) != BC_KSHORT || bc_a(c) != bc_a(call)+3u+LJ_FR2 ||
-        (width ? (int16_t)bc_d(c) != offset+width :
-                 (int16_t)bc_d(c) >= 0)) continue;
+    if (op != BC_CALL || bc_b(call) != 2u ||
+        (bc_c(call) != 3u && bc_c(call) != 4u) ||
+        (width && bc_c(call) != 4u)) continue;
+    if (bc_c(call) == 3u) {
+      /* Two explicit arguments: source string and first index. The VM supplies
+      ** the default last index (-1); no synthetic frame slot is read. */
+      if (width || pc < 2u ||
+          (MSize)bc_a(call)+3u+LJ_FR2 > pt->framesize) continue;
+      setup = pc-2u;
+      a = arm64_ir_bc_acq((uintptr_t)bc, setup);
+      b = arm64_ir_bc_acq((uintptr_t)bc, setup+1u);
+      if ((bc_op(a) != BC_MOV && bc_op(a) != BC_CGET) ||
+          bc_a(a) != bc_a(call)+1u+LJ_FR2 ||
+          bc_d(a) != strslot-1u-LJ_FR2 ||
+          bc_op(b) != BC_KSHORT || bc_a(b) != bc_a(call)+2u+LJ_FR2 ||
+          (int16_t)bc_d(b) != offset+1) continue;
+      if (lastargp) *lastargp = -1;
+    } else {
+      if (pc < 3u ||
+          (MSize)bc_a(call)+4u+LJ_FR2 > pt->framesize) continue;
+      setup = pc-3u;
+      a = arm64_ir_bc_acq((uintptr_t)bc, setup);
+      b = arm64_ir_bc_acq((uintptr_t)bc, setup+1u);
+      c = arm64_ir_bc_acq((uintptr_t)bc, setup+2u);
+      if ((bc_op(a) != BC_MOV && bc_op(a) != BC_CGET) ||
+          bc_a(a) != bc_a(call)+1u+LJ_FR2 ||
+          bc_d(a) != strslot-1u-LJ_FR2 ||
+          bc_op(b) != BC_KSHORT || bc_a(b) != bc_a(call)+2u+LJ_FR2 ||
+          (int16_t)bc_d(b) != offset+1 ||
+          bc_op(c) != BC_KSHORT || bc_a(c) != bc_a(call)+3u+LJ_FR2 ||
+          (width ? (int16_t)bc_d(c) != offset+width :
+                   (int16_t)bc_d(c) >= 0)) continue;
+      if (lastargp) *lastargp = (int16_t)bc_d(c);
+    }
     for (q = 0; q < pt->sizebc; q++) {
       BCIns ins = arm64_ir_bc_acq((uintptr_t)bc, q);
       BCOp jump = bc_op(ins);
       if (jump >= BC__MAX) return 0;
       if (bcmode_d(jump) == BCMjump) {
         int64_t target = (int64_t)q+1+bc_j(ins);
-        if (target > (int64_t)pc-3 && target <= (int64_t)pc) valid = 0;
+        if (target > (int64_t)setup && target <= (int64_t)pc) valid = 0;
       } else if (jump <= BC_ISNUM) {
         /* A test can skip the string copy without an explicit jump. */
         MSize target = q+2u;
-        if (target > pc-3u && target <= pc) valid = 0;
+        if (target > setup && target <= pc) valid = 0;
       }
     }
     if (!valid) continue;
-    if (lastargp) *lastargp = (int16_t)bc_d(c);
     *callpc = pc; *calla = bc_a(call); matches++;
   }
   return calls == 1u && matches == 1u;
@@ -11850,11 +11871,14 @@ static int arm64_string_sub_bounds_ir(const GCtrace *T, IRRef pointer)
     /* The folded literal arguments may leave the guard snapshot at either
     ** KSHORT before CALL. Source decoding proves that whole suffix is pure
     ** and preserves the already copied function and string argument. */
-    if ((uint8_t)footer ||
-        ((const BCIns *)(uintptr_t)(footer>>8) != proto_bc(pt)+callpc &&
-         (const BCIns *)(uintptr_t)(footer>>8) != proto_bc(pt)+callpc-1u &&
-         (const BCIns *)(uintptr_t)(footer>>8) != proto_bc(pt)+callpc-2u))
-      continue;
+    {
+      const BCIns *footerpc = (const BCIns *)(uintptr_t)(footer>>8);
+      MSize callc = bc_c(arm64_ir_bc_acq((uintptr_t)proto_bc(pt), callpc));
+      if ((uint8_t)footer ||
+          (footerpc != proto_bc(pt)+callpc &&
+           footerpc != proto_bc(pt)+callpc-1u &&
+           (callc == 3u || footerpc != proto_bc(pt)+callpc-2u))) continue;
+    }
     guard = T->ir[at];
     if (guard.o != IR_EQ || guard.t.irt != (IRT_FUNC|IRT_GUARD)) continue;
     if (guard.op1 < REF_FIRST || guard.op1 >= at ||
@@ -19447,11 +19471,14 @@ static int arm64_string_sub_bounds_postra(const LJArm64PostRAView *v, IRRef poin
     /* The folded literal arguments may leave the guard snapshot at either
     ** KSHORT before CALL. Source decoding proves that whole suffix is pure
     ** and preserves the already copied function and string argument. */
-    if ((uint8_t)footer ||
-        ((const BCIns *)(uintptr_t)(footer>>8) != proto_bc(pt)+callpc &&
-         (const BCIns *)(uintptr_t)(footer>>8) != proto_bc(pt)+callpc-1u &&
-         (const BCIns *)(uintptr_t)(footer>>8) != proto_bc(pt)+callpc-2u))
-      continue;
+    {
+      const BCIns *footerpc = (const BCIns *)(uintptr_t)(footer>>8);
+      MSize callc = bc_c(arm64_ir_bc_acq((uintptr_t)proto_bc(pt), callpc));
+      if ((uint8_t)footer ||
+          (footerpc != proto_bc(pt)+callpc &&
+           footerpc != proto_bc(pt)+callpc-1u &&
+           (callc == 3u || footerpc != proto_bc(pt)+callpc-2u))) continue;
+    }
     guard = ir_load_acq(&v->ir[at]);
     if (guard.o != IR_EQ || guard.t.irt != (IRT_FUNC|IRT_GUARD)) continue;
     if (guard.op1 < REF_FIRST || guard.op1 >= at ||
