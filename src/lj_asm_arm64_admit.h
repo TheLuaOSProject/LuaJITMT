@@ -10505,7 +10505,8 @@ static int arm64_string_sub_source(const GCproto *pt, MSize strslot,
           bc_a(a) != bc_a(call)+1u+LJ_FR2 ||
           bc_d(a) != strslot-1u-LJ_FR2 ||
           bc_op(b) != BC_KSHORT || bc_a(b) != bc_a(call)+2u+LJ_FR2 ||
-          (int16_t)bc_d(b) != offset+1) continue;
+          ((int16_t)bc_d(b) != offset+1 &&
+           !(offset == 0 && (int16_t)bc_d(b) == 0))) continue;
       if (lastargp) *lastargp = -1;
     } else {
       if (pc < 3u ||
@@ -10518,7 +10519,8 @@ static int arm64_string_sub_source(const GCproto *pt, MSize strslot,
           bc_a(a) != bc_a(call)+1u+LJ_FR2 ||
           bc_d(a) != strslot-1u-LJ_FR2 ||
           bc_op(b) != BC_KSHORT || bc_a(b) != bc_a(call)+2u+LJ_FR2 ||
-          (int16_t)bc_d(b) != offset+1 ||
+          ((int16_t)bc_d(b) != offset+1 &&
+           !(offset == 0 && (int16_t)bc_d(b) == 0)) ||
           bc_op(c) != BC_KSHORT || bc_a(c) != bc_a(call)+3u+LJ_FR2 ||
           (width ? (int16_t)bc_d(c) != offset+width :
                    (int16_t)bc_d(c) >= 0)) continue;
