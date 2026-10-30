@@ -35,3 +35,29 @@ temporary executables and are not test runs.
 
 The main parity branch remains at its full-gate-tested `ff86407a1` production
 checkpoint. Later focused results are not a full x86_64 parity claim.
+
+## Empty-arm integration and ordinary matrix
+
+Source `50eecd54d` also merges the bounded empty-arm leaf from `1b9018141`.
+The complete Lua-leaf contract passed all four profiles, including the new
+join-map checks, and restored ordinary ARM64 assertions (profile
+`d1925b0b5699d81f61dc401eaa97a0b26913a7065266faabb6f3331e333f4d27`).
+The source and log are `empty-leaf-integration-source.txt` and
+`empty-leaf-integration-four-profiles.log` in the directory above.
+
+The same production and tests, with notes at `8b3cf5a57`, subsequently passed
+an ordinary ARM64 assertion build and strict bare-`-Werror` x86_64 assertion
+build. Each passed all 509 stock source cases, all 509 original v2-bytecode
+cases, the 260 workload semantic checks, topology probes, and ten fixed plus
+forty dynamic-end multiple-byte native witness rows. Eighteen of the twenty
+workload rows had native root-exit witnesses on each architecture. The expanded
+inventory witnesses the empty-arm root on ARM in its first two phases; it
+still exposes the sequential two-condition leaf gap and does not establish
+native execution in every input phase.
+
+Evidence and frozen ordinary executables, matching JIT modules, archives and
+hashes are in
+`/Users/frityet/Scratch/ljmt-byte-results-num-sides-ordinary-20261030/`.
+`ordinary-matrix.sh` finished with `ordinary matrix passed at 8b3cf5a57`.
+The ordinary ARM64 restoration profile was
+`a2f8c31052621c9c536f3b876d51ebe50f0b86bbfffe423808583bc175083c15`.
