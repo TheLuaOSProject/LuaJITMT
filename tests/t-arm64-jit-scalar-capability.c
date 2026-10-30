@@ -48,7 +48,9 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
          mprotect((char *)guarded + mapsize, pagesize, PROT_NONE) == 0);
   copy = (IRIns *)((char *)guarded + mapsize - irbytes);
   SnapEntry *map = malloc(T->nsnapmap * sizeof(*map));
+  SnapShot *snaps = malloc(T->nsnap * sizeof(*snaps));
   IRRef ref, loop = 0, num = 0, knum = 0, fpmath = 0, mathop = 0;
+  IRRef tostr = 0, intref = 0, lref = 0, tmpreset = 0;
   IRRef maskload = 0, mathcall = 0;
   IRRef mathguard = 0, n;
   int math_builtin = mathkind && strncmp(mathkind, "math_", 5) == 0;
@@ -58,13 +60,14 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
   int math_proof = math_builtin ||
                    (mathkind && strcmp(mathkind, "numeric_neg") == 0);
   GCproto *pt = trace_startpt_acq(T);
-  assert(copy && map);
+  assert(copy && map && snaps);
   memcpy(copy + T->nk, T->ir + T->nk, (T->nins - T->nk) * sizeof(*copy));
   memcpy(map, T->snapmap, T->nsnapmap * sizeof(*map));
+  memcpy(snaps, T->snap, T->nsnap * sizeof(*snaps));
   v.ir = copy;
   v.owner = T;
   v.cts = ctype_ctsG(G(L));
-  v.snap = T->snap;
+  v.snap = snaps;
   v.snapmap = map;
   v.proto_bc = proto_bc(pt);
   v.nins = T->nins;
@@ -87,6 +90,16 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
       fpmath = ref;
     if (copy[ref].o == IR_CALLN)
       mathcall = ref;
+    if (copy[ref].o == IR_TOSTR && !tostr)
+      tostr = ref;
+    if (copy[ref].o == IR_LREF && !lref)
+      lref = ref;
+    if (copy[ref].o == IR_CALLS &&
+        copy[ref].op2 == IRCALL_lj_buf_tmp_reset && !tmpreset)
+      tmpreset = ref;
+    if (!intref && copy[ref].o == IR_SLOAD &&
+        irt_type(copy[ref].t) == IRT_INT)
+      intref = ref;
     if ((copy[ref].o == IR_ABS || copy[ref].o == IR_MIN ||
          copy[ref].o == IR_MAX || copy[ref].o == IR_POW ||
          copy[ref].o == IR_LDEXP ||
@@ -191,6 +204,200 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
              (unsigned)irt_type(copy[chosen_value].t),
              (unsigned)chosen_snap, (unsigned)chosen_rename);
     }
+  }
+  if (mathkind && strncmp(mathkind, "numeric_tostr", 13) == 0) {
+    IRIns saved, saved_lref, saved_reset;
+    IRRef source_tostr = 0, body_tostr = 0, tostr_phi = 0;
+    MSize mapidx;
+    MSize badsnap;
+    SnapEntry saved_map;
+    SnapShot saved_snap;
+    assert(tostr && intref && tostr < n &&
+           (copy[tostr].t.irt & ~IRT_ISPHI) == IRT_STR &&
+           copy[tostr].op2 == IRTOSTR_NUM && copy[tostr].op1 < tostr &&
+           irt_type(copy[copy[tostr].op1].t) == IRT_NUM);
+    saved = copy[tostr];
+    copy[tostr].op2 = IRTOSTR_INT;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[tostr] = saved;
+    copy[tostr].op2 = IRTOSTR_CHAR;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[tostr] = saved;
+    copy[tostr].op1 = intref;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[tostr] = saved;
+    copy[tostr].op1 = n;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[tostr] = saved;
+    assert(lref && tmpreset && copy[lref].t.irt == IRT_THREAD &&
+           copy[tmpreset].t.irt == IRT_PGC && copy[tmpreset].op1 == lref);
+    saved_lref = copy[lref];
+    saved_reset = copy[tmpreset];
+    copy[tmpreset].op2 = IRCALL_lj_buf_tmp_reset + 1u;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[tmpreset] = saved_reset;
+    copy[tmpreset].op1 = intref;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[tmpreset] = saved_reset;
+    copy[tmpreset].t.irt = IRT_INT;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[tmpreset] = saved_reset;
+    copy[lref].op1 = 1;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[lref] = saved_lref;
+    copy[lref].t.irt = IRT_PTR;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    copy[lref] = saved_lref;
+    for (mapidx = 0; mapidx < T->nsnapmap; mapidx++)
+      if (snap_ref(map[mapidx]) == tostr) break;
+    assert(mapidx < T->nsnapmap);
+    saved_map = map[mapidx];
+    map[mapidx] = snap_setref(saved_map, tmpreset);
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    map[mapidx] = snap_setref(saved_map, lref);
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    map[mapidx] = saved_map;
+    for (badsnap = 0; badsnap < T->nsnap; badsnap++)
+      if (snap_nent_acq(&snaps[badsnap]) != 0) break;
+    assert(badsnap < T->nsnap);
+    saved_snap = snaps[badsnap];
+    snaps[badsnap].mapofs = (uint32_t)T->nsnapmap;
+    assert(!lj_asm_arm64_postra_admit(&v, NULL));
+    snaps[badsnap] = saved_snap;
+    assert(lj_asm_arm64_postra_admit(&v, NULL));
+    for (ref = REF_FIRST; ref < loop; ref++)
+      if (copy[ref].o == IR_TOSTR && copy[ref].op2 == IRTOSTR_NUM &&
+          (copy[ref].t.irt & ~IRT_ISPHI) == IRT_STR)
+        source_tostr = ref;
+    for (ref = loop+1u; ref < n; ref++)
+      if (copy[ref].o == IR_TOSTR && copy[ref].op2 == IRTOSTR_NUM &&
+          (copy[ref].t.irt & ~IRT_ISPHI) == IRT_STR) {
+        body_tostr = ref;
+        break;
+      }
+    for (ref = loop+1u; ref < n; ref++)
+      if (copy[ref].o == IR_PHI && irt_type(copy[ref].t) == IRT_STR &&
+          copy[ref].op1 == source_tostr &&
+          copy[ref].op2 == body_tostr) {
+        tostr_phi = ref;
+      }
+    if (source_tostr && body_tostr && tostr_phi &&
+        copy[tostr_phi].op2 == body_tostr &&
+        lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, body_tostr)) {
+      IRIns saved_source = copy[source_tostr];
+      IRIns saved_phi = copy[tostr_phi];
+      copy[source_tostr].s = SPS_NONE;
+      copy[source_tostr].r = RID_X0;
+      assert(!lj_asm_arm64_test_scalar_math_live_across(
+        &v, n, loop, body_tostr));
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[source_tostr] = saved_source;
+      copy[tostr_phi].op1 = body_tostr;
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[tostr_phi] = saved_phi;
+      copy[tostr_phi].op2 = source_tostr;
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[tostr_phi] = saved_phi;
+      copy[body_tostr].op2 = IRTOSTR_INT;
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[body_tostr] = T->ir[body_tostr];
+      assert(lj_asm_arm64_postra_admit(&v, NULL));
+      printf("TOSTR loop survival: source=%u body=%u phi=%u; volatile-source, PHI and mode mutations rejected\n",
+             (unsigned)source_tostr, (unsigned)body_tostr,
+             (unsigned)tostr_phi);
+    }
+    printf("TOSTR post-RA: NUM mode/input accepted; INT/CHAR mode, INT input, forward ref rejected\n");
+  }
+  if (mathkind && strcmp(mathkind, "math_computed_result") == 0) {
+    IRRef call = 0, value = 0, phi = 0, rename = 0, alternate = 0;
+    SnapNo loop_snap = 0, other_snap = 0;
+    unsigned loop_snaps = 0, other_snaps = 0;
+    MSize s;
+    for (ref = loop+1u; ref < n; ref++)
+      if (copy[ref].o == IR_CALLN && irt_type(copy[ref].t) == IRT_NUM) {
+        call = ref;
+        break;
+      }
+    for (ref = REF_FIRST; ref < loop; ref++)
+      if (copy[ref].o == IR_CALLN && irt_type(copy[ref].t) == IRT_NUM) {
+        value = ref;
+        break;
+      }
+    for (ref = loop+1u; ref < n; ref++)
+      if (copy[ref].o == IR_PHI && irt_type(copy[ref].t) == IRT_NUM &&
+          copy[ref].op1 == value && copy[ref].op2 == call) {
+        phi = ref;
+        break;
+      }
+    for (s = 0; s < T->nsnap; s++)
+      if (snap_ref_acq(&T->snap[s]) == loop) {
+        loop_snap = (SnapNo)s;
+        loop_snaps++;
+      }
+    for (s = 0; s < T->nsnap; s++)
+      if (s != loop_snap) { other_snap = (SnapNo)s; other_snaps++; break; }
+    for (ref = n; ref < T->nins; ref++)
+      if (copy[ref].o == IR_RENAME && copy[ref].op1 == value &&
+          copy[ref].op2 == loop_snap) {
+        assert(rename == 0);
+        rename = ref;
+      }
+    assert(call && value && phi && rename && loop_snaps == 1u &&
+           other_snaps == 1u && loop_snap < T->nsnap &&
+           call > loop && value < loop && copy[phi].op1 == value &&
+           copy[phi].op2 == call && copy[rename].op1 == value &&
+           copy[rename].op2 == loop_snap &&
+           lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, call));
+    for (ref = REF_FIRST; ref < loop; ref++)
+      if (ref != value && irt_type(copy[ref].t) == IRT_NUM &&
+          (copy[ref].o == IR_SLOAD || copy[ref].o == IR_ADD ||
+           copy[ref].o == IR_SUB || copy[ref].o == IR_MUL ||
+           copy[ref].o == IR_DIV)) {
+        alternate = ref;
+        break;
+      }
+    assert(alternate);
+    {
+      IRIns saved = copy[rename];
+      copy[rename].op1 = alternate;
+      assert(!lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, call));
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[rename] = saved;
+      copy[rename].op2 = other_snap;
+      assert(copy[rename].op2 != loop_snap);
+      assert(!lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, call));
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[rename] = saved;
+      copy[rename].prev = REGSP(RID_D0, SPS_NONE);
+      assert(!lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, call));
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[rename] = saved;
+      {
+        IRIns saved_phi = copy[phi];
+        copy[phi].o = IR_ADD;
+        assert(!lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, call));
+        assert(!lj_asm_arm64_postra_admit(&v, NULL));
+        copy[phi] = saved_phi;
+      }
+      {
+        IRIns saved_body = copy[call];
+        copy[call].o = IR_FPMATH;
+        assert(!lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, call));
+        assert(!lj_asm_arm64_postra_admit(&v, NULL));
+        copy[call] = saved_body;
+        copy[call].t.irt = IRT_INT;
+        assert(!lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, call));
+        assert(!lj_asm_arm64_postra_admit(&v, NULL));
+        copy[call] = saved_body;
+      }
+      copy[rename].prev = REGSP(RID_NONE, SPS_FIRST-1u);
+      assert(!lj_asm_arm64_test_scalar_math_live_across(&v, n, loop, call));
+      assert(!lj_asm_arm64_postra_admit(&v, NULL));
+      copy[rename] = saved;
+      assert(lj_asm_arm64_postra_admit(&v, NULL));
+    }
+    printf("MATH computed-result CALLN=%u loop-PHI=%u rename=%u; body-call/source/snapshot/location/ordinary-use mutations rejected\n",
+           (unsigned)call, (unsigned)phi, (unsigned)rename);
   }
   /* A future consumer has not yet been certified when an earlier absent
      location is examined. Its other operand must be checked before loading. */
@@ -530,11 +737,100 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
     fake->baseslot = 1 + LJ_FR2;
     fake->loopref = loop;
     semantic.ir = copy;
+    semantic.snap = snaps;
     semantic.snapmap = map;
     semantic.nins = n;
     semantic.sinktags = 0;
     la_store32_rel((uint32_t *)pc, T->startins);
     assert(lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+    if (mathkind && strncmp(mathkind, "numeric_tostr", 13) == 0) {
+      IRIns saved, saved_lref, saved_reset;
+      IRRef source_tostr = 0, body_tostr = 0, tostr_phi = 0;
+      MSize mapidx;
+      MSize badsnap;
+      SnapEntry saved_map;
+      SnapShot saved_snap;
+      assert(tostr && intref && lref && tmpreset &&
+             (copy[tostr].t.irt & ~IRT_ISPHI) == IRT_STR &&
+             copy[tostr].op2 == IRTOSTR_NUM && copy[tostr].op1 < tostr &&
+             irt_type(copy[copy[tostr].op1].t) == IRT_NUM);
+      saved = copy[tostr];
+      copy[tostr].op2 = IRTOSTR_INT;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[tostr] = saved;
+      copy[tostr].op2 = IRTOSTR_CHAR;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[tostr] = saved;
+      copy[tostr].op1 = intref;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[tostr] = saved;
+      copy[tostr].op1 = n;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[tostr] = saved;
+      assert(copy[lref].t.irt == IRT_THREAD && copy[tmpreset].t.irt == IRT_PGC &&
+             copy[tmpreset].op1 == lref);
+      saved_lref = copy[lref];
+      saved_reset = copy[tmpreset];
+      copy[tmpreset].op2 = IRCALL_lj_buf_tmp_reset + 1u;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[tmpreset] = saved_reset;
+      copy[tmpreset].op1 = intref;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[tmpreset] = saved_reset;
+      copy[tmpreset].t.irt = IRT_INT;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[tmpreset] = saved_reset;
+      copy[lref].op1 = 1;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[lref] = saved_lref;
+      copy[lref].t.irt = IRT_PTR;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      copy[lref] = saved_lref;
+      for (mapidx = 0; mapidx < T->nsnapmap; mapidx++)
+        if (snap_ref(map[mapidx]) == tostr) break;
+      assert(mapidx < T->nsnapmap);
+      saved_map = map[mapidx];
+      map[mapidx] = snap_setref(saved_map, tmpreset);
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      map[mapidx] = snap_setref(saved_map, lref);
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      map[mapidx] = saved_map;
+      for (badsnap = 0; badsnap < T->nsnap; badsnap++)
+        if (snap_nent_acq(&snaps[badsnap]) != 0) break;
+      assert(badsnap < T->nsnap);
+      saved_snap = snaps[badsnap];
+      snaps[badsnap].mapofs = (uint32_t)T->nsnapmap;
+      assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      snaps[badsnap] = saved_snap;
+      for (ref = REF_FIRST; ref < loop; ref++)
+        if (copy[ref].o == IR_TOSTR && copy[ref].op2 == IRTOSTR_NUM &&
+            (copy[ref].t.irt & ~IRT_ISPHI) == IRT_STR)
+          source_tostr = ref;
+      for (ref = loop+1u; ref < n; ref++)
+        if (copy[ref].o == IR_TOSTR && copy[ref].op2 == IRTOSTR_NUM &&
+            (copy[ref].t.irt & ~IRT_ISPHI) == IRT_STR) {
+          body_tostr = ref;
+          break;
+        }
+      for (ref = loop+1u; ref < n; ref++)
+        if (copy[ref].o == IR_PHI && irt_type(copy[ref].t) == IRT_STR &&
+            copy[ref].op1 == source_tostr && copy[ref].op2 == body_tostr) {
+          assert(!tostr_phi);
+          tostr_phi = ref;
+        }
+      if (source_tostr && body_tostr && tostr_phi) {
+        assert(lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+        IRIns saved_phi = copy[tostr_phi];
+        copy[tostr_phi].op1 = body_tostr;
+        assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+        copy[tostr_phi] = saved_phi;
+        copy[tostr_phi].op2 = source_tostr;
+        assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+        copy[tostr_phi] = saved_phi;
+      }
+      assert(lj_asm_arm64_ir_admit(fake, &semantic, &reject));
+      printf("TOSTR semantic: NUM mode/input and loop PHI accepted; bad PHI inputs, INT/CHAR mode, INT input, forward ref rejected\n");
+    }
     if (num) {
       copy[num].r = RID_SINK;
       copy[num].s = 1;
@@ -686,6 +982,7 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
          "frame/link, snapshot rejected");
   }
   free(map);
+  free(snaps);
   assert(munmap(guarded, mapsize + pagesize) == 0);
   (void)L;
   puts("MUTATIONS poll, register class, NUM spill alignment, forward/payload ref, "
@@ -703,7 +1000,8 @@ static int check(lua_State *L)
 {
   const char *mathkind = lua_gettop(L) ? lua_tostring(L, 1) : NULL;
   if (mathkind && strncmp(mathkind, "math_", 5) != 0 &&
-      strcmp(mathkind, "numeric_neg") != 0) mathkind = NULL;
+      strcmp(mathkind, "numeric_neg") != 0 &&
+      strncmp(mathkind, "numeric_tostr", 13) != 0) mathkind = NULL;
   GCtrace *T = traceref_safe(L2J(L), 1);
   IRRef ref;
   unsigned ns = 0, nnum = 0, ntab = 0, ren = 0;
@@ -803,6 +1101,17 @@ static int invoke(lua_State *L, int n)
 }
 static void equal_result(lua_State *L)
 {
+  if (lua_type(L, -1) == LUA_TSTRING && lua_type(L, 2) == LUA_TSTRING) {
+    size_t gotlen, wantlen;
+    const char *got = lua_tolstring(L, -1, &gotlen);
+    const char *want = lua_tolstring(L, 2, &wantlen);
+    if (gotlen != wantlen || memcmp(got, want, gotlen) != 0)
+      fprintf(stderr, "string result length %lu expected %lu\n",
+              (unsigned long)gotlen, (unsigned long)wantlen);
+    assert(gotlen == wantlen && memcmp(got, want, gotlen) == 0);
+    lua_pop(L, 1);
+    return;
+  }
   if (lua_tonumber(L, -1) != lua_tonumber(L, 2))
     fprintf(stderr, "result %.17g expected %.17g\n", lua_tonumber(L, -1),
             lua_tonumber(L, 2));

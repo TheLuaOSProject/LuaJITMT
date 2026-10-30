@@ -125,8 +125,15 @@ int main(int argc, char **argv)
   int literal, literal_knum, literal_kint;
 
   assert(L && argc == 3);
-  get = !strcmp(argv[2], "get") || !strcmp(argv[2], "get-forl");
-  forl = !strcmp(argv[2], "get-forl") || !strcmp(argv[2], "store-forl");
+  get = !strcmp(argv[2], "get") || !strcmp(argv[2], "get-forl") ||
+        !strcmp(argv[2], "no-peer-string-sub-forl") ||
+        !strcmp(argv[2], "no-peer-string-sub-while") ||
+        !strcmp(argv[2], "no-peer-math-sin-forl") ||
+        !strcmp(argv[2], "no-peer-string-byte-forl");
+  forl = !strcmp(argv[2], "get-forl") || !strcmp(argv[2], "store-forl") ||
+         !strcmp(argv[2], "no-peer-string-sub-forl") ||
+         !strcmp(argv[2], "no-peer-math-sin-forl") ||
+         !strcmp(argv[2], "no-peer-string-byte-forl");
   literal = strncmp(argv[2], "literal-", 8) == 0;
   literal_kint = !strcmp(argv[2], "literal-integer") ||
                  !strcmp(argv[2], "literal-zero");
@@ -142,12 +149,18 @@ int main(int argc, char **argv)
 	 !strcmp(argv[2], "literal-negzero") ||
 	 !strcmp(argv[2], "literal-nil") ||
 	 !strcmp(argv[2], "literal-false") ||
-	 !strcmp(argv[2], "literal-true"));
+	 !strcmp(argv[2], "literal-true") ||
+	 !strcmp(argv[2], "no-peer-string-sub-forl") ||
+	 !strcmp(argv[2], "no-peer-string-sub-while") ||
+	 !strcmp(argv[2], "no-peer-math-sin-forl") ||
+	 !strcmp(argv[2], "no-peer-string-byte-forl"));
   luaL_openlibs(L);
   lua_pushcfunction(L, force_double_literal);
   lua_setglobal(L, "rooted_uv_force_double_literal");
   lua_pushboolean(L, 1);
   lua_setglobal(L, "rooted_upvalue_admission");
+  lua_pushboolean(L, !strncmp(argv[2], "no-peer-", 8u));
+  lua_setglobal(L, "rooted_upvalue_no_peer");
   lua_pushstring(L, argv[2]);
   lua_setglobal(L, "rooted_upvalue_mode");
   if (luaL_dofile(L, argv[1])) {

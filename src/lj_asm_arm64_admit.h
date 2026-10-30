@@ -10545,6 +10545,69 @@ static int arm64_string_sub_source(const GCproto *pt, MSize strslot,
   return calls == 1u && matches == 1u;
 }
 
+/* Decode the bounded suffix form sub(s, negative_first [, negative_last]).
+** The VM normalizes both negative indices from the same string length used by
+** the allocation proof below. */
+static int arm64_string_sub_negative_first_source(const GCproto *pt,
+                                                   MSize strslot,
+                                                   int32_t first,
+                                                   int32_t *lastp,
+                                                   MSize *callpc,
+                                                   BCReg *calla)
+{
+  MSize pc, calls = 0, matches = 0;
+  const BCIns *bc;
+  if (!pt || strslot < 1u+LJ_FR2 ||
+      strslot-1u-LJ_FR2 >= pt->numparams || first >= 0 ||
+      first < INT16_MIN || pt->sizebc < 4u) return 0;
+  bc = proto_bc(pt);
+  for (pc = 1; pc < pt->sizebc; pc++) {
+    BCIns call = arm64_ir_bc_acq((uintptr_t)bc, pc), a, b, c;
+    BCOp op = bc_op(call);
+    MSize q, setup;
+    int valid = 1;
+    int32_t last = -1;
+    if (op >= BC__MAX) return 0;
+    if (op != BC_CALL && op != BC_CALLM && op != BC_CALLT && op != BC_CALLMT)
+      continue;
+    calls++;
+    if (op != BC_CALL || bc_b(call) != 2u ||
+        (bc_c(call) != 3u && bc_c(call) != 4u) ||
+        (MSize)bc_a(call)+(bc_c(call) == 3u ? 3u : 4u)+LJ_FR2 >
+          pt->framesize) continue;
+    if (pc < (bc_c(call) == 3u ? 2u : 3u)) continue;
+    setup = pc-(bc_c(call) == 3u ? 2u : 3u);
+    a = arm64_ir_bc_acq((uintptr_t)bc, setup);
+    b = arm64_ir_bc_acq((uintptr_t)bc, setup+1u);
+    if ((bc_op(a) != BC_MOV && bc_op(a) != BC_CGET) ||
+        bc_a(a) != bc_a(call)+1u+LJ_FR2 ||
+        bc_d(a) != strslot-1u-LJ_FR2 ||
+        bc_op(b) != BC_KSHORT || bc_a(b) != bc_a(call)+2u+LJ_FR2 ||
+        (int16_t)bc_d(b) != first) continue;
+    if (bc_c(call) == 4u) {
+      c = arm64_ir_bc_acq((uintptr_t)bc, setup+2u);
+      if (bc_op(c) != BC_KSHORT ||
+          bc_a(c) != bc_a(call)+3u+LJ_FR2 ||
+          (int16_t)bc_d(c) >= 0) continue;
+      last = (int16_t)bc_d(c);
+    }
+    for (q = 0; q < pt->sizebc; q++) {
+      BCIns ins = arm64_ir_bc_acq((uintptr_t)bc, q);
+      BCOp jump = bc_op(ins);
+      if (jump >= BC__MAX) return 0;
+      if (bcmode_d(jump) == BCMjump) {
+        int64_t target = (int64_t)q+1+bc_j(ins);
+        if (target > (int64_t)setup && target <= (int64_t)pc) valid = 0;
+      } else if (jump <= BC_ISNUM && q+2u > setup && q+2u <= pc) {
+        valid = 0;
+      }
+    }
+    if (!valid) continue;
+    *lastp = last; *callpc = pc; *calla = bc_a(call); matches++;
+  }
+  return calls == 1u && matches == 1u;
+}
+
 static int arm64_string_sub_bounds_ir(const GCtrace *T, IRRef pointer);
 static int arm64_string_byte_bounds_ir(const GCtrace *T, IRRef strref,
                                        IRRef str, IRRef offset);
@@ -11615,6 +11678,74 @@ static int arm64_string_byte_xload_ir(const GCtrace *T, IRRef ref)
          arm64_string_byte_bounds_ir(T, load->op1, ptr->op1, ptr->op2);
 }
 
+/* ARM64 concat folding can leave only the thread-local tmp-buffer reset after
+** the one-put buffer chain has folded to the numeric TOSTR result. Admit that
+** exact dead-result effect, never a general buffer operation or call. */
+static int arm64_scalar_tmpreset_ir(const GCtrace *T, IRRef n)
+{
+  IRRef ref, lref = 0;
+  unsigned nlref = 0, nreset = 0, nreset_users = 0;
+  MSize s, i;
+  if (!T || !T->ir || !T->snap || !T->snapmap || n > T->nins) return 0;
+  for (ref = REF_FIRST; ref < n; ref++) {
+    const IRIns *ir = &T->ir[ref];
+    if (ir->o == IR_LREF) {
+      if (ir->t.irt != IRT_THREAD || ir->op12) return 0;
+      lref = ref;
+      nlref++;
+    }
+    if (ir->o == IR_CALLS && ir->op2 == IRCALL_lj_buf_tmp_reset) {
+      if (ir->t.irt != IRT_PGC || ir->op1 < REF_FIRST || ir->op1 >= ref ||
+          T->ir[ir->op1].o != IR_LREF || T->ir[ir->op1].t.irt != IRT_THREAD ||
+          T->ir[ir->op1].op12)
+        return 0;
+      nreset++;
+      for (i = 0; i < T->nsnap; i++) {
+        MSize ofs = snap_mapofs_acq(&T->snap[i]);
+        MSize cnt = snap_nent_acq(&T->snap[i]);
+        if (ofs > T->nsnapmap || cnt > T->nsnapmap-ofs) return 0;
+        for (s = 0; s < cnt; s++)
+          if (snap_ref(snapentry_acq(&T->snapmap[ofs+s])) == ref)
+            return 0;
+      }
+      for (s = ref+1u; s < n; s++) {
+        const IRIns *use = &T->ir[s];
+        IRMode mode;
+        if (use->o >= IR__MAX) return 0;
+        mode = lj_ir_mode[use->o];
+        if ((irm_op1(mode) == IRMref && use->op1 == ref) ||
+            (irm_op2(mode) == IRMref && use->op2 == ref))
+          return 0;
+      }
+    }
+  }
+  if (!nreset) return nlref == 0;
+  if (nlref != 1u || !lref) return 0;
+  for (ref = lref+1u; ref < n; ref++) {
+    const IRIns *use = &T->ir[ref];
+    IRMode mode;
+    if (use->o >= IR__MAX) return 0;
+    mode = lj_ir_mode[use->o];
+    if ((irm_op1(mode) == IRMref && use->op1 == lref) ||
+        (irm_op2(mode) == IRMref && use->op2 == lref)) {
+      if (use->o != IR_CALLS || use->op1 != lref ||
+          use->op2 != IRCALL_lj_buf_tmp_reset)
+        return 0;
+      nreset_users++;
+    }
+  }
+  if (nreset_users != nreset) return 0;
+  for (s = 0; s < T->nsnap; s++) {
+    MSize ofs = snap_mapofs_acq(&T->snap[s]);
+    MSize cnt = snap_nent_acq(&T->snap[s]);
+    if (ofs > T->nsnapmap || cnt > T->nsnapmap-ofs) return 0;
+    for (i = 0; i < cnt; i++)
+      if (snap_ref(snapentry_acq(&T->snapmap[ofs+i])) == lref)
+        return 0;
+  }
+  return 1;
+}
+
 /* Recorder-side scalar provenance. Deliberately independent of the immutable
 ** allocator certificate below: neither pass consumes the other's verdict. */
 static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
@@ -11637,6 +11768,8 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
   if (value < REF_FIRST || value >= before)
     return 0;
   ir = &T->ir[value];
+  if (type == IRT_THREAD && ir->o == IR_LREF)
+    return ir->t.irt == IRT_THREAD && !ir->op12;
   if (ir->o == IR_CALLN)
     return type == IRT_NUM && (ir->t.irt & ~IRT_ISPHI) == IRT_NUM &&
            arm64_scalar_math_call(ir->op2);
@@ -11671,6 +11804,15 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
   if (type == IRT_STR && ir->o == IR_SNEW)
     return (ir->t.irt & ~IRT_ISPHI) == IRT_STR &&
            arm64_string_sub_bounds_ir(T, ir->op1);
+  if (type == IRT_STR && ir->o == IR_TOSTR)
+    return (ir->t.irt & ~IRT_ISPHI) == IRT_STR &&
+           ir->op2 == IRTOSTR_NUM &&
+           arm64_scalar_ir_ref(T, ir->op1, value, IRT_NUM);
+  if (type == IRT_STR && ir->o == IR_PHI)
+    return ir->t.irt == (IRT_STR|IRT_ISPHI) && ir->op1 < value &&
+           ir->op2 < value &&
+           arm64_scalar_ir_ref(T, ir->op1, value, IRT_STR) &&
+           arm64_scalar_ir_ref(T, ir->op2, value, IRT_STR);
   if (arm64_rooted_gc_type(type) || type == IRT_LIGHTUD)
     return (ir->o == IR_SLOAD || ir->o == IR_VLOAD ||
             (type == IRT_TAB && ir->o == IR_TNEW)) &&
@@ -11844,8 +11986,9 @@ static int arm64_string_sub_bounds_ir(const GCtrace *T, IRRef pointer)
   GCobj *obj;
   GCproto *pt;
   IRIns ptr, str;
-  IRRef r, alloc = 0;
+  IRRef r, alloc = 0, negative_lenref = 0;
   int32_t offset, width = 0, lastarg = 0;
+  int32_t negative_first = 0, negative_last = -1;
   MSize callpc, sn;
   BCReg calla;
   int bounded = 0, identity = 0;
@@ -11856,8 +11999,39 @@ static int arm64_string_sub_bounds_ir(const GCtrace *T, IRRef pointer)
   pt = gco2pt(obj);
   ptr = T->ir[pointer];
   if (ptr.o != IR_STRREF || ptr.t.irt != IRT_PGC ||
-      ptr.op1 < REF_FIRST || ptr.op1 >= pointer ||
-      !arm64_ir_kint_value(T, ptr.op2, &offset) || offset < 0) return 0;
+      ptr.op1 < REF_FIRST || ptr.op1 >= pointer) return 0;
+  if (!arm64_ir_kint_value(T, ptr.op2, &offset)) {
+    IRIns index;
+    IRRef lenref, constant, q;
+    int32_t first;
+    unsigned lower_guards = 0;
+    if (ptr.op2 < REF_FIRST || ptr.op2 >= pointer) return 0;
+    index = T->ir[ptr.op2];
+    if (index.o != IR_ADD || index.t.irt != IRT_INT) return 0;
+    if (index.op1 >= REF_FIRST && index.op1 < ptr.op2 &&
+        T->ir[index.op1].o == IR_FLOAD) {
+      lenref = index.op1; constant = index.op2;
+    } else if (index.op2 >= REF_FIRST && index.op2 < ptr.op2 &&
+               T->ir[index.op2].o == IR_FLOAD) {
+      lenref = index.op2; constant = index.op1;
+    } else return 0;
+    if (lenref < REF_FIRST || T->ir[lenref].o != IR_FLOAD ||
+        T->ir[lenref].t.irt != IRT_INT ||
+        T->ir[lenref].op1 != ptr.op1 ||
+        T->ir[lenref].op2 != IRFL_STR_LEN ||
+        !arm64_ir_kint_value(T, constant, &first) || first >= 0 ||
+        first < INT16_MIN) return 0;
+    for (q = ptr.op2+1u; q < pointer; q++) {
+      IRIns guard = T->ir[q];
+      int32_t zero;
+      if (guard.o == IR_GE && guard.t.irt == (IRT_INT|IRT_GUARD) &&
+          guard.op1 == ptr.op2 && arm64_ir_kint_value(T, guard.op2, &zero) &&
+          zero == 0) lower_guards++;
+    }
+    if (lower_guards != 1u) return 0;
+    negative_first = first;
+    negative_lenref = lenref;
+  } else if (offset < 0) return 0;
   str = T->ir[ptr.op1];
   if (str.o != IR_SLOAD || str.t.irt != (IRT_STR|IRT_GUARD) ||
       str.op2 != IRSLOAD_TYPECHECK) return 0;
@@ -11869,7 +12043,52 @@ static int arm64_string_sub_bounds_ir(const GCtrace *T, IRRef pointer)
     }
   }
   if (!alloc) return 0;
-  if (!arm64_ir_kint_value(T, T->ir[alloc].op2, &width)) {
+  if (negative_first) {
+    IRRef widthref = T->ir[alloc].op2;
+    IRRef q, endref = 0;
+    int32_t delta;
+    unsigned width_guards = 0;
+    if (widthref < REF_FIRST || widthref >= alloc ||
+        !arm64_string_sub_negative_first_source(pt, str.op1, negative_first,
+                                                &negative_last,
+                                                &callpc, &calla) ||
+        !arm64_scalar_ir_ref(T, ptr.op2, pointer, IRT_INT)) return 0;
+    delta = negative_last+1;
+    if (delta == 0) {
+      endref = negative_lenref;
+    } else {
+      for (q = negative_lenref+1u; q < widthref; q++) {
+        IRIns add = T->ir[q];
+        int32_t k;
+        if (add.o != IR_ADD || add.t.irt != IRT_INT) continue;
+        if (add.op1 == negative_lenref &&
+            arm64_ir_kint_value(T, add.op2, &k) && k == delta) {
+          if (endref) return 0;
+          endref = q;
+        } else if (add.op2 == negative_lenref &&
+                   arm64_ir_kint_value(T, add.op1, &k) && k == delta) {
+          if (endref) return 0;
+          endref = q;
+        }
+      }
+      if (!endref) return 0;
+    }
+    if (widthref >= REF_FIRST && T->ir[widthref].o == IR_SUBOV &&
+        T->ir[widthref].t.irt == (IRT_INT|IRT_GUARD) &&
+        T->ir[widthref].op1 == endref &&
+        T->ir[widthref].op2 == ptr.op2) {
+      for (q = widthref+1u; q < pointer; q++) {
+        IRIns guard = T->ir[q];
+        int32_t zero;
+        if (guard.o == IR_GE && guard.t.irt == (IRT_INT|IRT_GUARD) &&
+            guard.op1 == widthref &&
+            arm64_ir_kint_value(T, guard.op2, &zero) && zero == 0)
+          width_guards++;
+      }
+    }
+    if (width_guards != 1u) return 0;
+    bounded = 1;
+  } else if (!arm64_ir_kint_value(T, T->ir[alloc].op2, &width)) {
     IRRef lenref = 0, endref = 0, widthref = T->ir[alloc].op2;
     IRRef q;
     int32_t delta = 0;
@@ -18670,6 +18889,11 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       if (ir->t.irt != IRT_NIL || ir->op12)
         goto bad_operand;
       break;
+    case IR_LREF:
+      if (side || type != IRT_THREAD || ir->t.irt != IRT_THREAD ||
+          ir->op12 || !arm64_scalar_tmpreset_ir(T, T->nins))
+        goto bad_operand;
+      break;
     case IR_SLOAD:
       if (side && (ir->op2 == (IRSLOAD_PARENT|IRSLOAD_INHERIT) ||
 	  ir->op2 == (IRSLOAD_PARENT|IRSLOAD_READONLY|IRSLOAD_INHERIT))) {
@@ -18734,6 +18958,12 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       if (side || type != IRT_STR || (flags & ~IRT_ISPHI) ||
           ir->op1 < REF_FIRST || ir->op1 >= ref ||
           !arm64_string_sub_bounds_ir(T, ir->op1)) goto bad_operand;
+      break;
+    case IR_TOSTR:
+      if (side || (flags & ~IRT_ISPHI) || type != IRT_STR ||
+          ir->op2 != IRTOSTR_NUM ||
+          !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_NUM))
+        goto bad_operand;
       break;
     case IR_STRREF:
       if (type != IRT_PGC || flags ||
@@ -18991,7 +19221,7 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       if (!firstphi)
         firstphi = ref;
       if (++nphi > LJ_MAX_PHI || !poll || flags ||
-          (type != IRT_INT && type != IRT_NUM &&
+          (type != IRT_INT && type != IRT_NUM && type != IRT_STR &&
            !arm64_rooted_gc_type(type) && type != IRT_LIGHTUD) ||
           ir->op1 < REF_FIRST ||
           ir->op1 >= loop || ir->op2 < REF_FIRST || ir->op2 >= firstphi)
@@ -19031,6 +19261,11 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       break;
     case IR_CALLS:
       {
+        if (!side && ir->op2 == IRCALL_lj_buf_tmp_reset &&
+            ir->t.irt == IRT_PGC && ir->op1 < ref &&
+            arm64_scalar_ir_ref(T, ir->op1, ref, IRT_THREAD) &&
+            arm64_scalar_tmpreset_ir(T, T->nins))
+          break;
         if (side && (arm64_rooted_upvalue_call((IRCallID)ir->op2) ||
                      arm64_rooted_cell_call((IRCallID)ir->op2)))
           return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL, ref,
@@ -19429,6 +19664,11 @@ static int arm64_scalar_postra_value(IRIns p)
     return (p.t.irt & ~IRT_ISPHI) == IRT_NUM && arm64_scalar_math_call(p.op2);
   case IR_SNEW:
     return (p.t.irt & ~IRT_ISPHI) == IRT_STR;
+  case IR_LREF:
+    return p.t.irt == IRT_THREAD && !p.op12;
+  case IR_TOSTR:
+    return (p.t.irt & ~IRT_ISPHI) == IRT_STR &&
+           p.op2 == IRTOSTR_NUM;
   case IR_TNEW:
     return (p.t.irt & ~IRT_ISPHI) == (IRT_TAB|IRT_GUARD);
   case IR_TMPREF:
@@ -19487,6 +19727,73 @@ static int arm64_string_byte_xload_postra(const LJArm64PostRAView *v,
   return ptr.o == IR_STRREF && ptr.t.irt == IRT_PGC &&
          arm64_string_byte_bounds_postra(v, load.op1, ptr.op1, ptr.op2);
 }
+static int arm64_scalar_tmpreset_postra(const LJArm64PostRAView *v, IRRef n)
+{
+  IRRef ref, lref = 0;
+  unsigned nlref = 0, nreset = 0, nreset_users = 0;
+  MSize s, i;
+  if (!v || !v->ir || !v->snap || !v->snapmap || n > v->nins) return 0;
+  for (ref = REF_FIRST; ref < n; ref++) {
+    IRIns ir = ir_load_acq(&v->ir[ref]);
+    if (ir.o == IR_LREF) {
+      if (ir.t.irt != IRT_THREAD || ir.op12) return 0;
+      lref = ref;
+      nlref++;
+    }
+    if (ir.o == IR_CALLS && ir.op2 == IRCALL_lj_buf_tmp_reset) {
+      IRIns arg;
+      if (ir.t.irt != IRT_PGC || ir.op1 < REF_FIRST || ir.op1 >= ref)
+        return 0;
+      arg = ir_load_acq(&v->ir[ir.op1]);
+      if (arg.o != IR_LREF || arg.t.irt != IRT_THREAD || arg.op12)
+        return 0;
+      nreset++;
+      for (i = 0; i < v->nsnap; i++) {
+        MSize ofs = snap_mapofs_acq(&v->snap[i]);
+        MSize cnt = snap_nent_acq(&v->snap[i]);
+        if (ofs > v->nsnapmap || cnt > v->nsnapmap-ofs) return 0;
+        for (s = 0; s < cnt; s++)
+          if (snap_ref(snapentry_acq(&v->snapmap[ofs+s])) == ref)
+            return 0;
+      }
+      for (s = ref+1u; s < n; s++) {
+        IRIns use = ir_load_acq(&v->ir[s]);
+        IRMode mode;
+        if (use.o >= IR__MAX) return 0;
+        mode = lj_ir_mode[use.o];
+        if ((irm_op1(mode) == IRMref && use.op1 == ref) ||
+            (irm_op2(mode) == IRMref && use.op2 == ref))
+          return 0;
+      }
+    }
+  }
+  if (!nreset) return nlref == 0;
+  if (nlref != 1u || !lref) return 0;
+  for (ref = lref+1u; ref < n; ref++) {
+    IRIns use = ir_load_acq(&v->ir[ref]);
+    IRMode mode;
+    if (use.o >= IR__MAX) return 0;
+    mode = lj_ir_mode[use.o];
+    if ((irm_op1(mode) == IRMref && use.op1 == lref) ||
+        (irm_op2(mode) == IRMref && use.op2 == lref)) {
+      if (use.o != IR_CALLS || use.op1 != lref ||
+          use.op2 != IRCALL_lj_buf_tmp_reset)
+        return 0;
+      nreset_users++;
+    }
+  }
+  if (nreset_users != nreset) return 0;
+  for (s = 0; s < v->nsnap; s++) {
+    MSize ofs = snap_mapofs_acq(&v->snap[s]);
+    MSize cnt = snap_nent_acq(&v->snap[s]);
+    if (ofs > v->nsnapmap || cnt > v->nsnapmap-ofs) return 0;
+    for (i = 0; i < cnt; i++)
+      if (snap_ref(snapentry_acq(&v->snapmap[ofs+i])) == lref)
+        return 0;
+  }
+  return 1;
+}
+
 static int arm64_scalar_postra_ref(const LJArm64PostRAView *v, IRRef ref,
                                    IRRef before, IRType type)
 {
@@ -19496,6 +19803,8 @@ static int arm64_scalar_postra_ref(const LJArm64PostRAView *v, IRRef ref,
   if (ref < REF_FIRST || ref >= before)
     return 0;
   p = ir_load_acq(&v->ir[ref]);
+  if (type == IRT_THREAD && p.o == IR_LREF)
+    return p.t.irt == IRT_THREAD && !p.op12;
   /* Independently retain LDRB's zero-extended integer operand semantics. */
   if (type == IRT_INT && irt_type(p.t) == IRT_U8 && p.o == IR_XLOAD)
     return arm64_scalar_postra_ref(v, ref, before, IRT_U8);
@@ -19508,6 +19817,14 @@ static int arm64_scalar_postra_ref(const LJArm64PostRAView *v, IRRef ref,
   if (type == IRT_STR && p.o == IR_SNEW)
     return (p.t.irt & ~IRT_ISPHI) == IRT_STR &&
            arm64_string_sub_bounds_postra(v, p.op1);
+  if (type == IRT_STR && p.o == IR_TOSTR)
+    return (p.t.irt & ~IRT_ISPHI) == IRT_STR &&
+           p.op2 == IRTOSTR_NUM &&
+           arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM);
+  if (type == IRT_STR && p.o == IR_PHI)
+    return p.t.irt == (IRT_STR|IRT_ISPHI) && p.op1 < ref && p.op2 < ref &&
+           arm64_scalar_postra_ref(v, p.op1, ref, IRT_STR) &&
+           arm64_scalar_postra_ref(v, p.op2, ref, IRT_STR);
   return arm64_scalar_postra_value(p) && irt_type(p.t) == type &&
          ((!arm64_rooted_gc_type(type) && type != IRT_LIGHTUD) ||
           ((p.o == IR_SLOAD || p.o == IR_VLOAD ||
@@ -20115,8 +20432,9 @@ static int arm64_string_sub_bounds_postra(const LJArm64PostRAView *v, IRRef poin
 {
   const GCproto *pt;
   IRIns ptr, str;
-  IRRef r, alloc = 0;
+  IRRef r, alloc = 0, negative_lenref = 0;
   int32_t offset, width = 0, lastarg = 0;
+  int32_t negative_first = 0, negative_last = -1;
   MSize callpc, sn;
   BCReg calla;
   int bounded = 0, identity = 0;
@@ -20128,8 +20446,42 @@ static int arm64_string_sub_bounds_postra(const LJArm64PostRAView *v, IRRef poin
       pt->framesize != v->root_topslot) return 0;
   ptr = ir_load_acq(&v->ir[pointer]);
   if (ptr.o != IR_STRREF || ptr.t.irt != IRT_PGC ||
-      ptr.op1 < REF_FIRST || ptr.op1 >= pointer ||
-      !arm64_scalar_postra_kint(v, ptr.op2, &offset) || offset < 0) return 0;
+      ptr.op1 < REF_FIRST || ptr.op1 >= pointer) return 0;
+  if (!arm64_scalar_postra_kint(v, ptr.op2, &offset)) {
+    IRIns index;
+    IRRef lenref, constant, q;
+    int32_t first;
+    unsigned lower_guards = 0;
+    if (ptr.op2 < REF_FIRST || ptr.op2 >= pointer) return 0;
+    index = ir_load_acq(&v->ir[ptr.op2]);
+    if (index.o != IR_ADD || index.t.irt != IRT_INT) return 0;
+    if (index.op1 >= REF_FIRST && index.op1 < ptr.op2 &&
+        ir_load_acq(&v->ir[index.op1]).o == IR_FLOAD) {
+      lenref = index.op1; constant = index.op2;
+    } else if (index.op2 >= REF_FIRST && index.op2 < ptr.op2 &&
+               ir_load_acq(&v->ir[index.op2]).o == IR_FLOAD) {
+      lenref = index.op2; constant = index.op1;
+    } else return 0;
+    {
+      IRIns len = ir_load_acq(&v->ir[lenref]);
+      if (lenref < REF_FIRST || len.o != IR_FLOAD ||
+          len.t.irt != IRT_INT || len.op1 != ptr.op1 ||
+          len.op2 != IRFL_STR_LEN ||
+          !arm64_scalar_postra_kint(v, constant, &first) || first >= 0 ||
+          first < INT16_MIN) return 0;
+    }
+    for (q = ptr.op2+1u; q < pointer; q++) {
+      IRIns guard = ir_load_acq(&v->ir[q]);
+      int32_t zero;
+      if (guard.o == IR_GE && guard.t.irt == (IRT_INT|IRT_GUARD) &&
+          guard.op1 == ptr.op2 &&
+          arm64_scalar_postra_kint(v, guard.op2, &zero) && zero == 0)
+        lower_guards++;
+    }
+    if (lower_guards != 1u) return 0;
+    negative_first = first;
+    negative_lenref = lenref;
+  } else if (offset < 0) return 0;
   str = ir_load_acq(&v->ir[ptr.op1]);
   if (str.o != IR_SLOAD || str.t.irt != (IRT_STR|IRT_GUARD) ||
       str.op2 != IRSLOAD_TYPECHECK) return 0;
@@ -20141,7 +20493,53 @@ static int arm64_string_sub_bounds_postra(const LJArm64PostRAView *v, IRRef poin
     }
   }
   if (!alloc) return 0;
-  if (!arm64_scalar_postra_kint(v, ir_load_acq(&v->ir[alloc]).op2, &width)) {
+  if (negative_first) {
+    IRRef widthref = ir_load_acq(&v->ir[alloc]).op2;
+    IRRef q, endref = 0;
+    int32_t delta;
+    unsigned width_guards = 0;
+    if (widthref < REF_FIRST || widthref >= alloc ||
+        !arm64_string_sub_negative_first_source(pt, str.op1, negative_first,
+                                                &negative_last,
+                                                &callpc, &calla) ||
+        !arm64_scalar_postra_ref(v, ptr.op2, pointer, IRT_INT)) return 0;
+    delta = negative_last+1;
+    if (delta == 0) {
+      endref = negative_lenref;
+    } else {
+      for (q = negative_lenref+1u; q < widthref; q++) {
+        IRIns add = ir_load_acq(&v->ir[q]);
+        int32_t k;
+        if (add.o != IR_ADD || add.t.irt != IRT_INT) continue;
+        if (add.op1 == negative_lenref &&
+            arm64_scalar_postra_kint(v, add.op2, &k) && k == delta) {
+          if (endref) return 0;
+          endref = q;
+        } else if (add.op2 == negative_lenref &&
+                   arm64_scalar_postra_kint(v, add.op1, &k) && k == delta) {
+          if (endref) return 0;
+          endref = q;
+        }
+      }
+      if (!endref) return 0;
+    }
+    {
+      IRIns sub = ir_load_acq(&v->ir[widthref]);
+      if (sub.o == IR_SUBOV && sub.t.irt == (IRT_INT|IRT_GUARD) &&
+          sub.op1 == endref && sub.op2 == ptr.op2) {
+        for (q = widthref+1u; q < pointer; q++) {
+          IRIns guard = ir_load_acq(&v->ir[q]);
+          int32_t zero;
+          if (guard.o == IR_GE && guard.t.irt == (IRT_INT|IRT_GUARD) &&
+              guard.op1 == widthref &&
+              arm64_scalar_postra_kint(v, guard.op2, &zero) && zero == 0)
+            width_guards++;
+        }
+      }
+    }
+    if (width_guards != 1u) return 0;
+    bounded = 1;
+  } else if (!arm64_scalar_postra_kint(v, ir_load_acq(&v->ir[alloc]).op2, &width)) {
     IRRef lenref = 0, endref = 0;
     IRRef widthref = ir_load_acq(&v->ir[alloc]).op2;
     IRRef q;
@@ -22611,6 +23009,75 @@ static int arm64_scalar_math_regsp_survives(RegSP rs, IRType type, MSize cap)
                           reg >= RID_X19 && reg <= RID_X28;
 }
 
+/* A CALLN result produced before IR_LOOP can be a PHI's incoming value for
+** the next iteration. The allocator may move that value to a preserved
+** register at the exact loop snapshot before the next body call. Validate
+** that specific rename rather than judging the original CALLN result's
+** caller-clobbered register. */
+static int arm64_scalar_math_loop_value_survives(
+                                      const LJArm64PostRAView *v, IRRef n,
+                                      IRRef value, IRRef loop, IRRef call,
+                                      MSize cap)
+{
+  IRRef ref;
+  MSize s, loop_snap = 0;
+  unsigned nsnap = 0, nrename = 0;
+  RegSP rs;
+  RegSP loop_rs = REGSP(RID_NONE, 0);
+  IRType type;
+  unsigned nphi = 0, nuse = 0;
+  IRIns body;
+  if (!v || !v->snap || !v->ir || value < REF_FIRST || value >= loop ||
+      loop < REF_FIRST || loop >= call || call >= n || n > v->nins ||
+      value >= v->nins || ir_load_acq(&v->ir[value]).o != IR_CALLN ||
+      irt_type(ir_load_acq(&v->ir[value]).t) != IRT_NUM)
+    return 0;
+  if (ir_load_acq(&v->ir[loop]).o != IR_LOOP) return 0;
+  body = ir_load_acq(&v->ir[call]);
+  if (body.o != IR_CALLN || irt_type(body.t) != IRT_NUM) return 0;
+  for (s = 0; s < v->nsnap; s++) {
+    if (snap_ref_acq(&v->snap[s]) == loop) {
+      loop_snap = s;
+      nsnap++;
+    }
+  }
+  if (nsnap != 1u) return 0;
+  for (ref = n; ref < v->nins; ref++) {
+    IRIns ren = ir_load_acq(&v->ir[ref]);
+    if (ren.o != IR_RENAME || ren.op1 != value || ren.op2 != loop_snap)
+      continue;
+    if (++nrename != 1u || ren.t.irt != IRT_NIL || ren.s != SPS_NONE)
+      return 0;
+    loop_rs = ren.prev;
+  }
+  if (nrename != 1u) return 0;
+  /* This exception is only for the initial CALLN value flowing into the
+  ** loop PHI whose backedge is the body CALLN. It cannot cover an ordinary
+  ** post-loop computation that happens to share the same snapshot rename. */
+  for (ref = loop+1u; ref < n; ref++) {
+    IRIns use = ir_load_acq(&v->ir[ref]);
+    IRMode mode;
+    int op1, op2;
+    if (use.o >= IR__MAX) return 0;
+    mode = lj_ir_mode[use.o];
+    op1 = irm_op1(mode) == IRMref && use.op1 == value;
+    op2 = irm_op2(mode) == IRMref && use.op2 == value;
+    if (!op1 && !op2) continue;
+    nuse++;
+    if (use.o != IR_PHI || !op1 || op2 || use.op2 != call ||
+        irt_type(use.t) != IRT_NUM)
+      return 0;
+    nphi++;
+  }
+  if (nuse != 1u || nphi != 1u) return 0;
+  rs = arm64_scalar_postra_snapshot_regsp(v, n, value, loop_snap);
+  if (rs != loop_rs || ra_hasspill(regsp_spill(rs)) ||
+      regsp_reg(rs) < RID_D8 || regsp_reg(rs) > RID_D15)
+    return 0;
+  type = (IRType)irt_type(ir_load_acq(&v->ir[value]).t);
+  return arm64_scalar_math_regsp_survives(rs, type, cap);
+}
+
 /* Reconstruct binary helper arguments from the allocated view independently
 ** of semantic admission. CARG itself has no value or allocation. */
 static int arm64_scalar_math_carg_postra(const LJArm64PostRAView *v,
@@ -22664,11 +23131,13 @@ static int arm64_scalar_math_live_across(const LJArm64PostRAView *v,
         arm64_scalar_ksimd_postra_fload(source, 1)) continue;
     for (ref = first; ref < n && !needed; ref++) {
       IRIns use = ir_load_acq(&v->ir[ref]);
+      if (use.o >= IR__MAX) return 0;
       IRMode mode = lj_ir_mode[use.o];
       needed = (irm_op1(mode) == IRMref && use.op1 == value) ||
                (irm_op2(mode) == IRMref && use.op2 == value);
     }
-    if (needed && !arm64_postra_value_survives_call(v, value, call, cap, 0))
+    if (needed && !arm64_postra_value_survives_call(v, value, call, cap, 0) &&
+        !arm64_scalar_math_loop_value_survives(v, n, value, loop, call, cap))
       return 0;
     for (s = 0; s < v->nsnap; s++) {
       const SnapShot *snap = &v->snap[s];
@@ -26093,6 +26562,11 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
 	  p.s != SPS_NONE)
 	return 0;
       break;
+    case IR_LREF:
+      if (side || type != IRT_THREAD || p.t.irt != IRT_THREAD ||
+          p.op12 || !arm64_scalar_tmpreset_postra(v, n))
+        return 0;
+      break;
     case IR_SLOAD:
       if (side && (p.op2 == (IRSLOAD_PARENT|IRSLOAD_INHERIT) ||
 	  p.op2 == (IRSLOAD_PARENT|IRSLOAD_READONLY|IRSLOAD_INHERIT))) {
@@ -26160,6 +26634,12 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
           p.op1 < REF_FIRST || p.op1 >= ref ||
           !arm64_string_sub_bounds_postra(v, p.op1)) return 0;
       break;
+    case IR_TOSTR:
+      if (side || (flags & ~IRT_ISPHI) || type != IRT_STR ||
+          p.op2 != IRTOSTR_NUM ||
+          !arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM))
+        return 0;
+      break;
     case IR_STRREF:
       if (p.t.irt != IRT_PGC ||
           (!arm64_string_byte_bounds_postra(v, ref, p.op1, p.op2) &&
@@ -26203,6 +26683,11 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       break;
     case IR_CALLS:
       {
+        if (!side && p.op2 == IRCALL_lj_buf_tmp_reset &&
+            p.t.irt == IRT_PGC && p.op1 < ref &&
+            arm64_scalar_postra_ref(v, p.op1, ref, IRT_THREAD) &&
+            arm64_scalar_tmpreset_postra(v, n))
+          break;
         if (side && (arm64_rooted_upvalue_call((IRCallID)p.op2) ||
                      arm64_rooted_cell_call((IRCallID)p.op2))) return 0;
         int effect = arm64_rooted_postra_effect(v, n, ref, root1, root2, root3);
@@ -26452,7 +26937,7 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       if (!firstphi)
         firstphi = ref;
       if (++nphi > LJ_MAX_PHI || !poll || flags ||
-          (type != IRT_INT && type != IRT_NUM &&
+          (type != IRT_INT && type != IRT_NUM && type != IRT_STR &&
            !arm64_rooted_gc_type(type) && type != IRT_LIGHTUD) ||
           p.op1 < REF_FIRST ||
           p.op1 >= loop || p.op2 < REF_FIRST || p.op2 >= firstphi)
@@ -26832,7 +27317,9 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
     if (rootop != BC_FORL && ir.o == IR_SLOAD &&
         ir.op1 >= snap_nslots_acq(&v->snap[s]))
       return 0;
-    if ((ir.o == IR_SNEW || ir.o == IR_CALLN || ir.o == IR_POW || ir.o == IR_LDEXP ||
+    if ((ir.o == IR_SNEW || ir.o == IR_TOSTR || ir.o == IR_CALLN || ir.o == IR_POW || ir.o == IR_LDEXP ||
+         (ir.o == IR_CALLS &&
+          ir.op2 == IRCALL_lj_buf_tmp_reset) ||
          (ir.o == IR_FPMATH && ir.op2 >= IRFPM_LOG)) &&
         !arm64_scalar_math_live_across(v, n, loop, ref, cap))
       return 0;

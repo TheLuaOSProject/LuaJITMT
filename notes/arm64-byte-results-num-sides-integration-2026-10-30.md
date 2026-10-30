@@ -367,3 +367,185 @@ binaries; those logs have the `corrected-boundary` suffix. This test-only edit
 does not change the production revision validated above. The complete gate
 running at `52efb731e` excludes this later slice, sequential leaves and numeric
 identity; the latest completed broad checkpoint remains `503c8ba2f`.
+
+
+## Fixed-pair raw byte snapshot integration
+
+Integrated `569e7ff5c` and tied the Lua companion's raw-load witnesses to the
+intended function at `9ebec6139`. The exact two-result `byte(s,1,2)` source
+CALL now independently binds its callee copy to the guarded function SLOAD,
+its argument window and two result lanes. Wrong builtin, changed callee copy,
+skipped setup, result-copy bypass, lower bound, lane and footer/map mutants
+are rejected in both passes. No allocator, emitter or locking change is added.
+
+The full byte contract passes all four native profiles at this integration.
+Log: `/Users/frityet/Scratch/ljmt-byte-pair-identity-integration-20261030/four-profiles.log`.
+Ordinary ARM64 restore profile:
+`84f644c927bb11d9d15923265d24fe9ac60d5e71113994f0cef6cd3dc95619a9`.
+The exact-source ordinary ARM64/strict-x86_64 matrix passes both 509-case stock
+corpora and every preceding inventory, byte, FFI, substring, sequential-leaf
+and numeric-identity probe. Saved evidence is under
+`/Users/frityet/Scratch/ljmt-byte-pair-identity-ordinary-20261030/`.
+Its fixed-pair probe witnesses selected root 1, two raw loads and 5,249 root
+exits per architecture, including post-peer-GC execution. Both architectures
+match short, empty, NUL/high-byte, wrong-type and independent branch outcomes.
+The probe asserts root/code identity after GC and those edge cases, rather
+than only printing it. It starts the peer before compilation; starting a
+thread afterward had retired the earlier exploratory trace.
+Ordinary ARM64 restore profile:
+`7358f693d5166ef42b8040544b5255bf1074b9027ffbf0542ac3a574c72341c0`.
+
+The preceding complete gate at `52efb731e` passed and was promoted to main.
+A new complete gate is frozen at `9ebec6139`, including sequential leaves,
+numeric identities, zero-first substrings and fixed-pair byte snapshots. It
+excludes the in-progress negative-first substring and child-side work.
+
+
+The captured substring callee was separately audited after the fixed-pair
+byte source-lineage repair. Replacing its UGET callee setup with KPRI nil is
+already rejected independently by both semantic and allocated validation for
+FORL, LOOP and omitted-end forms. `144843efa` retains those counterfactuals
+as assertions; no production change was needed. Diagnostic and asserted
+fixture logs are under
+`/Users/frityet/Scratch/ljmt-substring-call-lineage-audit-20261030/`.
+This test-only follow-up is outside the frozen `9ebec6139` complete gate.
+
+
+## Negative-first suffix and computed math integration
+
+At `f752aa882`, integrated `d87ab9d98` (negative literal first index with
+omitted or explicit -1 end) and `20db5e293` (computed math result preservation
+through the exact loop PHI). The substring fixture merge preserves normalized
+zero-first boundaries and derives negative-first boundaries from `-first`.
+The large -32768 result path checks HugeTab TRAVERSABLE and READY state;
+named negative-first default-end modes now test their named loop form.
+The math exception requires a preloop numeric CALLN, a body numeric CALLN,
+exactly one matching numeric PHI use, and the exact loop-snapshot RENAME to a
+preserved FP register. Other ordinary consumers keep the existing rule.
+
+Both integrated scalar and substring contracts passed all four ARM64/arm64e
+assertion/release profiles. Logs are in
+`/Users/frityet/Scratch/ljmt-negative-first-math-integration-20261030/`.
+Ordinary restores: scalar
+`1f7216335ceed820730f4fd129ccca431915c3f60adb4625ef5fcfca87ca848c`,
+substring
+`879b1a55d2e5ca9b8dffbf476197012601e938eb3aa8dfd33c7294be38911310`.
+
+The exact-source ordinary ARM64/strict-x86_64 matrix passes both stock corpora
+and all previous probes, plus 12 negative-first index/arity/loop combinations
+and computed-sin results in both loop forms. Saved binaries, JIT modules,
+archives and hashes are in
+`/Users/frityet/Scratch/ljmt-negative-first-math-ordinary-20261030/`.
+The stricter `computed-math-required.lua` probe additionally requires an actual
+loop root, nonempty mcode and increasing selected-root exits in each phase,
+including after GC. ARM64 FORL/while observed 83/84 exits in each phase; x64
+observed 5/5. Both retain identical code and match interpreted outputs. These
+counts prove selected native execution, not equal compilation coverage or
+performance for every input type. Negative-first probes assert SNEW, selected
+root exits after peer collection and code identity for all 12 combinations.
+Ordinary ARM64 restore profile:
+`514842a131ac00670c11e88d40d45d87acf4c70fbc065f6dc8024a2516f7fdb4`.
+The complete gate remains frozen at `9ebec6139`, excluding these later slices.
+
+
+The computed-sin exit-count difference was isolated to number mode rather
+than a new port defect. `lj_arch.h` defaults x64 to single-number mode and
+ARM64 to dual-number mode. In the input-resolved probe, integer zero causes
+79/80 guard-0 exits on ARM64 FORL/LOOP, while default x64 has one loop-end exit.
+An additional strict ordinary x64 build of exact `f752aa882` with
+`LUAJIT_NUMMODE=2` reproduces the ARM64 79/80 guard-0 exits and 83/84 phase
+totals, with matching results and retained code across GC. That isolated
+configuration comparison is saved in the ordinary evidence directory's
+`x86_64-dualnum/` bundle and `*-computed-math-exit-inputs.log` files. It does
+not replace the default x64 matrix or establish performance parity.
+
+
+## Both-negative substring endpoints
+
+Production source `0a04bdf1f` merges `278cabab1`, extending the negative-first
+range proof to fixed negative end indices. The same string length must feed
+both normalized indices, and the guarded difference must feed SNEW. The
+zero-first cold-boundary fix remains intact. The integrated substring contract
+passes all four profiles, including independent proof corruptions, fresh
+publication readiness and HugeTab header-inclusive size boundaries. Evidence:
+`/Users/frityet/Scratch/ljmt-negative-end-integrated-20261030/`.
+Ordinary ARM64 restore profile:
+`b8a15288a00109eaf801b23b80e6c2be48e533df54b162ae6e9488f4e69adc99`.
+
+The exact-source ordinary ARM64/strict-x86_64 matrix also passes both 509-case
+stock corpora and every preceding probe, with the stricter computed-math
+native assertions now part of the matrix itself. Fourteen both-negative
+endpoint/loop rows assert SNEW, selected-root execution after peer GC,
+boundary/type behavior and unchanged native code. An additional empty-result
+live-peer probe requires a loop root, nonempty machine code, selected exits
+before and after GC and unchanged code on both architectures. Its no-peer
+companion leaves JIT enabled and reproduces the distinct ARM64 UREFC refusal;
+results still match the interpreted oracle. Evidence and matching binaries:
+`/Users/frityet/Scratch/ljmt-negative-end-ordinary-20261030/`.
+Ordinary ARM64 restore profile:
+`ccee6637dd078338155ee3993cb3aa869a2b57b7c494146cba286f052cb63420`.
+
+The full gate at `9ebec6139` has passed and its promoted main branch has also
+passed an independent ordinary rebuild. The next full gate is frozen at
+`f752aa882`, which excludes the both-negative endpoint slice above and the
+ongoing numeric-concat, child-side and no-peer upvalue work. Full parity is
+still incomplete.
+
+## No-peer captured substring upvalue
+
+Production source `6ccf3a269` includes the bounded no-peer normalization from
+`67da4e268`: a closed, root-context read of captured `string.sub` uses the
+existing rooted helper and exact fast-function/source admission. The x64 raw
+upvalue path remains unchanged; ARM64 pays an additional helper read, whose
+overhead has not been benchmarked. Raw UREFC admission stays closed.
+
+The integrated rooted-upvalue contract passes all four profiles, including
+private proof mutations and the strengthened peer-transition test. That
+legacy contract does not restore a build itself; a separate ordinary ARM64
+rebuild and transition run passed afterward, with profile
+`28bc95e0783f4945c5c2824a3ee7071970851632410b77c53ee355bc42b64b79`.
+Evidence: `/Users/frityet/Scratch/ljmt-no-peer-upvalue-integrated-20261030/`.
+
+The exact-source ordinary ARM64/strict-x64 matrix passes both 509-case stock
+corpora and every preceding comparison. The four previously missing no-peer
+empty-substring rows now require actual loop roots, nonempty native code,
+selected exits before/after GC and unchanged code on both architectures.
+These rows establish selected-root execution, not full-body execution for
+every guard/input path. The separate ARM64 transition test observes 40 exits
+in each phase and checks a live current root before first peer activation,
+its retirement, and native re-entry after activation. Binaries, modules,
+hashes and logs: `/Users/frityet/Scratch/ljmt-no-peer-upvalue-ordinary-20261030/`.
+Ordinary ARM64 restore profile:
+`3254e2ae7826da1851590cbb114854c5132dc5c83da7b7a62d79e64d18743c5c`.
+This slice is outside the still-running complete gate at `f752aa882`.
+
+## Closed root-context upvalues on the refreshed SDK
+
+At `74a48b1b8`, the no-peer recorder normalization is generic for closed
+root-context UGETs, reusing the existing rooted helper and independent typed
+admission. The root merge retains the non-vacuous peer-retirement checks,
+adds native code identity through GC for both captured-function and numeric
+cell roots, disables the test harness/oracles recursively before enabling
+candidates, and makes byte/sub replacement functions return visibly different
+results. No raw UREFC/ULOAD or unsupported operation admission was opened.
+
+On Xcode 27.2/macOS SDK 27.2, the integrated rooted-upvalue contract passes
+all four ARM64/arm64e assertion/release profiles. The ordinary ARM64 rebuild
+also passed, profile
+`149b8ff00a04a3d744241000c7183bb3ae13322ca7d4436f7fca510e9382d21a`.
+Evidence: `/Users/frityet/Scratch/ljmt-closed-upvalue-integrated-sdk272-20261030/`.
+
+The exact-source ordinary ARM64/strict-x64 matrix passes both 509-case stock
+corpora, all preceding comparisons, nine closed-cell value/type cases and
+three captured builtin cases. ARM64 witnesses use rooted helpers with no
+UREFC; x64 keeps its existing raw representation. The scalar rows observe
+31 selected exits after collection, builtin rows 32; these counts are
+execution witnesses, not performance comparisons. The strengthened peer
+transition also passes. Evidence and matching binaries/modules:
+`/Users/frityet/Scratch/ljmt-closed-upvalue-ordinary-sdk272-20261030/`.
+Ordinary restore profile:
+`af033c43c939492cf6efae86bdb9693082562ba30e3be661efee19c9440f9f25`.
+
+The prior full gate at `f752aa882` stopped when its SDK path disappeared;
+see `arm64-sdk272-gate-restart-2026-10-30.md`. A new full gate is frozen at
+`74a48b1b8`. The last promoted complete checkpoint is still `9ebec6139`.

@@ -20,6 +20,20 @@ build_and_run() {
   LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" while
   LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" negative-forl
   LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" negative-while
+  for first in 1 4 32768; do
+    LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" "negative-first-$first-forl"
+    LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" "negative-first-$first-while"
+    LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" "negative-first-default-$first-forl"
+    LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" "negative-first-default-$first-while"
+  done
+  for pair in 1-1 4-2 4-3 4-4 32768-32768 32768-32767 32768-16385; do
+    LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" "negative-first-last-$pair-forl"
+    LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" "negative-first-last-$pair-while"
+  done
+  for pair in 4-5 4-6; do
+    LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" "negative-first-last-$pair-forl"
+    LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" "negative-first-last-$pair-while"
+  done
   LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" default-end
   LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" zero-forl
   LUA_PATH="$root/src/?.lua;;" lj_ci_run_fixture 120 "$fixture" "$root/tests/t-arm64-jit-string-sub.lua" zero-while

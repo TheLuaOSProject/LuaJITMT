@@ -21,21 +21,52 @@ local zero_first = substring_fixture_kind and
                    substring_fixture_kind:sub(1, 5) == 'zero-'
 local fixture_body = zero_first and substring_fixture_kind:sub(6) or
                      substring_fixture_kind
+local negative_first = fixture_body and
+                       fixture_body:sub(1, 15) == 'negative-first-'
+local negative_first_value, negative_first_last_value, negative_first_kind
+if negative_first then
+  local first_value, last_value, kind =
+    fixture_body:match('^negative%-first%-last%-(%d+)%-(%d+)%-(%w+)$')
+  if first_value then
+    negative_first_value, negative_first_last_value, negative_first_kind =
+      first_value, last_value, kind
+  else
+    first_value, kind = fixture_body:match('^negative%-first%-default%-(%d+)%-(%w+)$')
+    if first_value then
+      negative_first_value, negative_first_last_value, negative_first_kind =
+        first_value, '1', kind
+    else
+      first_value, kind = fixture_body:match('^negative%-first%-(%d+)%-(%w+)$')
+      negative_first_value, negative_first_last_value, negative_first_kind =
+        first_value, '1', kind
+    end
+  end
+end
+local negative_first_index = negative_first_value and -tonumber(negative_first_value)
+local negative_first_last = negative_first_last_value and -tonumber(negative_first_last_value)
 local negative = fixture_body and fixture_body:sub(1, 9) == 'negative-'
-local default_end = fixture_body == 'default-end'
-local fixture_kind = negative and fixture_body:sub(10) or fixture_body
+local default_end = fixture_body == 'default-end' or
+                    (negative_first and fixture_body:find('^negative%-first%-default%-') ~= nil)
+local fixture_kind = fixture_body
+if negative_first then
+  fixture_kind = negative_first_kind
+elseif negative then
+  fixture_kind = fixture_body:sub(10)
+end
 local kinds = substring_fixture_kind and {
-  default_end and 'forl' or fixture_kind
+  fixture_kind
 } or {'forl', 'while'}
-if default_end then kinds = {'forl', 'while'} end
-local starts = zero_first and {0} or
+if fixture_body == 'default-end' then kinds = {'forl', 'while'} end
+local starts = negative_first and {negative_first_index} or
+               (zero_first and {0} or
                (negative and {1, 2} or
                (default_end and {1, 2} or
-                (substring_fixture_kind and {2} or {1, 2})))
-local widths = negative and {-1, -2, -4} or
+                (substring_fixture_kind and {2} or {1, 2}))))
+local widths = negative_first and {negative_first_last} or
+               (negative and {-1, -2, -4} or
                (default_end and {0} or
                (substring_fixture_kind and {3} or {1, 2, 3, 8})
-               )
+               ))
 for _, kind in ipairs(kinds) do
   for _, first in ipairs(starts) do
     for _, width in ipairs(widths) do
@@ -45,7 +76,8 @@ for _, kind in ipairs(kinds) do
                    'local i=0;while i<n do i=i+1;'
       -- Keep the initial result tag stable so a while-loop entry can allocate
       -- before any interpreter iteration interns the same substring.
-      local last = negative and width or (math.max(1, first)+width-1)
+      local last = negative_first and negative_first_last or
+                   (negative and width or (math.max(1, first)+width-1))
       local source = 'local sub=string.sub;return function(s,n)local r=s;' ..
         loop .. 'r=' .. (default_end and
           ('sub(s,' .. first .. ')') or
@@ -56,13 +88,46 @@ for _, kind in ipairs(kinds) do
       jit.off(chunk, true)
       local oracle = chunk()
       jit.off(oracle, true)
+      if negative_first and negative_first_last_value and
+         negative_first_last < negative_first_index then
+        jit.on(f, true)
+        local s = 'a\0\255bcdef'
+        for i = 1, 80 do
+          assert(f(s, 80) == '' and f(s, 80) == oracle(s, 80))
+        end
+        for _, value in ipairs({'', 'x', 'abc', false, {}, 12345}) do
+          local ok, actual = pcall(f, value, 80)
+          local expected_ok, expected = pcall(oracle, value, 80)
+          assert(ok == expected_ok and (not ok or actual == expected))
+        end
+        local root
+        for pc = 0, util.funcinfo(f).bytecodes-1 do
+          local ins = util.funcbc(f, pc)
+          if ins then
+            local op = bit.band(ins, 255)
+            local name = vmdef.bcnames:sub(op*6+1, op*6+6)
+            if name == 'JLOOP ' or name == 'JFORL ' then
+              root = bit.rshift(ins, 16)
+            end
+          end
+        end
+        assert(stop:send(true, 5))
+        assert(peer:join(5))
+        print(jit.arch, kind, 'reversed-end fallback', -first, -last,
+              'candidate-JIT-on', 'root=' .. tostring(root))
+        return
+      end
       jit.on(f, true)
       if substring_fixture_kind then
         substring_trace_clone = assert(loadstring(source))()
       end
 
       local s, root
-      if negative then
+      if negative_first then
+        local boundary = -first
+        s = ('a\0\255' .. string.rep('bcdef', math.floor((boundary+9)/5)))
+              :sub(1, boundary+4)
+      elseif negative then
         s = ('a\0\255bcdef'):sub(1, first+1-width)
       else
         s = 'a\0\255bcdefghijklmnopqrstuvwxyz'
@@ -108,8 +173,9 @@ for _, kind in ipairs(kinds) do
         end
         assert(exits > before, 'no selected root exits ' .. kind ..
           ' first=' .. first .. ' width=' .. width .. ' phase=' .. phase)
-        local boundary = negative and (math.max(1, first)-last-2) or
-                         (default_end and #s or math.max(1, first)+width-1)
+        local boundary = negative_first and -first or
+                         (negative and (math.max(1, first)-last-2) or
+                         (default_end and #s or math.max(1, first)+width-1))
         for _, value in ipairs({'', 'x', 'xy',
                                 s:sub(1, math.max(0, boundary-1)),
                                 s:sub(1, boundary), s:sub(1, boundary+1),
@@ -129,8 +195,9 @@ for _, kind in ipairs(kinds) do
       local fresh = {}
       assert(stop:send('gc', 5))
       for i = 1, 48 do
-        local input = default_end and (s .. kind .. string.char(i)) or
-                      (string.char(i, 93, first, (i*7)%256) .. s)
+        local input = (negative_first or default_end) and
+                      (s .. kind .. string.char(i, 93, (i*7)%256)) or
+                      (string.char(i, 93, math.abs(first)%256, (i*7)%256) .. s)
         local actual, expected = f(input, 80), oracle(input, 80)
         assert(actual == expected)
         fresh[i] = {actual, expected}

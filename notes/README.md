@@ -18,20 +18,20 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
-- Current verified production checkpoint: `9ebec6139`. It adds sequential
-  pure Lua leaf branches, numeric identity builtins, zero-first substrings and
-  guarded fixed-pair byte snapshots to `52efb731e`. No locks are added. The
-  complete combined gate passes, including all four M7 FFI profiles and actual
-  VM/recorder safepoint runtime execution, and restores ordinary assertion
-  ARM64 without test helpers. Matching ordinary ARM64 and strict x86_64
-  builds pass both 509-case stock corpora and the expanded native matrix.
-  See the
-  [complete sequential/identity/byte checkpoint](arm64-sequential-identity-byte-complete-checkpoint-2026-10-30.md)
-  and [preceding substring checkpoint](arm64-negative-default-substrings-complete-checkpoint-2026-10-30.md).
-  Negative-first substrings and computed math-result preservation have later
-  focused integration evidence. Child-frame side traces, general Lua
-  calls/returns, recursion, protected calls and remaining FFI restrictions
-  still prevent full x86_64 parity.
+- Current verified production checkpoint: `68c122f2a`. It adds negative-first
+  and both-negative substring bounds, computed math-result preservation,
+  generic closed root-upvalue normalization, and bounded numeric concatenation
+  to `9ebec6139`. No locks are added. The complete combined gate passes on
+  Xcode 27.2, including all four M7 FFI profiles and actual VM/recorder safepoint
+  runtime execution, and restores ordinary assertion ARM64 without helpers.
+  Matching ordinary ARM64 and strict x86_64 builds pass both 509-case stock
+  corpora and the expanded native matrix. See the
+  [numeric concat and closed-upvalue checkpoint](arm64-numeric-concat-closed-upvalue-complete-checkpoint-2026-10-30.md)
+  and [preceding sequential/identity/byte checkpoint](arm64-sequential-identity-byte-complete-checkpoint-2026-10-30.md).
+  Integer formatting, integer modulo and child-return recording have later
+  focused evidence on the integration branch. Child-frame side publication,
+  general Lua calls/returns, recursion, protected calls and remaining FFI
+  restrictions still prevent full x86_64 parity.
 
 ## Earlier checkpoint records
 
