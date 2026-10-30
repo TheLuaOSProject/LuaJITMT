@@ -153,6 +153,11 @@ typedef struct LJArm64SideIRView {
   IRRef parent_root_forl_snapref;
   IRRef parent_root_forl_nins;
   uint8_t parent_root_forl_range_valid;
+  /* A NUM FORL side reuses the root's already certified literal step. The
+  ** value is copied while the root body is protected and remains tied to
+  ** parent_generation/root_generation. Dynamic steps stay closed here. */
+  lua_Number parent_num_forl_step;
+  uint8_t parent_num_forl_valid;
   TraceNo link;
   ExitNo exitno;
   BCIns startins;
@@ -196,6 +201,8 @@ typedef struct LJArm64SideParentSnapshot {
   IRRef parent_root_forl_snapref;
   IRRef parent_root_forl_nins;
   uint8_t parent_root_forl_range_valid;
+  lua_Number parent_num_forl_step;
+  uint8_t parent_num_forl_valid;
   const BCIns *continuation;
   /* Root-loop source and bounded executable body interval. */
   BCIns startins;

@@ -319,6 +319,118 @@ int main(void)
   assert(lj_trace_test_exit_calls() > 0 &&
          lj_trace_test_exit_calls() <= 2u*100u);
 
+  /* A NUM FORL root may publish a direct scalar side only after the child
+  ** independently proves its literal index update, stop comparison and
+  ** loop-boundary snapshot. The copied-view helper mutates the real child and
+  ** requires both semantic and post-RA rejection before runtime reuse. */
+  run(L,
+    "jit.flush(); jit.opt.start('hotloop=1','hotexit=1','maxtrace=128'); "
+    "numeric_side_kernel=function(mode,n) local sum=.5 "
+    "for i=.5,n,.5 do if mode==1 then sum=sum+i*.25 "
+    "else sum=sum-i*.5 end end return sum end; "
+    "for k=1,100 do assert(numeric_side_kernel(1,48)==582.5) end");
+  {
+    GCproto *numeric_pt;
+    GCtrace *numeric_root, *numeric_side;
+    TraceNo numeric_parentno = 0;
+    lua_getglobal(L, "numeric_side_kernel");
+    assert(lua_isfunction(L, -1) && isluafunc(funcV(L->top-1)));
+    numeric_pt = funcproto(funcV(L->top-1));
+    lua_pop(L, 1);
+    numeric_root = find_root_for_proto(J, numeric_pt);
+    assert(numeric_root != NULL);
+    assert(trace_arm64_admission_acq(numeric_root) ==
+           (TRACE_ARM64_NUM_FORL_ADMITTED|TRACE_ARM64_NUM_FORL_ASCENDING));
+    assert(trace_nchild_acq(numeric_root) == 0);
+    run(L, "for k=1,100 do assert(numeric_side_kernel(2,48)==-1163.5) end");
+    numeric_parentno = trace_traceno_acq(numeric_root);
+    numeric_side = NULL;
+    {
+      MSize trace_no;
+      for (trace_no = 1; trace_no < trace_sizetrace_acq(J); trace_no++) {
+        GCtrace *candidate = traceref_safe(J, (TraceNo)trace_no);
+        if (trace_runnable_acq(candidate, (TraceNo)trace_no) &&
+            trace_root_acq(candidate) == numeric_parentno &&
+            trace_link_acq(candidate) == numeric_parentno &&
+            trace_linktype_acq(candidate) == LJ_TRLINK_ROOT) {
+          numeric_side = candidate;
+          break;
+        }
+      }
+    }
+    assert(numeric_side != NULL);
+    assert(trace_root_acq(numeric_side) == numeric_parentno);
+    assert(trace_arm64_admission_acq(numeric_side) ==
+           TRACE_ARM64_INT_SIDE_ADMITTED);
+    {
+      uint32_t contract = lj_trace_test_arm64_side_scalar_copy_contract(
+        J, trace_traceno_acq(numeric_side));
+      /* Bits for the INT-only link-kind and SLOAD-flag no-op mutations are
+      ** intentionally absent; the four numeric update/bound/source/snapshot
+      ** mutations are the high bits and must reject in both passes. */
+      if (contract != 0x1fdefu)
+        fprintf(stderr, "numeric FORL copied contract=%#x\n", contract);
+      assert(contract == 0x1fdefu);
+    }
+    lj_trace_test_reset_exit_stats();
+    run(L, "for k=1,100 do assert(numeric_side_kernel(2,48)==-1163.5) end; "
+           "collectgarbage('collect'); "
+           "for k=1,100 do assert(numeric_side_kernel(2,48)==-1163.5) end");
+    assert(lj_trace_test_exit_calls() > 0);
+    run(L, "jit.flush(); "
+           "for k=1,20 do assert(numeric_side_kernel(2,48)==-1163.5) end");
+  }
+
+  /* The descending NUM mode uses the mirror update/ordered bound. Keep a
+  ** separate source prototype so its root admission and cold side edge are
+  ** independently published and checked. */
+  run(L,
+    "jit.flush(); jit.opt.start('hotloop=1','hotexit=1','maxtrace=128'); "
+    "numeric_side_desc_kernel=function(mode,n) local sum=.5 "
+    "for i=48,n,-.5 do if mode==1 then sum=sum+i*.25 "
+    "else sum=sum-i*.5 end end return sum end; "
+    "for k=1,100 do assert(numeric_side_desc_kernel(1,.5)==582.5) end");
+  {
+    GCproto *numeric_pt;
+    GCtrace *numeric_root, *numeric_side;
+    TraceNo numeric_parentno;
+    MSize trace_no;
+    lua_getglobal(L, "numeric_side_desc_kernel");
+    assert(lua_isfunction(L, -1) && isluafunc(funcV(L->top-1)));
+    numeric_pt = funcproto(funcV(L->top-1));
+    lua_pop(L, 1);
+    numeric_root = find_root_for_proto(J, numeric_pt);
+    assert(numeric_root != NULL);
+    assert(trace_arm64_admission_acq(numeric_root) ==
+           (TRACE_ARM64_NUM_FORL_ADMITTED|TRACE_ARM64_NUM_FORL_DESCENDING));
+    assert(trace_nchild_acq(numeric_root) == 0);
+    run(L, "for k=1,100 do assert(numeric_side_desc_kernel(2,.5)==-1163.5) end");
+    numeric_parentno = trace_traceno_acq(numeric_root);
+    numeric_side = NULL;
+    for (trace_no = 1; trace_no < trace_sizetrace_acq(J); trace_no++) {
+      GCtrace *candidate = traceref_safe(J, (TraceNo)trace_no);
+      if (trace_runnable_acq(candidate, (TraceNo)trace_no) &&
+          trace_root_acq(candidate) == numeric_parentno &&
+          trace_link_acq(candidate) == numeric_parentno &&
+          trace_linktype_acq(candidate) == LJ_TRLINK_ROOT) {
+        numeric_side = candidate;
+        break;
+      }
+    }
+    assert(numeric_side != NULL);
+    assert(trace_arm64_admission_acq(numeric_side) ==
+           TRACE_ARM64_INT_SIDE_ADMITTED);
+    assert(lj_trace_test_arm64_side_scalar_copy_contract(
+	J, trace_traceno_acq(numeric_side)) == 0x1fdefu);
+    lj_trace_test_reset_exit_stats();
+    run(L, "for k=1,100 do assert(numeric_side_desc_kernel(2,.5)==-1163.5) end; "
+           "collectgarbage('collect'); "
+           "for k=1,100 do assert(numeric_side_desc_kernel(2,.5)==-1163.5) end");
+    assert(lj_trace_test_exit_calls() > 0);
+    run(L, "jit.flush(); "
+           "for k=1,20 do assert(numeric_side_desc_kernel(2,.5)==-1163.5) end");
+  }
+
   /* A later type mismatch must leave the immutable child generation cleanly
   ** and preserve ordinary Lua arithmetic errors. */
   run(L, "local ok,err=pcall(kernel,64,true); "

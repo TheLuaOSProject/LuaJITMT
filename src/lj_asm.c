@@ -7,6 +7,9 @@
 #define LUA_CORE
 
 #include "lj_obj.h"
+#if defined(LJ_TRACE_TEST_HELPERS)
+#include <stdio.h>
+#endif
 
 #if LJ_HASJIT
 
@@ -252,6 +255,8 @@ static void asm_arm64_side_ir_view_init(const jit_State *J,
     view->parent_root_forl_nins = parent_snapshot->parent_root_forl_nins;
     view->parent_root_forl_range_valid =
 	parent_snapshot->parent_root_forl_range_valid;
+    view->parent_num_forl_step = parent_snapshot->parent_num_forl_step;
+    view->parent_num_forl_valid = parent_snapshot->parent_num_forl_valid;
   }
   view->link = trace_link_acq((GCtrace *)T);
   view->exitno = exitno;
@@ -2510,8 +2515,9 @@ static void asm_head_side(ASMState *as)
     IRRef validated_semantic_nins;
     asm_arm64_side_parent_result(as->J,
 	lj_trace_arm64_side_parent_revalidate(as->J));
-    if (LJ_UNLIKELY(as->parent != as->J->arm64_side_parent.body))
+    if (LJ_UNLIKELY(as->parent != as->J->arm64_side_parent.body)) {
       lj_trace_err(as->J, LJ_TRERR_RETRY);
+    }
     asm_arm64_side_postra_view_init(as, NULL, 0, &prehead);
 
 
