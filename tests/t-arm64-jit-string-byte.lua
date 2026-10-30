@@ -6,7 +6,7 @@ local bit = require('bit')
 
 assert(jit.status(), 'JIT is required')
 jit.flush()
-jit.opt.start('hotloop=1', 'hotexit=1000', 'maxtrace=4')
+jit.opt.start('hotloop=1', 'hotexit=1000', 'maxtrace=8')
 
 string_byte_trace = function(s, n)
   local byte = string.byte
@@ -39,6 +39,34 @@ end
 string_byte_dynamic_trace_clone = function(s, n, index)
   local byte = string.byte
   local i, sum = 1, 0
+  while i <= n do sum = sum + byte(s, index); i = i + 1 end
+  return sum
+end
+
+string_byte_integer_trace = function(s, n, index)
+  local byte = string.byte
+  local i, sum = 1, 0.5
+  while i <= n do sum = sum + byte(s, index); i = i + 1 end
+  return sum
+end
+
+string_byte_integer_oracle = function(s, n, index)
+  local byte = string.byte
+  local i, sum = 1, 0.5
+  while i <= n do sum = sum + byte(s, index); i = i + 1 end
+  return sum
+end
+
+string_byte_negative_integer_trace = function(s, n, index)
+  local byte = string.byte
+  local i, sum = 1, 0.5
+  while i <= n do sum = sum + byte(s, index); i = i + 1 end
+  return sum
+end
+
+string_byte_negative_integer_oracle = function(s, n, index)
+  local byte = string.byte
+  local i, sum = 1, 0.5
   while i <= n do sum = sum + byte(s, index); i = i + 1 end
   return sum
 end
@@ -79,6 +107,13 @@ local function has_bounded_byte_load()
 end
 jit.off(has_bounded_byte_load, true)
 assert(has_bounded_byte_load(), 'trace omitted bounded string byte IR')
+
+jit.off(string_byte_integer_oracle, true)
+jit.off(string_byte_negative_integer_oracle, true)
+assert(string_byte_integer_trace(s, 80, 2) ==
+       string_byte_integer_oracle(s, 80, 2))
+assert(string_byte_negative_integer_trace(s, 80, -2) ==
+       string_byte_negative_integer_oracle(s, 80, -2))
 
 collectgarbage('collect')
 assert(string_byte_trace(s, 80) == 99 * 80)

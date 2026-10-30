@@ -10879,9 +10879,16 @@ static int arm64_string_byte_bounds_ir(const GCtrace *T, IRRef strref,
 static int arm64_string_byte_dynamic_index_ir(const GCtrace *T, IRRef conv)
 {
   IRRef ref;
-  if (!T || conv < REF_FIRST || conv >= T->nins ||
-      T->ir[conv].o != IR_CONV || T->ir[conv].t.irt != IRT_INT ||
-      T->ir[conv].op2 != (IRCONV_INT_NUM|IRCONV_ANY)) return 0;
+  const IRIns *index;
+  if (!T || conv < REF_FIRST || conv >= T->nins) return 0;
+  index = &T->ir[conv];
+  if (index->o == IR_SLOAD && index->t.irt == (IRT_INT|IRT_GUARD)) {
+    if (index->op2 != IRSLOAD_TYPECHECK ||
+        !arm64_scalar_ir_ref(T, conv, conv+1u, IRT_INT)) return 0;
+  } else if (index->o != IR_CONV || index->t.irt != IRT_INT ||
+             index->op2 != (IRCONV_INT_NUM|IRCONV_ANY)) {
+    return 0;
+  }
   for (ref = conv+1u; ref < T->nins; ref++) {
     const IRIns *strref = &T->ir[ref];
     const IRIns *offset;
@@ -10961,14 +10968,19 @@ static int arm64_string_byte_dynamic_bounds_ir(const GCtrace *T,
   }
   if (idx < REF_FIRST || idx >= offset) return 0;
   conv = &T->ir[idx];
-  if (conv->o != IR_CONV || conv->t.irt != IRT_INT ||
-      conv->op2 != (IRCONV_INT_NUM|IRCONV_ANY) ||
-      conv->op1 < REF_FIRST || conv->op1 >= idx)
-    return 0;
-  source = &T->ir[conv->op1];
-  if (source->o != IR_SLOAD || source->t.irt != (IRT_NUM|IRT_GUARD) ||
-      source->op2 != IRSLOAD_TYPECHECK)
-    return 0;
+  if (conv->o == IR_SLOAD && conv->t.irt == (IRT_INT|IRT_GUARD)) {
+    if (!arm64_scalar_ir_ref(T, idx, offset, IRT_INT)) return 0;
+    source = conv;
+  } else {
+    if (conv->o != IR_CONV || conv->t.irt != IRT_INT ||
+        conv->op2 != (IRCONV_INT_NUM|IRCONV_ANY) ||
+        conv->op1 < REF_FIRST || conv->op1 >= idx)
+      return 0;
+    source = &T->ir[conv->op1];
+    if (source->o != IR_SLOAD || source->t.irt != (IRT_NUM|IRT_GUARD))
+      return 0;
+  }
+  if (source->op2 != IRSLOAD_TYPECHECK) return 0;
   if (str < REF_FIRST || str >= strref || T->ir[str].o != IR_SLOAD ||
       T->ir[str].t.irt != (IRT_STR|IRT_GUARD) ||
       T->ir[str].op2 != IRSLOAD_TYPECHECK)
@@ -17407,13 +17419,18 @@ static int arm64_string_byte_dynamic_bounds_postra(
     idx = sub.op1;
   }
   conv = ir_load_acq(&v->ir[idx]);
-  if (conv.o != IR_CONV || conv.t.irt != IRT_INT ||
-      conv.op2 != (IRCONV_INT_NUM|IRCONV_ANY) ||
-      conv.op1 < REF_FIRST || conv.op1 >= idx) return 0;
-  source = ir_load_acq(&v->ir[conv.op1]);
-  if (source.o != IR_SLOAD || source.t.irt != (IRT_NUM|IRT_GUARD) ||
-      source.op2 != IRSLOAD_TYPECHECK ||
-      !arm64_scalar_postra_ref(v, conv.op1, idx, IRT_NUM)) return 0;
+  if (conv.o == IR_SLOAD && conv.t.irt == (IRT_INT|IRT_GUARD)) {
+    if (!arm64_scalar_postra_ref(v, idx, offset, IRT_INT)) return 0;
+    source = conv;
+  } else {
+    if (conv.o != IR_CONV || conv.t.irt != IRT_INT ||
+        conv.op2 != (IRCONV_INT_NUM|IRCONV_ANY) ||
+        conv.op1 < REF_FIRST || conv.op1 >= idx) return 0;
+    source = ir_load_acq(&v->ir[conv.op1]);
+    if (source.o != IR_SLOAD || source.t.irt != (IRT_NUM|IRT_GUARD) ||
+        !arm64_scalar_postra_ref(v, conv.op1, idx, IRT_NUM)) return 0;
+  }
+  if (source.op2 != IRSLOAD_TYPECHECK) return 0;
   if (str < REF_FIRST || str >= strref) return 0;
   string = ir_load_acq(&v->ir[str]);
   if (string.o != IR_SLOAD || string.t.irt != (IRT_STR|IRT_GUARD) ||
@@ -17491,8 +17508,14 @@ static int arm64_string_byte_dynamic_index_postra(
   IRIns conversion;
   if (!v || conv < REF_FIRST || conv >= v->nins) return 0;
   conversion = ir_load_acq(&v->ir[conv]);
-  if (conversion.o != IR_CONV || conversion.t.irt != IRT_INT ||
-      conversion.op2 != (IRCONV_INT_NUM|IRCONV_ANY)) return 0;
+  if (conversion.o == IR_SLOAD &&
+      conversion.t.irt == (IRT_INT|IRT_GUARD)) {
+    if (conversion.op2 != IRSLOAD_TYPECHECK ||
+        !arm64_scalar_postra_ref(v, conv, conv+1u, IRT_INT)) return 0;
+  } else if (conversion.o != IR_CONV || conversion.t.irt != IRT_INT ||
+             conversion.op2 != (IRCONV_INT_NUM|IRCONV_ANY)) {
+    return 0;
+  }
   for (ref = conv+1u; ref < v->nins; ref++) {
     IRIns strref = ir_load_acq(&v->ir[ref]);
     IRIns offset;

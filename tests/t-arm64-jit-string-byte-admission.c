@@ -98,6 +98,28 @@ static int call_dynamic_loop(lua_State *L, const char *function_global,
                                  index, out);
 }
 
+static int call_integer_index_loop(lua_State *L, const char *function_global,
+                                   const char *string_global,
+                                   lua_Number index, int integer,
+                                   lua_Number *out)
+{
+  int status;
+  lua_getglobal(L, function_global);
+  lua_getglobal(L, string_global);
+  lua_pushinteger(L, 80);
+  if (integer) lua_pushinteger(L, (lua_Integer)index);
+  else lua_pushnumber(L, index);
+  status = lua_pcall(L, 3, 1, 0);
+  if (status == LUA_OK) {
+    assert(lua_isnumber(L, -1));
+    *out = lua_tonumber(L, -1);
+  } else {
+    assert(lua_isstring(L, -1));
+  }
+  lua_pop(L, 1);
+  return status;
+}
+
 static int kint(const IRIns *ir, IRRef nk, IRRef ref, int32_t *value)
 {
   IRRef r;
@@ -358,6 +380,149 @@ static void test_dynamic_range_byte(lua_State *L, lua_Number recorded_end,
          "GC/code reuse, six independent range negatives\n",recorded_end);
 }
 
+static void test_integer_dynamic_index(lua_State *L, int negative)
+{
+  Arm64TraceFixture f;
+  const char *fn = negative ? "string_byte_integer_negative_trace" :
+                              "string_byte_integer_trace";
+  const char *clone = negative ? "string_byte_integer_negative_clone" :
+                                 "string_byte_integer_clone";
+  const char *oracle = negative ? "string_byte_integer_negative_oracle" :
+                                 "string_byte_integer_oracle";
+  lua_Integer recorded = negative ? -2 : 2;
+  lua_Number actual = 0.0, expected = 0.0;
+  TraceNo no;
+  GCtrace *owner;
+  MCode *code;
+  MSize codesize;
+  unsigned char *saved;
+  IRRef source = 0, offset = 0, len = 0, upper = 0, nonneg = 0;
+  IRRef subov = 0, width = 0, strref = 0, r;
+  static const lua_Integer positive_cases[] = { 1, 2, 11, 0, -1 };
+  static const lua_Integer negative_cases[] = { -1, -2, -11, 0,
+                                                 (lua_Integer)INT32_MIN };
+  const lua_Integer *cases = negative ? negative_cases : positive_cases;
+  size_t ncases = negative ? sizeof(negative_cases)/sizeof(negative_cases[0]) :
+                             sizeof(positive_cases)/sizeof(positive_cases[0]);
+
+  assert(call_integer_index_loop(L, fn, "string_byte_value",
+                                 (lua_Number)recorded, 1, &actual) == LUA_OK);
+  lua_getglobal(L, fn);
+  assert(lua_isfunction(L, -1) && isluafunc(funcV(L->top-1)));
+  no = proto_trace_acq(funcproto(funcV(L->top-1)));
+  lua_pop(L, 1);
+  owner = traceref_safe(L2J(L), no);
+  assert(no && owner && trace_runnable_acq(owner, no) &&
+         bc_op(trace_startins_acq(owner)) == BC_LOOP);
+  code = trace_mcode_acq(owner); codesize = trace_szmcode_acq(owner);
+  assert(code && codesize);
+  saved = (unsigned char *)malloc(codesize); assert(saved);
+  memcpy(saved, code, codesize);
+
+  for (unsigned phase=0; phase<2; phase++) {
+    if (phase) lua_gc(L, LUA_GCCOLLECT, 0);
+    for (size_t i=0; i<ncases; i++) {
+      int expected_status = call_integer_index_loop(L, oracle,
+          "string_byte_value", (lua_Number)cases[i], 1, &expected);
+      uint32_t entries = lj_trace_test_root_entry_successes();
+      uint32_t exits = lj_trace_test_exit_calls();
+      int actual_status = call_integer_index_loop(L, fn,
+          "string_byte_value", (lua_Number)cases[i], 1, &actual);
+      assert(actual_status == expected_status &&
+             (actual_status != LUA_OK || actual == expected));
+      assert(lj_trace_test_root_entry_successes() > entries &&
+             lj_trace_test_exit_calls() > exits &&
+             lj_trace_test_last_exit_parent() == no);
+    }
+    assert(call_integer_index_loop(L, fn, "string_byte_value",
+                                   (lua_Number)recorded, 1,
+                                   &actual) == LUA_OK);
+    assert(trace_runnable_acq(owner, no) && trace_mcode_acq(owner) == code &&
+           trace_szmcode_acq(owner) == codesize &&
+           memcmp(saved, code, codesize) == 0);
+  }
+  {
+    lua_Number fractional = negative ? -2.9 : 2.9;
+    int expected_status = call_integer_index_loop(L, oracle,
+        "string_byte_value", fractional, 0, &expected);
+    uint32_t entries = lj_trace_test_root_entry_successes();
+    uint32_t exits = lj_trace_test_exit_calls();
+    int actual_status = call_integer_index_loop(L, fn,
+        "string_byte_value", fractional, 0, &actual);
+    assert(actual_status == expected_status &&
+           (actual_status != LUA_OK || actual == expected));
+    assert(lj_trace_test_root_entry_successes() > entries &&
+           lj_trace_test_exit_calls() > exits &&
+           lj_trace_test_last_exit_parent() == no);
+  }
+
+  arm64_fixture_init_trace(&f, L, clone, no);
+  f.view.proto = trace_startpt_acq(f.owner);
+  assert(semantic(&f) && allocated(&f));
+  for (r=REF_FIRST; r<f.semantic_nins; r++) {
+    if (f.ir[r].o == IR_STRREF) strref = r;
+  }
+  assert(strref);
+  offset = f.ir[strref].op2;
+  if (negative) {
+    IRRef left = f.ir[offset].op1, right = f.ir[offset].op2;
+    if (left >= REF_FIRST && left < offset && f.ir[left].o == IR_FLOAD)
+      len = left, source = right;
+    else if (right >= REF_FIRST && right < offset && f.ir[right].o == IR_FLOAD)
+      len = right, source = left;
+    assert(len && source >= REF_FIRST && source < offset);
+  } else {
+    assert(f.ir[offset].o == IR_ADDOV);
+    source = f.ir[offset].op1;
+  }
+  assert(source >= REF_FIRST && source < offset &&
+         f.ir[source].o == IR_SLOAD &&
+         f.ir[source].t.irt == (IRT_INT|IRT_GUARD) &&
+         f.ir[source].op2 == IRSLOAD_TYPECHECK);
+  for (r=REF_FIRST; r<offset; r++) {
+    IRIns *ir=&f.ir[r];
+    if (negative && ir->o == IR_LT && ir->op1 == source)
+      upper = r;
+    if (!negative && ((ir->o == IR_ULE && ir->op1 == source) ||
+                      (ir->o == IR_UGE && ir->op2 == source)))
+      upper = r;
+  }
+  for (r=offset+1u; r<strref; r++) {
+    IRIns *ir=&f.ir[r];
+    if (ir->o == IR_GE && ir->op1 == offset) nonneg = r;
+    if (ir->o == IR_SUBOV && ir->t.irt == (IRT_INT|IRT_GUARD)) subov = r;
+    if (ir->o == IR_EQ && ir->t.irt == (IRT_INT|IRT_GUARD) &&
+        subov && ir->op1 == subov) width = r;
+  }
+  assert(upper && nonneg && subov && width &&
+         lj_asm_arm64_test_string_byte_dynamic_index_ir(&f.semantic, source) &&
+         lj_asm_arm64_test_string_byte_dynamic_index_postra(&f.view, source));
+#define REJECT_INT_INDEX(change) do { \
+  arm64_fixture_reset(&f); assert(semantic(&f) && allocated(&f)); \
+  change; assert(!semantic(&f) && !allocated(&f)); \
+} while (0)
+  REJECT_INT_INDEX(f.ir[source].op2 = IRSLOAD_READONLY;
+                   f.postra[source].op2 = IRSLOAD_READONLY);
+  REJECT_INT_INDEX(f.ir[source].op1 = f.ir[strref].op1;
+                   f.postra[source].op1 = f.postra[strref].op1);
+  REJECT_INT_INDEX(f.ir[source].t.irt = IRT_NUM|IRT_GUARD;
+                   f.postra[source].t.irt = IRT_NUM|IRT_GUARD);
+  REJECT_INT_INDEX(f.ir[upper].t.irt &= (uint8_t)~IRT_GUARD;
+                   f.postra[upper].t.irt &= (uint8_t)~IRT_GUARD);
+  REJECT_INT_INDEX(f.ir[nonneg].op1 = source;
+                   f.postra[nonneg].op1 = source);
+  REJECT_INT_INDEX(f.ir[subov].o = IR_SUB;
+                   f.postra[subov].o = IR_SUB);
+  REJECT_INT_INDEX(f.ir[width].t.irt &= (uint8_t)~IRT_GUARD;
+                   f.postra[width].t.irt &= (uint8_t)~IRT_GUARD);
+#undef REJECT_INT_INDEX
+  arm64_fixture_reset(&f); assert(semantic(&f) && allocated(&f));
+  arm64_fixture_free(&f);
+  free(saved);
+  printf("string.byte(s,%sint): native root %u, boundary/type exits, GC/reuse, seven semantic/postRA source/bounds negatives\n",
+         negative ? "negative-" : "", (unsigned)no);
+}
+
 int main(void)
 {
   static const char source[] =
@@ -404,11 +569,37 @@ int main(void)
     " local byte=string.byte; local i,sum=1,0; "
     "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
     "end\n"
+    "string_byte_integer_trace=function(s,n,index)\n"
+    " local byte=string.byte; local i,sum=1,0.5; "
+    "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
+    "end\n"
+    "string_byte_integer_clone=function(s,n,index)\n"
+    " local byte=string.byte; local i,sum=1,0.5; "
+    "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
+    "end\n"
+    "string_byte_integer_oracle=function(s,n,index)\n"
+    " local byte=string.byte; local i,sum=1,0.5; "
+    "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
+    "end\n"
+    "string_byte_integer_negative_trace=function(s,n,index)\n"
+    " local byte=string.byte; local i,sum=1,0.5; "
+    "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
+    "end\n"
+    "string_byte_integer_negative_clone=function(s,n,index)\n"
+    " local byte=string.byte; local i,sum=1,0.5; "
+    "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
+    "end\n"
+    "string_byte_integer_negative_oracle=function(s,n,index)\n"
+    " local byte=string.byte; local i,sum=1,0.5; "
+    "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
+    "end\n"
     "string_byte_dynamic_oracle=function(s,n,index)\n"
     " local byte=string.byte; local i,sum=1,0; "
     "while i<=n do sum=sum+byte(s,index); i=i+1 end; return sum\n"
     "end\n"
     "jit.off(string_byte_dynamic_oracle,true)\n"
+    "jit.off(string_byte_integer_oracle,true); "
+    "jit.off(string_byte_integer_negative_oracle,true)\n"
     "string_byte_bounds_trace=function(s,n)\n"
     " local byte=string.byte; local i,sum=1,0.5; "
     "while i<=n do sum=sum+byte(s,2); i=i+1 end; return sum\n"
@@ -424,6 +615,10 @@ int main(void)
     "string.byte('gcstr-byte-',2)*80)\n"
     "assert(string_byte_negative_dynamic_trace(string_byte_value,80,-2.9)=="
     "string.byte('gcstr-byte-',-2)*80)\n"
+    "assert(string_byte_integer_trace(string_byte_value,80,2)=="
+    "string.byte('gcstr-byte-',2)*80+0.5)\n"
+    "assert(string_byte_integer_negative_trace(string_byte_value,80,-2)=="
+    "string.byte('gcstr-byte-',-2)*80+0.5)\n"
     "assert(string_byte_bounds_trace(string_byte_value,80)=="
     "string.byte('gcstr-byte-',2)*80+0.5)\n";
   lua_State *L = luaL_newstate();
@@ -1338,6 +1533,8 @@ int main(void)
   test_dynamic_range_byte(L,2,0);
   test_dynamic_range_byte(L,4,0);
   test_dynamic_range_byte(L,4.9,1);
+  test_integer_dynamic_index(L,0);
+  test_integer_dynamic_index(L,1);
   run_chunk(L, "assert(string_byte_stop:send(true,5)); "
                "local joined,result=string_byte_peer:join(5); "
                "assert(joined and result)");
