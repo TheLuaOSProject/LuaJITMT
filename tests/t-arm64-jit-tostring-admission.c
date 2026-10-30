@@ -115,17 +115,16 @@ static IRRef tostring_guard_constant(const GCtrace *T)
   return 0;
 }
 
-static void test_wrong_builtin_constant(lua_State *L, const char *clone_name,
-                                        TraceNo no)
+static void test_wrong_builtin_constant(lua_State *L, const char *wrong_name,
+                                        const char *clone_name, TraceNo no)
 {
   Arm64TraceFixture f;
   IRRef constant;
   GCfunc *wrong;
-  lua_getglobal(L, "string");
-  lua_getfield(L, -1, "byte");
-  assert(lua_isfunction(L, -1) && isffunc(funcV(L->top-1)));
+  lua_getglobal(L, wrong_name);
+  assert(lua_isfunction(L, -1));
   wrong = funcV(L->top-1);
-  lua_pop(L, 2);
+  lua_pop(L, 1);
   if (no == 1)
     arm64_fixture_init(&f, L, clone_name);
   else
@@ -136,6 +135,7 @@ static void test_wrong_builtin_constant(lua_State *L, const char *clone_name,
   f.view.proto = f.J->pt;
   f.view.proto_bc = proto_bc(f.J->pt);
   f.view.startpc = f.J->startpc;
+  f.view.owner_private = 1;
   constant = tostring_guard_constant(f.owner);
   assert(constant && semantic_fixture(&f) && postra_fixture(&f));
   arm64_fixture_reset(&f);
@@ -163,6 +163,7 @@ static void test_wrong_cell_source(lua_State *L, const char *clone_name,
   f.view.proto = f.J->pt;
   f.view.proto_bc = proto_bc(f.J->pt);
   f.view.startpc = f.J->startpc;
+  f.view.owner_private = 1;
   assert(semantic_fixture(&f) && postra_fixture(&f));
   pt = f.J->pt;
   for (p = 0; p < pt->sizebc; p++) {
@@ -208,6 +209,21 @@ static TraceNo check_root(lua_State *L, const char *fnname, BCOp expected)
 
 static void positive_form(lua_State *L, const char *fnname, BCOp op)
 {
+  static const char *wrong_builtins[] = {
+    "tostring_bad_rawset",
+    "tostring_bad_tobit", "tostring_bad_band", "tostring_bad_bor",
+    "tostring_bad_bxor", "tostring_bad_bnot", "tostring_bad_bswap",
+    "tostring_bad_lshift", "tostring_bad_rshift", "tostring_bad_arshift",
+    "tostring_bad_rol", "tostring_bad_ror",
+    "tostring_bad_floor", "tostring_bad_ceil", "tostring_bad_sqrt",
+    "tostring_bad_abs", "tostring_bad_min", "tostring_bad_max",
+    "tostring_bad_log", "tostring_bad_log10", "tostring_bad_exp",
+    "tostring_bad_sin", "tostring_bad_cos", "tostring_bad_tan",
+    "tostring_bad_asin", "tostring_bad_acos", "tostring_bad_atan",
+    "tostring_bad_sinh", "tostring_bad_cosh", "tostring_bad_tanh",
+    "tostring_bad_atan2", "tostring_bad_pow", "tostring_bad_ldexp",
+    "tostring_bad_byte", "tostring_replacement"
+  };
   const char *out;
   size_t outlen;
   TraceNo no;
@@ -224,8 +240,13 @@ static void positive_form(lua_State *L, const char *fnname, BCOp op)
   assert(outlen == 3 && memcmp(out, "a\0b", 3) == 0);
   assert(lj_trace_test_root_entry_successes() > entries);
   no = check_root(L, fnname, op);
-  test_wrong_builtin_constant(L,
-      op == BC_LOOP ? "tostring_while_clone" : "tostring_for_clone", no);
+  {
+    const char *clone = op == BC_LOOP ? "tostring_while_clone" :
+                                        "tostring_for_clone";
+    unsigned i;
+    for (i = 0; i < sizeof(wrong_builtins)/sizeof(wrong_builtins[0]); i++)
+      test_wrong_builtin_constant(L, wrong_builtins[i], clone, no);
+  }
   test_wrong_cell_source(L,
       op == BC_LOOP ? "tostring_while_clone" : "tostring_for_clone", no);
   T = traceref_safe(L2J(L), no);
@@ -300,6 +321,7 @@ int main(void)
     "package.path='./src/?.lua;./src/?/init.lua;'..package.path\n"
     "local jit=require('jit'); assert(jit.status())\n"
     "local threading=require('threading')\n"
+    "local bit=require('bit')\n"
     "tostring_ready=threading.channel(1); tostring_stop=threading.channel(1)\n"
     "tostring_peer=assert(threading.spawn(function(ready,stop) "
     "assert(ready:send(true,5)); assert(select(2,stop:recv(120))); return true "
@@ -307,6 +329,23 @@ int main(void)
     "assert(select(2,tostring_ready:recv(5)))\n"
     "jit.flush(); jit.opt.start('hotloop=1','hotexit=1000','maxtrace=8')\n"
     "tostring_builtin=tostring; tostring_side_effects=0\n"
+    "tostring_bad_rawset=rawset; tostring_bad_tobit=bit.tobit; "
+    "tostring_bad_band=bit.band; tostring_bad_bor=bit.bor; "
+    "tostring_bad_bxor=bit.bxor; tostring_bad_bnot=bit.bnot; "
+    "tostring_bad_bswap=bit.bswap; tostring_bad_lshift=bit.lshift; "
+    "tostring_bad_rshift=bit.rshift; tostring_bad_arshift=bit.arshift; "
+    "tostring_bad_rol=bit.rol; tostring_bad_ror=bit.ror; "
+    "tostring_bad_floor=math.floor; tostring_bad_ceil=math.ceil; "
+    "tostring_bad_sqrt=math.sqrt; tostring_bad_abs=math.abs; "
+    "tostring_bad_min=math.min; tostring_bad_max=math.max; "
+    "tostring_bad_log=math.log; tostring_bad_log10=math.log10; "
+    "tostring_bad_exp=math.exp; tostring_bad_sin=math.sin; "
+    "tostring_bad_cos=math.cos; tostring_bad_tan=math.tan; "
+    "tostring_bad_asin=math.asin; tostring_bad_acos=math.acos; "
+    "tostring_bad_atan=math.atan; tostring_bad_sinh=math.sinh; "
+    "tostring_bad_cosh=math.cosh; tostring_bad_tanh=math.tanh; "
+    "tostring_bad_atan2=math.atan2; tostring_bad_pow=math.pow; "
+    "tostring_bad_ldexp=math.ldexp; tostring_bad_byte=string.byte\n"
     "tostring_table=setmetatable({}, {__tostring=function() "
     "tostring_side_effects=tostring_side_effects+1; return 'table-tostring' end})\n"
     "tostring_error_table=setmetatable({}, {__tostring=function() "
