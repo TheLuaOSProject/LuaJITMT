@@ -209,6 +209,28 @@ run_native_special('math_sqrt_negative',-1)
 run_native_special('math_sqrt_infinity',1/0)
 run_native_special('math_sqrt_nan',0/0)
 
+local function numeric_tostr_for(n,x)
+  local out=''
+  for i=1,n do out=''..(x+i*.25) end
+  return out
+end
+run('numeric_tostr_forl',numeric_tostr_for,20,1.125)
+local function numeric_tostr_while(n,x)
+  local i,out=0,''
+  while i<n do out=''..(x+i*.25); i=i+1 end
+  return out
+end
+run('numeric_tostr_while',numeric_tostr_while,20,1.125)
+local function numeric_tostr_special(n,x)
+  local out=''
+  for i=1,n do out=''..x end
+  return out
+end
+run('numeric_tostr_negative_zero',numeric_tostr_special,12,-0.0)
+run('numeric_tostr_positive_infinity',numeric_tostr_special,12,1/0)
+run('numeric_tostr_negative_infinity',numeric_tostr_special,12,-1/0)
+run('numeric_tostr_nan',numeric_tostr_special,12,0/0)
+
 local abs_builtin, min_builtin, max_builtin = math.abs, math.min, math.max
 local function math_abs_guard(n,x)
   local i,s=0,0
