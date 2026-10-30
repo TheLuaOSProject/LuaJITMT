@@ -10589,10 +10589,9 @@ static int arm64_string_byte_result_copy_path_valid(const BCIns *bc,
     } else {
       continue;
     }
-    if ((q <= callpc && target > (int64_t)callpc &&
-         target <= (int64_t)snappc) ||
-        (q > callpc && q < copypc && target > (int64_t)copypc &&
-         target <= (int64_t)snappc))
+    if (target > (int64_t)callpc && target <= (int64_t)snappc &&
+        (q <= callpc || q > snappc ||
+         (q < copypc && target > (int64_t)copypc)))
       return 0;
   }
   return 1;
@@ -12406,20 +12405,178 @@ static int arm64_string_byte_negative_range_ir(const GCtrace *T,
   return 0;
 }
 
+/* The bytecode CALL's function register must be copied from the exact local
+** represented by the function SLOAD guarded by FF_string_byte. The generic
+** scalar allowlist also contains unrelated builtins such as math.floor. */
+static int arm64_string_byte_call_guard_ir(const GCtrace *T, const GCproto *pt,
+                                           MSize callpc, BCReg calla) {
+  MSize r, s, found = 0, candidates = 0;
+  MSize callslot = (MSize)calla + 1u + LJ_FR2;
+  MSize callee_pc, source_reg, startpc;
+  const BCIns *start;
+  BCIns startins;
+  if (!T || !pt || callpc >= pt->sizebc || callpc < 4u ||
+      callslot >= pt->framesize + 1u + LJ_FR2)
+    return 0;
+  callee_pc = callpc - 4u;
+  start = trace_startpc_acq((GCtrace *)T);
+  startins = trace_startins_acq((GCtrace *)T);
+  if ((uintptr_t)start < (uintptr_t)proto_bc(pt) ||
+      (uintptr_t)start >= (uintptr_t)(proto_bc(pt) + pt->sizebc) ||
+      ((uintptr_t)start - (uintptr_t)proto_bc(pt)) % sizeof(BCIns) ||
+      bc_op(startins) != BC_FORL)
+    return 0;
+  startpc = (MSize)(start - proto_bc(pt));
+  {
+    int64_t body = (int64_t)startpc + 1 + (int64_t)bc_j(startins);
+    if (body < 0 || (MSize)body >= pt->sizebc)
+      return 0;
+    startpc = (MSize)body;
+  }
+  if (startpc > callee_pc || !arm64_string_byte_source_window_valid(
+                                 proto_bc(pt), pt->sizebc, callee_pc, callpc))
+    return 0;
+  for (r = REF_FIRST; r < T->nins; r++) {
+    IRIns guard = ir_load_acq(&T->ir[r]);
+    IRRef constant, function;
+    IRIns value;
+    int bound = 0;
+    if (guard.o != IR_EQ || guard.t.irt != (IRT_FUNC | IRT_GUARD))
+      continue;
+    constant = irref_isk(guard.op1) ? guard.op1 : guard.op2;
+    function = constant == guard.op1 ? guard.op2 : guard.op1;
+    if (constant < T->nk || constant >= REF_TRUE ||
+        !arm64_scalar_ir_ref(T, constant, r, IRT_FUNC))
+      continue;
+    {
+      IRIns k = ir_load_acq(&T->ir[constant]);
+      GCobj *o;
+      if (k.o != IR_KGC || !(o = ir_kgc_acq(&T->ir[constant])) ||
+          !checkptrGC(o) || o->gch.gct != (uint32_t)~LJ_TFUNC ||
+          lj_func_ffid_acq(gco2func(o)) != FF_string_byte)
+        continue;
+    }
+    candidates++;
+    if (function < REF_FIRST || function >= r)
+      continue;
+    value = ir_load_acq(&T->ir[function]);
+    if (value.o != IR_SLOAD || value.t.irt != (IRT_FUNC | IRT_GUARD) ||
+        value.op2 != IRSLOAD_TYPECHECK || value.op1 < 1u + LJ_FR2)
+      continue;
+    source_reg = (MSize)value.op1 - 1u - LJ_FR2;
+    if (source_reg >= pt->framesize || source_reg > BCMAX_A ||
+        (bc_op(arm64_ir_bc_acq((uintptr_t)proto_bc(pt), callee_pc)) != BC_MOV &&
+         bc_op(arm64_ir_bc_acq((uintptr_t)proto_bc(pt), callee_pc)) !=
+             BC_CGET) ||
+        bc_a(arm64_ir_bc_acq((uintptr_t)proto_bc(pt), callee_pc)) != calla ||
+        bc_d(arm64_ir_bc_acq((uintptr_t)proto_bc(pt), callee_pc)) != source_reg)
+      continue;
+    {
+      MSize q;
+      int stable = 1;
+      for (q = startpc; q < callee_pc; q++) {
+        BCIns ins = arm64_ir_bc_acq((uintptr_t)proto_bc(pt), q);
+        BCOp op = bc_op(ins);
+        BCMode mode;
+        if (op >= BC__MAX) {
+          stable = 0;
+          break;
+        }
+        mode = bcmode_a(op);
+        if (((mode == BCMdst || mode == BCMvar) && bc_a(ins) == source_reg) ||
+            ((mode == BCMbase || mode == BCMrbase) &&
+             bc_a(ins) <= source_reg) ||
+            (op == BC_CSET && bc_a(ins) == source_reg)) {
+          stable = 0;
+          break;
+        }
+      }
+      if (!stable)
+        continue;
+    }
+    for (s = 0; s < T->nsnap; s++) {
+      const SnapShot *snap = &T->snap[s];
+      MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap);
+      const BCIns *pc;
+      MSize guardpc, q, i;
+      if (snap_ref_acq(snap) != r || ofs > T->nsnapmap ||
+          nent > T->nsnapmap - ofs || T->nsnapmap - ofs - nent < 1u + LJ_FR2)
+        continue;
+      pc = snap_pc(&T->snapmap[ofs + nent]);
+      if ((uintptr_t)pc < (uintptr_t)proto_bc(pt) ||
+          (uintptr_t)pc >= (uintptr_t)(proto_bc(pt) + pt->sizebc) ||
+          ((uintptr_t)pc - (uintptr_t)proto_bc(pt)) % sizeof(BCIns))
+        continue;
+      guardpc = (MSize)(pc - proto_bc(pt));
+      if (guardpc > callpc || guardpc <= callee_pc)
+        continue;
+      for (i = 0; i < nent; i++) {
+        SnapEntry se = snapentry_acq(&T->snapmap[ofs + i]);
+        if (snap_slot(se) == callslot && snap_ref(se) == function &&
+            !(se & 0x00ff0000u))
+          break;
+      }
+      if (i == nent)
+        continue;
+      {
+        uint64_t footer;
+        memcpy(&footer, &T->snapmap[ofs + nent], sizeof(footer));
+        if ((uint8_t)footer != 0)
+          continue;
+      }
+      for (q = 0; q < pt->sizebc; q++) {
+        BCIns ins = arm64_ir_bc_acq((uintptr_t)proto_bc(pt), q);
+        BCOp op = bc_op(ins);
+        if (op >= BC__MAX)
+          break;
+        if (bcmode_d(op) == BCMjump || (op >= BC_ISLT && op <= BC_ISNUM)) {
+          int64_t target = (int64_t)q + 1 + (int64_t)bc_j(ins);
+          if (op >= BC_ISLT && op <= BC_ISNUM)
+            target = (int64_t)q + 2;
+          if (target > (int64_t)guardpc && target <= (int64_t)callpc &&
+              (q <= guardpc || (q > guardpc && (int64_t)q >= target)))
+            break;
+        }
+      }
+      if (q != pt->sizebc)
+        continue;
+      for (q = guardpc; q < callpc; q++) {
+        BCIns ins = arm64_ir_bc_acq((uintptr_t)proto_bc(pt), q);
+        BCOp op = bc_op(ins);
+        BCMode mode;
+        if (op >= BC__MAX)
+          break;
+        mode = bcmode_a(op);
+        if (((mode == BCMdst || mode == BCMvar) && bc_a(ins) == calla) ||
+            ((mode == BCMbase || mode == BCMrbase) && bc_a(ins) <= calla))
+          break;
+      }
+      if (q != callpc)
+        continue;
+      bound = 1;
+      break;
+    }
+    if (bound)
+      found++;
+  }
+  return found == 1u && candidates == 1u;
+}
+
 /* Certify one raw lane from the fixed two-result source call
 ** `byte(s, 1, 2)`. BC_CALL.B encodes requested results plus one;
 ** BC_CALL.C encodes supplied arguments plus one. The returned U8 must occupy
 ** the same lane in the exact CALL result window; byte offset zero/one is
 ** separately bounded against the guarded source string. */
 static int arm64_string_byte_fixed_pair_snapshot_ir(
-    const GCproto *pt, MSize strslot, MSize slot, MSize snappc,
+    const GCtrace *T, const GCproto *pt, MSize strslot, MSize slot, MSize snappc,
     int32_t byte_offset, MSize *callpcp, BCReg *callap)
 {
   const BCIns *bc;
   MSize pc, sizebc;
   unsigned calls = 0, matches = 0;
   if (!pt || byte_offset < 0 || byte_offset > 1 ||
-      strslot < 1u+LJ_FR2 || slot < 1u+LJ_FR2)
+      strslot < 1u+LJ_FR2 || slot < 1u+LJ_FR2 ||
+      snappc >= pt->sizebc || slot-1u-LJ_FR2 >= pt->framesize)
     return 0;
   bc = proto_bc(pt); sizebc = pt->sizebc;
   for (pc = 0; pc < sizebc; pc++) {
@@ -12432,9 +12589,7 @@ static int arm64_string_byte_fixed_pair_snapshot_ir(
     if (bc_op(call) != BC_CALL || bc_b(call) != 3u || bc_c(call) != 4u)
       continue;
     calls++;
-    if (pc < 3u ||
-        (MSize)bc_a(call)+2u+LJ_FR2 > pt->framesize ||
-        (MSize)bc_a(call)+4u+LJ_FR2 > pt->framesize ||
+    if (pc < 3u || (MSize)bc_a(call)+4u+LJ_FR2 > pt->framesize ||
         pc >= snappc ||
         !arm64_string_byte_source_window_valid(bc, sizebc, pc-3u, pc))
       continue;
@@ -12470,6 +12625,8 @@ static int arm64_string_byte_fixed_pair_snapshot_ir(
       if (bc_op(ins) == BC_CSET && bc_a(ins) == source) valid = 0;
     }
     reg = slot-1u-LJ_FR2;
+    if (!arm64_string_byte_call_guard_ir(T, pt, pc, bc_a(call)))
+		valid = 0;
     if (reg == (MSize)bc_a(call)+lane) {
       if (!arm64_string_byte_result_copy_path_valid(bc, sizebc, pc,
                                                     pc+1u, snappc))
@@ -12573,7 +12730,7 @@ static int arm64_string_byte_snapshot_slot_ir(const GCtrace *T, IRRef value,
     if (!arm64_ir_kint_value(T, ptr->op2, &byte_offset) ||
         byte_offset < 0 || byte_offset > 1 ||
         !arm64_string_byte_bounds_ir(T, load->op1, ptr->op1, ptr->op2) ||
-        !arm64_string_byte_fixed_pair_snapshot_ir(pt, string->op1, slot,
+        !arm64_string_byte_fixed_pair_snapshot_ir(T, pt, string->op1, slot,
             snappc, byte_offset, &callpc, &calla))
       return 0;
     return 1;
@@ -19973,6 +20130,158 @@ static int arm64_string_byte_index_slot_postra(const LJArm64PostRAView *v,
   return 0;
 }
 
+static int arm64_string_byte_call_guard_postra(const LJArm64PostRAView *v,
+                                               const GCproto *pt, MSize callpc,
+                                               BCReg calla) {
+  MSize r, s, found = 0, candidates = 0;
+  MSize callslot = (MSize)calla + 1u + LJ_FR2;
+  MSize callee_pc, source_reg, startpc;
+  BCIns startins;
+  if (!v || !pt || callpc >= pt->sizebc || callpc < 4u || !v->startpc ||
+      callslot >= pt->framesize + 1u + LJ_FR2)
+    return 0;
+  callee_pc = callpc - 4u;
+  startins = v->startins;
+  if ((uintptr_t)v->startpc < (uintptr_t)proto_bc(pt) ||
+      (uintptr_t)v->startpc >= (uintptr_t)(proto_bc(pt) + pt->sizebc) ||
+      ((uintptr_t)v->startpc - (uintptr_t)proto_bc(pt)) % sizeof(BCIns) ||
+      bc_op(startins) != BC_FORL)
+    return 0;
+  startpc = (MSize)(v->startpc - proto_bc(pt));
+  {
+    int64_t body = (int64_t)startpc + 1 + (int64_t)bc_j(startins);
+    if (body < 0 || (MSize)body >= pt->sizebc)
+      return 0;
+    startpc = (MSize)body;
+  }
+  if (startpc > callee_pc || !arm64_string_byte_source_window_valid(
+                                 proto_bc(pt), pt->sizebc, callee_pc, callpc))
+    return 0;
+  for (r = REF_FIRST; r < v->nins; r++) {
+    IRIns guard = ir_load_acq(&v->ir[r]);
+    IRRef constant, function;
+    IRIns value;
+    int bound = 0;
+    if (guard.o != IR_EQ || guard.t.irt != (IRT_FUNC | IRT_GUARD))
+      continue;
+    constant = irref_isk(guard.op1) ? guard.op1 : guard.op2;
+    function = constant == guard.op1 ? guard.op2 : guard.op1;
+    if (!arm64_scalar_postra_kref(v, constant, IRT_FUNC))
+      continue;
+    {
+      IRIns k = ir_load_acq(&v->ir[constant]);
+      GCobj *o;
+      if (k.o != IR_KGC || !(o = ir_kgc_acq(&v->ir[constant])) ||
+          !checkptrGC(o) || o->gch.gct != (uint32_t)~LJ_TFUNC ||
+          lj_func_ffid_acq(gco2func(o)) != FF_string_byte)
+        continue;
+    }
+    candidates++;
+    if (function < REF_FIRST || function >= r)
+      continue;
+    value = ir_load_acq(&v->ir[function]);
+    if (value.o != IR_SLOAD || value.t.irt != (IRT_FUNC | IRT_GUARD) ||
+        value.op2 != IRSLOAD_TYPECHECK || value.op1 < 1u + LJ_FR2)
+      continue;
+    source_reg = (MSize)value.op1 - 1u - LJ_FR2;
+    if (source_reg >= pt->framesize || source_reg > BCMAX_A ||
+        (bc_op(arm64_ir_bc_acq((uintptr_t)proto_bc(pt), callee_pc)) != BC_MOV &&
+         bc_op(arm64_ir_bc_acq((uintptr_t)proto_bc(pt), callee_pc)) !=
+             BC_CGET) ||
+        bc_a(arm64_ir_bc_acq((uintptr_t)proto_bc(pt), callee_pc)) != calla ||
+        bc_d(arm64_ir_bc_acq((uintptr_t)proto_bc(pt), callee_pc)) != source_reg)
+      continue;
+    {
+      MSize q;
+      int stable = 1;
+      for (q = startpc; q < callee_pc; q++) {
+        BCIns ins = arm64_ir_bc_acq((uintptr_t)proto_bc(pt), q);
+        BCOp op = bc_op(ins);
+        BCMode mode;
+        if (op >= BC__MAX) {
+          stable = 0;
+          break;
+        }
+        mode = bcmode_a(op);
+        if (((mode == BCMdst || mode == BCMvar) && bc_a(ins) == source_reg) ||
+            ((mode == BCMbase || mode == BCMrbase) &&
+             bc_a(ins) <= source_reg) ||
+            (op == BC_CSET && bc_a(ins) == source_reg)) {
+          stable = 0;
+          break;
+        }
+      }
+      if (!stable)
+        continue;
+    }
+    for (s = 0; s < v->nsnap; s++) {
+      const SnapShot *snap = &v->snap[s];
+      MSize ofs = snap_mapofs_acq(snap), nent = snap_nent_acq(snap);
+      const BCIns *pc;
+      MSize guardpc, q, i;
+      if (snap_ref_acq(snap) != r || ofs > v->nsnapmap ||
+          nent > v->nsnapmap - ofs || v->nsnapmap - ofs - nent < 1u + LJ_FR2)
+        continue;
+      pc = snap_pc_acq(&v->snapmap[ofs + nent]);
+      if ((uintptr_t)pc < (uintptr_t)proto_bc(pt) ||
+          (uintptr_t)pc >= (uintptr_t)(proto_bc(pt) + pt->sizebc) ||
+          ((uintptr_t)pc - (uintptr_t)proto_bc(pt)) % sizeof(BCIns))
+        continue;
+      guardpc = (MSize)(pc - proto_bc(pt));
+      if (guardpc > callpc || guardpc <= callee_pc)
+        continue;
+      for (i = 0; i < nent; i++) {
+        SnapEntry se = snapentry_acq(&v->snapmap[ofs + i]);
+        if (snap_slot(se) == callslot && snap_ref(se) == function &&
+            !(se & 0x00ff0000u))
+          break;
+      }
+      if (i == nent)
+        continue;
+      {
+        uint64_t footer;
+        memcpy(&footer, &v->snapmap[ofs + nent], sizeof(footer));
+        if ((uint8_t)footer != 0)
+          continue;
+      }
+      for (q = 0; q < pt->sizebc; q++) {
+        BCIns ins = arm64_ir_bc_acq((uintptr_t)proto_bc(pt), q);
+        BCOp op = bc_op(ins);
+        if (op >= BC__MAX)
+          break;
+        if (bcmode_d(op) == BCMjump || (op >= BC_ISLT && op <= BC_ISNUM)) {
+          int64_t target = (int64_t)q + 1 + (int64_t)bc_j(ins);
+          if (op >= BC_ISLT && op <= BC_ISNUM)
+            target = (int64_t)q + 2;
+          if (target > (int64_t)guardpc && target <= (int64_t)callpc &&
+              (q <= guardpc || (q > guardpc && (int64_t)q >= target)))
+            break;
+        }
+      }
+      if (q != pt->sizebc)
+        continue;
+      for (q = guardpc; q < callpc; q++) {
+        BCIns ins = arm64_ir_bc_acq((uintptr_t)proto_bc(pt), q);
+        BCOp op = bc_op(ins);
+        BCMode mode;
+        if (op >= BC__MAX)
+          break;
+        mode = bcmode_a(op);
+        if (((mode == BCMdst || mode == BCMvar) && bc_a(ins) == calla) ||
+            ((mode == BCMbase || mode == BCMrbase) && bc_a(ins) <= calla))
+          break;
+      }
+      if (q != callpc)
+        continue;
+      bound = 1;
+      break;
+    }
+    if (bound)
+      found++;
+  }
+  return found == 1u && candidates == 1u;
+}
+
 /* Allocated-pass source replay for each raw lane of the fixed two-result
 ** `byte(s, 1, 2)` call. This rechecks frame bounds, source writes, call-window
 ** control-flow entry and exact lane-to-offset correspondence independently. */
@@ -19984,9 +20293,41 @@ static int arm64_string_byte_fixed_pair_snapshot_postra(
   const BCIns *bc;
   MSize pc, sizebc;
   unsigned calls = 0, matches = 0;
-  if (!v || !pt || v->proto != pt || byte_offset < 0 || byte_offset > 1 ||
-      strslot < 1u+LJ_FR2 || slot < 1u+LJ_FR2)
+  if (!v || !pt || v->proto != pt || !v->owner ||
+      proto_bc(pt) != v->proto_bc || pt->sizebc != v->proto_sizebc ||
+      pt->numparams != v->proto_numparams ||
+      pt->framesize != v->root_topslot || v->startpc == NULL ||
+      byte_offset < 0 || byte_offset > 1 ||
+      strslot < 1u+LJ_FR2 || slot < 1u+LJ_FR2 ||
+      snappc >= pt->sizebc || slot-1u-LJ_FR2 >= pt->framesize)
     return 0;
+  if (!v->owner_private) {
+    if (trace_startptgco_acq((GCtrace *)v->owner) != obj2gco((GCproto *)pt) ||
+        trace_startpc_acq((GCtrace *)v->owner) != v->startpc ||
+        trace_startins_acq((GCtrace *)v->owner) != v->startins)
+      return 0;
+  } else {
+    GCproto *ownerpt = trace_startpt_acq((GCtrace *)v->owner);
+    uintptr_t ownerlo, ownerhi, sourcepc, offset;
+    if (!ownerpt || ownerpt->sizebc != pt->sizebc ||
+        ownerpt->numparams != pt->numparams ||
+        ownerpt->framesize != pt->framesize ||
+        proto_bc(ownerpt) == NULL ||
+        trace_startpc_acq((GCtrace *)v->owner) != v->startpc ||
+        trace_startins_acq((GCtrace *)v->owner) != v->startins)
+      return 0;
+    ownerlo = (uintptr_t)(const void *)proto_bc(ownerpt);
+    ownerhi = ownerlo+(uintptr_t)ownerpt->sizebc*sizeof(BCIns);
+    sourcepc = (uintptr_t)(const void *)v->startpc;
+    if (ownerhi <= ownerlo || sourcepc < ownerlo || sourcepc >= ownerhi ||
+        (sourcepc-ownerlo)%sizeof(BCIns) != 0)
+      return 0;
+    offset = (sourcepc-ownerlo)/sizeof(BCIns);
+    if (offset >= pt->sizebc ||
+        arm64_ir_bc_acq((uintptr_t)(const void *)proto_bc(pt), offset) !=
+          v->startins)
+      return 0;
+  }
   bc = proto_bc(pt); sizebc = pt->sizebc;
   for (pc = 0; pc < sizebc; pc++) {
     BCIns call = arm64_ir_bc_acq((uintptr_t)bc, pc);
@@ -19998,9 +20339,7 @@ static int arm64_string_byte_fixed_pair_snapshot_postra(
     if (bc_op(call) != BC_CALL || bc_b(call) != 3u || bc_c(call) != 4u)
       continue;
     calls++;
-    if (pc < 3u ||
-        (MSize)bc_a(call)+2u+LJ_FR2 > pt->framesize ||
-        (MSize)bc_a(call)+4u+LJ_FR2 > pt->framesize ||
+    if (pc < 3u || (MSize)bc_a(call)+4u+LJ_FR2 > pt->framesize ||
         pc >= snappc ||
         !arm64_string_byte_source_window_valid(bc, sizebc, pc-3u, pc))
       continue;
@@ -20036,6 +20375,8 @@ static int arm64_string_byte_fixed_pair_snapshot_postra(
       if (bc_op(ins) == BC_CSET && bc_a(ins) == source) valid = 0;
     }
     reg = slot-1u-LJ_FR2;
+    if (!arm64_string_byte_call_guard_postra(v, pt, pc, bc_a(call)))
+		valid = 0;
     if (reg == (MSize)bc_a(call)+lane) {
       if (!arm64_string_byte_result_copy_path_valid(bc, pt->sizebc, pc,
                                                     pc+1u, snappc))
