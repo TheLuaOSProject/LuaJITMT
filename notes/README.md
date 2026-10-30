@@ -18,20 +18,20 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
-- Current verified production checkpoint: `503c8ba2f`. It adds mixed-sign
-  multiple byte results, bounded positive-literal substring allocation and
-  string-input `tostring` identity to `8123b7a3d`. No locks are added. The
-  complete combined gate passes, including actual VM/recorder safepoint
-  runtime execution and all four M7 FFI profiles. The gate checkout is restored
-  to ordinary assertion ARM64 without test helpers. Ordinary ARM64 and strict
-  x86_64 builds of the same source each pass all 509 source cases and all 509
-  original v2-bytecode cases, plus the expanded native workload matrix. See the
-  [complete checkpoint](arm64-mixed-byte-strings-complete-checkpoint-2026-10-30.md)
-  and [preceding checkpoint](arm64-byte-snapshots-forl-complete-checkpoint-2026-10-30.md).
-  Negative and omitted-end substrings, fixed-pair U8 snapshots and sequential
-  Lua leaf branches have separate focused work. General Lua calls/returns,
-  recursion, protected calls and remaining FFI restrictions still prevent full
-  x86_64 parity.
+- Current verified production checkpoint: `52efb731e`. It adds bounded
+  negative-literal ends and omitted-end string.sub calls to `503c8ba2f`, with
+  every repeated function-guard snapshot bound to its exact CALL suffix.
+  No locks are added. The complete combined gate passes, including actual
+  VM/recorder safepoint runtime execution and all four M7 FFI profiles, and
+  restores ordinary assertion ARM64 without test helpers. Matching ordinary
+  ARM64 and strict x86_64 builds pass both 509-case stock corpora and the
+  expanded native workload matrix. See the
+  [complete substring checkpoint](arm64-negative-default-substrings-complete-checkpoint-2026-10-30.md)
+  and [preceding checkpoint](arm64-mixed-byte-strings-complete-checkpoint-2026-10-30.md).
+  Sequential leaf branches, numeric identities, zero-first substrings and
+  fixed-pair byte snapshots have later focused integration evidence. General
+  Lua calls/returns, recursion, protected calls and remaining FFI restrictions
+  still prevent full x86_64 parity.
 
 ## Earlier checkpoint records
 
