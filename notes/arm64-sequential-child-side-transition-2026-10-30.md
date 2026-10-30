@@ -34,9 +34,30 @@ frame or root PC as equivalent to the child identity.
 
 ## Proof needed before admitting the transition
 
-An OWNER-phase extension must keep the original child proof tied to the exact
-parent trace generation, exit, snapshot frame marker, source CALL, callee, and
-argument window. For the transitioned phase it must separately establish:
+An OWNER-phase extension needs an explicit certificate with these fields (or
+an independently checked derivation of each field):
+
+| Certificate field | Required binding |
+| --- | --- |
+| Parent generation | Parent trace number and body identity, root number, exit number, trace-vector slot/generation, and active footer/map bounds. |
+| Root source | Root proto, loop start/interval, exact root `BC_CALL` instruction and its PC. |
+| Child source | Child proto, exact callable function object, fixed argument/result arity, and argument window. The function object must be recovered from a parent guard/source relation after the physical child frame is gone. |
+| Entry frame | Child base/top, root caller base, frame delta, child return PC, exact frame-marker KNUM, snapshot number/ref/map range, and footer PC/base encoding. |
+| Recorder identity | Owner/token, side trace number, parent/exit, child `startpt` and `startpc`, synthetic start instruction, and the represented `framedepth` transition. |
+| Transition target | Live root function/proto, exact caller return PC, restored root base, and result slots corresponding to the original CALL. |
+| Admission evidence | Semantic and post-RA source/snapshot proofs for both protos and their frame transition; the final root link and every cold exit must restore the same caller state without replaying the child call. |
+
+At IDLE/CLAIM, the existing bounded proof can derive the parent generation,
+source CALL/callee/arguments, and entry frame from the live child frame plus
+immutable parent snapshot. At OWNER after return, the live stack proves the
+transition target, while J proves the child recorder identity. The exact child
+function object is no longer directly available from the child frame; it must
+be independently recoverable from an immutable parent call guard or retained
+in token-private recorder state that is initialized, revalidated, and cleared
+with the recorder lifecycle. No acceptance path should infer it from only the
+child proto, a reused caller slot, or the fact that arithmetic still executes.
+
+For the transitioned phase the proof must separately establish:
 
 * the live root frame has the exact caller proto/function and return PC derived
   from that CALL;
