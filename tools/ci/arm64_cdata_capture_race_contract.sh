@@ -30,6 +30,8 @@ for profile in arm64-assert arm64e-assert arm64-release arm64e-release; do
   lj_ci_compile_fixture "$fixture" "$root/tests/t-jit-cdata-call-race.c"
   export LJ_M7_FFI_CALLXS_ARM64_SCALAR=1
   export LJ_M7_FFI_CALLXS_FLUSH_SO=$blocker
+  echo "arm64_cdata_capture_race_contract plain Lua companion profile=$profile"
+  lj_ci_run_lua 30 "$root/tests/t-ffi-callxs-remote-flush.lua"
   run=1
   while test "$run" -le 3; do
     echo "arm64_cdata_capture_race_contract repetition=$run profile=$profile"

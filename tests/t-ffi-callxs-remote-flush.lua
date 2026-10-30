@@ -567,7 +567,9 @@ if race_only then
   end
   local race_done, race_done_ok = ready:recv(10)
   assert(race_done_ok == true and race_done.phase == "metacall_race_done")
-  assert_capture_witness(race_done, "forward cdata __call capture")
+  if type(call_race_test) == "table" then
+    assert_capture_witness(race_done, "forward cdata __call capture")
+  end
   assert(race_done.alternate_results > 0,
          "VM did not execute the peer-installed cdata __call replacement")
   rawset(scalar_fn_mt, "__call", scalar_fn_mm)
