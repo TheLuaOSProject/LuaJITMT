@@ -62,3 +62,15 @@ argument setup while allowing entry at the setup's first instruction.
 
 This is a bounded positive-range proof, not general dynamic range parity. The
 full combined gate has not been run on this isolated follow-up.
+
+## Combined integration
+
+The corrected source/guard binding at `162150d3f` was merged with the wider
+forwarding, all prior byte-index/end cases, captured FFI prefixes and folded
+64-bit literal arguments at `861553103`. Merge resolution preserves the
+constant-negative byte source and bounds helpers alongside the new dynamic
+range helpers. The combined string-byte contract passes all four assertion/
+release ARM64/ARM64e profiles and restores ordinary assertion ARM64. Evidence:
+`/Users/frityet/Scratch/ljmt-byte-wide-combined-20261030/dynamic-start-end-source.txt`
+and `dynamic-start-end-four-profiles.log`. This focused result is separate
+from the full gate at the earlier `ff86407a1` checkpoint.
