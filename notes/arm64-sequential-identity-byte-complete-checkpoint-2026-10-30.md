@@ -36,3 +36,12 @@ The ordinary matrix restored ARM64 profile
 This gate excludes later negative-first substring allocation, computed math
 result preservation, numeric-to-string conversion and child-frame side work.
 The port remains experimental and full x86_64 parity is not yet established.
+
+## Promoted branch rebuild
+
+The promoted branch was independently rebuilt as ordinary assertion ARM64.
+Both 509-case stock corpora and the fixed-pair native, sequential live-peer,
+numeric identity and five zero-first substring companions pass. Logs are
+saved as `main-*.log` alongside the complete gate evidence above. The build
+profile is
+`93cd6ec3fb1ef2f531d01fdbbc7944bd570b7e0628b364753464d3073f60babf`.
