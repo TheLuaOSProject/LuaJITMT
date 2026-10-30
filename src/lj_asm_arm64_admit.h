@@ -11867,20 +11867,22 @@ static int arm64_string_sub_bounds_ir(const GCtrace *T, IRRef pointer)
     if (ofs > T->nsnapmap || count > T->nsnapmap-ofs ||
         T->nsnapmap-ofs-count < 1u+LJ_FR2 || at < REF_FIRST ||
         at >= T->nins) continue;
+    guard = T->ir[at];
+    if (guard.o != IR_EQ || guard.t.irt != (IRT_FUNC|IRT_GUARD)) continue;
     memcpy(&footer, &T->snapmap[ofs+count], sizeof(footer));
     /* The folded literal arguments may leave the guard snapshot at either
     ** KSHORT before CALL. Source decoding proves that whole suffix is pure
-    ** and preserves the already copied function and string argument. */
+    ** and preserves the already copied function and string argument. The
+    ** unique source CALL binds every function guard, so a later guard with
+    ** a malformed footer must not be skipped after an earlier one matched. */
     {
       const BCIns *footerpc = (const BCIns *)(uintptr_t)(footer>>8);
       MSize callc = bc_c(arm64_ir_bc_acq((uintptr_t)proto_bc(pt), callpc));
       if ((uint8_t)footer ||
           (footerpc != proto_bc(pt)+callpc &&
            footerpc != proto_bc(pt)+callpc-1u &&
-           (callc == 3u || footerpc != proto_bc(pt)+callpc-2u))) continue;
+           (callc == 3u || footerpc != proto_bc(pt)+callpc-2u))) return 0;
     }
-    guard = T->ir[at];
-    if (guard.o != IR_EQ || guard.t.irt != (IRT_FUNC|IRT_GUARD)) continue;
     if (guard.op1 < REF_FIRST || guard.op1 >= at ||
         !irref_isk(guard.op2) || guard.op2 < T->nk ||
         guard.op2 >= REF_TRUE || T->ir[guard.op2].o != IR_KGC ||
@@ -19462,6 +19464,8 @@ static int arm64_string_sub_bounds_postra(const LJArm64PostRAView *v, IRRef poin
     if (ofs > v->nsnapmap || count > v->nsnapmap-ofs ||
         v->nsnapmap-ofs-count < 1u+LJ_FR2 || at < REF_FIRST ||
         at >= v->nins) continue;
+    guard = ir_load_acq(&v->ir[at]);
+    if (guard.o != IR_EQ || guard.t.irt != (IRT_FUNC|IRT_GUARD)) continue;
     {
       SnapEntry words[1+LJ_FR2];
       for (i = 0; i < 1u+LJ_FR2; i++)
@@ -19470,17 +19474,17 @@ static int arm64_string_sub_bounds_postra(const LJArm64PostRAView *v, IRRef poin
     }
     /* The folded literal arguments may leave the guard snapshot at either
     ** KSHORT before CALL. Source decoding proves that whole suffix is pure
-    ** and preserves the already copied function and string argument. */
+    ** and preserves the already copied function and string argument. The
+    ** unique source CALL binds every function guard, so a later guard with
+    ** a malformed footer must not be skipped after an earlier one matched. */
     {
       const BCIns *footerpc = (const BCIns *)(uintptr_t)(footer>>8);
       MSize callc = bc_c(arm64_ir_bc_acq((uintptr_t)proto_bc(pt), callpc));
       if ((uint8_t)footer ||
           (footerpc != proto_bc(pt)+callpc &&
            footerpc != proto_bc(pt)+callpc-1u &&
-           (callc == 3u || footerpc != proto_bc(pt)+callpc-2u))) continue;
+           (callc == 3u || footerpc != proto_bc(pt)+callpc-2u))) return 0;
     }
-    guard = ir_load_acq(&v->ir[at]);
-    if (guard.o != IR_EQ || guard.t.irt != (IRT_FUNC|IRT_GUARD)) continue;
     if (guard.op1 < REF_FIRST || guard.op1 >= at ||
         !irref_isk(guard.op2) || guard.op2 < v->nk ||
         guard.op2 >= REF_TRUE || ir_load_acq(&v->ir[guard.op2]).o != IR_KGC ||

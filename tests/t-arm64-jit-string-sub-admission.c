@@ -187,7 +187,7 @@ int main(int argc, char **argv)
       if (bc_op(bc[pc]) == BC_CALL) { assert(!callpc); callpc = pc; }
     assert(callpc >= (default_end ? 2u : 3u));
     setup = callpc-(bc_c(bc[callpc]) == 3u ? 2u : 3u);
-    if (default_end) {
+    {
       unsigned tested = 0;
       size_t mapbytes = f.view.nsnapmap*sizeof(SnapEntry);
       SnapEntry *postcopy = (SnapEntry *)malloc(mapbytes);
@@ -203,17 +203,21 @@ int main(int argc, char **argv)
         if (at >= f.semantic_nins || f.ir[at].o != IR_EQ ||
             f.ir[at].t.irt != (IRT_FUNC|IRT_GUARD)) continue;
         memcpy(&saved, &f.map[footer], sizeof(saved));
-        /* With CALL.C=3, CALL-2 is the string copy, not a pure literal
-        ** suffix. A guard cannot resume there using the post-copy map. */
-        changed = (uint64_t)(uintptr_t)(bc+callpc-2u) << 8;
-        assert(changed != saved);
-        memcpy(&f.map[footer], &changed, sizeof(changed));
-        assert(!semantic(&f) && allocated(&f));
-        memcpy(&f.map[footer], &saved, sizeof(saved));
-        memcpy(&postcopy[footer], &changed, sizeof(changed));
-        assert(semantic(&f) && !allocated(&f));
-        memcpy(&postcopy[footer], &saved, sizeof(saved));
-        assert(semantic(&f) && allocated(&f));
+        /* The string copy precedes the pure literal suffix for either
+        ** arity. Every repeated CALL guard must preserve the suffix PC and
+        ** root-frame footer tag, including guards after a hoisted SNEW. */
+        for (unsigned mode = 0; mode < 2u; mode++) {
+          changed = mode ? saved | 1u :
+            (uint64_t)(uintptr_t)(bc+setup) << 8;
+          assert(changed != saved);
+          memcpy(&f.map[footer], &changed, sizeof(changed));
+          assert(!semantic(&f) && allocated(&f));
+          memcpy(&f.map[footer], &saved, sizeof(saved));
+          memcpy(&postcopy[footer], &changed, sizeof(changed));
+          assert(semantic(&f) && !allocated(&f));
+          memcpy(&postcopy[footer], &saved, sizeof(saved));
+          assert(semantic(&f) && allocated(&f));
+        }
         tested++;
       }
       assert(tested >= 2u);
