@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "lua.h"
 #include "lauxlib.h"
@@ -8,14 +9,30 @@
 #include "lj_target.h"
 #include "lj_str.h"
 #include "lj_arena.h"
+#include "lj_tg.h"
 #include "lib/arm64_trace_fixture.h"
 
 static lua_State *test_L;
 static unsigned native_string_matches;
 static unsigned native_string_publications;
 static int negative_case;
+static int negative_first_case;
+static int negative_first_magnitude;
 static int dynamic_end_case;
 static int zero_first_case;
+
+static void assert_string_ready(lua_State *L, GCstr *str, GCArena *arena)
+{
+  if (lj_arena_ishuge(arena)) {
+    LJHugeInfo info;
+    assert(negative_first_case && negative_first_magnitude == 32768);
+    assert(lj_arena_hugetab_lookup(&L2TG(L)->huge, str, &info));
+    assert((info.flags & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY)) ==
+           (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY));
+  } else {
+    assert(lj_arena_ready_get(arena, lj_arena_cellof(str)));
+  }
+}
 
 static void string_publish(lua_State *L, GCstr *str)
 {
@@ -25,8 +42,7 @@ static void string_publish(lua_State *L, GCstr *str)
   assert(str->gct == (uint8_t)~LJ_TSTR);
   assert((negative_case || dynamic_end_case) ? str->len > 0u : str->len == 3u);
   arena = lj_arena_of(str);
-  assert(!lj_arena_ishuge(arena));
-  assert(lj_arena_ready_get(arena, lj_arena_cellof(str)));
+  assert_string_ready(L, str, arena);
   native_string_publications++;
 }
 
@@ -42,8 +58,7 @@ static void string_match(lua_State *L, GCRef *link, GCobj *object,
   assert(str->gct == (uint8_t)~LJ_TSTR);
   assert((negative_case || dynamic_end_case) ? str->len > 0u : str->len == 3u);
   arena = lj_arena_of(str);
-  assert(!lj_arena_ishuge(arena));
-  assert(lj_arena_ready_get(arena, lj_arena_cellof(str)));
+  assert_string_ready(L, str, arena);
   native_string_matches++;
 }
 
@@ -69,7 +84,7 @@ int main(int argc, char **argv)
   lua_State *L = luaL_newstate();
   Arm64TraceFixture f;
   IRRef r, pointer = 0, allocation = 0, bound = 0, len = 0;
-  IRRef endcalc = 0, subcalc = 0;
+  IRRef endcalc = 0, subcalc = 0, lowerguard = 0;
   IRRef firstguard = 0, lastguard = 0;
   TraceNo no;
   GCobj *byte;
@@ -77,6 +92,13 @@ int main(int argc, char **argv)
   (void)arm64_fixture_init;
   assert(L && argc == 3);
   negative = strstr(argv[2], "negative-") != NULL;
+  negative_first_case = strncmp(argv[2], "negative-first-", 15u) == 0;
+  if (negative_first_case) {
+    const char *value = argv[2]+15u;
+    if (strncmp(value, "default-", 8u) == 0) value += 8u;
+    negative_first_magnitude = atoi(value);
+    assert(negative_first_magnitude > 0);
+  }
   default_end = strstr(argv[2], "default-end") != NULL;
   zero_first_case = strncmp(argv[2], "zero-", 5u) == 0;
   negative_case = negative;
@@ -92,8 +114,9 @@ int main(int argc, char **argv)
   lj_str_test_set_match_hook(NULL);
   lj_str_test_set_publish_hook(NULL);
   assert(native_string_matches > 0u);
-  if ((strstr(argv[2], "while") && !(negative && zero_first_case)) ||
-      (default_end && !zero_first_case))
+  if (((strstr(argv[2], "while") && !(negative && zero_first_case)) ||
+       (default_end && !zero_first_case)) &&
+      !(negative_first_case && negative_first_magnitude == 1))
     assert(native_string_publications > 0u);
   lua_getglobal(L, "substring_trace_no");
   no = (TraceNo)lua_tointeger(L,-1); lua_pop(L,1);
@@ -113,6 +136,9 @@ int main(int argc, char **argv)
         (p.op1 == len || p.op2 == len)) endcalc = r;
     if (negative && p.o == IR_SUBOV && p.t.irt == (IRT_INT|IRT_GUARD))
       subcalc = r;
+    if (negative_first_case && p.o == IR_GE &&
+        p.t.irt == (IRT_INT|IRT_GUARD) && p.op1 == endcalc)
+      lowerguard = r;
     if (p.o == IR_EQ && p.t.irt == (IRT_FUNC|IRT_GUARD)) {
       if (!firstguard) firstguard = r;
       lastguard = r;
@@ -144,12 +170,31 @@ int main(int argc, char **argv)
   REJECT(BOTH(bound, op2, len));
   REJECT(BOTH(len, op2, IRFL_TAB_ASIZE));
   if (negative && !zero_first_case) {
-    assert(endcalc && subcalc && f.ir[subcalc].op1 == endcalc);
+    assert(endcalc && subcalc &&
+           (negative_first_case ?
+             (f.ir[subcalc].op1 == len && f.ir[subcalc].op2 == endcalc) :
+             f.ir[subcalc].op1 == endcalc));
     if (f.ir[endcalc].op1 == len)
       REJECT(BOTH(endcalc, op2, f.ir[pointer].op2));
     else
       REJECT(BOTH(endcalc, op1, f.ir[pointer].op2));
     REJECT(BOTH(subcalc, op2, f.ir[bound].op2));
+  }
+  if (negative_first_case) {
+    IRRef other_string = 0;
+    assert(lowerguard && lowerguard > endcalc && lowerguard < pointer);
+    REJECT(BOTH(lowerguard, o, IR_UGE));
+    REJECT(BOTH(lowerguard, op2, f.ir[endcalc].op2));
+    for (r = REF_FIRST; r < f.semantic_nins; r++) {
+      IRIns candidate = f.ir[r];
+      if (r != f.ir[pointer].op1 && candidate.o == IR_SLOAD &&
+          candidate.t.irt == (IRT_STR|IRT_GUARD)) {
+        other_string = r;
+        break;
+      }
+    }
+    assert(other_string);
+    REJECT(BOTH(len, op1, other_string));
   }
   lua_getglobal(L, "string"); lua_getfield(L, -1, "byte");
   byte = obj2gco(funcV(L->top-1));
