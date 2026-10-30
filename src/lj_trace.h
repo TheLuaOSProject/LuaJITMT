@@ -463,6 +463,10 @@ LJ_FUNC uint32_t lj_trace_test_mcode_retries(void);
 LJ_FUNC uint32_t lj_trace_test_abort_count(void);
 LJ_FUNC TraceError lj_trace_test_last_abort_error(void);
 #if LJ_TARGET_ARM64
+#if defined(LJ_TRACE_TEST_HELPERS)
+LJ_FUNC int lj_trace_test_arm64_first_side_constant_head(const IRIns *ir,
+  IRRef nins, IRRef nk, IRRef target, IROp expected);
+#endif
 LJ_FUNC void lj_trace_test_arm64_child_return_reset(void);
 LJ_FUNC void lj_trace_test_arm64_child_return_note(
   const LJArm64ChildReturnCert *cert);

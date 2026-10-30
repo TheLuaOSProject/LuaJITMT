@@ -112,3 +112,27 @@ not validate ARM64 behavior. Logs are
 `/Users/frityet/Scratch/ljmt-seq-child-side-20261030/arm64-capture-final.log`
 and `x64-compile-check.log`. The earlier MacOSX27.0 SDK resolution failure is
 toolchain evidence only and is superseded by these SDK27.2 runs.
+
+## Constant-reference boundary review
+
+An independent review found that the guarded-call proof read KGC and KINT
+references by numeric range alone. It now walks the addressable constant table,
+skipping paired payload words and requiring each pair to fit below both
+`REF_TRUE` and the captured IR extent before the production proof dereferences
+the selected constant. A focused fixture checks valid KGC/KNUM/KINT heads,
+rejects paired payload aliases, and rejects a KGC head at `REF_TRUE-1` whose
+payload would cross the constant boundary. The
+four-profile Lua leaf contract passed again on Xcode clang with SDK 27.2;
+its durable log is
+`/Users/frityet/Scratch/ljmt-seq-child-side-20261030/constant-bounds-final-four-profile.log`.
+
+The strict Xcode clang x86-64 Darwin build also passed and produced an x86_64
+binary; its log is
+`/Users/frityet/Scratch/ljmt-seq-child-side-20261030/x64-constant-bound-build.log`.
+The new constant walker is within the ARM64 experimental section. An earlier
+x86-64 build attempt failed before compilation because the Makefile selected
+the host architecture before the target SDK and deployment variables were set;
+that failed attempt is superseded by the recorded build. The temporary OWNER
+diagnostics were removed after capturing the return transition, and ordinary
+execution still demonstrates root-only publication. No side publication is
+enabled by this follow-up.

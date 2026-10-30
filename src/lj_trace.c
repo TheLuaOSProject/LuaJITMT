@@ -5989,6 +5989,45 @@ static int trace_arm64_first_side_child_frame_valid(jit_State *J,
     MSize *childbasep, MSize *childtopp, MSize *basebytep,
     GCproto **childptp);
 
+/* Confirm a literal reference is a constant head, not a payload word. */
+static int trace_arm64_first_side_constant_head(
+    const TraceArm64FirstSideLoopView *view, IRRef target, IROp expected)
+{
+  IRRef ref;
+  if (view == NULL || view->ir == NULL || view->nk == 0 ||
+      view->nk > REF_TRUE || view->nins <= REF_FIRST ||
+      target < view->nk || target >= REF_TRUE || target >= view->nins)
+    return 0;
+  for (ref = view->nk; ref < REF_TRUE && ref < view->nins; ref++) {
+    IRIns value = ir_load_acq(&view->ir[ref]);
+    int paired = value.o == IR_KNUM || value.o == IR_KINT64 ||
+	(LJ_GC64 && (value.o == IR_KGC || value.o == IR_KPTR ||
+	             value.o == IR_KKPTR));
+    if (paired && (ref+1u >= REF_TRUE || ref+1u >= view->nins ||
+	   ref+1u == target))
+      return 0;
+    if (ref == target) {
+      return value.o == expected;
+    }
+    if (paired)
+      ref++;
+  }
+  return 0;
+}
+
+#if defined(LJ_TRACE_TEST_HELPERS)
+int lj_trace_test_arm64_first_side_constant_head(const IRIns *ir,
+    IRRef nins, IRRef nk, IRRef target, IROp expected)
+{
+  TraceArm64FirstSideLoopView view;
+  memset(&view, 0, sizeof(view));
+  view.ir = (IRIns *)(void *)ir;
+  view.nins = nins;
+  view.nk = nk;
+  return trace_arm64_first_side_constant_head(&view, target, expected);
+}
+#endif
+
 /* Recover a child closure after its physical frame has returned. The parent
 ** trace must contain the exact rooted-upvalue read and function identity
 ** guard, and the source CALL target must still be defined by that same UGET.
@@ -6068,13 +6107,14 @@ static int trace_arm64_first_side_guarded_call_valid(
     int guard_at_call = 0;
     if (guard.o != IR_EQ || guard.t.irt != (IRT_FUNC|IRT_GUARD))
       continue;
-    if (irref_isk(guard.op1) && guard.op1 >= view->nk &&
-        guard.op1 < REF_TRUE && view->ir[guard.op1].o == IR_KGC &&
+    if (irref_isk(guard.op1) &&
+        trace_arm64_first_side_constant_head(view, guard.op1, IR_KGC) &&
         ir_kgc_acq(&view->ir[guard.op1]) == obj2gco(childfn)) {
       constant = guard.op1;
       value = guard.op2;
-    } else if (irref_isk(guard.op2) && guard.op2 >= view->nk &&
-               guard.op2 < REF_TRUE && view->ir[guard.op2].o == IR_KGC &&
+    } else if (irref_isk(guard.op2) &&
+               trace_arm64_first_side_constant_head(view, guard.op2,
+                                                    IR_KGC) &&
                ir_kgc_acq(&view->ir[guard.op2]) == obj2gco(childfn)) {
       constant = guard.op2;
       value = guard.op1;
@@ -6130,8 +6170,8 @@ static int trace_arm64_first_side_guarded_call_valid(
         IRIns check = ir_load_acq(&view->ir[z]);
         if (check.o == IR_NE && irt_isguard(check.t) &&
             check.op1 == q && irref_isk(check.op2) &&
-            check.op2 < REF_TRUE && view->ir[check.op2].o == IR_KINT &&
-            view->ir[check.op2].i == 0) {
+            trace_arm64_first_side_constant_head(view, check.op2, IR_KINT) &&
+            ir_load_acq(&view->ir[check.op2]).i == 0) {
           guarded_nonnull = 1;
           break;
         }

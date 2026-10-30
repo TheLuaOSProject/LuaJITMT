@@ -38,6 +38,43 @@ static unsigned gc_reuses, cold_retries;
 static unsigned semantic_bad, postra_bad, alias_bad;
 static unsigned return_certificates;
 
+static void constant_boundary_checks(void)
+{
+  IRIns *ir = (IRIns *)calloc(REF_FIRST+16u, sizeof(IRIns));
+  IRRef nk = REF_TRUE-8u;
+  IRRef nins = REF_FIRST+16u;
+  IRRef boundary = REF_TRUE-1u;
+  assert(ir != NULL && nk < REF_TRUE && nins > REF_FIRST);
+  ir[nk].o = IR_KNUM;
+  ir[nk+1u].o = IR_KNUM;
+  ir[nk+2u].o = IR_KGC;
+  ir[nk+3u].o = IR_KGC;
+  ir[nk+4u].o = IR_KKPTR;
+  ir[nk+5u].o = IR_KKPTR;
+  ir[nk+6u].o = IR_KINT;
+  ir[nk+6u].i = 0;
+  ir[boundary].o = IR_KGC;
+  assert(lj_trace_test_arm64_first_side_constant_head(
+           ir, nins, nk, nk, IR_KNUM));
+  assert(!lj_trace_test_arm64_first_side_constant_head(
+           ir, nins, nk, nk+1u, IR_KNUM));
+  assert(lj_trace_test_arm64_first_side_constant_head(
+           ir, nins, nk, nk+2u, IR_KGC));
+  assert(!lj_trace_test_arm64_first_side_constant_head(
+           ir, nins, nk, nk+3u, IR_KGC));
+  assert(lj_trace_test_arm64_first_side_constant_head(
+           ir, nins, nk, nk+4u, IR_KKPTR));
+  assert(!lj_trace_test_arm64_first_side_constant_head(
+           ir, nins, nk, nk+5u, IR_KKPTR));
+  assert(lj_trace_test_arm64_first_side_constant_head(
+           ir, nins, nk, nk+6u, IR_KINT));
+  assert(!lj_trace_test_arm64_first_side_constant_head(
+           ir, nins, nk, nk-1u, IR_KINT));
+  assert(!lj_trace_test_arm64_first_side_constant_head(
+           ir, nins, nk, boundary, IR_KGC));
+  free(ir);
+}
+
 static GCfunc *global_function(lua_State *L, const char *name)
 {
   GCfunc *fn;
@@ -636,6 +673,7 @@ int main(void)
   lua_State *L = ljt_lua_newstate_openlibs();
   unsigned shape;
   assert(LJ_FR2 == 1);
+  constant_boundary_checks();
   ljt_lua_dostring(L,
     "local th=require('threading'); ready=th.channel(1); stop=th.channel(1); "
     "peer=assert(th.spawn(function(r,s) assert(r:send(true,5)); "
