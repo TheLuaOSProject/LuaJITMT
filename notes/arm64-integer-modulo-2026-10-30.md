@@ -44,3 +44,25 @@ scalar fixture because `lj_ci_run_fixture` requires a compiled fixture's
 now uses a bounded direct runtime invocation after the profile-matched build.
 This was runner setup, before the ordinary probe executed, not a runtime
 failure. The original log remains in `modulo-final/four-profile.log`.
+
+## Completed focused validation
+
+Frozen source `4bd2d27f9` passes the complete four-profile modulo contract:
+ARM64 and arm64e assertion/release, including independent malformed-proof
+checks and all four ordinary modulo rows per profile. It restores ordinary
+ARM64 at profile
+`f42266bad2586fcc559a3784b55e2474ef7e4d4eb0c75cd5596e1a377cac3d97`.
+
+Fresh ordinary ARM64 and strict x86_64 (`CFLAGS=-Werror`) builds each pass
+both 509-case stock source/bytecode corpora, all four live-peer modulo rows,
+and the 15-row next-primitive inventory. ARM64 selected roots contain IR_MOD;
+the default single-number x64 uses its NUM arithmetic graph. Both match the
+interpreter across the signed-limit, zero-divisor, overflow/coercion and GC
+cases. Exit counts differ and are not performance measurements.
+
+All logs, matching ordinary executables/archives/JIT modules and hashes are
+in `modulo-final-v2/` under the evidence directory above. Final explicit
+ordinary ARM64 restoration is profile
+`538243f3090ccf12d84e157ae88411395f274a2e98ed4205701b237520d64e30`.
+This supersedes the initial pending-validation paragraph. The result-local
+allocation gap is still open; no complete-gate or full-parity claim is made.
