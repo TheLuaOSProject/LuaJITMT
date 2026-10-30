@@ -11198,11 +11198,10 @@ static int arm64_string_byte_bounds_ir(const GCtrace *T, IRRef strref,
       byte_offset == INT32_MAX ||
       (uint32_t)byte_offset > 4095u - (uint32_t)sizeof(GCstr) ||
       !arm64_scalar_ir_ref(T, str, strref, IRT_STR)) {
-    int bounds = arm64_string_byte_dynamic_bounds_ir(T, strref, str, offset);
-    int range = arm64_string_byte_dynamic_range_ir(T, strref, str, offset, 0, 0);
     if (arm64_string_byte_constant_negative_bounds_ir(T, strref, str,
                                                        offset)) return 1;
-    return bounds || range;
+    return arm64_string_byte_dynamic_bounds_ir(T, strref, str, offset) ||
+           arm64_string_byte_dynamic_range_ir(T, strref, str, offset, 0, 0);
   }
   bound = (int64_t)byte_offset + 1;
   for (ref = REF_FIRST; ref < strref; ref++) {
