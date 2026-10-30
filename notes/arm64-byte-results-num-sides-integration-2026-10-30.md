@@ -113,3 +113,34 @@ retained alongside the logs and `ordinary-matrix.sh`.
 The matrix completed successfully and restored ordinary ARM64 assertions,
 profile `989b7fa27cbc79d1a765557428f7d18de999824a73e91ce86760e4b0146fcc0b`.
 This combined source is newer than the full-gate checkpoint `789c1e229`.
+
+## Negative bounds and raw byte snapshots
+
+Source `4f08d4b13` integrates the reviewed negative-dynamic-first/end multiple
+byte proof from `e43f3b1f0`. Each normalized bound is tied to its exact source
+parameter and string length; the sign, base, checked width and per-byte
+displacement guards are replayed independently. Review added acquire reads
+in the allocated pass and explicit rejection of forward width references and
+negative displacements. The integrated byte contract passed all four profiles,
+restoring ordinary ARM64 with profile
+`19b8b38bb9d8bddee08c0b7f23677b6e6c97aa1174e562984554a8092ee8da62`.
+Evidence is `negative-start-multiple-integration-source.txt` and
+`negative-start-multiple-integration-four-profiles.log` in the wide-byte-FFI
+directory above.
+
+Source `0a2ad9886` additionally integrates raw U8 snapshot restoration from
+`240e0668c`. A snapshot may restore a byte only into the exact one-result
+dynamic-positive-index CALL output slot or its immediate copy. Both validators
+reject source writes that clobber it, range writes, jumps bypassing its
+definition, unrelated slots and invalid allocated locations. Existing integer
+snapshot restoration handles the zero-extended byte; no emitter or restoration
+change was needed. The merge preserves both complete new proof pairs exactly.
+
+The combined byte contract passed all four profiles, including native
+execution, peer activity, GC, boundary exits and independent source/map/layout
+mutations. Evidence is `u8-snapshot-integration-source.txt` and
+`u8-snapshot-integration-four-profiles.log`; ordinary ARM64 restoration profile
+is `cf33d7e6c672ab0d111d8413b05f30264c2b0307430c9aabcace424da4d64b47`.
+The component's final ordinary live-peer probes witness both architectures'
+selected XLOAD loop, 84 exact-root exits and unchanged code identity after GC.
+This snapshot proof does not yet cover raw bytes from multiple-result CALLs.
