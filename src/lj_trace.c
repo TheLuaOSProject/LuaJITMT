@@ -6627,34 +6627,29 @@ static int trace_arm64_side_forl_norestore_valid(const IRIns *ir,
   IRIns source;
   IRType type;
   if (ir == NULL || bc_op(startins) != BC_FORL ||
-	  (sn & 0x00ff0000u) != SNAP_NORESTORE) {
+	  (sn & 0x00ff0000u) != SNAP_NORESTORE)
 	return 0;
-	}
   if (admission != TRACE_ARM64_INT_FORL_ADMITTED &&
 	  admission != (TRACE_ARM64_NUM_FORL_ADMITTED|
 			TRACE_ARM64_NUM_FORL_ASCENDING) &&
 	  admission != (TRACE_ARM64_NUM_FORL_ADMITTED|
-				  TRACE_ARM64_NUM_FORL_DESCENDING)) {
+			TRACE_ARM64_NUM_FORL_DESCENDING))
 	return 0;
-	}
   type = admission == TRACE_ARM64_INT_FORL_ADMITTED ? IRT_INT : IRT_NUM;
   slot = snap_slot(sn);
   idxslot = 1u+LJ_FR2+(MSize)bc_a(startins);
   if (slot != idxslot && slot != idxslot+FORL_STOP &&
-	  slot != idxslot+FORL_STEP) {
+	  slot != idxslot+FORL_STEP)
 	return 0;
-	}
   ref = snap_ref(sn);
   if (irref_isk(ref) || ref < REF_FIRST || ref >= snapref ||
-	  ref >= nins || ref >= REF_DROP || nk == 0 || nk > REF_TRUE) {
+	  ref >= nins || ref >= REF_DROP || nk == 0 || nk > REF_TRUE)
 	return 0;
-	}
   source = ir_load_acq(&ir[ref]);
   if (source.o != IR_SLOAD || source.op1 != slot ||
 	  (source.op2 & (IRSLOAD_CONVERT|IRSLOAD_PARENT)) != 0 ||
-	  irt_type(source.t) != type) {
+	  irt_type(source.t) != type)
 	return 0;
-	}
   if (slot == idxslot) {
 	return (source.t.irt & ~IRT_ISPHI) == (type|IRT_GUARD) &&
 	  source.op2 == (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT);
@@ -6998,7 +6993,7 @@ lj_trace_arm64_side_parent_capture(jit_State *J)
       child == view.rootno ||
       (MSize)child >= view.tracev->sizetrace ||
       gcref_acq(view.tracev->slot[child]) !=
-        (const GCobj *)LJ_TRACE_PENDING)
+	(const GCobj *)LJ_TRACE_PENDING)
     goto out;
   if (!trace_arm64_side_parent_asm_owner_exact(
         J, parent, exitno, continuation))
