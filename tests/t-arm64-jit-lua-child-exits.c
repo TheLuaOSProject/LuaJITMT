@@ -44,6 +44,8 @@ static void constant_boundary_checks(void)
   IRRef nk = REF_TRUE-8u;
   IRRef nins = REF_FIRST+16u;
   IRRef boundary = REF_TRUE-1u;
+  IRRef marker_nk = REF_TRUE-8u;
+  uint64_t framebits = UINT64_C(0x123456789abcdef0);
   assert(ir != NULL && nk < REF_TRUE && nins > REF_FIRST);
   ir[nk].o = IR_KNUM;
   ir[nk+1u].o = IR_KNUM;
@@ -72,6 +74,19 @@ static void constant_boundary_checks(void)
            ir, nins, nk, nk-1u, IR_KINT));
   assert(!lj_trace_test_arm64_first_side_constant_head(
            ir, nins, nk, boundary, IR_KGC));
+
+  /* The frame-marker consumer must reject a SNAP_FRAME ref that points into
+  ** a KNUM payload, even when that payload is forged to look like a KNUM. */
+  ir[marker_nk].o = IR_KNUM;
+  ir[marker_nk+1u].o = IR_KNUM;
+  ir[marker_nk+1u].tv.u64 = framebits;
+  ir[marker_nk+2u].tv.u64 = framebits;
+  assert(lj_trace_test_arm64_first_side_frame_marker(
+           ir, nins, marker_nk, marker_nk, 5, 5, framebits));
+  assert(!lj_trace_test_arm64_first_side_frame_marker(
+           ir, nins, marker_nk, marker_nk+1u, 5, 5, framebits));
+  assert(!lj_trace_test_arm64_first_side_frame_marker(
+           ir, nins, marker_nk, marker_nk, 4, 5, framebits));
   free(ir);
 }
 

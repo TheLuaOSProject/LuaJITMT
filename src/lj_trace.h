@@ -466,6 +466,9 @@ LJ_FUNC TraceError lj_trace_test_last_abort_error(void);
 #if defined(LJ_TRACE_TEST_HELPERS)
 LJ_FUNC int lj_trace_test_arm64_first_side_constant_head(const IRIns *ir,
   IRRef nins, IRRef nk, IRRef target, IROp expected);
+LJ_FUNC int lj_trace_test_arm64_first_side_frame_marker(const IRIns *ir,
+  IRRef nins, IRRef nk, IRRef ref, BCReg markerslot, BCReg frameslot,
+  uint64_t framebits);
 #endif
 LJ_FUNC void lj_trace_test_arm64_child_return_reset(void);
 LJ_FUNC void lj_trace_test_arm64_child_return_note(

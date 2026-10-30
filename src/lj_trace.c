@@ -6028,6 +6028,39 @@ int lj_trace_test_arm64_first_side_constant_head(const IRIns *ir,
 }
 #endif
 
+/* Validate the exact frame marker consumed by the child-frame proof. */
+static int trace_arm64_first_side_frame_marker_valid(
+    const TraceArm64FirstSideLoopView *view, SnapEntry sn, MSize frameslot,
+    uint64_t framebits)
+{
+  IRRef ref = snap_ref(sn);
+  IRIns payload;
+  if ((sn & SNAP_FRAME) == 0 ||
+      sn == SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL) ||
+      snap_slot(sn) != frameslot ||
+      (sn & UINT32_C(0x00ff0000)) != SNAP_FRAME || !irref_isk(ref) ||
+      !trace_arm64_first_side_constant_head(view, ref, IR_KNUM) ||
+      ref+1u >= view->nins || ref+1u >= REF_TRUE)
+    return 0;
+  payload = ir_load_acq(&view->ir[ref+1u]);
+  return payload.tv.u64 == framebits;
+}
+
+#if defined(LJ_TRACE_TEST_HELPERS)
+int lj_trace_test_arm64_first_side_frame_marker(const IRIns *ir,
+    IRRef nins, IRRef nk, IRRef ref, BCReg markerslot, BCReg frameslot,
+    uint64_t framebits)
+{
+  TraceArm64FirstSideLoopView view;
+  memset(&view, 0, sizeof(view));
+  view.ir = (IRIns *)(void *)ir;
+  view.nins = nins;
+  view.nk = nk;
+  return trace_arm64_first_side_frame_marker_valid(
+    &view, SNAP(markerslot, SNAP_FRAME, ref), frameslot, framebits);
+}
+#endif
+
 /* Recover a child closure after its physical frame has returned. The parent
 ** trace must contain the exact rooted-upvalue read and function identity
 ** guard, and the source CALL target must still be defined by that same UGET.
@@ -6367,23 +6400,13 @@ static int trace_arm64_first_side_child_frame_valid(jit_State *J,
   ** parent's frame extent. Its KNUM payload must equal the live Lua frame. */
   for (i = 0; i < view->nent; i++) {
     SnapEntry sn = snapentry_acq(&view->snapmap[view->mapofs+i]);
-    IRRef ref;
-    IRIns head, payload;
     if ((sn & SNAP_FRAME) == 0 ||
 	sn == SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL))
       continue;
     frame_markers++;
-    if (frame_markers != 1u || snap_slot(sn) != rootpt->framesize ||
-	(sn & UINT32_C(0x00ff0000)) != SNAP_FRAME)
-      return 0;
-    ref = snap_ref(sn);
-    if (!irref_isk(ref) ||
-	!trace_arm64_first_side_constant_head(view, ref, IR_KNUM) ||
-	ref+1u >= view->nins || ref+1u >= REF_TRUE)
-      return 0;
-    head = ir_load_acq(&view->ir[ref]);
-    payload = ir_load_acq(&view->ir[ref+1u]);
-    if (head.o != IR_KNUM || payload.tv.u64 != frame->u64)
+	if (frame_markers != 1u ||
+	    !trace_arm64_first_side_frame_marker_valid(
+	      view, sn, rootpt->framesize, frame->u64))
       return 0;
   }
   if (frame_markers != 1u)
