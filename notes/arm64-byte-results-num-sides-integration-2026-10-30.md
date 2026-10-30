@@ -490,3 +490,31 @@ passed an independent ordinary rebuild. The next full gate is frozen at
 `f752aa882`, which excludes the both-negative endpoint slice above and the
 ongoing numeric-concat, child-side and no-peer upvalue work. Full parity is
 still incomplete.
+
+## No-peer captured substring upvalue
+
+Production source `6ccf3a269` includes the bounded no-peer normalization from
+`67da4e268`: a closed, root-context read of captured `string.sub` uses the
+existing rooted helper and exact fast-function/source admission. The x64 raw
+upvalue path remains unchanged; ARM64 pays an additional helper read, whose
+overhead has not been benchmarked. Raw UREFC admission stays closed.
+
+The integrated rooted-upvalue contract passes all four profiles, including
+private proof mutations and the strengthened peer-transition test. That
+legacy contract does not restore a build itself; a separate ordinary ARM64
+rebuild and transition run passed afterward, with profile
+`28bc95e0783f4945c5c2824a3ee7071970851632410b77c53ee355bc42b64b79`.
+Evidence: `/Users/frityet/Scratch/ljmt-no-peer-upvalue-integrated-20261030/`.
+
+The exact-source ordinary ARM64/strict-x64 matrix passes both 509-case stock
+corpora and every preceding comparison. The four previously missing no-peer
+empty-substring rows now require actual loop roots, nonempty native code,
+selected exits before/after GC and unchanged code on both architectures.
+These rows establish selected-root execution, not full-body execution for
+every guard/input path. The separate ARM64 transition test observes 40 exits
+in each phase and checks a live current root before first peer activation,
+its retirement, and native re-entry after activation. Binaries, modules,
+hashes and logs: `/Users/frityet/Scratch/ljmt-no-peer-upvalue-ordinary-20261030/`.
+Ordinary ARM64 restore profile:
+`3254e2ae7826da1851590cbb114854c5132dc5c83da7b7a62d79e64d18743c5c`.
+This slice is outside the still-running complete gate at `f752aa882`.
