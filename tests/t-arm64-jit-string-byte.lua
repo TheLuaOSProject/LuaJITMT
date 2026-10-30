@@ -43,6 +43,28 @@ string_byte_dynamic_trace_clone = function(s, n, index)
   return sum
 end
 
+string_byte_fixed_pair_trace = function(s, n, ka, kb)
+  local byte = string.byte
+  local sum = 0
+  for i = 1, n do
+    local a, b = byte(s, 1, 2)
+    if a == ka then sum = sum + a else sum = sum + a * 2 end
+    if b == kb then sum = sum + b else sum = sum + b * 2 end
+  end
+  return sum
+end
+
+string_byte_fixed_pair_oracle = function(s, n, ka, kb)
+  local byte = string.byte
+  local sum = 0
+  for i = 1, n do
+    local a, b = byte(s, 1, 2)
+    if a == ka then sum = sum + a else sum = sum + a * 2 end
+    if b == kb then sum = sum + b else sum = sum + b * 2 end
+  end
+  return sum
+end
+
 string_byte_integer_trace = function(s, n, index)
   local byte = string.byte
   local i, sum = 1, 0.5
@@ -73,7 +95,8 @@ end
 
 local traced = {}
 local function trace_event(what, traceno, fn)
-  if what == 'start' and fn == string_byte_trace then
+  if what == 'start' and
+     (fn == string_byte_trace or fn == string_byte_fixed_pair_trace) then
     traced[traceno] = true
   elseif what == 'abort' then
     traced[traceno] = nil
@@ -86,6 +109,31 @@ assert(string_byte_trace(s, 80) == string.byte('gcstr-byte-', 2) * 80)
 assert(string_byte_dynamic_trace(s, 80, 2.9) == string.byte('gcstr-byte-', 2) * 80)
 assert(string_byte_literal_trace(s, 80) == 98 * 80)
 assert(string_byte_literal_trace_clone(s, 80) == 98 * 80)
+local pair_oracle = string_byte_fixed_pair_oracle
+jit.off(pair_oracle, true)
+assert(string_byte_fixed_pair_trace(s, 80, 103, 99) == 202 * 80)
+assert(string_byte_fixed_pair_trace(s, 80, 0, 0) ==
+       pair_oracle(s, 80, 0, 0))
+local function has_fixed_pair_trace()
+  for traceno in pairs(traced) do
+    local info = util.traceinfo(traceno)
+    if info then
+      local raw = 0
+      for ref = 1, info.nins do
+        local _, typedop = util.traceir(traceno, ref)
+        if typedop and vmdef.irnames:sub(
+             bit.rshift(typedop, 8) * 6 + 1,
+             bit.rshift(typedop, 8) * 6 + 6) == 'XLOAD ' then
+          raw = raw + 1
+        end
+      end
+      if raw >= 2 then return true end
+    end
+  end
+  return false
+end
+jit.off(has_fixed_pair_trace, true)
+assert(has_fixed_pair_trace(), 'two-result byte trace omitted its raw loads')
 
 local function has_bounded_byte_load()
   local traceno = next(traced)
@@ -117,6 +165,8 @@ assert(string_byte_negative_integer_trace(s, 80, -2) ==
 
 collectgarbage('collect')
 assert(string_byte_trace(s, 80) == 99 * 80)
+assert(string_byte_fixed_pair_trace(s, 80, 103, 99) ==
+       pair_oracle(s, 80, 103, 99))
 assert(string_byte_trace('a\0b', 80) == 0)
 assert(string_byte_trace(string.rep('L', 65536), 80) == 76 * 80)
 assert(string_byte_dynamic_trace('a\0b', 80, 2) == 0)
