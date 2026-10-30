@@ -45,7 +45,17 @@ mutations and the formatted fixture. Ordinary assertion ARM64 was restored
 without helpers, profile
 `9fab8de9937545c2ab2dab2e2a14b402c2fdbe44ac651a4d95734b2172f9248a`.
 Earlier logs retain the failed test-development attempts and do not replace
-this final run. Ordinary cross-architecture validation follows separately.
+this final run.
+
+Ordinary validation at `aca64562a` also passes. ARM64 assertions and strict
+bare-`-Werror` x86_64 assertions each pass all 509 source cases, all 509
+original v2-bytecode cases, 260 workload semantic checks, the topology probe
+and all sixteen substring native/live-peer rows. The workload inventory has
+selected-root exit witnesses in eighteen of twenty rows on each target.
+The `ordinary/` evidence directory retains source revision, logs, matching
+JIT modules, binaries, archives and SHA-256 files. It restores ordinary
+assertion ARM64 with profile
+`b78389a60e617b5927aee49becb901755962d3330bfd57d3990149451248057b`.
 
 This is a bounded admission slice. Dynamic/negative/empty substring results,
 other source shapes, broader string allocation and general Lua call/return
