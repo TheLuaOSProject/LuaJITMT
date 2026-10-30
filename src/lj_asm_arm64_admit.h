@@ -10885,8 +10885,27 @@ static int arm64_string_byte_dynamic_index_ir(const GCtrace *T, IRRef conv)
   for (ref = conv+1u; ref < T->nins; ref++) {
     const IRIns *strref = &T->ir[ref];
     const IRIns *offset;
-    if (strref->o != IR_STRREF || strref->t.irt != IRT_PGC ||
-        strref->op2 < REF_FIRST || strref->op2 >= ref) continue;
+    int32_t displacement;
+    if (strref->o != IR_STRREF || strref->t.irt != IRT_PGC) continue;
+    /* The same truncating conversion is valid for a positive range end.
+    ** Its checked width relation must prove this constant byte is in range. */
+    if (arm64_ir_kint_value(T, strref->op2, &displacement)) {
+      IRRef upper;
+      for (upper = conv+1u; upper < ref; upper++) {
+        const IRIns *guard = &T->ir[upper];
+        IRRef lenref = guard->o == IR_UGE && guard->op2 == conv ?
+          guard->op1 : guard->o == IR_ULE && guard->op1 == conv ?
+          guard->op2 : 0;
+        if (lenref >= REF_FIRST && lenref < upper &&
+            T->ir[lenref].o == IR_FLOAD && T->ir[lenref].t.irt == IRT_INT &&
+            T->ir[lenref].op2 == IRFL_STR_LEN &&
+            T->ir[lenref].op1 == strref->op1 &&
+            arm64_string_byte_range_ir(T, upper, ref, displacement))
+          return 1;
+      }
+      continue;
+    }
+    if (strref->op2 < REF_FIRST || strref->op2 >= ref) continue;
     offset = &T->ir[strref->op2];
     if ((offset->o != IR_ADDOV || offset->op1 != conv) &&
         (offset->o != IR_ADD ||
@@ -17477,8 +17496,25 @@ static int arm64_string_byte_dynamic_index_postra(
   for (ref = conv+1u; ref < v->nins; ref++) {
     IRIns strref = ir_load_acq(&v->ir[ref]);
     IRIns offset;
-    if (strref.o != IR_STRREF || strref.t.irt != IRT_PGC ||
-        strref.op2 < REF_FIRST || strref.op2 >= ref) continue;
+    int32_t displacement;
+    if (strref.o != IR_STRREF || strref.t.irt != IRT_PGC) continue;
+    if (arm64_scalar_postra_kint(v, strref.op2, &displacement)) {
+      IRRef upper;
+      for (upper = conv+1u; upper < ref; upper++) {
+        IRIns guard = ir_load_acq(&v->ir[upper]);
+        IRRef lenref = guard.o == IR_ULE && guard.op1 == conv ?
+          guard.op2 : guard.o == IR_UGE && guard.op2 == conv ? guard.op1 : 0;
+        if (lenref >= REF_FIRST && lenref < upper) {
+          IRIns len = ir_load_acq(&v->ir[lenref]);
+          if (len.o == IR_FLOAD && len.t.irt == IRT_INT &&
+              len.op2 == IRFL_STR_LEN && len.op1 == strref.op1 &&
+              arm64_string_byte_range_postra(v, upper, ref, displacement))
+            return 1;
+        }
+      }
+      continue;
+    }
+    if (strref.op2 < REF_FIRST || strref.op2 >= ref) continue;
     offset = ir_load_acq(&v->ir[strref.op2]);
     if ((offset.o != IR_ADDOV || offset.op1 != conv) &&
         (offset.o != IR_ADD ||
