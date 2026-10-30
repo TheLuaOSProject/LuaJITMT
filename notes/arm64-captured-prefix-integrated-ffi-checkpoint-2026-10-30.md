@@ -26,3 +26,15 @@ provenance are recorded in the captured-prefix component note.
 
 The separate full gate is still running at `ff86407a1`; it does not cover
 these later additions. Full x86_64 parity remains incomplete.
+
+## Folded-argument follow-up
+
+Source `af05ea408` adds `9a14875cb`'s folded fixed 64-bit argument support.
+The integer-argument runtime/admission and variadic contracts pass together
+in all four profiles; ordinary assertion ARM64 then passes both 509-case
+stock corpora. See `folded-int64-source.txt`,
+`folded-int64-four-profiles.log`, `folded-int64-stock-source.log` and
+`folded-int64-stock-bytecode.log` in the same evidence directory.
+The restored ordinary profile is
+`aa9fdeb21fa4c063d595c0914fa152d1cb76ef8bfbd788c87839fde0e7b36be0`.
+This focused follow-up does not supersede the full-gate scope above.
