@@ -16048,6 +16048,9 @@ static int lj_trace_arm64_lua_leaf_range(const GCproto *pt,
                op == BC_MULNV || op == BC_DIVNV) {
       if (b >= pt->framesize || !defined[b]) return 0;
       kn = c;
+    } else if (op == BC_UNM) {
+      BCReg source = bc_d(ins);
+      if (source >= pt->framesize || !defined[source]) return 0;
     } else {
       return 0;
     }
@@ -16445,6 +16448,9 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
       kn = bc_d(ins);
     } else if (op == BC_CALL) {
       if (!lj_trace_arm64_lua_leaf_call(pt, ins, defined)) return 0;
+    } else if (op == BC_UNM) {
+      BCReg source = bc_d(ins);
+      if (source >= frame || !defined[source]) return 0;
     } else if (op == BC_ADDVV || op == BC_SUBVV || op == BC_MULVV ||
                op == BC_DIVVV) {
       if (b >= frame || c >= frame || !defined[b] || !defined[c]) return 0;

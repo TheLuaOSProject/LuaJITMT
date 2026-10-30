@@ -23,6 +23,7 @@ for profile in arm64-assert arm64e-assert arm64-release arm64e-release; do
   lj_ci_compile_fixture "$fixture" "$root/tests/t-arm64-jit-lua-leaf-calls.c"
   lj_ci_run_fixture 60 "$fixture"
   lj_ci_run_lua 60 "$root/tests/t-arm64-jit-lua-leaf-calls.lua"
+  lj_ci_run_lua 60 "$root/tests/t-arm64-jit-lua-unary-neg.lua"
   nested_fixture=$tmpdir/lua-nested-$profile
   lj_ci_compile_fixture "$nested_fixture" "$root/tests/t-arm64-jit-lua-nested-calls.c"
   lj_ci_run_fixture 60 "$nested_fixture"

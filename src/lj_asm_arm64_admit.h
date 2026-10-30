@@ -15613,6 +15613,11 @@ static int arm64_lua_leaf_numeric_range(const GCproto *pt, MSize first,
       /* The exact requested values are seeded from the CALL map. */
     } else if (op == BC_CGET || op == BC_MOV || op == BC_CSET) {
       numeric[dst] = numeric[bc_d(ins)];
+    } else if (op == BC_UNM) {
+      MSize source = bc_d(ins);
+      if (dst >= pt->framesize || source >= pt->framesize || !numeric[source])
+        return 0;
+      numeric[dst] = 1;
     } else if (op == BC_KPRI) {
       if (bc_d(ins) > 2u) return 0;
       numeric[dst] = 0;
@@ -15651,6 +15656,11 @@ static int arm64_lua_leaf_numeric_path(const GCproto *pt,
     if (op != BC_JMP) {
       if (op == BC_CGET || op == BC_MOV || op == BC_CSET) {
         numeric[dst] = numeric[bc_d(ins)];
+      } else if (op == BC_UNM) {
+        MSize source = bc_d(ins);
+        if (dst >= pt->framesize || source >= pt->framesize || !numeric[source])
+          return 0;
+        numeric[dst] = 1;
       } else if (op == BC_KPRI) {
         if (bc_d(ins) > 2u) return 0;
         numeric[dst] = 0;
@@ -15714,6 +15724,11 @@ static int arm64_lua_leaf_type_range(const GCproto *pt, MSize first,
       /* The exact requested values are seeded from the CALL map. */
     } else if (op == BC_CGET || op == BC_MOV || op == BC_CSET) {
       types[dst] = types[bc_d(ins)];
+    } else if (op == BC_UNM) {
+      MSize source = bc_d(ins);
+      if (dst >= pt->framesize || source >= pt->framesize ||
+          (types[source] != IRT_INT && types[source] != IRT_NUM)) return 0;
+      types[dst] = IRT_NUM;
     } else if (op == BC_KPRI) {
       if (bc_d(ins) > 2u) return 0;
       types[dst] = (IRType)(IRT_NIL+bc_d(ins));
@@ -15757,6 +15772,11 @@ static int arm64_lua_leaf_type_path(const GCproto *pt,
     if (op != BC_JMP) {
       if (op == BC_CGET || op == BC_MOV || op == BC_CSET) {
         types[dst] = types[bc_d(ins)];
+      } else if (op == BC_UNM) {
+        MSize source = bc_d(ins);
+        if (dst >= pt->framesize || source >= pt->framesize ||
+            (types[source] != IRT_INT && types[source] != IRT_NUM)) return 0;
+        types[dst] = IRT_NUM;
       } else if (op == BC_KPRI) {
         if (bc_d(ins) > 2u) return 0;
         types[dst] = (IRType)(IRT_NIL+bc_d(ins));
@@ -16753,6 +16773,23 @@ static IRRef arm64_lua_leaf_ir_arith(const GCtrace *T, IROp op,
   return 0;
 }
 
+/* Numeric BC_UNM is represented by IR_NEG and the exact global sign mask.
+** Integer-specialized SUBOV forms stay closed in this leaf slice. */
+static IRRef arm64_lua_leaf_ir_neg(const GCtrace *T, IRRef value, IRRef end)
+{
+  IRRef r;
+  value = arm64_lua_leaf_ir_num(T, value, end);
+  if (!value) return 0;
+  for (r = REF_FIRST; r < end; r++) {
+    const IRIns *ir = &T->ir[r];
+    if (ir->o == IR_NEG && (ir->t.irt & ~IRT_ISPHI) == IRT_NUM &&
+        ir->op1 == value &&
+        value < r && arm64_scalar_ir_ref(T, value, r, IRT_NUM) &&
+        arm64_scalar_ksimd_ir_ref(T, ir->op2, r, 1u)) return r;
+  }
+  return 0;
+}
+
 /* Resolve a source CALL's exact function value from its IR value and an
 ** identity guard already present in the trace. This is deliberately separate
 ** from the post-RA resolver below. */
@@ -16955,6 +16992,9 @@ static int arm64_lua_leaf_ir_eval_multi(const jit_State *J, const GCtrace *T,
       for (i = 0; i < nargs; i++) state[a+1u+LJ_FR2+i] = 0;
       open_results = 0;
       open_producer = UINT32_MAX;
+    } else if (op == BC_UNM) {
+      if (d >= pt->framesize || !state[d]) return 0;
+      value = arm64_lua_leaf_ir_neg(T, state[d], end);
     } else if (op == BC_ADDVV || op == BC_SUBVV || op == BC_MULVV ||
                op == BC_DIVVV || op == BC_ADDVN || op == BC_SUBVN ||
                op == BC_MULVN || op == BC_DIVVN || op == BC_ADDNV ||
@@ -17163,7 +17203,7 @@ static int arm64_lua_leaf_ir_prefix(const GCtrace *T, const GCproto *pt,
       if (!(branch.early_return && op == BC_RET1) &&
           !((pc == branch.first || pc == branch.second) &&
             branch.compare != UINT32_MAX) &&
-          (op != BC_RET1 && op != BC_RET && op != BC_CGET &&
+          (op != BC_UNM && op != BC_RET1 && op != BC_RET && op != BC_CGET &&
           op != BC_MOV && op != BC_CSET && op != BC_KSHORT &&
           op != BC_KNUM && op != BC_KPRI &&
           op != BC_VARG &&
@@ -17207,6 +17247,10 @@ static int arm64_lua_leaf_ir_prefix(const GCtrace *T, const GCproto *pt,
     } else if (op == BC_KNUM) {
       proto_knumtv_load_acq(&k, pt, bc_d(ins));
       value = arm64_lua_leaf_ir_literal(T, numberVnum(&k), 0);
+    } else if (op == BC_UNM) {
+      MSize operand = bc_d(ins);
+      if (operand >= pt->framesize || !slots[operand]) return 0;
+      value = arm64_lua_leaf_ir_neg(T, slots[operand], limit);
     } else {
       left = slots[bc_b(ins)];
       if (op >= BC_ADDVV && op <= BC_DIVVV) {
@@ -17445,6 +17489,11 @@ static int arm64_lua_leaf_ir_result(const jit_State *J, const GCtrace *T,
       proto_knumtv_load_acq(&k, pt, d);
       if (!tvisnumber(&k)) return 0;
       out = arm64_lua_leaf_ir_literal(T, numberVnum(&k), 0);
+    } else if (op == BC_UNM) {
+      if (d >= pt->framesize) return 0;
+      out = arm64_lua_leaf_ir_neg(T, values[d], next->ref);
+      depends = derived[d];
+      if (!out) return 0;
     } else {
       IRRef left, right;
       IROp arith;
@@ -17578,6 +17627,10 @@ static int arm64_lua_leaf_ir_needed_range(const GCproto *pt, MSize first,
     }
     case BC_KPRI:
       if (d > 2u) return 0;
+      break;
+    case BC_UNM:
+      if (d >= pt->framesize) return 0;
+      needed[d] = 1;
       break;
     case BC_CALL: {
       MSize first = a+1u+LJ_FR2;
@@ -23743,6 +23796,23 @@ static IRRef arm64_lua_leaf_postra_arith(const LJArm64PostRAView *v,
   return 0;
 }
 
+/* Independent allocated-view proof for the numeric BC_UNM/IR_NEG mapping. */
+static IRRef arm64_lua_leaf_postra_neg(const LJArm64PostRAView *v,
+                                       IRRef value, IRRef end)
+{
+  IRRef r;
+  value = arm64_lua_leaf_postra_num(v, value, end);
+  if (!value) return 0;
+  for (r = REF_FIRST; r < end; r++) {
+    IRIns ir = ir_load_acq(&v->ir[r]);
+    if (ir.o == IR_NEG && (ir.t.irt & ~IRT_ISPHI) == IRT_NUM &&
+        ir.op1 == value &&
+        value < r && arm64_lua_leaf_postra_num(v, value, r) &&
+        arm64_scalar_ksimd_postra_ref(v, ir.op2, r, 1u)) return r;
+  }
+  return 0;
+}
+
 /* Independent allocated-view callable resolution and source replay. The
 ** semantic evaluator above is intentionally not reused here. */
 static const GCfunc *arm64_lua_leaf_postra_function(
@@ -23927,6 +23997,9 @@ static int arm64_lua_leaf_postra_eval_multi(const LJArm64PostRAView *v,
       for (i = 0; i < nargs; i++) state[a+1u+LJ_FR2+i] = 0;
       open_results = 0;
       open_producer = UINT32_MAX;
+    } else if (op == BC_UNM) {
+      if (d >= pt->framesize || !state[d]) return 0;
+      value = arm64_lua_leaf_postra_neg(v, state[d], end);
     } else if (op == BC_ADDVV || op == BC_SUBVV || op == BC_MULVV ||
                op == BC_DIVVV || op == BC_ADDVN || op == BC_SUBVN ||
                op == BC_MULVN || op == BC_DIVVN || op == BC_ADDNV ||
@@ -24139,7 +24212,7 @@ static int arm64_lua_leaf_postra_prefix(const LJArm64PostRAView *v,
     default: break;
     }
     if (pc == resume) {
-      if (arithmetic == IR_NOP &&
+      if (arithmetic == IR_NOP && op != BC_UNM &&
           !(op == BC_CGET || op == BC_MOV || op == BC_KSHORT ||
             op == BC_KPRI || op == BC_KNUM || op == BC_VARG ||
             (branch.early_return && op == BC_RET1)) &&
@@ -24166,7 +24239,11 @@ static int arm64_lua_leaf_postra_prefix(const LJArm64PostRAView *v,
           bc_c(ins) != 0u) return 0;
       continue;  /* args_at independently seeded this exact output window. */
     }
-    if (arithmetic != IR_NOP) {
+    if (op == BC_UNM) {
+      BCReg source = bc_d(ins);
+      if (source >= pt->framesize || !values[source]) return 0;
+      out = arm64_lua_leaf_postra_neg(v, values[source], limit);
+    } else if (arithmetic != IR_NOP) {
       lhs = values[bc_b(ins)];
       if (literal) {
         proto_knumtv_load_acq(&number, pt, bc_c(ins));
@@ -24307,6 +24384,10 @@ static int arm64_lua_leaf_postra_needed_range(const GCproto *pt,
       if (left >= pt->framesize) return 0;
       if (!written[left]) needed[left] = 1u;
       break;
+    case BC_UNM:
+      if (from >= pt->framesize) return 0;
+      if (!written[from]) needed[from] = 1u;
+      break;
     case BC_ADDVV: case BC_SUBVV: case BC_MULVV: case BC_DIVVV:
       if (left >= pt->framesize || right >= pt->framesize) return 0;
       if (!written[left]) needed[left] = 1u;
@@ -24365,6 +24446,11 @@ static int arm64_lua_leaf_postra_prepend_range(const GCproto *pt,
       if (left >= pt->framesize || right >= pt->framesize) return 0;
       needed[dst] = 0;
       needed[left] = needed[right] = 1;
+      break;
+    case BC_UNM:
+      if (from >= pt->framesize) return 0;
+      needed[dst] = 0;
+      needed[from] = 1;  /* Preserve numeric/type behavior even if dead. */
       break;
     default:
       return 0;
@@ -24727,6 +24813,12 @@ static int arm64_lua_leaf_postra_result(const LJArm64PostRAView *v,
       proto_knumtv_load_acq(&k, pt, src);
       if (!tvisnumber(&k)) return 0;
       out = arm64_lua_leaf_postra_literal(v, numberVnum(&k), 0);
+    } else if (op == BC_UNM) {
+      BCReg operand = src;
+      if (operand >= pt->framesize) return 0;
+      out = arm64_lua_leaf_postra_neg(v, state[operand], before);
+      affected = influenced[operand];
+      if (!out) return 0;
     } else return 0;
     if (affected && !out) return 0;
     state[dst] = out; influenced[dst] = (uint8_t)affected; changed[dst] = 1;
