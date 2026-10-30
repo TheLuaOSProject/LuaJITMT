@@ -338,3 +338,32 @@ Ordinary ARM64 was restored with profile
 This later integration is outside the complete gate currently frozen at
 `52efb731e`; the latest completed broad production checkpoint remains
 `503c8ba2f`.
+
+
+## Zero-first substring integration
+
+Integrated the bounded zero-first source normalization at `9cc11ead8`.
+The complete string.sub contract passed all four native profiles, including
+positive, negative-end and omitted-end zero-first modes. Log:
+`/Users/frityet/Scratch/ljmt-zero-substring-identity-integration-20261030/four-profiles.log`.
+Its ordinary ARM64 restore profile was
+`fad7d2643dbb96f4326c3826f62de2e8cc53f74dfea3808e1bd8e7bc36dfdc22`.
+
+The exact-source ordinary ARM64/strict-x86_64 matrix also passed both 509-case
+stock corpora and every preceding workload/byte/FFI/string/sequential/identity
+probe. It adds 16 native zero-first substring rows on each architecture;
+interpreter oracle results, selected-root exits, code identity across full GC,
+and live-peer execution agree. Saved binaries, matching JIT modules, archives,
+hashes and logs are in
+`/Users/frityet/Scratch/ljmt-zero-substring-identity-ordinary-20261030/`.
+Ordinary ARM64 was restored with profile
+`f2c9eeabb7de69be21f8f4b6e98d816ffb0d81a0e30bdea030e84b4f0b65cbb6`.
+
+Review then corrected the Lua component's cold input boundary calculation to
+use `max(1, first)`, matching the normalized source offset. The saved ordinary
+zero-first probe already used this correction. The corrected component Lua
+probe subsequently passed all ten fixture modes on both saved ordinary
+binaries; those logs have the `corrected-boundary` suffix. This test-only edit
+does not change the production revision validated above. The complete gate
+running at `52efb731e` excludes this later slice, sequential leaves and numeric
+identity; the latest completed broad checkpoint remains `503c8ba2f`.

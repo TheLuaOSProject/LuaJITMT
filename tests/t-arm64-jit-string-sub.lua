@@ -108,8 +108,8 @@ for _, kind in ipairs(kinds) do
         end
         assert(exits > before, 'no selected root exits ' .. kind ..
           ' first=' .. first .. ' width=' .. width .. ' phase=' .. phase)
-        local boundary = negative and (first-last-2) or
-                         (default_end and #s or first+width-1)
+        local boundary = negative and (math.max(1, first)-last-2) or
+                         (default_end and #s or math.max(1, first)+width-1)
         for _, value in ipairs({'', 'x', 'xy',
                                 s:sub(1, math.max(0, boundary-1)),
                                 s:sub(1, boundary), s:sub(1, boundary+1),
