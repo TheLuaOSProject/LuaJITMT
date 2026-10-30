@@ -458,3 +458,35 @@ totals, with matching results and retained code across GC. That isolated
 configuration comparison is saved in the ordinary evidence directory's
 `x86_64-dualnum/` bundle and `*-computed-math-exit-inputs.log` files. It does
 not replace the default x64 matrix or establish performance parity.
+
+
+## Both-negative substring endpoints
+
+Production source `0a04bdf1f` merges `278cabab1`, extending the negative-first
+range proof to fixed negative end indices. The same string length must feed
+both normalized indices, and the guarded difference must feed SNEW. The
+zero-first cold-boundary fix remains intact. The integrated substring contract
+passes all four profiles, including independent proof corruptions, fresh
+publication readiness and HugeTab header-inclusive size boundaries. Evidence:
+`/Users/frityet/Scratch/ljmt-negative-end-integrated-20261030/`.
+Ordinary ARM64 restore profile:
+`b8a15288a00109eaf801b23b80e6c2be48e533df54b162ae6e9488f4e69adc99`.
+
+The exact-source ordinary ARM64/strict-x86_64 matrix also passes both 509-case
+stock corpora and every preceding probe, with the stricter computed-math
+native assertions now part of the matrix itself. Fourteen both-negative
+endpoint/loop rows assert SNEW, selected-root execution after peer GC,
+boundary/type behavior and unchanged native code. An additional empty-result
+live-peer probe requires a loop root, nonempty machine code, selected exits
+before and after GC and unchanged code on both architectures. Its no-peer
+companion leaves JIT enabled and reproduces the distinct ARM64 UREFC refusal;
+results still match the interpreted oracle. Evidence and matching binaries:
+`/Users/frityet/Scratch/ljmt-negative-end-ordinary-20261030/`.
+Ordinary ARM64 restore profile:
+`ccee6637dd078338155ee3993cb3aa869a2b57b7c494146cba286f052cb63420`.
+
+The full gate at `9ebec6139` has passed and its promoted main branch has also
+passed an independent ordinary rebuild. The next full gate is frozen at
+`f752aa882`, which excludes the both-negative endpoint slice above and the
+ongoing numeric-concat, child-side and no-peer upvalue work. Full parity is
+still incomplete.
