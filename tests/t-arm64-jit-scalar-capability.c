@@ -35,6 +35,18 @@
 #include "lj_thr.h"
 #include "lj_trace.h"
 
+static int scalar_tostr_kind(const char *kind)
+{
+  return kind != NULL &&
+    (strncmp(kind, "numeric_tostr", 13) == 0 ||
+     strncmp(kind, "integer_tostr", 13) == 0);
+}
+
+static int scalar_integer_tostr_kind(const char *kind)
+{
+  return kind != NULL && strncmp(kind, "integer_tostr", 13) == 0;
+}
+
 static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
 {
   LJArm64PostRAView v = {0};
@@ -59,6 +71,10 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
      strcmp(mathkind, "math_max_one") == 0);
   int math_proof = math_builtin ||
                    (mathkind && strcmp(mathkind, "numeric_neg") == 0);
+  int tostr_mode = scalar_integer_tostr_kind(mathkind) ?
+    IRTOSTR_INT : IRTOSTR_NUM;
+  IRType tostr_input_type = scalar_integer_tostr_kind(mathkind) ?
+    IRT_INT : IRT_NUM;
   GCproto *pt = trace_startpt_acq(T);
   assert(copy && map && snaps);
   memcpy(copy + T->nk, T->ir + T->nk, (T->nins - T->nk) * sizeof(*copy));
@@ -205,7 +221,7 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
              (unsigned)chosen_snap, (unsigned)chosen_rename);
     }
   }
-  if (mathkind && strncmp(mathkind, "numeric_tostr", 13) == 0) {
+  if (scalar_tostr_kind(mathkind)) {
     IRIns saved, saved_lref, saved_reset;
     IRRef source_tostr = 0, body_tostr = 0, tostr_phi = 0;
     MSize mapidx;
@@ -214,16 +230,17 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
     SnapShot saved_snap;
     assert(tostr && intref && tostr < n &&
            (copy[tostr].t.irt & ~IRT_ISPHI) == IRT_STR &&
-           copy[tostr].op2 == IRTOSTR_NUM && copy[tostr].op1 < tostr &&
-           irt_type(copy[copy[tostr].op1].t) == IRT_NUM);
+           copy[tostr].op2 == tostr_mode && copy[tostr].op1 < tostr &&
+           irt_type(copy[copy[tostr].op1].t) == tostr_input_type);
     saved = copy[tostr];
-    copy[tostr].op2 = IRTOSTR_INT;
+    copy[tostr].op2 = tostr_mode == IRTOSTR_INT ?
+      IRTOSTR_NUM : IRTOSTR_INT;
     assert(!lj_asm_arm64_postra_admit(&v, NULL));
     copy[tostr] = saved;
     copy[tostr].op2 = IRTOSTR_CHAR;
     assert(!lj_asm_arm64_postra_admit(&v, NULL));
     copy[tostr] = saved;
-    copy[tostr].op1 = intref;
+    copy[tostr].op1 = tostr_mode == IRTOSTR_INT ? REF_NIL : intref;
     assert(!lj_asm_arm64_postra_admit(&v, NULL));
     copy[tostr] = saved;
     copy[tostr].op1 = n;
@@ -266,11 +283,11 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
     snaps[badsnap] = saved_snap;
     assert(lj_asm_arm64_postra_admit(&v, NULL));
     for (ref = REF_FIRST; ref < loop; ref++)
-      if (copy[ref].o == IR_TOSTR && copy[ref].op2 == IRTOSTR_NUM &&
+      if (copy[ref].o == IR_TOSTR && copy[ref].op2 == tostr_mode &&
           (copy[ref].t.irt & ~IRT_ISPHI) == IRT_STR)
         source_tostr = ref;
     for (ref = loop+1u; ref < n; ref++)
-      if (copy[ref].o == IR_TOSTR && copy[ref].op2 == IRTOSTR_NUM &&
+      if (copy[ref].o == IR_TOSTR && copy[ref].op2 == tostr_mode &&
           (copy[ref].t.irt & ~IRT_ISPHI) == IRT_STR) {
         body_tostr = ref;
         break;
@@ -298,7 +315,8 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
       copy[tostr_phi].op2 = source_tostr;
       assert(!lj_asm_arm64_postra_admit(&v, NULL));
       copy[tostr_phi] = saved_phi;
-      copy[body_tostr].op2 = IRTOSTR_INT;
+      copy[body_tostr].op2 = tostr_mode == IRTOSTR_INT ?
+        IRTOSTR_NUM : IRTOSTR_INT;
       assert(!lj_asm_arm64_postra_admit(&v, NULL));
       copy[body_tostr] = T->ir[body_tostr];
       assert(lj_asm_arm64_postra_admit(&v, NULL));
@@ -306,7 +324,8 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
              (unsigned)source_tostr, (unsigned)body_tostr,
              (unsigned)tostr_phi);
     }
-    printf("TOSTR post-RA: NUM mode/input accepted; INT/CHAR mode, INT input, forward ref rejected\n");
+    printf("TOSTR post-RA: mode %u/input type %u accepted; other numeric mode, CHAR, wrong input and forward ref rejected\n",
+           (unsigned)tostr_mode, (unsigned)tostr_input_type);
   }
   if (mathkind && strcmp(mathkind, "math_computed_result") == 0) {
     IRRef call = 0, value = 0, phi = 0, rename = 0, alternate = 0;
@@ -743,7 +762,7 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
     semantic.sinktags = 0;
     la_store32_rel((uint32_t *)pc, T->startins);
     assert(lj_asm_arm64_ir_admit(fake, &semantic, &reject));
-    if (mathkind && strncmp(mathkind, "numeric_tostr", 13) == 0) {
+    if (scalar_tostr_kind(mathkind)) {
       IRIns saved, saved_lref, saved_reset;
       IRRef source_tostr = 0, body_tostr = 0, tostr_phi = 0;
       MSize mapidx;
@@ -752,16 +771,17 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
       SnapShot saved_snap;
       assert(tostr && intref && lref && tmpreset &&
              (copy[tostr].t.irt & ~IRT_ISPHI) == IRT_STR &&
-             copy[tostr].op2 == IRTOSTR_NUM && copy[tostr].op1 < tostr &&
-             irt_type(copy[copy[tostr].op1].t) == IRT_NUM);
+             copy[tostr].op2 == tostr_mode && copy[tostr].op1 < tostr &&
+             irt_type(copy[copy[tostr].op1].t) == tostr_input_type);
       saved = copy[tostr];
-      copy[tostr].op2 = IRTOSTR_INT;
+      copy[tostr].op2 = tostr_mode == IRTOSTR_INT ?
+        IRTOSTR_NUM : IRTOSTR_INT;
       assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
       copy[tostr] = saved;
       copy[tostr].op2 = IRTOSTR_CHAR;
       assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
       copy[tostr] = saved;
-      copy[tostr].op1 = intref;
+      copy[tostr].op1 = tostr_mode == IRTOSTR_INT ? REF_NIL : intref;
       assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
       copy[tostr] = saved;
       copy[tostr].op1 = n;
@@ -803,11 +823,11 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
       assert(!lj_asm_arm64_ir_admit(fake, &semantic, &reject));
       snaps[badsnap] = saved_snap;
       for (ref = REF_FIRST; ref < loop; ref++)
-        if (copy[ref].o == IR_TOSTR && copy[ref].op2 == IRTOSTR_NUM &&
+        if (copy[ref].o == IR_TOSTR && copy[ref].op2 == tostr_mode &&
             (copy[ref].t.irt & ~IRT_ISPHI) == IRT_STR)
           source_tostr = ref;
       for (ref = loop+1u; ref < n; ref++)
-        if (copy[ref].o == IR_TOSTR && copy[ref].op2 == IRTOSTR_NUM &&
+        if (copy[ref].o == IR_TOSTR && copy[ref].op2 == tostr_mode &&
             (copy[ref].t.irt & ~IRT_ISPHI) == IRT_STR) {
           body_tostr = ref;
           break;
@@ -829,7 +849,8 @@ static void mutate_layout(lua_State *L, GCtrace *T, const char *mathkind)
         copy[tostr_phi] = saved_phi;
       }
       assert(lj_asm_arm64_ir_admit(fake, &semantic, &reject));
-      printf("TOSTR semantic: NUM mode/input and loop PHI accepted; bad PHI inputs, INT/CHAR mode, INT input, forward ref rejected\n");
+      printf("TOSTR semantic: mode %u/input type %u and loop PHI accepted; bad PHI inputs, other numeric mode, CHAR, wrong input and forward ref rejected\n",
+             (unsigned)tostr_mode, (unsigned)tostr_input_type);
     }
     if (num) {
       copy[num].r = RID_SINK;
@@ -1001,7 +1022,7 @@ static int check(lua_State *L)
   const char *mathkind = lua_gettop(L) ? lua_tostring(L, 1) : NULL;
   if (mathkind && strncmp(mathkind, "math_", 5) != 0 &&
       strcmp(mathkind, "numeric_neg") != 0 &&
-      strncmp(mathkind, "numeric_tostr", 13) != 0) mathkind = NULL;
+      !scalar_tostr_kind(mathkind)) mathkind = NULL;
   GCtrace *T = traceref_safe(L2J(L), 1);
   IRRef ref;
   unsigned ns = 0, nnum = 0, ntab = 0, ren = 0;

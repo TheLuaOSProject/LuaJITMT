@@ -1540,14 +1540,133 @@ static int check_downrec_unroll(jit_State *J, GCproto *pt)
 
 static TRef rec_cat(jit_State *J, BCReg baseslot, BCReg topslot);
 
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+/* Capture the exact represented child-return boundary while the owner still
+** has both the child source frame and the parent CALL frame in hand. The
+** record is token-private and remains non-authoritative until source and
+** allocated-IR validators independently recheck it. */
+static void rec_arm64_child_return_capture(jit_State *J, BCReg rbase,
+    ptrdiff_t gotresults, TRef child_result, TRef caller_result)
+{
+  LJArm64ChildReturnCert c;
+  GCtrace *parent;
+  GCfunc *childfn, *callerfn;
+  GCproto *childpt, *callerpt;
+  const TValue *frame, *caller, *funcslot;
+  const BCIns *callpc, *returnpc;
+  BCIns call, ret;
+  BCReg cbase;
+  MSize child_nargs;
+
+  memset(&c, 0, sizeof(c));
+  if (J == NULL || J->parent == 0 || J->framedepth != 1 || J->retdepth != 0 ||
+      gotresults != 1 || !isluafunc(J->fn) || J->pt == NULL ||
+      !lj_trace_arm64_lua_leaf(J->fn) ||
+      lj_trace_arm64_lua_leaf_nresults(J->fn) != 1u ||
+      bc_op((BCIns)la_load32_acq((const uint32_t *)J->pc)) != BC_RET1 ||
+      bc_a((BCIns)la_load32_acq((const uint32_t *)J->pc)) != rbase ||
+      !tref_isnumber(child_result) || !tref_isnumber(caller_result) ||
+      J->cur.startins != BCINS_AD(BC_JMP, 0, 0) ||
+      trace_startptgco_acq(&J->cur) != obj2gco(J->pt) ||
+      J->pc < proto_bc(J->pt) || J->pc >= proto_bc(J->pt)+J->pt->sizebc ||
+      trace_startpc_acq(&J->cur) < proto_bc(J->pt) ||
+      trace_startpc_acq(&J->cur) >= proto_bc(J->pt)+J->pt->sizebc)
+    return;
+  parent = rec_traceref_live(J, J->parent);
+  if (parent == NULL || !trace_runnable_acq(parent, J->parent) ||
+      trace_root_acq(parent) != 0 ||
+      trace_startptgco_acq(parent) == NULL ||
+      !(callerpt = gco2pt(trace_startptgco_acq(parent))) ||
+      bc_op(trace_startins_acq(parent)) != BC_FORL ||
+      trace_root_acq(&J->cur) != J->parent)
+    return;
+  childfn = J->fn;
+  childpt = J->pt;
+  if (callerpt == childpt)
+    return;
+  ret = (BCIns)la_load32_acq((const uint32_t *)J->pc);
+  frame = J->L->base-1;
+  if (!frame_islua(frame)) return;
+  returnpc = frame_pc(frame);
+  if (returnpc <= proto_bc(callerpt) ||
+      returnpc >= proto_bc(callerpt)+callerpt->sizebc)
+    return;
+  callpc = returnpc-1u;
+  if (callpc < proto_bc(callerpt) ||
+      callpc >= proto_bc(callerpt)+callerpt->sizebc)
+    return;
+  call = (BCIns)la_load32_acq((const uint32_t *)callpc);
+  if (bc_op(call) != BC_CALL || bc_b(call) != 2u || bc_c(call) != 2u ||
+      childpt->numparams > (MSize)bc_c(call)-1u)
+    return;
+  cbase = bc_a(call);
+  caller = frame-(cbase+1u+LJ_FR2);
+  callerfn = frame_func(caller);
+  child_nargs = (MSize)bc_c(call)-1u;
+  if (!isluafunc(callerfn) || funcproto(callerfn) != callerpt ||
+      (MSize)cbase+(MSize)bc_b(call)-1u+1u+LJ_FR2 > callerpt->framesize ||
+      (MSize)cbase+1u+LJ_FR2+child_nargs > callerpt->framesize)
+    return;
+  /* CALL.A names the function in the caller's register window. `caller` is
+  ** the caller frame descriptor, so skip its one frame slot, not the extra
+  ** FR2 return-PC slot in the callee argument window. */
+  funcslot = caller+cbase+1u;
+  if (!tvisfunc(funcslot) || funcV(funcslot) != childfn)
+    return;
+  if (J->L->base != caller+1u+cbase+1u+LJ_FR2)
+    return;
+  c.childpt = childpt;
+  c.callerpt = callerpt;
+  c.childfn = childfn;
+  c.callerfn = callerfn;
+  c.child_startpc = trace_startpc_acq(&J->cur);
+  c.child_retpc = J->pc;
+  c.caller_callpc = callpc;
+  c.caller_returnpc = returnpc;
+  c.parent_generation = la_load64_acq(&parent->arm64_generation);
+  c.split_nins = J->cur.nins;
+  c.child_result = tref_ref(child_result);
+  c.caller_result = tref_ref(caller_result);
+  c.parentno = J->parent;
+  c.traceno = trace_traceno_acq(&J->cur);
+  c.exitno = J->exitno;
+  c.caller_result_slot = cbase;
+  c.child_baseslot = J->baseslot;
+  c.nresults = 1;
+  if (c.parent_generation == 0 || c.traceno == 0 ||
+      c.traceno == c.parentno || c.split_nins <= REF_FIRST ||
+      c.split_nins >= REF_DROP || c.child_result >= c.split_nins ||
+      c.caller_result >= c.split_nins ||
+      c.child_result != c.caller_result ||
+      bc_op(ret) != BC_RET1 || bc_a(ret) != rbase)
+    return;
+  c.valid = 1;
+  J->arm64_child_return = c;
+#ifdef LJ_TRACE_TEST_HELPERS
+  lj_trace_test_arm64_child_return_note(&c);
+#endif
+}
+#endif
+
 /* Record return. */
 void lj_record_ret(jit_State *J, BCReg rbase, ptrdiff_t gotresults)
 {
   TValue *frame = J->L->base - 1;
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+  TRef child_result = TREF_NIL;
+  /* Any later return supersedes the single-transition witness. */
+  memset(&J->arm64_child_return, 0, sizeof(J->arm64_child_return));
+#endif
   ptrdiff_t i;
   BCReg baseadj = 0;
-  for (i = 0; i < gotresults; i++)
-    (void)getslot(J, rbase+i);  /* Ensure all results have a reference. */
+  for (i = 0; i < gotresults; i++) {
+    TRef result = getslot(J, rbase+(BCReg)i);
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+    if (i == 0) child_result = result;
+#else
+    UNUSED(result);
+#endif
+  }  /* Ensure all results have a reference. */
   while (frame_ispcall(frame)) {  /* Immediately resolve pcall() returns. */
     BCReg cbase = (BCReg)frame_delta(frame);
     if (--J->framedepth <= 0)
@@ -1605,6 +1724,10 @@ void lj_record_ret(jit_State *J, BCReg rbase, ptrdiff_t gotresults)
       J->base[i-1-LJ_FR2] = i < gotresults ? J->base[rbase+i] : TREF_NIL;
     J->maxslot = cbase+(BCReg)nresults;
     if (J->framedepth > 0) {  /* Return to a frame that is part of the trace. */
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+      rec_arm64_child_return_capture(J, rbase, gotresults, child_result,
+                                     J->base[-1-LJ_FR2]);
+#endif
       J->framedepth--;
       lj_assertJ(J->baseslot > cbase+1+LJ_FR2, "bad baseslot for return");
       J->baseslot -= cbase+1+LJ_FR2;
@@ -5136,6 +5259,10 @@ static ptrdiff_t rec_func_root_nargs(jit_State *J)
 void lj_record_setup(jit_State *J, BCIns root_iterl)
 {
   uint32_t i;
+
+#if LJ_TARGET_ARM64
+  memset(&J->arm64_child_return, 0, sizeof(J->arm64_child_return));
+#endif
 
 #if LJ_HASJIT_FFI_CALLXS
   J->pending_cdata_call_pc = NULL;

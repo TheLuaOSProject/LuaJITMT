@@ -549,3 +549,66 @@ Ordinary restore profile:
 The prior full gate at `f752aa882` stopped when its SDK path disappeared;
 see `arm64-sdk272-gate-restart-2026-10-30.md`. A new full gate is frozen at
 `74a48b1b8`. The last promoted complete checkpoint is still `9ebec6139`.
+
+## Numeric concatenation integration
+
+At `68c122f2a`, bounded NUM-input TOSTR and the exact unused-result per-thread
+buffer reset are integrated. The numeric CALLN loop-RENAME helper was restored
+byte-for-byte to its preceding implementation, removing unreachable STR
+branches left after the speculative STR-specific exception was disabled.
+TOSTR uses the existing generic preserved-register/spill proof. The future-use
+opcode bounds check remains. No formatter or emitter was changed.
+
+The integrated numeric-concat contract passes all four ARM64/arm64e
+assertion/release profiles on SDK27.2. Every fresh-publication run observes
+79 strings under published `jit_base`, including the exact new final string
+once, READY/traversable arena state, and a normal loop continuation exit.
+The separate `in_native` depth counter can be zero in generated trace helper
+calls and is not used as the trace-lease witness. Ordinary ARM64 restore:
+`39ff8a1619fa90ff13766f1731e4ca21e919a242c8d0294124a432424e9ed938`.
+Evidence: `/Users/frityet/Scratch/ljmt-numeric-concat-integrated-sdk272-20261030/`.
+
+The exact-source ordinary ARM64/strict-x64 matrix passes both 509-case stock
+corpora and all preceding probes. The numeric-concat probe now requires
+self-linked roots, nonempty native code, TOSTR presence, selected exits in
+both phases, code identity after GC and exact output against the interpreted
+oracle, including infinities/NaN and cold wrong-type calls. Each architecture
+observes 18 selected exits in both FORL/while forms. Evidence and matching
+binary/module bundles:
+`/Users/frityet/Scratch/ljmt-numeric-concat-ordinary-sdk272-20261030/`.
+Ordinary ARM64 restore:
+`e26d7ace1aa5097ec0bbfac56d3749e203a1f532841eec54268fd4488a7b3b06`.
+
+A second complete gate is frozen at `68c122f2a` in the previously idle clean
+`arm64-strings` checkout, while the earlier `74a48b1b8` SDK27.2 gate continues
+in `arm64-branches`. Its evidence is under
+`/Users/frityet/Scratch/ljmt-numeric-concat-complete-sdk272-20261030/`.
+Both complete gates remain pending; the promoted main checkpoint is still
+`9ebec6139`. Integer formatting, unary Lua leaves and child-side publication
+work remain outside these frozen sources.
+
+## Integer formatting and child-return recording integration
+
+`ad7cc73aa` integrates the INT TOSTR admission from `beba66068`, followed by
+`43bd1ca75` integrating child-return recording through `f1784218f`. These
+changes are committed and pushed. The child work records and validates a
+specific child-to-caller boundary, including parent generation, side trace
+number, source CALL/RET, and exact frame geometry. It does not authorize a
+cross-prototype side publication; that remains pending independent admission.
+
+At frozen `43bd1ca75`, both the numeric/integer TOSTR contract and Lua leaf
+contract pass all four ARM64/arm64e assertion/release profiles. The former
+observes exact fresh NUM and INT strings published under the native trace
+lease; the latter retains native/child-exit/certificate and mutation checks.
+Evidence: `/Users/frityet/Scratch/ljmt-int-concat-child-witness-integrated-20261030/`.
+The TOSTR contract restores ordinary ARM64 at profile
+`660b748b951dd250151b3ff3fcd93316d3f9cad103385fda7bfa09b9e50e4e2f`; the leaf
+contract restores ordinary ARM64 at
+`f0120a721f657907a011148c7166bd5b96553e80e21d2673c9738751ec764d6a`.
+An additional explicit ordinary restoration is recorded in the same directory.
+
+The follow-up `351c125ad` extracts the exact frame-marker consumer and adds
+valid-marker, payload-forged-as-KNUM, and wrong-slot controls. It passes the
+four-profile leaf contract in the agent checkout. `1aee08aa7` removes unrelated
+formatting churn without changing behavior. These later checkpoints do not
+extend the frozen `43bd1ca75` combined evidence to an unrun complete gate.

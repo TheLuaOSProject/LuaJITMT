@@ -11806,8 +11806,10 @@ static int arm64_scalar_ir_ref(const GCtrace *T, IRRef value, IRRef before,
            arm64_string_sub_bounds_ir(T, ir->op1);
   if (type == IRT_STR && ir->o == IR_TOSTR)
     return (ir->t.irt & ~IRT_ISPHI) == IRT_STR &&
-           ir->op2 == IRTOSTR_NUM &&
-           arm64_scalar_ir_ref(T, ir->op1, value, IRT_NUM);
+           ((ir->op2 == IRTOSTR_NUM &&
+             arm64_scalar_ir_ref(T, ir->op1, value, IRT_NUM)) ||
+            (ir->op2 == IRTOSTR_INT &&
+             arm64_scalar_ir_ref(T, ir->op1, value, IRT_INT)));
   if (type == IRT_STR && ir->o == IR_PHI)
     return ir->t.irt == (IRT_STR|IRT_ISPHI) && ir->op1 < value &&
            ir->op2 < value &&
@@ -18961,8 +18963,10 @@ static int arm64_scalar_ir_admit_mode(const jit_State *J, const GCtrace *T,
       break;
     case IR_TOSTR:
       if (side || (flags & ~IRT_ISPHI) || type != IRT_STR ||
-          ir->op2 != IRTOSTR_NUM ||
-          !arm64_scalar_ir_ref(T, ir->op1, ref, IRT_NUM))
+          !((ir->op2 == IRTOSTR_NUM &&
+             arm64_scalar_ir_ref(T, ir->op1, ref, IRT_NUM)) ||
+            (ir->op2 == IRTOSTR_INT &&
+             arm64_scalar_ir_ref(T, ir->op1, ref, IRT_INT))))
         goto bad_operand;
       break;
     case IR_STRREF:
@@ -19668,7 +19672,7 @@ static int arm64_scalar_postra_value(IRIns p)
     return p.t.irt == IRT_THREAD && !p.op12;
   case IR_TOSTR:
     return (p.t.irt & ~IRT_ISPHI) == IRT_STR &&
-           p.op2 == IRTOSTR_NUM;
+           (p.op2 == IRTOSTR_NUM || p.op2 == IRTOSTR_INT);
   case IR_TNEW:
     return (p.t.irt & ~IRT_ISPHI) == (IRT_TAB|IRT_GUARD);
   case IR_TMPREF:
@@ -19819,8 +19823,10 @@ static int arm64_scalar_postra_ref(const LJArm64PostRAView *v, IRRef ref,
            arm64_string_sub_bounds_postra(v, p.op1);
   if (type == IRT_STR && p.o == IR_TOSTR)
     return (p.t.irt & ~IRT_ISPHI) == IRT_STR &&
-           p.op2 == IRTOSTR_NUM &&
-           arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM);
+           ((p.op2 == IRTOSTR_NUM &&
+             arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM)) ||
+            (p.op2 == IRTOSTR_INT &&
+             arm64_scalar_postra_ref(v, p.op1, ref, IRT_INT)));
   if (type == IRT_STR && p.o == IR_PHI)
     return p.t.irt == (IRT_STR|IRT_ISPHI) && p.op1 < ref && p.op2 < ref &&
            arm64_scalar_postra_ref(v, p.op1, ref, IRT_STR) &&
@@ -26636,8 +26642,10 @@ static int arm64_scalar_postra_admit_mode(const LJArm64PostRAView *v,
       break;
     case IR_TOSTR:
       if (side || (flags & ~IRT_ISPHI) || type != IRT_STR ||
-          p.op2 != IRTOSTR_NUM ||
-          !arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM))
+          !((p.op2 == IRTOSTR_NUM &&
+             arm64_scalar_postra_ref(v, p.op1, ref, IRT_NUM)) ||
+            (p.op2 == IRTOSTR_INT &&
+             arm64_scalar_postra_ref(v, p.op1, ref, IRT_INT))))
         return 0;
       break;
     case IR_STRREF:
