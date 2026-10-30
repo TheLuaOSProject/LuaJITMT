@@ -189,6 +189,17 @@ int main(int argc, char **argv)
       if (bc_op(bc[pc]) == BC_CALL) { assert(!callpc); callpc = pc; }
     assert(callpc >= (default_end ? 2u : 3u));
     setup = callpc-(bc_c(bc[callpc]) == 3u ? 2u : 3u);
+    /* The captured builtin's UGET is independently bound by the rooted
+    ** read proof. A correctly guarded constant does not excuse replacing
+    ** the actual callee setup with a non-function source instruction. */
+    {
+      BCIns saved = bc[setup-1u];
+      assert(semantic(&f) && allocated(&f));
+      bc[setup-1u] = BCINS_AD(BC_KPRI, bc_a(saved), 0);
+      assert(!semantic(&f) && !allocated(&f));
+      bc[setup-1u] = saved;
+      assert(semantic(&f) && allocated(&f));
+    }
     if (zero_first_case) {
       MSize firstpc = callpc-(bc_c(bc[callpc]) == 3u ? 1u : 2u);
       BCIns saved = bc[firstpc], one = saved;
