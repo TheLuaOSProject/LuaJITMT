@@ -30,6 +30,12 @@ and reports that are no longer authoritative are retained in
   Child-frame side publication, general Lua calls/returns, recursion,
   protected calls and remaining iterator/FFI restrictions still prevent full
   x86_64 parity. Later focused changes do not inherit this gate result.
+- Later integrated FFI checkpoint: `7f8d046ee` admits pointer-containing,
+  larger and fixed-array structure results through the existing bounded ABI
+  mechanisms. All four combined M7 profiles pass on the integrated source;
+  its ordinary ARM64 assertion rebuild passes both 509-case stock corpora
+  and the 260-check workload inventory. The component companion also passes
+  on signed x64. See the [integration evidence](arm64-ffi-integration-2026-11-02.md).
 
 ## Earlier checkpoint records
 
