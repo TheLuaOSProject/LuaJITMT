@@ -479,13 +479,16 @@ static int lj_ccall_arm64_small_result_walk(LJArm64SmallResultWalk *walk,
   LJArm64ABIArg scalar;
   CTInfo info;
   CTSize size, end = 0;
-  unsigned i, start = walk->leaves;
+  unsigned i, start = walk->leaves, declared_align = 0;
   if (depth >= 32) return 0;
   for (i = 0; i < 32; i++) {
     if (lj_ctype_snapshot(walk->cts, declared, &ct) <= 0) return 0;
     info = ctype_info_acq(&ct);
-    if (ctype_isattrib(info) && ctype_isxattrib(info, CTA_ALIGN) &&
-        ctype_align(info) > 3) return 0;
+    if (ctype_isattrib(info) && ctype_isxattrib(info, CTA_ALIGN)) {
+      if (ctype_align(info) > 3) return 0;
+      if (ctype_align(info) > declared_align)
+        declared_align = ctype_align(info);
+    }
     if (!(ctype_isattrib(info) || ctype_istypedef(info))) break;
     declared = ctype_cid(info);
     if (!declared) return 0;
@@ -497,8 +500,9 @@ static int lj_ccall_arm64_small_result_walk(LJArm64SmallResultWalk *walk,
   walk->active[depth] = rawid;
   info = ctype_info_acq(&ct);
   size = ctype_size_acq(&ct);
-  if (ctype_isvltype(info) || !size || size > maxsize ||
-      ctype_align(info) > 3)
+  if (ctype_isref(info) || (info & CTF_VLA) || ctype_isvltype(info) || !size ||
+      size > maxsize || ctype_align(info) > 3 ||
+      declared_align > ctype_align(info))
     return 0;
   if (lj_ccall_arm64_scalar_class(walk->cts, id, 0, &scalar, &rawid)) {
     if (scalar.kind != LJ_ARM64_ABI_KIND_INTEGER &&
@@ -509,6 +513,40 @@ static int lj_ccall_arm64_small_result_walk(LJArm64SmallResultWalk *walk,
     if (walk->leaves >= LJ_ARM64_ABI_MAX_ARGS) return 0;
     walk->leaves++;
     if (scalar.kind != LJ_ARM64_ABI_KIND_FLOAT) walk->non_hfa = 1;
+    *sizep = size;
+    return 1;
+  }
+  if (ctype_isarray(info)) {
+    CType element;
+    CTypeID elementid = ctype_cid(info), elementraw;
+    CTInfo elementinfo;
+    CTSize elementsize, count, i;
+    if ((info & (CTF_VECTOR|CTF_COMPLEX|CTF_VLA)) ||
+        ctype_isref(info) ||
+        ctype_isvltype(info) || !elementid ||
+        !lj_ccall_arm64_raw_type(walk->cts, elementid, &element,
+                                 &elementraw))
+      return 0;
+    UNUSED(elementraw);
+    elementinfo = ctype_info_acq(&element);
+    elementsize = ctype_size_acq(&element);
+    if ((elementinfo & (CTF_VLA|CTF_VECTOR|CTF_COMPLEX)) ||
+        ctype_isref(elementinfo) ||
+        ctype_isvltype(elementinfo) || !elementsize ||
+        elementsize == CTSIZE_INVALID || size % elementsize != 0 ||
+        ctype_align(info) != ctype_align(elementinfo))
+      return 0;
+    count = size / elementsize;
+    if (!count || count > (CTSize)(LJ_ARM64_ABI_MAX_ARGS-walk->leaves))
+      return 0;
+    for (i = 0; i < count; i++) {
+      CTSize childsize;
+      if (!lj_ccall_arm64_small_result_walk(walk, elementid, depth+1u,
+                                             maxsize, &childsize) ||
+          childsize != elementsize)
+        return 0;
+    }
+    if (walk->leaves == start) return 0;
     *sizep = size;
     return 1;
   }

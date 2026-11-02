@@ -20,12 +20,19 @@ typedef struct { struct { float lo, hi; } inner; } SmallNestedHFA;
 typedef struct { struct { float lane[2]; } inner; } SmallArrayHFA;
 typedef struct { void *value; } SmallPointerResult;
 typedef struct { uint64_t tag; void *value; uint64_t tail; } PointerSretResult;
+typedef struct { uint32_t values[2]; } SmallIntArrayResult;
 typedef struct { uint64_t a, b, c, d; } SretWords4;
 typedef struct { SretWords4 a, b; } SretWords8;
 typedef struct { SretWords8 a, b; } SretWords16;
 typedef struct { SretWords16 a, b; } SretWords32;
 typedef struct { SretWords4 words; uint64_t e, f; } SretWords6;
 typedef struct { uint64_t a, b; uint32_t tail; } SretTailpad;
+typedef struct { uint64_t values[4]; uint64_t tag; } SretIntArray;
+typedef struct { uint32_t prefix[2]; uint64_t mark; } SretArrayInner;
+typedef struct { SretArrayInner inner; uint64_t values[4]; }
+  SretNestedArray;
+typedef struct { uint64_t tag; void *slots[3]; uint64_t tail; }
+  SretPointerArray;
 SmallNested arm64_return_nested_int(uint32_t);
 SmallMixed arm64_return_mixed(uint32_t);
 SmallNestedHFA arm64_return_nested_float_pair(uint32_t);
@@ -34,13 +41,25 @@ SmallPointerResult arm64_return_pointer_member(uint32_t);
 SmallPointerResult arm64_return_pointer_member_alt(uint32_t);
 PointerSretResult arm64_return_pointer_member_sret(uint32_t);
 PointerSretResult arm64_return_pointer_member_sret_alt(uint32_t);
+SmallIntArrayResult arm64_return_small_int_array(uint32_t);
+SmallIntArrayResult arm64_return_small_int_array_alt(uint32_t);
+uint32_t arm64_return_small_int_array_count(void);
 SretWords6 arm64_return_sret_words6(uint32_t);
 SretWords6 arm64_return_sret_words6_alt(uint32_t);
 SretWords32 arm64_return_sret_words32(uint32_t);
 SretWords32 arm64_return_sret_words32_alt(uint32_t);
 SretTailpad arm64_return_sret_tailpad(uint32_t);
+SretIntArray arm64_return_sret_int_array(uint32_t);
+SretIntArray arm64_return_sret_int_array_alt(uint32_t);
+SretNestedArray arm64_return_sret_nested_array(uint32_t);
+SretNestedArray arm64_return_sret_nested_array_alt(uint32_t);
+SretPointerArray arm64_return_sret_pointer_array(uint32_t);
+SretPointerArray arm64_return_sret_pointer_array_alt(uint32_t);
 uint32_t arm64_return_sret_words6_count(void);
 uint32_t arm64_return_sret_words32_count(void);
+uint32_t arm64_return_sret_int_array_count(void);
+uint32_t arm64_return_sret_nested_array_count(void);
+uint32_t arm64_return_sret_pointer_array_count(void);
 uint32_t arm64_return_pointer_member_sret_count(void);
 uint32_t arm64_return_scalar(uint32_t);
 void arm64_aggregate_reset(void);
@@ -87,6 +106,15 @@ local cases = {
      return a.tag == b.tag and a.value == b.value and a.tail == b.tail
    end,
    lib.arm64_return_pointer_member_sret_alt},
+  {'small-array-int', 'SmallIntArrayResult',
+   lib.arm64_return_small_int_array, 82,
+   function(a, b)
+     if type(b) == 'number' then
+       return a.values[0] == b+3 and a.values[1] == b+7
+     end
+     return a.values[0] == b.values[0] and a.values[1] == b.values[1]
+   end, lib.arm64_return_small_int_array_alt,
+   lib.arm64_return_small_int_array_count},
   {'sret-48', 'SretWords6', lib.arm64_return_sret_words6, 77,
    function(a, b)
      return words4_equal(a.words, b.words) and a.e == b.e and a.f == b.f
@@ -100,6 +128,30 @@ local cases = {
   {'sret-tailpad', 'SretTailpad', lib.arm64_return_sret_tailpad, 77,
    function(a, b) return a.a == b.a and a.b == b.b and a.tail == b.tail end,
    nil, lib.arm64_return_sret_words6_count},
+  {'sret-int-array', 'SretIntArray', lib.arm64_return_sret_int_array, 79,
+   function(a, b)
+     for i = 0, 3 do if a.values[i] ~= b.values[i] then return false end end
+     return a.tag == b.tag
+   end, lib.arm64_return_sret_int_array_alt,
+   lib.arm64_return_sret_int_array_count},
+  {'sret-nested-array', 'SretNestedArray',
+   lib.arm64_return_sret_nested_array, 80,
+   function(a, b)
+     if a.inner.prefix[0] ~= b.inner.prefix[0] or
+        a.inner.prefix[1] ~= b.inner.prefix[1] or
+        a.inner.mark ~= b.inner.mark then return false end
+     for i = 0, 3 do if a.values[i] ~= b.values[i] then return false end end
+     return true
+   end, lib.arm64_return_sret_nested_array_alt,
+   lib.arm64_return_sret_nested_array_count},
+  {'sret-pointer-array', 'SretPointerArray',
+   lib.arm64_return_sret_pointer_array, 81,
+   function(a, b)
+     if a.tag ~= b.tag or a.tail ~= b.tail then return false end
+     for i = 0, 2 do if a.slots[i] ~= b.slots[i] then return false end end
+     return true
+   end, lib.arm64_return_sret_pointer_array_alt,
+   lib.arm64_return_sret_pointer_array_count},
 }
 
 local function source()
@@ -211,7 +263,7 @@ for _, case in ipairs(cases) do
     assert(a == b and ar == br and type(ar) == 'number')
   end
   assert(exits > 0, 'alternate result callee did not exit selected root')
-  if case[1] == 'pointer-sret' or
+  if case[1] == 'pointer-sret' or case[1] == 'small-array-int' or
      (case[6] and case[1]:sub(1, 5) == 'sret-') then
     assert(native_count() == warm_effects+128,
            'pointer sret native/interpreter effects were lost or replayed')

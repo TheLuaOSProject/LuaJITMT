@@ -43,6 +43,15 @@ typedef struct { arm64_sret_words16 a, b; } arm64_sret_words32;
 typedef struct { arm64_sret_words4 words; uint64_t e, f; }
   arm64_sret_words6;
 typedef struct { uint64_t a, b; uint32_t tail; } arm64_sret_tailpad;
+typedef struct { uint64_t values[4]; uint64_t tag; } arm64_sret_int_array;
+typedef struct { uint32_t prefix[2]; uint64_t mark; }
+  arm64_sret_array_inner;
+typedef struct { uint32_t values[2]; } arm64_small_int_array;
+typedef struct { arm64_sret_array_inner inner; uint64_t values[4]; }
+  arm64_sret_nested_array;
+typedef struct { uint64_t tag; void *slots[3]; uint64_t tail; }
+  arm64_sret_pointer_array;
+static uint64_t sret_pointer_array_tokens[3];
 static unsigned calls_u64_triple_many;
 static unsigned calls_u64_triple_many_alt;
 static unsigned calls_u64_quad;
@@ -142,6 +151,10 @@ enum {
   ARM64_POINTER_MEMBER_STACK_ARG,
   ARM64_RETURN_SRET_WORDS6,
   ARM64_RETURN_SRET_WORDS32,
+  ARM64_RETURN_SRET_INT_ARRAY,
+  ARM64_RETURN_SRET_NESTED_ARRAY,
+  ARM64_RETURN_SRET_POINTER_ARRAY,
+  ARM64_RETURN_SMALL_INT_ARRAY,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -644,6 +657,127 @@ LJ_EXPORT uint32_t arm64_return_sret_words6_count(void)
 LJ_EXPORT uint32_t arm64_return_sret_words32_count(void)
 {
   return calls[ARM64_RETURN_SRET_WORDS32];
+}
+
+LJ_EXPORT arm64_sret_int_array arm64_return_sret_int_array(uint32_t value)
+{
+  arm64_sret_int_array result;
+  unsigned i;
+  calls[ARM64_RETURN_SRET_INT_ARRAY]++;
+  for (i = 0; i < 4; i++)
+    result.values[i] = UINT64_C(0xc100000000000000) |
+      ((uint64_t)i << 32) | value;
+  result.tag = UINT64_C(0xc200000000000000) | value;
+  return result;
+}
+
+LJ_EXPORT arm64_sret_int_array
+arm64_return_sret_int_array_alt(uint32_t value)
+{
+  arm64_sret_int_array result;
+  unsigned i;
+  calls[ARM64_RETURN_SRET_INT_ARRAY]++;
+  for (i = 0; i < 4; i++)
+    result.values[i] = UINT64_C(0xca00000000000000) |
+      ((uint64_t)i << 32) | value;
+  result.tag = UINT64_C(0xcb00000000000000) | value;
+  return result;
+}
+
+LJ_EXPORT arm64_sret_nested_array
+arm64_return_sret_nested_array(uint32_t value)
+{
+  arm64_sret_nested_array result;
+  unsigned i;
+  calls[ARM64_RETURN_SRET_NESTED_ARRAY]++;
+  result.inner.prefix[0] = value+1u;
+  result.inner.prefix[1] = value+2u;
+  result.inner.mark = UINT64_C(0xc300000000000000) | value;
+  for (i = 0; i < 4; i++)
+    result.values[i] = UINT64_C(0xc400000000000000) |
+      ((uint64_t)i << 32) | value;
+  return result;
+}
+
+LJ_EXPORT arm64_sret_nested_array
+arm64_return_sret_nested_array_alt(uint32_t value)
+{
+  arm64_sret_nested_array result;
+  unsigned i;
+  calls[ARM64_RETURN_SRET_NESTED_ARRAY]++;
+  result.inner.prefix[0] = value+11u;
+  result.inner.prefix[1] = value+12u;
+  result.inner.mark = UINT64_C(0xca30000000000000) | value;
+  for (i = 0; i < 4; i++)
+    result.values[i] = UINT64_C(0xca40000000000000) |
+      ((uint64_t)i << 32) | value;
+  return result;
+}
+
+LJ_EXPORT arm64_sret_pointer_array
+arm64_return_sret_pointer_array(uint32_t value)
+{
+  arm64_sret_pointer_array result;
+  unsigned i;
+  calls[ARM64_RETURN_SRET_POINTER_ARRAY]++;
+  result.tag = UINT64_C(0xc500000000000000) | value;
+  for (i = 0; i < 3; i++)
+    result.slots[i] = &sret_pointer_array_tokens[(value+i) % 3u];
+  result.tail = UINT64_C(0xc600000000000000) | value;
+  return result;
+}
+
+LJ_EXPORT arm64_sret_pointer_array
+arm64_return_sret_pointer_array_alt(uint32_t value)
+{
+  arm64_sret_pointer_array result;
+  unsigned i;
+  calls[ARM64_RETURN_SRET_POINTER_ARRAY]++;
+  result.tag = UINT64_C(0xca50000000000000) | value;
+  for (i = 0; i < 3; i++)
+    result.slots[i] = &sret_pointer_array_tokens[(value+i+1u) % 3u];
+  result.tail = UINT64_C(0xca60000000000000) | value;
+  return result;
+}
+
+LJ_EXPORT uint32_t arm64_return_sret_int_array_count(void)
+{
+  return calls[ARM64_RETURN_SRET_INT_ARRAY];
+}
+
+LJ_EXPORT uint32_t arm64_return_sret_nested_array_count(void)
+{
+  return calls[ARM64_RETURN_SRET_NESTED_ARRAY];
+}
+
+LJ_EXPORT uint32_t arm64_return_sret_pointer_array_count(void)
+{
+  return calls[ARM64_RETURN_SRET_POINTER_ARRAY];
+}
+
+LJ_EXPORT arm64_small_int_array
+arm64_return_small_int_array(uint32_t value)
+{
+  arm64_small_int_array result;
+  calls[ARM64_RETURN_SMALL_INT_ARRAY]++;
+  result.values[0] = value+3u;
+  result.values[1] = value+7u;
+  return result;
+}
+
+LJ_EXPORT arm64_small_int_array
+arm64_return_small_int_array_alt(uint32_t value)
+{
+  arm64_small_int_array result;
+  calls[ARM64_RETURN_SMALL_INT_ARRAY]++;
+  result.values[0] = value+13u;
+  result.values[1] = value+17u;
+  return result;
+}
+
+LJ_EXPORT uint32_t arm64_return_small_int_array_count(void)
+{
+  return calls[ARM64_RETURN_SMALL_INT_ARRAY];
 }
 
 LJ_EXPORT uint32_t arm64_return_u64_quad_count(void)

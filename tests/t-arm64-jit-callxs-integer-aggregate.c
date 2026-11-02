@@ -961,8 +961,11 @@ static void assert_integer_aggregate_result_signature(lua_State *L,
 						     unsigned size)
 {
   LJArm64ABISignature abi;
-  assert(lj_ccall_arm64_signature(ctype_ctsG(G(L)),
-				 global_cdata_ctype(L, name), &abi));
+  CTypeID fnid = global_cdata_ctype(L, name);
+  if (!lj_ccall_arm64_signature(ctype_ctsG(G(L)), fnid, &abi)) {
+    fprintf(stderr, "ABI integer aggregate result rejected: %s\n", name);
+    assert(0);
+  }
   assert(abi.result_class == LJ_ARM64_ABI_GPR &&
 	 abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE &&
 	 abi.result_size == size && abi.result_unsigned &&
@@ -1023,6 +1026,44 @@ static void assert_rejects_malformed_indirect_extent(lua_State *L,
   ctype_size_rel(last, CTSIZE_INVALID-3u);
   accepted = lj_ccall_arm64_signature(cts, fnid, &abi);
   ctype_size_rel(last, old_offset);
+  ctype_size_rel(result, old_size);
+  assert(!accepted);
+  assert(lj_ccall_arm64_signature(cts, fnid, &abi) &&
+         abi.result_size == old_size);
+}
+
+static void assert_rejects_malformed_indirect_array_extent(lua_State *L,
+                                                            const char *name)
+{
+  CTState *cts = ctype_ctsG(G(L));
+  CTypeID fnid = global_cdata_ctype(L, name);
+  LJArm64ABISignature abi;
+  CType field, *result, *array;
+  CTypeID arrayid, rawarrayid, fid;
+  CTSize old_size, old_array_size;
+  int accepted;
+  assert(lj_ccall_arm64_signature(cts, fnid, &abi));
+  result = ctype_tab_slot(cts->tabh, abi.result_id);
+  old_size = ctype_size_acq(result);
+  fid = ctype_sib_acq(result);
+  assert(fid != 0 && lj_ctype_snapshot(cts, fid, &field) > 0);
+  arrayid = ctype_cid(ctype_info_acq(&field));
+  assert(lj_ccall_arm64_raw_type(cts, arrayid, &field, &rawarrayid));
+  array = ctype_tab_slot(cts->tabh, rawarrayid);
+  old_array_size = ctype_size_acq(array);
+
+  /* The array extent is not an integral element count. */
+  ctype_size_rel(array, 33);
+  accepted = lj_ccall_arm64_signature(cts, fnid, &abi);
+  ctype_size_rel(array, old_array_size);
+  assert(!accepted);
+
+  /* A huge divisible extent implies far more than the bounded leaf budget.
+  ** It must be rejected before iterating that count. */
+  ctype_size_rel(array, CTSIZE_INVALID-7u);
+  ctype_size_rel(result, CTSIZE_INVALID-7u);
+  accepted = lj_ccall_arm64_signature(cts, fnid, &abi);
+  ctype_size_rel(array, old_array_size);
   ctype_size_rel(result, old_size);
   assert(!accepted);
   assert(lj_ccall_arm64_signature(cts, fnid, &abi) &&
@@ -1181,8 +1222,10 @@ static void test_aggregate_signatures(lua_State *L)
   assert_integer_aggregate_result_signature(L,
     "__arm64_pointer_member_result_fn", 8);
   assert_integer_aggregate_result_signature(L, "__arm64_nested_mixed_result_fn", 8);
-  assert_unsupported_aggregate_signature(L, "__arm64_integer_array_result_fn");
-  assert_unsupported_aggregate_signature(L, "__arm64_integer_array_result24_fn");
+  assert_integer_aggregate_result_signature(L,
+    "__arm64_integer_array_result_fn", 8);
+  assert_indirect_aggregate_result_signature(L,
+    "__arm64_integer_array_result24_fn", 24);
   assert_aggregate_signature(L, "__arm64_pointer_member_arg_fn", 8);
   assert_pointer_member_stack_signature(L,
 	"__arm64_pointer_member_stack_arg_fn");
@@ -1195,6 +1238,14 @@ static void test_aggregate_signatures(lua_State *L)
   assert_indirect_aggregate_result_signature(L,
     "__arm64_sret_words32_fn", 256);
   assert_rejects_malformed_indirect_extent(L, "__arm64_sret_words32_fn");
+  assert_indirect_aggregate_result_signature(L,
+    "__arm64_sret_int_array_fn", 40);
+  assert_rejects_malformed_indirect_array_extent(L,
+    "__arm64_sret_int_array_fn");
+  assert_indirect_aggregate_result_signature(L,
+    "__arm64_sret_nested_array_fn", 48);
+  assert_indirect_aggregate_result_signature(L,
+    "__arm64_sret_pointer_array_fn", 40);
   assert_integer_aggregate_result_signature(L, "__arm64_result_depth31_fn", 1);
   assert_unsupported_aggregate_signature(L, "__arm64_result_depth32_fn");
   assert_indirect_aggregate_result_signature(L,

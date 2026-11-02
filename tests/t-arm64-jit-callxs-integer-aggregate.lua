@@ -110,6 +110,13 @@ typedef struct { uint64_t a, b, c, d; } Arm64SretWords4;
 typedef struct { Arm64SretWords4 a, b; } Arm64SretWords8;
 typedef struct { Arm64SretWords8 a, b; } Arm64SretWords16;
 typedef struct { Arm64SretWords16 a, b; } Arm64SretWords32;
+typedef struct { uint64_t values[4]; uint64_t tag; } Arm64SretIntArray;
+typedef struct { uint32_t prefix[2]; uint64_t mark; }
+  Arm64SretArrayInner;
+typedef struct { Arm64SretArrayInner inner; uint64_t values[4]; }
+  Arm64SretNestedArray;
+typedef struct { uint64_t tag; void *slots[3]; uint64_t tail; }
+  Arm64SretPointerArray;
 typedef struct { uint16_t lo, hi; } Arm64HalfPair;
 typedef struct { Arm64HalfPair half; uint32_t tag; } Arm64NestedIntResult;
 typedef struct { uint32_t tag; float value; } Arm64MixedResult;
@@ -284,6 +291,9 @@ Arm64SretWords32 arm64_return_sret_words32(uint32_t);
 Arm64U64QuadResult arm64_return_u64_quad(uint32_t);
 Arm64U64QuadResult arm64_return_u64_quad_alt(uint32_t);
 uint32_t arm64_return_u64_quad_count(void);
+Arm64SretIntArray arm64_return_sret_int_array(uint32_t);
+Arm64SretNestedArray arm64_return_sret_nested_array(uint32_t);
+Arm64SretPointerArray arm64_return_sret_pointer_array(uint32_t);
 Arm64U64TripleResult arm64_return_u64_triple_many(
   uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
   uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);
@@ -361,6 +371,9 @@ _G.__arm64_pointer_member_result_fn = lib.arm64_return_pointer_member
 _G.__arm64_pointer_member_sret_result_fn =
   lib.arm64_return_pointer_member_sret
 _G.__arm64_sret_words32_fn = lib.arm64_return_sret_words32
+_G.__arm64_sret_int_array_fn = lib.arm64_return_sret_int_array
+_G.__arm64_sret_nested_array_fn = lib.arm64_return_sret_nested_array
+_G.__arm64_sret_pointer_array_fn = lib.arm64_return_sret_pointer_array
 _G.__arm64_pointer_member_arg_fn = lib.arm64_take_pointer_member_arg
 _G.__arm64_pointer_member_arg_alt_fn = lib.arm64_take_pointer_member_arg_alt
 _G.__arm64_pointer_member_stack_arg_fn =

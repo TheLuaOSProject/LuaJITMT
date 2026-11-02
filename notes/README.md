@@ -757,7 +757,9 @@ available.
   [fixed-argument note](arm64-jit-i64-arguments-2026-10-26.md).
   The bounded 17–32-byte non-HFA sret classifier also accepts pointer leaves;
   larger nested non-HFA results are covered by the fixed-CNEW path (validated
-  at 48 and 256 bytes); arrays and other unsupported layouts remain closed. See
+  at 48 and 256 bytes). Fixed arrays, nested arrays and pointer arrays are
+  accepted as result members; a direct 8-byte integer array result is also
+  covered. Arrays as arguments and unsupported layouts remain closed. See
   [pointer-bearing indirect results](arm64-ffi-pointer-sret-2026-11-02.md) and
   [large indirect results](arm64-ffi-large-indirect-results-2026-11-02.md).
 - Full parity with every x86_64 lockless VM, JIT, FFI, profiler, unwind, and
