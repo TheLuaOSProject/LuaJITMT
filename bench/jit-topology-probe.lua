@@ -22,6 +22,39 @@ local cases = {
     phases = {{11.5, 17.25}, {'bad'}},
   },
   {
+    name = 'loop-root-three-child-frame-chain',
+    -- FORL root -> top -> middle -> bottom keeps three child calls active
+    -- at the deepest return/exit. Each layer has one fixed-arity call and
+    -- captures only its immediate child, matching the admitted leaf grammar.
+    -- The accumulator keeps the top call non-tail.
+    source = [[local function bottom(x) return x+.25 end
+      local middle=function(x) return bottom(x)*.5 end
+      local top=function(x) return middle(x)-.125 end
+      return function(n,offset)
+        local sum=.5
+        for i=1,n do
+          local y=top(offset)
+          sum=sum+y+i+.0625
+        end
+        return sum
+      end]],
+    phases = {{48,0}, {48,'bad'}},
+  },
+  {
+    name = 'function-root-three-child-frame-chain',
+    -- Keep this separate from the FORL-rooted case: it exercises the general
+    -- FUNCF caller source with explicit function parameters and the same
+    -- three-deep non-tail child chain.
+    source = [[local function bottom(x) return x+.25 end
+      local function middle(child,x) return child(x)*.5 end
+      local function top(child,leaf,x) return child(leaf,x)-.125 end
+      return function(topfn,middlefn,bottomfn,x)
+        local y=topfn(middlefn,bottomfn,x); return y+.0625
+      end, {top,middle,bottom}]],
+    helper_args = true,
+    phases = {{11.5}, {'bad'}},
+  },
+  {
     name = 'captured-two-result-call',
     source = [[local function child(x) return x*.5, x+1.25 end
       return function(x) local a,b=child(x); return a+b end]],
@@ -103,6 +136,25 @@ local cases = {
         return sum
       end]],
     phases = {{64}, {'bad'}, {0}, {1}, {96}},
+  },
+  {
+    name = 'captured-stateful-multireturn-iterator-root',
+    -- The iterator closes over mutable state and returns two values. This
+    -- supplements the stateless one-result iterator cases above.
+    source = [[local function make_iterator(step)
+        local calls=0
+        return function(n,k)
+          calls=calls+1
+          if k<n then return k+step,calls end
+        end
+      end
+      local iter=make_iterator(1)
+      return function(n)
+        local sum=.5
+        for k,ordinal in iter,n,0 do sum=sum+k+ordinal*.01 end
+        return sum
+      end]],
+    phases = {{48}, {'bad'}, {16}, {64}},
   },
   {
     name = 'independent-two-root-sides',
@@ -190,8 +242,7 @@ local cases = {
 
 local function compile(source, oracle)
   local chunk=assert(loadstring(source, '@topology-probe'))
-  -- Captured sibling helpers belong to the loader's prototype tree.
-  -- Keep them interpreted along with the returned oracle runner.
+  -- Keep every helper prototype in the oracle tree interpreted too.
   if oracle then jit.off(chunk,true) end
   return chunk()
 end
@@ -261,14 +312,15 @@ local function equal(a,b)
   return a == b
 end
 
-local function invoke_pair(candidate, oracle, args)
+local function invoke_pair(candidate, oracle, args, oracle_args)
   local a,b
-  if args[1] == 'bad' then
+  oracle_args = oracle_args or args
+  if args[#args] == 'bad' then
     a={pcall(candidate, unpack(args))}
-    b={pcall(oracle, unpack(args))}
+    b={pcall(oracle, unpack(oracle_args))}
   else
     a={true,candidate(unpack(args))}
-    b={true,oracle(unpack(args))}
+    b={true,oracle(unpack(oracle_args))}
   end
   assert(a[1] == b[1], 'candidate/oracle success differs')
   if not a[1] then
@@ -281,49 +333,82 @@ local function invoke_pair(candidate, oracle, args)
   end
 end
 
+local function peer_wait(r,s)
+  assert(r:send(true,5)); assert(select(2,s:recv(120))); return true
+end
+
 local function main()
   local observed,active_candidate={},nil
   local ready,stop=threading.channel(1),threading.channel(1)
-  local peer=assert(threading.spawn(function(r,s)
-    assert(r:send(true,5)); assert(select(2,s:recv(120))); return true
-  end,ready,stop))
+  local peer=assert(threading.spawn(peer_wait,ready,stop))
   local function exit_observer(no, exitno)
     -- Match at delivery; later collection may retire or reuse trace IDs.
     local roots=root_headers(active_candidate)
-    observed[#observed+1]={no,exitno,roots[no] == true}
+    local info=util.traceinfo(no)
+    local kind,parent='other',nil
+    if roots[no] then
+      kind='root'
+    elseif info and info.linktype == 'root' and roots[info.link] then
+      kind,parent='root-side',info.link
+    end
+    observed[#observed+1]={no,exitno,kind,parent}
   end
   jit.off(exit_observer,true)
   assert(select(2,ready:recv(5)), 'MT peer did not start')
-  io.write('case\tarch\tphase\troot_ids\tpublished_root_linked_sides\tobserved_root_exits\tobserved_other_exits\texit_counts\ttraces\n')
+  io.write('case\tarch\tphase\troot_ids\tpublished_root_linked_sides\tobserved_root_exits\tobserved_root_side_exits\tobserved_other_exits\troot_side_exit_links\texit_counts\ttraces\n')
   io.flush()
   for _,case in ipairs(cases) do
     jit.flush()
-    local candidate=compile(case.source, false)
-    local oracle=compile(case.source, true)
+    local candidate,candidate_helpers=compile(case.source, false)
+    local oracle,oracle_helpers=compile(case.source, true)
     active_candidate=candidate
     jit.off(oracle,true)
     observed={}
     jit.opt.start('hotloop=1','hotexit=1','maxtrace=128')
     jit.attach(exit_observer,'texit')
     jit.on()
+    local function case_args(args, helpers)
+      if not case.helper_args then return args end
+      local out={}
+      for i=1,#helpers do out[#out+1]=helpers[i] end
+      for i=1,#args do out[#out+1]=args[i] end
+      return out
+    end
     for phase,args in ipairs(case.phases) do
-      for _=1,80 do invoke_pair(candidate,oracle,args) end
+      for _=1,80 do
+        invoke_pair(candidate,oracle,case_args(args,candidate_helpers),
+          case_args(args,oracle_helpers))
+      end
       collectgarbage('collect')
-      invoke_pair(candidate,oracle,args)
+      invoke_pair(candidate,oracle,case_args(args,candidate_helpers),
+        case_args(args,oracle_helpers))
       local roots=root_headers(candidate)
       local rows=trace_rows()
       local sides=side_ids(rows,roots)
-      local root_exits,other_exits=0,0
+      local root_exits,root_side_exits,other_exits=0,0,0
+      local root_side_links={}
       local counts={}
       for _,event in ipairs(observed) do
-        if event[3] then root_exits=root_exits+1
-        else other_exits=other_exits+1 end
+        if event[3] == 'root' then
+          root_exits=root_exits+1
+        elseif event[3] == 'root-side' then
+          root_side_exits=root_side_exits+1
+          local key=event[1]..':'..event[4]
+          root_side_links[key]=(root_side_links[key] or 0)+1
+        else
+          other_exits=other_exits+1
+        end
         local key=event[1]..':'..event[2]
         counts[key]=(counts[key] or 0)+1
       end
       local events={}
       for key,count in pairs(counts) do events[#events+1]=key..'='..count end
       table.sort(events)
+      local links={}
+      for key,count in pairs(root_side_links) do
+        links[#links+1]=key..'='..count
+      end
+      table.sort(links)
       if case.name == 'nonleaf-function-root-return' then
         local selected_root=false
         assert(next(roots), 'nonleaf FUNCF root was not published')
@@ -361,9 +446,10 @@ local function main()
             'two-result root did not enter natively and exit on bad argument')
         end
       end
-      io.write(string.format('%s\t%s\t%d\t%s\t%s\t%d\t%d\t%s\t%s\n',
+      io.write(string.format('%s\t%s\t%d\t%s\t%s\t%d\t%d\t%d\t%s\t%s\t%s\n',
         case.name,jit.arch,phase,id_list(roots),id_list(sides),
-        root_exits,other_exits,table.concat(events,','),describe(rows)))
+        root_exits,root_side_exits,other_exits,table.concat(links,','),
+        table.concat(events,','),describe(rows)))
       io.flush()
       observed={}
     end
@@ -377,7 +463,10 @@ jit.off(compile,true)
 jit.off(root_headers,true)
 jit.off(trace_rows,true)
 jit.off(describe,true)
+jit.off(id_list,true)
+jit.off(side_ids,true)
 jit.off(equal,true)
 jit.off(invoke_pair,true)
+jit.off(peer_wait,true)
 jit.off(main,true)
 main()
