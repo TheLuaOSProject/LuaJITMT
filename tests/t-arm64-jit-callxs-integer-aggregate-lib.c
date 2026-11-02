@@ -42,6 +42,7 @@ typedef struct { arm64_sret_words8 a, b; } arm64_sret_words16;
 typedef struct { arm64_sret_words16 a, b; } arm64_sret_words32;
 typedef struct { arm64_sret_words4 words; uint64_t e, f; }
   arm64_sret_words6;
+typedef struct { uint64_t a, b; uint32_t tail; } arm64_sret_tailpad;
 static unsigned calls_u64_triple_many;
 static unsigned calls_u64_triple_many_alt;
 static unsigned calls_u64_quad;
@@ -586,6 +587,19 @@ LJ_EXPORT arm64_sret_words6 arm64_return_sret_words6(uint32_t value)
   return result;
 }
 
+LJ_EXPORT arm64_sret_words6 arm64_return_sret_words6_alt(uint32_t value)
+{
+  arm64_sret_words6 result;
+  calls[ARM64_RETURN_SRET_WORDS6]++;
+  result.words.a = UINT64_C(0xa100000000000000) | value;
+  result.words.b = UINT64_C(0xa200000000000000) | (uint64_t)value+1u;
+  result.words.c = UINT64_C(0xa300000000000000) | (uint64_t)value+2u;
+  result.words.d = UINT64_C(0xa400000000000000) | (uint64_t)value+3u;
+  result.e = UINT64_C(0xa500000000000000) | (uint64_t)value+4u;
+  result.f = UINT64_C(0xa600000000000000) | (uint64_t)value+5u;
+  return result;
+}
+
 LJ_EXPORT arm64_sret_words32 arm64_return_sret_words32(uint32_t value)
 {
   arm64_sret_words32 result;
@@ -596,6 +610,29 @@ LJ_EXPORT arm64_sret_words32 arm64_return_sret_words32(uint32_t value)
     words[i] = UINT64_C(0x7000000000000000) |
       ((uint64_t)i << 32) | value;
   memcpy(&result, words, sizeof(result));
+  return result;
+}
+
+LJ_EXPORT arm64_sret_words32 arm64_return_sret_words32_alt(uint32_t value)
+{
+  arm64_sret_words32 result;
+  uint64_t words[32];
+  unsigned i;
+  calls[ARM64_RETURN_SRET_WORDS32]++;
+  for (i = 0; i < 32; i++)
+    words[i] = UINT64_C(0xa000000000000000) |
+      ((uint64_t)i << 32) | value;
+  memcpy(&result, words, sizeof(result));
+  return result;
+}
+
+LJ_EXPORT arm64_sret_tailpad arm64_return_sret_tailpad(uint32_t value)
+{
+  arm64_sret_tailpad result;
+  calls[ARM64_RETURN_SRET_WORDS6]++;
+  result.a = UINT64_C(0xb100000000000000) | value;
+  result.b = UINT64_C(0xb200000000000000) | (uint64_t)value+1u;
+  result.tail = value+2u;
   return result;
 }
 

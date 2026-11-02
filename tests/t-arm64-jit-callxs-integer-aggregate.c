@@ -984,6 +984,51 @@ static void assert_indirect_aggregate_result_signature(lua_State *L,
 	 abi.arg[0].cls == LJ_ARM64_ABI_GPR && abi.arg[0].reg == 0);
 }
 
+static void assert_rejects_malformed_indirect_extent(lua_State *L,
+                                                      const char *name)
+{
+  CTState *cts = ctype_ctsG(G(L));
+  CTypeID fnid = global_cdata_ctype(L, name);
+  LJArm64ABISignature abi;
+  CType *result, *last;
+  CTypeID fid;
+  CTSize old_size, old_offset;
+  int accepted;
+  assert(lj_ccall_arm64_signature(cts, fnid, &abi));
+  result = ctype_tab_slot(cts->tabh, abi.result_id);
+  old_size = ctype_size_acq(result);
+  fid = ctype_sib_acq(result);
+  assert(fid != 0);
+  last = ctype_tab_slot(cts->tabh, fid);
+  while ((fid = ctype_sib_acq(last)) != 0)
+    last = ctype_tab_slot(cts->tabh, fid);
+  old_offset = ctype_size_acq(last);
+
+  /* A forged enormous tail extent cannot be justified by the declared
+  ** fields and their normal final alignment. Restore the shared CType before
+  ** checking the result so no later fixture observes the mutation. */
+  ctype_size_rel(result, CTSIZE_INVALID-1u);
+  accepted = lj_ccall_arm64_signature(cts, fnid, &abi);
+  ctype_size_rel(result, old_size);
+  assert(!accepted);
+
+  ctype_size_rel(result, CTSIZE_INVALID);
+  accepted = lj_ccall_arm64_signature(cts, fnid, &abi);
+  ctype_size_rel(result, old_size);
+  assert(!accepted);
+
+  /* Exercise a near-sentinel field offset and wrapped field-end candidate
+  ** under a large declared extent. */
+  ctype_size_rel(result, CTSIZE_INVALID-1u);
+  ctype_size_rel(last, CTSIZE_INVALID-3u);
+  accepted = lj_ccall_arm64_signature(cts, fnid, &abi);
+  ctype_size_rel(last, old_offset);
+  ctype_size_rel(result, old_size);
+  assert(!accepted);
+  assert(lj_ccall_arm64_signature(cts, fnid, &abi) &&
+         abi.result_size == old_size);
+}
+
 static void assert_indirect_aggregate_many_signature(lua_State *L)
 {
   LJArm64ABISignature abi;
@@ -1149,6 +1194,7 @@ static void test_aggregate_signatures(lua_State *L)
     "__arm64_pointer_member_sret_result_fn", 24);
   assert_indirect_aggregate_result_signature(L,
     "__arm64_sret_words32_fn", 256);
+  assert_rejects_malformed_indirect_extent(L, "__arm64_sret_words32_fn");
   assert_integer_aggregate_result_signature(L, "__arm64_result_depth31_fn", 1);
   assert_unsupported_aggregate_signature(L, "__arm64_result_depth32_fn");
   assert_indirect_aggregate_result_signature(L,

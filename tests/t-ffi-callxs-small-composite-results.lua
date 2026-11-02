@@ -25,6 +25,7 @@ typedef struct { SretWords4 a, b; } SretWords8;
 typedef struct { SretWords8 a, b; } SretWords16;
 typedef struct { SretWords16 a, b; } SretWords32;
 typedef struct { SretWords4 words; uint64_t e, f; } SretWords6;
+typedef struct { uint64_t a, b; uint32_t tail; } SretTailpad;
 SmallNested arm64_return_nested_int(uint32_t);
 SmallMixed arm64_return_mixed(uint32_t);
 SmallNestedHFA arm64_return_nested_float_pair(uint32_t);
@@ -34,7 +35,10 @@ SmallPointerResult arm64_return_pointer_member_alt(uint32_t);
 PointerSretResult arm64_return_pointer_member_sret(uint32_t);
 PointerSretResult arm64_return_pointer_member_sret_alt(uint32_t);
 SretWords6 arm64_return_sret_words6(uint32_t);
+SretWords6 arm64_return_sret_words6_alt(uint32_t);
 SretWords32 arm64_return_sret_words32(uint32_t);
+SretWords32 arm64_return_sret_words32_alt(uint32_t);
+SretTailpad arm64_return_sret_tailpad(uint32_t);
 uint32_t arm64_return_sret_words6_count(void);
 uint32_t arm64_return_sret_words32_count(void);
 uint32_t arm64_return_pointer_member_sret_count(void);
@@ -43,6 +47,18 @@ void arm64_aggregate_reset(void);
 uint32_t arm64_aggregate_count(uint32_t);
 ]]
 local lib = ffi.load(assert(os.getenv('LJ_ARM64_INT_AGGREGATE_SO')))
+local function words4_equal(a, b)
+  return a.a == b.a and a.b == b.b and a.c == b.c and a.d == b.d
+end
+local function words8_equal(a, b)
+  return words4_equal(a.a, b.a) and words4_equal(a.b, b.b)
+end
+local function words16_equal(a, b)
+  return words8_equal(a.a, b.a) and words8_equal(a.b, b.b)
+end
+local function words32_equal(a, b)
+  return words16_equal(a.a, b.a) and words16_equal(a.b, b.b)
+end
 local pointer_seen = { null = false, nonnull = false }
 local cases = {
   {'nested', 'SmallNested', lib.arm64_return_nested_int, 67,
@@ -73,18 +89,17 @@ local cases = {
    lib.arm64_return_pointer_member_sret_alt},
   {'sret-48', 'SretWords6', lib.arm64_return_sret_words6, 77,
    function(a, b)
-     return a.words.a == b.words.a and a.words.d == b.words.d and
-       a.e == b.e and a.f == b.f
-   end, lib.arm64_return_sret_words6,
+     return words4_equal(a.words, b.words) and a.e == b.e and a.f == b.f
+   end,
+   lib.arm64_return_sret_words6_alt,
    lib.arm64_return_sret_words6_count},
   {'sret-256', 'SretWords32', lib.arm64_return_sret_words32, 78,
-   function(a, b)
-     return a.a.a.a.a == b.a.a.a.a and a.a.a.a.d == b.a.a.a.d and
-       a.a.a.b.a == b.a.a.b.a and a.a.a.b.d == b.a.a.b.d and
-       a.a.b.a.a == b.a.b.a.a and a.a.b.a.c == b.a.b.a.c and
-       a.a.b.b.a == b.a.b.b.a and a.b.b.b.d == b.b.b.b.d
-   end, lib.arm64_return_sret_words32,
+   function(a, b) return words32_equal(a, b) end,
+   lib.arm64_return_sret_words32_alt,
    lib.arm64_return_sret_words32_count},
+  {'sret-tailpad', 'SretTailpad', lib.arm64_return_sret_tailpad, 77,
+   function(a, b) return a.a == b.a and a.b == b.b and a.tail == b.tail end,
+   nil, lib.arm64_return_sret_words6_count},
 }
 
 local function source()
@@ -159,7 +174,9 @@ for _, case in ipairs(cases) do
             (pass % 2 == 0 and 64 or 63) or 64)
   end
   local warm_effects = case[1] == 'pointer-member' and 1016 or 1024
-  assert(native_count() == warm_effects)
+  assert(native_count() == warm_effects,
+         case[1]..' native effect count: '..native_count()..' expected '..
+         warm_effects)
   if case[1] == 'pointer-member' then
     assert(pointer_seen.null and pointer_seen.nonnull,
            'pointer result did not preserve both NULL and non-NULL values')
@@ -194,7 +211,8 @@ for _, case in ipairs(cases) do
     assert(a == b and ar == br and type(ar) == 'number')
   end
   assert(exits > 0, 'alternate result callee did not exit selected root')
-  if case[1] == 'pointer-sret' or case[1]:sub(1, 5) == 'sret-' then
+  if case[1] == 'pointer-sret' or
+     (case[6] and case[1]:sub(1, 5) == 'sret-') then
     assert(native_count() == warm_effects+128,
            'pointer sret native/interpreter effects were lost or replayed')
   end

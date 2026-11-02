@@ -528,6 +528,13 @@ static int lj_ccall_arm64_small_result_walk(LJArm64SmallResultWalk *walk,
     end = offset+childsize;
   }
   if (walk->leaves == start) return 0;
+  {
+    CTSize align = (CTSize)1u << ctype_align(info);
+    CTSize rounded;
+    if (end > CTSIZE_INVALID-(align-1u)) return 0;
+    rounded = (end+align-1u) & ~(align-1u);
+    if (rounded != size) return 0;
+  }
   *sizep = size;
   return 1;
 }
