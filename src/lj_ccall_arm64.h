@@ -55,7 +55,7 @@ typedef struct LJArm64ABISignature {
   CTypeID result_id;
   uint8_t result_class;
   uint8_t result_kind;
-  uint8_t result_size;
+  CTSize result_size;
   uint8_t result_unsigned;
   uint8_t result_hfa_count;
   uint8_t result_hfa_offset[4];
@@ -569,13 +569,13 @@ static int lj_ccall_arm64_small_aggregate_result_class(CTState *cts, CTypeID id,
 }
 
 /* Darwin AAPCS64 returns non-HFA composites larger than 16 bytes through the
-** independent X8 result pointer. Keep this slice bounded to ordinary
-** non-union structs no larger than 32 bytes. A failed HFA classifier is not
-** enough to prove non-HFA: independently walk the declared fields and require
-** at least one non-floating leaf. This rejects possible/over-aligned HFAs and
+** independent X8 result pointer. Keep this slice bounded by the independently
+** walked leaf/depth limits and the CType's representable extent. A failed HFA
+** classifier is not enough to prove non-HFA: walk the declared fields and
+** require at least one non-floating leaf. This rejects possible/over-aligned HFAs and
 ** unsupported fields rather than treating them as sret by default. */
 static int lj_ccall_arm64_indirect_aggregate_result_class(CTState *cts,
-    CTypeID id, LJArm64ABIArg *arg, CTypeID *rawid)
+    CTypeID id, LJArm64ABIArg *arg, CTypeID *rawid, CTSize *sizep)
 {
   LJArm64SmallResultWalk walk;
   CType ct;
@@ -587,22 +587,23 @@ static int lj_ccall_arm64_indirect_aggregate_result_class(CTState *cts,
   size = ctype_size_acq(&ct);
   if (!ctype_isstruct(info) ||
       (info & (CTF_UNION|CTF_REF|CTF_VLA)) || ctype_isvltype(info) ||
-      size <= 16 || size > 32 || size == CTSIZE_INVALID ||
+      size <= 16 || size == CTSIZE_INVALID ||
       ctype_align(info) > 3)
     return 0;
   memset(&walk, 0, sizeof(walk));
   walk.cts = cts;
   walk.allow_pointer = 1;
-  if (!lj_ccall_arm64_small_result_walk(&walk, id, 0, 32,
+  if (!lj_ccall_arm64_small_result_walk(&walk, id, 0, size,
                                         &checked_size) ||
       checked_size != size || !walk.non_hfa)
     return 0;
   if (rawid) *rawid = raw;
+  if (sizep) *sizep = size;
   if (arg) {
     memset(arg, 0, sizeof(*arg));
     arg->cls = LJ_ARM64_ABI_NONE;
     arg->kind = LJ_ARM64_ABI_KIND_INDIRECT_AGGREGATE;
-    arg->size = (uint8_t)size;
+    arg->size = 0;
     arg->align = ctype_align(info);
   }
   return 1;
@@ -678,6 +679,7 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
   CTypeID rawid, fid;
   unsigned nargs = 0, nparams = 0, ngpr = 0, nfpr = 0, stack_size = 0;
   LJArm64ABIArg result;
+  CTSize indirect_result_size = 0;
   if (cts == NULL || abi == NULL ||
       !lj_ccall_arm64_raw_type(cts, id, &fn, &rawid))
     return 0;
@@ -719,13 +721,14 @@ static int lj_ccall_arm64_signature(CTState *cts, CTypeID id,
         result.kind = LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE;
         result.is_unsigned = 1;
       } else if (!lj_ccall_arm64_indirect_aggregate_result_class(cts,
-                   abi->result_declared_id, &result, &rawid)) return 0;
+                   abi->result_declared_id, &result, &rawid,
+                   &indirect_result_size)) return 0;
     }
   }
   abi->result_id = rawid;
   abi->result_class = result.cls;
   abi->result_kind = result.kind;
-  abi->result_size = result.size;
+  abi->result_size = indirect_result_size ? indirect_result_size : result.size;
   abi->result_unsigned = result.is_unsigned;
   fid = ctype_sib_acq(&fn);
   while (fid != 0) {

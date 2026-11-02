@@ -1147,6 +1147,8 @@ static void test_aggregate_signatures(lua_State *L)
     "__arm64_pointer_member_union_arg_fn");
   assert_indirect_aggregate_result_signature(L,
     "__arm64_pointer_member_sret_result_fn", 24);
+  assert_indirect_aggregate_result_signature(L,
+    "__arm64_sret_words32_fn", 256);
   assert_integer_aggregate_result_signature(L, "__arm64_result_depth31_fn", 1);
   assert_unsupported_aggregate_signature(L, "__arm64_result_depth32_fn");
   assert_indirect_aggregate_result_signature(L,

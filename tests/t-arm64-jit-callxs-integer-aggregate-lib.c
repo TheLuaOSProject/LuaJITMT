@@ -36,6 +36,12 @@ typedef struct { uint64_t lo, mid, hi, tail; } arm64_u64_quad_result;
 typedef struct { void *value; } arm64_pointer_member_result;
 typedef struct { uint64_t tag; void *value; uint64_t tail; }
   arm64_pointer_member_sret_result;
+typedef struct { uint64_t a, b, c, d; } arm64_sret_words4;
+typedef struct { arm64_sret_words4 a, b; } arm64_sret_words8;
+typedef struct { arm64_sret_words8 a, b; } arm64_sret_words16;
+typedef struct { arm64_sret_words16 a, b; } arm64_sret_words32;
+typedef struct { arm64_sret_words4 words; uint64_t e, f; }
+  arm64_sret_words6;
 static unsigned calls_u64_triple_many;
 static unsigned calls_u64_triple_many_alt;
 static unsigned calls_u64_quad;
@@ -133,6 +139,8 @@ enum {
   ARM64_POINTER_MEMBER_ARG,
   ARM64_POINTER_MEMBER_ARG_ALT,
   ARM64_POINTER_MEMBER_STACK_ARG,
+  ARM64_RETURN_SRET_WORDS6,
+  ARM64_RETURN_SRET_WORDS32,
   ARM64_AGGREGATE_COUNT
 };
 
@@ -563,6 +571,42 @@ arm64_return_pointer_member_sret_alt(uint32_t value)
 LJ_EXPORT uint32_t arm64_return_pointer_member_sret_count(void)
 {
   return calls[ARM64_RETURN_POINTER_MEMBER_SRET];
+}
+
+LJ_EXPORT arm64_sret_words6 arm64_return_sret_words6(uint32_t value)
+{
+  arm64_sret_words6 result;
+  calls[ARM64_RETURN_SRET_WORDS6]++;
+  result.words.a = UINT64_C(0x1100000000000000) | value;
+  result.words.b = UINT64_C(0x2200000000000000) | (uint64_t)value+1u;
+  result.words.c = UINT64_C(0x3300000000000000) | (uint64_t)value+2u;
+  result.words.d = UINT64_C(0x4400000000000000) | (uint64_t)value+3u;
+  result.e = UINT64_C(0x5500000000000000) | (uint64_t)value+4u;
+  result.f = UINT64_C(0x6600000000000000) | (uint64_t)value+5u;
+  return result;
+}
+
+LJ_EXPORT arm64_sret_words32 arm64_return_sret_words32(uint32_t value)
+{
+  arm64_sret_words32 result;
+  uint64_t words[32];
+  unsigned i;
+  calls[ARM64_RETURN_SRET_WORDS32]++;
+  for (i = 0; i < 32; i++)
+    words[i] = UINT64_C(0x7000000000000000) |
+      ((uint64_t)i << 32) | value;
+  memcpy(&result, words, sizeof(result));
+  return result;
+}
+
+LJ_EXPORT uint32_t arm64_return_sret_words6_count(void)
+{
+  return calls[ARM64_RETURN_SRET_WORDS6];
+}
+
+LJ_EXPORT uint32_t arm64_return_sret_words32_count(void)
+{
+  return calls[ARM64_RETURN_SRET_WORDS32];
 }
 
 LJ_EXPORT uint32_t arm64_return_u64_quad_count(void)
