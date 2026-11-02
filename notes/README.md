@@ -7,7 +7,8 @@ and reports that are no longer authoritative are retained in
 
 ## Status at a glance
 
-- Integrated branch: `v2.1`; current parity continuation: `codex/arm64-parity`.
+- Integrated branch: `v2.1`; current parity continuation:
+  `codex/arm64-parity-20261102`.
 - Integrated upstream comparison point: LuaJITMT `v2.1` at `489bb089`.
   See
   [`upstream-refresh-2026-10-22.md`](upstream-refresh-2026-10-22.md) for merge
@@ -18,18 +19,17 @@ and reports that are no longer authoritative are retained in
 - Completion means parity with x86_64 LuaJITMT. The remaining general Lua
   call/return, trace topology, iterator and FFI restrictions below still
   prevent that claim.
-- Current verified production checkpoint: `505069708`. It adds integer
-  formatting and child-return certificate validation groundwork to `68c122f2a`.
-  No locks are added. The complete combined gate passes on Xcode 27.2,
-  including all four M7 FFI profiles and actual VM/recorder safepoint runtime
-  execution, and restores ordinary assertion ARM64 without helpers. See the
-  [integer formatting and child-return checkpoint](arm64-integer-concat-child-complete-checkpoint-2026-10-30.md)
-  and the preceding
-  [numeric concat and closed-upvalue checkpoint](arm64-numeric-concat-closed-upvalue-complete-checkpoint-2026-10-30.md).
-  Guarded character formatting, integer modulo and numeric unary leaves have
-  later focused evidence on the integration branch. Child-frame side
-  publication, general Lua calls/returns, recursion, protected calls and
-  remaining iterator/FFI restrictions still prevent full x86_64 parity.
+- Current complete-gate checkpoint: `e0da9e64e`, with production source
+  identical to `2387b3ed6`. Guarded character formatting, integer modulo and
+  numeric unary leaves now pass the combined gate on Xcode 27.2, including all
+  four M7 FFI profiles and actual VM/recorder safepoint execution. A separately
+  restored ordinary ARM64 assertion build and signed x64 release build each
+  pass both 509-case stock corpora. Bounded spawn/join and concurrent JIT
+  flush/GC stress also pass on both architectures. See the
+  [November 2 complete checkpoint](arm64-complete-checkpoint-2026-11-02.md).
+  Child-frame side publication, general Lua calls/returns, recursion,
+  protected calls and remaining iterator/FFI restrictions still prevent full
+  x86_64 parity. Later focused changes do not inherit this gate result.
 
 ## Earlier checkpoint records
 
