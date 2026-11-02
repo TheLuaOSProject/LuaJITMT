@@ -106,6 +106,17 @@ typedef struct { uint32_t value; } Arm64WordResult;
 typedef struct { uint64_t value; } Arm64U64Result;
 typedef struct { uint64_t lo, mid, hi; } Arm64U64TripleResult;
 typedef struct { uint64_t lo, mid, hi, tail; } Arm64U64QuadResult;
+typedef struct { uint64_t a, b, c, d; } Arm64SretWords4;
+typedef struct { Arm64SretWords4 a, b; } Arm64SretWords8;
+typedef struct { Arm64SretWords8 a, b; } Arm64SretWords16;
+typedef struct { Arm64SretWords16 a, b; } Arm64SretWords32;
+typedef struct { uint64_t values[4]; uint64_t tag; } Arm64SretIntArray;
+typedef struct { uint32_t prefix[2]; uint64_t mark; }
+  Arm64SretArrayInner;
+typedef struct { Arm64SretArrayInner inner; uint64_t values[4]; }
+  Arm64SretNestedArray;
+typedef struct { uint64_t tag; void *slots[3]; uint64_t tail; }
+  Arm64SretPointerArray;
 typedef struct { uint16_t lo, hi; } Arm64HalfPair;
 typedef struct { Arm64HalfPair half; uint32_t tag; } Arm64NestedIntResult;
 typedef struct { uint32_t tag; float value; } Arm64MixedResult;
@@ -274,9 +285,15 @@ Arm64WordResultAlias arm64_return_word_alias(uint32_t);
 Arm64U64Result arm64_return_u64(uint32_t);
 Arm64U64TripleResult arm64_return_u64_triple(uint32_t);
 uint32_t arm64_return_u64_triple_count(void);
+Arm64PointerMemberSretResult arm64_return_pointer_member_sret(uint32_t);
+uint32_t arm64_return_pointer_member_sret_count(void);
+Arm64SretWords32 arm64_return_sret_words32(uint32_t);
 Arm64U64QuadResult arm64_return_u64_quad(uint32_t);
 Arm64U64QuadResult arm64_return_u64_quad_alt(uint32_t);
 uint32_t arm64_return_u64_quad_count(void);
+Arm64SretIntArray arm64_return_sret_int_array(uint32_t);
+Arm64SretNestedArray arm64_return_sret_nested_array(uint32_t);
+Arm64SretPointerArray arm64_return_sret_pointer_array(uint32_t);
 Arm64U64TripleResult arm64_return_u64_triple_many(
   uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
   uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);
@@ -352,7 +369,11 @@ _G.__arm64_integer_array_result24_fn =
   ffi.cast('Arm64IntegerArrayResult24Fn', nil)
 _G.__arm64_pointer_member_result_fn = lib.arm64_return_pointer_member
 _G.__arm64_pointer_member_sret_result_fn =
-  ffi.cast('Arm64PointerMemberSretResultFn', nil)
+  lib.arm64_return_pointer_member_sret
+_G.__arm64_sret_words32_fn = lib.arm64_return_sret_words32
+_G.__arm64_sret_int_array_fn = lib.arm64_return_sret_int_array
+_G.__arm64_sret_nested_array_fn = lib.arm64_return_sret_nested_array
+_G.__arm64_sret_pointer_array_fn = lib.arm64_return_sret_pointer_array
 _G.__arm64_pointer_member_arg_fn = lib.arm64_take_pointer_member_arg
 _G.__arm64_pointer_member_arg_alt_fn = lib.arm64_take_pointer_member_arg_alt
 _G.__arm64_pointer_member_stack_arg_fn =
@@ -1765,7 +1786,54 @@ local function run_sret_quad_result()
          '32-byte sret native/interpreter effects were lost or replayed')
 end
 
+local function run_pointer_sret_result()
+  local candidate, oracle = make_result_pair('24-byte pointer sret result')
+  _set_sret_candidate(candidate)
+  jit.flush(candidate)
+  jit.on(candidate, true)
+  local before = lib.arm64_return_pointer_member_sret_count()
+  local native_before = _sret_native_count()
+  local function check(got, want, where)
+    assert(ffi.istype('Arm64PointerMemberSretResult', got) and
+           ffi.istype('Arm64PointerMemberSretResult', want) and
+           got.tag == want.tag and got.value == want.value and
+           got.tail == want.tail,
+           '24-byte pointer sret '..where..' differs from interpreter')
+  end
+  for pass = 1, 6 do
+    local seed = pass*7
+    check(candidate(32, lib.arm64_return_pointer_member_sret, seed),
+          oracle(32, lib.arm64_return_pointer_member_sret, seed), 'result')
+  end
+  assert(_sret_native_count() > native_before,
+         '24-byte pointer result had no selected-root native sret CALLXS finish')
+  tracked_exit_roots = roots(candidate)
+  local selected = assert(next(tracked_exit_roots),
+                          '24-byte pointer result loop published no root')
+  local code, address, loop = jitutil.tracemc(selected)
+  assert(code and address and loop)
+  exits = 0
+  local mismatch = candidate(32, lib.arm64_return_scalar, 13)
+  assert(type(mismatch) == 'number' and exits > 0,
+         'changed pointer sret signature did not exit its root')
+  collectgarbage('collect')
+  local native_after_gc = _sret_native_count()
+  exits = 0
+  check(candidate(24, lib.arm64_return_pointer_member_sret, 13),
+        oracle(24, lib.arm64_return_pointer_member_sret, 13), 'post-GC result')
+  assert(exits > 0, 'selected pointer sret root did not exit after full GC')
+  assert(_sret_native_count() > native_after_gc,
+         'selected pointer sret root did not re-enter after full GC')
+  local code_after, address_after, loop_after = jitutil.tracemc(selected)
+  assert(roots(candidate)[selected] and code == code_after and
+         address == address_after and loop == loop_after,
+         'selected pointer sret root changed across GC or alternate result')
+  assert(lib.arm64_return_pointer_member_sret_count()-before == 432,
+         '24-byte pointer sret native/interpreter effects were lost or replayed')
+end
+
 _G.__arm64_run_sret_quad_result = run_sret_quad_result
+_G.__arm64_run_pointer_sret_result = run_pointer_sret_result
 
 local function make_sret_many_pair()
   local source = [[

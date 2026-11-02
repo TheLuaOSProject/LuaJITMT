@@ -19,17 +19,65 @@ typedef struct { uint32_t tag; float value; } SmallMixed;
 typedef struct { struct { float lo, hi; } inner; } SmallNestedHFA;
 typedef struct { struct { float lane[2]; } inner; } SmallArrayHFA;
 typedef struct { void *value; } SmallPointerResult;
+typedef struct { uint64_t tag; void *value; uint64_t tail; } PointerSretResult;
+typedef struct { uint32_t values[2]; } SmallIntArrayResult;
+typedef struct { uint64_t a, b, c, d; } SretWords4;
+typedef struct { SretWords4 a, b; } SretWords8;
+typedef struct { SretWords8 a, b; } SretWords16;
+typedef struct { SretWords16 a, b; } SretWords32;
+typedef struct { SretWords4 words; uint64_t e, f; } SretWords6;
+typedef struct { uint64_t a, b; uint32_t tail; } SretTailpad;
+typedef struct { uint64_t values[4]; uint64_t tag; } SretIntArray;
+typedef struct { uint32_t prefix[2]; uint64_t mark; } SretArrayInner;
+typedef struct { SretArrayInner inner; uint64_t values[4]; }
+  SretNestedArray;
+typedef struct { uint64_t tag; void *slots[3]; uint64_t tail; }
+  SretPointerArray;
 SmallNested arm64_return_nested_int(uint32_t);
 SmallMixed arm64_return_mixed(uint32_t);
 SmallNestedHFA arm64_return_nested_float_pair(uint32_t);
 SmallArrayHFA arm64_return_array_float_pair(uint32_t);
 SmallPointerResult arm64_return_pointer_member(uint32_t);
 SmallPointerResult arm64_return_pointer_member_alt(uint32_t);
+PointerSretResult arm64_return_pointer_member_sret(uint32_t);
+PointerSretResult arm64_return_pointer_member_sret_alt(uint32_t);
+SmallIntArrayResult arm64_return_small_int_array(uint32_t);
+SmallIntArrayResult arm64_return_small_int_array_alt(uint32_t);
+uint32_t arm64_return_small_int_array_count(void);
+SretWords6 arm64_return_sret_words6(uint32_t);
+SretWords6 arm64_return_sret_words6_alt(uint32_t);
+SretWords32 arm64_return_sret_words32(uint32_t);
+SretWords32 arm64_return_sret_words32_alt(uint32_t);
+SretTailpad arm64_return_sret_tailpad(uint32_t);
+SretIntArray arm64_return_sret_int_array(uint32_t);
+SretIntArray arm64_return_sret_int_array_alt(uint32_t);
+SretNestedArray arm64_return_sret_nested_array(uint32_t);
+SretNestedArray arm64_return_sret_nested_array_alt(uint32_t);
+SretPointerArray arm64_return_sret_pointer_array(uint32_t);
+SretPointerArray arm64_return_sret_pointer_array_alt(uint32_t);
+uint32_t arm64_return_sret_words6_count(void);
+uint32_t arm64_return_sret_words32_count(void);
+uint32_t arm64_return_sret_int_array_count(void);
+uint32_t arm64_return_sret_nested_array_count(void);
+uint32_t arm64_return_sret_pointer_array_count(void);
+uint32_t arm64_return_pointer_member_sret_count(void);
 uint32_t arm64_return_scalar(uint32_t);
 void arm64_aggregate_reset(void);
 uint32_t arm64_aggregate_count(uint32_t);
 ]]
 local lib = ffi.load(assert(os.getenv('LJ_ARM64_INT_AGGREGATE_SO')))
+local function words4_equal(a, b)
+  return a.a == b.a and a.b == b.b and a.c == b.c and a.d == b.d
+end
+local function words8_equal(a, b)
+  return words4_equal(a.a, b.a) and words4_equal(a.b, b.b)
+end
+local function words16_equal(a, b)
+  return words8_equal(a.a, b.a) and words8_equal(a.b, b.b)
+end
+local function words32_equal(a, b)
+  return words16_equal(a.a, b.a) and words16_equal(a.b, b.b)
+end
 local pointer_seen = { null = false, nonnull = false }
 local cases = {
   {'nested', 'SmallNested', lib.arm64_return_nested_int, 67,
@@ -52,6 +100,58 @@ local cases = {
      return true
    end,
    lib.arm64_return_pointer_member_alt},
+  {'pointer-sret', 'PointerSretResult',
+   lib.arm64_return_pointer_member_sret, 75,
+   function(a, b)
+     return a.tag == b.tag and a.value == b.value and a.tail == b.tail
+   end,
+   lib.arm64_return_pointer_member_sret_alt},
+  {'small-array-int', 'SmallIntArrayResult',
+   lib.arm64_return_small_int_array, 82,
+   function(a, b)
+     if type(b) == 'number' then
+       return a.values[0] == b+3 and a.values[1] == b+7
+     end
+     return a.values[0] == b.values[0] and a.values[1] == b.values[1]
+   end, lib.arm64_return_small_int_array_alt,
+   lib.arm64_return_small_int_array_count},
+  {'sret-48', 'SretWords6', lib.arm64_return_sret_words6, 77,
+   function(a, b)
+     return words4_equal(a.words, b.words) and a.e == b.e and a.f == b.f
+   end,
+   lib.arm64_return_sret_words6_alt,
+   lib.arm64_return_sret_words6_count},
+  {'sret-256', 'SretWords32', lib.arm64_return_sret_words32, 78,
+   function(a, b) return words32_equal(a, b) end,
+   lib.arm64_return_sret_words32_alt,
+   lib.arm64_return_sret_words32_count},
+  {'sret-tailpad', 'SretTailpad', lib.arm64_return_sret_tailpad, 77,
+   function(a, b) return a.a == b.a and a.b == b.b and a.tail == b.tail end,
+   nil, lib.arm64_return_sret_words6_count},
+  {'sret-int-array', 'SretIntArray', lib.arm64_return_sret_int_array, 79,
+   function(a, b)
+     for i = 0, 3 do if a.values[i] ~= b.values[i] then return false end end
+     return a.tag == b.tag
+   end, lib.arm64_return_sret_int_array_alt,
+   lib.arm64_return_sret_int_array_count},
+  {'sret-nested-array', 'SretNestedArray',
+   lib.arm64_return_sret_nested_array, 80,
+   function(a, b)
+     if a.inner.prefix[0] ~= b.inner.prefix[0] or
+        a.inner.prefix[1] ~= b.inner.prefix[1] or
+        a.inner.mark ~= b.inner.mark then return false end
+     for i = 0, 3 do if a.values[i] ~= b.values[i] then return false end end
+     return true
+   end, lib.arm64_return_sret_nested_array_alt,
+   lib.arm64_return_sret_nested_array_count},
+  {'sret-pointer-array', 'SretPointerArray',
+   lib.arm64_return_sret_pointer_array, 81,
+   function(a, b)
+     if a.tag ~= b.tag or a.tail ~= b.tail then return false end
+     for i = 0, 2 do if a.slots[i] ~= b.slots[i] then return false end end
+     return true
+   end, lib.arm64_return_sret_pointer_array_alt,
+   lib.arm64_return_sret_pointer_array_count},
 }
 
 local function source()
@@ -104,6 +204,9 @@ for _, case in ipairs(cases) do
   jit.opt.start('hotloop=1', 'hotexit=1000')
   jit.on(candidate, true)
   lib.arm64_aggregate_reset()
+  local function native_count()
+    return case[7] and case[7]() or lib.arm64_aggregate_count(case[4])
+  end
   local function compare(n)
     local a, ar = candidate(n, case[3])
     local b, br = oracle(n, case[3])
@@ -111,6 +214,8 @@ for _, case in ipairs(cases) do
     assert(ffi.istype(case[2], ar) and ffi.istype(case[2], br))
     if case[1] == 'pointer-member' then
       assert(ar.value == br.value and case[5](ar, n) and case[5](br, n))
+    elseif case[1] == 'pointer-sret' or case[1]:sub(1, 5) == 'sret-' then
+      assert(case[5](ar, br), 'pointer sret fields differ from oracle')
     else
       assert(case[5](ar, n) and case[5](br, n))
     end
@@ -121,7 +226,9 @@ for _, case in ipairs(cases) do
             (pass % 2 == 0 and 64 or 63) or 64)
   end
   local warm_effects = case[1] == 'pointer-member' and 1016 or 1024
-  assert(lib.arm64_aggregate_count(case[4]) == warm_effects)
+  assert(native_count() == warm_effects,
+         case[1]..' native effect count: '..native_count()..' expected '..
+         warm_effects)
   if case[1] == 'pointer-member' then
     assert(pointer_seen.null and pointer_seen.nonnull,
            'pointer result did not preserve both NULL and non-NULL values')
@@ -137,20 +244,30 @@ for _, case in ipairs(cases) do
   collectgarbage('collect')
   compare(32)
   assert(exits > 0, 'selected result root did not exit after GC')
-  assert(lib.arm64_aggregate_count(case[4]) == warm_effects+64)
+  assert(native_count() == warm_effects+64)
   local gc_exits = exits
   exits = 0
   local alternate = case[6] or lib.arm64_return_scalar
   local a, ar = candidate(32, alternate)
   local b, br = oracle(32, alternate)
   if case[6] then
-    assert(ffi.istype(case[2], ar) and ffi.istype(case[2], br) and
-           ar.value == br.value and case[5](ar, br),
-           'alternate pointer result disagreed with oracle')
+    local fields_match = case[5](ar, br)
+    if case[1] == 'pointer-member' then
+      fields_match = ar.value == br.value and fields_match
+    elseif case[1] == 'pointer-sret' then
+      fields_match = ar.value == br.value and fields_match
+    end
+    assert(ffi.istype(case[2], ar) and ffi.istype(case[2], br) and fields_match,
+           'alternate aggregate result disagreed with oracle')
   else
     assert(a == b and ar == br and type(ar) == 'number')
   end
   assert(exits > 0, 'alternate result callee did not exit selected root')
+  if case[1] == 'pointer-sret' or case[1] == 'small-array-int' or
+     (case[6] and case[1]:sub(1, 5) == 'sret-') then
+    assert(native_count() == warm_effects+128,
+           'pointer sret native/interpreter effects were lost or replayed')
+  end
   local code_after, address_after, loop_after = util.tracemc(root)
   assert(loop_trace(candidate) == root and has_callxs(root))
   assert(code == code_after and address == address_after and loop == loop_after,

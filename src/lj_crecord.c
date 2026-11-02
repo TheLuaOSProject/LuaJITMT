@@ -2594,7 +2594,8 @@ static int crec_call_indirect_struct_result(CTState *cts, CTypeID id,
   return size > 16;
 #endif
 #elif LJ_TARGET_ARM64 && LJ_TARGET_OSX
-  return lj_ccall_arm64_indirect_aggregate_result_class(cts, id, NULL, NULL);
+  return lj_ccall_arm64_indirect_aggregate_result_class(cts, id, NULL, NULL,
+                                                        NULL);
 #else
   UNUSED(cts); UNUSED(id);
   return 0;

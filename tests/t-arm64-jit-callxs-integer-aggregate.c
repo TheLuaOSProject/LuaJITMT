@@ -961,8 +961,11 @@ static void assert_integer_aggregate_result_signature(lua_State *L,
 						     unsigned size)
 {
   LJArm64ABISignature abi;
-  assert(lj_ccall_arm64_signature(ctype_ctsG(G(L)),
-				 global_cdata_ctype(L, name), &abi));
+  CTypeID fnid = global_cdata_ctype(L, name);
+  if (!lj_ccall_arm64_signature(ctype_ctsG(G(L)), fnid, &abi)) {
+    fprintf(stderr, "ABI integer aggregate result rejected: %s\n", name);
+    assert(0);
+  }
   assert(abi.result_class == LJ_ARM64_ABI_GPR &&
 	 abi.result_kind == LJ_ARM64_ABI_KIND_INTEGER_AGGREGATE &&
 	 abi.result_size == size && abi.result_unsigned &&
@@ -982,6 +985,89 @@ static void assert_indirect_aggregate_result_signature(lua_State *L,
 	 abi.result_id != 0 && abi.nargs == 1 && abi.nparams == 1 &&
 	 abi.arg[0].kind == LJ_ARM64_ABI_KIND_INTEGER &&
 	 abi.arg[0].cls == LJ_ARM64_ABI_GPR && abi.arg[0].reg == 0);
+}
+
+static void assert_rejects_malformed_indirect_extent(lua_State *L,
+                                                      const char *name)
+{
+  CTState *cts = ctype_ctsG(G(L));
+  CTypeID fnid = global_cdata_ctype(L, name);
+  LJArm64ABISignature abi;
+  CType *result, *last;
+  CTypeID fid;
+  CTSize old_size, old_offset;
+  int accepted;
+  assert(lj_ccall_arm64_signature(cts, fnid, &abi));
+  result = ctype_tab_slot(cts->tabh, abi.result_id);
+  old_size = ctype_size_acq(result);
+  fid = ctype_sib_acq(result);
+  assert(fid != 0);
+  last = ctype_tab_slot(cts->tabh, fid);
+  while ((fid = ctype_sib_acq(last)) != 0)
+    last = ctype_tab_slot(cts->tabh, fid);
+  old_offset = ctype_size_acq(last);
+
+  /* A forged enormous tail extent cannot be justified by the declared
+  ** fields and their normal final alignment. Restore the shared CType before
+  ** checking the result so no later fixture observes the mutation. */
+  ctype_size_rel(result, CTSIZE_INVALID-1u);
+  accepted = lj_ccall_arm64_signature(cts, fnid, &abi);
+  ctype_size_rel(result, old_size);
+  assert(!accepted);
+
+  ctype_size_rel(result, CTSIZE_INVALID);
+  accepted = lj_ccall_arm64_signature(cts, fnid, &abi);
+  ctype_size_rel(result, old_size);
+  assert(!accepted);
+
+  /* Exercise a near-sentinel field offset and wrapped field-end candidate
+  ** under a large declared extent. */
+  ctype_size_rel(result, CTSIZE_INVALID-1u);
+  ctype_size_rel(last, CTSIZE_INVALID-3u);
+  accepted = lj_ccall_arm64_signature(cts, fnid, &abi);
+  ctype_size_rel(last, old_offset);
+  ctype_size_rel(result, old_size);
+  assert(!accepted);
+  assert(lj_ccall_arm64_signature(cts, fnid, &abi) &&
+         abi.result_size == old_size);
+}
+
+static void assert_rejects_malformed_indirect_array_extent(lua_State *L,
+                                                            const char *name)
+{
+  CTState *cts = ctype_ctsG(G(L));
+  CTypeID fnid = global_cdata_ctype(L, name);
+  LJArm64ABISignature abi;
+  CType field, *result, *array;
+  CTypeID arrayid, rawarrayid, fid;
+  CTSize old_size, old_array_size;
+  int accepted;
+  assert(lj_ccall_arm64_signature(cts, fnid, &abi));
+  result = ctype_tab_slot(cts->tabh, abi.result_id);
+  old_size = ctype_size_acq(result);
+  fid = ctype_sib_acq(result);
+  assert(fid != 0 && lj_ctype_snapshot(cts, fid, &field) > 0);
+  arrayid = ctype_cid(ctype_info_acq(&field));
+  assert(lj_ccall_arm64_raw_type(cts, arrayid, &field, &rawarrayid));
+  array = ctype_tab_slot(cts->tabh, rawarrayid);
+  old_array_size = ctype_size_acq(array);
+
+  /* The array extent is not an integral element count. */
+  ctype_size_rel(array, 33);
+  accepted = lj_ccall_arm64_signature(cts, fnid, &abi);
+  ctype_size_rel(array, old_array_size);
+  assert(!accepted);
+
+  /* A huge divisible extent implies far more than the bounded leaf budget.
+  ** It must be rejected before iterating that count. */
+  ctype_size_rel(array, CTSIZE_INVALID-7u);
+  ctype_size_rel(result, CTSIZE_INVALID-7u);
+  accepted = lj_ccall_arm64_signature(cts, fnid, &abi);
+  ctype_size_rel(array, old_array_size);
+  ctype_size_rel(result, old_size);
+  assert(!accepted);
+  assert(lj_ccall_arm64_signature(cts, fnid, &abi) &&
+         abi.result_size == old_size);
 }
 
 static void assert_indirect_aggregate_many_signature(lua_State *L)
@@ -1136,8 +1222,10 @@ static void test_aggregate_signatures(lua_State *L)
   assert_integer_aggregate_result_signature(L,
     "__arm64_pointer_member_result_fn", 8);
   assert_integer_aggregate_result_signature(L, "__arm64_nested_mixed_result_fn", 8);
-  assert_unsupported_aggregate_signature(L, "__arm64_integer_array_result_fn");
-  assert_unsupported_aggregate_signature(L, "__arm64_integer_array_result24_fn");
+  assert_integer_aggregate_result_signature(L,
+    "__arm64_integer_array_result_fn", 8);
+  assert_indirect_aggregate_result_signature(L,
+    "__arm64_integer_array_result24_fn", 24);
   assert_aggregate_signature(L, "__arm64_pointer_member_arg_fn", 8);
   assert_pointer_member_stack_signature(L,
 	"__arm64_pointer_member_stack_arg_fn");
@@ -1145,8 +1233,19 @@ static void test_aggregate_signatures(lua_State *L)
     "__arm64_pointer_member_pair_arg_fn");
   assert_unsupported_aggregate_signature(L,
     "__arm64_pointer_member_union_arg_fn");
-  assert_unsupported_aggregate_signature(L,
-    "__arm64_pointer_member_sret_result_fn");
+  assert_indirect_aggregate_result_signature(L,
+    "__arm64_pointer_member_sret_result_fn", 24);
+  assert_indirect_aggregate_result_signature(L,
+    "__arm64_sret_words32_fn", 256);
+  assert_rejects_malformed_indirect_extent(L, "__arm64_sret_words32_fn");
+  assert_indirect_aggregate_result_signature(L,
+    "__arm64_sret_int_array_fn", 40);
+  assert_rejects_malformed_indirect_array_extent(L,
+    "__arm64_sret_int_array_fn");
+  assert_indirect_aggregate_result_signature(L,
+    "__arm64_sret_nested_array_fn", 48);
+  assert_indirect_aggregate_result_signature(L,
+    "__arm64_sret_pointer_array_fn", 40);
   assert_integer_aggregate_result_signature(L, "__arm64_result_depth31_fn", 1);
   assert_unsupported_aggregate_signature(L, "__arm64_result_depth32_fn");
   assert_indirect_aggregate_result_signature(L,
@@ -1540,7 +1639,8 @@ static GCtrace *find_indirect_result_trace(jit_State *J, GCproto *pt)
 
 static void test_live_indirect_result_admission(lua_State *L, GCtrace *T,
 						 const BCIns *meta_pc,
-						 const char *clone_name)
+						 const char *clone_name,
+						 unsigned expected_nargs)
 {
   Arm64TraceFixture fx;
   jit_State *J, *fixture_jit;
@@ -1579,7 +1679,8 @@ static void test_live_indirect_result_admission(lua_State *L, GCtrace *T,
   assert(box != 0 && call != 0 && copy[box].op1 >= nk &&
 	 copy[box].op1 < REF_TRUE);
   nargs = test_callxs_values(copy, call, values, LJ_ARM64_ABI_MAX_ARGS);
-  assert(nargs == 11 && values[0] != 0 && copy[values[0]].o == IR_ADD &&
+  assert(nargs == expected_nargs && values[0] != 0 &&
+	 copy[values[0]].o == IR_ADD &&
 	 irt_type(copy[values[0]].t) == IRT_P64);
   payload = values[0];
   addrref = payload;
@@ -2636,7 +2737,25 @@ int main(int argc, char **argv)
     meta_pc = aggregate_meta_pc(T);
     assert(meta_pc != NULL);
     test_live_indirect_result_admission(L, T, meta_pc,
-      "__arm64_sret_many_clone");
+	      "__arm64_sret_many_clone", 11);
+  }
+  lua_getglobal(L, "__arm64_run_pointer_sret_result");
+  {
+    int status = lua_pcall(L, 0, 0, 0);
+    if (status != 0) {
+      fprintf(stderr, "pointer-containing sret result probe failed: %s\n",
+              lua_tostring(L, -1));
+    }
+    assert(status == 0);
+  }
+  {
+    jit_State *J = G2J(G(L));
+    GCtrace *T = find_indirect_result_trace(J, sret_candidate_pt);
+    assert(T != NULL);
+    meta_pc = aggregate_meta_pc(T);
+    assert(meta_pc != NULL);
+    test_live_indirect_result_admission(L, T, meta_pc,
+	      "__arm64_integer_result_clone", 2);
   }
   lua_getglobal(L, "__arm64_finish_peer");
   assert(lua_pcall(L, 0, 0, 0) == 0);

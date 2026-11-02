@@ -715,7 +715,7 @@ static int arm64_callxs_result_indirect(const LJArm64ABISignature *abi)
 {
   return abi->result_class == LJ_ARM64_ABI_NONE &&
          abi->result_kind == LJ_ARM64_ABI_KIND_INDIRECT_AGGREGATE &&
-         abi->result_size > 16 && abi->result_size <= 32;
+         abi->result_size > 16 && abi->result_size != CTSIZE_INVALID;
 }
 
 static CTypeID arm64_callxs_box_ctype(const LJArm64ABISignature *abi)
