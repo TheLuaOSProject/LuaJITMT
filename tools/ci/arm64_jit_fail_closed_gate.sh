@@ -15,6 +15,7 @@ LJ_TEST_ROOT="$root" sh "$root/tools/ci/gcobj_alignment_contract.sh"
 jobs=${JOBS:-${MAKE_JOBS:-$(sysctl -n hw.logicalcpu 2>/dev/null || echo 2)}}
 minver=${MACOSX_DEPLOYMENT_TARGET:-13.0}
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_ARM64_EMIT_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS'
+ordinary_xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT'
 # Nested shared contracts must restore the enclosing archive's complete helper
 # profile before the next fixture consumes it.
 LJ_TEST_RESTORE_XCFLAGS=$xcflags
@@ -26,7 +27,7 @@ archive=$root/src/libluajit.a
 vm_object=$root/src/lj_vm.o
 lua_path="$root/tests/lib/?.lua;$root/src/?.lua;$root/src/jit/?.lua;;"
 
-lj_ci_set_restore '-arch arm64' "$xcflags"
+lj_ci_set_restore '-arch arm64' "$ordinary_xcflags"
 lj_ci_build_profile arm64 '-arch arm64' "$xcflags" experimental
 
 for artifact in "$luajit" "$archive" "$vm_object"; do
@@ -287,5 +288,5 @@ env LUA_PATH="$lua_path" "$luajit" "$root/tests/t-upvalue-identity.lua"
 env LJ_TEST_ROOT="$root" LUA_PATH="$lua_path" "$luajit" "$root/tests/t-jit-cell-loops.lua"
 env LJ_TEST_ROOT="$root" LUA_PATH="$lua_path" "$luajit" "$root/tests/t-native-coverage.lua"
 
-LJ_CI_RESTORE_NEEDED=0
+lj_ci_restore '-arch arm64' "$ordinary_xcflags"
 echo "arm64_jit_fail_closed_gate OK: scalar LOOP/FORL/FUNCF, bitops, rooted effects, first-side entry, generic FFI and lifecycle contracts sound"
