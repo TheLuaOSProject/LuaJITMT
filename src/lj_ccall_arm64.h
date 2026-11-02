@@ -464,7 +464,7 @@ typedef struct LJArm64SmallResultWalk {
   CTypeID active[32];
   uint8_t leaves;
   uint8_t non_hfa;
-  uint8_t allow_pointer;  /* Set only for direct one-GPR aggregate results. */
+  uint8_t allow_pointer;  /* Enabled by direct and indirect result walkers. */
 } LJArm64SmallResultWalk;
 
 /* A small non-HFA result is returned as one opaque GPR payload. Establish

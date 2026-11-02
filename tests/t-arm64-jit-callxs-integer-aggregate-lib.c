@@ -39,7 +39,6 @@ typedef struct { uint64_t tag; void *value; uint64_t tail; }
 static unsigned calls_u64_triple_many;
 static unsigned calls_u64_triple_many_alt;
 static unsigned calls_u64_quad;
-static unsigned calls_pointer_member_sret;
 static uint64_t pointer_member_sret_tokens[2];
 typedef struct { uint16_t lo, hi; } arm64_half_pair;
 typedef struct { arm64_half_pair half; uint32_t tag; } arm64_nested_int_result;
@@ -130,6 +129,7 @@ enum {
   ARM64_RETURN_NESTED_DOUBLE_QUAD,
   ARM64_RETURN_U64_TRIPLE,
   ARM64_RETURN_POINTER_MEMBER,
+  ARM64_RETURN_POINTER_MEMBER_SRET,
   ARM64_POINTER_MEMBER_ARG,
   ARM64_POINTER_MEMBER_ARG_ALT,
   ARM64_POINTER_MEMBER_STACK_ARG,
@@ -542,16 +542,27 @@ LJ_EXPORT arm64_pointer_member_sret_result
 arm64_return_pointer_member_sret(uint32_t value)
 {
   arm64_pointer_member_sret_result result;
-  calls_pointer_member_sret++;
+  calls[ARM64_RETURN_POINTER_MEMBER_SRET]++;
   result.tag = UINT64_C(0x1234000000000000) | (uint64_t)value*29u+5u;
   result.value = &pointer_member_sret_tokens[value & 1u];
   result.tail = UINT64_C(0x9876000000000000) | (uint64_t)value*31u+7u;
   return result;
 }
 
+LJ_EXPORT arm64_pointer_member_sret_result
+arm64_return_pointer_member_sret_alt(uint32_t value)
+{
+  arm64_pointer_member_sret_result result;
+  calls[ARM64_RETURN_POINTER_MEMBER_SRET]++;
+  result.tag = UINT64_C(0xabcd000000000000) | (uint64_t)value*37u+9u;
+  result.value = &pointer_member_sret_tokens[(value+1u) & 1u];
+  result.tail = UINT64_C(0x7654000000000000) | (uint64_t)value*41u+11u;
+  return result;
+}
+
 LJ_EXPORT uint32_t arm64_return_pointer_member_sret_count(void)
 {
-  return calls_pointer_member_sret;
+  return calls[ARM64_RETURN_POINTER_MEMBER_SRET];
 }
 
 LJ_EXPORT uint32_t arm64_return_u64_quad_count(void)

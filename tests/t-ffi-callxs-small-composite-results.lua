@@ -19,12 +19,16 @@ typedef struct { uint32_t tag; float value; } SmallMixed;
 typedef struct { struct { float lo, hi; } inner; } SmallNestedHFA;
 typedef struct { struct { float lane[2]; } inner; } SmallArrayHFA;
 typedef struct { void *value; } SmallPointerResult;
+typedef struct { uint64_t tag; void *value; uint64_t tail; } PointerSretResult;
 SmallNested arm64_return_nested_int(uint32_t);
 SmallMixed arm64_return_mixed(uint32_t);
 SmallNestedHFA arm64_return_nested_float_pair(uint32_t);
 SmallArrayHFA arm64_return_array_float_pair(uint32_t);
 SmallPointerResult arm64_return_pointer_member(uint32_t);
 SmallPointerResult arm64_return_pointer_member_alt(uint32_t);
+PointerSretResult arm64_return_pointer_member_sret(uint32_t);
+PointerSretResult arm64_return_pointer_member_sret_alt(uint32_t);
+uint32_t arm64_return_pointer_member_sret_count(void);
 uint32_t arm64_return_scalar(uint32_t);
 void arm64_aggregate_reset(void);
 uint32_t arm64_aggregate_count(uint32_t);
@@ -52,6 +56,12 @@ local cases = {
      return true
    end,
    lib.arm64_return_pointer_member_alt},
+  {'pointer-sret', 'PointerSretResult',
+   lib.arm64_return_pointer_member_sret, 75,
+   function(a, b)
+     return a.tag == b.tag and a.value == b.value and a.tail == b.tail
+   end,
+   lib.arm64_return_pointer_member_sret_alt},
 }
 
 local function source()
@@ -111,6 +121,8 @@ for _, case in ipairs(cases) do
     assert(ffi.istype(case[2], ar) and ffi.istype(case[2], br))
     if case[1] == 'pointer-member' then
       assert(ar.value == br.value and case[5](ar, n) and case[5](br, n))
+    elseif case[1] == 'pointer-sret' then
+      assert(case[5](ar, br), 'pointer sret fields differ from oracle')
     else
       assert(case[5](ar, n) and case[5](br, n))
     end
@@ -151,6 +163,10 @@ for _, case in ipairs(cases) do
     assert(a == b and ar == br and type(ar) == 'number')
   end
   assert(exits > 0, 'alternate result callee did not exit selected root')
+  if case[1] == 'pointer-sret' then
+    assert(lib.arm64_aggregate_count(case[4]) == warm_effects+128,
+           'pointer sret native/interpreter effects were lost or replayed')
+  end
   local code_after, address_after, loop_after = util.tracemc(root)
   assert(loop_trace(candidate) == root and has_callxs(root))
   assert(code == code_after and address == address_after and loop == loop_after,
