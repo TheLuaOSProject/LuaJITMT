@@ -469,8 +469,8 @@ typedef struct LJArm64SmallResultWalk {
 
 /* A small non-HFA result is returned as one opaque GPR payload. Establish
 ** the classification from bounded scalar leaves, including named nested
-** structs. Pointer leaves are opt-in for the direct result path only; they
-** never widen the independent argument or indirect-result policy. */
+** structs. Pointer leaves are enabled only by result classifiers; they never
+** widen the independent argument policy. */
 static int lj_ccall_arm64_small_result_walk(LJArm64SmallResultWalk *walk,
     CTypeID id, unsigned depth, CTSize maxsize, CTSize *sizep)
 {
@@ -569,11 +569,11 @@ static int lj_ccall_arm64_small_aggregate_result_class(CTState *cts, CTypeID id,
 }
 
 /* Darwin AAPCS64 returns non-HFA composites larger than 16 bytes through the
-** independent X8 result pointer. Keep this first slice bounded to ordinary
+** independent X8 result pointer. Keep this slice bounded to ordinary
 ** non-union structs no larger than 32 bytes. A failed HFA classifier is not
-** enough to prove non-HFA: independently walk the declared numeric fields and
-** require at least one integer/enum leaf. This rejects possible/over-aligned
-** HFAs and unsupported fields rather than treating them as sret by default. */
+** enough to prove non-HFA: independently walk the declared fields and require
+** at least one non-floating leaf. This rejects possible/over-aligned HFAs and
+** unsupported fields rather than treating them as sret by default. */
 static int lj_ccall_arm64_indirect_aggregate_result_class(CTState *cts,
     CTypeID id, LJArm64ABIArg *arg, CTypeID *rawid)
 {
@@ -592,6 +592,7 @@ static int lj_ccall_arm64_indirect_aggregate_result_class(CTState *cts,
     return 0;
   memset(&walk, 0, sizeof(walk));
   walk.cts = cts;
+  walk.allow_pointer = 1;
   if (!lj_ccall_arm64_small_result_walk(&walk, id, 0, 32,
                                         &checked_size) ||
       checked_size != size || !walk.non_hfa)

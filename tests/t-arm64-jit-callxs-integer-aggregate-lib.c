@@ -34,9 +34,13 @@ typedef struct { uint64_t value; } arm64_u64_result;
 typedef struct { uint64_t lo, mid, hi; } arm64_u64_triple_result;
 typedef struct { uint64_t lo, mid, hi, tail; } arm64_u64_quad_result;
 typedef struct { void *value; } arm64_pointer_member_result;
+typedef struct { uint64_t tag; void *value; uint64_t tail; }
+  arm64_pointer_member_sret_result;
 static unsigned calls_u64_triple_many;
 static unsigned calls_u64_triple_many_alt;
 static unsigned calls_u64_quad;
+static unsigned calls_pointer_member_sret;
+static uint64_t pointer_member_sret_tokens[2];
 typedef struct { uint16_t lo, hi; } arm64_half_pair;
 typedef struct { arm64_half_pair half; uint32_t tag; } arm64_nested_int_result;
 typedef struct { uint32_t tag; float value; } arm64_mixed_result;
@@ -532,6 +536,22 @@ LJ_EXPORT arm64_u64_quad_result arm64_return_u64_quad_alt(uint32_t value)
   result.hi = UINT64_C(0xa1b2c3d400000000) | (uint64_t)value*29u+7u;
   result.tail = UINT64_C(0xe1f2031400000000) | (uint64_t)value*31u+8u;
   return result;
+}
+
+LJ_EXPORT arm64_pointer_member_sret_result
+arm64_return_pointer_member_sret(uint32_t value)
+{
+  arm64_pointer_member_sret_result result;
+  calls_pointer_member_sret++;
+  result.tag = UINT64_C(0x1234000000000000) | (uint64_t)value*29u+5u;
+  result.value = &pointer_member_sret_tokens[value & 1u];
+  result.tail = UINT64_C(0x9876000000000000) | (uint64_t)value*31u+7u;
+  return result;
+}
+
+LJ_EXPORT uint32_t arm64_return_pointer_member_sret_count(void)
+{
+  return calls_pointer_member_sret;
 }
 
 LJ_EXPORT uint32_t arm64_return_u64_quad_count(void)

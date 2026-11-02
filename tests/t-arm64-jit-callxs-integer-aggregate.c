@@ -1145,8 +1145,8 @@ static void test_aggregate_signatures(lua_State *L)
     "__arm64_pointer_member_pair_arg_fn");
   assert_unsupported_aggregate_signature(L,
     "__arm64_pointer_member_union_arg_fn");
-  assert_unsupported_aggregate_signature(L,
-    "__arm64_pointer_member_sret_result_fn");
+  assert_indirect_aggregate_result_signature(L,
+    "__arm64_pointer_member_sret_result_fn", 24);
   assert_integer_aggregate_result_signature(L, "__arm64_result_depth31_fn", 1);
   assert_unsupported_aggregate_signature(L, "__arm64_result_depth32_fn");
   assert_indirect_aggregate_result_signature(L,
@@ -1540,7 +1540,8 @@ static GCtrace *find_indirect_result_trace(jit_State *J, GCproto *pt)
 
 static void test_live_indirect_result_admission(lua_State *L, GCtrace *T,
 						 const BCIns *meta_pc,
-						 const char *clone_name)
+						 const char *clone_name,
+						 unsigned expected_nargs)
 {
   Arm64TraceFixture fx;
   jit_State *J, *fixture_jit;
@@ -1579,7 +1580,8 @@ static void test_live_indirect_result_admission(lua_State *L, GCtrace *T,
   assert(box != 0 && call != 0 && copy[box].op1 >= nk &&
 	 copy[box].op1 < REF_TRUE);
   nargs = test_callxs_values(copy, call, values, LJ_ARM64_ABI_MAX_ARGS);
-  assert(nargs == 11 && values[0] != 0 && copy[values[0]].o == IR_ADD &&
+  assert(nargs == expected_nargs && values[0] != 0 &&
+	 copy[values[0]].o == IR_ADD &&
 	 irt_type(copy[values[0]].t) == IRT_P64);
   payload = values[0];
   addrref = payload;
@@ -2636,7 +2638,25 @@ int main(int argc, char **argv)
     meta_pc = aggregate_meta_pc(T);
     assert(meta_pc != NULL);
     test_live_indirect_result_admission(L, T, meta_pc,
-      "__arm64_sret_many_clone");
+	      "__arm64_sret_many_clone", 11);
+  }
+  lua_getglobal(L, "__arm64_run_pointer_sret_result");
+  {
+    int status = lua_pcall(L, 0, 0, 0);
+    if (status != 0) {
+      fprintf(stderr, "pointer-containing sret result probe failed: %s\n",
+              lua_tostring(L, -1));
+    }
+    assert(status == 0);
+  }
+  {
+    jit_State *J = G2J(G(L));
+    GCtrace *T = find_indirect_result_trace(J, sret_candidate_pt);
+    assert(T != NULL);
+    meta_pc = aggregate_meta_pc(T);
+    assert(meta_pc != NULL);
+    test_live_indirect_result_admission(L, T, meta_pc,
+	      "__arm64_integer_result_clone", 2);
   }
   lua_getglobal(L, "__arm64_finish_peer");
   assert(lua_pcall(L, 0, 0, 0) == 0);
