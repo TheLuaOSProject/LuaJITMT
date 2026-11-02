@@ -17,25 +17,35 @@ walked. The HFA classifier runs first; pure HFA results retain their existing
 classification. Arrays (including arrays nested in structs), unions,
 references, VLA/vector/complex members, unsupported leaves, and over-aligned
 layouts remain excluded. Existing fixed CNEW allocation checks continue to
-enforce the runtime allocation limit.
+enforce the runtime allocation limit. The final field end must round to the
+declared struct size at its natural alignment, using checked arithmetic; this
+rejects oversized trailing extents and prevents offset-plus-field-size wrap.
 
 The helper-free ARM64/x86_64 companion checks nested 48-byte and 256-byte
 returns against an interpreted oracle. On ARM64 each selected trace remains
 published, exits and re-enters after a full GC, and records exactly the
-expected native effects. The 256-byte type contains 32 nested `uint64_t`
-leaves, exercising the former `uint8_t` truncation boundary. The existing
-classifier negative for a 24-byte array result confirms arrays remain closed.
+expected native effects. The 48-byte case checks all six fields; the 256-byte
+type compares all 32 nested `uint64_t` fields and exercises the former
+`uint8_t` truncation boundary. Distinct same-type alternate callees prove the
+signature guard exits. A valid 24-byte struct with four bytes of normal tail
+padding checks the size-alignment rule. The existing classifier negative for
+a 24-byte array result confirms arrays remain closed. The classifier fixture
+temporarily mutates the 256-byte CType's declared extent and final field offset
+to near-`CTSIZE_INVALID` values, verifies signature rejection, restores both
+shared records, and verifies the valid 256-byte signature again.
 
 Validation logs:
 
 - Four ARM64/arm64e assertion/release profiles: `/Users/frityet/Scratch/ljmt-large-sret-20261102/arm64-four-profile.log`.
+- Exact `CTSIZE_INVALID` malformed-extent rerun in the ARM64 assertion profile:
+  `/Users/frityet/Scratch/ljmt-large-sret-20261102/arm64-malformed-extent.log`.
 - Fresh x86_64 assertion runtime, ad-hoc signed and run under Rosetta with the
   same helper-free test: `/Users/frityet/Scratch/ljmt-large-sret-20261102/x64-comparison.log`.
 - x86_64 signature details and runtime/archive/helper hashes are in the same
   directory (`x64-codesign.txt`, `sha256.txt`). The x64 run passed nested,
-  pointer sret, 48-byte and 256-byte cases with selected trace 1; the large
-  cases each observed the selected-root exit after GC and alternate-callee
-  guard exit.
+  pointer sret, 48-byte, 256-byte and padded-extent cases with selected trace
+  1; the large cases observed one post-GC selected-root exit and 31 exits on
+  the distinct same-type alternate callee.
 
 The implementation covers only this bounded non-HFA result slice. It does not
 open by-value aggregate arguments or general aggregate/sret combinations.
