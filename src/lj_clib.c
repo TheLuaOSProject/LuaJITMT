@@ -1122,9 +1122,17 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name, TValue *out)
   ctx.outofs = outofs;
   errcode = lj_vm_cpcall(L, NULL, &ctx, clib_index_miss_cp);
   clib_reader_leave(L, G(L), cl, &closing);
-  L->top = restorestack(L, keyofs);
-  if (LJ_UNLIKELY(errcode))
+  if (LJ_UNLIKELY(errcode)) {
+    /* The error object is at L->top-1. Keep it as the rethrown object. */
+    TValue *errobj = restorestack(L, keyofs);
+    if (errobj < L->top-1) {
+      copyTV(L, errobj, L->top-1);
+      lj_state_stack_pubtv(L, L, errobj);
+    }
+    L->top = errobj+1;
     lj_err_throw(L, errcode);
+  }
+  L->top = restorestack(L, keyofs);
   if (closing)
     clib_closed_error(L);
   return restorestack(L, outofs);

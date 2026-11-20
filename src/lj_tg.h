@@ -413,16 +413,23 @@ LJ_STATIC_ASSERT(offsetof(TGState, profile_request) ==
 LJ_STATIC_ASSERT((offsetof(TGState, jit_event_sessions.sequence) & 7u) == 0);
 LJ_STATIC_ASSERT((offsetof(LJJitEventSessions, next_generation) & 7u) == 0);
 LJ_STATIC_ASSERT((offsetof(LJJitEventSessions, active_generation) & 7u) == 0);
-LJ_STATIC_ASSERT((offsetof(LJJitEventSessions, slot[0].generation) & 7u) == 0);
-LJ_STATIC_ASSERT((offsetof(LJJitEventSessions,
-			  slot[0].attachment_generation) & 7u) == 0);
-LJ_STATIC_ASSERT((offsetof(LJJitEventSessions,
-			  slot[0].control_borrow_generation) & 7u) == 0);
-LJ_STATIC_ASSERT((offsetof(LJJitEventSessions, slot[1].generation) & 7u) == 0);
-LJ_STATIC_ASSERT((offsetof(LJJitEventSessions,
-			  slot[1].attachment_generation) & 7u) == 0);
-LJ_STATIC_ASSERT((offsetof(LJJitEventSessions,
-			  slot[1].control_borrow_generation) & 7u) == 0);
+/* MSVC rejects offsetof() with a subscripted member designator as a
+** constant expression, so compose the slot offsets explicitly. */
+#define LJ_JIT_EVENT_SESSION_SLOT_OFS(slot_index, member) \
+  (offsetof(LJJitEventSessions, slot) + \
+   (slot_index) * sizeof(LJJitEventSessionSlot) + \
+   offsetof(LJJitEventSessionSlot, member))
+LJ_STATIC_ASSERT((LJ_JIT_EVENT_SESSION_SLOT_OFS(0, generation) & 7u) == 0);
+LJ_STATIC_ASSERT((LJ_JIT_EVENT_SESSION_SLOT_OFS(0, attachment_generation) &
+		  7u) == 0);
+LJ_STATIC_ASSERT((LJ_JIT_EVENT_SESSION_SLOT_OFS(0, control_borrow_generation) &
+		  7u) == 0);
+LJ_STATIC_ASSERT((LJ_JIT_EVENT_SESSION_SLOT_OFS(1, generation) & 7u) == 0);
+LJ_STATIC_ASSERT((LJ_JIT_EVENT_SESSION_SLOT_OFS(1, attachment_generation) &
+		  7u) == 0);
+LJ_STATIC_ASSERT((LJ_JIT_EVENT_SESSION_SLOT_OFS(1, control_borrow_generation) &
+		  7u) == 0);
+#undef LJ_JIT_EVENT_SESSION_SLOT_OFS
 LJ_STATIC_ASSERT(offsetof(LJJitEventSessionSlot, attachment_state) ==
 		 offsetof(LJJitEventSessionSlot, source_traceno) +
 		 sizeof(((LJJitEventSessionSlot *)0)->source_traceno));
@@ -462,8 +469,8 @@ LJ_STATIC_ASSERT(offsetof(TGState, jit_trace_stream) >=
 		 sizeof(LJJitEventSessions));
 LJ_STATIC_ASSERT(offsetof(TGState, jit_trace_stream) +
 		 sizeof(LJJitTraceStream) <= sizeof(TGState));
-LJ_STATIC_ASSERT((offsetof(TGState, jit_event_attachment[0].sequence) & 7u) ==
-		 0);
+LJ_STATIC_ASSERT(((offsetof(TGState, jit_event_attachment) +
+		  offsetof(LJJitEventAttachmentClock, sequence)) & 7u) == 0);
 LJ_STATIC_ASSERT((offsetof(LJJitEventAttachmentClock,
 			  next_generation) & 7u) == 0);
 LJ_STATIC_ASSERT((offsetof(LJJitEventAttachmentClock, generation) & 7u) == 0);

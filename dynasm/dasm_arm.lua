@@ -1110,8 +1110,9 @@ function _M.mergemaps(map_coreop, map_def)
     if cv then
       local v = rawget(t, k1..k2)
       if type(v) == "string" then
-	local scv = format("%x", cv)
-	return gsub(scv..sub(v, 2), "|e", "|"..scv)
+        local scv = format("%x", cv)
+        local r = gsub(scv..sub(v, 2), "|e", "|"..scv)
+        return r
       end
     end
   end })
