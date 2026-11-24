@@ -79,6 +79,25 @@ test("comparisons and masks", function()
   end
 end)
 
+test("less-than comparisons with scalar operands", function()
+  for _, ti in ipairs(alltypes) do
+    local rnd = T.rng(SEED + ti.bits * 11)
+    for _ = 1, 120 do
+      local a, b = T.rand(ti, rnd), T.rand(ti, rnd)[0]
+      local c = ti.ct(b)
+      checkeq(simd.lt(a, b), T.refcmp(ti, "lt", a, c), ti.name .. " lt scalar")
+      checkeq(simd.le(a, b), T.refcmp(ti, "le", a, c), ti.name .. " le scalar")
+      b = ffi.cast(ti.ect, b)
+      checkeq(simd.lt(a, b), T.refcmp(ti, "lt", a, c), ti.name .. " lt cdata scalar")
+      checkeq(simd.le(a, b), T.refcmp(ti, "le", a, c), ti.name .. " le cdata scalar")
+    end
+  end
+  local f = T.T.float4.ct
+  checkeq(simd.movemask(simd.le(f(0/0, -1, 0, 1), 0)), 6, "le with NaN lane")
+  checkeq(simd.movemask(simd.lt(f(0, 1, 2, 3), 0/0)), 0, "lt with NaN scalar")
+  check(not pcall(simd.lt, T.T.u8x16.ct(1), T.T.i8x16.ct(2)), "lt rejects a different vector type")
+end)
+
 test("select", function()
   for _, ti in ipairs(T.T) do
     local rnd = T.rng(SEED + ti.bits * 13)

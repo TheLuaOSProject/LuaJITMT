@@ -2557,6 +2557,7 @@ void LJ_FASTCALL recff_simd_cmp(jit_State *J, RecordFFData *rd)
   TRef r;
   CTypeID mid;
   b = crec_simd_arg2(J, rd, 1, &vi, id, vt);
+  if (J->fn->c.nupvalues) op = op == VCMP_GT ? VCMP_LT : VCMP_LE;
   if (op == VCMP_NE) { op = VCMP_EQ; inv = 1; }
   else if (op == VCMP_LE) { op = VCMP_GE; { TRef t = a; a = b; b = t; } }
   else if (op == VCMP_LT) { op = VCMP_GT; { TRef t = a; a = b; b = t; } }

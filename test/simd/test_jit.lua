@@ -112,6 +112,24 @@ test("loop-carried accumulator", function()
   end
 end)
 
+test("ordered comparisons with a changing scalar", function()
+  for _, ti in ipairs({T.T.u8x16, T.T.float4}) do
+    local ct = ti.ct
+    diff(ti.name .. " scalar lt/le", function(n)
+      local lt, le, gt, ge = 0, 0, 0, 0
+      local v = ct(2)
+      for i = 1, n do
+	local x = i % 32
+	lt = lt + simd.movemask(simd.lt(v, x))
+	le = le + simd.movemask(simd.le(v, x))
+	gt = gt + simd.movemask(simd.gt(v, x))
+	ge = ge + simd.movemask(simd.ge(v, x))
+      end
+      return lt, le, gt, ge
+    end, 300)
+  end
+end)
+
 test("multi-lane constant vector constructors on trace", function()
   local function literal(ct, lanes)
     if lanes == 2 then

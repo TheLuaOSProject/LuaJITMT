@@ -29,6 +29,7 @@
 #include "lj_jit.h"
 #include "lj_dispatch.h"
 #include "lj_lib.h"
+#include "lj_ff.h"
 
 /* -- Argument checking --------------------------------------------------- */
 
@@ -347,12 +348,12 @@ LJLIB_CF(ffi_simd_eq)		LJLIB_REC(simd_cmp VCMP_EQ)
 
 LJLIB_CF(ffi_simd_gt)		LJLIB_REC(simd_cmp VCMP_GT)
 {
-  return simd_cmpop(L, VCMP_GT);
+  return simd_cmpop(L, curr_func(L)->c.nupvalues ? VCMP_LT : VCMP_GT);
 }
 
 LJLIB_CF(ffi_simd_ge)		LJLIB_REC(simd_cmp VCMP_GE)
 {
-  return simd_cmpop(L, VCMP_GE);
+  return simd_cmpop(L, curr_func(L)->c.nupvalues ? VCMP_LE : VCMP_GE);
 }
 
 /* -- Masks --------------------------------------------------------------- */
@@ -629,11 +630,9 @@ static int simd_cf_features(lua_State *L)
 */
 static const char simd_luasrc[] =
   "local simd = ...\n"
-  "local eq, gt, ge, bnot = simd.eq, simd.gt, simd.ge, simd.bnot\n"
+  "local eq, bnot = simd.eq, simd.bnot\n"
   "local movemask = simd.movemask\n"
   "function simd.ne(a, b) return bnot(eq(a, b)) end\n"
-  "function simd.lt(a, b) return gt(b, a) end\n"
-  "function simd.le(a, b) return ge(b, a) end\n"
   /* anyof is exactly this, and as a Lua wrapper it needs no fast function
   ** ID and no LJ_POST_FIXGUARD dance: the comparison is ordinary Lua. */
   "function simd.anyof(a) return movemask(a) ~= 0 end\n"
@@ -654,6 +653,13 @@ LUALIB_API int luaopen_ffi_simd(lua_State *L)
 {
   const luaL_Reg *r;
   LJ_LIB_REG(L, NULL, ffi_simd);
+  /* Reuse the fast function IDs. An upvalue marks the reverse comparisons. */
+  lua_pushboolean(L, 1);
+  lj_lib_pushcc(L, lj_cf_ffi_simd_gt, FF_ffi_simd_gt, 1);
+  lua_setfield(L, -2, "lt");
+  lua_pushboolean(L, 1);
+  lj_lib_pushcc(L, lj_cf_ffi_simd_ge, FF_ffi_simd_ge, 1);
+  lua_setfield(L, -2, "le");
   for (r = simd_plaincf; r->name; r++) {
     lua_pushcfunction(L, r->func);
     lua_setfield(L, -2, r->name);

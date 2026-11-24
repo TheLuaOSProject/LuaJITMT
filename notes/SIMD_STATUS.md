@@ -325,9 +325,10 @@ while `simd.shuffle` right next to it compiled fine.
 
 Fixed by getting back under the limit without changing the API:
 
-* `simd.ne`, `simd.lt` and `simd.le` are now Lua wrappers over `bnot(eq(..))`,
-  `gt(b,a)` and `ge(b,a)`, which is exactly how the recorder lowered them
-  anyway. They inline into a trace just like a fast function.
+* `simd.ne` is a Lua wrapper over `bnot(eq(..))`.
+* `simd.lt` and `simd.le` share the fast function IDs for `simd.gt` and
+  `simd.ge`. The inverse comparisons use an upvalue so the interpreter and
+  recorder can convert a scalar right operand before they compare the lanes.
 * `simd.isvector/lanes/elementtype/features` are plain C functions registered
   by hand. They are never recorded, so they do not need an ID.
 
