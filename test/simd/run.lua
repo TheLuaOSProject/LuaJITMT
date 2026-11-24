@@ -14,7 +14,7 @@ package.path = dir .. "/?.lua;" .. package.path
 local arch = require("jit").arch
 local codegen = arch == "arm64" and "test_arm64_codegen" or "test_codegen"
 local ALL = {"test_types", "test_arith", "test_lib", "test_jit", codegen,
-	     "test_ffi_abi", "test_stress", "test_prng"}
+	     "test_ffi_abi", "test_stress", "test_prng", "test_dis_x86"}
 if arch == "arm64" then table.insert(ALL, 6, "test_arm64_conv") end
 
 -- Child process: run one file in one mode.

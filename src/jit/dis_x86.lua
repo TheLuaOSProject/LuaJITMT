@@ -860,7 +860,7 @@ map_act = {
       b = byte(ctx.code, pos)
       if not b then return incomplete(ctx) end
       pos += 1
-      if b & 0x80 then ctx.rexw = true end
+      if b & 0x80 != 0 then ctx.rexw = true end
     end
     ctx.pos = pos
     local map
