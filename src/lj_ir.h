@@ -201,6 +201,10 @@
   _(VCONV,	N , ref, lit) \
   _(VEXTRACT,	N , ref, lit) \
   _(VMOVMSK,	N , ref, lit) \
+  /* Integer horizontal reduction in lane zero. IRVSRC names type and op. */ \
+  _(VHRED,	N , ref, lit) \
+  /* Select bits from CARG.op1 or CARG.op2 using the mask in op1. */ \
+  _(VBSEL,	N , ref, ref) \
   \
   /* End of list. */
 
@@ -311,7 +315,7 @@ IRFLDEF(FLENUM)
 #define IRVSHUF2_BUILD256Z	9	/* Zero-extend one XMM half into YMM. */
 #define IRVSHUF2(mode, imm)	(((mode)<<8) + (imm))
 
-/* VEXTRACT and VMOVMSK op2 literal: the source vector IRType is carried in
+/* VEXTRACT, VMOVMSK and VHRED op2 literal: the source vector IRType is carried in
 ** bits 8+, so instruction selection never depends on an operand's IR type
 ** (a forwarded or CSEd value may legitimately have a different lane type).
 */

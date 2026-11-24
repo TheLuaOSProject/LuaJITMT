@@ -259,9 +259,10 @@ do
   local N = 1 << 16
   local buf = ffi.new("uint8_t[?]", N)
   for i = 0, N-1 do buf[i] = (i * 7) % 251 end
-  buf[N-3] = 199
+  local target = 255  -- Absent from the % 251 background.
+  buf[N-3] = target
   local bv = ffi.cast(ffi.typeof("$ *", u8), buf)
-  local target, vtarget = 199, u8(199)
+  local vtarget = u8(target)
 
   bench("find byte in 64 KiB", function()
     local found = -1

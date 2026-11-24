@@ -737,3 +737,55 @@ about 11% for XMM and 7% for YMM; eight-chain throughput improves about 9%
 and up to 3%. A 16 MiB INT8 32-tap ternary filter improves about 9--10% at
 XMM width and 4--5% at YMM width, reaching roughly 9.6x/14.2x scalar
 throughput.
+
+### AArch64 NEON on Apple M5 Max
+
+Apple Clang 21 release builds used `MACOSX_DEPLOYMENT_TARGET=13.0`.
+The baseline was `simd` at `7e551b60`. Both binaries ran the same benchmark
+scripts. Eight paired runs alternated which binary ran first. Each time below
+is the median of the eight best-of-three CPU times reported by the harness.
+
+Across all 27 vector kernels in `test/simd/bench.lua 3`, the geometric mean
+speedup was **1.52×**. Constant channel blends use NEON bit selection. Integer
+reductions, byte multiplication and repeated-lane shuffles use the corresponding
+native NEON instructions.
+
+<details>
+<summary>All 27 vector kernel timings</summary>
+
+| Workload | Baseline (ms) | Optimized (ms) | Speedup |
+|---|---:|---:|---:|
+| saxpy (float) | 1.45 | 1.45 | 1.00× |
+| dot product (float) | 1.90 | 1.80 | 1.06× |
+| horizontal max (int32) | 2.30 | 2.30 | 1.00× |
+| clamp (float) | 1.55 | 1.50 | 1.03× |
+| delta encode (int32) | 1.70 | 1.70 | 1.00× |
+| 8-tap FIR (float) | 0.70 | 0.70 | 1.00× |
+| degree-11 poly (double) | 1.70 | 1.70 | 1.00× |
+| Mandelbrot 64-it (double) | 5.20 | 5.15 | 1.01× |
+| RGBA channel merge | 22.70 | 2.60 | 8.73× |
+| 32-byte block checksum | 1.50 | 0.80 | 1.88× |
+| 32-byte block SAD | 1.60 | 1.40 | 1.14× |
+| 4K 16-pixel luma sum | 2.40 | 1.10 | 2.18× |
+| 4K depth tile extrema | 4.60 | 0.90 | 5.11× |
+| PCM16 peak envelope | 6.40 | 1.20 | 5.33× |
+| float PCM noise gate | 2.90 | 2.90 | 1.00× |
+| PCM16 16-tap decimator | 2.45 | 1.20 | 2.04× |
+| 4K residual codebook | 3.90 | 3.90 | 1.00× |
+| 4K four-rate quantize | 10.35 | 10.20 | 1.01× |
+| INT8 activation range | 4.85 | 0.90 | 5.39× |
+| INT8 32-tap ternary filter | 3.70 | 1.20 | 3.08× |
+| 5x5 Gaussian (1080p) | 1.90 | 1.90 | 1.00× |
+| 3x3 dilation (4K) | 6.10 | 6.00 | 1.02× |
+| weighted 4x4 point transform | 12.00 | 6.90 | 1.74× |
+| 3D voxel index checksum | 9.80 | 9.70 | 1.01× |
+| 64-tap audio FIR | 2.60 | 2.50 | 1.04× |
+| gravity particles x32 | 16.15 | 14.85 | 1.09× |
+| ChaCha20 block core | 4.50 | 4.45 | 1.01× |
+
+</details>
+
+In `test/simd/bench_ops.lua 3`, the 64 KiB byte search fell from 2.345 ms to
+0.995 ms (2.36×). Both binaries used the corrected fixture, where the only
+match is the third-to-last byte. A 16-byte movemask now gathers
+all sign bits in six instructions.

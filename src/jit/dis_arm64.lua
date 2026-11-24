@@ -881,7 +881,7 @@ local neon_int3 = {
 }
 local neon_bits = {
   [0x4e201c00] = "and", [0x4ea01c00] = "orr", [0x6e201c00] = "eor",
-  [0x4e601c00] = "bic", [0x6e601c00] = "bsl",
+  [0x4e601c00] = "bic", [0x6e601c00] = "bsl", [0x6ea01c00] = "bit",
 }
 local neon_fp3 = {
   [0x4e20d400] = "fadd", [0x4ea0d400] = "fsub",
@@ -898,6 +898,10 @@ local neon_fp2 = {
 }
 local neon_int2 = {
   [0x4e20b800] = "abs", [0x6e20b800] = "neg",
+}
+local neon_reduce = {
+  [0x4e31b800] = "addv", [0x4e31a800] = "sminv", [0x4e30a800] = "smaxv",
+  [0x6e31a800] = "uminv", [0x6e30a800] = "umaxv",
 }
 local neon_elem = { [0] = "b", "h", "s", "d" }
 
@@ -947,8 +951,15 @@ local function disass_neon(ctx)
   if op & 0xff3ffc00 == 0x6e202800 and sz < 3 then
     return put_neon(ctx, "uaddlp", {neon_reg(d, sz+1, true), neon_reg(n, sz, true)})
   end
-  if op & 0xff3ffc00 == 0x6e31a800 and sz < 3 then
-    return put_neon(ctx, "uminv", {neon_elem[sz]..d, neon_reg(n, sz, true)})
+  name = neon_reduce[op & 0xff3ffc00]
+  if name and sz < 3 then
+    return put_neon(ctx, name, {neon_elem[sz]..d, neon_reg(n, sz, true)})
+  end
+  if op & 0xfffffc00 == 0x5ef1b800 then
+    return put_neon(ctx, "addp", {"d"..d, neon_reg(n, 3, true)})
+  end
+  if op & 0xff3ffc00 == 0x0e212800 and sz < 3 then
+    return put_neon(ctx, "xtn", {neon_reg(d, sz, false), neon_reg(n, sz+1, true)})
   end
   local key = op & 0xbf20fc00
   if (key == 0x0e20c000 or key == 0x2e20c000) and sz < 3 then
@@ -958,7 +969,7 @@ local function disass_neon(ctx)
   end
   key = op & 0xff80fc00
   if key == 0x4f005400 or key == 0x4f000400 or key == 0x6f000400 or
-     key == 0x0f008400 or key == 0x4f008400 then
+     key == 0x6f001400 or key == 0x0f008400 or key == 0x4f008400 then
     local imm = (op >> 16) & 127
     if imm < 8 then return false end
     local bits = 8
@@ -971,7 +982,7 @@ local function disass_neon(ctx)
       return put_neon(ctx, q ? "shrn2" : "shrn", {
         neon_reg(d, sz, q), neon_reg(n, sz+1, true), "#"..(bits*2-imm)})
     else
-      name = key == 0x4f000400 ? "sshr" : "ushr"
+      name = key == 0x4f000400 ? "sshr" : key == 0x6f001400 ? "usra" : "ushr"
       imm = bits*2-imm
     end
     return put_neon(ctx, name, {neon_reg(d, sz, true), neon_reg(n, sz, true), "#"..imm})

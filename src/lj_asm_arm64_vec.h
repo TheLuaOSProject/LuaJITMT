@@ -303,8 +303,14 @@ static void asm_vecshuf(ASMState *as, IRIns *ir)
       VECZERO(z);
     }
   } else if (mode == IRVSHUF_PSHUFD) {
-    for (i = 3; i >= 0; i--)
-      emit_vecins(as, r.d, i, r.n, (imm>>(2*i))&3, 2);
+    if (imm == (imm&3)*0x55) {  /* Broadcast one dword. */
+      VEC2(0x4e000400 | (((imm&3)*2+1)<<18), r.d, r.n);
+    } else if (imm == 0x44 || imm == 0xee) {  /* Broadcast one qword. */
+      VEC2(imm == 0x44 ? 0x4e080400 : 0x4e180400, r.d, r.n);
+    } else {
+      for (i = 3; i >= 0; i--)
+        emit_vecins(as, r.d, i, r.n, (imm>>(2*i))&3, 2);
+    }
   } else {
     unsigned first = mode == IRVSHUF_PSHUFLW ? 0 : 4;
     if (mode != IRVSHUF_PSHUFLW && mode != IRVSHUF_PSHUFHW)
@@ -343,10 +349,16 @@ static void asm_vecshuf2(ASMState *as, IRIns *ir)
     emit_vecins(as, r.d, 1, r.m, (imm>>1)&1, 3);
     emit_vecins(as, r.d, 0, r.n, imm&1, 3);
   } else {
-    if (mode != IRVSHUF2_PBLENDW) lj_trace_err(as->J, LJ_TRERR_NYIVEC);
-    for (i = 7; i >= 0; i--)
-      emit_vecins(as, r.d, i, (imm&(1u<<i)) ? r.m : r.n, i, 1);
+    lj_trace_err(as->J, LJ_TRERR_NYIVEC);
   }
+}
+
+static void asm_vecbsel(ASMState *as, IRIns *ir)
+{
+  IRIns *arms = IR(ir->op2);
+  ARM64VecRegs r = asm_vecregs(as, ir, arms->op1);
+  VEC3(0x6ea01c00, r.d, r.m, r.n);  /* BIT dst, true arm, mask. */
+  ra_leftov(as, r.d, arms->op2);
 }
 
 static void asm_vecshufb(ASMState *as, IRIns *ir)
@@ -359,28 +371,28 @@ static void asm_vecshufb(ASMState *as, IRIns *ir)
   VEC2(0x4f00e400 | ((0x8fu&0xe0)<<11) | ((0x8fu&31)<<5), mask, 0);
 }
 
-/* Scalar gathering is deliberately independent of lane signedness. UMOV
-** zero-extends, and one UBFM extracts exactly the sign bit of each lane.
-*/
+/* Isolate each sign bit, then pack adjacent groups with USRA. Each shift
+** places the upper group's bits just above those already in the lower group.
+** Wider input lanes narrow first so the complete mask fits in one byte. */
 static void emit_vecmovmsk(ASMState *as, Reg d, Reg n, unsigned sz, Reg tmp)
 {
-  int i, lanes = 16>>sz;
-  unsigned bit = (8u<<sz)-1;
-  for (i = lanes-1; i >= 0; i--) {
-    emit_dnm(as, (A64Ins)(A64I_ORRw | ((uint32_t)i<<10)), d, d, tmp);
-    emit_dn(as, (A64Ins)((sz == 3 ? A64I_UBFMx : A64I_UBFMw) |
-                        (bit<<16) | (bit<<10)), tmp, tmp);
-    emit_vecget(as, tmp, n, i, sz);
-    checkmclim(as);
+  unsigned first = sz ? sz-1 : 0, s;
+  emit_vecget(as, d, tmp, 0, sz == 0 ? 1 : 0);
+  if (sz == 0) emit_vecins(as, tmp, 1, tmp, 8, 0);  /* Join the two bytes. */
+  for (s = 3; s > first; s--) {
+    unsigned bits = 8u<<s, maskbits = 1u<<(s-1-first);
+    unsigned shift = bits/2-maskbits;
+    VEC2(0x6f001400 | ((2*bits-shift)<<16), tmp, tmp);
   }
-  emit_loadi(as, d, 0);
+  if (sz) VEC2(0x0e212800 | (first<<22), tmp, tmp);  /* XTN */
+  emit_vecshift(as, IR_VSHR, tmp, n, sz, (8u<<sz)-1);
 }
 
 static void asm_vecmovmsk(ASMState *as, IRIns *ir)
 {
   Reg d = ra_dest(as, ir, RSET_GPR);
   Reg n = ra_alloc1(as, ir->op1, RSET_FPR);
-  Reg tmp = ra_scratch(as, rset_exclude(RSET_GPR, d));
+  Reg tmp = ra_scratch(as, rset_exclude(RSET_FPR, n));
   emit_vecmovmsk(as, d, n, asm_veclogsz(irvsrc_type(ir->op2)), tmp);
 }
 
@@ -389,14 +401,31 @@ static void asm_vechminpos(ASMState *as, IRIns *ir)
   ARM64VecRegs r = asm_vecregs(as, ir, 0);
   Reg mask = asm_vectmp(as, &r);
   Reg g = ra_scratch(as, RSET_GPR);
-  Reg tmp = ra_scratch(as, rset_exclude(RSET_GPR, g));
   emit_vecinsg(as, r.d, 1, g, 1);
   emit_dn(as, (A64Ins)0x5ac01000, g, g); /* CLZ */
   emit_dn(as, (A64Ins)0x5ac00000, g, g); /* RBIT */
-  emit_vecmovmsk(as, g, mask, 1, tmp);
+  emit_vecmovmsk(as, g, mask, 1, mask);
   VEC3(0x6e608c00, mask, mask, r.n);
   VEC2(0x4e020400, mask, r.d);
   VEC2(0x6e71a800, r.d, r.n); /* UMINV writes min, zeroes other lanes. */
+}
+
+/* Across-lane instructions zero the bits above the scalar result. */
+static void asm_vechred(ASMState *as, IRIns *ir)
+{
+  unsigned sz = asm_veclogsz(irvsrc_type(ir->op2));
+  Reg d = ra_dest(as, ir, RSET_FPR);
+  Reg n = ra_alloc1(as, ir->op1, RSET_FPR);
+  uint32_t ai;
+  switch (irvsrc_imm(ir->op2)) {
+  case IR_VADD: ai = sz == 3 ? 0x5e31b800 : 0x4e31b800; break;
+  case IR_VMIN: ai = 0x4e31a800; break;
+  case IR_VMAX: ai = 0x4e30a800; break;
+  case IR_VMINU: ai = 0x6e31a800; break;
+  case IR_VMAXU: ai = 0x6e30a800; break;
+  default: lj_trace_err(as->J, LJ_TRERR_NYIVEC); return;
+  }
+  VEC2(ai | (sz<<22), d, n);  /* ADDV (ADDP for .2D), SMINV, etc. */
 }
 
 static void asm_vecextract(ASMState *as, IRIns *ir)
@@ -460,6 +489,8 @@ static void asm_vec(ASMState *as, IRIns *ir)
   case IR_VSADU8: asm_vecsad(as, ir); return;
   case IR_VPMADW: asm_vecpmadd(as, ir); return;
   case IR_VHMINPOSU16: asm_vechminpos(as, ir); return;
+  case IR_VHRED: asm_vechred(as, ir); return;
+  case IR_VBSEL: asm_vecbsel(as, ir); return;
   case IR_VSIGN: asm_vecsign(as, ir); return;
   case IR_VSHL: case IR_VSHR: case IR_VSAR: asm_vecshifts(as, ir, 0); return;
   case IR_VSHLV: case IR_VSHRV: case IR_VSARV: asm_vecshifts(as, ir, 1); return;

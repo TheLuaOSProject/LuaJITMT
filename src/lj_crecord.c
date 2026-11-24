@@ -1844,9 +1844,12 @@ static TRef crec_vec_build(jit_State *J, CTState *cts, IRType vt,
 
 static TRef crec_simd_k16(jit_State *J, IRType vt, uint16_t v);
 
-/* Packed byte multiplication through the two word products x86 provides. */
+/* Use native byte multiplication where available. On x86 multiply words. */
 static TRef crec_simd_mul_i8(jit_State *J, IRType vt, TRef a, TRef b)
 {
+#if LJ_TARGET_ARM64
+  return emitir(IRT(IR_VMUL, vt), a, b);
+#else
   IRType wvt = (IRType)(IRT_V8I16 | (vt & IRT_VEC256));
   TRef even, odd;
   even = emitir(IRT(IR_VMUL, wvt), a, b);
@@ -1857,6 +1860,7 @@ static TRef crec_simd_mul_i8(jit_State *J, IRType vt, TRef a, TRef b)
 	       emitir(IRT(IR_VSHR, wvt), b, lj_ir_kint(J, 8)));
   return emitir(IRT(IR_VOR, vt), even,
 		emitir(IRT(IR_VSHL, wvt), odd, lj_ir_kint(J, 8)));
+#endif
 }
 
 /* Recover the two original operands from crec_simd_mul_i8()'s packed IR.
@@ -2906,6 +2910,17 @@ static TRef crec_simd_shuf2_direct(jit_State *J, IRType vt,
 				   const CTVecInfo *vi, TRef a, TRef b,
 				   const uint8_t *idx);
 
+static TRef crec_simd_selectbits(jit_State *J, IRType vt, TRef m, TRef a, TRef b)
+{
+#if LJ_TARGET_ARM64
+  TRef arms = emitir(IRT(IR_CARG, IRT_NIL), a, b);
+  return emitir(IRT(IR_VBSEL, vt), m, arms);
+#else
+  return emitir(IRT(IR_VOR, vt), emitir(IRT(IR_VAND, vt), m, a),
+		emitir(IRT(IR_VANDN, vt), m, b));
+#endif
+}
+
 /*
 ** A constant mask made entirely of zero/all-one destination lanes is a
 ** two-source lane blend. Return zero when the ISA cannot encode its pattern
@@ -3117,10 +3132,7 @@ void LJ_FASTCALL recff_ffi_simd_select(jit_State *J, RecordFFData *rd)
   } else if (crec_simd_iskfill(J, tref_ref(a), size, 0xff)) {
     r = emitir(IRT(IR_VOR, vt), m, b);
   } else {
-    /* (mask & a) | (~mask & b), which is what SSE2 needs anyway. */
-    r = emitir(IRT(IR_VOR, vt),
-	       emitir(IRT(IR_VAND, vt), m, a),
-	       emitir(IRT(IR_VANDN, vt), m, b));
+    r = crec_simd_selectbits(J, vt, m, a, b);
   }
   J->base[0] = crec_vec_box(J, r, vt, id);
 }
@@ -3490,8 +3502,17 @@ static int crec_simd_unpk(const CTVecInfo *vi, const uint8_t *idx,
 static TRef crec_simd_shuf2_emit(jit_State *J, IRType vt, TRef a, TRef b,
 				 uint32_t mode, uint32_t imm)
 {
-  TRef ctl = lj_ir_kint(J, (int32_t)IRVSHUF2(mode, imm));
-  TRef args = emitir(IRT(IR_CARG, IRT_NIL), b, ctl);
+  TRef ctl, args;
+#if LJ_TARGET_ARM64
+  if (mode == IRVSHUF2_PBLENDW) {
+    uint16_t mask[8];
+    unsigned i;
+    for (i = 0; i < 8; i++) mask[i] = (imm & (1u<<i)) ? 0xffff : 0;
+    return crec_simd_selectbits(J, vt, lj_ir_kvec(J, vt, mask), b, a);
+  }
+#endif
+  ctl = lj_ir_kint(J, (int32_t)IRVSHUF2(mode, imm));
+  args = emitir(IRT(IR_CARG, IRT_NIL), b, ctl);
   return emitir(IRT(IR_VSHUF2, vt), a, args);
 }
 
@@ -3972,6 +3993,14 @@ void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
     lj_trace_err(J, LJ_TRERR_NYIVEC);
     return;
   }
+#if LJ_TARGET_ARM64
+  /* Across-lane integer operations preserve the wrapped lane result.
+  ** FP reductions rely on the interpreter's pairwise evaluation order. */
+  if (!veck_isfp(vi.kind) && (vi.esize < 8 || rd->data == VRD_SUM)) {
+    r = emitir(IRT(IR_VHRED, vt), a, IRVSRC(vt, op));
+    n = 1;
+  } else
+#endif
   if (rd->data == VRD_SUM && vi.esize == 1) {
     IRRef ma, mb;
     if (uns && crec_simd_match_absdiff_u8(J, a, &ma, &mb)) {

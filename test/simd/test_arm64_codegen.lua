@@ -162,6 +162,15 @@ test("NEON disassembly preserves registers and vector widths", function()
   local dis = require("jit.dis_arm64")
   for _, c in ipairs({
     {0x4e22d420, "fadd v0.4s, v1.4s, v2.4s"},
+    {0x6eb91d87, "bit v7.16b, v12.16b, v25.16b"},
+    {0x4e31b9b3, "addv b19, v13.16b"},
+    {0x4e71aac4, "sminv h4, v22.8h"},
+    {0x4eb0a925, "smaxv s5, v9.4s"},
+    {0x6e30ab8f, "umaxv b15, v28.16b"},
+    {0x6eb1a868, "uminv s8, v3.4s"},
+    {0x5ef1ba22, "addp d2, v17.2d"},
+    {0x0e612b61, "xtn v1.4h, v27.4s"},
+    {0x6f1914fd, "usra v29.8h, v7.8h, #7"},
     {0x6e184441, "ins v1.d[1], v2.d[1]"},
     {0x3dc00841, "ldr q1, [x2, #32]"},
     {0x9c000016, "ldr q22, 0x00001000"},
@@ -227,6 +236,118 @@ test("constant shifts and shuffles", function()
     local a = ct(1, 3, 7, 15)
     for _ = 1, n do a = simd.shuffle(a + ct(1, 2, 4, 8), 3, 1, 0, 2) end
     return a
+  end, {401}, {nocall = true})
+end)
+
+test("lane broadcasts", function()
+  local ct = T.T.i32x4.ct
+  local dup32 = {}
+  for i = 0, 3 do dup32[i+1] = op("DUP .4S lane " .. i, 0x4e040400+i*0x80000, 0xfffffc00) end
+  native("dword broadcasts", dup32, function(n)
+    local v, a = ct(2, 3, 5, 7), ct(0)
+    for i = 1, n do
+      v = v + ct(11, 13, 17, 19)
+      a = a + simd.shuffle(v, 0, 0, 0, 0) - simd.shuffle(v, 1, 1, 1, 1)
+            + simd.shuffle(v, 2, 2, 2, 2) - simd.shuffle(v, 3, 3, 3, 3)
+    end
+    return a
+  end, {400}, {nocall = true})
+  local d2 = T.T.double2.ct
+  native("qword broadcasts", {op("DUP .2D low", 0x4e080400, 0xfffffc00),
+                              op("DUP .2D high", 0x4e180400, 0xfffffc00)}, function(n)
+    local v, a = d2(5, -9), d2(0)
+    for i = 1, n do
+      v = v + d2(1, -3)
+      a = a + simd.shuffle(v, 0, 0) - simd.shuffle(v, 1, 1)
+    end
+    return a
+  end, {400}, {nocall = true})
+end)
+
+test("packed sign masks preserve lane order and ignore payload bits", function()
+  local usra = op("USRA", 0x6f001400, 0xff80fc00)
+  for _, name in ipairs({"u8x16", "i16x8", "i32x4", "float4", "i64x2", "double2"}) do
+    local ti = T.T[name]
+    local full = 2^ti.lanes-1
+    local masks = {0, full, bit.band(0x5555, full), bit.band(0xaaaa, full)}
+    for lane = 0, ti.lanes-1 do
+      masks[#masks+1] = 2^lane
+      masks[#masks+1] = full-2^lane
+    end
+    local rows = ffi.new(name.."[?]", #masks)
+    local bytes = ffi.cast("uint8_t *", rows)
+    local width = ti.bits/8
+    for row, mask in ipairs(masks) do
+      for j = 0, 15 do
+        local b = (row*37 + j*53) % 256
+        if j % width == width-1 then
+          b = b % 128 + (bit.band(mask, 2^math.floor(j/width)) ~= 0 and 128 or 0)
+        end
+        bytes[(row-1)*16+j] = b
+      end
+    end
+    local out = ffi.new("int[?]", #masks)
+    native(name.." movemask", {usra}, function(n)
+      for i = 0, n-1 do out[i] = simd.movemask(rows[i]) end
+      return ffi.string(out, ffi.sizeof(out))
+    end, {#masks}, {nocall = true})
+    for i, mask in ipairs(masks) do checkeq(out[i-1], mask, name.." mask "..i) end
+  end
+end)
+
+test("integer horizontal reductions", function()
+  local bitsize = {[8] = 0, [16] = 0x400000, [32] = 0x800000}
+  for _, name in ipairs({"i8x16", "u8x16", "i16x8", "u16x8", "i32x4", "u32x4"}) do
+    local ti = T.T[name]
+    local sz = bitsize[ti.bits]
+    local sign = ti.signed and 0 or 0x20000000
+    local want = {op("ADDV", 0x4e31b800+sz, 0xfffffc00),
+                  op("MINV", 0x4e31a800+sz+sign, 0xfffffc00),
+                  op("MAXV", 0x4e30a800+sz+sign, 0xfffffc00)}
+    local rows = ffi.new(name.."[32]")
+    local bytes = ffi.cast("uint8_t *", rows)
+    for j = 0, 511 do bytes[j] = (j*19 + math.floor(j/7)*47) % 256 end
+    native(name.." reductions", want, function(n)
+      local s, lo, hi = 0, 0, 0
+      for i = 1, n do
+        local v = rows[bit.band(i, 31)]
+        s, lo, hi = s + simd.hsum(v), lo + simd.hmin(v), hi + simd.hmax(v)
+      end
+      return s, lo, hi
+    end, {401}, {nocall = true})
+  end
+  local ct = T.T.u64x2.ct
+  native("qword sum", {op("ADDP D", 0x5ef1b800, 0xfffffc00)}, function(n)
+    local v, s = ct(0xffffffffffffffffULL, 7), 0ULL
+    for i = 1, n do v = v + ct(3, 11); s = s + simd.hsum(v) end
+    return s
+  end, {401}, {nocall = true})
+  local u8 = T.T.u8x16.ct
+  native("byte products", {op("MUL .16B", 0x4e209c00)}, function(n)
+    local v = u8(3)
+    for i = 1, n do v = v * u8(7) + u8(i) end
+    return v
+  end, {401}, {nocall = true})
+end)
+
+test("bit selection with constant and changing masks", function()
+  local ct = T.T.i32x4.ct
+  local want = {op("BIT", 0x6ea01c00)}
+  native("whole-lane blend", want, function(n)
+    local a, b = ct(1, 2, 4, 8), ct(11, 23, 47, 95)
+    for i = 1, n do
+      a = simd.shuffle2(a + ct(5), b, 0, 5, 6, 3)
+      b = b + ct(1, 3, 7, 15)
+    end
+    return a, b
+  end, {401}, {nocall = true})
+  native("partial mask aliases false arm", want, function(n)
+    local a, b = ct(0x55555555, 37, -1, 0), ct(-7, 127, -1001, 0x2468ace)
+    for i = 1, n do
+      a = simd.select(a, b, a) + ct(7, 19, 41, 83)
+      b = b + a
+    end
+    return a, b
   end, {401}, {nocall = true})
 end)
 
