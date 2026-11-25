@@ -4562,13 +4562,14 @@ void lj_gc_pubtabtvn_vm(lua_State *L, GCtab *t, cTValue *tv, uint32_t n)
   lj_gc2_barrier_tab(L, t);  /* Preserve the previous TSETM table barrier. */
 }
 
-/* Publication wrapper for x64 VM table -> stack loads. */
+/* Publish a transferred value or freshly initialized object on the VM stack. */
 void lj_gc_pubtvroot_vm(lua_State *L, cTValue *tv)
 {
   if (!L || !tv)
     return;
-  /* DynASM stores and dirties the slot before entering this cold wrapper. */
-  lj_gc_pubroot(L, tv);
+  /* DynASM stores and dirties the new slot before entering. A new closure
+  ** still needs its first traversal because construction clears the stamp. */
+  lj_gc2_publish_read_root(L, tv, 0);
 }
 
 /* Publication wrapper for closed-upvalue TValue stores. Pass &uv->tv. */

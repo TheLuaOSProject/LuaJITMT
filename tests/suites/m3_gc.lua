@@ -201,6 +201,8 @@ return function(add)
           cflags = flags,
           timeout = "30s"
         })
+        compile_and_run_c(t, t:tmp("lj-t-gc2-vm-root-transfer"),
+                          "t-gc2-vm-root-transfer.c", { cflags = flags, timeout = "30s" })
       end)
       print("M3 SWEEP leaf publication regression passed")
     end
