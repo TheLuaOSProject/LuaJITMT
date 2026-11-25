@@ -12509,6 +12509,21 @@ static void gc2_weak_root_reopen(global_State *g)
   (void)gc2_weak_root_scanned_cas(g, &expect, 0);
 }
 
+/* An append to an owner's private SSB needs a rotation. Its published
+** edges can be traced against the completed root snapshot. Only a thread
+** which needs another scan invalidates that snapshot here. */
+static void gc2_weak_flush_pending(global_State *g)
+{
+  if (gc2_thread_scan_needscan_pending_acq(g)) {
+    gc2_weak_root_reopen(g);
+  } else if (gc2_ssb_published_empty(g) && gc2_grey_empty(g) &&
+             gc2_recovery_empty(g) && !gc2_jit_phase_gate_acq(g) &&
+             gc2_fixpoint_epoch_reserve(g)) {
+    la_store32_rel(&g->gc2.fixpoint_epoch_actions, LJ_GC2_HS_FLUSH_SSB);
+    (void)gc2_fixpoint_epoch_owned(g, 1);
+  }
+}
+
 static void gc2_weak_root_snapshot_abort(global_State *g)
 {
   uint32_t expect = 2;
@@ -13071,7 +13086,7 @@ static int gc2_weak_mark_close_round(global_State *g, lua_State *L,
       !gc2_recovery_empty(g))
     return 0;
   if (!lj_gc2_ssb_empty(g)) {
-    gc2_weak_root_reopen(g);
+    gc2_weak_flush_pending(g);
     return 0;
   }
   if (gc2_weak_owned_peer_active(g))
@@ -13097,7 +13112,7 @@ static int gc2_weak_mark_close_round(global_State *g, lua_State *L,
   if (gc2_deferred_epoch_acq(g) != defer0)
     return 0;
   if (!lj_gc2_ssb_empty(g)) {
-    gc2_weak_root_reopen(g);
+    gc2_weak_flush_pending(g);
     return 0;
   }
   if (gc2_weak_owned_peer_active(g) ||
@@ -13146,7 +13161,7 @@ static int gc2_weak_frontier_still_closed(global_State *g, lua_State *L,
       !gc2_recovery_empty(g))
     return 0;
   if (!lj_gc2_ssb_empty(g)) {
-    gc2_weak_root_reopen(g);
+    gc2_weak_flush_pending(g);
     return 0;
   }
   if (gc2_weak_owned_peer_active(g) ||
@@ -23009,13 +23024,16 @@ static int gc2_fixpoint_epoch_owned(global_State *g, int start)
   /* The phase gate holds the same cycle through ACKs and the global scan.
   ** A failed owner scan can invalidate provisional state 2 before completion. */
   if (gc2_phase_acq(g) == LJ_GC2_WEAK) {
-    uint32_t expect = 2;
-    lj_assertG(actions == (LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_FLUSH_SSB),
-	       "unexpected WEAK root action");
-    if (gc2_jit_phase_gate_acq(g) == 0 && !lj_tg_any_jit_active(g))
-      (void)gc2_weak_root_scanned_cas(g, &expect, 1);
-    else
-      gc2_weak_root_snapshot_abort(g);
+    lj_assertG(actions == LJ_GC2_HS_FLUSH_SSB ||
+	       actions == (LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_FLUSH_SSB),
+	       "unexpected WEAK epoch action");
+    if (actions & LJ_GC2_HS_SCAN_ROOTS) {
+      uint32_t expect = 2;
+      if (gc2_jit_phase_gate_acq(g) == 0 && !lj_tg_any_jit_active(g))
+        (void)gc2_weak_root_scanned_cas(g, &expect, 1);
+      else
+        gc2_weak_root_snapshot_abort(g);
+    }
   } else if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
     uint32_t grace = la_load32_acq(&g->gc2.sweep_grace_needed);
     if (actions & LJ_GC2_HS_SCAN_ROOTS)

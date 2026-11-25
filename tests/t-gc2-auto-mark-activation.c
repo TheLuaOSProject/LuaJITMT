@@ -26,6 +26,7 @@ static atomic_int timed_out;
 static atomic_int peer_resumed_mark;
 static int initial_phase;
 static int public_step;
+static int weak_flush_only;
 
 static uint64_t monotonic_ns(void)
 {
@@ -43,6 +44,13 @@ static void wait_briefly(void)
 static int hold_owner(lua_State *L)
 {
   assert(lj_tg_in_native_acq(L2TG(L)) == 0);
+  if (weak_flush_only) {
+    TGState *tg = L2TG(L);
+    assert(gc2_weak_root_scanned_acq(G(L)) == 1);
+    lua_pushliteral(L, "pending array value");
+    lua_rawseti(L, 1, 1);
+    assert(lj_tg_ssb_next_acq(tg) != lj_tg_ssb_base_acq(tg));
+  }
   atomic_store(&owner_parked, 1);
   while (!atomic_load(&release_owner))
     wait_briefly();
@@ -75,6 +83,18 @@ static int prepare_mark(lua_State *L)
       (void)lua_gc(L, LUA_GCSTEP, 1);
     assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
     assert(gc2_weak_root_scanned_acq(g) == 0);
+    if (weak_flush_only) {
+      for (round = 0; round < 5000 && gc2_weak_root_scanned_acq(g) != 1; round++) {
+        if (gc2_fixpoint_epoch_actions_acq(g)) {
+          (void)lj_safepoint_poll(L);
+          if (!lj_gc2_resumable_epoch_continue(g))
+            wait_briefly();
+        } else {
+          (void)lua_gc(L, LUA_GCSTEP, 1);
+        }
+      }
+      assert(gc2_phase_acq(g) == LJ_GC2_WEAK && gc2_weak_root_scanned_acq(g) == 1);
+    }
   }
   return 0;
 }
@@ -101,7 +121,10 @@ static int finish_allocation(lua_State *L)
   } else {
     assert(gc2_phase_acq(g) ==
 	   (initial_phase == LJ_GC2_WEAK ? LJ_GC2_WEAK : LJ_GC2_MARK));
-    if (initial_phase != LJ_GC2_IDLE) {
+    if (weak_flush_only) {
+      assert(gc2_fixpoint_epoch_actions_acq(g) == LJ_GC2_HS_FLUSH_SSB);
+      assert(gc2_weak_root_scanned_acq(g) == 1);
+    } else if (initial_phase != LJ_GC2_IDLE) {
       assert(gc2_fixpoint_epoch_actions_acq(g) & LJ_GC2_HS_SCAN_ROOTS);
       if (initial_phase == LJ_GC2_MARK)
 	assert(gc2_mark_root_scanned_acq(g) == 2);
@@ -161,17 +184,17 @@ static void *watchdog(void *unused)
 static int run_case(int phase)
 {
   static const char source[] =
-    "local hold, held, start, finish, resumed, prepare = ...\n"
+    "local hold, held, start, finish, resumed, prepare, flush = ...\n"
     "if jit then jit.off() end\n"
     "local threading = require('threading')\n"
     "local keep = {answer = 7391}\n"
     "if prepare then collectgarbage('stop') end\n"
     "local go = threading.channel(1)\n"
-    "local peer = assert(threading.spawn(function(hold, resumed, go)\n"
-    "  assert(select(2, go:recv(5))); hold()\n"
+    "local peer = assert(threading.spawn(function(hold, resumed, go, keep)\n"
+    "  assert(select(2, go:recv(5)) == true); hold(keep)\n"
     "  local n = 0; for i = 1, 200 do n = n + i end\n"
     "  assert(n == 20100); resumed()\n"
-    "end, hold, resumed, go))\n"
+    "end, hold, resumed, go, keep))\n"
     "if prepare then prepare() end; assert(go:send(true, 5))\n"
     "while not held() do threading.sleep(0.001) end\n"
     "start()\n"
@@ -179,7 +202,7 @@ static int run_case(int phase)
     "finish()\n"
     "assert(peer:join(5))\n"
     "collectgarbage('collect')\n"
-    "assert(keep.answer == 7391)\n";
+    "assert(keep.answer == 7391 and (not flush or keep[1] == 'pending array value'))\n";
   lua_State *L = luaL_newstate();
   pthread_t timer;
   int status;
@@ -203,8 +226,9 @@ static int run_case(int phase)
     lua_pushcfunction(L, prepare_mark);
   else
     lua_pushnil(L);
+  lua_pushboolean(L, weak_flush_only);
   assert(pthread_create(&timer, NULL, watchdog, NULL) == 0);
-  status = lua_pcall(L, 6, 0, 0);
+  status = lua_pcall(L, 7, 0, 0);
   if (status) fprintf(stderr, "%s\n", lua_tostring(L, -1));
   atomic_store(&allocation_finished, 1);
   atomic_store(&release_owner, 1);
@@ -226,10 +250,14 @@ int main(void)
 {
   int result;
   for (public_step = 0; public_step <= 1; public_step++) {
+    weak_flush_only = 0;
     result = run_case(LJ_GC2_IDLE) || run_case(LJ_GC2_MARK) ||
              run_case(LJ_GC2_WEAK);
     if (result)
       return result;
+    weak_flush_only = 1;
+    if (run_case(LJ_GC2_WEAK))
+      return 1;
   }
   return 0;
 }
