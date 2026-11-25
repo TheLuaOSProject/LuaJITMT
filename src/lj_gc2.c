@@ -5543,6 +5543,14 @@ static int gc2_call_finalizer(global_State *g, lua_State *L,
   setgcV(cbL, top, o, ~o->gch.gct);
   cbL->top = top+1;
   errcode = gc2_finalizer_pcall(g, cbL, top, &continue_gc);
+#if LJ_HASFFI
+  /* The queue claimed this delivery's FIN bit before entering the
+  ** callback. A new registration in the callback, or on its resurrected
+  ** object afterwards, belongs to a later collection. Retire the old
+  ** delivery marker without changing that registration's FIN bit. */
+  if (o->gch.gct == (uint32_t)~LJ_TCDATA)
+    lj_obj_cleargcflags_atomic(o, LJ_GC_FINALIZED);
+#endif
   if (oldL)
     lj_tg_setcur_L(g, oldL);
   else

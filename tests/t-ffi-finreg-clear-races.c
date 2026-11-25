@@ -511,6 +511,29 @@ static void test_clear_nil_vs_reenable(lua_State *L)
   cleanup_registration(L, "cd_clear_nil");
 }
 
+static void test_rearm_after_callback(lua_State *L)
+{
+  ljt_lua_dostring(L,
+    "local ffi=require('ffi')\n"
+    "local first, second, late, revived=0, 0, 0, nil\n"
+    "do\n"
+    "  local cd=ffi.gc(ffi.new('int[1]'), function(value)\n"
+    "    first=first+1\n"
+    "    assert(rawequal(ffi.gc(value, function() second=second+1 end), value))\n"
+    "  end)\n"
+    "end\n"
+    "do\n"
+    "  local cd=ffi.gc(ffi.new('int[1]'), function(value) revived=value end)\n"
+    "end\n"
+    "for i=1,4 do collectgarbage('collect') end\n"
+    "assert(first == 1 and second == 1 and revived ~= nil)\n"
+    "ffi.gc(revived, function() late=late+1 end)\n"
+    "revived=nil\n"
+    "for i=1,4 do collectgarbage('collect') end\n"
+    "assert(first == 1 and second == 1 and late == 1)\n");
+  assert(!lj_gc2_finreg_cdata_pending(G(L)));
+}
+
 static void test_nested_finalizer_collect(lua_State *L)
 {
   global_State *g = G(L);
@@ -560,6 +583,7 @@ int main(void)
   test_clear_miss_vs_enable(L);
   test_clear_nil_vs_reenable(L);
   test_nested_finalizer_collect(L);
+  test_rearm_after_callback(L);
 
   lua_close(L);
   printf("t-ffi-finreg-clear-races OK: all FINREG transaction races agree\n");
