@@ -312,13 +312,17 @@ static int check_upvalue_string_view(lua_State *L)
   const char *bytes = lua_tolstring(L, index, &len);
   assert(len == 4 && memcmp(bytes, "1987", len) == 0);
   assert(lua_type(L, index) == LUA_TSTRING);
-#ifdef LJ_GC2_TEST_HELPERS
-  lj_gc2_test_stack_admission_retry_once(
-    obj2gco(strV(&curr_func(L)->c.upvalue[0])));
-#endif
   assert(lua_tolstring(L, index, NULL) == bytes);
 #ifdef LJ_GC2_TEST_HELPERS
-  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+  {
+    GCstr *s = strV(&curr_func(L)->c.upvalue[0]);
+    TGState *outer = lj_str_source_pin(L, s);
+    assert(outer != NULL);
+    lj_gc2_test_stack_admission_retry_once(obj2gco(s));
+    assert(lua_tolstring(L, index, NULL) == bytes);
+    assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+    lj_str_source_unpin(outer);
+  }
 #endif
   full_cycle(L);
   assert(memcmp(bytes, "1987", len) == 0);

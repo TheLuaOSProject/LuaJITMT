@@ -51,6 +51,9 @@ int main(void)
     "local large = meta('struct { int x; char tail[20000]; }', mt)\n"
     "local custom = meta('struct { int x; }', {\n"
     "  __new=function(t,x) return new(t,x+1) end})\n"
+    "local methods = {inc=function(a,n) return a.x+n end}\n"
+    "local via = setmetatable({}, {__index=methods})\n"
+    "local indexed = meta('struct { int x; }', {__index=via})\n"
     "local sentinel = {}\n"
     "local proxy = setmetatable({}, {__metatable=sentinel})\n"
     "local getmt = getmetatable\n"
@@ -61,12 +64,13 @@ int main(void)
     "return function()\n"
     "  local a, b = new(ct, 23), new(ct, 19)\n"
     "  if getmt(proxy) ~= sentinel or custom(22).x ~= 23 then return false end\n"
+    "  if indexed(19):inc(23) ~= 42 then return false end\n"
     "  return is(ct, a) and is(ct, b) and use(small) and use(large), size(a), a, b\n"
     "end, function(a, b)\n"
     "  meta(ct, {__add = function(a, b) return a.x - b.x end})\n"
     "  return a + b, new(ct, 23) + ct(19)\n"
-    "end\n");
-  assert(lua_gettop(L) == 2);
+    "end, setmetatable({run=methods.inc}, {__mode='v'})\n");
+  assert(lua_gettop(L) == 3);
   assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
   lua_gc(L, LUA_GCSTOP, 0);
   la_store32_rel(&stage, 1);
@@ -74,6 +78,15 @@ int main(void)
   while (la_load32_acq(&stage) == 1)
     sched_yield();
   assert(gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_META_EXCLUSIVE);
+  lua_getfield(L, 3, "run");
+  assert(lua_isfunction(L, -1));
+  lua_pushliteral(L, "run");
+  lua_rawget(L, 3);
+  assert(lua_rawequal(L, -1, -2));
+  lua_pushliteral(L, "missing");
+  lua_rawget(L, 3);
+  assert(lua_isnil(L, -1));
+  lua_settop(L, 2);
   lua_pushvalue(L, 1);
   ljt_lua_pcall(L, 0, 4, "construct while IDLE reclaimer is parked");
   assert(lua_toboolean(L, 3) && lua_tointeger(L, 4) == 4);

@@ -52,12 +52,8 @@ static LJ_AINLINE int api_tv_on_stack(lua_State *L, cTValue *tv)
   return p >= lo && p < hi;
 }
 
-/* Materialize a thread/function environment edge in an enumerated root.
-** Source SMR begins before the GCRef load and the exact child lease is retained
-** until after release publication, closing replacement-to-reuse ABA in
-** LUA_GLOBALSINDEX/LUA_ENVIRONINDEX lookups. `fn == NULL` selects L->env; an
-** executing C closure is itself retained by L's claimed frame chain. A stack
-** destination must already be below L->top before this function is called. */
+/* The claimed frame retains fn. Retain its selected environment (or L's
+** global environment) before publishing the sampled table to the root. */
 static TValue *index2adr_envcapture(lua_State *L, GCfunc *fn, TValue *root,
 				    int stackroot)
 {
@@ -66,36 +62,22 @@ static TValue *index2adr_envcapture(lua_State *L, GCfunc *fn, TValue *root,
     LJGC2Lease lease;
     TValue snap;
     TValue *curroot = stackroot ? restorestack(L, rootofs) : root;
-    GCtab *env;
-    int status;
-    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(G(L)))) {
-      lj_tab_wait_l(L);
-      continue;
-    }
-    env = fn ? lj_func_env_acq(fn) : lj_state_env_acq(L);
-    if (!env) {
+    GCtab *env = fn ? lj_func_env_acq(fn) : lj_state_env_acq(L);
+    if (env)
+      setgcVraw(&snap, obj2gco(env), LJ_TTAB);
+    else
       setnilV(&snap);
+    if (lj_gc2_tv_lease_acquire(G(L), &snap, &lease) == LJ_GC2_TV_EDGE_VALID &&
+        (fn ? lj_func_env_acq(fn) : lj_state_env_acq(L)) == env) {
       copyTVrel(L, curroot, &snap);
-      lj_gc2_smr_read_leave(G(L));
-      if (stackroot) {
-	lj_state_stack_pubtv(L, L, curroot);
-	return restorestack(L, rootofs);
-      }
-      return root;
-    }
-    setgcVraw(&snap, obj2gco(env), LJ_TTAB);
-    status = lj_gc2_tv_lease_acquire(G(L), &snap, &lease);
-    if (status == LJ_GC2_TV_EDGE_VALID) {
-      copyTVrel(L, curroot, &snap);
-      lj_gc2_smr_read_leave(G(L));
       if (stackroot)
 	lj_state_stack_pubtv(L, L, curroot);
-      else
+      else if (env)
 	lj_gc_pubroot(L, curroot);
       lj_gc2_lease_release(&lease);
       return stackroot ? restorestack(L, rootofs) : root;
     }
-    lj_gc2_smr_read_leave(G(L));
+    lj_gc2_lease_release(&lease);
     lj_tab_wait_l(L);
   }
 }
@@ -234,11 +216,8 @@ static TValue *api_gcroot_push_reserved(lua_State *L, cTValue *tv,
 /* Capture an edge whose storage address is stable for this operation (for
 ** example a claimed stack/upvalue slot or the global registry root). Push a
 ** nil anchor first, so the allocation/debug hook cannot observe an unretained
-** candidate. Source SMR then starts before the TValue load and the exact
-** allocation lease remains live while the already-enumerated fixed anchor
-** slot is release-filled and barrier-published. This closes both
-** replacement-to-reuse ABA and the non-JIT TG.tmptv root gap. The caller must
-** reserve the next anchor slot first. */
+** candidate. Confirm the edge under its exact allocation lease and retain it
+** through publication to the reserved anchor. */
 static TValue *api_gcroot_capture_edge_reserved(lua_State *L,
 						cTValue *edge,
 						ApiGCRoot *root)
@@ -254,23 +233,15 @@ static TValue *api_gcroot_capture_edge_reserved(lua_State *L,
     LJGC2Lease lease;
     TValue snap;
     cTValue *curedge = edgestack ? restorestack(L, edgeofs) : edge;
-    int status;
-    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(G(L)))) {
-      lj_tab_wait_l(L);
-      continue;
-    }
-    lj_tv_load_acq(&snap, curedge);
-    status = lj_gc2_tv_lease_acquire(G(L), &snap, &lease);
+    int status = lj_gc2_root_lease_acquire(G(L), curedge, &snap, &lease, 0);
     if (status == LJ_GC2_TV_EDGE_VALID) {
       slot = lj_tg_root_anchor_slot_acq(root->tg, root->idx);
       lj_assertL(slot != NULL, "lost reserved API capture root");
       copyTVrel(L, slot, &snap);
-      lj_gc2_smr_read_leave(G(L));
       lj_gc_pubroot(L, slot);
       lj_gc2_lease_release(&lease);
       return slot;
     }
-    lj_gc2_smr_read_leave(G(L));
     /* STALE can be the old side of a raced root replacement; reacquire the
     ** root rather than publishing that unretained incarnation as nil/data. */
     lj_tab_wait_l(L);
@@ -278,10 +249,8 @@ static TValue *api_gcroot_capture_edge_reserved(lua_State *L,
 }
 
 /* Transfer a stable authoritative edge into an already-enumerated stack slot.
-** Source SMR precedes the edge load and the exact child lease remains live
-** until release-publication, so mutable registry/upvalue roots
-** cannot cross replacement-to-reuse ABA. No durable anchor or cleanup action
-** survives a catchable error. */
+** Recheck the original edge after exact admission, including for a mutable
+** registry or C upvalue, and publish before releasing its lease. */
 static TValue *api_stackroot_capture_edge(lua_State *L, cTValue *edge,
 					   TValue *out)
 {
@@ -297,21 +266,13 @@ static TValue *api_stackroot_capture_edge(lua_State *L, cTValue *edge,
     TValue snap;
     cTValue *curedge = edgestack ? restorestack(L, edgeofs) : edge;
     TValue *curout = restorestack(L, outofs);
-    int status;
-    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(G(L)))) {
-      lj_tab_wait_l(L);
-      continue;
-    }
-    lj_tv_load_acq(&snap, curedge);
-    status = lj_gc2_tv_lease_acquire(G(L), &snap, &lease);
+    int status = lj_gc2_root_lease_acquire(G(L), curedge, &snap, &lease, 0);
     if (status == LJ_GC2_TV_EDGE_VALID) {
       copyTVrel(L, curout, &snap);
-      lj_gc2_smr_read_leave(G(L));
       lj_state_stack_pubtv(L, L, curout);
       lj_gc2_lease_release(&lease);
       return restorestack(L, outofs);
     }
-    lj_gc2_smr_read_leave(G(L));
     lj_tab_wait_l(L);
   }
 }
@@ -565,20 +526,12 @@ static TValue *api_string_read_claimed(lua_State *L, int idx, TValue *snap,
       return snap;
     read->tg = lj_str_source_pin(L, (GCstr *)(void *)gcval(snap));
     if (!read->tg) {
-      /* Unregistered bootstrap/embedding paths lack an enumerable
-      ** per-actor slot. Transfer ordinary SMR to a counted body lease. */
-      if (!lj_gc2_smr_read_try(g))
-	return NULL;
-      lj_tv_load_acq(snap, o);
-      if (tvisstr(snap)) {
-	if (lj_gc2_tv_lease_acquire(g, snap, &read->lease) !=
-	      LJ_GC2_TV_EDGE_VALID) {
-	  lj_gc2_smr_read_leave(g);
-	  return NULL;
-	}
-	read->leased = 1;
-      }
-      lj_gc2_smr_read_leave(g);
+      /* A nested borrow may already occupy this actor's string pin. Retain
+      ** the sampled body and confirm the source before inspecting its bytes. */
+      if (lj_gc2_tv_lease_acquire(g, snap, &read->lease) !=
+          LJ_GC2_TV_EDGE_VALID)
+        return NULL;
+      read->leased = 1;
     }
     if (tv_rawload_acq(o) != tv_rawload(snap)) {
       api_string_read_release(read);

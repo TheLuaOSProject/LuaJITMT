@@ -350,22 +350,6 @@ static LJ_AINLINE TValue *meta_output_current(lua_State *L,
   return ref->stack ? restorestack(L, ref->ofs) : ref->tv;
 }
 
-/* A source read under SMR can retain the sampled incarnation directly. A
-** reader admitted during metadata retirement confirms its source after the
-** exact lease, so an address reused before admission needs a current edge. */
-static int meta_source_lease(global_State *g, cTValue *source, TValue *snap,
-                             LJGC2Lease *lease, int smr)
-{
-  int status;
-  lj_tv_load_acq(snap, source);
-  status = lj_gc2_tv_lease_acquire(g, snap, lease);
-  if (!smr && tv_rawload_acq(source) != tv_rawload(snap)) {
-    lj_gc2_lease_release(lease);
-    return LJ_GC2_TV_EDGE_RETRY;
-  }
-  return status;
-}
-
 static GCtab *meta_table_acq(global_State *g, cTValue *obj)
 {
   if (tvistab(obj))
@@ -406,7 +390,7 @@ static TValue *meta_lookup_rooted(lua_State *L, TValue *out, cTValue *obj,
     LJGC2Lease receiver = {0}, table = {0}, method = {0};
     TValue osnap, mtv, result;
     int smr = lj_gc2_smr_read_try(g);
-    int edge = meta_source_lease(g, meta_source_current(L, &source),
+    int edge = lj_gc2_root_lease_acquire(g, meta_source_current(L, &source),
                                  &osnap, &receiver, smr);
     int lookup = LJ_TAB_GC_LOOKUP_ABSENT;
     if (edge == LJ_GC2_TV_EDGE_VALID)
@@ -501,7 +485,7 @@ static int meta_chain_capture_inputs(lua_State *L, MetaChainRoots *roots,
     TValue osnap, ksnap, mtv, method;
     int smr = lj_gc2_smr_read_try(g);
     int captured = 0, miss = META_CAPTURE_RECEIVER_STALE;
-    int status = meta_source_lease(g, meta_source_current(L, oref),
+    int status = lj_gc2_root_lease_acquire(g, meta_source_current(L, oref),
                                    &osnap, &olease, smr);
     if (status != LJ_GC2_TV_EDGE_VALID)
       goto failed;
@@ -525,7 +509,7 @@ static int meta_chain_capture_inputs(lua_State *L, MetaChainRoots *roots,
         goto failed;
     }
     miss = META_CAPTURE_KEY_STALE;
-    status = meta_source_lease(g, meta_source_current(L, kref), &ksnap,
+    status = lj_gc2_root_lease_acquire(g, meta_source_current(L, kref), &ksnap,
                                &klease, smr);
     if (status != LJ_GC2_TV_EDGE_VALID)
       goto failed;
@@ -582,7 +566,7 @@ static TValue *meta_chain_value_publish(lua_State *L,
     TValue snap;
     int status;
     /* This owner-private chain anchor remains populated until publication. */
-    status = meta_source_lease(g, meta_chain_root(roots, which), &snap,
+    status = lj_gc2_root_lease_acquire(g, meta_chain_root(roots, which), &snap,
                                &lease, 0);
     out = meta_output_current(L, outref);
     if (status == LJ_GC2_TV_EDGE_VALID) {

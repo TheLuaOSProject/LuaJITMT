@@ -778,6 +778,22 @@ LJ_FUNC int lj_gc2_tv_gcref_valid_edge(global_State *g, cTValue *tv);
 ** result uses LJ_GC2_TV_EDGE_* and release is required only for VALID. */
 LJ_FUNC int lj_gc2_tv_lease_acquire(global_State *g, cTValue *tv,
 				      LJGC2Lease *lease);
+/* A source read under SMR can retain the sampled incarnation directly. A
+** reader admitted during metadata retirement confirms its source after the
+** exact lease, so an address reused before admission needs a current edge. */
+static LJ_AINLINE int lj_gc2_root_lease_acquire(
+  global_State *g, cTValue *source, TValue *snap, LJGC2Lease *lease, int smr)
+{
+  int status;
+  lj_tv_load_acq(snap, source);
+  status = lj_gc2_tv_lease_acquire(g, snap, lease);
+  if (!smr && tv_rawload_acq(source) != tv_rawload(snap)) {
+    lj_gc2_lease_release(lease);
+    return LJ_GC2_TV_EDGE_RETRY;
+  }
+  return status;
+}
+
 LJ_FUNC int lj_gc2_mem_registered(global_State *g, const void *p);
 LJ_FUNC int lj_gc2_mem_registered_known(global_State *g, const void *p);
 /* Current-thread sweep-reclaimer certificate. This does not acquire lifetime:

@@ -432,8 +432,10 @@ static void exercise_hit_only(lua_State *L, lua_State *wrong)
   assert(!bounded_hit(wrong, tabroot, keyroot, outroot));
   expect = LJ_GC2_SMR_OPEN;
   assert(gc2_smr_reclaiming_cas(G(L), &expect, LJ_GC2_SMR_META_EXCLUSIVE));
-  assert(!bounded_hit(L, tabroot, keyroot, outroot));
+  assert(bounded_hit(L, tabroot, keyroot, outroot));
+  assert(tvisfunc(outroot) && funcV(outroot)->c.f == result_function);
   gc2_smr_reclaiming_rel(G(L), LJ_GC2_SMR_OPEN);
+  setintV(outroot, 88);
   for (i = 0; i < 3; i++) {
     lj_gc2_test_stack_admission_retry_once(denied[i]);
     assert(!bounded_hit(L, tabroot, keyroot, outroot));

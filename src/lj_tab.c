@@ -5884,8 +5884,8 @@ static LJ_AINLINE int tab_rooted_get_key_valid(cTValue *key)
 {
   /* Nil and NaN are ordinary lookup misses.  Reject only table-internal
   ** encodings and malformed GC snapshots which must never reach hashing or
-  ** become Lua-visible output.  A collectable key is checked only while its
-  ** exact lease and the encompassing SMR reader are live. */
+  ** become Lua-visible output. A collectable key must have an exact lease
+  ** before its header can be inspected here. */
   return key && !tvistabinternal(key) &&
 	 !tab_val_is_publish_claim(key) && key->u32.hi != LJ_KEYINDEX &&
 	 tab_tv_snapshot_valid(key);
@@ -6086,6 +6086,7 @@ static LJ_AINLINE void tab_rooted_get_publish_nil(TValue *outroot)
 enum {
   TAB_ROOTED_GET_MODE_FULL,
   TAB_ROOTED_GET_MODE_HIT,
+  TAB_ROOTED_GET_MODE_RAW,
   TAB_ROOTED_GET_MODE_NIL_NO_META
 };
 
@@ -6111,8 +6112,8 @@ static int tab_gettv_rooted_try_impl(lua_State *L, cTValue *tabroot,
   GCtab *t = NULL;
   ptrdiff_t tabofs = 0, keyofs = 0, outofs = 0;
   int tabstack = 0, keystack = 0, outstack = 0;
-  int status = LJ_TAB_ROOTED_GET_RETRY;
-  int smr_active = 0;
+  int status = LJ_TAB_ROOTED_GET_RETRY, edge;
+  int smr_active;
   int table_lease_active = 0;
   int key_lease_active = 0;
   int result_lease_active = 0;
@@ -6140,16 +6141,10 @@ static int tab_gettv_rooted_try_impl(lua_State *L, cTValue *tabroot,
 		     fixedkey;
   curout = outstack ? restorestack(L, outofs) : outroot;
 
-  /* SMR begins before loading either mutable root.  This prevents a copied
-  ** pointer from validating as an address-reused successor before its exact
-  ** lease has been acquired. */
-  if (!lj_gc2_smr_read_try(owner.g)) {
-    if (mode == TAB_ROOTED_GET_MODE_FULL &&
-	tab_keyed_slot_owner_current(L, &owner))
-      tab_rooted_get_publish_nil(curout);
-    return LJ_TAB_ROOTED_GET_RETRY;
-  }
-  smr_active = 1;
+  /* With SMR the following loads identify the sampled incarnations. During
+  ** metadata retirement admit the exact allocations, then reload both
+  ** authoritative roots before dereferencing either sampled pointer. */
+  smr_active = lj_gc2_smr_read_try(owner.g);
 
   lj_tv_load_acq(&tablev, curtab);
   table_snapshot = 1;
@@ -6157,22 +6152,44 @@ static int tab_gettv_rooted_try_impl(lua_State *L, cTValue *tabroot,
     status = LJ_TAB_ROOTED_GET_ABSENT;
     goto confirm;
   }
-  if (lj_gc2_tv_lease_acquire(owner.g, &tablev, &table_lease) !=
-      LJ_GC2_TV_EDGE_VALID)
+  edge = lj_gc2_tv_lease_acquire(owner.g, &tablev, &table_lease);
+  if (edge != LJ_GC2_TV_EDGE_VALID) {
+    if (edge == LJ_GC2_TV_EDGE_STALE && mode == TAB_ROOTED_GET_MODE_RAW)
+      status = LJ_TAB_ROOTED_GET_ABSENT;
     goto confirm;
+  }
   table_lease_active = 1;
   t = tabV(&tablev);
 
   lj_tv_load_acq(&keysnap, curkey);
   key_snapshot = 1;
-  if (lj_gc2_tv_lease_acquire(owner.g, &keysnap, &key_lease) !=
-      LJ_GC2_TV_EDGE_VALID)
+  edge = lj_gc2_tv_lease_acquire(owner.g, &keysnap, &key_lease);
+  if (edge != LJ_GC2_TV_EDGE_VALID) {
+    if (edge == LJ_GC2_TV_EDGE_STALE && mode == TAB_ROOTED_GET_MODE_RAW)
+      status = LJ_TAB_ROOTED_GET_ABSENT;
     goto confirm;
+  }
   key_lease_active = 1;
+  if (!smr_active &&
+      (tv_rawload_acq(curtab) != tv_rawload(&tablev) ||
+       tv_rawload_acq(curkey) != tv_rawload(&keysnap) ||
+       !tab_keyed_slot_owner_current(L, &owner)))
+    goto confirm;
   if (!tab_rooted_get_key_valid(&keysnap))
     goto confirm;
 
-  if (mode == TAB_ROOTED_GET_MODE_NIL_NO_META) {
+  if (!smr_active) {
+    if (!tvisstr(&keysnap))
+      goto confirm;
+    status = lj_tab_getstr_leased_try(owner.g, t, strV(&keysnap), &result,
+                                      &result_lease);
+    if (status == LJ_TAB_GC_LOOKUP_RETRY)
+      status = LJ_TAB_ROOTED_GET_RETRY;
+    else if (status == LJ_TAB_GC_LOOKUP_FOUND)
+      result_lease_active = 1;
+    if (result_lease_active && mode == TAB_ROOTED_GET_MODE_NIL_NO_META)
+      status = LJ_TAB_ROOTED_GET_RETRY;
+  } else if (mode == TAB_ROOTED_GET_MODE_NIL_NO_META) {
     status = tab_resolve_current_keyed_held(t, &keysnap, NULL, &result);
     if (status == TAB_RESOLVE_FOUND)
       status = tab_val_absent(&result) ? TAB_RESOLVE_ABSENT :
@@ -6182,22 +6199,22 @@ static int tab_gettv_rooted_try_impl(lua_State *L, cTValue *tabroot,
     if (status == TAB_RESOLVE_FORWARD_ARRAY ||
 	status == TAB_RESOLVE_FORWARD_HASH)
       status = LJ_TAB_ROOTED_GET_RETRY;
-    if (status == LJ_TAB_ROOTED_GET_ABSENT) {
-      /* This acquire is deliberately after the validated raw lookup. A
-      ** non-NULL generation is left to meta_tget_rooted_mode, which will
-      ** acquire that TAB_META edge and resolve __index in its own ordered
-      ** protocol. No combined table/meta epoch is introduced here. */
-      if (lj_tab_metatable_acq(t) == NULL)
-	nil_candidate = 1;
-      else
-	status = LJ_TAB_ROOTED_GET_RETRY;
-    }
   } else {
     status = tab_get_current_forjit(t, &keysnap, &result);
   }
+  if (mode == TAB_ROOTED_GET_MODE_NIL_NO_META &&
+      status == LJ_TAB_ROOTED_GET_ABSENT) {
+    /* Observe the metatable after the validated raw miss. A table with a
+    ** metatable must continue through the ordinary __index chain. */
+    if (lj_tab_metatable_acq(t) == NULL)
+      nil_candidate = 1;
+    else
+      status = LJ_TAB_ROOTED_GET_RETRY;
+  }
   if (status == LJ_TAB_ROOTED_GET_FOUND) {
-    if (lj_gc2_tv_lease_acquire(owner.g, &result, &result_lease) !=
-	LJ_GC2_TV_EDGE_VALID) {
+    if (!result_lease_active &&
+        lj_gc2_tv_lease_acquire(owner.g, &result, &result_lease) !=
+          LJ_GC2_TV_EDGE_VALID) {
       status = LJ_TAB_ROOTED_GET_RETRY;
       goto confirm;
     }
@@ -6240,7 +6257,9 @@ confirm:
   curout = outstack ? restorestack(L, outofs) : outroot;
   if (status == LJ_TAB_ROOTED_GET_FOUND) {
     copyTVrel(L, curout, &result);
-  } else if (mode == TAB_ROOTED_GET_MODE_FULL) {
+  } else if (mode == TAB_ROOTED_GET_MODE_FULL ||
+             (mode == TAB_ROOTED_GET_MODE_RAW &&
+              status == LJ_TAB_ROOTED_GET_ABSENT)) {
     tab_rooted_get_publish_nil(curout);
   } else if (mode == TAB_ROOTED_GET_MODE_NIL_NO_META && nil_candidate &&
 	     status == LJ_TAB_ROOTED_GET_ABSENT) {
@@ -6503,6 +6522,16 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
     ** same-address successor after a concurrent root replacement/reclaim. The
     ** same interval then protects the paired table-vector snapshot below. */
     if (LJ_UNLIKELY(!lj_gc2_smr_read_try(G(L)))) {
+      if (!curtab) {
+        setgcVraw(&tablev, obj2gco(trusted_t), LJ_TTAB);
+        curtab = &tablev;
+      }
+      if (tab_gettv_rooted_try_impl(L, curtab, curkey, NULL, curout,
+                                    TAB_ROOTED_GET_MODE_RAW) !=
+          LJ_TAB_ROOTED_GET_RETRY) {
+        lj_oserr_restore(&oserr);
+        return outstack ? restorestack(L, outofs) : outroot;
+      }
       lj_oserr_restore(&oserr);
       lj_tab_wait_l(L);
       continue;
