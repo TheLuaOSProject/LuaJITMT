@@ -89,6 +89,16 @@ assert(after_remember.minor_sweep_deferred >= before_remember.minor_sweep_deferr
 assert(after_remember.minor_sweep_arenas >= before_remember.minor_sweep_arenas)
 assert(after_remember.minor_roots_deferred >= before_remember.minor_roots_deferred)
 
+local victim = {}
+local weak = setmetatable({victim}, {__mode = "v"})
+collectgarbage("collect")
+collectgarbage("stop")
+local keep = assert(loadstring("return function() return 'parser child' end"))()
+victim = nil
+collectgarbage("collect")
+assert(weak[1] == nil and keep() == "parser child")
+collectgarbage("restart")
+
 assert(threading.gcmode("incremental") == "generational")
 assert(stats_mode() == 0)
 local _, after_incremental = stats_mode()

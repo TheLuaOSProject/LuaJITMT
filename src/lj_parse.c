@@ -1469,7 +1469,9 @@ static void fs_fixup_k(FuncState *fs, GCproto *pt, void *kptr)
       } else {
 	GCobj *o = gcV(&key);
 	setgcrefrel(((GCRef *)kptr)[~kidx], o);
-	lj_gc_pubobjobj(fs->L, pt, o);
+	/* The prototype is still private. Preserve its initialized child
+	** until fs_finish publishes the complete prototype from its anchor. */
+	lj_gc_pubobjroot(fs->L, o);
 	if (tvisproto(&key))
 	  fs_fixup_uv2(fs, gco2pt(o));
       }
