@@ -1798,6 +1798,60 @@ static void test_registry_rescue_unmap_handoff(PRNGState *rs)
 #endif
 }
 
+static GCArena *test_finish_empty_arena(TGAlloc *alloc, uint32_t epoch)
+{
+  GCArena *a;
+  assert(lj_arena_alloc_prepare_sweep_kind(alloc, LJ_ARENAK_TRAVERSABLE));
+  a = lj_arena_alloc_quarantine_one(alloc, LJ_ARENAK_TRAVERSABLE, 1);
+  assert(a && lj_arena_reclaim_seal(a));
+  assert(lj_arena_alloc_quarantine_finish(
+    alloc, LJ_ARENAK_TRAVERSABLE, a, epoch, 0, NULL));
+  assert(lj_arena_alloc_empty_reclaimed_head(alloc) == a);
+  return a;
+}
+
+static void test_dead_empty_arena_unmap(PRNGState *rs)
+{
+  HugeTab registry = { 0 };
+  LJHugeReader reader = { 0 };
+  TGAlloc alloc;
+  GCArena *a;
+  uintptr_t addr;
+  void *p;
+  assert(lj_arena_hugetab_init(&registry, 2));
+  lj_arena_alloc_init(&alloc);
+  lj_arena_alloc_set_registry(&alloc, &registry);
+  p = lj_arena_alloc(&alloc, rs, 32u, LJ_AF_TRAVERSABLE);
+  assert(p);
+  lj_arena_free(&alloc, p, 32u);
+  a = test_finish_empty_arena(&alloc, 1);
+  assert(a == lj_arena_of(p));
+  addr = (uintptr_t)a;
+
+  /* Both sides of the registry-to-arena handoff can retain a mapping. */
+  assert(lj_arena_rescue_enter(a) != LJ_ARENA_RESCUE_RETRY);
+  lj_arena_alloc_unmap_dead_empty(&alloc, a);
+  assert(lj_arena_alloc_empty_reclaimed_head(&alloc) == a);
+  assert(lj_arena_hugetab_lookup(&registry, a, NULL));
+  lj_arena_rescue_leave(a);
+  assert(test_finish_empty_arena(&alloc, 2) == a);
+
+  assert(lj_arena_hugetab_reader_acquire(&registry, a, &reader, NULL) ==
+	 LJ_ARENA_HUGE_READER_ACQUIRED);
+  lj_arena_alloc_unmap_dead_empty(&alloc, a);
+  assert(lj_arena_alloc_empty_reclaimed_head(&alloc) == a);
+  assert(lj_arena_hugetab_lookup(&registry, a, NULL));
+  assert(lj_arena_hugetab_reader_release(&reader, NULL) ==
+	 LJ_ARENA_HUGE_READER_RELEASED);
+
+  assert(test_finish_empty_arena(&alloc, 3) == a);
+  lj_arena_alloc_unmap_dead_empty(&alloc, a);
+  assert(!lj_arena_alloc_empty_reclaimed_head(&alloc));
+  assert(!lj_arena_hugetab_lookup(&registry, (void *)addr, NULL));
+  assert(lj_arena_alloc_fini_try(&alloc));
+  lj_arena_hugetab_fini(&registry);
+}
+
 static void test_alloc_committed_prefix_tail_veto(PRNGState *rs)
 {
   const size_t span_size = 128u, take_size = 32u, prefix_size = 16u;
@@ -3086,6 +3140,7 @@ int main(void)
   test_plain_reader_mutation_gate(&rs);
   test_terminal_reconcile(&rs);
   test_registry_rescue_unmap_handoff(&rs);
+  test_dead_empty_arena_unmap(&rs);
   test_recovery_state(&rs);
   test_root_state(&rs);
   test_root_free_race(&rs);

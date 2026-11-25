@@ -1029,6 +1029,9 @@ LJ_FUNC void lj_arena_alloc_sweep_kind(TGAlloc *alloc, uint32_t kind,
 					    uint32_t epoch, int preserve_marks);
 LJ_FUNC GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind,
 				    uint32_t epoch, int preserve_marks);
+/* Trim an empty arena just published to the reclaimed head of a DEAD
+** allocator. The caller owns the exact post-grace sweep reclaimer. */
+LJ_FUNC void lj_arena_alloc_unmap_dead_empty(TGAlloc *alloc, GCArena *a);
 LJ_FUNC uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src);
 LJ_FUNC int lj_arena_reserve_bump(TGAlloc *alloc, PRNGState *rs,
 				  uint32_t flags, uint32_t ncells,

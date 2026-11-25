@@ -6884,6 +6884,37 @@ static GCArena *arena_unmap_list(TGAlloc *alloc, GCArena *a,
   return retained;
 }
 
+void lj_arena_alloc_unmap_dead_empty(TGAlloc *alloc, GCArena *a)
+{
+  GCArena *next;
+  uint64_t restore;
+  uint32_t w;
+  if (!alloc || !a || arena_empty_reclaimed_acq(alloc) != a ||
+      !(lj_arena_flags_acq(a) & LJ_AF_EMPTY_RECLAIMED) ||
+      !arena_unmap_claim(a, &restore))
+    return;
+  /* The cached empty proof only selects the candidate. A terminal claim
+  ** closes new body admissions, and the exact registry delete also excludes
+  ** readers which have not yet handed off to an arena count. */
+  for (w = 0; w < LJ_ARENA_WORDS; w++)
+    if (la_load64_acq(&a->block[w]) || la_load64_acq(&a->late[w]))
+      goto retained;
+  next = lj_arena_next_acq(a);
+  if (!arena_unmap_side_empty(a) ||
+      lj_arena_gcprep_pending_acq(a) != 0 ||
+      la_loadptr_acq((void *const *)&a->hdr.remote_free) != NULL ||
+      !arena_registry_delete(alloc, a))
+    goto retained;
+  la_storeptr_rel((void **)&alloc->empty_reclaimed, next);
+  arena_unmap_claimed(a);
+  return;
+
+retained:
+  /* The failed attempt invalidated the cache, so the next sweep can
+  ** reclassify this still-linked arena after the racing owner releases. */
+  arena_unmap_abandon(a, restore);
+}
+
 static int arena_register_list(TGAlloc *alloc, GCArena *a)
 {
   for (; a != NULL; a = lj_arena_next_acq(a))

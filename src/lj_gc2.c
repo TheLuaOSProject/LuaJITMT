@@ -6118,6 +6118,10 @@ static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
 	(void)lj_arena_reclaim_clear_pending(qa);
 	lj_arena_reclaim_unseal(qa, 1);
       }
+      /* A detached owner cannot consume an empty spare. Reclaim it under
+      ** the same post-grace writer, after the last access to its header. */
+      if (finished_arena && lj_tg_flags_test_acq(tg, TGF_DEAD))
+	lj_arena_alloc_unmap_dead_empty(&tg->alloc, qa);
       gc2_sweep_reclaim_leave(g);
       /* Retain the exact arena/cursor and finish all writer cleanup before
       ** ending this quantum. A suspended publisher cannot advance while a
