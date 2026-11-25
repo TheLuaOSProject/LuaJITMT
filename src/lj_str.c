@@ -348,20 +348,6 @@ static void strtab_retire(global_State *g, StrTabHdr *hdr)
   strtab_retired_push(g, hdr);
 }
 
-static void strq_retired_push(global_State *g, StrCanonHdr *hdr)
-{
-  StrCanonHdr *head = lj_str_qretired_head_acq(g);
-  do {
-    lj_str_qretired_next_rel(hdr, head);
-  } while (!lj_str_qretired_head_cas(g, &head, hdr));
-}
-
-static void strq_retire(global_State *g, StrCanonHdr *hdr)
-{
-  lj_str_qretire_epoch_rel(hdr, lj_gc2_retire_epoch(g));
-  strq_retired_push(g, hdr);
-}
-
 static LJ_AINLINE MSize strtab_resize_acq(StrTabHdr *hdr)
 {
   MSize state = lj_str_resize_state_acq(hdr);
@@ -487,44 +473,8 @@ static void strq_active_leave(TGState *tg, StrCanonHdr *hdr)
     lj_tg_strq_active_hdr_rel(tg, NULL);
 }
 
-static LJ_AINLINE int strq_active_on_tg(global_State *g, TGState *tg,
-					 StrCanonHdr *hdr)
-{
-  return tg && tg->gl == g && lj_tg_strq_active_depth_acq(tg) != 0 &&
-    lj_tg_strq_active_hdr_acq(tg) == hdr;
-}
-
-static int strq_active_on_hdr(global_State *g, StrCanonHdr *hdr)
-{
-  TGState *tg, *main_tg = g->main_tg, *self = lj_thr_get_tg();
-  int saw_main = 0, saw_self = 0;
-  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
-    if (tg == main_tg) saw_main = 1;
-    if (tg == self) saw_self = 1;
-    if (strq_active_on_tg(g, tg, hdr))
-      return 1;
-  }
-  if (!saw_main && strq_active_on_tg(g, main_tg, hdr))
-    return 1;
-  if (!saw_self && self != main_tg && strq_active_on_tg(g, self, hdr))
-    return 1;
-  return 0;
-}
-
-/* Claim link rewrites without waiting behind a pinned lookup or publisher. */
-static int strq_claim(global_State *g, StrCanonHdr *hdr)
-{
-  MSize expect = 0;
-  if (!hdr || !la_cas32(&hdr->resize, &expect, 1, LA_ACQ_REL, LA_ACQ))
-    return 0;
-  la_fence_seq();
-  if (lj_str_qtabh_acq(g) != hdr || strq_active_on_hdr(g, hdr)) {
-    la_store32_rel(&hdr->resize, 0);
-    return 0;
-  }
-  return 1;
-}
-
+/* The pin protects record metadata. Every directory is retained for the life
+** of the universe, so a concurrent grow cannot invalidate a bucket address. */
 static StrCanonHdr *strq_try_pin(global_State *g, TGState *tg)
 {
   StrCanonHdr *hdr = lj_str_qtabh_acq(g);
@@ -532,34 +482,19 @@ static StrCanonHdr *strq_try_pin(global_State *g, TGState *tg)
     return NULL;
   strq_active_enter(tg, hdr);
   la_fence_seq();
-  if (lj_str_qtabh_acq(g) == hdr && !la_load32_acq(&hdr->resize))
-    return hdr;
-  strq_active_leave(tg, hdr);
-  return NULL;
+  return hdr;
 }
 
 static StrCanonHdr *strq_enter(lua_State *L, global_State *g)
 {
   TGState *tg = L2TG(L);
-  for (;;) {
-    StrCanonHdr *hdr = lj_str_qtabh_acq(g);
-    if (!hdr)
-      return NULL;
-    if (lj_tg_strq_active_depth_acq(tg) != 0 &&
-	lj_tg_strq_active_hdr_acq(tg) == hdr) {
-      strq_active_enter(tg, hdr);
-      return hdr;
-    }
+  StrCanonHdr *hdr = lj_tg_strq_active_depth_acq(tg) ?
+    lj_tg_strq_active_hdr_acq(tg) : lj_str_qtabh_acq(g);
+  if (hdr) {
     strq_active_enter(tg, hdr);
-    /* Validate the generation before dereferencing the sampled header.
-    ** The topology claimant must see the pin or this actor must see its claim. */
     la_fence_seq();
-    if (LJ_LIKELY(lj_str_qtabh_acq(g) == hdr &&
-		  la_load32_acq(&hdr->resize) == 0))
-      return hdr;
-    strq_active_leave(tg, hdr);
-    strtab_wait(L);
   }
+  return hdr;
 }
 
 static void strq_leave(lua_State *L, StrCanonHdr *hdr)
@@ -1150,51 +1085,52 @@ void lj_str_resize(lua_State *L, MSize newmask)
   str_resize(L, newmask, NULL);
 }
 
-/* Replace the quarantine header only after claiming its topology and observing
-** no published header pins. A late reader which loaded the old header before
-** the claim rechecks resize after publishing its pin and never dereferences a
-** bucket. Failed claims are opportunistic; lookup remains available. */
-int lj_str_quarantine_resize(lua_State *L, MSize newmask)
+/* A collector worker has no Lua stack. Build retirement metadata in its own
+** plain arena and charge pacing only after its owner has published it. */
+static void *str_retire_alloc(global_State *g, TGState *tg, GCSize size)
 {
-  global_State *g = G(L);
-  StrCanonHdr *oldhdr, *newhdr;
-  GCSize newsize;
-  MSize i;
-  if (newmask >= LJ_MAX_STRTAB-1 || (newmask & (newmask + 1u)) != 0)
+  void *p;
+  if (!tg || tg->gl != g || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
+      g->allocf != lj_arena_allocf)
+    return NULL;
+  p = lj_arena_allocd_alloc(&tg->allocd, size, 0);
+  if (p) {
+    lj_assertG(checkptrGC(p), "string retirement metadata outside GC range");
+    lj_gc_total_add(g, size);
+  }
+  return p;
+}
+
+/* Append a larger directory with one CAS. Concurrent publishers may finish
+** in any older tier. No record moves and no reader drains before growth. */
+static int strq_grow(global_State *g, TGState *tg, StrCanonHdr *old, MSize newmask)
+{
+  GCSize size;
+  StrCanonHdr *hdr;
+  if (!old || newmask <= old->mask || newmask >= LJ_MAX_STRTAB-1 ||
+      (newmask & (newmask + 1u)) != 0)
     return 0;
-  newsize = lj_str_qtabsize(newmask);
-  newhdr = (StrCanonHdr *)lj_mem_new(L, newsize);
-  memset(newhdr, 0, newsize);
-  newhdr->mask = newmask;
-  /* Hold the sampled header until claim validation, even if another owner
-  ** replaces it while this actor is paused before the claim. */
-  if (!lj_gc2_smr_read_try(g)) {
-    lj_mem_free(g, newhdr, newsize);
+  size = lj_str_qtabsize(newmask);
+  hdr = (StrCanonHdr *)str_retire_alloc(g, tg, size);
+  if (!hdr) return 0;
+  memset(hdr, 0, size);
+  hdr->mask = newmask;
+  hdr->older = old;
+  if (!lj_str_qtabh_cas(g, &old, hdr)) {
+    lj_mem_free(g, hdr, size);
     return 0;
   }
-  oldhdr = lj_str_qtabh_acq(g);
-  if (!oldhdr || newmask <= oldhdr->mask || !strq_claim(g, oldhdr)) {
-    lj_gc2_smr_read_leave(g);
-    lj_mem_free(g, newhdr, newsize);
-    return 0;
-  }
-  for (i = 0; i <= oldhdr->mask; i++) {
-    StrCanonRec *rec = lj_str_qbucket_acq(&oldhdr->bucket[i]);
-    while (rec) {
-      StrCanonRec *next = lj_str_qnext_acq(rec);
-      StrCanonRec **bucket = &newhdr->bucket[rec->hash & newmask];
-      StrCanonRec *head = lj_str_qbucket_acq(bucket);
-      lj_str_qnext_rel(rec, head);
-      lj_str_qbucket_rel(bucket, rec);
-      rec = next;
-    }
-  }
-  lj_str_qmask_rel(g, newmask);
-  lj_str_qtabh_rel(g, newhdr);
-  strq_retire(g, oldhdr);
-  lj_gc2_smr_read_leave(g);
+  lj_gc2_markmem(g, hdr);
+  lj_gc2_account_alloc(g, tg, size);
   return 1;
 }
+
+#ifdef LJ_STR_TEST_HELPERS
+int lj_str_quarantine_resize(lua_State *L, MSize newmask)
+{
+  return strq_grow(G(L), L2TG(L), lj_str_qtabh_acq(G(L)), newmask);
+}
+#endif
 
 /* Allocate a new, unpublished string object. */
 static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
@@ -1374,19 +1310,13 @@ int lj_str_gc2_rescue_held(GCstr *s, StrCanonRec *expected)
 ** body lease holds a candidate while inspecting its header and bytes.
 ** A losing body admission cannot certify absence: interning must retry after
 ** releasing any main-table pin. */
-static GCstr *strcanon_lookup(lua_State *L, const char *str, MSize len,
-			     StrHash hash, int *retry)
+static GCstr *strcanon_lookup_bucket(lua_State *L, StrCanonHdr *hdr,
+                                     const char *str, MSize len,
+                                     StrHash hash, int *retry)
 {
   global_State *g = G(L);
-  StrCanonHdr *hdr;
   StrCanonRec *rec;
   GCstr *found = NULL;
-  *retry = 0;
-  if (lj_str_qcount_acq(g) == 0)
-    return NULL;
-  hdr = strq_enter(L, g);
-  if (!hdr)
-    return NULL;
   for (rec = lj_str_qbucket_acq(&hdr->bucket[hash & hdr->mask]);
        rec != NULL;
        rec = lj_str_qnext_acq(rec)) {
@@ -1429,7 +1359,23 @@ static GCstr *strcanon_lookup(lua_State *L, const char *str, MSize len,
     if (found)
       break;
   }
-  strq_leave(L, hdr);
+  return found;
+}
+
+static GCstr *strcanon_lookup(lua_State *L, const char *str, MSize len,
+                             StrHash hash, int *retry)
+{
+  global_State *g = G(L);
+  StrCanonHdr *pin, *tier;
+  GCstr *found = NULL;
+  *retry = 0;
+  if (lj_str_qcount_acq(g) == 0 || !(pin = strq_enter(L, g)))
+    return NULL;
+  for (tier = lj_str_qtabh_acq(g); tier; tier = tier->older) {
+    found = strcanon_lookup_bucket(L, tier, str, len, hash, retry);
+    if (found || *retry) break;
+  }
+  strq_leave(L, pin);
   return found;
 }
 
@@ -2086,24 +2032,14 @@ static StrBodyRetire *str_body_retire_new(global_State *g, GCstr *s,
 {
   TGState *tg = lj_thr_get_tg();
   StrBodyRetire *ret;
-  if (!g || !s || !hdr || !tg || tg->gl != g ||
-      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
-      g->allocf != lj_arena_allocf)
+  if (!g || !s || !hdr)
     return NULL;
-  /*
-  ** A parked worker has no borrowable Lua stack. Allocate this tiny ownership
-  ** record from its own TG-local plain arena, so failure is non-throwing and no
-  ** shared allocator cursor is touched. Dead worker arenas are transferred to
-  ** the main TG before their TG registry node can be reclaimed.
-  */
-  ret = (StrBodyRetire *)lj_arena_allocd_alloc(&tg->allocd,
-					       sizeof(*ret), 0);
+  ret = (StrBodyRetire *)str_retire_alloc(g, tg, sizeof(*ret));
   if (!ret)
     return NULL;
-  lj_assertG(checkptrGC(ret),
-	     "string retirement record outside required address range");
   ret->next = NULL;
   ret->qnext = NULL;
+  ret->bucket = NULL;
   ret->str = s;
   ret->hdr = hdr;
   ret->retire_epoch = 0;
@@ -2111,13 +2047,10 @@ static StrBodyRetire *str_body_retire_new(global_State *g, GCstr *s,
   ret->close_epoch = 0;
   ret->q_unlink_epoch = 0;
   ret->size = lj_str_size(s->len);
-  /* The quarantine index is independent of mutable main-table secondary
-  ** hashing. Always key it by the canonical sparse hash of immutable bytes. */
   ret->hash = s->hash;
   ret->len = s->len;
   ret->main_linked = 1;
   ret->status = 0;
-  lj_gc_total_add(g, sizeof(*ret));
   return ret;
 }
 
@@ -2130,21 +2063,27 @@ static void strq_preserve_body(global_State *g, GCstr *s)
     (void)lj_gc2_preserve_sweep_root(g, obj2gco(s));
 }
 
+/* The incoming bucket address is published with the record. Unlink can
+** always find it even if another TG installed newer tiers in the meantime. */
+static void strq_publish(StrCanonHdr *hdr, StrCanonRec *rec)
+{
+  StrCanonRec **bucket = &hdr->bucket[rec->hash & hdr->mask];
+  StrCanonRec *head = lj_str_qbucket_acq(bucket);
+  rec->bucket = bucket;
+  do {
+    lj_str_qnext_rel(rec, head);
+  } while (!lj_str_qbucket_cas(bucket, &head, rec));
+}
+
 #ifdef LJ_STR_TEST_HELPERS
 static void strcanon_bucket_publish(lua_State *L, global_State *g,
 				    StrCanonRec *rec)
 {
   StrCanonHdr *hdr = strq_enter(L, g);
-  StrCanonRec **bucket;
-  StrCanonRec *head;
   lj_assertG(hdr != NULL, "canonical quarantine is not initialized");
   str_test_canon(L, lj_str_body_retired_str_acq(rec), rec,
 		 LJ_STR_TEST_CANON_Q_PINNED_BEFORE_PUBLISH);
-  bucket = &hdr->bucket[rec->hash & hdr->mask];
-  head = lj_str_qbucket_acq(bucket);
-  do {
-    lj_str_qnext_rel(rec, head);
-  } while (!lj_str_qbucket_cas(bucket, &head, rec));
+  strq_publish(hdr, rec);
   strq_leave(L, hdr);
 }
 
@@ -2369,7 +2308,8 @@ static uint32_t str_sweep_unlink_active(global_State *g, StrTabHdr *mainhdr,
   TGState *tg = lj_thr_get_tg();
   StrCanonHdr *qhdr;
   GCstr *s = gco2str(o);
-  StrCanonRec *rec, **bucket, *head;
+  StrCanonRec *rec;
+  MSize count;
   uintptr_t canon = LJ_STR_CANON_CANDIDATE, active, next, current;
 
   qhdr = strq_try_pin(g, tg);
@@ -2382,11 +2322,7 @@ static uint32_t str_sweep_unlink_active(global_State *g, StrTabHdr *mainhdr,
   }
   la_store32_rel(&rec->status, LJ_STR_CANONREC_LIST_ONLY);
   str_body_retired_push(g, rec);
-  bucket = &qhdr->bucket[rec->hash & qhdr->mask];
-  head = lj_str_qbucket_acq(bucket);
-  do {
-    lj_str_qnext_rel(rec, head);
-  } while (!lj_str_qbucket_cas(bucket, &head, rec));
+  strq_publish(qhdr, rec);
   strq_active_leave(tg, qhdr);
 
   active = lj_str_canon_pack(rec, LJ_STR_CANON_QACTIVE);
@@ -2399,7 +2335,7 @@ static uint32_t str_sweep_unlink_active(global_State *g, StrTabHdr *mainhdr,
   }
   la_store32_rel(&rec->status,
 		 LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_BODY_OWNED);
-  (void)lj_str_qcount_inc_sat_acqrel(g);
+  count = lj_str_qcount_inc_sat_acqrel(g);
   strq_preserve_body(g, s);
   next = lj_str_link_load_acq(lj_str_nodelink(mainhdr, o));
   next = (next & ~(uintptr_t)LJ_STRHASH_SECONDARY) |
@@ -2424,6 +2360,13 @@ static uint32_t str_sweep_unlink_active(global_State *g, StrTabHdr *mainhdr,
     }
     la_store32_rel(&rec->main_linked, 0);
     lj_str_sweep_unlinked_add(g, 1);
+  }
+  /* A saturated count represents unknown occupancy. Sample ordinary counts
+  ** at intervals and grow only after both sides of the handoff are settled. */
+  if (count != UINT32_MAX && (count & (LJ_STRNUM_BLOCK-1u)) == 0) {
+    qhdr = lj_str_qtabh_acq(g);
+    if (count > qhdr->mask)
+      (void)strq_grow(g, tg, qhdr, (qhdr->mask << 1) + 1u);
   }
   lj_gc2_account_alloc(g, tg, sizeof(*rec));
   return 1;
@@ -2772,7 +2715,6 @@ static void strcanon_init(lua_State *L)
   StrCanonHdr *hdr = (StrCanonHdr *)lj_mem_new(L, size);
   memset(hdr, 0, size);
   hdr->mask = LJ_STR_CANON_MINMASK;
-  lj_str_qmask_rel(g, hdr->mask);
   lj_str_qtabh_rel(g, hdr);
 }
 
@@ -2821,8 +2763,8 @@ STR_RETIRE_CHAIN_VALIDATOR(str_body_retired_chain_valid, StrBodyRetire,
 			   lj_str_body_retired_next_acq)
 STR_RETIRE_CHAIN_VALIDATOR(str_tab_retired_chain_valid, StrTabHdr,
 			   lj_str_retired_next_acq)
-STR_RETIRE_CHAIN_VALIDATOR(str_qretired_chain_valid, StrCanonHdr,
-			   lj_str_qretired_next_acq)
+STR_RETIRE_CHAIN_VALIDATOR(str_qtier_chain_valid, StrCanonHdr,
+			   lj_str_qolder)
 
 #undef STR_RETIRE_CHAIN_VALIDATOR
 
@@ -2845,10 +2787,9 @@ static void strq_count_remove(global_State *g)
   }
 }
 
-/* Pin topology against resize, then remove only the exact incoming link.
-** A concurrent publisher can prepend, but no other actor removes records
-** while this IDLE reclaimer owns the retire list. Readers keep the immutable
-** old successor through the post-unlink grace. */
+/* Find the exact incoming link in the record's original bucket. A concurrent
+** publisher can prepend. The retire-list owner is the sole remover, and a
+** reader of the removed record keeps its successor through the unlink grace. */
 static int strq_unlink(global_State *g, StrCanonRec *rec)
 {
   TGState *tg = lj_thr_get_tg_fallback(g);
@@ -2857,7 +2798,7 @@ static int strq_unlink(global_State *g, StrCanonRec *rec)
   int unlinked;
   if (!hdr)
     return 0;
-  link = &hdr->bucket[rec->hash & hdr->mask];
+  link = rec->bucket;
   while ((cur = lj_str_qbucket_acq(link)) != NULL && cur != rec)
     link = &cur->qnext;
   if (LJ_UNLIKELY(cur != rec)) {
@@ -3101,7 +3042,6 @@ static uint32_t str_body_reclaim_step(global_State *g, uint64_t epoch)
 uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
 {
   StrTabHdr *hdr;
-  StrCanonHdr *qhdr;
   uint32_t reclaimed = 0;
   if (!g || completed_epoch == 0)
     return 0;
@@ -3157,28 +3097,6 @@ uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
       strtab_retired_push(g, hdr);
     }
     hdr = next;
-  }
-  qhdr = lj_str_qretired_head_xchg_acqrel(g, NULL);
-  if (LJ_UNLIKELY(!str_qretired_chain_valid(g, qhdr, 1))) {
-    lj_assertG(0, "invalid/cyclic detached string-canonical retire chain");
-    abort();
-  }
-  while (qhdr) {
-    if (LJ_UNLIKELY(
-	!lj_gc2_mem_registered_known_reclaim_held(g, qhdr))) {
-      lj_assertG(0, "invalid detached string-canonical retire header");
-      abort();
-    }
-    StrCanonHdr *next = lj_str_qretired_next_acq(qhdr);
-    lj_str_qretired_next_rel(qhdr, NULL);
-    if (lj_str_qretire_epoch_acq(qhdr) < completed_epoch &&
-	!strq_active_on_hdr(g, qhdr)) {
-      lj_mem_free(g, qhdr, lj_str_qtabbytes(qhdr));
-      reclaimed++;
-    } else {
-      strq_retired_push(g, qhdr);
-    }
-    qhdr = next;
   }
   return reclaimed;
 }
@@ -3373,10 +3291,7 @@ void lj_str_freetab(global_State *g)
     hdr = next;
   }
   qhdr = lj_str_qtabh_xchg_acqrel(g, NULL);
-  if (qhdr)
-    lj_mem_free(g, qhdr, lj_str_qtabbytes(qhdr));
-  qhdr = lj_str_qretired_head_xchg_acqrel(g, NULL);
-  if (LJ_UNLIKELY(!str_qretired_chain_valid(g, qhdr, 0))) {
+  if (LJ_UNLIKELY(!str_qtier_chain_valid(g, qhdr, 0))) {
     lj_assertG(0, "invalid/cyclic terminal string-canonical retire chain");
     abort();
   }
@@ -3385,7 +3300,7 @@ void lj_str_freetab(global_State *g)
       lj_assertG(0, "invalid terminal string-canonical retire header");
       abort();
     }
-    StrCanonHdr *next = lj_str_qretired_next_acq(qhdr);
+    StrCanonHdr *next = lj_str_qolder(qhdr);
     lj_mem_free(g, qhdr, lj_str_qtabbytes(qhdr));
     qhdr = next;
   }

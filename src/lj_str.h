@@ -172,19 +172,11 @@ static LJ_AINLINE StrCanonHdr *lj_str_qtabh_xchg_acqrel(global_State *g,
   return (StrCanonHdr *)la_xchgptr_acqrel((void **)&g->str.qtabh, hdr);
 }
 
-static LJ_AINLINE MSize lj_str_qmask_acq(const global_State *g)
+static LJ_AINLINE int lj_str_qtabh_cas(global_State *g, StrCanonHdr **oldp,
+                                       StrCanonHdr *hdr)
 {
-  return (MSize)la_load32_acq(&g->str.qmask);
-}
-
-static LJ_AINLINE void lj_str_qmask_store_rlx(global_State *g, MSize mask)
-{
-  la_store32_rlx(&g->str.qmask, mask);
-}
-
-static LJ_AINLINE void lj_str_qmask_rel(global_State *g, MSize mask)
-{
-  la_store32_rel(&g->str.qmask, mask);
+  return la_casptr((void **)&g->str.qtabh, (void **)oldp, hdr,
+                   LA_ACQ_REL, LA_ACQ);
 }
 
 static LJ_AINLINE MSize lj_str_qcount_acq(const global_State *g)
@@ -214,12 +206,6 @@ static LJ_AINLINE StrCanonRec *lj_str_qbucket_acq(StrCanonRec *const *bucket)
   return (StrCanonRec *)la_loadptr_acq((void *const *)bucket);
 }
 
-static LJ_AINLINE void lj_str_qbucket_rel(StrCanonRec **bucket,
-					   StrCanonRec *rec)
-{
-  la_storeptr_rel((void **)bucket, rec);
-}
-
 static LJ_AINLINE int lj_str_qbucket_cas(StrCanonRec **bucket,
 					  StrCanonRec **oldp,
 					  StrCanonRec *rec)
@@ -239,54 +225,9 @@ static LJ_AINLINE void lj_str_qnext_rel(StrCanonRec *rec,
   la_storeptr_rel((void **)&rec->qnext, next);
 }
 
-static LJ_AINLINE StrCanonHdr *lj_str_qretired_head_acq(
-  const global_State *g)
+static LJ_AINLINE StrCanonHdr *lj_str_qolder(const StrCanonHdr *hdr)
 {
-  return (StrCanonHdr *)la_loadptr_acq((void *const *)&g->str.qretired);
-}
-
-static LJ_AINLINE void lj_str_qretired_head_store_rlx(global_State *g,
-						       StrCanonHdr *hdr)
-{
-  la_storeptr_rlx((void **)&g->str.qretired, hdr);
-}
-
-static LJ_AINLINE int lj_str_qretired_head_cas(global_State *g,
-						StrCanonHdr **oldp,
-						StrCanonHdr *hdr)
-{
-  return la_casptr((void **)&g->str.qretired, (void **)oldp, hdr,
-		   LA_ACQ_REL, LA_ACQ);
-}
-
-static LJ_AINLINE StrCanonHdr *lj_str_qretired_head_xchg_acqrel(
-  global_State *g, StrCanonHdr *hdr)
-{
-  return (StrCanonHdr *)la_xchgptr_acqrel((void **)&g->str.qretired, hdr);
-}
-
-static LJ_AINLINE uint64_t lj_str_qretire_epoch_acq(
-  const StrCanonHdr *hdr)
-{
-  return la_load64_acq(&hdr->retire_epoch);
-}
-
-static LJ_AINLINE void lj_str_qretire_epoch_rel(StrCanonHdr *hdr,
-						 uint64_t epoch)
-{
-  la_store64_rel(&hdr->retire_epoch, epoch);
-}
-
-static LJ_AINLINE StrCanonHdr *lj_str_qretired_next_acq(
-  const StrCanonHdr *hdr)
-{
-  return (StrCanonHdr *)la_loadptr_acq((void *const *)&hdr->retired_next);
-}
-
-static LJ_AINLINE void lj_str_qretired_next_rel(StrCanonHdr *hdr,
-						 StrCanonHdr *next)
-{
-  la_storeptr_rel((void **)&hdr->retired_next, next);
+  return hdr->older;
 }
 
 static LJ_AINLINE void lj_str_tabh_store_rlx(global_State *g, StrTabHdr *hdr)
@@ -780,7 +721,6 @@ LJ_FUNC void lj_str_free_commit(global_State *g, GCstr *s,
 				 struct LJGCDestructCtx *ctx);
 LJ_FUNC void lj_str_flush_num_credit(global_State *g, TGState *tg);
 LJ_FUNC void LJ_FASTCALL lj_str_init(lua_State *L);
-LJ_FUNC int lj_str_quarantine_resize(lua_State *L, MSize newmask);
 /* Runtime drain only: caller holds GC2's exact-thread exclusive-reclaimer
 ** scope. Terminal joined-world cleanup uses the separate free helpers below. */
 LJ_FUNC uint32_t lj_str_reclaim_retired(global_State *g,
@@ -837,6 +777,7 @@ enum {
   LJ_STR_TEST_RECLAIM_CANDIDATE
 };
 #ifdef LJ_STR_TEST_HELPERS
+LJ_FUNC int lj_str_quarantine_resize(lua_State *L, MSize newmask);
 LJ_FUNC StrHash lj_str_test_hash(global_State *g, const char *str, MSize len);
 typedef struct LJStrTestSweepSnapshot {
   uint64_t tagged;

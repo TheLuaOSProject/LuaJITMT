@@ -302,12 +302,11 @@ typedef struct StrTabHdr {
   GCRef bucket[1];	/* String hash table anchors. */
 } StrTabHdr;
 
-/* RCU header for the secondary canonical-string quarantine index. */
+/* Quarantine directories grow geometrically. Records stay in their original
+** buckets and older directories stay reachable until the universe closes. */
 typedef struct StrCanonHdr {
   MSize mask;		/* Quarantine hash mask (size - 1). */
-  MSize resize;	/* Exact topology-owner claim. */
-  uint64_t retire_epoch;
-  struct StrCanonHdr *retired_next;
+  struct StrCanonHdr *older;
   StrCanonRec *bucket[1];
 } StrCanonHdr;
 
@@ -317,7 +316,7 @@ typedef struct GCstr {
   uint8_t reserved;	/* Used by lexer for fast lookup of reserved words. */
   uint8_t dense_valid;	/* The deterministic dense hash was memoized. */
   StrID sid;		/* Interned string ID. */
-  StrHash hash;		/* Sparse hash, immutable after publication. */
+  StrHash hash;		/* Keyed hash, immutable after publication. */
   MSize len;		/* Size of string. */
   LJ_ALIGN(8) uintptr_t canon;  /* Atomic canonical-lifecycle word. */
   GCRef str_alt_next;	/* Successor in the other string table generation. */
@@ -334,6 +333,7 @@ typedef struct GCstr {
 struct StrCanonRec {
   StrCanonRec *next;	/* Retired/ownership list link. */
   StrCanonRec *qnext;	/* Quarantine bucket link. */
+  StrCanonRec **bucket;	/* Immutable after bucket publication. */
   GCstr *str;
   StrTabHdr *hdr;
   uint64_t retire_epoch;
@@ -1928,7 +1928,6 @@ typedef struct StrInternState {
   StrTabHdr *tabh;	/* String hash table header and anchors. */
   StrTabHdr *retired;	/* Retired table headers kept until state close. */
   StrCanonHdr *qtabh;	/* Secondary canonical quarantine header. */
-  StrCanonHdr *qretired;	/* Retired quarantine headers awaiting SMR. */
   StrBodyRetire *retired_body;  /* Unlinked bodies awaiting SMR grace. */
   StrBodyRetire *retired_body_cursor;  /* Last retained record in bounded pass. */
   StrBodyRetire *sweep_pending;  /* Pre-CAS unlink ownership record. */
@@ -1945,7 +1944,6 @@ typedef struct StrInternState {
   uint64_t sweep_reclaimed;	/* Physically reclaimed string bodies. */
   MSize mask;		/* Mirror of tabh->mask for existing fast paths. */
   MSize num;		/* Number of strings in hash table. */
-  MSize qmask;		/* Mirror of qtabh->mask for diagnostics/growth. */
   MSize qcount;	/* Saturating authoritative Q count; zero is exact. */
   MSize sweep_bucket;	/* Bucket containing sweep_link. */
   uint32_t sweep_phase;	/* LJ_STR_SWEEP_* bounded subphase. */

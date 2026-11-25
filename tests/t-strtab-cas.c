@@ -893,10 +893,10 @@ static void exercise_canonical_quarantine(lua_State *L)
   assert(lj_str_canon_state(canon) == LJ_STR_CANON_QRESCUED);
   canonical_race_finish(&ctx, &worker);
 
-  /* Pause an actual publisher while it pins the old Q header. A concurrent
-  ** resize must abort without moving the bucket topology out from under it. */
-  oldmask = lj_str_qmask_acq(g);
+  /* A publisher parked before the bucket CAS can finish in its original
+  ** directory after two larger directories have become current. */
   oldhdr = lj_str_qtabh_acq(g);
+  oldmask = oldhdr->mask;
   memset(publish_name, 'z', sizeof(publish_name));
   memcpy(publish_name, publish_prefix, sizeof(publish_prefix)-1u);
   spublish = lj_str_new(L, publish_name, sizeof(publish_name));
@@ -913,17 +913,16 @@ static void exercise_canonical_quarantine(lua_State *L)
   assert(ctx.worker_tg != NULL);
   assert(lj_tg_strq_active_hdr_acq(ctx.worker_tg) == oldhdr);
   assert(lj_tg_strq_active_depth_acq(ctx.worker_tg) == 1u);
-  assert(lj_str_quarantine_resize(L, (oldmask << 1) + 1u) == 0);
-  assert(lj_str_qtabh_acq(g) == oldhdr);
+  assert(lj_str_quarantine_resize(L, (oldmask << 1) + 1u));
+  assert(lj_str_quarantine_resize(L, (oldmask << 2) + 3u));
+  assert(lj_str_qtabh_acq(g)->older->older == oldhdr);
   canonical_race_finish(&ctx, &worker);
   assert(lj_str_qcount_acq(g) == 2u);
   canon = lj_str_canon_acq(spublish);
   assert(lj_str_canon_state(canon) == LJ_STR_CANON_QACTIVE);
   assert(lj_str_canon_record(canon) != NULL);
-  assert(lj_str_quarantine_resize(L, (oldmask << 1) + 1u) == 1);
-  assert(lj_str_qtabh_acq(g) != oldhdr);
-  assert(lj_str_qmask_acq(g) == (oldmask << 1) + 1u);
-  assert(lj_str_qretired_head_acq(g) == oldhdr);
+  assert(canonical_qbucket_contains(oldhdr, lj_str_canon_record(canon)));
+  assert(lj_str_qtabh_acq(g)->mask == (oldmask << 2) + 3u);
   /* Ownership-only preservation does not rescue this close intent.
   ** An independently admitted semantic SWEEP root must rescue it. */
   {
@@ -973,7 +972,7 @@ static void exercise_canonical_quarantine(lua_State *L)
 		       &worker);
   assert(lj_arena_hugetab_lookup(&L2TG(L)->huge, spublish, &huge));
   assert(huge.readers != 0);
-  assert(lj_str_quarantine_resize(L, (ctx.qhdr->mask << 1) + 1u) == 0);
+  assert(lj_str_quarantine_resize(L, (ctx.qhdr->mask << 1) + 1u));
   assert(lj_str_new(L, strdata(spublish), spublish->len) == spublish);
   canonical_race_finish(&ctx, &worker);
   assert(lj_arena_hugetab_lookup(&L2TG(L)->huge, spublish, &huge));

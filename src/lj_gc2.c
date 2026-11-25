@@ -3976,14 +3976,9 @@ static LJ_NOINLINE void gc2_mark_strtab_mem(global_State *g)
   if (LJ_UNLIKELY(hdr != NULL && !lj_gc2_mem_registered(g, hdr)))
     gc2_root_scan_retry(g);
   qhdr = lj_str_qtabh_acq(g);
-  if (qhdr && !lj_gc2_mem_registered(g, qhdr))
-    gc2_root_scan_retry(g);
-  else if (qhdr)
-    lj_gc2_markmem(g, qhdr);
-  qhdr = lj_str_qretired_head_acq(g);
   gc2_root_cycle_guard_init(&guard, qhdr);
   while (qhdr != NULL && lj_gc2_mem_registered(g, qhdr)) {
-    nextqhdr = lj_str_qretired_next_acq(qhdr);
+    nextqhdr = lj_str_qolder(qhdr);
     lj_gc2_markmem(g, qhdr);
     qhdr = nextqhdr;
     if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, qhdr))) {

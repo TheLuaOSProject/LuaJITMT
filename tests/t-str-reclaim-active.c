@@ -222,6 +222,7 @@ static void run_reclamation(int use_jit, int pool)
     fprintf(stderr, "jit=%d pool=%d: %s\n", use_jit, pool, lua_tostring(L, -1));
   assert(status == LUA_OK);
   assert(lua_tolstring(L, 1, NULL) == borrowed);
+  assert(lj_str_qtabh_acq(G(L))->mask > LJ_STR_CANON_MINMASK);
   lua_close(L);
 }
 

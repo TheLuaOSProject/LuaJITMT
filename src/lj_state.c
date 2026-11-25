@@ -1310,7 +1310,6 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   lj_str_tabh_store_rlx(g, NULL);
   lj_str_retired_head_store_rlx(g, NULL);
   lj_str_qtabh_store_rlx(g, NULL);
-  lj_str_qretired_head_store_rlx(g, NULL);
   g->str.retired_body = NULL;
   g->str.retired_body_cursor = NULL;
   g->str.sweep_pending = NULL;
@@ -1325,7 +1324,6 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   g->str.sweep_phase = 0;
   g->str.sweep_cycle = 0;
   lj_str_mask_store_rlx(g, ~(MSize)0);
-  lj_str_qmask_store_rlx(g, ~(MSize)0);
   lj_str_qcount_store_rlx(g, 0);
   g->tab.retired_nodes = NULL;
   g->tab.retired_arrays = NULL;
