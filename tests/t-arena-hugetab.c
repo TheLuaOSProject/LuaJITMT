@@ -1706,6 +1706,8 @@ static void test_registry_rescue_unmap_handoff(PRNGState *rs)
 {
 #if defined(LJ_ARENA_TEST_HELPERS)
   HugeTab registry = { 0 };
+  LJHugeReader overlapping_reader = { 0 };
+  LJHugeInfo info;
   TGAlloc alloc;
   RegistryRescueRace race;
   pthread_t thread;
@@ -1752,10 +1754,20 @@ static void test_registry_rescue_unmap_handoff(PRNGState *rs)
   assert(lj_arena_alloc_registry_lookup(&alloc, race.a, NULL));
   assert((lj_arena_flags_acq(race.a) & LJ_AF_REGISTERED) != 0);
 
+  /* Change the exact slot snapshot while the handoff is paused. Releasing
+  ** the bridge's count must preserve the independent reader. */
+  assert(lj_arena_hugetab_reader_acquire(&registry, race.a,
+	&overlapping_reader, &info) == LJ_ARENA_HUGE_READER_ACQUIRED);
+  assert(info.readers == 2);
   lj_arena_test_registry_pause(0);
   while (!la_load32_acq(&race.entered))
     la_cpu_pause();
   assert(race.admission == LJ_ARENA_RESCUE_FULL && race.observed == 0xa6);
+  assert(lj_arena_alloc_registry_lookup(&alloc, race.a, &info));
+  assert(info.readers == 1);
+  assert(lj_arena_hugetab_reader_release(&overlapping_reader, &info) ==
+	 LJ_ARENA_HUGE_READER_RELEASED);
+  assert(info.readers == 0);
   /* After the bridge drops its registry count, the arena admission itself
   ** defeats terminal close. A second fini still retains the locator. */
   assert(!lj_arena_alloc_fini_try(&alloc));

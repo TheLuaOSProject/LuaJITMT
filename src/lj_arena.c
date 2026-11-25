@@ -6489,7 +6489,9 @@ static void arena_sweep_state_reset(GCArena *a)
 
 static void arena_sweep_state_prepare(GCArena *a)
 {
+  const uint64_t pairlo = UINT64_C(0x5555555555555555);
   uint32_t w;
+  LJ_STATIC_ASSERT(LJ_ARENA_SWEEP_FREEING == 3);
   /* WHITE means "not detached/classified" during NEEDSWEEP. The mark bitmap
   ** still distinguishes live raw/fixed allocations. LIVE is reserved for an
   ** exact old GC header detached from the ownership spine (or rescued after
@@ -6499,17 +6501,17 @@ static void arena_sweep_state_prepare(GCArena *a)
   ** observe a transient WHITE gap before the stable queue drain. */
   for (w = 0; w < LJ_ARENA_SWEEP_WORDS; w++) {
     uint64_t old = la_load64_acq(&a->sweep[w]);
-    uint64_t block = la_load64_acq(&a->block[w >> 1]);
-    uint32_t starts = (uint32_t)(w & 1u ? block >> 32 : block);
-    uint64_t next = 0;
-    uint32_t j;
-    for (j = 0; j < 32u; j++) {
-      uint32_t cell = (w << 5) + j;
-      if (cell >= LJ_AFIRST_CELL && (starts & ((uint32_t)1u << j)) &&
-	  ((old >> (j << 1)) & 3u) == LJ_ARENA_SWEEP_FREEING)
-	next |= (uint64_t)LJ_ARENA_SWEEP_FREEING << (j << 1);
+    uint64_t freeing = old & (old >> 1) & pairlo;
+    if (freeing && w >= (LJ_AFIRST_CELL >> 5)) {
+      uint64_t block = la_load64_acq(&a->block[w >> 1]);
+      uint32_t starts = (uint32_t)(block >> ((w & 1u) << 5));
+      if (w == (LJ_AFIRST_CELL >> 5))
+	starts &= UINT32_MAX << (LJ_AFIRST_CELL & 31u);
+      freeing &= arena_dilate32_even(starts);
+    } else {
+      freeing = 0;
     }
-    la_store64_rel(&a->sweep[w], next);
+    la_store64_rel(&a->sweep[w], freeing | (freeing << 1));
   }
   a->hdr.reclaim_cell = LJ_AFIRST_CELL;
   a->hdr.reclaim_deferred = 0;
@@ -6695,15 +6697,38 @@ int lj_arena_alloc_registry_lookup(const TGAlloc *alloc, const GCArena *a,
 int lj_arena_hugetab_rescue_enter(HugeTab *registry, GCArena *a,
 				    LJHugeInfo *hi)
 {
-  LJHugeReader reader = { NULL, NULL, 0 };
+  LJHugeTabHdr *h = registry ? registry->h : NULL;
+  LJHugeEnt *entry;
+  uint64_t addr = (uint64_t)(uintptr_t)a, meta, leased;
   int admission;
-  if (!registry || !a ||
-      lj_arena_hugetab_reader_acquire(registry, a, &reader, hi) !=
-	LJ_ARENA_HUGE_READER_ACQUIRED)
+  if (!h || !a || !hugetab_search(h, addr, &entry, &meta))
     return LJ_ARENA_RESCUE_RETRY;
+  /* An ordinary small mapping has no pending slot transition. Its exact
+  ** search snapshot supplies the counted reader CAS directly. Any unusual
+  ** state or concurrent change goes through the full admission protocol. */
+  leased = meta + LJ_HUGETAB_READER_ONE;
+  if (LJ_UNLIKELY(hugetab_size(meta) != LJ_ARENA_SIZE ||
+      (meta & (LJ_HUGEF_FREEING|LJ_HUGEF_DEFER_FREE|LJ_HUGEF_BUSY)) ||
+      hugetab_admission_closed(meta) ||
+      hugetab_readers(meta) == LJ_HUGETAB_READER_MAX ||
+      !hugetab_cas_meta(entry, addr, meta, leased))) {
+    LJHugeReader reader = { NULL, NULL, 0 };
+    if (hugetab_reader_entry(h, entry, addr, 0, NULL, &reader, hi) !=
+	LJ_ARENA_HUGE_READER_ACQUIRED)
+      return LJ_ARENA_RESCUE_RETRY;
+    arena_test_registry_pause_after_reader();
+    admission = lj_arena_rescue_enter(a);
+    (void)hugetab_cert_lease_release(entry, (uint64_t)(uintptr_t)reader.base,
+				     reader.base, NULL);
+    return admission;
+  }
+  hugetab_decode(leased, hi);
   arena_test_registry_pause_after_reader();
   admission = lj_arena_rescue_enter(a);
-  (void)lj_arena_hugetab_reader_release(&reader, NULL);
+  /* The reader pins the slot. If the snapshot changed, re-read that same
+  ** slot so a racing deferred free can make progress on the final release. */
+  if (LJ_UNLIKELY(!hugetab_cas_meta(entry, addr, leased, meta)))
+    (void)hugetab_cert_lease_release(entry, addr, a, NULL);
   return admission;
 }
 
@@ -6738,7 +6763,6 @@ int lj_arena_hugetab_rescue_slot_enter_bounded(
 {
   LJHugeTabHdr *h = registry ? registry->h : NULL;
   LJHugeEnt *e;
-  LJHugeReader reader = { NULL, NULL, 0 };
   uint64_t addr, meta, next;
   la_u128 exp, des;
   int admission;
@@ -6766,12 +6790,10 @@ int lj_arena_hugetab_rescue_slot_enter_bounded(
   des.hi = next;
   if (!la_cas128(&e->slot, &exp, des))
     return LJ_ARENA_RESCUE_RETRY;
-  reader.h = h;
-  reader.base = a;
-  reader.size = (uint32_t)hugetab_size(next);
   hugetab_decode(next, hi);
   admission = arena_rescue_enter_bounded(a);
-  (void)lj_arena_hugetab_reader_release(&reader, NULL);
+  if (LJ_UNLIKELY(!hugetab_cas_meta(e, addr, next, meta)))
+    (void)hugetab_cert_lease_release(e, addr, a, NULL);
   return admission;
 }
 
@@ -7489,7 +7511,6 @@ static int arena_quarantine_bitmap_ready(GCArena *a, uint32_t *retry_cell)
   for (w = 0; w < LJ_ARENA_WORDS; w++) {
     uint64_t b = la_load64_acq(&a->block[w]);
     uint64_t late, marks;
-    uint32_t j;
     /* This preliminary proof only skips scalar observations. It grants no
     ** commit authority: a publisher racing it dirties the sealed generation,
     ** and the post-commit apply independently proves the word again. */
@@ -7498,10 +7519,10 @@ static int arena_quarantine_bitmap_ready(GCArena *a, uint32_t *retry_cell)
       continue;
     late = la_load64_acq(&a->late[w]);
     marks = la_load64_acq(&a->mark[w]);
-    for (j = 0; j < 64u; j++) {
+    while (b) {
+      uint32_t j = lj_ffs64(b);
       uint32_t state;
-      if (!(b & ((uint64_t)1 << j)))
-	continue;
+      b &= b - 1u;
       if (!lj_arena_gc2_reclaim_clear_acq(a, (w << 6) + j)) {
 	if (retry_cell)
 	  *retry_cell = (w << 6) + j;
@@ -7543,7 +7564,7 @@ static int arena_quarantine_apply_bitmap(GCArena *a, int preserve_marks)
     uint64_t b = la_load64_acq(&a->block[w]);
     uint64_t m, late, recovery, root;
     uint64_t live = 0, freeing = 0;
-    uint32_t j;
+    uint64_t starts;
     /* The clean sealed commit immediately precedes this call. Re-prove every
     ** packed plane rather than inheriting bitmap_ready's pre-commit sample.
     ** On success the scalar loop's exact result is live=0/freeing=b. Preserve
@@ -7567,11 +7588,10 @@ static int arena_quarantine_apply_bitmap(GCArena *a, int preserve_marks)
     late = la_load64_acq(&a->late[w]);
     recovery = arena_recovery_block_bits(a, w);
     root = arena_root_block_bits(a, w);
-    for (j = 0; j < 64u; j++) {
+    for (starts = b; starts; starts &= starts - 1u) {
+      uint32_t j = lj_ffs64(starts);
       uint32_t cell = (w << 6) + j;
       uint32_t state;
-      if (!(b & ((uint64_t)1 << j)))
-	continue;
       if (!lj_arena_gc2_reclaim_clear_acq(a, cell)) {
 	live |= (uint64_t)1 << j;
 	continue;
