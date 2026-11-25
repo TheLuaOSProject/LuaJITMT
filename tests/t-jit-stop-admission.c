@@ -67,18 +67,16 @@ static StopAdmissionCtx *active_ctx;
 static int fail_gdb_alloc;
 static int failed_gdb_allocs;
 
-/* Link the optional build with -Wl,--wrap=lj_mem_realloc. The first growth
-** after checkpoint 4 is gdbjit_newentry's actual metadata allocation call. */
-LJ_FUNC void *__real_lj_mem_realloc(lua_State *L, void *p,
-                                   GCSize osize, GCSize nsize);
-void *__wrap_lj_mem_realloc(lua_State *L, void *p, GCSize osize, GCSize nsize)
+/* The optional GDB entry uses a nonthrowing allocation after checkpoint 4. */
+LJ_FUNC void *__real_lj_mem_new_nothrow(lua_State *L, GCSize size);
+void *__wrap_lj_mem_new_nothrow(lua_State *L, GCSize size)
 {
-  if (fail_gdb_alloc && nsize > osize) {
+  if (fail_gdb_alloc) {
     fail_gdb_alloc = 0;
     failed_gdb_allocs++;
-    lj_err_mem(L);
+    return NULL;
   }
-  return __real_lj_mem_realloc(L, p, osize, nsize);
+  return __real_lj_mem_new_nothrow(L, size);
 }
 #endif
 
@@ -229,19 +227,11 @@ static void run_case(uint32_t stage, int invalidate)
   lj_trace_test_set_stop_hook(stop_checkpoint);
   lj_trace_test_reset_retire_publish_calls();
   alarm(15);
+  call_probe(L, probe, 1);
 #ifdef LUAJIT_USE_GDBJIT
-  if (stage == 4) {
-    int status;
-    lua_pushvalue(L, probe);
-    lua_pushinteger(L, 80);
-    lua_pushboolean(L, 1);
-    status = lua_pcall(L, 2, 1, 0);
-    assert(status == LUA_ERRMEM);
-    lua_pop(L, 1);
+  if (stage == 4)
     assert(failed_gdb_allocs == 1 && fail_gdb_alloc == 0);
-  } else
 #endif
-    call_probe(L, probe, 1);
   lj_trace_test_set_stop_hook(NULL);
   assert(ctx.fired && "probe never reached authentic side publication");
   assert(jit_token_acq(g) == 0);
@@ -275,16 +265,24 @@ static void run_case(uint32_t stage, int invalidate)
       la_store8_rel(&ctx.parent->unused1, ctx.oldflags);
     }
   } else {
+    TraceNo tr = trace_nextside_acq(ctx.root);
+    uint32_t linked = 0, children = trace_nchild_acq(ctx.root);
     assert(trace_runnable_acq(child, ctx.traceno));
     assert(trace_root_acq(child) == ctx.rootno);
-    assert(trace_nextside_acq(ctx.root) == ctx.traceno);
-    assert(trace_nchild_acq(ctx.root) == ctx.oldnchild + 1);
+    /* The caller can add another side trace after this one succeeds. */
+    while (tr != ctx.traceno) {
+      GCtrace *side = traceref_safe(J, tr);
+      assert(tr && linked++ < children && trace_runnable_acq(side, tr));
+      tr = trace_nextside_acq(side);
+    }
+    assert(trace_nextside_acq(child) == ctx.oldside);
+    assert(children >= ctx.oldnchild + 1);
     assert(trace_exittarget_acq(ctx.parent, ctx.exitno) == trace_mcode_acq(child));
     assert(snap_count_acq(snap) == SNAPCOUNT_DONE);
 #ifdef LUAJIT_USE_GDBJIT
     if (stage == 4) {
       assert(trace_gdbjit_entry_acq(child) == NULL);
-      assert(ctx.stop_events == 0 && ctx.abort_events == 0);
+      assert(ctx.stop_events == 1 && ctx.abort_events == 0);
     }
 #endif
   }

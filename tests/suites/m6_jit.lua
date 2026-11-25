@@ -799,7 +799,7 @@ return function(add)
         build_and_run_c(t, t:tmp("lj_t-jit-stop-admission-optional"),
                         "t-jit-stop-admission.c", {
           build = false, cflags = optional, timeout = "30s",
-          libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=lj_mem_realloc" }
+          libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=lj_mem_new_nothrow" }
         })
       end)
       print("M6 side-publication admission and cleanup passed")
