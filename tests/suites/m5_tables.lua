@@ -267,6 +267,11 @@ return function(add)
       build.build_and_run_c(t, t:tmp("lj_t-tab-struct-owner"),
                             "t-tab-struct-owner.c",
                             build.tab_helper_opts({ timeout = "20s" }))
+      build.compile_and_run_c(t, t:tmp("lj_t-tab-resize-oom"),
+                              "t-tab-resize-oom.c", build.tab_helper_c_opts({
+        timeout = "20s", libs = { "-lm", "-ldl", "-pthread",
+                                  "-Wl,--wrap=lj_arena_allocf" }
+      }))
       print("M5 per-table structural owner tests passed")
     end
   })

@@ -871,16 +871,6 @@ static TValue *tab_findkey_or_keylock(Node *anchor, cTValue *key, int *locked,
 
 /* -- Table creation and destruction -------------------------------------- */
 
-static LJ_AINLINE Node *tab_node_new(lua_State *L, MSize hmask)
-{
-  TabNodeHdr *hdr = (TabNodeHdr *)lj_mem_new(L, lj_tab_node_bytes(hmask));
-  Node *node = (Node *)(void *)((char *)(void *)hdr + sizeof(TabNodeHdr));
-  hdr->hmask = hmask;
-  hdr->flags = (hmask + 1u) & TABNODE_FREECOUNT_MASK;
-  setmref(hdr->next_gen, NULL);
-  return node;
-}
-
 static LJ_AINLINE Node *tab_node_new_deferred_nothrow(lua_State *L,
 						       MSize hmask)
 {
@@ -922,13 +912,6 @@ static LJ_AINLINE void tab_node_free(global_State *g, Node *node, MSize hmask)
   if (LJ_UNLIKELY(node == &g->nilnode || !tab_node_free_ready(node, hmask)))
     return;
   lj_mem_free(g, lj_tab_node_hdrw(node), lj_tab_node_bytes(hmask));
-}
-
-static LJ_AINLINE TValue *tab_array_new(lua_State *L, MSize asize, MSize acap)
-{
-  TabArrayHdr *hdr = (TabArrayHdr *)lj_mem_new(L, lj_tab_array_bytes(acap));
-  lj_tab_array_hdr_init(hdr, asize, acap);
-  return lj_tab_array_slots(hdr);
 }
 
 static LJ_AINLINE TValue *tab_array_new_deferred_nothrow(lua_State *L,
@@ -1098,27 +1081,6 @@ int lj_tab_node_snapshot_gc_held(global_State *g, const GCtab *t,
 					 Node **nodep, MSize *hmaskp)
 {
   return tab_node_snapshot_gc_impl(g, t, nodep, hmaskp);
-}
-
-static LJ_AINLINE Node *newhpart_alloc(lua_State *L, uint32_t hbits,
-				       MSize *hmaskp)
-{
-  uint32_t i, hsize, hmask;
-  Node *node;
-  lj_assertL(hbits != 0, "zero hash size");
-  if (hbits > LJ_MAX_HBITS)
-    lj_err_msg(L, LJ_ERR_TABOV);
-  hsize = 1u << hbits;
-  hmask = hsize - 1u;
-  node = tab_node_new(L, hmask);
-  for (i = 0; i < hsize; i++) {
-    Node *n = &node[i];
-    lj_tab_nextnode_set(n, NULL);
-    lj_tab_storenilraw(&n->key);
-    lj_tab_storenilraw(&n->val);
-  }
-  *hmaskp = hmask;
-  return node;
 }
 
 static LJ_AINLINE Node *newhpart_alloc_deferred_nothrow(lua_State *L,
@@ -2532,12 +2494,6 @@ static LJ_AINLINE void tab_node_retired_tab_rel(TabNodeRetire *ret, GCtab *t)
   la_storeptr_rel((void **)&ret->tab, t);
 }
 
-static TabNodeRetire *tab_retire_reserve(lua_State *L)
-{
-  TabNodeRetire *ret = lj_mem_newt(L, sizeof(TabNodeRetire), TabNodeRetire);
-  return ret;
-}
-
 static void tab_retire_init(lua_State *L, TabNodeRetire *ret, GCtab *t,
 			    Node *node, MSize hmask)
 {
@@ -3150,12 +3106,6 @@ TAB_RETIRE_PUSH(tab_array_retired_push, TabArrayRetire,
 static LJ_AINLINE void tab_array_retired_tab_rel(TabArrayRetire *ret, GCtab *t)
 {
   la_storeptr_rel((void **)&ret->tab, t);
-}
-
-static TabArrayRetire *tab_array_retire_reserve(lua_State *L)
-{
-  TabArrayRetire *ret = lj_mem_newt(L, sizeof(TabArrayRetire), TabArrayRetire);
-  return ret;
 }
 
 static void tab_array_retire_init(lua_State *L, TabArrayRetire *ret, GCtab *t,
@@ -4082,6 +4032,8 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize,
   int weak;
   int shared_resize;
   int hash_shrink_requested = -1;
+  int alloc_failed = 0;
+  GCSize reserved;
 
 restart_resize:
   hbits = requested_hbits;
@@ -4235,23 +4187,39 @@ restart_resize:
       goto restart_resize;
     }
   }
+  /* Prepare privately. GC assistance runs only once the vectors are
+  ** published or retained by a published descriptor. A failed reservation
+  ** rolls back everything this attempt owns before the memory error. */
+  reserved = 0;
   if (newarray) {
-    uint32_t i;
-    array = tab_array_new(L, asize, newacap);
+    array = tab_array_new_deferred_nothrow(L, asize, newacap);
+    if (!array)
+      goto alloc_error;
+    reserved += lj_tab_array_bytes(newacap);
     tab_pub_array_mem(L, t, array, newacap);
-    for (i = 0; i < newacap; i++)
-      lj_tab_storenilraw(&array[i]);
+    cleararray(array, newacap);
   }
   if (hbits) {
-    newnode = newhpart_alloc(L, hbits, &newhmask);
+    newnode = newhpart_alloc_deferred_nothrow(L, hbits, &newhmask);
+    if (!newnode)
+      goto alloc_error;
+    reserved += lj_tab_node_bytes(newhmask);
     tab_pub_node_mem(L, t, newnode);
     newfreetop = &newnode[newhmask+1];
     newfreecount = newhmask + 1u;
   }
-  if (oldhmask > 0)
-    oldret = tab_retire_reserve(L);
-  if (newarray && oldarray_separated && oldacap > 0)
-    oldaret = tab_array_retire_reserve(L);
+  if (oldhmask > 0) {
+    oldret = (TabNodeRetire *)lj_mem_new_deferred_nothrow(L, sizeof(*oldret));
+    if (!oldret)
+      goto alloc_error;
+    reserved += sizeof(*oldret);
+  }
+  if (newarray && oldarray_separated && oldacap > 0) {
+    oldaret = (TabArrayRetire *)lj_mem_new_deferred_nothrow(L, sizeof(*oldaret));
+    if (!oldaret)
+      goto alloc_error;
+    reserved += sizeof(*oldaret);
+  }
   /*
   ** Pure hashes and separated arrays can hand off their copy. An integral
   ** key can move into a new array slot or out of the old tail into the
@@ -4272,28 +4240,27 @@ restart_resize:
 	(oldret && (!array_changed || array_migration));
       if (hash_migration)
 	bytes = tab_hash_move_size(hash_source_count, newhmask);
-      cutover = (TabResizeDesc *)lj_mem_new_nothrow(L, bytes);
-      if (cutover) {
-	memset(cutover, 0, (size_t)bytes);
-	cutover->tab = t;
-	cutover->id = id;
-	cutover->oldnode = oldnode;
-	cutover->oldret = oldret;
-	cutover->oldhmask = oldhmask;
-	cutover->oldasize = oldasize;
-	cutover->migration_weak = weak;
-	if (hash_migration) {
-	  cutover->hash_source_count = hash_source_count;
-	  cutover->hash_move_bytes = bytes;
-	  if (compact_hbits && compact_hbits < hbits) {
-	    MSize compact_hmask;
-	    Node *compact = newhpart_alloc_deferred_nothrow(
-	      L, compact_hbits, &compact_hmask);
-	    if (compact) {
-	      cutover->compactnode = compact;
-	      tab_pub_node_mem(L, t, compact);
-	      lj_mem_account_deferred(L, lj_tab_node_bytes(compact_hmask));
-	    }
+      cutover = (TabResizeDesc *)lj_mem_new_deferred_nothrow(L, bytes);
+      if (!cutover)
+	goto alloc_error;
+      memset(cutover, 0, (size_t)bytes);
+      cutover->tab = t;
+      cutover->id = id;
+      cutover->oldnode = oldnode;
+      cutover->oldret = oldret;
+      cutover->oldhmask = oldhmask;
+      cutover->oldasize = oldasize;
+      cutover->migration_weak = weak;
+      if (hash_migration) {
+	cutover->hash_source_count = hash_source_count;
+	cutover->hash_move_bytes = bytes;
+	if (compact_hbits && compact_hbits < hbits) {
+	  MSize compact_hmask;
+	  Node *compact = newhpart_alloc_deferred_nothrow(
+	    L, compact_hbits, &compact_hmask);
+	  if (compact) {
+	    cutover->compactnode = compact;
+	    tab_pub_node_mem(L, t, compact);
 	  }
 	}
       }
@@ -4346,6 +4313,9 @@ restart_resize:
   ** dereferenced until the root recheck below succeeds. */
   if (cutover) {
     int offered;
+    reserved += cutover->hash_move_bytes ? cutover->hash_move_bytes : sizeof(*cutover);
+    if (cutover->compactnode)
+      reserved += lj_tab_node_bytes(lj_tab_node_hmask_acq(cutover->compactnode));
     cutover->oldarray = oldarray;
     if (array_migration) {
       cutover->newarray = array;
@@ -4353,9 +4323,10 @@ restart_resize:
       cutover->oldaret = oldaret;
     }
     offered = tab_resize_offer_early(L, t, cutover, newnode);
-    if (offered > 0)
-      return;
-    if (offered < 0) {
+    if (offered) {
+      lj_mem_account_deferred(L, reserved);
+      if (offered > 0)
+        return;
       lj_tab_wait_l(L);
       goto restart_resize;
     }
@@ -4482,8 +4453,11 @@ restart_resize:
     lj_assertL(oldret && la_load32_acq(&oldret->armed),
 	       "retired table nodes not armed");
   lj_tab_struct_leave(t, struct_acq);
+  lj_mem_account_deferred(L, reserved);
   return;
 
+alloc_error:
+  alloc_failed = 1;
 retry_resize:
   if (array_next_claimed) {
     const TValue *revert = array;
@@ -4497,6 +4471,8 @@ retry_resize:
   tab_array_retire_discard(g, oldaret);
   tab_resize_discard_candidate(g, cutover);
   lj_tab_struct_leave(t, struct_acq);
+  if (alloc_failed)
+    lj_err_mem(L);
   lj_tab_wait_l(L);
   goto restart_resize;
 }
@@ -4991,10 +4967,12 @@ static TValue *tab_rehash_forwarded_key(lua_State *L, GCtab *t, cTValue *key)
   return slot;
 }
 
-static void tab_rehash_no_free(lua_State *L, GCtab *t, cTValue *ek,
-			       MSize oldhmask)
+static TValue *tab_rehash_no_free(lua_State *L, GCtab *t, cTValue *ek,
+				  MSize oldhmask)
 {
-  MSize hmask;
+  MSize hmask, asize;
+  uint32_t index;
+  TValue *array;
   Node *node;
   /*
   ** A full hash vector may only need compaction if deleted/forwarded values
@@ -5003,14 +4981,18 @@ static void tab_rehash_no_free(lua_State *L, GCtab *t, cTValue *ek,
   ** while guaranteeing no-free insertion makes progress.
   */
   rehashtab(L, t, ek);
+  /* The rebuild may have given this integer its own array slot, even when
+  ** the two hashes are equally full. Its caller can use that slot directly. */
+  asize = lj_tab_array_snapshot_acq(t, &array);
+  if (tab_rehash_arrayindex(asize, ek, &index))
+    return &array[index];
   node = lj_tab_node_snapshot_acq(t, &hmask);
   if (hmask <= oldhmask && (hmask == 0 || lj_tab_node_freecount_acq(node) == 0)) {
-    TValue *array;
     uint32_t growhbits = oldhmask > 0 ?
       lj_fls((uint32_t)oldhmask) + 2u : 1u;
-    lj_tab_resize(L, t, (uint32_t)lj_tab_array_snapshot_acq(t, &array),
-		  growhbits);
+    lj_tab_resize(L, t, (uint32_t)asize, growhbits);
   }
+  return NULL;
 }
 
 static TValue *tab_rehash_no_free_key(lua_State *L, GCtab *t, cTValue *key,
@@ -5019,8 +5001,9 @@ static TValue *tab_rehash_no_free_key(lua_State *L, GCtab *t, cTValue *key,
   TabRootAnchor anchor;
   TValue *slot;
   key = tab_anchor_rehash_key(L, key, &anchor);
-  tab_rehash_no_free(L, t, key, oldhmask);
-  slot = tab_set_anchored_current_key(L, t, key);
+  slot = tab_rehash_no_free(L, t, key, oldhmask);
+  if (!slot)
+    slot = tab_set_anchored_current_key(L, t, key);
   tab_unanchor_rehash_key(&anchor);
   return slot;
 }
@@ -7311,7 +7294,9 @@ retry_insert:
       if (reserved == 0) {
 	lj_gc2_smr_read_leave(g);
 	if (key_anchored) {
-	  tab_rehash_no_free(L, t, key, hmask);
+	  TValue *slot = tab_rehash_no_free(L, t, key, hmask);
+	  if (slot)
+	    return slot;
 	  goto retry_insert;
 	}
 	return tab_rehash_no_free_key(L, t, key, hmask);
@@ -7358,7 +7343,9 @@ retry_insert:
       }
       lj_gc2_smr_read_leave(g);
       if (key_anchored) {
-	tab_rehash_no_free(L, t, key, hmask);
+	TValue *slot = tab_rehash_no_free(L, t, key, hmask);
+	if (slot)
+	  return slot;
 	goto retry_insert;
       }
       return tab_rehash_no_free_key(L, t, key, hmask);
