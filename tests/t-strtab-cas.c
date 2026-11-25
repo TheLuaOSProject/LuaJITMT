@@ -402,6 +402,84 @@ static void *move_string_worker(void *ud)
   return NULL;
 }
 
+typedef struct GrowthRace {
+  lua_State *worker;
+  uint32_t parked, resume, moved;
+  char last[48];
+  const char *identity;
+} GrowthRace;
+
+static GrowthRace *growth_race;
+
+static void pause_growth_allocation(lua_State *L, GCstr *s, StrCanonRec *rec,
+                                    uint32_t stage)
+{
+  GrowthRace *race = growth_race;
+  UNUSED(s); UNUSED(rec);
+  if (L != race->worker)
+    return;
+  if (stage == LJ_STR_TEST_CANON_RESIZE_ALLOC && !la_load32_acq(&race->parked)) {
+    la_store32_rel(&race->parked, 1);
+    while (!la_load32_acq(&race->resume))
+      test_sleep_without_tg(100000);
+  } else if (stage == LJ_STR_TEST_CANON_RESIZE_MOVED) {
+    la_store32_rel(&race->moved, 1);
+  }
+}
+
+static void *insert_until_growth(void *ud)
+{
+  GrowthRace *race = (GrowthRace *)ud;
+  lua_State *L = race->worker;
+  unsigned i;
+  assert(lj_threading_attach_wait(L));
+  for (i = 0; !la_load32_acq(&race->parked); i++) {
+    int len = snprintf(race->last, sizeof(race->last), "growth-owner-%08x", i);
+    assert(len > 0 && (size_t)len < sizeof(race->last));
+    lua_pushlstring(L, race->last, (size_t)len);
+    race->identity = lua_tostring(L, -1);
+    lua_pop(L, 1);
+  }
+  lj_threading_detach(L, 1);
+  return NULL;
+}
+
+static void exercise_stale_growth(int generations)
+{
+  lua_State *L = luaL_newstate();
+  GrowthRace race = { 0 };
+  StrTabHdr *current;
+  LJThr peer;
+  MSize mask, i;
+  char bytes[48];
+  assert(L);
+  lua_gc(L, LUA_GCSTOP, 0);
+  race.worker = lua_newthread(L);
+  growth_race = &race;
+  lj_str_test_set_canon_hook(pause_growth_allocation);
+  assert(lj_thr_create(&peer, insert_until_growth, &race) == 0);
+  while (!la_load32_acq(&race.parked))
+    test_sleep_without_tg(100000);
+  mask = lj_str_tabh_acq(G(L))->mask;
+  mask = ((mask + 1u) << generations) - 1u;
+  for (i = 0; lj_str_tabh_acq(G(L))->mask < mask; i++) {
+    int len = snprintf(bytes, sizeof(bytes), "growth-peer-%08x", i);
+    assert(i < 4u * (mask + 1u) && len > 0 && (size_t)len < sizeof(bytes));
+    lua_pushlstring(L, bytes, (size_t)len);
+    lua_pop(L, 1);
+  }
+  current = lj_str_tabh_acq(G(L));
+  assert(current->mask == mask);
+  la_store32_rel(&race.resume, 1);
+  assert(lj_thr_join(&peer, NULL) == 0);
+  lj_str_test_set_canon_hook(NULL);
+  growth_race = NULL;
+  assert(!la_load32_acq(&race.moved) && lj_str_tabh_acq(G(L)) == current);
+  lua_pushstring(L, race.last);
+  assert(lua_tostring(L, -1) == race.identity);
+  lua_close(L);
+}
+
 static void check_paused_topology(lua_State *L, PausedTopology *p,
 				  const char *bytes, size_t len)
 {
@@ -1688,6 +1766,8 @@ int main(void)
   lua_close(L);
   exercise_paused_topology_hits();
   exercise_paused_allocation_pressure();
+  exercise_stale_growth(1);
+  exercise_stale_growth(2);
 #if LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   printf("t-strtab-cas OK: tagged-link rescue/prepend races, color-independent secondary rehash, canonical layout, Q-publish/resize and unlink/qcount identity races, saturating Q presence, nonwaiting resize claims with registered and TLS-only pins, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified (custom-allocator resize OOM injection skipped by the temporary internal-allocator-only policy)\n");
 #else

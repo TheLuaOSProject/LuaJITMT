@@ -944,8 +944,9 @@ static StrTabHdr *strtab_enter_completed(lua_State *L, global_State *g,
   return result;
 }
 
-/* Resize the string interning hash table (grow and shrink). */
-void lj_str_resize(lua_State *L, MSize newmask)
+/* A post-intern growth credit belongs to the producing header. Explicit
+** resize requests also serve initialization and may select another size. */
+static void str_resize(lua_State *L, MSize newmask, const StrTabHdr *source)
 {
   global_State *g = G(L);
   StrTabHdr *newhdr;
@@ -960,9 +961,16 @@ void lj_str_resize(lua_State *L, MSize newmask)
   if (newmask >= LJ_MAX_STRTAB-1)
     return;
 
+  if (!lj_gc2_smr_read_try(g))
+    return;
   oldhdr = lj_str_tabh_acq(g);
+  if (source && (oldhdr != source || newmask != (oldhdr->mask << 1) + 1u)) {
+    lj_gc2_smr_read_leave(g);
+    return;
+  }
   dense_mask = oldhdr && lj_str_second_acq(g) && oldhdr->dense_mask > newmask ?
     oldhdr->dense_mask : newmask;
+  lj_gc2_smr_read_leave(g);
   newsize = lj_str_tabsize_dense(newmask, dense_mask);
 #ifdef LJ_STR_TEST_HELPERS
   str_test_canon(L, NULL, NULL, LJ_STR_TEST_CANON_RESIZE_ALLOC);
@@ -974,9 +982,15 @@ void lj_str_resize(lua_State *L, MSize newmask)
   newtab = newhdr->bucket;
 
 restart:
+  if (!lj_gc2_smr_read_try(g)) {
+    lj_mem_free(g, newhdr, newsize);
+    return;
+  }
   oldhdr = lj_str_tabh_acq(g);
   oldtab = oldhdr ? oldhdr->bucket : NULL;
   oldmask = oldhdr ? oldhdr->mask : ~(MSize)0;
+  if (source && (oldhdr != source || newmask != (oldmask << 1) + 1u))
+    goto discard;
 
   if (oldhdr && (oldmask & (oldmask + 1u)) == 0 &&
       (newmask & (newmask + 1u)) == 0 &&
@@ -988,11 +1002,8 @@ restart:
         oldhdr->dense_mask : newmask;
     if ((expect & ~LJ_STRTAB_TOPO_SECOND) != 0 ||
         required_dense_mask != dense_mask ||
-        lj_tg_strtab_active_depth_acq(L2TG(L)) != 0 ||
-        !lj_gc2_smr_read_try(g)) {
-      lj_mem_free(g, newhdr, newsize);
-      return;
-    }
+        lj_tg_strtab_active_depth_acq(L2TG(L)) != 0)
+      goto discard;
     newhdr->link_slot = 1u - oldhdr->link_slot;
     la_store8_rlx(&newhdr->has_secondary,
                   (expect & LJ_STRTAB_TOPO_SECOND) != 0);
@@ -1011,32 +1022,27 @@ restart:
         lj_gc2_smr_read_leave(g);
       return;
     }
-    lj_gc2_smr_read_leave(g);
-    lj_mem_free(g, newhdr, newsize);
-    return;
+    goto discard;
   }
 
-  if (dense_mask != newmask) {
-    lj_mem_free(g, newhdr, newsize);
-    return;
-  }
+  if (dense_mask != newmask)
+    goto discard;
 
   if (oldhdr) {
-    if (!strtab_claim(L, oldhdr, LJ_STRTAB_RESIZE)) {
-      lj_mem_free(g, newhdr, newsize);
-      return;
-    }
+    if (!strtab_claim(L, oldhdr, LJ_STRTAB_RESIZE))
+      goto discard;
     if (LJ_UNLIKELY(lj_str_tabh_acq(g) != oldhdr)) {
       StrTabHdr *curhdr = lj_str_tabh_acq(g);
       strtab_release(oldhdr);
-      if (!curhdr || curhdr->mask >= newmask) {
-	lj_mem_free(g, newhdr, newsize);
-	return;
-      }
+      if (!curhdr || curhdr->mask >= newmask)
+	goto discard;
+      lj_gc2_smr_read_leave(g);
       strtab_wait(L);
       goto restart;
     }
   }
+  /* A successful exclusive claim keeps this header current through handoff. */
+  lj_gc2_smr_read_leave(g);
 
   newhdr->link_slot = oldhdr ? oldhdr->link_slot : 0;
 
@@ -1118,6 +1124,16 @@ restart:
   lj_str_tabh_rel(g, newhdr);
   if (oldhdr)
     strtab_retire(g, oldhdr);
+  return;
+
+discard:
+  lj_gc2_smr_read_leave(g);
+  lj_mem_free(g, newhdr, newsize);
+}
+
+void lj_str_resize(lua_State *L, MSize newmask)
+{
+  str_resize(L, newmask, NULL);
 }
 
 /* Replace the quarantine header only after claiming its topology and observing
@@ -1644,7 +1660,7 @@ lookup:
       /* The earlier source owns topology until it publishes this target.
       ** A speculative next directory would lose that claim on every credit. */
       if (grow && lj_str_tabh_acq(g) == hdr)
-	lj_str_resize(L, (mask << 1) + 1u);  /* Grow string table. */
+	str_resize(L, (mask << 1) + 1u, hdr);
       return news;  /* Return newly interned string. */
     }
   } else {
