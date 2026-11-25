@@ -2111,8 +2111,7 @@ static int ffi_layout_begin(CTState *cts, CTypeID id, FFILayoutSnap *ls)
 {
   uint64_t version = ctype_layout_version(cts);
   ls->cts = cts;
-  ls->top = (version & 1u) ? la_load32_acq(&cts->layout_top) :
-                             ctype_top_acq(cts);
+  ls->top = ctype_layout_limit(cts, version);
   /* An ID exposed during parsing may be newer than the committed prefix. */
   if ((version & 1u) && id >= ls->top)
     return -1;

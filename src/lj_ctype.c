@@ -1973,29 +1973,41 @@ void lj_ctype_save_layout(lua_State *L, CTState *cts, CTypeID id,
   la_store64_rel(&undo->version, ctype_layout_version(cts));
 }
 
-/* Sequence-checked type info/raw-type snapshot for stable layout readers. */
-int lj_ctype_info_snapshot(CTState *cts, CTypeID id, CTInfo *infop,
-			   CTSize *szp, CTypeID *ridp, CType *rawp)
+/* Read the layout which the writer last committed. An independently
+** published ID above its saved prefix can only be classified at commit. */
+int lj_ctype_read(lua_State *L, CTState *cts, CTypeID id, CType *out)
 {
-  uint32_t seq0 = ctype_parse_token_acq(cts);
-  CTypeTab *tabh;
-  CTypeID top;
-  MSize budget;
+  if (id <= CTID_CTYPEID) {
+    if (!id) return 0;
+    ctype_copy_rel(out, ctype_get(cts, id));
+    return !ctype_isabandoned(out->info);
+  }
+  for (;;) {
+    uint64_t version = ctype_layout_version(cts);
+    CTypeID top = ctype_layout_limit(cts, version);
+    int ok = ctype_layout_at(cts, version, ctype_tabh_acq(cts), top, id, out);
+    if (ctype_layout_version(cts) != version) continue;
+    if (id < top || !(version & 1u)) return ok;
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  }
+}
+
+static int ctype_info_at(CTState *cts, uint64_t version, CTypeID top,
+                         CTypeID id, CTInfo *infop, CTSize *szp,
+                         CTypeID *ridp, CType *rawp)
+{
+  CTypeTab *tabh = ctype_tabh_acq(cts);
+  MSize budget = top ? (MSize)top * 4u : 1u;
   CType ct;
   CTInfo qual = 0;
-  if (seq0 & 1u)
-    return -1;
-  top = ctype_top_acq(cts);
-  tabh = ctype_tabh_acq(cts);
-  budget = top ? (MSize)top * 4u : 1u;
   if (rawp || ridp) {
     CTypeID rid = id;
     for (;;) {
       CTInfo info;
       if (budget-- == 0)
 	return -1;
-      if (!ctype_snapshot_copy(tabh, top, rid, &ct))
-	return ctype_snapshot_done(cts, seq0, 0);
+      if (!ctype_layout_at(cts, version, tabh, top, rid, &ct))
+	return 0;
       info = ctype_info_acq(&ct);
       if (!ctype_isattrib(info)) {
 	if (ridp)
@@ -2012,8 +2024,8 @@ int lj_ctype_info_snapshot(CTState *cts, CTypeID id, CTInfo *infop,
     CTSize size;
     if (budget-- == 0)
       return -1;
-    if (!ctype_snapshot_copy(tabh, top, id, &ct))
-      return ctype_snapshot_done(cts, seq0, 0);
+    if (!ctype_layout_at(cts, version, tabh, top, id, &ct))
+      return 0;
     info = ctype_info_acq(&ct);
     size = ctype_size_acq(&ct);
     if (ctype_isenum(info)) {
@@ -2024,29 +2036,39 @@ int lj_ctype_info_snapshot(CTState *cts, CTypeID id, CTInfo *infop,
       else if (ctype_isxattrib(info, CTA_ALIGN) && !(qual & CTFP_ALIGNED))
 	qual |= CTFP_ALIGNED + CTALIGN(size);
     } else {
-      uint32_t seq1;
       if (!(qual & CTFP_ALIGNED)) qual |= (info & CTF_ALIGN);
       qual |= (info & ~(CTF_ALIGN|CTMASK_CID));
       *infop = qual;
       *szp = ctype_isfunc(info) ? CTSIZE_INVALID : size;
-      seq1 = ctype_parse_token_acq(cts);
-      return (seq0 == seq1 && !(seq1 & 1u)) ? 1 : -1;
+      return 1;
     }
     id = ctype_cid(info);
   }
 }
 
+int lj_ctype_info_snapshot(CTState *cts, CTypeID id, CTInfo *infop,
+                           CTSize *szp, CTypeID *ridp, CType *rawp)
+{
+  uint32_t seq = ctype_parse_token_acq(cts);
+  int ok;
+  if (seq & 1u) return -1;
+  ok = ctype_info_at(cts, ctype_layout_version(cts), ctype_top_acq(cts),
+                     id, infop, szp, ridp, rawp);
+  return ctype_snapshot_done(cts, seq, ok);
+}
+
 int lj_ctype_info_wait(lua_State *L, CTState *cts, CTypeID id,
-		       CTInfo *infop, CTSize *szp, CTypeID *ridp,
-		       CType *rawp)
+                       CTInfo *infop, CTSize *szp, CTypeID *ridp,
+                       CType *rawp)
 {
   int ok = lj_ctype_info_predefined(cts, id, infop, szp, ridp, rawp);
-  if (ok > 0)
-    return ok;
+  if (ok > 0) return ok;
   for (;;) {
-    ok = lj_ctype_info_snapshot(cts, id, infop, szp, ridp, rawp);
-    if (ok >= 0)
-      return ok;
+    uint64_t version = ctype_layout_version(cts);
+    CTypeID top = ctype_layout_limit(cts, version);
+    ok = ctype_info_at(cts, version, top, id, infop, szp, ridp, rawp);
+    if (ctype_layout_version(cts) != version) continue;
+    if (ok >= 0 && (id < top || !(version & 1u))) return ok;
     lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
   }
 }

@@ -17,10 +17,7 @@
 #include "lib/ctype_parse_fixture_helpers.h"
 #include "lib/lua_fixture_helpers.h"
 
-static LJTCTypeParseReleaseCtx result_ctx;
-static pthread_t result_thread;
-static int result_pending;
-
+static uint32_t result_seq;
 
 static void assert_callback_waits_without_lock(lua_State *L, CTState *cts,
 					       TGState *tg, const char *chunk)
@@ -35,19 +32,9 @@ static void assert_callback_waits_without_lock(lua_State *L, CTState *cts,
 
 static int hold_parse_token_for_callback_result(lua_State *L)
 {
-  assert(!result_pending);
-  ljt_ctype_release_when_native_start(&result_ctx, &result_thread,
-				      ctype_ctsG(G(L)), L2TG(L));
-  result_pending = 1;
+  assert(result_seq == 0);
+  result_seq = ljt_ctype_hold_parse_token(ctype_ctsG(G(L)));
   return 0;
-}
-
-static void assert_callback_result_waited(CTState *cts)
-{
-  assert(result_pending);
-  assert(result_ctx.cts == cts);
-  ljt_ctype_release_when_native_join(&result_ctx, result_thread);
-  result_pending = 0;
 }
 
 int main(void)
@@ -101,7 +88,9 @@ int main(void)
 
   ljt_lua_dostring(L,
     "assert(lj_m7_callback_snapshot_result(40) == 42)\n");
-  assert_callback_result_waited(cts);
+  assert(result_seq && ctype_parse_token_acq(cts) == result_seq-1);
+  ljt_ctype_release_parse_token(cts, result_seq);
+  result_seq = 0;
 
   assert_callback_waits_without_lock(L, cts, tg,
     "lj_m7_callback_snapshot_free:free()\n"

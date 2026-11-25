@@ -110,9 +110,9 @@ int main(void)
   assert_predefined_tostring_avoids_wait(L, cts);
   assert_tostring_waits_without_lock(L, cts, tg,
     "assert(tostring(lj_m7_tostring_ptr) == 'snap:42')\n");
-  assert_tostring_waits_without_lock(L, cts, tg,
+  ljt_ctype_read_committed(L, cts,
     "assert(tostring(lj_m7_tostring_i64_ref):find('-77', 1, true))\n");
-  assert_tostring_waits_without_lock(L, cts, tg,
+  ljt_ctype_read_committed(L, cts,
     "assert(tostring(lj_m7_tostring_complex_ref) == '1+2i')\n");
   assert_tostring_waits_without_lock(L, cts, tg,
     "assert(tostring(lj_m7_tostring_plain_ct) == "

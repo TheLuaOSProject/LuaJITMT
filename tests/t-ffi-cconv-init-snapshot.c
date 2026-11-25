@@ -99,21 +99,19 @@ static void assert_string_array_avoids_wait(lua_State *L, CTState *cts,
   assert(ljt_ctype_parse_seq(cts) == seq0 + 2u);
 }
 
-static void assert_ct_ct_pointer_waits_without_lock(lua_State *L,
-						    CTState *cts,
-						    TGState *tg,
-						    CTypeID did, CType *d,
-						    CTypeID sid, CType *s)
+static void assert_committed_pointer_conversion(lua_State *L, CTState *cts,
+                                                CTypeID did, CType *d,
+                                                CTypeID sid, CType *s)
 {
-  LJTCTypeParseReleaseCtx ctx;
-  pthread_t thread;
+  uint32_t release;
   int anchor = 0x5150;
   void *src = &anchor, *dst = NULL;
 
-  ljt_ctype_release_when_native_start(&ctx, &thread, cts, tg);
+  release = ljt_ctype_hold_parse_token(cts);
   lj_cconv_ct_ct_l(L, cts, d, did, s, sid, (uint8_t *)&dst,
 		   (uint8_t *)&src, 0);
-  ljt_ctype_release_when_native_join(&ctx, thread);
+  assert(ctype_parse_token_acq(cts) == release - 1u);
+  ljt_ctype_release_parse_token(cts, release);
   assert(dst == src);
 }
 
@@ -202,7 +200,7 @@ int main(void)
   seq3 = ljt_ctype_parse_seq(cts);
   assert(seq3 == seq2 + 2u);
 
-  assert_ct_ct_pointer_waits_without_lock(L, cts, tg, void_ptr_id,
+  assert_committed_pointer_conversion(L, cts, void_ptr_id,
 					  &void_ptr_snap, node_ptr_id,
 					  &node_ptr_snap);
   seq4 = ljt_ctype_parse_seq(cts);

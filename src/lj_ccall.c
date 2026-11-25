@@ -70,36 +70,12 @@ static LJ_AINLINE void ccall_error_publish(CCallNativeState *st,
   st->post_winerr = err->winerr;
 }
 
-static void ccall_ctype_copy(CType *out, CType *ct)
-{
-  GCobj *name;
-  out->info = ctype_info_acq(ct);
-  out->size = ctype_size_acq(ct);
-  out->sib = (CTypeID1)ctype_sib_acq(ct);
-  out->next = (CTypeID1)ctype_next_acq(ct);
-  name = ctype_nameobj_acq(ct);
-  setgcrefp(out->name, name);
-}
-
 static CType *ccall_ctype_snapshot_wait(lua_State *L, CTState *cts,
-					 CTypeID id, CType *out)
+                                        CTypeID id, CType *out)
 {
-  if (id <= CTID_CTYPEID) {
-    if (id == 0)
-      lj_err_caller(L, LJ_ERR_FFI_INVTYPE);
-    ccall_ctype_copy(out, ctype_get(cts, id));
-    if (!ctype_isabandoned(ctype_info_acq(out)))
-      return out;
+  if (!lj_ctype_read(L, cts, id, out))
     lj_err_caller(L, LJ_ERR_FFI_INVTYPE);
-  }
-  for (;;) {
-    int ok = lj_ctype_snapshot(cts, id, out);
-    if (ok > 0)
-      return out;
-    if (ok == 0)
-      lj_err_caller(L, LJ_ERR_FFI_INVTYPE);
-    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
-  }
+  return out;
 }
 
 static CType *ccall_rawid_wait(lua_State *L, CTState *cts, CTypeID id,

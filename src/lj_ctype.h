@@ -1491,6 +1491,11 @@ static LJ_AINLINE void ctype_copy_rel(CType *dst, const CType *src)
   ctype_nameobj_rel(dst, ctype_nameobj_acq(src));
 }
 
+static LJ_AINLINE CTypeID ctype_layout_limit(CTState *cts, uint64_t version)
+{
+  return (version & 1u) ? la_load32_acq(&cts->layout_top) : ctype_top_acq(cts);
+}
+
 /* Sample the live fields before checking for an undo record. Acquiring any
 ** provisional field also acquires its publisher's earlier undo publication.
 ** Readers validate the transaction version after walking their whole graph. */
@@ -1508,6 +1513,17 @@ static LJ_AINLINE void ctype_layout_copy(CTState *cts, uint64_t version,
   }
 }
 
+static LJ_AINLINE int ctype_layout_at(CTState *cts, uint64_t version,
+                                      CTypeTab *tabh, CTypeID top, CTypeID id,
+                                      CType *out)
+{
+  if (id == 0 || id >= top || id >= ctype_tab_sizetab_acq(tabh))
+    return 0;
+  ctype_layout_copy(cts, version, tabh, id, out);
+  return !ctype_isabandoned(out->info);
+}
+
+LJ_FUNC int lj_ctype_read(lua_State *L, CTState *cts, CTypeID id, CType *out);
 LJ_FUNC CTypeID lj_ctype_new_l(lua_State *L, CTState *cts, CType **ctp);
 LJ_FUNC void lj_ctype_save_layout(lua_State *L, CTState *cts, CTypeID id,
 				 const CType *old);

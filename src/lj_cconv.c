@@ -60,41 +60,13 @@ LJ_NORET static void cconv_err_initov_l(lua_State *L, CTState *cts,
   lj_err_callerv(L, LJ_ERR_FFI_INITOV, dst);
 }
 
-static void cconv_ctype_copy(CType *out, CType *ct)
-{
-  GCobj *name;
-  out->info = ctype_info_acq(ct);
-  out->size = ctype_size_acq(ct);
-  out->sib = (CTypeID1)ctype_sib_acq(ct);
-  out->next = (CTypeID1)ctype_next_acq(ct);
-  name = ctype_nameobj_acq(ct);
-  setgcrefp(out->name, name);
-}
-
-static int cconv_ctype_snapshot_wait(lua_State *L, CTState *cts,
-				     CTypeID id, CType *out)
-{
-  if (id <= CTID_CTYPEID) {
-    if (id == 0)
-      return 0;
-    cconv_ctype_copy(out, ctype_get(cts, id));
-    return !ctype_isabandoned(ctype_info_acq(out));
-  }
-  for (;;) {
-    int ok = lj_ctype_snapshot(cts, id, out);
-    if (ok >= 0)
-      return ok;
-    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
-  }
-}
-
 static CTypeID cconv_rawid_wait(lua_State *L, CTState *cts, CTypeID id,
 				CTypeID errid, CType *out,
 				CTInfo *infop, CTSize *sizep)
 {
   for (;;) {
     CTInfo info;
-    if (!cconv_ctype_snapshot_wait(L, cts, id, out))
+    if (!lj_ctype_read(L, cts, id, out))
       cconv_err_initov_l(L, cts, errid);
     info = ctype_info_acq(out);
     if (!ctype_isattrib(info)) {
@@ -113,7 +85,7 @@ static int cconv_childqual_l(lua_State *L, CTState *cts, CTypeID *idp,
 			     CType *ct, CType *out, CTInfo *qual)
 {
   CTypeID id = ctype_cid(ctype_info_acq(ct));
-  if (!cconv_ctype_snapshot_wait(L, cts, id, out))
+  if (!lj_ctype_read(L, cts, id, out))
     return 0;
   for (;;) {
     CTInfo info = ctype_info_acq(out);
@@ -124,7 +96,7 @@ static int cconv_childqual_l(lua_State *L, CTState *cts, CTypeID *idp,
       break;
     }
     id = ctype_cid(info);
-    if (!cconv_ctype_snapshot_wait(L, cts, id, out))
+    if (!lj_ctype_read(L, cts, id, out))
       return 0;
   }
   *idp = id;
@@ -195,8 +167,8 @@ void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
   CTSize dsize, ssize;
   CTInfo dinfo, sinfo;
   void *tmpptr;
-  cconv_ctype_copy(&dsnap, d);
-  cconv_ctype_copy(&ssnap, s);
+  ctype_copy_rel(&dsnap, d);
+  ctype_copy_rel(&ssnap, s);
   d = &dsnap;
   s = &ssnap;
   dsize = ctype_size_acq(d);
@@ -574,7 +546,7 @@ static void cconv_array_tab_l(lua_State *L, CTState *cts, CType *d,
   CTypeID dcid;
   CTSize size, esize, ofs = 0;
   UNUSED(d);
-  if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+  if (!lj_ctype_read(L, cts, did, &dsnap))
     cconv_err_initov_l(L, cts, did);
   dinfo = ctype_info_acq(&dsnap);
   size = ctype_size_acq(&dsnap);
@@ -612,7 +584,7 @@ static void cconv_substruct_tab_l(lua_State *L, CTState *cts, CType *d,
   CTypeID id;
   CTInfo dinfo;
   UNUSED(d);
-  if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+  if (!lj_ctype_read(L, cts, did, &dsnap))
     cconv_err_initov_l(L, cts, did);
   id = ctype_sib_acq(&dsnap);
   dinfo = ctype_info_acq(&dsnap);
@@ -620,7 +592,7 @@ static void cconv_substruct_tab_l(lua_State *L, CTState *cts, CType *d,
     CType dfsnap;
     CTInfo dfinfo;
     CTSize dfsize;
-    if (!cconv_ctype_snapshot_wait(L, cts, id, &dfsnap))
+    if (!lj_ctype_read(L, cts, id, &dfsnap))
       cconv_err_initov_l(L, cts, did);
     dfinfo = ctype_info_acq(&dfsnap);
     dfsize = ctype_size_acq(&dfsnap);
@@ -676,7 +648,7 @@ static void cconv_struct_tab_l(lua_State *L, CTState *cts, CType *d,
   CType dsnap;
   int32_t i = 0;
   UNUSED(d);
-  if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+  if (!lj_ctype_read(L, cts, did, &dsnap))
     cconv_err_initov_l(L, cts, did);
   memset(dp, 0, ctype_size_acq(&dsnap));  /* Clear the struct first. */
   cconv_substruct_tab_l(L, cts, &dsnap, did, dp, t, &i, flags);
@@ -694,7 +666,7 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
   void *tmpptr;
   CTSize tmpenum;
   uint8_t tmpbool, *sp = (uint8_t *)&tmpptr;
-  cconv_ctype_copy(&dsnap, d);
+  ctype_copy_rel(&dsnap, d);
   d = &dsnap;
   dinfo = ctype_info_acq(d);
   dsize = ctype_size_acq(d);
@@ -709,7 +681,7 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
   } else if (tviscdata(o)) {
     sp = cdataptr(cdataV(o));
     sid = cdataV(o)->ctypeid;
-    if (!cconv_ctype_snapshot_wait(L, cts, sid, &ssnap))
+    if (!lj_ctype_read(L, cts, sid, &ssnap))
       goto err_conv;
     s = &ssnap;
     {
@@ -727,7 +699,7 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
       if (ctype_isfunc(sinfo)) {
 	sid = lj_ctype_intern_l(L, cts, CTINFO(CT_PTR, CTALIGN_PTR|sid),
 				CTSIZE_PTR);
-	if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+	if (!lj_ctype_read(L, cts, did, &dsnap))
 	  cconv_err_initov_l(L, cts, did);
 	d = &dsnap;  /* C type table may have been reallocated. */
 	dinfo = ctype_info_acq(d);
@@ -877,7 +849,7 @@ static void cconv_array_init_l(lua_State *L, CTState *cts, CType *d,
   CTSize ofs, esize;
   MSize i;
   UNUSED(d);
-  if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+  if (!lj_ctype_read(L, cts, did, &dsnap))
     cconv_err_initov_l(L, cts, did);
   dinfo = ctype_info_acq(&dsnap);
   dcid = cconv_rawid_wait(L, cts, ctype_cid(dinfo), did, &dcsnap,
@@ -903,7 +875,7 @@ static void cconv_substruct_init_l(lua_State *L, CTState *cts, CType *d,
   CTypeID id;
   CTInfo dinfo;
   UNUSED(d);
-  if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+  if (!lj_ctype_read(L, cts, did, &dsnap))
     cconv_err_initov_l(L, cts, did);
   id = ctype_sib_acq(&dsnap);
   dinfo = ctype_info_acq(&dsnap);
@@ -911,7 +883,7 @@ static void cconv_substruct_init_l(lua_State *L, CTState *cts, CType *d,
     CType dfsnap;
     CTInfo dfinfo;
     CTSize dfsize;
-    if (!cconv_ctype_snapshot_wait(L, cts, id, &dfsnap))
+    if (!lj_ctype_read(L, cts, id, &dfsnap))
       cconv_err_initov_l(L, cts, did);
     dfinfo = ctype_info_acq(&dfsnap);
     dfsize = ctype_size_acq(&dfsnap);
@@ -983,7 +955,7 @@ void lj_cconv_ct_init_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
   else {
     CType dsnap;
     CTInfo dinfo;
-    if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+    if (!lj_ctype_read(L, cts, did, &dsnap))
       cconv_err_initov_l(L, cts, did);
     dinfo = ctype_info_acq(&dsnap);
     if (len == 1 && !lj_cconv_multi_init_l(L, cts, did, &dsnap, o))

@@ -86,7 +86,7 @@ int main(void)
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0);
 
-  assert_clib_extern_waits_without_lock(L, cts, tg,
+  ljt_ctype_read_committed(L, cts,
     "local cl = lj_m7_clib_extern_cl\n"
     "assert(cl.lj_m7_clib_snapshot_value == 41)\n");
 

@@ -56,7 +56,7 @@ int main(void)
   lua_register(L, "watch_type", watch_type);
   ljt_lua_dostring(L,
     "local ffi, th = require('ffi'), require('threading')\n"
-    "ffi.cdef('struct layout_ready { char a; double b; }; enum { LAYOUT_CONST = 123 };')\n"
+    "ffi.cdef('struct layout_ready { char a; double b; }; enum { LAYOUT_CONST = 123 }; int abs(int);')\n"
     "local ready = ffi.typeof('struct layout_ready')\n"
     "for n = 1, 2 do\n"
     "  local name = 'struct layout_pending_'..n\n"
@@ -68,6 +68,7 @@ int main(void)
     "    local ok = pcall(require('ffi').cdef, src); return ok\n"
     "  end, src)\n"
     "  wait_for_parser()\n"
+    "  assert(ffi.C.abs(-7) == 7)\n"
     "  assert(ffi.C.LAYOUT_CONST == 123)\n"
     "  assert(ffi.sizeof(ready) == 16 and ffi.alignof(ready) == 8)\n"
     "  assert(ffi.offsetof(ready, 'b') == 8)\n"

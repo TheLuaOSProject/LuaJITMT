@@ -113,7 +113,7 @@ int main(void)
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 4u);
 
-  assert_tonumber_waits_without_lock(L, cts, tg,
+  ljt_ctype_read_committed(L, cts,
     "local buffer = require('string.buffer')\n"
     "local out = buffer.decode(buffer.encode(lj_m7_serialize_i64))\n"
     "assert(out == lj_m7_serialize_i64)\n");
@@ -130,6 +130,6 @@ int main(void)
   assert(seq2 == seq1);
 
   lua_close(L);
-  printf("t-ffi-tonumber-snapshot OK: tonumber(cdata) waits on parser-owned ctypes\n");
+  printf("t-ffi-tonumber-snapshot OK: tonumber(cdata) reads registered types\n");
   return 0;
 }

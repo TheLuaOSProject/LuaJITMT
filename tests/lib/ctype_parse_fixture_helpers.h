@@ -18,6 +18,7 @@
 #include "lj_trace.h"
 
 #include "test_sleep.h"
+#include "lua_fixture_helpers.h"
 
 static CTState *ljt_ctype_release_cts;
 static uint32_t ljt_ctype_release_seq;
@@ -49,6 +50,15 @@ static inline void ljt_ctype_release_parse_token(CTState *cts, uint32_t seq)
   ctype_parse_token_rel(cts, seq);
   (void)ctype_parse_token_wake(cts, 0x7fffffff);
   assert((ctype_parse_token_acq(cts) & 1u) == 0);
+}
+
+static inline void ljt_ctype_read_committed(lua_State *L, CTState *cts,
+                                             const char *chunk)
+{
+  uint32_t release = ljt_ctype_hold_parse_token(cts);
+  ljt_lua_dostring(L, chunk);
+  assert(ctype_parse_token_acq(cts) == release - 1u);
+  ljt_ctype_release_parse_token(cts, release);
 }
 
 typedef struct LJTCTypeParseReleaseCtx {
