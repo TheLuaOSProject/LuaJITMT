@@ -543,7 +543,7 @@ return function(add)
       local numeric = compile("t-auto-restart-numeric-max")
       t:run({ numeric }, { env = env, timeout = "25s" })
 
-      -- These two schedules recognize the actual GCC MOV/register geometry.
+      -- These two schedules single-step the GCC threshold-store paths.
       -- Clang retains the first-live STOP and sequential attachment coverage.
       local macros = t:tmp("lj_auto-control-compiler-macros.txt")
       t:run(t.compiler .. " -dM -E -x c /dev/null > " ..

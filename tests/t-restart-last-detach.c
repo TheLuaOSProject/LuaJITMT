@@ -21,8 +21,9 @@
 #include "lj_tg.h"
 #include "lj_thr.h"
 #include "lj_vm.h"
+#include "lib/x64_store_probe.h"
 
-/* GCC/x64 trap stepping pauses a real external last detach after its saved
+/* Linux x64 trap stepping pauses a real external last detach after its saved
 ** threshold load and before its global threshold store. It verifies the
 ** emitted MOV, its real base/displacement, and captured MAX source register.
 ** No GC state, request, threshold, count, or native certificate is fabricated.
@@ -52,13 +53,9 @@ static void step_trap(int signo, siginfo_t *info, void *opaque)
   ucontext_t *ctx = opaque;
   global_State *g = probe.g;
   (void)signo; (void)info;
-  const unsigned char *pc = (const unsigned char *)ctx->uc_mcontext.gregs[REG_RIP];
   (void)la_add32_rlx(&probe.steps, 1);
   if (mt_live_acq(g) == 0 && lj_gc_mt_threshold_load(g) == LJ_MAX_MEM &&
-      pc[0] == 0x48 && pc[1] == 0x89 && pc[2] == 0x47 &&
-      pc[3] == (unsigned char)offsetof(global_State, gc.threshold) &&
-      (uintptr_t)ctx->uc_mcontext.gregs[REG_RDI] == (uintptr_t)g &&
-      (uint64_t)ctx->uc_mcontext.gregs[REG_RAX] == LJ_MAX_MEM) {
+      next_store_is(ctx, &g->gc.threshold, LJ_MAX_MEM)) {
     ctx->uc_mcontext.gregs[REG_EFL] &= ~(greg_t)0x100u;
     la_store32_rel(&probe.paused, 1);
     wait_for(&probe.release);
@@ -127,6 +124,8 @@ int main(void)
     lua_pushlstring(L, buf, 64); lua_pop(L, 1);
   }
   assert(gc2_cycle_leader_acq(g) != 0 && gc2_phase_acq(g) == LJ_GC2_IDLE);
+  /* The pending trigger can leave part of its allocation batch local. */
+  (void)lj_gc2_flush_alloc(g, L2TG(L));
   assert(lj_tg_local_total_acq(L2TG(L)) == 0);
   assert(lj_gc2_alloc_since_load(g) <= lj_gc2_hard_load(g));
   assert(lua_gc(L, LUA_GCSTOP, 0) == 0);

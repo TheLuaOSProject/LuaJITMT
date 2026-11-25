@@ -21,13 +21,13 @@
 #include "lj_tg.h"
 #include "lj_thr.h"
 #include "lj_vm.h"
+#include "lib/x64_store_probe.h"
 
 /* The only interposition single-steps a real external-attach transaction.
 ** Its handler pauses immediately after the actual mt_live increment, after
 ** it loads the stopped global threshold, just before its MT threshold store.
-** This GCC/x64 probe recognizes the exact emitted MOV and verifies its base,
-** displacement, and source register, rather than fabricating runtime state. No request, phase, threshold, live
-** count, or native certificate is fabricated by the fixture.
+** It matches the store's address and captured value using the registers
+** selected by the compiler.
 */
 typedef struct Probe {
   global_State *g;
@@ -54,16 +54,10 @@ static void step_trap(int signo, siginfo_t *info, void *opaque)
   ucontext_t *ctx = opaque;
   global_State *g = probe.g;
   (void)signo; (void)info;
-  const unsigned char *pc = (const unsigned char *)ctx->uc_mcontext.gregs[REG_RIP];
-  int32_t disp = 0;
-  memcpy(&disp, pc + 3, sizeof(disp));
   (void)la_add32_rlx(&probe.steps, 1);
   if (mt_live_acq(g) == 1 && lj_gc_mt_threshold_load(g) != LJ_MAX_MEM &&
       lj_gc_threshold_load(g) == LJ_MAX_MEM &&
-      pc[0] == 0x48 && pc[1] == 0x89 && pc[2] == 0x83 &&
-      (uintptr_t)ctx->uc_mcontext.gregs[REG_RBX] == (uintptr_t)g &&
-      disp == (int32_t)offsetof(global_State, mt_gc_threshold) &&
-      (uint64_t)ctx->uc_mcontext.gregs[REG_RAX] == LJ_MAX_MEM) {
+      next_store_is(ctx, &g->mt_gc_threshold, LJ_MAX_MEM)) {
     ctx->uc_mcontext.gregs[REG_EFL] &= ~(greg_t)0x100u;
     la_store32_rel(&probe.paused, 1);
     wait_for(&probe.release);
@@ -149,6 +143,8 @@ int main(void)
     lua_pushlstring(L, buf, 64); lua_pop(L, 1);
   }
   assert(gc2_cycle_leader_acq(g) != 0 && gc2_phase_acq(g) == LJ_GC2_IDLE);
+  /* The pending trigger can leave part of its allocation batch local. */
+  (void)lj_gc2_flush_alloc(g, L2TG(L));
   assert(lj_tg_local_total_acq(L2TG(L)) == 0);
   assert(lj_gc2_alloc_since_load(g) <= lj_gc2_hard_load(g));
   assert(lua_gc(L, LUA_GCSTOP, 0) == 0);

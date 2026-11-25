@@ -151,6 +151,8 @@ int main(void)
     lua_pushlstring(L, buf, 64); lua_pop(L, 1);
   }
   assert(gc2_cycle_leader_acq(g) != 0 && gc2_phase_acq(g) == LJ_GC2_IDLE);
+  /* The pending trigger can leave part of its allocation batch local. */
+  (void)lj_gc2_flush_alloc(g, L2TG(L));
   assert(lj_tg_local_total_acq(L2TG(L)) == 0);
   assert(lj_gc2_alloc_since_load(g) <= lj_gc2_hard_load(g));
   assert(lua_gc(L, LUA_GCSTOP, 0) == 0);
