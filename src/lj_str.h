@@ -111,6 +111,11 @@ enum {
 #define lj_str_qtabbytes(tabh) \
   ((tabh) ? lj_str_qtabsize((tabh)->mask) : (GCSize)0)
 
+static LJ_AINLINE StrTabHdr *lj_str_expand_to_acq(const StrTabHdr *hdr)
+{
+  return (StrTabHdr *)la_loadptr_acq((void *const *)&hdr->expand_to);
+}
+
 static LJ_AINLINE StrTabHdr *lj_str_tabh_acq(const global_State *g)
 {
   return (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
@@ -742,7 +747,8 @@ enum {
   LJ_STR_TEST_CANON_MAIN_UNLINKED,
   LJ_STR_TEST_CANON_Q_BODY_HELD,
   LJ_STR_TEST_CANON_RESIZE_MOVED,
-  LJ_STR_TEST_CANON_REHASH_DEST_SAMPLED
+  LJ_STR_TEST_CANON_REHASH_DEST_SAMPLED,
+  LJ_STR_TEST_CANON_EXPAND_BUCKET_DONE
 };
 enum {
   LJ_STR_TEST_RECLAIM_EXCLUSIVE_CLAIMED,
