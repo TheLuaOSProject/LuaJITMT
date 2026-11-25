@@ -378,10 +378,16 @@ static int meta_table_lease(global_State *g, cTValue *obj, TValue *mtv,
   return status;
 }
 
-/* Capture one metatable generation, then publish either its selected method
-** or, for getmetatable, the unprotected table from that same capture. */
+typedef enum MetaLookupView {
+  META_LOOKUP_METHOD,
+  META_LOOKUP_PROTECTED,
+  META_LOOKUP_RAW
+} MetaLookupView;
+
+/* All views resolve the receiver's metatable once. The raw C API returns
+** that table directly. Lua getmetatable first looks up __metatable in it. */
 static TValue *meta_lookup_rooted(lua_State *L, TValue *out, cTValue *obj,
-                                  MMS mm, int protected_view)
+                                  MMS mm, MetaLookupView view)
 {
   global_State *g = G(L);
   MetaSourceRef source = meta_source_ref(L, obj);
@@ -398,18 +404,19 @@ static TValue *meta_lookup_rooted(lua_State *L, TValue *out, cTValue *obj,
     if (smr)
       lj_gc2_smr_read_leave(g);
     if (edge == LJ_GC2_TV_EDGE_VALID) {
-      lookup = lj_tab_getstr_leased_try(g, tabV(&mtv), mmname_str(g, mm),
-                                        &result, &method);
-      if (lookup == LJ_TAB_GC_LOOKUP_ABSENT && protected_view)
+      if (view != META_LOOKUP_RAW)
+        lookup = lj_tab_getstr_leased_try(g, tabV(&mtv), mmname_str(g, mm),
+                                          &result, &method);
+      if (lookup == LJ_TAB_GC_LOOKUP_ABSENT && view != META_LOOKUP_METHOD)
         result = mtv;
     }
     if (edge != LJ_GC2_TV_EDGE_RETRY && lookup != LJ_TAB_GC_LOOKUP_RETRY) {
       if (edge == LJ_GC2_TV_EDGE_STALE ||
-          (lookup == LJ_TAB_GC_LOOKUP_ABSENT && !protected_view))
+          (lookup == LJ_TAB_GC_LOOKUP_ABSENT && view == META_LOOKUP_METHOD))
         setnilV(&result);
       out = meta_output_current(L, &dest);
       copyTVrel(L, out, &result);
-      if (protected_view || lookup == LJ_TAB_GC_LOOKUP_FOUND)
+      if (view != META_LOOKUP_METHOD || lookup == LJ_TAB_GC_LOOKUP_FOUND)
         lj_gc2_publish_read_root(L, out, dest.stack);
       lj_gc2_lease_release(&method);
       lj_gc2_lease_release(&table);
@@ -424,13 +431,18 @@ static TValue *meta_lookup_rooted(lua_State *L, TValue *out, cTValue *obj,
 
 cTValue *lj_meta_lookuptv(lua_State *L, TValue *out, cTValue *obj, MMS mm)
 {
-  return meta_lookup_rooted(L, out, obj, mm, 0);
+  return meta_lookup_rooted(L, out, obj, mm, META_LOOKUP_METHOD);
 }
 
 TValue *lj_meta_getmt_protected_rooted(lua_State *L, cTValue *obj,
                                        TValue *out)
 {
-  return meta_lookup_rooted(L, out, obj, MM_metatable, 1);
+  return meta_lookup_rooted(L, out, obj, MM_metatable, META_LOOKUP_PROTECTED);
+}
+
+TValue *lj_meta_getmt_raw_rooted(lua_State *L, cTValue *obj, TValue *out)
+{
+  return meta_lookup_rooted(L, out, obj, MM_metatable, META_LOOKUP_RAW);
 }
 
 static LJ_AINLINE TValue *meta_chain_root(const MetaChainRoots *roots,

@@ -4,6 +4,8 @@
 */
 
 #include <assert.h>
+#include <pthread.h>
+#include <sched.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -545,6 +547,58 @@ static void test_constructor_env_roots(lua_State *L, lua_State *co)
   assert(lj_state_owner_acq(co) == 0);
 }
 
+#ifdef LJ_GC2_TEST_HELPERS
+static int check_parked_metatable(lua_State *L)
+{
+  int receiver = lua_upvalueindex(1);
+  lua_pushvalue(L, LUA_GLOBALSINDEX);
+  lua_pushvalue(L, LUA_ENVIRONINDEX);
+  assert(lua_rawequal(L, -1, -2));
+  lua_pop(L, 2);
+  assert(lua_getmetatable(L, receiver));
+  luaL_getmetatable(L, "api.parked");
+  assert(lua_rawequal(L, -1, -2));
+  lua_pop(L, 2);
+  assert(luaL_getmetafield(L, receiver, "__metatable"));
+  assert(strcmp(lua_tostring(L, -1), "hidden") == 0);
+  assert(luaL_checkudata(L, receiver, "api.parked") ==
+         lua_touserdata(L, receiver));
+  assert(luaL_testudata(L, receiver, "api.other") == NULL);
+  return 0;
+}
+
+static void *reclaim_metadata(void *arg)
+{
+  global_State *g = (global_State *)arg;
+  (void)lj_gc2_reclaim_retired(g, lj_gc2_retire_epoch(g) + 1);
+  return NULL;
+}
+
+static void test_parked_metatable(lua_State *L)
+{
+  global_State *g = G(L);
+  pthread_t worker;
+  (void)lua_newuserdata(L, 16);
+  assert(luaL_newmetatable(L, "api.parked"));
+  lua_pushliteral(L, "hidden");
+  lua_setfield(L, -2, "__metatable");
+  assert(lua_setmetatable(L, -2));
+  lua_pushcclosure(L, check_parked_metatable, 1);
+  full_cycle(L);
+  lua_gc(L, LUA_GCSTOP, 0);
+  lj_gc2_test_idle_reclaim_pause_after_jit_quiescence();
+  assert(pthread_create(&worker, NULL, reclaim_metadata, g) == 0);
+  while (!lj_gc2_test_idle_reclaim_paused())
+    sched_yield();
+  assert(gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_META_EXCLUSIVE);
+  assert(lua_pcall(L, 0, 0, 0) == 0);
+  assert(lj_gc2_test_idle_reclaim_paused());
+  lj_gc2_test_idle_reclaim_release();
+  assert(pthread_join(worker, NULL) == 0);
+  lua_gc(L, LUA_GCRESTART, 0);
+}
+#endif
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -568,6 +622,9 @@ int main(void)
   test_borrowed_string_views(L);
   test_meta_roots(L);
   test_constructor_env_roots(L, co);
+#ifdef LJ_GC2_TEST_HELPERS
+  test_parked_metatable(L);
+#endif
   full_cycle(L);
   assert(lj_tg_root_anchor_top_acq(tg) == baseline);
 

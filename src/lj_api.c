@@ -821,80 +821,14 @@ static void api_test_raw_mt_publish(lua_State *L, TValue *result)
 static TValue *api_getmt_raw_rooted(lua_State *L, cTValue *objroot,
 				     TValue *outroot)
 {
-  global_State *g = G(L);
-  ptrdiff_t objofs, outofs;
+  ptrdiff_t outofs = savestack(L, outroot);
+  TValue *out;
   lj_assertL(api_tv_on_stack(L, objroot) && api_tv_on_stack(L, outroot),
-	     "raw metatable API roots must be stack slots");
-  objofs = savestack(L, (TValue *)(void *)objroot);
-  outofs = savestack(L, outroot);
-  for (;;) {
-    LJGC2Lease objlease, mtlease;
-    TValue osnap, mtv, nilv;
-    cTValue *obj;
-    TValue *out;
-    GCtab *mt;
-    int objstatus, mtstatus;
-
-    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
-      lj_tab_wait_l(L);
-      continue;
-    }
-    obj = restorestack(L, objofs);
-    lj_tv_load_acq(&osnap, obj);
-    objstatus = lj_gc2_tv_lease_acquire(g, &osnap, &objlease);
-    if (LJ_UNLIKELY(objstatus != LJ_GC2_TV_EDGE_VALID)) {
-      lj_gc2_smr_read_leave(g);
-      if (objstatus == LJ_GC2_TV_EDGE_RETRY) {
-	lj_tab_wait_l(L);
-	continue;
-      }
-      setnilV(&nilv);
-      out = restorestack(L, outofs);
-      copyTVrel(L, out, &nilv);
-      lj_state_stack_pubtv(L, L, out);
-      return restorestack(L, outofs);
-    }
-
-    if (tvistab(&osnap))
-      mt = lj_tab_metatable_acq(tabV(&osnap));
-    else if (tvisudata(&osnap))
-      mt = lj_udata_metatable_acq(udataV(&osnap));
-    else
-      mt = lj_basemt_obj_acq(g, &osnap);
-    if (mt == NULL) {
-      lj_gc2_smr_read_leave(g);
-      lj_gc2_lease_release(&objlease);
-      setnilV(&nilv);
-      out = restorestack(L, outofs);
-      copyTVrel(L, out, &nilv);
-      lj_state_stack_pubtv(L, L, out);
-      return restorestack(L, outofs);
-    }
-
-    setgcVraw(&mtv, obj2gco(mt), LJ_TTAB);
-    mtstatus = lj_gc2_tv_lease_acquire(g, &mtv, &mtlease);
-    if (mtstatus == LJ_GC2_TV_EDGE_VALID) {
-      out = restorestack(L, outofs);
-      copyTVrel(L, out, &mtv);
-      lj_gc2_smr_read_leave(g);
-      lj_state_stack_pubtv(L, L, out);
-      lj_gc2_lease_release(&mtlease);
-      lj_gc2_lease_release(&objlease);
-      api_test_raw_mt_publish(L, restorestack(L, outofs));
-      return restorestack(L, outofs);
-    }
-    lj_gc2_smr_read_leave(g);
-    lj_gc2_lease_release(&objlease);
-    if (mtstatus == LJ_GC2_TV_EDGE_RETRY) {
-      lj_tab_wait_l(L);
-      continue;
-    }
-    setnilV(&nilv);
-    out = restorestack(L, outofs);
-    copyTVrel(L, out, &nilv);
-    lj_state_stack_pubtv(L, L, out);
-    return restorestack(L, outofs);
-  }
+             "raw metatable API roots must be stack slots");
+  out = lj_meta_getmt_raw_rooted(L, objroot, outroot);
+  if (tvistab(out))
+    api_test_raw_mt_publish(L, out);
+  return restorestack(L, outofs);
 }
 
 typedef struct ApiResumeError {
@@ -2945,29 +2879,20 @@ LUALIB_API void *luaL_testudata(lua_State *L, int idx, const char *tname)
       TValue *udedge;
       GCudata *ud;
       int status;
-      if (LJ_UNLIKELY(!lj_gc2_smr_read_try(G(L)))) {
-	lj_tab_wait_l(L);
-	continue;
-      }
       udedge = index2adr(L, idx);
-      lj_tv_load_acq(&udsnap, udedge);
-      if (!tvisudata(&udsnap))
-	status = LJ_GC2_TV_EDGE_STALE;
-      else
-	status = lj_gc2_tv_lease_acquire(G(L), &udsnap, &udlease);
-      lj_gc2_smr_read_leave(G(L));
-      if (!tvisudata(&udsnap))
-	break;
+      status = lj_gc2_root_lease_acquire(G(L), udedge, &udsnap, &udlease, 0);
       if (status == LJ_GC2_TV_EDGE_RETRY) {
-	lj_tab_wait_l(L);
-	continue;
+        lj_tab_wait_l(L);
+        continue;
       }
       if (status != LJ_GC2_TV_EDGE_VALID)
-	break;
-      ud = udataV(&udsnap);
-      mtslot = lj_tg_root_anchor_slot_acq(mtroot.tg, mtroot.idx);
-      if (tvistab(mtslot) && tabV(mtslot) == lj_udata_metatable_acq(ud))
-	p = uddata(ud);
+        break;
+      if (tvisudata(&udsnap)) {
+        ud = udataV(&udsnap);
+        mtslot = lj_tg_root_anchor_slot_acq(mtroot.tg, mtroot.idx);
+        if (tvistab(mtslot) && tabV(mtslot) == lj_udata_metatable_acq(ud))
+          p = uddata(ud);
+      }
       lj_gc2_lease_release(&udlease);
       break;
     }

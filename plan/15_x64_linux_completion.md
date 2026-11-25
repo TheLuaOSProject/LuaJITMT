@@ -90,6 +90,7 @@ The lifetime rules follow the removal and reclamation split in RCU. C11 §5.1.2.
 - A paused IDLE metadata collector permits FFI construction, arithmetic, and function-valued field lookup on registered metatypes, including a 20,000-byte struct and a metatable with over 2,000 entries. The embedding test checks the return values before releasing the collector. Separate tests replace source tables and methods during lookup and exercise weak fields, callback errors and stack relocation.
 - The generational major-fallback oracle drives the same worker that drains graph, string and arena work in production. It checks the completed phase and the reverse mark difference. The x64 assembler also builds with the JIT disabled. The full collector paranoia target passed its four C fixtures, 509 JIT-enabled cases and 387 interpreter-only cases.
 - A table-valued FFI `__index` can follow a second table's `__index` and return a callable method while the IDLE collector is paused. Public `lua_getfield`, `lua_rawget` and `lua_rawequal` complete on a weak field during that same pause. The raw getter checks both an absent key and a collectable result that replaces its input stack slot.
+- C callers can inspect a userdata's raw metatable, its protected Lua view, the registry entry and its type while the metadata collector is paused. A C closure exercises its global environment, function environment and upvalue receiver. The same test verifies that looking up an unrelated registered type returns a null pointer.
 
 ## Correctness and progress checks
 
