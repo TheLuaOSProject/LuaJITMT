@@ -142,6 +142,23 @@ static StrHash str_dense_for_body(global_State *g, GCstr *s)
 }
 #endif
 
+/* Use the same placement in the primary and canonical directories.
+** Hardened builds mix every input byte when the string is first interned. */
+static StrHash hash_keyed(uint64_t seed, const char *str, MSize len)
+{
+  StrHash hash = hash_sparse(seed, str, len);
+#if LUAJIT_SECURITY_STRHASH
+  hash = hash_dense(seed, hash, str, len);
+#endif
+  return hash;
+}
+#ifdef LJ_STR_TEST_HELPERS
+StrHash lj_str_test_hash(global_State *g, const char *str, MSize len)
+{
+  return hash_keyed(g->str.seed, str, len);
+}
+#endif
+
 /* -- String interning ---------------------------------------------------- */
 
 #define LJ_STR_MAXCOLL		32
@@ -353,11 +370,6 @@ static LJ_AINLINE MSize strtab_resize_acq(StrTabHdr *hdr)
   lj_assertX(state == 0 || state == LJ_STRTAB_RESIZE ||
              state == LJ_STRTAB_SWEEP, "invalid string table topology claim");
   return state;
-}
-
-static LJ_AINLINE int strtab_sweeping(StrTabHdr *hdr)
-{
-  return (strtab_resize_acq(hdr) & LJ_STRTAB_SWEEP) != 0;
 }
 
 static void strtab_active_enter(TGState *tg, StrTabHdr *hdr)
@@ -1182,67 +1194,9 @@ int lj_str_quarantine_resize(lua_State *L, MSize newmask)
   return 1;
 }
 
-#if LUAJIT_SECURITY_STRHASH
-/* Publish a new generation which promotes one physical primary group.
-** The allocation happens before the claim. Ordinary interners can build
-** just their requested destination regardless of the initiator's progress. */
-static LJ_NOINLINE int lj_str_rehash_chain(lua_State *L, StrHash hashc)
-{
-  global_State *g = G(L);
-  StrTabHdr *source = lj_str_tabh_acq(g);
-  StrTabHdr *target;
-  MSize mask, dense_mask, i;
-  GCSize size;
-  uintptr_t expect;
-  if (!source || strtab_resize_acq(source) != 0 ||
-      lj_str_bucket_dense(source, hashc))
-    return 0;
-  mask = source->mask;
-  dense_mask = source->dense_mask;
-  size = lj_str_tabsize_dense(mask, dense_mask) + lj_str_promote_size(mask);
-  target = (StrTabHdr *)lj_mem_new_deferred_nothrow(L, size);
-  if (!target)
-    return 0;
-  memset(target, 0, size);
-  if (!lj_gc2_smr_read_try(g)) {
-    lj_mem_free(g, target, size);
-    return 0;
-  }
-  source = lj_str_tabh_acq(g);
-  expect = source ? lj_str_topology_acq(source) : LJ_STRTAB_TOPO_EXPAND;
-  if (!source || (expect & ~LJ_STRTAB_TOPO_SECOND) != 0 ||
-      source->mask != mask || source->dense_mask != dense_mask ||
-      lj_str_bucket_dense(source, hashc)) {
-    lj_gc2_smr_read_leave(g);
-    lj_mem_free(g, target, size);
-    return 0;
-  }
-  target->mask = mask;
-  target->dense_mask = dense_mask;
-  target->link_slot = 1u - source->link_slot;
-  target->promote_bucket = (hashc & mask) + 1u;
-  la_store8_rlx(&target->has_secondary, 1);
-  target->topology = LJ_STRTAB_TOPO_SECOND;
-  target->copy_cursor = mask + 1u;
-  for (i = 0; i <= mask; i++)
-    lj_str_ref_store_rel(&target->bucket[i], LJ_STRHASH_FROZEN);
-  if (!la_casuptr(&source->topology, &expect,
-                  (uintptr_t)target | LJ_STRTAB_TOPO_EXPAND, LA_ACQ_REL, LA_ACQ)) {
-    lj_gc2_smr_read_leave(g);
-    lj_mem_free(g, target, size);
-    return 0;
-  }
-  lj_gc2_markmem(g, target);
-  if (strtab_help_expand(L, source, target, 0, 1))
-    lj_gc2_smr_read_leave(g);
-  lj_mem_account_deferred(L, size);
-  return 1;
-}
-#endif
-
 /* Allocate a new, unpublished string object. */
 static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
-                          StrHash sparse)
+                          StrHash hash)
 {
   GCstr *s = (GCstr *)lj_mem_newgco_raw(L, lj_str_size(len),
 					 LJ_AF_TRAVERSABLE);
@@ -1250,7 +1204,7 @@ static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
   newwhite(g, s);
   s->gct = ~LJ_TSTR;
   s->len = len;
-  s->hash = sparse;
+  s->hash = hash;
   s->dense_hash = 0;
   s->sid = strid_next(L, g);
   s->reserved = 0;
@@ -1521,19 +1475,16 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
   global_State *g = G(L);
   if (lenx-1 < LJ_MAX_STR-1) {
     MSize len = (MSize)lenx;
-    StrHash hash, qhash = hash_sparse(g->str.seed, str, len);
+    StrHash hash, qhash = hash_keyed(g->str.seed, str, len);
     GCstr *news = NULL;
     int hashalg = 0;
-#if LUAJIT_SECURITY_STRHASH
-    int skip_rehash = 0;
-#endif
     for (;;) {
       int blocked = 0, selected_alg = -1;
       StrTabHdr *hdr = strtab_enter(L, g, &blocked);
       GCRef *strtab;
       GCRef *head, *link;
       GCobj *o;
-      MSize mask, coll = 0;
+      MSize mask;
       uintptr_t headu, u;
       uintptr_t want;
       int grow, qretry;
@@ -1579,7 +1530,6 @@ lookup:
         strtab_leave(L, hdr);
         continue;
       }
-      coll = 0;
       link = head;
       u = headu;
       while ((o = lj_str_link_target(u)) != NULL) {
@@ -1593,27 +1543,12 @@ lookup:
 	      lj_mem_free(g, news, lj_str_size(news->len));
 	    return sx;  /* Return existing string. */
 	  }
-	  coll++;
 	}
-	coll++;
 	if (!strtab_protect_walk_link(L, link, o))
 	  goto retry_lookup;
 	link = lj_str_nodelink(hdr, o);
 	u = lj_str_link_load_acq(link);
       }
-#if LUAJIT_SECURITY_STRHASH
-      /* Rehash chain if there are too many collisions. */
-      if (LJ_UNLIKELY(coll > LJ_STR_MAXCOLL) && !hashalg && !skip_rehash) {
-	if (strtab_sweeping(hdr)) {
-	  /* Keep this insertion nonrecursive while the CAS sweeper owns topology. */
-	  skip_rehash = 1;
-	} else {
-	  strtab_leave(L, hdr);
-	  skip_rehash = !lj_str_rehash_chain(L, hash);
-	  continue;
-	}
-      }
-#endif
       if (news == NULL) {
 	GCstr *qs;
 	strtab_leave(L, hdr);
@@ -1695,7 +1630,7 @@ void lj_str_free_commit(global_State *g, GCstr *s, LJGCDestructCtx *dctx)
   /* Stop nonowning resize lookups before clearing the registered body. A
   ** colliding cache publication names a different body and is left alone. */
   if (gct == (uint8_t)~LJ_TSTR && s->len != 0) {
-    StrHash hash = hash_sparse(g->str.seed, strdata(s), s->len);
+    StrHash hash = s->hash;
     void *expected = s;
     (void)la_casptr((void **)strtab_resize_hit_slot(g, hash),
 		    &expected, NULL, LA_ACQ_REL, LA_ACQ);

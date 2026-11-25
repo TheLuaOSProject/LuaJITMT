@@ -1,7 +1,6 @@
 /*
-** Focused regression test for M5 secondary string-table rehash gating.
+** Full-input string hashes avoid generations caused by sparse collisions.
 */
-
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -12,74 +11,53 @@
 #include "lj_obj.h"
 #include "lj_str.h"
 
-#define TARGET_MASK		4095u
-#define TARGET_BUCKET		0u
-#define TARGET_STRINGS		40u
-
-static StrHash test_hash_sparse(uint64_t seed, const char *str, MSize len)
-{
-  StrHash a, b, h = len ^ (StrHash)seed;
-  if (len >= 4) {
-    a = lj_getu32(str);
-    h ^= lj_getu32(str+len-4);
-    b = lj_getu32(str+(len>>1)-2);
-    h ^= b; h -= lj_rol(b, 14);
-    b += lj_getu32(str+(len>>2)-1);
-  } else {
-    a = *(const uint8_t *)str;
-    h ^= *(const uint8_t *)(str+len-1);
-    b = *(const uint8_t *)(str+(len>>1));
-    h ^= b; h -= lj_rol(b, 14);
-  }
-  a ^= h; a -= lj_rol(h, 11);
-  b ^= a; b -= lj_rol(a, 25);
-  h ^= b; h -= lj_rol(b, 16);
-  UNUSED(a);
-  return h;
-}
+#define TARGET_MASK 4095u
+#define TARGET_STRINGS 64u
 
 int main(void)
 {
   lua_State *L = luaL_newstate();
   global_State *g;
-  char candidate[TARGET_STRINGS][64];
-  GCstr *interned[TARGET_STRINGS];
-  uint32_t found = 0, i;
-  uint32_t n;
+  char candidate[TARGET_STRINGS][128];
+  const char *interned[TARGET_STRINGS];
+  StrHash first_hash = 0;
   StrTabHdr *hdr;
+  unsigned i, different = 0;
 
-  assert(L != NULL);
+  assert(L);
   g = G(L);
+  lua_gc(L, LUA_GCSTOP, 0);
   lj_str_resize(L, TARGET_MASK);
   hdr = lj_str_tabh_acq(g);
-  assert(hdr != NULL);
-  assert(lj_str_mask_acq(g) == TARGET_MASK);
-
-  for (n = 0; found < TARGET_STRINGS; n++) {
-    char buf[64];
-    MSize len;
-    snprintf(buf, sizeof(buf), "m5-strtab-rehash-%08x", n);
-    len = (MSize)strlen(buf);
-    if ((test_hash_sparse(g->str.seed, buf, len) & TARGET_MASK) ==
-	TARGET_BUCKET) {
-      memcpy(candidate[found], buf, len + 1u);
-      found++;
-    }
-  }
+  assert(hdr && hdr->mask == TARGET_MASK);
+  lua_createtable(L, TARGET_STRINGS, 0);
 
   for (i = 0; i < TARGET_STRINGS; i++) {
-    interned[i] = lj_str_new(L, candidate[i], strlen(candidate[i]));
-    assert(interned[i] != NULL);
+    StrHash hash;
+    memset(candidate[i], 'H', sizeof(candidate[i]));
+    /* These bytes are outside the legacy sparse input samples. */
+    candidate[i][12] = (char)i;
+    candidate[i][13] = (char)(i ^ 0x3f);
+    lua_pushlstring(L, candidate[i], sizeof(candidate[i]));
+    interned[i] = lua_tolstring(L, -1, NULL);
+    hash = strV(L->top - 1)->hash;
+    if (i == 0)
+      first_hash = hash;
+    different += hash != first_hash;
+    lua_rawseti(L, 1, (int)i + 1);
   }
 
-  assert(lj_str_second_acq(g) == 1);
-  hdr = lj_str_tabh_acq(g);
-  assert(lj_str_resize_state_acq(hdr) == 0);
-  assert(lj_str_hashsecondary(hdr->bucket[TARGET_BUCKET]) != 0);
-  for (i = 0; i < TARGET_STRINGS; i++)
-    assert(lj_str_new(L, candidate[i], strlen(candidate[i])) == interned[i]);
+  if (LUAJIT_SECURITY_STRHASH)
+    assert(different != 0);
+  assert(lj_str_tabh_acq(g) == hdr && lj_str_resize_state_acq(hdr) == 0);
+  for (i = 0; i < TARGET_STRINGS; i++) {
+    lua_pushlstring(L, candidate[i], sizeof(candidate[i]));
+    assert(lua_tolstring(L, -1, NULL) == interned[i]);
+    assert(memcmp(interned[i], candidate[i], sizeof(candidate[i])) == 0);
+    lua_pop(L, 1);
+  }
 
   lua_close(L);
-  printf("t-strtab-rehash OK: secondary chain rehash is gated and preserves identity\n");
+  puts("t-strtab-rehash OK: full-input hashes preserve canonical identity");
   return 0;
 }

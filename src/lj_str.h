@@ -837,6 +837,7 @@ enum {
   LJ_STR_TEST_RECLAIM_CANDIDATE
 };
 #ifdef LJ_STR_TEST_HELPERS
+LJ_FUNC StrHash lj_str_test_hash(global_State *g, const char *str, MSize len);
 typedef struct LJStrTestSweepSnapshot {
   uint64_t tagged;
   uint64_t rescued;
