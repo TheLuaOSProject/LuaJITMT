@@ -191,15 +191,128 @@ static void check_rooted_upvalue_publication(lua_State *L)
   lua_pop(L, 2);
 }
 
+typedef struct CopyPeer {
+  lua_State *L;
+  MSize target_mask;
+  uint32_t frozen, release;
+} CopyPeer;
+
+static CopyPeer *copy_peer;
+
+static void pause_generation_copy(lua_State *L, GCstr *s, StrCanonRec *rec,
+                                  uint32_t stage)
+{
+  CopyPeer *peer = copy_peer;
+  if (L != peer->L || stage != LJ_STR_TEST_CANON_EXPAND_FROZEN ||
+      la_load32_acq(&peer->frozen))
+    return;
+  assert(s == NULL && rec == NULL);
+  la_store32_rel(&peer->frozen, 1);
+  while (!la_load32_acq(&peer->release))
+    (void)lj_thr_retry_yield(L);
+}
+
+static void *resize_copy_peer(void *opaque)
+{
+  CopyPeer *peer = opaque;
+  assert(lj_threading_attach_wait(peer->L));
+  lj_str_resize(peer->L, peer->target_mask);
+  lj_threading_detach(peer->L, 1);
+  return NULL;
+}
+
+static void check_dual_generation_quarantine(void)
+{
+  static const char rescued_name[] = "quarantine-rescued-across-generation-copy";
+  static char closed_name[LJ_HUGE_THRESHOLD + 1];
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  StrTabHdr *source, *target;
+  StrCanonRec *record;
+  GCstr *rescued, *old;
+  CopyPeer peer = {0};
+  LJThr thread = {0};
+  const char *replacement;
+  MSize first_slot;
+  assert(L);
+  g = G(L);
+  (void)lua_gc(L, LUA_GCSTOP, 0);
+  source = lj_str_tabh_acq(g);
+  first_slot = source->link_slot;
+  lj_str_resize(L, (source->mask << 1) + 1u);
+  source = lj_str_tabh_acq(g);
+  assert(source->link_slot != first_slot);
+
+  memset(closed_name, 'r', sizeof(closed_name)-1);
+  rescued = lj_str_newz(L, rescued_name);
+  old = lj_str_newz(L, closed_name);
+  assert(lj_str_test_quarantine_detach(L, rescued));
+  assert(lj_str_test_quarantine_detach(L, old));
+  assert(lj_str_test_quarantine_close(g, old));
+  record = lj_str_canon_record(lj_str_canon_acq(old));
+  assert(record);
+
+  peer.L = lua_newthread(L);
+  peer.target_mask = (source->mask << 1) + 1u;
+  copy_peer = &peer;
+  lj_str_test_set_canon_hook(pause_generation_copy);
+  assert(lj_thr_create(&thread, resize_copy_peer, &peer) == 0);
+  while (!la_load32_acq(&peer.frozen))
+    (void)lj_thr_retry_yield(L);
+  target = lj_str_expand_to_acq(source);
+  assert(target && target->link_slot == first_slot);
+  assert(lj_str_tabh_acq(g) == source);
+
+  /* Main-table lookup assists the frozen generation and then finds the
+  ** exact Q record for the removed key. The paused copy retains its SMR
+  ** scope, so no retirement pass can consume the record or body meanwhile. */
+  lua_pushstring(L, rescued_name);
+  assert(strV(L->top - 1) == rescued);
+  assert(lj_str_canon_state(lj_str_canon_acq(rescued)) == LJ_STR_CANON_QRESCUED);
+  assert(lj_gc2_reclaim_retired(g, lj_gc2_retire_epoch(g)) == 0);
+  assert(lj_str_canon_state(lj_str_canon_acq(old)) == LJ_STR_CANON_QCLOSING);
+  assert(lj_str_tabh_acq(g) == source);
+  la_store32_rel(&peer.release, 1);
+  assert(lj_thr_join(&thread, NULL) == 0);
+  lj_str_test_set_canon_hook(NULL);
+  copy_peer = NULL;
+  assert(lj_str_tabh_acq(g) == target);
+
+  advance_grace(g);
+  assert(lj_str_canon_acq(rescued) == LJ_STR_CANON_LIVE);
+  assert(lj_str_canon_state(lj_str_canon_acq(old)) == LJ_STR_CANON_QCOMMIT);
+  assert(la_load32_acq(&record->status) & LJ_STR_CANONREC_Q_UNLINKED);
+  assert(lj_gc2_mem_registered_known(g, old));
+  assert(lj_str_qcount_acq(g) == 0);
+
+  /* Reuse the first successor slot again while the distinct closed body
+  ** still waits for its second grace. The live body follows the new index. */
+  lj_str_resize(L, (target->mask << 1) + 1u);
+  assert(lj_str_tabh_acq(g)->link_slot != first_slot);
+  lua_pushstring(L, rescued_name);
+  assert(strV(L->top - 1) == rescued);
+  lua_pushstring(L, closed_name);
+  replacement = lua_tolstring(L, -1, NULL);
+  assert(replacement != strdata(old));
+  advance_grace(g);
+  assert(!lj_gc2_mem_registered_known(g, old));
+  assert(!lj_gc2_mem_registered_known(g, record));
+  lua_pushstring(L, closed_name);
+  assert(lua_tolstring(L, -1, NULL) == replacement);
+  lua_close(L);
+}
+
 int main(void)
 {
-  lua_State *L = luaL_newstate();
+  lua_State *L;
   global_State *g;
   GCstr *old, *borrowed;
   StrCanonRec *rec;
   TGState *read_tg;
   Peer peer = {0};
   LJThr thread = {0};
+  check_dual_generation_quarantine();
+  L = luaL_newstate();
   assert(L);
   g = G(L);
   check_cancelled_record(L);
