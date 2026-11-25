@@ -3436,8 +3436,9 @@ LUA_API int lua_pcall(lua_State *L, int nargs, int nresults, int errfunc)
   global_State *g = G(L);
   uint8_t oldh = hook_save(g);
   LJStateClaim claim;
+  TValue *base;
   ptrdiff_t ef;
-  int status;
+  int status, certify_main;
   lj_checkapi(L->status == LUA_OK || L->status == LUA_ERRERR,
 	      "thread called in wrong state %d", L->status);
   lj_checkapi_slot(nargs+1);
@@ -3449,7 +3450,16 @@ LUA_API int lua_pcall(lua_State *L, int nargs, int nresults, int errfunc)
     cTValue *o = index2adr_stack(L, errfunc);
     ef = savestack(L, o);
   }
-  status = lj_vm_pcall_unwind(L, api_call_base(L, nargs), nresults+1, ef);
+  base = api_call_base(L, nargs);
+  /* The protected entry always returns to the scope which enabled it.
+  ** Nested API and foreign callback entries cannot supply a new witness. */
+  certify_main = L == mainthread_acq(g) && L2TG(L) == g->main_tg &&
+		 L->cframe == NULL;
+  if (certify_main)
+    la_store32_rel(&g->main_tg->str_vm_main_pcall, 1);
+  status = lj_vm_pcall_unwind(L, base, nresults+1, ef);
+  if (certify_main)
+    la_store32_rel(&g->main_tg->str_vm_main_pcall, 0);
   if (status) hook_restore(g, oldh);
   lj_state_dropresumeclaim(&claim);
   return status;

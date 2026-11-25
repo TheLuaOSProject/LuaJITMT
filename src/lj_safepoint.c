@@ -497,10 +497,39 @@ static void safepoint_requeue_consumed(TGState *tg, uint32_t actions)
   lj_tg_poll_futex_wake(tg, 1);
 }
 
+static int safepoint_str_vm_frame(lua_State *L, TGState *tg)
+{
+  global_State *g = G(L);
+  void *parent;
+  if (tg != lj_thr_get_tg_fallback(g) || !L->cframe ||
+      lj_tg_in_native_acq(tg) || lj_tg_load_jit_base(tg))
+    return 0;
+  parent = cframe_raw(cframe_prev(cframe_raw(L->cframe)));
+  if (tg == g->main_tg) {
+    if (L != mainthread_acq(g) || parent ||
+	!la_load32_acq(&tg->str_vm_main_pcall))
+      return 0;
+  } else if (!lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC) ||
+	     L != lj_tg_load_thread_L(tg) || !tg->str_vm_outer_cframe ||
+	     parent != cframe_raw(tg->str_vm_outer_cframe)) {
+    return 0;
+  }
+#if LJ_HASFFI
+  if (lj_tg_ffi_call_func_acq(tg) || ccallback_depth_acq(&tg->cb))
+    return 0;
+#if LJ_HASJIT
+  if (lj_ffi_native_frame_depth_acq(tg))
+    return 0;
+#endif
+#endif
+  return 1;
+}
+
 static uint32_t safepoint_ack_tg(global_State *g, TGState *tg,
 				 int note_latency, int wait_consumed,
 				 int native_parked,
-				 int native_trace_cert_required)
+				 int native_trace_cert_required,
+				 lua_State *vm_frame)
 {
   uint64_t epoch;
   uint32_t actions, oldpending, mark_cycle;
@@ -591,8 +620,14 @@ retry:
     return 0;
   }
   if (safepoint_apply_tg_mode(g, tg, actions, native_parked, roots_scanned) &&
-      !native_parked && tg == lj_thr_get_tg_fallback(g))
+      !native_parked && tg == lj_thr_get_tg_fallback(g)) {
     la_store64_rel(&tg->str_owner_scan_epoch, epoch);
+    /* The last ACK may wake a collector which immediately starts SWEEP.
+    ** Publish the real dispatch witness before that completion becomes
+    ** visible. Ordinary C and remote ACKs never provide a VM frame. */
+    if (vm_frame && safepoint_str_vm_frame(vm_frame, tg))
+      la_store64_rel(&tg->str_vm_root_epoch, epoch);
+  }
   if (note_latency)
     safepoint_note_ack_latency(g);  /* 13.8: mutator-observed poll latency. */
   {
@@ -672,7 +707,7 @@ uint32_t lj_safepoint_retire_dead_tg(global_State *g, TGState *tg)
   return 1;
 }
 
-uint32_t lj_safepoint_ack(lua_State *L)
+static uint32_t safepoint_ack_l(lua_State *L, int vm_frame)
 {
   ptrdiff_t oldbase, oldtop;
   uint32_t actions;
@@ -684,13 +719,19 @@ uint32_t lj_safepoint_ack(lua_State *L)
   lj_profile_owner_poll(L);
 #endif
   if (L->base == NULL || tvref(L->stack) == NULL)
-    return safepoint_ack_tg(G(L), L2TG(L), 1, 1, 0, 0);
+    return safepoint_ack_tg(G(L), L2TG(L), 1, 1, 0, 0, NULL);
   oldbase = savestack(L, L->base);
   oldtop = savestack(L, L->top);
-  actions = safepoint_ack_tg(G(L), L2TG(L), 1, 1, 0, 0);
+  actions = safepoint_ack_tg(G(L), L2TG(L), 1, 1, 0, 0,
+			     vm_frame ? L : NULL);
   L->base = restorestack(L, oldbase);
   L->top = restorestack(L, oldtop);
   return actions;  /* Safepoints must preserve the interrupted VM/C frame. */
+}
+
+uint32_t lj_safepoint_ack(lua_State *L)
+{
+  return safepoint_ack_l(L, 0);
 }
 
 uint32_t lj_safepoint_poll(lua_State *L)
@@ -714,7 +755,7 @@ uint32_t lj_safepoint_poll_tg(TGState *tg)
   /* Worker/no-Lua-stack TGs still own private allocator and SSB state. They
   ** therefore participate at the same consumed-poll boundary instead of
   ** silently resuming after a remote native acknowledgement. */
-  return safepoint_ack_tg(tg->gl, tg, 1, 1, 0, 0);
+  return safepoint_ack_tg(tg->gl, tg, 1, 1, 0, 0, NULL);
 }
 
 void lj_safepoint_checkstop(lua_State *L, uint32_t actions)
@@ -744,7 +785,7 @@ void lj_safepoint_checkstop(lua_State *L, uint32_t actions)
   }
 }
 
-uint32_t lj_safepoint_ack_check(lua_State *L)
+static uint32_t safepoint_ack_check_l(lua_State *L, int vm_frame)
 {
   LJOSerrState oserr;
   uint32_t actions;
@@ -753,11 +794,16 @@ uint32_t lj_safepoint_ack_check(lua_State *L)
   ** and must not replace the error-edge pair, including immediately before a
   ** STOPREQ throws again. */
   lj_oserr_save(&oserr);
-  actions = lj_safepoint_ack(L);
+  actions = safepoint_ack_l(L, vm_frame);
   lj_oserr_restore(&oserr);
   lj_safepoint_checkstop(L, actions);
   lj_oserr_restore(&oserr);
   return actions;
+}
+
+uint32_t lj_safepoint_ack_check(lua_State *L)
+{
+  return safepoint_ack_check_l(L, 0);
 }
 
 /* Only emitted after the interpreter has published BASE/PC, or after
@@ -767,33 +813,20 @@ void lj_safepoint_vm_checkpoint(lua_State *L, int trace_exit)
 {
   global_State *g = G(L);
   TGState *tg = L2TG(L);
-  uint32_t actions = lj_safepoint_ack_check(L);
+  uint32_t actions = safepoint_ack_check_l(L, 1);
   uint64_t epoch = la_load64_acq(&tg->str_owner_scan_epoch);
   if (!epoch || epoch <= la_load64_acq(&tg->str_vm_root_epoch) ||
-      tg != lj_thr_get_tg_fallback(g) ||
-      !lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC) ||
-      L != lj_tg_load_thread_L(tg) || !L->cframe ||
-      !tg->str_vm_outer_cframe ||
-      cframe_raw(cframe_prev(cframe_raw(L->cframe))) !=
-	cframe_raw(tg->str_vm_outer_cframe) ||
-      lj_tg_in_native_acq(tg) || lj_tg_load_jit_base(tg))
+      !safepoint_str_vm_frame(L, tg))
     return;
-#if LJ_HASFFI
-  if (lj_tg_ffi_call_func_acq(tg) || ccallback_depth_acq(&tg->cb))
-    return;
-#if LJ_HASJIT
-  if (lj_ffi_native_frame_depth_acq(tg))
-    return;
-#endif
-#endif
   if (!(actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS)) ||
       lj_tg_hs_epoch_ack_acq(tg) != epoch) {
     LJOSerrState oserr;
     int scanned;
-    if (!trace_exit)
+    if (!trace_exit && tg != g->main_tg)
       return;
-    /* GC-defer can consume the owner request while restoring a trace. Take
-    ** a fresh scan at this real frame boundary before certifying its epoch. */
+    /* A call or a trace-exit helper may have consumed the owner request
+    ** before dispatch restored this frame. Rescan from the real boundary
+    ** instead of granting a VM certificate to that earlier C/native scan. */
     lj_oserr_save(&oserr);
     scanned = lj_gc2_scan_cycle_owner_tg_roots(g, tg);
     lj_oserr_restore(&oserr);
@@ -970,7 +1003,7 @@ static void safepoint_ack_native(global_State *g, uint32_t actions)
     if (lj_tg_flags_test_acq(tg, TGF_DEAD))  /* 05 section 5.4.1. */
       continue;
     if (tg == self)
-      (void)safepoint_ack_tg(g, tg, 0, 0, 0, 0);
+      (void)safepoint_ack_tg(g, tg, 0, 0, 0, 0, NULL);
     else if (lj_tg_in_native_acq(tg)) {
       int trace_cert_required = 0;
       if (!safepoint_native_ack_allowed(tg, actions,
@@ -980,7 +1013,7 @@ static void safepoint_ack_native(global_State *g, uint32_t actions)
       ** certificate. If it wins reqmask, native leave must remain parked until
       ** the leader clears poll, so published frame offsets cannot race stack
       ** relocation or release during the exact scan. */
-      (void)safepoint_ack_tg(g, tg, 0, 0, 1, trace_cert_required);
+      (void)safepoint_ack_tg(g, tg, 0, 0, 1, trace_cert_required, NULL);
     }
   }
 }
@@ -1079,7 +1112,7 @@ static uint32_t safepoint_leader_enter(global_State *g)
     {
       TGState *self = lj_thr_get_tg();
       if (self && self->gl == g)
-	safepoint_ack_tg(g, self, 0, 0, 0, 0);
+	safepoint_ack_tg(g, self, 0, 0, 0, 0, NULL);
     }
     if (expect == 0)
       continue;

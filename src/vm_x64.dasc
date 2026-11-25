@@ -3048,8 +3048,11 @@ static void build_subroutines(BuildCtx *ctx)
   |  jnz >6
   |  // A trace-exit helper can have consumed the owner poll before restoring
   |  // the interpreter frame. Its scan still needs a restored-frame witness.
+  |  cmp dword [DISPATCH+DISPATCH_TG(str_vm_main_pcall)], 0
+  |  jne >5
   |  test byte [DISPATCH+DISPATCH_TG(tg_flags)], TGF_LUA_ALLOC
   |  jz >7
+  |5:
   |  mov TMPR, [DISPATCH+DISPATCH_TG(str_owner_scan_epoch)]
   |  cmp TMPR, [DISPATCH+DISPATCH_TG(str_vm_root_epoch)]
   |  jbe >7
