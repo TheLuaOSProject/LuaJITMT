@@ -1523,7 +1523,7 @@ static int gc2_observed_obj_status_scoped(global_State *g, GCobj *o,
 static int gc2_observed_obj_status_scoped_impl(global_State *g, GCobj *o,
 					     uint32_t *gctp,
 					     GC2MarkScope *scope,
-					     uint32_t *startp, int string_edge);
+					     uint32_t *startp, int allow_idle);
 static int gc2_observed_obj_valid(global_State *g, GCobj *o);
 static int gc2_queue_obj_info(global_State *g, GCobj *o,
 			      GCArena *known_small,
@@ -7399,7 +7399,7 @@ typedef enum GC2HugeRegistryLease {
 ** a negative scan touches registry slots only. It must not install ordinary
 ** SMR TLS: nested generic readers need the full OPEN mode. */
 static int gc2_huge_registry_read_try_mode(global_State *g,
-				GC2HugeRegistryLease *lease, int string_edge)
+				GC2HugeRegistryLease *lease, int allow_idle)
 {
   uint32_t mode, old;
   if (lease)
@@ -7417,11 +7417,11 @@ static int gc2_huge_registry_read_try_mode(global_State *g,
       *lease = GC2_HUGE_REGISTRY_FULL;
       return 1;
     }
-    /* String byte readers may enter during IDLE body retirement. They
-    ** transfer this directory count to an exact mapping reader before
-    ** inspecting any bytes. TG directory retirement closes both lanes. */
+    /* Typed value and plain vector readers can enter during IDLE retirement.
+    ** It transfers this directory count to a mapping reader before touching
+    ** the body. TG directory retirement closes both lanes. */
     if (mode != LJ_GC2_SMR_SWEEP_STABLE &&
-	!(string_edge && mode == LJ_GC2_SMR_META_EXCLUSIVE))
+	!(allow_idle && mode == LJ_GC2_SMR_META_EXCLUSIVE))
       return 0;
     old = gc2_smr_readers_add(g, 1);
     if (LJ_UNLIKELY(old == ~(uint32_t)0)) {
@@ -7671,11 +7671,12 @@ enum {
 ** still held. The caller must retain that scope through every semantic check:
 ** otherwise address reuse between validation and use can change incarnation. */
 static int gc2_tv_admit_scoped_impl(global_State *g, cTValue *tv,
-				    GC2MarkScope *scope, uint32_t *startp)
+				    GC2MarkScope *scope, uint32_t *startp,
+				    int value_read)
 {
   GCobj *o;
   uint32_t gct;
-  int status;
+  int status, allow_idle;
   gc2_mark_scope_init(scope);
   if (!tvisgcv(tv))
     return GC2_TV_SCOPE_ADMITTED;
@@ -7687,8 +7688,10 @@ static int gc2_tv_admit_scoped_impl(global_State *g, cTValue *tv,
   if (itype(tv) == LJ_TSTR && o == obj2gco(&g->strempty))
     return o->gch.gct == ~LJ_TSTR ?
 	   GC2_TV_SCOPE_ADMITTED : GC2_TV_SCOPE_STALE;
+  allow_idle = tvisstr(tv) || (value_read && (tviscdata(tv) || tvistab(tv) ||
+					      tvisudata(tv) || tvisfunc(tv)));
   status = gc2_observed_obj_status_scoped_impl(g, o, &gct, scope, startp,
-					       tvisstr(tv));
+					       allow_idle);
   if (status < 0)
     return GC2_TV_SCOPE_RETRY;
   if (status == 0)
@@ -7715,7 +7718,7 @@ ignore:
 static int gc2_tv_admit_scoped(global_State *g, cTValue *tv,
 			       GC2MarkScope *scope)
 {
-  return gc2_tv_admit_scoped_impl(g, tv, scope, NULL);
+  return gc2_tv_admit_scoped_impl(g, tv, scope, NULL, 0);
 }
 
 static int gc2_tv_gcref_type_match_known_status(global_State *g,
@@ -10451,7 +10454,7 @@ static int gc2_huge_observed(global_State *g, GCobj *o, void **basep,
 ** but supplies no dereferenceable body and must be returned immediately. */
 static int gc2_huge_observed_scoped(global_State *g, GCobj *o, void **basep,
 					    LJHugeInfo *hip,
-					    GC2MarkScope *scope, int string_edge)
+					    GC2MarkScope *scope, int allow_idle)
 {
   GC2HugeRegistryLease lease = GC2_HUGE_REGISTRY_NONE;
   TGState *tg;
@@ -10461,7 +10464,7 @@ static int gc2_huge_observed_scoped(global_State *g, GCobj *o, void **basep,
   gc2_mark_scope_init(scope);
   if (!g || !o || !scope)
     return LJ_ARENA_HUGE_READER_MISSING;
-  if (!gc2_huge_registry_read_try_mode(g, &lease, string_edge)) {
+  if (!gc2_huge_registry_read_try_mode(g, &lease, allow_idle)) {
     gc2_activation_pin_no_reclaim(g);
     gc2_marks_this_round_add(g, 1);
     lj_gc2_worker_wake(g);
@@ -10492,7 +10495,7 @@ found:
   return rc;
 }
 
-static HugeTab *gc2_huge_recovery_table(global_State *g, GCobj *o,
+static HugeTab *gc2_huge_table_for_address(global_State *g, const void *o,
 						 void **basep,
 						 LJHugeInfo *hip)
 {
@@ -11112,7 +11115,7 @@ static int gc2_recovery_publish_scoped(global_State *g, GCobj *o,
     void *base = NULL;
     if (!lj_gc2_smr_read_try(g))
       return 0;  /* Never wait behind a registry reclaimer on a barrier path. */
-    ht = gc2_huge_recovery_table(g, o, &base, &hi);
+    ht = gc2_huge_table_for_address(g, o, &base, &hi);
     if (!ht || !base) {
       lj_gc2_smr_read_leave(g);
       return 0;
@@ -11181,7 +11184,7 @@ static void gc2_recovery_fail_closed(global_State *g)
 static int gc2_observed_obj_status_scoped_impl(global_State *g, GCobj *o,
 					     uint32_t *gctp,
 					     GC2MarkScope *scope,
-					     uint32_t *startp, int string_edge)
+					     uint32_t *startp, int allow_idle)
 {
   GCArena *a;
   uint32_t gct, start;
@@ -11212,7 +11215,7 @@ static int gc2_observed_obj_status_scoped_impl(global_State *g, GCobj *o,
     LJHugeInfo hi;
     int interior_tag;
     base = NULL;
-    admitted = gc2_huge_observed_scoped(g, o, &base, &hi, hold, string_edge);
+    admitted = gc2_huge_observed_scoped(g, o, &base, &hi, hold, allow_idle);
     if (admitted != LJ_ARENA_HUGE_READER_ACQUIRED)
       return admitted == LJ_ARENA_HUGE_READER_OVERFLOW ? -1 : 0;
     if ((hi.flags & LJ_HUGEF_FREEING) ||
@@ -15398,7 +15401,7 @@ int lj_gc2_test_recovery_state(global_State *g, GCobj *o)
     HugeTab *ht;
     void *base = NULL;
     int state = -1;
-    ht = gc2_huge_recovery_table(g, o, &base, NULL);
+    ht = gc2_huge_table_for_address(g, o, &base, NULL);
     if (ht && base == (void *)o)
       state = lj_arena_hugetab_recovery_state_acq(ht, base, NULL);
     lj_gc2_smr_read_leave(g);
@@ -16905,7 +16908,7 @@ int lj_gc2_tv_lease_acquire(global_State *g, cTValue *tv,
   gc2_public_lease_init(lease);
   if (!g || !tv)
     return LJ_GC2_TV_EDGE_STALE;
-  status = gc2_tv_admit_scoped(g, tv, &scope);
+  status = gc2_tv_admit_scoped_impl(g, tv, &scope, NULL, 1);
   if (status != GC2_TV_SCOPE_ADMITTED) {
     gc2_mark_scope_leave(&scope);
     return status == GC2_TV_SCOPE_RETRY ? LJ_GC2_TV_EDGE_RETRY :
@@ -17028,6 +17031,40 @@ denied:
   return 0;
 }
 
+/* A separated vector may have a dedicated mapping. Its exact base has a
+** fixed offset in the aligned mapping. Both branches retain the allocation
+** before the caller confirms the mutable source and inspects its header. */
+int lj_gc2_storage_lease_try(global_State *g, const void *p, size_t minimum,
+                             LJGC2Lease *lease, size_t *spanp)
+{
+  GC2HugeRegistryLease registry;
+  LJHugeInfo hi;
+  HugeTab *ht;
+  void *base;
+  int acquired;
+  if (((uintptr_t)p & LJ_ARENA_MASK) != sizeof(GCAhdr))
+    return lj_gc2_small_lease_try(g, p, minimum, 0, lease, spanp);
+  gc2_public_lease_init(lease);
+  if (spanp) *spanp = 0;
+  if (!g || !minimum || !lease || !checkptrGC(p) ||
+      !gc2_huge_registry_read_try_mode(g, &registry, 1))
+    return 0;
+  ht = gc2_huge_table_for_address(g, p, &base, NULL);
+  acquired = ht && base == p &&
+    lj_arena_hugetab_reader_acquire(ht, p, &lease->huge, &hi) ==
+      LJ_ARENA_HUGE_READER_ACQUIRED;
+  gc2_huge_registry_read_leave(g, &registry);
+  if (!acquired)
+    return 0;
+  lease->admission = GC2_SCOPE_HUGE_READER;
+  if ((hi.flags & LJ_HUGEF_TRAVERSABLE) || hi.size < minimum) {
+    lj_gc2_lease_release(lease);
+    return 0;
+  }
+  if (spanp) *spanp = hi.size;
+  return 1;
+}
+
 /* Conservative TValue roots may be popped stack cells, stale weak slots, or
 ** racy spill words. During SWEEP the tag alone is not recovery authority:
 ** distinguish stable stale incarnations from transient lifetime ownership,
@@ -17042,7 +17079,7 @@ static uint32_t gc2_trace_sweep_tv_edge(global_State *g, cTValue *tv,
   int edge;
   if (!g || !tv || !tvisgcv(tv))
     return 0;
-  edge = gc2_tv_admit_scoped_impl(g, tv, &scope, &start);
+  edge = gc2_tv_admit_scoped_impl(g, tv, &scope, &start, 0);
   if (edge == GC2_TV_SCOPE_STALE)
     return 0;
   o = gcV(tv);

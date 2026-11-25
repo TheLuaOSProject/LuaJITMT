@@ -730,6 +730,11 @@ LJ_FUNC int lj_gc2_mem_lease_acquire(global_State *g, void *p,
 LJ_FUNC int lj_gc2_small_lease_try(global_State *g, const void *p,
 				 size_t minimum, uint32_t expected_gct,
 				 LJGC2Lease *lease, size_t *spanp);
+/* Retain plain storage in a small arena or an exact huge mapping. Confirm
+** the owning source before reading its header, as for a small lease. */
+LJ_FUNC int lj_gc2_storage_lease_try(global_State *g, const void *p,
+                                     size_t minimum, LJGC2Lease *lease,
+                                     size_t *spanp);
 /* Release is idempotent and zeros the public token before dropping admission. */
 LJ_FUNC void lj_gc2_lease_release(LJGC2Lease *lease);
 /* Resolve an interior bytecode pointer through allocator identity and retain

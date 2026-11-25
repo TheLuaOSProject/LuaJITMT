@@ -5146,17 +5146,11 @@ cTValue * LJ_FASTCALL lj_tab_getint_hop(GCtab *t, int32_t key)
   return lj_tab_getint(t, key);
 }
 
-int lj_tab_getstr_held_try(global_State *g, GCtab *t, const GCstr *key,
-			   TValue *out)
+static int tab_getstr_snapshot_try(GCtab *t, const GCstr *key, Node *node,
+                                   MSize hmask, TValue *out, Node **match)
 {
-  Node *node, *n;
-  MSize hmask, visited = 0;
-  int status;
-  if (!g || !t || !key || !out)
-    return LJ_TAB_GC_LOOKUP_RETRY;
-  status = lj_tab_node_snapshot_gc_held(g, t, &node, &hmask);
-  if (status != LJ_TAB_GC_SNAPSHOT_OK)
-    return LJ_TAB_GC_LOOKUP_RETRY;
+  Node *n;
+  MSize visited = 0;
   if (hmask == 0)
     return LJ_TAB_GC_LOOKUP_ABSENT;
   n = hashstr_node(node, hmask, key);
@@ -5180,6 +5174,7 @@ int lj_tab_getstr_held_try(global_State *g, GCtab *t, const GCstr *key,
 	return LJ_TAB_GC_LOOKUP_RETRY;
       if (tvisnil(&val))
 	return LJ_TAB_GC_LOOKUP_ABSENT;
+      if (match) *match = n;
       *out = val;
       return LJ_TAB_GC_LOOKUP_FOUND;
     }
@@ -5192,6 +5187,71 @@ int lj_tab_getstr_held_try(global_State *g, GCtab *t, const GCstr *key,
 		  lj_tab_node_is_retiring(node)))
     return LJ_TAB_GC_LOOKUP_RETRY;
   return LJ_TAB_GC_LOOKUP_ABSENT;
+}
+
+int lj_tab_getstr_held_try(global_State *g, GCtab *t, const GCstr *key,
+                           TValue *out)
+{
+  Node *node;
+  MSize hmask;
+  if (!g || !t || !key || !out ||
+      lj_tab_node_snapshot_gc_held(g, t, &node, &hmask) !=
+        LJ_TAB_GC_SNAPSHOT_OK)
+    return LJ_TAB_GC_LOOKUP_RETRY;
+  return tab_getstr_snapshot_try(t, key, node, hmask, out, NULL);
+}
+
+int lj_tab_getstr_leased_try(global_State *g, GCtab *t, const GCstr *key,
+                             TValue *out, LJGC2Lease *result)
+{
+  LJGC2Lease vector;
+  Node *node, *match = NULL;
+  MSize mask;
+  size_t span;
+  TValue value, current;
+  int edge, status = LJ_TAB_GC_LOOKUP_RETRY;
+  node = lj_tab_node_acq(t);
+  if (node == &g->nilnode)
+    return LJ_TAB_GC_LOOKUP_ABSENT;
+  if (!node || !lj_gc2_storage_lease_try(g, lj_tab_node_hdr(node),
+                                         sizeof(TabNodeHdr), &vector, &span))
+    return status;
+  if (lj_tab_node_acq(t) != node || lj_tab_node_is_retiring(node))
+    goto done;
+  mask = lj_tab_node_hmask_acq(node);
+  if (!tab_valid_hmask(mask) || lj_tab_node_bytes(mask) > span)
+    goto done;
+  status = tab_getstr_snapshot_try(t, key, node, mask, &value, &match);
+  if (status != LJ_TAB_GC_LOOKUP_FOUND)
+    goto done;
+  if (LJ_UNLIKELY(tvistabinternal(&value))) {
+    status = LJ_TAB_GC_LOOKUP_RETRY;
+    goto done;
+  }
+  edge = lj_gc2_tv_lease_acquire(g, &value, result);
+  /* A weak slot may have been cleared and its address reused during result
+  ** admission. Only the still-current key/value in this vector authorizes
+  ** the retained incarnation. */
+  lj_tv_load_acq(&current, &match->key);
+  if (!tvisstr(&current) || strV(&current) != key)
+    goto retry;
+  lj_tv_load_acq(&current, &match->val);
+  if (tv_rawload(&current) != tv_rawload(&value) ||
+      lj_tab_node_acq(t) != node || lj_tab_node_is_retiring(node) ||
+      edge == LJ_GC2_TV_EDGE_RETRY)
+    goto retry;
+  if (edge == LJ_GC2_TV_EDGE_STALE) {
+    status = LJ_TAB_GC_LOOKUP_ABSENT;
+  } else {
+    *out = value;
+  }
+  goto done;
+retry:
+  lj_gc2_lease_release(result);
+  status = LJ_TAB_GC_LOOKUP_RETRY;
+done:
+  lj_gc2_lease_release(&vector);
+  return status;
 }
 
 cTValue *lj_tab_getstr(GCtab *t, const GCstr *key)

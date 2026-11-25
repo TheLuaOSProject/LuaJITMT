@@ -353,6 +353,12 @@ LJ_FUNC int lj_tab_node_snapshot_gc_held(global_State *g, const GCtab *t,
 ** never be interpreted as semantic absence. */
 LJ_FUNC int lj_tab_getstr_held_try(global_State *g, GCtab *t,
 				   const GCstr *key, TValue *out);
+/* Caller pins the table and key. A hit transfers the exact value lease to
+** the caller. Each lookup retains its own hash generation. */
+struct LJGC2Lease;
+LJ_FUNC int lj_tab_getstr_leased_try(global_State *g, GCtab *t,
+                                     const GCstr *key, TValue *out,
+                                     struct LJGC2Lease *result);
 /* Long C-side generation scans publish an owner-written epoch pin before
 ** acquiring any raw array/node pointer and drop it after the final dereference.
 ** Nested scopes retain the epoch of the outermost reader. */

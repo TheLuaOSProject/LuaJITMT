@@ -1,5 +1,5 @@
-/* Construct a committed struct while an unrelated IDLE metadata collector
-** is parked. Subsequent metatype registration still applies to that ctype. */
+/* Use committed ctypes and their metatables while the metadata collector
+** is paused. A later registration also applies to existing cdata. */
 #include <assert.h>
 #include <pthread.h>
 #include <sched.h>
@@ -43,9 +43,25 @@ int main(void)
     "local ffi = require('ffi')\n"
     "local ct = ffi.typeof('struct { int x; }')\n"
     "local new, size, is, meta = ffi.new, ffi.sizeof, ffi.istype, ffi.metatype\n"
+    "local function plus(a, b) return a.x + b.x end\n"
+    "local function value(a, key) if key == 'twice' then return 2*a.x end end\n"
+    "local small = meta('struct { int x; }', {__add=plus, __index=value})\n"
+    "local mt = {__add=plus, __index=value}\n"
+    "for i=1,2048 do mt['extra'..i] = i end\n"
+    "local large = meta('struct { int x; char tail[20000]; }', mt)\n"
+    "local custom = meta('struct { int x; }', {\n"
+    "  __new=function(t,x) return new(t,x+1) end})\n"
+    "local sentinel = {}\n"
+    "local proxy = setmetatable({}, {__metatable=sentinel})\n"
+    "local getmt = getmetatable\n"
+    "local function use(t)\n"
+    "  local a, b = new(t, 19), t(23)\n"
+    "  return a + b == 42 and b.twice == 46 and is(t, a)\n"
+    "end\n"
     "return function()\n"
     "  local a, b = new(ct, 23), new(ct, 19)\n"
-    "  return is(ct, a) and is(ct, b), size(a), a, b\n"
+    "  if getmt(proxy) ~= sentinel or custom(22).x ~= 23 then return false end\n"
+    "  return is(ct, a) and is(ct, b) and use(small) and use(large), size(a), a, b\n"
     "end, function(a, b)\n"
     "  meta(ct, {__add = function(a, b) return a.x - b.x end})\n"
     "  return a + b, new(ct, 23) + ct(19)\n"

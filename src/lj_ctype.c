@@ -1940,8 +1940,8 @@ void lj_ctype_metaroot_release(LJCTypeMetaRoot *root)
 }
 
 /* Root one ctype metamethod without waiting. CType slots and the metatable
-** directory live until state close. Lua table vectors require SMR. Leases bridge
-** each CTState-owned raw root to the final release-published TG root. Parser
+** directory live until state close. Each lookup pins its hash vector and
+** result through publication into the next root. Parser
 ** sequencing validates only CType topology; metatype CAS and ordinary table
 ** mutation linearize independently through acquire/held table reads.
 **
@@ -1962,11 +1962,9 @@ static int ctype_metatv_rooted_try(lua_State *L, CTState *cts, TValue *outroot,
   uint64_t version;
   TValue sourcev, mtv, result, nilv;
   GCtab *source, *mt;
-  int source_status, mt_status, result_status;
   int function_meta = 0;
   int lookup;
   int rc = LJ_CTYPE_METATV_RETRY;
-  int smr = 0;
 
   if (!L || !cts || !outroot)
     return LJ_CTYPE_METATV_RETRY;
@@ -2015,53 +2013,32 @@ static int ctype_metatv_rooted_try(lua_State *L, CTState *cts, TValue *outroot,
   }
   if (!source)
     goto absent;
-  if (!lj_gc2_smr_read_try(g))
-    goto retry;
-  smr = 1;
 
   /* CTState carries raw GC roots, not TValues. Manufacture only the known TAB
   ** tag, then validate/retain the exact incarnation before dereferencing it. */
   setgcVraw(&sourcev, obj2gco(source), LJ_TTAB);
-  source_status = lj_gc2_tv_lease_acquire(g, &sourcev, &sourcelease);
-  if (source_status != LJ_GC2_TV_EDGE_VALID)
+  if (lj_gc2_tv_lease_acquire(g, &sourcev, &sourcelease) !=
+      LJ_GC2_TV_EDGE_VALID)
     goto retry;
   mt = source;
 
   if (function_meta) {
-    lookup = lj_tab_getstr_held_try(g, source, &g->strempty, &mtv);
+    lookup = lj_tab_getstr_leased_try(g, source, &g->strempty, &mtv, &mtlease);
     if (lookup == LJ_TAB_GC_LOOKUP_RETRY)
       goto retry;
     if (lookup != LJ_TAB_GC_LOOKUP_FOUND)
       goto absent;
-    if (LJ_UNLIKELY(tvistabinternal(&mtv)))
-      goto retry;
-    mt_status = lj_gc2_tv_lease_acquire(g, &mtv, &mtlease);
-    if (mt_status == LJ_GC2_TV_EDGE_RETRY)
-      goto retry;
-    if (mt_status != LJ_GC2_TV_EDGE_VALID || !tvistab(&mtv) ||
-	LJ_UNLIKELY(!lj_tv_gcref_type_match(&mtv)))
+    if (!tvistab(&mtv))
       goto absent;
     mt = tabV(&mtv);
   }
 
-  lookup = lj_tab_getstr_held_try(g, mt, mmname_str(g, mm), &result);
+  lookup = lj_tab_getstr_leased_try(g, mt, mmname_str(g, mm), &result,
+                                    &resultlease);
   if (lookup == LJ_TAB_GC_LOOKUP_RETRY)
     goto retry;
   if (lookup != LJ_TAB_GC_LOOKUP_FOUND)
     goto absent;
-  if (LJ_UNLIKELY(tvistabinternal(&result)))
-    goto retry;
-  result_status = lj_gc2_tv_lease_acquire(g, &result, &resultlease);
-  if (result_status == LJ_GC2_TV_EDGE_RETRY)
-    goto retry;
-  /* A weak metatable value may become terminally stale after the point read.
-  ** Normalize that legal race to absence; permanent CTState table roots use
-  ** the stricter RETRY handling above. */
-  if (result_status != LJ_GC2_TV_EDGE_VALID)
-    goto absent;
-  if (LJ_UNLIKELY(!lj_tv_gcref_type_match(&result)))
-    goto retry;
-
   rc = LJ_CTYPE_METATV_FOUND;
   goto publish;
 
@@ -2088,8 +2065,6 @@ retry:
   rc = LJ_CTYPE_METATV_RETRY;
 
 done:
-  if (smr)
-    lj_gc2_smr_read_leave(g);
   /* Publish only a terminal, sequence-valid result. The exact result lease
   ** remains held across GC2's publication hook and is released afterwards. */
   if (rc == LJ_CTYPE_METATV_FOUND)

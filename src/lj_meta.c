@@ -202,120 +202,6 @@ cTValue *lj_meta_lookup(lua_State *L, cTValue *o, MMS mm)
   return niltv(L);
 }
 
-cTValue *lj_meta_lookuptv(lua_State *L, TValue *out, cTValue *o, MMS mm)
-{
-  global_State *g = G(L);
-  TValue osnap, mtv, result;
-  for (;;) {
-    LJGC2Lease objlease, mtlease, resultlease;
-    GCtab *mt;
-    int ostatus, mtstatus, lookupstatus, resultstatus;
-
-    /* Open source SMR before copying the authoritative receiver root. A lease
-    ** acquired from a pre-SMR pointer could otherwise admit a same-address
-    ** successor after a raced root replacement/reclaim. One acquired snapshot
-    ** is the lookup's linearization candidate: never lease one incarnation and
-    ** then branch through a second read of the slot. Callers which pre-copy a
-    ** mutable registry/upvalue edge into a C local have not supplied an
-    ** authoritative root and must be converted at that call site. */
-    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
-      lj_tab_wait_l(L);
-      continue;
-    }
-    lj_tv_load_acq(&osnap, o);
-    ostatus = lj_gc2_tv_lease_acquire(g, &osnap, &objlease);
-    if (LJ_UNLIKELY(ostatus != LJ_GC2_TV_EDGE_VALID)) {
-      lj_gc2_smr_read_leave(g);
-      if (ostatus == LJ_GC2_TV_EDGE_RETRY) {
-	lj_tab_wait_l(L);
-	continue;
-      }
-      setnilV(&result);
-      copyTVrel(L, out, &result);
-      return out;
-    }
-    if (tvistab(&osnap))
-      mt = lj_tab_metatable_acq(tabV(&osnap));
-    else if (tvisudata(&osnap))
-      mt = lj_udata_metatable_acq(udataV(&osnap));
-    else
-      mt = lj_basemt_obj_acq(g, &osnap);
-    meta_test_pause_after_mt_capture(&osnap, mt);
-    if (!mt) {
-      lj_gc2_smr_read_leave(g);
-      lj_gc2_lease_release(&objlease);
-      setnilV(&result);
-      copyTVrel(L, out, &result);
-      return out;
-    }
-
-    /* The source-side SMR interval prevents reclamation/reuse between pointer
-    ** capture and target admission. Replacement of the receiver's metatable
-    ** therefore chooses the old or new table as a valid linearization, never a
-    ** new incarnation at the same address. */
-    setgcVraw(&mtv, obj2gco(mt), LJ_TTAB);
-    mtstatus = lj_gc2_tv_lease_acquire(g, &mtv, &mtlease);
-    if (mtstatus == LJ_GC2_TV_EDGE_VALID)
-      meta_test_pause_after_mt_lease(mt);
-    lj_gc2_smr_read_leave(g);
-    if (LJ_UNLIKELY(mtstatus != LJ_GC2_TV_EDGE_VALID)) {
-      lj_gc2_lease_release(&objlease);
-      if (mtstatus == LJ_GC2_TV_EDGE_RETRY) {
-	lj_tab_wait_l(L);
-	continue;
-      }
-      setnilV(&result);
-      copyTVrel(L, out, &result);
-      return out;
-    }
-    /* This lookup is deliberately one-shot. lj_tab_gettv_forjit() owns a retry
-    ** loop which may service a safepoint and longjmp; calling it with objlease
-    ** and mtlease held would strand both leases. The held nonwaiting lookup is
-    ** bounded and never waits. Admit its copied result before closing SMR, then
-    ** release every outer lease before the caller-visible retry wait. */
-    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
-      lj_gc2_lease_release(&mtlease);
-      lj_gc2_lease_release(&objlease);
-      lj_tab_wait_l(L);
-      continue;
-    }
-    lookupstatus = lj_tab_getstr_held_try(g, mt, mmname_str(g, mm),
-					  &result);
-    if (lookupstatus == LJ_TAB_GC_LOOKUP_FOUND &&
-        LJ_UNLIKELY(tvistabinternal(&result)))
-      lookupstatus = LJ_TAB_GC_LOOKUP_RETRY;
-    resultstatus = lookupstatus == LJ_TAB_GC_LOOKUP_FOUND ?
-      lj_gc2_tv_lease_acquire(g, &result, &resultlease) :
-      LJ_GC2_TV_EDGE_VALID;
-    if (lookupstatus == LJ_TAB_GC_LOOKUP_FOUND &&
-        resultstatus == LJ_GC2_TV_EDGE_VALID) {
-      /* Publish from the admitted local into the caller-provided result root
-      ** before the source vector SMR interval closes. No raw vector value or
-      ** unleased GC result crosses this helper boundary. */
-      copyTVrel(L, out, &result);
-      lj_gc2_smr_read_leave(g);
-      lj_gc2_publish_read_root(L, out, meta_tv_on_stack(L, out));
-      lj_gc2_lease_release(&resultlease);
-      lj_gc2_lease_release(&mtlease);
-      lj_gc2_lease_release(&objlease);
-      return out;
-    }
-    lj_gc2_smr_read_leave(g);
-    lj_gc2_lease_release(&mtlease);
-    lj_gc2_lease_release(&objlease);
-    if (lookupstatus == LJ_TAB_GC_LOOKUP_RETRY ||
-        resultstatus == LJ_GC2_TV_EDGE_RETRY) {
-      lj_tab_wait_l(L);
-      continue;
-    }
-    /* A stable absent slot, or a stale result incarnation observed before its
-    ** SMR scope closed, both have the semantic value nil for this lookup. */
-    setnilV(&result);
-    copyTVrel(L, out, &result);
-    return out;
-  }
-}
-
 #if LJ_HASFFI
 /* Tailcall from C function. */
 int lj_meta_tailcall(lua_State *L, cTValue *tv)
@@ -464,133 +350,103 @@ static LJ_AINLINE TValue *meta_output_current(lua_State *L,
   return ref->stack ? restorestack(L, ref->ofs) : ref->tv;
 }
 
-/* Return the protected metatable view from one admitted metatable generation.
-** The object/result roots may move while a retry wait services a safepoint, so
-** preserve stack offsets and rebind both on every attempt. In particular, do
-** not overwrite outroot until no further wait is possible: the ARM fast
-** function uses its current callable slot as the eventual result root. */
-TValue *lj_meta_getmt_protected_rooted(lua_State *L, cTValue *objroot,
-					      TValue *outroot)
+/* A source read under SMR can retain the sampled incarnation directly. A
+** reader admitted during metadata retirement confirms its source after the
+** exact lease, so an address reused before admission needs a current edge. */
+static int meta_source_lease(global_State *g, cTValue *source, TValue *snap,
+                             LJGC2Lease *lease, int smr)
+{
+  int status;
+  lj_tv_load_acq(snap, source);
+  status = lj_gc2_tv_lease_acquire(g, snap, lease);
+  if (!smr && tv_rawload_acq(source) != tv_rawload(snap)) {
+    lj_gc2_lease_release(lease);
+    return LJ_GC2_TV_EDGE_RETRY;
+  }
+  return status;
+}
+
+static GCtab *meta_table_acq(global_State *g, cTValue *obj)
+{
+  if (tvistab(obj))
+    return lj_tab_metatable_acq(tabV(obj));
+  if (tvisudata(obj))
+    return lj_udata_metatable_acq(udataV(obj));
+  return lj_basemt_obj_acq(g, obj);
+}
+
+static int meta_table_lease(global_State *g, cTValue *obj, TValue *mtv,
+                            LJGC2Lease *lease, int smr)
+{
+  GCtab *mt = meta_table_acq(g, obj);
+  int status;
+  meta_test_pause_after_mt_capture(obj, mt);
+  if (!mt)
+    return LJ_GC2_TV_EDGE_STALE;
+  setgcVraw(mtv, obj2gco(mt), LJ_TTAB);
+  status = lj_gc2_tv_lease_acquire(g, mtv, lease);
+  if (!smr && meta_table_acq(g, obj) != mt) {
+    lj_gc2_lease_release(lease);
+    return LJ_GC2_TV_EDGE_RETRY;
+  }
+  if (status == LJ_GC2_TV_EDGE_VALID)
+    meta_test_pause_after_mt_lease(mt);
+  return status;
+}
+
+/* Capture one metatable generation, then publish either its selected method
+** or, for getmetatable, the unprotected table from that same capture. */
+static TValue *meta_lookup_rooted(lua_State *L, TValue *out, cTValue *obj,
+                                  MMS mm, int protected_view)
 {
   global_State *g = G(L);
-  MetaSourceRef objref = meta_source_ref(L, objroot);
-  MetaOutputRef outref = meta_output_ref(L, outroot);
-  TValue osnap, mtv, result;
+  MetaSourceRef source = meta_source_ref(L, obj);
+  MetaOutputRef dest = meta_output_ref(L, out);
   for (;;) {
-    LJGC2Lease objlease, mtlease, resultlease;
-    cTValue *obj;
-    TValue *out;
-    GCtab *mt;
-    int objstatus, mtstatus, lookupstatus, resultstatus;
-
-    /* Admit the exact receiver before following its replaceable metatable
-    ** edge. Source SMR prevents replacement-to-reuse ABA until the captured
-    ** metatable generation owns its own exact lease. */
-    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
-      lj_tab_wait_l(L);
-      continue;
-    }
-    obj = meta_source_current(L, &objref);
-    lj_tv_load_acq(&osnap, obj);
-    objstatus = lj_gc2_tv_lease_acquire(g, &osnap, &objlease);
-    if (LJ_UNLIKELY(objstatus != LJ_GC2_TV_EDGE_VALID)) {
+    LJGC2Lease receiver = {0}, table = {0}, method = {0};
+    TValue osnap, mtv, result;
+    int smr = lj_gc2_smr_read_try(g);
+    int edge = meta_source_lease(g, meta_source_current(L, &source),
+                                 &osnap, &receiver, smr);
+    int lookup = LJ_TAB_GC_LOOKUP_ABSENT;
+    if (edge == LJ_GC2_TV_EDGE_VALID)
+      edge = meta_table_lease(g, &osnap, &mtv, &table, smr);
+    if (smr)
       lj_gc2_smr_read_leave(g);
-      if (objstatus == LJ_GC2_TV_EDGE_RETRY) {
-	lj_tab_wait_l(L);
-	continue;
-      }
-      setnilV(&result);
-      out = meta_output_current(L, &outref);
+    if (edge == LJ_GC2_TV_EDGE_VALID) {
+      lookup = lj_tab_getstr_leased_try(g, tabV(&mtv), mmname_str(g, mm),
+                                        &result, &method);
+      if (lookup == LJ_TAB_GC_LOOKUP_ABSENT && protected_view)
+        result = mtv;
+    }
+    if (edge != LJ_GC2_TV_EDGE_RETRY && lookup != LJ_TAB_GC_LOOKUP_RETRY) {
+      if (edge == LJ_GC2_TV_EDGE_STALE ||
+          (lookup == LJ_TAB_GC_LOOKUP_ABSENT && !protected_view))
+        setnilV(&result);
+      out = meta_output_current(L, &dest);
       copyTVrel(L, out, &result);
-      lj_gc2_publish_read_root(L, out, outref.stack);
-      return meta_output_current(L, &outref);
+      if (protected_view || lookup == LJ_TAB_GC_LOOKUP_FOUND)
+        lj_gc2_publish_read_root(L, out, dest.stack);
+      lj_gc2_lease_release(&method);
+      lj_gc2_lease_release(&table);
+      lj_gc2_lease_release(&receiver);
+      return meta_output_current(L, &dest);
     }
-    if (tvistab(&osnap))
-      mt = lj_tab_metatable_acq(tabV(&osnap));
-    else if (tvisudata(&osnap))
-      mt = lj_udata_metatable_acq(udataV(&osnap));
-    else
-      mt = lj_basemt_obj_acq(g, &osnap);
-    meta_test_pause_after_mt_capture(&osnap, mt);
-    if (!mt) {
-      lj_gc2_smr_read_leave(g);
-      lj_gc2_lease_release(&objlease);
-      setnilV(&result);
-      out = meta_output_current(L, &outref);
-      copyTVrel(L, out, &result);
-      lj_gc2_publish_read_root(L, out, outref.stack);
-      return meta_output_current(L, &outref);
-    }
-    setgcVraw(&mtv, obj2gco(mt), LJ_TTAB);
-    mtstatus = lj_gc2_tv_lease_acquire(g, &mtv, &mtlease);
-    if (mtstatus == LJ_GC2_TV_EDGE_VALID)
-      meta_test_pause_after_mt_lease(mt);
-    lj_gc2_smr_read_leave(g);
-    if (LJ_UNLIKELY(mtstatus != LJ_GC2_TV_EDGE_VALID)) {
-      lj_gc2_lease_release(&objlease);
-      if (mtstatus == LJ_GC2_TV_EDGE_RETRY) {
-	lj_tab_wait_l(L);
-	continue;
-      }
-      setnilV(&result);
-      out = meta_output_current(L, &outref);
-      copyTVrel(L, out, &result);
-      lj_gc2_publish_read_root(L, out, outref.stack);
-      return meta_output_current(L, &outref);
-    }
-
-    /* The held lookup is bounded and cannot wait while the object/metatable
-    ** leases are live. Acquire any collectable protected result before closing
-    ** its vector SMR interval. */
-    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
-      lj_gc2_lease_release(&mtlease);
-      lj_gc2_lease_release(&objlease);
-      lj_tab_wait_l(L);
-      continue;
-    }
-    lookupstatus = lj_tab_getstr_held_try(g, mt,
-						mmname_str(g, MM_metatable),
-						&result);
-    if (lookupstatus == LJ_TAB_GC_LOOKUP_FOUND &&
-	LJ_UNLIKELY(tvistabinternal(&result)))
-      lookupstatus = LJ_TAB_GC_LOOKUP_RETRY;
-    resultstatus = lookupstatus == LJ_TAB_GC_LOOKUP_FOUND ?
-      lj_gc2_tv_lease_acquire(g, &result, &resultlease) :
-      LJ_GC2_TV_EDGE_VALID;
-
-    if (lookupstatus == LJ_TAB_GC_LOOKUP_FOUND &&
-	resultstatus == LJ_GC2_TV_EDGE_VALID) {
-      out = meta_output_current(L, &outref);
-      copyTVrel(L, out, &result);
-      lj_gc2_smr_read_leave(g);
-      lj_gc2_publish_read_root(L, out, outref.stack);
-      lj_gc2_lease_release(&resultlease);
-      lj_gc2_lease_release(&mtlease);
-      lj_gc2_lease_release(&objlease);
-      return meta_output_current(L, &outref);
-    }
-    if (lookupstatus == LJ_TAB_GC_LOOKUP_ABSENT ||
-	(lookupstatus == LJ_TAB_GC_LOOKUP_FOUND &&
-	 resultstatus == LJ_GC2_TV_EDGE_STALE)) {
-      /* Nil/absent protection exposes this same captured metatable, never a
-      ** second generation loaded after a concurrent replacement. */
-      out = meta_output_current(L, &outref);
-      copyTVrel(L, out, &mtv);
-      lj_gc2_smr_read_leave(g);
-      lj_gc2_publish_read_root(L, out, outref.stack);
-      lj_gc2_lease_release(&mtlease);
-      lj_gc2_lease_release(&objlease);
-      return meta_output_current(L, &outref);
-    }
-
-    lj_gc2_smr_read_leave(g);
-    lj_gc2_lease_release(&mtlease);
-    lj_gc2_lease_release(&objlease);
-    lj_assertL(lookupstatus == LJ_TAB_GC_LOOKUP_RETRY ||
-	       resultstatus == LJ_GC2_TV_EDGE_RETRY,
-	       "bad protected metatable lookup status");
+    lj_gc2_lease_release(&table);
+    lj_gc2_lease_release(&receiver);
     lj_tab_wait_l(L);
   }
+}
+
+cTValue *lj_meta_lookuptv(lua_State *L, TValue *out, cTValue *obj, MMS mm)
+{
+  return meta_lookup_rooted(L, out, obj, mm, 0);
+}
+
+TValue *lj_meta_getmt_protected_rooted(lua_State *L, cTValue *obj,
+                                       TValue *out)
+{
+  return meta_lookup_rooted(L, out, obj, MM_metatable, 1);
 }
 
 static LJ_AINLINE TValue *meta_chain_root(const MetaChainRoots *roots,
@@ -630,145 +486,84 @@ static void meta_chain_roots_fini(MetaChainRoots *roots)
     lj_tg_root_anchor_pop(roots->tg, roots->idx[i]);
 }
 
-/* Opportunistically capture the first callable cdata method while source SMR
-** and the receiver/key leases are already held. A successful caller owns both
-** extra leases until the method anchor is published. Refusal owns neither;
-** the ordinary lookup can retry after input capture releases its scopes. */
-static int meta_chain_cdata_method_try(global_State *g, cTValue *receiver,
-				     MMS mm, TValue *method,
-				     LJGC2Lease *mtlease,
-				     LJGC2Lease *methodlease)
-{
-#if LJ_HASFFI && LJ_GC2_INTERNAL_ALLOCATOR_ONLY
-  GCtab *mt = lj_basemt_obj_acq(g, receiver);
-  TValue mtv;
-  int status;
-  meta_test_pause_after_mt_capture(receiver, mt);
-  if (!mt)
-    return 0;
-  setgcVraw(&mtv, obj2gco(mt), LJ_TTAB);
-  status = lj_gc2_tv_lease_acquire(g, &mtv, mtlease);
-  if (status != LJ_GC2_TV_EDGE_VALID)
-    return 0;
-  meta_test_pause_after_mt_lease(mt);
-  status = lj_tab_getstr_held_try(g, mt, mmname_str(g, mm), method);
-  if (status == LJ_TAB_GC_LOOKUP_FOUND && tvisfunc(method) &&
-      lj_gc2_tv_lease_acquire(g, method, methodlease) == LJ_GC2_TV_EDGE_VALID)
-    return 1;
-  lj_gc2_lease_release(mtlease);
-  return 0;
-#else
-  /* The default allocator's queue growth cannot throw. Configurations which
-  ** permit arbitrary allocator callbacks keep the original publication path
-  ** until that callback boundary has its own exact lease-unwind contract. */
-  UNUSED(g); UNUSED(receiver); UNUSED(mm); UNUSED(method);
-  UNUSED(mtlease); UNUSED(methodlease);
-  return 0;
-#endif
-}
-
-/* Capture the caller's authoritative receiver/key pair. Source SMR starts
-** before both mutable-root loads, and both exact
-** leases survive release-publication into owner-private enumerated anchors.
-** A callable first cdata method can share this admission and is published
-** before all its extra scopes close; other lookups follow normal capture.
-** A NULL method_ready requests only the receiver/key pair.
-** VM stack roots and VM scratch/constant roots satisfy this contract. A C
-** caller which first copied a replaceable registry/upvalue edge into a local
-** has already lost source authority and must root that edge at its call site.
-**
-** The remaining lj_tab_wait_l() calls are deliberate b1.2.1 zero-wait debt:
-** every lease and SMR interval is closed before servicing the retry. */
+/* Keep the two inputs and any callable cdata method live until all three
+** anchors have been published. Each retry drops its leases before a poll. */
 static int meta_chain_capture_inputs(lua_State *L, MetaChainRoots *roots,
-				     const MetaSourceRef *oref,
-				     const MetaSourceRef *kref,
-				     MMS mm, int *method_ready)
+                                     const MetaSourceRef *oref,
+                                     const MetaSourceRef *kref,
+                                     MMS mm, int *method_ready)
 {
   global_State *g = G(L);
   if (method_ready) *method_ready = 0;
   for (;;) {
-    LJGC2Lease olease, envlease, klease, mtlease, methodlease;
-    TValue osnap, ksnap, method;
-    cTValue *o, *k;
-    int ostatus, envstatus, kstatus, captured_method;
-    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
-      lj_tab_wait_l(L);
-      continue;
-    }
-    o = meta_source_current(L, oref);
-    k = meta_source_current(L, kref);
-    lj_tv_load_acq(&osnap, o);
-    ostatus = lj_gc2_tv_lease_acquire(g, &osnap, &olease);
-    if (LJ_UNLIKELY(ostatus != LJ_GC2_TV_EDGE_VALID)) {
-      lj_gc2_smr_read_leave(g);
-      if (ostatus == LJ_GC2_TV_EDGE_RETRY) {
-	lj_tab_wait_l(L);
-	continue;
-      }
-      return META_CAPTURE_RECEIVER_STALE;
-    }
+    LJGC2Lease olease = {0}, envlease = {0}, klease = {0};
+    LJGC2Lease mtlease = {0}, methodlease = {0};
+    TValue osnap, ksnap, mtv, method;
+    int smr = lj_gc2_smr_read_try(g);
+    int captured = 0, miss = META_CAPTURE_RECEIVER_STALE;
+    int status = meta_source_lease(g, meta_source_current(L, oref),
+                                   &osnap, &olease, smr);
+    if (status != LJ_GC2_TV_EDGE_VALID)
+      goto failed;
     if (oref->funcenv) {
+      GCfunc *fn;
       GCtab *env;
-      /* The function lease authorizes the child-edge load. The surrounding
-      ** source SMR interval then prevents replacement-to-reuse ABA until the
-      ** exact environment incarnation has acquired its own lease. */
-      if (LJ_UNLIKELY(!tvisfunc(&osnap))) {
-	lj_gc2_smr_read_leave(g);
-	lj_gc2_lease_release(&olease);
-	return META_CAPTURE_RECEIVER_STALE;
+      if (!tvisfunc(&osnap)) {
+        status = LJ_GC2_TV_EDGE_STALE;
+        goto failed;
       }
-      env = lj_func_env_acq(funcV(&osnap));
+      fn = funcV(&osnap);
+      env = lj_func_env_acq(fn);
       if (env)
-	setgcVraw(&osnap, obj2gco(env), LJ_TTAB);
+        setgcVraw(&osnap, obj2gco(env), LJ_TTAB);
       else
-	setnilV(&osnap);
-      envstatus = lj_gc2_tv_lease_acquire(g, &osnap, &envlease);
-      if (LJ_UNLIKELY(envstatus != LJ_GC2_TV_EDGE_VALID)) {
-	lj_gc2_smr_read_leave(g);
-	lj_gc2_lease_release(&olease);
-	if (envstatus == LJ_GC2_TV_EDGE_RETRY) {
-	  lj_tab_wait_l(L);
-	  continue;
-	}
-	return META_CAPTURE_RECEIVER_STALE;
-      }
+        setnilV(&osnap);
+      status = lj_gc2_tv_lease_acquire(g, &osnap, &envlease);
+      if (!smr && lj_func_env_acq(fn) != env)
+        status = LJ_GC2_TV_EDGE_RETRY;
+      if (status != LJ_GC2_TV_EDGE_VALID)
+        goto failed;
     }
-    lj_tv_load_acq(&ksnap, k);
-    kstatus = lj_gc2_tv_lease_acquire(g, &ksnap, &klease);
-    if (LJ_UNLIKELY(kstatus != LJ_GC2_TV_EDGE_VALID)) {
-      lj_gc2_smr_read_leave(g);
-      if (oref->funcenv)
-	lj_gc2_lease_release(&envlease);
-      lj_gc2_lease_release(&olease);
-      if (kstatus == LJ_GC2_TV_EDGE_RETRY) {
-	lj_tab_wait_l(L);
-	continue;
-      }
-      return META_CAPTURE_KEY_STALE;
+    miss = META_CAPTURE_KEY_STALE;
+    status = meta_source_lease(g, meta_source_current(L, kref), &ksnap,
+                               &klease, smr);
+    if (status != LJ_GC2_TV_EDGE_VALID)
+      goto failed;
+#if LJ_HASFFI && LJ_GC2_INTERNAL_ALLOCATOR_ONLY
+    if (method_ready && !oref->funcenv && tviscdata(&osnap) &&
+        meta_table_lease(g, &osnap, &mtv, &mtlease, smr) ==
+          LJ_GC2_TV_EDGE_VALID) {
+      captured = lj_tab_getstr_leased_try(g, tabV(&mtv), mmname_str(g, mm),
+                                          &method, &methodlease) ==
+                   LJ_TAB_GC_LOOKUP_FOUND && tvisfunc(&method);
     }
-    captured_method = method_ready && !oref->funcenv && tviscdata(&osnap) &&
-      meta_chain_cdata_method_try(g, &osnap, mm, &method,
-				 &mtlease, &methodlease);
+#else
+    UNUSED(mm); UNUSED(mtv);
+#endif
     copyTVrel(L, meta_chain_root(roots, META_CHAIN_RECEIVER), &osnap);
     copyTVrel(L, meta_chain_root(roots, META_CHAIN_KEY), &ksnap);
-    if (captured_method)
+    if (captured)
       copyTVrel(L, meta_chain_root(roots, META_CHAIN_METHOD), &method);
-    lj_gc2_smr_read_leave(g);
-    if (captured_method) {
-      /* Transfer the callable first. Extra leases must not extend across
-      ** the existing arbitrary-key root barrier's traversal fallback. */
+    if (smr) lj_gc2_smr_read_leave(g);
+    if (captured)
       lj_gc2_publish_read_root(L, meta_chain_root(roots, META_CHAIN_METHOD), 0);
-      lj_gc2_lease_release(&methodlease);
-      lj_gc2_lease_release(&mtlease);
-    }
+    lj_gc2_lease_release(&methodlease);
+    lj_gc2_lease_release(&mtlease);
     lj_gc2_publish_read_root(L, meta_chain_root(roots, META_CHAIN_RECEIVER), 0);
     lj_gc2_publish_read_root(L, meta_chain_root(roots, META_CHAIN_KEY), 0);
     lj_gc2_lease_release(&klease);
-    if (oref->funcenv)
-      lj_gc2_lease_release(&envlease);
+    lj_gc2_lease_release(&envlease);
     lj_gc2_lease_release(&olease);
-    if (method_ready) *method_ready = captured_method;
+    if (method_ready) *method_ready = captured;
     return META_CAPTURE_VALID;
+failed:
+    if (smr) lj_gc2_smr_read_leave(g);
+    lj_gc2_lease_release(&klease);
+    lj_gc2_lease_release(&envlease);
+    lj_gc2_lease_release(&olease);
+    if (status != LJ_GC2_TV_EDGE_RETRY)
+      return miss;
+    lj_tab_wait_l(L);
   }
 }
 
@@ -786,21 +581,16 @@ static TValue *meta_chain_value_publish(lua_State *L,
     TValue *out;
     TValue snap;
     int status;
-    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
-      lj_tab_wait_l(L);
-      continue;
-    }
-    lj_tv_load_acq(&snap, meta_chain_root(roots, which));
-    status = lj_gc2_tv_lease_acquire(g, &snap, &lease);
+    /* This owner-private chain anchor remains populated until publication. */
+    status = meta_source_lease(g, meta_chain_root(roots, which), &snap,
+                               &lease, 0);
     out = meta_output_current(L, outref);
     if (status == LJ_GC2_TV_EDGE_VALID) {
       copyTVrel(L, out, &snap);
-      lj_gc2_smr_read_leave(g);
       lj_gc2_publish_read_root(L, out, outref->stack);
       lj_gc2_lease_release(&lease);
       return meta_output_current(L, outref);
     }
-    lj_gc2_smr_read_leave(g);
     if (status == LJ_GC2_TV_EDGE_STALE) {
       setnilV(&snap);
       copyTVrel(L, out, &snap);
