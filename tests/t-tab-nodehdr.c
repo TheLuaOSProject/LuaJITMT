@@ -84,7 +84,7 @@ int main(void)
     check_pair(L, i);
 
   lua_settop(L, 0);
-  lua_createtable(L, 0, 2);
+  lua_createtable(L, 0, 4);
   t = tabV(L->top-1);
   assert(lj_tab_node_acq(t) != nilnode);
   oldnode = lj_tab_node_acq(t);
@@ -92,14 +92,16 @@ int main(void)
   assert(lj_tab_node_freecount_acq(oldnode) == lj_tab_node_hmask_acq(oldnode) + 1u);
   assert(lj_tab_node_nextgen_acq(oldnode) == NULL);
   lj_tab_resize(L, t, t->asize, 0);
-  assert(lj_tab_node_acq(t) == nilnode);
-  assert(lj_tab_node_hmask_acq(lj_tab_node_acq(t)) == 0);
+  newnode = lj_tab_node_acq(t);
+  assert(newnode != nilnode && newnode != oldnode);
+  assert(lj_tab_node_hmask_acq(newnode) == 1);
+  assert(lj_tab_node_freecount_acq(newnode) == 2);
   assert(lj_tab_node_hdr_flags_acq(oldnode) == TABNODE_FLAG_RETIRING);
-  assert(lj_tab_node_nextgen_acq(oldnode) == nilnode);
+  assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
   assert(lj_tab_node_hdr_flags_acq(nilnode) == 0);
   assert(lj_tab_node_freecount_acq(nilnode) == 0);
   assert(lj_tab_node_nextgen_acq(nilnode) == NULL);
-  assert(t->hmask == 0);
+  assert(t->hmask == 1);
 
   lua_close(L);
   printf("t-tab-nodehdr OK: hash masks stay paired with Node vectors\n");

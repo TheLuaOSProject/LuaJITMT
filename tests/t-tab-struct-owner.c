@@ -1149,6 +1149,97 @@ static void exercise_array_setup_owner(lua_State *L, int installed,
   lua_pop(L, 1);
 }
 
+static void exercise_first_hash_owner(lua_State *L, MSize installed)
+{
+  volatile int ready = 0, owner_start = 0, other_start = 0;
+  volatile int owner_done = 0, other_done = 0;
+  volatile int hook_entered = 0, hook_release = 0;
+  ResizeCtx owner = { 0 }, other = { 0 };
+  pthread_t other_thread;
+  GCtab *t;
+  Node *nilnode = &G(L)->nilnode;
+  int i;
+
+  lua_settop(L, 0);
+  lua_createtable(L, 2, 0);
+  t = tabV(L->top - 1);
+  lua_pushinteger(L, 11);
+  lua_rawseti(L, 1, 1);
+  lua_pushinteger(L, 22);
+  lua_rawseti(L, 1, 2);
+  assert(lj_tab_node_acq(t) == nilnode);
+
+  owner.L = new_child_with_table(L, 1);
+  owner.ready = &ready;
+  owner.start = &owner_start;
+  owner.done = &owner_done;
+  owner.asize = -2;
+  owner.mutate = 7;
+  owner.status = -1;
+  other.L = new_child_with_table(L, 1);
+  other.ready = &ready;
+  other.start = &other_start;
+  other.done = &other_done;
+  other.asize = -2;
+  other.mutate = 8;
+  other.status = -1;
+
+  resize_hook_tab = t;
+  resize_hook_entered = &hook_entered;
+  resize_hook_release = &hook_release;
+  hash_install_pause_stage = installed;
+  lj_tab_test_set_hash_install_hook(hash_install_hold_hook);
+  assert(pthread_create(&copy_owner, NULL, resize_worker, &owner) == 0);
+  assert(pthread_create(&other_thread, NULL, resize_worker, &other) == 0);
+  assert(wait_for_flag(&ready, 2, 1000000));
+  store_flag(&owner_start, 1);
+  assert(wait_for_flag(&hook_entered, 1, 1000000));
+  assert(lj_tab_node_acq(t) == nilnode);
+  assert((lj_tab_resize_desc_control_acq(t) != NULL) == installed);
+  store_flag(&other_start, 1);
+  assert(wait_for_flag(&other_done, 1, 1000000));
+  assert(!load_flag(&owner_done));
+  assert(lj_tab_node_acq(t) != nilnode);
+  assert(lj_tab_resize_desc_control_acq(t) == NULL);
+
+  for (i = 0; i < 4; i++) {
+    lj_tab_clear(L, t);
+    lj_tab_resize(L, t, lj_tab_asize_acq(t), 0);
+    assert(lj_tab_node_acq(t) != nilnode && lj_tab_hmask_acq(t) == 1);
+  }
+
+  store_flag(&hook_release, 1);
+  assert(pthread_join(copy_owner, NULL) == 0 && owner.status == 0);
+  assert(pthread_join(other_thread, NULL) == 0 && other.status == 0);
+  lj_tab_test_set_hash_install_hook(NULL);
+  resize_hook_tab = NULL;
+  resize_hook_entered = NULL;
+  resize_hook_release = NULL;
+  lua_rawgeti(L, 1, -2);
+  assert(lua_tointeger(L, -1) == 404);
+  lua_pop(L, 1);
+  lua_rawgeti(L, 1, -1);
+  assert(lua_isnil(L, -1));
+  lua_pop(L, 1);
+  lua_settop(L, 1);
+  assert(luaL_dostring(L,
+    "return function(t) "
+    "  local clear = require('table.clear') "
+    "  clear(t); assert(next(t) == nil) "
+    "  setmetatable(t, {__mode = 'v'}) "
+    "  t.dead = {}; collectgarbage(); collectgarbage() "
+    "  assert(next(t) == nil) "
+    "end") == 0);
+  for (i = 0; i < 4; i++) {
+    lua_pushvalue(L, 2);
+    lua_pushvalue(L, 1);
+    assert(lua_pcall(L, 1, 0, 0) == 0);
+    lj_tab_resize(L, t, lj_tab_asize_acq(t), 0);
+    assert(lj_tab_node_acq(t) != nilnode && lj_tab_hmask_acq(t) == 1);
+  }
+  lua_settop(L, 1);
+}
+
 static void exercise_hash_install_owner(lua_State *L, MSize installed)
 {
   volatile int ready = 0, owner_start = 0, other_start = 0;
@@ -1446,6 +1537,8 @@ int main(void)
   exercise_array_setup_owner(L, 1, 0, 1);
   exercise_array_setup_owner(L, 0, 1, 1);
   exercise_array_setup_owner(L, 1, 1, 1);
+  exercise_first_hash_owner(L, 0);
+  exercise_first_hash_owner(L, 1);
   exercise_hash_install_owner(L, 0);
   exercise_hash_install_owner(L, 1);
   exercise_hash_shrink_owner(L, 0, 0);

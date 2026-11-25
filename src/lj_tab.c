@@ -4026,7 +4026,8 @@ static int tab_resize_offer_early(lua_State *L, GCtab *t,
   begin = (uintptr_t)desc->oldnode;
   end = begin + ((MSize)desc->oldhmask + 1u) * sizeof(Node);
   if (desc->oldret ? cursor < begin || cursor > end :
-                     cursor != (uintptr_t)desc->oldarray) {
+      cursor != (uintptr_t)(desc->oldarray ?
+        (const void *)desc->oldarray : (const void *)&g->nilnode)) {
     lj_gc2_smr_read_leave(g);
     goto release;
   }
@@ -4049,8 +4050,9 @@ static int tab_resize_offer_early(lua_State *L, GCtab *t,
     tab_retire_init(L, desc->oldret, t, desc->oldnode, desc->oldhmask);
     desc->oldret->hold_control = tagged;
     tab_retire_preserve(g, desc->oldret);
-    tab_pub_node_mem(L, t, node);
   }
+  if (node)
+    tab_pub_node_mem(L, t, node);
   if (desc->oldaret) {
     tab_array_retire_init(L, desc->oldaret, t, desc->oldarray, desc->oldacap);
     desc->oldaret->hold_control = tagged;
@@ -4132,7 +4134,7 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize,
   TabNodeRetire *oldret;
   TabArrayRetire *oldaret;
   TabResizeDesc *cutover;
-  int array_migration, hash_migration, self_metatable, inline_shrink;
+  int array_migration, hash_migration, first_hash, self_metatable, inline_shrink;
   MSize hash_source_count;
   int array_next_claimed;
   int struct_acq;
@@ -4243,6 +4245,11 @@ restart_resize:
     if (hbits < needhbits)
       hbits = needhbits;
   }
+  /* Once a real hash exists, retain at least the smallest hash vector.
+  ** This makes nilnode a one-way source: a helper delayed before publishing
+  ** the first real root cannot match nilnode after a later shrink. */
+  if (oldhmask && !hbits)
+    hbits = 1;
   if (shared_resize && oldhmask > 0) {
     uint32_t oldhbits = lj_fls((uint32_t)oldhmask) + 1u;
     /*
@@ -4328,8 +4335,9 @@ restart_resize:
       (newnode && !self_metatable && (oldret || !oldarray_separated)))) ||
     (oldaret && asize < oldasize && oldret && newnode && !self_metatable &&
      newhmask + 1u >= hash_source_count);
+  first_hash = !oldhmask && newnode && !array_changed && !self_metatable;
   if ((mt_active_acq(g) || mt_entering_acq(g)) &&
-      (array_migration || (oldret && newnode && !array_changed))) {
+      (array_migration || first_hash || (oldret && newnode && !array_changed))) {
     uint64_t id = tab_resize_desc_id_reserve(g);
     if (id != 0) {
       GCSize bytes = sizeof(TabResizeDesc);
@@ -4410,12 +4418,12 @@ restart_resize:
   ** uses the TLS owner and yield-only wait variant. No old vector is
   ** dereferenced until the root recheck below succeeds. */
   if (cutover &&
-      ((hash_migration && !array_migration) ||
+      (first_hash || (hash_migration && !array_migration) ||
        (array_migration &&
         ((!oldhmask && !hbits) || (oldret && hash_migration))))) {
     int offered;
+    cutover->oldarray = oldarray;
     if (array_migration) {
-      cutover->oldarray = oldarray;
       cutover->newarray = array;
       cutover->newacap = newacap;
       cutover->oldaret = oldaret;
@@ -4490,7 +4498,7 @@ restart_resize:
     const Node *expect_next = NULL;
     uint32_t expect_flags = hash_flags0;
     uint32_t want_flags = hash_flags0 | (uint32_t)TABNODE_FLAG_RETIRING;
-    node_succ = hbits ? newnode : &g->nilnode;
+    node_succ = newnode;
     if (!lj_tab_node_nextgen_cas(oldnode, &expect_next, node_succ))
       goto retry_resize;
     if (!lj_tab_node_hdr_flags_word_cas(oldnode, &expect_flags, want_flags)) {
@@ -4577,10 +4585,7 @@ restart_resize:
     global_State *g = G(L);
     lj_tab_hmask_rel(t, 0);
     lj_tab_freetop_rel(t, array ? (const Node *)array : &g->nilnode);
-    lj_tab_node_rel(t, &g->nilnode);
-    if (oldret) {
-      tab_retire_arm(g, oldret);
-    }
+    lj_assertL(!oldret, "resize restores the initial nil hash root");
   }
   if (asize < oldasize) {  /* Array part shrinks? */
     lj_tab_asize_rel(t, asize);  /* This 'shrinks' even colocated arrays. */

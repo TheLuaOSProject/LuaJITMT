@@ -131,7 +131,7 @@ static void exercise_unpublished_nil_key_value(lua_State *L)
   assert_next_empty(t);
 
   lj_tab_resize(L, t, 0, 0);
-  assert(t->hmask == 0);
+  assert(t->hmask == 1);
   assert_next_empty(t);
 }
 
@@ -266,7 +266,7 @@ static void exercise_resize_keylock_hash_to_array(lua_State *L)
   assert(asize == 8);
   curnode = lj_tab_node_snapshot_acq(t, &curhmask);
   UNUSED(curnode);
-  assert(curhmask == 0);
+  assert(curhmask == 1);
   lj_tv_load_acq(&oldkey, &oldn->key);
   assert(tvisnum(&oldkey) && oldkey.n == keytv.n);
   tabfwd_assert_forward(&oldn->val);

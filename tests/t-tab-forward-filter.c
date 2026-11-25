@@ -549,7 +549,7 @@ static void exercise_hash_to_array_only_forward_hop(lua_State *L)
   newarray = lj_tab_array_acq(t);
   newasize = lj_tab_asize_acq(t);
   newnode = lj_tab_node_snapshot_acq(t, &newhmask);
-  assert(newhmask == 0);
+  assert(newhmask == 1);
   assert(newasize > (MSize)moveint);
   assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
   tabfwd_assert_forward(oldnumslot);

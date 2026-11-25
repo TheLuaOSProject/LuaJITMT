@@ -235,9 +235,10 @@ int main(void)
   oldnode = lj_tab_node_acq(t);
   assert(oldnode != &G(L)->nilnode);
   lj_tab_resize(L, t, t->asize, 0);
-  assert(t->hmask == 0);
-  assert(lj_tab_node_acq(t) == &G(L)->nilnode);
-  assert(lj_tab_node_hmask_acq(lj_tab_node_acq(t)) == 0);
+  assert(t->hmask == 1);
+  assert(lj_tab_node_acq(t) != oldnode);
+  assert(lj_tab_node_acq(t) != &G(L)->nilnode);
+  assert(lj_tab_node_hmask_acq(lj_tab_node_acq(t)) == 1);
 
   check_gc_key(L);
 
