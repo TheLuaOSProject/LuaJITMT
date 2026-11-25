@@ -56,7 +56,7 @@ return function(add)
           end
         end
         local progress = {}
-        for _, mode in ipairs({ "next", "itern", "rooted", "cursor" }) do
+        for _, mode in ipairs({ "next", "itern", "rooted", "cursor", "capi" }) do
           for _, shape in ipairs({ "dense", "sparse", "empty", "holes", "zero", "bool" }) do
             progress[#progress + 1] = { mode, shape }
           end

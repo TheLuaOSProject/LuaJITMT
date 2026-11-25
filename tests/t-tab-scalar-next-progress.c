@@ -1,6 +1,4 @@
-/* Public VM/direct-rooted progress while the real IDLE reclaimer is paused.
-** The separate capi mode intentionally retains the known receiver-capture
-** gap; its alarm is a recorded failure, never an accepted iterator result. */
+/* Public C and Lua iteration while the real IDLE reclaimer is paused. */
 #include <assert.h>
 #include <pthread.h>
 #include <stdint.h>
