@@ -1274,6 +1274,7 @@ static void gc2_peer_wait_owned_l(lua_State *L);
 static void gc2_root_scan_retry(global_State *g);
 static int gc2_mark_begin(global_State *g, int automatic);
 static int gc2_fixpoint_epoch_continue(global_State *g);
+static int gc2_sweep_close_epoch_owned(global_State *g, int start);
 static void gc2_weak_to_sweep(global_State *g, lua_State *L, int automatic);
 static int gc2_fixpoint_epoch_reserve(global_State *g);
 static int gc2_fixpoint_epoch_owned(global_State *g, int start);
@@ -2732,8 +2733,8 @@ static int gc2_worker_stop_locked_l(global_State *g, lua_State *L,
   /* The last worker can exit after dropping its counted poll without owning
   ** the resume token. Give its published epoch one turn before releasing TG
   ** slots. An unacknowledged Lua peer can still finish the same epoch later. */
-  if (unjoined == 0 && gc2_phase_acq(g) == LJ_GC2_SWEEP &&
-      gc2_fixpoint_epoch_actions_acq(g))
+  if (unjoined == 0 && gc2_fixpoint_epoch_actions_acq(g) &&
+      (gc2_phase_acq(g) == LJ_GC2_SWEEP || gc2_sweep_table_close_gate_sc(g)))
     (void)gc2_fixpoint_epoch_continue(g);
   if (L) {
     uint32_t actions = lj_native_leave(L);
@@ -3092,6 +3093,11 @@ int lj_gc2_collect_active(lua_State *L)
     if (gc2_jit_phase_gate_acq(g) == 0 && lj_tg_any_jit_active(g))
       return 0;
     if (phase == LJ_GC2_IDLE) {
+      if (gc2_sweep_table_close_gate_sc(g)) {
+	if (!gc2_fixpoint_epoch_continue(g))
+	  gc2_peer_wait_l(L);
+	continue;
+      }
       if (need_major) {
 	if (gc2_request_major_explicit(g, tg) ||
 	    gc2_cycle_leader_acq(g) != 0) {
@@ -3238,6 +3244,16 @@ static int gc2_step(lua_State *L, uint32_t budget)
     if (phase != LJ_GC2_IDLE)
       drove_cycle = 1;
     if (phase == LJ_GC2_IDLE) {
+      if (gc2_sweep_table_close_gate_sc(g)) {
+	drove_cycle = 1;
+	if (!gc2_fixpoint_epoch_continue(g))
+	  break;
+	if (gc2_phase_acq(g) == LJ_GC2_IDLE) {
+	  lj_gc2_publish_idle_threshold(g);
+	  return 1;
+	}
+	continue;
+      }
       if (!drove_cycle) {
 	if (gc2_request_major_explicit(g, tg) ||
 	    gc2_cycle_leader_acq(g) != 0) {
@@ -3334,7 +3350,8 @@ static int gc2_step(lua_State *L, uint32_t budget)
 	/* A small step can drain the last work yet have no next iteration
 	** in which to try the exact close. Returning to the mutator allows
 	** another suffix to appear, so attempt that close before returning. */
-	if (budget == 0 && (gc2_phase_acq(g) == LJ_GC2_IDLE ||
+	if (budget == 0 && ((gc2_phase_acq(g) == LJ_GC2_IDLE &&
+			     !gc2_sweep_table_close_gate_sc(g)) ||
 			    lj_gc2_sweep_to_idle(g))) {
 	  lj_gc2_publish_idle_threshold(g);
 	  return 1;
@@ -4556,17 +4573,11 @@ static uint32_t gc2_idle_barrier_actions(global_State *g, int flush_ssb)
   return actions;
 }
 
-static uint32_t gc2_idle_transition_handshake(global_State *g,
-					       uint32_t actions)
+static LJThrGC2TLS *gc2_idle_transition_enter(global_State *g)
 {
   LJThrGC2TLS *tls = gc2_tls_current();
-  uint32_t result;
-  if (!g)
-    return 0;
-  /* Callers publish the IDLE phase before invoking this mandatory close. A
-  ** missing per-thread capability therefore cannot be reported as an
-  ** optional zero result without leaving the phase half-transitioned. Every
-  ** valid controller/worker path is admitted before it can get here. */
+  /* The phase is already IDLE. Each transition owner must be able to borrow
+  ** the retained phase gate through the exact same-thread reclaim attempt. */
   if (LJ_UNLIKELY(!tls)) {
     lj_assertG(0, "GC2 IDLE transition lacks an admitted thread cell");
     abort();
@@ -4579,9 +4590,14 @@ static uint32_t gc2_idle_transition_handshake(global_State *g,
     abort();
   }
   tls->idle_transition_gate_g = g;
-  result = lj_gc2_handshake(g, actions);
+  return tls;
+}
+
+static void gc2_idle_transition_handshake(global_State *g, uint32_t actions)
+{
+  LJThrGC2TLS *tls = gc2_idle_transition_enter(g);
+  (void)lj_gc2_handshake(g, actions);
   tls->idle_transition_gate_g = NULL;
-  return result;
 }
 
 static void gc2_update_public_minor_gates(global_State *g)
@@ -6776,120 +6792,80 @@ void lj_gc2_preserve_root(global_State *g, GCobj *o)
   }
 }
 
-/* Consume worker_active while retaining the already-closed JIT entry gate. */
-static int gc2_sweep_to_idle_owned(global_State *g)
+static int gc2_sweep_close_ready(global_State *g, int flushed)
 {
-  uint32_t phase;
+  return gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+    !gc2_sweep_blocked_by_finalizer(g) &&
+    gc2_sweep_bridge_ready_acq(g) && gc2_sweep_root_scanned_acq(g) == 1 &&
+    !lj_tg_any_jit_active(g) && !gc2_jit_recorder_active(g) &&
+    !gc2_weak_owned_peer_active(g) && !gc2_sweep_bridge_owner_roots_pending(g) &&
+    gc2_table_rescan_pending_acq(g) == 0 && !gc2_sweep_grace_needed_acq(g) &&
+    (!flushed || lj_gc2_ssb_empty(g)) && gc2_recovery_empty(g) &&
+    gc2_grey_empty(g) && !lj_gc2_sweep_needs_prepare(g) &&
+    !lj_gc2_sweep_pending(g) && gc2_marks_this_round_xchg_acqrel(g, 0) == 0;
+}
+
+static void gc2_sweep_close_cancel_owned(global_State *g)
+{
+  la_store32_rel(&g->gc2.fixpoint_epoch_actions, 0);
+  gc2_sweep_table_close_gate_store_sc(g, 0);
+  if (gc2_phase_acq(g) == LJ_GC2_IDLE)
+    gc2_jit_phase_gate_open_idle(g);
+  else
+    gc2_jit_phase_gate_open_sweep(g, 0);
+  gc2_phase_gate_release(g);
+  gc2_worker_release(g);
+}
+
+/* The phase gate covers the final SWEEP flush, IDLE publication and the
+** barrier-policy ACKs. Reserve the next handshake before publishing IDLE so
+** an unrelated synchronous handshake cannot strand the transition here. */
+static int gc2_sweep_close_commit_owned(global_State *g)
+{
+  uint32_t actions, phase = LJ_GC2_SWEEP;
   uint64_t live;
-  if (!g)
-    return 0;
-  lj_assertG(gc2_phase_acq(g) == LJ_GC2_SWEEP &&
-	     gc2_jit_phase_gate_acq(g) == 0,
-	     "SWEEP close lost collector ownership");
-  /* An owned zero-work drain can reach close before a caller's explicit
-  ** finalizer turn. Keep any finalizer-spawn suppression until the last
-  ** secondary released it, then consume that release before closing. */
-  if (gc2_finalizer_spawn_deferred(g) || !gc2_phase_gate_try(g)) {
-    gc2_jit_phase_gate_open_sweep(g, 0);
-    gc2_worker_release(g);
-    return 0;
-  }
-  /* This close-only SC flag distinguishes terminal SWEEP->IDLE from the
-  ** shared GCSCAN forward transitions. It pairs with reservation increment
-  ** and pending-count reads so only a late terminal-close publisher may
-  ** leave an uncounted SSB identity for next MARK. */
-  gc2_sweep_table_close_gate_store_sc(g, 1);
-  if (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
-      gc2_sweep_blocked_by_finalizer(g) ||
-      !gc2_sweep_bridge_ready_acq(g) ||
-      gc2_sweep_root_scanned_acq(g) != 1 ||
-      lj_tg_any_jit_active(g) || gc2_jit_recorder_active(g) ||
-      gc2_weak_owned_peer_active(g) ||
-      gc2_sweep_bridge_owner_roots_pending(g) ||
-      gc2_table_rescan_pending_acq(g) != 0 ||
-      gc2_sweep_grace_needed_acq(g) ||
-      !gc2_recovery_empty(g) ||
-      !gc2_grey_empty(g) || lj_gc2_sweep_needs_prepare(g) ||
-      lj_gc2_sweep_pending(g) ||
-      gc2_marks_this_round_xchg_acqrel(g, 0) != 0) {
-    gc2_sweep_table_close_gate_store_sc(g, 0);
-    gc2_jit_phase_gate_open_sweep(g, 0);
-    gc2_phase_gate_release(g);
-    gc2_worker_release(g);
-    return 0;
-  }
-  /* A below-capacity suffix may be the only remaining work once all sweep
-  ** owners finished. Flush it under the close gate before testing for an
-  ** empty SSB; otherwise the final flush can never consume that suffix. */
-  (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
   (void)gc2_flush_ssb(g, G2TG(g), 0);
   (void)gc2_mark_drain_owned_bounded(g, LJ_GC2_SWEEP_BATCH);
-  /* The final handshake can publish sweep-rescue edges after the first close
-  ** predicate. Revalidate while retaining the worker token; using the generic
-  ** drain here would fail by trying to acquire our own token. */
-  if (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
-      gc2_sweep_blocked_by_finalizer(g) ||
-      gc2_sweep_root_scanned_acq(g) != 1 ||
-      lj_tg_any_jit_active(g) || gc2_jit_recorder_active(g) ||
-      gc2_weak_owned_peer_active(g) ||
-      gc2_sweep_bridge_owner_roots_pending(g) ||
-      gc2_table_rescan_pending_acq(g) != 0 ||
-      gc2_sweep_grace_needed_acq(g) || !lj_gc2_ssb_empty(g) ||
-      !gc2_recovery_empty(g) ||
-      !gc2_grey_empty(g) || lj_gc2_sweep_needs_prepare(g) ||
-      lj_gc2_sweep_pending(g) ||
-      gc2_marks_this_round_xchg_acqrel(g, 0) != 0) {
-    gc2_sweep_table_close_gate_store_sc(g, 0);
-    gc2_jit_phase_gate_open_sweep(g, 0);
-    gc2_phase_gate_release(g);
-    gc2_worker_release(g);
-    lj_gc2_worker_wake(g);
+  if (gc2_finalizer_spawn_deferred(g) || !gc2_sweep_close_ready(g, 1) ||
+      !lj_safepoint_resumable_epoch_reserve(g))
     return 0;
-  }
+  actions = gc2_idle_barrier_actions(g, 0);
   lj_str_gc2_sweep_finish(g);
   live = lj_gc2_sweep_live_aggregate(g);
   lj_gc2_update_minor_survival_policy(g, live);
   gc2_update_public_minor_gates(g);
-  phase = gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE);
-  /* Legacy remains the close authority. This exact reset only abandons the
-  ** veto-only SWEEP_OPEN generation and never publishes CLOSING or COMMIT. */
-  if (phase == LJ_GC2_SWEEP)
-    gc2_activation_mirror_edge(g, phase, LJ_GC2_IDLE);
-  else
+  /* This gate also keeps IDLE observers from completing their public step or
+  ** starting another cycle while the outgoing TG policy is still active. */
+  if (LJ_UNLIKELY(!gc2_phase_cas(g, &phase, LJ_GC2_IDLE))) {
+    lj_safepoint_resumable_epoch_cancel(g);
     gc2_activation_pin_no_reclaim(g);
-  gc2_mark_root_scanned_rel(g, 0);
-  gc2_mark_close_intent_rel(g, 0);
-  lj_gc2_worker_wake(g);
-  if (phase != LJ_GC2_SWEEP) {
-    gc2_sweep_table_close_gate_store_sc(g, 0);
-    if (gc2_phase_acq(g) == LJ_GC2_IDLE)
-      gc2_jit_phase_gate_open_idle(g);
-    gc2_phase_gate_release(g);
-    gc2_worker_release(g);
     return 0;
   }
-  /* GC2 phase is the sole collector authority. Once its SWEEP closes, keep the
-  ** legacy/color compatibility state coherent regardless of which bounded
-  ** bridge substate last touched it; public GC APIs still observe GCSpause. */
+  gc2_activation_mirror_edge(g, LJ_GC2_SWEEP, LJ_GC2_IDLE);
+  gc2_mark_root_scanned_rel(g, 0);
+  gc2_mark_close_intent_rel(g, 0);
   la_store8_rel(&g->gc.state, GCSpause);
   lj_gcsize_store_rel(&g->gc.debt, 0);
-  gc2_sweep_to_idle_add(g, 1);
   gc2_sweep_grace_needed_rel(g, 0);
   gc2_sweep_root_scanned_rel(g, 0);
   gc2_sweep_root_done_rel(g, 0);
   gc2_sweep_root_cursor_rel(g, NULL);
-  /*
-  ** The close owner has finished the SWEEP->IDLE transition, and cycle_leader
-  ** remains set until pacing is republished below. Release worker_active before
-  ** the grace handshake so lj_gc2_reclaim_retired() can drain retired strtab,
-  ** table, trace, mcode, and ctype/clib state at the completed epoch.
-  */
+  la_store32_rel(&g->gc2.fixpoint_epoch_actions, actions);
+  return 1;
+}
+
+static void gc2_sweep_close_finish(global_State *g, uint64_t epoch)
+{
+  LJThrGC2TLS *tls;
+  /* No peer can claim collector work once actions is zero while GCSCAN is
+  ** held. Drop worker_active and lend this completed epoch to the ordinary
+  ** IDLE reclaimer with its same-thread TLS proof. */
+  la_store32_rel(&g->gc2.fixpoint_epoch_actions, 0);
   gc2_worker_release(g);
-  (void)gc2_idle_transition_handshake(
-    g, gc2_idle_barrier_actions(g, 0));
-  /* An admitted b1.2 string batch is consumed by the exact IDLE reclaimer
-  ** inside the handshake above.  Never reopen attach/pool admission while an
-  ** unlinked canonical body remains undiscoverable from the main table. */
+  tls = gc2_idle_transition_enter(g);
+  (void)lj_gc2_reclaim_retired(g, epoch);
+  tls->idle_transition_gate_g = NULL;
+  /* The sole-mutator batch retains exclusive ownership through this drain. */
   if (LJ_UNLIKELY(!lj_str_gc2_reclaim_complete(g))) {
     lj_assertG(0, "explicit string retirement survived IDLE grace drain");
     abort();
@@ -6902,11 +6878,59 @@ static int gc2_sweep_to_idle_owned(global_State *g)
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_update_pacing(g);
   gc2_jit_phase_gate_open_idle(g);
-  /* Keep late SWEEP-close publishers on the uncounted path until all close
-  ** cleanup is complete; after this point IDLE reservations belong to MARK. */
   gc2_sweep_table_close_gate_store_sc(g, 0);
+  gc2_sweep_to_idle_add(g, 1);
   gc2_phase_gate_release(g);
-  return 1;
+  lj_gc2_worker_wake(g);
+}
+
+/* Consume worker_active. Both stages may finish on a different physical TG
+** from their publisher. The reserved handshake leader pins hs_epoch until
+** the successful call returns the certificate for that iteration. */
+static int gc2_sweep_close_epoch_owned(global_State *g, int start)
+{
+  for (;;) {
+    uint32_t actions = gc2_fixpoint_epoch_actions_acq(g);
+    uint64_t epoch = gc2_hs_epoch_acq(g) + (unsigned)start;
+    if (!lj_safepoint_resumable_epoch_try(g, actions, start)) {
+      gc2_worker_release(g);
+      if (gc2_hs_pending_acq(g) == 0)
+	lj_gc2_worker_wake(g);
+      return 0;
+    }
+    if (gc2_phase_acq(g) == LJ_GC2_IDLE) {
+      gc2_sweep_close_finish(g, epoch);
+      return 1;
+    }
+    if (!gc2_sweep_close_commit_owned(g)) {
+      gc2_sweep_close_cancel_owned(g);
+      lj_gc2_worker_wake(g);
+      return 0;
+    }
+    start = 1;
+  }
+}
+
+static int gc2_sweep_to_idle_owned(global_State *g)
+{
+  lj_assertG(gc2_phase_acq(g) == LJ_GC2_SWEEP && gc2_jit_phase_gate_acq(g) == 0,
+	     "SWEEP close lost collector ownership");
+  if (gc2_finalizer_spawn_deferred(g) || !gc2_phase_gate_try(g)) {
+    gc2_jit_phase_gate_open_sweep(g, 0);
+    gc2_worker_release(g);
+    return 0;
+  }
+  /* The SC flag pairs with table reservation publication/recheck. Late
+  ** publishers can leave uncounted SSB identities for the next MARK. */
+  gc2_sweep_table_close_gate_store_sc(g, 1);
+  if (!gc2_sweep_close_ready(g, 0) || !lj_safepoint_resumable_epoch_reserve(g)) {
+    gc2_sweep_close_cancel_owned(g);
+    return 0;
+  }
+  /* Flush any below-capacity suffix under the close gate before expecting
+  ** empty SSBs. A paused owner leaves this exact turn pending for its ACK. */
+  la_store32_rel(&g->gc2.fixpoint_epoch_actions, LJ_GC2_HS_FLUSH_SSB);
+  return gc2_sweep_close_epoch_owned(g, 1);
 }
 
 int lj_gc2_sweep_to_idle(global_State *g)
@@ -22967,9 +22991,13 @@ static int gc2_fixpoint_epoch_continue(global_State *g)
     int complete = 0;
     if (!gc2_worker_claim_fixpoint(g))
       break;
-    if (gc2_fixpoint_epoch_actions_acq(g))
-      complete = gc2_fixpoint_epoch_owned(g, 0);
-    gc2_worker_release(g);
+    if (gc2_fixpoint_epoch_actions_acq(g) && gc2_sweep_table_close_gate_sc(g)) {
+      complete = gc2_sweep_close_epoch_owned(g, 0);  /* Releases worker_active. */
+    } else {
+      if (gc2_fixpoint_epoch_actions_acq(g))
+	complete = gc2_fixpoint_epoch_owned(g, 0);
+      gc2_worker_release(g);
+    }
     if (complete) {
       lj_gc2_worker_wake(g);
       return 1;

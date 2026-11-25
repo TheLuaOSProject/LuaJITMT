@@ -456,7 +456,10 @@ return function(add)
         { "grace1" }, { "grace2" }, { "pool-grace1" }, { "pool-grace2" },
         { "restart-grace" }, { "pool-restart-grace" },
         { "late-roots" }, { "pool-late-roots" },
-        { "pool-reset", "publish" }, { "pool-roots", "publish" }
+        { "pool-reset", "publish" }, { "pool-roots", "publish" },
+        { "close-flush" }, { "close-idle" }, { "close-gen" },
+        { "pool-close-flush" }, { "pool-close-idle" }, { "pool-close-gen" },
+        { "pool-close-flush", "stop" }, { "pool-close-idle", "stop" }
       }, { "lj_safepoint_handshake", resumable, "lj_str_gc2_sweep_step" })
       run("t-worker-bridge-stop", stop_modes, { resumable })
       run("t-worker-bridge-detach", { { "0" }, { "1" } }, {

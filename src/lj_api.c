@@ -3675,7 +3675,9 @@ static TValue *api_gc_collect_cp(lua_State *L, lua_CFunction dummy, void *ud)
   int *result = (int *)ud;
   UNUSED(dummy);
   *result = lj_gc2_collect_active(L);
-  if (*result && gc2_n_workers_acq(G(L)) != 0)
+  /* Another Lua owner can complete the terminal epoch even without a pool.
+  ** The explicit requester still owes its owner-local string checkpoint. */
+  if (*result)
     (void)lj_str_gc2_reclaim_checkpoint(G(L), 1u + 2u * LJ_GC2_GRACE_EPOCHS);
   return NULL;
 }

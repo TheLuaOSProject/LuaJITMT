@@ -1923,10 +1923,11 @@ int lj_str_gc2_reclaim_checkpoint(global_State *g, uint32_t limit)
   ** Its remote ACK cannot certify that collector's stack, and its IDLE retire
   ** pass cannot commit this cohort. Give the initiating owner a real root
   ** checkpoint and bounded grace opportunities within the request scope.
-  ** A public step takes only one grace window at a time. */
+  ** A public step takes only one grace window at a time and must first let
+  ** any retained terminal policy finish. */
   for (pass = 0; pass < limit; pass++) {
     uint32_t actions = LJ_GC2_HS_FLUSH_SSB;
-    if (gc2_phase_acq(g) != LJ_GC2_IDLE ||
+    if (gc2_phase_acq(g) != LJ_GC2_IDLE || gc2_sweep_table_close_gate_sc(g) ||
 	lj_str_body_retired_head_acq(g) == NULL || !str_vm_reclaim_owner(g, 0))
       break;
     if (pass == 0 && queued != 0)

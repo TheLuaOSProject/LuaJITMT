@@ -18,7 +18,9 @@
 
 static atomic_int ready, enabled, requested, parked, release_peer, timeout_hit;
 static _Atomic(TGState *) peer_tg;
-static int pool, stop_pool;
+static int pool, stop_pool, terminal, pool_close_hot;
+static atomic_int pool_close_started, hot_alloc_seen;
+static uint32_t target_phase = LJ_GC2_SWEEP;
 static uint32_t grace_round;
 static atomic_uint grace_signals;
 static int restart_grace;
@@ -85,7 +87,22 @@ static int hold_peer(lua_State *L)
 
 static int before_actions(global_State *g, uint32_t actions)
 {
-  if (!atomic_load(&enabled) || (actions & target) != target)
+  uint32_t phase = gc2_phase_acq(g);
+  if (!atomic_load(&enabled))
+    return 0;
+  if (terminal && pool && phase == LJ_GC2_SWEEP &&
+      actions == LJ_GC2_HS_FLUSH_SSB && gc2_sweep_table_close_gate_sc(g) &&
+      !atomic_load(&requested)) {
+    TGState *self = lj_thr_get_tg();
+    assert(self && self != g->main_tg && lj_tg_load_cur_L(self) == NULL);
+    atomic_store(&pool_close_started, 1);
+    if (pool_close_hot)
+      while (!atomic_load(&hot_alloc_seen) && !atomic_load(&release_peer))
+	pause_briefly();
+  }
+  if (phase != target_phase || (actions & target) != target)
+    return 0;
+  if (terminal && (!gc2_sweep_table_close_gate_sc(g) || actions != target))
     return 0;
   if (late_roots) {
     if (atomic_load(&parked) && gc2_sweep_bridge_ready_acq(g) &&
@@ -102,8 +119,13 @@ static int before_actions(global_State *g, uint32_t actions)
   if (atomic_exchange(&requested, 1))
     return 0;
   if (pool) {
-    TGState *self = lj_thr_get_tg();
-    assert(self && self != g->main_tg && lj_tg_load_cur_L(self) == NULL);
+    /* The main TG can ACK the pool's final FLUSH and start IDLE policy. */
+    if (terminal)
+      assert(atomic_load(&pool_close_started));
+    else {
+      TGState *self = lj_thr_get_tg();
+      assert(self && self != g->main_tg && lj_tg_load_cur_L(self) == NULL);
+    }
   }
   while (!atomic_load(&parked) && !atomic_load(&release_peer))
     pause_briefly();
@@ -132,8 +154,7 @@ uint32_t __wrap_lj_str_gc2_sweep_step(global_State *g, uint32_t limit)
 uint32_t __real_lj_safepoint_handshake(global_State *, uint32_t);
 uint32_t __wrap_lj_safepoint_handshake(global_State *g, uint32_t actions)
 {
-  if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
-    (void)before_actions(g, actions);
+  (void)before_actions(g, actions);
   return __real_lj_safepoint_handshake(g, actions);
 }
 
@@ -141,8 +162,7 @@ int __real_lj_safepoint_resumable_epoch_try(global_State *, uint32_t, int);
 int __wrap_lj_safepoint_resumable_epoch_try(global_State *g, uint32_t actions,
                                              int start)
 {
-  int observed = start && gc2_phase_acq(g) == LJ_GC2_SWEEP &&
-    before_actions(g, actions);
+  int observed = start && before_actions(g, actions);
   unsigned fresh = atomic_load(&fresh_graces);
   if (start && fresh >= 1 && fresh <= LJ_GC2_GRACE_EPOCHS &&
       la_load32_acq(&g->gc2.sweep_grace_needed) == (LJ_GC2_GRACE_ACTIVE | fresh)) {
@@ -168,21 +188,35 @@ static int begin(lua_State *L)
     return 1;
   }
   atomic_store(&enabled, 1);
-  if (pool) {
+  if (pool || terminal) {
     global_State *g = G(L);
-    TGState *peer = atomic_load(&peer_tg);
-    uint32_t actions = 0;
     unsigned i;
-    /* Stop the public step at the real WEAK -> SWEEP edge. Only the pool can
-    ** initiate the selected bridge action before this callback returns. */
+    /* Stop the public step at the real WEAK -> SWEEP edge. */
     for (i = 0; i < 10000 && gc2_phase_acq(g) != LJ_GC2_SWEEP; i++)
       lua_gc(L, LUA_GCSTEP, 1);
     assert(i != 10000 && !gc2_sweep_bridge_ready_acq(g));
+    if (terminal && (target & LJ_GC2_HS_ENABLE_BARRIER))
+      lj_gc2_set_generational(g, 1);
     lua_gc(L, LUA_GCSTOP, 0);
+  }
+  if (pool) {
+    TGState *peer = atomic_load(&peer_tg);
+    uint32_t actions = 0;
     assert(lj_gc2_workers_set_l(L, 2, &actions) == 1);
     assert((actions & LJ_GC2_HS_STOPREQ) == 0);
+    if (pool_close_hot) {
+      /* The pool reached its actual FLUSH entry. Leave it poised there until
+      ** the main has executed a batch of bytecode allocations. */
+      while (!atomic_load(&pool_close_started) && !atomic_load(&release_peer)) {
+	(void)lj_safepoint_poll(L);
+	pause_briefly();
+      }
+      lua_pushboolean(L, 1);
+      return 1;
+    }
 #ifdef LJ_TRACE_TEST_HELPERS
     if (pause_publish) {
+      global_State *g = G(L);
       TGState *self = L2TG(L);
       atomic_store(&pool_started, 1);
       while (!lj_safepoint_test_signal_paused() && !atomic_load(&release_peer)) {
@@ -205,27 +239,52 @@ static int begin(lua_State *L)
       /* The original publish turn has stored poll, and the parked peer keeps
       ** this exact epoch live. The completed local action must let us run. */
       assert(gc2_hs_epoch_acq(g) == paused_epoch && gc2_hs_pending_acq(g) != 0);
-      assert(lj_tg_reqmask_acq(peer) & target);
+      assert((lj_tg_reqmask_acq(peer) & target) == target);
       assert(lj_safepoint_test_signal_resumed_poll_stores() == 1);
       assert(lj_tg_reqmask_acq(self) == 0 && lj_tg_poll_acq(self) == 0);
       assert(lj_safepoint_test_signal_consumed_clears() == 1);
     }
 #endif
-    while ((!atomic_load(&requested) || !(lj_tg_reqmask_acq(peer) & target)) &&
+    while ((!atomic_load(&requested) ||
+	    (lj_tg_reqmask_acq(peer) & target) != target) &&
 	   !atomic_load(&release_peer)) {
       (void)lj_safepoint_poll(L);
       pause_briefly();
     }
+  } else if (terminal) {
+    global_State *g = G(L);
+    unsigned i;
+    /* Finish the real sweep work. Drain-only turns leave the terminal close
+    ** to the next bytecode allocation. */
+    for (i = 0; i != 10000; i++) {
+      (void)lj_gc2_resumable_epoch_continue(g);
+      lj_gc2_sweep_prepare_bridge_boundary(g, NULL);
+      if (!lj_gc2_worker_drain(g, LJ_GC2_SWEEP_BATCH) &&
+	  gc2_sweep_bridge_ready_acq(g) && !lj_gc2_sweep_pending(g) &&
+	  !gc2_sweep_grace_needed_acq(g) && !gc2_fixpoint_epoch_actions_acq(g))
+	break;
+    }
+    assert(i != 10000 && gc2_phase_acq(g) == LJ_GC2_SWEEP);
   }
   lua_gc(L, LUA_GCRESTART, 0);
   lj_gc_threshold_store(G(L), 0);
+  if (terminal)
+    lj_gc_mt_threshold_store(G(L), 0);
   lua_pushboolean(L, 1);
   return 1;
 }
 
 static int park_seen(lua_State *L)
 {
-  lua_pushboolean(L, late_roots ? atomic_load(&late_scan) : atomic_load(&parked));
+  int seen = late_roots ? atomic_load(&late_scan) : atomic_load(&parked);
+  if (pool_close_hot) {
+    TGState *peer = atomic_load(&peer_tg);
+    atomic_store(&hot_alloc_seen, 1);
+    seen = seen && (lj_tg_reqmask_acq(peer) & target) == target;
+    if (!seen)
+      pause_briefly();
+  }
+  lua_pushboolean(L, seen);
   return 1;
 }
 
@@ -233,10 +292,14 @@ static int finish(lua_State *L)
 {
   global_State *g = G(L);
   if (!atomic_load(&release_peer)) {
-    assert(gc2_phase_acq(g) == LJ_GC2_SWEEP);
+    assert(gc2_phase_acq(g) == target_phase);
     assert(gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN);
     assert(gc2_jit_phase_gate_acq(g) == 0);
-    assert(gc2_sweep_bridge_ready_acq(g) == (grace_round != 0 || late_roots));
+    assert(gc2_sweep_bridge_ready_acq(g) == (grace_round != 0 || late_roots || terminal));
+    if (terminal) {
+      assert(gc2_sweep_table_close_gate_sc(g));
+      assert(gc2_sweep_root_scanned_acq(g) == (target_phase == LJ_GC2_SWEEP));
+    }
     if (late_roots) {
       assert(gc2_sweep_root_scanned_acq(g) == 1);
       assert(gc2_thread_scan_needscan_pending_acq(g) != 0);
@@ -262,22 +325,26 @@ static int finish(lua_State *L)
       assert(la_load64_acq(&lj_arena_of(late_body)->hdr.retire_epoch) == late_epoch);
       atomic_store(&fresh_graces, 1);
     }
-    assert(gc2_hs_pending_acq(g) != 0 && !lj_tg_mark_active_acq(L2TG(L)));
-    assert(lj_tg_alloc_black_acq(L2TG(L)));
+    assert(gc2_hs_pending_acq(g) != 0);
+    assert(lj_tg_mark_active_acq(L2TG(L)) ==
+	   (target_phase == LJ_GC2_IDLE && (target & LJ_GC2_HS_ENABLE_BARRIER)));
+    assert(lj_tg_alloc_black_acq(L2TG(L)) == (target_phase == LJ_GC2_SWEEP));
     if (target == LJ_GC2_HS_RESET_ALLOC || target == LJ_GC2_HS_SCAN_ROOTS)
       assert(la_load32_acq(&L2TG(L)->alloc.prepare_epoch) == gc2_cycle_acq(g));
     if (target == LJ_GC2_HS_SCAN_ROOTS && !late_roots)
       assert(gc2_sweep_root_scanned_acq(g) == 2);
-    if (pool) {
+    if (pool || terminal) {
       TGState *peer = atomic_load(&peer_tg);
       uint64_t epoch = gc2_hs_epoch_acq(g);
       assert(gc2_hs_leader_acq(g) == LJ_SAFEPOINT_RESUMABLE_LEADER);
-      assert(gc2_fixpoint_epoch_actions_acq(g) & target);
+      assert((gc2_fixpoint_epoch_actions_acq(g) & target) == target);
       assert(lj_tg_hs_epoch_ack_acq(L2TG(L)) == epoch);
       assert(lj_tg_hs_epoch_ack_acq(peer) != epoch);
-      assert(lj_tg_reqmask_acq(peer) & target);
+      assert((lj_tg_reqmask_acq(peer) & target) == target);
       lua_createtable(L, 2, 1);
       lua_pop(L, 1);
+      if (terminal)
+	assert(lua_gc(L, LUA_GCSTEP, 1) == 0);
       if (stop_pool) {
 	uint32_t actions = 0;
 	assert(lj_gc2_workers_set_l(L, 0, &actions) == 1);
@@ -309,19 +376,24 @@ static void *watchdog(void *unused)
 int main(int argc, char **argv)
 {
   static const char source[] =
-    "local hold, begin, parked, finish, late_attach = ...\n"
+    "local hold, begin, parked, finish, late_attach, terminal = ...\n"
     "if jit then jit.off() end\n"
     "collectgarbage('stop')\n"
     "local th = require('threading')\n"
     "local peer = assert(th.spawn(function(hold) hold('live sweep peer') end, hold))\n"
+    "local keep = terminal and {}\n"
     "while not begin() do th.sleep(0.001) end\n"
     "if late_attach then\n"
     "  local late = assert(th.spawn(function() return 17 end))\n"
     "  local ok, value = late:join(5)\n"
     "  assert(ok and value==17)\n"
     "end\n"
-    "local keep = {}\n"
-    "for i=1,100000 do keep[i%8+1]={i}; if parked() then break end end\n"
+    "if terminal then\n"
+    "  for i=1,100000 do local t={}; if i%32==0 and parked() then break end end\n"
+    "else\n"
+    "  keep = {}\n"
+    "  for i=1,100000 do keep[i%8+1]={i}; if parked() then break end end\n"
+    "end\n"
     "assert(parked())\n"
     "for i=1,200 do keep[i]={answer=i+23} end\n"
     "finish()\n"
@@ -336,7 +408,16 @@ int main(int argc, char **argv)
     pool = !strncmp(action, "pool-", 5);
     if (pool)
       action += 5;
-    if (!strcmp(action, "late-roots")) {
+    if (!strcmp(action, "close-flush")) {
+      terminal = 1;
+      pool_close_hot = pool;
+      target = LJ_GC2_HS_FLUSH_SSB;
+    } else if (!strcmp(action, "close-idle") || !strcmp(action, "close-gen")) {
+      terminal = 1;
+      target_phase = LJ_GC2_IDLE;
+      target = LJ_GC2_HS_ALLOC_WHITE | (!strcmp(action, "close-gen") ?
+	LJ_GC2_HS_ENABLE_BARRIER : LJ_GC2_HS_DISABLE_BARRIER);
+    } else if (!strcmp(action, "late-roots")) {
       late_roots = 1;
       target = LJ_GC2_HS_SCAN_ROOTS;
     } else if (!strcmp(action, "restart-grace")) {
@@ -378,8 +459,9 @@ int main(int argc, char **argv)
 #else
   lua_pushboolean(L, 0);
 #endif
+  lua_pushboolean(L, terminal);
   assert(pthread_create(&timer, NULL, watchdog, NULL) == 0);
-  status = lua_pcall(L, 5, 0, 0);
+  status = lua_pcall(L, 6, 0, 0);
   atomic_store(&release_peer, 1);
   assert(pthread_join(timer, NULL) == 0);
   if (status != LUA_OK)
@@ -387,6 +469,10 @@ int main(int argc, char **argv)
   else {
     assert(gc2_phase_acq(G(L)) == LJ_GC2_IDLE);
     assert(gc2_n_workers_acq(G(L)) == (pool && !stop_pool ? 2u : 0u));
+    if (terminal) {
+      assert(!gc2_sweep_table_close_gate_sc(G(L)));
+      assert(gc2_jit_phase_gate_acq(G(L)) != 0);
+    }
     if (restart_grace) {
       assert(atomic_load(&fresh_graces) == LJ_GC2_GRACE_EPOCHS + 1);
       assert(!lj_arena_hugetab_lookup(late_huge, late_body, NULL));
