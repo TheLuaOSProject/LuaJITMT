@@ -465,6 +465,9 @@ return function(add)
         "lj_str_gc2_sweep_finish"
       })
       run("t-gc2-idle-policy-setter", { {} })
+      run("t-gc2-idle-string-step", { {}, { "pool" }, { "pool-native" } }, {
+        "lj_str_gc2_reclaim_checkpoint"
+      })
       run("t-worker-bridge-stop", stop_modes, { resumable })
       run("t-worker-bridge-detach", { { "0" }, { "1" } }, {
         resumable, "lj_gc2_flush_ssb_detach", scan, prepare

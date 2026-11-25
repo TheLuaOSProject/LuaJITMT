@@ -371,6 +371,7 @@ LJ_FUNC int lj_gc2_reclaim_context_held(global_State *g);
 /* Migration-only veto: a zero result never authorizes reclamation. */
 LJ_FUNC int lj_gc2_activation_reclaim_veto(global_State *g);
 LJ_FUNC uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch);
+LJ_FUNC int lj_gc2_idle_retire_step(global_State *g, uint32_t actions);
 
 /* A JIT retire-list detach is valid either in the ordinary idle zero-worker
 ** grace pass, or in the sweep owner's bounded quarantine drain. Both cases

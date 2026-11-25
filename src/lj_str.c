@@ -1930,9 +1930,18 @@ int lj_str_gc2_reclaim_checkpoint(global_State *g, uint32_t limit)
     if (gc2_phase_acq(g) != LJ_GC2_IDLE || gc2_sweep_table_close_gate_sc(g) ||
 	lj_str_body_retired_head_acq(g) == NULL || !str_vm_reclaim_owner(g, 0))
       break;
-    if (pass == 0 && queued != 0)
-      actions |= LJ_GC2_HS_SCAN_OWNER_ROOTS;
-    (void)lj_gc2_handshake(g, actions);
+    if (pass == 0) {
+      /* A different TG may have finished the previous checkpoint. Retry its
+      ** actual grace as the current string-scope owner. */
+      (void)lj_gc2_reclaim_retired(g, gc2_idle_retire_epoch_acq(g));
+      if (lj_str_body_retired_head_acq(g) == NULL)
+	break;
+      if (queued != 0)
+	actions |= LJ_GC2_HS_SCAN_OWNER_ROOTS;
+    }
+    if (!lj_gc2_idle_retire_step(g, actions))
+      break;
+    (void)lj_gc2_reclaim_retired(g, gc2_idle_retire_epoch_acq(g));
   }
   return lj_str_qcount_acq(g) < queued ||
          la_load64_acq(&g->str.sweep_reclaimed) != reclaimed;

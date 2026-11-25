@@ -1998,6 +1998,7 @@ typedef struct GC2State {
   LJ_ALIGN(16) LJGC2Activation activation;  /* Veto-only typed phase mirror. */
   uint32_t cycle_leader;  /* Request tid or exact GCSCAN phase-edge gate. */
   uint64_t hs_epoch;	/* Soft-handshake generation. */
+  uint64_t idle_retire_epoch;  /* Last completed IDLE retirement handshake. */
   uint32_t hs_pending;	/* Outstanding handshake acknowledgements. */
   uint32_t hs_actions;	/* Current LJ_GC2_HS_* action bits. */
   uint32_t fixpoint_epoch_actions;  /* Root/SSB epoch holding the phase. */
@@ -3670,6 +3671,11 @@ LJ_GC2_COUNTER64_ACCESSORS(gc2_marks_this_round, marks_this_round)
 static LJ_AINLINE uint32_t gc2_mark_activation_request_acq(global_State *g)
 {
   return la_load32_acq(&g->gc2.mark_activation_request);
+}
+
+static LJ_AINLINE uint64_t gc2_idle_retire_epoch_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.idle_retire_epoch);
 }
 
 static LJ_AINLINE uint32_t gc2_fixpoint_epoch_actions_acq(global_State *g)

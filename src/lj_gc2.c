@@ -1751,6 +1751,7 @@ void lj_gc2_init(global_State *g)
   gc2_hs_leader_store_rlx(g, 0);
   la_store32_rlx(&g->gc2.mark_activation_request, 0);
   la_store32_rlx(&g->gc2.fixpoint_epoch_actions, 0);
+  la_store64_rlx(&g->gc2.idle_retire_epoch, 0);
   gc2_hs_signal_ns_store_rlx(g, 0);
   gc2_hs_ack_latency_samples_store_rlx(g, 0);
   gc2_hs_ack_latency_sum_store_rlx(g, 0);
@@ -2734,7 +2735,7 @@ static int gc2_worker_stop_locked_l(global_State *g, lua_State *L,
   ** the resume token. Give its published epoch one turn before releasing TG
   ** slots. An unacknowledged Lua peer can still finish the same epoch later. */
   if (unjoined == 0 && gc2_fixpoint_epoch_actions_acq(g) &&
-      (gc2_phase_acq(g) == LJ_GC2_SWEEP || gc2_sweep_table_close_gate_sc(g)))
+      (gc2_phase_acq(g) == LJ_GC2_SWEEP || gc2_phase_acq(g) == LJ_GC2_IDLE))
     (void)gc2_fixpoint_epoch_continue(g);
   if (L) {
     uint32_t actions = lj_native_leave(L);
@@ -2777,7 +2778,7 @@ static int gc2_worker_park_timeout_ns(global_State *g)
   uint32_t phase = gc2_phase_acq(g);
   if (gc2_recovery_stalled_failed(g))
     return -1;
-  if (phase == LJ_GC2_IDLE &&
+  if (phase == LJ_GC2_IDLE && gc2_fixpoint_epoch_actions_acq(g) == 0 &&
       !(gc2_cycle_leader_acq(g) != 0 &&
 	gc2_jit_phase_gate_acq(g) == 0))
     return -1;
@@ -3095,7 +3096,7 @@ int lj_gc2_collect_active(lua_State *L)
     if (gc2_jit_phase_gate_acq(g) == 0 && lj_tg_any_jit_active(g))
       return 0;
     if (phase == LJ_GC2_IDLE) {
-      if (gc2_sweep_table_close_gate_sc(g)) {
+      if (gc2_sweep_table_close_gate_sc(g) || gc2_fixpoint_epoch_actions_acq(g)) {
 	if (!gc2_fixpoint_epoch_continue(g))
 	  gc2_peer_wait_l(L);
 	continue;
@@ -3254,6 +3255,10 @@ static int gc2_step(lua_State *L, uint32_t budget)
 	  lj_gc2_publish_idle_threshold(g);
 	  return 1;
 	}
+	continue;
+      }
+      if (gc2_fixpoint_epoch_actions_acq(g)) {
+	(void)gc2_fixpoint_epoch_continue(g);
 	continue;
       }
       if (!drove_cycle) {
@@ -22989,17 +22994,45 @@ static int gc2_fixpoint_epoch_owned(global_State *g, int start)
   return 1;
 }
 
+/* This IDLE checkpoint owns GCSCAN, but leaves the native entry gate alone.
+** A finisher can publish the exact grace from any TG. The explicit string
+** requester later attempts physical retirement under its own gate. */
+static int gc2_idle_retire_epoch_owned(global_State *g, int start)
+{
+  uint32_t actions = gc2_fixpoint_epoch_actions_acq(g);
+  uint64_t epoch = gc2_hs_epoch_acq(g) + (unsigned)start;
+  int complete;
+  lj_assertG(gc2_phase_acq(g) == LJ_GC2_IDLE &&
+	     gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN &&
+	     !gc2_sweep_table_close_gate_sc(g),
+	     "idle retirement lost its phase gate");
+  complete = lj_safepoint_resumable_epoch_try(g, actions, start);
+  if (complete) {
+    /* Capture epoch before the handshake releases leadership. Reading the
+    ** current epoch afterward could name an incomplete newer handshake. */
+    la_store64_rel(&g->gc2.idle_retire_epoch, epoch);
+    la_store32_rel(&g->gc2.fixpoint_epoch_actions, 0);
+    gc2_phase_gate_release(g);
+  }
+  gc2_worker_release(g);
+  return complete;
+}
+
 static int gc2_fixpoint_epoch_continue(global_State *g)
 {
   unsigned attempt;
   for (attempt = 0; attempt < 2; attempt++) {
+    uint32_t actions;
     int complete = 0;
     if (!gc2_worker_claim_fixpoint(g))
       break;
-    if (gc2_fixpoint_epoch_actions_acq(g) && gc2_sweep_table_close_gate_sc(g)) {
-      complete = gc2_sweep_close_epoch_owned(g, 0);  /* Releases worker_active. */
+    actions = gc2_fixpoint_epoch_actions_acq(g);
+    if (actions && gc2_sweep_table_close_gate_sc(g)) {
+      complete = gc2_sweep_close_epoch_owned(g, 0);
+    } else if (actions && gc2_phase_acq(g) == LJ_GC2_IDLE) {
+      complete = gc2_idle_retire_epoch_owned(g, 0);
     } else {
-      if (gc2_fixpoint_epoch_actions_acq(g))
+      if (actions)
 	complete = gc2_fixpoint_epoch_owned(g, 0);
       gc2_worker_release(g);
     }
@@ -23021,6 +23054,40 @@ static int gc2_fixpoint_epoch_reserve(global_State *g)
     return 1;
   gc2_phase_gate_release(g);
   return 0;
+}
+
+/* Run one IDLE grace turn. Refused admission and peer ACKs are durable
+** across calls and every executor drops worker_active before returning. */
+int lj_gc2_idle_retire_step(global_State *g, uint32_t actions)
+{
+  uint64_t epoch;
+  int complete;
+  if (!g || gc2_phase_acq(g) != LJ_GC2_IDLE || gc2_sweep_table_close_gate_sc(g))
+    return 0;
+  lj_assertG(actions == LJ_GC2_HS_FLUSH_SSB ||
+	     actions == (LJ_GC2_HS_FLUSH_SSB | LJ_GC2_HS_SCAN_OWNER_ROOTS),
+	     "invalid idle retirement action");
+  epoch = gc2_idle_retire_epoch_acq(g);
+  if (gc2_fixpoint_epoch_actions_acq(g)) {
+    (void)gc2_fixpoint_epoch_continue(g);
+    return gc2_idle_retire_epoch_acq(g) != epoch;
+  }
+  if (!gc2_worker_claim(g))
+    return 0;
+  if (gc2_phase_acq(g) != LJ_GC2_IDLE || !gc2_fixpoint_epoch_reserve(g)) {
+    gc2_worker_release(g);
+    return 0;
+  }
+  la_store32_rel(&g->gc2.fixpoint_epoch_actions, actions);
+  complete = gc2_idle_retire_epoch_owned(g, 1);
+  /* An IDLE pool was allowed to sleep indefinitely before this publication. */
+  lj_gc2_worker_wake(g);
+  if (complete)
+    return 1;
+  /* A last owner can ACK just before worker_active is released. */
+  if (gc2_hs_pending_acq(g) == 0)
+    (void)gc2_fixpoint_epoch_continue(g);
+  return gc2_idle_retire_epoch_acq(g) != epoch;
 }
 
 static int gc2_mark_root_snapshot(global_State *g, int automatic)
