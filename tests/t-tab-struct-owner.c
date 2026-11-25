@@ -729,7 +729,10 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed,
   lua_createtable(L, inline_split ? 5 : (mixed >= 2 ? 80 : LJ_MAX_COLOSIZE + 2),
 		  mixed ? 4 : 0);
   if (weak) {
-    lua_newtable(L);
+    if (weak == 2)
+      lua_pushvalue(L, 1);
+    else
+      lua_newtable(L);
     lua_pushliteral(L, "v");
     lua_setfield(L, -2, "__mode");
     lua_setmetatable(L, 1);
@@ -1149,7 +1152,8 @@ static void exercise_array_setup_owner(lua_State *L, int installed,
   lua_pop(L, 1);
 }
 
-static void exercise_first_hash_owner(lua_State *L, MSize installed)
+static void exercise_first_hash_owner(lua_State *L, MSize installed,
+                                      int self_metatable)
 {
   volatile int ready = 0, owner_start = 0, other_start = 0;
   volatile int owner_done = 0, other_done = 0;
@@ -1158,10 +1162,15 @@ static void exercise_first_hash_owner(lua_State *L, MSize installed)
   pthread_t other_thread;
   GCtab *t;
   Node *nilnode = &G(L)->nilnode;
+  int descriptor_installed;
   int i;
 
   lua_settop(L, 0);
   lua_createtable(L, 2, 0);
+  if (self_metatable) {
+    lua_pushvalue(L, 1);
+    assert(lua_setmetatable(L, 1));
+  }
   t = tabV(L->top - 1);
   lua_pushinteger(L, 11);
   lua_rawseti(L, 1, 1);
@@ -1189,18 +1198,25 @@ static void exercise_first_hash_owner(lua_State *L, MSize installed)
   resize_hook_release = &hook_release;
   hash_install_pause_stage = installed;
   lj_tab_test_set_hash_install_hook(hash_install_hold_hook);
+  if (self_metatable && installed)
+    lj_tab_test_set_resize_before_freeze_hook(inline_before_freeze_hold);
   assert(pthread_create(&copy_owner, NULL, resize_worker, &owner) == 0);
   assert(pthread_create(&other_thread, NULL, resize_worker, &other) == 0);
   assert(wait_for_flag(&ready, 2, 1000000));
   store_flag(&owner_start, 1);
   assert(wait_for_flag(&hook_entered, 1, 1000000));
   assert(lj_tab_node_acq(t) == nilnode);
-  assert((lj_tab_resize_desc_control_acq(t) != NULL) == installed);
+  descriptor_installed = lj_tab_resize_desc_control_acq(t) != NULL;
   store_flag(&other_start, 1);
   assert(wait_for_flag(&other_done, 1, 1000000));
   assert(!load_flag(&owner_done));
+  assert(descriptor_installed == (int)installed);
   assert(lj_tab_node_acq(t) != nilnode);
   assert(lj_tab_resize_desc_control_acq(t) == NULL);
+  if (self_metatable) {
+    assert(lua_getmetatable(L, 1) && lua_rawequal(L, 1, -1));
+    lua_pop(L, 1);
+  }
 
   for (i = 0; i < 4; i++) {
     lj_tab_clear(L, t);
@@ -1212,6 +1228,7 @@ static void exercise_first_hash_owner(lua_State *L, MSize installed)
   assert(pthread_join(copy_owner, NULL) == 0 && owner.status == 0);
   assert(pthread_join(other_thread, NULL) == 0 && other.status == 0);
   lj_tab_test_set_hash_install_hook(NULL);
+  lj_tab_test_set_resize_before_freeze_hook(NULL);
   resize_hook_tab = NULL;
   resize_hook_entered = NULL;
   resize_hook_release = NULL;
@@ -1537,8 +1554,12 @@ int main(void)
   exercise_array_setup_owner(L, 1, 0, 1);
   exercise_array_setup_owner(L, 0, 1, 1);
   exercise_array_setup_owner(L, 1, 1, 1);
-  exercise_first_hash_owner(L, 0);
-  exercise_first_hash_owner(L, 1);
+  exercise_first_hash_owner(L, 0, 0);
+  exercise_first_hash_owner(L, 1, 0);
+  exercise_first_hash_owner(L, 1, 1);
+  exercise_first_hash_owner(L, 0, 1);
+  /* A self-metatable may supply its own weak mode during hash/array migration. */
+  exercise_array_migration_owner(L, 2, 3, 0, 0);
   exercise_hash_install_owner(L, 0);
   exercise_hash_install_owner(L, 1);
   exercise_hash_shrink_owner(L, 0, 0);

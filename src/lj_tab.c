@@ -4134,7 +4134,7 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize,
   TabNodeRetire *oldret;
   TabArrayRetire *oldaret;
   TabResizeDesc *cutover;
-  int array_migration, hash_migration, first_hash, self_metatable, inline_shrink;
+  int array_migration, hash_migration, first_hash, inline_shrink;
   MSize hash_source_count;
   int array_next_claimed;
   int struct_acq;
@@ -4207,7 +4207,6 @@ restart_resize:
   }
   hashcount = tab_rehash_hashcount(oldnode, oldhmask, asize,
 				   &deadkey, &count_retry);
-  self_metatable = lj_tab_metatable_acq(t) == t;
   hash_source_count = oldhmask + 1u;
   compact_hbits = 0;
   inline_shrink = 0;
@@ -4216,14 +4215,14 @@ restart_resize:
     uint32_t worst_hbits;
     hash_source_count += tail;
     worst_hbits = hsize2hbits(hash_source_count);
-    if (oldarray_separated && oldhmask && !self_metatable &&
+    if (oldarray_separated && oldhmask &&
 	(mt_active_acq(g) || mt_entering_acq(g)) &&
 	worst_hbits <= LJ_MAX_HBITS) {
       uint32_t oldhbits = lj_fls((uint32_t)oldhmask) + 1u;
       compact_hbits = hbits > oldhbits ? hbits : oldhbits;
       if (hbits < worst_hbits)
 	hbits = worst_hbits;
-    } else if (oldarray && !oldarray_separated && !self_metatable &&
+    } else if (oldarray && !oldarray_separated &&
 	       (mt_active_acq(g) || mt_entering_acq(g)) &&
 	       worst_hbits <= LJ_MAX_HBITS) {
       /* A shared inline shrink splits the array instead of freezing the
@@ -4260,8 +4259,7 @@ restart_resize:
     ** stock shrink-to-fit behavior.
     */
     if (hbits < oldhbits) {
-      if (hash_shrink_requested && !array_changed && !self_metatable &&
-	  oldhbits > 1)
+      if (hash_shrink_requested && !array_changed && oldhbits > 1)
 	compact_hbits = hbits ? hbits : 1;
       hbits = oldhbits;
     }
@@ -4327,22 +4325,23 @@ restart_resize:
   ** key can move into a new array slot or out of the old tail into the
   ** new hash. Separated shrink reserves a guaranteed successor and may
   ** choose a compact one after certifying the retired source occupancy.
-  ** FINREG tables use their own claim protocol and self metatable.
+  ** The same weak-mode barriers apply when the table is its own metatable.
+  ** Finalizer registrations are held in their native generation records.
   */
   array_migration = inline_shrink ||
     (newarray && oldarray && asize > oldasize &&
      ((!oldhmask && !hbits) ||
-      (newnode && !self_metatable && (oldret || !oldarray_separated)))) ||
-    (oldaret && asize < oldasize && oldret && newnode && !self_metatable &&
+      (newnode && (oldret || !oldarray_separated)))) ||
+    (oldaret && asize < oldasize && oldret && newnode &&
      newhmask + 1u >= hash_source_count);
-  first_hash = !oldhmask && newnode && !array_changed && !self_metatable;
+  first_hash = !oldhmask && newnode && !array_changed;
   if ((mt_active_acq(g) || mt_entering_acq(g)) &&
       (array_migration || first_hash || (oldret && newnode && !array_changed))) {
     uint64_t id = tab_resize_desc_id_reserve(g);
     if (id != 0) {
       GCSize bytes = sizeof(TabResizeDesc);
       hash_migration = inline_shrink ||
-	(oldret && (!array_changed || array_migration) && !self_metatable);
+	(oldret && (!array_changed || array_migration));
       if (hash_migration)
 	bytes = tab_hash_move_size(hash_source_count, newhmask);
       cutover = (TabResizeDesc *)lj_mem_new_nothrow(L, bytes);
