@@ -3694,6 +3694,12 @@ static TValue *api_gc_step_cp(lua_State *L, lua_CFunction dummy, void *ud)
   if (lj_str_gc2_reclaim_checkpoint(G(L), LJ_GC2_GRACE_EPOCHS) && --step->budget == 0)
     return NULL;
   step->done = lj_gc2_step_explicit(L, step->budget);
+  /* A bounded call can lose every quantum to a pool worker on the same CPU.
+  ** Offer that actor a turn without waiting for its token or entering a
+  ** native-to-VM safepoint, which could block behind its handshake. */
+  if (!step->done && gc2_n_workers_acq(G(L)) != 0 &&
+      gc2_worker_active_acq(G(L)) != 0 && lj_str_gc2_sweep_pending(G(L)))
+    lj_thr_sched_yield();
   return NULL;
 }
 

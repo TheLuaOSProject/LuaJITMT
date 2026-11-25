@@ -456,6 +456,7 @@ LJ_FUNC uint32_t lj_state_owner_wait(lua_State *L, lua_State *target,
 LJ_FUNC void lj_state_release(lua_State *L, uint32_t tid);
 LJ_FUNC uint32_t lj_thr_cpucount(void);
 LJ_FUNC void lj_thr_fence(void);
+LJ_FUNC void lj_thr_sched_yield(void);
 LJ_FUNC uint32_t lj_thr_yield(lua_State *L);
 LJ_FUNC uint32_t lj_thr_retry_yield(lua_State *L);
 LJ_FUNC uint32_t lj_thr_sleep_ns(lua_State *L, int64_t ns);
