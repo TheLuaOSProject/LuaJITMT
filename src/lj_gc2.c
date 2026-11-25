@@ -10845,6 +10845,12 @@ static int gc2_recovery_small_lifetime_release(global_State *g, GCArena *a,
     }
     return 1;
   }
+  /* The relinker can finish while this publisher owns the recovery count.
+  ** Its release transfers the combined lifetime to the remaining publisher. */
+  if (held == LJ_ARENA_LIFETIME_RELINK_RECOVERY &&
+      lj_arena_lifetime_state_cas(a, start, LJ_ARENA_LIFETIME_RECOVERY,
+                                  LJ_ARENA_LIFETIME_LIVE))
+    return 1;
   /* A successful claim has one unique owner. Losing it is descriptor
   ** corruption (or an invalid concurrent terminal teardown), so retain every
   ** recovery identity instead of pretending that its body is still safe. */
@@ -10856,9 +10862,12 @@ static int gc2_recovery_small_exact_ready(GCArena *a, GCobj *o,
 						   uint32_t start,
 						   uint32_t held)
 {
-  uint32_t check;
-  return a && o && (void *)o == lj_arena_cellptr(a, start) &&
-    lj_arena_lifetime_state_acq(a, start) == held &&
+  uint32_t check, life;
+  if (!a || !o || (void *)o != lj_arena_cellptr(a, start))
+    return 0;
+  life = lj_arena_lifetime_state_acq(a, start);
+  return (life == held || (held == LJ_ARENA_LIFETIME_RELINK_RECOVERY &&
+                           life == LJ_ARENA_LIFETIME_RECOVERY)) &&
     gc2_small_containing_start(a, lj_arena_cellof(o), &check) &&
     check == start && lj_arena_bm_get(a->block, start) &&
     lj_arena_ready_get(a, start);
@@ -10905,17 +10914,18 @@ static int gc2_recovery_publish_small(global_State *g, GCArena *a,
       uint32_t origin = lj_arena_lifetime_state_acq(a, start);
       uint32_t held;
       if (origin == LJ_ARENA_LIFETIME_RESCUE ||
-	  origin == LJ_ARENA_LIFETIME_RECOVERY) {
-	/* Another counted publisher already owns this exact allocation. RESCUE
-	** cancelled DESTRUCT, while RECOVERY claimed LIVE/CONSTRUCT; in both cases
-	** the reservation precedes the lifetime lane, so work is durable before
-	** its recovery side state appears. MUTATING alone is not coalescible. */
+	  origin == LJ_ARENA_LIFETIME_RECOVERY ||
+          origin == LJ_ARENA_LIFETIME_RELINK_RECOVERY) {
+	/* The other publisher reserved an item before claiming lifetime. A
+	** semantic edge can join that work before the side state appears. */
 	lj_gc2_worker_wake(g);
 	return 1;
       }
       if (origin == LJ_ARENA_LIFETIME_LIVE ||
 	  origin == LJ_ARENA_LIFETIME_CONSTRUCT)
 	held = LJ_ARENA_LIFETIME_RECOVERY;
+      else if (origin == LJ_ARENA_LIFETIME_RELINK)
+        held = LJ_ARENA_LIFETIME_RELINK_RECOVERY;
       else if (origin == LJ_ARENA_LIFETIME_DESTRUCT) {
 	/* Irrevocable external/remote free publishes late before DESTRUCT.
 	** Its intent supersedes traversal and must never be resurrected. A
@@ -10942,11 +10952,13 @@ static int gc2_recovery_publish_small(global_State *g, GCArena *a,
 	now = lj_arena_lifetime_state_acq(a, start);
 	if (now == LJ_ARENA_LIFETIME_RESCUE ||
 	    now == LJ_ARENA_LIFETIME_RECOVERY ||
+            now == LJ_ARENA_LIFETIME_RELINK_RECOVERY ||
 	    (now == LJ_ARENA_LIFETIME_DESTRUCT &&
 	     lj_arena_late_get(a, start)))
 	  return 1;
 	if (now == LJ_ARENA_LIFETIME_LIVE ||
 	    now == LJ_ARENA_LIFETIME_CONSTRUCT ||
+            now == LJ_ARENA_LIFETIME_RELINK ||
 	    now == LJ_ARENA_LIFETIME_DESTRUCT)
 	  continue;
 	return 0;
@@ -17064,7 +17076,9 @@ static LJ_AINLINE int gc2_small_lifetime_state_readable(uint32_t life)
 {
   return life == LJ_ARENA_LIFETIME_LIVE ||
     life == LJ_ARENA_LIFETIME_CONSTRUCT ||
-    life == LJ_ARENA_LIFETIME_RESCUE;
+    life == LJ_ARENA_LIFETIME_RESCUE ||
+    life == LJ_ARENA_LIFETIME_RELINK ||
+    life == LJ_ARENA_LIFETIME_RELINK_RECOVERY;
 }
 
 static LJ_AINLINE int gc2_small_lifetime_readable(GCArena *a,
@@ -17110,9 +17124,7 @@ static int gc2_small_lifetime_containing_start(GCArena *a, uint32_t cell,
 {
   uint32_t life;
   return gc2_small_lifetime_nearest(a, cell, startp, &life) &&
-    (life == LJ_ARENA_LIFETIME_LIVE ||
-     life == LJ_ARENA_LIFETIME_CONSTRUCT ||
-     life == LJ_ARENA_LIFETIME_RESCUE);
+    gc2_small_lifetime_state_readable(life);
 }
 
 /* Admit an arbitrary address inside a traversable small allocation without
@@ -17515,7 +17527,9 @@ static int gc2_small_candidate_transition_retry_held(GCArena *a,
       life == LJ_ARENA_LIFETIME_RECOVERY ||
       life == LJ_ARENA_LIFETIME_DESTRUCT ||
       life == LJ_ARENA_LIFETIME_RESCUE ||
-      life == LJ_ARENA_LIFETIME_MUTATING)
+      life == LJ_ARENA_LIFETIME_MUTATING ||
+      life == LJ_ARENA_LIFETIME_RELINK ||
+      life == LJ_ARENA_LIFETIME_RELINK_RECOVERY)
     return 1;
   recovery = lj_arena_recovery_state_acq(a, start);
   root = lj_arena_root_state_acq(a, start);
@@ -17563,9 +17577,7 @@ static int gc2_small_candidate_admit(global_State *g, GCobj *o, GCArena *a,
     start = cell;
     goto structural_invalid;
   }
-  if (life != LJ_ARENA_LIFETIME_LIVE &&
-      life != LJ_ARENA_LIFETIME_CONSTRUCT &&
-      life != LJ_ARENA_LIFETIME_RESCUE)
+  if (!gc2_small_lifetime_state_readable(life))
     goto structural_invalid;
   /* With an exact start, the block bit is already the nearest boundary.
   ** Interior candidates must also prove that no newer boundary intervenes. */
@@ -23763,9 +23775,7 @@ static uint32_t gc2_paranoia_scan_arena(global_State *g, GCArena *a)
 	  lj_arena_ready_get(a, cell) &&
 	  lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE) {
 	uint32_t life = lj_arena_lifetime_state_acq(a, cell);
-	if (life == LJ_ARENA_LIFETIME_LIVE ||
-	    life == LJ_ARENA_LIFETIME_CONSTRUCT ||
-	    life == LJ_ARENA_LIFETIME_RESCUE)
+	if (gc2_small_lifetime_state_readable(life))
 	  continue;  /* Exact arena-owned destructor identity replaces root. */
       }
       if (!gc2_root_oracle_has_base(g, lj_arena_cellptr(a, cell)))

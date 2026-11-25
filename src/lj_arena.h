@@ -262,7 +262,12 @@ enum {
   LJ_ARENA_LIFETIME_DESTRUCT = 4,
   LJ_ARENA_LIFETIME_RESCUE = 5,
   /* Non-destructive ownership without an implied initial reservation. */
-  LJ_ARENA_LIFETIME_MUTATING = 6
+  LJ_ARENA_LIFETIME_MUTATING = 6,
+  /* Root-list publication changes the intrusive gcw link, with stable body
+  ** geometry and semantic payload throughout the claim. */
+  LJ_ARENA_LIFETIME_RELINK = 7,
+  /* Both the root-list publisher and a counted recovery publisher own it. */
+  LJ_ARENA_LIFETIME_RELINK_RECOVERY = 8
 };
 
 enum {
@@ -1402,8 +1407,8 @@ static LJ_AINLINE int lj_arena_lifetime_state_cas(GCArena *a, uint32_t i,
 {
   uint32_t wi, shift;
   uint64_t mask, old;
-  if (!a || i >= LJ_ARENA_CELLS || from > LJ_ARENA_LIFETIME_MUTATING ||
-      to > LJ_ARENA_LIFETIME_MUTATING)
+  if (!a || i >= LJ_ARENA_CELLS || from > LJ_ARENA_LIFETIME_RELINK_RECOVERY ||
+      to > LJ_ARENA_LIFETIME_RELINK_RECOVERY)
     return 0;
   wi = i / LJ_ARENA_LIFETIME_CELLS_PER_WORD;
   shift = (i & (LJ_ARENA_LIFETIME_CELLS_PER_WORD-1u)) << 2;
@@ -1450,8 +1455,8 @@ static LJ_AINLINE int lj_arena_lifetime_state_cas_pair(GCArena *a,
 	uint32_t first, uint32_t second, uint32_t from, uint32_t to)
 {
   if (!a || first >= LJ_ARENA_CELLS || second >= LJ_ARENA_CELLS ||
-      from > LJ_ARENA_LIFETIME_MUTATING ||
-      to > LJ_ARENA_LIFETIME_MUTATING)
+      from > LJ_ARENA_LIFETIME_RELINK_RECOVERY ||
+      to > LJ_ARENA_LIFETIME_RELINK_RECOVERY)
     return 0;
   return lj_arena_packed_state_cas_pair(a->lifetime,
 	LJ_ARENA_LIFETIME_CELLS_PER_WORD, 4u, 0x0fu,
@@ -1675,7 +1680,7 @@ LJ_STATIC_ASSERT(LJ_ARENA_LIFETIME_FREE == 0);
 LJ_STATIC_ASSERT(LJ_ARENA_LIFETIME_LIVE == 1);
 LJ_STATIC_ASSERT(LJ_ARENA_LIFETIME_CONSTRUCT == 2);
 LJ_STATIC_ASSERT(LJ_ARENA_LIFETIME_RECOVERY == 3);
-LJ_STATIC_ASSERT(LJ_ARENA_LIFETIME_MUTATING <= 15);
+LJ_STATIC_ASSERT(LJ_ARENA_LIFETIME_RELINK_RECOVERY <= 15);
 LJ_STATIC_ASSERT((LJ_AF_ROOT_CONSTRUCT & LJ_AF_FLAG_MASK) == 0);
 LJ_STATIC_ASSERT((LJ_AF_DTOR_CONSTRUCT & LJ_AF_FLAG_MASK) == 0);
 LJ_STATIC_ASSERT(sizeof(GCAhdr) == 128u);

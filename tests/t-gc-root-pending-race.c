@@ -409,7 +409,7 @@ static void test_explicit_membership_claim_races(lua_State *L)
   thread = begin_root_state_race(&race, g, o,
 				 LJ_GC_ROOT_STATE_TEST_LINKING);
   assert(small_root_state(o) == LJ_ARENA_ROOT_LINKING);
-  assert(small_lifetime_state(o) == LJ_ARENA_LIFETIME_MUTATING);
+  assert(small_lifetime_state(o) == LJ_ARENA_LIFETIME_RELINK);
   next = lj_obj_gcw_acq(o);
   assert(lj_gc_linkobj(g, o) == LJ_GC_ROOT_LINK_DEFER);
   assert(lj_obj_gcw_acq(o) == next);
@@ -439,6 +439,67 @@ static void test_explicit_membership_claim_races(lua_State *L)
   assert(small_root_state(o) == LJ_ARENA_ROOT_MEMBER);
   assert(small_lifetime_state(o) == LJ_ARENA_LIFETIME_LIVE);
   assert(root_occurrences(g, o) == 1u);
+}
+
+static void *publish_relink_recovery(void *arg)
+{
+  RootStateRace *publication = (RootStateRace *)arg;
+  publication->result = lj_gc2_test_recovery_publish(publication->g,
+                                                     publication->o);
+  return NULL;
+}
+
+static void test_relink_reader_and_recovery(lua_State *L, int link_first)
+{
+  global_State *g = G(L);
+  GCobj *o = obj2gco(new_closed_upvalue_live_unlinked(L));
+  GCArena *a = lj_arena_of(o);
+  uint32_t cell = lj_arena_cellof(o);
+  RootStateRace link, publication = {0};
+  pthread_t linker, publisher;
+  TValue value;
+  LJGC2Lease lease;
+
+  linker = begin_root_state_race(&link, g, o, LJ_GC_ROOT_STATE_TEST_LINKING);
+  setgcVraw(&value, o, LJ_TUPVAL);
+  assert(lj_gc2_tv_lease_acquire(g, &value, &lease) == LJ_GC2_TV_EDGE_VALID);
+  lj_gc2_lease_release(&lease);
+
+  /* The emergency barrier path can acquire a durable item while the linker
+  ** is stopped. A second publication shares the same reservation, including
+  ** the interval before PENDING is visible. */
+  publication.g = g;
+  publication.o = o;
+  lj_gc2_test_recovery_pause(LJ_GC2_RECOVERY_TEST_RESERVED);
+  assert(pthread_create(&publisher, NULL, publish_relink_recovery,
+                        &publication) == 0);
+  while (lj_gc2_test_recovery_paused() != LJ_GC2_RECOVERY_TEST_RESERVED)
+    la_cpu_pause();
+  assert(small_lifetime_state(o) == LJ_ARENA_LIFETIME_RELINK_RECOVERY);
+  assert(lj_arena_recovery_state_acq(a, cell) == LJ_ARENA_RECOVERY_IDLE);
+  assert(lj_gc2_tv_lease_acquire(g, &value, &lease) == LJ_GC2_TV_EDGE_VALID);
+  lj_gc2_lease_release(&lease);
+  assert(lj_gc2_test_recovery_publish(g, o) == 1);
+  assert(gc2_recovery_items_acq(g) == 1);
+
+  if (link_first) {
+    finish_root_state_race(&link, linker);
+    assert(small_lifetime_state(o) == LJ_ARENA_LIFETIME_RECOVERY);
+  }
+  lj_gc2_test_recovery_release();
+  assert(pthread_join(publisher, NULL) == 0 && publication.result == 1);
+  if (!link_first) {
+    assert(small_lifetime_state(o) == LJ_ARENA_LIFETIME_RELINK);
+    finish_root_state_race(&link, linker);
+  }
+  assert(link.result == LJ_GC_ROOT_LINKED);
+  assert(small_root_state(o) == LJ_ARENA_ROOT_MEMBER);
+  assert(root_occurrences(g, o) == 1);
+  assert(small_lifetime_state(o) == LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_recovery_state_acq(a, cell) == LJ_ARENA_RECOVERY_PENDING);
+  assert(lj_gc2_test_recovery_drain(g, 1) == 1);
+  assert(lj_arena_recovery_state_acq(a, cell) == LJ_ARENA_RECOVERY_IDLE);
+  assert(gc2_recovery_items_acq(g) == 0 && !gc2_recovery_failed_acq(g));
 }
 
 #if LJ_HASFFI
@@ -940,6 +1001,8 @@ int main(void)
   test_destructor_terminal_gate(L);
   test_duplicate_link_is_idempotent(L);
   test_explicit_membership_claim_races(L);
+  test_relink_reader_and_recovery(L, 0);
+  test_relink_reader_and_recovery(L, 1);
 #if LJ_HASFFI
   test_variable_cdata_arbitrates_before_validation(L);
 #endif

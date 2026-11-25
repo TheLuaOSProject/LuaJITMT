@@ -397,7 +397,7 @@ typedef struct GCRootStateRef {
   void *base;
   uint32_t cell;
   uint8_t kind;
-  uint8_t lifetime_state;
+  uint8_t relinking;
 } GCRootStateRef;
 
 enum {
@@ -584,6 +584,24 @@ static int gc_root_state_cas(const GCRootStateRef *ref, uint32_t from,
   return ref->kind == GC_ROOT_STATE_EXEMPT;
 }
 
+/* Recovery reserves work before borrowing a root-link lifetime. Either
+** publisher can finish first. The other retains its own allocation claim. */
+static int gc_root_relink_release(const GCRootStateRef *ref)
+{
+  for (;;) {
+    uint32_t life = lj_arena_lifetime_state_acq(ref->a, ref->cell);
+    uint32_t next;
+    if (life == LJ_ARENA_LIFETIME_RELINK)
+      next = LJ_ARENA_LIFETIME_LIVE;
+    else if (life == LJ_ARENA_LIFETIME_RELINK_RECOVERY)
+      next = LJ_ARENA_LIFETIME_RECOVERY;
+    else
+      return 0;
+    if (lj_arena_lifetime_state_cas(ref->a, ref->cell, life, next))
+      return 1;
+  }
+}
+
 static int gc_root_link_claim_at(global_State *g, GCobj *o, void *base,
 				 GCRootStateRef *ref)
 {
@@ -595,34 +613,30 @@ static int gc_root_link_claim_at(global_State *g, GCobj *o, void *base,
     return LJ_GC_ROOT_LINKED;
   if (kind == GC_ROOT_STATE_SMALL) {
     /* Only the winner may inspect discovery/header state or mutate the root
-    ** lane. FREE excludes stale publishers; MUTATING serializes requeue with
+    ** lane. FREE excludes stale publishers; RELINK serializes requeue with
     ** allocator reuse without imposing a lock or wait on either side. */
     if (!lj_arena_lifetime_state_cas(ref->a, ref->cell,
 				     LJ_ARENA_LIFETIME_LIVE,
-				     LJ_ARENA_LIFETIME_MUTATING)) {
+				     LJ_ARENA_LIFETIME_RELINK)) {
       /* GC2 recovery is the sole runtime DESTRUCT->RESCUE producer because it
       ** reserves globally visible traversal work before making the body
       ** readable. Ordinary root owners retain their semantic token and retry. */
       return LJ_GC_ROOT_LINK_DEFER;
     }
-    ref->lifetime_state = LJ_ARENA_LIFETIME_MUTATING;
+    ref->relinking = 1;
     /* External/remote free release-publishes late[] before attempting its
     ** lifetime claim. Once observed, semantic ownership was irrevocably
     ** relinquished: restore LIVE for the terminal consumer and do not inspect
     ** the header or manufacture a resurrection root. Tentative GC destruction
     ** uses DESTRUCT (without late) and is rescued only by GC2 recovery work. */
     if (lj_arena_late_get(ref->a, ref->cell)) {
-      (void)lj_arena_lifetime_state_cas(ref->a, ref->cell,
-					LJ_ARENA_LIFETIME_MUTATING,
-					LJ_ARENA_LIFETIME_LIVE);
-      ref->lifetime_state = 0;
+      (void)gc_root_relink_release(ref);
+      ref->relinking = 0;
       return LJ_GC_ROOT_LINK_DEFER;
     }
     if (!gc_root_state_validate(g, o, ref)) {
-      (void)lj_arena_lifetime_state_cas(ref->a, ref->cell,
-					ref->lifetime_state,
-					LJ_ARENA_LIFETIME_LIVE);
-      ref->lifetime_state = 0;
+      (void)gc_root_relink_release(ref);
+      ref->relinking = 0;
       return LJ_GC_ROOT_LINK_INVALID;
     }
   } else if (!gc_root_state_validate(g, o, ref)) {
@@ -630,22 +644,18 @@ static int gc_root_link_claim_at(global_State *g, GCobj *o, void *base,
   }
   state = gc_root_state_acq(ref);
   if (state == LJ_ARENA_ROOT_MEMBER) {
-    if (ref->lifetime_state) {
-      (void)lj_arena_lifetime_state_cas(ref->a, ref->cell,
-					ref->lifetime_state,
-					LJ_ARENA_LIFETIME_LIVE);
-      ref->lifetime_state = 0;
+    if (ref->relinking) {
+      (void)gc_root_relink_release(ref);
+      ref->relinking = 0;
     }
     return LJ_GC_ROOT_LINK_ALREADY;
   }
   if (state != LJ_ARENA_ROOT_NONE ||
       !gc_root_state_cas(ref, LJ_ARENA_ROOT_NONE,
 			 LJ_ARENA_ROOT_LINKING)) {
-    if (ref->lifetime_state) {
-      (void)lj_arena_lifetime_state_cas(ref->a, ref->cell,
-					ref->lifetime_state,
-					LJ_ARENA_LIFETIME_LIVE);
-      ref->lifetime_state = 0;
+    if (ref->relinking) {
+      (void)gc_root_relink_release(ref);
+      ref->relinking = 0;
     }
     return LJ_GC_ROOT_LINK_DEFER;
   }
@@ -658,13 +668,10 @@ static int gc_root_link_commit(const GCRootStateRef *ref)
   if (ref->kind == GC_ROOT_STATE_EXEMPT)
     return 1;
   if (ref->kind == GC_ROOT_STATE_SMALL &&
-      (!ref->lifetime_state ||
-       !lj_arena_lifetime_state_cas(ref->a, ref->cell,
-				    ref->lifetime_state,
-				    LJ_ARENA_LIFETIME_LIVE)))
+      (!ref->relinking || !gc_root_relink_release(ref)))
     return 0;
-  /* Restore LIVE first. A racing free must then observe LINKING and leave the
-  ** span alone, while the final CAS establishes the MEMBER=>LIVE invariant. */
+  /* LINKING protects membership while the relinker releases its claim.
+  ** A concurrent recovery publisher retains its exact lifetime independently. */
   return gc_root_state_cas(ref, LJ_ARENA_ROOT_LINKING,
 			   LJ_ARENA_ROOT_MEMBER);
 }
@@ -801,13 +808,10 @@ static int gc_root_clear_complete(global_State *g,
 static void gc_root_link_rollback(global_State *g,
 				  const GCRootStateRef *ref)
 {
-  if (ref->kind == GC_ROOT_STATE_SMALL && ref->lifetime_state) {
+  if (ref->kind == GC_ROOT_STATE_SMALL && ref->relinking) {
     int cleared = gc_root_state_cas(ref, LJ_ARENA_ROOT_LINKING,
 				    LJ_ARENA_ROOT_NONE);
-    int restored = cleared &&
-      lj_arena_lifetime_state_cas(ref->a, ref->cell,
-				  ref->lifetime_state,
-				  LJ_ARENA_LIFETIME_LIVE);
+    int restored = cleared && gc_root_relink_release(ref);
     lj_assertG(restored, "ordinary root-link rollback lost lifetime");
     UNUSED(restored);
     return;
@@ -824,6 +828,10 @@ static int gc_root_link_terminal_rollback(global_State *g,
     uint32_t life = lj_arena_lifetime_state_acq(ref->a, ref->cell);
     if (life == LJ_ARENA_LIFETIME_CONSTRUCT)
       return lj_arena_root_construct_abandon(ref->a, ref->cell);
+    if (life == LJ_ARENA_LIFETIME_RELINK ||
+        life == LJ_ARENA_LIFETIME_RELINK_RECOVERY)
+      return gc_root_state_cas(ref, LJ_ARENA_ROOT_LINKING,
+                               LJ_ARENA_ROOT_NONE) && gc_root_relink_release(ref);
     if (life == LJ_ARENA_LIFETIME_MUTATING ||
 	life == LJ_ARENA_LIFETIME_RECOVERY ||
 	life == LJ_ARENA_LIFETIME_RESCUE) {
