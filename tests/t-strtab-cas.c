@@ -26,7 +26,6 @@
 typedef struct ActiveReleaseCtx {
   TGState *tg;
   StrTabHdr *hdr;
-  int64_t delay_ns;
   uint32_t claimed;
   uint32_t cleared;
 } ActiveReleaseCtx;
@@ -659,8 +658,6 @@ static void *release_active_after_claim(void *arg)
     (void)lj_thr_sleep_ns(NULL, 100000);
   assert(assert_resize_state(ctx->hdr) != 0);
   la_store32_rel(&ctx->claimed, 1);
-  if (ctx->delay_ns > 0)
-    (void)lj_thr_sleep_ns(NULL, ctx->delay_ns);
   assert(lj_tg_strtab_active_hdr_acq(ctx->tg) == ctx->hdr);
   assert(lj_tg_strtab_active_depth_acq(ctx->tg) == 1u);
   lj_tg_strtab_active_depth_rel(ctx->tg, 0);
@@ -841,21 +838,21 @@ int main(void)
   oldmask = lj_str_mask_acq(g);
   wantmask = (oldmask << 1) + 1u;
 
-  /* Simulate the last active interner leaving after resize claims the header. */
+  /* A paused interner must not keep the resize claimant waiting.
+  ** The original header remains current until retry. */
   lj_tg_strtab_active_hdr_rel(tg, hdr);
   lj_tg_strtab_active_depth_rel(tg, 1);
-  ctx.tg = tg;
-  ctx.hdr = hdr;
-  ctx.delay_ns = 0;
-  ctx.claimed = 0;
-  ctx.cleared = 0;
-  assert(lj_thr_create(&release_thr, release_active_after_claim, &ctx) == 0);
   lj_str_resize(L, wantmask);
-  assert(lj_thr_join(&release_thr, NULL) == 0);
-  assert(la_load32_acq(&ctx.claimed) != 0);
-  assert(la_load32_acq(&ctx.cleared) != 0);
-  assert(lj_tg_strtab_active_hdr_acq(tg) == NULL);
-  assert(lj_tg_strtab_active_depth_acq(tg) == 0);
+  assert(lj_str_tabh_acq(g) == hdr);
+  assert(lj_str_mask_acq(g) == oldmask);
+  assert_resize_idle(hdr);
+  assert(lj_str_retired_head_acq(g) == NULL);
+  assert(lj_tg_strtab_active_hdr_acq(tg) == hdr);
+  assert(lj_tg_strtab_active_depth_acq(tg) == 1u);
+  lj_tg_strtab_active_depth_rel(tg, 0);
+  lj_tg_strtab_active_hdr_rel(tg, NULL);
+  assert(lj_str_new(L, strdata(s1), s1->len) == s1);
+  lj_str_resize(L, wantmask);
   assert(lj_str_tabh_acq(g) != hdr);
   assert(lj_str_mask_acq(g) == wantmask);
   assert_resize_idle(lj_str_tabh_acq(g));
@@ -910,7 +907,6 @@ int main(void)
   lj_tg_strtab_active_depth_rel(tg, 1);
   ctx.tg = tg;
   ctx.hdr = hdr;
-  ctx.delay_ns = 0;
   ctx.claimed = 0;
   ctx.cleared = 0;
   assert(lj_thr_create(&release_thr, release_active_after_claim, &ctx) == 0);
@@ -933,25 +929,24 @@ int main(void)
   lj_thr_set_tg(&extra);
   lj_tg_strtab_active_hdr_rel(&extra, hdr);
   lj_tg_strtab_active_depth_rel(&extra, 1);
-  ctx.tg = &extra;
-  ctx.hdr = hdr;
-  ctx.delay_ns = 20000000;
-  ctx.claimed = 0;
-  ctx.cleared = 0;
-  assert(lj_thr_create(&release_thr, release_active_after_claim, &ctx) == 0);
   lj_str_resize(L, wantmask);
-  assert(lj_thr_join(&release_thr, NULL) == 0);
-  assert(la_load32_acq(&ctx.claimed) != 0);
-  assert(la_load32_acq(&ctx.cleared) != 0);
-  assert(lj_tg_strtab_active_hdr_acq(&extra) == NULL);
-  assert(lj_tg_strtab_active_depth_acq(&extra) == 0);
+  assert(lj_str_tabh_acq(g) == hdr);
+  assert(lj_str_mask_acq(g) == oldmask);
+  assert_resize_idle(hdr);
+  assert(lj_tg_strtab_active_hdr_acq(&extra) == hdr);
+  assert(lj_tg_strtab_active_depth_acq(&extra) == 1u);
+  /* The actual mutator can still make progress while the other pin exists. */
+  assert(lj_str_new(L, strdata(s1), s1->len) == s1);
+  lj_tg_strtab_active_depth_rel(&extra, 0);
+  lj_tg_strtab_active_hdr_rel(&extra, NULL);
+  lj_thr_set_tg(oldtls);
+  lj_tg_fini_thread(g, &extra);
+  lj_str_resize(L, wantmask);
   assert(lj_str_tabh_acq(g) != hdr);
   assert(lj_str_mask_acq(g) == wantmask);
   assert_resize_idle(lj_str_tabh_acq(g));
   assert_resize_claimed(hdr);
   assert(lj_str_retired_head_acq(g) == hdr);
-  lj_thr_set_tg(oldtls);
-  lj_tg_fini_thread(g, &extra);
   retire_epoch = gc2_hs_epoch_acq(g);
   assert(lj_gc2_reclaim_retired(g, retire_epoch + 1u) >= 1u);
   assert(lj_str_retired_head_acq(g) == NULL);
@@ -972,9 +967,9 @@ int main(void)
 
   lua_close(L);
 #if LJ_GC2_INTERNAL_ALLOCATOR_ONLY
-  printf("t-strtab-cas OK: tagged-link rescue/prepend races, color-independent secondary rehash, canonical layout, Q-publish/resize and unlink/qcount identity races, saturating Q presence, active-drain claim, TLS-only active drain, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified (custom-allocator resize OOM injection skipped by the temporary internal-allocator-only policy)\n");
+  printf("t-strtab-cas OK: tagged-link rescue/prepend races, color-independent secondary rehash, canonical layout, Q-publish/resize and unlink/qcount identity races, saturating Q presence, nonwaiting resize claims with registered and TLS-only pins, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified (custom-allocator resize OOM injection skipped by the temporary internal-allocator-only policy)\n");
 #else
-  printf("t-strtab-cas OK: tagged-link rescue/prepend races, color-independent secondary rehash, canonical layout, Q-publish/resize and unlink/qcount identity races, saturating Q presence, resize OOM, active-drain claim, TLS-only active drain, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified\n");
+  printf("t-strtab-cas OK: tagged-link rescue/prepend races, color-independent secondary rehash, canonical layout, Q-publish/resize and unlink/qcount identity races, saturating Q presence, resize OOM, nonwaiting resize claims with registered and TLS-only pins, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified\n");
 #endif
   return 0;
 }

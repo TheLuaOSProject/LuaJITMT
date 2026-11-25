@@ -511,6 +511,8 @@ static StrCanonHdr *strq_enter(lua_State *L, global_State *g)
       continue;
     }
     strq_active_enter(tg, hdr);
+    /* The topology claimant must see the pin or this actor must see its claim. */
+    la_fence_seq();
     if (LJ_LIKELY(lj_str_qtabh_acq(g) == hdr &&
 		  la_load32_acq(&hdr->resize) == 0))
       return hdr;
@@ -536,8 +538,15 @@ static int strtab_claim(lua_State *L, StrTabHdr *hdr)
 	       "stale string table reader-count bits");
     return 0;
   }
-  while (strtab_active_on_hdr(g, hdr))
-    strtab_wait(L);
+  /* Growth and secondary rehash are opportunistic. A paused reader keeps its
+  ** generation, but must not keep the claim held against new interners.
+  ** The paired fences prevent both sides from missing the other's
+  ** publication. */
+  la_fence_seq();
+  if (strtab_active_on_hdr(g, hdr)) {
+    la_store32_rel(&hdr->resize, 0);
+    return 0;
+  }
   return 1;
 }
 
@@ -606,6 +615,8 @@ static StrTabHdr *strtab_enter(lua_State *L, global_State *g)
       continue;
     }
     strtab_active_enter(tg, hdr);  /* 06 section 6.5 RCU header pin. */
+    /* Order pin publication before checking the destructive topology claim. */
+    la_fence_seq();
     if (LJ_LIKELY(lj_str_tabh_acq(g) == hdr && !strtab_resizing(hdr)))
       return hdr;
     strtab_active_leave(tg, hdr);
@@ -766,6 +777,7 @@ int lj_str_quarantine_resize(lua_State *L, MSize newmask)
     lj_mem_free(g, newhdr, newsize);
     return 0;
   }
+  la_fence_seq();
   if (lj_str_qtabh_acq(g) != oldhdr || strq_active_on_hdr(g, oldhdr)) {
     la_store32_rel(&oldhdr->resize, 0);
     lj_mem_free(g, newhdr, newsize);
@@ -1013,7 +1025,8 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
       GCobj *o;
       MSize mask, coll = 0;
       uintptr_t headu, u;
-      int grow = 0;
+      uintptr_t want;
+      int grow;
       if (LJ_UNLIKELY(hdr == NULL)) {
 	if (news)
 	  lj_mem_free(g, news, lj_str_size(news->len));
@@ -1026,20 +1039,24 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
       hashalg = 0;
       hash = qhash;
       head = &strtab[hash & mask];
-      u = lj_str_link_load_acq(head);
+      headu = lj_str_link_load_acq(head);
 #if LUAJIT_SECURITY_STRHASH
-      if (LJ_UNLIKELY(u & LJ_STRHASH_SECONDARY)) {
+      if (LJ_UNLIKELY(headu & LJ_STRHASH_SECONDARY)) {
 	hashalg = 1;
 	hash = hash_dense(g->str.seed, hash, str, len);
 	head = &strtab[hash & mask];
+	headu = lj_str_link_load_acq(head);
       }
 #endif
+      goto lookup;
 
 retry_lookup:
+      headu = lj_str_link_load_acq(head);
+lookup:
       coll = 0;
       link = head;
-      while ((o = lj_str_link_target(
-		u = lj_str_link_load_acq(link))) != NULL) {
+      u = headu;
+      while ((o = lj_str_link_target(u)) != NULL) {
 	GCstr *sx = gco2str(o);
 	if (sx->hash == hash && sx->len == len) {
 	  if (memcmp(str, strdata(sx), len) == 0) {
@@ -1056,6 +1073,7 @@ retry_lookup:
 	if (!strtab_protect_walk_link(L, link, o))
 	  goto retry_lookup;
 	link = lj_obj_gcwref(o);
+	u = lj_str_link_load_acq(link);
       }
 #if LUAJIT_SECURITY_STRHASH
       /* Rehash chain if there are too many collisions. */
@@ -1082,45 +1100,23 @@ retry_lookup:
 
       news->hash = hash;
       news->hashalg = (uint8_t)hashalg;
-      for (;;) {
-	uintptr_t want;
-
-retry_insert_lookup:
-	headu = lj_str_link_load_acq(head);  /* 06 section 6.5 snapshot. */
-	link = head;
-	while ((o = lj_str_link_target(
-		  u = lj_str_link_load_acq(link))) != NULL) {
-	  GCstr *sx = gco2str(o);
-	  if (sx->hash == hash && sx->len == len &&
-	      memcmp(str, strdata(sx), len) == 0) {
-	    if (!strtab_match_link(L, link, o, u))
-	      goto retry_insert_lookup;
-	    strtab_leave(L, hdr);
-	    lj_mem_free(g, news, lj_str_size(news->len));
-	    return sx;
-	  }
-	  if (!strtab_protect_walk_link(L, link, o))
-	    goto retry_insert_lookup;
-	  link = lj_obj_gcwref(o);
-	}
-	if (LJ_UNLIKELY(lj_str_qcount_acq(g) != 0)) {
-	  GCstr *qs = strcanon_lookup(L, str, len, qhash);
-	  if (qs) {
-	    strtab_leave(L, hdr);
-	    lj_mem_free(g, news, lj_str_size(news->len));
-	    return qs;
-	  }
-	}
-	/* Allocation-black is the fallback; make sweep publication explicit. */
-	strtab_mark_before_publish(g, obj2gco(news));
-	lj_str_next_store_rel(obj2gco(news), headu);
-	want = (uintptr_t)news | (headu & LJ_STRHASH_SECONDARY);
-	u = headu;
-	if (lj_str_link_cas_acqrel(head, &u, want)) {  /* Intern linearization. */
-	  grow = strnum_publish_success(g, L2TG(L), mask);
-	  break;
+      if (LJ_UNLIKELY(lj_str_qcount_acq(g) != 0)) {
+	GCstr *qs = strcanon_lookup(L, str, len, qhash);
+	if (qs) {
+	  strtab_leave(L, hdr);
+	  lj_mem_free(g, news, lj_str_size(news->len));
+	  return qs;
 	}
       }
+      /* The head snapshot covers the complete miss search. An intervening
+      ** prepend invalidates it, so a losing CAS must search again. */
+      strtab_mark_before_publish(g, obj2gco(news));
+      lj_str_next_store_rel(obj2gco(news), headu);
+      want = (uintptr_t)news | (headu & LJ_STRHASH_SECONDARY);
+      u = headu;
+      if (!lj_str_link_cas_acqrel(head, &u, want))  /* Intern linearization. */
+	goto retry_lookup;
+      grow = strnum_publish_success(g, L2TG(L), mask);
       strtab_leave(L, hdr);
       if (grow)
 	lj_str_resize(L, (mask << 1) + 1u);  /* Grow string table. */
