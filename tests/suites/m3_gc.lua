@@ -598,7 +598,7 @@ return function(add)
 
   register({
     name = "m3_gc2_mark_activation_progress",
-    description = "ordinary allocation resumes while a managed owner delays a MARK boundary",
+    description = "ordinary allocation resumes while a managed owner delays MARK or WEAK",
     run = function(t)
       local pthread = os.getenv("PTHREAD") or "-pthread"
       make_default(t, { jobs = false })

@@ -4201,7 +4201,7 @@ static int gc2_step_auto(lua_State *L, int threshold_step, uint32_t step_limit)
     done = lj_gc2_step_automatic(L);
     /* The next owner ACK or threshold turn retries this retained boundary. */
     if (gc2_mark_activation_request_acq(g) ||
-	gc2_mark_fixpoint_actions_acq(g))
+	gc2_fixpoint_epoch_actions_acq(g))
       break;
     /* A retained owner ends this automatic batch as well as the inner step. */
     if (gc2_deferred_epoch_acq(g) != defer0)

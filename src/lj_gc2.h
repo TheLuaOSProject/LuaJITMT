@@ -250,7 +250,7 @@ enum {
 #define LJ_GC2_HS_RESTORE_ALLOC		0x00000800u
 #define LJ_GC2_HS_SCAN_OWNER_ROOTS	0x00001000u
 #define LJ_GC2_HS_RESET_HOTCOUNT	0x00002000u
-#define LJ_GC2_HS_RESUMABLE_MARK	0x00004000u
+#define LJ_GC2_HS_RESUMABLE	0x00004000u
 
 #define LJ_GC2_ACCT_FLUSH		32768u
 /*
@@ -300,7 +300,7 @@ LJ_FUNC int lj_gc2_request_major(global_State *g, TGState *tg);
 LJ_FUNC int lj_gc2_collect_active(lua_State *L);
 LJ_FUNC int lj_gc2_step_explicit(lua_State *L, uint32_t budget);
 LJ_FUNC int lj_gc2_step_automatic(lua_State *L);
-LJ_FUNC int lj_gc2_mark_epoch_continue(global_State *g);
+LJ_FUNC int lj_gc2_resumable_epoch_continue(global_State *g);
 LJ_FUNC void lj_gc2_check_trigger(global_State *g, TGState *tg);
 LJ_FUNC void lj_gc2_update_pacing(global_State *g);
 LJ_FUNC void lj_gc2_publish_idle_threshold(global_State *g);

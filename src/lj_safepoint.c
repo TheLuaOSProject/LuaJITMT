@@ -287,15 +287,15 @@ static void safepoint_consume_fresh_stopreq_poll(TGState *tg)
   safepoint_restore_counted_poll(tg);
 }
 
-/* Only these MARK actions can release an acknowledged TG before the global
+/* Only these phase-local actions can release an acknowledged TG before the global
 ** tail. Their barriers stay enabled and native admission remains closed. */
-static int safepoint_resumable_mark(uint32_t actions)
+static int safepoint_resumable_actions(uint32_t actions)
 {
   switch (actions) {
-  case LJ_GC2_HS_RESUMABLE_MARK | LJ_SAFEPOINT_MARK_START_ACTIONS:
-  case LJ_GC2_HS_RESUMABLE_MARK | LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_FLUSH_SSB:
-  case LJ_GC2_HS_RESUMABLE_MARK | LJ_GC2_HS_SCAN_OWNER_ROOTS | LJ_GC2_HS_FLUSH_SSB:
-  case LJ_GC2_HS_RESUMABLE_MARK | LJ_GC2_HS_FLUSH_SSB:
+  case LJ_GC2_HS_RESUMABLE | LJ_SAFEPOINT_MARK_START_ACTIONS:
+  case LJ_GC2_HS_RESUMABLE | LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_FLUSH_SSB:
+  case LJ_GC2_HS_RESUMABLE | LJ_GC2_HS_SCAN_OWNER_ROOTS | LJ_GC2_HS_FLUSH_SSB:
+  case LJ_GC2_HS_RESUMABLE | LJ_GC2_HS_FLUSH_SSB:
     return 1;
   default:
     return 0;
@@ -310,9 +310,9 @@ static int safepoint_hold_poll_until_leader(global_State *g, uint32_t actions)
   ** SSB, allocator, or trace boundary. Epochs without a live leader cannot
   ** complete that consumed-poll phase, so they clear at acknowledgement.
   */
-  /* Resumable MARK finishes each private scan before acknowledging. Active
+  /* A resumable epoch finishes each private scan before acknowledging. Active
   ** barriers protect later publications while the global certificate is open. */
-  return !safepoint_resumable_mark(actions) &&
+  return !safepoint_resumable_actions(actions) &&
 	 (actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS|
 		     LJ_GC2_HS_FLUSH_SSB|
 		     LJ_GC2_HS_RESET_ALLOC|LJ_GC2_HS_RESTORE_ALLOC|
@@ -639,9 +639,15 @@ retry:
   }
   roots_scanned = safepoint_apply_tg_mode(g, tg, actions, native_parked,
 					 roots_scanned);
-  if (!roots_scanned && !native_parked && safepoint_resumable_mark(actions) &&
-      (actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS)))
-    gc2_mark_root_scanned_rel(g, 0);
+  if (!roots_scanned && !native_parked && safepoint_resumable_actions(actions) &&
+      (actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS))) {
+    if (gc2_phase_acq(g) == LJ_GC2_WEAK) {
+      gc2_weak_root_scanned_rel(g, 0);
+      gc2_weak_mark_closed_rel(g, 0);
+    } else {
+      gc2_mark_root_scanned_rel(g, 0);
+    }
+  }
   if (roots_scanned && !native_parked && tg == lj_thr_get_tg_fallback(g)) {
     la_store64_rel(&tg->str_owner_scan_epoch, epoch);
     /* The last ACK may wake a collector which immediately starts SWEEP.
@@ -683,8 +689,8 @@ retry:
     if (oldpending == 1) {
       gc2_hs_pending_futex_wake(g, 1);
       /* A different owner can finish the boundary from its dispatch ACK. */
-      if (safepoint_resumable_mark(actions))
-	(void)lj_gc2_mark_epoch_continue(g);
+      if (safepoint_resumable_actions(actions))
+	(void)lj_gc2_resumable_epoch_continue(g);
     }
     /* VM-owned acks must not resume with a consumed trace-flush poll. Drop
     ** pending first so the leader can retire/unlink traces and clear poll.
@@ -953,12 +959,12 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
       continue;  /* 09 section 9.3: attach self-caught this epoch. */
     if (lj_tg_reqmask_acq(tg) != 0)
       continue;  /* Already counted by this handshake. */
-    if (safepoint_resumable_mark(actions)) {
+    if (safepoint_resumable_actions(actions)) {
       /* A native executor consumes reqmask before its stack scan. Do not
       ** issue a duplicate that a local executor could ACK and clear first. */
-      if (la_load64_acq(&tg->hs_mark_epoch_signaled) == epoch)
+      if (la_load64_acq(&tg->hs_resumable_epoch_signaled) == epoch)
 	continue;
-      la_store64_rel(&tg->hs_mark_epoch_signaled, epoch);
+      la_store64_rel(&tg->hs_resumable_epoch_signaled, epoch);
     }
     (void)gc2_hs_pending_add_rlx(g, 1);
     signaled++;
@@ -1147,8 +1153,8 @@ static uint32_t safepoint_leader_enter(global_State *g)
       if (self && self->gl == g)
 	safepoint_ack_tg(g, self, 0, 0, 0, 0, NULL);
     }
-    if (expect == LJ_SAFEPOINT_MARK_EPOCH_LEADER &&
-	lj_gc2_mark_epoch_continue(g))
+    if (expect == LJ_SAFEPOINT_RESUMABLE_LEADER &&
+	lj_gc2_resumable_epoch_continue(g))
       continue;
     if (expect == 0)
       continue;
@@ -1204,25 +1210,25 @@ static void safepoint_apply_dead_allocators(global_State *g, uint32_t actions)
   lj_gc2_smr_read_leave(g);
 }
 
-int lj_safepoint_mark_epoch_reserve(global_State *g)
+int lj_safepoint_resumable_epoch_reserve(global_State *g)
 {
   uint32_t expect = 0;
   return gc2_hs_pending_acq(g) == 0 &&
-    gc2_hs_leader_cas(g, &expect, LJ_SAFEPOINT_MARK_EPOCH_LEADER);
+    gc2_hs_leader_cas(g, &expect, LJ_SAFEPOINT_RESUMABLE_LEADER);
 }
 
-void lj_safepoint_mark_epoch_cancel(global_State *g)
+void lj_safepoint_resumable_epoch_cancel(global_State *g)
 {
-  safepoint_leader_leave(g, LJ_SAFEPOINT_MARK_EPOCH_LEADER);
+  safepoint_leader_leave(g, LJ_SAFEPOINT_RESUMABLE_LEADER);
 }
 
-/* The MARK worker token serializes attempts across physical owners. Native
+/* The collector worker token serializes attempts across physical owners. Native
 ** entry is closed and each TG completes its private work before its ACK. */
-int lj_safepoint_mark_epoch_try(global_State *g, uint32_t actions, int start)
+int lj_safepoint_resumable_epoch_try(global_State *g, uint32_t actions, int start)
 {
   uint64_t epoch;
-  actions |= LJ_GC2_HS_RESUMABLE_MARK;
-  lj_assertG(safepoint_resumable_mark(actions), "invalid resumable MARK action");
+  actions |= LJ_GC2_HS_RESUMABLE;
+  lj_assertG(safepoint_resumable_actions(actions), "invalid resumable safepoint action");
   if (start) {
     gc2_hs_actions_rel(g, actions);
     gc2_hs_pending_rel(g, 1);  /* Publication sentinel. */
@@ -1250,7 +1256,7 @@ int lj_safepoint_mark_epoch_try(global_State *g, uint32_t actions, int start)
       (void)lj_gc2_flush_ssb(g, self);
   }
   safepoint_clear_consumed_polls(g, epoch);
-  safepoint_leader_leave(g, LJ_SAFEPOINT_MARK_EPOCH_LEADER);
+  safepoint_leader_leave(g, LJ_SAFEPOINT_RESUMABLE_LEADER);
   safepoint_rearm_fresh_stopreq_polls(g);
   return 1;
 }

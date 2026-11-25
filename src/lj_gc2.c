@@ -1271,7 +1271,9 @@ static void gc2_peer_wait_l(lua_State *L);
 static void gc2_peer_wait_owned_l(lua_State *L);
 static void gc2_root_scan_retry(global_State *g);
 static int gc2_mark_begin(global_State *g, int automatic);
-static int gc2_mark_fixpoint_continue(global_State *g);
+static int gc2_fixpoint_epoch_continue(global_State *g);
+static int gc2_fixpoint_epoch_reserve(global_State *g);
+static int gc2_fixpoint_epoch_owned(global_State *g, int start);
 static int gc2_mark_activation_continue(global_State *g);
 enum { GC2_MARK_CLOSE_SYNC = 1, GC2_MARK_CLOSE_ASYNC = 2 };
 static void lj_gc2_finalizer_enter_l(lua_State *L, global_State *g);
@@ -1524,7 +1526,8 @@ static int gc2_mark_complete_result(global_State *g, lua_State *L,
 				     uint32_t max_rounds, uint32_t limit,
 				     int automatic);
 static int gc2_weak_complete_result(global_State *g, lua_State *L,
-				     GCobj *bridge_head, uint32_t drain_limit);
+				     GCobj *bridge_head, uint32_t drain_limit,
+				     int automatic);
 static uint32_t gc2_mark_close_help(global_State *g, lua_State *L,
 				    uint32_t max_rounds, uint32_t limit,
 				    int automatic);
@@ -1545,7 +1548,7 @@ static LJ_AINLINE int gc2_mark_close_intent_blocks_worker(global_State *g)
 
 typedef enum {
   GC2_CLAIM_WORK,
-  GC2_CLAIM_MARK_CLOSE,
+  GC2_CLAIM_FIXPOINT,
   GC2_CLAIM_MARK_ACTIVATION
 } GC2WorkerClaim;
 
@@ -1556,8 +1559,8 @@ static LJ_AINLINE int gc2_worker_claim_blocked(global_State *g,
   return activation_pending != (claim == GC2_CLAIM_MARK_ACTIVATION) ||
 	 (claim == GC2_CLAIM_WORK && gc2_mark_close_intent_blocks_worker(g)) ||
 	 (gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN &&
-	  (claim != GC2_CLAIM_MARK_CLOSE ||
-	   gc2_mark_fixpoint_actions_acq(g) == 0)) ||
+	  (claim != GC2_CLAIM_FIXPOINT ||
+	   gc2_fixpoint_epoch_actions_acq(g) == 0)) ||
 	 gc2_smr_reclaiming_acq(g) != 0;
 }
 
@@ -1586,9 +1589,9 @@ static int gc2_worker_claim(global_State *g)
   return gc2_worker_claim_mode(g, GC2_CLAIM_WORK);
 }
 
-static int gc2_worker_claim_mark_close(global_State *g)
+static int gc2_worker_claim_fixpoint(global_State *g)
 {
-  return gc2_worker_claim_mode(g, GC2_CLAIM_MARK_CLOSE);
+  return gc2_worker_claim_mode(g, GC2_CLAIM_FIXPOINT);
 }
 
 static int gc2_worker_claim_count_busy(global_State *g)
@@ -1737,7 +1740,7 @@ void lj_gc2_init(global_State *g)
   gc2_hs_actions_store_rlx(g, 0);
   gc2_hs_leader_store_rlx(g, 0);
   la_store32_rlx(&g->gc2.mark_activation_request, 0);
-  la_store32_rlx(&g->gc2.mark_fixpoint_actions, 0);
+  la_store32_rlx(&g->gc2.fixpoint_epoch_actions, 0);
   gc2_hs_signal_ns_store_rlx(g, 0);
   gc2_hs_ack_latency_samples_store_rlx(g, 0);
   gc2_hs_ack_latency_sum_store_rlx(g, 0);
@@ -2837,8 +2840,8 @@ static void *gc2_worker_main(void *arg)
     uint32_t wake = gc2_worker_wake_acq(g);
     uint32_t total = 0;
     int deferred = 0, bridge_progress = 0;
-    if (gc2_mark_activation_request_acq(g))
-      total = (uint32_t)gc2_mark_activation_continue(g);
+    if (gc2_mark_activation_request_acq(g) || gc2_fixpoint_epoch_actions_acq(g))
+      total = (uint32_t)lj_gc2_resumable_epoch_continue(g);
     for (;;) {
       uint32_t step, forward = 0;
       uint64_t defer0;
@@ -3128,7 +3131,7 @@ int lj_gc2_collect_active(lua_State *L)
     }
     if (phase == LJ_GC2_WEAK) {
       int weak_result = gc2_weak_complete_result(
-	g, L, NULL, LJ_GC2_WEAK_DRAIN_BATCH);
+	g, L, NULL, LJ_GC2_WEAK_DRAIN_BATCH, 0);
       if (weak_result == GC2_DRIVER_COMPLETE) {
 	uint64_t defer0 = gc2_deferred_epoch_acq(g);
 	lj_gc2_weak_to_sweep(g, L);
@@ -3275,7 +3278,7 @@ static int gc2_step(lua_State *L, uint32_t budget, int automatic)
     }
     if (phase == LJ_GC2_WEAK) {
       int weak_result = gc2_weak_complete_result(
-	g, L, NULL, LJ_GC2_WEAK_DRAIN_BATCH);
+	g, L, NULL, LJ_GC2_WEAK_DRAIN_BATCH, automatic);
       if (weak_result == GC2_DRIVER_COMPLETE) {
 	uint64_t defer0 = gc2_deferred_epoch_acq(g);
 	lj_gc2_weak_to_sweep(g, L);
@@ -4292,7 +4295,7 @@ static void gc2_mark_begin_finish(global_State *g, uint32_t leader)
 
 static int gc2_mark_activation_progress(global_State *g, int start)
 {
-  if (!lj_safepoint_mark_epoch_try(g, LJ_SAFEPOINT_MARK_START_ACTIONS, start))
+  if (!lj_safepoint_resumable_epoch_try(g, LJ_SAFEPOINT_MARK_START_ACTIONS, start))
     return 0;
   gc2_mark_begin_finish(g, gc2_mark_activation_request_acq(g));
   la_store32_rel(&g->gc2.mark_activation_request, 0);
@@ -4320,12 +4323,12 @@ static int gc2_mark_activation_continue(global_State *g)
   return 0;
 }
 
-int lj_gc2_mark_epoch_continue(global_State *g)
+int lj_gc2_resumable_epoch_continue(global_State *g)
 {
   if (gc2_mark_activation_request_acq(g))
     return gc2_mark_activation_continue(g);
-  if (gc2_mark_fixpoint_actions_acq(g))
-    return gc2_mark_fixpoint_continue(g);
+  if (gc2_fixpoint_epoch_actions_acq(g))
+    return gc2_fixpoint_epoch_continue(g);
   return 0;
 }
 
@@ -4397,7 +4400,7 @@ static int gc2_mark_begin(global_State *g, int automatic)
   /* Leave IDLE unchanged if a concurrent handshake still owns this boundary.
   ** Reserving early ensures the initiating owner can acknowledge its exact
   ** barrier and allocation policy before returning from this checkpoint. */
-  if (automatic && !lj_safepoint_mark_epoch_reserve(g)) {
+  if (automatic && !lj_safepoint_resumable_epoch_reserve(g)) {
     gc2_worker_release(g);
     return 0;
   }
@@ -4409,7 +4412,7 @@ static int gc2_mark_begin(global_State *g, int automatic)
   if (!gc2_activation_mark_recheck(g, leader,
                                     staged_mark ? &staged : NULL)) {
     if (automatic)
-      lj_safepoint_mark_epoch_cancel(g);
+      lj_safepoint_resumable_epoch_cancel(g);
     if (gc2_phase_acq(g) == LJ_GC2_IDLE && gc2_cycle_leader_acq(g) == 0)
       gc2_jit_phase_gate_open_idle(g);
     gc2_worker_release(g);
@@ -12902,7 +12905,7 @@ int lj_gc2_test_weak_trace_close_frontier(global_State *g,
 
 static int gc2_weak_mark_close_round(global_State *g, lua_State *L,
 				     GCobj *bridge_head,
-				     uint32_t drain_limit)
+				     uint32_t drain_limit, int automatic)
 {
   int finqueued;
   uint32_t cycle;
@@ -12932,6 +12935,16 @@ static int gc2_weak_mark_close_round(global_State *g, lua_State *L,
 	!gc2_ssb_published_empty(g) || !gc2_grey_empty(g) ||
 	!gc2_recovery_empty(g)) {
       gc2_weak_root_snapshot_abort(g);
+      return 0;
+    }
+    if (automatic) {
+      if (gc2_jit_phase_gate_acq(g) != 0 || !gc2_fixpoint_epoch_reserve(g)) {
+	gc2_weak_root_snapshot_abort(g);
+	return 0;
+      }
+      la_store32_rel(&g->gc2.fixpoint_epoch_actions,
+		    LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_FLUSH_SSB);
+      (void)gc2_fixpoint_epoch_owned(g, 1);
       return 0;
     }
     (void)lj_gc2_handshake(
@@ -13042,13 +13055,17 @@ static int gc2_weak_frontier_still_closed(global_State *g, lua_State *L,
 
 static int gc2_weak_complete_result(global_State *g, lua_State *L,
 				     GCobj *bridge_head,
-				     uint32_t drain_limit)
+				     uint32_t drain_limit, int automatic)
 {
   uint32_t weakdrain;
   uint64_t progress = 0, defer0;
   int complete = 0;
   if (!g || drain_limit == 0 || gc2_phase_acq(g) != LJ_GC2_WEAK)
     return GC2_DRIVER_INCOMPLETE;
+  if (gc2_fixpoint_epoch_actions_acq(g)) {
+    (void)gc2_fixpoint_epoch_continue(g);
+    return GC2_DRIVER_INCOMPLETE;
+  }
   defer0 = gc2_deferred_epoch_acq(g);
   if (lj_tg_any_jit_active(g))
     return GC2_DRIVER_INCOMPLETE;
@@ -13060,7 +13077,7 @@ static int gc2_weak_complete_result(global_State *g, lua_State *L,
   if (!gc2_weak_mark_closed_acq(g)) {
     if (lj_tg_any_jit_active(g))
       goto out;
-    if (gc2_weak_mark_close_round(g, L, bridge_head, drain_limit)) {
+    if (gc2_weak_mark_close_round(g, L, bridge_head, drain_limit, automatic)) {
       /* Continue below with one bounded weak drain. */
     } else {
       goto out;
@@ -13127,6 +13144,8 @@ out:
        gc2_marks_this_round_acq(g) != 0))
     complete = 0;
   gc2_worker_release(g);
+  if (gc2_fixpoint_epoch_actions_acq(g) && gc2_hs_pending_acq(g) == 0)
+    (void)gc2_fixpoint_epoch_continue(g);
   if (gc2_deferred_epoch_acq(g) != defer0)
     return GC2_DRIVER_DEFERRED;
   return complete ? GC2_DRIVER_COMPLETE : GC2_DRIVER_INCOMPLETE;
@@ -13136,7 +13155,7 @@ out:
 int lj_gc2_weak_complete(global_State *g, lua_State *L, GCobj *bridge_head,
 			 uint32_t drain_limit)
 {
-  return gc2_weak_complete_result(g, L, bridge_head, drain_limit) ==
+  return gc2_weak_complete_result(g, L, bridge_head, drain_limit, 0) ==
     GC2_DRIVER_COMPLETE;
 }
 
@@ -23325,46 +23344,56 @@ static int gc2_mark_snapshot_finish(global_State *g, uint32_t cycle)
   return gc2_mark_root_scanned_cas(g, &expect, 1);
 }
 
-static int gc2_mark_fixpoint_epoch_owned(global_State *g, int start)
+static int gc2_fixpoint_epoch_owned(global_State *g, int start)
 {
-  uint32_t actions = gc2_mark_fixpoint_actions_acq(g);
-  if (!lj_safepoint_mark_epoch_try(g, actions, start))
+  uint32_t actions = gc2_fixpoint_epoch_actions_acq(g);
+  lj_assertG(gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN,
+	     "root epoch resumed without its phase gate");
+  if (!lj_safepoint_resumable_epoch_try(g, actions, start))
     return 0;
-  /* The phase gate pins MARK throughout this epoch, including its last ACK
-  ** and leader-side global scan. A failed owner scan may have invalidated
-  ** state 2 while the requests were in flight. */
-  if (actions & (LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_SCAN_OWNER_ROOTS))
+  /* The phase gate holds the same cycle through ACKs and the global scan.
+  ** A failed owner scan can invalidate provisional state 2 before completion. */
+  if (gc2_phase_acq(g) == LJ_GC2_WEAK) {
+    uint32_t expect = 2;
+    lj_assertG(actions == (LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_FLUSH_SSB),
+	       "unexpected WEAK root action");
+    if (gc2_jit_phase_gate_acq(g) == 0 && !lj_tg_any_jit_active(g))
+      (void)gc2_weak_root_scanned_cas(g, &expect, 1);
+    else
+      gc2_weak_root_snapshot_abort(g);
+  } else if (actions & (LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_SCAN_OWNER_ROOTS)) {
     (void)gc2_mark_snapshot_finish(g, gc2_cycle_acq(g));
-  la_store32_rel(&g->gc2.mark_fixpoint_actions, 0);
+  }
+  la_store32_rel(&g->gc2.fixpoint_epoch_actions, 0);
   gc2_phase_gate_release(g);
   return 1;
 }
 
-static int gc2_mark_fixpoint_continue(global_State *g)
+static int gc2_fixpoint_epoch_continue(global_State *g)
 {
   unsigned attempt;
   for (attempt = 0; attempt < 2; attempt++) {
     int complete = 0;
-    if (!gc2_worker_claim_mark_close(g))
+    if (!gc2_worker_claim_fixpoint(g))
       break;
-    if (gc2_mark_fixpoint_actions_acq(g))
-      complete = gc2_mark_fixpoint_epoch_owned(g, 0);
+    if (gc2_fixpoint_epoch_actions_acq(g))
+      complete = gc2_fixpoint_epoch_owned(g, 0);
     gc2_worker_release(g);
     if (complete) {
       lj_gc2_worker_wake(g);
       return 1;
     }
-    if (gc2_hs_pending_acq(g) != 0 || !gc2_mark_fixpoint_actions_acq(g))
+    if (gc2_hs_pending_acq(g) != 0 || !gc2_fixpoint_epoch_actions_acq(g))
       break;
   }
   return 0;
 }
 
-static int gc2_mark_fixpoint_epoch_reserve(global_State *g)
+static int gc2_fixpoint_epoch_reserve(global_State *g)
 {
   if (!gc2_phase_gate_try(g))
     return 0;
-  if (lj_safepoint_mark_epoch_reserve(g))
+  if (lj_safepoint_resumable_epoch_reserve(g))
     return 1;
   gc2_phase_gate_release(g);
   return 0;
@@ -23389,12 +23418,12 @@ static int gc2_mark_root_snapshot(global_State *g, int automatic)
   state = gc2_mark_root_scanned_acq(g);
   if (state != 0 && state != 1)
     return 0;
-  if (automatic && !gc2_mark_fixpoint_epoch_reserve(g))
+  if (automatic && !gc2_fixpoint_epoch_reserve(g))
     return 0;
   expect = state;
   if (!gc2_mark_root_scanned_cas(g, &expect, 2)) {
     if (automatic) {
-      lj_safepoint_mark_epoch_cancel(g);
+      lj_safepoint_resumable_epoch_cancel(g);
       gc2_phase_gate_release(g);
     }
     return 0;
@@ -23405,8 +23434,8 @@ static int gc2_mark_root_snapshot(global_State *g, int automatic)
     (state == 1 && thread_pending == 0 ? LJ_GC2_HS_SCAN_OWNER_ROOTS :
 				       LJ_GC2_HS_SCAN_ROOTS);
   if (automatic) {
-    la_store32_rel(&g->gc2.mark_fixpoint_actions, actions);
-    return gc2_mark_fixpoint_epoch_owned(g, 1) &&
+    la_store32_rel(&g->gc2.fixpoint_epoch_actions, actions);
+    return gc2_fixpoint_epoch_owned(g, 1) &&
 	   gc2_mark_root_scanned_acq(g) == 1;
   }
   (void)lj_gc2_handshake(g, actions);
@@ -23425,7 +23454,7 @@ static uint32_t gc2_fixpoint_round(global_State *g, lua_State *L,
   phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_MARK)
     return 0;
-  if (gc2_mark_fixpoint_actions_acq(g))
+  if (gc2_fixpoint_epoch_actions_acq(g))
     return 0;
   if (gc2_jit_phase_gate_acq(g) != 0)
     gc2_jit_phase_gate_close(g);
@@ -23486,10 +23515,10 @@ static uint32_t gc2_fixpoint_round(global_State *g, lua_State *L,
     ** those buffers with a flush-only handshake so the close owner can drain
     ** their concrete barrier work. */
     if (automatic) {
-      if (!gc2_mark_fixpoint_epoch_reserve(g))
+      if (!gc2_fixpoint_epoch_reserve(g))
 	return 0;
-      la_store32_rel(&g->gc2.mark_fixpoint_actions, LJ_GC2_HS_FLUSH_SSB);
-      if (!gc2_mark_fixpoint_epoch_owned(g, 1))
+      la_store32_rel(&g->gc2.fixpoint_epoch_actions, LJ_GC2_HS_FLUSH_SSB);
+      if (!gc2_fixpoint_epoch_owned(g, 1))
 	return 0;
     } else {
       (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
@@ -23555,7 +23584,7 @@ static uint32_t lj_gc2_fixpoint_run(global_State *g, lua_State *L,
     if (gc2_fixpoint_round(g, L, limit, worker_owned, automatic))
       return 1;
     if (gc2_deferred_epoch_acq(g) != defer0 ||
-	gc2_mark_fixpoint_actions_acq(g))
+	gc2_fixpoint_epoch_actions_acq(g))
       break;
   }
   return 0;
@@ -23595,7 +23624,7 @@ static uint32_t gc2_mark_close_help(global_State *g, lua_State *L,
     ** so a background worker parks while this exact native frame is active. */
     return 0;
   }
-  claimed = gc2_worker_claim_mark_close(g);
+  claimed = gc2_worker_claim_fixpoint(g);
   if (!claimed)
     return 0;
   if (gc2_phase_acq(g) != LJ_GC2_MARK) {
@@ -23607,11 +23636,11 @@ static uint32_t gc2_mark_close_help(global_State *g, lua_State *L,
   }
   lj_assertG(gc2_assist_active_acq(g) == 0,
 	     "MARK close token overlaps assist owner");
-  if (gc2_mark_fixpoint_actions_acq(g) &&
-      !gc2_mark_fixpoint_epoch_owned(g, 0)) {
+  if (gc2_fixpoint_epoch_actions_acq(g) &&
+      !gc2_fixpoint_epoch_owned(g, 0)) {
     gc2_worker_release(g);
     if (gc2_hs_pending_acq(g) == 0)
-      (void)gc2_mark_fixpoint_continue(g);
+      (void)gc2_fixpoint_epoch_continue(g);
     return 0;
   }
   hit = lj_gc2_fixpoint_run(g, L, max_rounds, limit, 1,
@@ -23635,7 +23664,7 @@ static uint32_t gc2_mark_close_help(global_State *g, lua_State *L,
   ** backstop for forced/test transitions. */
   if (phase != LJ_GC2_MARK) {
     gc2_mark_close_intent_rel(g, 0);
-  } else if (!hit && !gc2_mark_fixpoint_actions_acq(g)) {
+  } else if (!hit && !gc2_fixpoint_epoch_actions_acq(g)) {
     /* A bounded close miss is not permission to monopolize MARK. Barriers and
     ** black allocation make the completed portion stable. Keep the request
     ** durable across this incomplete round while granting another bounded
@@ -23643,8 +23672,8 @@ static uint32_t gc2_mark_close_help(global_State *g, lua_State *L,
     gc2_jit_phase_gate_open_mark(g, 1);
   }
   gc2_worker_release(g);
-  if (gc2_mark_fixpoint_actions_acq(g) && gc2_hs_pending_acq(g) == 0)
-    (void)gc2_mark_fixpoint_continue(g);
+  if (gc2_fixpoint_epoch_actions_acq(g) && gc2_hs_pending_acq(g) == 0)
+    (void)gc2_fixpoint_epoch_continue(g);
   hit = phase == LJ_GC2_WEAK;
   /* Wake a helper after releasing the token. A pending handshake kept the
   ** gate closed, while other misses granted an ordinary native turn. */

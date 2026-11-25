@@ -18,13 +18,13 @@ LJ_FUNCA void lj_safepoint_checkstop(lua_State *L, uint32_t actions);
 LJ_FUNCA void lj_safepoint_vm_checkpoint(lua_State *L, int trace_exit);
 LJ_FUNC uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions);
 /* Reserved outside the range of real safepoint leader thread IDs. */
-#define LJ_SAFEPOINT_MARK_EPOCH_LEADER UINT32_MAX
+#define LJ_SAFEPOINT_RESUMABLE_LEADER UINT32_MAX
 #define LJ_SAFEPOINT_MARK_START_ACTIONS (LJ_GC2_HS_ENABLE_BARRIER | \
   LJ_GC2_HS_ALLOC_BLACK | LJ_GC2_HS_EXIT_TRACES | LJ_GC2_HS_REDISPATCH | \
   LJ_GC2_HS_FLUSH_SSB)
-LJ_FUNC int lj_safepoint_mark_epoch_reserve(global_State *g);
-LJ_FUNC void lj_safepoint_mark_epoch_cancel(global_State *g);
-LJ_FUNC int lj_safepoint_mark_epoch_try(global_State *g, uint32_t actions, int start);
+LJ_FUNC int lj_safepoint_resumable_epoch_reserve(global_State *g);
+LJ_FUNC void lj_safepoint_resumable_epoch_cancel(global_State *g);
+LJ_FUNC int lj_safepoint_resumable_epoch_try(global_State *g, uint32_t actions, int start);
 LJ_FUNC void lj_safepoint_apply_tg(global_State *g, TGState *tg,
 				   uint32_t actions);
 LJ_FUNC uint32_t lj_safepoint_retire_dead_tg(global_State *g, TGState *tg);

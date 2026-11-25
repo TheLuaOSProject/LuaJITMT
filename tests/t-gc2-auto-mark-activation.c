@@ -1,6 +1,6 @@
 /*
 ** Verify automatic allocation can progress while a managed owner is parked
-** outside a declared native section at either MARK boundary. The watchdog
+** outside a declared native section at MARK and WEAK boundaries. The watchdog
 ** releases the peer on failure so the embedding can still shut down.
 */
 #include <assert.h>
@@ -23,7 +23,7 @@ static atomic_int allocation_finished;
 static atomic_int release_owner;
 static atomic_int timed_out;
 static atomic_int peer_resumed_mark;
-static int check_fixpoint;
+static int initial_phase;
 
 static uint64_t monotonic_ns(void)
 {
@@ -60,6 +60,13 @@ static int prepare_mark(lua_State *L)
   assert(lua_gc(L, LUA_GCSTEP, 1) == 0);
   assert(gc2_phase_acq(g) == LJ_GC2_MARK);
   assert(gc2_mark_activation_request_acq(g) == 0);
+  if (initial_phase == LJ_GC2_WEAK) {
+    unsigned round;
+    for (round = 0; round < 128 && gc2_phase_acq(g) == LJ_GC2_MARK; round++)
+      (void)lua_gc(L, LUA_GCSTEP, 1);
+    assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
+    assert(gc2_weak_root_scanned_acq(g) == 0);
+  }
   return 0;
 }
 
@@ -77,10 +84,14 @@ static int finish_allocation(lua_State *L)
   if (atomic_load(&release_owner)) {
     atomic_store(&timed_out, 1);
   } else {
-    assert(gc2_phase_acq(g) == LJ_GC2_MARK);
-    if (check_fixpoint) {
-      assert(gc2_mark_fixpoint_actions_acq(g) & LJ_GC2_HS_SCAN_ROOTS);
-      assert(gc2_mark_root_scanned_acq(g) == 2);
+    assert(gc2_phase_acq(g) ==
+	   (initial_phase == LJ_GC2_WEAK ? LJ_GC2_WEAK : LJ_GC2_MARK));
+    if (initial_phase != LJ_GC2_IDLE) {
+      assert(gc2_fixpoint_epoch_actions_acq(g) & LJ_GC2_HS_SCAN_ROOTS);
+      if (initial_phase == LJ_GC2_MARK)
+	assert(gc2_mark_root_scanned_acq(g) == 2);
+      else
+	assert(gc2_weak_root_scanned_acq(g) == 2);
       assert(gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN);
     } else {
       assert(gc2_mark_activation_request_acq(g) != 0);
@@ -103,9 +114,11 @@ static int peer_after_poll(lua_State *L)
     return 0;
   assert(lj_tg_mark_active_acq(L2TG(L)));
   assert(lj_tg_alloc_black_acq(L2TG(L)));
-  assert(gc2_mark_fixpoint_actions_acq(g) == 0);
-  if (check_fixpoint)
+  assert(gc2_fixpoint_epoch_actions_acq(g) == 0);
+  if (initial_phase == LJ_GC2_MARK)
     assert(gc2_mark_root_scanned_acq(g) == 1);
+  if (initial_phase == LJ_GC2_WEAK)
+    assert(gc2_weak_root_scanned_acq(g) == 1);
   assert(gc2_mark_activation_request_acq(g) == 0);
   assert(gc2_cycle_leader_acq(g) == 0);
   atomic_store(&peer_resumed_mark, 1);
@@ -130,7 +143,7 @@ static void *watchdog(void *unused)
   return NULL;
 }
 
-static int run_case(int fixpoint)
+static int run_case(int phase)
 {
   static const char source[] =
     "local hold, held, start, finish, resumed, prepare = ...\n"
@@ -155,7 +168,7 @@ static int run_case(int fixpoint)
   lua_State *L = luaL_newstate();
   pthread_t timer;
   int status;
-  check_fixpoint = fixpoint;
+  initial_phase = phase;
   atomic_store(&owner_parked, 0);
   atomic_store(&allocation_started, 0);
   atomic_store(&allocation_finished, 0);
@@ -171,7 +184,7 @@ static int run_case(int fixpoint)
   lua_pushcfunction(L, start_allocation);
   lua_pushcfunction(L, finish_allocation);
   lua_pushcfunction(L, peer_after_poll);
-  if (fixpoint)
+  if (phase != LJ_GC2_IDLE)
     lua_pushcfunction(L, prepare_mark);
   else
     lua_pushnil(L);
@@ -183,8 +196,11 @@ static int run_case(int fixpoint)
   assert(pthread_join(timer, NULL) == 0);
   lua_close(L);
   if (atomic_load(&timed_out)) {
-    fprintf(stderr, "allocation stalled during MARK %s with a parked owner\n",
-            fixpoint ? "root fixpoint" : "activation");
+    static const char *const boundary[] = {
+      "MARK activation", "MARK root fixpoint", "WEAK root fixpoint"
+    };
+    fprintf(stderr, "allocation stalled during %s with a parked owner\n",
+            boundary[phase]);
     return 1;
   }
   assert(status == LUA_OK && atomic_load(&peer_resumed_mark));
@@ -193,5 +209,6 @@ static int run_case(int fixpoint)
 
 int main(void)
 {
-  return run_case(0) || run_case(1);
+  return run_case(LJ_GC2_IDLE) || run_case(LJ_GC2_MARK) ||
+         run_case(LJ_GC2_WEAK);
 }
