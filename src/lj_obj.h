@@ -2187,6 +2187,7 @@ typedef struct GC2State {
   uint64_t sweep_owner_runs;  /* Owner traversable arena sweep batches. */
   uint64_t sweep_owner_arenas;  /* Traversable arenas swept by owner. */
   uint64_t sweep_owner_live_cells;  /* Post-sweep live cells observed. */
+  uint64_t sweep_cycle_live_cells;  /* Traversable cells counted this cycle. */
   uint64_t sweep_live_updates;  /* Sweep-closure live estimate refreshes. */
   uint64_t sweep_live_huge_bytes;  /* Marked traversable huge bytes observed. */
   uint64_t live_estimate;  /* GC2 live bytes from swept traversable memory. */
@@ -5158,6 +5159,7 @@ static LJ_AINLINE void gc2_minor_survival_major_requests_add(global_State *g,
 LJ_GC2_COUNTER64_ACCESSORS(gc2_sweep_owner_runs, sweep_owner_runs)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_sweep_owner_arenas, sweep_owner_arenas)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_sweep_owner_live_cells, sweep_owner_live_cells)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_sweep_cycle_live_cells, sweep_cycle_live_cells)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_sweep_live_updates, sweep_live_updates)
 
 static LJ_AINLINE uint64_t gc2_sweep_live_huge_bytes_acq(global_State *g)

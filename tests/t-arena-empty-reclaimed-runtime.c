@@ -36,8 +36,19 @@ int main(void)
   assert(L && pagesize != 0 && (pagesize & (pagesize-1u)) == 0);
   g = G(L);
   tg = g->main_tg;
-  lua_gc(L, LUA_GCCOLLECT, 0);
-  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  lua_newtable(L);
+  /* Each close uses this cycle's swept cells plus the HugeTab contribution.
+  ** Keep a small object live across both collections to detect stale totals. */
+  for (i = 0; i < 2u; i++) {
+    uint64_t cells = gc2_sweep_owner_live_cells_acq(g);
+    lua_gc(L, LUA_GCCOLLECT, 0);
+    assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+    cells = gc2_sweep_owner_live_cells_acq(g) - cells;
+    assert(cells != 0);
+    assert(gc2_live_estimate_acq(g) == (cells << LJ_CELL_SHIFT) +
+           gc2_sweep_live_huge_bytes_acq(g));
+  }
+  lua_pop(L, 1);
   lj_prng_seed_fixed(&rs);
   lj_arena_alloc_init(&alloc);
   lj_arena_alloc_owner_rel(&alloc, lj_tg_tid_acq(tg));

@@ -1941,6 +1941,7 @@ void lj_gc2_init(global_State *g)
   gc2_sweep_owner_runs_store_rlx(g, 0);
   gc2_sweep_owner_arenas_store_rlx(g, 0);
   gc2_sweep_owner_live_cells_store_rlx(g, 0);
+  gc2_sweep_cycle_live_cells_store_rlx(g, 0);
   gc2_sweep_live_updates_store_rlx(g, 0);
   gc2_sweep_live_huge_bytes_store_rlx(g, 0);
   gc2_live_estimate_store_rlx(g, 0);
@@ -4533,6 +4534,7 @@ static int gc2_mark_begin(global_State *g, int automatic)
     la_store32_rel(&g->gc2.mark_activation_request, leader);
   gc2_phase_rel(g, LJ_GC2_MARK);
   (void)gc2_cycle_inc_acqrel(g);
+  gc2_sweep_cycle_live_cells_store_rlx(g, 0);
   (void)gc2_thread_scan_cycle_inc_acqrel(g);
   if (leader)
     gc2_cycle_starts_add(g, 1);
@@ -6471,9 +6473,11 @@ static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
   }
   if (n) {
     gc2_sweep_owner_runs_add(g, 1);
-    if (arenas)
+    if (arenas) {
       gc2_sweep_owner_arenas_add(g, arenas);
-    gc2_sweep_owner_live_cells_add(g, live);
+      gc2_sweep_owner_live_cells_add(g, live);
+      gc2_sweep_cycle_live_cells_add(g, live);
+    }
     if (minor && arenas)
       gc2_minor_sweep_arenas_add(g, arenas);
   }
@@ -6530,28 +6534,6 @@ uint32_t lj_gc2_test_sweep_owner_progress(global_State *g, TGState *tg,
   return n;
 }
 
-static uint64_t gc2_sweep_live_cells(GCArena *a, uint32_t epoch)
-{
-  uint64_t cells = 0;
-  GCArena *slow = a, *fast = a;
-  for (; a != NULL; a = lj_arena_next_acq(a)) {
-    GCArena *next = lj_arena_next_acq(a);
-    if (a->hdr.sweep_epoch == epoch)
-      cells += a->hdr.live_cells;
-    if (next == a)
-      break;
-    if (slow)
-      slow = lj_arena_next_acq(slow);
-    if (fast)
-      fast = lj_arena_next_acq(fast);
-    if (fast)
-      fast = lj_arena_next_acq(fast);
-    if (slow && fast && slow == fast)
-      break;
-  }
-  return cells;
-}
-
 static uint64_t gc2_saturating_add64(uint64_t a, uint64_t b)
 {
   return a > ~(uint64_t)0 - b ? ~(uint64_t)0 : a + b;
@@ -6560,22 +6542,19 @@ static uint64_t gc2_saturating_add64(uint64_t a, uint64_t b)
 static uint64_t lj_gc2_sweep_live_aggregate(global_State *g)
 {
   TGState *tg;
-  uint64_t cells = 0, huge_bytes = 0, bytes;
-  uint32_t epoch;
+  uint64_t cells, huge_bytes = 0, bytes;
   if (!g)
     return 0;
-  epoch = gc2_cycle_acq(g);
+  /* Count the live-cell snapshot from each committed sweep independently
+  ** of later allocator list moves. The worker token also keeps the HugeTab
+  ** headers mapped and excludes transfer while their atomic slots are read. */
+  cells = gc2_sweep_cycle_live_cells_acq(g);
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
     uint8_t flags = lj_tg_flags_acq(tg);
     if (!(flags & TGF_ARENA_INTERNAL))
       continue;
-    cells += gc2_sweep_live_cells(tg->alloc.owned[LJ_ARENAK_TRAVERSABLE],
-				  epoch);
-    cells += gc2_sweep_live_cells(
-	lj_arena_alloc_reclaimed_head(&tg->alloc, LJ_ARENAK_TRAVERSABLE),
-	epoch);
     if (flags & TGF_HUGETAB)
       huge_bytes = gc2_saturating_add64(huge_bytes,
 	lj_arena_hugetab_live_bytes(&tg->huge,
