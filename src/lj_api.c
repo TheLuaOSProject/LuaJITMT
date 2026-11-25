@@ -1915,6 +1915,14 @@ LUA_API void lua_pushinteger(lua_State *L, lua_Integer n)
   lj_state_dropresumeclaim(&claim);
 }
 
+static void api_finish_string_push(lua_State *L, LJStateClaim *claim)
+{
+  int status = L->cframe ? LUA_OK : lj_gc_auto_string_checkpoint(L, 0);
+  lj_state_dropresumeclaim(claim);
+  if (LJ_UNLIKELY(status != LUA_OK))
+    lj_err_throw(L, status);
+}
+
 LUA_API void lua_pushlstring(lua_State *L, const char *str, size_t len)
 {
   LJStateClaim preclaim, claim;
@@ -1934,7 +1942,7 @@ LUA_API void lua_pushlstring(lua_State *L, const char *str, size_t len)
   lj_state_stack_pubtv(L, L, L->top);
   L->top++;
   api_gcroot_release(&root);
-  lj_state_dropresumeclaim(&claim);
+  api_finish_string_push(L, &claim);
 }
 
 LUA_API void lua_pushstring(lua_State *L, const char *str)
@@ -1966,7 +1974,10 @@ LUA_API void lua_pushstring(lua_State *L, const char *str)
   lj_state_stack_pubtv(L, L, L->top);
   L->top++;
   api_gcroot_release(&root);
-  lj_state_dropresumeclaim(&claim);
+  if (str != NULL)
+    api_finish_string_push(L, &claim);
+  else
+    lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API const char *lua_pushvfstring(lua_State *L, const char *fmt,
@@ -1994,7 +2005,7 @@ LUA_API const char *lua_pushvfstring(lua_State *L, const char *fmt,
   lj_state_stack_pubtv(L, L, L->top);
   L->top++;
   api_gcroot_release(&root);
-  lj_state_dropresumeclaim(&claim);
+  api_finish_string_push(L, &claim);
   return strdata(s);
 }
 
@@ -3703,6 +3714,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
   switch (what) {
   case LUA_GCSTOP:
     api_gc_setlogical(g, LJ_MAX_MEM, 1);
+    la_store32_rel(&g->str.auto_stage_pending, 0);
     break;
   case LUA_GCRESTART:
     {

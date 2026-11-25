@@ -360,6 +360,14 @@ LJ_STATIC_ASSERT(sizeof(GCtab) == 80u);
 |// preserves the existing zero-cost not-taken poll edge while routing an
 |// atomic SIGPROF request through vm_safepoint into normal owner C context.
 |.define TGPOLL, qword [DISPATCH+DISPATCH_TG(poll)]
+|.define TGSTRAUTO, dword [DISPATCH+DISPATCH_TG(str_auto_pending)]
+|
+|.macro vm_root_poll, target
+|  cmp TGPOLL, 0
+|  jnz target
+|  cmp TGSTRAUTO, 0
+|  jnz target
+|.endmacro
 |.define TGMARK, dword [DISPATCH+DISPATCH_TG(mark_active)]
 |.macro load_DISPATCH, lreg
 |  mov DISPATCH, L:lreg->tg_hint
@@ -3044,8 +3052,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov L:RB->base, BASE
   |  mov qword [DISPATCH+DISPATCH_TG(jit_base)], 0
   |  set_vmstate INTERP
-  |  cmp TGPOLL, 0
-  |  jnz >6
+  |  vm_root_poll >6
   |  // A trace-exit helper can have consumed the owner poll before restoring
   |  // the interpreter frame. Its scan still needs a restored-frame witness.
   |  cmp dword [DISPATCH+DISPATCH_TG(str_vm_main_pcall)], 0
@@ -5796,8 +5803,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp OP, BC_JITERL
     |  je =>BC_JITERL
     |  branchPC RD
-    |  cmp TGPOLL, 0
-    |  jnz ->vm_safepoint
+    |  vm_root_poll ->vm_safepoint
     |3:
     |  ins_next
     break;
@@ -6034,6 +6040,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   |.define FOR_EXT,  [RA+24]
 
   case BC_FORL:
+    |  cmp TGSTRAUTO, 0
+    |  jz >6
+    |  sub PC, 4
+    |  jmp ->vm_safepoint
+    |6:
     |.if JIT
     |  hotloop RBd
     |.endif
@@ -6052,8 +6063,18 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  lea RA, [BASE+RA*8]
     if (op == BC_IFORL || op == BC_JFORI || op == BC_JFORL) {
       |  // Resume the same instruction before updating the loop index.
-      |  cmp TGPOLL, 0
-      |  jz >4
+      if (op == BC_IFORL) {
+        |  cmp TGPOLL, 0
+        |  jnz >7
+        |  cmp PC_OP, BC_IFORL
+        |  jne >4
+        |  cmp TGSTRAUTO, 0
+        |  jz >4
+        |7:
+      } else {
+        |  cmp TGPOLL, 0
+        |  jz >4
+      }
       |  sub PC, 4
       |  jmp ->vm_safepoint
       |4:
@@ -6240,8 +6261,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_ILOOP:
     |  ins_A	// RA = base, RD = target (loop extent)
-    |  cmp TGPOLL, 0
-    |  jnz ->vm_safepoint
+    |  vm_root_poll ->vm_safepoint
     |  ins_next
     break;
 
@@ -6510,8 +6530,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_JMP:
     |  ins_AJ	// RA = unused, RD = target
     |  branchPC RD
-    |  cmp TGPOLL, 0
-    |  jnz ->vm_safepoint
+    |  vm_root_poll ->vm_safepoint
     |  ins_next
     break;
 
@@ -6569,8 +6588,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 #if LJ_HASJIT
       |  ins_next
 #else
-      |  cmp TGPOLL, 0
-      |  jnz ->vm_safepoint
+      |  vm_root_poll ->vm_safepoint
       |  ins_next
 #endif
     }
@@ -6637,8 +6655,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 #endif
     {
       |  mov KBASE, [PC-4+PC2PROTO(k)]
-      |  cmp TGPOLL, 0
-      |  jnz ->vm_safepoint
+      |  vm_root_poll ->vm_safepoint
       |  ins_next
     }
     |

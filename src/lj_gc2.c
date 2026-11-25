@@ -3435,6 +3435,19 @@ uint64_t lj_gc2_flush_alloc_checkpoint(global_State *g, TGState *tg)
   flushed = lj_gc2_flush_alloc(g, tg);
   if (flushed == 0)
     return 0;
+  if (tg == g->main_tg && lj_gc_auto_running(g) &&
+      lj_str_reclaim_request_acq(g) == LJ_STR_RECLAIM_NONE) {
+    uint32_t prior = la_load32_acq(&tg->str_auto_pending), next;
+    do {
+      next = prior | LJ_STR_AUTO_ALLOC;
+      if ((prior & LJ_STR_AUTO_RETIRE) && gc2_phase_acq(g) == LJ_GC2_IDLE)
+        next |= LJ_STR_AUTO_RETRIED;
+    } while (!la_cas32(&tg->str_auto_pending, &prior, next, LA_ACQ_REL, LA_ACQ));
+    /* Offer one actual owner turn after a completed IDLE epoch. A caller
+    ** without a stack checkpoint cannot suppress a second allocation flush. */
+    if (!(prior & LJ_STR_AUTO_RETRIED) && (next & LJ_STR_AUTO_RETRIED))
+      return flushed;
+  }
   lj_gc2_check_trigger(g, tg);
   if (lj_gc2_hard_limit_reached(g)) {  /* 05 section 5.11 hard limit. */
     uint64_t since = lj_gc2_alloc_since_load(g);
@@ -6879,6 +6892,8 @@ static void gc2_sweep_close_finish(global_State *g, uint64_t epoch)
   gc2_sweep_table_close_gate_store_sc(g, 0);
   gc2_sweep_to_idle_add(g, 1);
   gc2_phase_gate_release(g);
+  if (lj_str_body_retired_head_acq(g) && lj_gc_auto_running(g))
+    lj_tg_str_retire_pending(g->main_tg);
   lj_gc2_worker_wake(g);
 }
 
@@ -23018,27 +23033,53 @@ static int gc2_fixpoint_epoch_owned(global_State *g, int start)
   return 1;
 }
 
-/* This IDLE checkpoint owns GCSCAN, but leaves the native entry gate alone.
-** A finisher can publish the exact grace from any TG. The explicit string
-** requester later attempts physical retirement under its own gate. */
+/* A finisher on any TG can publish the exact IDLE grace. An automatic
+** collection's initiating Lua thread can carry its closed native-entry
+** gate through retirement. Other finishers leave retirement to its owner. */
 static int gc2_idle_retire_epoch_owned(global_State *g, int start)
 {
   uint32_t actions = gc2_fixpoint_epoch_actions_acq(g);
   uint64_t epoch = gc2_hs_epoch_acq(g) + (unsigned)start;
-  int complete;
+  uint32_t open = 1;
+  int complete, owner_gate = 0;
   lj_assertG(gc2_phase_acq(g) == LJ_GC2_IDLE &&
 	     gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN &&
 	     !gc2_sweep_table_close_gate_sc(g),
 	     "idle retirement lost its phase gate");
+  /* Borrow the native gate only during this actual rooted owner turn. Any
+  ** refused or unfinished epoch reopens the gate before dropping worker_active. */
+  if (lj_thr_get_tg() == g->main_tg &&
+      lj_str_reclaim_scope_acq(g) ==
+        lj_str_reclaim_scope_pack(lj_tg_tid_acq(g->main_tg), LJ_STR_RECLAIM_AUTO) &&
+      lj_gc_auto_running(g) && lj_str_body_retired_head_acq(g) != NULL)
+    owner_gate = gc2_jit_phase_gate_cas(g, &open, 0);
+  if (owner_gate)
+    la_fence_seq();
   complete = lj_safepoint_resumable_epoch_try(g, actions, start);
   if (complete) {
     /* Capture epoch before the handshake releases leadership. Reading the
     ** current epoch afterward could name an incomplete newer handshake. */
     la_store64_rel(&g->gc2.idle_retire_epoch, epoch);
     la_store32_rel(&g->gc2.fixpoint_epoch_actions, 0);
-    gc2_phase_gate_release(g);
+    if (!owner_gate)
+      gc2_phase_gate_release(g);
+  } else if (owner_gate) {
+    gc2_jit_phase_gate_open_idle(g);
   }
   gc2_worker_release(g);
+  if (owner_gate && complete) {
+    LJThrGC2TLS *tls = gc2_idle_transition_enter(g);
+    if (lj_gc_auto_running(g))
+      (void)lj_gc2_reclaim_retired(g, epoch);
+    tls->idle_transition_gate_g = NULL;
+    gc2_jit_phase_gate_open_idle(g);
+    gc2_phase_gate_release(g);
+  }
+  if (complete && lj_gc_auto_running(g) &&
+      lj_str_reclaim_request_acq(g) != LJ_STR_RECLAIM_AUTO &&
+      la_load32_acq(&g->str.auto_stage_pending) &&
+      lj_str_body_retired_head_acq(g) != NULL)
+    lj_tg_str_retire_pending(g->main_tg);
   return complete;
 }
 

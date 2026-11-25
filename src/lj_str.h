@@ -492,6 +492,7 @@ enum {
   LJ_STR_RECLAIM_NONE,
   LJ_STR_RECLAIM_FULL,
   LJ_STR_RECLAIM_STEP,
+  LJ_STR_RECLAIM_AUTO,
   LJ_STR_RECLAIM_CONSUMED
 };
 
@@ -511,10 +512,15 @@ static LJ_AINLINE uint32_t lj_str_reclaim_request_acq(const global_State *g)
   return (uint32_t)lj_str_reclaim_scope_acq(g);
 }
 
+static LJ_AINLINE int lj_str_reclaim_mode_active(uint32_t request)
+{
+  return request == LJ_STR_RECLAIM_FULL || request == LJ_STR_RECLAIM_STEP ||
+         request == LJ_STR_RECLAIM_AUTO;
+}
+
 static LJ_AINLINE int lj_str_reclaim_requested_acq(const global_State *g)
 {
-  uint32_t request = lj_str_reclaim_request_acq(g);
-  return request == LJ_STR_RECLAIM_FULL || request == LJ_STR_RECLAIM_STEP;
+  return lj_str_reclaim_mode_active(lj_str_reclaim_request_acq(g));
 }
 
 static LJ_AINLINE uint32_t lj_str_reclaim_exclusive_acq(

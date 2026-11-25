@@ -101,7 +101,7 @@ LJLIB_CF(string_rep)		LJLIB_REC(.)
   sb = lj_buf_putstr_rep(sb, s, rep);
   setstrV(L, L->top-1, lj_buf_str(L, sb));
   lj_gc_pubroot(L, L->top-1);
-  lj_gc_check(L);
+  lj_gc_check_string_result(L);
   return 1;
 }
 
@@ -145,7 +145,8 @@ LJLIB_CF(string_dump)
   if (!pt || lj_bcwrite(L, pt, writer_buf, sb, flags))
     lj_err_caller(L, LJ_ERR_STRDUMP);
   setstrV(L, L->top-1, lj_buf_str(L, sb));
-  lj_gc_check(L);
+  lj_gc_pubroot(L, L->top-1);
+  lj_gc_check_string_result(L);
   return 1;
 }
 
@@ -673,7 +674,8 @@ LJLIB_CF(string_format)		LJLIB_REC(.)
     retry = lj_strfmt_putarg(L, sb, 1, -retry);
   } while (retry > 0);
   setstrV(L, L->top-1, lj_buf_str(L, sb));
-  lj_gc_check(L);
+  lj_gc_pubroot(L, L->top-1);
+  lj_gc_check_string_result(L);
   return 1;
 }
 

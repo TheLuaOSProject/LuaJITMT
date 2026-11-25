@@ -319,6 +319,7 @@ struct TGState {
   uint32_t str_vm_main_pcall;  /* Top-level public main-state Lua entry. */
   void *str_vm_outer_cframe;  /* Managed Lua worker entry. */
   uint64_t str_owner_scan_epoch;  /* Completed owner-local root scan. */
+  uint32_t str_auto_pending;  /* Allocation debt for a rooted VM/API checkpoint. */
   uint64_t str_vm_root_epoch;  /* True owner dispatch checkpoint. */
   GCstr *str_source_pin;  /* Revalidated shared C API source. */
   StrTabHdr *strtab_active_hdr;
@@ -1021,6 +1022,20 @@ static LJ_AINLINE GC2SSBNode *lj_tg_ssb_active_acq(const TGState *tg)
 static LJ_AINLINE void lj_tg_ssb_active_rel(TGState *tg, GC2SSBNode *node)
 {
   la_storeptr_rel((void **)&tg->ssb_active, node);  /* 05 section 5.6.2. */
+}
+
+enum {
+  LJ_STR_AUTO_ALLOC = 1,
+  LJ_STR_AUTO_RETIRE = 2,
+  LJ_STR_AUTO_RETRIED = 4
+};
+
+static LJ_AINLINE void lj_tg_str_retire_pending(TGState *tg)
+{
+  uint32_t expect = la_load32_acq(&tg->str_auto_pending);
+  while (!(expect & LJ_STR_AUTO_RETIRE) &&
+         !la_cas32(&tg->str_auto_pending, &expect, expect | LJ_STR_AUTO_RETIRE,
+                   LA_ACQ_REL, LA_ACQ)) {}
 }
 
 static LJ_AINLINE GCRef *lj_tg_ssb_base_acq(const TGState *tg)

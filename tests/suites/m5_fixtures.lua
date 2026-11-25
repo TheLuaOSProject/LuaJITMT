@@ -156,6 +156,19 @@ return function(add)
     end
   })
 
+  add({
+    name = "m5_str_reclaim_auto",
+    description = "allocation-only physical string reclamation with active native peers",
+    run = function(t)
+      t:build({ clean = true, quiet = true })
+      compile_and_run_c(t, t:tmp("lj_t-str-reclaim-auto"),
+                        "t-str-reclaim-auto.c", {
+        timeout = "90s",
+        libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=munmap" }
+      })
+    end
+  })
+
   runtime.add_luajit_script_cases(add, {
     {
       name = "m5_strtab_gc_stress",

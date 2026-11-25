@@ -33,7 +33,9 @@
 #include "lj_frame.h"
 #include "lj_trace.h"
 #include "lj_mcode.h"
+#include "lj_vm.h"
 #if LJ_HASFFI
+#include "lj_ccall.h"
 #include "lj_ctype.h"
 #include "lj_cdata.h"
 #include "lj_clib.h"
@@ -4242,6 +4244,108 @@ static int gc2_step_auto(lua_State *L, int threshold_step, uint32_t step_limit)
   lj_gc_threshold_store(g, lj_gc_total_load(g) + quantum);
   vmstate_store_rel(g, ostate);
   return -1;
+}
+
+static TValue *gc_auto_string_cp(lua_State *L, lua_CFunction dummy, void *ud)
+{
+  global_State *g = G(L);
+  UNUSED(dummy);
+  UNUSED(ud);
+  (void)lj_str_gc2_reclaim_checkpoint(g, 1u + 2u * LJ_GC2_GRACE_EPOCHS);
+  /* A bounded turn can inherit an unfinished epoch. Continue it before
+  ** spending the next allocation quantum, just as an ordinary step would. */
+  gc2_step_auto(L, lj_gc_total_load(g) >= lj_gc_threshold_load(g),
+                GCACTIVEAUTOSTEPS);
+  (void)lj_str_gc2_reclaim_checkpoint(g, 1u + 2u * LJ_GC2_GRACE_EPOCHS);
+  return NULL;
+}
+
+enum {
+  STR_CHECKPOINT_API,
+  STR_CHECKPOINT_DISPATCH,
+  STR_CHECKPOINT_RESULT
+};
+
+static int gc_auto_string_checkpoint(lua_State *L, int context, int *drove)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  void *cf;
+  ptrdiff_t topofs;
+  int status;
+  uint32_t reasons;
+  if (tg != g->main_tg)
+    return LUA_OK;
+  reasons = la_xchg32_acqrel(&tg->str_auto_pending, 0);
+  if (!reasons)
+    return LUA_OK;
+  if (L != mainthread_acq(g) || !lj_gc_auto_running(g) ||
+      lj_thr_get_tg() != tg ||
+      lj_tg_load_cur_L(tg) != L || lj_tg_in_native_acq(tg) ||
+      lj_tg_load_jit_base(tg) || mt_shutdown_acq(g) ||
+      g->allocf != lj_arena_allocf || !la_load32_acq(&g->allocf_arena) ||
+      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
+    return LUA_OK;
+#if LJ_HASFFI
+  if (lj_tg_ffi_call_func_acq(tg) || ccallback_depth_acq(&tg->cb))
+    return LUA_OK;
+#if LJ_HASJIT
+  if (lj_ffi_native_frame_depth_acq(tg))
+    return LUA_OK;
+#endif
+#endif
+  cf = cframe_raw(L->cframe);
+  /* At an outer dispatch the VM saved BASE/PC and every live Lua value is
+  ** in the stack. An outer C API call can instead use its exact top after
+  ** the constructor result is published. Nested C or FFI callers may retain
+  ** native borrows across a Lua invocation and are outside this scope. */
+  if (context == STR_CHECKPOINT_API ? cf != NULL : (!cf || cframe_prev(cf)))
+    return LUA_OK;
+  if (context == STR_CHECKPOINT_DISPATCH && !curr_funcisL(L))
+    return LUA_OK;
+  if (lj_str_gc2_reclaim_request(g, LJ_STR_RECLAIM_AUTO) <= 0)
+    return LUA_OK;
+  if (reasons & LJ_STR_AUTO_ALLOC)
+    la_store32_rel(&g->str.auto_stage_pending, 1);
+  topofs = savestack(L, L->top);
+  if (drove)
+    *drove = 1;
+  if (context == STR_CHECKPOINT_DISPATCH && L->top < curr_topL(L))
+    L->top = curr_topL(L);
+  {
+    ERRNO_SAVE
+    status = lj_vm_cpcall(L, NULL, NULL, gc_auto_string_cp);
+    lj_str_gc2_reclaim_cancel(g);
+    ERRNO_RESTORE
+  }
+  if (context != STR_CHECKPOINT_API && status == LUA_OK)
+    L->top = restorestack(L, topofs);
+  return status;
+}
+
+int lj_gc_auto_string_checkpoint(lua_State *L, int dispatch)
+{
+  return gc_auto_string_checkpoint(L,
+    dispatch ? STR_CHECKPOINT_DISPATCH : STR_CHECKPOINT_API, NULL);
+}
+
+void lj_gc_check_string_result(lua_State *L)
+{
+  global_State *g = G(L);
+  int drove = 0;
+  /* Only an audited engine builtin may use this entry, after it published
+  ** the result and after its final use of borrowed payload bytes. */
+  if (L2TG(L) == g->main_tg && lj_gc_auto_running(g)) {
+    if (lj_str_body_retired_head_acq(g))
+      lj_tg_str_retire_pending(g->main_tg);
+    {
+      int status = gc_auto_string_checkpoint(L, STR_CHECKPOINT_RESULT, &drove);
+      if (LJ_UNLIKELY(status != LUA_OK))
+        lj_err_throw(L, status);
+    }
+  }
+  if (!drove)
+    lj_gc_check(L);
 }
 
 /* Perform a limited amount of incremental GC steps. */

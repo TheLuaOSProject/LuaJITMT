@@ -1502,8 +1502,11 @@ int main(void)
   assert(gc2_smr_reclaim_runs_acq(g) > smr_runs0);
   assert(gc2_smr_reclaimed_acq(g) >= smr_reclaimed0 + 1u);
 
+  lua_close(L);
+  L = luaL_newstate();
+  assert(L != NULL);
+  (void)lua_gc(L, LUA_GCSTOP, 0);
   exercise_canonical_quarantine(L);
-
   lua_close(L);
   exercise_paused_topology_hits();
   exercise_paused_allocation_pressure();

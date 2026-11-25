@@ -176,6 +176,8 @@ LJ_FUNC int lj_gc_linkobj_terminal(global_State *g, GCobj *o);
 LJ_FUNC uint32_t lj_gc_flush_root_pending(global_State *g);
 LJ_FUNC uint32_t lj_gc_repair_root_spine(global_State *g);
 LJ_FUNC void *lj_mem_newgco_unlinked(lua_State *L, GCSize size);
+LJ_FUNC int lj_gc_auto_string_checkpoint(lua_State *L, int dispatch);
+LJ_FUNC void lj_gc_check_string_result(lua_State *L);
 LJ_FUNCA int LJ_FASTCALL lj_gc_step(lua_State *L);
 LJ_FUNCA void LJ_FASTCALL lj_gc_step_fixtop(lua_State *L);
 LJ_FUNCA void LJ_FASTCALL lj_gc_step_top(lua_State *L);

@@ -851,7 +851,7 @@ uint32_t lj_safepoint_ack_check(lua_State *L)
 /* Only emitted after the interpreter has published BASE/PC, or after
 ** native trace exit restored its stack. A remote native ACK has no such
 ** authority, including when it consumes this actor's outstanding poll. */
-void lj_safepoint_vm_checkpoint(lua_State *L, int trace_exit)
+static void safepoint_vm_scan(lua_State *L, int trace_exit)
 {
   global_State *g = G(L);
   TGState *tg = L2TG(L);
@@ -882,6 +882,17 @@ void lj_safepoint_vm_checkpoint(lua_State *L, int trace_exit)
       return;
   }
   la_store64_rel(&tg->str_vm_root_epoch, epoch);
+}
+
+void lj_safepoint_vm_checkpoint(lua_State *L, int trace_exit)
+{
+  TGState *tg = L2TG(L);
+  safepoint_vm_scan(L, trace_exit);
+  if (la_load32_acq(&tg->str_auto_pending)) {
+    int status = lj_gc_auto_string_checkpoint(L, 1);
+    if (LJ_UNLIKELY(status != LUA_OK))
+      lj_err_throw(L, status);
+  }
 }
 
 void lj_native_enter(TGState *tg)

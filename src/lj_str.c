@@ -1737,60 +1737,65 @@ static int str_gc_worker(global_State *g, TGState *tg)
   return 0;
 }
 
-/* A pool executor may stage quarantine for the exact published FULL or
-** STEP request during WEAK-to-SWEEP, while it owns the GC worker token.
-** Only the initiating Lua actor may commit the staged cohort at IDLE. */
-static TGState *str_vm_reclaim_owner(global_State *g, int stage)
+/* A major cycle may reserve candidates before a safe automatic checkpoint
+** opens. Staging only changes canonical-directory membership. Committing a
+** record always requires an actual request on its initiating Lua thread. */
+static TGState *str_vm_reclaim_owner(global_State *g, uint64_t scope, int stage)
 {
-  TGState *tg = lj_thr_get_tg();
-  uint64_t scope;
-  uint32_t request, tid;
-  if (!g || !tg || tg->gl != g)
+  TGState *executor = lj_thr_get_tg();
+  TGState *owner;
+  uint32_t request = (uint32_t)scope;
+  uint32_t tid = (uint32_t)(scope >> 32);
+  if (!g || !executor || executor->gl != g)
     return NULL;
-  scope = lj_str_reclaim_scope_acq(g);
-  request = (uint32_t)scope;
-  tid = (uint32_t)(scope >> 32);
-  if (tid != lj_tg_tid_acq(tg)) {
-    if (!stage ||
-	(request != LJ_STR_RECLAIM_FULL && request != LJ_STR_RECLAIM_STEP) ||
-	!str_gc_worker(g, tg))
+  if (!scope) {
+    if (!stage || !lj_gc_auto_running(g) ||
+        (!la_load32_acq(&g->str.auto_stage_pending) && lj_str_qcount_acq(g) == 0))
       return NULL;
-    tg = lj_tg_find_owner(g, tid);
-    if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD) ||
-	(tg != g->main_tg &&
-	 (request != LJ_STR_RECLAIM_FULL ||
-	  !lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC))))
+    owner = g->main_tg;
+  } else {
+    if (!lj_str_reclaim_mode_active(request) ||
+        (request == LJ_STR_RECLAIM_AUTO && !lj_gc_auto_running(g)))
+      return NULL;
+    if (tid == lj_tg_tid_acq(executor))
+      owner = executor;
+    else if (stage && (request == LJ_STR_RECLAIM_AUTO ||
+                       str_gc_worker(g, executor)))
+      owner = lj_tg_find_owner(g, tid);
+    else
       return NULL;
   }
-  if ((request != LJ_STR_RECLAIM_FULL && request != LJ_STR_RECLAIM_STEP) ||
+  if (!owner || lj_tg_flags_test_acq(owner, TGF_DEAD) ||
+      (owner != g->main_tg &&
+       (request != LJ_STR_RECLAIM_FULL ||
+        !lj_tg_flags_test_acq(owner, TGF_LUA_ALLOC))) ||
+      (executor != owner && executor != g->main_tg &&
+       !lj_tg_flags_test_acq(executor, TGF_LUA_ALLOC) &&
+       !str_gc_worker(g, executor)) ||
       lj_str_reclaim_scope_acq(g) != scope ||
       lj_str_reclaim_exclusive_acq(g) != 0 ||
       g->allocf != lj_arena_allocf || !la_load32_acq(&g->allocf_arena) ||
-      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
+      !lj_tg_flags_test_acq(owner, TGF_ARENA_INTERNAL) ||
       mt_shutdown_acq(g) || mt_entering_acq(g) ||
       lj_gc2_finalizer_phase_pending(g) || gc2_finalizer_active_acq(g) ||
-      lj_tg_in_native_acq(tg))
+      lj_tg_in_native_acq(owner))
     return NULL;
 #if LJ_HASFFI
-  if (lj_tg_ffi_call_func_acq(tg) || ccallback_depth_acq(&tg->cb))
+  if (lj_tg_ffi_call_func_acq(owner) || ccallback_depth_acq(&owner->cb))
     return NULL;
 #if LJ_HASJIT
-  if (lj_ffi_native_frame_depth_acq(tg))
+  if (lj_ffi_native_frame_depth_acq(owner))
     return NULL;
 #endif
 #endif
-  return tg;
+  return owner;
 }
 
 static int str_vm_cohort_ready(global_State *g, TGState *owner,
-				 uint64_t after)
+                               uint64_t scope, uint64_t after)
 {
   TGState *tg, *head;
-  uint64_t scope = lj_str_reclaim_scope_acq(g);
-  uint32_t request = (uint32_t)scope;
-  if (!owner || (uint32_t)(scope >> 32) != lj_tg_tid_acq(owner) ||
-      (request != LJ_STR_RECLAIM_FULL && request != LJ_STR_RECLAIM_STEP) ||
-      (after && la_load64_acq(&owner->str_owner_scan_epoch) <= after))
+  if (!owner || (after && la_load64_acq(&owner->str_owner_scan_epoch) <= after))
     return 0;
   if (owner != g->main_tg &&
       (!la_load32_acq(&g->main_tg->str_vm_main_pcall) ||
@@ -1817,6 +1822,12 @@ static int str_vm_cohort_ready(global_State *g, TGState *owner,
 	 lj_str_reclaim_scope_acq(g) == scope;
 }
 
+static int str_vm_commit_ready(global_State *g, uint64_t after)
+{
+  uint64_t scope = lj_str_reclaim_scope_acq(g);
+  return str_vm_cohort_ready(g, str_vm_reclaim_owner(g, scope, 0), scope, after);
+}
+
 int lj_str_gc2_reclaim_checkpoint(global_State *g, uint32_t limit)
 {
   uint32_t pass;
@@ -1831,7 +1842,8 @@ int lj_str_gc2_reclaim_checkpoint(global_State *g, uint32_t limit)
   for (pass = 0; pass < limit; pass++) {
     uint32_t actions = LJ_GC2_HS_FLUSH_SSB;
     if (gc2_phase_acq(g) != LJ_GC2_IDLE || gc2_sweep_table_close_gate_sc(g) ||
-	lj_str_body_retired_head_acq(g) == NULL || !str_vm_reclaim_owner(g, 0))
+	lj_str_body_retired_head_acq(g) == NULL ||
+	!str_vm_reclaim_owner(g, lj_str_reclaim_scope_acq(g), 0))
       break;
     if (pass == 0) {
       /* A different TG may have finished the previous checkpoint. Retry its
@@ -2485,8 +2497,9 @@ void lj_str_gc2_sweep_begin(global_State *g, int major)
   /* A pool executor can resolve the initiating Lua owner only while its
   ** TG registry snapshot remains retained. This is try-only staging. */
   if (major && lj_gc2_smr_read_try(g)) {
-    TGState *owner = str_vm_reclaim_owner(g, 1);
-    if (owner && str_vm_cohort_ready(g, owner, 0)) {
+    uint64_t scope = lj_str_reclaim_scope_acq(g);
+    TGState *owner = str_vm_reclaim_owner(g, scope, 1);
+    if (owner && str_vm_cohort_ready(g, owner, scope, 0)) {
       uint64_t scan = la_load64_acq(&owner->str_owner_scan_epoch);
       uint64_t close = la_load64_acq(&g->str.vm_cohort_close_epoch);
       /* A cohort that passed its exact root grace cannot block later
@@ -2494,8 +2507,12 @@ void lj_str_gc2_sweep_begin(global_State *g, int major)
       if (lj_str_qcount_acq(g) != 0 &&
 	  (close == 0 || la_load64_acq(&g->str.vm_cohort_checked_epoch) != close))
 	vm_phase = LJ_STR_SWEEP_UNLINK_GRACE;
-      else if (scan != 0 && str_vm_cohort_ready(g, owner, scan - 1u))
+      else if (scope == 0 || (uint32_t)scope == LJ_STR_RECLAIM_AUTO ||
+               (scan != 0 && str_vm_cohort_ready(g, owner, scope, scan - 1u))) {
+        if (scope == 0 || (uint32_t)scope == LJ_STR_RECLAIM_AUTO)
+          la_store32_rel(&g->str.auto_stage_pending, 0);
 	vm_phase = LJ_STR_SWEEP_ACQUIRE;
+      }
     }
     lj_gc2_smr_read_leave(g);
   }
@@ -2907,7 +2924,7 @@ static int strq_retire_record(global_State *g, StrCanonRec *rec,
         if (canon != lj_str_canon_pack(rec, LJ_STR_CANON_QCLOSING) ||
             !str_retire_grace(completed, close) ||
 	    ((status & LJ_STR_CANONREC_VM_COHORT) &&
-	     !str_vm_cohort_ready(g, str_vm_reclaim_owner(g, 0), close)) ||
+	     !str_vm_commit_ready(g, close)) ||
             str_source_pinned(g, s) ||
             (mainhdr && strtab_active_on_hdr_before(g, mainhdr, close)) ||
             !lj_str_canon_cas(s, &canon, committed))
@@ -3052,7 +3069,7 @@ uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
     if (close != 0 && la_load64_acq(&g->str.vm_cohort_checked_epoch) != close &&
 	str_retire_grace(completed_epoch, close) &&
 	str_retire_grace(gc2_idle_retire_epoch_acq(g), close) &&
-	str_vm_cohort_ready(g, str_vm_reclaim_owner(g, 0), close))
+	str_vm_commit_ready(g, close))
       la_store64_rel(&g->str.vm_cohort_checked_epoch, close);
   }
   /* Retain the unfinished body list across a bounded public step. Both paths
