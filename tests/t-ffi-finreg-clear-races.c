@@ -167,68 +167,98 @@ static void cleanup_registration(lua_State *L, const char *cdname)
   assert_cleared(L, cdname);
 }
 
-static MSize current_fin_bucket(lua_State *L, CTState *cts, GCcdata *cd)
+static int empty_fin_bucket(lua_State *L, CTState *cts, GCcdata *cd)
 {
   CTypeFinLease held = CTYPE_FIN_LEASE_INIT;
   TValue key;
-  Node *node;
-  MSize mask, bucket;
+  Node *node, *anchor;
+  MSize mask;
+  int empty;
   assert(lj_ctype_fin_head(cts, &held) == LJ_CTYPE_FIN_FOUND);
   assert(lj_tab_node_snapshot_gc_held(G(L), held.tab, &node, &mask) ==
 	 LJ_TAB_GC_SNAPSHOT_OK);
-  assert(mask > 0);
+  assert(mask == 1);  /* Fresh FINREG head has two buckets. */
   setcdataV(L, &key, cd);
-  bucket = (MSize)(hashgcref_node(node, mask, key.gcr) - node);
+  anchor = hashgcref_node(node, mask, key.gcr);
+  empty = lj_tv_isnil_acq(&anchor->key) && lj_tv_isnil_acq(&anchor->val);
   lj_ctype_fin_lease_release(&held);
-  return bucket;
+  return empty;
 }
 
-static void test_unrelated_enable_progress(void)
+static void test_unrelated_enable_progress(int keylock)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
   CTState *cts;
   FinRegGen *oldhead;
-  MSize bucket;
-  unsigned attempt;
+  int i, selected = 0;
+  uint32_t pause = keylock ? LJ_CDATA_FIN_PAUSE_ENABLE_KEYLOCK :
+			     LJ_CDATA_FIN_PAUSE_ENABLE_ORDER;
 
   ljt_lua_dostring(L,
     "local ffi=require('ffi')\n"
     "require('threading')\n"
     "collectgarbage('stop')\n"
-    "cd_stalled=ffi.new('int[1]')\n"
+    "cd_candidates={}\n"
+    "for i=1,128 do cd_candidates[i]=ffi.new('int[?]', 513+i*31) end\n"
     "hits_stalled, hits_peer=0, 0\n"
     "fin_stalled=function() hits_stalled=hits_stalled+1 end\n"
     "fin_peer=function() hits_peer=hits_peer+1 end\n");
-  lj_cdata_test_fin_pause_arm(LJ_CDATA_FIN_PAUSE_ENABLE_ORDER);
+  cts = ctype_ctsG(G(L));
+  /* The fresh two-slot head holds __mode in one bucket. Different
+  ** allocation extents span the address bits used by the cdata hash. */
+  lua_getglobal(L, "cd_candidates");
+  for (i = 1; i <= 128 && selected < 2; i++) {
+    lua_rawgeti(L, -1, i);
+    assert(tviscdata(L->top - 1));
+    if (empty_fin_bucket(L, cts, cdataV(L->top - 1)))
+      lua_setglobal(L, selected++ == 0 ? "cd_stalled" : "cd_peer");
+    else
+      lua_pop(L, 1);
+  }
+  assert(selected == 2);
+  lua_pop(L, 1);
+  lua_pushnil(L);
+  lua_setglobal(L, "cd_candidates");
+  lj_cdata_test_fin_pause_arm(pause);
   ljt_lua_dostring(L,
     "worker_stalled=assert(require('threading').spawn(function(cd, fin)\n"
     "  return rawequal(require('ffi').gc(cd, fin), cd)\n"
     "end, cd_stalled, fin_stalled))\n");
-  wait_for_pause(LJ_CDATA_FIN_PAUSE_ENABLE_ORDER);
-
-  cts = ctype_ctsG(G(L));
-  oldhead = fin_gen_head_acq(cts);
-  bucket = current_fin_bucket(L, cts, global_cdata(L, "cd_stalled"));
-  for (attempt = 0; attempt < 256; attempt++) {
-    ljt_lua_dostring(L, "cd_peer=require('ffi').new('int[1]')");
-    if (current_fin_bucket(L, cts, global_cdata(L, "cd_peer")) == bucket)
-      break;
+  wait_for_pause(pause);
+  if (keylock) {
+    lj_cdata_test_fin_pause_arm(LJ_CDATA_FIN_PAUSE_ENABLE_RETRY);
+    ljt_lua_dostring(L,
+      "worker_same=assert(require('threading').spawn(function(cd, fin)\n"
+      "  return rawequal(require('ffi').gc(cd, fin), cd)\n"
+      "end, cd_stalled, fin_stalled))\n");
+    wait_for_pause(LJ_CDATA_FIN_PAUSE_ENABLE_RETRY);
   }
-  assert(attempt < 256);
 
-  /* A colliding key needs a new generation. Even that path must complete
-  ** while an unrelated visible FINCLAIM remains unresolved. */
+  oldhead = fin_gen_head_acq(cts);
+  /* A colliding key needs a new generation. Its registration and ordinary
+  ** use of the first cdata are independent of the paused publisher. */
   ljt_lua_dostring(L,
-    "assert(rawequal(require('ffi').gc(cd_peer, fin_peer), cd_peer))\n");
-  assert(lj_cdata_test_fin_pause_waiting(LJ_CDATA_FIN_PAUSE_ENABLE_ORDER));
+    "local ffi=require('ffi')\n"
+    "cd_stalled[0]=41\n"
+    "assert(cd_stalled[0] == 41 and ffi.sizeof(cd_stalled) >= ffi.sizeof('int'))\n"
+    "assert(rawequal(ffi.gc(cd_peer, nil), cd_peer))\n"
+    "assert(rawequal(ffi.gc(cd_peer, fin_peer), cd_peer))\n");
+  assert(lj_cdata_test_fin_pause_waiting(pause));
   assert(fin_gen_head_acq(cts) != oldhead);
   assert_registered(L, "cd_peer", "fin_peer");
 
-  lj_cdata_test_fin_pause_release(LJ_CDATA_FIN_PAUSE_ENABLE_ORDER);
+  lj_cdata_test_fin_pause_release(pause);
   ljt_lua_dostring(L,
     "local ok, result=worker_stalled:join(10)\n"
     "assert(ok and result == true)\n"
     "worker_stalled=nil\n");
+  if (keylock) {
+    lj_cdata_test_fin_pause_release(LJ_CDATA_FIN_PAUSE_ENABLE_RETRY);
+    ljt_lua_dostring(L,
+      "local ok, result=worker_same:join(10)\n"
+      "assert(ok and result == true)\n"
+      "worker_same=nil\n");
+  }
   assert_registered(L, "cd_stalled", "fin_stalled");
 
   ljt_lua_dostring(L,
@@ -522,7 +552,8 @@ int main(void)
     "collectgarbage('stop')\n");
   assert(!lj_gc2_finreg_cdata_pending(G(L)));
 
-  test_unrelated_enable_progress();
+  test_unrelated_enable_progress(0);
+  test_unrelated_enable_progress(1);
   test_replacement_identity(L);
   test_replacement_vs_clear(L);
   test_enable_order_vs_clear(L);

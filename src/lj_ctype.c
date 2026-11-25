@@ -617,7 +617,7 @@ int lj_ctype_fin_gen_tab_acquire(CTState *cts, FinRegGen *gen,
 ** node generation and return RETRY for KEYLOCK/FORWARD/retiring observations;
 ** callers must never turn those internal states into an ordinary miss. */
 static int ctype_fin_slot_lookup_held(CTypeFinLease *lease, cTValue *key,
-				      TValue **slotp)
+				      TValue **slotp, int stable_key)
 {
   Node *node, *check, *n;
   MSize hmask, checkmask, steps = 0;
@@ -642,9 +642,12 @@ static int ctype_fin_slot_lookup_held(CTypeFinLease *lease, cTValue *key,
     if (np < base || np >= end || (np - base) % sizeof(Node) != 0)
       return LJ_CTYPE_FIN_RETRY;
     lj_tv_load_acq(&nk, &n->key);
-    if (tviskeylock(&nk))
-      return LJ_CTYPE_FIN_RETRY;
-    if (lj_obj_equal(&nk, key)) {
+    if (tviskeylock(&nk)) {
+      /* Only a same-key insertion holder can prove that this empty-anchor
+      ** claim belongs to another object. Ordinary GC reads still retry. */
+      if (!stable_key)
+	return LJ_CTYPE_FIN_RETRY;
+    } else if (lj_obj_equal(&nk, key)) {
       TValue current;
       int rc = lj_tab_read_current_keyed(lease->g, lease->tab, &n->val,
 					 key, &current);
@@ -843,7 +846,7 @@ int lj_ctype_fin_head(CTState *cts, CTypeFinLease *lease)
 ** raw successor is consumed before that interval can end, eliminating the
 ** registered->raw->revalidate ABA window for untagged FinRegGen records. */
 static int ctype_fin_get_smr(CTState *cts, FinRegGen *gen, cTValue *key,
-			     CTypeFinLease *lease)
+			     CTypeFinLease *lease, int stable_key)
 {
   while (gen != NULL) {
     CTypeFinLease held = CTYPE_FIN_LEASE_INIT;
@@ -853,7 +856,7 @@ static int ctype_fin_get_smr(CTState *cts, FinRegGen *gen, cTValue *key,
     if (rc == LJ_CTYPE_FIN_RETRY)
       return LJ_CTYPE_FIN_RETRY;
     if (rc == LJ_CTYPE_FIN_FOUND && fin_gen_tab_enabled_acq(held.tab)) {
-      rc = ctype_fin_slot_lookup_held(&held, key, &slot);
+      rc = ctype_fin_slot_lookup_held(&held, key, &slot, stable_key);
       if (rc == LJ_CTYPE_FIN_FOUND) {
 	*lease = held;  /* Move the one active certificate to the caller. */
 	lease->slot = slot;
@@ -870,12 +873,11 @@ static int ctype_fin_get_smr(CTState *cts, FinRegGen *gen, cTValue *key,
   return LJ_CTYPE_FIN_MISS;
 }
 
-int lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
-		     CTypeFinLease *lease)
+static int ctype_fin_get(CTState *cts, cTValue *key, CTypeFinLease *lease,
+			 int stable_key)
 {
   FinRegGen *gen;
   int rc;
-  UNUSED(L);
   if (!lease)
     return LJ_CTYPE_FIN_RETRY;
   memset(lease, 0, sizeof(*lease));
@@ -884,12 +886,26 @@ int lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
   if (!lj_gc2_smr_read_try(cts->g))
     return LJ_CTYPE_FIN_RETRY;
   gen = fin_gen_head_acq(cts);
-  rc = ctype_fin_get_smr(cts, gen, key, lease);
+  rc = ctype_fin_get_smr(cts, gen, key, lease, stable_key);
   if (rc == LJ_CTYPE_FIN_FOUND)
     lease->smr_held = 1;
   else
     lj_gc2_smr_read_leave(cts->g);
   return rc;
+}
+
+int lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
+		     CTypeFinLease *lease)
+{
+  UNUSED(L);
+  return ctype_fin_get(cts, key, lease, 0);
+}
+
+int lj_ctype_fin_get_inserting(CTState *cts, cTValue *key, CTypeFinLease *lease)
+{
+  lj_assertG_(cts->g, cdata_flags_acq(cdataV(key)) & LJ_CDATA_FIN_INSERT,
+	      "FINREG lookup needs the exact insertion bit");
+  return ctype_fin_get(cts, key, lease, 1);
 }
 
 #define CTYPE_FIN_RETRY_MAX 256u
@@ -977,7 +993,7 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
       ctype_fin_claim_wait(L);
       continue;
     }
-    rc = ctype_fin_get_smr(cts, head, key, &found);
+    rc = ctype_fin_get_smr(cts, head, key, &found, 1);
     if (rc == LJ_CTYPE_FIN_FOUND) {
       lj_ctype_fin_lease_release(&found);
       lj_cdata_fin_insert_leave(cd);
@@ -1004,7 +1020,7 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
       lj_gc_pubobjroot(L, obj2gco(t));
       rc = ctype_fin_gen_tab_acquire_next_smr(cts, gen, lease, NULL);
       if (rc == LJ_CTYPE_FIN_FOUND)
-	rc = ctype_fin_slot_lookup_held(lease, key, &resolved);
+	rc = ctype_fin_slot_lookup_held(lease, key, &resolved, 0);
       if (rc == LJ_CTYPE_FIN_FOUND && resolved == tv) {
 	lease->slot = resolved;
 	lease->smr_held = 1;  /* Transfer the still-active reader to caller. */

@@ -362,7 +362,7 @@ static int cdata_fin_try_newkey_anchor_held(lua_State *L,
     return LJ_CTYPE_FIN_MISS;
   n = hashgcref_node(node, hmask, key->gcr);
   lj_tv_load_acq(&nk, &n->key);
-  if (lj_obj_equal(&nk, key) || tviskeylock(&nk))
+  if (lj_obj_equal(&nk, key))
     return LJ_CTYPE_FIN_RETRY;
   if (!tvisnil(&nk))
     return LJ_CTYPE_FIN_MISS;
@@ -395,6 +395,7 @@ static int cdata_fin_try_newkey_anchor_held(lua_State *L,
       lj_tab_node_is_retiring(node))
     goto rollback_value;
   /* The cdata key is already validated and rooted by lj_cdata_setfin(). */
+  cdata_fin_test_pause(LJ_CDATA_FIN_PAUSE_ENABLE_KEYLOCK);
   copyTVrel(L, &n->key, key);
   lj_gc_pubtabkey(L, lease->tab, key);
   lease->slot = &n->val;
@@ -436,7 +437,7 @@ static int cdata_fin_try_anchor(lua_State *L, CTState *cts,
   int rc;
   if (!lj_cdata_fin_insert_try(cd))
     return LJ_CTYPE_FIN_RETRY;
-  rc = lj_ctype_fin_get(L, cts, key, &found);
+  rc = lj_ctype_fin_get_inserting(cts, key, &found);
   lj_ctype_fin_lease_release(&found);
   if (rc == LJ_CTYPE_FIN_MISS)
     rc = cdata_fin_try_newkey_anchor_held(L, head, key, claim);
@@ -592,6 +593,18 @@ static int cdata_fin_clear_claimed(lua_State *L, global_State *g,
   return 1;
 }
 
+static int cdata_fin_lookup(lua_State *L, CTState *cts, TValue *key,
+			    CTypeFinLease *lease)
+{
+  int rc = lj_ctype_fin_get(L, cts, key, lease);
+  GCcdata *cd = cdataV(key);
+  if (rc == LJ_CTYPE_FIN_RETRY && lj_cdata_fin_insert_try(cd)) {
+    rc = lj_ctype_fin_get_inserting(cts, key, lease);
+    lj_cdata_fin_insert_leave(cd);
+  }
+  return rc;
+}
+
 void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 {
   global_State *g = G(L);
@@ -626,7 +639,7 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
     lj_gc_pubroot(L, &key);
   for (;;) {
     CTypeFinLease held = CTYPE_FIN_LEASE_INIT;
-    int rc = lj_ctype_fin_get(L, cts, &key, &held);
+    int rc = cdata_fin_lookup(L, cts, &key, &held);
     if (rc == LJ_CTYPE_FIN_RETRY) {
       lj_ctype_fin_lease_release(&held);
       if (enabled)

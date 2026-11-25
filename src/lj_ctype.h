@@ -1574,6 +1574,10 @@ LJ_FUNC int lj_ctype_fin_order_retire_obj_complete(CTState *cts,
 						    GCobj *target,
 						    size_t *retiredp);
 LJ_FUNC size_t lj_ctype_fin_order_retire_obj(CTState *cts, GCobj *target);
+/* Caller holds the requested cdata's insertion bit, so a KEYLOCK in a
+** published generation belongs to another key. */
+LJ_FUNC int lj_ctype_fin_get_inserting(CTState *cts, cTValue *key,
+				      CTypeFinLease *lease);
 LJ_FUNC int lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
 			     CTypeFinLease *lease);
 LJ_FUNC int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
