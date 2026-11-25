@@ -517,6 +517,20 @@ static int strq_active_on_hdr(global_State *g, StrCanonHdr *hdr)
   return 0;
 }
 
+/* Claim link rewrites without waiting behind a pinned lookup or publisher. */
+static int strq_claim(global_State *g, StrCanonHdr *hdr)
+{
+  MSize expect = 0;
+  if (!hdr || !la_cas32(&hdr->resize, &expect, 1, LA_ACQ_REL, LA_ACQ))
+    return 0;
+  la_fence_seq();
+  if (lj_str_qtabh_acq(g) != hdr || strq_active_on_hdr(g, hdr)) {
+    la_store32_rel(&hdr->resize, 0);
+    return 0;
+  }
+  return 1;
+}
+
 static StrCanonHdr *strq_enter(lua_State *L, global_State *g)
 {
   TGState *tg = L2TG(L);
@@ -529,17 +543,15 @@ static StrCanonHdr *strq_enter(lua_State *L, global_State *g)
       strq_active_enter(tg, hdr);
       return hdr;
     }
-    if (la_load32_acq(&hdr->resize) != 0) {
-      strtab_wait(L);
-      continue;
-    }
     strq_active_enter(tg, hdr);
-    /* The topology claimant must see the pin or this actor must see its claim. */
+    /* Validate the generation before dereferencing the sampled header.
+    ** The topology claimant must see the pin or this actor must see its claim. */
     la_fence_seq();
     if (LJ_LIKELY(lj_str_qtabh_acq(g) == hdr &&
 		  la_load32_acq(&hdr->resize) == 0))
       return hdr;
     strq_active_leave(tg, hdr);
+    strtab_wait(L);
   }
 }
 
@@ -787,29 +799,22 @@ int lj_str_quarantine_resize(lua_State *L, MSize newmask)
   global_State *g = G(L);
   StrCanonHdr *oldhdr, *newhdr;
   GCSize newsize;
-  MSize i, expect = 0;
+  MSize i;
   if (newmask >= LJ_MAX_STRTAB-1 || (newmask & (newmask + 1u)) != 0)
     return 0;
   newsize = lj_str_qtabsize(newmask);
   newhdr = (StrCanonHdr *)lj_mem_new(L, newsize);
   memset(newhdr, 0, newsize);
   newhdr->mask = newmask;
-  /* Allocation may safepoint and let another generation retire. Snapshot the
-  ** current header only after the allocating step; everything below is one
-  ** no-safepoint topology-claim sequence protected by header retirement. */
+  /* Hold the sampled header until claim validation, even if another owner
+  ** replaces it while this actor is paused before the claim. */
+  if (!lj_gc2_smr_read_try(g)) {
+    lj_mem_free(g, newhdr, newsize);
+    return 0;
+  }
   oldhdr = lj_str_qtabh_acq(g);
-  if (!oldhdr || newmask <= oldhdr->mask) {
-    lj_mem_free(g, newhdr, newsize);
-    return 0;
-  }
-  if (la_load32_acq(&oldhdr->resize) != 0 ||
-      !la_cas32(&oldhdr->resize, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
-    lj_mem_free(g, newhdr, newsize);
-    return 0;
-  }
-  la_fence_seq();
-  if (lj_str_qtabh_acq(g) != oldhdr || strq_active_on_hdr(g, oldhdr)) {
-    la_store32_rel(&oldhdr->resize, 0);
+  if (!oldhdr || newmask <= oldhdr->mask || !strq_claim(g, oldhdr)) {
+    lj_gc2_smr_read_leave(g);
     lj_mem_free(g, newhdr, newsize);
     return 0;
   }
@@ -827,6 +832,7 @@ int lj_str_quarantine_resize(lua_State *L, MSize newmask)
   lj_str_qmask_rel(g, newmask);
   lj_str_qtabh_rel(g, newhdr);
   strq_retire(g, oldhdr);
+  lj_gc2_smr_read_leave(g);
   return 1;
 }
 
@@ -1628,6 +1634,15 @@ static void strcanon_bucket_publish(lua_State *L, global_State *g,
   strq_leave(L, hdr);
 }
 
+static void strq_preserve_body(global_State *g, GCstr *s)
+{
+  uint32_t phase = gc2_phase_acq(g);
+  if (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK)
+    (void)lj_gc2_markobj_nogrey(g, obj2gco(s));
+  else if (phase == LJ_GC2_SWEEP)
+    (void)lj_gc2_preserve_sweep_root(g, obj2gco(s));
+}
+
 int lj_str_test_quarantine_detach(lua_State *L, GCstr *s)
 {
   global_State *g;
@@ -1659,9 +1674,9 @@ int lj_str_test_quarantine_detach(lua_State *L, GCstr *s)
   ** operation. The remainder is one no-safepoint exact-edge sequence. */
   hdr = lj_str_tabh_acq(g);
   if (!hdr || !lj_str_sweep_claim(L, hdr)) {
+    la_storeptr_rel((void **)&rec->str, NULL);
     la_store32_rel(&rec->status,
 	LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_CANCELLED);
-    la_storeptr_rel((void **)&rec->str, NULL);
     return 0;
   }
   la_storeptr_rel((void **)&rec->hdr, hdr);
@@ -1670,18 +1685,18 @@ int lj_str_test_quarantine_detach(lua_State *L, GCstr *s)
 	 o != obj2gco(s))
     link = lj_obj_gcwref(o);
   if (!o) {
+    la_storeptr_rel((void **)&rec->str, NULL);
     la_store32_rel(&rec->status,
 	LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_CANCELLED);
-    la_storeptr_rel((void **)&rec->str, NULL);
     lj_str_sweep_release(hdr);
     return 0;
   }
   canon = LJ_STR_CANON_LIVE;
   want = lj_str_canon_pack(rec, LJ_STR_CANON_QACTIVE);
   if (!lj_str_canon_cas(s, &canon, want)) {
+    la_storeptr_rel((void **)&rec->str, NULL);
     la_store32_rel(&rec->status,
 	LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_CANCELLED);
-    la_storeptr_rel((void **)&rec->str, NULL);
     lj_str_sweep_release(hdr);
     return 0;
   }
@@ -1694,7 +1709,7 @@ int lj_str_test_quarantine_detach(lua_State *L, GCstr *s)
   /* Durable list ownership precedes this phase-aware retention barrier. If a
   ** new cycle starts after the barrier, its metadata scan sees the list; if it
   ** started before list publication, this barrier observes the active phase. */
-  strtab_mark_before_publish(g, obj2gco(s));
+  strq_preserve_body(g, s);
   next = lj_str_next_link_acq(obj2gco(s));
   want = (next & ~(uintptr_t)LJ_STRHASH_SECONDARY) |
 	 (u & LJ_STRHASH_SECONDARY);
@@ -1705,17 +1720,37 @@ int lj_str_test_quarantine_detach(lua_State *L, GCstr *s)
     /* The main table still owns the body. Quarantine reserves identity but
     ** must not run the terminal body destructor a second time. */
     la_store32_rel(&rec->status, LJ_STR_CANONREC_Q_LINKED);
-    strtab_mark_before_publish(g, obj2gco(s));
+    strq_preserve_body(g, s);
     lj_str_sweep_release(hdr);
     return 0;
   }
   la_store32_rel(&rec->main_linked, 0);
-  strtab_mark_before_publish(g, obj2gco(s));
+  strq_preserve_body(g, s);
   lj_str_sweep_release(hdr);
   /* This hook is deliberately after releasing the main topology claim: a
   ** concurrent interner can now observe a true main miss and must acquire the
   ** already-published non-zero Q count before consulting the directory. */
   str_test_canon(L, s, rec, LJ_STR_TEST_CANON_MAIN_UNLINKED);
+  return 1;
+}
+
+/* The fixture certifies that the detached body has no unchecked native or
+** managed references. Real sweep must establish that proof before admission. */
+int lj_str_test_quarantine_close(global_State *g, GCstr *s)
+{
+  uintptr_t canon = lj_str_canon_acq(s);
+  StrCanonRec *rec = lj_str_canon_record(canon);
+  uint32_t status;
+  if (!rec || lj_str_canon_state(canon) != LJ_STR_CANON_QACTIVE ||
+      lj_str_body_retired_main_linked_acq(rec))
+    return 0;
+  status = la_load32_acq(&rec->status);
+  if (status != (LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_BODY_OWNED) ||
+      !lj_str_canon_cas(s, &canon,
+                        lj_str_canon_pack(rec, LJ_STR_CANON_QCLOSING)))
+    return 0;
+  la_store64_rel(&rec->close_epoch, lj_gc2_retire_epoch(g));
+  la_store32_rel(&rec->status, status|LJ_STR_CANONREC_CLOSE_PROVEN);
   return 1;
 }
 #endif
@@ -2151,6 +2186,109 @@ STR_RETIRE_CHAIN_VALIDATOR(str_qretired_chain_valid, StrCanonHdr,
 
 #undef STR_RETIRE_CHAIN_VALIDATOR
 
+static int str_retire_grace(uint64_t completed, uint64_t boundary)
+{
+  return completed >= boundary &&
+    completed - boundary >= LJ_STR_SWEEP_GRACE_EPOCHS;
+}
+
+static void strq_count_remove(global_State *g)
+{
+  uint32_t old = lj_str_qcount_acq(g);
+  while (old != UINT32_MAX) {
+    if (LJ_UNLIKELY(old == 0)) {
+      lj_assertG(0, "canonical quarantine count underflow");
+      abort();
+    }
+    if (la_cas32(&g->str.qcount, &old, old - 1u, LA_ACQ_REL, LA_ACQ))
+      break;
+  }
+}
+
+/* All qnext rewrites share the resize claim. The caller retains record
+** ownership until the post-unlink grace, including a cancelled publication. */
+static int strq_unlink(global_State *g, StrCanonRec *rec)
+{
+  StrCanonHdr *hdr = lj_str_qtabh_acq(g);
+  StrCanonRec **link, *cur;
+  if (!strq_claim(g, hdr))
+    return 0;
+  link = &hdr->bucket[rec->hash & hdr->mask];
+  while ((cur = lj_str_qbucket_acq(link)) != NULL && cur != rec)
+    link = &cur->qnext;
+  if (LJ_UNLIKELY(cur != rec)) {
+    lj_assertG(0, "canonical quarantine lost a linked record");
+    abort();
+  }
+  lj_str_qbucket_rel(link, lj_str_qnext_acq(rec));
+  la_store32_rel(&hdr->resize, 0);
+  return 1;
+}
+
+/* The IDLE reclaimer serializes ownership changes. Semantic rescue always
+** races logical death on the same lifecycle word. */
+static int strq_retire_record(global_State *g, StrCanonRec *rec,
+			      uint64_t completed, uint32_t status)
+{
+  GCstr *s = NULL;
+  StrTabHdr *mainhdr = lj_str_tabh_acq(g);
+  int owns_body = (status & LJ_STR_CANONREC_BODY_OWNED) != 0;
+  uintptr_t canon = 0, committed = 0;
+  if (status & LJ_STR_CANONREC_LIST_ONLY)
+    return 0;
+  if (owns_body) {
+    if (!(status & LJ_STR_CANONREC_CLOSE_PROVEN) ||
+        lj_str_body_retired_main_linked_acq(rec))
+      return 0;
+    s = lj_str_body_retired_str_acq(rec);
+    if (!s || !lj_gc2_mem_registered_known_reclaim_held(g, s))
+      return 0;
+    committed = lj_str_canon_pack(rec, LJ_STR_CANON_QCOMMIT);
+    canon = lj_str_canon_acq(s);
+    if (canon != committed) {
+      uint64_t close = la_load64_acq(&rec->close_epoch);
+      if (canon != lj_str_canon_pack(rec, LJ_STR_CANON_QCLOSING) ||
+          !str_retire_grace(completed, close) ||
+          (mainhdr && strtab_active_on_hdr_before(g, mainhdr, close)) ||
+          !lj_str_canon_cas(s, &canon, committed))
+        return 0;
+    }
+  } else if (!(status & LJ_STR_CANONREC_CANCELLED)) {
+    return 0;
+  }
+
+  if (status & LJ_STR_CANONREC_Q_LINKED) {
+    if (!strq_unlink(g, rec))
+      return 0;
+    la_store64_rel(&rec->q_unlink_epoch, lj_gc2_retire_epoch(g));
+    la_store32_rel(&rec->status, (status & ~LJ_STR_CANONREC_Q_LINKED) |
+                   LJ_STR_CANONREC_Q_UNLINKED);
+    if (owns_body)
+      strq_count_remove(g);
+    return 0;
+  }
+  if (!str_retire_grace(completed, la_load64_acq(&rec->q_unlink_epoch)))
+    return 0;
+  if (owns_body) {
+    LJGCDestructCtx dctx;
+    if ((mainhdr && strtab_active_on_hdr_before(g, mainhdr,
+                         la_load64_acq(&rec->q_unlink_epoch))) ||
+        str_free_prepare_impl(g, s, &dctx, 1) != LJ_GC_DESTRUCT_ACQUIRED)
+      return 0;
+    /* Claim arena destruction first so a lease refusal leaves QCOMMIT
+    ** retryable. FREEING has no path back to an acquirable identity. */
+    if (LJ_UNLIKELY(!lj_str_canon_cas(s, &committed,
+                            lj_str_canon_pack(rec, LJ_STR_CANON_FREEING)))) {
+      lj_assertG(0, "committed string lost canonical retirement ownership");
+      abort();
+    }
+    lj_str_free_commit(g, s, &dctx);
+    lj_str_sweep_reclaimed_add(g, 1);
+  }
+  lj_mem_free(g, rec, sizeof(*rec));
+  return 1;
+}
+
 uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
 {
   StrBodyRetire *ret;
@@ -2185,11 +2323,12 @@ uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
     int old_enough = completed_epoch >= retire_epoch &&
 	completed_epoch - retire_epoch >= LJ_STR_SWEEP_GRACE_EPOCHS;
     lj_str_body_retired_next_rel(ret, NULL);
-    /* Stage A quarantine records remain authoritative until the later
-    ** QCOMMIT/E2 protocol lands. Never remove a bucket-visible record or body
-    ** through the legacy prototype retire drain. */
-    if (status & (LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_LIST_ONLY)) {
-      str_body_retired_push(g, ret);
+    if (status & (LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_LIST_ONLY|
+                  LJ_STR_CANONREC_Q_UNLINKED)) {
+      if (strq_retire_record(g, ret, completed_epoch, status))
+        reclaimed++;
+      else
+        str_body_retired_push(g, ret);
       ret = next;
       continue;
     }
@@ -2330,9 +2469,7 @@ static void str_terminal_free_retired_body(global_State *g,
   GCstr *s = lj_str_body_retired_str_acq(ret);
   uint32_t status = la_load32_acq(&ret->status);
   uint32_t main_linked = lj_str_body_retired_main_linked_acq(ret);
-  int owns_body = !(status & (LJ_STR_CANONREC_Q_LINKED|
-				     LJ_STR_CANONREC_LIST_ONLY)) ||
-	(status & LJ_STR_CANONREC_BODY_OWNED);
+  int owns_body = status == 0 || (status & LJ_STR_CANONREC_BODY_OWNED);
   if (!owns_body)
     return;
   if (LJ_UNLIKELY(main_linked != 0)) {

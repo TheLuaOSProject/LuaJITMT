@@ -126,6 +126,11 @@ return function(add)
         cflags = strtab_cflags,
         timeout = "20s"
       })
+      compile_and_run_c(t, t:tmp("lj_t-strcanon-retire"),
+                        "t-strcanon-retire.c", {
+        cflags = strtab_cflags,
+        timeout = "20s"
+      })
       compile_and_run_c(t, out_rehash, "t-strtab-rehash.c", {
         cflags = strtab_cflags,
         timeout = "20s"

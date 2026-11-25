@@ -3876,9 +3876,7 @@ static LJ_NOINLINE void gc2_mark_strtab_mem(global_State *g)
     gc2_root_scan_retry(g);
   } else if (ret) {
     lj_gc2_markmem(g, ret);
-    if ((la_load32_acq(&ret->status) &
-	 (LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_BODY_OWNED)) ==
-	(LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_BODY_OWNED)) {
+    if (la_load32_acq(&ret->status) & LJ_STR_CANONREC_BODY_OWNED) {
       GCstr *s = lj_str_body_retired_str_acq(ret);
       if (s && !lj_gc2_mem_registered(g, s)) {
 	gc2_root_scan_retry(g);
@@ -3886,23 +3884,19 @@ static LJ_NOINLINE void gc2_mark_strtab_mem(global_State *g)
 	if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
 	  (void)lj_gc2_preserve_sweep_root(g, obj2gco(s));
 	else
-	  (void)lj_gc2_markobj(g, obj2gco(s));
+	  (void)lj_gc2_markobj_nogrey(g, obj2gco(s));
       }
     }
   }
-  /* Side records are ownership metadata. Stage A/B deliberately retain every
-  ** authoritative quarantine body until QCOMMIT is implemented; this is not a
-  ** liveness sample authorizing unlink/free. Later close stages replace this
-  ** conservative mark with their separate physical-quarantine proof. */
+  /* Retain body storage through directory unlink and the second grace.
+  ** Only a semantic edge may rescue the canonical identity. */
   ret = lj_str_body_retired_head_acq(g);
   gc2_root_cycle_guard_init(&guard, ret);
   while (ret != NULL && lj_gc2_mem_registered(g, ret)) {
     uint32_t status = la_load32_acq(&ret->status);
     nextret = lj_str_body_retired_next_acq(ret);
     lj_gc2_markmem(g, ret);
-    if ((status & (LJ_STR_CANONREC_Q_LINKED|
-		   LJ_STR_CANONREC_BODY_OWNED)) ==
-	(LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_BODY_OWNED)) {
+    if (status & LJ_STR_CANONREC_BODY_OWNED) {
       GCstr *s = lj_str_body_retired_str_acq(ret);
       if (s && !lj_gc2_mem_registered(g, s)) {
 	gc2_root_scan_retry(g);
@@ -3910,7 +3904,7 @@ static LJ_NOINLINE void gc2_mark_strtab_mem(global_State *g)
 	if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
 	  (void)lj_gc2_preserve_sweep_root(g, obj2gco(s));
 	else
-	  (void)lj_gc2_markobj(g, obj2gco(s));
+	  (void)lj_gc2_markobj_nogrey(g, obj2gco(s));
       }
     }
     ret = nextret;

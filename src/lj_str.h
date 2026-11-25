@@ -31,6 +31,8 @@ enum {
 #define LJ_STR_CANONREC_BODY_OWNED	0x02u
 #define LJ_STR_CANONREC_CANCELLED	0x04u
 #define LJ_STR_CANONREC_LIST_ONLY	0x08u
+#define LJ_STR_CANONREC_Q_UNLINKED	0x10u
+#define LJ_STR_CANONREC_CLOSE_PROVEN	0x20u
 
 #define LJ_STR_CANON_MINMASK	63u
 
@@ -161,11 +163,7 @@ static LJ_AINLINE void lj_str_qcount_store_rlx(global_State *g, MSize n)
   la_store32_rlx(&g->str.qcount, (uint32_t)n);
 }
 
-/* Stage A never removes an authoritative quarantine record. Keep this count
-** exact until saturation and permanently non-zero afterwards: zero is a
-** correctness fast-path, so wrapping through zero would permit a duplicate
-** main-table publication. Later Q-unlink stages need a separate exact live
-** count instead of decrementing a saturated value. */
+/* Saturation is sticky: an unknown count must never become a false zero. */
 static LJ_AINLINE MSize lj_str_qcount_inc_sat_acqrel(global_State *g)
 {
   uint32_t old = la_load32_acq(&g->str.qcount);
@@ -779,6 +777,7 @@ LJ_FUNC void lj_str_test_reset_sweep_counters(global_State *g);
 LJ_FUNC void lj_str_test_sweep_snapshot(global_State *g,
 					LJStrTestSweepSnapshot *snapshot);
 LJ_FUNC int lj_str_test_quarantine_detach(lua_State *L, GCstr *s);
+LJ_FUNC int lj_str_test_quarantine_close(global_State *g, GCstr *s);
 #endif
 
 #define lj_str_newz(L, s)	(lj_str_new(L, s, strlen(s)))
