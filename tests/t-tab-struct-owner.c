@@ -331,6 +331,20 @@ static void *resize_worker(void *arg)
     if (ctx->check_inline_split)
       verify_split_public_lua(L, ctx->check_inline_split == 2);
     array_migration_mutate(L, ctx->mutate == 5, ctx->weak_mode_change);
+  } else if (ctx->mutate == 7) {
+    lua_pushinteger(L, 404);
+    lua_rawseti(L, 1, 4);
+  } else if (ctx->mutate == 8) {
+    lua_rawgeti(L, 1, 1);
+    assert(lua_tointeger(L, -1) == 11);
+    lua_pop(L, 1);
+    lua_pushinteger(L, 444);
+    lua_rawseti(L, 1, 4);
+    lua_pushinteger(L, 111);
+    lua_rawseti(L, 1, -1);
+    lua_rawgeti(L, 1, 4);
+    assert(lua_tointeger(L, -1) == 444);
+    lua_pop(L, 1);
   } else if (ctx->mutate == 4)
     hash_migration_mutate(L);
   else if (ctx->mutate == 6) {
@@ -536,7 +550,7 @@ static void exercise_resize_owner(lua_State *L, int clear)
   assert(wait_for_flag(&other_done, 1, 1000000));
   assert(!load_flag(&owner_done));
   if (clear) {
-    assert(lj_tab_struct_owner_acq(owner_tab) != 0);
+    assert(lj_tab_struct_owner_acq(owner_tab) == 0);
     assert_clear_seeds_absent(owner_tab);
   }
 
@@ -1040,6 +1054,90 @@ static void hash_install_hold_hook(lua_State *L, GCtab *t,
     sched_yield();
 }
 
+static void inline_before_freeze_hold(lua_State *L, GCtab *t,
+                                      TValue *array, MSize asize)
+{
+  if (t == resize_hook_tab && pthread_equal(pthread_self(), copy_owner) &&
+      !load_flag(resize_hook_entered))
+    resize_hold_hook(L, t, array, asize);
+}
+
+static void exercise_mixed_inline_setup_owner(lua_State *L, int installed)
+{
+  volatile int ready = 0, owner_start = 0, other_start = 0;
+  volatile int owner_done = 0, other_done = 0;
+  volatile int hook_entered = 0, hook_release = 0;
+  ResizeCtx owner = { 0 }, other = { 0 };
+  GCtab *t;
+  pthread_t other_thread;
+  int i;
+
+  lua_settop(L, 0);
+  lua_createtable(L, 3, 1);
+  t = tabV(L->top - 1);
+  assert(lj_tab_colo_acq(t) > 0 && lj_tab_hmask_acq(t) != 0);
+  for (i = 1; i <= 3; i++) {
+    lua_pushinteger(L, 10 + i);
+    lua_rawseti(L, 1, i);
+  }
+  lua_pushinteger(L, -11);
+  lua_rawseti(L, 1, -1);
+  lua_pushinteger(L, -22);
+  lua_rawseti(L, 1, -2);
+
+  owner.L = new_child_with_table(L, 1);
+  owner.ready = &ready;
+  owner.start = &owner_start;
+  owner.done = &owner_done;
+  owner.mutate = 7;
+  owner.status = -1;
+  other.L = new_child_with_table(L, 1);
+  other.ready = &ready;
+  other.start = &other_start;
+  other.done = &other_done;
+  other.mutate = 8;
+  other.status = -1;
+  resize_hook_tab = t;
+  resize_hook_entered = &hook_entered;
+  resize_hook_release = &hook_release;
+
+  if (installed) {
+    lj_tab_test_set_resize_before_freeze_hook(inline_before_freeze_hold);
+  } else {
+    hash_install_pause_stage = 0;
+    lj_tab_test_set_hash_install_hook(hash_install_hold_hook);
+  }
+  assert(pthread_create(&copy_owner, NULL, resize_worker, &owner) == 0);
+  assert(pthread_create(&other_thread, NULL, resize_worker, &other) == 0);
+  assert(wait_for_flag(&ready, 2, 1000000));
+  store_flag(&owner_start, 1);
+  assert(wait_for_flag(&hook_entered, 1, 1000000));
+  assert(lj_tab_colo_acq(t) > 0);
+  if (!installed)
+    assert(lj_tab_struct_owner_acq(t) == 0);
+  store_flag(&other_start, 1);
+  assert(wait_for_flag(&other_done, 1, 1000000));
+  assert(!load_flag(&owner_done));
+  assert(lj_tab_colo_acq(t) < 0);
+  assert(lj_tab_resize_desc_control_acq(t) == NULL);
+
+  store_flag(&hook_release, 1);
+  assert(pthread_join(copy_owner, NULL) == 0 && owner.status == 0);
+  assert(pthread_join(other_thread, NULL) == 0 && other.status == 0);
+  lj_tab_test_set_resize_before_freeze_hook(NULL);
+  lj_tab_test_set_hash_install_hook(NULL);
+  resize_hook_tab = NULL;
+  resize_hook_entered = NULL;
+  resize_hook_release = NULL;
+
+  lua_rawgeti(L, 1, 4);
+  assert(lua_tointeger(L, -1) == 404);
+  lua_pop(L, 1);
+  lua_rawgeti(L, 1, -1);
+  assert(lua_tointeger(L, -1) == 111);
+  lua_pop(L, 1);
+}
+
 static void exercise_hash_install_owner(lua_State *L, MSize installed)
 {
   volatile int ready = 0, owner_start = 0, other_start = 0;
@@ -1329,6 +1427,8 @@ int main(void)
   exercise_array_migration_owner(L, 0, 0, 0, 3);
   exercise_array_migration_owner(L, 1, 1, 0, 3);
   exercise_hash_migration_owner(L);
+  exercise_mixed_inline_setup_owner(L, 0);
+  exercise_mixed_inline_setup_owner(L, 1);
   exercise_hash_install_owner(L, 0);
   exercise_hash_install_owner(L, 1);
   exercise_hash_shrink_owner(L, 0, 0);

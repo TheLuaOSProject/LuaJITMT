@@ -233,7 +233,7 @@ void lj_tab_test_set_constructor_prepublish_hook(
 void lj_tab_test_set_wait_l_after_yield_hook(
   LJTabWaitLAfterYieldHook hook)
 {
-  tab_test_wait_l_after_yield_hook = hook;
+  la_storefunc_rel(&tab_test_wait_l_after_yield_hook, hook);
 }
 
 static LJ_AINLINE void tab_test_constructor_prepublish(lua_State *L, GCtab *t)
@@ -244,8 +244,8 @@ static LJ_AINLINE void tab_test_constructor_prepublish(lua_State *L, GCtab *t)
 
 static LJ_AINLINE void tab_test_wait_l_after_yield(lua_State *L)
 {
-  LJTabWaitLAfterYieldHook hook = tab_test_wait_l_after_yield_hook;
-  tab_test_wait_l_after_yield_hook = NULL;
+  LJTabWaitLAfterYieldHook hook = la_xchgfunc_acqrel(
+    &tab_test_wait_l_after_yield_hook, NULL);
   if (hook)
     hook(L);
 }
@@ -1697,6 +1697,8 @@ static void tab_resize_desc_free(global_State *g, TabResizeDesc *desc)
     tab_node_free(g, unused, lj_tab_node_hmask_acq(unused));
   } else if (lj_tab_resize_desc_flags_acq(desc) & TAB_RESIZE_DESC_F_CANCELED) {
     tab_node_free(g, desc->newnode, lj_tab_node_hmask_acq(desc->newnode));
+    if (desc->newarray)
+      tab_array_free(g, desc->newarray, desc->newacap);
   }
   lj_mem_free(g, desc, bytes);
 }
@@ -2930,13 +2932,37 @@ static int tab_resize_early_hash_cancel(global_State *g, TabResizeDesc *desc)
   return tab_resize_desc_help_terminating(g, desc);
 }
 
-static la_u128 tab_resize_hash_shape(la_u128 oldshape, Node *node)
+static la_u128 tab_resize_hash_shape(const TabResizeDesc *desc, la_u128 oldshape,
+                                     Node *node)
 {
   LJTabShape shape;
   shape.packed = oldshape;
+  if (desc->newarray)
+    shape.fields.asize = lj_tab_array_hdr_asize_acq(desc->newarray);
   shape.fields.hmask = lj_tab_node_hmask_acq(node);
   setmref(shape.fields.freetop, node + shape.fields.hmask + 1u);
   return shape.packed;
+}
+
+/* The old inline allocation belongs to the table for its whole lifetime.
+** Its one-way split bit freezes that source, and a capacity update must
+** still name this exact installed descriptor. */
+static int tab_resize_early_inline_freeze(GCtab *t, TabResizeDesc *desc)
+{
+  const uint64_t control = lj_tab_struct_control_desc_word(desc);
+  uint64_t weak = lj_tab_weak_record_raw_acq(t);
+  int8_t colo = lj_tab_colo_acq(t);
+  if (colo > 0)
+    lj_tab_colo_rel(t, (int8_t)(colo | 0x80));
+  for (;;) {
+    uint64_t expected = control;
+    uint64_t desired = (weak & ~LJ_TAB_WEAK_RECORD_ACAP_MASK) |
+      ((uint64_t)desc->newacap << LJ_TAB_WEAK_RECORD_ACAP_SHIFT);
+    if (lj_tab_struct_weak_pair_cas(t, &expected, &weak, control, desired))
+      return 1;
+    if (expected != control)
+      return 0;
+  }
 }
 
 static int tab_resize_early_hash_start_held(global_State *g, GCtab *t,
@@ -2948,6 +2974,8 @@ static int tab_resize_early_hash_start_held(global_State *g, GCtab *t,
   if (phase == TAB_RESIZE_DESC_INSTALLING) {
     oldshape = la_load128_acq(&t->resize_shape);
     if (lj_tab_node_acq(t) != desc->oldnode ||
+        (desc->newarray && (lj_tab_array_acq(t) != desc->oldarray ||
+                           lj_tab_colo_acq(t) <= 0)) ||
 	oldshape.lo != desc->oldshape.lo || oldshape.hi != desc->oldshape.hi) {
       tab_resize_early_hash_cancel(g, desc);
       return 0;
@@ -2958,6 +2986,8 @@ static int tab_resize_early_hash_start_held(global_State *g, GCtab *t,
   if (phase != TAB_RESIZE_DESC_RETIRING)
     return phase == TAB_RESIZE_DESC_MIGRATING ||
 	   phase == TAB_RESIZE_DESC_PUBLISHING;
+  if (desc->newarray && !tab_resize_early_inline_freeze(t, desc))
+    return 0;
   next = NULL;
   if (!lj_tab_node_nextgen_cas(desc->oldnode, &next, desc->newnode) &&
       next != desc->newnode &&
@@ -2966,8 +2996,10 @@ static int tab_resize_early_hash_start_held(global_State *g, GCtab *t,
     abort();
   }
   (void)lj_tab_node_hdr_flags_try_or_rel(desc->oldnode, TABNODE_FLAG_RETIRING);
+  /* The old freetop points into the retained hash vector. Unlike an
+  ** array bound alone, that exact shape cannot recur after this cutover. */
   oldshape = desc->oldshape;
-  fallback = tab_resize_hash_shape(oldshape, desc->newnode);
+  fallback = tab_resize_hash_shape(desc, oldshape, desc->newnode);
   if (!la_cas128(&t->resize_shape, &oldshape, fallback) &&
       (oldshape.lo != fallback.lo || oldshape.hi != fallback.hi))
     return 0;  /* An already-published successor has itself been replaced. */
@@ -3057,9 +3089,9 @@ static int tab_resize_hash_cutover_held(global_State *g, TabResizeDesc *desc)
     lj_tab_resize_desc_selected_node_acq(desc) : desc->newnode;
   if (selected != desc->newnode) {
     la_u128 expected = desc->oldshape;
-    la_u128 compact = tab_resize_hash_shape(expected, selected);
+    la_u128 compact = tab_resize_hash_shape(desc, expected, selected);
     if (lj_tab_resize_desc_flags_acq(desc) & TAB_RESIZE_DESC_F_EARLY_HASH)
-      expected = tab_resize_hash_shape(expected, desc->newnode);
+      expected = tab_resize_hash_shape(desc, expected, desc->newnode);
     if (!la_cas128(&t->resize_shape, &expected, compact) &&
 	(expected.lo != compact.lo || expected.hi != compact.hi))
       return 0;
@@ -3915,7 +3947,7 @@ static void tab_resize_prepare_array_migration(lua_State *L, GCtab *t,
 }
 
 /*
-** Prepare a hash-only resize without first acquiring a bare structural tid.
+** Prepare a hash-backed resize without first acquiring a bare structural tid.
 ** The table read epoch retains the old vector and the prospective retirement
 ** record while the issuer is outside counted SMR. Competing resizes may win
 ** before the exact control CAS, in which case this intent cancels and the
@@ -3949,6 +3981,8 @@ static int tab_resize_offer_early_hash(lua_State *L, GCtab *t,
       lj_tab_node_acq(t) != desc->oldnode ||
       lj_tab_node_hmask_acq(desc->oldnode) != desc->oldhmask ||
       lj_tab_node_is_retiring(desc->oldnode) ||
+      (desc->newarray && (lj_tab_array_acq(t) != desc->oldarray ||
+                         lj_tab_colo_acq(t) <= 0)) ||
       shape.fields.asize != desc->oldasize ||
       shape.fields.hmask != desc->oldhmask) {
     lj_gc2_smr_read_leave(g);
@@ -3965,9 +3999,14 @@ static int tab_resize_offer_early_hash(lua_State *L, GCtab *t,
   desc->oldshape = shape.packed;
   desc->newnode = node;
   desc->oldacap = lj_tab_struct_control_acap(stable);
-  desc->newacap = desc->oldacap;
+  if (!desc->newarray)
+    desc->newacap = desc->oldacap;
   desc->phase = TAB_RESIZE_DESC_INSTALLING;
   desc->flags |= TAB_RESIZE_DESC_F_HASH_CUTOVER | TAB_RESIZE_DESC_F_EARLY_HASH;
+  if (desc->newarray) {
+    desc->flags |= TAB_RESIZE_DESC_F_ARRAY_CUTOVER;
+    tab_pub_array_mem(L, t, desc->newarray, desc->newacap);
+  }
   tab_retire_init(L, desc->oldret, t, desc->oldnode, desc->oldhmask);
   desc->oldret->hold_control = tagged;
   tab_retire_preserve(g, desc->oldret);
@@ -3986,6 +4025,8 @@ static int tab_resize_offer_early_hash(lua_State *L, GCtab *t,
       installed = 1;
       tab_test_struct_enter_acquire();
       tab_test_hash_install_at(L, t, 1);
+      if (desc->newarray)
+        tab_test_resize_before_freeze(L, t, desc->oldarray, desc->oldasize);
       break;
     }
     if (expected != stable)
@@ -4320,8 +4361,16 @@ restart_resize:
   ** while waiting for the structural slot would leak it, so this retry window
   ** uses the TLS owner and yield-only wait variant. No old vector is
   ** dereferenced until the root recheck below succeeds. */
-  if (cutover && hash_migration && !array_migration) {
-    int offered = tab_resize_offer_early_hash(L, t, cutover, newnode);
+  if (cutover && hash_migration &&
+      (!array_migration || (oldret && !oldarray_separated && newarray &&
+                            asize > oldasize && !cutover->compactnode))) {
+    int offered;
+    if (array_migration) {
+      cutover->oldarray = oldarray;
+      cutover->newarray = array;
+      cutover->newacap = newacap;
+    }
+    offered = tab_resize_offer_early_hash(L, t, cutover, newnode);
     if (offered > 0)
       return;
     if (offered < 0) {
