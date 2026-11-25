@@ -7311,16 +7311,50 @@ void lj_arena_alloc_fini(TGAlloc *alloc)
   (void)lj_arena_alloc_fini_try(alloc);
 }
 
-static void arena_clear_marks_list(GCArena *a)
+static void arena_clear_marks(GCArena *a)
 {
-  for (; a != NULL; a = lj_arena_next_acq(a)) {
-    uint32_t w;
-    for (w = 0; w < LJ_ARENA_WORDS; w++) {
-      uint64_t block = la_load64_acq(&a->block[w]);
+  uint32_t w;
+  for (w = 0; w < LJ_ARENA_WORDS; w++) {
+    uint64_t block = la_load64_acq(&a->block[w]);
+    if (block) {
       uint64_t recovery = arena_recovery_block_bits(a, w);
       (void)la_and64_rlx(&a->mark[w], ~(block & ~recovery));
     }
   }
+}
+
+void lj_arena_clear_registered_marks(HugeTab *registry)
+{
+  LJHugeTabHdr *h = registry ? registry->h : NULL;
+  uint32_t slot;
+  if (!h)
+    return;
+  /* Major activation owns the GC worker token, excluding sweep transitions.
+  ** An allocator can still adopt a completed arena and rewrite hdr.next.
+  ** The small-arena directory has no HugeTab object roots of its own. Borrow
+  ** its root lane as an exact mapping pin, independent of counted-reader
+  ** saturation. Deletion revalidates this lane even after closing readers. */
+  for (slot = 0; slot <= h->mask; slot++) {
+    uint64_t addr = hugetab_slot_addr_acq(&h->ent[slot]);
+    GCArena *a = (GCArena *)(uintptr_t)addr;
+    if (addr <= LJ_HUGETAB_TOMBSTONE ||
+	!lj_arena_hugetab_root_state_cas(registry, a, LJ_ARENA_ROOT_NONE,
+				       LJ_ARENA_ROOT_MEMBER, NULL))
+      continue;
+    /* Quarantine belongs to an unfinished sweep: its marks are still a
+    ** rescue proof. RECLAIMED and PREPSWEEP during adoption are eligible. */
+    if (!(lj_arena_flags_acq(a) & LJ_AF_QUARANTINE))
+      arena_clear_marks(a);
+    if (!lj_arena_hugetab_root_state_cas(registry, a, LJ_ARENA_ROOT_MEMBER,
+				       LJ_ARENA_ROOT_NONE, NULL))
+      abort();  /* No other actor can consume the reset pin. */
+  }
+}
+
+static void arena_clear_marks_list(GCArena *a)
+{
+  for (; a != NULL; a = lj_arena_next_acq(a))
+    arena_clear_marks(a);
 }
 
 void lj_arena_alloc_clear_marks(TGAlloc *alloc)

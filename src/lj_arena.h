@@ -1013,6 +1013,7 @@ LJ_FUNC int lj_arena_alloc_terminal_certificate_ready(TGAlloc *alloc);
 LJ_FUNC int lj_arena_alloc_fini_try(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_fini(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_clear_marks(TGAlloc *alloc);
+LJ_FUNC void lj_arena_clear_registered_marks(HugeTab *registry);
 LJ_FUNC void lj_arena_alloc_rebuild_free_kind(TGAlloc *alloc, uint32_t kind);
 LJ_FUNC void lj_arena_alloc_rebuild_free(TGAlloc *alloc);
 LJ_FUNC int lj_arena_alloc_prepare_sweep_kind(TGAlloc *alloc, uint32_t kind);

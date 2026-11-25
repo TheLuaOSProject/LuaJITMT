@@ -3783,22 +3783,20 @@ int lj_gc2_mem_registered_known_reclaim_held(global_State *g, const void *p)
 	 lj_arena_bm_get(a->block, cell);
 }
 
-static void gc2_clear_marks(TGState *tg)
-{
-  if (tg && lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL)) {
-    lj_arena_alloc_clear_marks(&tg->alloc);
-    if (lj_tg_flags_test_acq(tg, TGF_HUGETAB))
-      lj_arena_hugetab_clear_marks(&tg->huge);
-  }
-}
-
 static void gc2_clear_marks_all(global_State *g)
 {
+  HugeTab *registry = (HugeTab *)gc2_small_arena_tab_acq(g);
   TGState *tg;
-  for (tg = gc2_tg_list_acq(g);
-       tg != NULL;
-       tg = lj_tg_next_acq(tg))
-    gc2_clear_marks(tg);
+  if (registry)
+    lj_arena_clear_registered_marks(registry);
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    if (lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL)) {
+      if (!registry || lj_arena_alloc_registry_acq(&tg->alloc) != registry)
+	lj_arena_alloc_clear_marks(&tg->alloc);
+      if (lj_tg_flags_test_acq(tg, TGF_HUGETAB))
+	lj_arena_hugetab_clear_marks(&tg->huge);
+    }
+  }
 }
 
 typedef struct GC2RootCycleGuard {

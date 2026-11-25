@@ -8,6 +8,7 @@
 #include <sched.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "lj_arch.h"
@@ -507,6 +508,94 @@ static void cycle_all(TGAlloc *alloc)
   check_counts(alloc);
 }
 
+static void test_mark_reset_during_adoption(PRNGState *rs)
+{
+  HugeTab registry = { 0 };
+  LJHugeReader *readers, overflow = { 0 };
+  TGAlloc alloc[3];
+  GCArena *arena[3];
+  uint32_t cell[3], pinned_cell, i;
+  void *p, *pinned;
+  Race owner;
+  pthread_t thread;
+
+  assert(lj_arena_hugetab_init(&registry, 8));
+  for (i = 0; i < 3; i++) {
+    lj_arena_alloc_init(&alloc[i]);
+    lj_arena_alloc_set_registry(&alloc[i], &registry);
+    lj_arena_alloc_black_rel(&alloc[i], 1);
+    p = lj_arena_alloc(&alloc[i], rs, 64u, LJ_AF_TRAVERSABLE);
+    assert(p);
+    arena[i] = lj_arena_of(p);
+    cell[i] = lj_arena_cellof(p);
+  }
+  pinned = lj_arena_alloc(&alloc[0], rs, 64u, LJ_AF_TRAVERSABLE);
+  assert(pinned && lj_arena_of(pinned) == arena[0]);
+  pinned_cell = lj_arena_cellof(pinned);
+
+  for (i = 0; i < 3; i++)
+    assert(lj_arena_alloc_prepare_sweep_kind(&alloc[i], KIND));
+  assert(finish_one(&alloc[0], 7u) == arena[0]);
+  assert(finish_one(&alloc[1], 7u) == arena[1]);
+  assert(lj_arena_alloc_quarantine_one(&alloc[2], KIND, 0) == arena[2]);
+  assert(lj_arena_sweep_state_cas(arena[2], cell[2], LJ_ARENA_SWEEP_WHITE,
+                                LJ_ARENA_SWEEP_LIVE));
+
+  assert(lj_arena_lifetime_state_cas(arena[0], pinned_cell,
+      LJ_ARENA_LIFETIME_LIVE, LJ_ARENA_LIFETIME_RECOVERY));
+  assert(lj_arena_recovery_state_cas(arena[0], pinned_cell,
+      LJ_ARENA_RECOVERY_IDLE, LJ_ARENA_RECOVERY_PENDING));
+
+  /* Leave one arena on the completed list and pause the other after the
+  ** allocation owner has removed it and staged it on the owned list. */
+  memset(&owner, 0, sizeof(owner));
+  owner.alloc = &alloc[1];
+  owner.rs = rs;
+  lj_arena_test_open_sealed_pause(arena[1], 1);
+  assert(pthread_create(&thread, NULL, adopt_thread, &owner) == 0);
+  wait_seen(lj_arena_test_open_sealed_paused);
+  assert(lj_arena_alloc_reclaimed_head(&alloc[0], KIND) == arena[0]);
+  assert(lj_arena_alloc_reclaimed_head(&alloc[1], KIND) == NULL);
+  assert(lj_arena_alloc_owned_count_acq(&alloc[1], KIND) == 0);
+  assert(lj_arena_flags_acq(arena[1]) & LJ_AF_PREPSWEEP);
+  for (i = 0; i < 3; i++)
+    assert(lj_arena_state(arena[i], cell[i]) == 3);
+  assert(lj_arena_state(arena[0], pinned_cell) == 3);
+
+  /* A full counted reader lane cannot prevent the cycle from resetting an
+  ** old mark. None of these readers needs to leave for the reset to finish. */
+  readers = calloc(LJ_ARENA_HUGE_READER_MAX, sizeof(*readers));
+  assert(readers);
+  for (i = 0; i < LJ_ARENA_HUGE_READER_MAX; i++)
+    assert(lj_arena_hugetab_reader_acquire(&registry, arena[0], &readers[i],
+        NULL) == LJ_ARENA_HUGE_READER_ACQUIRED);
+  assert(lj_arena_hugetab_reader_acquire(&registry, arena[0], &overflow,
+      NULL) == LJ_ARENA_HUGE_READER_OVERFLOW);
+  lj_arena_clear_registered_marks(&registry);
+  assert(lj_arena_state(arena[0], cell[0]) == 2);
+  assert(lj_arena_state(arena[1], cell[1]) == 2);
+  assert(lj_arena_state(arena[0], pinned_cell) == 3);
+  assert(lj_arena_state(arena[2], cell[2]) == 3);
+  assert(lj_arena_sweep_state_acq(arena[2], cell[2]) == LJ_ARENA_SWEEP_LIVE);
+  for (i = 0; i < LJ_ARENA_HUGE_READER_MAX; i++)
+    assert(lj_arena_hugetab_reader_release(&readers[i], NULL) ==
+           LJ_ARENA_HUGE_READER_RELEASED);
+  free(readers);
+
+  lj_arena_test_open_sealed_pause(NULL, 0);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(owner.allocated && lj_arena_of(owner.allocated) == arena[1]);
+  assert(lj_arena_state(arena[1], cell[1]) == 2);
+  assert(lj_arena_state(arena[1], lj_arena_cellof(owner.allocated)) == 3);
+  assert(lj_arena_recovery_state_cas(arena[0], pinned_cell,
+      LJ_ARENA_RECOVERY_PENDING, LJ_ARENA_RECOVERY_IDLE));
+  assert(lj_arena_lifetime_state_cas(arena[0], pinned_cell,
+      LJ_ARENA_LIFETIME_RECOVERY, LJ_ARENA_LIFETIME_LIVE));
+  for (i = 0; i < 3; i++)
+    assert(lj_arena_alloc_fini_try(&alloc[i]));
+  assert(lj_arena_hugetab_fini_try(&registry));
+}
+
 static void test_quarantine_producer_during_adoption(PRNGState *rs,
                                                     int lose_open)
 {
@@ -697,6 +786,7 @@ int main(int argc, char **argv)
   test_late_recovery_owner(&rs);
   test_late_destruct_owner(&rs);
   test_descriptor_and_terminal_invalidation(&rs);
+  test_mark_reset_during_adoption(&rs);
   test_quarantine_producer_during_adoption(&rs, 0);
   test_quarantine_producer_during_adoption(&rs, 1);
   test_register_empty_spare(&rs);
