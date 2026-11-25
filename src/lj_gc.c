@@ -157,6 +157,10 @@ static void gc2_preserve_root_spine_body(global_State *g, GCobj *o)
     TValue *array = NULL;
     MSize asize = 0, acap = 0, hmask = 0;
     Node *node = NULL;
+    /* There are no side bodies in the empty representation. A resize
+    ** publishes its new generations under the allocator's phase barriers. */
+    if (!lj_tab_array_acq(t) && lj_tab_node_acq(t) == &g->nilnode)
+      return;
     /* The caller has just proved stable MEMBER ownership and remains the sole
     ** sweep-prune actor, which pins the table body without turning this
     ** ownership spine into a semantic root set. SMR separately pins any side

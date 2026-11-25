@@ -16767,6 +16767,10 @@ static void gc2_preserve_tab_direct_bodies(global_State *g, GCtab *t)
   Node *node;
   if (!g || !t)
     return;
+  /* An empty representation supplies no backing allocation to preserve.
+  ** A resize publishing a new generation owns its allocation barriers. */
+  if (!lj_tab_array_acq(t) && lj_tab_node_acq(t) == &g->nilnode)
+    return;
   /* This is an early representation-preservation optimization. The retained
   ** table identity is still published for semantic traversal, and ordinary
   ** table access owns its separate generation-read epoch. Do not turn a
