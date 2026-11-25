@@ -44,7 +44,9 @@ static uint32_t fail_spawn_create;
 static uint32_t block_unstarted_fini;
 static uint32_t blocked_unstarted_fini_calls;
 static uint32_t retried_unstarted_fini;
-static size_t failed_spawn_stack_bytes;
+static uint32_t failed_spawn_arguments;
+static uint32_t fail_child_stack;
+static uint32_t child_stack_moves;
 static TGState *blocked_unstarted_tg;
 static pthread_t fixture_main_thread;
 
@@ -55,6 +57,19 @@ extern int __real_pthread_create(pthread_t *thread,
 extern int __real_lj_vm_cpcall(lua_State *L, lua_CFunction func, void *ud,
 			       lua_CPFunction cp);
 extern int __real_lj_tg_fini_thread(global_State *g, TGState *tg);
+extern int __real_lj_state_rehome_stack(lua_State *L);
+
+int __wrap_lj_state_rehome_stack(lua_State *L)
+{
+  TGState *tg = lj_thr_get_tg();
+  assert(tg && L->tg_hint == tg);
+  assert(lj_tg_owns_state_acq(tg, L));
+  assert(lj_tg_load_cur_L(tg) == L && lj_tg_load_thread_L(tg) == L);
+  la_add32_rlx(&child_stack_moves, 1);
+  if (la_xchg32_acqrel(&fail_child_stack, 0))
+    return 0;
+  return __real_lj_state_rehome_stack(L);
+}
 
 int __wrap_lj_tg_fini_thread(global_State *g, TGState *tg)
 {
@@ -108,8 +123,8 @@ int __wrap_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
     LJThread *th = (LJThread *)arg;
     lua_State *child = lj_thread_state_load_acq(th);
     assert(child != NULL);
-    failed_spawn_stack_bytes =
-      (size_t)child->stacksize * sizeof(TValue);
+    assert(lj_thread_start_roots_acq(th));
+    failed_spawn_arguments = lj_thread_start_root_count_acq(th);
     return EAGAIN;
   }
   expect = 1;
@@ -313,7 +328,7 @@ static void run_create_failure_retry_case(uint32_t nargs, uint32_t blocks)
   for (i = 0; i < nargs; i++)
     lua_pushinteger(L, (lua_Integer)i);
   blocked_unstarted_tg = NULL;
-  failed_spawn_stack_bytes = 0;
+  failed_spawn_arguments = 0;
   la_store32_rel(&blocked_unstarted_fini_calls, 0);
   la_store32_rel(&retried_unstarted_fini, 0);
   /* The first veto is spawn error cleanup. With two blocks, lua_close's
@@ -325,10 +340,7 @@ static void run_create_failure_retry_case(uint32_t nargs, uint32_t blocks)
   rc = lua_pcall(L, (int)nargs + 1, 1, 0);
   assert(rc != LUA_OK);
   assert(lua_tostring(L, -1) != NULL);
-  if (nargs == 0)
-    assert(failed_spawn_stack_bytes < LJ_HUGE_THRESHOLD);
-  else
-    assert(failed_spawn_stack_bytes >= LJ_HUGE_THRESHOLD);
+  assert(failed_spawn_arguments == nargs + 1u);
   assert(la_load32_acq(&fail_spawn_create) == 0);
   assert(la_load32_acq(&block_unstarted_fini) == blocks - 1u);
   assert(la_load32_acq(&blocked_unstarted_fini_calls) == 1);
@@ -336,15 +348,46 @@ static void run_create_failure_retry_case(uint32_t nargs, uint32_t blocks)
   assert(blocked_unstarted_tg != NULL);
   assert(la_load32_acq(&g->threading_live_count) == 1);
 
-  /* Generic freeing used to route the provisional child stack into the main
-  ** allocator. Exercise small-bin reuse before close and a separate huge
-  ** child stack so the exact child allocd/HugeTab route is required. */
+  /* The parent still owns the initial stack and the argument vector when
+  ** pthread_create fails. Exercise both small and huge startup allocations. */
   churn_main_allocator_after_failed_spawn(L);
   lua_close(L);
   assert(la_load32_acq(&block_unstarted_fini) == 0);
   assert(la_load32_acq(&blocked_unstarted_fini_calls) == blocks);
   assert(la_load32_acq(&retried_unstarted_fini) == 1);
   blocked_unstarted_tg = NULL;
+}
+
+static void test_child_initializes_its_stack(void)
+{
+  lua_State *L = ljt_lua_newstate_openlibs();
+  uint32_t moves = la_load32_acq(&child_stack_moves);
+  int rc;
+  require_threading(L);
+  lua_getfield(L, -1, "spawn");
+  lua_pushcfunction(L, child_marker);
+  la_store32_rel(&fail_child_stack, 1);
+  rc = lua_pcall(L, 1, 1, 0);
+  assert(rc == LUA_ERRMEM);
+  assert(la_load32_acq(&child_stack_moves) == moves + 1u);
+  assert(mt_live_acq(G(L)) == 0);
+  lua_settop(L, 0);
+  ljt_lua_dostring(L,
+    "local th = require('threading')\n"
+    "assert(th.gcworkers(2) == 0)\n"
+    "local args = {}\n"
+    "for i=1,3000 do args[i] = {i} end\n"
+    "local worker = th.spawn(function(...)\n"
+    "  local a = {...}; assert(#a == 3000)\n"
+    "  for i=1,#a do assert(a[i][1] == i) end\n"
+    "  return th.spawn(function(a,b,c) return a[1]+c[1], b end,\n"
+    "                  a[1], nil, a[#a]):join()\n"
+    "end, unpack(args))\n"
+    "args = nil; collectgarbage('collect')\n"
+    "local ok, nested, sum, hole = worker:join(10)\n"
+    "assert(ok and nested and sum == 3001 and hole == nil)\n");
+  assert(la_load32_acq(&child_stack_moves) == moves + 3u);
+  lua_close(L);
 }
 
 static void test_create_failure_retains_retry_tg_until_joined_close(void)
@@ -357,6 +400,7 @@ static void test_create_failure_retains_retry_tg_until_joined_close(void)
 int main(void)
 {
   fixture_main_thread = pthread_self();
+  test_child_initializes_its_stack();
   test_sticky_stopreq_spawn_ok();
   test_fresh_stopreq_aborts_before_child_runs();
   test_spawn_preserves_active_gc_cycle();

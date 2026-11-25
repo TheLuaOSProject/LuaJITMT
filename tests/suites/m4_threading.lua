@@ -256,7 +256,7 @@ return function(add)
         libs = {
           "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread",
           "-Wl,--wrap=pthread_create", "-Wl,--wrap=lj_vm_cpcall",
-          "-Wl,--wrap=lj_tg_fini_thread"
+          "-Wl,--wrap=lj_tg_fini_thread", "-Wl,--wrap=lj_state_rehome_stack"
         }
       },
       message = "M4 threading.spawn native STOPREQ tests passed"
