@@ -50,7 +50,12 @@ static void *check_identity(void *arg)
   lua_pushlstring(L, target_name, sizeof(target_name)-1);
   peer->replacement = lua_tolstring(L, -1, NULL);
   la_store32_rel(&peer->stage, PEER_INTERNED);
-  wait_stage(peer, L, PEER_FINISH);
+  while (la_load32_acq(&peer->stage) < PEER_FINISH) {
+    lua_pushlstring(L, target_name, sizeof(target_name)-1);
+    assert(lua_tolstring(L, -1, NULL) == peer->replacement);
+    lua_pop(L, 1);
+    (void)lj_thr_retry_yield(L);
+  }
   assert(lua_tolstring(L, -2, NULL) == peer->borrowed);
   assert(memcmp(peer->borrowed, borrowed_name, sizeof(borrowed_name)) == 0);
   assert(memcmp(peer->replacement, target_name, sizeof(target_name)) == 0);
@@ -146,6 +151,7 @@ int main(void)
   lua_pushlstring(L, target_name, sizeof(target_name)-1);
   assert(lua_tolstring(L, -1, NULL) == peer.replacement);
   assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   advance_grace(g);
   assert(!lj_gc2_mem_registered_known(g, old));
   assert(!lj_gc2_mem_registered_known(g, rec));

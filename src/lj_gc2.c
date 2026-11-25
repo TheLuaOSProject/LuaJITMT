@@ -7100,30 +7100,34 @@ static int gc2_huge_registry_read_try(global_State *g,
     *lease = GC2_HUGE_REGISTRY_NONE;
   if (!g || !lease)
     return 0;
-  mode = gc2_smr_reclaiming_acq(g);
-  if (mode == LJ_GC2_SMR_OPEN) {
-    if (!lj_gc2_smr_read_try(g))
+  /* Both OPEN and SWEEP_STABLE can admit a HugeTab lookup. If an ordinary
+  ** mode transition races admission, try the newly published mode instead of
+  ** misreporting a fault. No actor waits on a stable reclaim owner. */
+  for (;;) {
+    mode = gc2_smr_reclaiming_acq(g);
+    if (mode == LJ_GC2_SMR_OPEN) {
+      if (!lj_gc2_smr_read_try(g))
+	continue;
+      *lease = GC2_HUGE_REGISTRY_FULL;
+      return 1;
+    }
+    if (mode != LJ_GC2_SMR_SWEEP_STABLE)
       return 0;
-    *lease = GC2_HUGE_REGISTRY_FULL;
-    return 1;
+    old = gc2_smr_readers_add(g, 1);
+    if (LJ_UNLIKELY(old == ~(uint32_t)0)) {
+      (void)gc2_smr_readers_sub(g, 1);
+      lj_assertG(0, "GC2 Huge registry reader overflow");
+      abort();
+    }
+    la_fence_seq();
+    if (gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_SWEEP_STABLE) {
+      *lease = GC2_HUGE_REGISTRY_SWEEP;
+      return 1;
+    }
+    old = gc2_smr_readers_sub(g, 1);
+    lj_assertG(old != 0, "GC2 Huge registry reader rollback underflow");
+    UNUSED(old);
   }
-  if (mode != LJ_GC2_SMR_SWEEP_STABLE)
-    return 0;
-  old = gc2_smr_readers_add(g, 1);
-  if (LJ_UNLIKELY(old == ~(uint32_t)0)) {
-    (void)gc2_smr_readers_sub(g, 1);
-    lj_assertG(0, "GC2 Huge registry reader overflow");
-    abort();
-  }
-  la_fence_seq();
-  if (gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_SWEEP_STABLE) {
-    *lease = GC2_HUGE_REGISTRY_SWEEP;
-    return 1;
-  }
-  old = gc2_smr_readers_sub(g, 1);
-  lj_assertG(old != 0, "GC2 Huge registry reader rollback underflow");
-  UNUSED(old);
-  return 0;
 }
 
 static void gc2_huge_registry_read_leave(global_State *g,
