@@ -90,6 +90,7 @@ static void constructor_prepublish_gc(lua_State *L, GCtab *t)
   MSize asize, hmask;
   uint32_t cell = lj_arena_cellof(t);
   assert(!lj_arena_ishuge(a));
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_LINKING);
   assert(lj_arena_ready_get(a, cell) == 1);
   asize = lj_tab_array_snapshot_acq(t, &array);
   node = lj_tab_node_snapshot_acq(t, &hmask);
@@ -104,6 +105,8 @@ static void constructor_prepublish_gc(lua_State *L, GCtab *t)
   ** the complete table and its side vectors. Production performs no poll at
   ** the earlier READY=0/nil-anchor boundary. */
   assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert(gc2_phase_acq(G(L)) == LJ_GC2_IDLE);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_LINKING);
   assert(lj_arena_ready_get(a, cell) == 1);
   assert(lj_tab_array_acq(t) == array);
   assert(lj_tab_node_acq(t) == node);
@@ -127,6 +130,8 @@ static void test_constructor_ready_boundary(lua_State *L)
   lj_tab_test_set_constructor_prepublish_hook(NULL);
   assert(constructor_hook_seen == 1);
   t = tabV(L->top - 1);
+  assert(lj_arena_root_state_acq(lj_arena_of(t), lj_arena_cellof(t)) ==
+         LJ_ARENA_ROOT_MEMBER);
   assert(lj_arena_ready_get(lj_arena_of(t), lj_arena_cellof(t)) == 1);
   assert(lj_tab_asize_acq(t) == 65u);
   assert(lj_tab_hmask_acq(t) == 15u);

@@ -3023,8 +3023,18 @@ uint32_t lj_gc_reclaim_gc2_arena_ex(global_State *g, GCArena *a,
     dtor_kind = lj_arena_dtor_kind_acq(a, cell);
     if (rootmem == LJ_ARENA_ROOT_LINKING ||
 	rootmem == LJ_ARENA_ROOT_UNLINKING) {
-      /* A publisher/remover owns both the intrusive link and the allocation
-      ** reuse veto. Reclaim never waits for it or inspects a mutable header. */
+      /* A marked, READY constructor is already reachable from a semantic
+      ** root. WHITE has no detach or destructor work. Bitmap commit retains
+      ** its allocation and leaves the constructor's intrusive link alone,
+      ** including when the constructor itself called this collection. */
+      if (rootmem == LJ_ARENA_ROOT_LINKING &&
+	  state == LJ_ARENA_SWEEP_WHITE && lj_arena_ready_get(a, cell) &&
+	  lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_CONSTRUCT &&
+	  lj_arena_bm_get(a->mark, cell) && !lj_arena_late_get(a, cell)) {
+	cell++;
+	scanned++;
+	continue;
+      }
       if (root_owner_blockedp)
 	*root_owner_blockedp = 1;
       pending = 1;
