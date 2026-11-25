@@ -614,6 +614,8 @@ LJ_FUNCA void LJ_FASTCALL lj_gc_pubuv(global_State *g, TValue *tv);
 /* Allocator. */
 LJ_FUNC void *lj_mem_realloc(lua_State *L, void *p, GCSize osz, GCSize nsz);
 LJ_FUNC void *lj_mem_new_nothrow(lua_State *L, GCSize size);
+/* Allocate private metadata through the current actor's admitted TG. */
+LJ_FUNC void *lj_mem_new_tg_nothrow(global_State *g, GCSize size);
 /* Constructor-only allocation which updates global bytes but defers GC2 local
 ** accounting/assistance until every mutually dependent body is published. */
 LJ_FUNC void *lj_mem_new_deferred_nothrow(lua_State *L, GCSize size);

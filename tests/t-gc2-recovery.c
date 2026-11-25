@@ -31,6 +31,7 @@
 #include "lj_state.h"
 #include "lj_tab.h"
 #include "lj_tg.h"
+#include "lj_thr.h"
 #include "lj_udata.h"
 
 typedef struct RecoveryFixture {
@@ -50,6 +51,11 @@ typedef struct RecoveryDrainCtx {
   uint32_t limit;
   uint32_t result;
 } RecoveryDrainCtx;
+
+typedef struct GreyGrowthCtx {
+  global_State *g;
+  TGState tg;
+} GreyGrowthCtx;
 
 typedef struct RecoveryFreeCtx {
   TGAlloc *alloc;
@@ -194,6 +200,56 @@ static void *gc_worker_drain_thread(void *arg)
   RecoveryDrainCtx *ctx = (RecoveryDrainCtx *)arg;
   ctx->result = lj_gc2_worker_drain(ctx->g, ctx->limit);
   return NULL;
+}
+
+static void *grey_growth_thread(void *arg)
+{
+  GreyGrowthCtx *ctx = (GreyGrowthCtx *)arg;
+  global_State *g = ctx->g;
+  TGState *tg = &ctx->tg;
+  uint32_t tid = lj_thr_newid();
+  GCobj *root = obj2gco(mainthread_acq(g));
+  uint32_t i;
+
+  assert(lj_thr_id_is_owner(tid));
+  lj_tg_init_thread(g, tg, NULL, 1);
+  lj_tg_tid_rel(tg, tid);
+  lj_arena_alloc_owner_rel(&tg->alloc, tid);
+  lj_tg_derive_prng(g, tg, tid);
+  lj_thr_set_tg(tg);
+  lj_tg_attach(g, tg);
+  assert(G2TG(g) == tg);
+  assert(lj_tg_cur_L(g) == NULL);
+
+  /* Give this stackless actor the sole producer side of the test deque. */
+  for (i = 0; i <= LJ_GC2_GREY_EMBEDDED; i++)
+    assert(lj_gc2_test_grey_push(g, root));
+  assert(gc2_grey_capacity_acq(g) > LJ_GC2_GREY_EMBEDDED);
+  assert(lj_arena_owner_acq(lj_arena_of(gc2_grey_stack_acq(g))) == tid);
+
+  lj_tg_detach(g, tg);
+  lj_thr_set_tg(NULL);
+  return NULL;
+}
+
+static void test_worker_grey_grows_in_own_arena(void)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  GreyGrowthCtx ctx;
+  pthread_t thread;
+  uint32_t i;
+
+  ctx.g = f.g;
+  assert(gc2_grey_capacity_acq(f.g) == LJ_GC2_GREY_EMBEDDED);
+  assert(gc2_grey_top_acq(f.g) == gc2_grey_bottom_acq(f.g));
+  assert(pthread_create(&thread, NULL, grey_growth_thread, &ctx) == 0);
+  assert(pthread_join(thread, NULL) == 0);
+  for (i = 0; i <= LJ_GC2_GREY_EMBEDDED; i++)
+    assert(lj_gc2_test_grey_steal(f.g) == obj2gco(f.L));
+  assert(lj_gc2_test_grey_steal(f.g) == NULL);
+  assert(lj_tg_reclaim_dead(f.g) == 1);
+  assert(lj_tg_fini_thread(f.g, &ctx.tg));
+  recovery_fixture_close(&f);
 }
 
 static void *recovery_free_thread(void *arg)
@@ -2529,6 +2585,7 @@ int main(int argc, char **argv)
   test_full_active_ssb_fallback();
   test_full_ssb_barrier_coalesces_reserved_recovery();
   test_stale_idle_sample_rechecks_mutating_recovery();
+  test_worker_grey_grows_in_own_arena();
   test_grey_growth_transaction();
   test_reservation_gap_blocks_mark_close();
   test_claimed_redirty_replay();

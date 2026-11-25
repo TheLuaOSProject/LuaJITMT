@@ -4754,13 +4754,13 @@ static int gc_arena_ptr_nonreallocable(LJArenaAllocD *ad, const void *p)
   return 0;
 }
 
-static void *gc_mem_new_nothrow(lua_State *L, GCSize size, int account)
+static void *gc_mem_new_nothrow(global_State *g, TGState *tg, GCSize size,
+			       int account)
 {
-  global_State *g = G(L);
   void *p;
   lj_assertG(size != 0, "zero-sized non-throwing allocation");
   if (g->allocf == lj_arena_allocf) {
-    LJArenaAllocD *ad = gc_arena_allocd_for_new(L);
+    LJArenaAllocD *ad = gc_arena_allocd_for_tg(g, tg);
     p = lj_arena_allocf(ad, NULL, 0, size);
   } else {
     p = g->allocf(g->allocd, NULL, 0, size);
@@ -4771,19 +4771,30 @@ static void *gc_mem_new_nothrow(lua_State *L, GCSize size, int account)
 	     "allocated memory address %p outside required range", p);
   lj_gc_total_add(g, size);
   if (account)
-    lj_gc2_account_alloc(g, L2TG(L), size);  /* 04 section 4.8. */
+    lj_gc2_account_alloc(g, tg, size);  /* 04 section 4.8. */
   return p;
 }
 
 /* Allocate a new fragment without raising an error on allocation failure. */
 void *lj_mem_new_nothrow(lua_State *L, GCSize size)
 {
-  return gc_mem_new_nothrow(L, size, 1);
+  return gc_mem_new_nothrow(G(L), L2TG(L), size, 1);
+}
+
+void *lj_mem_new_tg_nothrow(global_State *g, GCSize size)
+{
+  TGState *tg = g ? G2TG(g) : NULL;
+  uint8_t flags = tg ? lj_tg_flags_acq(tg) : TGF_DEAD;
+  if ((flags & TGF_DEAD) ||
+      (g->allocf == lj_arena_allocf && tg != g->main_tg &&
+       !(flags & TGF_ARENA_INTERNAL)))
+    return NULL;
+  return gc_mem_new_nothrow(g, tg, size, 1);
 }
 
 void *lj_mem_new_deferred_nothrow(lua_State *L, GCSize size)
 {
-  return gc_mem_new_nothrow(L, size, 0);
+  return gc_mem_new_nothrow(G(L), L2TG(L), size, 0);
 }
 
 void lj_mem_account_deferred(lua_State *L, GCSize size)

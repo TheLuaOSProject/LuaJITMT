@@ -11423,11 +11423,7 @@ static int gc2_grey_grow(global_State *g)
   uint64_t bottom = gc2_grey_bottom_rlx(g);
   top = gc2_grey_repair_span(g, oldcap, top, bottom);
   MSize count = bottom > top ? (MSize)(bottom - top) : 0;
-  lua_State *L = lj_tg_cur_L(g);
-  if (!L) {
-    L = mainthread_acq(g);
-  }
-  if (!L || oldcap >= GC2_GREY_LIMIT)
+  if (oldcap >= GC2_GREY_LIMIT)
     return 0;
   if (newcap < oldcap || newcap > GC2_GREY_LIMIT)
     newcap = GC2_GREY_LIMIT;
@@ -11439,9 +11435,10 @@ static int gc2_grey_grow(global_State *g)
 #endif
   /* Queue capacity is an optimization, never a correctness precondition.
   ** Growth must not throw through a worker/SSB consumer ownership scope; a
-  ** failed grow is routed to the allocation-free recovery plane by callers. */
-  newstack = (GCRef *)lj_mem_new_nothrow(
-    L, (GCSize)((size_t)newcap * sizeof(GCRef)));
+  ** failed grow is routed to the allocation-free recovery plane by callers.
+  ** A stackless GC worker owns its own allocator, even without a Lua state. */
+  newstack = (GCRef *)lj_mem_new_tg_nothrow(
+    g, (GCSize)((size_t)newcap * sizeof(GCRef)));
   if (!newstack)
     return 0;
   if (oldstack && oldcap) {
