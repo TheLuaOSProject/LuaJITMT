@@ -979,6 +979,10 @@ LJ_FUNC int lj_arena_alloc_registry_lookup(const TGAlloc *alloc,
 ** entry whose reader or arena admission was denied. This gives no body lease. */
 LJ_FUNC int lj_arena_hugetab_rescue_enter(HugeTab *registry, GCArena *a,
 					    LJHugeInfo *hi);
+/* Hold the same counted body lease solely for observation. A semantic
+** publication still needs a separate rescue admission. */
+LJ_FUNC int lj_arena_hugetab_observe_enter(HugeTab *registry, GCArena *a,
+					    LJHugeInfo *hi);
 /* Constant-attempt scanner bridge for an already-enumerated physical registry
 ** slot. Slot validation, reader acquisition, and remote_active acquisition
 ** each get one CAS attempt; any loss returns RETRY after releasing an acquired

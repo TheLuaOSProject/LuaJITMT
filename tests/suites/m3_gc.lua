@@ -623,6 +623,8 @@ return function(add)
       })
       run_luajit_script_jit_modes(t, "t-gc-active-thread-roots.lua", nil,
                                   { timeout = "60s" })
+      runtime.luajit_script(t, "t-gc2-sweep-active-reader.lua", nil,
+                            { timeout = "30s" })
       print("M3 active thread root GC regression passed")
     end
   })

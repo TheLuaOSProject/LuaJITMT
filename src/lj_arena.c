@@ -1166,7 +1166,7 @@ static void arena_plain_mutation_release(GCArena *a)
   arena_plain_mutation_done(a);
 }
 
-int lj_arena_rescue_enter(GCArena *a)
+static LJ_AINLINE int arena_rescue_enter(GCArena *a, int observe)
 {
   uint64_t active;
   if (!a)
@@ -1189,7 +1189,7 @@ int lj_arena_rescue_enter(GCArena *a)
     committed = (active & LJ_ARENA_REMOTE_SEALED) &&
 		!(active & LJ_ARENA_REMOTE_CLOSED);
     next = active + 1u;
-    if (!committed &&
+    if (!observe && !committed &&
 	(active & (LJ_ARENA_REMOTE_CLOSED|LJ_ARENA_REMOTE_SEALED)))
       next |= LJ_ARENA_REMOTE_PENDING;
     if (la_cas64(&a->hdr.remote_active, &expect, next,
@@ -1199,6 +1199,11 @@ int lj_arena_rescue_enter(GCArena *a)
 	 LJ_ARENA_RESCUE_BIT_ONLY : LJ_ARENA_RESCUE_FULL);
     active = expect;
   }
+}
+
+int lj_arena_rescue_enter(GCArena *a)
+{
+  return arena_rescue_enter(a, 0);
 }
 
 void lj_arena_rescue_leave(GCArena *a)
@@ -6694,8 +6699,8 @@ int lj_arena_alloc_registry_lookup(const TGAlloc *alloc, const GCArena *a,
   return tab && a ? lj_arena_hugetab_lookup(tab, a, hi) : 0;
 }
 
-int lj_arena_hugetab_rescue_enter(HugeTab *registry, GCArena *a,
-				    LJHugeInfo *hi)
+static LJ_AINLINE int arena_hugetab_rescue_enter(
+  HugeTab *registry, GCArena *a, LJHugeInfo *hi, int observe)
 {
   LJHugeTabHdr *h = registry ? registry->h : NULL;
   LJHugeEnt *entry;
@@ -6723,7 +6728,7 @@ int lj_arena_hugetab_rescue_enter(HugeTab *registry, GCArena *a,
     admission = LJ_ARENA_RESCUE_RETRY;
     if (reader.base == a) {
       arena_test_registry_pause_after_reader();
-      admission = lj_arena_rescue_enter(a);
+      admission = arena_rescue_enter(a, observe);
     }
     (void)hugetab_cert_lease_release(entry, (uint64_t)(uintptr_t)reader.base,
 				     reader.base, NULL);
@@ -6731,12 +6736,25 @@ int lj_arena_hugetab_rescue_enter(HugeTab *registry, GCArena *a,
   }
   hugetab_decode(leased, hi);
   arena_test_registry_pause_after_reader();
-  admission = lj_arena_rescue_enter(a);
+  admission = arena_rescue_enter(a, observe);
   /* The reader pins the slot. If the snapshot changed, re-read that same
   ** slot so a racing deferred free can make progress on the final release. */
   if (LJ_UNLIKELY(!hugetab_cas_meta(entry, addr, leased, meta)))
     (void)hugetab_cert_lease_release(entry, addr, a, NULL);
   return admission;
+}
+
+int lj_arena_hugetab_rescue_enter(HugeTab *registry, GCArena *a, LJHugeInfo *hi)
+{
+  return arena_hugetab_rescue_enter(registry, a, hi, 0);
+}
+
+int lj_arena_hugetab_observe_enter(HugeTab *registry, GCArena *a, LJHugeInfo *hi)
+{
+  /* The count pins bytes during an observational lease. The borrower cannot
+  ** publish mark, rescue or free intent through this admission, so releasing
+  ** it need not leave PENDING set on a closed sweep generation. */
+  return arena_hugetab_rescue_enter(registry, a, hi, 1);
 }
 
 static int arena_rescue_enter_bounded(GCArena *a)

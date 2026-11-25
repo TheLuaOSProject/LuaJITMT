@@ -5675,6 +5675,9 @@ static int gc2_sweep_root_snapshot(global_State *g)
     gc2_sweep_root_snapshot_abort(g);
     return 0;
   }
+  /* A SWEEP handoff must have scanned in this phase, not reused a scan
+  ** stamp from MARK or WEAK. */
+  (void)gc2_thread_scan_cycle_inc_acqrel(g);
   lj_gc2_trace_sweep_roots(g);
   if (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
       gc2_cycle_acq(g) != cycle || gc2_jit_phase_gate_acq(g) != 0 ||
@@ -6097,6 +6100,16 @@ static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
       if (!lj_arena_reclaim_seal(qa)) {
 	la_store32_rel(&qa->hdr.flags,
 		       lj_arena_flags_acq(qa) & ~LJ_AF_PREPSWEEP);
+	gc2_sweep_reclaim_leave(g);
+	break;
+      }
+      /* The seal pins the arena but inherits earlier intent. Discharge
+      ** completed publishers before checking the retire epoch and attempting
+      ** destructors. New publishers still have to acquire the exact gate. */
+      if (!lj_arena_reclaim_clear_pending(qa)) {
+	la_store32_rel(&qa->hdr.flags,
+		       lj_arena_flags_acq(qa) & ~LJ_AF_PREPSWEEP);
+	lj_arena_reclaim_unseal(qa, 1);
 	gc2_sweep_reclaim_leave(g);
 	break;
       }
@@ -17037,7 +17050,7 @@ int lj_gc2_small_lease_try(global_State *g, const void *p,
     return 0;
   }
   gc2_mark_scope_init(&scope);
-  scope.admission = lj_arena_hugetab_rescue_enter(registry, a, &hi);
+  scope.admission = lj_arena_hugetab_observe_enter(registry, a, &hi);
   if (scope.admission == LJ_ARENA_RESCUE_RETRY) {
     GC2_PROGRESS_ADD(lease_rescue_retry);
     GC2_PROGRESS_ADD(lease_refused);
@@ -21222,7 +21235,8 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L,
   return top > max ? max : top;
 }
 
-static int gc2_thread_owner_scans(global_State *g, lua_State *th)
+static int gc2_thread_owner_scans(global_State *g, lua_State *th,
+				   int sweep_snapshot)
 {
   TGState *tg;
   uint64_t scan_epoch, scanned_dirty, handoff_epoch, owner_dirty, cycle;
@@ -21239,6 +21253,12 @@ static int gc2_thread_owner_scans(global_State *g, lua_State *th)
   scan_epoch = lj_state_scan_epoch_acq(th);
   if (scan_epoch != cycle)
     return 0;
+  /* A completed SWEEP handoff covers this stack at the snapshot edge.
+  ** Subsequent semantic root stores use the SWEEP barrier. Requiring the
+  ** dirty stamp to survive until the grey pop would retry ordinary stack
+  ** copies and scalar operations forever. */
+  if (sweep_snapshot)
+    return 1;
   scanned_dirty = lj_state_scan_dirty_epoch_acq(th);
   if (scanned_dirty != owner_dirty) {
     gc2_thread_scan_dirty_misses_add(g, 1);
@@ -21416,11 +21436,14 @@ static int gc2_traverse_thread(global_State *g, lua_State *th,
   current_tg = lj_thr_get_tg_fallback(g);
   if (!current_tg || lj_tg_flags_test_acq(current_tg, TGF_DEAD) ||
       !lj_tg_owns_state_acq(current_tg, th)) {
+    int sweep_snapshot = gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+      gc2_sweep_root_scanned_acq(g) == 1;
     if (lj_state_gcscan_claim(th, &claim))
       goto scan_thread;
     gc2_thread_scan_busy_add(g, 1);
-    if (gc2_thread_owner_scans(g, th)) {
-      lj_state_scan_handoff_epoch_rel(th, 0);
+    if (gc2_thread_owner_scans(g, th, sweep_snapshot)) {
+      if (!sweep_snapshot)
+	lj_state_scan_handoff_epoch_rel(th, 0);
       gc2_thread_scan_owner_scans_add(g, 1);
     } else {
       if (!gc2_thread_has_live_owner(g, th)) {
