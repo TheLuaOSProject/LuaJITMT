@@ -162,6 +162,45 @@ local function active_worker_root_stress()
   end
 end
 
+local function collect_with_registered_peer(id, ready, start, finished, release)
+  local text = ("held-%d"):format(id):rep(64)
+  local root = { id, text }
+  local weak = setmetatable({ {} }, { __mode = "v" })
+  assert(weak[1] ~= nil)
+  assert(ready:send(true, 10))
+  assert(start:recv(10) == "collect")
+  collectgarbage("collect")
+  assert(weak[1] == nil, "full collection left an unreachable weak value")
+  assert(finished:send(id, 10))
+  assert(release:recv(10) == "go")
+  return root
+end
+
+local function concurrent_full_collections()
+  local ready, start = th.channel(2), th.channel(2)
+  local finished, release = th.channel(2), th.channel(2)
+  collectgarbage("collect")
+  for _ = 1, 8 do
+    collectgarbage("stop")
+    local workers = {}
+    for id = 1, 2 do
+      workers[id] = assert(th.spawn(collect_with_registered_peer, id,
+                                    ready, start, finished, release))
+    end
+    for _ = 1, 2 do assert(ready:recv(10) == true) end
+    for _ = 1, 2 do assert(start:send("collect", 10)) end
+    local a, ok = finished:recv(10)
+    assert(ok)
+    local b, ok = finished:recv(10)
+    assert(ok and a ~= b)
+    harness.release_start(release, 2, 10)
+    harness.join_each(workers, function(root, id)
+      assert(root[1] == id)
+      assert(root[2] == ("held-%d"):format(id):rep(64))
+    end, 30)
+  end
+end
+
 assert_stdlib_roots()
 collectgarbage("collect")
 assert_stdlib_roots()
@@ -173,5 +212,6 @@ native_leave_gc_preserves_caller_frame()
 
 assert(sum == 12507500)
 active_worker_root_stress()
+concurrent_full_collections()
 
 print("t-gc-active-thread-roots OK")

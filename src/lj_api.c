@@ -3709,6 +3709,10 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     res = (int)(lj_gc_total_load(g) & 0x3ff);
     break;
   case LUA_GCSTEP:
+    /* An explicit step after STOP resumes automatic collection as well as
+    ** driving this bounded turn. Preserve any active finalizer's pause. */
+    if (!lj_gc_auto_enabled(g))
+      api_gc_setlogical(g, api_gc_restart_threshold(g), 0);
     res = lj_gc2_step_explicit(L, data > 0 ? (uint32_t)data : 1u);
     break;
   case LUA_GCSETPAUSE:

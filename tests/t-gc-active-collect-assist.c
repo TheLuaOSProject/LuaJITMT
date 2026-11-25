@@ -80,6 +80,7 @@ static void seed_table_graph(lua_State *L, global_State *g, TGState *tg)
   GCtab *parent;
   int i;
 
+  lua_gc(L, LUA_GCSTOP, 0);
   lua_settop(L, 0);
   lua_createtable(L, ACTIVE_GRAPH_CHILDREN, 0);
   parent = tabV(L->top - 1);
@@ -94,29 +95,22 @@ static void seed_table_graph(lua_State *L, global_State *g, TGState *tg)
   assert(!lj_gc2_test_ssb_empty(g));
 }
 
-static void drain_mark_work(global_State *g)
+static void assert_table_graph(lua_State *L)
 {
   int i;
-  for (i = 0; i < 1000; i++)
-    if (lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH) == 0)
-      return;
-  assert(0);
+  assert(lua_objlen(L, -1) == ACTIVE_GRAPH_CHILDREN);
+  for (i = 1; i <= ACTIVE_GRAPH_CHILDREN; i++) {
+    lua_rawgeti(L, -1, i);
+    assert(lua_istable(L, -1));
+    lua_pop(L, 1);
+  }
 }
 
 static void reset_gc2(lua_State *L, global_State *g)
 {
-  drain_mark_work(g);
-  assert(lj_gc2_test_ssb_empty(g));
-  lj_gc2_cycle_to_idle(g);
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   lua_settop(L, 0);
-}
-
-static void reset_gc2_keep_stack(global_State *g)
-{
-  (void)lj_gc2_flush_ssb(g, G2TG(g));
-  drain_mark_work(g);
-  assert(lj_gc2_test_ssb_empty(g));
-  lj_gc2_cycle_to_idle(g);
 }
 
 static void *attached_step_worker(void *arg)
@@ -160,22 +154,21 @@ static void test_active_collect_completes_active_cycle(lua_State *L,
 						       global_State *g,
 						       TGState *tg)
 {
-  uint64_t runs0, grey0;
+  uint64_t grey0;
 
   seed_table_graph(L, g, tg);
-  runs0 = gc2_worker_runs_acq(g);
   grey0 = gc2_grey_drained_acq(g);
 
   enter_synthetic_active_peer(g);
   assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
   leave_synthetic_active_peer(g);
 
-  assert(gc2_worker_runs_acq(g) > runs0);
   /* Cooperative MARK can defer the ordinary worker turn and let the close
   ** owner drain this graph. Assert completed traversal, not its attribution. */
   assert(gc2_grey_drained_acq(g) > grey0 + LJ_GC2_WORKER_DRAIN_BATCH);
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   assert(lj_gc2_test_ssb_empty(g));
+  assert_table_graph(L);
 
   lua_settop(L, 0);
 }
@@ -220,27 +213,21 @@ static void test_active_collect_restarts_stopped_cycle(lua_State *L,
 static void test_active_step_returns_false(lua_State *L, global_State *g,
 					   TGState *tg)
 {
-  uint64_t runs0, grey0;
+  uint64_t completed;
 
   seed_table_graph(L, g, tg);
-  runs0 = gc2_worker_runs_acq(g);
-  grey0 = gc2_grey_drained_acq(g);
+  completed = gc2_sweep_to_idle_acq(g);
 
   enter_synthetic_active_peer(g);
   assert(lua_gc(L, LUA_GCSTEP, 0) == 0);
+  assert(lua_gc(L, LUA_GCISRUNNING, 0) == 1);
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
   leave_synthetic_active_peer(g);
 
-  /* The fresh MARK native turn may defer this caller's ordinary worker
-  ** quantum. STEP must remain bounded/false and leave drainable work. */
-  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
-  lj_gc2_jit_mark_request_exit(g);
-  gc2_jit_mark_resume_rel(g, 0);
-  assert(gc2_jit_phase_gate_acq(g) == 0);
-  assert(lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH) != 0);
-  assert(gc2_worker_runs_acq(g) > runs0);
-  assert(gc2_grey_drained_acq(g) > grey0);
-
-  reset_gc2(L, g);
+  assert(gc2_sweep_to_idle_acq(g) > completed);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert_table_graph(L);
+  lua_settop(L, 0);
 }
 
 static void test_active_step_starts_stopped_cycle(lua_State *L,
@@ -250,13 +237,14 @@ static void test_active_step_starts_stopped_cycle(lua_State *L,
 
   lua_gc(L, LUA_GCSTOP, 0);
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(lua_gc(L, LUA_GCISRUNNING, 0) == 0);
 
   enter_synthetic_active_peer(g);
   assert(lua_gc(L, LUA_GCSTEP, 0) == 0);
   leave_synthetic_active_peer(g);
 
   assert(gc2_cycle_starts_acq(g) == starts0 + 1u);
-  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  assert(lua_gc(L, LUA_GCISRUNNING, 0) == 1);
 
   reset_gc2(L, g);
 }
@@ -291,9 +279,8 @@ static void test_entering_step_starts_gc2(lua_State *L, global_State *g)
   leave_synthetic_entering_peer(g);
 
   assert(gc2_cycle_starts_acq(g) == starts0 + 1u);
-  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  assert(lua_gc(L, LUA_GCISRUNNING, 0) == 1);
 
-  lua_gc(L, LUA_GCRESTART, -1);
   reset_gc2(L, g);
 }
 
@@ -310,7 +297,7 @@ static void test_attached_step_while_host_native_join(lua_State *L,
 
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   child = lua_newthread(L);
-  reset_gc2_keep_stack(g);
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   requests0 = gc2_cycle_requests_acq(g);
   starts0 = gc2_cycle_starts_acq(g);

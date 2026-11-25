@@ -296,13 +296,12 @@ remain available.
 
 <h3 id="collectgarbage_threading"><tt>collectgarbage()</tt> during live threads</h3>
 <p>
-When secondary Lua threads are live, this fork cannot run the stock legacy
-collector synchronously on the caller's stack. In that interval,
-<tt>collectgarbage("collect")</tt> requests a GC2 major cycle and performs
-bounded GC2 worker assistance before returning, and <tt>collectgarbage("step")</tt>
-requests/assists progress but may return <tt>false</tt> before a cycle is
-complete. Once secondary threads have joined or detached, the ordinary
-synchronous stock LuaJIT behavior is used again.
+<tt>collectgarbage("collect")</tt> requests a GC2 major cycle and normally
+drives it to completion, including while other Lua threads are live. It may
+return early when a running finalizer or a blocking native call holding an
+active trace prevents further progress. <tt>collectgarbage("step")</tt> performs
+bounded work and returns <tt>true</tt> when a cycle completes. Both explicit
+operations resume automatic collection after <tt>collectgarbage("stop")</tt>.
 </p>
 
 <h3 id="io"><tt>io.*</tt> functions handle 64&nbsp;bit file offsets</h3>
