@@ -3726,7 +3726,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
       int owns_request = lj_str_gc2_reclaim_request(g, LJ_STR_RECLAIM_FULL);
       int errcode;
       /* Preserve full-GC scheduling for peers and reentrant callers without
-      ** letting either cancel the main collector's string request. */
+      ** letting either cancel the initiating collector's string request. */
       (void)la_add32_acqrel(&g->gc2.explicit_collectors, 1);
       errcode = lj_vm_cpcall(L, NULL, &collected, api_gc_collect_cp);
       if (owns_request > 0)

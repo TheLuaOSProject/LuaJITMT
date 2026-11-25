@@ -10,6 +10,7 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_err.h"
+#include "lj_frame.h"
 #include "lj_str.h"
 #include "lj_char.h"
 #include "lj_prng.h"
@@ -1770,56 +1771,52 @@ static void str_body_retired_push(global_State *g, StrBodyRetire *ret)
 int lj_str_gc2_reclaim_request(global_State *g, uint32_t request)
 {
   TGState *tg = lj_thr_get_tg();
-  uint32_t expect = LJ_STR_RECLAIM_NONE;
-  /* Only the main mutator can perform string-body reclamation. Nested
-  ** collectors share the outer request, including its consumed state, and
-  ** must leave cleanup to the call that opened the scope. */
-  if (!g || !tg || tg != g->main_tg || tg->gl != g)
+  uint64_t expect = 0;
+  uint32_t tid;
+  if (!g || !tg || tg->gl != g)
     return 0;
-  return la_cas32(&g->str.reclaim_requested, &expect, request,
-                  LA_ACQ_REL, LA_ACQ) ? 1 : -1;
+  if (tg != g->main_tg) {
+    lua_State *L = lj_tg_load_thread_L(tg);
+    /* Managed spawn enters the public protected call under its dedicated
+    ** outer frame. Foreign attachments and additional native entries
+    ** cannot acquire an explicit retirement scope. */
+    if (request != LJ_STR_RECLAIM_FULL ||
+	!lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC) || !L ||
+	lj_tg_load_cur_L(tg) != L || !L->cframe ||
+	!tg->str_vm_outer_cframe ||
+	cframe_raw(cframe_prev(cframe_raw(L->cframe))) !=
+	  cframe_raw(tg->str_vm_outer_cframe))
+      return 0;
+  }
+  tid = lj_tg_tid_acq(tg);
+  if (!lj_thr_id_is_owner(tid))
+    return 0;
+  if (la_cas64(&g->str.reclaim_scope, &expect,
+	       lj_str_reclaim_scope_pack(tid, request), LA_ACQ_REL, LA_ACQ))
+    return 1;
+  return (uint32_t)(expect >> 32) == tid ? -1 : 0;
 }
 
 void lj_str_gc2_reclaim_cancel(global_State *g)
 {
-  if (!g)
+  TGState *tg = lj_thr_get_tg();
+  uint64_t scope;
+  if (!g || !tg || tg->gl != g)
+    return;
+  scope = lj_str_reclaim_scope_acq(g);
+  if ((uint32_t)(scope >> 32) != lj_tg_tid_acq(tg))
     return;
   /* The sole-mutator batch is drained before this exclusion ends.
   ** Active quarantine records may span multiple explicit collections. */
   lj_assertG(lj_str_reclaim_exclusive_acq(g) == 0,
 	     "explicit string reclaim returned while exclusion was active");
-  lj_str_reclaim_requested_rel(g, LJ_STR_RECLAIM_NONE);
+  (void)la_cas64(&g->str.reclaim_scope, &scope, 0, LA_ACQ_REL, LA_ACQ);
 }
 
 static void str_reclaim_exclusive_leave(global_State *g)
 {
   if (g && lj_str_reclaim_exclusive_acq(g) != 0)
     lj_str_reclaim_exclusive_rel(g, 0);
-}
-
-/* Only the explicit main collector can admit the VM cohort. External
-** attachments have no enclosing managed frame certificate. */
-static int str_vm_reclaim_owner(global_State *g)
-{
-  TGState *tg = lj_thr_get_tg();
-  if (!g || !tg || tg != g->main_tg || tg->gl != g ||
-      lj_str_reclaim_requested_acq(g) == 0 ||
-      lj_str_reclaim_exclusive_acq(g) != 0 ||
-      g->allocf != lj_arena_allocf || !la_load32_acq(&g->allocf_arena) ||
-      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
-      mt_shutdown_acq(g) || mt_entering_acq(g) ||
-      lj_gc2_finalizer_phase_pending(g) || gc2_finalizer_active_acq(g) ||
-      lj_tg_in_native_acq(tg))
-    return 0;
-#if LJ_HASFFI
-  if (lj_tg_ffi_call_func_acq(tg) || ccallback_depth_acq(&tg->cb))
-    return 0;
-#if LJ_HASJIT
-  if (lj_ffi_native_frame_depth_acq(tg))
-    return 0;
-#endif
-#endif
-  return 1;
 }
 
 /* Pool workers have no Lua stack or C/FFI calls. Their graph reads occur
@@ -1837,16 +1834,70 @@ static int str_gc_worker(global_State *g, TGState *tg)
   return 0;
 }
 
-static int str_vm_cohort_ready(global_State *g, uint64_t after)
+/* A pool executor may stage quarantine for the exact published FULL or
+** STEP request during WEAK-to-SWEEP, while it owns the GC worker token.
+** Only the initiating Lua actor may commit the staged cohort at IDLE. */
+static TGState *str_vm_reclaim_owner(global_State *g, int stage)
+{
+  TGState *tg = lj_thr_get_tg();
+  uint64_t scope;
+  uint32_t request, tid;
+  if (!g || !tg || tg->gl != g)
+    return NULL;
+  scope = lj_str_reclaim_scope_acq(g);
+  request = (uint32_t)scope;
+  tid = (uint32_t)(scope >> 32);
+  if (tid != lj_tg_tid_acq(tg)) {
+    if (!stage ||
+	(request != LJ_STR_RECLAIM_FULL && request != LJ_STR_RECLAIM_STEP) ||
+	!str_gc_worker(g, tg))
+      return NULL;
+    tg = lj_tg_find_owner(g, tid);
+    if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+	(tg != g->main_tg &&
+	 (request != LJ_STR_RECLAIM_FULL ||
+	  !lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC))))
+      return NULL;
+  }
+  if ((request != LJ_STR_RECLAIM_FULL && request != LJ_STR_RECLAIM_STEP) ||
+      lj_str_reclaim_scope_acq(g) != scope ||
+      lj_str_reclaim_exclusive_acq(g) != 0 ||
+      g->allocf != lj_arena_allocf || !la_load32_acq(&g->allocf_arena) ||
+      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
+      mt_shutdown_acq(g) || mt_entering_acq(g) ||
+      lj_gc2_finalizer_phase_pending(g) || gc2_finalizer_active_acq(g) ||
+      lj_tg_in_native_acq(tg))
+    return NULL;
+#if LJ_HASFFI
+  if (lj_tg_ffi_call_func_acq(tg) || ccallback_depth_acq(&tg->cb))
+    return NULL;
+#if LJ_HASJIT
+  if (lj_ffi_native_frame_depth_acq(tg))
+    return NULL;
+#endif
+#endif
+  return tg;
+}
+
+static int str_vm_cohort_ready(global_State *g, TGState *owner,
+				 uint64_t after)
 {
   TGState *tg, *head;
-  if (!str_vm_reclaim_owner(g) ||
-      (after && la_load64_acq(&g->main_tg->str_owner_scan_epoch) <= after))
+  uint64_t scope = lj_str_reclaim_scope_acq(g);
+  uint32_t request = (uint32_t)scope;
+  if (!owner || (uint32_t)(scope >> 32) != lj_tg_tid_acq(owner) ||
+      (request != LJ_STR_RECLAIM_FULL && request != LJ_STR_RECLAIM_STEP) ||
+      (after && la_load64_acq(&owner->str_owner_scan_epoch) <= after))
+    return 0;
+  if (owner != g->main_tg &&
+      (!la_load32_acq(&g->main_tg->str_vm_main_pcall) ||
+       (after && la_load64_acq(&g->main_tg->str_vm_root_epoch) <= after)))
     return 0;
   head = gc2_tg_list_acq(g);
   for (tg = head; tg;) {
     TGState *next = lj_tg_next_acq(tg);
-    if (tg != g->main_tg && !lj_tg_flags_test_acq(tg, TGF_DEAD)) {
+    if (tg != g->main_tg && tg != owner &&
+	!lj_tg_flags_test_acq(tg, TGF_DEAD)) {
       if (lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC)) {
 	if (after && la_load64_acq(&tg->str_vm_root_epoch) <= after)
 	  return 0;
@@ -1859,7 +1910,8 @@ static int str_vm_cohort_ready(global_State *g, uint64_t after)
     tg = next;
   }
   la_fence_seq();
-  return mt_entering_acq(g) == 0 && gc2_tg_list_acq(g) == head;
+  return mt_entering_acq(g) == 0 && gc2_tg_list_acq(g) == head &&
+	 lj_str_reclaim_scope_acq(g) == scope;
 }
 
 int lj_str_gc2_reclaim_checkpoint(global_State *g, uint32_t limit)
@@ -1867,15 +1919,15 @@ int lj_str_gc2_reclaim_checkpoint(global_State *g, uint32_t limit)
   uint32_t pass;
   MSize queued = lj_str_qcount_acq(g);
   uint64_t reclaimed = la_load64_acq(&g->str.sweep_reclaimed);
-  /* A worker may close SWEEP while the main explicit collector was parked.
-  ** Its remote ACK cannot certify the main stack, and its IDLE retire pass
-  ** cannot commit this cohort. Give the main owner a real root checkpoint
-  ** and bounded grace opportunities before leaving its request scope.
+  /* A pool worker may close SWEEP while the explicit collector was parked.
+  ** Its remote ACK cannot certify that collector's stack, and its IDLE retire
+  ** pass cannot commit this cohort. Give the initiating owner a real root
+  ** checkpoint and bounded grace opportunities within the request scope.
   ** A public step takes only one grace window at a time. */
   for (pass = 0; pass < limit; pass++) {
     uint32_t actions = LJ_GC2_HS_FLUSH_SSB;
     if (gc2_phase_acq(g) != LJ_GC2_IDLE ||
-	lj_str_body_retired_head_acq(g) == NULL || !str_vm_reclaim_owner(g))
+	lj_str_body_retired_head_acq(g) == NULL || !str_vm_reclaim_owner(g, 0))
       break;
     if (pass == 0 && queued != 0)
       actions |= LJ_GC2_HS_SCAN_OWNER_ROOTS;
@@ -1889,14 +1941,15 @@ static int str_reclaim_exclusive_try(global_State *g)
 {
   TGState *tg;
   uint32_t expect = 0;
-  if (!g || lj_str_reclaim_request_acq(g) != LJ_STR_RECLAIM_FULL ||
-      g->allocf != lj_arena_allocf ||
+  if (!g || g->allocf != lj_arena_allocf ||
       la_load32_acq(&g->allocf_arena) == 0 ||
       lj_str_qcount_acq(g) != 0 || lj_gc2_finalizer_phase_pending(g))
     return 0;
   tg = lj_thr_get_tg();
   if (!tg || tg != g->main_tg || tg->gl != g ||
-      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
+      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
+      lj_str_reclaim_scope_acq(g) !=
+	lj_str_reclaim_scope_pack(lj_tg_tid_acq(tg), LJ_STR_RECLAIM_FULL))
     return 0;
   /* A C or FFI caller can still hold a borrowed byte address. Callback
   ** entry temporarily clears in_native and can suspend jit_base, so those
@@ -1936,7 +1989,9 @@ static int str_reclaim_exclusive_try(global_State *g)
   /* No interner can consume a new count credit until exclusion is released.
   ** Make the count exact before physical destructors start subtracting it. */
   lj_str_flush_num_credit(g, tg);
-  lj_str_reclaim_requested_rel(g, LJ_STR_RECLAIM_CONSUMED);
+  la_store64_rel(&g->str.reclaim_scope,
+		 lj_str_reclaim_scope_pack(lj_tg_tid_acq(tg),
+					   LJ_STR_RECLAIM_CONSUMED));
   return 1;
 }
 
@@ -2494,6 +2549,7 @@ static LJ_AINLINE int str_sweep_grace_complete(global_State *g)
 
 void lj_str_gc2_sweep_begin(global_State *g, int major)
 {
+  uint32_t vm_phase = LJ_STR_SWEEP_DONE;
   if (!g)
     return;
   if (LJ_UNLIKELY(lj_str_sweep_pending_acq(g) != NULL)) {
@@ -2512,24 +2568,28 @@ void lj_str_gc2_sweep_begin(global_State *g, int major)
   la_store32_rel(&g->str.sweep_cycle, gc2_cycle_acq(g));
   if (major && str_reclaim_exclusive_try(g)) {
     lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_ACQUIRE);
-  } else if (major && str_vm_cohort_ready(g, 0)) {
-    uint64_t scan = la_load64_acq(&g->main_tg->str_owner_scan_epoch);
-    /* A stalled actor may defer the currently reserved cohort. Once that
-    ** cohort commits, individual second-grace readers delay only its reuse. */
-    if (lj_str_qcount_acq(g) != 0) {
-      /* Offer resumed actors an owner checkpoint without scanning new
-      ** candidates. The next retire pass consumes only proven records. */
-      lj_str_sweep_grace_epoch_rel(g, lj_gc2_retire_epoch(g));
-      lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_UNLINK_GRACE);
-      gc2_sweep_grace_needed_rel(g, 1);
-    } else if (scan != 0 && str_vm_cohort_ready(g, scan - 1u)) {
-      lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_ACQUIRE);
-    } else {
-      lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_DONE);
-    }
-  } else {
-    lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_DONE);
+    return;
   }
+  /* A pool executor can resolve the initiating Lua owner only while its
+  ** TG registry snapshot remains retained. This is try-only staging. */
+  if (major && lj_gc2_smr_read_try(g)) {
+    TGState *owner = str_vm_reclaim_owner(g, 1);
+    if (owner && str_vm_cohort_ready(g, owner, 0)) {
+      uint64_t scan = la_load64_acq(&owner->str_owner_scan_epoch);
+      if (lj_str_qcount_acq(g) != 0)
+	vm_phase = LJ_STR_SWEEP_UNLINK_GRACE;
+      else if (scan != 0 && str_vm_cohort_ready(g, owner, scan - 1u))
+	vm_phase = LJ_STR_SWEEP_ACQUIRE;
+    }
+    lj_gc2_smr_read_leave(g);
+  }
+  /* A stalled actor may defer the currently reserved cohort. Once that
+  ** cohort commits, individual second-grace readers delay only its reuse. */
+  if (vm_phase == LJ_STR_SWEEP_UNLINK_GRACE) {
+    lj_str_sweep_grace_epoch_rel(g, lj_gc2_retire_epoch(g));
+    gc2_sweep_grace_needed_rel(g, 1);
+  }
+  lj_str_sweep_phase_rel(g, vm_phase);
 }
 
 uint32_t lj_str_gc2_grace_actions(global_State *g)
@@ -2933,7 +2993,7 @@ static int strq_retire_record(global_State *g, StrCanonRec *rec,
         if (canon != lj_str_canon_pack(rec, LJ_STR_CANON_QCLOSING) ||
             !str_retire_grace(completed, close) ||
 	    ((status & LJ_STR_CANONREC_VM_COHORT) &&
-	     !str_vm_cohort_ready(g, close)) ||
+	     !str_vm_cohort_ready(g, str_vm_reclaim_owner(g, 0), close)) ||
             str_source_pinned(g, s) ||
             (mainhdr && strtab_active_on_hdr_before(g, mainhdr, close)) ||
             !lj_str_canon_cas(s, &canon, committed))
@@ -3229,7 +3289,7 @@ void lj_str_free_retired_bodies(global_State *g)
       lj_str_retired_batch_head_acq(g) != NULL)
     (void)str_retire_batches_reclaim_all(g, 0);
   str_reclaim_exclusive_leave(g);
-  lj_str_reclaim_requested_rel(g, LJ_STR_RECLAIM_NONE);
+  la_store64_rel(&g->str.reclaim_scope, 0);
   /* Workers are stopped before the terminal GC2 drain, so an unlink CAS cannot
   ** still be between its discoverable pending slot and retired-list publish. */
   pending = lj_str_sweep_pending_acq(g);

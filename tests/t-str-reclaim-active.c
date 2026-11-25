@@ -364,22 +364,24 @@ static void check_step_reclamation(int workers)
     "  end\n"
     "  probe(round)\n"
     "  local peak, memory = collectgarbage('count')\n"
-    "  for i = 1, 12000 do\n"
-    "    step()\n"
-    "    if i % 32 == 0 then\n"
-    "      memory = collectgarbage('count')\n"
-    "      assert(getmetatable(weak)[mode] == 'v', 'step lost rooted __mode')\n"
-    "      if peak - memory > 450 and (not settled or memory < settled + 256)\n"
-    "         and not probe() then break end\n"
-    "    end\n"
-    "  end\n"
+    "  local deadline = threading.now() + 15\n"
+    "  repeat\n"
+    "    for i = 1, 32 do step() end\n"
+    /* Background workers can complete the cycle between public steps. */
+    "    if workers > 0 then threading.sleep(0.001) end\n"
+    "    memory = collectgarbage('count')\n"
+    "    assert(getmetatable(weak)[mode] == 'v', 'step lost rooted __mode')\n"
+    "    if peak - memory > 450 and (not settled or memory < settled + 256)\n"
+    "       and not probe() then break end\n"
+    "  until threading.now() >= deadline\n"
     "  assert(peak - memory > 450, ('step heap %.0f -> %.0f'):format(peak, memory))\n"
     "  assert(not probe(), 'step retained huge string')\n"
     "  if round == 2 then settled = memory end\n"
     "  if round > 2 then assert(memory < settled + 256, 'step heap grew') end\n"
     "  assert(keep == ('S'):rep(#keep))\n"
     "end\n"
-    "assert(cycles > 0 and threading.gcworkers() == workers)\n";
+    "assert(workers > 0 or cycles > 0)\n"
+    "assert(threading.gcworkers() == workers)\n";
   lua_State *L = luaL_newstate();
   int status;
   assert(L);
@@ -439,9 +441,130 @@ static void check_nested_step_scope(void)
   lua_close(L);
 }
 
+static uint32_t worker_sampled_main_trace;
+
+static int main_running_trace(lua_State *L)
+{
+  TGState *main = G(L)->main_tg;
+  if (L2TG(L) == main)
+    lua_pushboolean(L, la_load32_acq(&worker_sampled_main_trace) != 0);
+  else if (lua_gettop(L)) {
+    la_store32_rel(&worker_sampled_main_trace, 1);
+    return 0;
+  } else {
+    lua_pushboolean(L, lj_tg_vmstate_load_acq(main) > 0);
+  }
+  return 1;
+}
+
+static void check_worker_collection(int use_jit, int pool)
+{
+  static const char script[] =
+    "local stats, stop, park, invoke, probe, native, use_jit, pool = ...\n"
+    "if use_jit then jit.opt.start('hotloop=8')\n"
+    "elseif jit then jit.off() end\n"
+    "local threading = require('threading')\n"
+    "assert(threading.gcworkers(pool) == 0)\n"
+    "local have_ffi, ffi = pcall(require, 'ffi')\n"
+    "local keeper = ('main Lua dispatch value:'):rep(300)\n"
+    "local peer = assert(threading.spawn(function(stats, stop, park, probe, have_ffi, native, use_jit)\n"
+    "  local prior = stats()\n"
+    "  if have_ffi then\n"
+    "    park()\n"
+    "    probe(7)\n"
+    "    collectgarbage('collect')\n"
+    "    local blocked = stats() == prior and probe()\n"
+    "    park(true)\n"
+    "    assert(blocked, 'main callback certified reclamation')\n"
+    "  end\n"
+    "  for i = 1, 600 do\n"
+    "    assert(#('worker body:%d:'):format(i):rep(30) >= 420)\n"
+    "  end\n"
+    "  probe(8)\n"
+    "  if use_jit then\n"
+    "    local running\n"
+    "    for i = 1, 1000 do\n"
+    "      running = native()\n"
+    "      if running then break end\n"
+    "      threading.sleep(0.001)\n"
+    "    end\n"
+    "    assert(running, 'main did not execute a native trace')\n"
+    "    collectgarbage('collect')\n"
+    "    native(true)\n"
+    "  end\n"
+    "  for i = 1, 400 do\n"
+    "    collectgarbage('collect')\n"
+    "    if stats() - prior >= 600 and not probe() then break end\n"
+    "    threading.sleep(0.001)\n"
+    "  end\n"
+    "  local retired = stats() - prior\n"
+    "  local mapping_retired = not probe()\n"
+    "  stop(true)\n"
+    "  return retired, mapping_retired\n"
+    "end, stats, stop, park, probe, have_ffi, native, use_jit))\n"
+    "if have_ffi then\n"
+    "  local cb = ffi.cast('void (*)(void)', function() park(false) end)\n"
+    "  ffi.cast('void (*)(void (*)(void))', invoke)(cb)\n"
+    "  cb:free()\n"
+    "end\n"
+    "local function dispatch_window(s, n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do sum = sum + #s end\n"
+    "  return sum\n"
+    "end\n"
+    "if jit then jit.off(dispatch_window, true) end\n"
+    "local len, count = #keeper, 0\n"
+    "local deadline = threading.now() + 12\n"
+    "while not stop() and threading.now() < deadline do\n"
+    "  if use_jit and not native() then\n"
+    "    for i = 1, 20000 do count = count + #keeper - len end\n"
+    "  else\n"
+    "    assert(dispatch_window(keeper, 100000) == len * 100000)\n"
+    "  end\n"
+    "end\n"
+    "assert(count == 0 and keeper == ('main Lua dispatch value:'):rep(300))\n"
+    "local joined, retired, mapping_retired = peer:join(10)\n"
+    "assert(joined and retired >= 600, 'worker did not retire string bodies')\n"
+    "assert(mapping_retired, 'worker did not unmap an unreachable string')\n"
+    "assert(threading.gcworkers(0) == pool)\n";
+  lua_State *L = luaL_newstate();
+  int status;
+  assert(L);
+  stop_requested = callback_ready = callback_release = 0;
+  worker_sampled_main_trace = 0;
+  luaL_openlibs(L);
+  memset(held, 'H', sizeof(held)-1);
+  lua_pushlstring(L, held, sizeof(held)-1);
+  borrowed = lua_tolstring(L, -1, NULL);
+  assert(luaL_loadbuffer(L, script, sizeof(script)-1, "=worker string GC") ==
+	 LUA_OK);
+  lua_pushcfunction(L, check_reclamation);
+  lua_pushcfunction(L, stop_worker);
+  lua_pushcfunction(L, callback_park);
+  lua_pushlightuserdata(L, (void *)(uintptr_t)run_callback);
+  lua_pushcfunction(L, probe_huge_mapping);
+  lua_pushcfunction(L, main_running_trace);
+  lua_pushboolean(L, use_jit);
+  lua_pushinteger(L, pool);
+  status = lua_pcall(L, 8, 0, 0);
+  if (status != LUA_OK)
+    fprintf(stderr, "worker full GC jit=%d pool=%d: %s\n",
+	    use_jit, pool, lua_tostring(L, -1));
+  assert(status == LUA_OK);
+  assert(lua_tolstring(L, 1, NULL) == borrowed);
+  assert(memcmp(borrowed, held, sizeof(held)) == 0);
+  lua_close(L);
+}
+
 int main(void)
 {
   check_request_ownership();
+  check_worker_collection(0, 0);
+  check_worker_collection(0, 2);
+#if LJ_HASJIT
+  check_worker_collection(1, 0);
+  check_worker_collection(1, 2);
+#endif
   check_nested_step_scope();
   check_step_reclamation(0);
   check_step_reclamation(2);

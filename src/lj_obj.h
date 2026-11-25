@@ -1945,7 +1945,7 @@ typedef struct StrInternState {
   uint32_t sweep_phase;	/* LJ_STR_SWEEP_* bounded subphase. */
   uint32_t sweep_cycle;	/* GC2 cycle which owns sweep_hdr. */
   uint32_t sweep_batch_pending;  /* Batch slot spans the exact unlink CAS. */
-  uint32_t reclaim_requested;  /* Main lua_gc string request scope. */
+  uint64_t reclaim_scope;  /* Exact collector TID and string reclaim mode. */
   uint32_t reclaim_exclusive;  /* Nonwaiting sole-mutator admission gate. */
   StrID id;		/* Next string ID. */
   uint8_t idreseed;	/* String ID reseed counter. */
