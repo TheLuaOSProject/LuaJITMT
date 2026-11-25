@@ -1874,9 +1874,11 @@ static void test_worker_owned_sweep_direct(void)
   sweep_cycle = g->gc2.cycle;
   (void)test_publish_sweep_phase(g);
   gc2_sweep_bridge_ready_store_rlx(g, 0);
-  lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_PLAIN);
-  lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
-  lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_PLAIN);
+  assert(lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_PLAIN));
+  assert(lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE));
+  assert(lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_PLAIN));
+  /* Publish this owner's prepared lists as the RESET_ALLOC handler does. */
+  la_store32_rel(&extra_tg.alloc.prepare_epoch, sweep_cycle);
   assert(extra_tg.alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
   assert(arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_PLAIN],
 			     extra_plain_a));
