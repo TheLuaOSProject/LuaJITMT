@@ -30,6 +30,7 @@ typedef struct ConsumedWakeProbe {
   pthread_t owner_thread;
   pthread_t watchdog_thread;
   uint64_t epoch;
+  uint32_t actions;
   uint32_t armed;
   uint32_t attached;
   uint32_t counted;
@@ -74,13 +75,14 @@ static void completion_hook(global_State *g, TGState *tg, uint64_t epoch,
     uint32_t n = la_load32_acq(&p->counted) + 1u;
     assert(gc2_hs_pending_acq(g) != 0);
     if (n == 2) {
-      /* The first owner consume is paused. The second count is therefore a
-      ** duplicate publication for the same epoch. Let the owner advance to
-      ** its pre-wait interlock before reqmask/poll are republished. */
+      /* The first owner consume is paused before its claim. The second count
+      ** is a duplicate publication for the same epoch. For a held poll,
+      ** publish the duplicate immediately before the owner's wait. */
       until_value(&p->consumed, 1, 5000000000ull);
       assert(lj_tg_hs_epoch_ack_acq(tg) != epoch);
       la_store32_rel(&p->counted, n);
-      until_value(&p->before_wait, 1, 5000000000ull);
+      if (p->actions == LJ_GC2_HS_FLUSH_SSB)
+        until_value(&p->before_wait, 1, 5000000000ull);
     } else {
       assert(n == 1);
       la_store32_rel(&p->counted, n);
@@ -95,6 +97,8 @@ static void completion_hook(global_State *g, TGState *tg, uint64_t epoch,
         assert(lj_tg_reqmask_acq(tg) == 0);
         assert(lj_tg_poll_acq(tg) == 1);
         until_value(&p->counted, 2, 5000000000ull);
+        if (p->actions != LJ_GC2_HS_FLUSH_SSB)
+          until_value(&p->signaled, 2, 5000000000ull);
       } else {
         assert(n == 2);
         assert(lj_tg_reqmask_acq(tg) == 0);
@@ -112,11 +116,11 @@ static void completion_hook(global_State *g, TGState *tg, uint64_t epoch,
     uint32_t n = la_load32_acq(&p->signaled) + 1u;
     assert(lj_tg_poll_acq(tg) == 1);
     if (n == 2) {
-      /* The wake has returned while the futex word remains one. The owner is
-      ** still held in BEFORE_WAIT, making the later wait deterministically
-      ** vulnerable to a lost wake on the old implementation. */
-      assert(lj_tg_reqmask_acq(tg) == LJ_GC2_HS_FLUSH_SSB);
-      assert(la_load32_acq(&p->before_wait) == 1);
+      /* The duplicate wake has returned while the futex word remains one.
+      ** The owner can now resume its wait or complete the immediate clear. */
+      assert(lj_tg_reqmask_acq(tg) == p->actions);
+      if (p->actions == LJ_GC2_HS_FLUSH_SSB)
+        assert(la_load32_acq(&p->before_wait) == 1);
     }
     /* Publish last: the owner may immediately consume the duplicate. */
     la_store32_rel(&p->signaled, n);
@@ -139,9 +143,15 @@ static void *owner_main(void *arg)
   assert(lj_state_claim(p->ownerL, tid));
   la_store32_rel(&p->attached, 1);
 
-  until_value(&tg->reqmask, LJ_GC2_HS_FLUSH_SSB, 5000000000ull);
+  until_value(&tg->reqmask, p->actions, 5000000000ull);
   until_value(&tg->poll, 1, 5000000000ull);
   (void)lj_safepoint_ack(p->ownerL);
+  if (p->actions != LJ_GC2_HS_FLUSH_SSB) {
+    /* The first ACK must leave the duplicate visible to the VM poll site. */
+    assert(lj_tg_reqmask_acq(tg) == p->actions);
+    assert(lj_tg_poll_acq(tg) != 0);
+    (void)lj_safepoint_ack(p->ownerL);
+  }
   if (gc2_hs_pending_acq(p->g) != 0 ||
       lj_tg_reqmask_acq(tg) != 0 || lj_tg_poll_acq(tg) != 0 ||
       lj_tg_hs_epoch_ack_acq(tg) != p->epoch)
@@ -170,12 +180,14 @@ static void *watchdog_main(void *arg)
   return NULL;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
   lua_State *L;
   lua_State *ownerL;
   uint32_t signaled;
+  int clear = argc == 2 && strcmp(argv[1], "clear") == 0;
 
+  assert(argc == 1 || clear);
   alarm(15);
   setvbuf(stdout, NULL, _IOLBF, 0);
   L = luaL_newstate();
@@ -185,6 +197,8 @@ int main(void)
   lua_gc(L, LUA_GCSTOP, 0);
 
   memset(&probe, 0, sizeof(probe));
+  probe.actions = clear ? LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE :
+    LJ_GC2_HS_FLUSH_SSB;
   probe.g = G(L);
   ownerL = lua_newthread(L);  /* Keep the coroutine rooted on L's stack. */
   assert(ownerL != NULL);
@@ -195,24 +209,27 @@ int main(void)
   probe.epoch = gc2_hs_epoch_acq(probe.g) + 1u;
   la_store32_rel(&probe.armed, 1);
   lj_safepoint_test_completion_hook(completion_hook);
-  assert(pthread_create(&probe.watchdog_thread, NULL, watchdog_main,
-                        &probe) == 0);
+  if (!clear)
+    assert(pthread_create(&probe.watchdog_thread, NULL, watchdog_main,
+                          &probe) == 0);
 
-  signaled = lj_safepoint_handshake(probe.g, LJ_GC2_HS_FLUSH_SSB);
+  signaled = lj_safepoint_handshake(probe.g, probe.actions);
 
   assert(pthread_join(probe.owner_thread, NULL) == 0);
-  assert(pthread_join(probe.watchdog_thread, NULL) == 0);
+  if (!clear)
+    assert(pthread_join(probe.watchdog_thread, NULL) == 0);
   la_store32_rel(&probe.armed, 0);
   lj_safepoint_test_completion_hook(NULL);
 
   assert(signaled >= 2);
   assert(la_load32_acq(&probe.counted) == 2);
   assert(la_load32_acq(&probe.consumed) == 2);
-  assert(la_load32_acq(&probe.before_wait) >= 1);
+  if (!clear)
+    assert(la_load32_acq(&probe.before_wait) >= 1);
   assert(la_load32_acq(&probe.signaled) == 2);
   assert(la_load32_acq(&probe.owner_returned) == 1);
   assert(la_load32_acq(&probe.owner_returned_early) == 0);
-  assert(la_load32_acq(&probe.watchdog_done) == 1);
+  assert(la_load32_acq(&probe.watchdog_done) == (uint32_t)!clear);
   assert(gc2_hs_pending_acq(probe.g) == 0);
   assert(gc2_hs_leader_acq(probe.g) == 0);
   assert(lj_tg_reqmask_acq(&probe.owner) == 0);

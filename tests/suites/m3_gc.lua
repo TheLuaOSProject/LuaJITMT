@@ -686,7 +686,7 @@ return function(add)
       build.with_default_build_restore(t, function()
         build.clean_build(t, { xcflags = flags })
         local fixtures = {
-          { name = "t-safepoint-consumed-wake", modes = { false }, wraps = {} },
+          { name = "t-safepoint-consumed-wake", modes = { false, "clear" }, wraps = {} },
           { name = "t-safepoint-remote-root-completion", modes = { "0", "1", "2", "3", "4", "5" },
             wraps = { "lj_gc2_scan_cycle_owner_tg_roots_native_parked" } },
           { name = "t-safepoint-local-native-duplicate", modes = { false },

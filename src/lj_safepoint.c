@@ -578,8 +578,10 @@ retry:
     ** apply actions twice, but do release the counted slot.
     */
     hold = safepoint_hold_poll_until_leader(g, actions);
-    if (!hold)
+    if (!hold) {
       safepoint_clear_poll(tg);
+      safepoint_restore_counted_poll(tg);
+    }
     oldpending = gc2_hs_pending_sub_acqrel(g, 1);
     if (oldpending == 1)
       gc2_hs_pending_futex_wake(g, 1);
@@ -611,11 +613,11 @@ retry:
       ** excludes a newer epoch. Changing the futex word is the durable local
       ** completion publication; waking an unchanged poll could lose a wake. */
       safepoint_clear_poll(tg);
+      /* The leader can sample this TG before its epoch claim and publish a
+      ** duplicate request after reqmask consumption. Re-arm that counted
+      ** request if this clear crossed its poll store. */
+      safepoint_restore_counted_poll(tg);
       if (completed) {
-        /* A late signaler may have sampled this TG before its epoch claim and
-        ** republish the same counted epoch after reqmask consumption. Preserve
-        ** that duplicate's wake; the existing claim-loser path drops its slot. */
-        safepoint_restore_counted_poll(tg);
 	safepoint_completion_test_pause(g, tg, epoch,
 	  LJ_SAFEPOINT_COMPLETION_TEST_CLEARED);
       }
