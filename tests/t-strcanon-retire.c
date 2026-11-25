@@ -9,6 +9,7 @@
 #include "lua.h"
 #include "lauxlib.h"
 
+#include "lj_func.h"
 #include "lj_gc2.h"
 #include "lj_str.h"
 #include "lj_thr.h"
@@ -134,6 +135,62 @@ static void check_stack_publication(lua_State *L)
   lua_pop(L, 1);
 }
 
+static void check_table_publication(lua_State *L)
+{
+  const char name[] = "canonical-table-publication-fixture";
+  GCstr *s;
+  StrCanonRec *rec;
+
+  lua_newtable(L);
+  lua_pushlstring(L, name, sizeof(name)-1);
+  s = strV(L->top - 1);
+  lua_setfield(L, -2, "value");
+
+  assert(lj_str_test_quarantine_detach(L, s));
+  rec = lj_str_canon_record(lj_str_canon_acq(s));
+  assert(rec);
+  assert(luaL_loadstring(L, "local t = ...; return t.value") == LUA_OK);
+  lua_pushvalue(L, -2);
+  lj_str_canon_rel(s, lj_str_canon_pack(rec, LJ_STR_CANON_QCLOSING));
+  lua_call(L, 1, 1);
+  assert(strV(L->top - 1) == s);
+  assert(lj_str_canon_state(lj_str_canon_acq(s)) == LJ_STR_CANON_QRESCUED);
+  lua_pop(L, 1);
+
+  lj_str_canon_rel(s, lj_str_canon_pack(rec, LJ_STR_CANON_QCLOSING));
+  lua_pushnil(L);
+  assert(lua_next(L, -2));
+  assert(strV(L->top - 1) == s);
+  assert(lj_str_canon_state(lj_str_canon_acq(s)) == LJ_STR_CANON_QRESCUED);
+  advance_grace(G(L));
+  assert(lj_str_canon_acq(s) == LJ_STR_CANON_LIVE);
+  lua_pop(L, 3);
+}
+
+static void check_rooted_upvalue_publication(lua_State *L)
+{
+  const char name[] = "canonical-upvalue-publication-fixture";
+  GCstr *s;
+  StrCanonRec *rec;
+  assert(luaL_loadstring(L, "local x = ...; return function() return x end") ==
+	 LUA_OK);
+  lua_pushlstring(L, name, sizeof(name)-1);
+  s = strV(L->top - 1);
+  lua_call(L, 1, 1);
+
+  assert(lj_str_test_quarantine_detach(L, s));
+  rec = lj_str_canon_record(lj_str_canon_acq(s));
+  assert(rec);
+  lj_str_canon_rel(s, lj_str_canon_pack(rec, LJ_STR_CANON_QCLOSING));
+  lua_pushnil(L);
+  assert(lj_func_getuv_rooted_try(L, L->top - 2, 0, L->top - 1));
+  assert(strV(L->top - 1) == s);
+  assert(lj_str_canon_state(lj_str_canon_acq(s)) == LJ_STR_CANON_QRESCUED);
+  advance_grace(G(L));
+  assert(lj_str_canon_acq(s) == LJ_STR_CANON_LIVE);
+  lua_pop(L, 2);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -142,7 +199,7 @@ int main(void)
   StrCanonRec *rec;
   TGState *read_tg;
   Peer peer = {0};
-  LJThr thread;
+  LJThr thread = {0};
   assert(L);
   g = G(L);
   check_cancelled_record(L);
@@ -163,6 +220,9 @@ int main(void)
   assert(peer.borrowed == strdata(borrowed));
   assert(lj_str_canon_state(lj_str_canon_acq(borrowed)) == LJ_STR_CANON_QRESCUED);
   assert(!lj_str_test_quarantine_close(g, borrowed));
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  check_table_publication(L);
+  check_rooted_upvalue_publication(L);
 
   /* Only the fixture-owned, unrooted target is authorized to close. */
   assert(lj_str_test_quarantine_close(g, old));

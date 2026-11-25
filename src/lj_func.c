@@ -18,6 +18,7 @@
 #include "lj_func.h"
 #include "lj_oserr.h"
 #include "lj_state.h"
+#include "lj_str.h"
 #include "lj_trace.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
@@ -227,7 +228,8 @@ static int func_rooted_try_common(lua_State *L, cTValue *fnroot,
   if (store) {
     lj_tv_load_acq(&valueconfirm,
 		   valuestack ? restorestack(L, valueofs) : valueroot);
-    if (tv_rawload(&valueconfirm) != tv_rawload(&valuesnap))
+    if (tv_rawload(&valueconfirm) != tv_rawload(&valuesnap) ||
+	!lj_str_tv_rescue_held(&valuesnap))
       goto done;
     copyTVrel(L, &uv->tv, &valuesnap);
     /* The barrier uses the exact published snapshot, not a second read of the
@@ -236,6 +238,8 @@ static int func_rooted_try_common(lua_State *L, cTValue *fnroot,
       lj_gc2_barrier_tv_pair_g(owner.g, obj2gco(uv), &valuesnap);
   } else {
     TValue *out = outstack ? restorestack(L, outofs) : outroot;
+    if (!lj_str_tv_rescue_held(&result))
+      goto done;
     copyTVrel(L, out, &result);
     success = 1;
   }

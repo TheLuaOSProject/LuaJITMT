@@ -16,6 +16,7 @@
 #include "lj_err.h"
 #include "lj_oserr.h"
 #include "lj_state.h"
+#include "lj_str.h"
 #include "lj_arena.h"
 #include "lj_safepoint.h"
 #include "lj_tab.h"
@@ -5246,6 +5247,8 @@ confirm:
        tv_rawload(&key_confirm) != tv_rawload(&keysnap)))
     status = LJ_TAB_ROOTED_GET_RETRY;
 
+  if (status == LJ_TAB_ROOTED_GET_FOUND && !lj_str_tv_rescue_held(&result))
+    status = LJ_TAB_ROOTED_GET_RETRY;
   curout = outstack ? restorestack(L, outofs) : outroot;
   if (status == LJ_TAB_ROOTED_GET_FOUND) {
     copyTVrel(L, curout, &result);
@@ -5620,7 +5623,8 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
     ** intact; retrying after copyTVrel() would make an aliased key/output root
     ** name the previous result instead of the requested key. It would also
     ** briefly expose an internal marker to a concurrent root scanner. */
-    if (LJ_UNLIKELY(!tab_tv_forjit_loadable(&result))) {
+    if (LJ_UNLIKELY(!tab_tv_forjit_loadable(&result) ||
+		    !lj_str_tv_rescue_held(&result))) {
       lj_gc2_smr_read_leave(G(L));
       lj_gc2_lease_release(&result_lease);
       lj_gc2_lease_release(&key_lease);
@@ -9826,8 +9830,11 @@ int lj_tab_next_rooted(lua_State *L, cTValue *tabroot, cTValue *keyroot,
     }
     outval_status = lj_gc2_tv_lease_acquire(G(L), &nextval,
 					     &outval_lease);
-    if (LJ_UNLIKELY(outval_status != LJ_GC2_TV_EDGE_VALID)) {
+    if (LJ_UNLIKELY(outval_status != LJ_GC2_TV_EDGE_VALID ||
+		    !lj_str_tv_rescue_held(&nextkey) ||
+		    !lj_str_tv_rescue_held(&nextval))) {
       lj_gc2_smr_read_leave(G(L));
+      lj_gc2_lease_release(&outval_lease);
       lj_gc2_lease_release(&outkey_lease);
       lj_gc2_lease_release(&key_lease);
       lj_gc2_lease_release(&table_lease);

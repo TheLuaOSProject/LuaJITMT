@@ -752,6 +752,17 @@ LJ_FUNC uint32_t lj_str_reclaim_retired(global_State *g,
 LJ_FUNC TGState *lj_str_source_pin(lua_State *L, GCstr *s);
 LJ_FUNC void lj_str_source_unpin(TGState *tg);
 LJ_FUNC int lj_str_gc2_rescue_held(GCstr *s, StrCanonRec *expected);
+
+/* Prepare a retained value before publishing a new strong edge. */
+static LJ_AINLINE int lj_str_tv_rescue_held(cTValue *tv)
+{
+  GCstr *s;
+  if (!tvisstr(tv))
+    return 1;
+  s = strV(tv);
+  return lj_str_canon_acq(s) == LJ_STR_CANON_LIVE ||
+    lj_str_gc2_rescue_held(s, NULL);
+}
 LJ_FUNC void lj_str_gc2_reclaim_request(global_State *g);
 LJ_FUNC void lj_str_gc2_reclaim_cancel(global_State *g);
 LJ_FUNC void lj_str_gc2_sweep_begin(global_State *g, int major);
