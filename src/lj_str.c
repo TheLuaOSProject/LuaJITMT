@@ -693,10 +693,11 @@ static void strtab_help_expand_bucket(lua_State *L, StrTabHdr *source,
   }
   for (MSize side = 0; side < 2; side++) {
     uintptr_t unset = LJ_STRHASH_FROZEN;
+    uintptr_t marker = edge & LJ_STRHASH_SECONDARY;
     if (last[side])
       lj_str_ref_store_rel(lj_str_nodelink(target, last[side]), 0);
     (void)lj_str_link_cas_acqrel(&target->bucket[i + side * split],
-                                 &unset, (uintptr_t)first[side]);
+                                 &unset, (uintptr_t)first[side] | marker);
   }
   if (la_cas32(&target->copy_cursor, &cursor, i, LA_ACQ_REL, LA_ACQ)) {
 #ifdef LJ_STR_TEST_HELPERS
@@ -753,16 +754,16 @@ void lj_str_expand_terminal(lua_State *L)
     abort();
 }
 
-/* A plain expansion preserves each key's sparse hash. Each target bucket
-** maps to exactly one source bucket, so no later migration can touch a
-** completed source's destinations. Once published, those buckets are
-** ordinary CAS interning targets even before the global header handoff. */
+/* Each target bucket maps to one source bucket. During a helpable expansion
+** the target primary marker may still be unset even when its dense route is
+** ready. Select the hash with the source marker until global handoff. */
 static StrTabHdr *strtab_enter_completed(lua_State *L, global_State *g,
                                         StrHash sparse, const char *bytes,
-                                        MSize len)
+                                        MSize len, int *selected_alg)
 {
   TGState *tg = L2TG(L);
   StrTabHdr *source, *target, *result = NULL;
+  int hashalg = -1;
   if (lj_tg_strtab_active_depth_acq(tg) != 0 || !lj_gc2_smr_read_try(g))
     return NULL;
   source = lj_str_tabh_acq(g);
@@ -770,9 +771,17 @@ static StrTabHdr *strtab_enter_completed(lua_State *L, global_State *g,
     uintptr_t topology = lj_str_topology_acq(source);
     MSize i = sparse & source->mask;
     target = lj_str_expand_target(topology);
-    if (target)
+    if (target) {
+#if LUAJIT_SECURITY_STRHASH
+      if (lj_str_hashsecondary_acq(&source->bucket[i])) {
+        hashalg = 1;
+        i = hash_dense(g->str.seed, sparse, bytes, len) & source->mask;
+      } else {
+        hashalg = 0;
+      }
+#endif
       strtab_help_expand(L, source, target, i);
-    else {
+    } else {
       target = (StrTabHdr *)la_loadptr_acq((void *const *)&source->expand_to);
       if (i < la_load32_acq(&source->copy_cursor))
         target = NULL;
@@ -787,10 +796,12 @@ static StrTabHdr *strtab_enter_completed(lua_State *L, global_State *g,
       current = lj_str_tabh_acq(g);
       if ((current == source || current == target) &&
           !strtab_intern_blocked(g, target, strtab_resize_acq(target),
-                                 sparse, bytes, len))
+                                 sparse, bytes, len)) {
+        *selected_alg = current == source ? hashalg : -1;
         result = target;
-      else
+      } else {
         strtab_active_leave(tg, target);
+      }
     }
   }
   lj_gc2_smr_read_leave(g);
@@ -825,15 +836,17 @@ restart:
   oldmask = oldhdr ? oldhdr->mask : ~(MSize)0;
 
   if (oldhdr && newmask == (oldmask << 1) + 1u &&
-      (oldmask & (oldmask + 1u)) == 0 &&
-      !(lj_str_topology_acq(oldhdr) & LJ_STRTAB_TOPO_SECOND)) {
-    uintptr_t expect = 0;
-    if (lj_tg_strtab_active_depth_acq(L2TG(L)) != 0 ||
+      (oldmask & (oldmask + 1u)) == 0) {
+    uintptr_t expect = lj_str_topology_acq(oldhdr);
+    if ((expect & ~LJ_STRTAB_TOPO_SECOND) != 0 ||
+        lj_tg_strtab_active_depth_acq(L2TG(L)) != 0 ||
         !lj_gc2_smr_read_try(g)) {
       lj_mem_free(g, newhdr, newsize);
       return;
     }
     newhdr->link_slot = 1u - oldhdr->link_slot;
+    newhdr->has_secondary = (expect & LJ_STRTAB_TOPO_SECOND) != 0;
+    newhdr->topology = expect;
     newhdr->copy_cursor = oldmask + 1u;
     for (i = 0; i <= newmask; i++)
       lj_str_ref_store_rel(&newtab[i], LJ_STRHASH_FROZEN);
@@ -1364,7 +1377,7 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
     int skip_rehash = 0;
 #endif
     for (;;) {
-      int blocked = 0;
+      int blocked = 0, selected_alg = -1;
       StrTabHdr *hdr = strtab_enter(L, g, qhash, str, len, &blocked);
       GCRef *strtab;
       GCRef *head, *link;
@@ -1374,7 +1387,7 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
       uintptr_t want;
       int grow, qretry;
       if (!hdr && blocked)
-	hdr = strtab_enter_completed(L, g, qhash, str, len);
+	hdr = strtab_enter_completed(L, g, qhash, str, len, &selected_alg);
       if (LJ_UNLIKELY(hdr == NULL)) {
 	if (blocked) {
 	  GCstr *hit = strtab_resize_hit(L, str, len, qhash);
@@ -1399,7 +1412,8 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
       head = &strtab[hash & mask];
       headu = lj_str_link_load_acq(head);
 #if LUAJIT_SECURITY_STRHASH
-      if (LJ_UNLIKELY(headu & LJ_STRHASH_SECONDARY)) {
+      if (LJ_UNLIKELY(selected_alg < 0 ? (headu & LJ_STRHASH_SECONDARY) :
+                      selected_alg != 0)) {
 	hashalg = 1;
 	hash = hash_dense(g->str.seed, hash, str, len);
 	head = &strtab[hash & mask];

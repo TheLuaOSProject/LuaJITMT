@@ -400,6 +400,7 @@ static void check_paused_topology(lua_State *L, PausedTopology *p,
   LJThr peer;
   uint32_t i;
   GCstr *expected, *dense_expected = NULL, *inserted = NULL;
+  GCRef *pending_primary = NULL;
   const char *identity;
   char new_key[72];
   size_t new_len = 0, observed = 0;
@@ -449,12 +450,20 @@ static void check_paused_topology(lua_State *L, PausedTopology *p,
       &target->bucket[hash & target->mask])) == obj2gco(inserted));
     lua_pushlstring(L, new_key, new_len);
     assert(strV(L->top - 1) == inserted);
+    if (expected->hashalg) {
+      MSize sparse = test_hash_sparse(g->str.seed, bytes, (MSize)len);
+      assert((sparse & p->hdr->mask) < (expected->hash & p->hdr->mask));
+      pending_primary = &target->bucket[sparse & target->mask];
+      assert(lj_str_link_load_acq(pending_primary) == LJ_STRHASH_FROZEN);
+    }
   }
   /* Run the ordinary public interner after the writer has already changed
   ** a chain link, while its claim remains installed on the old header. */
   lua_pushlstring(L, bytes, len);
   assert(strV(L->top - 1) == expected);
   assert(lua_tolstring(L, -1, &observed) == identity && observed == len);
+  if (pending_primary)
+    assert(lj_str_link_load_acq(pending_primary) == LJ_STRHASH_FROZEN);
   if (p->dense_source) {
     /* This key's primary bucket is open, but its dense chain is the source
     ** being moved. It must use the retained hit, not certify a false miss. */
@@ -594,7 +603,7 @@ static void exercise_paused_topology_hits(void)
 #if LUAJIT_SECURITY_STRHASH
   {
     enum { CHAIN = 34u };
-    PausedTopology rehash = { 0 };
+    PausedTopology rehash = { 0 }, densegrow = { 0 };
     StrTabHdr *hdr = lj_str_tabh_acq(g);
     char names[CHAIN + 1u][64], dense_name[64];
     MSize bucket, source = 0, cache_mask = LJ_STR_RESIZE_HIT_COUNT - 1u;
@@ -622,7 +631,8 @@ static void exercise_paused_topology_hits(void)
       dense = lj_str_new(L, dense_name, (size_t)len);
       assert(dense->hashalg == 1);
       source = dense->hash & hdr->mask;
-      if ((source & cache_mask) != (bucket & cache_mask))
+      if (source > bucket && source < hdr->mask &&
+          (source & cache_mask) != (bucket & cache_mask))
 	break;
     }
     collect_collision_names(g, hdr, source, "paused-secondary-rehash",
@@ -634,6 +644,11 @@ static void exercise_paused_topology_hits(void)
     rehash.dense_source = dense_name;
     check_paused_topology(L, &rehash, names[CHAIN - 1u],
 			  strlen(names[CHAIN - 1u]));
+    assert(lj_str_second_acq(g));
+    densegrow.stage = LJ_STR_TEST_CANON_EXPAND_FROZEN;
+    densegrow.target_mask = (hdr->mask << 1) + 1u;
+    check_paused_topology(L, &densegrow, dense_name, strlen(dense_name));
+    assert(lj_str_mask_acq(g) == densegrow.target_mask);
     assert(lj_str_second_acq(g));
   }
 #endif
