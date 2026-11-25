@@ -578,8 +578,8 @@ static void tg_attach_wait_trace_boundary(global_State *g, TGState *tg)
       (void)lj_safepoint_poll_tg(tg);
       continue;
     }
-    if (leader == LJ_SAFEPOINT_MARK_ACTIVATION_LEADER &&
-	lj_gc2_mark_activation_continue(g))
+    if (leader == LJ_SAFEPOINT_MARK_EPOCH_LEADER &&
+	lj_gc2_mark_epoch_continue(g))
       continue;
     gc2_hs_leader_futex_wait(g, leader, 1000000);
   }
