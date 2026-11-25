@@ -72,11 +72,19 @@ The lifetime rules follow the removal and reclamation split in RCU. C11 §5.1.2.
 - Callback creation, invocation, replacement and release can use already committed signatures during a paused `ffi.cdef`. Existing struct allocation also completes during that pause. Continue through ordinary field lookup, enum conversion and independently interned anonymous types while a declaration is provisional or rolls back.
 - The sustained automatic string workload is still open. With a native peer and two GC workers, an experimental 80-round run completed 24 collections and ended around 1.85 GiB with 162,545 quarantined strings. Establish the bound with continuing allocations, a checked native loop result, actual unmaps, and valid C borrows. Also exercise concurrent automatic growth of the primary intern table and resizing of the quarantine directory as its population grows.
 
+## Progress after b1.2.7
+
+- Public `lua_next` retains the caller's receiver across storage changes and stack relocation, including registry, environment and upvalue receivers. Shared table growth releases all unpublished storage when a reservation fails. Embedding tests inject failure at each reservation during dense growth and sparse shrink, then continue reading and writing the same table.
+- The main intern table uses a full-input keyed hash. Optional directory growth happens before constructing a string and an allocation failure leaves the previous directory usable. Quarantined strings retain their original bucket while new records enter successively larger directories. A paused publisher can finish across multiple directory installations and its pinned string remains readable.
+- A one-unit collector step charges each completed arena against its work limit. An automatic turn that yields to native execution before doing sweep work leaves collection due on the next allocation. Continue measuring actual frees and heap occupancy with ordinary automatic collection while the peer still runs.
+- b1.2.7 could abort during FFI worker detach. The collector sampled the next allocation while validating a retained cdata object's extent. Small cdata now carries its exact allocation size in its existing header. The callback workload passed 2,500 fresh processes with 4–12 workers after this repair. An independent-universe embedding test also checks that a deferred root flush leaves pending roots intact when the OS thread holds a reader in another Lua state.
+- C type slots and their directory have state lifetime. A second producer can finish a suspended grow, and a declaration that commits during growth keeps its fields and size. Exercise independent anonymous type publication and rollback when a declaration is suspended. Continue the native and foreign-borrow soaks with zero and two collector workers before closing the automatic memory bound.
+
 ## Correctness and progress checks
 
 - Run both stock corpora, the public embedding and FFI cases, first-attach/flush races, assertion builds, ASan, TSan C drivers and the torture and weak/finalizer soaks. Keep the stock bytecode producer separate from the executable under test. Record which cases are eligible for each build.
 - Run stalled-actor tests through ordinary API and bytecode entry points. Exercise sustained allocation, retention and reclamation with live workers, including after repeated worker detach. Explicit channel rendezvous, joins and module initialization have their own documented synchronization semantics.
-- Publish tested checkpoints as prereleases with their outstanding issues. A stable lockless milestone requires the public semantic, lifetime and progress checks on one revision.
+- Push tested commits regularly. Group completed work into larger releases and run the public semantic, lifetime and progress checks together on each candidate. Record outstanding issues in prerelease notes.
 
 ## Deferred performance work
 
