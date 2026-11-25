@@ -17,6 +17,14 @@ LJ_FUNC uint32_t lj_safepoint_poll_tg(TGState *tg);
 LJ_FUNCA void lj_safepoint_checkstop(lua_State *L, uint32_t actions);
 LJ_FUNCA void lj_safepoint_vm_checkpoint(lua_State *L, int trace_exit);
 LJ_FUNC uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions);
+LJ_FUNC void lj_safepoint_idle_policy(global_State *g);
+
+static LJ_AINLINE uint32_t lj_safepoint_idle_policy_actions(global_State *g)
+{
+  return LJ_GC2_HS_ALLOC_WHITE | (gc2_generational_acq(g) ?
+    LJ_GC2_HS_ENABLE_BARRIER : LJ_GC2_HS_DISABLE_BARRIER);
+}
+
 /* Reserved outside the range of real safepoint leader thread IDs. */
 #define LJ_SAFEPOINT_RESUMABLE_LEADER UINT32_MAX
 #define LJ_SAFEPOINT_SWEEP_START (LJ_GC2_HS_DISABLE_BARRIER | LJ_GC2_HS_FLUSH_SSB)

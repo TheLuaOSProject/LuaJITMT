@@ -967,6 +967,9 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
   TGState *tg;
   uint32_t signaled = 0;
   int resumable = safepoint_resumable_actions(actions);
+  int local_release = resumable ||
+    actions == (LJ_GC2_HS_ALLOC_WHITE | LJ_GC2_HS_ENABLE_BARRIER) ||
+    actions == (LJ_GC2_HS_ALLOC_WHITE | LJ_GC2_HS_DISABLE_BARRIER);
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
@@ -1003,11 +1006,11 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
     ** the request and acknowledges itself, or the leader observes native and
     ** completes the remote snapshot before clearing the consumed poll. */
     la_fence_seq();
-    if (resumable && lj_tg_reqmask_acq(tg) == 0 &&
+    if (local_release && lj_tg_reqmask_acq(tg) == 0 &&
 	lj_tg_hs_epoch_ack_acq(tg) == epoch) {
       /* The owner can consume the request before our poll store. This turn
-      ** has not begun remote acknowledgement and the collector token excludes
-      ** another executor. Remove the redundant signal so the owner can run
+      ** has not begun remote acknowledgement and the leader excludes another
+      ** executor. Remove the redundant signal so the owner can run
       ** while other TGs still owe this epoch, and preserve fresh STOPREQ. */
       safepoint_clear_poll(tg);
       safepoint_test_signal_note_consumed_clear(tg, epoch);
@@ -1292,15 +1295,25 @@ int lj_safepoint_resumable_epoch_try(global_State *g, uint32_t actions, int star
   return 1;
 }
 
-uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
+static uint32_t safepoint_handshake(global_State *g, uint32_t actions,
+				    int idle_policy)
 {
   uint64_t epoch;
   uint32_t leader;
   uint32_t signaled, oldpending;
-  if (!g || actions == 0)
+  if (!g || (actions == 0 && !idle_policy))
     return 0;
   leader = safepoint_leader_enter(g);
   safepoint_finish_prior_epoch(g);
+  if (idle_policy) {
+    /* Another setter or phase transition can win while we wait. Select the
+    ** current mode under leadership, before publishing this policy. */
+    if (gc2_phase_acq(g) != LJ_GC2_IDLE) {
+      safepoint_leader_leave(g, leader);
+      return 0;
+    }
+    actions = lj_safepoint_idle_policy_actions(g);
+  }
   gc2_hs_actions_rel(g, actions);  /* 05 section 5.4.2. */
   gc2_hs_pending_rel(g, 1);  /* 09 section 9.3 leader sentinel. */
   epoch = gc2_hs_epoch_rlx(g) + 1u;
@@ -1367,4 +1380,14 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
   safepoint_rearm_fresh_stopreq_polls(g);
   lj_gc2_smr_read_leave(g);
   return signaled;
+}
+
+uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
+{
+  return safepoint_handshake(g, actions, 0);
+}
+
+void lj_safepoint_idle_policy(global_State *g)
+{
+  (void)safepoint_handshake(g, 0, 1);
 }

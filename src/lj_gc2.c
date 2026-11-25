@@ -3074,6 +3074,8 @@ int lj_gc2_collect_active(lua_State *L)
   ** fail-closed instead of self-waiting forever for impossible work. */
   if (gc2_recovery_stalled_failed(g))
     return 0;
+  /* Full collection can wait for the result. Its root and policy handshakes
+  ** must release collector ownership between attempts, just like a GC step. */
   if (gc2_request_major_explicit(g, tg) && gc2_mark_begin(g, 1)) {
     need_major = 0;
   }
@@ -4573,18 +4575,6 @@ void lj_gc2_force_major(global_State *g)
     gc2_force_major_rel(g, 1);
 }
 
-static uint32_t gc2_idle_barrier_actions(global_State *g, int flush_ssb)
-{
-  uint32_t actions = LJ_GC2_HS_ALLOC_WHITE;
-  if (flush_ssb)
-    actions |= LJ_GC2_HS_FLUSH_SSB;
-  if (gc2_generational_acq(g))
-    actions |= LJ_GC2_HS_ENABLE_BARRIER;
-  else
-    actions |= LJ_GC2_HS_DISABLE_BARRIER;
-  return actions;
-}
-
 static LJThrGC2TLS *gc2_idle_transition_enter(global_State *g)
 {
   LJThrGC2TLS *tls = gc2_tls_current();
@@ -4605,10 +4595,11 @@ static LJThrGC2TLS *gc2_idle_transition_enter(global_State *g)
   return tls;
 }
 
-static void gc2_idle_transition_handshake(global_State *g, uint32_t actions)
+static void gc2_idle_transition_handshake(global_State *g)
 {
   LJThrGC2TLS *tls = gc2_idle_transition_enter(g);
-  (void)lj_gc2_handshake(g, actions);
+  la_fence_seq();  /* Pair IDLE publication with the mode setter's recheck. */
+  lj_safepoint_idle_policy(g);
   tls->idle_transition_gate_g = NULL;
 }
 
@@ -4691,8 +4682,11 @@ void lj_gc2_set_generational(global_State *g, int enabled)
     gc2_minor_survival_bytes_rel(g, 0);
     gc2_update_public_minor_gates(g);
   }
+  /* Either the transition samples the new mode after publishing IDLE, or
+  ** this setter observes IDLE and publishes the policy under leadership. */
+  la_fence_seq();
   if (gc2_phase_acq(g) == LJ_GC2_IDLE)
-    lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
+    lj_safepoint_idle_policy(g);
 }
 
 int lj_gc2_mark_phase_active(global_State *g)
@@ -6762,8 +6756,7 @@ void lj_gc2_preserve_abort_to_idle(global_State *g)
   if (phase != LJ_GC2_IDLE)
     gc2_preserve_abort_to_idle_add(g, 1);
   lj_gc2_worker_wake(g);
-  (void)gc2_idle_transition_handshake(
-    g, gc2_idle_barrier_actions(g, 0));
+  gc2_idle_transition_handshake(g);
   /* Queue references and NEEDSCAN membership remain a conservative next-cycle
   ** root set. Walking them here would race a worker-owned detached suffix or a
   ** resumed idle-generational producer. The next MARK start preserves and
@@ -6834,14 +6827,13 @@ static void gc2_sweep_close_cancel_owned(global_State *g)
 ** an unrelated synchronous handshake cannot strand the transition here. */
 static int gc2_sweep_close_commit_owned(global_State *g)
 {
-  uint32_t actions, phase = LJ_GC2_SWEEP;
+  uint32_t phase = LJ_GC2_SWEEP;
   uint64_t live;
   (void)gc2_flush_ssb(g, G2TG(g), 0);
   (void)gc2_mark_drain_owned_bounded(g, LJ_GC2_SWEEP_BATCH);
   if (gc2_finalizer_spawn_deferred(g) || !gc2_sweep_close_ready(g, 1) ||
       !lj_safepoint_resumable_epoch_reserve(g))
     return 0;
-  actions = gc2_idle_barrier_actions(g, 0);
   lj_str_gc2_sweep_finish(g);
   live = lj_gc2_sweep_live_aggregate(g);
   lj_gc2_update_minor_survival_policy(g, live);
@@ -6862,7 +6854,9 @@ static int gc2_sweep_close_commit_owned(global_State *g)
   gc2_sweep_root_scanned_rel(g, 0);
   gc2_sweep_root_done_rel(g, 0);
   gc2_sweep_root_cursor_rel(g, NULL);
-  la_store32_rel(&g->gc2.fixpoint_epoch_actions, actions);
+  la_fence_seq();  /* Pair IDLE publication with the mode setter's recheck. */
+  la_store32_rel(&g->gc2.fixpoint_epoch_actions,
+		 lj_safepoint_idle_policy_actions(g));
   return 1;
 }
 
@@ -7107,8 +7101,7 @@ void lj_gc2_cycle_to_idle(global_State *g)
   gc2_sweep_root_cursor_rel(g, NULL);
   gc2_update_public_minor_gates(g);
   gc2_worker_release(g);
-  (void)gc2_idle_transition_handshake(
-    g, gc2_idle_barrier_actions(g, 0));
+  gc2_idle_transition_handshake(g);
   /* Forced close preserves queue membership for the next MARK cycle. This is
   ** conservative and avoids cross-owner queue/cursor mutation after IDLE. */
   (void)lj_tg_reclaim_dead(g);
@@ -23332,10 +23325,8 @@ static int gc2_mark_complete_result(global_State *g, lua_State *L,
     return GC2_DRIVER_COMPLETE;
   if (gc2_deferred_epoch_acq(g) != defer0)
     return GC2_DRIVER_DEFERRED;
-  /* The published intent survives an ownership loss. Automatic GC reaches
-  ** this path through step_explicit(L, 1), so it must return without parking
-  ** behind the peer. Explicit collection/step drivers own their retry policy
-  ** above; background workers retry the same intent after wake or timeout. */
+  /* The published intent survives an ownership loss. Bounded steps return
+  ** to the mutator, full collection retries, and workers can help on wake. */
   return gc2_phase_acq(g) == LJ_GC2_WEAK ?
     GC2_DRIVER_COMPLETE : GC2_DRIVER_INCOMPLETE;
 }

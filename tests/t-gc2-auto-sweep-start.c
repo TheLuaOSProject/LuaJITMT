@@ -20,6 +20,7 @@ static atomic_int ready, enabled, requested, parked, release_peer, timeout_hit;
 static _Atomic(TGState *) peer_tg;
 static int pool, stop_pool, terminal, pool_close_hot;
 static atomic_int pool_close_started, hot_alloc_seen;
+static atomic_int change_mode, changed_mode;
 static uint32_t target_phase = LJ_GC2_SWEEP;
 static uint32_t grace_round;
 static atomic_uint grace_signals;
@@ -71,9 +72,15 @@ static int hold_peer(lua_State *L)
   lj_native_enter_l(L, &frame);
   atomic_store(&peer_tg, L2TG(L));
   atomic_store(&ready, 1);
-  while (!atomic_load(&requested) && !atomic_load(&release_peer))
+  while (!atomic_load(&requested) && !atomic_load(&change_mode) &&
+	 !atomic_load(&release_peer))
     pause_briefly();
   (void)lj_native_leave_l(L, &frame);
+  if (atomic_load(&change_mode)) {
+    assert(gc2_phase_acq(G(L)) == LJ_GC2_SWEEP);
+    lj_gc2_set_generational(G(L), 1);
+    atomic_store(&changed_mode, 1);
+  }
   if (late_roots) {
     lua_State *co = lua_newthread(L);
     lua_pushcfunction(co, hold_fresh_stack);
@@ -139,6 +146,18 @@ static int before_actions(global_State *g, uint32_t actions)
   return 1;
 }
 
+void __real_lj_str_gc2_sweep_finish(global_State *);
+void __wrap_lj_str_gc2_sweep_finish(global_State *g)
+{
+  if (terminal && (target & LJ_GC2_HS_ENABLE_BARRIER) &&
+      gc2_sweep_table_close_gate_sc(g) && !atomic_exchange(&change_mode, 1)) {
+    /* FLUSH has completed but the next IDLE policy has not been published. */
+    while (!atomic_load(&changed_mode) && !atomic_load(&release_peer))
+      pause_briefly();
+  }
+  __real_lj_str_gc2_sweep_finish(g);
+}
+
 uint32_t __real_lj_str_gc2_sweep_step(global_State *, uint32_t);
 uint32_t __wrap_lj_str_gc2_sweep_step(global_State *g, uint32_t limit)
 {
@@ -195,8 +214,6 @@ static int begin(lua_State *L)
     for (i = 0; i < 10000 && gc2_phase_acq(g) != LJ_GC2_SWEEP; i++)
       lua_gc(L, LUA_GCSTEP, 1);
     assert(i != 10000 && !gc2_sweep_bridge_ready_acq(g));
-    if (terminal && (target & LJ_GC2_HS_ENABLE_BARRIER))
-      lj_gc2_set_generational(g, 1);
     lua_gc(L, LUA_GCSTOP, 0);
   }
   if (pool) {
@@ -297,6 +314,8 @@ static int finish(lua_State *L)
     assert(gc2_jit_phase_gate_acq(g) == 0);
     assert(gc2_sweep_bridge_ready_acq(g) == (grace_round != 0 || late_roots || terminal));
     if (terminal) {
+      if (target & LJ_GC2_HS_ENABLE_BARRIER)
+	assert(atomic_load(&changed_mode));
       assert(gc2_sweep_table_close_gate_sc(g));
       assert(gc2_sweep_root_scanned_acq(g) == (target_phase == LJ_GC2_SWEEP));
     }
