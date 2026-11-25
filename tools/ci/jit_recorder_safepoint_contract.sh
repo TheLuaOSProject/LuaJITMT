@@ -169,7 +169,9 @@ test "$stitch_gate" -lt "$stitch_abort" && test "$stitch_abort" -lt "$stitch_ret
 error_save=$(line_of "$trace_ins" 'lj_oserr_save(&oserr)' 1)
 error_cleanup=$(line_of "$trace_ins" 'lj_trace_abort_owner(L)' 1)
 error_restore=$(line_of "$trace_ins" 'lj_oserr_restore(&oserr)' 1)
-error_throw=$(line_of "$trace_ins" 'lj_err_throw(L, errcode)' 1)
+# A detached callback also rethrows, before the branch that owns scratch.
+# Check the throw within the cleanup path whose OS error was just restored.
+error_throw=$(awk -v start="$error_restore" 'NR > start && /lj_err_throw\(L, errcode\)/ { print NR; exit }' "$trace_ins")
 for value in "$error_save" "$error_cleanup" "$error_restore" "$error_throw"; do
   test -n "$value" || {
     echo "recorder external-error cleanup lost OS-error preservation" >&2
