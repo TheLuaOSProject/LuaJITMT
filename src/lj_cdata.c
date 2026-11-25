@@ -537,6 +537,7 @@ static int cdata_fin_store_enabled(lua_State *L, global_State *g,
     lj_ctype_fin_order_publish(cts, *ordp, obj2gco(cd), t, tv);
     *ordp = NULL;
   }
+  lj_cdata_fin_cancel_ticket(cd);
   cdata_fin_test_pause(LJ_CDATA_FIN_PAUSE_ENABLE_ORDER);
   lj_obj_addgcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
   if (fresh)
@@ -566,6 +567,7 @@ static int cdata_fin_clear_claimed(lua_State *L, global_State *g,
   ** clear still has to suppress under this exact slot transaction. */
   if (tvisnil(old) &&
       !(lj_obj_gcflags(obj2gco(cd)) & LJ_GC_CDATA_FIN)) {
+    lj_cdata_fin_cancel_ticket(cd);
     cdata_fin_store_exact_or_abort(g, lease, key, old,
 				   "FINREG nil clear lost slot claim");
     lj_ctype_fin_lease_release(lease);
@@ -582,6 +584,7 @@ static int cdata_fin_clear_claimed(lua_State *L, global_State *g,
     return 0;
   }
   UNUSED(retired);
+  lj_cdata_fin_cancel_ticket(cd);
   lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
   lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
   cdata_fin_test_pause(LJ_CDATA_FIN_PAUSE_CLEAR_BEFORE_NIL);
@@ -650,7 +653,24 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
       continue;
     }
     if (rc == LJ_CTYPE_FIN_MISS) {
-      if (!enabled) {  /* Missing clear is a no-op; avoid structural insert. */
+      if (!enabled) {
+        /* A dead weak key can disappear before the queued callback is
+        ** dispatched. Certify absence while excluding a competing insert. */
+        if (cdata_flags_acq(cd) & LJ_CDATA_FIN_QUEUED) {
+          if (!lj_cdata_fin_insert_try(cd)) {
+            cdata_fin_claim_wait(L);
+            continue;
+          }
+          rc = lj_ctype_fin_get_inserting(cts, &key, &held);
+          if (rc == LJ_CTYPE_FIN_MISS)
+            lj_cdata_fin_cancel_ticket(cd);
+          lj_ctype_fin_lease_release(&held);
+          lj_cdata_fin_insert_leave(cd);
+          if (rc != LJ_CTYPE_FIN_MISS) {
+            cdata_fin_claim_wait(L);
+            continue;
+          }
+        }
 	cdata_fin_test_pause(LJ_CDATA_FIN_PAUSE_CLEAR_MISS);
 	goto done;
       }

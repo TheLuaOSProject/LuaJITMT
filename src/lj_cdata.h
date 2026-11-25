@@ -141,6 +141,23 @@ static LJ_AINLINE void lj_cdata_fin_insert_leave(GCcdata *cd)
   }
 }
 
+/* A non-reusable delivery ticket for the one outstanding ordered queue
+** envelope. FINALIZED excludes another preclaim until this envelope has
+** completed. Cancellation stays sticky across any number of re-arms. */
+#define LJ_CDATA_FIN_QUEUED      0x0040u
+#define LJ_CDATA_FIN_CANCELLED   0x0080u
+#define LJ_CDATA_FIN_TICKET     (LJ_CDATA_FIN_QUEUED | LJ_CDATA_FIN_CANCELLED)
+
+static LJ_AINLINE void lj_cdata_fin_cancel_ticket(GCcdata *cd)
+{
+  uint16_t flags = cdata_flags_acq(cd);
+  while ((flags & LJ_CDATA_FIN_TICKET) == LJ_CDATA_FIN_QUEUED) {
+    uint16_t next = (uint16_t)(flags | LJ_CDATA_FIN_CANCELLED);
+    if (la_cas16(&cd->flags, &flags, next, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
+}
+
 LJ_FUNC void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj,
 			     uint32_t it);
 /* One-shot keyed claims for an exact CTypeFinLease. RETRY means the caller must

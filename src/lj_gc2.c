@@ -5544,7 +5544,7 @@ static int gc2_call_finalizer(global_State *g, lua_State *L,
   cbL->top = top+1;
   errcode = gc2_finalizer_pcall(g, cbL, top, &continue_gc);
 #if LJ_HASFFI
-  /* The queue claimed this delivery's FIN bit before entering the
+  /* The queue claimed this delivery before entering the
   ** callback. A new registration in the callback, or on its resurrected
   ** object afterwards, belongs to a later collection. Retire the old
   ** delivery marker without changing that registration's FIN bit. */
@@ -13107,7 +13107,6 @@ static void gc2_finreg_cdata_finalizer_enqueue_admitted(global_State *g,
   ** admission after unlinking the root: a transient rescue/huge-reader miss
   ** there would otherwise consume the finalizer and silently drop its
   ** callback. */
-  markfinalized(o);
   gc2_finreg_queue_mark(g, o);
   gc2_finreg_cdata_queued_add(g, 1);
   lj_gc2_finalizer_enqueue_fin(g, o, fin);
@@ -13122,6 +13121,7 @@ static void lj_gc2_finreg_cdata_finalizer_enqueue(global_State *g, GCobj *o,
 #if LJ_HASFFI
   if (!gc2_finreg_cdata_obj_valid(g, o))
     return;
+  lj_obj_addgcflags_atomic(o, LJ_GC_FINALIZED);
   gc2_finreg_cdata_finalizer_enqueue_admitted(g, o, fin);
 #else
   UNUSED(g); UNUSED(o); UNUSED(fin);
@@ -13212,6 +13212,39 @@ static int gc2_finreg_cdata_store_claim(global_State *g,
   gc2_activation_pin_no_reclaim(g);
   gc2_marks_this_round_add(g, 1);
   lj_gc2_worker_wake(g);
+  return 0;
+}
+
+static uint16_t gc2_finreg_cdata_ticket_remove(GCcdata *cd)
+{
+  uint16_t flags = cdata_flags_acq(cd);
+  while (flags & LJ_CDATA_FIN_QUEUED) {
+    uint16_t next = (uint16_t)(flags & ~LJ_CDATA_FIN_TICKET);
+    if (la_cas16(&cd->flags, &flags, next, LA_ACQ_REL, LA_ACQ))
+      return flags & LJ_CDATA_FIN_TICKET;
+  }
+  return 0;
+}
+
+/* Transfer the live slot generation to the one outstanding queue envelope
+** before a new publisher can acquire the nil slot. A subsequent ffi.gc can
+** cancel the ticket, but dispatch never owns the FIN bit of a new slot. */
+static int gc2_finreg_cdata_ticket_publish(global_State *g,
+                                          CTypeFinLease *lease, cTValue *key,
+                                          GCobj *o)
+{
+  TValue nilv;
+  setnilV(&nilv);
+  lj_obj_addgcflags_atomic(o, LJ_GC_FINALIZED);
+  cdata_flags_or_atomic(gco2cd(o), LJ_CDATA_FIN_QUEUED);
+  lj_obj_cleargcflags_atomic(o, LJ_GC_CDATA_FIN);
+  if (gc2_finreg_cdata_store_claim(g, lease, key, &nilv)) {
+    gc2_finreg_cdata_clears_add(g, 1);
+    return 1;
+  }
+  (void)gc2_finreg_cdata_ticket_remove(gco2cd(o));
+  lj_obj_addgcflags_atomic(o, LJ_GC_CDATA_FIN);
+  lj_obj_cleargcflags_atomic(o, LJ_GC_FINALIZED);
   return 0;
 }
 
@@ -13390,8 +13423,7 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
       break;
     }
     if (candidate_status != GC2_FINREG_CANDIDATE_YES) {
-      if (!(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) ||
-	  (lj_obj_gcflags(o) & LJ_GC_FINALIZED)) {
+      if (!(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN)) {
 	gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
 	gc2_finreg_cdata_order_tombstones_add(g, 1);
 	if (!lj_ctype_fin_order_retire(
@@ -13423,6 +13455,14 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
       gc2_fin_order_walk_advance(&walk, 0);
       continue;
     }
+    if (fin_order_active_acq(walk.cur) != 1 ||
+        !gc2_finreg_cdata_candidate_close(o)) {
+      mark(g, &fin);
+      (void)gc2_finreg_cdata_store_claim(g, &finlease, &key, &fin);
+      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
+      gc2_fin_order_walk_advance(&walk, 1);
+      continue;
+    }
     /*
     ** 05 section 5.8: ordered FINREG identity is enough for P_WEAK
     ** discovery without root membership.
@@ -13450,9 +13490,7 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
     }
     if (!preclaim_ready ||
 	!lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)) {
-      TValue nilv;
-      setnilV(&nilv);
-      if (!gc2_finreg_cdata_store_claim(g, &finlease, &key, &nilv)) {
+      if (!gc2_finreg_cdata_ticket_publish(g, &finlease, &key, o)) {
 	gc2_finreg_queue_mark(g, o);
 	gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
 	gc2_fin_order_walk_advance(&walk, 1);
@@ -13474,9 +13512,7 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
       continue;
     }
     {
-      TValue nilv;
-      setnilV(&nilv);
-      if (!gc2_finreg_cdata_store_claim(g, &finlease, &key, &nilv)) {
+      if (!gc2_finreg_cdata_ticket_publish(g, &finlease, &key, o)) {
 	TValue unused;
 	(void)lj_gc2_finreg_cdata_preclaim_take(L, g, o, &unused);
 	gc2_finreg_queue_mark(g, o);
@@ -13582,8 +13618,7 @@ size_t lj_gc2_finreg_cdata_finalize_close(global_State *g)
       continue;
     }
     if (!gc2_finreg_cdata_candidate_close(o)) {
-      if (!(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) ||
-	  (lj_obj_gcflags(o) & LJ_GC_FINALIZED)) {
+      if (!(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN)) {
 	gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
 	if (!lj_ctype_fin_order_retire(
 	      cts, walk.prev, walk.cur, walk.next)) {
@@ -13612,6 +13647,14 @@ size_t lj_gc2_finreg_cdata_finalize_close(global_State *g)
       gc2_fin_order_walk_advance(&walk, 0);
       continue;
     }
+    if (fin_order_active_acq(walk.cur) != 1 ||
+        !gc2_finreg_cdata_candidate_close(o)) {
+      gc2_finreg_marktv(g, &fin);
+      (void)gc2_finreg_cdata_store_claim(g, &finlease, &key, &fin);
+      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
+      gc2_fin_order_walk_advance(&walk, 1);
+      continue;
+    }
     /*
     ** 05 section 5.8: ordered FINREG identity is enough for close-time
     ** discovery without root membership.
@@ -13629,9 +13672,7 @@ size_t lj_gc2_finreg_cdata_finalize_close(global_State *g)
       continue;
     }
     {
-      TValue nilv;
-      setnilV(&nilv);
-      if (!gc2_finreg_cdata_store_claim(g, &finlease, &key, &nilv)) {
+      if (!gc2_finreg_cdata_ticket_publish(g, &finlease, &key, o)) {
 	gc2_finreg_queue_mark(g, o);
 	gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
 	gc2_fin_order_walk_advance(&walk, 1);
@@ -13734,26 +13775,19 @@ int lj_gc2_finreg_cdata_pending(global_State *g)
       gc2_fin_order_walk_advance(&walk, 0);
       continue;
     }
-    if (gc2_finreg_cdata_candidate_close(o)) {
+    if (lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) {
       gc2_finreg_cdata_pending_order_hits_add(g, 1);
       gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
       pending = 1;
       break;
     }
-    if (!(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) ||
-	(lj_obj_gcflags(o) & LJ_GC_FINALIZED)) {
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      if (!lj_ctype_fin_order_retire(
-	    cts, walk.prev, walk.cur, walk.next)) {
-	gc2_fin_order_walk_retry(g);
-	pending = 1;
-	break;
-      }
-      gc2_fin_order_walk_advance(&walk, 0);
-      continue;
-    }
     gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-    gc2_fin_order_walk_advance(&walk, 1);
+    if (!lj_ctype_fin_order_retire(cts, walk.prev, walk.cur, walk.next)) {
+      gc2_fin_order_walk_retry(g);
+      pending = 1;
+      break;
+    }
+    gc2_fin_order_walk_advance(&walk, 0);
   }
   gc2_fin_order_walk_fini(&walk);
   lj_gc2_smr_read_leave(g);
@@ -13914,6 +13948,36 @@ void lj_gc2_test_finreg_cdata_finalizer_enqueue(global_State *g, GCobj *o)
   lj_gc2_finreg_cdata_finalizer_enqueue(g, o, NULL);
 }
 
+/* Exercise the ordered queue handoff without requiring timing against P_WEAK. */
+int lj_gc2_test_finreg_cdata_queue_slot(lua_State *L, GCobj *o)
+{
+#if LJ_HASFFI
+  global_State *g = G(L);
+  CTState *cts = ctype_ctsG(g);
+  CTypeFinLease lease = CTYPE_FIN_LEASE_INIT;
+  TValue key, fin;
+  size_t retired = 0;
+  int ok = 0;
+  setcdataV(L, &key, gco2cd(o));
+  if (lj_ctype_fin_get(L, cts, &key, &lease) == LJ_CTYPE_FIN_FOUND &&
+      lj_cdata_fin_claim_held(&lease, &key, &fin, 1) == LJ_CTYPE_FIN_FOUND) {
+    if (gc2_finreg_cdata_unlink_root(g, o) != LJ_GC_ROOT_UNLINK_UNPROVEN &&
+        lj_ctype_fin_order_retire_obj_complete(cts, o, &retired) &&
+        gc2_finreg_cdata_ticket_publish(g, &lease, &key, o)) {
+      gc2_finreg_cdata_finalizer_enqueue_admitted(g, o, &fin);
+      ok = 1;
+    } else {
+      (void)gc2_finreg_cdata_store_claim(g, &lease, &key, &fin);
+    }
+  }
+  lj_ctype_fin_lease_release(&lease);
+  return ok;
+#else
+  UNUSED(L); UNUSED(o);
+  return 0;
+#endif
+}
+
 int lj_gc2_test_finreg_cdata_preclaim(lua_State *L, global_State *g,
 				      GCobj *o, cTValue *fin)
 {
@@ -13968,6 +14032,14 @@ static void gc2_finreg_cdata_dispatch_clear(global_State *g, GCobj *o)
 {
   lj_obj_cleargcflags_atomic(o, LJ_GC_CDATA_FIN);
   lj_gc2_finreg_cdata_set(g, o, 0);
+}
+
+static int gc2_finreg_cdata_ticket_take(GCobj *o)
+{
+  uint16_t ticket = gc2_finreg_cdata_ticket_remove(gco2cd(o));
+  if (ticket & LJ_CDATA_FIN_CANCELLED)
+    lj_obj_cleargcflags_atomic(o, LJ_GC_FINALIZED);
+  return ticket == LJ_CDATA_FIN_QUEUED;
 }
 
 static int gc2_finreg_cdata_dispatch_claim_preclaimed(global_State *g,
@@ -14059,8 +14131,8 @@ static int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
     if (gc2_finreg_dispatch_requeue(g, o) <= LJ_GC_ROOT_LINK_DEFER)
       return GC2_FINALIZER_DISPATCH_DEFER;
     (void)lj_gc2_finreg_cdata_preclaim_take(L, g, o, &unused);
-    if (!gc2_finreg_cdata_dispatch_claim_preclaimed(g, o))
-      return 0;  /* Queued snapshot suppressed by later ffi.gc(cd, nil). */
+    if (!gc2_finreg_cdata_ticket_take(o))
+      return 0;
     copyTV(L, &tmp, fin);
     return gc2_call_finalizer(g, L, &tmp, o) ? 1 : -1;
   }
