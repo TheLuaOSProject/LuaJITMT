@@ -44,5 +44,9 @@ end
 if os.getenv('BCCELL_NOJIT') and jit then jit.off(); jit=nil end
 assert(require('threading').spawn(function()return true end):join())
 threading=nil; package.loaded.threading=nil
-arg={'--quiet'}
-dofile('test.lua')
+local suite = assert(loadfile('test.lua'))
+if #arg == 0 then
+  suite('--quiet')
+else
+  suite(unpack(arg))
+end

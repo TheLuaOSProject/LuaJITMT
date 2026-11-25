@@ -136,7 +136,8 @@ local function run_errno_fixture(t, flags, sign)
   local out = t:tmp("lj_t-ffi-errno-preservation")
   t:cc(out, { t:path("tests", "t-ffi-errno-preservation.c") }, {
     cflags = flags,
-    link_luajit = true
+    link_luajit = true,
+    libs = utils.luajit_fixture_libs()
   })
   if sign then t:run("codesign --sign - " .. utils.shell_quote(out)) end
   t:run({ out }, { timeout = "30s" })

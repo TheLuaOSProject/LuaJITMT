@@ -34,6 +34,11 @@ jobs:
           tools/ci/platform_build.sh linux-x86_64
       - name: Stock compatibility and shared-heap runtime tests
         run: tools/ci/linux_x64_shared.sh
+      - name: Check shared execution with VM and recorder assertions
+        run: |
+          make -C src clean
+          make -C src -j2 CC=clang XCFLAGS=-DLUA_USE_ASSERT BUILDMODE=static
+          tools/ci/linux_x64_shared.sh
 
   macos:
     name: macOS x86_64 build/run
