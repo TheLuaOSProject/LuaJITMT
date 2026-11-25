@@ -3074,7 +3074,11 @@ assert(live >= 4, live)
     name = "m6_jit_flush_atomic_redispatch",
     description = "JIT patch generations are decoded atomically after hotloop",
     run = function(t)
-      build_default(t)
+      build_and_run_c(t, t:tmp("lj_t-jit-stale-loop-backedge"),
+                      "t-jit-stale-loop-backedge.c", {
+        timeout = "20s",
+        libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=lj_trace_hot" }
+      })
       luajit_file(t, t:path("tests", "t-jit-flush-atomic-redispatch.lua"),
                   { lua_path = true,
                     timeout =

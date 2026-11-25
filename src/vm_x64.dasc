@@ -541,6 +541,31 @@ static void build_subroutines(BuildCtx *ctx)
 {
   |.code_sub
   |
+  |->vm_safepoint_static:
+  |  // This opcode already reached dispatch. Resume it without recording it
+  |  // twice. A hot FORL can install the recorder just before this checkpoint.
+  |  mov RBd, RDd                       // Preserve nargs+1 at function headers.
+  |  mov L:CARG1, SAVE_L
+  |  mov L:CARG1->base, BASE
+  |  mov SAVE_PC, PC
+  |  xor CARG2d, CARG2d
+  |  call extern lj_safepoint_vm_checkpoint
+  |  mov L:RA, SAVE_L
+  |  mov BASE, L:RA->base
+  |  mov RCd, [PC]                      // A peer may have repatched this word.
+  |  movzx RAd, RCH
+  |  movzx TMPRd, RCL
+  |  shr RCd, 16
+  |  add PC, 4
+  |  cmp TMPRd, BC_FUNCF
+  |  jb >1
+  |  cmp TMPRd, BC_FUNCCW
+  |  ja >1
+  |  mov RDd, RBd
+  |1:
+  |  mov OP, TMPRd
+  |  jmp aword [DISPATCH+OP*8+GG_DISP2STATIC]
+  |
   |->vm_safepoint:
   |  mov L:RB, SAVE_L
   |  mov L:RB->base, BASE
@@ -2909,7 +2934,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  and RBd, 0xffff
   |  shr RDd, 16
   |  test RDd, RDd
-  |  jne =>BC_JLOOP			// Jump to stitched trace.
+  |  jne ->vm_jloop_enter			// Jump to stitched trace.
   |
   |  // Stitch a new trace to the previous trace.
   |  mov CARG4d, RBd
@@ -6043,7 +6068,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp TGSTRAUTO, 0
     |  jz >6
     |  sub PC, 4
-    |  jmp ->vm_safepoint
+    |  jmp ->vm_safepoint_static
     |6:
     |.if JIT
     |  hotloop RBd
@@ -6076,7 +6101,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         |  jz >4
       }
       |  sub PC, 4
-      |  jmp ->vm_safepoint
+      |  jmp ->vm_safepoint_static
       |4:
     }
     if (LJ_DUALNUM) {
@@ -6110,7 +6135,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       } else if (op == BC_JFORI) {
 	|  branchPC RD
 	|  movzx RDd, PC_RD
-	|  jle =>BC_JLOOP
+	|  jle ->vm_jloop_enter
 	|1:
 	|6:
       } else if (op == BC_IFORL) {
@@ -6119,7 +6144,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 	|  branchPC RD
 	|1:
       } else {
-	|  jle =>BC_JLOOP
+	|  jle ->vm_jloop_enter
 	|1:
 	|6:
       }
@@ -6142,11 +6167,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       } else if (op == BC_JFORI) {
 	|  branchPC RD
 	|  movzx RDd, PC_RD
-	|  jge =>BC_JLOOP
+	|  jge ->vm_jloop_enter
       } else if (op == BC_IFORL) {
 	|  jl <7
       } else {
-	|  jge =>BC_JLOOP
+	|  jge ->vm_jloop_enter
       }
       |  jmp <6
       |9:  // Fallback to FP variant.
@@ -6190,7 +6215,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     } else if (op == BC_JFORI) {
       |  branchPC RD
       |  movzx RDd, PC_RD
-      |  jnb =>BC_JLOOP
+      |  jnb ->vm_jloop_enter
     } else if (op == BC_IFORL) {
       |.if DUALNUM
       |  jb <7
@@ -6199,7 +6224,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  branchPC RD
       |.endif
     } else {
-      |  jnb =>BC_JLOOP
+      |  jnb ->vm_jloop_enter
     }
     |.if DUALNUM
     |  jmp <6
@@ -6231,14 +6256,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  cmp TGPOLL, 0
       |  jz >2
       |  sub PC, 4
-      |  jmp ->vm_safepoint
+      |  jmp ->vm_safepoint_static
       |2:
     }
     |  mov RB, [RA]
     |  cmp RB, LJ_TNIL; je >1		// Stop if iterator returned nil.
     if (op == BC_JITERL) {
       |  mov [RA-8], RB
-      |  jmp =>BC_JLOOP
+      |  jmp ->vm_jloop_enter
     } else {
       |  branchPC RD			// Otherwise save control var + branch.
       |  mov [RA-8], RB
@@ -6267,13 +6292,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_JLOOP:
     |.if JIT
-    |  cmp OP, BC_JLOOP
-    |  jne >1
     |  cmp TGPOLL, 0
-    |  jz >1
+    |  jz ->vm_jloop_enter
     |  sub PC, 4
-    |  jmp ->vm_safepoint
-    |1:
+    |  jmp ->vm_safepoint_static
+    |->vm_jloop_enter:
+    |  // A loop or function header has already executed its interpreter work.
+    |  // Only a freshly decoded JLOOP may replay its bytecode at a safepoint.
     |  ins_AD	// RA = base (ignored), RD = traceno
     |  mov L:RB, SAVE_L
     |  load_G RA
@@ -6342,9 +6367,15 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov RCd, [PC-4]
     |  movzx TMPRd, RCL
     |  shr RCd, 16
+    |  // A rejected JFORL/JITERL still owes the backedge after an unpatch
+    |  // or blacklist. Its induction/control slot was updated before entry.
     |  cmp TMPRd, BC_FORL
     |  je >7
+    |  cmp TMPRd, BC_IFORL
+    |  je >7
     |  cmp TMPRd, BC_ITERL
+    |  je >7
+    |  cmp TMPRd, BC_IITERL
     |  je >7
     |  cmp TMPRd, BC_JFORL
     |  je >5
@@ -6562,7 +6593,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  cmp TGPOLL, 0
       |  jz >1
       |  sub PC, 4
-      |  jmp ->vm_safepoint
+      |  jmp ->vm_safepoint_static
       |1:
     }
 #endif
@@ -6581,7 +6612,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  // Route every header trace through the common gate+xchg publication
       |  // before reading TraceVec/slot metadata. Gate-denied callee semantics
       |  // have already completed above and use the ordinary ins_next fallback.
-      |  jmp =>BC_JLOOP
+      |  jmp ->vm_jloop_enter
     } else
 #endif
     {
@@ -6615,7 +6646,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  cmp TGPOLL, 0
       |  jz >1
       |  sub PC, 4
-      |  jmp ->vm_safepoint
+      |  jmp ->vm_safepoint_static
       |1:
     }
 #endif
@@ -6650,7 +6681,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 #if LJ_HASJIT
     if (op == BC_JFUNCV) {
       |  movzx RDd, PC_RD
-      |  jmp =>BC_JLOOP
+      |  jmp ->vm_jloop_enter
     } else
 #endif
     {
