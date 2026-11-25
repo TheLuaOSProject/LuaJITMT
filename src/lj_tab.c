@@ -2648,7 +2648,10 @@ static int tab_hash_move_source(TabResizeDesc *desc, MSize idx,
 {
   uint32_t array_idx;
   if (idx <= desc->oldhmask) {
-    Node *source = &desc->oldnode[idx];
+    Node *source;
+    if (!desc->oldret)
+      return -1;  /* The nil hash contributes no source slot. */
+    source = &desc->oldnode[idx];
     lj_tv_load_acq(key, &source->key);
     lj_tv_load_acq(val, &source->val);
     /* A shadowed hash key must not duplicate the authoritative array slot. */
@@ -3892,7 +3895,7 @@ static void tab_resize_prepare_array_migration(lua_State *L, GCtab *t,
   /*
   ** Separate roots carry their bounds in their allocation header. Inline
   ** storage belongs to the table and has no such header: mark it retiring
-  ** before widening the compatibility bound. Readers that still see the
+  ** before changing the compatibility bound. Readers that still see the
   ** inline pointer must retry instead of consuming the new bound.
   */
   if (!desc->oldaret) {
@@ -4033,7 +4036,7 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize,
   TabNodeRetire *oldret;
   TabArrayRetire *oldaret;
   TabResizeDesc *cutover;
-  int array_migration, hash_migration, self_metatable;
+  int array_migration, hash_migration, self_metatable, inline_shrink;
   MSize hash_source_count;
   int array_next_claimed;
   int struct_acq;
@@ -4103,6 +4106,7 @@ restart_resize:
   self_metatable = lj_tab_metatable_acq(t) == t;
   hash_source_count = oldhmask + 1u;
   compact_hbits = 0;
+  inline_shrink = 0;
   if (asize < oldasize) {
     MSize tail = oldasize - asize;
     uint32_t worst_hbits;
@@ -4113,6 +4117,14 @@ restart_resize:
 	worst_hbits <= LJ_MAX_HBITS) {
       uint32_t oldhbits = lj_fls((uint32_t)oldhmask) + 1u;
       compact_hbits = hbits > oldhbits ? hbits : oldhbits;
+      if (hbits < worst_hbits)
+	hbits = worst_hbits;
+    } else if (oldarray && !oldarray_separated && !self_metatable &&
+	       (mt_active_acq(g) || mt_entering_acq(g)) &&
+	       worst_hbits <= LJ_MAX_HBITS) {
+      /* A shared inline shrink splits the array instead of freezing the
+      ** still-published tail under the structural owner. */
+      inline_shrink = 1;
       if (hbits < worst_hbits)
 	hbits = worst_hbits;
     } else {
@@ -4150,9 +4162,9 @@ restart_resize:
     if (oldarray_separated) {
       newarray = 1;
       newacap = asize >= oldasize ? asize : oldacap;
-    } else if (asize > oldacap) {
+    } else if (asize > oldacap || inline_shrink) {
       newarray = 1;
-      newacap = asize;
+      newacap = inline_shrink ? oldacap : asize;
     }
   }
   /*
@@ -4204,7 +4216,7 @@ restart_resize:
   ** choose a compact one after certifying the retired source occupancy.
   ** FINREG tables use their own claim protocol and self metatable.
   */
-  array_migration =
+  array_migration = inline_shrink ||
     (newarray && oldarray && asize > oldasize &&
      ((!oldhmask && !hbits) ||
       (newnode && !self_metatable && (oldret || !oldarray_separated)))) ||
@@ -4215,7 +4227,8 @@ restart_resize:
     uint64_t id = tab_resize_desc_id_reserve(g);
     if (id != 0) {
       GCSize bytes = sizeof(TabResizeDesc);
-      hash_migration = oldret && (!asize || array_migration) && !self_metatable;
+      hash_migration = inline_shrink ||
+	(oldret && (!asize || array_migration) && !self_metatable);
       if (hash_migration)
 	bytes = tab_hash_move_size(hash_source_count, newhmask);
       cutover = (TabResizeDesc *)lj_mem_new_nothrow(L, bytes);
@@ -4409,7 +4422,7 @@ restart_resize:
 					      &newfreecount, oldret != NULL,
 					      weak);
   }
-  if (!oldarray_separated && oldarray && asize < oldasize) {
+  if (!newarray && !oldarray_separated && oldarray && asize < oldasize) {
     /* Freeze and reinsert old colocated array tail off-table. */
     uint32_t i;
     for (i = asize; i < oldasize; i++)

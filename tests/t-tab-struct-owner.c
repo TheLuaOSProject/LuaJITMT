@@ -748,8 +748,11 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed,
   owner.ready = &ready;
   owner.start = &owner_start;
   owner.done = &owner_done;
-  owner.asize = mixed >= 2 ? 40 : 80;
-  owner.hbits = mixed >= 3 ? 3 : (mixed == 2 ? 8 : (inline_split == 2 ? 2 : 0));
+  owner.asize = inline_split == 3 ? 3 : (mixed >= 2 ? 40 : 80);
+  if (inline_split == 3)
+    owner.hbits = 4;
+  else
+    owner.hbits = mixed >= 3 ? 3 : (mixed == 2 ? 8 : (inline_split == 2 ? 2 : 0));
   owner.status = -1;
   other.L = new_child_with_table(L, 1);
   other.ready = &ready;
@@ -1230,6 +1233,8 @@ int main(void)
   exercise_array_migration_owner(L, 0, 0, 0, 1);
   exercise_array_migration_owner(L, 1, 1, 0, 1);
   exercise_array_migration_owner(L, 0, 0, 0, 2);
+  exercise_array_migration_owner(L, 0, 0, 0, 3);
+  exercise_array_migration_owner(L, 1, 1, 0, 3);
   exercise_hash_migration_owner(L);
   exercise_hash_install_owner(L, 0);
   exercise_hash_install_owner(L, 1);
