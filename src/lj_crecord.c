@@ -2172,6 +2172,7 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
 #define CREC_CALL_RCL_INT	1
 #define CREC_CALL_RCL_SSE	2
 #define CREC_CALL_RCL_MEM	4
+#define CREC_CALL_RCL_BITFIELD	8
 
 static int crec_call_sysv_classify_struct(jit_State *J, CTState *cts,
 					  CType *ct, int *rcl,
@@ -2204,7 +2205,7 @@ static void crec_call_sysv_classify_ct(jit_State *J, CTState *cts, CType *ct,
       rcl[0] |= CREC_CALL_RCL_MEM;
   } else {
     int cl;
-    if (!ctype_hassize(info) || size == 0 || size == CTSIZE_INVALID ||
+    if (!ctype_hassize(info) || size == 0 || size > 8 ||
 	ofs >= 16 || size > 16-ofs) {
       rcl[0] |= CREC_CALL_RCL_MEM;
       return;
@@ -2236,7 +2237,7 @@ static int crec_call_sysv_classify_struct(jit_State *J, CTState *cts,
       crec_call_sysv_classify_ct(J, cts,
 	crec_ctype_rawchild(J, cts, field, &childsnap), rcl, fofs);
     } else if (ctype_isbitfield(info) && ctype_bitbsz(info)) {
-      rcl[fofs >= 8] |= CREC_CALL_RCL_INT;
+      rcl[fofs >= 8] |= CREC_CALL_RCL_INT | CREC_CALL_RCL_BITFIELD;
     } else if (ctype_isxattrib(info, CTA_SUBTYPE)) {
       CType *child = crec_ctype_rawchild(J, cts, field, &childsnap);
       if (!ctype_isstruct(ctype_info_acq(child)) ||
@@ -2279,31 +2280,48 @@ static IRType crec_call_sysv_aggregate_type(jit_State *J, CTState *cts,
   return IRT_CDATA;
 }
 
-/* Specialize an exact aggregate cdata argument and load its raw ABI carrier. */
-static TRef crec_call_sysv_aggregate_arg(jit_State *J, CTState *cts,
-					 CTypeID did, TRef sp, cTValue *o,
-					 IRType t)
+/* Specialize the complete layout before loading any ABI carriers. */
+static TRef crec_call_sysv_aggregate_ptr(jit_State *J, CTState *cts,
+					 CTypeID did, TRef sp, cTValue *o)
 {
   GCcdata *cd = argv2cdata(J, sp, o);
   CType srcsnap, rawsnap;
   CTypeID rid;
   CType *src = crec_ctype_rawid(J, cts, cd->ctypeid, NULL, &srcsnap);
   CTInfo sinfo = ctype_info_acq(src);
-  TRef ptr;
   crec_ctype_rawrefid(J, cts, cd->ctypeid, &rid, &rawsnap);
   if (rid != did || !ctype_isstruct(ctype_info_acq(&rawsnap)))
     lj_trace_err(J, LJ_TRERR_NYICONV);
   if (ctype_isref(sinfo))
-    ptr = emitir(IRT(IR_FLOAD, IRT_PTR), sp, IRFL_CDATA_PTR);
-  else
-    ptr = emitir(IRT(IR_ADD, IRT_PTR), sp,
-		  lj_ir_kintp(J, sizeof(GCcdata)));
+    return emitir(IRT(IR_FLOAD, IRT_PTR), sp, IRFL_CDATA_PTR);
+  return emitir(IRT(IR_ADD, IRT_PTR), sp, lj_ir_kintp(J, sizeof(GCcdata)));
+}
+
+static TRef crec_call_sysv_aggregate_load(jit_State *J, TRef ptr, IRType t)
+{
   if (t == IRT_U64) lj_needsplit(J);
   return emitir(IRT(IR_XLOAD, t), ptr, 0);
+}
+
+/* Only complete, register-classified eightbytes are flattened. The caller
+** must first prove that the entire group fits in the remaining registers. */
+static int crec_call_sysv_aggregate_pair(jit_State *J, CTState *cts,
+					 CType *ct, IRType *lane)
+{
+  int rcl[2] = { 0, 0 };
+  CTInfo info = ctype_info_acq(ct);
+  if (!ctype_isstruct(info) || ctype_isvltype(info) || ctype_align(info) > 4 ||
+      crec_call_sysv_classify_struct(J, cts, ct, rcl, 0) ||
+      !rcl[0] || !rcl[1] || ((rcl[0] | rcl[1]) & CREC_CALL_RCL_BITFIELD))
+    return 0;
+  lane[0] = (rcl[0] & CREC_CALL_RCL_INT) ? IRT_U64 : IRT_NUM;
+  lane[1] = (rcl[1] & CREC_CALL_RCL_INT) ? IRT_U64 : IRT_NUM;
+  return 1;
 }
 #undef CREC_CALL_RCL_INT
 #undef CREC_CALL_RCL_SSE
 #undef CREC_CALL_RCL_MEM
+#undef CREC_CALL_RCL_BITFIELD
 #endif
 
 /* Collect scalar and admitted aggregate argument conversions for one
@@ -2336,6 +2354,8 @@ static MSize crec_call_args_collect(jit_State *J, RecordFFData *rd,
     ngpr = 2;
 #elif LJ_TARGET_ARM64 && LJ_TARGET_OSX
   int ngpr = CCALL_NARG_GPR;
+#elif LJ_TARGET_X64 && !LJ_ABI_WIN
+  MSize sysv_gpr = reserve, sysv_fpr = 0;
 #endif
 
   /* Skip initial attributes. */
@@ -2380,10 +2400,32 @@ static MSize crec_call_args_collect(jit_State *J, RecordFFData *rd,
     dsize = ctype_size_acq(d);
     if (!(ctype_isnum(dinfo) || ctype_isptr(dinfo) || ctype_isenum(dinfo))) {
 #if LJ_TARGET_X64 && !LJ_ABI_WIN
-      IRType at = crec_call_sysv_aggregate_type(J, cts, d, dsize);
-      if (at == IRT_CDATA)
-	lj_trace_err(J, LJ_TRERR_NYICALL);
-      tr = crec_call_sysv_aggregate_arg(J, cts, did, *base, o, at);
+      TRef ptr;
+      IRType at;
+      if (LJ_TARGET_LINUX && dsize == 16) {
+	IRType lane[2];
+	MSize fp;
+	if (limit - n < 2 || !crec_call_sysv_aggregate_pair(J, cts, d, lane))
+	  lj_trace_err(J, LJ_TRERR_NYICALL);
+	fp = (lane[0] == IRT_NUM) + (lane[1] == IRT_NUM);
+	/* A split register/stack placement would change the ABI of the
+	** aggregate and of following arguments. Use the interpreter if
+	** the entire pair cannot stay in registers. */
+	if (sysv_gpr + (2 - fp) > CCALL_NARG_GPR ||
+	    sysv_fpr + fp > CCALL_NARG_FPR)
+	  lj_trace_err(J, LJ_TRERR_NYICALL);
+	ptr = crec_call_sysv_aggregate_ptr(J, cts, did, *base, o);
+	args[n++] = crec_call_sysv_aggregate_load(J, ptr, lane[0]);
+	if (lane[0] == IRT_NUM) sysv_fpr++; else sysv_gpr++;
+	ptr = emitir(IRT(IR_ADD, IRT_PTR), ptr, lj_ir_kintp(J, 8));
+	at = lane[1];
+      } else {
+	at = crec_call_sysv_aggregate_type(J, cts, d, dsize);
+	if (at == IRT_CDATA)
+	  lj_trace_err(J, LJ_TRERR_NYICALL);
+	ptr = crec_call_sysv_aggregate_ptr(J, cts, did, *base, o);
+      }
+      tr = crec_call_sysv_aggregate_load(J, ptr, at);
 #else
       lj_trace_err(J, LJ_TRERR_NYICALL);
 #endif
@@ -2439,6 +2481,9 @@ static MSize crec_call_args_collect(jit_State *J, RecordFFData *rd,
 #elif LJ_TARGET_ARM64 && LJ_TARGET_OSX
     if (!ctype_isfp(dinfo) && ngpr)
       ngpr--;
+#elif LJ_TARGET_X64 && !LJ_ABI_WIN
+    if (tref_isnum(tr) || tref_type(tr) == IRT_FLOAT) sysv_fpr++;
+    else sysv_gpr++;
 #endif
     args[n] = tr;
   }

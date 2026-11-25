@@ -534,13 +534,17 @@ return function(add)
 
   add({
     name = "m7_ffi_callxs_sysv_small_aggregate",
-    description = "generic SysV x64 one-class aggregate CALLXS ABI",
+    description = "generic SysV x64 aggregate CALLXS ABI",
     run = function(t)
       clean_build(t)
       local aggregate_so = build_shared_library(t,
         t:tmp("lj_t-ffi-callxs-sysv-small-aggregate.so"),
         "t-ffi-callxs-sysv-small-aggregate-lib.c")
       run_luajit_script(t, "t-ffi-callxs-sysv-small-aggregate.lua", nil, {
+        env = { LJ_M7_FFI_CALLXS_SYSV_AGG_SO = aggregate_so },
+        timeout = "30s"
+      })
+      run_luajit_script(t, "t-ffi-callxs-sysv-register-pairs.lua", nil, {
         env = { LJ_M7_FFI_CALLXS_SYSV_AGG_SO = aggregate_so },
         timeout = "30s"
       })
