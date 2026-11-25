@@ -1834,8 +1834,28 @@ static void build_subroutines(BuildCtx *ctx)
   |  checknumtp [BASE+8], ->fff_fallback
   |  cvttsd2si RAd, qword [BASE+8]
   |.endif
+  |  // The shared path retains the table and current lookup result.
+  |  load_G r8
+  |  cmp dword GL:r8->mt_active, 0
+  |  jne ->fff_fallback_2
+  |  cmp dword GL:r8->mt_entering, 0
+  |  jne ->fff_fallback_2
   |  mov PC, [BASE-8]
   |  add RAd, 1
+  |  x64_vm_tab_asize_acq TMPRd, TAB:RB
+  |  x64_vm_tab_array_acq RD, TAB:RB
+  |  test RD, RD; jz >3
+  |  lea r8, [RB+TAB_COLO_SLOTS]
+  |  cmp RD, r8; jne >7
+  |  test byte TAB:RB->colo, 0x80
+  |  jnz ->fff_fallback_2
+  |  jmp >3
+  |7:
+  |  x64_vm_tab_array_asize_acq TMPRd, RD
+  |  x64_vm_tab_array_flags_acq r9d, RD
+  |  test r9d, TABARRAY_FLAG_RETIRING
+  |  jnz ->fff_fallback_2
+  |3:
   |.if DUALNUM
   |  setint ITYPE, RA
   |  mov [BASE-16], ITYPE
@@ -1843,20 +1863,6 @@ static void build_subroutines(BuildCtx *ctx)
   |  cvtsi2sd xmm0, RAd
   |  movsd qword [BASE-16], xmm0
   |.endif
-  |  x64_vm_tab_asize_acq TMPRd, TAB:RB
-  |  x64_vm_tab_array_acq RD, TAB:RB
-  |  test RD, RD; jz >3
-  |  lea r8, [RB+TAB_COLO_SLOTS]
-  |  cmp RD, r8; jne >7
-  |  test byte TAB:RB->colo, 0x80
-  |  jnz >6
-  |  jmp >3
-  |7:
-  |  x64_vm_tab_array_asize_acq TMPRd, RD
-  |  x64_vm_tab_array_flags_acq r9d, RD
-  |  test r9d, TABARRAY_FLAG_RETIRING
-  |  jnz >6
-  |3:
   |  cmp RAd, TMPRd;  jae >2		// Not in array part?
   |  lea RD, [RD+RA*8]
   |1:

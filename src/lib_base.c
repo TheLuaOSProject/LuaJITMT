@@ -127,9 +127,16 @@ LJLIB_ASM(pairs)		LJLIB_REC(xpairs 0)
 
 LJLIB_NOREGUV LJLIB_ASM(ipairs_aux)	LJLIB_REC(.)
 {
+  int32_t idx;
+  TValue *value;
   lj_lib_checktab(L, 1);
-  lj_lib_checkint(L, 2);
-  return FFH_UNREACHABLE;
+  idx = (int32_t)((uint32_t)lj_lib_checkint(L, 2) + 1u);
+  value = lj_tab_getinttv_rooted(L, L->base, idx, L->base + 1);
+  if (tvisnil(value))
+    return FFH_RES(0);
+  setintV(L->base - 1 - LJ_FR2, idx);
+  copyTV(L, L->base - LJ_FR2, value);
+  return FFH_RES(2);
 }
 
 LJLIB_PUSH(lastcl)

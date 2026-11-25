@@ -294,6 +294,9 @@ static void verify_split_public_lua(lua_State *L, int first_write)
     "assert(seen[1] == 11 and seen[2] == 22)\n"
     "assert(seen[4] == 'array migration pins string values')\n"
     "assert(seen[-1] == t[-1] and seen[64] == t[64])\n"
+    "local step, state = ipairs(t)\n"
+    "local first, value = step(state, 0)\n"
+    "assert(first == 1 and value == 11 and step(state, 79) == nil)\n"
     "t[65] = 'peer wrote to split table'\n"
     "assert(t[65] == 'peer wrote to split table')\n"));
   lua_pushvalue(L, 1);
