@@ -4182,6 +4182,7 @@ static int gc2_step_auto(lua_State *L, int threshold_step, uint32_t step_limit)
   GCSize quantum = gc_step_debt_quantum(g);
   int32_t ostate = vmstate_load_acq(g);
   uint64_t sweep_arenas0 = gc2_sweep_owner_arenas_acq(g);
+  uint64_t work0 = gc2_worker_runs_acq(g);
   int running = gc_logical_running(g);
   int drove = 0;
   int done = 0;
@@ -4233,13 +4234,12 @@ static int gc2_step_auto(lua_State *L, int threshold_step, uint32_t step_limit)
     vmstate_store_rel(g, ostate);
     return done ? 1 : (drove ? 0 : -1);
   }
-  /* A pre-dispatch MARK lease is not permission to move the allocation
-  ** threshold. Leave it due so the first subsequent allocation—traced or
-  ** interpreted—must pay the next bounded collector quantum. This makes the
-  ** native opportunity a one-dispatch handoff instead of unbounded debt
-  ** deferral until the next accounting quantum. */
-  lj_gc_threshold_store(g, lj_gc_total_load(g) +
-	(mark_dispatch_yield ? 0 : quantum));
+  /* Give native code its dispatch opportunity while keeping the next
+  ** allocation due when the collector yielded or did no SWEEP work. */
+  if (mark_dispatch_yield || (running && gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+			      gc2_worker_runs_acq(g) == work0))
+    quantum = 0;
+  lj_gc_threshold_store(g, lj_gc_total_load(g) + quantum);
   vmstate_store_rel(g, ostate);
   return -1;
 }
