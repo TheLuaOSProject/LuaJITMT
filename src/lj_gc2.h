@@ -641,7 +641,6 @@ LJ_FUNC uint32_t lj_gc2_test_paranoia_root_diff(global_State *g);
 #endif
 LJ_FUNC void lj_gc2_test_finreg_cdata_finalizer_enqueue(global_State *g,
 							GCobj *o);
-LJ_FUNC int lj_gc2_test_finreg_cdata_queue_slot(lua_State *L, GCobj *o);
 LJ_FUNC int lj_gc2_test_finreg_cdata_preclaim(lua_State *L, global_State *g,
 					      GCobj *o, cTValue *fin);
 LJ_FUNC int lj_gc2_test_finreg_cdata_preclaim_take(lua_State *L,

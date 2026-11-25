@@ -676,6 +676,8 @@ FinRegOrderNode *lj_ctype_fin_order_new(lua_State *L)
   fin_order_slot_rel(ord, NULL);
   fin_order_next_rel(ord, NULL);
   fin_order_retired_next_rel(ord, NULL);
+  setnilV(&ord->ready_callback);
+  ord->ready_token = 0;
   fin_order_active_rel(ord, 0);
   return ord;
 }

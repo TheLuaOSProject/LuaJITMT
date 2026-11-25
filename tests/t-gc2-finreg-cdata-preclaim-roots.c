@@ -34,9 +34,9 @@ static void test_queued_generation(lua_State *L)
     "ffi = require('ffi'); calls_a, calls_b = 0, 0\n"
     "a = function(x) assert(x[0] == 37); calls_a = calls_a + 1 end\n"
     "b = function(x) assert(x[0] == 37); calls_b = calls_b + 1 end\n"
-    "obj = ffi.gc(ffi.new('int[1]', 37), a); return obj") == LUA_OK);
-  assert(lj_gc2_test_finreg_cdata_queue_slot(L, gcval(L->top - 1)));
-  lua_pop(L, 1);
+    "obj = ffi.gc(ffi.new('int[1]', 37), a)") == LUA_OK);
+  /* Queue via the real ordered traversal while keeping obj reachable. */
+  assert(lj_gc2_finreg_cdata_finalize_close(G(L)) == 1);
   assert(luaL_dostring(L,
     "ffi.gc(obj, nil)\n"
     "for i = 1, 1024 do ffi.gc(obj, a); ffi.gc(obj, nil) end\n"
@@ -50,9 +50,8 @@ static void test_queued_generation(lua_State *L)
 
   /* Rearming without an explicit clear also supersedes the queued snapshot. */
   assert(luaL_dostring(L,
-    "obj = ffi.gc(ffi.new('int[1]', 37), a); return obj") == LUA_OK);
-  assert(lj_gc2_test_finreg_cdata_queue_slot(L, gcval(L->top - 1)));
-  lua_pop(L, 1);
+    "obj = ffi.gc(ffi.new('int[1]', 37), a)") == LUA_OK);
+  assert(lj_gc2_finreg_cdata_finalize_close(G(L)) == 1);
   assert(luaL_dostring(L, "ffi.gc(obj, a)") == LUA_OK);
   lj_gc2_finalizer_dispatch_all(L);
   assert(luaL_dostring(L, "assert(calls_a == 0 and calls_b == 1); obj = nil") ==

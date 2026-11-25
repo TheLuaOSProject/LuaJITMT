@@ -1,12 +1,8 @@
 /*
 ** Deterministic FINREG transaction races.
 **
-** These pauses cover the three slot/order/flag interleavings which a broad
-** registration hammer cannot prove:
-**   - clear observes an enable's published order node while FINCLAIM is held;
-**   - clear has authoritatively missed immediately before an enable commits;
-**   - re-enable retries while clear has retired order/flag but not published
-**     the nil callback slot yet.
+** Pause owners across slot, order and flag transitions to prove which
+** operations can finish while a publisher is still parked.
 */
 
 #include <assert.h>
@@ -327,8 +323,6 @@ static void test_replacement_vs_clear(lua_State *L)
   retired0 = gc2_finreg_cdata_order_retired_acq(g);
 
   lj_cdata_test_fin_pause_arm(LJ_CDATA_FIN_PAUSE_ENABLE_ORDER);
-  lj_cdata_test_fin_pause_arm(LJ_CDATA_FIN_PAUSE_CLEAR_RETRY);
-  lj_cdata_test_fin_pause_arm(LJ_CDATA_FIN_PAUSE_CLEAR_BEFORE_NIL);
   ljt_lua_dostring(L,
     "local th=require('threading')\n"
     "worker_replace_race=th.spawn(function(cd, fin)\n"
@@ -339,34 +333,28 @@ static void test_replacement_vs_clear(lua_State *L)
   assert(gc2_finreg_cdata_order_retired_acq(g) == retired0 + 1u);
   assert(gc2_finreg_cdata_sets_acq(g) == sets0 + 1u);
 
-  /* Replacement owns FINCLAIM after atomically swapping the order identity.
-  ** A clear can only retry without retiring the new node or accounting a clear
-  ** against the still-active registration. */
+  /* The clear completes the ready enable, then removes that generation
+  ** while the publishing owner is still stopped. */
   ljt_lua_dostring(L,
     "local th=require('threading')\n"
     "worker_replace_clear=th.spawn(function(cd)\n"
     "  require('ffi').gc(cd, nil)\n"
     "  return true\n"
     "end, cd_replace_race)\n");
-  wait_for_pause(LJ_CDATA_FIN_PAUSE_CLEAR_RETRY);
-  assert(active_order_refs(g,
-         obj2gco(global_cdata(L, "cd_replace_race"))) == 1u);
-  assert(gc2_finreg_cdata_clears_acq(g) == clears0);
+  ljt_lua_dostring(L,
+    "local ok, result=worker_replace_clear:join(10)\n"
+    "assert(ok == true and result == true)\n"
+    "worker_replace_clear=nil\n");
+  assert(lj_cdata_test_fin_pause_waiting(LJ_CDATA_FIN_PAUSE_ENABLE_ORDER));
+  assert(gc2_finreg_cdata_sets_acq(g) == sets0 + 1u);
+  assert(gc2_finreg_cdata_clears_acq(g) == clears0 + 1u);
+  assert_cleared(L, "cd_replace_race");
+
   lj_cdata_test_fin_pause_release(LJ_CDATA_FIN_PAUSE_ENABLE_ORDER);
   ljt_lua_dostring(L,
     "local ok, result=worker_replace_race:join(10)\n"
     "assert(ok == true and result == true)\n"
     "worker_replace_race=nil\n");
-  lj_cdata_test_fin_pause_release(LJ_CDATA_FIN_PAUSE_CLEAR_RETRY);
-  wait_for_pause(LJ_CDATA_FIN_PAUSE_CLEAR_BEFORE_NIL);
-
-  assert(gc2_finreg_cdata_sets_acq(g) == sets0 + 1u);
-  assert(gc2_finreg_cdata_clears_acq(g) == clears0 + 1u);
-  lj_cdata_test_fin_pause_release(LJ_CDATA_FIN_PAUSE_CLEAR_BEFORE_NIL);
-  ljt_lua_dostring(L,
-    "local ok, result=worker_replace_clear:join(10)\n"
-    "assert(ok == true and result == true)\n"
-    "worker_replace_clear=nil\n");
   assert_cleared(L, "cd_replace_race");
 }
 
@@ -377,8 +365,6 @@ static void test_enable_order_vs_clear(lua_State *L)
   uint64_t clears0 = gc2_finreg_cdata_clears_acq(g);
 
   lj_cdata_test_fin_pause_arm(LJ_CDATA_FIN_PAUSE_ENABLE_ORDER);
-  lj_cdata_test_fin_pause_arm(LJ_CDATA_FIN_PAUSE_CLEAR_RETRY);
-  lj_cdata_test_fin_pause_arm(LJ_CDATA_FIN_PAUSE_CLEAR_BEFORE_NIL);
   ljt_lua_dostring(L,
     "local ffi=require('ffi')\n"
     "local th=require('threading')\n"
@@ -390,34 +376,28 @@ static void test_enable_order_vs_clear(lua_State *L)
     "end, cd_enable_order, fin_enable_order)\n");
   wait_for_pause(LJ_CDATA_FIN_PAUSE_ENABLE_ORDER);
 
-  /* The clear retries while the exact callback slot is FINCLAIM. It must not
-  ** retire the enable's already-published order node. */
+  /* The clear completes the ready enable, then removes that generation
+  ** while the publishing owner is still stopped. */
   ljt_lua_dostring(L,
     "local th=require('threading')\n"
     "worker_clear_enable=th.spawn(function(cd)\n"
     "  require('ffi').gc(cd, nil)\n"
     "  return true\n"
     "end, cd_enable_order)\n");
-  wait_for_pause(LJ_CDATA_FIN_PAUSE_CLEAR_RETRY);
-  assert(active_order_refs(g,
-         obj2gco(global_cdata(L, "cd_enable_order"))) == 1u);
-  assert(gc2_finreg_cdata_sets_acq(g) == sets0);
-  assert(gc2_finreg_cdata_clears_acq(g) == clears0);
+  ljt_lua_dostring(L,
+    "local ok, result=worker_clear_enable:join(10)\n"
+    "assert(ok == true and result == true)\n"
+    "worker_clear_enable=nil\n");
+  assert(lj_cdata_test_fin_pause_waiting(LJ_CDATA_FIN_PAUSE_ENABLE_ORDER));
+  assert(gc2_finreg_cdata_sets_acq(g) == sets0 + 1u);
+  assert(gc2_finreg_cdata_clears_acq(g) == clears0 + 1u);
+  assert_cleared(L, "cd_enable_order");
 
   lj_cdata_test_fin_pause_release(LJ_CDATA_FIN_PAUSE_ENABLE_ORDER);
   ljt_lua_dostring(L,
     "local ok, result=worker_enable_order:join(10)\n"
     "assert(ok == true and result == true)\n"
     "worker_enable_order=nil\n");
-  lj_cdata_test_fin_pause_release(LJ_CDATA_FIN_PAUSE_CLEAR_RETRY);
-  wait_for_pause(LJ_CDATA_FIN_PAUSE_CLEAR_BEFORE_NIL);
-  assert(gc2_finreg_cdata_sets_acq(g) == sets0 + 1u);
-  assert(gc2_finreg_cdata_clears_acq(g) == clears0 + 1u);
-  lj_cdata_test_fin_pause_release(LJ_CDATA_FIN_PAUSE_CLEAR_BEFORE_NIL);
-  ljt_lua_dostring(L,
-    "local ok, result=worker_clear_enable:join(10)\n"
-    "assert(ok == true and result == true)\n"
-    "worker_clear_enable=nil\n");
   assert_cleared(L, "cd_enable_order");
 }
 
@@ -509,6 +489,36 @@ static void test_clear_nil_vs_reenable(lua_State *L)
   cleanup_registration(L, "cd_clear_nil");
 }
 
+static void test_queued_delivery_vs_suspended_rearm(lua_State *L)
+{
+  ljt_lua_dostring(L,
+    "local ffi=require('ffi')\n"
+    "queued_a, queued_b=0, 0\n"
+    "queued_b_fin=function(x) assert(x[0] == 51); queued_b=queued_b+1 end\n"
+    "queued_cd=ffi.gc(ffi.new('int[1]', 51),function() queued_a=queued_a+1 end)\n");
+  assert(lj_gc2_finreg_cdata_finalize_close(G(L)) == 1);
+
+  lj_cdata_test_fin_pause_arm(LJ_CDATA_FIN_PAUSE_ENABLE_ORDER);
+  ljt_lua_dostring(L,
+    "local th=require('threading')\n"
+    "queued_worker=th.spawn(function(cd, fin)\n"
+    "  require('ffi').gc(cd, fin)\n"
+    "  return true\n"
+    "end, queued_cd, queued_b_fin)\n");
+  wait_for_pause(LJ_CDATA_FIN_PAUSE_ENABLE_ORDER);
+  lj_gc2_finalizer_dispatch_all(L);
+  assert(lj_cdata_test_fin_pause_waiting(LJ_CDATA_FIN_PAUSE_ENABLE_ORDER));
+  ljt_lua_dostring(L, "assert(queued_a == 0 and queued_b == 0)");
+
+  lj_cdata_test_fin_pause_release(LJ_CDATA_FIN_PAUSE_ENABLE_ORDER);
+  ljt_lua_dostring(L,
+    "local ok, result=queued_worker:join(10)\n"
+    "assert(ok == true and result == true)\n"
+    "queued_worker, queued_cd=nil, nil\n"
+    "for i=1,4 do collectgarbage('collect') end\n"
+    "assert(queued_a == 0 and queued_b == 1)\n");
+}
+
 static void test_rearm_after_callback(lua_State *L)
 {
   ljt_lua_dostring(L,
@@ -580,6 +590,7 @@ int main(void)
   test_enable_order_vs_clear(L);
   test_clear_miss_vs_enable(L);
   test_clear_nil_vs_reenable(L);
+  test_queued_delivery_vs_suspended_rearm(L);
   test_nested_finalizer_collect(L);
   test_rearm_after_callback(L);
 

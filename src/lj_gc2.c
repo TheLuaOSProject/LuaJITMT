@@ -13477,7 +13477,7 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
     slot_status = lj_tab_read_current_keyed(g, finlease.tab, slot, &key,
 					    &fin);
     if (slot_status == LJ_TAB_STORE_CAS_OK &&
-        lj_cdata_fin_help_clear(slot, &fin)) {
+        lj_cdata_fin_help_ready(g, slot, &key, &fin)) {
       gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
       continue;  /* Re-resolve this exact order node after helping. */
     }
@@ -13684,7 +13684,7 @@ size_t lj_gc2_finreg_cdata_finalize_close(global_State *g)
     slot_status = lj_tab_read_current_keyed(g, finlease.tab, slot, &key,
 					    &fin);
     if (slot_status == LJ_TAB_STORE_CAS_OK &&
-        lj_cdata_fin_help_clear(slot, &fin)) {
+        lj_cdata_fin_help_ready(g, slot, &key, &fin)) {
       gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
       continue;  /* Re-resolve this exact order node after helping. */
     }
@@ -13846,7 +13846,7 @@ int lj_gc2_finreg_cdata_pending(global_State *g)
     slot_status = lj_tab_read_current_keyed(g, finlease.tab, slot, &key,
 					    &fin);
     if (slot_status == LJ_TAB_STORE_CAS_OK &&
-        lj_cdata_fin_help_clear(slot, &fin)) {
+        lj_cdata_fin_help_ready(g, slot, &key, &fin)) {
       gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
       continue;  /* Re-resolve this exact order node after helping. */
     }
@@ -14038,36 +14038,6 @@ static int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
 void lj_gc2_test_finreg_cdata_finalizer_enqueue(global_State *g, GCobj *o)
 {
   lj_gc2_finreg_cdata_finalizer_enqueue(g, o, NULL);
-}
-
-/* Exercise the ordered queue handoff without requiring timing against P_WEAK. */
-int lj_gc2_test_finreg_cdata_queue_slot(lua_State *L, GCobj *o)
-{
-#if LJ_HASFFI
-  global_State *g = G(L);
-  CTState *cts = ctype_ctsG(g);
-  CTypeFinLease lease = CTYPE_FIN_LEASE_INIT;
-  TValue key, fin;
-  size_t retired = 0;
-  int ok = 0;
-  setcdataV(L, &key, gco2cd(o));
-  if (lj_ctype_fin_get(L, cts, &key, &lease) == LJ_CTYPE_FIN_FOUND &&
-      lj_cdata_fin_claim_held(&lease, &key, &fin, 1) == LJ_CTYPE_FIN_FOUND) {
-    if (gc2_finreg_cdata_unlink_root(g, o) != LJ_GC_ROOT_UNLINK_UNPROVEN &&
-        lj_ctype_fin_order_retire_obj_complete(cts, o, &retired) &&
-        gc2_finreg_cdata_ticket_publish(g, &lease, &key, o)) {
-      gc2_finreg_cdata_finalizer_enqueue_admitted(g, o, &fin);
-      ok = 1;
-    } else {
-      (void)gc2_finreg_cdata_store_claim(g, &lease, &key, &fin);
-    }
-  }
-  lj_ctype_fin_lease_release(&lease);
-  return ok;
-#else
-  UNUSED(L); UNUSED(o);
-  return 0;
-#endif
 }
 
 int lj_gc2_test_finreg_cdata_preclaim(lua_State *L, global_State *g,

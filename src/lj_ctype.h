@@ -266,6 +266,8 @@ typedef struct FinRegOrderNode {
   TValue *slot;			/* Original value slot; not stable across resize. */
   struct FinRegOrderNode *next;	/* Older registration, newest-first list. */
   struct FinRegOrderNode *retired_next;
+  TValue ready_callback;	/* Immutable after order publication. */
+  uint64_t ready_token;		/* Encoded slot marker, or zero. */
   uint32_t active;		/* 1 active, 2 retiring, 0 retired. */
 } FinRegOrderNode;
 
@@ -771,7 +773,7 @@ typedef struct CTState {
   CTypeID layout_top;   /* Committed ID prefix at the start of parsing. */
   uint64_t layout_version;  /* Odd during a parser transaction. */
   CTypeLayoutPage *layout_pages[CTYPE_LAYOUT_PAGES];
-  uint64_t fin_clear_id;  /* Never reused by a delayed clear helper. */
+  uint64_t fin_ready_id;  /* Never reused by a delayed publication helper. */
   FinRegGen *fin_head;	/* 11.4 CAS-published FINREG generation list. */
   FinRegOrderNode *fin_order_head;  /* 11.4 ordered FINREG registrations. */
   FinRegOrderNode *fin_order_retired;  /* Retired ordered FINREG nodes. */

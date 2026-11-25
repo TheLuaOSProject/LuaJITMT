@@ -1264,7 +1264,7 @@ static int tab_freeze_forward(lua_State *L, GCtab *t, int weak,
     ** table-wide nonblocking claim descriptor. */
     if (tab_val_is_publish_claim(oldp)) {
 #if LJ_HASFFI
-      if (lj_cdata_fin_help_clear(slot, oldp))
+      if (lj_cdata_fin_help_ready(G(L), slot, key, oldp))
         continue;
 #endif
       lj_tab_wait_no_l();

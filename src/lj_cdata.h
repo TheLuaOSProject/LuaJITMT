@@ -173,14 +173,14 @@ LJ_FUNC int lj_cdata_fin_isclaim(cTValue *tv);
 #define LJ_CDATA_FINCLAIM_U64 \
   ((((uint64_t)LJ_TLIGHTUD) << 47) | (((uint64_t)1 << 47) - 1u))
 /* Kind 7 shares the reserved internal segment with resize markers. The
-** all-ones ID remains the opaque FINCLAIM used before clear is ready. */
-#define LJ_CDATA_FIN_CLEAR_KIND 7u
-static LJ_AINLINE int lj_cdata_fin_isclear_ready(cTValue *tv)
+** all-ones ID remains the opaque FINCLAIM used before publication is ready. */
+#define LJ_CDATA_FIN_READY_KIND 7u
+static LJ_AINLINE int lj_cdata_fin_isready(cTValue *tv)
 {
 #if LJ_64
   uint64_t bits = tv_rawload(tv);
   return (bits & ~LJ_LIGHTUD_INTERNAL_LO_MASK) == LJ_LIGHTUD_INTERNAL_BASE &&
-         (bits & LJ_TAB_RESIZE_MARK_KIND_MASK) == LJ_CDATA_FIN_CLEAR_KIND &&
+         (bits & LJ_TAB_RESIZE_MARK_KIND_MASK) == LJ_CDATA_FIN_READY_KIND &&
          bits != LJ_CDATA_FINCLAIM_U64;
 #else
   UNUSED(tv);
@@ -191,19 +191,11 @@ static LJ_AINLINE int lj_cdata_fin_isclear_ready(cTValue *tv)
 static LJ_AINLINE int lj_cdata_fin_isclaim_inline(cTValue *tv)
 {
   return tv_rawload(tv) == LJ_CDATA_FINCLAIM_U64 ||
-         lj_cdata_fin_isclear_ready(tv);
+         lj_cdata_fin_isready(tv);
 }
 
-static LJ_AINLINE int lj_cdata_fin_help_clear(TValue *slot, cTValue *claim)
-{
-  TValue expect = *claim;
-  TValue nilv;
-  if (!lj_cdata_fin_isclear_ready(claim))
-    return 0;
-  setnilV(&nilv);
-  (void)lj_tv_cas(slot, &expect, &nilv);
-  return 1;  /* A failed exact CAS means someone already finished this clear. */
-}
+LJ_FUNC int lj_cdata_fin_help_ready(global_State *g, TValue *slot,
+                                      cTValue *key, cTValue *claim);
 
 #if defined(LJ_CDATA_TEST_HELPERS)
 enum {
