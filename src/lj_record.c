@@ -335,6 +335,13 @@ static TRef sload(jit_State *J, int32_t slot)
   TRef ref = emitir_raw(IRTG(IR_SLOAD, t), (int32_t)J->baseslot+slot,
 			IRSLOAD_TYPECHECK);
   if (irtype_ispri(t)) ref = TREF_PRI(t);  /* Canonicalize primitive refs. */
+  /* A side exit can omit unchanged locals from its parent snapshot. Once
+  ** the recorder reads such a local it is live. Include it in the frame
+  ** extent before a later MOV clears the gap below its destination. */
+  if (slot >= (int32_t)J->maxslot) {
+    memset(J->base + J->maxslot, 0, ((BCReg)slot - J->maxslot)*sizeof(TRef));
+    J->maxslot = (BCReg)slot + 1;
+  }
   J->base[slot] = ref;
   return ref;
 }
