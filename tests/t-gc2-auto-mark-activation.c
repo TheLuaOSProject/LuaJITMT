@@ -1,7 +1,7 @@
 /*
-** Verify automatic allocation can progress while a managed owner is parked
-** outside a declared native section at MARK and WEAK boundaries. The watchdog
-** releases the peer on failure so the embedding can still shut down.
+** Exercise ordinary allocation and one-unit public GC steps with a managed
+** owner parked outside a declared native section at MARK and WEAK boundaries.
+** The watchdog releases the peer on failure so the embedding can shut down.
 */
 #include <assert.h>
 #include <pthread.h>
@@ -24,6 +24,7 @@ static atomic_int release_owner;
 static atomic_int timed_out;
 static atomic_int peer_resumed_mark;
 static int initial_phase;
+static int public_step;
 
 static uint64_t monotonic_ns(void)
 {
@@ -73,8 +74,14 @@ static int prepare_mark(lua_State *L)
 static int start_allocation(lua_State *L)
 {
   assert(atomic_load(&owner_parked));
-  lj_gc_threshold_store(G(L), 0);
   atomic_store(&allocation_started, 1);
+  if (public_step) {
+    unsigned i;
+    for (i = 0; i < 256 && !gc2_hs_pending_acq(G(L)); i++)
+      assert(lua_gc(L, LUA_GCSTEP, 1) == 0 || atomic_load(&timed_out));
+    assert(gc2_hs_pending_acq(G(L)) || atomic_load(&timed_out));
+  }
+  lj_gc_threshold_store(G(L), 0);
   return 0;
 }
 
@@ -209,6 +216,12 @@ static int run_case(int phase)
 
 int main(void)
 {
-  return run_case(LJ_GC2_IDLE) || run_case(LJ_GC2_MARK) ||
-         run_case(LJ_GC2_WEAK);
+  int result;
+  for (public_step = 0; public_step <= 1; public_step++) {
+    result = run_case(LJ_GC2_IDLE) || run_case(LJ_GC2_MARK) ||
+             run_case(LJ_GC2_WEAK);
+    if (result)
+      return result;
+  }
+  return 0;
 }

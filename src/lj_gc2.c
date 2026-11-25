@@ -3073,7 +3073,7 @@ int lj_gc2_collect_active(lua_State *L)
   ** fail-closed instead of self-waiting forever for impossible work. */
   if (gc2_recovery_stalled_failed(g))
     return 0;
-  if (gc2_request_major_explicit(g, tg) && gc2_mark_begin(g, 0)) {
+  if (gc2_request_major_explicit(g, tg) && gc2_mark_begin(g, 1)) {
     need_major = 0;
   }
   for (;;) {
@@ -3095,7 +3095,7 @@ int lj_gc2_collect_active(lua_State *L)
       if (need_major) {
 	if (gc2_request_major_explicit(g, tg) ||
 	    gc2_cycle_leader_acq(g) != 0) {
-	  if (gc2_mark_begin(g, 0)) {
+	  if (gc2_mark_begin(g, 1)) {
 	    need_major = 0;
 	    continue;
 	  }
@@ -3107,7 +3107,7 @@ int lj_gc2_collect_active(lua_State *L)
 	extra_finreg = 1;
 	if (gc2_request_major_explicit(g, tg) ||
 	    gc2_cycle_leader_acq(g) != 0) {
-	  if (gc2_mark_begin(g, 0))
+	  if (gc2_mark_begin(g, 1))
 	    continue;
 	  gc2_peer_wait_l(L);
 	  continue;
@@ -3134,7 +3134,7 @@ int lj_gc2_collect_active(lua_State *L)
       }
       if (gc2_deferred_epoch_acq(g) != defer0)
 	return 0;
-      close_result = gc2_mark_complete_result(g, L, 64, ~(uint32_t)0, 0);
+      close_result = gc2_mark_complete_result(g, L, 64, ~(uint32_t)0, 1);
       if (close_result == GC2_DRIVER_COMPLETE) {
 	lj_gc2_mark_to_weak(g);
 	continue;
@@ -3146,10 +3146,10 @@ int lj_gc2_collect_active(lua_State *L)
     }
     if (phase == LJ_GC2_WEAK) {
       int weak_result = gc2_weak_complete_result(
-	g, L, NULL, LJ_GC2_WEAK_DRAIN_BATCH, 0);
+	g, L, NULL, LJ_GC2_WEAK_DRAIN_BATCH, 1);
       if (weak_result == GC2_DRIVER_COMPLETE) {
 	uint64_t defer0 = gc2_deferred_epoch_acq(g);
-	lj_gc2_weak_to_sweep(g, L);
+	gc2_weak_to_sweep(g, L, 1);
 	if (gc2_deferred_epoch_acq(g) != defer0)
 	  return 0;
 	continue;
@@ -3215,7 +3215,7 @@ static int gc2_step_retry(lua_State *L, uint32_t budget)
   return 1;
 }
 
-static int gc2_step(lua_State *L, uint32_t budget, int automatic)
+static int gc2_step(lua_State *L, uint32_t budget)
 {
   global_State *g;
   TGState *tg;
@@ -3241,7 +3241,7 @@ static int gc2_step(lua_State *L, uint32_t budget, int automatic)
       if (!drove_cycle) {
 	if (gc2_request_major_explicit(g, tg) ||
 	    gc2_cycle_leader_acq(g) != 0) {
-	  if (gc2_mark_begin(g, automatic)) {
+	  if (gc2_mark_begin(g, 1)) {
 	    drove_cycle = 1;
 	    continue;
 	  }
@@ -3253,7 +3253,7 @@ static int gc2_step(lua_State *L, uint32_t budget, int automatic)
 	extra_finreg = 1;
 	if (gc2_request_major_explicit(g, tg) ||
 	    gc2_cycle_leader_acq(g) != 0) {
-	  if (gc2_mark_begin(g, automatic))
+	  if (gc2_mark_begin(g, 1))
 	    continue;
 	  if (gc2_step_retry(L, budget))
 	    continue;
@@ -3271,7 +3271,7 @@ static int gc2_step(lua_State *L, uint32_t budget, int automatic)
       }
       uint32_t available = LJ_GC2_WORKER_DRAIN_BATCH, drained;
       uint64_t defer0 = gc2_deferred_epoch_acq(g);
-      if (automatic && gc2_mark_close_intent_acq(g)) {
+      if (gc2_mark_close_intent_acq(g)) {
 	(void)gc2_mark_complete_result(g, L, 1, available, 1);
 	continue;
       }
@@ -3286,7 +3286,7 @@ static int gc2_step(lua_State *L, uint32_t budget, int automatic)
 	** Spend the rest of this batch on its normal fixpoint attempt. */
 	available -= drained;
       }
-      close_result = gc2_mark_complete_result(g, L, 1, available, automatic);
+      close_result = gc2_mark_complete_result(g, L, 1, available, 1);
       if (close_result == GC2_DRIVER_COMPLETE) {
 	lj_gc2_mark_to_weak(g);
 	continue;
@@ -3299,10 +3299,10 @@ static int gc2_step(lua_State *L, uint32_t budget, int automatic)
     }
     if (phase == LJ_GC2_WEAK) {
       int weak_result = gc2_weak_complete_result(
-	g, L, NULL, LJ_GC2_WEAK_DRAIN_BATCH, automatic);
+	g, L, NULL, LJ_GC2_WEAK_DRAIN_BATCH, 1);
       if (weak_result == GC2_DRIVER_COMPLETE) {
 	uint64_t defer0 = gc2_deferred_epoch_acq(g);
-	gc2_weak_to_sweep(g, L, automatic);
+	gc2_weak_to_sweep(g, L, 1);
 	if (gc2_deferred_epoch_acq(g) != defer0)
 	  break;
 	continue;
@@ -3366,12 +3366,12 @@ static int gc2_step(lua_State *L, uint32_t budget, int automatic)
 
 int lj_gc2_step_explicit(lua_State *L, uint32_t budget)
 {
-  return gc2_step(L, budget, 0);
+  return gc2_step(L, budget);
 }
 
 int lj_gc2_step_automatic(lua_State *L)
 {
-  return gc2_step(L, 1, 1);
+  return gc2_step(L, 1);
 }
 
 void lj_gc2_check_trigger(global_State *g, TGState *tg)
