@@ -312,8 +312,9 @@ static uint64_t arena_lifetime_block_bits(const GCArena *a, uint32_t w)
 
 static LJ_AINLINE int arena_lifetime_managed(const GCArena *a)
 {
-  return a && !lj_arena_ishuge(a) &&
-    (lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE) != 0;
+  uint32_t flags = a ? lj_arena_flags_acq(a) : 0;
+  return (flags & LJ_AF_HUGE_MAGIC) != LJ_AF_HUGE_MAGIC &&
+    (flags & LJ_AF_TRAVERSABLE) != 0;
 }
 
 /* Callers already retain the small mapping. A missing sidecar on a
