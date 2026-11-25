@@ -1697,8 +1697,17 @@ static void tab_resize_desc_preserve(global_State *g, TabResizeDesc *desc)
     return;
   (void)lj_gc2_markmem_registered_publish_try(g, desc);
   t = lj_tab_resize_desc_tab_acq(desc);
-  if (t)
-    lj_gc2_preserve_root(g, obj2gco(t));
+  if (t) {
+    if (lj_tab_resize_desc_flags_acq(desc) & TAB_RESIZE_DESC_F_RUNTIME_CUTOVER) {
+      TValue root;
+      /* Runtime resize publishes an ordinary typed root. The regular GC2
+      ** barrier admits or rescues that exact edge without abandoning MARK. */
+      setgcVraw(&root, obj2gco(t), LJ_TTAB);
+      lj_gc2_barrier_tv_g(g, &root);
+    } else {
+      lj_gc2_preserve_root(g, obj2gco(t));
+    }
+  }
 }
 
 static void tab_resize_desc_push(global_State *g, TabResizeDesc *desc)
