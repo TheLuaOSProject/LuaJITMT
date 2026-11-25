@@ -580,32 +580,38 @@ resize trigger: num > mask (la_add32 num on success): claim via
   observing resize==1 *help finish the copy first*, then insert into NEW.
   Helping is bounded (cursor); still lock-free (initiator stall ⇒ helpers
   finish). This serializes intern-vs-resize without a lock.)
-Current implementation status: bucket publication now uses release CAS under
-a TG-local active-user marker. Resize claims the high bit in
-`StrTabHdr.resize`, then drains live TG markers that point at the claimed header
-before copying and publishing the replacement header; new entrants spin on the
-claimed bit. This keeps the current destructive resize exclusion rule but
-removes the shared-header active-count RMW pair from ordinary string interning.
-The old header is retained on a raw retired-header list and freed after a later
-completed safepoint handshake epoch, avoiding immediate RCU use-after-free for
-threads that loaded the old header before pinning it. The string count is
-updated and read with atomic helpers (`la_add32_rlx`, `la_sub32_acqrel`,
-`la_load32_acq`) so sweep-side frees and shrink checks do not race plain
-accesses against concurrent interns. `GCstr.sid` allocation uses
-`la_add32_rlx(&g->str.id, 1)`; the old allocation-time `idreseed`/global-PRNG
-mutation is deferred until it can be reintroduced without racing allocation
-outside the active table marker. Secondary-chain rehash now reuses the same
-claim/drain bit on the current header, verifies the header is still current
-after the claim, rechains in place while new entrants spin, and releases the
-bit before retrying the pending insert. The original full helping protocol
-above is still the target; bounded helper copy, cross-table resize
-participation, generic deferred-free buckets for all raw gens, and Harris
-dead-link sweep remain follow-up work.
-Current legacy string sweep bridge claims the active header before relinking a
-bucket and freeing dead string bodies, using the same resize bit and TG-local
-active marker drain as resize/secondary rehash. This prevents current lockless
-intern readers from racing destructive sweep, but it is still a bridge until
-Harris dead-link sweep and deferred string-body reclamation replace it.
+Current implementation publishes a canonical entry with a bucket-head CAS
+under a TG-local header pin. Growth and secondary rehash claim topology
+opportunistically and release the claim when an earlier pin is visible. The
+publisher orders that pin before rechecking the owner's claim. Retired
+headers stay on a raw retirement list until the appropriate reader grace
+interval has passed.
+
+Secondary rehash gates its source bucket and any lookup whose selected dense
+bucket is that source. Rehash prepends moved entries to each destination with
+a CAS, allowing unrelated interners to use the same destination concurrently.
+Plain expansion preserves sparse hashes. As each source bucket finishes, a
+release-published cursor makes its target buckets available for ordinary
+interning before the global header handoff. A nonowning hit cache provides a
+retained canonical hit on some routes whose topology is still closed.
+Uncached keys routed through unfinished sources, secondary-mode resize and
+shrink can still depend on a descheduled topology owner.
+
+A helpable copy requires source and target generations to retain separate
+successor links. One design freezes a source head with a CAS, leaving its
+links available to every helper. Interners select the source before the
+freeze, help initialize the target while the source is frozen, and select
+the target after the ready publication. Publishing the prepared target and
+its ownership in one operation permits helpers to proceed even if the
+initiator stops immediately after publication. Secondary rehash,
+resurrection and physical unlink must share this routing and the exact
+reader grace rules.
+
+The current sweep gates structural changes with the sweep claim and uses a
+tagged-link CAS for candidate and unlink transitions. The quarantine keeps
+exact canonical records until reclamation admission and the reader grace
+intervals permit physical retirement. Any interning topology change has to
+preserve that ownership and the canonical-identity checks.
 ### 6.5.3 sid / idreseed: StrID wraps are handled as today at full-resize
 points (lj_str.c:129+ logic) under the resize claim.
 ### 6.5.4 Sweep

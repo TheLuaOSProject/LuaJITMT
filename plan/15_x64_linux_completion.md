@@ -22,6 +22,14 @@ With stock and fork run sequentially on CPU 8, the 15-case default-JIT geomean w
 
 The lifetime rules follow the removal and reclamation split in RCU. C11 §5.1.2.4 governs the ordering between participants. LuaJIT's FFI rules define lifetimes for application-owned buffers and callbacks, and its JIT controls distinguish compilation, flushing and execution. [Linux RCU overview](https://www.kernel.org/doc/html/latest/RCU/whatisRCU.html), [C11 committee draft](https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1570.pdf), [LuaJIT FFI semantics](https://luajit.org/ext_ffi_semantics.html), [LuaJIT JIT controls](https://luajit.org/ext_jit.html).
 
+## Progress after b1.2.1
+
+- Arena preparation runs once per collector epoch across thread attachment. A live local closure now survives worker pool changes and full collections. Collection can finish while a marked, initialized table still awaits ownership-list publication, and while a peer continuously interns a rooted string. Detached threads' empty arenas can be unmapped.
+- A thread can complete `table.clear` while a resize is paused before freezing its source. After the owner has copied a hash-only resize, readers and writers can publish the new hash and retire the old one. Cover the earlier copy stages, collision slots and array changes with the same suspended-owner test.
+- During ordinary string-table expansion, interners can use buckets whose migration has completed. Collision rehash also admits unrelated source buckets. Quarantine supports identity-preserving rescue, directory removal and a second reader grace period before body reuse. Physical collection of ordinary unreachable strings with active peers still needs complete coverage of interpreter, JIT and native references.
+- Numeric interpreter loops now service stop requests without a function call. A parked trace-event callback can release the recorder for a peer flush. The imported-bytecode suite caught a side trace clearing a live Lua local during recording. Linux CI runs all 509 stock source cases with JIT on, the 387 eligible interpreter cases and 509 imported bytecode cases under GCC and a Clang assertion build.
+- Native FFI coverage includes mixed-register SysV aggregates, register exhaustion and an outer C call retaining Lua string bytes across a nested callback and collection. Audit ordinary FFI readers during a paused declaration and continue testing concurrent callbacks and allocation lifetimes.
+
 ## Correctness and progress checks
 
 - Run both stock corpora, the public embedding and FFI cases, first-attach/flush races, assertion builds, ASan, TSan C drivers and the torture and weak/finalizer soaks. Keep the stock bytecode producer separate from the executable under test. Record which cases are eligible for each build.
