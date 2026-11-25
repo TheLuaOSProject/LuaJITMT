@@ -173,6 +173,17 @@ cTValue *lj_meta_cachetv_l(lua_State *L, GCtab *mt, MMS mm, GCstr *name,
   return tvisnil(out) ? NULL : out;
 }
 
+static LJ_AINLINE int meta_tv_on_stack(lua_State *L, cTValue *tv)
+{
+  uintptr_t p, lo, hi;
+  if (!L || !tv)
+    return 0;
+  p = (uintptr_t)(const void *)tv;
+  lo = (uintptr_t)(const void *)tvref(L->stack);
+  hi = (uintptr_t)(const void *)tvref(L->maxstack);
+  return p >= lo && p < hi;
+}
+
 /* Lookup metamethod for object. */
 cTValue *lj_meta_lookup(lua_State *L, cTValue *o, MMS mm)
 {
@@ -283,7 +294,7 @@ cTValue *lj_meta_lookuptv(lua_State *L, TValue *out, cTValue *o, MMS mm)
       ** unleased GC result crosses this helper boundary. */
       copyTVrel(L, out, &result);
       lj_gc2_smr_read_leave(g);
-      lj_gc_pubroot(L, out);
+      lj_gc2_publish_read_root(L, out, meta_tv_on_stack(L, out));
       lj_gc2_lease_release(&resultlease);
       lj_gc2_lease_release(&mtlease);
       lj_gc2_lease_release(&objlease);
@@ -411,17 +422,6 @@ enum {
   META_CAPTURE_KEY_STALE
 };
 
-static LJ_AINLINE int meta_tv_on_stack(lua_State *L, cTValue *tv)
-{
-  uintptr_t p, lo, hi;
-  if (!L || !tv)
-    return 0;
-  p = (uintptr_t)(const void *)tv;
-  lo = (uintptr_t)(const void *)tvref(L->stack);
-  hi = (uintptr_t)(const void *)tvref(L->maxstack);
-  return p >= lo && p < hi;
-}
-
 static LJ_AINLINE MetaSourceRef meta_source_ref(lua_State *L, cTValue *tv)
 {
   MetaSourceRef ref;
@@ -502,10 +502,7 @@ TValue *lj_meta_getmt_protected_rooted(lua_State *L, cTValue *objroot,
       setnilV(&result);
       out = meta_output_current(L, &outref);
       copyTVrel(L, out, &result);
-      if (outref.stack)
-	lj_state_stack_pubtv(L, L, out);
-      else
-	lj_gc_pubroot(L, out);
+      lj_gc2_publish_read_root(L, out, outref.stack);
       return meta_output_current(L, &outref);
     }
     if (tvistab(&osnap))
@@ -521,10 +518,7 @@ TValue *lj_meta_getmt_protected_rooted(lua_State *L, cTValue *objroot,
       setnilV(&result);
       out = meta_output_current(L, &outref);
       copyTVrel(L, out, &result);
-      if (outref.stack)
-	lj_state_stack_pubtv(L, L, out);
-      else
-	lj_gc_pubroot(L, out);
+      lj_gc2_publish_read_root(L, out, outref.stack);
       return meta_output_current(L, &outref);
     }
     setgcVraw(&mtv, obj2gco(mt), LJ_TTAB);
@@ -541,10 +535,7 @@ TValue *lj_meta_getmt_protected_rooted(lua_State *L, cTValue *objroot,
       setnilV(&result);
       out = meta_output_current(L, &outref);
       copyTVrel(L, out, &result);
-      if (outref.stack)
-	lj_state_stack_pubtv(L, L, out);
-      else
-	lj_gc_pubroot(L, out);
+      lj_gc2_publish_read_root(L, out, outref.stack);
       return meta_output_current(L, &outref);
     }
 
@@ -572,10 +563,7 @@ TValue *lj_meta_getmt_protected_rooted(lua_State *L, cTValue *objroot,
       out = meta_output_current(L, &outref);
       copyTVrel(L, out, &result);
       lj_gc2_smr_read_leave(g);
-      if (outref.stack)
-	lj_state_stack_pubtv(L, L, out);
-      else
-	lj_gc_pubroot(L, out);
+      lj_gc2_publish_read_root(L, out, outref.stack);
       lj_gc2_lease_release(&resultlease);
       lj_gc2_lease_release(&mtlease);
       lj_gc2_lease_release(&objlease);
@@ -589,10 +577,7 @@ TValue *lj_meta_getmt_protected_rooted(lua_State *L, cTValue *objroot,
       out = meta_output_current(L, &outref);
       copyTVrel(L, out, &mtv);
       lj_gc2_smr_read_leave(g);
-      if (outref.stack)
-	lj_state_stack_pubtv(L, L, out);
-      else
-	lj_gc_pubroot(L, out);
+      lj_gc2_publish_read_root(L, out, outref.stack);
       lj_gc2_lease_release(&mtlease);
       lj_gc2_lease_release(&objlease);
       return meta_output_current(L, &outref);
@@ -961,7 +946,7 @@ static cTValue *meta_tget_rooted_mode(lua_State *L, cTValue *o, cTValue *k,
       return NULL;  /* Trigger metamethod call. */
     }
     copyTVrel(L, receiver, method);
-    lj_gc_pubroot(L, receiver);
+    lj_gc2_publish_read_root(L, receiver, 0);
   }
   meta_chain_roots_fini(&roots);
   lj_err_msg(L, LJ_ERR_GETLOOP);
@@ -1096,7 +1081,7 @@ static TValue *meta_tset_rooted_mode(lua_State *L, cTValue *o, cTValue *k,
       return NULL;  /* Trigger metamethod call. */
     }
     copyTVrel(L, receiver, method);
-    lj_gc_pubroot(L, receiver);
+    lj_gc2_publish_read_root(L, receiver, 0);
   }
   meta_chain_roots_fini(roots);
   lj_err_msg(L, LJ_ERR_SETLOOP);

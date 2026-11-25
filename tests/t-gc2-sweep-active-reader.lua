@@ -5,15 +5,19 @@ if jit then jit.off() end
 local done = { false }
 local ready = threading.channel(1)
 local held = ("held-string-"):rep(200)
-local reader = assert(threading.spawn(function(done, ready, held)
+local source = { value = held }
+local proxy = setmetatable({}, { __index = source, __metatable = source })
+local reader = assert(threading.spawn(function(done, ready, held, proxy)
   assert(ready:send(true, 10))
   local sum = 0
   while not done[1] do
-    sum = sum + #held
+    local visible = getmetatable(proxy)
+    assert(proxy.value == visible.value and visible.value == held)
+    sum = sum + #proxy.value
     if sum > 1000000000 then sum = 0 end
   end
   return #held
-end, done, ready, held))
+end, done, ready, held, proxy))
 local started, received = ready:recv(10)
 assert(received and started)
 
