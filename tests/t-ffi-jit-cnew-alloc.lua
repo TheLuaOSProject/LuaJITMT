@@ -14,25 +14,28 @@ local worker = th.spawn(function()
 
   local struct_t = ffi.typeof("lj_m7_jit_cnew_alloc_t")
   local int64_t = ffi.typeof("int64_t")
+  local new, tonumber = ffi.new, tonumber
 
   local function make(n)
-    local sum = 0
+    local sum, last = 0
     for i = 1, n do
-      local obj = struct_t(i, i + 0.25)
-      local i64 = int64_t(i)
-      sum = sum + obj.x + tonumber(i64)
+      last = new(struct_t, i, i + 0.25)
+      sum = sum + tonumber(new(int64_t, i))
     end
-    return sum
+    return sum, last
   end
 
+  local sum, last
   for _ = 1, 30 do
-    assert(make(80) == 6480)
+    sum, last = make(80)
+    assert(sum == 3240 and last.x == 80 and last.y == 80.25)
   end
 
   local traces = trace_count(64)
   assert(traces > 0)
   collectgarbage("collect")
   collectgarbage("collect")
+  assert(last.x == 80 and last.y == 80.25)
   return traces
 end)
 
