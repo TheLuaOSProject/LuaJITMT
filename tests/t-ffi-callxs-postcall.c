@@ -369,7 +369,7 @@ static void assert_postcall_snapshot_pc(GCtrace *T, GCproto *pt,
     if (!leave)
       continue;
     for (sn = 0; sn < nsnap; sn++) {
-      MSize ofs, nent;
+      MSize ofs, nent, topslot = pt->framesize;
       const BCIns *pc;
 #if LJ_FR2
       uint64_t pcbase;
@@ -389,9 +389,26 @@ static void assert_postcall_snapshot_pc(GCtrace *T, GCproto *pt,
       assert(pc >= proto_bc(pt) && pc < proto_bc(pt) + pt->sizebc);
       assert(pc > proto_bc(pt));
 #if LJ_FR2
-      assert((pcbase & UINT64_C(0xff)) == 0);
+      if (trace_startpt_acq(T) == pt) {
+	assert((pcbase & UINT64_C(0xff)) == 0);
+      } else {
+	GCproto *root = trace_startpt_acq(T);
+	MSize base = (MSize)(pcbase & UINT64_C(0xff));
+	MSize i;
+	assert(base > 0);
+	/* The nested CALLM resumes in the recorded Lua callee frame. */
+	for (i = 0; i < nent; i++) {
+	  SnapEntry entry = snapentry_acq(&snapmap[ofs + i]);
+	  if (snap_isframe(entry) && snap_slot(entry) == base+1)
+	    break;
+	}
+	assert(i < nent);
+	topslot += base;
+	if (topslot < root->framesize)
+	  topslot = root->framesize;
+      }
 #endif
-      assert(snap_topslot_acq(&snap[sn]) == pt->framesize);
+      assert(snap_topslot_acq(&snap[sn]) == topslot);
       assert(bc_op(pc[-1]) == expected_callop);
       found++;
     }
@@ -593,13 +610,13 @@ static GCtrace *exercise_forced_result(lua_State *L, jit_State *J,
 static GCtrace *exercise_generated_topology(lua_State *L, jit_State *J,
 					    TGState *tg,
 					    const char *run_name,
-					    const char *opcode_name,
+					    const char *trace_name,
 					    const char *snapshot_name,
 					    BCOp expected_callop,
 					    lua_Integer result_offset,
 					    lua_Integer stop_effects)
 {
-  GCproto *opcode_pt, *snapshot_pt;
+  GCproto *snapshot_pt;
   GCtrace *T;
   lua_Integer expected;
   uint8_t old_flags;
@@ -613,10 +630,9 @@ static GCtrace *exercise_generated_topology(lua_State *L, jit_State *J,
   assert(auth_count(L) == 200);
   auth_reset(L);
 
-  opcode_pt = global_lua_proto(L, opcode_name);
-  assert(proto_has_bc(opcode_pt, expected_callop));
   snapshot_pt = global_lua_proto(L, snapshot_name);
-  T = find_callxs_trace(J, snapshot_pt);
+  assert(proto_has_bc(snapshot_pt, expected_callop));
+  T = find_callxs_trace(J, global_lua_proto(L, trace_name));
   if (T == NULL)
     fprintf(stderr, "%s did not produce a CALLXS trace\n", run_name);
   assert(T != NULL);
@@ -1147,10 +1163,12 @@ int main(void)
     "__callxs_postcall_iter_entry",
     "__callxs_postcall_iter_run",
     "__callxs_postcall_iter_run", BC_ITERC, 0, 2);
+  /* The outer loop interprets its first iteration before entering the
+  ** generated CALLM, whose completed foreign effect must count once. */
   T = exercise_generated_topology(L, J, tg,
     "__callxs_postcall_callm_run",
-    "__callxs_postcall_callm_once",
-    "__callxs_postcall_callm_once", BC_CALLM, 9, 1);
+    "__callxs_postcall_callm_run",
+    "__callxs_postcall_callm_once", BC_CALLM, 9, 2);
 
   /* The declared 32-byte alignment is an outer CType attribute, not part of
   ** the raw struct child. Prove interpreted preallocation and the generated
