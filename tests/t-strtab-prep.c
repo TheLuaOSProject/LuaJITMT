@@ -25,7 +25,7 @@ static void check_strtab(global_State *g)
   mask = lj_str_mask_acq(g);
   assert(mask != ~(MSize)0);
   assert(hdr->mask == mask);
-  assert(hdr->resize == 0);
+  assert(lj_str_resize_state_acq(hdr) == 0);
   assert(hdr->copy_cursor == 0);
   assert(lj_str_retire_epoch_acq(hdr) == 0);
   assert(lj_str_retired_next_acq(hdr) == NULL);

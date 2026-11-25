@@ -289,8 +289,10 @@ typedef struct StrCanonRec StrCanonRec;
 
 typedef struct StrTabHdr {
   MSize mask;		/* String hash mask (size of hash table - 1). */
-  MSize resize;		/* Reserved resize claim for M5 lock-free interning. */
+  uintptr_t topology;	/* Claim or tagged target generation of plain growth. */
   MSize copy_cursor;	/* First completed source bucket of a plain expansion. */
+  MSize link_slot;	/* Successor slot used by this generation. */
+  uint8_t has_secondary;  /* Every idle topology after rehash records this. */
   uint64_t retire_epoch;  /* Safepoint epoch when retired. */
   struct StrTabHdr *retired_next;  /* Retired string table headers. */
   struct StrTabHdr *expand_to;  /* Rooted target of eligible plain growth. */
@@ -315,6 +317,7 @@ typedef struct GCstr {
   StrHash hash;		/* Hash of string. */
   MSize len;		/* Size of string. */
   LJ_ALIGN(8) uintptr_t canon;  /* Atomic canonical-lifecycle word. */
+  GCRef str_alt_next;	/* Successor in the other string table generation. */
 } GCstr;
 
 /*
@@ -3358,13 +3361,13 @@ LJ_STATIC_ASSERT(offsetof(GChead, marked) == sizeof(GCRef));
 LJ_STATIC_ASSERT(offsetof(GChead, gct) == sizeof(GCRef) + 1u);
 LJ_STATIC_ASSERT(offsetof(GChead, marked) == offsetof(GCstr, marked));
 LJ_STATIC_ASSERT((offsetof(GCstr, canon) & (sizeof(uintptr_t)-1u)) == 0u);
-LJ_STATIC_ASSERT(sizeof(GCstr) == offsetof(GCstr, canon) + sizeof(uintptr_t));
+LJ_STATIC_ASSERT(sizeof(GCstr) == offsetof(GCstr, str_alt_next) + sizeof(GCRef));
 #if LJ_64
 LJ_STATIC_ASSERT(offsetof(GCstr, sid) == 12u);
 LJ_STATIC_ASSERT(offsetof(GCstr, hash) == 16u);
 LJ_STATIC_ASSERT(offsetof(GCstr, len) == 20u);
 LJ_STATIC_ASSERT(offsetof(GCstr, canon) == 24u);
-LJ_STATIC_ASSERT(sizeof(GCstr) == 32u);
+LJ_STATIC_ASSERT(sizeof(GCstr) == 40u);
 LJ_STATIC_ASSERT(offsetof(global_State, stremptyz) ==
 		 offsetof(global_State, strempty) + sizeof(GCstr));
 #endif

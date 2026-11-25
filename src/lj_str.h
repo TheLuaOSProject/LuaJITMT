@@ -12,7 +12,17 @@
 
 #define LJ_STRHASH_DEAD		((uintptr_t)1)
 #define LJ_STRHASH_SECONDARY	((uintptr_t)2)
+#define LJ_STRHASH_FROZEN	((uintptr_t)4)
 #define LJ_STRHASH_LINKMASK	(LJ_STRHASH_DEAD|LJ_STRHASH_SECONDARY)
+
+#define LJ_STRTAB_RESIZE	((MSize)0x80000000u)
+#define LJ_STRTAB_SWEEP		((MSize)0x40000000u)
+#define LJ_STRTAB_REHASH		((MSize)0x20000000u)
+#define LJ_STRTAB_BUCKET_MASK	((MSize)(LJ_MAX_STRTAB - 1u))
+#define LJ_STRTAB_TOPO_EXPAND	((uintptr_t)1u)
+#define LJ_STRTAB_TOPO_SECOND	((uintptr_t)2u)
+#define LJ_STRTAB_TOPO_SHIFT	2
+
 
 /* Per-body canonical lifecycle. Record-carrying states use the low three
 ** alignment bits of an authoritative StrCanonRec pointer. */
@@ -97,7 +107,7 @@ enum {
 };
 
 #define lj_str_hashhead_u(u) \
-  ((GCobj *)(void *)((u) & ~(uintptr_t)LJ_STRHASH_LINKMASK))
+  ((GCobj *)(void *)((u) & ~(LJ_STRHASH_LINKMASK | LJ_STRHASH_FROZEN)))
 #define lj_str_tabsize(mask) \
   ((mask) == ~(MSize)0 ? (GCSize)0 : \
    (GCSize)offsetof(StrTabHdr, bucket) + \
@@ -111,9 +121,29 @@ enum {
 #define lj_str_qtabbytes(tabh) \
   ((tabh) ? lj_str_qtabsize((tabh)->mask) : (GCSize)0)
 
+static LJ_AINLINE uintptr_t lj_str_topology_acq(const StrTabHdr *hdr)
+{
+  return la_loaduptr_acq(&hdr->topology);
+}
+
+static LJ_AINLINE MSize lj_str_resize_state_acq(const StrTabHdr *hdr)
+{
+  uintptr_t topo = lj_str_topology_acq(hdr);
+  return topo & LJ_STRTAB_TOPO_EXPAND ? LJ_STRTAB_RESIZE :
+    (MSize)(topo >> LJ_STRTAB_TOPO_SHIFT);
+}
+
+static LJ_AINLINE StrTabHdr *lj_str_expand_target(uintptr_t topo)
+{
+  return topo & LJ_STRTAB_TOPO_EXPAND ?
+    (StrTabHdr *)(topo & ~LJ_STRTAB_TOPO_EXPAND) : NULL;
+}
+
 static LJ_AINLINE StrTabHdr *lj_str_expand_to_acq(const StrTabHdr *hdr)
 {
-  return (StrTabHdr *)la_loadptr_acq((void *const *)&hdr->expand_to);
+  StrTabHdr *target = lj_str_expand_target(lj_str_topology_acq(hdr));
+  return target ? target :
+    (StrTabHdr *)la_loadptr_acq((void *const *)&hdr->expand_to);
 }
 
 static LJ_AINLINE StrTabHdr *lj_str_tabh_acq(const global_State *g)
@@ -273,7 +303,8 @@ static LJ_AINLINE void lj_str_tabh_rel(global_State *g, StrTabHdr *hdr)
 
 static LJ_AINLINE MSize lj_str_mask_acq(const global_State *g)
 {
-  return la_load32_acq(&g->str.mask);
+  StrTabHdr *hdr = lj_str_tabh_acq(g);
+  return hdr ? hdr->mask : la_load32_acq(&g->str.mask);
 }
 
 static LJ_AINLINE void lj_str_mask_store_rlx(global_State *g, MSize mask)
@@ -671,21 +702,9 @@ static LJ_AINLINE uintptr_t lj_str_hashsecondary_acq(const GCRef *r)
 #define lj_str_hashflags(r)		lj_str_hashflags_acq(&(r))
 #define lj_str_hashsecondary(r)		lj_str_hashsecondary_acq(&(r))
 
-static LJ_AINLINE GCobj *lj_str_next_acq(const GCobj *o)
+static LJ_AINLINE GCRef *lj_str_nodelink(const StrTabHdr *hdr, GCobj *o)
 {
-  return lj_str_link_target(lj_str_link_load_acq(
-	lj_obj_gcwref((GCobj *)o)));
-}
-
-static LJ_AINLINE uintptr_t lj_str_next_link_acq(const GCobj *o)
-{
-  return lj_str_link_load_acq(lj_obj_gcwref((GCobj *)o));
-}
-
-static LJ_AINLINE void lj_str_next_store_rel(GCobj *o, uintptr_t next)
-{
-  lj_str_ref_store_rel(lj_obj_gcwref(o),
-		       next & ~(uintptr_t)LJ_STRHASH_SECONDARY);
+  return hdr->link_slot ? &gco2str(o)->str_alt_next : lj_obj_gcwref(o);
 }
 
 static LJ_AINLINE void lj_str_bucket_store_rel(GCRef *r, GCobj *o,
@@ -703,6 +722,7 @@ LJ_FUNC int lj_str_haspattern(GCstr *s);
 
 /* String interning. */
 LJ_FUNC void lj_str_resize(lua_State *L, MSize newmask);
+LJ_FUNC void lj_str_expand_terminal(lua_State *L);
 LJ_FUNC int lj_str_sweep_claim(lua_State *L, StrTabHdr *hdr);
 LJ_FUNC void lj_str_sweep_release(StrTabHdr *hdr);
 LJ_FUNCA GCstr *lj_str_new(lua_State *L, const char *str, size_t len);
@@ -753,6 +773,8 @@ enum {
   LJ_STR_TEST_CANON_Q_BODY_HELD,
   LJ_STR_TEST_CANON_RESIZE_MOVED,
   LJ_STR_TEST_CANON_REHASH_DEST_SAMPLED,
+  LJ_STR_TEST_CANON_EXPAND_PUBLISHED,
+  LJ_STR_TEST_CANON_EXPAND_FROZEN,
   LJ_STR_TEST_CANON_EXPAND_BUCKET_DONE
 };
 enum {

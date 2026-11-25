@@ -74,7 +74,7 @@ int main(void)
 
   assert(lj_str_second_acq(g) == 1);
   hdr = lj_str_tabh_acq(g);
-  assert(hdr->resize == 0);
+  assert(lj_str_resize_state_acq(hdr) == 0);
   assert(lj_str_hashsecondary(hdr->bucket[TARGET_BUCKET]) != 0);
   for (i = 0; i < TARGET_STRINGS; i++)
     assert(lj_str_new(L, candidate[i], strlen(candidate[i])) == interned[i]);

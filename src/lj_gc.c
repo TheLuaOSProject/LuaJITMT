@@ -4052,7 +4052,7 @@ static uint32_t gc2_shutdown_free_strings(global_State *g,
 	  lj_assertG(0, "invalid terminal interned-string identity");
 	  abort();
 	}
-	next = lj_str_next_acq(o);
+	next = lj_str_hashhead_acq(lj_str_nodelink(hdr, o));
 	/* Keep the bucket edge until the exact gate and destructor lifetime LP
 	** succeed. A loss leaves this string and its complete suffix discoverable
 	** for the next PRE/retry round. */

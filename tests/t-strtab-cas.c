@@ -223,7 +223,7 @@ static void exercise_tagged_link_protocol(lua_State *L)
   assert(lj_str_link_target(raw) == obj2gco(prepended));
   assert((raw & LJ_STRHASH_DEAD) == 0);
   assert((raw & LJ_STRHASH_SECONDARY) == 0);
-  raw = lj_str_next_link_acq(obj2gco(prepended));
+  raw = lj_str_link_load_acq(lj_str_nodelink(hdr, obj2gco(prepended)));
   assert(lj_str_link_target(raw) == obj2gco(target));
   assert((raw & LJ_STRHASH_DEAD) != 0);
   assert((raw & LJ_STRHASH_SECONDARY) == 0);
@@ -235,7 +235,7 @@ static void exercise_tagged_link_protocol(lua_State *L)
   assert(tagged_match_ctx.mutations == 1);
   assert(tagged_match_ctx.before_cas == 1);
   assert(tagged_match_ctx.after_compare == 2);  /* Retry reached the match. */
-  raw = lj_str_next_link_acq(obj2gco(prepended));
+  raw = lj_str_link_load_acq(lj_str_nodelink(hdr, obj2gco(prepended)));
   assert((raw & LJ_STRHASH_DEAD) == 0);
 
   /* Tagging after bytes match is observed, cleared and rescued before return. */
@@ -298,13 +298,13 @@ static void exercise_rehash_ignores_legacy_colors(lua_State *L)
   }
 
   assert(lj_str_sweep_claim(L, hdr) == 1);
-  assert(la_load32_acq(&hdr->resize) == TEST_STRTAB_SWEEP);
+  assert(lj_str_resize_state_acq(hdr) == TEST_STRTAB_SWEEP);
   for (n = 0; n < TEST_CHAIN; n++) {
     members[n] = lj_str_new(L, names[n], lens[n]);
     assert(members[n] != NULL && members[n]->hashalg == 0);
   }
   lj_str_sweep_release(hdr);
-  assert(la_load32_acq(&hdr->resize) == 0);
+  assert(lj_str_resize_state_acq(hdr) == 0);
 
   /* The retired implementation swept this chain as a side effect whenever
   ** the compatibility state and header whites happened to look old. Those
@@ -355,12 +355,14 @@ static void pause_moved_string(lua_State *L, GCstr *s, StrCanonRec *rec,
   if (L != p->peer || stage != p->stage || la_load32_acq(&p->stopped))
     return;
   assert(rec == NULL);
-  owner = la_load32_acq(&p->hdr->resize);
+  owner = lj_str_resize_state_acq(p->hdr);
   if (stage != LJ_STR_TEST_CANON_REHASH_DEST_SAMPLED) {
     assert(owner == TEST_STRTAB_RESIZE);
-    if (stage == LJ_STR_TEST_CANON_EXPAND_BUCKET_DONE) {
+    if (stage == LJ_STR_TEST_CANON_EXPAND_BUCKET_DONE ||
+        stage == LJ_STR_TEST_CANON_EXPAND_FROZEN ||
+        stage == LJ_STR_TEST_CANON_EXPAND_PUBLISHED) {
       assert(s == NULL && lj_str_expand_to_acq(p->hdr) != NULL);
-      p->destination = la_load32_acq(&p->hdr->copy_cursor);
+      p->destination = p->hdr->mask;
       assert(p->destination == p->hdr->mask);
     } else {
       assert(s != NULL);
@@ -418,6 +420,36 @@ static void check_paused_topology(lua_State *L, PausedTopology *p,
        !la_load32_acq(&p->done); i++)
     test_sleep_without_tg(100000);
   assert(la_load32_acq(&p->stopped) && !la_load32_acq(&p->done));
+  if (p->stage == LJ_STR_TEST_CANON_EXPAND_BUCKET_DONE ||
+             p->stage == LJ_STR_TEST_CANON_EXPAND_FROZEN ||
+             p->stage == LJ_STR_TEST_CANON_EXPAND_PUBLISHED) {
+    global_State *g = G(L);
+    StrTabHdr *target = lj_str_expand_to_acq(p->hdr);
+    MSize hash;
+    assert(target && lj_str_tabh_acq(g) == p->hdr);
+    if (p->stage != LJ_STR_TEST_CANON_EXPAND_BUCKET_DONE) {
+      uintptr_t oldhead = lj_str_link_load_acq(&p->hdr->bucket[p->destination]);
+      assert(la_load32_acq(&target->copy_cursor) == p->hdr->mask + 1u);
+      assert(!!(oldhead & LJ_STRHASH_FROZEN) ==
+             (p->stage == LJ_STR_TEST_CANON_EXPAND_FROZEN));
+    }
+    for (i = 0;; i++) {
+      int n = snprintf(new_key, sizeof(new_key), "%08x-paused-growth-insert-%08x",
+                       i * UINT32_C(0x9e3779b9), i);
+      assert(n > 0 && (size_t)n < sizeof(new_key));
+      new_len = (size_t)n;
+      hash = test_hash_sparse(g->str.seed, new_key, (MSize)n);
+      if ((hash & p->hdr->mask) == p->destination)
+        break;
+    }
+    lua_pushlstring(L, new_key, new_len);
+    inserted = strV(L->top - 1);
+    assert(lj_str_tabh_acq(g) == p->hdr);
+    assert(lj_str_link_target(lj_str_link_load_acq(
+      &target->bucket[hash & target->mask])) == obj2gco(inserted));
+    lua_pushlstring(L, new_key, new_len);
+    assert(strV(L->top - 1) == inserted);
+  }
   /* Run the ordinary public interner after the writer has already changed
   ** a chain link, while its claim remains installed on the old header. */
   lua_pushlstring(L, bytes, len);
@@ -436,7 +468,8 @@ static void check_paused_topology(lua_State *L, PausedTopology *p,
     assert(!(lj_str_link_load_acq(&p->hdr->bucket[p->destination]) &
 	     LJ_STRHASH_SECONDARY));
     for (i = 0;; i++) {
-      int n = snprintf(new_key, sizeof(new_key), "paused-rehash-insert-%08x", i);
+      int n = snprintf(new_key, sizeof(new_key), "%08x-paused-rehash-insert-%08x",
+                       i * UINT32_C(0x9e3779b9), i);
       assert(n > 0 && (size_t)n < sizeof(new_key));
       new_len = (size_t)n;
       if ((test_hash_sparse(g->str.seed, new_key, (MSize)n) &
@@ -445,29 +478,9 @@ static void check_paused_topology(lua_State *L, PausedTopology *p,
     }
     lua_pushlstring(L, new_key, new_len);
     inserted = strV(L->top - 1);
-    assert((la_load32_acq(&p->hdr->resize) & TEST_STRTAB_REHASH) != 0);
-  } else if (p->stage == LJ_STR_TEST_CANON_EXPAND_BUCKET_DONE) {
-    global_State *g = G(L);
-    StrTabHdr *target = lj_str_expand_to_acq(p->hdr);
-    MSize hash;
-    assert(target && lj_str_tabh_acq(g) == p->hdr);
-    for (i = 0;; i++) {
-      int n = snprintf(new_key, sizeof(new_key), "paused-growth-insert-%08x", i);
-      assert(n > 0 && (size_t)n < sizeof(new_key));
-      new_len = (size_t)n;
-      hash = test_hash_sparse(g->str.seed, new_key, (MSize)n);
-      if ((hash & p->hdr->mask) == p->destination)
-        break;
-    }
-    lua_pushlstring(L, new_key, new_len);
-    inserted = strV(L->top - 1);
-    assert(lj_str_tabh_acq(g) == p->hdr);
-    assert(lj_str_link_target(lj_str_link_load_acq(
-      &target->bucket[hash & target->mask])) == obj2gco(inserted));
-    lua_pushlstring(L, new_key, new_len);
-    assert(strV(L->top - 1) == inserted);
+    assert((lj_str_resize_state_acq(p->hdr) & TEST_STRTAB_REHASH) != 0);
   } else {
-    assert(la_load32_acq(&p->hdr->resize) == TEST_STRTAB_RESIZE);
+    assert(lj_str_resize_state_acq(p->hdr) == TEST_STRTAB_RESIZE);
   }
   assert(!la_load32_acq(&p->done));
   la_store32_rel(&p->release, 1);
@@ -534,7 +547,8 @@ static void collect_collision_names(global_State *g, StrTabHdr *hdr,
   MSize found = 0;
   uint32_t n;
   for (n = 0; found < count; n++) {
-    int len = snprintf(names[found], sizeof(names[found]), "%s-%08x", prefix, n);
+    int len = snprintf(names[found], sizeof(names[found]), "%08x-%s-%08x",
+                       n * UINT32_C(0x9e3779b9), prefix, n);
     assert(len > 0 && (size_t)len < sizeof(names[found]));
     if ((test_hash_sparse(g->str.seed, names[found], (MSize)len) &
 	 hdr->mask) == bucket)
@@ -558,7 +572,7 @@ static void exercise_paused_topology_hits(void)
   static const char bytes[] = "string-intern-hit-during-moving-topology";
   lua_State *L = luaL_newstate();
   global_State *g;
-  PausedTopology resize = { 0 }, grow = { 0 };
+  PausedTopology resize = { 0 }, grow = { 0 }, publish = { 0 };
   assert(L != NULL);
   g = G(L);
   check_resize_hit_invalidation(L, bytes, sizeof(bytes)-1u);
@@ -567,11 +581,15 @@ static void exercise_paused_topology_hits(void)
   resize.target_mask = 4095u;
   check_paused_topology(L, &resize, bytes, sizeof(bytes)-1u);
   assert(lj_str_mask_acq(g) == resize.target_mask);
-  grow.stage = LJ_STR_TEST_CANON_EXPAND_BUCKET_DONE;
+  grow.stage = LJ_STR_TEST_CANON_EXPAND_FROZEN;
   grow.target_mask = 8191u;
   assert(!lj_str_second_acq(g));
   check_paused_topology(L, &grow, bytes, sizeof(bytes)-1u);
   assert(lj_str_mask_acq(g) == grow.target_mask);
+  publish.stage = LJ_STR_TEST_CANON_EXPAND_PUBLISHED;
+  publish.target_mask = (grow.target_mask << 1) + 1u;
+  check_paused_topology(L, &publish, bytes, sizeof(bytes)-1u);
+  assert(lj_str_mask_acq(g) == publish.target_mask);
 
 #if LUAJIT_SECURITY_STRHASH
   {
@@ -594,7 +612,8 @@ static void exercise_paused_topology_hits(void)
     ** of the next rehash and whose retained-hit slot will not collide. */
     for (n = 0;; n++) {
       int len = snprintf(dense_name, sizeof(dense_name),
-			 "paused-rehash-dense-source-%08x", n);
+			 "%08x-paused-rehash-dense-source-%08x",
+                         n * UINT32_C(0x9e3779b9), n);
       GCstr *dense;
       assert(len > 0 && (size_t)len < sizeof(dense_name));
       if ((test_hash_sparse(g->str.seed, dense_name, (MSize)len) &
@@ -952,7 +971,7 @@ static void exercise_canonical_quarantine(lua_State *L)
 
 static MSize assert_resize_state(StrTabHdr *hdr)
 {
-  MSize state = la_load32_acq(&hdr->resize);
+  MSize state = lj_str_resize_state_acq(hdr);
   assert((state & TEST_STRTAB_OWNER_LOBITS) == 0);
   assert(state == 0 || state == TEST_STRTAB_RESIZE ||
 	 state == TEST_STRTAB_SWEEP);
@@ -1258,10 +1277,10 @@ int main(void)
   assert(lj_str_retired_head_acq(g) == NULL);
   hdr = lj_str_tabh_acq(g);
   assert(hdr != NULL);
-  assert(hdr->resize == 0);
+  assert(lj_str_resize_state_acq(hdr) == 0);
 
   oldmask = lj_str_mask_acq(g);
-  wantmask = (oldmask << 1) + 1u;
+  wantmask = (oldmask << 2) + 3u;
 
   /* A paused interner must not keep the resize claimant waiting.
   ** The original header remains current until retry. */
@@ -1347,7 +1366,7 @@ int main(void)
 
   hdr = lj_str_tabh_acq(g);
   oldmask = lj_str_mask_acq(g);
-  wantmask = (oldmask << 1) + 1u;
+  wantmask = (oldmask << 2) + 3u;
   lj_tg_init_thread(g, &extra, NULL, 0);
   lj_tg_tid_rel(&extra, lj_thr_newid());
   oldtls = lj_thr_get_tg();

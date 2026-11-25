@@ -1036,6 +1036,7 @@ static void close_state(lua_State *L)
   ** closed here instead of discovering a non-resumable veto at the tail. */
   if (!lj_gc2_terminal_prefree(g))
     abort();
+  lj_str_expand_terminal(L);
   /* threading_shutdown tombstones native live-root nodes before entering this
   ** terminal path. Only now are all collector readers joined, so their raw
   ** arena storage may be physically released. */

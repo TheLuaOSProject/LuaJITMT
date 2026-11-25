@@ -131,10 +131,6 @@ static LJ_NOINLINE StrHash hash_dense(uint64_t seed, StrHash h,
 /* -- String interning ---------------------------------------------------- */
 
 #define LJ_STR_MAXCOLL		32
-#define LJ_STRTAB_RESIZE	((MSize)0x80000000u)
-#define LJ_STRTAB_SWEEP		((MSize)0x40000000u)
-#define LJ_STRTAB_REHASH		((MSize)0x20000000u)
-#define LJ_STRTAB_BUCKET_MASK	((MSize)(LJ_MAX_STRTAB - 1u))
 LJ_STATIC_ASSERT(LJ_STRTAB_BUCKET_MASK < LJ_STRTAB_REHASH);
 #define LJ_STRID_BLOCK		64u
 #define LJ_STRNUM_BLOCK		64u
@@ -339,7 +335,7 @@ static void strq_retire(global_State *g, StrCanonHdr *hdr)
 
 static LJ_AINLINE MSize strtab_resize_acq(StrTabHdr *hdr)
 {
-  MSize state = la_load32_acq(&hdr->resize);
+  MSize state = lj_str_resize_state_acq(hdr);
   lj_assertX(state == 0 || state == LJ_STRTAB_RESIZE ||
 	     state == LJ_STRTAB_SWEEP ||
 	     (state & ~LJ_STRTAB_BUCKET_MASK) == LJ_STRTAB_REHASH,
@@ -560,13 +556,26 @@ static void strq_leave(lua_State *L, StrCanonHdr *hdr)
   strq_active_leave(L2TG(L), hdr);
 }
 
+static int strtab_topology_claim(StrTabHdr *hdr, MSize state)
+{
+  uintptr_t expect = lj_str_topology_acq(hdr);
+  uintptr_t claim = ((uintptr_t)state << LJ_STRTAB_TOPO_SHIFT) | expect;
+  return expect <= LJ_STRTAB_TOPO_SECOND &&
+    (expect & LJ_STRTAB_TOPO_EXPAND) == 0 &&
+    la_casuptr(&hdr->topology, &expect, claim, LA_ACQ_REL, LA_ACQ);
+}
+
+static void strtab_release(StrTabHdr *hdr)
+{
+  la_storeuptr_rel(&hdr->topology, hdr->has_secondary ?
+                  LJ_STRTAB_TOPO_SECOND : 0);
+}
+
 static int strtab_claim(lua_State *L, StrTabHdr *hdr, MSize state)
 {
   global_State *g = G(L);
-  MSize expect = 0;
   /* Resize and secondary rehash never wait behind either destructive owner. */
-  if (strtab_resize_acq(hdr) != 0 ||
-      !la_cas32(&hdr->resize, &expect, state, LA_ACQ_REL, LA_ACQ))
+  if (!strtab_topology_claim(hdr, state))
     return 0;
   /* Growth and secondary rehash are opportunistic. A paused reader keeps its
   ** generation, but must not keep the claim held against new interners.
@@ -574,28 +583,21 @@ static int strtab_claim(lua_State *L, StrTabHdr *hdr, MSize state)
   ** publication. */
   la_fence_seq();
   if (strtab_active_on_hdr(g, hdr)) {
-    la_store32_rel(&hdr->resize, 0);
+    strtab_release(hdr);
     return 0;
   }
   return 1;
 }
 
-static void strtab_release(StrTabHdr *hdr)
-{
-  la_store32_rel(&hdr->resize, 0);
-}
-
 int lj_str_sweep_claim(lua_State *L, StrTabHdr *hdr)
 {
-  MSize expect = 0;
   /*
   ** Sweep owns stable bucket topology against resize/secondary rehash, but it
   ** never excludes or drains ordinary interners. All shared-link changes use
   ** exact CAS and body reclamation is deferred to a later grace period.
   */
   if (!hdr || strtab_resize_acq(hdr) != 0 ||
-      !la_cas32(&hdr->resize, &expect, LJ_STRTAB_SWEEP,
-		LA_ACQ_REL, LA_ACQ))
+      !strtab_topology_claim(hdr, LJ_STRTAB_SWEEP))
     return 0;
   if (LJ_UNLIKELY(lj_str_tabh_acq(G(L)) != hdr)) {
     strtab_release(hdr);
@@ -611,10 +613,8 @@ void lj_str_sweep_release(StrTabHdr *hdr)
 
 static int strtab_gc2_claim(global_State *g, StrTabHdr *hdr)
 {
-  MSize expect = 0;
   if (!g || !hdr || strtab_resize_acq(hdr) != 0 ||
-      !la_cas32(&hdr->resize, &expect, LJ_STRTAB_SWEEP,
-		LA_ACQ_REL, LA_ACQ))
+      !strtab_topology_claim(hdr, LJ_STRTAB_SWEEP))
     return 0;
   if (LJ_UNLIKELY(lj_str_tabh_acq(g) != hdr)) {
     strtab_release(hdr);
@@ -662,34 +662,136 @@ static StrTabHdr *strtab_enter(lua_State *L, global_State *g, StrHash sparse,
   }
 }
 
+/* The frozen source remains readable and every helper sees the same order.
+** Only a target head's first publication may replace the unset sentinel. The
+** target cannot be rehashed or swept while an old-generation helper is pinned. */
+static void strtab_help_expand_bucket(lua_State *L, StrTabHdr *source,
+                                      StrTabHdr *target, MSize cursor)
+{
+  MSize i = cursor - 1u, split = source->mask + 1u;
+  GCRef *oldhead = &source->bucket[i];
+  GCobj *first[2] = { NULL, NULL }, *last[2] = { NULL, NULL }, *o;
+  uintptr_t edge = lj_str_link_load_acq(oldhead);
+  while (!(edge & LJ_STRHASH_FROZEN)) {
+    if (lj_str_link_cas_acqrel(oldhead, &edge, edge | LJ_STRHASH_FROZEN)) {
+#ifdef LJ_STR_TEST_HELPERS
+      str_test_canon(L, NULL, NULL, LJ_STR_TEST_CANON_EXPAND_FROZEN);
+#else
+      UNUSED(L);
+#endif
+      break;
+    }
+  }
+  for (o = lj_str_link_target(edge); o;
+       o = lj_str_hashhead_acq(lj_str_nodelink(source, o))) {
+    MSize side = !!(gco2str(o)->hash & split);
+    if (last[side])
+      lj_str_ref_store_rel(lj_str_nodelink(target, last[side]), (uintptr_t)o);
+    else
+      first[side] = o;
+    last[side] = o;
+  }
+  for (MSize side = 0; side < 2; side++) {
+    uintptr_t unset = LJ_STRHASH_FROZEN;
+    if (last[side])
+      lj_str_ref_store_rel(lj_str_nodelink(target, last[side]), 0);
+    (void)lj_str_link_cas_acqrel(&target->bucket[i + side * split],
+                                 &unset, (uintptr_t)first[side]);
+  }
+  if (la_cas32(&target->copy_cursor, &cursor, i, LA_ACQ_REL, LA_ACQ)) {
+#ifdef LJ_STR_TEST_HELPERS
+    str_test_canon(L, NULL, NULL, LJ_STR_TEST_CANON_EXPAND_BUCKET_DONE);
+#endif
+  }
+}
+
+static void strtab_help_expand(lua_State *L, StrTabHdr *source,
+                               StrTabHdr *target, MSize until)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  MSize cursor;
+  if (la_load32_acq(&target->copy_cursor) <= until)
+    goto finish;
+  strtab_active_enter(tg, source);
+  la_fence_seq();
+  if (lj_str_tabh_acq(g) == source) {
+    while ((cursor = la_load32_acq(&target->copy_cursor)) > until)
+      strtab_help_expand_bucket(L, source, target, cursor);
+  }
+  strtab_active_leave(tg, source);
+
+finish:
+  if (la_load32_acq(&target->copy_cursor) == 0) {
+    void *expect = source;
+    /* Once cursor reaches zero no new helper can start reading source
+    ** links. Admission to the ready target needs no old-header
+    ** pin; if a prior reader remains, leave the handoff for a later call. */
+    la_fence_seq();
+    if (!strtab_active_on_hdr(g, source) &&
+        la_casptr((void **)&g->str.tabh, &expect, target, LA_ACQ_REL, LA_ACQ)) {
+      strtab_retire(g, source);
+    }
+  }
+}
+
+/* Terminal shutdown joins mutators and collector workers before dropping
+** string bodies. Finalize a copy left unpublished by an earlier reader. */
+void lj_str_expand_terminal(lua_State *L)
+{
+  global_State *g = G(L);
+  StrTabHdr *source = lj_str_tabh_acq(g);
+  StrTabHdr *target = source ? lj_str_expand_target(lj_str_topology_acq(source)) :
+                               NULL;
+  if (!target)
+    return;
+  if (!lj_gc2_smr_read_try(g))
+    abort();
+  strtab_help_expand(L, source, target, 0);
+  lj_gc2_smr_read_leave(g);
+  if (lj_str_tabh_acq(g) == source)
+    abort();
+}
+
 /* A plain expansion preserves each key's sparse hash. Each target bucket
 ** maps to exactly one source bucket, so no later migration can touch a
 ** completed source's destinations. Once published, those buckets are
 ** ordinary CAS interning targets even before the global header handoff. */
 static StrTabHdr *strtab_enter_completed(lua_State *L, global_State *g,
-					StrHash sparse, const char *bytes,
-					MSize len)
+                                        StrHash sparse, const char *bytes,
+                                        MSize len)
 {
   TGState *tg = L2TG(L);
   StrTabHdr *source, *target, *result = NULL;
   if (lj_tg_strtab_active_depth_acq(tg) != 0 || !lj_gc2_smr_read_try(g))
     return NULL;
   source = lj_str_tabh_acq(g);
-  if (source && strtab_resize_acq(source) == LJ_STRTAB_RESIZE &&
-      (target = lj_str_expand_to_acq(source)) != NULL &&
-      (sparse & source->mask) >= la_load32_acq(&source->copy_cursor)) {
-    StrTabHdr *current;
-    strtab_active_enter(tg, target);
-    /* The target can become current during admission. Any following
-    ** destructive owner must observe this pin or be seen on recheck. */
-    la_fence_seq();
-    current = lj_str_tabh_acq(g);
-    if ((current == source || current == target) &&
-	!strtab_intern_blocked(g, target, strtab_resize_acq(target),
-			       sparse, bytes, len))
-      result = target;
-    else
-      strtab_active_leave(tg, target);
+  if (source && strtab_resize_acq(source) == LJ_STRTAB_RESIZE) {
+    uintptr_t topology = lj_str_topology_acq(source);
+    MSize i = sparse & source->mask;
+    target = lj_str_expand_target(topology);
+    if (target)
+      strtab_help_expand(L, source, target, i);
+    else {
+      target = (StrTabHdr *)la_loadptr_acq((void *const *)&source->expand_to);
+      if (i < la_load32_acq(&source->copy_cursor))
+        target = NULL;
+    }
+
+    if (target) {
+      StrTabHdr *current;
+      strtab_active_enter(tg, target);
+      /* The target can become current during admission. Any following
+      ** destructive owner must observe this pin or be seen on recheck. */
+      la_fence_seq();
+      current = lj_str_tabh_acq(g);
+      if ((current == source || current == target) &&
+          !strtab_intern_blocked(g, target, strtab_resize_acq(target),
+                                 sparse, bytes, len))
+        result = target;
+      else
+        strtab_active_leave(tg, target);
+    }
   }
   lj_gc2_smr_read_leave(g);
   return result;
@@ -722,6 +824,35 @@ restart:
   oldtab = oldhdr ? oldhdr->bucket : NULL;
   oldmask = oldhdr ? oldhdr->mask : ~(MSize)0;
 
+  if (oldhdr && newmask == (oldmask << 1) + 1u &&
+      (oldmask & (oldmask + 1u)) == 0 &&
+      !(lj_str_topology_acq(oldhdr) & LJ_STRTAB_TOPO_SECOND)) {
+    uintptr_t expect = 0;
+    if (lj_tg_strtab_active_depth_acq(L2TG(L)) != 0 ||
+        !lj_gc2_smr_read_try(g)) {
+      lj_mem_free(g, newhdr, newsize);
+      return;
+    }
+    newhdr->link_slot = 1u - oldhdr->link_slot;
+    newhdr->copy_cursor = oldmask + 1u;
+    for (i = 0; i <= newmask; i++)
+      lj_str_ref_store_rel(&newtab[i], LJ_STRHASH_FROZEN);
+    if (lj_str_tabh_acq(g) == oldhdr &&
+        la_casuptr(&oldhdr->topology, &expect,
+                   (uintptr_t)newhdr | LJ_STRTAB_TOPO_EXPAND, LA_ACQ_REL, LA_ACQ)) {
+#ifdef LJ_STR_TEST_HELPERS
+      str_test_canon(L, NULL, NULL, LJ_STR_TEST_CANON_EXPAND_PUBLISHED);
+#endif
+      lj_gc2_markmem(g, newhdr);
+      strtab_help_expand(L, oldhdr, newhdr, 0);
+      lj_gc2_smr_read_leave(g);
+      return;
+    }
+    lj_gc2_smr_read_leave(g);
+    lj_mem_free(g, newhdr, newsize);
+    return;
+  }
+
   if (oldhdr) {
     if (!strtab_claim(L, oldhdr, LJ_STRTAB_RESIZE)) {
       lj_mem_free(g, newhdr, newsize);
@@ -738,6 +869,8 @@ restart:
       goto restart;
     }
   }
+
+  newhdr->link_slot = oldhdr ? oldhdr->link_slot : 0;
 
   expand = oldhdr && oldmask < newmask &&
 	   (oldmask & (oldmask + 1u)) == 0 &&
@@ -764,7 +897,7 @@ restart:
 	hash &= newmask;
 	lj_str_ref_store_rel(&newtab[hash],
 			     lj_str_ref_load_acq(&newtab[hash]) + 1u);
-	o = lj_str_next_acq(o);
+	o = lj_str_hashhead_acq(lj_str_nodelink(oldhdr, o));
       }
     }
     /* Mark secondary chains. */
@@ -774,6 +907,8 @@ restart:
       lj_str_ref_store_rel(&newtab[i],
 			   secondary ? LJ_STRHASH_SECONDARY : (uintptr_t)0);
     }
+    newhdr->has_secondary = (uint8_t)newsecond;
+    strtab_release(newhdr);
     lj_str_second_rel(g, (uint8_t)newsecond);
   }
 #endif
@@ -783,7 +918,7 @@ restart:
     uintptr_t oldlink = lj_str_link_load_acq(&oldtab[i]);
     GCobj *o;
     while ((o = lj_str_link_target(oldlink)) != NULL) {
-      uintptr_t nextlink = lj_str_next_link_acq(o);
+      uintptr_t nextlink = lj_str_link_load_acq(lj_str_nodelink(oldhdr, o));
       uintptr_t dead = oldlink & LJ_STRHASH_DEAD;
       GCstr *s = gco2str(o);
       MSize hash = s->hash;
@@ -811,14 +946,14 @@ restart:
 	}
       }
       /* NOBARRIER: The string table is a GC root. */
-      lj_str_next_store_rel(o, u);
+      lj_str_ref_store_rel(lj_str_nodelink(newhdr, o), u & ~LJ_STRHASH_SECONDARY);
       lj_str_bucket_store_rel(&newtab[hash], o,
 			      (u & LJ_STRHASH_SECONDARY) | dead);
 #else
       hash &= newmask;
       u = lj_str_ref_load_acq(&newtab[hash]);
       /* NOBARRIER: The string table is a GC root. */
-      lj_str_next_store_rel(o, u);
+      lj_str_ref_store_rel(lj_str_nodelink(newhdr, o), u & ~LJ_STRHASH_SECONDARY);
       lj_str_bucket_store_rel(&newtab[hash], o, dead);
 #endif
 #ifdef LJ_STR_TEST_HELPERS
@@ -908,10 +1043,11 @@ static LJ_NOINLINE int lj_str_rehash_chain(lua_State *L, StrHash hashc)
   strmask = hdr->mask;
   oldlink = lj_str_link_load_acq(&strtab[hashc & strmask]);
   lj_str_ref_store_rel(&strtab[hashc & strmask], LJ_STRHASH_SECONDARY);
+  hdr->has_secondary = 1;
   lj_str_second_rel(g, 1);
   while ((o = lj_str_link_target(oldlink)) != NULL) {
     uintptr_t u;
-    uintptr_t nextlink = lj_str_next_link_acq(o);
+    uintptr_t nextlink = lj_str_link_load_acq(lj_str_nodelink(hdr, o));
     uintptr_t dead = oldlink & LJ_STRHASH_DEAD;
     GCstr *s = gco2str(o);
     StrHash hash;
@@ -930,7 +1066,7 @@ static LJ_NOINLINE int lj_str_rehash_chain(lua_State *L, StrHash hashc)
     /* Unrelated interners may prepend concurrently to this destination.
     ** The source chain has already been detached under the rehash claim. */
     do {
-      lj_str_next_store_rel(o, u);
+      lj_str_ref_store_rel(lj_str_nodelink(hdr, o), u & ~LJ_STRHASH_SECONDARY);
     } while (!lj_str_link_cas_acqrel(&strtab[hash], &u,
 				    (uintptr_t)o |
 				    (u & LJ_STRHASH_SECONDARY) | dead));
@@ -1275,6 +1411,10 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
 retry_lookup:
       headu = lj_str_link_load_acq(head);
 lookup:
+      if (headu & LJ_STRHASH_FROZEN) {
+        strtab_leave(L, hdr);
+        continue;
+      }
       coll = 0;
       link = head;
       u = headu;
@@ -1294,7 +1434,7 @@ lookup:
 	coll++;
 	if (!strtab_protect_walk_link(L, link, o))
 	  goto retry_lookup;
-	link = lj_obj_gcwref(o);
+	link = lj_str_nodelink(hdr, o);
 	u = lj_str_link_load_acq(link);
       }
 #if LUAJIT_SECURITY_STRHASH
@@ -1342,7 +1482,8 @@ lookup:
       /* The head snapshot covers the complete miss search. An intervening
       ** prepend invalidates it, so a losing CAS must search again. */
       strtab_mark_before_publish(g, obj2gco(news));
-      lj_str_next_store_rel(obj2gco(news), headu);
+      lj_str_ref_store_rel(lj_str_nodelink(hdr, obj2gco(news)),
+			   headu & ~LJ_STRHASH_SECONDARY);
       want = (uintptr_t)news | (headu & LJ_STRHASH_SECONDARY);
       u = headu;
       if (!lj_str_link_cas_acqrel(head, &u, want))  /* Intern linearization. */
@@ -1782,7 +1923,7 @@ int lj_str_test_quarantine_detach(lua_State *L, GCstr *s)
   link = &hdr->bucket[s->hash & hdr->mask];
   while ((o = lj_str_link_target(u = lj_str_link_load_acq(link))) != NULL &&
 	 o != obj2gco(s))
-    link = lj_obj_gcwref(o);
+    link = lj_str_nodelink(hdr, o);
   if (!o) {
     la_storeptr_rel((void **)&rec->str, NULL);
     la_store32_rel(&rec->status,
@@ -1808,7 +1949,7 @@ int lj_str_test_quarantine_detach(lua_State *L, GCstr *s)
   ** new cycle starts after the barrier, its metadata scan sees the list; if it
   ** started before list publication, this barrier observes the active phase. */
   strq_preserve_body(g, s);
-  next = lj_str_next_link_acq(obj2gco(s));
+  next = lj_str_link_load_acq(lj_str_nodelink(hdr, obj2gco(s)));
   want = (next & ~(uintptr_t)LJ_STRHASH_SECONDARY) |
 	 (u & LJ_STRHASH_SECONDARY);
   if (!lj_str_link_cas_acqrel(link, &u, want)) {
@@ -1920,7 +2061,7 @@ static uint32_t str_sweep_tag_one(global_State *g, StrTabHdr *hdr)
       if (!lj_str_link_cas_acqrel(link, &current, want))
 	return 1;
     }
-    lj_str_sweep_link_rel(g, lj_obj_gcwref(o));
+    lj_str_sweep_link_rel(g, lj_str_nodelink(hdr, o));
     return 1;
   }
 
@@ -1949,7 +2090,7 @@ static uint32_t str_sweep_tag_one(global_State *g, StrTabHdr *hdr)
     (void)lj_str_link_cas_acqrel(link, &current, want);
   }
   /* UNLINK restarts at every bucket head, so a later prepend cannot be missed. */
-  lj_str_sweep_link_rel(g, lj_obj_gcwref(o));
+  lj_str_sweep_link_rel(g, lj_str_nodelink(hdr, o));
   return 1;
 }
 
@@ -1968,7 +2109,7 @@ static uint32_t str_sweep_unlink_one(global_State *g, StrTabHdr *hdr)
   if (!o)
     return str_sweep_advance_bucket(g, hdr, LJ_STR_SWEEP_UNLINK);
   if (!(u & LJ_STRHASH_DEAD)) {
-    lj_str_sweep_link_rel(g, lj_obj_gcwref(o));
+    lj_str_sweep_link_rel(g, lj_str_nodelink(hdr, o));
     return 1;
   }
 
@@ -1979,7 +2120,7 @@ static uint32_t str_sweep_unlink_one(global_State *g, StrTabHdr *hdr)
     want = u & ~(uintptr_t)LJ_STRHASH_DEAD;
     if (!lj_str_link_cas_acqrel(link, &current, want))
       return 1;
-    lj_str_sweep_link_rel(g, lj_obj_gcwref(o));
+    lj_str_sweep_link_rel(g, lj_str_nodelink(hdr, o));
     return 1;
   }
 
@@ -1991,7 +2132,7 @@ static uint32_t str_sweep_unlink_one(global_State *g, StrTabHdr *hdr)
     want = u & ~(uintptr_t)LJ_STRHASH_DEAD;
     if (!lj_str_link_cas_acqrel(link, &current, want))
       return 1;
-    lj_str_sweep_link_rel(g, lj_obj_gcwref(o));
+    lj_str_sweep_link_rel(g, lj_str_nodelink(hdr, o));
     return 1;
   }
 
@@ -2005,7 +2146,7 @@ static uint32_t str_sweep_unlink_one(global_State *g, StrTabHdr *hdr)
   la_storeptr_rel((void **)&batch->body[slot], s);
   la_store32_rel(&batch->count, slot + 1u);
   lj_str_sweep_batch_pending_rel(g, 1);
-  next = lj_str_next_link_acq(o);
+  next = lj_str_link_load_acq(lj_str_nodelink(hdr, o));
   want = (next & ~(uintptr_t)LJ_STRHASH_SECONDARY) |
 	 (u & LJ_STRHASH_SECONDARY);
   current = u;
@@ -2356,7 +2497,8 @@ static int strq_relink(global_State *g, StrCanonRec *rec, GCstr *s,
 #endif
   s->hash = hash;
   s->hashalg = (uint8_t)hashalg;
-  lj_str_next_store_rel(obj2gco(s), edge);
+  lj_str_ref_store_rel(lj_str_nodelink(hdr, obj2gco(s)),
+		       edge & ~LJ_STRHASH_SECONDARY);
   want = (uintptr_t)s | (edge & LJ_STRHASH_SECONDARY);
   if (!lj_str_link_cas_acqrel(head, &edge, want)) {
     strtab_release(hdr);

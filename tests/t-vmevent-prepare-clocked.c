@@ -870,17 +870,20 @@ static void test_no_runtime_string_admission(lua_State *L)
   StrTabHdr *hdr = lj_str_tabh_acq(g);
   LJVMEVENTPrepareResult result;
   ptrdiff_t oldtop;
-  uint32_t expect = 0;
+  uintptr_t expect;
+  uintptr_t claim = (uintptr_t)LJ_STRTAB_RESIZE << LJ_STRTAB_TOPO_SHIFT;
   assert(hdr != NULL);
   call_jit_attach(L, handler_a, "trace");
-  assert(la_cas32(&hdr->resize, &expect, (uint32_t)0x80000000u,
+  expect = lj_str_topology_acq(hdr);
+  claim |= expect;
+  assert(la_casuptr(&hdr->topology, &expect, claim,
 		  LA_ACQ_REL, LA_ACQ));
   oldtop = savestack(L, L->top);
   assert(prepare_checked(L, LJ_VMEVENT_TRACE, &result, 1) ==
 	 LJ_VMEVENT_PREPARE_READY);
   assert(funcV(prepared_handler(L, &result))->c.f == handler_a);
   discard_ready(L, oldtop);
-  la_store32_rel(&hdr->resize, 0);
+  la_storeuptr_rel(&hdr->topology, expect);
 }
 
 static void test_writer_reader_races(lua_State *L)
