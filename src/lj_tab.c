@@ -6855,6 +6855,7 @@ static TValue *tab_newkey_private(lua_State *L, GCtab *t, cTValue *key,
 #ifdef LJ_TAB_TEST_HELPERS
 static LJTabNewkeyReserveHook tab_test_newkey_anchor_after_reserve_hook;
 static LJTabNewkeyReserveHook tab_test_newkey_chain_after_reserve_hook;
+static LJTabNewkeyBeforeBarrierHook tab_test_newkey_before_barrier_hook;
 static LJTabNewkeyPublishHook tab_test_newkey_publish_hook;
 static LJTabNextAfterKeyindexHook tab_test_next_after_keyindex_hook;
 static LJTabStorePostCasHook tab_test_store_post_cas_hook;
@@ -6874,6 +6875,12 @@ void lj_tab_test_set_newkey_chain_after_reserve_hook(
   LJTabNewkeyReserveHook hook)
 {
   tab_test_newkey_chain_after_reserve_hook = hook;
+}
+
+void lj_tab_test_set_newkey_before_barrier_hook(
+  LJTabNewkeyBeforeBarrierHook hook)
+{
+  tab_test_newkey_before_barrier_hook = hook;
 }
 
 void lj_tab_test_set_newkey_publish_hook(LJTabNewkeyPublishHook hook)
@@ -7051,6 +7058,10 @@ static int tab_try_publish_nil_key(lua_State *L, GCtab *t, TValue *dst,
   setnilV(&expect);
   if (!lj_tv_cas(dst, &expect, key))
     return tab_key_islocked(&expect) ? -1 : 0;
+#ifdef LJ_TAB_TEST_HELPERS
+  if (tab_test_newkey_before_barrier_hook)
+    tab_test_newkey_before_barrier_hook(L, t, dst);
+#endif
   lj_gc2_barrier_weak_key(L, t, key);
   lj_gc_pubtabkey(L, t, key);
   return 1;
@@ -7070,6 +7081,7 @@ static Node *tab_publish_free_node_scan(lua_State *L, GCtab *t,
       *locked = 1;
     return NULL;
   }
+  tab_test_newkey_chain_after_reserve(L, t, nodebase);
   for (i = 1; i <= hmask; i++) {
     MSize idx = (start + i) & hmask;
     Node *n = &nodebase[idx];
@@ -7280,6 +7292,7 @@ retry_insert:
 	}
 	return tab_rehash_no_free_key(L, t, key, hmask);
       }
+      tab_test_newkey_anchor_after_reserve(L, t, nodebase);
       {
 	int claimed = tab_try_publish_nil_key(L, t, &n->key, &pubkey);
 	if (claimed < 0) {

@@ -13,6 +13,7 @@ local m5_concurrent_cases = {
   "m5_tab_slot_snapshot",
   "m5_tab_keylock_lookup",
   "m5_tab_newkey_monotonic",
+  "m5_tab_newkey_public",
   "m5_tab_finreg_newkey_stale",
   "m5_tab_next_snapshot",
   "m5_tab_forward_filter",

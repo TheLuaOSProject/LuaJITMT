@@ -183,6 +183,14 @@ return function(add)
       message = "M5 monotonic shared table new-key tests passed"
     },
     {
+      name = "m5_tab_newkey_public",
+      description = "public C API reads and writes during paused hash insertion",
+      output = "lj_t-tab-newkey-public",
+      cfile = "t-tab-newkey-public.c",
+      opts = build.tab_helper_opts({ timeout = "20s" }),
+      message = "M5 public shared table new-key tests passed"
+    },
+    {
       name = "m5_tab_chain_order",
       description = "stable table-node/hash-chain ordering C fixture",
       output = "lj_t-tab-chain-order",

@@ -575,6 +575,8 @@ LJ_FUNC int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 #ifdef LJ_TAB_TEST_HELPERS
 typedef void (*LJTabNewkeyReserveHook)(lua_State *L, GCtab *t,
 				       Node *nodebase);
+typedef void (*LJTabNewkeyBeforeBarrierHook)(lua_State *L, GCtab *t,
+					     cTValue *keyslot);
 typedef void (*LJTabNewkeyPublishHook)(lua_State *L, GCtab *t,
 				       Node *nodebase, Node *anchor,
 				       Node *claimed, uint32_t stage);
@@ -646,6 +648,8 @@ LJ_FUNC void lj_tab_test_set_newkey_anchor_after_reserve_hook(
   LJTabNewkeyReserveHook hook);
 LJ_FUNC void lj_tab_test_set_newkey_chain_after_reserve_hook(
   LJTabNewkeyReserveHook hook);
+LJ_FUNC void lj_tab_test_set_newkey_before_barrier_hook(
+  LJTabNewkeyBeforeBarrierHook hook);
 LJ_FUNC void lj_tab_test_set_newkey_publish_hook(
   LJTabNewkeyPublishHook hook);
 LJ_FUNC void lj_tab_test_set_hash_install_hook(LJTabResizeArrayHook hook);
