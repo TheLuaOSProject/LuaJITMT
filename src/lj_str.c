@@ -147,6 +147,7 @@ static StrHash str_dense_for_body(global_State *g, GCstr *s)
 #define LJ_STRID_BLOCK		64u
 #define LJ_STRNUM_BLOCK		64u
 #define LJ_STR_SWEEP_GRACE_EPOCHS LJ_GC2_GRACE_EPOCHS
+#define LJ_STR_STEP_RETIRE_RECORDS 64u
 
 #ifdef LJ_STR_TEST_HELPERS
 static uint32_t str_test_id_refills;
@@ -1766,16 +1767,17 @@ static void str_body_retired_push(global_State *g, StrBodyRetire *ret)
 
 /* -- b1.2 explicit sole-mutator body retirement ------------------------ */
 
-int lj_str_gc2_reclaim_request(global_State *g)
+int lj_str_gc2_reclaim_request(global_State *g, uint32_t request)
 {
   TGState *tg = lj_thr_get_tg();
   uint32_t expect = LJ_STR_RECLAIM_NONE;
   /* Only the main mutator can perform string-body reclamation. Nested
   ** collectors share the outer request, including its consumed state, and
   ** must leave cleanup to the call that opened the scope. */
-  return g && tg && tg == g->main_tg && tg->gl == g &&
-    la_cas32(&g->str.reclaim_requested, &expect, LJ_STR_RECLAIM_REQUESTED,
-             LA_ACQ_REL, LA_ACQ);
+  if (!g || !tg || tg != g->main_tg || tg->gl != g)
+    return 0;
+  return la_cas32(&g->str.reclaim_requested, &expect, request,
+                  LA_ACQ_REL, LA_ACQ) ? 1 : -1;
 }
 
 void lj_str_gc2_reclaim_cancel(global_State *g)
@@ -1860,32 +1862,34 @@ static int str_vm_cohort_ready(global_State *g, uint64_t after)
   return mt_entering_acq(g) == 0 && gc2_tg_list_acq(g) == head;
 }
 
-void lj_str_gc2_reclaim_pool(global_State *g)
+int lj_str_gc2_reclaim_checkpoint(global_State *g, uint32_t limit)
 {
   uint32_t pass;
-  if (gc2_n_workers_acq(g) == 0)
-    return;
+  MSize queued = lj_str_qcount_acq(g);
+  uint64_t reclaimed = la_load64_acq(&g->str.sweep_reclaimed);
   /* A worker may close SWEEP while the main explicit collector was parked.
   ** Its remote ACK cannot certify the main stack, and its IDLE retire pass
   ** cannot commit this cohort. Give the main owner a real root checkpoint
-  ** and both bounded grace opportunities before leaving its request scope.
-  ** All physical work still uses the normal try-only SMR reclaimer. */
-  for (pass = 0; pass <= 2u * LJ_STR_SWEEP_GRACE_EPOCHS; pass++) {
+  ** and bounded grace opportunities before leaving its request scope.
+  ** A public step takes only one grace window at a time. */
+  for (pass = 0; pass < limit; pass++) {
     uint32_t actions = LJ_GC2_HS_FLUSH_SSB;
     if (gc2_phase_acq(g) != LJ_GC2_IDLE ||
 	lj_str_body_retired_head_acq(g) == NULL || !str_vm_reclaim_owner(g))
       break;
-    if (pass == 0)
+    if (pass == 0 && queued != 0)
       actions |= LJ_GC2_HS_SCAN_OWNER_ROOTS;
     (void)lj_gc2_handshake(g, actions);
   }
+  return lj_str_qcount_acq(g) < queued ||
+         la_load64_acq(&g->str.sweep_reclaimed) != reclaimed;
 }
 
 static int str_reclaim_exclusive_try(global_State *g)
 {
   TGState *tg;
   uint32_t expect = 0;
-  if (!g || lj_str_reclaim_requested_acq(g) == 0 ||
+  if (!g || lj_str_reclaim_request_acq(g) != LJ_STR_RECLAIM_FULL ||
       g->allocf != lj_arena_allocf ||
       la_load32_acq(&g->allocf_arena) == 0 ||
       lj_str_qcount_acq(g) != 0 || lj_gc2_finalizer_phase_pending(g))
@@ -2982,94 +2986,113 @@ static int strq_retire_record(global_State *g, StrCanonRec *rec,
   return 1;
 }
 
+static int str_body_retire_record(global_State *g, StrBodyRetire *ret,
+                                  uint64_t completed_epoch)
+{
+  uint64_t retire_epoch = lj_str_body_retired_epoch_acq(ret);
+  StrTabHdr *rethdr = lj_str_body_retired_hdr_acq(ret);
+  uint32_t status = la_load32_acq(&ret->status);
+  GCstr *s;
+  uint8_t gct;
+  if (status & (LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_LIST_ONLY|
+                LJ_STR_CANONREC_Q_UNLINKED))
+    return strq_retire_record(g, ret, completed_epoch, status);
+  /* Ordinary records become retire owners only after exact detachment. */
+  if (LJ_UNLIKELY(lj_str_body_retired_main_linked_acq(ret) != 0)) {
+    lj_assertG(0, "linked string body reached retired ownership list");
+    abort();
+  }
+  if (!str_retire_grace(completed_epoch, retire_epoch) ||
+      (lj_str_tabh_acq(g) == rethdr && strtab_active_on_hdr(g, rethdr)))
+    return 0;
+  s = lj_str_body_retired_str_acq(ret);
+  if (!s || !lj_gc2_mem_registered_known_reclaim_held(g, s))
+    return 0;
+  gct = la_load8_acq(&s->gct);
+  if (gct == (uint8_t)~LJ_TSTR) {
+    int freed = str_free_try_impl(g, s, 1);
+    if (freed == LJ_GC_DESTRUCT_LOST)
+      return 0;
+    if (freed == LJ_GC_DESTRUCT_ACQUIRED)
+      lj_str_sweep_reclaimed_add(g, 1);
+  } else if (LJ_UNLIKELY(gct != 0)) {
+    lj_assertG(0, "retired string body type identity changed");
+    abort();
+  }
+  lj_mem_free(g, ret, sizeof(*ret));
+  return 1;
+}
+
+static uint32_t str_body_reclaim_step(global_State *g, uint64_t epoch)
+{
+  StrBodyRetire *prev = g->str.retired_body_cursor;
+  uint32_t i, reclaimed = 0;
+  /* Only the exact SMR reclaimer edits published interior links. Producers
+  ** may prepend; an exact CAS protects a head removal against that prepend.
+  ** Continue after the last retained node so slow pins do not starve the
+  ** suffix. Full passes clear this cursor before they detach the list. */
+  for (i = 0; i < LJ_STR_STEP_RETIRE_RECORDS; i++) {
+    StrBodyRetire *ret = prev ? lj_str_body_retired_next_acq(prev) :
+                              lj_str_body_retired_head_acq(g);
+    StrBodyRetire *next;
+    if (!ret) {
+      prev = NULL;
+      break;
+    }
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered_known_reclaim_held(g, ret)))
+      abort();
+    next = lj_str_body_retired_next_acq(ret);
+    if (LJ_UNLIKELY(next == ret || (prev && next == prev)))
+      abort();
+    if (prev)
+      lj_str_body_retired_next_rel(prev, next);
+    else if (!lj_str_body_retired_head_cas(g, &ret, next))
+      continue;
+    lj_str_body_retired_next_rel(ret, NULL);
+    if (str_body_retire_record(g, ret, epoch)) {
+      reclaimed++;
+    } else {
+      if (prev) {
+        lj_str_body_retired_next_rel(ret, next);
+        lj_str_body_retired_next_rel(prev, ret);
+      } else {
+        str_body_retired_push(g, ret);
+      }
+      prev = ret;
+    }
+  }
+  g->str.retired_body_cursor = prev;
+  return reclaimed;
+}
+
 uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
 {
-  StrBodyRetire *ret;
   StrTabHdr *hdr;
   StrCanonHdr *qhdr;
   uint32_t reclaimed = 0;
   if (!g || completed_epoch == 0)
     return 0;
-  /* The generic GC2 owner has closed SMR admission and installed its exact
-  ** current-thread capability across every detach and nested validation. */
-  /* Body records are processed before header records. A deferred current-header
-  ** body still needs that generation name for the active-pin check below. */
+  /* Retain the unfinished body list across a bounded public step. Both paths
+  ** run with the exact SMR reclaimer's admission already held. */
   reclaimed += str_retire_batches_reclaim_all(g, 1);
-  ret = lj_str_body_retired_head_xchg_acqrel(g, NULL);
-  if (LJ_UNLIKELY(!str_body_retired_chain_valid(g, ret, 1))) {
-    lj_assertG(0, "invalid/cyclic detached string-body retire chain");
-    abort();
-  }
-  while (ret) {
-    if (LJ_UNLIKELY(
-	!lj_gc2_mem_registered_known_reclaim_held(g, ret))) {
-      /* The exclusive owner already detached this list. Losing the remaining
-      ** chain here is an allocator/accounting corruption, not a retry result. */
-      lj_assertG(0, "invalid detached string-body retire record");
+  if (lj_str_reclaim_request_acq(g) == LJ_STR_RECLAIM_STEP) {
+    reclaimed += str_body_reclaim_step(g, completed_epoch);
+  } else {
+    StrBodyRetire *ret = lj_str_body_retired_head_xchg_acqrel(g, NULL);
+    g->str.retired_body_cursor = NULL;
+    if (LJ_UNLIKELY(!str_body_retired_chain_valid(g, ret, 1))) {
+      lj_assertG(0, "invalid/cyclic detached string-body retire chain");
       abort();
     }
-    StrBodyRetire *next = lj_str_body_retired_next_acq(ret);
-    uint64_t retire_epoch = lj_str_body_retired_epoch_acq(ret);
-    StrTabHdr *rethdr = lj_str_body_retired_hdr_acq(ret);
-    uint32_t status = la_load32_acq(&ret->status);
-    uint32_t main_linked = lj_str_body_retired_main_linked_acq(ret);
-    int old_enough = completed_epoch >= retire_epoch &&
-	completed_epoch - retire_epoch >= LJ_STR_SWEEP_GRACE_EPOCHS;
-    lj_str_body_retired_next_rel(ret, NULL);
-    if (status & (LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_LIST_ONLY|
-                  LJ_STR_CANONREC_Q_UNLINKED)) {
-      if (strq_retire_record(g, ret, completed_epoch, status))
+    while (ret) {
+      StrBodyRetire *next = lj_str_body_retired_next_acq(ret);
+      lj_str_body_retired_next_rel(ret, NULL);
+      if (str_body_retire_record(g, ret, completed_epoch))
         reclaimed++;
       else
         str_body_retired_push(g, ret);
       ret = next;
-      continue;
     }
-    if (LJ_UNLIKELY(main_linked != 0)) {
-      /* Normal sweep records enter this list only after their exact bucket
-      ** unlink. A still-linked record never owns the canonical body. */
-      lj_assertG(0, "linked string body reached retired ownership list");
-      abort();
-    }
-    if (old_enough &&
-	(lj_str_tabh_acq(g) != rethdr || !strtab_active_on_hdr(g, rethdr))) {
-      GCstr *s = lj_str_body_retired_str_acq(ret);
-      uint8_t gct;
-      int freed;
-      /* This record is the exact detached body owner. Validate the nested
-      ** allocation with that same non-transferable reclaimer capability before
-      ** reading its type/size, then arbitrate destruction through the matching
-      ** reclaim-held entry point. A transient failed validation retains both
-      ** the record and its body for the next grace pass. */
-      if (LJ_UNLIKELY(!s ||
-	  !lj_gc2_mem_registered_known_reclaim_held(g, s))) {
-	str_body_retired_push(g, ret);
-	ret = next;
-	continue;
-      }
-      gct = la_load8_acq(&s->gct);
-      if (gct == (uint8_t)~LJ_TSTR) {
-	freed = str_free_try_impl(g, s, 1);
-	if (freed == LJ_GC_DESTRUCT_LOST) {
-	  str_body_retired_push(g, ret);
-	  ret = next;
-	  continue;
-	}
-	if (freed == LJ_GC_DESTRUCT_ACQUIRED)
-	  lj_str_sweep_reclaimed_add(g, 1);
-      } else if (LJ_UNLIKELY(gct != 0)) {
-	/* A completed destructor publishes type zero. Any other type means the
-	** allocation was reused or the exact retire record names the wrong body;
-	** neither condition permits silently dropping its ownership record. */
-	lj_assertG(0, "retired string body type identity changed");
-	abort();
-      }
-      lj_mem_free(g, ret, sizeof(*ret));
-      reclaimed++;
-    } else {
-      str_body_retired_push(g, ret);
-    }
-    ret = next;
   }
   hdr = lj_str_retired_head_xchg_acqrel(g, NULL);
   if (LJ_UNLIKELY(!str_tab_retired_chain_valid(g, hdr, 1))) {
@@ -3229,6 +3252,7 @@ void lj_str_free_retired_bodies(global_State *g)
       lj_mem_free(g, pending, sizeof(*pending));
     }
   }
+  g->str.retired_body_cursor = NULL;
   ret = lj_str_body_retired_head_xchg_acqrel(g, NULL);
   if (LJ_UNLIKELY(!str_body_retired_chain_valid(g, ret, 0))) {
     lj_assertG(0, "invalid/cyclic terminal string-body retire chain");

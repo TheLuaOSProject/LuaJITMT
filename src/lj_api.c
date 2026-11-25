@@ -3665,8 +3665,25 @@ static TValue *api_gc_collect_cp(lua_State *L, lua_CFunction dummy, void *ud)
   int *result = (int *)ud;
   UNUSED(dummy);
   *result = lj_gc2_collect_active(L);
-  if (*result)
-    lj_str_gc2_reclaim_pool(G(L));
+  if (*result && gc2_n_workers_acq(G(L)) != 0)
+    (void)lj_str_gc2_reclaim_checkpoint(G(L), 1u + 2u * LJ_GC2_GRACE_EPOCHS);
+  return NULL;
+}
+
+typedef struct ApiGCStep {
+  uint32_t budget;
+  int done;
+} ApiGCStep;
+
+static TValue *api_gc_step_cp(lua_State *L, lua_CFunction dummy, void *ud)
+{
+  ApiGCStep *step = (ApiGCStep *)ud;
+  UNUSED(dummy);
+  /* An IDLE checkpoint that advances retirement uses one unit. A pin or
+  ** refused admission cannot monopolize future public steps. */
+  if (lj_str_gc2_reclaim_checkpoint(G(L), LJ_GC2_GRACE_EPOCHS) && --step->budget == 0)
+    return NULL;
+  step->done = lj_gc2_step_explicit(L, step->budget);
   return NULL;
 }
 
@@ -3690,13 +3707,13 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     ** quarantined body can commit; unsupported cohorts defer reclamation. */
     {
       int collected = 0;
-      int owns_request = lj_str_gc2_reclaim_request(g);
+      int owns_request = lj_str_gc2_reclaim_request(g, LJ_STR_RECLAIM_FULL);
       int errcode;
       /* Preserve full-GC scheduling for peers and reentrant callers without
       ** letting either cancel the main collector's string request. */
       (void)la_add32_acqrel(&g->gc2.explicit_collectors, 1);
       errcode = lj_vm_cpcall(L, NULL, &collected, api_gc_collect_cp);
-      if (owns_request)
+      if (owns_request > 0)
 	lj_str_gc2_reclaim_cancel(g);
       (void)la_sub32_acqrel(&g->gc2.explicit_collectors, 1);
       if (LJ_UNLIKELY(errcode != LUA_OK))
@@ -3716,7 +3733,21 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     ** driving this bounded turn. Preserve any active finalizer's pause. */
     if (!lj_gc_auto_enabled(g))
       api_gc_setlogical(g, api_gc_restart_threshold(g), 0);
-    res = lj_gc2_step_explicit(L, data > 0 ? (uint32_t)data : 1u);
+    {
+      uint32_t budget = data > 0 ? (uint32_t)data : 1u;
+      int scope = lj_str_gc2_reclaim_request(g, LJ_STR_RECLAIM_STEP);
+      if (scope > 0) {
+	ApiGCStep step = { budget, 0 };
+	int errcode = lj_vm_cpcall(L, NULL, &step, api_gc_step_cp);
+	lj_str_gc2_reclaim_cancel(g);
+	if (LJ_UNLIKELY(errcode != LUA_OK))
+	  lj_err_throw(L, errcode);
+	res = step.done;
+      } else if (scope == 0) {
+	res = lj_gc2_step_explicit(L, budget);
+      }
+      /* An enclosing main collector already owns the request and phase. */
+    }
     break;
   case LUA_GCSETPAUSE:
     res = (int)lj_gc_pause_xchg(g, (MSize)data);

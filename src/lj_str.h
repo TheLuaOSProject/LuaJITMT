@@ -549,14 +549,20 @@ static LJ_AINLINE void lj_str_sweep_batch_pending_rel(global_State *g,
 
 enum {
   LJ_STR_RECLAIM_NONE,
-  LJ_STR_RECLAIM_REQUESTED,
+  LJ_STR_RECLAIM_FULL,
+  LJ_STR_RECLAIM_STEP,
   LJ_STR_RECLAIM_CONSUMED
 };
 
-static LJ_AINLINE uint32_t lj_str_reclaim_requested_acq(
-  const global_State *g)
+static LJ_AINLINE uint32_t lj_str_reclaim_request_acq(const global_State *g)
 {
-  return la_load32_acq(&g->str.reclaim_requested) == LJ_STR_RECLAIM_REQUESTED;
+  return la_load32_acq(&g->str.reclaim_requested);
+}
+
+static LJ_AINLINE int lj_str_reclaim_requested_acq(const global_State *g)
+{
+  uint32_t request = lj_str_reclaim_request_acq(g);
+  return request == LJ_STR_RECLAIM_FULL || request == LJ_STR_RECLAIM_STEP;
 }
 
 static LJ_AINLINE void lj_str_reclaim_requested_rel(global_State *g,
@@ -793,9 +799,9 @@ static LJ_AINLINE int lj_str_tv_rescue_held(cTValue *tv)
   return lj_str_canon_acq(s) == LJ_STR_CANON_LIVE ||
     lj_str_gc2_rescue_held(s, NULL);
 }
-LJ_FUNC int lj_str_gc2_reclaim_request(global_State *g);
+LJ_FUNC int lj_str_gc2_reclaim_request(global_State *g, uint32_t request);
 LJ_FUNC void lj_str_gc2_reclaim_cancel(global_State *g);
-LJ_FUNC void lj_str_gc2_reclaim_pool(global_State *g);
+LJ_FUNC int lj_str_gc2_reclaim_checkpoint(global_State *g, uint32_t limit);
 LJ_FUNC void lj_str_gc2_sweep_begin(global_State *g, int major);
 LJ_FUNC uint32_t lj_str_gc2_sweep_step(global_State *g, uint32_t limit);
 LJ_FUNC uint32_t lj_str_gc2_grace_actions(global_State *g);

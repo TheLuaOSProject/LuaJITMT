@@ -1312,6 +1312,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   lj_str_qtabh_store_rlx(g, NULL);
   lj_str_qretired_head_store_rlx(g, NULL);
   g->str.retired_body = NULL;
+  g->str.retired_body_cursor = NULL;
   g->str.sweep_pending = NULL;
   g->str.sweep_hdr = NULL;
   g->str.sweep_link = NULL;

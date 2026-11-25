@@ -289,6 +289,8 @@ static void check_request_ownership(void)
     "  local proxy = newproxy(true)\n"
     "  getmetatable(proxy).__gc = function()\n"
     "    local before = request_pending()\n"
+    "    assert(collectgarbage('step', 1) == false)\n"
+    "    assert(request_pending())\n"
     "    collectgarbage('collect')\n"
     "    local after_nested = request_pending()\n"
     "    assert(run:send(true, 10))\n"
@@ -316,9 +318,133 @@ static void check_request_ownership(void)
   lua_close(L);
 }
 
+static int check_step_scope(lua_State *L)
+{
+  uint32_t request = lua_toboolean(L, 1) ?
+    LJ_STR_RECLAIM_STEP : LJ_STR_RECLAIM_NONE;
+  assert(lj_str_reclaim_request_acq(G(L)) == request);
+  assert(lj_str_reclaim_exclusive_acq(G(L)) == 0);
+  return 0;
+}
+
+static void step_borrow(const char *bytes, void (*callback)(void))
+{
+  assert(memcmp(bytes, held, sizeof(held)) == 0);
+  callback();
+  assert(memcmp(bytes, held, sizeof(held)) == 0);
+}
+
+static void check_step_reclamation(int workers)
+{
+  static const char script[] =
+    "local keep, check_scope, borrow, workers, probe = ...\n"
+    "if jit then jit.off() end\n"
+    "local threading = require('threading')\n"
+    "assert(threading.gcworkers(workers) == 0)\n"
+    "local cycles = 0\n"
+    "local mode = table.concat({'__', 'mode'})\n"
+    "local weak = setmetatable({}, {[mode] = 'v'})\n"
+    "local function step()\n"
+    "  if collectgarbage('step', 1) then cycles = cycles + 1 end\n"
+    "  check_scope()\n"
+    "end\n"
+    "local ok, ffi = pcall(require, 'ffi')\n"
+    "if ok then\n"
+    "  local callback = ffi.cast('void (*)(void)', function()\n"
+    "    for i = 1, 40 do step() end\n"
+    "  end)\n"
+    "  ffi.cast('void (*)(const char *, void (*)(void))', borrow)(keep, callback)\n"
+    "  callback:free()\n"
+    "end\n"
+    "local settled\n"
+    "for round = 1, 5 do\n"
+    "  collectgarbage('stop')\n"
+    "  for i = 1, 1200 do\n"
+    "    assert(#('%d/%d step data:'):format(round, i):rep(30) >= 300)\n"
+    "  end\n"
+    "  probe(round)\n"
+    "  local peak, memory = collectgarbage('count')\n"
+    "  for i = 1, 12000 do\n"
+    "    step()\n"
+    "    if i % 32 == 0 then\n"
+    "      memory = collectgarbage('count')\n"
+    "      assert(getmetatable(weak)[mode] == 'v', 'step lost rooted __mode')\n"
+    "      if peak - memory > 450 and (not settled or memory < settled + 256)\n"
+    "         and not probe() then break end\n"
+    "    end\n"
+    "  end\n"
+    "  assert(peak - memory > 450, ('step heap %.0f -> %.0f'):format(peak, memory))\n"
+    "  assert(not probe(), 'step retained huge string')\n"
+    "  if round == 2 then settled = memory end\n"
+    "  if round > 2 then assert(memory < settled + 256, 'step heap grew') end\n"
+    "  assert(keep == ('S'):rep(#keep))\n"
+    "end\n"
+    "assert(cycles > 0 and threading.gcworkers() == workers)\n";
+  lua_State *L = luaL_newstate();
+  int status;
+  assert(L);
+  luaL_openlibs(L);
+  memset(held, 'S', sizeof(held)-1);
+  held[sizeof(held)-1] = 0;
+  lua_pushlstring(L, held, sizeof(held)-1);
+  borrowed = lua_tolstring(L, 1, NULL);
+  assert(luaL_loadbuffer(L, script, sizeof(script)-1, "=bounded string step") == 0);
+  lua_pushvalue(L, 1);
+  lua_pushcfunction(L, check_step_scope);
+  lua_pushlightuserdata(L, (void *)(uintptr_t)step_borrow);
+  lua_pushinteger(L, workers);
+  lua_pushcfunction(L, probe_huge_mapping);
+  status = lua_pcall(L, 5, 0, 0);
+  if (status != LUA_OK)
+    fprintf(stderr, "workers=%d: %s\n", workers, lua_tostring(L, -1));
+  assert(status == LUA_OK);
+  assert(lua_tolstring(L, 1, NULL) == borrowed);
+  assert(memcmp(borrowed, held, sizeof(held)) == 0);
+  lua_close(L);
+}
+
+static void check_nested_step_scope(void)
+{
+  static const char script[] =
+    "if jit then jit.off() end\n"
+    "collectgarbage('stop')\n"
+    "local finalized = false\n"
+    "do\n"
+    "  local proxy = newproxy(true)\n"
+    "  getmetatable(proxy).__gc = function()\n"
+    "    check_step_scope(true)\n"
+    "    assert(collectgarbage('step', 1) == false)\n"
+    "    assert(collectgarbage('collect') == 0)\n"
+    "    check_step_scope(true)\n"
+    "    finalized = true\n"
+    "    error('expected bounded step finalizer error')\n"
+    "  end\n"
+    "end\n"
+    "for i = 1, 500 do\n"
+    "  collectgarbage('step', 1)\n"
+    "  check_step_scope()\n"
+    "  if finalized then break end\n"
+    "end\n"
+    "assert(finalized)\n";
+  lua_State *L = luaL_newstate();
+  int status;
+  assert(L);
+  luaL_openlibs(L);
+  lua_pushcfunction(L, check_step_scope);
+  lua_setglobal(L, "check_step_scope");
+  status = luaL_dostring(L, script);
+  if (status != LUA_OK)
+    fprintf(stderr, "%s\n", lua_tostring(L, -1));
+  assert(status == LUA_OK);
+  lua_close(L);
+}
+
 int main(void)
 {
   check_request_ownership();
+  check_nested_step_scope();
+  check_step_reclamation(0);
+  check_step_reclamation(2);
   run_reclamation(0, 0);
   run_reclamation(0, 2);
   check_pool_only_reclamation();

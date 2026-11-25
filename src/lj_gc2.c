@@ -3217,18 +3217,20 @@ int lj_gc2_step_explicit(lua_State *L, uint32_t budget)
     }
     if (phase == LJ_GC2_MARK) {
       int close_result;
+      uint32_t available = LJ_GC2_WORKER_DRAIN_BATCH;
       uint64_t defer0 = gc2_deferred_epoch_acq(g);
-      if (gc2_worker_drain_logical(g, tg,
-					   LJ_GC2_WORKER_DRAIN_BATCH, 0) != 0) {
-	if (gc2_deferred_epoch_acq(g) != defer0)
-	  break;
-	(void)lj_safepoint_ack(L);
-	continue;
-      }
+      uint32_t drained = gc2_worker_drain_logical(g, tg, available, 0);
       if (gc2_deferred_epoch_acq(g) != defer0)
 	break;
-      close_result = gc2_mark_complete_result(
-	g, L, 1, LJ_GC2_WORKER_DRAIN_BATCH);
+      if (drained != 0) {
+	(void)lj_safepoint_ack(L);
+	if (budget != 0 || drained >= available)
+	  continue;
+	/* Mutators can publish fresh SSB work between every one-unit step.
+	** Spend the rest of this batch on its normal fixpoint attempt. */
+	available -= drained;
+      }
+      close_result = gc2_mark_complete_result(g, L, 1, available);
       if (close_result == GC2_DRIVER_COMPLETE) {
 	lj_gc2_mark_to_weak(g);
 	continue;
@@ -3268,6 +3270,13 @@ int lj_gc2_step_explicit(lua_State *L, uint32_t budget)
 	if (gc2_deferred_epoch_acq(g) != defer0)
 	  break;
 	(void)lj_safepoint_ack(L);
+	/* A small step can drain the last work yet have no next iteration
+	** in which to try the exact close. Returning to the mutator allows
+	** another suffix to appear, so attempt that close before returning. */
+	if (budget == 0 && lj_gc2_sweep_to_idle(g)) {
+	  lj_gc2_publish_idle_threshold(g);
+	  return 1;
+	}
 	continue;
       }
       if (gc2_deferred_epoch_acq(g) != defer0)
@@ -6026,7 +6035,9 @@ static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
   if (gc2_phase_acq(g) != LJ_GC2_SWEEP || !gc2_recovery_empty(g) ||
       gc2_jit_recorder_active(g) || gc2_sweep_root_scanned_acq(g) != 1)
     return 0;
-  if (!gc2_sweep_bridge_ready_acq(g))
+  /* String candidate classification still consumes this cycle's physical
+  ** marks. No worker or direct owner pass may clear them before it finishes. */
+  if (!gc2_sweep_bridge_ready_acq(g) || lj_str_gc2_sweep_pending(g))
     return 0;
   if (gc2_sweep_blocked_by_finalizer(g))
     return 0;
@@ -12798,12 +12809,11 @@ static int gc2_weak_mark_close_round(global_State *g, lua_State *L,
       return 0;  /* One peer owns the snapshot handshake/pre-drain. */
     cycle = gc2_cycle_acq(g);
     (void)gc2_marks_this_round_xchg_acqrel(g, 0);
-    if (gc2_mark_drain_owned_bounded(g, drain_limit) != 0 ||
-	gc2_deferred_epoch_acq(g) != defer0) {
-      gc2_weak_root_snapshot_abort(g);
-      return 0;
-    }
-    if (!gc2_ssb_published_empty(g) || !gc2_grey_empty(g) ||
+    (void)gc2_mark_drain_owned_bounded(g, drain_limit);
+    /* An ordinary mutator turn can publish a few edges on every STEP.
+    ** Draining work does not veto the snapshot once its frontier is empty. */
+    if (gc2_deferred_epoch_acq(g) != defer0 ||
+	!gc2_ssb_published_empty(g) || !gc2_grey_empty(g) ||
 	!gc2_recovery_empty(g)) {
       gc2_weak_root_snapshot_abort(g);
       return 0;
@@ -12823,8 +12833,9 @@ static int gc2_weak_mark_close_round(global_State *g, lua_State *L,
 
   /* Weak clearing uses GC2 mark bits as the liveness oracle, so finish every
   ** edge created by that snapshot before any slot is nilled. */
-  if (gc2_mark_drain_owned_bounded(g, drain_limit) != 0 ||
-      gc2_deferred_epoch_acq(g) != defer0)
+  (void)gc2_mark_drain_owned_bounded(g, drain_limit);
+  if (gc2_deferred_epoch_acq(g) != defer0 || !gc2_grey_empty(g) ||
+      !gc2_recovery_empty(g))
     return 0;
   if (!lj_gc2_ssb_empty(g)) {
     gc2_weak_root_reopen(g);
@@ -12897,8 +12908,9 @@ static int gc2_weak_frontier_still_closed(global_State *g, lua_State *L,
 	     "weak frontier validation without worker ownership");
   if (lj_tg_any_jit_active(g))
     return 0;
-  if (gc2_mark_drain_owned_bounded(g, drain_limit) != 0 ||
-      gc2_deferred_epoch_acq(g) != defer0)
+  (void)gc2_mark_drain_owned_bounded(g, drain_limit);
+  if (gc2_deferred_epoch_acq(g) != defer0 || !gc2_grey_empty(g) ||
+      !gc2_recovery_empty(g))
     return 0;
   if (!lj_gc2_ssb_empty(g)) {
     gc2_weak_root_reopen(g);
@@ -22666,6 +22678,7 @@ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
     return 0;
   /* Sweep-time publishers enqueue rescued containers on SSB. Close that graph
   ** before taking the post-retirement grace or running any destructor. */
+drain_graph:
   while (n < limit) {
     uint32_t moved = gc2_drain_published_ssb_to_grey(g, 1);
     GCobj *o;
@@ -22705,7 +22718,9 @@ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
   }
   if (gc2_deferred_epoch_acq(g) != defer0)
     return n;  /* Never cross a retry quantum into irreversible sweep work. */
-  if (n)
+  /* Keep the unused budget if the graph frontier is empty. VM work between
+  ** small public steps may keep adding a few rescue entries per invocation. */
+  if (n >= limit)
     return n;
   /* A peer can publish a below-capacity active SSB suffix after the SWEEP
   ** bridge snapshot. The current logical owner was rotated before taking the
@@ -22717,18 +22732,25 @@ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
   ** itself prevents. */
   if (gc2_ssb_published_empty(g) && gc2_grey_empty(g) &&
       gc2_recovery_empty(g) && !lj_gc2_ssb_empty(g)) {
+    TGState *self = lj_thr_get_tg();
+    /* Traversal can append another local SSB suffix. Drain it within the
+    ** remaining quantum instead of making the next STEP rediscover it. */
+    if (self && self->gl == g && gc2_flush_ssb(g, self, 0) != 0) {
+      n++;
+      goto drain_graph;
+    }
     (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
-    return 1;
+    return n+1u;
   }
   /* A zero-progress drain is not proof of semantic emptiness: the exact
   ** recovery locator may still be behind its reserve-before-publish LP, and a
   ** sticky classification failure deliberately has no drainable identity.
   ** Gate every irreversible sweep subsystem on the complete work predicate. */
-  if (!lj_gc2_ssb_empty(g) || !gc2_recovery_empty(g))
-    return 0;
+  if (!lj_gc2_ssb_empty(g) || !gc2_grey_empty(g) || !gc2_recovery_empty(g))
+    return n;
   if (gc2_sweep_bridge_ready_acq(g) &&
       gc2_sweep_root_scanned_acq(g) != 1)
-    return 0;
+    return n;
   if (gc2_sweep_grace_needed_acq(g)) {
     uint32_t grace;
     /* This synchronous API returns only after every target acknowledged. The
@@ -22739,12 +22761,12 @@ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
       (void)lj_gc2_handshake(g, lj_str_gc2_grace_actions(g));
     if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
       gc2_sweep_grace_needed_rel(g, 0);
-    return 1;
+    return n+1u;
   }
   if (gc2_sweep_bridge_ready_acq(g)) {
-    uint32_t strings = lj_str_gc2_sweep_step(g, limit);
+    uint32_t strings = lj_str_gc2_sweep_step(g, limit - n);
     if (strings)
-      return strings;
+      return n+strings;
   }
   /* worker_active excludes physical TG unlink/reclaim during this pass.
   ** Attach only prepends; capture that head once so new owners join the next

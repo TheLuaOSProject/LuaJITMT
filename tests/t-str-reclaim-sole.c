@@ -286,7 +286,7 @@ int main(void)
   assert(lj_str_reclaim_exclusive_acq(g) == 0);
 
   /* Terminal cancellation must tolerate a requested but never consumed pass. */
-  lj_str_gc2_reclaim_request(g);
+  assert(lj_str_gc2_reclaim_request(g, LJ_STR_RECLAIM_FULL) == 1);
   lua_close(L);
 #if LJ_HASFFI
   check_native_callback_borrow();

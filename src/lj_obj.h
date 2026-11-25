@@ -1926,6 +1926,7 @@ typedef struct StrInternState {
   StrCanonHdr *qtabh;	/* Secondary canonical quarantine header. */
   StrCanonHdr *qretired;	/* Retired quarantine headers awaiting SMR. */
   StrBodyRetire *retired_body;  /* Unlinked bodies awaiting SMR grace. */
+  StrBodyRetire *retired_body_cursor;  /* Last retained record in bounded pass. */
   StrBodyRetire *sweep_pending;  /* Pre-CAS unlink ownership record. */
   StrRetireBatch *retired_batch;  /* Sealed sole-mutator body batches. */
   StrRetireBatch *sweep_batch;  /* Published current sole-mutator batch. */
