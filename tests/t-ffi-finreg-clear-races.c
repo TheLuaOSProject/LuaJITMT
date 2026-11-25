@@ -571,38 +571,78 @@ static void test_order_storage_reclaim(lua_State *L)
   }
 }
 
-static void test_prepare_vs_reenable(lua_State *L, int state)
+typedef enum FinPrepareTest {
+  PREPARE_REARM, PREPARE_FIRST, PREPARE_REPLACE, PREPARE_CLEAR
+} FinPrepareTest;
+
+static void test_prepare_vs_reenable(lua_State *L, FinPrepareTest state)
 {
+  uint32_t pause = state == PREPARE_CLEAR ? LJ_CDATA_FIN_PAUSE_CLEAR_PREPARE :
+                                LJ_CDATA_FIN_PAUSE_ENABLE_PREPARE;
   ljt_lua_dostring(L,
     "local ffi=require('ffi')\n"
     "prepare_cd=ffi.new('int[1]', 19)\n"
     "prepare_first=function() end\n"
     "prepare_second=function() end\n");
-  if (state != 1)
+  if (state != PREPARE_FIRST)
     ljt_lua_dostring(L,
       "local ffi=require('ffi'); ffi.gc(prepare_cd, function() end)");
-  if (state == 0)
+  if (state == PREPARE_REARM)
     ljt_lua_dostring(L, "require('ffi').gc(prepare_cd, nil)");
-  lj_cdata_test_fin_pause_arm(LJ_CDATA_FIN_PAUSE_ENABLE_PREPARE);
+  if (state == PREPARE_CLEAR)
+    ljt_lua_dostring(L, "prepare_first=nil");
+  lj_cdata_test_fin_pause_arm(pause);
   ljt_lua_dostring(L,
     "local th=require('threading')\n"
     "prepare_worker=th.spawn(function(cd, fin)\n"
     "  require('ffi').gc(cd, fin)\n"
     "  return true\n"
     "end, prepare_cd, prepare_first)\n");
-  wait_for_pause(LJ_CDATA_FIN_PAUSE_ENABLE_PREPARE);
+  wait_for_pause(pause);
 
   ljt_lua_dostring(L, "require('ffi').gc(prepare_cd, prepare_second)");
-  assert(lj_cdata_test_fin_pause_waiting(LJ_CDATA_FIN_PAUSE_ENABLE_PREPARE));
+  assert(lj_cdata_test_fin_pause_waiting(pause));
   assert_registered(L, "prepare_cd", "prepare_second");
 
-  lj_cdata_test_fin_pause_release(LJ_CDATA_FIN_PAUSE_ENABLE_PREPARE);
+  lj_cdata_test_fin_pause_release(pause);
   ljt_lua_dostring(L,
     "local ok, result=prepare_worker:join(10)\n"
     "assert(ok == true and result == true)\n"
     "prepare_worker=nil\n");
-  assert_registered(L, "prepare_cd", "prepare_first");
-  cleanup_registration(L, "prepare_cd");
+  if (state == PREPARE_CLEAR) {
+    assert_cleared(L, "prepare_cd");
+  } else {
+    assert_registered(L, "prepare_cd", "prepare_first");
+    cleanup_registration(L, "prepare_cd");
+  }
+}
+
+static void test_identical_rearm_vs_replace(lua_State *L)
+{
+  ljt_lua_dostring(L,
+    "local ffi=require('ffi')\n"
+    "same_fin=function() end\n"
+    "different_fin=function() end\n"
+    "same_cd=ffi.gc(ffi.new('int[1]'), same_fin)\n");
+  lj_cdata_test_fin_pause_arm(LJ_CDATA_FIN_PAUSE_ENABLE_UNCHANGED);
+  ljt_lua_dostring(L,
+    "local th=require('threading')\n"
+    "same_worker=th.spawn(function(cd, fin)\n"
+    "  require('ffi').gc(cd, fin)\n"
+    "  return true\n"
+    "end, same_cd, same_fin)\n");
+  wait_for_pause(LJ_CDATA_FIN_PAUSE_ENABLE_UNCHANGED);
+  ljt_lua_dostring(L, "require('ffi').gc(same_cd, different_fin)");
+  assert(lj_cdata_test_fin_pause_waiting(LJ_CDATA_FIN_PAUSE_ENABLE_UNCHANGED));
+  assert_registered(L, "same_cd", "different_fin");
+
+  lj_cdata_test_fin_pause_release(LJ_CDATA_FIN_PAUSE_ENABLE_UNCHANGED);
+  ljt_lua_dostring(L,
+    "local ok, result=same_worker:join(10)\n"
+    "assert(ok == true and result == true)\n"
+    "same_worker=nil\n");
+  assert_registered(L, "same_cd", "different_fin");
+  cleanup_registration(L, "same_cd");
 }
 
 static void test_queued_delivery_vs_suspended_rearm(lua_State *L)
@@ -707,9 +747,11 @@ int main(void)
   test_enable_order_vs_clear(L);
   test_clear_miss_vs_enable(L);
   test_clear_nil_vs_reenable(L);
-  test_prepare_vs_reenable(L, 0);
-  test_prepare_vs_reenable(L, 1);
-  test_prepare_vs_reenable(L, 2);
+  test_prepare_vs_reenable(L, PREPARE_REARM);
+  test_prepare_vs_reenable(L, PREPARE_FIRST);
+  test_prepare_vs_reenable(L, PREPARE_REPLACE);
+  test_prepare_vs_reenable(L, PREPARE_CLEAR);
+  test_identical_rearm_vs_replace(L);
   test_queued_delivery_vs_suspended_rearm(L);
   test_nested_finalizer_collect(L);
   test_rearm_after_callback(L);
