@@ -8147,10 +8147,13 @@ static TValue *gc2_active_thread_top(global_State *g, lua_State *L, TValue *top,
 /* The widened native scan can observe words left by lua_pop. Retain the
 ** exact incarnation while arbitrating with string close. Only a terminal
 ** string outside a parked C activation's live window is a stale word.
-** Lua/JIT frames, open cells and live C arguments keep the strong check. */
+** A remote ACK that consumed the request while the owner was in native
+** code retains that parked stack through its poll, even after native leave
+** clears in_native. Lua/JIT frames, open cells and live C arguments keep
+** the strong check. */
 static int gc2_stack_tv_admit_scoped(global_State *g, lua_State *L,
                                      cTValue *slot, cTValue *tv,
-                                     GC2MarkScope *scope)
+                                     GC2MarkScope *scope, int parked)
 {
   GC2FrameScope fscope;
   GCfunc *fn;
@@ -8162,7 +8165,8 @@ static int gc2_stack_tv_admit_scoped(global_State *g, lua_State *L,
     return status;
   state = lj_str_canon_state(lj_str_canon_acq(strV(tv)));
   if ((state != LJ_STR_CANON_QCOMMIT && state != LJ_STR_CANON_FREEING) ||
-      !gc2_thread_is_native_current(g, L) || gc2_thread_is_jit_current(g, L))
+      (!parked && !gc2_thread_is_native_current(g, L)) ||
+      gc2_thread_is_jit_current(g, L))
     return status;
   frame = L->base - 1;
   bot = tvref(L->stack);
@@ -8516,7 +8520,7 @@ static int gc2_thread_scan_current(global_State *g, lua_State *L)
 }
 
 static int gc2_scan_thread_stack(global_State *g, lua_State *L,
-				 const GC2MarkScope *held)
+				 const GC2MarkScope *held, int parked)
 {
   GCobj *mt, *uv;
   TValue *o, *top;
@@ -8536,7 +8540,7 @@ static int gc2_scan_thread_stack(global_State *g, lua_State *L,
     lj_tv_load_acq(&tv, o);
     if (conservative) {
       GC2MarkScope scope;
-      int admitted = gc2_stack_tv_admit_scoped(g, L, o, &tv, &scope);
+      int admitted = gc2_stack_tv_admit_scoped(g, L, o, &tv, &scope, parked);
       if (LJ_UNLIKELY(admitted == GC2_TV_SCOPE_RETRY)) {
 	stack_retry = 1;
 	gc2_mark_scope_leave(&scope);
@@ -8596,7 +8600,7 @@ static int gc2_scan_thread_stack(global_State *g, lua_State *L,
   ** active-top scan above, the remote safepoint can publish a fresh stack stamp.
   ** Running remote/JIT-owned stacks still need an owner NEEDSCAN handoff.
   */
-  if (!gc2_thread_stack_scan_authoritative(g, L) &&
+  if (!parked && !gc2_thread_stack_scan_authoritative(g, L) &&
       !gc2_thread_is_native_current(g, L)) {
     if (!gc2_thread_scan_current(g, L) && gc2_thread_has_live_owner(g, L))
       gc2_thread_set_needscan(g, L);
@@ -8613,7 +8617,7 @@ static int gc2_scan_thread_stack(global_State *g, lua_State *L,
 }
 
 static void gc2_scan_owned_needscan_chain(global_State *g, TGState *tg,
-					  GCobj *head)
+					  GCobj *head, lua_State *parked_L)
 {
   GCobj *o = head;
   GC2MarkScope scope;
@@ -8631,7 +8635,7 @@ static void gc2_scan_owned_needscan_chain(global_State *g, TGState *tg,
       goto next_root;
     if (!lj_tg_owns_state_acq(tg, th))
       goto next_root;
-    (void)gc2_scan_thread_stack(g, th, &scope);
+    (void)gc2_scan_thread_stack(g, th, &scope, th == parked_L);
     gc2_thread_scan_owner_needscans_add(g, 1);
 next_root:
     if (++n >= LJ_GC2_ROOT_SCAN_LIMIT) {
@@ -8649,7 +8653,8 @@ next_root:
   }
 }
 
-static void gc2_scan_owned_needscan_registry(global_State *g, TGState *tg)
+static void gc2_scan_owned_needscan_registry(global_State *g, TGState *tg,
+					    lua_State *parked_L)
 {
   lua_State *th = lj_state_thread_registry_head_acq(g);
   GC2MarkScope scope;
@@ -8671,7 +8676,7 @@ static void gc2_scan_owned_needscan_registry(global_State *g, TGState *tg)
     }
     next = lj_state_thread_registry_next_acq(th);
     if (gc2_thread_needscan(th) && lj_tg_owns_state_acq(tg, th)) {
-      (void)gc2_scan_thread_stack(g, th, &scope);
+      (void)gc2_scan_thread_stack(g, th, &scope, th == parked_L);
       gc2_thread_scan_owner_needscans_add(g, 1);
     }
     if (next) {
@@ -8690,7 +8695,8 @@ static void gc2_scan_owned_needscan_registry(global_State *g, TGState *tg)
   gc2_mark_scope_leave(&scope);
 }
 
-static void gc2_scan_owned_needscan(global_State *g, TGState *tg)
+static void gc2_scan_owned_needscan(global_State *g, TGState *tg,
+				    lua_State *parked_L)
 {
   uint32_t tid;
   if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD))
@@ -8702,15 +8708,15 @@ static void gc2_scan_owned_needscan(global_State *g, TGState *tg)
     return;
   (void)lj_gc_flush_root_pending(g);
   (void)lj_gc_repair_root_spine(g);
-  gc2_scan_owned_needscan_chain(g, tg, lj_gc_root_acq(g));
+  gc2_scan_owned_needscan_chain(g, tg, lj_gc_root_acq(g), parked_L);
   if (gc2_thread_scan_needscan_pending_acq(g) != 0) {
     lua_State *mainL = mainthread_acq(g);
     if (mainL)
-      gc2_scan_owned_needscan_chain(g, tg,
-				    lj_obj_gcw_acq(obj2gco(mainL)));
+      gc2_scan_owned_needscan_chain(g, tg, lj_obj_gcw_acq(obj2gco(mainL)),
+				    parked_L);
   }
   if (gc2_thread_scan_needscan_pending_acq(g) != 0)
-    gc2_scan_owned_needscan_registry(g, tg);
+    gc2_scan_owned_needscan_registry(g, tg, parked_L);
 }
 
 #if LJ_HASFFI
@@ -9101,7 +9107,7 @@ static void gc2_scan_tg_anchor_roots(global_State *g, TGState *tg)
 }
 
 static void gc2_scan_tg_thread_root(global_State *g, TGState *tg,
-				     lua_State *L)
+				     lua_State *L, int parked)
 {
   GC2MarkScope scope;
   int status;
@@ -9124,7 +9130,7 @@ static void gc2_scan_tg_thread_root(global_State *g, TGState *tg,
     gc2_mark_scope_leave(&scope);
     return;
   }
-  if (!gc2_scan_thread_stack(g, L, &scope)) {
+  if (!gc2_scan_thread_stack(g, L, &scope, parked)) {
     /* If validation/authority was transiently unavailable, republish identity
     ** traversal so env/mt/upvalues and the stack cannot disappear behind an
     ** already-marked thread body. */
@@ -9744,7 +9750,7 @@ retry_without_reader:
 }
 #endif
 
-static int gc2_scan_owner_tg_roots(global_State *g, TGState *tg)
+static int gc2_scan_owner_tg_roots(global_State *g, TGState *tg, int parked)
 {
   lua_State *thread_L, *cur_L;
   TValue tv;
@@ -9779,11 +9785,11 @@ static int gc2_scan_owner_tg_roots(global_State *g, TGState *tg)
   thread_L = lj_tg_load_thread_L(tg);
   cur_L = lj_tg_load_cur_L(tg);
   if (thread_L) {
-    gc2_scan_tg_thread_root(g, tg, thread_L);  /* 05 section 5.7.4. */
+    gc2_scan_tg_thread_root(g, tg, thread_L, parked && thread_L == cur_L);
     gc2_tg_thread_roots_add(g, 1);
   }
   if (cur_L && cur_L != thread_L) {
-    gc2_scan_tg_thread_root(g, tg, cur_L);  /* 05 section 5.7.4. */
+    gc2_scan_tg_thread_root(g, tg, cur_L, parked);
     gc2_tg_cur_roots_add(g, 1);
   }
 #if LJ_HASJIT
@@ -9793,7 +9799,7 @@ static int gc2_scan_owner_tg_roots(global_State *g, TGState *tg)
       gc2_tg_trace_roots_add(g, 1);
   }
 #endif
-  gc2_scan_owned_needscan(g, tg);
+  gc2_scan_owned_needscan(g, tg, parked ? cur_L : NULL);
   return complete;
 }
 
@@ -10069,7 +10075,7 @@ static int gc2_scan_cycle_owner_tg_roots_mode(global_State *g, TGState *tg,
   ** owner scan, including native/JIT maxstack widening and every NEEDSCAN
   ** handoff, remains authoritative until the later narrowing proof. */
   if (exact)
-    exact = gc2_scan_owner_tg_roots(g, tg);
+    exact = gc2_scan_owner_tg_roots(g, tg, native_parked);
   lj_gc2_smr_read_leave(g);
   return exact;
 }
@@ -10118,7 +10124,7 @@ void lj_gc2_test_scan_tg_thread_root(global_State *g, TGState *tg,
 				      lua_State *L)
 {
   if (g && tg && L && lj_gc2_smr_read_try(g)) {
-    gc2_scan_tg_thread_root(g, tg, L);
+    gc2_scan_tg_thread_root(g, tg, L, 0);
     lj_gc2_smr_read_leave(g);
   }
 }
@@ -10129,7 +10135,7 @@ void lj_gc2_test_scan_owned_needscan(global_State *g, lua_State *owner_L)
   if (g && owner_L) {
     if (!lj_gc2_smr_read_try(g))
       return;
-    gc2_scan_owned_needscan(g, L2TG(owner_L));
+    gc2_scan_owned_needscan(g, L2TG(owner_L), NULL);
     lj_gc2_smr_read_leave(g);
   }
 }
@@ -21613,7 +21619,7 @@ scan_thread:
     lj_tv_load_acq(&tv, o);
     if (conservative) {
       GC2MarkScope scope;
-      int admitted = gc2_stack_tv_admit_scoped(g, th, o, &tv, &scope);
+      int admitted = gc2_stack_tv_admit_scoped(g, th, o, &tv, &scope, 0);
       if (LJ_UNLIKELY(admitted == GC2_TV_SCOPE_RETRY)) {
 	stack_retry = 1;
 	gc2_mark_scope_leave(&scope);

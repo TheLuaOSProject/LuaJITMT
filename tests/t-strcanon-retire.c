@@ -338,6 +338,20 @@ static void *scan_parked_stack(void *arg)
   return NULL;
 }
 
+static uint32_t remote_scan_consumed;
+
+static void resume_during_scan(global_State *g, TGState *tg, uint64_t epoch,
+			       uint32_t point)
+{
+  (void)epoch;
+  if (point == LJ_SAFEPOINT_COMPLETION_TEST_CONSUMED && tg == g->main_tg &&
+      tg != lj_thr_get_tg()) {
+    la_store32_rel(&remote_scan_consumed, 1);
+    while (lj_tg_in_native_acq(tg))
+      la_cpu_pause();
+  }
+}
+
 static int check_popped_native_slot(lua_State *L)
 {
   global_State *g = G(L);
@@ -367,10 +381,16 @@ static int check_popped_native_slot(lua_State *L)
   assert(lj_str_test_quarantine_detach(L, live));
   assert(lj_str_test_quarantine_close(g, live));
   assert(tvisstr(L->top) && strV(L->top) == old);
+  lj_safepoint_test_completion_hook(resume_during_scan);
   lj_native_enter_l(L, &frame);
   assert(lj_thr_create(&thread, scan_parked_stack, scanner) == 0);
-  assert(lj_thr_join(&thread, NULL) == 0);
+  while (!la_load32_acq(&remote_scan_consumed))
+    la_cpu_pause();
+  /* Native leave clears the depth and must retain its parked stack until
+  ** the remote actor finishes the request it already consumed. */
   (void)lj_native_leave_l(L, &frame);
+  assert(lj_thr_join(&thread, NULL) == 0);
+  lj_safepoint_test_completion_hook(NULL);
   assert(!lj_gc2_activation_reclaim_veto(g));
   assert(lj_str_canon_state(lj_str_canon_acq(live)) == LJ_STR_CANON_QRESCUED);
   assert(lua_tolstring(L, -1, NULL) == bytes);
