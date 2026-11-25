@@ -1381,6 +1381,7 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
       else
 	actions = 0;
       lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+      lj_safepoint_string_join_checkpoint(L);
     }
   }
 

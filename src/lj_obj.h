@@ -1944,7 +1944,8 @@ typedef struct StrInternState {
   MSize num;		/* Number of strings in hash table. */
   MSize qcount;	/* Saturating authoritative Q count; zero is exact. */
   MSize sweep_bucket;	/* Bucket containing sweep_link. */
-  uint32_t auto_stage_pending;  /* Rooted allocation asked for a new cohort. */
+  uint32_t auto_stage_tid;  /* Rooted allocation asked for a new cohort. */
+  uint32_t auto_retire_tid;  /* Automatic cohort owner to notify at IDLE. */
   uint32_t sweep_phase;	/* LJ_STR_SWEEP_* bounded subphase. */
   uint32_t sweep_cycle;	/* GC2 cycle which owns sweep_hdr. */
   uint32_t sweep_batch_pending;  /* Batch slot spans the exact unlink CAS. */

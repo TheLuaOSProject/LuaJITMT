@@ -1682,8 +1682,8 @@ int lj_str_gc2_reclaim_request(global_State *g, uint32_t request)
     lua_State *L = lj_tg_load_thread_L(tg);
     /* Managed spawn enters the public protected call under its dedicated
     ** outer frame. Foreign attachments and additional native entries
-    ** cannot acquire an explicit retirement scope. */
-    if (request != LJ_STR_RECLAIM_FULL ||
+    ** cannot acquire a retirement scope. */
+    if ((request != LJ_STR_RECLAIM_FULL && request != LJ_STR_RECLAIM_AUTO) ||
 	!lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC) || !L ||
 	lj_tg_load_cur_L(tg) != L || !L->cframe ||
 	!tg->str_vm_outer_cframe ||
@@ -1749,10 +1749,19 @@ static TGState *str_vm_reclaim_owner(global_State *g, uint64_t scope, int stage)
   if (!g || !executor || executor->gl != g)
     return NULL;
   if (!scope) {
+    uint32_t wanted = la_load32_acq(&g->str.auto_stage_tid);
     if (!stage || !lj_gc_auto_running(g) ||
-        (!la_load32_acq(&g->str.auto_stage_pending) && lj_str_qcount_acq(g) == 0))
+        (!wanted && lj_str_qcount_acq(g) == 0))
       return NULL;
-    owner = g->main_tg;
+    owner = wanted ? lj_tg_find_owner(g, wanted) : g->main_tg;
+    /* A bounded turn may outlive the allocating worker. Transfer its pending
+    ** request without consuming any newer allocation published by a peer. */
+    if (!owner || lj_tg_flags_test_acq(owner, TGF_DEAD)) {
+      owner = g->main_tg;
+      (void)la_cas32(&g->str.auto_stage_tid, &wanted, lj_tg_tid_acq(owner),
+                     LA_ACQ_REL, LA_ACQ);
+    }
+    request = LJ_STR_RECLAIM_AUTO;
   } else {
     if (!lj_str_reclaim_mode_active(request) ||
         (request == LJ_STR_RECLAIM_AUTO && !lj_gc_auto_running(g)))
@@ -1767,7 +1776,7 @@ static TGState *str_vm_reclaim_owner(global_State *g, uint64_t scope, int stage)
   }
   if (!owner || lj_tg_flags_test_acq(owner, TGF_DEAD) ||
       (owner != g->main_tg &&
-       (request != LJ_STR_RECLAIM_FULL ||
+       ((request != LJ_STR_RECLAIM_FULL && request != LJ_STR_RECLAIM_AUTO) ||
         !lj_tg_flags_test_acq(owner, TGF_LUA_ALLOC))) ||
       (executor != owner && executor != g->main_tg &&
        !lj_tg_flags_test_acq(executor, TGF_LUA_ALLOC) &&
@@ -2509,8 +2518,11 @@ void lj_str_gc2_sweep_begin(global_State *g, int major)
 	vm_phase = LJ_STR_SWEEP_UNLINK_GRACE;
       else if (scope == 0 || (uint32_t)scope == LJ_STR_RECLAIM_AUTO ||
                (scan != 0 && str_vm_cohort_ready(g, owner, scope, scan - 1u))) {
-        if (scope == 0 || (uint32_t)scope == LJ_STR_RECLAIM_AUTO)
-          la_store32_rel(&g->str.auto_stage_pending, 0);
+        if (scope == 0 || (uint32_t)scope == LJ_STR_RECLAIM_AUTO) {
+          uint32_t wanted = lj_tg_tid_acq(owner);
+          la_store32_rel(&g->str.auto_retire_tid, wanted);
+          (void)la_cas32(&g->str.auto_stage_tid, &wanted, 0, LA_ACQ_REL, LA_ACQ);
+        }
 	vm_phase = LJ_STR_SWEEP_ACQUIRE;
       }
     }

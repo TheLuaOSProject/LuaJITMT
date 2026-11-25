@@ -3435,7 +3435,8 @@ uint64_t lj_gc2_flush_alloc_checkpoint(global_State *g, TGState *tg)
   flushed = lj_gc2_flush_alloc(g, tg);
   if (flushed == 0)
     return 0;
-  if (tg == g->main_tg && lj_gc_auto_running(g) &&
+  if ((tg == g->main_tg || lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC)) &&
+      lj_gc_auto_running(g) &&
       lj_str_reclaim_request_acq(g) == LJ_STR_RECLAIM_NONE) {
     uint32_t prior = la_load32_acq(&tg->str_auto_pending), next;
     do {
@@ -6865,6 +6866,22 @@ static int gc2_sweep_close_commit_owned(global_State *g)
   return 1;
 }
 
+static void gc2_auto_string_retire_notify(global_State *g)
+{
+  uint32_t tid = la_load32_acq(&g->str.auto_retire_tid);
+  TGState *owner = g->main_tg;
+  if (tid && tid != lj_tg_tid_acq(owner) && lj_gc2_smr_read_try(g)) {
+    TGState *wanted = lj_tg_find_owner(g, tid);
+    if (wanted && !lj_tg_flags_test_acq(wanted, TGF_DEAD) &&
+        lj_tg_flags_test_acq(wanted, TGF_LUA_ALLOC))
+      owner = wanted;
+    lj_tg_str_retire_pending(owner);
+    lj_gc2_smr_read_leave(g);
+  } else {
+    lj_tg_str_retire_pending(owner);
+  }
+}
+
 static void gc2_sweep_close_finish(global_State *g, uint64_t epoch)
 {
   LJThrGC2TLS *tls;
@@ -6893,7 +6910,7 @@ static void gc2_sweep_close_finish(global_State *g, uint64_t epoch)
   gc2_sweep_to_idle_add(g, 1);
   gc2_phase_gate_release(g);
   if (lj_str_body_retired_head_acq(g) && lj_gc_auto_running(g))
-    lj_tg_str_retire_pending(g->main_tg);
+    gc2_auto_string_retire_notify(g);
   lj_gc2_worker_wake(g);
 }
 
@@ -23070,6 +23087,7 @@ static int gc2_idle_retire_epoch_owned(global_State *g, int start)
 {
   uint32_t actions = gc2_fixpoint_epoch_actions_acq(g);
   uint64_t epoch = gc2_hs_epoch_acq(g) + (unsigned)start;
+  TGState *self = lj_thr_get_tg();
   uint32_t open = 1;
   int complete, owner_gate = 0;
   lj_assertG(gc2_phase_acq(g) == LJ_GC2_IDLE &&
@@ -23078,9 +23096,9 @@ static int gc2_idle_retire_epoch_owned(global_State *g, int start)
 	     "idle retirement lost its phase gate");
   /* Borrow the native gate only during this actual rooted owner turn. Any
   ** refused or unfinished epoch reopens the gate before dropping worker_active. */
-  if (lj_thr_get_tg() == g->main_tg &&
+  if (self && self->gl == g &&
       lj_str_reclaim_scope_acq(g) ==
-        lj_str_reclaim_scope_pack(lj_tg_tid_acq(g->main_tg), LJ_STR_RECLAIM_AUTO) &&
+        lj_str_reclaim_scope_pack(lj_tg_tid_acq(self), LJ_STR_RECLAIM_AUTO) &&
       lj_gc_auto_running(g) && lj_str_body_retired_head_acq(g) != NULL)
     owner_gate = gc2_jit_phase_gate_cas(g, &open, 0);
   if (owner_gate)
@@ -23107,9 +23125,9 @@ static int gc2_idle_retire_epoch_owned(global_State *g, int start)
   }
   if (complete && lj_gc_auto_running(g) &&
       lj_str_reclaim_request_acq(g) != LJ_STR_RECLAIM_AUTO &&
-      la_load32_acq(&g->str.auto_stage_pending) &&
+      la_load32_acq(&g->str.auto_stage_tid) &&
       lj_str_body_retired_head_acq(g) != NULL)
-    lj_tg_str_retire_pending(g->main_tg);
+    gc2_auto_string_retire_notify(g);
   return complete;
 }
 

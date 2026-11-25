@@ -848,6 +848,16 @@ uint32_t lj_safepoint_ack_check(lua_State *L)
   return safepoint_ack_check_l(L, 0);
 }
 
+static int safepoint_rescan_string_roots(global_State *g, TGState *tg)
+{
+  LJOSerrState oserr;
+  int scanned;
+  lj_oserr_save(&oserr);
+  scanned = lj_gc2_scan_cycle_owner_tg_roots(g, tg);
+  lj_oserr_restore(&oserr);
+  return scanned;
+}
+
 /* Only emitted after the interpreter has published BASE/PC, or after
 ** native trace exit restored its stack. A remote native ACK has no such
 ** authority, including when it consumes this actor's outstanding poll. */
@@ -868,17 +878,12 @@ static void safepoint_vm_scan(lua_State *L, int trace_exit)
     return;
   if (!(actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS)) ||
       lj_tg_hs_epoch_ack_acq(tg) != epoch) {
-    LJOSerrState oserr;
-    int scanned;
     if (!trace_exit && tg != g->main_tg)
       return;
     /* A call or a trace-exit helper may have consumed the owner request
     ** before dispatch restored this frame. Rescan from the real boundary
     ** instead of granting a VM certificate to that earlier C/native scan. */
-    lj_oserr_save(&oserr);
-    scanned = lj_gc2_scan_cycle_owner_tg_roots(g, tg);
-    lj_oserr_restore(&oserr);
-    if (!scanned)
+    if (!safepoint_rescan_string_roots(g, tg))
       return;
   }
   la_store64_rel(&tg->str_vm_root_epoch, epoch);
@@ -893,6 +898,27 @@ void lj_safepoint_vm_checkpoint(lua_State *L, int trace_exit)
     if (LJ_UNLIKELY(status != LUA_OK))
       lj_err_throw(L, status);
   }
+}
+
+/* thread:join() holds only already-published Lua roots across its futex
+** wait. A local owner ACK at that exact protected frame can be witnessed
+** after native leave. Foreign/native ACKs still cannot publish this proof. */
+void lj_safepoint_string_join_checkpoint(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  uint64_t scope = lj_str_reclaim_scope_acq(g);
+  uint64_t epoch;
+  if (tg != g->main_tg || (uint32_t)scope != LJ_STR_RECLAIM_AUTO ||
+      (uint32_t)(scope >> 32) == lj_tg_tid_acq(tg) ||
+      !safepoint_str_vm_frame(L, tg))
+    return;
+  epoch = la_load64_acq(&tg->str_owner_scan_epoch);
+  if (epoch <= la_load64_acq(&tg->str_vm_root_epoch))
+    return;
+  if (safepoint_rescan_string_roots(g, tg) &&
+      lj_str_reclaim_scope_acq(g) == scope)
+    la_store64_rel(&tg->str_vm_root_epoch, epoch);
 }
 
 void lj_native_enter(TGState *tg)

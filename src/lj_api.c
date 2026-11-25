@@ -3714,7 +3714,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
   switch (what) {
   case LUA_GCSTOP:
     api_gc_setlogical(g, LJ_MAX_MEM, 1);
-    la_store32_rel(&g->str.auto_stage_pending, 0);
+    la_store32_rel(&g->str.auto_stage_tid, 0);
     break;
   case LUA_GCRESTART:
     {

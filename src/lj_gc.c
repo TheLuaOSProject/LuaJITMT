@@ -4278,16 +4278,15 @@ static int gc_auto_string_checkpoint(lua_State *L, int context, int *drove)
 {
   global_State *g = G(L);
   TGState *tg = L2TG(L);
-  void *cf;
   ptrdiff_t topofs;
   int status;
   uint32_t reasons;
-  if (tg != g->main_tg)
+  if (tg != g->main_tg && !lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC))
     return LUA_OK;
   reasons = la_xchg32_acqrel(&tg->str_auto_pending, 0);
   if (!reasons)
     return LUA_OK;
-  if (L != mainthread_acq(g) || !lj_gc_auto_running(g) ||
+  if (!lj_gc_auto_running(g) ||
       lj_thr_get_tg() != tg ||
       lj_tg_load_cur_L(tg) != L || lj_tg_in_native_acq(tg) ||
       lj_tg_load_jit_base(tg) || mt_shutdown_acq(g) ||
@@ -4302,19 +4301,23 @@ static int gc_auto_string_checkpoint(lua_State *L, int context, int *drove)
     return LUA_OK;
 #endif
 #endif
-  cf = cframe_raw(L->cframe);
-  /* At an outer dispatch the VM saved BASE/PC and every live Lua value is
-  ** in the stack. An outer C API call can instead use its exact top after
-  ** the constructor result is published. Nested C or FFI callers may retain
-  ** native borrows across a Lua invocation and are outside this scope. */
-  if (context == STR_CHECKPOINT_API ? cf != NULL : (!cf || cframe_prev(cf)))
+  /* At dispatch the VM has saved BASE/PC and published the Lua frame. A
+  ** main C API call can use its published result at the outer stack top.
+  ** reclaim_request verifies the managed worker's protected entry frame. */
+  if (tg == g->main_tg) {
+    void *cf = cframe_raw(L->cframe);
+    if (L != mainthread_acq(g) ||
+        (context == STR_CHECKPOINT_API ? cf != NULL : (!cf || cframe_prev(cf))))
+      return LUA_OK;
+  } else if (context == STR_CHECKPOINT_API) {
     return LUA_OK;
+  }
   if (context == STR_CHECKPOINT_DISPATCH && !curr_funcisL(L))
     return LUA_OK;
   if (lj_str_gc2_reclaim_request(g, LJ_STR_RECLAIM_AUTO) <= 0)
     return LUA_OK;
   if (reasons & LJ_STR_AUTO_ALLOC)
-    la_store32_rel(&g->str.auto_stage_pending, 1);
+    la_store32_rel(&g->str.auto_stage_tid, lj_tg_tid_acq(tg));
   topofs = savestack(L, L->top);
   if (drove)
     *drove = 1;
@@ -4340,12 +4343,14 @@ int lj_gc_auto_string_checkpoint(lua_State *L, int dispatch)
 void lj_gc_check_string_result(lua_State *L)
 {
   global_State *g = G(L);
+  TGState *tg = L2TG(L);
   int drove = 0;
   /* Only an audited engine builtin may use this entry, after it published
   ** the result and after its final use of borrowed payload bytes. */
-  if (L2TG(L) == g->main_tg && lj_gc_auto_running(g)) {
+  if ((tg == g->main_tg || lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC)) &&
+      lj_gc_auto_running(g)) {
     if (lj_str_body_retired_head_acq(g))
-      lj_tg_str_retire_pending(g->main_tg);
+      lj_tg_str_retire_pending(tg);
     {
       int status = gc_auto_string_checkpoint(L, STR_CHECKPOINT_RESULT, &drove);
       if (LJ_UNLIKELY(status != LUA_OK))
