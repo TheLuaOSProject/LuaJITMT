@@ -201,11 +201,16 @@ static void array_copy_hold_hook(GCtab *t, MSize idx)
     sched_yield();
 }
 
-static void array_migration_mutate(lua_State *L)
+static void array_migration_mutate(lua_State *L, int mixed)
 {
   lua_rawgeti(L, 1, 2);
   assert(lua_tointeger(L, -1) == 22);
   lua_pop(L, 1);
+  if (mixed) {
+    lua_rawgeti(L, 1, 64);
+    assert(lua_tointeger(L, -1) == 64);
+    lua_pop(L, 1);
+  }
   lua_pushnil(L);
   lua_rawseti(L, 1, 1);
   lua_pushinteger(L, 222);
@@ -279,8 +284,8 @@ static void *resize_worker(void *arg)
 
   if (ctx->clear)
     lj_tab_clear(L, t);
-  else if (ctx->mutate == 3)
-    array_migration_mutate(L);
+  else if (ctx->mutate == 3 || ctx->mutate == 5)
+    array_migration_mutate(L, ctx->mutate == 5);
   else if (ctx->mutate == 4)
     hash_migration_mutate(L);
   else if (ctx->mutate)
@@ -630,7 +635,7 @@ static void assert_array_migration_values(lua_State *L, int weak)
   lua_pop(L, 1);
 }
 
-static void exercise_array_migration_owner(lua_State *L, int weak)
+static void exercise_array_migration_owner(lua_State *L, int weak, int mixed)
 {
   volatile int ready = 0, owner_start = 0, other_start = 0;
   volatile int owner_done = 0, other_done = 0;
@@ -638,10 +643,11 @@ static void exercise_array_migration_owner(lua_State *L, int weak)
   ResizeCtx owner = { 0 }, other = { 0 };
   pthread_t other_thr;
   GCtab *t;
+  Node *oldnode;
   TValue *oldarray, *nextarray;
 
   lua_settop(L, 0);
-  lua_createtable(L, LJ_MAX_COLOSIZE + 2, 0);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 2, mixed ? 4 : 0);
   if (weak) {
     lua_newtable(L);
     lua_pushliteral(L, "v");
@@ -657,6 +663,13 @@ static void exercise_array_migration_owner(lua_State *L, int weak)
   lua_rawseti(L, 1, 3);
   lua_pushliteral(L, "array migration pins string values");
   lua_rawseti(L, 1, 4);
+  if (mixed) {
+    lua_pushinteger(L, 64);
+    lua_rawseti(L, 1, 64);
+    lua_pushinteger(L, 555);
+    lua_rawseti(L, 1, -1);
+  }
+  oldnode = lj_tab_node_acq(t);
   oldarray = lj_tab_array_acq(t);
   assert(!lj_tab_array_is_colocated(t, oldarray));
   owner.L = new_child_with_table(L, 1);
@@ -669,7 +682,7 @@ static void exercise_array_migration_owner(lua_State *L, int weak)
   other.ready = &ready;
   other.start = &other_start;
   other.done = &other_done;
-  other.mutate = 3;
+  other.mutate = mixed ? 5 : 3;
   other.status = -1;
   resize_hook_tab = t;
   resize_hook_entered = &hook_entered;
@@ -683,6 +696,9 @@ static void exercise_array_migration_owner(lua_State *L, int weak)
   assert(lj_tab_array_acq(t) == oldarray);
   assert(lj_tab_array_is_retiring(t, oldarray));
   assert(lj_tab_resize_desc_control_acq(t) != NULL);
+  if (mixed) {
+    assert(lj_tab_node_acq(t) == oldnode && lj_tab_node_is_retiring(oldnode));
+  }
   nextarray = lj_tab_array_nextgen_acq(oldarray);
   assert(tvisnil(&nextarray[0]));
   assert(tvisresizemarker(&nextarray[1]));
@@ -691,6 +707,8 @@ static void exercise_array_migration_owner(lua_State *L, int weak)
   assert(wait_for_flag(&other_done, 1, 1000000));
   assert(!load_flag(&owner_done));
   assert(lj_tab_array_acq(t) == nextarray);
+  if (mixed)
+    assert(lj_tab_node_acq(t) != oldnode);
   assert(lj_tab_resize_desc_control_acq(t) == NULL);
   lua_rawgeti(L, 1, 1);
   assert(lua_isnil(L, -1));
@@ -706,6 +724,11 @@ static void exercise_array_migration_owner(lua_State *L, int weak)
   resize_hook_release = NULL;
   lua_gc(L, LUA_GCCOLLECT, 0);
   assert_array_migration_values(L, weak);
+  if (mixed) {
+    lua_rawgeti(L, 1, -1);
+    assert(lua_tointeger(L, -1) == 555);
+    lua_pop(L, 1);
+  }
 }
 
 static void exercise_hash_migration_owner(lua_State *L)
@@ -914,8 +937,10 @@ int main(void)
   exercise_hash_cutover_owner(L, 0);
   exercise_hash_cutover_owner(L, 1);
   exercise_hash_cutover_weak_value(L);
-  exercise_array_migration_owner(L, 0);
-  exercise_array_migration_owner(L, 1);
+  exercise_array_migration_owner(L, 0, 0);
+  exercise_array_migration_owner(L, 1, 0);
+  exercise_array_migration_owner(L, 0, 1);
+  exercise_array_migration_owner(L, 1, 1);
   exercise_hash_migration_owner(L);
   exercise_wait_stopreq(L);
 

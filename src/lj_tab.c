@@ -2729,10 +2729,25 @@ static int tab_hash_move_forward(Node *source)
   }
 }
 
+static void tab_hash_move_install_value(global_State *g, TabResizeDesc *desc,
+					GCtab *t, TValue *slot, cTValue *marker,
+					cTValue *key, cTValue *val)
+{
+  TValue expect = *marker;
+  if (lj_tv_cas(slot, &expect, val)) {
+    if (tvisgcv(key) && !tab_resize_key_is_weak(desc->migration_weak, key))
+      lj_gc2_barrier_key_g(g, t, key);
+    if (tvisgcv(val) &&
+	tab_hash_move_value_is_strong(desc->migration_weak, key, val))
+      lj_gc2_barrier_tv_pair_g(g, obj2gco(t), val);
+  }
+}
+
 static int tab_resize_hash_copy_held(global_State *g, TabResizeDesc *desc)
 {
   MSize i, freecount = 0;
   MSize hmask = lj_tab_node_hmask_acq(desc->newnode);
+  MSize asize = desc->newarray ? lj_tab_array_hdr_asize_acq(desc->newarray) : 0;
   uint32_t flags = TABNODE_FLAG_COPYING;
   uint32_t *owners = tab_hash_move_owners(desc);
   TValue dst_marker, nilv;
@@ -2753,6 +2768,13 @@ static int tab_resize_hash_copy_held(global_State *g, TabResizeDesc *desc)
     tv_rawstore(&val, edge.hi);
     if (tvisnil(&key))
       continue;
+    if (tab_rehash_arrayindex(asize, &key, &bucket)) {
+      tab_hash_move_install_value(g, desc, t, &desc->newarray[bucket],
+				  &dst_marker, &key, &val);
+      if (!tab_hash_move_forward(&desc->oldnode[i]))
+	return 0;
+      continue;
+    }
     bucket = la_load32_acq(&move->home);
     home = &desc->newnode[bucket];
     dest = tab_hash_move_reserve(desc, hmask, bucket, i);
@@ -2760,14 +2782,8 @@ static int tab_resize_hash_copy_held(global_State *g, TabResizeDesc *desc)
       tab_test_hash_collision_copy(t, i);
     expect = nilv;
     (void)lj_tv_cas(&dest->key, &expect, &key);
-    expect = dst_marker;
-    if (lj_tv_cas(&dest->val, &expect, &val)) {
-      if (tvisgcv(&key) && !tab_resize_key_is_weak(desc->migration_weak, &key))
-	lj_gc2_barrier_key_g(g, t, &key);
-      if (tvisgcv(&val) &&
-	  tab_hash_move_value_is_strong(desc->migration_weak, &key, &val))
-	lj_gc2_barrier_tv_pair_g(g, obj2gco(t), &val);
-    }
+    tab_hash_move_install_value(g, desc, t, &dest->val, &dst_marker,
+				&key, &val);
     tab_hash_move_link(home, dest, hmask);
     if (!tab_hash_move_forward(&desc->oldnode[i]))
       return 0;
@@ -2784,9 +2800,16 @@ static int tab_resize_hash_copy_held(global_State *g, TabResizeDesc *desc)
       freecount++;
     }
   }
+  for (i = desc->oldasize; i < asize; i++) {
+    TValue expect = dst_marker;
+    (void)lj_tv_cas(&desc->newarray[i], &expect, &nilv);
+  }
   (void)lj_tab_node_hdr_flags_word_cas(desc->newnode, &flags, freecount);
   return 1;
 }
+
+static int tab_resize_array_copy_held(global_State *g, TabResizeDesc *desc);
+static int tab_resize_array_root_held(global_State *g, TabResizeDesc *desc);
 
 /* The migrator published the freetop and mask and relinquished structural
 ** control. Only the exact old root can be replaced. SMR rules out reuse of
@@ -2809,6 +2832,11 @@ static int tab_resize_hash_cutover_held(global_State *g, TabResizeDesc *desc)
       lj_tab_resize_desc_control_acq(t) != desc)
     return 0;
   if (phase == TAB_RESIZE_DESC_MIGRATING) {
+    if (desc->newarray) {
+      lj_tab_array_hdr_flags_or_rel(desc->oldarray, TABARRAY_FLAG_RETIRING);
+      if (!tab_resize_array_copy_held(g, desc))
+	return 0;
+    }
     if (!tab_resize_hash_copy_held(g, desc))
       return 0;
     if (lj_tab_resize_desc_phase_cas(desc, &phase,
@@ -2818,6 +2846,10 @@ static int tab_resize_hash_cutover_held(global_State *g, TabResizeDesc *desc)
       return tab_resize_desc_help_terminating(g, desc);
     }
   }
+  /* Growing the array makes the new numeric slots authoritative before
+  ** the hash root stops advertising the retiring generation. */
+  if (desc->newarray && !tab_resize_array_root_held(g, desc))
+    return 0;
   oldnode = (uint64_t)(uintptr_t)desc->oldnode;
   newnode = (uint64_t)(uintptr_t)desc->newnode;
   if (!la_cas64(&t->node.ptr64, &oldnode, newnode, LA_ACQ_REL, LA_ACQ) &&
@@ -2968,12 +3000,33 @@ static int tab_resize_array_copy_held(global_State *g, TabResizeDesc *desc)
   return 1;
 }
 
+static int tab_resize_array_root_held(global_State *g, TabResizeDesc *desc)
+{
+  GCtab *t = lj_tab_resize_desc_tab_acq(desc);
+  uint64_t oldarray, newarray;
+  TabArrayRetire *ret;
+  oldarray = (uint64_t)(uintptr_t)desc->oldarray;
+  newarray = (uint64_t)(uintptr_t)desc->newarray;
+  if (!la_cas64(&t->array.ptr64, &oldarray, newarray, LA_ACQ_REL, LA_ACQ) &&
+      oldarray != newarray)
+    return 0;
+  ret = desc->oldaret;
+  if (!lj_tab_array_retired_armed_acq(ret)) {
+    uint64_t epoch = lj_gc2_retire_epoch(g);
+    uint64_t old_epoch = lj_tab_array_retired_epoch_acq(ret);
+    tab_array_retire_preserve(g, ret);
+    while (old_epoch < epoch &&
+	   !la_cas64(&ret->retire_epoch, &old_epoch, epoch, LA_ACQ_REL, LA_ACQ))
+      ;
+    lj_tab_array_retired_armed_rel(ret, 1);
+  }
+  return 1;
+}
+
 static int tab_resize_array_cutover_held(global_State *g, TabResizeDesc *desc)
 {
   uint32_t phase = lj_tab_resize_desc_phase_acq(desc);
   GCtab *t;
-  uint64_t oldarray, newarray;
-  TabArrayRetire *ret;
   if (phase == TAB_RESIZE_DESC_TERMINAL)
     return 1;
   if (phase == TAB_RESIZE_DESC_TERMINATING)
@@ -2992,21 +3045,8 @@ static int tab_resize_array_cutover_held(global_State *g, TabResizeDesc *desc)
 	phase != TAB_RESIZE_DESC_PUBLISHING)
       return tab_resize_desc_help_terminating(g, desc);
   }
-  oldarray = (uint64_t)(uintptr_t)desc->oldarray;
-  newarray = (uint64_t)(uintptr_t)desc->newarray;
-  if (!la_cas64(&t->array.ptr64, &oldarray, newarray, LA_ACQ_REL, LA_ACQ) &&
-      oldarray != newarray)
+  if (!tab_resize_array_root_held(g, desc))
     return 0;
-  ret = desc->oldaret;
-  if (!lj_tab_array_retired_armed_acq(ret)) {
-    uint64_t epoch = lj_gc2_retire_epoch(g);
-    uint64_t old_epoch = lj_tab_array_retired_epoch_acq(ret);
-    tab_array_retire_preserve(g, ret);
-    while (old_epoch < epoch &&
-	   !la_cas64(&ret->retire_epoch, &old_epoch, epoch, LA_ACQ_REL, LA_ACQ))
-      ;
-    lj_tab_array_retired_armed_rel(ret, 1);
-  }
   phase = TAB_RESIZE_DESC_PUBLISHING;
   (void)lj_tab_resize_desc_phase_cas(desc, &phase,
 				    TAB_RESIZE_DESC_TERMINATING);
@@ -3610,8 +3650,9 @@ static void tab_resize_publish_hash_cutover(lua_State *L, GCtab *t,
 					     MSize freecount)
 {
   desc->newnode = node;
-  desc->newacap = (uint32_t)lj_tab_acap_acq(t);
-  desc->flags = TAB_RESIZE_DESC_F_HASH_CUTOVER;
+  if (!desc->newarray)
+    desc->newacap = (uint32_t)lj_tab_acap_acq(t);
+  desc->flags |= TAB_RESIZE_DESC_F_HASH_CUTOVER;
   if (!desc->hash_move_bytes)
     tab_node_freecount_set_private(node, freecount);
   tab_pub_node_mem(L, t, node);
@@ -3621,12 +3662,12 @@ static void tab_resize_publish_hash_cutover(lua_State *L, GCtab *t,
     TAB_RESIZE_DESC_MIGRATING : TAB_RESIZE_DESC_PUBLISHING);
 }
 
-static void tab_resize_publish_array_migration(lua_State *L, GCtab *t,
+static void tab_resize_prepare_array_migration(lua_State *L, GCtab *t,
 					       TabResizeDesc *desc,
 					       TValue *array, MSize asize)
 {
   desc->newarray = array;
-  desc->flags = TAB_RESIZE_DESC_F_ARRAY_CUTOVER;
+  desc->flags |= TAB_RESIZE_DESC_F_ARRAY_CUTOVER;
   /*
   ** Only an already separated array is eligible. Readers use the size in
   ** its own header until the root advances, while private VM/JIT paths are
@@ -3634,7 +3675,6 @@ static void tab_resize_publish_array_migration(lua_State *L, GCtab *t,
   */
   lj_tab_asize_rel(t, asize);
   tab_pub_array_mem(L, t, array, desc->newacap);
-  tab_resize_publish_runtime(L, t, desc, TAB_RESIZE_DESC_MIGRATING);
 }
 
 /* Resize a table to fit the new array/hash part sizes. */
@@ -3661,7 +3701,7 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
   TabNodeRetire *oldret;
   TabArrayRetire *oldaret;
   TabResizeDesc *cutover;
-  int array_migration, hash_migration;
+  int array_migration, hash_migration, self_metatable;
   int array_next_claimed;
   int struct_acq;
   Node *node_succ;
@@ -3799,19 +3839,21 @@ restart_resize:
   if (newarray && oldarray_separated && oldacap > 0)
     oldaret = tab_array_retire_reserve(L);
   /*
-  ** Pure hashes and separated arrays can hand off their copy. A resize
-  ** which may move keys between array and hash still uses the owner copy.
+  ** Pure hashes and separated-array growth can hand off their copy. An
+  ** integral key from the hash is moved directly to its new array index.
   ** The sticky MT latch excludes private readers while old roots briefly
   ** coexist with new header metadata.
   */
-  array_migration = oldaret && asize > oldasize && !oldhmask && !hbits;
+  /* FINREG tables use their own claim protocol and self metatable. */
+  self_metatable = lj_tab_metatable_acq(t) == t;
+  array_migration = oldaret && asize > oldasize &&
+    ((!oldhmask && !hbits) || (oldret && newnode && !self_metatable));
   if (mt_active_acq(g) &&
       (array_migration || (oldret && newnode && !array_changed))) {
     uint64_t id = tab_resize_desc_id_reserve(g);
     if (id != 0) {
       GCSize bytes = sizeof(TabResizeDesc);
-      /* FINREG tables use their own claim protocol and self metatable. */
-      hash_migration = oldret && !asize && lj_tab_metatable_acq(t) != t;
+      hash_migration = oldret && (!asize || array_migration) && !self_metatable;
       if (hash_migration)
 	bytes = tab_hash_move_size(oldhmask, newhmask);
       cutover = (TabResizeDesc *)lj_mem_new_nothrow(L, bytes);
@@ -3832,7 +3874,7 @@ restart_resize:
     TValue marker;
     MSize i;
     setresizemarkerV(&marker, cutover->id, LJ_TAB_RESIZE_MARK_DST);
-    for (i = 0; i < oldasize; i++)
+    for (i = 0; i < (hash_migration ? asize : oldasize); i++)
       tv_rawstore(&array[i], tv_rawload(&marker));
   }
   if (cutover && hash_migration) {
@@ -3872,7 +3914,7 @@ restart_resize:
   }
   if (cutover && array_migration && !struct_acq) {
     MSize i;
-    for (i = 0; i < oldasize; i++)
+    for (i = 0; i < (hash_migration ? asize : oldasize); i++)
       lj_tab_storenilraw(&array[i]);
   }
   if (cutover && hash_migration && !struct_acq) {
@@ -3898,7 +3940,8 @@ restart_resize:
       cutover->migration_weak = weak;
     }
   }
-  if (asize > oldasize) {  /* Array part grows? */
+  if (asize > oldasize &&
+      !(cutover && struct_acq && array_migration && hash_migration)) {
     uint32_t i;
     for (i = oldasize; i < asize; i++)  /* Clear newly allocated/current slots. */
       lj_tab_storenilraw(&array[i]);
@@ -3928,13 +3971,14 @@ restart_resize:
       lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
     tab_array_retired_push(g, oldaret);
   }
-  if (cutover && struct_acq && array_migration) {
-    tab_resize_publish_array_migration(L, t, cutover, array, asize);
-    return;
-  }
-  if (cutover && struct_acq && hash_migration) {
-    tab_resize_publish_hash_cutover(L, t, cutover, newnode, newhmask,
-				    newfreetop, newfreecount);
+  if (cutover && struct_acq && (array_migration || hash_migration)) {
+    if (array_migration)
+      tab_resize_prepare_array_migration(L, t, cutover, array, asize);
+    if (hash_migration)
+      tab_resize_publish_hash_cutover(L, t, cutover, newnode, newhmask,
+				      newfreetop, newfreecount);
+    else
+      tab_resize_publish_runtime(L, t, cutover, TAB_RESIZE_DESC_MIGRATING);
     return;
   }
   if (newarray && !oldarray_separated && oldarray) {

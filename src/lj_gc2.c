@@ -4006,7 +4006,7 @@ static LJ_NOINLINE void gc2_mark_tab_retired_mem(global_State *g)
 	  phase == TAB_RESIZE_DESC_PUBLISHING) {
 	if (cutover & TAB_RESIZE_DESC_F_ARRAY_CUTOVER)
 	  (void)lj_gc2_markmem(g, lj_tab_array_hdrw(desc->newarray));
-	else
+	if (cutover & TAB_RESIZE_DESC_F_HASH_CUTOVER)
 	  (void)lj_gc2_markmem(g, lj_tab_node_hdrw(desc->newnode));
       }
       /* Detached production records are SMR metadata. Rooting their table
