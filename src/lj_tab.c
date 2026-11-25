@@ -2930,12 +2930,20 @@ static int tab_resize_early_hash_cancel(global_State *g, TabResizeDesc *desc)
   return tab_resize_desc_help_terminating(g, desc);
 }
 
+static la_u128 tab_resize_hash_shape(la_u128 oldshape, Node *node)
+{
+  LJTabShape shape;
+  shape.packed = oldshape;
+  shape.fields.hmask = lj_tab_node_hmask_acq(node);
+  setmref(shape.fields.freetop, node + shape.fields.hmask + 1u);
+  return shape.packed;
+}
+
 static int tab_resize_early_hash_start_held(global_State *g, GCtab *t,
 					     TabResizeDesc *desc)
 {
   uint32_t phase = lj_tab_resize_desc_phase_acq(desc);
-  LJTabShape shape;
-  la_u128 oldshape;
+  la_u128 oldshape, fallback;
   const Node *next;
   if (phase == TAB_RESIZE_DESC_INSTALLING) {
     oldshape = la_load128_acq(&t->resize_shape);
@@ -2952,17 +2960,16 @@ static int tab_resize_early_hash_start_held(global_State *g, GCtab *t,
 	   phase == TAB_RESIZE_DESC_PUBLISHING;
   next = NULL;
   if (!lj_tab_node_nextgen_cas(desc->oldnode, &next, desc->newnode) &&
-      next != desc->newnode) {
+      next != desc->newnode &&
+      (!desc->compactnode || next != lj_tab_resize_desc_selected_node_acq(desc))) {
     lj_assertG(0, "early hash source acquired an unrelated successor");
     abort();
   }
   (void)lj_tab_node_hdr_flags_try_or_rel(desc->oldnode, TABNODE_FLAG_RETIRING);
   oldshape = desc->oldshape;
-  shape.packed = oldshape;
-  shape.fields.hmask = lj_tab_node_hmask_acq(desc->newnode);
-  setmref(shape.fields.freetop, desc->newnode + shape.fields.hmask + 1u);
-  if (!la_cas128(&t->resize_shape, &oldshape, shape.packed) &&
-      (oldshape.lo != shape.packed.lo || oldshape.hi != shape.packed.hi))
+  fallback = tab_resize_hash_shape(oldshape, desc->newnode);
+  if (!la_cas128(&t->resize_shape, &oldshape, fallback) &&
+      (oldshape.lo != fallback.lo || oldshape.hi != fallback.hi))
     return 0;  /* An already-published successor has itself been replaced. */
   if (lj_tab_resize_desc_phase_cas(desc, &phase, TAB_RESIZE_DESC_MIGRATING))
     return 1;
@@ -3050,12 +3057,11 @@ static int tab_resize_hash_cutover_held(global_State *g, TabResizeDesc *desc)
     lj_tab_resize_desc_selected_node_acq(desc) : desc->newnode;
   if (selected != desc->newnode) {
     la_u128 expected = desc->oldshape;
-    LJTabShape shape;
-    shape.packed = expected;
-    shape.fields.hmask = lj_tab_node_hmask_acq(selected);
-    setmref(shape.fields.freetop, selected + shape.fields.hmask + 1u);
-    if (!la_cas128(&t->resize_shape, &expected, shape.packed) &&
-	(expected.lo != shape.packed.lo || expected.hi != shape.packed.hi))
+    la_u128 compact = tab_resize_hash_shape(expected, selected);
+    if (lj_tab_resize_desc_flags_acq(desc) & TAB_RESIZE_DESC_F_EARLY_HASH)
+      expected = tab_resize_hash_shape(expected, desc->newnode);
+    if (!la_cas128(&t->resize_shape, &expected, compact) &&
+	(expected.lo != compact.lo || expected.hi != compact.hi))
       return 0;
   }
   newnode = (uint64_t)(uintptr_t)selected;
@@ -3909,7 +3915,7 @@ static void tab_resize_prepare_array_migration(lua_State *L, GCtab *t,
 }
 
 /*
-** Prepare a pure-hash resize without first acquiring a bare structural tid.
+** Prepare a hash-only resize without first acquiring a bare structural tid.
 ** The table read epoch retains the old vector and the prospective retirement
 ** record while the issuer is outside counted SMR. Competing resizes may win
 ** before the exact control CAS, in which case this intent cancels and the
@@ -3943,7 +3949,8 @@ static int tab_resize_offer_early_hash(lua_State *L, GCtab *t,
       lj_tab_node_acq(t) != desc->oldnode ||
       lj_tab_node_hmask_acq(desc->oldnode) != desc->oldhmask ||
       lj_tab_node_is_retiring(desc->oldnode) ||
-      shape.fields.asize || shape.fields.hmask != desc->oldhmask) {
+      shape.fields.asize != desc->oldasize ||
+      shape.fields.hmask != desc->oldhmask) {
     lj_gc2_smr_read_leave(g);
     goto release;
   }
@@ -4045,6 +4052,7 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize,
   int count_retry;
   int weak;
   int shared_resize;
+  int hash_shrink_requested = -1;
 
 restart_resize:
   hbits = requested_hbits;
@@ -4069,6 +4077,11 @@ restart_resize:
   array = oldarray;
   newacap = oldacap;
   array_changed = asize != oldasize;
+  /* A retried grow must not undo a larger generation another writer just
+  ** published. Only a request that started as a hash-only shrink may compact. */
+  if (hash_shrink_requested < 0)
+    hash_shrink_requested = !array_changed && oldhmask > 0 &&
+      requested_hbits < lj_fls((uint32_t)oldhmask) + 1u;
   newarray = 0;
   newhmask = 0;
   newnode = NULL;
@@ -4150,8 +4163,12 @@ restart_resize:
     ** a destination during migration. Private single-mutator resizes retain the
     ** stock shrink-to-fit behavior.
     */
-    if (hbits < oldhbits)
+    if (hbits < oldhbits) {
+      if (hash_shrink_requested && !array_changed && !self_metatable &&
+	  oldhbits > 1)
+	compact_hbits = hbits ? hbits : 1;
       hbits = oldhbits;
+    }
   }
   if (hbits > LJ_MAX_HBITS)
     lj_err_msg(L, LJ_ERR_TABOV);
@@ -4173,7 +4190,7 @@ restart_resize:
   ** when dead value slots are present: that compaction is observable as future
   ** insert capacity and cannot be skipped safely.
   */
-  if (!array_changed && oldhmask == target_hmask && !deadkey)
+  if (!array_changed && oldhmask == target_hmask && !deadkey && !compact_hbits)
     return;
   /*
   ** Another mutator may publish the requested generation after the snapshot
@@ -4228,7 +4245,7 @@ restart_resize:
     if (id != 0) {
       GCSize bytes = sizeof(TabResizeDesc);
       hash_migration = inline_shrink ||
-	(oldret && (!asize || array_migration) && !self_metatable);
+	(oldret && (!array_changed || array_migration) && !self_metatable);
       if (hash_migration)
 	bytes = tab_hash_move_size(hash_source_count, newhmask);
       cutover = (TabResizeDesc *)lj_mem_new_nothrow(L, bytes);
@@ -4239,6 +4256,7 @@ restart_resize:
 	cutover->oldnode = oldnode;
 	cutover->oldret = oldret;
 	cutover->oldhmask = oldhmask;
+	cutover->oldasize = oldasize;
 	cutover->migration_weak = weak;
 	if (hash_migration) {
 	  cutover->hash_source_count = hash_source_count;

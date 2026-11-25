@@ -1106,6 +1106,99 @@ static void exercise_hash_install_owner(lua_State *L, MSize installed)
   assert_hash_cutover_values(L);
 }
 
+static void exercise_hash_shrink_owner(lua_State *L, int has_array,
+                                       int read_first)
+{
+  volatile int ready = 0, owner_start = 0, other_start = 0;
+  volatile int owner_done = 0, other_done = 0;
+  volatile int hook_entered = 0, hook_release = 0;
+  ResizeCtx owner = { 0 }, other = { 0 };
+  pthread_t other_thr;
+  GCtab *t;
+  Node *oldnode;
+  TValue *oldarray, *array;
+  MSize asize, oldmask;
+  uint32_t seq = 0, i;
+  char keys[2][128];
+
+  lua_settop(L, 0);
+  lua_createtable(L, has_array ? 8 : 0, 128);
+  t = tabV(L->top-1);
+  if (has_array) {
+    lua_pushinteger(L, 77);
+    lua_rawseti(L, 1, 1);
+  }
+  lua_pushinteger(L, 11);
+  lua_rawseti(L, 1, -1);
+  lua_pushinteger(L, 22);
+  lua_rawseti(L, 1, -2);
+  for (i = 0; i < 2; i++) {
+    GCstr *key = tabfwd_find_sid_bucket(L, "hash-shrink", 7, 1, &seq);
+    assert(key->len < sizeof(keys[i]));
+    memcpy(keys[i], strdata(key), key->len + 1u);
+    lua_pushstring(L, keys[i]);
+    lua_pushinteger(L, 44 + i);
+    lua_rawset(L, 1);
+  }
+  asize = lj_tab_array_snapshot_acq(t, &oldarray);
+  oldnode = lj_tab_node_snapshot_acq(t, &oldmask);
+  assert(oldmask == 127 && (asize != 0) == has_array);
+  owner.L = new_child_with_table(L, 1);
+  owner.ready = &ready;
+  owner.start = &owner_start;
+  owner.done = &owner_done;
+  owner.asize = asize;
+  owner.hbits = 3;
+  owner.status = -1;
+  other.L = new_child_with_table(L, 1);
+  other.ready = &ready;
+  other.start = &other_start;
+  other.done = &other_done;
+  other.mutate = read_first ? 2 : 1;
+  other.status = -1;
+  resize_hook_tab = t;
+  resize_hook_entered = &hook_entered;
+  resize_hook_release = &hook_release;
+  lj_tab_test_set_hash_collision_copy_hook(hash_copy_hold_hook);
+  assert(pthread_create(&copy_owner, NULL, resize_worker, &owner) == 0);
+  assert(pthread_create(&other_thr, NULL, resize_worker, &other) == 0);
+  assert(wait_for_flag(&ready, 2, 1000000));
+  store_flag(&owner_start, 1);
+  assert(wait_for_flag(&hook_entered, 1, 1000000));
+  assert(lj_tab_node_acq(t) == oldnode && lj_tab_node_is_retiring(oldnode));
+  assert(lj_tab_resize_desc_control_acq(t));
+
+  store_flag(&other_start, 1);
+  assert(wait_for_flag(&other_done, 1, 1000000));
+  assert(!load_flag(&owner_done));
+  assert(lj_tab_node_acq(t) != oldnode && lj_tab_hmask_acq(t) == 7);
+  assert(lj_tab_array_snapshot_acq(t, &array) == asize && array == oldarray);
+  assert(lj_tab_resize_desc_control_acq(t) == NULL);
+
+  assert_lua_ok(L, luaL_loadstring(L,
+    "local t, has_array, first, second = ...\n"
+    "assert(t[-1] == 111 and t[-2] == nil and t[-3] == 333)\n"
+    "assert(t[1] == (has_array and 77 or nil))\n"
+    "local seen, count = {}, 0\n"
+    "for k, v in pairs(t) do assert(not seen[k]); seen[k] = v; count = count + 1 end\n"
+    "assert(count == (has_array and 5 or 4))\n"
+    "assert(seen[-1] == 111 and seen[-3] == 333 and seen[1] == t[1])\n"
+    "assert(seen[first] == 44 and seen[second] == 45)\n"));
+  lua_pushvalue(L, 1);
+  lua_pushboolean(L, has_array);
+  lua_pushstring(L, keys[0]);
+  lua_pushstring(L, keys[1]);
+  assert_lua_ok(L, lua_pcall(L, 4, 0, 0));
+
+  store_flag(&hook_release, 1);
+  assert(pthread_join(copy_owner, NULL) == 0 && owner.status == 0);
+  assert(pthread_join(other_thr, NULL) == 0 && other.status == 0);
+  lj_tab_test_set_hash_collision_copy_hook(NULL);
+  resize_hook_tab = NULL;
+  resize_hook_entered = NULL;
+  resize_hook_release = NULL;
+}
+
 static void first_attach_hold_hook(global_State *g)
 {
   if (g != first_attach_g)
@@ -1238,6 +1331,9 @@ int main(void)
   exercise_hash_migration_owner(L);
   exercise_hash_install_owner(L, 0);
   exercise_hash_install_owner(L, 1);
+  exercise_hash_shrink_owner(L, 0, 0);
+  exercise_hash_shrink_owner(L, 1, 0);
+  exercise_hash_shrink_owner(L, 1, 1);
   exercise_wait_stopreq(L);
   lua_close(L);
 
