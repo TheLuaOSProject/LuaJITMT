@@ -19,6 +19,7 @@ LJ_FUNCA void lj_safepoint_vm_checkpoint(lua_State *L, int trace_exit);
 LJ_FUNC uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions);
 /* Reserved outside the range of real safepoint leader thread IDs. */
 #define LJ_SAFEPOINT_RESUMABLE_LEADER UINT32_MAX
+#define LJ_SAFEPOINT_SWEEP_START (LJ_GC2_HS_DISABLE_BARRIER | LJ_GC2_HS_FLUSH_SSB)
 #define LJ_SAFEPOINT_MARK_START_ACTIONS (LJ_GC2_HS_ENABLE_BARRIER | \
   LJ_GC2_HS_ALLOC_BLACK | LJ_GC2_HS_EXIT_TRACES | LJ_GC2_HS_REDISPATCH | \
   LJ_GC2_HS_FLUSH_SSB)

@@ -446,6 +446,9 @@ return function(add)
       local scan = "lj_gc2_scan_cycle_owner_tg_roots_native_parked"
       local prepare = "lj_arena_alloc_prepare_sweep_kind"
       run("t-gc2-sweep-step-close", { {} })
+      run("t-gc2-auto-sweep-start", { {} }, {
+        handshake, "lj_safepoint_resumable_epoch_try"
+      })
       run("t-worker-bridge-stop", stop_modes, { handshake })
       run("t-worker-bridge-detach", { { "0" }, { "1" } }, {
         handshake, "lj_gc2_flush_ssb_detach", scan, prepare

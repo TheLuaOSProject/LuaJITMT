@@ -1272,6 +1272,7 @@ static void gc2_peer_wait_owned_l(lua_State *L);
 static void gc2_root_scan_retry(global_State *g);
 static int gc2_mark_begin(global_State *g, int automatic);
 static int gc2_fixpoint_epoch_continue(global_State *g);
+static void gc2_weak_to_sweep(global_State *g, lua_State *L, int automatic);
 static int gc2_fixpoint_epoch_reserve(global_State *g);
 static int gc2_fixpoint_epoch_owned(global_State *g, int start);
 static int gc2_mark_activation_continue(global_State *g);
@@ -3155,6 +3156,11 @@ int lj_gc2_collect_active(lua_State *L)
       GCSize cost;
       int finstep;
       uint64_t defer0 = gc2_deferred_epoch_acq(g);
+      if (gc2_fixpoint_epoch_actions_acq(g)) {
+        if (!gc2_fixpoint_epoch_continue(g))
+          gc2_peer_wait_l(L);
+        continue;
+      }
       lj_gc2_sweep_prepare_bridge_boundary(
 	g, lj_gc_preserve_root_chain_for_gc2_sweep);
       if (gc2_deferred_epoch_acq(g) != defer0)
@@ -3288,7 +3294,7 @@ static int gc2_step(lua_State *L, uint32_t budget, int automatic)
 	g, L, NULL, LJ_GC2_WEAK_DRAIN_BATCH, automatic);
       if (weak_result == GC2_DRIVER_COMPLETE) {
 	uint64_t defer0 = gc2_deferred_epoch_acq(g);
-	lj_gc2_weak_to_sweep(g, L);
+	gc2_weak_to_sweep(g, L, automatic);
 	if (gc2_deferred_epoch_acq(g) != defer0)
 	  break;
 	continue;
@@ -3303,6 +3309,10 @@ static int gc2_step(lua_State *L, uint32_t budget, int automatic)
       GCSize cost;
       int finstep;
       uint64_t defer0 = gc2_deferred_epoch_acq(g);
+      if (gc2_fixpoint_epoch_actions_acq(g)) {
+        (void)gc2_fixpoint_epoch_continue(g);
+        continue;
+      }
       lj_gc2_sweep_prepare_bridge_boundary(
 	g, lj_gc_preserve_root_chain_for_gc2_sweep);
       if (gc2_deferred_epoch_acq(g) != defer0)
@@ -4744,9 +4754,9 @@ static void gc2_weak_to_sweep_drain_boundary(global_State *g, lua_State *L)
   ** the caller retries after the foreign owner or registry writer advances. */
 }
 
-void lj_gc2_weak_to_sweep(global_State *g, lua_State *L)
+static void gc2_weak_to_sweep(global_State *g, lua_State *L, int automatic)
 {
-  uint32_t expect = LJ_GC2_WEAK;
+  uint32_t expect = LJ_GC2_WEAK, actions;
   uint64_t defer0;
   if (!g || lj_tg_any_jit_active(g) || !gc2_recovery_empty(g))
     return;
@@ -4789,6 +4799,11 @@ void lj_gc2_weak_to_sweep(global_State *g, lua_State *L)
     gc2_worker_release(g);
     return;
   }
+  if (automatic && !lj_safepoint_resumable_epoch_reserve(g)) {
+    gc2_phase_gate_release(g);
+    gc2_worker_release(g);
+    return;
+  }
   /* Typed SWEEP_OPEN must be visible before legacy SWEEP can enable any of its
   ** existing reclaim paths. It remains a veto, not positive permission. */
   gc2_activation_mirror_edge(g, LJ_GC2_WEAK, LJ_GC2_SWEEP);
@@ -4796,6 +4811,8 @@ void lj_gc2_weak_to_sweep(global_State *g, lua_State *L)
     /* A CAS-owned preserve abort may have reset legacy phase first and either
     ** still own the typed reset or have completed it. Its exact reset consumes
     ** any staged SWEEP_OPEN state; other failures are genuine mismatches. */
+    if (automatic)
+      lj_safepoint_resumable_epoch_cancel(g);
     if (expect != LJ_GC2_IDLE ||
         !gc2_activation_forward_abort_defer(g))
       gc2_activation_pin_no_reclaim(g);
@@ -4813,10 +4830,23 @@ void lj_gc2_weak_to_sweep(global_State *g, lua_State *L)
   ** does not claim or tag the header until the semantic bridge is ready. */
   lj_str_gc2_sweep_begin(g, gc2_cycle_sweep_minor_acq(g) == 0);
   gc2_weak_to_sweep_add(g, 1);
+  actions = LJ_SAFEPOINT_SWEEP_START |
+    (gc2_cycle_sweep_minor_acq(g) ? LJ_GC2_HS_ALLOC_WHITE : LJ_GC2_HS_ALLOC_BLACK);
+  if (automatic) {
+    /* SWEEP is visible to publishers. The phase gate and closed bridge
+    ** exclude destructive work until every owner has applied this policy.
+    ** The ordinary bridge then drains their SSBs and obtains its own roots;
+    ** no caller-local L is retained across the asynchronous handoff. */
+    la_store32_rel(&g->gc2.fixpoint_epoch_actions, actions);
+    (void)gc2_fixpoint_epoch_owned(g, 1);
+    gc2_worker_release(g);
+    if (gc2_hs_pending_acq(g) == 0 && gc2_fixpoint_epoch_actions_acq(g))
+      (void)gc2_fixpoint_epoch_continue(g);
+    lj_gc2_worker_wake(g);
+    return;
+  }
   defer0 = gc2_deferred_epoch_acq(g);
-  lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_FLUSH_SSB|
-		   (gc2_cycle_sweep_minor_acq(g) ?
-		    LJ_GC2_HS_ALLOC_WHITE : LJ_GC2_HS_ALLOC_BLACK));
+  lj_gc2_handshake(g, actions);
   if (gc2_deferred_epoch_acq(g) == defer0)
     gc2_weak_to_sweep_drain_boundary(g, L);
   /* A handshake or boundary drain which transferred a retry deliberately
@@ -4827,6 +4857,11 @@ void lj_gc2_weak_to_sweep(global_State *g, lua_State *L)
   gc2_phase_gate_release(g);
   gc2_worker_release(g);
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
+}
+
+void lj_gc2_weak_to_sweep(global_State *g, lua_State *L)
+{
+  gc2_weak_to_sweep(g, L, 0);
 }
 
 static uint32_t gc2_finalizer_current_owner(global_State *g)

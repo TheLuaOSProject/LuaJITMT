@@ -287,12 +287,16 @@ static void safepoint_consume_fresh_stopreq_poll(TGState *tg)
   safepoint_restore_counted_poll(tg);
 }
 
-/* Only these phase-local actions can release an acknowledged TG before the global
-** tail. Their barriers stay enabled and native admission remains closed. */
+/* Each owner applies these phase-local actions before acknowledgement.
+** MARK and WEAK retain their marking barriers. The published SWEEP phase
+** protects new edges while its entry policy changes. Native entry and
+** physical sweep stay gated until all owners have switched. */
 static int safepoint_resumable_actions(uint32_t actions)
 {
   switch (actions) {
   case LJ_GC2_HS_RESUMABLE | LJ_SAFEPOINT_MARK_START_ACTIONS:
+  case LJ_GC2_HS_RESUMABLE | LJ_SAFEPOINT_SWEEP_START | LJ_GC2_HS_ALLOC_BLACK:
+  case LJ_GC2_HS_RESUMABLE | LJ_SAFEPOINT_SWEEP_START | LJ_GC2_HS_ALLOC_WHITE:
   case LJ_GC2_HS_RESUMABLE | LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_FLUSH_SSB:
   case LJ_GC2_HS_RESUMABLE | LJ_GC2_HS_SCAN_OWNER_ROOTS | LJ_GC2_HS_FLUSH_SSB:
   case LJ_GC2_HS_RESUMABLE | LJ_GC2_HS_FLUSH_SSB:
