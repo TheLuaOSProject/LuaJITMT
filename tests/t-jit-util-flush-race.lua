@@ -106,22 +106,29 @@ local worker = th.spawn(function(ready_ch, start_ch, done_ch, count)
 end, ready, start, done, rounds)
 
 harness.wait_ready(ready, 1)
-harness.release_start(start, 1)
-
-local probes = 0
+-- Exercise reflection with a live trace while the attached worker is still
+-- parked. The later race may legitimately return no body on every probe.
+publish_trace(17)
 local live_seen = 0
+for tr = 1, trace_limit do live_seen = live_seen + probe_trace(tr) end
+assert(live_seen > 0, "initial trace was not observable")
+
+harness.release_start(start, 1)
+local probes = 0
 local finished = false
 while not finished and probes < max_probes do
-  local token, ok = done_recv(done, 0.001)
-  if ok == true then
-    assert(token == "done")
-    finished = true
-  end
-  publish_trace(900000 + probes)
   for tr = 1, trace_limit do
     live_seen = live_seen + probe_trace(tr)
   end
   probes = probes + 1
+
+  local token, ok = done_recv(done, 0.001)
+  if ok == true then
+    assert(token == "done")
+    finished = true
+  else
+    publish_trace(900000 + probes)
+  end
 end
 
 local ok, result = worker:join(20)
@@ -134,8 +141,6 @@ if not finished then
   finished = true
 end
 assert(finished, "worker joined without sending done token")
-assert(probes > 0)
-assert(live_seen > 0)
 
 print(("t-jit-util-flush-race OK: %d probe rounds, %d live snapshots"):format(
   probes, live_seen))

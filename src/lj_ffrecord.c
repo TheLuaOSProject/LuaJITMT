@@ -199,6 +199,21 @@ static void LJ_FASTCALL recff_nyi(jit_State *J, RecordFFData *rd)
   case FF_threading_current:
     lj_trace_err_info(J, LJ_TRERR_NYIFFU);
     break;
+#if LJ_TARGET_X64 && LJ_TARGET_LINUX
+  case FF_jit_util_traceinfo:
+  case FF_jit_util_traceir:
+  case FF_jit_util_tracek:
+  case FF_jit_util_tracesnap:
+  case FF_jit_util_tracemc:
+  case FF_jit_util_traceexitstub:
+    /* Reflection can inspect trace state and allocate after dropping its
+    ** reader. In active MT a native stitch tail can reach the observer with
+    ** an incomplete protected caller frame while another TG controls the
+    ** engine. Keep the original Lua call frame as the observation boundary. */
+    if (lj_record_mt_runtime_shared(J2G(J), J->L))
+      lj_trace_err_info(J, LJ_TRERR_NYIFFU);
+    break;
+#endif
   default:
     break;
   }
