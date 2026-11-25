@@ -943,21 +943,29 @@ static LJ_AINLINE void strtab_mark_before_publish(global_State *g, GCobj *o)
     (void)lj_gc2_preserve_sweep_root(g, o);
 }
 
-/* The caller retains the exact body across this arbitration. The record
-** match protects a quarantine lookup against a superseded ownership entry. */
-static int strcanon_rescue_held(GCstr *s, StrCanonRec *rec)
+/* The caller retains the exact body across this arbitration. Directory
+** readers also bind the reservation they observed; a strong semantic edge
+** can rescue whichever record still owns the exact retained body. */
+int lj_str_gc2_rescue_held(GCstr *s, StrCanonRec *expected)
 {
   uintptr_t canon = lj_str_canon_acq(s);
   for (;;) {
+    StrCanonRec *rec = lj_str_canon_record(canon);
     uint32_t state = lj_str_canon_state(canon);
-    if (lj_str_canon_record(canon) != rec)
+    uintptr_t want;
+    if (expected && expected != rec)
       return 0;
-    if (state == LJ_STR_CANON_QRESCUED)
+    if (canon == LJ_STR_CANON_LIVE ||
+	(rec && state == LJ_STR_CANON_QRESCUED))
       return 1;
-    if (state != LJ_STR_CANON_QACTIVE && state != LJ_STR_CANON_QCLOSING)
+    if (canon == LJ_STR_CANON_CANDIDATE)
+      want = LJ_STR_CANON_LIVE;
+    else if (rec && (state == LJ_STR_CANON_QACTIVE ||
+		     state == LJ_STR_CANON_QCLOSING))
+      want = lj_str_canon_pack(rec, LJ_STR_CANON_QRESCUED);
+    else
       return 0;
-    if (lj_str_canon_cas(s, &canon,
-			lj_str_canon_pack(rec, LJ_STR_CANON_QRESCUED)))
+    if (lj_str_canon_cas(s, &canon, want))
       return 1;  /* Rescue and logical-death arbitration LP. */
   }
 }
@@ -1010,7 +1018,7 @@ static GCstr *strcanon_lookup(lua_State *L, const char *str, MSize len,
 #ifdef LJ_STR_TEST_HELPERS
       str_test_canon(L, s, rec, LJ_STR_TEST_CANON_Q_BODY_HELD);
 #endif
-      if (memcmp(str, strdata(s), len) == 0 && strcanon_rescue_held(s, rec)) {
+      if (memcmp(str, strdata(s), len) == 0 && lj_str_gc2_rescue_held(s, rec)) {
 	strtab_mark_before_publish(g, obj2gco(s));
 	canon = lj_str_canon_acq(s);
 	if (lj_str_canon_state(canon) == LJ_STR_CANON_QRESCUED &&

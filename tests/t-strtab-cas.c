@@ -518,6 +518,22 @@ static void exercise_canonical_quarantine(lua_State *L)
   assert(lj_str_qtabh_acq(g) != oldhdr);
   assert(lj_str_qmask_acq(g) == (oldmask << 1) + 1u);
   assert(lj_str_qretired_head_acq(g) == oldhdr);
+  /* Ownership-only preservation does not rescue this close intent.
+  ** An independently admitted semantic SWEEP root must rescue it. */
+  {
+    uint32_t phase = gc2_phase_acq(g);
+    lj_str_canon_rel(spublish,
+		     lj_str_canon_pack(ctx.rec, LJ_STR_CANON_QCLOSING));
+    gc2_phase_rel(g, LJ_GC2_SWEEP);
+    (void)lj_gc2_preserve_sweep_root(g, obj2gco(spublish));
+    assert(lj_str_canon_state(lj_str_canon_acq(spublish)) ==
+	   LJ_STR_CANON_QCLOSING);
+    (void)lj_gc2_trace_sweep_root(g, obj2gco(spublish));
+    assert(lj_str_canon_state(lj_str_canon_acq(spublish)) ==
+	   LJ_STR_CANON_QRESCUED);
+    gc2_phase_rel(g, phase);
+  }
+
   /* Simulate close intent while the directory still owns the huge body.
   ** Pause one interner before it compares the borrowed bytes. Its exact
   ** mapping reader defers reclamation while another interner can rescue. */

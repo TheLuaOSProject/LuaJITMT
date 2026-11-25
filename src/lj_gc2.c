@@ -22362,6 +22362,19 @@ static uint32_t gc2_trace_sweep_edge(global_State *g, GCobj *o,
     result = 1;
     goto out;
   }
+  if (gct == (uint32_t)~LJ_TSTR) {
+    GCstr *str = gco2str(o);
+    /* This is a semantic edge, unlike the ownership-only preservation of
+    ** string buckets and quarantine records. Rescue the exact admitted body
+    ** before releasing its lease. A committed old body in a strong edge
+    ** would invalidate the close proof, so veto further reclamation. */
+    if (lj_str_canon_acq(str) != LJ_STR_CANON_LIVE &&
+	!lj_str_gc2_rescue_held(str, NULL)) {
+      gc2_recovery_fail_closed(g);
+      result = 1;
+    }
+    goto out;
+  }
   if (gct == (uint32_t)~LJ_TTHREAD &&
       gc2_thread_scan_current(g, gco2th(o))) {
     /* The owner acknowledgement synchronously traversed this exact stack and

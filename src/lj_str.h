@@ -721,6 +721,9 @@ LJ_FUNC int lj_str_quarantine_resize(lua_State *L, MSize newmask);
 ** scope. Terminal joined-world cleanup uses the separate free helpers below. */
 LJ_FUNC uint32_t lj_str_reclaim_retired(global_State *g,
 					uint64_t completed_epoch);
+/* Exact-body lifetime is a caller obligation. A non-NULL record also
+** binds a quarantine lookup to that directory reservation. */
+LJ_FUNC int lj_str_gc2_rescue_held(GCstr *s, StrCanonRec *expected);
 LJ_FUNC void lj_str_gc2_reclaim_request(global_State *g);
 LJ_FUNC void lj_str_gc2_reclaim_cancel(global_State *g);
 LJ_FUNC void lj_str_gc2_sweep_begin(global_State *g, int major);
