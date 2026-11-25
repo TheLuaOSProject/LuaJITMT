@@ -1023,6 +1023,8 @@ static int tab_array_snapshot_gc_impl(global_State *g, const GCtab *t,
   } else if (lj_tab_array_is_colocated(t, array)) {
 #if LJ_MAX_COLOSIZE != 0
     MSize colosz = lj_tab_colo_size(t);
+    if (lj_tab_array_is_retiring(t, array) || lj_tab_array_acq(t) != array)
+      return LJ_TAB_GC_SNAPSHOT_TRANSIENT;
     if (colosz > LJ_MAX_COLOSIZE || asize > colosz)
       return LJ_TAB_GC_SNAPSHOT_INVALID;
 #endif
@@ -1844,9 +1846,9 @@ static int tab_resize_desc_roots_try(GCtab *t, TValue **arrayp,
   table_asize = lj_tab_asize_acq(t);
   array = lj_tab_array_acq(t);
   asize = table_asize;
+  if (lj_tab_array_is_retiring(t, array))
+    return 0;
   if (array && !lj_tab_array_is_colocated(t, array)) {
-    if (lj_tab_array_is_retiring(t, array))
-      return 0;
     asize = lj_tab_array_hdr_asize_acq(array);
   } else if (lj_tab_asize_acq(t) != table_asize) {
     return 0;
@@ -1868,8 +1870,7 @@ static int tab_resize_desc_roots_try(GCtab *t, TValue **arrayp,
   ** cleared descriptor control between their individual samples.
   */
   if (array != lj_tab_array_acq(t) ||
-      (array && !lj_tab_array_is_colocated(t, array) &&
-       lj_tab_array_is_retiring(t, array)) ||
+      lj_tab_array_is_retiring(t, array) ||
       node != lj_tab_node_acq(t) || lj_tab_node_is_retiring(node))
     return 0;
   *arrayp = array;
@@ -3017,13 +3018,16 @@ static int tab_resize_hash_cutover_held(global_State *g, TabResizeDesc *desc)
     return 0;
   if (phase == TAB_RESIZE_DESC_MIGRATING) {
     if (desc->newarray) {
-      lj_tab_array_hdr_flags_or_rel(desc->oldarray, TABARRAY_FLAG_RETIRING);
+      if (desc->oldaret)
+	lj_tab_array_hdr_flags_or_rel(desc->oldarray, TABARRAY_FLAG_RETIRING);
       if (!tab_resize_array_copy_held(g, desc))
 	return 0;
     }
-    selected = tab_resize_hash_select_held(desc);
-    if (!selected || !tab_resize_hash_copy_held(g, desc, selected))
-      return 0;
+    if (desc->hash_move_bytes) {
+      selected = tab_resize_hash_select_held(desc);
+      if (!selected || !tab_resize_hash_copy_held(g, desc, selected))
+	return 0;
+    }
     if (lj_tab_resize_desc_phase_cas(desc, &phase,
 				    TAB_RESIZE_DESC_PUBLISHING)) {
       tab_test_resize_hash_cutover(NULL, t);
@@ -3056,7 +3060,7 @@ static int tab_resize_hash_cutover_held(global_State *g, TabResizeDesc *desc)
       oldnode != newnode)
     return 0;  /* Another helper published and a later resize replaced it. */
   ret = desc->oldret;
-  if (!lj_tab_node_retired_armed_acq(ret)) {
+  if (ret && !lj_tab_node_retired_armed_acq(ret)) {
     uint64_t epoch = lj_gc2_retire_epoch(g);
     uint64_t old_epoch = lj_tab_node_retired_epoch_acq(ret);
     tab_retire_preserve(g, ret);
@@ -3156,8 +3160,9 @@ static void tab_test_array_copy_before_cas(TabResizeDesc *desc, MSize idx)
 #endif
 
 /*
-** The separated old array remains readable while retiring. Keyed writers
-** which lose that generation revalidate their writes against the successor,
+** The old array remains readable while retiring. Inline slots stay within
+** the table allocation, while a separate source has an armed retire record.
+** Keyed writers which lose that generation revalidate against the successor,
 ** just as in the owner-only copy. Each destination starts with a marker
 ** unique to this descriptor. After any helper replaces it, delayed helpers
 ** cannot overwrite the slot, even after an ordinary writer stores nil.
@@ -3213,7 +3218,7 @@ static int tab_resize_array_root_held(global_State *g, TabResizeDesc *desc)
       oldarray != newarray)
     return 0;
   ret = desc->oldaret;
-  if (!lj_tab_array_retired_armed_acq(ret)) {
+  if (ret && !lj_tab_array_retired_armed_acq(ret)) {
     uint64_t epoch = lj_gc2_retire_epoch(g);
     uint64_t old_epoch = lj_tab_array_retired_epoch_acq(ret);
     tab_array_retire_preserve(g, ret);
@@ -3239,7 +3244,8 @@ static int tab_resize_array_cutover_held(global_State *g, TabResizeDesc *desc)
       lj_tab_resize_desc_control_acq(t) != desc)
     return 0;
   if (phase == TAB_RESIZE_DESC_MIGRATING) {
-    lj_tab_array_hdr_flags_or_rel(desc->oldarray, TABARRAY_FLAG_RETIRING);
+    if (desc->oldaret)
+      lj_tab_array_hdr_flags_or_rel(desc->oldarray, TABARRAY_FLAG_RETIRING);
     if (!tab_resize_array_copy_held(g, desc))
       return 0;
     if (!lj_tab_resize_desc_phase_cas(desc, &phase,
@@ -3872,8 +3878,9 @@ static void tab_resize_publish_hash_cutover(lua_State *L, GCtab *t,
   lj_tab_hmask_rel(t, hmask);
   if (desc->compactnode)
     desc->oldshape = la_load128_acq(&t->resize_shape);
-  tab_resize_publish_runtime(L, t, desc, desc->hash_move_bytes ?
-    TAB_RESIZE_DESC_MIGRATING : TAB_RESIZE_DESC_PUBLISHING);
+  tab_resize_publish_runtime(L, t, desc,
+    (desc->newarray || desc->hash_move_bytes) ?
+      TAB_RESIZE_DESC_MIGRATING : TAB_RESIZE_DESC_PUBLISHING);
 }
 
 static void tab_resize_prepare_array_migration(lua_State *L, GCtab *t,
@@ -3883,10 +3890,17 @@ static void tab_resize_prepare_array_migration(lua_State *L, GCtab *t,
   desc->newarray = array;
   desc->flags |= TAB_RESIZE_DESC_F_ARRAY_CUTOVER;
   /*
-  ** Only an already separated array is eligible. Readers use the size in
-  ** its own header until the root advances, while private VM/JIT paths are
-  ** excluded by the MT latch. A stale helper never writes table metadata.
+  ** Separate roots carry their bounds in their allocation header. Inline
+  ** storage belongs to the table and has no such header: mark it retiring
+  ** before widening the compatibility bound. Readers that still see the
+  ** inline pointer must retry instead of consuming the new bound.
   */
+  if (!desc->oldaret) {
+    int8_t colo = lj_tab_colo_acq(t);
+    lj_assertL(colo > 0 && lj_tab_array_is_colocated(t, desc->oldarray),
+	       "inline migration needs its original allocation");
+    lj_tab_colo_rel(t, (int8_t)(colo | 0x80));
+  }
   lj_tab_asize_rel(t, asize);
   tab_pub_array_mem(L, t, array, desc->newacap);
 }
@@ -4190,11 +4204,12 @@ restart_resize:
   ** choose a compact one after certifying the retired source occupancy.
   ** FINREG tables use their own claim protocol and self metatable.
   */
-  array_migration = oldaret &&
-    ((asize > oldasize &&
-      ((!oldhmask && !hbits) || (oldret && newnode && !self_metatable))) ||
-     (asize < oldasize && oldret && newnode && !self_metatable &&
-      newhmask + 1u >= hash_source_count));
+  array_migration =
+    (newarray && oldarray && asize > oldasize &&
+     ((!oldhmask && !hbits) ||
+      (newnode && !self_metatable && (oldret || !oldarray_separated)))) ||
+    (oldaret && asize < oldasize && oldret && newnode && !self_metatable &&
+     newhmask + 1u >= hash_source_count);
   if ((mt_active_acq(g) || mt_entering_acq(g)) &&
       (array_migration || (oldret && newnode && !array_changed))) {
     uint64_t id = tab_resize_desc_id_reserve(g);
@@ -4320,14 +4335,14 @@ restart_resize:
   }
   if (oldaret) {
     tab_array_retire_init(L, oldaret, t, oldarray, oldacap);
-    if (cutover && struct_acq) {
+    if (cutover && struct_acq)
       oldaret->hold_control = lj_tab_struct_control_desc_word(cutover);
-      cutover->oldarray = oldarray;
-      cutover->oldasize = oldasize;
-      cutover->oldaret = oldaret;
-      cutover->newacap = newacap;
-      cutover->migration_weak = weak;
-    }
+  }
+  if (cutover && struct_acq && array_migration) {
+    cutover->oldarray = oldarray;
+    cutover->oldasize = oldasize;
+    cutover->oldaret = oldaret;
+    cutover->newacap = newacap;
   }
   if (asize > oldasize &&
       !(cutover && struct_acq && array_migration && hash_migration)) {
@@ -4363,7 +4378,7 @@ restart_resize:
   if (cutover && struct_acq && (array_migration || hash_migration)) {
     if (array_migration)
       tab_resize_prepare_array_migration(L, t, cutover, array, asize);
-    if (hash_migration)
+    if (newnode)
       tab_resize_publish_hash_cutover(L, t, cutover, newnode, newhmask,
 				      newfreetop, newfreecount);
     else
@@ -5329,10 +5344,10 @@ static LJ_AINLINE int tab_forjit_snapshot_acq(GCtab *t,
   TValue *array = lj_tab_array_acq(t);
   Node *node;
   MSize asize, hmask;
-  if (lj_tab_array_is_retiring(t, array))
-    return 0;
   asize = array && !lj_tab_array_is_colocated(t, array) ?
     lj_tab_array_hdr_asize_acq(array) : lj_tab_asize_acq(t);
+  if (lj_tab_array_is_retiring(t, array) || lj_tab_array_acq(t) != array)
+    return 0;
   node = lj_tab_node_acq(t);
   hmask = lj_tab_node_hmask_acq(node);
   if (lj_tab_node_is_retiring(node) || !lj_tab_hmask_value_valid(hmask))
@@ -5893,6 +5908,8 @@ int lj_tab_getscalar_rooted_try(lua_State *L, cTValue *tabroot,
   } else {
     snap.asize = lj_tab_asize_acq(t);
     if ((!snap.array && snap.asize != 0) ||
+	(snap.array && (lj_tab_array_is_retiring(t, snap.array) ||
+			snap.asize > lj_tab_colo_size(t))) ||
 	(size_t)snap.asize > (table_span - sizeof(GCtab)) / sizeof(TValue))
       goto leave;
   }
@@ -7977,7 +7994,9 @@ static LJ_AINLINE int tab_store_array_snapshot_try(GCtab *parent,
   } else if (lj_tab_asize_acq(parent) != asize) {
     return 0;
   }
-  if (array != lj_tab_array_acq(parent))
+  if (array != lj_tab_array_acq(parent) ||
+      (lj_tab_array_is_colocated(parent, array) &&
+       lj_tab_array_is_retiring(parent, array)))
     return 0;
   *arrayp = array;
   *asizep = asize;
@@ -9946,8 +9965,7 @@ static LJ_AINLINE TValue *tab_tsetm_fast_range(GCtab *parent, uint32_t start,
   asize = tab_store_array_snapshot_acq(parent, &array);
   if (!array || start > asize || n > asize - start)
     return NULL;
-  if (!lj_tab_array_is_colocated(parent, array) &&
-      lj_tab_array_is_retiring(parent, array))
+  if (lj_tab_array_is_retiring(parent, array))
     return NULL;
   for (i = 0; i < n; i++) {
     TValue old;
@@ -10707,6 +10725,10 @@ int lj_tab_next_rooted(lua_State *L, cTValue *tabroot, cTValue *keyroot,
 #endif
     status = tab_next_current_held(t, &keysnap, &nextkey, &nextval,
 				   nextidx);
+    if (status == TAB_ROOTED_NEXT_RETRY &&
+	tab_runtime_cutover_help_held(G(L), t))
+      status = tab_next_current_held(t, &keysnap, &nextkey, &nextval,
+				     nextidx);
     if (status != TAB_ROOTED_NEXT_FOUND) {
       lj_gc2_smr_read_leave(G(L));
       lj_gc2_lease_release(&key_lease);

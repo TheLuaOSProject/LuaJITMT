@@ -1847,7 +1847,11 @@ static void build_subroutines(BuildCtx *ctx)
   |  x64_vm_tab_array_acq RD, TAB:RB
   |  test RD, RD; jz >3
   |  lea r8, [RB+TAB_COLO_SLOTS]
-  |  cmp RD, r8; je >3
+  |  cmp RD, r8; jne >7
+  |  test byte TAB:RB->colo, 0x80
+  |  jnz >6
+  |  jmp >3
+  |7:
   |  x64_vm_tab_array_asize_acq TMPRd, RD
   |  x64_vm_tab_array_flags_acq r9d, RD
   |  test r9d, TABARRAY_FLAG_RETIRING
@@ -5258,7 +5262,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  x64_vm_tab_array_acq TMPR, TAB:RB
     |  test TMPR, TMPR; jz >4
     |  lea r8, [RB+TAB_COLO_SLOTS]
-    |  cmp TMPR, r8; je >4
+    |  cmp TMPR, r8; jne >9
+    |  test byte TAB:RB->colo, 0x80
+    |  jnz ->vmeta_tsetv
+    |  jmp >4
+    |9:
     |  x64_vm_tab_array_asize_acq ITYPEd, TMPR
     |4:
     |  cmp RCd, ITYPEd		// Takes care of unordered, too.
@@ -5434,7 +5442,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  x64_vm_tab_array_acq TMPR, TAB:RB
     |  test TMPR, TMPR; jz >4
     |  lea r8, [RB+TAB_COLO_SLOTS]
-    |  cmp TMPR, r8; je >4
+    |  cmp TMPR, r8; jne >9
+    |  test byte TAB:RB->colo, 0x80
+    |  jnz ->vmeta_tsetb
+    |  jmp >4
+    |9:
     |  x64_vm_tab_array_asize_acq ITYPEd, TMPR
     |4:
     |  cmp RCd, ITYPEd
@@ -5526,7 +5538,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  x64_vm_tab_array_acq TMPR, TAB:RB
     |  test TMPR, TMPR; jz >3
     |  lea r8, [RB+TAB_COLO_SLOTS]
-    |  cmp TMPR, r8; je >3
+    |  cmp TMPR, r8; jne >9
+    |  test byte TAB:RB->colo, 0x80
+    |  jnz ->vmeta_tsetr
+    |  jmp >3
+    |9:
     |  x64_vm_tab_array_asize_acq ITYPEd, TMPR
     |3:
     |  mov r9d, RCd

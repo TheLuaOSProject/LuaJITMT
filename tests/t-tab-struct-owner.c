@@ -47,6 +47,7 @@ typedef struct ResizeCtx {
   int clear;
   int mutate;
   int weak_mode_change;
+  int check_inline_split;
   int status;
 } ResizeCtx;
 
@@ -280,6 +281,26 @@ static void hash_migration_mutate(lua_State *L)
   lua_rawset(L, 1);
 }
 
+static void verify_split_public_lua(lua_State *L, int first_write)
+{
+  assert_lua_ok(L, luaL_loadstring(L,
+    "local t, first_write = ...\n"
+    "if first_write then t[65] = 'peer wrote to split table' end\n"
+    "local seen = {}\n"
+    "for k, v in pairs(t) do\n"
+    "  assert(seen[k] == nil)\n"
+    "  seen[k] = type(v) == 'table' or v\n"
+    "end\n"
+    "assert(seen[1] == 11 and seen[2] == 22)\n"
+    "assert(seen[4] == 'array migration pins string values')\n"
+    "assert(seen[-1] == t[-1] and seen[64] == t[64])\n"
+    "t[65] = 'peer wrote to split table'\n"
+    "assert(t[65] == 'peer wrote to split table')\n"));
+  lua_pushvalue(L, 1);
+  lua_pushboolean(L, first_write);
+  assert_lua_ok(L, lua_pcall(L, 2, 0, 0));
+}
+
 static void *resize_worker(void *arg)
 {
   ResizeCtx *ctx = (ResizeCtx *)arg;
@@ -303,9 +324,11 @@ static void *resize_worker(void *arg)
 
   if (ctx->clear)
     lj_tab_clear(L, t);
-  else if (ctx->mutate == 3 || ctx->mutate == 5)
+  else if (ctx->mutate == 3 || ctx->mutate == 5) {
+    if (ctx->check_inline_split)
+      verify_split_public_lua(L, ctx->check_inline_split == 2);
     array_migration_mutate(L, ctx->mutate == 5, ctx->weak_mode_change);
-  else if (ctx->mutate == 4)
+  } else if (ctx->mutate == 4)
     hash_migration_mutate(L);
   else if (ctx->mutate == 6) {
     lj_tab_resize(L, t, ctx->asize, ctx->hbits);
@@ -496,9 +519,10 @@ static void exercise_resize_owner(lua_State *L, int clear)
   if (clear)
     lj_tab_test_set_resize_before_freeze_hook(resize_hold_hook);
   else
-    lj_tab_test_set_resize_colocated_after_freeze_hook(resize_hold_hook);
+    lj_tab_test_set_array_copy_hook(array_copy_hold_hook);
 
-  assert(pthread_create(&owner_thr, NULL, resize_worker, &owner) == 0);
+  assert(pthread_create(clear ? &owner_thr : &copy_owner, NULL,
+			resize_worker, &owner) == 0);
   assert(pthread_create(&other_thr, NULL, resize_worker, &other) == 0);
 
   assert(wait_for_flag(&ready, 2, 1000000));
@@ -516,10 +540,10 @@ static void exercise_resize_owner(lua_State *L, int clear)
   store_flag(&hook_release, 1);
   assert(wait_for_flag(&owner_done, 1, 1000000));
 
-  assert(pthread_join(owner_thr, NULL) == 0);
+  assert(pthread_join(clear ? owner_thr : copy_owner, NULL) == 0);
   assert(pthread_join(other_thr, NULL) == 0);
   lj_tab_test_set_resize_before_freeze_hook(NULL);
-  lj_tab_test_set_resize_colocated_after_freeze_hook(NULL);
+  lj_tab_test_set_array_copy_hook(NULL);
   resize_hook_tab = NULL;
   resize_hook_entered = NULL;
   resize_hook_release = NULL;
@@ -672,7 +696,7 @@ static void late_tail_hold_hook(lua_State *L, GCtab *t, TValue *oldarray,
 }
 
 static void exercise_array_migration_owner(lua_State *L, int weak, int mixed,
-					   int weak_change)
+					   int weak_change, int inline_split)
 {
   volatile int ready = 0, owner_start = 0, other_start = 0;
   volatile int owner_done = 0, other_done = 0;
@@ -685,7 +709,8 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed,
   int i;
 
   lua_settop(L, 0);
-  lua_createtable(L, mixed >= 2 ? 80 : LJ_MAX_COLOSIZE + 2, mixed ? 4 : 0);
+  lua_createtable(L, inline_split ? 5 : (mixed >= 2 ? 80 : LJ_MAX_COLOSIZE + 2),
+		  mixed ? 4 : 0);
   if (weak) {
     lua_newtable(L);
     lua_pushliteral(L, "v");
@@ -715,13 +740,13 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed,
   }
   oldnode = lj_tab_node_acq(t);
   oldarray = lj_tab_array_acq(t);
-  assert(!lj_tab_array_is_colocated(t, oldarray));
+  assert(lj_tab_array_is_colocated(t, oldarray) == !!inline_split);
   owner.L = new_child_with_table(L, 1);
   owner.ready = &ready;
   owner.start = &owner_start;
   owner.done = &owner_done;
   owner.asize = mixed >= 2 ? 40 : 80;
-  owner.hbits = mixed >= 3 ? 3 : (mixed == 2 ? 8 : 0);
+  owner.hbits = mixed >= 3 ? 3 : (mixed == 2 ? 8 : (inline_split == 2 ? 2 : 0));
   owner.status = -1;
   other.L = new_child_with_table(L, 1);
   other.ready = &ready;
@@ -729,6 +754,7 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed,
   other.done = &other_done;
   other.mutate = mixed ? 5 : 3;
   other.weak_mode_change = weak_change;
+  other.check_inline_split = inline_split;
   other.status = -1;
   resize_hook_tab = t;
   resize_hook_entered = &hook_entered;
@@ -764,7 +790,14 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed,
   if (mixed) {
     assert(lj_tab_node_acq(t) == oldnode && lj_tab_node_is_retiring(oldnode));
   }
-  nextarray = lj_tab_array_nextgen_acq(oldarray);
+  if (inline_split) {
+    TabResizeDesc *desc = lj_tab_resize_desc_control_acq(t);
+    assert(desc->oldarray == oldarray && !desc->oldaret);
+    assert(lj_tab_colo_acq(t) < 0);
+    nextarray = desc->newarray;
+  } else {
+    nextarray = lj_tab_array_nextgen_acq(oldarray);
+  }
   assert(tvisnil(&nextarray[0]));
   assert(tvisresizemarker(&nextarray[1]));
 
@@ -794,6 +827,11 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed,
   resize_hook_release = NULL;
   lua_gc(L, LUA_GCCOLLECT, 0);
   assert_array_migration_values(L, weak_change ? weak_change > 0 : weak);
+  if (inline_split) {
+    lua_rawgeti(L, 1, 65);
+    assert(lua_isstring(L, -1));
+    lua_pop(L, 1);
+  }
   if (mixed == 3) {
     lua_rawgeti(L, 1, 65);
     assert(weak ? lua_isnil(L, -1) : lua_istable(L, -1));
@@ -1175,17 +1213,20 @@ int main(void)
   exercise_hash_cutover_owner(L, 0);
   exercise_hash_cutover_owner(L, 1);
   exercise_hash_cutover_weak_value(L);
-  exercise_array_migration_owner(L, 0, 0, 0);
-  exercise_array_migration_owner(L, 1, 0, 0);
-  exercise_array_migration_owner(L, 0, 1, 0);
-  exercise_array_migration_owner(L, 1, 1, 0);
-  exercise_array_migration_owner(L, 0, 2, 0);
-  exercise_array_migration_owner(L, 1, 2, 0);
-  exercise_array_migration_owner(L, 0, 1, 1);
-  exercise_array_migration_owner(L, 1, 2, -1);
-  exercise_array_migration_owner(L, 0, 3, 0);
-  exercise_array_migration_owner(L, 1, 3, 0);
-  exercise_array_migration_owner(L, 0, 4, 0);
+  exercise_array_migration_owner(L, 0, 0, 0, 0);
+  exercise_array_migration_owner(L, 1, 0, 0, 0);
+  exercise_array_migration_owner(L, 0, 1, 0, 0);
+  exercise_array_migration_owner(L, 1, 1, 0, 0);
+  exercise_array_migration_owner(L, 0, 2, 0, 0);
+  exercise_array_migration_owner(L, 1, 2, 0, 0);
+  exercise_array_migration_owner(L, 0, 1, 1, 0);
+  exercise_array_migration_owner(L, 1, 2, -1, 0);
+  exercise_array_migration_owner(L, 0, 3, 0, 0);
+  exercise_array_migration_owner(L, 1, 3, 0, 0);
+  exercise_array_migration_owner(L, 0, 4, 0, 0);
+  exercise_array_migration_owner(L, 0, 0, 0, 1);
+  exercise_array_migration_owner(L, 1, 1, 0, 1);
+  exercise_array_migration_owner(L, 0, 0, 0, 2);
   exercise_hash_migration_owner(L);
   exercise_hash_install_owner(L, 0);
   exercise_hash_install_owner(L, 1);

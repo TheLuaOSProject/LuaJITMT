@@ -1460,8 +1460,11 @@ static LJ_AINLINE void lj_tab_array_nextgen_rel(TValue *array,
 static LJ_AINLINE int lj_tab_array_is_retiring(const GCtab *t,
 					       const TValue *array)
 {
-  return array && !lj_tab_array_is_colocated(t, array) &&
-	 ((lj_tab_array_hdr_flags_acq(array) & TABARRAY_FLAG_RETIRING) != 0);
+  if (!array)
+    return 0;
+  if (lj_tab_array_is_colocated(t, array))
+    return lj_tab_colo_acq(t) < 0;
+  return (lj_tab_array_hdr_flags_acq(array) & TABARRAY_FLAG_RETIRING) != 0;
 }
 
 static LJ_AINLINE void lj_tab_array_hdr_flags_or_rel(TValue *array,
