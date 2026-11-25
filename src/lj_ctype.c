@@ -16,6 +16,7 @@
 #include "lj_strfmt.h"
 #include "lj_state.h"
 #include "lj_ctype.h"
+#include "lj_cdata.h"
 #include "lj_ccallback.h"
 #include "lj_buf.h"
 #include "lj_dispatch.h"
@@ -891,49 +892,6 @@ int lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
   return rc;
 }
 
-static int ctype_fin_has_claim_smr(CTState *cts, FinRegGen *gen,
-				   cTValue *claim)
-{
-  while (gen != NULL) {
-    CTypeFinLease held = CTYPE_FIN_LEASE_INIT;
-    FinRegGen *next = NULL;
-    Node *node, *check;
-    MSize i, hmask, checkmask;
-    int snap;
-    int rc = ctype_fin_gen_tab_acquire_next_smr(cts, gen, &held, &next);
-    if (rc != LJ_CTYPE_FIN_FOUND)
-      return 1;  /* Transient record/table identity is conservatively busy. */
-    if (!fin_gen_tab_enabled_acq(held.tab)) {
-      lj_ctype_fin_lease_release(&held);
-      gen = next;
-      continue;
-    }
-    snap = lj_tab_node_snapshot_gc_held(held.g, held.tab, &node, &hmask);
-    if (snap != LJ_TAB_GC_SNAPSHOT_OK) {
-      lj_ctype_fin_lease_release(&held);
-      return 1;
-    }
-    if (hmask > 0) {
-      for (i = 0; i <= hmask; i++) {
-	TValue val;
-	lj_tv_load_acq(&val, &node[i].val);
-	if (tv_rawload(&val) == tv_rawload(claim)) {
-	  lj_ctype_fin_lease_release(&held);
-	  return 1;
-	}
-      }
-    }
-    snap = lj_tab_node_snapshot_gc_held(held.g, held.tab, &check,
-						&checkmask);
-    lj_ctype_fin_lease_release(&held);
-    if (snap != LJ_TAB_GC_SNAPSHOT_OK || check != node ||
-	checkmask != hmask)
-      return 1;
-    gen = next;
-  }
-  return 0;
-}
-
 #define CTYPE_FIN_RETRY_MAX 256u
 
 int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
@@ -997,7 +955,8 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
     CTypeFinLease headheld = CTYPE_FIN_LEASE_INIT;
     CTypeFinLease found = CTYPE_FIN_LEASE_INIT;
     FinRegGen *head;
-    int rc, busy;
+    GCcdata *cd = cdataV(key);
+    int rc;
     if (!lj_gc2_smr_read_try(cts->g)) {
       ctype_fin_claim_wait(L);
       continue;
@@ -1013,8 +972,7 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
       }
       lj_ctype_fin_lease_release(&headheld);
     }
-    busy = ctype_fin_has_claim_smr(cts, head, claim);
-    if (busy) {
+    if (!lj_cdata_fin_insert_try(cd)) {
       lj_gc2_smr_read_leave(cts->g);
       ctype_fin_claim_wait(L);
       continue;
@@ -1022,6 +980,7 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
     rc = ctype_fin_get_smr(cts, head, key, &found);
     if (rc == LJ_CTYPE_FIN_FOUND) {
       lj_ctype_fin_lease_release(&found);
+      lj_cdata_fin_insert_leave(cd);
       lj_gc2_smr_read_leave(cts->g);
       lj_mem_freet(G(L), gen);
       L->top = anchor;
@@ -1029,6 +988,7 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
     }
     lj_ctype_fin_lease_release(&found);
     if (rc == LJ_CTYPE_FIN_RETRY || fin_gen_head_acq(cts) != head) {
+      lj_cdata_fin_insert_leave(cd);
       lj_gc2_smr_read_leave(cts->g);
       ctype_fin_claim_wait(L);
       continue;
@@ -1038,6 +998,8 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
     lj_gc_pubobjroot(L, obj2gco(t));
     if (fin_gen_head_cas(cts, &head, gen)) {
       TValue *resolved = NULL;
+      /* The same key now has a discoverable slot even with FINCLAIM. */
+      lj_cdata_fin_insert_leave(cd);
       (void)lj_gc2_markmem(G(L), gen);
       lj_gc_pubobjroot(L, obj2gco(t));
       rc = ctype_fin_gen_tab_acquire_next_smr(cts, gen, lease, NULL);
@@ -1088,6 +1050,7 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
       L->top = anchor;
       return LJ_CTYPE_FIN_RETRY;
     }
+    lj_cdata_fin_insert_leave(cd);
     lj_gc2_smr_read_leave(cts->g);
     ctype_fin_claim_wait(L);
   }

@@ -116,6 +116,31 @@ LJ_FUNC GCcdata *lj_cdata_newx_l(lua_State *L, CTState *cts, CTypeID id,
 LJ_FUNC int lj_cdata_validate(global_State *g, GCcdata *cd, void **basep,
 			      GCSize *sizep);
 LJ_FUNC void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd);
+/* Only insertion of this cdata key is serialized. Never retain the bit
+** across an allocating/throwing operation or a finalizer slot transaction. */
+#define LJ_CDATA_FIN_INSERT	0x0020u
+
+static LJ_AINLINE int lj_cdata_fin_insert_try(GCcdata *cd)
+{
+  uint16_t flags = cdata_flags_acq(cd);
+  while (!(flags & LJ_CDATA_FIN_INSERT)) {
+    uint16_t next = (uint16_t)(flags | LJ_CDATA_FIN_INSERT);
+    if (la_cas16(&cd->flags, &flags, next, LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+  return 0;
+}
+
+static LJ_AINLINE void lj_cdata_fin_insert_leave(GCcdata *cd)
+{
+  uint16_t flags = cdata_flags_acq(cd);
+  for (;;) {
+    uint16_t next = (uint16_t)(flags & ~LJ_CDATA_FIN_INSERT);
+    if (la_cas16(&cd->flags, &flags, next, LA_REL, LA_RLX))
+      return;
+  }
+}
+
 LJ_FUNC void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj,
 			     uint32_t it);
 /* One-shot keyed claims for an exact CTypeFinLease. RETRY means the caller must

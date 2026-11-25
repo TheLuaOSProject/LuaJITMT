@@ -426,6 +426,26 @@ rollback_key:
 			    "FINREG anchor rollback ownership lost");
 }
 
+/* An empty anchor and a new generation are alternate publication locations.
+** Recheck absence under the exact cdata insertion bit shared by both paths. */
+static int cdata_fin_try_anchor(lua_State *L, CTState *cts,
+				CTypeFinLease *head, TValue *key, TValue *claim)
+{
+  GCcdata *cd = cdataV(key);
+  CTypeFinLease found = CTYPE_FIN_LEASE_INIT;
+  int rc;
+  if (!lj_cdata_fin_insert_try(cd))
+    return LJ_CTYPE_FIN_RETRY;
+  rc = lj_ctype_fin_get(L, cts, key, &found);
+  lj_ctype_fin_lease_release(&found);
+  if (rc == LJ_CTYPE_FIN_MISS)
+    rc = cdata_fin_try_newkey_anchor_held(L, head, key, claim);
+  else
+    rc = LJ_CTYPE_FIN_RETRY;
+  lj_cdata_fin_insert_leave(cd);
+  return rc;
+}
+
 static TValue *cdata_fin_weak_key_barrier_cp(lua_State *L, lua_CFunction dummy,
 					     void *ud)
 {
@@ -633,7 +653,7 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 	} else {
 	  cdata_fin_setclaim(&claim);
 	  setnilV(&old);
-	  rc = cdata_fin_try_newkey_anchor_held(L, &held, &key, &claim);
+	  rc = cdata_fin_try_anchor(L, cts, &held, &key, &claim);
 	  if (rc == LJ_CTYPE_FIN_FOUND) {
 	    if (!fin_gen_tab_enabled_acq(held.tab)) {
 	      cdata_fin_store_exact_or_abort(
