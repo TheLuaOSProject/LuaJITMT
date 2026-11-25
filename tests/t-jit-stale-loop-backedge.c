@@ -14,13 +14,19 @@
 
 static GCproto *sum_proto;
 static unsigned polls;
+static unsigned interruptions;
 
 void __real_lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L);
 void __wrap_lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)
 {
   __real_lj_trace_hot(J, pc, L);
-  if (!polls && sum_proto && lj_trace_state_load(J) == LJ_TRACE_RECORD &&
-      !J->parent && J->pt == sum_proto && bc_op(J->cur.startins) == BC_FORL) {
+  if (!sum_proto || lj_trace_state_load(J) != LJ_TRACE_RECORD ||
+      J->parent || J->pt != sum_proto || bc_op(J->cur.startins) != BC_FORL)
+    return;
+  if (interruptions) {
+    interruptions--;
+    lj_trace_abort(G(L));
+  } else if (!polls) {
     global_State *g = G(L);
     TGState *tg = L2TG(L);
     /* Deliver a counted FLUSH_SSB after the recorder installs its dispatch
@@ -33,6 +39,25 @@ void __wrap_lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)
     lj_tg_poll_rel(tg, 1);
     polls++;
   }
+}
+
+static void check_interrupted_recording(lua_State *L)
+{
+  assert(luaL_dostring(L,
+    "jit.flush()\n"
+    "function interrupted_sum(n) local s=0; for i=1,n do s=s+i end; return s end\n")
+    == LUA_OK);
+  lua_getglobal(L, "interrupted_sum");
+  sum_proto = funcproto(funcV(L->top-1));
+  interruptions = 16;
+  lua_pushinteger(L, 250000);
+  assert(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  assert(lua_tonumber(L, -1) == 31250125000.0);
+  /* The same arithmetic loop must still be eligible once GC stops asking
+  ** the recorder to leave. No bytecode or JIT settings have changed. */
+  assert(interruptions == 0 && proto_trace_acq(sum_proto) != 0);
+  lua_pop(L, 1);
+  sum_proto = NULL;
 }
 
 static void check_record_start_poll(lua_State *L)
@@ -103,6 +128,7 @@ int main(void)
   check_loop(L, "numeric", BC_FORL, BC_IFORL, BC_JFORL);
   check_loop(L, "iterator", BC_ITERL, BC_IITERL, BC_JITERL);
   check_record_start_poll(L);
+  check_interrupted_recording(L);
   lua_close(L);
   puts("t-jit-stale-loop-backedge OK");
   return 0;

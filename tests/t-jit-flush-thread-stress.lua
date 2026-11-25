@@ -168,15 +168,16 @@ for id = 1, nthreads do
     assert(type(gc_pressure) == "boolean", "missing GC pressure mode")
     local preheat_traces = 0
     local preheat_ok, preheat_err = pcall(function()
-      local deadline = (th.now() or 0) + ready_timeout
+      local began = th.now()
+      local deadline = began and began + ready_timeout
       local attempts = 0
       local traces
       repeat
         heat_pair(worker * 100000 + attempts)
         traces = live_trace_count()
         attempts = attempts + 1
-      until traces > 0 or attempts >= 64 or
-            ((th.now() or 0) >= deadline)
+      until traces > 0 or (deadline and (th.now() or deadline) >= deadline) or
+            (not deadline and attempts >= 64)
       assert(traces > 0,
 	     "worker did not publish traces before flush race")
       preheat_traces = traces

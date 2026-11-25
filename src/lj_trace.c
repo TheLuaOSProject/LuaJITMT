@@ -11513,7 +11513,7 @@ static TraceAbortResult trace_abort(jit_State *J)
     }
     /* An asynchronous abort won before the restart. Continue through ordinary
     ** slot/error cleanup; publishing IDLE here would leak J->cur's reservation. */
-    e = LJ_TRERR_RECERR;
+    e = LJ_TRERR_RETRY;
     setintV(L->top-1, (int32_t)e);
   }
   /* Penalize or blacklist starting bytecode instruction. */
@@ -11524,7 +11524,7 @@ static TraceAbortResult trace_abort(jit_State *J)
 	(void)hotcount_setl(J2G(J), jit_owner_l_acq(J), startpc+1, 1);
       else
 	penalty_pc(J, trace_startpt_acq(&J->cur), startpc, e);
-    } else {
+    } else if (e != LJ_TRERR_RETRY && e != LJ_TRERR_SMRRETRY) {
       TraceNo selflink = (TraceNo)J->exitno;
       GCtrace *T;
       /* Blacklisting is a retry-suppression optimization. Error cleanup still
@@ -11827,8 +11827,10 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
         return NULL;
       }
 
-    default:  /* Trace aborted asynchronously. */
-      setintV(L->top++, (int32_t)LJ_TRERR_RECERR);
+    default:
+      /* A collector or peer can interrupt an otherwise recordable loop.
+      ** Leave it eligible for the next hot execution after this request. */
+      setintV(L->top++, (int32_t)LJ_TRERR_RETRY);
       /* fallthrough */
     /* lj_err_throw() clears ACTIVE for synchronous errors other than the
     ** owner-local MCODELM retry handled by trace_sync_mcode_retry_owner. */
