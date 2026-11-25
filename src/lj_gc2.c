@@ -3148,6 +3148,18 @@ int lj_gc2_collect_active(lua_State *L)
   }
 }
 
+/* A step budget is a work budget. A peer already owns the collector's
+** current unit, so return incomplete and leave the published work for it. */
+static int gc2_step_retry(lua_State *L, uint32_t budget)
+{
+  global_State *g = G(L);
+  if (budget == 0 || gc2_worker_active_acq(g) != 0 ||
+      gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN)
+    return 0;
+  (void)lj_thr_retry_yield(L);
+  return 1;
+}
+
 int lj_gc2_step_explicit(lua_State *L, uint32_t budget)
 {
   global_State *g;
@@ -3178,10 +3190,8 @@ int lj_gc2_step_explicit(lua_State *L, uint32_t budget)
 	    drove_cycle = 1;
 	    continue;
 	  }
-	  if (budget != 0) {
-	    gc2_peer_wait_l(L);
+	  if (gc2_step_retry(L, budget))
 	    continue;
-	  }
 	  break;
 	}
       } else if (!extra_finreg && lj_gc2_finreg_cdata_pending(g)) {
@@ -3190,10 +3200,8 @@ int lj_gc2_step_explicit(lua_State *L, uint32_t budget)
 	    gc2_cycle_leader_acq(g) != 0) {
 	  if (gc2_mark_begin(g))
 	    continue;
-	  if (budget != 0) {
-	    gc2_peer_wait_l(L);
+	  if (gc2_step_retry(L, budget))
 	    continue;
-	  }
 	  break;
 	}
       }
@@ -3220,10 +3228,8 @@ int lj_gc2_step_explicit(lua_State *L, uint32_t budget)
       }
       if (close_result == GC2_DRIVER_DEFERRED)
 	break;
-      if (budget != 0) {
-	gc2_peer_wait_l(L);
+      if (gc2_step_retry(L, budget))
 	continue;
-      }
       break;
     }
     if (phase == LJ_GC2_WEAK) {
@@ -3238,10 +3244,8 @@ int lj_gc2_step_explicit(lua_State *L, uint32_t budget)
       }
       if (weak_result == GC2_DRIVER_DEFERRED)
 	break;
-      if (budget != 0) {
-	gc2_peer_wait_l(L);
+      if (gc2_step_retry(L, budget))
 	continue;
-      }
       break;
     }
     if (phase == LJ_GC2_SWEEP) {
@@ -3273,10 +3277,8 @@ int lj_gc2_step_explicit(lua_State *L, uint32_t budget)
 	  continue;
 	return 1;
       }
-      if (budget != 0) {
-	gc2_peer_wait_l(L);
+      if (gc2_step_retry(L, budget))
 	continue;
-      }
       break;
     }
     break;
