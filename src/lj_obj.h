@@ -703,10 +703,11 @@ typedef struct TabNodeHdr {
   MRef next_gen;	/* Replacement generation during/after retirement. */
 } TabNodeHdr;
 
-#define TABNODE_FREECOUNT_BITS	31
+#define TABNODE_FREECOUNT_BITS	30
 #define TABNODE_FREECOUNT_MASK	((((MSize)1u) << TABNODE_FREECOUNT_BITS) - 1u)
 #define TABNODE_FLAGS_MASK	((MSize)~TABNODE_FREECOUNT_MASK)
 #define TABNODE_FLAG_RETIRING	(((MSize)1u) << 31)
+#define TABNODE_FLAG_COPYING	(((MSize)1u) << 30)
 
 LJ_STATIC_ASSERT(sizeof(TabNodeHdr) == 16);
 LJ_STATIC_ASSERT(((MSize)1u << LJ_MAX_HBITS) <= TABNODE_FREECOUNT_MASK);
@@ -785,7 +786,8 @@ typedef struct TabResizeDesc {
   TabNodeRetire *oldret;
   TValue *newarray;
   TabArrayRetire *oldaret;
-  int array_weak;
+  int migration_weak;
+  GCSize hash_move_bytes;	/* Total size when hash move records follow. */
   uint64_t id;
   uint64_t stable_control;  /* Exact pre-install {owner, acap} word. */
   uint64_t retire_epoch;

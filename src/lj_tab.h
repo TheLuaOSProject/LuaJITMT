@@ -638,6 +638,7 @@ LJ_FUNC void lj_tab_test_set_resize_before_freeze_hook(
 LJ_FUNC void lj_tab_test_set_resize_hash_cutover_hook(
   LJTabResizeArrayHook hook);
 LJ_FUNC void lj_tab_test_set_array_copy_hook(LJTabArrayCopyHook hook);
+LJ_FUNC void lj_tab_test_set_hash_collision_copy_hook(LJTabArrayCopyHook hook);
 LJ_FUNC void lj_tab_test_set_resize_colocated_after_freeze_hook(
   LJTabResizeArrayHook hook);
 LJ_FUNC void lj_tab_test_set_next_after_keyindex_hook(
