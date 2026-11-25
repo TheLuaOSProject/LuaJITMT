@@ -3,7 +3,6 @@
 */
 
 #include <assert.h>
-#include <pthread.h>
 #include <stdio.h>
 
 #include "lua.h"
@@ -19,17 +18,6 @@
 
 static uint32_t result_seq;
 
-static void assert_callback_waits_without_lock(lua_State *L, CTState *cts,
-					       TGState *tg, const char *chunk)
-{
-  LJTCTypeParseReleaseCtx ctx;
-  pthread_t thread;
-
-  ljt_ctype_release_when_native_start(&ctx, &thread, cts, tg);
-  ljt_lua_dostring(L, chunk);
-  ljt_ctype_release_when_native_join(&ctx, thread);
-}
-
 static int hold_parse_token_for_callback_result(lua_State *L)
 {
   assert(result_seq == 0);
@@ -41,7 +29,6 @@ int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
   CTState *cts;
-  TGState *tg;
   uint32_t seq0, seq1;
 
   lua_pushcfunction(L, hold_parse_token_for_callback_result);
@@ -68,8 +55,6 @@ int main(void)
 
   cts = ctype_ctsG(G(L));
   assert(cts != NULL);
-  tg = L2TG(L);
-  assert(tg != NULL);
   seq0 = ljt_ctype_parse_seq(cts);
 
   ljt_lua_dostring(L,
@@ -79,11 +64,11 @@ int main(void)
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0);
 
-  assert_callback_waits_without_lock(L, cts, tg,
+  ljt_ctype_read_committed(L, cts,
     "lj_m7_callback_snapshot_cb:set(function(x) return x + 3 end)\n"
     "assert(lj_m7_callback_snapshot_cb(39) == 42)\n");
 
-  assert_callback_waits_without_lock(L, cts, tg,
+  ljt_ctype_read_committed(L, cts,
     "assert(lj_m7_callback_snapshot_cb(39) == 42)\n");
 
   ljt_lua_dostring(L,
@@ -92,7 +77,7 @@ int main(void)
   ljt_ctype_release_parse_token(cts, result_seq);
   result_seq = 0;
 
-  assert_callback_waits_without_lock(L, cts, tg,
+  ljt_ctype_read_committed(L, cts,
     "lj_m7_callback_snapshot_free:free()\n"
     "assert(not pcall(lj_m7_callback_snapshot_free))\n"
     "lj_m7_callback_snapshot_free = nil\n");
@@ -105,6 +90,6 @@ int main(void)
     "collectgarbage('collect')\n");
 
   lua_close(L);
-  printf("t-ffi-callback-snapshot OK: callback install/runtime waits on ctype snapshots\n");
+  printf("t-ffi-callback-snapshot OK: callback install/runtime uses committed ctypes\n");
   return 0;
 }

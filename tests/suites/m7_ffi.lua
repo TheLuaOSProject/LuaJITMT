@@ -1192,7 +1192,8 @@ assert(cl.lj_clib_ldscript_value() == 42)
         build_and_run_c(t, t:tmp("lj_t-ffi-layout-parser-progress"),
                         "t-ffi-layout-parser-progress.c", {
           timeout = "20s", libs = { "-lm", "-ldl", "-pthread",
-                                    "-Wl,--wrap=lj_ctype_publish" }
+                                    "-Wl,--wrap=lj_ctype_publish",
+                                    "-Wl,--wrap=lj_gc_pubroot" }
         })
       end
       build_and_run_c(t, t:tmp("lj_t-ffi-field-snapshot"),

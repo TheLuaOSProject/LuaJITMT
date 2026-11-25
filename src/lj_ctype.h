@@ -1674,6 +1674,8 @@ LJ_FUNC void lj_ctype_metaroot_release(LJCTypeMetaRoot *root);
 ** structural publication. No retry path parks while SMR or a lease is held. */
 LJ_FUNC int lj_ctype_metatv_rooted_try(lua_State *L, CTState *cts,
 				       TValue *outroot, CTypeID id, MMS mm);
+LJ_FUNC int lj_ctype_metatv_committed_try(lua_State *L, CTState *cts,
+					 TValue *outroot, CTypeID id, MMS mm);
 LJ_FUNC GCstr *lj_ctype_repr(lua_State *L, CTypeID id, GCstr *name);
 LJ_FUNC GCstr *lj_ctype_repr_wait(lua_State *L, CTypeID id, GCstr *name);
 LJ_FUNC GCstr *lj_ctype_repr_int64(lua_State *L, uint64_t n, int isunsigned);

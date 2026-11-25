@@ -2023,8 +2023,8 @@ void lj_ctype_metaroot_release(LJCTypeMetaRoot *root)
 ** The function-pointer case is semantic topology, not an ABI/signature shape:
 ** every pointer-to-function CType uses the same miscmap -> shared metatable
 ** hop, irrespective of argument and result classes. */
-int lj_ctype_metatv_rooted_try(lua_State *L, CTState *cts, TValue *outroot,
-			       CTypeID id, MMS mm)
+static int ctype_metatv_rooted_try(lua_State *L, CTState *cts, TValue *outroot,
+				  CTypeID id, MMS mm, int committed)
 {
   global_State *g = G(L);
   LJGC2Lease sourcelease = { 0 }, mtlease = { 0 }, resultlease = { 0 };
@@ -2034,6 +2034,7 @@ int lj_ctype_metatv_rooted_try(lua_State *L, CTState *cts, TValue *outroot,
   CTInfo info;
   MSize budget;
   uint32_t seq0;
+  uint64_t version;
   TValue sourcev, mtv, result, nilv;
   GCtab *source, *mt;
   int source_status, mt_status, result_status;
@@ -2053,20 +2054,21 @@ int lj_ctype_metatv_rooted_try(lua_State *L, CTState *cts, TValue *outroot,
     return LJ_CTYPE_METATV_RETRY;
   smr = 1;
   seq0 = ctype_parse_token_acq(cts);
-  if (seq0 & 1u) {
-    rc = LJ_CTYPE_METATV_CTBUSY;
-    goto done;
-  }
+  if (!committed && (seq0 & 1u))
+    goto busy;
+  version = ctype_layout_version(cts);
 
   /* SMR starts before acquiring the current RCU CTypeTab header. A sequence
   ** check alone cannot retain a retired header against the GC2 reclaimer. */
-  top = ctype_top_acq(cts);
+  top = committed ? ctype_layout_limit(cts, version) : ctype_top_acq(cts);
   tabh = ctype_tabh_acq(cts);
   budget = top ? (MSize)top * 4u : 1u;
   for (;;) {
     if (budget-- == 0)
       goto retry;
-    if (!ctype_snapshot_copy(tabh, top, id, &ct))
+    if (committed && (version & 1u) && id >= top)
+      goto unsettled;
+    if (!ctype_layout_at(cts, version, tabh, top, id, &ct))
       goto absent;
     info = ctype_info_acq(&ct);
     if (!(ctype_isattrib(info) || ctype_isref(info)))
@@ -2078,7 +2080,9 @@ int lj_ctype_metatv_rooted_try(lua_State *L, CTState *cts, TValue *outroot,
     CTypeID cid = ctype_cid(info);
     if (budget-- == 0)
       goto retry;
-    if (!ctype_snapshot_copy(tabh, top, cid, &cct))
+    if (committed && (version & 1u) && cid >= top)
+      goto unsettled;
+    if (!ctype_layout_at(cts, version, tabh, top, cid, &cct))
       goto absent;
     function_meta = ctype_isfunc(ctype_info_acq(&cct));
   }
@@ -2134,21 +2138,26 @@ int lj_ctype_metatv_rooted_try(lua_State *L, CTState *cts, TValue *outroot,
   if (LJ_UNLIKELY(!lj_tv_gcref_type_match(&result)))
     goto retry;
 
-  if (ctype_parse_token_acq(cts) != seq0) {
-    rc = LJ_CTYPE_METATV_CTBUSY;
-    goto done;
-  }
-  copyTVrel(L, outroot, &result);
   rc = LJ_CTYPE_METATV_FOUND;
-  goto done;
+  goto publish;
 
 absent:
-  if (ctype_parse_token_acq(cts) != seq0) {
-    rc = LJ_CTYPE_METATV_CTBUSY;
-    goto done;
-  }
-  copyTVrel(L, outroot, &nilv);
   rc = LJ_CTYPE_METATV_ABSENT;
+publish:
+  if (committed ? ctype_layout_version(cts) != version :
+		  ctype_parse_token_acq(cts) != seq0) {
+    if (committed)
+      goto retry;
+    goto busy;
+  }
+  copyTVrel(L, outroot, rc == LJ_CTYPE_METATV_FOUND ? &result : &nilv);
+  goto done;
+
+unsettled:
+  if (ctype_layout_version(cts) != version)
+    goto retry;
+busy:
+  rc = LJ_CTYPE_METATV_CTBUSY;
   goto done;
 
 retry:
@@ -2165,6 +2174,18 @@ done:
   lj_gc2_lease_release(&mtlease);
   lj_gc2_lease_release(&sourcelease);
   return rc;
+}
+
+int lj_ctype_metatv_rooted_try(lua_State *L, CTState *cts, TValue *outroot,
+			       CTypeID id, MMS mm)
+{
+  return ctype_metatv_rooted_try(L, cts, outroot, id, mm, 0);
+}
+
+int lj_ctype_metatv_committed_try(lua_State *L, CTState *cts, TValue *outroot,
+				 CTypeID id, MMS mm)
+{
+  return ctype_metatv_rooted_try(L, cts, outroot, id, mm, 1);
 }
 
 /* -- C type information -------------------------------------------------- */

@@ -1053,13 +1053,23 @@ static cTValue *ffi_ctype_metatv_read(lua_State *L, CTState *cts,
 				      LJCTypeMetaRoot *root,
 				      CTypeID id, MMS mm)
 {
+#if LJ_HASJIT
+  jit_State *J = ffi_active_recorder(L);
+#endif
   if (lj_ctype_predefined_nometa(cts, id))
     return NULL;
   if (LJ_UNLIKELY(!lj_ctype_metaroot_init_nothrow(L, root)))
     lj_err_mem(L);
   for (;;) {
-    int status = lj_ctype_metatv_rooted_try(
-      L, cts, lj_ctype_metaroot_tv(root), id, mm);
+    int status;
+#if LJ_HASJIT
+    if (J)
+      status = lj_ctype_metatv_rooted_try(
+	L, cts, lj_ctype_metaroot_tv(root), id, mm);
+    else
+#endif
+      status = lj_ctype_metatv_committed_try(
+	L, cts, lj_ctype_metaroot_tv(root), id, mm);
     if (status == LJ_CTYPE_METATV_FOUND)
       return lj_ctype_metaroot_tv(root);
     if (status == LJ_CTYPE_METATV_ABSENT) {
@@ -1067,13 +1077,10 @@ static cTValue *ffi_ctype_metatv_read(lua_State *L, CTState *cts,
       return NULL;
     }
 #if LJ_HASJIT
-    {
-      jit_State *J = ffi_active_recorder(L);
-      if (J) {
-	lj_ctype_metaroot_release(root);
-	lj_trace_err(J, status == LJ_CTYPE_METATV_CTBUSY ?
-			     LJ_TRERR_CTBUSY : LJ_TRERR_NYIBC);
-      }
+    if (J) {
+      lj_ctype_metaroot_release(root);
+      lj_trace_err(J, status == LJ_CTYPE_METATV_CTBUSY ?
+			   LJ_TRERR_CTBUSY : LJ_TRERR_NYIBC);
     }
 #endif
     /* The bounded helper has closed SMR and every lease before either wait.

@@ -1014,17 +1014,6 @@ void lj_ccallback_unwind_detach(void)
   ccallback_error_restore(&err);
 }
 
-static int callback_ctype_snapshot_wait(lua_State *L, CTState *cts,
-					 CTypeID id, CType *out)
-{
-  for (;;) {
-    int ok = lj_ctype_snapshot(cts, id, out);
-    if (ok >= 0)
-      return ok;
-    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
-  }
-}
-
 static int callback_rawctype_wait(lua_State *L, CTState *cts, CTypeID id,
 				  CTypeID *ridp, CType *out)
 {
@@ -1131,7 +1120,7 @@ static void callback_conv_args(CTState *cts, lua_State *L,
     lj_err_caller(L, LJ_ERR_FFI_BADCBACK);
   if (isluafunc(fn))
     setcframe_pc(L->cframe, proto_bc(funcproto(fn))+1);
-  if (!callback_ctype_snapshot_wait(L, cts, id, &ctsnap))
+  if (!lj_ctype_read(L, cts, id, &ctsnap))
     lj_err_caller(L, LJ_ERR_FFI_BADCBACK);
   ctinfo = ctype_info_acq(ct);
   if (!ctype_isfunc(ctinfo))
@@ -1155,7 +1144,7 @@ static void callback_conv_args(CTState *cts, lua_State *L,
     CType ctfsnap, ctasnap;
     CType *ctf = &ctfsnap;
     CTInfo finfo;
-    if (!callback_ctype_snapshot_wait(L, cts, fid, ctf))
+    if (!lj_ctype_read(L, cts, fid, ctf))
       lj_err_caller(L, LJ_ERR_FFI_BADCBACK);
     finfo = ctype_info_acq(ctf);
     if (!ctype_isattrib(finfo)) {
@@ -1577,7 +1566,7 @@ static int callback_checkfunc(lua_State *L, CTState *cts, CTypeID ptrid,
   CType *ct = &ptrsnap;
   CTInfo info;
   CTSize size;
-  if (!callback_ctype_snapshot_wait(L, cts, ptrid, ct))
+  if (!lj_ctype_read(L, cts, ptrid, ct))
     return 0;
   info = ctype_info_acq(ct);
   size = ctype_size_acq(ct);
@@ -1606,7 +1595,7 @@ static int callback_checkfunc(lua_State *L, CTState *cts, CTypeID ptrid,
       CType ctfsnap, ctasnap;
       CType *ctf = &ctfsnap;
       CTInfo finfo;
-      if (!callback_ctype_snapshot_wait(L, cts, fid, ctf))
+      if (!lj_ctype_read(L, cts, fid, ctf))
 	return 0;
       finfo = ctype_info_acq(ctf);
       if (!ctype_isattrib(finfo)) {
