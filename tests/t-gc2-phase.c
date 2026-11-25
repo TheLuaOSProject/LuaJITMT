@@ -1196,6 +1196,12 @@ int main(void)
   assert(!lj_gc2_sweep_pending(g));
   assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
   assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
+  /* A late mutator requests a new allocator handshake from every owner.
+  ** This owner's major sweep already cleared the marks of its survivors. */
+  assert(lj_gc2_handshake(g, LJ_GC2_HS_RESET_ALLOC) > 0);
+  assert(!lj_gc2_sweep_pending(g));
+  assert(!arena_list_contains(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
+			      lj_arena_of(phase_tab)));
   sweep_to_idle0 = gc2_sweep_to_idle_acq(g);
   sweep_live_updates0 = la_load64_acq(&g->gc2.sweep_live_updates);
   finalizer_blocks0 = gc2_finalizer_sweep_blocks_acq(g);

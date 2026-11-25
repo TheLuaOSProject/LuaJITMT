@@ -367,8 +367,18 @@ static int safepoint_claim_epoch(TGState *tg, uint64_t epoch)
 static void safepoint_apply_allocator(global_State *g, TGState *tg,
                                       uint32_t actions)
 {
+  uint32_t cycle;
+  if (!(actions & (LJ_GC2_HS_RESET_ALLOC|LJ_GC2_HS_RESTORE_ALLOC)) ||
+      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
+    return;
+  cycle = gc2_cycle_acq(g);
+  /* A late attachment or a partially prepared peer requests another reset
+  ** from every TG. A completed major sweep clears survivor marks as it
+  ** returns its arena to the allocator. Never enqueue that arena again in
+  ** the same cycle. New allocations stay black until the next boundary. */
   if ((actions & LJ_GC2_HS_RESET_ALLOC) &&
-      lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL)) {
+      (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
+       la_load32_acq(&tg->alloc.prepare_epoch) != cycle)) {
     int prepared = lj_arena_alloc_prepare_sweep_kind(
 	&tg->alloc, LJ_ARENAK_TRAVERSABLE);
     int plain_restored = lj_arena_alloc_restore_sweep_kind(
@@ -380,12 +390,11 @@ static void safepoint_apply_allocator(global_State *g, TGState *tg,
       tg->alloc.huge_retire_done = 0;
     }
     if (prepared && plain_restored)
-      tg->alloc.prepare_epoch = gc2_cycle_acq(g);
+      la_store32_rel(&tg->alloc.prepare_epoch, cycle);
     else
       lj_gc2_sweep_publish_wake(g);
   }
-  if ((actions & LJ_GC2_HS_RESTORE_ALLOC) &&
-      lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL)) {
+  if (actions & LJ_GC2_HS_RESTORE_ALLOC) {
     int restored;
     /* Abort is legal only before bounded root detachment/quarantine. Restore
     ** owner-local bins on the owning TG while it is stopped at this ACK. */
@@ -394,7 +403,7 @@ static void safepoint_apply_allocator(global_State *g, TGState *tg,
     if (lj_tg_flags_test_acq(tg, TGF_HUGETAB))
       lj_arena_hugetab_abort_sweep(&tg->huge);
     if (restored)
-      tg->alloc.prepare_epoch = 0;
+      la_store32_rel(&tg->alloc.prepare_epoch, 0);
     else
       lj_gc2_sweep_publish_wake(g);
     tg->alloc.huge_retire_cursor = 0;
@@ -1071,9 +1080,7 @@ static void safepoint_apply_dead_allocators(global_State *g, uint32_t actions)
     if ((flags & (TGF_DEAD|TGF_ARENA_INTERNAL)) !=
         (TGF_DEAD|TGF_ARENA_INTERNAL))
       continue;
-    if ((actions & LJ_GC2_HS_RESTORE_ALLOC) ||
-        tg->alloc.prepare_epoch != gc2_cycle_acq(g))
-      safepoint_apply_allocator(g, tg, actions);
+    safepoint_apply_allocator(g, tg, actions);
   }
   lj_gc2_smr_read_leave(g);
 }

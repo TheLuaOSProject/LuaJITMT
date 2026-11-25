@@ -5576,7 +5576,8 @@ int lj_gc2_sweep_needs_prepare(global_State *g)
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg))
-    if (lj_gc2_sweep_tg_ready(tg) && tg->alloc.prepare_epoch != cycle)
+    if (lj_gc2_sweep_tg_ready(tg) &&
+	la_load32_acq(&tg->alloc.prepare_epoch) != cycle)
       return 1;
   return 0;
 }
@@ -5592,7 +5593,7 @@ int lj_gc2_sweep_needs_restore(global_State *g)
        tg = lj_tg_next_acq(tg)) {
     if (!lj_gc2_sweep_tg_ready(tg))
       continue;
-    if (tg->alloc.prepare_epoch != 0)
+    if (la_load32_acq(&tg->alloc.prepare_epoch) != 0)
       return 1;
     for (k = 0; k < LJ_ARENA_NKINDS; k++)
       if (tg->alloc.needsweep[k] != NULL)
@@ -22618,8 +22619,10 @@ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
     int finished = 0, owner_blocked = 0;
     if (next == NULL || next == tg)
       next = head;
+    /* A partial reset leaves a retryable list. Finish preparing that owner
+    ** before any committed arena can be picked up by the next reset. */
     if ((flags & TGF_ARENA_INTERNAL) &&
-	(!(flags & TGF_DEAD) || tg->alloc.prepare_epoch == gc2_cycle_acq(g))) {
+	la_load32_acq(&tg->alloc.prepare_epoch) == gc2_cycle_acq(g)) {
       n += lj_gc2_sweep_owner_progress(
         g, tg, limit - n, &finished, &owner_blocked);
       root_owner_blocked |= owner_blocked;

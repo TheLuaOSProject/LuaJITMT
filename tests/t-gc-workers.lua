@@ -101,7 +101,8 @@ local function dead_owner_collection()
   collectgarbage("restart")
   collectgarbage("collect")
   assert(payload[1] == 8192 and payload[3] == 8194)
-  assert(th.gcworkers() == 2)
+  -- This closure has no upvalues and lives across both pool changes and GC.
+  assert(workers() == 2)
   assert(th.gcstats().total_bytes + 256 * 1024 < before,
          "dead owner's unreachable objects remained allocated")
   assert(th.gcworkers(0) == 2)
