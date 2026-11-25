@@ -55,11 +55,9 @@ static void assert_typed_rootless_closure(lua_State *L)
   lua_pop(L, 2);
 }
 
-static void run_generational_major_fallback(lua_State *L, global_State *g,
-					     TGState *tg)
+static void run_generational_major_fallback(lua_State *L, global_State *g)
 {
   int complete = 0, i;
-  uint32_t swept;
   lj_gc2_mark_begin(g);
   assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 1);
   assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 0);
@@ -79,23 +77,22 @@ static void run_generational_major_fallback(lua_State *L, global_State *g,
     lj_gc2_sweep_prepare_bridge_boundary(
       g, lj_gc_preserve_root_chain_for_gc2_sweep);
   assert(i < 10000 && gc2_sweep_root_scanned_acq(g) == 1);
-  do {
-    swept = lj_gc2_test_sweep_owner_progress(g, tg, LJ_GC2_SWEEP_BATCH);
-  } while (swept != 0);
+  /* A major sweep also has graph and intern-table work. Drive the same
+  ** bounded worker turns that must finish before the public cycle closes. */
+  for (i = 0; i < 10000 && lj_gc2_sweep_pending(g); i++)
+    (void)lj_gc2_worker_drain(g, LJ_GC2_SWEEP_BATCH);
   assert(!lj_gc2_sweep_pending(g));
   lj_gc2_cycle_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
 }
 
 static void test_minor_major_paranoia(void)
 {
   lua_State *L = luaL_newstate();
   global_State *g;
-  TGState *tg;
   assert(L != NULL);
   luaL_openlibs(L);
   g = G(L);
-  tg = G2TG(g);
-  assert(tg != NULL);
   lj_gc2_set_generational(g, 1);
   lua_gc(L, LUA_GCCOLLECT, 0);
   assert(la_load32_acq(&g->gc2.minor_sweep_enabled) == 0);
@@ -110,7 +107,7 @@ static void test_minor_major_paranoia(void)
   lua_gc(L, LUA_GCCOLLECT, 0);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE);
   la_store32_rel(&g->gc2.force_major, 0);
-  run_generational_major_fallback(L, g, tg);
+  run_generational_major_fallback(L, g);
   /*
   ** The reverse mark oracle still checks the fallback's non-preserving major
   ** sweep. Disable generational remembered publication before the zero-diff

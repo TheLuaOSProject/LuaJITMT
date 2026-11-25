@@ -6296,7 +6296,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jz ->vm_jloop_enter
     |  sub PC, 4
     |  jmp ->vm_safepoint_static
+    |.endif
     |->vm_jloop_enter:
+    |.if JIT
     |  // A loop or function header has already executed its interpreter work.
     |  // Only a freshly decoded JLOOP may replay its bytecode at a safepoint.
     |  ins_AD	// RA = base (ignored), RD = traceno
