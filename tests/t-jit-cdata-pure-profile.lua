@@ -1,3 +1,4 @@
+-- A global, table-typed FLOAD is the base-metatable lookup in these traces.
 local ffi,util,vmdef,bit,profile=require('ffi'),require('jit.util'),require('jit.vmdef'),require('bit'),require('jit.profile')
 local p=ffi.new('struct {double x;double y;}',0,1)
 local mt=debug.getmetatable(p);local oldindex=mt.__index
@@ -22,7 +23,7 @@ local function main()
     local op=vmdef.irnames:sub(6*bit.rshift(ot,8)+1,6*bit.rshift(ot,8)+6)
     if op=='LOOP  ' then loop=r end
     if op=='XPOLL ' and a==1 then mode1=true end
-    if loop>0 and op=='FLOAD ' and a==-1 and b==276 then post=post+1 end
+    if loop>0 and op=='FLOAD ' and a==-1 and bit.band(ot,31)==11 then post=post+1 end
    end end
    if mode1 then sawmode1=true;if post>0 then conservative=true end end
   end

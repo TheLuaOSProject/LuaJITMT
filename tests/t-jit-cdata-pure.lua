@@ -1,3 +1,4 @@
+-- A global, table-typed FLOAD is the base-metatable lookup in these traces.
 -- Isolated optimization proof: receiver allocation is outside the native loop.
 local ffi, util, vmdef, bit = require('ffi'), require('jit.util'), require('jit.vmdef'), require('bit')
 local ct = ffi.typeof('struct { double x; double y; }')
@@ -36,7 +37,7 @@ local function trace_shape(tr, expect)
    local op=vmdef.irnames:sub(6*bit.rshift(ot,8)+1,6*bit.rshift(ot,8)+6)
    if op=='LOOP  ' then loop=r end
    if op=='XPOLL ' then assert(a==0,'eligible trace must retain mode-0 phase poll');polls=polls+1 end
-   if op=='FLOAD ' and a==-1 and b==276 then
+   if op=='FLOAD ' and a==-1 and bit.band(ot,31)==11 then
     if loop==0 then roots=roots+1 else postroots=postroots+1 end
    elseif op=='FLOAD ' and b==7 then
     if loop==0 then nodes=nodes+1 else postnodes=postnodes+1 end

@@ -1,3 +1,4 @@
+-- A global, table-typed FLOAD is the base-metatable lookup in these traces.
 local ffi,util,vmdef,bit=require('ffi'),require('jit.util'),require('jit.vmdef'),require('bit')
 local obj=ffi.new('struct { double x; double y; }',0,1)
 local mt=debug.getmetatable(obj);local oldindex=mt.__index
@@ -36,7 +37,7 @@ local function main()
   local op=vmdef.irnames:sub(6*bit.rshift(ot,8)+1,6*bit.rshift(ot,8)+6)
   if op=='LOOP  ' then loop=ref end
   if op=='XPOLL ' then assert(a==0);poll=poll+1 end
-  if op=='FLOAD ' and a==-1 and b==276 then if loop==0 then pre=pre+1 else post=post+1 end end
+  if op=='FLOAD ' and a==-1 and bit.band(ot,31)==11 then if loop==0 then pre=pre+1 else post=post+1 end end
  end end
  assert(pre==1 and poll==1 and loop>0,'linked destination must retain entry proof and phase poll')
  assert(post==(arg[1]=='baseline' and 1 or 0),'linked root must exercise requested reuse shape')

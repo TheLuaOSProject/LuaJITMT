@@ -95,7 +95,9 @@ int main(int argc, char **argv)
       " local op=vmdef.irnames:sub(6*bit.rshift(ot,8)+1,6*bit.rshift(ot,8)+6)\n"
       " if op=='LOOP  ' then loop=r end\n"
       " if op=='XPOLL ' then assert(a==0);poll=poll+1 end\n"
-      " if op=='FLOAD ' and a==-1 and b==276 then if loop==0 then pre=pre+1 "
+      /* IRT_TAB global load of the cdata base metatable. */
+      " if op=='FLOAD ' and a==-1 and bit.band(ot,31)==11 then "
+      "if loop==0 then pre=pre+1 "
       "else post=post+1 end end\n"
       "end end\n"
       "assert(loop>0 and pre==1 and post==0 and poll==1,'gate must challenge "

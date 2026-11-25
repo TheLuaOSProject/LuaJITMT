@@ -1,3 +1,4 @@
+-- A global, table-typed FLOAD is the base-metatable lookup in these traces.
 -- Whole-body exclusions include effects after the cdata method lookup.
 local ffi,util,vmdef,bit=require('ffi'),require('jit.util'),require('jit.vmdef'),require('bit')
 local mode=arg[1]
@@ -49,7 +50,7 @@ local function main()
    effects[op]=(effects[op] or 0)+1
    if op=='LOOP  ' then loop=r end
    if op=='XPOLL ' then assert(a==0,'exclusion must be tested in otherwise-eligible pre-MT mode');polls=polls+1 end
-   if loop>0 and op=='FLOAD ' and a==-1 and b==276 then after=after+1 end
+   if loop>0 and op=='FLOAD ' and a==-1 and bit.band(ot,31)==11 then after=after+1 end
   end
  end
  print('negative',mode,'root',root,'nins',info.nins,'exits',exits[root],'postroot',after,'answer',answer)
