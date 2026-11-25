@@ -136,11 +136,16 @@ static GCupval *func_rooted_closed_uv(global_State *g, GCfuncL *fn,
 {
   GCobj *obj;
   GCupval *uv;
+  TValue cell;
   if (index >= lj_funcL_nupvalues(fn))
     return NULL;
   obj = func_uvptr_acq(fn, index);
-  if (!obj || lj_gc2_obj_lease_acquire(g, obj, (uint32_t)~LJ_TUPVAL,
-					      NULL, lease) < 0)
+  if (!obj)
+    return NULL;
+  /* The retained closure owns this edge. Observe its exact cell as for a
+  ** frame-local upvalue. A store publishes the new child after writing it. */
+  setgcVraw(&cell, obj, LJ_TUPVAL);
+  if (lj_gc2_tv_lease_acquire(g, &cell, lease) != LJ_GC2_TV_EDGE_VALID)
     return NULL;
   uv = &obj->uv;
   if (mref_acq(uv->v, TValue) != &uv->tv) {
