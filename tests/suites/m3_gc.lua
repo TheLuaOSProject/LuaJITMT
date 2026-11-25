@@ -455,8 +455,9 @@ return function(add)
         { "pool-reset", "stop" }, { "pool-roots", "stop" },
         { "grace1" }, { "grace2" }, { "pool-grace1" }, { "pool-grace2" },
         { "restart-grace" }, { "pool-restart-grace" },
+        { "late-roots" }, { "pool-late-roots" },
         { "pool-reset", "publish" }, { "pool-roots", "publish" }
-      }, { "lj_safepoint_handshake", resumable })
+      }, { "lj_safepoint_handshake", resumable, "lj_str_gc2_sweep_step" })
       run("t-worker-bridge-stop", stop_modes, { resumable })
       run("t-worker-bridge-detach", { { "0" }, { "1" } }, {
         resumable, "lj_gc2_flush_ssb_detach", scan, prepare

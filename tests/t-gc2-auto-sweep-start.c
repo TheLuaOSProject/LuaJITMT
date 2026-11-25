@@ -12,6 +12,7 @@
 #include "lj_obj.h"
 #include "lj_gc.h"
 #include "lj_safepoint.h"
+#include "lj_str.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
 
@@ -26,6 +27,8 @@ static void *late_body;
 static HugeTab *late_huge;
 static uint32_t late_cycle;
 static uint64_t late_epoch;
+static int late_roots;
+static atomic_int late_scan;
 #ifdef LJ_TRACE_TEST_HELPERS
 static int pause_publish;
 static atomic_int pool_started, first_attempt_returned;
@@ -42,6 +45,24 @@ static void pause_briefly(void)
 /* The peer services earlier epochs from a real published native frame. It
 ** leaves that frame just before the selected action is signalled and keeps its
 ** Lua stack untouched inside a managed call until the allocating TG returns. */
+static int hold_fresh_stack(lua_State *L)
+{
+  atomic_store(&parked, 1);
+  while (!atomic_load(&release_peer)) {
+    if (late_roots) {
+      uint32_t actions = lj_tg_reqmask_acq(L2TG(L));
+      /* Creating the coroutine can leave its first roots in our local
+      ** buffer. Publish that suffix while withholding its new stack scan. */
+      if ((actions & LJ_GC2_HS_FLUSH_SSB) &&
+          !(actions & (LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_SCAN_OWNER_ROOTS)))
+        (void)lj_safepoint_poll(L);
+    }
+    pause_briefly();
+  }
+  assert(strcmp(lua_tostring(L, 1), "live sweep peer") == 0);
+  return 0;
+}
+
 static int hold_peer(lua_State *L)
 {
   LJNativeFrame frame;
@@ -51,16 +72,28 @@ static int hold_peer(lua_State *L)
   while (!atomic_load(&requested) && !atomic_load(&release_peer))
     pause_briefly();
   (void)lj_native_leave_l(L, &frame);
-  atomic_store(&parked, 1);
-  while (!atomic_load(&release_peer))
-    pause_briefly();
-  assert(strcmp(lua_tostring(L, 1), "live sweep peer") == 0);
-  return 0;
+  if (late_roots) {
+    lua_State *co = lua_newthread(L);
+    lua_pushcfunction(co, hold_fresh_stack);
+    lua_pushvalue(L, 1);
+    lua_xmove(L, co, 1);
+    assert(lua_resume(co, 1) == 0);
+    return 0;
+  }
+  return hold_fresh_stack(L);
 }
 
 static int before_actions(global_State *g, uint32_t actions)
 {
-  if (!atomic_load(&enabled) || (actions & target) != target || atomic_load(&requested))
+  if (!atomic_load(&enabled) || (actions & target) != target)
+    return 0;
+  if (late_roots) {
+    if (atomic_load(&parked) && gc2_sweep_bridge_ready_acq(g) &&
+        gc2_thread_scan_needscan_pending_acq(g))
+      atomic_store(&late_scan, 1);
+    return 0;
+  }
+  if (atomic_load(&requested))
     return 0;
   if (grace_round && (!gc2_sweep_bridge_ready_acq(g) || !gc2_sweep_grace_needed_acq(g) ||
       (actions & ~(LJ_GC2_HS_FLUSH_SSB | LJ_GC2_HS_SCAN_OWNER_ROOTS)) ||
@@ -82,6 +115,18 @@ static int before_actions(global_State *g, uint32_t actions)
   }
 #endif
   return 1;
+}
+
+uint32_t __real_lj_str_gc2_sweep_step(global_State *, uint32_t);
+uint32_t __wrap_lj_str_gc2_sweep_step(global_State *g, uint32_t limit)
+{
+  uint32_t n = __real_lj_str_gc2_sweep_step(g, limit);
+  if (late_roots && atomic_load(&enabled) && gc2_sweep_bridge_ready_acq(g) &&
+      !lj_str_gc2_sweep_pending(g) && !atomic_exchange(&requested, 1)) {
+    while (!atomic_load(&parked) && !atomic_load(&release_peer))
+      pause_briefly();
+  }
+  return n;
 }
 
 uint32_t __real_lj_safepoint_handshake(global_State *, uint32_t);
@@ -180,7 +225,7 @@ static int begin(lua_State *L)
 
 static int park_seen(lua_State *L)
 {
-  lua_pushboolean(L, atomic_load(&parked));
+  lua_pushboolean(L, late_roots ? atomic_load(&late_scan) : atomic_load(&parked));
   return 1;
 }
 
@@ -191,7 +236,11 @@ static int finish(lua_State *L)
     assert(gc2_phase_acq(g) == LJ_GC2_SWEEP);
     assert(gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN);
     assert(gc2_jit_phase_gate_acq(g) == 0);
-    assert(gc2_sweep_bridge_ready_acq(g) == (grace_round != 0));
+    assert(gc2_sweep_bridge_ready_acq(g) == (grace_round != 0 || late_roots));
+    if (late_roots) {
+      assert(gc2_sweep_root_scanned_acq(g) == 1);
+      assert(gc2_thread_scan_needscan_pending_acq(g) != 0);
+    }
     if (grace_round)
       assert(la_load32_acq(&g->gc2.sweep_grace_needed) == (LJ_GC2_GRACE_ACTIVE | grace_round));
     if (restart_grace) {
@@ -217,7 +266,7 @@ static int finish(lua_State *L)
     assert(lj_tg_alloc_black_acq(L2TG(L)));
     if (target == LJ_GC2_HS_RESET_ALLOC || target == LJ_GC2_HS_SCAN_ROOTS)
       assert(la_load32_acq(&L2TG(L)->alloc.prepare_epoch) == gc2_cycle_acq(g));
-    if (target == LJ_GC2_HS_SCAN_ROOTS)
+    if (target == LJ_GC2_HS_SCAN_ROOTS && !late_roots)
       assert(gc2_sweep_root_scanned_acq(g) == 2);
     if (pool) {
       TGState *peer = atomic_load(&peer_tg);
@@ -287,7 +336,10 @@ int main(int argc, char **argv)
     pool = !strncmp(action, "pool-", 5);
     if (pool)
       action += 5;
-    if (!strcmp(action, "restart-grace")) {
+    if (!strcmp(action, "late-roots")) {
+      late_roots = 1;
+      target = LJ_GC2_HS_SCAN_ROOTS;
+    } else if (!strcmp(action, "restart-grace")) {
       restart_grace = 1;
       grace_round = LJ_GC2_GRACE_EPOCHS;
       target = LJ_GC2_HS_FLUSH_SSB;

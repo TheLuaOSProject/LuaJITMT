@@ -6249,14 +6249,13 @@ static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
   ** this batch touches another arena. */
   if (lj_tg_any_jit_active(g) ||
       gc2_thread_scan_needscan_pending_acq(g) != 0) {
-    (void)lj_gc2_handshake(g,
-	LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB);
+    (void)gc2_sweep_epoch(g, LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_FLUSH_SSB, 0);
     return 0;
   }
   if (gc2_weak_owned_peer_active(g))
     return 0;
   if (!lj_gc2_ssb_empty(g)) {
-    (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
+    (void)gc2_sweep_epoch(g, LJ_GC2_HS_FLUSH_SSB, 0);
     return 0;
   }
   if (gc2_table_rescan_pending_acq(g) != 0) {
@@ -22599,7 +22598,8 @@ drain_graph:
     ** the next owner after either boundary. A persistent EOF retry must not
     ** reclaim the front of every subsequent invocation. */
     gc2_sweep_owner_next_tid_store_rlx(g, next ? lj_tg_tid_acq(next) : 0);
-    if (finished || gc2_deferred_epoch_acq(g) != defer0)
+    if (finished || gc2_fixpoint_epoch_actions_acq(g) ||
+	gc2_deferred_epoch_acq(g) != defer0)
       break;
     tg = next;
     if (tg == start)
