@@ -3293,7 +3293,8 @@ static int gc2_step(lua_State *L, uint32_t budget, int automatic)
 	/* A small step can drain the last work yet have no next iteration
 	** in which to try the exact close. Returning to the mutator allows
 	** another suffix to appear, so attempt that close before returning. */
-	if (budget == 0 && lj_gc2_sweep_to_idle(g)) {
+	if (budget == 0 && (gc2_phase_acq(g) == LJ_GC2_IDLE ||
+			    lj_gc2_sweep_to_idle(g))) {
 	  lj_gc2_publish_idle_threshold(g);
 	  return 1;
 	}
@@ -6669,40 +6670,16 @@ void lj_gc2_preserve_root(global_State *g, GCobj *o)
   }
 }
 
-int lj_gc2_sweep_to_idle(global_State *g)
+/* Consume worker_active while retaining the already-closed JIT entry gate. */
+static int gc2_sweep_to_idle_owned(global_State *g)
 {
   uint32_t phase;
   uint64_t live;
   if (!g)
     return 0;
-  if (gc2_jit_sweep_turn_deferred(g))
-    return 0;
-  if (!gc2_worker_claim(g))
-    return 0;  /* 05 section 5.8 scheduler close waits for worker owner. */
-  phase = gc2_phase_acq(g);
-  if (phase != LJ_GC2_SWEEP) {
-    gc2_worker_release(g);
-    return 0;
-  }
-  gc2_jit_phase_gate_close(g);
-  if (lj_tg_any_jit_active(g) || gc2_jit_recorder_active(g)) {
-    /* Never wait for a peer in blocking FFI, and never self-wait from a trace
-    ** helper. Allocation checks observe the closed gate; x64 loop XPOLL does
-    ** the same. A later owner retries after every TG has published quiescence. */
-    if (gc2_jit_recorder_active(g))
-      lj_trace_abort(g);
-    gc2_jit_sweep_displaced_rel(g, 1);
-    gc2_worker_release(g);
-    return 0;
-  }
-  if (gc2_phase_acq(g) != LJ_GC2_SWEEP) {
-    if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
-      gc2_jit_phase_gate_open_sweep(g, 0);
-    else if (gc2_phase_acq(g) == LJ_GC2_IDLE)
-      gc2_jit_phase_gate_open_idle(g);
-    gc2_worker_release(g);
-    return 0;
-  }
+  lj_assertG(gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+	     gc2_jit_phase_gate_acq(g) == 0,
+	     "SWEEP close lost collector ownership");
   if (!gc2_phase_gate_try(g)) {
     gc2_jit_phase_gate_open_sweep(g, 0);
     gc2_worker_release(g);
@@ -6818,6 +6795,33 @@ int lj_gc2_sweep_to_idle(global_State *g)
   gc2_sweep_table_close_gate_store_sc(g, 0);
   gc2_phase_gate_release(g);
   return 1;
+}
+
+int lj_gc2_sweep_to_idle(global_State *g)
+{
+  uint32_t phase;
+  if (!g || gc2_jit_sweep_turn_deferred(g) || !gc2_worker_claim(g))
+    return 0;
+  if (gc2_phase_acq(g) != LJ_GC2_SWEEP) {
+    gc2_worker_release(g);
+    return 0;
+  }
+  gc2_jit_phase_gate_close(g);
+  if (lj_tg_any_jit_active(g) || gc2_jit_recorder_active(g)) {
+    if (gc2_jit_recorder_active(g))
+      lj_trace_abort(g);
+    gc2_jit_sweep_displaced_rel(g, 1);
+    gc2_worker_release(g);
+    return 0;  /* The trace exit publishes quiescence. */
+  }
+  phase = gc2_phase_acq(g);
+  if (phase != LJ_GC2_SWEEP) {
+    if (phase == LJ_GC2_IDLE)
+      gc2_jit_phase_gate_open_idle(g);
+    gc2_worker_release(g);
+    return 0;
+  }
+  return gc2_sweep_to_idle_owned(g);
 }
 
 void lj_gc2_cycle_to_idle(global_State *g)
@@ -23212,6 +23216,17 @@ static uint32_t gc2_worker_drain_inner(global_State *g, TGState *logical_tg,
       gc2_phase_acq(g) == LJ_GC2_MARK &&
       gc2_mark_close_intent_acq(g) == 0)
     gc2_jit_phase_gate_open_mark(g, 1);
+  /* A drained frontier needs the same closed entry gate as terminal close.
+  ** Reopening here would let a running peer take another trace before the
+  ** caller can claim close, even when the worker found no remaining work.
+  ** Only scheduler drivers may close here. The drain-only API has no
+  ** completion result and leaves the phase to its caller. */
+  if (progress && sweep_gate_closed && total == 0 &&
+      gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+      gc2_deferred_epoch_acq(g) == defer0) {
+    *progress = (uint32_t)gc2_sweep_to_idle_owned(g);
+    return *progress;
+  }
   if (sweep_gate_closed && gc2_phase_acq(g) == LJ_GC2_SWEEP)
     gc2_jit_phase_gate_open_sweep(g, 0);
   gc2_worker_release(g);
