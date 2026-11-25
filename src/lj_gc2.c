@@ -3950,7 +3950,8 @@ static LJ_NOINLINE void gc2_mark_tab_retired_mem(global_State *g)
     ** control marking: resize links records before the new generation is fully
     ** published, and transient snapshots can still point at that old storage.
     */
-    lj_gc2_markmem(g, lj_tab_node_hdrw(lj_tab_node_retired_node_acq(ret)));
+    if (lj_tab_node_retired_armed_acq(ret) != TAB_NODE_RETIRE_CANCELED)
+      lj_gc2_markmem(g, lj_tab_node_hdrw(lj_tab_node_retired_node_acq(ret)));
     ret = nextret;
     if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, ret))) {
       gc2_root_scan_retry(g);
@@ -3981,9 +3982,9 @@ static LJ_NOINLINE void gc2_mark_tab_retired_mem(global_State *g)
   gc2_root_cycle_guard_init(&guard, desc);
   while (desc != NULL && lj_gc2_mem_registered(g, desc)) {
     GCtab *t;
-    uint32_t cutover = lj_tab_resize_desc_flags_acq(desc) &
-      TAB_RESIZE_DESC_F_RUNTIME_CUTOVER;
     uint32_t phase = lj_tab_resize_desc_phase_acq(desc);
+    uint32_t flags = lj_tab_resize_desc_flags_acq(desc);
+    uint32_t cutover = flags & TAB_RESIZE_DESC_F_RUNTIME_CUTOVER;
     nextdesc = lj_tab_resize_desc_next_acq(desc);
     (void)lj_gc2_markmem(g, desc);
     /*
@@ -3992,18 +3993,27 @@ static LJ_NOINLINE void gc2_mark_tab_retired_mem(global_State *g)
     ** cannot disappear while a helper resolves its descriptor id. Immutable
     ** vector/intent payload joins this scan before runtime markers are enabled.
     */
-    if (cutover && phase == TAB_RESIZE_DESC_TERMINAL)
+    if (cutover && phase == TAB_RESIZE_DESC_TERMINAL) {
+      if (flags & TAB_RESIZE_DESC_F_CANCELED)
+	(void)lj_gc2_markmem(g, lj_tab_node_hdrw(desc->newnode));
       goto next_desc;
+    }
     t = lj_tab_resize_desc_tab_acq(desc);
     if (LJ_UNLIKELY(t == NULL || !lj_gc2_mem_registered(g, t))) {
       gc2_root_scan_retry(g);
       break;
     }
     if (cutover) {
+      /* The intent may be visible before its issuer links the old record. */
+      if (flags & TAB_RESIZE_DESC_F_EARLY_HASH)
+	(void)lj_gc2_markmem(g, desc->oldret);
       /* Protect the rebuilt vector even before the owner transfers control. */
       if (phase == TAB_RESIZE_DESC_INSTALLING ||
+	  phase == TAB_RESIZE_DESC_RETIRING ||
 	  phase == TAB_RESIZE_DESC_MIGRATING ||
-	  phase == TAB_RESIZE_DESC_PUBLISHING) {
+	  phase == TAB_RESIZE_DESC_PUBLISHING ||
+	  phase == TAB_RESIZE_DESC_CLEARING ||
+	  (flags & TAB_RESIZE_DESC_F_CANCELED)) {
 	if (cutover & TAB_RESIZE_DESC_F_ARRAY_CUTOVER)
 	  (void)lj_gc2_markmem(g, lj_tab_array_hdrw(desc->newarray));
 	if (cutover & TAB_RESIZE_DESC_F_HASH_CUTOVER)

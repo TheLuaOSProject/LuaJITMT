@@ -726,6 +726,8 @@ typedef struct TabNodeRetire {
   struct TabNodeRetire *next;
 } TabNodeRetire;
 
+#define TAB_NODE_RETIRE_CANCELED 2u
+
 typedef struct TabArrayHdr {
   MSize asize;		/* Visible array size paired with the slots vector. */
   MSize acap;		/* Capacity plus high-bit state flags. */
@@ -769,6 +771,8 @@ enum {
 #define TAB_RESIZE_DESC_F_VM_GUARD_RELEASED	0x00000008u
 #define TAB_RESIZE_DESC_F_HASH_CUTOVER	0x00000010u
 #define TAB_RESIZE_DESC_F_ARRAY_CUTOVER	0x00000020u
+#define TAB_RESIZE_DESC_F_EARLY_HASH	0x00000040u
+#define TAB_RESIZE_DESC_F_CANCELED	0x00000080u
 #define TAB_RESIZE_DESC_F_RUNTIME_CUTOVER \
   (TAB_RESIZE_DESC_F_HASH_CUTOVER | TAB_RESIZE_DESC_F_ARRAY_CUTOVER)
 
@@ -789,6 +793,7 @@ typedef struct TabResizeDesc {
   TValue *newarray;
   TabArrayRetire *oldaret;
   int migration_weak;
+  la_u128 oldshape;	/* Metadata expected by an early hash descriptor. */
   GCSize hash_move_bytes;	/* Total size when hash move records follow. */
   uint64_t id;
   uint64_t stable_control;  /* Exact pre-install {owner, acap} word. */
@@ -810,6 +815,15 @@ typedef struct GC2FinRegUDataNode {
   uint32_t active;	/* Node is still part of active discovery set. */
 } GC2FinRegUDataNode;
 
+typedef union LJTabShape {
+  struct {
+    uint32_t asize;
+    uint32_t hmask;
+    MRef freetop;
+  } fields;
+  la_u128 packed;
+} LJTabShape;
+
 typedef struct GCtab {
   GCHeader;
   uint8_t nomm;		/* Negative cache for fast metamethods. */
@@ -819,9 +833,14 @@ typedef struct GCtab {
   GCRef gclist;
   GCRef metatable;	/* Must be at same offset in GCudata. */
   MRef node;		/* Hash part. */
-  uint32_t asize;	/* Size of array part (keys [0, asize-1]). */
-  uint32_t hmask;	/* Hash part mask (size of hash part - 1). */
-  MRef freetop;		/* Top of free elements. */
+  union {
+    struct {
+      uint32_t asize;	/* Size of array part (keys [0, asize-1]). */
+      uint32_t hmask;	/* Hash part mask (size of hash part - 1). */
+      MRef freetop;	/* Top of free elements. */
+    };
+    la_u128 resize_shape;  /* Generation-bound raw compatibility metadata. */
+  };
   union {
     struct {
       union {
@@ -842,6 +861,8 @@ typedef struct GCtab {
   };
 } GCtab;
 
+LJ_STATIC_ASSERT(offsetof(GCtab, resize_shape) == offsetof(GCtab, asize));
+LJ_STATIC_ASSERT((offsetof(GCtab, resize_shape) & 15u) == 0);
 LJ_STATIC_ASSERT((offsetof(GCtab, weak_record) & 7u) == 0);
 LJ_STATIC_ASSERT((offsetof(GCtab, struct_control) & 7u) == 0);
 LJ_STATIC_ASSERT((offsetof(GCtab, struct_weak_pair) & 15u) == 0);

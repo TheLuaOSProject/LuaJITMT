@@ -53,6 +53,7 @@ static GCtab *resize_hook_tab;
 static volatile int *resize_hook_entered;
 static volatile int *resize_hook_release;
 static pthread_t copy_owner;
+static MSize hash_install_pause_stage;
 static char collision_keys[4][128];
 
 static global_State *first_attach_g;
@@ -294,6 +295,10 @@ static void *resize_worker(void *arg)
     array_migration_mutate(L, ctx->mutate == 5);
   else if (ctx->mutate == 4)
     hash_migration_mutate(L);
+  else if (ctx->mutate == 6) {
+    lj_tab_resize(L, t, ctx->asize, ctx->hbits);
+    hash_cutover_mutate(L, 1);
+  }
   else if (ctx->mutate)
     hash_cutover_mutate(L, ctx->mutate == 2);
   else
@@ -901,6 +906,84 @@ static void exercise_resize_noop_owner(lua_State *L)
   assert(lj_tab_test_struct_enter_acquires() == 0);
 }
 
+static void hash_install_hold_hook(lua_State *L, GCtab *t,
+				     TValue *array, MSize installed)
+{
+  UNUSED(L); UNUSED(array);
+  if (t != resize_hook_tab || installed != hash_install_pause_stage ||
+      !pthread_equal(pthread_self(), copy_owner) || load_flag(resize_hook_entered))
+    return;
+  store_flag(resize_hook_entered, 1);
+  while (!load_flag(resize_hook_release))
+    sched_yield();
+}
+
+static void exercise_hash_install_owner(lua_State *L, MSize installed)
+{
+  volatile int ready = 0, owner_start = 0, other_start = 0;
+  volatile int owner_done = 0, other_done = 0;
+  volatile int hook_entered = 0, hook_release = 0;
+  ResizeCtx owner = { 0 }, other = { 0 };
+  pthread_t other_thr;
+  GCtab *t;
+  Node *oldnode;
+
+  lua_settop(L, 0);
+  lua_createtable(L, 0, 4);
+  t = tabV(L->top - 1);
+  lua_pushinteger(L, 11);
+  lua_rawseti(L, 1, -1);
+  lua_pushinteger(L, 22);
+  lua_rawseti(L, 1, -2);
+  oldnode = lj_tab_node_acq(t);
+  owner.L = new_child_with_table(L, 1);
+  owner.ready = &ready;
+  owner.start = &owner_start;
+  owner.done = &owner_done;
+  owner.hbits = 6;
+  owner.status = -1;
+  other.L = new_child_with_table(L, 1);
+  other.ready = &ready;
+  other.start = &other_start;
+  other.done = &other_done;
+  other.hbits = 7;
+  other.mutate = 6;
+  other.status = -1;
+  resize_hook_tab = t;
+  resize_hook_entered = &hook_entered;
+  resize_hook_release = &hook_release;
+  hash_install_pause_stage = installed;
+  lj_tab_test_set_hash_install_hook(hash_install_hold_hook);
+  assert(pthread_create(&copy_owner, NULL, resize_worker, &owner) == 0);
+  assert(pthread_create(&other_thr, NULL, resize_worker, &other) == 0);
+  assert(wait_for_flag(&ready, 2, 1000000));
+  store_flag(&owner_start, 1);
+  assert(wait_for_flag(&hook_entered, 1, 1000000));
+  assert(lj_tab_node_acq(t) == oldnode && !lj_tab_node_is_retiring(oldnode));
+  if (installed)
+    assert(lj_tab_resize_desc_control_acq(t) != NULL);
+  else
+    assert(lj_tab_struct_owner_acq(t) == 0);
+
+  store_flag(&other_start, 1);
+  assert(wait_for_flag(&other_done, 1, 1000000));
+  assert(!load_flag(&owner_done));
+  assert(lj_tab_node_acq(t) != oldnode && lj_tab_hmask_acq(t) == 127);
+  assert(lj_tab_resize_desc_control_acq(t) == NULL);
+  assert_hash_cutover_values(L);
+
+  store_flag(&hook_release, 1);
+  assert(wait_for_flag(&owner_done, 1, 1000000));
+  assert(pthread_join(copy_owner, NULL) == 0 && owner.status == 0);
+  assert(pthread_join(other_thr, NULL) == 0 && other.status == 0);
+  lj_tab_test_set_hash_install_hook(NULL);
+  resize_hook_tab = NULL;
+  resize_hook_entered = NULL;
+  resize_hook_release = NULL;
+  assert(lj_tab_hmask_acq(t) == 127);
+  assert_hash_cutover_values(L);
+}
+
 static void first_attach_hold_hook(global_State *g)
 {
   if (g != first_attach_g)
@@ -1019,6 +1102,8 @@ int main(void)
   exercise_array_migration_owner(L, 0, 1);
   exercise_array_migration_owner(L, 1, 1);
   exercise_hash_migration_owner(L);
+  exercise_hash_install_owner(L, 0);
+  exercise_hash_install_owner(L, 1);
   exercise_wait_stopreq(L);
   lua_close(L);
 
