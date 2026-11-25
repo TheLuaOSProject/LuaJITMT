@@ -414,7 +414,8 @@ return function(add)
         print("M3 worker SWEEP fixtures require Linux x64 and GNU ld wrapping")
         return
       end
-      build.clean_build(t)
+      local opts = build.trace_helper_opts()
+      build.clean_build(t, opts)
       local env = {
         LUA_PATH = t:path("src", "?.lua") .. ";;",
         RETENTION_JIT = "0"
@@ -426,7 +427,8 @@ return function(add)
           libs[#libs + 1] = "-Wl,--wrap=" .. symbol
         end
         t:cc(out, { t:path("tests", name .. ".c") }, {
-          cflags = "-g -Wall -Wextra -Werror", link_luajit = true, libs = libs
+          cflags = "-g -Wall -Wextra -Werror " .. opts.cflags,
+          link_luajit = true, libs = libs
         })
         for _, mode in ipairs(modes) do
           local argv = { out }
@@ -450,7 +452,8 @@ return function(add)
       run("t-gc2-sweep-step-close", { {} })
       run("t-gc2-auto-sweep-start", {
         {}, { "reset" }, { "roots" }, { "pool-reset" }, { "pool-roots" },
-        { "pool-reset", "stop" }, { "pool-roots", "stop" }
+        { "pool-reset", "stop" }, { "pool-roots", "stop" },
+        { "pool-reset", "publish" }, { "pool-roots", "publish" }
       }, { "lj_safepoint_handshake", resumable })
       run("t-worker-bridge-stop", stop_modes, { resumable })
       run("t-worker-bridge-detach", { { "0" }, { "1" } }, {

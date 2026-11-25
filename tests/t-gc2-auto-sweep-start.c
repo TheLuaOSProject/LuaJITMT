@@ -18,6 +18,11 @@
 static atomic_int ready, enabled, requested, parked, release_peer, timeout_hit;
 static _Atomic(TGState *) peer_tg;
 static int pool, stop_pool;
+#ifdef LJ_TRACE_TEST_HELPERS
+static int pause_publish;
+static atomic_int pool_started, first_attempt_returned;
+static uint64_t paused_epoch;
+#endif
 static uint32_t target = LJ_GC2_HS_DISABLE_BARRIER | LJ_GC2_HS_ALLOC_BLACK;
 
 static void pause_briefly(void)
@@ -45,24 +50,32 @@ static int hold_peer(lua_State *L)
   return 0;
 }
 
-static void before_actions(global_State *g, uint32_t actions)
+static int before_actions(global_State *g, uint32_t actions)
 {
   if (!atomic_load(&enabled) || (actions & target) != target ||
       atomic_exchange(&requested, 1))
-    return;
+    return 0;
   if (pool) {
     TGState *self = lj_thr_get_tg();
     assert(self && self != g->main_tg && lj_tg_load_cur_L(self) == NULL);
   }
   while (!atomic_load(&parked) && !atomic_load(&release_peer))
     pause_briefly();
+#ifdef LJ_TRACE_TEST_HELPERS
+  if (pause_publish) {
+    while (!atomic_load(&pool_started) && !atomic_load(&release_peer))
+      pause_briefly();
+    lj_safepoint_test_signal_pause_arm(g->main_tg);
+  }
+#endif
+  return 1;
 }
 
 uint32_t __real_lj_safepoint_handshake(global_State *, uint32_t);
 uint32_t __wrap_lj_safepoint_handshake(global_State *g, uint32_t actions)
 {
   if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
-    before_actions(g, actions);
+    (void)before_actions(g, actions);
   return __real_lj_safepoint_handshake(g, actions);
 }
 
@@ -70,9 +83,16 @@ int __real_lj_safepoint_resumable_epoch_try(global_State *, uint32_t, int);
 int __wrap_lj_safepoint_resumable_epoch_try(global_State *g, uint32_t actions,
                                              int start)
 {
-  if (start && gc2_phase_acq(g) == LJ_GC2_SWEEP)
+  int observed = start && gc2_phase_acq(g) == LJ_GC2_SWEEP &&
     before_actions(g, actions);
-  return __real_lj_safepoint_resumable_epoch_try(g, actions, start);
+  int complete = __real_lj_safepoint_resumable_epoch_try(g, actions, start);
+#ifdef LJ_TRACE_TEST_HELPERS
+  if (pause_publish && observed)
+    atomic_store(&first_attempt_returned, 1);
+#else
+  (void)observed;
+#endif
+  return complete;
 }
 
 static int begin(lua_State *L)
@@ -95,6 +115,30 @@ static int begin(lua_State *L)
     lua_gc(L, LUA_GCSTOP, 0);
     assert(lj_gc2_workers_set_l(L, 2, &actions) == 1);
     assert((actions & LJ_GC2_HS_STOPREQ) == 0);
+#ifdef LJ_TRACE_TEST_HELPERS
+    if (pause_publish) {
+      TGState *self = L2TG(L);
+      atomic_store(&pool_started, 1);
+      while (!lj_safepoint_test_signal_paused() && !atomic_load(&release_peer))
+	pause_briefly();
+      assert(lj_tg_reqmask_acq(self) & target);
+      assert(lj_tg_poll_acq(self) == 0);
+      paused_epoch = gc2_hs_epoch_acq(g);
+      assert(lj_safepoint_poll(L) & target);
+      assert(lj_tg_hs_epoch_ack_acq(self) == paused_epoch);
+      assert(lj_tg_reqmask_acq(self) == 0 && lj_tg_poll_acq(self) == 0);
+      lj_safepoint_test_signal_pause_release();
+      while (!atomic_load(&first_attempt_returned) && !atomic_load(&release_peer))
+	pause_briefly();
+      /* The original publish turn has stored poll, and the parked peer keeps
+      ** this exact epoch live. The completed local action must let us run. */
+      assert(gc2_hs_epoch_acq(g) == paused_epoch && gc2_hs_pending_acq(g) != 0);
+      assert(lj_tg_reqmask_acq(peer) & target);
+      assert(lj_safepoint_test_signal_resumed_poll_stores() == 1);
+      assert(lj_tg_reqmask_acq(self) == 0 && lj_tg_poll_acq(self) == 0);
+      assert(lj_safepoint_test_signal_consumed_clears() == 1);
+    }
+#endif
     while (!(lj_tg_reqmask_acq(peer) & target) && !atomic_load(&release_peer)) {
       (void)lj_safepoint_poll(L);
       pause_briefly();
@@ -166,12 +210,17 @@ static void *watchdog(void *unused)
 int main(int argc, char **argv)
 {
   static const char source[] =
-    "local hold, begin, parked, finish = ...\n"
+    "local hold, begin, parked, finish, late_attach = ...\n"
     "if jit then jit.off() end\n"
     "collectgarbage('stop')\n"
     "local th = require('threading')\n"
     "local peer = assert(th.spawn(function(hold) hold('live sweep peer') end, hold))\n"
     "while not begin() do th.sleep(0.001) end\n"
+    "if late_attach then\n"
+    "  local late = assert(th.spawn(function() return 17 end))\n"
+    "  local ok, value = late:join(5)\n"
+    "  assert(ok and value==17)\n"
+    "end\n"
     "local keep = {}\n"
     "for i=1,100000 do keep[i%8+1]={i}; if parked() then break end end\n"
     "assert(parked())\n"
@@ -195,8 +244,15 @@ int main(int argc, char **argv)
       target = LJ_GC2_HS_SCAN_ROOTS;
     }
     if (argc == 3) {
-      assert(pool && !strcmp(argv[2], "stop"));
-      stop_pool = 1;
+      assert(pool);
+#ifdef LJ_TRACE_TEST_HELPERS
+      pause_publish = !strcmp(argv[2], "publish");
+      if (!pause_publish)
+#endif
+      {
+	assert(!strcmp(argv[2], "stop"));
+	stop_pool = 1;
+      }
     } else {
       assert(argc == 2);
     }
@@ -208,8 +264,13 @@ int main(int argc, char **argv)
   lua_pushcfunction(L, begin);
   lua_pushcfunction(L, park_seen);
   lua_pushcfunction(L, finish);
+#ifdef LJ_TRACE_TEST_HELPERS
+  lua_pushboolean(L, pause_publish);
+#else
+  lua_pushboolean(L, 0);
+#endif
   assert(pthread_create(&timer, NULL, watchdog, NULL) == 0);
-  status = lua_pcall(L, 4, 0, 0);
+  status = lua_pcall(L, 5, 0, 0);
   atomic_store(&release_peer, 1);
   assert(pthread_join(timer, NULL) == 0);
   if (status != LUA_OK)
@@ -217,6 +278,12 @@ int main(int argc, char **argv)
   else {
     assert(gc2_phase_acq(G(L)) == LJ_GC2_IDLE);
     assert(gc2_n_workers_acq(G(L)) == (pool && !stop_pool ? 2u : 0u));
+#ifdef LJ_TRACE_TEST_HELPERS
+    if (pause_publish) {
+      assert(lj_tg_hs_epoch_ack_acq(L2TG(L)) > paused_epoch);
+      lj_safepoint_test_signal_pause_reset();
+    }
+#endif
   }
   lua_close(L);
   assert(status == LUA_OK);

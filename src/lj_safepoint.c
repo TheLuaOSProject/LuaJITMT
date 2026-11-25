@@ -964,6 +964,7 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
 {
   TGState *tg;
   uint32_t signaled = 0;
+  int resumable = safepoint_resumable_actions(actions);
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
@@ -973,7 +974,7 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
       continue;  /* 09 section 9.3: attach self-caught this epoch. */
     if (lj_tg_reqmask_acq(tg) != 0)
       continue;  /* Already counted by this handshake. */
-    if (safepoint_resumable_actions(actions)) {
+    if (resumable) {
       /* A native executor consumes reqmask before its stack scan. Do not
       ** issue a duplicate that a local executor could ACK and clear first. */
       if (la_load64_acq(&tg->hs_resumable_epoch_signaled) == epoch)
@@ -1000,7 +1001,18 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
     ** the request and acknowledges itself, or the leader observes native and
     ** completes the remote snapshot before clearing the consumed poll. */
     la_fence_seq();
-    lj_tg_poll_futex_wake(tg, 1);
+    if (resumable && lj_tg_reqmask_acq(tg) == 0 &&
+	lj_tg_hs_epoch_ack_acq(tg) == epoch) {
+      /* The owner can consume the request before our poll store. This turn
+      ** has not begun remote acknowledgement and the collector token excludes
+      ** another executor. Remove the redundant signal so the owner can run
+      ** while other TGs still owe this epoch, and preserve fresh STOPREQ. */
+      safepoint_clear_poll(tg);
+      safepoint_test_signal_note_consumed_clear(tg, epoch);
+      safepoint_rearm_fresh_stopreq_poll(tg);
+    } else {
+      lj_tg_poll_futex_wake(tg, 1);
+    }
     safepoint_completion_test_pause(g, tg, epoch,
       LJ_SAFEPOINT_COMPLETION_TEST_SIGNALED);
     if (lj_safepoint_retire_dead_tg(g, tg) && signaled != 0)
