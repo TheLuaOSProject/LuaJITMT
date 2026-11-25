@@ -296,7 +296,7 @@ static LJ_AINLINE StrID strid_next(lua_State *L, global_State *g)
   return strid_refill(g, tg);
 }
 
-static LJ_NOINLINE MSize strnum_refill(global_State *g, TGState *tg)
+static LJ_NOINLINE void strnum_refill(global_State *g, TGState *tg)
 {
   /*
   ** `g->str.num` is the shared resize/shrink and close-time string count.
@@ -306,21 +306,19 @@ static LJ_NOINLINE MSize strnum_refill(global_State *g, TGState *tg)
   ** close, removing a contended RMW from the common successful-intern path
   ** while preserving exact final accounting.
   */
-  MSize n = lj_str_num_add_rlx(g, LJ_STRNUM_BLOCK) + LJ_STRNUM_BLOCK;
+  (void)lj_str_num_add_rlx(g, LJ_STRNUM_BLOCK);
   tg->strnum_credit = LJ_STRNUM_BLOCK - 1u;
   str_test_num_refill();
-  return n;
 }
 
-static LJ_AINLINE int strnum_publish_success(global_State *g, TGState *tg,
-					     MSize mask)
+static LJ_AINLINE void strnum_publish_success(global_State *g, TGState *tg)
 {
   uint32_t credit = tg->strnum_credit;
   if (credit != 0) {
     tg->strnum_credit = credit - 1u;
-    return 0;
+  } else {
+    strnum_refill(g, tg);
   }
-  return strnum_refill(g, tg) > mask;
 }
 
 void lj_str_flush_num_credit(global_State *g, TGState *tg)
@@ -987,7 +985,11 @@ static void str_resize(lua_State *L, MSize newmask, const StrTabHdr *source)
 #ifdef LJ_STR_TEST_HELPERS
   str_test_canon(L, NULL, NULL, LJ_STR_TEST_CANON_RESIZE_ALLOC);
 #endif
-  newhdr = (StrTabHdr *)lj_mem_new(L, newsize);
+  newhdr = (StrTabHdr *)lj_mem_new_nothrow(L, newsize);
+  if (!newhdr) {
+    if (!source) lj_err_mem(L);
+    return;
+  }
   memset(newhdr, 0, newsize);
   newhdr->mask = newmask;
   newhdr->dense_mask = dense_mask;
@@ -1487,7 +1489,7 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
       MSize mask;
       uintptr_t headu, u;
       uintptr_t want;
-      int grow, qretry;
+      int qretry;
       if (!hdr && blocked)
 	hdr = strtab_enter_completed(L, g, qhash, str, len, &selected_alg);
       if (LJ_UNLIKELY(hdr == NULL)) {
@@ -1551,6 +1553,12 @@ lookup:
       }
       if (news == NULL) {
 	GCstr *qs;
+	/* Grow on a confirmed miss before allocating the candidate. A GC
+	** checkpoint inside directory allocation can then run without an
+	** unrooted result. Only a TG about to refill count credits checks. */
+	int grow = L2TG(L)->strnum_credit == 0 &&
+	  (uint64_t)lj_str_num_acq(g) + LJ_STRNUM_BLOCK > mask &&
+	  lj_str_tabh_acq(g) == hdr;
 	strtab_leave(L, hdr);
 	qs = strcanon_lookup(L, str, len, qhash, &qretry);
 	if (qs)
@@ -1559,6 +1567,8 @@ lookup:
 	  strtab_wait(L);
 	  continue;
 	}
+	if (grow)
+	  str_resize(L, (mask << 1) + 1u, hdr);
 	news = lj_str_alloc(L, str, len, qhash);
 	continue;
       }
@@ -1590,12 +1600,8 @@ lookup:
       if (!lj_str_link_cas_acqrel(head, &u, want))  /* Intern linearization. */
 	goto retry_lookup;
       la_storeptr_rel((void **)strtab_resize_hit_slot(g, qhash), news);
-      grow = strnum_publish_success(g, L2TG(L), mask);
+      strnum_publish_success(g, L2TG(L));
       strtab_leave(L, hdr);
-      /* The earlier source owns topology until it publishes this target.
-      ** A speculative next directory would lose that claim on every credit. */
-      if (grow && lj_str_tabh_acq(g) == hdr)
-	str_resize(L, (mask << 1) + 1u, hdr);
       return news;  /* Return newly interned string. */
     }
   } else {

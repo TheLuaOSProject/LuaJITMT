@@ -131,6 +131,11 @@ return function(add)
         cflags = strtab_cflags,
         timeout = "20s"
       })
+      compile_and_run_c(t, t:tmp("lj_t-strtab-growth-oom"),
+                        "t-strtab-growth-oom.c", {
+        cflags = strtab_cflags, timeout = "20s",
+        libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=lj_arena_allocf" }
+      })
       compile_and_run_c(t, t:tmp("lj_t-str-reclaim-cohort-step"),
                         "t-str-reclaim-cohort-step.c", {
         cflags = strtab_cflags,
