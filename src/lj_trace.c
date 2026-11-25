@@ -11237,7 +11237,9 @@ static void trace_stop_admit(jit_State *J, TraceNo parentno, TraceNo rootno,
     lj_trace_err(J, LJ_TRERR_RETRY);
 }
 
-/* Stop tracing. */
+#define TRACE_STOP_PARKED (-1)
+
+/* Stop tracing. Return the GC pressure hint or TRACE_STOP_PARKED. */
 static int trace_stop(jit_State *J)
 {
   BCIns *pc = mref(J->cur.startpc, BCIns);
@@ -11407,21 +11409,29 @@ static int trace_stop(jit_State *J)
     /* Keep ordinary abort inspection while the recorder is active. Cleanup is
     ** already a durable reserved-slot request, so this callback may flush,
     ** collect or reuse the number without any later raw T access here. */
-    lj_vmevent_send_l(J->L, TRACE,
+    lj_vmevent_send_l_(J->L, TRACE,
       setstrV(V, V->top++, lj_str_newlit(V, "abort"));
       setintV(V->top++, traceno);
       setfuncV(V, V->top++, J->fn);
       setintV(V->top++, proto_bcpos(pt, pc));
       setintV(V->top++, LJ_TRERR_RETRY);
       setnilV(V->top++);
+      trace_event_park_begin(V);
+    ,
+      if (trace_event_park_end())
+	return TRACE_STOP_PARKED;
     );
     return 0;
   }
 
-  lj_vmevent_send_l(J->L, TRACE,
+  lj_vmevent_send_l_(J->L, TRACE,
     setstrV(V, V->top++, lj_str_newlit(V, "stop"));
     setintV(V->top++, traceno);
     setfuncV(V, V->top++, J->fn);
+    trace_event_park_begin(V);
+  ,
+    if (trace_event_park_end())
+      return TRACE_STOP_PARKED;
   );
   /* Count only completely published traces. The caller releases the recorder
   ** token before converting this hint into an ordinary GC2 cycle request. */
@@ -11541,7 +11551,7 @@ static TraceAbortResult trace_abort(jit_State *J)
     ** still owns the recorder token, so only this collision path suppresses
     ** instrumentation. Ordinary RETRY remains API-visible. */
     if (e != LJ_TRERR_SMRRETRY) {
-      lj_vmevent_send_l(L, TRACE,
+      lj_vmevent_send_l_(L, TRACE,
 	cTValue *bot = tvref(L->stack)+LJ_FR2;
 	cTValue *frame;
 	const BCIns *pc;
@@ -11565,6 +11575,12 @@ static TraceAbortResult trace_abort(jit_State *J)
 	setintV(V->top++, pos);
 	copyTV(V, V->top++, restorestack(L, vmevtop)-1);
 	copyTV(V, V->top++, &J->errinfo);
+	trace_event_park_begin(V);
+      ,
+	if (trace_event_park_end()) {
+	  L->top--;  /* Remove the recorder error after the callback unwinds. */
+	  return TRACE_ABORT_PARKED;
+	}
       );
     }
     /* Drop aborted trace after the optional vmevent (which may still access it). */
@@ -11800,6 +11816,8 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
         if (lj_trace_state_aborted(lj_trace_state_load(J)))
 	  goto retry;
         gc_pressure = trace_stop(J);
+        if (gc_pressure == TRACE_STOP_PARKED)
+          return NULL;
         trace_terminal_release(J->L, J);
         if (gc_pressure)
 	  (void)lj_gc2_request_cycle_pressure(G(L), L2TG(L));
@@ -11898,9 +11916,9 @@ void lj_trace_abort_owner(lua_State *L)
   trace_test_admission_maybe_clobber_cleanup_oserr();
 }
 
-/* A start/record callback can park while a peer is trying to flush. Cancel
-** only the recorder whose protected continuation accepts detachment. The
-** callback owns its Lua arguments independently of the compiler scratch. */
+/* A recorder callback can park while a peer is trying to flush. Cancel only
+** the recorder whose protected continuation accepts detachment. The callback
+** owns its Lua arguments independently of the compiler scratch. */
 void lj_trace_abort_owner_before_park(lua_State *L)
 {
   global_State *g;
