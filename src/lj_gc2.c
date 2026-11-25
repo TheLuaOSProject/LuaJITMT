@@ -6797,7 +6797,7 @@ static int gc2_sweep_to_idle_owned(global_State *g)
       gc2_weak_owned_peer_active(g) ||
       gc2_sweep_bridge_owner_roots_pending(g) ||
       gc2_table_rescan_pending_acq(g) != 0 ||
-      gc2_sweep_grace_needed_acq(g) || !lj_gc2_ssb_empty(g) ||
+      gc2_sweep_grace_needed_acq(g) ||
       !gc2_recovery_empty(g) ||
       !gc2_grey_empty(g) || lj_gc2_sweep_needs_prepare(g) ||
       lj_gc2_sweep_pending(g) ||
@@ -6808,9 +6808,12 @@ static int gc2_sweep_to_idle_owned(global_State *g)
     gc2_worker_release(g);
     return 0;
   }
+  /* A below-capacity suffix may be the only remaining work once all sweep
+  ** owners finished. Flush it under the close gate before testing for an
+  ** empty SSB; otherwise the final flush can never consume that suffix. */
   (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
   (void)gc2_flush_ssb(g, G2TG(g), 0);
-  (void)gc2_drain_ssb_owned(g);
+  (void)gc2_mark_drain_owned_bounded(g, LJ_GC2_SWEEP_BATCH);
   /* The final handshake can publish sweep-rescue edges after the first close
   ** predicate. Revalidate while retaining the worker token; using the generic
   ** drain here would fail by trying to acquire our own token. */
