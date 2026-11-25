@@ -18,6 +18,8 @@
 static atomic_int ready, enabled, requested, parked, release_peer, timeout_hit;
 static _Atomic(TGState *) peer_tg;
 static int pool, stop_pool;
+static uint32_t grace_round;
+static atomic_uint grace_signals;
 #ifdef LJ_TRACE_TEST_HELPERS
 static int pause_publish;
 static atomic_int pool_started, first_attempt_returned;
@@ -52,8 +54,13 @@ static int hold_peer(lua_State *L)
 
 static int before_actions(global_State *g, uint32_t actions)
 {
-  if (!atomic_load(&enabled) || (actions & target) != target ||
-      atomic_exchange(&requested, 1))
+  if (!atomic_load(&enabled) || (actions & target) != target || atomic_load(&requested))
+    return 0;
+  if (grace_round && (!gc2_sweep_bridge_ready_acq(g) || !gc2_sweep_grace_needed_acq(g) ||
+      (actions & ~(LJ_GC2_HS_FLUSH_SSB | LJ_GC2_HS_SCAN_OWNER_ROOTS)) ||
+      atomic_fetch_add(&grace_signals, 1) + 1 != grace_round))
+    return 0;
+  if (atomic_exchange(&requested, 1))
     return 0;
   if (pool) {
     TGState *self = lj_thr_get_tg();
@@ -145,7 +152,8 @@ static int begin(lua_State *L)
       assert(lj_safepoint_test_signal_consumed_clears() == 1);
     }
 #endif
-    while (!(lj_tg_reqmask_acq(peer) & target) && !atomic_load(&release_peer)) {
+    while ((!atomic_load(&requested) || !(lj_tg_reqmask_acq(peer) & target)) &&
+	   !atomic_load(&release_peer)) {
       (void)lj_safepoint_poll(L);
       pause_briefly();
     }
@@ -168,7 +176,10 @@ static int finish(lua_State *L)
   if (!atomic_load(&release_peer)) {
     assert(gc2_phase_acq(g) == LJ_GC2_SWEEP);
     assert(gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN);
-    assert(gc2_sweep_bridge_ready_acq(g) == 0 && gc2_jit_phase_gate_acq(g) == 0);
+    assert(gc2_jit_phase_gate_acq(g) == 0);
+    assert(gc2_sweep_bridge_ready_acq(g) == (grace_round != 0));
+    if (grace_round)
+      assert(la_load32_acq(&g->gc2.sweep_grace_needed) == (LJ_GC2_GRACE_ACTIVE | grace_round));
     assert(gc2_hs_pending_acq(g) != 0 && !lj_tg_mark_active_acq(L2TG(L)));
     assert(lj_tg_alloc_black_acq(L2TG(L)));
     if (target == LJ_GC2_HS_RESET_ALLOC || target == LJ_GC2_HS_SCAN_ROOTS)
@@ -243,7 +254,10 @@ int main(int argc, char **argv)
     pool = !strncmp(action, "pool-", 5);
     if (pool)
       action += 5;
-    if (!strcmp(action, "reset"))
+    if (!strcmp(action, "grace1") || !strcmp(action, "grace2")) {
+      grace_round = (uint32_t)(action[5] - '0');
+      target = LJ_GC2_HS_FLUSH_SSB;
+    } else if (!strcmp(action, "reset"))
       target = LJ_GC2_HS_RESET_ALLOC;
     else {
       assert(!strcmp(action, "roots"));

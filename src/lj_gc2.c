@@ -156,6 +156,7 @@ static void gc2_jit_phase_gate_open_sweep(global_State *g, int mutator_turn)
   uint64_t deadline = 0;
   if (!g || la_load32_acq(&g->gc2.explicit_collectors) != 0 ||
       gc2_phase_acq(g) != LJ_GC2_SWEEP ||
+      gc2_fixpoint_epoch_actions_acq(g) != 0 ||
       !gc2_sweep_bridge_ready_acq(g))
     return;
   lj_assertG(gc2_phase_acq(g) == LJ_GC2_SWEEP &&
@@ -5881,16 +5882,24 @@ static int gc2_sweep_root_snapshot(global_State *g)
   return gc2_fixpoint_epoch_owned(g, 1) && gc2_sweep_root_scanned_acq(g) == 1;
 }
 
-static int gc2_sweep_bridge_epoch(global_State *g, uint32_t actions)
+/* A retire publisher stores 1 even if a grace is already in flight. The CAS
+** on completion cannot credit that new retirement with an earlier epoch. */
+static int gc2_sweep_epoch(global_State *g, uint32_t actions, uint32_t grace)
 {
-  /* A TG can attach after READY. Close native entry before starting its
-  ** allocator reset, just as for the initial rotation before the bridge. */
+  /* A TG can attach after READY, and a reclaim quantum may need another
+  ** owner scan or grace. Keep native entry closed across outstanding ACKs. */
   if (gc2_jit_phase_gate_acq(g) != 0)
     gc2_jit_phase_gate_close(g);
   if (lj_tg_any_jit_active(g) || gc2_jit_recorder_active(g))
     return 0;
   if (!gc2_fixpoint_epoch_reserve(g))
     return 0;
+  if (grace && !la_cas32(&g->gc2.sweep_grace_needed, &grace,
+			grace | LJ_GC2_GRACE_ACTIVE, LA_ACQ_REL, LA_ACQ)) {
+    lj_safepoint_resumable_epoch_cancel(g);
+    gc2_phase_gate_release(g);
+    return 0;
+  }
   la_store32_rel(&g->gc2.fixpoint_epoch_actions, actions);
   return gc2_fixpoint_epoch_owned(g, 1);
 }
@@ -5931,7 +5940,7 @@ static GC2SweepBridgeResult gc2_sweep_prepare_bridge_result(global_State *g)
   ** safepoint so each TG moves its own traversable bump/free state to sweep
   ** while it is not concurrently allocating from that state.
   */
-  if (prepare0 && !gc2_sweep_bridge_epoch(g, LJ_GC2_HS_RESET_ALLOC))
+  if (prepare0 && !gc2_sweep_epoch(g, LJ_GC2_HS_RESET_ALLOC, 0))
     goto retry;
   if (gc2_deferred_epoch_acq(g) != defer0)
     goto retry;
@@ -5948,7 +5957,7 @@ static GC2SweepBridgeResult gc2_sweep_prepare_bridge_result(global_State *g)
 	goto retry;
     }
     if (gc2_sweep_bridge_owner_roots_pending(g)) {
-      (void)gc2_sweep_bridge_epoch(g, LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_FLUSH_SSB);
+      (void)gc2_sweep_epoch(g, LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_FLUSH_SSB, 0);
       goto retry;
     }
     /* Rotate post-snapshot rescue entries, including the initiating TG which
@@ -5961,7 +5970,7 @@ static GC2SweepBridgeResult gc2_sweep_prepare_bridge_result(global_State *g)
     if (gc2_deferred_epoch_acq(g) != defer0)
       goto retry;
     if (!lj_gc2_ssb_empty(g)) {
-      (void)gc2_sweep_bridge_epoch(g, LJ_GC2_HS_FLUSH_SSB);
+      (void)gc2_sweep_epoch(g, LJ_GC2_HS_FLUSH_SSB, 0);
       goto retry;
     }
     if (gc2_table_rescan_pending_acq(g) != 0) {
@@ -23035,8 +23044,7 @@ drain_graph:
       n++;
       goto drain_graph;
     }
-    (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
-    return n+1u;
+    return n + (uint32_t)gc2_sweep_epoch(g, LJ_GC2_HS_FLUSH_SSB, 0);
   }
   /* A zero-progress drain is not proof of semantic emptiness: the exact
   ** recovery locator may still be behind its reserve-before-publish LP, and a
@@ -23048,16 +23056,10 @@ drain_graph:
       gc2_sweep_root_scanned_acq(g) != 1)
     return n;
   if (gc2_sweep_grace_needed_acq(g)) {
-    uint32_t grace;
-    /* This synchronous API returns only after every target acknowledged. The
-    ** worker token prevents a second retire producer, so clearing the latch
-    ** afterward proves all currently quarantined gcw/raw readers crossed a
-    ** complete epoch. The next worker pass drains roots published by the ACK. */
-    for (grace = 0; grace < LJ_GC2_GRACE_EPOCHS; grace++)
-      (void)lj_gc2_handshake(g, lj_str_gc2_grace_actions(g));
-    if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
-      gc2_sweep_grace_needed_rel(g, 0);
-    return n+1u;
+    uint32_t grace = la_load32_acq(&g->gc2.sweep_grace_needed);
+    lj_assertG(grace >= 1 && grace <= LJ_GC2_GRACE_EPOCHS,
+	       "worker entered an unfinished sweep grace");
+    return n + (uint32_t)gc2_sweep_epoch(g, lj_str_gc2_grace_actions(g), grace);
   }
   if (gc2_sweep_bridge_ready_acq(g)) {
     uint32_t strings = lj_str_gc2_sweep_step(g, limit - n);
@@ -23446,8 +23448,15 @@ static int gc2_fixpoint_epoch_owned(global_State *g, int start)
       (void)gc2_weak_root_scanned_cas(g, &expect, 1);
     else
       gc2_weak_root_snapshot_abort(g);
-  } else if ((actions & LJ_GC2_HS_SCAN_ROOTS) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
-    (void)gc2_sweep_root_snapshot_finish(g, gc2_cycle_acq(g));
+  } else if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
+    uint32_t grace = la_load32_acq(&g->gc2.sweep_grace_needed);
+    if (actions & LJ_GC2_HS_SCAN_ROOTS)
+      (void)gc2_sweep_root_snapshot_finish(g, gc2_cycle_acq(g));
+    if (grace & LJ_GC2_GRACE_ACTIVE) {
+      uint32_t round = grace & ~LJ_GC2_GRACE_ACTIVE;
+      uint32_t next = round == LJ_GC2_GRACE_EPOCHS ? 0 : round + 1;
+      (void)la_cas32(&g->gc2.sweep_grace_needed, &grace, next, LA_ACQ_REL, LA_ACQ);
+    }
   } else if (actions & (LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_SCAN_OWNER_ROOTS)) {
     (void)gc2_mark_snapshot_finish(g, gc2_cycle_acq(g));
   }

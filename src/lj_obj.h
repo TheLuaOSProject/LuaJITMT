@@ -2079,7 +2079,7 @@ typedef struct GC2State {
   uint32_t sweep_root_scanned;  /* Mandatory SWEEP owner/global snapshot done. */
   GCRef *sweep_root_cursor;  /* Bounded old-generation root-prune link. */
   uint32_t sweep_root_done;  /* Final pending-root flush reached EOF. */
-  uint32_t sweep_grace_needed;  /* Quarantine awaits another HS epoch. */
+  uint32_t sweep_grace_needed;  /* Next quarantine grace round, or an active round. */
   uint64_t sweep_to_idle;  /* SWEEP-to-IDLE phase publications. */
   uint64_t preserve_abort_to_idle;  /* Preserve aborts leaving an active phase. */
   uint64_t alloc_total_bytes;  /* Monotonic flushed mutator allocation bytes. */
@@ -4345,7 +4345,7 @@ static LJ_AINLINE void gc2_sweep_root_done_rel(global_State *g, uint32_t done)
 
 static LJ_AINLINE uint32_t gc2_sweep_grace_needed_acq(global_State *g)
 {
-  return la_load32_acq(&g->gc2.sweep_grace_needed);
+  return la_load32_acq(&g->gc2.sweep_grace_needed) != 0;
 }
 
 static LJ_AINLINE void gc2_sweep_grace_needed_rel(global_State *g,
