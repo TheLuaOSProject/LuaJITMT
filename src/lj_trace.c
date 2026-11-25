@@ -75,7 +75,43 @@
 ** TLS marker suppresses only the throwing owner's own lj_trace_abort() call;
 ** an abort from any peer thread has independent TLS and still clears ACTIVE. */
 static LJ_TRACE_TLS jit_State *trace_sync_mcode_retry_owner;
+
+/* This observer frame lives in lj_trace_ins across its protected call. It
+** never escapes the physical recorder owner. A callback may park and give up
+** the unpublished recorder; its C continuations must then avoid shared J. */
+typedef struct TraceEventPark {
+  lua_State *owner;
+  int active;
+  int detached;
+} TraceEventPark;
+
+static LJ_TRACE_TLS TraceEventPark *trace_event_park;
 #undef LJ_TRACE_TLS
+
+#if LJ_TARGET_X64 && LJ_TARGET_LINUX && !defined(LUAJIT_DISABLE_VMEVENT)
+#define TRACE_EVENT_PARK_SUPPORTED 1
+#else
+#define TRACE_EVENT_PARK_SUPPORTED 0
+#endif
+
+#ifndef LUAJIT_DISABLE_VMEVENT
+static LJ_AINLINE void trace_event_park_begin(lua_State *L)
+{
+  if (TRACE_EVENT_PARK_SUPPORTED && trace_event_park &&
+      trace_event_park->owner == L)
+    trace_event_park->active = 1;
+}
+
+static LJ_AINLINE int trace_event_park_end(void)
+{
+  TraceEventPark *park = trace_event_park;
+  if (park) {
+    park->active = 0;
+    return park->detached;
+  }
+  return 0;
+}
+#endif
 
 #ifdef LJ_TRACE_TEST_HELPERS
 static uint32_t trace_test_call_unroll_aborts;
@@ -11009,7 +11045,8 @@ static int trace_root_arm64_generation_valid(GCproto *pt, const BCIns *pc,
 typedef enum TraceStartResult {
   TRACE_START_RESULT_ACTIVE = 0,
   TRACE_START_RESULT_IDLE,
-  TRACE_START_RESULT_FLUSH_ALL
+  TRACE_START_RESULT_FLUSH_ALL,
+  TRACE_START_RESULT_PARKED
 } TraceStartResult;
 
 /* Start tracing. Terminal work is returned to trace_state(), which first
@@ -11127,9 +11164,10 @@ static TraceStartResult trace_start(jit_State *J)
   trace_mark_active_startpt(J);
 
   lj_vmevent_send_l_(J->L, TRACE,
-    TValue savetv = J2TG(J)->tmptv;
-    TValue savetv2 = J2TG(J)->tmptv2;
-    TValue savetv3 = J2TG(J)->tmptv3;
+    TGState *event_tg = L2TG(V);
+    TValue savetv = event_tg->tmptv;
+    TValue savetv2 = event_tg->tmptv2;
+    TValue savetv3 = event_tg->tmptv3;
     TraceNo parent = J->parent;
     ExitNo exitno = J->exitno;
     setstrV(V, V->top++, lj_str_newlit(V, "start"));
@@ -11146,10 +11184,13 @@ static TraceStartResult trace_start(jit_State *J)
 	setintV(V->top++, -1);
       }
     }
+    trace_event_park_begin(V);
   ,
-    J2TG(J)->tmptv = savetv;
-    J2TG(J)->tmptv2 = savetv2;
-    J2TG(J)->tmptv3 = savetv3;
+    if (trace_event_park_end())
+      return TRACE_START_RESULT_PARKED;
+    event_tg->tmptv = savetv;
+    event_tg->tmptv2 = savetv2;
+    event_tg->tmptv3 = savetv3;
     J->parent = parent;
     J->exitno = exitno;
   );
@@ -11420,7 +11461,8 @@ static TraceStartResult trace_downrec(jit_State *J)
 typedef enum TraceAbortResult {
   TRACE_ABORT_DONE = 0,
   TRACE_ABORT_RETRY,
-  TRACE_ABORT_FLUSH_ALL
+  TRACE_ABORT_FLUSH_ALL,
+  TRACE_ABORT_PARKED
 } TraceAbortResult;
 
 /* Abort tracing. Return any work which must run only after terminal recorder
@@ -11534,6 +11576,8 @@ static TraceAbortResult trace_abort(jit_State *J)
   L->top--;  /* Remove error object */
   if (e == LJ_TRERR_DOWNREC) {
     TraceStartResult start_result = trace_downrec(J);
+    if (start_result == TRACE_START_RESULT_PARKED)
+      return TRACE_ABORT_PARKED;
     if (start_result == TRACE_START_RESULT_FLUSH_ALL)
       return TRACE_ABORT_FLUSH_ALL;
     if (start_result == TRACE_START_RESULT_ACTIVE &&
@@ -11661,6 +11705,8 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
 	      lj_trace_state_store_active(J, LJ_TRACE_RECORD)))
 	  goto retry;
 	start_result = trace_start(J);
+	if (start_result == TRACE_START_RESULT_PARKED)
+	  return NULL;
 	if (start_result != TRACE_START_RESULT_ACTIVE) {
 	  trace_terminal_release(J->L, J);
 	  if (start_result == TRACE_START_RESULT_FLUSH_ALL)
@@ -11688,19 +11734,23 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
       setvmstate(J2G(J), RECORD);
       lj_vmevent_send_l_(J->L, RECORD,
 	/* Save/restore state for trace recorder. */
-	TValue savetv = J2TG(J)->tmptv;
-	TValue savetv2 = J2TG(J)->tmptv2;
-	TValue savetv3 = J2TG(J)->tmptv3;
+	TGState *event_tg = L2TG(V);
+	TValue savetv = event_tg->tmptv;
+	TValue savetv2 = event_tg->tmptv2;
+	TValue savetv3 = event_tg->tmptv3;
 	TraceNo parent = J->parent;
 	ExitNo exitno = J->exitno;
 	setintV(V->top++, J->cur.traceno);
 	setfuncV(V, V->top++, J->fn);
 	setintV(V->top++, J->pt ? (int32_t)proto_bcpos(J->pt, J->pc) : -1);
 	setintV(V->top++, J->framedepth);
+	trace_event_park_begin(V);
       ,
-	J2TG(J)->tmptv = savetv;
-	J2TG(J)->tmptv2 = savetv2;
-	J2TG(J)->tmptv3 = savetv3;
+	if (trace_event_park_end())
+	  return NULL;
+	event_tg->tmptv = savetv;
+	event_tg->tmptv2 = savetv2;
+	event_tg->tmptv3 = savetv3;
 	J->parent = parent;
 	J->exitno = exitno;
       );
@@ -11769,6 +11819,8 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
       TraceAbortResult abort_result;
       trace_pendpatch(J, 1);
       abort_result = trace_abort(J);
+      if (abort_result == TRACE_ABORT_PARKED)
+	return NULL;
       if (abort_result == TRACE_ABORT_RETRY)
 	goto retry;
       trace_terminal_release(J->L, J);
@@ -11846,20 +11898,32 @@ void lj_trace_abort_owner(lua_State *L)
   trace_test_admission_maybe_clobber_cleanup_oserr();
 }
 
-/* Retire an interrupted recorder before its owner parks outside the recorder
-** callback stack. A TRACE/RECORD VM-event handler still has trace_state() live
-** beneath it; destructively clearing J->cur there would make that state machine
-** resume into freed or zeroed recorder state. Leave the exact callback owner
-** intact so trace_state() consumes the asynchronous abort after the handler
-** returns. */
+/* A start/record callback can park while a peer is trying to flush. Cancel
+** only the recorder whose protected continuation accepts detachment. The
+** callback owns its Lua arguments independently of the compiler scratch. */
 void lj_trace_abort_owner_before_park(lua_State *L)
 {
   global_State *g;
   if (!L)
     return;
   g = G(L);
-  if (vmevent_owner_acq(g) == lj_thr_current_id(g))
+  if (vmevent_owner_acq(g) == lj_thr_current_id(g)) {
+    TraceEventPark *park = trace_event_park;
+    jit_State *J = G2J(g);
+    if (TRACE_EVENT_PARK_SUPPORTED && park && park->active &&
+	jit_owner_l_acq(J) == park->owner) {
+      TGState *owner_tg = lj_jit_owner_tg_l(park->owner, J);
+      /* The callback may have resumed another Lua coroutine. Only its
+      ** physical recorder owner may discard the suspended compiler frame. */
+      if (owner_tg && owner_tg == L2TG(L) &&
+	  jit_token_acq(g) == lj_tg_tid_acq(owner_tg)) {
+	park->active = 0;
+	park->detached = 1;
+	lj_trace_abort_owner(park->owner);
+      }
+    }
     return;
+  }
   lj_trace_abort_owner(L);
 }
 
@@ -12404,6 +12468,8 @@ void lj_trace_ins(jit_State *J, const BCIns *pc)
   lua_State *L = J->L;
 #endif
   int errcode;
+  TraceEventPark park;
+  TraceEventPark *outer_park;
 #if LJ_TARGET_ARM64
 #if defined(LJ_TRACE_TEST_HELPERS) && \
     defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)
@@ -12442,8 +12508,20 @@ void lj_trace_ins(jit_State *J, const BCIns *pc)
   J->fn = curr_func(L);
 #endif
   J->pt = isluafunc(J->fn) ? funcproto(J->fn) : NULL;
-  while ((errcode = lj_vm_cpcall(L, NULL, (void *)J,
-				 trace_state)) != 0) {
+  outer_park = TRACE_EVENT_PARK_SUPPORTED ? trace_event_park : NULL;
+  park.owner = L;
+  park.detached = 0;
+  for (;;) {
+    park.active = 0;
+    if (TRACE_EVENT_PARK_SUPPORTED)
+      trace_event_park = &park;
+    errcode = lj_vm_cpcall(L, NULL, (void *)J, trace_state);
+    if (TRACE_EVENT_PARK_SUPPORTED)
+      trace_event_park = outer_park;
+    if (errcode == 0)
+      break;
+    if (park.detached)
+      lj_err_throw(L, errcode);  /* The peer may already own all scratch. */
     /* Recorder failures use an integer LJ_TRERR_* object and are consumed by
     ** trace_state() on the next protected entry. An external VM error (notably
     ** STOPREQ from a native publication boundary) carries its ordinary Lua

@@ -1,4 +1,5 @@
 local th = require"threading"
+local detached_park = jit.arch == "x64" and jit.os == "Linux"
 
 local function make_trace(n)
   local sum = 0
@@ -10,25 +11,33 @@ local function trigger_trace()
   for _ = 1, 40 do assert(make_trace(80) == 3240) end
 end
 
-local function channel_park_from_trace_event()
+local function channel_park_from_trace_event(event, nested)
   local entered = th.channel(1)
   local release = th.channel(1)
   local armed = true
-  local saw_timeout = false
+  local received = false
 
   local function trace_hook(ev)
-    if armed and ev == "start" then
+    if armed and (event == "record" or ev == "start") then
       armed = false
       assert(entered:send("entered", 1) == true)
-      local token, status = release:recv(0.05)
-      saw_timeout = token == nil and status == "timeout"
+      local function wait()
+        return release:recv(detached_park and 2 or 0.05)
+      end
+      local token, status
+      if nested then
+        token, status = coroutine.wrap(wait)()
+      else
+        token, status = wait()
+      end
+      received = token == "release" and status == true
     end
   end
   jit.off(trace_hook, true)
 
   jit.flush()
   jit.opt.start("hotloop=1", "hotexit=1")
-  jit.attach(trace_hook, "trace")
+  jit.attach(trace_hook, event)
   local peer = th.spawn(function(entered_ch, release_ch)
     local token, ok = entered_ch:recv(1)
     assert(ok == true and token == "entered")
@@ -42,22 +51,21 @@ local function channel_park_from_trace_event()
   local joined, result = peer:join(5)
   assert(joined == true and result == true,
          "channel-event peer did not finish after recorder unwind")
-  assert(saw_timeout,
-         "channel event park unexpectedly crossed synchronous peer flush")
+  assert(received == detached_park, "channel park did not have expected progress")
 end
 
 local function join_park_from_trace_event()
   local entered = th.channel(1)
   local armed = true
-  local saw_timeout = false
+  local finished = false
   local peer
 
   local function trace_hook(ev)
     if armed and ev == "start" then
       armed = false
       assert(entered:send("entered", 1) == true)
-      local joined, status = peer:join(0.05)
-      saw_timeout = joined ~= true and status == "timeout"
+      local joined, result = peer:join(detached_park and 2 or 0.05)
+      finished = joined == true and result == true
     end
   end
   jit.off(trace_hook, true)
@@ -77,10 +85,10 @@ local function join_park_from_trace_event()
   local joined, result = peer:join(5)
   assert(joined == true and result == true,
          "join-event peer did not finish after recorder unwind")
-  assert(saw_timeout,
-         "join event park unexpectedly crossed synchronous peer flush")
+  assert(finished == detached_park, "join park did not have expected progress")
 end
 
-channel_park_from_trace_event()
+channel_park_from_trace_event("trace")
+if detached_park then channel_park_from_trace_event("record", true) end
 join_park_from_trace_event()
-print("t-jit-park-vmevent-reentrant OK: parks defer owner teardown")
+print("t-jit-park-vmevent-reentrant OK")

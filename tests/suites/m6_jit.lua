@@ -3050,7 +3050,7 @@ assert(live >= 4, live)
 
   add({
     name = "m6_jit_park_vmevent_reentrant",
-    description = "blocking parks preserve active VM-event recorder frames",
+    description = "blocking VM-event callbacks and peer flush progress",
     run = function(t)
       build_default(t)
       luajit_file(t, t:path("tests", "t-jit-park-vmevent-reentrant.lua"),
