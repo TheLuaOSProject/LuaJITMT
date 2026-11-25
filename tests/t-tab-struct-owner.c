@@ -41,6 +41,7 @@ typedef struct ResizeCtx {
   volatile int *start;
   volatile int *done;
   uint32_t asize;
+  int clear;
   int status;
 } ResizeCtx;
 
@@ -191,7 +192,10 @@ static void *resize_worker(void *arg)
   while (!load_flag(ctx->start))
     sched_yield();
 
-  lj_tab_resize(L, t, ctx->asize, 0);
+  if (ctx->clear)
+    lj_tab_clear(L, t);
+  else
+    lj_tab_resize(L, t, ctx->asize, 0);
   store_flag(ctx->done, 1);
   lj_threading_detach(L, 1);
   ctx->status = 0;
@@ -310,7 +314,15 @@ static void exercise_direct_owner(lua_State *L)
   assert(lj_tab_test_struct_owner_no_l_waits() > 0);
 }
 
-static void exercise_resize_owner(lua_State *L)
+static void assert_clear_seeds_absent(GCtab *t)
+{
+  cTValue *slot = lj_tab_getint(t, 1);
+  assert(slot == NULL || tvisnil(slot));
+  slot = lj_tab_getint(t, -1);
+  assert(slot == NULL || tvisnil(slot));
+}
+
+static void exercise_resize_owner(lua_State *L, int clear)
 {
   lua_State *ownerL, *otherL;
   pthread_t owner_thr, other_thr;
@@ -325,20 +337,26 @@ static void exercise_resize_owner(lua_State *L)
   volatile int hook_release = 0;
 
   lua_settop(L, 0);
-  lua_createtable(L, 3, 0);  /* colocated table A */
+  lua_createtable(L, 3, 2);  /* colocated array and hash table A */
   owner_tab = tabV(L->top - 1);
   assert(lj_tab_colo_acq(owner_tab) > 0);
+  if (clear) {
+    lua_pushinteger(L, 11);
+    lua_rawseti(L, 1, 1);
+    lua_pushinteger(L, 22);
+    lua_rawseti(L, 1, -1);
+  }
   lua_createtable(L, 3, 0);  /* colocated table B */
-  assert(lua_gettop(L) == 2);
 
   ownerL = new_child_with_table(L, 1);
-  otherL = new_child_with_table(L, 2);
+  otherL = new_child_with_table(L, clear ? 1 : 2);
 
   owner.L = ownerL;
   owner.ready = &ready;
   owner.start = &owner_start;
   owner.done = &owner_done;
   owner.asize = LJ_MAX_COLOSIZE + 24u;
+  owner.clear = 0;
   owner.status = -1;
 
   other.L = otherL;
@@ -346,12 +364,16 @@ static void exercise_resize_owner(lua_State *L)
   other.start = &other_start;
   other.done = &other_done;
   other.asize = LJ_MAX_COLOSIZE + 32u;
+  other.clear = clear;
   other.status = -1;
 
   resize_hook_tab = owner_tab;
   resize_hook_entered = &hook_entered;
   resize_hook_release = &hook_release;
-  lj_tab_test_set_resize_colocated_after_freeze_hook(resize_hold_hook);
+  if (clear)
+    lj_tab_test_set_resize_before_freeze_hook(resize_hold_hook);
+  else
+    lj_tab_test_set_resize_colocated_after_freeze_hook(resize_hold_hook);
 
   assert(pthread_create(&owner_thr, NULL, resize_worker, &owner) == 0);
   assert(pthread_create(&other_thr, NULL, resize_worker, &other) == 0);
@@ -363,12 +385,17 @@ static void exercise_resize_owner(lua_State *L)
   store_flag(&other_start, 1);
   assert(wait_for_flag(&other_done, 1, 1000000));
   assert(!load_flag(&owner_done));
+  if (clear) {
+    assert(lj_tab_struct_owner_acq(owner_tab) != 0);
+    assert_clear_seeds_absent(owner_tab);
+  }
 
   store_flag(&hook_release, 1);
   assert(wait_for_flag(&owner_done, 1, 1000000));
 
   assert(pthread_join(owner_thr, NULL) == 0);
   assert(pthread_join(other_thr, NULL) == 0);
+  lj_tab_test_set_resize_before_freeze_hook(NULL);
   lj_tab_test_set_resize_colocated_after_freeze_hook(NULL);
   resize_hook_tab = NULL;
   resize_hook_entered = NULL;
@@ -376,6 +403,10 @@ static void exercise_resize_owner(lua_State *L)
 
   assert(owner.status == 0);
   assert(other.status == 0);
+  if (clear) {
+    assert(lj_tab_asize_acq(owner_tab) == owner.asize);
+    assert_clear_seeds_absent(owner_tab);
+  }
 }
 
 static void exercise_resize_noop_owner(lua_State *L)
@@ -461,7 +492,8 @@ int main(void)
 
   exercise_resize_noop_owner(L);
   exercise_direct_owner(L);
-  exercise_resize_owner(L);
+  exercise_resize_owner(L, 0);
+  exercise_resize_owner(L, 1);
   exercise_wait_stopreq(L);
 
   lua_close(L);

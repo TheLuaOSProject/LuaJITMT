@@ -3119,6 +3119,19 @@ void LJ_FASTCALL lj_tab_free(global_State *g, GCtab *t)
 
 #ifdef LJ_TAB_TEST_HELPERS
 static LJTabResizeArrayHook tab_test_resize_colocated_after_freeze_hook;
+static LJTabResizeArrayHook tab_test_resize_before_freeze_hook;
+
+void lj_tab_test_set_resize_before_freeze_hook(LJTabResizeArrayHook hook)
+{
+  tab_test_resize_before_freeze_hook = hook;
+}
+
+static void tab_test_resize_before_freeze(lua_State *L, GCtab *t,
+                                         TValue *oldarray, MSize oldasize)
+{
+  if (tab_test_resize_before_freeze_hook)
+    tab_test_resize_before_freeze_hook(L, t, oldarray, oldasize);
+}
 
 static LJ_AINLINE void tab_test_resize_colocated_after_freeze(lua_State *L,
 							      GCtab *t,
@@ -3129,6 +3142,7 @@ static LJ_AINLINE void tab_test_resize_colocated_after_freeze(lua_State *L,
     tab_test_resize_colocated_after_freeze_hook(L, t, oldarray, oldasize);
 }
 #else
+#define tab_test_resize_before_freeze(L, t, oldarray, oldasize) ((void)0)
 #define tab_test_resize_colocated_after_freeze(L, t, oldarray, oldasize) \
   ((void)(L), (void)(t), (void)(oldarray), (void)(oldasize))
 #endif
@@ -3306,6 +3320,7 @@ restart_resize:
     if (!shared_resize && !tab_private_table_mutation_allowed(L, t))
       goto retry_resize;
   }
+  tab_test_resize_before_freeze(L, t, oldarray, oldasize);
   if (oldret)
     tab_retire_init(L, oldret, t, oldnode, oldhmask);
   if (oldaret)
@@ -7775,131 +7790,69 @@ int lj_tab_clear_weak_slot_keyed(global_State *g, GCtab *parent, TValue *dst,
   return tab_clear_weak_slot_once(g, parent, dst, key, val);
 }
 
-static LJ_AINLINE void tab_clear_store_wait(lua_State *L, int guarded)
+/* The caller retains the vector with SMR and validates the full generation
+** at the end of its pass. A failed CAS or migration marker restarts the pass
+** without holding SMR over the retry wait. */
+static int tab_clear_slot_shared(TValue *slot, cTValue *nilv)
 {
-  /*
-  ** A fresh STOPREQ-visible wait can longjmp. While table.clear owns the
-  ** per-table structural slot, retry waits must only yield to competing
-  ** publishers and then unwind through the normal leave path below.
-  */
-  if (guarded)
-    lj_tab_wait_no_l();
-  else
-    lj_tab_store_wait_l(L);
+  TValue old;
+  lj_tv_load_acq(&old, slot);
+  if (tvisnil(&old))
+    return 1;
+  if (tvisforward(&old) || tab_val_is_publish_claim(&old))
+    return 0;
+  return lj_tv_cas(slot, &old, nilv);
 }
 
-static LJ_AINLINE void tab_clear_wait(lua_State *L, int guarded)
+static int tab_clear_generation_held(GCtab *t)
 {
-  if (guarded)
-    lj_tab_wait_no_l();
-  else
-    lj_tab_wait_l(L);
-}
-
-static int tab_clear_try_nil_keyed(lua_State *L, GCtab *parent, TValue *dst,
-				   cTValue *key, int guarded)
-{
-  TValue old, expect, nilv;
-  global_State *g = G(L);
-  setnilV(&nilv);
-  for (;;) {
-    int result = 0;
-    int claim = 0;
-    int stale = 0;
-    if (!lj_gc2_smr_read_try(g)) {
-      tab_clear_store_wait(L, guarded);
-      continue;
-    }
-    if (!tab_current_slot_for_key_bounded(parent, dst, key)) {
-      stale = 1;
-      goto leave;
-    }
-    lj_tv_load_acq(&old, dst);
-    if (tvisnil(&old)) {
-      result = 1;
-      goto leave;
-    }
-    if (tab_val_is_publish_claim(&old)) {
-      claim = 1;
-      goto leave;
-    }
-    expect = old;
-    if (lj_tv_cas(dst, &expect, &nilv)) {
-      result = tab_current_slot_for_key_bounded(parent, dst, key);
-      stale = !result;
-      goto leave;
-    }
-    claim = tab_val_is_publish_claim(&expect);
-leave:
-    lj_gc2_smr_read_leave(g);
-    if (result)
-      return 1;
-    if (stale)
-      return 0;
-    if (claim) {
-      tab_clear_wait(L, guarded);
-      continue;
-    }
-    if (tvisforward(&expect))
-      return 0;
-    tab_clear_store_wait(L, guarded);
-  }
-}
-
-static void tab_clear_array_shared(lua_State *L, GCtab *t, TValue *array,
-				   MSize asize, int guarded)
-{
+  TabForjitSnapshot snap;
+  TValue nilv;
   MSize i;
-  for (i = 0; i < asize; i++) {
-    TValue key;
-    if (i > (MSize)INT32_MAX)
-      break;
-    setintV(&key, (int32_t)i);
-    while (!tab_clear_try_nil_keyed(L, t, &array[i], &key, guarded))
-      tab_clear_store_wait(L, guarded);
+  if (!tab_forjit_snapshot_acq(t, &snap) ||
+      (snap.asize && !snap.array) ||
+      (lj_tab_array_is_colocated(t, snap.array) &&
+       snap.asize > lj_tab_colo_size(t)) ||
+      !tab_forjit_snapshot_current(t, &snap))
+    return 0;
+  setnilV(&nilv);
+  for (i = 0; i < snap.asize; i++) {
+    if (!tab_clear_slot_shared(&snap.array[i], &nilv))
+      return 0;
   }
-}
-
-static void tab_clear_hash_slot_shared(lua_State *L, GCtab *t, Node *n,
-				       int guarded)
-{
-  for (;;) {
-    TValue key, val;
-    lj_tv_load_acq(&val, &n->val);
-    if (tab_val_is_publish_claim(&val)) {
-      tab_clear_wait(L, guarded);
-      continue;
+  if (snap.hmask > 0) {
+    for (i = 0; i <= snap.hmask; i++) {
+      if (!tab_clear_slot_shared(&snap.node[i].val, &nilv))
+        return 0;
     }
-    if (tab_val_absent(&val))
-      return;
-    lj_tv_load_acq(&key, &n->key);
-    if (tab_key_islocked(&key)) {
-      tab_clear_wait(L, guarded);
-      continue;
-    }
-    if (tab_hash_key_hidden(&key))
-      return;
-    (void)tab_clear_try_nil_keyed(L, t, &n->val, &key, guarded);
-    return;
   }
+  /*
+  ** Shared nodes retain their canonical keys, and an unlinked ordinary
+  ** insertion has a nil value. Clearing only physical values needs no key
+  ** lookup. Resize can have copied a separated array slot without forwarding
+  ** it; if the roots or retirement state changed during the pass, scan again
+  ** to clear any surviving copies in the successor generation.
+  */
+  return tab_forjit_snapshot_current(t, &snap);
 }
 
 static void tab_clear_shared(lua_State *L, GCtab *t)
 {
-  TValue *array;
-  Node *node;
-  MSize asize, hmask, i;
-  int guard = lj_tab_struct_enter(L, t);
+  global_State *g = G(L);
   tab_test_clear_shared_call();
-  asize = lj_tab_array_snapshot_acq(t, &array);
-  if (array)
-    tab_clear_array_shared(L, t, array, asize, guard);
-  node = lj_tab_node_snapshot_acq(t, &hmask);
-  if (hmask > 0) {
-    for (i = 0; i <= hmask; i++)
-      tab_clear_hash_slot_shared(L, t, &node[i], guard);
+  for (;;) {
+    uint64_t control = lj_tab_struct_control_acq(t);
+    if (LJ_UNLIKELY(lj_tab_struct_control_is_desc(control))) {
+      if (tab_struct_desc_help(L, t, control))
+        continue;
+    } else if (lj_gc2_smr_read_try(g)) {
+      int cleared = tab_clear_generation_held(t);
+      lj_gc2_smr_read_leave(g);
+      if (cleared)
+        return;
+    }
+    lj_tab_wait_l(L);
   }
-  lj_tab_struct_leave(t, guard);
 }
 
 /* Clear a table. */
