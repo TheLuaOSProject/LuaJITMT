@@ -1468,6 +1468,7 @@ static int gc2_markobj_direct_status(global_State *g, GCobj *o);
 static LJ_AINLINE int gc2_reclaim_tls_active(global_State *g);
 static void gc2_traverse_udata(global_State *g, GCudata *ud);
 static LJ_AINLINE int gc2_rescan_pending_set(GCobj *o);
+static int gc2_container_visit(global_State *g, GCobj *o);
 static LJ_AINLINE uint8_t gc2_rescan_pending_clear(GCobj *o);
 static int gc2_grey_push(global_State *g, GCobj *o);
 static int gc2_recovery_publish_scoped(global_State *g, GCobj *o,
@@ -7490,7 +7491,7 @@ static void gc2_root_rescan_later(global_State *g, GCobj *o)
     }
     return;
   }
-  if (!gc2_rescan_pending_set(o)) {
+  if (!gc2_container_visit(g, o)) {
     /*
     ** Same-cycle NEEDSCAN is a traversal/deduplication token: it proves this
     ** container has already been scheduled or scanned and bounds cyclic graphs.
@@ -7503,7 +7504,7 @@ static void gc2_root_rescan_later(global_State *g, GCobj *o)
     if (!gc2_grey_empty(g) || !lj_gc2_ssb_empty(g))
       return;
     (void)gc2_rescan_pending_clear(o);
-    if (!gc2_rescan_pending_set(o))
+    if (!gc2_container_visit(g, o))
       return;
   }
   pushed = gc2_publish_mutator(g, o);
@@ -18593,6 +18594,29 @@ static LJ_AINLINE int gc2_rescan_pending_set(GCobj *o)
   return (old & LJ_GC_NEEDSCAN) == 0;
 }
 
+/* Arena-owned closures and cells can survive a major collection outside the
+** ownership spine. A retained physical mark and a prior cycle's NEEDSCAN
+** do not cover their prototype or captured values in this cycle. */
+static int gc2_container_visit(global_State *g, GCobj *o)
+{
+  uint32_t *stamp;
+  uint32_t cycle, seen;
+  int first = gc2_rescan_pending_set(o);
+  if (o->gch.gct == (uint8_t)~LJ_TFUNC)
+    stamp = &gco2func(o)->c.gc2_visit_cycle;
+  else if (o->gch.gct == (uint8_t)~LJ_TUPVAL)
+    stamp = &gco2uv(o)->gc2_visit_cycle;
+  else
+    return first;
+  cycle = gc2_cycle_acq(g);
+  seen = la_load32_acq(stamp);
+  while (seen < cycle) {
+    if (la_cas32(stamp, &seen, cycle, LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+  return first;
+}
+
 static LJ_AINLINE uint8_t gc2_rescan_pending_clear(GCobj *o)
 {
   return la_and8_rlx(&o->gch.marked, (uint8_t)~LJ_GC_NEEDSCAN);
@@ -19051,7 +19075,7 @@ static int gc2_mark_payload_obj_worker(global_State *g, GCobj *o)
     ** ordinary GC2 traversal; table payloads use the table-child helper with its
     ** local seen set, and strings/cdata have no GC2 child graph to rescan.
     */
-    if (gc2_rescan_pending_set(o)) {
+    if (gc2_container_visit(g, o)) {
       int pushed = gc2_publish_worker(g, o);
       if (!pushed)
 	gc2_activation_pin_no_reclaim(g);
@@ -19157,7 +19181,7 @@ void lj_gc2_barrier_marked_proto(lua_State *L, GCproto *pt)
   ** remain set after traversal because protos are immutable and future cycles
   ** with cleared arena marks take the ordinary mark-and-queue path.
   */
-  if (!gc2_rescan_pending_set(o))
+  if (!gc2_container_visit(g, o))
     return;
   pushed = gc2_publish_mutator(g, o);
   if (!pushed)
@@ -22521,7 +22545,7 @@ static uint32_t gc2_trace_sweep_edge(global_State *g, GCobj *o,
   }
   if (worker_edge && gct != (uint32_t)~LJ_TTAB &&
       gct != (uint32_t)~LJ_TTHREAD && gc2_gct_may_traverse(gct) &&
-      !gc2_rescan_pending_set(o)) {
+      !gc2_container_visit(g, o)) {
     /* Preserve-path NEW clears prior-cycle uncounted membership before graph
     ** scheduling; other NEW winners publish explicit queue work which must
     ** drain before close. With public minor sweep disabled, a remaining bit

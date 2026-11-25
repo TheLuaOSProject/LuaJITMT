@@ -632,6 +632,7 @@ typedef struct GCupval {
   GCHeader;
   uint8_t closed;	/* Set if closed (i.e. uv->v == &uv->u.value). */
   uint8_t immutable;	/* Low bit: immutable. High bit: arena-owned FNEW. */
+  uint32_t gc2_visit_cycle;  /* Cycle owning the uncounted NEEDSCAN bit. */
   union {
     TValue tv;		/* If closed: the value itself. */
     struct {		/* If open: double linked list, anchored at thread. */
@@ -653,7 +654,7 @@ typedef struct GCupval {
 
 /* Common header for functions. env should be at same offset in GCudata. */
 #define GCfuncHeader \
-  GCHeader; uint8_t ffid; uint8_t nupvalues; \
+  GCHeader; uint8_t ffid; uint8_t nupvalues; uint32_t gc2_visit_cycle; \
   GCRef env; GCRef gclist; MRef pc
 
 typedef struct GCfuncC {

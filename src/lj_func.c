@@ -569,6 +569,7 @@ static GCupval *func_finduv_nothrow(lua_State *L, TValue *slot)
   }
   newwhite(g, uv);
   uv->gct = ~LJ_TUPVAL;
+  uv->gc2_visit_cycle = 0;
   uv->closed = 0;  /* Still open. */
   setmref(uv->v, slot);  /* Pointing to the stack slot. */
   /* The legacy global doubly-linked ring is retired. Keep its overlapping
@@ -609,6 +610,7 @@ static GCupval *func_newuvclosed_unlinked_nothrow(lua_State *L)
   if (LJ_UNLIKELY(uv == NULL))
     return NULL;
   uv->gct = ~LJ_TUPVAL;
+  uv->gc2_visit_cycle = 0;
   uv->closed = 1;
   setnilV(&uv->tv);
   setmref(uv->v, &uv->tv);
@@ -832,6 +834,7 @@ static GCupval *func_snapshotuv_unlinked_nothrow(lua_State *L,
   if (LJ_UNLIKELY(uv == NULL))
     return NULL;
   uv->gct = ~LJ_TUPVAL;
+  uv->gc2_visit_cycle = 0;
   uv->closed = 1;
   /*
   ** FNEW may capture a C-call result slot before the next ordinary root scan.
@@ -1042,6 +1045,7 @@ static GCfunc *func_newC_at_anchor(lua_State *L, MSize nelems, GCtab *env,
     lj_err_mem(L);
   }
   fn->c.gct = ~LJ_TFUNC;
+  fn->c.gc2_visit_cycle = 0;
   fn->c.ffid = FF_C;
   fn->c.nupvalues = (uint8_t)nelems;
   setmref(fn->c.pc, &G(L)->bc_cfunc_ext);
@@ -1222,6 +1226,7 @@ static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
   /* The typed reservation owns CONSTRUCT while root[] remains NONE. */
   uv = (GCupval *)lj_arena_cellptr(a, cell);
   uv->gct = ~LJ_TUPVAL;
+  uv->gc2_visit_cycle = 0;
   uv->closed = 1;
   setnilV(&uv->tv);
   setmref(uv->v, &uv->tv);
@@ -1285,6 +1290,7 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   uv = (GCupval *)lj_arena_cellptr(a, uvcell);
 
   fn->l.gct = ~LJ_TFUNC;
+  fn->l.gc2_visit_cycle = 0;
   fn->l.ffid = FF_LUA;
   func_nupvalues_rel(&fn->l, 0);
   setmref(fn->l.pc, proto_bc(pt));
@@ -1293,6 +1299,7 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   newwhite(g, obj2gco(fn));
 
   uv->gct = ~LJ_TUPVAL;
+  uv->gc2_visit_cycle = 0;
   uv->closed = 1;
   copyTVrel(L, &uv->tv, src);
   setmref(uv->v, &uv->tv);
@@ -1372,6 +1379,7 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
   /* The typed reservation owns CONSTRUCT while root[] remains NONE. */
   fn = (GCfunc *)lj_arena_cellptr(a, cell);
   fn->l.gct = ~LJ_TFUNC;
+  fn->l.gc2_visit_cycle = 0;
   fn->l.ffid = FF_LUA;
   func_nupvalues_rel(&fn->l, 0);
   setmref(fn->l.pc, proto_bc(pt));
@@ -1406,6 +1414,7 @@ static GCfunc *func_newL_unlinked_nothrow(lua_State *L, GCproto *pt,
   if (LJ_UNLIKELY(fn == NULL))
     return NULL;
   fn->l.gct = ~LJ_TFUNC;
+  fn->l.gc2_visit_cycle = 0;
   fn->l.ffid = FF_LUA;
   /* The count is both traversal metadata and the physical allocation extent.
   ** Clear every slot, then release-publish the exact count before READY. This

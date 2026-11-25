@@ -941,6 +941,62 @@ static void test_upval_needscan_preserve_abort(lua_State *L, global_State *g,
   lua_settop(L, top);
 }
 
+/* A physical body mark can survive on a completed arena or a recovery pin.
+** The table is the only semantic root of this closure, its child prototype
+** and the value retained by its closed upvalue. */
+static void test_retained_closure_graph(lua_State *L, global_State *g,
+                                        TGState *tg)
+{
+  int top = lua_gettop(L), i;
+  GCtab *root, *captured;
+  GCfunc *fn;
+  GCupval *uv;
+  GCproto *pt, *child = NULL;
+  assert(luaL_dostring(L,
+    "local value = {42}\n"
+    "return {function() return function() return value end end}") == LUA_OK);
+  root = tabV(L->top - 1);
+  lua_rawgeti(L, -1, 1);
+  fn = funcV(L->top - 1);
+  assert(isluafunc(fn) && lj_funcL_nupvalues(&fn->l) == 1);
+  uv = func_uv_acq(&fn->l, 0);
+  assert(uv->closed && tvistab(uvval(uv)));
+  captured = tabV(uvval(uv));
+  pt = funcproto(fn);
+  for (i = -(int)proto_sizekgc_acq(pt); i < 0; i++) {
+    GCobj *k = proto_kgc_acq(pt, i);
+    if (k->gch.gct == (uint8_t)~LJ_TPROTO)
+      child = gco2pt(k);
+  }
+  assert(child);
+  lua_pop(L, 1);
+  settle_automatic_cycle(g);
+  lj_gc2_force_major(g);
+  lj_gc2_mark_begin(g);
+  assert(!lj_gc2_ismarked(g, obj2gco(child)));
+  assert(!lj_gc2_ismarked(g, obj2gco(captured)));
+
+  /* The previous visit token survives independently of a current-cycle
+  ** body-only mark. Neither action publishes a semantic grey identity. */
+  lj_obj_addgcflags_atomic(obj2gco(fn), LJ_GC_NEEDSCAN);
+  lj_obj_addgcflags_atomic(obj2gco(uv), LJ_GC_NEEDSCAN);
+  (void)lj_gc2_markmem(g, fn);
+  (void)lj_gc2_markmem(g, pt);
+  (void)lj_gc2_markmem(g, uv);
+  assert(lj_gc2_markobj(g, obj2gco(root)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(child)));
+  assert(lj_gc2_ismarked(g, obj2gco(captured)));
+  lj_gc2_cycle_to_idle(g);
+
+  lua_rawgeti(L, -1, 1);
+  lua_call(L, 0, 1);
+  lua_call(L, 0, 1);
+  lua_rawgeti(L, -1, 1);
+  assert(lua_tointeger(L, -1) == 42);
+  lua_settop(L, top);
+}
+
 static void test_vm_upvalue_barrier(lua_State *L, global_State *g, TGState *tg)
 {
   GCfunc *fn;
@@ -9550,6 +9606,7 @@ int main(void)
   test_c_table_rescan_barrier(L, g, tg);
   test_table_rescan_idle_clear(L, g, tg, 0);
   test_table_rescan_idle_clear(L, g, tg, 1);
+  test_retained_closure_graph(L, g, tg);
   test_upval_needscan_preserve_abort(L, g, tg, 0);
   test_upval_needscan_preserve_abort(L, g, tg, 1);
   test_vm_upvalue_barrier(L, g, tg);
