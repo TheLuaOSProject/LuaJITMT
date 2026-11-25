@@ -19,8 +19,7 @@ typedef struct Parent {
 
 static void defined(jit_State *J, BCIns ins, BCReg slot, int want)
 {
-  BCIns code[2];
-  code[0] = ins;
+  BCIns code[] = { ins, BCINS_AD(BC_RET0, 0, 1) };
   J->pc = code;
   assert(lj_record_test_celluv_defined_before(J, code+1, slot) == want);
 }
