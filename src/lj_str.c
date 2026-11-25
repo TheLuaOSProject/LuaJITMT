@@ -662,18 +662,13 @@ static StrTabHdr *strtab_enter(lua_State *L, global_State *g, StrHash sparse,
   }
 }
 
-/* The frozen source remains readable and every helper sees the same order.
-** Only a target head's first publication may replace the unset sentinel. The
-** target cannot be rehashed or swept while an old-generation helper is pinned. */
-static void strtab_help_expand_bucket(lua_State *L, StrTabHdr *source,
-                                      StrTabHdr *target, MSize cursor)
+/* Freeze the incoming edge before any helper uses the old bucket. A
+** prior interner can still finish a hit, but its old-head insert CAS loses. */
+static uintptr_t strtab_freeze_bucket(lua_State *L, GCRef *head)
 {
-  MSize i = cursor - 1u, split = source->mask + 1u;
-  GCRef *oldhead = &source->bucket[i];
-  GCobj *first[2] = { NULL, NULL }, *last[2] = { NULL, NULL }, *o;
-  uintptr_t edge = lj_str_link_load_acq(oldhead);
+  uintptr_t edge = lj_str_link_load_acq(head);
   while (!(edge & LJ_STRHASH_FROZEN)) {
-    if (lj_str_link_cas_acqrel(oldhead, &edge, edge | LJ_STRHASH_FROZEN)) {
+    if (lj_str_link_cas_acqrel(head, &edge, edge | LJ_STRHASH_FROZEN)) {
 #ifdef LJ_STR_TEST_HELPERS
       str_test_canon(L, NULL, NULL, LJ_STR_TEST_CANON_EXPAND_FROZEN);
 #else
@@ -682,22 +677,45 @@ static void strtab_help_expand_bucket(lua_State *L, StrTabHdr *source,
       break;
     }
   }
-  for (o = lj_str_link_target(edge); o;
-       o = lj_str_hashhead_acq(lj_str_nodelink(source, o))) {
-    MSize side = !!(gco2str(o)->hash & split);
-    if (last[side])
-      lj_str_ref_store_rel(lj_str_nodelink(target, last[side]), (uintptr_t)o);
-    else
-      first[side] = o;
-    last[side] = o;
+  return edge;
+}
+
+/* The frozen sources remain readable and every helper sees the same order.
+** For doubling one source maps to two destinations. For plain shrink, all
+** source buckets in a group must be frozen before their merged head opens. */
+static void strtab_help_expand_bucket(lua_State *L, StrTabHdr *source,
+                                      StrTabHdr *target, MSize cursor)
+{
+  MSize i = cursor - 1u;
+  int grow = source->mask < target->mask;
+  MSize step = (grow ? source->mask : target->mask) + 1u;
+  GCobj *first[2] = { NULL, NULL }, *last[2] = { NULL, NULL }, *o;
+  uintptr_t edge, marker = 0;
+  MSize k;
+  for (k = i; k <= source->mask; k += step) {
+    edge = strtab_freeze_bucket(L, &source->bucket[k]);
+    marker |= edge & LJ_STRHASH_SECONDARY;
   }
-  for (MSize side = 0; side < 2; side++) {
+  for (k = i; k <= source->mask; k += step) {
+    edge = lj_str_link_load_acq(&source->bucket[k]);
+    for (o = lj_str_link_target(edge); o;
+         o = lj_str_hashhead_acq(lj_str_nodelink(source, o))) {
+      MSize side = grow && (gco2str(o)->hash & step);
+      if (last[side])
+        lj_str_ref_store_rel(lj_str_nodelink(target, last[side]), (uintptr_t)o);
+      else
+        first[side] = o;
+      last[side] = o;
+    }
+  }
+  /* Only first publication may replace the unset sentinel. Target chains
+  ** cannot be rehashed or swept while an old-generation helper is pinned. */
+  for (k = 0; k <= (MSize)grow; k++) {
     uintptr_t unset = LJ_STRHASH_FROZEN;
-    uintptr_t marker = edge & LJ_STRHASH_SECONDARY;
-    if (last[side])
-      lj_str_ref_store_rel(lj_str_nodelink(target, last[side]), 0);
-    (void)lj_str_link_cas_acqrel(&target->bucket[i + side * split],
-                                 &unset, (uintptr_t)first[side] | marker);
+    if (last[k])
+      lj_str_ref_store_rel(lj_str_nodelink(target, last[k]), 0);
+    (void)lj_str_link_cas_acqrel(&target->bucket[i + k * step],
+                                 &unset, (uintptr_t)first[k] | marker);
   }
   if (la_cas32(&target->copy_cursor, &cursor, i, LA_ACQ_REL, LA_ACQ)) {
 #ifdef LJ_STR_TEST_HELPERS
@@ -754,9 +772,9 @@ void lj_str_expand_terminal(lua_State *L)
     abort();
 }
 
-/* Each target bucket maps to one source bucket. During a helpable expansion
-** the target primary marker may still be unset even when its dense route is
-** ready. Select the hash with the source marker until global handoff. */
+/* During a helpable expansion the target primary marker may still be unset
+** even when its dense route is ready. Select the hash with the source marker
+** until global handoff. During plain shrink the hash mode stays sparse. */
 static StrTabHdr *strtab_enter_completed(lua_State *L, global_State *g,
                                         StrHash sparse, const char *bytes,
                                         MSize len, int *selected_alg)
@@ -780,7 +798,7 @@ static StrTabHdr *strtab_enter_completed(lua_State *L, global_State *g,
         hashalg = 0;
       }
 #endif
-      strtab_help_expand(L, source, target, i);
+      strtab_help_expand(L, source, target, i & target->mask);
     } else {
       target = (StrTabHdr *)la_loadptr_acq((void *const *)&source->expand_to);
       if (i < la_load32_acq(&source->copy_cursor))
@@ -835,10 +853,15 @@ restart:
   oldtab = oldhdr ? oldhdr->bucket : NULL;
   oldmask = oldhdr ? oldhdr->mask : ~(MSize)0;
 
-  if (oldhdr && newmask == (oldmask << 1) + 1u &&
-      (oldmask & (oldmask + 1u)) == 0) {
+  if (oldhdr && (oldmask & (oldmask + 1u)) == 0 &&
+      (newmask & (newmask + 1u)) == 0 &&
+      (newmask == (oldmask << 1) + 1u ||
+       (newmask < oldmask &&
+        !(lj_str_topology_acq(oldhdr) & LJ_STRTAB_TOPO_SECOND)))) {
     uintptr_t expect = lj_str_topology_acq(oldhdr);
+    MSize routemask = oldmask < newmask ? oldmask : newmask;
     if ((expect & ~LJ_STRTAB_TOPO_SECOND) != 0 ||
+        (newmask < oldmask && expect != 0) ||
         lj_tg_strtab_active_depth_acq(L2TG(L)) != 0 ||
         !lj_gc2_smr_read_try(g)) {
       lj_mem_free(g, newhdr, newsize);
@@ -847,7 +870,7 @@ restart:
     newhdr->link_slot = 1u - oldhdr->link_slot;
     newhdr->has_secondary = (expect & LJ_STRTAB_TOPO_SECOND) != 0;
     newhdr->topology = expect;
-    newhdr->copy_cursor = oldmask + 1u;
+    newhdr->copy_cursor = routemask + 1u;
     for (i = 0; i <= newmask; i++)
       lj_str_ref_store_rel(&newtab[i], LJ_STRHASH_FROZEN);
     if (lj_str_tabh_acq(g) == oldhdr &&

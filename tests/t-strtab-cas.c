@@ -361,9 +361,10 @@ static void pause_moved_string(lua_State *L, GCstr *s, StrCanonRec *rec,
     if (stage == LJ_STR_TEST_CANON_EXPAND_BUCKET_DONE ||
         stage == LJ_STR_TEST_CANON_EXPAND_FROZEN ||
         stage == LJ_STR_TEST_CANON_EXPAND_PUBLISHED) {
-      assert(s == NULL && lj_str_expand_to_acq(p->hdr) != NULL);
-      p->destination = p->hdr->mask;
-      assert(p->destination == p->hdr->mask);
+      StrTabHdr *target = lj_str_expand_to_acq(p->hdr);
+      assert(s == NULL && target != NULL);
+      p->destination = p->hdr->mask < target->mask ? p->hdr->mask :
+                      target->mask;
     } else {
       assert(s != NULL);
     }
@@ -402,8 +403,11 @@ static void check_paused_topology(lua_State *L, PausedTopology *p,
   GCstr *expected, *dense_expected = NULL, *inserted = NULL;
   GCRef *pending_primary = NULL;
   const char *identity;
-  char new_key[72];
+  enum { MERGE_SOURCES = 4 };
+  GCstr *merged[MERGE_SOURCES];
+  char new_key[72], merged_keys[MERGE_SOURCES][64];
   size_t new_len = 0, observed = 0;
+  MSize merges = 0, m;
   int top = lua_gettop(L);
   lua_pushlstring(L, bytes, len);
   expected = strV(L->top - 1);
@@ -414,6 +418,26 @@ static void check_paused_topology(lua_State *L, PausedTopology *p,
   }
   p->peer = lua_newthread(L);
   p->hdr = lj_str_tabh_acq(G(L));
+  if (p->stage == LJ_STR_TEST_CANON_EXPAND_FROZEN &&
+      p->target_mask < p->hdr->mask) {
+    global_State *g = G(L);
+    merges = (p->hdr->mask + 1u) / (p->target_mask + 1u);
+    assert(merges == MERGE_SOURCES);
+    for (m = 0; m < merges; m++) {
+      MSize source = (m + 1u) * (p->target_mask + 1u) - 1u;
+      for (i = 0;; i++) {
+        int len = snprintf(merged_keys[m], sizeof(merged_keys[m]),
+                           "%08x-paused-shrink-source-%u-%08x",
+                           i * UINT32_C(0x9e3779b9), m, i);
+        assert(len > 0 && (size_t)len < sizeof(merged_keys[m]));
+        if ((test_hash_sparse(g->str.seed, merged_keys[m], (MSize)len) &
+             p->hdr->mask) == source)
+          break;
+      }
+      lua_pushstring(L, merged_keys[m]);
+      merged[m] = strV(L->top - 1);
+    }
+  }
   paused_topology = p;
   lj_str_test_set_canon_hook(pause_moved_string);
   assert(lj_thr_create(&peer, move_string_worker, p) == 0);
@@ -430,22 +454,35 @@ static void check_paused_topology(lua_State *L, PausedTopology *p,
     assert(target && lj_str_tabh_acq(g) == p->hdr);
     if (p->stage != LJ_STR_TEST_CANON_EXPAND_BUCKET_DONE) {
       uintptr_t oldhead = lj_str_link_load_acq(&p->hdr->bucket[p->destination]);
-      assert(la_load32_acq(&target->copy_cursor) == p->hdr->mask + 1u);
+      assert(la_load32_acq(&target->copy_cursor) == p->destination + 1u);
       assert(!!(oldhead & LJ_STRHASH_FROZEN) ==
              (p->stage == LJ_STR_TEST_CANON_EXPAND_FROZEN));
     }
     for (i = 0;; i++) {
-      int n = snprintf(new_key, sizeof(new_key), "%08x-paused-growth-insert-%08x",
-                       i * UINT32_C(0x9e3779b9), i);
+      int n = snprintf(new_key, sizeof(new_key), "%08x-paused-resize-insert-%x-%u-%u-%08x",
+                       i * UINT32_C(0x9e3779b9), p->target_mask, p->stage,
+                       (unsigned)expected->hashalg, i);
       assert(n > 0 && (size_t)n < sizeof(new_key));
       new_len = (size_t)n;
       hash = test_hash_sparse(g->str.seed, new_key, (MSize)n);
-      if ((hash & p->hdr->mask) == p->destination)
+      if ((hash & p->destination) == p->destination)
         break;
+    }
+    for (m = 1; m < merges; m++) {
+      MSize source = (m + 1u) * (target->mask + 1u) - 1u;
+      assert(!(lj_str_link_load_acq(&p->hdr->bucket[source]) &
+               LJ_STRHASH_FROZEN));
     }
     lua_pushlstring(L, new_key, new_len);
     inserted = strV(L->top - 1);
     assert(lj_str_tabh_acq(g) == p->hdr);
+    for (m = 0; m < merges; m++) {
+      MSize source = (m + 1u) * (target->mask + 1u) - 1u;
+      assert(lj_str_link_load_acq(&p->hdr->bucket[source]) &
+             LJ_STRHASH_FROZEN);
+      lua_pushstring(L, merged_keys[m]);
+      assert(strV(L->top - 1) == merged[m]);
+    }
     assert(lj_str_link_target(lj_str_link_load_acq(
       &target->bucket[hash & target->mask])) == obj2gco(inserted));
     lua_pushlstring(L, new_key, new_len);
@@ -581,7 +618,7 @@ static void exercise_paused_topology_hits(void)
   static const char bytes[] = "string-intern-hit-during-moving-topology";
   lua_State *L = luaL_newstate();
   global_State *g;
-  PausedTopology resize = { 0 }, grow = { 0 }, publish = { 0 };
+  PausedTopology resize = { 0 }, grow = { 0 }, publish = { 0 }, shrink = { 0 };
   assert(L != NULL);
   g = G(L);
   check_resize_hit_invalidation(L, bytes, sizeof(bytes)-1u);
@@ -599,6 +636,10 @@ static void exercise_paused_topology_hits(void)
   publish.target_mask = (grow.target_mask << 1) + 1u;
   check_paused_topology(L, &publish, bytes, sizeof(bytes)-1u);
   assert(lj_str_mask_acq(g) == publish.target_mask);
+  shrink.stage = LJ_STR_TEST_CANON_EXPAND_FROZEN;
+  shrink.target_mask = 4095u;
+  check_paused_topology(L, &shrink, bytes, sizeof(bytes)-1u);
+  assert(lj_str_mask_acq(g) == shrink.target_mask);
 
 #if LUAJIT_SECURITY_STRHASH
   {
