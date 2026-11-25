@@ -11,10 +11,48 @@
 
 #include "lj_obj.h"
 #include "lj_str.h"
+#include "lj_safepoint.h"
 
 static char held[1024];
 static const char *borrowed;
 static uint32_t stop_requested;
+static uint32_t callback_ready, callback_release;
+
+static void run_callback(void (*fn)(void))
+{
+  fn();
+}
+
+static int callback_park(lua_State *L)
+{
+  if (lua_gettop(L) == 0) {
+    LJNativeFrame f;
+    lj_native_enter_l(L, &f);
+    while (!la_load32_acq(&callback_ready))
+      la_cpu_pause();
+    (void)lj_native_leave_l(L, &f);
+  } else if (lua_toboolean(L, 1)) {
+    la_store32_rel(&callback_release, 1);
+  } else {
+    char expected[512];
+    const char *bytes;
+    size_t len;
+    LJNativeFrame f;
+    memset(expected, 'B', sizeof(expected));
+    lua_pushlstring(L, expected, sizeof(expected));
+    bytes = lua_tolstring(L, -1, &len);
+    assert(len == sizeof(expected));
+    lj_native_enter_l(L, &f);
+    la_store32_rel(&callback_ready, 1);
+    while (!la_load32_acq(&callback_release))
+      la_cpu_pause();
+    (void)lj_native_leave_l(L, &f);
+    assert(memcmp(bytes, expected, len) == 0);
+    lua_pushlstring(L, expected, sizeof(expected));
+    assert(lua_tolstring(L, -1, NULL) == bytes);
+  }
+  return 0;
+}
 
 static int stop_worker(lua_State *L)
 {
@@ -40,14 +78,21 @@ static int check_reclamation(lua_State *L)
 int main(void)
 {
   static const char script[] =
-    "local stats, held, stop = ...\n"
+    "local stats, held, stop, park, invoke = ...\n"
     "local threading = require('threading')\n"
     "if jit then jit.off() end\n"
     "local ready, start = threading.channel(1), threading.channel(1)\n"
-    "local peer = assert(threading.spawn(function(stop, ready, start, held)\n"
+    "local have_ffi, ffi = pcall(require, 'ffi')\n"
+    "if not have_ffi then ffi = nil end\n"
+    "local peer = assert(threading.spawn(function(stop, ready, start, held, park, invoke, ffi)\n"
     "  assert(ready:send(true, 10))\n"
     "  assert(select(2, start:recv(20)))\n"
     "  assert(ready:send(true, 10))\n"
+    "  if ffi then\n"
+    "    local cb = ffi.cast('void (*)(void)', function() park(false) end)\n"
+    "    ffi.cast('void (*)(void (*)(void))', invoke)(cb)\n"
+    "    cb:free()\n"
+    "  end\n"
     "  local sum = 0\n"
     "  repeat\n"
     "    for i = 1, 200000 do\n"
@@ -56,7 +101,7 @@ int main(void)
     "    end\n"
     "  until stop()\n"
     "  return #held\n"
-    "end, stop, ready, start, held))\n"
+    "end, stop, ready, start, held, park, invoke, ffi))\n"
     "local function churn(round)\n"
     "  for i = 1, 600 do\n"
     "    local s = ('%d:%d:'):format(round, i):rep(20)\n"
@@ -70,6 +115,13 @@ int main(void)
     "assert(stats() == before, 'native ACK certified string acquisition')\n"
     "assert(start:send(true, 10))\n"
     "assert(select(2, ready:recv(10)))\n"
+    "if ffi then\n"
+    "  park()\n"
+    "  churn(12)\n"
+    "  collectgarbage('collect')\n"
+    "  assert(stats() == before, 'FFI callback certified string acquisition')\n"
+    "  park(true)\n"
+    "end\n"
     "local weak = setmetatable({('weak-value-'):rep(16)}, {__mode = 'v'})\n"
     "local finalized = 0\n"
     "do\n"
@@ -107,7 +159,9 @@ int main(void)
   lua_pushcfunction(L, check_reclamation);
   lua_pushvalue(L, 1);
   lua_pushcfunction(L, stop_worker);
-  status = lua_pcall(L, 3, 0, 0);
+  lua_pushcfunction(L, callback_park);
+  lua_pushlightuserdata(L, (void *)(uintptr_t)run_callback);
+  status = lua_pcall(L, 5, 0, 0);
   if (status != LUA_OK)
     fprintf(stderr, "%s\n", lua_tostring(L, -1));
   assert(status == LUA_OK);
