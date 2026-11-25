@@ -52,6 +52,13 @@ local function trace_owned_cnew(n)
   return total
 end
 
+local new = ffi.new
+local function allocate_outer(n)
+  local last
+  for _ = 1, n do last = new(outer_ct) end
+  return last
+end
+
 if jit.status() then
   jit.flush()
   jit.opt.start("hotloop=1", "hotexit=1")
@@ -74,11 +81,16 @@ if jit.status() then
   assert(trace_count(200) == 0,
 	 "active-MT cdata field load/store loop must stay interpreted")
 
+  assert(trace_owned_cnew(80) == 6560)
   jit.flush()
-  jit.opt.start("hotloop=1", "hotexit=1")
-  assert(trace_owned_cnew(80) > 0)
+  jit.opt.start("hotloop=1", "hotexit=1", "-sink")
+  local last = allocate_outer(80)
   assert(trace_count(200) > 0,
 	 "active-MT trace-owned cdata allocation loop should trace")
+  assert(last.owner == 0 and last.counter == 0)
+  last.owner, last.counter = 80, 81
+  collectgarbage("collect")
+  assert(last.owner == 80 and last.counter == 81)
   harness.release_start(release, 1)
   harness.join_all({ worker })
 
