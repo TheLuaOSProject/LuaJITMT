@@ -1532,6 +1532,7 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   /* Install the environment captured before certificate validation. Do not
   ** reload parent->env after a racy setfenv may have changed it. */
   emit_movtomro(as, env|REX_GC64, RID_RET, offsetof(GCfuncL, env));
+  asm_fnew1num_movi64zero(as, RID_RET, offsetof(GCfuncL, gclist));
   asm_fnew1num_movi8(as, RID_RET, offsetof(GCfuncL, ffid), FF_LUA);
   asm_fnew1num_movi8(as, RID_RET, offsetof(GCfuncL, gct), ~LJ_TFUNC);
   checkmclim(as);  /* Split function fields from proto closure counter. */

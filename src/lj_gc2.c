@@ -1332,12 +1332,19 @@ static int gc2_traverse_thread(global_State *g, lua_State *th,
 void lj_gc2_trace_sweep_roots(global_State *g);
 uint32_t lj_gc2_trace_sweep_root(global_State *g, GCobj *o);
 static uint32_t gc2_trace_sweep_worker_edge(global_State *g, GCobj *o);
+/* Ordinary publications may follow unenumerated payload changes. A worker
+** discovery may rely on its own queue reservation. A closure read can only
+** coalesce after worker traversal published its completed proof. */
+typedef enum GC2SweepEdgeKind {
+  GC2_SWEEP_PUBLISH, GC2_SWEEP_DISCOVER, GC2_SWEEP_READ_FUNC
+} GC2SweepEdgeKind;
+
 static uint32_t gc2_trace_sweep_edge(global_State *g, GCobj *o,
-				   int worker_edge,
+				   GC2SweepEdgeKind edge_kind,
 				   const GC2MarkScope *scope,
 				   uint32_t start, uint32_t gct);
 static uint32_t gc2_trace_sweep_tv_edge(global_State *g, cTValue *tv,
-					 int worker_edge);
+					 GC2SweepEdgeKind edge_kind);
 static int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g,
 					GCobj *o, cTValue *fin);
 static int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
@@ -7606,7 +7613,7 @@ int lj_gc2_tv_gcref_valid_edge(global_State *g, cTValue *tv)
 static void gc2_mark_tv(global_State *g, cTValue *tv)
 {
   if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
-    (void)gc2_trace_sweep_tv_edge(g, tv, 0);
+    (void)gc2_trace_sweep_tv_edge(g, tv, GC2_SWEEP_PUBLISH);
     return;
   }
   if (tvisgcv(tv))
@@ -7809,7 +7816,7 @@ static void gc2_mark_thread_root_obj(global_State *g, GCobj *o)
 static void gc2_mark_thread_root_tv(global_State *g, cTValue *tv)
 {
   if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
-    (void)gc2_trace_sweep_tv_edge(g, tv, 0);
+    (void)gc2_trace_sweep_tv_edge(g, tv, GC2_SWEEP_PUBLISH);
     return;
   }
   if (tvisgcv(tv))
@@ -7819,7 +7826,7 @@ static void gc2_mark_thread_root_tv(global_State *g, cTValue *tv)
 static int gc2_mark_thread_root_tv_status(global_State *g, cTValue *tv)
 {
   if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
-    (void)gc2_trace_sweep_tv_edge(g, tv, 0);
+    (void)gc2_trace_sweep_tv_edge(g, tv, GC2_SWEEP_PUBLISH);
     return 1;
   }
   if (tvisgcv(tv))
@@ -7830,7 +7837,7 @@ static int gc2_mark_thread_root_tv_status(global_State *g, cTValue *tv)
 static int gc2_mark_upval_payload_tv_status(global_State *g, cTValue *tv)
 {
   if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
-    (void)gc2_trace_sweep_tv_edge(g, tv, 0);
+    (void)gc2_trace_sweep_tv_edge(g, tv, GC2_SWEEP_PUBLISH);
     return 1;
   }
   if (!tvisgcv(tv))
@@ -15859,7 +15866,7 @@ static int gc2_sweep_barrier_tv(global_State *g, cTValue *tv)
     return 0;
   lj_tv_load_acq(&snap, tv);
   if (tvisgcv(&snap))
-    (void)gc2_trace_sweep_tv_edge(g, &snap, 0);
+    (void)gc2_trace_sweep_tv_edge(g, &snap, GC2_SWEEP_PUBLISH);
   return 1;
 }
 
@@ -16046,14 +16053,14 @@ void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv)
 	  ** veto). Ordinary mark admission can report DEAD for that bounded
 	  ** arbitration window without doing either, which lets the caller's
 	  ** subsequent validation manufacture a false nil. */
-	  (void)gc2_trace_sweep_tv_edge(g, &snap, 0);
+	  (void)gc2_trace_sweep_tv_edge(g, &snap, GC2_SWEEP_PUBLISH);
 	} else {
 	  int status = gc2_markobj_expected_status(
 	    g, o, (uint32_t)~itype(&snap), NULL);
 	  if (status == GC2_MARK_DEAD &&
 	      gc2_phase_acq(g) == LJ_GC2_SWEEP) {
 	    /* Close the MARK/WEAK -> SWEEP sampling edge as well. */
-	    (void)gc2_trace_sweep_tv_edge(g, &snap, 0);
+	    (void)gc2_trace_sweep_tv_edge(g, &snap, GC2_SWEEP_PUBLISH);
 	  } else if (status == GC2_MARK_LIVE_ALREADY) {
 	    gc2_thread_root_rescan_marked_obj(g, o);
 	  }
@@ -16266,7 +16273,7 @@ void lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent,
       lj_tv_load_acq(&snap, &tv[i]);
       if (tvisgcv(&snap)) {
 	if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
-	  (void)gc2_trace_sweep_tv_edge(g, &snap, 0);
+	  (void)gc2_trace_sweep_tv_edge(g, &snap, GC2_SWEEP_PUBLISH);
 	  continue;
 	}
 	{
@@ -16289,7 +16296,7 @@ void lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent,
       lj_tv_load_acq(&snap, &tv[i]);
       if (tvisgcv(&snap)) {
 	if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
-	  (void)gc2_trace_sweep_tv_edge(g, &snap, 0);
+	  (void)gc2_trace_sweep_tv_edge(g, &snap, GC2_SWEEP_PUBLISH);
 	else
 	  gc2_remember_pair(g, parent, gcV(&snap));
       }
@@ -16421,7 +16428,7 @@ void lj_gc2_barrier_key_g(global_State *g, GCtab *t, cTValue *key)
   if (!t || !key || !tvisgcv(key))
     return;
   if (g && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
-    (void)gc2_trace_sweep_tv_edge(g, key, 0);
+    (void)gc2_trace_sweep_tv_edge(g, key, GC2_SWEEP_PUBLISH);
     return;
   }
   if (LJ_UNLIKELY(!gc2_tv_gcref_type_match_known(g, key)))
@@ -16933,7 +16940,7 @@ static void gc2_table_store_preserve_edge(global_State *g, GCobj *parent,
     return;
   phase = gc2_phase_acq(g);
   if (phase == LJ_GC2_SWEEP) {
-    (void)gc2_trace_sweep_tv_edge(g, &snap, 0);
+    (void)gc2_trace_sweep_tv_edge(g, &snap, GC2_SWEEP_PUBLISH);
     return;
   }
   if (phase == LJ_GC2_IDLE) {
@@ -16943,7 +16950,7 @@ static void gc2_table_store_preserve_edge(global_State *g, GCobj *parent,
   status = gc2_markobj_expected_status(g, gcV(&snap),
 				       (uint32_t)~itype(&snap), NULL);
   if (status == GC2_MARK_DEAD && gc2_phase_acq(g) == LJ_GC2_SWEEP)
-    (void)gc2_trace_sweep_tv_edge(g, &snap, 0);
+    (void)gc2_trace_sweep_tv_edge(g, &snap, GC2_SWEEP_PUBLISH);
   else if (status == GC2_MARK_LIVE_ALREADY)
     gc2_thread_root_rescan_marked_obj(g, gcV(&snap));
 }
@@ -17357,7 +17364,7 @@ denied:
 ** and retain an admitted allocation through all body/type accesses made by
 ** the ordinary sweep tracer. */
 static uint32_t gc2_trace_sweep_tv_edge(global_State *g, cTValue *tv,
-					 int worker_edge)
+					 GC2SweepEdgeKind edge_kind)
 {
   GC2MarkScope scope;
   GCobj *o;
@@ -17380,7 +17387,7 @@ static uint32_t gc2_trace_sweep_tv_edge(global_State *g, cTValue *tv,
   /* The validated tag and allocation start belong to this still-counted
   ** incarnation. Reuse that admission for marking and all ensuing payload
   ** accesses instead of re-entering the same arena/HugeTab reader protocol. */
-  traced = gc2_trace_sweep_edge(g, o, worker_edge, &scope, start,
+  traced = gc2_trace_sweep_edge(g, o, edge_kind, &scope, start,
 			      (uint32_t)~itype(tv));
   gc2_mark_scope_leave(&scope);
   return traced;
@@ -17398,7 +17405,11 @@ void lj_gc2_publish_read_root(lua_State *L, cTValue *root, int stack)
       /* Root transfer has the same table-edge semantics as graph discovery.
       ** Preserve the body, queue any uncovered payload, and leave a writer's
       ** dirty epoch intact. Repeated reads can overlap that same scan. */
-      (void)gc2_trace_sweep_tv_edge(g, &snap, 1);
+      (void)gc2_trace_sweep_tv_edge(g, &snap, GC2_SWEEP_DISCOVER);
+      return;
+    }
+    if (tvisfunc(&snap)) {
+      (void)gc2_trace_sweep_tv_edge(g, &snap, GC2_SWEEP_READ_FUNC);
       return;
     }
   }
@@ -18789,7 +18800,7 @@ static int gc2_markobj_worker(global_State *g, GCobj *o)
 static void gc2_mark_tv_worker(global_State *g, cTValue *tv)
 {
   if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
-    (void)gc2_trace_sweep_tv_edge(g, tv, 1);
+    (void)gc2_trace_sweep_tv_edge(g, tv, GC2_SWEEP_DISCOVER);
     return;
   }
   if (tvisgcv(tv))
@@ -18825,7 +18836,7 @@ static void gc2_mark_thread_root_obj_worker(global_State *g, GCobj *o)
 static void gc2_mark_thread_root_tv_worker(global_State *g, cTValue *tv)
 {
   if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
-    (void)gc2_trace_sweep_tv_edge(g, tv, 1);
+    (void)gc2_trace_sweep_tv_edge(g, tv, GC2_SWEEP_DISCOVER);
     return;
   }
   if (tvisgcv(tv))
@@ -18835,7 +18846,7 @@ static void gc2_mark_thread_root_tv_worker(global_State *g, cTValue *tv)
 static int gc2_mark_thread_root_tv_worker_status(global_State *g, cTValue *tv)
 {
   if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
-    (void)gc2_trace_sweep_tv_edge(g, tv, 1);
+    (void)gc2_trace_sweep_tv_edge(g, tv, GC2_SWEEP_DISCOVER);
     return 1;
   }
   if (tvisgcv(tv))
@@ -18847,7 +18858,7 @@ static int gc2_mark_upval_payload_tv_worker_status(global_State *g,
 					    cTValue *tv)
 {
   if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
-    (void)gc2_trace_sweep_tv_edge(g, tv, 1);
+    (void)gc2_trace_sweep_tv_edge(g, tv, GC2_SWEEP_DISCOVER);
     return 1;
   }
   if (!tvisgcv(tv))
@@ -19406,7 +19417,7 @@ static void gc2_mark_table_child_tv_worker(global_State *g, GCtab *parent,
     return;
   }
   if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
-    (void)gc2_trace_sweep_tv_edge(g, tv, 1);
+    (void)gc2_trace_sweep_tv_edge(g, tv, GC2_SWEEP_DISCOVER);
     return;
   }
   if (!tvisgcv(tv))
@@ -21376,6 +21387,10 @@ static void gc2_traverse_func(global_State *g, GCfunc *fn)
       gc2_mark_upval_payload_tv_worker(g, &tv);
     }
   }
+  /* The worker owns the closure's outgoing edges through mark/publication.
+  ** Readers can coalesce only after this release, never on a queue hint. */
+  if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
+    la_store32_rel(&fn->c.gc2_scan_cycle, gc2_cycle_acq(g));
 }
 
 #if LJ_HASJIT
@@ -22744,7 +22759,7 @@ uint32_t lj_gc2_preserve_sweep_root(global_State *g, GCobj *o)
 }
 
 static uint32_t gc2_trace_sweep_edge(global_State *g, GCobj *o,
-				   int worker_edge,
+				   GC2SweepEdgeKind edge_kind,
 				   const GC2MarkScope *scope,
 				   uint32_t start, uint32_t gct)
 {
@@ -22803,7 +22818,11 @@ static uint32_t gc2_trace_sweep_edge(global_State *g, GCobj *o,
     ** lifetime edge; the current stamp is the complete payload proof. */
     goto out;
   }
-  if (worker_edge && gct == (uint32_t)~LJ_TTAB &&
+  if (edge_kind == GC2_SWEEP_READ_FUNC && status == GC2_MARK_LIVE_ALREADY &&
+      gct == (uint32_t)~LJ_TFUNC &&
+      la_load32_acq(&gco2func(o)->c.gc2_scan_cycle) == gc2_cycle_acq(g))
+    goto out;
+  if (edge_kind == GC2_SWEEP_DISCOVER && gct == (uint32_t)~LJ_TTAB &&
       !(lj_obj_gcflags(o) & LJ_GC_NEEDSCAN) &&
       gc2_table_scan_current(g, gco2tab(o))) {
     /* This is graph discovery by an admitted worker traversal, not a semantic
@@ -22817,7 +22836,7 @@ static uint32_t gc2_trace_sweep_edge(global_State *g, GCobj *o,
 #endif
     goto out;
   }
-  if (worker_edge && gct != (uint32_t)~LJ_TTAB &&
+  if (edge_kind == GC2_SWEEP_DISCOVER && gct != (uint32_t)~LJ_TTAB &&
       gct != (uint32_t)~LJ_TTHREAD && gc2_gct_may_traverse(gct) &&
       !gc2_container_visit(g, o)) {
     /* Preserve-path NEW clears prior-cycle uncounted membership before graph
@@ -22840,7 +22859,7 @@ static uint32_t gc2_trace_sweep_edge(global_State *g, GCobj *o,
     ** before the post-retire grace/reclaim boundary. This also makes every
     ** sweep-time semantic publication visible to the close predicate.
     */
-    result = (uint32_t)(worker_edge ?
+    result = (uint32_t)(edge_kind != GC2_SWEEP_PUBLISH ?
       gc2_publish_mutator_scoped(g, o, scope) :
       gc2_publish_semantic_scoped(g, o, gct, scope));
   }
@@ -22851,12 +22870,12 @@ out:
 
 uint32_t lj_gc2_trace_sweep_root(global_State *g, GCobj *o)
 {
-  return gc2_trace_sweep_edge(g, o, 0, NULL, 0, 0);
+  return gc2_trace_sweep_edge(g, o, GC2_SWEEP_PUBLISH, NULL, 0, 0);
 }
 
 static uint32_t gc2_trace_sweep_worker_edge(global_State *g, GCobj *o)
 {
-  return gc2_trace_sweep_edge(g, o, 1, NULL, 0, 0);
+  return gc2_trace_sweep_edge(g, o, GC2_SWEEP_DISCOVER, NULL, 0, 0);
 }
 
 void lj_gc2_trace_sweep_roots(global_State *g)

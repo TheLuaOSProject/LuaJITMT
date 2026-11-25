@@ -652,10 +652,12 @@ typedef struct GCupval {
 
 /* -- Function object (closures) ------------------------------------------ */
 
-/* Common header for functions. env should be at same offset in GCudata. */
+/* Common header for functions. env should be at same offset in GCudata.
+** GC2 uses the retired color collector's unused function-list slot for its
+** completed traversal cycle. Keep the common header layout. */
 #define GCfuncHeader \
   GCHeader; uint8_t ffid; uint8_t nupvalues; uint32_t gc2_visit_cycle; \
-  GCRef env; GCRef gclist; MRef pc
+  GCRef env; union { GCRef gclist; uint32_t gc2_scan_cycle; }; MRef pc
 
 typedef struct GCfuncC {
   GCfuncHeader;

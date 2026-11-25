@@ -367,8 +367,6 @@ static void check_step_reclamation(int workers)
     "  local deadline = threading.now() + 15\n"
     "  repeat\n"
     "    for i = 1, 32 do step() end\n"
-    /* Background workers can complete the cycle between public steps. */
-    "    if workers > 0 then threading.sleep(0.001) end\n"
     "    memory = collectgarbage('count')\n"
     "    assert(getmetatable(weak)[mode] == 'v', 'step lost rooted __mode')\n"
     "    if peak - memory > 450 and (not settled or memory < settled + 256)\n"
@@ -380,6 +378,7 @@ static void check_step_reclamation(int workers)
     "  if round > 2 then assert(memory < settled + 256, 'step heap grew') end\n"
     "  assert(keep == ('S'):rep(#keep))\n"
     "end\n"
+    /* Background workers can complete the cycle between public steps. */
     "assert(workers > 0 or cycles > 0)\n"
     "assert(threading.gcworkers() == workers)\n";
   lua_State *L = luaL_newstate();

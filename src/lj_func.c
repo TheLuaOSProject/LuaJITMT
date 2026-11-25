@@ -1050,6 +1050,7 @@ static GCfunc *func_newC_at_anchor(lua_State *L, MSize nelems, GCtab *env,
   }
   fn->c.gct = ~LJ_TFUNC;
   fn->c.gc2_visit_cycle = 0;
+  fn->c.gc2_scan_cycle = 0;
   fn->c.ffid = FF_C;
   fn->c.nupvalues = (uint8_t)nelems;
   setmref(fn->c.pc, &G(L)->bc_cfunc_ext);
@@ -1295,6 +1296,7 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
 
   fn->l.gct = ~LJ_TFUNC;
   fn->l.gc2_visit_cycle = 0;
+  fn->l.gc2_scan_cycle = 0;
   fn->l.ffid = FF_LUA;
   func_nupvalues_rel(&fn->l, 0);
   setmref(fn->l.pc, proto_bc(pt));
@@ -1384,6 +1386,7 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
   fn = (GCfunc *)lj_arena_cellptr(a, cell);
   fn->l.gct = ~LJ_TFUNC;
   fn->l.gc2_visit_cycle = 0;
+  fn->l.gc2_scan_cycle = 0;
   fn->l.ffid = FF_LUA;
   func_nupvalues_rel(&fn->l, 0);
   setmref(fn->l.pc, proto_bc(pt));
@@ -1419,6 +1422,7 @@ static GCfunc *func_newL_unlinked_nothrow(lua_State *L, GCproto *pt,
     return NULL;
   fn->l.gct = ~LJ_TFUNC;
   fn->l.gc2_visit_cycle = 0;
+  fn->l.gc2_scan_cycle = 0;
   fn->l.ffid = FF_LUA;
   /* The count is both traversal metadata and the physical allocation extent.
   ** Clear every slot, then release-publish the exact count before READY. This
