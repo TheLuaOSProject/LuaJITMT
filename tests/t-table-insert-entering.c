@@ -1,6 +1,5 @@
 /*
-** Focused regression fixture for table.insert structural ownership while
-** mt_entering is nonzero.
+** A paused structural owner must permit table.insert on an existing array.
 */
 
 #include <assert.h>
@@ -12,6 +11,7 @@
 
 #include "lj_obj.h"
 #include "lj_tab.h"
+#include "lj_tg.h"
 
 /* Built by the M5 harness with LJ_TAB_TEST_HELPERS enabled. */
 
@@ -72,6 +72,9 @@ static void exercise_private_insert(lua_State *L)
 static void exercise_entering_insert(lua_State *L)
 {
   global_State *g = G(L);
+  GCtab *t;
+  uint32_t owner = 0;
+  uint32_t peer = lj_tg_tid_acq(L2TG(L)) + 1u;
 
   lua_settop(L, 0);
   lua_createtable(L, 32, 0);
@@ -81,12 +84,18 @@ static void exercise_entering_insert(lua_State *L)
 
   lj_tab_test_reset_struct_enter_acquires();
   assert(mt_entering_add_rlx(g, 1) == 0);
+  t = tabV(L->base);
+  /* Model a resizer stopped after claiming this table, before freezing or
+  ** replacing either vector. Both public operations fit the live array. */
+  assert(lj_tab_struct_owner_cas(t, &owner, peer));
   call_insert_append(L, 1, 44);
   call_insert_pos(L, 1, 2, 99);
+  owner = peer;
+  assert(lj_tab_struct_owner_cas(t, &owner, 0));
   assert(mt_entering_sub_acqrel(g, 1) == 1);
   mt_entering_futex_wake(g, INT_MAX);
 
-  assert(lj_tab_test_struct_enter_acquires() == 2);
+  assert(lj_tab_test_struct_enter_acquires() == 0);
   assert_i(L, 1, 1, 11);
   assert_i(L, 1, 2, 99);
   assert_i(L, 1, 3, 22);

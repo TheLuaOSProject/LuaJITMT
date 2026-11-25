@@ -276,7 +276,7 @@ return function(add)
 
   add({
     name = "m5_table_insert_entering",
-    description = "table.insert owns structure during mt_entering",
+    description = "table.insert on a live array progresses past a paused structural owner",
     run = function(t)
       build.build_and_run_c(t, t:tmp("lj_t-table-insert-entering"),
                             "t-table-insert-entering.c",

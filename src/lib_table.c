@@ -28,108 +28,6 @@
 
 #define LJLIB_MODULE_table
 
-static LJ_AINLINE int table_mt_concurrent(lua_State *L)
-{
-  return mt_active_or_entering_acq(G(L));
-}
-
-static LJ_AINLINE void table_insert_publish_pending(lua_State *L, GCtab *t,
-						    cTValue *src)
-{
-  /*
-  ** table.insert can be called from a trace with the inserted value only in the
-  ** synthetic C-call argument area. Publish the parent and pending value before
-  ** lj_tab_setint() can allocate, resize, or assist GC.
-  */
-  lj_gc_pubobjroot(L, obj2gco(t));
-  lj_gc_pubroot(L, src);
-}
-
-static LJ_AINLINE void table_insert_store_wait(lua_State *L, int guarded)
-{
-  /*
-  ** A fresh STOPREQ-visible wait can longjmp. While table.insert owns the
-  ** per-table structural slot, retry waits must only yield to competing
-  ** resizers and then unwind through the normal leave path below.
-  */
-  if (guarded)
-    lj_tab_wait_no_l();
-  else
-    lj_tab_store_wait_l(L);
-}
-
-static void table_insert_shift_store(lua_State *L, GCtab *t, int32_t i,
-				     int guarded)
-{
-  lj_gc_pubobjroot(L, obj2gco(t));
-  for (;;) {
-    TValue *dst = lj_tab_setint(L, t, i);
-    cTValue *src = lj_tab_getint(t, i-1);
-    TValue key, val;
-    int have_src = src != NULL;
-    if (have_src)
-      lj_tv_load_acq(&val, src);
-    else
-      setnilV(&val);
-    setintV(&key, i);
-    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &key, &val) ==
-	LJ_TAB_STORE_CAS_OK) {
-      if (have_src) {
-	lj_gc2_barrier_weak_write(L, t, &key, &val);
-	lj_gc_pubtabtv(L, t, dst);
-      }
-      return;
-    }
-    table_insert_store_wait(L, guarded);
-  }
-}
-
-static TValue *table_insert_value_store(lua_State *L, GCtab *t, int32_t i,
-					cTValue *src, int guarded)
-{
-  TValue *dst;
-  TValue key;
-  setintV(&key, i);
-  table_insert_publish_pending(L, t, src);
-  for (;;) {
-    dst = lj_tab_setint(L, t, i);
-    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &key, src) ==
-	LJ_TAB_STORE_CAS_OK)
-      return dst;
-    table_insert_store_wait(L, guarded);
-  }
-}
-
-static MSize table_insert_len(lua_State *L, GCtab *t)
-{
-  if (!table_mt_concurrent(L))
-    return lj_tab_len(t);
-  lj_tab_read_enter(L2TG(L));
-  for (;;) {
-    TValue *array0, *array1;
-    Node *node0, *node1;
-    MSize asize0, asize1, hmask0, hmask1, n;
-    asize0 = lj_tab_array_snapshot_acq(t, &array0);
-    node0 = lj_tab_node_snapshot_acq(t, &hmask0);
-    if ((array0 && lj_tab_array_is_retiring(t, array0)) ||
-	(hmask0 > 0 && lj_tab_node_is_retiring(node0))) {
-      lj_tab_wait_no_l();
-      continue;
-    }
-    n = lj_tab_len(t);
-    asize1 = lj_tab_array_snapshot_acq(t, &array1);
-    node1 = lj_tab_node_snapshot_acq(t, &hmask1);
-    if (array0 == array1 && asize0 == asize1 &&
-	node0 == node1 && hmask0 == hmask1 &&
-	(!array1 || !lj_tab_array_is_retiring(t, array1)) &&
-	(hmask1 == 0 || !lj_tab_node_is_retiring(node1))) {
-	lj_tab_read_leave(L2TG(L));
-	return n;
-    }
-    lj_tab_wait_no_l();
-  }
-}
-
 LJLIB_LUA(table_foreachi) /*
   function(t, f)
     CHECK_tab(t)
@@ -230,34 +128,25 @@ LJLIB_CF(table_maxn)
 
 LJLIB_CF(table_insert)		LJLIB_REC(.)
 {
-  GCtab *t = lj_lib_checktab(L, 1);
-  int32_t n, i = (int32_t)table_insert_len(L, t) + 1;
-  int nargs = (int)((char *)L->top - (char *)L->base);
-  int guard = 0;
-  if (nargs != 2*sizeof(TValue)) {
-    if (nargs != 3*sizeof(TValue))
-      lj_err_caller(L, LJ_ERR_TABINS);
-    n = lj_lib_checkint(L, 2);
-    if (table_mt_concurrent(L)) {
-      (void)lj_tab_setint(L, t, n > i ? n : i);
-      guard = lj_tab_struct_enter(L, t);
-    }
-    /* Shifted weak-table writes still need the P_WEAK bridge. */
-    for (; i > n; i--)
-      table_insert_shift_store(L, t, i, guard);
-    i = n;
-  } else if (table_mt_concurrent(L)) {
-    (void)lj_tab_setint(L, t, i);
-    guard = lj_tab_struct_enter(L, t);
+  int nargs = (int)(L->top - L->base);
+  int32_t i, pos;
+  lj_lib_checktab(L, 1);
+  if (nargs != 2 && nargs != 3)
+    lj_err_caller(L, LJ_ERR_TABINS);
+  /* The fast-function frame may be materialized by a trace. Keep the actual
+  ** table/value arguments visible through length lookup, resize and GC. */
+  lj_state_stack_pubtv(L, L, L->base);
+  lj_state_stack_pubtv(L, L, L->top-1);
+  i = (int32_t)(lj_tab_len_rooted(L, L->base) + 1u);
+  pos = nargs == 3 ? lj_lib_checkint(L, 2) : i;
+  for (; i > pos; i--) {
+    /* rawgeti roots the shifted value on this stack before the destination
+    ** is resolved. rawseti revalidates the exact slot across resize/retry
+    ** and publishes weak and strong edges for its committed store. */
+    lua_rawgeti(L, 1, i-1);
+    lua_rawseti(L, 1, i);
   }
-  {
-    TValue *dst = table_insert_value_store(L, t, i, L->top-1, guard);
-    TValue key;
-    setintV(&key, i);
-    lj_gc2_barrier_weak_write(L, t, &key, L->top-1);
-    lj_gc_pubtabtv(L, t, dst);
-  }
-  lj_tab_struct_leave(t, guard);
+  lua_rawseti(L, 1, pos);
   return 0;
 }
 
