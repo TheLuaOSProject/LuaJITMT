@@ -1011,6 +1011,29 @@ static void test_sweep_multiupvalue_constructor(void)
   lua_close(L);
 }
 
+#if LJ_HASJIT
+static void test_weak_value_after_trace_exit(void)
+{
+  lua_State *L = luaL_newstate();
+  assert(L != NULL);
+  luaL_openlibs(L);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  /* The taken branch exits the hot loop trace while v is a live local. Once
+  ** this chunk returns, the weak table is its only reference. */
+  assert(luaL_dostring(L,
+    "jit.opt.start('hotloop=1')\n"
+    "weak = setmetatable({}, {__mode = 'v'})\n"
+    "for i = 1, 100 do\n"
+    "  local v = {}\n"
+    "  if i == 57 then weak.value = v end\n"
+    "end\n"
+    "assert(type(weak.value) == 'table')\n") == LUA_OK);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(luaL_dostring(L, "assert(weak.value == nil)") == LUA_OK);
+  lua_close(L);
+}
+#endif
+
 int main(void)
 {
   lua_State *L;
@@ -1043,6 +1066,9 @@ int main(void)
   test_isolated_weak_skip_case("k");
   test_isolated_weak_skip_case("kv");
   test_sweep_multiupvalue_constructor();
+#if LJ_HASJIT
+  test_weak_value_after_trace_exit();
+#endif
 
   L = luaL_newstate();
   assert(L != NULL);

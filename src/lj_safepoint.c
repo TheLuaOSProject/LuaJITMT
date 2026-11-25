@@ -847,6 +847,12 @@ void lj_safepoint_vm_checkpoint(lua_State *L, int trace_exit)
   TGState *tg = L2TG(L);
   uint32_t actions = safepoint_ack_check_l(L, 1);
   uint64_t epoch = la_load64_acq(&tg->str_owner_scan_epoch);
+  /* A completed collection can leave an owner scan without a dispatch
+  ** witness. At IDLE, rescanning that old epoch would queue transient stack
+  ** roots for the next collection. An active string reclaim request can
+  ** still need a restored-frame witness to commit its quarantined cohort. */
+  if (gc2_phase_acq(g) == LJ_GC2_IDLE && !lj_str_reclaim_requested_acq(g))
+    return;
   if (!epoch || epoch <= la_load64_acq(&tg->str_vm_root_epoch) ||
       !safepoint_str_vm_frame(L, tg))
     return;
