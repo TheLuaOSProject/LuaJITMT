@@ -4073,7 +4073,8 @@ static LJ_NOINLINE void gc2_mark_tab_retired_mem(global_State *g)
     ** Keep the array payload marked even before the retire record is armed;
     ** arming only makes the record eligible for epoch-based reclamation.
     */
-    lj_gc2_markmem(g, lj_tab_array_hdrw(lj_tab_array_retired_array_acq(aret)));
+    if (lj_tab_array_retired_armed_acq(aret) != TAB_ARRAY_RETIRE_CANCELED)
+      lj_gc2_markmem(g, lj_tab_array_hdrw(lj_tab_array_retired_array_acq(aret)));
     aret = nextaret;
     if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, aret))) {
       gc2_root_scan_retry(g);
@@ -4098,11 +4099,18 @@ static LJ_NOINLINE void gc2_mark_tab_retired_mem(global_State *g)
     ** vector/intent payload joins this scan before runtime markers are enabled.
     */
     if (cutover && phase >= TAB_RESIZE_DESC_TERMINATING) {
-      Node *unused = lj_tab_resize_desc_unused_node_acq(desc);
-      if (unused)
-	(void)lj_gc2_markmem(g, lj_tab_node_hdrw(unused));
-      else if (flags & TAB_RESIZE_DESC_F_CANCELED)
-	(void)lj_gc2_markmem(g, lj_tab_node_hdrw(desc->newnode));
+      if (flags & TAB_RESIZE_DESC_F_CANCELED) {
+        if (desc->newnode)
+          (void)lj_gc2_markmem(g, lj_tab_node_hdrw(desc->newnode));
+        if (desc->compactnode)
+          (void)lj_gc2_markmem(g, lj_tab_node_hdrw(desc->compactnode));
+        if (desc->newarray)
+          (void)lj_gc2_markmem(g, lj_tab_array_hdrw(desc->newarray));
+      } else {
+        Node *unused = lj_tab_resize_desc_unused_node_acq(desc);
+        if (unused)
+          (void)lj_gc2_markmem(g, lj_tab_node_hdrw(unused));
+      }
       if (phase == TAB_RESIZE_DESC_TERMINAL)
 	goto next_desc;
     }
@@ -4113,8 +4121,12 @@ static LJ_NOINLINE void gc2_mark_tab_retired_mem(global_State *g)
     }
     if (cutover) {
       /* The intent may be visible before its issuer links the old record. */
-      if (flags & TAB_RESIZE_DESC_F_EARLY_HASH)
-	(void)lj_gc2_markmem(g, desc->oldret);
+      if (flags & (TAB_RESIZE_DESC_F_EARLY_HASH | TAB_RESIZE_DESC_F_EARLY_ARRAY)) {
+        if (desc->oldret)
+          (void)lj_gc2_markmem(g, desc->oldret);
+        if (desc->oldaret)
+          (void)lj_gc2_markmem(g, desc->oldaret);
+      }
       /* Protect the rebuilt vector even before the owner transfers control. */
       if (phase == TAB_RESIZE_DESC_INSTALLING ||
 	  phase == TAB_RESIZE_DESC_RETIRING ||

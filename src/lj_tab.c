@@ -1686,19 +1686,23 @@ static void tab_resize_desc_free(global_State *g, TabResizeDesc *desc)
 {
   GCSize bytes = desc->hash_move_bytes ? desc->hash_move_bytes :
 					(GCSize)sizeof(*desc);
-  if (desc->compactnode) {
-    Node *unused = lj_tab_resize_desc_unused_node_acq(desc);
-    /* An unpublished candidate still leaves the main vector with the
-    ** allocating resize attempt. A published shrink cannot cancel. */
-    lj_assertG(!(lj_tab_resize_desc_flags_acq(desc) &
-		 TAB_RESIZE_DESC_F_PUBLISHED) ||
-	       lj_tab_resize_desc_selected_node_acq(desc),
-	       "freeing published compact resize before selection");
-    tab_node_free(g, unused, lj_tab_node_hmask_acq(unused));
-  } else if (lj_tab_resize_desc_flags_acq(desc) & TAB_RESIZE_DESC_F_CANCELED) {
-    tab_node_free(g, desc->newnode, lj_tab_node_hmask_acq(desc->newnode));
+  if (lj_tab_resize_desc_flags_acq(desc) & TAB_RESIZE_DESC_F_CANCELED) {
+    if (desc->compactnode)
+      tab_node_free(g, desc->compactnode,
+                    lj_tab_node_hmask_acq(desc->compactnode));
+    if (desc->newnode)
+      tab_node_free(g, desc->newnode, lj_tab_node_hmask_acq(desc->newnode));
     if (desc->newarray)
       tab_array_free(g, desc->newarray, desc->newacap);
+  } else if (desc->compactnode) {
+    Node *unused = lj_tab_resize_desc_unused_node_acq(desc);
+    /* An unpublished candidate still leaves the fallback vector with the
+    ** allocating resize attempt. A committed resize owns exactly one. */
+    lj_assertG(!(lj_tab_resize_desc_flags_acq(desc) &
+                 TAB_RESIZE_DESC_F_PUBLISHED) ||
+               lj_tab_resize_desc_selected_node_acq(desc),
+               "freeing committed compact resize before selection");
+    tab_node_free(g, unused, lj_tab_node_hmask_acq(unused));
   }
   lj_mem_free(g, desc, bytes);
 }
@@ -2916,7 +2920,7 @@ static int tab_resize_array_copy_held(global_State *g, TabResizeDesc *desc);
 static int tab_resize_array_root_held(global_State *g, TabResizeDesc *desc);
 
 /* Cancellation can only win before any helper starts retiring the source. */
-static int tab_resize_early_hash_cancel(global_State *g, TabResizeDesc *desc)
+static int tab_resize_early_cancel(global_State *g, TabResizeDesc *desc)
 {
   uint32_t phase = TAB_RESIZE_DESC_INSTALLING;
   if (lj_tab_resize_desc_phase_cas(desc, &phase, TAB_RESIZE_DESC_CLEARING))
@@ -2925,35 +2929,51 @@ static int tab_resize_early_hash_cancel(global_State *g, TabResizeDesc *desc)
     return tab_resize_desc_help_terminating(g, desc);
   if (phase != TAB_RESIZE_DESC_CLEARING)
     return 0;
-  lj_tab_node_retired_armed_rel(desc->oldret, TAB_NODE_RETIRE_CANCELED);
+  if (desc->oldret)
+    lj_tab_node_retired_armed_rel(desc->oldret, TAB_NODE_RETIRE_CANCELED);
+  if (desc->oldaret)
+    lj_tab_array_retired_armed_rel(desc->oldaret, TAB_ARRAY_RETIRE_CANCELED);
   lj_tab_resize_desc_flags_or(desc, TAB_RESIZE_DESC_F_CANCELED);
   (void)lj_tab_resize_desc_phase_cas(desc, &phase,
 				    TAB_RESIZE_DESC_TERMINATING);
   return tab_resize_desc_help_terminating(g, desc);
 }
 
-static la_u128 tab_resize_hash_shape(const TabResizeDesc *desc, la_u128 oldshape,
+static la_u128 tab_resize_successor_shape(const TabResizeDesc *desc, la_u128 oldshape,
                                      Node *node)
 {
   LJTabShape shape;
   shape.packed = oldshape;
   if (desc->newarray)
     shape.fields.asize = lj_tab_array_hdr_asize_acq(desc->newarray);
-  shape.fields.hmask = lj_tab_node_hmask_acq(node);
-  setmref(shape.fields.freetop, node + shape.fields.hmask + 1u);
+  if (node) {
+    shape.fields.hmask = lj_tab_node_hmask_acq(node);
+    setmref(shape.fields.freetop, node + shape.fields.hmask + 1u);
+  } else {
+    lj_assertX(shape.fields.hmask == 0 && desc->newarray,
+               "array-only cutover must be hashless");
+    setmref(shape.fields.freetop, desc->newarray);
+  }
   return shape.packed;
 }
 
-/* The old inline allocation belongs to the table for its whole lifetime.
-** Its one-way split bit freezes that source, and a capacity update must
-** still name this exact installed descriptor. */
-static int tab_resize_early_inline_freeze(GCtab *t, TabResizeDesc *desc)
+/* Freeze the retained separated allocation or the table's inline source.
+** Capacity publication must still name this exact installed descriptor. */
+static int tab_resize_early_array_freeze(GCtab *t, TabResizeDesc *desc)
 {
   const uint64_t control = lj_tab_struct_control_desc_word(desc);
   uint64_t weak = lj_tab_weak_record_raw_acq(t);
-  int8_t colo = lj_tab_colo_acq(t);
-  if (colo > 0)
-    lj_tab_colo_rel(t, (int8_t)(colo | 0x80));
+  if (desc->oldaret) {
+    const TValue *next = NULL;
+    if (!lj_tab_array_nextgen_cas(desc->oldarray, &next, desc->newarray) &&
+        next != desc->newarray)
+      return 0;
+    lj_tab_array_hdr_flags_or_rel(desc->oldarray, TABARRAY_FLAG_RETIRING);
+  } else {
+    int8_t colo = lj_tab_colo_acq(t);
+    if (colo > 0)
+      lj_tab_colo_rel(t, (int8_t)(colo | 0x80));
+  }
   for (;;) {
     uint64_t expected = control;
     uint64_t desired = (weak & ~LJ_TAB_WEAK_RECORD_ACAP_MASK) |
@@ -2965,7 +2985,7 @@ static int tab_resize_early_inline_freeze(GCtab *t, TabResizeDesc *desc)
   }
 }
 
-static int tab_resize_early_hash_start_held(global_State *g, GCtab *t,
+static int tab_resize_early_start_held(global_State *g, GCtab *t,
 					     TabResizeDesc *desc)
 {
   uint32_t phase = lj_tab_resize_desc_phase_acq(desc);
@@ -2975,9 +2995,9 @@ static int tab_resize_early_hash_start_held(global_State *g, GCtab *t,
     oldshape = la_load128_acq(&t->resize_shape);
     if (lj_tab_node_acq(t) != desc->oldnode ||
         (desc->newarray && (lj_tab_array_acq(t) != desc->oldarray ||
-                           lj_tab_colo_acq(t) <= 0)) ||
+                           lj_tab_array_is_retiring(t, desc->oldarray))) ||
 	oldshape.lo != desc->oldshape.lo || oldshape.hi != desc->oldshape.hi) {
-      tab_resize_early_hash_cancel(g, desc);
+      tab_resize_early_cancel(g, desc);
       return 0;
     }
     if (lj_tab_resize_desc_phase_cas(desc, &phase, TAB_RESIZE_DESC_RETIRING))
@@ -2986,20 +3006,22 @@ static int tab_resize_early_hash_start_held(global_State *g, GCtab *t,
   if (phase != TAB_RESIZE_DESC_RETIRING)
     return phase == TAB_RESIZE_DESC_MIGRATING ||
 	   phase == TAB_RESIZE_DESC_PUBLISHING;
-  if (desc->newarray && !tab_resize_early_inline_freeze(t, desc))
+  if (desc->newarray && !tab_resize_early_array_freeze(t, desc))
     return 0;
-  next = NULL;
-  if (!lj_tab_node_nextgen_cas(desc->oldnode, &next, desc->newnode) &&
-      next != desc->newnode &&
-      (!desc->compactnode || next != lj_tab_resize_desc_selected_node_acq(desc))) {
-    lj_assertG(0, "early hash source acquired an unrelated successor");
-    abort();
+  if (desc->oldret) {
+    next = NULL;
+    if (!lj_tab_node_nextgen_cas(desc->oldnode, &next, desc->newnode) &&
+        next != desc->newnode &&
+        (!desc->compactnode || next != lj_tab_resize_desc_selected_node_acq(desc))) {
+      lj_assertG(0, "early hash source acquired an unrelated successor");
+      abort();
+    }
+    (void)lj_tab_node_hdr_flags_try_or_rel(desc->oldnode, TABNODE_FLAG_RETIRING);
   }
-  (void)lj_tab_node_hdr_flags_try_or_rel(desc->oldnode, TABNODE_FLAG_RETIRING);
-  /* The old freetop points into the retained hash vector. Unlike an
-  ** array bound alone, that exact shape cannot recur after this cutover. */
+  /* The old cursor identifies a retained hash or hashless array storage
+  ** generation. Unlike a bound alone, that shape cannot recur after cutover. */
   oldshape = desc->oldshape;
-  fallback = tab_resize_hash_shape(desc, oldshape, desc->newnode);
+  fallback = tab_resize_successor_shape(desc, oldshape, desc->newnode);
   if (!la_cas128(&t->resize_shape, &oldshape, fallback) &&
       (oldshape.lo != fallback.lo || oldshape.hi != fallback.hi))
     return 0;  /* An already-published successor has itself been replaced. */
@@ -3047,10 +3069,10 @@ static int tab_resize_hash_cutover_held(global_State *g, TabResizeDesc *desc)
   if (lj_tab_resize_desc_control_acq(t) != desc)
     return 0;
   if (phase == TAB_RESIZE_DESC_CLEARING)
-    return tab_resize_early_hash_cancel(g, desc);
+    return tab_resize_early_cancel(g, desc);
   if ((phase == TAB_RESIZE_DESC_INSTALLING || phase == TAB_RESIZE_DESC_RETIRING) &&
       (lj_tab_resize_desc_flags_acq(desc) & TAB_RESIZE_DESC_F_EARLY_HASH)) {
-    if (!tab_resize_early_hash_start_held(g, t, desc))
+    if (!tab_resize_early_start_held(g, t, desc))
       return 0;
     phase = lj_tab_resize_desc_phase_acq(desc);
   }
@@ -3089,9 +3111,9 @@ static int tab_resize_hash_cutover_held(global_State *g, TabResizeDesc *desc)
     lj_tab_resize_desc_selected_node_acq(desc) : desc->newnode;
   if (selected != desc->newnode) {
     la_u128 expected = desc->oldshape;
-    la_u128 compact = tab_resize_hash_shape(desc, expected, selected);
+    la_u128 compact = tab_resize_successor_shape(desc, expected, selected);
     if (lj_tab_resize_desc_flags_acq(desc) & TAB_RESIZE_DESC_F_EARLY_HASH)
-      expected = tab_resize_hash_shape(desc, expected, desc->newnode);
+      expected = tab_resize_successor_shape(desc, expected, desc->newnode);
     if (!la_cas128(&t->resize_shape, &expected, compact) &&
 	(expected.lo != compact.lo || expected.hi != compact.hi))
       return 0;
@@ -3280,6 +3302,16 @@ static int tab_resize_array_cutover_held(global_State *g, TabResizeDesc *desc)
   if (phase == TAB_RESIZE_DESC_TERMINATING)
     return tab_resize_desc_help_terminating(g, desc);
   t = lj_tab_resize_desc_tab_acq(desc);
+  if (lj_tab_resize_desc_control_acq(t) != desc)
+    return 0;
+  if (phase == TAB_RESIZE_DESC_CLEARING)
+    return tab_resize_early_cancel(g, desc);
+  if ((phase == TAB_RESIZE_DESC_INSTALLING || phase == TAB_RESIZE_DESC_RETIRING) &&
+      (lj_tab_resize_desc_flags_acq(desc) & TAB_RESIZE_DESC_F_EARLY_ARRAY)) {
+    if (!tab_resize_early_start_held(g, t, desc))
+      return 0;
+    phase = lj_tab_resize_desc_phase_acq(desc);
+  }
   if ((phase != TAB_RESIZE_DESC_MIGRATING &&
        phase != TAB_RESIZE_DESC_PUBLISHING) ||
       lj_tab_resize_desc_control_acq(t) != desc)
@@ -3539,6 +3571,8 @@ static GCtab *newtab_rooted(lua_State *L, uint32_t asize, uint32_t hbits,
   }
   if (node)
     newhpart_publish(L, t, node, hmask, &node[hmask+1], hmask + 1u);
+  else if (array)
+    lj_tab_freetop_rel(t, (const Node *)array);
 
   /* READY and ownership are the single final constructor publication. Every
   ** array/hash root and raw side-body mark is already visible at this point. */
@@ -3947,7 +3981,7 @@ static void tab_resize_prepare_array_migration(lua_State *L, GCtab *t,
 }
 
 /*
-** Prepare a hash-backed resize without first acquiring a bare structural tid.
+** Prepare a resize without first acquiring a bare structural tid.
 ** The table read epoch retains the old vector and the prospective retirement
 ** record while the issuer is outside counted SMR. Competing resizes may win
 ** before the exact control CAS, in which case this intent cancels and the
@@ -3956,7 +3990,7 @@ static void tab_resize_prepare_array_migration(lua_State *L, GCtab *t,
 ** Return 0 for an unpublished retry, -1 for a published cancellation and 1
 ** after a committed cutover.
 */
-static int tab_resize_offer_early_hash(lua_State *L, GCtab *t,
+static int tab_resize_offer_early(lua_State *L, GCtab *t,
 				       TabResizeDesc *desc, Node *node)
 {
   global_State *g = G(L);
@@ -3979,10 +4013,10 @@ static int tab_resize_offer_early_hash(lua_State *L, GCtab *t,
   shape.packed = la_load128_acq(&t->resize_shape);
   if (lj_tab_struct_control_owner(stable) ||
       lj_tab_node_acq(t) != desc->oldnode ||
-      lj_tab_node_hmask_acq(desc->oldnode) != desc->oldhmask ||
-      lj_tab_node_is_retiring(desc->oldnode) ||
+      (desc->oldret && (lj_tab_node_hmask_acq(desc->oldnode) != desc->oldhmask ||
+                       lj_tab_node_is_retiring(desc->oldnode))) ||
       (desc->newarray && (lj_tab_array_acq(t) != desc->oldarray ||
-                         lj_tab_colo_acq(t) <= 0)) ||
+                         lj_tab_array_is_retiring(t, desc->oldarray))) ||
       shape.fields.asize != desc->oldasize ||
       shape.fields.hmask != desc->oldhmask) {
     lj_gc2_smr_read_leave(g);
@@ -3991,7 +4025,8 @@ static int tab_resize_offer_early_hash(lua_State *L, GCtab *t,
   cursor = (uintptr_t)mref(shape.fields.freetop, Node);
   begin = (uintptr_t)desc->oldnode;
   end = begin + ((MSize)desc->oldhmask + 1u) * sizeof(Node);
-  if (cursor < begin || cursor > end) {
+  if (desc->oldret ? cursor < begin || cursor > end :
+                     cursor != (uintptr_t)desc->oldarray) {
     lj_gc2_smr_read_leave(g);
     goto release;
   }
@@ -4002,17 +4037,30 @@ static int tab_resize_offer_early_hash(lua_State *L, GCtab *t,
   if (!desc->newarray)
     desc->newacap = desc->oldacap;
   desc->phase = TAB_RESIZE_DESC_INSTALLING;
-  desc->flags |= TAB_RESIZE_DESC_F_HASH_CUTOVER | TAB_RESIZE_DESC_F_EARLY_HASH;
+  if (node)
+    desc->flags |= TAB_RESIZE_DESC_F_HASH_CUTOVER | TAB_RESIZE_DESC_F_EARLY_HASH;
+  else
+    desc->flags |= TAB_RESIZE_DESC_F_EARLY_ARRAY;
   if (desc->newarray) {
     desc->flags |= TAB_RESIZE_DESC_F_ARRAY_CUTOVER;
     tab_pub_array_mem(L, t, desc->newarray, desc->newacap);
   }
-  tab_retire_init(L, desc->oldret, t, desc->oldnode, desc->oldhmask);
-  desc->oldret->hold_control = tagged;
-  tab_retire_preserve(g, desc->oldret);
-  tab_pub_node_mem(L, t, node);
+  if (desc->oldret) {
+    tab_retire_init(L, desc->oldret, t, desc->oldnode, desc->oldhmask);
+    desc->oldret->hold_control = tagged;
+    tab_retire_preserve(g, desc->oldret);
+    tab_pub_node_mem(L, t, node);
+  }
+  if (desc->oldaret) {
+    tab_array_retire_init(L, desc->oldaret, t, desc->oldarray, desc->oldacap);
+    desc->oldaret->hold_control = tagged;
+    tab_array_retire_preserve(g, desc->oldaret);
+  }
   tab_resize_desc_publish(g, desc);
-  tab_retired_push(g, desc->oldret);
+  if (desc->oldret)
+    tab_retired_push(g, desc->oldret);
+  if (desc->oldaret)
+    tab_array_retired_push(g, desc->oldaret);
   lj_gc2_smr_read_leave(g);
 
   tab_test_hash_install_at(L, t, 0);
@@ -4035,7 +4083,7 @@ static int tab_resize_offer_early_hash(lua_State *L, GCtab *t,
   if (!installed) {
     while (!lj_gc2_smr_read_try(g))
       lj_tab_wait_no_l();
-    (void)tab_resize_early_hash_cancel(g, desc);
+    (void)tab_resize_early_cancel(g, desc);
     lj_gc2_smr_read_leave(g);
   } else {
     while (lj_tab_struct_control_acq(t) == tagged) {
@@ -4361,16 +4409,18 @@ restart_resize:
   ** while waiting for the structural slot would leak it, so this retry window
   ** uses the TLS owner and yield-only wait variant. No old vector is
   ** dereferenced until the root recheck below succeeds. */
-  if (cutover && hash_migration &&
-      (!array_migration || (oldret && !oldarray_separated && newarray &&
-                            asize > oldasize && !cutover->compactnode))) {
+  if (cutover &&
+      ((hash_migration && !array_migration) ||
+       (array_migration &&
+        ((!oldhmask && !hbits) || (oldret && hash_migration))))) {
     int offered;
     if (array_migration) {
       cutover->oldarray = oldarray;
       cutover->newarray = array;
       cutover->newacap = newacap;
+      cutover->oldaret = oldaret;
     }
-    offered = tab_resize_offer_early_hash(L, t, cutover, newnode);
+    offered = tab_resize_offer_early(L, t, cutover, newnode);
     if (offered > 0)
       return;
     if (offered < 0) {
@@ -4526,7 +4576,7 @@ restart_resize:
   } else {
     global_State *g = G(L);
     lj_tab_hmask_rel(t, 0);
-    lj_tab_freetop_rel(t, &g->nilnode);
+    lj_tab_freetop_rel(t, array ? (const Node *)array : &g->nilnode);
     lj_tab_node_rel(t, &g->nilnode);
     if (oldret) {
       tab_retire_arm(g, oldret);
@@ -4695,6 +4745,22 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
     }
     TabArrayRetire *next = lj_tab_array_retired_next_acq(aret);
     lj_tab_array_retired_next_rel(aret, NULL);
+    if (lj_tab_array_retired_armed_acq(aret) == TAB_ARRAY_RETIRE_CANCELED) {
+      TabResizeDesc *owner = lj_tab_struct_control_desc(aret->hold_control);
+      if (LJ_UNLIKELY(!owner ||
+          !lj_gc2_mem_registered_known_reclaim_held(g, owner))) {
+        lj_assertG(0, "canceled array retire record lost its descriptor");
+        abort();
+      }
+      if (lj_tab_resize_desc_phase_acq(owner) == TAB_RESIZE_DESC_TERMINAL) {
+        lj_mem_freet(g, aret);
+        reclaimed++;
+      } else {
+        tab_array_retired_push(g, aret);
+      }
+      aret = next;
+      continue;
+    }
     current = tab_array_still_published(g, aret);
     if (!lj_tab_array_retired_armed_acq(aret)) {
       tab_array_retired_push(g, aret);
@@ -4816,7 +4882,7 @@ void lj_tab_freeretired(global_State *g)
     TabArrayRetire *next = lj_tab_array_retired_next_acq(aret);
     array = lj_tab_array_retired_array_acq(aret);
     acap = lj_tab_array_retired_acap_acq(aret);
-    if (lj_tab_array_retired_armed_acq(aret)) {
+    if (lj_tab_array_retired_armed_acq(aret) == 1u) {
       if (LJ_UNLIKELY(!array ||
 	  !lj_gc2_mem_registered_known(g, lj_tab_array_hdr(array)) ||
 	  !tab_array_free_ready(array, acap))) {

@@ -732,6 +732,7 @@ typedef struct TabNodeRetire {
 } TabNodeRetire;
 
 #define TAB_NODE_RETIRE_CANCELED 2u
+#define TAB_ARRAY_RETIRE_CANCELED 2u
 
 typedef struct TabArrayHdr {
   MSize asize;		/* Visible array size paired with the slots vector. */
@@ -778,6 +779,7 @@ enum {
 #define TAB_RESIZE_DESC_F_ARRAY_CUTOVER	0x00000020u
 #define TAB_RESIZE_DESC_F_EARLY_HASH	0x00000040u
 #define TAB_RESIZE_DESC_F_CANCELED	0x00000080u
+#define TAB_RESIZE_DESC_F_EARLY_ARRAY	0x00000100u
 #define TAB_RESIZE_DESC_F_RUNTIME_CUTOVER \
   (TAB_RESIZE_DESC_F_HASH_CUTOVER | TAB_RESIZE_DESC_F_ARRAY_CUTOVER)
 
@@ -845,7 +847,7 @@ typedef struct GCtab {
     struct {
       uint32_t asize;	/* Size of array part (keys [0, asize-1]). */
       uint32_t hmask;	/* Hash part mask (size of hash part - 1). */
-      MRef freetop;	/* Top of free elements. */
+      MRef freetop;	/* Hash cursor, or exact hashless array identity. */
     };
     la_u128 resize_shape;  /* Generation-bound raw compatibility metadata. */
   };

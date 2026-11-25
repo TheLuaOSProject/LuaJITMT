@@ -333,16 +333,16 @@ static void *resize_worker(void *arg)
     array_migration_mutate(L, ctx->mutate == 5, ctx->weak_mode_change);
   } else if (ctx->mutate == 7) {
     lua_pushinteger(L, 404);
-    lua_rawseti(L, 1, 4);
+    lua_rawseti(L, 1, (int)ctx->asize);
   } else if (ctx->mutate == 8) {
     lua_rawgeti(L, 1, 1);
     assert(lua_tointeger(L, -1) == 11);
     lua_pop(L, 1);
     lua_pushinteger(L, 444);
-    lua_rawseti(L, 1, 4);
+    lua_rawseti(L, 1, (int)ctx->asize);
     lua_pushinteger(L, 111);
     lua_rawseti(L, 1, -1);
-    lua_rawgeti(L, 1, 4);
+    lua_rawgeti(L, 1, (int)ctx->asize);
     assert(lua_tointeger(L, -1) == 444);
     lua_pop(L, 1);
   } else if (ctx->mutate == 4)
@@ -797,8 +797,8 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed,
       lua_pushinteger(L, i);
       lua_rawseti(L, 1, i);
     }
-    /* Occupying an old hash slot changes the retirement CAS, so the first
-    ** attempt must discard both allocated candidates and retry. */
+    /* Occupy an old hash slot as well. Retirement must capture this
+    ** publication and the late array writes in the same generation. */
     lua_pushinteger(L, 777);
     lua_rawseti(L, 1, -2);
     store_flag(&late_tail_release, 1);
@@ -861,7 +861,7 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed,
     lua_pop(L, 1);
   }
   if (mixed == 4) {
-    assert(load_flag(&late_tail_passes) >= 2);
+    assert(load_flag(&late_tail_passes) == 1);
     lua_rawgeti(L, 1, -2);
     assert(lua_tointeger(L, -1) == 777);
     lua_pop(L, 1);
@@ -1062,39 +1062,48 @@ static void inline_before_freeze_hold(lua_State *L, GCtab *t,
     resize_hold_hook(L, t, array, asize);
 }
 
-static void exercise_mixed_inline_setup_owner(lua_State *L, int installed)
+static void exercise_array_setup_owner(lua_State *L, int installed,
+                                       int mixed, int separated)
 {
   volatile int ready = 0, owner_start = 0, other_start = 0;
   volatile int owner_done = 0, other_done = 0;
   volatile int hook_entered = 0, hook_release = 0;
   ResizeCtx owner = { 0 }, other = { 0 };
   GCtab *t;
+  TValue *oldarray;
   pthread_t other_thread;
-  int i;
+  int i, size = separated ? LJ_MAX_COLOSIZE + 4 : 3;
+  int key = size + 1;
 
   lua_settop(L, 0);
-  lua_createtable(L, 3, 1);
+  lua_createtable(L, size, mixed ? 1 : 0);
   t = tabV(L->top - 1);
-  assert(lj_tab_colo_acq(t) > 0 && lj_tab_hmask_acq(t) != 0);
-  for (i = 1; i <= 3; i++) {
+  assert((lj_tab_colo_acq(t) > 0) != separated);
+  assert((lj_tab_hmask_acq(t) != 0) == mixed);
+  oldarray = lj_tab_array_acq(t);
+  for (i = 1; i <= size; i++) {
     lua_pushinteger(L, 10 + i);
     lua_rawseti(L, 1, i);
   }
-  lua_pushinteger(L, -11);
-  lua_rawseti(L, 1, -1);
-  lua_pushinteger(L, -22);
-  lua_rawseti(L, 1, -2);
+  if (mixed) {
+    lua_pushinteger(L, -11);
+    lua_rawseti(L, 1, -1);
+    lua_pushinteger(L, -22);
+    lua_rawseti(L, 1, -2);
+  }
 
   owner.L = new_child_with_table(L, 1);
   owner.ready = &ready;
   owner.start = &owner_start;
   owner.done = &owner_done;
+  owner.asize = key;
   owner.mutate = 7;
   owner.status = -1;
   other.L = new_child_with_table(L, 1);
   other.ready = &ready;
   other.start = &other_start;
   other.done = &other_done;
+  other.asize = key;
   other.mutate = 8;
   other.status = -1;
   resize_hook_tab = t;
@@ -1112,13 +1121,15 @@ static void exercise_mixed_inline_setup_owner(lua_State *L, int installed)
   assert(wait_for_flag(&ready, 2, 1000000));
   store_flag(&owner_start, 1);
   assert(wait_for_flag(&hook_entered, 1, 1000000));
-  assert(lj_tab_colo_acq(t) > 0);
+  assert((lj_tab_colo_acq(t) > 0) != separated);
+  assert(lj_tab_array_acq(t) == oldarray);
   if (!installed)
     assert(lj_tab_struct_owner_acq(t) == 0);
   store_flag(&other_start, 1);
   assert(wait_for_flag(&other_done, 1, 1000000));
   assert(!load_flag(&owner_done));
-  assert(lj_tab_colo_acq(t) < 0);
+  assert(lj_tab_colo_acq(t) <= 0);
+  assert(lj_tab_array_acq(t) != oldarray);
   assert(lj_tab_resize_desc_control_acq(t) == NULL);
 
   store_flag(&hook_release, 1);
@@ -1130,7 +1141,7 @@ static void exercise_mixed_inline_setup_owner(lua_State *L, int installed)
   resize_hook_entered = NULL;
   resize_hook_release = NULL;
 
-  lua_rawgeti(L, 1, 4);
+  lua_rawgeti(L, 1, key);
   assert(lua_tointeger(L, -1) == 404);
   lua_pop(L, 1);
   lua_rawgeti(L, 1, -1);
@@ -1427,8 +1438,14 @@ int main(void)
   exercise_array_migration_owner(L, 0, 0, 0, 3);
   exercise_array_migration_owner(L, 1, 1, 0, 3);
   exercise_hash_migration_owner(L);
-  exercise_mixed_inline_setup_owner(L, 0);
-  exercise_mixed_inline_setup_owner(L, 1);
+  exercise_array_setup_owner(L, 0, 1, 0);
+  exercise_array_setup_owner(L, 1, 1, 0);
+  exercise_array_setup_owner(L, 0, 0, 0);
+  exercise_array_setup_owner(L, 1, 0, 0);
+  exercise_array_setup_owner(L, 0, 0, 1);
+  exercise_array_setup_owner(L, 1, 0, 1);
+  exercise_array_setup_owner(L, 0, 1, 1);
+  exercise_array_setup_owner(L, 1, 1, 1);
   exercise_hash_install_owner(L, 0);
   exercise_hash_install_owner(L, 1);
   exercise_hash_shrink_owner(L, 0, 0);
