@@ -16,6 +16,9 @@
 #include "lj_thr.h"
 #include "lj_tg.h"
 #include "lj_arena.h"
+#if LJ_HASFFI && LJ_HASJIT
+#include "lj_ccall.h"
+#endif
 
 /* -- String helpers ------------------------------------------------------ */
 
@@ -1312,6 +1315,19 @@ static int str_reclaim_exclusive_try(global_State *g)
   if (!tg || tg != g->main_tg || tg->gl != g ||
       !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
     return 0;
+  /* A C or FFI caller can still hold a borrowed byte address. Callback
+  ** entry temporarily clears in_native and can suspend jit_base, so those
+  ** two fields alone do not certify that its outer native borrow ended. */
+  if (lj_tg_in_native_acq(tg) != 0)
+    return 0;
+#if LJ_HASFFI
+  if (lj_tg_ffi_call_func_acq(tg) || ccallback_depth_acq(&tg->cb) != 0)
+    return 0;
+#if LJ_HASJIT
+  if (lj_ffi_native_frame_depth_acq(tg) != 0)
+    return 0;
+#endif
+#endif
 #if LJ_HASJIT
   /* MARK's EXIT_TRACES boundary normally establishes this already. Keep it an
   ** admission predicate so a future transition reorder cannot free a string

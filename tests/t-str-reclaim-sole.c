@@ -101,6 +101,64 @@ static void intern_churn(lua_State *L, const char *prefix, uint32_t n)
   }
 }
 
+#if LJ_HASFFI
+static const char native_bytes[] = "borrowed while a callback collects";
+static uint32_t native_borrow_calls, native_reclaim_claims;
+
+static void native_borrow_callback(const char *str, void (*cb)(void))
+{
+  assert(memcmp(str, native_bytes, sizeof(native_bytes)) == 0);
+  cb();
+  assert(memcmp(str, native_bytes, sizeof(native_bytes)) == 0);
+  native_borrow_calls++;
+}
+
+static void count_native_reclaim_claims(global_State *g, uint32_t stage)
+{
+  UNUSED(g);
+  if (stage == LJ_STR_TEST_RECLAIM_EXCLUSIVE_CLAIMED)
+    native_reclaim_claims++;
+}
+
+static void check_native_callback_borrow(void)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  uint64_t completed0;
+  MSize count0;
+  assert(L != NULL);
+  g = G(L);
+  luaL_openlibs(L);
+  lua_pushlightuserdata(L, (void *)native_borrow_callback);
+  lua_setglobal(L, "native_borrow_callback");
+  assert(luaL_dostring(L,
+    "local ffi = require('ffi')\n"
+    "jit.off()\n"
+    "local cb = ffi.cast('void (*)(void)', function()\n"
+    "  collectgarbage('collect')\n"
+    "end)\n"
+    "local native = ffi.cast('void (*)(const char *, void (*)(void))', "
+    "native_borrow_callback)\n"
+    "return function(bytes) native(bytes, cb) end\n") == 0);
+  lua_pushlstring(L, native_bytes, sizeof(native_bytes)-1u);
+  intern_churn(L, "native-borrow-unreachable", 512u);
+  lj_str_flush_num_credit(g, L2TG(L));
+  completed0 = gc2_sweep_to_idle_acq(g);
+  count0 = lj_str_num_acq(g);
+  lj_str_test_set_reclaim_hook(count_native_reclaim_claims);
+  assert(lua_pcall(L, 1, 0, 0) == 0);
+  assert(native_borrow_calls == 1u);
+  assert(gc2_sweep_to_idle_acq(g) > completed0);
+  assert(native_reclaim_claims == 0u);
+  assert(lj_str_num_acq(g) >= count0);
+  (void)lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(native_reclaim_claims == 1u);
+  assert(lj_str_num_acq(g) + 512u <= count0);
+  lj_str_test_set_reclaim_hook(NULL);
+  lua_close(L);
+}
+#endif
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -180,6 +238,9 @@ int main(void)
   /* Terminal cancellation must tolerate a requested but never consumed pass. */
   lj_str_gc2_reclaim_request(g);
   lua_close(L);
+#if LJ_HASFFI
+  check_native_callback_borrow();
+#endif
   printf("t-str-reclaim-sole OK: exact count/memory shrink, candidate rescue, batch drain, attach-race backout, and terminal request cleanup\n");
   return 0;
 }
