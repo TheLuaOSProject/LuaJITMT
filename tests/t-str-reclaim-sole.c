@@ -58,6 +58,55 @@ static void attach_race_hook(global_State *g, uint32_t stage)
   assert(mt_entering_acq(g) != 0);
 }
 
+typedef struct CopyRaceCtx {
+  lua_State *L;
+  MSize target_mask;
+} CopyRaceCtx;
+
+static void *prepare_copy_worker(void *ud)
+{
+  CopyRaceCtx *ctx = (CopyRaceCtx *)ud;
+  assert(lj_threading_attach_wait(ctx->L));
+  lj_str_resize(ctx->L, ctx->target_mask);
+  lj_threading_detach(ctx->L, 1);
+  return NULL;
+}
+
+static void check_ready_copy_at_collection(lua_State *L)
+{
+  static const char key[] = "string-sweep-publishes-ready-generation";
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  CopyRaceCtx ctx;
+  LJThr worker = { 0 };
+  StrTabHdr *source, *target;
+  const char *identity;
+  int top = lua_gettop(L);
+
+  lua_pushlstring(L, key, sizeof(key)-1u);
+  identity = lua_tolstring(L, -1, NULL);
+  ctx.L = lua_newthread(L);
+  source = lj_str_tabh_acq(g);
+  ctx.target_mask = (source->mask << 1) + 1u;
+  /* Model an admitted old lookup that returns after the copy is ready,
+  ** without another intern to finalize global publication. */
+  lj_tg_strtab_active_hdr_rel(tg, source);
+  lj_tg_strtab_active_depth_rel(tg, 1);
+  assert(lj_thr_create(&worker, prepare_copy_worker, &ctx) == 0);
+  assert(lj_thr_join(&worker, NULL) == 0);
+  assert(lj_str_tabh_acq(g) == source);
+  target = lj_str_expand_to_acq(source);
+  assert(target && la_load32_acq(&target->copy_cursor) == 0);
+  lj_tg_strtab_active_depth_rel(tg, 0);
+  lj_tg_strtab_active_hdr_rel(tg, NULL);
+
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert(lj_str_tabh_acq(g) == target);
+  lua_pushlstring(L, key, sizeof(key)-1u);
+  assert(lua_tolstring(L, -1, NULL) == identity);
+  lua_settop(L, top);
+}
+
 static GCstr *candidate_target;
 static uint32_t candidate_rescues;
 
@@ -203,6 +252,7 @@ int main(void)
   assert(lj_str_reclaim_exclusive_acq(g) == 0);
 
   check_candidate_rescue(L);
+  check_ready_copy_at_collection(L);
 
   /* Force the no-both-win attach race at the collector's post-CAS hook. */
   memset(&ctx, 0, sizeof(ctx));

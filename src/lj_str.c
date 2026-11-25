@@ -805,6 +805,22 @@ ready:
   }
 }
 
+static int strtab_finish_ready_copy(global_State *g, StrTabHdr *source,
+                                    StrTabHdr *target)
+{
+  void *expect = source;
+  if (la_load32_acq(&target->copy_cursor) != 0)
+    return 0;
+  /* A new helper which races the pin scan rechecks the ready cursor
+  ** after publishing its pin and never enters the old chains. */
+  la_fence_seq();
+  if (strtab_active_on_hdr(g, source))
+    return 0;
+  if (la_casptr((void **)&g->str.tabh, &expect, target, LA_ACQ_REL, LA_ACQ))
+    strtab_retire(g, source);
+  return 1;
+}
+
 static void strtab_help_expand(lua_State *L, StrTabHdr *source,
                                StrTabHdr *target, MSize until, int all)
 {
@@ -829,17 +845,7 @@ static void strtab_help_expand(lua_State *L, StrTabHdr *source,
   strtab_active_leave(tg, source);
 
 finish:
-  if (la_load32_acq(&target->copy_cursor) == 0) {
-    void *expect = source;
-    /* Once cursor reaches zero no new helper can start reading source
-    ** links. Admission to the ready target needs no old-header
-    ** pin; if a prior reader remains, leave the handoff for a later call. */
-    la_fence_seq();
-    if (!strtab_active_on_hdr(g, source) &&
-        la_casptr((void **)&g->str.tabh, &expect, target, LA_ACQ_REL, LA_ACQ)) {
-      strtab_retire(g, source);
-    }
-  }
+  (void)strtab_finish_ready_copy(g, source, target);
 }
 
 /* Terminal shutdown joins mutators and collector workers before dropping
@@ -2333,12 +2339,25 @@ uint32_t lj_str_gc2_sweep_step(global_State *g, uint32_t limit)
     if (phase == LJ_STR_SWEEP_IDLE || phase == LJ_STR_SWEEP_DONE)
       break;
     if (phase == LJ_STR_SWEEP_ACQUIRE) {
+      StrTabHdr *pending;
       hdr = lj_str_tabh_acq(g);
       if (!hdr) {
 	str_reclaim_exclusive_leave(g);
 	lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_DONE);
 	n++;
 	continue;
+      }
+      pending = lj_str_expand_target(lj_str_topology_acq(hdr));
+      if (LJ_UNLIKELY(pending != NULL)) {
+        /* Exclusive string admission retains the current header. A ready
+        ** migration can be left by a former mutator whose pin has since
+        ** drained. Publish it before claiming the sweep topology. */
+        if (!strtab_finish_ready_copy(g, hdr, pending)) {
+          str_reclaim_exclusive_leave(g);
+          lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_DONE);
+        }
+        n++;
+        continue;
       }
       if (!strtab_gc2_claim(g, hdr)) {
 	/* Failed claims are retry work, not a reason to park forever. */
