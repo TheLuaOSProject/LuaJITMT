@@ -119,8 +119,14 @@ static int begin(lua_State *L)
     if (pause_publish) {
       TGState *self = L2TG(L);
       atomic_store(&pool_started, 1);
-      while (!lj_safepoint_test_signal_paused() && !atomic_load(&release_peer))
+      while (!lj_safepoint_test_signal_paused() && !atomic_load(&release_peer)) {
+	/* RESET can start just after pool startup returns. Service it before
+	** waiting to consume the deliberately incomplete SCAN_ROOTS signal. */
+	if (target == LJ_GC2_HS_SCAN_ROOTS &&
+	    (lj_tg_reqmask_acq(self) & LJ_GC2_HS_RESET_ALLOC))
+	  (void)lj_safepoint_poll(L);
 	pause_briefly();
+      }
       assert(lj_tg_reqmask_acq(self) & target);
       assert(lj_tg_poll_acq(self) == 0);
       paused_epoch = gc2_hs_epoch_acq(g);
