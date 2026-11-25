@@ -144,6 +144,11 @@ static void test_huge_proto(lua_State *L, global_State *g)
   ht = hugetab_for(g, pt, &hi);
   assert((hi.flags & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY)) ==
 	 (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY));
+  /* Drain the parser's temporary parent constant table while the returned
+  ** function still roots the nested prototype. */
+  (void)lua_gc(L, LUA_GCCOLLECT, 0);
+  (void)lua_gc(L, LUA_GCSTOP, 0);
+  assert(lj_arena_hugetab_lookup(ht, pt, NULL) == 1);
   collect_dead_huge_stack_object(L, g, ht, pt, "huge proto");
 }
 

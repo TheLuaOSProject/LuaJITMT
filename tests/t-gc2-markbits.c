@@ -84,12 +84,18 @@ int main(void)
   lua_newtable(L);
   tab = tabV(L->top - 1);
 
+  /* Keep the test table out of the root snapshot so the test can mark it. */
+  lua_pop(L, 1);
   lj_gc2_mark_begin(g);
-  /* Cycle-start root handshakes may legitimately mark permanent roots after
-  ** resetting the counter. This fixture checks exact helper deltas from that
-  ** semantic baseline, not an obsolete empty-root startup assumption. */
+  /* Drain the cycle-start root publications before measuring the helpers'
+  ** exact mark-counter deltas and SSB effects. */
+  (void)lj_gc2_flush_ssb(g, tg);
+  while (lj_gc2_test_ssb_drain(g) != 0)
+    (void)lj_gc2_flush_ssb(g, tg);
   marks0 = la_load64_acq(&g->gc2.marks_this_round);
   assert(lj_gc2_markobj(g, NULL) == 0);
+  /* A non-null candidate may align down to a null arena base. */
+  assert(lj_gc2_markobj(g, (GCobj *)(uintptr_t)0x1000u) == 0);
   {
     GCobj *bad = (GCobj *)(uintptr_t)U64x(00004000,00000000);
     assert(lj_gc2_markobj(g, bad) == 0);
@@ -143,7 +149,6 @@ int main(void)
   lj_arena_free(&tg->alloc, trav, trav_size);
   lj_arena_free(&tg->alloc, plain, plain_size);
   lj_arena_allocf(&tg->allocd, huge, huge_size, 0);
-  lua_pop(L, 1);
   lua_close(L);
 
   printf("t-gc2-markbits OK: mark helpers are idempotent\n");
