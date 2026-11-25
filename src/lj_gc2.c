@@ -6746,7 +6746,10 @@ static int gc2_sweep_to_idle_owned(global_State *g)
   lj_assertG(gc2_phase_acq(g) == LJ_GC2_SWEEP &&
 	     gc2_jit_phase_gate_acq(g) == 0,
 	     "SWEEP close lost collector ownership");
-  if (!gc2_phase_gate_try(g)) {
+  /* An owned zero-work drain can reach close before a caller's explicit
+  ** finalizer turn. Keep any finalizer-spawn suppression until the last
+  ** secondary released it, then consume that release before closing. */
+  if (gc2_finalizer_spawn_deferred(g) || !gc2_phase_gate_try(g)) {
     gc2_jit_phase_gate_open_sweep(g, 0);
     gc2_worker_release(g);
     return 0;
