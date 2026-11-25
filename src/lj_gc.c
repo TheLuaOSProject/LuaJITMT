@@ -4194,12 +4194,18 @@ static int gc2_step_auto(lua_State *L, int threshold_step, uint32_t step_limit)
   while (running && step_limit-- != 0) {
     uint64_t defer0 = gc2_deferred_epoch_acq(g);
     uint32_t phase = gc2_phase_acq(g);
-    int sweep_step = phase == LJ_GC2_SWEEP;
+    uint32_t sweep_limit = LJ_GC2_SWEEP_BATCH;
+    if (phase == LJ_GC2_SWEEP) {
+      uint64_t finished = gc2_sweep_owner_arenas_acq(g) - sweep_arenas0;
+      if (finished >= sweep_limit)
+	break;
+      sweep_limit -= (uint32_t)finished;
+    }
     if (phase == LJ_GC2_IDLE && gc2_cycle_leader_acq(g) == 0 &&
 	!threshold_step)
       break;
     drove = 1;
-    done = lj_gc2_step_automatic(L);
+    done = lj_gc2_step_automatic(L, sweep_limit);
     /* The next owner ACK or threshold turn retries this retained boundary. */
     if (gc2_mark_activation_request_acq(g) ||
 	gc2_fixpoint_epoch_actions_acq(g))
@@ -4219,12 +4225,6 @@ static int gc2_step_auto(lua_State *L, int threshold_step, uint32_t step_limit)
       mark_dispatch_yield = 1;
       break;
     }
-    /* Keep driving grace/classification units, but stop after one complete
-    ** LJ_GC2_SWEEP_BATCH of arenas. Without this aggregate bound, each of the
-    ** GCACTIVEAUTOSTEPS units could itself complete a full arena batch. */
-    if (sweep_step &&
-	gc2_sweep_owner_arenas_acq(g) - sweep_arenas0 >= LJ_GC2_SWEEP_BATCH)
-      break;
   }
   lj_gcsize_store_rel(&g->gc.debt, 0);
   if (gc2_phase_acq(g) == LJ_GC2_IDLE) {

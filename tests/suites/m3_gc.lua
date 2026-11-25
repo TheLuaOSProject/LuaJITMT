@@ -450,6 +450,7 @@ return function(add)
       local scan = "lj_gc2_scan_cycle_owner_tg_roots_native_parked"
       local prepare = "lj_arena_alloc_prepare_sweep_kind"
       run("t-gc2-sweep-step-close", { {} })
+      run("t-gc2-sweep-quantum", { {} })
       run("t-gc2-auto-sweep-start", {
         {}, { "reset" }, { "roots" }, { "pool-reset" }, { "pool-roots" },
         { "pool-reset", "stop" }, { "pool-roots", "stop" },

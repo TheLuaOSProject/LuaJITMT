@@ -3225,7 +3225,7 @@ static int gc2_step_retry(lua_State *L, uint32_t budget)
   return 1;
 }
 
-static int gc2_step(lua_State *L, uint32_t budget)
+static int gc2_step(lua_State *L, uint32_t budget, uint32_t sweep_limit)
 {
   global_State *g;
   TGState *tg;
@@ -3351,7 +3351,7 @@ static int gc2_step(lua_State *L, uint32_t budget)
       if (gc2_deferred_epoch_acq(g) != defer0)
 	break;
       if (gc2_worker_drain_logical(g, tg,
-					   LJ_GC2_SWEEP_BATCH, 0) != 0) {
+					   sweep_limit, 0) != 0) {
 	if (gc2_deferred_epoch_acq(g) != defer0)
 	  break;
 	(void)lj_safepoint_ack(L);
@@ -3391,12 +3391,12 @@ static int gc2_step(lua_State *L, uint32_t budget)
 
 int lj_gc2_step_explicit(lua_State *L, uint32_t budget)
 {
-  return gc2_step(L, budget);
+  return gc2_step(L, budget, LJ_GC2_SWEEP_BATCH);
 }
 
-int lj_gc2_step_automatic(lua_State *L)
+int lj_gc2_step_automatic(lua_State *L, uint32_t sweep_limit)
 {
-  return gc2_step(L, 1);
+  return gc2_step(L, 1, sweep_limit);
 }
 
 void lj_gc2_check_trigger(global_State *g, TGState *tg)
@@ -6431,17 +6431,19 @@ static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
 	break;
       if (!step)
 	break;
+      n++;
       if (finished_arena) {
-	/* Bitmap-word summaries can now finish an otherwise inert arena in one
-	** reclaim visit. End the physical-commit quantum explicitly instead of
-	** inflating the returned work count: the caller reopens the JIT gate and
-	** automatic pacing retains its LJ_GC2_SWEEP_BATCH completion bound. */
-	n++;
 	if (finishedp)
 	  *finishedp = 1;
-	break;
+	/* Stop for newly published graph work exactly as between owned
+	** turns. Another independently admitted arena costs another unit. */
+	if (gc2_sweep_blocked_by_finalizer(g) ||
+	    gc2_thread_scan_needscan_pending_acq(g) != 0 ||
+	    gc2_weak_owned_peer_active(g) || !lj_gc2_ssb_empty(g) ||
+	    !gc2_grey_empty(g) || !gc2_recovery_empty(g) ||
+	    gc2_table_rescan_pending_acq(g) != 0 || gc2_marks_this_round_acq(g))
+	  break;
       }
-      n++;
       if (root_owner_blocked)
 	break;  /* Keep committed work counters, but do not retry this owner. */
       continue;
@@ -22643,7 +22645,7 @@ drain_graph:
         g, tg, limit - n, &finished, &owner_blocked);
       root_owner_blocked |= owner_blocked;
     }
-    /* Preserve the work quota and one-finished-arena boundary, but resume at
+    /* Preserve the work quota and resume at
     ** the next owner after either boundary. A persistent EOF retry must not
     ** reclaim the front of every subsequent invocation. */
     gc2_sweep_owner_next_tid_store_rlx(g, next ? lj_tg_tid_acq(next) : 0);
