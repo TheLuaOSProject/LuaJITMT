@@ -96,20 +96,20 @@ static void carith_ctype_snapshot_wait(lua_State *L, CTState *cts, CTypeID id,
       return;
     lj_err_caller(L, LJ_ERR_FFI_INVTYPE);
   }
-  for (;;) {
+  {
     int ok = lj_ctype_snapshot(cts, id, out);
     if (ok > 0)
       return;
-    if (ok == 0)
-      lj_err_caller(L, LJ_ERR_FFI_INVTYPE);
+    if (ok < 0) {
 #if LJ_HASJIT
-    {
       jit_State *J = carith_active_recorder(L);
       if (J)
 	lj_trace_err(J, LJ_TRERR_CTBUSY);
-    }
 #endif
-    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+      if (lj_ctype_read(L, cts, id, out))
+	return;
+    }
+    lj_err_caller(L, LJ_ERR_FFI_INVTYPE);
   }
 }
 
@@ -169,8 +169,16 @@ static cTValue *carith_ctype_metatv_read(lua_State *L, CTState *cts,
   if (LJ_UNLIKELY(!lj_ctype_metaroot_init_nothrow(L, root)))
     lj_err_mem(L);
   for (;;) {
-    int status = lj_ctype_metatv_rooted_try(
-      L, cts, lj_ctype_metaroot_tv(root), id, mm);
+    int status;
+#if LJ_HASJIT
+    jit_State *J = carith_active_recorder(L);
+    if (J)
+      status = lj_ctype_metatv_rooted_try(L, cts, lj_ctype_metaroot_tv(root),
+					id, mm);
+    else
+#endif
+      status = lj_ctype_metatv_committed_try(L, cts, lj_ctype_metaroot_tv(root),
+					   id, mm);
     if (status == LJ_CTYPE_METATV_FOUND)
       return lj_ctype_metaroot_tv(root);
     if (status == LJ_CTYPE_METATV_ABSENT) {
@@ -178,13 +186,10 @@ static cTValue *carith_ctype_metatv_read(lua_State *L, CTState *cts,
       return NULL;
     }
 #if LJ_HASJIT
-    {
-      jit_State *J = carith_active_recorder(L);
-      if (J) {
-	lj_ctype_metaroot_release(root);
-	lj_trace_err(J, status == LJ_CTYPE_METATV_CTBUSY ?
-			     LJ_TRERR_CTBUSY : LJ_TRERR_NYIBC);
-      }
+    if (J) {
+      lj_ctype_metaroot_release(root);
+      lj_trace_err(J, status == LJ_CTYPE_METATV_CTBUSY ?
+			   LJ_TRERR_CTBUSY : LJ_TRERR_NYIBC);
     }
 #endif
     lj_ctype_metaroot_release(root);

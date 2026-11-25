@@ -3,7 +3,6 @@
 */
 
 #include <assert.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -15,22 +14,9 @@
 #include "lj_cconv.h"
 #include "lj_ctype.h"
 #include "lj_str.h"
-#include "lj_tg.h"
 
 #include "lib/ctype_parse_fixture_helpers.h"
 #include "lib/lua_fixture_helpers.h"
-
-static void assert_cconv_init_waits_without_lock(lua_State *L, CTState *cts,
-						 TGState *tg,
-						 const char *chunk)
-{
-  LJTCTypeParseReleaseCtx ctx;
-  pthread_t thread;
-
-  ljt_ctype_release_when_native_start(&ctx, &thread, cts, tg);
-  ljt_lua_dostring(L, chunk);
-  ljt_ctype_release_when_native_join(&ctx, thread);
-}
 
 static void assert_predefined_init_avoids_wait(lua_State *L, CTState *cts)
 {
@@ -115,22 +101,21 @@ static void assert_committed_pointer_conversion(lua_State *L, CTState *cts,
   assert(dst == src);
 }
 
-static void assert_multi_init_source_cdata_waits_without_lock(lua_State *L,
+static void assert_multi_init_source_cdata_reads_committed(lua_State *L,
 							      CTState *cts,
-							      TGState *tg,
 							      CTypeID did,
 							      CType *d)
 {
-  LJTCTypeParseReleaseCtx ctx;
-  pthread_t thread;
+  uint32_t release;
   int rc;
 
   lua_getglobal(L, "lj_m7_cconv_init_str_arr_src");
   assert(tviscdata(L->top - 1));
 
-  ljt_ctype_release_when_native_start(&ctx, &thread, cts, tg);
+  release = ljt_ctype_hold_parse_token(cts);
   rc = lj_cconv_multi_init_l(L, cts, did, d, L->top - 1);
-  ljt_ctype_release_when_native_join(&ctx, thread);
+  assert(ctype_parse_token_acq(cts) == release - 1u);
+  ljt_ctype_release_parse_token(cts, release);
   L->top--;
   assert(rc == 0);
 }
@@ -139,7 +124,6 @@ int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
   CTState *cts;
-  TGState *tg;
   CType predef_str_arr_snap, parser_str_arr_snap;
   CType void_ptr_snap, node_ptr_snap;
   CTypeID predef_str_arr_id, parser_str_arr_id;
@@ -174,8 +158,6 @@ int main(void)
 
   cts = ctype_ctsG(G(L));
   assert(cts != NULL);
-  tg = L2TG(L);
-  assert(tg != NULL);
   predef_str_arr_id = raw_ctype_snapshot_from_global(L, cts,
     "lj_m7_cconv_init_char_arr_ct", &predef_str_arr_snap);
   parser_str_arr_id = raw_ctype_snapshot_from_global(L, cts,
@@ -206,13 +188,13 @@ int main(void)
   seq4 = ljt_ctype_parse_seq(cts);
   assert(seq4 == seq3 + 2u);
 
-  assert_multi_init_source_cdata_waits_without_lock(L, cts, tg,
+  assert_multi_init_source_cdata_reads_committed(L, cts,
 						    parser_str_arr_id,
 						    &parser_str_arr_snap);
   seq5 = ljt_ctype_parse_seq(cts);
   assert(seq5 == seq4 + 2u);
 
-  assert_cconv_init_waits_without_lock(L, cts, tg,
+  ljt_ctype_read_committed(L, cts,
     "local e = lj_m7_cconv_init_enum_ct('LJ_M7_CCONV_INIT_B')\n"
     "local i = lj_m7_cconv_init_int_ct(e)\n"
     "local v = lj_m7_cconv_init_vector_ct(1.5)\n"
@@ -221,7 +203,7 @@ int main(void)
   seq6 = ljt_ctype_parse_seq(cts);
   assert(seq6 == seq5 + 2u);
 
-  assert_cconv_init_waits_without_lock(L, cts, tg,
+  ljt_ctype_read_committed(L, cts,
     "local ffi = require('ffi')\n"
     "local a = ffi.new(lj_m7_cconv_init_arr_ct, {\n"
     "  'LJ_M7_CCONV_INIT_A', 'LJ_M7_CCONV_INIT_B',\n"
@@ -232,7 +214,7 @@ int main(void)
   seq7 = ljt_ctype_parse_seq(cts);
   assert(seq7 == seq6 + 2u);
 
-  assert_cconv_init_waits_without_lock(L, cts, tg,
+  ljt_ctype_read_committed(L, cts,
     "local ffi = require('ffi')\n"
     "local p = ffi.new(lj_m7_cconv_init_pair_ct, {\n"
     "  a = 'LJ_M7_CCONV_INIT_A', b = 'LJ_M7_CCONV_INIT_B' })\n"
@@ -241,7 +223,7 @@ int main(void)
   seq8 = ljt_ctype_parse_seq(cts);
   assert(seq8 == seq7 + 2u);
 
-  assert_cconv_init_waits_without_lock(L, cts, tg,
+  ljt_ctype_read_committed(L, cts,
     "local ffi = require('ffi')\n"
     "local a = ffi.new(lj_m7_cconv_init_arr_ct,\n"
     "  'LJ_M7_CCONV_INIT_A', 'LJ_M7_CCONV_INIT_B',\n"
@@ -252,7 +234,7 @@ int main(void)
   seq9 = ljt_ctype_parse_seq(cts);
   assert(seq9 == seq8 + 2u);
 
-  assert_cconv_init_waits_without_lock(L, cts, tg,
+  ljt_ctype_read_committed(L, cts,
     "local ffi = require('ffi')\n"
     "local p = ffi.new(lj_m7_cconv_init_pair_ct,\n"
     "  'LJ_M7_CCONV_INIT_A', 'LJ_M7_CCONV_INIT_B')\n"
@@ -274,6 +256,6 @@ int main(void)
   assert(ljt_ctype_parse_seq(cts) == seq9 + 2u);
 
   lua_close(L);
-  printf("t-ffi-cconv-init-snapshot OK: aggregate init waits on ctype snapshots\n");
+  printf("t-ffi-cconv-init-snapshot OK: aggregate init uses committed ctypes\n");
   return 0;
 }

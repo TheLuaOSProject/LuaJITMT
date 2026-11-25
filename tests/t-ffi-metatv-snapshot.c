@@ -3,7 +3,6 @@
 */
 
 #include <assert.h>
-#include <pthread.h>
 #include <stdio.h>
 
 #include "lua.h"
@@ -17,17 +16,6 @@
 
 #include "lib/ctype_parse_fixture_helpers.h"
 #include "lib/lua_fixture_helpers.h"
-
-static void assert_metatv_waits_without_lock(lua_State *L, CTState *cts,
-					     TGState *tg, const char *chunk)
-{
-  LJTCTypeParseReleaseCtx ctx;
-  pthread_t thread;
-
-  ljt_ctype_release_when_native_start(&ctx, &thread, cts, tg);
-  ljt_lua_dostring(L, chunk);
-  ljt_ctype_release_when_native_join(&ctx, thread);
-}
 
 static void assert_predefined_metatv_avoids_wait(lua_State *L, CTState *cts)
 {
@@ -161,15 +149,15 @@ int main(void)
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 2u);
 
-  assert_metatv_waits_without_lock(L, cts, tg,
+  ljt_ctype_read_committed(L, cts,
     "assert(lj_m7_metatv_obj(2) == 42)\n");
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 4u);
-  assert_metatv_waits_without_lock(L, cts, tg,
+  ljt_ctype_read_committed(L, cts,
     "assert((lj_m7_metatv_obj + lj_m7_metatv_rhs).x == 42)\n");
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 6u);
-  assert_metatv_waits_without_lock(L, cts, tg,
+  ljt_ctype_read_committed(L, cts,
     "local seen = 0\n"
     "for k, v in pairs(lj_m7_metatv_obj) do\n"
     "  assert(k == 'x' and v == 40)\n"
@@ -186,6 +174,6 @@ int main(void)
     "assert(lj_m7_metatv_gc_count >= 1)\n");
 
   lua_close(L);
-  printf("t-ffi-metatv-snapshot OK: ctype metamethods wait on snapshots\n");
+  printf("t-ffi-metatv-snapshot OK: ctype metamethods use committed ctypes\n");
   return 0;
 }
