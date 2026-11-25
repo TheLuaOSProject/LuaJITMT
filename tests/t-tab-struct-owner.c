@@ -658,7 +658,7 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed)
   TValue *oldarray, *nextarray;
 
   lua_settop(L, 0);
-  lua_createtable(L, LJ_MAX_COLOSIZE + 2, mixed ? 4 : 0);
+  lua_createtable(L, mixed == 2 ? 80 : LJ_MAX_COLOSIZE + 2, mixed ? 4 : 0);
   if (weak) {
     lua_newtable(L);
     lua_pushliteral(L, "v");
@@ -687,7 +687,8 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed)
   owner.ready = &ready;
   owner.start = &owner_start;
   owner.done = &owner_done;
-  owner.asize = 80;
+  owner.asize = mixed == 2 ? 40 : 80;
+  owner.hbits = mixed == 2 ? 8 : 0;
   owner.status = -1;
   other.L = new_child_with_table(L, 1);
   other.ready = &ready;
@@ -720,6 +721,7 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed)
   assert(lj_tab_array_acq(t) == nextarray);
   if (mixed)
     assert(lj_tab_node_acq(t) != oldnode);
+  assert(lj_tab_asize_acq(t) == owner.asize);
   assert(lj_tab_resize_desc_control_acq(t) == NULL);
   lua_rawgeti(L, 1, 1);
   assert(lua_isnil(L, -1));
@@ -1101,6 +1103,8 @@ int main(void)
   exercise_array_migration_owner(L, 1, 0);
   exercise_array_migration_owner(L, 0, 1);
   exercise_array_migration_owner(L, 1, 1);
+  exercise_array_migration_owner(L, 0, 2);
+  exercise_array_migration_owner(L, 1, 2);
   exercise_hash_migration_owner(L);
   exercise_hash_install_owner(L, 0);
   exercise_hash_install_owner(L, 1);

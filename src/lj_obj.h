@@ -794,6 +794,7 @@ typedef struct TabResizeDesc {
   TabArrayRetire *oldaret;
   int migration_weak;
   la_u128 oldshape;	/* Metadata expected by an early hash descriptor. */
+  MSize hash_source_count;	/* Includes array tail sources when shrinking. */
   GCSize hash_move_bytes;	/* Total size when hash move records follow. */
   uint64_t id;
   uint64_t stable_control;  /* Exact pre-install {owner, acap} word. */

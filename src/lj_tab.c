@@ -2586,10 +2586,10 @@ typedef struct TabHashMove {
 
 #define TAB_HASH_MOVES_OFFSET ((sizeof(TabResizeDesc) + 15u) & ~(size_t)15u)
 
-static GCSize tab_hash_move_size(MSize oldhmask, MSize newhmask)
+static GCSize tab_hash_move_size(MSize source_count, MSize newhmask)
 {
   return (GCSize)TAB_HASH_MOVES_OFFSET +
-    (GCSize)(oldhmask + 1u) * sizeof(TabHashMove) +
+    (GCSize)source_count * sizeof(TabHashMove) +
     (GCSize)(newhmask + 1u) * sizeof(uint32_t);
 }
 
@@ -2600,7 +2600,7 @@ static TabHashMove *tab_hash_moves(TabResizeDesc *desc)
 
 static uint32_t *tab_hash_move_owners(TabResizeDesc *desc)
 {
-  return (uint32_t *)(void *)(tab_hash_moves(desc) + desc->oldhmask + 1u);
+  return (uint32_t *)(void *)(tab_hash_moves(desc) + desc->hash_source_count);
 }
 
 #ifdef LJ_TAB_TEST_HELPERS
@@ -2637,13 +2637,26 @@ static int tab_hash_move_capture_held(global_State *g, TabResizeDesc *desc,
 				     MSize idx, MSize hmask, la_u128 *edge)
 {
   TabHashMove *move = &tab_hash_moves(desc)[idx];
-  Node *source = &desc->oldnode[idx];
   TValue key, val;
   LJGC2Lease key_lease = { 0 }, value_lease = { 0 };
   int status;
+  uint32_t array_idx;
   la_u128 proposed;
-  lj_tv_load_acq(&key, &source->key);
-  lj_tv_load_acq(&val, &source->val);
+  if (idx <= desc->oldhmask) {
+    Node *source = &desc->oldnode[idx];
+    lj_tv_load_acq(&key, &source->key);
+    lj_tv_load_acq(&val, &source->val);
+    /* The current array was authoritative for these indices. A shadowed
+    ** old hash key must not be rebuilt as a second live entry. */
+    if (desc->newarray &&
+	tab_rehash_arrayindex(desc->oldasize, &key, &array_idx))
+      goto absent;
+  } else {
+    MSize asize = lj_tab_array_hdr_asize_acq(desc->newarray);
+    MSize source = asize + (idx - desc->oldhmask - 1u);
+    setnumV(&key, (lua_Number)source);
+    lj_tv_load_acq(&val, &desc->oldarray[source]);
+  }
   if (tab_key_islocked(&key) || tab_val_is_publish_claim(&val))
     return 0;
   if (tvisnil(&key) || tvistabinternal(&key) ||
@@ -2767,7 +2780,7 @@ static int tab_resize_hash_copy_held(global_State *g, TabResizeDesc *desc)
   GCtab *t = lj_tab_resize_desc_tab_acq(desc);
   setresizemarkerV(&dst_marker, desc->id, LJ_TAB_RESIZE_MARK_DST);
   setnilV(&nilv);
-  for (i = 0; i <= desc->oldhmask; i++) {
+  for (i = 0; i < desc->hash_source_count; i++) {
     TabHashMove *move = &tab_hash_moves(desc)[i];
     la_u128 edge = la_load128_acq(&move->edge);
     Node *home, *dest;
@@ -2790,14 +2803,14 @@ static int tab_resize_hash_copy_held(global_State *g, TabResizeDesc *desc)
     bucket = la_load32_acq(&move->home);
     home = &desc->newnode[bucket];
     dest = tab_hash_move_reserve(desc, hmask, bucket, i);
-    if (dest != home)
+    if (dest != home && i <= desc->oldhmask)
       tab_test_hash_collision_copy(t, i);
     expect = nilv;
     (void)lj_tv_cas(&dest->key, &expect, &key);
     tab_hash_move_install_value(g, desc, t, &dest->val, &dst_marker,
 				&key, &val);
     tab_hash_move_link(home, dest, hmask);
-    if (!tab_hash_move_forward(&desc->oldnode[i]))
+    if (i <= desc->oldhmask && !tab_hash_move_forward(&desc->oldnode[i]))
       return 0;
   }
   /*
@@ -2891,6 +2904,7 @@ static int tab_resize_hash_cutover_held(global_State *g, TabResizeDesc *desc)
   GCtab *t;
   uint64_t oldnode, newnode;
   TabNodeRetire *ret;
+  int grows;
   if (phase == TAB_RESIZE_DESC_TERMINAL)
     return 1;
   if (phase == TAB_RESIZE_DESC_TERMINATING)
@@ -2925,9 +2939,12 @@ static int tab_resize_hash_cutover_held(global_State *g, TabResizeDesc *desc)
       return tab_resize_desc_help_terminating(g, desc);
     }
   }
-  /* Growing the array makes the new numeric slots authoritative before
-  ** the hash root stops advertising the retiring generation. */
-  if (desc->newarray && !tab_resize_array_root_held(g, desc))
+  /* In growth the destination array publishes before the hash. In shrink
+  ** the destination hash publishes before the array, matching the legacy
+  ** cross-part handoff. */
+  grows = desc->newarray &&
+    desc->oldasize < lj_tab_array_hdr_asize_acq(desc->newarray);
+  if (grows && !tab_resize_array_root_held(g, desc))
     return 0;
   oldnode = (uint64_t)(uintptr_t)desc->oldnode;
   newnode = (uint64_t)(uintptr_t)desc->newnode;
@@ -2944,6 +2961,8 @@ static int tab_resize_hash_cutover_held(global_State *g, TabResizeDesc *desc)
       ;
     lj_tab_node_retired_armed_rel(ret, 1);
   }
+  if (desc->newarray && !grows && !tab_resize_array_root_held(g, desc))
+    return 0;
   lj_tab_resize_desc_flags_or(desc, TAB_RESIZE_DESC_F_CUTOVER);
   (void)lj_tab_resize_desc_phase_cas(desc, &expect_phase,
 				    TAB_RESIZE_DESC_TERMINATING);
@@ -3045,9 +3064,11 @@ static void tab_test_array_copy_before_cas(TabResizeDesc *desc, MSize idx)
 static int tab_resize_array_copy_held(global_State *g, TabResizeDesc *desc)
 {
   TValue marker;
+  MSize asize = lj_tab_array_hdr_asize_acq(desc->newarray);
+  MSize count = desc->oldasize < asize ? desc->oldasize : asize;
   MSize i;
   setresizemarkerV(&marker, desc->id, LJ_TAB_RESIZE_MARK_DST);
-  for (i = 0; i < desc->oldasize; i++) {
+  for (i = 0; i < count; i++) {
     TValue expect, val;
     LJGC2Lease lease;
     int retained = 0, strong = 0;
@@ -3898,6 +3919,7 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
   TabArrayRetire *oldaret;
   TabResizeDesc *cutover;
   int array_migration, hash_migration, self_metatable;
+  MSize hash_source_count;
   int array_next_claimed;
   int struct_acq;
   Node *node_succ;
@@ -4041,15 +4063,21 @@ restart_resize:
   if (newarray && oldarray_separated && oldacap > 0)
     oldaret = tab_array_retire_reserve(L);
   /*
-  ** Pure hashes and separated-array growth can hand off their copy. An
-  ** integral key from the hash is moved directly to its new array index.
-  ** The sticky MT latch excludes private readers while old roots briefly
-  ** coexist with new header metadata.
+  ** Pure hashes and separated arrays can hand off their copy. An integral
+  ** key can move into a new array slot or out of the old tail into the
+  ** new hash. Admit shrink only when the requested hash already has room
+  ** for every old hash slot and tail index, including last-minute inserts.
   */
   /* FINREG tables use their own claim protocol and self metatable. */
   self_metatable = lj_tab_metatable_acq(t) == t;
-  array_migration = oldaret && asize > oldasize &&
-    ((!oldhmask && !hbits) || (oldret && newnode && !self_metatable));
+  hash_source_count = oldhmask + 1u;
+  if (asize < oldasize)
+    hash_source_count += oldasize - asize;
+  array_migration = oldaret &&
+    ((asize > oldasize &&
+      ((!oldhmask && !hbits) || (oldret && newnode && !self_metatable))) ||
+     (asize < oldasize && oldret && newnode && !self_metatable &&
+      newhmask + 1u >= hash_source_count));
   if ((mt_active_acq(g) || mt_entering_acq(g)) &&
       (array_migration || (oldret && newnode && !array_changed))) {
     uint64_t id = tab_resize_desc_id_reserve(g);
@@ -4057,7 +4085,7 @@ restart_resize:
       GCSize bytes = sizeof(TabResizeDesc);
       hash_migration = oldret && (!asize || array_migration) && !self_metatable;
       if (hash_migration)
-	bytes = tab_hash_move_size(oldhmask, newhmask);
+	bytes = tab_hash_move_size(hash_source_count, newhmask);
       cutover = (TabResizeDesc *)lj_mem_new_nothrow(L, bytes);
       if (cutover) {
 	memset(cutover, 0, (size_t)bytes);
@@ -4067,8 +4095,10 @@ restart_resize:
 	cutover->oldret = oldret;
 	cutover->oldhmask = oldhmask;
 	cutover->migration_weak = weak;
-	if (hash_migration)
+	if (hash_migration) {
+	  cutover->hash_source_count = hash_source_count;
 	  cutover->hash_move_bytes = bytes;
+	}
       }
     }
   }
@@ -4100,7 +4130,7 @@ restart_resize:
 					      LJ_TAB_RESIZE_MARK_SRC);
     lj_assertL(((uintptr_t)tab_hash_moves(cutover) & 15u) == 0,
 	       "unaligned hash move records");
-    for (i = 0; i <= oldhmask; i++)
+    for (i = 0; i < hash_source_count; i++)
       tab_hash_moves(cutover)[i].edge.lo = source;
     setresizemarkerV(&marker, cutover->id, LJ_TAB_RESIZE_MARK_DST);
     for (i = 0; i <= newhmask; i++)
