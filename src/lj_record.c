@@ -1621,9 +1621,7 @@ int lj_record_cdata_method_matches(lua_State *L, GCstr *name, GCfunc *expected)
 {
   return rec_cdata_method_try(L, name, expected, NULL);
 }
-#endif
 
-#if LJ_HASFFI && LJ_TARGET_X64 && LJ_TARGET_LINUX
 /* Only the built-in arithmetic on two predefined boxed integers is
 ** supported here. Custom methods and cdata references keep the generic VM
 ** path, even when they would produce the same result at record time. */
@@ -1774,7 +1772,7 @@ nocheck:
 static TRef rec_mm_arith(jit_State *J, RecordIndex *ix, MMS mm)
 {
   int boxed_arith = 0;
-#if LJ_HASFFI && LJ_TARGET_X64 && LJ_TARGET_LINUX
+#if LJ_HASFFI
   boxed_arith = rec_mm_cdata_boxed_arith(J, ix, mm);
 #endif
   /* Set up metamethod call first to save ix->tab and ix->tabv. */

@@ -120,7 +120,7 @@ static void restore_patch(PatchedPC *patch)
 }
 
 
-#if LJ_HASJIT && LJ_GC64 && defined(__linux__) && defined(LJ_GC2_TEST_HELPERS)
+#if LJ_HASJIT && LJ_GC64 && defined(LJ_GC2_TEST_HELPERS)
 typedef struct IdleReadRace {
   global_State *g;
   lua_State *peer;
@@ -562,7 +562,7 @@ int main(void)
   lua_pop(L, 1);
   assert(la_load32_acq(&native_hits) != 0);
 
-#if LJ_HASJIT && LJ_GC64 && defined(__linux__) && defined(LJ_GC2_TEST_HELPERS)
+#if LJ_HASJIT && LJ_GC64 && defined(LJ_GC2_TEST_HELPERS)
   check_idle_read_generation(L);
 #endif
   lua_close(L);

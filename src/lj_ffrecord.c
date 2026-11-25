@@ -199,7 +199,6 @@ static void LJ_FASTCALL recff_nyi(jit_State *J, RecordFFData *rd)
   case FF_threading_current:
     lj_trace_err_info(J, LJ_TRERR_NYIFFU);
     break;
-#if LJ_TARGET_X64 && LJ_TARGET_LINUX
   case FF_jit_util_traceinfo:
   case FF_jit_util_traceir:
   case FF_jit_util_tracek:
@@ -213,7 +212,6 @@ static void LJ_FASTCALL recff_nyi(jit_State *J, RecordFFData *rd)
     if (lj_record_mt_runtime_shared(J2G(J), J->L))
       lj_trace_err_info(J, LJ_TRERR_NYIFFU);
     break;
-#endif
   default:
     break;
   }
@@ -659,7 +657,6 @@ static void LJ_FASTCALL recff_next(jit_State *J, RecordFFData *rd)
     RecordIndex ix;
     cTValue *keyv;
     if (lj_record_mt_shared_tab(J, tab)) {
-#if LJ_TARGET_X64 && LJ_TARGET_LINUX
       TValue key, val;
       TRef keyref = tref_isnil(J->base[1]) ? TREF_NIL : J->base[1];
       cTValue *keyroot = keyref == TREF_NIL ? niltv(J->L) : &rd->argv[1];
@@ -683,7 +680,6 @@ static void LJ_FASTCALL recff_next(jit_State *J, RecordFFData *rd)
 	}
 	return;
       }
-#endif
       /* Unsupported shapes and transient refusals use ordinary VM traversal.
       ** Abort without stitching so the VM can handle this boundary. */
       lj_trace_err_info(J, LJ_TRERR_NYIFFU);

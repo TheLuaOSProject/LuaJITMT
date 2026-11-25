@@ -1,8 +1,3 @@
-if jit.arch ~= "x64" or jit.os ~= "Linux" then
-  print("t-x64-jit-next-scalar SKIP")
-  return
-end
-
 local bit = require("bit")
 local threading = require("threading")
 local util = require("jit.util")

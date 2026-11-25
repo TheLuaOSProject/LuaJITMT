@@ -2402,7 +2402,7 @@ static MSize crec_call_args_collect(jit_State *J, RecordFFData *rd,
 #if LJ_TARGET_X64 && !LJ_ABI_WIN
       TRef ptr;
       IRType at;
-      if (LJ_TARGET_LINUX && dsize == 16) {
+      if (dsize == 16) {
 	IRType lane[2];
 	MSize fp;
 	if (limit - n < 2 || !crec_call_sysv_aggregate_pair(J, cts, d, lane))

@@ -530,7 +530,7 @@ LJ_FUNC uint32_t lj_tab_test_forjit_snapshot_paused(void);
 LJ_FUNC void lj_tab_test_forjit_snapshot_release(void);
 LJ_FUNC void lj_tab_test_forjit_initial_miss_once(void);
 LJ_FUNC void lj_tab_test_forjit_initial_miss_after(uint32_t nth);
-#if LJ_TARGET_X64 && LJ_HASJIT && LJ_GC64 && defined(__linux__)
+#if LJ_HASJIT && LJ_GC64
 typedef void (*LJTabJitIdleReadHook)(lua_State *L, GCtab *tab, cTValue *value);
 LJ_FUNC void lj_tab_test_set_jit_idle_read_hook(LJTabJitIdleReadHook hook);
 #endif

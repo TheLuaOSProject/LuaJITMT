@@ -5489,7 +5489,7 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
   }
 }
 
-#if LJ_TARGET_X64 && LJ_HASJIT && LJ_GC64 && defined(__linux__)
+#if LJ_HASJIT && LJ_GC64
 #ifdef LJ_GC2_TEST_HELPERS
 static LJTabJitIdleReadHook tab_test_jit_idle_read_hook;
 
@@ -5575,7 +5575,7 @@ static LJ_AINLINE int tab_gettv_jit_idle_hit(lua_State *L, cTValue *tabroot,
 LJ_FUNCA TValue *lj_tab_gettv_rooted(lua_State *L, cTValue *tabroot,
 				     cTValue *key, TValue *outroot)
 {
-#if LJ_TARGET_X64 && LJ_HASJIT && LJ_GC64 && defined(__linux__)
+#if LJ_HASJIT && LJ_GC64
   if (LJ_LIKELY(tab_gettv_jit_idle_hit(L, tabroot, key, outroot)))
     return outroot;
 #endif

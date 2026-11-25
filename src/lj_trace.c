@@ -88,7 +88,7 @@ typedef struct TraceEventPark {
 static LJ_TRACE_TLS TraceEventPark *trace_event_park;
 #undef LJ_TRACE_TLS
 
-#if LJ_TARGET_X64 && LJ_TARGET_LINUX && !defined(LUAJIT_DISABLE_VMEVENT)
+#ifndef LUAJIT_DISABLE_VMEVENT
 #define TRACE_EVENT_PARK_SUPPORTED 1
 #else
 #define TRACE_EVENT_PARK_SUPPORTED 0

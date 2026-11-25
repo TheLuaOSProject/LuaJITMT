@@ -3,10 +3,6 @@ local threading = require("threading")
 local util = require("jit.util")
 local vmdef = require("jit.vmdef")
 
-if jit.arch ~= "x64" or jit.os ~= "Linux" then
-  print("t-x64-jit-boxed-arithmetic SKIP")
-  return
-end
 require("ffi")
 
 local function add(n, acc, rhs)
