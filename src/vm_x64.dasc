@@ -538,6 +538,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov L:RB->base, BASE
   |  mov SAVE_PC, PC
   |  mov CARG1, L:RB
+  |  xor CARG2d, CARG2d
   |  call extern lj_safepoint_vm_checkpoint
   |  mov BASE, L:RB->base
   |  ins_next
@@ -3034,10 +3035,19 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov qword [DISPATCH+DISPATCH_TG(jit_base)], 0
   |  set_vmstate INTERP
   |  cmp TGPOLL, 0
+  |  jnz >6
+  |  // A trace-exit helper can have consumed the owner poll before restoring
+  |  // the interpreter frame. Its scan still needs a restored-frame witness.
+  |  test byte [DISPATCH+DISPATCH_TG(tg_flags)], TGF_LUA_ALLOC
   |  jz >7
+  |  mov TMPR, [DISPATCH+DISPATCH_TG(str_owner_scan_epoch)]
+  |  cmp TMPR, [DISPATCH+DISPATCH_TG(str_vm_root_epoch)]
+  |  jbe >7
+  |6:
   |  mov SAVE_ERRF, RDd
   |  mov SAVE_PC, PC
   |  mov CARG1, L:RB
+  |  mov CARG2d, 1
   |  call extern lj_safepoint_vm_checkpoint
   |  mov L:RB, SAVE_L
   |  mov BASE, L:RB->base

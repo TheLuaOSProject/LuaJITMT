@@ -15,7 +15,7 @@ LJ_FUNCA uint32_t lj_safepoint_ack_check(lua_State *L);
 LJ_FUNCA uint32_t lj_safepoint_poll(lua_State *L);
 LJ_FUNC uint32_t lj_safepoint_poll_tg(TGState *tg);
 LJ_FUNCA void lj_safepoint_checkstop(lua_State *L, uint32_t actions);
-LJ_FUNCA void lj_safepoint_vm_checkpoint(lua_State *L);
+LJ_FUNCA void lj_safepoint_vm_checkpoint(lua_State *L, int trace_exit);
 LJ_FUNC uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions);
 LJ_FUNC void lj_safepoint_apply_tg(global_State *g, TGState *tg,
 				   uint32_t actions);

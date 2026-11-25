@@ -12,6 +12,7 @@
 #include "lj_obj.h"
 #include "lj_str.h"
 #include "lj_safepoint.h"
+#include "lj_tg.h"
 
 static char held[1024];
 static const char *borrowed;
@@ -75,16 +76,27 @@ static int check_reclamation(lua_State *L)
   return 1;
 }
 
-int main(void)
+/* Sample the attached peer's actual native execution, not trace metadata. */
+static int worker_running_trace(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *peer = gc2_tg_list_acq(g);
+  assert(peer && peer != g->main_tg && mt_live_acq(g) == 1);
+  lua_pushboolean(L, lj_tg_vmstate_load_acq(peer) > 0);
+  return 1;
+}
+
+static void run_reclamation(int use_jit)
 {
   static const char script[] =
-    "local stats, held, stop, park, invoke = ...\n"
+    "local stats, held, stop, park, invoke, use_jit, running_trace = ...\n"
     "local threading = require('threading')\n"
-    "if jit then jit.off() end\n"
+    "if use_jit then jit.opt.start('hotloop=8')\n"
+    "elseif jit then jit.off() end\n"
     "local ready, start = threading.channel(1), threading.channel(1)\n"
     "local have_ffi, ffi = pcall(require, 'ffi')\n"
     "if not have_ffi then ffi = nil end\n"
-    "local peer = assert(threading.spawn(function(stop, ready, start, held, park, invoke, ffi)\n"
+    "local peer = assert(threading.spawn(function(stop, ready, start, held, park, invoke, ffi, use_jit)\n"
     "  assert(ready:send(true, 10))\n"
     "  assert(select(2, start:recv(20)))\n"
     "  assert(ready:send(true, 10))\n"
@@ -94,14 +106,15 @@ int main(void)
     "    cb:free()\n"
     "  end\n"
     "  local sum = 0\n"
+    "  local iterations = use_jit and 3000 or 200000\n"
     "  repeat\n"
-    "    for i = 1, 200000 do\n"
+    "    for i = 1, iterations do\n"
     "      sum = sum + #held\n"
     "      if sum > 1000000000 then sum = 0 end\n"
     "    end\n"
     "  until stop()\n"
     "  return #held\n"
-    "end, stop, ready, start, held, park, invoke, ffi))\n"
+    "end, stop, ready, start, held, park, invoke, ffi, use_jit))\n"
     "local function churn(round)\n"
     "  for i = 1, 600 do\n"
     "    local s = ('%d:%d:'):format(round, i):rep(20)\n"
@@ -122,6 +135,15 @@ int main(void)
     "  assert(stats() == before, 'FFI callback certified string acquisition')\n"
     "  park(true)\n"
     "end\n"
+    "if use_jit then\n"
+    "  local running\n"
+    "  for i = 1, 1000 do\n"
+    "    running = running_trace()\n"
+    "    if running then break end\n"
+    "    threading.sleep(0.001)\n"
+    "  end\n"
+    "  assert(running, 'worker did not execute a native trace')\n"
+    "end\n"
     "local weak = setmetatable({('weak-value-'):rep(16)}, {__mode = 'v'})\n"
     "local finalized = 0\n"
     "do\n"
@@ -132,9 +154,10 @@ int main(void)
     "for r = 1, 6 do\n"
     "  local prior = stats()\n"
     "  churn(r)\n"
-    "  for attempt = 1, 8 do\n"
+    "  for attempt = 1, use_jit and 400 or 8 do\n"
     "    collectgarbage('collect')\n"
     "    if stats() - prior >= 600 then break end\n"
+    "    if use_jit then threading.sleep(0.001) end\n"
     "  end\n"
     "  assert(stats() - prior >= 600, 'cohort did not retire while active')\n"
     "  local memory = collectgarbage('count')\n"
@@ -150,6 +173,7 @@ int main(void)
   lua_State *L = luaL_newstate();
   int status;
   assert(L);
+  stop_requested = callback_ready = callback_release = 0;
   luaL_openlibs(L);
   memset(held, 'H', sizeof(held)-1);
   lua_pushlstring(L, held, sizeof(held)-1);
@@ -161,12 +185,22 @@ int main(void)
   lua_pushcfunction(L, stop_worker);
   lua_pushcfunction(L, callback_park);
   lua_pushlightuserdata(L, (void *)(uintptr_t)run_callback);
-  status = lua_pcall(L, 5, 0, 0);
+  lua_pushboolean(L, use_jit);
+  lua_pushcfunction(L, worker_running_trace);
+  status = lua_pcall(L, 7, 0, 0);
   if (status != LUA_OK)
     fprintf(stderr, "%s\n", lua_tostring(L, -1));
   assert(status == LUA_OK);
   assert(lua_tolstring(L, 1, NULL) == borrowed);
   lua_close(L);
+}
+
+int main(void)
+{
+  run_reclamation(0);
+#if LJ_HASJIT && LJ_TARGET_X64
+  run_reclamation(1);
+#endif
   puts("t-str-reclaim-active OK");
   return 0;
 }

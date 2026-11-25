@@ -763,29 +763,44 @@ uint32_t lj_safepoint_ack_check(lua_State *L)
 /* Only emitted after the interpreter has published BASE/PC, or after
 ** native trace exit restored its stack. A remote native ACK has no such
 ** authority, including when it consumes this actor's outstanding poll. */
-void lj_safepoint_vm_checkpoint(lua_State *L)
+void lj_safepoint_vm_checkpoint(lua_State *L, int trace_exit)
 {
   global_State *g = G(L);
   TGState *tg = L2TG(L);
   uint32_t actions = lj_safepoint_ack_check(L);
   uint64_t epoch = la_load64_acq(&tg->str_owner_scan_epoch);
-  if ((actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS)) &&
-      tg == lj_thr_get_tg_fallback(g) &&
-      lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC) &&
-      L == lj_tg_load_thread_L(tg) && L->cframe &&
-      tg->str_vm_outer_cframe &&
-      cframe_raw(cframe_prev(cframe_raw(L->cframe))) ==
-	cframe_raw(tg->str_vm_outer_cframe) &&
-      lj_tg_in_native_acq(tg) == 0 && !lj_tg_load_jit_base(tg) &&
-      epoch && lj_tg_hs_epoch_ack_acq(tg) == epoch
+  if (!epoch || epoch <= la_load64_acq(&tg->str_vm_root_epoch) ||
+      tg != lj_thr_get_tg_fallback(g) ||
+      !lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC) ||
+      L != lj_tg_load_thread_L(tg) || !L->cframe ||
+      !tg->str_vm_outer_cframe ||
+      cframe_raw(cframe_prev(cframe_raw(L->cframe))) !=
+	cframe_raw(tg->str_vm_outer_cframe) ||
+      lj_tg_in_native_acq(tg) || lj_tg_load_jit_base(tg))
+    return;
 #if LJ_HASFFI
-      && !lj_tg_ffi_call_func_acq(tg) && ccallback_depth_acq(&tg->cb) == 0
+  if (lj_tg_ffi_call_func_acq(tg) || ccallback_depth_acq(&tg->cb))
+    return;
 #if LJ_HASJIT
-      && lj_ffi_native_frame_depth_acq(tg) == 0
+  if (lj_ffi_native_frame_depth_acq(tg))
+    return;
 #endif
 #endif
-      )
-    la_store64_rel(&tg->str_vm_root_epoch, epoch);
+  if (!(actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS)) ||
+      lj_tg_hs_epoch_ack_acq(tg) != epoch) {
+    LJOSerrState oserr;
+    int scanned;
+    if (!trace_exit)
+      return;
+    /* GC-defer can consume the owner request while restoring a trace. Take
+    ** a fresh scan at this real frame boundary before certifying its epoch. */
+    lj_oserr_save(&oserr);
+    scanned = lj_gc2_scan_cycle_owner_tg_roots(g, tg);
+    lj_oserr_restore(&oserr);
+    if (!scanned)
+      return;
+  }
+  la_store64_rel(&tg->str_vm_root_epoch, epoch);
 }
 
 void lj_native_enter(TGState *tg)
