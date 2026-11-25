@@ -364,6 +364,45 @@ static int safepoint_claim_epoch(TGState *tg, uint64_t epoch)
   return oldepoch != epoch;
 }
 
+static void safepoint_apply_allocator(global_State *g, TGState *tg,
+                                      uint32_t actions)
+{
+  if ((actions & LJ_GC2_HS_RESET_ALLOC) &&
+      lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL)) {
+    int prepared = lj_arena_alloc_prepare_sweep_kind(
+	&tg->alloc, LJ_ARENAK_TRAVERSABLE);
+    int plain_restored = lj_arena_alloc_restore_sweep_kind(
+	&tg->alloc, LJ_ARENAK_PLAIN);
+    if (lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
+      lj_arena_hugetab_prepare_sweep(&tg->huge);
+      tg->alloc.huge_retire_cursor = 0;
+      tg->alloc.huge_reclaim_cursor = 0;
+      tg->alloc.huge_retire_done = 0;
+    }
+    if (prepared && plain_restored)
+      tg->alloc.prepare_epoch = gc2_cycle_acq(g);
+    else
+      lj_gc2_sweep_publish_wake(g);
+  }
+  if ((actions & LJ_GC2_HS_RESTORE_ALLOC) &&
+      lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL)) {
+    int restored;
+    /* Abort is legal only before bounded root detachment/quarantine. Restore
+    ** owner-local bins on the owning TG while it is stopped at this ACK. */
+    restored = lj_arena_alloc_restore_sweep_kind(
+	&tg->alloc, LJ_ARENAK_TRAVERSABLE);
+    if (lj_tg_flags_test_acq(tg, TGF_HUGETAB))
+      lj_arena_hugetab_abort_sweep(&tg->huge);
+    if (restored)
+      tg->alloc.prepare_epoch = 0;
+    else
+      lj_gc2_sweep_publish_wake(g);
+    tg->alloc.huge_retire_cursor = 0;
+    tg->alloc.huge_reclaim_cursor = 0;
+    tg->alloc.huge_retire_done = 0;
+  }
+}
+
 static void safepoint_apply_tg_mode(global_State *g, TGState *tg,
 				    uint32_t actions, int native_parked,
 				    int roots_already_scanned)
@@ -405,40 +444,7 @@ static void safepoint_apply_tg_mode(global_State *g, TGState *tg,
       lj_gc2_flush_ssb(g, tg);  /* 05 section 5.6.2. */
   }
   (void)lj_gc2_flush_alloc(g, tg);  /* 04 section 4.8 safepoint flush. */
-  if ((actions & LJ_GC2_HS_RESET_ALLOC) &&
-      lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL)) {
-    int prepared = lj_arena_alloc_prepare_sweep_kind(
-	&tg->alloc, LJ_ARENAK_TRAVERSABLE);
-    int plain_restored = lj_arena_alloc_restore_sweep_kind(
-	&tg->alloc, LJ_ARENAK_PLAIN);
-    if (lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
-      lj_arena_hugetab_prepare_sweep(&tg->huge);
-      tg->alloc.huge_retire_cursor = 0;
-      tg->alloc.huge_reclaim_cursor = 0;
-      tg->alloc.huge_retire_done = 0;
-    }
-    if (prepared && plain_restored)
-      tg->alloc.prepare_epoch = gc2_cycle_acq(g);
-    else
-      lj_gc2_sweep_publish_wake(g);
-  }
-  if ((actions & LJ_GC2_HS_RESTORE_ALLOC) &&
-      lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL)) {
-    int restored;
-    /* Abort is legal only before bounded root detachment/quarantine. Restore
-    ** owner-local bins on the owning TG while it is stopped at this ACK. */
-    restored = lj_arena_alloc_restore_sweep_kind(
-	&tg->alloc, LJ_ARENAK_TRAVERSABLE);
-    if (lj_tg_flags_test_acq(tg, TGF_HUGETAB))
-      lj_arena_hugetab_abort_sweep(&tg->huge);
-    if (restored)
-      tg->alloc.prepare_epoch = 0;
-    else
-      lj_gc2_sweep_publish_wake(g);
-    tg->alloc.huge_retire_cursor = 0;
-    tg->alloc.huge_reclaim_cursor = 0;
-    tg->alloc.huge_retire_done = 0;
-  }
+  safepoint_apply_allocator(g, tg, actions);
   if (actions & LJ_GC2_HS_REDISPATCH)
     lj_dispatch_sync_tg(g, tg);  /* 03 section 3.6, 07 section 7.3. */
 #if LJ_HASJIT
@@ -1050,6 +1056,28 @@ static void safepoint_finish_prior_epoch(global_State *g)
   }
 }
 
+/* DEAD is release-published after detach has finished using the private
+** allocator. The handshake leader excludes a competing allocator reset or
+** TG transfer, and the registry read section retains each list entry. Dead
+** owners take no ordinary poll slot, so apply only their allocator actions. */
+static void safepoint_apply_dead_allocators(global_State *g, uint32_t actions)
+{
+  TGState *tg;
+  if (!(actions & (LJ_GC2_HS_RESET_ALLOC|LJ_GC2_HS_RESTORE_ALLOC)) ||
+      gc2_phase_acq(g) != LJ_GC2_SWEEP || !lj_gc2_smr_read_try(g))
+    return;
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    uint32_t flags = lj_tg_flags_acq(tg);
+    if ((flags & (TGF_DEAD|TGF_ARENA_INTERNAL)) !=
+        (TGF_DEAD|TGF_ARENA_INTERNAL))
+      continue;
+    if ((actions & LJ_GC2_HS_RESTORE_ALLOC) ||
+        tg->alloc.prepare_epoch != gc2_cycle_acq(g))
+      safepoint_apply_allocator(g, tg, actions);
+  }
+  lj_gc2_smr_read_leave(g);
+}
+
 uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
 {
   uint64_t epoch;
@@ -1085,6 +1113,7 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
       break;
     gc2_hs_pending_futex_wait(g, gc2_hs_pending_rlx(g), 1000000);
   }
+  safepoint_apply_dead_allocators(g, actions);
   if (actions & LJ_GC2_HS_SCAN_ROOTS) {
     TGState *self = lj_thr_get_tg_fallback(g);
     lj_gc2_scan_cycle_global_roots(g);

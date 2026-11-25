@@ -78,4 +78,35 @@ assert(workers(0) == 0)
 
 churn_worker_control(tonumber(os.getenv("LJ_GC_WORKERS_CHURN_ROUNDS")) or 1)
 
+local function dead_owner_collection()
+  local th = require("threading")
+  assert(th.gcworkers(2) == 0)
+  collectgarbage("collect")
+  -- Keep the allocation batch intact until the owner has detached.
+  collectgarbage("stop")
+  local function make_payload()
+    local owner = assert(th.spawn(function()
+      local hold = {}
+      for i = 1, 8192 do
+        hold[i % 128 + 1] = {i, i + 1, i + 2}
+      end
+      return hold[1]
+    end))
+    local ok, payload = owner:join(15)
+    assert(ok, payload)
+    return payload
+  end
+  local payload = make_payload()
+  local before = th.gcstats().total_bytes
+  collectgarbage("restart")
+  collectgarbage("collect")
+  assert(payload[1] == 8192 and payload[3] == 8194)
+  assert(th.gcworkers() == 2)
+  assert(th.gcstats().total_bytes + 256 * 1024 < before,
+         "dead owner's unreachable objects remained allocated")
+  assert(th.gcworkers(0) == 2)
+end
+
+dead_owner_collection()
+
 print("t-gc-workers OK")

@@ -59,8 +59,11 @@ extern int __real_lj_arena_alloc_prepare_sweep_kind(TGAlloc *, uint32_t);
 int __wrap_lj_arena_alloc_prepare_sweep_kind(TGAlloc *alloc, uint32_t kind)
 {
   TGState *target = (TGState *)la_loadptr_acq((void *const *)&detach_tg);
+  /* This probe observes remote polls while DETACHING. A DEAD target can be
+  ** prepared directly by the leader, after every owner-private action ends. */
   if (target && alloc == &target->alloc &&
-      wanted == LJ_GC2_HS_RESET_ALLOC && kind == LJ_ARENAK_TRAVERSABLE)
+      wanted == LJ_GC2_HS_RESET_ALLOC && kind == LJ_ARENAK_TRAVERSABLE &&
+      !lj_tg_flags_test_acq(target, TGF_DEAD))
     pause_remote_action(probe_g, target);
   return __real_lj_arena_alloc_prepare_sweep_kind(alloc, kind);
 }

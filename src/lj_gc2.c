@@ -5545,11 +5545,10 @@ static int gc2_sweep_blocked_by_finalizer(global_State *g)
 
 int lj_gc2_sweep_tg_ready(TGState *tg)
 {
-  uint8_t flags;
-  if (!tg)
-    return 0;
-  flags = lj_tg_flags_acq(tg);
-  return !(flags & TGF_DEAD) && (flags & TGF_ARENA_INTERNAL);
+  /* A DEAD owner no longer mutates its allocator. The allocator-action
+  ** handshake prepares its old generations even while the TG itself stays
+  ** registered for the running GC workers. */
+  return tg && lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL);
 }
 
 int lj_gc2_sweep_bridge_can_progress(global_State *g)
@@ -6263,7 +6262,7 @@ static uint64_t lj_gc2_sweep_live_aggregate(global_State *g)
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
     uint8_t flags = lj_tg_flags_acq(tg);
-    if ((flags & (TGF_DEAD|TGF_ARENA_INTERNAL)) != TGF_ARENA_INTERNAL)
+    if (!(flags & TGF_ARENA_INTERNAL))
       continue;
     cells += gc2_sweep_live_cells(tg->alloc.owned[LJ_ARENAK_TRAVERSABLE],
 				  epoch);
@@ -22594,7 +22593,8 @@ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
     int finished = 0, owner_blocked = 0;
     if (next == NULL || next == tg)
       next = head;
-    if ((flags & (TGF_DEAD|TGF_ARENA_INTERNAL)) == TGF_ARENA_INTERNAL) {
+    if ((flags & TGF_ARENA_INTERNAL) &&
+	(!(flags & TGF_DEAD) || tg->alloc.prepare_epoch == gc2_cycle_acq(g))) {
       n += lj_gc2_sweep_owner_progress(
         g, tg, limit - n, &finished, &owner_blocked);
       root_owner_blocked |= owner_blocked;
