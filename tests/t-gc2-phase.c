@@ -987,6 +987,30 @@ static void test_finalizer_step_defers_busy_callback_state(lua_State *L,
   lua_pop(L, 1);
 }
 
+static void test_sweep_multiupvalue_constructor(void)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  assert(L != NULL);
+  g = G(L);
+  lua_gc(L, LUA_GCSTOP, 0);
+  assert(luaL_loadstring(L,
+    "local a, b = 1, 2\n"
+    "local f = function() a = a + 1; b = b + 2 end\n"
+    "local read = function() return a, b end\n"
+    "f()\n"
+    "local x, y = read()\n"
+    "return a == 2 and b == 4 and x == a and y == b\n") == 0);
+  /* Exercise the SWEEP barrier without allowing collection to finish before
+  ** FNEW promotes the two local stack slots. */
+  la_store32_rel(&g->gc2.phase, LJ_GC2_SWEEP);
+  assert(lua_pcall(L, 0, 1, 0) == 0);
+  assert(lua_toboolean(L, -1));
+  assert(gc2_recovery_failed_acq(g) == 0);
+  la_store32_rel(&g->gc2.phase, LJ_GC2_IDLE);
+  lua_close(L);
+}
+
 int main(void)
 {
   lua_State *L;
@@ -1018,6 +1042,7 @@ int main(void)
   test_isolated_weak_skip_case("v");
   test_isolated_weak_skip_case("k");
   test_isolated_weak_skip_case("kv");
+  test_sweep_multiupvalue_constructor();
 
   L = luaL_newstate();
   assert(L != NULL);

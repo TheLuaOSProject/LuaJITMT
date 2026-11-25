@@ -1347,37 +1347,6 @@ static void func_pending_chain_free(lua_State *L, GCfunc *fn)
     g, fn, sizeLfunc((MSize)lj_funcL_nupvalues(&fn->l)));
 }
 
-static int func_pending_chain_contains(GCfunc *fn, GCupval *needle)
-{
-  GCobj *o;
-  for (o = lj_obj_gcw_acq(obj2gco(fn)); o != NULL;
-       o = lj_obj_gcw_acq(o))
-    if (o == obj2gco(needle))
-      return 1;
-  return 0;
-}
-
-static void func_pending_cells_restore(lua_State *L, GCfunc *fn,
-				       TValue *base, GCproto *pt, MSize n)
-{
-  MSize i;
-  if (!proto_celluv(pt))
-    return;
-  for (i = 0; i < n; i++) {
-    uint32_t v = proto_uv(pt)[i];
-    if ((v & PROTO_UV_LOCAL)) {
-      TValue *slot = base + (v & 0xffu);
-      if (itype(slot) == LJ_TUPVAL) {
-	GCupval *uv = gco2uv(gcV(slot));
-	if (func_pending_chain_contains(fn, uv)) {
-	  copyTVrel(L, slot, &uv->tv);
-	  lj_state_stack_pubtv(L, L, slot);
-	}
-      }
-    }
-  }
-}
-
 static GCfunc *func_newL_gc1uv_chain(lua_State *L, TValue *base, GCproto *pt,
 				     GCfuncL *parent, int32_t slotno,
 				     const TValue *slot, uint32_t v)
@@ -1485,6 +1454,7 @@ static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
 {
   GCfunc *fn;
   GCobj *tail;
+  uint8_t promoted[256] = {0};  /* One-based upvalue index per local slot. */
   MSize i, nuv;
   if (base == NULL)
     base = L->base;
@@ -1506,19 +1476,22 @@ static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
     uint32_t v = proto_uv(pt)[i];
     GCupval *uv;
     if ((v & PROTO_UV_LOCAL)) {
-      TValue *slot = base + (v & 0xff);
+      uint32_t slotno = v & 0xffu;
+      TValue *slot = base + slotno;
       if (proto_celluv(pt)) {
 	if (itype(slot) == LJ_TUPVAL) {
 	  uv = gco2uv(gcV(slot));
 	  lj_assertL(uv->closed && uvval(uv) == &uv->tv,
 		     "bad local cell upvalue");
+	} else if (promoted[slotno]) {
+	  uv = gco2uv(func_uvptr_acq(&fn->l, promoted[slotno] - 1u));
 	} else {
 	  uv = func_snapshotuv_unlinked_nothrow(L, slot);
 	  if (LJ_UNLIKELY(uv == NULL))
 	    goto oom;
 	  func_pending_chain_add(&tail, obj2gco(uv));
 	  func_test_uv_afterfn_call();
-	  func_storecell_pub(L, slot, uv);
+	  promoted[slotno] = (uint8_t)(i + 1u);
 	}
 	func_uvmeta(uv, parent, v);
       } else {
@@ -1544,12 +1517,16 @@ static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
   lj_gc_pubobjroot(L, obj2gco(fn));
   for (i = 0; i < nuv; i++) {
     GCobj *uv = func_uvptr_acq(&fn->l, (uint32_t)i);
+    uint32_t v = proto_uv(pt)[i];
     if (uv)
       lj_gc_pubobjobj(L, fn, uv);
+    /* The stack publication barrier requires a READY upvalue. Keep the
+    ** original slot rooted until the complete chain publishes its headers. */
+    if ((v & PROTO_UV_LOCAL) && promoted[v & 0xffu] == i + 1u)
+      func_storecell_pub(L, base + (v & 0xffu), gco2uv(uv));
   }
   return fn;
 oom:
-  func_pending_cells_restore(L, fn, base, pt, i);
   func_pending_chain_free(L, fn);
   lj_err_mem(L);
   return NULL;  /* Unreachable. */
