@@ -287,6 +287,11 @@ static void safepoint_consume_fresh_stopreq_poll(TGState *tg)
   safepoint_restore_counted_poll(tg);
 }
 
+/* This one resumable action leaves the native-entry gate closed for its
+** whole epoch. No other action mask may release a consumed poll early. */
+#define SAFEPOINT_MARK_START_ASYNC \
+  (LJ_SAFEPOINT_MARK_START_ACTIONS | LJ_GC2_HS_MARK_ACTIVATION)
+
 static int safepoint_hold_poll_until_leader(global_State *g, uint32_t actions)
 {
   /* These boundaries inspect or rotate owner-private state and may keep using
@@ -295,7 +300,11 @@ static int safepoint_hold_poll_until_leader(global_State *g, uint32_t actions)
   ** SSB, allocator, or trace boundary. Epochs without a live leader cannot
   ** complete that consumed-poll phase, so they clear at acknowledgement.
   */
-  return (actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS|
+  /* Activation's per-TG updates finish before the counted ACK. Its closed
+  ** JIT gate and retained cycle request protect the unfinished global work;
+  ** an owner which applied its actions can continue in the interpreter. */
+  return actions != SAFEPOINT_MARK_START_ASYNC &&
+	 (actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS|
 		     LJ_GC2_HS_FLUSH_SSB|
 		     LJ_GC2_HS_RESET_ALLOC|LJ_GC2_HS_RESTORE_ALLOC|
 		     LJ_GC2_HS_RESET_HOTCOUNT|
@@ -658,8 +667,13 @@ retry:
       }
     }
     oldpending = gc2_hs_pending_sub_acqrel(g, 1);  /* 05 section 5.4.2. */
-    if (oldpending == 1)
+    if (oldpending == 1) {
       gc2_hs_pending_futex_wake(g, 1);
+      /* The last mutator can finish activation without waiting for a fresh
+      ** allocation, even if it differs from the original requester. */
+      if (actions == SAFEPOINT_MARK_START_ASYNC)
+	(void)lj_gc2_mark_activation_continue(g);
+    }
     /* VM-owned acks must not resume with a consumed trace-flush poll. Drop
     ** pending first so the leader can retire/unlink traces and clear poll.
     */
@@ -1114,6 +1128,9 @@ static uint32_t safepoint_leader_enter(global_State *g)
       if (self && self->gl == g)
 	safepoint_ack_tg(g, self, 0, 0, 0, 0, NULL);
     }
+    if (expect == LJ_SAFEPOINT_MARK_ACTIVATION_LEADER &&
+	lj_gc2_mark_activation_continue(g))
+      continue;
     if (expect == 0)
       continue;
     gc2_hs_leader_futex_wait(g, expect, 1000000);
@@ -1166,6 +1183,47 @@ static void safepoint_apply_dead_allocators(global_State *g, uint32_t actions)
     safepoint_apply_allocator(g, tg, actions);
   }
   lj_gc2_smr_read_leave(g);
+}
+
+int lj_safepoint_mark_activation_reserve(global_State *g)
+{
+  uint32_t expect = 0;
+  return gc2_hs_pending_acq(g) == 0 &&
+    gc2_hs_leader_cas(g, &expect, LJ_SAFEPOINT_MARK_ACTIVATION_LEADER);
+}
+
+void lj_safepoint_mark_activation_cancel(global_State *g)
+{
+  safepoint_leader_leave(g, LJ_SAFEPOINT_MARK_ACTIVATION_LEADER);
+}
+
+/* The MARK-start worker token serializes attempts, including handoff to a
+** different TG. Its gate already prohibits executable trace activation, so
+** this action has no leader-side stack, allocator or trace-flush tail. */
+int lj_safepoint_mark_activation_try(global_State *g, int start)
+{
+  const uint32_t actions = SAFEPOINT_MARK_START_ASYNC;
+  uint64_t epoch;
+  if (start) {
+    gc2_hs_actions_rel(g, actions);
+    gc2_hs_pending_rel(g, 1);  /* Publication sentinel. */
+    epoch = gc2_hs_epoch_rlx(g) + 1u;
+    gc2_hs_signal_ns_rel(g, safepoint_now_ns());
+    gc2_hs_epoch_rel(g, epoch);
+  } else {
+    epoch = gc2_hs_epoch_acq(g);
+    (void)gc2_hs_pending_add_rlx(g, 1);
+  }
+  (void)safepoint_signal_late(g, actions, epoch);
+  safepoint_ack_native(g, actions);
+  if (gc2_hs_pending_sub_acqrel(g, 1) == 1)
+    gc2_hs_pending_futex_wake(g, 1);
+  if (gc2_hs_pending_acq(g) != 0)
+    return 0;
+  safepoint_clear_consumed_polls(g, epoch);
+  safepoint_leader_leave(g, LJ_SAFEPOINT_MARK_ACTIVATION_LEADER);
+  safepoint_rearm_fresh_stopreq_polls(g);
+  return 1;
 }
 
 uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)

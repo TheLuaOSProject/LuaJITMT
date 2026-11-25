@@ -1996,6 +1996,7 @@ typedef struct GC2State {
   uint64_t hs_epoch;	/* Soft-handshake generation. */
   uint32_t hs_pending;	/* Outstanding handshake acknowledgements. */
   uint32_t hs_actions;	/* Current LJ_GC2_HS_* action bits. */
+  uint32_t mark_activation_request;  /* Exact MARK request awaiting ACKs. */
   uint32_t hs_leader;	/* Serializes safepoint handshake leaders. */
   uint64_t hs_signal_ns;  /* Current handshake publication timestamp. */
   uint64_t hs_ack_latency_samples;  /* Safepoint ack latency samples. */
@@ -3660,6 +3661,11 @@ static LJ_AINLINE void gc2_grey_bottom_rel(global_State *g, uint64_t bottom)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_grey_pushed, grey_pushed)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_grey_drained, grey_drained)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_marks_this_round, marks_this_round)
+
+static LJ_AINLINE uint32_t gc2_mark_activation_request_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.mark_activation_request);
+}
 
 static LJ_AINLINE uint32_t gc2_mark_root_scanned_acq(global_State *g)
 {

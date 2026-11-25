@@ -50,6 +50,7 @@ local m3_scaffold_deps = {
   "m3_gc2_worker_sweep_bridge",
   "m3_gc2_constructor_defer",
   "m3_gc2_auto_control",
+  "m3_gc2_mark_activation_progress",
   "m3_gc2_mark_close_progress",
   "m3_gc_active_thread_roots",
   "m3_safepoint_handshake",
@@ -595,6 +596,20 @@ return function(add)
   })
 
   register({
+    name = "m3_gc2_mark_activation_progress",
+    description = "ordinary allocation resumes while a managed owner delays MARK activation",
+    run = function(t)
+      local pthread = os.getenv("PTHREAD") or "-pthread"
+      make_default(t, { jobs = false })
+      compile_and_run_c(t, t:tmp("lj_t-gc2-auto-mark-activation"),
+                        "t-gc2-auto-mark-activation.c", {
+        libs = { "-lm", "-ldl", pthread },
+        timeout = "25s"
+      })
+    end
+  })
+
+  register({
     name = "m3_gc2_mark_close_progress",
     description = "paused GC owner does not block automatic MARK close or spin workers",
     run = function(t)
@@ -899,6 +914,7 @@ return function(add)
       utils.run_case(cases, t, "m3_gc2_worker_scheduler")
       utils.run_case(cases, t, "m3_gc2_worker_sweep_bridge")
       utils.run_case(cases, t, "m3_gc2_constructor_defer")
+      utils.run_case(cases, t, "m3_gc2_mark_activation_progress")
       utils.run_case(cases, t, "m3_gc2_mark_close_progress")
       utils.run_case(cases, t, "m3_gc_active_thread_roots")
       utils.run_case(cases, t, "m3_safepoint_handshake")
