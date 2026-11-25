@@ -58,6 +58,37 @@ static void attach_race_hook(global_State *g, uint32_t stage)
   assert(mt_entering_acq(g) != 0);
 }
 
+static GCstr *candidate_target;
+static uint32_t candidate_rescues;
+
+static void candidate_rescue_hook(global_State *g, uint32_t stage)
+{
+  uintptr_t link;
+  if (stage != LJ_STR_TEST_RECLAIM_CANDIDATE)
+    return;
+  link = lj_str_link_load_acq(lj_str_sweep_link_acq(g));
+  if (lj_str_link_target(link) != obj2gco(candidate_target))
+    return;
+  assert((link & LJ_STRHASH_DEAD) == 0);
+  assert(lj_str_canon_acq(candidate_target) == LJ_STR_CANON_CANDIDATE);
+  (void)lj_gc2_trace_sweep_root(g, obj2gco(candidate_target));
+  assert(lj_str_canon_acq(candidate_target) == LJ_STR_CANON_LIVE);
+  candidate_rescues++;
+}
+
+static void check_candidate_rescue(lua_State *L)
+{
+  static const char bytes[] = "candidate-rescued-before-dead";
+  candidate_target = lj_str_new(L, bytes, sizeof(bytes)-1u);
+  lj_str_test_set_reclaim_hook(candidate_rescue_hook);
+  (void)lua_gc(L, LUA_GCCOLLECT, 0);
+  lj_str_test_set_reclaim_hook(NULL);
+  assert(candidate_rescues == 1u);
+  assert(lj_str_new(L, bytes, sizeof(bytes)-1u) == candidate_target);
+  assert(lj_str_canon_acq(candidate_target) == LJ_STR_CANON_LIVE);
+  candidate_target = NULL;
+}
+
 static void intern_churn(lua_State *L, const char *prefix, uint32_t n)
 {
   uint32_t i;
@@ -113,6 +144,8 @@ int main(void)
   assert(lj_str_retired_batch_head_acq(g) == NULL);
   assert(lj_str_reclaim_exclusive_acq(g) == 0);
 
+  check_candidate_rescue(L);
+
   /* Force the no-both-win attach race at the collector's post-CAS hook. */
   memset(&ctx, 0, sizeof(ctx));
   ctx.L = lua_newthread(L);  /* Keep the foreign-attach target rooted. */
@@ -147,6 +180,6 @@ int main(void)
   /* Terminal cancellation must tolerate a requested but never consumed pass. */
   lj_str_gc2_reclaim_request(g);
   lua_close(L);
-  printf("t-str-reclaim-sole OK: exact count/memory shrink, batch drain, attach-race backout, and terminal request cleanup\n");
+  printf("t-str-reclaim-sole OK: exact count/memory shrink, candidate rescue, batch drain, attach-race backout, and terminal request cleanup\n");
   return 0;
 }

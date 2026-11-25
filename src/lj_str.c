@@ -880,6 +880,9 @@ static LJ_AINLINE int strtab_match_link(lua_State *L, GCRef *link,
 
   /* A tagger or prepender may run after the matching bytes were inspected. */
   str_test_match(L, link, o, observed, LJ_STR_TEST_MATCH_AFTER_COMPARE);
+  if (lj_str_canon_acq(gco2str(o)) != LJ_STR_CANON_LIVE &&
+      !lj_str_gc2_rescue_held(gco2str(o), NULL))
+    return 0;
   phase = gc2_phase_acq(g);
   if (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK)
     (void)lj_gc2_markobj(g, o);
@@ -1242,12 +1245,24 @@ void LJ_FASTCALL lj_str_free(global_State *g, GCstr *s)
 
 /* -- GC2 intern-table string reclamation ------------------------------- */
 
+static LJ_AINLINE void str_sweep_cancel_candidate(GCobj *o)
+{
+  uintptr_t canon = lj_str_canon_acq(gco2str(o));
+  if (canon == LJ_STR_CANON_CANDIDATE)
+    (void)lj_str_canon_cas(gco2str(o), &canon, LJ_STR_CANON_LIVE);
+}
+
 static LJ_AINLINE int str_sweep_target_live(global_State *g, GCobj *o)
 {
   int marked = lj_gc2_ismarked(g, o);
-  if (marked != 0)  /* Invalid/retiring memory is retained conservatively. */
+  /* Invalid/retiring bodies do not provide canonical-word authority. */
+  if (marked < 0 || la_load8_acq(&o->gch.gct) != (uint8_t)~LJ_TSTR)
     return 1;
-  return (lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED)) != 0;
+  if (marked == 0 &&
+      (lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED)) == 0)
+    return 0;
+  str_sweep_cancel_candidate(o);
+  return 1;
 }
 
 static void str_body_retired_push(global_State *g, StrBodyRetire *ret)
@@ -1643,7 +1658,7 @@ static uint32_t str_sweep_advance_bucket(global_State *g, StrTabHdr *hdr,
 static uint32_t str_sweep_tag_one(global_State *g, StrTabHdr *hdr)
 {
   GCRef *link = lj_str_sweep_link_acq(g);
-  uintptr_t u, want, current;
+  uintptr_t u, want, current, canon;
   GCobj *o;
   if (!link)
     return str_sweep_finish_tag(g);
@@ -1652,7 +1667,9 @@ static uint32_t str_sweep_tag_one(global_State *g, StrTabHdr *hdr)
   if (!o)
     return str_sweep_advance_bucket(g, hdr, LJ_STR_SWEEP_TAG);
 
-  if (str_sweep_target_live(g, o)) {
+  if (str_sweep_target_live(g, o) ||
+      ((canon = lj_str_canon_acq(gco2str(o))) != LJ_STR_CANON_LIVE &&
+       canon != LJ_STR_CANON_CANDIDATE)) {
     if (u & LJ_STRHASH_DEAD) {
       current = u;
       want = u & ~(uintptr_t)LJ_STRHASH_DEAD;
@@ -1663,19 +1680,29 @@ static uint32_t str_sweep_tag_one(global_State *g, StrTabHdr *hdr)
     return 1;
   }
 
+  /* CANDIDATE is the lifecycle authority. DEAD describes the incoming
+  ** topology edge. A strong late root may rescue on the lifecycle word. */
+  if (canon == LJ_STR_CANON_LIVE &&
+      !lj_str_canon_cas(gco2str(o), &canon, LJ_STR_CANON_CANDIDATE))
+    return 1;
+  str_test_reclaim(g, LJ_STR_TEST_RECLAIM_CANDIDATE);
   if (!(u & LJ_STRHASH_DEAD)) {
     current = u;
     want = u | LJ_STRHASH_DEAD;
-    if (!lj_str_link_cas_acqrel(link, &current, want))
+    if (!lj_str_link_cas_acqrel(link, &current, want)) {
+      str_sweep_cancel_candidate(o);
       return 1;  /* A prepend moved this incoming edge: retry it. */
+    }
     lj_str_sweep_tagged_add(g, 1);
     u = want;
-    /* A late root can race the tag CAS. Never leave it for unlink unchecked. */
-    if (str_sweep_target_live(g, o)) {
-      current = u;
-      want = u & ~(uintptr_t)LJ_STRHASH_DEAD;
-      (void)lj_str_link_cas_acqrel(link, &current, want);
-    }
+  }
+  /* A late root can race either publication. Cancel its candidate before
+  ** clearing the hint, even if a subsequent prepend moved the incoming link. */
+  if (str_sweep_target_live(g, o) ||
+      lj_str_canon_acq(gco2str(o)) != LJ_STR_CANON_CANDIDATE) {
+    current = u;
+    want = u & ~(uintptr_t)LJ_STRHASH_DEAD;
+    (void)lj_str_link_cas_acqrel(link, &current, want);
   }
   /* UNLINK restarts at every bucket head, so a later prepend cannot be missed. */
   lj_str_sweep_link_rel(g, lj_obj_gcwref(o));
@@ -1702,7 +1729,8 @@ static uint32_t str_sweep_unlink_one(global_State *g, StrTabHdr *hdr)
   }
 
   /* A rescued/fixed/invalid target wins over an earlier tag observation. */
-  if (str_sweep_target_live(g, o)) {
+  if (str_sweep_target_live(g, o) ||
+      lj_str_canon_acq(gco2str(o)) != LJ_STR_CANON_CANDIDATE) {
     current = u;
     want = u & ~(uintptr_t)LJ_STRHASH_DEAD;
     if (!lj_str_link_cas_acqrel(link, &current, want))
@@ -1714,6 +1742,7 @@ static uint32_t str_sweep_unlink_one(global_State *g, StrTabHdr *hdr)
   batch = str_retire_batch_current(g, hdr);
   if (!batch) {
     /* Metadata OOM retains canonical identity and retries in a later cycle. */
+    str_sweep_cancel_candidate(o);
     current = u;
     want = u & ~(uintptr_t)LJ_STRHASH_DEAD;
     if (!lj_str_link_cas_acqrel(link, &current, want))
