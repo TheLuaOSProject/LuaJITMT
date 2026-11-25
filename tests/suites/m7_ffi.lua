@@ -1451,6 +1451,11 @@ print("jit big cnew ok")
                       "t-ffi-metatype-snapshot.c", { timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-ffi-metatv-snapshot"),
                       "t-ffi-metatv-snapshot.c", { timeout = "20s" })
+      build_and_run_c(t, t:tmp("lj_t-ffi-new-idle-reclaim"),
+                      "t-ffi-new-idle-reclaim.c", {
+        timeout = "20s",
+        libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=lj_str_reclaim_retired" }
+      })
       build_and_run_c(t, t:tmp("lj_t-ffi-recorder-metatv-busy"),
                       "t-ffi-recorder-metatv-busy.c", { timeout = "20s" })
       run_luajit_script(t, "t-ffi-metatype-miscmap.lua", {

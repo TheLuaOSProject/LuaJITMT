@@ -1939,8 +1939,8 @@ void lj_ctype_metaroot_release(LJCTypeMetaRoot *root)
   root->active = 0;
 }
 
-/* Root one ctype metamethod without waiting. The ctype table header and every
-** Lua table vector are read in one SMR interval. Exact object leases bridge
+/* Root one ctype metamethod without waiting. CType slots and the metatable
+** directory live until state close. Lua table vectors require SMR. Leases bridge
 ** each CTState-owned raw root to the final release-published TG root. Parser
 ** sequencing validates only CType topology; metatype CAS and ordinary table
 ** mutation linearize independently through acquire/held table reads.
@@ -1951,7 +1951,7 @@ void lj_ctype_metaroot_release(LJCTypeMetaRoot *root)
 static int ctype_metatv_rooted_try(lua_State *L, CTState *cts, TValue *outroot,
 				  CTypeID id, MMS mm, int committed)
 {
-  global_State *g = G(L);
+  global_State *g;
   LJGC2Lease sourcelease = { 0 }, mtlease = { 0 }, resultlease = { 0 };
   CTypeTab *tabh;
   CTypeID top;
@@ -1970,14 +1970,12 @@ static int ctype_metatv_rooted_try(lua_State *L, CTState *cts, TValue *outroot,
 
   if (!L || !cts || !outroot)
     return LJ_CTYPE_METATV_RETRY;
+  g = G(L);
   setnilV(&nilv);
   if (lj_ctype_predefined_nometa(cts, id)) {
     copyTVrel(L, outroot, &nilv);
     return LJ_CTYPE_METATV_ABSENT;
   }
-  if (!lj_gc2_smr_read_try(g))
-    return LJ_CTYPE_METATV_RETRY;
-  smr = 1;
   seq0 = ctype_parse_token_acq(cts);
   if (!committed && (seq0 & 1u))
     goto busy;
@@ -2017,6 +2015,9 @@ static int ctype_metatv_rooted_try(lua_State *L, CTState *cts, TValue *outroot,
   }
   if (!source)
     goto absent;
+  if (!lj_gc2_smr_read_try(g))
+    goto retry;
+  smr = 1;
 
   /* CTState carries raw GC roots, not TValues. Manufacture only the known TAB
   ** tag, then validate/retain the exact incarnation before dereferencing it. */
