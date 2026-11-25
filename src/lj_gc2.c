@@ -173,6 +173,7 @@ static void gc2_jit_phase_gate_open_sweep(global_State *g, int mutator_turn)
   gc2_jit_mark_resume_rel(g, 0);
   gc2_jit_mark_auto_yield_rel(g, 0);
   gc2_jit_mark_yield_until_ns_rel(g, 0);
+  la_store32_rel(&g->gc2.jit_sweep_entered, 0);
   gc2_jit_sweep_yield_until_ns_rel(g, deadline);
   gc2_jit_phase_gate_rel(g, 1);
 }
@@ -185,6 +186,10 @@ static int gc2_jit_sweep_turn_deferred(global_State *g)
     return 0;
   deadline = gc2_jit_sweep_yield_until_ns_acq(g);
   if (deadline == 0)
+    return 0;
+  /* A real admitted trace used the turn. Its last return discharges the
+  ** lease early, while a still-active trace keeps the ordinary deadline. */
+  if (la_load32_acq(&g->gc2.jit_sweep_entered) && !lj_tg_any_jit_active(g))
     return 0;
   if (lj_thr_now_ns() < deadline)
     return 1;
@@ -1799,6 +1804,7 @@ void lj_gc2_init(global_State *g)
   gc2_jit_mark_auto_yield_store_rlx(g, 0);
   gc2_jit_mark_yield_until_ns_store_rlx(g, 0);
   gc2_jit_sweep_displaced_store_rlx(g, 0);
+  la_store32_rlx(&g->gc2.jit_sweep_entered, 0);
   gc2_jit_sweep_yield_until_ns_store_rlx(g, 0);
   gc2_ssb_head_store_rlx(g, NULL);
   gc2_ssb_drain_rel(g, NULL);
@@ -6947,9 +6953,9 @@ static int gc2_sweep_to_idle_owned(global_State *g)
 int lj_gc2_sweep_to_idle(global_State *g)
 {
   uint32_t phase;
-  if (!g || gc2_jit_sweep_turn_deferred(g) || !gc2_worker_claim(g))
+  if (!g || !gc2_worker_claim(g))
     return 0;
-  if (gc2_phase_acq(g) != LJ_GC2_SWEEP) {
+  if (gc2_phase_acq(g) != LJ_GC2_SWEEP || gc2_jit_sweep_turn_deferred(g)) {
     gc2_worker_release(g);
     return 0;
   }

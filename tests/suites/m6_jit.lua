@@ -2759,6 +2759,13 @@ assert(util.traceinfo(1), "empty-hash miss loop did not trace")
                         timeout = "20s",
                         cflags = gc2_test_cflags
                       })
+      build_and_run_c(t, t:tmp("lj_t-gc2-jit-sweep-lease"),
+                      "t-gc2-jit-sweep-lease.c",
+                      {
+                        build = false,
+                        timeout = "20s",
+                        cflags = gc2_test_cflags
+                      })
       build_and_run_c(t, t:tmp("lj_t-gc2-jit-sweep-coop-helper"),
                       "t-gc2-jit-sweep-coop.c",
                       {

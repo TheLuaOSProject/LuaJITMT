@@ -6394,6 +6394,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  branchPC RC
     |  ins_next
 |2:
+    |  // Count only after the gate recheck and exact mcode target validation.
+    |  // The trace intent still covers this publication until native leave.
+    |  load_G RA
+    |  cmp aword GL:RA->gc2.jit_sweep_yield_until_ns, 0
+    |  jz >8
+    |  mov dword GL:RA->gc2.jit_sweep_entered, 1
+    |8:
     |  mov [DISPATCH+DISPATCH_TG(tmpbuf.L)], L:RB
     |  // Save additional callee-save registers only used in compiled code.
     |.if X64WIN

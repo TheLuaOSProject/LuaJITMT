@@ -2047,6 +2047,7 @@ typedef struct GC2State {
 	  uint32_t jit_mark_auto_yield;  /* Bounded pre-dispatch attempts per cycle. */
 	  uint64_t jit_mark_yield_until_ns;  /* Bounded MARK mutator lease. */
 	  uint32_t jit_sweep_displaced;  /* Closed gate displaced native execution. */
+	  uint32_t jit_sweep_entered;  /* Admitted trace consumed this open turn. */
 	  uint64_t jit_sweep_yield_until_ns;  /* Bounded mutator turn after quiesce. */
 	  void *small_arena_tab;  /* Shared directory for mapped small arenas. */
 	  GC2SSBNode *ssb_head;	/* Published mutator SSB buffers. */
