@@ -444,7 +444,9 @@ static void ctype_storestr_str(lua_State *L, GCtab *tab, GCstr *key,
 /* Returns with the new table held in one lua_State stack-root slot. */
 static GCtab *ctype_fin_tab_new_anchor_l(lua_State *L, uint32_t hbits)
 {
-  GCtab *t = lj_tab_new(L, 0, hbits);
+  GCtab *t;
+  lj_state_checkstack(L, 1);
+  t = lj_tab_new(L, 0, hbits);
   settabV(L, L->top++, t);
   lj_state_stack_pubtv(L, L, L->top-1);
   fin_gen_tab_enable_rel(t);
@@ -459,6 +461,8 @@ static FinRegGen *ctype_fin_gen_new_l(lua_State *L, GCtab *t)
   FinRegGen *gen = lj_mem_newt(L, sizeof(FinRegGen), FinRegGen);
   fin_gen_tab_rel(gen, t);
   fin_gen_next_rel(gen, NULL);
+  gen->insert_nodes = NULL;
+  gen->insert_hmask = 0;
   return gen;
 }
 
@@ -615,7 +619,7 @@ int lj_ctype_fin_gen_tab_acquire(CTState *cts, FinRegGen *gen,
 ** node generation and return RETRY for KEYLOCK/FORWARD/retiring observations;
 ** callers must never turn those internal states into an ordinary miss. */
 static int ctype_fin_slot_lookup_held(CTypeFinLease *lease, cTValue *key,
-				      TValue **slotp, int stable_key)
+				      TValue **slotp)
 {
   Node *node, *check, *n;
   MSize hmask, checkmask, steps = 0;
@@ -640,12 +644,9 @@ static int ctype_fin_slot_lookup_held(CTypeFinLease *lease, cTValue *key,
     if (np < base || np >= end || (np - base) % sizeof(Node) != 0)
       return LJ_CTYPE_FIN_RETRY;
     lj_tv_load_acq(&nk, &n->key);
-    if (tviskeylock(&nk)) {
-      /* Only a same-key insertion holder can prove that this empty-anchor
-      ** claim belongs to another object. Ordinary GC reads still retry. */
-      if (!stable_key)
-	return LJ_CTYPE_FIN_RETRY;
-    } else if (lj_obj_equal(&nk, key)) {
+    if (tviskeylock(&nk))
+      return LJ_CTYPE_FIN_RETRY;
+    if (lj_obj_equal(&nk, key)) {
       TValue current;
       int rc = lj_tab_read_current_keyed(lease->g, lease->tab, &n->val,
 					 key, &current);
@@ -845,7 +846,7 @@ int lj_ctype_fin_head(CTState *cts, CTypeFinLease *lease)
 ** raw successor is consumed before that interval can end, eliminating the
 ** registered->raw->revalidate ABA window for untagged FinRegGen records. */
 static int ctype_fin_get_smr(CTState *cts, FinRegGen *gen, cTValue *key,
-			     CTypeFinLease *lease, int stable_key)
+			     CTypeFinLease *lease)
 {
   while (gen != NULL) {
     CTypeFinLease held = CTYPE_FIN_LEASE_INIT;
@@ -855,7 +856,7 @@ static int ctype_fin_get_smr(CTState *cts, FinRegGen *gen, cTValue *key,
     if (rc == LJ_CTYPE_FIN_RETRY)
       return LJ_CTYPE_FIN_RETRY;
     if (rc == LJ_CTYPE_FIN_FOUND && fin_gen_tab_enabled_acq(held.tab)) {
-      rc = ctype_fin_slot_lookup_held(&held, key, &slot, stable_key);
+      rc = ctype_fin_slot_lookup_held(&held, key, &slot);
       if (rc == LJ_CTYPE_FIN_FOUND) {
 	*lease = held;  /* Move the one active certificate to the caller. */
 	lease->slot = slot;
@@ -872,8 +873,7 @@ static int ctype_fin_get_smr(CTState *cts, FinRegGen *gen, cTValue *key,
   return LJ_CTYPE_FIN_MISS;
 }
 
-static int ctype_fin_get(CTState *cts, cTValue *key, CTypeFinLease *lease,
-			 int stable_key)
+static int ctype_fin_get(CTState *cts, cTValue *key, CTypeFinLease *lease)
 {
   FinRegGen *gen;
   int rc;
@@ -885,7 +885,7 @@ static int ctype_fin_get(CTState *cts, cTValue *key, CTypeFinLease *lease,
   if (!lj_gc2_smr_read_try(cts->g))
     return LJ_CTYPE_FIN_RETRY;
   gen = fin_gen_head_acq(cts);
-  rc = ctype_fin_get_smr(cts, gen, key, lease, stable_key);
+  rc = ctype_fin_get_smr(cts, gen, key, lease);
   if (rc == LJ_CTYPE_FIN_FOUND)
     lease->smr_held = 1;
   else
@@ -897,14 +897,7 @@ int lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
 		     CTypeFinLease *lease)
 {
   UNUSED(L);
-  return ctype_fin_get(cts, key, lease, 0);
-}
-
-int lj_ctype_fin_get_inserting(CTState *cts, cTValue *key, CTypeFinLease *lease)
-{
-  lj_assertG_(cts->g, cdata_flags_acq(cdataV(key)) & LJ_CDATA_FIN_INSERT,
-	      "FINREG lookup needs the exact insertion bit");
-  return ctype_fin_get(cts, key, lease, 1);
+  return ctype_fin_get(cts, key, lease);
 }
 
 #define CTYPE_FIN_RETRY_MAX 256u
@@ -913,64 +906,31 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
 			cTValue *claim, CTypeFinLease *lease)
 {
   uint32_t retry;
-  MSize hmask = 0;
-  uint32_t hbits = 1;
   GCtab *t;
   FinRegGen *gen;
   TValue *tv;
-  TValue *anchor;
+  ptrdiff_t anchor;
   if (!L || !cts || !key || !claim || !lease)
     return 0;
 
   memset(lease, 0, sizeof(*lease));
-  /* Size is only a hint. Sample it through the ordinary exact head token and
-  ** release before any allocation, yield or potential error unwind. */
-  for (retry = 0; retry < CTYPE_FIN_RETRY_MAX; retry++) {
-    CTypeFinLease headheld = CTYPE_FIN_LEASE_INIT;
-    int rc = lj_ctype_fin_head(cts, &headheld);
-    if (rc == LJ_CTYPE_FIN_FOUND) {
-      Node *node;
-      if (!fin_gen_tab_enabled_acq(headheld.tab)) {
-	/* A quarantined generation remains on the native spine so older live
-	** generations stay reachable. It is not a reason to brick all future
-	** registrations: use the minimum size hint and publish a healthy head
-	** above it. */
-	lj_ctype_fin_lease_release(&headheld);
-	break;
-      }
-      rc = lj_tab_node_snapshot_gc_held(headheld.g, headheld.tab, &node,
-					       &hmask);
-      lj_ctype_fin_lease_release(&headheld);
-      if (rc != LJ_TAB_GC_SNAPSHOT_OK) {
-	ctype_fin_claim_wait(L);
-	continue;
-      }
-      hbits = hmask > 0 ? lj_fls((uint32_t)hmask) + 2u : 1u;
-      if (hbits > LJ_MAX_HBITS)
-	hbits = LJ_MAX_HBITS;
-      break;
-    }
-    if (rc == LJ_CTYPE_FIN_MISS)
-      break;
-    lj_ctype_fin_lease_release(&headheld);
-    ctype_fin_claim_wait(L);
-  }
-  if (retry == CTYPE_FIN_RETRY_MAX)
-    return LJ_CTYPE_FIN_ERROR;
-
-  /* Allocation and private insertion may throw, so no body/raw-record lease or
-  ** tactical SMR reader is active until the table and generation are complete. */
-  anchor = L->top;
-  t = ctype_fin_tab_new_anchor_l(L, hbits);
-  gen = ctype_fin_gen_new_l(L, t);
+  /* Every reachable generation has immutable key membership. A new
+  ** registration publishes a private table through the head CAS, so an
+  ** absence proof against its exact predecessor remains authoritative. */
+  anchor = savestack(L, L->top);
+  t = ctype_fin_tab_new_anchor_l(L, 1);
   tv = lj_tab_set(L, t, key);  /* Private generation, unpublished. */
   copyTVrel(L, tv, claim);
+  gen = ctype_fin_gen_new_l(L, t);
+  gen->insert_nodes = lj_tab_node_acq(t);
+  gen->insert_hmask = lj_tab_hmask_acq(t);
 
   for (retry = 0; retry < CTYPE_FIN_RETRY_MAX; retry++) {
+    CTypeFinLease prepared = CTYPE_FIN_LEASE_INIT;
     CTypeFinLease headheld = CTYPE_FIN_LEASE_INIT;
     CTypeFinLease found = CTYPE_FIN_LEASE_INIT;
     FinRegGen *head;
-    GCcdata *cd = cdataV(key);
+    TValue *resolved = NULL;
     int rc;
     if (!lj_gc2_smr_read_try(cts->g)) {
       ctype_fin_claim_wait(L);
@@ -987,90 +947,48 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
       }
       lj_ctype_fin_lease_release(&headheld);
     }
-    if (!lj_cdata_fin_insert_try(cd)) {
-      lj_gc2_smr_read_leave(cts->g);
-      ctype_fin_claim_wait(L);
-      continue;
-    }
-    rc = ctype_fin_get_smr(cts, head, key, &found, 1);
+    rc = ctype_fin_get_smr(cts, head, key, &found);
     if (rc == LJ_CTYPE_FIN_FOUND) {
       lj_ctype_fin_lease_release(&found);
-      lj_cdata_fin_insert_leave(cd);
       lj_gc2_smr_read_leave(cts->g);
       lj_mem_freet(G(L), gen);
-      L->top = anchor;
+      L->top = restorestack(L, anchor);
       return -1;
     }
     lj_ctype_fin_lease_release(&found);
     if (rc == LJ_CTYPE_FIN_RETRY || fin_gen_head_acq(cts) != head) {
-      lj_cdata_fin_insert_leave(cd);
       lj_gc2_smr_read_leave(cts->g);
       ctype_fin_claim_wait(L);
       continue;
     }
-    fin_gen_next_rel(gen, head);
-    (void)lj_gc2_markmem(G(L), gen);
-    lj_gc_pubobjroot(L, obj2gco(t));
-    if (fin_gen_head_cas(cts, &head, gen)) {
-      TValue *resolved = NULL;
-      /* The same key now has a discoverable slot even with FINCLAIM. */
-      lj_cdata_fin_insert_leave(cd);
+    rc = ctype_fin_gen_tab_acquire_next_smr(cts, gen, &prepared, NULL);
+    if (rc == LJ_CTYPE_FIN_FOUND)
+      rc = ctype_fin_slot_lookup_held(&prepared, key, &resolved);
+    if (rc == LJ_CTYPE_FIN_FOUND && resolved == tv) {
+      fin_gen_next_rel(gen, head);
       (void)lj_gc2_markmem(G(L), gen);
       lj_gc_pubobjroot(L, obj2gco(t));
-      rc = ctype_fin_gen_tab_acquire_next_smr(cts, gen, lease, NULL);
-      if (rc == LJ_CTYPE_FIN_FOUND)
-	rc = ctype_fin_slot_lookup_held(lease, key, &resolved, 0);
-      if (rc == LJ_CTYPE_FIN_FOUND && resolved == tv) {
-	lease->slot = resolved;
-	lease->smr_held = 1;  /* Transfer the still-active reader to caller. */
-	L->top = anchor;
-	return 1;  /* Generation publish plus exact slot/body handoff. */
+#if defined(LJ_CDATA_TEST_HELPERS)
+      lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_FIRST_KEY);
+#endif
+      if (fin_gen_head_cas(cts, &head, gen)) {
+        /* The already validated token moves to the caller. No allocation
+        ** or fresh body admission is needed past the publication CAS. */
+        (void)lj_gc2_markmem(G(L), gen);
+        lj_gc_pubobjroot(L, obj2gco(t));
+        prepared.slot = resolved;
+        prepared.smr_held = 1;
+        *lease = prepared;
+        L->top = restorestack(L, anchor);
+        return 1;
       }
-      lj_ctype_fin_lease_release(lease);
-      /* The rooted fresh table should always admit. If allocator identity is
-      ** unavailable, disable this generation and remove its unresolved claim
-      ** before dropping the construction root. */
-      {
-	CTypeFinLease cleanup = CTYPE_FIN_LEASE_INIT;
-	int admitted;
-	cleanup.g = cts->g;
-	admitted = lj_gc2_obj_lease_acquire(
-	  cts->g, obj2gco(t), (uint32_t)~LJ_TTAB, NULL,
-	  &cleanup.table_lease);
-	if (admitted < 0) {
-	  lj_gc2_lease_release(&cleanup.table_lease);
-	  lj_gc2_smr_read_leave(cts->g);
-	  L->top = anchor;
-	  lj_assertG_(cts->g, 0, "fresh FINREG table admission lost");
-	  abort();
-	}
-	cleanup.tab = t;
-	fin_gen_tab_disable_rel(cleanup.tab);
-	{
-	  TValue nilv, expect;
-	  setnilV(&nilv);
-	  expect = *claim;
-	  if (!lj_tv_cas(tv, &expect, &nilv)) {
-	    lj_ctype_fin_lease_release(&cleanup);
-	    lj_gc2_smr_read_leave(cts->g);
-	    L->top = anchor;
-	    lj_assertG_(cts->g, 0,
-			"fresh FINREG claim cleanup ownership lost");
-	    abort();
-	  }
-	}
-	lj_ctype_fin_lease_release(&cleanup);
-      }
-      lj_gc2_smr_read_leave(cts->g);
-      L->top = anchor;
-      return LJ_CTYPE_FIN_RETRY;
     }
-    lj_cdata_fin_insert_leave(cd);
+    lj_ctype_fin_lease_release(&prepared);
     lj_gc2_smr_read_leave(cts->g);
     ctype_fin_claim_wait(L);
   }
   lj_mem_freet(G(L), gen);
-  L->top = anchor;
+  L->top = restorestack(L, anchor);
   return LJ_CTYPE_FIN_ERROR;
 }
 
@@ -2976,6 +2894,59 @@ static uint32_t ctype_fin_order_reclaim(global_State *g, CTState *cts)
   return reclaimed;
 }
 
+static int ctype_fin_generation_empty(global_State *g, FinRegGen *gen)
+{
+  GCtab *tab = fin_gen_tab_acq(gen);
+  Node *nodes = gen->insert_nodes;
+  MSize i, hmask = gen->insert_hmask;
+  if (!nodes || !tab ||
+      !lj_gc2_mem_registered_known_reclaim_held(g, tab) ||
+      tab->gct != (uint8_t)~LJ_TTAB ||
+      lj_tab_node_acq(tab) != nodes || lj_tab_hmask_acq(tab) != hmask ||
+      !lj_gc2_mem_registered_known_reclaim_held(g, lj_tab_node_hdrw(nodes)) ||
+      lj_tab_node_is_retiring(nodes))
+    return 0;
+  for (i = 0; i <= hmask; i++) {
+    TValue key;
+    lj_tv_load_acq(&key, &nodes[i].key);
+    /* The private generation contains __mode and its one cdata key.
+    ** Preserve a record if any other slot could still carry a value. */
+    if (!tvisstr(&key) && !lj_tv_isnil_acq(&nodes[i].val))
+      return 0;
+  }
+  return 1;
+}
+
+/* No reader or publisher can retain a slot during exact idle reclaim.
+** A generation with an empty callback can leave the registry immediately;
+** its table body, if still retained by GC, follows normal table collection. */
+static uint32_t ctype_fin_empty_generations_reclaim(global_State *g,
+                                                    CTState *cts)
+{
+  FinRegGen *gen = fin_gen_head_acq(cts), *prev = NULL;
+  uint32_t reclaimed = 0;
+  while (gen) {
+    FinRegGen *next;
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered_known_reclaim_held(g, gen))) {
+      lj_assertG(0, "invalid FINREG generation in reclaim");
+      abort();
+    }
+    next = fin_gen_next_acq(gen);
+    if (ctype_fin_generation_empty(g, gen)) {
+      if (prev)
+        fin_gen_next_rel(prev, next);
+      else
+        fin_gen_head_rel(cts, next);
+      lj_mem_freet(g, gen);
+      reclaimed++;
+    } else {
+      prev = gen;
+    }
+    gen = next;
+  }
+  return reclaimed;
+}
+
 uint32_t lj_ctype_reclaim_retired(global_State *g, uint64_t completed_epoch)
 {
   CTState *cts = ctype_ctsG(g);
@@ -3008,7 +2979,8 @@ uint32_t lj_ctype_reclaim_retired(global_State *g, uint64_t completed_epoch)
     }
     ret = next;
   }
-  return reclaimed + ctype_fin_order_reclaim(g, cts);
+  return reclaimed + ctype_fin_order_reclaim(g, cts) +
+    ctype_fin_empty_generations_reclaim(g, cts);
 }
 
 static void ctype_freeretired(global_State *g, CTState *cts)
@@ -3077,16 +3049,18 @@ CTState *lj_ctype_init(lua_State *L)
   }
   setmrefrel(G(L)->ctype_state, cts);  /* 11.2 CTState global publish. */
   {
-    TValue *anchor = L->top;
+    ptrdiff_t anchor = savestack(L, L->top);
     GCtab *t = ctype_fin_tab_new_anchor_l(L, 1);
-    FinRegGen *gen;
+    FinRegGen *gen, *empty = NULL;
     gen = ctype_fin_gen_new_l(L, t);
     (void)lj_gc2_markmem(G(L), gen);
     lj_gc_pubobjroot(L, obj2gco(t));
-    fin_gen_head_rel(cts, gen);
-    (void)lj_gc2_markmem(G(L), gen);
+    if (fin_gen_head_cas(cts, &empty, gen))
+      (void)lj_gc2_markmem(G(L), gen);
+    else
+      lj_mem_freet(G(L), gen);
     lj_gc_pubobjroot(L, obj2gco(t));
-    L->top = anchor;
+    L->top = restorestack(L, anchor);
   }
   return cts;
 }

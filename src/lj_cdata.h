@@ -116,31 +116,6 @@ LJ_FUNC GCcdata *lj_cdata_newx_l(lua_State *L, CTState *cts, CTypeID id,
 LJ_FUNC int lj_cdata_validate(global_State *g, GCcdata *cd, void **basep,
 			      GCSize *sizep);
 LJ_FUNC void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd);
-/* Only insertion of this cdata key is serialized. Never retain the bit
-** across an allocating/throwing operation or a finalizer slot transaction. */
-#define LJ_CDATA_FIN_INSERT	0x0020u
-
-static LJ_AINLINE int lj_cdata_fin_insert_try(GCcdata *cd)
-{
-  uint16_t flags = cdata_flags_acq(cd);
-  while (!(flags & LJ_CDATA_FIN_INSERT)) {
-    uint16_t next = (uint16_t)(flags | LJ_CDATA_FIN_INSERT);
-    if (la_cas16(&cd->flags, &flags, next, LA_ACQ_REL, LA_ACQ))
-      return 1;
-  }
-  return 0;
-}
-
-static LJ_AINLINE void lj_cdata_fin_insert_leave(GCcdata *cd)
-{
-  uint16_t flags = cdata_flags_acq(cd);
-  for (;;) {
-    uint16_t next = (uint16_t)(flags & ~LJ_CDATA_FIN_INSERT);
-    if (la_cas16(&cd->flags, &flags, next, LA_REL, LA_RLX))
-      return;
-  }
-}
-
 /* A non-reusable delivery ticket for the one outstanding ordered queue
 ** envelope. FINALIZED excludes another preclaim until this envelope has
 ** completed. Cancellation stays sticky across any number of re-arms. */
@@ -204,12 +179,13 @@ enum {
   LJ_CDATA_FIN_PAUSE_CLEAR_BEFORE_NIL,
   LJ_CDATA_FIN_PAUSE_ENABLE_RETRY,
   LJ_CDATA_FIN_PAUSE_CLEAR_RETRY,
-  LJ_CDATA_FIN_PAUSE_ENABLE_KEYLOCK,
+  LJ_CDATA_FIN_PAUSE_FIRST_KEY,
   LJ_CDATA_FIN_PAUSE_ENABLE_PREPARE,
   LJ_CDATA_FIN_PAUSE_CLEAR_PREPARE,
   LJ_CDATA_FIN_PAUSE_ENABLE_UNCHANGED,
   LJ_CDATA_FIN_PAUSE__MAX
 };
+LJ_FUNC void lj_cdata_test_fin_pause_at(uint32_t point);
 LJ_FUNC void lj_cdata_test_fin_pause_arm(uint32_t point);
 LJ_FUNC int lj_cdata_test_fin_pause_waiting(uint32_t point);
 LJ_FUNC void lj_cdata_test_fin_pause_release(uint32_t point);
