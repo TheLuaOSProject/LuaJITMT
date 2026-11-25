@@ -594,6 +594,40 @@ static void exercise_canonical_quarantine(lua_State *L)
     lua_pop(L, 1);
   }
 
+  /* A guarded table store retains exact string inputs before publishing its
+  ** descriptor and re-arbitrates close before authorizing the actual CAS. */
+  {
+    TValue key, value;
+    LJGC2TableStoreGuard guard;
+    GCtab *tab;
+    StrCanonRec *other = lj_str_canon_record(lj_str_canon_acq(sunlink));
+    lua_newtable(L);
+    tab = tabV(L->top - 1);
+    setstrV(L, &key, spublish);
+    setstrV(L, &value, sunlink);
+    lj_str_canon_rel(spublish,
+		     lj_str_canon_pack(ctx.rec, LJ_STR_CANON_QCLOSING));
+    lj_str_canon_rel(sunlink,
+		     lj_str_canon_pack(other, LJ_STR_CANON_QCLOSING));
+    (void)lj_gc2_table_store_begin(L, &guard, tab, &key, &value);
+    assert(guard.begun && !guard.finished);
+    assert(lj_str_canon_state(lj_str_canon_acq(spublish)) ==
+	   LJ_STR_CANON_QRESCUED);
+    assert(lj_str_canon_state(lj_str_canon_acq(sunlink)) ==
+	   LJ_STR_CANON_QRESCUED);
+    (void)lj_gc2_table_store_admit(L, &guard);
+    assert(guard.gate_admitted);
+    lj_str_canon_rel(sunlink,
+		     lj_str_canon_pack(other, LJ_STR_CANON_QCLOSING));
+    (void)lj_gc2_table_store_revalidate(L, &guard);
+    assert(guard.store_authorized);
+    assert(lj_str_canon_state(lj_str_canon_acq(sunlink)) ==
+	   LJ_STR_CANON_QRESCUED);
+    (void)lj_gc2_table_store_finish(L, &guard, 0);
+    assert(guard.finished && !guard.cleanup_failed);
+    lua_pop(L, 1);
+  }
+
   /* The collector must also rescue a value reached by traversing a
   ** strong table, even when the Lua stack never contains the string. */
   lua_newtable(L);

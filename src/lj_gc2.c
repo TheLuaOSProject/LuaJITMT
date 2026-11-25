@@ -16305,6 +16305,17 @@ gc2_table_store_guard_abort(lua_State *L, LJGC2TableStoreGuard *guard,
   return result;
 }
 
+static int gc2_table_store_rescue_strings(LJGC2TableStoreGuard *guard)
+{
+  /* The transaction's inputs are strong roots even if the destination
+  ** later participates in weak clearing. The exact leases must remain
+  ** held as both string bodies compete with canonical close. */
+  return (!tvisstr(&guard->key) ||
+	  gc2_rescue_semantic_string(guard->g, obj2gco(strV(&guard->key)))) &&
+	 (!tvisstr(&guard->value) ||
+	  gc2_rescue_semantic_string(guard->g, obj2gco(strV(&guard->value))));
+}
+
 LJGC2TableStoreGuardResult
 lj_gc2_table_store_begin(lua_State *L, LJGC2TableStoreGuard *guard,
 			 GCtab *parent, cTValue *key, cTValue *value)
@@ -16401,6 +16412,9 @@ lj_gc2_table_store_begin(lua_State *L, LJGC2TableStoreGuard *guard,
     }
     guard->value_lease_active = 1;
   }
+  if (!gc2_table_store_rescue_strings(guard))
+    return gc2_table_store_guard_abort(
+      L, guard, LJ_GC2_TABLE_STORE_GUARD_RETRY);
 
   /* The legacy closer is still positive authority during this migration
   ** tranche and does not enumerate root descriptors. Publish the stable
@@ -16563,8 +16577,13 @@ gc2_table_store_admit_(lua_State *L, LJGC2TableStoreGuard *guard,
 	 guard->parent_lease_active &&
 	 (!tvisgcv(&guard->key) || guard->key_lease_active) &&
 	 (!tvisgcv(&guard->value) || guard->value_lease_active) &&
-	 final.state == LJ_GC2_ACT_NO_RECLAIM))
+	 final.state == LJ_GC2_ACT_NO_RECLAIM)) {
+      /* Re-arbitrate before authorizing the bounded slot CAS. The exact
+      ** leases remain live until finish accounts for the store. */
+      if (!gc2_table_store_rescue_strings(guard))
+	return LJ_GC2_TABLE_STORE_GUARD_RETRY;
       guard->store_authorized = 1;
+    }
   }
   return authorized;
 }
