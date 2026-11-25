@@ -2944,7 +2944,6 @@ static int tab_resize_array_copy_held(global_State *g, TabResizeDesc *desc)
       continue;
     lj_tv_load_acq(&val, &desc->oldarray[i]);
     if (tvisgcv(&val)) {
-      LJGC2Lease lease;
       int status = lj_gc2_tv_lease_acquire(g, &val, &lease);
       if (status == LJ_GC2_TV_EDGE_RETRY)
 	return 0;
