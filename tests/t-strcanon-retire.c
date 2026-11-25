@@ -134,7 +134,8 @@ int main(void)
   advance_grace(g);
   assert(lj_str_canon_state(lj_str_canon_acq(old)) == LJ_STR_CANON_QCOMMIT);
   assert(la_load32_acq(&rec->status) & LJ_STR_CANONREC_Q_UNLINKED);
-  assert(lj_str_qcount_acq(g) == 1);
+  assert(lj_str_canon_acq(borrowed) == LJ_STR_CANON_LIVE);
+  assert(lj_str_qcount_acq(g) == 0);
   (void)lj_gc2_reclaim_retired(g, lj_gc2_retire_epoch(g));
   assert(lj_gc2_mem_registered_known(g, old));
 

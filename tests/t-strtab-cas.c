@@ -354,12 +354,20 @@ static void pause_moved_string(lua_State *L, GCstr *s, StrCanonRec *rec,
   MSize owner;
   if (L != p->peer || stage != p->stage || la_load32_acq(&p->stopped))
     return;
-  assert(s != NULL && rec == NULL);
+  assert(rec == NULL);
   owner = la_load32_acq(&p->hdr->resize);
-  if (stage == LJ_STR_TEST_CANON_RESIZE_MOVED) {
+  if (stage != LJ_STR_TEST_CANON_REHASH_DEST_SAMPLED) {
     assert(owner == TEST_STRTAB_RESIZE);
+    if (stage == LJ_STR_TEST_CANON_EXPAND_BUCKET_DONE) {
+      assert(s == NULL && lj_str_expand_to_acq(p->hdr) != NULL);
+      p->destination = la_load32_acq(&p->hdr->copy_cursor);
+      assert(p->destination == p->hdr->mask);
+    } else {
+      assert(s != NULL);
+    }
   } else {
     assert((owner & ~p->hdr->mask) == TEST_STRTAB_REHASH);
+    assert(s != NULL);
     p->destination = s->hash & p->hdr->mask;
     if (p->destination == (owner & p->hdr->mask) ||
 	(lj_str_link_load_acq(&p->hdr->bucket[p->destination]) &
@@ -375,7 +383,7 @@ static void *move_string_worker(void *ud)
 {
   PausedTopology *p = (PausedTopology *)ud;
   assert(lj_threading_attach_wait(p->peer));
-  if (p->stage == LJ_STR_TEST_CANON_RESIZE_MOVED)
+  if (p->stage != LJ_STR_TEST_CANON_REHASH_DEST_SAMPLED)
     lj_str_resize(p->peer, p->target_mask);
   else
     assert(lj_str_new(p->peer, p->trigger, p->trigger_len)->hashalg == 1);
@@ -438,6 +446,26 @@ static void check_paused_topology(lua_State *L, PausedTopology *p,
     lua_pushlstring(L, new_key, new_len);
     inserted = strV(L->top - 1);
     assert((la_load32_acq(&p->hdr->resize) & TEST_STRTAB_REHASH) != 0);
+  } else if (p->stage == LJ_STR_TEST_CANON_EXPAND_BUCKET_DONE) {
+    global_State *g = G(L);
+    StrTabHdr *target = lj_str_expand_to_acq(p->hdr);
+    MSize hash;
+    assert(target && lj_str_tabh_acq(g) == p->hdr);
+    for (i = 0;; i++) {
+      int n = snprintf(new_key, sizeof(new_key), "paused-growth-insert-%08x", i);
+      assert(n > 0 && (size_t)n < sizeof(new_key));
+      new_len = (size_t)n;
+      hash = test_hash_sparse(g->str.seed, new_key, (MSize)n);
+      if ((hash & p->hdr->mask) == p->destination)
+        break;
+    }
+    lua_pushlstring(L, new_key, new_len);
+    inserted = strV(L->top - 1);
+    assert(lj_str_tabh_acq(g) == p->hdr);
+    assert(lj_str_link_target(lj_str_link_load_acq(
+      &target->bucket[hash & target->mask])) == obj2gco(inserted));
+    lua_pushlstring(L, new_key, new_len);
+    assert(strV(L->top - 1) == inserted);
   } else {
     assert(la_load32_acq(&p->hdr->resize) == TEST_STRTAB_RESIZE);
   }
@@ -530,7 +558,7 @@ static void exercise_paused_topology_hits(void)
   static const char bytes[] = "string-intern-hit-during-moving-topology";
   lua_State *L = luaL_newstate();
   global_State *g;
-  PausedTopology resize = { 0 };
+  PausedTopology resize = { 0 }, grow = { 0 };
   assert(L != NULL);
   g = G(L);
   check_resize_hit_invalidation(L, bytes, sizeof(bytes)-1u);
@@ -539,6 +567,11 @@ static void exercise_paused_topology_hits(void)
   resize.target_mask = 4095u;
   check_paused_topology(L, &resize, bytes, sizeof(bytes)-1u);
   assert(lj_str_mask_acq(g) == resize.target_mask);
+  grow.stage = LJ_STR_TEST_CANON_EXPAND_BUCKET_DONE;
+  grow.target_mask = 8191u;
+  assert(!lj_str_second_acq(g));
+  check_paused_topology(L, &grow, bytes, sizeof(bytes)-1u);
+  assert(lj_str_mask_acq(g) == grow.target_mask);
 
 #if LUAJIT_SECURITY_STRHASH
   {
@@ -895,18 +928,21 @@ static void exercise_canonical_quarantine(lua_State *L)
   lj_str_canon_rel(sunlink,
 		   lj_str_canon_pack(lj_str_canon_record(canon),
 				     LJ_STR_CANON_QCLOSING));
+  lua_pushlstring(L, publish_name, sizeof(publish_name));
   (void)lua_gc(L, LUA_GCCOLLECT, 0);
-  lua_pop(L, 1);
-  assert(lj_str_qcount_acq(g) == before + 2u);
-  assert(lj_str_canon_state(lj_str_canon_acq(spublish)) ==
-	 LJ_STR_CANON_QRESCUED);
-  assert(lj_str_canon_state(lj_str_canon_acq(sunlink)) ==
-	 LJ_STR_CANON_QRESCUED);
+  {
+    uint32_t i;
+    for (i = 0; i < LJ_GC2_GRACE_EPOCHS; i++)
+      (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
+  }
+  assert(lj_str_qcount_acq(g) == before);
+  assert(lj_str_canon_acq(spublish) == LJ_STR_CANON_LIVE);
+  assert(lj_str_canon_acq(sunlink) == LJ_STR_CANON_LIVE);
   assert(lj_str_new(L, publish_name, sizeof(publish_name)) == spublish);
   assert(lj_str_new(L, unlink_name, sizeof(unlink_name)-1u) == sunlink);
+  lua_pop(L, 2);
 
-  /* The zero/non-zero bypass is a correctness boundary. Prove that the Stage
-  ** A monotonic count saturates instead of wrapping back to the false zero. */
+  /* Saturation cannot wrap the Q presence test back to a false zero. */
   lj_str_qcount_store_rlx(g, UINT32_MAX - 1u);
   assert(lj_str_qcount_inc_sat_acqrel(g) == UINT32_MAX - 1u);
   assert(lj_str_qcount_acq(g) == UINT32_MAX);

@@ -662,6 +662,39 @@ static StrTabHdr *strtab_enter(lua_State *L, global_State *g, StrHash sparse,
   }
 }
 
+/* A plain expansion preserves each key's sparse hash. Each target bucket
+** maps to exactly one source bucket, so no later migration can touch a
+** completed source's destinations. Once published, those buckets are
+** ordinary CAS interning targets even before the global header handoff. */
+static StrTabHdr *strtab_enter_completed(lua_State *L, global_State *g,
+					StrHash sparse, const char *bytes,
+					MSize len)
+{
+  TGState *tg = L2TG(L);
+  StrTabHdr *source, *target, *result = NULL;
+  if (lj_tg_strtab_active_depth_acq(tg) != 0 || !lj_gc2_smr_read_try(g))
+    return NULL;
+  source = lj_str_tabh_acq(g);
+  if (source && strtab_resize_acq(source) == LJ_STRTAB_RESIZE &&
+      (target = lj_str_expand_to_acq(source)) != NULL &&
+      (sparse & source->mask) >= la_load32_acq(&source->copy_cursor)) {
+    StrTabHdr *current;
+    strtab_active_enter(tg, target);
+    /* The target can become current during admission. Any following
+    ** destructive owner must observe this pin or be seen on recheck. */
+    la_fence_seq();
+    current = lj_str_tabh_acq(g);
+    if ((current == source || current == target) &&
+	!strtab_intern_blocked(g, target, strtab_resize_acq(target),
+			       sparse, bytes, len))
+      result = target;
+    else
+      strtab_active_leave(tg, target);
+  }
+  lj_gc2_smr_read_leave(g);
+  return result;
+}
+
 /* Resize the string interning hash table (grow and shrink). */
 void lj_str_resize(lua_State *L, MSize newmask)
 {
@@ -671,6 +704,7 @@ void lj_str_resize(lua_State *L, MSize newmask)
   GCRef *newtab, *oldtab;
   GCSize newsize;
   MSize i, oldmask;
+  int expand;
 
   /* The atomic header claim below serializes every GC2 topology owner. The
   ** retired color collector state byte is not a resize authority. */
@@ -703,6 +737,17 @@ restart:
       strtab_wait(L);
       goto restart;
     }
+  }
+
+  expand = oldhdr && oldmask < newmask &&
+	   (oldmask & (oldmask + 1u)) == 0 &&
+	   (newmask & (newmask + 1u)) == 0 && !lj_str_second_acq(g);
+  if (expand) {
+    la_store32_rlx(&oldhdr->copy_cursor, oldmask + 1u);
+    la_storeptr_rel((void **)&oldhdr->expand_to, newhdr);
+    /* Keep the pending target visible across an asynchronous root scan
+    ** racing the ownership-edge publication. */
+    lj_gc2_markmem(g, newhdr);
   }
 
 #if LUAJIT_SECURITY_STRHASH
@@ -780,6 +825,13 @@ restart:
       str_test_canon(L, s, NULL, LJ_STR_TEST_CANON_RESIZE_MOVED);
 #endif
       oldlink = nextlink;
+    }
+    if (expand) {
+      /* Release publishes the complete target chains for this source. */
+      la_store32_rel(&oldhdr->copy_cursor, i);
+#ifdef LJ_STR_TEST_HELPERS
+      str_test_canon(L, NULL, NULL, LJ_STR_TEST_CANON_EXPAND_BUCKET_DONE);
+#endif
     }
   }
 
@@ -1140,6 +1192,8 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
       uintptr_t headu, u;
       uintptr_t want;
       int grow, qretry;
+      if (!hdr && blocked)
+	hdr = strtab_enter_completed(L, g, qhash, str, len);
       if (LJ_UNLIKELY(hdr == NULL)) {
 	if (blocked) {
 	  GCstr *hit = strtab_resize_hit(L, str, len, qhash);
@@ -1704,7 +1758,6 @@ int lj_str_test_quarantine_detach(lua_State *L, GCstr *s)
 	LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_BODY_OWNED);
   (void)lj_str_qcount_inc_sat_acqrel(g);
   epoch = lj_gc2_retire_epoch(g);
-  la_store64_rel(&rec->main_unlink_epoch, epoch);
   lj_str_body_retired_epoch_rel(rec, epoch);
   /* Durable list ownership precedes this phase-aware retention barrier. If a
   ** new cycle starts after the barrier, its metadata scan sees the list; if it
@@ -1724,6 +1777,9 @@ int lj_str_test_quarantine_detach(lua_State *L, GCstr *s)
     lj_str_sweep_release(hdr);
     return 0;
   }
+  /* Remote handshakes can advance while this actor still owns its exact
+  ** splice. Sample the boundary after removal, before settling the transfer. */
+  la_store64_rel(&rec->main_unlink_epoch, lj_gc2_retire_epoch(g));
   la_store32_rel(&rec->main_linked, 0);
   strq_preserve_body(g, s);
   lj_str_sweep_release(hdr);
@@ -2225,6 +2281,51 @@ static int strq_unlink(global_State *g, StrCanonRec *rec)
   return 1;
 }
 
+/* Publish the rescued body to the current main generation. Older chain
+** readers must drain before its intrusive next link can be written again. */
+static int strq_relink(global_State *g, StrCanonRec *rec, GCstr *s,
+		      StrTabHdr *hdr, uint64_t completed)
+{
+  uint64_t unlink_epoch = la_load64_acq(&rec->main_unlink_epoch);
+  GCRef *head;
+  StrHash hash = rec->hash;
+  uintptr_t edge, want;
+  int hashalg = 0;
+  if (lj_str_body_retired_main_linked_acq(rec))
+    return 1;
+  if (!str_retire_grace(completed, unlink_epoch) || !strtab_gc2_claim(g, hdr))
+    return 0;
+  if (strtab_active_on_hdr_before(g, hdr, unlink_epoch)) {
+    strtab_release(hdr);
+    return 0;
+  }
+  head = &hdr->bucket[hash & hdr->mask];
+  edge = lj_str_link_load_acq(head);
+#if LUAJIT_SECURITY_STRHASH
+  if (edge & LJ_STRHASH_SECONDARY) {
+    hashalg = 1;
+    hash = hash_dense(g->str.seed, hash, strdata(s), s->len);
+    head = &hdr->bucket[hash & hdr->mask];
+    edge = lj_str_link_load_acq(head);
+  }
+#endif
+  s->hash = hash;
+  s->hashalg = (uint8_t)hashalg;
+  lj_str_next_store_rel(obj2gco(s), edge);
+  want = (uintptr_t)s | (edge & LJ_STRHASH_SECONDARY);
+  if (!lj_str_link_cas_acqrel(head, &edge, want)) {
+    strtab_release(hdr);
+    return 0;
+  }
+  /* The body was already counted. Durable ownership transfers to main at
+  ** publication, while the record still reserves the same identity. */
+  la_store32_rel(&rec->main_linked, 1);
+  la_store32_rel(&rec->status,
+		la_load32_acq(&rec->status) & ~LJ_STR_CANONREC_BODY_OWNED);
+  strtab_release(hdr);
+  return 1;
+}
+
 /* The IDLE reclaimer serializes ownership changes. Semantic rescue always
 ** races logical death on the same lifecycle word. */
 static int strq_retire_record(global_State *g, StrCanonRec *rec,
@@ -2233,37 +2334,57 @@ static int strq_retire_record(global_State *g, StrCanonRec *rec,
   GCstr *s = NULL;
   StrTabHdr *mainhdr = lj_str_tabh_acq(g);
   int owns_body = (status & LJ_STR_CANONREC_BODY_OWNED) != 0;
+  int counted = owns_body;
   uintptr_t canon = 0, committed = 0;
   if (status & LJ_STR_CANONREC_LIST_ONLY)
     return 0;
-  if (owns_body) {
-    if (!(status & LJ_STR_CANONREC_CLOSE_PROVEN) ||
-        lj_str_body_retired_main_linked_acq(rec))
-      return 0;
+  /* A body owner with the main edge still linked is inside its exact
+  ** detach handoff. Do not consume its quarantine reservation. */
+  if (owns_body && lj_str_body_retired_main_linked_acq(rec))
+    return 0;
+  if (owns_body || (status & LJ_STR_CANONREC_Q_LINKED &&
+		    !(status & LJ_STR_CANONREC_CANCELLED))) {
     s = lj_str_body_retired_str_acq(rec);
     if (!s || !lj_gc2_mem_registered_known_reclaim_held(g, s))
       return 0;
-    committed = lj_str_canon_pack(rec, LJ_STR_CANON_QCOMMIT);
     canon = lj_str_canon_acq(s);
-    if (canon != committed) {
-      uint64_t close = la_load64_acq(&rec->close_epoch);
-      if (canon != lj_str_canon_pack(rec, LJ_STR_CANON_QCLOSING) ||
-          !str_retire_grace(completed, close) ||
-          (mainhdr && strtab_active_on_hdr_before(g, mainhdr, close)) ||
-          !lj_str_canon_cas(s, &canon, committed))
+    if (canon == lj_str_canon_pack(rec, LJ_STR_CANON_QRESCUED)) {
+      if (!strq_relink(g, rec, s, mainhdr, completed))
         return 0;
+      owns_body = 0;
+      counted = 1;
+    } else {
+      if (!owns_body || !(status & LJ_STR_CANONREC_CLOSE_PROVEN))
+        return 0;
+      committed = lj_str_canon_pack(rec, LJ_STR_CANON_QCOMMIT);
+      if (canon != committed) {
+        uint64_t close = la_load64_acq(&rec->close_epoch);
+        if (canon != lj_str_canon_pack(rec, LJ_STR_CANON_QCLOSING) ||
+            !str_retire_grace(completed, close) ||
+            (mainhdr && strtab_active_on_hdr_before(g, mainhdr, close)) ||
+            !lj_str_canon_cas(s, &canon, committed))
+          return 0;
+      }
     }
-  } else if (!(status & LJ_STR_CANONREC_CANCELLED)) {
-    return 0;
   }
 
   if (status & LJ_STR_CANONREC_Q_LINKED) {
     if (!strq_unlink(g, rec))
       return 0;
+    if (!owns_body && s) {
+      /* Main publication precedes removal from Q. No later lookup can
+      ** confuse the retiring reservation with the live main identity. */
+      if (LJ_UNLIKELY(!lj_str_canon_cas(s, &canon, LJ_STR_CANON_LIVE))) {
+        lj_assertG(0, "rescued string lost canonical relink ownership");
+        abort();
+      }
+      la_storeptr_rel((void **)&rec->str, NULL);
+      status &= ~(LJ_STR_CANONREC_BODY_OWNED|LJ_STR_CANONREC_CLOSE_PROVEN);
+    }
     la_store64_rel(&rec->q_unlink_epoch, lj_gc2_retire_epoch(g));
     la_store32_rel(&rec->status, (status & ~LJ_STR_CANONREC_Q_LINKED) |
                    LJ_STR_CANONREC_Q_UNLINKED);
-    if (owns_body)
+    if (counted)
       strq_count_remove(g);
     return 0;
   }
