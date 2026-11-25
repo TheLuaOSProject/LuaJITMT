@@ -3687,20 +3687,36 @@ static IRType rec_celluv_rooted_sample(jit_State *J, BCReg slotno)
   return itype2irt(&value);
 }
 
+/* Each of these helpers publishes its result back to BASE[slot]. The
+** generated read can recover that cell through the same enumerated root. */
+static int rec_celluv_rooted_source(jit_State *J, TRef tr, BCReg slot)
+{
+  IRIns *ir = IR(tref_ref(tr));
+  IRRef args[3];
+  int nargs;
+  if (ir->o == IR_SLOAD)
+    return ir->op1 == J->baseslot+slot && ir->op2 == IRSLOAD_TYPECHECK &&
+           ir->t.irt == (IRT_P32|IRT_GUARD);
+  if (ir->o == IR_CALLS && ir->op2 == IRCALL_lj_func_promoteuv_forjit)
+    nargs = 3;
+  else if (ir->o == IR_CALLA && ir->op2 == IRCALL_lj_func_newuvcell_forjit)
+    nargs = 2;
+  else
+    return 0;
+  return rec_call_argrefs(J, ir->op1, args, nargs) == nargs &&
+         args[0] == REF_BASE && irref_isk(args[1]) &&
+         IR(args[1])->o == IR_KINT && IR(args[1])->i == (int32_t)slot;
+}
+
 static TRef rec_celluv_rooted(jit_State *J, cTValue *slot, TRef slotref,
                               TRef val, BCReg slotno)
 {
-  const IRIns *source;
   TRef root, index, status;
   IRType type;
   if (J->parent || J->framedepth || J->retdepth ||
       J->baseslot != 1+LJ_FR2 || slotno >= J->pt->framesize ||
-      itype(slot) != LJ_TUPVAL || tref_ref(slotref) < REF_FIRST)
-    lj_trace_err_info(J, LJ_TRERR_NYIBC);
-  source = IR(tref_ref(slotref));
-  if (source->o != IR_SLOAD || source->op1 != J->baseslot+slotno ||
-      source->op2 != IRSLOAD_TYPECHECK ||
-      source->t.irt != (IRT_P32|IRT_GUARD))
+      itype(slot) != LJ_TUPVAL || tref_ref(slotref) < REF_FIRST ||
+      !rec_celluv_rooted_source(J, slotref, slotno))
     lj_trace_err_info(J, LJ_TRERR_NYIBC);
   type = rec_celluv_rooted_sample(J, slotno);
   if (val && !LJ_DUALNUM && tref_isinteger(val))

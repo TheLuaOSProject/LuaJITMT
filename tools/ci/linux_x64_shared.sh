@@ -19,7 +19,8 @@ export LUA_PATH="$root/src/?.lua;$root/tests/lib/?.lua;;"
 
 cd "$root"
 for script in t-gc-workers t-jit-secondary t-jit-flush-thread-stress \
-              t-jit-util-flush-race t-x64-jit-boxed-arithmetic \
+              t-jit-util-flush-race t-jit-park-vmevent-reentrant \
+              t-x64-jit-rooted-upvalue t-x64-jit-boxed-arithmetic \
               t-x64-jit-next-scalar t-ffi-callxs-production t-ffi-callback-runtime \
               t-ffi-jit-cnew-alloc t-ffi-cdata-shared-hammer \
               t-weak-modes t-strtab-gc-stress; do
