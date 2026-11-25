@@ -1014,7 +1014,7 @@ static int tg_reclaim_writer_try(global_State *g, int terminal)
 {
   uint32_t expect = LJ_GC2_SMR_OPEN;
   if (!tg_reclaim_dead_admissible(g, terminal) ||
-      !gc2_smr_reclaiming_cas(g, &expect, LJ_GC2_SMR_META_EXCLUSIVE))
+      !gc2_smr_reclaiming_cas(g, &expect, LJ_GC2_SMR_TG_EXCLUSIVE))
     return 0;
   /* Publish the shared metadata-reclaim gate before testing readers. A reader
   ** already inside keeps its counted lease and makes this pass abandon; a new
@@ -1043,7 +1043,7 @@ static int tg_reclaim_writer_try(global_State *g, int terminal)
 
 static void tg_reclaim_writer_leave(global_State *g)
 {
-  lj_assertG(gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_META_EXCLUSIVE,
+  lj_assertG(gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_TG_EXCLUSIVE,
 	     "TG reclaimer lost exclusive registry mode");
   gc2_tg_reclaiming_rel(g, 0);
   gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);

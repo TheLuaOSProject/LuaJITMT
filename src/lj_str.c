@@ -2306,10 +2306,6 @@ static uint32_t str_sweep_unlink_active(global_State *g, StrTabHdr *mainhdr,
   StrCanonRec *rec, **bucket, *head;
   uintptr_t canon = LJ_STR_CANON_CANDIDATE, active, next, current;
 
-  /* Small bodies use the independent arena directory. Huge mappings still
-  ** need generic registry admission that a parked IDLE reclaimer can close. */
-  if (lj_str_size(s->len) >= LJ_HUGE_THRESHOLD)
-    goto keep;
   qhdr = strq_try_pin(g, tg);
   if (!qhdr)
     goto keep;

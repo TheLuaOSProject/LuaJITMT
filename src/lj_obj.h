@@ -1970,12 +1970,13 @@ typedef struct TabResizeState {
 #define LJ_GC2_WORKER_MAX 2
 #define LJ_GC2_GREY_EMBEDDED 256u
 
-/* Global registry/reclaimer mode. Ordinary SMR readers require OPEN. A
-** SWEEP_STABLE owner does not change TG/HugeTab topology and permits the
-** narrower counted Huge registry admission. */
+/* Ordinary metadata readers require OPEN. A body-retirement pass at IDLE
+** or SWEEP keeps TG/HugeTab directories stable until mapping readers can
+** acquire their own slot. Only TG_EXCLUSIVE can destroy the directories. */
 #define LJ_GC2_SMR_OPEN			0u
 #define LJ_GC2_SMR_META_EXCLUSIVE	1u
 #define LJ_GC2_SMR_SWEEP_STABLE		2u
+#define LJ_GC2_SMR_TG_EXCLUSIVE		3u
 
 typedef struct TGState TGState;
 typedef struct LJThreadLive LJThreadLive;

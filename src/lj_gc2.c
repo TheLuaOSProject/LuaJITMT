@@ -1500,7 +1500,7 @@ static int gc2_observed_obj_status_scoped(global_State *g, GCobj *o,
 static int gc2_observed_obj_status_scoped_impl(global_State *g, GCobj *o,
 					     uint32_t *gctp,
 					     GC2MarkScope *scope,
-					     uint32_t *startp);
+					     uint32_t *startp, int string_edge);
 static int gc2_observed_obj_valid(global_State *g, GCobj *o);
 static int gc2_queue_obj_info(global_State *g, GCobj *o,
 			      GCArena *known_small,
@@ -7125,7 +7125,7 @@ int lj_gc2_smr_read_tracked_try(global_State *g)
 typedef enum GC2HugeRegistryLease {
   GC2_HUGE_REGISTRY_NONE = 0,
   GC2_HUGE_REGISTRY_FULL,
-  GC2_HUGE_REGISTRY_SWEEP
+  GC2_HUGE_REGISTRY_STABLE
 } GC2HugeRegistryLease;
 
 /* A SWEEP owner keeps TG/HugeTab topology stable, but may reclaim bodies. A
@@ -7133,8 +7133,8 @@ typedef enum GC2HugeRegistryLease {
 ** ends in the same-slot HugeReader/mark CAS before any body byte is inspected;
 ** a negative scan touches registry slots only. It must not install ordinary
 ** SMR TLS: nested generic readers need the full OPEN mode. */
-static int gc2_huge_registry_read_try(global_State *g,
-				       GC2HugeRegistryLease *lease)
+static int gc2_huge_registry_read_try_mode(global_State *g,
+				GC2HugeRegistryLease *lease, int string_edge)
 {
   uint32_t mode, old;
   if (lease)
@@ -7152,7 +7152,11 @@ static int gc2_huge_registry_read_try(global_State *g,
       *lease = GC2_HUGE_REGISTRY_FULL;
       return 1;
     }
-    if (mode != LJ_GC2_SMR_SWEEP_STABLE)
+    /* String byte readers may enter during IDLE body retirement. They
+    ** transfer this directory count to an exact mapping reader before
+    ** inspecting any bytes. TG directory retirement closes both lanes. */
+    if (mode != LJ_GC2_SMR_SWEEP_STABLE &&
+	!(string_edge && mode == LJ_GC2_SMR_META_EXCLUSIVE))
       return 0;
     old = gc2_smr_readers_add(g, 1);
     if (LJ_UNLIKELY(old == ~(uint32_t)0)) {
@@ -7161,14 +7165,20 @@ static int gc2_huge_registry_read_try(global_State *g,
       abort();
     }
     la_fence_seq();
-    if (gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_SWEEP_STABLE) {
-      *lease = GC2_HUGE_REGISTRY_SWEEP;
+    if (gc2_smr_reclaiming_acq(g) == mode) {
+      *lease = GC2_HUGE_REGISTRY_STABLE;
       return 1;
     }
     old = gc2_smr_readers_sub(g, 1);
     lj_assertG(old != 0, "GC2 Huge registry reader rollback underflow");
     UNUSED(old);
   }
+}
+
+static int gc2_huge_registry_read_try(global_State *g,
+				      GC2HugeRegistryLease *lease)
+{
+  return gc2_huge_registry_read_try_mode(g, lease, 0);
 }
 
 static void gc2_huge_registry_read_leave(global_State *g,
@@ -7180,7 +7190,7 @@ static void gc2_huge_registry_read_leave(global_State *g,
   if (*lease == GC2_HUGE_REGISTRY_FULL) {
     lj_gc2_smr_read_leave(g);
   } else {
-    lj_assertG(*lease == GC2_HUGE_REGISTRY_SWEEP,
+    lj_assertG(*lease == GC2_HUGE_REGISTRY_STABLE,
 	       "bad GC2 Huge registry lease");
     old = gc2_smr_readers_sub(g, 1);
     lj_assertG(old != 0, "GC2 Huge registry reader underflow");
@@ -7412,7 +7422,8 @@ static int gc2_tv_admit_scoped_impl(global_State *g, cTValue *tv,
   if (itype(tv) == LJ_TSTR && o == obj2gco(&g->strempty))
     return o->gch.gct == ~LJ_TSTR ?
 	   GC2_TV_SCOPE_ADMITTED : GC2_TV_SCOPE_STALE;
-  status = gc2_observed_obj_status_scoped_impl(g, o, &gct, scope, startp);
+  status = gc2_observed_obj_status_scoped_impl(g, o, &gct, scope, startp,
+					       tvisstr(tv));
   if (status < 0)
     return GC2_TV_SCOPE_RETRY;
   if (status == 0)
@@ -10148,7 +10159,7 @@ static int gc2_huge_observed(global_State *g, GCobj *o, void **basep,
 ** but supplies no dereferenceable body and must be returned immediately. */
 static int gc2_huge_observed_scoped(global_State *g, GCobj *o, void **basep,
 					    LJHugeInfo *hip,
-					    GC2MarkScope *scope)
+					    GC2MarkScope *scope, int string_edge)
 {
   GC2HugeRegistryLease lease = GC2_HUGE_REGISTRY_NONE;
   TGState *tg;
@@ -10158,7 +10169,7 @@ static int gc2_huge_observed_scoped(global_State *g, GCobj *o, void **basep,
   gc2_mark_scope_init(scope);
   if (!g || !o || !scope)
     return LJ_ARENA_HUGE_READER_MISSING;
-  if (!gc2_huge_registry_read_try(g, &lease)) {
+  if (!gc2_huge_registry_read_try_mode(g, &lease, string_edge)) {
     gc2_activation_pin_no_reclaim(g);
     gc2_marks_this_round_add(g, 1);
     lj_gc2_worker_wake(g);
@@ -10866,7 +10877,7 @@ static void gc2_recovery_fail_closed(global_State *g)
 static int gc2_observed_obj_status_scoped_impl(global_State *g, GCobj *o,
 					     uint32_t *gctp,
 					     GC2MarkScope *scope,
-					     uint32_t *startp)
+					     uint32_t *startp, int string_edge)
 {
   GCArena *a;
   uint32_t gct, start;
@@ -10897,7 +10908,7 @@ static int gc2_observed_obj_status_scoped_impl(global_State *g, GCobj *o,
     LJHugeInfo hi;
     int interior_tag;
     base = NULL;
-    admitted = gc2_huge_observed_scoped(g, o, &base, &hi, hold);
+    admitted = gc2_huge_observed_scoped(g, o, &base, &hi, hold, string_edge);
     if (admitted != LJ_ARENA_HUGE_READER_ACQUIRED)
       return admitted == LJ_ARENA_HUGE_READER_OVERFLOW ? -1 : 0;
     if ((hi.flags & LJ_HUGEF_FREEING) ||
@@ -10936,7 +10947,7 @@ static int gc2_observed_obj_status_scoped(global_State *g, GCobj *o,
 					  uint32_t *gctp,
 					  GC2MarkScope *scope)
 {
-  return gc2_observed_obj_status_scoped_impl(g, o, gctp, scope, NULL);
+  return gc2_observed_obj_status_scoped_impl(g, o, gctp, scope, NULL, 0);
 }
 
 static int gc2_observed_obj_valid_scoped(global_State *g, GCobj *o,
@@ -23494,7 +23505,7 @@ int lj_gc2_ismarked(global_State *g, GCobj *o)
     GC2MarkScope scope;
     LJHugeInfo hi;
     int result;
-    if (gc2_huge_observed_scoped(g, o, &base, &hi, &scope) !=
+    if (gc2_huge_observed_scoped(g, o, &base, &hi, &scope, 0) !=
 	LJ_ARENA_HUGE_READER_ACQUIRED)
       return -1;
     /* Mark queries are observational. The counted reader protects validation;

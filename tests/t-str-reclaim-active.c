@@ -14,8 +14,9 @@
 #include "lj_safepoint.h"
 #include "lj_tg.h"
 
-static char held[1024];
+static char held[LJ_HUGE_THRESHOLD + 1024];
 static const char *borrowed;
+static GCstr *huge_probe;
 static uint32_t stop_requested;
 static uint32_t callback_ready, callback_release;
 
@@ -35,7 +36,7 @@ static int callback_park(lua_State *L)
   } else if (lua_toboolean(L, 1)) {
     la_store32_rel(&callback_release, 1);
   } else {
-    char expected[512];
+    char expected[LJ_HUGE_THRESHOLD + 512];
     const char *bytes;
     size_t len;
     LJNativeFrame f;
@@ -76,6 +77,27 @@ static int check_reclamation(lua_State *L)
   return 1;
 }
 
+/* Keep only the mapping address in C. Look it up without accessing the
+** old bytes after the allocating call has returned to Lua. */
+static int probe_huge_mapping(lua_State *L)
+{
+  LJHugeInfo info;
+  if (lua_gettop(L)) {
+    char payload[LJ_HUGE_THRESHOLD * 2 + 17];
+    int round = (int)luaL_checkinteger(L, 1);
+    memset(payload, '0' + round, sizeof(payload));
+    lua_pushlstring(L, payload, sizeof(payload));
+    huge_probe = strV(L->top - 1);
+    assert(lj_arena_hugetab_lookup(&L2TG(L)->huge, huge_probe, &info));
+    lua_pop(L, 1);
+    lua_pushnil(L);
+    return 0;
+  }
+  lua_pushboolean(L, lj_arena_hugetab_lookup(&L2TG(L)->huge, huge_probe,
+					     &info) != 0);
+  return 1;
+}
+
 /* Sample the attached peer's actual native execution, not trace metadata. */
 static int worker_running_trace(lua_State *L)
 {
@@ -89,7 +111,7 @@ static int worker_running_trace(lua_State *L)
 static void run_reclamation(int use_jit)
 {
   static const char script[] =
-    "local stats, held, stop, park, invoke, use_jit, running_trace = ...\n"
+    "local stats, held, stop, park, invoke, use_jit, running_trace, probe = ...\n"
     "local threading = require('threading')\n"
     "if use_jit then jit.opt.start('hotloop=8')\n"
     "elseif jit then jit.off() end\n"
@@ -154,12 +176,14 @@ static void run_reclamation(int use_jit)
     "for r = 1, 6 do\n"
     "  local prior = stats()\n"
     "  churn(r)\n"
+    "  probe(r)\n"
     "  for attempt = 1, use_jit and 400 or 8 do\n"
     "    collectgarbage('collect')\n"
-    "    if stats() - prior >= 600 then break end\n"
+    "    if stats() - prior >= 600 and not probe() then break end\n"
     "    if use_jit then threading.sleep(0.001) end\n"
     "  end\n"
     "  assert(stats() - prior >= 600, 'cohort did not retire while active')\n"
+    "  assert(not probe(), 'unreachable huge string mapping survived')\n"
     "  local memory = collectgarbage('count')\n"
     "  if r == 3 then settled = memory end\n"
     "  if r > 3 then assert(memory < settled + 384, 'unbounded churn') end\n"
@@ -187,7 +211,8 @@ static void run_reclamation(int use_jit)
   lua_pushlightuserdata(L, (void *)(uintptr_t)run_callback);
   lua_pushboolean(L, use_jit);
   lua_pushcfunction(L, worker_running_trace);
-  status = lua_pcall(L, 7, 0, 0);
+  lua_pushcfunction(L, probe_huge_mapping);
+  status = lua_pcall(L, 8, 0, 0);
   if (status != LUA_OK)
     fprintf(stderr, "%s\n", lua_tostring(L, -1));
   assert(status == LUA_OK);

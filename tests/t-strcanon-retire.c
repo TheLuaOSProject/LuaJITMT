@@ -303,6 +303,59 @@ static void check_dual_generation_quarantine(void)
   lua_close(L);
 }
 
+#ifdef LJ_GC2_TEST_HELPERS
+typedef struct IdleRetire {
+  global_State *g;
+  uint32_t started, release;
+} IdleRetire;
+
+static void *hold_idle_retirement(void *arg)
+{
+  IdleRetire *r = arg;
+  assert(lj_gc2_test_idle_reclaim_enter(r->g));
+  la_store32_rel(&r->started, 1);
+  while (!la_load32_acq(&r->release))
+    (void)lj_thr_retry_yield(NULL);
+  lj_gc2_test_idle_reclaim_leave(r->g);
+  return NULL;
+}
+
+static void check_huge_idle_identity(void)
+{
+  static char bytes[LJ_HUGE_THRESHOLD + 77];
+  IdleRetire r = {0};
+  LJThr thr = {0};
+  lua_State *L = luaL_newstate();
+  const char *first;
+  GCstr *s;
+  assert(L);
+  r.g = G(L);
+  lua_gc(L, LUA_GCSTOP, 0);
+  memset(bytes, 'I', sizeof(bytes));
+  lua_pushlstring(L, bytes, sizeof(bytes));
+  first = lua_tolstring(L, -1, NULL);
+  s = strV(L->top - 1);
+  assert(lj_str_test_quarantine_detach(L, s));
+  assert(lj_str_test_quarantine_close(r.g, s));
+  assert(lj_thr_create(&thr, hold_idle_retirement, &r) == 0);
+  while (!la_load32_acq(&r.started))
+    (void)lj_thr_retry_yield(L);
+
+  /* Obtain the same huge mapping from quarantine while another actor
+  ** owns retirement and ordinary registry readers cannot enter. */
+  assert(!lj_gc2_smr_read_try(r.g));
+  lua_pushlstring(L, bytes, sizeof(bytes));
+  assert(lua_tolstring(L, -1, NULL) == first);
+  assert(memcmp(first, bytes, sizeof(bytes)) == 0);
+  assert(lj_str_canon_state(lj_str_canon_acq(s)) == LJ_STR_CANON_QRESCUED);
+  la_store32_rel(&r.release, 1);
+  assert(lj_thr_join(&thr, NULL) == 0);
+  advance_grace(r.g);
+  assert(lj_str_canon_acq(s) == LJ_STR_CANON_LIVE);
+  lua_close(L);
+}
+#endif
+
 #if LJ_TARGET_X64 && defined(LJ_GC2_TEST_HELPERS)
 static GCstr *vm_source;
 static StrCanonRec *vm_source_rec;
@@ -351,6 +404,9 @@ int main(void)
   TGState *read_tg;
   Peer peer = {0};
   LJThr thread = {0};
+#ifdef LJ_GC2_TEST_HELPERS
+  check_huge_idle_identity();
+#endif
   check_dual_generation_quarantine();
   L = luaL_newstate();
   assert(L);
