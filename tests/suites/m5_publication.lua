@@ -825,6 +825,7 @@ return function(add)
         libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=lj_gc2_table_store_finish",
                  "-Wl,--wrap=lj_gc_pubtabtv_vm" }
       })
+      t:build(opts)
       build_and_run_c(t, t:tmp("lj_t-gc2-vm-array-leaf"),
                       "t-gc2-vm-array-leaf.c", opts)
     end
