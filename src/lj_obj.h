@@ -741,6 +741,7 @@ LJ_STATIC_ASSERT((TABARRAY_FLAG_RETIRING & TABARRAY_ACAP_MASK) == 0);
 typedef struct TabArrayRetire {
   struct GCtab *tab;	/* Table that unpublished this array vector. */
   TValue *array;	/* Retired array vector, owned only when armed. */
+  uint64_t hold_control;  /* A tagged cutover still uses this record. */
   MSize acap;		/* Original array capacity for vector free. */
   uint64_t retire_epoch;  /* Safepoint epoch when retired. */
   uint32_t armed;	/* Array vector has been unpublished from its table. */
@@ -764,6 +765,9 @@ enum {
 #define TAB_RESIZE_DESC_F_VM_GUARD	0x00000004u
 #define TAB_RESIZE_DESC_F_VM_GUARD_RELEASED	0x00000008u
 #define TAB_RESIZE_DESC_F_HASH_CUTOVER	0x00000010u
+#define TAB_RESIZE_DESC_F_ARRAY_CUTOVER	0x00000020u
+#define TAB_RESIZE_DESC_F_RUNTIME_CUTOVER \
+  (TAB_RESIZE_DESC_F_HASH_CUTOVER | TAB_RESIZE_DESC_F_ARRAY_CUTOVER)
 
 /*
 ** Cold persistent identity for a helpable resize. The installed substrate
@@ -779,6 +783,9 @@ typedef struct TabResizeDesc {
   Node *oldnode;
   Node *newnode;	/* Completed hash migration, for helpable cutover. */
   TabNodeRetire *oldret;
+  TValue *newarray;
+  TabArrayRetire *oldaret;
+  int array_weak;
   uint64_t id;
   uint64_t stable_control;  /* Exact pre-install {owner, acap} word. */
   uint64_t retire_epoch;
@@ -1454,6 +1461,8 @@ static LJ_AINLINE int lj_tab_array_hdr_flags_try_or_rel(TValue *array,
   return 1;
 }
 
+LJ_FUNC void lj_tab_wait_array_retiring(const GCtab *t);
+
 static LJ_AINLINE MSize lj_tab_array_snapshot_acq(const GCtab *t,
 						  TValue **arrayp)
 {
@@ -1463,7 +1472,7 @@ retry_snapshot:
   asize = lj_tab_asize_acq(t);
   array = lj_tab_array_acq(t);
   if (lj_tab_array_is_retiring(t, array)) {
-    lj_tab_wait_no_l();
+    lj_tab_wait_array_retiring(t);
     goto retry_snapshot;
   }
   if (array && !lj_tab_array_is_colocated(t, array))
@@ -1488,7 +1497,7 @@ static LJ_AINLINE MSize lj_tab_array_separated_snapshot_acq(const GCtab *t,
 retry_snapshot:
   array = lj_tab_array_acq(t);
   if (lj_tab_array_is_retiring(t, array)) {
-    lj_tab_wait_no_l();
+    lj_tab_wait_array_retiring(t);
     goto retry_snapshot;
   }
   *arrayp = array;

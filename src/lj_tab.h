@@ -563,6 +563,7 @@ typedef void (*LJTabNewkeyReserveHook)(lua_State *L, GCtab *t,
 typedef void (*LJTabNewkeyPublishHook)(lua_State *L, GCtab *t,
 				       Node *nodebase, Node *anchor,
 				       Node *claimed, uint32_t stage);
+typedef void (*LJTabArrayCopyHook)(GCtab *t, MSize idx);
 typedef void (*LJTabResizeArrayHook)(lua_State *L, GCtab *t,
 				     TValue *oldarray, MSize oldasize);
 typedef void (*LJTabNextAfterKeyindexHook)(GCtab *t, uint32_t idx);
@@ -636,6 +637,7 @@ LJ_FUNC void lj_tab_test_set_resize_before_freeze_hook(
   LJTabResizeArrayHook hook);
 LJ_FUNC void lj_tab_test_set_resize_hash_cutover_hook(
   LJTabResizeArrayHook hook);
+LJ_FUNC void lj_tab_test_set_array_copy_hook(LJTabArrayCopyHook hook);
 LJ_FUNC void lj_tab_test_set_resize_colocated_after_freeze_hook(
   LJTabResizeArrayHook hook);
 LJ_FUNC void lj_tab_test_set_next_after_keyindex_hook(

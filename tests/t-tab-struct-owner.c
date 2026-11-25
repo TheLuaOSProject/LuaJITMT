@@ -50,6 +50,7 @@ typedef struct ResizeCtx {
 static GCtab *resize_hook_tab;
 static volatile int *resize_hook_entered;
 static volatile int *resize_hook_release;
+static pthread_t array_copy_owner;
 
 static int load_flag(volatile int *p)
 {
@@ -188,6 +189,29 @@ static void hash_cutover_mutate(lua_State *L, int read_first)
   lua_rawseti(L, 1, -3);
 }
 
+static void array_copy_hold_hook(GCtab *t, MSize idx)
+{
+  if (t != resize_hook_tab || idx != 1 ||
+      !pthread_equal(pthread_self(), array_copy_owner))
+    return;
+  store_flag(resize_hook_entered, 1);
+  while (!load_flag(resize_hook_release))
+    sched_yield();
+}
+
+static void array_migration_mutate(lua_State *L)
+{
+  lua_rawgeti(L, 1, 2);
+  assert(lua_tointeger(L, -1) == 22);
+  lua_pop(L, 1);
+  lua_pushnil(L);
+  lua_rawseti(L, 1, 1);
+  lua_pushinteger(L, 222);
+  lua_rawseti(L, 1, 2);
+  lua_pushinteger(L, 444);
+  lua_rawseti(L, 1, 64);
+}
+
 static void *resize_worker(void *arg)
 {
   ResizeCtx *ctx = (ResizeCtx *)arg;
@@ -211,6 +235,8 @@ static void *resize_worker(void *arg)
 
   if (ctx->clear)
     lj_tab_clear(L, t);
+  else if (ctx->mutate == 3)
+    array_migration_mutate(L);
   else if (ctx->mutate)
     hash_cutover_mutate(L, ctx->mutate == 2);
   else
@@ -539,6 +565,103 @@ static void exercise_hash_cutover_weak_value(lua_State *L)
   lua_pop(L, 1);
 }
 
+static void assert_array_migration_values(lua_State *L, int weak)
+{
+  lua_rawgeti(L, 1, 1);
+  assert(lua_isnil(L, -1));
+  lua_pop(L, 1);
+  lua_rawgeti(L, 1, 2);
+  assert(lua_tointeger(L, -1) == 222);
+  lua_pop(L, 1);
+  lua_rawgeti(L, 1, 3);
+  assert(weak ? lua_isnil(L, -1) : lua_istable(L, -1));
+  lua_pop(L, 1);
+  lua_rawgeti(L, 1, 4);
+  assert(lua_isstring(L, -1));
+  lua_pop(L, 1);
+  lua_rawgeti(L, 1, 64);
+  assert(lua_tointeger(L, -1) == 444);
+  lua_pop(L, 1);
+}
+
+static void exercise_array_migration_owner(lua_State *L, int weak)
+{
+  volatile int ready = 0, owner_start = 0, other_start = 0;
+  volatile int owner_done = 0, other_done = 0;
+  volatile int hook_entered = 0, hook_release = 0;
+  ResizeCtx owner = { 0 }, other = { 0 };
+  pthread_t other_thr;
+  GCtab *t;
+  TValue *oldarray, *nextarray;
+
+  lua_settop(L, 0);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 2, 0);
+  if (weak) {
+    lua_newtable(L);
+    lua_pushliteral(L, "v");
+    lua_setfield(L, -2, "__mode");
+    lua_setmetatable(L, 1);
+  }
+  t = tabV(L->top - 1);
+  lua_pushinteger(L, 11);
+  lua_rawseti(L, 1, 1);
+  lua_pushinteger(L, 22);
+  lua_rawseti(L, 1, 2);
+  lua_newtable(L);
+  lua_rawseti(L, 1, 3);
+  lua_pushliteral(L, "array migration pins string values");
+  lua_rawseti(L, 1, 4);
+  oldarray = lj_tab_array_acq(t);
+  assert(!lj_tab_array_is_colocated(t, oldarray));
+  owner.L = new_child_with_table(L, 1);
+  owner.ready = &ready;
+  owner.start = &owner_start;
+  owner.done = &owner_done;
+  owner.asize = 80;
+  owner.status = -1;
+  other.L = new_child_with_table(L, 1);
+  other.ready = &ready;
+  other.start = &other_start;
+  other.done = &other_done;
+  other.mutate = 3;
+  other.status = -1;
+  resize_hook_tab = t;
+  resize_hook_entered = &hook_entered;
+  resize_hook_release = &hook_release;
+  lj_tab_test_set_array_copy_hook(array_copy_hold_hook);
+  assert(pthread_create(&array_copy_owner, NULL, resize_worker, &owner) == 0);
+  assert(pthread_create(&other_thr, NULL, resize_worker, &other) == 0);
+  assert(wait_for_flag(&ready, 2, 1000000));
+  store_flag(&owner_start, 1);
+  assert(wait_for_flag(&hook_entered, 1, 1000000));
+  assert(lj_tab_array_acq(t) == oldarray);
+  assert(lj_tab_array_is_retiring(t, oldarray));
+  assert(lj_tab_resize_desc_control_acq(t) != NULL);
+  nextarray = lj_tab_array_nextgen_acq(oldarray);
+  assert(tvisnil(&nextarray[0]));
+  assert(tvisresizemarker(&nextarray[1]));
+
+  store_flag(&other_start, 1);
+  assert(wait_for_flag(&other_done, 1, 1000000));
+  assert(!load_flag(&owner_done));
+  assert(lj_tab_array_acq(t) == nextarray);
+  assert(lj_tab_resize_desc_control_acq(t) == NULL);
+  lua_rawgeti(L, 1, 1);
+  assert(lua_isnil(L, -1));
+  lua_pop(L, 1);
+
+  store_flag(&hook_release, 1);
+  assert(wait_for_flag(&owner_done, 1, 1000000));
+  assert(pthread_join(array_copy_owner, NULL) == 0 && owner.status == 0);
+  assert(pthread_join(other_thr, NULL) == 0 && other.status == 0);
+  lj_tab_test_set_array_copy_hook(NULL);
+  resize_hook_tab = NULL;
+  resize_hook_entered = NULL;
+  resize_hook_release = NULL;
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert_array_migration_values(L, weak);
+}
+
 static void exercise_resize_noop_owner(lua_State *L)
 {
   global_State *g = G(L);
@@ -627,6 +750,8 @@ int main(void)
   exercise_hash_cutover_owner(L, 0);
   exercise_hash_cutover_owner(L, 1);
   exercise_hash_cutover_weak_value(L);
+  exercise_array_migration_owner(L, 0);
+  exercise_array_migration_owner(L, 1);
   exercise_wait_stopreq(L);
 
   lua_close(L);

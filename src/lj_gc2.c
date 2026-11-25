@@ -3981,8 +3981,8 @@ static LJ_NOINLINE void gc2_mark_tab_retired_mem(global_State *g)
   gc2_root_cycle_guard_init(&guard, desc);
   while (desc != NULL && lj_gc2_mem_registered(g, desc)) {
     GCtab *t;
-    int hash_cutover = (lj_tab_resize_desc_flags_acq(desc) &
-			TAB_RESIZE_DESC_F_HASH_CUTOVER) != 0;
+    uint32_t cutover = lj_tab_resize_desc_flags_acq(desc) &
+      TAB_RESIZE_DESC_F_RUNTIME_CUTOVER;
     uint32_t phase = lj_tab_resize_desc_phase_acq(desc);
     nextdesc = lj_tab_resize_desc_next_acq(desc);
     (void)lj_gc2_markmem(g, desc);
@@ -3992,18 +3992,23 @@ static LJ_NOINLINE void gc2_mark_tab_retired_mem(global_State *g)
     ** cannot disappear while a helper resolves its descriptor id. Immutable
     ** vector/intent payload joins this scan before runtime markers are enabled.
     */
-    if (hash_cutover && phase == TAB_RESIZE_DESC_TERMINAL)
+    if (cutover && phase == TAB_RESIZE_DESC_TERMINAL)
       goto next_desc;
     t = lj_tab_resize_desc_tab_acq(desc);
     if (LJ_UNLIKELY(t == NULL || !lj_gc2_mem_registered(g, t))) {
       gc2_root_scan_retry(g);
       break;
     }
-    if (hash_cutover) {
+    if (cutover) {
       /* Protect the rebuilt vector even before the owner transfers control. */
       if (phase == TAB_RESIZE_DESC_INSTALLING ||
-	  phase == TAB_RESIZE_DESC_PUBLISHING)
-	(void)lj_gc2_markmem(g, lj_tab_node_hdrw(desc->newnode));
+	  phase == TAB_RESIZE_DESC_MIGRATING ||
+	  phase == TAB_RESIZE_DESC_PUBLISHING) {
+	if (cutover & TAB_RESIZE_DESC_F_ARRAY_CUTOVER)
+	  (void)lj_gc2_markmem(g, lj_tab_array_hdrw(desc->newarray));
+	else
+	  (void)lj_gc2_markmem(g, lj_tab_node_hdrw(desc->newnode));
+      }
       /* Detached production records are SMR metadata. Rooting their table
       ** through grace would keep an otherwise dead weak value visible. */
       if (lj_tab_resize_desc_maintain_held(g, desc))
@@ -4013,7 +4018,7 @@ static LJ_NOINLINE void gc2_mark_tab_retired_mem(global_State *g)
       (void)lj_gc2_preserve_sweep_root(g, obj2gco(t));
     else
       (void)lj_gc2_markobj(g, obj2gco(t));
-    if (!hash_cutover)
+    if (!cutover)
       (void)lj_tab_resize_desc_maintain_held(g, desc);
   next_desc:
     desc = nextdesc;
