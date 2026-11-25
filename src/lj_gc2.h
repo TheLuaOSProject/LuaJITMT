@@ -390,8 +390,8 @@ static LJ_AINLINE int lj_gc2_jit_reclaim_context_acq(global_State *g)
     return 0;
   phase = gc2_phase_acq(g);
   worker = gc2_worker_active_acq(g);
-  return (phase == LJ_GC2_IDLE && worker == 0 &&
-	  mode == LJ_GC2_SMR_META_EXCLUSIVE) ||
+  return (phase == LJ_GC2_IDLE && mode == LJ_GC2_SMR_META_EXCLUSIVE &&
+	  (worker == 0 || lj_gc2_reclaim_context_held(g))) ||
 	 (phase == LJ_GC2_SWEEP && worker != 0 &&
 	  mode == LJ_GC2_SMR_SWEEP_STABLE);
 }

@@ -3742,8 +3742,11 @@ static LJ_AINLINE LJThrGC2TLS *gc2_tls_current(void)
 static LJ_AINLINE int gc2_reclaim_tls_active_state(const LJThrGC2TLS *tls,
 						    global_State *g)
 {
-  return g && tls && tls->reclaim_g == g &&
-	 lj_gc2_jit_reclaim_context_acq(g);
+  /* Published only after exclusive admission and cleared before release.
+  ** A worker which sampled OPEN earlier may temporarily set worker_active
+  ** before its second gate check rejects the claim. It cannot use the heap
+  ** or revoke this owner's proof during that interval. */
+  return g && tls && tls->reclaim_g == g;
 }
 
 static LJ_AINLINE int gc2_smr_reader_tls_active_state(const LJThrGC2TLS *tls,
@@ -3877,9 +3880,8 @@ int lj_gc2_mem_registered_known_reclaim_held(global_State *g, const void *p)
     return 0;
   if (la_load32_acq(&g->allocf_arena) == 0)
     return 1;
-  /* The typed context proves smr_reclaiming plus either IDLE/worker0 or
-  ** SWEEP/worker-owned authority. The TLS marker is the non-transferable proof
-  ** that this caller won that exact CAS rather than merely observing it. */
+  /* Only the thread that completed IDLE or SWEEP admission may inspect the
+  ** retained body without a reader. */
   if (!gc2_reclaim_tls_active(g))
     return 0;
   /* The caller's retained list/body ticket makes this header dereference legal.
@@ -7303,7 +7305,7 @@ static LJ_AINLINE int gc2_reclaim_retired_ready(global_State *g)
 {
   return la_load8_acq(&g->gc.state) == GCSpause &&
 	 gc2_phase_acq(g) == LJ_GC2_IDLE &&
-	 gc2_worker_active_acq(g) == 0 &&
+	 (gc2_worker_active_acq(g) == 0 || gc2_reclaim_tls_active(g)) &&
 	 gc2_assist_active_acq(g) == 0 &&
 	 gc2_weak_drain_active_acq(g) == 0 &&
 	 gc2_weak_write_active_acq(g) == 0 &&

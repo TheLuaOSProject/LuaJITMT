@@ -5,6 +5,7 @@
 */
 
 #include <assert.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -60,6 +61,55 @@ static void drain_mark_work(global_State *g)
   assert(lj_gc2_test_ssb_empty(g));
 }
 
+typedef struct ClaimOverlap {
+  global_State *g;
+  void *body;
+  pthread_barrier_t barrier;
+} ClaimOverlap;
+
+static void *losing_worker(void *ud)
+{
+  ClaimOverlap *race = (ClaimOverlap *)ud;
+  uint32_t expected = 0;
+  /* Separate the preflight, provisional CAS and rollback in
+  ** gc2_worker_claim_mode so the admitted IDLE owner spans the collision. */
+  assert(gc2_smr_reclaiming_acq(race->g) == LJ_GC2_SMR_OPEN);
+  pthread_barrier_wait(&race->barrier);
+  pthread_barrier_wait(&race->barrier);
+  assert(gc2_worker_active_cas(race->g, &expected, 1));
+  assert(gc2_smr_reclaiming_acq(race->g) == LJ_GC2_SMR_META_EXCLUSIVE);
+  assert(!lj_gc2_reclaim_context_held(race->g));
+  assert(!lj_gc2_jit_reclaim_context_acq(race->g));
+  assert(!lj_gc2_mem_registered_known_reclaim_held(race->g, race->body));
+  pthread_barrier_wait(&race->barrier);
+  pthread_barrier_wait(&race->barrier);
+  gc2_worker_active_rel(race->g, 0);
+  return NULL;
+}
+
+static void check_worker_overlap(global_State *g, void *body)
+{
+  pthread_t worker;
+  ClaimOverlap race;
+  race.g = g;
+  race.body = body;
+  assert(pthread_barrier_init(&race.barrier, NULL, 2) == 0);
+  assert(pthread_create(&worker, NULL, losing_worker, &race) == 0);
+  pthread_barrier_wait(&race.barrier);
+  assert(lj_gc2_test_idle_reclaim_enter(g));
+  pthread_barrier_wait(&race.barrier);
+  pthread_barrier_wait(&race.barrier);
+  assert(lj_gc2_reclaim_context_held(g));
+  assert(lj_gc2_jit_reclaim_context_acq(g));
+  assert(lj_gc2_mem_registered_known_reclaim_held(g, body));
+  lj_gc2_test_idle_reclaim_leave(g);
+  assert(gc2_jit_phase_gate_acq(g) == 1);
+  assert(!lj_gc2_reclaim_context_held(g));
+  pthread_barrier_wait(&race.barrier);
+  assert(pthread_join(worker, NULL) == 0);
+  assert(pthread_barrier_destroy(&race.barrier) == 0);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -97,6 +147,7 @@ int main(void)
   unmark_raw(live);
   unmark_raw(retired);
   unmark_raw(finreg);
+  check_worker_overlap(g, finreg);
 
   /* Model the exact ordinary IDLE retired-metadata writer collision. Local
   ** ownership covers each pre-CAS body; its published list/retirement protocol
