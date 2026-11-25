@@ -434,21 +434,19 @@ typedef struct GCcdataVar {
 
 #define cdataptr(cd)	((void *)((cd)+1))
 #define LJ_CDATA_CALLBACK_FREE	0x0001u
-/* Exact allocation byte tail (size modulo one arena cell). Coverage bits give
-** the cell span; these four immutable bits distinguish every byte extent inside
-** the final cell. Bit 0 remains the mutable callback-release flag. */
-#define LJ_CDATA_SIZE_TAIL_SHIFT	1u
-#define LJ_CDATA_SIZE_TAIL_MASK	0x001eu
-static LJ_AINLINE uint16_t cdata_size_tail_flags(size_t size)
+/* The upper 15 bits hold the exact size of every small allocation. Huge
+** mappings also have their full byte extent in the allocator registry. */
+#define LJ_CDATA_SIZE_SHIFT	1u
+#define LJ_CDATA_SIZE_MASK	0xfffeu
+static LJ_AINLINE uint16_t cdata_size_flags(size_t size)
 {
-  return (uint16_t)(((uint16_t)(size & 15u)) <<
-		    LJ_CDATA_SIZE_TAIL_SHIFT);
+  return (uint16_t)((uint16_t)size << LJ_CDATA_SIZE_SHIFT);
 }
 
-static LJ_AINLINE int cdata_size_tail_matches(const GCcdata *cd, size_t size)
+static LJ_AINLINE int cdata_size_matches(const GCcdata *cd, size_t size)
 {
-  return (la_load16_acq(&cd->flags) & LJ_CDATA_SIZE_TAIL_MASK) ==
-    cdata_size_tail_flags(size);
+  return (la_load16_acq(&cd->flags) & LJ_CDATA_SIZE_MASK) ==
+    cdata_size_flags(size);
 }
 static LJ_AINLINE uint16_t cdata_flags_acq(const GCcdata *cd)
 {

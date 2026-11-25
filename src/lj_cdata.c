@@ -72,7 +72,7 @@ GCcdata *lj_cdata_newv(lua_State *L, CTypeID id, CTSize sz, CTSize align)
   g = G(L);
   cd->gct = ~LJ_TCDATA;
   cd->ctypeid = id;
-  cdata_flags_rel(cd, cdata_size_tail_flags(allocsz));
+  cdata_flags_rel(cd, cdata_size_flags(allocsz));
   newwhite(g, obj2gco(cd));
   lj_obj_addgcflags(obj2gco(cd), 0x80);
   if (LJ_UNLIKELY(!lj_mem_publish_interior_cdata(L, p, allocsz))) {
@@ -155,7 +155,7 @@ int lj_cdata_validate(global_State *g, GCcdata *cd, void **basep,
       return 0;
     base = cd;
     size = (GCSize)(sizeof(GCcdata) + sz);
-    if (!cdata_size_tail_matches(cd, (size_t)size))
+    if (!cdata_size_matches(cd, (size_t)size))
       return 0;
     if (basep) *basep = base;
     if (sizep) *sizep = size;
@@ -187,7 +187,7 @@ int lj_cdata_validate(global_State *g, GCcdata *cd, void **basep,
     }
     base = cd;
   }
-  if (!cdata_size_tail_matches(cd, (size_t)size))
+  if (!cdata_size_matches(cd, (size_t)size))
     return 0;
   if (basep) *basep = base;
   if (sizep) *sizep = size;

@@ -1615,9 +1615,10 @@ static int gc2_worker_claim_count_busy(global_State *g)
 static int gc2_small_cdata_span_exact(GCArena *a, uint32_t start,
 				       GCcdata *cd, GCSize size)
 {
-  uint32_t cells, i, end;
+  uint32_t cells, i;
+  LJ_STATIC_ASSERT(LJ_HUGE_THRESHOLD <= (LJ_CDATA_SIZE_MASK >> LJ_CDATA_SIZE_SHIFT));
   if (!a || !cd || size > LJ_HUGE_THRESHOLD ||
-      !cdata_size_tail_matches(cd, (size_t)size))
+      !cdata_size_matches(cd, (size_t)size))
     return 0;
   cells = lj_arena_ncells((size_t)size);
   if (cells == 0 || start + cells > LJ_ARENA_CELLS)
@@ -1629,14 +1630,9 @@ static int gc2_small_cdata_span_exact(GCArena *a, uint32_t start,
 		    lj_arena_bm_get(a->mark, cell))))
       return 0;
   }
-  end = start + cells;
-  /* At the exact end either the next allocation/free-run boundary starts, or
-  ** cdata coverage stops. Adjacent cdata allocations are distinguished by
-  ** their block boundary even though both coverage ranges contain one bits. */
-  if (end < LJ_ARENA_CELLS &&
-      !lj_arena_bm_get(a->block, end) && !lj_arena_bm_get(a->mark, end) &&
-      lj_arena_cdata_get(a, end))
-    return 0;
+  /* All observations belong to this retained allocation. A neighboring
+  ** cdata constructor can publish its block and coverage between any two
+  ** loads; neither plane in the next cell describes this object's extent. */
   return 1;
 }
 
@@ -17436,14 +17432,14 @@ static int gc2_retained_candidate_valid(global_State *g, GCobj *o,
 	CTSize payload;
 	/* Lexer/bytecode bootstrap uses only immutable predefined fixed types.
 	** Coverage identifies the cdata family, but exact bytes still come from
-	** this authoritative table plus the header tail encoding. */
+	** this authoritative table and the allocation size in the header. */
 	if (cdataisv(gco2cd(o)) ||
 	    ((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0 ||
 	    !gc2_predefined_ctype_payload_size(gco2cd(o)->ctypeid, &payload) ||
 	    payload > LJ_MAX_MEM32 - sizeof(GCcdata))
 	  return 0;
 	size = (GCSize)(sizeof(GCcdata) + payload);
-	if (!cdata_size_tail_matches(gco2cd(o), (size_t)size) ||
+	if (!cdata_size_matches(gco2cd(o), (size_t)size) ||
 	    (a ? !gc2_small_cdata_span_exact(a, start, gco2cd(o), size) :
 		  (size_t)size != alloc_size))
 	  return 0;

@@ -64,7 +64,7 @@ static LJ_AINLINE GCcdata *lj_cdata_new_l(lua_State *L, CTState *cts,
   }
   cd->gct = ~LJ_TCDATA;
   cd->ctypeid = checked;
-  cdata_flags_rel(cd, cdata_size_tail_flags(sizeof(GCcdata) + sz));
+  cdata_flags_rel(cd, cdata_size_flags(sizeof(GCcdata) + sz));
   newwhite(g, obj2gco(cd));
   if (LJ_UNLIKELY(!lj_mem_publish_cdata(
 	L, cd, (GCSize)(sizeof(GCcdata) + sz), 0))) {
@@ -92,7 +92,7 @@ static LJ_AINLINE GCcdata *lj_cdata_new_(lua_State *L, CTypeID id, CTSize sz)
   }
   cd->gct = ~LJ_TCDATA;
   cd->ctypeid = id;
-  cdata_flags_rel(cd, cdata_size_tail_flags(sizeof(GCcdata) + sz));
+  cdata_flags_rel(cd, cdata_size_flags(sizeof(GCcdata) + sz));
   newwhite(g, obj2gco(cd));
   if (LJ_UNLIKELY(!lj_mem_publish_cdata(
 	L, cd, (GCSize)(sizeof(GCcdata) + sz), 0))) {

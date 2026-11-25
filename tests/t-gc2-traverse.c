@@ -285,7 +285,7 @@ static void test_cdata_exact_coverage_admission(lua_State *L,
 
   lj_gc2_mark_begin(g);
   /* INT8 and INT64 bodies occupy the same two 16-byte cells here. Coverage
-  ** alone would overaccept the forged larger CType; byte-tail metadata must
+  ** alone would overaccept the forged larger CType; the recorded size must
   ** reject it without setting the allocation mark. */
   cd->ctypeid = CTID_INT64;
   assert(lj_gc2_markobj_status(g, obj2gco(cd), NULL) < 0);

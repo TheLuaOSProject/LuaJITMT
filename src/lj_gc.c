@@ -2317,7 +2317,7 @@ static GCobj *gc2_sweep_cell_obj(global_State *g, GCArena *a,
       if (lj_cdata_validate(g, gco2cd(o), &realbase, &size) &&
 	  realbase == (void *)base && size <= bytes &&
 	  lj_arena_ncells(size) == end - cell &&
-	  cdata_size_tail_matches(gco2cd(o), (size_t)size))
+	  cdata_size_matches(gco2cd(o), (size_t)size))
 	return o;
     }
     /* If the base is not an exact fixed cdata header, allocation-owned prefix
@@ -2333,7 +2333,7 @@ static GCobj *gc2_sweep_cell_obj(global_State *g, GCArena *a,
 	  lj_cdata_validate(g, cd, &realbase, &size) &&
 	  realbase == (void *)base && size <= bytes &&
 	  lj_arena_ncells(size) == end - cell &&
-	  cdata_size_tail_matches(cd, (size_t)size))
+	  cdata_size_matches(cd, (size_t)size))
 	return obj2gco(cd);
     }
   }
