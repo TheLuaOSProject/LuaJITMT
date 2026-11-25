@@ -140,6 +140,18 @@ static void *handshake_main(void *arg)
   return NULL;
 }
 
+typedef struct OwnerWait {
+  lua_State *target;
+  uint32_t owner;
+} OwnerWait;
+
+static void *wait_for_owner(void *arg)
+{
+  OwnerWait *wait = (OwnerWait *)arg;
+  (void)lj_state_owner_wait(NULL, wait->target, wait->owner, -1);
+  return NULL;
+}
+
 static void *id_stress_main(void *arg)
 {
   IdStressCtx *ctx = (IdStressCtx *)arg;
@@ -256,6 +268,8 @@ int main(void)
   {
     lua_State *Lclaim = lua_newthread(L);
     uint32_t owner = lj_thr_current_id(g);
+    OwnerWait wait = { Lclaim, owner };
+    LJThr waiter = { 0 };
     uint64_t dirty0;
     assert(owner == tg->tid);
     assert(lj_state_owner_acq(Lclaim) == 0);
@@ -266,6 +280,19 @@ int main(void)
     lj_state_release(Lclaim, owner);
     assert(lj_state_owner_acq(Lclaim) == 0);
     assert(lj_tg_stack_dirty_epoch_acq(tg) == dirty0 + 1u);
+    assert(la_load32_acq(&Lclaim->owner_wait_seq) == 0);
+    assert(lj_state_claim(Lclaim, owner));
+    assert(lj_thr_create(&waiter, wait_for_owner, &wait) == 0);
+    while (la_load32_acq(&Lclaim->owner_wait_seq) != 1u)
+      la_cpu_pause();
+    /* Release may beat the kernel wait. The armed generation must still
+    ** complete and this infinite-timeout waiter must observe the wake. */
+    lj_state_release(Lclaim, owner);
+    assert(lj_thr_join(&waiter, NULL) == 0);
+    assert(la_load32_acq(&Lclaim->owner_wait_seq) == 2u);
+    assert(lj_state_claim(Lclaim, owner));
+    lj_state_release(Lclaim, owner);
+    assert(la_load32_acq(&Lclaim->owner_wait_seq) == 2u);
     lua_pop(L, 1);
   }
 

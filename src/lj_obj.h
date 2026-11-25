@@ -2963,8 +2963,8 @@ static LJ_AINLINE void hookcount_reset(global_State *g)
   hookcount_store(g, hookcstart_load(g));
 }
 
-/* One exact lua_State mutator claim. The low half remains the futex-visible
-** logical TG id/sentinel; the high half is the process-issued physical
+/* One exact lua_State mutator claim. The low half holds the logical TG
+** id/sentinel; the high half is the process-issued physical
 ** OS-thread actor. A normal owner is authoritative only when both halves
 ** match its TG. Protocol sentinels retain the exact scanner/reclaimer actor;
 ** only the ownerless state is the all-zero word. */
@@ -2991,6 +2991,7 @@ struct lua_State {
   TGState *tg_hint;	/* Owning/running TG block, if attached. */
   LJStateOwner thr_owner;  /* Atomic {actor32, TG tid32} claim. */
   uint32_t grayagain_cycle;  /* Classic-GC grayagain membership cycle. */
+  uint32_t owner_wait_seq;  /* Even when idle, odd when an owner waiter arms. */
   uint64_t scan_epoch;	/* Last thread-snapshot generation scanned. */
   uint64_t scan_dirty_epoch;  /* Owner stack-dirty stamp at last scan. */
   uint64_t scan_handoff_epoch;  /* Thread generation requesting owner scan. */
@@ -3073,12 +3074,6 @@ static LJ_AINLINE void lj_state_owner_rel(lua_State *L, uint32_t owner)
   lj_state_owner_word_rel(L, lj_state_owner_pack(owner, actor));
 }
 
-static LJ_AINLINE uint32_t *lj_state_owner_futex_word(lua_State *L)
-{
-  /* thr_owner's numeric low half contains tid on every target. */
-  return (uint32_t *)((char *)&L->thr_owner + LJ_ENDIAN_SELECT(0, 4));
-}
-
 static LJ_AINLINE uint32_t lj_state_grayagain_cycle_acq(const lua_State *L)
 {
   return la_load32_acq(&L->grayagain_cycle);
@@ -3097,16 +3092,12 @@ static LJ_AINLINE int lj_state_grayagain_cycle_cas(lua_State *L,
   return la_cas32(&L->grayagain_cycle, oldp, cycle, LA_ACQ_REL, LA_ACQ);
 }
 
-static LJ_AINLINE void lj_state_owner_futex_wait(lua_State *L,
-						 uint32_t owner,
-						 int64_t timeout_ns)
+static LJ_AINLINE void lj_state_owner_notify(lua_State *L)
 {
-  (void)la_futex_wait(lj_state_owner_futex_word(L), owner, timeout_ns);
-}
-
-static LJ_AINLINE void lj_state_owner_futex_wake(lua_State *L, int n)
-{
-  la_futex_wake(lj_state_owner_futex_word(L), n);
+  uint32_t seq = la_load32_acq(&L->owner_wait_seq);
+  if ((seq & 1u) && la_cas32(&L->owner_wait_seq, &seq, seq + 1u,
+			      LA_ACQ_REL, LA_ACQ))
+    la_futex_wake(&L->owner_wait_seq, 0x7fffffff);
 }
 
 static LJ_AINLINE uint64_t lj_state_scan_epoch_acq(const lua_State *L)

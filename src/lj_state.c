@@ -772,9 +772,7 @@ static LJStateOwner state_gcprep_transfer_to_current(lua_State *L)
     expect = owner;
     if (!lj_state_owner_word_cas(L, &expect, desired))
       return 0;
-    /* The numeric futex half is unchanged, so make any full-pair observer
-    ** sleeping on the sentinel re-evaluate the actor explicitly. */
-    lj_state_owner_futex_wake(L, 0x7fffffff);
+    lj_state_owner_notify(L);
   }
   return lj_thr_actor_current() == actor &&
     lj_state_owner_word_acq(L) == desired ? desired : 0;
@@ -1440,6 +1438,7 @@ static lua_State *state_new_withenv_at_anchor(lua_State *L, GCtab *env,
   lj_state_thread_registry_next_rel(L1, NULL);
   lj_state_gcprep_next_rel(L1, NULL);
   lj_state_owner_word_rel(L1, 0);
+  la_store32_rlx(&L1->owner_wait_seq, 0);
   lj_state_gcprep_state_store_rlx(L1, LJ_STATE_GCPREP_NONE);
   lj_state_grayagain_cycle_store_rlx(L1, 0);
   lj_state_scan_epoch_rel(L1, 0);

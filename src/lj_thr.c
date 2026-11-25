@@ -1758,9 +1758,8 @@ int lj_thr_main_close_claim(lua_State *L)
       abort();
     return 0;
   }
-  /* Actor-only migration leaves the low futex word unchanged. Wake owner
-  ** waiters explicitly so they re-evaluate the full claim. */
-  lj_state_owner_futex_wake(L, 0x7fffffff);
+  /* A new physical actor also completes a wait for the old claim. */
+  lj_state_owner_notify(L);
   if (lj_tg_actor_acq(tg) != actor ||
       lj_state_owner_word_acq(L) != desired ||
       lj_tg_actor_acq(tg) != actor)
@@ -1931,7 +1930,7 @@ int lj_state_resumeclaim(lua_State *L, uint32_t tid, LJStateClaim *claim)
   */
   if (claim && claim->release) {
     claim->tg_hint = L->tg_hint;
-    L->tg_hint = lj_thr_get_tg_fallback(G(L));
+    L->tg_hint = claim->owner_tg;
   }
   return 1;
 }
@@ -2047,11 +2046,8 @@ static int state_release_exact(lua_State *L, TGState *tg,
 	lj_tg_actor_acq(tg) != actor)
       abort();  /* Never continue cleanup after paired authority was lost. */
     lj_gc2_thread_owner_releasing(g, L, tid, 0);
-    /* Wake while the protocol sentinel still pins every byte of L. A waiter
-    ** which races after this wake either observes GCSCAN and yields, or its
-    ** old-tid futex comparison fails. Owner zero is therefore the final L
-    ** access and cannot race a terminal THREAD body reuse. */
-    lj_state_owner_futex_wake(L, 0x7fffffff);
+    /* Notify under the sentinel. Publishing owner zero is the final L access. */
+    lj_state_owner_notify(L);
     lj_state_owner_word_rel(L, 0);
   } else {
     if (tid != LJ_THREAD_GCSCAN && tid != LJ_THREAD_GCPREP)
@@ -2061,7 +2057,7 @@ static int state_release_exact(lua_State *L, TGState *tg,
     /* Protocol waiters never sleep on sentinel words. Wake first anyway so
     ** an old-tid waiter from a completed transfer is conservatively released,
     ** then make the exact CAS the final access to L. */
-    lj_state_owner_futex_wake(L, 0x7fffffff);
+    lj_state_owner_notify(L);
     if (!lj_state_owner_word_cas(L, &current, 0))
       return 0;
   }
@@ -2091,7 +2087,7 @@ static int state_release_cold_exact(global_State *g, lua_State *L,
   lj_gc2_thread_owner_releasing(g, L, tid, 1);
   /* Recovery is durable before this wake. As in the hot path, the sentinel
   ** keeps the address live and owner zero is the final body access. */
-  lj_state_owner_futex_wake(L, 0x7fffffff);
+  lj_state_owner_notify(L);
   lj_state_owner_word_rel(L, 0);
   return 1;
 }
@@ -2139,18 +2135,27 @@ uint32_t lj_state_owner_wait(lua_State *L, lua_State *target, uint32_t owner,
 			     int64_t ns)
 {
   TGState *tg = L ? L2TG(L) : lj_thr_tls_get();
-  uint32_t actions = 0;
+  LJStateOwner expected;
+  uint32_t seq, actions = 0;
   if (!target || owner == 0)
     return 0;
-  /* A releasing normal owner first publishes GCSCAN and wakes the old tid.
-  ** Never enqueue a futex waiter on either protocol sentinel: this closes the
-  ** wake-before-owner0 protocol even for a future caller using an infinite
-  ** timeout. A stale ordinary owner sample is rechecked immediately before
-  ** the kernel comparison; a concurrent sentinel CAS makes that comparison
-  ** fail instead of missing the preceding wake. */
   if (owner == LJ_THREAD_GCSCAN || owner == LJ_THREAD_GCPREP)
     return lj_thr_retry_yield(L);
-  if (lj_state_owner_acq(target) != owner)
+  expected = lj_state_owner_word_acq(target);
+  if (lj_state_owner_tid(expected) != owner)
+    return 0;
+  seq = la_load32_acq(&target->owner_wait_seq);
+  if (!(seq & 1u)) {
+    if (!la_cas32(&target->owner_wait_seq, &seq, seq + 1u, LA_ACQ_REL, LA_ACQ))
+      return 0;
+    seq++;
+  }
+  /* Order registration against the releasing owner's CAS to GCSCAN (or
+  ** its actor handoff) on the same atomic word. If we win, its acquire CAS
+  ** observes the armed generation. If we lose, retry without sleeping. The
+  ** kernel compares the generation, so a wake before syscall entry counts
+  ** even if the numeric owner id remains the same. */
+  if (!lj_state_owner_word_cas(target, &expected, expected))
     return 0;
   /*
   ** State-owner waits are native waits, not VM stalls. Mark the TG native so
@@ -2158,7 +2163,7 @@ uint32_t lj_state_owner_wait(lua_State *L, lua_State *target, uint32_t owner,
   */
   if (tg)
     lj_native_enter(tg);
-  lj_state_owner_futex_wait(target, owner, ns);
+  (void)la_futex_wait(&target->owner_wait_seq, seq, ns);
   if (L) {
     actions = lj_native_leave(L);
   } else if (tg) {
