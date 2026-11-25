@@ -2546,9 +2546,12 @@ int lj_str_gc2_sweep_pending(global_State *g)
 uint32_t lj_str_gc2_sweep_step(global_State *g, uint32_t limit)
 {
   uint32_t phase, n = 0;
+  uint32_t stride = limit == 1 ? 1 : LJ_STR_SWEEP_LINKS_PER_UNIT;
   StrTabHdr *hdr;
   if (!g || limit == 0 || gc2_phase_acq(g) != LJ_GC2_SWEEP)
     return 0;
+  if (limit > LJ_GC2_SWEEP_BATCH)
+    limit = LJ_GC2_SWEEP_BATCH;
   while (n < limit) {
     phase = lj_str_sweep_phase_acq(g);
     if (phase == LJ_STR_SWEEP_IDLE || phase == LJ_STR_SWEEP_DONE)
@@ -2596,12 +2599,22 @@ uint32_t lj_str_gc2_sweep_step(global_State *g, uint32_t limit)
       continue;
     }
     hdr = lj_str_sweep_hdr_acq(g);
-    if (phase == LJ_STR_SWEEP_TAG) {
+    if (phase == LJ_STR_SWEEP_TAG || phase == LJ_STR_SWEEP_UNLINK) {
+      uint32_t links = stride;
       if (LJ_UNLIKELY(!hdr || lj_str_tabh_acq(g) != hdr)) {
 	lj_str_gc2_sweep_abort(g);
 	break;
       }
-      n += str_sweep_tag_one(g, hdr);
+      /* Both directory passes visit every bucket and every live link.
+      ** A bulk worker unit advances a bounded group before lending the
+      ** native gate back. Grace and acquisition keep their own units. */
+      do {
+	if (phase == LJ_STR_SWEEP_TAG)
+	  (void)str_sweep_tag_one(g, hdr);
+	else
+	  (void)str_sweep_unlink_one(g, hdr);
+      } while (--links && lj_str_sweep_phase_acq(g) == phase);
+      n++;
       continue;
     }
     if (phase == LJ_STR_SWEEP_TAG_GRACE) {
@@ -2630,14 +2643,6 @@ uint32_t lj_str_gc2_sweep_step(global_State *g, uint32_t limit)
       }
       str_sweep_cursor_start(g, hdr, LJ_STR_SWEEP_UNLINK);
       n++;
-      continue;
-    }
-    if (phase == LJ_STR_SWEEP_UNLINK) {
-      if (LJ_UNLIKELY(!hdr || lj_str_tabh_acq(g) != hdr)) {
-	lj_str_gc2_sweep_abort(g);
-	break;
-      }
-      n += str_sweep_unlink_one(g, hdr);
       continue;
     }
     if (phase == LJ_STR_SWEEP_UNLINK_GRACE) {

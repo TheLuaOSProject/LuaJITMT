@@ -89,6 +89,7 @@ static LJ_AINLINE uintptr_t lj_str_canon_pack(StrCanonRec *rec,
 /* Active string retirement uses an exact Q reservation and owner scan
 ** certificates. The sole-actor path still uses batched retirement. */
 /* Bounded GC2 string-table subphase. */
+#define LJ_STR_SWEEP_LINKS_PER_UNIT 16u
 enum {
   LJ_STR_SWEEP_IDLE,
   LJ_STR_SWEEP_ACQUIRE,

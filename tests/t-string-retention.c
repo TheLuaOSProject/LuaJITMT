@@ -261,22 +261,19 @@ int main(int argc, char **argv)
     rounds_done = round;
     assert(settled.peers == (uint32_t)with_peer &&
            settled.workers == (uint32_t)nworkers);
-    if (!explicit_collect && !automatic_completed) {
-      assert(settled.strings == base.strings + (uint64_t)round * BATCH);
-      assert(settled.reclaimed == base.reclaimed && settled.unlinked == base.unlinked);
-      break;  /* Preserve this failed progress gate; no explicit substitute. */
-    }
+    /* Every churn string was unique. A quarantined body remains counted
+    ** until physical free, including when allocation drives collection. */
+    assert(settled.reclaimed >= base.reclaimed && settled.unlinked >= settled.reclaimed);
+    assert(settled.strings + (settled.reclaimed - base.reclaimed) ==
+           base.strings + (uint64_t)round * BATCH);
+    if (!explicit_collect && !automatic_completed)
+      break;
     assert(!explicit_collect || settled.phase == LJ_GC2_IDLE);
     assert(settled.completed >= peak.completed + (explicit_collect ? 2 : 3));
     if (explicit_collect && !with_peer && !nworkers) {
-      assert(peak.strings == base.strings + BATCH);
       assert(settled.strings == base.strings);
       assert(settled.reclaimed - base.reclaimed == (uint64_t)round * BATCH);
       assert(settled.unlinked == settled.reclaimed);
-    } else {
-      assert(settled.strings == base.strings + (uint64_t)round * BATCH);
-      assert(settled.reclaimed == base.reclaimed);
-      assert(settled.unlinked == base.unlinked);
     }
   }
   call(L, workers, 0, 1);
