@@ -376,9 +376,12 @@ local function run(n)
   end
   return keep, x
 end
-local f, x = run(30)
+-- First promotion can invalidate the recording that saw the original local.
+-- Give the recorder a second hot loop with the promoted representation.
+local n = 200
+local f, x = run(n)
 local self, fx = f()
-assert(self == f and fx == 30 and x == 30)
+assert(self == f and fx == n and x == n)
 ]=] .. trace_assert(opts)
 end
 
@@ -399,9 +402,10 @@ local src = function(n)
   return keep, x
 end
 local run = assert(loadstring(string.dump(src)))
-local f, x = run(30)
+local n = 200
+local f, x = run(n)
 local self, fx = f()
-assert(self == f and fx == 30 and x == 30)
+assert(self == f and fx == n and x == n)
 ]=] .. trace_assert(opts)
 end
 
