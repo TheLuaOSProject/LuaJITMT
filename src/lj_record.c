@@ -1574,6 +1574,100 @@ static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t,
 static int rec_mm_cdata_call_shared(jit_State *J, RecordIndex *ix, GCtab *mt);
 #endif
 
+#if LJ_HASFFI
+/* Either compare with a live trace constant or hand the method to a
+** recorder-owned root. A transient lookup failure never waits or polls. */
+static int rec_cdata_method_try(lua_State *L, GCstr *name, GCfunc *expected,
+			       TValue *root)
+{
+  global_State *g = G(L);
+  LJGC2Lease mtlease, methodlease;
+  GCtab *mt;
+  TValue mtv, method;
+  int matches = 0;
+  int retained = 0;
+  if (!lj_gc2_smr_read_try(g))
+    return 0;
+  mt = lj_basemt_it_acq(g, LJ_TCDATA);
+  if (mt) {
+    setgcVraw(&mtv, obj2gco(mt), LJ_TTAB);
+    if (lj_gc2_tv_lease_acquire(g, &mtv, &mtlease) == LJ_GC2_TV_EDGE_VALID) {
+      if (lj_tab_getstr_held_try(g, mt, name, &method) ==
+	    LJ_TAB_GC_LOOKUP_FOUND &&
+	  tvisfunc(&method) && lj_basemt_it_acq(g, LJ_TCDATA) == mt) {
+	if (!root) {
+	  /* The constant keeps the expected object alive. Compare raw
+	  ** identities without dereferencing the sampled function. */
+	  matches = gcval(&method) == obj2gco(expected);
+	} else if (LJ_GC2_INTERNAL_ALLOCATOR_ONLY &&
+		   lj_gc2_tv_lease_acquire(g, &method, &methodlease) ==
+		     LJ_GC2_TV_EDGE_VALID) {
+	  copyTVrel(L, root, &method);
+	  retained = matches = 1;
+	}
+      }
+      lj_gc2_lease_release(&mtlease);
+    }
+  }
+  lj_gc2_smr_read_leave(g);
+  if (retained) {
+    lj_gc_pubroot(L, root);
+    lj_gc2_lease_release(&methodlease);
+  }
+  return matches;
+}
+
+int lj_record_cdata_method_matches(lua_State *L, GCstr *name, GCfunc *expected)
+{
+  return rec_cdata_method_try(L, name, expected, NULL);
+}
+#endif
+
+#if LJ_HASFFI && LJ_TARGET_X64 && LJ_TARGET_LINUX
+/* Only the built-in arithmetic on two predefined boxed integers is
+** supported here. Custom methods and cdata references keep the generic VM
+** path, even when they would produce the same result at record time. */
+static int rec_mm_cdata_boxed_arith(jit_State *J, RecordIndex *ix, MMS mm)
+{
+  lua_State *L = J->L;
+  TGState *tg = L2TG(L);
+  GCstr *name;
+  TValue *root;
+  TRef func, matches;
+  CTypeID lhs, rhs;
+  uint32_t index;
+  if (!LJ_GC2_INTERNAL_ALLOCATOR_ONLY || mm < MM_add || mm > MM_mul ||
+      !tref_iscdata(ix->tab) || !tref_iscdata(ix->key))
+    return 0;
+  lhs = cdataV(&ix->tabv)->ctypeid;
+  rhs = cdataV(&ix->keyv)->ctypeid;
+  if ((lhs != CTID_INT64 && lhs != CTID_UINT64) ||
+      (rhs != CTID_INT64 && rhs != CTID_UINT64) ||
+      !lj_record_mt_runtime_shared(J2G(J), L))
+    return 0;
+  /* Only use existing anchor capacity. A cold allocation could otherwise
+  ** assist GC during an incomplete metamethod recording step. */
+  index = lj_tg_root_anchor_top_acq(tg);
+  if (index >= LJ_ROOT_SCAN_LIMIT || !lj_tg_root_anchor_slot_acq(tg, index))
+    lj_trace_err(J, LJ_TRERR_RECERR);
+  name = mmname_str(J2G(J), mm);
+  root = lj_tg_root_anchor_push(L, tg, niltv(L), &index);
+  if (!rec_cdata_method_try(L, name, NULL, root) ||
+      lj_func_ffid_acq(funcV(root)) != FF_ffi_meta___add + mm - MM_add) {
+    lj_tg_root_anchor_pop(tg, index);
+    lj_trace_err(J, LJ_TRERR_RECERR);
+  }
+  func = lj_ir_kfunc(J, funcV(root));
+  copyTV(L, &ix->mobjv, root);
+  lj_tg_root_anchor_pop(tg, index);
+  matches = lj_ir_call(J, IRCALL_lj_record_cdata_method_matches,
+		       lj_ir_kstr(J, name), func);
+  emitir(IRTGI(IR_NE), matches, lj_ir_kint(J, 0));
+  ix->mobj = func;
+  return 1;
+}
+#endif
+
 /* Record metamethod lookup. */
 int lj_record_mm_lookup(jit_State *J, RecordIndex *ix, MMS mm)
 {
@@ -1679,6 +1773,10 @@ nocheck:
 /* Record call to arithmetic metamethod. */
 static TRef rec_mm_arith(jit_State *J, RecordIndex *ix, MMS mm)
 {
+  int boxed_arith = 0;
+#if LJ_HASFFI && LJ_TARGET_X64 && LJ_TARGET_LINUX
+  boxed_arith = rec_mm_cdata_boxed_arith(J, ix, mm);
+#endif
   /* Set up metamethod call first to save ix->tab and ix->tabv. */
   BCReg func = rec_mm_prep(J, mm == MM_concat ? lj_cont_cat : lj_cont_ra);
   TRef *base = J->base + func;
@@ -1686,6 +1784,8 @@ static TRef rec_mm_arith(jit_State *J, RecordIndex *ix, MMS mm)
   base[1+LJ_FR2] = ix->tab; base[2+LJ_FR2] = ix->key;
   copyTV(J->L, basev+1+LJ_FR2, &ix->tabv);
   copyTV(J->L, basev+2+LJ_FR2, &ix->keyv);
+  if (boxed_arith)
+    goto ok;
   if (!lj_record_mm_lookup(J, ix, mm)) {  /* Lookup mm on 1st operand. */
     if (mm != MM_unm) {
       ix->tab = ix->key;

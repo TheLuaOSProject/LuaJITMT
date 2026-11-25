@@ -207,6 +207,7 @@ typedef struct CCallInfo {
   _(ANY,	lj_tab_getnil_nometa_rooted_try, 4, S, INT, CCI_L|CCI_T) \
   _(ANY,	lj_tab_getscalar_rooted_try, 4, S, INT, CCI_L|CCI_T) \
   _(FFI,	lj_tab_cmpcdata_kgc_rooted_try, 4, S, INT, CCI_L|CCI_T) \
+  _(FFI,	lj_record_cdata_method_matches, 3, S, INT, CCI_L) \
   _(ANY,	lj_tab_gettv_forjit,	4,   S, PGC, CCI_L|CCI_T) \
   _(ANY,	lj_tab_storetv_forjit_array_nogc, 5, S, PGC, CCI_L|CCI_T) \
   _(ANY,	lj_tab_storetv_forjit_array, 5, S, PGC, CCI_L|CCI_T) \

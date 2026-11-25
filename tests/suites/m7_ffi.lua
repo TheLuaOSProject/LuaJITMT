@@ -577,6 +577,7 @@ return function(add)
       -- The larger ABI catalogue below proves the same generic recorder across
       -- the complete admitted scalar and boxed result matrix.
       run_luajit_script(t, "t-ffi-callxs-production.lua")
+      run_luajit_script(t, "t-x64-jit-boxed-arithmetic.lua")
       run_luajit_script(t, "t-ffi-ccall-temp-roots.lua", nil, {
         env = { LJ_M7_FFI_CCALL_ROOT_SO = root_so },
         timeout = "60s"

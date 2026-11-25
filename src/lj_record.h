@@ -54,6 +54,10 @@ LJ_FUNC void lj_record_tailcall(jit_State *J, BCReg func, ptrdiff_t nargs);
 LJ_FUNC void lj_record_ret(jit_State *J, BCReg rbase, ptrdiff_t gotresults);
 
 LJ_FUNC int lj_record_mm_lookup(jit_State *J, RecordIndex *ix, MMS mm);
+#if LJ_HASFFI
+LJ_FUNC int lj_record_cdata_method_matches(lua_State *L, GCstr *name,
+					  GCfunc *expected);
+#endif
 LJ_FUNC TRef lj_record_idx(jit_State *J, RecordIndex *ix);
 LJ_FUNC int lj_record_mt_shared_tab(jit_State *J, TRef tab);
 LJ_FUNC TRef lj_record_tab_len(jit_State *J, TRef tab);
