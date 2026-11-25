@@ -344,6 +344,7 @@ typedef struct PausedTopology {
   uint32_t stage;
   uint32_t stopped;
   uint32_t release;
+  uint32_t returned;
   uint32_t done;
 } PausedTopology;
 
@@ -395,6 +396,7 @@ static void *move_string_worker(void *ud)
     lj_str_resize(p->peer, p->target_mask);
   else
     assert(lj_str_new(p->peer, p->trigger, p->trigger_len)->dense_valid == 1);
+  la_store32_rel(&p->returned, 1);
   lj_threading_detach(p->peer, 1);
   la_store32_rel(&p->done, 1);
   return NULL;
@@ -582,7 +584,7 @@ static void exercise_paused_allocation_pressure(void)
   StrTabHdr *target;
   LJThr peer = { 0 };
   MSize count, before, i;
-  uint32_t waits;
+  uint32_t waits, mode = LJ_GC2_SMR_OPEN;
   int anchors;
   char bytes[64];
   assert(L);
@@ -591,11 +593,14 @@ static void exercise_paused_allocation_pressure(void)
   pause.observer = L;
   pause.peer = lua_newthread(L);
   pause.hdr = lj_str_tabh_acq(g);
+  lj_str_resize(L, (pause.hdr->mask << 1) + 1u);
+  pause.hdr = lj_str_tabh_acq(g);
   assert(!lj_str_second_acq(g));
   pause.target_mask = (pause.hdr->mask << 1) + 1u;
   pause.stage = LJ_STR_TEST_CANON_EXPAND_FROZEN;
   count = 2u * (pause.target_mask + 1u);
   lua_createtable(L, (int)count, 0);
+  assert(lj_str_retired_head_acq(g));
   anchors = lua_gettop(L);
   paused_topology = &pause;
   lj_str_test_set_canon_hook(pause_moved_string);
@@ -605,6 +610,11 @@ static void exercise_paused_allocation_pressure(void)
   assert(la_load32_acq(&pause.stopped) && !la_load32_acq(&pause.done));
   target = lj_str_expand_to_acq(pause.hdr);
   assert(target && lj_str_tabh_acq(g) == pause.hdr);
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(lj_gc2_reclaim_retired(g, lj_gc2_retire_epoch(g) + 1u) != 0);
+  assert(lj_str_retired_head_acq(g) == NULL);
+  assert(lj_str_tabh_acq(g) == pause.hdr);
+  assert(lj_str_expand_to_acq(pause.hdr) == target);
 
   lj_str_flush_num_credit(g, L2TG(L));
   before = lj_str_num_acq(g);
@@ -625,8 +635,19 @@ static void exercise_paused_allocation_pressure(void)
   assert(la_load32_acq(&target->copy_cursor) == 0);
   assert(lj_str_tabh_acq(g) == pause.hdr && !la_load32_acq(&pause.done));
   assert(pause.allocations == 0);
+
+  /* Model a metadata reader refusal at the old helper's final handoff.
+  ** It must drop the source pin and return without dereferencing raw state. */
+  assert(gc2_smr_reclaiming_cas(g, &mode, LJ_GC2_SMR_META_EXCLUSIVE));
   la_store32_rel(&pause.release, 1);
+  for (waits = 0; waits < 50000u && !la_load32_acq(&pause.returned); waits++)
+    test_sleep_without_tg(100000);
+  assert(la_load32_acq(&pause.returned));
+  assert(lj_str_tabh_acq(g) == pause.hdr && gc2_smr_readers_acq(g) == 0);
+  gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
   assert(lj_thr_join(&peer, NULL) == 0);
+  lua_pushlstring(L, bytes, strlen(bytes));
+  lua_pop(L, 1);
   assert(lj_str_tabh_acq(g) == target);
   lj_str_test_set_canon_hook(NULL);
   paused_topology = NULL;

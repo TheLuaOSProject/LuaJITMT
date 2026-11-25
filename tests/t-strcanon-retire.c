@@ -264,12 +264,13 @@ static void check_dual_generation_quarantine(void)
   assert(lj_str_tabh_acq(g) == source);
 
   /* Main-table lookup assists the frozen generation and then finds the
-  ** exact Q record for the removed key. The paused copy retains its SMR
-  ** scope, so no retirement pass can consume the record or body meanwhile. */
+  ** exact Q record for the removed key. The old header pin keeps this
+  ** exact close in flight while the reclaimer may free unrelated data. */
   lua_pushstring(L, rescued_name);
   assert(strV(L->top - 1) == rescued);
   assert(lj_str_canon_state(lj_str_canon_acq(rescued)) == LJ_STR_CANON_QRESCUED);
-  assert(lj_gc2_reclaim_retired(g, lj_gc2_retire_epoch(g)) == 0);
+  assert(gc2_smr_readers_acq(g) == 0);
+  (void)lj_gc2_reclaim_retired(g, lj_gc2_retire_epoch(g));
   assert(lj_str_canon_state(lj_str_canon_acq(old)) == LJ_STR_CANON_QCLOSING);
   assert(lj_str_tabh_acq(g) == source);
   la_store32_rel(&peer.release, 1);

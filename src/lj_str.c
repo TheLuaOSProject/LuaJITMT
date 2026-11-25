@@ -834,31 +834,41 @@ static int strtab_finish_ready_copy(global_State *g, StrTabHdr *source,
   return 1;
 }
 
-static void strtab_help_expand(lua_State *L, StrTabHdr *source,
-                               StrTabHdr *target, MSize until, int all)
+/* Consumes the caller's registry reader while copying under the exact
+** source pin. A return of zero means caller must drop all cached headers. */
+static int strtab_help_expand(lua_State *L, StrTabHdr *source,
+                              StrTabHdr *target, MSize until, int all)
 {
   global_State *g = G(L);
   TGState *tg = L2TG(L);
   int one = target->promote_bucket && !all;
+  int registry = 1;
   MSize cursor;
   if (one ? lj_str_link_load_acq(&target->bucket[until]) != LJ_STRHASH_FROZEN :
             la_load32_acq(&target->copy_cursor) <= until)
     goto finish;
   strtab_active_enter(tg, source);
   la_fence_seq();
-  if (lj_str_tabh_acq(g) == source) {
+  if (lj_str_tabh_acq(g) == source &&
+      la_load32_acq(&target->copy_cursor) > until) {
+    /* The ready-handoff fence observes this pin or we observe completion.
+    ** While the pin prevents handoff the current source roots the target,
+    ** and its topology claim excludes any destructive string sweep. */
+    lj_gc2_smr_read_leave(g);
     if (one) {
-      if (la_load32_acq(&target->copy_cursor) > until)
-        strtab_help_expand_bucket(L, source, target, until + 1u);
+      strtab_help_expand_bucket(L, source, target, until + 1u);
     } else {
       while ((cursor = la_load32_acq(&target->copy_cursor)) > until)
         strtab_help_expand_bucket(L, source, target, cursor);
     }
+    registry = lj_gc2_smr_read_try(g);
   }
   strtab_active_leave(tg, source);
 
 finish:
-  (void)strtab_finish_ready_copy(g, source, target);
+  if (registry)
+    (void)strtab_finish_ready_copy(g, source, target);
+  return registry;
 }
 
 /* Terminal shutdown joins mutators and collector workers before dropping
@@ -873,8 +883,8 @@ void lj_str_expand_terminal(lua_State *L)
     return;
   if (!lj_gc2_smr_read_try(g))
     abort();
-  strtab_help_expand(L, source, target, 0, 1);
-  lj_gc2_smr_read_leave(g);
+  if (strtab_help_expand(L, source, target, 0, 1))
+    lj_gc2_smr_read_leave(g);
   if (lj_str_tabh_acq(g) == source)
     abort();
 }
@@ -905,7 +915,8 @@ static StrTabHdr *strtab_enter_completed(lua_State *L, global_State *g,
         hashalg = 0;
       }
 #endif
-      strtab_help_expand(L, source, target, i & target->mask, 0);
+      if (!strtab_help_expand(L, source, target, i & target->mask, 0))
+        return NULL;
     } else {
       target = (StrTabHdr *)la_loadptr_acq((void *const *)&source->expand_to);
       if (i < la_load32_acq(&source->copy_cursor))
@@ -995,8 +1006,8 @@ restart:
       str_test_canon(L, NULL, NULL, LJ_STR_TEST_CANON_EXPAND_PUBLISHED);
 #endif
       lj_gc2_markmem(g, newhdr);
-      strtab_help_expand(L, oldhdr, newhdr, 0, 1);
-      lj_gc2_smr_read_leave(g);
+      if (strtab_help_expand(L, oldhdr, newhdr, 0, 1))
+        lj_gc2_smr_read_leave(g);
       return;
     }
     lj_gc2_smr_read_leave(g);
@@ -1205,8 +1216,8 @@ static LJ_NOINLINE int lj_str_rehash_chain(lua_State *L, StrHash hashc)
     return 0;
   }
   lj_gc2_markmem(g, target);
-  strtab_help_expand(L, source, target, 0, 1);
-  lj_gc2_smr_read_leave(g);
+  if (strtab_help_expand(L, source, target, 0, 1))
+    lj_gc2_smr_read_leave(g);
   lj_mem_account_deferred(L, size);
   return 1;
 }
