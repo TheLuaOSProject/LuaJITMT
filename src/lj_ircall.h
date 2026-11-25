@@ -222,6 +222,7 @@ typedef struct CCallInfo {
   _(ANY,	lj_tab_storenil_rooted,	3, S, INT, CCI_L|CCI_T) \
   _(ANY,	lj_tab_len_rooted_try, 2, S, INT, CCI_L) \
   _(ANY,	lj_tab_len_forjit_try, 2, S, INT, CCI_L) \
+  _(ANY,	lj_tab_nextscalar_forjit, 3, S, INT, CCI_L) \
   _(ANY,	lj_tab_keyindex,	2,  FL, INT, 0) \
   _(ANY,	lj_vm_next,		2,  FL, PTR, 0) \
   _(ANY,	lj_tab_len,		1,  FL, INT, 0) \

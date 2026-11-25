@@ -644,14 +644,33 @@ static void LJ_FASTCALL recff_next(jit_State *J, RecordFFData *rd)
     RecordIndex ix;
     cTValue *keyv;
     if (lj_record_mt_shared_tab(J, tab)) {
-      /*
-      ** Direct next() re-derives the cursor from the Lua key, but a shared
-      ** active-MT table can still change generation while exits/side traces
-      ** carry the traversal result through ordinary Lua calls. Abort recording
-      ** without stitching; a stitched fast-function chain can otherwise keep
-      ** replaying the same unguarded cursor boundary instead of returning to
-      ** the VM traversal helper.
-      */
+#if LJ_TARGET_X64 && LJ_TARGET_LINUX
+      TValue key, val;
+      TRef keyref = tref_isnil(J->base[1]) ? TREF_NIL : J->base[1];
+      cTValue *keyroot = keyref == TREF_NIL ? niltv(J->L) : &rd->argv[1];
+      int found = lj_tab_nextscalar_rooted_try(J->L, &rd->argv[0], keyroot,
+					      &key, &val, NULL);
+      if (found >= 0) {
+	TRef tableout = recff_tmpref(J, tab, IRTMPREF_IN1|IRTMPREF_OUT1);
+	TRef inkey = recff_tmpref(J, keyref, IRTMPREF_IN2);
+	TRef status = lj_ir_call(J, IRCALL_lj_tab_nextscalar_forjit,
+				 tableout, inkey);
+	/* Both the status and result-type exits replay the pure next()
+	** step with the original Lua operands. No raw cursor crosses them. */
+	emitir(IRTGI(IR_EQ), status, lj_ir_kint(J, found));
+	if (found) {
+	  J->base[0] = lj_record_vload(J, tableout, 1, itype2irt(&key));
+	  J->base[1] = lj_record_vload(J, tableout, 0, itype2irt(&val));
+	  rd->nres = 2;
+	} else {
+	  J->base[0] = TREF_NIL;
+	  rd->nres = 1;
+	}
+	return;
+      }
+#endif
+      /* Unsupported shapes and transient refusals use ordinary VM traversal.
+      ** Abort without stitching so the VM can handle this boundary. */
       lj_trace_err_info(J, LJ_TRERR_NYIFFU);
     }
     ix.tab = tab;

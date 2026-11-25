@@ -855,6 +855,15 @@ LJ_FUNCA int lj_tab_next(GCtab *t, cTValue *key, TValue *o);
 LJ_FUNCA int lj_tab_next_rooted(lua_State *L, cTValue *tabroot,
 				cTValue *keyroot, TValue *outkey,
 				TValue *outval, uint32_t *nextidx);
+/* Nonwaiting array-only next(). A hit writes scalar outputs and returns one,
+** a certified end returns zero, and refusal returns a negative status. */
+LJ_FUNC int lj_tab_nextscalar_rooted_try(lua_State *L, cTValue *tabroot,
+					cTValue *keyroot, TValue *outkey,
+					TValue *outval, uint32_t *nextidx);
+#if LJ_HASJIT
+LJ_FUNC int lj_tab_nextscalar_forjit(lua_State *L, TValue *tableout,
+				    cTValue *keyroot);
+#endif
 LJ_FUNCA int lj_tab_next_pair_rooted(lua_State *L, cTValue *tabroot,
 				     cTValue *keyroot, TValue *out);
 LJ_FUNCA int32_t LJ_FASTCALL lj_tab_itern_rooted(lua_State *L,

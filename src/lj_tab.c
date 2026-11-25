@@ -9305,9 +9305,9 @@ enum {
 /* A refused global SMR reader need not stop scalar array iteration. Retain
 ** small table/array allocations independently, never discover a GC result,
 ** and require the permanent nil hash node even for a terminal END. */
-static int tab_nextscalar_rooted_try(lua_State *L, cTValue *tabroot,
-				    cTValue *keyroot, TValue *outkey,
-				    TValue *outval, uint32_t *nextidx)
+int lj_tab_nextscalar_rooted_try(lua_State *L, cTValue *tabroot,
+				cTValue *keyroot, TValue *outkey,
+				TValue *outval, uint32_t *nextidx)
 {
   TabKeyedSlotOwnerSnapshot owner;
   LJGC2Lease table_lease = { 0 }, array_lease = { 0 };
@@ -9451,13 +9451,28 @@ retry:
   goto leave;
 }
 
+#if LJ_HASJIT
+/* A hit overwrites the two TG roots in the order consumed by VLOAD.
+** The cursor comes from an ordinary Lua key on every call. */
+int lj_tab_nextscalar_forjit(lua_State *L, TValue *tableout, cTValue *keyroot)
+{
+  TGState *tg = L2TG(L);
+  LJ_STATIC_ASSERT(offsetof(TGState, tmptv2) ==
+		   offsetof(TGState, tmptv) + sizeof(TValue));
+  if (LJ_UNLIKELY(!tg || tableout != &tg->tmptv))
+    return TAB_ROOTED_NEXT_RETRY;
+  return lj_tab_nextscalar_rooted_try(L, tableout, keyroot,
+				     &tg->tmptv2, tableout, NULL);
+}
+#endif
+
 #ifdef LJ_TAB_TEST_HELPERS
 int lj_tab_test_nextscalar_rooted_try(lua_State *L, cTValue *tabroot,
 				    cTValue *keyroot, TValue *outkey,
 				    TValue *outval, uint32_t *nextidx)
 {
-  return tab_nextscalar_rooted_try(L, tabroot, keyroot, outkey, outval,
-				 nextidx);
+  return lj_tab_nextscalar_rooted_try(L, tabroot, keyroot, outkey, outval,
+				     nextidx);
 }
 #endif
 
@@ -9622,8 +9637,8 @@ int lj_tab_next_rooted(lua_State *L, cTValue *tabroot, cTValue *keyroot,
       /* A prior L-aware wait may have moved every stack-backed output too. */
       TValue *curoutkey = outkeystack ? restorestack(L, outkeyofs) : outkey;
       TValue *curoutval = outvalstack ? restorestack(L, outvalofs) : outval;
-      status = tab_nextscalar_rooted_try(L, curtab, curkey, curoutkey,
-					curoutval, nextidx);
+      status = lj_tab_nextscalar_rooted_try(L, curtab, curkey, curoutkey,
+					   curoutval, nextidx);
       if (status != TAB_ROOTED_NEXT_RETRY)
 	return status;
       lj_tab_wait_l(L);

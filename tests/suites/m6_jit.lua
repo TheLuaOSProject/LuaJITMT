@@ -70,6 +70,7 @@ local m6_cases = {
   "m6_jit_xsave",
   "m6_jit_table_store_helper",
   "m6_jit_rooted_table_len",
+  "m6_jit_x64_next_scalar",
   "m6_jit_string_len_ir",
   "m6_jit_string_byte_ir",
   "m6_jit_rooted_read_ir",
@@ -2166,6 +2167,20 @@ assert(exits > 0, "active-MT rooted-length BC_LOOP never entered native code")
         end)
       else
         print("M6 JIT string byte requires native ARM64")
+      end
+    end
+  })
+
+  add({
+    name = "m6_jit_x64_next_scalar",
+    description = "active-MT x64 next() traces scalar array traversal",
+    run = function(t)
+      if jit.os == "Linux" and jit.arch == "x64" and t.target_arch == "x64" then
+        build_default(t)
+        luajit_file(t, t:path("tests", "t-x64-jit-next-scalar.lua"), {
+          lua_path = true,
+          timeout = "30s"
+        })
       end
     end
   })
