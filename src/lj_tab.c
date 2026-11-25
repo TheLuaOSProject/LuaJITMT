@@ -10876,6 +10876,68 @@ static LJ_AINLINE int tab_len_dense_current_held(GCtab *t, MSize *lenp,
   return TAB_LEN_DENSE_OK;
 }
 
+/* Complete the public table setter or leave the call for the interpreter. */
+int32_t lj_tab_setmetatable_rooted_try(lua_State *L, cTValue *tabroot,
+				      cTValue *newroot)
+{
+  TabKeyedSlotOwnerSnapshot owner;
+  LJGC2Lease table_lease = { 0 }, new_lease = { 0 }, old_lease = { 0 };
+  TValue tablev, newv, oldv, protection;
+  GCobj *expected;
+  GCtab *t, *old, *mt = NULL;
+  int32_t ok = 0;
+
+  if (!tab_keyed_slot_owner_snapshot(L, &owner) ||
+      !lj_gc2_smr_read_try(owner.g))
+    return 0;
+
+  lj_tv_load_acq(&tablev, tabroot);
+  lj_tv_load_acq(&newv, newroot);
+  if (!tvistab(&tablev) ||
+      lj_gc2_tv_lease_acquire(owner.g, &tablev, &table_lease) !=
+      LJ_GC2_TV_EDGE_VALID)
+    goto leave;
+  t = tabV(&tablev);
+  if (tvistab(&newv)) {
+    if (lj_gc2_tv_lease_acquire(owner.g, &newv, &new_lease) !=
+        LJ_GC2_TV_EDGE_VALID)
+      goto leave;
+    mt = tabV(&newv);
+  } else if (!tvisnil(&newv)) {
+    goto leave;
+  }
+
+  old = lj_tab_metatable_acq(t);
+  if (old) {
+    /* Retain the exact metatable captured from the receiver inside SMR.
+    ** A found value, including false, protects the table. A retry or an
+    ** unresolved slot must also side-exit before changing the receiver. */
+    setgcVraw(&oldv, obj2gco(old), LJ_TTAB);
+    if (lj_gc2_tv_lease_acquire(owner.g, &oldv, &old_lease) !=
+          LJ_GC2_TV_EDGE_VALID ||
+        lj_tab_getstr_held_try(owner.g, old, mmname_str(owner.g, MM_metatable),
+			       &protection) != LJ_TAB_GC_LOOKUP_ABSENT)
+      goto leave;
+  }
+  if (!tab_keyed_slot_owner_current(L, &owner))
+    goto leave;
+
+  if (mt)
+    lj_tab_nomm_rel(mt, 0);
+  /* Do not replace a different edge than the one checked for protection. */
+  expected = obj2gco(old);
+  ok = gcref_cas(&t->metatable, &expected, obj2gco(mt));
+
+leave:
+  lj_gc2_smr_read_leave(owner.g);
+  if (ok && mt)
+    lj_gc_pubtabobj(L, t, mt);
+  lj_gc2_lease_release(&old_lease);
+  lj_gc2_lease_release(&new_lease);
+  lj_gc2_lease_release(&table_lease);
+  return ok;
+}
+
 int32_t lj_tab_len_rooted_try(lua_State *L, cTValue *tabroot)
 {
   TabKeyedSlotOwnerSnapshot owner;

@@ -714,8 +714,8 @@ TRef LJ_FASTCALL lj_opt_fwd_fload(jit_State *J)
     ref = store->prev;
   }
 
-  /* No conflicting store: const-fold field loads from allocations. */
-  if (fid == IRFL_TAB_META) {
+  /* A call behind XBAR can have published a metatable on this allocation. */
+  if (fid == IRFL_TAB_META && J->chain[IR_XBAR] <= oref) {
     IRIns *ir = IR(oref);
     if (ir->o == IR_TNEW || ir->o == IR_TDUP)
       return lj_ir_knull(J, IRT_TAB);

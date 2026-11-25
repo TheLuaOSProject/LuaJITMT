@@ -318,6 +318,17 @@ static void LJ_FASTCALL recff_setmetatable(jit_State *J, RecordFFData *rd)
   if (tref_istab(tr) && (tref_istab(mt) || (mt && tref_isnil(mt)))) {
     TRef fref, mtref;
     RecordIndex ix;
+    if (lj_record_mt_runtime_shared(J2G(J), J->L)) {
+      TRef table = recff_tmpref(J, tr, IRTMPREF_IN1);
+      TRef meta = recff_tmpref(J, mt, IRTMPREF_IN2);
+      TRef ok = lj_ir_call(J, IRCALL_lj_tab_setmetatable_rooted_try,
+			  table, meta);
+      /* Refusal keeps the receiver edge unchanged. Replay the original
+      ** arguments so the interpreter can report a protected metatable. */
+      emitir(IRTGI(IR_NE), ok, lj_ir_kint(J, 0));
+      emitir(IRT(IR_XBAR, IRT_NIL), 0, 0);
+      return;  /* Pass through the original table at base[0]. */
+    }
     ix.tab = tr;
     copyTV(J->L, &ix.tabv, &rd->argv[0]);
     lj_record_mm_lookup(J, &ix, MM_metatable); /* Guard for no __metatable. */

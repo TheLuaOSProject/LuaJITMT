@@ -885,6 +885,8 @@ LJ_FUNCA MSize LJ_FASTCALL lj_tab_len(GCtab *t);
 enum {
   LJ_TAB_LEN_RETRY = -1
 };
+LJ_FUNC int32_t lj_tab_setmetatable_rooted_try(lua_State *L, cTValue *tabroot,
+					     cTValue *newroot);
 LJ_FUNC int32_t lj_tab_len_rooted_try(lua_State *L, cTValue *tabroot);
 /* Generated x64 active-MT length ABI. IR_TMPREF IN1 must place tabroot at the
 ** exact current TG tmptv. The active trace retains the table body globally;

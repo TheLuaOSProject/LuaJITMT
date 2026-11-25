@@ -1175,18 +1175,51 @@ print("jit-recursive-call-unroll OK")
     run = function(t)
       build_default(t)
       luajit_code(t, [=[
+local bit = require("bit")
 local threading = require("threading")
 local util = require("jit.util")
-jit.opt.start("hotloop=1","hotexit=1")
+local vmdef = require("jit.vmdef")
+local setmeta = setmetatable
+local function replace(t, mts, n)
+  local result
+  for i = 1, n do result = setmeta(t, mts[i]) end
+  return result
+end
+local function has_setmeta_call()
+  local info = util.traceinfo(1)
+  if not info or not util.tracemc(1) then return false end
+  for ref = 1, info.nins do
+    local _, ot, _, op2 = util.traceir(1, ref)
+    local op = bit.rshift(ot, 8)
+    if vmdef.irnames:sub(op * 6 + 1, op * 6 + 6) == "CALLS " and
+       vmdef.ircall[op2] == "lj_tab_setmetatable_rooted_try" then
+      return true
+    end
+  end
+  return false
+end
+jit.off(has_setmeta_call)
+jit.opt.start("hotloop=1", "hotexit=1")
 jit.off()
-local t={}
-local mts={}
-for i=1,80 do mts[i]={} end
+local t, mts = {}, {}
+for i = 1, 64 do mts[i] = {} end
 assert(threading.gcworkers(1) == 0)
 jit.on()
-for i=1,64 do setmetatable(t, mts[i]) end
+assert(replace(t, mts, 64) == t)
 assert(getmetatable(t) == mts[64])
 assert(util.traceinfo(1), "setmetatable loop did not trace")
+if jit.arch == "x64" then
+  assert(has_setmeta_call(), "setmetatable helper missing from native trace")
+end
+
+-- A compiled replacement must replay a protected call in the interpreter.
+local protected = { __metatable = false }
+setmeta(t, protected)
+local ok, err = pcall(replace, t, mts, 64)
+assert(not ok and err:find("cannot change a protected metatable", 1, true))
+assert(debug.getmetatable(t) == protected and getmetatable(t) == false)
+protected.__metatable = nil
+assert(setmeta(t, nil) == t and getmetatable(t) == nil)
 assert(threading.gcworkers(0) == 1)
 ]=], { timeout = "20s" })
 
