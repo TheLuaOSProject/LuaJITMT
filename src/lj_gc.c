@@ -5319,11 +5319,11 @@ uint32_t lj_gc_flush_root_pending(global_State *g)
     return 0;
   /* Pin the TG/HugeTab registry before the first pending-head xchg and retain
   ** it through validation and splice. The exclusive reclaimer already owns a
-  ** stronger exact-thread registry certificate; every other caller uses one
-  ** nonblocking ordinary reader. On admission loss leave the hint and every
-  ** per-TG chain untouched for a later flush. */
+  ** stronger exact-thread registry certificate. The chain validator checks
+  ** this thread's reader identity, so a caller inside a different universe's
+  ** read scope must leave the heads intact for a later flush. */
   reclaim_held = lj_gc2_reclaim_context_held(g);
-  if (!reclaim_held && !lj_gc2_smr_read_try(g))
+  if (!reclaim_held && !lj_gc2_smr_read_tracked_try(g))
     return 0;
   /*
   ** Once the hint is non-zero, clear it before scanning so a concurrent

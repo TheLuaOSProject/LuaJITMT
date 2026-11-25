@@ -909,6 +909,26 @@ static void test_terminal_root_unlink_bypasses_runtime_cap(lua_State *L)
   assert(lj_gc_linkobj(g, obj2gco(needle)) == LJ_GC_ROOT_LINKED);
 }
 
+static void test_independent_universe_flush(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  GCtab *object;
+  lua_State *other;
+  (void)lj_gc_flush_root_pending(g);
+  object = lj_tab_new(L, 0, 0);
+  assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(object));
+  other = luaL_newstate();
+  assert(other && lj_gc2_smr_read_tracked_try(G(other)));
+  assert(lj_gc_flush_root_pending(g) == 0);
+  assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(object));
+  assert(gc2_smr_readers_acq(g) == 0 && gc2_smr_readers_acq(G(other)) == 1);
+  lj_gc2_smr_read_leave(G(other));
+  assert(lj_gc_flush_root_pending(g) != 0);
+  assert(root_contains(g, obj2gco(object)));
+  lua_close(other);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -925,6 +945,7 @@ int main(void)
 #endif
   test_small_reanchor_commits_once(L);
   test_ordinary_retry(L);
+  test_independent_universe_flush(L);
 #if LJ_TARGET_X64 && LJ_GC64
   test_vm_tnew_retry(L);
 #endif
