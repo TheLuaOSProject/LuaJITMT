@@ -14,6 +14,7 @@
 #include "lualib.h"
 #include "lj_obj.h"
 #include "lj_gc.h"
+#include "lj_safepoint.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
 
@@ -57,12 +58,19 @@ static int hold_started(lua_State *L)
 static int prepare_mark(lua_State *L)
 {
   global_State *g = G(L);
+  unsigned round;
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   assert(lua_gc(L, LUA_GCSTEP, 1) == 0);
   assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  /* The peer is still free to acknowledge startup. Finish that exact
+  ** activation before parking it at the selected later boundary. */
+  for (round = 0; round < 5000 && gc2_mark_activation_request_acq(g); round++) {
+    (void)lj_safepoint_poll(L);
+    if (!lj_gc2_resumable_epoch_continue(g))
+      wait_briefly();
+  }
   assert(gc2_mark_activation_request_acq(g) == 0);
   if (initial_phase == LJ_GC2_WEAK) {
-    unsigned round;
     for (round = 0; round < 128 && gc2_phase_acq(g) == LJ_GC2_MARK; round++)
       (void)lua_gc(L, LUA_GCSTEP, 1);
     assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
