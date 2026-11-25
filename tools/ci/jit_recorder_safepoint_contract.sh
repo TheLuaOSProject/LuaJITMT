@@ -31,7 +31,7 @@ sed -n '/static void call_hot_poll/,/^}/p' \
   "$root/src/lj_dispatch.c" >"$hotcall"
 sed -n '/static uint32_t safepoint_signal_late/,/static int safepoint_native_ack_allowed/p' \
   "$root/src/lj_safepoint.c" >"$signal_late"
-sed -n '/uint32_t lj_safepoint_handshake/,/^}/p' \
+sed -n '/^static uint32_t safepoint_handshake(/,/^}/p' \
   "$root/src/lj_safepoint.c" >"$handshake"
 
 line_of() {
@@ -204,7 +204,8 @@ test "$signal_pause" -lt "$signal_poll"
 
 final_poll_clear=$(line_of "$handshake" 'safepoint_clear_consumed_polls(g, epoch)' 1)
 final_clean_note=$(line_of "$handshake" 'safepoint_test_signal_note_before_leader_leave(g, epoch)' 1)
-leader_leave=$(line_of "$handshake" 'safepoint_leader_leave(g, leader)' 1)
+leader_leave=$(awk -v start="$final_clean_note" \
+  'NR > start && /safepoint_leader_leave\(g, leader\)/ { print NR; exit }' "$handshake")
 test -n "$final_poll_clear" && test -n "$final_clean_note" && \
   test -n "$leader_leave"
 test "$final_poll_clear" -lt "$final_clean_note"
@@ -228,7 +229,10 @@ for vm in vm_x64.dasc vm_arm64.dasc; do
   sed -n '/|->vm_exit_interp:/,/|->vm_exit_rethrow:/p' \
     "$root/src/$vm" >"$block"
   clear=$(line_of "$block" 'jit_base' 1)
-  ack=$(line_of "$block" 'lj_safepoint_ack_check' 1)
+  case "$vm" in
+    vm_x64.dasc) ack=$(line_of "$block" 'lj_safepoint_vm_checkpoint' 1) ;;
+    *) ack=$(line_of "$block" 'lj_safepoint_ack_check' 1) ;;
+  esac
   test -n "$clear" && test -n "$ack" && test "$clear" -lt "$ack"
 done
 
