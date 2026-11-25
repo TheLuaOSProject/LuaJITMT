@@ -17208,6 +17208,25 @@ static uint32_t gc2_trace_sweep_tv_edge(global_State *g, cTValue *tv,
   return traced;
 }
 
+void lj_gc2_publish_read_root(lua_State *L, cTValue *root, int stack)
+{
+  global_State *g = G(L);
+  if (stack)
+    lj_state_stack_dirty_vm(L);
+  if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
+    TValue snap;
+    lj_tv_load_acq(&snap, root);
+    if (tvistab(&snap)) {
+      /* Root transfer has the same table-edge semantics as graph discovery.
+      ** Preserve the body, queue any uncovered payload, and leave a writer's
+      ** dirty epoch intact. Repeated reads can overlap that same scan. */
+      (void)gc2_trace_sweep_tv_edge(g, &snap, 1);
+      return;
+    }
+  }
+  lj_gc_pubroot(L, root);
+}
+
 #define GC2_CDATA_BACK_CELLS \
   ((uint32_t)(LJ_HUGE_THRESHOLD / LJ_CELL_SIZE))
 

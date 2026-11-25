@@ -252,10 +252,7 @@ done:
     lj_gc2_smr_read_leave(owner.g);
   if (success && !store) {
     TValue *out = outstack ? restorestack(L, outofs) : outroot;
-    if (outstack)
-      lj_state_stack_pubtv(L, L, out);
-    else
-      lj_gc_pubroot(L, out);
+    lj_gc2_publish_read_root(L, out, outstack);
   }
   if (vallease_active)
     lj_gc2_lease_release(&vallease);
@@ -324,13 +321,13 @@ static int func_vm_read_cell(lua_State *L, uint32_t src, uint32_t dst,
   TValue value;
   LJGC2Lease cell_lease, value_lease;
   TGState *pin = NULL;
-  int leased = 0, success = 0;
+  int leased = 0, open_stack = 0, success = 0;
 
   if (local_cell) {
     lj_tv_load_acq(&value, base + src);
     if (itype(&value) != LJ_TUPVAL) {
       copyTVrel(L, base + dst, &value);
-      lj_state_stack_pubtv(L, L, base + dst);
+      lj_gc2_publish_read_root(L, base + dst, 1);
       return 1;
     }
     obj = gcval(&value);
@@ -350,15 +347,22 @@ static int func_vm_read_cell(lua_State *L, uint32_t src, uint32_t dst,
   }
   uv = &obj->uv;
   edge = mref_acq(uv->v, TValue);
+  /* The closed cell's value lives inside its retained body. An open cell
+  ** may instead name storage retired by a stack move or a close. */
+  if (edge != &uv->tv) {
+    if (!lj_gc2_smr_read_try(g))
+      goto done;
+    open_stack = 1;
+    edge = mref_acq(uv->v, TValue);
+  }
   lj_tv_load_acq(&value, edge);
-  if (tvisstr(&value)) {
+  if (tvisstr(&value))
     pin = lj_str_source_pin(L, (GCstr *)(void *)gcval(&value));
-    if (!pin) {
-      if (lj_gc2_tv_lease_acquire(g, &value, &value_lease) !=
-	  LJ_GC2_TV_EDGE_VALID)
-	goto done;
-      leased = 1;
-    }
+  if (tvisgcv(&value) && !pin) {
+    if (lj_gc2_tv_lease_acquire(g, &value, &value_lease) !=
+        LJ_GC2_TV_EDGE_VALID)
+      goto done;
+    leased = 1;
   }
   if ((local_cell ? gcval(base + src) != obj :
 		  func_uvptr_acq(fn, src) != obj) ||
@@ -367,10 +371,13 @@ static int func_vm_read_cell(lua_State *L, uint32_t src, uint32_t dst,
       !lj_str_tv_rescue_held(&value))
     goto done;
   copyTVrel(L, base + dst, &value);
-  lj_state_stack_pubtv(L, L, base + dst);
   success = 1;
 
 done:
+  if (open_stack)
+    lj_gc2_smr_read_leave(g);
+  if (success)
+    lj_gc2_publish_read_root(L, base + dst, 1);
   if (pin)
     lj_str_source_unpin(pin);
   if (leased)
@@ -500,10 +507,7 @@ done:
     lj_gc2_smr_read_leave(owner.g);
   if (success && !store) {
     TValue *out = outstack ? restorestack(L, outofs) : outroot;
-    if (outstack)
-      lj_state_stack_pubtv(L, L, out);
-    else
-      lj_gc_pubroot(L, out);
+    lj_gc2_publish_read_root(L, out, outstack);
   }
   if (vallease_active)
     lj_gc2_lease_release(&vallease);

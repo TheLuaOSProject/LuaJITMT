@@ -756,6 +756,9 @@ enum {
 };
 /* Validate a structured, authoritative TValue edge (table/root publication). */
 LJ_FUNC int lj_gc2_tv_gcref_status_edge(global_State *g, cTValue *tv);
+/* The caller release-stored a value copied from a live source into this
+** enumerated root. No table payload was modified by the transfer. */
+LJ_FUNC void lj_gc2_publish_read_root(lua_State *L, cTValue *root, int stack);
 LJ_FUNC int lj_gc2_tv_gcref_valid_edge(global_State *g, cTValue *tv);
 /* Retain the exact allocation named by a TValue through its final use. The
 ** result uses LJ_GC2_TV_EDGE_* and release is required only for VALID. */

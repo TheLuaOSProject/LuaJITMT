@@ -6211,10 +6211,7 @@ cleanup:
     lj_gc2_smr_read_leave(owner.g);
   if (status == LJ_TAB_ROOTED_GET_FOUND) {
     curout = outstack ? restorestack(L, outofs) : outroot;
-    if (outstack)
-      lj_state_stack_pubtv(L, L, curout);
-    else
-      lj_gc_pubroot(L, curout);
+    lj_gc2_publish_read_root(L, curout, outstack);
   }
   if (result_lease_active)
     lj_gc2_lease_release(&result_lease);
@@ -6584,18 +6581,11 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
     copyTVrel(L, curout, &result);
     tab_forjit_test_pause_after_result_lease(curout);
     lj_gc2_smr_read_leave(G(L));
-    /* Helper-backed trace reads return through a temporary TValue, not a Lua
-    ** stack slot. Publish GC values and the source table before later trace
-    ** helpers can allocate or assist GC with only the temporary live. */
-    if (tvisgcv(&result)) {
-      if (outstack)
-	lj_state_stack_pubtv(L, L, curout);
-      else
-	lj_gc_pubroot(L, curout);
-      tab_publish_storage(L, t);
-      lj_gc_pubtabtv(L, t, &result);
-      lj_gc_pubtab(L, t);
-    }
+    /* Publish the result while its exact lease is held. A lookup has not
+    ** changed the source table or its vectors. Issuing a table write barrier
+    ** here invalidates a concurrent scan on every read of an unchanged key. */
+    if (tvisgcv(&result))
+      lj_gc2_publish_read_root(L, curout, outstack);
     lj_gc2_lease_release(&result_lease);
     lj_gc2_lease_release(&key_lease);
     lj_gc2_lease_release(&table_lease);

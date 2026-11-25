@@ -145,6 +145,23 @@ static void test_public_rescan(int publication, uint32_t requests, int cyclic)
          LJ_GC2_TABLE_TOKEN_NONE);
 
   sweep = enter_sweep(g);
+  /* Copying an already-scanned live table into another root must preserve
+  ** the scan. Otherwise a tight stream of table reads starves the scanner. */
+  before_raw = la_load64_acq(&stamp->state);
+  next = lj_tg_ssb_next_acq(tg);
+  lj_gc2_publish_read_root(L, L->base, 1);
+  assert(lj_tg_ssb_next_acq(tg) == next);
+  assert(la_load64_acq(&stamp->state) == before_raw);
+  assert(lj_gc2_test_table_scan_current(g, parent));
+
+  /* A read of a table whose payload is no longer covered must enqueue it.
+  ** This scan still has to leave the subsequent raw writer its own barrier. */
+  lj_gc2_test_table_dirty_bump(g, parent);
+  assert(!lj_gc2_test_table_scan_current(g, parent));
+  lj_gc2_publish_read_root(L, L->base, 1);
+  assert(lj_gc2_flush_ssb(g, tg) != 0);
+  drain_all(g, tg);
+  assert(lj_gc2_test_table_scan_current(g, parent));
   before_raw = la_load64_acq(&stamp->state);
   assert(lj_tab_asize_acq(parent) > 0);
   settabV(L, &value, child);

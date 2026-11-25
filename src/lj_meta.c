@@ -772,12 +772,12 @@ static int meta_chain_capture_inputs(lua_State *L, MetaChainRoots *roots,
     if (captured_method) {
       /* Transfer the callable first. Extra leases must not extend across
       ** the existing arbitrary-key root barrier's traversal fallback. */
-      lj_gc_pubroot(L, meta_chain_root(roots, META_CHAIN_METHOD));
+      lj_gc2_publish_read_root(L, meta_chain_root(roots, META_CHAIN_METHOD), 0);
       lj_gc2_lease_release(&methodlease);
       lj_gc2_lease_release(&mtlease);
     }
-    lj_gc_pubroot(L, meta_chain_root(roots, META_CHAIN_RECEIVER));
-    lj_gc_pubroot(L, meta_chain_root(roots, META_CHAIN_KEY));
+    lj_gc2_publish_read_root(L, meta_chain_root(roots, META_CHAIN_RECEIVER), 0);
+    lj_gc2_publish_read_root(L, meta_chain_root(roots, META_CHAIN_KEY), 0);
     lj_gc2_lease_release(&klease);
     if (oref->funcenv)
       lj_gc2_lease_release(&envlease);
@@ -811,10 +811,7 @@ static TValue *meta_chain_value_publish(lua_State *L,
     if (status == LJ_GC2_TV_EDGE_VALID) {
       copyTVrel(L, out, &snap);
       lj_gc2_smr_read_leave(g);
-      if (outref->stack)
-	lj_state_stack_pubtv(L, L, out);
-      else
-	lj_gc_pubroot(L, out);
+      lj_gc2_publish_read_root(L, out, outref->stack);
       lj_gc2_lease_release(&lease);
       return meta_output_current(L, outref);
     }
@@ -822,10 +819,7 @@ static TValue *meta_chain_value_publish(lua_State *L,
     if (status == LJ_GC2_TV_EDGE_STALE) {
       setnilV(&snap);
       copyTVrel(L, out, &snap);
-      if (outref->stack)
-	lj_state_stack_pubtv(L, L, out);
-      else
-	lj_gc_pubroot(L, out);
+      lj_gc2_publish_read_root(L, out, outref->stack);
       return meta_output_current(L, outref);
     }
     lj_tab_wait_l(L);
