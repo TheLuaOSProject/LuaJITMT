@@ -85,6 +85,11 @@ static LJ_AINLINE int lj_snap_rooted_continuation(const jit_State *J,
 #define lj_snap_rooted_continuation(J, snap) 0
 #endif
 
+#ifdef LJ_GC2_TEST_HELPERS
+typedef void (*LJSnapTestRootsHook)(lua_State *L, int published);
+LJ_FUNC void lj_snap_test_roots_hook(LJSnapTestRootsHook hook);
+#endif
+
 LJ_FUNC void lj_snap_add(jit_State *J);
 LJ_FUNC void lj_snap_purge(jit_State *J);
 LJ_FUNC void lj_snap_shrink(jit_State *J);

@@ -874,6 +874,10 @@ return function(add)
                   { lua_path = true, timeout = "20s" })
       luajit_file(t, t:path("tests", "t-jit-explicit-exit.lua"),
                   { lua_path = true, timeout = "20s" })
+      build_and_run_c(t, t:tmp("lj_t-jit-snapshot-roots"),
+                      "t-jit-snapshot-roots.c", build.gc2_test_helper_opts({
+        build = false, clean = false, timeout = "20s"
+      }))
 
       luajit_code(t, [=[
 local util = require("jit.util")

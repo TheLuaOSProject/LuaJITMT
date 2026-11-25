@@ -29,6 +29,24 @@
 #include "lj_cdata.h"
 #endif
 
+#ifdef LJ_GC2_TEST_HELPERS
+static LJSnapTestRootsHook snap_test_roots_hook;
+
+void lj_snap_test_roots_hook(LJSnapTestRootsHook hook)
+{
+  la_storefunc_rel(&snap_test_roots_hook, hook);
+}
+
+static void snap_test_roots(lua_State *L, int published)
+{
+  LJSnapTestRootsHook hook = la_loadfunc_acq(&snap_test_roots_hook);
+  if (hook)
+    hook(L, published);
+}
+#else
+#define snap_test_roots(L, published) ((void)0)
+#endif
+
 /* Pass IR on to next optimization in chain (FOLD). */
 #define emitir(ot, a, b)	(lj_ir_set(J, (ot), (a), (b)), lj_opt_fold(J))
 
@@ -1272,7 +1290,22 @@ static const BCIns *snap_restore(jit_State *J, void *exptr, lua_State *L,
   ** owner-scan proofs after base/top are stable so GC2 cannot accept a root
   ** scan taken before these stack slots existed.
   */
-  lj_state_stack_pubrange(L, L);
+  snap_test_roots(L, 0);
+  {
+    TValue *slot = tvref(L->stack) + 1 + LJ_FR2;
+    for (; slot < L->top; slot++) {
+      if (tvisfunc(slot)) {
+        /* Snapshot restoration moves closure identities. It never constructs
+        ** a closure or changes its payload. Preserve the same owner-stack
+        ** publication ordering while using the closure's traversal proof. */
+        tv_rawstore_rel(slot, tv_rawload(slot));
+        lj_gc2_publish_read_root(L, slot, 1);
+      } else {
+        lj_state_stack_pubtv(L, L, slot);
+      }
+    }
+  }
+  snap_test_roots(L, 1);
   return pc;
 }
 
