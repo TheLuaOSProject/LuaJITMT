@@ -636,15 +636,14 @@ static StrTabHdr *strtab_enter(lua_State *L, global_State *g, int *blocked)
     int nested;
     if (hdr == NULL)
       return NULL;
-    nested = lj_tg_strtab_active_depth_acq(tg) != 0 &&
-	     lj_tg_strtab_active_hdr_acq(tg) == hdr;
-    if (!nested && (strtab_resize_acq(hdr) & LJ_STRTAB_RESIZE)) {
+    nested = lj_tg_strtab_active_depth_acq(tg) != 0;
+    if (nested && lj_tg_strtab_active_hdr_acq(tg) != hdr) {
       *blocked = 1;
       return NULL;
     }
     strtab_active_enter(tg, hdr);  /* 06 section 6.5 RCU header pin. */
-    /* Order pin publication before checking the destructive topology claim.
-    ** Only inspect a primary bucket's mode after retaining this header. */
+    /* The initial sample is only an address. Publish the pin and recheck
+    ** the directory before reading even its topology word. */
     if (!nested)
       la_fence_seq();
     if (LJ_LIKELY(nested || lj_str_tabh_acq(g) == hdr)) {
