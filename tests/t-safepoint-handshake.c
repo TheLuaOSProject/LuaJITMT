@@ -780,12 +780,12 @@ static void test_owner_only_root_handshake(lua_State *L, global_State *g,
 					   TGState *tg)
 {
   uint64_t major0, minor0, owner0;
-  uint32_t cycle;
+  uint64_t cycle;
   assert(L != NULL && g != NULL && tg != NULL);
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   lj_gc2_mark_begin(g);
   assert(gc2_phase_acq(g) == LJ_GC2_MARK);
-  cycle = gc2_cycle_acq(g);
+  cycle = gc2_thread_scan_cycle_acq(g);
   major0 = gc2_major_root_scans_acq(g);
   minor0 = gc2_minor_root_scans_acq(g);
   owner0 = gc2_tg_thread_roots_acq(g);
