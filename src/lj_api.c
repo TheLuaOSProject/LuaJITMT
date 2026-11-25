@@ -3665,6 +3665,8 @@ static TValue *api_gc_collect_cp(lua_State *L, lua_CFunction dummy, void *ud)
   int *result = (int *)ud;
   UNUSED(dummy);
   *result = lj_gc2_collect_active(L);
+  if (*result)
+    lj_str_gc2_reclaim_pool(G(L));
   return NULL;
 }
 

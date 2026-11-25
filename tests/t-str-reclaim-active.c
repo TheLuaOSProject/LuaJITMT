@@ -103,18 +103,21 @@ static int worker_running_trace(lua_State *L)
 {
   global_State *g = G(L);
   TGState *peer = gc2_tg_list_acq(g);
-  assert(peer && peer != g->main_tg && mt_live_acq(g) == 1);
+  while (peer && !lj_tg_flags_test_acq(peer, TGF_LUA_ALLOC))
+    peer = lj_tg_next_acq(peer);
+  assert(peer && mt_live_acq(g) == 1);
   lua_pushboolean(L, lj_tg_vmstate_load_acq(peer) > 0);
   return 1;
 }
 
-static void run_reclamation(int use_jit)
+static void run_reclamation(int use_jit, int pool)
 {
   static const char script[] =
-    "local stats, held, stop, park, invoke, use_jit, running_trace, probe = ...\n"
+    "local stats, held, stop, park, invoke, use_jit, running_trace, probe, pool = ...\n"
     "local threading = require('threading')\n"
     "if use_jit then jit.opt.start('hotloop=8')\n"
     "elseif jit then jit.off() end\n"
+    "assert(threading.gcworkers(pool) == 0)\n"
     "local ready, start = threading.channel(1), threading.channel(1)\n"
     "local have_ffi, ffi = pcall(require, 'ffi')\n"
     "if not have_ffi then ffi = nil end\n"
@@ -177,7 +180,7 @@ static void run_reclamation(int use_jit)
     "  local prior = stats()\n"
     "  churn(r)\n"
     "  probe(r)\n"
-    "  for attempt = 1, use_jit and 400 or 8 do\n"
+    "  for attempt = 1, use_jit and 400 or (pool > 0 and 32 or 8) do\n"
     "    collectgarbage('collect')\n"
     "    if stats() - prior >= 600 and not probe() then break end\n"
     "    if use_jit then threading.sleep(0.001) end\n"
@@ -193,7 +196,8 @@ static void run_reclamation(int use_jit)
     "assert(finalized == 1)\n"
     "stop(true)\n"
     "local joined, n = peer:join(10)\n"
-    "assert(joined and n == #held)\n";
+    "assert(joined and n == #held)\n"
+    "assert(threading.gcworkers(0) == pool)\n";
   lua_State *L = luaL_newstate();
   int status;
   assert(L);
@@ -212,11 +216,50 @@ static void run_reclamation(int use_jit)
   lua_pushboolean(L, use_jit);
   lua_pushcfunction(L, worker_running_trace);
   lua_pushcfunction(L, probe_huge_mapping);
-  status = lua_pcall(L, 8, 0, 0);
+  lua_pushinteger(L, pool);
+  status = lua_pcall(L, 9, 0, 0);
+  if (status != LUA_OK)
+    fprintf(stderr, "jit=%d pool=%d: %s\n", use_jit, pool, lua_tostring(L, -1));
+  assert(status == LUA_OK);
+  assert(lua_tolstring(L, 1, NULL) == borrowed);
+  lua_close(L);
+}
+
+static void check_pool_only_reclamation(void)
+{
+  static const char script[] =
+    "if jit then jit.off() end\n"
+    "local threading = require('threading')\n"
+    "assert(threading.gcworkers(2) == 0)\n"
+    "local keep = ('pool-root:'):rep(40)\n"
+    "local settled\n"
+    "for round = 1, 8 do\n"
+    "  collectgarbage('stop')\n"
+    "  for i = 1, 1000 do\n"
+    "    assert(#('%d/%d pool data:'):format(round, i):rep(30) >= 300)\n"
+    "  end\n"
+    "  local peak = collectgarbage('count')\n"
+    "  local memory\n"
+    "  for pass = 1, 48 do\n"
+    "    collectgarbage('collect')\n"
+    "    memory = collectgarbage('count')\n"
+    "    if peak - memory >= 250 then break end\n"
+    "  end\n"
+    "  assert(peak - memory >= 250, ('pool did not reclaim small string bytes: %g -> %g at %d'):format(peak, memory, round))\n"
+    "  if round == 3 then settled = memory end\n"
+    "  if round > 3 then assert(memory < settled + 512, 'pool heap grew') end\n"
+    "  assert(keep == ('pool-root:'):rep(40))\n"
+    "end\n"
+    "assert(threading.gcworkers() == 2)\n";
+  lua_State *L = luaL_newstate();
+  int status;
+  assert(L);
+  luaL_openlibs(L);
+  status = luaL_dostring(L, script);
   if (status != LUA_OK)
     fprintf(stderr, "%s\n", lua_tostring(L, -1));
   assert(status == LUA_OK);
-  assert(lua_tolstring(L, 1, NULL) == borrowed);
+  /* Exercise joined teardown with the public pool still running. */
   lua_close(L);
 }
 
@@ -276,9 +319,12 @@ static void check_request_ownership(void)
 int main(void)
 {
   check_request_ownership();
-  run_reclamation(0);
+  run_reclamation(0, 0);
+  run_reclamation(0, 2);
+  check_pool_only_reclamation();
 #if LJ_HASJIT && LJ_TARGET_X64
-  run_reclamation(1);
+  run_reclamation(1, 0);
+  run_reclamation(1, 2);
 #endif
   puts("t-str-reclaim-active OK");
   return 0;

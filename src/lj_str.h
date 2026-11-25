@@ -795,6 +795,7 @@ static LJ_AINLINE int lj_str_tv_rescue_held(cTValue *tv)
 }
 LJ_FUNC int lj_str_gc2_reclaim_request(global_State *g);
 LJ_FUNC void lj_str_gc2_reclaim_cancel(global_State *g);
+LJ_FUNC void lj_str_gc2_reclaim_pool(global_State *g);
 LJ_FUNC void lj_str_gc2_sweep_begin(global_State *g, int major);
 LJ_FUNC uint32_t lj_str_gc2_sweep_step(global_State *g, uint32_t limit);
 LJ_FUNC uint32_t lj_str_gc2_grace_actions(global_State *g);

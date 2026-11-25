@@ -1805,7 +1805,7 @@ static int str_vm_reclaim_owner(global_State *g)
       lj_str_reclaim_exclusive_acq(g) != 0 ||
       g->allocf != lj_arena_allocf || !la_load32_acq(&g->allocf_arena) ||
       !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
-      mt_shutdown_acq(g) || mt_entering_acq(g) || gc2_n_workers_acq(g) ||
+      mt_shutdown_acq(g) || mt_entering_acq(g) ||
       lj_gc2_finalizer_phase_pending(g) || gc2_finalizer_active_acq(g) ||
       lj_tg_in_native_acq(tg))
     return 0;
@@ -1820,6 +1820,21 @@ static int str_vm_reclaim_owner(global_State *g)
   return 1;
 }
 
+/* Pool workers have no Lua stack or C/FFI calls. Their graph reads occur
+** under the GC worker token or exact reader scopes, which the IDLE reclaimer
+** excludes independently of VM checkpoint epochs. Require the pool's exact
+** TG identity: a transiently empty cur_L alone does not certify a mutator. */
+static int str_gc_worker(global_State *g, TGState *tg)
+{
+  uint32_t i;
+  if (lj_tg_load_cur_L(tg) || lj_tg_load_thread_L(tg))
+    return 0;
+  for (i = 0; i < LJ_GC2_WORKER_MAX; i++)
+    if (gc2_worker_tg_acq(g, i) == tg)
+      return 1;
+  return 0;
+}
+
 static int str_vm_cohort_ready(global_State *g, uint64_t after)
 {
   TGState *tg, *head;
@@ -1829,16 +1844,41 @@ static int str_vm_cohort_ready(global_State *g, uint64_t after)
   head = gc2_tg_list_acq(g);
   for (tg = head; tg;) {
     TGState *next = lj_tg_next_acq(tg);
-    if (tg != g->main_tg && !lj_tg_flags_test_acq(tg, TGF_DEAD) &&
-	(!lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC) ||
-	 (after && la_load64_acq(&tg->str_vm_root_epoch) <= after)))
-      return 0;
+    if (tg != g->main_tg && !lj_tg_flags_test_acq(tg, TGF_DEAD)) {
+      if (lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC)) {
+	if (after && la_load64_acq(&tg->str_vm_root_epoch) <= after)
+	  return 0;
+      } else if (!str_gc_worker(g, tg)) {
+	return 0;
+      }
+    }
     if (next == tg)
       return 0;
     tg = next;
   }
   la_fence_seq();
   return mt_entering_acq(g) == 0 && gc2_tg_list_acq(g) == head;
+}
+
+void lj_str_gc2_reclaim_pool(global_State *g)
+{
+  uint32_t pass;
+  if (gc2_n_workers_acq(g) == 0)
+    return;
+  /* A worker may close SWEEP while the main explicit collector was parked.
+  ** Its remote ACK cannot certify the main stack, and its IDLE retire pass
+  ** cannot commit this cohort. Give the main owner a real root checkpoint
+  ** and both bounded grace opportunities before leaving its request scope.
+  ** All physical work still uses the normal try-only SMR reclaimer. */
+  for (pass = 0; pass <= 2u * LJ_STR_SWEEP_GRACE_EPOCHS; pass++) {
+    uint32_t actions = LJ_GC2_HS_FLUSH_SSB;
+    if (gc2_phase_acq(g) != LJ_GC2_IDLE ||
+	lj_str_body_retired_head_acq(g) == NULL || !str_vm_reclaim_owner(g))
+      break;
+    if (pass == 0)
+      actions |= LJ_GC2_HS_SCAN_OWNER_ROOTS;
+    (void)lj_gc2_handshake(g, actions);
+  }
 }
 
 static int str_reclaim_exclusive_try(global_State *g)
