@@ -688,11 +688,29 @@ static void threading_entering_leave(global_State *g)
     mt_entering_futex_wake(g, INT_MAX);
 }
 
+#ifdef LJ_TAB_TEST_HELPERS
+static LJThreadingEnteringHook threading_test_entering_hook;
+
+void lj_threading_test_set_entering_hook(LJThreadingEnteringHook hook)
+{
+  threading_test_entering_hook = hook;
+}
+
+static void threading_test_after_entering(global_State *g)
+{
+  if (threading_test_entering_hook)
+    threading_test_entering_hook(g);
+}
+#else
+#define threading_test_after_entering(g) ((void)0)
+#endif
+
 static int threading_entering_begin(global_State *g)
 {
   /* Acq-rel pairs the entrant with the registry writer's post-CAS acquire
   ** recheck; neither side may miss the other's publication. */
   mt_entering_add_acqrel(g, 1);
+  threading_test_after_entering(g);
   /* The sole-mutator string collector publishes its gate, fences, then checks
   ** this counter.  Publish our counter first and fence before checking its
   ** gate so the store-buffering outcome (both sides believe they won) is

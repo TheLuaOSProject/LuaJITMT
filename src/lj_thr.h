@@ -428,6 +428,10 @@ LJ_FUNCA TGState *lj_thr_get_tg_fallback(global_State *g);
 ** still lacks a public remotely invalidatable carrier/handoff and remains a
 ** b1.2.1 compatibility blocker; macOS/Windows exited actors fail closed too. */
 LJ_FUNC int lj_thr_main_close_claim(lua_State *L);
+#ifdef LJ_TAB_TEST_HELPERS
+typedef void (*LJThreadingEnteringHook)(global_State *g);
+LJ_FUNC void lj_threading_test_set_entering_hook(LJThreadingEnteringHook hook);
+#endif
 LJ_FUNC int lj_threading_attach(lua_State *L);
 LJ_FUNC int lj_threading_attach_wait(lua_State *L);
 LJ_FUNC void lj_threading_detach(lua_State *L, int disown_callbacks);

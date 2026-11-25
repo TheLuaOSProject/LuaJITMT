@@ -1921,7 +1921,8 @@ static void tab_resize_desc_vm_guard_release(global_State *g,
 }
 
 static int tab_resize_desc_vm_guard_acquire(lua_State *L,
-					     TabResizeDesc *desc)
+					     TabResizeDesc *desc,
+					     int allow_entering)
 {
   global_State *g = G(L);
   int entered = mt_resize_guard_enter(g);
@@ -1947,12 +1948,12 @@ static int tab_resize_desc_vm_guard_acquire(lua_State *L,
   ** events. Every pre-MT installer therefore serializes through the bounded
   ** token path before it may publish table control.
   */
-  if (mt_active_acq(g) == 0 && lj_trace_flushall_try_noevent(L)) {
+  if (mt_active_acq(g) == 0 && lj_trace_flushall_try_noevent(L, allow_entering)) {
     tab_resize_desc_vm_guard_release(g, desc);
     return 0;
   }
 #else
-  UNUSED(L);
+  UNUSED(L); UNUSED(allow_entering);
 #endif
   return 1;
 }
@@ -2302,7 +2303,7 @@ int lj_tab_resize_desc_install(lua_State *L, GCtab *t, TabResizeDesc *desc)
   }
 
   if (install_authority &&
-      !tab_resize_desc_vm_guard_acquire(L, desc)) {
+      !tab_resize_desc_vm_guard_acquire(L, desc, 0)) {
     (void)tab_resize_desc_cancel_installing(g, L, desc);
     lj_gc2_smr_read_leave(g);
     return 0;
@@ -3677,6 +3678,15 @@ static void tab_resize_prepare_array_migration(lua_State *L, GCtab *t,
   tab_pub_array_mem(L, t, array, desc->newacap);
 }
 
+static void tab_resize_discard_candidate(global_State *g,
+					 TabResizeDesc *desc)
+{
+  if (desc) {
+    tab_resize_desc_vm_guard_release(g, desc);
+    tab_resize_desc_free(g, desc);
+  }
+}
+
 /* Resize a table to fit the new array/hash part sizes. */
 void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
 {
@@ -3848,7 +3858,7 @@ restart_resize:
   self_metatable = lj_tab_metatable_acq(t) == t;
   array_migration = oldaret && asize > oldasize &&
     ((!oldhmask && !hbits) || (oldret && newnode && !self_metatable));
-  if (mt_active_acq(g) &&
+  if ((mt_active_acq(g) || mt_entering_acq(g)) &&
       (array_migration || (oldret && newnode && !array_changed))) {
     uint64_t id = tab_resize_desc_id_reserve(g);
     if (id != 0) {
@@ -3868,6 +3878,20 @@ restart_resize:
 	if (hash_migration)
 	  cutover->hash_move_bytes = bytes;
       }
+    }
+  }
+  /* The first entrant has reserved the universe but may still be before
+  ** the sticky latch and its trace flush. A counted guard protects the
+  ** candidate until that latch or the descriptor's terminal cleanup. */
+  if (cutover && !mt_active_acq(g)) {
+    int guarded = 0;
+    if (!lj_tg_jit_active_acq(L2TG(L)) && lj_gc2_smr_read_tracked_try(g)) {
+      guarded = tab_resize_desc_vm_guard_acquire(L, cutover, 1);
+      lj_gc2_smr_read_leave(g);
+    }
+    if (!guarded) {
+      tab_resize_discard_candidate(g, cutover);
+      cutover = NULL;
     }
   }
   if (cutover && array_migration) {
@@ -4059,8 +4083,7 @@ restart_resize:
     lj_assertL(oldret && la_load32_acq(&oldret->armed),
 	       "retired table nodes not armed");
   lj_tab_struct_leave(t, struct_acq);
-  if (cutover)
-    tab_resize_desc_free(g, cutover);
+  tab_resize_discard_candidate(g, cutover);
   return;
 
 retry_resize:
@@ -4074,8 +4097,7 @@ retry_resize:
     tab_array_free(g, array, newacap);
   tab_retire_discard(g, oldret);
   tab_array_retire_discard(g, oldaret);
-  if (cutover)
-    tab_resize_desc_free(g, cutover);
+  tab_resize_discard_candidate(g, cutover);
   lj_tab_struct_leave(t, struct_acq);
   lj_tab_wait_l(L);
   goto restart_resize;

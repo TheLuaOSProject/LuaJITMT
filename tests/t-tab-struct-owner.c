@@ -21,6 +21,7 @@
 #include "lj_safepoint.h"
 #include "lj_tab.h"
 #include "lj_thr.h"
+#include "lj_trace.h"
 #include "lj_tg.h"
 
 /* Built by the M5 harness with LJ_TAB_TEST_HELPERS enabled. */
@@ -53,6 +54,11 @@ static volatile int *resize_hook_entered;
 static volatile int *resize_hook_release;
 static pthread_t copy_owner;
 static char collision_keys[4][128];
+
+static global_State *first_attach_g;
+static volatile int first_attach_entering;
+static volatile int first_attach_release;
+static volatile int first_attach_done;
 
 static int load_flag(volatile int *p)
 {
@@ -895,6 +901,77 @@ static void exercise_resize_noop_owner(lua_State *L)
   assert(lj_tab_test_struct_enter_acquires() == 0);
 }
 
+static void first_attach_hold_hook(global_State *g)
+{
+  if (g != first_attach_g)
+    return;
+  store_flag(&first_attach_entering, 1);
+  while (!load_flag(&first_attach_release))
+    sched_yield();
+}
+
+static void first_attach_cutover_hook(lua_State *L, GCtab *t,
+				       TValue *array, MSize asize)
+{
+  TabResizeDesc *desc = lj_tab_resize_desc_control_acq(t);
+  UNUSED(L); UNUSED(array); UNUSED(asize);
+  assert(desc != NULL);
+  assert(mt_entering_acq(first_attach_g) == 1);
+  assert(mt_active_acq(first_attach_g) == 0);
+  assert(mt_resize_guard_count_acq(first_attach_g) == 1);
+  assert(lj_tab_resize_desc_flags_acq(desc) & TAB_RESIZE_DESC_F_VM_GUARD);
+  assert(!lj_trace_hasany(first_attach_g));
+  store_flag(&first_attach_release, 1);
+  assert(wait_for_flag(&first_attach_done, 1, 1000000));
+  assert(lj_tab_resize_desc_control_acq(t) == NULL);
+  assert(mt_active_acq(first_attach_g) != 0);
+  assert(mt_resize_guard_count_acq(first_attach_g) == 0);
+}
+
+static void exercise_first_attach_cutover(void)
+{
+  lua_State *L = luaL_newstate();
+  ResizeCtx worker = { 0 };
+  pthread_t thread;
+  GCtab *t;
+  volatile int ready = 0, start = 1;
+  assert(L != NULL);
+#if LJ_HASJIT
+  luaL_openlibs(L);
+  assert_lua_ok(L, luaL_dostring(L,
+    "jit.opt.start('hotloop=1'); local n=0; "
+    "for i=1,200 do n=n+i end; assert(n==20100)"));
+  assert(lj_trace_hasany(G(L)));
+#endif
+  lua_createtable(L, 0, 4);
+  t = tabV(L->top - 1);
+  lua_pushinteger(L, 11);
+  lua_rawseti(L, 1, -1);
+  lua_pushinteger(L, 22);
+  lua_rawseti(L, 1, -2);
+  worker.L = new_child_with_table(L, 1);
+  worker.ready = &ready;
+  worker.start = &start;
+  worker.done = &first_attach_done;
+  worker.mutate = 2;
+  worker.status = -1;
+
+  first_attach_g = G(L);
+  assert(mt_active_word_acq(first_attach_g) == 0);
+  lj_threading_test_set_entering_hook(first_attach_hold_hook);
+  lj_tab_test_set_resize_hash_cutover_hook(first_attach_cutover_hook);
+  assert(pthread_create(&thread, NULL, resize_worker, &worker) == 0);
+  assert(wait_for_flag(&first_attach_entering, 1, 1000000));
+  lj_tab_resize(L, t, 0, 6);
+  assert(wait_for_flag(&first_attach_done, 1, 1000000));
+  assert(pthread_join(thread, NULL) == 0 && worker.status == 0);
+  lj_tab_test_set_resize_hash_cutover_hook(NULL);
+  lj_threading_test_set_entering_hook(NULL);
+  first_attach_g = NULL;
+  assert_hash_cutover_values(L);
+  lua_close(L);
+}
+
 static void exercise_wait_stopreq(lua_State *L)
 {
   TGState *tg = L2TG(L);
@@ -943,8 +1020,9 @@ int main(void)
   exercise_array_migration_owner(L, 1, 1);
   exercise_hash_migration_owner(L);
   exercise_wait_stopreq(L);
-
   lua_close(L);
+
+  exercise_first_attach_cutover();
   printf("t-tab-struct-owner OK: table structure ownership is per-table\n");
   return 0;
 }

@@ -162,8 +162,9 @@ LJ_FUNC int lj_trace_flushall_gc(lua_State *L);
 LJ_FUNC int lj_trace_flushall_hs(lua_State *L);
 LJ_FUNC int lj_trace_flushall_hs_noevent(lua_State *L);
 /* Bounded, callback-free pre-MT flush. Returns nonzero instead of waiting for
-** another JIT-token owner or crossing an mt_entering transition. */
-LJ_FUNC int lj_trace_flushall_try_noevent(lua_State *L);
+** another JIT-token owner. Only runtime resize may cross mt_entering,
+** while its guard prevents any new pre-MT direct-store traces. */
+LJ_FUNC int lj_trace_flushall_try_noevent(lua_State *L, int allow_entering);
 LJ_FUNC void lj_trace_flushscope_hs(global_State *g, uint32_t work);
 LJ_FUNC uint32_t lj_trace_flushscope_retire_hs(global_State *g,
 					       uint64_t epoch);
@@ -592,7 +593,7 @@ static LJ_AINLINE int lj_trace_state_publish_try(jit_State *J)
 #define lj_trace_flushall(L)	(UNUSED(L), 0)
 #define lj_trace_flushall_hs(L)	(UNUSED(L), 0)
 #define lj_trace_flushall_hs_noevent(L)	(UNUSED(L), 0)
-#define lj_trace_flushall_try_noevent(L)	(UNUSED(L), 0)
+#define lj_trace_flushall_try_noevent(L, e)	(UNUSED(L), UNUSED(e), 0)
 #define lj_trace_flushscope_retire_hs(g, e)	(UNUSED(g), UNUSED(e), 0)
 #define lj_trace_hasany(g)	(UNUSED(g), 0)
 #define lj_jit_token_try(J)	(UNUSED(J), 0)

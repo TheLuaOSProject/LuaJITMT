@@ -10576,7 +10576,7 @@ int lj_trace_flushall_hs_noevent(lua_State *L)
 ** or error path: the caller already owns an install transaction which must be
 ** explicitly unwound on contention.
 */
-int lj_trace_flushall_try_noevent(lua_State *L)
+int lj_trace_flushall_try_noevent(lua_State *L, int allow_entering)
 {
   global_State *g = G(L);
   jit_State *J = L2J(L);
@@ -10585,7 +10585,7 @@ int lj_trace_flushall_try_noevent(lua_State *L)
 
   if (mt_active_acq(g) != 0)
     return 0;  /* First MT activation already retired pre-MT traces. */
-  if (mt_entering_acq(g) != 0)
+  if (!allow_entering && mt_entering_acq(g) != 0)
     return 1;  /* Let that activation own the trace transition. */
   if (lj_trace_state_load(J) != LJ_TRACE_IDLE)
     return 1;  /* Never dismantle an in-progress pre-guard recording. */
@@ -10598,12 +10598,13 @@ int lj_trace_flushall_try_noevent(lua_State *L)
 
   /*
   ** Close races with a first entrant after token acquisition. A published
-  ** latch proves its mandatory flush completed; a still-entering actor has not
-  ** made that proof yet, so this descriptor retries without waiting.
+  ** latch proves its mandatory flush completed. Runtime resize can do the
+  ** flush itself while a first entrant is still inactive. Both use this
+  ** token, and the installed guard forbids new unguarded stores.
   */
   if (mt_active_acq(g) != 0)
     retry = 0;
-  else if (mt_entering_acq(g) != 0)
+  else if (!allow_entering && mt_entering_acq(g) != 0)
     retry = 1;
   else if (lj_trace_state_load(J) != LJ_TRACE_IDLE)
     retry = 1;
