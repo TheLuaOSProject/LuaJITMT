@@ -538,7 +538,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov L:RB->base, BASE
   |  mov SAVE_PC, PC
   |  mov CARG1, L:RB
-  |  call extern lj_safepoint_ack_check
+  |  call extern lj_safepoint_vm_checkpoint
   |  mov BASE, L:RB->base
   |  ins_next
   |
@@ -3038,7 +3038,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov SAVE_ERRF, RDd
   |  mov SAVE_PC, PC
   |  mov CARG1, L:RB
-  |  call extern lj_safepoint_ack_check
+  |  call extern lj_safepoint_vm_checkpoint
   |  mov L:RB, SAVE_L
   |  mov BASE, L:RB->base
   |  mov RDd, SAVE_ERRF

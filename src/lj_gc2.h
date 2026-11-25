@@ -389,7 +389,7 @@ static LJ_AINLINE int lj_gc2_jit_reclaim_context_acq(global_State *g)
 LJ_FUNC void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s);
 LJ_FUNC void lj_gc2_scan_cycle_roots(global_State *g, lua_State *L);
 LJ_FUNC void lj_gc2_scan_cycle_global_roots(global_State *g);
-LJ_FUNC void lj_gc2_scan_cycle_owner_tg_roots(global_State *g, TGState *tg);
+LJ_FUNC int lj_gc2_scan_cycle_owner_tg_roots(global_State *g, TGState *tg);
 /* Caller must own the consumed-poll remote-native stability certificate. */
 LJ_FUNC int lj_gc2_scan_cycle_owner_tg_roots_native_parked(
   global_State *g, TGState *tg);

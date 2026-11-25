@@ -12,6 +12,7 @@
 #include "lj_ccall.h"
 #include "lj_dispatch.h"
 #include "lj_err.h"
+#include "lj_frame.h"
 #include "lj_gc2.h"
 #include "lj_mcode.h"
 #include "lj_oserr.h"
@@ -412,10 +413,11 @@ static void safepoint_apply_allocator(global_State *g, TGState *tg,
   }
 }
 
-static void safepoint_apply_tg_mode(global_State *g, TGState *tg,
+static int safepoint_apply_tg_mode(global_State *g, TGState *tg,
 				    uint32_t actions, int native_parked,
 				    int roots_already_scanned)
 {
+  int owner_scan = 0;
   if (actions & LJ_GC2_HS_ENABLE_BARRIER) {
     /* Mark activation runs with native entry closed. Invalidate comparison
     ** authority before enabling the TG barrier mirror, so a wrapped or stale
@@ -439,7 +441,7 @@ static void safepoint_apply_tg_mode(global_State *g, TGState *tg,
     if (native_parked)
       lj_gc2_scan_cycle_owner_tg_roots_native_parked(g, tg);
     else
-      lj_gc2_scan_cycle_owner_tg_roots(g, tg);
+      owner_scan = lj_gc2_scan_cycle_owner_tg_roots(g, tg);
   }
   if (actions & LJ_GC2_HS_FLUSH_SSB) {
     /*
@@ -474,6 +476,7 @@ static void safepoint_apply_tg_mode(global_State *g, TGState *tg,
     lj_trace_abort(g);  /* 08 section 8.7: no active recorder past ack. */
   if (actions & LJ_GC2_HS_STOPREQ)
     lj_tg_flags_or_rlx(tg, TGF_STOPREQ|TGF_STOPREQ_FRESH);
+  return owner_scan;
 }
 
 void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
@@ -585,7 +588,9 @@ retry:
       goto retry;
     return 0;
   }
-  safepoint_apply_tg_mode(g, tg, actions, native_parked, roots_scanned);
+  if (safepoint_apply_tg_mode(g, tg, actions, native_parked, roots_scanned) &&
+      !native_parked && tg == lj_thr_get_tg_fallback(g))
+    la_store64_rel(&tg->str_owner_scan_epoch, epoch);
   if (note_latency)
     safepoint_note_ack_latency(g);  /* 13.8: mutator-observed poll latency. */
   {
@@ -751,6 +756,34 @@ uint32_t lj_safepoint_ack_check(lua_State *L)
   lj_safepoint_checkstop(L, actions);
   lj_oserr_restore(&oserr);
   return actions;
+}
+
+/* Only emitted after the interpreter has published BASE/PC, or after
+** native trace exit restored its stack. A remote native ACK has no such
+** authority, including when it consumes this actor's outstanding poll. */
+void lj_safepoint_vm_checkpoint(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  uint32_t actions = lj_safepoint_ack_check(L);
+  uint64_t epoch = la_load64_acq(&tg->str_owner_scan_epoch);
+  if ((actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS)) &&
+      tg == lj_thr_get_tg_fallback(g) &&
+      lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC) &&
+      L == lj_tg_load_thread_L(tg) && L->cframe &&
+      tg->str_vm_outer_cframe &&
+      cframe_raw(cframe_prev(cframe_raw(L->cframe))) ==
+	cframe_raw(tg->str_vm_outer_cframe) &&
+      lj_tg_in_native_acq(tg) == 0 && !lj_tg_load_jit_base(tg) &&
+      epoch && lj_tg_hs_epoch_ack_acq(tg) == epoch
+#if LJ_HASFFI
+      && !lj_tg_ffi_call_func_acq(tg) && ccallback_depth_acq(&tg->cb) == 0
+#if LJ_HASJIT
+      && lj_ffi_native_frame_depth_acq(tg) == 0
+#endif
+#endif
+      )
+    la_store64_rel(&tg->str_vm_root_epoch, epoch);
 }
 
 void lj_native_enter(TGState *tg)

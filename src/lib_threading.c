@@ -1110,7 +1110,9 @@ static TValue *threading_worker_cp(lua_State *L, lua_CFunction dummy,
     lj_state_stack_pubrange(L, L);
     la_store32_rel(&th->start_ready, 2);
     threading_wake_thread(th);
+    ctx->tg->str_vm_outer_cframe = L->cframe;
     status = lua_pcall(L, (int)th->nargs, LUA_MULTRET, 0);
+    ctx->tg->str_vm_outer_cframe = NULL;
     th->status = (uint32_t)status;
     th->nresults = (uint32_t)(L->top - L->base);
     /*

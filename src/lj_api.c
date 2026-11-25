@@ -3683,9 +3683,9 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     }
     break;
   case LUA_GCCOLLECT:
-    /* b1.2 permits physical string-body reclamation only for this explicit
-    ** full-collection boundary. Admission remains opportunistic and refuses
-    ** any live/entering secondary mutator or configured GC worker pool. */
+    /* String reclamation is requested at this explicit major boundary.
+    ** Active Lua workers must complete owner-local root scans before a
+    ** quarantined body can commit; unsupported cohorts defer reclamation. */
     {
       int collected = 0;
       int errcode;

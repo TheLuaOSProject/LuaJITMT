@@ -41,6 +41,7 @@ enum {
 #define LJ_STR_CANONREC_LIST_ONLY	0x08u
 #define LJ_STR_CANONREC_Q_UNLINKED	0x10u
 #define LJ_STR_CANONREC_CLOSE_PROVEN	0x20u
+#define LJ_STR_CANONREC_VM_COHORT	0x40u
 
 #define LJ_STR_CANON_MINMASK	63u
 
@@ -85,14 +86,8 @@ static LJ_AINLINE uintptr_t lj_str_canon_pack(StrCanonRec *rec,
   return (uintptr_t)rec | (uintptr_t)state;
 }
 
-/*
-** Runtime GCstr unlink/free remains safety-gated until every sweep-time string
-** publication can atomically defeat retirement and every native raw-byte borrow
-** is represented by a quiescence/hazard contract. The implementation below is
-** retained for focused development, but production builds must not enter it.
-*/
-#define LJ_GC2_STRING_BODY_RECLAIM 0
-
+/* Active string retirement uses an exact Q reservation and owner scan
+** certificates. The sole-actor path still uses batched retirement. */
 /* Bounded GC2 string-table subphase. */
 enum {
   LJ_STR_SWEEP_IDLE,
@@ -796,6 +791,7 @@ LJ_FUNC void lj_str_gc2_reclaim_request(global_State *g);
 LJ_FUNC void lj_str_gc2_reclaim_cancel(global_State *g);
 LJ_FUNC void lj_str_gc2_sweep_begin(global_State *g, int major);
 LJ_FUNC uint32_t lj_str_gc2_sweep_step(global_State *g, uint32_t limit);
+LJ_FUNC uint32_t lj_str_gc2_grace_actions(global_State *g);
 LJ_FUNC int lj_str_gc2_sweep_pending(global_State *g);
 LJ_FUNC void lj_str_gc2_sweep_abort(global_State *g);
 LJ_FUNC void lj_str_gc2_sweep_finish(global_State *g);

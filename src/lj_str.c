@@ -513,6 +513,19 @@ static int strq_claim(global_State *g, StrCanonHdr *hdr)
   return 1;
 }
 
+static StrCanonHdr *strq_try_pin(global_State *g, TGState *tg)
+{
+  StrCanonHdr *hdr = lj_str_qtabh_acq(g);
+  if (!tg || !hdr || lj_tg_strq_active_depth_acq(tg))
+    return NULL;
+  strq_active_enter(tg, hdr);
+  la_fence_seq();
+  if (lj_str_qtabh_acq(g) == hdr && !la_load32_acq(&hdr->resize))
+    return hdr;
+  strq_active_leave(tg, hdr);
+  return NULL;
+}
+
 static StrCanonHdr *strq_enter(lua_State *L, global_State *g)
 {
   TGState *tg = L2TG(L);
@@ -1748,9 +1761,8 @@ void lj_str_gc2_reclaim_cancel(global_State *g)
 {
   if (!g)
     return;
-  /* A synchronous full collection cannot return while its admitted string
-  ** sweep is still active.  Keep this assertion close to the API cancellation
-  ** edge so a future asynchronous caller cannot silently shorten exclusion. */
+  /* The sole-mutator batch is drained before this exclusion ends.
+  ** Active quarantine records may span multiple explicit collections. */
   lj_assertG(lj_str_reclaim_exclusive_acq(g) == 0,
 	     "explicit string reclaim returned while exclusion was active");
   lj_str_reclaim_requested_rel(g, 0);
@@ -1760,6 +1772,52 @@ static void str_reclaim_exclusive_leave(global_State *g)
 {
   if (g && lj_str_reclaim_exclusive_acq(g) != 0)
     lj_str_reclaim_exclusive_rel(g, 0);
+}
+
+/* Only the explicit main collector can admit the VM cohort. External
+** attachments have no enclosing managed frame certificate. */
+static int str_vm_reclaim_owner(global_State *g)
+{
+  TGState *tg = lj_thr_get_tg();
+  if (!g || !tg || tg != g->main_tg || tg->gl != g ||
+      lj_str_reclaim_requested_acq(g) == 0 ||
+      lj_str_reclaim_exclusive_acq(g) != 0 ||
+      g->allocf != lj_arena_allocf || !la_load32_acq(&g->allocf_arena) ||
+      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
+      mt_shutdown_acq(g) || mt_entering_acq(g) || gc2_n_workers_acq(g) ||
+      lj_gc2_finalizer_phase_pending(g) || gc2_finalizer_active_acq(g) ||
+      lj_tg_in_native_acq(tg))
+    return 0;
+#if LJ_HASFFI
+  if (lj_tg_ffi_call_func_acq(tg) || ccallback_depth_acq(&tg->cb))
+    return 0;
+#if LJ_HASJIT
+  if (lj_ffi_native_frame_depth_acq(tg))
+    return 0;
+#endif
+#endif
+  return 1;
+}
+
+static int str_vm_cohort_ready(global_State *g, uint64_t after)
+{
+  TGState *tg, *head;
+  if (!str_vm_reclaim_owner(g) ||
+      (after && la_load64_acq(&g->main_tg->str_owner_scan_epoch) <= after))
+    return 0;
+  head = gc2_tg_list_acq(g);
+  for (tg = head; tg;) {
+    TGState *next = lj_tg_next_acq(tg);
+    if (tg != g->main_tg && !lj_tg_flags_test_acq(tg, TGF_DEAD) &&
+	(!lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC) ||
+	 (after && la_load64_acq(&tg->str_vm_root_epoch) <= after)))
+      return 0;
+    if (next == tg)
+      return 0;
+    tg = next;
+  }
+  la_fence_seq();
+  return mt_entering_acq(g) == 0 && gc2_tg_list_acq(g) == head;
 }
 
 static int str_reclaim_exclusive_try(global_State *g)
@@ -1915,9 +1973,8 @@ static uint32_t str_retire_batches_reclaim_all(global_State *g,
       if (gct == (uint8_t)~LJ_TSTR) {
 	freed = str_free_try_impl(g, s, reclaim_held);
 	if (LJ_UNLIKELY(freed == LJ_GC_DESTRUCT_LOST)) {
-	  /* Releasing exclusion after losing an unlinked canonical body would
-	  ** permit a duplicate identity. This narrow path therefore fails closed
-	  ** instead of pretending the concurrent quarantine protocol exists. */
+	  /* Sole-mutator unlink leaves no directory reservation. Losing this
+	  ** destructor transaction would allow a duplicate canonical identity. */
 	  lj_assertG(0, "sole-mutator string destructor ownership lost");
 	  abort();
 	}
@@ -1937,7 +1994,6 @@ static uint32_t str_retire_batches_reclaim_all(global_State *g,
   return reclaimed;
 }
 
-#ifdef LJ_STR_TEST_HELPERS
 static StrBodyRetire *str_body_retire_new(global_State *g, GCstr *s,
 					   StrTabHdr *hdr)
 {
@@ -1975,10 +2031,19 @@ static StrBodyRetire *str_body_retire_new(global_State *g, GCstr *s,
   ret->main_linked = 1;
   ret->status = 0;
   lj_gc_total_add(g, sizeof(*ret));
-  lj_gc2_account_alloc(g, tg, sizeof(*ret));
   return ret;
 }
 
+static void strq_preserve_body(global_State *g, GCstr *s)
+{
+  uint32_t phase = gc2_phase_acq(g);
+  if (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK)
+    (void)lj_gc2_markobj_nogrey(g, obj2gco(s));
+  else if (phase == LJ_GC2_SWEEP)
+    (void)lj_gc2_preserve_sweep_root(g, obj2gco(s));
+}
+
+#ifdef LJ_STR_TEST_HELPERS
 static void strcanon_bucket_publish(lua_State *L, global_State *g,
 				    StrCanonRec *rec)
 {
@@ -1994,15 +2059,6 @@ static void strcanon_bucket_publish(lua_State *L, global_State *g,
     lj_str_qnext_rel(rec, head);
   } while (!lj_str_qbucket_cas(bucket, &head, rec));
   strq_leave(L, hdr);
-}
-
-static void strq_preserve_body(global_State *g, GCstr *s)
-{
-  uint32_t phase = gc2_phase_acq(g);
-  if (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK)
-    (void)lj_gc2_markobj_nogrey(g, obj2gco(s));
-  else if (phase == LJ_GC2_SWEEP)
-    (void)lj_gc2_preserve_sweep_root(g, obj2gco(s));
 }
 
 int lj_str_test_quarantine_detach(lua_State *L, GCstr *s)
@@ -2030,6 +2086,7 @@ int lj_str_test_quarantine_detach(lua_State *L, GCstr *s)
   la_store32_rel(&rec->status, LJ_STR_CANONREC_LIST_ONLY);
   lj_str_body_retired_epoch_rel(rec, lj_gc2_retire_epoch(g));
   str_body_retired_push(g, rec);
+  lj_gc2_account_alloc(g, lj_thr_get_tg(), sizeof(*rec));
   strcanon_bucket_publish(L, g, rec);  /* Reservation precedes main unlink. */
 
   /* Snapshot and claim main topology only after every allocating/waiting Q
@@ -2216,6 +2273,84 @@ static uint32_t str_sweep_tag_one(global_State *g, StrTabHdr *hdr)
   return 1;
 }
 
+/* An active sweep has no exclusion over main readers. Reserve the same
+** identity in Q before splicing its exact main edge. A conflicting prepend
+** or rescue wins and leaves an ordinary relink/metadata cleanup transaction. */
+static uint32_t str_sweep_unlink_active(global_State *g, StrTabHdr *mainhdr,
+					 GCRef *link, uintptr_t u, GCobj *o)
+{
+  TGState *tg = lj_thr_get_tg();
+  StrCanonHdr *qhdr;
+  GCstr *s = gco2str(o);
+  StrCanonRec *rec, **bucket, *head;
+  uintptr_t canon = LJ_STR_CANON_CANDIDATE, active, next, current;
+
+  /* Small bodies use the independent arena directory. Huge mappings still
+  ** need generic registry admission that a parked IDLE reclaimer can close. */
+  if (lj_str_size(s->len) >= LJ_HUGE_THRESHOLD)
+    goto keep;
+  qhdr = strq_try_pin(g, tg);
+  if (!qhdr)
+    goto keep;
+  rec = str_body_retire_new(g, s, mainhdr);
+  if (!rec) {
+    strq_active_leave(tg, qhdr);
+    goto keep;
+  }
+  la_store32_rel(&rec->status, LJ_STR_CANONREC_LIST_ONLY);
+  str_body_retired_push(g, rec);
+  bucket = &qhdr->bucket[rec->hash & qhdr->mask];
+  head = lj_str_qbucket_acq(bucket);
+  do {
+    lj_str_qnext_rel(rec, head);
+  } while (!lj_str_qbucket_cas(bucket, &head, rec));
+  strq_active_leave(tg, qhdr);
+
+  active = lj_str_canon_pack(rec, LJ_STR_CANON_QACTIVE);
+  if (!lj_str_canon_cas(s, &canon, active)) {
+    la_storeptr_rel((void **)&rec->str, NULL);
+    la_store32_rel(&rec->status,
+		   LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_CANCELLED);
+    lj_gc2_account_alloc(g, tg, sizeof(*rec));
+    goto keep;
+  }
+  la_store32_rel(&rec->status,
+		 LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_BODY_OWNED);
+  (void)lj_str_qcount_inc_sat_acqrel(g);
+  strq_preserve_body(g, s);
+  next = lj_str_link_load_acq(lj_str_nodelink(mainhdr, o));
+  next = (next & ~(uintptr_t)LJ_STRHASH_SECONDARY) |
+	 (u & LJ_STRHASH_SECONDARY);
+  current = u;
+  if (!lj_str_link_cas_acqrel(link, &current, next)) {
+    (void)lj_str_canon_cas(s, &active,
+			  lj_str_canon_pack(rec, LJ_STR_CANON_QRESCUED));
+    la_store32_rel(&rec->status, LJ_STR_CANONREC_Q_LINKED);
+  } else {
+    uint64_t epoch = lj_gc2_retire_epoch(g);
+    la_store64_rel(&rec->main_unlink_epoch, epoch);
+    lj_str_body_retired_epoch_rel(rec, epoch);
+    if (lj_str_canon_cas(s, &active,
+			 lj_str_canon_pack(rec, LJ_STR_CANON_QCLOSING))) {
+      la_store64_rel(&rec->close_epoch, lj_gc2_retire_epoch(g));
+      la_store32_rel(&rec->status,
+	LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_BODY_OWNED|
+	LJ_STR_CANONREC_CLOSE_PROVEN|LJ_STR_CANONREC_VM_COHORT);
+    }
+    la_store32_rel(&rec->main_linked, 0);
+    lj_str_sweep_unlinked_add(g, 1);
+  }
+  lj_gc2_account_alloc(g, tg, sizeof(*rec));
+  return 1;
+
+keep:
+  str_sweep_cancel_candidate(o);
+  current = u;
+  if (lj_str_link_cas_acqrel(link, &current, u & ~(uintptr_t)LJ_STRHASH_DEAD))
+    lj_str_sweep_link_rel(g, lj_str_nodelink(mainhdr, o));
+  return 1;
+}
+
 static uint32_t str_sweep_unlink_one(global_State *g, StrTabHdr *hdr)
 {
   GCRef *link = lj_str_sweep_link_acq(g);
@@ -2245,6 +2380,9 @@ static uint32_t str_sweep_unlink_one(global_State *g, StrTabHdr *hdr)
     lj_str_sweep_link_rel(g, lj_str_nodelink(hdr, o));
     return 1;
   }
+
+  if (lj_str_reclaim_exclusive_acq(g) == 0)
+    return str_sweep_unlink_active(g, hdr, link, u, o);
 
   batch = str_retire_batch_current(g, hdr);
   if (!batch) {
@@ -2311,12 +2449,35 @@ void lj_str_gc2_sweep_begin(global_State *g, int major)
   lj_str_sweep_grace_epoch_rel(g, 0);
   lj_str_sweep_batch_pending_rel(g, 0);
   la_store32_rel(&g->str.sweep_cycle, gc2_cycle_acq(g));
-  /* The fully concurrent quarantine/commit protocol remains hard-disabled.
-  ** b1.2 instead admits only an explicit, internal-allocator, sole-main-TG
-  ** collection and holds that nonwaiting exclusion through physical free. */
-  major = major && str_reclaim_exclusive_try(g);
-  lj_str_sweep_phase_rel(g, major ? LJ_STR_SWEEP_ACQUIRE :
-					 LJ_STR_SWEEP_DONE);
+  if (major && str_reclaim_exclusive_try(g)) {
+    lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_ACQUIRE);
+  } else if (major && str_vm_cohort_ready(g, 0)) {
+    uint64_t scan = la_load64_acq(&g->main_tg->str_owner_scan_epoch);
+    /* A stalled actor may defer the currently reserved cohort. Once that
+    ** cohort commits, individual second-grace readers delay only its reuse. */
+    if (lj_str_qcount_acq(g) != 0) {
+      /* Offer resumed actors an owner checkpoint without scanning new
+      ** candidates. The next retire pass consumes only proven records. */
+      lj_str_sweep_grace_epoch_rel(g, lj_gc2_retire_epoch(g));
+      lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_UNLINK_GRACE);
+      gc2_sweep_grace_needed_rel(g, 1);
+    } else if (scan != 0 && str_vm_cohort_ready(g, scan - 1u)) {
+      lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_ACQUIRE);
+    } else {
+      lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_DONE);
+    }
+  } else {
+    lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_DONE);
+  }
+}
+
+uint32_t lj_str_gc2_grace_actions(global_State *g)
+{
+  uint32_t actions = LJ_GC2_HS_FLUSH_SSB;
+  if (lj_str_sweep_phase_acq(g) == LJ_STR_SWEEP_UNLINK_GRACE &&
+      lj_str_reclaim_exclusive_acq(g) == 0)
+    actions |= LJ_GC2_HS_SCAN_OWNER_ROOTS;
+  return actions;
 }
 
 int lj_str_gc2_sweep_pending(global_State *g)
@@ -2349,9 +2510,9 @@ uint32_t lj_str_gc2_sweep_step(global_State *g, uint32_t limit)
       }
       pending = lj_str_expand_target(lj_str_topology_acq(hdr));
       if (LJ_UNLIKELY(pending != NULL)) {
-        /* Exclusive string admission retains the current header. A ready
-        ** migration can be left by a former mutator whose pin has since
-        ** drained. Publish it before claiming the sweep topology. */
+        /* SWEEP retains directory storage until the IDLE retire drain.
+        ** Publish a ready copy before claiming its topology; a pinned or
+        ** unfinished copy naturally defers string sweep for this cycle. */
         if (!strtab_finish_ready_copy(g, hdr, pending)) {
           str_reclaim_exclusive_leave(g);
           lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_DONE);
@@ -2360,14 +2521,15 @@ uint32_t lj_str_gc2_sweep_step(global_State *g, uint32_t limit)
         continue;
       }
       if (!strtab_gc2_claim(g, hdr)) {
-	/* Failed claims are retry work, not a reason to park forever. */
+	/* The active collector leaves a topology owner to its mutator. */
+	if (lj_str_reclaim_exclusive_acq(g) == 0)
+	  lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_DONE);
 	n++;
 	continue;
       }
-      /* Admission has excluded every new interner. A pre-admission native
-      ** table pin would mean the sole-mutator proof was incomplete, so skip
-      ** this pass before tagging or unlinking anything. */
-      if (LJ_UNLIKELY(strtab_active_on_hdr(g, hdr))) {
+      /* Sole-mutator admission requires that pre-existing table pins have
+      ** already ended before tagging. Quarantine permits active readers. */
+      if (lj_str_reclaim_exclusive_acq(g) && strtab_active_on_hdr(g, hdr)) {
 	strtab_release(hdr);
 	str_reclaim_exclusive_leave(g);
 	lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_DONE);
@@ -2401,7 +2563,14 @@ uint32_t lj_str_gc2_sweep_step(global_State *g, uint32_t limit)
       ** tags and protect every traversed incoming edge before following it. */
       if (strtab_active_on_hdr_before(g, hdr,
 	    lj_str_sweep_grace_epoch_acq(g))) {
-	(void)lj_thr_retry_yield(NULL);
+	if (!lj_str_reclaim_exclusive_acq(g)) {
+	  strtab_release(hdr);
+	  lj_str_sweep_hdr_rel(g, NULL);
+	  lj_str_sweep_link_rel(g, NULL);
+	  lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_DONE);
+	} else {
+	  (void)lj_thr_retry_yield(NULL);
+	}
 	n++;
 	continue;
       }
@@ -2582,13 +2751,17 @@ static void strq_count_remove(global_State *g)
   }
 }
 
-/* All qnext rewrites share the resize claim. The caller retains record
-** ownership until the post-unlink grace, including a cancelled publication. */
+/* Pin topology against resize, then remove only the exact incoming link.
+** A concurrent publisher can prepend, but no other actor removes records
+** while this IDLE reclaimer owns the retire list. Readers keep the immutable
+** old successor through the post-unlink grace. */
 static int strq_unlink(global_State *g, StrCanonRec *rec)
 {
-  StrCanonHdr *hdr = lj_str_qtabh_acq(g);
+  TGState *tg = lj_thr_get_tg_fallback(g);
+  StrCanonHdr *hdr = strq_try_pin(g, tg);
   StrCanonRec **link, *cur;
-  if (!strq_claim(g, hdr))
+  int unlinked;
+  if (!hdr)
     return 0;
   link = &hdr->bucket[rec->hash & hdr->mask];
   while ((cur = lj_str_qbucket_acq(link)) != NULL && cur != rec)
@@ -2597,9 +2770,28 @@ static int strq_unlink(global_State *g, StrCanonRec *rec)
     lj_assertG(0, "canonical quarantine lost a linked record");
     abort();
   }
-  lj_str_qbucket_rel(link, lj_str_qnext_acq(rec));
-  la_store32_rel(&hdr->resize, 0);
-  return 1;
+  unlinked = lj_str_qbucket_cas(link, &cur, lj_str_qnext_acq(rec));
+  strq_active_leave(tg, hdr);
+  return unlinked;
+}
+
+static int strq_readers_active(global_State *g)
+{
+  TGState *tg;
+  /* Pair with the reader fence before its first bucket load. A reader not
+  ** observed by this scan must observe the already-published unlink. */
+  la_fence_seq();
+  if (lj_tg_strq_active_depth_acq(g->main_tg))
+    return 1;
+  for (tg = gc2_tg_list_acq(g); tg != NULL;) {
+    TGState *next = lj_tg_next_acq(tg);
+    if (lj_tg_strq_active_depth_acq(tg))
+      return 1;
+    if (next == tg)
+      return 1;
+    tg = next;
+  }
+  return 0;
 }
 
 /* Publish the rescued body to the current main generation. Older chain
@@ -2679,6 +2871,8 @@ static int strq_retire_record(global_State *g, StrCanonRec *rec,
         uint64_t close = la_load64_acq(&rec->close_epoch);
         if (canon != lj_str_canon_pack(rec, LJ_STR_CANON_QCLOSING) ||
             !str_retire_grace(completed, close) ||
+	    ((status & LJ_STR_CANONREC_VM_COHORT) &&
+	     !str_vm_cohort_ready(g, close)) ||
             str_source_pinned(g, s) ||
             (mainhdr && strtab_active_on_hdr_before(g, mainhdr, close)) ||
             !lj_str_canon_cas(s, &canon, committed))
@@ -2707,7 +2901,8 @@ static int strq_retire_record(global_State *g, StrCanonRec *rec,
       strq_count_remove(g);
     return 0;
   }
-  if (!str_retire_grace(completed, la_load64_acq(&rec->q_unlink_epoch)))
+  if (!str_retire_grace(completed, la_load64_acq(&rec->q_unlink_epoch)) ||
+      strq_readers_active(g))
     return 0;
   if (owns_body) {
     LJGCDestructCtx dctx;

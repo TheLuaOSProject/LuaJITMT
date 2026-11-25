@@ -6236,7 +6236,7 @@ uint32_t lj_gc2_test_sweep_owner_progress(global_State *g, TGState *tg,
       /* Grace needs acknowledgement and SSB closure, not a duplicate semantic
       ** root traversal. The next bounded sweep batch establishes its one root
       ** boundary before touching another arena. */
-      (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
+      (void)lj_gc2_handshake(g, lj_str_gc2_grace_actions(g));
     if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
       gc2_sweep_grace_needed_rel(g, 0);
     n = 1;
@@ -9985,9 +9985,9 @@ static int gc2_scan_cycle_owner_tg_roots_mode(global_State *g, TGState *tg,
   return exact;
 }
 
-void lj_gc2_scan_cycle_owner_tg_roots(global_State *g, TGState *tg)
+int lj_gc2_scan_cycle_owner_tg_roots(global_State *g, TGState *tg)
 {
-  (void)gc2_scan_cycle_owner_tg_roots_mode(g, tg, 0);
+  return gc2_scan_cycle_owner_tg_roots_mode(g, tg, 0);
 }
 
 int lj_gc2_scan_cycle_owner_tg_roots_native_parked(global_State *g,
@@ -18358,6 +18358,8 @@ static int gc2_markobj_expected_scoped_status_mode(global_State *g,
     return GC2_MARK_DEAD;
   if (gctp)
     *gctp = gct;
+  if (semantic_publish && gct == (uint32_t)~LJ_TSTR)
+    return gc2_rescue_semantic_string(g, o) ? status : GC2_MARK_DEAD;
   if (semantic_publish && gc2_gct_may_traverse(gct)) {
     uint32_t phase = gc2_phase_acq(g);
     if (((status == GC2_MARK_NEW &&
@@ -22631,7 +22633,7 @@ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
     ** afterward proves all currently quarantined gcw/raw readers crossed a
     ** complete epoch. The next worker pass drains roots published by the ACK. */
     for (grace = 0; grace < LJ_GC2_GRACE_EPOCHS; grace++)
-      (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
+      (void)lj_gc2_handshake(g, lj_str_gc2_grace_actions(g));
     if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
       gc2_sweep_grace_needed_rel(g, 0);
     return 1;

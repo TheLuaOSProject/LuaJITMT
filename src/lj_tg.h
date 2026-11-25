@@ -316,6 +316,9 @@ struct TGState {
   uint32_t profile_samples;
   int32_t profile_vmstate;
   uint32_t in_native;
+  void *str_vm_outer_cframe;  /* Managed Lua worker entry. */
+  uint64_t str_owner_scan_epoch;  /* Completed owner-local root scan. */
+  uint64_t str_vm_root_epoch;  /* True owner dispatch checkpoint. */
   GCstr *str_source_pin;  /* Revalidated shared C API source. */
   StrTabHdr *strtab_active_hdr;
   uint32_t strtab_active_depth;

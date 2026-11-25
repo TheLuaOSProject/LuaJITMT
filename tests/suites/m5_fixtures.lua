@@ -131,6 +131,13 @@ return function(add)
         cflags = strtab_cflags,
         timeout = "20s"
       })
+      if jit.os == "Linux" and jit.arch == "x64" and t.target_arch == "x64" then
+        compile_and_run_c(t, t:tmp("lj_t-str-reclaim-active"),
+                          "t-str-reclaim-active.c", {
+          cflags = strtab_cflags,
+          timeout = "30s"
+        })
+      end
       compile_and_run_c(t, out_rehash, "t-strtab-rehash.c", {
         cflags = strtab_cflags,
         timeout = "20s"
