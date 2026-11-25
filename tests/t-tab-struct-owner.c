@@ -46,6 +46,7 @@ typedef struct ResizeCtx {
   uint32_t hbits;
   int clear;
   int mutate;
+  int weak_mode_change;
   int status;
 } ResizeCtx;
 
@@ -208,8 +209,18 @@ static void array_copy_hold_hook(GCtab *t, MSize idx)
     sched_yield();
 }
 
-static void array_migration_mutate(lua_State *L, int mixed)
+static void array_migration_mutate(lua_State *L, int mixed, int weak_change)
 {
+  if (weak_change) {
+    if (weak_change < 0) {
+      lua_pushnil(L);
+    } else {
+      lua_newtable(L);
+      lua_pushliteral(L, "v");
+      lua_setfield(L, -2, "__mode");
+    }
+    assert(lua_setmetatable(L, 1));
+  }
   lua_rawgeti(L, 1, 2);
   assert(lua_tointeger(L, -1) == 22);
   lua_pop(L, 1);
@@ -292,7 +303,7 @@ static void *resize_worker(void *arg)
   if (ctx->clear)
     lj_tab_clear(L, t);
   else if (ctx->mutate == 3 || ctx->mutate == 5)
-    array_migration_mutate(L, ctx->mutate == 5);
+    array_migration_mutate(L, ctx->mutate == 5, ctx->weak_mode_change);
   else if (ctx->mutate == 4)
     hash_migration_mutate(L);
   else if (ctx->mutate == 6) {
@@ -433,7 +444,7 @@ static void exercise_resize_owner(lua_State *L, int clear)
 {
   lua_State *ownerL, *otherL;
   pthread_t owner_thr, other_thr;
-  ResizeCtx owner, other;
+  ResizeCtx owner = { 0 }, other = { 0 };
   GCtab *owner_tab;
   volatile int ready = 0;
   volatile int owner_start = 0;
@@ -646,7 +657,8 @@ static void assert_array_migration_values(lua_State *L, int weak)
   lua_pop(L, 1);
 }
 
-static void exercise_array_migration_owner(lua_State *L, int weak, int mixed)
+static void exercise_array_migration_owner(lua_State *L, int weak, int mixed,
+					   int weak_change)
 {
   volatile int ready = 0, owner_start = 0, other_start = 0;
   volatile int owner_done = 0, other_done = 0;
@@ -695,6 +707,7 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed)
   other.start = &other_start;
   other.done = &other_done;
   other.mutate = mixed ? 5 : 3;
+  other.weak_mode_change = weak_change;
   other.status = -1;
   resize_hook_tab = t;
   resize_hook_entered = &hook_entered;
@@ -736,7 +749,7 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed)
   resize_hook_entered = NULL;
   resize_hook_release = NULL;
   lua_gc(L, LUA_GCCOLLECT, 0);
-  assert_array_migration_values(L, weak);
+  assert_array_migration_values(L, weak_change ? weak_change > 0 : weak);
   if (mixed) {
     lua_rawgeti(L, 1, -1);
     assert(lua_tointeger(L, -1) == 555);
@@ -1099,12 +1112,14 @@ int main(void)
   exercise_hash_cutover_owner(L, 0);
   exercise_hash_cutover_owner(L, 1);
   exercise_hash_cutover_weak_value(L);
-  exercise_array_migration_owner(L, 0, 0);
-  exercise_array_migration_owner(L, 1, 0);
-  exercise_array_migration_owner(L, 0, 1);
-  exercise_array_migration_owner(L, 1, 1);
-  exercise_array_migration_owner(L, 0, 2);
-  exercise_array_migration_owner(L, 1, 2);
+  exercise_array_migration_owner(L, 0, 0, 0);
+  exercise_array_migration_owner(L, 1, 0, 0);
+  exercise_array_migration_owner(L, 0, 1, 0);
+  exercise_array_migration_owner(L, 1, 1, 0);
+  exercise_array_migration_owner(L, 0, 2, 0);
+  exercise_array_migration_owner(L, 1, 2, 0);
+  exercise_array_migration_owner(L, 0, 1, 1);
+  exercise_array_migration_owner(L, 1, 2, -1);
   exercise_hash_migration_owner(L);
   exercise_hash_install_owner(L, 0);
   exercise_hash_install_owner(L, 1);

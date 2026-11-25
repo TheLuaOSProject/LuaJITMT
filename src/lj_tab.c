@@ -2893,6 +2893,24 @@ static int tab_resize_early_hash_start_held(global_State *g, GCtab *t,
 	 phase == TAB_RESIZE_DESC_PUBLISHING;
 }
 
+static int tab_resize_runtime_finish_held(global_State *g, GCtab *t,
+					    TabResizeDesc *desc)
+{
+  uint32_t expect = TAB_RESIZE_DESC_PUBLISHING;
+  /*
+  ** The metatable or its __mode may have changed while helpers used the
+  ** captured policy for individual strong barriers. Rescan the now-current
+  ** roots so an active collection classifies the completed table afresh.
+  */
+  if (lj_tab_resize_desc_phase_acq(desc) == TAB_RESIZE_DESC_PUBLISHING &&
+      gc2_phase_acq(g) != LJ_GC2_IDLE)
+    lj_gc2_barrier_tab_g(g, t);
+  lj_tab_resize_desc_flags_or(desc, TAB_RESIZE_DESC_F_CUTOVER);
+  (void)lj_tab_resize_desc_phase_cas(desc, &expect,
+				    TAB_RESIZE_DESC_TERMINATING);
+  return tab_resize_desc_help_terminating(g, desc);
+}
+
 /* The migrator published the freetop and mask and relinquished structural
 ** control. Only the exact old root can be replaced. SMR rules out reuse of
 ** that vector while a helper is delayed between checking control and CAS.
@@ -2900,7 +2918,6 @@ static int tab_resize_early_hash_start_held(global_State *g, GCtab *t,
 static int tab_resize_hash_cutover_held(global_State *g, TabResizeDesc *desc)
 {
   uint32_t phase = lj_tab_resize_desc_phase_acq(desc);
-  uint32_t expect_phase = TAB_RESIZE_DESC_PUBLISHING;
   GCtab *t;
   uint64_t oldnode, newnode;
   TabNodeRetire *ret;
@@ -2963,10 +2980,7 @@ static int tab_resize_hash_cutover_held(global_State *g, TabResizeDesc *desc)
   }
   if (desc->newarray && !grows && !tab_resize_array_root_held(g, desc))
     return 0;
-  lj_tab_resize_desc_flags_or(desc, TAB_RESIZE_DESC_F_CUTOVER);
-  (void)lj_tab_resize_desc_phase_cas(desc, &expect_phase,
-				    TAB_RESIZE_DESC_TERMINATING);
-  return tab_resize_desc_help_terminating(g, desc);
+  return tab_resize_runtime_finish_held(g, t, desc);
 }
 
 /* 06 section 6.3.1 raw array retire. */
@@ -3148,10 +3162,7 @@ static int tab_resize_array_cutover_held(global_State *g, TabResizeDesc *desc)
   }
   if (!tab_resize_array_root_held(g, desc))
     return 0;
-  phase = TAB_RESIZE_DESC_PUBLISHING;
-  (void)lj_tab_resize_desc_phase_cas(desc, &phase,
-				    TAB_RESIZE_DESC_TERMINATING);
-  return tab_resize_desc_help_terminating(g, desc);
+  return tab_resize_runtime_finish_held(g, t, desc);
 }
 
 static LJ_AINLINE int tab_retire_epoch_elapsed(uint64_t completed_epoch,
