@@ -106,6 +106,7 @@ return function(add)
       local out_reclaim = t:tmp("lj_t-str-reclaim-sole")
       local out_rehash = t:tmp("lj_t-strtab-rehash")
       local out_canon = t:tmp("lj_t-strcanon-model")
+      local strtab_cflags = "-DLJ_STR_TEST_HELPERS -DLJ_GC2_TEST_HELPERS"
       compile_and_run_sources(t, out_canon,
         { t:path("tests", "t-strcanon-model.c") }, {
         default_cflags = false,
@@ -116,17 +117,19 @@ return function(add)
         cflags = "-std=c11 -O2 -Wall -Wextra -Werror -pthread"
       })
       t:build({ clean = true, quiet = true,
-                xcflags = "-DLJ_STR_TEST_HELPERS" })
+                xcflags = strtab_cflags })
       compile_and_run_c(t, out, "t-strtab-cas.c", {
-        cflags = "-DLJ_STR_TEST_HELPERS",
+        cflags = strtab_cflags,
         timeout = "20s"
       })
       compile_and_run_c(t, out_reclaim, "t-str-reclaim-sole.c", {
-        cflags = "-DLJ_STR_TEST_HELPERS",
+        cflags = strtab_cflags,
         timeout = "20s"
       })
-      compile_and_run_c(t, out_rehash, "t-strtab-rehash.c",
-                        { timeout = "20s" })
+      compile_and_run_c(t, out_rehash, "t-strtab-rehash.c", {
+        cflags = strtab_cflags,
+        timeout = "20s"
+      })
       print("M5 string table CAS publication and canonical quarantine model tests passed")
     end
   })

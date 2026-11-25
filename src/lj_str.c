@@ -943,19 +943,38 @@ static LJ_AINLINE void strtab_mark_before_publish(global_State *g, GCobj *o)
     (void)lj_gc2_preserve_sweep_root(g, o);
 }
 
+/* The caller retains the exact body across this arbitration. The record
+** match protects a quarantine lookup against a superseded ownership entry. */
+static int strcanon_rescue_held(GCstr *s, StrCanonRec *rec)
+{
+  uintptr_t canon = lj_str_canon_acq(s);
+  for (;;) {
+    uint32_t state = lj_str_canon_state(canon);
+    if (lj_str_canon_record(canon) != rec)
+      return 0;
+    if (state == LJ_STR_CANON_QRESCUED)
+      return 1;
+    if (state != LJ_STR_CANON_QACTIVE && state != LJ_STR_CANON_QCLOSING)
+      return 0;
+    if (lj_str_canon_cas(s, &canon,
+			lj_str_canon_pack(rec, LJ_STR_CANON_QRESCUED)))
+      return 1;  /* Rescue and logical-death arbitration LP. */
+  }
+}
+
 /* Consult the authoritative secondary canonical directory after a true main
-** table miss. The per-TG header pin keeps the selected quarantine generation
-** stable while immutable bytes are compared; Stage A retains bucket records
-** until terminal shutdown. QCOMMIT/FREEING are deliberately not
-** acquirable; those states are enabled only after read epochs can substitute
-** the current canonical body. */
+** table miss. The pin retains records in the sampled generation. An exact
+** body lease holds a candidate while inspecting its header and bytes.
+** A losing body admission cannot certify absence: interning must retry after
+** releasing any main-table pin. */
 static GCstr *strcanon_lookup(lua_State *L, const char *str, MSize len,
-			      StrHash hash)
+			     StrHash hash, int *retry)
 {
   global_State *g = G(L);
   StrCanonHdr *hdr;
   StrCanonRec *rec;
   GCstr *found = NULL;
+  *retry = 0;
   if (lj_str_qcount_acq(g) == 0)
     return NULL;
   hdr = strq_enter(L, g);
@@ -965,42 +984,43 @@ static GCstr *strcanon_lookup(lua_State *L, const char *str, MSize len,
        rec != NULL;
        rec = lj_str_qnext_acq(rec)) {
     GCstr *s;
-    uintptr_t canon, want;
-    uint32_t state;
+    LJGC2Lease lease;
+    TValue value;
+    uintptr_t canon;
+    int status;
     if (rec->hash != hash || rec->len != len)
       continue;
     s = (GCstr *)la_loadptr_acq((void *const *)&rec->str);
-    if (!s || !lj_gc2_mem_registered(g, s) ||
-	la_load8_acq(&s->gct) != (uint8_t)~LJ_TSTR ||
-	s->len != len || memcmp(str, strdata(s), len) != 0)
+    if (!s)
       continue;
+    setgcVraw(&value, obj2gco(s), LJ_TSTR);
+    status = lj_gc2_tv_lease_acquire(g, &value, &lease);
+    if (status != LJ_GC2_TV_EDGE_VALID) {
+      if (la_loadptr_acq((void *const *)&rec->str) == s) {
+	*retry = 1;
+	break;
+      }
+      continue;
+    }
     canon = lj_str_canon_acq(s);
-    for (;;) {
-      state = lj_str_canon_state(canon);
-      if (lj_str_canon_record(canon) != rec ||
-	  (state != LJ_STR_CANON_QACTIVE &&
-	   state != LJ_STR_CANON_QRESCUED &&
-	   state != LJ_STR_CANON_QCLOSING))
-	break;
-      if (state == LJ_STR_CANON_QRESCUED) {
-	found = s;
-	break;
-      }
-      want = lj_str_canon_pack(rec, LJ_STR_CANON_QRESCUED);
-      if (lj_str_canon_cas(s, &canon, want)) {
-	found = s;  /* Rescue and logical-death arbitration LP. */
-	break;
+    if (la_loadptr_acq((void *const *)&rec->str) == s &&
+	lj_str_canon_record(canon) == rec &&
+	lj_str_canon_state(canon) < LJ_STR_CANON_QCOMMIT &&
+	s->len == len) {
+#ifdef LJ_STR_TEST_HELPERS
+      str_test_canon(L, s, rec, LJ_STR_TEST_CANON_Q_BODY_HELD);
+#endif
+      if (memcmp(str, strdata(s), len) == 0 && strcanon_rescue_held(s, rec)) {
+	strtab_mark_before_publish(g, obj2gco(s));
+	canon = lj_str_canon_acq(s);
+	if (lj_str_canon_state(canon) == LJ_STR_CANON_QRESCUED &&
+	    lj_str_canon_record(canon) == rec)
+	  found = s;
       }
     }
-    if (found) {
-      strtab_mark_before_publish(g, obj2gco(found));
-      canon = lj_str_canon_acq(found);
-      if (lj_str_canon_state(canon) != LJ_STR_CANON_QRESCUED ||
-	  lj_str_canon_record(canon) != rec)
-	found = NULL;
-      else
-	break;
-    }
+    lj_gc2_lease_release(&lease);
+    if (found)
+      break;
   }
   strq_leave(L, hdr);
   return found;
@@ -1026,7 +1046,7 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
       MSize mask, coll = 0;
       uintptr_t headu, u;
       uintptr_t want;
-      int grow;
+      int grow, qretry;
       if (LJ_UNLIKELY(hdr == NULL)) {
 	if (news)
 	  lj_mem_free(g, news, lj_str_size(news->len));
@@ -1091,9 +1111,13 @@ lookup:
       if (news == NULL) {
 	GCstr *qs;
 	strtab_leave(L, hdr);
-	qs = strcanon_lookup(L, str, len, qhash);
+	qs = strcanon_lookup(L, str, len, qhash, &qretry);
 	if (qs)
 	  return qs;
+	if (qretry) {
+	  strtab_wait(L);
+	  continue;
+	}
 	news = lj_str_alloc(L, str, len, hash, hashalg);
 	continue;
       }
@@ -1101,11 +1125,16 @@ lookup:
       news->hash = hash;
       news->hashalg = (uint8_t)hashalg;
       if (LJ_UNLIKELY(lj_str_qcount_acq(g) != 0)) {
-	GCstr *qs = strcanon_lookup(L, str, len, qhash);
+	GCstr *qs = strcanon_lookup(L, str, len, qhash, &qretry);
 	if (qs) {
 	  strtab_leave(L, hdr);
 	  lj_mem_free(g, news, lj_str_size(news->len));
 	  return qs;
+	}
+	if (qretry) {
+	  strtab_leave(L, hdr);
+	  strtab_wait(L);
+	  continue;
 	}
       }
       /* The head snapshot covers the complete miss search. An intervening

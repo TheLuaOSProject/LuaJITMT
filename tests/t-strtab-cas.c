@@ -359,12 +359,12 @@ static void canonical_race_hook(lua_State *L, GCstr *s, StrCanonRec *rec,
 				uint32_t stage)
 {
   CanonRaceCtx *ctx = canon_race_ctx;
-  if (!ctx || ctx->pause_stage != stage || ctx->s != s)
+  if (!ctx || ctx->pause_stage != stage || ctx->s != s || ctx->worker_L != L)
     return;
-  assert(ctx->worker_L == L);
   assert(rec != NULL);
   ctx->rec = rec;
-  if (stage == LJ_STR_TEST_CANON_Q_PINNED_BEFORE_PUBLISH) {
+  if (stage == LJ_STR_TEST_CANON_Q_PINNED_BEFORE_PUBLISH ||
+      stage == LJ_STR_TEST_CANON_Q_BODY_HELD) {
     ctx->qhdr = lj_tg_strq_active_hdr_acq(L2TG(L));
     assert(ctx->qhdr != NULL);
     assert(lj_tg_strq_active_depth_acq(L2TG(L)) != 0);
@@ -374,7 +374,7 @@ static void canonical_race_hook(lua_State *L, GCstr *s, StrCanonRec *rec,
     test_sleep_without_tg(100000);
 }
 
-static void *canonical_detach_worker(void *arg)
+static void *canonical_race_worker(void *arg)
 {
   CanonRaceCtx *ctx = (CanonRaceCtx *)arg;
   lua_State *L = ctx->worker_L;
@@ -384,7 +384,10 @@ static void *canonical_detach_worker(void *arg)
   }
   ctx->worker_tg = lj_thr_get_tg();
   assert(ctx->worker_tg != NULL && L2TG(L) == ctx->worker_tg);
-  ctx->result = lj_str_test_quarantine_detach(L, ctx->s);
+  if (ctx->pause_stage == LJ_STR_TEST_CANON_Q_BODY_HELD)
+    ctx->result = lj_str_new(L, strdata(ctx->s), ctx->s->len) == ctx->s;
+  else
+    ctx->result = lj_str_test_quarantine_detach(L, ctx->s);
   ctx->active_cleared =
     lj_tg_strq_active_hdr_acq(ctx->worker_tg) == NULL &&
     lj_tg_strq_active_depth_acq(ctx->worker_tg) == 0;
@@ -406,7 +409,7 @@ static void canonical_race_start(CanonRaceCtx *ctx, lua_State *L, GCstr *s,
   ctx->pause_stage = stage;
   canon_race_ctx = ctx;
   lj_str_test_set_canon_hook(canonical_race_hook);
-  assert(lj_thr_create(thr, canonical_detach_worker, ctx) == 0);
+  assert(lj_thr_create(thr, canonical_race_worker, ctx) == 0);
   for (i = 0; i < 50000 && la_load32_acq(&ctx->reached) == 0 &&
 	 la_load32_acq(&ctx->done) == 0; i++)
     test_sleep_without_tg(100000);
@@ -445,10 +448,11 @@ static int canonical_qbucket_contains(StrCanonHdr *hdr, StrCanonRec *want)
 
 static void exercise_canonical_quarantine(lua_State *L)
 {
-  static const char publish_name[] =
+  static const char publish_prefix[] =
     "m5-strtab-canonical-q-publish-resize-race";
   static const char unlink_name[] =
     "m5-strtab-canonical-unlink-qcount-race";
+  char publish_name[LJ_HUGE_THRESHOLD + 1u];
   global_State *g = G(L);
   CanonRaceCtx ctx;
   LJThr worker;
@@ -456,6 +460,7 @@ static void exercise_canonical_quarantine(lua_State *L)
   MSize oldmask;
   StrCanonHdr *oldhdr;
   GCstr *spublish, *sunlink;
+  LJHugeInfo huge;
   uintptr_t canon;
 
   /* Exercise the zero -> non-zero correctness gate first in a fresh state.
@@ -470,7 +475,14 @@ static void exercise_canonical_quarantine(lua_State *L)
 		       &worker);
   assert(ctx.rec != NULL);
   assert(lj_str_qcount_acq(g) == 1u);
+#ifdef LJ_GC2_TEST_HELPERS
+  /* Refusing a lease cannot permit a competing equal identity. */
+  lj_gc2_test_stack_admission_retry_once(obj2gco(sunlink));
+#endif
   assert(lj_str_new(L, unlink_name, sizeof(unlink_name)-1u) == sunlink);
+#ifdef LJ_GC2_TEST_HELPERS
+  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+#endif
   canon = lj_str_canon_acq(sunlink);
   assert(lj_str_canon_state(canon) == LJ_STR_CANON_QRESCUED);
   canonical_race_finish(&ctx, &worker);
@@ -479,8 +491,11 @@ static void exercise_canonical_quarantine(lua_State *L)
   ** resize must abort without moving the bucket topology out from under it. */
   oldmask = lj_str_qmask_acq(g);
   oldhdr = lj_str_qtabh_acq(g);
-  spublish = lj_str_new(L, publish_name, sizeof(publish_name)-1u);
+  memset(publish_name, 'z', sizeof(publish_name));
+  memcpy(publish_name, publish_prefix, sizeof(publish_prefix)-1u);
+  spublish = lj_str_new(L, publish_name, sizeof(publish_name));
   assert(spublish != NULL);
+  assert(lj_arena_ishuge(lj_arena_of(spublish)));
   assert(lj_str_canon_acq(spublish) == LJ_STR_CANON_LIVE);
   canonical_race_start(&ctx, L, spublish,
 	LJ_STR_TEST_CANON_Q_PINNED_BEFORE_PUBLISH, &worker);
@@ -503,7 +518,20 @@ static void exercise_canonical_quarantine(lua_State *L)
   assert(lj_str_qtabh_acq(g) != oldhdr);
   assert(lj_str_qmask_acq(g) == (oldmask << 1) + 1u);
   assert(lj_str_qretired_head_acq(g) == oldhdr);
-  assert(lj_str_new(L, publish_name, sizeof(publish_name)-1u) == spublish);
+  /* Simulate close intent while the directory still owns the huge body.
+  ** Pause one interner before it compares the borrowed bytes. Its exact
+  ** mapping reader defers reclamation while another interner can rescue. */
+  lj_str_canon_rel(spublish,
+		   lj_str_canon_pack(ctx.rec, LJ_STR_CANON_QCLOSING));
+  canonical_race_start(&ctx, L, spublish, LJ_STR_TEST_CANON_Q_BODY_HELD,
+		       &worker);
+  assert(lj_arena_hugetab_lookup(&L2TG(L)->huge, spublish, &huge));
+  assert(huge.readers != 0);
+  assert(lj_str_quarantine_resize(L, (ctx.qhdr->mask << 1) + 1u) == 0);
+  assert(lj_str_new(L, strdata(spublish), spublish->len) == spublish);
+  canonical_race_finish(&ctx, &worker);
+  assert(lj_arena_hugetab_lookup(&L2TG(L)->huge, spublish, &huge));
+  assert(huge.readers == 0);
   canon = lj_str_canon_acq(spublish);
   assert(lj_str_canon_state(canon) == LJ_STR_CANON_QRESCUED);
 
@@ -513,7 +541,7 @@ static void exercise_canonical_quarantine(lua_State *L)
 	 LJ_STR_CANON_QRESCUED);
   assert(lj_str_canon_state(lj_str_canon_acq(sunlink)) ==
 	 LJ_STR_CANON_QRESCUED);
-  assert(lj_str_new(L, publish_name, sizeof(publish_name)-1u) == spublish);
+  assert(lj_str_new(L, publish_name, sizeof(publish_name)) == spublish);
   assert(lj_str_new(L, unlink_name, sizeof(unlink_name)-1u) == sunlink);
 
   /* The zero/non-zero bypass is a correctness boundary. Prove that the Stage
