@@ -131,6 +131,11 @@ return function(add)
         cflags = strtab_cflags,
         timeout = "20s"
       })
+      compile_and_run_c(t, t:tmp("lj_t-str-reclaim-cohort-step"),
+                        "t-str-reclaim-cohort-step.c", {
+        cflags = strtab_cflags,
+        timeout = "20s"
+      })
       if jit.os == "Linux" and jit.arch == "x64" and t.target_arch == "x64" then
         compile_and_run_c(t, t:tmp("lj_t-str-reclaim-active"),
                           "t-str-reclaim-active.c", {

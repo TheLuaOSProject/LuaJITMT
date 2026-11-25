@@ -1937,6 +1937,8 @@ typedef struct StrInternState {
   StrTabHdr *sweep_hdr;	/* Header owned by the bounded GC2 string sweep. */
   GCRef *sweep_link;	/* Exact incoming-edge cursor in sweep_hdr. */
   uint64_t sweep_grace_epoch;  /* Epoch at the current string grace edge. */
+  uint64_t vm_cohort_close_epoch;  /* Latest VM quarantine close. */
+  uint64_t vm_cohort_checked_epoch;  /* Latest cohort with exact root grace. */
   uint64_t sweep_tagged;	/* Successfully tagged incoming edges. */
   uint64_t sweep_rescued;	/* Tagged exact matches preserved by interners. */
   uint64_t sweep_unlinked;	/* Successfully retired string bodies. */

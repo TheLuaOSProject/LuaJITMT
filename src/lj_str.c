@@ -2458,7 +2458,9 @@ static uint32_t str_sweep_unlink_active(global_State *g, StrTabHdr *mainhdr,
     lj_str_body_retired_epoch_rel(rec, epoch);
     if (lj_str_canon_cas(s, &active,
 			 lj_str_canon_pack(rec, LJ_STR_CANON_QCLOSING))) {
-      la_store64_rel(&rec->close_epoch, lj_gc2_retire_epoch(g));
+      uint64_t close = lj_gc2_retire_epoch(g);
+      la_store64_rel(&rec->close_epoch, close);
+      la_store64_rel(&g->str.vm_cohort_close_epoch, close);
       la_store32_rel(&rec->status,
 	LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_BODY_OWNED|
 	LJ_STR_CANONREC_CLOSE_PROVEN|LJ_STR_CANONREC_VM_COHORT);
@@ -2586,7 +2588,11 @@ void lj_str_gc2_sweep_begin(global_State *g, int major)
     TGState *owner = str_vm_reclaim_owner(g, 1);
     if (owner && str_vm_cohort_ready(g, owner, 0)) {
       uint64_t scan = la_load64_acq(&owner->str_owner_scan_epoch);
-      if (lj_str_qcount_acq(g) != 0)
+      uint64_t close = la_load64_acq(&g->str.vm_cohort_close_epoch);
+      /* A cohort that passed its exact root grace cannot block later
+      ** classification merely because one body still has a source reader. */
+      if (lj_str_qcount_acq(g) != 0 &&
+	  (close == 0 || la_load64_acq(&g->str.vm_cohort_checked_epoch) != close))
 	vm_phase = LJ_STR_SWEEP_UNLINK_GRACE;
       else if (scan != 0 && str_vm_cohort_ready(g, owner, scan - 1u))
 	vm_phase = LJ_STR_SWEEP_ACQUIRE;
@@ -3142,6 +3148,16 @@ uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
   uint32_t reclaimed = 0;
   if (!g || completed_epoch == 0)
     return 0;
+  if (lj_str_qcount_acq(g) != 0) {
+    uint64_t close = la_load64_acq(&g->str.vm_cohort_close_epoch);
+    /* This certificate only admits later classification. Current scope,
+    ** per-body epochs and source pins still govern physical retirement. */
+    if (close != 0 && la_load64_acq(&g->str.vm_cohort_checked_epoch) != close &&
+	str_retire_grace(completed_epoch, close) &&
+	str_retire_grace(gc2_idle_retire_epoch_acq(g), close) &&
+	str_vm_cohort_ready(g, str_vm_reclaim_owner(g, 0), close))
+      la_store64_rel(&g->str.vm_cohort_checked_epoch, close);
+  }
   /* Retain the unfinished body list across a bounded public step. Both paths
   ** run with the exact SMR reclaimer's admission already held. */
   reclaimed += str_retire_batches_reclaim_all(g, 1);
