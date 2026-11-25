@@ -454,6 +454,7 @@ return function(add)
         {}, { "reset" }, { "roots" }, { "pool-reset" }, { "pool-roots" },
         { "pool-reset", "stop" }, { "pool-roots", "stop" },
         { "grace1" }, { "grace2" }, { "pool-grace1" }, { "pool-grace2" },
+        { "restart-grace" }, { "pool-restart-grace" },
         { "pool-reset", "publish" }, { "pool-roots", "publish" }
       }, { "lj_safepoint_handshake", resumable })
       run("t-worker-bridge-stop", stop_modes, { resumable })

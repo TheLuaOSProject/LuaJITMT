@@ -1845,7 +1845,7 @@ static void test_worker_owned_sweep_direct(void)
   global_State *g;
   TGState *tg, extra_tg;
   uint64_t worker_runs0, arenas0, idle0;
-  uint32_t sweep_cycle;
+  uint32_t sweep_cycle, grace;
   void *extra_plain, *extra_trav;
   GCArena *extra_plain_a, *extra_trav_a, *swept_a;
 
@@ -1900,8 +1900,13 @@ static void test_worker_owned_sweep_direct(void)
   /* Classification and epoch grace are distinct production worker quanta. */
   assert(lj_gc2_worker_drain(g, 1u) == 1u);
   assert(extra_tg.alloc.quarantine[LJ_ARENAK_TRAVERSABLE] == swept_a);
-  assert(gc2_sweep_grace_needed_acq(g));
-  assert(lj_gc2_worker_drain(g, 1u) == 1u);
+  for (grace = 1; grace <= LJ_GC2_GRACE_EPOCHS; grace++) {
+    uint64_t epoch = gc2_hs_epoch_acq(g);
+    assert(la_load32_acq(&g->gc2.sweep_grace_needed) == grace);
+    assert(lj_gc2_worker_drain(g, 1u) == 1u);
+    assert(gc2_hs_epoch_acq(g) > epoch);
+    assert(extra_tg.alloc.quarantine[LJ_ARENAK_TRAVERSABLE] == swept_a);
+  }
   assert(!gc2_sweep_grace_needed_acq(g));
 
   /* An inert arena now finishes in one summarized reclaim visit. The internal

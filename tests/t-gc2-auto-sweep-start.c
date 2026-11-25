@@ -20,6 +20,12 @@ static _Atomic(TGState *) peer_tg;
 static int pool, stop_pool;
 static uint32_t grace_round;
 static atomic_uint grace_signals;
+static int restart_grace;
+static atomic_uint fresh_graces;
+static void *late_body;
+static HugeTab *late_huge;
+static uint32_t late_cycle;
+static uint64_t late_epoch;
 #ifdef LJ_TRACE_TEST_HELPERS
 static int pause_publish;
 static atomic_int pool_started, first_attempt_returned;
@@ -92,6 +98,14 @@ int __wrap_lj_safepoint_resumable_epoch_try(global_State *g, uint32_t actions,
 {
   int observed = start && gc2_phase_acq(g) == LJ_GC2_SWEEP &&
     before_actions(g, actions);
+  unsigned fresh = atomic_load(&fresh_graces);
+  if (start && fresh >= 1 && fresh <= LJ_GC2_GRACE_EPOCHS &&
+      la_load32_acq(&g->gc2.sweep_grace_needed) == (LJ_GC2_GRACE_ACTIVE | fresh)) {
+    assert(gc2_cycle_acq(g) == late_cycle);
+    assert(gc2_hs_epoch_acq(g) >= late_epoch + fresh - 1);
+    assert(lj_arena_hugetab_lookup(late_huge, late_body, NULL));
+    atomic_fetch_add(&fresh_graces, 1);
+  }
   int complete = __real_lj_safepoint_resumable_epoch_try(g, actions, start);
 #ifdef LJ_TRACE_TEST_HELPERS
   if (pause_publish && observed)
@@ -180,6 +194,25 @@ static int finish(lua_State *L)
     assert(gc2_sweep_bridge_ready_acq(g) == (grace_round != 0));
     if (grace_round)
       assert(la_load32_acq(&g->gc2.sweep_grace_needed) == (LJ_GC2_GRACE_ACTIVE | grace_round));
+    if (restart_grace) {
+      GCSize size = LJ_HUGE_THRESHOLD + LJ_CELL_SIZE;
+      LJHugeInfo hi;
+      late_huge = &L2TG(L)->huge;
+      late_body = lj_mem_newgco_unlinked_nothrow(L, size);
+      assert(late_body && lj_arena_ishuge(lj_arena_of(late_body)));
+      late_cycle = gc2_cycle_acq(g);
+      late_epoch = gc2_hs_epoch_acq(g);
+      /* A logical free racing an unfinished constructor retains its mapping.
+      ** Abandoning the constructor publishes a new physical retirement. */
+      lj_mem_free(g, late_body, size);
+      assert(lj_arena_hugetab_lookup(late_huge, late_body, &hi));
+      assert(hi.flags & LJ_HUGEF_DEFER_FREE);
+      assert(lj_mem_abandon_gco_unpublished(g, late_body) ==
+             LJ_ARENA_HUGE_ROOT_COMPLETE_SWEEP);
+      assert(la_load32_acq(&g->gc2.sweep_grace_needed) == 1);
+      assert(la_load64_acq(&lj_arena_of(late_body)->hdr.retire_epoch) == late_epoch);
+      atomic_store(&fresh_graces, 1);
+    }
     assert(gc2_hs_pending_acq(g) != 0 && !lj_tg_mark_active_acq(L2TG(L)));
     assert(lj_tg_alloc_black_acq(L2TG(L)));
     if (target == LJ_GC2_HS_RESET_ALLOC || target == LJ_GC2_HS_SCAN_ROOTS)
@@ -254,7 +287,11 @@ int main(int argc, char **argv)
     pool = !strncmp(action, "pool-", 5);
     if (pool)
       action += 5;
-    if (!strcmp(action, "grace1") || !strcmp(action, "grace2")) {
+    if (!strcmp(action, "restart-grace")) {
+      restart_grace = 1;
+      grace_round = LJ_GC2_GRACE_EPOCHS;
+      target = LJ_GC2_HS_FLUSH_SSB;
+    } else if (!strcmp(action, "grace1") || !strcmp(action, "grace2")) {
       grace_round = (uint32_t)(action[5] - '0');
       target = LJ_GC2_HS_FLUSH_SSB;
     } else if (!strcmp(action, "reset"))
@@ -298,6 +335,10 @@ int main(int argc, char **argv)
   else {
     assert(gc2_phase_acq(G(L)) == LJ_GC2_IDLE);
     assert(gc2_n_workers_acq(G(L)) == (pool && !stop_pool ? 2u : 0u));
+    if (restart_grace) {
+      assert(atomic_load(&fresh_graces) == LJ_GC2_GRACE_EPOCHS + 1);
+      assert(!lj_arena_hugetab_lookup(late_huge, late_body, NULL));
+    }
 #ifdef LJ_TRACE_TEST_HELPERS
     if (pause_publish) {
       assert(lj_tg_hs_epoch_ack_acq(L2TG(L)) > paused_epoch);
