@@ -1416,6 +1416,9 @@ static int gc2_markobj_expected_scoped_status(global_State *g, GCobj *o,
 					       uint32_t expected_gct,
 					       uint32_t *gctp,
 					       GC2MarkScope *scope);
+static int gc2_obj_lease_acquire_mode(global_State *g, GCobj *o,
+                                     uint32_t expected_gct, uint32_t *gctp,
+                                     LJGC2Lease *lease, int semantic_publish);
 static int gc2_markobj_expected_scoped_status_mode(global_State *g,
 						    GCobj *o,
 						    uint32_t expected_gct,
@@ -16232,9 +16235,9 @@ static int gc2_table_store_rescue_strings(LJGC2TableStoreGuard *guard)
 	  gc2_rescue_semantic_string(guard->g, obj2gco(strV(&guard->value))));
 }
 
-LJGC2TableStoreGuardResult
-lj_gc2_table_store_begin(lua_State *L, LJGC2TableStoreGuard *guard,
-			 GCtab *parent, cTValue *key, cTValue *value)
+static LJGC2TableStoreGuardResult
+gc2_table_store_begin(lua_State *L, LJGC2TableStoreGuard *guard,
+		      GCtab *parent, cTValue *key, cTValue *value, int array)
 {
   global_State *g;
   TGState *tg;
@@ -16300,9 +16303,9 @@ lj_gc2_table_store_begin(lua_State *L, LJGC2TableStoreGuard *guard,
     (void)gc2_table_store_guard_pin(guard);
   }
 
-  lease = lj_gc2_obj_lease_acquire(g, obj2gco(parent),
-				   (uint32_t)~LJ_TTAB, NULL,
-				   &guard->parent_lease);
+  lease = gc2_obj_lease_acquire_mode(g, obj2gco(parent),
+                                    (uint32_t)~LJ_TTAB, NULL,
+                                    &guard->parent_lease, !array);
   if (lease < 0) {
     (void)gc2_table_store_guard_pin(guard);
     return gc2_table_store_guard_abort(
@@ -16335,7 +16338,14 @@ lj_gc2_table_store_begin(lua_State *L, LJGC2TableStoreGuard *guard,
   /* The legacy closer is still positive authority during this migration
   ** tranche and does not enumerate root descriptors. Publish the stable
   ** by-value payload semantically before ACTIVE can become observable. */
-  lj_gc_pubroot(L, &guard->parent);
+  if (array && !guard->globally_pinned && tvisnumber(&guard->key) &&
+      tvisstr(&guard->value) && gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+      !lj_tab_metatable_acq(parent)) {
+    guard->leaf_cycle = gc2_cycle_acq(g);
+    lj_gc2_publish_read_root(L, &guard->parent, 0);
+  } else {
+    lj_gc_pubroot(L, &guard->parent);
+  }
   lj_gc_pubroot(L, &guard->key);
   lj_gc_pubroot(L, &guard->value);
   guard->weak_active = (uint8_t)lj_gc2_weak_write_begin(L, parent);
@@ -16373,6 +16383,20 @@ lj_gc2_table_store_begin(lua_State *L, LJGC2TableStoreGuard *guard,
   ** live. Only this unfinished conservative guard makes PINNED store-safe. */
   (void)gc2_table_store_guard_pin(guard);
   return LJ_GC2_TABLE_STORE_GUARD_PINNED;
+}
+
+LJGC2TableStoreGuardResult
+lj_gc2_table_store_begin(lua_State *L, LJGC2TableStoreGuard *guard,
+                         GCtab *parent, cTValue *key, cTValue *value)
+{
+  return gc2_table_store_begin(L, guard, parent, key, value, 0);
+}
+
+LJGC2TableStoreGuardResult
+lj_gc2_table_store_begin_array(lua_State *L, LJGC2TableStoreGuard *guard,
+                               GCtab *parent, cTValue *key, cTValue *value)
+{
+  return gc2_table_store_begin(L, guard, parent, key, value, 1);
 }
 
 static LJGC2TableStoreGuardResult
@@ -16569,6 +16593,16 @@ static int gc2_table_store_handoff(lua_State *L,
 {
   global_State *g = guard->g;
   GCtab *parent = guard->parent_tab;
+  if (guard->leaf_cycle && guard->leaf_cycle == gc2_cycle_acq(g) &&
+      gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+      guard->store_authorized && !guard->globally_pinned &&
+      !lj_tab_metatable_acq(parent)) {
+    /* This exact current array slot only acquired a leaf edge. The source
+    ** was semantically marked before descriptor/CAS publication. */
+    gc2_table_store_preserve_edge(g, obj2gco(parent), &guard->value);
+    return 1;
+  }
+  guard->leaf_cycle = 0;
   /* Every committed edge invalidates the same-cycle table scan proof. SWEEP
   ** additionally rescues the body; it never replaces the dirty epoch. */
   gc2_table_dirty_bump(g, parent);
@@ -18286,23 +18320,30 @@ static int gc2_markobj_expected_status(global_State *g, GCobj *o,
   return status;
 }
 
-int lj_gc2_obj_lease_acquire(global_State *g, GCobj *o,
+static int gc2_obj_lease_acquire_mode(global_State *g, GCobj *o,
 				      uint32_t expected_gct, uint32_t *gctp,
-				      LJGC2Lease *lease)
+				      LJGC2Lease *lease, int semantic_publish)
 {
   GC2MarkScope scope;
   int status;
   if (!lease)
     return GC2_MARK_DEAD;
   gc2_public_lease_init(lease);
-  status = gc2_markobj_expected_scoped_status(
-    g, o, expected_gct, gctp, &scope);
+  status = gc2_markobj_expected_scoped_status_mode(
+    g, o, expected_gct, gctp, &scope, semantic_publish);
   if (status == GC2_MARK_DEAD) {
     gc2_mark_scope_leave(&scope);
     return status;
   }
   gc2_public_lease_take(lease, &scope);
   return status;
+}
+
+int lj_gc2_obj_lease_acquire(global_State *g, GCobj *o,
+                            uint32_t expected_gct, uint32_t *gctp,
+                            LJGC2Lease *lease)
+{
+  return gc2_obj_lease_acquire_mode(g, o, expected_gct, gctp, lease, 1);
 }
 
 int lj_gc2_markobj_status(global_State *g, GCobj *o, uint32_t *gctp)

@@ -67,6 +67,7 @@ typedef struct LJGC2TableStoreGuard {
   TValue parent;
   TValue key;
   TValue value;
+  uint32_t leaf_cycle;
   uint8_t active;
   uint8_t globally_pinned;
   uint8_t weak_active;
@@ -357,6 +358,9 @@ LJ_FUNC int lj_gc2_smr_read_tracked_try(global_State *g);
 LJ_FUNC void lj_gc2_smr_read_enter(global_State *g);
 LJ_FUNC void lj_gc2_smr_read_leave(global_State *g);
 LJ_FUNC LJGC2TableStoreGuardResult lj_gc2_table_store_begin(
+  lua_State *L, LJGC2TableStoreGuard *guard, GCtab *parent,
+  cTValue *key, cTValue *value);
+LJ_FUNC LJGC2TableStoreGuardResult lj_gc2_table_store_begin_array(
   lua_State *L, LJGC2TableStoreGuard *guard, GCtab *parent,
   cTValue *key, cTValue *value);
 LJ_FUNC LJGC2TableStoreGuardResult lj_gc2_table_store_admit(

@@ -817,6 +817,20 @@ return function(add)
   })
 
   add({
+    name = "m5_tab_vm_array_leaf",
+    description = "exact VM string array stores preserve a current strong scan",
+    run = function(t)
+      local opts = build.gc2_test_helper_opts({
+        quiet = true, timeout = "20s",
+        libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=lj_gc2_table_store_finish",
+                 "-Wl,--wrap=lj_gc_pubtabtv_vm" }
+      })
+      build_and_run_c(t, t:tmp("lj_t-gc2-vm-array-leaf"),
+                      "t-gc2-vm-array-leaf.c", opts)
+    end
+  })
+
+  add({
     name = "m5_tab_keyed_store_txn",
     description = "prepared exact keyed table-store transaction",
     run = function(t)

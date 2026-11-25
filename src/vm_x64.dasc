@@ -5330,17 +5330,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov SAVE_PC, PC
     |  call extern lj_tab_storetv_forvm_array	// (lua_State *L, GCtab *t, TValue *d, TValue *s, MSize key)
     |  mov BASE, L:RB->base
-    |  movzx RAd, PC_RA
-    |  lea RC, [BASE+RA*8]		// Stable source; returned dst left SMR.
-    |  movzx RBd, PC_RB
-    |  mov TAB:RB, [BASE+RB*8]
-    |  cleartp TAB:RB
-    |  cmp TGMARK, 0
-    |  jnz ->vm_gc2_barriertv_tab
-    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
-    |  jz >8
-    |  jmp ->vm_gc2_barriertv_tab
-    |8:
     |  ins_next
     |
     |3:  // Check for __newindex if previous value is nil.
@@ -5510,17 +5499,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov SAVE_PC, PC
     |  call extern lj_tab_storetv_forvm_array	// (lua_State *L, GCtab *t, TValue *d, TValue *s, MSize key)
     |  mov BASE, L:RB->base
-    |  movzx RAd, PC_RA
-    |  lea RC, [BASE+RA*8]		// Stable source; returned dst left SMR.
-    |  movzx RBd, PC_RB
-    |  mov TAB:RB, [BASE+RB*8]
-    |  cleartp TAB:RB
-    |  cmp TGMARK, 0
-    |  jnz ->vm_gc2_barriertv_tab
-    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
-    |  jz >8
-    |  jmp ->vm_gc2_barriertv_tab
-    |8:
     |  ins_next
     |
     |3:  // Check for __newindex if previous value is nil.
@@ -5606,17 +5584,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov SAVE_PC, PC
     |  call extern lj_tab_storetv_forvm_array	// (lua_State *L, GCtab *t, TValue *d, TValue *s, MSize key)
     |  mov BASE, L:RB->base
-    |  movzx RAd, PC_RA
-    |  lea RC, [BASE+RA*8]		// Stable source; returned dst left SMR.
-    |  movzx RBd, PC_RB
-    |  mov TAB:RB, [BASE+RB*8]
-    |  cleartp TAB:RB
-    |  cmp TGMARK, 0
-    |  jnz ->vm_gc2_barriertv_tab
-    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
-    |  jz >8
-    |  jmp ->vm_gc2_barriertv_tab
-    |8:
     |  ins_next
     |
     |->BC_TSETR_Z:
@@ -5639,17 +5606,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov SAVE_PC, PC
     |  call extern lj_tab_storetv_forvm_array	// (lua_State *L, GCtab *t, TValue *d, TValue *s, MSize key)
     |  mov BASE, L:RB->base
-    |  movzx RAd, PC_RA
-    |  lea RC, [BASE+RA*8]		// Stable source; returned dst left SMR.
-    |  movzx RBd, PC_RB
-    |  mov TAB:RB, [BASE+RB*8]
-    |  cleartp TAB:RB
-    |  cmp TGMARK, 0
-    |  jnz ->vm_gc2_barriertv_tab
-    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
-    |  jz >8
-    |  jmp ->vm_gc2_barriertv_tab
-    |8:
     |  ins_next
     |
     break;

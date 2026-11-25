@@ -7888,7 +7888,8 @@ static LJ_AINLINE int tab_trystoretv_cas_once(lua_State *L, TValue *dst,
 enum {
   TAB_STORE_MODE_ANY,
   TAB_STORE_MODE_EXISTING,
-  TAB_STORE_MODE_NIL
+  TAB_STORE_MODE_NIL,
+  TAB_STORE_MODE_VM_ARRAY
 };
 
 static LJ_AINLINE int tab_store_observed(lua_State *L, TValue *observed,
@@ -8130,7 +8131,8 @@ static int tab_store_array_successor_slot_bounded(GCtab *parent,
 static int tab_current_slot_addr_for_key_bounded(GCtab *parent,
 						  uintptr_t dst_addr,
 						  cTValue *key,
-						  TValue **currentp)
+						  TValue **currentp,
+                                                  int *exact_array)
 {
   int32_t k;
   int64_t i64;
@@ -8140,6 +8142,8 @@ static int tab_current_slot_addr_for_key_bounded(GCtab *parent,
   int array_to_hash = 0;
   if (currentp)
     *currentp = NULL;
+  if (exact_array)
+    *exact_array = 0;
   if (tvisint(key)) {
     k = intV(key);
     intkey = 1;
@@ -8160,6 +8164,8 @@ static int tab_current_slot_addr_for_key_bounded(GCtab *parent,
 	  array == lj_tab_array_acq(parent)) {
 	if (currentp)
 	  *currentp = &array[k];
+        if (exact_array)
+          *exact_array = 1;
 	return 1;
       }
       if (tab_store_array_successor_slot_bounded(
@@ -8195,7 +8201,7 @@ static int tab_current_slot_for_key_bounded(GCtab *parent, TValue *dst,
 					     cTValue *key)
 {
   return tab_current_slot_addr_for_key_bounded(
-    parent, (uintptr_t)(void *)dst, key, NULL);
+    parent, (uintptr_t)(void *)dst, key, NULL, NULL);
 }
 
 LJ_FUNCA int lj_tab_read_current_keyed(global_State *g, GCtab *parent,
@@ -8428,7 +8434,7 @@ static int tab_keyed_store_prepare(lua_State *L, LJTabKeyedStoreTxn *txn,
        !tab_keyed_store_value_valid(&txn->expected)))
     return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_STALE);
   if (!tab_current_slot_addr_for_key_bounded(parent, txn->dst_addr,
-					       &txn->key, &current_dst))
+					       &txn->key, &current_dst, NULL))
     return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_STALE);
   lj_tv_load_acq(&current, current_dst);
   if (tvisforward(&current))
@@ -8445,7 +8451,7 @@ static int tab_keyed_store_prepare(lua_State *L, LJTabKeyedStoreTxn *txn,
   /* Close a weak-clear/replacement race after acquiring the expected lease.
   ** A mismatch is ordinary lost exact authority, never an ABA retry. */
   if (!tab_current_slot_addr_for_key_bounded(parent, txn->dst_addr,
-					       &txn->key, &current_dst))
+					       &txn->key, &current_dst, NULL))
     return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_STALE);
   lj_tv_load_acq(&current, current_dst);
   if (tvisforward(&current))
@@ -8487,7 +8493,7 @@ static int tab_keyed_store_prepare(lua_State *L, LJTabKeyedStoreTxn *txn,
     return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_STALE);
   txn->smr_active = 1;
   if (!tab_current_slot_addr_for_key_bounded(parent, txn->dst_addr,
-					       &txn->key, &current_dst))
+					       &txn->key, &current_dst, NULL))
     return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_STALE);
   lj_tv_load_acq(&current, current_dst);
   if (tvisforward(&current))
@@ -8591,9 +8597,11 @@ static int tab_trystoretv_cas_keyed_once_mode(lua_State *L,
   global_State *g;
   TValue keysnap, valuesnap, expected;
   int committed = 0;
-  int guarded;
+  int guarded, vm_array = mode == TAB_STORE_MODE_VM_ARRAY;
+  int array;
   int rc = LJ_TAB_STORE_CAS_STALE;
   if (did_commit) *did_commit = 0;
+  if (vm_array) mode = TAB_STORE_MODE_ANY;
   if (!parent)
     return tab_trystoretv_cas_once(L, dst, src);
   lj_tv_load_acq(&keysnap, key);
@@ -8601,7 +8609,7 @@ static int tab_trystoretv_cas_keyed_once_mode(lua_State *L,
   guarded = tab_store_guard_needed(&keysnap, &valuesnap);
   /* Trace/VM scratch operands must become semantic roots before SMR failure,
   ** retry, or descriptor publication can make their native locations stale. */
-  if (guarded)
+  if (guarded && !vm_array)
     tab_store_barrier_write(L, parent, &keysnap, &valuesnap);
   /*
   ** Keyed CAS validates the slot before and after the store. Hold a short SMR
@@ -8616,13 +8624,15 @@ static int tab_trystoretv_cas_keyed_once_mode(lua_State *L,
   ** root and retries without retaining this raw slot. */
   if (!lj_gc2_smr_read_try(g))
     return LJ_TAB_STORE_CAS_STALE;
-  if (!tab_current_slot_for_key_bounded(parent, dst, &keysnap)) {
+  if (!tab_current_slot_addr_for_key_bounded(parent, (uintptr_t)(void *)dst,
+                                               &keysnap, NULL, &array)) {
     /* dst was resolved before this SMR interval and can already name a
     ** reclaimed generation. Failed currentness is the complete answer: never
     ** inspect the rejected raw pointer to refine EXISTING into ABSENT/FORWARD.
     ** The caller re-resolves from the table root outside this interval. */
     goto leave;
   }
+  array = vm_array && array;
   lj_tv_load_acq(&expected, dst);
   if (tvisforward(&expected)) {
     rc = LJ_TAB_STORE_CAS_FORWARD;
@@ -8647,8 +8657,9 @@ static int tab_trystoretv_cas_keyed_once_mode(lua_State *L,
   if (guarded) {
     LJGC2TableStoreGuard guard;
     LJGC2TableStoreGuardResult stage;
-    stage = lj_gc2_table_store_begin(L, &guard, parent,
-				     &keysnap, &valuesnap);
+    stage = array ?
+      lj_gc2_table_store_begin_array(L, &guard, parent, &keysnap, &valuesnap) :
+      lj_gc2_table_store_begin(L, &guard, parent, &keysnap, &valuesnap);
     if (stage != LJ_GC2_TABLE_STORE_GUARD_OK &&
 	stage != LJ_GC2_TABLE_STORE_GUARD_PINNED) {
       if (!guard.finished && guard.g && guard.tg)
@@ -8674,13 +8685,20 @@ static int tab_trystoretv_cas_keyed_once_mode(lua_State *L,
     committed = rc == LJ_TAB_STORE_CAS_OK;
     if (committed)
       tab_test_store_post_cas(L, parent, dst, &guard.key, &guard.value);
-    if (committed &&
-	!tab_current_slot_for_key_bounded(parent, dst, &guard.key))
-      rc = LJ_TAB_STORE_CAS_STALE;
+    if (committed) {
+      int exact_array;
+      if (!tab_current_slot_addr_for_key_bounded(parent, (uintptr_t)(void *)dst,
+                                                 &guard.key, NULL, &exact_array))
+        rc = LJ_TAB_STORE_CAS_STALE;
+      if (!exact_array)
+        guard.leaf_cycle = 0;
+    }
 guarded_finish:
     /* A committed CAS must hand off even when post-currentness returns STALE.
     ** Every other exit clears ACTIVE before the caller may wait or retry. */
     tab_store_guard_finish_checked(L, &guard, committed);
+    if (array && did_commit)
+      *did_commit = committed && guard.leaf_cycle != 0;
   } else {
     rc = tab_trystoretv_cas_expected(L, dst, &expected, &valuesnap,
 					     mode, observed, observed_rooted);
@@ -8699,7 +8717,7 @@ guarded_finish:
   }
 leave:
   lj_gc2_smr_read_leave(g);
-  if (did_commit) *did_commit = committed;
+  if (did_commit && !vm_array) *did_commit = committed;
   return rc;
 }
 
@@ -8751,11 +8769,12 @@ LJ_FUNCA int lj_tab_trystoretv_cas_keyed(lua_State *L, GCtab *parent,
   }
 }
 
-static int tab_trystoretv_cas_keyed_weak(lua_State *L, GCtab *parent,
+static int tab_trystoretv_cas_keyed_weak_mode(lua_State *L, GCtab *parent,
 					 TValue *dst, cTValue *key,
-					 cTValue *src)
+					 cTValue *src, int array, int *leaf)
 {
   int rc, weakwr;
+  if (leaf) *leaf = 0;
   /*
   ** The weak-write counter only needs to cover the edge publication and the
   ** matching weak barrier. Slot resolution, resize assist and retry waits can
@@ -8765,13 +8784,23 @@ static int tab_trystoretv_cas_keyed_weak(lua_State *L, GCtab *parent,
   weakwr = lj_gc2_weak_write_begin(L, parent);
   if (weakwr)
     tab_store_barrier_write(L, parent, key, src);
-  rc = tab_trystoretv_cas_keyed_once(L, parent, dst, key, src);
+  rc = array && !weakwr ?
+    tab_trystoretv_cas_keyed_once_mode(L, parent, dst, key, src,
+                                     TAB_STORE_MODE_VM_ARRAY, NULL, 0, leaf) :
+    tab_trystoretv_cas_keyed_once(L, parent, dst, key, src);
   if (weakwr) {
     if (rc == LJ_TAB_STORE_CAS_OK || rc == LJ_TAB_STORE_CAS_STALE)
       tab_store_barrier_write(L, parent, key, src);
     lj_gc2_weak_write_end(L, weakwr);
   }
   return rc;
+}
+
+static int tab_trystoretv_cas_keyed_weak(lua_State *L, GCtab *parent,
+                                        TValue *dst, cTValue *key,
+                                        cTValue *src)
+{
+  return tab_trystoretv_cas_keyed_weak_mode(L, parent, dst, key, src, 0, NULL);
 }
 
 static int tab_clear_weak_slot_once(global_State *g, GCtab *parent,
@@ -9830,28 +9859,40 @@ LJ_FUNCA TValue *lj_tab_storetv_forvm_array(lua_State *L, GCtab *parent,
 					    TValue *dst, cTValue *src,
 					    MSize key)
 {
-  TValue *orig = dst;
   TValue keytv;
+  int array, leaf = 0;
   int stack_src = tab_key_on_stack(L, src);
   ptrdiff_t srcofs = stack_src ? savestack(L, (TValue *)(void *)src) : 0;
-  UNUSED(orig);
   tab_test_vm_array_store_call();
   setintV(&keytv, (int32_t)key);
   if (stack_src) src = restorestack(L, srcofs);
   /*
-  ** Active-MT VM stores publish with CAS and run the VM table barrier
-  ** only after the helper returns. Publish the source before the CAS so a
-  ** concurrent collector cannot observe the new slot without its value edge.
+  ** A VM stack string is a leaf. Preserve its identity before an SMR retry
+  ** and discover the parent without modifying an existing scan proof.
+  ** Every other source needs the ordinary keyed write publication.
   */
-  tab_store_barrier_write(L, parent, &keytv, src);
+  array = stack_src && tvisstr(src) && gc2_phase_acq(G(L)) == LJ_GC2_SWEEP;
+  if (array) {
+    TValue tv;
+    setgcVraw(&tv, obj2gco(parent), LJ_TTAB);
+    lj_gc2_publish_read_root(L, &tv, 0);
+    lj_gc_pubroot(L, restorestack(L, srcofs));
+  } else {
+    tab_store_barrier_write(L, parent, &keytv, src);
+  }
   for (;;) {
     if (stack_src) src = restorestack(L, srcofs);
     dst = tab_current_vm_array_key_slot(L, parent, key);
     if (stack_src) src = restorestack(L, srcofs);
-    if (tab_trystoretv_cas_keyed_weak(L, parent, dst, &keytv, src) ==
-	LJ_TAB_STORE_CAS_OK)
+    if (tab_trystoretv_cas_keyed_weak_mode(L, parent, dst, &keytv, src,
+                                         array, &leaf) == LJ_TAB_STORE_CAS_OK)
       break;
     lj_tab_store_wait_l(L);  /* VM array store saw stale/FORWARD slot. */
+  }
+  if (!leaf && (lj_tg_mark_active_acq(L2TG(L)) ||
+		(lj_obj_gcflags(obj2gco(parent)) & LJ_GC_BLACK))) {
+    if (stack_src) src = restorestack(L, srcofs);
+    lj_gc_pubtabtv_vm(L, parent, src);
   }
   return dst;
 }
