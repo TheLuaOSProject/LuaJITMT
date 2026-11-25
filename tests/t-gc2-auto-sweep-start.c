@@ -1,4 +1,4 @@
-/* Ordinary allocations during the handoff from weak marking to sweep. */
+/* Ordinary allocations while a peer is suspended at a SWEEP boundary. */
 #include <assert.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -16,6 +16,7 @@
 #include "lj_thr.h"
 
 static atomic_int ready, enabled, requested, parked, release_peer, timeout_hit;
+static uint32_t target = LJ_GC2_HS_DISABLE_BARRIER | LJ_GC2_HS_ALLOC_BLACK;
 
 static void pause_briefly(void)
 {
@@ -24,7 +25,7 @@ static void pause_briefly(void)
 }
 
 /* The peer services earlier epochs from a real published native frame. It
-** leaves that frame just before the sweep policy is signalled and keeps its
+** leaves that frame just before the selected action is signalled and keeps its
 ** Lua stack untouched inside a managed call until the allocating TG returns. */
 static int hold_peer(lua_State *L)
 {
@@ -43,9 +44,7 @@ static int hold_peer(lua_State *L)
 
 static void before_actions(uint32_t actions)
 {
-  if (!atomic_load(&enabled) ||
-      (actions & (LJ_GC2_HS_DISABLE_BARRIER | LJ_GC2_HS_ALLOC_BLACK)) !=
-        (LJ_GC2_HS_DISABLE_BARRIER | LJ_GC2_HS_ALLOC_BLACK) ||
+  if (!atomic_load(&enabled) || (actions & target) != target ||
       atomic_exchange(&requested, 1))
     return;
   while (!atomic_load(&parked) && !atomic_load(&release_peer))
@@ -97,6 +96,10 @@ static int finish(lua_State *L)
     assert(gc2_sweep_bridge_ready_acq(g) == 0 && gc2_jit_phase_gate_acq(g) == 0);
     assert(gc2_hs_pending_acq(g) != 0 && !lj_tg_mark_active_acq(L2TG(L)));
     assert(lj_tg_alloc_black_acq(L2TG(L)));
+    if (target == LJ_GC2_HS_RESET_ALLOC || target == LJ_GC2_HS_SCAN_ROOTS)
+      assert(la_load32_acq(&L2TG(L)->alloc.prepare_epoch) == gc2_cycle_acq(g));
+    if (target == LJ_GC2_HS_SCAN_ROOTS)
+      assert(gc2_sweep_root_scanned_acq(g) == 2);
   }
   lua_gc(L, LUA_GCSTOP, 0);
   atomic_store(&release_peer, 1);
@@ -116,7 +119,7 @@ static void *watchdog(void *unused)
   return NULL;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
   static const char source[] =
     "local hold, begin, parked, finish = ...\n"
@@ -136,6 +139,12 @@ int main(void)
   lua_State *L = luaL_newstate();
   pthread_t timer;
   int status;
+  if (argc == 2 && !strcmp(argv[1], "reset"))
+    target = LJ_GC2_HS_RESET_ALLOC;
+  else if (argc == 2 && !strcmp(argv[1], "roots"))
+    target = LJ_GC2_HS_SCAN_ROOTS;
+  else
+    assert(argc == 1);
   assert(L);
   luaL_openlibs(L);
   assert(luaL_loadbuffer(L, source, sizeof(source)-1, "=sweep entry") == LUA_OK);
@@ -152,7 +161,7 @@ int main(void)
   lua_close(L);
   assert(status == LUA_OK);
   if (atomic_load(&timeout_hit)) {
-    fputs("allocation waited for a parked owner at sweep entry\n", stderr);
+    fprintf(stderr, "allocation waited for a parked owner on sweep action %#x\n", target);
     return 1;
   }
   return 0;

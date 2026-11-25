@@ -297,6 +297,7 @@ static int safepoint_resumable_actions(uint32_t actions)
   case LJ_GC2_HS_RESUMABLE | LJ_SAFEPOINT_MARK_START_ACTIONS:
   case LJ_GC2_HS_RESUMABLE | LJ_SAFEPOINT_SWEEP_START | LJ_GC2_HS_ALLOC_BLACK:
   case LJ_GC2_HS_RESUMABLE | LJ_SAFEPOINT_SWEEP_START | LJ_GC2_HS_ALLOC_WHITE:
+  case LJ_GC2_HS_RESUMABLE | LJ_GC2_HS_RESET_ALLOC:
   case LJ_GC2_HS_RESUMABLE | LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_FLUSH_SSB:
   case LJ_GC2_HS_RESUMABLE | LJ_GC2_HS_SCAN_OWNER_ROOTS | LJ_GC2_HS_FLUSH_SSB:
   case LJ_GC2_HS_RESUMABLE | LJ_GC2_HS_FLUSH_SSB:
@@ -648,6 +649,9 @@ retry:
     if (gc2_phase_acq(g) == LJ_GC2_WEAK) {
       gc2_weak_root_scanned_rel(g, 0);
       gc2_weak_mark_closed_rel(g, 0);
+    } else if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
+      uint32_t provisional = 2;
+      (void)gc2_sweep_root_scanned_cas(g, &provisional, 0);
     } else {
       gc2_mark_root_scanned_rel(g, 0);
     }
@@ -1259,6 +1263,9 @@ int lj_safepoint_resumable_epoch_try(global_State *g, uint32_t actions, int star
     gc2_hs_pending_futex_wake(g, 1);
   if (gc2_hs_pending_acq(g) != 0)
     return 0;
+  /* Live owners finish private bin rotation before clearing poll. Detached
+  ** owners have no poll slot. Rotate those bins before releasing this epoch. */
+  safepoint_apply_dead_allocators(g, actions);
   if (actions & LJ_GC2_HS_SCAN_ROOTS) {
     TGState *self = lj_thr_get_tg_fallback(g);
     lj_gc2_scan_cycle_global_roots(g);
