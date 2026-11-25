@@ -104,6 +104,36 @@ static void check_cancelled_record(lua_State *L)
   assert(lj_str_newz(L, name) == s);
 }
 
+/* A mutable source is still strong when copied to a new natural root. */
+static int push_closing_upvalue(lua_State *L)
+{
+  lua_pushvalue(L, lua_upvalueindex(1));
+  assert(lj_str_canon_state(lj_str_canon_acq(strV(L->top - 1))) ==
+	 LJ_STR_CANON_QRESCUED);
+  return 1;
+}
+
+static void check_stack_publication(lua_State *L)
+{
+  const char name[] = "canonical-stack-publication-fixture";
+  GCstr *s;
+  StrCanonRec *rec;
+  lua_pushlstring(L, name, sizeof(name)-1);
+  s = strV(L->top - 1);
+  lua_pushcclosure(L, push_closing_upvalue, 1);
+  assert(lj_str_test_quarantine_detach(L, s));
+  rec = lj_str_canon_record(lj_str_canon_acq(s));
+  assert(rec);
+  /* A synthetic reversible close exercises the publication arbitration
+  ** while the old body remains rooted in the closure. */
+  lj_str_canon_rel(s, lj_str_canon_pack(rec, LJ_STR_CANON_QCLOSING));
+  lua_call(L, 0, 1);
+  assert(strV(L->top - 1) == s);
+  advance_grace(G(L));
+  assert(lj_str_canon_acq(s) == LJ_STR_CANON_LIVE);
+  lua_pop(L, 1);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -116,6 +146,7 @@ int main(void)
   assert(L);
   g = G(L);
   check_cancelled_record(L);
+  check_stack_publication(L);
   memset(target_name, 'q', sizeof(target_name)-1);
   peer.L = lua_newthread(L);
   assert(peer.L);

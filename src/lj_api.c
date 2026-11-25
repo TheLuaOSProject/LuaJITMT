@@ -1323,16 +1323,27 @@ LUA_API void lua_copy(lua_State *L, int fromidx, int toidx)
 
 LUA_API void lua_pushvalue(lua_State *L, int idx)
 {
-  LJStateClaim claim;
   lua_State *errL = api_errstate(L);
-  TValue snap;
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-    lj_err_callermsg(errL, "thread busy");
-  api_checkstack1_claimed(L, errL, &claim);
-  copyTV(L, L->top, index2adr_read(L, idx, &snap));
-  lj_state_stack_pubtv(L, L, L->top);
-  L->top++;
-  lj_state_dropresumeclaim(&claim);
+  for (;;) {
+    LJStateClaim claim;
+    ApiStringRead read;
+    TValue snap;
+    TValue *o;
+    if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+      lj_err_callermsg(errL, "thread busy");
+    api_checkstack1_claimed(L, errL, &claim);
+    o = api_string_read_claimed(L, idx, &snap, &read);
+    if (LJ_LIKELY(o != NULL)) {
+      copyTV(L, L->top, o);
+      lj_state_stack_pubtv(L, L, L->top);
+      L->top++;
+      api_string_read_release(&read);
+      lj_state_dropresumeclaim(&claim);
+      return;
+    }
+    lj_state_dropresumeclaim(&claim);
+    lj_tab_wait_l(errL);
+  }
 }
 
 /* -- Stack getters ------------------------------------------------------- */
