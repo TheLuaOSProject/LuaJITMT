@@ -208,7 +208,7 @@ static void exercise_tagged_link_protocol(lua_State *L)
   }
 
   target = lj_str_new(L, target_buf, strlen(target_buf));
-  assert(target != NULL && target->hashalg == 0);
+  assert(target != NULL && target->dense_valid == 0);
   head = &hdr->bucket[bucket];
   raw = lj_str_link_load_acq(head);
   assert(lj_str_link_target(raw) == obj2gco(target));
@@ -301,7 +301,7 @@ static void exercise_rehash_ignores_legacy_colors(lua_State *L)
   assert(lj_str_resize_state_acq(hdr) == TEST_STRTAB_SWEEP);
   for (n = 0; n < TEST_CHAIN; n++) {
     members[n] = lj_str_new(L, names[n], lens[n]);
-    assert(members[n] != NULL && members[n]->hashalg == 0);
+    assert(members[n] != NULL && members[n]->dense_valid == 0);
   }
   lj_str_sweep_release(hdr);
   assert(lj_str_resize_state_acq(hdr) == 0);
@@ -318,13 +318,13 @@ static void exercise_rehash_ignores_legacy_colors(lua_State *L)
   g->gc.state = GCSsweepstring;
   trigger = lj_str_new(L, names[TEST_CHAIN], lens[TEST_CHAIN]);
   g->gc.state = (uint8_t)oldstate;
-  assert(trigger != NULL && trigger->hashalg == 1);
+  assert(trigger != NULL && trigger->dense_valid == 1);
 
   for (n = 0; n < TEST_CHAIN; n++) {
     assert(members[n]->gct == (uint8_t)~LJ_TSTR);
     assert(members[n]->len == lens[n]);
     assert(memcmp(strdata(members[n]), names[n], lens[n] + 1u) == 0);
-    assert(members[n]->hashalg == 1);
+    assert(members[n]->dense_valid == 1);
     assert(lj_str_new(L, names[n], lens[n]) == members[n]);
     lj_obj_masksetgcflags(obj2gco(members[n]), LJ_GC_COLORS,
 			 (uint8_t)curwhite(g));
@@ -371,7 +371,7 @@ static void pause_moved_string(lua_State *L, GCstr *s, StrCanonRec *rec,
   } else {
     assert((owner & ~p->hdr->mask) == TEST_STRTAB_REHASH);
     assert(s != NULL);
-    p->destination = s->hash & p->hdr->mask;
+    p->destination = lj_str_link_hash(p->hdr, s) & p->hdr->mask;
     if (p->destination == (owner & p->hdr->mask) ||
 	(lj_str_link_load_acq(&p->hdr->bucket[p->destination]) &
 	 LJ_STRHASH_SECONDARY))
@@ -389,7 +389,7 @@ static void *move_string_worker(void *ud)
   if (p->stage != LJ_STR_TEST_CANON_REHASH_DEST_SAMPLED)
     lj_str_resize(p->peer, p->target_mask);
   else
-    assert(lj_str_new(p->peer, p->trigger, p->trigger_len)->hashalg == 1);
+    assert(lj_str_new(p->peer, p->trigger, p->trigger_len)->dense_valid == 1);
   lj_threading_detach(p->peer, 1);
   la_store32_rel(&p->done, 1);
   return NULL;
@@ -461,7 +461,7 @@ static void check_paused_topology(lua_State *L, PausedTopology *p,
     for (i = 0;; i++) {
       int n = snprintf(new_key, sizeof(new_key), "%08x-paused-resize-insert-%x-%u-%u-%08x",
                        i * UINT32_C(0x9e3779b9), p->target_mask, p->stage,
-                       (unsigned)expected->hashalg, i);
+                       (unsigned)expected->dense_valid, i);
       assert(n > 0 && (size_t)n < sizeof(new_key));
       new_len = (size_t)n;
       hash = test_hash_sparse(g->str.seed, new_key, (MSize)n);
@@ -488,9 +488,9 @@ static void check_paused_topology(lua_State *L, PausedTopology *p,
       &target->bucket[hash & target->mask])) == obj2gco(inserted));
     lua_pushlstring(L, new_key, new_len);
     assert(strV(L->top - 1) == inserted);
-    if (expected->hashalg && target->mask > p->hdr->mask) {
+    if (expected->dense_valid && target->mask > p->hdr->mask) {
       MSize sparse = test_hash_sparse(g->str.seed, bytes, (MSize)len);
-      assert((sparse & p->hdr->mask) < (expected->hash & p->hdr->mask));
+      assert((sparse & p->hdr->mask) < (lj_str_link_hash(p->hdr, expected) & p->hdr->mask));
       pending_primary = &target->bucket[sparse & target->mask];
       assert(lj_str_link_load_acq(pending_primary) == LJ_STRHASH_FROZEN);
     }
@@ -609,7 +609,7 @@ static void install_primary_chain(lua_State *L, StrTabHdr *hdr,
   MSize i;
   assert(lj_str_sweep_claim(L, hdr));
   for (i = 0; i < count; i++)
-    assert(lj_str_new(L, names[i], strlen(names[i]))->hashalg == 0);
+    assert(lj_str_new(L, names[i], strlen(names[i]))->dense_valid == 0);
   lj_str_sweep_release(hdr);
 }
 #endif
@@ -657,7 +657,7 @@ static void exercise_paused_topology_hits(void)
     collect_collision_names(g, hdr, bucket, "paused-secondary-setup",
 			    names, CHAIN + 1u);
     install_primary_chain(L, hdr, names, CHAIN);
-    assert(lj_str_new(L, names[CHAIN], strlen(names[CHAIN]))->hashalg == 1);
+    assert(lj_str_new(L, names[CHAIN], strlen(names[CHAIN]))->dense_valid == 1);
 
     /* Seed a secondary key whose dense destination will be the source
     ** of the next rehash and whose retained-hit slot will not collide. */
@@ -671,8 +671,8 @@ static void exercise_paused_topology_hits(void)
 	   hdr->mask) != bucket)
 	continue;
       dense = lj_str_new(L, dense_name, (size_t)len);
-      assert(dense->hashalg == 1);
-      source = dense->hash & hdr->mask;
+      assert(dense->dense_valid == 1);
+      source = lj_str_link_hash(hdr, dense) & hdr->mask;
       if (source > bucket && source < hdr->mask &&
           (source & cache_mask) != (bucket & cache_mask))
 	break;
@@ -721,7 +721,7 @@ static void exercise_paused_topology_hits(void)
       dense_key = strV(L->top - 1);
       lua_pushstring(L, plain_name);
       plain_key = strV(L->top - 1);
-      assert(dense_key->hashalg && !plain_key->hashalg);
+      assert(dense_key->dense_valid && !plain_key->dense_valid);
       collect_collision_names(g, before, dense_hash & widened,
                               "mixed-shrink-new-dense", dense_new, 1u);
       collect_collision_names(g, before, plain_hash & widened,
@@ -744,9 +744,9 @@ static void exercise_paused_topology_hits(void)
           uint32_t grace;
           lua_pushstring(L, dense_new[0]);
           rescued = strV(L->top - 1);
-          assert(rescued->hashalg);
+          assert(rescued->dense_valid);
           lua_pushstring(L, plain_new[0]);
-          assert(!strV(L->top - 1)->hashalg);
+          assert(!strV(L->top - 1)->dense_valid);
           assert(lj_str_test_quarantine_detach(L, rescued));
           lua_pushstring(L, dense_new[0]);
           assert(strV(L->top - 1) == rescued);
@@ -754,7 +754,7 @@ static void exercise_paused_topology_hits(void)
             (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
           (void)lj_gc2_reclaim_retired(g, lj_gc2_retire_epoch(g));
           assert(lj_str_canon_acq(rescued) == LJ_STR_CANON_LIVE);
-          assert(rescued->hashalg);
+          assert(rescued->dense_valid);
           assert(lj_str_newz(L, dense_new[0]) == rescued);
 
           /* A later collision promotes all fine modes that now share the
@@ -772,7 +772,7 @@ static void exercise_paused_topology_hits(void)
           collect_collision_names(g, current, group, "mixed-shrink-new-rehash",
                                   names, CHAIN + 1u);
           install_primary_chain(L, current, names, CHAIN);
-          assert(lj_str_newz(L, names[CHAIN])->hashalg);
+          assert(lj_str_newz(L, names[CHAIN])->dense_valid);
           for (k = group; k <= current->dense_mask; k += current->mask + 1u)
             assert(lj_str_bucket_dense(current, k));
         }

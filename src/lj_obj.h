@@ -313,12 +313,13 @@ typedef struct StrCanonHdr {
 typedef struct GCstr {
   GCHeader;
   uint8_t reserved;	/* Used by lexer for fast lookup of reserved words. */
-  uint8_t hashalg;	/* Hash algorithm. */
+  uint8_t dense_valid;	/* The deterministic dense hash was memoized. */
   StrID sid;		/* Interned string ID. */
-  StrHash hash;		/* Hash of string. */
+  StrHash hash;		/* Sparse hash, immutable after publication. */
   MSize len;		/* Size of string. */
   LJ_ALIGN(8) uintptr_t canon;  /* Atomic canonical-lifecycle word. */
   GCRef str_alt_next;	/* Successor in the other string table generation. */
+  StrHash dense_hash;	/* Deterministic keyed dense hash. */
 } GCstr;
 
 /*
@@ -3373,13 +3374,14 @@ LJ_STATIC_ASSERT(offsetof(GChead, marked) == sizeof(GCRef));
 LJ_STATIC_ASSERT(offsetof(GChead, gct) == sizeof(GCRef) + 1u);
 LJ_STATIC_ASSERT(offsetof(GChead, marked) == offsetof(GCstr, marked));
 LJ_STATIC_ASSERT((offsetof(GCstr, canon) & (sizeof(uintptr_t)-1u)) == 0u);
-LJ_STATIC_ASSERT(sizeof(GCstr) == offsetof(GCstr, str_alt_next) + sizeof(GCRef));
+LJ_STATIC_ASSERT(offsetof(GCstr, dense_hash) ==
+                 offsetof(GCstr, str_alt_next) + sizeof(GCRef));
 #if LJ_64
 LJ_STATIC_ASSERT(offsetof(GCstr, sid) == 12u);
 LJ_STATIC_ASSERT(offsetof(GCstr, hash) == 16u);
 LJ_STATIC_ASSERT(offsetof(GCstr, len) == 20u);
 LJ_STATIC_ASSERT(offsetof(GCstr, canon) == 24u);
-LJ_STATIC_ASSERT(sizeof(GCstr) == 40u);
+LJ_STATIC_ASSERT(sizeof(GCstr) == 48u);
 LJ_STATIC_ASSERT(offsetof(global_State, stremptyz) ==
 		 offsetof(global_State, strempty) + sizeof(GCstr));
 #endif

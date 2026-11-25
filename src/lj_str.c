@@ -126,6 +126,19 @@ static LJ_NOINLINE StrHash hash_dense(uint64_t seed, StrHash h,
   }
   return b;
 }
+
+/* Independent helpers may initialize the same memo. Both publish the
+** same keyed value and neither changes the original sparse hash. */
+static StrHash str_dense_for_body(global_State *g, GCstr *s)
+{
+  if (!la_load8_acq(&s->dense_valid)) {
+    StrHash hash = hash_dense(g->str.seed, s->hash, strdata(s), s->len);
+    la_store32_rel(&s->dense_hash, hash);
+    la_store8_rel(&s->dense_valid, 1);
+    return hash;
+  }
+  return la_load32_acq(&s->dense_hash);
+}
 #endif
 
 /* -- String interning ---------------------------------------------------- */
@@ -703,7 +716,7 @@ static void strtab_help_expand_bucket(lua_State *L, StrTabHdr *source,
     edge = lj_str_link_load_acq(&source->bucket[k]);
     for (o = lj_str_link_target(edge); o;
          o = lj_str_hashhead_acq(lj_str_nodelink(source, o))) {
-      MSize side = grow && (gco2str(o)->hash & step);
+      MSize side = grow && (lj_str_link_hash(source, gco2str(o)) & step);
       if (last[side])
         lj_str_ref_store_rel(lj_str_nodelink(target, last[side]), (uintptr_t)o);
       else
@@ -949,9 +962,7 @@ restart:
       GCobj *o = lj_str_hashhead_acq(&oldtab[i]);
       while (o) {
 	GCstr *s = gco2str(o);
-	MSize hash = s->hashalg ? hash_sparse(g->str.seed, strdata(s), s->len) :
-				  s->hash;
-	hash &= newmask;
+	MSize hash = s->hash & newmask;
 	lj_str_ref_store_rel(&newtab[hash],
 			     lj_str_ref_load_acq(&newtab[hash]) + 1u);
 	o = lj_str_hashhead_acq(lj_str_nodelink(oldhdr, o));
@@ -981,38 +992,15 @@ restart:
       MSize hash = s->hash;
       uintptr_t u;
 #if LUAJIT_SECURITY_STRHASH
-      if (LJ_LIKELY(!s->hashalg)) {  /* String hashed with primary hash. */
-	hash &= newmask;
-	u = lj_str_ref_load_acq(&newtab[hash]);
-	if (LJ_UNLIKELY(u & LJ_STRHASH_SECONDARY)) {  /* Switch string to secondary hash. */
-	  s->hash = hash = hash_dense(g->str.seed, s->hash, strdata(s), s->len);
-	  s->hashalg = 1;
-	  hash &= newmask;
-	  u = lj_str_ref_load_acq(&newtab[hash]);
-	}
-      } else {  /* String hashed with secondary hash. */
-	MSize shash = hash_sparse(g->str.seed, strdata(s), s->len);
-	u = lj_str_ref_load_acq(&newtab[shash & newmask]);
-	if (u & LJ_STRHASH_SECONDARY) {
-	  hash &= newmask;
-	  u = lj_str_ref_load_acq(&newtab[hash]);
-	} else {  /* Revert string back to primary hash. */
-	  s->hash = shash;
-	  s->hashalg = 0;
-	  hash = (shash & newmask);
-	}
-      }
-      /* NOBARRIER: The string table is a GC root. */
-      lj_str_ref_store_rel(lj_str_nodelink(newhdr, o), u & ~LJ_STRHASH_SECONDARY);
-      lj_str_bucket_store_rel(&newtab[hash], o,
-			      (u & LJ_STRHASH_SECONDARY) | dead);
-#else
+      if (lj_str_bucket_dense(newhdr, hash))
+        hash = str_dense_for_body(g, s);
+#endif
       hash &= newmask;
       u = lj_str_ref_load_acq(&newtab[hash]);
       /* NOBARRIER: The string table is a GC root. */
       lj_str_ref_store_rel(lj_str_nodelink(newhdr, o), u & ~LJ_STRHASH_SECONDARY);
-      lj_str_bucket_store_rel(&newtab[hash], o, dead);
-#endif
+      lj_str_bucket_store_rel(&newtab[hash], o,
+                              (u & LJ_STRHASH_SECONDARY) | dead);
 #ifdef LJ_STR_TEST_HELPERS
       str_test_canon(L, s, NULL, LJ_STR_TEST_CANON_RESIZE_MOVED);
 #endif
@@ -1113,13 +1101,7 @@ static LJ_NOINLINE int lj_str_rehash_chain(lua_State *L, StrHash hashc)
     uintptr_t dead = oldlink & LJ_STRHASH_DEAD;
     GCstr *s = gco2str(o);
     StrHash hash;
-    hash = s->hash;
-    if (!s->hashalg) {  /* Rehash with secondary hash. */
-      hash = hash_dense(g->str.seed, hash, strdata(s), s->len);
-      s->hash = hash;
-      s->hashalg = 1;
-    }
-    /* Rechain. */
+    hash = str_dense_for_body(g, s);
     hash &= strmask;
     u = lj_str_ref_load_acq(&strtab[hash]);
 #ifdef LJ_STR_TEST_HELPERS
@@ -1141,7 +1123,7 @@ static LJ_NOINLINE int lj_str_rehash_chain(lua_State *L, StrHash hashc)
 
 /* Allocate a new, unpublished string object. */
 static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
-			   StrHash hash, int hashalg)
+                          StrHash sparse)
 {
   GCstr *s = (GCstr *)lj_mem_newgco_raw(L, lj_str_size(len),
 					 LJ_AF_TRAVERSABLE);
@@ -1149,10 +1131,11 @@ static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
   newwhite(g, s);
   s->gct = ~LJ_TSTR;
   s->len = len;
-  s->hash = hash;
+  s->hash = sparse;
+  s->dense_hash = 0;
   s->sid = strid_next(L, g);
   s->reserved = 0;
-  s->hashalg = (uint8_t)hashalg;
+  s->dense_valid = 0;
   lj_str_canon_store_rlx(s, LJ_STR_CANON_LIVE);
   /* Clear last 4 bytes of allocated memory. Implies zero-termination, too. */
   *(uint32_t *)(strdatawr(s)+(len & ~(MSize)3)) = 0;
@@ -1450,8 +1433,7 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
 	}
 	if (news)
 	  lj_mem_free(g, news, lj_str_size(news->len));
-	hash = hash_sparse(g->str.seed, str, len);
-	return lj_str_alloc(L, str, len, hash, 0);
+	return lj_str_alloc(L, str, len, qhash);
       }
 
       mask = hdr->mask;
@@ -1483,7 +1465,7 @@ lookup:
       u = headu;
       while ((o = lj_str_link_target(u)) != NULL) {
 	GCstr *sx = gco2str(o);
-	if (sx->hash == hash && sx->len == len) {
+	if (sx->hash == qhash && sx->len == len) {
 	  if (memcmp(str, strdata(sx), len) == 0) {
 	    if (!strtab_match_link(L, link, o, u))
 	      goto retry_lookup;
@@ -1523,12 +1505,14 @@ lookup:
 	  strtab_wait(L);
 	  continue;
 	}
-	news = lj_str_alloc(L, str, len, hash, hashalg);
+	news = lj_str_alloc(L, str, len, qhash);
 	continue;
       }
 
-      news->hash = hash;
-      news->hashalg = (uint8_t)hashalg;
+      if (hashalg) {
+        la_store32_rlx(&news->dense_hash, hash);
+        la_store8_rlx(&news->dense_valid, 1);
+      }
       if (LJ_UNLIKELY(lj_str_qcount_acq(g) != 0)) {
 	GCstr *qs = strcanon_lookup(L, str, len, qhash, &qretry);
 	if (qs) {
@@ -1911,7 +1895,7 @@ static StrBodyRetire *str_body_retire_new(global_State *g, GCstr *s,
   ret->size = lj_str_size(s->len);
   /* The quarantine index is independent of mutable main-table secondary
   ** hashing. Always key it by the canonical sparse hash of immutable bytes. */
-  ret->hash = hash_sparse(g->str.seed, strdata(s), s->len);
+  ret->hash = s->hash;
   ret->len = s->len;
   ret->main_linked = 1;
   ret->status = 0;
@@ -1983,7 +1967,7 @@ int lj_str_test_quarantine_detach(lua_State *L, GCstr *s)
     return 0;
   }
   la_storeptr_rel((void **)&rec->hdr, hdr);
-  link = &hdr->bucket[s->hash & hdr->mask];
+  link = &hdr->bucket[lj_str_link_hash(hdr, s) & hdr->mask];
   while ((o = lj_str_link_target(u = lj_str_link_load_acq(link))) != NULL &&
 	 o != obj2gco(s))
     link = lj_str_nodelink(hdr, o);
@@ -2539,7 +2523,6 @@ static int strq_relink(global_State *g, StrCanonRec *rec, GCstr *s,
   GCRef *head;
   StrHash hash = rec->hash;
   uintptr_t edge, want;
-  int hashalg = 0;
   if (lj_str_body_retired_main_linked_acq(rec))
     return 1;
   if (!str_retire_grace(completed, unlink_epoch) || !strtab_gc2_claim(g, hdr))
@@ -2552,14 +2535,11 @@ static int strq_relink(global_State *g, StrCanonRec *rec, GCstr *s,
   edge = lj_str_link_load_acq(head);
 #if LUAJIT_SECURITY_STRHASH
   if (lj_str_bucket_dense(hdr, hash)) {
-    hashalg = 1;
-    hash = hash_dense(g->str.seed, hash, strdata(s), s->len);
+    hash = str_dense_for_body(g, s);
     head = &hdr->bucket[hash & hdr->mask];
     edge = lj_str_link_load_acq(head);
   }
 #endif
-  s->hash = hash;
-  s->hashalg = (uint8_t)hashalg;
   lj_str_ref_store_rel(lj_str_nodelink(hdr, obj2gco(s)),
 		       edge & ~LJ_STRHASH_SECONDARY);
   want = (uintptr_t)s | (edge & LJ_STRHASH_SECONDARY);

@@ -722,6 +722,12 @@ static LJ_AINLINE int lj_str_bucket_dense(const StrTabHdr *hdr, StrHash sparse)
                 (index & 63u)) & 1u);
 }
 
+static LJ_AINLINE StrHash lj_str_link_hash(const StrTabHdr *hdr, const GCstr *s)
+{
+  return lj_str_bucket_dense(hdr, s->hash) ?
+    la_load32_acq(&s->dense_hash) : s->hash;
+}
+
 static LJ_AINLINE GCRef *lj_str_nodelink(const StrTabHdr *hdr, GCobj *o)
 {
   return hdr->link_slot ? &gco2str(o)->str_alt_next : lj_obj_gcwref(o);
