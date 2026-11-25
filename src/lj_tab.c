@@ -5489,9 +5489,96 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
   }
 }
 
+#if LJ_TARGET_X64 && LJ_HASJIT && LJ_GC64 && defined(__linux__)
+#ifdef LJ_GC2_TEST_HELPERS
+static LJTabJitIdleReadHook tab_test_jit_idle_read_hook;
+
+void lj_tab_test_set_jit_idle_read_hook(LJTabJitIdleReadHook hook)
+{
+  tab_test_jit_idle_read_hook = hook;
+}
+#endif
+
+/* TMPREF supplies already-live native TValue inputs in this actor's own TG
+** cells. The native entry publication remains live throughout the call.
+** GC2 closes entry and observes zero active native frames before starting
+** MARK or reclaiming IDLE retired vectors/bodies. That phase lease keeps
+** the input objects and any generation acquired below live without another
+** counted SMR reader. A refused hit preserves both TMPREF cells. */
+static LJ_AINLINE int tab_gettv_jit_idle_hit(lua_State *L, cTValue *tabroot,
+					    cTValue *keyroot, TValue *outroot)
+{
+  global_State *g = G(L);
+  TGState *tg = L->tg_hint;
+  TabForjitSnapshot snap;
+  TValue tv, key, value;
+  GCtab *t;
+  TValue *slot = NULL;
+  if (!tg || tabroot != &tg->tmptv || outroot != &tg->tmptv ||
+      keyroot != &tg->tmptv2 || tg->gl != g || G2TG(g) != tg ||
+      lj_tg_load_cur_L(tg) != L || !lj_tg_load_jit_base(tg) ||
+      !lj_tg_owns_state_acq(tg, L) || gc2_phase_acq(g) != LJ_GC2_IDLE ||
+      gc2_generational_acq(g))
+    return 0;
+  lj_tv_load_acq(&tv, tabroot);
+  lj_tv_load_acq(&key, keyroot);
+  if (!tvistab(&tv))
+    return 0;
+  t = tabV(&tv);
+  if (!tab_forjit_snapshot_acq(t, &snap))
+    return 0;
+  if (tvisnumber(&key)) {
+    uint32_t idx;
+    if (!tab_rehash_arrayindex(snap.asize, &key, &idx) || !snap.array)
+      return 0;
+    slot = &snap.array[idx];
+  } else if (tvisstr(&key) && snap.hmask) {
+    Node *n = hashstr_node(snap.node, snap.hmask, strV(&key));
+    MSize left = snap.hmask + 1;
+    for (; n && left--; n = lj_tab_nextnode_acq(n)) {
+      TValue nk;
+      if (LJ_UNLIKELY(!tab_node_in_snapshot(snap.node, snap.hmask, n)))
+	return 0;
+      lj_tv_load_acq(&nk, &n->key);
+      if (tvistabinternal(&nk) || tab_val_is_publish_claim(&nk) ||
+	  nk.u32.hi == LJ_KEYINDEX)
+	return 0;
+      /* Shared deletion changes only the value. A published key stays
+      ** bound to its slot until this node generation is retired. */
+      if (tv_rawload(&nk) == tv_rawload(&key)) {
+	slot = &n->val;
+	break;
+      }
+    }
+  }
+  if (!slot)
+    return 0;
+  lj_tv_load_acq(&value, slot);
+  /* The slot supplies an exact acquired TValue. Strings are never weakly
+  ** cleared, and the phase lease retains the copied body even if a peer
+  ** immediately replaces that slot. The release store publishes the result
+  ** to TMPREF before VLOAD. Later GC admission waits for the native frame
+  ** to materialize its exit snapshot. Other GC types take the rooted path. */
+  if (!(tvisnumber(&value) || tvisbool(&value) || tvisstr(&value)))
+    return 0;
+#ifdef LJ_GC2_TEST_HELPERS
+  if (tab_test_jit_idle_read_hook)
+    tab_test_jit_idle_read_hook(L, t, &value);
+#endif
+  if (!tab_forjit_snapshot_current(t, &snap))
+    return 0;
+  tv_rawstore_rel(outroot, tv_rawload(&value));
+  return 1;
+}
+#endif
+
 LJ_FUNCA TValue *lj_tab_gettv_rooted(lua_State *L, cTValue *tabroot,
 				     cTValue *key, TValue *outroot)
 {
+#if LJ_TARGET_X64 && LJ_HASJIT && LJ_GC64 && defined(__linux__)
+  if (LJ_LIKELY(tab_gettv_jit_idle_hit(L, tabroot, key, outroot)))
+    return outroot;
+#endif
   return tab_gettv_rooted_impl(L, tabroot, NULL, key, outroot);
 }
 

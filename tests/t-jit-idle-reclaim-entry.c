@@ -4,6 +4,7 @@
 
 #include <assert.h>
 #include <pthread.h>
+#include <sched.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -16,6 +17,8 @@
 #include "lj_bc.h"
 #include "lj_func.h"
 #include "lj_gc2.h"
+#include "lj_safepoint.h"
+#include "lj_tab.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
 #include "lj_trace.h"
@@ -115,6 +118,156 @@ static void restore_patch(PatchedPC *patch)
   assert(patch && patch->pc && patch->original != 0);
   bc_publish(patch->pc, patch->original);
 }
+
+
+#if LJ_HASJIT && LJ_GC64 && defined(__linux__) && defined(LJ_GC2_TEST_HELPERS)
+typedef struct IdleReadRace {
+  global_State *g;
+  lua_State *peer;
+  TGState *reader;
+  GCtab *tab;
+  TValue *oldarray;
+  uint32_t ready;
+  uint32_t paused;
+  uint32_t release;
+} IdleReadRace;
+
+static IdleReadRace *idle_read_race;
+
+static void wait_idle_read_flag(uint32_t *flag)
+{
+  uint32_t i;
+  for (i = 0; i < 10000000u; i++) {
+    if (la_load32_acq(flag))
+      return;
+    (void)sched_yield();
+  }
+  assert(!"IDLE read fixture failed to reach the expected stage");
+}
+
+static void pause_idle_read(lua_State *L, GCtab *tab, cTValue *value)
+{
+  IdleReadRace *race = idle_read_race;
+  if (tab != race->tab || la_load32_acq(&race->paused))
+    return;
+  assert(G(L) == race->g && tvisstr(value));
+  assert(strV(value)->len == 3);
+  assert(lj_tg_load_jit_base(race->reader));
+  assert(gc2_phase_acq(race->g) == LJ_GC2_IDLE);
+  la_store32_rel(&race->paused, 1);
+  wait_idle_read_flag(&race->release);
+  /* Both authoritative source slots were replaced and the vector retired.
+  ** Native entry still owns the old body through this last native use. */
+  assert(strV(value)->len == 3);
+}
+
+static void *resize_during_idle_read(void *ud)
+{
+  IdleReadRace *race = (IdleReadRace *)ud;
+  lua_State *L = race->peer;
+  uint32_t i;
+  TValue snapshot;
+  assert(lj_threading_attach(L));
+  lj_native_enter(L2TG(L));
+  la_store32_rel(&race->ready, 1);
+  wait_idle_read_flag(&race->paused);
+  (void)lj_native_leave(L);
+
+  lj_tv_load_acq(&snapshot, &race->reader->tmptv);
+  assert(tvistab(&snapshot) && tabV(&snapshot) == race->tab);
+  assert(lj_tg_load_jit_base(race->reader));
+  assert(gc2_smr_readers_acq(race->g) == 0);
+  lj_tab_resize(L, race->tab, 257, 0);
+  assert(lj_tab_array_acq(race->tab) != race->oldarray);
+  lua_pushliteral(L, "surviving");
+  lua_rawseti(L, 1, 1);
+  lua_pushliteral(L, "surviving");
+  lua_rawseti(L, 1, 2);
+  assert(!lj_gc2_test_idle_reclaim_enter(race->g));
+  assert(gc2_phase_acq(race->g) == LJ_GC2_IDLE);
+  assert(lj_tg_load_jit_base(race->reader));
+
+  /* A stale generation must refuse before publishing the old result. The
+  ** subsequent authoritative lookup sees the replacement under its lease. */
+  lj_tab_test_forjit_result_pause();
+  la_store32_rel(&race->release, 1);
+  lj_native_enter(L2TG(L));
+  for (i = 0; i < 10000000u; i++) {
+    if (lj_tab_test_forjit_result_paused())
+      break;
+    (void)lj_thr_retry_yield(NULL);
+  }
+  assert(i < 10000000u);
+  lj_tv_load_acq(&snapshot, &race->reader->tmptv);
+  assert(tvisstr(&snapshot) && strV(&snapshot)->len == 9);
+  lj_tab_test_forjit_result_release();
+  (void)lj_native_leave(L);
+  lj_threading_detach(L, 1);
+  return NULL;
+}
+
+static void check_idle_read_generation(lua_State *L)
+{
+  IdleReadRace race = { 0 };
+  pthread_t peer;
+  int base = lua_gettop(L), tabidx, fnidx, i;
+  race.g = G(L);
+  race.reader = L2TG(L);
+  ljt_lua_dostring(L,
+    "local th = require('threading')\n"
+    "assert(th.spawn(function() return true end):join(5))\n"
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "function __idle_read_generation(t, n)\n"
+    "  local s = 0\n"
+    "  for j = 1, n do s = s + #t[j % 2 + 1] end\n"
+    "  return s\n"
+    "end\n");
+  lua_getglobal(L, "__idle_read_generation");
+  fnidx = lua_gettop(L);
+  lua_createtable(L, 64, 0);
+  tabidx = lua_gettop(L);
+  race.tab = tabV(L->top - 1);
+  race.oldarray = lj_tab_array_acq(race.tab);
+  lua_pushliteral(L, "old");
+  lua_rawseti(L, tabidx, 1);
+  lua_pushliteral(L, "old");
+  lua_rawseti(L, tabidx, 2);
+  race.peer = lua_newthread(L);
+  lua_pushvalue(L, tabidx);
+  lua_xmove(L, race.peer, 1);
+  for (i = 0; i < 20; i++) {
+    lua_pushvalue(L, fnidx);
+    lua_pushvalue(L, tabidx);
+    lua_pushinteger(L, 64);
+    ljt_lua_pcall(L, 2, 1, "IDLE read warmup");
+    assert(lua_tointeger(L, -1) == 192);
+    lua_pop(L, 1);
+  }
+  assert(proto_has_op(global_proto(L, "__idle_read_generation"), BC_JFORL));
+  assert(gc2_phase_acq(race.g) == LJ_GC2_IDLE);
+  assert(lj_gc2_test_idle_reclaim_enter(race.g));
+  lj_gc2_test_idle_reclaim_leave(race.g);
+  idle_read_race = &race;
+  lj_tab_test_set_jit_idle_read_hook(pause_idle_read);
+  lj_native_enter(race.reader);
+  assert(pthread_create(&peer, NULL, resize_during_idle_read, &race) == 0);
+  wait_idle_read_flag(&race.ready);
+  (void)lj_native_leave(L);
+  lua_pushvalue(L, fnidx);
+  lua_pushvalue(L, tabidx);
+  lua_pushinteger(L, 64);
+  ljt_lua_pcall(L, 2, 1, "IDLE read generation changed");
+  /* The interpreter executed exactly one old-value read before native
+  ** entry; every native read, including the stale-generation retry, sees
+  ** the longer replacement. */
+  assert(lua_tointeger(L, -1) == 3 + 63 * 9);
+  assert(pthread_join(peer, NULL) == 0);
+  lj_tab_test_set_jit_idle_read_hook(NULL);
+  idle_read_race = NULL;
+  lua_settop(L, base);
+}
+#endif
 
 int main(void)
 {
@@ -409,6 +562,9 @@ int main(void)
   lua_pop(L, 1);
   assert(la_load32_acq(&native_hits) != 0);
 
+#if LJ_HASJIT && LJ_GC64 && defined(__linux__) && defined(LJ_GC2_TEST_HELPERS)
+  check_idle_read_generation(L);
+#endif
   lua_close(L);
   puts("t-jit-idle-reclaim-entry OK: IDLE reclaim owns native-entry closure");
   return 0;

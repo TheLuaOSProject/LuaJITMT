@@ -437,6 +437,22 @@ local worker = th.spawn(function()
     shared_pairs_churn["seed:" .. i] = i
   end
 
+  -- Exercise the generated read of a string from a moving array followed
+  -- by a scalar hit in the same moving hash generation.
+  shared_pairs_churn[1], shared_pairs_churn[2] = "alpha", "beta"
+  local function read_churn(n)
+    local sum = 0
+    for i = 1, n do
+      local key = shared_pairs_churn[i % 2 + 1]
+      sum = sum + shared_pairs_churn[key]
+    end
+    return sum
+  end
+  for _ = 1, 8 do
+    assert(read_churn(64) == 256)
+  end
+  assert(trace_count(trace_limit) > 0)
+
   local ready = th.channel(1)
   local start = th.channel(1)
   local writer = th.spawn(function(tbl, ready_ch, start_ch)
@@ -466,6 +482,7 @@ local worker = th.spawn(function()
   assert(start:send("go", 10) == true)
 
   for round = 1, 128 do
+    assert(read_churn(64) == 256)
     local count = 0
     for k, v in pairs(shared_pairs_churn) do
       assert(type(count) == "number",
