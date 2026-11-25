@@ -1491,6 +1491,23 @@ static LJ_AINLINE void ctype_copy_rel(CType *dst, const CType *src)
   ctype_nameobj_rel(dst, ctype_nameobj_acq(src));
 }
 
+/* Sample the live fields before checking for an undo record. Acquiring any
+** provisional field also acquires its publisher's earlier undo publication.
+** Readers validate the transaction version after walking their whole graph. */
+static LJ_AINLINE void ctype_layout_copy(CTState *cts, uint64_t version,
+                                         CTypeTab *tabh, CTypeID id, CType *out)
+{
+  ctype_copy_rel(out, ctype_tab_slot(tabh, id));
+  if (version & 1u) {
+    CTypeLayoutPage *page = ctype_layout_page(cts, id >> CTYPE_LAYOUT_PAGE_BITS);
+    if (page) {
+      CTypeLayoutUndo *undo = &page->slots[id & (CTYPE_LAYOUT_PAGE_SIZE-1)];
+      if (la_load64_acq(&undo->version) == version)
+        ctype_copy_rel(out, &undo->old);
+    }
+  }
+}
+
 LJ_FUNC CTypeID lj_ctype_new_l(lua_State *L, CTState *cts, CType **ctp);
 LJ_FUNC void lj_ctype_save_layout(lua_State *L, CTState *cts, CTypeID id,
 				 const CType *old);

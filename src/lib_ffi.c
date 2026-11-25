@@ -103,13 +103,7 @@ static void ffi_ctype_wait_or_record_ctbusy(lua_State *L, CTState *cts);
 static int ffi_lookup_named_ctype(lua_State *L, CTState *cts, GCstr *name,
 				  uint32_t tmask, CTypeID *idp, CType *out)
 {
-  int ok = lj_ctype_getname_snapshot(cts, name, tmask, idp, out, NULL);
-  while (ok < 0) {
-    /* Name hash is cparser-published; recorders abort, readers wait. */
-    ffi_ctype_wait_or_record_ctbusy(L, cts);
-    ok = lj_ctype_getname_snapshot(cts, name, tmask, idp, out, NULL);
-  }
-  return ok;
+  return lj_ctype_getname_wait(L, cts, name, tmask, idp, out, NULL);
 }
 
 static int ffi_ctype_info_read(lua_State *L, CTState *cts, CTypeID id,
@@ -2150,25 +2144,12 @@ static int ffi_layout_end(FFILayoutSnap *ls)
 
 static int ffi_layout_get(FFILayoutSnap *ls, CTypeID id, CType *out)
 {
-  CType *ct;
   if (id == 0 || id >= ls->top ||
       (MSize)id >= ctype_tab_sizetab_acq(ls->tabh))
     return 0;
   if (ls->budget-- == 0)
     return -1;
-  ct = ctype_tab_slot(ls->tabh, id);
-  ctype_copy_rel(out, ct);
-  if (ls->version & 1u) {
-    /* Any provisional field observed above acquired the earlier publication
-    ** of this ID's rollback image. Unedited entries stay readable in place.
-    ** An overlapping commit or another parse retries the whole graph. */
-    CTypeLayoutPage *page = ctype_layout_page(ls->cts, id >> CTYPE_LAYOUT_PAGE_BITS);
-    if (page) {
-      CTypeLayoutUndo *undo = &page->slots[id & (CTYPE_LAYOUT_PAGE_SIZE-1)];
-      if (la_load64_acq(&undo->version) == ls->version)
-        ctype_copy_rel(out, &undo->old);
-    }
-  }
+  ctype_layout_copy(ls->cts, ls->version, ls->tabh, id, out);
   return ctype_isabandoned(out->info) ? 0 : 1;
 }
 

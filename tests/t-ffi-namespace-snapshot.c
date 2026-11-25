@@ -65,9 +65,13 @@ int main(void)
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0);
 
-  assert_namespace_waits_without_lock(L, cts, tg,
-    "local ffi = require('ffi')\n"
-    "assert(ffi.C.LJ_M7_NS_WAIT_CONST == 123)\n");
+  {
+    uint32_t release = ljt_ctype_hold_parse_token(cts);
+    ljt_lua_dostring(L,
+      "assert(require('ffi').C.LJ_M7_NS_WAIT_CONST == 123)");
+    assert(ctype_parse_token_acq(cts) == release - 1u);
+    ljt_ctype_release_parse_token(cts, release);
+  }
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 2u);
 

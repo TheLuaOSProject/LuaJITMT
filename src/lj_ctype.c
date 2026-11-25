@@ -1641,84 +1641,74 @@ CTypeID lj_ctype_getname(CTState *cts, CType **ctp, GCstr *name, uint32_t tmask)
   return 0;
 }
 
-/* Sequence-checked named ctype lookup for stable non-parser readers. */
-int lj_ctype_getname_snapshot(CTState *cts, GCstr *name, uint32_t tmask,
-			      CTypeID *idp, CType *out, GCstr **redirp)
+/* New parser records may already be on a name chain. Follow their immutable
+** next links to the committed prefix without inspecting provisional names. */
+static int ctype_getname_at(CTState *cts, uint64_t version, GCstr *name,
+                            uint32_t tmask, CTypeID *idp, CType *out,
+                            GCstr **redirp)
 {
-  uint32_t seq0 = ctype_parse_token_acq(cts);
-  CTypeTab *tabh;
-  CTypeID top, id;
-  MSize budget;
-  if (seq0 & 1u)
-    return -1;
-  top = ctype_top_acq(cts);
-  tabh = ctype_tabh_acq(cts);
-  id = ctype_hash_load(cts, ct_hashname(name));
-  budget = top ? (MSize)top * 2u : 1u;
+  CTypeID id = ctype_hash_load(cts, ct_hashname(name));
+  CTypeID top = ctype_top_acq(cts);
+  CTypeTab *tabh = ctype_tabh_acq(cts);
+  CTypeID limit = (version & 1u) ? la_load32_acq(&cts->layout_top) : top;
+  MSize budget = top;
   while (id) {
-    CType *ct;
+    CType ct;
     CTInfo info;
-    CTSize size;
-    CTypeID sib, next;
-    GCobj *gco;
-    if (id >= top || (MSize)id >= ctype_tab_sizetab_acq(tabh))
+    if (id >= top || id >= ctype_tab_sizetab_acq(tabh) || budget-- == 0)
       return -1;
-    if (budget-- == 0)
-      return -1;
-    ct = ctype_tab_slot(tabh, id);
-    info = ctype_info_acq(ct);
-    size = ctype_size_acq(ct);
-    sib = ctype_sib_acq(ct);
-    next = ctype_next_acq(ct);
-    gco = ctype_nameobj_acq(ct);
-    if (!ctype_isabandoned(info) && gco == obj2gco(name) &&
-	((tmask >> ctype_type(info)) & 1)) {
-      GCstr *redir = name;
-      uint32_t seq1;
-      if (redirp && sib) {
-	CType *rt;
-	CTInfo rinfo;
-	GCobj *rgco;
-	if (sib >= top || (MSize)sib >= ctype_tab_sizetab_acq(tabh))
-	  return -1;
-	rt = ctype_tab_slot(tabh, sib);
-	rinfo = ctype_info_acq(rt);
-	rgco = ctype_nameobj_acq(rt);
-	if (ctype_isabandoned(rinfo))
-	  return ctype_snapshot_done(cts, seq0, 0);
-	if (ctype_isxattrib(rinfo, CTA_REDIR)) {
-	  if (rgco == NULL)
-	    return -1;
-	  redir = gco2str(rgco);
-	}
-      }
-      out->info = info;
-      out->size = size;
-      out->sib = (CTypeID1)sib;
-      out->next = (CTypeID1)next;
-      setgcrefp(out->name, gco);
-      *idp = id;
-      if (redirp)
-	*redirp = redir;
-      seq1 = ctype_parse_token_acq(cts);
-      return (seq0 == seq1 && !(seq1 & 1u)) ? 1 : -1;
+    if (id >= limit) {
+      id = ctype_next_acq(ctype_tab_slot(tabh, id));
+      continue;
     }
-    id = next;
+    ctype_layout_copy(cts, version, tabh, id, &ct);
+    info = ct.info;
+    if (!ctype_isabandoned(info) && ctype_nameobj_acq(&ct) == obj2gco(name) &&
+        ((tmask >> ctype_type(info)) & 1)) {
+      if (redirp) {
+        *redirp = name;
+        if (ct.sib) {
+          CType sib;
+          if (ct.sib >= limit || ct.sib >= ctype_tab_sizetab_acq(tabh))
+            return -1;
+          ctype_layout_copy(cts, version, tabh, ct.sib, &sib);
+          if (ctype_isabandoned(sib.info)) return 0;
+          if (ctype_isxattrib(sib.info, CTA_REDIR)) {
+            *redirp = ctype_name_acq(&sib);
+            if (!*redirp) return -1;
+          }
+        }
+      }
+      *out = ct;
+      *idp = id;
+      return 1;
+    }
+    id = ct.next;
   }
-  {
-    uint32_t seq1 = ctype_parse_token_acq(cts);
-    return (seq0 == seq1 && !(seq1 & 1u)) ? 0 : -1;
-  }
+  return 0;
+}
+
+/* Speculative callers may decline the operation during a declaration. */
+int lj_ctype_getname_snapshot(CTState *cts, GCstr *name, uint32_t tmask,
+                              CTypeID *idp, CType *out, GCstr **redirp)
+{
+  uint32_t seq = ctype_parse_token_acq(cts);
+  int ok;
+  if (seq & 1u) return -1;
+  ok = ctype_getname_at(cts, ctype_layout_version(cts), name, tmask,
+                        idp, out, redirp);
+  return ctype_snapshot_done(cts, seq, ok);
 }
 
 int lj_ctype_getname_wait(lua_State *L, CTState *cts, GCstr *name,
-			  uint32_t tmask, CTypeID *idp, CType *out,
-			  GCstr **redirp)
+                          uint32_t tmask, CTypeID *idp, CType *out,
+                          GCstr **redirp)
 {
   for (;;) {
-    int ok = lj_ctype_getname_snapshot(cts, name, tmask, idp, out, redirp);
-    if (ok >= 0)
-      return ok;
+    uint64_t version = ctype_layout_version(cts);
+    int ok = ctype_getname_at(cts, version, name, tmask, idp, out, redirp);
+    if (ctype_layout_version(cts) != version) continue;
+    if (ok >= 0) return ok;
     lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
   }
 }
