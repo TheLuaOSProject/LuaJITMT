@@ -2186,6 +2186,20 @@ assert(exits > 0, "active-MT rooted-length BC_LOOP never entered native code")
   })
 
   add({
+    name = "m6_jit_x64_rooted_upvalue",
+    description = "active-MT x64 UGET and CGET trace exact upvalue reads",
+    run = function(t)
+      if jit.os == "Linux" and jit.arch == "x64" and t.target_arch == "x64" then
+        build_default(t)
+        luajit_file(t, t:path("tests", "t-x64-jit-rooted-upvalue.lua"), {
+          lua_path = true,
+          timeout = "30s"
+        })
+      end
+    end
+  })
+
+  add({
     name = "m6_jit_rooted_read_ir",
     description = "active-MT ARM64 scalar array reads retain explicit roots",
     run = function(t)

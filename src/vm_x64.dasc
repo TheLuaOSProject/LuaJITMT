@@ -4289,13 +4289,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_UGET:
     |  ins_AD	// RA = dst, RD = upvalue #
-    |  mov LFUNC:RB, [BASE-16]
-    |  cleartp LFUNC:RB
-    |  mov UPVAL:RB, [LFUNC:RB+RD*8+offsetof(GCfuncL, uvptr)]
-    |  mov RB, UPVAL:RB->v
-    |  mov RD, [RB]
-    |  mov [BASE+RA*8], RD
-    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
+    |  mov L:RB, SAVE_L
+    |  mov L:RB->base, BASE
+    |  mov SAVE_PC, PC
+    |  mov CARG2d, RDd
+    |  mov CARG3d, RAd
+    |  mov CARG1, L:RB
+    |  call extern lj_func_getuv_vm
+    |  mov BASE, L:RB->base
     |  ins_next
     break;
   case BC_CNEW:
@@ -4319,9 +4320,15 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  sar ITYPE, 47
     |  cmp ITYPEd, LJ_TUPVAL
     |  jne >1
-    |  cleartp UPVAL:RB
-    |  mov RB, UPVAL:RB->v
-    |  mov RB, [RB]
+    |  mov L:RB, SAVE_L
+    |  mov L:RB->base, BASE
+    |  mov SAVE_PC, PC
+    |  mov CARG2d, RDd
+    |  mov CARG3d, RAd
+    |  mov CARG1, L:RB
+    |  call extern lj_func_getcell_vm
+    |  mov BASE, L:RB->base
+    |  ins_next
     |1:
     |  mov [BASE+RA*8], RB
     |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1

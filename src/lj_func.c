@@ -19,6 +19,7 @@
 #include "lj_oserr.h"
 #include "lj_state.h"
 #include "lj_str.h"
+#include "lj_tab.h"
 #include "lj_trace.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
@@ -312,6 +313,94 @@ static int func_rooted_cell_slot(lua_State *L,
   return 1;
 }
 
+static int func_vm_read_cell(lua_State *L, uint32_t src, uint32_t dst,
+			      int local_cell)
+{
+  global_State *g = G(L);
+  TValue *base = L->base, *edge;
+  GCfuncL *fn = NULL;
+  GCobj *obj;
+  GCupval *uv;
+  TValue value;
+  LJGC2Lease cell_lease, value_lease;
+  TGState *pin = NULL;
+  int leased = 0, success = 0;
+
+  if (local_cell) {
+    lj_tv_load_acq(&value, base + src);
+    if (itype(&value) != LJ_TUPVAL) {
+      copyTVrel(L, base + dst, &value);
+      lj_state_stack_pubtv(L, L, base + dst);
+      return 1;
+    }
+    obj = gcval(&value);
+  } else {
+    /* The current frame owns this function. A sibling may replace its
+    ** uvptr, so the sampled cell is only an address until admitted. */
+    fn = &funcV(base - 2)->l;
+    obj = func_uvptr_acq(fn, src);
+  }
+  if (LJ_LIKELY(gc2_small_arena_tab_acq(g))) {
+    if (!lj_gc2_small_lease_try(g, obj, sizeof(GCupval),
+			       (uint32_t)~LJ_TUPVAL, &cell_lease, NULL))
+      return 0;
+  } else if (lj_gc2_obj_lease_acquire(g, obj, (uint32_t)~LJ_TUPVAL,
+				     NULL, &cell_lease) < 0) {
+    return 0;
+  }
+  uv = &obj->uv;
+  edge = mref_acq(uv->v, TValue);
+  lj_tv_load_acq(&value, edge);
+  if (tvisstr(&value)) {
+    pin = lj_str_source_pin(L, (GCstr *)(void *)gcval(&value));
+    if (!pin) {
+      if (lj_gc2_tv_lease_acquire(g, &value, &value_lease) !=
+	  LJ_GC2_TV_EDGE_VALID)
+	goto done;
+      leased = 1;
+    }
+  }
+  if ((local_cell ? gcval(base + src) != obj :
+		  func_uvptr_acq(fn, src) != obj) ||
+      mref_acq(uv->v, TValue) != edge ||
+      tv_rawload_acq(edge) != tv_rawload(&value) ||
+      !lj_str_tv_rescue_held(&value))
+    goto done;
+  copyTVrel(L, base + dst, &value);
+  lj_state_stack_pubtv(L, L, base + dst);
+  success = 1;
+
+done:
+  if (pin)
+    lj_str_source_unpin(pin);
+  if (leased)
+    lj_gc2_lease_release(&value_lease);
+  lj_gc2_lease_release(&cell_lease);
+  return success;
+}
+
+static void func_vm_read(lua_State *L, uint32_t src, uint32_t dst,
+			 int local_cell)
+{
+  LJOSerrState oserr;
+  lj_oserr_save(&oserr);
+  while (!func_vm_read_cell(L, src, dst, local_cell)) {
+    lj_oserr_restore(&oserr);
+    lj_tab_wait_l(L);
+  }
+  lj_oserr_restore(&oserr);
+}
+
+void lj_func_getuv_vm(lua_State *L, uint32_t src, uint32_t dst)
+{
+  func_vm_read(L, src, dst, 0);
+}
+
+void lj_func_getcell_vm(lua_State *L, uint32_t src, uint32_t dst)
+{
+  func_vm_read(L, src, dst, 1);
+}
+
 static int func_rooted_cell_try_common(lua_State *L, TValue *base,
 				       uint32_t index, cTValue *valueroot,
 				       TValue *outroot, int store)
@@ -392,13 +481,16 @@ static int func_rooted_cell_try_common(lua_State *L, TValue *base,
   if (store) {
     lj_tv_load_acq(&valueconfirm,
 		   valuestack ? restorestack(L, valueofs) : valueroot);
-    if (tv_rawload(&valueconfirm) != tv_rawload(&valuesnap))
+    if (tv_rawload(&valueconfirm) != tv_rawload(&valuesnap) ||
+	!lj_str_tv_rescue_held(&valuesnap))
       goto done;
     copyTVrel(L, &uv->tv, &valuesnap);
     if (tvisgcv(&valuesnap))
       lj_gc2_barrier_tv_pair_g(owner.g, obj2gco(uv), &valuesnap);
   } else {
     TValue *out = outstack ? restorestack(L, outofs) : outroot;
+    if (!lj_str_tv_rescue_held(&result))
+      goto done;
     copyTVrel(L, out, &result);
   }
   success = 1;

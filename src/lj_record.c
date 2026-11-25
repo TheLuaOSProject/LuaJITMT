@@ -3154,7 +3154,8 @@ static int rec_upvalue_constify(jit_State *J, GCupval *uvp)
   return 0;
 }
 
-#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+#if LJ_HAS_X64_MT_JIT_HELPERS || \
+    (LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL))
 /* Sample a shared cell through an enumerated closure root. Do not keep a raw
 ** uvptr or payload across recorder allocation, or borrow the VM's comparison
 ** scratch words. A refused attempt abandons recording without waiting. */
@@ -3246,7 +3247,8 @@ static TRef rec_upvalue(jit_State *J, uint32_t uv, TRef val)
   IRRef uref;
   RecFnew1NumUV fnew1num;
   int needbarrier = 0;
-#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+#if LJ_HAS_X64_MT_JIT_HELPERS || \
+    (LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL))
   if (lj_record_mt_runtime_shared(J2G(J), J->L))
     return rec_upvalue_rooted(J, uv, val);
 #endif
@@ -3652,7 +3654,8 @@ static int rec_celluv_prepare_cget_sources(jit_State *J,
   return materialized;
 }
 
-#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+#if LJ_HAS_X64_MT_JIT_HELPERS || \
+    (LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL))
 /* The stack contains the cell identity throughout this root trace. Sample its
 ** payload through a leased operation and a private enumerated root, without
 ** carrying the internal cell pointer in native registers or scratch roots. */
@@ -3734,7 +3737,8 @@ static TRef rec_celluv(jit_State *J, cTValue *slot, TRef slotref, TRef val,
   GCupval *uvp = NULL;
   IRRef uref;
   uint32_t uh = 0;
-#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+#if LJ_HAS_X64_MT_JIT_HELPERS || \
+    (LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL))
   if (lj_record_mt_runtime_shared(J2G(J), J->L) &&
       (itype(slot) == LJ_TUPVAL || rec_celluv_iscellref(slotref)))
     return rec_celluv_rooted(J, slot, slotref, val, slotno);

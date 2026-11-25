@@ -17014,7 +17014,8 @@ int lj_gc2_small_lease_try(global_State *g, const void *p,
       !checkptrGC(p) || ((uintptr_t)p & (LJ_CELL_SIZE - 1u)) ||
       la_load32_acq(&g->allocf_arena) == 0 ||
       (expected_gct && expected_gct != (uint32_t)~LJ_TTAB &&
-		       expected_gct != (uint32_t)~LJ_TSTR) ||
+		       expected_gct != (uint32_t)~LJ_TSTR &&
+		       expected_gct != (uint32_t)~LJ_TUPVAL) ||
       !(registry = (HugeTab *)gc2_small_arena_tab_acq(g))) {
     GC2_PROGRESS_ADD(lease_refused);
     return 0;

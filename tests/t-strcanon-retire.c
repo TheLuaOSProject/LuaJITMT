@@ -302,6 +302,45 @@ static void check_dual_generation_quarantine(void)
   lua_close(L);
 }
 
+#if LJ_TARGET_X64 && defined(LJ_GC2_TEST_HELPERS)
+static GCstr *vm_source;
+static StrCanonRec *vm_source_rec;
+
+static int arm_vm_source(lua_State *L)
+{
+  lj_str_canon_rel(vm_source,
+		   lj_str_canon_pack(vm_source_rec, LJ_STR_CANON_QCLOSING));
+  assert(lj_gc2_test_idle_reclaim_enter(G(L)));
+  return 0;
+}
+
+static void check_vm_upvalue_publication(lua_State *L, int cell)
+{
+  const char name[] = "canonical-VM-cell-fixture";
+  const char *chunk = cell ?
+    "local x,arm = ...; local function store(v) x=v end; arm(); return x,store" :
+    "local x = ...; return function(arm) arm(); return x end";
+  assert(luaL_loadstring(L, chunk) == LUA_OK);
+  lua_pushlstring(L, name, sizeof(name)-1);
+  vm_source = strV(L->top - 1);
+  assert(lj_str_test_quarantine_detach(L, vm_source));
+  vm_source_rec = lj_str_canon_record(lj_str_canon_acq(vm_source));
+  assert(vm_source_rec);
+
+  if (!cell)
+    lua_call(L, 1, 1);
+  lua_pushcfunction(L, arm_vm_source);
+  lua_call(L, cell ? 2 : 1, cell ? 2 : 1);
+  lj_gc2_test_idle_reclaim_leave(G(L));
+  assert(strV(L->top - (cell ? 2 : 1)) == vm_source);
+  assert(lj_str_canon_state(lj_str_canon_acq(vm_source)) ==
+	 LJ_STR_CANON_QRESCUED);
+  advance_grace(G(L));
+  assert(lj_str_canon_acq(vm_source) == LJ_STR_CANON_LIVE);
+  lua_pop(L, cell ? 2 : 1);
+}
+#endif
+
 int main(void)
 {
   lua_State *L;
@@ -336,6 +375,10 @@ int main(void)
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   check_table_publication(L);
   check_rooted_upvalue_publication(L);
+#if LJ_TARGET_X64 && defined(LJ_GC2_TEST_HELPERS)
+  check_vm_upvalue_publication(L, 0);
+  check_vm_upvalue_publication(L, 1);
+#endif
 
   /* Only the fixture-owned, unrooted target is authorized to close. */
   assert(lj_str_test_quarantine_close(g, old));
