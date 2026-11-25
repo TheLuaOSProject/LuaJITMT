@@ -1827,97 +1827,102 @@ LJLIB_CF(ffi_typeinfo)
   return 0;
 }
 
-typedef struct FFITypeCmpSnap {
+typedef struct FFILayoutSnap {
   CTState *cts;
   CTypeTab *tabh;
   CTypeID top;
-  uint32_t seq;
+  uint64_t version;
   MSize budget;
-} FFITypeCmpSnap;
+} FFILayoutSnap;
 
-static int ffi_typecmp_begin(CTState *cts, FFITypeCmpSnap *ts)
+static int ffi_layout_begin(CTState *cts, CTypeID id, FFILayoutSnap *ls)
 {
-  uint32_t seq = ctype_parse_token_acq(cts);
-  if (seq & 1u)
+  uint64_t version = ctype_layout_version(cts);
+  ls->cts = cts;
+  ls->top = ctype_layout_limit(cts, version, id);
+  /* An ID exposed during parsing may be newer than the committed prefix. */
+  if ((version & 1u) && id >= ls->top)
     return -1;
-  ts->cts = cts;
-  ts->top = ctype_top_acq(cts);
-  ts->tabh = &cts->tab;
-  ts->seq = seq;
-  ts->budget = ts->top ? (MSize)ts->top * 6u : 1u;
+  ls->tabh = &cts->tab;
+  ls->version = version;
+  ls->budget = ls->top ? (MSize)ls->top * 2u : 1u;
   return 1;
 }
 
-static int ffi_typecmp_end(FFITypeCmpSnap *ts)
+static int ffi_layout_begin_predefined(CTState *cts, CTypeID id,
+				       FFILayoutSnap *ls)
 {
-  uint32_t seq = ctype_parse_token_acq(ts->cts);
-  return (seq == ts->seq && !(seq & 1u)) ? 1 : -1;
-}
-
-static int ffi_typecmp_get(FFITypeCmpSnap *ts, CTypeID id, CType *out)
-{
-  CType *ct;
-  CTInfo info;
-  if (id == 0 || id >= ts->top)
+  if (!ffi_ctype_predefined_id(id))
     return 0;
-  if ((MSize)id >= ctype_tab_sizetab_acq(ts->tabh))
-    return -1;
-  if (ts->budget-- == 0)
-    return -1;
-  ct = ctype_tab_slot(ts->tabh, id);
-  info = ctype_info_acq(ct);
-  out->info = info;
-  out->size = ctype_size_acq(ct);
-  out->sib = (CTypeID1)ctype_sib_acq(ct);
-  out->next = (CTypeID1)ctype_next_acq(ct);
-  setgcrefnull(out->name);
-  return !ctype_isabandoned(info);
+  ls->cts = cts;
+  ls->top = CTID_CTYPEID + 1;
+  ls->tabh = &cts->tab;
+  ls->version = 0;
+  ls->budget = (MSize)ls->top * 2u;
+  if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(ls->tabh))
+    return 0;
+  return 1;
 }
 
-static int ffi_typecmp_rawid(FFITypeCmpSnap *ts, CTypeID id, CTypeID *ridp,
-			     CType *out)
+static int ffi_layout_end(FFILayoutSnap *ls)
+{
+  return ctype_layout_version(ls->cts) == ls->version;
+}
+
+static int ffi_layout_get(FFILayoutSnap *ls, CTypeID id, CType *out)
+{
+  if (id == 0 || id >= ls->top ||
+      (MSize)id >= ctype_tab_sizetab_acq(ls->tabh))
+    return 0;
+  if (ls->budget-- == 0)
+    return -1;
+  return ctype_layout_at(ls->cts, ls->version, ls->tabh, ls->top, id, out);
+}
+
+static int ffi_layout_rawrefid(FFILayoutSnap *ls, CTypeID id, CTypeID *ridp,
+                               CType *out)
 {
   int ok;
   for (;;) {
     CTInfo info;
-    ok = ffi_typecmp_get(ts, id, out);
-    if (ok <= 0)
-      return ok;
-    info = ctype_info_acq(out);
-    if (!ctype_isattrib(info)) {
-      *ridp = id;
-      return 1;
-    }
-    id = ctype_cid(info);
-  }
-}
-
-static int ffi_typecmp_rawrefid(FFITypeCmpSnap *ts, CTypeID id, CTypeID *ridp,
-				CType *out)
-{
-  int ok;
-  for (;;) {
-    CTInfo info;
-    ok = ffi_typecmp_get(ts, id, out);
+    ok = ffi_layout_get(ls, id, out);
     if (ok <= 0)
       return ok;
     info = ctype_info_acq(out);
     if (!(ctype_isattrib(info) || ctype_isref(info))) {
-      *ridp = id;
+      if (ridp) *ridp = id;
       return 1;
     }
     id = ctype_cid(info);
   }
 }
 
-static int ffi_typecmp_childqual(FFITypeCmpSnap *ts, const CType *root,
+static int ffi_layout_rawid(FFILayoutSnap *ls, CTypeID id, CTypeID *ridp,
+			    CType *out)
+{
+  int ok;
+  for (;;) {
+    CTInfo info;
+    ok = ffi_layout_get(ls, id, out);
+    if (ok <= 0)
+      return ok;
+    info = ctype_info_acq(out);
+    if (!ctype_isattrib(info)) {
+      if (ridp) *ridp = id;
+      return 1;
+    }
+    id = ctype_cid(info);
+  }
+}
+
+static int ffi_typecmp_childqual(FFILayoutSnap *ts, const CType *root,
 				 CTypeID *idp, CType *out, CTInfo *qualp)
 {
   CTypeID id = ctype_cid(ctype_info_acq(root));
   int ok;
   for (;;) {
     CTInfo info;
-    ok = ffi_typecmp_get(ts, id, out);
+    ok = ffi_layout_get(ts, id, out);
     if (ok <= 0)
       return ok;
     info = ctype_info_acq(out);
@@ -1933,7 +1938,7 @@ static int ffi_typecmp_childqual(FFITypeCmpSnap *ts, const CType *root,
   }
 }
 
-static int ffi_typecmp_compatptr(FFITypeCmpSnap *ts, CTypeID did,
+static int ffi_typecmp_compatptr(FFILayoutSnap *ts, CTypeID did,
 				 const CType *d0, CTypeID sid,
 				 const CType *s0, CTInfo flags, int *bp)
 {
@@ -1989,16 +1994,16 @@ static int ffi_typecmp_compatptr(FFITypeCmpSnap *ts, CTypeID did,
   return 1;
 }
 
-static int ffi_istype_compare(FFITypeCmpSnap *ts, CTypeID id1, CTypeID id2,
+static int ffi_istype_compare(FFILayoutSnap *ts, CTypeID id1, CTypeID id2,
 			      int *bp)
 {
   CType ct1, ct2, child;
   CTypeID rid1, rid2, cid;
   int ok;
   int b = 0;
-  ok = ffi_typecmp_rawrefid(ts, id1, &rid1, &ct1);
+  ok = ffi_layout_rawrefid(ts, id1, &rid1, &ct1);
   if (ok > 0)
-    ok = ffi_typecmp_rawrefid(ts, id2, &rid2, &ct2);
+    ok = ffi_layout_rawrefid(ts, id2, &rid2, &ct2);
   if (ok > 0) {
     CTInfo info1 = ctype_info_acq(&ct1);
     CTInfo info2 = ctype_info_acq(&ct2);
@@ -2015,7 +2020,7 @@ static int ffi_istype_compare(FFITypeCmpSnap *ts, CTypeID id1, CTypeID id2,
 	b = ((info1 ^ info2) & ~(CTF_QUAL|CTF_LONG)) == 0;
       }
     } else if (ctype_isstruct(info1) && ctype_isptr(info2)) {
-      ok = ffi_typecmp_rawid(ts, ctype_cid(info2), &cid, &child);
+      ok = ffi_layout_rawid(ts, ctype_cid(info2), &cid, &child);
       if (ok > 0 && rid1 == cid)
 	b = 1;
     }
@@ -2030,30 +2035,23 @@ static int ffi_istype_compare(FFITypeCmpSnap *ts, CTypeID id1, CTypeID id2,
 
 static int ffi_istype_snapshot(CTState *cts, CTypeID id1, CTypeID id2, int *bp)
 {
-  FFITypeCmpSnap ts;
-  int ok = ffi_typecmp_begin(cts, &ts);
-  if (ok < 0)
-    return -1;
+  FFILayoutSnap ts;
+  int ok = ffi_layout_begin(cts, id1 > id2 ? id1 : id2, &ts);
+  if (ok < 0) return -1;
+  ts.budget = (MSize)ts.top * 6u;
   ok = ffi_istype_compare(&ts, id1, id2, bp);
-  if (ok >= 0 && ffi_typecmp_end(&ts) < 0)
-    return -1;
+  if (!ffi_layout_end(&ts)) return -1;
   return ok;
 }
 
 static int ffi_istype_predefined(CTState *cts, CTypeID id1, CTypeID id2,
 				 int *bp)
 {
-  FFITypeCmpSnap ts;
-  if (!(id1 > CTID_NONE && id1 <= CTID_CTYPEID &&
-	id2 > CTID_NONE && id2 <= CTID_CTYPEID))
+  FFILayoutSnap ts;
+  if (!ffi_ctype_predefined_id(id1) ||
+      !ffi_layout_begin_predefined(cts, id2, &ts))
     return 0;
-  ts.cts = cts;
-  ts.top = CTID_CTYPEID + 1;
-  ts.tabh = &cts->tab;
-  ts.seq = 0;
   ts.budget = (MSize)ts.top * 6u;
-  if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(ts.tabh))
-    return 0;
   return ffi_istype_compare(&ts, id1, id2, bp) > 0;
 }
 
@@ -2104,106 +2102,6 @@ done:
   setboolV(L->top-1, b);
   setboolV(&L2TG(L)->tmptv2, b);  /* Remember for trace recorder. */
   return 1;
-}
-
-typedef struct FFILayoutSnap {
-  CTState *cts;
-  CTypeTab *tabh;
-  CTypeID top;
-  uint64_t version;
-  MSize budget;
-} FFILayoutSnap;
-
-static int ffi_layout_begin(CTState *cts, CTypeID id, FFILayoutSnap *ls)
-{
-  uint64_t version = ctype_layout_version(cts);
-  ls->cts = cts;
-  ls->top = ctype_layout_limit(cts, version, id);
-  /* An ID exposed during parsing may be newer than the committed prefix. */
-  if ((version & 1u) && id >= ls->top)
-    return -1;
-  ls->tabh = &cts->tab;
-  ls->version = version;
-  ls->budget = ls->top ? (MSize)ls->top * 2u : 1u;
-  return 1;
-}
-
-static int ffi_layout_begin_predefined(CTState *cts, CTypeID id,
-				       FFILayoutSnap *ls)
-{
-  if (!ffi_ctype_predefined_id(id))
-    return 0;
-  ls->cts = cts;
-  ls->top = CTID_CTYPEID + 1;
-  ls->tabh = &cts->tab;
-  ls->version = 0;
-  ls->budget = (MSize)ls->top * 2u;
-  if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(ls->tabh))
-    return 0;
-  return 1;
-}
-
-static int ffi_layout_end(FFILayoutSnap *ls)
-{
-  return ctype_layout_version(ls->cts) == ls->version;
-}
-
-static int ffi_layout_get(FFILayoutSnap *ls, CTypeID id, CType *out)
-{
-  if (id == 0 || id >= ls->top ||
-      (MSize)id >= ctype_tab_sizetab_acq(ls->tabh))
-    return 0;
-  if (ls->budget-- == 0)
-    return -1;
-  return ctype_layout_at(ls->cts, ls->version, ls->tabh, ls->top, id, out);
-}
-
-static int ffi_layout_rawref(FFILayoutSnap *ls, CTypeID id, CType *out)
-{
-  int ok;
-  for (;;) {
-    CTInfo info;
-    ok = ffi_layout_get(ls, id, out);
-    if (ok <= 0)
-      return ok;
-    info = ctype_info_acq(out);
-    if (!(ctype_isattrib(info) || ctype_isref(info)))
-      return 1;
-    id = ctype_cid(info);
-  }
-}
-
-static int ffi_layout_rawid(FFILayoutSnap *ls, CTypeID id, CTypeID *ridp,
-			    CType *out)
-{
-  int ok;
-  for (;;) {
-    CTInfo info;
-    ok = ffi_layout_get(ls, id, out);
-    if (ok <= 0)
-      return ok;
-    info = ctype_info_acq(out);
-    if (!ctype_isattrib(info)) {
-      *ridp = id;
-      return 1;
-    }
-    id = ctype_cid(info);
-  }
-}
-
-static int ffi_layout_raw(FFILayoutSnap *ls, CTypeID id, CType *out)
-{
-  int ok;
-  for (;;) {
-    CTInfo info;
-    ok = ffi_layout_get(ls, id, out);
-    if (ok <= 0)
-      return ok;
-    info = ctype_info_acq(out);
-    if (!ctype_isattrib(info))
-      return 1;
-    id = ctype_cid(info);
-  }
 }
 
 static int ffi_layout_rawchild(FFILayoutSnap *ls, const CType *ct, CType *out)
@@ -2315,7 +2213,7 @@ static int ffi_layout_vlsize(FFILayoutSnap *ls, const CType *ct,
     }
     if (arrid == 0)
       return 0;
-    ok = ffi_layout_raw(ls, arrid, &cur);
+    ok = ffi_layout_rawid(ls, arrid, NULL, &cur);
     if (ok <= 0)
       return ok;
     info = ctype_info_acq(&cur);
@@ -2407,7 +2305,7 @@ static int ffi_layout_sizeof_read(FFILayoutSnap *ls, CTypeID id, CTSize nelem,
 				  int hasnelem, CTSize *szp, int *neednelem)
 {
   CType ct;
-  int ok = ffi_layout_rawref(ls, id, &ct);
+  int ok = ffi_layout_rawrefid(ls, id, NULL, &ct);
   if (ok > 0) {
     CTInfo info = ctype_info_acq(&ct);
     CTSize size = ctype_size_acq(&ct);
@@ -2563,7 +2461,7 @@ static int ffi_layout_offsetof_read(FFILayoutSnap *ls, CTypeID id, GCstr *name,
 				    CTSize *ofs, CType *out)
 {
   CType ct;
-  int ok = ffi_layout_rawref(ls, id, &ct);
+  int ok = ffi_layout_rawrefid(ls, id, NULL, &ct);
   if (ok > 0) {
     CTInfo info = ctype_info_acq(&ct);
     CTSize size = ctype_size_acq(&ct);

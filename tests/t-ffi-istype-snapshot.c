@@ -3,7 +3,6 @@
 */
 
 #include <assert.h>
-#include <pthread.h>
 #include <stdio.h>
 
 #include "lua.h"
@@ -18,19 +17,15 @@
 #include "lib/ctype_parse_fixture_helpers.h"
 #include "lib/lua_fixture_helpers.h"
 
-static void assert_istype_waits_without_lock(lua_State *L, CTState *cts,
-					     TGState *tg)
+static void assert_istype_committed(lua_State *L, CTState *cts)
 {
-  LJTCTypeParseReleaseCtx ctx;
-  pthread_t thread;
-
-  ljt_ctype_release_when_native_start(&ctx, &thread, cts, tg);
+  uint32_t release_seq = ljt_ctype_hold_parse_token(cts);
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "local arr = ffi.new(lj_m7_istype_snapshot_arr)\n"
     "local ptr = ffi.cast(lj_m7_istype_snapshot_pct, arr)\n"
     "assert(ffi.istype(lj_m7_istype_snapshot_ct, ptr) == true)\n");
-  ljt_ctype_release_when_native_join(&ctx, thread);
+  ljt_ctype_release_parse_token(cts, release_seq);
 }
 
 static void assert_istype_predefined_avoids_wait(lua_State *L, CTState *cts)
@@ -120,7 +115,6 @@ int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
   CTState *cts;
-  TGState *tg;
   uint32_t seq0, seq1, seq2;
 
   ljt_lua_dostring(L,
@@ -149,8 +143,6 @@ int main(void)
 
   cts = ctype_ctsG(G(L));
   assert(cts != NULL);
-  tg = L2TG(L);
-  assert(tg != NULL);
   seq0 = ljt_ctype_parse_seq(cts);
 
   ljt_lua_dostring(L,
@@ -186,7 +178,7 @@ int main(void)
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 2u);
 
-  assert_istype_waits_without_lock(L, cts, tg);
+  assert_istype_committed(L, cts);
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 4u);
 

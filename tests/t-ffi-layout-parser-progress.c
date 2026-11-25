@@ -160,6 +160,8 @@ int main(void)
     "  local fresh = ffi.typeof('int['..(len + 50)..']')\n"
     "  local other = fresh(); other[1] = -n\n"
     "  assert(ffi.sizeof(other) == 4*(len+50) and other[1] == -n)\n"
+    "  assert(ffi.istype(ready, ready_ptr) and not ffi.istype(arr, other))\n"
+    "  assert(ffi.istype('const int *', ffi.cast('int *', a)))\n"
     "  release_parser()\n"
     "  local joined, committed = w:join(10)\n"
     "  assert(joined and committed == (n == 2))\n"
