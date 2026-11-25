@@ -133,8 +133,9 @@ static LJ_NOINLINE StrHash hash_dense(uint64_t seed, StrHash h,
 #define LJ_STR_MAXCOLL		32
 #define LJ_STRTAB_RESIZE	((MSize)0x80000000u)
 #define LJ_STRTAB_SWEEP		((MSize)0x40000000u)
-#define LJ_STRTAB_OWNER_MASK	(LJ_STRTAB_RESIZE|LJ_STRTAB_SWEEP)
-#define LJ_STRTAB_OWNER_LOBITS	(LJ_STRTAB_SWEEP - 1u)
+#define LJ_STRTAB_REHASH		((MSize)0x20000000u)
+#define LJ_STRTAB_BUCKET_MASK	((MSize)(LJ_MAX_STRTAB - 1u))
+LJ_STATIC_ASSERT(LJ_STRTAB_BUCKET_MASK < LJ_STRTAB_REHASH);
 #define LJ_STRID_BLOCK		64u
 #define LJ_STRNUM_BLOCK		64u
 #define LJ_STR_SWEEP_GRACE_EPOCHS LJ_GC2_GRACE_EPOCHS
@@ -339,16 +340,35 @@ static void strq_retire(global_State *g, StrCanonHdr *hdr)
 static LJ_AINLINE MSize strtab_resize_acq(StrTabHdr *hdr)
 {
   MSize state = la_load32_acq(&hdr->resize);
-  lj_assertX((state & LJ_STRTAB_OWNER_LOBITS) == 0 &&
-	     (state & ~(MSize)LJ_STRTAB_OWNER_MASK) == 0,
-	     "stale string table reader-count bits");
+  lj_assertX(state == 0 || state == LJ_STRTAB_RESIZE ||
+	     state == LJ_STRTAB_SWEEP ||
+	     (state & ~LJ_STRTAB_BUCKET_MASK) == LJ_STRTAB_REHASH,
+	     "invalid string table topology claim");
   return state;
 }
 
-static LJ_AINLINE int strtab_resizing(StrTabHdr *hdr)
+static LJ_AINLINE int strtab_intern_blocked(global_State *g, StrTabHdr *hdr,
+					    MSize owner, StrHash sparse,
+					    const char *bytes, MSize len)
 {
-  /* Sweep mutates links with exact CASes, so ordinary interners keep running. */
-  return (strtab_resize_acq(hdr) & LJ_STRTAB_RESIZE) != 0;
+  if (owner & LJ_STRTAB_RESIZE)
+    return 1;
+#if LUAJIT_SECURITY_STRHASH
+  if (owner & LJ_STRTAB_REHASH) {
+    MSize source = owner & LJ_STRTAB_BUCKET_MASK;
+    MSize primary = sparse & hdr->mask;
+    /* Every access to the source chain is excluded, either as its primary
+    ** bucket or as the dense destination of an already-rehashed primary.
+    ** Secondary flags on all other primary buckets remain stable. */
+    if (primary == source)
+      return 1;
+    if (lj_str_link_load_acq(&hdr->bucket[primary]) & LJ_STRHASH_SECONDARY)
+      return (hash_dense(g->str.seed, sparse, bytes, len) & hdr->mask) == source;
+  }
+#else
+  UNUSED(g); UNUSED(hdr); UNUSED(sparse); UNUSED(bytes); UNUSED(len);
+#endif
+  return 0;
 }
 
 static LJ_AINLINE int strtab_sweeping(StrTabHdr *hdr)
@@ -528,19 +548,14 @@ static void strq_leave(lua_State *L, StrCanonHdr *hdr)
   strq_active_leave(L2TG(L), hdr);
 }
 
-static int strtab_claim(lua_State *L, StrTabHdr *hdr)
+static int strtab_claim(lua_State *L, StrTabHdr *hdr, MSize state)
 {
   global_State *g = G(L);
   MSize expect = 0;
   /* Resize and secondary rehash never wait behind either destructive owner. */
   if (strtab_resize_acq(hdr) != 0 ||
-      !la_cas32(&hdr->resize, &expect, LJ_STRTAB_RESIZE,
-		LA_ACQ_REL, LA_ACQ)) {
-    lj_assertX((expect & LJ_STRTAB_OWNER_LOBITS) == 0 &&
-	       (expect & ~(MSize)LJ_STRTAB_OWNER_MASK) == 0,
-	       "stale string table reader-count bits");
+      !la_cas32(&hdr->resize, &expect, state, LA_ACQ_REL, LA_ACQ))
     return 0;
-  }
   /* Growth and secondary rehash are opportunistic. A paused reader keeps its
   ** generation, but must not keep the claim held against new interners.
   ** The paired fences prevent both sides from missing the other's
@@ -601,27 +616,36 @@ static LJ_AINLINE void strtab_leave(lua_State *L, StrTabHdr *hdr)
   strtab_active_leave(L2TG(L), hdr);
 }
 
-static StrTabHdr *strtab_enter(lua_State *L, global_State *g, int *blocked)
+static StrTabHdr *strtab_enter(lua_State *L, global_State *g, StrHash sparse,
+			       const char *bytes, MSize len, int *blocked)
 {
   TGState *tg = L2TG(L);
   for (;;) {
     StrTabHdr *hdr = lj_str_tabh_acq(g);
+    MSize owner;
+    int nested;
     if (hdr == NULL)
       return NULL;
-    if (lj_tg_strtab_active_depth_acq(tg) != 0 &&
-	lj_tg_strtab_active_hdr_acq(tg) == hdr) {
-      strtab_active_enter(tg, hdr);
-      return hdr;
-    }
-    if (strtab_resizing(hdr)) {
+    nested = lj_tg_strtab_active_depth_acq(tg) != 0 &&
+	     lj_tg_strtab_active_hdr_acq(tg) == hdr;
+    if (!nested && (strtab_resize_acq(hdr) & LJ_STRTAB_RESIZE)) {
       *blocked = 1;
       return NULL;
     }
     strtab_active_enter(tg, hdr);  /* 06 section 6.5 RCU header pin. */
-    /* Order pin publication before checking the destructive topology claim. */
-    la_fence_seq();
-    if (LJ_LIKELY(lj_str_tabh_acq(g) == hdr && !strtab_resizing(hdr)))
-      return hdr;
+    /* Order pin publication before checking the destructive topology claim.
+    ** Only inspect a primary bucket's mode after retaining this header. */
+    if (!nested)
+      la_fence_seq();
+    if (LJ_LIKELY(nested || lj_str_tabh_acq(g) == hdr)) {
+      owner = strtab_resize_acq(hdr);
+      if ((nested && !(owner & LJ_STRTAB_REHASH)) ||
+	  !strtab_intern_blocked(g, hdr, owner, sparse, bytes, len))
+	return hdr;
+      strtab_active_leave(tg, hdr);
+      *blocked = 1;
+      return NULL;
+    }
     strtab_active_leave(tg, hdr);
   }
 }
@@ -653,7 +677,7 @@ restart:
   oldmask = oldhdr ? oldhdr->mask : ~(MSize)0;
 
   if (oldhdr) {
-    if (!strtab_claim(L, oldhdr)) {
+    if (!strtab_claim(L, oldhdr, LJ_STRTAB_RESIZE)) {
       lj_mem_free(g, newhdr, newsize);
       return;
     }
@@ -816,7 +840,7 @@ static LJ_NOINLINE int lj_str_rehash_chain(lua_State *L, StrHash hashc)
   MSize strmask;
   uintptr_t oldlink;
   GCobj *o;
-  if (!hdr || !strtab_claim(L, hdr))
+  if (!hdr || !strtab_claim(L, hdr, LJ_STRTAB_REHASH | (hashc & hdr->mask)))
     return 0;
   if (lj_str_tabh_acq(g) != hdr) {
     strtab_release(hdr);
@@ -842,12 +866,16 @@ static LJ_NOINLINE int lj_str_rehash_chain(lua_State *L, StrHash hashc)
     /* Rechain. */
     hash &= strmask;
     u = lj_str_ref_load_acq(&strtab[hash]);
-    lj_str_next_store_rel(o, u);
-    lj_str_bucket_store_rel(&strtab[hash], o,
-			    (u & LJ_STRHASH_SECONDARY) | dead);
 #ifdef LJ_STR_TEST_HELPERS
-    str_test_canon(L, s, NULL, LJ_STR_TEST_CANON_REHASH_MOVED);
+    str_test_canon(L, s, NULL, LJ_STR_TEST_CANON_REHASH_DEST_SAMPLED);
 #endif
+    /* Unrelated interners may prepend concurrently to this destination.
+    ** The source chain has already been detached under the rehash claim. */
+    do {
+      lj_str_next_store_rel(o, u);
+    } while (!lj_str_link_cas_acqrel(&strtab[hash], &u,
+				    (uintptr_t)o |
+				    (u & LJ_STRHASH_SECONDARY) | dead));
     oldlink = nextlink;
   }
   strtab_release(hdr);
@@ -1098,7 +1126,7 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
 #endif
     for (;;) {
       int blocked = 0;
-      StrTabHdr *hdr = strtab_enter(L, g, &blocked);
+      StrTabHdr *hdr = strtab_enter(L, g, qhash, str, len, &blocked);
       GCRef *strtab;
       GCRef *head, *link;
       GCobj *o;

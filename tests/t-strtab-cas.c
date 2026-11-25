@@ -21,6 +21,7 @@
 
 #define TEST_STRTAB_RESIZE	((MSize)0x80000000u)
 #define TEST_STRTAB_SWEEP	((MSize)0x40000000u)
+#define TEST_STRTAB_REHASH	((MSize)0x20000000u)
 #define TEST_STRTAB_OWNER_LOBITS	(TEST_STRTAB_SWEEP - 1u)
 
 typedef struct ActiveReleaseCtx {
@@ -334,7 +335,9 @@ typedef struct PausedTopology {
   lua_State *peer;
   StrTabHdr *hdr;
   MSize target_mask;
+  MSize destination;
   const char *trigger;
+  const char *dense_source;
   size_t trigger_len;
   uint32_t stage;
   uint32_t stopped;
@@ -348,10 +351,21 @@ static void pause_moved_string(lua_State *L, GCstr *s, StrCanonRec *rec,
 			       uint32_t stage)
 {
   PausedTopology *p = paused_topology;
+  MSize owner;
   if (L != p->peer || stage != p->stage || la_load32_acq(&p->stopped))
     return;
   assert(s != NULL && rec == NULL);
-  assert(la_load32_acq(&p->hdr->resize) == TEST_STRTAB_RESIZE);
+  owner = la_load32_acq(&p->hdr->resize);
+  if (stage == LJ_STR_TEST_CANON_RESIZE_MOVED) {
+    assert(owner == TEST_STRTAB_RESIZE);
+  } else {
+    assert((owner & ~p->hdr->mask) == TEST_STRTAB_REHASH);
+    p->destination = s->hash & p->hdr->mask;
+    if (p->destination == (owner & p->hdr->mask) ||
+	(lj_str_link_load_acq(&p->hdr->bucket[p->destination]) &
+	 LJ_STRHASH_SECONDARY))
+      return;  /* Use an independent primary destination in the test. */
+  }
   la_store32_rel(&p->stopped, 1);
   while (!la_load32_acq(&p->release))
     test_sleep_without_tg(100000);
@@ -375,13 +389,18 @@ static void check_paused_topology(lua_State *L, PausedTopology *p,
 {
   LJThr peer;
   uint32_t i;
-  GCstr *expected;
+  GCstr *expected, *dense_expected = NULL, *inserted = NULL;
   const char *identity;
-  size_t observed = 0;
+  char new_key[72];
+  size_t new_len = 0, observed = 0;
   int top = lua_gettop(L);
   lua_pushlstring(L, bytes, len);
   expected = strV(L->top - 1);
   identity = lua_tolstring(L, -1, NULL);
+  if (p->dense_source) {
+    lua_pushstring(L, p->dense_source);
+    dense_expected = strV(L->top - 1);
+  }
   p->peer = lua_newthread(L);
   p->hdr = lj_str_tabh_acq(G(L));
   paused_topology = p;
@@ -396,7 +415,32 @@ static void check_paused_topology(lua_State *L, PausedTopology *p,
   lua_pushlstring(L, bytes, len);
   assert(strV(L->top - 1) == expected);
   assert(lua_tolstring(L, -1, &observed) == identity && observed == len);
-  assert(la_load32_acq(&p->hdr->resize) == TEST_STRTAB_RESIZE);
+  if (p->dense_source) {
+    /* This key's primary bucket is open, but its dense chain is the source
+    ** being moved. It must use the retained hit, not certify a false miss. */
+    lua_pushstring(L, p->dense_source);
+    assert(strV(L->top - 1) == dense_expected);
+  }
+  if (p->stage == LJ_STR_TEST_CANON_REHASH_DEST_SAMPLED) {
+    global_State *g = G(L);
+    /* Insert an unrelated primary key into the exact bucket whose head the
+    ** rehash owner already sampled. A stale release-store would lose it. */
+    assert(!(lj_str_link_load_acq(&p->hdr->bucket[p->destination]) &
+	     LJ_STRHASH_SECONDARY));
+    for (i = 0;; i++) {
+      int n = snprintf(new_key, sizeof(new_key), "paused-rehash-insert-%08x", i);
+      assert(n > 0 && (size_t)n < sizeof(new_key));
+      new_len = (size_t)n;
+      if ((test_hash_sparse(g->str.seed, new_key, (MSize)n) &
+	   p->hdr->mask) == p->destination)
+	break;
+    }
+    lua_pushlstring(L, new_key, new_len);
+    inserted = strV(L->top - 1);
+    assert((la_load32_acq(&p->hdr->resize) & TEST_STRTAB_REHASH) != 0);
+  } else {
+    assert(la_load32_acq(&p->hdr->resize) == TEST_STRTAB_RESIZE);
+  }
   assert(!la_load32_acq(&p->done));
   la_store32_rel(&p->release, 1);
   assert(lj_thr_join(&peer, NULL) == 0);
@@ -405,6 +449,10 @@ static void check_paused_topology(lua_State *L, PausedTopology *p,
   paused_topology = NULL;
   lua_pushlstring(L, bytes, len);
   assert(strV(L->top - 1) == expected);
+  if (inserted) {
+    lua_pushlstring(L, new_key, new_len);
+    assert(strV(L->top - 1) == inserted);
+  }
   lua_settop(L, top);
 }
 
@@ -450,6 +498,33 @@ static void check_resize_hit_invalidation(lua_State *L, const char *bytes,
   lua_pop(L, 1);
 }
 
+#if LUAJIT_SECURITY_STRHASH
+static void collect_collision_names(global_State *g, StrTabHdr *hdr,
+				    MSize bucket, const char *prefix,
+				    char (*names)[64], MSize count)
+{
+  MSize found = 0;
+  uint32_t n;
+  for (n = 0; found < count; n++) {
+    int len = snprintf(names[found], sizeof(names[found]), "%s-%08x", prefix, n);
+    assert(len > 0 && (size_t)len < sizeof(names[found]));
+    if ((test_hash_sparse(g->str.seed, names[found], (MSize)len) &
+	 hdr->mask) == bucket)
+      found++;
+  }
+}
+
+static void install_primary_chain(lua_State *L, StrTabHdr *hdr,
+				  char (*names)[64], MSize count)
+{
+  MSize i;
+  assert(lj_str_sweep_claim(L, hdr));
+  for (i = 0; i < count; i++)
+    assert(lj_str_new(L, names[i], strlen(names[i]))->hashalg == 0);
+  lj_str_sweep_release(hdr);
+}
+#endif
+
 static void exercise_paused_topology_hits(void)
 {
   static const char bytes[] = "string-intern-hit-during-moving-topology";
@@ -470,28 +545,41 @@ static void exercise_paused_topology_hits(void)
     enum { CHAIN = 34u };
     PausedTopology rehash = { 0 };
     StrTabHdr *hdr = lj_str_tabh_acq(g);
-    char names[CHAIN + 1u][64];
-    MSize bucket, found = 0;
+    char names[CHAIN + 1u][64], dense_name[64];
+    MSize bucket, source = 0, cache_mask = LJ_STR_RESIZE_HIT_COUNT - 1u;
     uint32_t n;
     for (bucket = 0; bucket <= hdr->mask; bucket++)
       if (lj_str_ref_load_acq(&hdr->bucket[bucket]) == 0)
 	break;
     assert(bucket <= hdr->mask);
-    for (n = 0; found <= CHAIN; n++) {
-      int len = snprintf(names[found], sizeof(names[found]),
-			 "paused-secondary-rehash-%08x", n);
-      assert(len > 0 && (size_t)len < sizeof(names[found]));
-      if ((test_hash_sparse(g->str.seed, names[found], (MSize)len) &
-	   hdr->mask) == bucket)
-	found++;
+    collect_collision_names(g, hdr, bucket, "paused-secondary-setup",
+			    names, CHAIN + 1u);
+    install_primary_chain(L, hdr, names, CHAIN);
+    assert(lj_str_new(L, names[CHAIN], strlen(names[CHAIN]))->hashalg == 1);
+
+    /* Seed a secondary key whose dense destination will be the source
+    ** of the next rehash and whose retained-hit slot will not collide. */
+    for (n = 0;; n++) {
+      int len = snprintf(dense_name, sizeof(dense_name),
+			 "paused-rehash-dense-source-%08x", n);
+      GCstr *dense;
+      assert(len > 0 && (size_t)len < sizeof(dense_name));
+      if ((test_hash_sparse(g->str.seed, dense_name, (MSize)len) &
+	   hdr->mask) != bucket)
+	continue;
+      dense = lj_str_new(L, dense_name, (size_t)len);
+      assert(dense->hashalg == 1);
+      source = dense->hash & hdr->mask;
+      if ((source & cache_mask) != (bucket & cache_mask))
+	break;
     }
-    assert(lj_str_sweep_claim(L, hdr));
-    for (n = 0; n < CHAIN; n++)
-      assert(lj_str_new(L, names[n], strlen(names[n]))->hashalg == 0);
-    lj_str_sweep_release(hdr);
-    rehash.stage = LJ_STR_TEST_CANON_REHASH_MOVED;
+    collect_collision_names(g, hdr, source, "paused-secondary-rehash",
+			    names, CHAIN + 1u);
+    install_primary_chain(L, hdr, names, CHAIN);
+    rehash.stage = LJ_STR_TEST_CANON_REHASH_DEST_SAMPLED;
     rehash.trigger = names[CHAIN];
     rehash.trigger_len = strlen(names[CHAIN]);
+    rehash.dense_source = dense_name;
     check_paused_topology(L, &rehash, names[CHAIN - 1u],
 			  strlen(names[CHAIN - 1u]));
     assert(lj_str_second_acq(g));
