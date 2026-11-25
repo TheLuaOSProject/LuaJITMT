@@ -1023,7 +1023,7 @@ static int ffi_ctype_predefined_snapshot(CTState *cts, CTypeID id, CType *out)
   CTypeTab *tabh;
   if (!ffi_ctype_predefined_id(id))
     return 0;
-  tabh = ctype_tabh_acq(cts);
+  tabh = &cts->tab;
   if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(tabh))
     return 0;
   ffi_ctype_slot_snapshot(tabh, id, out);
@@ -1842,7 +1842,7 @@ static int ffi_typecmp_begin(CTState *cts, FFITypeCmpSnap *ts)
     return -1;
   ts->cts = cts;
   ts->top = ctype_top_acq(cts);
-  ts->tabh = ctype_tabh_acq(cts);
+  ts->tabh = &cts->tab;
   ts->seq = seq;
   ts->budget = ts->top ? (MSize)ts->top * 6u : 1u;
   return 1;
@@ -2049,7 +2049,7 @@ static int ffi_istype_predefined(CTState *cts, CTypeID id1, CTypeID id2,
     return 0;
   ts.cts = cts;
   ts.top = CTID_CTYPEID + 1;
-  ts.tabh = ctype_tabh_acq(cts);
+  ts.tabh = &cts->tab;
   ts.seq = 0;
   ts.budget = (MSize)ts.top * 6u;
   if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(ts.tabh))
@@ -2122,7 +2122,7 @@ static int ffi_layout_begin(CTState *cts, CTypeID id, FFILayoutSnap *ls)
   /* An ID exposed during parsing may be newer than the committed prefix. */
   if ((version & 1u) && id >= ls->top)
     return -1;
-  ls->tabh = ctype_tabh_acq(cts);
+  ls->tabh = &cts->tab;
   ls->version = version;
   ls->budget = ls->top ? (MSize)ls->top * 2u : 1u;
   return 1;
@@ -2135,7 +2135,7 @@ static int ffi_layout_begin_predefined(CTState *cts, CTypeID id,
     return 0;
   ls->cts = cts;
   ls->top = CTID_CTYPEID + 1;
-  ls->tabh = ctype_tabh_acq(cts);
+  ls->tabh = &cts->tab;
   ls->version = 0;
   ls->budget = (MSize)ls->top * 2u;
   if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(ls->tabh))

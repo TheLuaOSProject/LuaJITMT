@@ -140,7 +140,7 @@ static int carith_ctype_shallow_predef_ptr(CTState *cts, CTypeID id,
   CTSize size;
   if (id == 0)
     return 0;
-  tabh = ctype_tabh_acq(cts);
+  tabh = &cts->tab;
   if (id >= ctype_top_acq(cts) || (MSize)id >= ctype_tab_sizetab_acq(tabh))
     return 0;
   ct = ctype_tab_slot(tabh, id);

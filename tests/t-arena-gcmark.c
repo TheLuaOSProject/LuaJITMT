@@ -212,7 +212,8 @@ int main(void)
   cts = ctype_ctsG(g);
   assert(cts != NULL);
   assert(arena_mem_marked(g, cts));
-  assert(arena_mem_marked(g, ctype_tabh_acq(cts)));
+  if (ctype_tab_sizetab_acq(&cts->tab) > CTYPE_TAB_MIN)
+    assert(arena_mem_marked(g, ctype_tab_span_acq(&cts->tab, 0)));
 #endif
 
   lua_getfield(L, -1, "co");

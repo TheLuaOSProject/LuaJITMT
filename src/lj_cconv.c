@@ -701,7 +701,7 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
 				CTSIZE_PTR);
 	if (!lj_ctype_read(L, cts, did, &dsnap))
 	  cconv_err_initov_l(L, cts, did);
-	d = &dsnap;  /* C type table may have been reallocated. */
+	d = &dsnap;
 	dinfo = ctype_info_acq(d);
 	dsize = ctype_size_acq(d);
       } else {

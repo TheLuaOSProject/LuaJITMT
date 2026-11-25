@@ -7603,7 +7603,7 @@ uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch)
   n += lj_str_reclaim_retired(g, epoch);  /* 05 section 5.9 SMR drain. */
   n += lj_tab_reclaim_retired(g, epoch);  /* 06 section 6.3.5 SMR drain. */
 #if LJ_HASFFI
-  n += lj_ctype_reclaim_retired(g, epoch);  /* 11.2 CTState table SMR drain. */
+  n += lj_ctype_fin_reclaim(g);
   n += lj_clib_cache_reclaim_retired(g, epoch);  /* 11.7 CLibrary cache SMR. */
 #endif
 #if LJ_HASJIT
@@ -10147,8 +10147,6 @@ static void gc2_scan_global_roots(global_State *g)
   {
     CTState *cts = ctype_ctsG(g);
     if (cts) {
-      CTypeTab *ret, *nextret;
-      GC2RootCycleGuard guard;
       GCtab *miscmap;
       GCRef *meta;
       uint64_t *cbblack;
@@ -10161,24 +10159,14 @@ static void gc2_scan_global_roots(global_State *g)
 	(void)lj_gc2_markobj(g, obj2gco(miscmap));
       meta = ctype_metamap_acq(cts);
       cbblack = ctype_cbblack_acq(cts);
-      lj_gc2_markmem(g, ctype_tabh_acq(cts));
+      /* A peer may be stopped after installing a span and before raising
+      ** the published slot count. The directory owns that span already. */
+      for (i = 0; i < CTYPE_TAB_SPANS; i++)
+	lj_gc2_markmem(g, ctype_tab_span_acq(&cts->tab, i));
       for (i = 0; i < CTYPE_LAYOUT_PAGES; i++) {
 	CTypeLayoutPage *page = ctype_layout_page(cts, i);
 	if (page) lj_gc2_markmem(g, page);
       }
-      ret = ctype_retiredtab_acq(cts);
-      gc2_root_cycle_guard_init(&guard, ret);
-      while (ret != NULL && lj_gc2_mem_registered(g, ret)) {
-	nextret = ctype_tab_retired_next_acq(ret);
-	lj_gc2_markmem(g, ret);
-	ret = nextret;
-	if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, ret))) {
-	  gc2_root_scan_retry(g);
-	  break;
-	}
-      }
-      if (LJ_UNLIKELY(ret != NULL && !lj_gc2_mem_registered(g, ret)))
-	gc2_root_scan_retry(g);
       lj_gc2_markmem(g, meta);
       lj_gc2_markmem(g, cbblack);
       if (meta) {

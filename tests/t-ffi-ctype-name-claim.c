@@ -44,11 +44,11 @@ static void assert_name_snapshot(CTState *cts, GCstr *name, uint32_t ns,
   assert(ctype_info_acq(&snap) == want_info);
 }
 
-static void force_table_move_after_reserve(lua_State *L, CTState *cts)
+static void grow_after_reserve(lua_State *L, CTState *cts)
 {
-  CTypeTab *before = ctype_tabh_acq(cts);
+  MSize before = ctype_tab_sizetab_acq(&cts->tab);
   int guard = 0;
-  while (ctype_tabh_acq(cts) == before) {
+  while (ctype_tab_sizetab_acq(&cts->tab) == before) {
     CType *ct;
     CTypeID id = lj_ctype_new_l(L, cts, &ct);
     init_test_ctype(ct, CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD)), 0);
@@ -97,8 +97,8 @@ int main(void)
 		       CTINFO(CT_TYPEDEF, CTID_INT32));
 
   id3 = new_named(cts, L, CTINFO(CT_STRUCT, CTALIGN(2)), 4, name, &ct3);
-  force_table_move_after_reserve(L, cts);
-  assert(ct3 != ctype_get(cts, id3));
+  grow_after_reserve(L, cts);
+  assert(ct3 == ctype_get(cts, id3));
   winner = lj_ctype_addname_unique(cts, ct3, id3, struct_ns);
   assert(winner == id3);
   assert(lj_ctype_getname(cts, &found, name, struct_ns) == id3);
@@ -126,8 +126,8 @@ int main(void)
     "       'parser duplicate enum loser replaced winner')\n");
 
   id4 = new_named(cts, L, CTINFO(CT_TYPEDEF, CTID_INT32), 0, name, &ct4);
-  force_table_move_after_reserve(L, cts);
-  assert(ct4 != ctype_get(cts, id4));
+  grow_after_reserve(L, cts);
+  assert(ct4 == ctype_get(cts, id4));
   winner = lj_ctype_addname_unique(cts, ct4, id4, default_ns);
   assert(winner == id1);
   assert(ctype_isabandoned(ctype_info_acq(ctype_get(cts, id4))));

@@ -14,7 +14,7 @@
 static inline void ljt_ctype_force_table_growth(lua_State *L, CTState *cts,
 						const char *prefix)
 {
-  MSize count = ctype_tab_sizetab_acq(ctype_tabh_acq(cts)) + 64u;
+  MSize count = ctype_tab_sizetab_acq(&cts->tab) + 64u;
   lua_pushinteger(L, (lua_Integer)count);
   lua_setglobal(L, "lj_m7_ctype_growth_count");
   lua_pushstring(L, prefix);

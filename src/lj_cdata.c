@@ -110,9 +110,7 @@ static int cdata_raw_info_safe(CTState *cts, CTypeID id, CTInfo *infop,
   uint32_t guard = 0;
   if (!cts || id == 0)
     return 0;
-  tabh = ctype_tabh_acq(cts);
-  if (!tabh)
-    return 0;
+  tabh = &cts->tab;
   top = ctype_top_acq(cts);
   sizetab = ctype_tab_sizetab_acq(tabh);
   for (;;) {
@@ -432,7 +430,7 @@ static int cdata_ctype_snapshot_shallow(CTState *cts, CTypeID id, CType *out)
   top = ctype_top_acq(cts);
   if (id >= top)
     return 0;
-  tabh = ctype_tabh_acq(cts);
+  tabh = &cts->tab;
   if ((MSize)id >= ctype_tab_sizetab_acq(tabh))
     return -1;  /* Table/top raced a grow; retry through the wait path. */
   ct = ctype_tab_slot(tabh, id);

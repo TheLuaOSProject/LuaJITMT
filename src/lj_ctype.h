@@ -190,11 +190,14 @@ static LJ_AINLINE void ctype_sib_rel(CType *ct, CTypeID sib)
   la_store16_rel(&ct->sib, (CTypeID1)sib);  /* 11.2: ctype sibling link. */
 }
 
+#define CTYPE_TAB_MIN_BITS	7u
+#define CTYPE_TAB_MIN		(1u << CTYPE_TAB_MIN_BITS)
+#define CTYPE_TAB_SPANS		(16u - CTYPE_TAB_MIN_BITS)
+
 typedef struct CTypeTab {
-  MSize sizetab;		/* Number of C type table slots. */
-  uint64_t retire_epoch;	/* Safepoint epoch when retired. */
-  struct CTypeTab *retired_next;  /* Retired C type tables awaiting SMR. */
-  CType tab[1];			/* C type table slots. */
+  MSize sizetab;		/* Contiguous published slot count. */
+  CType *span[CTYPE_TAB_SPANS];  /* span[i] covers [128 << i, 256 << i). */
+  CType initial[CTYPE_TAB_MIN];
 } CTypeTab;
 
 static LJ_AINLINE MSize ctype_tab_sizetab_acq(const CTypeTab *tabh)
@@ -202,36 +205,19 @@ static LJ_AINLINE MSize ctype_tab_sizetab_acq(const CTypeTab *tabh)
   return (MSize)la_load32_acq(&tabh->sizetab);
 }
 
-static LJ_AINLINE void ctype_tab_sizetab_rel(CTypeTab *tabh, MSize sizetab)
+static LJ_AINLINE CType *ctype_tab_span_acq(const CTypeTab *tabh, MSize i)
 {
-  la_store32_rel(&tabh->sizetab, sizetab);
+  return (CType *)la_loadptr_acq((void *const *)&tabh->span[i]);
 }
 
 static LJ_AINLINE CType *ctype_tab_slot(CTypeTab *tabh, CTypeID id)
 {
-  return &tabh->tab[id];
-}
-
-static LJ_AINLINE uint64_t ctype_tab_retire_epoch_acq(const CTypeTab *tabh)
-{
-  return la_load64_acq(&tabh->retire_epoch);
-}
-
-static LJ_AINLINE void ctype_tab_retire_epoch_rel(CTypeTab *tabh,
-						  uint64_t epoch)
-{
-  la_store64_rel(&tabh->retire_epoch, epoch);
-}
-
-static LJ_AINLINE CTypeTab *ctype_tab_retired_next_acq(const CTypeTab *tabh)
-{
-  return (CTypeTab *)la_loadptr_acq((void *const *)&tabh->retired_next);
-}
-
-static LJ_AINLINE void ctype_tab_retired_next_rel(CTypeTab *tabh,
-						  CTypeTab *next)
-{
-  la_storeptr_rel((void **)&tabh->retired_next, next);
+  if (id < CTYPE_TAB_MIN)
+    return &tabh->initial[id];
+  {
+    MSize bit = (MSize)lj_fls(id);
+    return &ctype_tab_span_acq(tabh, bit - CTYPE_TAB_MIN_BITS)[id - (1u << bit)];
+  }
 }
 
 typedef struct FinRegGen {
@@ -790,8 +776,7 @@ typedef struct CTypeLayoutPage {
 } CTypeLayoutPage;
 
 typedef struct CTState {
-  CTypeTab *tabh;	/* RCU-published C type table header. */
-  CTypeTab *retiredtab;  /* Retired C type tables awaiting SMR. */
+  CTypeTab tab;		/* Permanent directory and predefined slots. */
   CTypeID top;		/* Current top of C type table. */
   global_State *g;	/* Global state. */
   GCtab *miscmap;	/* FFI function metatable/root table. */
@@ -1357,42 +1342,6 @@ static LJ_AINLINE CTypeID ctype_check(CTState *cts, CTypeID id)
   return id;
 }
 
-/* Acquire current C type table header. */
-static LJ_AINLINE CTypeTab *ctype_tabh_acq(const CTState *cts)
-{
-  return (CTypeTab *)la_loadptr_acq((void *const *)&cts->tabh);
-}
-
-static LJ_AINLINE void ctype_tabh_rel(CTState *cts, CTypeTab *tabh)
-{
-  la_storeptr_rel((void **)&cts->tabh, tabh);
-}
-
-static LJ_AINLINE int ctype_tabh_cas(CTState *cts, CTypeTab **oldp,
-				     CTypeTab *tabh)
-{
-  return la_casptr((void **)&cts->tabh, (void **)oldp, tabh,
-		   LA_ACQ_REL, LA_ACQ);
-}
-
-static LJ_AINLINE CTypeTab *ctype_retiredtab_acq(const CTState *cts)
-{
-  return (CTypeTab *)la_loadptr_acq((void *const *)&cts->retiredtab);
-}
-
-static LJ_AINLINE int ctype_retiredtab_cas(CTState *cts, CTypeTab **oldp,
-					   CTypeTab *tabh)
-{
-  return la_casptr((void **)&cts->retiredtab, (void **)oldp, tabh,
-		   LA_ACQ_REL, LA_ACQ);
-}
-
-static LJ_AINLINE CTypeTab *ctype_retiredtab_xchg_acqrel(CTState *cts,
-							 CTypeTab *tabh)
-{
-  return (CTypeTab *)la_xchgptr_acqrel((void **)&cts->retiredtab, tabh);
-}
-
 static LJ_AINLINE CTypeID ctype_hash_head_acq(const CTState *cts, uint32_t h)
 {
   return (CTypeID)(la_load32_acq(&cts->hash[h]) & 0xffffu);
@@ -1408,16 +1357,11 @@ static LJ_AINLINE int ctype_hash_head_cas(CTState *cts, uint32_t h,
   return ok;
 }
 
-/* Acquire current C type table. */
-static LJ_AINLINE CType *ctype_tab_acq(CTState *cts)
-{
-  return ctype_tab_slot(ctype_tabh_acq(cts), 0);
-}
-
 /* Get C type for C type ID. */
 static LJ_AINLINE CType *ctype_get(CTState *cts, CTypeID id)
 {
-  return &ctype_tab_acq(cts)[ctype_check(cts, id)];
+  id = ctype_check(cts, id);
+  return ctype_tab_slot(&cts->tab, id);
 }
 
 /* Get child C type ID. */
@@ -1680,10 +1624,8 @@ LJ_FUNC GCstr *lj_ctype_repr(lua_State *L, CTypeID id, GCstr *name);
 LJ_FUNC GCstr *lj_ctype_repr_wait(lua_State *L, CTypeID id, GCstr *name);
 LJ_FUNC GCstr *lj_ctype_repr_int64(lua_State *L, uint64_t n, int isunsigned);
 LJ_FUNC GCstr *lj_ctype_repr_complex(lua_State *L, void *sp, CTSize size);
-/* Runtime drain only: caller must own GC2's exact-thread exclusive-reclaimer
-** scope before detaching the retired CTypeTab chain. */
-LJ_FUNC uint32_t lj_ctype_reclaim_retired(global_State *g,
-					  uint64_t completed_epoch);
+/* Compact finalizer metadata under the collector's exclusive reader scope. */
+LJ_FUNC uint32_t lj_ctype_fin_reclaim(global_State *g);
 LJ_FUNCA CTState *LJ_FASTCALL lj_ctype_ctsG_acq(global_State *g);
 LJ_FUNC CTState *lj_ctype_init(lua_State *L);
 LJ_FUNC void lj_ctype_freestate(global_State *g);

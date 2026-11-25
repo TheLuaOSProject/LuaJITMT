@@ -212,7 +212,7 @@ static CPToken cp_param(CPState *cp)
   if (tvisstr(o)) {
     cp->str = strV(o);
     cp->val.id = 0;
-    cp->ct = &ctype_tab_acq(cp->cts)[0];
+    cp->ct = ctype_tab_slot(&cp->cts->tab, 0);
     return CTOK_IDENT;
   } else if (tvisnumber(o)) {
     cp->val.i32 = numberVint(o);
@@ -1056,7 +1056,7 @@ static CTypeID cp_decl_intern(CPState *cp, CPDecl *decl)
 	if (!ctype_isattrib(ctn->info)) break;
 	idx = ctn->next;  /* Skip attribute. */
       }
-      sib = ctype_sib_acq(ct);  /* Next line may reallocate the C type table. */
+      sib = ctype_sib_acq(ct);
       fid = cp_ctype_new(cp, &fct);
       csize = CTSIZE_INVALID;
       cinfo = info + id;
@@ -2111,7 +2111,7 @@ static void cp_decl_multi(CPState *cp)
 	if (decl.redir) {  /* Add attribute for redirected symbol name. */
 	  CType *cta;
 	  aid = cp_ctype_new(cp, &cta);
-	  ct = ctype_get(cp->cts, id);  /* Table may have been reallocated. */
+	  ct = ctype_get(cp->cts, id);
 	  ctype_info_rel(cta, CTINFO(CT_ATTRIB, CTATTRIB(CTA_REDIR)));
 	  ctype_sib_rel(cta, ctype_sib_acq(ct));
 	  cta = cp_ctype_publish(cp, aid, cta);

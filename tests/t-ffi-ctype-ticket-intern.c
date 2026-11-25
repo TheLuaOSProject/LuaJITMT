@@ -23,11 +23,11 @@ static void init_test_ctype(CType *ct, CTInfo info, CTSize size)
   ctype_clearname(ct);
 }
 
-static void force_table_move_after_reserve(lua_State *L, CTState *cts)
+static void grow_after_reserve(lua_State *L, CTState *cts)
 {
-  CTypeTab *before = ctype_tabh_acq(cts);
+  MSize before = ctype_tab_sizetab_acq(&cts->tab);
   int guard = 0;
-  while (ctype_tabh_acq(cts) == before) {
+  while (ctype_tab_sizetab_acq(&cts->tab) == before) {
     CType *ct;
     CTypeID id = lj_ctype_new_l(L, cts, &ct);
     init_test_ctype(ct, CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD)), 0);
@@ -59,12 +59,12 @@ int main(void)
   assert(ctype_top_acq(cts) == top0 + 1u);
 
   movedid = lj_ctype_new_l(L, cts, &movedct);
-  force_table_move_after_reserve(L, cts);
-  assert(movedct != ctype_get(cts, movedid));
+  grow_after_reserve(L, cts);
+  assert(movedct == ctype_get(cts, movedid));
   init_test_ctype(movedct, CTINFO(CT_STRUCT, CTALIGN(2)), 8);
   curct = lj_ctype_publish(cts, movedid, movedct);
   assert(curct == ctype_get(cts, movedid));
-  assert(curct != movedct);
+  assert(curct == movedct);
   assert(ctype_info_acq(curct) == CTINFO(CT_STRUCT, CTALIGN(2)));
   assert(ctype_size_acq(curct) == 8);
 
@@ -87,6 +87,6 @@ int main(void)
   assert(!ctype_isabandoned(ctype_info_acq(ptrct)));
 
   lua_close(L);
-  printf("t-ffi-ctype-ticket-intern OK: ctype tickets are monotonic, RCU-published, and duplicate interning reuses IDs\n");
+  printf("t-ffi-ctype-ticket-intern OK: ctype tickets are monotonic, stable across growth, and duplicate interning reuses IDs\n");
   return 0;
 }

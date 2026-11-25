@@ -1297,12 +1297,22 @@ assert(cl.lj_clib_ldscript_value() == 42)
 
   add({
     name = "m7_ffi_ctype_tab_retire",
-    description = "FFI ctype-table retirement behavior",
+    description = "Stable FFI type storage during growth and collection",
     run = function(t)
       clean_build(t)
-      build_and_run_c(t, t:tmp("lj_t-ffi-ctype-tab-retire"),
-                      "t-ffi-ctype-tab-retire.c", { timeout = "20s" })
-      print("M7 FFI ctype table-retirement behavior passed")
+      build_and_run_c(t, t:tmp("lj_t-ffi-ctype-storage"),
+                      "t-ffi-ctype-storage.c", {
+        timeout = "20s",
+        libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=lj_mem_new_deferred_nothrow" }
+      })
+      local grow = t:tmp("lj_t-ffi-ctype-grow-commit")
+      build_and_run_c(t, grow, "t-ffi-ctype-grow-commit.c", {
+        timeout = "20s", libs = { "-lm", "-ldl", "-pthread",
+                                  "-Wl,--wrap=lj_gc2_markmem",
+                                  "-Wl,--wrap=lj_ctype_publish" }
+      })
+      t:run({ grow, "2" }, { timeout = "20s" })
+      print("M7 FFI type growth and lifetime passed")
     end
   })
 

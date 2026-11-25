@@ -316,7 +316,6 @@ int lj_ctype_predefined_payload_size(CTypeID id, CTSize *sizep)
 ** CTState table moves now force them by declaring enough ordinary ctypes at
 ** runtime, so the runtime has no build-only narrow-table path.
 */
-#define CTTYPETAB_MIN		128
 #define CTCBBLACK_SIZE		4096u
 
 /* -- C type interning ---------------------------------------------------- */
@@ -412,9 +411,9 @@ int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out)
     return -1;  /* Active parser rollback window: use the locked reader. */
   if (id >= ctype_top_acq(cts))
     return ctype_snapshot_done(cts, seq0, 0);
-  tabh = ctype_tabh_acq(cts);
+  tabh = &cts->tab;
   if ((MSize)id >= ctype_tab_sizetab_acq(tabh))
-    return -1;  /* Table/top snapshot raced a grow; retry under the lock. */
+    return -1;
   ct = ctype_tab_slot(tabh, id);
   out->info = ctype_info_acq(ct);
   out->size = ctype_size_acq(ct);
@@ -1262,35 +1261,19 @@ static LJ_AINLINE int ctype_hash_cas(CTState *cts, uint32_t h,
 			     newid);  /* 11.2: CAS-prepend ctype hash publication. */
 }
 
-static void ctype_hash_setnext(CTState *cts, CType *src, CTypeID id,
-			       CTypeID next)
-{
-  CType *tab, *dst;
-  do {
-    dst = ctype_get(cts, id);
-    if (dst != src)
-      ctype_copy_rel(dst, src);
-    ctype_next_rel(dst, next);
-    tab = ctype_tab_acq(cts);
-  } while (dst != &tab[id]);
-}
-
 CType *lj_ctype_publish(CTState *cts, CTypeID id, CType *src)
 {
-  CType *tab, *dst;
-  do {
-    dst = ctype_get(cts, id);
-    if (dst != src)
-      ctype_copy_rel(dst, src);
-    tab = ctype_tab_acq(cts);
-  } while (dst != &tab[id]);
+  CType *dst = ctype_get(cts, id);
+  if (dst != src)
+    ctype_copy_rel(dst, src);
   return dst;
 }
 
 static int ctype_hash_try_prepend(CTState *cts, uint32_t h, CType *src,
 				  CTypeID id, CTypeID *head)
 {
-  ctype_hash_setnext(cts, src, id, *head);
+  CType *ct = lj_ctype_publish(cts, id, src);
+  ctype_next_rel(ct, *head);
   return ctype_hash_cas(cts, h, head, id);
 }
 
@@ -1345,87 +1328,49 @@ static void ctype_abandon(CTState *cts, CTypeID id)
 	       "abandoned ctype not visible in current table");
 }
 
-static GCSize ctype_tab_size(MSize sizetab)
+/* Each slot keeps the same address until the state closes. A grower can
+** finish publishing a span allocated by another thread. */
+static void ctype_tab_grow_l(lua_State *L, CTState *cts, CTypeID id)
 {
-  return (GCSize)(sizeof(CTypeTab) + (sizetab - 1u)*sizeof(CType));
-}
-
-static CTypeTab *ctype_tab_new(lua_State *L, MSize sizetab)
-{
-  CTypeTab *tabh = (CTypeTab *)lj_mem_new(L, ctype_tab_size(sizetab));
-  ctype_tab_sizetab_rel(tabh, sizetab);
-  ctype_tab_retire_epoch_rel(tabh, 0);
-  ctype_tab_retired_next_rel(tabh, NULL);
-  return tabh;
-}
-
-static void ctype_tab_free(global_State *g, CTypeTab *tabh)
-{
-  lj_mem_free(g, tabh, ctype_tab_size(ctype_tab_sizetab_acq(tabh)));
-}
-
-static void ctype_tab_retired_push(CTState *cts, CTypeTab *ret)
-{
-  CTypeTab *head = ctype_retiredtab_acq(cts);
-  do {
-    ctype_tab_retired_next_rel(ret, head);
-  } while (!ctype_retiredtab_cas(cts, &head,
-				 ret));  /* 11.2 CTState table SMR. */
-}
-
-static void ctype_tab_retire(CTState *cts, CTypeTab *ret)
-{
-  ctype_tab_retire_epoch_rel(ret, lj_gc2_retire_epoch(cts->g));
-  ctype_tab_retired_push(cts, ret);
-}
-
-static MSize ctype_tab_growsize(MSize osz, CTypeID id)
-{
-  MSize nsz = osz << 1;
-  if (nsz < LJ_MIN_VECSZ)
-    nsz = LJ_MIN_VECSZ;
-  if (nsz <= (MSize)id)
-    nsz = (MSize)id + 1u;
-  if (nsz > CTID_MAX)
-    nsz = CTID_MAX;
-  return nsz;
-}
-
-static CType *ctype_tab_grow_l(lua_State *L, CTState *cts, CTypeID id)
-{
-  if (id >= CTID_MAX) lj_err_msg(L, LJ_ERR_TABOV);
-  for (;;) {
-    CTypeTab *oldh = ctype_tabh_acq(cts);
-    MSize osz = ctype_tab_sizetab_acq(oldh);
-    MSize nsz;
-    CTypeTab *newh;
-    CTypeTab *expect;
-    MSize i;
-    if ((MSize)id < osz)
-      return oldh->tab;
-    nsz = ctype_tab_growsize(osz, id);
-    newh = ctype_tab_new(L, nsz);
-    for (i = 0; i < osz; i++)
-      ctype_copy_rel(&newh->tab[i], &oldh->tab[i]);
-    memset(newh->tab + osz, 0, (nsz - osz)*sizeof(CType));
-    expect = oldh;
-    if (ctype_tabh_cas(cts, &expect, newh)) {
-      ctype_tab_retire(cts, oldh);
-      return newh->tab;
+  CTypeTab *tabh = &cts->tab;
+  global_State *g = G(L);
+  MSize capacity;
+  while (id >= (capacity = ctype_tab_sizetab_acq(tabh))) {
+    MSize i = (MSize)lj_fls(capacity) - CTYPE_TAB_MIN_BITS;
+    GCSize bytes = capacity * sizeof(CType);
+    CType *span = ctype_tab_span_acq(tabh, i);
+    int installed = 0;
+    if (!span) {
+      CType *fresh = (CType *)lj_mem_new_deferred_nothrow(L, bytes);
+      if (fresh) {
+	memset(fresh, 0, bytes);
+	(void)lj_gc2_markmem(g, fresh);
+	installed = la_casptr((void **)&tabh->span[i], (void **)&span, fresh,
+			      LA_ACQ_REL, LA_ACQ);
+	if (installed)
+	  span = fresh;
+	else
+	  lj_mem_free(g, fresh, bytes);
+      } else {
+	span = ctype_tab_span_acq(tabh, i);
+	if (!span) lj_err_mem(L);
+      }
     }
-    ctype_tab_free(cts->g, newh);
+    (void)lj_gc2_markmem(g, span);
+    (void)la_cas32(&tabh->sizetab, &capacity, capacity * 2, LA_ACQ_REL, LA_ACQ);
+    if (installed) lj_mem_account_deferred(L, bytes);
   }
 }
 
 static CTypeID ctype_top_reserve_l(lua_State *L, CTState *cts, CType **ctp)
 {
   for (;;) {
-    CTypeTab *tabh = ctype_tabh_acq(cts);
+    CTypeTab *tabh = &cts->tab;
     CTypeID id = ctype_top_acq(cts);
     uint32_t expect = id;
     if (LJ_UNLIKELY(id >= CTID_MAX)) lj_err_msg(L, LJ_ERR_TABOV);
     if (LJ_UNLIKELY((MSize)id >= ctype_tab_sizetab_acq(tabh))) {
-      (void)ctype_tab_grow_l(L, cts, id);
+      ctype_tab_grow_l(L, cts, id);
       continue;
     }
     if (ctype_top_cas(cts, &expect, id+1u)) {
@@ -1537,7 +1482,7 @@ CTypeID lj_ctype_getname(CTState *cts, CType **ctp, GCstr *name, uint32_t tmask)
     *ctp = ctype_get(cts, id);
     return id;
   }
-  *ctp = ctype_tab_slot(ctype_tabh_acq(cts), 0);  /* Simplify caller logic. */
+  *ctp = ctype_tab_slot(&cts->tab, 0);  /* Simplify caller logic. */
   return 0;
 }
 
@@ -1549,7 +1494,7 @@ static int ctype_getname_at(CTState *cts, uint64_t version, GCstr *name,
 {
   CTypeID id = ctype_hash_load(cts, ct_hashname(name));
   CTypeID top = ctype_top_acq(cts);
-  CTypeTab *tabh = ctype_tabh_acq(cts);
+  CTypeTab *tabh = &cts->tab;
   CTypeID limit = (version & 1u) ? la_load32_acq(&cts->layout_top) : top;
   MSize budget = top;
   while (id) {
@@ -1733,7 +1678,7 @@ int lj_ctype_getfieldq_snapshot(CTState *cts, const CType *root,
     return ctype_snapshot_done(cts, seq, 0);
   top = ctype_top_acq(cts);
   budget = top ? (MSize)top * 4u : 1u;
-  ok = ctype_getfieldq_at(cts, ctype_layout_version(cts), ctype_tabh_acq(cts),
+  ok = ctype_getfieldq_at(cts, ctype_layout_version(cts), &cts->tab,
 			 top, ctype_sib_acq(root), name, 0, 0, ofsp,
 			 qualp ? &qual : NULL, out, &budget);
   ok = ctype_snapshot_done(cts, seq, ok);
@@ -1750,7 +1695,7 @@ int lj_ctype_getfieldq_wait(lua_State *L, CTState *cts, CTypeID rootid,
     uint32_t seq = ctype_parse_token_acq(cts);
     uint64_t version = ctype_layout_version(cts);
     CTypeID top = ctype_layout_limit(cts, version);
-    CTypeTab *tabh = ctype_tabh_acq(cts);
+    CTypeTab *tabh = &cts->tab;
     CType root, field;
     CTInfo qual = qualp ? *qualp : 0;
     CTSize ofs;
@@ -1786,7 +1731,7 @@ int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id, CTypeID *cidp)
   if (seq0 & 1u)
     return -1;
   top = ctype_top_acq(cts);
-  tabh = ctype_tabh_acq(cts);
+  tabh = &cts->tab;
   budget = top ? (MSize)top * 2u : 1u;
   if (id == 0 || id >= top || (MSize)id >= ctype_tab_sizetab_acq(tabh))
     return -1;
@@ -1854,7 +1799,7 @@ int lj_ctype_read(lua_State *L, CTState *cts, CTypeID id, CType *out)
   for (;;) {
     uint64_t version = ctype_layout_version(cts);
     CTypeID top = ctype_layout_limit(cts, version);
-    int ok = ctype_layout_at(cts, version, ctype_tabh_acq(cts), top, id, out);
+    int ok = ctype_layout_at(cts, version, &cts->tab, top, id, out);
     if (ctype_layout_version(cts) != version) continue;
     if (id < top || !(version & 1u)) return ok;
     lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
@@ -1865,7 +1810,7 @@ static int ctype_info_at(CTState *cts, uint64_t version, CTypeID top,
                          CTypeID id, CTInfo *infop, CTSize *szp,
                          CTypeID *ridp, CType *rawp)
 {
-  CTypeTab *tabh = ctype_tabh_acq(cts);
+  CTypeTab *tabh = &cts->tab;
   MSize budget = top ? (MSize)top * 4u : 1u;
   CType ct;
   CTInfo qual = 0;
@@ -2027,10 +1972,8 @@ static int ctype_metatv_rooted_try(lua_State *L, CTState *cts, TValue *outroot,
     goto busy;
   version = ctype_layout_version(cts);
 
-  /* SMR starts before acquiring the current RCU CTypeTab header. A sequence
-  ** check alone cannot retain a retired header against the GC2 reclaimer. */
   top = committed ? ctype_layout_limit(cts, version) : ctype_top_acq(cts);
-  tabh = ctype_tabh_acq(cts);
+  tabh = &cts->tab;
   budget = top ? (MSize)top * 4u : 1u;
   for (;;) {
     if (budget-- == 0)
@@ -2168,7 +2111,7 @@ CType *lj_ctype_rawref(CTState *cts, CTypeID id)
 static int ctype_rawref_at(CTState *cts, uint64_t version, CTypeID top,
 			   CTypeID id, CTypeID *ridp, CType *out)
 {
-  CTypeTab *tabh = ctype_tabh_acq(cts);
+  CTypeTab *tabh = &cts->tab;
   MSize budget = top ? (MSize)top * 4u : 1u;
   CType ct;
   while (budget--) {
@@ -2227,7 +2170,7 @@ CTSize lj_ctype_size(CTState *cts, CTypeID id)
 static int ctype_size_at(CTState *cts, uint64_t version, CTypeID top,
 			 CTypeID id, CTSize *szp)
 {
-  CTypeTab *tabh = ctype_tabh_acq(cts);
+  CTypeTab *tabh = &cts->tab;
   MSize budget = top ? (MSize)top * 2u : 1u;
   if (id == 0 || id >= top)
     return 0;
@@ -2272,7 +2215,7 @@ int lj_ctype_rawref_predefined(CTState *cts, CTypeID id, CTypeID *ridp,
   CType ct;
   if (!ctype_predefined_id(id))
     return -1;
-  tabh = ctype_tabh_acq(cts);
+  tabh = &cts->tab;
   if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(tabh))
     return -1;
   for (;;) {
@@ -2299,9 +2242,7 @@ int lj_ctype_predefined_nometa(CTState *cts, CTypeID id)
   UNUSED(cts);
   if (!ctype_predefined_id(id))
     return 0;
-  /* These bootstrap records are immutable compile-time data. Reading the
-  ** current RCU CTypeTab merely to classify them would require an SMR reader
-  ** and would defeat the parser-busy fast miss this predicate exists for. */
+  /* Bootstrap records have immutable type and metatable eligibility. */
   info = lj_ctype_typeinfo[id] & 0xffff03ffu;
   if (ctype_isstruct(info) || ctype_iscomplex(info) || ctype_isvector(info))
     return 0;
@@ -2326,7 +2267,7 @@ int lj_ctype_info_predefined(CTState *cts, CTypeID id, CTInfo *infop,
   CTInfo qual = 0;
   if (!ctype_predefined_id(id))
     return 0;
-  tabh = ctype_tabh_acq(cts);
+  tabh = &cts->tab;
   if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(tabh))
     return 0;
   if (rawp || ridp) {
@@ -2383,7 +2324,7 @@ int lj_ctype_size_predefined(CTState *cts, CTypeID id, CTSize *szp)
   MSize budget = (MSize)top * 2u;
   if (!ctype_predefined_id(id))
     return -1;
-  tabh = ctype_tabh_acq(cts);
+  tabh = &cts->tab;
   if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(tabh))
     return -1;
   for (;;) {
@@ -2460,7 +2401,7 @@ int lj_ctype_enumconst_snapshot(CTState *cts, const CType *root,
     return -1;
   if (!ctype_isenum(ctype_info_acq(root)))
     return ctype_snapshot_done(cts, seq, 0);
-  ok = ctype_enumconst_at(cts, ctype_layout_version(cts), ctype_tabh_acq(cts),
+  ok = ctype_enumconst_at(cts, ctype_layout_version(cts), &cts->tab,
 			 ctype_top_acq(cts), ctype_sib_acq(root), name, valp, cidp);
   return ctype_snapshot_done(cts, seq, ok);
 }
@@ -2472,7 +2413,7 @@ int lj_ctype_enumconst_wait(lua_State *L, CTState *cts, CTypeID rootid,
     uint32_t seq = ctype_parse_token_acq(cts);
     uint64_t version = ctype_layout_version(cts);
     CTypeID top = ctype_layout_limit(cts, version);
-    CTypeTab *tabh = ctype_tabh_acq(cts);
+    CTypeTab *tabh = &cts->tab;
     CType root;
     CTypeID cid;
     CTSize val;
@@ -2796,7 +2737,7 @@ GCstr *lj_ctype_repr_wait(lua_State *L, CTypeID id, GCstr *name)
       continue;
     }
     ctr.cts = cts;
-    ctr.tabh = ctype_tabh_acq(cts);
+    ctr.tabh = &cts->tab;
     ctr.top = top;
     ctr.version = version;
     ctype_repr_format(&ctr, id, name);
@@ -2839,38 +2780,6 @@ GCstr *lj_ctype_repr_complex(lua_State *L, void *sp, CTSize size)
   lj_strfmt_putfnum(sb, STRFMT_G14, im.n);
   lj_buf_putchar(sb, sb->w[-1] >= 'a' ? 'I' : 'i');
   return lj_buf_str(L, sb);
-}
-
-/* CTypeTab retirement is one intrusive chain. Preflight it before mutation so
-** a duplicate push/cycle cannot revisit a table after ctype_tab_free(). */
-static int ctype_retired_chain_valid(global_State *g, CTypeTab *head,
-				      int reclaim_held)
-{
-  CTypeTab *slow = head, *fast = head;
-  while (fast) {
-    if (slow) {
-      if (!(reclaim_held ?
-	    lj_gc2_mem_registered_known_reclaim_held(g, slow) :
-	    lj_gc2_mem_registered_known(g, slow)))
-	return 0;
-      slow = ctype_tab_retired_next_acq(slow);
-    }
-    if (!(reclaim_held ?
-	  lj_gc2_mem_registered_known_reclaim_held(g, fast) :
-	  lj_gc2_mem_registered_known(g, fast)))
-      return 0;
-    fast = ctype_tab_retired_next_acq(fast);
-    if (fast) {
-      if (!(reclaim_held ?
-	    lj_gc2_mem_registered_known_reclaim_held(g, fast) :
-	    lj_gc2_mem_registered_known(g, fast)))
-	return 0;
-      fast = ctype_tab_retired_next_acq(fast);
-    }
-    if (fast && slow == fast)
-      return 0;
-  }
-  return 1;
 }
 
 /* The caller owns idle SMR reclaim. Every order publisher and every
@@ -2976,58 +2885,12 @@ static uint32_t ctype_fin_empty_generations_reclaim(global_State *g,
   return reclaimed;
 }
 
-uint32_t lj_ctype_reclaim_retired(global_State *g, uint64_t completed_epoch)
+uint32_t lj_ctype_fin_reclaim(global_State *g)
 {
   CTState *cts = ctype_ctsG(g);
-  CTypeTab *ret;
-  uint32_t reclaimed = 0;
-  if (!cts || completed_epoch == 0)
-    return 0;
-  /* The generic GC2 owner retains its exact current-thread SMR capability
-  ** across this detach and every record validation below. */
-  ret = ctype_retiredtab_xchg_acqrel(cts, NULL);
-  if (LJ_UNLIKELY(!ctype_retired_chain_valid(g, ret, 1))) {
-    lj_assertG(0, "invalid/cyclic detached ctype-table retire chain");
-    abort();
-  }
-  while (ret) {
-    if (LJ_UNLIKELY(
-	!lj_gc2_mem_registered_known_reclaim_held(g, ret))) {
-      /* xchg transferred the whole chain to this exact reclaimer. Silently
-      ** stopping here would orphan the unvisited suffix permanently. */
-      lj_assertG(0, "invalid detached ctype-table retire record");
-      abort();
-    }
-    CTypeTab *next = ctype_tab_retired_next_acq(ret);
-    ctype_tab_retired_next_rel(ret, NULL);
-    if (ctype_tab_retire_epoch_acq(ret) < completed_epoch) {
-      ctype_tab_free(g, ret);
-      reclaimed++;
-    } else {
-      ctype_tab_retired_push(cts, ret);
-    }
-    ret = next;
-  }
-  return reclaimed + ctype_fin_order_reclaim(g, cts) +
+  if (!cts) return 0;
+  return ctype_fin_order_reclaim(g, cts) +
     ctype_fin_empty_generations_reclaim(g, cts);
-}
-
-static void ctype_freeretired(global_State *g, CTState *cts)
-{
-  CTypeTab *ret = ctype_retiredtab_xchg_acqrel(cts, NULL);
-  if (LJ_UNLIKELY(!ctype_retired_chain_valid(g, ret, 0))) {
-    lj_assertG(0, "invalid/cyclic terminal ctype-table retire chain");
-    abort();
-  }
-  while (ret) {
-    if (LJ_UNLIKELY(!lj_gc2_mem_registered_known(g, ret))) {
-      lj_assertG(0, "invalid terminal ctype-table retire record");
-      abort();
-    }
-    CTypeTab *next = ctype_tab_retired_next_acq(ret);
-    ctype_tab_free(g, ret);
-    ret = next;
-  }
 }
 
 CTState *LJ_FASTCALL lj_ctype_ctsG_acq(global_State *g)
@@ -3049,17 +2912,18 @@ CTState *LJ_FASTCALL lj_ctype_ctsG_acq(global_State *g)
 CTState *lj_ctype_init(lua_State *L)
 {
   CTState *cts = lj_mem_newt(L, sizeof(CTState), CTState);
-  CTypeTab *tabh = ctype_tab_new(L, CTTYPETAB_MIN);
-  CType *ct = tabh->tab;
   const char *name = lj_ctype_typenames;
   CTypeID id;
   memset(cts, 0, sizeof(CTState));
-  ctype_tabh_rel(cts, tabh);
+  LJ_STATIC_ASSERT((CTYPE_TAB_MIN << CTYPE_TAB_SPANS) == CTID_MAX);
+  LJ_STATIC_ASSERT(CTTYPEINFO_NUM <= CTYPE_TAB_MIN);
+  cts->tab.sizetab = CTYPE_TAB_MIN;
   ctype_top_rel(cts, CTTYPEINFO_NUM);
   ctype_metamap_init_l(L, cts);
   ctype_cbblack_init_l(L, cts);
   cts->g = G(L);
-  for (id = 0; id < CTTYPEINFO_NUM; id++, ct++) {
+  for (id = 0; id < CTTYPEINFO_NUM; id++) {
+    CType *ct = ctype_tab_slot(&cts->tab, id);
     CTInfo info = lj_ctype_typeinfo[id];
     ctype_size_rel(ct, (CTSize)((int32_t)(info << 16) >> 26));
     ctype_info_rel(ct, info & 0xffff03ffu);
@@ -3106,8 +2970,10 @@ void lj_ctype_freestate(global_State *g)
     }
     lj_ccallback_mcode_free(cts);
     lj_ctype_fin_freetabs(g, cts);
-    ctype_freeretired(g, cts);
-    ctype_tab_free(g, ctype_tabh_acq(cts));
+    for (i = 0; i < CTYPE_TAB_SPANS; i++) {
+      CType *span = ctype_tab_span_acq(&cts->tab, i);
+      if (span) lj_mem_freevec(g, span, CTYPE_TAB_MIN << i, CType);
+    }
     lj_mem_freevec(g, ctype_metamap_acq(cts),
 		   ctype_metamap_size_acq(cts), GCRef);
     lj_mem_freevec(g, ctype_cbblack_acq(cts),
