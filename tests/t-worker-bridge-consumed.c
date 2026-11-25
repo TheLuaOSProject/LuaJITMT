@@ -14,7 +14,8 @@ static void hold_remote_action(global_State *g, TGState *target)
   assert(target && target != self && target != g->main_tg);
   assert(lj_tg_load_cur_L(target) == NULL && lj_tg_load_thread_L(target) == NULL);
   assert(lj_tg_tid_acq(self) == worker_tid);
-  assert(gc2_hs_leader_acq(g) == worker_tid);
+  assert(gc2_hs_leader_acq(g) == LJ_SAFEPOINT_RESUMABLE_LEADER);
+  assert(gc2_hs_epoch_acq(g) == handshake_epoch);
   assert(lj_tg_reqmask_acq(target) == 0 && lj_tg_poll_acq(target) == 1);
   assert(lj_tg_in_native_acq(target) == 1);
   assert(!lj_tg_flags_test_acq(target, TGF_DEAD));
@@ -83,7 +84,7 @@ static void *observe_hold(void *unused)
 {
   global_State *g = probe_g;
   TGState *target;
-  uint64_t start, epoch;
+  uint64_t start;
   UNUSED(unused);
   wait_value(&g->gc2.worker_stop, 1);
   wait_value(&leave_entered, 1);
@@ -93,25 +94,25 @@ static void *observe_hold(void *unused)
     assert(lj_thr_now_ns() - start < UINT64_C(10000000000));
     la_cpu_pause();
   }
-  epoch = gc2_hs_epoch_acq(g);
   /* Keep the actual remote action paused while its target must remain behind
   ** the consumed poll. This is a real owner close, not an injected native bit. */
   usleep(20000);
   assert(lj_tg_reqmask_acq(target) == 0 && lj_tg_poll_acq(target) == 1);
   assert(!lj_tg_flags_test_acq(target, TGF_DEAD));
-  assert(gc2_hs_leader_acq(g) == worker_tid && gc2_hs_pending_acq(g) != 0);
+  assert(gc2_hs_leader_acq(g) == LJ_SAFEPOINT_RESUMABLE_LEADER);
+  assert(gc2_hs_epoch_acq(g) == handshake_epoch && gc2_hs_pending_acq(g) != 0);
   assert(la_load32_acq(&detach_entered) == 0);
   if (wanted == LJ_GC2_HS_RESET_ALLOC)
-    assert(lj_tg_hs_epoch_ack_acq(target) == epoch);
+    assert(lj_tg_hs_epoch_ack_acq(target) == handshake_epoch);
   else
-    assert(lj_tg_hs_epoch_ack_acq(target) != epoch);
+    assert(lj_tg_hs_epoch_ack_acq(target) != handshake_epoch);
   printf("{\"stage\":\"native_leave_holds_consumed_action\",\"wanted\":%u,"
          "\"tid\":%u,\"depth_before_leave\":%u,\"native\":%u,"
          "\"poll\":%u,\"reqmask\":%u,\"epoch_claimed\":%u,"
          "\"detach_entered\":%u}\n",
          wanted, lj_tg_tid_acq(target), native_depth_at_leave,
          lj_tg_in_native_acq(target), lj_tg_poll_acq(target),
-         lj_tg_reqmask_acq(target), lj_tg_hs_epoch_ack_acq(target) == epoch,
+         lj_tg_reqmask_acq(target), lj_tg_hs_epoch_ack_acq(target) == handshake_epoch,
          la_load32_acq(&detach_entered));
   la_store32_rel(&action_release, 1);
   return NULL;
@@ -154,6 +155,7 @@ int main(int argc, char **argv)
   assert(la_load32_acq(&detach_entered) == 1);
   assert(gc2_n_workers_acq(g) == 0 && gc2_worker_exited_acq(g) == 2);
   assert(gc2_hs_leader_acq(g) == 0 && gc2_hs_pending_acq(g) == 0);
+  assert(gc2_fixpoint_epoch_actions_acq(g) == 0);
   assert(lj_tg_in_native_acq(L2TG(L)) == 0);
   assert(actions == 0);
   lua_gc(L, LUA_GCCOLLECT, 0);

@@ -187,7 +187,7 @@ void lj_gc_preserve_root_chain_for_gc2_sweep(global_State *g)
   /*
   ** The root list is still the GC root ownership spine while GC2 owns arena
   ** storage, but it is not a semantic root set. Semantic roots are closed by
-  ** lj_gc2_trace_sweep_roots(); the arena owner sweep dispatches or preserves
+  ** the SWEEP root snapshot; the arena owner sweep dispatches or preserves
   ** unmarked valid root-spine bodies at the bridge boundary. Do not mark child
   ** values here, but keep side-vector storage for root-spine table bodies alive
   ** for the same bridge interval as the table bodies themselves.

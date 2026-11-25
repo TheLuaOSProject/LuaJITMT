@@ -400,7 +400,6 @@ LJ_FUNC void lj_gc2_scan_cycle_owner_roots(global_State *g, lua_State *L);
 LJ_FUNC void lj_gc2_thread_owner_releasing(global_State *g, lua_State *L,
 					     uint32_t tid,
 					     int force_recovery);
-LJ_FUNC void lj_gc2_trace_sweep_roots(global_State *g);
 LJ_FUNC uint32_t lj_gc2_flush_ssb(global_State *g, TGState *tg);
 LJ_FUNC uint32_t lj_gc2_flush_ssb_detach(global_State *g, TGState *tg);
 LJ_FUNC uint32_t lj_gc2_workers_count(global_State *g);

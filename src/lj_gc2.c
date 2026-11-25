@@ -1291,8 +1291,7 @@ typedef enum GC2SweepBridgeResult {
   GC2_SWEEP_BRIDGE_COMPLETE,
   GC2_SWEEP_BRIDGE_DEFERRED
 } GC2SweepBridgeResult;
-static GC2SweepBridgeResult gc2_sweep_prepare_bridge_result(global_State *g,
-							    int automatic);
+static GC2SweepBridgeResult gc2_sweep_prepare_bridge_result(global_State *g);
 static uint32_t gc2_worker_drain_inner(global_State *g, TGState *logical_tg,
 				       uint32_t limit, uint32_t *progress,
 				       int hold_mark_gate);
@@ -1331,7 +1330,6 @@ static int gc2_valid_thread_for_traverse_held(global_State *g,
 					       const GC2MarkScope *held);
 static int gc2_traverse_thread(global_State *g, lua_State *th,
 			       const GC2MarkScope *held);
-void lj_gc2_trace_sweep_roots(global_State *g);
 uint32_t lj_gc2_trace_sweep_root(global_State *g, GCobj *o);
 static uint32_t gc2_trace_sweep_worker_edge(global_State *g, GCobj *o);
 /* Ordinary publications may follow unenumerated payload changes. A worker
@@ -2729,6 +2727,12 @@ static int gc2_worker_stop_locked_l(global_State *g, lua_State *L,
       unjoined++;
     }
   }
+  /* The last worker can exit after dropping its counted poll without owning
+  ** the resume token. Give its published epoch one turn before releasing TG
+  ** slots. An unacknowledged Lua peer can still finish the same epoch later. */
+  if (unjoined == 0 && gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+      gc2_fixpoint_epoch_actions_acq(g))
+    (void)gc2_fixpoint_epoch_continue(g);
   if (L) {
     uint32_t actions = lj_native_leave(L);
     if (actionsp)
@@ -2869,7 +2873,7 @@ static void *gc2_worker_main(void *arg)
     }
     if (!deferred && gc2_worker_stop_acq(g) == 0 &&
 	gc2_phase_acq(g) == LJ_GC2_SWEEP) {
-      GC2SweepBridgeResult result = gc2_sweep_prepare_bridge_result(g, 0);
+      GC2SweepBridgeResult result = gc2_sweep_prepare_bridge_result(g);
       if (result == GC2_SWEEP_BRIDGE_PROGRESS) {
 	bridge_progress = 1;
 	if (total != ~(uint32_t)0)
@@ -3162,8 +3166,9 @@ int lj_gc2_collect_active(lua_State *L)
           gc2_peer_wait_l(L);
         continue;
       }
-      lj_gc2_sweep_prepare_bridge_boundary(
-	g, lj_gc_preserve_root_chain_for_gc2_sweep);
+      (void)gc2_sweep_prepare_bridge_result(g);
+      if (gc2_fixpoint_epoch_actions_acq(g))
+	continue;
       if (gc2_deferred_epoch_acq(g) != defer0)
 	return 0;
       if (gc2_worker_drain_logical(g, tg,
@@ -3314,7 +3319,7 @@ static int gc2_step(lua_State *L, uint32_t budget, int automatic)
         (void)gc2_fixpoint_epoch_continue(g);
         continue;
       }
-      (void)gc2_sweep_prepare_bridge_result(g, automatic);
+      (void)gc2_sweep_prepare_bridge_result(g);
       if (gc2_fixpoint_epoch_actions_acq(g))
 	continue;
       if (gc2_deferred_epoch_acq(g) != defer0)
@@ -5843,9 +5848,9 @@ static int gc2_sweep_root_snapshot_finish(global_State *g, uint32_t cycle)
   return gc2_sweep_root_scanned_cas(g, &expect, 1);
 }
 
-static int gc2_sweep_root_snapshot(global_State *g, int automatic)
+static int gc2_sweep_root_snapshot(global_State *g)
 {
-  uint32_t state, expect, cycle;
+  uint32_t state, expect;
   if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP)
     return 0;
   state = gc2_sweep_root_scanned_acq(g);
@@ -5856,7 +5861,6 @@ static int gc2_sweep_root_snapshot(global_State *g, int automatic)
   expect = 0;
   if (!gc2_sweep_root_scanned_cas(g, &expect, 2))
     return 0;
-  cycle = gc2_cycle_acq(g);
   if (gc2_jit_phase_gate_acq(g) != 0)
     gc2_jit_phase_gate_close(g);
   if (lj_tg_any_jit_active(g) || gc2_jit_recorder_active(g)) {
@@ -5865,28 +5869,20 @@ static int gc2_sweep_root_snapshot(global_State *g, int automatic)
     gc2_sweep_root_snapshot_abort(g);
     return 0;
   }
-  if (automatic && !gc2_fixpoint_epoch_reserve(g)) {
+  if (!gc2_fixpoint_epoch_reserve(g)) {
     gc2_sweep_root_snapshot_abort(g);
     return 0;
   }
-  /* A SWEEP handoff must have scanned in this phase, not reused a scan
-  ** stamp from MARK or WEAK. */
+  /* Advance the scan stamp so the ordinary owner/global root scanners
+  ** obtain a certificate for SWEEP rather than reusing MARK or WEAK. */
   (void)gc2_thread_scan_cycle_inc_acqrel(g);
-  if (automatic) {
-    la_store32_rel(&g->gc2.fixpoint_epoch_actions,
-		   LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_FLUSH_SSB);
-    return gc2_fixpoint_epoch_owned(g, 1) && gc2_sweep_root_scanned_acq(g) == 1;
-  }
-  lj_gc2_trace_sweep_roots(g);
-  return gc2_sweep_root_snapshot_finish(g, cycle);
+  la_store32_rel(&g->gc2.fixpoint_epoch_actions,
+		 LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_FLUSH_SSB);
+  return gc2_fixpoint_epoch_owned(g, 1) && gc2_sweep_root_scanned_acq(g) == 1;
 }
 
-static int gc2_sweep_bridge_epoch(global_State *g, uint32_t actions, int automatic)
+static int gc2_sweep_bridge_epoch(global_State *g, uint32_t actions)
 {
-  if (!automatic) {
-    (void)lj_gc2_handshake(g, actions);
-    return 1;
-  }
   /* A TG can attach after READY. Close native entry before starting its
   ** allocator reset, just as for the initial rotation before the bridge. */
   if (gc2_jit_phase_gate_acq(g) != 0)
@@ -5899,8 +5895,7 @@ static int gc2_sweep_bridge_epoch(global_State *g, uint32_t actions, int automat
   return gc2_fixpoint_epoch_owned(g, 1);
 }
 
-static GC2SweepBridgeResult gc2_sweep_prepare_bridge_result(global_State *g,
-							    int automatic)
+static GC2SweepBridgeResult gc2_sweep_prepare_bridge_result(global_State *g)
 {
   GCRef *cursor0;
   uint32_t cycle, scanned0, done0, ready0, unlinked = 0;
@@ -5936,7 +5931,7 @@ static GC2SweepBridgeResult gc2_sweep_prepare_bridge_result(global_State *g,
   ** safepoint so each TG moves its own traversable bump/free state to sweep
   ** while it is not concurrently allocating from that state.
   */
-  if (prepare0 && !gc2_sweep_bridge_epoch(g, LJ_GC2_HS_RESET_ALLOC, automatic))
+  if (prepare0 && !gc2_sweep_bridge_epoch(g, LJ_GC2_HS_RESET_ALLOC))
     goto retry;
   if (gc2_deferred_epoch_acq(g) != defer0)
     goto retry;
@@ -5947,14 +5942,13 @@ static GC2SweepBridgeResult gc2_sweep_prepare_bridge_result(global_State *g,
     ** another all-TG scan on every batch. A real thread NEEDSCAN handoff is the
     ** only condition which requests an additional owner snapshot. */
     if (gc2_sweep_root_scanned_acq(g) != 1) {
-      if (!gc2_sweep_root_snapshot(g, automatic))
+      if (!gc2_sweep_root_snapshot(g))
 	goto retry;
       if (gc2_deferred_epoch_acq(g) != defer0)
 	goto retry;
     }
     if (gc2_sweep_bridge_owner_roots_pending(g)) {
-      (void)gc2_sweep_bridge_epoch(g, LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_FLUSH_SSB,
-				   automatic);
+      (void)gc2_sweep_bridge_epoch(g, LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_FLUSH_SSB);
       goto retry;
     }
     /* Rotate post-snapshot rescue entries, including the initiating TG which
@@ -5967,7 +5961,7 @@ static GC2SweepBridgeResult gc2_sweep_prepare_bridge_result(global_State *g,
     if (gc2_deferred_epoch_acq(g) != defer0)
       goto retry;
     if (!lj_gc2_ssb_empty(g)) {
-      (void)gc2_sweep_bridge_epoch(g, LJ_GC2_HS_FLUSH_SSB, automatic);
+      (void)gc2_sweep_bridge_epoch(g, LJ_GC2_HS_FLUSH_SSB);
       goto retry;
     }
     if (gc2_table_rescan_pending_acq(g) != 0) {
@@ -6046,7 +6040,7 @@ void lj_gc2_sweep_prepare_bridge_boundary(global_State *g,
 					  GC2SweepBridgePreserveFunc preserve)
 {
   UNUSED(preserve);  /* Per-entry preservation is folded into bounded pruning. */
-  (void)gc2_sweep_prepare_bridge_result(g, 0);
+  (void)gc2_sweep_prepare_bridge_result(g);
 }
 
 int lj_gc2_sweep_pending(global_State *g)
@@ -22834,9 +22828,8 @@ uint32_t lj_gc2_preserve_sweep_root(global_State *g, GCobj *o)
   /*
   ** The GC root list is an ownership spine, not the Lua semantic root set.
   ** At the sweep bridge we preserve these bodies from arena reuse so the root
-  ** spine sweeper can own destructors and unlinking. Payload traversal belongs to
-  ** lj_gc2_trace_sweep_roots(), which walks actual roots such as stacks,
-  ** registry, globals, JIT/FFI side roots and thread handles.
+  ** spine sweeper can own destructors and unlinking. The SWEEP root snapshot
+  ** traverses the stacks, registry, globals, JIT/FFI side roots and handles.
   */
   status = gc2_markobj_preserve_status(g, o, NULL, NULL, NULL);
   return (uint32_t)(status == GC2_MARK_NEW);
@@ -22960,20 +22953,6 @@ uint32_t lj_gc2_trace_sweep_root(global_State *g, GCobj *o)
 static uint32_t gc2_trace_sweep_worker_edge(global_State *g, GCobj *o)
 {
   return gc2_trace_sweep_edge(g, o, GC2_SWEEP_DISCOVER, NULL, 0, 0);
-}
-
-void lj_gc2_trace_sweep_roots(global_State *g)
-{
-  if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP)
-    return;
-  /*
-  ** Root marking is phase-aware: during SWEEP the ordinary owner/global
-  ** scanners route semantic objects through lj_gc2_trace_sweep_root(). Reuse
-  ** that split under a complete acknowledgement boundary instead of carrying a
-  ** second global scanner or walking live TG stacks from the sweep worker.
-  */
-  (void)lj_gc2_handshake(g,
-    LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB);
 }
 
 static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)

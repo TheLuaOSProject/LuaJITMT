@@ -16,6 +16,8 @@
 #include "lj_thr.h"
 
 static atomic_int ready, enabled, requested, parked, release_peer, timeout_hit;
+static _Atomic(TGState *) peer_tg;
+static int pool, stop_pool;
 static uint32_t target = LJ_GC2_HS_DISABLE_BARRIER | LJ_GC2_HS_ALLOC_BLACK;
 
 static void pause_briefly(void)
@@ -31,6 +33,7 @@ static int hold_peer(lua_State *L)
 {
   LJNativeFrame frame;
   lj_native_enter_l(L, &frame);
+  atomic_store(&peer_tg, L2TG(L));
   atomic_store(&ready, 1);
   while (!atomic_load(&requested) && !atomic_load(&release_peer))
     pause_briefly();
@@ -42,11 +45,15 @@ static int hold_peer(lua_State *L)
   return 0;
 }
 
-static void before_actions(uint32_t actions)
+static void before_actions(global_State *g, uint32_t actions)
 {
   if (!atomic_load(&enabled) || (actions & target) != target ||
       atomic_exchange(&requested, 1))
     return;
+  if (pool) {
+    TGState *self = lj_thr_get_tg();
+    assert(self && self != g->main_tg && lj_tg_load_cur_L(self) == NULL);
+  }
   while (!atomic_load(&parked) && !atomic_load(&release_peer))
     pause_briefly();
 }
@@ -55,7 +62,7 @@ uint32_t __real_lj_safepoint_handshake(global_State *, uint32_t);
 uint32_t __wrap_lj_safepoint_handshake(global_State *g, uint32_t actions)
 {
   if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
-    before_actions(actions);
+    before_actions(g, actions);
   return __real_lj_safepoint_handshake(g, actions);
 }
 
@@ -64,7 +71,7 @@ int __wrap_lj_safepoint_resumable_epoch_try(global_State *g, uint32_t actions,
                                              int start)
 {
   if (start && gc2_phase_acq(g) == LJ_GC2_SWEEP)
-    before_actions(actions);
+    before_actions(g, actions);
   return __real_lj_safepoint_resumable_epoch_try(g, actions, start);
 }
 
@@ -75,6 +82,24 @@ static int begin(lua_State *L)
     return 1;
   }
   atomic_store(&enabled, 1);
+  if (pool) {
+    global_State *g = G(L);
+    TGState *peer = atomic_load(&peer_tg);
+    uint32_t actions = 0;
+    unsigned i;
+    /* Stop the public step at the real WEAK -> SWEEP edge. Only the pool can
+    ** initiate the selected bridge action before this callback returns. */
+    for (i = 0; i < 10000 && gc2_phase_acq(g) != LJ_GC2_SWEEP; i++)
+      lua_gc(L, LUA_GCSTEP, 1);
+    assert(i != 10000 && !gc2_sweep_bridge_ready_acq(g));
+    lua_gc(L, LUA_GCSTOP, 0);
+    assert(lj_gc2_workers_set_l(L, 2, &actions) == 1);
+    assert((actions & LJ_GC2_HS_STOPREQ) == 0);
+    while (!(lj_tg_reqmask_acq(peer) & target) && !atomic_load(&release_peer)) {
+      (void)lj_safepoint_poll(L);
+      pause_briefly();
+    }
+  }
   lua_gc(L, LUA_GCRESTART, 0);
   lj_gc_threshold_store(G(L), 0);
   lua_pushboolean(L, 1);
@@ -100,6 +125,25 @@ static int finish(lua_State *L)
       assert(la_load32_acq(&L2TG(L)->alloc.prepare_epoch) == gc2_cycle_acq(g));
     if (target == LJ_GC2_HS_SCAN_ROOTS)
       assert(gc2_sweep_root_scanned_acq(g) == 2);
+    if (pool) {
+      TGState *peer = atomic_load(&peer_tg);
+      uint64_t epoch = gc2_hs_epoch_acq(g);
+      assert(gc2_hs_leader_acq(g) == LJ_SAFEPOINT_RESUMABLE_LEADER);
+      assert(gc2_fixpoint_epoch_actions_acq(g) & target);
+      assert(lj_tg_hs_epoch_ack_acq(L2TG(L)) == epoch);
+      assert(lj_tg_hs_epoch_ack_acq(peer) != epoch);
+      assert(lj_tg_reqmask_acq(peer) & target);
+      lua_createtable(L, 2, 1);
+      lua_pop(L, 1);
+      if (stop_pool) {
+	uint32_t actions = 0;
+	assert(lj_gc2_workers_set_l(L, 0, &actions) == 1);
+	assert(actions == 0);
+	assert(gc2_n_workers_acq(g) == 0 && gc2_worker_exited_acq(g) == 2);
+	assert(gc2_hs_epoch_acq(g) == epoch && gc2_hs_pending_acq(g) == 1);
+	assert(lj_tg_reqmask_acq(peer) & target);
+      }
+    }
   }
   lua_gc(L, LUA_GCSTOP, 0);
   atomic_store(&release_peer, 1);
@@ -139,12 +183,24 @@ int main(int argc, char **argv)
   lua_State *L = luaL_newstate();
   pthread_t timer;
   int status;
-  if (argc == 2 && !strcmp(argv[1], "reset"))
-    target = LJ_GC2_HS_RESET_ALLOC;
-  else if (argc == 2 && !strcmp(argv[1], "roots"))
-    target = LJ_GC2_HS_SCAN_ROOTS;
-  else
-    assert(argc == 1);
+  if (argc >= 2) {
+    const char *action = argv[1];
+    pool = !strncmp(action, "pool-", 5);
+    if (pool)
+      action += 5;
+    if (!strcmp(action, "reset"))
+      target = LJ_GC2_HS_RESET_ALLOC;
+    else {
+      assert(!strcmp(action, "roots"));
+      target = LJ_GC2_HS_SCAN_ROOTS;
+    }
+    if (argc == 3) {
+      assert(pool && !strcmp(argv[2], "stop"));
+      stop_pool = 1;
+    } else {
+      assert(argc == 2);
+    }
+  }
   assert(L);
   luaL_openlibs(L);
   assert(luaL_loadbuffer(L, source, sizeof(source)-1, "=sweep entry") == LUA_OK);
@@ -158,6 +214,10 @@ int main(int argc, char **argv)
   assert(pthread_join(timer, NULL) == 0);
   if (status != LUA_OK)
     fprintf(stderr, "%s\n", lua_tostring(L, -1));
+  else {
+    assert(gc2_phase_acq(G(L)) == LJ_GC2_IDLE);
+    assert(gc2_n_workers_acq(G(L)) == (pool && !stop_pool ? 2u : 0u));
+  }
   lua_close(L);
   assert(status == LUA_OK);
   if (atomic_load(&timeout_hit)) {

@@ -15,10 +15,10 @@
 #include "lj_tg.h"
 #include "lj_thr.h"
 
-/* Only pause an actual worker's existing handshake entry. All GC phases,
-** requests, owner/native words and allocator/root actions are production calls.
-** The main actor then releases the worker and waits for its real counted
-** request before invoking the ordinary pool stop/join API. */
+/* Pause at a worker's reserved bridge epoch, before it publishes requests.
+** The physical worker owns this turn, while the resumable epoch uses a
+** reserved leader ID. The main actor waits for a real counted request before
+** invoking the pool stop/join API. */
 static global_State *probe_g;
 static uint32_t wanted, armed, paused, release_worker, worker_tid;
 static uint64_t handshake_epoch;
@@ -32,23 +32,29 @@ static void wait_value(const uint32_t *p, uint32_t value)
   }
 }
 
-extern uint32_t __real_lj_safepoint_handshake(global_State *, uint32_t);
-uint32_t __wrap_lj_safepoint_handshake(global_State *g, uint32_t actions)
+extern int __real_lj_safepoint_resumable_epoch_try(global_State *, uint32_t, int);
+int __wrap_lj_safepoint_resumable_epoch_try(global_State *g, uint32_t actions,
+					  int start)
 {
   TGState *self = lj_thr_get_tg();
   uint32_t expect = 1;
-  if (g == probe_g && (actions & wanted) != 0 && self &&
+  if (g == probe_g && start && (actions & wanted) != 0 && self &&
       self != g->main_tg && lj_tg_load_cur_L(self) == NULL &&
       la_cas32(&armed, &expect, 0, LA_ACQ_REL, LA_ACQ)) {
     assert(gc2_phase_acq(g) == LJ_GC2_SWEEP);
     assert(gc2_worker_active_acq(g) == 1);
+    assert(gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN);
+    assert(gc2_fixpoint_epoch_actions_acq(g) == actions);
+    assert(gc2_hs_leader_acq(g) == LJ_SAFEPOINT_RESUMABLE_LEADER);
+    assert(gc2_hs_pending_acq(g) == 0);
     assert(lj_tg_in_native_acq(self) == 1);
     assert(lj_tg_load_thread_L(self) == NULL);
     worker_tid = lj_tg_tid_acq(self);
+    handshake_epoch = gc2_hs_epoch_acq(g) + 1;
     la_store32_rel(&paused, 1);
     wait_value(&release_worker, 1);
   }
-  return __real_lj_safepoint_handshake(g, actions);
+  return __real_lj_safepoint_resumable_epoch_try(g, actions, start);
 }
 
 static void enter_real_sweep(lua_State *L)
@@ -126,12 +132,13 @@ int main(int argc, char **argv)
   actions = 0;
   la_store32_rel(&release_worker, 1);
   start = lj_thr_now_ns();
-  while ((lj_tg_reqmask_acq(tg) & wanted) == 0) {
+  while ((lj_tg_reqmask_acq(tg) & (wanted | LJ_GC2_HS_RESUMABLE)) !=
+	 (wanted | LJ_GC2_HS_RESUMABLE) || lj_tg_poll_acq(tg) == 0) {
     assert(lj_thr_now_ns() - start < UINT64_C(10000000000));
     la_cpu_pause();
   }
-  handshake_epoch = gc2_hs_epoch_acq(g);
-  assert(gc2_hs_leader_acq(g) == worker_tid);
+  assert(gc2_hs_epoch_acq(g) == handshake_epoch);
+  assert(gc2_hs_leader_acq(g) == LJ_SAFEPOINT_RESUMABLE_LEADER);
   assert(gc2_hs_pending_acq(g) != 0);
   assert(lj_tg_poll_acq(tg) == 1);
   assert(lj_tg_hs_epoch_ack_acq(tg) != handshake_epoch);
@@ -140,10 +147,11 @@ int main(int argc, char **argv)
   assert(gc2_phase_acq(g) == LJ_GC2_SWEEP && gc2_cycle_acq(g) == cycle);
   printf("{\"stage\":\"pending_before_stop\",\"actions\":%u,"
          "\"workers\":%u,\"api\":%u,\"phase\":%u,\"cycle\":%u,"
-         "\"leader\":%u,\"pending\":%u,\"main_native\":%u,"
+         "\"worker_tid\":%u,\"leader\":%u,\"pending\":%u,\"main_native\":%u,"
          "\"epoch\":%" PRIu64 ",\"owner\":%" PRIu64 "}\n",
          wanted, workers, api, gc2_phase_acq(g), cycle, worker_tid,
-         gc2_hs_pending_acq(g), lj_tg_in_native_acq(tg), handshake_epoch,
+         gc2_hs_leader_acq(g), gc2_hs_pending_acq(g), lj_tg_in_native_acq(tg),
+         handshake_epoch,
          (uint64_t)owner);
   start = lj_thr_now_ns();
   ok = api ? lj_gc2_workers_set(g, 0) : lj_gc2_workers_set_l(L, 0, &actions);
@@ -152,6 +160,8 @@ int main(int argc, char **argv)
   assert(gc2_n_workers_acq(g) == 0 && gc2_worker_stop_acq(g) == 1);
   assert(gc2_worker_exited_acq(g) == workers);
   assert(gc2_hs_leader_acq(g) == 0 && gc2_hs_pending_acq(g) == 0);
+  assert(gc2_fixpoint_epoch_actions_acq(g) == 0);
+  assert(lj_tg_hs_epoch_ack_acq(tg) >= handshake_epoch);
   assert(lj_tg_reqmask_acq(tg) == 0 && lj_tg_poll_acq(tg) == 0);
   assert(lj_tg_in_native_acq(tg) == 0);
   assert(lj_state_owner_word_acq(L) == owner);

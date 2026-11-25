@@ -32,7 +32,8 @@ static void pause_remote_action(global_State *g, TGState *target)
   TGState *self = lj_thr_get_tg();
   LJTGSlotSnap snap;
   assert(target && target != self);
-  assert(gc2_hs_leader_acq(g) == worker_tid);
+  assert(gc2_hs_leader_acq(g) == LJ_SAFEPOINT_RESUMABLE_LEADER);
+  assert(gc2_hs_epoch_acq(g) == handshake_epoch);
   assert(self && lj_tg_tid_acq(self) == worker_tid);
   assert(lj_tg_reqmask_acq(target) == 0);
   assert(lj_tg_poll_acq(target) == 1);
@@ -100,7 +101,7 @@ static void *observe_detach(void *unused)
     }
     assert(lj_tgregistry_key_snapshot(&target->registry_key, &snap) == LJ_TGSLOT_OK);
     assert(snap.state == LJ_TGSLOT_RETIRED);
-    assert(gc2_hs_leader_acq(g) == worker_tid);
+    assert(gc2_hs_leader_acq(g) == LJ_SAFEPOINT_RESUMABLE_LEADER);
     assert(gc2_hs_pending_acq(g) != 0);
     assert(la_load32_acq(&action_release) == 0);
     printf("{\"stage\":\"retired_before_remote_action_return\",\"wanted\":%u,"
@@ -115,11 +116,13 @@ static void *observe_detach(void *unused)
     /* A repaired owner closes native before touching detach-private state.
     ** The actual request must stay owner-pending until detach retires it. */
     start = lj_thr_now_ns();
-    while ((lj_tg_reqmask_acq(target) & wanted) == 0) {
+    while ((lj_tg_reqmask_acq(target) & (wanted | LJ_GC2_HS_RESUMABLE)) !=
+	   (wanted | LJ_GC2_HS_RESUMABLE) || lj_tg_poll_acq(target) == 0) {
       assert(lj_thr_now_ns() - start < UINT64_C(10000000000));
       la_cpu_pause();
     }
-    assert(lj_tg_poll_acq(target) == 1);
+    assert(gc2_hs_epoch_acq(g) == handshake_epoch);
+    assert(lj_tg_hs_epoch_ack_acq(target) != handshake_epoch);
     assert(la_load32_acq(&action_paused) == 0);
     assert(la_load32_acq(&remote_calls) == 0);
     printf("{\"stage\":\"remote_action_refused_owner_pending\","
@@ -165,6 +168,7 @@ int main(int argc, char **argv)
   assert(pthread_join(observer, NULL) == 0);
   assert(gc2_n_workers_acq(g) == 0 && gc2_worker_exited_acq(g) == 2);
   assert(gc2_hs_leader_acq(g) == 0 && gc2_hs_pending_acq(g) == 0);
+  assert(gc2_fixpoint_epoch_actions_acq(g) == 0);
   assert(lj_tg_in_native_acq(L2TG(L)) == 0);
   assert(actions == 0);
   lua_gc(L, LUA_GCCOLLECT, 0);

@@ -444,22 +444,23 @@ return function(add)
           end
         end
       end
-      local handshake = "lj_safepoint_handshake"
+      local resumable = "lj_safepoint_resumable_epoch_try"
       local scan = "lj_gc2_scan_cycle_owner_tg_roots_native_parked"
       local prepare = "lj_arena_alloc_prepare_sweep_kind"
       run("t-gc2-sweep-step-close", { {} })
-      run("t-gc2-auto-sweep-start", { {}, { "reset" }, { "roots" } }, {
-        handshake, "lj_safepoint_resumable_epoch_try"
-      })
-      run("t-worker-bridge-stop", stop_modes, { handshake })
+      run("t-gc2-auto-sweep-start", {
+        {}, { "reset" }, { "roots" }, { "pool-reset" }, { "pool-roots" },
+        { "pool-reset", "stop" }, { "pool-roots", "stop" }
+      }, { "lj_safepoint_handshake", resumable })
+      run("t-worker-bridge-stop", stop_modes, { resumable })
       run("t-worker-bridge-detach", { { "0" }, { "1" } }, {
-        handshake, "lj_gc2_flush_ssb_detach", scan, prepare
+        resumable, "lj_gc2_flush_ssb_detach", scan, prepare
       })
       run("t-worker-bridge-consumed", { { "0" }, { "1" } }, {
-        handshake, "lj_native_leave_tg", "lj_tg_detach", scan, prepare
+        resumable, "lj_native_leave_tg", "lj_tg_detach", scan, prepare
       })
       run("t-worker-bridge-quiet", { { "1" }, { "2" } }, {
-        handshake, "lj_gc_sweep_gc2_unmarked"
+        resumable, "lj_gc_sweep_gc2_unmarked"
       })
       local automatic_modes = {}
       for peer = 0, 1 do
