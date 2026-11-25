@@ -734,7 +734,8 @@ LJ_FUNC int lj_gc2_mark_proto_for_pc(global_State *g, const BCIns *pc);
 ** terminal owner, and -1 when admission is transient and reclaim must retry. */
 LJ_FUNC int lj_gc2_tab_generation_current(global_State *g, GCtab *t,
 					   const void *generation,
-					   int array_generation);
+					   int array_generation,
+					   uint64_t hold_control);
 LJ_FUNC int lj_gc2_markobj_direct(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_markobj_nogrey(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_markmem(global_State *g, void *p);

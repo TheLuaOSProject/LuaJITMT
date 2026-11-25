@@ -634,6 +634,8 @@ LJ_FUNC void lj_tab_test_set_newkey_publish_hook(
   LJTabNewkeyPublishHook hook);
 LJ_FUNC void lj_tab_test_set_resize_before_freeze_hook(
   LJTabResizeArrayHook hook);
+LJ_FUNC void lj_tab_test_set_resize_hash_cutover_hook(
+  LJTabResizeArrayHook hook);
 LJ_FUNC void lj_tab_test_set_resize_colocated_after_freeze_hook(
   LJTabResizeArrayHook hook);
 LJ_FUNC void lj_tab_test_set_next_after_keyindex_hook(

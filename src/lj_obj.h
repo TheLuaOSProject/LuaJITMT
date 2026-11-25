@@ -290,9 +290,10 @@ typedef struct StrCanonRec StrCanonRec;
 typedef struct StrTabHdr {
   MSize mask;		/* String hash mask (size of hash table - 1). */
   MSize resize;		/* Reserved resize claim for M5 lock-free interning. */
-  MSize copy_cursor;	/* Reserved resize copy cursor. */
+  MSize copy_cursor;	/* First completed source bucket of a plain expansion. */
   uint64_t retire_epoch;  /* Safepoint epoch when retired. */
   struct StrTabHdr *retired_next;  /* Retired string table headers. */
+  struct StrTabHdr *expand_to;  /* Rooted target of eligible plain growth. */
   GCRef bucket[1];	/* String hash table anchors. */
 } StrTabHdr;
 
@@ -712,6 +713,7 @@ struct GCtab;
 typedef struct TabNodeRetire {
   struct GCtab *tab;	/* Table that unpublished this hash vector. */
   Node *node;		/* Retired hash vector, owned only when armed. */
+  uint64_t hold_control;  /* A tagged cutover still uses this record. */
   MSize hmask;		/* Original hash mask for vector free. */
   uint64_t retire_epoch;  /* Safepoint epoch when retired. */
   uint32_t armed;	/* Node vector has been unpublished from its table. */
@@ -758,6 +760,7 @@ enum {
 #define TAB_RESIZE_DESC_F_CUTOVER	0x00000002u
 #define TAB_RESIZE_DESC_F_VM_GUARD	0x00000004u
 #define TAB_RESIZE_DESC_F_VM_GUARD_RELEASED	0x00000008u
+#define TAB_RESIZE_DESC_F_HASH_CUTOVER	0x00000010u
 
 /*
 ** Cold persistent identity for a helpable resize. The installed substrate
@@ -771,6 +774,8 @@ typedef struct TabResizeDesc {
   struct GCtab *tab;
   TValue *oldarray;
   Node *oldnode;
+  Node *newnode;	/* Completed hash migration, for helpable cutover. */
+  TabNodeRetire *oldret;
   uint64_t id;
   uint64_t stable_control;  /* Exact pre-install {owner, acap} word. */
   uint64_t retire_epoch;

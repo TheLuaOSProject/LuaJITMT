@@ -41,7 +41,9 @@ typedef struct ResizeCtx {
   volatile int *start;
   volatile int *done;
   uint32_t asize;
+  uint32_t hbits;
   int clear;
+  int mutate;
   int status;
 } ResizeCtx;
 
@@ -171,6 +173,21 @@ static void resize_hold_hook(lua_State *L, GCtab *t, TValue *oldarray,
     sched_yield();
 }
 
+static void hash_cutover_mutate(lua_State *L, int read_first)
+{
+  if (read_first) {
+    lua_rawgeti(L, 1, -1);
+    assert(lua_tointeger(L, -1) == 11);
+    lua_pop(L, 1);
+  }
+  lua_pushinteger(L, 111);
+  lua_rawseti(L, 1, -1);
+  lua_pushnil(L);
+  lua_rawseti(L, 1, -2);
+  lua_pushinteger(L, 333);
+  lua_rawseti(L, 1, -3);
+}
+
 static void *resize_worker(void *arg)
 {
   ResizeCtx *ctx = (ResizeCtx *)arg;
@@ -194,8 +211,10 @@ static void *resize_worker(void *arg)
 
   if (ctx->clear)
     lj_tab_clear(L, t);
+  else if (ctx->mutate)
+    hash_cutover_mutate(L, ctx->mutate == 2);
   else
-    lj_tab_resize(L, t, ctx->asize, 0);
+    lj_tab_resize(L, t, ctx->asize, ctx->hbits);
   store_flag(ctx->done, 1);
   lj_threading_detach(L, 1);
   ctx->status = 0;
@@ -356,7 +375,9 @@ static void exercise_resize_owner(lua_State *L, int clear)
   owner.start = &owner_start;
   owner.done = &owner_done;
   owner.asize = LJ_MAX_COLOSIZE + 24u;
+  owner.hbits = 0;
   owner.clear = 0;
+  owner.mutate = 0;
   owner.status = -1;
 
   other.L = otherL;
@@ -364,7 +385,9 @@ static void exercise_resize_owner(lua_State *L, int clear)
   other.start = &other_start;
   other.done = &other_done;
   other.asize = LJ_MAX_COLOSIZE + 32u;
+  other.hbits = 0;
   other.clear = clear;
+  other.mutate = 0;
   other.status = -1;
 
   resize_hook_tab = owner_tab;
@@ -407,6 +430,113 @@ static void exercise_resize_owner(lua_State *L, int clear)
     assert(lj_tab_asize_acq(owner_tab) == owner.asize);
     assert_clear_seeds_absent(owner_tab);
   }
+}
+
+static void assert_hash_cutover_values(lua_State *L)
+{
+  unsigned seen = 0;
+  lua_rawgeti(L, 1, -1);
+  assert(lua_tointeger(L, -1) == 111);
+  lua_pop(L, 1);
+  lua_rawgeti(L, 1, -2);
+  assert(lua_isnil(L, -1));
+  lua_pop(L, 1);
+  lua_rawgeti(L, 1, -3);
+  assert(lua_tointeger(L, -1) == 333);
+  lua_pop(L, 1);
+  lua_pushnil(L);
+  while (lua_next(L, 1)) {
+    int key = (int)lua_tointeger(L, -2);
+    unsigned bit;
+    assert(key == -1 || key == -3);
+    bit = 1u << -key;
+    assert(!(seen & bit));
+    seen |= bit;
+    lua_pop(L, 1);
+  }
+  assert(seen == ((1u << 1) | (1u << 3)));
+}
+
+static void exercise_hash_cutover_owner(lua_State *L, int read_first)
+{
+  volatile int ready = 0, owner_start = 0, other_start = 0;
+  volatile int owner_done = 0, other_done = 0;
+  volatile int hook_entered = 0, hook_release = 0;
+  ResizeCtx owner = { 0 }, other = { 0 };
+  pthread_t owner_thr, other_thr;
+  GCtab *t;
+  Node *oldnode;
+
+  lua_settop(L, 0);
+  lua_createtable(L, 0, 4);
+  t = tabV(L->top - 1);
+  lua_pushinteger(L, 11);
+  lua_rawseti(L, 1, -1);
+  lua_pushinteger(L, 22);
+  lua_rawseti(L, 1, -2);
+  oldnode = lj_tab_node_acq(t);
+  owner.L = new_child_with_table(L, 1);
+  owner.ready = &ready;
+  owner.start = &owner_start;
+  owner.done = &owner_done;
+  owner.hbits = 6;
+  owner.status = -1;
+  other.L = new_child_with_table(L, 1);
+  other.ready = &ready;
+  other.start = &other_start;
+  other.done = &other_done;
+  other.mutate = read_first ? 2 : 1;
+  other.status = -1;
+  resize_hook_tab = t;
+  resize_hook_entered = &hook_entered;
+  resize_hook_release = &hook_release;
+  lj_tab_test_set_resize_hash_cutover_hook(resize_hold_hook);
+  assert(pthread_create(&owner_thr, NULL, resize_worker, &owner) == 0);
+  assert(pthread_create(&other_thr, NULL, resize_worker, &other) == 0);
+  assert(wait_for_flag(&ready, 2, 1000000));
+  store_flag(&owner_start, 1);
+  assert(wait_for_flag(&hook_entered, 1, 1000000));
+  assert(lj_tab_node_acq(t) == oldnode);
+  assert(lj_tab_node_is_retiring(oldnode));
+  assert(lj_tab_resize_desc_control_acq(t) != NULL);
+  store_flag(&other_start, 1);
+  assert(wait_for_flag(&other_done, 1, 1000000));
+  assert(!load_flag(&owner_done));
+  assert(lj_tab_node_acq(t) != oldnode);
+  assert(lj_tab_resize_desc_control_acq(t) == NULL);
+  assert_hash_cutover_values(L);
+
+  store_flag(&hook_release, 1);
+  assert(wait_for_flag(&owner_done, 1, 1000000));
+  assert(pthread_join(owner_thr, NULL) == 0 && owner.status == 0);
+  assert(pthread_join(other_thr, NULL) == 0 && other.status == 0);
+  lj_tab_test_set_resize_hash_cutover_hook(NULL);
+  resize_hook_tab = NULL;
+  resize_hook_entered = NULL;
+  resize_hook_release = NULL;
+  assert_hash_cutover_values(L);
+}
+
+static void exercise_hash_cutover_weak_value(lua_State *L)
+{
+  GCtab *t;
+  lua_settop(L, 0);
+  lua_newtable(L);
+  lua_newtable(L);
+  lua_pushliteral(L, "v");
+  lua_setfield(L, -2, "__mode");
+  lua_setmetatable(L, 1);
+  lua_createtable(L, 0, 4);
+  t = tabV(L->top - 1);
+  lua_pushinteger(L, 11);
+  lua_rawseti(L, 2, -1);
+  lj_tab_resize(L, t, 0, 6);
+  assert(lj_tab_resize_desc_control_acq(t) == NULL);
+  lua_rawseti(L, 1, 1);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_rawgeti(L, 1, 1);
+  assert(lua_isnil(L, -1));
+  lua_pop(L, 1);
 }
 
 static void exercise_resize_noop_owner(lua_State *L)
@@ -494,6 +624,9 @@ int main(void)
   exercise_direct_owner(L);
   exercise_resize_owner(L, 0);
   exercise_resize_owner(L, 1);
+  exercise_hash_cutover_owner(L, 0);
+  exercise_hash_cutover_owner(L, 1);
+  exercise_hash_cutover_weak_value(L);
   exercise_wait_stopreq(L);
 
   lua_close(L);
