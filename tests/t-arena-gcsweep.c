@@ -1897,6 +1897,14 @@ static void test_worker_owned_sweep_direct(void)
   assert(gc2_sweep_owner_arenas_acq(g) == arenas0);
   lj_gc2_sweep_bridge_ready(g);
 
+  /* A completed leaf mark leaves a notification but no graph work. The
+  ** worker owes another visit to this prepared arena after consuming it. */
+  gc2_marks_this_round_add(g, 1);
+  assert(lj_gc2_worker_drain(g, 1u) == 1u);
+  assert(gc2_marks_this_round_acq(g) == 0);
+  assert(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == swept_a);
+  assert(gc2_sweep_owner_arenas_acq(g) == arenas0);
+
   /* Classification and epoch grace are distinct production worker quanta. */
   assert(lj_gc2_worker_drain(g, 1u) == 1u);
   assert(extra_tg.alloc.quarantine[LJ_ARENAK_TRAVERSABLE] == swept_a);

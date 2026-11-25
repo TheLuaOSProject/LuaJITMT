@@ -6285,8 +6285,11 @@ static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
     ** duplicate requeue owns progress; a sweep worker must not forge zero. */
     return 0;
   }
+  /* Retiring this round's mark notifications changes the sweep frontier.
+  ** Retry after the ordinary work checks rather than waiting for a new
+  ** publisher or the active-worker timeout to revisit prepared arenas. */
   if (gc2_marks_this_round_xchg_acqrel(g, 0) != 0)
-    return 0;
+    return 1;
   epoch = gc2_cycle_acq(g);
   minor = gc2_cycle_sweep_minor_acq(g) != 0;
   /*
