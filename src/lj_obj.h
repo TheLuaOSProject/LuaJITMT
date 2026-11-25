@@ -1866,6 +1866,8 @@ typedef struct GCState {
 #endif
 } GCState;
 
+#define LJ_STR_RESIZE_HIT_COUNT 128u
+
 /* String interning state. */
 typedef struct StrInternState {
   StrTabHdr *tabh;	/* String hash table header and anchors. */
@@ -1899,6 +1901,7 @@ typedef struct StrInternState {
   uint8_t unused1;
   uint8_t unused2;
   LJ_ALIGN(8) uint64_t seed;	/* Random string seed. */
+  GCstr *resize_hits[LJ_STR_RESIZE_HIT_COUNT];  /* Nonowning canonical hits. */
 } StrInternState;
 
 typedef struct TabState {

@@ -330,6 +330,176 @@ static void exercise_rehash_ignores_legacy_colors(lua_State *L)
   }
 }
 
+typedef struct PausedTopology {
+  lua_State *peer;
+  StrTabHdr *hdr;
+  MSize target_mask;
+  const char *trigger;
+  size_t trigger_len;
+  uint32_t stage;
+  uint32_t stopped;
+  uint32_t release;
+  uint32_t done;
+} PausedTopology;
+
+static PausedTopology *paused_topology;
+
+static void pause_moved_string(lua_State *L, GCstr *s, StrCanonRec *rec,
+			       uint32_t stage)
+{
+  PausedTopology *p = paused_topology;
+  if (L != p->peer || stage != p->stage || la_load32_acq(&p->stopped))
+    return;
+  assert(s != NULL && rec == NULL);
+  assert(la_load32_acq(&p->hdr->resize) == TEST_STRTAB_RESIZE);
+  la_store32_rel(&p->stopped, 1);
+  while (!la_load32_acq(&p->release))
+    test_sleep_without_tg(100000);
+}
+
+static void *move_string_worker(void *ud)
+{
+  PausedTopology *p = (PausedTopology *)ud;
+  assert(lj_threading_attach_wait(p->peer));
+  if (p->stage == LJ_STR_TEST_CANON_RESIZE_MOVED)
+    lj_str_resize(p->peer, p->target_mask);
+  else
+    assert(lj_str_new(p->peer, p->trigger, p->trigger_len)->hashalg == 1);
+  lj_threading_detach(p->peer, 1);
+  la_store32_rel(&p->done, 1);
+  return NULL;
+}
+
+static void check_paused_topology(lua_State *L, PausedTopology *p,
+				  const char *bytes, size_t len)
+{
+  LJThr peer;
+  uint32_t i;
+  GCstr *expected;
+  const char *identity;
+  size_t observed = 0;
+  int top = lua_gettop(L);
+  lua_pushlstring(L, bytes, len);
+  expected = strV(L->top - 1);
+  identity = lua_tolstring(L, -1, NULL);
+  p->peer = lua_newthread(L);
+  p->hdr = lj_str_tabh_acq(G(L));
+  paused_topology = p;
+  lj_str_test_set_canon_hook(pause_moved_string);
+  assert(lj_thr_create(&peer, move_string_worker, p) == 0);
+  for (i = 0; i < 50000u && !la_load32_acq(&p->stopped) &&
+       !la_load32_acq(&p->done); i++)
+    test_sleep_without_tg(100000);
+  assert(la_load32_acq(&p->stopped) && !la_load32_acq(&p->done));
+  /* Run the ordinary public interner after the writer has already changed
+  ** a chain link, while its claim remains installed on the old header. */
+  lua_pushlstring(L, bytes, len);
+  assert(strV(L->top - 1) == expected);
+  assert(lua_tolstring(L, -1, &observed) == identity && observed == len);
+  assert(la_load32_acq(&p->hdr->resize) == TEST_STRTAB_RESIZE);
+  assert(!la_load32_acq(&p->done));
+  la_store32_rel(&p->release, 1);
+  assert(lj_thr_join(&peer, NULL) == 0);
+  assert(la_load32_acq(&p->done));
+  lj_str_test_set_canon_hook(NULL);
+  paused_topology = NULL;
+  lua_pushlstring(L, bytes, len);
+  assert(strV(L->top - 1) == expected);
+  lua_settop(L, top);
+}
+
+static void check_resize_hit_invalidation(lua_State *L, const char *bytes,
+					  size_t len)
+{
+  global_State *g = G(L);
+  GCstr *live, *dead;
+  LJGC2Lease lease;
+  TValue dead_value;
+  MSize only_slot;
+  MSize slot = test_hash_sparse(g->str.seed, bytes, (MSize)len) &
+	       (LJ_STR_RESIZE_HIT_COUNT - 1u);
+  char other[64];
+  uint32_t i;
+  for (i = 0;; i++) {
+    int n = snprintf(other, sizeof(other), "retired-cached-collision-%08x", i);
+    assert(n > 0 && (size_t)n < sizeof(other));
+    if ((test_hash_sparse(g->str.seed, other, (MSize)n) &
+	 (LJ_STR_RESIZE_HIT_COUNT - 1u)) == slot)
+      break;
+  }
+  dead = lj_str_new(L, other, strlen(other));
+  assert(la_loadptr_acq((void *const *)&g->str.resize_hits[slot]) == dead);
+  setgcVraw(&dead_value, obj2gco(dead), LJ_TSTR);
+  lua_pushlstring(L, bytes, len);
+  live = strV(L->top - 1);
+  assert(live != dead);
+  assert(la_loadptr_acq((void *const *)&g->str.resize_hits[slot]) == live);
+  do {
+    int n = snprintf(other, sizeof(other), "unrooted-cached-string-%08x", i++);
+    assert(n > 0 && (size_t)n < sizeof(other));
+    only_slot = test_hash_sparse(g->str.seed, other, (MSize)n) &
+		(LJ_STR_RESIZE_HIT_COUNT - 1u);
+  } while (only_slot == slot);
+  assert(lj_str_new(L, other, strlen(other)));
+  assert(la_loadptr_acq((void *const *)&g->str.resize_hits[only_slot]));
+  (void)lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(lj_gc2_tv_lease_acquire(g, &dead_value, &lease) !=
+	 LJ_GC2_TV_EDGE_VALID);
+  assert(la_loadptr_acq((void *const *)&g->str.resize_hits[only_slot]) == NULL);
+  assert(la_loadptr_acq((void *const *)&g->str.resize_hits[slot]) == live);
+  lua_pop(L, 1);
+}
+
+static void exercise_paused_topology_hits(void)
+{
+  static const char bytes[] = "string-intern-hit-during-moving-topology";
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  PausedTopology resize = { 0 };
+  assert(L != NULL);
+  g = G(L);
+  check_resize_hit_invalidation(L, bytes, sizeof(bytes)-1u);
+  (void)lua_gc(L, LUA_GCSTOP, 0);
+  resize.stage = LJ_STR_TEST_CANON_RESIZE_MOVED;
+  resize.target_mask = 4095u;
+  check_paused_topology(L, &resize, bytes, sizeof(bytes)-1u);
+  assert(lj_str_mask_acq(g) == resize.target_mask);
+
+#if LUAJIT_SECURITY_STRHASH
+  {
+    enum { CHAIN = 34u };
+    PausedTopology rehash = { 0 };
+    StrTabHdr *hdr = lj_str_tabh_acq(g);
+    char names[CHAIN + 1u][64];
+    MSize bucket, found = 0;
+    uint32_t n;
+    for (bucket = 0; bucket <= hdr->mask; bucket++)
+      if (lj_str_ref_load_acq(&hdr->bucket[bucket]) == 0)
+	break;
+    assert(bucket <= hdr->mask);
+    for (n = 0; found <= CHAIN; n++) {
+      int len = snprintf(names[found], sizeof(names[found]),
+			 "paused-secondary-rehash-%08x", n);
+      assert(len > 0 && (size_t)len < sizeof(names[found]));
+      if ((test_hash_sparse(g->str.seed, names[found], (MSize)len) &
+	   hdr->mask) == bucket)
+	found++;
+    }
+    assert(lj_str_sweep_claim(L, hdr));
+    for (n = 0; n < CHAIN; n++)
+      assert(lj_str_new(L, names[n], strlen(names[n]))->hashalg == 0);
+    lj_str_sweep_release(hdr);
+    rehash.stage = LJ_STR_TEST_CANON_REHASH_MOVED;
+    rehash.trigger = names[CHAIN];
+    rehash.trigger_len = strlen(names[CHAIN]);
+    check_paused_topology(L, &rehash, names[CHAIN - 1u],
+			  strlen(names[CHAIN - 1u]));
+    assert(lj_str_second_acq(g));
+  }
+#endif
+  lua_close(L);
+}
+
 static void exercise_canonical_layout(lua_State *L)
 {
   global_State *g = G(L);
@@ -1097,6 +1267,7 @@ int main(void)
   exercise_canonical_quarantine(L);
 
   lua_close(L);
+  exercise_paused_topology_hits();
 #if LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   printf("t-strtab-cas OK: tagged-link rescue/prepend races, color-independent secondary rehash, canonical layout, Q-publish/resize and unlink/qcount identity races, saturating Q presence, nonwaiting resize claims with registered and TLS-only pins, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified (custom-allocator resize OOM injection skipped by the temporary internal-allocator-only policy)\n");
 #else

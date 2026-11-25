@@ -601,7 +601,7 @@ static LJ_AINLINE void strtab_leave(lua_State *L, StrTabHdr *hdr)
   strtab_active_leave(L2TG(L), hdr);
 }
 
-static StrTabHdr *strtab_enter(lua_State *L, global_State *g)
+static StrTabHdr *strtab_enter(lua_State *L, global_State *g, int *blocked)
 {
   TGState *tg = L2TG(L);
   for (;;) {
@@ -614,8 +614,8 @@ static StrTabHdr *strtab_enter(lua_State *L, global_State *g)
       return hdr;
     }
     if (strtab_resizing(hdr)) {
-      strtab_wait(L);
-      continue;
+      *blocked = 1;
+      return NULL;
     }
     strtab_active_enter(tg, hdr);  /* 06 section 6.5 RCU header pin. */
     /* Order pin publication before checking the destructive topology claim. */
@@ -740,6 +740,9 @@ restart:
       lj_str_next_store_rel(o, u);
       lj_str_bucket_store_rel(&newtab[hash], o, dead);
 #endif
+#ifdef LJ_STR_TEST_HELPERS
+      str_test_canon(L, s, NULL, LJ_STR_TEST_CANON_RESIZE_MOVED);
+#endif
       oldlink = nextlink;
     }
   }
@@ -842,6 +845,9 @@ static LJ_NOINLINE int lj_str_rehash_chain(lua_State *L, StrHash hashc)
     lj_str_next_store_rel(o, u);
     lj_str_bucket_store_rel(&strtab[hash], o,
 			    (u & LJ_STRHASH_SECONDARY) | dead);
+#ifdef LJ_STR_TEST_HELPERS
+    str_test_canon(L, s, NULL, LJ_STR_TEST_CANON_REHASH_MOVED);
+#endif
     oldlink = nextlink;
   }
   strtab_release(hdr);
@@ -1040,6 +1046,44 @@ static GCstr *strcanon_lookup(lua_State *L, const char *str, MSize len,
   return found;
 }
 
+static LJ_AINLINE GCstr **strtab_resize_hit_slot(global_State *g, StrHash hash)
+{
+  return &g->str.resize_hits[hash & (LJ_STR_RESIZE_HIT_COUNT - 1u)];
+}
+
+/* Destructive owners only rewrite topology and derived hashes. An already
+** published canonical hit has immutable bytes independent of those fields.
+** The cache edge is invalidated before destruction. An exact body lease
+** followed by edge revalidation admits only the currently cached incarnation,
+** even if the address was reused between the first load and admission.
+** A cache miss cannot prove that the canonical body is absent. */
+static GCstr *strtab_resize_hit(lua_State *L, const char *str, MSize len,
+			       StrHash hash)
+{
+  global_State *g = G(L);
+  GCstr **slot = strtab_resize_hit_slot(g, hash);
+  GCstr *s, *found = NULL;
+  LJGC2Lease lease;
+  TValue value;
+  /* Use the alternate lookup only while the live-peer predicate itself
+  ** excludes the existing sole-body retirement path. */
+  if (mt_live_acq(g) == 0 || lj_str_reclaim_exclusive_acq(g) != 0)
+    return NULL;
+  s = (GCstr *)la_loadptr_acq((void *const *)slot);
+  if (!s)
+    return NULL;
+  setgcVraw(&value, obj2gco(s), LJ_TSTR);
+  if (lj_gc2_tv_lease_acquire(g, &value, &lease) != LJ_GC2_TV_EDGE_VALID)
+    return NULL;
+  if (la_loadptr_acq((void *const *)slot) == s && s->len == len &&
+      memcmp(str, strdata(s), len) == 0 && lj_str_gc2_rescue_held(s, NULL)) {
+    strtab_mark_before_publish(g, obj2gco(s));
+    found = s;
+  }
+  lj_gc2_lease_release(&lease);
+  return found;
+}
+
 /* Intern a string and return string object. */
 GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
 {
@@ -1053,7 +1097,8 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
     int skip_rehash = 0;
 #endif
     for (;;) {
-      StrTabHdr *hdr = strtab_enter(L, g);
+      int blocked = 0;
+      StrTabHdr *hdr = strtab_enter(L, g, &blocked);
       GCRef *strtab;
       GCRef *head, *link;
       GCobj *o;
@@ -1062,6 +1107,16 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
       uintptr_t want;
       int grow, qretry;
       if (LJ_UNLIKELY(hdr == NULL)) {
+	if (blocked) {
+	  GCstr *hit = strtab_resize_hit(L, str, len, qhash);
+	  if (hit) {
+	    if (news)
+	      lj_mem_free(g, news, lj_str_size(news->len));
+	    return hit;
+	  }
+	  strtab_wait(L);
+	  continue;
+	}
 	if (news)
 	  lj_mem_free(g, news, lj_str_size(news->len));
 	hash = hash_sparse(g->str.seed, str, len);
@@ -1159,6 +1214,7 @@ lookup:
       u = headu;
       if (!lj_str_link_cas_acqrel(head, &u, want))  /* Intern linearization. */
 	goto retry_lookup;
+      la_storeptr_rel((void **)strtab_resize_hit_slot(g, qhash), news);
       grow = strnum_publish_success(g, L2TG(L), mask);
       strtab_leave(L, hdr);
       if (grow)
@@ -1194,6 +1250,14 @@ void lj_str_free_commit(global_State *g, GCstr *s, LJGCDestructCtx *dctx)
     abort();
   }
   size = dctx->size;
+  /* Stop nonowning resize lookups before clearing the registered body. A
+  ** colliding cache publication names a different body and is left alone. */
+  if (gct == (uint8_t)~LJ_TSTR && s->len != 0) {
+    StrHash hash = hash_sparse(g->str.seed, strdata(s), s->len);
+    void *expected = s;
+    (void)la_casptr((void **)strtab_resize_hit_slot(g, hash),
+		    &expected, NULL, LA_ACQ_REL, LA_ACQ);
+  }
   for (;;) {
     if (LJ_UNLIKELY(gct != (uint8_t)~LJ_TSTR)) {
       lj_assertG(0, "string type claim lost after destructor ownership");
