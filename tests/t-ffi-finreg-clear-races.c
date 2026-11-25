@@ -571,14 +571,17 @@ static void test_order_storage_reclaim(lua_State *L)
   }
 }
 
-static void test_prepare_nil_vs_reenable(lua_State *L)
+static void test_prepare_nil_vs_reenable(lua_State *L, int fresh)
 {
   ljt_lua_dostring(L,
     "local ffi=require('ffi')\n"
-    "prepare_cd=ffi.gc(ffi.new('int[1]', 19), function() end)\n"
-    "ffi.gc(prepare_cd, nil)\n"
+    "prepare_cd=ffi.new('int[1]', 19)\n"
     "prepare_first=function() end\n"
     "prepare_second=function() end\n");
+  if (!fresh)
+    ljt_lua_dostring(L,
+      "local ffi=require('ffi'); ffi.gc(prepare_cd, function() end); "
+      "ffi.gc(prepare_cd, nil)");
   lj_cdata_test_fin_pause_arm(LJ_CDATA_FIN_PAUSE_ENABLE_PREPARE);
   ljt_lua_dostring(L,
     "local th=require('threading')\n"
@@ -703,7 +706,8 @@ int main(void)
   test_enable_order_vs_clear(L);
   test_clear_miss_vs_enable(L);
   test_clear_nil_vs_reenable(L);
-  test_prepare_nil_vs_reenable(L);
+  test_prepare_nil_vs_reenable(L, 0);
+  test_prepare_nil_vs_reenable(L, 1);
   test_queued_delivery_vs_suspended_rearm(L);
   test_nested_finalizer_collect(L);
   test_rearm_after_callback(L);

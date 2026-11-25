@@ -696,15 +696,36 @@ static int cdata_fin_clear_claimed(lua_State *L, global_State *g,
   return 1;
 }
 
+static int cdata_fin_finish_prepare(lua_State *L, CTState *cts,
+                                    CTypeFinLease *lease, cTValue *key,
+                                    TValue *old, cTValue *ready,
+                                    FinRegOrderNode **ordp, int *prepared)
+{
+  TValue observed, exclusive;
+  if (!lj_cdata_fin_isready(ready))
+    return LJ_CTYPE_FIN_FOUND;
+  if (lj_tab_read_current_keyed(cts->g, lease->tab, lease->slot, key, &observed) !=
+      LJ_TAB_STORE_CAS_OK || tv_rawload(&observed) != tv_rawload(ready)) {
+    (void)cdata_fin_ready_store(lease->slot, ready, old);
+    return LJ_CTYPE_FIN_RETRY;
+  }
+  cdata_fin_test_pause(LJ_CDATA_FIN_PAUSE_ENABLE_PREPARE);
+  cdata_fin_weak_key_barrier_claimed(L, cts->g, lease, key, old, ready, ordp);
+  cdata_fin_setclaim(&exclusive);
+  if (!cdata_fin_ready_store(lease->slot, ready, &exclusive))
+    return LJ_CTYPE_FIN_RETRY;
+  *prepared = 1;
+  return LJ_CTYPE_FIN_FOUND;
+}
+
 /* A nil value needs no rollback roots. Reserve it with an exact token a
-** contender can restore to nil while this worker prepares GC publication.
-** The opaque mutation claim is installed only when preparation has finished. */
+** contender can restore to nil while this worker prepares GC publication. */
 static int cdata_fin_claim_prepare(lua_State *L, CTState *cts,
                                    CTypeFinLease *lease, cTValue *key,
                                    TValue *old, FinRegOrderNode **ordp,
                                    int *prepared)
 {
-  TValue ready, expect, exclusive;
+  TValue ready, expect;
   if (lj_tab_read_current_keyed(cts->g, lease->tab, lease->slot, key, old) !=
       LJ_TAB_STORE_CAS_OK)
     return LJ_CTYPE_FIN_RETRY;
@@ -713,19 +734,29 @@ static int cdata_fin_claim_prepare(lua_State *L, CTState *cts,
   expect = *old;
   if (!lj_tv_cas(lease->slot, &expect, &ready))
     return LJ_CTYPE_FIN_RETRY;
-  if (lj_tab_read_current_keyed(cts->g, lease->tab, lease->slot, key, &expect) !=
-      LJ_TAB_STORE_CAS_OK || tv_rawload(&expect) != tv_rawload(&ready)) {
-    (void)cdata_fin_ready_store(lease->slot, &ready, old);
-    return LJ_CTYPE_FIN_RETRY;
-  }
+  return cdata_fin_finish_prepare(L, cts, lease, key, old, &ready, ordp,
+                                  prepared);
+}
 
-  cdata_fin_test_pause(LJ_CDATA_FIN_PAUSE_ENABLE_PREPARE);
-  cdata_fin_weak_key_barrier_claimed(L, cts->g, lease, key, old, &ready, ordp);
-  cdata_fin_setclaim(&exclusive);
-  if (!cdata_fin_ready_store(lease->slot, &ready, &exclusive))
-    return LJ_CTYPE_FIN_RETRY;
-  *prepared = 1;
-  return LJ_CTYPE_FIN_FOUND;
+static int cdata_fin_store_enabled_new(lua_State *L, CTState *cts,
+                                       CTypeFinLease *lease, GCcdata *cd,
+                                       cTValue *key, TValue *val, TValue *nilv,
+                                       cTValue *claim, FinRegOrderNode **ordp)
+{
+  int prepared = 0;
+  if (!fin_gen_tab_enabled_acq(lease->tab)) {
+    if (lj_cdata_fin_isready(claim))
+      (void)cdata_fin_ready_store(lease->slot, claim, nilv);
+    else
+      cdata_fin_store_exact_or_abort(cts->g, lease, key, nilv,
+                                    "disabled FINREG new slot lost claim");
+  } else if (cdata_fin_finish_prepare(L, cts, lease, key, nilv, claim, ordp,
+                                      &prepared) == LJ_CTYPE_FIN_FOUND) {
+    return cdata_fin_store_enabled(L, cts->g, cts, lease, cd, key, val, nilv,
+                                   prepared, ordp);
+  }
+  lj_ctype_fin_lease_release(lease);
+  return 0;
 }
 
 static int cdata_fin_lookup(lua_State *L, CTState *cts, TValue *key,
@@ -817,21 +848,16 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 	if (!fin_gen_tab_enabled_acq(held.tab)) {
 	  lj_ctype_fin_lease_release(&held);
 	} else {
-	  cdata_fin_setclaim(&claim);
+	  if (!cdata_fin_ready_token(cts, &claim, 0))
+	    cdata_fin_setclaim(&claim);
 	  setnilV(&old);
 	  rc = cdata_fin_try_anchor(L, cts, &held, &key, &claim);
 	  if (rc == LJ_CTYPE_FIN_FOUND) {
-	    if (!fin_gen_tab_enabled_acq(held.tab)) {
-	      cdata_fin_store_exact_or_abort(
-		g, &held, &key, &old,
-		"disabled FINREG anchor lost exact slot claim");
-	      lj_ctype_fin_lease_release(&held);
-	      continue;
-	    }
-	    (void)cdata_fin_store_enabled(L, g, cts, &held, cd, &key,
-					   &val, &old, 0, &ord);
-	    goto done;
-	  }
+            if (cdata_fin_store_enabled_new(L, cts, &held, cd, &key, &val,
+                                           &old, &claim, &ord))
+              goto done;
+            continue;
+          }
 	  lj_ctype_fin_lease_release(&held);
 	  if (rc == LJ_CTYPE_FIN_ERROR) {
 	    cdata_fin_claim_wait(L);
@@ -843,20 +869,15 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 	  }
 	}
       }
-      cdata_fin_setclaim(&claim);
+      if (!cdata_fin_ready_token(cts, &claim, 0))
+        cdata_fin_setclaim(&claim);
       setnilV(&old);
       switch (lj_ctype_fin_newgen(L, cts, &key, &claim, &held)) {
       case 1:
-	if (!fin_gen_tab_enabled_acq(held.tab)) {
-	  cdata_fin_store_exact_or_abort(
-	    g, &held, &key, &old,
-	    "disabled fresh FINREG generation lost exact slot claim");
-	  lj_ctype_fin_lease_release(&held);
-	  continue;
-	}
-	(void)cdata_fin_store_enabled(L, g, cts, &held, cd, &key, &val,
-                                      &old, 0, &ord);
-	goto done;
+        if (cdata_fin_store_enabled_new(L, cts, &held, cd, &key, &val,
+                                       &old, &claim, &ord))
+          goto done;
+        continue;
       case -1:
 	continue;  /* Racing generation already has this cdata key. */
       case LJ_CTYPE_FIN_ERROR:
