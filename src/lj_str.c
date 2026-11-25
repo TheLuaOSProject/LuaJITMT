@@ -1041,6 +1041,51 @@ static LJ_AINLINE void strtab_mark_before_publish(global_State *g, GCobj *o)
     (void)lj_gc2_preserve_sweep_root(g, o);
 }
 
+/* The hazard is visible to string retirement even while generic SMR rejects
+** lookups. A source pointer is only a scalar until the caller revalidates its
+** strong edge. Do not publish it as a semantic root before that recheck. */
+TGState *lj_str_source_pin(lua_State *L, GCstr *s)
+{
+  global_State *g = G(L);
+  TGState *tg = lj_thr_get_tg_fallback(g);
+  if (!tg || la_loadptr_acq((void *const *)&tg->str_source_pin))
+    return NULL;
+  if (tg != g->main_tg) {
+    LJTGSlotSnap snap;
+    if (lj_tgregistry_key_snapshot(&tg->registry_key, &snap) !=
+	LJ_TGSLOT_OK || snap.state != LJ_TGSLOT_LIVE)
+      return NULL;
+  }
+  la_storeptr_rel((void **)&tg->str_source_pin, s);
+  la_fence_seq();
+  return tg;
+}
+
+void lj_str_source_unpin(TGState *tg)
+{
+  la_storeptr_rel((void **)&tg->str_source_pin, NULL);
+}
+
+static int str_source_pinned(global_State *g, GCstr *s)
+{
+  TGState *tg;
+  /* Pairs with the reader's pre-validation fence. A reader may only accept
+  ** an exact source edge; retirement may only destroy a body whose strong
+  ** edges have already been closed. */
+  la_fence_seq();
+  if (la_loadptr_acq((void *const *)&g->main_tg->str_source_pin) == s)
+    return 1;
+  for (tg = gc2_tg_list_acq(g); tg != NULL;) {
+    TGState *next = lj_tg_next_acq(tg);
+    if (la_loadptr_acq((void *const *)&tg->str_source_pin) == s)
+      return 1;
+    if (next == tg)
+      break;
+    tg = next;
+  }
+  return 0;
+}
+
 /* The caller retains the exact body across this arbitration. Directory
 ** readers also bind the reservation they observed; a strong semantic edge
 ** can rescue whichever record still owns the exact retained body. */
@@ -2361,6 +2406,7 @@ static int strq_retire_record(global_State *g, StrCanonRec *rec,
         uint64_t close = la_load64_acq(&rec->close_epoch);
         if (canon != lj_str_canon_pack(rec, LJ_STR_CANON_QCLOSING) ||
             !str_retire_grace(completed, close) ||
+            str_source_pinned(g, s) ||
             (mainhdr && strtab_active_on_hdr_before(g, mainhdr, close)) ||
             !lj_str_canon_cas(s, &canon, committed))
           return 0;
@@ -2392,7 +2438,8 @@ static int strq_retire_record(global_State *g, StrCanonRec *rec,
     return 0;
   if (owns_body) {
     LJGCDestructCtx dctx;
-    if ((mainhdr && strtab_active_on_hdr_before(g, mainhdr,
+    if (str_source_pinned(g, s) ||
+        (mainhdr && strtab_active_on_hdr_before(g, mainhdr,
                          la_load64_acq(&rec->q_unlink_epoch))) ||
         str_free_prepare_impl(g, s, &dctx, 1) != LJ_GC_DESTRUCT_ACQUIRED)
       return 0;

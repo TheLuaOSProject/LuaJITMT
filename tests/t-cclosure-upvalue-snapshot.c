@@ -10,6 +10,10 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
+#ifdef LJ_GC2_TEST_HELPERS
+#include "lj_gc2.h"
+#endif
+
 static void check_lua(lua_State *L, int status, const char *what)
 {
   if (status != LUA_OK) {
@@ -158,17 +162,26 @@ static int number_reader_c(lua_State *L)
   size_t len = 0;
   const char *s;
   int uv = lua_upvalueindex(1);
+  int type = lua_type(L, uv);
+#ifdef LJ_GC2_TEST_HELPERS
+  global_State *g = G(L);
+  uint32_t mode = LJ_GC2_SMR_OPEN;
+#endif
 
-  assert(lua_type(L, uv) == LUA_TNUMBER);
+  assert(type == LUA_TNUMBER || type == LUA_TSTRING);
+#ifdef LJ_GC2_TEST_HELPERS
+  if (type == LUA_TSTRING)
+    assert(gc2_smr_reclaiming_cas(g, &mode, LJ_GC2_SMR_META_EXCLUSIVE));
+#endif
   assert(lua_isnumber(L, uv));
   assert(lua_isstring(L, uv));
   assert(!lua_iscfunction(L, uv));
   assert(!lua_isnil(L, uv));
   assert(!lua_isnone(L, uv));
   assert(!lua_isnoneornil(L, uv));
-  assert(strcmp(lua_typename(L, lua_type(L, uv)), "number") == 0);
-  assert(strcmp(luaL_typename(L, uv), "number") == 0);
-  luaL_checktype(L, uv, LUA_TNUMBER);
+  assert(strcmp(lua_typename(L, type), type == LUA_TNUMBER ? "number" : "string") == 0);
+  assert(strcmp(luaL_typename(L, uv), type == LUA_TNUMBER ? "number" : "string") == 0);
+  luaL_checktype(L, uv, type);
   luaL_checkany(L, uv);
   assert(lua_toboolean(L, uv));
   assert((int)lua_tonumber(L, uv) == 123);
@@ -182,6 +195,12 @@ static int number_reader_c(lua_State *L)
 
   s = lua_tolstring(L, uv, &len);
   assert(s != NULL && len == 3 && strcmp(s, "123") == 0);
+#ifdef LJ_GC2_TEST_HELPERS
+  if (type == LUA_TSTRING) {
+    assert(gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_META_EXCLUSIVE);
+    gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
+  }
+#endif
   assert(lua_type(L, uv) == LUA_TSTRING);
   lua_pushvalue(L, uv);
   return 1;
@@ -470,6 +489,12 @@ static void exercise_number_readers(lua_State *L)
   lua_pushinteger(L, 123);
   lua_pushcclosure(L, number_reader_c, 1);
   check_lua(L, lua_pcall(L, 0, 1, 0), "number reader");
+  assert_string(L, -1, "123");
+  lua_pop(L, 1);
+
+  lua_pushliteral(L, "123");
+  lua_pushcclosure(L, number_reader_c, 1);
+  check_lua(L, lua_pcall(L, 0, 1, 0), "numeric string reader");
   assert_string(L, -1, "123");
   lua_pop(L, 1);
 

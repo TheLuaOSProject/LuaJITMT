@@ -110,6 +110,7 @@ int main(void)
   global_State *g;
   GCstr *old, *borrowed;
   StrCanonRec *rec;
+  TGState *read_tg;
   Peer peer = {0};
   LJThr thread;
   assert(L);
@@ -150,8 +151,16 @@ int main(void)
   assert(peer.replacement != strdata(old));
   lua_pushlstring(L, target_name, sizeof(target_name)-1);
   assert(lua_tolstring(L, -1, NULL) == peer.replacement);
+  /* A C source reader may still hold an exact pre-commit pointer.
+  ** Its read scope must veto reuse even after both grace periods. */
+  read_tg = lj_str_source_pin(L, old);
+  assert(read_tg);
   assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  advance_grace(g);
+  assert(lj_gc2_mem_registered_known(g, old));
+  assert(lj_gc2_mem_registered_known(g, rec));
+  lj_str_source_unpin(read_tg);
   advance_grace(g);
   assert(!lj_gc2_mem_registered_known(g, old));
   assert(!lj_gc2_mem_registered_known(g, rec));

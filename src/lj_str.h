@@ -726,6 +726,11 @@ LJ_FUNC uint32_t lj_str_reclaim_retired(global_State *g,
 					uint64_t completed_epoch);
 /* Exact-body lifetime is a caller obligation. A non-NULL record also
 ** binds a quarantine lookup to that directory reservation. */
+/* Publish before accepting a sampled strong edge at a retained location.
+** Revalidate the edge before accessing the string. Release the pin after
+** the final read and before invoking any callback or leaving the actor. */
+LJ_FUNC TGState *lj_str_source_pin(lua_State *L, GCstr *s);
+LJ_FUNC void lj_str_source_unpin(TGState *tg);
 LJ_FUNC int lj_str_gc2_rescue_held(GCstr *s, StrCanonRec *expected);
 LJ_FUNC void lj_str_gc2_reclaim_request(global_State *g);
 LJ_FUNC void lj_str_gc2_reclaim_cancel(global_State *g);

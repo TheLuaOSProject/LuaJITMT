@@ -136,6 +136,16 @@ static int push_checked_upvalue_seq(lua_State *L)
   return 1;
 }
 
+static void assert_numeric_upvalue(lua_State *L)
+{
+  int uv = lua_upvalueindex(2), ok;
+  lua_Number number = lua_tonumberx(L, uv, &ok);
+  lua_Integer integer;
+  assert(ok && (number == 11 || number == 29));
+  integer = lua_tointegerx(L, uv, &ok);
+  assert(ok && (integer == 11 || integer == 29));
+}
+
 static int upvalue_actor_c(lua_State *L)
 {
   int narg = lua_gettop(L);
@@ -150,6 +160,7 @@ static int upvalue_actor_c(lua_State *L)
     }
     lua_settop(L, 0);
   }
+  assert_numeric_upvalue(L);
   return push_checked_upvalue_seq(L);
 }
 
@@ -180,6 +191,8 @@ static void *writer_main(void *arg)
     const char *name;
     int mode = i % 3;
 
+    lua_pushstring(L, (i & 1) ? "11" : "29");
+    assert(lua_setupvalue(L, 1, 2) != NULL);
     push_payload(L, i);
     if (mode == 0) {
       name = lua_setupvalue(L, 1, 1);
@@ -315,7 +328,8 @@ int main(void)
   assert(L != NULL);
   luaL_openlibs(L);
   push_payload(L, 0);
-  lua_pushcclosure(L, upvalue_actor_c, 1);
+  lua_pushliteral(L, "11");
+  lua_pushcclosure(L, upvalue_actor_c, 2);
   assert(lua_gettop(L) == 1);
 
   memset(&writer, 0, sizeof(writer));

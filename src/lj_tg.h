@@ -316,6 +316,7 @@ struct TGState {
   uint32_t profile_samples;
   int32_t profile_vmstate;
   uint32_t in_native;
+  GCstr *str_source_pin;  /* Revalidated shared C API source. */
   StrTabHdr *strtab_active_hdr;
   uint32_t strtab_active_depth;
   uint64_t strtab_active_epoch;  /* GC2 epoch of outermost table read pin. */

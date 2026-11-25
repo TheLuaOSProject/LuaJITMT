@@ -521,53 +521,118 @@ typedef struct ApiStringView {
   size_t len;
 } ApiStringView;
 
-static LJ_AINLINE int api_string_view_held(ApiStringView *view, GCstr *str)
+static LJ_AINLINE int api_string_rescue_held(GCstr *str)
 {
-  if (lj_str_canon_acq(str) != LJ_STR_CANON_LIVE &&
-      !lj_str_gc2_rescue_held(str, NULL))
-    return 0;
-  view->bytes = strdata(str);
-  view->len = str->len;
-  return 1;
+  return lj_str_canon_acq(str) == LJ_STR_CANON_LIVE ||
+    lj_str_gc2_rescue_held(str, NULL);
 }
 
-/* An owned stack slot retains its string while the claim is held. For shared
-** pseudo-indices, acquire SMR before sampling the mutable slot, retain the
-** exact string incarnation, and recheck the source before reading its header.
-** The returned bytes borrow the object's storage. The caller retains the
-** source Lua value for any use after this API call. */
+static LJ_AINLINE void api_string_view(ApiStringView *view, GCstr *str)
+{
+  view->bytes = strdata(str);
+  view->len = str->len;
+}
+
+typedef struct ApiStringRead {
+  TGState *tg;
+  LJGC2Lease lease;
+  int leased;
+} ApiStringRead;
+
+static LJ_AINLINE void api_string_read_release(ApiStringRead *read)
+{
+  if (read->tg)
+    lj_str_source_unpin(read->tg);
+  else if (read->leased)
+    lj_gc2_lease_release(&read->lease);
+}
+
+/* A claimed stack slot retains its body. A shared strong source needs a
+** separate read scope before revalidation. Scalar copies need no arena read. */
+static TValue *api_string_read_claimed(lua_State *L, int idx, TValue *snap,
+				       ApiStringRead *read)
+{
+  TValue *o;
+  read->tg = NULL;
+  read->leased = 0;
+  if (idx != LUA_REGISTRYINDEX && !index_iscupvalue(idx)) {
+    o = index2adr_read(L, idx, snap);
+  } else {
+    global_State *g = G(L);
+    o = index2adr(L, idx);
+    lj_tv_load_acq(snap, o);
+    if (!tvisstr(snap))
+      return snap;
+    read->tg = lj_str_source_pin(L, (GCstr *)(void *)gcval(snap));
+    if (!read->tg) {
+      /* Unregistered bootstrap/embedding paths lack an enumerable
+      ** per-actor slot. Transfer ordinary SMR to a counted body lease. */
+      if (!lj_gc2_smr_read_try(g))
+	return NULL;
+      lj_tv_load_acq(snap, o);
+      if (tvisstr(snap)) {
+	if (lj_gc2_tv_lease_acquire(g, snap, &read->lease) !=
+	      LJ_GC2_TV_EDGE_VALID) {
+	  lj_gc2_smr_read_leave(g);
+	  return NULL;
+	}
+	read->leased = 1;
+      }
+      lj_gc2_smr_read_leave(g);
+    }
+    if (tv_rawload_acq(o) != tv_rawload(snap)) {
+      api_string_read_release(read);
+      return NULL;
+    }
+    o = snap;
+  }
+  if (tvisstr(o) && !api_string_rescue_held(strV(o))) {
+    api_string_read_release(read);
+    return NULL;
+  }
+  return o;
+}
+
+/* The caller retains the source Lua value while borrowing returned bytes. */
 static TValue *api_tolstring_read_claimed(lua_State *L, int idx, TValue *snap,
 					 ApiStringView *view)
 {
-  global_State *g;
-  TValue *o;
-  if (idx != LUA_REGISTRYINDEX && !index_iscupvalue(idx)) {
-    o = index2adr_read(L, idx, snap);
-    if (tvisstr(o) && !api_string_view_held(view, strV(o)))
-      return NULL;
-    return o;
+  ApiStringRead read;
+  TValue *o = api_string_read_claimed(L, idx, snap, &read);
+  if (o) {
+    if (tvisstr(o))
+      api_string_view(view, strV(o));
+    api_string_read_release(&read);
   }
-  g = G(L);
-  if (!lj_gc2_smr_read_try(g))
-    return NULL;
-  o = index2adr(L, idx);
-  lj_tv_load_acq(snap, o);
-  if (tvisstr(snap)) {
-    LJGC2Lease lease;
-    if (lj_gc2_tv_lease_acquire(g, snap, &lease) != LJ_GC2_TV_EDGE_VALID) {
-      lj_gc2_smr_read_leave(g);
-      return NULL;
+  return o;
+}
+
+/* Parse while the exact allocation is retained. Only scalar results escape
+** the claim, so retrying a changing shared source can never expose old bytes. */
+static void api_numeric_read(lua_State *L, int idx, TValue *out, int integer)
+{
+  for (;;) {
+    LJStateClaim claim;
+    ApiStringRead read;
+    TValue snap;
+    const TValue *o;
+    api_checkclaim(L, &claim);
+    o = api_string_read_claimed(L, idx, &snap, &read);
+    if (LJ_LIKELY(o != NULL)) {
+      if (tvisnumber(o) || tvisnil(o)) {
+	copyTV(L, out, o);
+      } else if (!tvisstr(o) ||
+	  !(integer ? lj_strscan_number(strV(o), out) :
+		      lj_strscan_num(strV(o), out))) {
+	setboolV(out, 0);
+      }
+      api_string_read_release(&read);
+      lj_state_dropclaim(&claim);
+      return;
     }
-    if (tv_rawload_acq(o) != tv_rawload(snap) ||
-	!api_string_view_held(view, strV(snap))) {
-      lj_gc2_lease_release(&lease);
-      lj_gc2_smr_read_leave(g);
-      return NULL;
-    }
-    lj_gc2_lease_release(&lease);
+    lj_state_dropclaim(&claim);
+    lj_tab_wait_l(api_errstate(L));
   }
-  lj_gc2_smr_read_leave(g);
-  return snap;
 }
 
 static int index2adr_storestr_noflush(lua_State *L, int idx, TValue *o,
@@ -653,8 +718,9 @@ static int api_tolstring_claimed(lua_State *L, int idx, ApiStringView *view)
 	  api_trace_flush_mutation(api_errstate(L));
 	  continue;
 	}
-	if (api_string_view_held(view, s) &&
+	if (api_string_rescue_held(s) &&
 	    index2adr_storestr_noflush(L, idx, o, &numtv, s)) {
+	  api_string_view(view, s);
 	  lj_state_dropclaim(&claim);
 	  api_gcroot_release(&root);
 	  return API_TOSTR_OK;
@@ -1335,16 +1401,9 @@ LUA_API int lua_iscfunction(lua_State *L, int idx)
 
 LUA_API int lua_isnumber(lua_State *L, int idx)
 {
-  LJStateClaim claim;
-  TValue snap;
-  cTValue *o;
-  TValue tmp;
-  int ok;
-  api_checkclaim(L, &claim);
-  o = index2adr_read(L, idx, &snap);
-  ok = (tvisnumber(o) || (tvisstr(o) && lj_strscan_number(strV(o), &tmp)));
-  lj_state_dropclaim(&claim);
-  return ok;
+  TValue number;
+  api_numeric_read(L, idx, &number, 1);
+  return tvisnumber(&number);
 }
 
 LUA_API int lua_isstring(lua_State *L, int idx)
@@ -1576,230 +1635,79 @@ LUA_API int lua_lessthan(lua_State *L, int idx1, int idx2)
   return ctx.ok;
 }
 
-LUA_API lua_Number lua_tonumber(lua_State *L, int idx)
-{
-  LJStateClaim claim;
-  TValue snap;
-  cTValue *o;
-  TValue tmp;
-  lua_Number n;
-  api_checkclaim(L, &claim);
-  o = index2adr_read(L, idx, &snap);
-  if (LJ_LIKELY(tvisnumber(o)))
-    n = numberVnum(o);
-  else if (tvisstr(o) && lj_strscan_num(strV(o), &tmp))
-    n = numV(&tmp);
-  else
-    n = 0;
-  lj_state_dropclaim(&claim);
-  return n;
-}
-
 LUA_API lua_Number lua_tonumberx(lua_State *L, int idx, int *ok)
 {
-  LJStateClaim claim;
-  TValue snap;
-  cTValue *o;
-  TValue tmp;
-  lua_Number n;
+  TValue number;
   int isnum;
-  api_checkclaim(L, &claim);
-  o = index2adr_read(L, idx, &snap);
-  if (LJ_LIKELY(tvisnumber(o))) {
-    isnum = 1;
-    n = numberVnum(o);
-  } else if (tvisstr(o) && lj_strscan_num(strV(o), &tmp)) {
-    isnum = 1;
-    n = numV(&tmp);
-  } else {
-    isnum = 0;
-    n = 0;
-  }
-  lj_state_dropclaim(&claim);
+  api_numeric_read(L, idx, &number, 0);
+  isnum = tvisnumber(&number);
   if (ok) *ok = isnum;
-  return n;
+  return isnum ? numberVnum(&number) : 0;
+}
+
+LUA_API lua_Number lua_tonumber(lua_State *L, int idx)
+{
+  return lua_tonumberx(L, idx, NULL);
 }
 
 LUALIB_API lua_Number luaL_checknumber(lua_State *L, int idx)
 {
-  LJStateClaim claim;
-  TValue snap;
-  cTValue *o;
-  TValue tmp;
-  lua_Number n = 0;
-  int ok;
-  api_checkclaim(L, &claim);
-  o = index2adr_read(L, idx, &snap);
-  if (LJ_LIKELY(tvisnumber(o))) {
-    ok = 1;
-    n = numberVnum(o);
-  } else if (tvisstr(o) && lj_strscan_num(strV(o), &tmp)) {
-    ok = 1;
-    n = numV(&tmp);
-  } else {
-    ok = 0;
-  }
-  lj_state_dropclaim(&claim);
-  if (!ok)
+  TValue number;
+  api_numeric_read(L, idx, &number, 0);
+  if (!tvisnumber(&number))
     lj_err_argt(L, idx, LUA_TNUMBER);
-  return n;
+  return numberVnum(&number);
 }
 
 LUALIB_API lua_Number luaL_optnumber(lua_State *L, int idx, lua_Number def)
 {
-  LJStateClaim claim;
-  TValue snap;
-  cTValue *o;
-  TValue tmp;
-  lua_Number n = 0;
-  int ok;
-  api_checkclaim(L, &claim);
-  o = index2adr_read(L, idx, &snap);
-  if (LJ_LIKELY(tvisnumber(o))) {
-    ok = 1;
-    n = numberVnum(o);
-  } else if (tvisnil(o)) {
-    ok = 1;
-    n = def;
-  } else if (tvisstr(o) && lj_strscan_num(strV(o), &tmp)) {
-    ok = 1;
-    n = numV(&tmp);
-  } else {
-    ok = 0;
-  }
-  lj_state_dropclaim(&claim);
-  if (!ok)
+  TValue number;
+  api_numeric_read(L, idx, &number, 0);
+  if (tvisnil(&number))
+    return def;
+  if (!tvisnumber(&number))
     lj_err_argt(L, idx, LUA_TNUMBER);
-  return n;
+  return numberVnum(&number);
 }
 
-LUA_API lua_Integer lua_tointeger(lua_State *L, int idx)
+static LJ_AINLINE lua_Integer api_integer_value(cTValue *o)
 {
-  LJStateClaim claim;
-  TValue snap;
-  cTValue *o;
-  TValue tmp;
-  lua_Number n;
-  lua_Integer i;
-  api_checkclaim(L, &claim);
-  o = index2adr_read(L, idx, &snap);
-  if (LJ_LIKELY(tvisint(o))) {
-    i = intV(o);
-  } else if (LJ_LIKELY(tvisnum(o))) {
-    n = numV(o);
-    i = lj_num2int_type(n, lua_Integer);
-  } else {
-    if (!(tvisstr(o) && lj_strscan_number(strV(o), &tmp))) {
-      lj_state_dropclaim(&claim);
-      return 0;
-    }
-    if (tvisint(&tmp))
-      i = intV(&tmp);
-    else {
-      n = numV(&tmp);
-      i = lj_num2int_type(n, lua_Integer);
-    }
-  }
-  lj_state_dropclaim(&claim);
-  return i;
+  return tvisint(o) ? intV(o) : lj_num2int_type(numV(o), lua_Integer);
 }
 
 LUA_API lua_Integer lua_tointegerx(lua_State *L, int idx, int *ok)
 {
-  LJStateClaim claim;
-  TValue snap;
-  cTValue *o;
-  TValue tmp;
-  lua_Number n;
-  lua_Integer i;
-  int isnum = 1;
-  api_checkclaim(L, &claim);
-  o = index2adr_read(L, idx, &snap);
-  if (LJ_LIKELY(tvisint(o))) {
-    i = intV(o);
-  } else if (LJ_LIKELY(tvisnum(o))) {
-    n = numV(o);
-    i = lj_num2int_type(n, lua_Integer);
-  } else {
-    if (!(tvisstr(o) && lj_strscan_number(strV(o), &tmp))) {
-      isnum = 0;
-      i = 0;
-    } else if (tvisint(&tmp)) {
-      i = intV(&tmp);
-    } else {
-      n = numV(&tmp);
-      i = lj_num2int_type(n, lua_Integer);
-    }
-  }
-  lj_state_dropclaim(&claim);
+  TValue number;
+  int isnum;
+  api_numeric_read(L, idx, &number, 1);
+  isnum = tvisnumber(&number);
   if (ok) *ok = isnum;
-  return i;
+  return isnum ? api_integer_value(&number) : 0;
+}
+
+LUA_API lua_Integer lua_tointeger(lua_State *L, int idx)
+{
+  return lua_tointegerx(L, idx, NULL);
 }
 
 LUALIB_API lua_Integer luaL_checkinteger(lua_State *L, int idx)
 {
-  LJStateClaim claim;
-  TValue snap;
-  cTValue *o;
-  TValue tmp;
-  lua_Number n;
-  lua_Integer i = 0;
-  int ok = 1;
-  api_checkclaim(L, &claim);
-  o = index2adr_read(L, idx, &snap);
-  if (LJ_LIKELY(tvisint(o))) {
-    i = intV(o);
-  } else if (LJ_LIKELY(tvisnum(o))) {
-    n = numV(o);
-    i = lj_num2int_type(n, lua_Integer);
-  } else {
-    if (!(tvisstr(o) && lj_strscan_number(strV(o), &tmp))) {
-      ok = 0;
-    } else if (tvisint(&tmp)) {
-      i = (lua_Integer)intV(&tmp);
-    } else {
-      n = numV(&tmp);
-      i = lj_num2int_type(n, lua_Integer);
-    }
-  }
-  lj_state_dropclaim(&claim);
-  if (!ok)
+  TValue number;
+  api_numeric_read(L, idx, &number, 1);
+  if (!tvisnumber(&number))
     lj_err_argt(L, idx, LUA_TNUMBER);
-  return i;
+  return api_integer_value(&number);
 }
 
 LUALIB_API lua_Integer luaL_optinteger(lua_State *L, int idx, lua_Integer def)
 {
-  LJStateClaim claim;
-  TValue snap;
-  cTValue *o;
-  TValue tmp;
-  lua_Number n;
-  lua_Integer i = 0;
-  int ok = 1;
-  api_checkclaim(L, &claim);
-  o = index2adr_read(L, idx, &snap);
-  if (LJ_LIKELY(tvisint(o))) {
-    i = intV(o);
-  } else if (LJ_LIKELY(tvisnum(o))) {
-    n = numV(o);
-    i = lj_num2int_type(n, lua_Integer);
-  } else if (tvisnil(o)) {
-    i = def;
-  } else {
-    if (!(tvisstr(o) && lj_strscan_number(strV(o), &tmp))) {
-      ok = 0;
-    } else if (tvisint(&tmp)) {
-      i = (lua_Integer)intV(&tmp);
-    } else {
-      n = numV(&tmp);
-      i = lj_num2int_type(n, lua_Integer);
-    }
-  }
-  lj_state_dropclaim(&claim);
-  if (!ok)
+  TValue number;
+  api_numeric_read(L, idx, &number, 1);
+  if (tvisnil(&number))
+    return def;
+  if (!tvisnumber(&number))
     lj_err_argt(L, idx, LUA_TNUMBER);
-  return i;
+  return api_integer_value(&number);
 }
 
 LUA_API int lua_toboolean(lua_State *L, int idx)
