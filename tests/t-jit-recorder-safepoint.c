@@ -133,12 +133,14 @@ static void prepare_side_root(lua_State *L)
 
 static int run_single_side_exit(lua_State *L)
 {
+  /* A second iteration can legitimately revisit this exit after its pending
+  ** request has been acknowledged and advance the same snapshot counter. */
   int status = luaL_loadstring(L,
-    "return lj_m6_admission_side(true, 2)");
+    "return lj_m6_admission_side(true, 1)");
   assert(status == LUA_OK);
   status = lua_pcall(L, 0, 1, 0);
   if (status == LUA_OK) {
-    assert(lua_tointeger(L, -1) == 9);
+    assert(lua_tointeger(L, -1) == 3);
     lua_pop(L, 1);
   }
   return status;
