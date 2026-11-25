@@ -771,6 +771,7 @@ typedef struct CTState {
   CTypeID layout_top;   /* Committed ID prefix at the start of parsing. */
   uint64_t layout_version;  /* Odd during a parser transaction. */
   CTypeLayoutPage *layout_pages[CTYPE_LAYOUT_PAGES];
+  uint64_t fin_clear_id;  /* Never reused by a delayed clear helper. */
   FinRegGen *fin_head;	/* 11.4 CAS-published FINREG generation list. */
   FinRegOrderNode *fin_order_head;  /* 11.4 ordered FINREG registrations. */
   FinRegOrderNode *fin_order_retired;  /* Retired ordered FINREG nodes. */

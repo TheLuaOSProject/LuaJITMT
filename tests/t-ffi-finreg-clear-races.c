@@ -473,7 +473,6 @@ static void test_clear_nil_vs_reenable(lua_State *L)
   assert_registered(L, "cd_clear_nil", "fin_clear_nil_old");
 
   lj_cdata_test_fin_pause_arm(LJ_CDATA_FIN_PAUSE_CLEAR_BEFORE_NIL);
-  lj_cdata_test_fin_pause_arm(LJ_CDATA_FIN_PAUSE_ENABLE_RETRY);
   ljt_lua_dostring(L,
     "local th=require('threading')\n"
     "worker_clear_nil=th.spawn(function(cd)\n"
@@ -490,20 +489,19 @@ static void test_clear_nil_vs_reenable(lua_State *L)
     "  require('ffi').gc(cd, fin)\n"
     "  return true\n"
     "end, cd_clear_nil, fin_clear_nil_new)\n");
-  wait_for_pause(LJ_CDATA_FIN_PAUSE_ENABLE_RETRY);
+  /* Re-enable must finish while the old clear remains stopped. */
+  ljt_lua_dostring(L,
+    "local ok, result=worker_reenable:join(10)\n"
+    "assert(ok == true and result == true)\n"
+    "worker_reenable=nil\n");
+  assert(lj_cdata_test_fin_pause_waiting(LJ_CDATA_FIN_PAUSE_CLEAR_BEFORE_NIL));
+  assert_registered(L, "cd_clear_nil", "fin_clear_nil_new");
 
-  /* Clear owns the nil publication. Re-enable may only retry after releasing
-  ** its transient lease, so it cannot have overwritten the clear's FIN bit. */
   lj_cdata_test_fin_pause_release(LJ_CDATA_FIN_PAUSE_CLEAR_BEFORE_NIL);
   ljt_lua_dostring(L,
     "local ok, result=worker_clear_nil:join(10)\n"
     "assert(ok == true and result == true)\n"
     "worker_clear_nil=nil\n");
-  lj_cdata_test_fin_pause_release(LJ_CDATA_FIN_PAUSE_ENABLE_RETRY);
-  ljt_lua_dostring(L,
-    "local ok, result=worker_reenable:join(10)\n"
-    "assert(ok == true and result == true)\n"
-    "worker_reenable=nil\n");
 
   assert(gc2_finreg_cdata_sets_acq(g) == sets0 + 2u);
   assert(gc2_finreg_cdata_clears_acq(g) == clears0 + 1u);

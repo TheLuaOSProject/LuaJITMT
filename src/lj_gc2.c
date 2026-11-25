@@ -13399,6 +13399,11 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
     setcdataV(L, &key, gco2cd(o));
     slot_status = lj_tab_read_current_keyed(g, finlease.tab, slot, &key,
 					    &fin);
+    if (slot_status == LJ_TAB_STORE_CAS_OK &&
+        lj_cdata_fin_help_clear(slot, &fin)) {
+      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
+      continue;  /* Re-resolve this exact order node after helping. */
+    }
     if (slot_status != LJ_TAB_STORE_CAS_OK || tvisforward(&fin) ||
 	lj_cdata_fin_isclaim(&fin)) {
       gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
@@ -13601,6 +13606,11 @@ size_t lj_gc2_finreg_cdata_finalize_close(global_State *g)
     setcdataV(L, &key, gco2cd(o));
     slot_status = lj_tab_read_current_keyed(g, finlease.tab, slot, &key,
 					    &fin);
+    if (slot_status == LJ_TAB_STORE_CAS_OK &&
+        lj_cdata_fin_help_clear(slot, &fin)) {
+      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
+      continue;  /* Re-resolve this exact order node after helping. */
+    }
     if (slot_status != LJ_TAB_STORE_CAS_OK || tvisforward(&fin) ||
 	lj_cdata_fin_isclaim(&fin)) {
       gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
@@ -13758,6 +13768,11 @@ int lj_gc2_finreg_cdata_pending(global_State *g)
     setcdataV(L, &key, gco2cd(o));
     slot_status = lj_tab_read_current_keyed(g, finlease.tab, slot, &key,
 					    &fin);
+    if (slot_status == LJ_TAB_STORE_CAS_OK &&
+        lj_cdata_fin_help_clear(slot, &fin)) {
+      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
+      continue;  /* Re-resolve this exact order node after helping. */
+    }
     if (slot_status != LJ_TAB_STORE_CAS_OK || tvisforward(&fin) ||
 	lj_cdata_fin_isclaim(&fin)) {
       gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);

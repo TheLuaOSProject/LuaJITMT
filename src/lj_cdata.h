@@ -172,9 +172,37 @@ LJ_FUNC int lj_cdata_fin_isclaim(cTValue *tv);
 ** external helper remains available to cold translation units. */
 #define LJ_CDATA_FINCLAIM_U64 \
   ((((uint64_t)LJ_TLIGHTUD) << 47) | (((uint64_t)1 << 47) - 1u))
+/* Kind 7 shares the reserved internal segment with resize markers. The
+** all-ones ID remains the opaque FINCLAIM used before clear is ready. */
+#define LJ_CDATA_FIN_CLEAR_KIND 7u
+static LJ_AINLINE int lj_cdata_fin_isclear_ready(cTValue *tv)
+{
+#if LJ_64
+  uint64_t bits = tv_rawload(tv);
+  return (bits & ~LJ_LIGHTUD_INTERNAL_LO_MASK) == LJ_LIGHTUD_INTERNAL_BASE &&
+         (bits & LJ_TAB_RESIZE_MARK_KIND_MASK) == LJ_CDATA_FIN_CLEAR_KIND &&
+         bits != LJ_CDATA_FINCLAIM_U64;
+#else
+  UNUSED(tv);
+  return 0;
+#endif
+}
+
 static LJ_AINLINE int lj_cdata_fin_isclaim_inline(cTValue *tv)
 {
-  return tv_rawload(tv) == LJ_CDATA_FINCLAIM_U64;
+  return tv_rawload(tv) == LJ_CDATA_FINCLAIM_U64 ||
+         lj_cdata_fin_isclear_ready(tv);
+}
+
+static LJ_AINLINE int lj_cdata_fin_help_clear(TValue *slot, cTValue *claim)
+{
+  TValue expect = *claim;
+  TValue nilv;
+  if (!lj_cdata_fin_isclear_ready(claim))
+    return 0;
+  setnilV(&nilv);
+  (void)lj_tv_cas(slot, &expect, &nilv);
+  return 1;  /* A failed exact CAS means someone already finished this clear. */
 }
 
 #if defined(LJ_CDATA_TEST_HELPERS)

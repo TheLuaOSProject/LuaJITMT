@@ -298,9 +298,12 @@ int lj_cdata_fin_claim_held(CTypeFinLease *lease, cTValue *key, TValue *old,
   if (!lease || !lease->tab || !lease->slot || !key || !old)
     return LJ_CTYPE_FIN_RETRY;
   rc = lj_tab_read_current_keyed(lease->g, lease->tab, lease->slot, key, old);
-  if (rc != LJ_TAB_STORE_CAS_OK || tvisforward(old) ||
-      lj_cdata_fin_isclaim(old))
+  if (rc != LJ_TAB_STORE_CAS_OK || tvisforward(old))
     return LJ_CTYPE_FIN_RETRY;
+  if (lj_cdata_fin_isclaim(old)) {
+    (void)lj_cdata_fin_help_clear(lease->slot, old);
+    return LJ_CTYPE_FIN_RETRY;
+  }
   if (nonnil && tvisnil(old))
     return LJ_CTYPE_FIN_MISS;
   cdata_fin_setclaim(&claim);
@@ -329,12 +332,12 @@ int lj_cdata_fin_store_claim_held(CTypeFinLease *lease, cTValue *key,
     if (lj_tab_read_current_keyed(lease->g, lease->tab, lease->slot, key,
 				  &old) !=
 	LJ_TAB_STORE_CAS_OK || tvisforward(&old) ||
-	!lj_cdata_fin_isclaim(&old))
+	tv_rawload(&old) != LJ_CDATA_FINCLAIM_U64)
       return 0;
     expect = old;
     if (lj_tv_cas(lease->slot, &expect, src))
       return 1;
-    if (tvisforward(&expect) || !lj_cdata_fin_isclaim(&expect))
+    if (tv_rawload(&expect) != LJ_CDATA_FINCLAIM_U64)
       return 0;
   }
   return 0;
@@ -551,6 +554,23 @@ static int cdata_fin_store_enabled(lua_State *L, global_State *g,
   return 1;
 }
 
+static int cdata_fin_clear_ready(CTState *cts, TValue *ready)
+{
+#if LJ_64
+  uint64_t old = la_load64_acq(&cts->fin_clear_id);
+  while (old < LJ_TAB_RESIZE_MARK_ID_MAX - 1u) {
+    uint64_t id = old + 1;
+    if (la_cas64(&cts->fin_clear_id, &old, id, LA_RLX, LA_RLX)) {
+      tv_rawstore(ready, LJ_TAB_RESIZE_MARK_BITS(id, LJ_CDATA_FIN_CLEAR_KIND));
+      return 1;
+    }
+  }
+#else
+  UNUSED(cts); UNUSED(ready);
+#endif
+  return 0;
+}
+
 /* FINCLAIM is the clear transaction LP. No later enable can observe nil until
 ** every old ordered membership is logically retired and the old FIN bit is
 ** gone. Conversely, a transient spine scan restores the exact old value before
@@ -559,7 +579,7 @@ static int cdata_fin_clear_claimed(lua_State *L, global_State *g,
 				    CTState *cts, CTypeFinLease *lease,
 				    GCcdata *cd, cTValue *key, cTValue *old)
 {
-  TValue nilv;
+  TValue nilv, ready;
   size_t retired = 0;
   /* A previously committed clear leaves a stable nil slot with no FIN bit.
   ** Repeating ffi.gc(cd, nil) is an identity no-op, not another clear event.
@@ -587,10 +607,16 @@ static int cdata_fin_clear_claimed(lua_State *L, global_State *g,
   lj_cdata_fin_cancel_ticket(cd);
   lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
   lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
-  cdata_fin_test_pause(LJ_CDATA_FIN_PAUSE_CLEAR_BEFORE_NIL);
-  setnilV(&nilv);
-  cdata_fin_store_exact_or_abort(g, lease, key, &nilv,
-				 "FINREG clear lost exact slot claim");
+  if (cdata_fin_clear_ready(cts, &ready)) {
+    cdata_fin_store_exact_or_abort(g, lease, key, &ready,
+                                  "FINREG clear lost exact slot claim");
+    cdata_fin_test_pause(LJ_CDATA_FIN_PAUSE_CLEAR_BEFORE_NIL);
+    (void)lj_cdata_fin_help_clear(lease->slot, &ready);
+  } else {
+    setnilV(&nilv);
+    cdata_fin_store_exact_or_abort(g, lease, key, &nilv,
+                                  "FINREG clear lost exact slot claim");
+  }
   lj_gc_pubtab(L, lease->tab);
   lj_ctype_fin_lease_release(lease);
   return 1;
