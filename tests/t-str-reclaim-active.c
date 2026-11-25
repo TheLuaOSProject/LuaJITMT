@@ -195,8 +195,62 @@ static void run_reclamation(int use_jit)
   lua_close(L);
 }
 
+static int request_pending(lua_State *L)
+{
+  lua_pushboolean(L, lj_str_reclaim_requested_acq(G(L)) != 0);
+  return 1;
+}
+
+static void check_request_ownership(void)
+{
+  static const char script[] =
+    "jit.off()\n"
+    "local threading = require('threading')\n"
+    "local ready, run, done = threading.channel(1), threading.channel(1), threading.channel(1)\n"
+    "local peer = assert(threading.spawn(function(ready, run, done)\n"
+    "  assert(ready:send(true, 10))\n"
+    "  assert(select(2, run:recv(10)))\n"
+    "  assert(collectgarbage('collect') == 0)\n"
+    "  assert(done:send(true, 10))\n"
+    "  assert(select(2, run:recv(10)))\n"
+    "end, ready, run, done))\n"
+    "assert(select(2, ready:recv(10)))\n"
+    "collectgarbage('stop')\n"
+    "local result\n"
+    "do\n"
+    "  local proxy = newproxy(true)\n"
+    "  getmetatable(proxy).__gc = function()\n"
+    "    local before = request_pending()\n"
+    "    collectgarbage('collect')\n"
+    "    local after_nested = request_pending()\n"
+    "    assert(run:send(true, 10))\n"
+    "    assert(select(2, done:recv(10)))\n"
+    "    result = { before, after_nested, request_pending() }\n"
+    "  end\n"
+    "end\n"
+    "assert(collectgarbage('collect') == 0)\n"
+    "assert(run:send(true, 10))\n"
+    "assert(peer:join(10))\n"
+    "assert(result and result[1], 'outer request missing in finalizer')\n"
+    "assert(result[2], 'nested collect canceled outer request')\n"
+    "assert(result[3], 'peer collect canceled outer request')\n"
+    "assert(not request_pending(), 'outer request escaped its scope')\n";
+  lua_State *L = luaL_newstate();
+  int status;
+  assert(L);
+  luaL_openlibs(L);
+  lua_pushcfunction(L, request_pending);
+  lua_setglobal(L, "request_pending");
+  status = luaL_dostring(L, script);
+  if (status != LUA_OK)
+    fprintf(stderr, "%s\n", lua_tostring(L, -1));
+  assert(status == LUA_OK);
+  lua_close(L);
+}
+
 int main(void)
 {
+  check_request_ownership();
   run_reclamation(0);
 #if LJ_HASJIT && LJ_TARGET_X64
   run_reclamation(1);

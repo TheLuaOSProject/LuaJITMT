@@ -1941,7 +1941,7 @@ typedef struct StrInternState {
   uint32_t sweep_phase;	/* LJ_STR_SWEEP_* bounded subphase. */
   uint32_t sweep_cycle;	/* GC2 cycle which owns sweep_hdr. */
   uint32_t sweep_batch_pending;  /* Batch slot spans the exact unlink CAS. */
-  uint32_t reclaim_requested;  /* Explicit lua_gc(LUA_GCCOLLECT) request. */
+  uint32_t reclaim_requested;  /* Main lua_gc string request scope. */
   uint32_t reclaim_exclusive;  /* Nonwaiting sole-mutator admission gate. */
   StrID id;		/* Next string ID. */
   uint8_t idreseed;	/* String ID reseed counter. */
@@ -2025,6 +2025,7 @@ typedef struct GC2State {
   uint32_t minor_survival_threshold_pct;  /* Survival pct forcing a major. */
   uint64_t minor_survival_major_requests;  /* High-survival major requests. */
   uint32_t force_major;  /* One-shot full-GC major-cycle override. */
+  uint32_t explicit_collectors;  /* Public full collections currently in flight. */
   uint64_t remembered_barriers;  /* Idle generational barriers observed. */
   uint64_t remembered_pushed;  /* Idle remembered entries queued. */
   uint64_t remembered_overflows;  /* Remembered SSB overflows forcing major. */

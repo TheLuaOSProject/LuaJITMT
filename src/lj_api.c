@@ -3688,14 +3688,15 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     ** quarantined body can commit; unsupported cohorts defer reclamation. */
     {
       int collected = 0;
+      int owns_request = lj_str_gc2_reclaim_request(g);
       int errcode;
-      lj_str_gc2_reclaim_request(g);
-      /* Keep the one-shot request cleanup outside the protected collector.
-      ** All post-admission operations are non-throwing; protection also clears
-      ** a request if an earlier mark/bridge allocation ever gains an error
-      ** path in a later revision. */
+      /* Preserve full-GC scheduling for peers and reentrant callers without
+      ** letting either cancel the main collector's string request. */
+      (void)la_add32_acqrel(&g->gc2.explicit_collectors, 1);
       errcode = lj_vm_cpcall(L, NULL, &collected, api_gc_collect_cp);
-      lj_str_gc2_reclaim_cancel(g);
+      if (owns_request)
+	lj_str_gc2_reclaim_cancel(g);
+      (void)la_sub32_acqrel(&g->gc2.explicit_collectors, 1);
       if (LJ_UNLIKELY(errcode != LUA_OK))
 	lj_err_throw(L, errcode);
       UNUSED(collected);

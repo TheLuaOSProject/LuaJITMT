@@ -1766,10 +1766,16 @@ static void str_body_retired_push(global_State *g, StrBodyRetire *ret)
 
 /* -- b1.2 explicit sole-mutator body retirement ------------------------ */
 
-void lj_str_gc2_reclaim_request(global_State *g)
+int lj_str_gc2_reclaim_request(global_State *g)
 {
-  if (g)
-    lj_str_reclaim_requested_rel(g, 1);
+  TGState *tg = lj_thr_get_tg();
+  uint32_t expect = LJ_STR_RECLAIM_NONE;
+  /* Only the main mutator can perform string-body reclamation. Nested
+  ** collectors share the outer request, including its consumed state, and
+  ** must leave cleanup to the call that opened the scope. */
+  return g && tg && tg == g->main_tg && tg->gl == g &&
+    la_cas32(&g->str.reclaim_requested, &expect, LJ_STR_RECLAIM_REQUESTED,
+             LA_ACQ_REL, LA_ACQ);
 }
 
 void lj_str_gc2_reclaim_cancel(global_State *g)
@@ -1780,7 +1786,7 @@ void lj_str_gc2_reclaim_cancel(global_State *g)
   ** Active quarantine records may span multiple explicit collections. */
   lj_assertG(lj_str_reclaim_exclusive_acq(g) == 0,
 	     "explicit string reclaim returned while exclusion was active");
-  lj_str_reclaim_requested_rel(g, 0);
+  lj_str_reclaim_requested_rel(g, LJ_STR_RECLAIM_NONE);
 }
 
 static void str_reclaim_exclusive_leave(global_State *g)
@@ -1886,7 +1892,7 @@ static int str_reclaim_exclusive_try(global_State *g)
   /* No interner can consume a new count credit until exclusion is released.
   ** Make the count exact before physical destructors start subtracting it. */
   lj_str_flush_num_credit(g, tg);
-  lj_str_reclaim_requested_rel(g, 0);
+  lj_str_reclaim_requested_rel(g, LJ_STR_RECLAIM_CONSUMED);
   return 1;
 }
 
@@ -3164,7 +3170,7 @@ void lj_str_free_retired_bodies(global_State *g)
       lj_str_retired_batch_head_acq(g) != NULL)
     (void)str_retire_batches_reclaim_all(g, 0);
   str_reclaim_exclusive_leave(g);
-  lj_str_reclaim_requested_rel(g, 0);
+  lj_str_reclaim_requested_rel(g, LJ_STR_RECLAIM_NONE);
   /* Workers are stopped before the terminal GC2 drain, so an unlink CAS cannot
   ** still be between its discoverable pending slot and retired-list publish. */
   pending = lj_str_sweep_pending_acq(g);

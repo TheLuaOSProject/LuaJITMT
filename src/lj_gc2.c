@@ -119,7 +119,8 @@ static void gc2_jit_phase_gate_open_mark(global_State *g, int mutator_turn)
   /* The explicit driver can return as soon as it observes an active trace.
   ** Reopening after every quantum lets the same peer repeatedly win native
   ** entry. It can keep executing through the interpreter during the request. */
-  if (!gc2_jit_mark_resume_authorized(g) || lj_str_reclaim_requested_acq(g))
+  if (!gc2_jit_mark_resume_authorized(g) ||
+      la_load32_acq(&g->gc2.explicit_collectors) != 0)
     return;
   lj_assertG(gc2_phase_acq(g) == LJ_GC2_MARK &&
 	     gc2_jit_mark_resume_acq(g) == gc2_cycle_acq(g),
@@ -153,7 +154,7 @@ static int gc2_jit_mark_turn_deferred(global_State *g)
 static void gc2_jit_phase_gate_open_sweep(global_State *g, int mutator_turn)
 {
   uint64_t deadline = 0;
-  if (!g || lj_str_reclaim_requested_acq(g) ||
+  if (!g || la_load32_acq(&g->gc2.explicit_collectors) != 0 ||
       gc2_phase_acq(g) != LJ_GC2_SWEEP ||
       !gc2_sweep_bridge_ready_acq(g))
     return;
@@ -1756,6 +1757,7 @@ void lj_gc2_init(global_State *g)
     g, LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT);
   gc2_minor_survival_major_requests_store_rlx(g, 0);
   gc2_force_major_store_rlx(g, 0);
+  la_store32_rlx(&g->gc2.explicit_collectors, 0);
   gc2_remembered_barriers_store_rlx(g, 0);
   gc2_remembered_pushed_store_rlx(g, 0);
   gc2_remembered_overflows_store_rlx(g, 0);
