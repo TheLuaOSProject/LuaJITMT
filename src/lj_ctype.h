@@ -777,6 +777,7 @@ typedef struct CTState {
   FinRegGen *fin_head;	/* 11.4 CAS-published FINREG generation list. */
   FinRegOrderNode *fin_order_head;  /* 11.4 ordered FINREG registrations. */
   FinRegOrderNode *fin_order_lifetime;  /* Published order nodes. */
+  uint32_t fin_order_has_inactive;  /* Reclaim has work at next quiescence. */
   uint32_t hash[CTHASH_SIZE];  /* Hash anchors. Low 16 bits hold CTypeID. */
 } CTState;
 

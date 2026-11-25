@@ -726,8 +726,10 @@ int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
   next = fin_order_next_acq(ord);  /* Ignore an unprotected caller snapshot. */
   if (prev && lj_gc2_mem_lease_acquire(cts->g, prev, &prevlease) < 0)
     goto out;
-  if (fin_order_active_retire(ord))
+  if (fin_order_active_retire(ord)) {
+    la_store32_rel(&cts->fin_order_has_inactive, 1);
     lj_gc2_finreg_cdata_note_order_retired(cts->g);
+  }
   if (prev) {
     if (lj_gc2_mem_registered(cts->g, prev)) {
       expect = ord;
@@ -2924,6 +2926,56 @@ static int ctype_retired_chain_valid(global_State *g, CTypeTab *head,
   return 1;
 }
 
+/* The caller owns idle SMR reclaim. Every order publisher and every
+** scanner holds an SMR read section, so both spines can be compacted in
+** place before a retired allocation becomes available for reuse. */
+static uint32_t ctype_fin_order_reclaim(global_State *g, CTState *cts)
+{
+  FinRegOrderNode *cur, *prev = NULL;
+  uint32_t reclaimed = 0;
+  if (!la_load32_acq(&cts->fin_order_has_inactive))
+    return 0;
+  for (cur = fin_order_head_acq(cts); cur != NULL; ) {
+    FinRegOrderNode *next;
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered_known_reclaim_held(g, cur))) {
+      lj_assertG(0, "invalid ordered FINREG member in reclaim");
+      abort();
+    }
+    next = fin_order_next_acq(cur);
+    if (fin_order_active_acq(cur)) {
+      prev = cur;
+    } else if (prev) {
+      fin_order_next_rel(prev, next);
+    } else {
+      (void)fin_order_head_xchg_acqrel(cts, next);
+    }
+    cur = next;
+  }
+
+  prev = NULL;
+  for (cur = fin_order_lifetime_acq(cts); cur != NULL; ) {
+    FinRegOrderNode *next;
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered_known_reclaim_held(g, cur))) {
+      lj_assertG(0, "invalid FINREG lifetime record in reclaim");
+      abort();
+    }
+    next = fin_order_lifetime_next_acq(cur);
+    if (fin_order_active_acq(cur)) {
+      prev = cur;
+    } else {
+      if (prev)
+        fin_order_lifetime_next_rel(prev, next);
+      else
+        (void)fin_order_lifetime_xchg_acqrel(cts, next);
+      lj_mem_freet(g, cur);
+      reclaimed++;
+    }
+    cur = next;
+  }
+  la_store32_rel(&cts->fin_order_has_inactive, 0);
+  return reclaimed;
+}
+
 uint32_t lj_ctype_reclaim_retired(global_State *g, uint64_t completed_epoch)
 {
   CTState *cts = ctype_ctsG(g);
@@ -2956,7 +3008,7 @@ uint32_t lj_ctype_reclaim_retired(global_State *g, uint64_t completed_epoch)
     }
     ret = next;
   }
-  return reclaimed;
+  return reclaimed + ctype_fin_order_reclaim(g, cts);
 }
 
 static void ctype_freeretired(global_State *g, CTState *cts)

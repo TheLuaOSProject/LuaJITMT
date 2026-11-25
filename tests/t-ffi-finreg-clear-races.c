@@ -6,6 +6,7 @@
 */
 
 #include <assert.h>
+#include <pthread.h>
 #include <sched.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -489,6 +490,87 @@ static void test_clear_nil_vs_reenable(lua_State *L)
   cleanup_registration(L, "cd_clear_nil");
 }
 
+typedef struct FinOrderReader {
+  global_State *g;
+  FinRegOrderNode *held;
+  uint32_t ready;
+  uint32_t release;
+} FinOrderReader;
+
+static void *hold_order_reader(void *opaque)
+{
+  FinOrderReader *reader = (FinOrderReader *)opaque;
+  assert(lj_gc2_smr_read_try(reader->g));
+  reader->held = fin_order_head_acq(ctype_ctsG(reader->g));
+  assert(reader->held && fin_order_active_acq(reader->held));
+  la_store32_rel(&reader->ready, 1);
+  while (!la_load32_acq(&reader->release))
+    (void)sched_yield();
+  assert(!fin_order_active_acq(reader->held));
+  assert(lj_gc2_mem_registered(reader->g, reader->held));
+  lj_gc2_smr_read_leave(reader->g);
+  return NULL;
+}
+
+static size_t fin_order_storage_count(global_State *g)
+{
+  FinRegOrderNode *node;
+  size_t count = 0;
+  assert(lj_gc2_smr_read_try(g));
+  for (node = fin_order_lifetime_acq(ctype_ctsG(g)); node != NULL;
+       node = fin_order_lifetime_next_acq(node)) {
+    assert(lj_gc2_mem_registered(g, node));
+    assert(++count < FINREG_TEST_SPINE_MAX);
+  }
+  lj_gc2_smr_read_leave(g);
+  return count;
+}
+
+static void test_order_storage_reclaim(lua_State *L)
+{
+  global_State *g = G(L);
+  FinOrderReader reader = { 0 };
+  uint64_t completed_epoch;
+  pthread_t thread;
+  unsigned batch;
+  /* Public collection completes the handshake before any test reader starts. */
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert(lua_gc(L, LUA_GCSTOP, 0) == 0);
+  completed_epoch = lj_gc2_retire_epoch(g);
+  assert(completed_epoch != 0);
+  reader.g = g;
+  ljt_lua_dostring(L,
+    "local ffi=require('ffi')\n"
+    "order_storage_fin=function(x) assert(x[0] == 42) end\n"
+    "order_storage_cd=ffi.gc(ffi.new('int[1]', 42), order_storage_fin)\n");
+  assert(pthread_create(&thread, NULL, hold_order_reader, &reader) == 0);
+  while (!la_load32_acq(&reader.ready))
+    (void)sched_yield();
+  ljt_lua_dostring(L,
+    "local ffi=require('ffi')\n"
+    "ffi.gc(order_storage_cd, nil)\n"
+    "for i=1,1000 do ffi.gc(order_storage_cd, order_storage_fin); "
+    "ffi.gc(order_storage_cd, nil) end\n");
+  assert(lj_gc2_reclaim_retired(g, completed_epoch) == 0);
+  assert(fin_order_storage_count(g) >= 1001);
+  la_store32_rel(&reader.release, 1);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(lj_gc2_reclaim_retired(g, completed_epoch) >= 1001);
+  assert(fin_order_storage_count(g) == 0);
+
+  for (batch = 0; batch < 12; batch++) {
+    ljt_lua_dostring(L,
+      "local ffi=require('ffi')\n"
+      "for i=1,1000 do ffi.gc(order_storage_cd, order_storage_fin); "
+      "ffi.gc(order_storage_cd, nil) end\n"
+      "ffi.gc(order_storage_cd, order_storage_fin)\n"
+      "collectgarbage('collect'); collectgarbage('stop')\n");
+    assert(fin_order_storage_count(g) == 1);
+    assert_registered(L, "order_storage_cd", "order_storage_fin");
+    cleanup_registration(L, "order_storage_cd");
+  }
+}
+
 static void test_prepare_nil_vs_reenable(lua_State *L)
 {
   ljt_lua_dostring(L,
@@ -613,6 +695,7 @@ int main(void)
     "collectgarbage('stop')\n");
   assert(!lj_gc2_finreg_cdata_pending(G(L)));
 
+  test_order_storage_reclaim(L);
   test_unrelated_enable_progress(0);
   test_unrelated_enable_progress(1);
   test_replacement_identity(L);
