@@ -1594,6 +1594,52 @@ static void test_weak_clear_recovery_gate(void)
   recovery_fixture_close(&f);
 }
 
+static void test_sweep_recovery_gets_a_turn_with_published_ssb(void)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  GCtab *parent;
+  GCstr *filler;
+  uint32_t i;
+
+  lua_newtable(f.L);
+  parent = tabV(f.L->top - 1);
+  lua_pushliteral(f.L, "ordinary sweep SSB work");
+  filler = strV(f.L->top - 1);
+  gc2_phase_rel(f.g, LJ_GC2_SWEEP);
+
+  /* Leave published work across independent worker turns, with an already
+  ** claimable exact recovery identity each time. */
+  for (i = 0; i < 64; i++)
+    assert(lj_gc2_test_ssb_push(f.g, obj2gco(filler)));
+  assert(lj_gc2_flush_ssb(f.g, f.tg) >= 64u);
+  for (i = 0; i < 4; i++) {
+    uint64_t recovered0 = gc2_recovery_drained_acq(f.g);
+    uint64_t ssb0 = gc2_ssb_items_drained_acq(f.g);
+    assert(lj_gc2_test_recovery_publish(f.g, obj2gco(parent)));
+    assert(lj_gc2_worker_drain(f.g, 8u) == 8u);
+    assert(gc2_recovery_drained_acq(f.g) == recovered0 + 1u);
+    assert(gc2_ssb_items_drained_acq(f.g) > ssb0);
+    assert(gc2_recovery_items_acq(f.g) == 0);
+    assert(!lj_gc2_test_ssb_empty(f.g));
+  }
+
+  /* The one-item API has no spare slot. Each pair of turns must give both
+  ** frontiers progress while ordinary published work is still available. */
+  for (i = 0; i < 4; i++) {
+    uint64_t recovered0 = gc2_recovery_drained_acq(f.g);
+    uint64_t ssb0 = gc2_ssb_items_drained_acq(f.g);
+    assert(lj_gc2_test_recovery_publish(f.g, obj2gco(parent)));
+    assert(lj_gc2_worker_drain(f.g, 1u) == 1u);
+    assert(lj_gc2_worker_drain(f.g, 1u) == 1u);
+    assert(gc2_recovery_drained_acq(f.g) == recovered0 + 1u);
+    assert(gc2_ssb_items_drained_acq(f.g) == ssb0 + 1u);
+    assert(gc2_recovery_items_acq(f.g) == 0);
+    assert(!lj_gc2_test_ssb_empty(f.g));
+  }
+  gc2_phase_rel(f.g, LJ_GC2_IDLE);
+  recovery_fixture_close(&f);
+}
+
 static void test_sweep_empty_string_is_immortal(void)
 {
   RecoveryFixture f = recovery_fixture_open();
@@ -2598,6 +2644,7 @@ int main(int argc, char **argv)
   test_postrestore_claimants();
   test_postclaim_late_retained_requeues();
   test_weak_clear_recovery_gate();
+  test_sweep_recovery_gets_a_turn_with_published_ssb();
   test_sweep_empty_string_is_immortal();
   test_huge_recovery_exact_lane_accounting();
   test_huge_reader_recovery_bypasses_smr_writer();

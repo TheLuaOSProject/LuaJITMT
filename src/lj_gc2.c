@@ -1834,6 +1834,7 @@ void lj_gc2_init(global_State *g)
   gc2_sweep_root_done_rel(g, 0);
   gc2_sweep_grace_needed_rel(g, 0);
   gc2_sweep_owner_next_tid_store_rlx(g, 0);
+  g->gc2.sweep_recovery_turn = 0;
   gc2_sweep_to_idle_store_rlx(g, 0);
   gc2_preserve_abort_to_idle_store_rlx(g, 0);
   gc2_alloc_total_bytes_store_rlx(g, 0);
@@ -22511,10 +22512,24 @@ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
     return 0;
   /* Sweep-time publishers enqueue rescued containers on SSB. Close that graph
   ** before taking the post-retirement grace or running any destructor. */
+  if (limit == 1) {
+    uint32_t recovery_turn = g->gc2.sweep_recovery_turn;
+    g->gc2.sweep_recovery_turn = !recovery_turn;
+    if (recovery_turn && gc2_recovery_drain_owned(g, 1, NULL))
+      return 1;
+  }
 drain_graph:
   while (n < limit) {
-    uint32_t moved = gc2_drain_published_ssb_to_grey(g, 1);
+    uint32_t moved;
     GCobj *o;
+    /* A sustained SSB/grey producer can occupy every normal worker slot.
+    ** Give exact recovery the last slot of a multi-item quantum even when
+    ** the ordinary frontier stays busy. A refused recovery consumes no unit. */
+    if (n != 0 && n == limit - 1u && gc2_recovery_drain_owned(g, 1, NULL)) {
+      n++;
+      break;
+    }
+    moved = gc2_drain_published_ssb_to_grey(g, 1);
     if (gc2_deferred_epoch_acq(g) != defer0)
       break;
     o = gc2_grey_pop(g);

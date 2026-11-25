@@ -2108,6 +2108,7 @@ typedef struct GC2State {
   GCRef *grey_stack;	/* GC2 grey work deque ring. */
   MSize grey_capacity;	/* Allocated grey deque slots. */
   uint32_t sweep_owner_next_tid;  /* Worker-owned sweep scheduling hint. */
+  uint32_t sweep_recovery_turn;  /* Next one-item graph turn, under worker_active. */
   uint64_t grey_top;	/* Chase-Lev steal-side index. */
   uint64_t grey_bottom;	/* Chase-Lev owner-side index. */
   uint64_t grey_pushed;	/* Grey entries scheduled from SSB/traversal. */
