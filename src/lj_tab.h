@@ -214,6 +214,21 @@ static LJ_AINLINE void lj_tab_resize_desc_next_rel(TabResizeDesc *desc,
   la_storeptr_rel((void **)&desc->next, next);
 }
 
+static LJ_AINLINE Node *
+lj_tab_resize_desc_selected_node_acq(const TabResizeDesc *desc)
+{
+  return (Node *)la_loadptr_acq((void *const *)&desc->selectednode);
+}
+
+static LJ_AINLINE Node *
+lj_tab_resize_desc_unused_node_acq(const TabResizeDesc *desc)
+{
+  if (!desc->compactnode)
+    return NULL;
+  return lj_tab_resize_desc_selected_node_acq(desc) == desc->compactnode ?
+    desc->newnode : desc->compactnode;
+}
+
 static LJ_AINLINE GCtab *
 lj_tab_resize_desc_tab_acq(const TabResizeDesc *desc)
 {

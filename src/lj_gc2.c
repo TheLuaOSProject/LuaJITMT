@@ -3997,10 +3997,14 @@ static LJ_NOINLINE void gc2_mark_tab_retired_mem(global_State *g)
     ** cannot disappear while a helper resolves its descriptor id. Immutable
     ** vector/intent payload joins this scan before runtime markers are enabled.
     */
-    if (cutover && phase == TAB_RESIZE_DESC_TERMINAL) {
-      if (flags & TAB_RESIZE_DESC_F_CANCELED)
+    if (cutover && phase >= TAB_RESIZE_DESC_TERMINATING) {
+      Node *unused = lj_tab_resize_desc_unused_node_acq(desc);
+      if (unused)
+	(void)lj_gc2_markmem(g, lj_tab_node_hdrw(unused));
+      else if (flags & TAB_RESIZE_DESC_F_CANCELED)
 	(void)lj_gc2_markmem(g, lj_tab_node_hdrw(desc->newnode));
-      goto next_desc;
+      if (phase == TAB_RESIZE_DESC_TERMINAL)
+	goto next_desc;
     }
     t = lj_tab_resize_desc_tab_acq(desc);
     if (LJ_UNLIKELY(t == NULL || !lj_gc2_mem_registered(g, t))) {
@@ -4020,8 +4024,11 @@ static LJ_NOINLINE void gc2_mark_tab_retired_mem(global_State *g)
 	  (flags & TAB_RESIZE_DESC_F_CANCELED)) {
 	if (cutover & TAB_RESIZE_DESC_F_ARRAY_CUTOVER)
 	  (void)lj_gc2_markmem(g, lj_tab_array_hdrw(desc->newarray));
-	if (cutover & TAB_RESIZE_DESC_F_HASH_CUTOVER)
+	if (cutover & TAB_RESIZE_DESC_F_HASH_CUTOVER) {
 	  (void)lj_gc2_markmem(g, lj_tab_node_hdrw(desc->newnode));
+	  if (desc->compactnode)
+	    (void)lj_gc2_markmem(g, lj_tab_node_hdrw(desc->compactnode));
+	}
       }
       /* Detached production records are SMR metadata. Rooting their table
       ** through grace would keep an otherwise dead weak value visible. */

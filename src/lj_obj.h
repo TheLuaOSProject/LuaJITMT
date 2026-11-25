@@ -791,7 +791,9 @@ typedef struct TabResizeDesc {
   struct GCtab *tab;
   TValue *oldarray;
   Node *oldnode;
-  Node *newnode;	/* Completed hash migration, for helpable cutover. */
+  Node *newnode;	/* Guaranteed-capacity hash successor. */
+  Node *compactnode;	/* Optional compact successor for a separated shrink. */
+  Node *selectednode;	/* Monotonic successor choice if compactnode exists. */
   TabNodeRetire *oldret;
   TValue *newarray;
   TabArrayRetire *oldaret;

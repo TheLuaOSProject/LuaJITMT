@@ -53,6 +53,7 @@ typedef struct ResizeCtx {
 static GCtab *resize_hook_tab;
 static volatile int *resize_hook_entered;
 static volatile int *resize_hook_release;
+static volatile int late_tail_passes, late_tail_release;
 static pthread_t copy_owner;
 static MSize hash_install_pause_stage;
 static char collision_keys[4][128];
@@ -657,6 +658,19 @@ static void assert_array_migration_values(lua_State *L, int weak)
   lua_pop(L, 1);
 }
 
+static void late_tail_hold_hook(lua_State *L, GCtab *t, TValue *oldarray,
+				MSize oldasize)
+{
+  UNUSED(L);
+  UNUSED(oldarray);
+  UNUSED(oldasize);
+  if (t != resize_hook_tab || !pthread_equal(pthread_self(), copy_owner))
+    return;
+  add_flag(&late_tail_passes, 1);
+  while (!load_flag(&late_tail_release))
+    sched_yield();
+}
+
 static void exercise_array_migration_owner(lua_State *L, int weak, int mixed,
 					   int weak_change)
 {
@@ -668,9 +682,10 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed,
   GCtab *t;
   Node *oldnode;
   TValue *oldarray, *nextarray;
+  int i;
 
   lua_settop(L, 0);
-  lua_createtable(L, mixed == 2 ? 80 : LJ_MAX_COLOSIZE + 2, mixed ? 4 : 0);
+  lua_createtable(L, mixed >= 2 ? 80 : LJ_MAX_COLOSIZE + 2, mixed ? 4 : 0);
   if (weak) {
     lua_newtable(L);
     lua_pushliteral(L, "v");
@@ -692,6 +707,12 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed,
     lua_pushinteger(L, 555);
     lua_rawseti(L, 1, -1);
   }
+  if (mixed == 3) {
+    lua_newtable(L);
+    lua_rawseti(L, 1, 65);
+    lua_pushliteral(L, "compact migration retains strings");
+    lua_rawseti(L, 1, 66);
+  }
   oldnode = lj_tab_node_acq(t);
   oldarray = lj_tab_array_acq(t);
   assert(!lj_tab_array_is_colocated(t, oldarray));
@@ -699,8 +720,8 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed,
   owner.ready = &ready;
   owner.start = &owner_start;
   owner.done = &owner_done;
-  owner.asize = mixed == 2 ? 40 : 80;
-  owner.hbits = mixed == 2 ? 8 : 0;
+  owner.asize = mixed >= 2 ? 40 : 80;
+  owner.hbits = mixed >= 3 ? 3 : (mixed == 2 ? 8 : 0);
   owner.status = -1;
   other.L = new_child_with_table(L, 1);
   other.ready = &ready;
@@ -713,10 +734,29 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed,
   resize_hook_entered = &hook_entered;
   resize_hook_release = &hook_release;
   lj_tab_test_set_array_copy_hook(array_copy_hold_hook);
+  if (mixed == 4) {
+    store_flag(&late_tail_passes, 0);
+    store_flag(&late_tail_release, 0);
+    lj_tab_test_set_resize_before_freeze_hook(late_tail_hold_hook);
+  }
   assert(pthread_create(&copy_owner, NULL, resize_worker, &owner) == 0);
   assert(pthread_create(&other_thr, NULL, resize_worker, &other) == 0);
   assert(wait_for_flag(&ready, 2, 1000000));
   store_flag(&owner_start, 1);
+  if (mixed == 4) {
+    assert(wait_for_flag(&late_tail_passes, 1, 1000000));
+    /* These accepted writes land after candidate allocation but before
+    ** retirement. They exceed the compact hash and must all survive. */
+    for (i = 50; i < 59; i++) {
+      lua_pushinteger(L, i);
+      lua_rawseti(L, 1, i);
+    }
+    /* Occupying an old hash slot changes the retirement CAS, so the first
+    ** attempt must discard both allocated candidates and retry. */
+    lua_pushinteger(L, 777);
+    lua_rawseti(L, 1, -2);
+    store_flag(&late_tail_release, 1);
+  }
   assert(wait_for_flag(&hook_entered, 1, 1000000));
   assert(lj_tab_array_acq(t) == oldarray);
   assert(lj_tab_array_is_retiring(t, oldarray));
@@ -735,6 +775,8 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed,
   if (mixed)
     assert(lj_tab_node_acq(t) != oldnode);
   assert(lj_tab_asize_acq(t) == owner.asize);
+  if (mixed >= 3)
+    assert(lj_tab_hmask_acq(t) == (mixed == 3 ? 7u : 63u));
   assert(lj_tab_resize_desc_control_acq(t) == NULL);
   lua_rawgeti(L, 1, 1);
   assert(lua_isnil(L, -1));
@@ -745,11 +787,32 @@ static void exercise_array_migration_owner(lua_State *L, int weak, int mixed,
   assert(pthread_join(copy_owner, NULL) == 0 && owner.status == 0);
   assert(pthread_join(other_thr, NULL) == 0 && other.status == 0);
   lj_tab_test_set_array_copy_hook(NULL);
+  if (mixed == 4)
+    lj_tab_test_set_resize_before_freeze_hook(NULL);
   resize_hook_tab = NULL;
   resize_hook_entered = NULL;
   resize_hook_release = NULL;
   lua_gc(L, LUA_GCCOLLECT, 0);
   assert_array_migration_values(L, weak_change ? weak_change > 0 : weak);
+  if (mixed == 3) {
+    lua_rawgeti(L, 1, 65);
+    assert(weak ? lua_isnil(L, -1) : lua_istable(L, -1));
+    lua_pop(L, 1);
+    lua_rawgeti(L, 1, 66);
+    assert(lua_isstring(L, -1));
+    lua_pop(L, 1);
+  }
+  if (mixed == 4) {
+    assert(load_flag(&late_tail_passes) >= 2);
+    lua_rawgeti(L, 1, -2);
+    assert(lua_tointeger(L, -1) == 777);
+    lua_pop(L, 1);
+    for (i = 50; i < 59; i++) {
+      lua_rawgeti(L, 1, i);
+      assert(lua_tointeger(L, -1) == i);
+      lua_pop(L, 1);
+    }
+  }
   if (mixed) {
     lua_rawgeti(L, 1, -1);
     assert(lua_tointeger(L, -1) == 555);
@@ -1120,6 +1183,9 @@ int main(void)
   exercise_array_migration_owner(L, 1, 2, 0);
   exercise_array_migration_owner(L, 0, 1, 1);
   exercise_array_migration_owner(L, 1, 2, -1);
+  exercise_array_migration_owner(L, 0, 3, 0);
+  exercise_array_migration_owner(L, 1, 3, 0);
+  exercise_array_migration_owner(L, 0, 4, 0);
   exercise_hash_migration_owner(L);
   exercise_hash_install_owner(L, 0);
   exercise_hash_install_owner(L, 1);
