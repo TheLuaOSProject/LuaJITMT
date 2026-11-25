@@ -569,8 +569,7 @@ static int ctype_fin_gen_next_smr(global_State *g, FinRegGen *gen,
 }
 
 static int ctype_fin_order_next_smr(global_State *g, FinRegOrderNode *ord,
-				     int retired,
-				     FinRegOrderNode **nextp)
+				     int lifetime, FinRegOrderNode **nextp)
 {
   LJGC2Lease lease = { 0 };
   if (!ord) {
@@ -581,8 +580,7 @@ static int ctype_fin_order_next_smr(global_State *g, FinRegOrderNode *ord,
     lj_gc2_lease_release(&lease);
     return 0;
   }
-  *nextp = retired ? fin_order_retired_next_acq(ord) :
-    fin_order_next_acq(ord);
+  *nextp = lifetime ? fin_order_lifetime_next_acq(ord) : fin_order_next_acq(ord);
   lj_gc2_lease_release(&lease);
   return 1;
 }
@@ -675,7 +673,7 @@ FinRegOrderNode *lj_ctype_fin_order_new(lua_State *L)
   fin_order_tab_rel(ord, NULL);
   fin_order_slot_rel(ord, NULL);
   fin_order_next_rel(ord, NULL);
-  fin_order_retired_next_rel(ord, NULL);
+  fin_order_lifetime_next_rel(ord, NULL);
   setnilV(&ord->ready_callback);
   ord->ready_token = 0;
   fin_order_active_rel(ord, 0);
@@ -699,6 +697,12 @@ void lj_ctype_fin_order_publish(CTState *cts, FinRegOrderNode *ord,
   fin_order_slot_rel(ord, slot);
   fin_order_active_rel(ord, 1);
   (void)lj_gc2_markmem(cts->g, ord);
+  /* Keep each node alive before exposing ordered membership. This lets
+  ** every contender retire the membership with one CAS. */
+  do {
+    head = fin_order_lifetime_acq(cts);
+    fin_order_lifetime_next_rel(ord, head);
+  } while (!fin_order_lifetime_cas(cts, &head, ord));
   do {
     head = fin_order_head_acq(cts);
     fin_order_next_rel(ord, head);
@@ -711,7 +715,7 @@ void lj_ctype_fin_order_publish(CTState *cts, FinRegOrderNode *ord,
 int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
 			      FinRegOrderNode *ord, FinRegOrderNode *next)
 {
-  FinRegOrderNode *head, *expect;
+  FinRegOrderNode *expect;
   LJGC2Lease ordlease = { 0 }, prevlease = { 0 };
   int ok = 0;
   UNUSED(next);
@@ -722,17 +726,8 @@ int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
   next = fin_order_next_acq(ord);  /* Ignore an unprotected caller snapshot. */
   if (prev && lj_gc2_mem_lease_acquire(cts->g, prev, &prevlease) < 0)
     goto out;
-  if (!fin_order_active_retiring(ord)) {
-    ok = 1;
-    goto out;
-  }
-  do {
-    head = fin_order_retired_acq(cts);
-    fin_order_retired_next_rel(ord, head);
-  } while (!fin_order_retired_cas(cts, &head, ord));
-  (void)lj_gc2_markmem(cts->g, ord);
-  lj_gc2_finreg_cdata_note_order_retired(cts->g);
-  fin_order_active_rel(ord, 0);
+  if (fin_order_active_retire(ord))
+    lj_gc2_finreg_cdata_note_order_retired(cts->g);
   if (prev) {
     if (lj_gc2_mem_registered(cts->g, prev)) {
       expect = ord;
@@ -1149,7 +1144,7 @@ int lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *, GCobj *),
   }
   {
     FinRegOrderNode *ord, *fast;
-    ord = fin_order_head_acq(cts);
+    ord = fin_order_lifetime_acq(cts);
     fast = ord;
     while (ord != NULL) {
       LJGC2Lease ordlease = { 0 };
@@ -1159,29 +1154,7 @@ int lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *, GCobj *),
 	goto retry;
       }
       markmem(g, ord);
-      next = fin_order_next_acq(ord);
-      lj_gc2_lease_release(&ordlease);
-      ord = next;
-      if (fast && !ctype_fin_order_next_smr(g, fast, 0, &fast))
-	goto retry;
-      if (fast && !ctype_fin_order_next_smr(g, fast, 0, &fast))
-	goto retry;
-      if (ord && fast == ord) {
-	lj_gc2_smr_read_leave(g);
-	ctype_fin_spine_cycle(g);
-      }
-    }
-    ord = fin_order_retired_acq(cts);
-    fast = ord;
-    while (ord != NULL) {
-      LJGC2Lease ordlease = { 0 };
-      FinRegOrderNode *next;
-      if (lj_gc2_mem_lease_acquire(g, ord, &ordlease) < 0) {
-	lj_gc2_lease_release(&ordlease);
-	goto retry;
-      }
-      markmem(g, ord);
-      next = fin_order_retired_next_acq(ord);
+      next = fin_order_lifetime_next_acq(ord);
       lj_gc2_lease_release(&ordlease);
       ord = next;
       if (fast && !ctype_fin_order_next_smr(g, fast, 1, &fast))
@@ -1204,16 +1177,10 @@ retry:
 void lj_ctype_fin_freetabs(global_State *g, CTState *cts)
 {
   FinRegGen *gen = fin_gen_head_xchg_acqrel(cts, NULL);
-  FinRegOrderNode *ord = fin_order_head_xchg_acqrel(cts, NULL);
+  FinRegOrderNode *ord = fin_order_lifetime_xchg_acqrel(cts, NULL);
+  (void)fin_order_head_xchg_acqrel(cts, NULL);
   while (ord && lj_gc2_mem_registered(g, ord)) {
-    FinRegOrderNode *next = fin_order_next_acq(ord);
-    if (fin_order_active_acq(ord) != 0)
-      lj_mem_freet(g, ord);
-    ord = next;
-  }
-  ord = fin_order_retired_xchg_acqrel(cts, NULL);
-  while (ord && lj_gc2_mem_registered(g, ord)) {
-    FinRegOrderNode *next = fin_order_retired_next_acq(ord);
+    FinRegOrderNode *next = fin_order_lifetime_next_acq(ord);
     lj_mem_freet(g, ord);
     ord = next;
   }

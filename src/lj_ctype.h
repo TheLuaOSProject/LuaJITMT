@@ -265,10 +265,10 @@ typedef struct FinRegOrderNode {
   GCtab *tab;			/* Original FINREG generation; scans re-resolve. */
   TValue *slot;			/* Original value slot; not stable across resize. */
   struct FinRegOrderNode *next;	/* Older registration, newest-first list. */
-  struct FinRegOrderNode *retired_next;
+  struct FinRegOrderNode *lifetime_next;
   TValue ready_callback;	/* Immutable after order publication. */
   uint64_t ready_token;		/* Encoded slot marker, or zero. */
-  uint32_t active;		/* 1 active, 2 retiring, 0 retired. */
+  uint32_t active;		/* 1 active, 0 inactive. */
 } FinRegOrderNode;
 
 static LJ_AINLINE GCtab *fin_gen_tab_acq(const FinRegGen *gen)
@@ -327,16 +327,16 @@ static LJ_AINLINE int fin_order_next_cas(FinRegOrderNode *ord,
 }
 
 static LJ_AINLINE FinRegOrderNode *
-fin_order_retired_next_acq(const FinRegOrderNode *ord)
+fin_order_lifetime_next_acq(const FinRegOrderNode *ord)
 {
   return (FinRegOrderNode *)la_loadptr_acq(
-    (void *const *)&ord->retired_next);
+    (void *const *)&ord->lifetime_next);
 }
 
-static LJ_AINLINE void fin_order_retired_next_rel(FinRegOrderNode *ord,
+static LJ_AINLINE void fin_order_lifetime_next_rel(FinRegOrderNode *ord,
 						  FinRegOrderNode *next)
 {
-  la_storeptr_rel((void **)&ord->retired_next, next);
+  la_storeptr_rel((void **)&ord->lifetime_next, next);
 }
 
 static LJ_AINLINE uint32_t fin_order_active_acq(const FinRegOrderNode *ord)
@@ -350,10 +350,10 @@ static LJ_AINLINE void fin_order_active_rel(FinRegOrderNode *ord,
   la_store32_rel(&ord->active, active);
 }
 
-static LJ_AINLINE int fin_order_active_retiring(FinRegOrderNode *ord)
+static LJ_AINLINE int fin_order_active_retire(FinRegOrderNode *ord)
 {
   uint32_t old = 1;
-  return la_cas32(&ord->active, &old, 2, LA_ACQ_REL, LA_ACQ);
+  return la_cas32(&ord->active, &old, 0, LA_ACQ_REL, LA_ACQ);
 }
 
 static LJ_AINLINE GCobj *fin_order_obj_acq(FinRegOrderNode *ord)
@@ -776,7 +776,7 @@ typedef struct CTState {
   uint64_t fin_ready_id;  /* Never reused by a delayed publication helper. */
   FinRegGen *fin_head;	/* 11.4 CAS-published FINREG generation list. */
   FinRegOrderNode *fin_order_head;  /* 11.4 ordered FINREG registrations. */
-  FinRegOrderNode *fin_order_retired;  /* Retired ordered FINREG nodes. */
+  FinRegOrderNode *fin_order_lifetime;  /* Published order nodes. */
   uint32_t hash[CTHASH_SIZE];  /* Hash anchors. Low 16 bits hold CTypeID. */
 } CTState;
 
@@ -882,25 +882,25 @@ fin_order_head_xchg_acqrel(CTState *cts, FinRegOrderNode *ord)
     (void **)&cts->fin_order_head, ord);
 }
 
-static LJ_AINLINE FinRegOrderNode *fin_order_retired_acq(const CTState *cts)
+static LJ_AINLINE FinRegOrderNode *fin_order_lifetime_acq(const CTState *cts)
 {
   return (FinRegOrderNode *)la_loadptr_acq(
-    (void *const *)&cts->fin_order_retired);
+    (void *const *)&cts->fin_order_lifetime);
 }
 
-static LJ_AINLINE int fin_order_retired_cas(CTState *cts,
+static LJ_AINLINE int fin_order_lifetime_cas(CTState *cts,
 					    FinRegOrderNode **oldp,
 					    FinRegOrderNode *ord)
 {
-  return la_casptr((void **)&cts->fin_order_retired, (void **)oldp, ord,
+  return la_casptr((void **)&cts->fin_order_lifetime, (void **)oldp, ord,
 		   LA_ACQ_REL, LA_ACQ);
 }
 
 static LJ_AINLINE FinRegOrderNode *
-fin_order_retired_xchg_acqrel(CTState *cts, FinRegOrderNode *ord)
+fin_order_lifetime_xchg_acqrel(CTState *cts, FinRegOrderNode *ord)
 {
   return (FinRegOrderNode *)la_xchgptr_acqrel(
-    (void **)&cts->fin_order_retired, ord);
+    (void **)&cts->fin_order_lifetime, ord);
 }
 
 static LJ_AINLINE GCtab *ctype_miscmap_acq(const CTState *cts)
