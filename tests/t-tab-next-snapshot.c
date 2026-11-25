@@ -222,6 +222,44 @@ static void assert_itern_helper_survives_resize(lua_State *L,
   reset_hook();
 }
 
+static void assert_next_skips_collected_collision_key(lua_State *L)
+{
+  char deleted_name[128], live_name[128];
+  uint32_t seq = 0;
+  MSize hmask;
+  Node *node;
+  GCtab *t;
+  GCstr *key;
+  int i;
+  lua_createtable(L, 0, 8);
+  t = tabV(L->top - 1);
+  node = lj_tab_node_snapshot_acq(t, &hmask);
+  key = tabfwd_find_sid_bucket(L, "next-collected", hmask, 1u, &seq);
+  assert(key->len < sizeof(deleted_name));
+  memcpy(deleted_name, strdata(key), key->len + 1u);
+  lua_pushinteger(L, 11);
+  lua_setfield(L, -2, deleted_name);
+  key = tabfwd_find_sid_bucket(L, "next-collected", hmask, 1u, &seq);
+  assert(key->len < sizeof(live_name));
+  memcpy(live_name, strdata(key), key->len + 1u);
+  lua_pushinteger(L, 22);
+  lua_setfield(L, -2, live_name);
+  assert(lj_tab_nextnode_acq(&node[1]) != NULL);
+  lua_pushnil(L);
+  lua_setfield(L, -2, deleted_name);
+  assert(tvisnil(&node[1].val));
+  for (i = 0; i < 3; i++)
+    lua_gc(L, LUA_GCCOLLECT, 0);
+
+  lua_pushnil(L);
+  assert(lua_next(L, -2));
+  assert(lua_tointeger(L, -1) == 22);
+  assert(strcmp(lua_tostring(L, -2), live_name) == 0);
+  lua_pop(L, 1);
+  assert(!lua_next(L, -2));
+  lua_pop(L, 1);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -235,6 +273,7 @@ int main(void)
   assert_vmnext_helper_survives_resize(L, 4, 4, 1);
   assert_itern_helper_survives_resize(L, 4, 48, 0);
   assert_itern_helper_survives_resize(L, 4, 4, 1);
+  assert_next_skips_collected_collision_key(L);
 
   lua_close(L);
   printf("t-tab-next-snapshot OK: next() cursor helpers stay generation-bound\n");

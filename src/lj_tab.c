@@ -10093,10 +10093,14 @@ static int tab_keyindex_snapshot_held(const TabForjitSnapshot *snap,
 		    visited++ > snap->hmask))
       return TAB_ROOTED_NEXT_RETRY;
     lj_tv_load_acq(&nodekey, &n->key);
-    if (LJ_UNLIKELY(tab_key_islocked(&nodekey) ||
-		    !tab_tv_snapshot_valid(&nodekey)))
+    if (LJ_UNLIKELY(tab_key_islocked(&nodekey)))
       return TAB_ROOTED_NEXT_RETRY;
-    if (!tvisnil(&nodekey) && lj_obj_equal(&nodekey, key)) {
+    if (LJ_UNLIKELY(!tab_tv_snapshot_valid(&nodekey))) {
+      /* A nil-valued collision tombstone can outlive its collected key.
+      ** Keep walking to find a live cursor later in the same chain. */
+      if (!lj_tv_isnil_acq(&n->val))
+	return TAB_ROOTED_NEXT_RETRY;
+    } else if (!tvisnil(&nodekey) && lj_obj_equal(&nodekey, key)) {
       *idxp = (uint32_t)snap->asize +
 	      (uint32_t)((n + 1) - snap->node);
       return TAB_ROOTED_NEXT_FOUND;
