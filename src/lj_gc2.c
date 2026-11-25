@@ -21557,6 +21557,7 @@ static int gc2_thread_owner_scans(global_State *g, lua_State *th,
 				   int sweep_snapshot)
 {
   TGState *tg;
+  uint32_t phase;
   uint64_t scan_epoch, scanned_dirty, handoff_epoch, owner_dirty, cycle;
   if (!g || !th)
     return 0;
@@ -21576,6 +21577,15 @@ static int gc2_thread_owner_scans(global_State *g, lua_State *th,
   ** dirty stamp to survive until the grey pop would retry ordinary stack
   ** copies and scalar operations forever. */
   if (sweep_snapshot)
+    return 1;
+  phase = gc2_phase_acq(g);
+  /* A resumable root epoch lets the scanned owner run before the grey
+  ** consumer reaches its registry identity. Once the phase snapshot is
+  ** complete, active barriers protect later roots and an ordinary stack
+  ** store cannot invalidate the exact completed handoff above. */
+  if (lj_tg_mark_active_acq(tg) && gc2_jit_phase_gate_acq(g) == 0 &&
+      ((phase == LJ_GC2_MARK && gc2_mark_root_scanned_acq(g) == 1) ||
+       (phase == LJ_GC2_WEAK && gc2_weak_root_scanned_acq(g) == 1)))
     return 1;
   scanned_dirty = lj_state_scan_dirty_epoch_acq(th);
   if (scanned_dirty != owner_dirty) {
