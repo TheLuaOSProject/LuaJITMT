@@ -1180,6 +1180,8 @@ int main(void)
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
   lj_gc2_cycle_to_idle(g);
 
+  /* Build the weak graph before the explicit cycle owns its first mark. */
+  assert(lua_gc(L, LUA_GCSTOP, 0) == 0);
   lua_settop(L, 0);
   lua_newtable(L);
   weak = tabV(L->top - 1);
@@ -1197,6 +1199,7 @@ int main(void)
   lua_settable(L, 1);
 
   lj_gc2_mark_begin(g);
+  assert(lua_gc(L, LUA_GCRESTART, -1) == 0);
   assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
   (void)lj_gc2_test_ssb_drain(g);

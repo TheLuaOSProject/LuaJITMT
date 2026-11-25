@@ -573,6 +573,7 @@ static void test_mark_complete_defers_to_peer(lua_State *L, global_State *g,
   PeerRelease rel;
   pthread_t thread;
   uint64_t runs0, hits0, waits0, roots0;
+  int auto_enabled = lj_gc_auto_enabled(g);
 
   lua_settop(L, 0);
   lua_newtable(L);
@@ -595,6 +596,9 @@ static void test_mark_complete_defers_to_peer(lua_State *L, global_State *g,
   gc2_worker_active_rel(g, 1);
   /* Even the largest explicit step must return while its peer owns MARK. */
   assert(lua_gc(L, LUA_GCSTEP, 1 << 20) == 0);
+  /* STEP resumes automatic GC; restore the surrounding fixture's policy. */
+  if (!auto_enabled)
+    assert(lua_gc(L, LUA_GCSTOP, 0) == 0);
   assert(gc2_worker_active_acq(g) == 1);
   assert(gc2_phase_acq(g) == LJ_GC2_MARK);
   rel.g = g;

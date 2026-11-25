@@ -1771,6 +1771,7 @@ static void test_jit_current_trace_root(lua_State *L, global_State *g,
   GCfunc *fn;
   GCproto *pt;
   GCtab *nonproto;
+  int auto_enabled = lj_gc_auto_enabled(g);
   UNUSED(tg);
 
   /* This fixture keeps a prototype only in a raw C local while probing exact
@@ -1831,7 +1832,8 @@ static void test_jit_current_trace_root(lua_State *L, global_State *g,
   J->cur = saved;
   lj_gc2_cycle_to_idle(g);
   lua_pop(L, 1);
-  assert(lua_gc(L, LUA_GCRESTART, 0) == 0);
+  if (auto_enabled)
+    assert(lua_gc(L, LUA_GCRESTART, 0) == 0);
 }
 
 static void test_jit_tg_executing_trace_root(lua_State *L, global_State *g,
