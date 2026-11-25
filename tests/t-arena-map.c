@@ -40,9 +40,12 @@ int main(void)
     if (flags & LJ_AF_TRAVERSABLE) {
       LJGC2TabStampArena *side = lj_arena_gc2_tabstamp_acq(a);
       assert(side != NULL);
-      assert(sizeof(*side) == LJ_ARENA_SIZE);
+      assert(sizeof(side->cell) == LJ_ARENA_SIZE);
+      assert(sizeof(side->wide) == LJ_ARENA_SIZE);
       for (j = 0; j < LJ_ARENA_CELLS; j++) {
 	uint64_t control = la_load64_acq(&side->cell[j].token.control);
+	la_u128 wide = lj_arena_gc2_wide_snapshot(&side->wide[j]);
+	assert(wide.lo == 0 && wide.hi == 0);
 	assert(la_load64_acq(&side->cell[j].state) == 0);
 	assert(lj_gc2_table_token_state(control) == LJ_GC2_TABLE_TOKEN_NONE);
 	assert(lj_gc2_table_token_generation(control) == 0);
