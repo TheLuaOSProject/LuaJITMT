@@ -1287,14 +1287,17 @@ static void ctype_hash_prepend(CTState *cts, uint32_t h, CType *src, CTypeID id)
 }
 
 static CTypeID ctype_hash_findtype(CTState *cts, CTypeID id, CTInfo info,
-				   CTSize size)
+                                   CTSize size, int independent)
 {
   while (id) {
     CType *ct = ctype_get(cts, id);
-    CTInfo cinfo = ctype_info_acq(ct);
-    CTSize csize = ctype_size_acq(ct);
-    if (!ctype_isabandoned(cinfo) && cinfo == info && csize == size)
-      return id;
+    if (ctype_info_acq(ct) == info && ctype_size_acq(ct) == size) {
+      uint32_t state = la_load32_acq(&ct->internstate);
+      if (state == CTINTERN_PENDING && independent &&
+	  la_cas32(&ct->internstate, &state, CTINTERN_PUBLIC, LA_ACQ_REL, LA_ACQ))
+	return id;
+      if (state == CTINTERN_PUBLIC || state == CTINTERN_PENDING) return id;
+    }
     id = ctype_next_acq(ct);
   }
   return 0;
@@ -1314,10 +1317,16 @@ static CTypeID ctype_hash_findname(CTState *cts, CTypeID id, GCstr *name,
   return 0;
 }
 
-static void ctype_abandon(CTState *cts, CTypeID id)
+void lj_ctype_abandon(CTState *cts, CTypeID id)
 {
+  CType *ct = ctype_get(cts, id);
   CType tmp;
-  ctype_copy_rel(&tmp, ctype_get(cts, id));
+  uint32_t state = CTINTERN_PENDING;
+  if (!la_cas32(&ct->internstate, &state, CTINTERN_ABANDONED,
+		LA_ACQ_REL, LA_ACQ) &&
+      state == CTINTERN_PUBLIC)
+    return;
+  ctype_copy_rel(&tmp, ct);
   ctype_info_rel(&tmp, CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD)));
   ctype_size_rel(&tmp, 0);
   ctype_sib_rel(&tmp, 0);
@@ -1399,7 +1408,8 @@ static CTypeID ctype_intern_l(lua_State *L, CTState *cts, CTInfo info,
 {
   uint32_t h = ct_hashtype(info, size);
   CTypeID head = ctype_hash_load(cts, h);
-  CTypeID id = ctype_hash_findtype(cts, head, info, size);
+  int independent = newp == NULL;  /* The parser tracks new IDs for rollback. */
+  CTypeID id = ctype_hash_findtype(cts, head, info, size, independent);
   if (newp) *newp = 0;
   if (id)
     return id;
@@ -1411,15 +1421,17 @@ static CTypeID ctype_intern_l(lua_State *L, CTState *cts, CTInfo info,
     ctype_sib_rel(ct, 0);
     ctype_next_rel(ct, 0);
     ctype_clearname(ct);
+    la_store32_rel(&ct->internstate, CTINTERN_PENDING);
     head = ctype_hash_load(cts, h);
     for (;;) {
-      CTypeID winner = ctype_hash_findtype(cts, head, info, size);
+      CTypeID winner = ctype_hash_findtype(cts, head, info, size, independent);
       if (winner) {
-	ctype_abandon(cts, id);
+	lj_ctype_abandon(cts, id);
 	return winner;
       }
       if (ctype_hash_try_prepend(cts, h, ct, id, &head)) {
 	if (newp) *newp = 1;
+	else la_store32_rel(&ct->internstate, CTINTERN_PUBLIC);
 	return id;
       }
     }
@@ -1465,7 +1477,7 @@ CTypeID lj_ctype_addname_unique(CTState *cts, CType *ct, CTypeID id,
     CTypeID winner = ctype_hash_findname(cts, head, name, tmask);
     if (winner) {
       if (winner != id)
-	ctype_abandon(cts, id);
+	lj_ctype_abandon(cts, id);
       return winner;  /* 11.2 named ctype duplicate winner. */
     }
     if (ctype_hash_try_prepend(cts, h, ct, id, &head))
@@ -1694,7 +1706,7 @@ int lj_ctype_getfieldq_wait(lua_State *L, CTState *cts, CTypeID rootid,
   for (;;) {
     uint32_t seq = ctype_parse_token_acq(cts);
     uint64_t version = ctype_layout_version(cts);
-    CTypeID top = ctype_layout_limit(cts, version);
+    CTypeID top = ctype_layout_limit(cts, version, rootid);
     CTypeTab *tabh = &cts->tab;
     CType root, field;
     CTInfo qual = qualp ? *qualp : 0;
@@ -1787,8 +1799,7 @@ void lj_ctype_save_layout(lua_State *L, CTState *cts, CTypeID id,
   la_store64_rel(&undo->version, ctype_layout_version(cts));
 }
 
-/* Read the layout which the writer last committed. An independently
-** published ID above its saved prefix can only be classified at commit. */
+/* Read a committed parser layout or an independently published structural type. */
 int lj_ctype_read(lua_State *L, CTState *cts, CTypeID id, CType *out)
 {
   if (id <= CTID_CTYPEID) {
@@ -1798,7 +1809,7 @@ int lj_ctype_read(lua_State *L, CTState *cts, CTypeID id, CType *out)
   }
   for (;;) {
     uint64_t version = ctype_layout_version(cts);
-    CTypeID top = ctype_layout_limit(cts, version);
+    CTypeID top = ctype_layout_limit(cts, version, id);
     int ok = ctype_layout_at(cts, version, &cts->tab, top, id, out);
     if (ctype_layout_version(cts) != version) continue;
     if (id < top || !(version & 1u)) return ok;
@@ -1879,7 +1890,7 @@ int lj_ctype_info_wait(lua_State *L, CTState *cts, CTypeID id,
   if (ok > 0) return ok;
   for (;;) {
     uint64_t version = ctype_layout_version(cts);
-    CTypeID top = ctype_layout_limit(cts, version);
+    CTypeID top = ctype_layout_limit(cts, version, id);
     ok = ctype_info_at(cts, version, top, id, infop, szp, ridp, rawp);
     if (ctype_layout_version(cts) != version) continue;
     if (ok >= 0 && (id < top || !(version & 1u))) return ok;
@@ -1972,7 +1983,7 @@ static int ctype_metatv_rooted_try(lua_State *L, CTState *cts, TValue *outroot,
     goto busy;
   version = ctype_layout_version(cts);
 
-  top = committed ? ctype_layout_limit(cts, version) : ctype_top_acq(cts);
+  top = committed ? ctype_layout_limit(cts, version, id) : ctype_top_acq(cts);
   tabh = &cts->tab;
   budget = top ? (MSize)top * 4u : 1u;
   for (;;) {
@@ -2151,7 +2162,7 @@ int lj_ctype_rawref_wait(lua_State *L, CTState *cts, CTypeID id,
   for (;;) {
     uint32_t seq = ctype_parse_token_acq(cts);
     uint64_t version = ctype_layout_version(cts);
-    CTypeID top = ctype_layout_limit(cts, version);
+    CTypeID top = ctype_layout_limit(cts, version, id);
     ok = ctype_rawref_at(cts, version, top, id, ridp, out);
     if (ctype_layout_version(cts) != version) continue;
     if (ok >= 0 && (id < top || !(version & 1u))) return ok;
@@ -2358,7 +2369,7 @@ int lj_ctype_size_wait(lua_State *L, CTState *cts, CTypeID id, CTSize *szp)
   for (;;) {
     uint32_t seq = ctype_parse_token_acq(cts);
     uint64_t version = ctype_layout_version(cts);
-    CTypeID top = ctype_layout_limit(cts, version);
+    CTypeID top = ctype_layout_limit(cts, version, id);
     ok = ctype_size_at(cts, version, top, id, szp);
     if (ctype_layout_version(cts) != version) continue;
     if (ok > 0) return 1;
@@ -2412,7 +2423,7 @@ int lj_ctype_enumconst_wait(lua_State *L, CTState *cts, CTypeID rootid,
   for (;;) {
     uint32_t seq = ctype_parse_token_acq(cts);
     uint64_t version = ctype_layout_version(cts);
-    CTypeID top = ctype_layout_limit(cts, version);
+    CTypeID top = ctype_layout_limit(cts, version, rootid);
     CTypeTab *tabh = &cts->tab;
     CType root;
     CTypeID cid;
@@ -2730,7 +2741,7 @@ GCstr *lj_ctype_repr_wait(lua_State *L, CTypeID id, GCstr *name)
   for (;;) {
     uint32_t seq = ctype_parse_token_acq(cts);
     uint64_t version = ctype_layout_version(cts);
-    CTypeID top = ctype_layout_limit(cts, version);
+    CTypeID top = ctype_layout_limit(cts, version, id);
     CTRepr ctr;
     if (id >= top && (version & 1u)) {
       lj_ctype_parse_wait(cts, L, seq);
@@ -2925,6 +2936,7 @@ CTState *lj_ctype_init(lua_State *L)
   for (id = 0; id < CTTYPEINFO_NUM; id++) {
     CType *ct = ctype_tab_slot(&cts->tab, id);
     CTInfo info = lj_ctype_typeinfo[id];
+    la_store32_rel(&ct->internstate, CTINTERN_PUBLIC);
     ctype_size_rel(ct, (CTSize)((int32_t)(info << 16) >> 26));
     ctype_info_rel(ct, info & 0xffff03ffu);
     ctype_sib_rel(ct, 0);

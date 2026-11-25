@@ -141,12 +141,17 @@ typedef uint32_t CTSize;	/* Type size. */
 typedef uint32_t CTypeID;	/* Type ID. */
 typedef uint16_t CTypeID1;	/* Minimum-sized type ID. */
 
+/* A structural type on the hash chain may be adopted by an independent
+** caller before its creating parser commits or rolls back. */
+enum { CTINTERN_NONE, CTINTERN_PENDING, CTINTERN_PUBLIC, CTINTERN_ABANDONED };
+
 /* C type table element. */
 typedef struct CType {
   CTInfo info;		/* Type info. */
   CTSize size;		/* Type size or other info. */
   CTypeID1 sib;		/* Sibling element. */
   CTypeID1 next;	/* Next element in hash chain. */
+  uint32_t internstate;	/* Publication state of the slot, outside its layout. */
   GCRef name;		/* Element name (GCstr). */
 } CType;
 
@@ -1471,9 +1476,24 @@ static LJ_AINLINE void ctype_copy_rel(CType *dst, const CType *src)
   ctype_nameobj_rel(dst, ctype_nameobj_acq(src));
 }
 
-static LJ_AINLINE CTypeID ctype_layout_limit(CTState *cts, uint64_t version)
+static LJ_AINLINE int ctype_layout_visible(CTState *cts, uint64_t version,
+                                           CTypeID id)
 {
-  return (version & 1u) ? la_load32_acq(&cts->layout_top) : ctype_top_acq(cts);
+  return !(version & 1u) || id < la_load32_acq(&cts->layout_top) ||
+    la_load32_acq(&ctype_tab_slot(&cts->tab, id)->internstate) == CTINTERN_PUBLIC;
+}
+
+static LJ_AINLINE CTypeID ctype_layout_limit(CTState *cts, uint64_t version,
+                                              CTypeID id)
+{
+  CTypeID top = ctype_top_acq(cts);
+  if (version & 1u) {
+    CTypeID prefix = la_load32_acq(&cts->layout_top);
+    if (id < prefix || id >= top ||
+        la_load32_acq(&ctype_tab_slot(&cts->tab, id)->internstate) != CTINTERN_PUBLIC)
+      return prefix;
+  }
+  return top;
 }
 
 /* Sample the live fields before checking for an undo record. Acquiring any
@@ -1497,7 +1517,8 @@ static LJ_AINLINE int ctype_layout_at(CTState *cts, uint64_t version,
                                       CTypeTab *tabh, CTypeID top, CTypeID id,
                                       CType *out)
 {
-  if (id == 0 || id >= top || id >= ctype_tab_sizetab_acq(tabh))
+  if (id == 0 || id >= top || id >= ctype_tab_sizetab_acq(tabh) ||
+      !ctype_layout_visible(cts, version, id))
     return 0;
   ctype_layout_copy(cts, version, tabh, id, out);
   return !ctype_isabandoned(out->info);
@@ -1505,6 +1526,7 @@ static LJ_AINLINE int ctype_layout_at(CTState *cts, uint64_t version,
 
 LJ_FUNC int lj_ctype_read(lua_State *L, CTState *cts, CTypeID id, CType *out);
 LJ_FUNC CTypeID lj_ctype_new_l(lua_State *L, CTState *cts, CType **ctp);
+LJ_FUNC void lj_ctype_abandon(CTState *cts, CTypeID id);
 LJ_FUNC void lj_ctype_save_layout(lua_State *L, CTState *cts, CTypeID id,
 				 const CType *old);
 LJ_FUNC CTypeID lj_ctype_intern_l(lua_State *L, CTState *cts, CTInfo info,

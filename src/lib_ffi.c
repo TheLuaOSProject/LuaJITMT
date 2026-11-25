@@ -2118,7 +2118,7 @@ static int ffi_layout_begin(CTState *cts, CTypeID id, FFILayoutSnap *ls)
 {
   uint64_t version = ctype_layout_version(cts);
   ls->cts = cts;
-  ls->top = ctype_layout_limit(cts, version);
+  ls->top = ctype_layout_limit(cts, version, id);
   /* An ID exposed during parsing may be newer than the committed prefix. */
   if ((version & 1u) && id >= ls->top)
     return -1;
@@ -2155,8 +2155,7 @@ static int ffi_layout_get(FFILayoutSnap *ls, CTypeID id, CType *out)
     return 0;
   if (ls->budget-- == 0)
     return -1;
-  ctype_layout_copy(ls->cts, ls->version, ls->tabh, id, out);
-  return ctype_isabandoned(out->info) ? 0 : 1;
+  return ctype_layout_at(ls->cts, ls->version, ls->tabh, ls->top, id, out);
 }
 
 static int ffi_layout_rawref(FFILayoutSnap *ls, CTypeID id, CType *out)
