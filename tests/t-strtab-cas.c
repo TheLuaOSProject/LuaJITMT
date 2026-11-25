@@ -419,7 +419,7 @@ static void check_paused_topology(lua_State *L, PausedTopology *p,
   p->peer = lua_newthread(L);
   p->hdr = lj_str_tabh_acq(G(L));
   if (p->stage == LJ_STR_TEST_CANON_EXPAND_FROZEN &&
-      p->target_mask < p->hdr->mask) {
+      p->target_mask < p->hdr->mask && !lj_str_second_acq(G(L))) {
     global_State *g = G(L);
     merges = (p->hdr->mask + 1u) / (p->target_mask + 1u);
     assert(merges == MERGE_SOURCES);
@@ -465,7 +465,8 @@ static void check_paused_topology(lua_State *L, PausedTopology *p,
       assert(n > 0 && (size_t)n < sizeof(new_key));
       new_len = (size_t)n;
       hash = test_hash_sparse(g->str.seed, new_key, (MSize)n);
-      if ((hash & p->destination) == p->destination)
+      if ((hash & p->destination) == p->destination &&
+          !lj_str_bucket_dense(p->hdr, hash))
         break;
     }
     for (m = 1; m < merges; m++) {
@@ -487,7 +488,7 @@ static void check_paused_topology(lua_State *L, PausedTopology *p,
       &target->bucket[hash & target->mask])) == obj2gco(inserted));
     lua_pushlstring(L, new_key, new_len);
     assert(strV(L->top - 1) == inserted);
-    if (expected->hashalg) {
+    if (expected->hashalg && target->mask > p->hdr->mask) {
       MSize sparse = test_hash_sparse(g->str.seed, bytes, (MSize)len);
       assert((sparse & p->hdr->mask) < (expected->hash & p->hdr->mask));
       pending_primary = &target->bucket[sparse & target->mask];
@@ -644,7 +645,7 @@ static void exercise_paused_topology_hits(void)
 #if LUAJIT_SECURITY_STRHASH
   {
     enum { CHAIN = 34u };
-    PausedTopology rehash = { 0 }, densegrow = { 0 };
+    PausedTopology rehash = { 0 }, densegrow = { 0 }, mixed = { 0 };
     StrTabHdr *hdr = lj_str_tabh_acq(g);
     char names[CHAIN + 1u][64], dense_name[64];
     MSize bucket, source = 0, cache_mask = LJ_STR_RESIZE_HIT_COUNT - 1u;
@@ -691,6 +692,96 @@ static void exercise_paused_topology_hits(void)
     check_paused_topology(L, &densegrow, dense_name, strlen(dense_name));
     assert(lj_str_mask_acq(g) == densegrow.target_mask);
     assert(lj_str_second_acq(g));
+    {
+      StrHash dense_hash, plain_hash = 0;
+      StrTabHdr *before = lj_str_tabh_acq(g);
+      GCstr *dense_key, *plain_key;
+      char plain_name[64], dense_new[1][64], plain_new[1][64];
+      MSize widened = before->mask;
+      int top = lua_gettop(L);
+
+      mixed.stage = LJ_STR_TEST_CANON_EXPAND_FROZEN;
+      mixed.target_mask = widened >> 2;
+      dense_hash = test_hash_sparse(g->str.seed, dense_name,
+                                    (MSize)strlen(dense_name));
+      assert(lj_str_bucket_dense(before, dense_hash));
+      for (n = 0;; n++) {
+        int len = snprintf(plain_name, sizeof(plain_name),
+                           "%08x-mixed-shrink-plain-%08x",
+                           n * UINT32_C(0x9e3779b9), n);
+        assert(len > 0 && (size_t)len < sizeof(plain_name));
+        plain_hash = test_hash_sparse(g->str.seed, plain_name, (MSize)len);
+        if ((plain_hash & mixed.target_mask) ==
+            (dense_hash & mixed.target_mask) &&
+            !lj_str_bucket_dense(before, plain_hash))
+          break;
+      }
+
+      lua_pushstring(L, dense_name);
+      dense_key = strV(L->top - 1);
+      lua_pushstring(L, plain_name);
+      plain_key = strV(L->top - 1);
+      assert(dense_key->hashalg && !plain_key->hashalg);
+      collect_collision_names(g, before, dense_hash & widened,
+                              "mixed-shrink-new-dense", dense_new, 1u);
+      collect_collision_names(g, before, plain_hash & widened,
+                              "mixed-shrink-new-plain", plain_new, 1u);
+      mixed.dense_source = plain_name;
+      check_paused_topology(L, &mixed, dense_name, strlen(dense_name));
+      do {
+        StrTabHdr *current = lj_str_tabh_acq(g);
+        assert(current->dense_mask == widened);
+        assert(lj_str_bucket_dense(current, dense_hash));
+        assert(!lj_str_bucket_dense(current, plain_hash));
+        lua_pushstring(L, dense_name);
+        assert(strV(L->top - 1) == dense_key);
+        lua_pushstring(L, plain_name);
+        assert(strV(L->top - 1) == plain_key);
+        lua_pop(L, 2);
+        if (current->mask == mixed.target_mask) {
+          GCstr *rescued;
+          MSize group, k;
+          uint32_t grace;
+          lua_pushstring(L, dense_new[0]);
+          rescued = strV(L->top - 1);
+          assert(rescued->hashalg);
+          lua_pushstring(L, plain_new[0]);
+          assert(!strV(L->top - 1)->hashalg);
+          assert(lj_str_test_quarantine_detach(L, rescued));
+          lua_pushstring(L, dense_new[0]);
+          assert(strV(L->top - 1) == rescued);
+          for (grace = 0; grace < LJ_GC2_GRACE_EPOCHS; grace++)
+            (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
+          (void)lj_gc2_reclaim_retired(g, lj_gc2_retire_epoch(g));
+          assert(lj_str_canon_acq(rescued) == LJ_STR_CANON_LIVE);
+          assert(rescued->hashalg);
+          assert(lj_str_newz(L, dense_new[0]) == rescued);
+
+          /* A later collision promotes all fine modes that now share the
+          ** rehashed physical group. Other groups keep their mixed modes. */
+          for (group = 0; group <= current->mask; group++) {
+            if (group == (dense_hash & current->mask))
+              continue;
+            for (k = group; k <= current->dense_mask; k += current->mask + 1u)
+              if (lj_str_bucket_dense(current, k))
+                break;
+            if (k > current->dense_mask)
+              break;
+          }
+          assert(group <= current->mask);
+          collect_collision_names(g, current, group, "mixed-shrink-new-rehash",
+                                  names, CHAIN + 1u);
+          install_primary_chain(L, current, names, CHAIN);
+          assert(lj_str_newz(L, names[CHAIN])->hashalg);
+          for (k = group; k <= current->dense_mask; k += current->mask + 1u)
+            assert(lj_str_bucket_dense(current, k));
+        }
+        if (current->mask == widened)
+          break;
+        lj_str_resize(L, (current->mask << 1) + 1u);
+      } while (1);
+      lua_settop(L, top);
+    }
   }
 #endif
   lua_close(L);

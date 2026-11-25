@@ -288,7 +288,8 @@ typedef uint32_t StrID;		/* String ID. */
 typedef struct StrCanonRec StrCanonRec;
 
 typedef struct StrTabHdr {
-  MSize mask;		/* String hash mask (size of hash table - 1). */
+  MSize mask;		/* Physical string bucket mask. */
+  MSize dense_mask;	/* Dense classification mask, possibly wider. */
   uintptr_t topology;	/* Claim or tagged target generation of plain growth. */
   MSize copy_cursor;	/* First completed source bucket of a plain expansion. */
   MSize link_slot;	/* Successor slot used by this generation. */

@@ -112,8 +112,11 @@ enum {
   ((mask) == ~(MSize)0 ? (GCSize)0 : \
    (GCSize)offsetof(StrTabHdr, bucket) + \
    (((GCSize)(mask) + 1u) * (GCSize)sizeof(GCRef)))
+#define lj_str_tabsize_dense(mask, dense_mask) \
+  (lj_str_tabsize(mask) + ((dense_mask) > (mask) ? \
+    (((GCSize)(dense_mask) + 64u) >> 6) * sizeof(uint64_t) : (GCSize)0))
 #define lj_str_tabbytes(tabh) \
-  ((tabh) ? lj_str_tabsize((tabh)->mask) : (GCSize)0)
+  ((tabh) ? lj_str_tabsize_dense((tabh)->mask, (tabh)->dense_mask) : (GCSize)0)
 #define lj_str_qtabsize(mask) \
   ((mask) == ~(MSize)0 ? (GCSize)0 : \
    (GCSize)offsetof(StrCanonHdr, bucket) + \
@@ -701,6 +704,23 @@ static LJ_AINLINE uintptr_t lj_str_hashsecondary_acq(const GCRef *r)
 #define lj_str_hashhead(r)		lj_str_hashhead_acq(&(r))
 #define lj_str_hashflags(r)		lj_str_hashflags_acq(&(r))
 #define lj_str_hashsecondary(r)		lj_str_hashsecondary_acq(&(r))
+
+/* A shrink may merge an old sparse primary and an old dense primary.
+** The packed bitmap retains their exact classification independently of
+** where the corresponding physical chains now live. */
+static LJ_AINLINE uint64_t *lj_str_dense_words(const StrTabHdr *hdr)
+{
+  return (uint64_t *)(void *)&hdr->bucket[hdr->mask + 1u];
+}
+
+static LJ_AINLINE int lj_str_bucket_dense(const StrTabHdr *hdr, StrHash sparse)
+{
+  MSize index = sparse & hdr->dense_mask;
+  if (hdr->dense_mask == hdr->mask)
+    return lj_str_hashsecondary_acq(&hdr->bucket[index]) != 0;
+  return (int)((la_load64_acq(&lj_str_dense_words(hdr)[index >> 6]) >>
+                (index & 63u)) & 1u);
+}
 
 static LJ_AINLINE GCRef *lj_str_nodelink(const StrTabHdr *hdr, GCobj *o)
 {

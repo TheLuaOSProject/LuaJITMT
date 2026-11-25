@@ -358,7 +358,7 @@ static LJ_AINLINE int strtab_intern_blocked(global_State *g, StrTabHdr *hdr,
     ** Secondary flags on all other primary buckets remain stable. */
     if (primary == source)
       return 1;
-    if (lj_str_link_load_acq(&hdr->bucket[primary]) & LJ_STRHASH_SECONDARY)
+    if (lj_str_bucket_dense(hdr, sparse))
       return (hash_dense(g->str.seed, sparse, bytes, len) & hdr->mask) == source;
   }
 #else
@@ -664,7 +664,7 @@ static StrTabHdr *strtab_enter(lua_State *L, global_State *g, StrHash sparse,
 
 /* Freeze the incoming edge before any helper uses the old bucket. A
 ** prior interner can still finish a hit, but its old-head insert CAS loses. */
-static uintptr_t strtab_freeze_bucket(lua_State *L, GCRef *head)
+static void strtab_freeze_bucket(lua_State *L, GCRef *head)
 {
   uintptr_t edge = lj_str_link_load_acq(head);
   while (!(edge & LJ_STRHASH_FROZEN)) {
@@ -677,11 +677,16 @@ static uintptr_t strtab_freeze_bucket(lua_State *L, GCRef *head)
       break;
     }
   }
-  return edge;
+}
+
+static void strtab_set_dense_bit(StrTabHdr *hdr, MSize index)
+{
+  (void)la_or64_rlx(&lj_str_dense_words(hdr)[index >> 6],
+                   UINT64_C(1) << (index & 63u));
 }
 
 /* The frozen sources remain readable and every helper sees the same order.
-** For doubling one source maps to two destinations. For plain shrink, all
+** For doubling one source maps to two destinations. For shrink, all
 ** source buckets in a group must be frozen before their merged head opens. */
 static void strtab_help_expand_bucket(lua_State *L, StrTabHdr *source,
                                       StrTabHdr *target, MSize cursor)
@@ -690,12 +695,10 @@ static void strtab_help_expand_bucket(lua_State *L, StrTabHdr *source,
   int grow = source->mask < target->mask;
   MSize step = (grow ? source->mask : target->mask) + 1u;
   GCobj *first[2] = { NULL, NULL }, *last[2] = { NULL, NULL }, *o;
-  uintptr_t edge, marker = 0;
+  uintptr_t edge;
   MSize k;
-  for (k = i; k <= source->mask; k += step) {
-    edge = strtab_freeze_bucket(L, &source->bucket[k]);
-    marker |= edge & LJ_STRHASH_SECONDARY;
-  }
+  for (k = i; k <= source->mask; k += step)
+    strtab_freeze_bucket(L, &source->bucket[k]);
   for (k = i; k <= source->mask; k += step) {
     edge = lj_str_link_load_acq(&source->bucket[k]);
     for (o = lj_str_link_target(edge); o;
@@ -708,13 +711,21 @@ static void strtab_help_expand_bucket(lua_State *L, StrTabHdr *source,
       last[side] = o;
     }
   }
+  if (target->dense_mask > target->mask) {
+    for (k = i; k <= target->dense_mask; k += step)
+      if (lj_str_bucket_dense(source, k))
+        strtab_set_dense_bit(target, k);
+  }
   /* Only first publication may replace the unset sentinel. Target chains
   ** cannot be rehashed or swept while an old-generation helper is pinned. */
   for (k = 0; k <= (MSize)grow; k++) {
+    MSize destination = i + k * step;
     uintptr_t unset = LJ_STRHASH_FROZEN;
+    uintptr_t marker = target->dense_mask == target->mask &&
+      lj_str_bucket_dense(source, destination) ? LJ_STRHASH_SECONDARY : 0;
     if (last[k])
       lj_str_ref_store_rel(lj_str_nodelink(target, last[k]), 0);
-    (void)lj_str_link_cas_acqrel(&target->bucket[i + k * step],
+    (void)lj_str_link_cas_acqrel(&target->bucket[destination],
                                  &unset, (uintptr_t)first[k] | marker);
   }
   if (la_cas32(&target->copy_cursor, &cursor, i, LA_ACQ_REL, LA_ACQ)) {
@@ -774,7 +785,7 @@ void lj_str_expand_terminal(lua_State *L)
 
 /* During a helpable expansion the target primary marker may still be unset
 ** even when its dense route is ready. Select the hash with the source marker
-** until global handoff. During plain shrink the hash mode stays sparse. */
+** until global handoff. Shrink keeps both sparse and dense hash choices. */
 static StrTabHdr *strtab_enter_completed(lua_State *L, global_State *g,
                                         StrHash sparse, const char *bytes,
                                         MSize len, int *selected_alg)
@@ -791,7 +802,7 @@ static StrTabHdr *strtab_enter_completed(lua_State *L, global_State *g,
     target = lj_str_expand_target(topology);
     if (target) {
 #if LUAJIT_SECURITY_STRHASH
-      if (lj_str_hashsecondary_acq(&source->bucket[i])) {
+      if (lj_str_bucket_dense(source, sparse)) {
         hashalg = 1;
         i = hash_dense(g->str.seed, sparse, bytes, len) & source->mask;
       } else {
@@ -834,7 +845,7 @@ void lj_str_resize(lua_State *L, MSize newmask)
   StrTabHdr *oldhdr;
   GCRef *newtab, *oldtab;
   GCSize newsize;
-  MSize i, oldmask;
+  MSize i, oldmask, dense_mask;
   int expand;
 
   /* The atomic header claim below serializes every GC2 topology owner. The
@@ -842,10 +853,14 @@ void lj_str_resize(lua_State *L, MSize newmask)
   if (newmask >= LJ_MAX_STRTAB-1)
     return;
 
-  newsize = lj_str_tabsize(newmask);
+  oldhdr = lj_str_tabh_acq(g);
+  dense_mask = oldhdr && lj_str_second_acq(g) && oldhdr->dense_mask > newmask ?
+    oldhdr->dense_mask : newmask;
+  newsize = lj_str_tabsize_dense(newmask, dense_mask);
   newhdr = (StrTabHdr *)lj_mem_new(L, newsize);
   memset(newhdr, 0, newsize);
   newhdr->mask = newmask;
+  newhdr->dense_mask = dense_mask;
   newtab = newhdr->bucket;
 
 restart:
@@ -855,13 +870,14 @@ restart:
 
   if (oldhdr && (oldmask & (oldmask + 1u)) == 0 &&
       (newmask & (newmask + 1u)) == 0 &&
-      (newmask == (oldmask << 1) + 1u ||
-       (newmask < oldmask &&
-        !(lj_str_topology_acq(oldhdr) & LJ_STRTAB_TOPO_SECOND)))) {
+      (newmask == (oldmask << 1) + 1u || newmask < oldmask)) {
     uintptr_t expect = lj_str_topology_acq(oldhdr);
     MSize routemask = oldmask < newmask ? oldmask : newmask;
+    MSize required_dense_mask =
+      (expect & LJ_STRTAB_TOPO_SECOND) && oldhdr->dense_mask > newmask ?
+        oldhdr->dense_mask : newmask;
     if ((expect & ~LJ_STRTAB_TOPO_SECOND) != 0 ||
-        (newmask < oldmask && expect != 0) ||
+        required_dense_mask != dense_mask ||
         lj_tg_strtab_active_depth_acq(L2TG(L)) != 0 ||
         !lj_gc2_smr_read_try(g)) {
       lj_mem_free(g, newhdr, newsize);
@@ -885,6 +901,11 @@ restart:
       return;
     }
     lj_gc2_smr_read_leave(g);
+    lj_mem_free(g, newhdr, newsize);
+    return;
+  }
+
+  if (dense_mask != newmask) {
     lj_mem_free(g, newhdr, newsize);
     return;
   }
@@ -1079,6 +1100,11 @@ static LJ_NOINLINE int lj_str_rehash_chain(lua_State *L, StrHash hashc)
   strmask = hdr->mask;
   oldlink = lj_str_link_load_acq(&strtab[hashc & strmask]);
   lj_str_ref_store_rel(&strtab[hashc & strmask], LJ_STRHASH_SECONDARY);
+  if (hdr->dense_mask > strmask) {
+    MSize i;
+    for (i = hashc & strmask; i <= hdr->dense_mask; i += strmask + 1u)
+      strtab_set_dense_bit(hdr, i);
+  }
   hdr->has_secondary = 1;
   lj_str_second_rel(g, 1);
   while ((o = lj_str_link_target(oldlink)) != NULL) {
@@ -1435,8 +1461,8 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
       head = &strtab[hash & mask];
       headu = lj_str_link_load_acq(head);
 #if LUAJIT_SECURITY_STRHASH
-      if (LJ_UNLIKELY(selected_alg < 0 ? (headu & LJ_STRHASH_SECONDARY) :
-                      selected_alg != 0)) {
+      if (LJ_UNLIKELY(selected_alg < 0 ?
+                      lj_str_bucket_dense(hdr, qhash) : selected_alg != 0)) {
 	hashalg = 1;
 	hash = hash_dense(g->str.seed, hash, str, len);
 	head = &strtab[hash & mask];
@@ -2525,7 +2551,7 @@ static int strq_relink(global_State *g, StrCanonRec *rec, GCstr *s,
   head = &hdr->bucket[hash & hdr->mask];
   edge = lj_str_link_load_acq(head);
 #if LUAJIT_SECURITY_STRHASH
-  if (edge & LJ_STRHASH_SECONDARY) {
+  if (lj_str_bucket_dense(hdr, hash)) {
     hashalg = 1;
     hash = hash_dense(g->str.seed, hash, strdata(s), s->len);
     head = &hdr->bucket[hash & hdr->mask];
