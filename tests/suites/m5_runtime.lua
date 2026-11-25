@@ -346,7 +346,7 @@ return function(add)
     description = "public API string/key/environment root handoffs",
     run = function(t)
       local flags = build.assert_flag .. " -DLJ_TG_ROOT_TEST_HELPERS " ..
-                    "-DLJ_API_ROOT_TEST_HELPERS"
+                    "-DLJ_API_ROOT_TEST_HELPERS -DLJ_GC2_TEST_HELPERS"
       build.with_default_build_restore(t, function()
         t:build({ clean = true, quiet = true, xcflags = flags })
         build_and_run_c(t, t:tmp("lj_t-api-gc-handoffs"),

@@ -14,6 +14,7 @@
 #include "lj_func.h"
 #include "lj_frame.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_obj.h"
 #include "lj_state.h"
 #include "lj_str.h"
@@ -304,6 +305,72 @@ static void newmetatable_race_hook(lua_State *L, int stage, GCtab *regt,
   }
 }
 
+static int check_upvalue_string_view(lua_State *L)
+{
+  int index = lua_upvalueindex(1);
+  size_t len = 0;
+  const char *bytes = lua_tolstring(L, index, &len);
+  assert(len == 4 && memcmp(bytes, "1987", len) == 0);
+  assert(lua_type(L, index) == LUA_TSTRING);
+#ifdef LJ_GC2_TEST_HELPERS
+  lj_gc2_test_stack_admission_retry_once(
+    obj2gco(strV(&curr_func(L)->c.upvalue[0])));
+#endif
+  assert(lua_tolstring(L, index, NULL) == bytes);
+#ifdef LJ_GC2_TEST_HELPERS
+  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+#endif
+  full_cycle(L);
+  assert(memcmp(bytes, "1987", len) == 0);
+  lua_pushliteral(L, "1987");
+  assert(lua_tolstring(L, -1, NULL) == bytes);
+  return 0;
+}
+
+static void test_borrowed_string_views(lua_State *L)
+{
+  static const char binary[] = { 'x', '\0', 'y' };
+  static const char fallback[] = "fallback";
+  const char *bytes;
+  size_t len = 0;
+  int top = lua_gettop(L);
+
+  lua_pushlstring(L, binary, sizeof(binary));
+  bytes = lua_tolstring(L, -1, &len);
+  assert(bytes != NULL && len == sizeof(binary));
+  assert(lua_tolstring(L, -1, NULL) == bytes);
+  full_cycle(L);  /* The original Lua stack root retains the borrow. */
+  assert(memcmp(bytes, binary, sizeof(binary)) == 0);
+  assert(luaL_checklstring(L, -1, NULL) == bytes);
+  lua_pushlstring(L, binary, sizeof(binary));
+  assert(luaL_optlstring(L, -1, fallback, &len) == bytes);
+  assert(len == sizeof(binary));
+  lua_pop(L, 2);
+
+  lua_pushinteger(L, 1987);
+  lua_pushcclosure(L, check_upvalue_string_view, 1);
+  assert(lua_pcall(L, 0, 0, 0) == 0);
+
+  /* Registry replacement is a shared TValue publication, not a write to
+  ** the temporary snapshot produced by reading that pseudo-index. */
+  lua_pushvalue(L, LUA_REGISTRYINDEX);
+  lua_pushinteger(L, 7291);
+  lua_replace(L, LUA_REGISTRYINDEX);
+  assert(lua_objlen(L, LUA_REGISTRYINDEX) == 4);
+  assert(lua_type(L, LUA_REGISTRYINDEX) == LUA_TSTRING);
+  bytes = lua_tolstring(L, LUA_REGISTRYINDEX, &len);
+  assert(len == 4 && memcmp(bytes, "7291", len) == 0);
+  assert(lua_tolstring(L, LUA_REGISTRYINDEX, NULL) == bytes);
+  lua_replace(L, LUA_REGISTRYINDEX);
+
+  lua_pushnil(L);
+  assert(luaL_optlstring(L, -1, fallback, &len) == fallback);
+  assert(len == sizeof(fallback) - 1u);
+  assert(lua_tolstring(L, -1, &len) == NULL && len == 0);
+  lua_pop(L, 1);
+  assert(lua_gettop(L) == top);
+}
+
 static void test_string_and_key_roots(lua_State *L, lua_State *co)
 {
   TGState *tg = L2TG(L);
@@ -494,6 +561,7 @@ int main(void)
 
   test_reserve_oom_and_bound(L, co);
   test_string_and_key_roots(L, co);
+  test_borrowed_string_views(L);
   test_meta_roots(L);
   test_constructor_env_roots(L, co);
   full_cycle(L);

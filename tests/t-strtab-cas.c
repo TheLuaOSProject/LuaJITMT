@@ -575,6 +575,25 @@ static void exercise_canonical_quarantine(lua_State *L)
   canon = lj_str_canon_acq(spublish);
   assert(lj_str_canon_state(canon) == LJ_STR_CANON_QRESCUED);
 
+  /* An ordinary C API borrow of a rooted canonical string rescues it
+  ** before returning the borrowed bytes, with or without a length result. */
+  {
+    size_t len = 0;
+    lua_pushlstring(L, strdata(spublish), spublish->len);
+    lj_str_canon_rel(spublish,
+		     lj_str_canon_pack(ctx.rec, LJ_STR_CANON_QCLOSING));
+    assert(lua_tolstring(L, -1, &len) == strdata(spublish));
+    assert(len == spublish->len);
+    assert(lj_str_canon_state(lj_str_canon_acq(spublish)) ==
+	   LJ_STR_CANON_QRESCUED);
+    lj_str_canon_rel(spublish,
+		     lj_str_canon_pack(ctx.rec, LJ_STR_CANON_QCLOSING));
+    assert(lua_tolstring(L, -1, NULL) == strdata(spublish));
+    assert(lj_str_canon_state(lj_str_canon_acq(spublish)) ==
+	   LJ_STR_CANON_QRESCUED);
+    lua_pop(L, 1);
+  }
+
   /* The collector must also rescue a value reached by traversing a
   ** strong table, even when the Lua stack never contains the string. */
   lua_newtable(L);

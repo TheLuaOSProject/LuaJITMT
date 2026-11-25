@@ -516,41 +516,103 @@ static void api_gcroot_replace(lua_State *L, ApiGCRoot *root, cTValue *tv)
   lj_gc_pubroot(L, slot);
 }
 
-static void index2adr_storestr_noflush(lua_State *L, int idx, TValue *o,
-				      GCstr *s)
+typedef struct ApiStringView {
+  const char *bytes;
+  size_t len;
+} ApiStringView;
+
+static LJ_AINLINE int api_string_view_held(ApiStringView *view, GCstr *str)
 {
-  if (index_iscupvalue(idx)) {
-    TValue tv;
-    setstrV(L, &tv, s);
-    o = index2adr(L, idx);
-    copyTVrel(L, o, &tv);
-    lj_gc_pubobjtv(L, curr_func(L), &tv);
-  } else {
-    setstrV(L, o, s);
-    lj_state_stack_pubtv(L, L, o);
-  }
+  if (lj_str_canon_acq(str) != LJ_STR_CANON_LIVE &&
+      !lj_str_gc2_rescue_held(str, NULL))
+    return 0;
+  view->bytes = strdata(str);
+  view->len = str->len;
+  return 1;
 }
 
-static GCstr *api_tolstring_claimed(lua_State *L, int idx, int *status)
+/* An owned stack slot retains its string while the claim is held. For shared
+** pseudo-indices, acquire SMR before sampling the mutable slot, retain the
+** exact string incarnation, and recheck the source before reading its header.
+** The returned bytes borrow the object's storage. The caller retains the
+** source Lua value for any use after this API call. */
+static TValue *api_tolstring_read_claimed(lua_State *L, int idx, TValue *snap,
+					 ApiStringView *view)
+{
+  global_State *g;
+  TValue *o;
+  if (idx != LUA_REGISTRYINDEX && !index_iscupvalue(idx)) {
+    o = index2adr_read(L, idx, snap);
+    if (tvisstr(o) && !api_string_view_held(view, strV(o)))
+      return NULL;
+    return o;
+  }
+  g = G(L);
+  if (!lj_gc2_smr_read_try(g))
+    return NULL;
+  o = index2adr(L, idx);
+  lj_tv_load_acq(snap, o);
+  if (tvisstr(snap)) {
+    LJGC2Lease lease;
+    if (lj_gc2_tv_lease_acquire(g, snap, &lease) != LJ_GC2_TV_EDGE_VALID) {
+      lj_gc2_smr_read_leave(g);
+      return NULL;
+    }
+    if (tv_rawload_acq(o) != tv_rawload(snap) ||
+	!api_string_view_held(view, strV(snap))) {
+      lj_gc2_lease_release(&lease);
+      lj_gc2_smr_read_leave(g);
+      return NULL;
+    }
+    lj_gc2_lease_release(&lease);
+  }
+  lj_gc2_smr_read_leave(g);
+  return snap;
+}
+
+static int index2adr_storestr_noflush(lua_State *L, int idx, TValue *o,
+				     cTValue *number, GCstr *str)
+{
+  if (index_iscupvalue(idx) || idx == LUA_REGISTRYINDEX) {
+    TValue expect = *number, value;
+    setstrV(L, &value, str);
+    o = index2adr(L, idx);
+    if (!lj_tv_cas(o, &expect, &value))
+      return 0;
+    if (idx == LUA_REGISTRYINDEX)
+      lj_gc_pubroot(L, o);
+    else
+      lj_gc_pubobjtv(L, curr_func(L), &value);
+  } else {
+    setstrV(L, o, str);
+    lj_state_stack_pubtv(L, L, o);
+  }
+  return 1;
+}
+
+static int api_tolstring_claimed(lua_State *L, int idx, ApiStringView *view)
 {
   for (;;) {
     LJStateClaim claim;
     ApiGCRoot root = { NULL, 0 };
     TValue snap, numtv;
-    cTValue *o;
+    TValue *o;
     GCstr *s;
     api_checkclaim(L, &claim);
-    o = index2adr_read(L, idx, &snap);
-    if (LJ_LIKELY(tvisstr(o))) {
-      s = strV(o);
+    o = api_tolstring_read_claimed(L, idx, &snap, view);
+    if (LJ_UNLIKELY(!o)) {
       lj_state_dropclaim(&claim);
-      *status = API_TOSTR_OK;
-      return s;
+      lj_tab_wait_l(api_errstate(L));
+      continue;
+    }
+    if (LJ_LIKELY(tvisstr(o))) {
+      lj_state_dropclaim(&claim);
+      return API_TOSTR_OK;
     }
     if (!tvisnumber(o)) {
-      *status = tvisnil(o) ? API_TOSTR_NIL : API_TOSTR_BAD;
+      int status = tvisnil(o) ? API_TOSTR_NIL : API_TOSTR_BAD;
       lj_state_dropclaim(&claim);
-      return NULL;
+      return status;
     }
     copyTV(L, &numtv, o);
     lj_state_dropclaim(&claim);
@@ -567,14 +629,21 @@ static GCstr *api_tolstring_claimed(lua_State *L, int idx, int *status)
       (void)api_gcroot_push_reserved(errL, &strtv, &root);
     }
 
-    api_checkclaim(L, &claim);
-    o = index2adr_read(L, idx, &snap);
-    if (tvisstr(o)) {
-      s = strV(o);
+    if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim)) {
+      api_gcroot_release(&root);
+      lj_err_callermsg(api_errstate(L), "thread busy");
+    }
+    o = api_tolstring_read_claimed(L, idx, &snap, view);
+    if (LJ_UNLIKELY(!o)) {
       lj_state_dropclaim(&claim);
       api_gcroot_release(&root);
-      *status = API_TOSTR_OK;
-      return s;
+      lj_tab_wait_l(api_errstate(L));
+      continue;
+    }
+    if (tvisstr(o)) {
+      lj_state_dropclaim(&claim);
+      api_gcroot_release(&root);
+      return API_TOSTR_OK;
     }
     if (tvisnumber(o)) {
       if (tv_rawload_acq(o) == tv_rawload(&numtv)) {
@@ -584,21 +653,22 @@ static GCstr *api_tolstring_claimed(lua_State *L, int idx, int *status)
 	  api_trace_flush_mutation(api_errstate(L));
 	  continue;
 	}
-	index2adr_storestr_noflush(L, idx,
-				 index_iscupvalue(idx) ? NULL : (TValue *)o, s);
-	lj_state_dropclaim(&claim);
-	api_gcroot_release(&root);
-	*status = API_TOSTR_OK;
-	return s;
+	if (api_string_view_held(view, s) &&
+	    index2adr_storestr_noflush(L, idx, o, &numtv, s)) {
+	  lj_state_dropclaim(&claim);
+	  api_gcroot_release(&root);
+	  return API_TOSTR_OK;
+	}
       }
       lj_state_dropclaim(&claim);
       api_gcroot_release(&root);
       continue;
+    } else {
+      int status = tvisnil(o) ? API_TOSTR_NIL : API_TOSTR_BAD;
+      lj_state_dropclaim(&claim);
+      api_gcroot_release(&root);
+      return status;
     }
-    *status = tvisnil(o) ? API_TOSTR_NIL : API_TOSTR_BAD;
-    lj_state_dropclaim(&claim);
-    api_gcroot_release(&root);
-    return NULL;
   }
 }
 
@@ -1747,39 +1817,37 @@ LUA_API int lua_toboolean(lua_State *L, int idx)
 
 LUA_API const char *lua_tolstring(lua_State *L, int idx, size_t *len)
 {
-  int status;
-  GCstr *s = api_tolstring_claimed(L, idx, &status);
-  if (status != API_TOSTR_OK) {
+  ApiStringView view;
+  if (api_tolstring_claimed(L, idx, &view) != API_TOSTR_OK) {
     if (len != NULL) *len = 0;
     return NULL;
   }
-  if (len != NULL) *len = s->len;
-  return strdata(s);
+  if (len != NULL) *len = view.len;
+  return view.bytes;
 }
 
 LUALIB_API const char *luaL_checklstring(lua_State *L, int idx, size_t *len)
 {
-  int status;
-  GCstr *s = api_tolstring_claimed(L, idx, &status);
-  if (status != API_TOSTR_OK)
+  ApiStringView view;
+  if (api_tolstring_claimed(L, idx, &view) != API_TOSTR_OK)
     lj_err_argt(L, idx, LUA_TSTRING);
-  if (len != NULL) *len = s->len;
-  return strdata(s);
+  if (len != NULL) *len = view.len;
+  return view.bytes;
 }
 
 LUALIB_API const char *luaL_optlstring(lua_State *L, int idx,
 				       const char *def, size_t *len)
 {
-  int status;
-  GCstr *s = api_tolstring_claimed(L, idx, &status);
+  ApiStringView view;
+  int status = api_tolstring_claimed(L, idx, &view);
   if (status == API_TOSTR_NIL) {
     if (len != NULL) *len = def ? strlen(def) : 0;
     return def;
   } else if (status != API_TOSTR_OK) {
     lj_err_argt(L, idx, LUA_TSTRING);
   }
-  if (len != NULL) *len = s->len;
-  return strdata(s);
+  if (len != NULL) *len = view.len;
+  return view.bytes;
 }
 
 LUALIB_API int luaL_checkoption(lua_State *L, int idx, const char *def,
@@ -1814,12 +1882,10 @@ LUA_API size_t lua_objlen(lua_State *L, int idx)
   } else if (tvisudata(o)) {
     len = udataV(o)->len;
   } else if (tvisnumber(o)) {
-    int status;
-    GCstr *s;
+    ApiStringView view;
     L->top = restorestack(L, rootoffs);
     lj_state_dropresumeclaim(&claim);
-    s = api_tolstring_claimed(L, idx, &status);
-    return status == API_TOSTR_OK ? s->len : 0;
+    return api_tolstring_claimed(L, idx, &view) == API_TOSTR_OK ? view.len : 0;
   } else {
     len = 0;
   }
