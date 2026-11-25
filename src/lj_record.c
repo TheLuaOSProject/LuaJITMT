@@ -3192,11 +3192,17 @@ static TRef rec_upvalue_rooted(jit_State *J, uint32_t uv, TRef val)
 {
   TRef fn, root, index, status;
   IRType type;
-  if (J->parent || J->framedepth || J->retdepth ||
-      J->baseslot != 1+LJ_FR2)
+  if (J->retdepth || (val && J->parent) ||
+      (!J->parent && (J->framedepth || J->baseslot != 1+LJ_FR2)))
     lj_trace_err_info(J, LJ_TRERR_NYIBC);
-  type = rec_upvalue_rooted_sample(J, uv);
+  /* Snapshot replay supplies the closure for a represented Lua frame. At
+  ** the base frame, getcurrf can also load its readonly physical stack slot.
+  ** A readonly base load cannot recover an unrepresented inlined frame. */
+  fn = J->base[-1-LJ_FR2];
+  if (fn ? !tref_isfunc(fn) : J->baseslot != 1+LJ_FR2)
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
   fn = getcurrf(J);
+  type = rec_upvalue_rooted_sample(J, uv);
   if (val && bc_op(*J->pc) == BC_USETN) {
     TValue literal;
     /* Preserve the proto's exact numeric TValue. Operand decoding may have
