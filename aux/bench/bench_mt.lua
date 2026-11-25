@@ -13,6 +13,7 @@ local floor = math.floor
 local getenv = os.getenv
 
 local NT = tonumber(arg and arg[1]) or th.cpucount()
+assert(NT >= 1 and NT == floor(NT), "expected a positive integer thread count")
 local filter = arg and arg[2]
 local scale = tonumber(getenv("BENCH_SCALE")) or 1
 if scale <= 0 then scale = 1 end
@@ -126,18 +127,20 @@ local function run(name, perthread_ops, mkworker, setup)
   collectgarbage("collect")
   local shared = setup and setup() or nil
   local gc_before = snapshot_gc_stats()
-  local start = th.channel(0)            -- rendezvous: aligned start
+  local ready = th.channel(NT)
+  local start = th.channel(0)
   local ts = {}
   for i = 1, NT do
-    ts[i] = th.spawn(function(id, sh, n)
-      start:recv()
+    ts[i] = assert(th.spawn(function(id, sh, n)
+      assert(ready:send(true))
+      assert(start:recv())
       return mkworker(id, sh, n)
-    end, i, shared, perthread_ops)
+    end, i, shared, perthread_ops))
   end
-  local t0
-  -- release all workers as close together as possible
-  for _ = 1, NT do start:send(true) end
-  t0 = wall()
+  for _ = 1, NT do assert(ready:recv()) end
+  -- Include work done by the first worker while later workers are released.
+  local t0 = wall()
+  for _ = 1, NT do assert(start:send(true)) end
   local sum = 0
   for i = 1, NT do
     local ok, r = ts[i]:join()
