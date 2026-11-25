@@ -100,11 +100,8 @@ int lj_vm_cpcall(lua_State *L, lua_CFunction func, void *ud, lua_CPFunction cp)
   TGState *oldtg;
   uint32_t owner, root_anchor_top;
   int status;
-  if (LJ_UNLIKELY(L == NULL))
+  if (LJ_UNLIKELY(L == NULL || G(L) == NULL))
     return LUA_ERRRUN;
-  if (LJ_UNLIKELY(mref(L->glref, global_State) == NULL && L->tg_hint != NULL &&
-		  L->tg_hint->gl != NULL))
-    setmref(L->glref, L->tg_hint->gl);
   oldtg = L->tg_hint;
   owner = lj_state_owner_acq(L);
   if (LJ_UNLIKELY(oldtg == NULL))

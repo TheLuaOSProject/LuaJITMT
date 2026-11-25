@@ -4454,10 +4454,6 @@ void lj_gc_pubroot(lua_State *L, cTValue *tv)
   if (!L || !tv)
     return;
   g = G(L);
-  if (LJ_UNLIKELY(g == NULL && L->tg_hint != NULL && L->tg_hint->gl != NULL)) {
-    g = L->tg_hint->gl;
-    setmref(L->glref, g);
-  }
   if (LJ_UNLIKELY(g == NULL))
     return;
   phase = gc2_phase_acq(g);

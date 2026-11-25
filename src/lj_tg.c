@@ -429,8 +429,8 @@ void lj_tg_init_thread(global_State *g, TGState *tg, lua_State *L,
   lj_ffi_native_frame_init(tg);
 #endif
   if (L) {
+    lj_assertG(G(L) == g, "thread belongs to a different global state");
     L->tg_hint = tg;
-    setmref(L->glref, g);
   }
   lj_arena_alloc_init(&tg->alloc);
   if (arena_internal) {

@@ -2459,7 +2459,6 @@ static int threading_attach(lua_State *L, int wait)
     threading_attach_cleanup(L, &ctx, 0);
     return 0;
   }
-  setmref(L->glref, g);
   L->tg_hint = tg;
   lj_tg_store_cur_L(tg, L);
   lj_tg_store_thread_L(tg, L);

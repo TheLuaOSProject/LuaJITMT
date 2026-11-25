@@ -3024,7 +3024,7 @@ struct lua_State {
   GCHeader;
   uint8_t dummy_ffid;	/* Fake FF_C for curr_funcisL() on dummy frames. */
   uint8_t status;	/* Thread status. */
-  MRef glref;		/* Link to global state. */
+  MRef glref;		/* Immutable after lua_State construction. */
   GCRef gclist;		/* GC chain. */
   TValue *base;		/* Base of currently executing function. */
   TValue *top;		/* First free slot in the stack. */
