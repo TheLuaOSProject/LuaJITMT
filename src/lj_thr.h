@@ -50,6 +50,7 @@ typedef struct LJThr {
 
 typedef struct LJStateClaim {
   lua_State *L;
+  lua_State *previous_L;  /* Physical TG carrier before a temporary resume. */
   TGState *tg_hint;
   TGState *owner_tg;
   LJStateOwner owner_word;

@@ -1776,6 +1776,7 @@ static void state_claim_init(LJStateClaim *claim)
 {
   if (claim) {
     claim->L = NULL;
+    claim->previous_L = NULL;
     claim->tg_hint = NULL;
     claim->owner_tg = NULL;
     claim->owner_word = 0;
@@ -1930,6 +1931,7 @@ int lj_state_resumeclaim(lua_State *L, uint32_t tid, LJStateClaim *claim)
   */
   if (claim && claim->release) {
     claim->tg_hint = L->tg_hint;
+    claim->previous_L = lj_tg_load_cur_L(claim->owner_tg);
     L->tg_hint = claim->owner_tg;
   }
   return 1;
@@ -2122,6 +2124,9 @@ void lj_state_dropresumeclaim(LJStateClaim *claim)
   if (claim && claim->release) {
     TGState *running_hint = claim->L->tg_hint;
     claim->L->tg_hint = claim->tg_hint;
+    /* VM entry can publish the target as current. Restore the caller while
+    ** the target is still owned, before another actor can claim it. */
+    lj_tg_store_cur_L(claim->owner_tg, claim->previous_L);
     if (!state_release_exact(claim->L, claim->owner_tg,
 			     claim->owner_word)) {
       claim->L->tg_hint = running_hint;

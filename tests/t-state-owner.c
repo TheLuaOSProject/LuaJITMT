@@ -16,6 +16,7 @@
 
 #include "lj_obj.h"
 #include "lj_thr.h"
+#include "lj_tg.h"
 
 #include "lib/lua_fixture_helpers.h"
 
@@ -294,14 +295,16 @@ static int c_upvalue_return(lua_State *L)
 
 static void check_call_entry_unowned(lua_State *L)
 {
-  lua_State *co;
+  lua_State *co, *caller;
   lua_settop(L, 0);
 
   co = lua_newthread(L);
   assert(luaL_loadstring(L, "return 95") == 0);
   lua_xmove(L, co, 1);
   assert(lj_state_owner_acq(co) == 0);
+  caller = lj_tg_cur_L(G(L));
   lua_call(co, 0, 1);
+  assert(lj_tg_cur_L(G(L)) == caller);
   assert(lua_tointeger(co, -1) == 95);
   assert(lj_state_owner_acq(co) == 0);
   lua_pop(co, 1);
@@ -310,15 +313,26 @@ static void check_call_entry_unowned(lua_State *L)
   assert(luaL_loadstring(L, "return 96") == 0);
   lua_xmove(L, co, 1);
   assert(lj_state_owner_acq(co) == 0);
+  caller = lj_tg_cur_L(G(L));
   assert(lua_pcall(co, 0, 1, 0) == 0);
+  assert(lj_tg_cur_L(G(L)) == caller);
   assert(lua_tointeger(co, -1) == 96);
   assert(lj_state_owner_acq(co) == 0);
   lua_pop(co, 1);
 
   co = lua_newthread(L);
   assert(lj_state_owner_acq(co) == 0);
+  caller = lj_tg_cur_L(G(L));
   assert(lua_cpcall(co, resume_return, NULL) == 0);
+  assert(lj_tg_cur_L(G(L)) == caller);
   assert(lj_state_owner_acq(co) == 0);
+  lua_settop(L, 0);
+  co = lua_newthread(L);
+  assert(luaL_loadstring(co, "error('temporary state')") == 0);
+  caller = lj_tg_cur_L(G(L));
+  assert(lua_pcall(co, 0, 0, 0) == LUA_ERRRUN);
+  assert(lj_tg_cur_L(G(L)) == caller);
+  assert(strstr(lua_tostring(co, -1), "temporary state") != NULL);
   lua_settop(L, 0);
 }
 
