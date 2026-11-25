@@ -290,9 +290,11 @@ typedef struct StrCanonRec StrCanonRec;
 typedef struct StrTabHdr {
   MSize mask;		/* Physical string bucket mask. */
   MSize dense_mask;	/* Dense classification mask, possibly wider. */
-  uintptr_t topology;	/* Claim or tagged target generation of plain growth. */
-  MSize copy_cursor;	/* First completed source bucket of a plain expansion. */
+  uintptr_t topology;	/* Claim or tagged target generation. */
+  MSize copy_cursor;	/* First completed bucket group during migration. */
   MSize link_slot;	/* Successor slot used by this generation. */
+  MSize promote_bucket;  /* Rehashed source bucket + 1, or zero. */
+  uint32_t promote_ready;  /* All promoted destinations are indexed. */
   uint8_t has_secondary;  /* Every idle topology after rehash records this. */
   uint64_t retire_epoch;  /* Safepoint epoch when retired. */
   struct StrTabHdr *retired_next;  /* Retired string table headers. */

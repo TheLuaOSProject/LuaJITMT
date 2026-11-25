@@ -17,8 +17,6 @@
 
 #define LJ_STRTAB_RESIZE	((MSize)0x80000000u)
 #define LJ_STRTAB_SWEEP		((MSize)0x40000000u)
-#define LJ_STRTAB_REHASH		((MSize)0x20000000u)
-#define LJ_STRTAB_BUCKET_MASK	((MSize)(LJ_MAX_STRTAB - 1u))
 #define LJ_STRTAB_TOPO_EXPAND	((uintptr_t)1u)
 #define LJ_STRTAB_TOPO_SECOND	((uintptr_t)2u)
 #define LJ_STRTAB_TOPO_SHIFT	2
@@ -115,8 +113,11 @@ enum {
 #define lj_str_tabsize_dense(mask, dense_mask) \
   (lj_str_tabsize(mask) + ((dense_mask) > (mask) ? \
     (((GCSize)(dense_mask) + 64u) >> 6) * sizeof(uint64_t) : (GCSize)0))
+#define lj_str_promote_size(mask) \
+  ((((GCSize)(mask) + 64u) >> 6) * sizeof(uint64_t))
 #define lj_str_tabbytes(tabh) \
-  ((tabh) ? lj_str_tabsize_dense((tabh)->mask, (tabh)->dense_mask) : (GCSize)0)
+  ((tabh) ? lj_str_tabsize_dense((tabh)->mask, (tabh)->dense_mask) + \
+    ((tabh)->promote_bucket ? lj_str_promote_size((tabh)->mask) : 0) : (GCSize)0)
 #define lj_str_qtabsize(mask) \
   ((mask) == ~(MSize)0 ? (GCSize)0 : \
    (GCSize)offsetof(StrCanonHdr, bucket) + \
@@ -347,7 +348,9 @@ static LJ_AINLINE StrID lj_str_id_add_rlx(global_State *g, StrID n)
 
 static LJ_AINLINE uint8_t lj_str_second_acq(const global_State *g)
 {
-  return la_load8_acq(&g->str.second);
+  StrTabHdr *hdr = lj_str_tabh_acq(g);
+  return hdr ? la_load8_acq(&hdr->has_secondary) :
+               la_load8_acq(&g->str.second);
 }
 
 static LJ_AINLINE void lj_str_second_rel(global_State *g, uint8_t second)
@@ -809,7 +812,7 @@ enum {
   LJ_STR_TEST_CANON_MAIN_UNLINKED,
   LJ_STR_TEST_CANON_Q_BODY_HELD,
   LJ_STR_TEST_CANON_RESIZE_MOVED,
-  LJ_STR_TEST_CANON_REHASH_DEST_SAMPLED,
+  LJ_STR_TEST_CANON_REHASH_SOURCE_FROZEN,
   LJ_STR_TEST_CANON_EXPAND_PUBLISHED,
   LJ_STR_TEST_CANON_EXPAND_FROZEN,
   LJ_STR_TEST_CANON_EXPAND_BUCKET_DONE
