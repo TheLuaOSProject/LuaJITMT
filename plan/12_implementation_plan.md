@@ -1,5 +1,9 @@
 # 12. Implementation Plan — Milestones M0..M10
 
+The [x86-64 Linux completion plan](15_x64_linux_completion.md) tracks
+the remaining work against the running fork. The milestones below retain the
+original sequence and historical implementation notes.
+
 Your task list. Each milestone: goal → tasks (with spec refs) → tests →
 acceptance gate. Do not start Mn+1 before Mn's gate is green. Estimated
 diff sizes are for sanity-checking scope, not deadlines.

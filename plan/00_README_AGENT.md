@@ -6,6 +6,10 @@ This is the entry point of a 15-document implementation specification plus
 auxiliary code. It tells you exactly how to consume the rest, what the ground
 rules are, and how to verify your work at every step.
 
+For work on the current x86-64 Linux runtime, start with the
+[Linux implementation plan](15_x64_linux_completion.md). The M0–M10
+chapters record the original design and intermediate implementations.
+
 ### 0.1 What you are building
 
 A fork of LuaJIT v2.1 in which multiple OS threads execute Lua code in
