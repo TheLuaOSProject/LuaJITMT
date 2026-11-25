@@ -28,19 +28,22 @@ local alternate=otherkey and env[otherkey]
 if mode=='positive-zero' then env[key]=-0.0;if target=='root' then ra=-0.0 else rb=-0.0 end end
 for _,key in ipairs({'reg_clib_root_slot','reg_clib_side_slot','reg_clib_other_slot'}) do index(observer,key) end
 local effects={0,0};local out,tripwire={},{};for i=1,80 do out[i]=false;tripwire[i]=false end
-local function run_read(left,right,n,cut,rkey,skey,output)
+-- Pass the same captured methods as arguments so side recording does not
+-- depend on support for loading shared upvalues from a side trace.
+local function run_read(left,right,n,cut,rkey,skey,output,effects,index,tripwire)
  for i=0,n do if i>0 then
   effects[1]=effects[1]+1
   if i<cut then output[i]=index(left,rkey) else output[i]=index(right,skey);if tripwire[i] then effects[2]=effects[2]+1 end end
  end end
 end
-local function run_write(left,right,n,cut,rkey,skey,output)
+local function run_write(left,right,n,cut,rkey,skey,output,effects,newindex,tripwire)
  for i=0,n do if i>0 then
   effects[1]=effects[1]+1
   if i<cut then newindex(left,rkey,i) else newindex(right,skey,i+100);if tripwire[i] then effects[2]=effects[2]+1 end end
  end end
 end
 local run=kind=='write' and run_write or run_read
+local method=kind=='write' and newindex or index
 local roots,parents,exits,generations={},{},{},{}
 local witness_generations
 local function ontrace(what,tr,func,pc,parent)
@@ -84,7 +87,7 @@ end
 local function main()
  if gc_enabled then collectgarbage('collect');collectgarbage('restart') else collectgarbage('stop') end
  jit.flush();jit.opt.start('hotloop=1','hotexit=1');jit.attach(ontrace,'trace');jit.attach(onexit,'texit')
- for j=1,6 do effects[1]=0;reset_slots();run(a,b,80,40,rootkey,sidekey,out);assert(effects[1]==80)
+ for j=1,6 do effects[1]=0;reset_slots();run(a,b,80,40,rootkey,sidekey,out,effects,method,tripwire);assert(effects[1]==80)
   if kind~='write' then check_output(ra,rb) end
  end
  local warmroots,warmsides,oldsides,helpers=trace_state()
@@ -133,7 +136,7 @@ local function main()
  -- Force a post-lookup side exit even when a new numeric value needs no guard exit.
  tripwire[65]=true;effects[1]=0;effects[2]=0;exits={}
  local count=target=="root" and 39 or 80
- local ok,err=pcall(run,a,b,count,40,rootkey,sidekey,out)
+ local ok,err=pcall(run,a,b,count,40,rootkey,sidekey,out,effects,method,tripwire)
  local rootexits=0;for tr in pairs(oldroots) do rootexits=rootexits+(exits[tr] or 0) end
  local sideexits=0;for _,tr in ipairs(oldsides) do sideexits=sideexits+(exits[tr] or 0) end
  local effect_expected=must_error and (target=='root' and 1 or 40) or count

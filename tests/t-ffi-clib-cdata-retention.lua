@@ -19,7 +19,9 @@ index(receiver,ak)
 local alternate=env[ak]
 local weak=setmetatable({env[key],{}},{__mode='v'})
 local effects={0}
-local function readloop(left,right,n,cut,rkey,skey)
+-- Keep the native side focused on the cache lookup by passing the method
+-- and effect counter as arguments.
+local function readloop(left,right,n,cut,rkey,skey,effects,index)
  local count=0
  for i=0,n do if i>0 then
   effects[1]=effects[1]+1
@@ -28,13 +30,14 @@ local function readloop(left,right,n,cut,rkey,skey)
  end end
  return count
 end
-local function writeloop(left,right,n,cut,rkey,skey)
+local function writeloop(left,right,n,cut,rkey,skey,effects,newindex)
  for i=0,n do if i>0 then
   effects[1]=effects[1]+1
   if i<cut then newindex(left,rkey,i) else newindex(right,skey,i+100) end
  end end
 end
 local run=kind=='write' and writeloop or readloop
+local method=kind=='write' and newindex or index
 local roots,parents,generations,exits={},{},{},{}
 local witness_generations
 local function ontrace(what,tr,func,pc,parent)
@@ -76,7 +79,7 @@ assert(select(2,ready:recv(10))==true)
 local function main()
  collectgarbage('collect');collectgarbage('restart')
  jit.flush();jit.opt.start('hotloop=1','hotexit=1');jit.attach(ontrace,'trace');jit.attach(onexit,'texit')
- for j=1,6 do effects[1]=0;reset_slots();run(a,b,80,40,rk,sk);assert(effects[1]==80) end
+ for j=1,6 do effects[1]=0;reset_slots();run(a,b,80,40,rk,sk,effects,method);assert(effects[1]==80) end
  local re,se,sides,helpers=trace_state()
  if enabled then assert(re>0 and se>0 and #sides>0 and helpers>0,'actual shared native root and installed side required') end
  local oldroots={};witness_generations={}
@@ -100,7 +103,7 @@ local function main()
  env[key]=weak[1]
  arm_cmp_probe(receiver,key,alternate,env,weak[1])
  reset_slots();effects[1]=0;exits={}
- local ok,err=pcall(run,a,b,target=='root' and 39 or 80,40,rk,sk)
+ local ok,err=pcall(run,a,b,target=='root' and 39 or 80,40,rk,sk,effects,method)
  assert(not ok and tostring(err):find('closed C library',1,true),'later semantic close guard must still reject')
  assert(effects[1]==(target=='root' and 1 or 40),'comparison or close exit replayed/skipped the prefix')
  local rex,sex=0,0
