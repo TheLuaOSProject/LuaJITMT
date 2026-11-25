@@ -4221,7 +4221,7 @@ static int gc2_step_auto(lua_State *L, int threshold_step, uint32_t step_limit)
 	gc2_sweep_owner_arenas_acq(g) - sweep_arenas0 >= LJ_GC2_SWEEP_BATCH)
       break;
   }
-  g->gc.debt = 0;
+  lj_gcsize_store_rel(&g->gc.debt, 0);
   if (gc2_phase_acq(g) == LJ_GC2_IDLE) {
     if (running)
       lj_gc2_publish_idle_threshold(g);

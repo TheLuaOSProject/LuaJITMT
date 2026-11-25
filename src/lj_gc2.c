@@ -3438,7 +3438,8 @@ void lj_gc2_publish_idle_threshold(global_State *g)
   uint64_t trigger, since, remain, total, limit;
   if (!g)
     return;
-  if (g->gc.state != GCSpause || gc2_phase_acq(g) != LJ_GC2_IDLE)
+  if (la_load8_acq(&g->gc.state) != GCSpause ||
+      gc2_phase_acq(g) != LJ_GC2_IDLE)
     return;
   if (lj_gc_threshold_load(g) == LJ_MAX_MEM)
     return;  /* Honor collectgarbage("stop") and MT stop-the-world gates. */
@@ -6677,8 +6678,8 @@ int lj_gc2_sweep_to_idle(global_State *g)
   /* GC2 phase is the sole collector authority. Once its SWEEP closes, keep the
   ** legacy/color compatibility state coherent regardless of which bounded
   ** bridge substate last touched it; public GC APIs still observe GCSpause. */
-  g->gc.state = GCSpause;
-  g->gc.debt = 0;
+  la_store8_rel(&g->gc.state, GCSpause);
+  lj_gcsize_store_rel(&g->gc.debt, 0);
   gc2_sweep_to_idle_add(g, 1);
   gc2_sweep_grace_needed_rel(g, 0);
   gc2_sweep_root_scanned_rel(g, 0);
@@ -7040,7 +7041,7 @@ void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s)
 
 static LJ_AINLINE int gc2_reclaim_retired_ready(global_State *g)
 {
-  return g->gc.state == GCSpause &&
+  return la_load8_acq(&g->gc.state) == GCSpause &&
 	 gc2_phase_acq(g) == LJ_GC2_IDLE &&
 	 gc2_worker_active_acq(g) == 0 &&
 	 gc2_assist_active_acq(g) == 0 &&
