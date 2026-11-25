@@ -9828,6 +9828,10 @@ static void gc2_scan_global_roots(global_State *g)
       meta = ctype_metamap_acq(cts);
       cbblack = ctype_cbblack_acq(cts);
       lj_gc2_markmem(g, ctype_tabh_acq(cts));
+      for (i = 0; i < CTYPE_LAYOUT_PAGES; i++) {
+	CTypeLayoutPage *page = ctype_layout_page(cts, i);
+	if (page) lj_gc2_markmem(g, page);
+      }
       ret = ctype_retiredtab_acq(cts);
       gc2_root_cycle_guard_init(&guard, ret);
       while (ret != NULL && lj_gc2_mem_registered(g, ret)) {

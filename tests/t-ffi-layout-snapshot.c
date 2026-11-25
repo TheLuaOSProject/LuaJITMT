@@ -39,6 +39,15 @@ static void assert_layout_waits_without_lock(lua_State *L, CTState *cts,
   ljt_ctype_release_when_native_join(&ctx, thread);
 }
 
+static void assert_layout_read_completes(lua_State *L, CTState *cts,
+                                         const char *chunk)
+{
+  uint32_t seq = ljt_ctype_hold_parse_token(cts);
+  ljt_lua_dostring(L, chunk);
+  assert(ctype_parse_token_acq(cts) == seq - 1u);
+  ljt_ctype_release_parse_token(cts, seq);
+}
+
 static void assert_predefined_layout_avoids_wait(lua_State *L, CTState *cts)
 {
   uint32_t seq0 = ljt_ctype_parse_seq(cts);
@@ -172,25 +181,25 @@ int main(void)
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 2u);
 
-  assert_layout_waits_without_lock(L, cts, tg,
+  assert_layout_read_completes(L, cts,
     "local ffi = require('ffi')\n"
     "assert(ffi.sizeof(lj_m7_layout_snapshot_ct) == 16)\n");
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 4u);
 
-  assert_layout_waits_without_lock(L, cts, tg,
+  assert_layout_read_completes(L, cts,
     "local ffi = require('ffi')\n"
     "assert(ffi.alignof(lj_m7_layout_snapshot_ct) == 8)\n");
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 6u);
 
-  assert_layout_waits_without_lock(L, cts, tg,
+  assert_layout_read_completes(L, cts,
     "local ffi = require('ffi')\n"
     "assert(ffi.offsetof(lj_m7_layout_snapshot_ct, 'b') == 8)\n");
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 8u);
 
-  assert_layout_waits_without_lock(L, cts, tg,
+  assert_layout_read_completes(L, cts,
     "local ffi = require('ffi')\n"
     "assert(ffi.sizeof(lj_m7_layout_vla_ct, 7) == 28)\n");
   seq1 = ljt_ctype_parse_seq(cts);

@@ -1188,6 +1188,13 @@ assert(cl.lj_clib_ldscript_value() == 42)
                       "t-ffi-tonumber-snapshot.c", { timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-ffi-layout-snapshot"),
                       "t-ffi-layout-snapshot.c", { timeout = "20s" })
+      if jit.os == "Linux" then  -- Exercise a live parser using GNU ld wrapping.
+        build_and_run_c(t, t:tmp("lj_t-ffi-layout-parser-progress"),
+                        "t-ffi-layout-parser-progress.c", {
+          timeout = "20s", libs = { "-lm", "-ldl", "-pthread",
+                                    "-Wl,--wrap=lj_ctype_publish" }
+        })
+      end
       build_and_run_c(t, t:tmp("lj_t-ffi-field-snapshot"),
                       "t-ffi-field-snapshot.c", { timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-ffi-element-size-snapshot"),

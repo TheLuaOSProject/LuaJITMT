@@ -2109,19 +2109,21 @@ typedef struct FFILayoutSnap {
   CTState *cts;
   CTypeTab *tabh;
   CTypeID top;
-  uint32_t seq;
+  uint64_t version;
   MSize budget;
 } FFILayoutSnap;
 
-static int ffi_layout_begin(CTState *cts, FFILayoutSnap *ls)
+static int ffi_layout_begin(CTState *cts, CTypeID id, FFILayoutSnap *ls)
 {
-  uint32_t seq = ctype_parse_token_acq(cts);
-  if (seq & 1u)
-    return -1;
+  uint64_t version = ctype_layout_version(cts);
   ls->cts = cts;
-  ls->top = ctype_top_acq(cts);
+  ls->top = (version & 1u) ? la_load32_acq(&cts->layout_top) :
+                             ctype_top_acq(cts);
+  /* An ID exposed during parsing may be newer than the committed prefix. */
+  if ((version & 1u) && id >= ls->top)
+    return -1;
   ls->tabh = ctype_tabh_acq(cts);
-  ls->seq = seq;
+  ls->version = version;
   ls->budget = ls->top ? (MSize)ls->top * 2u : 1u;
   return 1;
 }
@@ -2134,7 +2136,7 @@ static int ffi_layout_begin_predefined(CTState *cts, CTypeID id,
   ls->cts = cts;
   ls->top = CTID_CTYPEID + 1;
   ls->tabh = ctype_tabh_acq(cts);
-  ls->seq = 0;
+  ls->version = 0;
   ls->budget = (MSize)ls->top * 2u;
   if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(ls->tabh))
     return 0;
@@ -2143,26 +2145,30 @@ static int ffi_layout_begin_predefined(CTState *cts, CTypeID id,
 
 static int ffi_layout_end(FFILayoutSnap *ls)
 {
-  uint32_t seq = ctype_parse_token_acq(ls->cts);
-  return (seq == ls->seq && !(seq & 1u)) ? 1 : -1;
+  return ctype_layout_version(ls->cts) == ls->version;
 }
 
 static int ffi_layout_get(FFILayoutSnap *ls, CTypeID id, CType *out)
 {
   CType *ct;
-  GCobj *name;
   if (id == 0 || id >= ls->top ||
       (MSize)id >= ctype_tab_sizetab_acq(ls->tabh))
     return 0;
   if (ls->budget-- == 0)
     return -1;
   ct = ctype_tab_slot(ls->tabh, id);
-  out->info = ctype_info_acq(ct);
-  out->size = ctype_size_acq(ct);
-  out->sib = (CTypeID1)ctype_sib_acq(ct);
-  out->next = (CTypeID1)ctype_next_acq(ct);
-  name = ctype_nameobj_acq(ct);
-  setgcrefp(out->name, name);
+  ctype_copy_rel(out, ct);
+  if (ls->version & 1u) {
+    /* Any provisional field observed above acquired the earlier publication
+    ** of this ID's rollback image. Unedited entries stay readable in place.
+    ** An overlapping commit or another parse retries the whole graph. */
+    CTypeLayoutPage *page = ctype_layout_page(ls->cts, id >> CTYPE_LAYOUT_PAGE_BITS);
+    if (page) {
+      CTypeLayoutUndo *undo = &page->slots[id & (CTYPE_LAYOUT_PAGE_SIZE-1)];
+      if (la_load64_acq(&undo->version) == ls->version)
+        ctype_copy_rel(out, &undo->old);
+    }
+  }
   return ctype_isabandoned(out->info) ? 0 : 1;
 }
 
@@ -2372,13 +2378,13 @@ static int ffi_new_layout_snapshot(CTState *cts, CTypeID id, CTSize nelem,
 				   int *neednelem)
 {
   FFILayoutSnap ls;
-  int ok = ffi_layout_begin(cts, &ls);
-  if (ok < 0)
-    return -1;
-  ok = ffi_new_layout_read(&ls, id, nelem, hasnelem, ridp, infop, szp,
+  int ok;
+  do {
+    if (ffi_layout_begin(cts, id, &ls) < 0)
+      return -1;
+    ok = ffi_new_layout_read(&ls, id, nelem, hasnelem, ridp, infop, szp,
 			   neednelem);
-  if (ok >= 0 && ffi_layout_end(&ls) < 0)
-    return -1;
+  } while (!ffi_layout_end(&ls));
   return ok;
 }
 
@@ -2437,12 +2443,12 @@ static int ffi_layout_sizeof_snapshot(CTState *cts, CTypeID id, CTSize nelem,
 				      int hasnelem, CTSize *szp, int *neednelem)
 {
   FFILayoutSnap ls;
-  int ok = ffi_layout_begin(cts, &ls);
-  if (ok < 0)
-    return -1;
-  ok = ffi_layout_sizeof_read(&ls, id, nelem, hasnelem, szp, neednelem);
-  if (ok >= 0 && ffi_layout_end(&ls) < 0)
-    return -1;
+  int ok;
+  do {
+    if (ffi_layout_begin(cts, id, &ls) < 0)
+      return -1;
+    ok = ffi_layout_sizeof_read(&ls, id, nelem, hasnelem, szp, neednelem);
+  } while (!ffi_layout_end(&ls));
   return ok;
 }
 
@@ -2487,12 +2493,12 @@ static int ffi_layout_alignof_read(FFILayoutSnap *ls, CTypeID id,
 static int ffi_layout_alignof_snapshot(CTState *cts, CTypeID id, CTSize *alignp)
 {
   FFILayoutSnap ls;
-  int ok = ffi_layout_begin(cts, &ls);
-  if (ok < 0)
-    return -1;
-  ok = ffi_layout_alignof_read(&ls, id, alignp);
-  if (ok >= 0 && ffi_layout_end(&ls) < 0)
-    return -1;
+  int ok;
+  do {
+    if (ffi_layout_begin(cts, id, &ls) < 0)
+      return -1;
+    ok = ffi_layout_alignof_read(&ls, id, alignp);
+  } while (!ffi_layout_end(&ls));
   return ok;
 }
 
@@ -2587,12 +2593,12 @@ static int ffi_layout_offsetof_snapshot(CTState *cts, CTypeID id, GCstr *name,
 					CTSize *ofs, CType *out)
 {
   FFILayoutSnap ls;
-  int ok = ffi_layout_begin(cts, &ls);
-  if (ok < 0)
-    return -1;
-  ok = ffi_layout_offsetof_read(&ls, id, name, ofs, out);
-  if (ok >= 0 && ffi_layout_end(&ls) < 0)
-    return -1;
+  int ok;
+  do {
+    if (ffi_layout_begin(cts, id, &ls) < 0)
+      return -1;
+    ok = ffi_layout_offsetof_read(&ls, id, name, ofs, out);
+  } while (!ffi_layout_end(&ls));
   return ok;
 }
 

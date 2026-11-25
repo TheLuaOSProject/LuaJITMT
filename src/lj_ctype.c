@@ -1964,6 +1964,25 @@ int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id, CTypeID *cidp)
 int lj_ctype_info_predefined(CTState *cts, CTypeID id, CTInfo *infop,
 			     CTSize *szp, CTypeID *ridp, CType *rawp);
 
+void lj_ctype_save_layout(lua_State *L, CTState *cts, CTypeID id,
+			  const CType *old)
+{
+  uint32_t i = id >> CTYPE_LAYOUT_PAGE_BITS;
+  CTypeLayoutPage *page = ctype_layout_page(cts, i);
+  CTypeLayoutUndo *undo;
+  if (!page) {
+    page = lj_mem_newt(L, sizeof(*page), CTypeLayoutPage);
+    memset(page, 0, sizeof(*page));
+    (void)lj_gc2_markmem(G(L), page);
+    la_storeptr_rel((void **)&cts->layout_pages[i], page);
+    (void)lj_gc2_markmem(G(L), page);
+  }
+  undo = &page->slots[id & (CTYPE_LAYOUT_PAGE_SIZE-1)];
+  ctype_copy_rel(&undo->old, old);
+  /* Publish the rollback image before any provisional live field. */
+  la_store64_rel(&undo->version, ctype_layout_version(cts));
+}
+
 /* Sequence-checked type info/raw-type snapshot for stable layout readers. */
 int lj_ctype_info_snapshot(CTState *cts, CTypeID id, CTInfo *infop,
 			   CTSize *szp, CTypeID *ridp, CType *rawp)
@@ -3065,6 +3084,11 @@ void lj_ctype_freestate(global_State *g)
 {
   CTState *cts = ctype_ctsG(g);
   if (cts) {
+    uint32_t i;
+    for (i = 0; i < CTYPE_LAYOUT_PAGES; i++) {
+      CTypeLayoutPage *page = ctype_layout_page(cts, i);
+      if (page) lj_mem_freet(g, page);
+    }
     lj_ccallback_mcode_free(cts);
     lj_ctype_fin_freetabs(g, cts);
     ctype_freeretired(g, cts);

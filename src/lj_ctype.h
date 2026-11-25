@@ -740,6 +740,21 @@ typedef LJ_ALIGN(8) struct CCallback {
 } CCallback;
 
 /* C type state. */
+/* Existing types changed by a parser keep their committed layout available
+** to independent readers. Pages are allocated on the first edit in a range
+** and owned by CTState until shutdown. CType names are fixed strings. */
+typedef struct CTypeLayoutUndo {
+  uint64_t version;
+  CType old;
+} CTypeLayoutUndo;
+
+#define CTYPE_LAYOUT_PAGE_BITS 8
+#define CTYPE_LAYOUT_PAGE_SIZE (1u << CTYPE_LAYOUT_PAGE_BITS)
+#define CTYPE_LAYOUT_PAGES (65536u / CTYPE_LAYOUT_PAGE_SIZE)
+typedef struct CTypeLayoutPage {
+  CTypeLayoutUndo slots[CTYPE_LAYOUT_PAGE_SIZE];
+} CTypeLayoutPage;
+
 typedef struct CTState {
   CTypeTab *tabh;	/* RCU-published C type table header. */
   CTypeTab *retiredtab;  /* Retired C type tables awaiting SMR. */
@@ -753,6 +768,9 @@ typedef struct CTState {
   uint32_t cbblack_all;	/* Conservative blacklist overflow flag. */
   CCallback cb;		/* Temporary callback state. */
   uint32_t parse_token;	/* 11.2 cparse mutation sequence: even free, odd held. */
+  CTypeID layout_top;   /* Committed ID prefix at the start of parsing. */
+  uint64_t layout_version;  /* Odd during a parser transaction. */
+  CTypeLayoutPage *layout_pages[CTYPE_LAYOUT_PAGES];
   FinRegGen *fin_head;	/* 11.4 CAS-published FINREG generation list. */
   FinRegOrderNode *fin_order_head;  /* 11.4 ordered FINREG registrations. */
   FinRegOrderNode *fin_order_retired;  /* Retired ordered FINREG nodes. */
@@ -770,6 +788,18 @@ typedef struct LJCTypeMetaRoot {
 } LJCTypeMetaRoot;
 
 #define LJ_CTYPE_META_ROOT_INIT { NULL, 0, 0 }
+
+static LJ_AINLINE uint64_t ctype_layout_version(const CTState *cts)
+{
+  return la_load64_acq(&cts->layout_version);
+}
+
+static LJ_AINLINE CTypeLayoutPage *ctype_layout_page(const CTState *cts,
+						     uint32_t index)
+{
+  return (CTypeLayoutPage *)la_loadptr_acq(
+    (void *const *)&cts->layout_pages[index]);
+}
 
 enum {
   LJ_CTYPE_METATV_CTBUSY = -2,
@@ -1462,6 +1492,8 @@ static LJ_AINLINE void ctype_copy_rel(CType *dst, const CType *src)
 }
 
 LJ_FUNC CTypeID lj_ctype_new_l(lua_State *L, CTState *cts, CType **ctp);
+LJ_FUNC void lj_ctype_save_layout(lua_State *L, CTState *cts, CTypeID id,
+				 const CType *old);
 LJ_FUNC CTypeID lj_ctype_intern_l(lua_State *L, CTState *cts, CTInfo info,
 				  CTSize size);
 LJ_FUNC CTypeID lj_ctype_intern_new_l(lua_State *L, CTState *cts,

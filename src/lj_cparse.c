@@ -417,6 +417,7 @@ static void cp_rollback_log(CPState *cp, CTypeID id)
   ctype_copy_rel(&rb->old, ctype_get(cp->cts, id));
   rb->next = cp->rollback;
   cp->rollback = rb;
+  lj_ctype_save_layout(cp->L, cp->cts, id, &rb->old);
 }
 
 /*
@@ -541,7 +542,6 @@ static void cp_init(CPState *cp)
 {
   cp->rollback = NULL;
   cp->newct = NULL;
-  cp->starttop = ctype_top_acq(cp->cts);
   cp->newtype = 0;
   cp->linenumber = 1;
   cp->depth = 0;
@@ -2166,9 +2166,16 @@ static TValue *cpcparser(lua_State *L, lua_CFunction dummy, void *ud)
 /* C parser. */
 int lj_cparse(CPState *cp)
 {
-  int errcode = lj_vm_cpcall(cp->L, NULL, cp, cpcparser);
+  CTState *cts = cp->cts;
+  uint64_t version = ctype_layout_version(cts);
+  int errcode;
+  cp->starttop = ctype_top_acq(cts);
+  la_store32_rel(&cts->layout_top, cp->starttop);
+  la_store64_rel(&cts->layout_version, version + 1);
+  errcode = lj_vm_cpcall(cp->L, NULL, cp, cpcparser);
   if (errcode)
     cp_rollback_restore(cp);
+  la_store64_rel(&cts->layout_version, version + 2);
   cp_cleanup(cp);
   return errcode;
 }
