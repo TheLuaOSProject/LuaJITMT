@@ -1443,7 +1443,8 @@ static LJ_AINLINE int gc2_small_lifetime_readable(GCArena *a, uint32_t cell);
 static int gc2_small_candidate_admit(global_State *g, GCobj *o, GCArena *a,
 				     uint32_t expected_gct,
 				     void **basep, uint32_t *startp,
-				     uint32_t *gctp, GC2MarkScope *scope);
+				     uint32_t *gctp, GC2MarkScope *scope,
+				     int *registeredp);
 static int gc2_small_candidate_transition_retry_held(GCArena *a,
 						      uint32_t start,
 						      uint32_t life);
@@ -3521,17 +3522,25 @@ static int gc2_small_arena_registered(global_State *g, const GCArena *want,
 ** HugeTab of exact arena mappings; its counted reader prevents delete/unmap
 ** until rescue_enter has installed the arena-local lifetime admission. During
 ** bootstrap, tactical SMR protects the trusted owner-list fallback through
-** the same handoff. No arena header byte is read before one of those pins. */
-static int gc2_small_registered_rescue_enter(global_State *g, GCArena *a)
+** the same handoff. No arena header byte is read before one of those pins.
+** Callers choosing between small and huge registries get that observation
+** from the same lookup. Denial with an existing slot remains a small-arena
+** retry. */
+static int gc2_small_registered_rescue_enter(global_State *g, GCArena *a,
+					     int *registeredp)
 {
   HugeTab *tab;
   int admission;
+  if (registeredp)
+    *registeredp = 0;
   if (!g || !a)
     return LJ_ARENA_RESCUE_RETRY;
   tab = (HugeTab *)gc2_small_arena_tab_acq(g);
   if (tab) {
     LJHugeInfo hi;
     admission = lj_arena_hugetab_rescue_enter(tab, a, &hi);
+    if (registeredp)
+      *registeredp = hi.size != 0;
     if (admission == LJ_ARENA_RESCUE_RETRY)
       return admission;
     if (hi.size != LJ_ARENA_SIZE) {
@@ -3541,12 +3550,17 @@ static int gc2_small_registered_rescue_enter(global_State *g, GCArena *a)
     }
     return admission;
   }
-  if (!lj_gc2_smr_read_try(g))
+  if (!lj_gc2_smr_read_try(g)) {
+    if (registeredp)
+      *registeredp = 1;  /* A missed admission cannot establish absence. */
     return LJ_ARENA_RESCUE_RETRY;
+  }
   if (!gc2_small_arena_known(g, a)) {
     lj_gc2_smr_read_leave(g);
     return LJ_ARENA_RESCUE_RETRY;
   }
+  if (registeredp)
+    *registeredp = 1;
   admission = lj_arena_rescue_enter(a);
   lj_gc2_smr_read_leave(g);
   return admission;
@@ -10761,8 +10775,11 @@ static int gc2_observed_obj_status_scoped_impl(global_State *g, GCobj *o,
 					     uint32_t *startp)
 {
   GCArena *a;
-  uint32_t gct;
+  uint32_t gct, start;
   void *base;
+  GC2MarkScope local;
+  GC2MarkScope *hold = scope ? scope : &local;
+  int admitted, registered;
   gc2_mark_scope_init(scope);
   if (!g || !o || !checkptrGC(o) ||
       ((uintptr_t)o & (uintptr_t)(sizeof(void *) - 1u)) != 0)
@@ -10773,13 +10790,9 @@ static int gc2_observed_obj_status_scoped_impl(global_State *g, GCobj *o,
     return 1;  /* Temporary custom-lua_Alloc compatibility boundary. */
   }
   a = lj_arena_of(o);
-  if (gc2_small_arena_known(g, a)) {
-    uint32_t start;
-    GC2MarkScope local;
-    GC2MarkScope *hold = scope ? scope : &local;
-    int admitted = gc2_small_candidate_admit(g, o, a, 0, &base, &start,
-						      &gct, hold);
-    UNUSED(base);
+  admitted = gc2_small_candidate_admit(g, o, a, 0, &base, &start, &gct,
+					     hold, &registered);
+  if (registered) {
     if (admitted <= 0)
       return admitted;
     if (startp)
@@ -10787,10 +10800,7 @@ static int gc2_observed_obj_status_scoped_impl(global_State *g, GCobj *o,
     if (!scope)
       gc2_mark_scope_leave(&local);
   } else {
-    GC2MarkScope local;
-    GC2MarkScope *hold = scope ? scope : &local;
     LJHugeInfo hi;
-    int admitted;
     int interior_tag;
     base = NULL;
     admitted = gc2_huge_observed_scoped(g, o, &base, &hi, hold);
@@ -11522,7 +11532,7 @@ static int gc2_expected_type_scoped_status(global_State *g, GCobj *o,
   GCArena *a;
   void *base;
   uint32_t start, gct;
-  int admitted, status, markretry = 0;
+  int admitted, registered, status, markretry = 0;
   if (admittedp)
     *admittedp = NULL;
   gc2_mark_scope_init(scope);
@@ -11531,9 +11541,9 @@ static int gc2_expected_type_scoped_status(global_State *g, GCobj *o,
     return GC2_TAB_SCOPE_STALE;
   if (la_load32_acq(&g->allocf_arena) != 0) {
     a = lj_arena_of(o);
-    if (gc2_small_arena_known(g, a)) {
-      admitted = gc2_small_candidate_admit(
-	g, o, a, expected_gct, &base, &start, &gct, scope);
+    admitted = gc2_small_candidate_admit(
+      g, o, a, expected_gct, &base, &start, &gct, scope, &registered);
+    if (registered) {
       UNUSED(base); UNUSED(gct);
       if (admitted < 0)
 	return GC2_TAB_SCOPE_RETRY;
@@ -17080,7 +17090,7 @@ static int gc2_small_containing_admit(global_State *g, GCArena *a,
   gc2_mark_scope_init(scope);
   if (!g || !a || !scope)
     return 0;
-  admission = gc2_small_registered_rescue_enter(g, a);
+  admission = gc2_small_registered_rescue_enter(g, a, NULL);
   if (admission == LJ_ARENA_RESCUE_RETRY)
     return 0;
   scope->a = a;
@@ -17259,7 +17269,7 @@ static int gc2_mark_small_cell_begin(global_State *g, GCArena *a,
 {
   int admission, status;
   gc2_mark_scope_init(scope);
-  admission = gc2_small_registered_rescue_enter(g, a);
+  admission = gc2_small_registered_rescue_enter(g, a, NULL);
   if (admission == LJ_ARENA_RESCUE_RETRY)
     return GC2_MARK_DEAD;
   /* Pair the admission RMW with the destructive-owner SC fence before the
@@ -17484,15 +17494,19 @@ static int gc2_small_candidate_transition_retry_held(GCArena *a,
 static int gc2_small_candidate_admit(global_State *g, GCobj *o, GCArena *a,
 				     uint32_t expected_gct,
 				     void **basep, uint32_t *startp,
-				     uint32_t *gctp, GC2MarkScope *scope)
+				     uint32_t *gctp, GC2MarkScope *scope,
+				     int *registeredp)
 {
   uint32_t cell, start, checkstart, state, gct, life;
   void *base;
   int admission, interior_tag;
   gc2_mark_scope_init(scope);
-  if (!g || !o || !a || !scope)
+  if (!g || !o || !a || !scope) {
+    if (registeredp)
+      *registeredp = 0;
     return 0;
-  admission = gc2_small_registered_rescue_enter(g, a);
+  }
+  admission = gc2_small_registered_rescue_enter(g, a, registeredp);
   if (admission == LJ_ARENA_RESCUE_RETRY)
     return -1;
   scope->a = a;
@@ -17516,8 +17530,11 @@ static int gc2_small_candidate_admit(global_State *g, GCobj *o, GCArena *a,
       life != LJ_ARENA_LIFETIME_CONSTRUCT &&
       life != LJ_ARENA_LIFETIME_RESCUE)
     goto structural_invalid;
-  if (!gc2_small_containing_start(a, cell, &checkstart) ||
-      checkstart != start || !lj_arena_bm_get(a->block, start) ||
+  /* With an exact start, the block bit is already the nearest boundary.
+  ** Interior candidates must also prove that no newer boundary intervenes. */
+  if ((start != cell && (!gc2_small_containing_start(a, cell, &checkstart) ||
+			 checkstart != start)) ||
+      !lj_arena_bm_get(a->block, start) ||
       !lj_arena_ready_get(a, start) || lj_arena_late_get(a, start) ||
       lj_arena_sweep_state_acq(a, start) == LJ_ARENA_SWEEP_FREEING) {
     life = lj_arena_lifetime_state_acq(a, start);
@@ -17652,8 +17669,8 @@ static int gc2_retain_candidate_status(global_State *g, GCobj *o,
   GC2MarkScope scope;
   GCArena *a;
   void *base = NULL;
-  uint32_t gct = 0;
-  int status, traversable = 0;
+  uint32_t gct = 0, start;
+  int status, registered, admitted, traversable = 0;
   gc2_mark_scope_init(&scope);
   gc2_mark_scope_init(holdp);
   if (retryp)
@@ -17696,10 +17713,10 @@ static int gc2_retain_candidate_status(global_State *g, GCobj *o,
     goto done;
   }
   a = lj_arena_of(o);
-  if (gc2_small_arena_known(g, a)) {
-    uint32_t start;
-    int admitted = gc2_small_candidate_admit(g, o, a, expected_gct,
-					      &base, &start, &gct, &scope);
+  admitted = gc2_small_candidate_admit(g, o, a, expected_gct,
+					     &base, &start, &gct, &scope,
+					     &registered);
+  if (registered) {
     if (admitted <= 0) {
       if (admitted < 0 && retryp)
 	*retryp = 1;
@@ -17807,11 +17824,9 @@ int lj_gc2_tab_generation_current(global_State *g, GCtab *t,
   if (la_load32_acq(&g->allocf_arena) == 0)
     return -1;  /* Temporary custom-lua_Alloc boundary: retain, never free. */
   a = lj_arena_of(t);
-  if (!gc2_small_arena_known(g, a))
-    return -1;  /* GCtab is small today; fail closed if that ever changes. */
   admitted = gc2_small_candidate_admit(g, obj2gco(t), a,
 					(uint32_t)~LJ_TTAB,
-					&base, &start, &gct, &scope);
+					&base, &start, &gct, &scope, NULL);
   UNUSED(base); UNUSED(start); UNUSED(gct);
   if (admitted < 0)
     return -1;
@@ -20193,7 +20208,7 @@ uint64_t lj_gc2_test_table_token_request(global_State *g, GCtab *t)
   a = lj_arena_of(t);  /* Address arithmetic only until registry admission. */
   admitted = gc2_small_candidate_admit(
     g, obj2gco(t), a, (uint32_t)~LJ_TTAB,
-    &base, &start, &gct, &scope);
+    &base, &start, &gct, &scope, NULL);
   if (admitted != 1) {
     gc2_mark_scope_leave(&scope);
     return gc2_table_token_request_huge(g, t, cycle);
@@ -23157,7 +23172,7 @@ static int gc2_ismarked_small_cell(global_State *g, GCArena *a,
   int admission, result;
   if (!a || cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS)
     return -1;
-  admission = gc2_small_registered_rescue_enter(g, a);
+  admission = gc2_small_registered_rescue_enter(g, a, NULL);
   if (admission == LJ_ARENA_RESCUE_RETRY)
     return -1;
   la_fence_seq();
@@ -23278,7 +23293,7 @@ int lj_gc2_ismarked(global_State *g, GCobj *o)
     int admission;
     uint32_t cell, start, checkstart;
     int result;
-    admission = gc2_small_registered_rescue_enter(g, a);
+    admission = gc2_small_registered_rescue_enter(g, a, NULL);
     if (admission == LJ_ARENA_RESCUE_RETRY)
       return -1;
 

@@ -974,7 +974,9 @@ LJ_FUNC int lj_arena_alloc_registry_lookup(const TGAlloc *alloc,
 /* Bridge a counted registry-slot reader into the arena's remote admission.
 ** No arena/header byte is read before the HugeTab reader CAS succeeds. The
 ** registry count remains held until rescue_enter has modified remote_active,
-** so terminal registry deletion and arena unmap cannot both miss the reader. */
+** so terminal registry deletion and arena unmap cannot both miss the reader.
+** On RETRY, hi->size distinguishes an absent entry (zero) from a sampled
+** entry whose reader or arena admission was denied. This gives no body lease. */
 LJ_FUNC int lj_arena_hugetab_rescue_enter(HugeTab *registry, GCArena *a,
 					    LJHugeInfo *hi);
 /* Constant-attempt scanner bridge for an already-enumerated physical registry

@@ -1775,10 +1775,23 @@ static void test_registry_rescue_unmap_handoff(PRNGState *rs)
   la_store32_rel(&race.leave, 1);
   assert(pthread_join(thread, NULL) == 0);
 
+  /* Arena admission can decline an exact registered mapping. Keep the
+  ** registry observation available while supplying no body lease. */
+  assert(lj_arena_reclaim_seal(race.a));
+  assert(lj_arena_hugetab_rescue_enter(&registry, race.a, &info) ==
+	 LJ_ARENA_RESCUE_RETRY);
+  assert(info.size == LJ_ARENA_SIZE);
+  assert(lj_arena_alloc_registry_lookup(&alloc, race.a, &info));
+  assert(info.readers == 0);
+  lj_arena_reclaim_unseal(race.a, 0);
+
   /* With both admissions gone, close -> registry delete -> unmap succeeds in
   ** that order. The stale address is used only as a HugeTab key afterward. */
   assert(lj_arena_alloc_fini_try(&alloc));
   assert(!lj_arena_hugetab_lookup(&registry, race.a, NULL));
+  assert(lj_arena_hugetab_rescue_enter(&registry, race.a, &info) ==
+	 LJ_ARENA_RESCUE_RETRY);
+  assert(info.size == 0 && info.flags == 0 && info.readers == 0);
   lj_arena_hugetab_fini(&registry);
 #else
   UNUSED(rs);

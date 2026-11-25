@@ -6701,8 +6701,11 @@ int lj_arena_hugetab_rescue_enter(HugeTab *registry, GCArena *a,
   LJHugeEnt *entry;
   uint64_t addr = (uint64_t)(uintptr_t)a, meta, leased;
   int admission;
-  if (!h || !a || !hugetab_search(h, addr, &entry, &meta))
+  if (!h || !a || !hugetab_search(h, addr, &entry, &meta)) {
+    if (hi)
+      memset(hi, 0, sizeof(*hi));
     return LJ_ARENA_RESCUE_RETRY;
+  }
   /* An ordinary small mapping has no pending slot transition. Its exact
   ** search snapshot supplies the counted reader CAS directly. Any unusual
   ** state or concurrent change goes through the full admission protocol. */
@@ -6713,11 +6716,15 @@ int lj_arena_hugetab_rescue_enter(HugeTab *registry, GCArena *a,
       hugetab_readers(meta) == LJ_HUGETAB_READER_MAX ||
       !hugetab_cas_meta(entry, addr, meta, leased))) {
     LJHugeReader reader = { NULL, NULL, 0 };
+    hugetab_decode(meta, hi);
     if (hugetab_reader_entry(h, entry, addr, 0, NULL, &reader, hi) !=
 	LJ_ARENA_HUGE_READER_ACQUIRED)
       return LJ_ARENA_RESCUE_RETRY;
-    arena_test_registry_pause_after_reader();
-    admission = lj_arena_rescue_enter(a);
+    admission = LJ_ARENA_RESCUE_RETRY;
+    if (reader.base == a) {
+      arena_test_registry_pause_after_reader();
+      admission = lj_arena_rescue_enter(a);
+    }
     (void)hugetab_cert_lease_release(entry, (uint64_t)(uintptr_t)reader.base,
 				     reader.base, NULL);
     return admission;
