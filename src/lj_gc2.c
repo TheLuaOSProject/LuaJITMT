@@ -7539,6 +7539,19 @@ void lj_gc2_test_thread_root_rescan_marked_obj(global_State *g, GCobj *o)
 }
 #endif
 
+/* Call only while the semantic edge retains the exact string allocation.
+** Bucket ownership and topology borrows must use preservation by itself. */
+static LJ_AINLINE int gc2_rescue_semantic_string(global_State *g, GCobj *o)
+{
+  GCstr *str = gco2str(o);
+  if (lj_str_canon_acq(str) == LJ_STR_CANON_LIVE ||
+      lj_str_gc2_rescue_held(str, NULL))
+    return 1;
+  /* A committed old body in a strong edge invalidates the close proof. */
+  gc2_recovery_fail_closed(g);
+  return 0;
+}
+
 static int gc2_mark_thread_root_obj_status(global_State *g, GCobj *o)
 {
   GC2MarkScope scope;
@@ -7562,6 +7575,11 @@ static int gc2_mark_thread_root_obj_status(global_State *g, GCobj *o)
     g, o, NULL, &gct, &traversable, 0, &scope, NULL);
   if (status == GC2_MARK_DEAD)
     return 0;
+  if (gct == (uint32_t)~LJ_TSTR) {
+    int rescued = gc2_rescue_semantic_string(g, o);
+    gc2_mark_scope_leave(&scope);
+    return rescued;
+  }
   if (status == GC2_MARK_NEW) {
     if (gc2_gct_may_traverse(gct) &&
 	(traversable || gct == (uint32_t)~LJ_TUDATA)) {
@@ -18369,16 +18387,22 @@ int lj_gc2_markobj_nogrey(global_State *g, GCobj *o)
 static int gc2_markobj_worker_status(global_State *g, GCobj *o,
 				     uint32_t *gctp)
 {
+  GC2MarkScope scope;
   int status;
   int traversable;
   uint32_t gct;
-  status = gc2_markobj_preserve_status(g, o, NULL, &gct, &traversable);
+  status = gc2_markobj_preserve_status_impl(
+    g, o, NULL, &gct, &traversable, 0, &scope, NULL);
   if (status == GC2_MARK_DEAD)
     return status;
   if (gctp)
     *gctp = gct;
-  if (gct == (uint32_t)~LJ_TSTR)
-    return status;
+  if (gct == (uint32_t)~LJ_TSTR) {
+    int rescued = gc2_rescue_semantic_string(g, o);
+    gc2_mark_scope_leave(&scope);
+    return rescued ? status : GC2_MARK_DEAD;
+  }
+  gc2_mark_scope_leave(&scope);
   if (status == GC2_MARK_NEW && gc2_gct_may_traverse(gct)) {
     if (!(traversable || gct == (uint32_t)~LJ_TUDATA))
       return status;
@@ -22363,16 +22387,8 @@ static uint32_t gc2_trace_sweep_edge(global_State *g, GCobj *o,
     goto out;
   }
   if (gct == (uint32_t)~LJ_TSTR) {
-    GCstr *str = gco2str(o);
-    /* This is a semantic edge, unlike the ownership-only preservation of
-    ** string buckets and quarantine records. Rescue the exact admitted body
-    ** before releasing its lease. A committed old body in a strong edge
-    ** would invalidate the close proof, so veto further reclamation. */
-    if (lj_str_canon_acq(str) != LJ_STR_CANON_LIVE &&
-	!lj_str_gc2_rescue_held(str, NULL)) {
-      gc2_recovery_fail_closed(g);
+    if (!gc2_rescue_semantic_string(g, o))
       result = 1;
-    }
     goto out;
   }
   if (gct == (uint32_t)~LJ_TTHREAD &&

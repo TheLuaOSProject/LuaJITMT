@@ -534,6 +534,30 @@ static void exercise_canonical_quarantine(lua_State *L)
     gc2_phase_rel(g, phase);
   }
 
+  /* Actor-owned roots retain a closing string during MARK and WEAK.
+  ** Install the rooted value before asserting the synthetic close intent. */
+  {
+    TGState *tg = L2TG(L);
+    TValue value;
+    uint32_t idx, phase = gc2_phase_acq(g);
+    setstrV(L, &value, spublish);
+    assert(lj_tg_root_anchor_push(L, tg, &value, &idx));
+    lj_str_canon_rel(spublish,
+		     lj_str_canon_pack(ctx.rec, LJ_STR_CANON_QCLOSING));
+    gc2_phase_rel(g, LJ_GC2_MARK);
+    lj_gc2_scan_cycle_owner_tg_roots(g, tg);
+    assert(lj_str_canon_state(lj_str_canon_acq(spublish)) ==
+	   LJ_STR_CANON_QRESCUED);
+    lj_str_canon_rel(spublish,
+		     lj_str_canon_pack(ctx.rec, LJ_STR_CANON_QCLOSING));
+    gc2_phase_rel(g, LJ_GC2_WEAK);
+    lj_gc2_scan_cycle_owner_tg_roots(g, tg);
+    assert(lj_str_canon_state(lj_str_canon_acq(spublish)) ==
+	   LJ_STR_CANON_QRESCUED);
+    gc2_phase_rel(g, phase);
+    lj_tg_root_anchor_pop(tg, idx);
+  }
+
   /* Simulate close intent while the directory still owns the huge body.
   ** Pause one interner before it compares the borrowed bytes. Its exact
   ** mapping reader defers reclamation while another interner can rescue. */
@@ -551,7 +575,17 @@ static void exercise_canonical_quarantine(lua_State *L)
   canon = lj_str_canon_acq(spublish);
   assert(lj_str_canon_state(canon) == LJ_STR_CANON_QRESCUED);
 
+  /* The collector must also rescue a value reached by traversing a
+  ** strong table, even when the Lua stack never contains the string. */
+  lua_newtable(L);
+  lua_pushlstring(L, strdata(sunlink), sunlink->len);
+  lua_rawseti(L, -2, 1);
+  canon = lj_str_canon_acq(sunlink);
+  lj_str_canon_rel(sunlink,
+		   lj_str_canon_pack(lj_str_canon_record(canon),
+				     LJ_STR_CANON_QCLOSING));
   (void)lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_pop(L, 1);
   assert(lj_str_qcount_acq(g) == before + 2u);
   assert(lj_str_canon_state(lj_str_canon_acq(spublish)) ==
 	 LJ_STR_CANON_QRESCUED);
