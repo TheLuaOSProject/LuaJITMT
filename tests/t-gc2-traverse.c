@@ -7185,7 +7185,14 @@ static void test_stack_admission_tristate(lua_State *L, global_State *g,
   lj_tg_detach(g, &extra_tg);
   assert(lj_tg_flags_test_acq(&extra_tg, TGF_DEAD));
   assert(g->gc2.n_threads <= n_threads0 + 1u);
-  assert(lj_tg_reclaim_dead(g) == 1u);
+  /* Other dead TGs can be eligible at this point in the combined fixture.
+  ** Check this TG's unlink before releasing its caller-owned storage. */
+  assert(lj_tg_reclaim_dead(g) >= 1u);
+  {
+    TGState *it;
+    for (it = gc2_tg_list_acq(g); it; it = lj_tg_next_acq(it))
+      assert(it != &extra_tg);
+  }
   lj_tg_fini_thread(g, &extra_tg);
   lj_gc2_cycle_to_idle(g);
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
