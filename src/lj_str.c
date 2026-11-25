@@ -952,6 +952,9 @@ void lj_str_resize(lua_State *L, MSize newmask)
   dense_mask = oldhdr && lj_str_second_acq(g) && oldhdr->dense_mask > newmask ?
     oldhdr->dense_mask : newmask;
   newsize = lj_str_tabsize_dense(newmask, dense_mask);
+#ifdef LJ_STR_TEST_HELPERS
+  str_test_canon(L, NULL, NULL, LJ_STR_TEST_CANON_RESIZE_ALLOC);
+#endif
   newhdr = (StrTabHdr *)lj_mem_new(L, newsize);
   memset(newhdr, 0, newsize);
   newhdr->mask = newmask;
@@ -1626,7 +1629,9 @@ lookup:
       la_storeptr_rel((void **)strtab_resize_hit_slot(g, qhash), news);
       grow = strnum_publish_success(g, L2TG(L), mask);
       strtab_leave(L, hdr);
-      if (grow)
+      /* The earlier source owns topology until it publishes this target.
+      ** A speculative next directory would lose that claim on every credit. */
+      if (grow && lj_str_tabh_acq(g) == hdr)
 	lj_str_resize(L, (mask << 1) + 1u);  /* Grow string table. */
       return news;  /* Return newly interned string. */
     }

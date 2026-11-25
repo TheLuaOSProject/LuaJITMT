@@ -332,8 +332,10 @@ static void exercise_rehash_ignores_legacy_colors(lua_State *L)
 
 typedef struct PausedTopology {
   lua_State *peer;
+  lua_State *observer;
   StrTabHdr *hdr;
   MSize target_mask;
+  uint32_t allocations;
   MSize destination;
   const char *trigger;
   const char *dense_source;
@@ -352,6 +354,10 @@ static void pause_moved_string(lua_State *L, GCstr *s, StrCanonRec *rec,
 {
   PausedTopology *p = paused_topology;
   MSize owner;
+  if (L == p->observer && stage == LJ_STR_TEST_CANON_RESIZE_ALLOC) {
+    p->allocations++;
+    return;
+  }
   if (L != p->peer || stage != p->stage || la_load32_acq(&p->stopped))
     return;
   assert(rec == NULL);
@@ -566,6 +572,80 @@ static void check_paused_topology(lua_State *L, PausedTopology *p,
     assert(lj_str_newz(L, p->quarantined) == qexpected);
   }
   lua_settop(L, top);
+}
+
+static void exercise_paused_allocation_pressure(void)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  PausedTopology pause = { 0 };
+  StrTabHdr *target;
+  LJThr peer = { 0 };
+  MSize count, before, i;
+  uint32_t waits;
+  int anchors;
+  char bytes[64];
+  assert(L);
+  g = G(L);
+  (void)lua_gc(L, LUA_GCSTOP, 0);
+  pause.observer = L;
+  pause.peer = lua_newthread(L);
+  pause.hdr = lj_str_tabh_acq(g);
+  assert(!lj_str_second_acq(g));
+  pause.target_mask = (pause.hdr->mask << 1) + 1u;
+  pause.stage = LJ_STR_TEST_CANON_EXPAND_FROZEN;
+  count = 2u * (pause.target_mask + 1u);
+  lua_createtable(L, (int)count, 0);
+  anchors = lua_gettop(L);
+  paused_topology = &pause;
+  lj_str_test_set_canon_hook(pause_moved_string);
+  assert(lj_thr_create(&peer, move_string_worker, &pause) == 0);
+  for (waits = 0; waits < 50000u && !la_load32_acq(&pause.stopped); waits++)
+    test_sleep_without_tg(100000);
+  assert(la_load32_acq(&pause.stopped) && !la_load32_acq(&pause.done));
+  target = lj_str_expand_to_acq(pause.hdr);
+  assert(target && lj_str_tabh_acq(g) == pause.hdr);
+
+  lj_str_flush_num_credit(g, L2TG(L));
+  before = lj_str_num_acq(g);
+  for (i = 0; i < count; i++) {
+    uint32_t sample = i;
+    int len;
+    do {
+      len = snprintf(bytes, sizeof(bytes), "%08x-paused-pressure-%08x",
+                     sample++ * UINT32_C(0x9e3779b9), i);
+      assert(len > 0 && (size_t)len < sizeof(bytes));
+    } while (i == 0 &&
+             (test_hash_sparse(g->str.seed, bytes, (MSize)len) & pause.hdr->mask));
+    lua_pushlstring(L, bytes, (size_t)len);
+    lua_rawseti(L, anchors, (int)i+1);
+  }
+  lj_str_flush_num_credit(g, L2TG(L));
+  assert(lj_str_num_acq(g) == before + count);
+  assert(la_load32_acq(&target->copy_cursor) == 0);
+  assert(lj_str_tabh_acq(g) == pause.hdr && !la_load32_acq(&pause.done));
+  assert(pause.allocations == 0);
+  la_store32_rel(&pause.release, 1);
+  assert(lj_thr_join(&peer, NULL) == 0);
+  assert(lj_str_tabh_acq(g) == target);
+  lj_str_test_set_canon_hook(NULL);
+  paused_topology = NULL;
+
+  lj_str_resize(L, (target->mask << 1) + 1u);
+  target = lj_str_tabh_acq(g);
+  lj_str_resize(L, (target->mask << 1) + 1u);
+  assert(lj_str_tabh_acq(g)->mask == (target->mask << 1) + 1u);
+  for (i = 0; i < count; i++) {
+    const char *identity;
+    size_t len;
+    lua_rawgeti(L, anchors, (int)i+1);
+    identity = lua_tolstring(L, -1, &len);
+    assert(identity);
+    lua_pushlstring(L, identity, len);
+    assert(lua_tolstring(L, -1, NULL) == identity);
+    lua_pop(L, 2);
+  }
+  lua_close(L);
 }
 
 static void check_resize_hit_invalidation(lua_State *L, const char *bytes,
@@ -1586,6 +1666,7 @@ int main(void)
 
   lua_close(L);
   exercise_paused_topology_hits();
+  exercise_paused_allocation_pressure();
 #if LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   printf("t-strtab-cas OK: tagged-link rescue/prepend races, color-independent secondary rehash, canonical layout, Q-publish/resize and unlink/qcount identity races, saturating Q presence, nonwaiting resize claims with registered and TLS-only pins, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified (custom-allocator resize OOM injection skipped by the temporary internal-allocator-only policy)\n");
 #else
