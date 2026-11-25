@@ -6052,7 +6052,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     vk = (op == BC_IFORL || op == BC_JFORL);
     |  ins_AJ	// RA = base, RD = target (after end of loop or start of loop)
     |  lea RA, [BASE+RA*8]
-    if (op == BC_JFORI || op == BC_JFORL) {
+    if (op == BC_IFORL || op == BC_JFORI || op == BC_JFORL) {
+      |  // Resume the same instruction before updating the loop index.
       |  cmp TGPOLL, 0
       |  jz >4
       |  sub PC, 4
