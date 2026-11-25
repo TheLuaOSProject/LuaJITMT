@@ -48,6 +48,7 @@ typedef struct ResizeCtx {
   int mutate;
   int weak_mode_change;
   int check_inline_split;
+  int expect_empty;
   int status;
 } ResizeCtx;
 
@@ -336,7 +337,7 @@ static void *resize_worker(void *arg)
     lua_rawseti(L, 1, (int)ctx->asize);
   } else if (ctx->mutate == 8) {
     lua_rawgeti(L, 1, 1);
-    assert(lua_tointeger(L, -1) == 11);
+    assert(ctx->expect_empty ? lua_isnil(L, -1) : lua_tointeger(L, -1) == 11);
     lua_pop(L, 1);
     lua_pushinteger(L, 444);
     lua_rawseti(L, 1, (int)ctx->asize);
@@ -1065,8 +1066,10 @@ static void inline_before_freeze_hold(lua_State *L, GCtab *t,
     resize_hold_hook(L, t, array, asize);
 }
 
+enum ArrayInsert { APPEND_INDEX, DENSE_FIRST_HASH, SPARSE_FIRST_HASH };
+
 static void exercise_array_setup_owner(lua_State *L, int installed,
-                                       int mixed, int separated)
+                                       int mixed, int size, enum ArrayInsert op)
 {
   volatile int ready = 0, owner_start = 0, other_start = 0;
   volatile int owner_done = 0, other_done = 0;
@@ -1075,24 +1078,31 @@ static void exercise_array_setup_owner(lua_State *L, int installed,
   GCtab *t;
   TValue *oldarray;
   pthread_t other_thread;
-  int i, size = separated ? LJ_MAX_COLOSIZE + 4 : 3;
-  int key = size + 1;
+  int i, inline_array = size > 0 && size < LJ_MAX_COLOSIZE;
+  int key = op == APPEND_INDEX ? size + 1 : -3;
+  int prefix = op == SPARSE_FIRST_HASH ? 3 : size;
 
   lua_settop(L, 0);
   lua_createtable(L, size, mixed ? 1 : 0);
   t = tabV(L->top - 1);
-  assert((lj_tab_colo_acq(t) > 0) != separated);
+  assert((lj_tab_colo_acq(t) > 0) == inline_array);
   assert((lj_tab_hmask_acq(t) != 0) == mixed);
   oldarray = lj_tab_array_acq(t);
-  for (i = 1; i <= size; i++) {
+  assert((oldarray != NULL) == (size > 0));
+  for (i = 1; i <= prefix; i++) {
     lua_pushinteger(L, 10 + i);
     lua_rawseti(L, 1, i);
+  }
+  if (op == SPARSE_FIRST_HASH) {
+    lua_pushinteger(L, size + 10);
+    lua_rawseti(L, 1, size);
   }
   if (mixed) {
     lua_pushinteger(L, -11);
     lua_rawseti(L, 1, -1);
-    lua_pushinteger(L, -22);
-    lua_rawseti(L, 1, -2);
+    /* With no array yet, key 2 starts in the hash and moves into the array. */
+    lua_pushinteger(L, 22);
+    lua_rawseti(L, 1, size ? -2 : 2);
   }
 
   owner.L = new_child_with_table(L, 1);
@@ -1108,6 +1118,7 @@ static void exercise_array_setup_owner(lua_State *L, int installed,
   other.done = &other_done;
   other.asize = key;
   other.mutate = 8;
+  other.expect_empty = size == 0;
   other.status = -1;
   resize_hook_tab = t;
   resize_hook_entered = &hook_entered;
@@ -1124,7 +1135,7 @@ static void exercise_array_setup_owner(lua_State *L, int installed,
   assert(wait_for_flag(&ready, 2, 1000000));
   store_flag(&owner_start, 1);
   assert(wait_for_flag(&hook_entered, 1, 1000000));
-  assert((lj_tab_colo_acq(t) > 0) != separated);
+  assert((lj_tab_colo_acq(t) > 0) == inline_array);
   assert(lj_tab_array_acq(t) == oldarray);
   if (!installed)
     assert(lj_tab_struct_owner_acq(t) == 0);
@@ -1134,6 +1145,20 @@ static void exercise_array_setup_owner(lua_State *L, int installed,
   assert(lj_tab_colo_acq(t) <= 0);
   assert(lj_tab_array_acq(t) != oldarray);
   assert(lj_tab_resize_desc_control_acq(t) == NULL);
+  if (op != APPEND_INDEX) {
+    assert(lj_tab_hmask_acq(t));
+    assert(op == SPARSE_FIRST_HASH ? lj_tab_asize_acq(t) < (MSize)size :
+           lj_tab_asize_acq(t) > (MSize)size + 1u);
+    lua_rawgeti(L, 1, size);
+    assert(lua_tointeger(L, -1) == size + 10);
+    lua_pop(L, 1);
+  }
+  if (!size && mixed) {
+    assert(lj_tab_asize_acq(t) > 2);
+    lua_rawgeti(L, 1, 2);
+    assert(lua_tointeger(L, -1) == 22);
+    lua_pop(L, 1);
+  }
 
   store_flag(&hook_release, 1);
   assert(pthread_join(copy_owner, NULL) == 0 && owner.status == 0);
@@ -1518,6 +1543,7 @@ static void exercise_wait_stopreq(lua_State *L)
 int main(void)
 {
   lua_State *L = luaL_newstate();
+  int installed, mixed;
 
   assert(L != NULL);
   luaL_openlibs(L);
@@ -1546,14 +1572,17 @@ int main(void)
   exercise_array_migration_owner(L, 0, 0, 0, 3);
   exercise_array_migration_owner(L, 1, 1, 0, 3);
   exercise_hash_migration_owner(L);
-  exercise_array_setup_owner(L, 0, 1, 0);
-  exercise_array_setup_owner(L, 1, 1, 0);
-  exercise_array_setup_owner(L, 0, 0, 0);
-  exercise_array_setup_owner(L, 1, 0, 0);
-  exercise_array_setup_owner(L, 0, 0, 1);
-  exercise_array_setup_owner(L, 1, 0, 1);
-  exercise_array_setup_owner(L, 0, 1, 1);
-  exercise_array_setup_owner(L, 1, 1, 1);
+  for (installed = 0; installed <= 1; installed++) {
+    for (mixed = 0; mixed <= 1; mixed++) {
+      exercise_array_setup_owner(L, installed, mixed, 0, APPEND_INDEX);
+      exercise_array_setup_owner(L, installed, mixed, 3, APPEND_INDEX);
+      exercise_array_setup_owner(L, installed, mixed, LJ_MAX_COLOSIZE + 4, APPEND_INDEX);
+    }
+    exercise_array_setup_owner(L, installed, 0, 3, DENSE_FIRST_HASH);
+    exercise_array_setup_owner(L, installed, 0, LJ_MAX_COLOSIZE + 4, DENSE_FIRST_HASH);
+    exercise_array_setup_owner(L, installed, 0, LJ_MAX_COLOSIZE - 1, SPARSE_FIRST_HASH);
+    exercise_array_setup_owner(L, installed, 0, LJ_MAX_COLOSIZE + 4, SPARSE_FIRST_HASH);
+  }
   exercise_first_hash_owner(L, 0, 0);
   exercise_first_hash_owner(L, 1, 0);
   exercise_first_hash_owner(L, 1, 1);
