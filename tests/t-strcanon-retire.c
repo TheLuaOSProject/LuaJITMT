@@ -11,6 +11,7 @@
 
 #include "lj_func.h"
 #include "lj_gc2.h"
+#include "lj_safepoint.h"
 #include "lj_str.h"
 #include "lj_thr.h"
 
@@ -320,6 +321,82 @@ static void *hold_idle_retirement(void *arg)
   return NULL;
 }
 
+/* A C API pop leaves its word in unused stack capacity. A remote scan
+** must still rescue the adjacent live slot while that stale mapping
+** waits for the second grace period. */
+static void *scan_parked_stack(void *arg)
+{
+  TGState *tg = arg;
+  global_State *g = tg->gl;
+  lj_tg_tid_rel(tg, lj_thr_newid());
+  lj_arena_alloc_owner_rel(&tg->alloc, lj_tg_tid_acq(tg));
+  lj_thr_set_tg(tg);
+  lj_tg_attach(g, tg);
+  assert(lj_gc2_handshake(g, LJ_GC2_HS_SCAN_OWNER_ROOTS) == 2);
+  lj_tg_detach(g, tg);
+  lj_thr_set_tg(NULL);
+  return NULL;
+}
+
+static int check_popped_native_slot(lua_State *L)
+{
+  global_State *g = G(L);
+  LJNativeFrame frame;
+  LJThr thread = {0};
+  TGState *pin;
+  GCstr *live, *old;
+  const char *bytes;
+  static char payload[LJ_HUGE_THRESHOLD + 63];
+  TGState *scanner = lua_touserdata(L, 1);
+  memset(payload, 'p', sizeof(payload));
+  lua_pushliteral(L, "live across parked stack scan");
+  live = strV(L->top - 1);
+  bytes = lua_tolstring(L, -1, NULL);
+  lua_pushlstring(L, payload, sizeof(payload));
+  old = strV(L->top - 1);
+  lua_pop(L, 1);
+  assert(tvisstr(L->top) && strV(L->top) == old);
+  assert(lj_str_test_quarantine_detach(L, old));
+  assert(lj_str_test_quarantine_close(g, old));
+  advance_grace(g);
+  assert(lj_str_canon_state(lj_str_canon_acq(old)) == LJ_STR_CANON_QCOMMIT);
+  pin = lj_str_source_pin(L, old);
+  assert(pin);
+  lj_gc2_mark_begin(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  assert(lj_str_test_quarantine_detach(L, live));
+  assert(lj_str_test_quarantine_close(g, live));
+  assert(tvisstr(L->top) && strV(L->top) == old);
+  lj_native_enter_l(L, &frame);
+  assert(lj_thr_create(&thread, scan_parked_stack, scanner) == 0);
+  assert(lj_thr_join(&thread, NULL) == 0);
+  (void)lj_native_leave_l(L, &frame);
+  assert(!lj_gc2_activation_reclaim_veto(g));
+  assert(lj_str_canon_state(lj_str_canon_acq(live)) == LJ_STR_CANON_QRESCUED);
+  assert(lua_tolstring(L, -1, NULL) == bytes);
+  assert(strcmp(bytes, "live across parked stack scan") == 0);
+  lj_str_source_unpin(pin);
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  advance_grace(g);
+  assert(!lj_gc2_mem_registered_known(g, old));
+  return 0;
+}
+
+static void check_parked_stack(void)
+{
+  lua_State *L = luaL_newstate();
+  TGState scanner;
+  assert(L);
+  lua_gc(L, LUA_GCSTOP, 0);
+  lj_tg_init_thread(G(L), &scanner, NULL, 0);
+  lua_pushcfunction(L, check_popped_native_slot);
+  lua_pushlightuserdata(L, &scanner);
+  lua_call(L, 1, 0);
+  (void)lj_tg_reclaim_dead(G(L));
+  assert(lj_tg_fini_thread(G(L), &scanner));
+  lua_close(L);
+}
+
 static void check_huge_idle_identity(void)
 {
   static char bytes[LJ_HUGE_THRESHOLD + 77];
@@ -406,6 +483,7 @@ int main(void)
   LJThr thread = {0};
 #ifdef LJ_GC2_TEST_HELPERS
   check_huge_idle_identity();
+  check_parked_stack();
 #endif
   check_dual_generation_quarantine();
   L = luaL_newstate();

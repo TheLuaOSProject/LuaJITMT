@@ -8125,6 +8125,39 @@ static TValue *gc2_active_thread_top(global_State *g, lua_State *L, TValue *top,
   return top > max ? max : top;
 }
 
+/* The widened native scan can observe words left by lua_pop. Retain the
+** exact incarnation while arbitrating with string close. Only a terminal
+** string outside a parked C activation's live window is a stale word.
+** Lua/JIT frames, open cells and live C arguments keep the strong check. */
+static int gc2_stack_tv_admit_scoped(global_State *g, lua_State *L,
+                                     cTValue *slot, cTValue *tv,
+                                     GC2MarkScope *scope)
+{
+  GC2FrameScope fscope;
+  GCfunc *fn;
+  TValue *frame, *bot;
+  uint32_t state;
+  int cfunc, status = gc2_tv_admit_scoped(g, tv, scope);
+  if (status != GC2_TV_SCOPE_ADMITTED || slot < L->top || !tvisstr(tv) ||
+      lj_str_tv_rescue_held(tv))
+    return status;
+  state = lj_str_canon_state(lj_str_canon_acq(strV(tv)));
+  if ((state != LJ_STR_CANON_QCOMMIT && state != LJ_STR_CANON_FREEING) ||
+      !gc2_thread_is_native_current(g, L) || gc2_thread_is_jit_current(g, L))
+    return status;
+  frame = L->base - 1;
+  bot = tvref(L->stack);
+  if (frame == bot + LJ_FR2)
+    return GC2_TV_SCOPE_STALE;
+  if (frame <= bot + LJ_FR2 || frame >= tvref(L->maxstack))
+    return status;
+  cfunc = gc2_frame_func_valid(g, frame, &fn, NULL, &fscope) && !isluafunc(fn);
+  gc2_frame_scope_leave(&fscope);
+  if (cfunc && slot >= gc2_active_thread_top(g, L, L->top, NULL))
+    return GC2_TV_SCOPE_STALE;
+  return status;
+}
+
 static TValue *gc2_stack_scan_top(global_State *g, lua_State *L,
 				  int *conservativep)
 {
@@ -8484,7 +8517,7 @@ static int gc2_scan_thread_stack(global_State *g, lua_State *L,
     lj_tv_load_acq(&tv, o);
     if (conservative) {
       GC2MarkScope scope;
-      int admitted = gc2_tv_admit_scoped(g, &tv, &scope);
+      int admitted = gc2_stack_tv_admit_scoped(g, L, o, &tv, &scope);
       if (LJ_UNLIKELY(admitted == GC2_TV_SCOPE_RETRY)) {
 	stack_retry = 1;
 	gc2_mark_scope_leave(&scope);
@@ -21560,7 +21593,7 @@ scan_thread:
     lj_tv_load_acq(&tv, o);
     if (conservative) {
       GC2MarkScope scope;
-      int admitted = gc2_tv_admit_scoped(g, &tv, &scope);
+      int admitted = gc2_stack_tv_admit_scoped(g, th, o, &tv, &scope);
       if (LJ_UNLIKELY(admitted == GC2_TV_SCOPE_RETRY)) {
 	stack_retry = 1;
 	gc2_mark_scope_leave(&scope);
