@@ -8711,7 +8711,7 @@ static void finreg_cdata_test_mark(global_State *g, cTValue *tv)
   UNUSED(tv);  /* The fixture keeps the C finalizer in a global Lua root. */
 }
 
-static void test_finreg_cdata_slot_retry_reopens_weak(lua_State *L,
+static void test_finreg_cdata_pending_ignores_retired_vector(lua_State *L,
 						       global_State *g)
 {
   FinRegOrderNode *ord;
@@ -8753,33 +8753,17 @@ static void test_finreg_cdata_slot_retry_reopens_weak(lua_State *L,
   gc2_weak_root_scanned_rel(g, 1);
   gc2_weak_mark_closed_rel(g, 1);
 
-  /* A transient FIN-table generation is neither MISS nor a live candidate
-  ** skip. P_WEAK must reopen its exact certificate without consuming the
-  ** order node, slot, flags, or callback. */
+  /* Native callback ownership needs no live hash-vector certificate. */
   lj_tab_node_hdr_flags_or_rel(finnode, TABNODE_FLAG_RETIRING);
-  assert(lj_gc2_finreg_cdata_finalize_pweak(
-	L, g, finreg_cdata_test_mark) == 0);
+  assert(lj_gc2_finreg_cdata_finalize_pweak(L, g, finreg_cdata_test_mark) == 1u);
   la_store32_rel(&lj_tab_node_hdrw(finnode)->flags, finflags);
-  assert(gc2_weak_root_scanned_acq(g) == 0);
-  assert(gc2_weak_mark_closed_acq(g) == 0);
   assert(finreg_cdata_order_active_refs(g, o) == 1u);
-  assert(gc2_finreg_cdata_order_claimed_acq(g) == claimed0);
-  assert(gc2_finreg_cdata_order_queued_acq(g) == orderq0);
-  assert(gc2_finalizer_queued_acq(g) == finalizerq0);
-  assert((lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) != 0);
-  assert((lj_obj_gcflags(o) & LJ_GC_FINALIZED) == 0);
-  assert(gc2_cdata_finalized == finalized0);
-
-  lj_gc2_cycle_to_idle(g);
-  lj_gc2_mark_begin(g);
-  assert(lj_gc2_ismarked(g, o) == 0);
-  assert(lj_gc2_finreg_cdata_finalize_pweak(
-	L, g, finreg_cdata_test_mark) == 1u);
-  assert(finreg_cdata_order_active_refs(g, o) == 0);
   assert(gc2_finreg_cdata_order_claimed_acq(g) == claimed0 + 1u);
   assert(gc2_finreg_cdata_order_queued_acq(g) == orderq0 + 1u);
   assert(gc2_finalizer_queued_acq(g) == finalizerq0 + 1u);
+  assert(gc2_cdata_finalized == finalized0);
   lj_gc2_finalizer_dispatch_all(L);
+  assert(finreg_cdata_order_active_refs(g, o) == 0);
   assert(gc2_cdata_finalized == finalized0 + 1);
   lj_gc2_cycle_to_idle(g);
   lua_pushnil(L);
@@ -8787,12 +8771,11 @@ static void test_finreg_cdata_slot_retry_reopens_weak(lua_State *L,
   lua_settop(L, 0);
 }
 
-static void test_finreg_cdata_unproven_unlink_retry(lua_State *L,
+static void test_finreg_cdata_pending_preserves_root(lua_State *L,
 						     global_State *g)
 {
   GCcdata *cd;
   GCobj *o, *saved_root;
-  GCstr *invalid;
   uint64_t claimed0, orderq0, finalizerq0;
   int finalized0;
 
@@ -8808,7 +8791,6 @@ static void test_finreg_cdata_unproven_unlink_retry(lua_State *L,
   (void)lj_gc_flush_root_pending(g);
   saved_root = lj_gc_root_acq(g);
   assert(saved_root != NULL);
-  invalid = lj_str_newlit(L, "finreg-unproven-root-sentinel");
   assert(finreg_cdata_order_active_refs(g, o) == 1u);
 
   claimed0 = gc2_finreg_cdata_order_claimed_acq(g);
@@ -8818,32 +8800,10 @@ static void test_finreg_cdata_unproven_unlink_retry(lua_State *L,
   lj_gc2_mark_begin(g);
   assert(lj_gc2_ismarked(g, o) == 0);
 
-  /* An inadmissible root entry makes target absence UNPROVEN. Discovery must
-  ** restore the claimed finalizer slot and retain the active order node, not
-  ** enqueue an object which may still have an intrusive root membership. */
-  lj_gc_root_rel(g, obj2gco(invalid));
-  lj_gcroot_repair_epoch_add(g);
-  assert(lj_gc2_finreg_cdata_finalize_pweak(
-	L, g, finreg_cdata_test_mark) == 0);
-  assert(lj_gc_root_acq(g) == NULL);  /* Shared unlinker severed invalid head. */
+  /* Publishing a pending callback does not mutate intrusive membership. */
+  assert(lj_gc2_finreg_cdata_finalize_pweak(L, g, finreg_cdata_test_mark) == 1u);
+  assert(lj_gc_root_acq(g) == saved_root);
   assert(finreg_cdata_order_active_refs(g, o) == 1u);
-  assert(gc2_finreg_cdata_order_claimed_acq(g) == claimed0);
-  assert(gc2_finreg_cdata_order_queued_acq(g) == orderq0);
-  assert(gc2_finalizer_queued_acq(g) == finalizerq0);
-  assert((lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) != 0);
-  assert((lj_obj_gcflags(o) & LJ_GC_FINALIZED) == 0);
-  assert(lj_gc2_ismarked(g, o) == 1);
-
-  /* Once a complete scan can prove membership, the same node is claimed and
-  ** dispatched exactly once. */
-  lj_gc_root_rel(g, saved_root);
-  lj_gcroot_repair_epoch_add(g);
-  lj_gc2_cycle_to_idle(g);
-  lj_gc2_mark_begin(g);
-  assert(lj_gc2_ismarked(g, o) == 0);
-  assert(lj_gc2_finreg_cdata_finalize_pweak(
-	L, g, finreg_cdata_test_mark) == 1u);
-  assert(finreg_cdata_order_active_refs(g, o) == 0);
   assert(gc2_finreg_cdata_order_claimed_acq(g) == claimed0 + 1u);
   assert(gc2_finreg_cdata_order_queued_acq(g) == orderq0 + 1u);
   assert(gc2_finalizer_queued_acq(g) == finalizerq0 + 1u);
@@ -9036,49 +8996,6 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(gc2_finreg_cdata_clears_acq(g) == clears1 + 1u);
   assert(gc2_cdata_finalized == finalized0 + 1);
 
-  sets1 = gc2_finreg_cdata_sets_acq(g);
-  clears1 = gc2_finreg_cdata_clears_acq(g);
-  queued1 = gc2_finreg_cdata_queued_acq(g);
-  finalizerq1 = gc2_finalizer_queued_acq(g);
-  finalizerd1 = gc2_finalizer_dequeued_acq(g);
-  mpscd1 = gc2_finalizer_mpsc_drained_acq(g);
-  claimed1 = gc2_finreg_cdata_pweak_claimed_acq(g);
-  dispatched1 = gc2_finreg_cdata_preclaim_dispatched_acq(g);
-  finalized0 = gc2_cdata_finalized;
-  lua_settop(L, 0);
-  lua_pushcfunction(L, gc2_cdata_counting_finalizer);
-  lua_setglobal(L, "gc2_cdata_counting_finalizer");
-  assert(luaL_dostring(L,
-    "local ffi = require('ffi')\n"
-    "ffi.cdef('typedef struct { int x; } gc2_preclaim_clear_fin_t;')\n"
-    "return ffi.gc(ffi.new('gc2_preclaim_clear_fin_t'), gc2_cdata_counting_finalizer)\n") ==
-    LUA_OK);
-  {
-    GCcdata *cd = cdataV(L->top - 1);
-    GCobj *o = obj2gco(cd);
-    TValue nilv;
-    lua_getglobal(L, "gc2_cdata_counting_finalizer");
-    assert(tvisfunc(L->top - 1));
-    assert(lj_gc2_test_finreg_cdata_preclaim(L, g, o, L->top - 1));
-    assert(test_unlink_root_object(g, o));
-    lj_gc2_test_finreg_cdata_finalizer_enqueue(g, o);
-    setnilV(&nilv);
-    lj_cdata_setfin(L, cd, gcval(&nilv), itype(&nilv));
-  }
-  assert(gc2_finreg_cdata_sets_acq(g) == sets1 + 1u);
-  assert(gc2_finreg_cdata_clears_acq(g) == clears1 + 1u);
-  assert(gc2_finreg_cdata_queued_acq(g) == queued1 + 1u);
-  assert(gc2_finreg_cdata_pweak_claimed_acq(g) == claimed1 + 1u);
-  assert(gc2_finalizer_queued_acq(g) == finalizerq1 + 1u);
-  lj_gc2_finalizer_dispatch_all(L);
-  assert(gc2_finalizer_dequeued_acq(g) == finalizerd1 + 1u);
-  assert(gc2_finalizer_mpsc_drained_acq(g) == mpscd1 + 1u);
-  assert(gc2_finreg_cdata_preclaim_dispatched_acq(g) ==
-	 dispatched1 + 1u);
-  assert(gc2_finreg_cdata_clears_acq(g) == clears1 + 1u);
-  assert(gc2_cdata_finalized == finalized0);
-  lua_settop(L, 0);
-
   sets2 = gc2_finreg_cdata_sets_acq(g);
   clears2 = gc2_finreg_cdata_clears_acq(g);
   queued2 = gc2_finreg_cdata_queued_acq(g);
@@ -9133,60 +9050,6 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(gc2_cdata_order[1] == 2);
   assert(gc2_cdata_order[2] == 1);
 
-#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
-  sets2 = gc2_finreg_cdata_sets_acq(g);
-  clears2 = gc2_finreg_cdata_clears_acq(g);
-  queued2 = gc2_finreg_cdata_queued_acq(g);
-  sweepqueued2 = gc2_finreg_cdata_sweep_queued_acq(g);
-  pweak2 = gc2_finreg_cdata_pweak_queued_acq(g);
-  finalizerq2 = gc2_finalizer_queued_acq(g);
-  finalizerd2 = gc2_finalizer_dequeued_acq(g);
-  mpscd2 = gc2_finalizer_mpsc_drained_acq(g);
-  claimed2 = gc2_finreg_cdata_pweak_claimed_acq(g);
-  dispatched2 = gc2_finreg_cdata_preclaim_dispatched_acq(g);
-  orderq2 = gc2_finreg_cdata_order_queued_acq(g);
-  orderclaimed2 = gc2_finreg_cdata_order_claimed_acq(g);
-  orderfallback2 = gc2_finreg_cdata_order_fallbacks_acq(g);
-  overflow2 = gc2_finreg_cdata_preclaim_overflow_acq(g);
-  gc2_cdata_order_count = 0;
-  lj_gc2_test_finreg_cdata_preclaim_fail(g, 1);
-  assert(luaL_dostring(L,
-    "local ffi = require('ffi')\n"
-    "ffi.cdef('typedef struct { int x; } gc2_order_fail_fin_t;')\n"
-    "do\n"
-    "  local a = ffi.gc(ffi.new('gc2_order_fail_fin_t'), gc2_cdata_order_finalizer_1)\n"
-    "  local b = ffi.gc(ffi.new('gc2_order_fail_fin_t'), gc2_cdata_order_finalizer_2)\n"
-    "  local c = ffi.gc(ffi.new('gc2_order_fail_fin_t'), gc2_cdata_order_finalizer_3)\n"
-    "end\n") ==
-    LUA_OK);
-  assert(gc2_finreg_cdata_sets_acq(g) == sets2 + 3u);
-  lua_gc(L, LUA_GCCOLLECT, 0);
-  lua_gc(L, LUA_GCCOLLECT, 0);
-  lua_gc(L, LUA_GCSTOP, 0);
-  assert(gc2_finreg_cdata_preclaim_test_fail_acq(g) == 0);
-  assert(gc2_finreg_cdata_queued_acq(g) == queued2 + 3u);
-  assert(gc2_finreg_cdata_sweep_queued_acq(g) ==
-	 sweepqueued2);
-  assert(gc2_finreg_cdata_pweak_queued_acq(g) == pweak2 + 3u);
-  assert(gc2_finreg_cdata_pweak_claimed_acq(g) == claimed2 + 2u);
-  assert(gc2_finreg_cdata_preclaim_overflow_acq(g) ==
-	 overflow2 + 1u);
-  assert(gc2_finalizer_queued_acq(g) == finalizerq2 + 3u);
-  assert(gc2_finalizer_dequeued_acq(g) == finalizerd2 + 3u);
-  assert(gc2_finalizer_mpsc_drained_acq(g) == mpscd2 + 3u);
-  assert(gc2_finreg_cdata_preclaim_dispatched_acq(g) ==
-	 dispatched2 + 2u);
-  assert(gc2_finreg_cdata_order_queued_acq(g) == orderq2 + 3u);
-  assert(gc2_finreg_cdata_order_claimed_acq(g) ==
-	 orderclaimed2 + 3u);
-  assert(gc2_finreg_cdata_order_fallbacks_acq(g) ==
-	 orderfallback2 + 1u);
-  assert(gc2_finreg_cdata_clears_acq(g) == clears2 + 3u);
-  assert(gc2_cdata_order_count == 3);
-  assert(gc2_cdata_order[0] == 3);
-  assert(gc2_cdata_order[1] == 2);
-  assert(gc2_cdata_order[2] == 1);
-#endif
 
   sets2 = gc2_finreg_cdata_sets_acq(g);
   clears2 = gc2_finreg_cdata_clears_acq(g);
@@ -9491,16 +9354,16 @@ static void test_finreg_disabled_ordered_pending(lua_State *L, global_State *g)
   assert(tviscdata(L->top - 1));
   cd = cdataV(L->top - 1);
   setcdataV(L, &key, cd);
-  rc = lj_ctype_fin_get(L, cts, &key, &finlease);
+  rc = lj_ctype_fin_get_native(cts, &key, &finlease);
   assert(rc == LJ_CTYPE_FIN_FOUND);
-  assert(finlease.slot != NULL && finlease.tab != NULL);
+  assert(finlease.generation != NULL && finlease.tab != NULL);
   assert(lj_ctype_fin_istab(g, finlease.tab));
   fin_tab = finlease.tab;
   lj_ctype_fin_lease_release(&finlease);
   lj_gc2_finreg_cdata_disable(g);
   assert(!lj_gc2_finreg_cdata_pending(g));
   assert(!lj_ctype_fin_istab(g, fin_tab));
-  rc = lj_ctype_fin_get(L, cts, &key, &finlease);
+  rc = lj_ctype_fin_get_native(cts, &key, &finlease);
   assert(rc == LJ_CTYPE_FIN_MISS);
   assert(finlease.slot == NULL && finlease.tab == NULL);
   lj_ctype_fin_lease_release(&finlease);
@@ -9522,7 +9385,7 @@ static void test_finreg_disabled_ordered_pending(lua_State *L, global_State *g)
     "ffi.gc(gc2_disable_keep, nil)\n"
     "gc2_disable_keep = nil\n") ==
     LUA_OK);
-  assert((lj_obj_gcflags(obj2gco(cd)) & LJ_GC_CDATA_FIN) == 0);
+  assert(!lj_cdata_fin_native_pending(g, obj2gco(cd)));
   assert(!lj_gc2_finreg_cdata_pending(g));
   lua_settop(L, 0);
 }
@@ -9734,8 +9597,8 @@ int main(void)
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   test_finreg_cdata_preclaim_publish_order(L, g);
 #endif
-  test_finreg_cdata_slot_retry_reopens_weak(L, g);
-  test_finreg_cdata_unproven_unlink_retry(L, g);
+  test_finreg_cdata_pending_ignores_retired_vector(L, g);
+  test_finreg_cdata_pending_preserves_root(L, g);
   test_finreg_cdata_order_active_retire(L, g);
   test_finreg_cdata_telemetry(L, g);
   test_finalizer_spawn_deferred_state(L, g);

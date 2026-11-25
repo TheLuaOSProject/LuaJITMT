@@ -459,6 +459,7 @@ static GCtab *ctype_fin_tab_new_anchor_l(lua_State *L, uint32_t hbits)
 static FinRegGen *ctype_fin_gen_new_l(lua_State *L, GCtab *t)
 {
   FinRegGen *gen = lj_mem_newt(L, sizeof(FinRegGen), FinRegGen);
+  gen->registration.lo = gen->registration.hi = 0;
   fin_gen_tab_rel(gen, t);
   fin_gen_next_rel(gen, NULL);
   setgcrefnull(gen->registered_key);
@@ -480,6 +481,7 @@ void lj_ctype_fin_lease_release(CTypeFinLease *lease)
   lease->g = NULL;
   lease->tab = NULL;
   lease->slot = NULL;
+  lease->generation = NULL;
   lease->smr_held = 0;
   lj_gc2_lease_release(&lease->table_lease);
   if (smr)
@@ -545,6 +547,7 @@ static int ctype_fin_gen_tab_acquire_next_smr_mode(CTState *cts, FinRegGen *gen,
   if (nextp)
     *nextp = next;
   lease->tab = t;
+  lease->generation = gen;
   lj_gc2_lease_release(&genlease);
   return LJ_CTYPE_FIN_FOUND;
 }
@@ -667,32 +670,28 @@ static int ctype_fin_slot_lookup_held(CTypeFinLease *lease, cTValue *key,
     LJ_CTYPE_FIN_MISS : LJ_CTYPE_FIN_RETRY;
 }
 
-FinRegOrderNode *lj_ctype_fin_order_new(lua_State *L)
+FinRegOrderNode *lj_ctype_fin_order_new_nothrow(lua_State *L)
 {
-  FinRegOrderNode *ord = lj_mem_newt(L, sizeof(FinRegOrderNode),
-				     FinRegOrderNode);
+  FinRegOrderNode *ord = lj_mem_new_deferred_nothrow(L, sizeof(*ord));
+  if (!ord)
+    return NULL;
   fin_order_obj_clear(ord);
   fin_order_tab_rel(ord, NULL);
   fin_order_slot_rel(ord, NULL);
   fin_order_next_rel(ord, NULL);
   fin_order_lifetime_next_rel(ord, NULL);
-  setnilV(&ord->ready_callback);
-  ord->ready_token = 0;
+  ord->registration_id = 0;
+  la_store32_rel(&ord->submission_done, 0);
+  la_store32_rel(&ord->queue_visible, 0);
   fin_order_active_rel(ord, 0);
   return ord;
-}
-
-void lj_ctype_fin_order_free(global_State *g, FinRegOrderNode *ord)
-{
-  if (ord)
-    lj_mem_freet(g, ord);
 }
 
 void lj_ctype_fin_order_publish(CTState *cts, FinRegOrderNode *ord,
 				GCobj *o, GCtab *t, TValue *slot)
 {
   FinRegOrderNode *head;
-  if (!cts || !ord || !o || !t || !slot)
+  if (!cts || !ord || !o || !t || (!slot && !ord->registration_id))
     return;
   fin_order_obj_rel(ord, o);
   fin_order_tab_rel(ord, t);
@@ -815,6 +814,34 @@ out:
   return complete;
 }
 
+/* Caller retains SMR while following exact order node identity. */
+void lj_ctype_fin_order_retire_id(CTState *cts, GCobj *o, uint64_t id)
+{
+  FinRegOrderNode *prev = NULL, *ord = fin_order_head_acq(cts);
+  size_t remaining = LJ_ROOT_SCAN_LIMIT;
+  while (ord && remaining--) {
+    LJGC2Lease scope = { 0 };
+    FinRegOrderNode *next;
+    uint32_t active;
+    if (lj_gc2_mem_lease_acquire(cts->g, ord, &scope) < 0) {
+      lj_gc2_lease_release(&scope);
+      return;
+    }
+    next = fin_order_next_acq(ord);
+    active = fin_order_active_acq(ord);
+    if (active == 1 && ord->registration_id == id &&
+        fin_order_obj_acq(ord) == o) {
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      lj_gc2_lease_release(&scope);
+      return;
+    }
+    lj_gc2_lease_release(&scope);
+    if (active == 1)
+      prev = ord;
+    ord = next;
+  }
+}
+
 size_t lj_ctype_fin_order_retire_obj(CTState *cts, GCobj *target)
 {
   size_t n = 0;
@@ -853,7 +880,6 @@ static int ctype_fin_get_smr(CTState *cts, FinRegGen *gen, cTValue *key,
     CTypeFinLease held = CTYPE_FIN_LEASE_INIT;
     FinRegGen *next = NULL;
     LJGC2Lease generation = { 0 };
-    TValue *slot;
     int rc, same_key;
     if (lj_gc2_mem_lease_acquire(cts->g, gen, &generation) < 0) {
       lj_gc2_lease_release(&generation);
@@ -870,15 +896,10 @@ static int ctype_fin_get_smr(CTState *cts, FinRegGen *gen, cTValue *key,
     if (rc == LJ_CTYPE_FIN_RETRY)
       return LJ_CTYPE_FIN_RETRY;
     if (rc == LJ_CTYPE_FIN_FOUND && fin_gen_tab_enabled_acq(held.tab)) {
-      rc = ctype_fin_slot_lookup_held(&held, key, &slot);
-      if (rc == LJ_CTYPE_FIN_FOUND) {
-	*lease = held;  /* Move the one active certificate to the caller. */
-	lease->slot = slot;
-	return LJ_CTYPE_FIN_FOUND;
-      }
-      lj_ctype_fin_lease_release(&held);
-      if (rc == LJ_CTYPE_FIN_RETRY)
-	return LJ_CTYPE_FIN_RETRY;
+      /* A weak-table clear may have erased the hidden key while the
+      ** native pending state preserves the exact allocation. */
+      *lease = held;
+      return LJ_CTYPE_FIN_FOUND;
     } else {
       lj_ctype_fin_lease_release(&held);
     }
@@ -907,10 +928,8 @@ static int ctype_fin_get(CTState *cts, cTValue *key, CTypeFinLease *lease)
   return rc;
 }
 
-int lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
-		     CTypeFinLease *lease)
+int lj_ctype_fin_get_native(CTState *cts, cTValue *key, CTypeFinLease *lease)
 {
-  UNUSED(L);
   return ctype_fin_get(cts, key, lease);
 }
 
@@ -1047,6 +1066,15 @@ int lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *, GCobj *),
       goto retry;
     }
     markmem(g, gen);
+    {
+      la_u128 registration = finreg_load(gen);
+      TValue fin;
+      tv_rawstore(&fin, registration.lo);
+      if (finreg_state(registration) && tvisgcv(&fin))
+        mark(g, gcV(&fin));
+      if (finreg_state(registration) == FINREG_PENDING)
+        mark(g, gcref(gen->registered_key));
+    }
     t = fin_gen_tab_acq(gen);
     next = fin_gen_next_acq(gen);
     /* The semantic marker is itself the retain-first validity check. A queued
@@ -2903,7 +2931,7 @@ static int ctype_fin_generation_empty(global_State *g, FinRegGen *gen)
   GCtab *tab = fin_gen_tab_acq(gen);
   Node *nodes = gen->insert_nodes;
   MSize i, hmask = gen->insert_hmask;
-  if (!nodes || !tab ||
+  if (finreg_state(finreg_load(gen)) || !nodes || !tab ||
       !lj_gc2_mem_registered_known_reclaim_held(g, tab) ||
       tab->gct != (uint8_t)~LJ_TTAB ||
       lj_tab_node_acq(tab) != nodes || lj_tab_hmask_acq(tab) != hmask ||

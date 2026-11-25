@@ -116,31 +116,9 @@ LJ_FUNC GCcdata *lj_cdata_newx_l(lua_State *L, CTState *cts, CTypeID id,
 LJ_FUNC int lj_cdata_validate(global_State *g, GCcdata *cd, void **basep,
 			      GCSize *sizep);
 LJ_FUNC void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd);
-/* A non-reusable delivery ticket for the one outstanding ordered queue
-** envelope. FINALIZED excludes another preclaim until this envelope has
-** completed. Cancellation stays sticky across any number of re-arms. */
-#define LJ_CDATA_FIN_QUEUED      0x0040u
-#define LJ_CDATA_FIN_CANCELLED   0x0080u
-#define LJ_CDATA_FIN_TICKET     (LJ_CDATA_FIN_QUEUED | LJ_CDATA_FIN_CANCELLED)
-
-static LJ_AINLINE void lj_cdata_fin_cancel_ticket(GCcdata *cd)
-{
-  uint16_t flags = cdata_flags_acq(cd);
-  while ((flags & LJ_CDATA_FIN_TICKET) == LJ_CDATA_FIN_QUEUED) {
-    uint16_t next = (uint16_t)(flags | LJ_CDATA_FIN_CANCELLED);
-    if (la_cas16(&cd->flags, &flags, next, LA_ACQ_REL, LA_ACQ))
-      return;
-  }
-}
-
+LJ_FUNC int lj_cdata_fin_native_pending(global_State *g, GCobj *o);
 LJ_FUNC void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj,
 			     uint32_t it);
-/* One-shot keyed claims for an exact CTypeFinLease. RETRY means the caller must
-** release/re-resolve before touching the slot again; FORWARD is never claimed. */
-LJ_FUNC int lj_cdata_fin_claim_held(CTypeFinLease *lease, cTValue *key,
-				    TValue *old, int nonnil);
-LJ_FUNC int lj_cdata_fin_store_claim_held(CTypeFinLease *lease,
-					  cTValue *key, cTValue *src);
 LJ_FUNC int lj_cdata_fin_isclaim(cTValue *tv);
 /* FINCLAIM is checked by every shared table snapshot, including generated
 ** numeric reads. Keep the raw-tag test inline for those hot readers while the
@@ -169,9 +147,6 @@ static LJ_AINLINE int lj_cdata_fin_isclaim_inline(cTValue *tv)
          lj_cdata_fin_isready(tv);
 }
 
-LJ_FUNC int lj_cdata_fin_help_ready(global_State *g, TValue *slot,
-                                      cTValue *key, cTValue *claim);
-
 #if defined(LJ_CDATA_TEST_HELPERS)
 enum {
   LJ_CDATA_FIN_PAUSE_ENABLE_ORDER = 1,
@@ -183,8 +158,12 @@ enum {
   LJ_CDATA_FIN_PAUSE_ENABLE_PREPARE,
   LJ_CDATA_FIN_PAUSE_CLEAR_PREPARE,
   LJ_CDATA_FIN_PAUSE_ENABLE_UNCHANGED,
+  LJ_CDATA_FIN_PAUSE_QUEUE_PENDING,
+  LJ_CDATA_FIN_PAUSE_QUEUE_LINK,
+  LJ_CDATA_FIN_PAUSE_TRANSITION,
   LJ_CDATA_FIN_PAUSE__MAX
 };
+LJ_FUNC void lj_cdata_test_fail_order_once(void);
 LJ_FUNC void lj_cdata_test_fin_pause_at(uint32_t point);
 LJ_FUNC void lj_cdata_test_fin_pause_arm(uint32_t point);
 LJ_FUNC int lj_cdata_test_fin_pause_waiting(uint32_t point);

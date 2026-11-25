@@ -827,6 +827,7 @@ typedef struct GC2FinalizerNode {
   GCobj *obj;
   TValue fin;
   uint32_t has_fin;
+  uint64_t registration_id;
 } GC2FinalizerNode;
 
 struct GC2WeakOverflow {
@@ -1353,7 +1354,7 @@ static int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
 static int gc2_call_finalizer(global_State *g, lua_State *L,
 			      cTValue *mo, GCobj *o);
 static int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
-					GCobj *o, cTValue *fin);
+					GCobj *o, cTValue *fin, uint64_t id);
 static int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
 					GCobj *o, cTValue *fin);
 static LJ_AINLINE int gc2_finreg_udata_obj_valid(global_State *g, GCobj *o);
@@ -4893,7 +4894,7 @@ int lj_gc2_finalizer_owned_by_current(global_State *g)
 }
 
 static GC2FinalizerNode *gc2_finalizer_node_new(global_State *g, GCobj *o,
-						cTValue *fin)
+						cTValue *fin, uint64_t registration_id)
 {
   GC2FinalizerNode *node;
   if (!g || !o)
@@ -4907,6 +4908,7 @@ static GC2FinalizerNode *gc2_finalizer_node_new(global_State *g, GCobj *o,
   gc2_finalizer_node_next_rel(node, NULL);
   gc2_finalizer_node_obj_rel(node, o);
   gc2_finalizer_node_fin_rel(node, fin);
+  node->registration_id = registration_id;
   return node;
 }
 
@@ -4936,14 +4938,14 @@ static void gc2_finalizer_free_ring(global_State *g, GC2FinalizerNode *tail)
   gc2_finalizer_free_stack(g, node);
 }
 
-static void lj_gc2_finalizer_enqueue_fin(global_State *g, GCobj *o,
-					 cTValue *fin)
+static void gc2_finalizer_enqueue_registration(global_State *g, GCobj *o,
+					 cTValue *fin, uint64_t id)
 {
   GC2FinalizerNode *node;
   void *head;
   if (!g || !o)
     return;
-  node = gc2_finalizer_node_new(g, o, fin);
+  node = gc2_finalizer_node_new(g, o, fin, id);
   if (!node)
     return;
   do {
@@ -4953,6 +4955,12 @@ static void lj_gc2_finalizer_enqueue_fin(global_State *g, GCobj *o,
   gc2_finalizer_queued_add(g, 1);
   if (head == NULL)
     lj_gc2_worker_wake(g);  /* 05 section 5.8: finalizer work became visible. */
+}
+
+static void lj_gc2_finalizer_enqueue_fin(global_State *g, GCobj *o,
+                                         cTValue *fin)
+{
+  gc2_finalizer_enqueue_registration(g, o, fin, 0);
 }
 
 static void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o)
@@ -5108,7 +5116,7 @@ static void gc2_finalizer_requeue_front_owned(global_State *g,
 
 static int gc2_finalizer_dispatch_obj(lua_State *L, global_State *g, GCobj *o,
 				      GC2FinalizerDispatchCtx *ctx,
-				      cTValue *fin)
+				      cTValue *fin, uint64_t id)
 {
   GC2MarkScope scope;
   uint32_t gct;
@@ -5121,11 +5129,12 @@ static int gc2_finalizer_dispatch_obj(lua_State *L, global_State *g, GCobj *o,
     return 0;
 #if LJ_HASFFI
   if (gct == (uint32_t)~LJ_TCDATA) {
-    rc = lj_gc2_finreg_cdata_dispatch(L, g, o, fin);
+    rc = lj_gc2_finreg_cdata_dispatch(L, g, o, fin, id);
     gc2_mark_scope_leave(&scope);
     return rc;
   }
 #endif
+  UNUSED(id);
   if (gct == (uint32_t)~LJ_TUDATA) {
     rc = lj_gc2_finreg_udata_dispatch(L, g, o, fin);
     gc2_mark_scope_leave(&scope);
@@ -5164,7 +5173,8 @@ static int lj_gc2_finalizer_dispatch_one(lua_State *L,
     lj_state_dropresumeclaim(&claim);
     return 0;
   }
-  rc = gc2_finalizer_dispatch_obj(L, g, o, ctx, has_fin ? &fin : NULL);
+  rc = gc2_finalizer_dispatch_obj(L, g, o, ctx, has_fin ? &fin : NULL,
+                                   node->registration_id);
   if (rc == GC2_FINALIZER_DISPATCH_DEFER) {
     /* No registration bit, slot, preclaim, or callback was consumed. Put the
     ** exact callback back at the FIFO head before publishing semantic liveness
@@ -5695,14 +5705,6 @@ static int gc2_call_finalizer(global_State *g, lua_State *L,
   setgcV(cbL, top, o, ~o->gch.gct);
   cbL->top = top+1;
   errcode = gc2_finalizer_pcall(g, cbL, top, &continue_gc);
-#if LJ_HASFFI
-  /* The queue claimed this delivery before entering the
-  ** callback. A new registration in the callback, or on its resurrected
-  ** object afterwards, belongs to a later collection. Retire the old
-  ** delivery marker without changing that registration's FIN bit. */
-  if (o->gch.gct == (uint32_t)~LJ_TCDATA)
-    lj_obj_cleargcflags_atomic(o, LJ_GC_FINALIZED);
-#endif
   if (oldL)
     lj_tg_setcur_L(g, oldL);
   else
@@ -11698,11 +11700,6 @@ static int gc2_finclaim_ensure(global_State *g)
   return 1;  /* Fixed preclaim vector: no active-GC migration/free. */
 }
 
-static int gc2_finclaim_prepare(global_State *g)
-{
-  return gc2_finreg_cdata_preclaim_ready(g) || gc2_finclaim_ensure(g);
-}
-
 static void gc2_finclaim_reset(global_State *g)
 {
   lua_State *L;
@@ -13258,16 +13255,25 @@ static LJ_AINLINE int gc2_finreg_udata_obj_valid(global_State *g, GCobj *o)
   return g && o && gc2_observed_obj_type(g, o, (uint32_t)~LJ_TUDATA);
 }
 
+/* Registration decisions are made by the exact native tuple. These
+** counters report completed transition accounting, never active membership. */
+void lj_gc2_finreg_cdata_note_transition(global_State *g, int enabled)
+{
+#if LJ_HASFFI
+  if (enabled)
+    gc2_finreg_cdata_sets_add(g, 1);
+  else
+    gc2_finreg_cdata_clears_add(g, 1);
+#else
+  UNUSED(g); UNUSED(enabled);
+#endif
+}
+
 void lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled)
 {
 #if LJ_HASFFI
-  if (!gc2_finreg_cdata_obj_valid(g, o))
-    return;
-  if (enabled) {
-    gc2_finreg_cdata_sets_add(g, 1);
-  } else {
-    gc2_finreg_cdata_clears_add(g, 1);
-  }
+  if (gc2_finreg_cdata_obj_valid(g, o))
+    lj_gc2_finreg_cdata_note_transition(g, enabled);
 #else
   UNUSED(g); UNUSED(o); UNUSED(enabled);
 #endif
@@ -13337,125 +13343,6 @@ static void lj_gc2_finreg_cdata_finalizer_enqueue(global_State *g, GCobj *o,
 }
 
 #if LJ_HASFFI
-enum {
-  GC2_FINREG_CANDIDATE_RETRY = -1,
-  GC2_FINREG_CANDIDATE_NO = 0,
-  GC2_FINREG_CANDIDATE_YES = 1
-};
-
-static int gc2_finreg_cdata_candidate_pweak(global_State *g, GCobj *o)
-{
-  int marked;
-  if (o->gch.gct != ~LJ_TCDATA ||
-      !(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) ||
-      (lj_obj_gcflags(o) & LJ_GC_FINALIZED))
-    return GC2_FINREG_CANDIDATE_NO;
-  marked = lj_gc2_ismarked(g, o);
-  if (marked < 0)
-    return GC2_FINREG_CANDIDATE_RETRY;
-  return marked == 0 ? GC2_FINREG_CANDIDATE_YES :
-		       GC2_FINREG_CANDIDATE_NO;
-}
-
-static int gc2_finreg_cdata_candidate_close(GCobj *o)
-{
-  return o->gch.gct == ~LJ_TCDATA &&
-	 (lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) &&
-	 !(lj_obj_gcflags(o) & LJ_GC_FINALIZED);
-}
-
-static int gc2_finreg_cdata_order_resolve(lua_State *L, CTState *cts,
-					  FinRegOrderNode *ord, GCobj **op,
-					  GC2MarkScope *objscope,
-					  CTypeFinLease *finlease)
-{
-  TValue key;
-  GCobj *o;
-  int rc;
-  uint32_t gct;
-  if (op)
-    *op = NULL;
-  gc2_mark_scope_init(objscope);
-  if (finlease)
-    memset(finlease, 0, sizeof(*finlease));
-  if (!L || !cts || !ord || !op || !objscope || !finlease)
-    return LJ_CTYPE_FIN_MISS;
-  o = fin_order_obj_acq(ord);
-  rc = gc2_observed_obj_status_scoped(cts->g, o, &gct, objscope);
-  if (rc <= 0 || gct != (uint32_t)~LJ_TCDATA) {
-    gc2_mark_scope_leave(objscope);
-    return rc < 0 ? LJ_CTYPE_FIN_RETRY : LJ_CTYPE_FIN_MISS;
-  }
-  setcdataV(L, &key, gco2cd(o));
-  rc = lj_ctype_fin_get(L, cts, &key, finlease);
-  if (rc != LJ_CTYPE_FIN_FOUND || !finlease->tab || !finlease->slot ||
-      !fin_gen_tab_enabled_acq(finlease->tab)) {
-    lj_ctype_fin_lease_release(finlease);
-    gc2_mark_scope_leave(objscope);
-    return rc == LJ_CTYPE_FIN_RETRY ? LJ_CTYPE_FIN_RETRY :
-	   LJ_CTYPE_FIN_MISS;
-  }
-  /* 05 section 5.8: ordered FINREG node owns cdata identity, while the two
-  ** returned move-only scopes own its body and exact FINREG slot bytes. */
-  *op = o;
-  return LJ_CTYPE_FIN_FOUND;
-}
-
-static void gc2_finreg_cdata_order_scopes_leave(GC2MarkScope *objscope,
-						 CTypeFinLease *finlease)
-{
-  lj_ctype_fin_lease_release(finlease);
-  gc2_mark_scope_leave(objscope);
-}
-
-static int gc2_finreg_cdata_store_claim(global_State *g,
-					 CTypeFinLease *finlease,
-					 cTValue *key, cTValue *src)
-{
-  if (lj_cdata_fin_store_claim_held(finlease, key, src))
-    return 1;
-  /* A successful keyed claim pins its vector generation until replacement.
-  ** Failure here is therefore an invariant break, not an ordinary miss. Keep
-  ** physical reclamation vetoed and leave the order/finalizer work retryable. */
-  gc2_activation_pin_no_reclaim(g);
-  gc2_marks_this_round_add(g, 1);
-  lj_gc2_worker_wake(g);
-  return 0;
-}
-
-static uint16_t gc2_finreg_cdata_ticket_remove(GCcdata *cd)
-{
-  uint16_t flags = cdata_flags_acq(cd);
-  while (flags & LJ_CDATA_FIN_QUEUED) {
-    uint16_t next = (uint16_t)(flags & ~LJ_CDATA_FIN_TICKET);
-    if (la_cas16(&cd->flags, &flags, next, LA_ACQ_REL, LA_ACQ))
-      return flags & LJ_CDATA_FIN_TICKET;
-  }
-  return 0;
-}
-
-/* Transfer the live slot generation to the one outstanding queue envelope
-** before a new publisher can acquire the nil slot. A subsequent ffi.gc can
-** cancel the ticket, but dispatch never owns the FIN bit of a new slot. */
-static int gc2_finreg_cdata_ticket_publish(global_State *g,
-                                          CTypeFinLease *lease, cTValue *key,
-                                          GCobj *o)
-{
-  TValue nilv;
-  setnilV(&nilv);
-  lj_obj_addgcflags_atomic(o, LJ_GC_FINALIZED);
-  cdata_flags_or_atomic(gco2cd(o), LJ_CDATA_FIN_QUEUED);
-  lj_obj_cleargcflags_atomic(o, LJ_GC_CDATA_FIN);
-  if (gc2_finreg_cdata_store_claim(g, lease, key, &nilv)) {
-    gc2_finreg_cdata_clears_add(g, 1);
-    return 1;
-  }
-  (void)gc2_finreg_cdata_ticket_remove(gco2cd(o));
-  lj_obj_addgcflags_atomic(o, LJ_GC_CDATA_FIN);
-  lj_obj_cleargcflags_atomic(o, LJ_GC_FINALIZED);
-  return 0;
-}
-
 typedef struct GC2FinOrderWalk {
   FinRegOrderNode *prev;
   FinRegOrderNode *cur;
@@ -13538,220 +13425,139 @@ static void gc2_fin_order_walk_retry(global_State *g)
   gc2_root_scan_retry(g);
 }
 
-static int gc2_finreg_cdata_unlink_root(global_State *g, GCobj *target)
+static size_t gc2_finreg_cdata_order(lua_State *L, global_State *g,
+                                      GC2FinRegMarkFunc mark, int close,
+                                      int *pending)
 {
-  /* Keep ABSENT distinct from a bounded/invalid-spine failure. Dispatch may
-  ** reinsert this intrusive object only after discovery proves that it is no
-  ** longer a member; treating UNPROVEN as absence overwrites an in-list gcw and
-  ** forms a cycle. The shared unlinker also rejects string-hash successors. */
-  return lj_gc_unlink_root_obj(g, target);
-}
-#endif
-
-size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
-					  GC2FinRegMarkFunc mark)
-{
-#if LJ_HASFFI
-  CTState *cts;
+  CTState *cts = ctype_ctsG(g);
   GC2FinOrderWalk walk;
   size_t queued = 0;
-  if (!L || !g || !mark)
-    return 0;
-  cts = ctype_ctsG(g);
-  if (cts == NULL)
+  if (!cts)
     return 0;
   if (!lj_gc2_smr_read_try(g)) {
     gc2_fin_order_walk_retry(g);
+    *pending = 1;
     return 0;
   }
   if (!gc2_fin_order_walk_start(g, cts, &walk)) {
-    lj_gc2_smr_read_leave(g);
     gc2_fin_order_walk_retry(g);
+    *pending = 1;
+    lj_gc2_smr_read_leave(g);
     return 0;
   }
-  while (walk.cur != NULL) {
-    CTypeFinLease finlease = CTYPE_FIN_LEASE_INIT;
-    GC2MarkScope objscope;
-    TValue *slot;
-    TValue fin, key;
+  while (walk.cur) {
+    FinRegOrderNode *ord = walk.cur;
+    CTypeFinLease lease = CTYPE_FIN_LEASE_INIT;
+    GC2MarkScope object;
+    TValue key;
+    la_u128 current = { 0, 0 };
     GCobj *o;
-    int candidate_status, claim_status, preclaim_ready, resolve_status;
-    int slot_status;
-    int unlink_status;
+    uint32_t gct;
+    int rc;
     if (!gc2_fin_order_walk_prepare_next(g, &walk)) {
       gc2_fin_order_walk_retry(g);
+      *pending = 1;
       break;
     }
-    if (fin_order_active_acq(walk.cur) != 1) {
+    if (!ord->registration_id || fin_order_active_acq(ord) != 1) {
       gc2_fin_order_walk_advance(&walk, 0);
       continue;
     }
-    gc2_finreg_cdata_order_seen_add(g, 1);
-    resolve_status = gc2_finreg_cdata_order_resolve(
-      L, cts, walk.cur, &o, &objscope, &finlease);
-    if (resolve_status == LJ_CTYPE_FIN_RETRY) {
+    o = fin_order_obj_acq(ord);
+    rc = gc2_observed_obj_status_scoped(g, o, &gct, &object);
+    if (rc > 0 && gct == (uint32_t)~LJ_TCDATA) {
+      setcdataV(L, &key, gco2cd(o));
+      rc = lj_ctype_fin_get_native(cts, &key, &lease);
+      if (rc == LJ_CTYPE_FIN_FOUND)
+        current = finreg_load(lease.generation);
+    }
+    if (rc < 0) {
+      *pending = 1;
       gc2_fin_order_walk_retry(g);
+    } else if (finreg_id(current) != ord->registration_id) {
+      if (la_load32_acq(&ord->submission_done))
+        (void)lj_ctype_fin_order_retire(cts, walk.prev, ord, walk.next);
+    } else {
+      int marked = 1;
+      if (finreg_state(current) == FINREG_ACTIVE ||
+          !la_load32_acq(&ord->queue_visible)) {
+        *pending = 1;
+        if (!mark)
+          gc2_finreg_cdata_pending_order_hits_add(g, 1);
+      }
+      if (mark && finreg_state(current) == FINREG_ACTIVE)
+        marked = close ? 0 : lj_gc2_ismarked(g, o);
+      if (marked < 0)
+        gc2_fin_order_walk_retry(g);
+      if (marked == 0) {
+        la_u128 next = current;
+        next.hi = (finreg_id(current) << 2) | FINREG_PENDING;
+        if (finreg_cas(lease.generation, &current, next)) {
+          current = next;
+#if defined(LJ_CDATA_TEST_HELPERS)
+          lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_QUEUE_PENDING);
+#endif
+          lj_gc2_finreg_cdata_note_transition(g, 0);
+          gc2_finreg_cdata_order_claimed_add(g, 1);
+          if (!close)
+            gc2_finreg_cdata_pweak_claimed_add(g, 1);
+        }
+      }
+      if (mark && finreg_id(current) == ord->registration_id &&
+          finreg_state(current) == FINREG_PENDING) {
+        LJGC2Lease callback = { 0 };
+        TValue fin;
+        la_u128 check;
+        tv_rawstore(&fin, current.lo);
+        rc = !tvisgcv(&fin) ? LJ_GC2_TV_EDGE_VALID :
+             lj_gc2_tv_lease_acquire(g, &fin, &callback);
+        check = finreg_load(lease.generation);
+        if (check.lo == current.lo && check.hi == current.hi) {
+          if (rc != LJ_GC2_TV_EDGE_VALID) {
+            gc2_fin_order_walk_retry(g);
+          } else {
+            gc2_finreg_queue_mark(g, o);
+            mark(g, &fin);
+            if (!la_load32_acq(&ord->queue_visible)) {
+#if defined(LJ_CDATA_TEST_HELPERS)
+              lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_QUEUE_LINK);
+#endif
+              gc2_finalizer_enqueue_registration(g, o, &fin, ord->registration_id);
+              la_store32_rel(&ord->queue_visible, 1);
+              gc2_finreg_cdata_queued_add(g, 1);
+              gc2_finreg_cdata_order_queued_add(g, 1);
+              queued++;
+            }
+          }
+        }
+        lj_gc2_lease_release(&callback);
+      }
+    }
+    lj_ctype_fin_lease_release(&lease);
+    gc2_mark_scope_leave(&object);
+    if (!mark && *pending)
       break;
-    }
-    if (resolve_status != LJ_CTYPE_FIN_FOUND) {
-      gc2_finreg_cdata_order_tombstones_add(g, 1);
-      if (!lj_ctype_fin_order_retire(
-	    cts, walk.prev, walk.cur, walk.next)) {
-	gc2_fin_order_walk_retry(g);
-	break;
-      }
-      gc2_fin_order_walk_advance(&walk, 0);
-      continue;
-    }
-    slot = finlease.slot;
-    setcdataV(L, &key, gco2cd(o));
-    slot_status = lj_tab_read_current_keyed(g, finlease.tab, slot, &key,
-					    &fin);
-    if (slot_status == LJ_TAB_STORE_CAS_OK &&
-        lj_cdata_fin_help_ready(g, slot, &key, &fin)) {
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      continue;  /* Re-resolve this exact order node after helping. */
-    }
-    if (slot_status != LJ_TAB_STORE_CAS_OK || tvisforward(&fin) ||
-	lj_cdata_fin_isclaim(&fin)) {
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      gc2_fin_order_walk_retry(g);
-      break;
-    }
-    if (tvisnil(&fin)) {
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      gc2_finreg_cdata_order_tombstones_add(g, 1);
-      if (!lj_ctype_fin_order_retire(
-	    cts, walk.prev, walk.cur, walk.next)) {
-	gc2_fin_order_walk_retry(g);
-	break;
-      }
-      gc2_fin_order_walk_advance(&walk, 0);
-      continue;
-    }
-    candidate_status = gc2_finreg_cdata_candidate_pweak(g, o);
-    if (candidate_status == GC2_FINREG_CANDIDATE_RETRY) {
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      gc2_fin_order_walk_retry(g);
-      break;
-    }
-    if (candidate_status != GC2_FINREG_CANDIDATE_YES) {
-      if (!(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN)) {
-	gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-	gc2_finreg_cdata_order_tombstones_add(g, 1);
-	if (!lj_ctype_fin_order_retire(
-	      cts, walk.prev, walk.cur, walk.next)) {
-	  gc2_fin_order_walk_retry(g);
-	  break;
-	}
-	gc2_fin_order_walk_advance(&walk, 0);
-	continue;
-      }
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      gc2_fin_order_walk_advance(&walk, 1);
-      continue;
-    }
-    preclaim_ready = gc2_finclaim_prepare(g);
-    claim_status = lj_cdata_fin_claim_held(&finlease, &key, &fin, 1);
-    if (claim_status != LJ_CTYPE_FIN_FOUND) {
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      if (claim_status == LJ_CTYPE_FIN_RETRY) {
-	gc2_fin_order_walk_retry(g);
-	break;
-      }
-      gc2_finreg_cdata_order_tombstones_add(g, 1);
-      if (!lj_ctype_fin_order_retire(
-	    cts, walk.prev, walk.cur, walk.next)) {
-	gc2_fin_order_walk_retry(g);
-	break;
-      }
-      gc2_fin_order_walk_advance(&walk, 0);
-      continue;
-    }
-    if (fin_order_active_acq(walk.cur) != 1 ||
-        !gc2_finreg_cdata_candidate_close(o)) {
-      mark(g, &fin);
-      (void)gc2_finreg_cdata_store_claim(g, &finlease, &key, &fin);
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      gc2_fin_order_walk_advance(&walk, 1);
-      continue;
-    }
-    /*
-    ** 05 section 5.8: ordered FINREG identity is enough for P_WEAK
-    ** discovery without root membership.
-    */
-    unlink_status = gc2_finreg_cdata_unlink_root(g, o);
-    if (unlink_status == LJ_GC_ROOT_UNLINK_UNPROVEN) {
-      /* The finalizer slot is the retry lease. Restore the value release-wise
-      ** and leave this order node active; neither the finalizer queue nor a
-      ** later root requeue may own o until membership is proved. A weak/root
-      ** scanner may have observed the claim sentinel, so retain the restored
-      ** finalizer before making that weak value visible again. Structural table
-      ** publication is unchanged; claim-aware scanners wait for this release. */
-      gc2_finreg_queue_mark(g, o);
-      mark(g, &fin);
-      (void)gc2_finreg_cdata_store_claim(g, &finlease, &key, &fin);
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      gc2_fin_order_walk_advance(&walk, 1);
-      continue;
-    }
-    gc2_finreg_cdata_order_claimed_add(g, 1);
-    if (unlink_status == LJ_GC_ROOT_UNLINKED)
-      gc2_finreg_cdata_order_unlinked_add(g, 1);
-    if (!preclaim_ready) {
-      gc2_finreg_cdata_preclaim_overflow_add(g, 1);
-    }
-    if (!preclaim_ready ||
-	!lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)) {
-      if (!gc2_finreg_cdata_ticket_publish(g, &finlease, &key, o)) {
-	gc2_finreg_queue_mark(g, o);
-	gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-	gc2_fin_order_walk_advance(&walk, 1);
-	continue;
-      }
-      lj_ctype_fin_lease_release(&finlease);
-      mark(g, &fin);
-      gc2_finreg_cdata_finalizer_enqueue_admitted(g, o, &fin);
-      gc2_mark_scope_leave(&objscope);
-      gc2_finreg_cdata_order_fallbacks_add(g, 1);
-      gc2_finreg_cdata_order_queued_add(g, 1);
-      if (!lj_ctype_fin_order_retire(
-	    cts, walk.prev, walk.cur, walk.next)) {
-	gc2_fin_order_walk_retry(g);
-	break;
-      }
-      queued++;
-      gc2_fin_order_walk_advance(&walk, 0);
-      continue;
-    }
-    {
-      if (!gc2_finreg_cdata_ticket_publish(g, &finlease, &key, o)) {
-	TValue unused;
-	(void)lj_gc2_finreg_cdata_preclaim_take(L, g, o, &unused);
-	gc2_finreg_queue_mark(g, o);
-	gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-	gc2_fin_order_walk_advance(&walk, 1);
-	continue;
-      }
-    }
-    lj_ctype_fin_lease_release(&finlease);
-    mark(g, &fin);
-    gc2_finreg_cdata_finalizer_enqueue_admitted(g, o, &fin);
-    gc2_mark_scope_leave(&objscope);
-    gc2_finreg_cdata_order_queued_add(g, 1);
-    if (!lj_ctype_fin_order_retire(
-	  cts, walk.prev, walk.cur, walk.next)) {
-      gc2_fin_order_walk_retry(g);
-      break;
-    }
-    queued++;
-    gc2_fin_order_walk_advance(&walk, 0);
+    gc2_fin_order_walk_advance(&walk, fin_order_active_acq(ord) == 1);
   }
   gc2_fin_order_walk_fini(&walk);
   lj_gc2_smr_read_leave(g);
+  return queued;
+}
+
+#endif
+
+size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
+                                         GC2FinRegMarkFunc mark)
+{
+#if LJ_HASFFI
+  int pending = 0;
+  size_t queued;
+  if (!L || !g || !mark)
+    return 0;
+  queued = gc2_finreg_cdata_order(L, g, mark, 0, &pending);
   if (queued)
     gc2_finreg_cdata_pweak_queued_add(g, queued);
-  return queued;  /* 05 section 5.8: GC2-owned P_WEAK FINREG cdata scan. */
+  return queued;
 #else
   UNUSED(L); UNUSED(g); UNUSED(mark);
   return 0;
@@ -13761,157 +13567,9 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
 size_t lj_gc2_finreg_cdata_finalize_close(global_State *g)
 {
 #if LJ_HASFFI
-  CTState *cts;
-  GC2FinOrderWalk walk;
-  lua_State *L;
-  size_t queued = 0;
-  if (!g)
-    return 0;
-  cts = ctype_ctsG(g);
-  if (cts == NULL)
-    return 0;
-  L = mainthread_acq(g);
-  if (!lj_gc2_smr_read_try(g)) {
-    gc2_fin_order_walk_retry(g);
-    return 0;
-  }
-  if (!gc2_fin_order_walk_start(g, cts, &walk)) {
-    lj_gc2_smr_read_leave(g);
-    gc2_fin_order_walk_retry(g);
-    return 0;
-  }
-  while (walk.cur != NULL) {
-    CTypeFinLease finlease = CTYPE_FIN_LEASE_INIT;
-    GC2MarkScope objscope;
-    TValue *slot;
-    TValue fin, key;
-    GCobj *o;
-    int claim_status, resolve_status, slot_status, unlink_status;
-    if (!gc2_fin_order_walk_prepare_next(g, &walk)) {
-      gc2_fin_order_walk_retry(g);
-      break;
-    }
-    if (fin_order_active_acq(walk.cur) != 1) {
-      gc2_fin_order_walk_advance(&walk, 0);
-      continue;
-    }
-    resolve_status = gc2_finreg_cdata_order_resolve(
-      L, cts, walk.cur, &o, &objscope, &finlease);
-    if (resolve_status == LJ_CTYPE_FIN_RETRY) {
-      gc2_fin_order_walk_retry(g);
-      break;
-    }
-    if (resolve_status != LJ_CTYPE_FIN_FOUND) {
-      if (!lj_ctype_fin_order_retire(
-	    cts, walk.prev, walk.cur, walk.next)) {
-	gc2_fin_order_walk_retry(g);
-	break;
-      }
-      gc2_fin_order_walk_advance(&walk, 0);
-      continue;
-    }
-    slot = finlease.slot;
-    setcdataV(L, &key, gco2cd(o));
-    slot_status = lj_tab_read_current_keyed(g, finlease.tab, slot, &key,
-					    &fin);
-    if (slot_status == LJ_TAB_STORE_CAS_OK &&
-        lj_cdata_fin_help_ready(g, slot, &key, &fin)) {
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      continue;  /* Re-resolve this exact order node after helping. */
-    }
-    if (slot_status != LJ_TAB_STORE_CAS_OK || tvisforward(&fin) ||
-	lj_cdata_fin_isclaim(&fin)) {
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      gc2_fin_order_walk_retry(g);
-      break;
-    }
-    if (tvisnil(&fin)) {
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      if (!lj_ctype_fin_order_retire(
-	    cts, walk.prev, walk.cur, walk.next)) {
-	gc2_fin_order_walk_retry(g);
-	break;
-      }
-      gc2_fin_order_walk_advance(&walk, 0);
-      continue;
-    }
-    if (!gc2_finreg_cdata_candidate_close(o)) {
-      if (!(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN)) {
-	gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-	if (!lj_ctype_fin_order_retire(
-	      cts, walk.prev, walk.cur, walk.next)) {
-	  gc2_fin_order_walk_retry(g);
-	  break;
-	}
-	gc2_fin_order_walk_advance(&walk, 0);
-	continue;
-      }
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      gc2_fin_order_walk_advance(&walk, 1);
-      continue;
-    }
-    claim_status = lj_cdata_fin_claim_held(&finlease, &key, &fin, 1);
-    if (claim_status != LJ_CTYPE_FIN_FOUND) {
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      if (claim_status == LJ_CTYPE_FIN_RETRY) {
-	gc2_fin_order_walk_retry(g);
-	break;
-      }
-      if (!lj_ctype_fin_order_retire(
-	    cts, walk.prev, walk.cur, walk.next)) {
-	gc2_fin_order_walk_retry(g);
-	break;
-      }
-      gc2_fin_order_walk_advance(&walk, 0);
-      continue;
-    }
-    if (fin_order_active_acq(walk.cur) != 1 ||
-        !gc2_finreg_cdata_candidate_close(o)) {
-      gc2_finreg_marktv(g, &fin);
-      (void)gc2_finreg_cdata_store_claim(g, &finlease, &key, &fin);
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      gc2_fin_order_walk_advance(&walk, 1);
-      continue;
-    }
-    /*
-    ** 05 section 5.8: ordered FINREG identity is enough for close-time
-    ** discovery without root membership.
-    */
-    unlink_status = gc2_finreg_cdata_unlink_root(g, o);
-    if (unlink_status == LJ_GC_ROOT_UNLINK_UNPROVEN) {
-      /* Keep the slot/order node intact for a later bounded retry. An active
-      ** close entered from a non-idle collector still needs the object and
-      ** callback retained after an invalid prefix was severed. */
-      gc2_finreg_queue_mark(g, o);
-      gc2_finreg_marktv(g, &fin);
-      (void)gc2_finreg_cdata_store_claim(g, &finlease, &key, &fin);
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      gc2_fin_order_walk_advance(&walk, 1);
-      continue;
-    }
-    {
-      if (!gc2_finreg_cdata_ticket_publish(g, &finlease, &key, o)) {
-	gc2_finreg_queue_mark(g, o);
-	gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-	gc2_fin_order_walk_advance(&walk, 1);
-	continue;
-      }
-    }
-    lj_ctype_fin_lease_release(&finlease);
-    gc2_finreg_cdata_finalizer_enqueue_admitted(g, o, &fin);
-    gc2_mark_scope_leave(&objscope);
-    gc2_finreg_cdata_order_queued_add(g, 1);
-    queued++;
-    if (!lj_ctype_fin_order_retire(
-	  cts, walk.prev, walk.cur, walk.next)) {
-      gc2_fin_order_walk_retry(g);
-      break;
-    }
-    gc2_fin_order_walk_advance(&walk, 0);
-  }
-  gc2_fin_order_walk_fini(&walk);
-  lj_gc2_smr_read_leave(g);
-  return queued;  /* 05 section 5.8: GC2-owned close-time FINREG scan. */
+  int pending = 0;
+  return g ? gc2_finreg_cdata_order(mainthread_acq(g), g, gc2_finreg_marktv,
+                                    1, &pending) : 0;
 #else
   UNUSED(g);
   return 0;
@@ -13921,100 +13579,10 @@ size_t lj_gc2_finreg_cdata_finalize_close(global_State *g)
 int lj_gc2_finreg_cdata_pending(global_State *g)
 {
 #if LJ_HASFFI
-  CTState *cts;
-  GC2FinOrderWalk walk;
-  lua_State *L;
   int pending = 0;
-  if (!g)
-    return 0;
-  cts = ctype_ctsG(g);
-  if (cts == NULL)
-    return 0;
-  L = mainthread_acq(g);
-  if (!lj_gc2_smr_read_try(g)) {
-    gc2_fin_order_walk_retry(g);
-    return 1;
-  }
-  if (!gc2_fin_order_walk_start(g, cts, &walk)) {
-    lj_gc2_smr_read_leave(g);
-    gc2_fin_order_walk_retry(g);
-    return 1;
-  }
-  while (walk.cur != NULL) {
-    CTypeFinLease finlease = CTYPE_FIN_LEASE_INIT;
-    GC2MarkScope objscope;
-    TValue *slot;
-    TValue fin, key;
-    GCobj *o;
-    int resolve_status, slot_status;
-    if (!gc2_fin_order_walk_prepare_next(g, &walk)) {
-      gc2_fin_order_walk_retry(g);
-      pending = 1;
-      break;
-    }
-    if (fin_order_active_acq(walk.cur) != 1) {
-      gc2_fin_order_walk_advance(&walk, 0);
-      continue;
-    }
-    resolve_status = gc2_finreg_cdata_order_resolve(
-      L, cts, walk.cur, &o, &objscope, &finlease);
-    if (resolve_status == LJ_CTYPE_FIN_RETRY) {
-      pending = 1;  /* Transient slot identity is conservatively pending. */
-      break;
-    }
-    if (resolve_status != LJ_CTYPE_FIN_FOUND) {
-      if (!lj_ctype_fin_order_retire(
-	    cts, walk.prev, walk.cur, walk.next)) {
-	gc2_fin_order_walk_retry(g);
-	pending = 1;
-	break;
-      }
-      gc2_fin_order_walk_advance(&walk, 0);
-      continue;
-    }
-    slot = finlease.slot;
-    setcdataV(L, &key, gco2cd(o));
-    slot_status = lj_tab_read_current_keyed(g, finlease.tab, slot, &key,
-					    &fin);
-    if (slot_status == LJ_TAB_STORE_CAS_OK &&
-        lj_cdata_fin_help_ready(g, slot, &key, &fin)) {
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      continue;  /* Re-resolve this exact order node after helping. */
-    }
-    if (slot_status != LJ_TAB_STORE_CAS_OK || tvisforward(&fin) ||
-	lj_cdata_fin_isclaim(&fin)) {
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      pending = 1;
-      break;
-    }
-    if (tvisnil(&fin)) {
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      if (!lj_ctype_fin_order_retire(
-	    cts, walk.prev, walk.cur, walk.next)) {
-	gc2_fin_order_walk_retry(g);
-	pending = 1;
-	break;
-      }
-      gc2_fin_order_walk_advance(&walk, 0);
-      continue;
-    }
-    if (lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) {
-      gc2_finreg_cdata_pending_order_hits_add(g, 1);
-      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      pending = 1;
-      break;
-    }
-    gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-    if (!lj_ctype_fin_order_retire(cts, walk.prev, walk.cur, walk.next)) {
-      gc2_fin_order_walk_retry(g);
-      pending = 1;
-      break;
-    }
-    gc2_fin_order_walk_advance(&walk, 0);
-  }
-  gc2_fin_order_walk_fini(&walk);
-  lj_gc2_smr_read_leave(g);
-  return pending;  /* 05 section 5.8: close-time pending FINREG scan. */
+  if (g)
+    (void)gc2_finreg_cdata_order(mainthread_acq(g), g, NULL, 0, &pending);
+  return pending;
 #else
   UNUSED(g);
   return 0;
@@ -14220,120 +13788,47 @@ static int gc2_finreg_dispatch_requeue(global_State *g, GCobj *o)
   return link;
 }
 
-#if LJ_HASFFI
-static void gc2_finreg_cdata_dispatch_clear(global_State *g, GCobj *o)
-{
-  lj_obj_cleargcflags_atomic(o, LJ_GC_CDATA_FIN);
-  lj_gc2_finreg_cdata_set(g, o, 0);
-}
-
-static int gc2_finreg_cdata_ticket_take(GCobj *o)
-{
-  uint16_t ticket = gc2_finreg_cdata_ticket_remove(gco2cd(o));
-  if (ticket & LJ_CDATA_FIN_CANCELLED)
-    lj_obj_cleargcflags_atomic(o, LJ_GC_FINALIZED);
-  return ticket == LJ_CDATA_FIN_QUEUED;
-}
-
-static int gc2_finreg_cdata_dispatch_claim_preclaimed(global_State *g,
-						      GCobj *o)
-{
-  uint8_t old = la_load8_acq(lj_obj_gcflags_ref(o));
-  for (;;) {
-    uint8_t next;
-    if (!(old & LJ_GC_CDATA_FIN))
-      return 0;
-    next = (uint8_t)(old & (uint8_t)~LJ_GC_CDATA_FIN);
-    if (la_cas8(lj_obj_gcflags_ref(o), &old, next, LA_ACQ_REL, LA_ACQ)) {
-      lj_gc2_finreg_cdata_set(g, o, 0);
-      return 1;
-    }
-  }
-}
-
-static int gc2_finreg_cdata_dispatch_preclaimed(lua_State *L, global_State *g,
-						GCobj *o, cTValue *fin)
-{
-  TValue tmp;
-  if (!gc2_finreg_cdata_dispatch_claim_preclaimed(g, o))
-    return 0;  /* P_WEAK preclaim suppressed by later ffi.gc(cd, nil). */
-  copyTV(L, &tmp, fin);
-  return gc2_call_finalizer(g, L, &tmp, o) ? 1 : -1;
-}
-
-static int gc2_finreg_cdata_dispatch_slot(lua_State *L, global_State *g,
-					  GCobj *o, cTValue *key)
-{
-  CTState *cts = ctype_ctsG(g);
-  CTypeFinLease finlease = CTYPE_FIN_LEASE_INIT;
-  TValue fin;
-  int rc = lj_ctype_fin_get(L, cts, key, &finlease);
-  if (rc == LJ_CTYPE_FIN_RETRY)
-    return GC2_FINALIZER_DISPATCH_DEFER;
-  if (rc == LJ_CTYPE_FIN_FOUND) {
-    rc = lj_cdata_fin_claim_held(&finlease, key, &fin, 1);
-    if (rc == LJ_CTYPE_FIN_RETRY) {
-      lj_ctype_fin_lease_release(&finlease);
-      return GC2_FINALIZER_DISPATCH_DEFER;
-    }
-    if (rc == LJ_CTYPE_FIN_FOUND) {
-    TValue tmp;
-    copyTV(L, &tmp, &fin);
-    {
-      TValue nilv;
-      setnilV(&nilv);
-      if (!gc2_finreg_cdata_store_claim(g, &finlease, key, &nilv)) {
-	(void)gc2_finreg_cdata_store_claim(g, &finlease, key, &fin);
-	lj_ctype_fin_lease_release(&finlease);
-	return GC2_FINALIZER_DISPATCH_DEFER;
-      }
-    }
-    lj_ctype_fin_lease_release(&finlease);
-    gc2_finreg_cdata_dispatch_clear(g, o);
-    return gc2_call_finalizer(g, L, &tmp, o) ? 1 : -1;
-    }
-  }
-  lj_ctype_fin_lease_release(&finlease);
-  gc2_finreg_cdata_dispatch_clear(g, o);
-  return 0;
-}
-
-static int gc2_finreg_cdata_dispatch_ffi(lua_State *L, global_State *g,
-					 GCobj *o)
-{
-  TValue key;
-  TValue fin;
-  if (!L || !gc2_finreg_cdata_obj_valid(g, o))
-    return 0;
-  if (lj_gc2_finreg_cdata_preclaim_take(L, g, o, &fin))
-    return gc2_finreg_cdata_dispatch_preclaimed(L, g, o, &fin);
-  setcdataV(L, &key, gco2cd(o));
-  return gc2_finreg_cdata_dispatch_slot(L, g, o, &key);
-}
-#endif
-
 static int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
-					GCobj *o, cTValue *fin)
+					GCobj *o, cTValue *fin, uint64_t id)
 {
 #if LJ_HASFFI
-  TValue tmp;
-  if (!L || !gc2_finreg_cdata_obj_valid(g, o))
+  UNUSED(fin);  /* The queue carries an additional root for its snapshot. */
+  if (!id || !L || !gc2_finreg_cdata_obj_valid(g, o))
     return 0;
-  if (fin) {
-    TValue unused;
-    if (gc2_finreg_dispatch_requeue(g, o) <= LJ_GC_ROOT_LINK_DEFER)
+  {
+    TValue tmp;
+    CTState *cts = ctype_ctsG(g);
+    CTypeFinLease lease = CTYPE_FIN_LEASE_INIT;
+    TValue key;
+    la_u128 old, empty = { 0, 0 };
+    int rc;
+    setcdataV(L, &key, gco2cd(o));
+    rc = lj_ctype_fin_get_native(cts, &key, &lease);
+    if (rc == LJ_CTYPE_FIN_RETRY)
       return GC2_FINALIZER_DISPATCH_DEFER;
-    (void)lj_gc2_finreg_cdata_preclaim_take(L, g, o, &unused);
-    if (!gc2_finreg_cdata_ticket_take(o))
+    if (rc != LJ_CTYPE_FIN_FOUND)
       return 0;
-    copyTV(L, &tmp, fin);
+    old = finreg_load(lease.generation);
+    if (finreg_state(old) != FINREG_PENDING || finreg_id(old) != id) {
+      lj_ctype_fin_lease_release(&lease);
+      return 0;
+    }
+    if (gc2_finreg_dispatch_requeue(g, o) <= LJ_GC_ROOT_LINK_DEFER) {
+      lj_ctype_fin_lease_release(&lease);
+      return GC2_FINALIZER_DISPATCH_DEFER;
+    }
+    if (!finreg_cas(lease.generation, &old, empty)) {
+      lj_ctype_fin_lease_release(&lease);
+      return 0;
+    }
+    gc2_finreg_cdata_preclaim_dispatched_add(g, 1);
+    lj_ctype_fin_order_retire_id(cts, o, id);
+    lj_ctype_fin_lease_release(&lease);
+    tv_rawstore(&tmp, old.lo);
     return gc2_call_finalizer(g, L, &tmp, o) ? 1 : -1;
   }
-  if (gc2_finreg_dispatch_requeue(g, o) <= LJ_GC_ROOT_LINK_DEFER)
-    return GC2_FINALIZER_DISPATCH_DEFER;
-  return gc2_finreg_cdata_dispatch_ffi(L, g, o);
 #else
-  UNUSED(L); UNUSED(g); UNUSED(o); UNUSED(fin);
+  UNUSED(L); UNUSED(g); UNUSED(o); UNUSED(fin); UNUSED(id);
   return 0;
 #endif
 }

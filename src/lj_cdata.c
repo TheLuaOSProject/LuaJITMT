@@ -197,7 +197,8 @@ int lj_cdata_validate(global_State *g, GCcdata *cd, void **basep,
 /* Free a C data object. */
 void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd)
 {
-  if (LJ_UNLIKELY(lj_obj_gcflags(obj2gco(cd)) & LJ_GC_CDATA_FIN)) {
+  if (LJ_UNLIKELY((lj_obj_gcflags(obj2gco(cd)) & LJ_GC_CDATA_FIN) &&
+                  lj_cdata_fin_native_pending(g, obj2gco(cd)))) {
     cdata_free_finalizer_invariant(g);
   } else {
     void *base;
@@ -210,20 +211,21 @@ void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd)
   }
 }
 
-static void cdata_fin_setclaim(TValue *tv)
-{
-  tv_rawstore(tv, LJ_CDATA_FINCLAIM_U64);
-}
-
 int lj_cdata_fin_isclaim(cTValue *tv)
 {
   return lj_cdata_fin_isclaim_inline(tv);
 }
 
 #if defined(LJ_CDATA_TEST_HELPERS)
+static uint32_t cdata_fin_test_fail_order;
 static uint32_t cdata_fin_test_pause_armed[LJ_CDATA_FIN_PAUSE__MAX];
 static uint32_t cdata_fin_test_pause_waiting[LJ_CDATA_FIN_PAUSE__MAX];
 static uint32_t cdata_fin_test_pause_release[LJ_CDATA_FIN_PAUSE__MAX];
+
+void lj_cdata_test_fail_order_once(void)
+{
+  la_store32_rel(&cdata_fin_test_fail_order, 1);
+}
 
 void lj_cdata_test_fin_pause_arm(uint32_t point)
 {
@@ -273,456 +275,14 @@ static void cdata_fin_claim_wait(lua_State *L)
   (void)lj_thr_retry_yield(L);
 }
 
-#define CDATA_FIN_ENABLE_BIT (1ull << LJ_TAB_RESIZE_MARK_KIND_BITS)
-#define CDATA_FIN_RESTORE_BIT (2ull << LJ_TAB_RESIZE_MARK_KIND_BITS)
-
-static int cdata_fin_ready_token(CTState *cts, TValue *ready, int enabled)
+static uint64_t cdata_fin_newid(CTState *cts)
 {
-#if LJ_64
-  uint64_t old = la_load64_acq(&cts->fin_ready_id);
-  while (old < (LJ_TAB_RESIZE_MARK_ID_MAX >> 2) - 1u) {
-    uint64_t id = old + 1;
-    if (la_cas64(&cts->fin_ready_id, &old, id, LA_RLX, LA_RLX)) {
-      tv_rawstore(ready, LJ_TAB_RESIZE_MARK_BITS(
-        (id << 2) | (uint64_t)enabled, LJ_CDATA_FIN_READY_KIND));
-      return 1;
-    }
+  uint64_t old = la_load64_acq(&cts->fin_registration_id);
+  while (old < FINREG_MAX_ID) {
+    uint64_t next = old + 1;
+    if (la_cas64(&cts->fin_registration_id, &old, next, LA_RLX, LA_RLX))
+      return next;
   }
-#else
-  UNUSED(cts); UNUSED(ready); UNUSED(enabled);
-#endif
-  return 0;
-}
-
-static int cdata_fin_ready_store(TValue *slot, cTValue *ready, cTValue *val)
-{
-  TValue expect = *ready;
-  return lj_tv_cas(slot, &expect, val);
-}
-
-int lj_cdata_fin_help_ready(global_State *g, TValue *slot, cTValue *key,
-                            cTValue *claim)
-{
-#if LJ_64
-  uint64_t bits = tv_rawload(claim);
-  FinRegOrderNode *ord;
-  CTState *cts;
-  uint32_t remaining = LJ_ROOT_SCAN_LIMIT;
-  if (!lj_cdata_fin_isready(claim))
-    return 0;
-  if (!(bits & CDATA_FIN_ENABLE_BIT)) {
-    TValue nilv;
-    setnilV(&nilv);
-    cdata_fin_ready_store(slot, claim, &nilv);
-    return 1;
-  }
-  cts = ctype_ctsG(g);
-  if (!cts || !key || !tviscdata(key) || !lj_gc2_smr_read_try(g))
-    return 0;
-  ord = fin_order_lifetime_acq(cts);
-  while (ord && remaining--) {
-    LJGC2Lease lease = { 0 };
-    FinRegOrderNode *next;
-    if (lj_gc2_mem_lease_acquire(g, ord, &lease) < 0) {
-      lj_gc2_lease_release(&lease);
-      break;
-    }
-    if (ord->ready_token == (bits & ~CDATA_FIN_RESTORE_BIT) &&
-        fin_order_obj_acq(ord) == gcV(key)) {
-      TValue val;
-      lj_tv_load_acq(&val, &ord->ready_callback);
-      cdata_fin_ready_store(slot, claim, &val);
-      lj_gc2_lease_release(&lease);
-      break;
-    }
-    next = fin_order_lifetime_next_acq(ord);
-    lj_gc2_lease_release(&lease);
-    ord = next;
-  }
-  lj_gc2_smr_read_leave(g);
-  return tv_rawload_acq(slot) != bits;
-#else
-  UNUSED(g); UNUSED(slot); UNUSED(key); UNUSED(claim);
-  return 0;
-#endif
-}
-
-static LJ_NORET void cdata_fin_store_invariant(global_State *g,
-					       const char *why)
-{
-  lj_assertG_(g, 0, "%s", why);
-  UNUSED(g); UNUSED(why);
-  abort();
-}
-
-static void cdata_fin_store_exact_or_abort(global_State *g,
-					    CTypeFinLease *lease,
-					    cTValue *key, cTValue *src,
-					    const char *why)
-{
-  if (!lj_cdata_fin_store_claim_held(lease, key, src))
-    cdata_fin_store_invariant(g, why);
-}
-
-int lj_cdata_fin_claim_held(CTypeFinLease *lease, cTValue *key, TValue *old,
-			    int nonnil)
-{
-  TValue claim, expect;
-  int rc;
-  if (!lease || !lease->tab || !lease->slot || !key || !old)
-    return LJ_CTYPE_FIN_RETRY;
-  rc = lj_tab_read_current_keyed(lease->g, lease->tab, lease->slot, key, old);
-  if (rc != LJ_TAB_STORE_CAS_OK || tvisforward(old))
-    return LJ_CTYPE_FIN_RETRY;
-  if (lj_cdata_fin_isclaim(old)) {
-    (void)lj_cdata_fin_help_ready(lease->g, lease->slot, key, old);
-    return LJ_CTYPE_FIN_RETRY;
-  }
-  if (nonnil && tvisnil(old))
-    return LJ_CTYPE_FIN_MISS;
-  cdata_fin_setclaim(&claim);
-  expect = *old;
-  if (lj_tv_cas(lease->slot, &expect, &claim))
-    return LJ_CTYPE_FIN_FOUND;
-  *old = expect;
-  /* A resize winner publishes FORWARD. Never use it as a CAS expectation on a
-  ** retry; release the exact generation certificate and resolve by key again. */
-  return LJ_CTYPE_FIN_RETRY;
-}
-
-typedef struct CDataFinBarrierCtx {
-  GCtab *t;
-  cTValue *key;
-} CDataFinBarrierCtx;
-
-int lj_cdata_fin_store_claim_held(CTypeFinLease *lease, cTValue *key,
-				  cTValue *src)
-{
-  uint32_t retry;
-  if (!lease || !lease->tab || !lease->slot || !key || !src)
-    return 0;
-  for (retry = 0; retry < 4; retry++) {
-    TValue old, expect;
-    if (lj_tab_read_current_keyed(lease->g, lease->tab, lease->slot, key,
-				  &old) !=
-	LJ_TAB_STORE_CAS_OK || tvisforward(&old) ||
-	tv_rawload(&old) != LJ_CDATA_FINCLAIM_U64)
-      return 0;
-    expect = old;
-    if (lj_tv_cas(lease->slot, &expect, src))
-      return 1;
-    if (tv_rawload(&expect) != LJ_CDATA_FINCLAIM_U64)
-      return 0;
-  }
-  return 0;
-}
-
-static TValue *cdata_fin_weak_key_barrier_cp(lua_State *L, lua_CFunction dummy,
-					     void *ud)
-{
-  CDataFinBarrierCtx *ctx = (CDataFinBarrierCtx *)ud;
-  UNUSED(dummy);
-  lj_gc2_barrier_weak_key(L, ctx->t, ctx->key);
-  return NULL;
-}
-
-static void cdata_fin_weak_key_barrier_claimed(lua_State *L,
-					       global_State *g,
-					       CTypeFinLease *lease,
-					       cTValue *key, cTValue *restore,
-                                       cTValue *early,
-					       FinRegOrderNode **ordp)
-{
-  CDataFinBarrierCtx ctx;
-  int errcode;
-  ctx.t = lease->tab;
-  ctx.key = key;
-  errcode = lj_vm_cpcall(L, NULL, &ctx, cdata_fin_weak_key_barrier_cp);
-  if (LJ_UNLIKELY(errcode)) {
-    TValue nilv;
-    cTValue *src = restore;
-    setnilV(&nilv);
-    if (!src || lj_cdata_fin_isclaim(src))
-      src = &nilv;
-    if (early)
-      (void)cdata_fin_ready_store(lease->slot, early, src);
-    else
-      cdata_fin_store_exact_or_abort(g, lease, key, src,
-                                    "FINREG barrier unwind lost slot claim");
-    if (ordp && *ordp) {
-      lj_ctype_fin_order_free(g, *ordp);
-      *ordp = NULL;
-    }
-    /* cpcall caught the internal unwind. Drop both lifetime certificates
-    ** before rethrowing across this C frame. */
-    lj_ctype_fin_lease_release(lease);
-    lj_err_throw(L, errcode);
-  }
-}
-
-static int cdata_fin_store_enabled(lua_State *L, global_State *g,
-				   CTState *cts, CTypeFinLease *lease,
-				   GCcdata *cd, cTValue *key, TValue *val,
-				   cTValue *restore, int prepared,
-				   FinRegOrderNode **ordp)
-{
-  GCtab *t = lease->tab;
-  TValue *tv = lease->slot;
-  TValue ready;
-  int fresh = tvisnil(restore);
-  int helpable;
-
-  /* Re-registering the exact same callback is an identity-preserving slot
-  ** transaction. Keep its one ordered membership and active-set accounting;
-  ** only close a scanner which may have observed FINCLAIM. */
-  if (!fresh && lj_obj_equal(restore, val)) {
-    cdata_fin_store_exact_or_abort(g, lease, key, restore,
-				   "FINREG identical enable lost slot claim");
-    lj_gc2_barrier_weak_value(L, t, restore);
-    lj_gc2_barrier_tv_pair(L, obj2gco(t), restore);
-    lj_gc_pubtab(L, t);
-    lj_ctype_fin_lease_release(lease);
-    return 1;
-  }
-
-  if (!prepared)
-    cdata_fin_weak_key_barrier_claimed(L, g, lease, key, restore, NULL, ordp);
-  if (!fresh) {
-    size_t retired = 0;
-    if (!lj_ctype_fin_order_retire_obj_complete(
-	  cts, obj2gco(cd), &retired)) {
-      /* Once even one membership is retired, restoring the callback would
-      ** expose a live registration without a complete discovery certificate.
-      ** Published native nodes must remain admissible under the outer SMR
-      ** lease; a partial commit is therefore an invariant failure, not an API
-      ** retry. A zero-mutation transient remains exactly rollbackable. */
-      if (retired != 0)
-	cdata_fin_store_invariant(g,
-	  "FINREG replacement retirement partially committed");
-      cdata_fin_store_exact_or_abort(
-	g, lease, key, restore,
-	"FINREG replacement rollback lost exact slot claim");
-      lj_ctype_fin_lease_release(lease);
-      return 0;
-    }
-  }
-  helpable = ordp && *ordp && cdata_fin_ready_token(cts, &ready, 1);
-  if (ordp && *ordp) {
-    /* The owner's stack continues to root val through the slot store. A
-    ** helper that finds the ready marker copies this immutable snapshot. */
-    if (helpable) {
-      copyTVrel(L, &(*ordp)->ready_callback, val);
-      (*ordp)->ready_token = tv_rawload(&ready);
-    }
-    lj_ctype_fin_order_publish(cts, *ordp, obj2gco(cd), t, tv);
-    *ordp = NULL;
-  }
-  lj_cdata_fin_cancel_ticket(cd);
-  lj_obj_addgcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
-  if (fresh)
-    lj_gc2_finreg_cdata_set(g, obj2gco(cd), 1);
-  if (helpable) {
-    lj_gc2_barrier_weak_value(L, t, val);
-    lj_gc2_barrier_tv_pair(L, obj2gco(t), val);
-    /* Until the owner runs the post-store barrier, its published stack
-    ** roots retain both operands. A helper can perform just the raw CAS. */
-    cdata_fin_store_exact_or_abort(g, lease, key, &ready,
-                                  "FINREG enable lost exact slot claim");
-    lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_ENABLE_ORDER);
-    cdata_fin_ready_store(tv, &ready, val);
-  } else {
-    cdata_fin_store_exact_or_abort(g, lease, key, val,
-                                  "FINREG enable lost exact slot claim");
-  }
-  lj_gc2_barrier_weak_value(L, t, val);
-  lj_gc2_barrier_tv_pair(L, obj2gco(t), val);
-  lj_gc_pubtab(L, t);  /* 11.4 FINREG publish after claim resolution. */
-  lj_ctype_fin_lease_release(lease);
-  return 1;
-}
-
-/* FINCLAIM is the clear transaction LP. No later enable can observe nil until
-** every old ordered membership is logically retired and the old FIN bit is
-** gone. Conversely, a transient spine scan restores the exact old value before
-** releasing either lifetime certificate, leaving the registration unchanged. */
-static int cdata_fin_clear_claimed(lua_State *L, global_State *g,
-				    CTState *cts, CTypeFinLease *lease,
-				    GCcdata *cd, cTValue *key, cTValue *old)
-{
-  TValue nilv, ready;
-  size_t retired = 0;
-  /* A previously committed clear leaves a stable nil slot with no FIN bit.
-  ** Repeating ffi.gc(cd, nil) is an identity no-op, not another clear event.
-  ** Nil plus FIN is distinct: GC2 may own a queued preclaim which an explicit
-  ** clear still has to suppress under this exact slot transaction. */
-  if (tvisnil(old) &&
-      !(lj_obj_gcflags(obj2gco(cd)) & LJ_GC_CDATA_FIN)) {
-    lj_cdata_fin_cancel_ticket(cd);
-    cdata_fin_store_exact_or_abort(g, lease, key, old,
-				   "FINREG nil clear lost slot claim");
-    lj_ctype_fin_lease_release(lease);
-    return 1;
-  }
-  if (!lj_ctype_fin_order_retire_obj_complete(
-	cts, obj2gco(cd), &retired)) {
-    if (retired != 0)
-      cdata_fin_store_invariant(g,
-	"FINREG clear retirement partially committed");
-    cdata_fin_store_exact_or_abort(
-      g, lease, key, old, "FINREG clear rollback lost exact slot claim");
-    lj_ctype_fin_lease_release(lease);
-    return 0;
-  }
-  UNUSED(retired);
-  lj_cdata_fin_cancel_ticket(cd);
-  lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
-  lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
-  if (cdata_fin_ready_token(cts, &ready, 0)) {
-    cdata_fin_store_exact_or_abort(g, lease, key, &ready,
-                                  "FINREG clear lost exact slot claim");
-    lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_CLEAR_BEFORE_NIL);
-    setnilV(&nilv);
-    cdata_fin_ready_store(lease->slot, &ready, &nilv);
-  } else {
-    setnilV(&nilv);
-    cdata_fin_store_exact_or_abort(g, lease, key, &nilv,
-                                  "FINREG clear lost exact slot claim");
-  }
-  lj_gc_pubtab(L, lease->tab);
-  lj_ctype_fin_lease_release(lease);
-  return 1;
-}
-
-static int cdata_fin_finish_prepare(lua_State *L, CTState *cts,
-                                    CTypeFinLease *lease, cTValue *key,
-                                    TValue *old, cTValue *ready,
-                                    FinRegOrderNode **ordp, int *prepared,
-                                    int enabling)
-{
-  TValue observed, exclusive;
-  if (!lj_cdata_fin_isready(ready))
-    return LJ_CTYPE_FIN_FOUND;
-  if (lj_tab_read_current_keyed(cts->g, lease->tab, lease->slot, key, &observed) !=
-      LJ_TAB_STORE_CAS_OK || tv_rawload(&observed) != tv_rawload(ready)) {
-    (void)cdata_fin_ready_store(lease->slot, ready, old);
-    return LJ_CTYPE_FIN_RETRY;
-  }
-  if (enabling) {
-    lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_ENABLE_PREPARE);
-    cdata_fin_weak_key_barrier_claimed(L, cts->g, lease, key, old, ready, ordp);
-  } else {
-    lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_CLEAR_PREPARE);
-  }
-  cdata_fin_setclaim(&exclusive);
-  if (!cdata_fin_ready_store(lease->slot, ready, &exclusive))
-    return LJ_CTYPE_FIN_RETRY;
-  *prepared = 1;
-  return LJ_CTYPE_FIN_FOUND;
-}
-
-/* For a live callback, its ordered record retains the same raw value
-** and immutable token that published the slot. The exact slot CAS is still
-** authoritative: a competing claimant can only restore its saved value. */
-static int cdata_fin_prepare_restore(CTState *cts, cTValue *key, cTValue *old,
-                                     TValue *ready)
-{
-#if LJ_64
-  FinRegOrderNode *ord = fin_order_head_acq(cts);
-  uint32_t remaining = LJ_ROOT_SCAN_LIMIT;
-  while (ord && remaining--) {
-    LJGC2Lease lease = { 0 };
-    FinRegOrderNode *next;
-    if (lj_gc2_mem_lease_acquire(cts->g, ord, &lease) < 0) {
-      lj_gc2_lease_release(&lease);
-      return 0;
-    }
-    if (ord->ready_token && fin_order_active_acq(ord) == 1 &&
-        fin_order_obj_acq(ord) == gcV(key) &&
-        tv_rawload_acq(&ord->ready_callback) == tv_rawload(old)) {
-      tv_rawstore(ready, ord->ready_token | CDATA_FIN_RESTORE_BIT);
-      lj_gc2_lease_release(&lease);
-      return 1;
-    }
-    next = fin_order_next_acq(ord);
-    lj_gc2_lease_release(&lease);
-    ord = next;
-  }
-#else
-  UNUSED(cts); UNUSED(key); UNUSED(old); UNUSED(ready);
-#endif
-  return 0;
-}
-
-enum { CDATA_FIN_UNCHANGED = 2 };
-
-static int cdata_fin_claim_prepare(lua_State *L, CTState *cts,
-                                   CTypeFinLease *lease, cTValue *key,
-                                   TValue *old, cTValue *desired,
-                                   ptrdiff_t anchor, FinRegOrderNode **ordp,
-                                   int *prepared)
-{
-  TValue ready, expect;
-  LJGC2Lease callback = { 0 };
-  int available;
-  size_t rootindex = desired ? 2u : 1u;
-  if (lj_tab_read_current_keyed(cts->g, lease->tab, lease->slot, key, old) !=
-      LJ_TAB_STORE_CAS_OK)
-    return LJ_CTYPE_FIN_RETRY;
-  if (desired && !tvisnil(old) && !lj_cdata_fin_isclaim(old) &&
-      lj_obj_equal(old, desired) && fin_gen_tab_enabled_acq(lease->tab)) {
-    /* This read is the identity operation's linearization point. Barriers
-    ** use the caller's rooted value and no registry claim is necessary. */
-    lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_ENABLE_UNCHANGED);
-    lj_gc2_barrier_weak_value(L, lease->tab, desired);
-    lj_gc2_barrier_tv_pair(L, obj2gco(lease->tab), desired);
-    lj_gc_pubtab(L, lease->tab);
-    return CDATA_FIN_UNCHANGED;
-  }
-  if (tvisnil(old)) {
-    available = desired && cdata_fin_ready_token(cts, &ready, 0);
-  } else {
-    available = restorestack(L, anchor) + rootindex < L->top &&
-      !lj_cdata_fin_isclaim(old) &&
-      cdata_fin_prepare_restore(cts, key, old, &ready) &&
-      (!tvisgcv(old) || lj_gc2_tv_lease_acquire(cts->g, old, &callback) ==
-                       LJ_GC2_TV_EDGE_VALID);
-    if (available) {
-      TValue *root = restorestack(L, anchor) + rootindex;
-      /* The weak-key registry temporarily hides the old callback under
-      ** the marker. Keep its exact value rooted for every helper. */
-      copyTVrel(L, root, old);
-      lj_gc2_publish_read_root(L, root, 1);
-    }
-  }
-  if (!available)
-    return lj_cdata_fin_claim_held(lease, key, old, 0);
-  expect = *old;
-  available = lj_tv_cas(lease->slot, &expect, &ready);
-  lj_gc2_lease_release(&callback);
-  if (!available)
-    return LJ_CTYPE_FIN_RETRY;
-  return cdata_fin_finish_prepare(L, cts, lease, key, old, &ready, ordp,
-                                  prepared, desired != NULL);
-}
-
-static int cdata_fin_store_enabled_new(lua_State *L, CTState *cts,
-                                       CTypeFinLease *lease, GCcdata *cd,
-                                       cTValue *key, TValue *val, TValue *nilv,
-                                       cTValue *claim, FinRegOrderNode **ordp)
-{
-  int prepared = 0;
-  if (!fin_gen_tab_enabled_acq(lease->tab)) {
-    if (lj_cdata_fin_isready(claim))
-      (void)cdata_fin_ready_store(lease->slot, claim, nilv);
-    else
-      cdata_fin_store_exact_or_abort(cts->g, lease, key, nilv,
-                                    "disabled FINREG new slot lost claim");
-  } else if (cdata_fin_finish_prepare(L, cts, lease, key, nilv, claim, ordp,
-                                      &prepared, 1) == LJ_CTYPE_FIN_FOUND) {
-    return cdata_fin_store_enabled(L, cts->g, cts, lease, cd, key, val, nilv,
-                                   prepared, ordp);
-  }
-  lj_ctype_fin_lease_release(lease);
   return 0;
 }
 
@@ -730,120 +290,126 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 {
   global_State *g = G(L);
   CTState *cts = ctype_ctsG(g);
+  TValue key, val;
   ptrdiff_t anchor;
-  TValue key, val, old, claim;
-  FinRegOrderNode *ord = NULL;
-  int enabled = (it != LJ_TNIL);
-  if (LJ_UNLIKELY(cts == NULL))
+  int enabled = it != LJ_TNIL;
+  if (!cts)
     return;
-  lj_state_checkstack(L, enabled ? 3u : 2u);
+  lj_state_checkstack(L, enabled ? 2u : 1u);
   anchor = savestack(L, L->top);
   setcdataV(L, &key, cd);
+  copyTVrel(L, L->top++, &key);
+  lj_gc2_publish_read_root(L, L->top - 1, 1);
   if (enabled) {
-    TValue *top = restorestack(L, anchor);
     setgcV(L, &val, obj, it);
-    if (LJ_LIKELY(top + 3 < tvref(L->maxstack))) {
-      TValue nilv;
-      setnilV(&nilv);
-      copyTVrel(L, top, &key);
-      copyTVrel(L, top + 1, &val);
-      copyTVrel(L, top + 2, &nilv);
-      L->top = top + 3;
-    }
-    lj_gc_pubroot(L, &val);
-    ord = lj_ctype_fin_order_new(L);
+    copyTVrel(L, L->top++, &val);
+    lj_gc2_publish_read_root(L, L->top - 1, 1);
   } else {
-    TValue *top = restorestack(L, anchor);
-    if (LJ_LIKELY(top + 2 < tvref(L->maxstack))) {
-      TValue nilv;
-      setnilV(&nilv);
-      copyTVrel(L, top, &key);
-      copyTVrel(L, top + 1, &nilv);
-      L->top = top + 2;
-    }
+    setnilV(&val);
   }
-  lj_gc_pubroot(L, &key);
   for (;;) {
     CTypeFinLease held = CTYPE_FIN_LEASE_INIT;
-    int prepared = 0;
-    int rc = lj_ctype_fin_get(L, cts, &key, &held);
-    if (rc == LJ_CTYPE_FIN_RETRY) {
-      lj_ctype_fin_lease_release(&held);
-      if (enabled)
-	lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_ENABLE_RETRY);
-      else
-	lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_CLEAR_RETRY);
-      cdata_fin_claim_wait(L);
-      continue;
+    FinRegOrderNode *ord = NULL;
+    la_u128 old, next = { 0, 0 };
+    int rc = lj_ctype_fin_get_native(cts, &key, &held);
+    if (rc == LJ_CTYPE_FIN_MISS && !enabled) {
+      lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_CLEAR_MISS);
+      break;
     }
     if (rc == LJ_CTYPE_FIN_MISS) {
-      if (!enabled) {
-        /* This exact cdata is rooted by the public call. An already queued
-        ** delivery can be cancelled even if its weak registry key is gone. */
-        lj_cdata_fin_cancel_ticket(cd);
-	lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_CLEAR_MISS);
-	goto done;
-      }
-      if (!cdata_fin_ready_token(cts, &claim, 0))
-        cdata_fin_setclaim(&claim);
-      setnilV(&old);
-      switch (lj_ctype_fin_newgen(L, cts, &key, &claim, &held)) {
-      case 1:
-        if (cdata_fin_store_enabled_new(L, cts, &held, cd, &key, &val,
-                                       &old, &claim, &ord))
-          goto done;
-        continue;
-      case -1:
-	continue;  /* Racing generation already has this cdata key. */
-      case LJ_CTYPE_FIN_ERROR:
-	cdata_fin_claim_wait(L);
-	continue;
-      default:
-	cdata_fin_claim_wait(L);
-	continue;
-      }
-    }
-    rc = cdata_fin_claim_prepare(L, cts, &held, &key, &old,
-                                 enabled ? &val : NULL, anchor, &ord,
-                                 &prepared);
-    if (rc == CDATA_FIN_UNCHANGED) {
-      lj_ctype_fin_lease_release(&held);
-      goto done;
+      TValue nilv;
+      setnilV(&nilv);
+      rc = lj_ctype_fin_newgen(L, cts, &key, &nilv, &held);
     }
     if (rc != LJ_CTYPE_FIN_FOUND) {
       lj_ctype_fin_lease_release(&held);
-      if (enabled)
-	lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_ENABLE_RETRY);
-      else
-	lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_CLEAR_RETRY);
       cdata_fin_claim_wait(L);
       continue;
     }
-    if (!fin_gen_tab_enabled_acq(held.tab)) {
-      cdata_fin_store_exact_or_abort(
-	g, &held, &key, &old,
-	"disabled FINREG slot lost exact claim rollback");
+    old = finreg_load(held.generation);
+    if (enabled && finreg_state(old) == FINREG_ACTIVE &&
+        tv_rawload(&val) == old.lo) {
+      lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_ENABLE_UNCHANGED);
       lj_ctype_fin_lease_release(&held);
-      continue;
+      break;
     }
     if (enabled) {
-      if (!cdata_fin_store_enabled(L, g, cts, &held, cd, &key, &val,
-				   &old, prepared, &ord)) {
-	cdata_fin_claim_wait(L);
-	continue;
+      uint64_t id = cdata_fin_newid(cts);
+      if (LJ_UNLIKELY(!id)) {
+        lj_ctype_fin_lease_release(&held);
+        lj_err_callermsg(L, "too many cdata finalizer registrations");
       }
+#if defined(LJ_CDATA_TEST_HELPERS)
+      if (!la_xchg32_acqrel(&cdata_fin_test_fail_order, 0))
+#endif
+        ord = lj_ctype_fin_order_new_nothrow(L);
+      if (LJ_UNLIKELY(!ord)) {
+        lj_ctype_fin_lease_release(&held);
+        lj_err_mem(L);
+      }
+      ord->registration_id = id;
+      next.lo = tv_rawload(&val);
+      next.hi = (id << 2) | FINREG_ACTIVE;
+      lj_obj_addgcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
+      lj_ctype_fin_order_publish(cts, ord, obj2gco(cd), held.tab, NULL);
     }
-    else if (!cdata_fin_clear_claimed(L, g, cts, &held, cd, &key, &old)) {
-      lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_CLEAR_RETRY);
-      cdata_fin_claim_wait(L);
-      continue;
+    lj_cdata_test_fin_pause_at(enabled ? LJ_CDATA_FIN_PAUSE_ENABLE_PREPARE :
+                                        LJ_CDATA_FIN_PAUSE_CLEAR_PREPARE);
+    rc = finreg_cas(held.generation, &old, next);
+    if (ord)
+      la_store32_rel(&ord->submission_done, 1);
+    if (rc) {
+      lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_TRANSITION);
+      if (finreg_id(old))
+        lj_ctype_fin_order_retire_id(cts, obj2gco(cd), finreg_id(old));
+      if (enabled && finreg_state(old) != FINREG_ACTIVE)
+        lj_gc2_finreg_cdata_note_transition(g, 1);
+      else if (!enabled && finreg_state(old) == FINREG_ACTIVE)
+        lj_gc2_finreg_cdata_note_transition(g, 0);
+    } else if (ord) {
+      lj_ctype_fin_order_retire_id(cts, obj2gco(cd), ord->registration_id);
     }
-    goto done;
+    lj_ctype_fin_lease_release(&held);
+    if (enabled)
+      lj_mem_account_deferred(L, sizeof(FinRegOrderNode));
+    if (rc) {
+      lj_cdata_test_fin_pause_at(enabled ? LJ_CDATA_FIN_PAUSE_ENABLE_ORDER :
+                                          LJ_CDATA_FIN_PAUSE_CLEAR_BEFORE_NIL);
+      break;
+    }
   }
-done:
-  if (ord)
-    lj_ctype_fin_order_free(g, ord);
   L->top = restorestack(L, anchor);
+}
+
+int lj_cdata_fin_native_pending(global_State *g, GCobj *o)
+{
+  CTState *cts = ctype_ctsG(g);
+  FinRegGen *gen;
+  int smr, pending = 0;
+  if (!cts)
+    return 0;
+  smr = lj_gc2_smr_read_try(g);
+  for (gen = fin_gen_head_acq(cts); gen != NULL; ) {
+    FinRegGen *next;
+    LJGC2Lease scope = { 0 };
+    if (smr ? lj_gc2_mem_lease_acquire(g, gen, &scope) < 0 :
+              !lj_gc2_mem_registered_known_reclaim_held(g, gen)) {
+      lj_gc2_lease_release(&scope);
+      pending = 1;
+      break;
+    }
+    next = fin_gen_next_acq(gen);
+    if (gcref(gen->registered_key) == o) {
+      pending = finreg_state(finreg_load(gen)) != 0;
+      lj_gc2_lease_release(&scope);
+      break;
+    }
+    lj_gc2_lease_release(&scope);
+    gen = next;
+  }
+  if (smr)
+    lj_gc2_smr_read_leave(g);
+  return pending;
 }
 
 /* -- C data indexing ----------------------------------------------------- */

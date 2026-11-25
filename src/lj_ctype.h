@@ -235,6 +235,7 @@ static LJ_AINLINE void ctype_tab_retired_next_rel(CTypeTab *tabh,
 }
 
 typedef struct FinRegGen {
+  la_u128 registration;   /* Atomic {raw callback, generation and state}. */
   GCtab *tab;			/* One hash-only FINREG table generation. */
   struct FinRegGen *next;	/* Older generation, searched after this one. */
   GCRef registered_key;	/* Immutable allocation identity for lookup. */
@@ -242,16 +243,43 @@ typedef struct FinRegGen {
   MSize insert_hmask;		/* Exact vector shape certified at publication. */
 } FinRegGen;
 
+LJ_STATIC_ASSERT(offsetof(FinRegGen, registration) % 16 == 0);
+
+#define FINREG_ACTIVE 1u
+#define FINREG_PENDING 2u
+#define FINREG_STATE_MASK 3u
+#define FINREG_MAX_ID ((1ull << 62) - 1u)
+
+static LJ_AINLINE uint32_t finreg_state(la_u128 registration)
+{
+  return (uint32_t)(registration.hi & FINREG_STATE_MASK);
+}
+
+static LJ_AINLINE uint64_t finreg_id(la_u128 registration)
+{
+  return registration.hi >> 2;
+}
+
+static LJ_AINLINE la_u128 finreg_load(const FinRegGen *gen)
+{
+  return la_load128_acq(&gen->registration);
+}
+
+static LJ_AINLINE int finreg_cas(FinRegGen *gen, la_u128 *old, la_u128 next)
+{
+  return la_cas128(&gen->registration, old, next);
+}
+
 /*
-** Exact lifetime certificate for one FINREG table slot. The table body lease
-** and tactical SMR scope are deliberately one move-only token: the former
-** keeps GCtab fields admitted while the latter keeps a separated array/node
-** generation mapped through the final slot access. Never copy an active token.
+** Move-only FINREG lifetime certificate. SMR keeps the native generation
+** and any separated vector mapped, and the body lease keeps its GCtab
+** admitted. The slot pointer is used only to validate new publication.
 */
 typedef struct CTypeFinLease {
   global_State *g;
   GCtab *tab;
   TValue *slot;
+  FinRegGen *generation;
   LJGC2Lease table_lease;
   uint32_t smr_held;
 } CTypeFinLease;
@@ -269,8 +297,9 @@ typedef struct FinRegOrderNode {
   TValue *slot;			/* Original value slot; not stable across resize. */
   struct FinRegOrderNode *next;	/* Older registration, newest-first list. */
   struct FinRegOrderNode *lifetime_next;
-  TValue ready_callback;	/* Immutable after order publication. */
-  uint64_t ready_token;		/* Encoded slot marker, or zero. */
+  uint64_t registration_id;  /* Exact native slot generation, zero for legacy. */
+  uint32_t submission_done;  /* The unpublished order record can retire. */
+  uint32_t queue_visible;  /* Set only after an exact envelope is published. */
   uint32_t active;		/* 1 active, 0 inactive. */
 } FinRegOrderNode;
 
@@ -776,7 +805,7 @@ typedef struct CTState {
   CTypeID layout_top;   /* Committed ID prefix at the start of parsing. */
   uint64_t layout_version;  /* Odd during a parser transaction. */
   CTypeLayoutPage *layout_pages[CTYPE_LAYOUT_PAGES];
-  uint64_t fin_ready_id;  /* Never reused by a delayed publication helper. */
+  uint64_t fin_registration_id;  /* Monotonic identity for exact callback deliveries. */
   FinRegGen *fin_head;	/* 11.4 CAS-published FINREG generation list. */
   FinRegOrderNode *fin_order_head;  /* 11.4 ordered FINREG registrations. */
   FinRegOrderNode *fin_order_lifetime;  /* Published order nodes. */
@@ -1566,8 +1595,7 @@ LJ_FUNC void lj_ctype_fin_lease_release(CTypeFinLease *lease);
 LJ_FUNC int lj_ctype_fin_gen_tab_acquire(CTState *cts, FinRegGen *gen,
 					 CTypeFinLease *lease);
 LJ_FUNC int lj_ctype_fin_head(CTState *cts, CTypeFinLease *lease);
-LJ_FUNC FinRegOrderNode *lj_ctype_fin_order_new(lua_State *L);
-LJ_FUNC void lj_ctype_fin_order_free(global_State *g, FinRegOrderNode *ord);
+LJ_FUNC FinRegOrderNode *lj_ctype_fin_order_new_nothrow(lua_State *L);
 LJ_FUNC void lj_ctype_fin_order_publish(CTState *cts, FinRegOrderNode *ord,
 					GCobj *o, GCtab *t, TValue *slot);
 LJ_FUNC int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
@@ -1580,11 +1608,12 @@ LJ_FUNC int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
 LJ_FUNC int lj_ctype_fin_order_retire_obj_complete(CTState *cts,
 						    GCobj *target,
 						    size_t *retiredp);
+LJ_FUNC void lj_ctype_fin_order_retire_id(CTState *cts, GCobj *o, uint64_t id);
 LJ_FUNC size_t lj_ctype_fin_order_retire_obj(CTState *cts, GCobj *target);
 /* Caller holds the requested cdata's insertion bit, so a KEYLOCK in a
 ** published generation belongs to another key. */
-LJ_FUNC int lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
-			     CTypeFinLease *lease);
+LJ_FUNC int lj_ctype_fin_get_native(CTState *cts, cTValue *key,
+                                    CTypeFinLease *lease);
 LJ_FUNC int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
 				cTValue *claim, CTypeFinLease *lease);
 /* Observational membership: FOUND, MISS, or RETRY. A transient generation or

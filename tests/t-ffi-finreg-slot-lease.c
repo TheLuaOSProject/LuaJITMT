@@ -1,6 +1,6 @@
 /*
-** FINREG slot leases must reject a retired hash generation without ever
-** claiming its FORWARD marker.
+** A FINREG lease preserves its native entry across vector retirement.
+** An old registration generation cannot erase a later callback.
 */
 
 #include <assert.h>
@@ -22,14 +22,10 @@ int main(void)
   lua_State *L = luaL_newstate();
   CTState *cts;
   CTypeFinLease held = CTYPE_FIN_LEASE_INIT;
-  CTypeFinLease current = CTYPE_FIN_LEASE_INIT;
-  TValue key, old, stale;
-  TValue *oldslot;
+  TValue key;
   Node *oldnode;
-  MSize hmask;
-  uint32_t hbits;
-  uint32_t readers;
-  int rc;
+  la_u128 old, replacement, empty = { 0, 0 };
+  uint32_t hbits, readers;
 
   assert(L != NULL);
   luaL_openlibs(L);
@@ -42,49 +38,33 @@ int main(void)
   setcdataV(L, &key, cdataV(L->top - 1));
 
   readers = gc2_smr_readers_acq(G(L));
-  assert(lj_ctype_fin_get(L, cts, &key, &held) == LJ_CTYPE_FIN_FOUND);
-  assert(held.tab != NULL && held.slot != NULL && held.smr_held);
+  assert(lj_ctype_fin_get_native(cts, &key, &held) == LJ_CTYPE_FIN_FOUND);
+  assert(held.tab != NULL && held.generation != NULL && held.smr_held);
   assert(gc2_smr_readers_acq(G(L)) == readers + 1u);
-  oldslot = held.slot;
+  old = finreg_load(held.generation);
+  assert(finreg_state(old) == FINREG_ACTIVE);
   oldnode = lj_tab_node_acq(held.tab);
-  hmask = lj_tab_node_hmask_acq(oldnode);
-  assert(hmask > 0);
-  assert(lj_tab_read_current_keyed(G(L), held.tab, oldslot, &key, &old) ==
-	 LJ_TAB_STORE_CAS_OK);
-  assert(!tvisnil(&old) && !lj_cdata_fin_isclaim(&old));
-  copyTVrel(L, L->top, &old);
-  lj_state_stack_pubtv(L, L, L->top);
-  L->top++;
-
-  hbits = lj_fls((uint32_t)hmask) + 2u;
-  if (hbits > LJ_MAX_HBITS)
-    hbits = LJ_MAX_HBITS;
+  hbits = lj_fls((uint32_t)lj_tab_node_hmask_acq(oldnode)) + 2u;
   lj_tab_resize(L, held.tab, lj_tab_asize_acq(held.tab), hbits);
   assert(lj_tab_node_acq(held.tab) != oldnode);
-  lj_tv_load_acq(&stale, oldslot);
-  assert(tvisforward(&stale));
 
-  rc = lj_cdata_fin_claim_held(&held, &key, &stale, 1);
-  assert(rc == LJ_CTYPE_FIN_RETRY);
-  lj_tv_load_acq(&stale, oldslot);
-  assert(tvisforward(&stale));  /* FORWARD was not overwritten by FINCLAIM. */
+  lua_pushvalue(L, -1);
+  lua_setglobal(L, "registered_cdata");
+  assert(luaL_dostring(L, "local ffi=require('ffi'); "
+                         "ffi.gc(registered_cdata, function() end)") == LUA_OK);
+  replacement = finreg_load(held.generation);
+  assert(finreg_state(replacement) == FINREG_ACTIVE);
+  assert(finreg_id(replacement) != finreg_id(old));
+  assert(!finreg_cas(held.generation, &old, empty));
+  assert(old.hi == replacement.hi && old.lo == replacement.lo);
+
   lj_ctype_fin_lease_release(&held);
   assert(gc2_smr_readers_acq(G(L)) == readers);
-  lj_ctype_fin_lease_release(&held);  /* Cleanup is intentionally idempotent. */
+  lj_ctype_fin_lease_release(&held);
   assert(gc2_smr_readers_acq(G(L)) == readers);
-
-  assert(lj_ctype_fin_get(L, cts, &key, &current) == LJ_CTYPE_FIN_FOUND);
-  assert(gc2_smr_readers_acq(G(L)) == readers + 1u);
-  assert(current.slot != oldslot);
-  assert(lj_cdata_fin_claim_held(&current, &key, &stale, 1) ==
-	 LJ_CTYPE_FIN_FOUND);
-  assert(lj_cdata_fin_store_claim_held(&current, &key, L->top - 1));
-  lj_ctype_fin_lease_release(&current);
-  assert(gc2_smr_readers_acq(G(L)) == readers);
-  L->top--;
 
   lua_close(L);
-  printf("t-ffi-finreg-slot-lease OK: retired vector rejected safely\n");
+  printf("t-ffi-finreg-slot-lease OK: stale registration rejected after vector retirement\n");
 #else
   printf("t-ffi-finreg-slot-lease SKIP: FFI disabled\n");
 #endif

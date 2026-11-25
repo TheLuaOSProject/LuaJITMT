@@ -1289,13 +1289,14 @@ out:
   return valid;
 }
 
-static int gc2_cdata_finalizer_pending(GCobj *o)
+static int gc2_cdata_finalizer_pending(global_State *g, GCobj *o)
 {
 #if LJ_HASFFI
   return o->gch.gct == (uint32_t)~LJ_TCDATA &&
-	 (lj_obj_gcflags(o) & LJ_GC_CDATA_FIN);
+         (lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) &&
+         lj_cdata_fin_native_pending(g, o);
 #else
-  UNUSED(o);
+  UNUSED(g); UNUSED(o);
   return 0;
 #endif
 }
@@ -1312,8 +1313,8 @@ static int gc2_valid_freeable_obj(global_State *g, GCobj *o,
   uint32_t gct = o->gch.gct;
   if (gct == (uint32_t)~LJ_TSTR)
     return 0;  /* String table sweep owns GCstr lifetime. */
-  if (gc2_cdata_finalizer_pending(o))
-    return 0;  /* FINREG dispatch must clear LJ_GC_CDATA_FIN before free. */
+  if (gc2_cdata_finalizer_pending(g, o))
+    return 0;  /* An active or pending registration retains the cdata. */
 #if LJ_HASFFI
   if (gct == (uint32_t)~LJ_TCDATA &&
       !lj_gc2_obj_valid_queued(g, o))
@@ -1977,7 +1978,7 @@ uint32_t lj_gc_sweep_gc2_unmarked(global_State *g)
       continue;
     }
     marked = (int)info.marked;
-    if (LJ_UNLIKELY(gc2_cdata_finalizer_pending(o)) ||
+    if (LJ_UNLIKELY(gc2_cdata_finalizer_pending(g, o)) ||
 	LJ_UNLIKELY(gc2_udata_finalizer_pending(o)) ||
 	(lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED))) {
       /* FINREG dispatch owns both finalizer classes until it requeues them and

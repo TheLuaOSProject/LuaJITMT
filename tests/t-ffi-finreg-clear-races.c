@@ -65,12 +65,19 @@ static uint32_t active_order_refs(global_State *g, GCobj *target)
   assert(cts != NULL);
   for (retry = 0; retry < FINREG_TEST_RETRY_MAX; retry++) {
     FinRegOrderNode *ord;
+    CTypeFinLease reg = CTYPE_FIN_LEASE_INIT;
+    TValue key;
+    uint64_t generation = 0;
     uint32_t count = 0, steps = 0;
     int complete = 1;
     if (!lj_gc2_smr_read_try(g)) {
       (void)sched_yield();
       continue;
     }
+    setgcVraw(&key, target, LJ_TCDATA);
+    if (lj_ctype_fin_get_native(cts, &key, &reg) == LJ_CTYPE_FIN_FOUND)
+      generation = finreg_id(finreg_load(reg.generation));
+    lj_ctype_fin_lease_release(&reg);
     ord = fin_order_head_acq(cts);
     while (ord != NULL) {
       LJGC2Lease lease = { 0 };
@@ -86,9 +93,9 @@ static uint32_t active_order_refs(global_State *g, GCobj *target)
       next = fin_order_next_acq(ord);
       active = fin_order_active_acq(ord);
       obj = active == 1 ? fin_order_obj_acq(ord) : NULL;
-      lj_gc2_lease_release(&lease);
-      if (active == 1 && obj == target)
+      if (active == 1 && obj == target && ord->registration_id == generation)
         count++;
+      lj_gc2_lease_release(&lease);
       ord = next;
     }
     lj_gc2_smr_read_leave(g);
@@ -108,18 +115,15 @@ static void assert_registered(lua_State *L, const char *cdname,
   CTypeFinLease held = CTYPE_FIN_LEASE_INIT;
   GCcdata *cd = global_cdata(L, cdname);
   TValue key, callback, expected;
+  la_u128 registration;
   int rc;
 
   setcdataV(L, &key, cd);
-  rc = lj_ctype_fin_get(L, cts, &key, &held);
+  rc = lj_ctype_fin_get_native(cts, &key, &held);
   assert(rc == LJ_CTYPE_FIN_FOUND);
-  assert(held.tab != NULL && held.slot != NULL && held.smr_held);
-  assert(lj_tab_read_current_keyed(G(L), held.tab, held.slot, &key,
-				   &callback) ==
-         LJ_TAB_STORE_CAS_OK);
-  assert(!tvisnil(&callback));
-  assert(!tvisforward(&callback));
-  assert(!lj_cdata_fin_isclaim(&callback));
+  registration = finreg_load(held.generation);
+  assert(finreg_state(registration) == FINREG_ACTIVE);
+  tv_rawstore(&callback, registration.lo);
   lua_getglobal(L, finname);
   lj_tv_load_acq(&expected, L->top - 1);
   assert(tvisfunc(&expected));
@@ -138,19 +142,15 @@ static void assert_cleared(lua_State *L, const char *cdname)
   CTState *cts = ctype_ctsG(g);
   CTypeFinLease held = CTYPE_FIN_LEASE_INIT;
   GCcdata *cd = global_cdata(L, cdname);
-  TValue key, callback;
+  TValue key;
   int rc;
 
   setcdataV(L, &key, cd);
-  rc = lj_ctype_fin_get(L, cts, &key, &held);
-  assert(rc == LJ_CTYPE_FIN_FOUND);
-  assert(lj_tab_read_current_keyed(G(L), held.tab, held.slot, &key,
-				   &callback) ==
-         LJ_TAB_STORE_CAS_OK);
-  assert(tvisnil(&callback));
+  rc = lj_ctype_fin_get_native(cts, &key, &held);
+  assert(rc == LJ_CTYPE_FIN_MISS || (rc == LJ_CTYPE_FIN_FOUND &&
+         finreg_state(finreg_load(held.generation)) == 0));
   lj_ctype_fin_lease_release(&held);
   assert(active_order_refs(g, obj2gco(cd)) == 0u);
-  assert((lj_obj_gcflags(obj2gco(cd)) & LJ_GC_CDATA_FIN) == 0);
   assert(!lj_gc2_finreg_cdata_pending(g));
 }
 
@@ -559,6 +559,75 @@ static void test_order_storage_reclaim(lua_State *L)
   }
 }
 
+static void test_registration_errors_release_state(lua_State *L)
+{
+  global_State *g = G(L);
+  CTState *cts = ctype_ctsG(g);
+  uint32_t readers = gc2_smr_readers_acq(g);
+  uint64_t saved_id;
+  size_t count;
+  ljt_lua_dostring(L,
+    "local ffi=require('ffi')\n"
+    "fail_old_fin=function() end; fail_new_fin=function() end\n"
+    "fail_old=ffi.gc(ffi.new('int[1]'), fail_old_fin)\n"
+    "fail_fresh=ffi.new('int[1]')\n");
+  count = fin_order_storage_count(g);
+
+  lj_cdata_test_fail_order_once();
+  ljt_lua_dostring(L,
+    "local ffi=require('ffi'); assert(not pcall(ffi.gc, fail_fresh, fail_new_fin))");
+  assert(gc2_smr_readers_acq(g) == readers);
+  assert(fin_order_storage_count(g) == count);
+  assert(!lj_cdata_fin_native_pending(g, obj2gco(global_cdata(L, "fail_fresh"))));
+
+  lj_cdata_test_fail_order_once();
+  ljt_lua_dostring(L,
+    "local ffi=require('ffi'); assert(not pcall(ffi.gc, fail_old, fail_new_fin))");
+  assert(gc2_smr_readers_acq(g) == readers);
+  assert(fin_order_storage_count(g) == count);
+  assert_registered(L, "fail_old", "fail_old_fin");
+
+  saved_id = la_load64_acq(&cts->fin_registration_id);
+  la_store64_rel(&cts->fin_registration_id, FINREG_MAX_ID);
+  ljt_lua_dostring(L,
+    "local ffi=require('ffi'); local ok, err=pcall(ffi.gc, fail_old, fail_new_fin); "
+    "assert(not ok and err:find('too many cdata finalizer registrations',1,true)); "
+    "assert(rawequal(ffi.gc(fail_old, fail_old_fin), fail_old))");
+  assert(gc2_smr_readers_acq(g) == readers);
+  assert(fin_order_storage_count(g) == count);
+  assert_registered(L, "fail_old", "fail_old_fin");
+  cleanup_registration(L, "fail_old");
+  la_store64_rel(&cts->fin_registration_id, saved_id);
+  ljt_lua_dostring(L, "require('ffi').gc(fail_fresh, fail_new_fin)");
+  assert_registered(L, "fail_fresh", "fail_new_fin");
+  cleanup_registration(L, "fail_fresh");
+}
+
+static void test_paused_transition_does_not_control_membership(lua_State *L)
+{
+  global_State *g = G(L);
+  uint64_t sets = gc2_finreg_cdata_sets_acq(g);
+  uint64_t clears = gc2_finreg_cdata_clears_acq(g);
+  ljt_lua_dostring(L,
+    "pause_cd=require('ffi').new('int[1]'); pause_fin=function() end");
+  lj_cdata_test_fin_pause_arm(LJ_CDATA_FIN_PAUSE_TRANSITION);
+  ljt_lua_dostring(L,
+    "pause_worker=require('threading').spawn(function(cd, fin)\n"
+    "  require('ffi').gc(cd, fin); return true\n"
+    "end, pause_cd, pause_fin)\n");
+  wait_for_pause(LJ_CDATA_FIN_PAUSE_TRANSITION);
+  assert(gc2_finreg_cdata_sets_acq(g) == sets);
+  assert_registered(L, "pause_cd", "pause_fin");
+  cleanup_registration(L, "pause_cd");
+  assert(gc2_finreg_cdata_clears_acq(g) == clears + 1);
+
+  lj_cdata_test_fin_pause_release(LJ_CDATA_FIN_PAUSE_TRANSITION);
+  ljt_lua_dostring(L, "local ok,ret=pause_worker:join(10); assert(ok and ret)");
+  assert(gc2_finreg_cdata_sets_acq(g) == sets + 1);
+  assert(gc2_finreg_cdata_clears_acq(g) == clears + 1);
+  assert_cleared(L, "pause_cd");
+}
+
 typedef enum FinPrepareTest {
   PREPARE_REARM, PREPARE_FIRST, PREPARE_REPLACE, PREPARE_CLEAR
 } FinPrepareTest;
@@ -631,6 +700,70 @@ static void test_identical_rearm_vs_replace(lua_State *L)
     "same_worker=nil\n");
   assert_registered(L, "same_cd", "different_fin");
   cleanup_registration(L, "same_cd");
+}
+
+static void *queue_pending_worker(void *opaque)
+{
+  global_State *g = (global_State *)opaque;
+  (void)lj_gc2_finreg_cdata_finalize_close(g);
+  return NULL;
+}
+
+static void test_suspended_pending_owner(lua_State *L)
+{
+  pthread_t worker;
+  uint64_t clears = gc2_finreg_cdata_clears_acq(G(L));
+  ljt_lua_dostring(L,
+    "local ffi=require('ffi')\n"
+    "pending_a, pending_b=0, 0\n"
+    "pending_cd=ffi.gc(ffi.new('int[1]', 51),function() pending_a=pending_a+1 end)\n");
+  lj_cdata_test_fin_pause_arm(LJ_CDATA_FIN_PAUSE_QUEUE_PENDING);
+  assert(pthread_create(&worker, NULL, queue_pending_worker, G(L)) == 0);
+  wait_for_pause(LJ_CDATA_FIN_PAUSE_QUEUE_PENDING);
+  assert(gc2_finreg_cdata_clears_acq(G(L)) == clears);
+  assert(lj_gc2_finreg_cdata_pending(G(L)));
+
+  ljt_lua_dostring(L,
+    "local ffi=require('ffi')\n"
+    "ffi.gc(pending_cd, nil)\n"
+    "ffi.gc(pending_cd, function(x) assert(x[0]==51); pending_b=pending_b+1 end)\n");
+  assert(lj_cdata_test_fin_pause_waiting(LJ_CDATA_FIN_PAUSE_QUEUE_PENDING));
+  lj_cdata_test_fin_pause_release(LJ_CDATA_FIN_PAUSE_QUEUE_PENDING);
+  assert(pthread_join(worker, NULL) == 0);
+  assert(gc2_finreg_cdata_clears_acq(G(L)) == clears + 1);
+  lj_gc2_finalizer_dispatch_all(L);
+  ljt_lua_dostring(L,
+    "assert(pending_a == 0 and pending_b == 0); pending_cd=nil\n"
+    "for i=1,4 do collectgarbage('collect') end\n"
+    "assert(pending_a == 0 and pending_b == 1)\n");
+}
+
+static void test_help_pending_queue_once(lua_State *L)
+{
+  pthread_t worker;
+  ljt_lua_dostring(L,
+    "local ffi=require('ffi')\n"
+    "help_a, help_b=0, 0\n"
+    "help_cd=ffi.gc(ffi.new('int[1]', 42), function(x)\n"
+    "  help_a=help_a+1\n"
+    "  ffi.gc(x, function(y) assert(y[0]==42); help_b=help_b+1 end)\n"
+    "end)\n");
+  lj_cdata_test_fin_pause_arm(LJ_CDATA_FIN_PAUSE_QUEUE_LINK);
+  assert(pthread_create(&worker, NULL, queue_pending_worker, G(L)) == 0);
+  wait_for_pause(LJ_CDATA_FIN_PAUSE_QUEUE_LINK);
+
+  assert(lj_gc2_finreg_cdata_finalize_close(G(L)) == 1);
+  lj_gc2_finalizer_dispatch_all(L);
+  assert(lj_cdata_test_fin_pause_waiting(LJ_CDATA_FIN_PAUSE_QUEUE_LINK));
+  ljt_lua_dostring(L, "assert(help_a == 1 and help_b == 0)");
+
+  lj_cdata_test_fin_pause_release(LJ_CDATA_FIN_PAUSE_QUEUE_LINK);
+  assert(pthread_join(worker, NULL) == 0);
+  lj_gc2_finalizer_dispatch_all(L);
+  ljt_lua_dostring(L,
+    "assert(help_a == 1 and help_b == 0); help_cd=nil\n"
+    "for i=1,4 do collectgarbage('collect') end\n"
+    "assert(help_a == 1 and help_b == 1)\n");
 }
 
 static void test_queued_delivery_vs_suspended_rearm(lua_State *L)
@@ -728,6 +861,8 @@ int main(void)
   assert(!lj_gc2_finreg_cdata_pending(G(L)));
 
   test_order_storage_reclaim(L);
+  test_registration_errors_release_state(L);
+  test_paused_transition_does_not_control_membership(L);
   test_unrelated_enable_progress(0);
   test_unrelated_enable_progress(1);
   test_first_key_generation_reclaim();
@@ -741,6 +876,8 @@ int main(void)
   test_prepare_vs_reenable(L, PREPARE_REPLACE);
   test_prepare_vs_reenable(L, PREPARE_CLEAR);
   test_identical_rearm_vs_replace(L);
+  test_suspended_pending_owner(L);
+  test_help_pending_queue_once(L);
   test_queued_delivery_vs_suspended_rearm(L);
   test_nested_finalizer_collect(L);
   test_rearm_after_callback(L);

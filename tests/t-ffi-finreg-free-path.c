@@ -30,7 +30,6 @@ static void child_must_abort(lua_State *L, GCcdata *cd)
 {
   global_State *g = G(L);
   disable_core_files();
-  lj_obj_addgcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
   lj_cdata_free(g, cd);
   _exit(101);
 }
@@ -46,10 +45,11 @@ int main(void)
 
   assert(L != NULL);
   luaL_openlibs(L);
-  assert(luaL_dostring(L, "require('ffi')") == LUA_OK);
-  lua_settop(L, 0);
-  cd = lj_cdata_new_(L, CTID_INT32, 4);
-  assert(cd != NULL);
+  assert(luaL_dostring(L, "local ffi=require('ffi'); "
+                         "return ffi.gc(ffi.new('int[1]'), function() end)") ==
+         LUA_OK);
+  assert(tviscdata(L->top - 1));
+  cd = cdataV(L->top - 1);
 
   pid = fork();
   assert(pid >= 0);
