@@ -461,6 +461,7 @@ static FinRegGen *ctype_fin_gen_new_l(lua_State *L, GCtab *t)
   FinRegGen *gen = lj_mem_newt(L, sizeof(FinRegGen), FinRegGen);
   fin_gen_tab_rel(gen, t);
   fin_gen_next_rel(gen, NULL);
+  setgcrefnull(gen->registered_key);
   gen->insert_nodes = NULL;
   gen->insert_hmask = 0;
   return gen;
@@ -851,8 +852,21 @@ static int ctype_fin_get_smr(CTState *cts, FinRegGen *gen, cTValue *key,
   while (gen != NULL) {
     CTypeFinLease held = CTYPE_FIN_LEASE_INIT;
     FinRegGen *next = NULL;
+    LJGC2Lease generation = { 0 };
     TValue *slot;
-    int rc = ctype_fin_gen_tab_acquire_next_smr(cts, gen, &held, &next);
+    int rc, same_key;
+    if (lj_gc2_mem_lease_acquire(cts->g, gen, &generation) < 0) {
+      lj_gc2_lease_release(&generation);
+      return LJ_CTYPE_FIN_RETRY;
+    }
+    next = fin_gen_next_acq(gen);
+    same_key = gcval(key) == gcref(gen->registered_key);
+    lj_gc2_lease_release(&generation);
+    if (!same_key) {
+      gen = next;
+      continue;
+    }
+    rc = ctype_fin_gen_tab_acquire_next_smr(cts, gen, &held, NULL);
     if (rc == LJ_CTYPE_FIN_RETRY)
       return LJ_CTYPE_FIN_RETRY;
     if (rc == LJ_CTYPE_FIN_FOUND && fin_gen_tab_enabled_acq(held.tab)) {
@@ -922,12 +936,12 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
   tv = lj_tab_set(L, t, key);  /* Private generation, unpublished. */
   copyTVrel(L, tv, claim);
   gen = ctype_fin_gen_new_l(L, t);
+  setgcrefp(gen->registered_key, gcval(key));
   gen->insert_nodes = lj_tab_node_acq(t);
   gen->insert_hmask = lj_tab_hmask_acq(t);
 
   for (retry = 0; retry < CTYPE_FIN_RETRY_MAX; retry++) {
     CTypeFinLease prepared = CTYPE_FIN_LEASE_INIT;
-    CTypeFinLease headheld = CTYPE_FIN_LEASE_INIT;
     CTypeFinLease found = CTYPE_FIN_LEASE_INIT;
     FinRegGen *head;
     TValue *resolved = NULL;
@@ -937,16 +951,6 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
       continue;
     }
     head = fin_gen_head_acq(cts);
-    if (head) {
-      rc = ctype_fin_gen_tab_acquire_next_smr(cts, head, &headheld, NULL);
-      if (rc != LJ_CTYPE_FIN_FOUND) {
-	lj_ctype_fin_lease_release(&headheld);
-	lj_gc2_smr_read_leave(cts->g);
-	ctype_fin_claim_wait(L);
-	continue;
-      }
-      lj_ctype_fin_lease_release(&headheld);
-    }
     rc = ctype_fin_get_smr(cts, head, key, &found);
     if (rc == LJ_CTYPE_FIN_FOUND) {
       lj_ctype_fin_lease_release(&found);
@@ -972,7 +976,7 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
       lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_FIRST_KEY);
 #endif
       if (fin_gen_head_cas(cts, &head, gen)) {
-        /* The already validated token moves to the caller. No allocation
+        /* The already validated token moves to the caller. No throwing allocation
         ** or fresh body admission is needed past the publication CAS. */
         (void)lj_gc2_markmem(G(L), gen);
         lj_gc_pubobjroot(L, obj2gco(t));

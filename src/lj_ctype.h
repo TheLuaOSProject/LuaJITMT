@@ -237,6 +237,7 @@ static LJ_AINLINE void ctype_tab_retired_next_rel(CTypeTab *tabh,
 typedef struct FinRegGen {
   GCtab *tab;			/* One hash-only FINREG table generation. */
   struct FinRegGen *next;	/* Older generation, searched after this one. */
+  GCRef registered_key;	/* Immutable allocation identity for lookup. */
   Node *insert_nodes;		/* Original vector for the immutable key. */
   MSize insert_hmask;		/* Exact vector shape certified at publication. */
 } FinRegGen;
