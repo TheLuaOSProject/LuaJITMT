@@ -1,0 +1,150 @@
+Exact private-bump exclusion in free-bin rebuild
+2026-11-26; /root/buffer_publication_review
+
+Base: 4423c15f24688cbeafcc498e2cb9370b21cea950
+Runtime scope: src/lj_arena.c only. No header, test, suite, plan, bin geometry,
+allocator admission, lifetime or reclamation gate changes by this agent.
+Parent package: /tmp/lj-arena-rebuild-bump-20261126-1d94ydej
+Baseline build, read-only: /tmp/lj-plain-bin-capacity-20261126-wyqryfj8/gcc
+
+Source SHA256 before:
+1a3420fe54b2450bedfeb0bca775f2625e6452459ac1da94598eac5a4acbfe29
+Source SHA256 after/frozen:
+471b215c6e54082b6c27c17bb3fb155e4baffc6de819842bbc578e979048dfbf
+Unchanged src/lj_arena.h SHA256:
+c9fb420ebd3c0b24bb77bcd61fe867bc10ca67086dc9f56d2947782afd55bcde
+
+The defect
+
+The previous ArenaRebuildFree stored only a high limit. Full owner rebuild
+set that limit to active_bump.cell for the whole matching arena. A reused
+interior bump ends before the arena ends, so every separate free run beyond
+bump.end was wrongly excluded as well. Clearing all heads before the scan
+made that free capacity undiscoverable. An exhausted bump retaining its arena
+pointer could similarly exclude later free runs despite owning no private
+cells. The current plan explicitly identifies this separate capacity defect.
+
+Legal witness: allocate p=1024, a live guard, q=1024, another live guard, and
+consume the original tail with actual allocations. Free q then p. Allocate
+512 and get p, retaining [p+512,p+1024) as the private bump. Full owner rebuild
+must retain q's entire free run while preserving that private interval. The
+old high-limit callback drops q. This needs neither forged links nor direct
+cursor writes. It affects full rebuild and destination rebuild during transfer.
+
+Implementation and interval proof
+
+The callback context now stores bump_cell and bump_end. For a scanned free
+span R=[start,end), subtract B=[bump_cell,bump_end) only when B is nonempty
+and intersects R. If start<bump_cell, publish [start,bump_cell) through the
+existing arena_set_free_run followed by arena_link_run_head. If end>bump_end,
+then publish [bump_end,end) through the same helpers. Otherwise there is no
+right part. If no overlap or no private interval exists, publish R unchanged.
+
+All nonempty relative cases are covered:
+- R entirely before B, including end==bump_cell: publish R.
+- R entirely after B, including start==bump_end: publish R.
+- R within B: publish nothing.
+- R crosses the left edge only: publish its prefix.
+- R crosses the right edge only: publish its suffix.
+- R crosses both edges: publish both disjoint complements.
+- bump_cell==bump_end, including an exhausted cursor with non-NULL arena:
+  B is empty; publish R unchanged.
+- No matching bump arena: the explicit [0,0) sentinel excludes nothing.
+
+The overlap conditions prove the prefix length positive when called, and the
+end>bump_end check proves the suffix length positive. The scanner supplies
+positive spans bounded by LJ_ARENA_CELLS, so start+len cannot overflow and no
+zero-length publication is introduced. Valid owner cursors have cell<=end
+within their arena; malformed cursor state is not an added input contract.
+
+A callback may see BOTH complements in one run. The scanner coalesces state-1
+free boundaries across zero-state cells, so a private bump has no guaranteed
+scan boundary of its own. A real example frees an allocated prefix immediately
+before its private remainder while an adjacent free run follows bump.end.
+The patch handles that single coalesced callback, not merely distinct runs.
+
+Boundary and ownership preservation
+
+No new body write, block/mark operation, cdata/READY scrub or side-plane clear
+occurs inside B. arena_set_free_run receives only each nonempty complement,
+so its existing complete-range ownership preflight and bitmap masks remain
+applicable. arena_link_run_head writes only the first cell of that complement.
+A new suffix start at bump_end is outside the half-open private interval and
+becomes an ordinary free boundary. No bump field is changed.
+
+When one complement's preflight refuses publication, the other independent
+complement still receives its own complete proof. There is no permission to
+cross a protected region or consume a side owner. Existing helper refusal and
+retention behavior is preserved; this patch adds no broader recovery promise
+for an independently vetoed free span.
+
+The scanner calls back after it has reached the next nonfree boundary (or the
+arena end). Newly written complement boundaries are at or behind that scan
+position and therefore cannot cause a second callback for the same cells in
+this pass. Full rebuild clears heads first, so the new direct links preserve
+the existing absent-from-bin ownership proof. The recent head-only insertion
+and full finite search code is unchanged.
+
+All constructors audited
+
+There are exactly three ArenaRebuildFree constructors / callback users in
+this source (all identified with rg and checked individually):
+
+1. arena_adopt_reclaimed_one, frozen lines7391-7393. It rebuilds one reclaimed
+   arena into private staging after seal/commit. The reclaimed arena is absent
+   from current owned bins and cannot contain a current owner bump. Set explicit
+   [0,0). Existing whole-arena-empty shortcut, ownership checks, staged-head
+   splice, exact open arbitration and rollback remain unchanged.
+
+2. lj_arena_alloc_rebuild_free_kind, frozen lines7691-7703. It clears this kind's
+   heads, then scans each owned arena. Copy both cell and end only when that
+   arena matches alloc->bump[k].a; all other arenas receive [0,0). This owner-
+   private cursor is stable during the synchronous rebuild. Transfer still
+   retires the source cursor before moving lists, then invokes this destination
+   rebuild, so only the destination's existing private interval is excluded.
+
+3. lj_arena_alloc_restore_sweep_kind, frozen lines8317-8319. Preparation already
+   detached the cursor; arena_prepare_bump_tail materializes its old tail before
+   staging. Explicit [0,0) preserves the previous full-arena behavior. Existing
+   PREPSWEEP, terminal checks, commit/open arbitration, side-plane handling,
+   staged splice and rollback are unchanged. Any active current allocator bump
+   belongs to a different owned arena, not this needsweep arena.
+
+ArenaRebuildRuns / arena_rebuild_run is a distinct sweep callback. Its existing
+rule excludes exactly the selected largest free run, and was not changed.
+There are no remaining rf.limit references or uninitialized new fields.
+
+Verification performed by this agent
+
+GCC release syntax: PASS
+  taskset -c 0-7 gcc -fsyntax-only -O2 -Wall -Wextra -Werror -mcx16 -Isrc
+    -DLJ_ARENA_TEST_HELPERS -DLJ_GC2_TEST_HELPERS src/lj_arena.c
+GCC assertion syntax: PASS
+  Same command with -DLUA_USE_ASSERT.
+Clang assertion syntax: PASS
+  taskset -c 0-7 clang -fsyntax-only -O2 -Wall -Wextra -Werror -mcx16 -Isrc
+    -DLUA_USE_ASSERT -DLJ_ARENA_TEST_HELPERS -DLJ_GC2_TEST_HELPERS src/lj_arena.c
+git diff --check: PASS
+
+No runtime build/test was performed by this reviewer and no immutable prior
+build tree was modified. Parent owns the build/validation matrix. Test agent
+owns tests/t-arena-rebuild-bump.c and was informed of exact interval semantics
+and the real coalesced-span case crossing both edges before writing the fixture.
+
+Edges to validate in the runtime fixture/matrix
+
+- Live private interior window with free runs before and after it, both PLAIN
+  and TRAVERSABLE, unchanged cursor triple and unchanged private bytes/metadata.
+- A coalesced scanner span crossing both private edges, requiring both pieces.
+- Repeated rebuild (no duplicate links), exact reuse and no extra arena mapping.
+- Original arena tail, absent bump, and exhausted interior bump (cell==end).
+- Rebuild through allocator transfer with destination interior bump intact.
+- Existing side-owner, pending construction, reclaimed adoption, restore and
+  refused-publication tests remain relevant because they exercise shared helpers.
+
+The baseline's former residual rebuild gaps are consistent with this bug, but
+no empirical attribution of those historical exact byte counts is asserted
+without recording the corresponding bump endpoints. This patch fixes the
+source invariant directly. It does not reduce capacity retained by live small
+shrinks, change huge shrink, reclaim dead TGs, index long bin searches, or solve
+independent orphaned-boundary paths that still need an owner rebuild.

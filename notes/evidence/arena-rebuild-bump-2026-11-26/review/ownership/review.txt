@@ -1,0 +1,195 @@
+Interior private-bump rebuild audit, 2026-11-26
+
+Scope and identity
+------------------
+Independent source review only. No shared source/test edits, builds, benchmark,
+or private-table attachment diagnostic. Parent evidence package:
+/tmp/lj-arena-rebuild-bump-20261126-1d94ydej.
+Baseline HEAD: 4423c15f24688cbeafcc498e2cb9370b21cea950.
+Baseline src/lj_arena.c SHA256:
+1a3420fe54b2450bedfeb0bca775f2625e6452459ac1da94598eac5a4acbfe29.
+Reviewed candidate src/lj_arena.c SHA256:
+471b215c6e54082b6c27c17bb3fb155e4baffc6de819842bbc578e979048dfbf.
+metadata.json records other source hashes. baseline/ and candidate/ contain the
+reviewed sources; candidate.diff is the complete arena.c change reviewed here.
+Line references below say baseline/candidate when different.
+
+Verdict
+-------
+The candidate fixes a concrete capacity-loss bug without changing reader
+admission, lifetime transitions, allocation publication or reclamation gates.
+No correctness defect found in the reviewed interval subtraction. Publication
+must exclude exactly the nonempty private interval [bump.cell,bump.end), not
+all cells at or after bump.cell. An exhausted matching cursor excludes nothing.
+Keep the narrow patch; a new generic scanner or allocator-policy change is not
+needed for this defect. Dynamic correctness acceptance belongs to the separate
+real-helper regression and root validation, not to this source-only report.
+
+Why the baseline loses usable storage
+------------------------------------
+Baseline arena.c:7676-7687 clears all kind bins, then sets rf.limit to the
+matching bump.cell and scans every owned arena. Its callback at 7326-7335 drops
+any free run starting at/after that point and truncates any crossing run there.
+That is correct only if the private bump extends to the end of the arena.
+Generic allocation from an interior free run reserves the remainder as a new
+private bump (baseline 8939-8948; candidate 8954-8963). The next live allocation
+bounds that window; unrelated free runs can exist later in the same arena.
+Specialized reserve_bump_impl has the same interior-window construction
+(baseline 8739-8809; candidate 8754-8824), and legacy largest-run sweep can also
+select an interior bump (candidate 8415-8431). These are legitimate windows,
+not corrupt cursor metadata. The lost suffix remains in bitmap structure, but
+is no longer selectable through bins; it can cause unnecessary fresh mappings
+until a later sweep/rebuild or other publication rediscovers it. This is not
+in itself a live-object overwrite or logical Lua-byte accounting leak.
+
+Scanner semantics and the exact interval proof
+---------------------------------------------
+lj_arena_scan_free_runs (1859-1904 in both files) scans structural starts from
+block|mark and recovery/root/destructor/lifetime/GC2 token/descriptor planes.
+At each visited cell, recovery/root/token ownership or a non-FREE lifetime
+forces a nonfree state; otherwise block/mark supplies the state. A state-1
+start (block=0,mark=1) opens or continues a free span; any other state closes
+it. Descriptor/destructor planes ensure their cells are visited; if stale
+authority coexists with state 1, the later full range preflight still vetoes
+publication. All-zero cells are skipped, and consecutive free starts coalesce.
+The scanner never infers an independent free span before its first state-1
+start. Its callback interval ends at the next nonfree start or LJ_ARENA_CELLS
+(4096).
+
+The unused bump is commonly all zero after free-run consumption. Consequently
+one scanned interval can contain a free prefix, the whole private bump, and a
+free suffix. Handling only runs whose starts lie inside the bump is insufficient.
+For callback R=[start,end) and B=[cell,bump_end), emit R minus B: at most a
+prefix [start,min(end,cell)) and a suffix [max(start,bump_end),end), only when
+nonempty. With no overlap or empty B, emit R unchanged. Candidate 7327-7349
+implements exactly that partition. The overlap condition is strict at both
+ends. Prefix publication requires start<cell; suffix publication requires
+end>bump_end. Thus no zero-length node is published. start+len is safe in
+uint32_t because callbacks are bounded by the 4096-cell arena.
+
+The callback can rewrite earlier free boundaries without invalidating scanner
+iteration. It is called only after the scanner has reached the next nonfree
+start i, and all rewritten cells are strictly before i; the terminal callback
+has no remaining scan. Cached GC2 token summaries are not modified by free-run
+publication. New mark starts at the fragment origins lie in already-scanned
+space. Both fragments remain separate in allocator bins even if their bitmap
+boundaries would coalesce on a later scan: the same private-interval subtraction
+is applied again. No sentinel or body write is needed inside the private bump.
+
+Body, mark and lifetime safety
+-----------------------------
+Each output fragment still goes through arena_set_free_run (5656-5683), then
+arena_link_run_head (5729-5750). The complete range preflight at 5489-5547 rejects
+root/recovery/destructor ownership, GC2 descriptors/tokens and non-FREE managed
+lifetime state before structural reuse. READY/cdata scrubbing remains exactly
+as before; a second stricter interior check precedes removal of old boundaries.
+Each fragment gets its own block=0/mark=1 start and cleared old interior starts;
+its free-run body is written only after the usual exact start validation.
+The bin-head store is still the owner-private publication point. A 1-cell
+fragment is legal: LJArenaFreeRun is exactly the 16-byte cell size (arena.h:1744).
+
+The half-open range masks cannot clear bump cells or the occupied boundary at
+the callback end, including boundaries in the same bitmap word. Prefix and
+suffix validate independently, so an ownership veto retains that fragment
+without blocking a valid disjoint fragment. A failed later link validation
+can retain bitmap-only capacity as before; the patch does not turn such a veto
+into permission to reuse. PLAIN retained physical shrink extents still have a
+live block start and therefore remain scanner barriers. TRAVERSABLE construction
+and non-FREE lifetimes likewise remain barriers. No new lease, unchecked body
+load or broad writer admission was introduced.
+
+This reasoning relies on the existing owner/reclaimer exclusion required by
+rebuild and its current production caller. It does not make the internal
+rebuild function safe for arbitrary concurrent raw allocator calls. The
+production TG-transfer path takes the exclusive gates described below.
+
+All callback initialization and lifecycle callers
+------------------------------------------------
+There are exactly three ArenaRebuildFree initialization sites and all set both
+new fields:
+1. Owner-kind rebuild (candidate 7691-7703): matching owned arena gets its exact
+   bump.cell and bump.end; every other arena gets 0,0. The destination cursor is
+   preserved, and bins are cleared before each arena contributes unique spans.
+2. Reclaimed adoption (candidate 7391-7409): staged private heads use 0,0. An
+   arena on the reclaimed stack has no active allocator cursor. C|S sealing,
+   queue drain, pending clear and committed sealed generation precede the scan.
+   Existing staged-bin/owned-list rollback on failed OPEN is unchanged.
+3. Aborted sweep restoration (candidate 8316-8320): staged heads use 0,0.
+   prepare_sweep_kind (7751-7797) has already saved the unused window in
+   prep_bump_cell/end, detached the allocator cursor and cleared bins.
+   arena_prepare_bump_tail (6827-6875) publishes that saved interval structurally
+   after ownership checks; restoration invokes it at 8279 before rebuilding.
+   Its ordinary staged publication and rollback remain unchanged.
+
+The separate ArenaRebuildRuns callback used by lj_arena_sweep_one selects and
+skips exactly the largest run chosen for a *new* bump. It is not a fourth
+ArenaRebuildFree initializer and does not need the new exclusion fields.
+Production quarantine_finish does not call this callback directly: completed
+arenas stay closed on reclaimed lists until the adoption path above. The
+change does not alter quarantine admission, completion or terminal proof.
+
+Real production reachability and user-facing shape
+-------------------------------------------------
+The sole non-test caller of lj_arena_alloc_rebuild_free_kind outside its
+all-kind wrapper is lj_arena_alloc_transfer (baseline 8443-8505; candidate
+8458-8520). Transfer publishes/detaches the DEAD SOURCE's bump and bins, moves
+its arena lists, then rebuilds every DESTINATION kind. It deliberately keeps
+the destination's current private bump, which is precisely the failing case.
+Even a source with no arenas in one kind still triggers that destination-kind
+rebuild. Ordinary destination arena allocation can have established the
+interior window before transfer begins.
+
+lj_tg.c:978-999 calls transfer from tg_transfer_dead_alloc. The caller's
+admissibility checks at 1001-1014 require one mutator, no pending/leading
+handshake, no live or entering MT actor, no GC worker and no active GC worker;
+main TLS must own the runtime operation. The reclaimer also takes exclusive
+SMR/TG gates and rechecks reader/admission counters before touching lists
+(1016-1047), then invokes transfer at 1169. This excludes another attached
+allocator actor while destination metadata is rebuilt.
+
+A normal public route is threading.thread:join(): threading_join_core removes
+the joined worker and calls lj_tg_reclaim_dead at lib_threading.c:1418-1420.
+threading.gcworkers(0) is the public pool-off control at 2043-2060. Thus a
+main-thread workload with differently sized buffer/string storage and live
+separators can leave later free spans and an interior private bump while a
+worker is live; joining the last worker can rebuild and lose those free spans
+on the baseline. Buffer storage follows lj_mem_new_nothrow (lj_buf.c:184),
+which reaches the generic arena allocator; typed function/upvalue allocation
+also uses specialized reserve_bump_dtor (lj_func.c:1281,1340,1435). Explicit GC
+and other main-thread reclaim checkpoints can provide later transfer retries
+when immediate join reclamation is vetoed.
+
+This is a source-derived public workload shape, not a claimed deterministic
+Lua reproducer. Pure Lua cannot directly select physical arena addresses, free
+run ordering or cursor positions; incidental allocations/collection can change
+the layout. The meaningful deterministic regression uses real allocation,
+free and transfer helpers and asserts exact known reuse/no new mapping. No
+extra private-table first-attachment diagnostic is required.
+
+Required edge coverage
+----------------------
+- Matching interior bump with distinct valid runs both before and after it;
+  later run remains discoverable even if the first test cannot fit the bump.
+- One scanner interval spanning a free prefix, all-zero private bump and free
+  suffix; assert both complements are linked once and bump bytes/cursor intact.
+- A free interval touching cell or bump_end exactly; a run wholly within the
+  private window (if a retained free sentinel exists) must produce no node.
+- Exhausted matching cursor cell==end excludes nothing; no matching bump also
+  excludes nothing. Repeat rebuild to rule out node duplication/interior marks.
+- Both PLAIN and TRAVERSABLE paths; live guard bytes/lifetime unchanged and no
+  usable free node overlaps the bump or a still-live allocation.
+- Production-style transfer with a nonempty source and a partial destination
+  interior bump, then consume the formerly hidden exact suffix without growth.
+  Source bump publication and owner/list transfer assertions should remain.
+- Existing side-owner/interior-boundary, staged adoption/rollback and sweep
+  restoration tests should remain in the root validation set. The new interval
+  behavior does not require weakening any of those invariants.
+
+Remaining limits
+----------------
+This review does not promise all physical free capacity is immediately binned:
+real ownership vetoes, private bump space, pending late frees and closed/reclaimed
+arenas intentionally remain unavailable. Nor does it prove unrelated FINREG,
+worker-retention or arbitrary corrupted-bin recovery obligations. It addresses
+the deterministic loss caused solely by treating an interior private bump as
+an arena-wide suffix. No new correctness concern was found in this patch.

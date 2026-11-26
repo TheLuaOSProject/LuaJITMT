@@ -1,0 +1,21 @@
+{
+  "head": "4423c15f24688cbeafcc498e2cb9370b21cea950",
+  "captured_utc": "2026-11-26T18:33:34.305162+00:00",
+  "baseline": {
+    "src/lj_arena.c": "1a3420fe54b2450bedfeb0bca775f2625e6452459ac1da94598eac5a4acbfe29",
+    "src/lj_arena.h": "c9fb420ebd3c0b24bb77bcd61fe867bc10ca67086dc9f56d2947782afd55bcde",
+    "src/lj_tg.c": "721c5f49d3abe06f2aa73a67c01bc28161e432b8e16b02fe6cb90eb553024fbd",
+    "src/lib_threading.c": "48ebe966ec387cf122f0b64db7c2191877c3686a8dffc0c1487198ccddf4e8d8",
+    "src/lj_gc2.c": "26ccc9581b0ff86832685a9691b3a7131292eb112500f02d8a9a0a542e59343a",
+    "src/lj_safepoint.c": "e9f7694a8083c652951b1257264520afe930f5c8f18d411ef358d54f8c85536c",
+    "src/lj_buf.c": "182614b26a2ecfcbfdabedadf00d3891065514fb4cff363f03b8c9cf290ce9cf",
+    "src/lj_gc.c": "12361f5e801e7d2af8859bd04dd03bfab0bdc7583a1ea7c2c7949ea03874afbb",
+    "src/lj_func.c": "02948fe5942bb2f31f822f8cee918e2d393ddb85772bbc3ca0bf2ed22dfd5208",
+    "tests/t-arena-hugetab.c": "1a88492d071f13b9e616c5d5d038962a8617c44e1d1d9c2685a0f56658540a1d",
+    "tests/t-arena-sweep.c": "f9fd8f1ca0cc483112720c2cf26be13b6e85e4f8b893d9ecd185fccb6ed7503f"
+  },
+  "candidate": {
+    "src/lj_arena.c": "471b215c6e54082b6c27c17bb3fb155e4baffc6de819842bbc578e979048dfbf"
+  },
+  "reviewed_candidate_still_matches_shared": true
+}

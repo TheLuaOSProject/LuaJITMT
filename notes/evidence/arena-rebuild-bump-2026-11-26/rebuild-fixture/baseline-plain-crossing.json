@@ -1,0 +1,18 @@
+{
+  "case": "plain-crossing",
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline",
+    "plain-crossing"
+  ],
+  "exit": 1,
+  "utc_start": "2026-11-26T18:40:41.734362+00:00",
+  "utc_end": "2026-11-26T18:40:41.736187+00:00",
+  "seconds": 0.0018185939989052713,
+  "user_seconds": 0.0,
+  "system_seconds": 0.001431,
+  "maxrss_kib": 9208,
+  "binary_sha256": "fe13ce74f14480a5d536643aa583c4d2308fa0760189fcafd8d42ea1e52a7e32"
+}

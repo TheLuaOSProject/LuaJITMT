@@ -1,0 +1,13 @@
+{
+  "commit": "4423c15f24688cbeafcc498e2cb9370b21cea950",
+  "baseline_tree": "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/gcc",
+  "files": {
+    "src/lj_arena.c": "1a3420fe54b2450bedfeb0bca775f2625e6452459ac1da94598eac5a4acbfe29",
+    "src/lj_arena.h": "c9fb420ebd3c0b24bb77bcd61fe867bc10ca67086dc9f56d2947782afd55bcde",
+    "src/lj_prng.c": "d1109cdd8e6ff74139a2290b2144c5d48e9c3da88b0b6f6462be44d69ae7c2ad",
+    "tests/t-arena-tls-stub.c": "c77bec4d1fa415bbfa741053e1eadb48f6cee1f32407046914a7ed526dd97b36",
+    "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/gcc/src/luajit": "f6e978cb0875791b216df3608530e3d1180b121dc457c48e11f87fd66212365d",
+    "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/gcc/src/libluajit.a": "2a29b71710786af7ee2f8a06eb402e1923ea72e31fba6d4d7ee390d05a7b0b28",
+    "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/gcc/build.json": "664b6a1b2ecb49d6a822dbe7caf87c4cfdb7aac4928969f78a0fdf3be73df2c1"
+  }
+}

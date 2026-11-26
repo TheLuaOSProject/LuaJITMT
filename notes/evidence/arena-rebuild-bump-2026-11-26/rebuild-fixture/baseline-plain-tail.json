@@ -1,0 +1,18 @@
+{
+  "case": "plain-tail",
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline",
+    "plain-tail"
+  ],
+  "exit": 0,
+  "utc_start": "2026-11-26T18:40:41.779593+00:00",
+  "utc_end": "2026-11-26T18:40:41.781996+00:00",
+  "seconds": 0.0023963880084920675,
+  "user_seconds": 0.0,
+  "system_seconds": 0.00196,
+  "maxrss_kib": 9120,
+  "binary_sha256": "fe13ce74f14480a5d536643aa583c4d2308fa0760189fcafd8d42ea1e52a7e32"
+}

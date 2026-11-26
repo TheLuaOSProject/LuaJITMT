@@ -1,0 +1,64 @@
+[
+  {
+    "name": "buffer-joff",
+    "command": [
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/src/luajit",
+      "-joff",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/tests/t-buffer-thread-safety.lua"
+    ],
+    "seconds": 1.622110213007545,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "buffer-jon",
+    "command": [
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/src/luajit",
+      "-jon",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/tests/t-buffer-thread-safety.lua"
+    ],
+    "seconds": 1.2186589979974087,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "consume-build",
+    "command": [
+      "clang",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-ftrivial-auto-var-init=pattern",
+      "-I/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/src",
+      "-I/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/tests",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/tests/t-buffer-consume.c",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/src/libluajit.a",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_str_new",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-smoke/consume"
+    ],
+    "seconds": 0.3643572840082925,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "consume",
+    "command": [
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-smoke/consume"
+    ],
+    "seconds": 0.03275496998685412,
+    "exit": 0,
+    "test": true
+  }
+]

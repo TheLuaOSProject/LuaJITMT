@@ -1,0 +1,10 @@
+{
+  "base": "4423c15f24688cbeafcc498e2cb9370b21cea950",
+  "prior": "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8",
+  "scope": "Preserve free runs outside an interior private bump during bin rebuild",
+  "baseline_tree": "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/gcc",
+  "baseline_outputs": {
+    "luajit": "f6e978cb0875791b216df3608530e3d1180b121dc457c48e11f87fd66212365d",
+    "libluajit.a": "2a29b71710786af7ee2f8a06eb402e1923ea72e31fba6d4d7ee390d05a7b0b28"
+  }
+}

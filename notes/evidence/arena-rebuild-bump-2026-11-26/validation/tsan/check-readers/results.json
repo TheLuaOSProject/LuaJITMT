@@ -1,0 +1,50 @@
+[
+  {
+    "name": "progress-build",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-Wno-error=tsan",
+      "-fsanitize=thread",
+      "-fno-omit-frame-pointer",
+      "-fno-pie",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-readers/progress.d",
+      "-I/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/src",
+      "-I/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/tests",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/tests/t-arena-plain-progress.c",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/src/libluajit.a",
+      "-fsanitize=thread",
+      "-no-pie",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-readers/readers"
+    ],
+    "seconds": 0.3143929899961222,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "progress",
+    "command": [
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-readers/readers"
+    ],
+    "seconds": 0.11387807899154723,
+    "exit": 0,
+    "test": true
+  }
+]

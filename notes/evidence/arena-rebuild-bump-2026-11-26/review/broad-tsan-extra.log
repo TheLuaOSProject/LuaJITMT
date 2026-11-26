@@ -1,0 +1,2 @@
+tsan large-buffer 0
+tsan extra failures 0

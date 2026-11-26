@@ -1,0 +1,7 @@
+interior kind=plain exhausted=0 free_cells=64/64 exact_suffix=1 arenas=1->1 PASS
+interior kind=traversable exhausted=0 free_cells=64/64 exact_suffix=1 arenas=1->1 PASS
+interior kind=plain exhausted=1 free_cells=64/64 exact_suffix=1 arenas=1->1 PASS
+interior kind=traversable exhausted=1 free_cells=64/64 exact_suffix=1 arenas=1->1 PASS
+crossing kind=plain scan_crossings=1 free_cells=224/224 reused_mask=7 arenas=1->1 PASS
+crossing kind=traversable scan_crossings=1 free_cells=224/224 reused_mask=7 arenas=1->1 PASS
+candidate-standalone: /tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/t-arena-rebuild-bump.c:332: test_tail: Assertion `w.alloc.bump[w.kind].a == NULL' failed.

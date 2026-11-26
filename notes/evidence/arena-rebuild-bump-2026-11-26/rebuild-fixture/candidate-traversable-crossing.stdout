@@ -1,0 +1,2 @@
+crossing kind=traversable scan_crossings=1 free_cells=224/224 reused_mask=7 arenas=1->1 PASS
+t-arena-rebuild-bump OK

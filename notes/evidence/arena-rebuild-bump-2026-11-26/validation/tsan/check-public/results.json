@@ -1,0 +1,24 @@
+[
+  {
+    "name": "public-joff",
+    "command": [
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/src/luajit",
+      "-joff",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/tests/t-buffer-concurrent-public.lua"
+    ],
+    "seconds": 25.188820010022027,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "public-jon",
+    "command": [
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/src/luajit",
+      "-jon",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/tests/t-buffer-concurrent-public.lua"
+    ],
+    "seconds": 25.216061281011207,
+    "exit": 0,
+    "test": true
+  }
+]

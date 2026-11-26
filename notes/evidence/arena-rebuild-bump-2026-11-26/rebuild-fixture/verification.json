@@ -1,0 +1,17 @@
+{
+  "utc": "2026-11-26T18:42:58.406208+00:00",
+  "baseline_commit": "4423c15f24688cbeafcc498e2cb9370b21cea950",
+  "fixture_sha256": "d2b3bd4b50720b84093141be3f928160b1065c49ff031ff743d54e3a71f27ba8",
+  "final_full_library_invocations": 20,
+  "expected_baseline_failures": 8,
+  "baseline_tail_controls_pass": 2,
+  "candidate_cases_pass": 10,
+  "all_final_stderr_empty": true,
+  "sources_verified": 2473,
+  "outputs_verified": 4,
+  "baseline_library_sha256": "2a29b71710786af7ee2f8a06eb402e1923ea72e31fba6d4d7ee390d05a7b0b28",
+  "baseline_fixture_binary_sha256": "fe13ce74f14480a5d536643aa583c4d2308fa0760189fcafd8d42ea1e52a7e32",
+  "candidate_library_sha256": "c880ce0ddee055eb92d71a31753ab13d883e95aea8f79d5ff3ba3805192029df",
+  "candidate_fixture_binary_sha256": "246405c872b2d7349b1ddf80a95ce2267c34e15bee70d592c43d0b390f28c14c",
+  "baseline_committed_runtime_inputs_verified": 213
+}

@@ -1,0 +1,7 @@
+{
+  "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/src/luajit": "cc7f9c27727fdf31cf0e66337d96e285632cd7ac430180e9520261d5ed6f4a27",
+  "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/src/libluajit.a": "8a6253f3730705aba95e1b589adf013dbdc4876a9f1a381fbad8f3191fdf3da7",
+  "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/tests/t-buffer-thread-safety.lua": "e90325db1a6c8cd661eede720047e03a6e3f08c4be611b921cc6e163f88a7155",
+  "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/tests/t-buffer-consume.c": "5738fa68b3c7bb9e28b39ca1f99b7a2cc17a17ff14c47bbc3b73063f322d6334",
+  "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-smoke/consume": "c5287cca82bf5682fd67fb2ecaf5fe2d3aa3ce735d5724082aacca73d043bf4b"
+}

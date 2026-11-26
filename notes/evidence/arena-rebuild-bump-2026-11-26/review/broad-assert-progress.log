@@ -1,0 +1,3 @@
+assert progress progress-build 0
+assert progress progress 0
+assert progress {'runtime_pass': 1, 'runtime_fail': 0, 'build_fail': 0}

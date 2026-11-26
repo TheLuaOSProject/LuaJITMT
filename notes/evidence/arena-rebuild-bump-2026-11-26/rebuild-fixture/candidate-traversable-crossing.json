@@ -1,0 +1,18 @@
+{
+  "case": "traversable-crossing",
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate",
+    "traversable-crossing"
+  ],
+  "exit": 0,
+  "utc_start": "2026-11-26T18:41:56.635892+00:00",
+  "utc_end": "2026-11-26T18:41:56.637699+00:00",
+  "seconds": 0.0018035719986073673,
+  "user_seconds": 0.0,
+  "system_seconds": 0.00148,
+  "maxrss_kib": 9120,
+  "binary_sha256": "246405c872b2d7349b1ddf80a95ce2267c34e15bee70d592c43d0b390f28c14c"
+}

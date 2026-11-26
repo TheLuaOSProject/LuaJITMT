@@ -1,0 +1,295 @@
+[
+  {
+    "mode": "gcc",
+    "phase": "matrix",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "gcc",
+      "matrix"
+    ],
+    "exit": 0,
+    "seconds": 18.53528197298874
+  },
+  {
+    "mode": "gcc",
+    "phase": "smoke",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "gcc",
+      "smoke"
+    ],
+    "exit": 0,
+    "seconds": 3.0054439140076283
+  },
+  {
+    "mode": "gcc",
+    "phase": "public",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "gcc",
+      "public"
+    ],
+    "exit": 0,
+    "seconds": 1.5634260009974241
+  },
+  {
+    "mode": "assert",
+    "phase": "matrix",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "assert",
+      "matrix"
+    ],
+    "exit": 0,
+    "seconds": 20.64387459299178
+  },
+  {
+    "mode": "assert",
+    "phase": "smoke",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "assert",
+      "smoke"
+    ],
+    "exit": 0,
+    "seconds": 3.3791290420049336
+  },
+  {
+    "mode": "assert",
+    "phase": "public",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "assert",
+      "public"
+    ],
+    "exit": 0,
+    "seconds": 1.7742251490126364
+  },
+  {
+    "mode": "asan",
+    "phase": "matrix",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "asan",
+      "matrix"
+    ],
+    "exit": 0,
+    "seconds": 53.78710944001796
+  },
+  {
+    "mode": "asan",
+    "phase": "smoke",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "asan",
+      "smoke"
+    ],
+    "exit": 0,
+    "seconds": 5.225546106987167
+  },
+  {
+    "mode": "asan",
+    "phase": "public",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "asan",
+      "public"
+    ],
+    "exit": 0,
+    "seconds": 2.2692956819955725
+  },
+  {
+    "mode": "assert",
+    "phase": "progress",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "assert",
+      "progress"
+    ],
+    "exit": 0,
+    "seconds": 0.29164849600056186
+  },
+  {
+    "mode": "assert",
+    "phase": "lease",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "assert",
+      "lease"
+    ],
+    "exit": 0,
+    "seconds": 0.23328399498132057
+  },
+  {
+    "mode": "assert",
+    "phase": "traverse",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "assert",
+      "traverse"
+    ],
+    "exit": 0,
+    "seconds": 19.36269905901281
+  },
+  {
+    "mode": "asan",
+    "phase": "progress",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "asan",
+      "progress"
+    ],
+    "exit": 0,
+    "seconds": 0.738309821987059
+  },
+  {
+    "mode": "asan",
+    "phase": "lease",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "asan",
+      "lease"
+    ],
+    "exit": 0,
+    "seconds": 0.555595665005967
+  },
+  {
+    "mode": "asan",
+    "phase": "traverse",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "asan",
+      "traverse"
+    ],
+    "exit": 0,
+    "seconds": 50.66240020102123
+  },
+  {
+    "mode": "tsan",
+    "phase": "progress",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "tsan",
+      "progress"
+    ],
+    "exit": 0,
+    "seconds": 0.6497089140175376
+  },
+  {
+    "mode": "tsan",
+    "phase": "lease",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "tsan",
+      "lease"
+    ],
+    "exit": 0,
+    "seconds": 0.29529481098870747
+  },
+  {
+    "mode": "tsan",
+    "phase": "public",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "tsan",
+      "public"
+    ],
+    "exit": 0,
+    "seconds": 50.55199721298413
+  },
+  {
+    "mode": "gcc",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/extra.py",
+      "gcc"
+    ],
+    "exit": 0,
+    "seconds": 1.0983959099976346
+  },
+  {
+    "mode": "assert",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/extra.py",
+      "assert"
+    ],
+    "exit": 0,
+    "seconds": 1.194886179000605
+  },
+  {
+    "mode": "asan",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/extra.py",
+      "asan"
+    ],
+    "exit": 0,
+    "seconds": 1.7015454190259334
+  },
+  {
+    "mode": "tsan",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/extra.py",
+      "tsan"
+    ],
+    "exit": 0,
+    "seconds": 22.94695131899789
+  },
+  {
+    "mode": "noffi",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/extra.py",
+      "noffi"
+    ],
+    "exit": 0,
+    "seconds": 1.6980333469982725
+  },
+  {
+    "mode": "nojit",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/extra.py",
+      "nojit"
+    ],
+    "exit": 0,
+    "seconds": 1.5391314990120009
+  },
+  {
+    "mode": "nobuf",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/extra.py",
+      "nobuf"
+    ],
+    "exit": 0,
+    "seconds": 0.07823357702000067
+  }
+]

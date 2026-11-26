@@ -1,0 +1,4818 @@
+[
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/archive.py",
+    "path": "review/archive.py",
+    "bytes": 2991,
+    "sha256": "cb38449752ecfeee91a6aa1d40874d9336d6b8e062ece3c0b2e4fcf57e17256a",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-asan-extra.log",
+    "path": "review/broad-asan-extra.log",
+    "bytes": 70,
+    "sha256": "4e6c603970db3d5d8666e542632eea466283a078b7a33644f828ff1f111f6353",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-asan-lease.log",
+    "path": "review/broad-asan-lease.log",
+    "bytes": 117,
+    "sha256": "a4e3c82e0d9a726a4f794dd4746350842fad46b5d11794ba6a0bb8a25cf0d4c2",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-asan-matrix.log",
+    "path": "review/broad-asan-matrix.log",
+    "bytes": 99,
+    "sha256": "995d4c3998f5ae11a9b9f5425edf58e77068363ac28b2206a92aec9a177d3647",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-asan-progress.log",
+    "path": "review/broad-asan-progress.log",
+    "bytes": 126,
+    "sha256": "e54b5ba52a1527da7efc57d5a5867b9e393dd4923a50c25959c46489f04a201b",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-asan-public.log",
+    "path": "review/broad-asan-public.log",
+    "bytes": 119,
+    "sha256": "e317c43ecb747d49cfe6e483fed3f58d679209a37026f8ae3dc10fa3d405667c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-asan-smoke.log",
+    "path": "review/broad-asan-smoke.log",
+    "bytes": 164,
+    "sha256": "3601aef464784a89b513fe5af9c9c5fded2243ff50ede7aa1ba27385b9789b1e",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-asan-traverse.log",
+    "path": "review/broad-asan-traverse.log",
+    "bytes": 126,
+    "sha256": "4f6e15fd911342ae3a8bf248d693524d033447f54fe083e18551808c86878e78",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-assert-extra.log",
+    "path": "review/broad-assert-extra.log",
+    "bytes": 76,
+    "sha256": "1d6ed210c4f63866ef1e26b8fd20be3cb2582396bb58e41673fdb7fc203c2e59",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-assert-lease.log",
+    "path": "review/broad-assert-lease.log",
+    "bytes": 123,
+    "sha256": "a7af2600f9b77cbf02897e2f24f02929e9092a31a4246c0401f27b61508b43e5",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-assert-matrix.log",
+    "path": "review/broad-assert-matrix.log",
+    "bytes": 103,
+    "sha256": "7f10f0fc1b485c78099226c4111d2cbd51f4f2d7ca4c3ad2684e8ed547c77f5b",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-assert-progress.log",
+    "path": "review/broad-assert-progress.log",
+    "bytes": 132,
+    "sha256": "5c930f8106ac419e6680052f90325c2eedc54ffc1d9ccc3363a5dd532d7ee875",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-assert-public.log",
+    "path": "review/broad-assert-public.log",
+    "bytes": 125,
+    "sha256": "e51ea7925fe4eb52f86b8dde3fb5f4ff74b70970c0ad01ca1a131e5bc6e45dcb",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-assert-smoke.log",
+    "path": "review/broad-assert-smoke.log",
+    "bytes": 174,
+    "sha256": "149301055059c0267f373327cc9307c78b93c1caf68b340440cd933a0ed551ff",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-assert-traverse.log",
+    "path": "review/broad-assert-traverse.log",
+    "bytes": 132,
+    "sha256": "2e75b1867d102dafe4bb2494d7643a0336a9a320848e10bef7c6672df9a31aba",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-gcc-extra.log",
+    "path": "review/broad-gcc-extra.log",
+    "bytes": 67,
+    "sha256": "ba99917030e331aa4ac178aa470450e8d54b67934aae0991937e329a22a1c2bc",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-gcc-matrix.log",
+    "path": "review/broad-gcc-matrix.log",
+    "bytes": 97,
+    "sha256": "dcbada05872ae325dcfa350be72af65e9b5b4af674336e672e2dccf83ee9c636",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-gcc-public.log",
+    "path": "review/broad-gcc-public.log",
+    "bytes": 116,
+    "sha256": "395d03b5a62bac4b4d7726988404666d6a8b5cba42f2cc7c017d18565f99bb5c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-gcc-smoke.log",
+    "path": "review/broad-gcc-smoke.log",
+    "bytes": 159,
+    "sha256": "6f81ab347c78b6a2f518e88555eadbd6c9c13a88f652c71394ca3a23f46180c3",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-nobuf-extra.log",
+    "path": "review/broad-nobuf-extra.log",
+    "bytes": 47,
+    "sha256": "eba0c4aac54b3ebd3336a479680b3113b78ac7be4ac13a08d20ef21830739ef9",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-noffi-extra.log",
+    "path": "review/broad-noffi-extra.log",
+    "bytes": 66,
+    "sha256": "cf24a00c89e72cceb78136bf14cbfb546731b32f7345275075d5275d107bc0f6",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-nojit-extra.log",
+    "path": "review/broad-nojit-extra.log",
+    "bytes": 66,
+    "sha256": "8a4ee54039a2465849c3be1a79f6109327165f8bee43e2e079e6d1147696368a",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-results.json",
+    "path": "review/broad-results.json",
+    "bytes": 6040,
+    "sha256": "6b1b578c2c8a3b9f72221f10aacc8ed63dd348e7bd8a5e3982b3d94e1c47df78",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-tsan-extra.log",
+    "path": "review/broad-tsan-extra.log",
+    "bytes": 42,
+    "sha256": "d96ba517af23d654d4e6f34d2e880a3e2a38ae36132dbc7ae4cac5106f9b113a",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-tsan-lease.log",
+    "path": "review/broad-tsan-lease.log",
+    "bytes": 117,
+    "sha256": "634576a5f343f208c239cd8248e5d5c819df6fed827d655d6191e7675ea1696b",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-tsan-progress.log",
+    "path": "review/broad-tsan-progress.log",
+    "bytes": 126,
+    "sha256": "03cbdd166a6d458a728b7b9c55ce712238e3c83fc574a8d72b1fef093bc48c9f",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/broad-tsan-public.log",
+    "path": "review/broad-tsan-public.log",
+    "bytes": 119,
+    "sha256": "0aa17bc03fb66c5c0aef49b285632170addedd10ef495cc49ecabff8afc3559b",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/build.py",
+    "path": "review/build.py",
+    "bytes": 2585,
+    "sha256": "24021c67e09ee6ee63c9e71993e2e03aba172764d1160ed5cd7e723ad047e09e",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/canonical.py",
+    "path": "review/canonical.py",
+    "bytes": 1716,
+    "sha256": "e746cbe5d757861c2d70dfe67b2a9adc75deca2f819d7246d5fc68fd2ad8ad49",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/checks.py",
+    "path": "review/checks.py",
+    "bytes": 1690,
+    "sha256": "a70dd7c87b91d44d842051173832619796af5257e2bf327f285411b4c44f8438",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/core-asan-arena.log",
+    "path": "review/core-asan-arena.log",
+    "bytes": 794,
+    "sha256": "a414418bab825c976a617d7b661edcf75a5d9ee28bcdf132c4ae32acd51cbcc6",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/core-asan-plain.log",
+    "path": "review/core-asan-plain.log",
+    "bytes": 117,
+    "sha256": "414171c7a7d59fb5e47406dc627f067d025614ba4d1c68080b34b08978691ef3",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/core-asan-readers.log",
+    "path": "review/core-asan-readers.log",
+    "bytes": 123,
+    "sha256": "838639cb0fde8b5839cc47116631358c70450206622f0103ef4b774ade02b99e",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/core-asan-shrink.log",
+    "path": "review/core-asan-shrink.log",
+    "bytes": 120,
+    "sha256": "23a6da1e4d6031274bc1e6e78555f319cca3685439811edc5170498fecdc578c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/core-assert-plain.log",
+    "path": "review/core-assert-plain.log",
+    "bytes": 123,
+    "sha256": "5c7c979f7847617ca4a5e015a3e0581cbd436f7e13625f6d86c0016dec827e5a",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/core-assert-readers.log",
+    "path": "review/core-assert-readers.log",
+    "bytes": 129,
+    "sha256": "aebbf389e179d6b31f843690a18743843a39c56fbd1f6a26152d5195b7d42d4c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/core-assert-shrink.log",
+    "path": "review/core-assert-shrink.log",
+    "bytes": 126,
+    "sha256": "1dad0980a8dd19863b2f5d9ba81a2bd15fd09a1898eafba455dfa08fd44d6a39",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/core-results.json",
+    "path": "review/core-results.json",
+    "bytes": 2716,
+    "sha256": "eda845e0c04632ee6ed3a0757de5886605d0d6535eb8de757196458a51aba1e0",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/core-tsan-arena.log",
+    "path": "review/core-tsan-arena.log",
+    "bytes": 794,
+    "sha256": "66b8ca3eb761d664355545232f9ed4b3df488eef34b3c7d72c2ca0fec08ea87b",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/core-tsan-plain.log",
+    "path": "review/core-tsan-plain.log",
+    "bytes": 117,
+    "sha256": "cebeb258905148a13bf4c46f2f54f752e08867d7a9a2e2e5b6b7743df7b7a278",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/core-tsan-readers.log",
+    "path": "review/core-tsan-readers.log",
+    "bytes": 123,
+    "sha256": "68ef80c5ba188fe08f992cb422c97e92bafc2236858216fc5b9939876a40e7ed",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/core-tsan-shrink.log",
+    "path": "review/core-tsan-shrink.log",
+    "bytes": 120,
+    "sha256": "05e37e8c222349a41af5ee1d056616a082b578a349f1f694e19564e30c18af54",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/extra.py",
+    "path": "review/extra.py",
+    "bytes": 1883,
+    "sha256": "8154d06aac5b9ab700b94bc52c8c3edf2e9a17e4f436f46e15352cc1b026636c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/final-verification.json",
+    "path": "review/final-verification.json",
+    "bytes": 25084,
+    "sha256": "5c9b557c687ce7d2e46aee64a521628d2fe85e0220c236b0ecbbe3c9f132533c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture.tar.gz",
+    "path": "review/rebuild-fixture.tar.gz",
+    "bytes": 3796980,
+    "sha256": "6fe3c9a86d771d66a295b4eeb9cc77d444348238de8b3cbfcf69853bdc83c5b8",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/runtime-freeze.json",
+    "path": "review/runtime-freeze.json",
+    "bytes": 374,
+    "sha256": "8c112db5162e2791944e303919535af6bdadefb10adbc02b63855838093c476a",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/runtime.patch",
+    "path": "review/runtime.patch",
+    "bytes": 3034,
+    "sha256": "ef1c5946dbe9fa02b7ffa6edcb39c8ec7a91ec918ce0736bc566d5bc7fffe44b",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/setup.json",
+    "path": "review/setup.json",
+    "bytes": 469,
+    "sha256": "0aaedb80a65d3403fbd400b978f0f6de2874819bf1cc9e267cbac501fb594fee",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/source.patch",
+    "path": "review/source.patch",
+    "bytes": 4183,
+    "sha256": "6a0afa5c66df11ae281271d9d4a1b79c4d92002e0d94c4a0450a7259e0d86841",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+    "path": "review/validate.py",
+    "bytes": 4353,
+    "sha256": "4a895ce8fb140e15017867f697b191259329adcf921a6d49e66e369b07aa4685",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/verify.py",
+    "path": "review/verify.py",
+    "bytes": 2357,
+    "sha256": "56201f96eb0733b71c0b4e8ca4b6c01cfe050a1bb14bd4f427bcc41970242c93",
+    "copied": true
+  },
+  {
+    "source": "/workspaces/lj-lockless/tests/t-arena-rebuild-bump.c",
+    "path": "review/t-arena-rebuild-bump.c",
+    "bytes": 15795,
+    "sha256": "d2b3bd4b50720b84093141be3f928160b1065c49ff031ff743d54e3a71f27ba8",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/build.json",
+    "path": "validation/gcc/build.json",
+    "bytes": 131591,
+    "sha256": "0991d216937a288a73f09248ef70b4823bbada2cbcf9fa105c06cf35bb332422",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/build.log",
+    "path": "validation/gcc/build.log",
+    "bytes": 2444,
+    "sha256": "9e0e2f78c92f7940f8d7915a51b8130e19eb3885f76ec71c2b8f3330b87429f7",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-extra/jit-flush-gc-workers.stderr",
+    "path": "validation/gcc/check-extra/jit-flush-gc-workers.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-extra/jit-flush-gc-workers.stdout",
+    "path": "validation/gcc/check-extra/jit-flush-gc-workers.stdout",
+    "bytes": 90,
+    "sha256": "8fb336bdd56db831b5cbe34a2cca8e773d38070b8066a83a925ca360e324ad85",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-extra/large-buffer.stderr",
+    "path": "validation/gcc/check-extra/large-buffer.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-extra/large-buffer.stdout",
+    "path": "validation/gcc/check-extra/large-buffer.stdout",
+    "bytes": 30,
+    "sha256": "0165f7e531b58c50c39d871ac34b38cdf624da2783e82606731456fd8bcaa282",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-extra/results.json",
+    "path": "validation/gcc/check-extra/results.json",
+    "bytes": 674,
+    "sha256": "310eebccc1df76beb9c77c6dfb3054877fbd5c84b5047b32416ee1aec75b15cc",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-matrix/identities.json",
+    "path": "validation/gcc/check-matrix/identities.json",
+    "bytes": 425,
+    "sha256": "f7a895610a5bf240509a2cb3a042b433642fd1c2463d125521628fc53966fcc3",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-matrix/linux-x64-shared.stderr",
+    "path": "validation/gcc/check-matrix/linux-x64-shared.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-matrix/linux-x64-shared.stdout",
+    "path": "validation/gcc/check-matrix/linux-x64-shared.stdout",
+    "bytes": 2174,
+    "sha256": "506697ccb24ef075df19c6ce183b0f076a827afd75f685390accd16186cd31f0",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-matrix/results.json",
+    "path": "validation/gcc/check-matrix/results.json",
+    "bytes": 186,
+    "sha256": "6669d83be3a1aecab2792b689ac8268ba678d008411348050cda33d2d94b3d9b",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-matrix/summary.json",
+    "path": "validation/gcc/check-matrix/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-public/identities.json",
+    "path": "validation/gcc/check-public/identities.json",
+    "bytes": 433,
+    "sha256": "9cf10f400133d57a85b3e050664759cc8023be24e7aa42d3bb4732be5411c132",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-public/public-joff.stderr",
+    "path": "validation/gcc/check-public/public-joff.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-public/public-joff.stdout",
+    "path": "validation/gcc/check-public/public-joff.stdout",
+    "bytes": 30,
+    "sha256": "0165f7e531b58c50c39d871ac34b38cdf624da2783e82606731456fd8bcaa282",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-public/public-jon.stderr",
+    "path": "validation/gcc/check-public/public-jon.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-public/public-jon.stdout",
+    "path": "validation/gcc/check-public/public-jon.stdout",
+    "bytes": 30,
+    "sha256": "0165f7e531b58c50c39d871ac34b38cdf624da2783e82606731456fd8bcaa282",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-public/results.json",
+    "path": "validation/gcc/check-public/results.json",
+    "bytes": 611,
+    "sha256": "ee6144b9794f913f50f51a817adfe517eeb4202f878a4022cbc4a76043b165d3",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-public/summary.json",
+    "path": "validation/gcc/check-public/summary.json",
+    "bytes": 64,
+    "sha256": "b3ad69a6ff13ce7a2e492ba23a0afa82813a1bcd024fda10f3e85aeeab9cd2ea",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-smoke/buffer-joff.stderr",
+    "path": "validation/gcc/check-smoke/buffer-joff.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-smoke/buffer-joff.stdout",
+    "path": "validation/gcc/check-smoke/buffer-joff.stdout",
+    "bytes": 26,
+    "sha256": "cd9171c7ccf831a4cdb33d80bb365d9e0af1e5a837faf057655140ae3ae13fb5",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-smoke/buffer-jon.stderr",
+    "path": "validation/gcc/check-smoke/buffer-jon.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-smoke/buffer-jon.stdout",
+    "path": "validation/gcc/check-smoke/buffer-jon.stdout",
+    "bytes": 26,
+    "sha256": "cd9171c7ccf831a4cdb33d80bb365d9e0af1e5a837faf057655140ae3ae13fb5",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-smoke/consume",
+    "path": "validation/gcc/check-smoke/consume",
+    "bytes": 1873600,
+    "sha256": "9e0424b2dba2af96f3fe59d69581db5a5202457a9b9cc712d359316da25d03aa",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-smoke/consume-build.stderr",
+    "path": "validation/gcc/check-smoke/consume-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-smoke/consume-build.stdout",
+    "path": "validation/gcc/check-smoke/consume-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-smoke/consume.stderr",
+    "path": "validation/gcc/check-smoke/consume.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-smoke/consume.stdout",
+    "path": "validation/gcc/check-smoke/consume.stdout",
+    "bytes": 20,
+    "sha256": "45054d71fd77547c45a883c2d636f5d3120f27d1db34734e7d13d5dbfe543dd9",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-smoke/identities.json",
+    "path": "validation/gcc/check-smoke/identities.json",
+    "bytes": 718,
+    "sha256": "10ccdc68bdf7fedd9c0864cd1d3f469c2a55191892c3f287ec1690441bb6bd5d",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-smoke/results.json",
+    "path": "validation/gcc/check-smoke/results.json",
+    "bytes": 1505,
+    "sha256": "1c8d7958c480ae4ec6d0c9cdbfdc5438de3b8026816d0427cb5ef6caa96b81d8",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/check-smoke/summary.json",
+    "path": "validation/gcc/check-smoke/summary.json",
+    "bytes": 64,
+    "sha256": "099e3787a589e6726763c1240fe81141bed6c79af60745ccc389e4760a2f25d9",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/src/luajit",
+    "path": "validation/gcc/luajit",
+    "bytes": 1836368,
+    "sha256": "d15fc7a2ebd08fa04dc6759b27b522c4975263420caebdc545b0aec475d36eed",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/src/libluajit.a",
+    "path": "validation/gcc/libluajit.a",
+    "bytes": 2551794,
+    "sha256": "c880ce0ddee055eb92d71a31753ab13d883e95aea8f79d5ff3ba3805192029df",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/build.json",
+    "path": "validation/assert/build.json",
+    "bytes": 131868,
+    "sha256": "615cc94db895bc5493c60ae7979347565602fee42a40b9d9e5e02a57be785df7",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/build.log",
+    "path": "validation/assert/build.log",
+    "bytes": 2450,
+    "sha256": "6413f5a42904a6aa7920eae5721df8f380d9b99fdf4478d53a52b86f11b28da3",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/alloc",
+    "path": "validation/assert/check-arena/alloc",
+    "bytes": 975192,
+    "sha256": "b07778d393f569d0b76a39c89b1c917cd4e30f2de0f9073665c8de6724a0499b",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/alloc-build.stderr",
+    "path": "validation/assert/check-arena/alloc-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/alloc-build.stdout",
+    "path": "validation/assert/check-arena/alloc-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/alloc.stderr",
+    "path": "validation/assert/check-arena/alloc.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/alloc.stdout",
+    "path": "validation/assert/check-arena/alloc.stdout",
+    "bytes": 55,
+    "sha256": "9d858f3258b33d539040ba2d53469ebf04592b4b359179626f99805deabaa9d9",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/allocf",
+    "path": "validation/assert/check-arena/allocf",
+    "bytes": 981360,
+    "sha256": "e3251b0c96c28dd2f29b70a4f5c93feda2f3efa7a82c537fce863b4297554fca",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/allocf-build.stderr",
+    "path": "validation/assert/check-arena/allocf-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/allocf-build.stdout",
+    "path": "validation/assert/check-arena/allocf-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/allocf.stderr",
+    "path": "validation/assert/check-arena/allocf.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/allocf.stdout",
+    "path": "validation/assert/check-arena/allocf.stdout",
+    "bytes": 55,
+    "sha256": "1a49bc3ed48ec5f3ba3c11b9c50964a5e8bdbf43ea6332f351986d9407c9f988",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/bin-capacity",
+    "path": "validation/assert/check-arena/bin-capacity",
+    "bytes": 994224,
+    "sha256": "104d3fe1f05ec173ac1488ddb18553679145d5269a10330441b8ba9058d15545",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/bin-capacity-build.stderr",
+    "path": "validation/assert/check-arena/bin-capacity-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/bin-capacity-build.stdout",
+    "path": "validation/assert/check-arena/bin-capacity-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/bin-capacity.stderr",
+    "path": "validation/assert/check-arena/bin-capacity.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/bin-capacity.stdout",
+    "path": "validation/assert/check-arena/bin-capacity.stdout",
+    "bytes": 890,
+    "sha256": "2395ce2f81e2699a46cba218f956e0d6fa567edbaa43bcd53d0dcdfe2e2e9749",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/bitmap",
+    "path": "validation/assert/check-arena/bitmap",
+    "bytes": 966936,
+    "sha256": "004738bb3c763c843ecdd52b6d87ed42bff131c8330ca489c1e8a6a58581c3d0",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/bitmap-build.stderr",
+    "path": "validation/assert/check-arena/bitmap-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/bitmap-build.stdout",
+    "path": "validation/assert/check-arena/bitmap-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/bitmap.stderr",
+    "path": "validation/assert/check-arena/bitmap.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/bitmap.stdout",
+    "path": "validation/assert/check-arena/bitmap.stdout",
+    "bytes": 60,
+    "sha256": "23993253aa88fd338e189689092a8ef66141495daaf0e97c63963880330fc1f3",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/empty-reclaimed",
+    "path": "validation/assert/check-arena/empty-reclaimed",
+    "bytes": 1060568,
+    "sha256": "f93d888cd601adad1d42625793b9c05432b1c33d51ab8a473ac3e427faca8c3e",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/empty-reclaimed-build.stderr",
+    "path": "validation/assert/check-arena/empty-reclaimed-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/empty-reclaimed-build.stdout",
+    "path": "validation/assert/check-arena/empty-reclaimed-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/empty-reclaimed.stderr",
+    "path": "validation/assert/check-arena/empty-reclaimed.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/empty-reclaimed.stdout",
+    "path": "validation/assert/check-arena/empty-reclaimed.stdout",
+    "bytes": 35,
+    "sha256": "8eea1ad042cb52287a4042c56f14723e85aca7fd0f9563636c09875041ec7037",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/huge",
+    "path": "validation/assert/check-arena/huge",
+    "bytes": 965432,
+    "sha256": "6963ef251308c4d7b0d76454e2411e75c39834b5ba9a5e31c27e5bb182ccf3c7",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/huge-build.stderr",
+    "path": "validation/assert/check-arena/huge-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/huge-build.stdout",
+    "path": "validation/assert/check-arena/huge-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/huge.stderr",
+    "path": "validation/assert/check-arena/huge.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/huge.stdout",
+    "path": "validation/assert/check-arena/huge.stdout",
+    "bytes": 42,
+    "sha256": "d1927df12245e4d4149e7c24fc58538ca155940bb3d4fa8a9c4f2c4bffc1aeea",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/hugetab",
+    "path": "validation/assert/check-arena/hugetab",
+    "bytes": 1343216,
+    "sha256": "cceb2f6731a6aef0db7aec7a748078d91922f1a07fc5a7184d2e9d93eaf94c3e",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/hugetab-build.stderr",
+    "path": "validation/assert/check-arena/hugetab-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/hugetab-build.stdout",
+    "path": "validation/assert/check-arena/hugetab-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/hugetab.stderr",
+    "path": "validation/assert/check-arena/hugetab.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/hugetab.stdout",
+    "path": "validation/assert/check-arena/hugetab.stdout",
+    "bytes": 75,
+    "sha256": "57f8d12c0537677b958b12b11fadb44b174ef5821f78b1a8b6fe1893367240a0",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/identities.json",
+    "path": "validation/assert/check-arena/identities.json",
+    "bytes": 5020,
+    "sha256": "897983d37aabbc12dd327297c35651f0ac048ba36fd4e87a03e252e663360735",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/map",
+    "path": "validation/assert/check-arena/map",
+    "bytes": 970512,
+    "sha256": "9b29aa279facdda2ded65ed78a532c9c2765f3ca92c4e3fae55a78c0eab7ea49",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/map-build.stderr",
+    "path": "validation/assert/check-arena/map-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/map-build.stdout",
+    "path": "validation/assert/check-arena/map-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/map.stderr",
+    "path": "validation/assert/check-arena/map.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/map.stdout",
+    "path": "validation/assert/check-arena/map.stdout",
+    "bytes": 48,
+    "sha256": "6857339d8276eeabc43441f5839a31ac656903009cc5c948ac7989f9ad1843f8",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/plain-bin-progress",
+    "path": "validation/assert/check-arena/plain-bin-progress",
+    "bytes": 971808,
+    "sha256": "5a9f909693d4225a61dd2992173cb28469958f1baea14c95ddd259552a66e031",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/plain-bin-progress-build.stderr",
+    "path": "validation/assert/check-arena/plain-bin-progress-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/plain-bin-progress-build.stdout",
+    "path": "validation/assert/check-arena/plain-bin-progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/plain-bin-progress.stderr",
+    "path": "validation/assert/check-arena/plain-bin-progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/plain-bin-progress.stdout",
+    "path": "validation/assert/check-arena/plain-bin-progress.stdout",
+    "bytes": 63,
+    "sha256": "75d095970af3462088e490fb3c56fb61b8353c9fd6f08993f43db0835457a493",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/publication",
+    "path": "validation/assert/check-arena/publication",
+    "bytes": 966752,
+    "sha256": "5ff27046f42f6f20d727be3959a6a13acf1b43190d719f015f896e42195e4c4d",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/publication-build.stderr",
+    "path": "validation/assert/check-arena/publication-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/publication-build.stdout",
+    "path": "validation/assert/check-arena/publication-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/publication.stderr",
+    "path": "validation/assert/check-arena/publication.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/publication.stdout",
+    "path": "validation/assert/check-arena/publication.stdout",
+    "bytes": 52,
+    "sha256": "1dd1ded0bffba610564bb9de85a4c3e23a705a0f17ddf2b5fbb624997e899def",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/realloc",
+    "path": "validation/assert/check-arena/realloc",
+    "bytes": 971792,
+    "sha256": "38b1c0a1f924a812676aea7996d4cd60684e90b18c5634b5d6e6150cd50e0587",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/realloc-build.stderr",
+    "path": "validation/assert/check-arena/realloc-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/realloc-build.stdout",
+    "path": "validation/assert/check-arena/realloc-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/realloc.stderr",
+    "path": "validation/assert/check-arena/realloc.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/realloc.stdout",
+    "path": "validation/assert/check-arena/realloc.stdout",
+    "bytes": 56,
+    "sha256": "8d9f57ec493790f89ac9c81b40f6103b04c4687e4b47b49aa4e7325fe3852443",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/rebuild-bump",
+    "path": "validation/assert/check-arena/rebuild-bump",
+    "bytes": 1021512,
+    "sha256": "60f3ad37861ada89dea90be768e032e8a933c0cb37cf5a068d8f0f6ebca88dcc",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/rebuild-bump-build.stderr",
+    "path": "validation/assert/check-arena/rebuild-bump-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/rebuild-bump-build.stdout",
+    "path": "validation/assert/check-arena/rebuild-bump-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/rebuild-bump.stderr",
+    "path": "validation/assert/check-arena/rebuild-bump.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/rebuild-bump.stdout",
+    "path": "validation/assert/check-arena/rebuild-bump.stdout",
+    "bytes": 806,
+    "sha256": "cde0d2be5a67fa170430dd09f0df7912306cb43426e092a2570ac17fe455003f",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/remote-pending",
+    "path": "validation/assert/check-arena/remote-pending",
+    "bytes": 998128,
+    "sha256": "19b43a52f0ef2f68734e3d147f6f04af339c4597e37047b699f5adf43a74be26",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/remote-pending-build.stderr",
+    "path": "validation/assert/check-arena/remote-pending-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/remote-pending-build.stdout",
+    "path": "validation/assert/check-arena/remote-pending-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/remote-pending.stderr",
+    "path": "validation/assert/check-arena/remote-pending.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/remote-pending.stdout",
+    "path": "validation/assert/check-arena/remote-pending.stdout",
+    "bytes": 85,
+    "sha256": "a87339734b155b2b333f2f98c4e7c73dee58771a6fc3fd6289d43061307d1965",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/results.json",
+    "path": "validation/assert/check-arena/results.json",
+    "bytes": 19183,
+    "sha256": "c8aed57739b5dbf8da90132117d2395f6989e236584836ebe03e1411a0b26b7a",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/summary.json",
+    "path": "validation/assert/check-arena/summary.json",
+    "bytes": 65,
+    "sha256": "6c2944364f116bdaa7ec87278e891182fbe5c96a9ddea04aceb7747f5ac40ecf",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/sweep",
+    "path": "validation/assert/check-arena/sweep",
+    "bytes": 1165872,
+    "sha256": "f8ac445e9d6cf9627b09d91182ab3402119d954ce9e3af7a2d89d9480724d950",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/sweep-build.stderr",
+    "path": "validation/assert/check-arena/sweep-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/sweep-build.stdout",
+    "path": "validation/assert/check-arena/sweep-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/sweep.stderr",
+    "path": "validation/assert/check-arena/sweep.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-arena/sweep.stdout",
+    "path": "validation/assert/check-arena/sweep.stdout",
+    "bytes": 53,
+    "sha256": "ba8655ab9d9c75609804e992b6bc539fe74ab810d5d4e46910055fa183cf2436",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-extra/jit-flush-gc-workers.stderr",
+    "path": "validation/assert/check-extra/jit-flush-gc-workers.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-extra/jit-flush-gc-workers.stdout",
+    "path": "validation/assert/check-extra/jit-flush-gc-workers.stdout",
+    "bytes": 90,
+    "sha256": "8fb336bdd56db831b5cbe34a2cca8e773d38070b8066a83a925ca360e324ad85",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-extra/large-buffer.stderr",
+    "path": "validation/assert/check-extra/large-buffer.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-extra/large-buffer.stdout",
+    "path": "validation/assert/check-extra/large-buffer.stdout",
+    "bytes": 30,
+    "sha256": "0165f7e531b58c50c39d871ac34b38cdf624da2783e82606731456fd8bcaa282",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-extra/results.json",
+    "path": "validation/assert/check-extra/results.json",
+    "bytes": 679,
+    "sha256": "e2fc71b37204d35d99c4b093bbf572b7bda17181baee8f8b166b6e3ee5ea930b",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-lease/identities.json",
+    "path": "validation/assert/check-lease/identities.json",
+    "bytes": 579,
+    "sha256": "8d8190412b5f771477466dc49a818c8ab996b9a14d43a5906d6e0617fe02100f",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-lease/lease",
+    "path": "validation/assert/check-lease/lease",
+    "bytes": 2134240,
+    "sha256": "f9d7874de3df725ef8790300e26c3aa2965a3ba9d304f84946ef242e9aa8a17d",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-lease/progress-build.stderr",
+    "path": "validation/assert/check-lease/progress-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-lease/progress-build.stdout",
+    "path": "validation/assert/check-lease/progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-lease/progress.d",
+    "path": "validation/assert/check-lease/progress.d",
+    "bytes": 1074,
+    "sha256": "0f4e87218f62c3262899a7d142a0eb9c6f927e439b3ed962eebda486f3343a9c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-lease/progress.stderr",
+    "path": "validation/assert/check-lease/progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-lease/progress.stdout",
+    "path": "validation/assert/check-lease/progress.stdout",
+    "bytes": 74,
+    "sha256": "793151d9b677e5a011e7fd57f7c4a29ec7a4ab8d4e7b7a42b916bc6a27a0493b",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-lease/results.json",
+    "path": "validation/assert/check-lease/results.json",
+    "bytes": 1192,
+    "sha256": "5a3c1a1bdc12e70c06e821f1605509f361ce54503eee672c76b7bc90ed450555",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-lease/summary.json",
+    "path": "validation/assert/check-lease/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-matrix/identities.json",
+    "path": "validation/assert/check-matrix/identities.json",
+    "bytes": 434,
+    "sha256": "27456785511d6682633f71d9f55c3cccd3673cdec1e3d40f22cfa0ef77ed2cac",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-matrix/linux-x64-shared.stderr",
+    "path": "validation/assert/check-matrix/linux-x64-shared.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-matrix/linux-x64-shared.stdout",
+    "path": "validation/assert/check-matrix/linux-x64-shared.stdout",
+    "bytes": 2174,
+    "sha256": "506697ccb24ef075df19c6ce183b0f076a827afd75f685390accd16186cd31f0",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-matrix/results.json",
+    "path": "validation/assert/check-matrix/results.json",
+    "bytes": 186,
+    "sha256": "359fe1335f0bb020b7907404ed36a49a40b3b17ab0b733c89d55fa0d6679755f",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-matrix/summary.json",
+    "path": "validation/assert/check-matrix/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-plain/identities.json",
+    "path": "validation/assert/check-plain/identities.json",
+    "bytes": 575,
+    "sha256": "29d9af38c8d00451bb1e7b4d864fc583e0f48cf120d7cd5fd455994fd6cb1d8d",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-plain/plain",
+    "path": "validation/assert/check-plain/plain",
+    "bytes": 2271512,
+    "sha256": "319643b1e9984b71e4dda335fd762e64a840a7a0f9c5e661930f5293097eface",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-plain/progress-build.stderr",
+    "path": "validation/assert/check-plain/progress-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-plain/progress-build.stdout",
+    "path": "validation/assert/check-plain/progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-plain/progress.d",
+    "path": "validation/assert/check-plain/progress.d",
+    "bytes": 1504,
+    "sha256": "f24879a089bdadac2c16ec645a31cbb0300bdfdb5b78cca0a88b231a63aa95a5",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-plain/progress.stderr",
+    "path": "validation/assert/check-plain/progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-plain/progress.stdout",
+    "path": "validation/assert/check-plain/progress.stdout",
+    "bytes": 86,
+    "sha256": "81ca1369d1ba6afec5cb940190726f34a1e43280d5107e794e23ac99b3531c49",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-plain/results.json",
+    "path": "validation/assert/check-plain/results.json",
+    "bytes": 1185,
+    "sha256": "8c3905a95474b26f09547fba41bf6cc7a69a9c9b259b4a98645d7986ea364db7",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-plain/summary.json",
+    "path": "validation/assert/check-plain/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-progress/identities.json",
+    "path": "validation/assert/check-progress/identities.json",
+    "bytes": 580,
+    "sha256": "644d2736df72fd0b150f6c41c2c9c8ed446d76e4291c911f1052b48fe7232242",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-progress/progress",
+    "path": "validation/assert/check-progress/progress",
+    "bytes": 2248608,
+    "sha256": "a1bfee543617874f9faf04f2203009d0722ab13c863dc7b94f4edac68fbf58b1",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-progress/progress-build.stderr",
+    "path": "validation/assert/check-progress/progress-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-progress/progress-build.stdout",
+    "path": "validation/assert/check-progress/progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-progress/progress.d",
+    "path": "validation/assert/check-progress/progress.d",
+    "bytes": 1646,
+    "sha256": "03dd36fef09c75409facf44d59d257bc2e0199d1065cfa33e170e26de06c2a34",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-progress/progress.stderr",
+    "path": "validation/assert/check-progress/progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-progress/progress.stdout",
+    "path": "validation/assert/check-progress/progress.stdout",
+    "bytes": 21,
+    "sha256": "c9ee9c9dd6cbb90e0b587ca50d0948e3d370387cd2e18e6f77144c3701b6dfc2",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-progress/results.json",
+    "path": "validation/assert/check-progress/results.json",
+    "bytes": 1203,
+    "sha256": "382d788df550d5f7870e13f137433c1edef2de809e728625375303db27cc7c09",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-progress/summary.json",
+    "path": "validation/assert/check-progress/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-public/identities.json",
+    "path": "validation/assert/check-public/identities.json",
+    "bytes": 442,
+    "sha256": "a1574a24137a6a354e30eb1601cff65e558bce92dfeae2fe47cbefda77681dc8",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-public/public-joff.stderr",
+    "path": "validation/assert/check-public/public-joff.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-public/public-joff.stdout",
+    "path": "validation/assert/check-public/public-joff.stdout",
+    "bytes": 30,
+    "sha256": "0165f7e531b58c50c39d871ac34b38cdf624da2783e82606731456fd8bcaa282",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-public/public-jon.stderr",
+    "path": "validation/assert/check-public/public-jon.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-public/public-jon.stdout",
+    "path": "validation/assert/check-public/public-jon.stdout",
+    "bytes": 30,
+    "sha256": "0165f7e531b58c50c39d871ac34b38cdf624da2783e82606731456fd8bcaa282",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-public/results.json",
+    "path": "validation/assert/check-public/results.json",
+    "bytes": 622,
+    "sha256": "3a2eeb2edb554fa59efd88c5ae5d6db7a738e4a97394e22aed879e28e0fae970",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-public/summary.json",
+    "path": "validation/assert/check-public/summary.json",
+    "bytes": 64,
+    "sha256": "b3ad69a6ff13ce7a2e492ba23a0afa82813a1bcd024fda10f3e85aeeab9cd2ea",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-readers/identities.json",
+    "path": "validation/assert/check-readers/identities.json",
+    "bytes": 583,
+    "sha256": "a241580a24829b8dcdaf985378a089b44e3263085fac4907cadc44ef61ba0a65",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-readers/progress-build.stderr",
+    "path": "validation/assert/check-readers/progress-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-readers/progress-build.stdout",
+    "path": "validation/assert/check-readers/progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-readers/progress.d",
+    "path": "validation/assert/check-readers/progress.d",
+    "bytes": 1580,
+    "sha256": "dc5931283283dcc479ec9887d7d0a36eae7844afbdb05b79eab8816cb1527d01",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-readers/progress.stderr",
+    "path": "validation/assert/check-readers/progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-readers/progress.stdout",
+    "path": "validation/assert/check-readers/progress.stdout",
+    "bytes": 70,
+    "sha256": "97cb2a7b9f1e486c01bf633efb552141f83253a44f44f55eb7a109e5d191bf3a",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-readers/readers",
+    "path": "validation/assert/check-readers/readers",
+    "bytes": 2262440,
+    "sha256": "737dd238d07fc78fa3d9b120f767fbae8d6885603e6a54d5c882873d8f2e4dc6",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-readers/results.json",
+    "path": "validation/assert/check-readers/results.json",
+    "bytes": 1201,
+    "sha256": "20e4ede6950f0eaf8dc4b4a3fff0d103546a3b64f12225ea976807aa4f8f1d2f",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-readers/summary.json",
+    "path": "validation/assert/check-readers/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-shrink/identities.json",
+    "path": "validation/assert/check-shrink/identities.json",
+    "bytes": 579,
+    "sha256": "dbd8f9779a1b5469ac55879a456518805a22acff0b6afab6586a8a26857b7e42",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-shrink/progress-build.stderr",
+    "path": "validation/assert/check-shrink/progress-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-shrink/progress-build.stdout",
+    "path": "validation/assert/check-shrink/progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-shrink/progress.d",
+    "path": "validation/assert/check-shrink/progress.d",
+    "bytes": 1351,
+    "sha256": "1b0a21e35a00f73bfb730f9d3125aa8e2f6659694438a3364d0a02ce144de8d5",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-shrink/progress.stderr",
+    "path": "validation/assert/check-shrink/progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-shrink/progress.stdout",
+    "path": "validation/assert/check-shrink/progress.stdout",
+    "bytes": 83,
+    "sha256": "45df7dec91ae64263f3a30dbfd5743d499efc2b60b8a6fad934897b111d3715e",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-shrink/results.json",
+    "path": "validation/assert/check-shrink/results.json",
+    "bytes": 1196,
+    "sha256": "2841ccc0263f380640b959d90b524bee2f797e6f6619b28d21c65a883e4e88d4",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-shrink/shrink",
+    "path": "validation/assert/check-shrink/shrink",
+    "bytes": 2173600,
+    "sha256": "d3dcebb4faa99abd7b02d80b9ad4f4f6b54a3543b6faa477088b1eee3ece3f50",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-shrink/summary.json",
+    "path": "validation/assert/check-shrink/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-smoke/buffer-joff.stderr",
+    "path": "validation/assert/check-smoke/buffer-joff.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-smoke/buffer-joff.stdout",
+    "path": "validation/assert/check-smoke/buffer-joff.stdout",
+    "bytes": 26,
+    "sha256": "cd9171c7ccf831a4cdb33d80bb365d9e0af1e5a837faf057655140ae3ae13fb5",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-smoke/buffer-jon.stderr",
+    "path": "validation/assert/check-smoke/buffer-jon.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-smoke/buffer-jon.stdout",
+    "path": "validation/assert/check-smoke/buffer-jon.stdout",
+    "bytes": 26,
+    "sha256": "cd9171c7ccf831a4cdb33d80bb365d9e0af1e5a837faf057655140ae3ae13fb5",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-smoke/consume",
+    "path": "validation/assert/check-smoke/consume",
+    "bytes": 2236136,
+    "sha256": "624fe2a8ae20dbf33022e76c83a7e431b0dd5c5cded23562382debfd06e12859",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-smoke/consume-build.stderr",
+    "path": "validation/assert/check-smoke/consume-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-smoke/consume-build.stdout",
+    "path": "validation/assert/check-smoke/consume-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-smoke/consume.stderr",
+    "path": "validation/assert/check-smoke/consume.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-smoke/consume.stdout",
+    "path": "validation/assert/check-smoke/consume.stdout",
+    "bytes": 20,
+    "sha256": "45054d71fd77547c45a883c2d636f5d3120f27d1db34734e7d13d5dbfe543dd9",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-smoke/identities.json",
+    "path": "validation/assert/check-smoke/identities.json",
+    "bytes": 733,
+    "sha256": "c77dc47e7554e582155dddc41f6c2761a4a3c075e5842bc9f8f65bae08f67564",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-smoke/results.json",
+    "path": "validation/assert/check-smoke/results.json",
+    "bytes": 1698,
+    "sha256": "a162bc5957090f114e7f2e0eb5e06be86b741663066197398c909d1aad13743b",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-smoke/summary.json",
+    "path": "validation/assert/check-smoke/summary.json",
+    "bytes": 64,
+    "sha256": "099e3787a589e6726763c1240fe81141bed6c79af60745ccc389e4760a2f25d9",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-traverse/identities.json",
+    "path": "validation/assert/check-traverse/identities.json",
+    "bytes": 577,
+    "sha256": "2071d7137c4230f5533b11c84f19631187264d417446a65762e2002888c14500",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-traverse/progress-build.stderr",
+    "path": "validation/assert/check-traverse/progress-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-traverse/progress-build.stdout",
+    "path": "validation/assert/check-traverse/progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-traverse/progress.d",
+    "path": "validation/assert/check-traverse/progress.d",
+    "bytes": 2872,
+    "sha256": "0d2917e4178da861b79329753585dcbd41cb74d680ff4cc62b02d9a819f023e1",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-traverse/progress.stderr",
+    "path": "validation/assert/check-traverse/progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-traverse/progress.stdout",
+    "path": "validation/assert/check-traverse/progress.stdout",
+    "bytes": 47,
+    "sha256": "a9e1a5f7e7419dda5c5f1417e0c05c6de84aea5bde75ac503923721de367664f",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-traverse/results.json",
+    "path": "validation/assert/check-traverse/results.json",
+    "bytes": 1197,
+    "sha256": "84f32b893a97259f5c128afdbfa950109d5472f8aa65839661b192417dc5f496",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-traverse/summary.json",
+    "path": "validation/assert/check-traverse/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-traverse/traverse",
+    "path": "validation/assert/check-traverse/traverse",
+    "bytes": 3282768,
+    "sha256": "6e9d517bfebfa38ae6cc7e397d7f062b83c25f429cfae0afdd6368f09c08c395",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/src/luajit",
+    "path": "validation/assert/luajit",
+    "bytes": 2204104,
+    "sha256": "1bd2586a7ecd50ff4cfe52a4ce7d760b6e20067f3c3f67bb4eec40c000fdd8f7",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/src/libluajit.a",
+    "path": "validation/assert/libluajit.a",
+    "bytes": 3404946,
+    "sha256": "a82f85083fa1b8e7fd52ca47864fb1871dd02d42721f252ffddfd1617531a038",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/build.json",
+    "path": "validation/asan/build.json",
+    "bytes": 131943,
+    "sha256": "6538a1f9662ac7590817d2115d26c6bceb96566beb553f03cf11271d715bd613",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/build.log",
+    "path": "validation/asan/build.log",
+    "bytes": 2446,
+    "sha256": "e3fe69844cf3edc25e55a9ccc697e5e527bd372d5d0a7fc5c6a675337a6b64a9",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/alloc",
+    "path": "validation/asan/check-arena/alloc",
+    "bytes": 3080016,
+    "sha256": "bbe13bbffeefa5a7b3565b37c01f92e9bee4d5e9f0b7a957a4f26e7c511b21ec",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/alloc-build.stderr",
+    "path": "validation/asan/check-arena/alloc-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/alloc-build.stdout",
+    "path": "validation/asan/check-arena/alloc-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/alloc.stderr",
+    "path": "validation/asan/check-arena/alloc.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/alloc.stdout",
+    "path": "validation/asan/check-arena/alloc.stdout",
+    "bytes": 55,
+    "sha256": "9d858f3258b33d539040ba2d53469ebf04592b4b359179626f99805deabaa9d9",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/allocf",
+    "path": "validation/asan/check-arena/allocf",
+    "bytes": 3093488,
+    "sha256": "ef21e0e62de0658728bb5870ded5ab6e28b79bc1e7ffdf3aa5d5f13a91e95902",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/allocf-build.stderr",
+    "path": "validation/asan/check-arena/allocf-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/allocf-build.stdout",
+    "path": "validation/asan/check-arena/allocf-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/allocf.stderr",
+    "path": "validation/asan/check-arena/allocf.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/allocf.stdout",
+    "path": "validation/asan/check-arena/allocf.stdout",
+    "bytes": 55,
+    "sha256": "1a49bc3ed48ec5f3ba3c11b9c50964a5e8bdbf43ea6332f351986d9407c9f988",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/bin-capacity",
+    "path": "validation/asan/check-arena/bin-capacity",
+    "bytes": 3110536,
+    "sha256": "56879d7bac6b330d8f453ac24d87c1125f5a8b9e5d6d87524e77dfed181d157e",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/bin-capacity-build.stderr",
+    "path": "validation/asan/check-arena/bin-capacity-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/bin-capacity-build.stdout",
+    "path": "validation/asan/check-arena/bin-capacity-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/bin-capacity.stderr",
+    "path": "validation/asan/check-arena/bin-capacity.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/bin-capacity.stdout",
+    "path": "validation/asan/check-arena/bin-capacity.stdout",
+    "bytes": 890,
+    "sha256": "2395ce2f81e2699a46cba218f956e0d6fa567edbaa43bcd53d0dcdfe2e2e9749",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/bitmap",
+    "path": "validation/asan/check-arena/bitmap",
+    "bytes": 3059056,
+    "sha256": "b9b6e2e6271d00890b4893706b7d86c187b16a6ea5bc4b7bfba056b075f43557",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/bitmap-build.stderr",
+    "path": "validation/asan/check-arena/bitmap-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/bitmap-build.stdout",
+    "path": "validation/asan/check-arena/bitmap-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/bitmap.stderr",
+    "path": "validation/asan/check-arena/bitmap.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/bitmap.stdout",
+    "path": "validation/asan/check-arena/bitmap.stdout",
+    "bytes": 60,
+    "sha256": "23993253aa88fd338e189689092a8ef66141495daaf0e97c63963880330fc1f3",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/empty-reclaimed",
+    "path": "validation/asan/check-arena/empty-reclaimed",
+    "bytes": 3218624,
+    "sha256": "cc65577723d3aa5671bd440244f193cf49ef695c2252d92209b3b3ae0c343374",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/empty-reclaimed-build.stderr",
+    "path": "validation/asan/check-arena/empty-reclaimed-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/empty-reclaimed-build.stdout",
+    "path": "validation/asan/check-arena/empty-reclaimed-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/empty-reclaimed.stderr",
+    "path": "validation/asan/check-arena/empty-reclaimed.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/empty-reclaimed.stdout",
+    "path": "validation/asan/check-arena/empty-reclaimed.stdout",
+    "bytes": 35,
+    "sha256": "8eea1ad042cb52287a4042c56f14723e85aca7fd0f9563636c09875041ec7037",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/huge",
+    "path": "validation/asan/check-arena/huge",
+    "bytes": 3062440,
+    "sha256": "7f756e2fad0d1b3e575d2e1e6f39e6990218e940d34ecbb1078d498ada1eb6df",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/huge-build.stderr",
+    "path": "validation/asan/check-arena/huge-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/huge-build.stdout",
+    "path": "validation/asan/check-arena/huge-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/huge.stderr",
+    "path": "validation/asan/check-arena/huge.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/huge.stdout",
+    "path": "validation/asan/check-arena/huge.stdout",
+    "bytes": 42,
+    "sha256": "d1927df12245e4d4149e7c24fc58538ca155940bb3d4fa8a9c4f2c4bffc1aeea",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/hugetab",
+    "path": "validation/asan/check-arena/hugetab",
+    "bytes": 3641064,
+    "sha256": "82cd421ab95f489885e07f96af04bb6e4fc8d806736f920755c39662f5e4dc1e",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/hugetab-build.stderr",
+    "path": "validation/asan/check-arena/hugetab-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/hugetab-build.stdout",
+    "path": "validation/asan/check-arena/hugetab-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/hugetab.stderr",
+    "path": "validation/asan/check-arena/hugetab.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/hugetab.stdout",
+    "path": "validation/asan/check-arena/hugetab.stdout",
+    "bytes": 75,
+    "sha256": "57f8d12c0537677b958b12b11fadb44b174ef5821f78b1a8b6fe1893367240a0",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/identities.json",
+    "path": "validation/asan/check-arena/identities.json",
+    "bytes": 4952,
+    "sha256": "784600b244a297109c122f9f36ffd2c6fe30da8b314ff62e6c6f6352cdf10c62",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/map",
+    "path": "validation/asan/check-arena/map",
+    "bytes": 3068952,
+    "sha256": "ffe7b2f5ac78d26789e939de58210be49149f678822336a7a4b2eccea519cf94",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/map-build.stderr",
+    "path": "validation/asan/check-arena/map-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/map-build.stdout",
+    "path": "validation/asan/check-arena/map-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/map.stderr",
+    "path": "validation/asan/check-arena/map.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/map.stdout",
+    "path": "validation/asan/check-arena/map.stdout",
+    "bytes": 48,
+    "sha256": "6857339d8276eeabc43441f5839a31ac656903009cc5c948ac7989f9ad1843f8",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/plain-bin-progress",
+    "path": "validation/asan/check-arena/plain-bin-progress",
+    "bytes": 3068384,
+    "sha256": "43c1f9a96c64680a1f63f53e115554fec973ab089c9b7645db7eb38255cab620",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/plain-bin-progress-build.stderr",
+    "path": "validation/asan/check-arena/plain-bin-progress-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/plain-bin-progress-build.stdout",
+    "path": "validation/asan/check-arena/plain-bin-progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/plain-bin-progress.stderr",
+    "path": "validation/asan/check-arena/plain-bin-progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/plain-bin-progress.stdout",
+    "path": "validation/asan/check-arena/plain-bin-progress.stdout",
+    "bytes": 63,
+    "sha256": "75d095970af3462088e490fb3c56fb61b8353c9fd6f08993f43db0835457a493",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/publication",
+    "path": "validation/asan/check-arena/publication",
+    "bytes": 3058848,
+    "sha256": "5b43202c54877c15602d993450127d3a5cece3e99fb606df3f75a41b00ff98dc",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/publication-build.stderr",
+    "path": "validation/asan/check-arena/publication-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/publication-build.stdout",
+    "path": "validation/asan/check-arena/publication-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/publication.stderr",
+    "path": "validation/asan/check-arena/publication.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/publication.stdout",
+    "path": "validation/asan/check-arena/publication.stdout",
+    "bytes": 52,
+    "sha256": "1dd1ded0bffba610564bb9de85a4c3e23a705a0f17ddf2b5fbb624997e899def",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/realloc",
+    "path": "validation/asan/check-arena/realloc",
+    "bytes": 3075928,
+    "sha256": "810a256e5e7e174a2e25ea514986f5d63c7f725c9362edebe5e58d7265af4a8d",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/realloc-build.stderr",
+    "path": "validation/asan/check-arena/realloc-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/realloc-build.stdout",
+    "path": "validation/asan/check-arena/realloc-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/realloc.stderr",
+    "path": "validation/asan/check-arena/realloc.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/realloc.stdout",
+    "path": "validation/asan/check-arena/realloc.stdout",
+    "bytes": 56,
+    "sha256": "8d9f57ec493790f89ac9c81b40f6103b04c4687e4b47b49aa4e7325fe3852443",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/rebuild-bump",
+    "path": "validation/asan/check-arena/rebuild-bump",
+    "bytes": 3147624,
+    "sha256": "9f81304ab6ec156a723a29bddc2a7fcf09f7c56be1bd327427115693c4309b98",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/rebuild-bump-build.stderr",
+    "path": "validation/asan/check-arena/rebuild-bump-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/rebuild-bump-build.stdout",
+    "path": "validation/asan/check-arena/rebuild-bump-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/rebuild-bump.stderr",
+    "path": "validation/asan/check-arena/rebuild-bump.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/rebuild-bump.stdout",
+    "path": "validation/asan/check-arena/rebuild-bump.stdout",
+    "bytes": 806,
+    "sha256": "cde0d2be5a67fa170430dd09f0df7912306cb43426e092a2570ac17fe455003f",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/remote-pending",
+    "path": "validation/asan/check-arena/remote-pending",
+    "bytes": 3106936,
+    "sha256": "5eb6791f920857d386bd9bcc22d3e1e2ea09569013fb13a06a0941e12799476c",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/remote-pending-build.stderr",
+    "path": "validation/asan/check-arena/remote-pending-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/remote-pending-build.stdout",
+    "path": "validation/asan/check-arena/remote-pending-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/remote-pending.stderr",
+    "path": "validation/asan/check-arena/remote-pending.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/remote-pending.stdout",
+    "path": "validation/asan/check-arena/remote-pending.stdout",
+    "bytes": 85,
+    "sha256": "a87339734b155b2b333f2f98c4e7c73dee58771a6fc3fd6289d43061307d1965",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/results.json",
+    "path": "validation/asan/check-arena/results.json",
+    "bytes": 19593,
+    "sha256": "ba9039a4130908a58b933d27ca63b68dc69a2312a1222c3a868a9389f9c2985c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/summary.json",
+    "path": "validation/asan/check-arena/summary.json",
+    "bytes": 65,
+    "sha256": "6c2944364f116bdaa7ec87278e891182fbe5c96a9ddea04aceb7747f5ac40ecf",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/sweep",
+    "path": "validation/asan/check-arena/sweep",
+    "bytes": 3404408,
+    "sha256": "949760137a4913d83b6fb125fe7c5b2d243ae09a80d58e7aa829654f1c9a4ee9",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/sweep-build.stderr",
+    "path": "validation/asan/check-arena/sweep-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/sweep-build.stdout",
+    "path": "validation/asan/check-arena/sweep-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/sweep.stderr",
+    "path": "validation/asan/check-arena/sweep.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-arena/sweep.stdout",
+    "path": "validation/asan/check-arena/sweep.stdout",
+    "bytes": 53,
+    "sha256": "ba8655ab9d9c75609804e992b6bc539fe74ab810d5d4e46910055fa183cf2436",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-extra/jit-flush-gc-workers.stderr",
+    "path": "validation/asan/check-extra/jit-flush-gc-workers.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-extra/jit-flush-gc-workers.stdout",
+    "path": "validation/asan/check-extra/jit-flush-gc-workers.stdout",
+    "bytes": 90,
+    "sha256": "8fb336bdd56db831b5cbe34a2cca8e773d38070b8066a83a925ca360e324ad85",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-extra/large-buffer.stderr",
+    "path": "validation/asan/check-extra/large-buffer.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-extra/large-buffer.stdout",
+    "path": "validation/asan/check-extra/large-buffer.stdout",
+    "bytes": 30,
+    "sha256": "0165f7e531b58c50c39d871ac34b38cdf624da2783e82606731456fd8bcaa282",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-extra/results.json",
+    "path": "validation/asan/check-extra/results.json",
+    "bytes": 677,
+    "sha256": "46eee08b2df9951b1ab164388f645f23e5045ec6a10410b82490bb1d95d965fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-lease/identities.json",
+    "path": "validation/asan/check-lease/identities.json",
+    "bytes": 571,
+    "sha256": "002d6b6b61f457b6b18183487bba1e11b201a863774049c36404f9c57ab209e8",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-lease/lease",
+    "path": "validation/asan/check-lease/lease",
+    "bytes": 7156760,
+    "sha256": "387dab09665f952e3d88d58fb3325cc6d4731ef0113ce4aec47a1dff926a5dbd",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-lease/progress-build.stderr",
+    "path": "validation/asan/check-lease/progress-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-lease/progress-build.stdout",
+    "path": "validation/asan/check-lease/progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-lease/progress.d",
+    "path": "validation/asan/check-lease/progress.d",
+    "bytes": 1044,
+    "sha256": "2b32b0099f3599a6282a9787d3268b0f81742557c7eecebdcd8f351a27b9d867",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-lease/progress.stderr",
+    "path": "validation/asan/check-lease/progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-lease/progress.stdout",
+    "path": "validation/asan/check-lease/progress.stdout",
+    "bytes": 74,
+    "sha256": "793151d9b677e5a011e7fd57f7c4a29ec7a4ab8d4e7b7a42b916bc6a27a0493b",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-lease/results.json",
+    "path": "validation/asan/check-lease/results.json",
+    "bytes": 1225,
+    "sha256": "a765f41e16b78d5245d680505af6e7f89105cd96b2e3b4ad8d7c257a7fd3938f",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-lease/summary.json",
+    "path": "validation/asan/check-lease/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-matrix/identities.json",
+    "path": "validation/asan/check-matrix/identities.json",
+    "bytes": 428,
+    "sha256": "4fa0ef14f6d805b5370def8ab9f5d20b021358ca7b3de4d1138a9fa3eb868bfd",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-matrix/linux-x64-shared.stderr",
+    "path": "validation/asan/check-matrix/linux-x64-shared.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-matrix/linux-x64-shared.stdout",
+    "path": "validation/asan/check-matrix/linux-x64-shared.stdout",
+    "bytes": 2174,
+    "sha256": "da432fd4922b092e46dc93b6bf490bc57a183460021b40aa9b11ee63a031e32a",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-matrix/results.json",
+    "path": "validation/asan/check-matrix/results.json",
+    "bytes": 185,
+    "sha256": "5001ef9dfd920128a8c7409f6672a77de3a6c08d6ab76715789387ff9207a7e8",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-matrix/summary.json",
+    "path": "validation/asan/check-matrix/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-plain/identities.json",
+    "path": "validation/asan/check-plain/identities.json",
+    "bytes": 567,
+    "sha256": "482de047a7580b6bddf7ca1dae1ada5d438a867c2dc2f0271110ed9592842ac1",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-plain/plain",
+    "path": "validation/asan/check-plain/plain",
+    "bytes": 7461032,
+    "sha256": "f73055d82b3a5c32ca66b7bd9ac33d745219704f5d8a192ba3dc4506f16ed8d8",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-plain/progress-build.stderr",
+    "path": "validation/asan/check-plain/progress-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-plain/progress-build.stdout",
+    "path": "validation/asan/check-plain/progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-plain/progress.d",
+    "path": "validation/asan/check-plain/progress.d",
+    "bytes": 1462,
+    "sha256": "7c2545b8c685923476d2a756a2213d7aeb72903fca91fddcb1d8607a385d4ab8",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-plain/progress.stderr",
+    "path": "validation/asan/check-plain/progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-plain/progress.stdout",
+    "path": "validation/asan/check-plain/progress.stdout",
+    "bytes": 86,
+    "sha256": "81ca1369d1ba6afec5cb940190726f34a1e43280d5107e794e23ac99b3531c49",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-plain/results.json",
+    "path": "validation/asan/check-plain/results.json",
+    "bytes": 1220,
+    "sha256": "fc22797813f01cd0758c523dbcf700f0d404f5a97b1d0a39079406015d1b3c03",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-plain/summary.json",
+    "path": "validation/asan/check-plain/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-progress/identities.json",
+    "path": "validation/asan/check-progress/identities.json",
+    "bytes": 572,
+    "sha256": "596fd8afdc694c50c35e6f51a828502b78847dd27a1b92f375c1f98716319c04",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-progress/progress",
+    "path": "validation/asan/check-progress/progress",
+    "bytes": 7422776,
+    "sha256": "a10922bb8515b00cc8daadd08c04a99b69a1422764c95b941ab9325f97b6cefa",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-progress/progress-build.stderr",
+    "path": "validation/asan/check-progress/progress-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-progress/progress-build.stdout",
+    "path": "validation/asan/check-progress/progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-progress/progress.d",
+    "path": "validation/asan/check-progress/progress.d",
+    "bytes": 1600,
+    "sha256": "797da11b0fd260a97f6a546693d8e600e9095e7a1d744d9b4fe3bf9b1d42f493",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-progress/progress.stderr",
+    "path": "validation/asan/check-progress/progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-progress/progress.stdout",
+    "path": "validation/asan/check-progress/progress.stdout",
+    "bytes": 21,
+    "sha256": "c9ee9c9dd6cbb90e0b587ca50d0948e3d370387cd2e18e6f77144c3701b6dfc2",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-progress/results.json",
+    "path": "validation/asan/check-progress/results.json",
+    "bytes": 1235,
+    "sha256": "0cf3d4b698c07f10434fa596d9a305310d79e863ec28fc46abcc4af8813171eb",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-progress/summary.json",
+    "path": "validation/asan/check-progress/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-public/identities.json",
+    "path": "validation/asan/check-public/identities.json",
+    "bytes": 436,
+    "sha256": "bf91a038f6c3951ff36f1baf8fb8e0f505f6f66e32a1ad8b3c9a5fbd00991d20",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-public/public-joff.stderr",
+    "path": "validation/asan/check-public/public-joff.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-public/public-joff.stdout",
+    "path": "validation/asan/check-public/public-joff.stdout",
+    "bytes": 30,
+    "sha256": "0165f7e531b58c50c39d871ac34b38cdf624da2783e82606731456fd8bcaa282",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-public/public-jon.stderr",
+    "path": "validation/asan/check-public/public-jon.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-public/public-jon.stdout",
+    "path": "validation/asan/check-public/public-jon.stdout",
+    "bytes": 30,
+    "sha256": "0165f7e531b58c50c39d871ac34b38cdf624da2783e82606731456fd8bcaa282",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-public/results.json",
+    "path": "validation/asan/check-public/results.json",
+    "bytes": 614,
+    "sha256": "4613b028cc2703d4e0e351f4a431f8ff4b473f5e33ed558d06566db5f250950d",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-public/summary.json",
+    "path": "validation/asan/check-public/summary.json",
+    "bytes": 64,
+    "sha256": "b3ad69a6ff13ce7a2e492ba23a0afa82813a1bcd024fda10f3e85aeeab9cd2ea",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-readers/identities.json",
+    "path": "validation/asan/check-readers/identities.json",
+    "bytes": 575,
+    "sha256": "4b2fdaf0ebfd3b2d5b3e4c4e7fbe2e5ebc0ab1caea460c2970d033da0d0790a7",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-readers/progress-build.stderr",
+    "path": "validation/asan/check-readers/progress-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-readers/progress-build.stdout",
+    "path": "validation/asan/check-readers/progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-readers/progress.d",
+    "path": "validation/asan/check-readers/progress.d",
+    "bytes": 1536,
+    "sha256": "8c55414be1fb578bf78cc909fca86171dc6bb47b4271845f780d67d7836c4cd3",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-readers/progress.stderr",
+    "path": "validation/asan/check-readers/progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-readers/progress.stdout",
+    "path": "validation/asan/check-readers/progress.stdout",
+    "bytes": 70,
+    "sha256": "97cb2a7b9f1e486c01bf633efb552141f83253a44f44f55eb7a109e5d191bf3a",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-readers/readers",
+    "path": "validation/asan/check-readers/readers",
+    "bytes": 7450016,
+    "sha256": "4e7956e1e41b5881e6f54adf6c0595aadca1bdfc47e764137ada353399b153d7",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-readers/results.json",
+    "path": "validation/asan/check-readers/results.json",
+    "bytes": 1235,
+    "sha256": "6ef666f4ebbb888eaee4b1c2557f5f71f53be1cf558bdd7f58bce94e3ca0c3c7",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-readers/summary.json",
+    "path": "validation/asan/check-readers/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-shrink/identities.json",
+    "path": "validation/asan/check-shrink/identities.json",
+    "bytes": 571,
+    "sha256": "91c0394d7fcbaac37c7102369c7b2217e4597ea8b56f1a4d39909ddc613fe89b",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-shrink/progress-build.stderr",
+    "path": "validation/asan/check-shrink/progress-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-shrink/progress-build.stdout",
+    "path": "validation/asan/check-shrink/progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-shrink/progress.d",
+    "path": "validation/asan/check-shrink/progress.d",
+    "bytes": 1313,
+    "sha256": "942a5651a524ebb4c987a28067962c44014470b639e1ca3066755d15c1282a1e",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-shrink/progress.stderr",
+    "path": "validation/asan/check-shrink/progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-shrink/progress.stdout",
+    "path": "validation/asan/check-shrink/progress.stdout",
+    "bytes": 83,
+    "sha256": "45df7dec91ae64263f3a30dbfd5743d499efc2b60b8a6fad934897b111d3715e",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-shrink/results.json",
+    "path": "validation/asan/check-shrink/results.json",
+    "bytes": 1228,
+    "sha256": "877763d408b59739ac21c6b6581c75a8ccba8a03f6a58b607cf408614e646cc7",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-shrink/shrink",
+    "path": "validation/asan/check-shrink/shrink",
+    "bytes": 7223360,
+    "sha256": "4b046f2a03dbcd23bbb0481abf392b1c83e64c9d783b5789f6c3bdb6c5233a14",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-shrink/summary.json",
+    "path": "validation/asan/check-shrink/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-smoke/buffer-joff.stderr",
+    "path": "validation/asan/check-smoke/buffer-joff.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-smoke/buffer-joff.stdout",
+    "path": "validation/asan/check-smoke/buffer-joff.stdout",
+    "bytes": 26,
+    "sha256": "cd9171c7ccf831a4cdb33d80bb365d9e0af1e5a837faf057655140ae3ae13fb5",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-smoke/buffer-jon.stderr",
+    "path": "validation/asan/check-smoke/buffer-jon.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-smoke/buffer-jon.stdout",
+    "path": "validation/asan/check-smoke/buffer-jon.stdout",
+    "bytes": 26,
+    "sha256": "cd9171c7ccf831a4cdb33d80bb365d9e0af1e5a837faf057655140ae3ae13fb5",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-smoke/consume",
+    "path": "validation/asan/check-smoke/consume",
+    "bytes": 7401968,
+    "sha256": "c5287cca82bf5682fd67fb2ecaf5fe2d3aa3ce735d5724082aacca73d043bf4b",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-smoke/consume-build.stderr",
+    "path": "validation/asan/check-smoke/consume-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-smoke/consume-build.stdout",
+    "path": "validation/asan/check-smoke/consume-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-smoke/consume.stderr",
+    "path": "validation/asan/check-smoke/consume.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-smoke/consume.stdout",
+    "path": "validation/asan/check-smoke/consume.stdout",
+    "bytes": 20,
+    "sha256": "45054d71fd77547c45a883c2d636f5d3120f27d1db34734e7d13d5dbfe543dd9",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-smoke/identities.json",
+    "path": "validation/asan/check-smoke/identities.json",
+    "bytes": 723,
+    "sha256": "6202c45ce4738dcbc6545578983043d26041fe38f0fa8ba0899e418f5d35db82",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-smoke/results.json",
+    "path": "validation/asan/check-smoke/results.json",
+    "bytes": 1727,
+    "sha256": "3b75582ae11fa1640a272f3d3d98100f0379db8c39f792818ac55711ab667f70",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-smoke/summary.json",
+    "path": "validation/asan/check-smoke/summary.json",
+    "bytes": 64,
+    "sha256": "099e3787a589e6726763c1240fe81141bed6c79af60745ccc389e4760a2f25d9",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-traverse/identities.json",
+    "path": "validation/asan/check-traverse/identities.json",
+    "bytes": 569,
+    "sha256": "fb249150c0fa0391395c099768f00e0893b551890b8271277690efaf7ba5f10d",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-traverse/progress-build.stderr",
+    "path": "validation/asan/check-traverse/progress-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-traverse/progress-build.stdout",
+    "path": "validation/asan/check-traverse/progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-traverse/progress.d",
+    "path": "validation/asan/check-traverse/progress.d",
+    "bytes": 2792,
+    "sha256": "352d11c670ff82c29d53d916cbe071a8b279cc890b86b9316aa3fd95beff4727",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-traverse/progress.stderr",
+    "path": "validation/asan/check-traverse/progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-traverse/progress.stdout",
+    "path": "validation/asan/check-traverse/progress.stdout",
+    "bytes": 47,
+    "sha256": "a9e1a5f7e7419dda5c5f1417e0c05c6de84aea5bde75ac503923721de367664f",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-traverse/results.json",
+    "path": "validation/asan/check-traverse/results.json",
+    "bytes": 1229,
+    "sha256": "4ff741a9fe25c5752efc0776fb4d1ecf0fc0d126aba9f4021a0d86e7152ead42",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-traverse/summary.json",
+    "path": "validation/asan/check-traverse/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-traverse/traverse",
+    "path": "validation/asan/check-traverse/traverse",
+    "bytes": 8890512,
+    "sha256": "1b4cb3553100da9da71866f07644b8e7dd138c19c6c0d53914fb6a44ea8e4dc5",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/src/luajit",
+    "path": "validation/asan/luajit",
+    "bytes": 7380856,
+    "sha256": "cc7f9c27727fdf31cf0e66337d96e285632cd7ac430180e9520261d5ed6f4a27",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/src/libluajit.a",
+    "path": "validation/asan/libluajit.a",
+    "bytes": 10014836,
+    "sha256": "8a6253f3730705aba95e1b589adf013dbdc4876a9f1a381fbad8f3191fdf3da7",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/build.json",
+    "path": "validation/tsan/build.json",
+    "bytes": 132021,
+    "sha256": "4d78472a8ff7eec5477cd59f4bd464444808dbb58847edeae5a1d3ec1259a79b",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/build.log",
+    "path": "validation/tsan/build.log",
+    "bytes": 50131,
+    "sha256": "2d7e17c324d3337fdecf508f7e4f9d0697ab2c817c949b41bf153b9f23a2159e",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/alloc",
+    "path": "validation/tsan/check-arena/alloc",
+    "bytes": 1362872,
+    "sha256": "3f25e4ef8be616eeafb06d5aae4901dde6440a9204139808d1706a5814dc0688",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/alloc-build.stderr",
+    "path": "validation/tsan/check-arena/alloc-build.stderr",
+    "bytes": 9758,
+    "sha256": "ed214e62744370e03df3cf662f7d34c01a3ff846e74817a176e55a8d21af266c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/alloc-build.stdout",
+    "path": "validation/tsan/check-arena/alloc-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/alloc.stderr",
+    "path": "validation/tsan/check-arena/alloc.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/alloc.stdout",
+    "path": "validation/tsan/check-arena/alloc.stdout",
+    "bytes": 55,
+    "sha256": "9d858f3258b33d539040ba2d53469ebf04592b4b359179626f99805deabaa9d9",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/allocf",
+    "path": "validation/tsan/check-arena/allocf",
+    "bytes": 1349400,
+    "sha256": "2549834135d6ac94858b623297764e9176237bf60e633df770ed7dc4235f97f5",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/allocf-build.stderr",
+    "path": "validation/tsan/check-arena/allocf-build.stderr",
+    "bytes": 9758,
+    "sha256": "ed214e62744370e03df3cf662f7d34c01a3ff846e74817a176e55a8d21af266c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/allocf-build.stdout",
+    "path": "validation/tsan/check-arena/allocf-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/allocf.stderr",
+    "path": "validation/tsan/check-arena/allocf.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/allocf.stdout",
+    "path": "validation/tsan/check-arena/allocf.stdout",
+    "bytes": 55,
+    "sha256": "1a49bc3ed48ec5f3ba3c11b9c50964a5e8bdbf43ea6332f351986d9407c9f988",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/bin-capacity",
+    "path": "validation/tsan/check-arena/bin-capacity",
+    "bytes": 1382040,
+    "sha256": "8e78f0d4fb6fd45372f2bb98646ae9b64cbd178f66e4a9d1319675c61bfcfde9",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/bin-capacity-build.stderr",
+    "path": "validation/tsan/check-arena/bin-capacity-build.stderr",
+    "bytes": 9758,
+    "sha256": "ed214e62744370e03df3cf662f7d34c01a3ff846e74817a176e55a8d21af266c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/bin-capacity-build.stdout",
+    "path": "validation/tsan/check-arena/bin-capacity-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/bin-capacity.stderr",
+    "path": "validation/tsan/check-arena/bin-capacity.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/bin-capacity.stdout",
+    "path": "validation/tsan/check-arena/bin-capacity.stdout",
+    "bytes": 890,
+    "sha256": "2395ce2f81e2699a46cba218f956e0d6fa567edbaa43bcd53d0dcdfe2e2e9749",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/bitmap",
+    "path": "validation/tsan/check-arena/bitmap",
+    "bytes": 1339824,
+    "sha256": "4424dcebc2960cbee189769a89066ca5091890dc18de87a533728c2d53719d9b",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/bitmap-build.stderr",
+    "path": "validation/tsan/check-arena/bitmap-build.stderr",
+    "bytes": 9758,
+    "sha256": "ed214e62744370e03df3cf662f7d34c01a3ff846e74817a176e55a8d21af266c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/bitmap-build.stdout",
+    "path": "validation/tsan/check-arena/bitmap-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/bitmap.stderr",
+    "path": "validation/tsan/check-arena/bitmap.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/bitmap.stdout",
+    "path": "validation/tsan/check-arena/bitmap.stdout",
+    "bytes": 60,
+    "sha256": "23993253aa88fd338e189689092a8ef66141495daaf0e97c63963880330fc1f3",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/empty-reclaimed",
+    "path": "validation/tsan/check-arena/empty-reclaimed",
+    "bytes": 1464664,
+    "sha256": "446928d35cb228a60246bd40b76ff90360cd9b3a63464b9062a71e59421cb1c7",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/empty-reclaimed-build.stderr",
+    "path": "validation/tsan/check-arena/empty-reclaimed-build.stderr",
+    "bytes": 9758,
+    "sha256": "ed214e62744370e03df3cf662f7d34c01a3ff846e74817a176e55a8d21af266c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/empty-reclaimed-build.stdout",
+    "path": "validation/tsan/check-arena/empty-reclaimed-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/empty-reclaimed.stderr",
+    "path": "validation/tsan/check-arena/empty-reclaimed.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/empty-reclaimed.stdout",
+    "path": "validation/tsan/check-arena/empty-reclaimed.stdout",
+    "bytes": 35,
+    "sha256": "8eea1ad042cb52287a4042c56f14723e85aca7fd0f9563636c09875041ec7037",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/huge",
+    "path": "validation/tsan/check-arena/huge",
+    "bytes": 1329520,
+    "sha256": "7948545878f2f88d913bee1746d60a0b9287a1b48f0f0f7d2e3b3f158783049a",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/huge-build.stderr",
+    "path": "validation/tsan/check-arena/huge-build.stderr",
+    "bytes": 9758,
+    "sha256": "ed214e62744370e03df3cf662f7d34c01a3ff846e74817a176e55a8d21af266c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/huge-build.stdout",
+    "path": "validation/tsan/check-arena/huge-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/huge.stderr",
+    "path": "validation/tsan/check-arena/huge.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/huge.stdout",
+    "path": "validation/tsan/check-arena/huge.stdout",
+    "bytes": 42,
+    "sha256": "d1927df12245e4d4149e7c24fc58538ca155940bb3d4fa8a9c4f2c4bffc1aeea",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/hugetab",
+    "path": "validation/tsan/check-arena/hugetab",
+    "bytes": 1877304,
+    "sha256": "ba8575c427655ea910fe17f95c5a0528e72b794e7bcc608f49f67adc5283eab9",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/hugetab-build.stderr",
+    "path": "validation/tsan/check-arena/hugetab-build.stderr",
+    "bytes": 10450,
+    "sha256": "6a54ca40afcb24a5583f022d55a954a5c14c5d74d9ef4550e083503e0b38795e",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/hugetab-build.stdout",
+    "path": "validation/tsan/check-arena/hugetab-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/hugetab.stderr",
+    "path": "validation/tsan/check-arena/hugetab.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/hugetab.stdout",
+    "path": "validation/tsan/check-arena/hugetab.stdout",
+    "bytes": 75,
+    "sha256": "57f8d12c0537677b958b12b11fadb44b174ef5821f78b1a8b6fe1893367240a0",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/identities.json",
+    "path": "validation/tsan/check-arena/identities.json",
+    "bytes": 4952,
+    "sha256": "19e6c195208ceabed727d3099729bfa94e2acab913a67f42c26e21c80df7970b",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/map",
+    "path": "validation/tsan/check-arena/map",
+    "bytes": 1346464,
+    "sha256": "66973767e0a2778f343b3a09ae7f3f672f6a61952988324d9984f6179750a1dd",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/map-build.stderr",
+    "path": "validation/tsan/check-arena/map-build.stderr",
+    "bytes": 9758,
+    "sha256": "ed214e62744370e03df3cf662f7d34c01a3ff846e74817a176e55a8d21af266c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/map-build.stdout",
+    "path": "validation/tsan/check-arena/map-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/map.stderr",
+    "path": "validation/tsan/check-arena/map.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/map.stdout",
+    "path": "validation/tsan/check-arena/map.stdout",
+    "bytes": 48,
+    "sha256": "6857339d8276eeabc43441f5839a31ac656903009cc5c948ac7989f9ad1843f8",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/plain-bin-progress",
+    "path": "validation/tsan/check-arena/plain-bin-progress",
+    "bytes": 1349928,
+    "sha256": "117cf417f9e6bc2ba81ebf3d5ed26123f01d17a7cd2609d40ce24c2ea5b0b2a5",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/plain-bin-progress-build.stderr",
+    "path": "validation/tsan/check-arena/plain-bin-progress-build.stderr",
+    "bytes": 9758,
+    "sha256": "ed214e62744370e03df3cf662f7d34c01a3ff846e74817a176e55a8d21af266c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/plain-bin-progress-build.stdout",
+    "path": "validation/tsan/check-arena/plain-bin-progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/plain-bin-progress.stderr",
+    "path": "validation/tsan/check-arena/plain-bin-progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/plain-bin-progress.stdout",
+    "path": "validation/tsan/check-arena/plain-bin-progress.stdout",
+    "bytes": 63,
+    "sha256": "75d095970af3462088e490fb3c56fb61b8353c9fd6f08993f43db0835457a493",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/publication",
+    "path": "validation/tsan/check-arena/publication",
+    "bytes": 1336712,
+    "sha256": "6e26b5cd49825145e826e5706e7f1344dbc9636f23d4a7c03b81ce3b43344d78",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/publication-build.stderr",
+    "path": "validation/tsan/check-arena/publication-build.stderr",
+    "bytes": 9758,
+    "sha256": "ed214e62744370e03df3cf662f7d34c01a3ff846e74817a176e55a8d21af266c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/publication-build.stdout",
+    "path": "validation/tsan/check-arena/publication-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/publication.stderr",
+    "path": "validation/tsan/check-arena/publication.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/publication.stdout",
+    "path": "validation/tsan/check-arena/publication.stdout",
+    "bytes": 52,
+    "sha256": "1dd1ded0bffba610564bb9de85a4c3e23a705a0f17ddf2b5fbb624997e899def",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/realloc",
+    "path": "validation/tsan/check-arena/realloc",
+    "bytes": 1350680,
+    "sha256": "b1c35ace34f5f69f9ba7c78422320f242f96ca8b26d30021c53f2de11e79b8b5",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/realloc-build.stderr",
+    "path": "validation/tsan/check-arena/realloc-build.stderr",
+    "bytes": 9758,
+    "sha256": "ed214e62744370e03df3cf662f7d34c01a3ff846e74817a176e55a8d21af266c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/realloc-build.stdout",
+    "path": "validation/tsan/check-arena/realloc-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/realloc.stderr",
+    "path": "validation/tsan/check-arena/realloc.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/realloc.stdout",
+    "path": "validation/tsan/check-arena/realloc.stdout",
+    "bytes": 56,
+    "sha256": "8d9f57ec493790f89ac9c81b40f6103b04c4687e4b47b49aa4e7325fe3852443",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/rebuild-bump",
+    "path": "validation/tsan/check-arena/rebuild-bump",
+    "bytes": 1411072,
+    "sha256": "dd3b849c9b9f3b7ed5093f952ae46480edf160688960bbbb87574a17a3e35cf9",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/rebuild-bump-build.stderr",
+    "path": "validation/tsan/check-arena/rebuild-bump-build.stderr",
+    "bytes": 9758,
+    "sha256": "ed214e62744370e03df3cf662f7d34c01a3ff846e74817a176e55a8d21af266c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/rebuild-bump-build.stdout",
+    "path": "validation/tsan/check-arena/rebuild-bump-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/rebuild-bump.stderr",
+    "path": "validation/tsan/check-arena/rebuild-bump.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/rebuild-bump.stdout",
+    "path": "validation/tsan/check-arena/rebuild-bump.stdout",
+    "bytes": 806,
+    "sha256": "cde0d2be5a67fa170430dd09f0df7912306cb43426e092a2570ac17fe455003f",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/remote-pending",
+    "path": "validation/tsan/check-arena/remote-pending",
+    "bytes": 1375360,
+    "sha256": "e871d9f930418c90f1d23b13d1d83eb3747aeb3c87e66c9bd62b46cd5cc22f39",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/remote-pending-build.stderr",
+    "path": "validation/tsan/check-arena/remote-pending-build.stderr",
+    "bytes": 9758,
+    "sha256": "ed214e62744370e03df3cf662f7d34c01a3ff846e74817a176e55a8d21af266c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/remote-pending-build.stdout",
+    "path": "validation/tsan/check-arena/remote-pending-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/remote-pending.stderr",
+    "path": "validation/tsan/check-arena/remote-pending.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/remote-pending.stdout",
+    "path": "validation/tsan/check-arena/remote-pending.stdout",
+    "bytes": 85,
+    "sha256": "a87339734b155b2b333f2f98c4e7c73dee58771a6fc3fd6289d43061307d1965",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/results.json",
+    "path": "validation/tsan/check-arena/results.json",
+    "bytes": 20370,
+    "sha256": "efea797c69cb39de3aa8600ba7d16ba12627e2447703bbc34c3a29db7cfa890f",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/summary.json",
+    "path": "validation/tsan/check-arena/summary.json",
+    "bytes": 65,
+    "sha256": "6c2944364f116bdaa7ec87278e891182fbe5c96a9ddea04aceb7747f5ac40ecf",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/sweep",
+    "path": "validation/tsan/check-arena/sweep",
+    "bytes": 1664424,
+    "sha256": "5b9a6139649ba227cb49f31418e300efa57616fd6de8ecbec0f7620f034b9a2a",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/sweep-build.stderr",
+    "path": "validation/tsan/check-arena/sweep-build.stderr",
+    "bytes": 9758,
+    "sha256": "ed214e62744370e03df3cf662f7d34c01a3ff846e74817a176e55a8d21af266c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/sweep-build.stdout",
+    "path": "validation/tsan/check-arena/sweep-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/sweep.stderr",
+    "path": "validation/tsan/check-arena/sweep.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-arena/sweep.stdout",
+    "path": "validation/tsan/check-arena/sweep.stdout",
+    "bytes": 53,
+    "sha256": "ba8655ab9d9c75609804e992b6bc539fe74ab810d5d4e46910055fa183cf2436",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-extra/large-buffer.stderr",
+    "path": "validation/tsan/check-extra/large-buffer.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-extra/large-buffer.stdout",
+    "path": "validation/tsan/check-extra/large-buffer.stdout",
+    "bytes": 30,
+    "sha256": "0165f7e531b58c50c39d871ac34b38cdf624da2783e82606731456fd8bcaa282",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-extra/results.json",
+    "path": "validation/tsan/check-extra/results.json",
+    "bytes": 327,
+    "sha256": "79b60bf818afafbd2c9adccc8b737139110cc692b855f88e84891b9b93217446",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-lease/identities.json",
+    "path": "validation/tsan/check-lease/identities.json",
+    "bytes": 571,
+    "sha256": "13e62a87475f9f91c41f8339d0938aeb1d3dea91250a503047730cac07815116",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-lease/lease",
+    "path": "validation/tsan/check-lease/lease",
+    "bytes": 2907528,
+    "sha256": "14ace7c6a55b2564e9f6b034165c72bc3d10439c6928ef8c5c1c906fe0e5a39d",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-lease/progress-build.stderr",
+    "path": "validation/tsan/check-lease/progress-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-lease/progress-build.stdout",
+    "path": "validation/tsan/check-lease/progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-lease/progress.d",
+    "path": "validation/tsan/check-lease/progress.d",
+    "bytes": 1227,
+    "sha256": "fcf2fa765c7375935ba0cba22d52dee1a470c912b033117ab42663f8c1a5fc39",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-lease/progress.stderr",
+    "path": "validation/tsan/check-lease/progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-lease/progress.stdout",
+    "path": "validation/tsan/check-lease/progress.stdout",
+    "bytes": 74,
+    "sha256": "793151d9b677e5a011e7fd57f7c4a29ec7a4ab8d4e7b7a42b916bc6a27a0493b",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-lease/results.json",
+    "path": "validation/tsan/check-lease/results.json",
+    "bytes": 1282,
+    "sha256": "f0e3232f0dafe1c003de1d7ace286f0a41742f23c4e067a84f594ebec2ac8c0e",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-lease/summary.json",
+    "path": "validation/tsan/check-lease/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-plain/identities.json",
+    "path": "validation/tsan/check-plain/identities.json",
+    "bytes": 567,
+    "sha256": "3d2be62af6965ec4b1633b00a10d3933e06fba8426e3559f695b83d500d845b7",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-plain/plain",
+    "path": "validation/tsan/check-plain/plain",
+    "bytes": 3085848,
+    "sha256": "67db4eecfb01133b4483987c284ed70b31df48bd91a27ea2b877d489bbf3e371",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-plain/progress-build.stderr",
+    "path": "validation/tsan/check-plain/progress-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-plain/progress-build.stdout",
+    "path": "validation/tsan/check-plain/progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-plain/progress.d",
+    "path": "validation/tsan/check-plain/progress.d",
+    "bytes": 1770,
+    "sha256": "2eea4a1e640bb733ca8d2b8d7573bbd7be9b120cb08742c0ba717a65f7f0ed19",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-plain/progress.stderr",
+    "path": "validation/tsan/check-plain/progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-plain/progress.stdout",
+    "path": "validation/tsan/check-plain/progress.stdout",
+    "bytes": 86,
+    "sha256": "81ca1369d1ba6afec5cb940190726f34a1e43280d5107e794e23ac99b3531c49",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-plain/results.json",
+    "path": "validation/tsan/check-plain/results.json",
+    "bytes": 1274,
+    "sha256": "8113dac9a9a183d522a6c2d0767aa24985743e2982fc93ad8682bfa066615cd2",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-plain/summary.json",
+    "path": "validation/tsan/check-plain/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-progress/identities.json",
+    "path": "validation/tsan/check-progress/identities.json",
+    "bytes": 572,
+    "sha256": "553fae61342483614448e20b1052c6fe86d581bc2fa6e42d759992af90a4825d",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-progress/progress",
+    "path": "validation/tsan/check-progress/progress",
+    "bytes": 3057584,
+    "sha256": "25573a6017a9611371595eb3da78bb7c000a7999c3bd91bbfb0e991cb91fd2ba",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-progress/progress-build.stderr",
+    "path": "validation/tsan/check-progress/progress-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-progress/progress-build.stdout",
+    "path": "validation/tsan/check-progress/progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-progress/progress.d",
+    "path": "validation/tsan/check-progress/progress.d",
+    "bytes": 1773,
+    "sha256": "031cfc401d8d44bca673f8da05e29991d7121561877a804fbfa55cf32003e17f",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-progress/progress.stderr",
+    "path": "validation/tsan/check-progress/progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-progress/progress.stdout",
+    "path": "validation/tsan/check-progress/progress.stdout",
+    "bytes": 21,
+    "sha256": "c9ee9c9dd6cbb90e0b587ca50d0948e3d370387cd2e18e6f77144c3701b6dfc2",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-progress/results.json",
+    "path": "validation/tsan/check-progress/results.json",
+    "bytes": 1292,
+    "sha256": "c3c13fa21ec76bb3cba5bb1e3138e896cefb5f8395d0eb98bcadab9ee06e64fc",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-progress/summary.json",
+    "path": "validation/tsan/check-progress/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-public/identities.json",
+    "path": "validation/tsan/check-public/identities.json",
+    "bytes": 436,
+    "sha256": "8dcf91d0c55fbdec93e5228c82a8fd60f5c1dc1824182bb8fdad90aa97c08812",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-public/public-joff.stderr",
+    "path": "validation/tsan/check-public/public-joff.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-public/public-joff.stdout",
+    "path": "validation/tsan/check-public/public-joff.stdout",
+    "bytes": 30,
+    "sha256": "0165f7e531b58c50c39d871ac34b38cdf624da2783e82606731456fd8bcaa282",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-public/public-jon.stderr",
+    "path": "validation/tsan/check-public/public-jon.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-public/public-jon.stdout",
+    "path": "validation/tsan/check-public/public-jon.stdout",
+    "bytes": 30,
+    "sha256": "0165f7e531b58c50c39d871ac34b38cdf624da2783e82606731456fd8bcaa282",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-public/results.json",
+    "path": "validation/tsan/check-public/results.json",
+    "bytes": 615,
+    "sha256": "576a08392f2fc6613da2ae84b05eab204c14ea1b9591ec72cf0224a3e27f1534",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-public/summary.json",
+    "path": "validation/tsan/check-public/summary.json",
+    "bytes": 64,
+    "sha256": "b3ad69a6ff13ce7a2e492ba23a0afa82813a1bcd024fda10f3e85aeeab9cd2ea",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-readers/identities.json",
+    "path": "validation/tsan/check-readers/identities.json",
+    "bytes": 575,
+    "sha256": "5bf98e77ccc4e4a6943d34d3931136a22062b413dd72327b53dea40c1578e06d",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-readers/progress-build.stderr",
+    "path": "validation/tsan/check-readers/progress-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-readers/progress-build.stdout",
+    "path": "validation/tsan/check-readers/progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-readers/progress.d",
+    "path": "validation/tsan/check-readers/progress.d",
+    "bytes": 1843,
+    "sha256": "62206c8a744dd6434bcefb482b7ef5f62f9d013b5ed85b748db494b50f45c1bf",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-readers/progress.stderr",
+    "path": "validation/tsan/check-readers/progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-readers/progress.stdout",
+    "path": "validation/tsan/check-readers/progress.stdout",
+    "bytes": 70,
+    "sha256": "97cb2a7b9f1e486c01bf633efb552141f83253a44f44f55eb7a109e5d191bf3a",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-readers/readers",
+    "path": "validation/tsan/check-readers/readers",
+    "bytes": 3076224,
+    "sha256": "2e5b0a28cd7a1989bf9ace33d3806557c7307cb08a6de56ebd1776d6cb35d5d3",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-readers/results.json",
+    "path": "validation/tsan/check-readers/results.json",
+    "bytes": 1291,
+    "sha256": "9736941a1c496d5d2ddbaf070ac044ce7848ff9ea40f51a24d3eb26aae7c3379",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-readers/summary.json",
+    "path": "validation/tsan/check-readers/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-shrink/identities.json",
+    "path": "validation/tsan/check-shrink/identities.json",
+    "bytes": 571,
+    "sha256": "c795b180354ae6fd4ddee091ec322fb7ea9b18573f436805871845de310a5ac4",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-shrink/progress-build.stderr",
+    "path": "validation/tsan/check-shrink/progress-build.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-shrink/progress-build.stdout",
+    "path": "validation/tsan/check-shrink/progress-build.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-shrink/progress.d",
+    "path": "validation/tsan/check-shrink/progress.d",
+    "bytes": 1558,
+    "sha256": "f7b2ab3f158def7a629e16890260357c09f943b347c276d614699da284f46959",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-shrink/progress.stderr",
+    "path": "validation/tsan/check-shrink/progress.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-shrink/progress.stdout",
+    "path": "validation/tsan/check-shrink/progress.stdout",
+    "bytes": 83,
+    "sha256": "45df7dec91ae64263f3a30dbfd5743d499efc2b60b8a6fad934897b111d3715e",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-shrink/results.json",
+    "path": "validation/tsan/check-shrink/results.json",
+    "bytes": 1284,
+    "sha256": "c83e6fa86e448961c3a3f4300a19618fee633683ca763906ac14e096d08ef4ee",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-shrink/shrink",
+    "path": "validation/tsan/check-shrink/shrink",
+    "bytes": 2960544,
+    "sha256": "c87c87167b938dd12c314c67031370de543ea58947b5a7eb9df7bf0057696edc",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-shrink/summary.json",
+    "path": "validation/tsan/check-shrink/summary.json",
+    "bytes": 64,
+    "sha256": "0befe9e44c128b938d71c1a6e8433c6de087dd3142a58bdbff0c513e5d5474fa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/src/luajit",
+    "path": "validation/tsan/luajit",
+    "bytes": 3005824,
+    "sha256": "98355f72128b93f321614d48be8a129ef07a2e9add8753b6d1b7856d77cce8c8",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/src/libluajit.a",
+    "path": "validation/tsan/libluajit.a",
+    "bytes": 5624698,
+    "sha256": "602ee462bc4916cc1993153568b87b23beb6d0c6dd8751a16b86cff2db0b6e2f",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/noffi/build.json",
+    "path": "validation/noffi/build.json",
+    "bytes": 131685,
+    "sha256": "828f7dba2db71761c447d303d236d3e22e90716cd754e70d4d9260c7a6082458",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/noffi/build.log",
+    "path": "validation/noffi/build.log",
+    "bytes": 13580,
+    "sha256": "2f79b367d7e6807be5fdd12d3cd3d7cf8e8edebaf6f37a7cb44fc49134d6cb01",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/noffi/check-extra/buffer-basic.stderr",
+    "path": "validation/noffi/check-extra/buffer-basic.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/noffi/check-extra/buffer-basic.stdout",
+    "path": "validation/noffi/check-extra/buffer-basic.stdout",
+    "bytes": 26,
+    "sha256": "cd9171c7ccf831a4cdb33d80bb365d9e0af1e5a837faf057655140ae3ae13fb5",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/noffi/check-extra/buffer-public.stderr",
+    "path": "validation/noffi/check-extra/buffer-public.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/noffi/check-extra/buffer-public.stdout",
+    "path": "validation/noffi/check-extra/buffer-public.stdout",
+    "bytes": 30,
+    "sha256": "0165f7e531b58c50c39d871ac34b38cdf624da2783e82606731456fd8bcaa282",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/noffi/check-extra/results.json",
+    "path": "validation/noffi/check-extra/results.json",
+    "bytes": 616,
+    "sha256": "548f5399f5ee5f957af510f1ed6d9b3082e1c0fed0dee9730112057fb6426b27",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/noffi/src/luajit",
+    "path": "validation/noffi/luajit",
+    "bytes": 1781736,
+    "sha256": "15b6d6e92b1ed47838b42652468172188bb73d68d08b0ad733d7c7a0148295de",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/noffi/src/libluajit.a",
+    "path": "validation/noffi/libluajit.a",
+    "bytes": 2613380,
+    "sha256": "5ebed4f6e02fc7846f27573b3dde4e5cd50ab5d135c0b219fb4306eb1566bb91",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/nojit/build.json",
+    "path": "validation/nojit/build.json",
+    "bytes": 131684,
+    "sha256": "d789b04a1c83943043d37ac376812467d0a804ff0deaa0b3244334173f0c3c5d",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/nojit/build.log",
+    "path": "validation/nojit/build.log",
+    "bytes": 2448,
+    "sha256": "605019fe07c8bee04c93cdc335c754d241ec3d9f774dc9a116c9b61218735693",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/nojit/check-extra/buffer-basic.stderr",
+    "path": "validation/nojit/check-extra/buffer-basic.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/nojit/check-extra/buffer-basic.stdout",
+    "path": "validation/nojit/check-extra/buffer-basic.stdout",
+    "bytes": 26,
+    "sha256": "cd9171c7ccf831a4cdb33d80bb365d9e0af1e5a837faf057655140ae3ae13fb5",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/nojit/check-extra/buffer-public.stderr",
+    "path": "validation/nojit/check-extra/buffer-public.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/nojit/check-extra/buffer-public.stdout",
+    "path": "validation/nojit/check-extra/buffer-public.stdout",
+    "bytes": 30,
+    "sha256": "0165f7e531b58c50c39d871ac34b38cdf624da2783e82606731456fd8bcaa282",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/nojit/check-extra/results.json",
+    "path": "validation/nojit/check-extra/results.json",
+    "bytes": 615,
+    "sha256": "d01fb863b59a4a632a9311673f98436ccb00814f4d99103e62fba268d7e78136",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/nojit/src/luajit",
+    "path": "validation/nojit/luajit",
+    "bytes": 1534680,
+    "sha256": "622fcd99875cb40449bc4a7970b57aeca6f4f7ed3eab6ecd00565dc5517d4fb1",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/nojit/src/libluajit.a",
+    "path": "validation/nojit/libluajit.a",
+    "bytes": 2269378,
+    "sha256": "82e43883acc07a2ab6027c650ceb1c9644238a6dfe58e1ff911518dc22c3527a",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/nobuf/build.json",
+    "path": "validation/nobuf/build.json",
+    "bytes": 131691,
+    "sha256": "eb9c3f7f7f60c0d18fd1539194b40d54f66af37e5491be76e4f8039eb96c41fe",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/nobuf/build.log",
+    "path": "validation/nobuf/build.log",
+    "bytes": 2448,
+    "sha256": "4164e6754d4c90ae2a4e0159e06aef8d1f186c27ae2b94c309188a24e769833f",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/nobuf/check-extra/disabled-buffer.stderr",
+    "path": "validation/nobuf/check-extra/disabled-buffer.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/nobuf/check-extra/disabled-buffer.stdout",
+    "path": "validation/nobuf/check-extra/disabled-buffer.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/nobuf/check-extra/results.json",
+    "path": "validation/nobuf/check-extra/results.json",
+    "bytes": 387,
+    "sha256": "2f7f6147830a89e6cf541289e9e2cdffb70e9830e9542c76b33d5fc1095b70c2",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/nobuf/src/luajit",
+    "path": "validation/nobuf/luajit",
+    "bytes": 2068784,
+    "sha256": "0518c4ea1b72fdb70da9f8a957c0bfebadbccf91f762491c703a4f1de4d4f421",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/nobuf/src/libluajit.a",
+    "path": "validation/nobuf/libluajit.a",
+    "bytes": 3029920,
+    "sha256": "f58c69762bb6795e67d7ae38b5e614f3123a695eb6cbce0650421bfe1cb8188c",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/canonical/inputs.json",
+    "path": "canonical/inputs.json",
+    "bytes": 20435,
+    "sha256": "ef132d5e9faebe05c71d8c89c6bfd2521f51dbe40a5fb16054a5dd34c2ee44c1",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/canonical/result.json",
+    "path": "canonical/result.json",
+    "bytes": 1290,
+    "sha256": "ea2fee2c276dd4b749afd803c11518b47c9c383325ccc0791ff19d4910633248",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/canonical/stderr",
+    "path": "canonical/stderr",
+    "bytes": 4288,
+    "sha256": "5f35710f8049c5b09723ad354fe78219cf0ce79ad39d3f9f08498ef91fad992d",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/canonical/stdout",
+    "path": "canonical/stdout",
+    "bytes": 43971,
+    "sha256": "5034af1c9b0c38671841ed7a0cd33d182c44018040164f2694e6d7482f978e4b",
+    "copied": true
+  },
+  {
+    "source": "/workspaces/lj-lockless/src/.lj-test-build-signature",
+    "path": "canonical/default-build-signature.txt",
+    "bytes": 453,
+    "sha256": "71bc8db2a224741bd8509d883604b925439b1a1029d8a246deddc8a037684d9e",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/MANIFEST.sha256.json",
+    "path": "rebuild-fixture/MANIFEST.sha256.json",
+    "bytes": 10321,
+    "sha256": "031fc9ba0a8f13b72b6af22fe0e9f234794d014c12111cd782633987cdb13287",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/REPORT.md",
+    "path": "rebuild-fixture/REPORT.md",
+    "bytes": 5934,
+    "sha256": "88aa8361789d8d8b1b44cdf331f0916f4e6a122f69d9ee49b262a0cd7f93f357",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/SHA256SUMS",
+    "path": "rebuild-fixture/SHA256SUMS",
+    "bytes": 9719,
+    "sha256": "3ac837beb0ab152ad3271413c24f1f8f698f1f790f867fcbc775d11dbd3c2476",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline",
+    "path": "rebuild-fixture/baseline",
+    "bytes": 1801560,
+    "sha256": "fe13ce74f14480a5d536643aa583c4d2308fa0760189fcafd8d42ea1e52a7e32",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-build.json",
+    "path": "rebuild-fixture/baseline-build.json",
+    "bytes": 131488,
+    "sha256": "664b6a1b2ecb49d6a822dbe7caf87c4cfdb7aac4928969f78a0fdf3be73df2c1",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-compile.json",
+    "path": "rebuild-fixture/baseline-compile.json",
+    "bytes": 719,
+    "sha256": "7dac5412aaf9c862434bc124d70d481f42a09eae4652db6358f0831fef6fee6e",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-compile.log",
+    "path": "rebuild-fixture/baseline-compile.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-identities.json",
+    "path": "rebuild-fixture/baseline-identities.json",
+    "bytes": 926,
+    "sha256": "44d967fe8f37808bc8a90a1457a5465f63fa303daef1ef35c189cf6d730e7caa",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-plain-crossing.json",
+    "path": "rebuild-fixture/baseline-plain-crossing.json",
+    "bytes": 494,
+    "sha256": "40a89950af443b918a62046e524f077c0ad8c174ae7b0c5befd0a82818bced63",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-plain-crossing.stderr",
+    "path": "rebuild-fixture/baseline-plain-crossing.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-plain-crossing.stdout",
+    "path": "rebuild-fixture/baseline-plain-crossing.stdout",
+    "bytes": 86,
+    "sha256": "f9a688e01da5e3dfa226b30b41895e60310efa4f36fb314491cecb3567f361cc",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-plain-exhausted.json",
+    "path": "rebuild-fixture/baseline-plain-exhausted.json",
+    "bytes": 508,
+    "sha256": "babba61be8d3d3366344e5bd19d6bfc447102ec69ba6c2d30cefbae5069d06f1",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-plain-exhausted.stderr",
+    "path": "rebuild-fixture/baseline-plain-exhausted.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-plain-exhausted.stdout",
+    "path": "rebuild-fixture/baseline-plain-exhausted.stdout",
+    "bytes": 80,
+    "sha256": "111a405130d45d0f48328f7e5a45c1593d03ada5c037f2705bebd73d3a4ef5a1",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-plain-interior.json",
+    "path": "rebuild-fixture/baseline-plain-interior.json",
+    "bytes": 494,
+    "sha256": "62f57da8ad928ff837fd805d69997273edc77866ad1e7fd7414b53c994c8fc89",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-plain-interior.stderr",
+    "path": "rebuild-fixture/baseline-plain-interior.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-plain-interior.stdout",
+    "path": "rebuild-fixture/baseline-plain-interior.stdout",
+    "bytes": 80,
+    "sha256": "6f8964ab379592cd7b453ad6564363216f50ceaec10be398727f97ddfe3b68a6",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-plain-tail.json",
+    "path": "rebuild-fixture/baseline-plain-tail.json",
+    "bytes": 485,
+    "sha256": "160f9e3ecafd6d2e71e5a3364538168a00ec159b90c6daffc597321a0475cedf",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-plain-tail.stderr",
+    "path": "rebuild-fixture/baseline-plain-tail.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-plain-tail.stdout",
+    "path": "rebuild-fixture/baseline-plain-tail.stdout",
+    "bytes": 72,
+    "sha256": "830ba457c46ee5851c5adee58d04302a584493f33c22864455c91d7a2217f7b2",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-plain-transfer.json",
+    "path": "rebuild-fixture/baseline-plain-transfer.json",
+    "bytes": 493,
+    "sha256": "06ad26c18cf9194fe522458bc78b85e787dd8f32057307ee01591bc65173d1da",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-plain-transfer.stderr",
+    "path": "rebuild-fixture/baseline-plain-transfer.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-plain-transfer.stdout",
+    "path": "rebuild-fixture/baseline-plain-transfer.stdout",
+    "bytes": 79,
+    "sha256": "eaa508bbeef7077b968ce784f6c437b03b28325fb8aa8c91eb5003dd442343e9",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-results.json",
+    "path": "rebuild-fixture/baseline-results.json",
+    "bytes": 5400,
+    "sha256": "e73311ca88b06aaa15045efb80f31d95e61e898548e91816a9818bed0c7e2093",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-source/src/lj_arena.c",
+    "path": "rebuild-fixture/baseline-source/src/lj_arena.c",
+    "bytes": 325626,
+    "sha256": "1a3420fe54b2450bedfeb0bca775f2625e6452459ac1da94598eac5a4acbfe29",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-source/src/lj_arena.h",
+    "path": "rebuild-fixture/baseline-source/src/lj_arena.h",
+    "bytes": 74753,
+    "sha256": "c9fb420ebd3c0b24bb77bcd61fe867bc10ca67086dc9f56d2947782afd55bcde",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-source/src/lj_prng.c",
+    "path": "rebuild-fixture/baseline-source/src/lj_prng.c",
+    "bytes": 8932,
+    "sha256": "d1109cdd8e6ff74139a2290b2144c5d48e9c3da88b0b6f6462be44d69ae7c2ad",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-source/tests/t-arena-tls-stub.c",
+    "path": "rebuild-fixture/baseline-source/tests/t-arena-tls-stub.c",
+    "bytes": 350,
+    "sha256": "c77bec4d1fa415bbfa741053e1eadb48f6cee1f32407046914a7ed526dd97b36",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-traversable-crossing.json",
+    "path": "rebuild-fixture/baseline-traversable-crossing.json",
+    "bytes": 511,
+    "sha256": "76276711f0ab4b99506aa56fd104c888bb66ccefdd8a364f481b8a1d7b5b201b",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-traversable-crossing.stderr",
+    "path": "rebuild-fixture/baseline-traversable-crossing.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-traversable-crossing.stdout",
+    "path": "rebuild-fixture/baseline-traversable-crossing.stdout",
+    "bytes": 92,
+    "sha256": "e7410944c1a995c7a008f961c42a9b1744c1bf4ed4de33da97954d6b4c088342",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-traversable-exhausted.json",
+    "path": "rebuild-fixture/baseline-traversable-exhausted.json",
+    "bytes": 521,
+    "sha256": "b7d4581bace7406cc4aa0aeb53c71dab0bba32178b2ef392ef511eebcf73872d",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-traversable-exhausted.stderr",
+    "path": "rebuild-fixture/baseline-traversable-exhausted.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-traversable-exhausted.stdout",
+    "path": "rebuild-fixture/baseline-traversable-exhausted.stdout",
+    "bytes": 86,
+    "sha256": "f70f0ae943c0ea99e8da7c7809448751b7f1f13f6d04baa91ceb2f0d853cf422",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-traversable-interior.json",
+    "path": "rebuild-fixture/baseline-traversable-interior.json",
+    "bytes": 505,
+    "sha256": "2168de0d0e93e075ff17fc92da5375c22f7295fcd390bdad5bdeb147ad92bb3e",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-traversable-interior.stderr",
+    "path": "rebuild-fixture/baseline-traversable-interior.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-traversable-interior.stdout",
+    "path": "rebuild-fixture/baseline-traversable-interior.stdout",
+    "bytes": 86,
+    "sha256": "66b3ca9125466d36147f283e5406969e1954164aa42cbd3981eac524c18b28bc",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-traversable-tail.json",
+    "path": "rebuild-fixture/baseline-traversable-tail.json",
+    "bytes": 497,
+    "sha256": "b77e294d123cfb64a9a15a2d15e984ce6769844d8d7252ae99d7aa8552614929",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-traversable-tail.stderr",
+    "path": "rebuild-fixture/baseline-traversable-tail.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-traversable-tail.stdout",
+    "path": "rebuild-fixture/baseline-traversable-tail.stdout",
+    "bytes": 78,
+    "sha256": "bedfe51c7af9a1ee70ca03eea3975a64138f2e945d27419af7241d637a9083ba",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-traversable-transfer.json",
+    "path": "rebuild-fixture/baseline-traversable-transfer.json",
+    "bytes": 519,
+    "sha256": "caf93a7f8a2035ff45b269a164525dd37c65c3a810b6cfb5d37b2b34c047f248",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-traversable-transfer.stderr",
+    "path": "rebuild-fixture/baseline-traversable-transfer.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/baseline-traversable-transfer.stdout",
+    "path": "rebuild-fixture/baseline-traversable-transfer.stdout",
+    "bytes": 85,
+    "sha256": "068575f33f97546ee5e6b70af099ef18204579466ac4b4069e9361a94281d5c8",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate",
+    "path": "rebuild-fixture/candidate",
+    "bytes": 1801560,
+    "sha256": "246405c872b2d7349b1ddf80a95ce2267c34e15bee70d592c43d0b390f28c14c",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-build.json",
+    "path": "rebuild-fixture/candidate-build.json",
+    "bytes": 131591,
+    "sha256": "0991d216937a288a73f09248ef70b4823bbada2cbcf9fa105c06cf35bb332422",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-compile.json",
+    "path": "rebuild-fixture/candidate-compile.json",
+    "bytes": 808,
+    "sha256": "ec1cea8ccea025bf1eb755044c2e1f3660ff4fe3cdf059322227dbb77929f74e",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-compile.log",
+    "path": "rebuild-fixture/candidate-compile.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-plain-crossing.json",
+    "path": "rebuild-fixture/candidate-plain-crossing.json",
+    "bytes": 495,
+    "sha256": "e058be400c766264f47cb50218e7b4595d82311dde0c01d72b8543f43eb1f7ea",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-plain-crossing.stderr",
+    "path": "rebuild-fixture/candidate-plain-crossing.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-plain-crossing.stdout",
+    "path": "rebuild-fixture/candidate-plain-crossing.stdout",
+    "bytes": 111,
+    "sha256": "e5b5c1aeeabbf8303e66e278ebf6f0a829d35e43df94a1fbf926d53087ac93cf",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-plain-exhausted.json",
+    "path": "rebuild-fixture/candidate-plain-exhausted.json",
+    "bytes": 510,
+    "sha256": "d039b69232a40fd08142032ed117a817f046d538a1f5798b93deaf0e6f2c023e",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-plain-exhausted.stderr",
+    "path": "rebuild-fixture/candidate-plain-exhausted.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-plain-exhausted.stdout",
+    "path": "rebuild-fixture/candidate-plain-exhausted.stdout",
+    "bytes": 105,
+    "sha256": "6f06b49687bc0ec4c658acb6afc7f377269ef9f2c28bec8d133e002f6717832c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-plain-interior.json",
+    "path": "rebuild-fixture/candidate-plain-interior.json",
+    "bytes": 495,
+    "sha256": "e0a56908766ff6bc785348bf38f090185523d788f536985f8a1ef5845c596658",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-plain-interior.stderr",
+    "path": "rebuild-fixture/candidate-plain-interior.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-plain-interior.stdout",
+    "path": "rebuild-fixture/candidate-plain-interior.stdout",
+    "bytes": 105,
+    "sha256": "6c01ca438567c257e03cc4c0bdecddcf7af2d0cf7d8ab2b8fe34823c702eb4ee",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-plain-tail.json",
+    "path": "rebuild-fixture/candidate-plain-tail.json",
+    "bytes": 487,
+    "sha256": "1a30b43b0237f8c4b0d2c3d6a76442c73ee5e9f6d555c413bda7a79339db240f",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-plain-tail.stderr",
+    "path": "rebuild-fixture/candidate-plain-tail.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-plain-tail.stdout",
+    "path": "rebuild-fixture/candidate-plain-tail.stdout",
+    "bytes": 72,
+    "sha256": "830ba457c46ee5851c5adee58d04302a584493f33c22864455c91d7a2217f7b2",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-plain-transfer.json",
+    "path": "rebuild-fixture/candidate-plain-transfer.json",
+    "bytes": 508,
+    "sha256": "e06964d9a5cc6430200e72fac96db3e9e9a1b151554fc09fc7f1f26b0e3eb2cd",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-plain-transfer.stderr",
+    "path": "rebuild-fixture/candidate-plain-transfer.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-plain-transfer.stdout",
+    "path": "rebuild-fixture/candidate-plain-transfer.stdout",
+    "bytes": 103,
+    "sha256": "15db5d74dc8da4605d29fac102979f550e296442ff02d35f5d8c3ef1aa860cae",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-results.json",
+    "path": "rebuild-fixture/candidate-results.json",
+    "bytes": 5406,
+    "sha256": "d46491e6a4275528258d33643faa5fddb450db502b155ffc60703fe13ab1d6d0",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-source/src/lj_arena.c",
+    "path": "rebuild-fixture/candidate-source/src/lj_arena.c",
+    "bytes": 326501,
+    "sha256": "471b215c6e54082b6c27c17bb3fb155e4baffc6de819842bbc578e979048dfbf",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-source/src/lj_arena.h",
+    "path": "rebuild-fixture/candidate-source/src/lj_arena.h",
+    "bytes": 74753,
+    "sha256": "c9fb420ebd3c0b24bb77bcd61fe867bc10ca67086dc9f56d2947782afd55bcde",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-source/src/lj_prng.c",
+    "path": "rebuild-fixture/candidate-source/src/lj_prng.c",
+    "bytes": 8932,
+    "sha256": "d1109cdd8e6ff74139a2290b2144c5d48e9c3da88b0b6f6462be44d69ae7c2ad",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-source/tests/t-arena-tls-stub.c",
+    "path": "rebuild-fixture/candidate-source/tests/t-arena-tls-stub.c",
+    "bytes": 350,
+    "sha256": "c77bec4d1fa415bbfa741053e1eadb48f6cee1f32407046914a7ed526dd97b36",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-standalone",
+    "path": "rebuild-fixture/candidate-standalone",
+    "bytes": 1142032,
+    "sha256": "991253dc5b2726dc5e98dd605b4b75c3ad0ef9a59e2f03e5ef55716ca6abe991",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-standalone-all.json",
+    "path": "rebuild-fixture/candidate-standalone-all.json",
+    "bytes": 205,
+    "sha256": "2a2b9d2afe12521433834efa95d99bb700dcf61c7b6db85269c42669141965cd",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-standalone-all.log",
+    "path": "rebuild-fixture/candidate-standalone-all.log",
+    "bytes": 806,
+    "sha256": "cde0d2be5a67fa170430dd09f0df7912306cb43426e092a2570ac17fe455003f",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-standalone-compile.json",
+    "path": "rebuild-fixture/candidate-standalone-compile.json",
+    "bytes": 716,
+    "sha256": "4fe293e79957392783d9b8f5e38747a0f6bc50924a5f85ef18022fea75d0eab5",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-standalone-compile.log",
+    "path": "rebuild-fixture/candidate-standalone-compile.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-traversable-crossing.json",
+    "path": "rebuild-fixture/candidate-traversable-crossing.json",
+    "bytes": 506,
+    "sha256": "84cb6b96a3131b574f347aecf9f29c1a69f461605d73ed6f5c30715f454bc256",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-traversable-crossing.stderr",
+    "path": "rebuild-fixture/candidate-traversable-crossing.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-traversable-crossing.stdout",
+    "path": "rebuild-fixture/candidate-traversable-crossing.stdout",
+    "bytes": 117,
+    "sha256": "eef7e3774649601df5261aa74dd98153c6b0a46cae22019ba76304545239475a",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-traversable-exhausted.json",
+    "path": "rebuild-fixture/candidate-traversable-exhausted.json",
+    "bytes": 508,
+    "sha256": "931c951b7f6df64211d4b9fc3a3bf55fcffd56cf935e80ca18f8ca2c1cc8d840",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-traversable-exhausted.stderr",
+    "path": "rebuild-fixture/candidate-traversable-exhausted.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-traversable-exhausted.stdout",
+    "path": "rebuild-fixture/candidate-traversable-exhausted.stdout",
+    "bytes": 111,
+    "sha256": "b317ff10ea624de7c16ec48d2efee63e29f85080fe1f09f0d73a4107a0b05e68",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-traversable-interior.json",
+    "path": "rebuild-fixture/candidate-traversable-interior.json",
+    "bytes": 507,
+    "sha256": "29f3ee9d34d3825f8ae38db2d8a1a674db085e882f6378e1da255fd2cd5acff7",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-traversable-interior.stderr",
+    "path": "rebuild-fixture/candidate-traversable-interior.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-traversable-interior.stdout",
+    "path": "rebuild-fixture/candidate-traversable-interior.stdout",
+    "bytes": 111,
+    "sha256": "b66518b44aff4cd24c0c2b10807152a41ed5b7b17462f03228a7a7a46a0b9ddb",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-traversable-tail.json",
+    "path": "rebuild-fixture/candidate-traversable-tail.json",
+    "bytes": 511,
+    "sha256": "a36ffb304e7eeeaa3df6d8b13a68afaaccdf7e7f61121303732d34af289d2d35",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-traversable-tail.stderr",
+    "path": "rebuild-fixture/candidate-traversable-tail.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-traversable-tail.stdout",
+    "path": "rebuild-fixture/candidate-traversable-tail.stdout",
+    "bytes": 78,
+    "sha256": "bedfe51c7af9a1ee70ca03eea3975a64138f2e945d27419af7241d637a9083ba",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-traversable-transfer.json",
+    "path": "rebuild-fixture/candidate-traversable-transfer.json",
+    "bytes": 506,
+    "sha256": "d9d404f8e79968a84ef7b36699743464d9af271397982902351c87f025d3f2bc",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-traversable-transfer.stderr",
+    "path": "rebuild-fixture/candidate-traversable-transfer.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-traversable-transfer.stdout",
+    "path": "rebuild-fixture/candidate-traversable-transfer.stdout",
+    "bytes": 109,
+    "sha256": "6be02846c0090cfbba5bb9f0cfc1ae1233e0d05f6dfbd9cafa677f244cc538cd",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/initial-tail-assumption/README.md",
+    "path": "rebuild-fixture/initial-tail-assumption/README.md",
+    "bytes": 698,
+    "sha256": "f60552a99805320707fb9a644d7d527ea3f7b4896ddbba930533f90862e28265",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/initial-tail-assumption/baseline",
+    "path": "rebuild-fixture/initial-tail-assumption/baseline",
+    "bytes": 1801624,
+    "sha256": "4c037b9fb83e3ba5e3700e51a0c3d5ac5122492e5623d39f02ac30926f4e510c",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/initial-tail-assumption/baseline-compile.json",
+    "path": "rebuild-fixture/initial-tail-assumption/baseline-compile.json",
+    "bytes": 719,
+    "sha256": "c5d69125adce59ab5391552d1e127bfbbaf6c5f127230d4442d99e4fdb84ea56",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/initial-tail-assumption/baseline-compile.log",
+    "path": "rebuild-fixture/initial-tail-assumption/baseline-compile.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/initial-tail-assumption/candidate-standalone",
+    "path": "rebuild-fixture/initial-tail-assumption/candidate-standalone",
+    "bytes": 1142096,
+    "sha256": "e8cfa95e189a770200d11157cfc4c04d4e3870791193ab71bca1fe0e5e9fb314",
+    "copied": false
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/initial-tail-assumption/candidate-standalone-all.json",
+    "path": "rebuild-fixture/initial-tail-assumption/candidate-standalone-all.json",
+    "bytes": 205,
+    "sha256": "aef0cdaa203cdb4008e1c6cf41ffadc911c7d7de792c781a0d8de4c4f3803dae",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/initial-tail-assumption/candidate-standalone-all.log",
+    "path": "rebuild-fixture/initial-tail-assumption/candidate-standalone-all.log",
+    "bytes": 689,
+    "sha256": "36eedd6d804f7c9d0106e0df6be9eb7264dc0cd846e9c45ec486f9f204b51451",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/initial-tail-assumption/candidate-standalone-compile.json",
+    "path": "rebuild-fixture/initial-tail-assumption/candidate-standalone-compile.json",
+    "bytes": 715,
+    "sha256": "04441f512d806a6b35d85f5985eb26b31bd3e330e66123d6619fdeb37777cd32",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/initial-tail-assumption/candidate-standalone-compile.log",
+    "path": "rebuild-fixture/initial-tail-assumption/candidate-standalone-compile.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/initial-tail-assumption/t-arena-rebuild-bump.c",
+    "path": "rebuild-fixture/initial-tail-assumption/t-arena-rebuild-bump.c",
+    "bytes": 15675,
+    "sha256": "776976c896598d68822f3d4e4fb81e938841ca78eef01dc7ad7ae6100e81cdaf",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/run-case.py",
+    "path": "rebuild-fixture/run-case.py",
+    "bytes": 1141,
+    "sha256": "7ef72d89c1141f56f52e261854970b31b555d03c855e88e7ad73a2c30a882972",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/t-arena-rebuild-bump.c",
+    "path": "rebuild-fixture/t-arena-rebuild-bump.c",
+    "bytes": 15795,
+    "sha256": "d2b3bd4b50720b84093141be3f928160b1065c49ff031ff743d54e3a71f27ba8",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/verification.json",
+    "path": "rebuild-fixture/verification.json",
+    "bytes": 886,
+    "sha256": "bc58bd207c859c73171c07248b0c00082692b6112b13020da127531a3a7f0f37",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-review.yycd0k1l/identity.json",
+    "path": "review/runtime/identity.json",
+    "bytes": 798,
+    "sha256": "8c7089d68653974cc2fb81600052d20320e27327dcacb66413cc8b071d1b0da4",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-review.yycd0k1l/lj_arena.after.c",
+    "path": "review/runtime/lj_arena.after.c",
+    "bytes": 326501,
+    "sha256": "471b215c6e54082b6c27c17bb3fb155e4baffc6de819842bbc578e979048dfbf",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-review.yycd0k1l/lj_arena.before.c",
+    "path": "review/runtime/lj_arena.before.c",
+    "bytes": 325626,
+    "sha256": "1a3420fe54b2450bedfeb0bca775f2625e6452459ac1da94598eac5a4acbfe29",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-review.yycd0k1l/review.txt",
+    "path": "review/runtime/review.txt",
+    "bytes": 8409,
+    "sha256": "9a41819ba728b9b8ac67dc1715c9dd80e427c73134f2979efe2bc8a43a421178",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-review.yycd0k1l/runtime.patch",
+    "path": "review/runtime/runtime.patch",
+    "bytes": 3034,
+    "sha256": "ef1c5946dbe9fa02b7ffa6edcb39c8ec7a91ec918ce0736bc566d5bc7fffe44b",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-audit-20261126-mf173ld2/SHA256SUMS",
+    "path": "review/ownership/SHA256SUMS",
+    "bytes": 1333,
+    "sha256": "5ae6285f0a3baaeb3b64521d12a3ea1cc21c9a6b0c6ff859744a485cb1306d7c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-audit-20261126-mf173ld2/baseline/src/lib_threading.c",
+    "path": "review/ownership/baseline/src/lib_threading.c",
+    "bytes": 80721,
+    "sha256": "48ebe966ec387cf122f0b64db7c2191877c3686a8dffc0c1487198ccddf4e8d8",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-audit-20261126-mf173ld2/baseline/src/lj_arena.c",
+    "path": "review/ownership/baseline/src/lj_arena.c",
+    "bytes": 325626,
+    "sha256": "1a3420fe54b2450bedfeb0bca775f2625e6452459ac1da94598eac5a4acbfe29",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-audit-20261126-mf173ld2/baseline/src/lj_arena.h",
+    "path": "review/ownership/baseline/src/lj_arena.h",
+    "bytes": 74753,
+    "sha256": "c9fb420ebd3c0b24bb77bcd61fe867bc10ca67086dc9f56d2947782afd55bcde",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-audit-20261126-mf173ld2/baseline/src/lj_buf.c",
+    "path": "review/ownership/baseline/src/lj_buf.c",
+    "bytes": 27906,
+    "sha256": "182614b26a2ecfcbfdabedadf00d3891065514fb4cff363f03b8c9cf290ce9cf",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-audit-20261126-mf173ld2/baseline/src/lj_func.c",
+    "path": "review/ownership/baseline/src/lj_func.c",
+    "bytes": 62107,
+    "sha256": "02948fe5942bb2f31f822f8cee918e2d393ddb85772bbc3ca0bf2ed22dfd5208",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-audit-20261126-mf173ld2/baseline/src/lj_gc.c",
+    "path": "review/ownership/baseline/src/lj_gc.c",
+    "bytes": 206265,
+    "sha256": "12361f5e801e7d2af8859bd04dd03bfab0bdc7583a1ea7c2c7949ea03874afbb",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-audit-20261126-mf173ld2/baseline/src/lj_gc2.c",
+    "path": "review/ownership/baseline/src/lj_gc2.c",
+    "bytes": 804534,
+    "sha256": "26ccc9581b0ff86832685a9691b3a7131292eb112500f02d8a9a0a542e59343a",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-audit-20261126-mf173ld2/baseline/src/lj_safepoint.c",
+    "path": "review/ownership/baseline/src/lj_safepoint.c",
+    "bytes": 54354,
+    "sha256": "e9f7694a8083c652951b1257264520afe930f5c8f18d411ef358d54f8c85536c",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-audit-20261126-mf173ld2/baseline/src/lj_tg.c",
+    "path": "review/ownership/baseline/src/lj_tg.c",
+    "bytes": 47686,
+    "sha256": "721c5f49d3abe06f2aa73a67c01bc28161e432b8e16b02fe6cb90eb553024fbd",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-audit-20261126-mf173ld2/baseline/tests/t-arena-hugetab.c",
+    "path": "review/ownership/baseline/tests/t-arena-hugetab.c",
+    "bytes": 143617,
+    "sha256": "1a88492d071f13b9e616c5d5d038962a8617c44e1d1d9c2685a0f56658540a1d",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-audit-20261126-mf173ld2/baseline/tests/t-arena-sweep.c",
+    "path": "review/ownership/baseline/tests/t-arena-sweep.c",
+    "bytes": 60163,
+    "sha256": "f9fd8f1ca0cc483112720c2cf26be13b6e85e4f8b893d9ecd185fccb6ed7503f",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-audit-20261126-mf173ld2/candidate/src/lj_arena.c",
+    "path": "review/ownership/candidate/src/lj_arena.c",
+    "bytes": 326501,
+    "sha256": "471b215c6e54082b6c27c17bb3fb155e4baffc6de819842bbc578e979048dfbf",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-audit-20261126-mf173ld2/candidate.diff",
+    "path": "review/ownership/candidate.diff",
+    "bytes": 3034,
+    "sha256": "ef1c5946dbe9fa02b7ffa6edcb39c8ec7a91ec918ce0736bc566d5bc7fffe44b",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-audit-20261126-mf173ld2/metadata.json",
+    "path": "review/ownership/metadata.json",
+    "bytes": 1297,
+    "sha256": "b503a32700bfca1e80eef2385c82bd9361d482f950026870a4bbd64128e34966",
+    "copied": true
+  },
+  {
+    "source": "/tmp/lj-arena-rebuild-bump-audit-20261126-mf173ld2/review.txt",
+    "path": "review/ownership/review.txt",
+    "bytes": 12367,
+    "sha256": "90abecda9a320ca9f31710a099c67eb17199035a81ed288b472e8d238f1a88b1",
+    "copied": true
+  }
+]

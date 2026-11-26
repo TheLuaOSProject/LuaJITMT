@@ -1,0 +1,47 @@
+[
+  {
+    "name": "progress-build",
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-readers/progress.d",
+      "-I/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/src",
+      "-I/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/tests",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/tests/t-arena-plain-progress.c",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/src/libluajit.a",
+      "-fsanitize=address",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-readers/readers"
+    ],
+    "seconds": 0.3645338019996416,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "progress",
+    "command": [
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-readers/readers"
+    ],
+    "seconds": 0.01567193999653682,
+    "exit": 0,
+    "test": true
+  }
+]

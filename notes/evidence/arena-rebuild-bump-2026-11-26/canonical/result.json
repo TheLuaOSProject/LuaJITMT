@@ -1,0 +1,47 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-7",
+    "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/src/luajit",
+    "tools/test.lua",
+    "m2_arena_rebuild_bump",
+    "m2_arena_bin_capacity",
+    "m2_arena_plain_shrink",
+    "m2_arena_plain_progress",
+    "m2_arena_alloc",
+    "m2_arena_plain_late",
+    "m2_arena_hugetab",
+    "m2_arena_publication",
+    "m2_arena_sweep",
+    "m2_arena_gcsweep",
+    "m2_arena_empty_reclaimed_runtime",
+    "m2_arena_gcphase"
+  ],
+  "gates": [
+    "m2_arena_rebuild_bump",
+    "m2_arena_bin_capacity",
+    "m2_arena_plain_shrink",
+    "m2_arena_plain_progress",
+    "m2_arena_alloc",
+    "m2_arena_plain_late",
+    "m2_arena_hugetab",
+    "m2_arena_publication",
+    "m2_arena_sweep",
+    "m2_arena_gcsweep",
+    "m2_arena_empty_reclaimed_runtime",
+    "m2_arena_gcphase"
+  ],
+  "exit": 0,
+  "seconds": 177.6030891769915,
+  "environment": {
+    "LUA_PATH": "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/gcc/src/?.lua;;",
+    "JOBS": "6"
+  },
+  "outputs": {
+    "luajit": "0d0c7738416277c701ba033b88c1b63b7c44b9f1520f8f232c72f258ca8bf51b",
+    "libluajit.a": "2925175aa03d26937ed6507fbd869501f6ba5cfc93b173ab2fc91b7fe776d444",
+    "libluajit.so": "b21845a55d724c6c7727719314d5e1803d9c56a22665aba807b52bb03fb96f7f"
+  },
+  "source_mismatches": []
+}

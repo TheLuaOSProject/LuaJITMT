@@ -1,0 +1,11 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-standalone",
+    "all"
+  ],
+  "exit": -6,
+  "seconds": 0.040197910013375804
+}

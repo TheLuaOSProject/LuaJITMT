@@ -1,0 +1,18 @@
+{
+  "case": "plain-exhausted",
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate",
+    "plain-exhausted"
+  ],
+  "exit": 0,
+  "utc_start": "2026-11-26T18:41:56.572097+00:00",
+  "utc_end": "2026-11-26T18:41:56.573762+00:00",
+  "seconds": 0.0016564269899390638,
+  "user_seconds": 0.0,
+  "system_seconds": 0.0013759999999999998,
+  "maxrss_kib": 9544,
+  "binary_sha256": "246405c872b2d7349b1ddf80a95ce2267c34e15bee70d592c43d0b390f28c14c"
+}

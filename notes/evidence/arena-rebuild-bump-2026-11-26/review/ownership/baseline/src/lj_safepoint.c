@@ -1,0 +1,1462 @@
+/*
+** Safepoint and soft-handshake scaffold.
+** Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
+*/
+
+#define lj_safepoint_c
+#define LUA_CORE
+
+#include "lj_obj.h"
+#include "lj_atomic.h"
+#include "lj_arena.h"
+#include "lj_ccall.h"
+#include "lj_dispatch.h"
+#include "lj_err.h"
+#include "lj_frame.h"
+#include "lj_gc2.h"
+#include "lj_mcode.h"
+#include "lj_oserr.h"
+#include "lj_profile.h"
+#include "lj_safepoint.h"
+#include "lj_state.h"
+#include "lj_str.h"
+#include "lj_tab.h"
+#include "lj_thr.h"
+#include "lj_tg.h"
+#include "lj_trace.h"
+
+#ifdef LJ_TRACE_TEST_HELPERS
+static TGState *safepoint_test_signal_pause_tg;
+static uint32_t safepoint_test_signal_pause_armed;
+static uint32_t safepoint_test_signal_pause_waiting;
+static uint32_t safepoint_test_signal_pause_release;
+static uint32_t safepoint_test_signal_resumed_poll_store_count;
+static uint32_t safepoint_test_signal_consumed_clear_count;
+static uint32_t safepoint_test_signal_clean_before_leave_count;
+
+void lj_safepoint_test_signal_pause_reset(void)
+{
+  la_storeptr_rel((void **)&safepoint_test_signal_pause_tg, NULL);
+  la_store32_rel(&safepoint_test_signal_pause_armed, 0);
+  la_store32_rel(&safepoint_test_signal_pause_waiting, 0);
+  la_store32_rel(&safepoint_test_signal_pause_release, 0);
+  la_store32_rel(&safepoint_test_signal_resumed_poll_store_count, 0);
+  la_store32_rel(&safepoint_test_signal_consumed_clear_count, 0);
+  la_store32_rel(&safepoint_test_signal_clean_before_leave_count, 0);
+}
+
+void lj_safepoint_test_signal_pause_arm(TGState *tg)
+{
+  if (!tg)
+    return;
+  lj_safepoint_test_signal_pause_reset();
+  la_storeptr_rel((void **)&safepoint_test_signal_pause_tg, tg);
+  la_store32_rel(&safepoint_test_signal_pause_armed, 1);
+}
+
+uint32_t lj_safepoint_test_signal_paused(void)
+{
+  return la_load32_acq(&safepoint_test_signal_pause_waiting);
+}
+
+void lj_safepoint_test_signal_pause_release(void)
+{
+  la_store32_rel(&safepoint_test_signal_pause_release, 1);
+}
+
+uint32_t lj_safepoint_test_signal_resumed_poll_stores(void)
+{
+  return la_load32_acq(&safepoint_test_signal_resumed_poll_store_count);
+}
+
+uint32_t lj_safepoint_test_signal_consumed_clears(void)
+{
+  return la_load32_acq(&safepoint_test_signal_consumed_clear_count);
+}
+
+uint32_t lj_safepoint_test_signal_clean_before_leaves(void)
+{
+  return la_load32_acq(&safepoint_test_signal_clean_before_leave_count);
+}
+
+static int safepoint_test_signal_pause_after_reqmask(TGState *tg)
+{
+  TGState *target = (TGState *)la_loadptr_acq(
+	(void *const *)&safepoint_test_signal_pause_tg);
+  uint32_t armed = 1;
+  if (target != tg ||
+      !la_cas32(&safepoint_test_signal_pause_armed, &armed, 0,
+		LA_ACQ_REL, LA_ACQ))
+    return 0;
+  la_store32_rel(&safepoint_test_signal_pause_waiting, 1);
+  while (la_load32_acq(&safepoint_test_signal_pause_release) == 0)
+    la_cpu_pause();
+  la_store32_rel(&safepoint_test_signal_pause_waiting, 0);
+  return 1;
+}
+
+static void safepoint_test_signal_note_resumed_poll(TGState *tg, int paused)
+{
+  TGState *target = (TGState *)la_loadptr_acq(
+	(void *const *)&safepoint_test_signal_pause_tg);
+  if (paused && target == tg)
+    (void)la_add32_acqrel(
+	&safepoint_test_signal_resumed_poll_store_count, 1);
+}
+
+static void safepoint_test_signal_note_consumed_clear(TGState *tg,
+					       uint64_t epoch)
+{
+  TGState *target = (TGState *)la_loadptr_acq(
+	(void *const *)&safepoint_test_signal_pause_tg);
+  if (target == tg && lj_tg_hs_epoch_ack_acq(tg) == epoch &&
+      lj_tg_reqmask_acq(tg) == 0 && lj_tg_poll_acq(tg) == 0 &&
+      la_load32_acq(&safepoint_test_signal_resumed_poll_store_count) != 0)
+    (void)la_add32_acqrel(&safepoint_test_signal_consumed_clear_count, 1);
+}
+
+static void safepoint_test_signal_note_before_leader_leave(global_State *g,
+						    uint64_t epoch)
+{
+  TGState *tg = (TGState *)la_loadptr_acq(
+	(void *const *)&safepoint_test_signal_pause_tg);
+  if (tg && tg->gl == g && gc2_hs_leader_acq(g) != 0 &&
+      lj_tg_hs_epoch_ack_acq(tg) == epoch &&
+      lj_tg_reqmask_acq(tg) == 0 && lj_tg_poll_acq(tg) == 0 &&
+      la_load32_acq(&safepoint_test_signal_consumed_clear_count) != 0)
+    (void)la_add32_acqrel(
+	&safepoint_test_signal_clean_before_leave_count, 1);
+}
+#else
+#define safepoint_test_signal_pause_after_reqmask(tg) ((void)(tg), 0)
+#define safepoint_test_signal_note_resumed_poll(tg, paused) \
+  ((void)(tg), (void)(paused))
+#define safepoint_test_signal_note_consumed_clear(tg, epoch) \
+  ((void)(tg), (void)(epoch))
+#define safepoint_test_signal_note_before_leader_leave(g, epoch) \
+  ((void)(g), (void)(epoch))
+#endif
+
+#if defined(LJ_GC2_TEST_HELPERS)
+static LJSafepointCompletionTestHook safepoint_completion_test_hook;
+
+void lj_safepoint_test_completion_hook(LJSafepointCompletionTestHook hook)
+{
+  la_storefunc_rel(&safepoint_completion_test_hook, hook);
+}
+
+static void safepoint_completion_test_pause(global_State *g, TGState *tg,
+					 uint64_t epoch, uint32_t point)
+{
+  LJSafepointCompletionTestHook hook =
+    la_loadfunc_acq(&safepoint_completion_test_hook);
+  if (hook)
+    hook(g, tg, epoch, point);
+}
+#else
+#define safepoint_completion_test_pause(g, tg, epoch, point) ((void)0)
+#endif
+
+static uint64_t safepoint_now_ns(void)
+{
+  return lj_thr_now_ns();
+}
+
+static uint32_t safepoint_latency_bucket(uint64_t ns)
+{
+  uint32_t bucket = 0;
+  while ((ns >>= 1) != 0 && bucket + 1u < LJ_GC2_HS_LATENCY_BUCKETS)
+    bucket++;
+  return bucket;
+}
+
+static void safepoint_note_ack_latency(global_State *g)
+{
+  uint64_t start, now, delta, old;
+  if (!g)
+    return;
+  start = gc2_hs_signal_ns_acq(g);
+  if (start == 0)
+    return;
+  now = safepoint_now_ns();
+  if (now < start)
+    return;
+  delta = now - start;
+  gc2_hs_ack_latency_samples_add(g, 1);
+  gc2_hs_ack_latency_sum_add(g, delta);
+  gc2_hs_ack_latency_bucket_add(g, safepoint_latency_bucket(delta), 1);
+  old = gc2_hs_ack_latency_max_acq(g);
+  while (delta > old) {
+    uint64_t expect = old;
+    if (gc2_hs_ack_latency_max_cas(g, &expect, delta))
+      break;
+    old = expect;
+  }
+}
+
+static int safepoint_wait_consumed_ack(TGState *tg, uint32_t actions)
+{
+  uint32_t poll;
+  /* A native-ack leader clears poll only after it finishes applying actions.
+  ** If this thread races with that consumed request, it must not resume the VM
+  ** while the leader may still be scanning its Lua stack. A late counted
+  ** request can publish reqmask and wake before this thread starts waiting,
+  ** without changing poll from one. Bound the wait so a lost same-value wake
+  ** cannot strand that request while the leader waits for its pending slot. */
+  while ((poll = lj_tg_poll_acq(tg)) != 0) {
+    global_State *g = tg->gl;
+    uint32_t tid = lj_tg_tid_acq(tg);
+    /* A trace-flush leader can re-enter native boundaries while it runs
+    ** leader-owned actions such as JIT dump events. It must not wait for its
+    ** own consumed poll: only the leader can clear that poll after the action
+    ** finishes.
+    */
+    if (g && tid != 0 && gc2_hs_leader_acq(g) == tid)
+      return 0;
+    /*
+    ** A trace-exit C frame keeps jit_base published through snapshot restore.
+    ** It is cleared either by the GC-defer path once restore is complete or by
+    ** vm_exit_interp before its poll check. If the earlier part of that frame
+    ** waits here, the leader waits for jit_base to clear and neither side can
+    ** progress. Defer the consumed-poll wait to the later GC/VM-exit boundary:
+    ** the trace slot is still protected by jit_base while this frame unwinds.
+    */
+    if ((actions & (LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)) &&
+	lj_tg_load_jit_base(tg) != NULL
+#if LJ_HASFFI && LJ_HASJIT
+	&& !lj_ffi_native_trace_consumed_poll_wait_required(tg)
+#endif
+	)
+      return 0;
+    if (lj_tg_reqmask_acq(tg) != 0)
+      return 1;
+    safepoint_completion_test_pause(g, tg, gc2_hs_epoch_acq(g),
+      LJ_SAFEPOINT_COMPLETION_TEST_BEFORE_WAIT);
+    lj_tg_poll_futex_wait(tg, poll, 1000000);
+  }
+  return 0;
+}
+
+static void safepoint_clear_poll(TGState *tg)
+{
+  lj_tg_poll_rel(tg, 0);
+  lj_tg_poll_futex_wake(tg, 1);
+}
+
+static void safepoint_restore_counted_poll(TGState *tg)
+{
+  la_fence_seq();
+  /* reqmask is the per-TG counted publication and precedes poll. A bare global
+  ** leader may already have completed this TG's only clear pass, so using it
+  ** here would manufacture an orphan poll after FRESH was consumed. */
+  if (tg && lj_tg_reqmask_acq(tg) != 0) {
+    lj_tg_poll_rel(tg, 1);
+    lj_tg_poll_futex_wake(tg, 1);
+  }
+}
+
+static void safepoint_rearm_fresh_stopreq_poll(TGState *tg)
+{
+  if (!tg || !lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH) ||
+      (lj_tg_load_cur_L(tg) == NULL && lj_tg_load_thread_L(tg) == NULL))
+    return;
+  lj_tg_poll_rel(tg, 1);
+  la_fence_seq();
+  if (!lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH)) {
+    /* checkstop won between the FRESH snapshot and poll publication. Remove
+    ** the orphan synthetic edge, then repair any newer counted request. */
+    safepoint_clear_poll(tg);
+    safepoint_restore_counted_poll(tg);
+    return;
+  }
+  lj_tg_poll_futex_wake(tg, 1);
+}
+
+static void safepoint_consume_fresh_stopreq_poll(TGState *tg)
+{
+  if (!tg)
+    return;
+  /* FRESH is the consume LP. A concurrent rearm which observed the old value
+  ** must detect its disappearance after publishing poll and remove that edge. */
+  (void)lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_STOPREQ_FRESH);
+  if (lj_tg_poll_acq(tg) == 0)
+    return;
+  safepoint_clear_poll(tg);
+  /* A new leader can publish between the poll snapshot and clear. Do not let
+  ** consuming the uncounted STOPREQ edge erase its counted signal. */
+  safepoint_restore_counted_poll(tg);
+}
+
+/* Each owner applies these phase-local actions before acknowledgement.
+** MARK and WEAK retain their marking barriers. The published SWEEP phase
+** protects new edges while its entry policy changes. Native entry and
+** physical sweep stay gated until all owners have switched. */
+static int safepoint_resumable_actions(uint32_t actions)
+{
+  switch (actions) {
+  case LJ_GC2_HS_RESUMABLE | LJ_SAFEPOINT_MARK_START_ACTIONS:
+  case LJ_GC2_HS_RESUMABLE | LJ_SAFEPOINT_SWEEP_START | LJ_GC2_HS_ALLOC_BLACK:
+  case LJ_GC2_HS_RESUMABLE | LJ_SAFEPOINT_SWEEP_START | LJ_GC2_HS_ALLOC_WHITE:
+  case LJ_GC2_HS_RESUMABLE | LJ_GC2_HS_ALLOC_WHITE | LJ_GC2_HS_ENABLE_BARRIER:
+  case LJ_GC2_HS_RESUMABLE | LJ_GC2_HS_ALLOC_WHITE | LJ_GC2_HS_DISABLE_BARRIER:
+  case LJ_GC2_HS_RESUMABLE | LJ_GC2_HS_RESET_ALLOC:
+  case LJ_GC2_HS_RESUMABLE | LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_FLUSH_SSB:
+  case LJ_GC2_HS_RESUMABLE | LJ_GC2_HS_SCAN_OWNER_ROOTS | LJ_GC2_HS_FLUSH_SSB:
+  case LJ_GC2_HS_RESUMABLE | LJ_GC2_HS_FLUSH_SSB:
+    return 1;
+  default:
+    return 0;
+  }
+}
+
+static int safepoint_hold_poll_until_leader(global_State *g, uint32_t actions)
+{
+  /* These boundaries inspect or rotate owner-private state and may keep using
+  ** process-global state after the individual TG acknowledgement. Keep a
+  ** native-to-Lua reentry parked until the leader completes the matching root,
+  ** SSB, allocator, or trace boundary. Epochs without a live leader cannot
+  ** complete that consumed-poll phase, so they clear at acknowledgement.
+  */
+  /* A resumable epoch finishes each private scan before acknowledging. Active
+  ** barriers protect later publications while the global certificate is open. */
+  return !safepoint_resumable_actions(actions) &&
+	 (actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS|
+		     LJ_GC2_HS_FLUSH_SSB|
+		     LJ_GC2_HS_RESET_ALLOC|LJ_GC2_HS_RESTORE_ALLOC|
+		     LJ_GC2_HS_RESET_HOTCOUNT|
+		     LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)) &&
+	 gc2_hs_leader_acq(g) != 0;
+}
+
+/* This is local action completion, never a root-fixpoint or SSB-empty proof.
+** Every owner-private access (including fresh SSB installation and the
+** unconditional allocation-accounting flush) has finished before this test.
+** MARK/cycle samples only narrow eligibility: they do not pin the phase.
+** A later legal transition retains its ordinary barriers, entry gates and
+** counted handshake. This exact tail touches only target atomics, published
+** SSB nodes and independently retained metadata; the leader's last SSB flush
+** uses its own physical TG. Broader masks retain their global root, trace,
+** allocator and phase-action holds. */
+static int safepoint_owner_roots_complete(global_State *g, TGState *tg,
+					uint32_t actions, uint32_t cycle)
+{
+  return actions == (LJ_GC2_HS_SCAN_OWNER_ROOTS|LJ_GC2_HS_FLUSH_SSB) &&
+	 cycle != 0 && gc2_phase_acq(g) == LJ_GC2_MARK &&
+	 gc2_cycle_acq(g) == cycle && !lj_tg_jit_active_acq(tg) &&
+	 !lj_tg_flags_test_acq(tg, TGF_DEAD|TGF_STOPREQ_FRESH);
+}
+
+static void safepoint_clear_consumed_polls(global_State *g, uint64_t epoch)
+{
+  TGState *tg;
+  for (tg = gc2_tg_list_acq(g);
+       tg != NULL;
+       tg = lj_tg_next_acq(tg)) {
+    if (lj_tg_flags_test_acq(tg, TGF_DEAD))
+      continue;
+    if (lj_tg_hs_epoch_ack_acq(tg) == epoch &&
+	lj_tg_reqmask_acq(tg) == 0 && lj_tg_poll_acq(tg) != 0) {
+      safepoint_clear_poll(tg);
+      safepoint_test_signal_note_consumed_clear(tg, epoch);
+    }
+  }
+}
+
+static void safepoint_rearm_fresh_stopreq_polls(global_State *g)
+{
+  TGState *tg;
+  /* Run only after leader_leave. First clear every consumed hold above so a
+  ** combined STOPREQ|root/SSB/allocator request cannot deadlock its waiter;
+  ** this second pass creates a distinct, uncounted VM-dispatch edge. */
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    if (lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+	!lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH) ||
+	lj_tg_reqmask_acq(tg) != 0 ||
+	(lj_tg_load_cur_L(tg) == NULL && lj_tg_load_thread_L(tg) == NULL))
+      continue;
+    safepoint_rearm_fresh_stopreq_poll(tg);
+  }
+}
+
+static int safepoint_claim_epoch(TGState *tg, uint64_t epoch)
+{
+  uint64_t oldepoch = lj_tg_hs_epoch_ack_acq(tg);
+  while (oldepoch != epoch) {
+    uint64_t expect = oldepoch;
+    if (lj_tg_hs_epoch_ack_cas(tg, &expect, epoch))
+      break;
+    oldepoch = expect;
+  }
+  return oldepoch != epoch;
+}
+
+static void safepoint_apply_allocator(global_State *g, TGState *tg,
+                                      uint32_t actions)
+{
+  uint32_t cycle;
+  if (!(actions & (LJ_GC2_HS_RESET_ALLOC|LJ_GC2_HS_RESTORE_ALLOC)) ||
+      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
+    return;
+  cycle = gc2_cycle_acq(g);
+  /* A late attachment or a partially prepared peer requests another reset
+  ** from every TG. A completed major sweep clears survivor marks as it
+  ** returns its arena to the allocator. Never enqueue that arena again in
+  ** the same cycle. New allocations stay black until the next boundary. */
+  if ((actions & LJ_GC2_HS_RESET_ALLOC) &&
+      (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
+       la_load32_acq(&tg->alloc.prepare_epoch) != cycle)) {
+    int prepared, plain_restored;
+    /* Plain storage is explicitly managed, never semantically swept. Finish
+    ** only its durable free intents while this ACK owns the allocator lists. */
+    (void)lj_arena_remote_free_drain_force(&tg->alloc);
+    prepared = lj_arena_alloc_prepare_sweep_kind(
+	&tg->alloc, LJ_ARENAK_TRAVERSABLE);
+    plain_restored = lj_arena_alloc_restore_sweep_kind(
+	&tg->alloc, LJ_ARENAK_PLAIN);
+    if (lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
+      lj_arena_hugetab_prepare_sweep(&tg->huge);
+      tg->alloc.huge_retire_cursor = 0;
+      tg->alloc.huge_reclaim_cursor = 0;
+      tg->alloc.huge_retire_done = 0;
+    }
+    if (prepared && plain_restored)
+      la_store32_rel(&tg->alloc.prepare_epoch, cycle);
+    else
+      lj_gc2_sweep_publish_wake(g);
+  }
+  if (actions & LJ_GC2_HS_RESTORE_ALLOC) {
+    int restored;
+    /* Abort is legal only before bounded root detachment/quarantine. Restore
+    ** owner-local bins on the owning TG while it is stopped at this ACK. */
+    restored = lj_arena_alloc_restore_sweep_kind(
+	&tg->alloc, LJ_ARENAK_TRAVERSABLE);
+    if (lj_tg_flags_test_acq(tg, TGF_HUGETAB))
+      lj_arena_hugetab_abort_sweep(&tg->huge);
+    if (restored)
+      la_store32_rel(&tg->alloc.prepare_epoch, 0);
+    else
+      lj_gc2_sweep_publish_wake(g);
+    tg->alloc.huge_retire_cursor = 0;
+    tg->alloc.huge_reclaim_cursor = 0;
+    tg->alloc.huge_retire_done = 0;
+  }
+}
+
+static int safepoint_apply_tg_mode(global_State *g, TGState *tg,
+				    uint32_t actions, int native_parked,
+				    int roots_already_scanned)
+{
+  int owner_scan = 0;
+  if (actions & LJ_GC2_HS_ENABLE_BARRIER) {
+    /* Mark activation runs with native entry closed. Invalidate comparison
+    ** authority before enabling the TG barrier mirror, so a wrapped or stale
+    ** certificate can never authorize a new cycle. */
+    lj_tg_fnew_cert_reset_rel(tg);
+    lj_tg_mark_active_rel(tg, 1);
+  }
+  if (actions & LJ_GC2_HS_DISABLE_BARRIER)
+    lj_tg_mark_active_rel(tg, 0);
+  if (actions & LJ_GC2_HS_ALLOC_BLACK)
+    lj_tg_alloc_black_rel(tg, 1);
+  if (actions & LJ_GC2_HS_ALLOC_WHITE)
+    lj_tg_alloc_black_rel(tg, 0);
+  if (!roots_already_scanned &&
+      (actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS))) {
+    /* Each stopped TG publishes its complete private root set. Passing the TG
+    ** directly is essential: cur_L may be NULL, may differ from thread_L, and
+    ** must not be used to rediscover the owner tid for NEEDSCAN handoffs. A
+    ** full SCAN_ROOTS epoch adds the once-per-snapshot global pass below;
+    ** SCAN_OWNER_ROOTS intentionally services only an existing owner handoff. */
+    if (native_parked)
+      lj_gc2_scan_cycle_owner_tg_roots_native_parked(g, tg);
+    else
+      owner_scan = lj_gc2_scan_cycle_owner_tg_roots(g, tg);
+  }
+  if (actions & LJ_GC2_HS_FLUSH_SSB) {
+    /*
+    ** Remote-native ACK may observe no-Lua-stack GC worker TGs while they are
+    ** actively draining GC2 work under their own TG. Let those workers publish
+    ** their own SSB at GC-owner boundaries; remotely swapping their active SSB
+    ** can race traversal-local rescan publication. Native mutators still carry
+    ** cur_L and are flushed here.
+    */
+    if (lj_tg_load_cur_L(tg) != NULL || tg == lj_thr_get_tg_fallback(g))
+      lj_gc2_flush_ssb(g, tg);  /* 05 section 5.6.2. */
+  }
+  (void)lj_gc2_flush_alloc(g, tg);  /* 04 section 4.8 safepoint flush. */
+  safepoint_apply_allocator(g, tg, actions);
+  if (actions & LJ_GC2_HS_REDISPATCH)
+    lj_dispatch_sync_tg(g, tg);  /* 03 section 3.6, 07 section 7.3. */
+#if LJ_HASJIT
+  if (actions & LJ_GC2_HS_RESET_HOTCOUNT) {
+    /* Hotcount buckets are owner-private mutable VM state. A foreign leader
+    ** may fill them only on the existing consumed-poll native-park path; an
+    ** attach/ordinary ACK must instead resolve to this TG as the logical owner
+    ** of g. The fallback preserves outer raw TLS across nested universes while
+    ** still checking the current physical actor. The applied-generation
+    ** release occurs inside the fill, before hs_pending is
+    ** decremented by safepoint_ack_tg(). hs_epoch_ack is deliberately not a
+    ** completion certificate because the epoch is claimed before actions. */
+    if (native_parked || tg == lj_thr_get_tg_fallback(g))
+      (void)lj_dispatch_hotcount_apply_tg(g, tg);
+  }
+#endif
+  if (actions & LJ_GC2_HS_EXIT_TRACES)
+    lj_trace_abort(g);  /* 08 section 8.7: no active recorder past ack. */
+  if (actions & LJ_GC2_HS_STOPREQ)
+    lj_tg_flags_or_rlx(tg, TGF_STOPREQ|TGF_STOPREQ_FRESH);
+  return owner_scan;
+}
+
+void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
+{
+  /* Attach/TG-only catch-up is not proof that the caller owns a stable Lua
+  ** stack. Keep the public entry on the conservative owner-root path. */
+  safepoint_apply_tg_mode(g, tg, actions, 0, 0);
+}
+
+static void safepoint_requeue_consumed(TGState *tg, uint32_t actions)
+{
+  /* Handshake leadership serializes counted request publication. Preserve the
+  ** original pending slot and return the exact mask to the owner; it will
+  ** consume this after closing native state if remote certification failed. */
+  lj_tg_reqmask_rel(tg, actions);
+  lj_tg_poll_rel(tg, 1);
+  la_fence_seq();
+  lj_tg_poll_futex_wake(tg, 1);
+}
+
+static int safepoint_str_vm_frame(lua_State *L, TGState *tg)
+{
+  global_State *g = G(L);
+  void *parent;
+  if (tg != lj_thr_get_tg_fallback(g) || !L->cframe ||
+      lj_tg_in_native_acq(tg) || lj_tg_load_jit_base(tg))
+    return 0;
+  parent = cframe_raw(cframe_prev(cframe_raw(L->cframe)));
+  if (tg == g->main_tg) {
+    if (L != mainthread_acq(g) || parent != tg->str_vm_outer_cframe ||
+	!la_load32_acq(&tg->str_vm_main_pcall))
+      return 0;
+  } else if (!lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC) ||
+	     L != lj_tg_load_thread_L(tg) || !tg->str_vm_outer_cframe ||
+	     parent != cframe_raw(tg->str_vm_outer_cframe)) {
+    return 0;
+  }
+#if LJ_HASFFI
+  if (lj_tg_ffi_call_func_acq(tg) || ccallback_depth_acq(&tg->cb))
+    return 0;
+#if LJ_HASJIT
+  if (lj_ffi_native_frame_depth_acq(tg))
+    return 0;
+#endif
+#endif
+  return 1;
+}
+
+static uint32_t safepoint_ack_tg(global_State *g, TGState *tg,
+				 int note_latency, int wait_consumed,
+				 int native_parked,
+				 int native_trace_cert_required,
+				 lua_State *vm_frame)
+{
+  uint64_t epoch;
+  uint32_t actions, oldpending, mark_cycle;
+  int roots_scanned;
+  if (!g || !tg)
+    return 0;
+#if !(LJ_HASFFI && LJ_HASJIT)
+  UNUSED(native_trace_cert_required);
+#endif
+retry:
+  roots_scanned = 0;
+  actions = lj_tg_reqmask_xchg_acqrel(tg, 0);  /* 05 section 5.4.2. */
+  if (actions == 0) {
+    if (lj_tg_poll_acq(tg) != 0) {
+      if (lj_tg_reqmask_acq(tg) != 0)
+	goto retry;
+      /* Uncounted poll re-armed by a remote/TG-only STOPREQ ACK. Once the
+      ** producing leader has left, consume the wake edge and return the action
+      ** so an L-aware ack/check boundary throws from TGF_STOPREQ_FRESH. */
+      if (wait_consumed && gc2_hs_leader_acq(g) == 0 &&
+	  lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH)) {
+	/* Keep the uncounted edge armed until lj_safepoint_checkstop consumes
+	** TGF_STOPREQ_FRESH. A caller which ignores the returned mask must not
+	** silently lose the VM interrupt. */
+	return LJ_GC2_HS_STOPREQ;
+      }
+      /* Remote leader acks do not resume this TG's VM, so they must not
+      ** block behind another leader's already-consumed poll bit. */
+      if (wait_consumed &&
+	  safepoint_wait_consumed_ack(tg, gc2_hs_actions_acq(g)))
+	goto retry;
+    }
+    return 0;
+  }
+  epoch = gc2_hs_epoch_acq(g);  /* 05 section 5.4.2 epoch. */
+#if LJ_HASJIT
+  if ((actions & LJ_GC2_HS_RESET_HOTCOUNT) && !native_parked &&
+      tg != lj_thr_get_tg_fallback(g)) {
+    /* A TG-only call from a foreign actor is not an owner acknowledgement.
+    ** Resolve logical self through g so nested universes can preserve the
+    ** outer raw TLS binding; foreign TGs still leave their counted slot
+    ** pending instead of letting hs_pending reach zero without an
+    ** applied-generation publication. */
+    safepoint_requeue_consumed(tg, actions);
+    return 0;
+  }
+#endif
+  safepoint_completion_test_pause(g, tg, epoch,
+    LJ_SAFEPOINT_COMPLETION_TEST_CONSUMED);
+  mark_cycle = actions == (LJ_GC2_HS_SCAN_OWNER_ROOTS|LJ_GC2_HS_FLUSH_SSB) &&
+    gc2_phase_acq(g) == LJ_GC2_MARK ? gc2_cycle_acq(g) : 0;
+  if (native_parked && lj_tg_hs_epoch_ack_acq(tg) != epoch) {
+#if LJ_HASFFI && LJ_HASJIT
+    /* Admission captured this obligation before reqmask consumption. Never
+    ** re-decide it from jit_base here: an ACTIVE->SUSPENDED callback
+    ** transition can clear jit_base in the intervening window. */
+    if (native_trace_cert_required &&
+	!lj_ffi_native_trace_remote_certify(tg, NULL)) {
+      safepoint_requeue_consumed(tg, actions);
+      return 0;
+    }
+#endif
+    if (actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS)) {
+      if (!lj_gc2_scan_cycle_owner_tg_roots_native_parked(g, tg)) {
+	safepoint_requeue_consumed(tg, actions);
+	return 0;
+      }
+      roots_scanned = 1;
+    }
+  }
+  if (!safepoint_claim_epoch(tg, epoch)) {
+    int hold;
+    /* A nonzero reqmask consumed here owns a pending-count slot even when the
+    ** epoch was already caught up by attach or by an earlier ack race. Do not
+    ** apply actions twice, but do release the counted slot.
+    */
+    hold = safepoint_hold_poll_until_leader(g, actions);
+    if (!hold) {
+      safepoint_clear_poll(tg);
+      safepoint_restore_counted_poll(tg);
+    }
+    oldpending = gc2_hs_pending_sub_acqrel(g, 1);
+    if (oldpending == 1)
+      gc2_hs_pending_futex_wake(g, 1);
+    if (hold && wait_consumed &&
+	safepoint_wait_consumed_ack(tg, actions))
+      goto retry;
+    return 0;
+  }
+  roots_scanned = safepoint_apply_tg_mode(g, tg, actions, native_parked,
+					 roots_scanned);
+  if (!roots_scanned && !native_parked && safepoint_resumable_actions(actions) &&
+      (actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS))) {
+    if (gc2_phase_acq(g) == LJ_GC2_WEAK) {
+      gc2_weak_root_scanned_rel(g, 0);
+      gc2_weak_mark_closed_rel(g, 0);
+    } else if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
+      uint32_t provisional = 2;
+      (void)gc2_sweep_root_scanned_cas(g, &provisional, 0);
+    } else {
+      gc2_mark_root_scanned_rel(g, 0);
+    }
+  }
+  if (roots_scanned && !native_parked && tg == lj_thr_get_tg_fallback(g)) {
+    la_store64_rel(&tg->str_owner_scan_epoch, epoch);
+    /* The last ACK may wake a collector which immediately starts SWEEP.
+    ** Publish the real dispatch witness before that completion becomes
+    ** visible. Ordinary C and remote ACKs never provide a VM frame. */
+    if (vm_frame && safepoint_str_vm_frame(vm_frame, tg))
+      la_store64_rel(&tg->str_vm_root_epoch, epoch);
+  }
+  if (note_latency)
+    safepoint_note_ack_latency(g);  /* 13.8: mutator-observed poll latency. */
+  {
+    int hold = safepoint_hold_poll_until_leader(g, actions);
+    /* Local poll callers can retain native depth during startup or detach.
+    ** A duplicate may then have a remote pre-claim root scan still in flight,
+    ** even after the local executor wins the epoch. Only the unique leader's
+    ** remote executor can prove no other remote scan outlives this clear. */
+    int completed = hold && native_parked &&
+      safepoint_owner_roots_complete(g, tg, actions, mark_cycle);
+    if (completed) {
+      safepoint_completion_test_pause(g, tg, epoch,
+	LJ_SAFEPOINT_COMPLETION_TEST_BEFORE_CLEAR);
+      hold = 0;
+    }
+    if (!hold) {
+      /* This executor still owns its pending slot and the current leader
+      ** excludes a newer epoch. Changing the futex word is the durable local
+      ** completion publication; waking an unchanged poll could lose a wake. */
+      safepoint_clear_poll(tg);
+      /* The leader can sample this TG before its epoch claim and publish a
+      ** duplicate request after reqmask consumption. Re-arm that counted
+      ** request if this clear crossed its poll store. */
+      safepoint_restore_counted_poll(tg);
+      if (completed) {
+	safepoint_completion_test_pause(g, tg, epoch,
+	  LJ_SAFEPOINT_COMPLETION_TEST_CLEARED);
+      }
+    }
+    oldpending = gc2_hs_pending_sub_acqrel(g, 1);  /* 05 section 5.4.2. */
+    if (oldpending == 1) {
+      gc2_hs_pending_futex_wake(g, 1);
+      /* A different owner can finish the boundary from its dispatch ACK. */
+      if (safepoint_resumable_actions(actions))
+	(void)lj_gc2_resumable_epoch_continue(g);
+    }
+    /* VM-owned acks must not resume with a consumed trace-flush poll. Drop
+    ** pending first so the leader can retire/unlink traces and clear poll.
+    */
+    /* Trace exit CP frames can acknowledge before snapshot restore is complete
+    ** and jit_base can be cleared. Defer their consumed-poll wait to the later
+    ** GC-defer or VM-exit boundary.
+    */
+    if (hold && wait_consumed &&
+	safepoint_wait_consumed_ack(tg, actions))
+      goto retry;
+  }
+  if (wait_consumed && (actions & LJ_GC2_HS_STOPREQ) &&
+      (lj_tg_load_cur_L(tg) != NULL || lj_tg_load_thread_L(tg) != NULL)) {
+    /* L-aware and TG-only owner ACKs retain a one-shot dispatch edge until
+    ** checkstop throws. Remote ACKs use the post-leader registry rearm pass. */
+    safepoint_rearm_fresh_stopreq_poll(tg);
+  }
+  return actions;
+}
+
+uint32_t lj_safepoint_retire_dead_tg(global_State *g, TGState *tg)
+{
+  uint64_t epoch;
+  uint32_t oldpending, pending;
+  if (!g || !tg || !lj_tg_flags_test_acq(tg, TGF_DEAD))
+    return 0;
+  pending = lj_tg_reqmask_xchg_acqrel(tg, 0);
+  safepoint_clear_poll(tg);
+  if (!pending)
+    return 0;
+  epoch = gc2_hs_epoch_acq(g);
+  if (!safepoint_claim_epoch(tg, epoch)) {
+    /* The nonzero reqmask means the handshake counted this TG. The already
+    ** acknowledged epoch means attach/self-ack or a racing owner already
+    ** applied the actions, but this retire path still owns the counted slot.
+    */
+    oldpending = gc2_hs_pending_sub_acqrel(g, 1);
+    if (oldpending == 1)
+      gc2_hs_pending_futex_wake(g, 1);
+    return 0;
+  }
+  oldpending = gc2_hs_pending_sub_acqrel(g, 1);
+  if (oldpending == 1)
+    gc2_hs_pending_futex_wake(g, 1);
+  return 1;
+}
+
+static uint32_t safepoint_ack_l(lua_State *L, int vm_frame)
+{
+  ptrdiff_t oldbase, oldtop;
+  uint32_t actions;
+  if (!L)
+    return 0;
+#if LJ_HASPROFILE
+  /* SIGPROF only publishes TG atomics. Consume its request on the interrupted
+  ** TG's ordinary VM/C owner path before any dispatch table mutation. */
+  lj_profile_owner_poll(L);
+#endif
+  if (L->base == NULL || tvref(L->stack) == NULL)
+    return safepoint_ack_tg(G(L), L2TG(L), 1, 1, 0, 0, NULL);
+  oldbase = savestack(L, L->base);
+  oldtop = savestack(L, L->top);
+  actions = safepoint_ack_tg(G(L), L2TG(L), 1, 1, 0, 0,
+			     vm_frame ? L : NULL);
+  L->base = restorestack(L, oldbase);
+  L->top = restorestack(L, oldtop);
+  return actions;  /* Safepoints must preserve the interrupted VM/C frame. */
+}
+
+uint32_t lj_safepoint_ack(lua_State *L)
+{
+  return safepoint_ack_l(L, 0);
+}
+
+uint32_t lj_safepoint_poll(lua_State *L)
+{
+  if (!L)
+    return 0;
+  /* reqmask owns the counted pending slot. poll is the wake/dispatch signal and
+  ** can be consumed independently when a thread catches up with the current
+  ** epoch, so a nonzero reqmask must still drive the acknowledgement path. */
+  if (!lj_safepoint_owner_poll_pending(L))
+    return 0;
+  return lj_safepoint_ack(L);
+}
+
+uint32_t lj_safepoint_poll_tg(TGState *tg)
+{
+  if (!tg || !tg->gl)
+    return 0;
+  if (lj_tg_poll_acq(tg) == 0 && lj_tg_reqmask_acq(tg) == 0)
+    return 0;
+  /* Worker/no-Lua-stack TGs still own private allocator and SSB state. They
+  ** therefore participate at the same consumed-poll boundary instead of
+  ** silently resuming after a remote native acknowledgement. */
+  return safepoint_ack_tg(tg->gl, tg, 1, 1, 0, 0, NULL);
+}
+
+void lj_safepoint_checkstop(lua_State *L, uint32_t actions)
+{
+  TGState *tg;
+  if (!L)
+    return;
+  tg = L2TG(L);
+  /* TGF_STOPREQ is sticky bookkeeping: native regions use it to decide
+  ** whether a shutdown request was already pending on entry. The fresh bit is
+  ** the one-shot interrupt edge for VM dispatch checks. Otherwise a Lua pcall
+  ** that catches a STOPREQ would immediately rethrow from the next dispatch
+  ** boundary while the sticky bit is still intentionally set.
+  */
+  if ((actions & LJ_GC2_HS_STOPREQ) ||
+      (tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH))) {
+    if (tg) {
+      LJOSerrState oserr;
+      lj_oserr_save(&oserr);
+      /* Consume only the synthetic uncounted edge. A new handshake can publish
+      ** between the first poll load and clear; fence and recheck its counted
+      ** reqmask/leader publication, then restore poll before throwing. */
+      safepoint_consume_fresh_stopreq_poll(tg);
+      lj_oserr_restore(&oserr);
+    }
+    lj_err_callermsg(L, "thread interrupted: VM shutdown");
+  }
+}
+
+static uint32_t safepoint_ack_check_l(lua_State *L, int vm_frame)
+{
+  LJOSerrState oserr;
+  uint32_t actions;
+  /* VM external-unwind landings reach this helper immediately after their
+  ** authoritative errno/LastError restore. ACK bookkeeping is observational
+  ** and must not replace the error-edge pair, including immediately before a
+  ** STOPREQ throws again. */
+  lj_oserr_save(&oserr);
+  actions = safepoint_ack_l(L, vm_frame);
+  lj_oserr_restore(&oserr);
+  lj_safepoint_checkstop(L, actions);
+  lj_oserr_restore(&oserr);
+  return actions;
+}
+
+uint32_t lj_safepoint_ack_check(lua_State *L)
+{
+  return safepoint_ack_check_l(L, 0);
+}
+
+static int safepoint_rescan_string_roots(global_State *g, TGState *tg)
+{
+  LJOSerrState oserr;
+  int scanned;
+  lj_oserr_save(&oserr);
+  scanned = lj_gc2_scan_cycle_owner_tg_roots(g, tg);
+  lj_oserr_restore(&oserr);
+  return scanned;
+}
+
+/* Only emitted after the interpreter has published BASE/PC, or after
+** native trace exit restored its stack. A remote native ACK has no such
+** authority, including when it consumes this actor's outstanding poll. */
+static void safepoint_vm_scan(lua_State *L, int trace_exit)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  uint32_t actions = safepoint_ack_check_l(L, 1);
+  uint64_t epoch = la_load64_acq(&tg->str_owner_scan_epoch);
+  /* A completed collection can leave an owner scan without a dispatch
+  ** witness. At IDLE, rescanning that old epoch would queue transient stack
+  ** roots for the next collection. An active string reclaim request can
+  ** still need a restored-frame witness to commit its quarantined cohort. */
+  if (gc2_phase_acq(g) == LJ_GC2_IDLE && !lj_str_reclaim_requested_acq(g))
+    return;
+  if (!epoch || epoch <= la_load64_acq(&tg->str_vm_root_epoch) ||
+      !safepoint_str_vm_frame(L, tg))
+    return;
+  if (!(actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS)) ||
+      lj_tg_hs_epoch_ack_acq(tg) != epoch) {
+    if (!trace_exit && tg != g->main_tg)
+      return;
+    /* A call or a trace-exit helper may have consumed the owner request
+    ** before dispatch restored this frame. Rescan from the real boundary
+    ** instead of granting a VM certificate to that earlier C/native scan. */
+    if (!safepoint_rescan_string_roots(g, tg))
+      return;
+  }
+  la_store64_rel(&tg->str_vm_root_epoch, epoch);
+}
+
+void lj_safepoint_vm_checkpoint(lua_State *L, int trace_exit)
+{
+  TGState *tg = L2TG(L);
+  safepoint_vm_scan(L, trace_exit);
+  if (la_load32_acq(&tg->str_auto_pending)) {
+    int status = lj_gc_auto_string_checkpoint(L, 1);
+    if (LJ_UNLIKELY(status != LUA_OK))
+      lj_err_throw(L, status);
+  }
+}
+
+/* thread:join() holds only already-published Lua roots across its futex
+** wait. A local owner ACK at that exact protected frame can be witnessed
+** after native leave. Foreign/native ACKs still cannot publish this proof. */
+void lj_safepoint_string_join_checkpoint(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  uint64_t scope = lj_str_reclaim_scope_acq(g);
+  uint64_t epoch;
+  if (tg != g->main_tg || (uint32_t)scope != LJ_STR_RECLAIM_AUTO ||
+      (uint32_t)(scope >> 32) == lj_tg_tid_acq(tg) ||
+      !safepoint_str_vm_frame(L, tg))
+    return;
+  epoch = la_load64_acq(&tg->str_owner_scan_epoch);
+  if (epoch <= la_load64_acq(&tg->str_vm_root_epoch))
+    return;
+  if (safepoint_rescan_string_roots(g, tg) &&
+      lj_str_reclaim_scope_acq(g) == scope)
+    la_store64_rel(&tg->str_vm_root_epoch, epoch);
+}
+
+void lj_native_enter(TGState *tg)
+{
+  if (tg)
+    lj_tg_in_native_inc_rel(tg);
+}
+
+void lj_native_enter_l(lua_State *L, LJNativeFrame *frame)
+{
+  TGState *tg = L ? L2TG(L) : NULL;
+  if (frame) {
+    frame->base = 0;
+    frame->top = 0;
+    frame->active = 0;
+    if (L && L->base != NULL && tvref(L->stack) != NULL) {
+      frame->base = savestack(L, L->base);
+      frame->top = savestack(L, L->top);
+      frame->active = 1;
+    }
+  }
+  lj_native_enter(tg);
+}
+
+uint32_t lj_native_leave(lua_State *L)
+{
+  TGState *tg;
+  uint32_t depth;
+  if (!L)
+    return 0;
+  tg = L2TG(L);
+  if (!tg)
+    return 0;
+  depth = lj_tg_in_native_acq(tg);
+  if (depth == 1) {
+    /* Close the remotely readable native snapshot before checking for work.
+    ** If a remote ACK consumed poll first, the consumed-poll gate keeps this
+    ** owner here until that scan completes. If this store wins, the leader
+    ** cannot start a new remote-private scan and leaves the request for this
+    ** owner-side poll. No Lua/TG-private mutation is permitted between them. */
+    lj_tg_in_native_rel(tg, 0);
+    /* Paired with the post-signal fence in safepoint_signal_late(): the owner
+    ** cannot miss poll while the leader misses this native-state close. */
+    la_fence_seq();
+    return lj_safepoint_poll(L);
+  }
+  if (lj_tg_in_native_dec_rel(tg) != 0)
+    return 0;
+  return lj_safepoint_poll(L);
+}
+
+uint32_t lj_native_leave_tg(TGState *tg)
+{
+  uint32_t depth;
+  if (!tg)
+    return 0;
+  depth = lj_tg_in_native_acq(tg);
+  if (depth == 0)
+    return 0;
+  if (depth > 1) {
+    (void)lj_tg_in_native_dec_rel(tg);
+    return 0;
+  }
+  lj_tg_in_native_rel(tg, 0);
+  la_fence_seq();  /* Pair with post-signal fence before remote native load. */
+  return lj_safepoint_poll_tg(tg);
+}
+
+uint32_t lj_native_leave_l(lua_State *L, LJNativeFrame *frame)
+{
+  uint32_t actions = lj_native_leave(L);
+  if (frame && frame->active && L && tvref(L->stack) != NULL) {
+    L->base = restorestack(L, frame->base);
+    L->top = restorestack(L, frame->top);
+    frame->active = 0;
+  }
+  return actions;
+}
+
+static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
+				      uint64_t epoch)
+{
+  TGState *tg;
+  uint32_t signaled = 0;
+  int resumable = safepoint_resumable_actions(actions);
+  int local_release = resumable ||
+    actions == (LJ_GC2_HS_ALLOC_WHITE | LJ_GC2_HS_ENABLE_BARRIER) ||
+    actions == (LJ_GC2_HS_ALLOC_WHITE | LJ_GC2_HS_DISABLE_BARRIER);
+  for (tg = gc2_tg_list_acq(g);
+       tg != NULL;
+       tg = lj_tg_next_acq(tg)) {
+    if (lj_tg_flags_test_acq(tg, TGF_DEAD))  /* 05 section 5.4.1. */
+      continue;
+    if (lj_tg_hs_epoch_ack_acq(tg) == epoch)
+      continue;  /* 09 section 9.3: attach self-caught this epoch. */
+    if (lj_tg_reqmask_acq(tg) != 0)
+      continue;  /* Already counted by this handshake. */
+    if (resumable || (actions & LJ_GC2_HS_STOPREQ)) {
+      /* A native executor can consume reqmask before its scan. A stopped
+      ** Lua owner may never return to drain a second counted interrupt.
+      ** If an executor cannot apply a request it requeues its original slot. */
+      if (la_load64_acq(&tg->hs_request_epoch) == epoch)
+	continue;
+      la_store64_rel(&tg->hs_request_epoch, epoch);
+    }
+    (void)gc2_hs_pending_add_rlx(g, 1);
+    signaled++;
+    safepoint_completion_test_pause(g, tg, epoch,
+      LJ_SAFEPOINT_COMPLETION_TEST_COUNTED);
+    lj_tg_reqmask_rel(tg, actions);  /* 05 section 5.4.2. */
+    /* A consumed trace-flush poll can remain set after the TG has acked an
+    ** earlier epoch, keeping that TG parked until the leader retires trace
+    ** slots. A later handshake must still publish a fresh reqmask and count
+    ** the TG for this epoch; the waiter will see reqmask and retry.
+    */
+    {
+      int test_paused = safepoint_test_signal_pause_after_reqmask(tg);
+      lj_tg_poll_rel(tg, 1);  /* 05 section 5.4.2 signal word. */
+      safepoint_test_signal_note_resumed_poll(tg, test_paused);
+    }
+    /* Paired with the native owner close->poll fence. This is the Dekker edge
+    ** which forbids both sides observing the old value: either the owner sees
+    ** the request and acknowledges itself, or the leader observes native and
+    ** completes the remote snapshot before clearing the consumed poll. */
+    la_fence_seq();
+    if (local_release && lj_tg_reqmask_acq(tg) == 0 &&
+	lj_tg_hs_epoch_ack_acq(tg) == epoch) {
+      /* The owner can consume the request before our poll store. This turn
+      ** has not begun remote acknowledgement and the leader excludes another
+      ** executor. Remove the redundant signal so the owner can run
+      ** while other TGs still owe this epoch, and preserve fresh STOPREQ. */
+      safepoint_clear_poll(tg);
+      safepoint_test_signal_note_consumed_clear(tg, epoch);
+      safepoint_rearm_fresh_stopreq_poll(tg);
+    } else {
+      lj_tg_poll_futex_wake(tg, 1);
+    }
+    safepoint_completion_test_pause(g, tg, epoch,
+      LJ_SAFEPOINT_COMPLETION_TEST_SIGNALED);
+    if (lj_safepoint_retire_dead_tg(g, tg) && signaled != 0)
+      signaled--;
+  }
+  return signaled;
+}
+
+static int safepoint_native_ack_allowed(TGState *tg, uint32_t actions,
+					int *trace_cert_required)
+{
+  if (trace_cert_required)
+    *trace_cert_required = 0;
+  /* A sanctioned native-to-Lua reentry clears in_native with release ordering
+  ** and polls before changing the Lua stack, C frame, root anchors, SSB or
+  ** allocator. If a remote acknowledgement consumed the request first, its
+  ** poll remains set through private action completion and the reentry waits
+  ** for it. Broader action masks retain the hold through the leader's tail.
+  ** Thus a still-native TG is a stable owner-private snapshot for root/SSB and
+  ** allocator boundary actions. Trace retirement has the extra JIT gate below.
+  */
+#if LJ_HASJIT
+  /* Trace entry publishes jit_base before it loads a body/mcode pointer, and
+  ** ordinary trace exit retains it through snapshot restore. Only generated
+  ** FFI frames add an exact even-frame, pinned-slot certificate; all other
+  ** jit_base windows continue to veto remote trace acknowledgment. A positive
+  ** vmstate without jit_base is merely a conservative trace root for GC.
+  */
+  if ((actions & (LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)) &&
+      lj_tg_load_jit_base(tg) != NULL) {
+#if LJ_HASFFI
+    if (!lj_ffi_native_trace_remote_shape_allowed(tg))
+      return 0;
+    if (trace_cert_required)
+      *trace_cert_required = 1;
+#else
+    return 0;
+#endif
+  }
+#else
+  UNUSED(tg); UNUSED(actions);
+#endif
+  return 1;
+}
+
+static void safepoint_ack_native(global_State *g, uint32_t actions)
+{
+  TGState *tg;
+  TGState *self = lj_thr_get_tg_fallback(g);
+  for (tg = gc2_tg_list_acq(g);
+       tg != NULL;
+       tg = lj_tg_next_acq(tg)) {
+    if (lj_tg_flags_test_acq(tg, TGF_DEAD))  /* 05 section 5.4.1. */
+      continue;
+    if (tg == self)
+      (void)safepoint_ack_tg(g, tg, 0, 0, 0, 0, NULL);
+    else if (lj_tg_in_native_acq(tg)) {
+      int trace_cert_required = 0;
+      if (!safepoint_native_ack_allowed(tg, actions,
+					&trace_cert_required))
+	continue;
+      /* Only this remote-native branch carries the consumed-poll stability
+      ** certificate. If it wins reqmask, native leave must remain parked until
+      ** the leader clears poll, so published frame offsets cannot race stack
+      ** relocation or release during the exact scan. */
+      (void)safepoint_ack_tg(g, tg, 0, 0, 1, trace_cert_required, NULL);
+    }
+  }
+}
+
+static int safepoint_trace_tg_active(global_State *g)
+{
+#if LJ_HASJIT
+  TGState *tg;
+  TGState *self = lj_thr_get_tg_fallback(g);
+  uint32_t leader = gc2_hs_leader_acq(g);
+  for (tg = gc2_tg_list_acq(g);
+       tg != NULL;
+       tg = lj_tg_next_acq(tg)) {
+    if (lj_tg_flags_test_acq(tg, TGF_DEAD))
+      continue;
+    /*
+    ** Trace quiescence protects peer TGs that may still need trace slots or
+    ** mcode while leaving compiled code. The leader can legitimately start a
+    ** trace-flush handshake from trace-exit C code before snapshot restore has
+    ** reached the safe jit_base clear; waiting for that self-published edge
+    ** would be a self-deadlock. The leader still applies its own safepoint action
+    ** synchronously before this quiescence check.
+    */
+    if (tg == self && leader != 0 && lj_tg_tid_acq(tg) == leader)
+      continue;
+    if (lj_tg_load_jit_base(tg) != NULL) {
+#if LJ_HASFFI
+      uint64_t epoch = gc2_hs_epoch_acq(g);
+      /* A current-epoch consumed poll freezes this exact generated frame until
+      ** leader completion. Revalidate its TraceVec slot/pin before exempting it
+      ** from quiescence; every ordinary trace-exit jit_base still vetoes. */
+      if (lj_tg_poll_acq(tg) != 0 && lj_tg_reqmask_acq(tg) == 0 &&
+	  lj_tg_hs_epoch_ack_acq(tg) == epoch &&
+	  lj_ffi_native_trace_remote_certify(tg, NULL))
+	continue;
+#endif
+      return 1;
+    }
+  }
+#else
+  UNUSED(g);
+#endif
+  return 0;
+}
+
+static void safepoint_wait_trace_quiescent(global_State *g, uint32_t actions)
+{
+  if (!(actions & (LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)))
+    return;
+  while (safepoint_trace_tg_active(g)) {
+    /* The pending count is the primary boundary. This final quiescence check
+    ** closes attach/native-observation races before trace slots are unlinked.
+    */
+    safepoint_ack_native(g, actions);
+    (void)lj_thr_retry_yield(NULL);
+  }
+}
+
+static uint32_t safepoint_leader_id(global_State *g)
+{
+  TGState *self = lj_thr_get_tg_fallback(g);
+  uint32_t id = self ? lj_tg_tid_acq(self) : 0;
+  return lj_thr_id_is_owner(id) ? id : 1u;
+}
+
+#if LJ_HASJIT
+static lua_State *safepoint_leader_lua_state(global_State *g)
+{
+  TGState *self = lj_thr_get_tg_fallback(g);
+  lua_State *L = self ? lj_tg_load_cur_L(self) : NULL;
+  /*
+  ** FLUSHJ is executed by the safepoint leader after peer TGs have left traces,
+  ** but trace retirement still allocates raw metadata through the token owner's
+  ** lua_State. Use the leader TG's current state for that ownership; fall back to
+  ** the main state only for bootstrap/test handshakes without a published cur_L.
+  ** The eventless lj_trace_flushall_gc() path below keeps VM event stacks out of
+  ** arbitrary leader action.
+  */
+  if (L && mref(L->glref, global_State) == g)
+    return L;
+  return mainthread_acq(g);
+}
+#endif
+
+static uint32_t safepoint_leader_enter(global_State *g)
+{
+  uint32_t id = safepoint_leader_id(g);
+  for (;;) {
+    uint32_t expect = 0;
+    if (gc2_hs_leader_cas(g, &expect, id))
+      return id;
+    /* A contender may help only its exact TLS TG. Remote acknowledgement is
+    ** owned by the active leader after request publication and its full fence;
+    ** helping arbitrary native TGs here could race that fence, or scan the
+    ** leader TG while its self-wait bypass is active. */
+    {
+      TGState *self = lj_thr_get_tg();
+      if (self && self->gl == g)
+	safepoint_ack_tg(g, self, 0, 0, 0, 0, NULL);
+    }
+    if (expect == LJ_SAFEPOINT_RESUMABLE_LEADER &&
+	lj_gc2_resumable_epoch_continue(g))
+      continue;
+    if (expect == 0)
+      continue;
+    gc2_hs_leader_futex_wait(g, expect, 1000000);
+  }
+}
+
+static void safepoint_leader_leave(global_State *g, uint32_t id)
+{
+  uint32_t expect = id;
+  if (gc2_hs_leader_cas(g, &expect, 0))
+    gc2_hs_leader_futex_wake(g, 1);
+  else {
+    gc2_hs_leader_rel(g, 0);
+    gc2_hs_leader_futex_wake(g, 1);
+  }
+}
+
+static void safepoint_finish_leader(global_State *g, uint32_t id, uint64_t epoch)
+{
+  /* The registry lease spans leader release. A TG can detach during the
+  ** final STOPREQ walk, but its storage cannot be retired under the walker. */
+  LJGC2RegistryLease registry = lj_gc2_registry_read_enter(g);
+  safepoint_clear_consumed_polls(g, epoch);
+  safepoint_test_signal_note_before_leader_leave(g, epoch);
+  safepoint_leader_leave(g, id);
+  safepoint_rearm_fresh_stopreq_polls(g);
+  lj_gc2_registry_read_leave(g, &registry);
+}
+
+static void safepoint_finish_prior_epoch(global_State *g)
+{
+  /* A synchronous leader can be entered while a previously published async
+  ** request still owns counted reqmask slots (notably STOPREQ arriving between
+  ** bytecodes and an allocation-triggered GC). Never overwrite that pending
+  ** count with the next epoch's sentinel. Finish the prior boundary first;
+  ** applying STOPREQ here only publishes its sticky/fresh flag, so the normal
+  ** VM/native exit boundary still performs the user-visible throw. */
+  while (gc2_hs_pending_acq(g) != 0) {
+    uint32_t pending = gc2_hs_pending_acq(g);
+    safepoint_ack_native(g, gc2_hs_actions_acq(g));
+    if (gc2_hs_pending_acq(g) == 0)
+      break;
+    gc2_hs_pending_futex_wait(g, pending, 1000000);
+  }
+}
+
+/* DEAD is release-published after detach has finished using the private
+** allocator. The handshake leader excludes a competing allocator reset or
+** TG transfer, and the registry read section retains each list entry. Dead
+** owners take no ordinary poll slot, so apply only their allocator actions. */
+static void safepoint_apply_dead_allocators(global_State *g, uint32_t actions)
+{
+  TGState *tg;
+  if (!(actions & (LJ_GC2_HS_RESET_ALLOC|LJ_GC2_HS_RESTORE_ALLOC)) ||
+      gc2_phase_acq(g) != LJ_GC2_SWEEP || !lj_gc2_smr_read_try(g))
+    return;
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    uint32_t flags = lj_tg_flags_acq(tg);
+    if ((flags & (TGF_DEAD|TGF_ARENA_INTERNAL)) !=
+        (TGF_DEAD|TGF_ARENA_INTERNAL))
+      continue;
+    safepoint_apply_allocator(g, tg, actions);
+  }
+  lj_gc2_smr_read_leave(g);
+}
+
+int lj_safepoint_resumable_epoch_reserve(global_State *g)
+{
+  uint32_t expect = 0;
+  return gc2_hs_pending_acq(g) == 0 &&
+    gc2_hs_leader_cas(g, &expect, LJ_SAFEPOINT_RESUMABLE_LEADER);
+}
+
+void lj_safepoint_resumable_epoch_cancel(global_State *g)
+{
+  safepoint_leader_leave(g, LJ_SAFEPOINT_RESUMABLE_LEADER);
+}
+
+/* The collector worker token serializes attempts across physical owners. Native
+** entry is closed and each TG completes its private work before its ACK. */
+int lj_safepoint_resumable_epoch_try(global_State *g, uint32_t actions, int start)
+{
+  uint64_t epoch;
+  actions |= LJ_GC2_HS_RESUMABLE;
+  lj_assertG(safepoint_resumable_actions(actions), "invalid resumable safepoint action");
+  if (start) {
+    gc2_hs_actions_rel(g, actions);
+    gc2_hs_pending_rel(g, 1);  /* Publication sentinel. */
+    epoch = gc2_hs_epoch_rlx(g) + 1u;
+    gc2_hs_signal_ns_rel(g, safepoint_now_ns());
+    gc2_hs_epoch_rel(g, epoch);
+  } else {
+    epoch = gc2_hs_epoch_acq(g);
+    (void)gc2_hs_pending_add_rlx(g, 1);
+  }
+  (void)safepoint_signal_late(g, actions, epoch);
+  safepoint_ack_native(g, actions);
+  /* The first registry pass may precede a racing attach. Keep the sentinel
+  ** through a second admission check and leave further work to another turn. */
+  if (safepoint_signal_late(g, actions, epoch) != 0)
+    safepoint_ack_native(g, actions);
+  if (gc2_hs_pending_sub_acqrel(g, 1) == 1)
+    gc2_hs_pending_futex_wake(g, 1);
+  if (gc2_hs_pending_acq(g) != 0)
+    return 0;
+  /* Live owners finish private bin rotation before clearing poll. Detached
+  ** owners have no poll slot. Rotate those bins before releasing this epoch. */
+  safepoint_apply_dead_allocators(g, actions);
+  if (actions & LJ_GC2_HS_SCAN_ROOTS) {
+    TGState *self = lj_thr_get_tg_fallback(g);
+    lj_gc2_scan_cycle_global_roots(g);
+    if (self)
+      (void)lj_gc2_flush_ssb(g, self);
+  }
+  safepoint_finish_leader(g, LJ_SAFEPOINT_RESUMABLE_LEADER, epoch);
+  return 1;
+}
+
+static uint32_t safepoint_handshake(global_State *g, uint32_t actions,
+				    int idle_policy, struct LJTraceFlushRequest *scope)
+{
+  uint64_t epoch;
+  uint32_t leader;
+  uint32_t signaled, oldpending;
+  int flush_only;
+  if (!g || (actions == 0 && !idle_policy))
+    return 0;
+  leader = safepoint_leader_enter(g);
+  safepoint_finish_prior_epoch(g);
+  if (idle_policy) {
+    /* Another setter or phase transition can win while we wait. Select the
+    ** current mode under leadership, before publishing this policy. */
+    if (gc2_phase_acq(g) != LJ_GC2_IDLE) {
+      safepoint_leader_leave(g, leader);
+      return 0;
+    }
+    actions = lj_safepoint_idle_policy_actions(g);
+  }
+  flush_only = lj_safepoint_is_trace_flush(actions);
+  gc2_hs_actions_rel(g, actions);  /* 05 section 5.4.2. */
+  gc2_hs_pending_rel(g, 1);  /* 09 section 9.3 leader sentinel. */
+  epoch = gc2_hs_epoch_rlx(g) + 1u;
+  gc2_hs_signal_ns_rel(g, safepoint_now_ns());
+  gc2_hs_epoch_rel(g, epoch);  /* 05 section 5.4.2. */
+
+  signaled = safepoint_signal_late(g, actions, epoch);
+  for (;;) {
+    uint32_t late;
+    safepoint_ack_native(g, actions);
+    late = safepoint_signal_late(g, actions, epoch);
+    if (late == 0)
+      break;
+    signaled += late;
+  }
+
+  oldpending = gc2_hs_pending_sub_acqrel(g, 1);  /* Drop sentinel. */
+  if (oldpending == 1)
+    gc2_hs_pending_futex_wake(g, 1);
+  while (gc2_hs_pending_acq(g) != 0) {
+    signaled += safepoint_signal_late(g, actions, epoch);
+    safepoint_ack_native(g, actions);
+    if (gc2_hs_pending_acq(g) == 0)
+      break;
+    gc2_hs_pending_futex_wait(g, gc2_hs_pending_rlx(g), 1000000);
+  }
+  safepoint_apply_dead_allocators(g, actions);
+  if (actions & LJ_GC2_HS_SCAN_ROOTS) {
+    TGState *self = lj_thr_get_tg_fallback(g);
+    lj_gc2_scan_cycle_global_roots(g);
+    /* Global traversal can enqueue rescans in the leader's active SSB after
+    ** its self acknowledgement already flushed. Publish that final suffix. */
+    if (self)
+      (void)lj_gc2_flush_ssb(g, self);
+  }
+  safepoint_wait_trace_quiescent(g, actions);
+#if LJ_HASJIT
+  if (scope)
+    lj_trace_flushscope_safepoint(g, scope, epoch);
+  if (actions & LJ_GC2_HS_FLUSHJ) {
+    /*
+     ** The safepoint leader can be any participating thread. Flush trace state
+     ** here, but do not emit a TRACE "flush" event through the VM event stack:
+     ** that stack belongs to vmthread and is not owned by an arbitrary leader.
+     */
+    lua_State *L = safepoint_leader_lua_state(g);
+    if (flush_only)
+      (void)lj_trace_flushall_safepoint(L);
+    else
+      (void)lj_trace_flushall_gc(L);
+  }
+#else
+  UNUSED(scope);
+#endif
+  if (!flush_only)
+    (void)lj_gc2_reclaim_retired(g, epoch);
+  if (actions & LJ_GC2_HS_FLUSH_SSB) {
+    TGState *self = lj_thr_get_tg_fallback(g);
+    /* Epoch reclamation can preserve a late metadata/object edge after the
+    ** global-root flush above. Publish that suffix before the handshake's
+    ** completion LP so fixpoint callers never manufacture another handshake
+    ** solely to expose one leader-local SSB entry. */
+    if (self)
+      (void)lj_gc2_flush_ssb(g, self);
+  }
+  safepoint_finish_leader(g, leader, epoch);
+  /* A trace flush has already removed the code before releasing the polls.
+  ** Retired storage has its own grace, native-entry gate and reader checks.
+  ** A delayed reclaim pass must let acknowledged owners run the interpreter. */
+  if (flush_only)
+    (void)lj_gc2_reclaim_retired(g, epoch);
+  return signaled;
+}
+
+uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
+{
+  return safepoint_handshake(g, actions, 0, NULL);
+}
+
+void lj_safepoint_idle_policy(global_State *g)
+{
+  (void)safepoint_handshake(g, 0, 1, NULL);
+}
+
+#if LJ_HASJIT
+void lj_safepoint_flush_scope(global_State *g, struct LJTraceFlushRequest *scope)
+{
+  /* The synchronous caller owns the recorder token and the request storage
+  ** until return. Only this leader selects and retires the requested graph. */
+  (void)safepoint_handshake(g, LJ_SAFEPOINT_SCOPED_FLUSH, 0, scope);
+}
+#endif

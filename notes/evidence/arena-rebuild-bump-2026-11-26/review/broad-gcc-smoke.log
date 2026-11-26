@@ -1,0 +1,5 @@
+gcc smoke buffer-joff 0
+gcc smoke buffer-jon 0
+gcc smoke consume-build 0
+gcc smoke consume 0
+gcc smoke {'runtime_pass': 3, 'runtime_fail': 0, 'build_fail': 0}

@@ -1,0 +1,45 @@
+[
+  {
+    "name": "progress-build",
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-ftrivial-auto-var-init=pattern",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-traverse/progress.d",
+      "-I/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/src",
+      "-I/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/tests",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/tests/t-gc2-traverse.c",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-traverse/traverse"
+    ],
+    "seconds": 3.6696546569874045,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "progress",
+    "command": [
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/check-traverse/traverse"
+    ],
+    "seconds": 15.621475149993785,
+    "exit": 0,
+    "test": true
+  }
+]

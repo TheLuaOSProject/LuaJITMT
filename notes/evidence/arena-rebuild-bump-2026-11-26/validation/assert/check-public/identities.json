@@ -1,0 +1,5 @@
+{
+  "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/src/luajit": "1bd2586a7ecd50ff4cfe52a4ce7d760b6e20067f3c3f67bb4eec40c000fdd8f7",
+  "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/src/libluajit.a": "a82f85083fa1b8e7fd52ca47864fb1871dd02d42721f252ffddfd1617531a038",
+  "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/assert/tests/t-buffer-concurrent-public.lua": "e7f61c097347eb0b7cb968db3d60e232c17d0ddeb0eb3aea436b1e4e30e3e40b"
+}

@@ -1,0 +1,2 @@
+transfer kind=traversable free_cells=3543/3543 destination_suffix=1 arenas=2->2 PASS
+t-arena-rebuild-bump OK

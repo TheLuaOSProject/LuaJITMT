@@ -1,0 +1,134 @@
+[
+  {
+    "mode": "assert",
+    "phase": "shrink",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "assert",
+      "shrink"
+    ],
+    "exit": 0,
+    "seconds": 0.3894691150053404
+  },
+  {
+    "mode": "assert",
+    "phase": "readers",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "assert",
+      "readers"
+    ],
+    "exit": 0,
+    "seconds": 0.3725969340011943
+  },
+  {
+    "mode": "assert",
+    "phase": "plain",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "assert",
+      "plain"
+    ],
+    "exit": 0,
+    "seconds": 0.5471832190232817
+  },
+  {
+    "mode": "asan",
+    "phase": "shrink",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "asan",
+      "shrink"
+    ],
+    "exit": 0,
+    "seconds": 0.5144806659955066
+  },
+  {
+    "mode": "asan",
+    "phase": "readers",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "asan",
+      "readers"
+    ],
+    "exit": 0,
+    "seconds": 0.4672984300123062
+  },
+  {
+    "mode": "asan",
+    "phase": "plain",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "asan",
+      "plain"
+    ],
+    "exit": 0,
+    "seconds": 0.7627272849786095
+  },
+  {
+    "mode": "asan",
+    "phase": "arena",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "asan",
+      "arena"
+    ],
+    "exit": 0,
+    "seconds": 63.753877544018906
+  },
+  {
+    "mode": "tsan",
+    "phase": "shrink",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "tsan",
+      "shrink"
+    ],
+    "exit": 0,
+    "seconds": 0.4513256160134915
+  },
+  {
+    "mode": "tsan",
+    "phase": "readers",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "tsan",
+      "readers"
+    ],
+    "exit": 0,
+    "seconds": 0.49901058501563966
+  },
+  {
+    "mode": "tsan",
+    "phase": "plain",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "tsan",
+      "plain"
+    ],
+    "exit": 0,
+    "seconds": 8.481866311980411
+  },
+  {
+    "mode": "tsan",
+    "phase": "arena",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/validate.py",
+      "tsan",
+      "arena"
+    ],
+    "exit": 0,
+    "seconds": 97.21152497502044
+  }
+]

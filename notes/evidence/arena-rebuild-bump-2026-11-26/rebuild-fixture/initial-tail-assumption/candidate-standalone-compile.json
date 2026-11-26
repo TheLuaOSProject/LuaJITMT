@@ -1,0 +1,29 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "gcc",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-UNDEBUG",
+    "-DLUAJIT_SECURITY_PRNG=0",
+    "-Isrc",
+    "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/t-arena-rebuild-bump.c",
+    "tests/t-arena-tls-stub.c",
+    "src/lj_arena.c",
+    "src/lj_prng.c",
+    "-pthread",
+    "-lm",
+    "-ldl",
+    "-o",
+    "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate-standalone"
+  ],
+  "exit": 0,
+  "seconds": 2.486578076001024,
+  "source_sha256": "776976c896598d68822f3d4e4fb81e938841ca78eef01dc7ad7ae6100e81cdaf",
+  "binary_sha256": "e8cfa95e189a770200d11157cfc4c04d4e3870791193ab71bca1fe0e5e9fb314"
+}

@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/src/luajit": "98355f72128b93f321614d48be8a129ef07a2e9add8753b6d1b7856d77cce8c8",
+  "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/src/libluajit.a": "602ee462bc4916cc1993153568b87b23beb6d0c6dd8751a16b86cff2db0b6e2f",
+  "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/tests/t-arena-plain-late.c": "8bba5b01b23ca6b459af9400c64ababff4d26d8a6d0fb82f830b1c8069197f89",
+  "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/tsan/check-plain/plain": "67db4eecfb01133b4483987c284ed70b31df48bd91a27ea2b877d489bbf3e371"
+}

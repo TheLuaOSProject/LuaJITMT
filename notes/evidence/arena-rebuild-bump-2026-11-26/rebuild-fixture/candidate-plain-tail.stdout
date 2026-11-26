@@ -1,0 +1,2 @@
+tail kind=plain free_cells=0/0 arenas=1->1 PASS
+t-arena-rebuild-bump OK

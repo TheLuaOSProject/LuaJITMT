@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/src/luajit": "cc7f9c27727fdf31cf0e66337d96e285632cd7ac430180e9520261d5ed6f4a27",
+  "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/src/libluajit.a": "8a6253f3730705aba95e1b589adf013dbdc4876a9f1a381fbad8f3191fdf3da7",
+  "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/tests/t-gc2-small-lease-span.c": "e221568a914d812101bc5aef8834ac314703581a3cecb7d8871527dfe9ad2bf6",
+  "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/asan/check-lease/lease": "387dab09665f952e3d88d58fb3325cc6d4731ef0113ce4aec47a1dff926a5dbd"
+}

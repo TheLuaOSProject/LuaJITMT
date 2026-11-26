@@ -7307,7 +7307,8 @@ typedef struct ArenaRebuildRuns {
 typedef struct ArenaRebuildFree {
   TGAlloc *alloc;
   GCArena *a;
-  uint32_t limit;
+  uint32_t bump_cell;
+  uint32_t bump_end;
 } ArenaRebuildFree;
 
 static void arena_rebuild_run(uint32_t start, uint32_t len, void *ud)
@@ -7326,10 +7327,24 @@ static void arena_rebuild_run(uint32_t start, uint32_t len, void *ud)
 static void arena_rebuild_free_run(uint32_t start, uint32_t len, void *ud)
 {
   ArenaRebuildFree *rf = (ArenaRebuildFree *)ud;
-  if (start >= rf->limit)
-    return;
-  if (len > rf->limit - start)
-    len = rf->limit - start;
+  uint32_t end = start + len;
+  /* A private bump can be an interior window, not the arena's final tail.
+  ** Its zero-state cells may join free boundaries on both sides into this
+  ** scanned run. Publish both complements without touching the private
+  ** interval; an exhausted or absent bump excludes nothing. Each complement
+  ** retains the ordinary complete ownership preflight before publication. */
+  if (rf->bump_cell < rf->bump_end &&
+      start < rf->bump_end && end > rf->bump_cell) {
+    if (start < rf->bump_cell) {
+      uint32_t prefix = rf->bump_cell - start;
+      if (arena_set_free_run(rf->a, start, prefix))
+        arena_link_run_head(rf->alloc, rf->a, start, prefix);
+    }
+    if (end <= rf->bump_end)
+      return;
+    start = rf->bump_end;
+    len = end - start;
+  }
   if (arena_set_free_run(rf->a, start, len))
     arena_link_run_head(rf->alloc, rf->a, start, len);
 }
@@ -7375,7 +7390,7 @@ static int arena_adopt_reclaimed_one(TGAlloc *alloc, uint32_t k)
   old_owned = alloc->owned[k];
   rf.alloc = &staged;
   rf.a = a;
-  rf.limit = LJ_ARENA_CELLS;
+  rf.bump_cell = rf.bump_end = 0;  /* No private bump in a reclaimed arena. */
   /* A terminal-word quarantine may already have proved that no live cell
   ** remains. Treat that count only as a hint: the whole-payload free-run
   ** transform repeats the complete root/recovery/destructor/lifetime
@@ -7682,8 +7697,8 @@ void lj_arena_alloc_rebuild_free_kind(TGAlloc *alloc, uint32_t k)
       ArenaRebuildFree rf;
       rf.alloc = alloc;
       rf.a = a;
-      rf.limit = alloc->bump[k].a == a ? alloc->bump[k].cell :
-					 LJ_ARENA_CELLS;
+      rf.bump_cell = alloc->bump[k].a == a ? alloc->bump[k].cell : 0;
+      rf.bump_end = alloc->bump[k].a == a ? alloc->bump[k].end : 0;
       lj_arena_scan_free_runs(a, arena_rebuild_free_run, &rf);
     }
   }
@@ -8301,7 +8316,7 @@ int lj_arena_alloc_restore_sweep_kind(TGAlloc *alloc, uint32_t k)
     memset(&staged, 0, sizeof(staged));
     rf.alloc = &staged;
     rf.a = a;
-    rf.limit = LJ_ARENA_CELLS;
+    rf.bump_cell = rf.bump_end = 0;  /* Preparation detached its private bump. */
     lj_arena_scan_free_runs(a, arena_rebuild_free_run, &rf);
     memcpy(old_bins, alloc->bins[k], sizeof(old_bins));
     old_binmask = alloc->binmask[k];

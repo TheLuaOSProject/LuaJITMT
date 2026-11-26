@@ -11,6 +11,7 @@ local M2_ORDER = {
   "m2_arena_map",
   "m2_arena_alloc",
   "m2_arena_bin_capacity",
+  "m2_arena_rebuild_bump",
   "m2_arena_plain_late",
   "m2_arena_plain_progress",
   "m2_arena_plain_shrink",
@@ -115,6 +116,21 @@ return function(add)
       local pthread = os.getenv("PTHREAD") or "-pthread"
       compile_and_run_sources(t, t:tmp("lj_t_arena_bin_capacity"),
         arena_sources(t, "t-arena-bin-capacity.c"), {
+        cflags = "-DLUAJIT_SECURITY_PRNG=0 -DLJ_ARENA_TEST_HELPERS " .. pthread,
+        link_luajit = false,
+        libs = { pthread }, timeout = "120s"
+      })
+    end
+  })
+
+  register({
+    name = "m2_arena_rebuild_bump",
+    description = "rebuild preserves free capacity outside the private bump window",
+    run = function(t)
+      if jit.os ~= "Linux" then return end
+      local pthread = os.getenv("PTHREAD") or "-pthread"
+      compile_and_run_sources(t, t:tmp("lj_t_arena_rebuild_bump"),
+        arena_sources(t, "t-arena-rebuild-bump.c"), {
         cflags = "-DLUAJIT_SECURITY_PRNG=0 -DLJ_ARENA_TEST_HELPERS " .. pthread,
         link_luajit = false,
         libs = { pthread }, timeout = "120s"

@@ -1,0 +1,182 @@
+[
+  {
+    "case": "plain-interior",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate",
+      "plain-interior"
+    ],
+    "exit": 0,
+    "utc_start": "2026-11-26T18:41:56.526828+00:00",
+    "utc_end": "2026-11-26T18:41:56.528761+00:00",
+    "seconds": 0.0019285859889350832,
+    "user_seconds": 0.0,
+    "system_seconds": 0.001637,
+    "maxrss_kib": 9484,
+    "binary_sha256": "246405c872b2d7349b1ddf80a95ce2267c34e15bee70d592c43d0b390f28c14c"
+  },
+  {
+    "case": "traversable-interior",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate",
+      "traversable-interior"
+    ],
+    "exit": 0,
+    "utc_start": "2026-11-26T18:41:56.547969+00:00",
+    "utc_end": "2026-11-26T18:41:56.549868+00:00",
+    "seconds": 0.0018959399894811213,
+    "user_seconds": 0.0,
+    "system_seconds": 0.001568,
+    "maxrss_kib": 9180,
+    "binary_sha256": "246405c872b2d7349b1ddf80a95ce2267c34e15bee70d592c43d0b390f28c14c"
+  },
+  {
+    "case": "plain-exhausted",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate",
+      "plain-exhausted"
+    ],
+    "exit": 0,
+    "utc_start": "2026-11-26T18:41:56.572097+00:00",
+    "utc_end": "2026-11-26T18:41:56.573762+00:00",
+    "seconds": 0.0016564269899390638,
+    "user_seconds": 0.0,
+    "system_seconds": 0.0013759999999999998,
+    "maxrss_kib": 9544,
+    "binary_sha256": "246405c872b2d7349b1ddf80a95ce2267c34e15bee70d592c43d0b390f28c14c"
+  },
+  {
+    "case": "traversable-exhausted",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate",
+      "traversable-exhausted"
+    ],
+    "exit": 0,
+    "utc_start": "2026-11-26T18:41:56.591831+00:00",
+    "utc_end": "2026-11-26T18:41:56.593594+00:00",
+    "seconds": 0.001759829989168793,
+    "user_seconds": 0.0,
+    "system_seconds": 0.001437,
+    "maxrss_kib": 9200,
+    "binary_sha256": "246405c872b2d7349b1ddf80a95ce2267c34e15bee70d592c43d0b390f28c14c"
+  },
+  {
+    "case": "plain-crossing",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate",
+      "plain-crossing"
+    ],
+    "exit": 0,
+    "utc_start": "2026-11-26T18:41:56.611904+00:00",
+    "utc_end": "2026-11-26T18:41:56.613635+00:00",
+    "seconds": 0.0017283099878113717,
+    "user_seconds": 0.0,
+    "system_seconds": 0.001429,
+    "maxrss_kib": 9196,
+    "binary_sha256": "246405c872b2d7349b1ddf80a95ce2267c34e15bee70d592c43d0b390f28c14c"
+  },
+  {
+    "case": "traversable-crossing",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate",
+      "traversable-crossing"
+    ],
+    "exit": 0,
+    "utc_start": "2026-11-26T18:41:56.635892+00:00",
+    "utc_end": "2026-11-26T18:41:56.637699+00:00",
+    "seconds": 0.0018035719986073673,
+    "user_seconds": 0.0,
+    "system_seconds": 0.00148,
+    "maxrss_kib": 9120,
+    "binary_sha256": "246405c872b2d7349b1ddf80a95ce2267c34e15bee70d592c43d0b390f28c14c"
+  },
+  {
+    "case": "plain-tail",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate",
+      "plain-tail"
+    ],
+    "exit": 0,
+    "utc_start": "2026-11-26T18:41:56.655097+00:00",
+    "utc_end": "2026-11-26T18:41:56.657015+00:00",
+    "seconds": 0.0019098059856332839,
+    "user_seconds": 0.0,
+    "system_seconds": 0.001624,
+    "maxrss_kib": 9096,
+    "binary_sha256": "246405c872b2d7349b1ddf80a95ce2267c34e15bee70d592c43d0b390f28c14c"
+  },
+  {
+    "case": "traversable-tail",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate",
+      "traversable-tail"
+    ],
+    "exit": 0,
+    "utc_start": "2026-11-26T18:41:56.674867+00:00",
+    "utc_end": "2026-11-26T18:41:56.676591+00:00",
+    "seconds": 0.001721045991871506,
+    "user_seconds": 0.0,
+    "system_seconds": 0.0014939999999999999,
+    "maxrss_kib": 9208,
+    "binary_sha256": "246405c872b2d7349b1ddf80a95ce2267c34e15bee70d592c43d0b390f28c14c"
+  },
+  {
+    "case": "plain-transfer",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate",
+      "plain-transfer"
+    ],
+    "exit": 0,
+    "utc_start": "2026-11-26T18:41:56.699247+00:00",
+    "utc_end": "2026-11-26T18:41:56.700980+00:00",
+    "seconds": 0.0017281750042457134,
+    "user_seconds": 0.0,
+    "system_seconds": 0.0014429999999999998,
+    "maxrss_kib": 9224,
+    "binary_sha256": "246405c872b2d7349b1ddf80a95ce2267c34e15bee70d592c43d0b390f28c14c"
+  },
+  {
+    "case": "traversable-transfer",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-rebuild-bump-20261126-1d94ydej/rebuild-fixture/candidate",
+      "traversable-transfer"
+    ],
+    "exit": 0,
+    "utc_start": "2026-11-26T18:41:56.718954+00:00",
+    "utc_end": "2026-11-26T18:41:56.720885+00:00",
+    "seconds": 0.0019295829988550395,
+    "user_seconds": 0.0,
+    "system_seconds": 0.00162,
+    "maxrss_kib": 9480,
+    "binary_sha256": "246405c872b2d7349b1ddf80a95ce2267c34e15bee70d592c43d0b390f28c14c"
+  }
+]

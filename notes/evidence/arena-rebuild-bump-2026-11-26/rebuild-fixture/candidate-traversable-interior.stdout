@@ -1,0 +1,2 @@
+interior kind=traversable exhausted=0 free_cells=64/64 exact_suffix=1 arenas=1->1 PASS
+t-arena-rebuild-bump OK
