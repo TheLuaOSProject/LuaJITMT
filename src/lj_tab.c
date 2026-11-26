@@ -7238,29 +7238,29 @@ void lj_tab_test_set_nil_store_found_hook(LJTabStorePostCasHook hook)
 void lj_tab_test_set_rooted_reader_retry_hook(
   LJTabRootedReaderRetryHook hook)
 {
-  tab_test_rooted_reader_retry_hook = hook;
+  la_storefunc_rel(&tab_test_rooted_reader_retry_hook, hook);
 }
 
 void lj_tab_test_set_len_rooted_try_hook(LJTabLenRootedTryHook hook)
 {
-  tab_test_len_rooted_try_hook = hook;
+  la_storefunc_rel(&tab_test_len_rooted_try_hook, hook);
 }
 
 static LJ_AINLINE LJTabRootedReaderRetryHook
 tab_test_rooted_reader_retry_take(void)
 {
-  LJTabRootedReaderRetryHook hook = tab_test_rooted_reader_retry_hook;
-  tab_test_rooted_reader_retry_hook = NULL;
-  return hook;
+  if (!la_loadfunc_acq(&tab_test_rooted_reader_retry_hook))
+    return NULL;
+  return la_xchgfunc_acqrel(&tab_test_rooted_reader_retry_hook, NULL);
 }
 
 static LJ_AINLINE void tab_test_len_rooted_try_before_current(int enabled,
 							      GCtab *t)
 {
-  LJTabLenRootedTryHook hook = tab_test_len_rooted_try_hook;
-  if (!enabled)
+  LJTabLenRootedTryHook hook;
+  if (!enabled || !la_loadfunc_acq(&tab_test_len_rooted_try_hook))
     return;
-  tab_test_len_rooted_try_hook = NULL;
+  hook = la_xchgfunc_acqrel(&tab_test_len_rooted_try_hook, NULL);
   if (hook)
     hook(t);
 }
@@ -10781,7 +10781,7 @@ int lj_tab_nextscalar_rooted_try(lua_State *L, cTValue *tabroot,
 #ifdef LJ_TAB_TEST_HELPERS
   /* The established retry hook may allocate or move the stack. Let its
   ** original general reader close all authority before calling it. */
-  if (tab_test_rooted_reader_retry_hook)
+  if (la_loadfunc_acq(&tab_test_rooted_reader_retry_hook))
     return status;
 #endif
   lj_tv_load_acq(&tablev, tabroot);
