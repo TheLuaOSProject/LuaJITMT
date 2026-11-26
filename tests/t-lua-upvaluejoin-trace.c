@@ -55,17 +55,25 @@ int main(void)
   check_lua(L, luaL_dostring(L,
     "local function cell(x) return function() return x end end\n"
     "local dest, donor, replacement = cell(1), cell(2), cell(3)\n"
-    "jit.flush(); assert(f(120)==840 and require('jit.util').traceinfo(1))\n"
-    "local callbacks = 0\n"
-    "local function redirect(kind)\n"
-    "  if kind=='flush' and callbacks==0 then\n"
-    "    callbacks=callbacks+1; debug.upvaluejoin(donor,1,replacement,1)\n"
+    "local function redirect_on_flush(from,to)\n"
+    "  jit.flush(); assert(f(120)==840 and require('jit.util').traceinfo(1))\n"
+    "  local callbacks=0\n"
+    "  local function redirect(kind)\n"
+    "    if kind=='flush' and callbacks==0 then\n"
+    "      callbacks=callbacks+1; debug.upvaluejoin(from,1,to,1)\n"
+    "    end\n"
     "  end\n"
+    "  jit.off(redirect); jit.attach(redirect,'trace')\n"
+    "  return function() jit.attach(redirect); assert(callbacks==1) end\n"
     "end\n"
-    "jit.off(redirect); jit.attach(redirect,'trace')\n"
-    "debug.upvaluejoin(dest,1,donor,1); jit.attach(redirect)\n"
-    "assert(callbacks==1 and donor()==3 and dest()==3)\n"),
-    "join after a flush callback redirects the donor");
+    "local finish=redirect_on_flush(donor,replacement)\n"
+    "debug.upvaluejoin(dest,1,donor,1); finish()\n"
+    "assert(donor()==3 and dest()==3)\n"
+    "local old=cell(0); debug.upvaluejoin(old,1,dest,1)\n"
+    "local new,v=cell(19),{}; finish=redirect_on_flush(dest,new)\n"
+    "assert(debug.setupvalue(dest,1,v)=='x'); finish()\n"
+    "collectgarbage(); assert(old()==3 and dest()==v and new()==v)\n"),
+    "join and assign after a trace-flush callback redirects the cell");
 
   lua_close(L);
   printf("t-lua-upvaluejoin-trace OK: lua_upvaluejoin flushes stale traces\n");

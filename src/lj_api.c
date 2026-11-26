@@ -2748,33 +2748,12 @@ LUA_API int lua_next(lua_State *L, int idx)
   return more;
 }
 
-LUA_API const char *lua_getupvalue(lua_State *L, int idx, int n)
-{
-  LJStateClaim claim;
-  lua_State *errL = api_errstate(L);
-  TValue snap;
-  TValue *val;
-  GCobj *o;
-  const char *name;
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-    lj_err_callermsg(errL, "thread busy");
-  name = lj_debug_uvnamev(index2adr_read(L, idx, &snap),
-			  (uint32_t)(n-1), &val, &o);
-  if (name) {
-    api_checkstack1_claimed(L, errL, &claim);
-    lj_tv_load_acq(L->top, val);
-    lj_state_stack_pubtv(L, L, L->top);
-    incr_top(L);
-  }
-  lj_state_dropresumeclaim(&claim);
-  return name;
-}
-
 enum {
   API_UV_RETRY = -1,
   API_UV_INVALID,
   API_UV_OK,
-  API_UV_FLUSH
+  API_UV_FLUSH,
+  API_UV_GROW
 };
 
 typedef struct ApiUpvalueFunction {
@@ -2803,6 +2782,116 @@ static int api_upvalue_function_try(lua_State *L, int idx, uint32_t uv,
       LJ_GC2_TV_EDGE_VALID || !api_upvalue_function_current(f))
     return API_UV_RETRY;
   return uv < lj_func_nupvalues(funcV(&f->value)) ? API_UV_OK : API_UV_INVALID;
+}
+
+/* Stack growth and trace-flush callbacks can move the stack or replace a
+** closure edge. Return to the caller for either operation, then resolve the
+** original API index again with no outstanding lease. */
+static int api_accessupvalue_try(lua_State *L, int idx, uint32_t n,
+                                 int store, int flushed, const char **name)
+{
+  ApiUpvalueFunction f = {0};
+  LJGC2Lease cell_lease = {0}, value_lease = {0};
+  GCfunc *fn;
+  GCobj *parent;
+  TValue value, *slot;
+  cTValue *input;
+  int open = 0, lua;
+  int status = api_upvalue_function_try(L, idx, n, &f);
+  if (status != API_UV_OK)
+    goto leave;
+  if (!store && L->top + 1 >= tvref(L->maxstack)) {
+    status = API_UV_GROW;
+    goto leave;
+  }
+  status = API_UV_RETRY;
+  fn = funcV(&f.value);
+  lua = isluafunc(fn);
+  if (lua) {
+    parent = func_uvptr_acq(&fn->l, n);
+    if (!lj_func_uv_lease_try(G(L), parent, &cell_lease) ||
+        func_uvptr_acq(&fn->l, n) != parent)
+      goto leave;
+    slot = mref_acq(parent->uv.v, TValue);
+    if (slot != &parent->uv.tv) {
+      if (!lj_gc2_smr_read_try(G(L)))
+        goto leave;
+      open = 1;
+      slot = mref_acq(parent->uv.v, TValue);
+    }
+  } else {
+    parent = obj2gco(fn);
+    slot = &fn->c.upvalue[n];
+  }
+  input = store ? L->top - 1 : slot;
+  if (lj_gc2_root_lease_acquire(G(L), input, &value, &value_lease, 0) !=
+      LJ_GC2_TV_EDGE_VALID || !api_upvalue_function_current(&f) ||
+      (lua && (func_uvptr_acq(&fn->l, n) != parent ||
+               mref_acq(parent->uv.v, TValue) != slot)) ||
+      !lj_str_tv_rescue_held(&value))
+    goto leave;
+  if (store && !flushed && (!lua || tv_rawload_acq(slot) != tv_rawload(&value))) {
+    status = API_UV_FLUSH;
+    goto leave;
+  }
+  *name = lua ? lj_debug_uvname(funcproto(fn), n) : "";
+  if (store) {
+    /* An equal Lua value needs no invalidation. That observation completes
+    ** the assignment even if a sibling immediately writes a different value. */
+    if (flushed) {
+      copyTVrel(L, slot, &value);
+      if (tvisgcv(&value))
+        lj_gc2_barrier_tv_pair_g(G(L), parent, &value);
+      if (open)
+        lj_gc2_publish_read_root(L, &value, 1);
+    }
+    L->top--;
+  } else {
+    copyTVrel(L, L->top, &value);
+    L->top++;
+    lj_gc2_publish_read_root(L, L->top-1, 1);
+  }
+  status = API_UV_OK;
+leave:
+  if (open)
+    lj_gc2_smr_read_leave(G(L));
+  lj_gc2_lease_release(&value_lease);
+  lj_gc2_lease_release(&cell_lease);
+  lj_gc2_lease_release(&f.lease);
+  return status;
+}
+
+static const char *api_accessupvalue(lua_State *L, int idx, int n, int store)
+{
+  LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
+  const char *name = NULL;
+  int flushed = 0;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  if (store)
+    lj_checkapi_slot(1);
+  for (;;) {
+    int status = api_accessupvalue_try(L, idx, (uint32_t)n - 1u,
+                                       store, flushed, &name);
+    if (status == API_UV_GROW) {
+      api_checkstack1_claimed(L, errL, &claim);
+    } else if (status == API_UV_FLUSH) {
+      api_trace_flush_mutation_claimed(L, errL, &claim);
+      flushed = 1;
+    } else if (status == API_UV_RETRY) {
+      lj_tab_wait_l(L);
+    } else {
+      break;
+    }
+  }
+  lj_state_dropresumeclaim(&claim);
+  return name;
+}
+
+LUA_API const char *lua_getupvalue(lua_State *L, int idx, int n)
+{
+  return api_accessupvalue(L, idx, n, 0);
 }
 
 LUA_API void *lua_upvalueid(lua_State *L, int idx, int n)
@@ -3327,30 +3416,7 @@ LUA_API int lua_setfenv(lua_State *L, int idx)
 
 LUA_API const char *lua_setupvalue(lua_State *L, int idx, int n)
 {
-  LJStateClaim claim;
-  lua_State *errL = api_errstate(L);
-  TValue snap;
-  cTValue *f;
-  TValue *val;
-  GCobj *o;
-  const char *name;
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-    lj_err_callermsg(errL, "thread busy");
-  f = index2adr_read(L, idx, &snap);
-  lj_checkapi_slot(1);
-  name = lj_debug_uvnamev(f, (uint32_t)(n-1), &val, &o);
-  if (name) {
-    if (o->gch.gct == ~LJ_TFUNC && !isluafunc(gco2func(o)))
-      api_trace_flush_mutation_claimed(L, errL, &claim);
-    else if (o->gch.gct == ~LJ_TUPVAL &&
-	     tv_rawload_acq(val) != tv_rawload(L->top-1))
-      api_trace_flush_mutation_claimed(L, errL, &claim);
-    L->top--;
-    copyTVrel(L, val, L->top);
-    lj_gc_pubobjtv(L, o, L->top);
-  }
-  lj_state_dropresumeclaim(&claim);
-  return name;
+  return api_accessupvalue(L, idx, n, 1);
 }
 
 /* -- Calls --------------------------------------------------------------- */

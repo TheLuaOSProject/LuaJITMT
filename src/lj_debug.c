@@ -266,30 +266,6 @@ const char *lj_debug_uvname(GCproto *pt, uint32_t idx)
   return (const char *)p;
 }
 
-/* Get name and value of upvalue. */
-const char *lj_debug_uvnamev(cTValue *o, uint32_t idx, TValue **tvp, GCobj **op)
-{
-  if (tvisfunc(o)) {
-    GCfunc *fn = funcV(o);
-    if (isluafunc(fn)) {
-      GCproto *pt = funcproto(fn);
-      if (idx < pt->sizeuv) {
-	GCobj *uvo = func_uvptr_acq(&fn->l, idx);
-	*tvp = uvval(&uvo->uv);
-	*op = uvo;
-	return lj_debug_uvname(pt, idx);
-      }
-    } else {
-      if (idx < lj_funcC_nupvalues(&fn->c)) {
-	*tvp = &fn->c.upvalue[idx];
-	*op = obj2gco(fn);
-	return "";
-      }
-    }
-  }
-  return NULL;
-}
-
 /* Deduce name of an object from slot number and PC. */
 const char *lj_debug_slotname(GCproto *pt, const BCIns *ip, BCReg slot,
 			      const char **name)
