@@ -1,127 +1,149 @@
 /*
-** Focused regression test for lock-free JIT snapshot cdata restore ctype reads.
+** Restore sunk cdata on native side exits while a real cdef is suspended.
 */
 
 #include <assert.h>
-#include <pthread.h>
+#include <sched.h>
 #include <stdio.h>
 
-#include "lua.h"
-#include "lauxlib.h"
-#include "lualib.h"
-
-#include "lib/test_sleep.h"
-
-#include "lj_obj.h"
 #include "lj_ctype.h"
-
-#include "lib/ctype_parse_fixture_helpers.h"
+#include "lj_cdata.h"
+#include "lj_snap.h"
 #include "lib/lua_fixture_helpers.h"
 
-typedef struct ParseReleaseCtx {
-  CTState *cts;
-  uint32_t release_seq;
-  volatile int released;
-} ParseReleaseCtx;
+enum { INACTIVE, PARSING, PAUSED, RELEASED };
+static uint32_t stage;
+static CTypeID target, struct_id, boxed_id;
+static unsigned structs_restored, boxes_restored;
+static _Thread_local unsigned restoring;
 
-
-static void *release_parse_token(void *arg)
+CType *__real_lj_ctype_publish(CTState *cts, CTypeID id, CType *src);
+CType *__wrap_lj_ctype_publish(CTState *cts, CTypeID id, CType *src)
 {
-  ParseReleaseCtx *ctx = (ParseReleaseCtx *)arg;
-  sleep_ns(200000000);
-  ljt_ctype_release_parse_token(ctx->cts, ctx->release_seq);
-  ctx->released = 1;
-  return NULL;
+  CType *ct = __real_lj_ctype_publish(cts, id, src);
+  if (la_load32_acq(&stage) == PARSING && id == target &&
+      ctype_size_acq(ct) == sizeof(int)) {
+    assert(ctype_parse_token_acq(cts) & 1u);
+    la_store32_rel(&stage, PAUSED);
+    while (la_load32_acq(&stage) == PAUSED)
+      sched_yield();
+  }
+  return ct;
 }
 
-static void assert_snap_restore_waits_for_release(lua_State *L, CTState *cts,
-						  const char *chunk)
+const BCIns *__real_lj_snap_restore_exit(jit_State *J, void *exptr,
+  lua_State *L, GCtrace *T, TraceNo parent, ExitNo exitno);
+const BCIns *__wrap_lj_snap_restore_exit(jit_State *J, void *exptr,
+  lua_State *L, GCtrace *T, TraceNo parent, ExitNo exitno)
 {
-  ParseReleaseCtx ctx;
-  pthread_t thread;
-  uint32_t seq0 = ljt_ctype_parse_seq(cts);
-  uint32_t seq1;
+  const BCIns *pc;
+  restoring++;
+  pc = __real_lj_snap_restore_exit(J, exptr, L, T, parent, exitno);
+  restoring--;
+  return pc;
+}
 
-  ctx.cts = cts;
-  ctx.release_seq = ljt_ctype_hold_parse_token(cts);
-  ctx.released = 0;
-  assert(ctx.release_seq == seq0 + 2u);
+GCcdata *__real_lj_cdata_newx_l(lua_State *L, CTState *cts, CTypeID id,
+                               CTSize sz, CTInfo info);
+GCcdata *__wrap_lj_cdata_newx_l(lua_State *L, CTState *cts, CTypeID id,
+                               CTSize sz, CTInfo info)
+{
+  GCcdata *cd = __real_lj_cdata_newx_l(L, cts, id, sz, info);
+  if (restoring && la_load32_acq(&stage) == PAUSED) {
+    assert(ctype_parse_token_acq(cts) & 1u);
+    if (id == struct_id)
+      structs_restored++;
+    if (id == boxed_id)
+      boxes_restored++;
+  }
+  return cd;
+}
 
-  assert(pthread_create(&thread, NULL, release_parse_token, &ctx) == 0);
-  ljt_lua_dostring(L, chunk);
-  seq1 = ctype_parse_token_acq(cts);
-  assert(pthread_join(thread, NULL) == 0);
-  assert(ctx.released);
-  assert(seq1 == ctx.release_seq);
+static int watch_types(lua_State *L)
+{
+  target = (CTypeID)luaL_checkinteger(L, 1);
+  struct_id = (CTypeID)luaL_checkinteger(L, 2);
+  boxed_id = (CTypeID)luaL_checkinteger(L, 3);
+  la_store32_rel(&stage, PARSING);
+  return 0;
+}
+
+static int wait_for_parser(lua_State *L)
+{
+  UNUSED(L);
+  while (la_load32_acq(&stage) != PAUSED)
+    sched_yield();
+  return 0;
+}
+
+static int verify_and_release(lua_State *L)
+{
+  UNUSED(L);
+  assert(la_load32_acq(&stage) == PAUSED);
+  assert(structs_restored > 0);
+  assert(boxes_restored > 0);
+  la_store32_rel(&stage, RELEASED);
+  return 0;
 }
 
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
-  CTState *cts;
-  uint32_t seq0, seq1, seq2, seq3;
-
+  lua_register(L, "watch_types", watch_types);
+  lua_register(L, "wait_for_parser", wait_for_parser);
+  lua_register(L, "verify_and_release", verify_and_release);
   ljt_lua_dostring(L,
-    "local ffi = require('ffi')\n"
+    "local ffi, th = require('ffi'), require('threading')\n"
     "ffi.cdef[[\n"
-    "typedef struct { int x; double y; } lj_m7_snap_restore_snapshot_t;\n"
-    "typedef const int64_t lj_m7_snap_restore_snapshot_i64_t;\n"
+    "typedef struct { int x; double y; } snap_ready_t;\n"
+    "typedef const int64_t snap_boxed_t;\n"
+    "struct snap_pending;\n"
     "]]\n"
-    "jit.flush()\n"
-    "jit.on()\n"
-    "jit.opt.start('hotloop=1', 'hotexit=1000')\n"
-    "lj_m7_snap_restore_struct_t = "
-    "ffi.typeof('lj_m7_snap_restore_snapshot_t')\n"
-    "lj_m7_snap_restore_i64_t = "
-    "ffi.typeof('lj_m7_snap_restore_snapshot_i64_t')\n"
-    "function lj_m7_snap_restore_make_struct(n, stop)\n"
-    "  local struct_t = lj_m7_snap_restore_struct_t\n"
+    "local struct_t, boxed_t = ffi.typeof('snap_ready_t'), ffi.typeof('snap_boxed_t')\n"
+    "local pending = ffi.typeof('struct snap_pending')\n"
+    "watch_types(tonumber(pending), tonumber(ffi.typeof(struct_t())),\n"
+    "            tonumber(ffi.typeof(boxed_t(0))))\n"
+    "local function make_struct(n, stop)\n"
     "  for i = 1, n do\n"
     "    local obj = struct_t(i, i + 0.5)\n"
     "    if i == stop then return obj end\n"
     "  end\n"
-    "  return nil\n"
     "end\n"
-    "function lj_m7_snap_restore_make_i64(n, stop)\n"
-    "  local int64_t = lj_m7_snap_restore_i64_t\n"
+    "local function make_i64(n, stop)\n"
     "  for i = 1, n do\n"
-    "    local v = int64_t(i)\n"
+    "    local v = boxed_t(9007199254740000 + i)\n"
     "    if i == stop then return v end\n"
     "  end\n"
-    "  return nil\n"
     "end\n"
+    "local start = th.channel(1)\n"
+    "local w = th.spawn(function(start)\n"
+    "  assert(start:recv())\n"
+    "  require('ffi').cdef('struct snap_pending { int x; };')\n"
+    "  return true\n"
+    "end, start)\n"
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1000')\n"
     "for _ = 1, 60 do\n"
-    "  assert(lj_m7_snap_restore_make_struct(80, 0) == nil)\n"
-    "  assert(lj_m7_snap_restore_make_i64(80, 0) == nil)\n"
-    "end\n");
-
-  cts = ctype_ctsG(G(L));
-  assert(cts != NULL);
-  seq0 = ljt_ctype_parse_seq(cts);
-
-  assert_snap_restore_waits_for_release(L, cts,
-    "local obj = lj_m7_snap_restore_make_struct(80, 37)\n"
-    "assert(obj.x == 37)\n"
-    "assert(obj.y == 37.5)\n");
-  seq1 = ljt_ctype_parse_seq(cts);
-  assert(seq1 == seq0 + 2u);
-
-  assert_snap_restore_waits_for_release(L, cts,
-    "local v = lj_m7_snap_restore_make_i64(80, 41)\n"
-    "assert(tonumber(v) == 41)\n");
-  seq2 = ljt_ctype_parse_seq(cts);
-  assert(seq2 == seq0 + 4u);
-
-  ljt_lua_dostring(L,
-    "local obj = lj_m7_snap_restore_make_struct(80, 43)\n"
-    "assert(obj.x == 43)\n"
-    "assert(obj.y == 43.5)\n"
-    "local v = lj_m7_snap_restore_make_i64(80, 47)\n"
-    "assert(tonumber(v) == 47)\n");
-  seq3 = ljt_ctype_parse_seq(cts);
-  assert(seq3 == seq2);
-
+    "  assert(make_struct(80, 0) == nil)\n"
+    "  assert(make_i64(80, 0) == nil)\n"
+    "end\n"
+    "assert(start:send(true))\n"
+    "wait_for_parser()\n"
+    "assert(ffi.sizeof(pending) == nil)\n"
+    "assert(ffi.sizeof(struct_t) == 16 and ffi.offsetof(struct_t, 'y') == 8)\n"
+    "local obj, v = make_struct(80, 37), make_i64(80, 41)\n"
+    "assert(ffi.istype(struct_t, obj) and obj.x == 37 and obj.y == 37.5)\n"
+    "assert(type(v) == 'cdata' and ffi.istype(boxed_t, v))\n"
+    "assert(v == 9007199254740041LL)\n"
+    "verify_and_release()\n"
+    "local joined, result = w:join(10)\n"
+    "assert(joined and result, tostring(result))\n"
+    "assert(ffi.sizeof(pending) == 4 and ffi.offsetof(pending, 'x') == 0)\n"
+    "obj, v = make_struct(80, 43), make_i64(80, 47)\n"
+    "assert(obj.x == 43 and obj.y == 43.5 and v == 9007199254740047LL)\n");
   lua_close(L);
-  printf("t-ffi-snap-restore-snapshot OK: JIT cdata restore waits on parser-owned ctypes\n");
+  printf("t-ffi-snap-restore-snapshot OK: restored %u structs and %u boxes during cdef\n",
+         structs_restored, boxes_restored);
   return 0;
 }

@@ -192,7 +192,42 @@ static void *publish_redispatch_while_native(void *arg)
 
 static int checkstop_from_lua(lua_State *L)
 {
-  lj_ccall_native_checkstop(L, pending_actions, &pending_native);
+  TGState *tg = L2TG(L);
+  CTState *cts = ctype_cts(L);
+  NativeHelperStopReqCtx ctx;
+  CCallNativeState native;
+  pthread_t thread;
+  uint32_t actions;
+  void *func = (void *)(uintptr_t)&dummy_foreign;
+
+  /* Publish the real interrupt inside the protected C frame. A pending
+  ** STOPREQ before Lua enters this frame belongs to VM dispatch instead. */
+  ctx.g = G(L);
+  ctx.tg = tg;
+  ctx.published = 0;
+  ctx.saw_native = 0;
+  assert(pthread_create(&thread, NULL, publish_stopreq_while_native,
+                        &ctx) == 0);
+  lj_ccall_native_save(L, &native);
+  lj_ccall_native_enter(L, &native, func);
+  while (!(lj_tg_reqmask_acq(tg) & LJ_GC2_HS_STOPREQ) &&
+         !ljt_tg_has_stopreq(tg))
+    sleep_ns(1000000);
+  errno = EDOM;
+#if LJ_TARGET_WINDOWS
+  SetLastError((DWORD)STOPREQ_WINERR);
+#endif
+  actions = lj_ccall_native_leave(L, cts, &native, func);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(ctx.published);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(lj_tg_ffi_call_func_acq(tg) == NULL);
+  assert(ccallback_slot_acq(&tg->cb) == 0);
+  assert(ljt_tg_has_stopreq(tg));
+  assert((actions & LJ_GC2_HS_STOPREQ) != 0);
+  assert(lj_tg_reqmask_acq(tg) == 0);
+  assert(lj_tg_poll_acq(tg) == 1);
+  lj_ccall_native_checkstop(L, actions, &native);
   return 0;
 }
 
@@ -260,55 +295,14 @@ static void run_callback_blacklist(lua_State *L, CTState *cts, TGState *tg)
   ccallback_slot_rel(&tg->cb, 0);
 }
 
-static void run_fresh_stopreq_check(lua_State *L, CTState *cts,
-				    global_State *g, TGState *tg)
+static void run_fresh_stopreq_check(lua_State *L, TGState *tg)
 {
 #if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   NativeHelperAllocCtx alloc;
 #endif
-  NativeHelperStopReqCtx ctx;
-  CCallNativeState native;
-  pthread_t thread;
-  void *func = (void *)(uintptr_t)&dummy_foreign;
 
   ljt_tg_clear_stopreq(tg);
-  /* Compile before publishing STOPREQ. The loader is itself an L-aware
-  ** safepoint boundary and correctly throws a pending request before this
-  ** chunk can establish its inner pcall frame. Keep the compiled closure on
-  ** the Lua stack through the allocation-free native-state probe, then test
-  ** only the intended post-call checkstop unwind below. */
   ljt_lua_loadstring(L, fresh_stopreq_chunk);
-  ctx.g = g;
-  ctx.tg = tg;
-  ctx.published = 0;
-  ctx.saw_native = 0;
-
-  assert(pthread_create(&thread, NULL, publish_stopreq_while_native,
-			&ctx) == 0);
-  lj_ccall_native_save(L, &native);
-  lj_ccall_native_enter(L, &native, func);
-  sleep_ns(20000000);
-  errno = EDOM;
-#if LJ_TARGET_WINDOWS
-  SetLastError((DWORD)STOPREQ_WINERR);
-#endif
-  pending_actions = lj_ccall_native_leave(L, cts, &native, func);
-  assert(pthread_join(thread, NULL) == 0);
-  assert(ctx.published);
-  assert(lj_tg_in_native_acq(tg) == 0);
-  assert(lj_tg_ffi_call_func_acq(tg) == NULL);
-  assert(ccallback_slot_acq(&tg->cb) == 0);
-  assert(ljt_tg_has_stopreq(tg));
-
-  pending_native = native;
-  /* Native leave returned the STOP action without checking it, so the generic
-  ** protocol deliberately retains a synthetic VM-dispatch poll. This fixture
-  ** wants the nested probe below to perform the checked throw inside its pcall;
-  ** cancel only that dispatch edge while retaining FRESH and pending_actions. */
-  assert((pending_actions & LJ_GC2_HS_STOPREQ) != 0);
-  assert(lj_tg_reqmask_acq(tg) == 0);
-  assert(lj_tg_poll_acq(tg) == 1);
-  lj_tg_poll_rel(tg, 0);
   lua_pushcfunction(L, checkstop_from_lua);
   lua_setglobal(L, "ccall_native_checkstop_probe");
   lua_pushcfunction(L, error_state_from_lua);
@@ -463,7 +457,7 @@ int main(void)
 
   run_restore_state(L, cts, tg);
   run_callback_blacklist(L, cts, tg);
-  run_fresh_stopreq_check(L, cts, g, tg);
+  run_fresh_stopreq_check(L, tg);
   run_post_leave_stopreq_check(L, cts, g, tg);
   run_scalar_native_protocol(L, cts, tg);
   run_errno_redispatch_helper(L, cts, g, tg);

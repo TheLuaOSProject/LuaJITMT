@@ -1475,11 +1475,15 @@ print("jit big cnew ok")
         timeout = "20s",
         env = { LUA_PATH = lua_path(t) }
       })
-      build_and_run_c(t, t:tmp("lj_t-ffi-snap-restore-snapshot"),
-                      "t-ffi-snap-restore-snapshot.c", {
-        build = false,
-        timeout = "20s"
-      })
+      if jit.os == "Linux" and t.target_arch == "x64" then
+        build_and_run_c(t, t:tmp("lj_t-ffi-snap-restore-snapshot"),
+                        "t-ffi-snap-restore-snapshot.c", {
+          build = false,
+          timeout = "20s",
+          libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=lj_ctype_publish",
+                   "-Wl,--wrap=lj_snap_restore_exit", "-Wl,--wrap=lj_cdata_newx_l" }
+        })
+      end
       print("M7 FFI snapshot restore cdata allocation behavior passed")
     end
   })

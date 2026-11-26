@@ -2581,6 +2581,9 @@ static void test_traced_active_mark_certificate(lua_State *L,
   /* Activation reset and the explicit current-cycle comparison both reject
   ** stale authority. Publish the old cycle deliberately; exactly one C miss
   ** repairs it for the new cooperative MARK generation. */
+  /* Calling the surviving closure and looking up its environment can start
+  ** another cycle after the first explicit drain. Finish it before seeding. */
+  drive_fnew_mark_to_idle(L, g);
   quiet_gc_for_bump(g, tg);
   prime_traversable_bump_window(tg);
   begin_open_fnew_mark(g, tg);

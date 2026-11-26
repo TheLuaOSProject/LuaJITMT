@@ -3,7 +3,6 @@
 */
 
 #include <assert.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -14,22 +13,9 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_ctype.h"
-#include "lj_tg.h"
 
 #include "lib/ctype_parse_fixture_helpers.h"
 #include "lib/lua_fixture_helpers.h"
-
-static void assert_clib_extern_waits_without_lock(lua_State *L, CTState *cts,
-						  TGState *tg,
-						  const char *chunk)
-{
-  LJTCTypeParseReleaseCtx ctx;
-  pthread_t thread;
-
-  ljt_ctype_release_when_native_start(&ctx, &thread, cts, tg);
-  ljt_lua_dostring(L, chunk);
-  ljt_ctype_release_when_native_join(&ctx, thread);
-}
 
 static void assert_busy_trace_releases(lua_State *L, CTState *cts,
 				       const char *chunk)
@@ -44,7 +30,6 @@ int main(void)
   const char *so = getenv("LJ_M7_FFI_CLIB_EXTERN_SO");
   lua_State *L = ljt_lua_newstate_openlibs();
   CTState *cts;
-  TGState *tg;
   uint32_t seq0, seq1;
 
   assert(so != NULL);
@@ -65,8 +50,6 @@ int main(void)
 
   cts = ctype_ctsG(G(L));
   assert(cts != NULL);
-  tg = L2TG(L);
-  assert(tg != NULL);
   seq0 = ljt_ctype_parse_seq(cts);
 
   ljt_lua_dostring(L,
@@ -90,7 +73,7 @@ int main(void)
     "local cl = lj_m7_clib_extern_cl\n"
     "assert(cl.lj_m7_clib_snapshot_value == 41)\n");
 
-  assert_clib_extern_waits_without_lock(L, cts, tg,
+  ljt_ctype_read_committed(L, cts,
     "local ffi = require('ffi')\n"
     "local cl = lj_m7_clib_extern_cl\n"
     "cl.lj_m7_clib_snapshot_value = 42\n"
@@ -140,6 +123,6 @@ int main(void)
     "for i = 1, 30 do assert(run(8) == 448) end\n");
 
   lua_close(L);
-  printf("t-ffi-clib-extern-snapshot OK: extern variables wait on ctype snapshots\n");
+  printf("t-ffi-clib-extern-snapshot OK: extern variables use committed ctypes\n");
   return 0;
 }
