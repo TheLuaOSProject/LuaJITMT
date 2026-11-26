@@ -17,11 +17,13 @@
 
 #include <assert.h>
 #include <pthread.h>
+#include <sched.h>
 #include <stdint.h>
 #include <stdio.h>
 
 #include "lua.h"
 #include "lauxlib.h"
+#include "lualib.h"
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
@@ -181,6 +183,97 @@ static void test_primitive_and_delete_need_no_window(lua_State *L,
   lua_pop(L, 2);
 }
 
+typedef struct StoreReclaimPeer {
+  lua_State *peer;
+  uint32_t ready, start;
+} StoreReclaimPeer;
+
+static void *retire_metadata(void *ud)
+{
+  StoreReclaimPeer *run = (StoreReclaimPeer *)ud;
+  lua_State *peer = run->peer;
+  global_State *g = G(peer);
+  assert(lj_threading_attach(peer));
+  la_store32_rel(&run->ready, 1);
+  while (!la_load32_acq(&run->start))
+    sched_yield();
+  (void)lj_gc2_reclaim_retired(g, lj_gc2_retire_epoch(g) + 1);
+  lj_threading_detach(peer, 1);
+  return NULL;
+}
+
+static void test_replacing_during_retirement(void)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  StoreReclaimPeer run = {0};
+  pthread_t worker;
+  assert(L != NULL);
+  luaL_openlibs(L);
+  g = G(L);
+  assert(luaL_dostring(L,
+    "local t = setmetatable({}, {__mode='kv'})\n"
+    "local key, value = {}, require('ffi').new('char[20000]')\n"
+    "for i=1,3072 do t[i]=i; t['h'..i]=i end\n"
+    "t[key]=true\n"
+    "local store,eq = rawset,rawequal\n"
+    "return t,key,value,function()\n"
+    "  t.h19=value; assert(eq(t.h19,value))\n"
+    "  store(t,key,value); assert(eq(t[key],value))\n"
+    "  t[key]=false; assert(t[key]==false)\n"
+    "  t[3071]=value; assert(eq(t[3071],value))\n"
+    "  t.new_field=value; assert(eq(t.new_field,value))\n"
+    "  local other={}; store(t,other,value); assert(eq(t[other],value))\n"
+    "end") == 0);
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+  run.peer = lua_newthread(L);
+  assert(pthread_create(&worker, NULL, retire_metadata, &run) == 0);
+  while (!la_load32_acq(&run.ready))
+    (void)lj_thr_retry_yield(L);
+  lj_gc2_test_idle_reclaim_pause_after_jit_quiescence();
+  la_store32_rel(&run.start, 1);
+  while (!lj_gc2_test_idle_reclaim_paused())
+    (void)lj_thr_retry_yield(NULL);
+  assert(mt_active_or_entering_acq(g));
+  lua_pushvalue(L, 3);
+  lua_rawseti(L, 1, 3072);
+  lua_rawgeti(L, 1, 3072);
+  assert(lua_rawequal(L, -1, 3));
+  lua_pop(L, 1);
+  lua_pushvalue(L, 2);
+  lua_pushvalue(L, 3);
+  lua_rawset(L, 1);
+  lua_pushvalue(L, 2);
+  lua_rawget(L, 1);
+  assert(lua_rawequal(L, -1, 3));
+  lua_pop(L, 1);
+  lua_pushvalue(L, 2);
+  lua_pushnil(L);
+  lua_rawset(L, 1);
+  lua_pushvalue(L, 2);
+  lua_rawget(L, 1);
+  assert(lua_isnil(L, -1));
+  lua_pop(L, 1);
+  lua_pushvalue(L, 3);
+  lua_setfield(L, 1, "h18");
+  lua_getfield(L, 1, "h18");
+  assert(lua_rawequal(L, -1, 3));
+  lua_pop(L, 1);
+  lua_pushvalue(L, 2);
+  lua_pushboolean(L, 1);
+  lua_settable(L, 1);
+  lua_pushvalue(L, 4);
+  assert(lua_pcall(L, 0, 0, 0) == 0);
+  assert(lj_gc2_test_idle_reclaim_paused());
+  lj_gc2_test_idle_reclaim_release();
+  assert(pthread_join(worker, NULL) == 0);
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  lua_rawgeti(L, 1, 3072);
+  assert(lua_rawequal(L, -1, 3));
+  lua_close(L);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -207,6 +300,7 @@ int main(void)
 
   assert(gc2_weak_write_active_acq(g) == 0u);
   lua_close(L);
+  test_replacing_during_retirement();
   puts("gc2 public scalar weak-window regression passed");
   return 0;
 }
