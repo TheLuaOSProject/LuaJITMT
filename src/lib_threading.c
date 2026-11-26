@@ -2101,8 +2101,10 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   live = threading_live_new(L, ud);
   threading_live_publish(L, th, live);
   tg = lj_mem_newt(L, sizeof(TGState), TGState);
+  /* The live handle owns L1 from startup through the first join. Subsequent
+  ** joins reach the result stack through the same userdata. A second global
+  ** state root would keep the handle and its results alive after Lua drops it. */
   threading_publish_thread_state(L, ud, th, L1);
-  lj_state_thread_registry_publish(G(L), L1);
   th->tg = tg;
   th->state = LJ_THREAD_STARTING;
   th->nargs = (uint32_t)nargs;

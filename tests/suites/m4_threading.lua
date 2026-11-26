@@ -482,6 +482,12 @@ return function(add)
       }
     },
     {
+      name = "m4_threading_join_lifetime",
+      description = "joined results live as long as their public handle",
+      script = "t-threading-join-lifetime.lua",
+      opts = { timeout = "35s" }
+    },
+    {
       name = "m4_threading_require_once",
       description = "concurrent require executes one module body and " ..
         "preserves stock recursion behavior",
