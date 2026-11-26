@@ -18559,6 +18559,10 @@ static int gc2_mark_thread_root_obj_worker_status(global_State *g, GCobj *o)
     (void)gc2_trace_sweep_worker_edge(g, o);
     return 1;  /* DEAD is represented by SWEEP recovery work. */
   }
+  /* The main lua_State is embedded in GG_State. The global root scan
+  ** schedules its stack independently of references from other threads. */
+  if (o == obj2gco(mainthread_acq(g)))
+    return 1;
   if (gc2_root_test_take_semantic_retry(o))
     return 0;
   status = gc2_markobj_worker_status(g, o, NULL);

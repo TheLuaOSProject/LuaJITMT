@@ -728,6 +728,15 @@ return function(add)
   })
 
   add({
+    name = "m5_profile_collect",
+    description = "full collection in a profiler callback sampling the main thread",
+    run = function(t)
+      build_and_run_luajit_script(t, "t-profile-collect.lua", nil,
+                                  { joff = true, timeout = "20s" })
+    end
+  })
+
+  add({
     name = "m5_gc_total_atomic",
     description = "GC total atomic accounting helper behavior",
     run = function(t)
