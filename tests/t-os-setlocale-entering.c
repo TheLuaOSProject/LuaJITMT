@@ -25,16 +25,11 @@ static void call_setlocale(lua_State *L, const char *locale,
     lua_pushnil(L);
   lua_pushliteral(L, "all");
   status = lua_pcall(L, 2, 1, 0);
-  if (expect_success) {
-    ljt_lua_assert_ok(L, status, "os.setlocale");
-    assert(lua_isnil(L, -1) || lua_isstring(L, -1));
-  } else {
-    const char *err;
-    assert(status != LUA_OK);
-    err = lua_tostring(L, -1);
-    assert(err != NULL);
-    assert(strstr(err, "os.setlocale mutation disabled") != NULL);
-  }
+  ljt_lua_assert_ok(L, status, "os.setlocale");
+  if (expect_success)
+    assert(lua_isstring(L, -1) && strcmp(lua_tostring(L, -1), "C") == 0);
+  else
+    assert(lua_isnil(L, -1));
   lua_settop(L, 0);
 }
 
@@ -49,7 +44,8 @@ int main(void)
   assert(mt_live_acq(g) == 0);
   assert(mt_entering_add_rlx(g, 1) == 0);
   call_setlocale(L, NULL, 1);
-  call_setlocale(L, "C", 0);
+  call_setlocale(L, "C", 1);
+  call_setlocale(L, "", 0);
   assert(mt_entering_sub_acqrel(g, 1) == 1);
   mt_entering_futex_wake(g, INT_MAX);
 

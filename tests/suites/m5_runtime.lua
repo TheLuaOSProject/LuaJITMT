@@ -265,6 +265,14 @@ return function(add)
     run = function(t)
       build_and_run_c(t, t:tmp("lj_t-os-setlocale-entering"),
                       "t-os-setlocale-entering.c")
+      if jit.os == "Linux" then
+        build.compile_and_run_c(t, t:tmp("lj_t-os-setlocale-result"),
+                                "t-os-setlocale-result.c", {
+          timeout = "20s",
+          libs = { "-lm", "-ldl", "-pthread",
+                   "-Wl,--wrap=setlocale", "-Wl,--wrap=lua_pushstring" }
+        })
+      end
       build_and_run_luajit_script(t, "t-os-reentrant.lua", nil, {
         joff = true,
         env = {

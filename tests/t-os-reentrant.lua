@@ -27,14 +27,16 @@ local function check_tmpname()
 end
 
 local function check_setlocale_blocked()
-  local ok, err = pcall(os.setlocale, "C", "all")
-  assert(ok == false)
-  assert(tostring(err):find("os.setlocale mutation disabled", 1, true))
+  assert(os.setlocale("", "all") == nil)
+  assert(os.setlocale("nonexistent-locale", "time") == nil)
 end
 
 local function check_setlocale_query()
-  local current = os.setlocale(nil, "all")
-  assert(current == nil or type(current) == "string")
+  for _, category in ipairs({"all", "ctype", "numeric", "time", "collate", "monetary"}) do
+    local current = os.setlocale(nil, category)
+    assert(current == "C")
+    assert(os.setlocale(current, category) == current)
+  end
 end
 
 local workers = {}

@@ -654,8 +654,21 @@ by caller (typical pattern: parent moves args into a not-yet-started L).
   broken-down time buffers on the supported POSIX and Windows targets
   (`localtime_r`/`gmtime_r` or `localtime_s`/`gmtime_s`). Mutating
   `os.setlocale()` is serialized with secondary-thread entry before the
-  activation latch is set; queries remain stock, mutation remains stock before
-  threading activation, and mutation is rejected after activation.
+  activation latch is set. Lua heaps in the same runtime serialize locale
+  calls and copy libc's result before another call can replace it. Queries
+  and exact current-name requests work after activation. A request to change
+  the locale then returns nil. This follows the documented failure result
+  for a setting the runtime cannot honor. [Lua 5.1 manual](https://www.lua.org/manual/5.1/manual.html#pdf-os.setlocale)
+  To support wider mutation, runtime locale-sensitive calls would need
+  process-wide admission. A writer could publish a duplicate of the old
+  locale to serve readers during mutation. This works for readers with
+  explicit locale arguments, such as `strftime_l`. On glibc, `fscanf`
+  and `dlerror` have no equivalent. Switching the thread locale temporarily
+  also leaves a race because restoring `LC_GLOBAL_LOCALE` reads ctype
+  pointers that `setlocale` can be updating. Glibc gettext takes libc's
+  locale lock, which also makes translated diagnostics wait behind a stalled
+  locale writer. Raw native code must observe libc's existing process-locale
+  synchronization requirements.
 - `math.random`: per-TG prng; `math.randomseed` seeds calling thread only
   (doc note 09 §9.8).
 - package.loaded / require: ordinary shared tables now safe; the *loader*

@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 
 #define lib_os_c
@@ -27,6 +28,7 @@
 #include "lj_lib.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
+#include "lj_vm.h"
 
 #if LJ_TARGET_POSIX
 #include <unistd.h>
@@ -363,6 +365,26 @@ LJLIB_CF(os_difftime)
 /* ------------------------------------------------------------------------ */
 
 #if !LJ_TARGET_PSVITA
+/* Lua heaps share libc's locale names, including their lifetime. */
+static uint32_t os_locale_lock;
+
+static void os_locale_lock_acquire(void)
+{
+  for (;;) {
+    uint32_t expect = 0;
+    if (la_cas32(&os_locale_lock, &expect, 1, __ATOMIC_ACQUIRE,
+		 __ATOMIC_RELAXED))
+      return;
+    (void)la_futex_wait(&os_locale_lock, 1, 1000000);
+  }
+}
+
+static void os_locale_lock_release(void)
+{
+  la_store32_rel(&os_locale_lock, 0);
+  la_futex_wake(&os_locale_lock, 1);
+}
+
 /* Reuse the runtime exclusive gate for process-global locale mutation. */
 static void os_setlocale_leaveexclusive(global_State *g)
 {
@@ -399,6 +421,13 @@ static int os_setlocale_enterexclusive(lua_State *L)
       mt_gc_exclusive_futex_wait(g, expect, 1000000);
   }
 }
+
+static TValue *os_locale_push_cp(lua_State *L, lua_CFunction dummy, void *ud)
+{
+  UNUSED(dummy);
+  lua_pushstring(L, (const char *)ud);
+  return NULL;
+}
 #endif
 
 LJLIB_CF(os_setlocale)
@@ -410,6 +439,8 @@ LJLIB_CF(os_setlocale)
   GCstr *s = lj_lib_optstr(L, 1);
   const char *str = s ? strdata(s) : NULL;
   const char *res;
+  char buf[256], *copy = NULL;
+  int exclusive, oom = 0;
   int opt = lj_lib_checkopt(L, 2, 6,
     "\5ctype\7numeric\4time\7collate\10monetary\1\377\3all");
   if (opt == 0) opt = LC_CTYPE;
@@ -418,12 +449,38 @@ LJLIB_CF(os_setlocale)
   else if (opt == 3) opt = LC_COLLATE;
   else if (opt == 4) opt = LC_MONETARY;
   else if (opt == 6) opt = LC_ALL;
-  if (str && !os_setlocale_enterexclusive(L))
-    lj_err_callermsg(L, "os.setlocale mutation disabled after threading activation");
-  res = setlocale(opt, str);
-  if (str)
+  exclusive = str && os_setlocale_enterexclusive(L);
+  os_locale_lock_acquire();
+  if (str && !exclusive) {
+    /* An exact name returned by libc requests no change. Do not ask libc
+    ** to mutate, and keep empty-string environment lookup on the write path. */
+    res = setlocale(opt, NULL);
+    if (!*str || !res || strcmp(str, res) != 0)
+      res = NULL;
+  } else {
+    res = setlocale(opt, str);
+  }
+  if (res) {
+    size_t len = strlen(res) + 1;
+    copy = len <= sizeof(buf) ? buf : (char *)malloc(len);
+    if (copy)
+      memcpy(copy, res, len);
+    else
+      oom = 1;
+  }
+  os_locale_lock_release();
+  if (exclusive)
     os_setlocale_leaveexclusive(g);
-  lua_pushstring(L, res);
+  if (oom)
+    lj_err_mem(L);
+  if (copy && copy != buf) {
+    int status = lj_vm_cpcall(L, NULL, copy, os_locale_push_cp);
+    free(copy);
+    if (status)
+      lj_err_throw(L, status);
+  } else {
+    lua_pushstring(L, copy);
+  }
 #endif
   return 1;
 }

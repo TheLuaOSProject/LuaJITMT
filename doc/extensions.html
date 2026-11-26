@@ -289,9 +289,10 @@ Important: Neither this nor any other PRNG based on the simplistic
 <h3 id="os_setlocale"><tt>os.setlocale()</tt> is restricted after threading activation</h3>
 <p>
 Process locale mutation is not thread-safe. After this fork has activated
-secondary thread support, calls such as <tt>os.setlocale("C", "all")</tt>
-raise an error. Query-only calls such as <tt>os.setlocale(nil, "all")</tt>
-remain available.
+secondary thread support, requests to change the process locale return
+<tt>nil</tt>. Queries and requests that pass back the exact locale name returned
+for the same category remain available. Embedders must coordinate direct C
+or FFI locale changes with other users of the process locale.
 </p>
 
 <h3 id="collectgarbage_threading"><tt>collectgarbage()</tt> during live threads</h3>
