@@ -2796,7 +2796,7 @@ static int api_accessupvalue_try(lua_State *L, int idx, uint32_t n,
   GCobj *parent;
   TValue value, *slot;
   cTValue *input;
-  int open = 0, lua;
+  int open = 0, lua, write;
   int status = api_upvalue_function_try(L, idx, n, &f);
   if (status != API_UV_OK)
     goto leave;
@@ -2830,7 +2830,12 @@ static int api_accessupvalue_try(lua_State *L, int idx, uint32_t n,
                mref_acq(parent->uv.v, TValue) != slot)) ||
       !lj_str_tv_rescue_held(&value))
     goto leave;
-  if (store && !flushed && (!lua || tv_rawload_acq(slot) != tv_rawload(&value))) {
+  write = store && (!lua || tv_rawload_acq(slot) != tv_rawload(&value));
+  /* First attachment retires old code before publishing mt_active. Shared
+  ** x64 traces read a closed Lua cell again at each UGET or captured CGET.
+  ** C upvalues and open stack aliases still require invalidation. */
+  if (write && !flushed &&
+      !(LJ_HAS_X64_MT_JIT_HELPERS && lua && !open && mt_active_acq(G(L)))) {
     status = API_UV_FLUSH;
     goto leave;
   }
@@ -2838,7 +2843,7 @@ static int api_accessupvalue_try(lua_State *L, int idx, uint32_t n,
   if (store) {
     /* An equal Lua value needs no invalidation. That observation completes
     ** the assignment even if a sibling immediately writes a different value. */
-    if (flushed) {
+    if (write) {
       copyTVrel(L, slot, &value);
       if (tvisgcv(&value))
         lj_gc2_barrier_tv_pair_g(G(L), parent, &value);

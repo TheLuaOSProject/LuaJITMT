@@ -439,6 +439,17 @@ static void check_live_upvalue_invalidation(int shared, int overlap)
   wait_for_idle_reclaim_pause(&run.reclaim);
   lua_pushinteger(L, 5);
   assert(lua_setupvalue(L, 1, 1) != NULL);
+  if (shared && LJ_HAS_X64_MT_JIT_HELPERS) {
+    /* The surviving root reads its upvalue at run time. Exercise the same
+    ** interrupted retirement through the explicit public flush operation. */
+    assert(proto_trace_acq(pt) == tr && proto_has_op(pt, BC_JFORL));
+    lua_pushvalue(L, 1);
+    lua_pushinteger(L, 80);
+    ljt_lua_pcall(L, 1, 1, "read changed upvalue before flush");
+    assert(lua_tointeger(L, -1) == 400);
+    lua_pop(L, 1);
+    assert(luaJIT_setmode(L, 0, LUAJIT_MODE_ENGINE | LUAJIT_MODE_FLUSH));
+  }
   assert(!proto_has_op(pt, BC_JFORL));
   lua_pushvalue(L, 2);
   lua_pushinteger(L, tr);

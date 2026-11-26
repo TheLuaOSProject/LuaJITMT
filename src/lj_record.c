@@ -42,12 +42,6 @@
 #include "lj_vm.h"
 #include "lj_prng.h"
 
-#if LJ_TARGET_X64 && (defined(__linux__) || LJ_TARGET_OSX)
-#define LJ_HAS_X64_MT_JIT_HELPERS 1
-#else
-#define LJ_HAS_X64_MT_JIT_HELPERS 0
-#endif
-
 /* Some local macros to save typing. Undef'd at the end. */
 #define IR(ref)			(&J->cur.ir[(ref)])
 

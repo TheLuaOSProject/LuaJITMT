@@ -108,6 +108,7 @@ local m6_cases = {
   "m6_jit_perftools_native",
   "m6_jit_io_native_stopreq",
   "m6_jit_cclosure_upvalue_flush",
+  "m6_jit_upvalue_write_progress",
   "m6_jit_env_mutation_flush",
   "m6_jit_threading_nyi_boundary",
   "m6_jit_buffer_method_shared_nyi"
@@ -3378,6 +3379,16 @@ end
         timeout = "20s"
       })
       print("M6 JIT IO native-state STOPREQ behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_upvalue_write_progress",
+    description = "public assignment to a traced Lua upvalue with a paused recorder",
+    run = function(t)
+      build_and_run_c(t, t:tmp("lj_t-jit-upvalue-mutation-progress"),
+                      "t-jit-upvalue-mutation-progress.c",
+                      build.trace_helper_opts({ timeout = "30s" }))
     end
   })
 

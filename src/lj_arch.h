@@ -691,6 +691,13 @@
 #define LJ_HASJIT		1
 #endif
 
+/* Targets where shared Lua traces resolve upvalues at run time. */
+#if LJ_TARGET_X64 && (defined(__linux__) || LJ_TARGET_OSX)
+#define LJ_HAS_X64_MT_JIT_HELPERS 1
+#else
+#define LJ_HAS_X64_MT_JIT_HELPERS 0
+#endif
+
 /* Disable or enable the FFI extension. */
 #if defined(LUAJIT_DISABLE_FFI) || defined(LJ_ARCH_NOFFI)
 #define LJ_HASFFI		0

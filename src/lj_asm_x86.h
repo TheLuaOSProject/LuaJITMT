@@ -7,12 +7,6 @@
 
 /* -- Guard handling ------------------------------------------------------ */
 
-#if LJ_TARGET_X64 && (defined(__linux__) || LJ_TARGET_OSX)
-#define LJ_HAS_X64_MT_JIT_HELPERS 1
-#else
-#define LJ_HAS_X64_MT_JIT_HELPERS 0
-#endif
-
 /* Generate an exit stub group at the bottom of the reserved MCode memory. */
 static MCode *asm_exitstub_gen(ASMState *as, ExitNo group)
 {
