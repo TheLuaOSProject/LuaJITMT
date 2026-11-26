@@ -54,6 +54,10 @@ int main(void)
     "local methods = {inc=function(a,n) return a.x+n end}\n"
     "local via = setmetatable({}, {__index=methods})\n"
     "local indexed = meta('struct { int x; }', {__index=via})\n"
+    "local finalized = 0\n"
+    "local fin = function(a) finalized=finalized+a.x end\n"
+    "local withgc = meta('struct { int x; }', {__gc=fin})\n"
+    "local cleanup=ffi.gc\n"
     "local sentinel = {}\n"
     "local proxy = setmetatable({}, {__metatable=sentinel})\n"
     "local getmt = getmetatable\n"
@@ -64,10 +68,12 @@ int main(void)
     "return function()\n"
     "  local a, b = new(ct, 23), new(ct, 19)\n"
     "  if getmt(proxy) ~= sentinel or custom(22).x ~= 23 then return false end\n"
+    "  local f=withgc(17); cleanup(f, nil); cleanup(f, fin)\n"
     "  if indexed(19):inc(23) ~= 42 then return false end\n"
     "  return is(ct, a) and is(ct, b) and use(small) and use(large), size(a), a, b\n"
     "end, function(a, b)\n"
     "  meta(ct, {__add = function(a, b) return a.x - b.x end})\n"
+    "  collectgarbage(); collectgarbage(); assert(finalized == 17)\n"
     "  return a + b, new(ct, 23) + ct(19)\n"
     "end, setmetatable({run=methods.inc}, {__mode='v'})\n");
   assert(lua_gettop(L) == 3);

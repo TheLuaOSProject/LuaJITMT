@@ -3472,9 +3472,14 @@ static LJ_AINLINE void tab_publish_array(GCtab *t, TValue *array,
 
 LJ_STATIC_ASSERT(((sizeof(GCtab) + LJ_CELL_SIZE-1u) >> LJ_CELL_SHIFT) == 5u);
 
-/* Create a new table with slots initialized to nil. */
+typedef struct TabFinSeed {
+  GCstr *mode;
+  cTValue *key;
+} TabFinSeed;
+
+/* Create a table with its complete initial contents before publishing READY. */
 static GCtab *newtab_rooted(lua_State *L, uint32_t asize, uint32_t hbits,
-			    LJTabRoot *root)
+			    LJTabRoot *root, const TabFinSeed *fin)
 {
   global_State *g = G(L);
   GCtab *t = NULL;
@@ -3531,9 +3536,25 @@ static GCtab *newtab_rooted(lua_State *L, uint32_t asize, uint32_t hbits,
     tab_pub_array_mem(L, t, array, asize);
     tab_publish_array(t, array, asize, asize);
   }
-  if (node)
-    newhpart_publish(L, t, node, hmask, &node[hmask+1], hmask + 1u);
-  else if (array)
+  if (node) {
+    Node *freetop = &node[hmask+1];
+    MSize freecount = hmask + 1u;
+    if (fin) {
+      TValue mode, value;
+      TValue *slot;
+      setstrV(L, &mode, mmname_str(g, MM_mode));
+      setstrV(L, &value, fin->mode);
+      slot = tab_rehash_insert(L, node, hmask, &freetop, &freecount, &mode);
+      copyTVrel(L, slot, &value);
+      /* The cdata's hidden slot starts at nil. Inserting it last preserves
+      ** the occupied __mode field when both keys share a hash bucket. */
+      if (fin->key)
+        (void)tab_rehash_insert(L, node, hmask, &freetop, &freecount, fin->key);
+      lj_tab_metatable_rel(t, t);
+      lj_tab_nomm_rel(t, (uint8_t)~(1u << MM_mode));
+    }
+    newhpart_publish(L, t, node, hmask, freetop, freecount);
+  } else if (array)
     lj_tab_freetop_rel(t, (const Node *)array);
 
   /* READY and ownership are the single final constructor publication. Every
@@ -3566,7 +3587,7 @@ oom:
 
 static GCtab *newtab(lua_State *L, uint32_t asize, uint32_t hbits)
 {
-  return newtab_rooted(L, asize, hbits, NULL);
+  return newtab_rooted(L, asize, hbits, NULL, NULL);
 }
 
 /* Create a new table.
@@ -3682,7 +3703,15 @@ GCtab *lj_tab_new_rooted(lua_State *L, uint32_t asize, uint32_t hbits,
   lj_assertL(root != NULL, "missing table construction root");
   /* Rooted callers deliberately bypass the empty bump specialization: the TG
   ** anchor, not a transient birth mark, spans their semantic handoff. */
-  return newtab_rooted(L, asize, hbits, root);
+  return newtab_rooted(L, asize, hbits, root, NULL);
+}
+
+/* The mode string and optional cdata key are already rooted by the caller. */
+GCtab *lj_tab_new_finreg_rooted(lua_State *L, GCstr *mode, cTValue *key,
+                                LJTabRoot *root)
+{
+  TabFinSeed fin = { mode, key };
+  return newtab_rooted(L, 0, 1, root, &fin);
 }
 
 GCtab *lj_tab_new_ah_rooted(lua_State *L, uint32_t a, uint32_t h,

@@ -229,6 +229,7 @@ typedef struct FinRegGen {
   la_u128 registration;   /* Atomic {raw callback, generation and state}. */
   GCtab *tab;			/* One hash-only FINREG table generation. */
   struct FinRegGen *next;	/* Older generation, searched after this one. */
+  struct FinRegGen *retired_next; /* Unlinked records awaiting readers. */
   GCRef registered_key;	/* Immutable allocation identity for lookup. */
   Node *insert_nodes;		/* Original vector for the immutable key. */
   MSize insert_hmask;		/* Exact vector shape certified at publication. */
@@ -238,6 +239,7 @@ LJ_STATIC_ASSERT(offsetof(FinRegGen, registration) % 16 == 0);
 
 #define FINREG_ACTIVE 1u
 #define FINREG_PENDING 2u
+#define FINREG_RETIRING 3u
 #define FINREG_STATE_MASK 3u
 #define FINREG_MAX_ID ((1ull << 62) - 1u)
 
@@ -261,18 +263,20 @@ static LJ_AINLINE int finreg_cas(FinRegGen *gen, la_u128 *old, la_u128 next)
   return la_cas128(&gen->registration, old, next);
 }
 
-/*
-** Move-only FINREG lifetime certificate. SMR keeps the native generation
-** and any separated vector mapped, and the body lease keeps its GCtab
-** admitted. The slot pointer is used only to validate new publication.
-*/
+typedef enum CTypeFinRead {
+  LJ_CTYPE_FIN_READ_NONE,
+  LJ_CTYPE_FIN_READ_SMR,
+  LJ_CTYPE_FIN_READ_NATIVE
+} CTypeFinRead;
+
+/* Native publication keeps the spines and their weak tables rooted. Collector
+** inspection can instead hold the table body in a general SMR read scope. */
 typedef struct CTypeFinLease {
   global_State *g;
   GCtab *tab;
-  TValue *slot;
   FinRegGen *generation;
   LJGC2Lease table_lease;
-  uint32_t smr_held;
+  CTypeFinRead reader;
 } CTypeFinLease;
 
 #define CTYPE_FIN_LEASE_INIT { 0 }
@@ -288,10 +292,12 @@ typedef struct FinRegOrderNode {
   TValue *slot;			/* Original value slot; not stable across resize. */
   struct FinRegOrderNode *next;	/* Older registration, newest-first list. */
   struct FinRegOrderNode *lifetime_next;
+  struct FinRegOrderNode *retired_next;
   uint64_t registration_id;  /* Exact native slot generation, zero for legacy. */
   uint32_t submission_done;  /* The unpublished order record can retire. */
   uint32_t queue_visible;  /* Set only after an exact envelope is published. */
   uint32_t active;		/* 1 active, 0 inactive. */
+  uint32_t reclaim_selected; /* Finished publishing before this cleanup pass. */
 } FinRegOrderNode;
 
 static LJ_AINLINE GCtab *fin_gen_tab_acq(const FinRegGen *gen)
@@ -799,6 +805,9 @@ typedef struct CTState {
   FinRegGen *fin_head;	/* 11.4 CAS-published FINREG generation list. */
   FinRegOrderNode *fin_order_head;  /* 11.4 ordered FINREG registrations. */
   FinRegOrderNode *fin_order_lifetime;  /* Published order nodes. */
+  FinRegGen *fin_retired_gens; /* Unlinked under the IDLE metadata writer. */
+  FinRegOrderNode *fin_retired_orders;
+  uint32_t fin_native_readers;
   uint32_t fin_order_has_inactive;  /* Reclaim has work at next quiescence. */
   uint32_t hash[CTHASH_SIZE];  /* Hash anchors. Low 16 bits hold CTypeID. */
 } CTState;
@@ -1576,12 +1585,11 @@ LJ_FUNC int lj_ctype_fin_order_retire_obj_complete(CTState *cts,
 						    size_t *retiredp);
 LJ_FUNC void lj_ctype_fin_order_retire_id(CTState *cts, GCobj *o, uint64_t id);
 LJ_FUNC size_t lj_ctype_fin_order_retire_obj(CTState *cts, GCobj *target);
-/* Caller holds the requested cdata's insertion bit, so a KEYLOCK in a
-** published generation belongs to another key. */
+/* The lease retains the generation and its table across a registration CAS. */
 LJ_FUNC int lj_ctype_fin_get_native(CTState *cts, cTValue *key,
                                     CTypeFinLease *lease);
 LJ_FUNC int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
-				cTValue *claim, CTypeFinLease *lease);
+				CTypeFinLease *lease);
 /* Observational membership: FOUND, MISS, or RETRY. A transient generation or
 ** table admission must not classify FINREG storage as an ordinary weak table. */
 LJ_FUNC int lj_ctype_fin_istab(global_State *g, GCtab *t);

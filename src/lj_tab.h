@@ -323,6 +323,8 @@ LJ_FUNC GCtab *lj_tab_new_rooted(lua_State *L, uint32_t asize,
 				  uint32_t hbits, LJTabRoot *root);
 LJ_FUNC GCtab *lj_tab_new_ah_rooted(lua_State *L, uint32_t a, uint32_t h,
 				    LJTabRoot *root);
+LJ_FUNC GCtab *lj_tab_new_finreg_rooted(lua_State *L, GCstr *mode,
+                                        cTValue *key, LJTabRoot *root);
 LJ_FUNC void lj_tab_root_release(LJTabRoot *root);
 #if LJ_HASJIT
 LJ_FUNC GCtab * LJ_FASTCALL lj_tab_new0_forjit(lua_State *L);

@@ -37,10 +37,11 @@ int main(void)
   assert(cts != NULL);
   setcdataV(L, &key, cdataV(L->top - 1));
 
-  readers = gc2_smr_readers_acq(G(L));
+  readers = la_load32_acq(&cts->fin_native_readers);
   assert(lj_ctype_fin_get_native(cts, &key, &held) == LJ_CTYPE_FIN_FOUND);
-  assert(held.tab != NULL && held.generation != NULL && held.smr_held);
-  assert(gc2_smr_readers_acq(G(L)) == readers + 1u);
+  assert(held.tab != NULL && held.generation != NULL &&
+         held.reader == LJ_CTYPE_FIN_READ_NATIVE);
+  assert(la_load32_acq(&cts->fin_native_readers) == readers + 1u);
   old = finreg_load(held.generation);
   assert(finreg_state(old) == FINREG_ACTIVE);
   oldnode = lj_tab_node_acq(held.tab);
@@ -59,9 +60,9 @@ int main(void)
   assert(old.hi == replacement.hi && old.lo == replacement.lo);
 
   lj_ctype_fin_lease_release(&held);
-  assert(gc2_smr_readers_acq(G(L)) == readers);
+  assert(la_load32_acq(&cts->fin_native_readers) == readers);
   lj_ctype_fin_lease_release(&held);
-  assert(gc2_smr_readers_acq(G(L)) == readers);
+  assert(la_load32_acq(&cts->fin_native_readers) == readers);
 
   lua_close(L);
   printf("t-ffi-finreg-slot-lease OK: stale registration rejected after vector retirement\n");

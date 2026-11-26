@@ -20,6 +20,7 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_tab.h"
+#include "lj_tg.h"
 #include "lj_ctype.h"
 #include "lj_cdata.h"
 
@@ -250,6 +251,94 @@ static void test_first_key_generation_reclaim(void)
     assert(head && !head->insert_nodes && !fin_gen_next_acq(head));
     lj_gc2_smr_read_leave(g);
   }
+  lua_close(L);
+}
+
+static void *reclaim_finalizer_records(void *arg)
+{
+  global_State *g = (global_State *)arg;
+  (void)lj_gc2_reclaim_retired(g, lj_gc2_retire_epoch(g) + 1);
+  return NULL;
+}
+
+static void register_callback(lua_State *L, int object, int correct)
+{
+  lua_pushvalue(L, 3);
+  lua_pushvalue(L, object);
+  lua_pushboolean(L, correct);
+  ljt_lua_pcall(L, 2, 0, "register finalizer");
+}
+
+static void test_registration_during_reclaim(void)
+{
+  lua_State *L = ljt_lua_newstate_openlibs();
+  global_State *g = G(L);
+  CTState *cts;
+  CTypeFinLease lease = CTYPE_FIN_LEASE_INIT;
+  FinRegGen *a, *b;
+  FinRegOrderNode *replaced;
+  pthread_t worker;
+  TValue key;
+  la_u128 empty = { 0, 0 }, candidate = { 0, FINREG_ACTIVE };
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "collectgarbage(); collectgarbage('stop')\n"
+    "local a, b = ffi.new('int[1]', 17), ffi.new('int[1]', 25)\n"
+    "local hits, wrong = 0, 0\n"
+    "local good = function(o) hits=hits+o[0] end\n"
+    "local bad = function() wrong=wrong+1 end\n"
+    "local set = ffi.gc\n"
+    "set(a,bad); set(a,nil); set(b,bad); set(b,nil)\n"
+    "return a,b,function(o,ok) set(o,ok and good or bad) end,"
+    "function() return hits,wrong end\n");
+  cts = ctype_ctsG(g);
+  b = fin_gen_head_acq(cts);
+  a = fin_gen_next_acq(b);
+  lj_tv_load_acq(&key, L->top - 4);
+  assert(gcref(a->registered_key) == gcval(&key));
+  lj_cdata_test_fin_pause_arm(LJ_CDATA_FIN_PAUSE_GEN_RETIRED);
+  assert(pthread_create(&worker, NULL, reclaim_finalizer_records, g) == 0);
+  wait_for_pause(LJ_CDATA_FIN_PAUSE_GEN_RETIRED);
+  assert(finreg_state(finreg_load(b)) == FINREG_RETIRING);
+  assert(lj_ctype_fin_get_native(cts, &key, &lease) == LJ_CTYPE_FIN_FOUND);
+  assert(lease.reader == LJ_CTYPE_FIN_READ_NATIVE && lease.generation == a);
+
+  /* The collector sampled b as the head. Replace its registration twice
+  ** before it can unlink b. Its head CAS must preserve both new spines. */
+  register_callback(L, 2, 0);
+  replaced = fin_order_lifetime_acq(cts);
+  register_callback(L, 2, 1);
+  assert(fin_gen_head_acq(cts) != b);
+  assert(lj_cdata_test_fin_pause_waiting(LJ_CDATA_FIN_PAUSE_GEN_RETIRED));
+  lj_cdata_test_fin_pause_release(LJ_CDATA_FIN_PAUSE_GEN_RETIRED);
+  assert(pthread_join(worker, NULL) == 0);
+  reclaim_finalizer_records(g);
+  assert(cts->fin_retired_gens && cts->fin_retired_orders);
+  assert(lj_gc2_mem_registered_known(g, a) && lj_gc2_mem_registered_known(g, replaced));
+  assert(!finreg_cas(a, &empty, candidate));
+  assert(finreg_state(empty) == FINREG_RETIRING);
+  register_callback(L, 1, 1);
+
+  /* A delayed publisher keeps its stale record readable across a full GC.
+  ** Only the fresh generations can deliver callbacks. */
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert(finreg_state(finreg_load(a)) == FINREG_RETIRING);
+  assert(!fin_order_active_acq(replaced));
+  lj_ctype_fin_lease_release(&lease);
+  reclaim_finalizer_records(g);
+  assert(!cts->fin_retired_gens && !cts->fin_retired_orders);
+  /* An embedding pthread can lack the allocator-owner TLS between API calls.
+  ** Drain its published remote frees before inspecting exact allocation starts. */
+  (void)lj_arena_remote_free_drain_force(&g->main_tg->alloc);
+  assert(!lj_gc2_mem_registered_known(g, a) &&
+         !lj_gc2_mem_registered_known(g, replaced));
+
+  lua_remove(L, 1);
+  lua_remove(L, 1);
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  ljt_lua_pcall(L, 0, 2, "count finalizers");
+  assert(lua_tointeger(L, -2) == 42 && lua_tointeger(L, -1) == 0);
   lua_close(L);
 }
 
@@ -866,6 +955,7 @@ int main(void)
   test_unrelated_enable_progress(0);
   test_unrelated_enable_progress(1);
   test_first_key_generation_reclaim();
+  test_registration_during_reclaim();
   test_replacement_identity(L);
   test_replacement_vs_clear(L);
   test_enable_order_vs_clear(L);

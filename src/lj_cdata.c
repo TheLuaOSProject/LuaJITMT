@@ -314,17 +314,18 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
       lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_CLEAR_MISS);
       break;
     }
-    if (rc == LJ_CTYPE_FIN_MISS) {
-      TValue nilv;
-      setnilV(&nilv);
-      rc = lj_ctype_fin_newgen(L, cts, &key, &nilv, &held);
-    }
+    if (rc == LJ_CTYPE_FIN_MISS)
+      rc = lj_ctype_fin_newgen(L, cts, &key, &held);
     if (rc != LJ_CTYPE_FIN_FOUND) {
       lj_ctype_fin_lease_release(&held);
       cdata_fin_claim_wait(L);
       continue;
     }
     old = finreg_load(held.generation);
+    if (finreg_state(old) == FINREG_RETIRING) {
+      lj_ctype_fin_lease_release(&held);
+      continue;
+    }
     if (enabled && finreg_state(old) == FINREG_ACTIVE &&
         tv_rawload(&val) == old.lo) {
       lj_cdata_test_fin_pause_at(LJ_CDATA_FIN_PAUSE_ENABLE_UNCHANGED);
@@ -398,9 +399,12 @@ int lj_cdata_fin_native_pending(global_State *g, GCobj *o)
     }
     next = fin_gen_next_acq(gen);
     if (gcref(gen->registered_key) == o) {
-      pending = finreg_state(finreg_load(gen)) != 0;
-      lj_gc2_lease_release(&scope);
-      break;
+      uint32_t state = finreg_state(finreg_load(gen));
+      if (state != FINREG_RETIRING) {
+        pending = state != 0;
+        lj_gc2_lease_release(&scope);
+        break;
+      }
     }
     lj_gc2_lease_release(&scope);
     gen = next;

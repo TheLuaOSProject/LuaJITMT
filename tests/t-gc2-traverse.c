@@ -9367,7 +9367,7 @@ static void test_finreg_disabled_ordered_pending(lua_State *L, global_State *g)
   assert(!lj_ctype_fin_istab(g, fin_tab));
   rc = lj_ctype_fin_get_native(cts, &key, &finlease);
   assert(rc == LJ_CTYPE_FIN_MISS);
-  assert(finlease.slot == NULL && finlease.tab == NULL);
+  assert(finlease.generation == NULL && finlease.tab == NULL);
   lj_ctype_fin_lease_release(&finlease);
   lua_pop(L, 1);
 
