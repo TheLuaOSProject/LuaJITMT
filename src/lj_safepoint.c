@@ -531,7 +531,7 @@ static int safepoint_str_vm_frame(lua_State *L, TGState *tg)
     return 0;
   parent = cframe_raw(cframe_prev(cframe_raw(L->cframe)));
   if (tg == g->main_tg) {
-    if (L != mainthread_acq(g) || parent ||
+    if (L != mainthread_acq(g) || parent != tg->str_vm_outer_cframe ||
 	!la_load32_acq(&tg->str_vm_main_pcall))
       return 0;
   } else if (!lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC) ||

@@ -18,9 +18,10 @@
 #include "luajit.h"
 
 #include "lj_arch.h"
+#include "lj_frame.h"
+#include "lj_tg.h"
 #if !LJ_TARGET_WINDOWS
 #include "lj_safepoint.h"
-#include "lj_tg.h"
 #endif
 
 #if LJ_TARGET_POSIX
@@ -646,6 +647,10 @@ static int pmain(lua_State *L)
   char **argv = s->argv;
   int argn;
   int flags = 0;
+  /* The frontend's protected startup frame encloses script lua_pcall calls.
+  ** Its callers retain no Lua string pointer across those calls. Mark this
+  ** exact parent instead of granting the same authority to host C frames. */
+  G(L)->main_tg->str_vm_outer_cframe = cframe_raw(L->cframe);
   globalL = L;
   LUAJIT_VERSION_SYM();  /* Linker-enforced version check. */
 
@@ -711,6 +716,8 @@ int main(int argc, char **argv)
   smain.argc = argc;
   smain.argv = argv;
   status = lua_cpcall(L, pmain, NULL);
+  G(L)->main_tg->str_vm_outer_cframe = NULL;
+  la_store32_rel(&G(L)->main_tg->str_vm_main_pcall, 0);
   report_raw(L, status);
   lua_close(L);
   return (status || smain.status > 0) ? EXIT_FAILURE : EXIT_SUCCESS;

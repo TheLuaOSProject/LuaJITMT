@@ -317,7 +317,7 @@ struct TGState {
   int32_t profile_vmstate;
   uint32_t in_native;
   uint32_t str_vm_main_pcall;  /* Top-level public main-state Lua entry. */
-  void *str_vm_outer_cframe;  /* Managed Lua worker entry. */
+  void *str_vm_outer_cframe;  /* Frontend startup or managed Lua worker entry. */
   uint64_t str_owner_scan_epoch;  /* Completed owner-local root scan. */
   uint32_t str_auto_pending;  /* Allocation debt for a rooted VM/API checkpoint. */
   uint64_t str_vm_root_epoch;  /* True owner dispatch checkpoint. */

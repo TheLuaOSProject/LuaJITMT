@@ -3491,10 +3491,10 @@ LUA_API int lua_pcall(lua_State *L, int nargs, int nresults, int errfunc)
     ef = savestack(L, o);
   }
   base = api_call_base(L, nargs);
-  /* The protected entry always returns to the scope which enabled it.
-  ** Nested API and foreign callback entries cannot supply a new witness. */
+  /* Only a direct embedding entry or an entry from the audited standalone
+  ** frontend can certify the main frame. Nested host calls cannot. */
   certify_main = L == mainthread_acq(g) && L2TG(L) == g->main_tg &&
-		 L->cframe == NULL;
+		 cframe_raw(L->cframe) == g->main_tg->str_vm_outer_cframe;
   if (certify_main)
     la_store32_rel(&g->main_tg->str_vm_main_pcall, 1);
   status = lj_vm_pcall_unwind(L, base, nresults+1, ef);

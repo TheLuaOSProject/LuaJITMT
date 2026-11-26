@@ -32,15 +32,22 @@ static void check_bytes(const char *p)
   assert(p[sizeof(expected)-1] == '\0');
 }
 
+static const char *push_borrowed(lua_State *L)
+{
+  const char *p;
+  lua_pushlstring(L, expected, sizeof(expected)-1);
+  p = lua_tolstring(L, -1, NULL);
+  check_bytes(p);
+  return p;
+}
+
 static lua_State *new_owner(int libs)
 {
   lua_State *L = luaL_newstate();
   assert(L);
   if (libs)
     luaL_openlibs(L);
-  lua_pushlstring(L, expected, sizeof(expected)-1);
-  borrowed = lua_tolstring(L, 1, NULL);
-  check_bytes(borrowed);
+  borrowed = push_borrowed(L);
   return L;
 }
 
@@ -183,6 +190,68 @@ static void invoke_borrowed(const char *p, void (*callback)(void))
   callback();
   la_store32_rel(&borrow_active, 0);
   check_bytes(p);
+}
+
+static int nested_host_call(lua_State *L)
+{
+  static const char chunk[] =
+    "local stats, tick, probe = ...\n"
+    "local th = require('threading')\n"
+    "assert(th.gcworkers(2) == 0)\n"
+    "local ready = th.channel(1)\n"
+    "local peer = th.spawn(function(ready, tick)\n"
+    "  assert(ready:send(true, 10))\n"
+    "  local windows = 0\n"
+    "  repeat\n"
+    "    local sum = 0; for i = 1, 2048 do sum = sum + i end\n"
+    "    assert(sum == 2098176); windows = windows + 1\n"
+    "  until tick()\n"
+    "  return windows\n"
+    "end, ready, tick)\n"
+    "assert(select(2, ready:recv(10)))\n"
+    "local before = stats()\n"
+    "probe(1)\n"
+    "local sink\n"
+    "for round = 1, 4 do\n"
+    "  for i = 1, 1800 do sink = ('%d/%d host:'):format(round, i):rep(252) end\n"
+    "  assert(#sink > 3000)\n"
+    "  local after, _, active = stats()\n"
+    "  assert(active == 1 and th.gcworkers() == 2)\n"
+    "  assert(after == before and probe(), 'ordinary host entry certified string retirement')\n"
+    "end\n"
+    "tick(true)\n"
+    "local ok, windows = peer:join(10)\n"
+    "assert(ok and windows > 0, tostring(windows))\n";
+  TGState *tg = G(L)->main_tg;
+  uint64_t epoch = la_load64_acq(&tg->str_vm_root_epoch);
+  int status, slot;
+
+  /* Keep the value in this C frame across a genuinely nested Lua call. The
+  ** Lua chunk never receives the borrowed string as an argument. */
+  borrowed = push_borrowed(L);
+  slot = lua_gettop(L);
+  assert(luaL_loadbuffer(L, chunk, sizeof(chunk)-1, "=nested host string GC") ==
+         LUA_OK);
+  lua_pushcfunction(L, snapshot);
+  lua_pushcfunction(L, tick);
+  lua_pushcfunction(L, probe);
+  status = lua_pcall(L, 3, 0, 0);
+  if (status != LUA_OK) fprintf(stderr, "%s\n", lua_tostring(L, -1));
+  assert(status == LUA_OK && lua_gettop(L) == slot);
+  assert(lua_tolstring(L, slot, NULL) == borrowed);
+  assert(la_load64_acq(&tg->str_vm_root_epoch) == epoch);
+  check_bytes(borrowed);
+  return 0;
+}
+
+static void check_nested_host(void)
+{
+  lua_State *L = luaL_newstate();
+  assert(L);
+  luaL_openlibs(L);
+  stop_requested = worker_progress = 0;
+  assert(lua_cpcall(L, nested_host_call, NULL) == LUA_OK);
+  lua_close(L);
 }
 
 static void check_vm(int use_jit, int workers)
@@ -382,6 +451,8 @@ int main(int argc, char **argv)
   memset(expected, 'H', sizeof(expected)-1);
   if (argc == 1 || strcmp(argv[1], "c") == 0)
     check_c_api();
+  if (argc == 1 || strcmp(argv[1], "nested-host") == 0)
+    check_nested_host();
   if (argc == 1 || strcmp(argv[1], "interp") == 0)
     check_vm(0, 0);
   if (LJ_HASJIT && (argc == 1 || strcmp(argv[1], "jit") == 0))

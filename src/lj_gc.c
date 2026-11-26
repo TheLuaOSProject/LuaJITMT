@@ -4306,9 +4306,17 @@ static int gc_auto_string_checkpoint(lua_State *L, int context, int *drove)
   ** reclaim_request verifies the managed worker's protected entry frame. */
   if (tg == g->main_tg) {
     void *cf = cframe_raw(L->cframe);
-    if (L != mainthread_acq(g) ||
-        (context == STR_CHECKPOINT_API ? cf != NULL : (!cf || cframe_prev(cf))))
+    if (L != mainthread_acq(g))
       return LUA_OK;
+    if (context == STR_CHECKPOINT_API) {
+      if (cf)
+        return LUA_OK;
+    } else if (!cf ||
+               cframe_raw(cframe_prev(cf)) != tg->str_vm_outer_cframe ||
+               (tg->str_vm_outer_cframe &&
+                !la_load32_acq(&tg->str_vm_main_pcall))) {
+      return LUA_OK;
+    }
   } else if (context == STR_CHECKPOINT_API) {
     return LUA_OK;
   }

@@ -15714,7 +15714,7 @@ void lj_gc2_weak_write_end(lua_State *L, int active)
   UNUSED(old);
 }
 
-void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv)
+static void gc2_barrier_tv(global_State *g, cTValue *tv, int remember)
 {
   TValue snap;
   if (tv) {
@@ -15741,11 +15741,16 @@ void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv)
 	    gc2_thread_root_rescan_marked_obj(g, o);
 	  }
 	}
-      } else {
+      } else if (remember || gc2_minor_roots_enabled_acq(g)) {
 	gc2_remember_pair(g, NULL, gcV(&snap));
       }
     }
   }
+}
+
+void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv)
+{
+  gc2_barrier_tv(g, tv, 1);
 }
 
 static LJ_AINLINE uint64_t gc2_tabstamp_pack(uint32_t cycle, uint32_t dirty)
@@ -17140,9 +17145,16 @@ static uint32_t gc2_trace_sweep_tv_edge(global_State *g, cTValue *tv,
 void lj_gc2_publish_read_root(lua_State *L, cTValue *root, int stack)
 {
   global_State *g = G(L);
+  uint32_t phase;
   if (stack)
     lj_state_stack_dirty_vm(L);
-  if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
+  phase = gc2_phase_acq(g);
+  /* Read transfer only relocates an admitted value. With full root scans
+  ** the next owner ACK captures its stack or anchor, just as incremental
+  ** IDLE does. No old heap object gained an edge that must be remembered. */
+  if (phase == LJ_GC2_IDLE && !gc2_minor_roots_enabled_acq(g))
+    return;
+  if (phase == LJ_GC2_SWEEP) {
     TValue snap;
     lj_tv_load_acq(&snap, root);
     if (tvistab(&snap)) {
@@ -17157,7 +17169,7 @@ void lj_gc2_publish_read_root(lua_State *L, cTValue *root, int stack)
       return;
     }
   }
-  lj_gc_pubroot(L, root);
+  gc2_barrier_tv(g, root, 0);
 }
 
 #define GC2_CDATA_BACK_CELLS \

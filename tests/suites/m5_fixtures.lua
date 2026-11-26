@@ -166,6 +166,12 @@ return function(add)
         timeout = "90s",
         libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=munmap" }
       })
+      if jit.os == "Linux" and t.target_arch == "x64" then
+        for _, mode in ipairs({ "incremental", "generational" }) do
+          runtime.luajit_script(t, "t-str-reclaim-auto-cli.lua", { mode },
+                                { timeout = "60s" })
+        end
+      end
     end
   })
 
