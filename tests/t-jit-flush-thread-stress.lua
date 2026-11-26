@@ -281,10 +281,11 @@ assert(observed > 0, "workers did not observe live traces during flush race")
 jit_flush()
 collectgarbage("collect")
 collectgarbage("collect")
+-- Sample collection completion before running the trace probes.
+local stats = gcworkers > 0 and th.gcstats()
 assert(live_trace_count() == 0, "full flush left visible live traces")
 
-if gcworkers > 0 then
-  local stats = th.gcstats()
+if stats then
   assert(stats.cycle_starts > gcstats0.cycle_starts,
 	 "combined stress did not start a GC2 cycle")
   assert(stats.worker_runs > gcstats0.worker_runs,
