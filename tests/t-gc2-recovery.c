@@ -252,6 +252,58 @@ static void test_worker_grey_grows_in_own_arena(void)
   recovery_fixture_close(&f);
 }
 
+typedef struct GreyObserverCtx {
+  global_State *g;
+  int empty;
+} GreyObserverCtx;
+
+static void *grey_observer_thread(void *arg)
+{
+  GreyObserverCtx *ctx = (GreyObserverCtx *)arg;
+  ctx->empty = lj_gc2_test_grey_empty(ctx->g);
+  return NULL;
+}
+
+static void test_grey_observer_growth(uint32_t advance)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  GreyObserverCtx ctx = { f.g, -1 };
+  GCobj *items[LJ_GC2_GREY_EMBEDDED + 1];
+  pthread_t observer;
+  uint32_t i;
+
+  assert(gc2_grey_capacity_acq(f.g) == LJ_GC2_GREY_EMBEDDED);
+  assert(lua_checkstack(f.L, LJ_GC2_GREY_EMBEDDED + 1));
+  for (i = 0; i <= LJ_GC2_GREY_EMBEDDED; i++) {
+    lua_newtable(f.L);
+    items[i] = obj2gco(tabV(f.L->top - 1));
+  }
+  assert(lj_gc2_test_grey_empty(f.g));
+  for (i = 0; i < advance; i++) {
+    assert(lj_gc2_test_grey_push(f.g, items[0]));
+    assert(lj_gc2_test_grey_steal(f.g) == items[0]);
+  }
+  for (i = 0; i < LJ_GC2_GREY_EMBEDDED; i++)
+    assert(lj_gc2_test_grey_push(f.g, items[i]));
+
+  /* Keep the queue nonempty while a mutator observes it across a grow.
+  ** A low old top exposed a spurious overrun; a high old top reported empty. */
+  lj_gc2_test_recovery_pause(LJ_GC2_RECOVERY_TEST_GREY_TOP_SAMPLED);
+  assert(pthread_create(&observer, NULL, grey_observer_thread, &ctx) == 0);
+  recovery_wait_paused(LJ_GC2_RECOVERY_TEST_GREY_TOP_SAMPLED);
+  lj_gc2_test_recovery_pause_disarm();
+  assert(lj_gc2_test_grey_push(f.g, items[LJ_GC2_GREY_EMBEDDED]));
+  assert(gc2_grey_capacity_acq(f.g) > LJ_GC2_GREY_EMBEDDED);
+  lj_gc2_test_recovery_release();
+  assert(pthread_join(observer, NULL) == 0);
+  assert(ctx.empty == 0);
+  assert(gc2_recovery_failed_acq(f.g) == 0);
+  for (i = 0; i <= LJ_GC2_GREY_EMBEDDED; i++)
+    assert(lj_gc2_test_grey_steal(f.g) == items[i]);
+  assert(lj_gc2_test_grey_empty(f.g));
+  recovery_fixture_close(&f);
+}
+
 static void *recovery_free_thread(void *arg)
 {
   RecoveryFreeCtx *ctx = (RecoveryFreeCtx *)arg;
@@ -2615,23 +2667,28 @@ int main(int argc, char **argv)
       test_postrestore_claimant_one(0);
     else if (!strcmp(argv[1], "postrestore-abandon"))
       test_postrestore_claimant_one(1);
-    else {
+    else if (!strcmp(argv[1], "grey-observer")) {
+      test_grey_observer_growth(0);
+      test_grey_observer_growth(3 * LJ_GC2_GREY_EMBEDDED + 17);
+    } else {
       fprintf(stderr, "unknown t-gc2-recovery selector: %s\n", argv[1]);
       return 2;
     }
-    puts("t-gc2-recovery selected constructor race OK");
+    puts("t-gc2-recovery selected case OK");
     return 0;
   }
   if (argc != 1) {
     fprintf(stderr, "usage: %s [sampled-commit|sampled-abandon|"
 	    "drain-commit|drain-abandon|unrelated-mutating|"
-	    "postrestore-commit|postrestore-abandon]\n", argv[0]);
+	    "postrestore-commit|postrestore-abandon|grey-observer]\n", argv[0]);
     return 2;
   }
   test_full_active_ssb_fallback();
   test_full_ssb_barrier_coalesces_reserved_recovery();
   test_stale_idle_sample_rechecks_mutating_recovery();
   test_worker_grey_grows_in_own_arena();
+  test_grey_observer_growth(0);
+  test_grey_observer_growth(3 * LJ_GC2_GREY_EMBEDDED + 17);
   test_grey_growth_transaction();
   test_reservation_gap_blocks_mark_close();
   test_claimed_redirty_replay();

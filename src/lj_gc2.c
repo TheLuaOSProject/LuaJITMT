@@ -771,6 +771,7 @@ uint32_t lj_gc2_test_worker_table_skips(void)
 #define LJ_GC2_RECOVERY_TEST_POST_CLAIM 5u
 #define LJ_GC2_RECOVERY_TEST_SMALL_IDLE_SAMPLED 6u
 #define LJ_GC2_RECOVERY_TEST_POST_CONSTRUCT_RESTORE 7u
+#define LJ_GC2_RECOVERY_TEST_GREY_TOP_SAMPLED 8u
 #define LJ_GC2_THREAD_NEEDSCAN_TEST_BEFORE_SET 1u
 #define LJ_GC2_THREAD_NEEDSCAN_TEST_AFTER_SET 2u
 #define LJ_GC2_THREAD_NEEDSCAN_TEST_INSTALLING 3u
@@ -11454,21 +11455,16 @@ int lj_gc2_obj_queued_brief_held(global_State *g, GCobj *o,
   return gc2_queue_obj_info(g, o, (GCArena *)known_arena, info, 0);
 }
 
-static uint64_t gc2_grey_repair_span(global_State *g, MSize cap,
-				     uint64_t top, uint64_t bottom)
+static int gc2_grey_owner_span_ok(global_State *g, MSize cap,
+				  uint64_t top, uint64_t bottom)
 {
   if (cap != 0 && bottom > top && bottom - top > (uint64_t)cap) {
-    /*
-    ** Advancing top here used to discard the oldest semantic identities after
-    ** cursor corruption. Recovery cannot reconstruct work which was already
-    ** overwritten, so fail closed instead: NO_RECLAIM makes the generation a
-    ** permanent veto and the unchanged span keeps the invariant violation
-    ** visible to every owner. Correct push/grow arbitration never reaches this
-    ** branch.
-    */
+    /* Only the owner has a stable capacity and bottom. An actual overrun
+    ** would have overwritten work that recovery cannot reconstruct. */
     gc2_recovery_fail_closed(g);
+    return 0;
   }
-  return top;
+  return 1;
 }
 
 static int gc2_grey_grow(global_State *g)
@@ -11479,10 +11475,11 @@ static int gc2_grey_grow(global_State *g)
   MSize newcap = oldcap ? oldcap << 1 : GC2_GREY_INIT;
   uint64_t top = gc2_grey_top_acq(g);
   uint64_t bottom = gc2_grey_bottom_rlx(g);
-  top = gc2_grey_repair_span(g, oldcap, top, bottom);
-  MSize count = bottom > top ? (MSize)(bottom - top) : 0;
-  if (oldcap >= GC2_GREY_LIMIT)
+  MSize count;
+  if (!gc2_grey_owner_span_ok(g, oldcap, top, bottom) ||
+      oldcap >= GC2_GREY_LIMIT)
     return 0;
+  count = bottom > top ? (MSize)(bottom - top) : 0;
   if (newcap < oldcap || newcap > GC2_GREY_LIMIT)
     newcap = GC2_GREY_LIMIT;
   if (newcap <= oldcap || count > newcap)
@@ -11501,18 +11498,16 @@ static int gc2_grey_grow(global_State *g)
     return 0;
   if (oldstack && oldcap) {
     MSize i;
+    /* Mutators sample the cursors without holding the ring. Keep logical
+    ** positions across growth, including when the live range wraps. */
     for (i = 0; i < count; i++) {
-      GCobj *o = gc2_queue_slot_load_acq(&oldstack[(MSize)((top + i) % oldcap)]);
-      if (o)
-	gc2_queue_slot_store_rel(&newstack[i], o);
-      else
-	gc2_queue_slot_clear_rel(&newstack[i]);
+      uint64_t pos = top + i;
+      GCobj *o = gc2_queue_slot_load_acq(&oldstack[pos % oldcap]);
+      gc2_queue_slot_store_rel(&newstack[pos % newcap], o);
     }
   }
   gc2_grey_stack_rel(g, newstack);
   gc2_grey_capacity_rel(g, newcap);
-  gc2_grey_top_store_rlx(g, 0);
-  gc2_grey_bottom_store_rlx(g, count);
   if (oldstack && oldstack != g->gc2.grey_embedded)
     lj_mem_freevec(g, oldstack, oldcap, GCRef);
   return 1;
@@ -11528,7 +11523,8 @@ static int gc2_grey_push(global_State *g, GCobj *o)
   bottom = gc2_grey_bottom_rlx(g);
   top = gc2_grey_top_acq(g);
   cap = gc2_grey_capacity_acq(g);
-  top = gc2_grey_repair_span(g, cap, top, bottom);
+  if (!gc2_grey_owner_span_ok(g, cap, top, bottom))
+    return 0;
   if (top > bottom) {
     /*
     ** Chase-Lev indexes describe an empty deque when the steal side catches or
@@ -11555,13 +11551,14 @@ static int gc2_grey_push(global_State *g, GCobj *o)
 static int gc2_grey_empty(global_State *g)
 {
   uint64_t top, bottom;
-  MSize cap;
   if (!g)
     return 1;
-  cap = gc2_grey_capacity_acq(g);
+  /* Top only advances. If bottom is at or below this sample, the deque
+  ** was empty at the bottom load. Growth or many pushes between loads
+  ** can make their difference larger than the observed ring capacity. */
   top = gc2_grey_top_acq(g);
+  gc2_recovery_test_pause_at(LJ_GC2_RECOVERY_TEST_GREY_TOP_SAMPLED);
   bottom = gc2_grey_bottom_acq(g);
-  top = gc2_grey_repair_span(g, cap, top, bottom);
   return top >= bottom;
 }
 
@@ -14391,8 +14388,7 @@ static GCobj *gc2_grey_pop(global_State *g)
     return NULL;
   bottom = gc2_grey_bottom_rlx(g);
   top = gc2_grey_top_acq(g);
-  top = gc2_grey_repair_span(g, cap, top, bottom);
-  if (top >= bottom)
+  if (!gc2_grey_owner_span_ok(g, cap, top, bottom) || top >= bottom)
     return NULL;
   bottom--;
   gc2_grey_bottom_store_rlx(g, bottom);
@@ -14438,7 +14434,6 @@ static GCobj *lj_gc2_grey_steal(global_State *g)
   top = gc2_grey_top_acq(g);
   la_fence_seq();  /* 05 section 5.6.3: order top before bottom snapshot. */
   bottom = gc2_grey_bottom_acq(g);
-  top = gc2_grey_repair_span(g, cap, top, bottom);
   if (top >= bottom)
     return NULL;
   slot = &stack[(MSize)(top % cap)];
@@ -14460,6 +14455,11 @@ GCobj *lj_gc2_test_grey_steal(global_State *g)
 int lj_gc2_test_grey_push(global_State *g, GCobj *o)
 {
   return g && o ? gc2_grey_push(g, o) : 0;
+}
+
+int lj_gc2_test_grey_empty(global_State *g)
+{
+  return gc2_grey_empty(g);
 }
 #endif
 

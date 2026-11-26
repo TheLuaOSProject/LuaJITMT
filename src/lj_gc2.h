@@ -518,6 +518,7 @@ LJ_FUNC void lj_gc2_test_progress_metrics_read(
 #define LJ_GC2_RECOVERY_TEST_POST_CLAIM	5u
 #define LJ_GC2_RECOVERY_TEST_SMALL_IDLE_SAMPLED	6u
 #define LJ_GC2_RECOVERY_TEST_POST_CONSTRUCT_RESTORE	7u
+#define LJ_GC2_RECOVERY_TEST_GREY_TOP_SAMPLED	8u
 #define LJ_GC2_WEAK_FRONTIER_FAULT_VECTOR_TAB	1u
 #define LJ_GC2_WEAK_FRONTIER_FAULT_OVERFLOW_NODE	2u
 #define LJ_GC2_WEAK_FRONTIER_FAULT_OVERFLOW_TAB	3u
@@ -680,6 +681,7 @@ LJ_FUNC void lj_gc2_test_rescan_pending_clear_cycle(global_State *g,
 #if defined(LJ_GC2_TEST_HELPERS)
 LJ_FUNC int lj_gc2_test_grey_push(global_State *g, GCobj *o);
 LJ_FUNC GCobj *lj_gc2_test_grey_steal(global_State *g);
+LJ_FUNC int lj_gc2_test_grey_empty(global_State *g);
 #endif
 LJ_FUNC void lj_gc2_test_worker_wake(global_State *g);
 LJ_FUNC int lj_gc2_test_finalizer_try_enter(global_State *g);
