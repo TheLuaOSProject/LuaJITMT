@@ -4342,18 +4342,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   /* -- Upvalue and function ops ------------------------------------------ */
 
-  case BC_UGET:
-    |  ins_AD	// RA = dst, RD = upvalue #
-    |  mov L:RB, SAVE_L
-    |  mov L:RB->base, BASE
-    |  mov SAVE_PC, PC
-    |  mov CARG2d, RDd
-    |  mov CARG3d, RAd
-    |  mov CARG1, L:RB
-    |  call extern lj_func_getuv_vm
-    |  mov BASE, L:RB->base
-    |  ins_next
-    break;
   case BC_CNEW:
     |  ins_AD	// RA = dst
     |  mov L:RB, SAVE_L
@@ -4369,171 +4357,37 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jmp ->vm_gc2_pubroot
     break;
   case BC_CGET:
-    |  ins_AD	// RA = dst, RD = local cell/raw slot
-    |  mov RB, [BASE+RD*8]
+  case BC_CSET:
+    |  ins_AD
+    if (op == BC_CGET) {
+      |  mov RB, [BASE+RD*8]
+    } else {
+      |  mov RB, [BASE+RA*8]
+    }
     |  mov ITYPE, RB
     |  sar ITYPE, 47
     |  cmp ITYPEd, LJ_TUPVAL
-    |  jne >1
-    |  mov L:RB, SAVE_L
-    |  mov L:RB->base, BASE
-    |  mov SAVE_PC, PC
-    |  mov CARG2d, RDd
-    |  mov CARG3d, RAd
-    |  mov CARG1, L:RB
-    |  call extern lj_func_getcell_vm
-    |  mov BASE, L:RB->base
-    |  ins_next
-    |1:
+    |  je >1
+    if (op == BC_CSET) {
+      |  mov RB, [BASE+RD*8]
+    }
     |  mov [BASE+RA*8], RB
     |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |  ins_next
-    break;
-  case BC_CSET:
-    |  ins_AD	// RA = local cell/raw slot, RD = src
-    |  mov RB, [BASE+RA*8]
-    |  mov ITYPE, RB
-    |  sar ITYPE, 47
-    |  cmp ITYPEd, LJ_TUPVAL
-    |  jne >3
-    |  cleartp UPVAL:RB
-    |  cmp byte UPVAL:RB->closed, 0
-    |  mov RB, UPVAL:RB->v
-    |  jz >4
-    |  mov L:CARG1, SAVE_L
-    |  mov L:CARG1->base, BASE
-    |.if X64WIN
-    |  lea CARG3, [BASE+RD*8]
-    |  mov CARG2, RB
-    |.else
-    |  mov CARG2, RB
-    |  lea CARG3, [BASE+RD*8]
-    |.endif
-    |  mov L:RB, L:CARG1
-    |  call extern lj_func_storeuv_pub	// (lua_State *L, TValue *tv, const TValue *src)
-    |  mov BASE, L:RB->base
-    |  ins_next
-    |
-  |3:
-  |  mov RB, [BASE+RD*8]
-  |  mov [BASE+RA*8], RB
-  |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
-  |  ins_next
-  |
-  |4:  // Defensive open-cell fallback.
-  |  mov RA, [BASE+RD*8]
-  |  mov [RB], RA
-  |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
-  |  ins_next
-    break;
+    |1:
+    /* fallthrough */
+  case BC_UGET:
   case BC_USETV:
-    |  ins_AD	// RA = upvalue #, RD = src
-    |  mov LFUNC:RB, [BASE-16]
-    |  cleartp LFUNC:RB
-    |  mov UPVAL:RB, [LFUNC:RB+RA*8+offsetof(GCfuncL, uvptr)]
-    |  cmp byte UPVAL:RB->closed, 0
-    |  mov RB, UPVAL:RB->v
-    |  jz >1
-    |  mov L:CARG1, SAVE_L
-    |  mov L:CARG1->base, BASE
-    |.if X64WIN
-    |  lea CARG3, [BASE+RD*8]
-    |  mov CARG2, RB
-    |.else
-    |  mov CARG2, RB
-    |  lea CARG3, [BASE+RD*8]
-    |.endif
-    |  mov L:RB, L:CARG1
-    |  call extern lj_func_storeuv_pub	// (lua_State *L, TValue *tv, const TValue *src)
-    |  mov BASE, L:RB->base
-    |  ins_next
-    |
-    |1:
-    |  mov RA, [BASE+RD*8]
-    |  mov [RB], RA
-    |  ins_next
-    break;
   case BC_USETS:
-    |  ins_AND	// RA = upvalue #, RD = str const (~)
-    |  mov LFUNC:RB, [BASE-16]
-    |  cleartp LFUNC:RB
-    |  mov UPVAL:RB, [LFUNC:RB+RA*8+offsetof(GCfuncL, uvptr)]
-    |  mov STR:RA, [KBASE+RD*8]
-    |  cmp byte UPVAL:RB->closed, 0
-    |  mov RD, UPVAL:RB->v
-    |  jz >1
-    |.if X64WIN
-    |  mov CARG3, STR:RA
-    |.endif
-    |  mov L:CARG1, SAVE_L
-    |  mov L:CARG1->base, BASE
-    |  mov CARG2, RD
-    |.if not X64WIN
-    |  mov CARG3, STR:RA
-    |.endif
-    |  mov L:RB, L:CARG1
-    |  call extern lj_func_storeuvstr_pub	// (lua_State *L, TValue *tv, GCstr *str)
-    |  mov BASE, L:RB->base
-    |  ins_next
-    |
-    |1:
-    |  settp STR:ITYPE, STR:RA, LJ_TSTR
-    |  mov [RD], STR:ITYPE
-    |  ins_next
-    break;
   case BC_USETN:
-    |  ins_AD	// RA = upvalue #, RD = num const
-    |  mov LFUNC:RB, [BASE-16]
-    |  cleartp LFUNC:RB
-    |  mov UPVAL:RB, [LFUNC:RB+RA*8+offsetof(GCfuncL, uvptr)]
-    |  cmp byte UPVAL:RB->closed, 0
-    |  mov RB, UPVAL:RB->v
-    |  jz >1
-    |  mov L:CARG1, SAVE_L
-    |  mov L:CARG1->base, BASE
-    |.if X64WIN
-    |  lea CARG3, [KBASE+RD*8]
-    |  mov CARG2, RB
-    |.else
-    |  mov CARG2, RB
-    |  lea CARG3, [KBASE+RD*8]
-    |.endif
-    |  mov L:RB, L:CARG1
-    |  call extern lj_func_storeuvnum_pub	// (lua_State *L, TValue *tv, const lua_Number *np)
-    |  mov BASE, L:RB->base
-    |  ins_next
-    |
-    |1:
-    |  movsd xmm0, qword [KBASE+RD*8]
-    |  movsd qword [RB], xmm0
-    |  ins_next
-    break;
   case BC_USETP:
-    |  ins_AD	// RA = upvalue #, RD = primitive type (~)
-    |  mov LFUNC:RB, [BASE-16]
-    |  cleartp LFUNC:RB
-    |  mov UPVAL:RB, [LFUNC:RB+RA*8+offsetof(GCfuncL, uvptr)]
-    |  cmp byte UPVAL:RB->closed, 0
-    |  mov RB, UPVAL:RB->v
-    |  jz >1
-    |  mov L:CARG1, SAVE_L
-    |  mov L:CARG1->base, BASE
-    |.if X64WIN
-    |  mov CARG3d, RDd
-    |  mov CARG2, RB
-    |.else
-    |  mov CARG2, RB
-    |  mov CARG3d, RDd
-    |.endif
-    |  mov L:RB, L:CARG1
-    |  call extern lj_func_storeuvpri_pub	// (lua_State *L, TValue *tv, uint32_t pri)
+    |  mov L:RB, SAVE_L
+    |  mov L:RB->base, BASE
+    |  mov SAVE_PC, PC
+    |  mov CARG2d, dword [PC-4]
+    |  mov CARG1, L:RB
+    |  call extern lj_func_accessuv_vm
     |  mov BASE, L:RB->base
-    |  ins_next
-    |
-    |1:
-    |  shl RD, 47
-    |  not RD
-    |  mov [RB], RD
     |  ins_next
     break;
   case BC_UCLO:

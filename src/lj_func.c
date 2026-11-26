@@ -12,6 +12,7 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_arena.h"
+#include "lj_bc.h"
 #include "lj_err.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
@@ -315,32 +316,55 @@ static int func_rooted_cell_slot(lua_State *L,
   return 1;
 }
 
-static int func_vm_read_cell(lua_State *L, uint32_t src, uint32_t dst,
-			      int local_cell)
+static cTValue *func_vm_store_source(lua_State *L, BCIns ins, TValue *literal)
+{
+  BCReg d = bc_d(ins);
+  switch (bc_op(ins)) {
+  case BC_USETS:
+    setgcVraw(literal,
+              proto_kgc_acq(funcproto(funcV(L->base-2)), ~(ptrdiff_t)d), LJ_TSTR);
+    return literal;
+  case BC_USETN:
+    return proto_knumtv(funcproto(funcV(L->base-2)), d);
+  case BC_USETP:
+    setpriV(literal, ~d);
+    return literal;
+  default:
+    return L->base + d;
+  }
+}
+
+static int func_vm_cell_access(lua_State *L, BCIns ins)
 {
   global_State *g = G(L);
+  BCOp op = bc_op(ins);
+  int read = op == BC_UGET || op == BC_CGET;
+  int local = op == BC_CGET || op == BC_CSET;
+  BCReg index = read ? bc_d(ins) : bc_a(ins);
   TValue *base = L->base, *edge;
   GCfuncL *fn = NULL;
   GCobj *obj;
   GCupval *uv;
-  TValue value;
+  TValue cell, value, literal;
+  cTValue *source;
   LJGC2Lease cell_lease, value_lease;
   TGState *pin = NULL;
   int leased = 0, open_stack = 0, success = 0;
 
-  if (local_cell) {
-    lj_tv_load_acq(&value, base + src);
-    if (itype(&value) != LJ_TUPVAL) {
-      copyTVrel(L, base + dst, &value);
-      lj_gc2_publish_read_root(L, base + dst, 1);
+  if (local) {
+    lj_tv_load_acq(&cell, base + index);
+    if (itype(&cell) != LJ_TUPVAL) {
+      lj_tv_load_acq(&value, base + bc_d(ins));
+      copyTVrel(L, base + bc_a(ins), &value);
+      lj_gc2_publish_read_root(L, base + bc_a(ins), 1);
       return 1;
     }
-    obj = gcval(&value);
+    obj = gcval(&cell);
   } else {
-    /* The current frame owns this function. A sibling may replace its
-    ** uvptr, so the sampled cell is only an address until admitted. */
+    /* The frame owns the closure. The sampled upvalue can be replaced by
+    ** lua_upvaluejoin before admission or while the value is retained. */
     fn = &funcV(base - 2)->l;
-    obj = func_uvptr_acq(fn, src);
+    obj = func_uvptr_acq(fn, index);
   }
   if (LJ_LIKELY(gc2_small_arena_tab_acq(g))) {
     if (!lj_gc2_small_lease_try(g, obj, sizeof(GCupval),
@@ -360,7 +384,8 @@ static int func_vm_read_cell(lua_State *L, uint32_t src, uint32_t dst,
     open_stack = 1;
     edge = mref_acq(uv->v, TValue);
   }
-  lj_tv_load_acq(&value, edge);
+  source = read ? edge : func_vm_store_source(L, ins, &literal);
+  lj_tv_load_acq(&value, source);
   if (tvisstr(&value))
     pin = lj_str_source_pin(L, (GCstr *)(void *)gcval(&value));
   if (tvisgcv(&value) && !pin) {
@@ -369,20 +394,29 @@ static int func_vm_read_cell(lua_State *L, uint32_t src, uint32_t dst,
       goto done;
     leased = 1;
   }
-  if ((local_cell ? gcval(base + src) != obj :
-		  func_uvptr_acq(fn, src) != obj) ||
+  if ((local ? tv_rawload_acq(base + index) != tv_rawload(&cell) :
+	       func_uvptr_acq(fn, index) != obj) ||
       mref_acq(uv->v, TValue) != edge ||
-      tv_rawload_acq(edge) != tv_rawload(&value) ||
+      tv_rawload_acq(source) != tv_rawload(&value) ||
       !lj_str_tv_rescue_held(&value))
     goto done;
-  copyTVrel(L, base + dst, &value);
+  if (read) {
+    copyTVrel(L, base + bc_a(ins), &value);
+  } else {
+    copyTVrel(L, edge, &value);
+    /* A sibling can overwrite the slot before the barrier reads it. */
+    if (tvisgcv(&value))
+      lj_gc2_barrier_tv_pair_g(g, obj, &value);
+    if (open_stack)
+      lj_gc2_publish_read_root(L, &value, 1);
+  }
   success = 1;
 
 done:
   if (open_stack)
     lj_gc2_smr_read_leave(g);
-  if (success)
-    lj_gc2_publish_read_root(L, base + dst, 1);
+  if (success && read)
+    lj_gc2_publish_read_root(L, base + bc_a(ins), 1);
   if (pin)
     lj_str_source_unpin(pin);
   if (leased)
@@ -391,26 +425,15 @@ done:
   return success;
 }
 
-static void func_vm_read(lua_State *L, uint32_t src, uint32_t dst,
-			 int local_cell)
+void lj_func_accessuv_vm(lua_State *L, BCIns ins)
 {
   LJOSerrState oserr;
   lj_oserr_save(&oserr);
-  while (!func_vm_read_cell(L, src, dst, local_cell)) {
+  while (!func_vm_cell_access(L, ins)) {
     lj_oserr_restore(&oserr);
     lj_tab_wait_l(L);
   }
   lj_oserr_restore(&oserr);
-}
-
-void lj_func_getuv_vm(lua_State *L, uint32_t src, uint32_t dst)
-{
-  func_vm_read(L, src, dst, 0);
-}
-
-void lj_func_getcell_vm(lua_State *L, uint32_t src, uint32_t dst)
-{
-  func_vm_read(L, src, dst, 1);
 }
 
 static int func_rooted_cell_try_common(lua_State *L, TValue *base,

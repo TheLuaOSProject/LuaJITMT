@@ -2224,7 +2224,7 @@ assert(exits > 0, "active-MT rooted-length BC_LOOP never entered native code")
 
   add({
     name = "m6_jit_x64_rooted_upvalue",
-    description = "active-MT x64 UGET and CGET trace exact upvalue reads",
+    description = "x64 rooted native upvalue reads and concurrent interpreter stores",
     run = function(t)
       build_default(t)
       build_and_run_c(t, t:tmp("lj_t-jit-sweep-upvalue-read"),
@@ -2233,6 +2233,11 @@ assert(exits > 0, "active-MT rooted-length BC_LOOP never entered native code")
         lua_path = true,
         timeout = "30s"
       })
+      build.with_default_build_restore(t, function()
+        build_and_run_c(t, t:tmp("lj_t-vm-upvalue-store"),
+                        "t-vm-upvalue-store.c",
+                        build.tab_helper_opts({ timeout = "20s" }))
+      end)
     end
   })
 
