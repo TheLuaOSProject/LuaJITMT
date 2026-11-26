@@ -572,6 +572,7 @@ int main(void)
   global_State *g = G(L);
   IdleReclaimCtx ctx;
   PatchedPC loop_patch, ret_patch, itern_patch;
+  TraceNo unrelated;
   pthread_t reclaimer;
   int cache_base, jfuncf_idx, loop_idx, ret_idx, itern_idx, itern_input_idx;
   int probe_idx, generic_idx, generic_input_idx;
@@ -580,11 +581,8 @@ int main(void)
   lua_gc(L, LUA_GCSTOP, 0);
   publish_ptr(L, "__idle_reclaim_vmstate", &G2TG(g)->vmstate);
   publish_ptr(L, "__idle_reclaim_hits", &native_hits);
-  /* The native-entry probe intentionally uses FFI/cdata metadata and therefore
-  ** runs only while the metadata SMR writer can make progress. The separate
-  ** closed-window numeric and generic traces below use scalar/upvalue state;
-  ** an unrelated retained metadata lookup would correctly wait for the test's
-  ** deliberately frozen exclusive writer and obscure the JIT-entry proof. */
+  /* FFI counters witness native execution on either side of the pause. The
+  ** scalar and generic loops below check interpreter recovery during it. */
   ljt_lua_dostring(L,
     "jit.flush()\n"
     "jit.on()\n"
@@ -677,6 +675,9 @@ int main(void)
     ret_patch = patch_first_op(L, "__idle_shadow_ret", BC_RET0);
   assert(proto_has_op(global_proto(L, "__idle_shadow_itern"), BC_ISNEXT));
   itern_patch = patch_first_op(L, "__idle_shadow_itern", BC_ITERN);
+  unrelated = proto_trace_acq(global_proto(L, "__idle_reclaim_closed_probe"));
+  assert(unrelated && trace_runnable_acq(traceref(L2J(L), unrelated), unrelated));
+  bc_publish(itern_patch.pc, BCINS_AD(BC_JLOOP, bc_a(itern_patch.original), unrelated));
   if (!lj_gc2_test_idle_reclaim_enter(g)) {
     fprintf(stderr,
       "idle reclaim preflight failed: state=%u phase=%u worker=%u assist=%u "
@@ -689,12 +690,7 @@ int main(void)
   }
   lj_gc2_test_idle_reclaim_leave(g);
 
-  /* Retained table lookup now takes a short SMR reader while copying a global
-  ** value. Preload every value needed below before the test hook freezes the
-  ** exclusive reclaimer; otherwise lua_getglobal() would correctly wait for
-  ** the deliberately paused writer and the fixture would deadlock itself
-  ** before exercising closed-gate bytecode recovery. Keep the cached values on
-  ** the Lua stack as ordinary roots and duplicate them for each call. */
+  /* Keep the entry-probe functions and inputs rooted on the Lua stack. */
   cache_base = lua_gettop(L);
   lua_getglobal(L, "__idle_reclaim_jfuncf");
   jfuncf_idx = lua_gettop(L);
@@ -785,6 +781,29 @@ int main(void)
   assert(!lj_tg_any_jit_active(g));
   assert(gc2_jit_phase_gate_acq(g) == 0);
   assert(gc2_smr_reclaiming_acq(g) != 0);
+  /* This recovery sidecar names a synthetic JLOOP with an unrelated trace
+  ** number. Resolve the generic iterator while the collector remains parked. */
+  lua_getglobal(L, "__idle_shadow_set_next");
+  lua_getglobal(L, "idle_next_wrapper");
+  ljt_lua_pcall(L, 1, 0, "set ITERN invalidation iterator");
+  lua_getglobal(L, "__idle_shadow_itern");
+  lua_getglobal(L, "idle_shadow_input");
+  ljt_lua_pcall(L, 1, 2, "closed IDLE ITERN invalidation");
+  assert(lua_tointeger(L, -2) == 5);
+  assert(lua_tointeger(L, -1) == 165);
+  lua_pop(L, 2);
+  assert(bc_op((BCIns)la_load32_acq((const uint32_t *)itern_patch.pc)) ==
+	 BC_ITERC);
+  {
+    LJGC2Lease body;
+    GCtrace *T = lj_trace_published_lease(L2J(L), unrelated, &body);
+    assert(T && trace_runnable_acq(T, unrelated));
+    lj_gc2_lease_release(&body);
+  }
+  lua_getglobal(L, "__idle_shadow_set_next");
+  lua_getglobal(L, "next");
+  ljt_lua_pcall(L, 1, 0, "restore ITERN iterator");
+  assert(lj_gc2_test_idle_reclaim_paused());
   lj_gc2_test_idle_reclaim_release();
   assert(pthread_join(reclaimer, NULL) == 0);
   assert(la_load32_acq(&ctx.done) != 0);
@@ -792,26 +811,6 @@ int main(void)
   assert(gc2_jit_phase_gate_acq(g) != 0);
   lua_settop(L, cache_base);
 
-  /* A failed ISNEXT must take a trace-body lease before deciding whether the
-  ** observed JLOOP still names the exact live ITERN generation and before
-  ** publishing JLOOP -> ITERC. Do that lease-dependent despecialization only
-  ** after the deliberately paused exclusive SMR writer has left. During the
-  ** pause the real builtin above still exercises closed-gate JLOOP recovery
-  ** through the immutable sidecar without waiting for body admission. */
-  lua_getglobal(L, "__idle_shadow_set_next");
-  lua_getglobal(L, "idle_next_wrapper");
-  ljt_lua_pcall(L, 1, 0, "set ITERN invalidation iterator");
-  lua_getglobal(L, "__idle_shadow_itern");
-  lua_getglobal(L, "idle_shadow_input");
-  ljt_lua_pcall(L, 1, 2, "reopened IDLE ITERN invalidation");
-  assert(lua_tointeger(L, -2) == 5);
-  assert(lua_tointeger(L, -1) == 165);
-  lua_pop(L, 2);
-  assert(bc_op((BCIns)la_load32_acq((const uint32_t *)itern_patch.pc)) ==
-	 BC_ITERC);
-  lua_getglobal(L, "__idle_shadow_set_next");
-  lua_getglobal(L, "next");
-  ljt_lua_pcall(L, 1, 0, "restore ITERN iterator");
   restore_patch(&loop_patch);
   restore_patch(&ret_patch);
   restore_patch(&itern_patch);

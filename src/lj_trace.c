@@ -10121,6 +10121,9 @@ BCIns LJ_FASTCALL lj_trace_stale_startins(jit_State *J, const BCIns *pc,
   return startins;
 }
 
+static int trace_published_read_lease(jit_State *J, TraceNo tr,
+                                      GCtrace **out, LJGC2Lease *body);
+
 /* Recover an ITERN trace's original word and close its VM/C validation gate.
 ** Failed ISNEXT executes without the recorder token, so it cannot unlink or
 ** retire a root trace. TRACE_ENTRY_INVALIDATED is a one-word nonwaiting gate:
@@ -10145,10 +10148,27 @@ BCIns LJ_FASTCALL lj_trace_invalidate_itern(jit_State *J, const BCIns *pc,
     return LJ_TRACE_STARTINS_RETRY;
   shadow = trace_stale_startins_shadow(L, pc, &owner);
 
-  /* Body validation and the invalidation-bit CAS need one allocation lease. A
-  ** temporary exclusive registry writer is progress by a peer, so redispatch
-  ** and retry instead of waiting inside the VM. */
   if (!lj_gc2_smr_read_try(g)) {
+    if (shadow && bc_op(shadow) == BC_ITERN &&
+        gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_META_EXCLUSIVE) {
+      LJGC2Lease body;
+      GCtrace *T;
+      int status = trace_published_read_lease(J, traceno, &T, &body);
+      if (status == 0) return shadow;
+      if (status > 0) {
+        /* The Lua frame owns the original instruction. Only the trace with
+        ** this exact PC can be affected by the VM's ensuing JLOOP -> ITERC
+        ** CAS. Its fixed header is sufficient to gate future native entry. */
+        if (trace_startpc_acq(T) == pc) {
+          if (trace_startpt_acq(T) == owner && trace_startins_acq(T) == shadow)
+            (void)trace_entry_mark_invalidated(T);
+          else
+            shadow = LJ_TRACE_STARTINS_RETRY;
+        }
+        lj_gc2_lease_release(&body);
+        return shadow;
+      }
+    }
     (void)lj_thr_retry_yield(NULL);
     return LJ_TRACE_STARTINS_RETRY;
   }
@@ -10328,19 +10348,39 @@ static int trace_slot_read_lease(jit_State *J, TraceVec *tv, TraceNo tr,
   return 1;
 }
 
-GCtrace *lj_trace_published_lease(jit_State *J, TraceNo tr, LJGC2Lease *body)
+/* Distinguish an empty or retired slot from an inconclusive admission.
+** A mutator may act on absence only in the directory generation it checked. */
+static int trace_published_read_lease(jit_State *J, TraceNo tr,
+                                      GCtrace **out, LJGC2Lease *body)
 {
   LJGC2Lease vector;
   TraceVec *tv;
   GCtrace *T = NULL;
-  if (!tr || tracevec_read_lease(J, &tv, &vector) <= 0)
-    return NULL;
-  if (tr < tv->sizetrace && trace_slot_read_lease(J, tv, tr, &T, body) > 0 &&
-      la_load64_acq(&T->retire_epoch) != 0) {
-    lj_gc2_lease_release(body);
-    T = NULL;
+  int status;
+  *out = NULL;
+  if (!tr) return 0;
+  status = tracevec_read_lease(J, &tv, &vector);
+  if (status <= 0) return status;
+  status = tr < tv->sizetrace ? trace_slot_read_lease(J, tv, tr, &T, body) : 0;
+  if (tracevec_acq(J) != tv) {
+    if (status > 0) lj_gc2_lease_release(body);
+    status = -1;
+  } else if (status > 0) {
+    if (la_load64_acq(&T->retire_epoch) != 0) {
+      lj_gc2_lease_release(body);
+      status = 0;
+    } else {
+      *out = T;
+    }
   }
   lj_gc2_lease_release(&vector);
+  return status;
+}
+
+GCtrace *lj_trace_published_lease(jit_State *J, TraceNo tr, LJGC2Lease *body)
+{
+  GCtrace *T;
+  (void)trace_published_read_lease(J, tr, &T, body);
   return T;
 }
 

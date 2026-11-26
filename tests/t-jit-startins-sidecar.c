@@ -3,6 +3,8 @@
 */
 
 #include <assert.h>
+#include <pthread.h>
+#include <sched.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -46,6 +48,19 @@ typedef struct RecordReentryCtx {
 } RecordReentryCtx;
 
 static RecordReentryCtx record_reentry;
+
+typedef struct ReclaimRun {
+  global_State *g;
+  uint32_t done;
+} ReclaimRun;
+
+static void *reclaim_during_itern(void *arg)
+{
+  ReclaimRun *run = (ReclaimRun *)arg;
+  (void)lj_gc2_reclaim_retired(run->g, lj_gc2_retire_epoch(run->g) + 1u);
+  la_store32_rel(&run->done, 1);
+  return NULL;
+}
 
 static void record_reentry_assert_victim_live(lua_State *L)
 {
@@ -368,6 +383,8 @@ int main(void)
   PatchedPC record_victim_target, record_outer_target;
   TraceNo post_publish_tr = 0;
   GCtrace *post_publish_body = NULL;
+  ReclaimRun reclaim = {G(L), 0};
+  pthread_t collector;
 
   ljt_lua_dostring(L,
     "jit.flush()\n"
@@ -589,6 +606,8 @@ int main(void)
   /* Exercise the later winner order. First publish a real ITERN root, then
   ** make ISNEXT fail. Its JLOOP -> ITERC writer must gate that exact trace
   ** before exposing the terminal generic target. */
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
   post_publish_target =
     find_first_op(L, "__sidecar_post_publish_itern", BC_ITERN);
   post_publish_guard =
@@ -627,8 +646,24 @@ int main(void)
     L, "__sidecar_post_publish_itern");
   lua_getglobal(L, "sidecar_next_wrapper");
   lua_setglobal(L, "next");
+  lj_gc2_test_idle_reclaim_pause_after_jit_quiescence();
+  assert(pthread_create(&collector, NULL, reclaim_during_itern, &reclaim) == 0);
+  while (!lj_gc2_test_idle_reclaim_paused() && !la_load32_acq(&reclaim.done))
+    sched_yield();
+  assert(lj_gc2_test_idle_reclaim_paused());
   call_itern_empty(L, "__sidecar_post_publish_itern",
 		   "sidecar post-publication JLOOP invalidation");
+  {
+    LJGC2Lease lease;
+    GCtrace *T = lj_trace_published_lease(L2J(L), post_publish_tr, &lease);
+    assert(T == post_publish_body && (la_load8_acq(&T->unused1) & TRACE_ENTRY_INVALIDATED));
+    assert(!trace_runnable_acq(T, post_publish_tr));
+    lj_gc2_lease_release(&lease);
+    assert(lj_gc2_test_idle_reclaim_paused() && !la_load32_acq(&reclaim.done));
+  }
+  lj_gc2_test_idle_reclaim_release();
+  assert(pthread_join(collector, NULL) == 0);
+  lua_gc(L, LUA_GCRESTART, 0);
   assert((BCIns)la_load32_acq(
     (const uint32_t *)post_publish_target.pc) ==
     replace_op(post_publish_target.original, BC_ITERC));
