@@ -9,9 +9,11 @@
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+#include "lj_gc2.h"
 #include "lj_obj.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
+#include "lj_thr.h"
 
 static _Atomic(TGState *) peer_tg, setter_tg;
 static atomic_int start_setter, release_peer, setter_done, timeout_hit;
@@ -109,6 +111,60 @@ static void *watchdog(void *unused)
   return NULL;
 }
 
+typedef struct PolicyReclaim {
+  lua_State *peer;
+  atomic_int ready, start;
+} PolicyReclaim;
+
+static void *reclaim_in_native(void *arg)
+{
+  PolicyReclaim *run = (PolicyReclaim *)arg;
+  lua_State *L = run->peer;
+  global_State *g = G(L);
+  assert(lj_threading_attach(L));
+  lj_native_enter(L2TG(L));
+  atomic_store(&run->ready, 1);
+  while (!atomic_load(&run->start))
+    pause_briefly();
+  (void)lj_gc2_reclaim_retired(g, lj_gc2_retire_epoch(g) + 1);
+  (void)lj_native_leave(L);
+  lj_threading_detach(L, 1);
+  return NULL;
+}
+
+static void test_policy_during_reclaim(void)
+{
+  lua_State *L = luaL_newstate();
+  PolicyReclaim run = {0};
+  pthread_t worker;
+  assert(L);
+  luaL_openlibs(L);
+  assert(luaL_dostring(L,
+    "local mode = require('threading').gcmode\n"
+    "return function()\n"
+    "  assert(mode('generational') == 'incremental')\n"
+    "  assert(mode('incremental') == 'generational')\n"
+    "end") == LUA_OK);
+  lua_gc(L, LUA_GCSTOP, 0);
+  run.peer = lua_newthread(L);
+  assert(pthread_create(&worker, NULL, reclaim_in_native, &run) == 0);
+  while (!atomic_load(&run.ready))
+    (void)lj_thr_retry_yield(L);
+  lj_gc2_test_idle_reclaim_pause_after_jit_quiescence();
+  atomic_store(&run.start, 1);
+  while (!lj_gc2_test_idle_reclaim_paused())
+    pause_briefly();
+  lua_pushvalue(L, 1);
+  assert(lua_pcall(L, 0, 0, 0) == LUA_OK);
+  assert(lj_gc2_test_idle_reclaim_paused());
+  assert(gc2_hs_leader_acq(G(L)) == 0 && gc2_hs_pending_acq(G(L)) == 0);
+  assert(!lj_tg_mark_active_acq(L2TG(L)) &&
+         !lj_tg_mark_active_acq(L2TG(run.peer)));
+  lj_gc2_test_idle_reclaim_release();
+  assert(pthread_join(worker, NULL) == 0);
+  lua_close(L);
+}
+
 int main(void)
 {
   static const char source[] =
@@ -154,5 +210,6 @@ int main(void)
     fprintf(stderr, "allocation waited for a parked mode-policy peer\n");
     return 1;
   }
+  test_policy_during_reclaim();
   return 0;
 }

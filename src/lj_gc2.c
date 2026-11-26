@@ -7387,23 +7387,16 @@ int lj_gc2_smr_read_tracked_try(global_State *g)
   return 0;
 }
 
-typedef enum GC2HugeRegistryLease {
-  GC2_HUGE_REGISTRY_NONE = 0,
-  GC2_HUGE_REGISTRY_FULL,
-  GC2_HUGE_REGISTRY_STABLE
-} GC2HugeRegistryLease;
-
-/* A SWEEP owner keeps TG/HugeTab topology stable, but may reclaim bodies. A
-** positive scan under this narrower reader is therefore legal only when it
-** ends in the same-slot HugeReader/mark CAS before any body byte is inspected;
-** a negative scan touches registry slots only. It must not install ordinary
-** SMR TLS: nested generic readers need the full OPEN mode. */
-static int gc2_huge_registry_read_try_mode(global_State *g,
-				GC2HugeRegistryLease *lease, int allow_idle)
+/* SWEEP and IDLE metadata retirement keep the TG registry stable while
+** reclaiming other storage. Huge allocation lookups must acquire their own
+** mapping reader before inspecting a body. Only OPEN installs ordinary SMR
+** TLS for nested readers. */
+static int gc2_registry_read_try_mode(global_State *g,
+                                      LJGC2RegistryLease *lease, int allow_idle)
 {
   uint32_t mode, old;
   if (lease)
-    *lease = GC2_HUGE_REGISTRY_NONE;
+    *lease = LJ_GC2_REGISTRY_NONE;
   if (!g || !lease)
     return 0;
   /* Both OPEN and SWEEP_STABLE can admit a HugeTab lookup. If an ordinary
@@ -7414,7 +7407,7 @@ static int gc2_huge_registry_read_try_mode(global_State *g,
     if (mode == LJ_GC2_SMR_OPEN) {
       if (!lj_gc2_smr_read_try(g))
 	continue;
-      *lease = GC2_HUGE_REGISTRY_FULL;
+      *lease = LJ_GC2_REGISTRY_FULL;
       return 1;
     }
     /* Typed value and plain vector readers can enter during IDLE retirement.
@@ -7426,42 +7419,48 @@ static int gc2_huge_registry_read_try_mode(global_State *g,
     old = gc2_smr_readers_add(g, 1);
     if (LJ_UNLIKELY(old == ~(uint32_t)0)) {
       (void)gc2_smr_readers_sub(g, 1);
-      lj_assertG(0, "GC2 Huge registry reader overflow");
+      lj_assertG(0, "GC2 registry reader overflow");
       abort();
     }
     la_fence_seq();
     if (gc2_smr_reclaiming_acq(g) == mode) {
-      *lease = GC2_HUGE_REGISTRY_STABLE;
+      *lease = LJ_GC2_REGISTRY_STABLE;
       return 1;
     }
     old = gc2_smr_readers_sub(g, 1);
-    lj_assertG(old != 0, "GC2 Huge registry reader rollback underflow");
+    lj_assertG(old != 0, "GC2 registry reader rollback underflow");
     UNUSED(old);
   }
 }
 
 static int gc2_huge_registry_read_try(global_State *g,
-				      GC2HugeRegistryLease *lease)
+				      LJGC2RegistryLease *lease)
 {
-  return gc2_huge_registry_read_try_mode(g, lease, 0);
+  return gc2_registry_read_try_mode(g, lease, 0);
 }
 
-static void gc2_huge_registry_read_leave(global_State *g,
-					 GC2HugeRegistryLease *lease)
+LJGC2RegistryLease lj_gc2_registry_read_enter(global_State *g)
+{
+  LJGC2RegistryLease lease;
+  while (!gc2_registry_read_try_mode(g, &lease, 1))
+    (void)lj_thr_retry_yield(NULL);
+  return lease;
+}
+
+void lj_gc2_registry_read_leave(global_State *g, LJGC2RegistryLease *lease)
 {
   uint32_t old;
-  if (!g || !lease || *lease == GC2_HUGE_REGISTRY_NONE)
+  if (!g || !lease || *lease == LJ_GC2_REGISTRY_NONE)
     return;
-  if (*lease == GC2_HUGE_REGISTRY_FULL) {
+  if (*lease == LJ_GC2_REGISTRY_FULL) {
     lj_gc2_smr_read_leave(g);
   } else {
-    lj_assertG(*lease == GC2_HUGE_REGISTRY_STABLE,
-	       "bad GC2 Huge registry lease");
+    lj_assertG(*lease == LJ_GC2_REGISTRY_STABLE, "bad GC2 registry lease");
     old = gc2_smr_readers_sub(g, 1);
-    lj_assertG(old != 0, "GC2 Huge registry reader underflow");
+    lj_assertG(old != 0, "GC2 registry reader underflow");
     UNUSED(old);
   }
-  *lease = GC2_HUGE_REGISTRY_NONE;
+  *lease = LJ_GC2_REGISTRY_NONE;
 }
 
 void lj_gc2_smr_read_enter(global_State *g)
@@ -10457,7 +10456,7 @@ static int gc2_huge_observed_scoped(global_State *g, GCobj *o, void **basep,
 					    LJHugeInfo *hip,
 					    GC2MarkScope *scope, int allow_idle)
 {
-  GC2HugeRegistryLease lease = GC2_HUGE_REGISTRY_NONE;
+  LJGC2RegistryLease lease = LJ_GC2_REGISTRY_NONE;
   TGState *tg;
   int rc;
   if (basep)
@@ -10465,7 +10464,7 @@ static int gc2_huge_observed_scoped(global_State *g, GCobj *o, void **basep,
   gc2_mark_scope_init(scope);
   if (!g || !o || !scope)
     return LJ_ARENA_HUGE_READER_MISSING;
-  if (!gc2_huge_registry_read_try_mode(g, &lease, allow_idle)) {
+  if (!gc2_registry_read_try_mode(g, &lease, allow_idle)) {
     gc2_activation_pin_no_reclaim(g);
     gc2_marks_this_round_add(g, 1);
     lj_gc2_worker_wake(g);
@@ -10481,13 +10480,13 @@ static int gc2_huge_observed_scoped(global_State *g, GCobj *o, void **basep,
   }
   tg = g->main_tg;
   if (!tg || !lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
-    gc2_huge_registry_read_leave(g, &lease);
+    lj_gc2_registry_read_leave(g, &lease);
     return LJ_ARENA_HUGE_READER_MISSING;
   }
   rc = lj_arena_hugetab_reader_cdata_range_acquire(
     &tg->huge, o, basep, &scope->huge, hip);
 found:
-  gc2_huge_registry_read_leave(g, &lease);
+  lj_gc2_registry_read_leave(g, &lease);
   /* A successful slot reader pins the direct header beyond either registry
   ** admission mode. */
   if (rc == LJ_ARENA_HUGE_READER_ACQUIRED) {
@@ -10520,7 +10519,7 @@ static int gc2_mark_huge_range_scoped(global_State *g, const void *p,
 				       void **basep, LJHugeInfo *hip,
 				       GC2MarkScope *scope)
 {
-  GC2HugeRegistryLease lease = GC2_HUGE_REGISTRY_NONE;
+  LJGC2RegistryLease lease = LJ_GC2_REGISTRY_NONE;
   TGState *tg;
   int marked;
   if (basep)
@@ -10538,13 +10537,13 @@ static int gc2_mark_huge_range_scoped(global_State *g, const void *p,
   }
   tg = g->main_tg;
   if (!tg || !lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
-    gc2_huge_registry_read_leave(g, &lease);
+    lj_gc2_registry_read_leave(g, &lease);
     return GC2_MARK_DEAD;
   }
   marked = lj_arena_hugetab_mark_range_reader_acquire(
     &tg->huge, p, basep, &scope->huge, hip);
 found:
-  gc2_huge_registry_read_leave(g, &lease);
+  lj_gc2_registry_read_leave(g, &lease);
   if (marked >= 0 && marked != LJ_ARENA_HUGE_MARK_INTENT &&
       marked != LJ_ARENA_HUGE_MARK_SATURATED)
     scope->admission = GC2_SCOPE_HUGE_READER;
@@ -10582,7 +10581,7 @@ static int gc2_frame_pc_valid_scoped(global_State *g, const BCIns *pc,
 	gct != (uint32_t)~LJ_TPROTO)
       goto fail;
   } else {
-    GC2HugeRegistryLease lease = GC2_HUGE_REGISTRY_NONE;
+    LJGC2RegistryLease lease = LJ_GC2_REGISTRY_NONE;
     TGState *tg;
     LJHugeInfo hi;
     int rc = LJ_ARENA_HUGE_READER_MISSING;
@@ -10602,7 +10601,7 @@ static int gc2_frame_pc_valid_scoped(global_State *g, const BCIns *pc,
 	rc = lj_arena_hugetab_reader_range_acquire(
 	  &tg->huge, pc, &base, &scope->huge, &hi);
     }
-    gc2_huge_registry_read_leave(g, &lease);
+    lj_gc2_registry_read_leave(g, &lease);
     if (rc != LJ_ARENA_HUGE_READER_ACQUIRED)
       return 0;
     scope->admission = GC2_SCOPE_HUGE_READER;
@@ -17038,7 +17037,7 @@ denied:
 int lj_gc2_storage_lease_try(global_State *g, const void *p, size_t minimum,
                              LJGC2Lease *lease, size_t *spanp)
 {
-  GC2HugeRegistryLease registry;
+  LJGC2RegistryLease registry;
   LJHugeInfo hi;
   HugeTab *ht;
   void *base;
@@ -17048,13 +17047,13 @@ int lj_gc2_storage_lease_try(global_State *g, const void *p, size_t minimum,
   gc2_public_lease_init(lease);
   if (spanp) *spanp = 0;
   if (!g || !minimum || !lease || !checkptrGC(p) ||
-      !gc2_huge_registry_read_try_mode(g, &registry, 1))
+      !gc2_registry_read_try_mode(g, &registry, 1))
     return 0;
   ht = gc2_huge_table_for_address(g, p, &base, NULL);
   acquired = ht && base == p &&
     lj_arena_hugetab_reader_acquire(ht, p, &lease->huge, &hi) ==
       LJ_ARENA_HUGE_READER_ACQUIRED;
-  gc2_huge_registry_read_leave(g, &registry);
+  lj_gc2_registry_read_leave(g, &registry);
   if (!acquired)
     return 0;
   lease->admission = GC2_SCOPE_HUGE_READER;
@@ -17688,7 +17687,7 @@ static int gc2_mark_huge_candidate(global_State *g, GCobj *o, void **basep,
 				    LJHugeInfo *hip,
 				    GC2MarkScope *scope, int *retryp)
 {
-  GC2HugeRegistryLease lease = GC2_HUGE_REGISTRY_NONE;
+  LJGC2RegistryLease lease = LJ_GC2_REGISTRY_NONE;
   TGState *tg;
   int marked;
   if (basep)
@@ -17710,7 +17709,7 @@ static int gc2_mark_huge_candidate(global_State *g, GCobj *o, void **basep,
   }
   tg = g->main_tg;
   if (!tg || !lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
-    gc2_huge_registry_read_leave(g, &lease);
+    lj_gc2_registry_read_leave(g, &lease);
     return GC2_MARK_DEAD;
   }
   marked = lj_arena_hugetab_mark_cdata_range_reader_acquire(
@@ -17718,11 +17717,11 @@ static int gc2_mark_huge_candidate(global_State *g, GCobj *o, void **basep,
   if (marked == LJ_ARENA_HUGE_READER_OVERFLOW)
     goto overflow;
   if (marked < 0) {
-    gc2_huge_registry_read_leave(g, &lease);
+    lj_gc2_registry_read_leave(g, &lease);
     return GC2_MARK_DEAD;
   }
 found:
-  gc2_huge_registry_read_leave(g, &lease);
+  lj_gc2_registry_read_leave(g, &lease);
   /* The slot-local reader now pins the stable header after either registry
   ** admission mode has ended. */
   if (marked == LJ_ARENA_HUGE_MARK_INTENT)
@@ -17734,7 +17733,7 @@ found:
     gc2_marks_this_round_add(g, 1);
   return marked > 0 ? GC2_MARK_NEW : GC2_MARK_LIVE_ALREADY;
 overflow:
-  gc2_huge_registry_read_leave(g, &lease);
+  lj_gc2_registry_read_leave(g, &lease);
   /* Saturation publishes MARK but no body token. An old MARK or table stamp
   ** is not proof that this request's graph was covered. Recovery retains this
   ** unresolved identity without touching its body or using SSB suppression. */
@@ -17986,7 +17985,7 @@ static int gc2_markmem_registered_scoped_status(global_State *g, void *p,
 static int gc2_mark_huge_exact_scoped_status(global_State *g, void *p,
 					      GC2MarkScope *holdp)
 {
-  GC2HugeRegistryLease lease = GC2_HUGE_REGISTRY_NONE;
+  LJGC2RegistryLease lease = LJ_GC2_REGISTRY_NONE;
   GC2MarkScope scope;
   TGState *tg;
   LJHugeInfo hi;
@@ -18008,7 +18007,7 @@ static int gc2_mark_huge_exact_scoped_status(global_State *g, void *p,
       marked = lj_arena_hugetab_mark_reader_acquire(
 	&tg->huge, p, &scope.huge, &hi);
   }
-  gc2_huge_registry_read_leave(g, &lease);
+  lj_gc2_registry_read_leave(g, &lease);
   if (marked == LJ_ARENA_HUGE_READER_OVERFLOW ||
       marked == LJ_ARENA_HUGE_MARK_SATURATED) {
     gc2_marks_this_round_add(g, 1);
@@ -19963,7 +19962,7 @@ static uint32_t gc2_table_token_scan_huge_steps(global_State *g,
 						 int pass_mode,
 						 GC2TableTokenLaneStep *stepp)
 {
-  GC2HugeRegistryLease outer = GC2_HUGE_REGISTRY_NONE;
+  LJGC2RegistryLease outer = LJ_GC2_REGISTRY_NONE;
   uint64_t completed0 = gc2_table_token_scan_completed_acq(g);
   GC2TableTokenLaneStep step;
   uint32_t phase;
@@ -20049,7 +20048,7 @@ static uint32_t gc2_table_token_scan_huge_steps(global_State *g,
   }
   if (pass_mode && gc2_table_token_huge_node_acq(g) == NULL)
     step.ended = 1;
-  gc2_huge_registry_read_leave(g, &outer);
+  lj_gc2_registry_read_leave(g, &outer);
   if (stepp)
     *stepp = step;
   {
@@ -20251,7 +20250,7 @@ static uint64_t gc2_table_token_request_publish(global_State *g, GCtab *t,
 static uint64_t gc2_table_token_request_huge(global_State *g, GCtab *t,
 					      uint32_t cycle)
 {
-  GC2HugeRegistryLease outer = GC2_HUGE_REGISTRY_NONE;
+  LJGC2RegistryLease outer = LJ_GC2_REGISTRY_NONE;
   GC2MarkScope scope;
   LJTGRegistrySlot *node;
   LJGC2TabStamp *stamp = NULL;
@@ -20265,7 +20264,7 @@ static uint64_t gc2_table_token_request_huge(global_State *g, GCtab *t,
     return 0;
   /* A MARK/WEAK request requires the full OPEN reader. SWEEP_STABLE is useful
   ** only to the scanner's header-only deferred completion path. */
-  if (outer != GC2_HUGE_REGISTRY_FULL)
+  if (outer != LJ_GC2_REGISTRY_FULL)
     goto out_outer;
   for (node = gc2_tg_registry_head_acq(g); node != NULL;
        node = lj_tgregistry_slot_next_all(node)) {
@@ -20333,7 +20332,7 @@ static uint64_t gc2_table_token_request_huge(global_State *g, GCtab *t,
   }
   result = gc2_table_token_request_publish(g, t, stamp, cycle);
 out_outer:
-  gc2_huge_registry_read_leave(g, &outer);
+  lj_gc2_registry_read_leave(g, &outer);
   gc2_mark_scope_leave(&scope);
   return result;
 }
@@ -20718,7 +20717,7 @@ int lj_gc2_test_table_token_pass_ack_current(global_State *g)
 
 static void gc2_table_token_scan_huge_target(global_State *g, GCtab *target)
 {
-  GC2HugeRegistryLease outer = GC2_HUGE_REGISTRY_NONE;
+  LJGC2RegistryLease outer = LJ_GC2_REGISTRY_NONE;
   LJTGRegistrySlot *node;
   uint32_t phase;
   if (!g || !target || !gc2_huge_registry_read_try(g, &outer)) {
@@ -20780,7 +20779,7 @@ static void gc2_table_token_scan_huge_target(global_State *g, GCtab *target)
     (void)incarnation;
   }
 out:
-  gc2_huge_registry_read_leave(g, &outer);
+  lj_gc2_registry_read_leave(g, &outer);
 }
 
 int lj_gc2_test_table_token_scan_one(global_State *g, GCtab *t)

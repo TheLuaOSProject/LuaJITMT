@@ -357,6 +357,16 @@ LJ_FUNC int lj_gc2_smr_read_try(global_State *g);
 LJ_FUNC int lj_gc2_smr_read_tracked_try(global_State *g);
 LJ_FUNC void lj_gc2_smr_read_enter(global_State *g);
 LJ_FUNC void lj_gc2_smr_read_leave(global_State *g);
+/* Pins the TG registry through a list walk, including during IDLE metadata
+** retirement and SWEEP. Object bodies require their own admission. */
+typedef enum LJGC2RegistryLease {
+  LJ_GC2_REGISTRY_NONE,
+  LJ_GC2_REGISTRY_FULL,
+  LJ_GC2_REGISTRY_STABLE
+} LJGC2RegistryLease;
+LJ_FUNC LJGC2RegistryLease lj_gc2_registry_read_enter(global_State *g);
+LJ_FUNC void lj_gc2_registry_read_leave(global_State *g,
+                                        LJGC2RegistryLease *lease);
 LJ_FUNC LJGC2TableStoreGuardResult lj_gc2_table_store_begin(
   lua_State *L, LJGC2TableStoreGuard *guard, GCtab *parent,
   cTValue *key, cTValue *value);

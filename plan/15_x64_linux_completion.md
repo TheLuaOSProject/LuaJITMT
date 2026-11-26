@@ -103,6 +103,7 @@ The lifetime rules follow the removal and reclamation split in RCU. C11 §5.1.2.
 - An interrupt handshake counts each target once. A test pauses a Lua owner after it consumes the request and forces the leader to rescan before the owner acknowledges. The public protected call receives one interrupt and the leader drains its pending count.
 - During IDLE metadata retirement, `jit.util.traceinfo` and `traceir` can inspect the exact trace in its published slot. Tests compare a runnable trace's fields and first and last IR instructions before and during a suspended collection. An ordinary trace-abort callback also inspects its committed body before retirement.
 - `table.clear` completes on weak mixed tables during metadata retirement, including when a third thread has paused halfway through resizing the same table. The tests check emptiness, subsequent insertion and eventual release of the old storage.
+- A GC-mode change can finish after a native peer acknowledges, even when that peer is suspended in metadata reclamation. The final safepoint walk retains only the thread registry. The test changes modes in both directions before releasing the collector and checks the installed barrier policy on both threads.
 
 ## Correctness and progress checks
 

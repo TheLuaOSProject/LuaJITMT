@@ -1242,6 +1242,18 @@ static void safepoint_leader_leave(global_State *g, uint32_t id)
   }
 }
 
+static void safepoint_finish_leader(global_State *g, uint32_t id, uint64_t epoch)
+{
+  /* The registry lease spans leader release. A TG can detach during the
+  ** final STOPREQ walk, but its storage cannot be retired under the walker. */
+  LJGC2RegistryLease registry = lj_gc2_registry_read_enter(g);
+  safepoint_clear_consumed_polls(g, epoch);
+  safepoint_test_signal_note_before_leader_leave(g, epoch);
+  safepoint_leader_leave(g, id);
+  safepoint_rearm_fresh_stopreq_polls(g);
+  lj_gc2_registry_read_leave(g, &registry);
+}
+
 static void safepoint_finish_prior_epoch(global_State *g)
 {
   /* A synchronous leader can be entered while a previously published async
@@ -1327,9 +1339,7 @@ int lj_safepoint_resumable_epoch_try(global_State *g, uint32_t actions, int star
     if (self)
       (void)lj_gc2_flush_ssb(g, self);
   }
-  safepoint_clear_consumed_polls(g, epoch);
-  safepoint_leader_leave(g, LJ_SAFEPOINT_RESUMABLE_LEADER);
-  safepoint_rearm_fresh_stopreq_polls(g);
+  safepoint_finish_leader(g, LJ_SAFEPOINT_RESUMABLE_LEADER, epoch);
   return 1;
 }
 
@@ -1411,15 +1421,7 @@ static uint32_t safepoint_handshake(global_State *g, uint32_t actions,
     if (self)
       (void)lj_gc2_flush_ssb(g, self);
   }
-  /* hs_pending==0 does not pin registry nodes. Hold the ordinary tactical
-  ** reader lease across the final list walks and leader handoff; TG reclamation
-  ** is try-only and backs out rather than waiting on this reader. */
-  lj_gc2_smr_read_enter(g);
-  safepoint_clear_consumed_polls(g, epoch);
-  safepoint_test_signal_note_before_leader_leave(g, epoch);
-  safepoint_leader_leave(g, leader);
-  safepoint_rearm_fresh_stopreq_polls(g);
-  lj_gc2_smr_read_leave(g);
+  safepoint_finish_leader(g, leader, epoch);
   /* A full flush has already removed the code before releasing the polls.
   ** Retired storage has its own grace, native-entry gate and reader checks.
   ** A delayed reclaim pass must let acknowledged owners run the interpreter. */
