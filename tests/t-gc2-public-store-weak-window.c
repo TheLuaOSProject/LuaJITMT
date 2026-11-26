@@ -218,7 +218,7 @@ static void test_replacing_during_retirement(void)
     "local key, value = {}, require('ffi').new('char[20000]')\n"
     "for i=1,3072 do t[i]=i; t['h'..i]=i end\n"
     "t[key]=true\n"
-    "local store,eq = rawset,rawequal\n"
+    "local store,eq,clear = rawset,rawequal,require('table.clear')\n"
     "local grow, labels = setmetatable({}, {__mode='kv'}), {}\n"
     "for i=1,80 do labels[i] = i%2==0 and {} or ('k'..i) end\n"
     "return t,key,value,function()\n"
@@ -230,6 +230,8 @@ static void test_replacing_during_retirement(void)
     "  local other={}; store(t,other,value); assert(eq(t[other],value))\n"
     "  for i=1,80 do grow[i]=value; grow[labels[i]]=i end\n"
     "  for i=1,80 do assert(eq(grow[i],value) and grow[labels[i]]==i) end\n"
+    "  clear(grow); assert(next(grow)==nil)\n"
+    "  grow[labels[1]]=value; assert(eq(grow[labels[1]],value))\n"
     "end") == 0);
   assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
   lua_gc(L, LUA_GCSTOP, 0);
@@ -340,6 +342,11 @@ static void test_helping_during_retirement(int operation)
   resize.table = tabV(L->top - 1);
   lua_pushinteger(L, 42); lua_rawseti(L, 1, 1);
   lua_pushinteger(L, 99); lua_rawseti(L, 1, -1);
+  if (operation == 4) {
+    luaL_openlibs(L);
+    assert(luaL_dostring(L, "return require('table.clear')") == 0);
+    assert(lua_isfunction(L, 2));
+  }
   assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
   lua_gc(L, LUA_GCSTOP, 0);
   resize.peer = lua_newthread(L);
@@ -385,8 +392,15 @@ static void test_helping_during_retirement(int operation)
     assert(lua_tointeger(L, -1) == (lua_tointeger(L, -2) == 1 ? 42 : 99));
     lua_pop(L, 2);
     break;
-  default:
+  case 3:
     assert(lua_objlen(L, 1) == 1);
+    break;
+  case 4:
+    lua_pushvalue(L, 2);
+    lua_pushvalue(L, 1);
+    assert(lua_pcall(L, 1, 0, 0) == 0);
+    lua_pushnil(L);
+    assert(!lua_next(L, 1));
     break;
   }
   assert(lj_tab_resize_desc_control_acq(resize.table) == NULL);
@@ -447,7 +461,7 @@ int main(void)
   assert(gc2_weak_write_active_acq(g) == 0u);
   lua_close(L);
   test_replacing_during_retirement();
-  for (int i = 0; i < 4; i++)
+  for (int i = 0; i < 5; i++)
     test_helping_during_retirement(i);
   puts("gc2 public scalar weak-window regression passed");
   return 0;

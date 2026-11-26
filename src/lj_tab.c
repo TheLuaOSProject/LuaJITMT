@@ -471,21 +471,32 @@ tab_private_table_mutation_allowed(lua_State *L, GCtab *t)
   return tab_private_mutation_allowed(L);
 }
 
+/* Both forms protect table storage after a root is sampled. An owner epoch
+** also retains detached resize descriptors and their retirement records. */
+static int tab_vector_read_try(global_State *g, TGState *tg, int *smr)
+{
+  if ((*smr = lj_gc2_smr_read_try(g)) != 0)
+    return 1;
+  if (!tg || tg->gl != g ||
+      gc2_smr_reclaiming_acq(g) != LJ_GC2_SMR_META_EXCLUSIVE)
+    return 0;
+  tab_read_enter_owner(tg);
+  return 1;
+}
+
+static void tab_vector_read_leave(global_State *g, TGState *tg, int smr)
+{
+  if (smr) lj_gc2_smr_read_leave(g); else tab_read_leave_owner(tg);
+}
+
 static int tab_struct_desc_help(lua_State *L, GCtab *t, uint64_t control)
 {
   TGState *tg = L ? L2TG(L) : lj_thr_get_tg();
   global_State *g = L ? G(L) : (tg ? tg->gl : NULL);
   TabResizeDesc *desc;
   int smr, changed = 0;
-  if (!g)
+  if (!g || !tab_vector_read_try(g, tg, &smr))
     return 0;
-  smr = lj_gc2_smr_read_try(g);
-  if (!smr) {
-    if (!tg || tg->gl != g ||
-	gc2_smr_reclaiming_acq(g) != LJ_GC2_SMR_META_EXCLUSIVE)
-      return 0;
-    tab_read_enter_owner(tg);
-  }
   /* Both admissions precede the exact tag recheck. The table read epoch
   ** retains a detached descriptor and its old vectors until this helper leaves. */
   if (lj_tab_struct_control_acq(t) == control) {
@@ -495,10 +506,7 @@ static int tab_struct_desc_help(lua_State *L, GCtab *t, uint64_t control)
       changed = lj_tab_struct_control_acq(t) != control;
     }
   }
-  if (smr)
-    lj_gc2_smr_read_leave(g);
-  else
-    tab_read_leave_owner(tg);
+  tab_vector_read_leave(g, tg, smr);
   return changed;
 }
 
@@ -9263,9 +9271,8 @@ int lj_tab_clear_weak_slot_keyed(global_State *g, GCtab *parent, TValue *dst,
   return tab_clear_weak_slot_once(g, parent, dst, key, val);
 }
 
-/* The caller retains the vector with SMR and validates the full generation
-** at the end of its pass. A failed CAS or migration marker restarts the pass
-** without holding SMR over the retry wait. */
+/* The caller retains the vector and validates the generation at the end of
+** its pass. A failed CAS or migration marker restarts with fresh storage. */
 static int tab_clear_slot_shared(TValue *slot, cTValue *nilv)
 {
   TValue old;
@@ -9312,15 +9319,17 @@ static int tab_clear_generation_held(GCtab *t)
 static void tab_clear_shared(lua_State *L, GCtab *t)
 {
   global_State *g = G(L);
+  TGState *tg = L2TG(L);
   tab_test_clear_shared_call();
   for (;;) {
+    int smr;
     uint64_t control = lj_tab_struct_control_acq(t);
     if (LJ_UNLIKELY(lj_tab_struct_control_is_desc(control))) {
       if (tab_struct_desc_help(L, t, control))
         continue;
-    } else if (lj_gc2_smr_read_try(g)) {
+    } else if (tab_vector_read_try(g, tg, &smr)) {
       int cleared = tab_clear_generation_held(t);
-      lj_gc2_smr_read_leave(g);
+      tab_vector_read_leave(g, tg, smr);
       if (cleared)
         return;
     }

@@ -102,6 +102,7 @@ The lifetime rules follow the removal and reclamation split in RCU. C11 §5.1.2.
 - A first external attachment can pause in physical metadata reclamation after flushing preexisting traces. The previously running thread can leave a native call, execute its Lua loop with the correct result and grow a table while the attaching thread is paused. Full trace flush releases acknowledged mutators as soon as it has unpatched the code.
 - An interrupt handshake counts each target once. A test pauses a Lua owner after it consumes the request and forces the leader to rescan before the owner acknowledges. The public protected call receives one interrupt and the leader drains its pending count.
 - During IDLE metadata retirement, `jit.util.traceinfo` and `traceir` can inspect the exact trace in its published slot. Tests compare a runnable trace's fields and first and last IR instructions before and during a suspended collection. An ordinary trace-abort callback also inspects its committed body before retirement.
+- `table.clear` completes on weak mixed tables during metadata retirement, including when a third thread has paused halfway through resizing the same table. The tests check emptiness, subsequent insertion and eventual release of the old storage.
 
 ## Correctness and progress checks
 
