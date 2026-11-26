@@ -1,0 +1,79 @@
+{
+  "baseline_tree": "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc",
+  "candidate_tree": "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/gcc",
+  "cpu": 8,
+  "hot_sizes": [
+    64,
+    256,
+    4096
+  ],
+  "hot_operations": 500000,
+  "hot_samples": 5,
+  "bulk_counts": [
+    1024,
+    4096,
+    9000
+  ],
+  "bulk_kinds": [
+    0,
+    1
+  ],
+  "bulk_samples": 3,
+  "retention_cases": [
+    [
+      4096,
+      8192
+    ],
+    [
+      16384,
+      2048
+    ]
+  ],
+  "retention_samples": 3,
+  "public_buffer_count": 20000,
+  "public_buffer_rounds": 40,
+  "public_buffer_samples": 3,
+  "public_buffer_period": 0,
+  "source_sha256": {
+    "hot.c": "78034de6bdbc0974c3b486f4a8c63c095707bcff045dd61494d6046b1a353913",
+    "retention.c": "990c956be3699782e7e09622132039aa38d691504487e938deba60d57c46dc21",
+    "growth.lua": "279558a63a2a326473cffb34c07d3823e598e3b258b0052641b673c89a88476f",
+    "bulk.c": "3abc9d0734fddb28529d37b006a396406168bfc8299884f7e97af44af419a880",
+    "t-arena-bin-capacity.c": "325ab26eb15a5b976b8785ab2742fda503ee0743d347ef4efa86f909391e682a"
+  },
+  "library_sha256": {
+    "baseline": "0e514cd5c35218c6ff012b60589739c3f49e28fd0272b4beff3c84e42d0ed894",
+    "candidate": "2a29b71710786af7ee2f8a06eb402e1923ea72e31fba6d4d7ee390d05a7b0b28"
+  },
+  "luajit_sha256": {
+    "baseline": "aa15b67e1a1764714dd0d2e82623be9b53fe3f29b24d92db295faab19fb16dcf",
+    "candidate": "f6e978cb0875791b216df3608530e3d1180b121dc457c48e11f87fd66212365d"
+  },
+  "host": {
+    "uname": [
+      "Linux",
+      "7f3bd9b38fd8",
+      "7.3.5-ogc2.1.fc45.x86_64",
+      "#1 SMP PREEMPT_DYNAMIC Mon Nov 23 19:56:04 UTC 2026",
+      "x86_64",
+      ""
+    ],
+    "compiler": "gcc (Debian 14.2.0-19) 14.2.0"
+  },
+  "status": "complete; reports frozen",
+  "runtime_invocations": 104,
+  "cpu8_released": true,
+  "primary_runtime_invocations": 84,
+  "long_hot_runtime_invocations": 10,
+  "isolated_long_hot_runtime_invocations": 10,
+  "cpu9_released": true,
+  "long_hot_protocol": {
+    "size": 4096,
+    "operations": 2000000,
+    "samples_per_set": 5,
+    "reason": "Initial500000-cycle4 KiB paired ratios varied from0.760 to1.306; declared bounded follow-up. First set may overlap CPU9 sibling diagnostic; repeated once after CPU8/9 core reserved.",
+    "pooled_with_primary": false,
+    "first_set_classification": "potential_sibling_overlap",
+    "repeat_classification": "core_reserved_repeat"
+  }
+}

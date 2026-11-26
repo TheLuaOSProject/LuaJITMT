@@ -1,0 +1,16 @@
+{
+  "case": "traversable-local",
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/bin-fixture/baseline",
+    "traversable-local"
+  ],
+  "exit": 1,
+  "seconds": 0.22131220501614735,
+  "user_seconds": 0.21154799999999999,
+  "system_seconds": 0.008964,
+  "maxrss_kib": 25828,
+  "binary_sha256": "b4afafacb4c41b47901b12ce2e145940a7e919c30969c471957fa7d4441f9c6b"
+}

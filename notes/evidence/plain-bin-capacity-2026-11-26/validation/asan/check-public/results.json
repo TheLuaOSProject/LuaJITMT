@@ -1,0 +1,24 @@
+[
+  {
+    "name": "public-joff",
+    "command": [
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/tests/t-buffer-concurrent-public.lua"
+    ],
+    "seconds": 0.5644740709976759,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "public-jon",
+    "command": [
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/tests/t-buffer-concurrent-public.lua"
+    ],
+    "seconds": 0.5643706789996941,
+    "exit": 0,
+    "test": true
+  }
+]

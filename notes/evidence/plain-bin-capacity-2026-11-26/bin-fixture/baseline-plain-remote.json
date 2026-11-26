@@ -1,0 +1,16 @@
+{
+  "case": "plain-remote",
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/bin-fixture/baseline",
+    "plain-remote"
+  ],
+  "exit": 1,
+  "seconds": 0.15368314000079408,
+  "user_seconds": 0.149195,
+  "system_seconds": 0.00396,
+  "maxrss_kib": 14476,
+  "binary_sha256": "b4afafacb4c41b47901b12ce2e145940a7e919c30969c471957fa7d4441f9c6b"
+}

@@ -1,0 +1,9 @@
+capacity kind=plain source=local targets=9000/9000 bins=9169 cells=581915/581915 reused=9000/9000 arenas=170->170 PASS
+capacity kind=traversable source=local targets=9000/9000 bins=9169 cells=581915/581915 reused=9000/9000 arenas=170->170 PASS
+capacity kind=plain source=remote targets=9000/9000 bins=9169 cells=581915/581915 reused=9000/9000 arenas=170->170 PASS
+capacity kind=traversable source=remote targets=9000/9000 bins=9169 cells=581915/581915 reused=9000/9000 arenas=170->170 PASS
+capacity kind=plain source=late targets=9000/9000 bins=9169 cells=581915/581915 reused=9000/9000 arenas=170->170 PASS
+search kind=plain fit_position=8193 returned_fit=1 remaining=8192/8192 arenas=155->155 PASS
+search kind=traversable fit_position=8193 returned_fit=1 remaining=8192/8192 arenas=155->155 PASS
+defensive-cycles stale-insertion=bounded nonfit-search=bounded PASS
+t-arena-bin-capacity OK

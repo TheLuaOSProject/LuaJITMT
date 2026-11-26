@@ -1,0 +1,124 @@
+[
+  {
+    "label": "baseline-build",
+    "command": [
+      "taskset",
+      "-c",
+      "9",
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-DLUAJIT_SECURITY_PRNG=0",
+      "-I/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/src",
+      "-I/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/tests",
+      "/tmp/lj-remote-pending-deferral-20261126-vzwfb00s/witness.c",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/tests/t-arena-tls-stub.c",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/src/lj_arena.c",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/src/lj_prng.c",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/src/lj_assert.c",
+      "-fsanitize=address",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-remote-pending-deferral-20261126-vzwfb00s/baseline"
+    ],
+    "exit": 0,
+    "seconds": 2.4107461489911657
+  },
+  {
+    "label": "baseline-positive",
+    "command": [
+      "taskset",
+      "-c",
+      "9",
+      "/tmp/lj-remote-pending-deferral-20261126-vzwfb00s/baseline"
+    ],
+    "exit": 0,
+    "seconds": 0.0048713240248616785
+  },
+  {
+    "label": "baseline-original-assertion",
+    "command": [
+      "taskset",
+      "-c",
+      "9",
+      "/tmp/lj-remote-pending-deferral-20261126-vzwfb00s/baseline",
+      "--require-eight"
+    ],
+    "exit": -6,
+    "seconds": 0.04866864799987525
+  },
+  {
+    "label": "candidate-build",
+    "command": [
+      "taskset",
+      "-c",
+      "9",
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-DLUAJIT_SECURITY_PRNG=0",
+      "-I/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/src",
+      "-I/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/tests",
+      "/tmp/lj-remote-pending-deferral-20261126-vzwfb00s/witness.c",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/tests/t-arena-tls-stub.c",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/src/lj_arena.c",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/src/lj_prng.c",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/src/lj_assert.c",
+      "-fsanitize=address",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-remote-pending-deferral-20261126-vzwfb00s/candidate"
+    ],
+    "exit": 0,
+    "seconds": 2.464795559004415
+  },
+  {
+    "label": "candidate-positive",
+    "command": [
+      "taskset",
+      "-c",
+      "9",
+      "/tmp/lj-remote-pending-deferral-20261126-vzwfb00s/candidate"
+    ],
+    "exit": 0,
+    "seconds": 0.004621455009328201
+  },
+  {
+    "label": "candidate-original-assertion",
+    "command": [
+      "taskset",
+      "-c",
+      "9",
+      "/tmp/lj-remote-pending-deferral-20261126-vzwfb00s/candidate",
+      "--require-eight"
+    ],
+    "exit": -6,
+    "seconds": 0.04481098699034192
+  }
+]

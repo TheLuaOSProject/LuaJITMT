@@ -1,0 +1,16 @@
+{
+  "case": "traversable-remote",
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/bin-fixture/baseline",
+    "traversable-remote"
+  ],
+  "exit": 1,
+  "seconds": 0.2488891009998042,
+  "user_seconds": 0.242981,
+  "system_seconds": 0.004997,
+  "maxrss_kib": 26020,
+  "binary_sha256": "b4afafacb4c41b47901b12ce2e145940a7e919c30969c471957fa7d4441f9c6b"
+}

@@ -1,0 +1,8 @@
+{
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/fixture-update/t-arena-remote-pending.c": "f72696bbe9df189a4508049d36ee9c274b0ba432fde90617c5c65d93ac3fabc8",
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/tsan/tests/t-arena-tls-stub.c": "c77bec4d1fa415bbfa741053e1eadb48f6cee1f32407046914a7ed526dd97b36",
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/tsan/src/lj_arena.c": "1a3420fe54b2450bedfeb0bca775f2625e6452459ac1da94598eac5a4acbfe29",
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/tsan/src/lj_prng.c": "d1109cdd8e6ff74139a2290b2144c5d48e9c3da88b0b6f6462be44d69ae7c2ad",
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/tsan/src/lj_assert.c": "1de95362225261dc56d33567e46b48af6b5aca074933d0e08ae26ae1a3c542c1",
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/tsan/check-pending/remote-pending": "6b6df9bce6574cbf2cd21a50d3efa377855b4d3d056dbcb5a4de918a0dc09dd8"
+}

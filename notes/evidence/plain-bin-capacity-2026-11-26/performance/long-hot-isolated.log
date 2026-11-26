@@ -1,0 +1,10 @@
+hot-long-isolated-4096-2000000-1-1-baseline 719.764
+hot-long-isolated-4096-2000000-1-2-candidate 691.273
+hot-long-isolated-4096-2000000-2-1-candidate 691.059
+hot-long-isolated-4096-2000000-2-2-baseline 724.601
+hot-long-isolated-4096-2000000-3-1-baseline 722.285
+hot-long-isolated-4096-2000000-3-2-candidate 691.437
+hot-long-isolated-4096-2000000-4-1-candidate 691.355
+hot-long-isolated-4096-2000000-4-2-baseline 722.507
+hot-long-isolated-4096-2000000-5-1-baseline 691.231
+hot-long-isolated-4096-2000000-5-2-candidate 665.27

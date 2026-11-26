@@ -1,0 +1,17 @@
+{
+  "candidate_source_sha256": {
+    "src/lj_arena.c": "1a3420fe54b2450bedfeb0bca775f2625e6452459ac1da94598eac5a4acbfe29",
+    "src/lj_arena.h": "c9fb420ebd3c0b24bb77bcd61fe867bc10ca67086dc9f56d2947782afd55bcde",
+    "src/lj_prng.c": "d1109cdd8e6ff74139a2290b2144c5d48e9c3da88b0b6f6462be44d69ae7c2ad",
+    "tests/t-arena-tls-stub.c": "c77bec4d1fa415bbfa741053e1eadb48f6cee1f32407046914a7ed526dd97b36"
+  },
+  "fixture_sha256": "325ab26eb15a5b976b8785ab2742fda503ee0743d347ef4efa86f909391e682a",
+  "watchdogs": {
+    "internal_alarm_seconds": 120,
+    "external_timeout_seconds": 60,
+    "address_space_limit_bytes": 1073741824,
+    "core_limit_bytes": 0
+  },
+  "cpu": 8,
+  "timing_note": "Single invocations are regression diagnostics, not paired performance measurements. Candidate smoke links standalone allocator sources; baseline links immutable full GCC library."
+}

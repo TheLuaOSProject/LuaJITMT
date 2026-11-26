@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/assert/src/luajit": "0beeab02404225ff7a686feaeec156f79d12435b4b25a680f4454d5e7c4a883f",
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/assert/src/libluajit.a": "defea184e9946d9f19184f25661cc5373d274238d831afea23999a078b2f48cc",
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/assert/tests/t-gc2-small-lease-span.c": "e221568a914d812101bc5aef8834ac314703581a3cecb7d8871527dfe9ad2bf6",
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/assert/check-lease/lease": "028692f69866d8fdff7ec9c836978fcd133cc8a2032c983f4b0e524c74779013"
+}

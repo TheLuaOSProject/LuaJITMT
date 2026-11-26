@@ -1,0 +1,11 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/bin-fixture/candidate-standalone",
+    "all"
+  ],
+  "exit": 0,
+  "seconds": 0.12341356201795861
+}

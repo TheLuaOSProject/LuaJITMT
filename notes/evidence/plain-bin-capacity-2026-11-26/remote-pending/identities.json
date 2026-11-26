@@ -1,0 +1,18 @@
+{
+  "baseline": {
+    "/tmp/lj-remote-pending-deferral-20261126-vzwfb00s/witness.c": "f5912016e3904a972ebbba2b9f6f826734958112d0e01c92a7df3a14a045e054",
+    "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/tests/t-arena-tls-stub.c": "c77bec4d1fa415bbfa741053e1eadb48f6cee1f32407046914a7ed526dd97b36",
+    "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/src/lj_arena.c": "1d7468f5a975d1255d8ea69ca72beb284a5e9a85f59046a058c9919fcf822ed5",
+    "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/src/lj_prng.c": "d1109cdd8e6ff74139a2290b2144c5d48e9c3da88b0b6f6462be44d69ae7c2ad",
+    "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/src/lj_assert.c": "1de95362225261dc56d33567e46b48af6b5aca074933d0e08ae26ae1a3c542c1",
+    "binary_sha256": "6bd7c50493fbc2b49098b064f530b5e7fb99e9946be1227fe7c9236becead504"
+  },
+  "candidate": {
+    "/tmp/lj-remote-pending-deferral-20261126-vzwfb00s/witness.c": "f5912016e3904a972ebbba2b9f6f826734958112d0e01c92a7df3a14a045e054",
+    "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/tests/t-arena-tls-stub.c": "c77bec4d1fa415bbfa741053e1eadb48f6cee1f32407046914a7ed526dd97b36",
+    "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/src/lj_arena.c": "1a3420fe54b2450bedfeb0bca775f2625e6452459ac1da94598eac5a4acbfe29",
+    "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/src/lj_prng.c": "d1109cdd8e6ff74139a2290b2144c5d48e9c3da88b0b6f6462be44d69ae7c2ad",
+    "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/src/lj_assert.c": "1de95362225261dc56d33567e46b48af6b5aca074933d0e08ae26ae1a3c542c1",
+    "binary_sha256": "e874e46f322e69e3741539bba368ab34684d20d4ccc99d686610369cd245c8e7"
+  }
+}

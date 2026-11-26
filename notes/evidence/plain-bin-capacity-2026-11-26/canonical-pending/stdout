@@ -1,0 +1,2 @@
+t-arena-publication OK: 200000 ordered publications
+t-arena-remote-pending OK: empty scans elided, races and force drains preserve frees

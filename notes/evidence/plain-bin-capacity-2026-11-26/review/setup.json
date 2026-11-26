@@ -1,0 +1,10 @@
+{
+  "base": "c106cd7bb109e9705c6b753f794001627320ab7f",
+  "prior": "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l",
+  "scope": "Preserve free-bin capacity and remove full-bin insertion scans",
+  "baseline_tree": "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc",
+  "baseline_outputs": {
+    "luajit": "aa15b67e1a1764714dd0d2e82623be9b53fe3f29b24d92db295faab19fb16dcf",
+    "libluajit.a": "0e514cd5c35218c6ff012b60589739c3f49e28fd0272b4beff3c84e42d0ed894"
+  }
+}

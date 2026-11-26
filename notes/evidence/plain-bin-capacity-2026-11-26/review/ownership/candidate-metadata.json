@@ -1,0 +1,15 @@
+{
+  "baseline": "c106cd7bb109e9705c6b753f794001627320ab7f",
+  "candidate_files": {
+    "src/lj_arena.c": "1a3420fe54b2450bedfeb0bca775f2625e6452459ac1da94598eac5a4acbfe29"
+  },
+  "diff_sha256": "a7a948da1c67b9ae3741f2cefe1bbbbb64e25ebb49ddce53f8ce9d586ef5e8c0",
+  "scope": "read-only final minimal bin patch review; no builds/tests",
+  "routing_source": {
+    "src/lj_gc.c": "12361f5e801e7d2af8859bd04dd03bfab0bdc7583a1ea7c2c7949ea03874afbb",
+    "src/lj_gc2.c": "26ccc9581b0ff86832685a9691b3a7131292eb112500f02d8a9a0a542e59343a",
+    "src/lj_buf.c": "182614b26a2ecfcbfdabedadf00d3891065514fb4cff363f03b8c9cf290ce9cf",
+    "src/lj_tab.c": "130576cbfff6dfcb0f4489085cf7e136f676a281f0decbe990aad8806d37fc0d",
+    "src/lj_str.c": "850f7c705af8d6b6bdaa76f82717383fbc4d29a06b1266a4d3635dfd57e43f26"
+  }
+}

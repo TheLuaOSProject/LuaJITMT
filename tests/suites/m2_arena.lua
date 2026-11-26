@@ -10,6 +10,7 @@ local M2_ORDER = {
   "m2_arena_publication",
   "m2_arena_map",
   "m2_arena_alloc",
+  "m2_arena_bin_capacity",
   "m2_arena_plain_late",
   "m2_arena_plain_progress",
   "m2_arena_plain_shrink",
@@ -103,6 +104,21 @@ return function(add)
       run_standalone_fixture(t, out .. ".alloc", "t-arena-alloc.c")
       run_standalone_fixture(t, out .. ".realloc", "t-arena-realloc.c")
       run_standalone_fixture(t, out .. ".allocf", "t-arena-allocf.c")
+    end
+  })
+
+  register({
+    name = "m2_arena_bin_capacity",
+    description = "long free bins retain capacity and expose fitting tail runs",
+    run = function(t)
+      if jit.os ~= "Linux" then return end
+      local pthread = os.getenv("PTHREAD") or "-pthread"
+      compile_and_run_sources(t, t:tmp("lj_t_arena_bin_capacity"),
+        arena_sources(t, "t-arena-bin-capacity.c"), {
+        cflags = "-DLUAJIT_SECURITY_PRNG=0 -DLJ_ARENA_TEST_HELPERS " .. pthread,
+        link_luajit = false,
+        libs = { pthread }, timeout = "120s"
+      })
     end
   })
 

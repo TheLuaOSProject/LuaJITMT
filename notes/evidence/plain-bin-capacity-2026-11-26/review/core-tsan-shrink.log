@@ -1,0 +1,3 @@
+tsan shrink progress-build 0
+tsan shrink progress 0
+tsan shrink {'runtime_pass': 1, 'runtime_fail': 0, 'build_fail': 0}

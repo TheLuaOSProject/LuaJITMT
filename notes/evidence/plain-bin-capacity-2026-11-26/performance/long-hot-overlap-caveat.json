@@ -1,0 +1,78 @@
+{
+  "recorded_utc": "2026-11-26T18:21:00.139147+00:00",
+  "parent_notification": "Root reports CPU8 and CPU9 are SMT siblings on core4. Semantics agent compile/ASAN diagnostic on CPU9 may overlap the first ten longer4KiB samples. Root confirms CPU9 idle before this rerun and all further diagnostic/CI commands constrained0\u20137. Original84 matrix completed before diagnostic based on message chronology.",
+  "classification": "Retain first10 longer samples as potentially overlapping; do not present as isolated confirmation.",
+  "timestamp_note": "Original run did not record UTC start/end. Listed intervals use stdout filesystem mtime minus controller duration and are approximate, not definitive overlap attribution.",
+  "inferred_intervals": [
+    {
+      "sample": 1,
+      "variant": "baseline",
+      "stdout_write_utc": "2026-11-26T18:16:31.182749+00:00",
+      "inferred_start_utc": "2026-11-26T18:16:29.488858+00:00",
+      "controller_seconds": 1.6938911720062606
+    },
+    {
+      "sample": 1,
+      "variant": "candidate",
+      "stdout_write_utc": "2026-11-26T18:16:32.579275+00:00",
+      "inferred_start_utc": "2026-11-26T18:16:31.182024+00:00",
+      "controller_seconds": 1.3972506999853067
+    },
+    {
+      "sample": 2,
+      "variant": "candidate",
+      "stdout_write_utc": "2026-11-26T18:16:33.994804+00:00",
+      "inferred_start_utc": "2026-11-26T18:16:32.580278+00:00",
+      "controller_seconds": 1.4145264529797714
+    },
+    {
+      "sample": 2,
+      "variant": "baseline",
+      "stdout_write_utc": "2026-11-26T18:16:35.602806+00:00",
+      "inferred_start_utc": "2026-11-26T18:16:33.994941+00:00",
+      "controller_seconds": 1.6078652389987838
+    },
+    {
+      "sample": 3,
+      "variant": "baseline",
+      "stdout_write_utc": "2026-11-26T18:16:37.084880+00:00",
+      "inferred_start_utc": "2026-11-26T18:16:35.604008+00:00",
+      "controller_seconds": 1.480872027022997
+    },
+    {
+      "sample": 3,
+      "variant": "candidate",
+      "stdout_write_utc": "2026-11-26T18:16:38.430195+00:00",
+      "inferred_start_utc": "2026-11-26T18:16:37.086072+00:00",
+      "controller_seconds": 1.3441233369812835
+    },
+    {
+      "sample": 4,
+      "variant": "candidate",
+      "stdout_write_utc": "2026-11-26T18:16:39.783549+00:00",
+      "inferred_start_utc": "2026-11-26T18:16:38.431380+00:00",
+      "controller_seconds": 1.352169834979577
+    },
+    {
+      "sample": 4,
+      "variant": "baseline",
+      "stdout_write_utc": "2026-11-26T18:16:41.232031+00:00",
+      "inferred_start_utc": "2026-11-26T18:16:39.784463+00:00",
+      "controller_seconds": 1.4475680559989996
+    },
+    {
+      "sample": 5,
+      "variant": "baseline",
+      "stdout_write_utc": "2026-11-26T18:16:42.644345+00:00",
+      "inferred_start_utc": "2026-11-26T18:16:41.233358+00:00",
+      "controller_seconds": 1.410986745991977
+    },
+    {
+      "sample": 5,
+      "variant": "candidate",
+      "stdout_write_utc": "2026-11-26T18:16:44.036268+00:00",
+      "inferred_start_utc": "2026-11-26T18:16:42.645401+00:00",
+      "controller_seconds": 1.3908661979949102
+    }
+  ]
+}

@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "lj_arch.h"
 #include "lj_arena.h"
@@ -168,25 +169,97 @@ static void test_multi_publisher_no_drop(PRNGState *rs)
   TGAlloc alloc;
   RemoteWork work[RACE_PUBLISHERS];
   pthread_t threads[RACE_PUBLISHERS];
-  uint32_t i;
+  GCArena *a;
+  void *guard;
+  uint32_t i, drained, reason = LJ_ARENA_FINISH_NONE, fillers = 0;
+  const uint32_t kind = LJ_ARENAK_TRAVERSABLE;
 
   lj_arena_alloc_init(&alloc);
+  alloc.alloc_black = 1;  /* Reclaim explicit free intent, not unmarked bytes. */
   for (i = 0; i < RACE_PUBLISHERS; i++) {
     work[i].alloc = &alloc;
     work[i].p = lj_arena_alloc(&alloc, rs, 64u, LJ_AF_TRAVERSABLE);
     work[i].result = 0;
     assert(work[i].p != NULL);
+    memset(work[i].p, 0x30 + (int)i, 64u);
+    if (i)
+      assert(lj_arena_of(work[i].p) == lj_arena_of(work[0].p));
   }
-  for (i = 0; i < RACE_PUBLISHERS; i++)
+  a = lj_arena_of(work[0].p);
+  guard = lj_arena_alloc(&alloc, rs, 64u, LJ_AF_TRAVERSABLE);
+  assert(guard && lj_arena_of(guard) == a);
+  memset(guard, 0xa7, 64u);
+  /* Consume the unused bump with live opaque fillers. Reuse below must then
+  ** come from the eight target bodies, not an unrelated fresh tail. */
+  while (alloc.bump[kind].cell < alloc.bump[kind].end) {
+    uint32_t cells = alloc.bump[kind].end - alloc.bump[kind].cell;
+    void *p;
+    if (cells > LJ_HUGE_THRESHOLD / LJ_CELL_SIZE)
+      cells = LJ_HUGE_THRESHOLD / LJ_CELL_SIZE;
+    p = lj_arena_alloc(&alloc, rs, (size_t)cells * LJ_CELL_SIZE,
+                       LJ_AF_TRAVERSABLE);
+    assert(p && lj_arena_of(p) == a && ++fillers < 32u);
+  }
+  /* Publisher 0 retains its admission while paused after the queue CAS.
+  ** Each later publisher must defer: own_count=1 cannot exclude that reader.
+  ** Its late bit retains the free without overwriting the still-live body. */
+  lj_arena_test_remote_publish_pause(1);
+  assert(pthread_create(&threads[0], NULL, publish_one, &work[0]) == 0);
+  wait_seen(lj_arena_test_remote_publish_paused);
+  assert(la_loadptr_acq((void *const *)&a->hdr.remote_free) == work[0].p);
+  for (i = 1; i < RACE_PUBLISHERS; i++)
     assert(pthread_create(&threads[i], NULL, publish_one, &work[i]) == 0);
-  for (i = 0; i < RACE_PUBLISHERS; i++) {
-    assert(pthread_join(threads[i], NULL) == 0);
-    assert(work[i].result == 1);
+  for (i = 1; i < RACE_PUBLISHERS; i++) {
+    unsigned j;
+    assert(pthread_join(threads[i], NULL) == 0 && work[i].result == 1);
+    assert(lj_arena_bm_get(a->block, lj_arena_cellof(work[i].p)));
+    assert(lj_arena_late_get(a, lj_arena_cellof(work[i].p)));
+    assert(lj_arena_lifetime_state_acq(a, lj_arena_cellof(work[i].p)) ==
+           LJ_ARENA_LIFETIME_LIVE);
+    for (j = 0; j < 64u; j++)
+      assert(((unsigned char *)work[i].p)[j] == 0x30u + i);
   }
-  assert(lj_arena_remote_free_drain(&alloc) == RACE_PUBLISHERS);
-  for (i = 0; i < RACE_PUBLISHERS; i++)
-    assert(lj_arena_lifetime_state_acq(lj_arena_of(work[i].p),
-	lj_arena_cellof(work[i].p)) == LJ_ARENA_LIFETIME_FREE);
+  lj_arena_test_remote_publish_pause(0);
+  assert(pthread_join(threads[0], NULL) == 0 && work[0].result == 1);
+  drained = lj_arena_remote_free_drain(&alloc);
+  assert(drained == 1u);
+  assert(!lj_arena_bm_get(a->block, lj_arena_cellof(work[0].p)));
+  assert(!lj_arena_late_get(a, lj_arena_cellof(work[0].p)));
+  assert(la_loadptr_acq((void *const *)&a->hdr.remote_free) == NULL);
+  for (i = 1; i < RACE_PUBLISHERS; i++) {
+    uint32_t j, c = lj_arena_cellof(work[i].p);
+    assert(lj_arena_bm_get(a->block, c) && lj_arena_late_get(a, c));
+    assert(lj_arena_lifetime_state_acq(a, c) == LJ_ARENA_LIFETIME_LIVE);
+    for (j = 0; j < 64u; j++)
+      assert(((const uint8_t *)work[i].p)[j] == 0x30u + i);
+  }
+  /* Real allocator preparation and quarantine consume every durable late
+  ** intent only after all publishers/readers joined. No repeated raw free. */
+  assert(lj_arena_alloc_prepare_sweep_kind(&alloc, kind));
+  for (i = 1; i < RACE_PUBLISHERS; i++) {
+    uint32_t c = lj_arena_cellof(work[i].p);
+    assert(lj_arena_bm_get(a->block, c) && lj_arena_late_get(a, c));
+    assert(lj_arena_lifetime_state_acq(a, c) == LJ_ARENA_LIFETIME_FREE);
+    assert(lj_arena_sweep_state_acq(a, c) == LJ_ARENA_SWEEP_FREEING);
+  }
+  assert(lj_arena_alloc_quarantine_one(&alloc, kind, 11u) == a);
+  assert(lj_arena_reclaim_seal(a));
+  assert(lj_arena_alloc_quarantine_finish(&alloc, kind, a, 31u, 0, &reason));
+  assert(lj_arena_bm_get(a->block, lj_arena_cellof(guard)));
+  assert(lj_arena_lifetime_state_acq(a, lj_arena_cellof(guard)) ==
+         LJ_ARENA_LIFETIME_LIVE);
+  for (i = 0; i < 64u; i++)
+    assert(((const uint8_t *)guard)[i] == 0xa7);
+  for (i = 0; i < RACE_PUBLISHERS; i++) {
+    uint32_t c = lj_arena_cellof(work[i].p);
+    assert(!lj_arena_bm_get(a->block, c) && !lj_arena_late_get(a, c));
+    assert(lj_arena_lifetime_state_acq(a, c) == LJ_ARENA_LIFETIME_FREE);
+  }
+  for (i = 0; i < RACE_PUBLISHERS; i++) {
+    void *p = lj_arena_alloc(&alloc, rs, 64u, LJ_AF_TRAVERSABLE);
+    assert(p == work[i].p);
+  }
+  assert(alloc.owned[kind] == a && lj_arena_next_acq(a) == NULL);
   lj_arena_alloc_fini(&alloc);
 }
 

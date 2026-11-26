@@ -1,0 +1,22 @@
+{
+  "command": [
+    "gcc",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-UNDEBUG",
+    "-I/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc/src",
+    "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/bin-fixture/t-arena-bin-capacity.c",
+    "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc/src/libluajit.a",
+    "-pthread",
+    "-lm",
+    "-ldl",
+    "-o",
+    "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/bin-fixture/baseline"
+  ],
+  "exit": 0,
+  "seconds": 0.1683462169894483,
+  "source_sha256": "325ab26eb15a5b976b8785ab2742fda503ee0743d347ef4efa86f909391e682a",
+  "binary_sha256": "b4afafacb4c41b47901b12ce2e145940a7e919c30969c471957fa7d4441f9c6b"
+}

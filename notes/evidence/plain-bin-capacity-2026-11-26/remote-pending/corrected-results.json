@@ -1,0 +1,100 @@
+[
+  {
+    "label": "baseline-corrected-build",
+    "command": [
+      "taskset",
+      "-c",
+      "6",
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-DLUAJIT_SECURITY_PRNG=0",
+      "-I/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/src",
+      "-I/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/tests",
+      "/tmp/lj-remote-pending-deferral-20261126-vzwfb00s/t-arena-remote-pending.c",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/tests/t-arena-tls-stub.c",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/src/lj_arena.c",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/src/lj_prng.c",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/src/lj_assert.c",
+      "-fsanitize=address",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-remote-pending-deferral-20261126-vzwfb00s/baseline-corrected-fixture"
+    ],
+    "exit": 0,
+    "seconds": 2.5256873549951706
+  },
+  {
+    "label": "baseline-corrected",
+    "command": [
+      "taskset",
+      "-c",
+      "6",
+      "/tmp/lj-remote-pending-deferral-20261126-vzwfb00s/baseline-corrected-fixture"
+    ],
+    "exit": 0,
+    "seconds": 0.017816866020439193
+  },
+  {
+    "label": "candidate-corrected-build",
+    "command": [
+      "taskset",
+      "-c",
+      "6",
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-DLUAJIT_SECURITY_PRNG=0",
+      "-I/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/src",
+      "-I/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/tests",
+      "/tmp/lj-remote-pending-deferral-20261126-vzwfb00s/t-arena-remote-pending.c",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/tests/t-arena-tls-stub.c",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/src/lj_arena.c",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/src/lj_prng.c",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/src/lj_assert.c",
+      "-fsanitize=address",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-remote-pending-deferral-20261126-vzwfb00s/candidate-corrected-fixture"
+    ],
+    "exit": 0,
+    "seconds": 2.521410778979771
+  },
+  {
+    "label": "candidate-corrected",
+    "command": [
+      "taskset",
+      "-c",
+      "6",
+      "/tmp/lj-remote-pending-deferral-20261126-vzwfb00s/candidate-corrected-fixture"
+    ],
+    "exit": 0,
+    "seconds": 0.018256930983625352
+  }
+]

@@ -1,0 +1,2 @@
+capacity kind=plain source=late targets=9000/9000 bins=9169 cells=581915/581915 reused=9000/9000 arenas=170->170 PASS
+t-arena-bin-capacity OK

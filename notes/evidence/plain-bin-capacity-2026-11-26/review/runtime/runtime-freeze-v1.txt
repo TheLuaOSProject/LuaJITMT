@@ -1,0 +1,54 @@
+Runtime freeze v1, 2026-11-26
+
+Parent authorized the minimal source implementation after the read-only report.
+Only src/lj_arena.c was edited. No test/header/bin geometry/layout changes.
+
+SHA256 src/lj_arena.c:
+1a3420fe54b2450bedfeb0bca775f2625e6452459ac1da94598eac5a4acbfe29
+SHA256 src/lj_arena.h (unchanged):
+c9fb420ebd3c0b24bb77bcd61fe867bc10ca67086dc9f56d2947782afd55bcde
+Base HEAD: c106cd7bb109e9705c6b753f794001627320ab7f
+
+Valid insertion stops at the first valid existing head. Stale leading nodes
+remain removable, and an exact duplicate head is still scrubbed defensively.
+The prior complete valid-tail duplicate walk and 8192-node cutoff are gone.
+Both stale-prefix cleanup and search use one streaming Brent cycle detector,
+which compares only pointer values from the ordinary walk; it never follows
+a second unvalidated pointer. Search traverses every valid finite candidate
+chain before fresh allocation, preserving existing per-node gates/preflight.
+A detected actual cycle is cut at the current link, as corruption handling.
+
+GCC release syntax: PASS
+  gcc -std=gnu99 -fsyntax-only -O2 -Wall -Wextra -Werror -mcx16 -Isrc
+      -DLJ_ARENA_TEST_HELPERS -DLJ_GC2_TEST_HELPERS src/lj_arena.c
+GCC assertion syntax: PASS
+  gcc -fsyntax-only -O2 -Wall -Wextra -Werror -mcx16 -Isrc -DLUA_USE_ASSERT
+      -DLJ_ARENA_TEST_HELPERS -DLJ_GC2_TEST_HELPERS src/lj_arena.c
+Clang assertion syntax: PASS
+  clang -fsyntax-only -O2 -Wall -Wextra -Werror -mcx16 -Isrc -DLUA_USE_ASSERT
+        -DLJ_ARENA_TEST_HELPERS -DLJ_GC2_TEST_HELPERS src/lj_arena.c
+git diff --check: PASS
+
+An initial Clang invocation explicitly requesting gnu99 plus -Werror failed
+on existing duplicate GCArena/LJHugeInfo typedef declarations in lj_gc.h and
+lj_arena.h. No source change was made for that unrelated language-mode warning;
+the normal compiler default syntax invocation above passes.
+No build or runtime execution was performed by this reviewer. Parent owns
+runtime validation; performance peer owns tests/t-arena-bin-capacity.c.
+
+Independent ownership review agreed no valid current duplicate-publication
+path was found: /tmp/lj-arena-bin-insertion-audit-20261126-66zkf506/review.txt.
+
+Exact separate interior-bump rebuild counterexample:
+Allocate p=1024 bytes, a live 16-byte guard, q=1024 bytes, another live guard.
+Fill the remaining original private bump with actual bounded allocations.
+Free q, then p, so p is the first same-bin run. Allocate 512 bytes and require
+the result p; its remaining [p+512,p+1024) is the active interior bump. q is
+a distinct free run after that bump's end. Invoke full PLAIN bin rebuild.
+The existing rf.limit=bump.cell condition drops q although q remains state1.
+Consume the private 512-byte remainder, then request 1024 bytes: q should be
+selected without mapping, but current rebuild no longer lists it. This needs
+no fabricated metadata and no direct bump-cursor modification. Keep it a
+separate test/fix: subtract the exact private interval, not the rest of its arena.
+
+The main report and its pre-edit source snapshot remain unchanged.

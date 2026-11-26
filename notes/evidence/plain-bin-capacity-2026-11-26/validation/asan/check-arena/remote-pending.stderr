@@ -1,0 +1,1 @@
+remote-pending: /tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/tests/t-arena-remote-pending.c:186: void test_multi_publisher_no_drop(PRNGState *): Assertion `lj_arena_remote_free_drain(&alloc) == RACE_PUBLISHERS' failed.

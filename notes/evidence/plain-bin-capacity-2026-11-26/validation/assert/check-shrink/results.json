@@ -1,0 +1,45 @@
+[
+  {
+    "name": "progress-build",
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-ftrivial-auto-var-init=pattern",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/assert/check-shrink/progress.d",
+      "-I/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/assert/src",
+      "-I/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/assert/tests",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/assert/tests/t-arena-plain-shrink.c",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/assert/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/assert/check-shrink/shrink"
+    ],
+    "seconds": 0.31928476100438274,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "progress",
+    "command": [
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/assert/check-shrink/shrink"
+    ],
+    "seconds": 0.0034233879996463656,
+    "exit": 0,
+    "test": true
+  }
+]

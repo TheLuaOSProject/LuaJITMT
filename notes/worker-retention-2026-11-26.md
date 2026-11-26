@@ -76,6 +76,14 @@ checks do not retain a node. Dead thread-state transfer must preserve raw owner
 lookups, durable wake routing, registry borrows and shared result storage. Merely
 removing the current global-quiescence predicates would be unsafe.
 
+The [finalizer-record proposal](evidence/worker-retention-2026-11-26/ownership/finreg-design-v2.txt)
+uses leased active-list traversal, frozen links before unlinking, and a retired
+stack containing only fully unlinked records. Independent consumers remove one
+record at a time. An earlier private-batch design was rejected because a paused
+consumer could retain an entire backlog. The proposal still needs runtime
+integration, exact drain-context lifetime checks and the listed pause tests;
+it is not an implemented reclamation guarantee.
+
 The [public report](evidence/worker-retention-2026-11-26/public/REPORT.txt),
 [exact census](evidence/worker-retention-2026-11-26/census/finreg-baseline.stdout)
 and [source audit](evidence/worker-retention-2026-11-26/ownership/review.txt)

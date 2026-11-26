@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/tsan/src/luajit": "25927a78864ff0ecc8fb914e7fb50b50894ce8e55d5c3c315a7bc2ffbeeb3b05",
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/tsan/src/libluajit.a": "63a5f5474d78726be1ea80bdf245c49abf3394d7049df6a40c8904ed9777c425",
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/tsan/tests/t-arena-plain-progress.c": "d1289617afe8630d11a5127414adf80b285d66e1cab4148a59f32183300d4564",
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/tsan/check-readers/readers": "8bf3f57ce9777d3cb8090b2c7f124566b9958f89da262297fea800226ae646a7"
+}

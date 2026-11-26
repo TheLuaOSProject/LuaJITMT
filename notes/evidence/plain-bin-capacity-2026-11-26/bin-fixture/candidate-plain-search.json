@@ -1,0 +1,16 @@
+{
+  "case": "plain-search",
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/bin-fixture/candidate",
+    "plain-search"
+  ],
+  "exit": 0,
+  "seconds": 0.01711528899613768,
+  "user_seconds": 0.014820999999999999,
+  "system_seconds": 0.00197,
+  "maxrss_kib": 12148,
+  "binary_sha256": "fd501240aaed653aef187581923e2df318b8fa99de7a6be8311120ab14519941"
+}

@@ -1,0 +1,12 @@
+{
+  "commit": "c106cd7bb109e9705c6b753f794001627320ab7f",
+  "baseline": "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc",
+  "files": {
+    "src/lj_arena.c": "1d7468f5a975d1255d8ea69ca72beb284a5e9a85f59046a058c9919fcf822ed5",
+    "src/lj_arena.h": "c9fb420ebd3c0b24bb77bcd61fe867bc10ca67086dc9f56d2947782afd55bcde",
+    "tests/t-arena-tls-stub.c": "c77bec4d1fa415bbfa741053e1eadb48f6cee1f32407046914a7ed526dd97b36",
+    "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc/src/luajit": "aa15b67e1a1764714dd0d2e82623be9b53fe3f29b24d92db295faab19fb16dcf",
+    "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc/src/libluajit.a": "0e514cd5c35218c6ff012b60589739c3f49e28fd0272b4beff3c84e42d0ed894",
+    "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc/build.json": "3696c75875509acc43047745bc326419f5c07adf1359fbc62c6b9c8f5ea62e94"
+  }
+}

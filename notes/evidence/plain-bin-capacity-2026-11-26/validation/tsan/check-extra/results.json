@@ -1,0 +1,17 @@
+[
+  {
+    "name": "large-buffer",
+    "command": [
+      "taskset",
+      "-c",
+      "0-7",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/tsan/src/luajit",
+      "tests/t-buffer-concurrent-public.lua"
+    ],
+    "environment": {
+      "LJ_BUFFER_LARGE": "1"
+    },
+    "exit": 0,
+    "seconds": 10.589616194018163
+  }
+]

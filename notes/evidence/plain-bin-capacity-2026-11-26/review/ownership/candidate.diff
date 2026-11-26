@@ -1,0 +1,136 @@
+diff --git a/src/lj_arena.c b/src/lj_arena.c
+index e44f65fe2..466c390f9 100644
+--- a/src/lj_arena.c
++++ b/src/lj_arena.c
+@@ -5372,8 +5372,6 @@ static uint32_t arena_bin(uint32_t ncells)
+   return lj_arena_bin_from_ncells(ncells);
+ }
+ 
+-#define LJ_ARENA_BIN_WALK_LIMIT 8192u
+-
+ /* Return 2 for an unmanaged plain arena, 1 for a held traversable DESTRUCT
+ ** lane and 0 on a nonwaiting loss. No bitmap/header/body mutation is allowed
+ ** before the post-claim ownership and reader-generation rechecks succeed. */
+@@ -5790,8 +5788,8 @@ static LJ_AINLINE int arena_free_run_valid_knownptr(const LJArenaFreeRun *run,
+   /*
+   ** Free-run bin nodes live in the first cell of the free run they describe.
+   ** Allocating from a bin can leave old payload bytes in cells that later sit
+-  ** behind a defensive bin pointer. Keep the exact-address duplicate scrub,
+-  ** but also drop any node whose bitmap state no longer says "free run start".
++  ** behind a defensive bin pointer. A node is reusable only while its bitmap
++  ** state still says "free run start".
+   */
+   if (start < LJ_AFIRST_CELL || start >= LJ_ARENA_CELLS || len == 0 ||
+       len > LJ_ARENA_CELLS - start ||
+@@ -5805,6 +5803,35 @@ static LJ_AINLINE int arena_free_run_valid_knownptr(const LJArenaFreeRun *run,
+   return 1;
+ }
+ 
++typedef struct ArenaBinWalk {
++  const LJArenaFreeRun *checkpoint;
++  uint64_t power;
++  uint64_t distance;
++} ArenaBinWalk;
++
++/* Brent's cycle detector observes only the ordinary validated traversal.
++** Comparing a saved pointer grants no body authority and never dereferences
++** a second, unvalidated fast pointer. A long acyclic bin is valid capacity,
++** not evidence of corruption or permission to disconnect its suffix. */
++static LJ_AINLINE int arena_bin_walk_cycle(ArenaBinWalk *walk,
++                                         const LJArenaFreeRun *run)
++{
++  if (walk->power == 0) {
++    walk->checkpoint = run;
++    walk->power = 1;
++    return 0;
++  }
++  if (run == walk->checkpoint)
++    return 1;
++  if (++walk->distance == walk->power) {
++    walk->checkpoint = run;
++    walk->distance = 0;
++    if (walk->power <= ~(uint64_t)0 / 2u)
++      walk->power *= 2u;
++  }
++  return 0;
++}
++
+ static int arena_insert_run(TGAlloc *alloc, GCArena *a, uint32_t start,
+                             uint32_t len)
+ {
+@@ -5812,12 +5839,20 @@ static int arena_insert_run(TGAlloc *alloc, GCArena *a, uint32_t start,
+   uint32_t b = arena_bin(len);
+   LJArenaFreeRun *run = (LJArenaFreeRun *)lj_arena_cellptr(a, start);
+   LJArenaFreeRun **pp = &alloc->bins[k][b];
+-  uint32_t steps = 0;
+-  int scrub_head = 1;
++  ArenaBinWalk walk = { NULL, 0, 0 };
++  /* Bins have one allocator owner. A fresh insertion converts an allocated
++  ** start under terminal ownership, or an owned realloc suffix; neither can
++  ** already be linked. Allocation detaches the complete old node before reuse,
++  ** and its private bump tail is absent from bins. Rebuild uses cleared/staged
++  ** heads instead. Thus valid publication needs no duplicate-address walk.
++  ** Keep the defensive stale-head cleanup, charging each removed node once;
++  ** stop at the first valid head so freeing N valid runs costs O(N), not O(N^2).
++  ** The same cycle check also bounds a deliberately malformed stale prefix. */
+   while (*pp) {
+     LJArenaFreeRun *cur = *pp;
+     LJArenaFreeRun *next;
+-    if (!arena_free_run_ptr_ok(cur) || !arena_free_run_body_readable(cur)) {
++    if (arena_bin_walk_cycle(&walk, cur) ||
++        !arena_free_run_ptr_ok(cur) || !arena_free_run_body_readable(cur)) {
+       *pp = NULL;
+       break;
+     }
+@@ -5826,22 +5861,13 @@ static int arena_insert_run(TGAlloc *alloc, GCArena *a, uint32_t start,
+       *pp = next == cur ? NULL : next;
+       continue;
+     }
+-    if (next == cur || ++steps > LJ_ARENA_BIN_WALK_LIMIT) {
++    if (next == cur) {
+       *pp = NULL;
+       break;
+     }
+-    /*
+-    ** Scrub stale leading nodes before publishing a new run, but leave full
+-    ** per-node validation to arena_find_run(), which must validate before
+-    ** reuse anyway. This keeps insertion from turning long valid bins into a
+-    ** bitmap-walking hot path.
+-    */
+-    if (scrub_head && !arena_free_run_valid_knownptr(cur, NULL)) {
+-      *pp = next;
+-      continue;
+-    }
+-    scrub_head = 0;
+-    pp = &cur->next;
++    if (arena_free_run_valid_knownptr(cur, NULL))
++      break;
++    *pp = next;
+   }
+   return arena_insert_run_head(alloc, a, start, len);
+ }
+@@ -6640,17 +6666,21 @@ static LJArenaFreeRun **arena_find_run(TGAlloc *alloc, uint32_t k,
+ 				       uint32_t ncells, uint32_t *binp)
+ {
+   uint32_t mask = alloc->binmask[k] & lj_arena_binmask_from_ncells(ncells);
++  /* Complete the finite search before mapping or reporting allocation failure:
++  ** a fitting run may follow any number of smaller or temporarily gated runs.
++  ** A miss is linear in examined nodes; it never waits for a gated peer. */
+   while (mask) {
+     uint32_t b = lj_ffs(mask);
+     LJArenaFreeRun **pp = &alloc->bins[k][b];
+-    uint32_t steps = 0;
++    ArenaBinWalk walk = { NULL, 0, 0 };
+     mask &= mask - 1u;
+     while (*pp) {
+       LJArenaFreeRun *run = *pp;
+       LJArenaFreeRun *next;
+       uint32_t len;
+-      if (++steps > LJ_ARENA_BIN_WALK_LIMIT) {
+-	alloc->bins[k][b] = NULL;
++
++      if (arena_bin_walk_cycle(&walk, run)) {
++	*pp = NULL;
+ 	arena_refresh_binmask(alloc, k, b);
+ 	break;
+       }

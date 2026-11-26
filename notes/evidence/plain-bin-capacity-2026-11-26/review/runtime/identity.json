@@ -1,0 +1,17 @@
+{
+  "review_head": "c106cd7bb109e9705c6b753f794001627320ab7f",
+  "baseline_head": "78f117627cdecbe83600d9e1d39c0b0f923459c1",
+  "scope": "Read-only source/history review; no runtime edits or builds by this agent.",
+  "source_sha256": {
+    "src/lj_arena.c": "1d7468f5a975d1255d8ea69ca72beb284a5e9a85f59046a058c9919fcf822ed5",
+    "src/lj_arena.h": "c9fb420ebd3c0b24bb77bcd61fe867bc10ca67086dc9f56d2947782afd55bcde",
+    "src/lj_safepoint.c": "e9f7694a8083c652951b1257264520afe930f5c8f18d411ef358d54f8c85536c"
+  },
+  "evidence_root": "/tmp/lj-plain-shrink-perf-20261126-s5650_mv",
+  "evidence_sha256": {
+    "retention.c": "990c956be3699782e7e09622132039aa38d691504487e938deba60d57c46dc21",
+    "retention-rebuild.c": "52d711cced415be28575bbe95733463d937043768cd403c565088a35223d5ca1",
+    "rebuild-control-results.json": "c38bb9146a71c4e3902da4485b967c49a1262b0ccc841708c720d2f8f493becd",
+    "measurements.json": "4cc37fef40a0b7831b4ef674a0302a1dc65f9a92646fed4d5270b0cd2d93ae4a"
+  }
+}

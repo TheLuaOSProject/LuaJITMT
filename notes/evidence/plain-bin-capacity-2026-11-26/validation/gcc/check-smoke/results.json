@@ -1,0 +1,59 @@
+[
+  {
+    "name": "buffer-joff",
+    "command": [
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/gcc/src/luajit",
+      "-joff",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/gcc/tests/t-buffer-thread-safety.lua"
+    ],
+    "seconds": 0.4641635970037896,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "buffer-jon",
+    "command": [
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/gcc/src/luajit",
+      "-jon",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/gcc/tests/t-buffer-thread-safety.lua"
+    ],
+    "seconds": 0.5643102199828718,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "consume-build",
+    "command": [
+      "gcc",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/gcc/src",
+      "-I/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/gcc/tests",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/gcc/tests/t-buffer-consume.c",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/gcc/src/libluajit.a",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_str_new",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/gcc/check-smoke/consume"
+    ],
+    "seconds": 0.16398072100128047,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "consume",
+    "command": [
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/gcc/check-smoke/consume"
+    ],
+    "seconds": 0.007488897012080997,
+    "exit": 0,
+    "test": true
+  }
+]

@@ -1,0 +1,57 @@
+[
+  {
+    "name": "remote-pending-build",
+    "command": [
+      "taskset",
+      "-c",
+      "0-7",
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-Wno-error=tsan",
+      "-fsanitize=thread",
+      "-fno-omit-frame-pointer",
+      "-fno-pie",
+      "-DLUAJIT_SECURITY_PRNG=0",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-I/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/tsan/src",
+      "-I/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/tsan/tests",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/fixture-update/t-arena-remote-pending.c",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/tsan/tests/t-arena-tls-stub.c",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/tsan/src/lj_arena.c",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/tsan/src/lj_prng.c",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/tsan/src/lj_assert.c",
+      "-fsanitize=thread",
+      "-no-pie",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/tsan/check-pending/remote-pending"
+    ],
+    "seconds": 3.017652847978752,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "remote-pending",
+    "command": [
+      "taskset",
+      "-c",
+      "0-7",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/tsan/check-pending/remote-pending"
+    ],
+    "seconds": 0.015699957992183045,
+    "exit": 0,
+    "test": true
+  }
+]

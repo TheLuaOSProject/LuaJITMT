@@ -1,0 +1,42 @@
+== m2_arena_bin_capacity ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLUAJIT_SECURITY_PRNG=0 -DLJ_ARENA_TEST_HELPERS -pthread -I'./src' './tests/t-arena-bin-capacity.c' './tests/t-arena-tls-stub.c' './src/lj_arena.c' './src/lj_prng.c' -pthread -o '/tmp/lj_t_arena_bin_capacity'
++ timeout '120s' '/tmp/lj_t_arena_bin_capacity'
+ok m2_arena_bin_capacity
+== m2_arena_plain_shrink ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT -DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT -I'./src' './tests/t-arena-plain-shrink.c' './src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj_t_arena_plain_shrink'
++ timeout '65s' '/tmp/lj_t_arena_plain_shrink'
+ok m2_arena_plain_shrink
+== m2_arena_plain_progress ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLUAJIT_SECURITY_PRNG=0 -DLJ_ARENA_TEST_HELPERS -pthread -I'./src' './tests/t-arena-plain-bin-progress.c' './tests/t-arena-tls-stub.c' './src/lj_arena.c' './src/lj_prng.c' -pthread -o '/tmp/lj_t_arena_plain_bin_progress'
++ timeout '65s' '/tmp/lj_t_arena_plain_bin_progress'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT -DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT -I'./src' './tests/t-arena-plain-progress.c' './src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj_t_arena_plain_progress'
++ timeout '65s' '/tmp/lj_t_arena_plain_progress'
+ok m2_arena_plain_progress
+== m2_arena_alloc ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLUAJIT_SECURITY_PRNG=0 -I'./src' './tests/t-arena-alloc.c' './tests/t-arena-tls-stub.c' './src/lj_arena.c' './src/lj_prng.c' -o '/tmp/lj_t_arena_alloc.alloc'
++ '/tmp/lj_t_arena_alloc.alloc'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLUAJIT_SECURITY_PRNG=0 -I'./src' './tests/t-arena-realloc.c' './tests/t-arena-tls-stub.c' './src/lj_arena.c' './src/lj_prng.c' -o '/tmp/lj_t_arena_alloc.realloc'
++ '/tmp/lj_t_arena_alloc.realloc'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLUAJIT_SECURITY_PRNG=0 -I'./src' './tests/t-arena-allocf.c' './tests/t-arena-tls-stub.c' './src/lj_arena.c' './src/lj_prng.c' -o '/tmp/lj_t_arena_alloc.allocf'
++ '/tmp/lj_t_arena_alloc.allocf'
+ok m2_arena_alloc
+== m2_arena_plain_late ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT -DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT -I'./src' './tests/t-arena-plain-late.c' './src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj_t-arena-plain-late'
++ timeout '65s' '/tmp/lj_t-arena-plain-late'
+ok m2_arena_plain_late
+== m2_arena_hugetab ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLUAJIT_SECURITY_PRNG=0 -DLJ_ARENA_TEST_HELPERS -pthread -I'./src' './tests/t-arena-hugetab.c' './tests/t-arena-tls-stub.c' './src/lj_arena.c' './src/lj_prng.c' -pthread -o '/tmp/lj_t_arena_hugetab'
++ '/tmp/lj_t_arena_hugetab'
+ok m2_arena_hugetab
+== m2_arena_publication ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLUAJIT_SECURITY_PRNG=0 -pthread -I'./src' './tests/t-arena-publication.c' './tests/t-arena-tls-stub.c' './src/lj_arena.c' './src/lj_prng.c' -pthread -o '/tmp/lj_t_arena_publication.publication'
++ '/tmp/lj_t_arena_publication.publication'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLUAJIT_SECURITY_PRNG=0 -DLJ_ARENA_TEST_HELPERS -pthread -I'./src' './tests/t-arena-remote-pending.c' './tests/t-arena-tls-stub.c' './src/lj_arena.c' './src/lj_prng.c' -pthread -o '/tmp/lj_t_arena_publication.remote_pending'
++ '/tmp/lj_t_arena_publication.remote_pending'
+ok m2_arena_publication
+== m2_arena_gcsweep ==
+ok m2_arena_gcsweep
+== m2_arena_empty_reclaimed_runtime ==
+ok m2_arena_empty_reclaimed_runtime
+== m2_arena_gcphase ==
+ok m2_arena_gcphase

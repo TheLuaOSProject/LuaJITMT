@@ -1,0 +1,130 @@
+[
+  {
+    "case": "plain-local",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/bin-fixture/baseline",
+      "plain-local"
+    ],
+    "exit": 1,
+    "seconds": 0.15723600998171605,
+    "user_seconds": 0.152604,
+    "system_seconds": 0.004001,
+    "maxrss_kib": 14340,
+    "binary_sha256": "b4afafacb4c41b47901b12ce2e145940a7e919c30969c471957fa7d4441f9c6b"
+  },
+  {
+    "case": "traversable-local",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/bin-fixture/baseline",
+      "traversable-local"
+    ],
+    "exit": 1,
+    "seconds": 0.22131220501614735,
+    "user_seconds": 0.21154799999999999,
+    "system_seconds": 0.008964,
+    "maxrss_kib": 25828,
+    "binary_sha256": "b4afafacb4c41b47901b12ce2e145940a7e919c30969c471957fa7d4441f9c6b"
+  },
+  {
+    "case": "plain-remote",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/bin-fixture/baseline",
+      "plain-remote"
+    ],
+    "exit": 1,
+    "seconds": 0.15368314000079408,
+    "user_seconds": 0.149195,
+    "system_seconds": 0.00396,
+    "maxrss_kib": 14476,
+    "binary_sha256": "b4afafacb4c41b47901b12ce2e145940a7e919c30969c471957fa7d4441f9c6b"
+  },
+  {
+    "case": "traversable-remote",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/bin-fixture/baseline",
+      "traversable-remote"
+    ],
+    "exit": 1,
+    "seconds": 0.2488891009998042,
+    "user_seconds": 0.242981,
+    "system_seconds": 0.004997,
+    "maxrss_kib": 26020,
+    "binary_sha256": "b4afafacb4c41b47901b12ce2e145940a7e919c30969c471957fa7d4441f9c6b"
+  },
+  {
+    "case": "plain-late",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/bin-fixture/baseline",
+      "plain-late"
+    ],
+    "exit": 1,
+    "seconds": 0.0941714420041535,
+    "user_seconds": 0.08674699999999999,
+    "system_seconds": 0.006938,
+    "maxrss_kib": 14504,
+    "binary_sha256": "b4afafacb4c41b47901b12ce2e145940a7e919c30969c471957fa7d4441f9c6b"
+  },
+  {
+    "case": "plain-search",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/bin-fixture/baseline",
+      "plain-search"
+    ],
+    "exit": 1,
+    "seconds": 0.12601002902374603,
+    "user_seconds": 0.123524,
+    "system_seconds": 0.002006,
+    "maxrss_kib": 12148,
+    "binary_sha256": "b4afafacb4c41b47901b12ce2e145940a7e919c30969c471957fa7d4441f9c6b"
+  },
+  {
+    "case": "traversable-search",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/bin-fixture/baseline",
+      "traversable-search"
+    ],
+    "exit": 1,
+    "seconds": 0.2035055430023931,
+    "user_seconds": 0.195687,
+    "system_seconds": 0.006979,
+    "maxrss_kib": 21760,
+    "binary_sha256": "b4afafacb4c41b47901b12ce2e145940a7e919c30969c471957fa7d4441f9c6b"
+  },
+  {
+    "case": "defensive-cycles",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/bin-fixture/baseline",
+      "defensive-cycles"
+    ],
+    "exit": 0,
+    "seconds": 0.0019115079776383936,
+    "user_seconds": 0.001622,
+    "system_seconds": 0.0,
+    "maxrss_kib": 9036,
+    "binary_sha256": "b4afafacb4c41b47901b12ce2e145940a7e919c30969c471957fa7d4441f9c6b"
+  }
+]

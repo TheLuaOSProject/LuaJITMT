@@ -1,0 +1,179 @@
+Arena bin insertion ownership review
+2026-11-26; frozen source c106cd7bb109e9705c6b753f794001627320ab7f
+Source-only: no runtime/shared edits, builds, or tests.
+
+Verdict
+
+Removing the full-bin exact-address duplicate walk in arena_insert_run is
+sound under the current valid allocator contracts: owner-local bin mutation,
+one semantic free per allocation incarnation, and correct allocation sizes.
+I found no reachable valid current caller inserting a span already in bins.
+The proof belongs at the lifetime/extent transfer, not an O(bin length) scrub.
+Keep arena_set_free_run's complete side-owner preflight and allocation-time
+candidate validation. A constant-size leading-stale cleanup is compatible
+with removing the full duplicate walk if the historical injected-head test
+is deliberately retained.
+
+The existing scrub is not a general overlap/double-free safety mechanism:
+it searches only the selected size bin and only the exact start address.
+It cannot repair a stale overlapping interior run in another bin, a duplicated
+remote queue, incorrect old sizes, or arbitrary owner-list corruption.
+
+All references below are to the frozen source, not a later candidate.
+
+Core invariant
+
+A published free-bin node is owner-local block=0/mark=1 reusable storage.
+Normal allocation unlinks the whole selected node before changing its bytes
+(8722 and8898), then clears old interior boundaries (5620-5629 and8724-8731).
+Its remaining tail becomes an unpublished private bump window, not another
+still-linked fragment (8743-8756 and8908-8921). A bin cannot validly retain a
+pointer into a current live allocation or into the active bump tail.
+
+There are four callers of the scrubbed insertion helper:
+
+1. Local free, lj_arena_free, insert at9050.
+   The entry verifies the exact start has block=1 (8958-8961), which excludes
+   a previously linked free start. Managed storage additionally claims its
+   lifetime and irreversible FREE transition. Plain storage owns the exact
+   writer generation or destructor token and rechecks block/side owners
+   before mutation (9000-9049). Correct osize bounds the live extent; retained
+   plain shrink recovers the physical extent before freeing. Nothing in that
+   extent belongs to a bin. After successful publication block is cleared,
+   so a repeat free before reuse exits without insertion. A duplicate after
+   reuse is an invalid old-incarnation free, not supported by the old scrub.
+
+2. Remote queue drain, arena_remote_free_drain_one, insert at6335.
+   The owner detaches a queued record, saves next before overwriting its body,
+   and requires valid exact start plus block=1 (6316-6329). A remote record
+   still owns an allocated block; it has not been placed in reusable bins.
+   RECLAIMED arenas update only the bitmap and defer bin linkage to adoption
+   (6332-6335). Successful insertion clears duplicate late intent before
+   reuse (6337-6343). If a duplicate record is encountered after the first
+   conversion, block=0 suppresses another insert. This statement is about
+   bin insertion, not arbitrary corrupted remote-queue traversal.
+
+3. Plain late drain, arena_plain_late_drain_one, insert at6445.
+   The writer captures cohort = late & block BEFORE committing (6406-6410).
+   Postcommit late frees are excluded. It refuses to run while an intrusive
+   queue still owns payload bytes (6420-6425). Each cohort entry denotes an
+   allocated start absent from bins. arena_plain_extent stops at the next
+   block|mark boundary or the owner bump limit (6360-6382); adjacent cohort
+   entries cannot be swallowed by an earlier insertion. The owner is the
+   only bin/bitmap structural writer; no allocation/rebuild can insert the
+   same span during this committed drain. Side-owner/full-range preflight
+   remains required. First success clears block and consumes the late bit;
+   future cohort snapshots omit block=0 duplicate bits.
+
+4. Traversable shrink suffix, lj_arena_realloc, insert at9205.
+   Since c106cd7bb, small PLAIN shrink retains its whole physical span and
+   does not call insert at all. The remaining suffix insertion runs only for
+   a valid live traversable allocation after MUTATING claim. With correct
+   osize it is a previously allocated interior, absent from bins. Repeated
+   valid shrinks pass the updated logical size, so each new suffix is disjoint
+   from previously released suffixes. Failed side-owner validation leaves
+   the operation retryable. An incorrect old size or concurrent semantic free
+   of the same realloc target is outside the API's ownership contract.
+
+Direct insert/rebuild paths already bypass the duplicate scrub
+
+Private bump publication at6622 already calls arena_insert_run_head directly.
+The bump window came from fresh unexposed space or a fully detached selected
+bin run; previous publication clears the cursor. Allocated prefixes and
+shrink suffixes lie before its current cell. The private tail cannot already
+be a bin node. Temporary plain writer veto retains bitmap boundaries instead
+of writing payload, and then clears the cursor (6618-6628).
+
+Full rebuild at7646 first clears ALL heads for that kind, then enumerates
+disjoint bitmap ranges; it excludes the current bump tail with rf.limit.
+The callbacks at7283/7296 use direct linking already. Transfer at8415 drains
+the quiescent source, retires its bump boundary, clears source bins, moves
+unique owned arenas, then clears/rebuilds destination bins at8475.
+
+PREPSWEEP detaches owner lists/cursors and clears bins at7718-7735 before an
+arena enters needsweep/quarantine/reclaimed ownership. Lazy sweep therefore
+rebuilds an arena absent from existing owner bins; it skips its selected new
+bump span and publishes the old independent bump before replacing the cursor
+(8350-8392). The defensive owned-list duplicate repair is not proof that a
+valid lifecycle may keep the same arena on multiple lists.
+
+Reclaimed adoption at7310 stages direct bin heads in a zeroed TGAlloc, for
+an arena removed from the reclaimed stack and absent from owner bins.
+Before the exact OPEN CAS, staged tails are attached to old heads. Failure
+restores the complete old head array/mask/owned head (7389-7393); staged
+payload links become unreachable. A retry overwrites its staged nodes before
+publication. Existing old bins were never changed internally: only a staged
+tail was pointed at them.
+
+Restore-sweep uses the same disjointness/staging discipline (8183-8307).
+PREPSWEEP already removed that arena from bins. Failed OPEN restores old
+heads/mask/owned state and leaves the arena on needsweep. Successful OPEN
+removes it from needsweep exactly once. In neither outcome can a staged
+node remain reachable twice. Late bit-only publishers cannot mutate bins;
+their PENDING/count defeats OPEN and forces the rollback above.
+
+Historical scrub and fixtures
+
+9fd6500fc introduced the whole-bin duplicate/cycle walk and8192 limit.
+814ae2b29 added stale-leading-node cleanup; its archived note claims split-tail
+and realloc-shrink paths could duplicate, but provides no present-day valid
+witness. In that old source lj_arena_free unconditionally inserted an extent:
+there was no exact block-start guard or current lifetime claim. Generic bin
+allocation immediately reinserted split tails, and the later comprehensive
+interior-boundary clearing/private-bump rules were absent.
+
+Current tests/t-arena-realloc.c64-74 explicitly writes an allocated q3 record
+into bins, then requires freeing q2 to remove that injected stale head. This
+is a corruption-recovery expectation, not a valid allocation-produced state.
+Unconditional O(1) insertion changes that expectation and fails the assertion.
+Either retain a fixed small leading cleanup or rewrite the fixture explicitly
+around allocation-time stale-candidate rejection; do not silently claim the
+original insertion-cleanup behavior remains tested.
+
+Current interior-boundary/coalescing coverage is t-arena-sweep.c924-953 and
+977-1013. It asserts that reused coalesced runs have no old interior starts
+and that specialized reservations detach the entire free span.
+Duplicate free/late coverage at1175-1300 verifies committed FREE and late
+intent cannot become a fresh current-cycle allocation prematurely.
+The adoption model at t-arena-terminal-model.c1092-1531 covers staged OPEN
+rollback and explicitly excludes an old incarnation's first free beginning
+only after reuse. Those guarantees do not depend on a bin-wide duplicate scan.
+
+Capacity/search caveat
+
+Removing insertion truncation is necessary but not sufficient. find_run at
+6652 currently clears an entire bin when8192 steps expire, independently
+losing valid capacity. Preserve every valid link on budget exhaustion.
+If bounded search simply returns NULL while keeping the same head, repeated
+requests can repeatedly scan the same long unsuitable/gated prefix and map
+new arenas despite a valid fitting tail. Require eventual continuation or
+another demonstrated way to reach later valid runs; a no-link-loss assertion
+alone is insufficient for the intended capacity/progress result.
+
+Required focused evidence for the change
+
+- More than8192 equal-bin runs with guards preventing coalescing. Assert
+  unique reachable run addresses, total reusable cells, mask consistency,
+  and reuse without unnecessary new mapping. Exercise insertion and search
+  limits separately; insertion must preserve every pre-existing run.
+- A long valid undersized prefix plus fitting tail in coarse bin31, and a
+  long gated prefix plus reusable run in another arena. Repeated bounded
+  search must eventually reach the tail without deleting or stranding it.
+- Duplicate local free before reuse; repeated bit-only late intent while
+  retained; queued-free plus legal late duplicate; multiple drain passes.
+  Assert one bin node per exact span, no cycle, late clearing and exact reuse.
+- Traversable repeated valid shrinks and later frees with updated sizes,
+  alongside the existing PLAIN retained-shrink tests. Check disjoint suffixes
+  and no bin node inside any still-live extent.
+- Coalesced-run split and specialized bump reservation, abandoned/private
+  tail publication, full rebuild, transfer, and staged adoption/restore
+  rollback followed by retry. Compare unique bin coverage before/after and
+  preserve the existing descriptor/lifetime veto tests.
+- Deliberate stale-head fixture handled explicitly as above; normal candidate
+  validation must remain. Run the existing arena/assert/sanitizer suites,
+  including remote-pending, plain-late/progress/bin-progress/shrink, sweep,
+  empty-reclaimed and terminal-model.
+
+No new production duplicate-insertion counterexample was found. This is a
+source proof conditional on the existing ownership contracts, not a claim
+that the proposed candidate has already passed runtime validation.

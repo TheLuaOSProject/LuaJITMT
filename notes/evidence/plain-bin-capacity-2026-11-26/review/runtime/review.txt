@@ -1,0 +1,268 @@
+Plain free-bin discoverability and insertion/search review
+2026-11-26; /root/buffer_publication_review
+
+This is a read-only follow-up to the small PLAIN retained-extent shrink change.
+No runtime or test files were edited and no build or new runtime measurement
+was run by this reviewer. The performance peer supplied the four existing
+rebuild controls and is independently writing tests/t-arena-bin-capacity.c.
+Current source, not the historical handoff or July notes, governs conclusions.
+
+Source identity
+
+The reviewed runtime was initially pending on 78f117627cdecbe83600d9e1d39c0b0f923459c1
+and was committed unchanged during this review as c106cd7bb109e9705c6b753f794001627320ab7f.
+See identity.json for exact SHA256 values and evidence identities. Key hashes:
+  src/lj_arena.c 1d7468f5a975d1255d8ea69ca72beb284a5e9a85f59046a058c9919fcf822ed5
+  src/lj_arena.h c9fb420ebd3c0b24bb77bcd61fe867bc10ca67086dc9f56d2947782afd55bcde
+Line references below name these exact files. Source excerpts are preserved.
+
+1. Main finding: valid free capacity is deliberately disconnected.
+
+arena_insert_run(), arena.c:5808-5846, walks the complete destination bin to
+remove an exact-address duplicate. At 5829-5831, a normal acyclic chain reaching
+the 8,193rd examined node is treated like a self-loop: *pp=NULL drops that node
+and every following node. The newly freed run is then prepended. With valid
+same-bin frees, this leaves at most roughly 8,193 linked nodes, rather than
+preserving all reusable capacity. No allocation or free bitmap transition
+accounts for the disconnected suffix; it is still physically free storage.
+
+arena_find_run(), 6639-6710, has an even larger loss: its 6652-6655 budget branch
+sets the entire bin head to NULL after examining 8,192 nodes. A perfectly valid
+fitting node at position 8,193 is neither selected nor retained. Long legitimate
+prefixes arise from different sizes in the same bin and from gated arenas.
+The current class function, arena.h:66-70, is STILL exact sizes 1..31 cells and
+one flat >=32-cell bin. The earlier proposed logarithmic classes were not
+implemented. Do not assume that proposal is part of this source.
+
+Insertion is quadratic through the first 8,192 same-bin frees and subsequently
+costs a capped full-bin walk on each free. This is why a guard originally added
+to contain corrupted chains is both a memory-discovery defect and a hot path.
+The small-shrink change exposes it but did not introduce it: both frozen 78f
+and candidate controls exhibit the loss.
+
+2. Ordinary PLAIN activity does not rediscover the lost suffix.
+
+The general allocation loop at 8875-8895 searches bins, tries one reclaimed
+arena, drains hinted remote/late frees, and maps a fresh arena. It never rebuilds
+ordinary owned PLAIN bins. The new late drain at 6388-6468 starts with late bits
+and freezes late & block. A completed free disconnected by the bin walk has
+block=0 and no durable late intent, so that drain cannot reinsert it.
+
+lj_safepoint.c:410-415 force-drains explicit raw free intents but only prepares
+TRAVERSABLE for semantic sweep. It calls restore_sweep_kind(PLAIN), which walks
+existing needsweep entries, not ordinary owned PLAIN arenas. Thus repeated full
+GC is not a completion guarantee for disconnected ordinary PLAIN bin nodes.
+
+lj_arena_alloc_rebuild_free_kind(), 7646-7658, clears bins and scans all owned
+arenas. The only production direct invocation outside its generic wrapper is
+allocator transfer at 8475. Explicit tests/diagnostics also call it. A transfer
+may restore capacity, but an allocator that remains live need never transfer.
+No claim of automatic ordinary-path rediscovery is supported by this source.
+
+Related existing paths also retain a bitmap boundary while losing immediate
+bin discovery: abandoning a gated private bump (6600-6630), detaching a selected
+run before a failed arena_set_alloc() postcheck (8898-8912), or refusing suffix
+preparation after prefix allocation (8915-8928). Their comments refer to a later
+rebuild. A bin fix must not treat that wording as an ordinary PLAIN guarantee.
+These are separate from the measured 8,192-node truncation; no new runtime
+witness for those paths was run here.
+
+3. Four independent rebuild controls, supplied by the performance peer.
+
+The fixture allocates N blocks of S bytes, touches them, shrinks every block to
+16 bytes, fills with N*(S/1024-1) live 1-KiB allocations, verifies both payload
+sets, then frees all originals and refills. At all_freed, every allocation block
+bit is zero. It then explicitly calls owner-only rebuild and recounts bins.
+The saved source and exact commands/results are included in this report bundle.
+All values below are bytes; bump capacity is the same before/after rebuild.
+
+version   S     N     arenas  bins before   bump   bins after   residual gap
+78f       4096  8192   631      8,521,088   2,032   35,088,656        43,392
+78f      16384  2048   683      8,422,784   8,176   37,998,352        22,912
+candidate 4096  8192  1062      8,797,056   4,480   59,127,680             0
+candidate16384 2048  1176      8,840,832  16,768   65,462,912             0
+
+Usable capacity is arena_count*55,680. Both candidate rows recover exactly this
+capacity after adding the bump remainder. The baseline recovers most, not all.
+The baseline binary hash is 618a5f837bb1e9b4fd17a40d77706421eb74392c64467144f3d2bae96130f538.
+The candidate binary hash is e6ee8af893342a23388e240980fbbaddbeab922e7083c432a44504a69685877f.
+Do not attribute the baseline residual gaps to live retained shrink extents:
+its allocation bits are zero too. See the separate rebuild limitation below.
+
+4. Why exact-address duplicate scrubbing exists.
+
+The duplicate walk and limit were added together in 9fd6500fc0dcfccdef6276a5f4a94a1db92f414c
+("fix: harden table resize concurrency", 2026-07-01). The 2026-07-04 head-scrub
+note says split-tail/realloc-shrink could otherwise insert an identical cell
+again, and that validating all existing nodes regressed a table benchmark.
+814ae2b29a2d4c80981770a8141f2097ae1d54a8 adds only leading stale-node validation
+and the manually injected stale-head fixture, retaining the duplicate walk.
+
+The concrete hazard is real: if a bin already has A -> R -> B, prepending R
+sets R.next=A and produces R -> A -> R. Reusing R later also overwrites the
+old traversal link. A duplicate publication must therefore be prevented.
+However, a scan is not the only way to prevent it. It is also not a complete
+corruption repair: the existing scan checks only the new length's bin, so an
+old alias in another size class is not removed.
+
+Current code is materially different from the July source. 5e488d14d added
+interior-boundary removal after coalesced rebuild reuse. Allocation now detaches
+one entire free run and retains its suffix as an unpublished private bump,
+instead of repeatedly publishing split tails. Thus the old note documents why
+the defensive scan was retained, not proof that every valid current free needs
+one. This review found no valid current call sequence that requires reinserting
+an already-linked address, under the existing exclusive allocator-owner and
+correct old-size contracts. That absence must be made an explicit invariant
+and tested; it is not permission to treat corrupted aliases as ordinary input.
+
+The legacy tests/t-arena-realloc.c:64-80 deliberately writes an allocated cell's
+body as a fake free node and injects it at a bin head. It tests stale-head cleanup,
+not a legal duplicate-producing allocator sequence. A leading stale scrub can
+remain: each removed stale head is charged once, while a valid long bin costs
+constant insertion work. The test does not justify scanning every valid tail.
+A reader-safe stale-body policy must still validate metadata before following
+links; syntactic pointer alignment alone is not lifetime authority.
+
+5. Source basis for trusted fresh insertion.
+
+The proposed invariant is: every run published by an ordinary fresh insertion
+was absent from every bin immediately before this owner publishes it, and no
+other actor publishes into these owner-private bins. Keep all existing whole-
+span metadata preflights and terminal/generation ownership proofs.
+
+- Owner free (8940-9067) requires block=1, then obtains the exact terminal body
+  authority and rechecks it before converting the span. A successfully linked
+  run is block=0, so another ordinary free cannot publish it a second time.
+- Intrusive remote drain (6271-6354) exchanges the queue under its current gate;
+  insertion still requires block=1. It clears duplicate late intent after
+  block/bin publication. Foreign producers publish queues, never these bins.
+- PLAIN late drain (6388-6468) freezes late & block before commit, then the single
+  owner converts each cohort start once. Queue ownership is excluded. Duplicate
+  late producers cannot independently publish a second bin node.
+- Remaining in-place shrink is the managed direct API (9194-9216). MUTATING
+  owns the original allocation; the positive suffix was interior allocated
+  storage, not an independently reusable bin node. Correct logical old size
+  and exclusive realloc ownership remain preconditions. Small PLAIN shrink
+  no longer publishes a suffix at all.
+- Allocation removes its selected node before use (8898-8928); any remainder
+  becomes a private bump absent from bins. Bump publication (6600-6630) then
+  publishes a previously private tail once and clears the cursor.
+- Whole-kind rebuild clears all relevant heads first (7646-7658). Sweep staging
+  and adoption rebuild an arena absent from current owner bins, then splice it
+  once. Prepare detaches bins before changing owned arenas (7704-7735).
+- Transfer clears source bins and rebuilds destination bins once. These paths
+  already use direct head publication and cannot rely on ordinary scrub.
+
+Metadata state alone is not a bin-membership bit. In particular, block=0/mark=1
+can name either a linked run or an unpublished retained boundary. Proof comes
+from these source transitions and single-owner list operations, not from
+blindly replacing every insertion with prepend on any state-1 input.
+
+6. Recommended minimal next patch.
+
+Use O(1) trusted-owner fresh insertion for the valid common path, retaining the
+whole-span preflight and a narrowly justified stale-leading scrub if the legacy
+contract is retained. Document and assert fresh-publication ownership at its
+callers. Remove the length-based destruction from search and insertion.
+
+Search the complete finite valid candidate chain before mapping a new arena.
+Keep the existing gated-node proof at 6665-6684: an ordinary foreign writer only
+mutates allocated targets/remote records, so a validated owner-private free
+node in its arena can be skipped; it must not be reused through SEALED/PENDING.
+Lifecycle flags and side-owner failures remain vetoes. No wait for that foreign
+writer is needed. A fitting run beyond 8,192 nodes must remain reachable and be
+selected by the current request, not deferred behind a new mapping attempt.
+
+A corruption-cycle diagnostic must distinguish a cycle from a long acyclic
+list. A Brent-style pointer equality detector can run alongside the normal
+validated walk without a separately dereferenced unvalidated fast pointer.
+Arbitrary 8,192-node cutoff is not an integrity proof. On actual malformed
+metadata, retain fail-closed behavior; do not turn lost authority into reuse.
+
+This minimal design is sound for valid owner-private lists and avoids false
+OOM/new-arena growth caused solely by a search budget. It is not a bounded-work
+search optimization: an unsuccessful request can still examine O(N) valid
+nodes. Repeated misses through too-small or gated nodes can remain quadratic.
+That is a separate performance debt and must not be described as resolved.
+No arena/node/native/JIT layout or bin-class change is necessary for this step.
+
+7. Why a bounded FIFO rewrite should be a separate design.
+
+A possible later representation keeps existing singly linked free nodes and
+adds one owner-private tail per (kind,bin): 2*32*8 = 512 bytes per TGAlloc on x64,
+without changing GCArena or the 16-byte node. Append new nodes at the tail;
+for search, move safely readable nonfits/gated heads to the tail. Limit each
+bin's slice and retain every unvisited node. Appending new work, rather than
+prepending it ahead of the cursor, gives old nodes a fair opportunity.
+
+It still has nontrivial obligations:
+- A fitting run beyond the slice must not produce false OOM when mapping fails.
+  A complete finite fallback search is needed before declaring resource failure.
+- Even successful fresh mappings can grow memory while existing fits remain
+  past the slice. A fairness proof bounds eventual discovery, not the amount
+  of avoidable growth before discovery. A policy must quantify that tradeoff.
+- The current flat large bin can contain permanently too-small nodes. Repeated
+  rotation is bounded per call but still expensive; size summaries/class changes
+  can improve it, with their own exact update/rollback requirements.
+- Rotating a gated node rewrites body links. Prove it is a block=0/mark=1 owner-
+  private node before any read/write, preserve all lifecycle/side-owner checks,
+  and do not broaden the current permission to reuse the payload.
+- Staged adoption and restore currently save/restore heads and binmask only
+  (7320-7400 and 8270-8310). Tails/counts/cursors must be staged and rolled back
+  together. Old-bin tails must not acquire links into a failed staged arena.
+- Whole-bin clear/rebuild, prepare, transfer, init/fini and node removal must
+  reset or maintain tail state. A raw cursor into a removed/reused node is unsafe.
+- A post-selection admission veto must preserve discovery. Popping a candidate
+  and then dropping it on gate failure retains the existing PLAIN orphan issue;
+  rebuilding during some hypothetical future sweep is insufficient.
+
+For the immediate capacity fix, this is more protocol and layout work than the
+trusted-insert/full-search change. Do not add it merely to preserve a fixed
+search constant. The parent was advised to defer it pending a measured design.
+
+8. Separate exact-window rebuild defect.
+
+arena_rebuild_free_run(), 7296-7304, receives only a high limit. The caller at
+7655 sets that limit to active_bump.cell for the entire bump arena. If a bump
+window is a reused interior free run, valid free runs after bump.end belong to
+neither that private window nor a live allocation, yet the callback rejects
+all starts >= bump.cell. Clearing the bins first disconnects those later runs.
+
+A future correction should exclude exactly [bump.cell,bump.end), not truncate
+the whole arena at bump.cell. A scanner callback must subtract that interval
+from each free span while preserving both disjoint eligible portions, and must
+not expose the still-private window. This is relevant to full rebuild and to
+transfer into an allocator whose destination bump is interior.
+
+The observed baseline gaps would be exactly the bytes after bump.end if the
+ends were 1384 and 2664 cells respectively. Recorded bump remainders are 127
+and 511 cells, implying cursors 1257 and 2153 under that hypothesis. The peer
+confirmed the frozen controls did NOT record arena/cell/end, so this numerical
+attribution is conditional. The source-level exclusion error is independent of
+that empirical attribution. Candidate rows happen to recover full capacity;
+that is not a general proof that rebuild handles interior bumps correctly.
+
+9. Focused validation suggested for the next coherent change.
+
+- More than 8,193 real same-bin frees; census bitmap free bytes, bins and bump,
+  then refill without explicit rebuild and without excess arena growth.
+- A real fitting run at position 8,193 behind 8,192 smaller nodes in the same
+  current flat bin, e.g. 768-byte fit behind 640-byte nonfits. Free the fit first
+  and nonfits afterward; exhaust the private bump; require exact fit reuse and
+  no new arena. This distinguishes search loss from insertion loss.
+- Repeat free/allocate/realloc/remote/late cycles with uniqueness checks for
+  every linked node and no overlap with live blocks/private bump intervals.
+- Keep old head-stale fixture, coalesced-boundary tests, and both paused-writer
+  bin-progress tests. Neither a retained foreign writer nor a late producer
+  may hide an unrelated fitting arena or authorize its target's reuse.
+- Test long managed lists as well as PLAIN, staged adoption refusal/rollback,
+  clear/rebuild/transfer, and an interior bump with free runs on both sides.
+- Force mapping failure with a fit beyond any proposed search slice. Check
+  actual exact fit reuse, not only successful fresh allocation.
+- For performance, measure size-doubling free batches and repeated nonfit misses
+  separately. O(1) insertion should remove N-squared free cost; full search is
+  expected to leave the repeated-miss debt visible.
+
+No claim of overall goal completion is made. Huge/mixed-class infallible shrink,
+retained live-small capacity, dead-TG retention and other explicitly tracked
+progress work remain outside this bin review.

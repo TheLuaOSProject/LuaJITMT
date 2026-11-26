@@ -1,0 +1,295 @@
+[
+  {
+    "mode": "gcc",
+    "phase": "matrix",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "gcc",
+      "matrix"
+    ],
+    "exit": 0,
+    "seconds": 10.834698933991604
+  },
+  {
+    "mode": "gcc",
+    "phase": "smoke",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "gcc",
+      "smoke"
+    ],
+    "exit": 0,
+    "seconds": 1.24793094600318
+  },
+  {
+    "mode": "gcc",
+    "phase": "public",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "gcc",
+      "public"
+    ],
+    "exit": 0,
+    "seconds": 0.9241704620071687
+  },
+  {
+    "mode": "assert",
+    "phase": "matrix",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "assert",
+      "matrix"
+    ],
+    "exit": 0,
+    "seconds": 17.441578914993443
+  },
+  {
+    "mode": "assert",
+    "phase": "smoke",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "assert",
+      "smoke"
+    ],
+    "exit": 0,
+    "seconds": 1.1984386080002878
+  },
+  {
+    "mode": "assert",
+    "phase": "public",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "assert",
+      "public"
+    ],
+    "exit": 0,
+    "seconds": 1.1753085469827056
+  },
+  {
+    "mode": "asan",
+    "phase": "matrix",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "asan",
+      "matrix"
+    ],
+    "exit": 0,
+    "seconds": 30.77511268100352
+  },
+  {
+    "mode": "asan",
+    "phase": "smoke",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "asan",
+      "smoke"
+    ],
+    "exit": 0,
+    "seconds": 2.7764402129978407
+  },
+  {
+    "mode": "asan",
+    "phase": "public",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "asan",
+      "public"
+    ],
+    "exit": 0,
+    "seconds": 1.190037246007705
+  },
+  {
+    "mode": "assert",
+    "phase": "progress",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "assert",
+      "progress"
+    ],
+    "exit": 0,
+    "seconds": 0.21880100198904984
+  },
+  {
+    "mode": "assert",
+    "phase": "lease",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "assert",
+      "lease"
+    ],
+    "exit": 0,
+    "seconds": 0.16447197599336505
+  },
+  {
+    "mode": "assert",
+    "phase": "traverse",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "assert",
+      "traverse"
+    ],
+    "exit": 0,
+    "seconds": 13.158319052978186
+  },
+  {
+    "mode": "asan",
+    "phase": "progress",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "asan",
+      "progress"
+    ],
+    "exit": 0,
+    "seconds": 0.29451503697782755
+  },
+  {
+    "mode": "asan",
+    "phase": "lease",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "asan",
+      "lease"
+    ],
+    "exit": 0,
+    "seconds": 0.285017362999497
+  },
+  {
+    "mode": "asan",
+    "phase": "traverse",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "asan",
+      "traverse"
+    ],
+    "exit": 0,
+    "seconds": 29.448172601987608
+  },
+  {
+    "mode": "tsan",
+    "phase": "progress",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "tsan",
+      "progress"
+    ],
+    "exit": 0,
+    "seconds": 0.42945590399904177
+  },
+  {
+    "mode": "tsan",
+    "phase": "lease",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "tsan",
+      "lease"
+    ],
+    "exit": 0,
+    "seconds": 0.22872903602547012
+  },
+  {
+    "mode": "tsan",
+    "phase": "public",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "tsan",
+      "public"
+    ],
+    "exit": 0,
+    "seconds": 43.557301040011225
+  },
+  {
+    "mode": "gcc",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/extra.py",
+      "gcc"
+    ],
+    "exit": 0,
+    "seconds": 0.49806782000814565
+  },
+  {
+    "mode": "assert",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/extra.py",
+      "assert"
+    ],
+    "exit": 0,
+    "seconds": 0.4479881079751067
+  },
+  {
+    "mode": "asan",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/extra.py",
+      "asan"
+    ],
+    "exit": 0,
+    "seconds": 0.7524953079991974
+  },
+  {
+    "mode": "tsan",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/extra.py",
+      "tsan"
+    ],
+    "exit": 0,
+    "seconds": 10.610666054999456
+  },
+  {
+    "mode": "noffi",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/extra.py",
+      "noffi"
+    ],
+    "exit": 0,
+    "seconds": 0.9985074239957612
+  },
+  {
+    "mode": "nojit",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/extra.py",
+      "nojit"
+    ],
+    "exit": 0,
+    "seconds": 1.1490448230179027
+  },
+  {
+    "mode": "nobuf",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/extra.py",
+      "nobuf"
+    ],
+    "exit": 0,
+    "seconds": 0.022094186977483332
+  }
+]

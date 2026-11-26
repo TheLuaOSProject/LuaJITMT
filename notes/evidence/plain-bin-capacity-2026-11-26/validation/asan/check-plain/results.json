@@ -1,0 +1,47 @@
+[
+  {
+    "name": "progress-build",
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/check-plain/progress.d",
+      "-I/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/src",
+      "-I/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/tests",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/tests/t-arena-plain-late.c",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/src/libluajit.a",
+      "-fsanitize=address",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/check-plain/plain"
+    ],
+    "seconds": 0.36456036401796155,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "progress",
+    "command": [
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/check-plain/plain"
+    ],
+    "seconds": 0.4143708740011789,
+    "exit": 0,
+    "test": true
+  }
+]

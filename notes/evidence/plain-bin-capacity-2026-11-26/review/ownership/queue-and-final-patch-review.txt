@@ -1,0 +1,114 @@
+PLAIN remote queue caveat and final bin-patch review
+2026-11-26; read-only follow-up to review.txt
+Baseline: c106cd7bb109e9705c6b753f794001627320ab7f
+Frozen candidate src/lj_arena.c SHA256:
+1a3420fe54b2450bedfeb0bca775f2625e6452459ac1da94598eac5a4acbfe29
+No runtime/shared edits, builds, or tests by this reviewer.
+
+PLAIN queue publication is not deduplicated
+
+The concern is real at the direct API boundary. A second ordinary OPEN
+lj_arena_remote_free_publish(alloc,p,size) for the same still-block=1 PLAIN
+body may accept its existing FREEING state. If p is already the queue head,
+writing node->next=head before CAS makes a self-link. The API has no exact
+PLAIN queue-membership token or active0-style unique enqueue claim. Do NOT
+describe the queue itself as duplicate-safe or deduplicated.
+
+This is separate from duplicate BIN insertion. The owner's queue drain checks
+block=1 before converting the body to a free run; after conversion that block
+is clear. That gate does not prove that a malformed duplicate intrusive queue
+can be traversed safely, and the old full-bin scrub does not repair the queue.
+The earlier report's conditional block-gate observation must not be read as a
+queue-deduplication proof.
+
+Production reachability audited
+
+The only direct production call to lj_arena_remote_free_publish is the
+foreign-owner branch of arena_allocf_free (baseline lj_arena.c9307-9317).
+It is reached by ordinary allocator free, or freeing the old allocation after
+a successful replacement. The API's callers relinquish one raw allocation
+ownership; free returns void/NULL and does not tell them to retry publication.
+lj_mem_free subtracts accounting once per call (lj_gc.c5973-5983), another
+reason that a second raw call is not an idempotent ownership operation.
+
+A single remote-free call cannot internally enqueue twice:
+- retry_open is taken only when late admission reports the generation reopened
+  BEFORE any late bit/queue publication. It has not relinquished ownership.
+- Once a durable late bit is published, the call returns.
+- Once the intrusive head CAS succeeds, the call releases its admission,
+  publishes the advisory wake, and returns. There is no enqueue retry after
+  that successful CAS.
+- Oversize retained shrinks use late-only publication and return.
+
+Supported late duplicates do not require a second queue publication. A caller
+admitted while a plain writer is closed uses the nonintrusive late path and
+returns; postcommit duplicate bits are consumed at stable completion or a
+later owner drain. Last-reader release publishes wake/progress, not a queue
+record. Plain late drain inserts directly from its frozen late&block cohort;
+it refuses to touch a still-nonempty intrusive queue. Sweep drain/restore,
+adoption and transfer consume existing queue/late ownership and never call
+remote_free_publish again for those records. Managed allocations additionally
+have FREE lifetime/late-claim suppression before ordinary queue publication.
+
+The active public-buffer raw-storage path has its own exact unique owner:
+bufx_replace frees a private failed candidate once, or frees the removed old
+backing only after winning the range CAS (lj_buf.c245-276). Repeated public
+buffer free observes the new empty range and does not free the old backing
+again. Table vector/descriptor retirement uses detached list ownership under
+its existing exclusive reclaimer; string retire records likewise transfer
+ownership once. These paths do not request idempotent repeated raw free.
+
+No valid production counterexample requiring a second OPEN PLAIN enqueue was
+found. This is not an exhaustive proof against all unrelated higher-level
+double-free bugs: the 116 raw/free-wrapper search hits are recorded in
+mem-free-callers.txt, but each subsystem still relies on its own ownership
+contract. The bin change neither creates nor fixes arbitrary repeated raw
+free. Acceptance tests should duplicate BIT-ONLY late intents under the real
+writer/reader protocol, not call ordinary OPEN raw free twice and assume that
+unsupported operation is required to work.
+
+Independent review of frozen minimal patch
+
+Verdict: no new correctness issue found in the frozen diff. It preserves the
+existing extent/lifetime proof and removes the destructive length heuristic.
+
+- arena_insert_run stops at its first valid head. Thus normal valid insertion
+  is O(1); a deliberately stale leading prefix is removed once, preserving
+  the historical t-arena-realloc injected-head behavior. The full exact-address
+  walk is gone. The previously documented caller ownership proof remains the
+  basis for ruling out a valid duplicate deeper in a bin.
+- arena_find_run completes the finite bin search. A fitting run after more
+  than8192 undersized or ordinary-gated nodes is now reached in the SAME call;
+  this avoids both capacity truncation and fixed-prefix starvation.
+- The Brent detector compares only pointer VALUES observed by the ordinary
+  walk. It does not dereference a hare/checkpoint or create any second body
+  access without validation. power/distance state is local to a bin walk.
+- With unique nodes in an acyclic owner-local list, its saved checkpoint can
+  never equal a later node; no long valid list is cut. On a genuine repeated
+  pointer it cuts only the current incoming link. The saturating power update
+  cannot wrap to zero. Normal stale-prefix removal changes the head, not the
+  unvisited outgoing sequence, so it does not introduce a false repetition.
+- Existing invalid-pointer, self-link, unreadable-body, bitmap and lifetime
+  checks remain. Ordinary gated PLAIN runs are still traversed after metadata
+  validation, preserving independent-arena progress. No ownership gate, node
+  layout, allocation size class, or raw free protocol changes.
+
+Limits and acceptance notes
+
+Search cost remains linear in all nodes examined. It is finite and does not
+wait for a gated peer, but is not a fixed-work quantum. This is the chosen
+minimal capacity-correct change, not the later size-class performance fix.
+
+The detector is corruption containment during a walk, not proof that an
+arbitrary cyclic bin can safely satisfy every request: a fitting node may be
+returned before a cycle is encountered, as in the old implementation. Tests
+of cycle detection should force a full miss/undersized search and assert
+termination and retained valid prefix. Do not claim arbitrary corruption
+recovery beyond the branches exercised.
+
+Runtime evidence still belongs to the parent/test author. Required cases from
+review.txt remain: >8192 insertion and fitting-tail search, long gated prefix,
+unique bin coverage, real late duplicate paths, interior/coalesced boundaries,
+retained PLAIN shrink, staged adoption rollback, plus existing assertion and
+sanitizer suites. Snapshot and exact diff are in candidate/lj_arena.c and
+candidate.diff; candidate-metadata.json records their identities.

@@ -1,0 +1,86 @@
+Deterministic traversable remote-free deferral review
+2026-11-26
+
+Conclusion
+
+The ASan failure at t-arena-remote-pending.c186 was a pre-existing incorrect
+immediate-drain assertion, not a bin insertion regression or sanitizer finding.
+The same legal forced schedule fails drain==8 on both the frozen c106cd7bb
+allocator and final bin candidate, and both correctly preserve then reclaim
+all eight allocations. The corrected complete fixture passes both ASan builds.
+
+Source mechanism
+
+All eight fixture bodies are TRAVERSABLE allocations in the same arena.
+arena_late_claim_release publishes durable late intent before trying lifetime
+LIVE->DESTRUCT. arena_destruct_claim_live then requires the exact reader count
+own_count=1. Another publisher's admission can defeat that proof. It restores
+LIVE and returns; the caller retains block=1 and late=1 without overwriting
+the body. That result is successful ownership transfer, not immediate queue
+publication. The ordinary owner queue drain does not consume traversable late
+bits; PREPSWEEP and quarantine do so under their stronger generation proof.
+
+Baseline locations in src/lj_arena.c:
+- late publication/unique intent:5944-5973
+- managed remote free before queue publication:6182-6204
+- destruct claim and post-claim reader recheck:5378-5395
+- ordinary remote queue drain:6274-6353
+- PREPSWEEP late ownership transition:6851-6908
+- preparation calls that consumer:7794-7815
+- quarantine physical block/late conversion:7953-8055
+
+Deterministic schedule and exact states
+
+The existing post-queue pause hook stops publisher0 after its queue CAS but
+before releasing its arena admission. Publishers1-7 run and join while that
+one admission remains. Each sees at least one admission besides its own and
+therefore retains a late LIVE allocation. After publisher0 resumes and joins:
+
+                          target0           targets1-7
+immediate queue drain     block0 late0 FREE  block1 late1 LIVE
+PREPSWEEP                 block0 late0 FREE  block1 late1 FREE/FREEING
+quarantine completion     block0 late0 FREE  block0 late0 FREE
+
+Immediate drain count is exactly1 in both builds. All seven deferred payloads
+remain unchanged before and after that drain. Real allocator operations
+prepare_sweep_kind -> quarantine_one -> reclaim_seal -> quarantine_finish
+consume the remaining seven intents. No repeated raw free is used.
+
+alloc_black=1 makes explicit free intent, rather than unmarked collection,
+responsible for reclamation. A marked live guard remains allocated with its
+payload intact. Live opaque fillers exhaust the remaining bump tail. The
+next eight allocations consequently reuse the exact original eight addresses,
+and the owned list still contains only the original arena.
+
+Evidence and controls
+
+witness.c / run.py: isolated deterministic schedule. No runtime instrumentation
+or runtime source edits. Existing test hook only.
+
+results.json: baseline and candidate ASan build commands and results.
+Both positive runs exit0. The --require-eight negative control reinstates the
+old assertion; both exit-6 with that assertion failure. Per-stage states are
+recorded in baseline-positive.stdout and candidate-positive.stdout.
+
+identities.json: exact compiled inputs and witness binary hashes.
+Baseline arena source SHA256:
+1d7468f5a975d1255d8ea69ca72beb284a5e9a85f59046a058c9919fcf822ed5
+Candidate arena source SHA256:
+1a3420fe54b2450bedfeb0bca775f2625e6452459ac1da94598eac5a4acbfe29
+
+Authorized shared change: tests/t-arena-remote-pending.c only. The formerly
+nondeterministic multipublisher assertion is replaced with this forced
+schedule, state/payload checks, real quarantine, exact reuse, and no-new-arena
+proof. Other test cases and runtime code remain unchanged by this reviewer.
+Corrected fixture SHA256:
+f72696bbe9df189a4508049d36ee9c274b0ba432fde90617c5c65d93ac3fabc8
+
+corrected-results.json: the complete corrected fixture compiled and passed
+against both frozen ASan source trees. corrected-identities.json records
+fixture and binary hashes. The fixture snapshot is included in this package.
+
+CPU disclosure: initial witness compiles/runs used CPU9 for approximately
+5 seconds total. Root subsequently identified CPU8/9 as SMT siblings and is
+preserving/repeating potentially overlapping performance controls. No timing
+claim is made here. All corrected-fixture compiles/runs used CPU6. No process
+from either round remains running.

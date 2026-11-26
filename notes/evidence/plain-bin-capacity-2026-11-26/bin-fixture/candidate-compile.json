@@ -1,0 +1,23 @@
+{
+  "command": [
+    "gcc",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-UNDEBUG",
+    "-I/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/gcc/src",
+    "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/bin-fixture/t-arena-bin-capacity.c",
+    "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/gcc/src/libluajit.a",
+    "-pthread",
+    "-lm",
+    "-ldl",
+    "-o",
+    "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/bin-fixture/candidate"
+  ],
+  "exit": 0,
+  "seconds": 0.16209859802620485,
+  "source_sha256": "325ab26eb15a5b976b8785ab2742fda503ee0743d347ef4efa86f909391e682a",
+  "library_sha256": "2a29b71710786af7ee2f8a06eb402e1923ea72e31fba6d4d7ee390d05a7b0b28",
+  "binary_sha256": "fd501240aaed653aef187581923e2df318b8fa99de7a6be8311120ab14519941"
+}

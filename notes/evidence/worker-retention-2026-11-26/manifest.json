@@ -2756,5 +2756,12 @@
     "bytes": 3619681,
     "sha256": "7f37d44ba94d7ec2bfa2959dae887363289b1db3f1ce9d3309f7ca45fcc0463f",
     "copied": false
+  },
+  {
+    "source": "/tmp/lj-plain-worker-ownership-20261126-fg7_swl4/finreg-design-v2.txt",
+    "path": "ownership/finreg-design-v2.txt",
+    "bytes": 17191,
+    "sha256": "d470c4bcf4b72599453401fd4d1cfc78d58242e021cff950ba632983c989d080",
+    "copied": true
   }
 ]

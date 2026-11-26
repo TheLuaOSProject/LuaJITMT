@@ -1,0 +1,50 @@
+[
+  {
+    "variant": "baseline",
+    "original_size": 4096,
+    "original_count": 8192,
+    "arenas": 631,
+    "before_bin_bytes": 8521088,
+    "bump_bytes": 2032,
+    "after_bin_bytes": 35088656,
+    "usable_capacity": 35134080,
+    "unaccounted_after_rebuild": 43392,
+    "binary_sha256": "618a5f837bb1e9b4fd17a40d77706421eb74392c64467144f3d2bae96130f538"
+  },
+  {
+    "variant": "baseline",
+    "original_size": 16384,
+    "original_count": 2048,
+    "arenas": 683,
+    "before_bin_bytes": 8422784,
+    "bump_bytes": 8176,
+    "after_bin_bytes": 37998352,
+    "usable_capacity": 38029440,
+    "unaccounted_after_rebuild": 22912,
+    "binary_sha256": "618a5f837bb1e9b4fd17a40d77706421eb74392c64467144f3d2bae96130f538"
+  },
+  {
+    "variant": "candidate",
+    "original_size": 4096,
+    "original_count": 8192,
+    "arenas": 1062,
+    "before_bin_bytes": 8797056,
+    "bump_bytes": 4480,
+    "after_bin_bytes": 59127680,
+    "usable_capacity": 59132160,
+    "unaccounted_after_rebuild": 0,
+    "binary_sha256": "e6ee8af893342a23388e240980fbbaddbeab922e7083c432a44504a69685877f"
+  },
+  {
+    "variant": "candidate",
+    "original_size": 16384,
+    "original_count": 2048,
+    "arenas": 1176,
+    "before_bin_bytes": 8840832,
+    "bump_bytes": 16768,
+    "after_bin_bytes": 65462912,
+    "usable_capacity": 65479680,
+    "unaccounted_after_rebuild": 0,
+    "binary_sha256": "e6ee8af893342a23388e240980fbbaddbeab922e7083c432a44504a69685877f"
+  }
+]

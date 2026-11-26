@@ -1,0 +1,6 @@
+== m2_arena_publication ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLUAJIT_SECURITY_PRNG=0 -pthread -I'./src' './tests/t-arena-publication.c' './tests/t-arena-tls-stub.c' './src/lj_arena.c' './src/lj_prng.c' -pthread -o '/tmp/lj_t_arena_publication.publication'
++ '/tmp/lj_t_arena_publication.publication'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLUAJIT_SECURITY_PRNG=0 -DLJ_ARENA_TEST_HELPERS -pthread -I'./src' './tests/t-arena-remote-pending.c' './tests/t-arena-tls-stub.c' './src/lj_arena.c' './src/lj_prng.c' -pthread -o '/tmp/lj_t_arena_publication.remote_pending'
++ '/tmp/lj_t_arena_publication.remote_pending'
+ok m2_arena_publication

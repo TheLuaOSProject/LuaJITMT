@@ -1,0 +1,16 @@
+{
+  "case": "plain-local",
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/bin-fixture/baseline",
+    "plain-local"
+  ],
+  "exit": 1,
+  "seconds": 0.15723600998171605,
+  "user_seconds": 0.152604,
+  "system_seconds": 0.004001,
+  "maxrss_kib": 14340,
+  "binary_sha256": "b4afafacb4c41b47901b12ce2e145940a7e919c30969c471957fa7d4441f9c6b"
+}

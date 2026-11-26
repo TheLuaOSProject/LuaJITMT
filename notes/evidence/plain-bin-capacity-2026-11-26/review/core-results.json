@@ -1,0 +1,134 @@
+[
+  {
+    "mode": "assert",
+    "phase": "shrink",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "assert",
+      "shrink"
+    ],
+    "exit": 0,
+    "seconds": 0.39030863100197166
+  },
+  {
+    "mode": "assert",
+    "phase": "readers",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "assert",
+      "readers"
+    ],
+    "exit": 0,
+    "seconds": 0.3220695740019437
+  },
+  {
+    "mode": "assert",
+    "phase": "plain",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "assert",
+      "plain"
+    ],
+    "exit": 0,
+    "seconds": 0.5433434470032807
+  },
+  {
+    "mode": "asan",
+    "phase": "shrink",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "asan",
+      "shrink"
+    ],
+    "exit": 0,
+    "seconds": 0.5930813789891545
+  },
+  {
+    "mode": "asan",
+    "phase": "readers",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "asan",
+      "readers"
+    ],
+    "exit": 0,
+    "seconds": 0.45608998998068273
+  },
+  {
+    "mode": "asan",
+    "phase": "plain",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "asan",
+      "plain"
+    ],
+    "exit": 0,
+    "seconds": 0.865296303993091
+  },
+  {
+    "mode": "asan",
+    "phase": "arena",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "asan",
+      "arena"
+    ],
+    "exit": 1,
+    "seconds": 42.90912471298361
+  },
+  {
+    "mode": "tsan",
+    "phase": "shrink",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "tsan",
+      "shrink"
+    ],
+    "exit": 0,
+    "seconds": 0.3388871189963538
+  },
+  {
+    "mode": "tsan",
+    "phase": "readers",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "tsan",
+      "readers"
+    ],
+    "exit": 0,
+    "seconds": 0.43596621698816307
+  },
+  {
+    "mode": "tsan",
+    "phase": "plain",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "tsan",
+      "plain"
+    ],
+    "exit": 0,
+    "seconds": 6.419040897977538
+  },
+  {
+    "mode": "tsan",
+    "phase": "arena",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/validate.py",
+      "tsan",
+      "arena"
+    ],
+    "exit": 0,
+    "seconds": 74.667367105023
+  }
+]

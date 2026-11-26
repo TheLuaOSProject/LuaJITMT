@@ -1,0 +1,7 @@
+{
+  "path": "tests/t-arena-remote-pending.c",
+  "original_sha256": "400e0a24c9ea7bcb8b97b6d3527d6d5995f3d41abc897c2fef74e493b9e5ec1f",
+  "corrected_sha256": "f72696bbe9df189a4508049d36ee9c274b0ba432fde90617c5c65d93ac3fabc8",
+  "reason": "Replace incorrect immediate-queue-count assumption with deterministic deferred lifetime and exact reuse checks.",
+  "diagnostic": "/tmp/lj-remote-pending-deferral-20261126-vzwfb00s"
+}

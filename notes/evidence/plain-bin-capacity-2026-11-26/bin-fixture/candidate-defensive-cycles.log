@@ -1,0 +1,2 @@
+defensive-cycles stale-insertion=bounded nonfit-search=bounded PASS
+t-arena-bin-capacity OK

@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/assert/src/luajit": "0beeab02404225ff7a686feaeec156f79d12435b4b25a680f4454d5e7c4a883f",
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/assert/src/libluajit.a": "defea184e9946d9f19184f25661cc5373d274238d831afea23999a078b2f48cc",
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/assert/tests/t-gc2-traverse.c": "65e693eae2712a250c0b12e8cf40a965c2f560aea0b08b2c1361bea9a0d1006f",
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/assert/check-traverse/traverse": "9a6bcd26e4489e0688db8b22653f242318e69fa72f1abcde101f1261ed4eac44"
+}

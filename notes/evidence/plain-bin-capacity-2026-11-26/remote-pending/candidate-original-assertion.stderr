@@ -1,0 +1,1 @@
+candidate: /tmp/lj-remote-pending-deferral-20261126-vzwfb00s/witness.c:97: int main(int, char **): Assertion `drained == N' failed.

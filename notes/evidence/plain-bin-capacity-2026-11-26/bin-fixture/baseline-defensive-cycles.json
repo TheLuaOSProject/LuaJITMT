@@ -1,0 +1,16 @@
+{
+  "case": "defensive-cycles",
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/bin-fixture/baseline",
+    "defensive-cycles"
+  ],
+  "exit": 0,
+  "seconds": 0.0019115079776383936,
+  "user_seconds": 0.001622,
+  "system_seconds": 0.0,
+  "maxrss_kib": 9036,
+  "binary_sha256": "b4afafacb4c41b47901b12ce2e145940a7e919c30969c471957fa7d4441f9c6b"
+}

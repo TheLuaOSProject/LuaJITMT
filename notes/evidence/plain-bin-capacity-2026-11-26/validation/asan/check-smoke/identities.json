@@ -1,0 +1,7 @@
+{
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/src/luajit": "43b333ff3cc1d1b20c4c54cb12d088443577bfa6aa22ed0127bfbea2f2b36e50",
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/src/libluajit.a": "0175f9155229797c7b9486ef0fae39050083fe451d86b1d6f75a3b154b594c8e",
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/tests/t-buffer-thread-safety.lua": "e90325db1a6c8cd661eede720047e03a6e3f08c4be611b921cc6e163f88a7155",
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/tests/t-buffer-consume.c": "5738fa68b3c7bb9e28b39ca1f99b7a2cc17a17ff14c47bbc3b73063f322d6334",
+  "/tmp/lj-plain-bin-capacity-20261126-wyqryfj8/asan/check-smoke/consume": "bff963b14ed9e30b5a7340ed845a884ba6c3ac39ffe67402e45f4d2e12e9ef10"
+}
