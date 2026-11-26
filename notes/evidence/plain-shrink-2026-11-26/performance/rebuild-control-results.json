@@ -1,0 +1,348 @@
+[
+  {
+    "kind": "build",
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "gcc",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src",
+      "/tmp/lj-plain-shrink-perf-20261126-s5650_mv/retention-rebuild.c",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-plain-shrink-perf-20261126-s5650_mv/baseline-retention-rebuild"
+    ],
+    "exit": 0
+  },
+  {
+    "kind": "run",
+    "variant": "baseline",
+    "size": 4096,
+    "count": 8192,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-plain-shrink-perf-20261126-s5650_mv/baseline-retention-rebuild",
+      "8192",
+      "4096"
+    ],
+    "exit": 0,
+    "binary_sha256": "618a5f837bb1e9b4fd17a40d77706421eb74392c64467144f3d2bae96130f538",
+    "phases": [
+      {
+        "stage": "original",
+        "logical_bytes": "33554432",
+        "physical_allocated_bytes": "33554432",
+        "block_starts": "8192",
+        "arenas": "631",
+        "bin_free_bytes": "1532160",
+        "bump_free_bytes": "47488",
+        "work_cpu": "0.016745010",
+        "work_wall": "0.016979083"
+      },
+      {
+        "stage": "shrunk",
+        "logical_bytes": "131072",
+        "physical_allocated_bytes": "131072",
+        "block_starts": "8192",
+        "arenas": "631",
+        "bin_free_bytes": "33425792",
+        "bump_free_bytes": "47488",
+        "work_cpu": "0.826478965",
+        "work_wall": "0.827756871"
+      },
+      {
+        "stage": "refilled",
+        "logical_bytes": "25296896",
+        "physical_allocated_bytes": "25296896",
+        "block_starts": "32768",
+        "arenas": "631",
+        "bin_free_bytes": "8305424",
+        "bump_free_bytes": "2032",
+        "work_cpu": "0.520538620",
+        "work_wall": "0.521792768"
+      },
+      {
+        "stage": "all_freed",
+        "logical_bytes": "0",
+        "physical_allocated_bytes": "0",
+        "block_starts": "0",
+        "arenas": "631",
+        "bin_free_bytes": "8521088",
+        "bump_free_bytes": "2032",
+        "work_cpu": "2.851433149",
+        "work_wall": "2.855861095"
+      },
+      {
+        "stage": "rebuilt",
+        "logical_bytes": "0",
+        "physical_allocated_bytes": "0",
+        "block_starts": "0",
+        "arenas": "631",
+        "bin_free_bytes": "35088656",
+        "bump_free_bytes": "2032",
+        "work_cpu": "0.000000000",
+        "work_wall": "0.000000000"
+      }
+    ],
+    "stderr": ""
+  },
+  {
+    "kind": "run",
+    "variant": "baseline",
+    "size": 16384,
+    "count": 2048,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-plain-shrink-perf-20261126-s5650_mv/baseline-retention-rebuild",
+      "2048",
+      "16384"
+    ],
+    "exit": 0,
+    "binary_sha256": "618a5f837bb1e9b4fd17a40d77706421eb74392c64467144f3d2bae96130f538",
+    "phases": [
+      {
+        "stage": "original",
+        "logical_bytes": "33554432",
+        "physical_allocated_bytes": "33554432",
+        "block_starts": "2048",
+        "arenas": "683",
+        "bin_free_bytes": "4452096",
+        "bump_free_bytes": "22912",
+        "work_cpu": "0.018906815",
+        "work_wall": "0.019141190"
+      },
+      {
+        "stage": "shrunk",
+        "logical_bytes": "32768",
+        "physical_allocated_bytes": "32768",
+        "block_starts": "2048",
+        "arenas": "683",
+        "bin_free_bytes": "37973760",
+        "bump_free_bytes": "22912",
+        "work_cpu": "0.061118573",
+        "work_wall": "0.061251640"
+      },
+      {
+        "stage": "refilled",
+        "logical_bytes": "31490048",
+        "physical_allocated_bytes": "31490048",
+        "block_starts": "32768",
+        "arenas": "683",
+        "bin_free_bytes": "6531216",
+        "bump_free_bytes": "8176",
+        "work_cpu": "0.042464534",
+        "work_wall": "0.042559532"
+      },
+      {
+        "stage": "all_freed",
+        "logical_bytes": "0",
+        "physical_allocated_bytes": "0",
+        "block_starts": "0",
+        "arenas": "683",
+        "bin_free_bytes": "8422784",
+        "bump_free_bytes": "8176",
+        "work_cpu": "2.510516363",
+        "work_wall": "2.514575640"
+      },
+      {
+        "stage": "rebuilt",
+        "logical_bytes": "0",
+        "physical_allocated_bytes": "0",
+        "block_starts": "0",
+        "arenas": "683",
+        "bin_free_bytes": "37998352",
+        "bump_free_bytes": "8176",
+        "work_cpu": "0.000000000",
+        "work_wall": "0.000000000"
+      }
+    ],
+    "stderr": ""
+  },
+  {
+    "kind": "build",
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "gcc",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc/src",
+      "/tmp/lj-plain-shrink-perf-20261126-s5650_mv/retention-rebuild.c",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-plain-shrink-perf-20261126-s5650_mv/candidate-retention-rebuild"
+    ],
+    "exit": 0
+  },
+  {
+    "kind": "run",
+    "variant": "candidate",
+    "size": 4096,
+    "count": 8192,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-plain-shrink-perf-20261126-s5650_mv/candidate-retention-rebuild",
+      "8192",
+      "4096"
+    ],
+    "exit": 0,
+    "binary_sha256": "e6ee8af893342a23388e240980fbbaddbeab922e7083c432a44504a69685877f",
+    "phases": [
+      {
+        "stage": "original",
+        "logical_bytes": "33554432",
+        "physical_allocated_bytes": "33554432",
+        "block_starts": "8192",
+        "arenas": "631",
+        "bin_free_bytes": "1532160",
+        "bump_free_bytes": "47488",
+        "work_cpu": "0.016684796",
+        "work_wall": "0.016908705"
+      },
+      {
+        "stage": "shrunk",
+        "logical_bytes": "131072",
+        "physical_allocated_bytes": "33554432",
+        "block_starts": "8192",
+        "arenas": "631",
+        "bin_free_bytes": "1532160",
+        "bump_free_bytes": "47488",
+        "work_cpu": "0.000192724",
+        "work_wall": "0.000193102"
+      },
+      {
+        "stage": "refilled",
+        "logical_bytes": "25296896",
+        "physical_allocated_bytes": "58720256",
+        "block_starts": "32768",
+        "arenas": "1062",
+        "bin_free_bytes": "407424",
+        "bump_free_bytes": "4480",
+        "work_cpu": "0.009351153",
+        "work_wall": "0.009390820"
+      },
+      {
+        "stage": "all_freed",
+        "logical_bytes": "0",
+        "physical_allocated_bytes": "0",
+        "block_starts": "0",
+        "arenas": "1062",
+        "bin_free_bytes": "8797056",
+        "bump_free_bytes": "4480",
+        "work_cpu": "2.995744602",
+        "work_wall": "3.000659259"
+      },
+      {
+        "stage": "rebuilt",
+        "logical_bytes": "0",
+        "physical_allocated_bytes": "0",
+        "block_starts": "0",
+        "arenas": "1062",
+        "bin_free_bytes": "59127680",
+        "bump_free_bytes": "4480",
+        "work_cpu": "0.000000000",
+        "work_wall": "0.000000000"
+      }
+    ],
+    "stderr": ""
+  },
+  {
+    "kind": "run",
+    "variant": "candidate",
+    "size": 16384,
+    "count": 2048,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-plain-shrink-perf-20261126-s5650_mv/candidate-retention-rebuild",
+      "2048",
+      "16384"
+    ],
+    "exit": 0,
+    "binary_sha256": "e6ee8af893342a23388e240980fbbaddbeab922e7083c432a44504a69685877f",
+    "phases": [
+      {
+        "stage": "original",
+        "logical_bytes": "33554432",
+        "physical_allocated_bytes": "33554432",
+        "block_starts": "2048",
+        "arenas": "683",
+        "bin_free_bytes": "4452096",
+        "bump_free_bytes": "22912",
+        "work_cpu": "0.019235695",
+        "work_wall": "0.019528360"
+      },
+      {
+        "stage": "shrunk",
+        "logical_bytes": "32768",
+        "physical_allocated_bytes": "33554432",
+        "block_starts": "2048",
+        "arenas": "683",
+        "bin_free_bytes": "4452096",
+        "bump_free_bytes": "22912",
+        "work_cpu": "0.000069963",
+        "work_wall": "0.000070013"
+      },
+      {
+        "stage": "refilled",
+        "logical_bytes": "31490048",
+        "physical_allocated_bytes": "65011712",
+        "block_starts": "32768",
+        "arenas": "1176",
+        "bin_free_bytes": "451200",
+        "bump_free_bytes": "16768",
+        "work_cpu": "0.011255531",
+        "work_wall": "0.011308977"
+      },
+      {
+        "stage": "all_freed",
+        "logical_bytes": "0",
+        "physical_allocated_bytes": "0",
+        "block_starts": "0",
+        "arenas": "1176",
+        "bin_free_bytes": "8840832",
+        "bump_free_bytes": "16768",
+        "work_cpu": "2.417237612",
+        "work_wall": "2.421051445"
+      },
+      {
+        "stage": "rebuilt",
+        "logical_bytes": "0",
+        "physical_allocated_bytes": "0",
+        "block_starts": "0",
+        "arenas": "1176",
+        "bin_free_bytes": "65462912",
+        "bump_free_bytes": "16768",
+        "work_cpu": "0.000000000",
+        "work_wall": "0.000000000"
+      }
+    ],
+    "stderr": ""
+  }
+]

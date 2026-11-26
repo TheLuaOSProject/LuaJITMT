@@ -1,0 +1,5 @@
+{
+  "base": "78f117627cdecbe83600d9e1d39c0b0f923459c1",
+  "previous_turn": "progress: exact-target reader admission committed/pushed and verified",
+  "scope": "physical plain-arena retention across worker exit with a live peer"
+}

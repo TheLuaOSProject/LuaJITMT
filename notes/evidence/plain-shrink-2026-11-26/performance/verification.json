@@ -1,0 +1,12 @@
+{
+  "final_runtime_invocations": 74,
+  "expected_baseline_witness_failures": 2,
+  "all_final_results_expected": true,
+  "all_final_stderr_empty": true,
+  "all_frozen_inputs_outputs_and_harness_hashes_match": true,
+  "hot_processes": 30,
+  "retention_processes": 36,
+  "rebuild_controls": 4,
+  "witnesses": 4,
+  "initial_seam_runs_retained": 4
+}

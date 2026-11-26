@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/src/luajit": "32b056949fb5f752c635199196c06933d9fd032a65fb513b5ec40964dd922887",
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/src/libluajit.a": "e7955ceffdb546b7844377efc4ccb77ff98081a0425ea605565197d5fa1d8895",
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/tests/t-gc2-small-lease-span.c": "e221568a914d812101bc5aef8834ac314703581a3cecb7d8871527dfe9ad2bf6",
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/check-lease/lease": "ae6e38abaecc1df951b1c7487532884d1db28d60b4fcf404ea095c8a8a302a5a"
+}

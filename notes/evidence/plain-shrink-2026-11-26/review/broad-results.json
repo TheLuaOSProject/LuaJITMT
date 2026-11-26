@@ -1,0 +1,295 @@
+[
+  {
+    "mode": "gcc",
+    "phase": "matrix",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "gcc",
+      "matrix"
+    ],
+    "exit": 0,
+    "seconds": 23.336898554989602
+  },
+  {
+    "mode": "gcc",
+    "phase": "smoke",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "gcc",
+      "smoke"
+    ],
+    "exit": 0,
+    "seconds": 1.5000696529750712
+  },
+  {
+    "mode": "gcc",
+    "phase": "public",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "gcc",
+      "public"
+    ],
+    "exit": 0,
+    "seconds": 1.387737543991534
+  },
+  {
+    "mode": "assert",
+    "phase": "matrix",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "assert",
+      "matrix"
+    ],
+    "exit": 0,
+    "seconds": 30.059792624990223
+  },
+  {
+    "mode": "assert",
+    "phase": "smoke",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "assert",
+      "smoke"
+    ],
+    "exit": 0,
+    "seconds": 1.8977454180130735
+  },
+  {
+    "mode": "assert",
+    "phase": "public",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "assert",
+      "public"
+    ],
+    "exit": 0,
+    "seconds": 1.5368331520003267
+  },
+  {
+    "mode": "asan",
+    "phase": "matrix",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "asan",
+      "matrix"
+    ],
+    "exit": 0,
+    "seconds": 50.068348717002664
+  },
+  {
+    "mode": "asan",
+    "phase": "smoke",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "asan",
+      "smoke"
+    ],
+    "exit": 0,
+    "seconds": 5.376960163004696
+  },
+  {
+    "mode": "asan",
+    "phase": "public",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "asan",
+      "public"
+    ],
+    "exit": 0,
+    "seconds": 3.476289349986473
+  },
+  {
+    "mode": "assert",
+    "phase": "progress",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "assert",
+      "progress"
+    ],
+    "exit": 0,
+    "seconds": 0.5404822389828041
+  },
+  {
+    "mode": "assert",
+    "phase": "lease",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "assert",
+      "lease"
+    ],
+    "exit": 0,
+    "seconds": 0.40989248899859376
+  },
+  {
+    "mode": "assert",
+    "phase": "traverse",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "assert",
+      "traverse"
+    ],
+    "exit": 0,
+    "seconds": 23.690857991023222
+  },
+  {
+    "mode": "asan",
+    "phase": "progress",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "asan",
+      "progress"
+    ],
+    "exit": 0,
+    "seconds": 0.6171311029756907
+  },
+  {
+    "mode": "asan",
+    "phase": "lease",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "asan",
+      "lease"
+    ],
+    "exit": 0,
+    "seconds": 0.5555575339822099
+  },
+  {
+    "mode": "asan",
+    "phase": "traverse",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "asan",
+      "traverse"
+    ],
+    "exit": 0,
+    "seconds": 51.823037711001234
+  },
+  {
+    "mode": "tsan",
+    "phase": "progress",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "tsan",
+      "progress"
+    ],
+    "exit": 0,
+    "seconds": 1.0960667679901235
+  },
+  {
+    "mode": "tsan",
+    "phase": "lease",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "tsan",
+      "lease"
+    ],
+    "exit": 0,
+    "seconds": 0.7453619209991302
+  },
+  {
+    "mode": "tsan",
+    "phase": "public",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "tsan",
+      "public"
+    ],
+    "exit": 0,
+    "seconds": 38.7247540380049
+  },
+  {
+    "mode": "gcc",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/extra.py",
+      "gcc"
+    ],
+    "exit": 0,
+    "seconds": 1.1897778729908168
+  },
+  {
+    "mode": "assert",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/extra.py",
+      "assert"
+    ],
+    "exit": 0,
+    "seconds": 1.097797836002428
+  },
+  {
+    "mode": "asan",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/extra.py",
+      "asan"
+    ],
+    "exit": 0,
+    "seconds": 1.6517967410036363
+  },
+  {
+    "mode": "tsan",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/extra.py",
+      "tsan"
+    ],
+    "exit": 0,
+    "seconds": 18.96221367799444
+  },
+  {
+    "mode": "noffi",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/extra.py",
+      "noffi"
+    ],
+    "exit": 0,
+    "seconds": 2.895116047002375
+  },
+  {
+    "mode": "nojit",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/extra.py",
+      "nojit"
+    ],
+    "exit": 0,
+    "seconds": 2.145888402010314
+  },
+  {
+    "mode": "nobuf",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/extra.py",
+      "nobuf"
+    ],
+    "exit": 0,
+    "seconds": 0.08363074198132381
+  }
+]

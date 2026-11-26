@@ -1,0 +1,202 @@
+Source-only ownership/reclamation audit, 2026-11-26
+Frozen source: 78f117627cdecbe83600d9e1d39c0b0f923459c1
+Source archive SHA-256: 912dd5db184305d4e5a82e53689213bd32363cf205858a9f105fea9bbb73ef0f
+Scope: managed worker attachment/exit, repeated detach, result handles,
+plain allocation free routing, dead allocator checkpoints and transfer.
+No runtime edits, test edits, builds, or timed runs performed by this audit.
+The private-table first-attachment diagnostic was not used.
+
+The active-worker memory growth has three separate sources. Empty plain
+arenas remain attached to dead allocators. Small native ownership records
+can legitimately retain a second arena. The whole dead TG body also stays
+allocated until a globally quiescent transfer/reclamation pass. Fixing only
+empty-arena trimming must not be reported as a full worker-churn bound.
+
+1. Retention of empty plain arenas is a concrete production gap.
+
+lj_tg.c1001-1013 admits runtime dead-TG reclamation only with n_threads==1,
+mt_live==0, mt_entering==0, n_workers==0, worker_active==0, no handshake,
+and the current actor being main_tg. Thus one parked managed peer, or a
+configured GC worker pool, blocks allocator transfer indefinitely. This
+is an intentional safety restriction of the existing raw-owner protocol,
+not evidence that merely removing those predicates would be safe.
+
+Dead allocators are prepared by safepoint_apply_dead_allocators at
+lj_safepoint.c1278-1295. RESET_ALLOC force-drains their intrusive queues
+and plain late bits (393-425), prepares only TRAVERSABLE, and restores
+PLAIN. Production sweep at lj_gc2.c6331-6488 processes traversable and
+Huge storage. Its dead empty trim at6440-6443 applies only to a just-finished
+traversable empty_reclaimed head, not owned[PLAIN]. A dead allocator's
+empty plain capacity is consequently neither allocatable by a live owner
+nor unmapped until global transfer/terminal teardown.
+
+Parent-owned baseline census independently corroborates this mechanism:
+/tmp/lj-worker-plain-retention-20261126-4u6_n8fl/baseline.stdout
+16 waves x4 workers, each followed by3 full collections while a parked
+sentinel remained alive: dead_tgs64, dead_plain_arenas128, empty64,
+blocks85, late0, actors0, queues0 at the last collected snapshot.
+After releasing the sentinel, disabling the GC pool and5 full collections:
+dead_tgs0, main/live plain arenas130, empty65. Logical heap fell from
+2137.34KiB to167.96KiB. This transfers capacity; it does not trim it.
+These are parent measurements, not a new measurement by this source audit.
+
+2. One likely live raw block per worker is finalizer-registration metadata.
+
+buffer.new invokes lj_udata_finreg_mt_rooted at lib_buffer.c323. Registration
+allocates GC2FinRegUDataNode through lj_mem_new_nothrow on the current
+worker at lj_gc2.c13994-14001. The default x64 node is32 bytes:
+GCRef obj, next, retired_next, uint32 active plus alignment (lj_obj.h827).
+The retired list explicitly retains these nodes until teardown
+(lj_obj.h2266; lj_gc2.c13967-13971,9206-9208). Physical frees appear only
+in lj_gc2_fini at2121-2141. A single retired record can pin an otherwise
+empty64KiB worker arena after buffer:free and all userdata finalizers finish.
+Confirm the census survivor by matching exact block-start addresses against
+the active and retired FINREG lists; source proves the retention policy,
+but does not identify every one of the85 measured starts.
+
+Runtime FINREG freeing is not a one-line addition to an existing writer.
+Registration walks raw nodes with point-in-time mem_registered probes
+(13987-13992). forget does likewise (14093-14112). Retire publishes the
+separate retired-list membership before best-effort active-spine unlink
+(14042-14083); a retired node can still be reachable from the active head.
+The current terminal lifetime protects both borrowed next pointers and
+failed unlinks. Earlier reclamation must cover every walker/publisher with
+a lifetime protocol and complete unlinking before retiring the storage.
+The current SMR writer by itself does not supply that missing discipline.
+
+3. Dead TG bodies account for substantial independently retained metadata.
+
+threading.spawn allocates sizeof(TGState) from the spawning parent before
+child attachment (lib_threading.c2103). Therefore its body usually appears
+in the main parent's plain arenas, not the child's owned plain list.
+TGState embeds two8KiB SSB buffers plus dispatch/hotcount, allocator,
+JIT and FFI metadata (lj_tg.h292-425). The parent's approximately30KiB/TG
+logical-accounting growth is consistent with those bodies; exact sizeof
+can be added to a diagnostic census without interpreting raw payloads.
+
+After a joined handle dies, its finalizer marks a still-registered Lua TG
+TGF_DEFER_FREE and clears the userdata's TG/child pointers
+(lib_threading.c1512-1547). Actual TG finalization/free occurs only after
+the globally gated registry/allocator reclaim (lj_tg.c1122-1218). Stable
+TG slots also remain allocated until global shutdown, by explicit policy
+(lj_tg.c1212-1218,1273-1310). Early TG removal is broader than arena trim:
+lj_tg_find_owner at1313-1325 returns a raw TG pointer, and lj_mem_free
+routes through it (lj_gc.c4767-4787,5973-5978). Other live mutators are
+currently excluded from racing a transfer by the global admissibility
+predicates. Retained SSB nodes and stable registry borrows are additional
+negative vetoes, not substitutes for that exclusion.
+
+4. The detach/result ownership order appears consistent.
+
+Worker prepare attaches its fresh TG before claiming/using the child state
+(lib_threading.c965-989). Stack rehome allocates into its own allocator
+(lj_state.c149-180). Completion publishes results through the child stack
+and result-GC handoff, then cleanup releases state ownership, detaches,
+clears TLS, drops mt_live, and finally publishes DONE (lib_threading.c
+1067-1117). The last drop therefore cannot make transfer legal while the
+worker still needs its state/TG for cleanup.
+
+lj_tg_detach checks physical actor ownership and all active native/JIT/raw
+scopes, closes stable registry admission, flushes roots/SSB/accounting,
+frees tmpbuf, clears Lua-state and TLS publications, retires the actor,
+then publishes DEAD and decrements n_threads once (813-924). A second
+detach returns immediately819-820. Public threading_detach is also a
+no-op after TLS has been cleared (lib_threading.c2430-2446).
+
+join copies results under a child-state ownership claim and deliberately
+keeps the child stack for subsequent joins (lib_threading.c1403-1423).
+THREAD userdata traversal marks that child (lj_gc2.c20996-21017). Therefore
+exit must not free the child stack or a worker-created shared buffer simply
+because its allocating TG is dead. Child stack release belongs to the
+ordinary THREAD destructor/preparation path (lj_state.c877-938).
+
+Only root-anchor overflow blocks are an obvious remaining TG-private plain
+cache: they allocate at lj_tg.c128/154 and free only at245-257 during fini.
+Releasing them at detach would need root_anchor_top==0 and a proven owner/
+scanner boundary. Ordinary buffer helpers use the embedded slots, so this
+does not explain one persistent block per worker in the simple workload.
+tmpbuf already releases at detach868. JIT event snapshot/root caches use
+libc malloc/free (lj_trace.c1597-1606), and dynamic SSB nodes use libc
+malloc/free; their embedded16KiB buffers cannot be independently freed.
+
+5. No lost durable plain-free wake was found under current transfer rules.
+
+Late intent publishes its bit before remote_pending=1 (lj_arena.c5857-5865).
+Hinted drains exchange pending to0 before scanning (6475-6492), preserving
+a later producer's wake. Blocked queue/gate and side-ownership cases rearm
+pending (6243-6255,6388-6417). Transfer force-drains source and carries a
+residual wake to destination (8377-8383,8443-8444). Current global transfer
+exclusion prevents a lawful producer from appearing behind that exchange;
+weakening it would require redesigning wake routing as well as TG lifetime.
+
+Dead owners have no ordinary allocation consumer. RESET_ALLOC executes
+once per prepare_epoch/cycle (lj_safepoint.c405-425), while sweep wake only
+wakes a worker during SWEEP (lj_gc2.c2183-2189). A plain free or last-reader
+release after the dead owner's checkpoint can therefore wait until another
+full cycle or transfer; the bit remains durable. A bounded dead-plain sweep
+step should drain the exact candidate before trying empty certification,
+so it need not add another whole cycle of physical retention.
+
+6. Suggested bounded empty-plain trimming design.
+
+Use gc2_sweep_reclaim_enter/leave (lj_gc2.c6130-6192), the same physical
+writer used by the existing dead traversable trim. Do not unmap inside
+safepoint_apply_dead_allocators, which holds ordinary SMR read1285-1295.
+Only act on DEAD+ARENA_INTERNAL sources; never mutate a live owner's bins.
+
+Charge one candidate arena examination per owner-progress budget unit.
+Use a dead-allocator cursor/pass epoch so a nonempty or reader-blocked head
+cannot hide empty successors and repeated steps do not rescan from head.
+Explicitly account pending scans in sweep_pending if a cycle promises to
+finish the pass. A paused reader must make its candidate defer, not wait
+or prevent independent candidates from progressing.
+
+For each candidate in owned[PLAIN], exclude lifecycle transitions; optionally
+drain its intrusive and late queues first using existing owner helpers.
+An early bitmap check can avoid closing admission for obviously live arenas.
+Then arena_unmap_claim2053 closes fresh admission and requires zero existing
+counts/no writer seal. Under that claim recheck every block and late word0,
+arena_unmap_side_empty2115 (recovery/root/lifetime/dtor/token/descriptor),
+gcprep_pending0, and remote_freeNULL. An exact retained plain destructor
+already vetoes terminal claim through its SEALED gate; a defensive explicit
+plain_destructNULL check is also reasonable. mark[] need not be zero: free
+run boundaries live there. Do not mistake remote_pending1 alone for live
+storage; it is only an advisory allocator-wide hint.
+
+Only exact registry deletion (arena_registry_delete7080) grants the final
+unmap permission, including readers entering via SWEEP_STABLE and handing
+off from the registry to an arena count. On refusal, restore terminal
+admission and preserve the linked candidate for later work. On success,
+unlink the owned node, decrement owned_count, clear a matching bump pointer,
+and clear all dead plain bins/binmask before unmapping. Clearing bins is
+safe for a dead source; transfer later rebuilds all free runs from bitmaps
+(7598-7612,8424). Do not leave any bin or cursor pointing into an unmapped
+arena. Preserve a remaining arena's unused bump-tail boundary for transfer.
+
+7. Meaningful deterministic acceptance cases.
+
+Keep a real managed sentinel parked on a public channel while repeated
+short workers create/churn buffers, join, validate returned bytes, free/drop
+results and handles, and run full GC. Record empty arenas, live block
+starts, late/queue/count state, dead TG count, logical bytes, and RSS/VM.
+Compare retained handles/repeated join against dropped handles explicitly.
+Classify raw survivors by FINREG metadata, child stack, root-anchor overflow
+and unknown; do not infer a leak from block count alone. Empty trimming must
+reduce dead empty arenas while retaining meaningful live results and readers.
+
+For a deterministic physical helper fixture, create a DEAD allocator whose
+plain list has a retained reader/registered locator on candidateA and an
+independently empty candidateB behind it. Under the real sweep writer,
+verify A stays mapped and B unmaps while the reader remains paused; verify
+ordinary SMR readers veto the writer, exact registry readers veto only A,
+and every registry/bin/bump/count remains consistent. Then release the
+reader, perform a later bounded step and prove A becomes reclaimable.
+Include a nonempty FINREG-pinned arena and an explicit late-free target to
+prove the new helper cannot free either before its exact owner drains.
+
+Finally release the sentinel/pool, reclaim TGs and allocate from transferred
+capacity; verify correct owner_tid routing, no stale bins/bump links, no
+double n_threads decrement on repeated detach, retained join results, and
+lua_close completion. Empty trimming alone should be accepted/reported only
+as that narrower improvement until FINREG and TG metadata lifetimes are
+addressed with their own reader and transfer proof.

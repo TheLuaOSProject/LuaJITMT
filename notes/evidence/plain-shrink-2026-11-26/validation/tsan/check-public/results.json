@@ -1,0 +1,24 @@
+[
+  {
+    "name": "public-joff",
+    "command": [
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/tsan/src/luajit",
+      "-joff",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/tsan/tests/t-buffer-concurrent-public.lua"
+    ],
+    "seconds": 21.488124277995666,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "public-jon",
+    "command": [
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/tsan/src/luajit",
+      "-jon",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/tsan/tests/t-buffer-concurrent-public.lua"
+    ],
+    "seconds": 17.101340822002385,
+    "exit": 0,
+    "test": true
+  }
+]

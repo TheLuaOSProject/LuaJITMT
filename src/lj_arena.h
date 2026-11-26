@@ -182,7 +182,7 @@ typedef struct GCAhdr {
   union {
     void *retire_obj;  /* Exact GC header for variable-offset huge bodies. */
     /* Small plain destructor's exact retained writer token. Ordinary frees
-    ** and transient realloc writers never publish this identity. */
+    ** and retained logical shrinks never publish this identity. */
     void *plain_destruct;
   };
   void *progress_g;  /* Immutable global_State used for progress wakes. */
@@ -337,10 +337,13 @@ struct GCArena {
   ** be published after terminal bitmap commit. A bit naming committed live
   ** storage persists across adoption until a sweep or plain owner drain. */
   uint64_t late[LJ_ARENA_WORDS];
-  /* Per-cell allocation coverage for every fixed/interior cdata body. READY
+  /* Traversable: per-cell coverage for every fixed/interior cdata body. READY
   ** remains start-only and is published after the complete coverage range and
   ** descriptor. Boundaries plus coverage and GCcdata's byte-tail field give an
-  ** exact extent without taxing ordinary Lua allocation hot paths. */
+  ** exact extent without taxing ordinary Lua allocation hot paths.
+  ** Plain: a start-only oversize bit records a logical shrink which retained
+  ** its original physical extent. This is neither type nor lifetime authority;
+  ** only full-span free-run publication clears it before reuse. */
   uint64_t cdata[LJ_ARENA_WORDS];
   /* Header-discovery publication for traversable allocation starts. block=1
   ** and ready=0 is a constructor-owned pending allocation: sweep pins it as
@@ -948,6 +951,10 @@ LJ_FUNC void lj_arena_test_plain_claim_pause(int enabled);
 LJ_FUNC uint32_t lj_arena_test_plain_claim_paused(void);
 LJ_FUNC void lj_arena_test_plain_commit_pause(GCArena *a, int enabled);
 LJ_FUNC uint32_t lj_arena_test_plain_commit_paused(void);
+LJ_FUNC void lj_arena_test_plain_shrink_pause(GCArena *a, int enabled);
+LJ_FUNC uint32_t lj_arena_test_plain_shrink_paused(void);
+LJ_FUNC void lj_arena_test_alloc_fail(int enabled);
+LJ_FUNC uint64_t lj_arena_test_alloc_failures(void);
 LJ_FUNC void lj_arena_test_plain_admit_pause(int enabled);
 LJ_FUNC uint32_t lj_arena_test_plain_admit_paused(void);
 LJ_FUNC void lj_arena_test_remote_publish_pause(int enabled);
@@ -1354,6 +1361,25 @@ static LJ_AINLINE uint32_t lj_arena_bm_get(const uint64_t *bm, uint32_t i)
 static LJ_AINLINE uint32_t lj_arena_cdata_get(const GCArena *a, uint32_t i)
 {
   return (uint32_t)((la_load64_acq(&a->cdata[i >> 6]) >> (i & 63)) & 1u);
+}
+
+/* PLAIN has no typed coverage. A retained shrink uses only the start bit;
+** readers still discover the unchanged physical allocation through block and
+** mark. Callers validate the small plain arena and start before accessing this
+** plane. The caller owns the allocation across publication and every later
+** realloc/free, just as for the ordinary lua_Alloc contract. */
+static LJ_AINLINE uint32_t lj_arena_plain_oversize_acq(const GCArena *a,
+                                                     uint32_t i)
+{
+  return (uint32_t)((la_load64_acq(&a->cdata[i >> 6]) >> (i & 63)) & 1u);
+}
+
+static LJ_AINLINE void lj_arena_plain_oversize_set_rel(GCArena *a, uint32_t i)
+{
+  /* Release-fence + atomic OR pairs with a later acquire of this bit without
+  ** adding a new primitive or a retry loop to shrink. */
+  la_fence_rel();
+  (void)la_bit_test_and_set64(&a->cdata[i >> 6], i & 63);
 }
 
 static LJ_AINLINE uint32_t lj_arena_ready_get(const GCArena *a, uint32_t i)

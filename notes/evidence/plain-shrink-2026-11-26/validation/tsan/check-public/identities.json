@@ -1,0 +1,5 @@
+{
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/tsan/src/luajit": "093d039c2b61988928766ee46d18e34837f1afd6d85bcadcad509dcb1bc9e7eb",
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/tsan/src/libluajit.a": "b65bac2e40507e2e9604f9cb0e84452c553b286b6ce6216503bf56835c6904a7",
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/tsan/tests/t-buffer-concurrent-public.lua": "e7f61c097347eb0b7cb968db3d60e232c17d0ddeb0eb3aea436b1e4e30e3e40b"
+}

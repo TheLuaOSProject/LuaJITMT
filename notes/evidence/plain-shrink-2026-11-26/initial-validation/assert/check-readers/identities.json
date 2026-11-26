@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-plain-shrink-20261126-7izllbqs/assert/src/luajit": "5c9870ff4a2b5072f6bf9a241b35d37c1915e561b68ad8ced685360b923220e8",
+  "/tmp/lj-plain-shrink-20261126-7izllbqs/assert/src/libluajit.a": "e15021408e6e18d9803c37955b2d123e915c2ef2087765e11e0d86faa01697cd",
+  "/tmp/lj-plain-shrink-20261126-7izllbqs/assert/tests/t-arena-plain-progress.c": "d1289617afe8630d11a5127414adf80b285d66e1cab4148a59f32183300d4564",
+  "/tmp/lj-plain-shrink-20261126-7izllbqs/assert/check-readers/readers": "fe6032cd394c727c0d98f8e635c8f438eae85631a08858e2204a09fc2b9514b6"
+}

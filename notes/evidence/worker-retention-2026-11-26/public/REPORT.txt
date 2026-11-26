@@ -1,0 +1,29 @@
+Public multiworker buffer churn and repeated worker exit
+
+Revision 78f117627cdecbe83600d9e1d39c0b0f923459c1
+Executable SHA256 d092d949bbbae32eed53f05e1ee679be33dd30c96cc62ade7bb64e6302ee88a9
+Lua workload SHA256 8d00495348a5e60542b0106c35388ae3805c47be63c4316803d6f9c973bacbcc
+
+All 20 full configurations and both canaries passed their payload, channel, join and retained-result checks. They performed 48,460,000 verified buffer cycles. No runtime emitted stderr or exceeded the 512 MiB / 120 s watchdog limits. Peak RSS was 21,480 KiB; the longest process took 33.283 s. Runtime CPUs 8–15 have been released. Frozen sources, executable/library outputs and workload hashes were reverified after the run.
+
+The diagnostic found continuing memory retention across short-worker exits while an unrelated long-lived sentinel remains alive. Each short handle and transient join result was dropped before the checkpoints. Three complete full GCs followed wave 6 and wave 12 while the sentinel stayed parked on its public channel. All checkpoint collector phases are IDLE, and cycle counts advanced. Physical RSS still grows in every configuration:
+
+JIT, short workers, GC workers, RSS after wave6/wave12 fullGC (KiB), growth (KiB), logical growth (bytes), cycle-start counts
+off 1 0 6900/9488 +2588 +279260 362/841
+off 1 2 8312/12348 +4036 +285604 547/1104
+off 4 0 10544/16404 +5860 +830200 64/127
+off 4 2 13164/21056 +7892 +849656 64/127
+on  1 0 6264/7844 +1580 +270156 1564/3128
+on  1 2 6220/7776 +1556 +281680 1544/3078
+on  4 0 10496/15728 +5232 +834132 167/280
+on  4 2 10292/15860 +5568 +847568 215/346
+
+The four-short-worker interpreter / two-GC-worker case grows from 13,164 to 21,056 KiB after these full-GC checkpoints. The corresponding JIT case grows from 10,292 to 15,860 KiB. OS thread counts remain four at these checkpoints: main, sentinel and two GC workers; all short workers have exited. The no-GC-pool checkpoints similarly contain only main plus sentinel.
+
+Logical Lua byte accounting also grows: about 270–286 thousand bytes per six waves with one short worker, and 830–850 thousand bytes with four. The growth therefore cannot be described entirely as unaccounted raw arena capacity. RSS includes native/TG caches and live runtime metadata; this public diagnostic alone does not prove an unreachable allocation leak or identify which arenas can be safely reused. Root's independent exact alive/dead TG census is needed for that attribution. Ending the sentinel and GC pool followed by three more full GCs reduces RSS in several cases, but leaves it above the starting footprint. Reusable mapped capacity is not by itself a leak.
+
+The ordinary matrix covers one, two and four workers with zero/two GC workers and interpreter/JIT execution. Its first four waves retain completed handles and their returned buffers; then those handles are dropped and four more waves drop each completed set immediately. No full GC is forced during these eight waves. GC cycles advance during normal churn, and every active-batch checkpoint verifies that all worker handles still report running. After eight waves, a further five main-thread buffer batches run with ordinary automatic GC before separately labeled final full collections. All ordinary configurations pass, but their final RSS remains roughly 5.8–10.8 MiB versus starting RSS around 3.6–4.3 MiB. This finite run is not a bounded multiworker-memory proof.
+
+METHODOLOGY.txt and churn.lua specify the protocol. Each process directory retains the full command, exact binary/script hashes, stdout/stderr, synchronized /proc memory snapshots, all numeric gcstats fields and watchdog results. summary.csv gives process endpoints; wave-summary.csv preserves retained/dropped/full-GC checkpoints; sentinel-checkpoints.csv isolates the two directly comparable sentinel checkpoints. The complete matrix and both canaries are retained; no failures or timing rows were filtered out.
+
+No shared source edits were made. These measurements concern Linux x86_64 public spawn/exit/join/handle-drop behavior, not an unjoined-thread destructor stress test, stock performance parity, full lock freedom, or Windows/macOS release readiness.

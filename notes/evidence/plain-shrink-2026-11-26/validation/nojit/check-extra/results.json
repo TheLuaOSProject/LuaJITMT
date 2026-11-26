@@ -1,0 +1,30 @@
+[
+  {
+    "name": "buffer-basic",
+    "command": [
+      "taskset",
+      "-c",
+      "0-7",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/nojit/src/luajit",
+      "tests/t-buffer-thread-safety.lua"
+    ],
+    "environment": {},
+    "exit": 0,
+    "seconds": 1.1706118269939907
+  },
+  {
+    "name": "buffer-public",
+    "command": [
+      "taskset",
+      "-c",
+      "0-7",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/nojit/src/luajit",
+      "tests/t-buffer-concurrent-public.lua"
+    ],
+    "environment": {
+      "LJ_BUFFER_LARGE": "1"
+    },
+    "exit": 0,
+    "seconds": 0.920004723011516
+  }
+]

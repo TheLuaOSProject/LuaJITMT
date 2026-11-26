@@ -1,0 +1,11 @@
+{
+  "processes": 22,
+  "full_matrix_processes": 20,
+  "all_exit_zero": true,
+  "all_stderr_empty": true,
+  "all_inputs_and_outputs_match": true,
+  "sentinel_checkpoint_pairs": 8,
+  "all_sentinel_checkpoints_idle": true,
+  "all_sentinel_checkpoints_zero_retained_short_handles": true,
+  "total_verified_cycles": 48460000
+}

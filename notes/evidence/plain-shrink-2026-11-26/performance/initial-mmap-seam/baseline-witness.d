@@ -1,0 +1,23 @@
+/tmp/lj-plain-shrink-perf-20261126-s5650_mv/baseline-witness: \
+ /tmp/lj-plain-shrink-perf-20261126-s5650_mv/witness.c \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lua.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/luaconf.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lauxlib.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lua.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lj_obj.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lj_def.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lj_arch.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lj_atomic.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lj_gc2token.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lj_tgregistry.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lj_tgslot.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lj_arena.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lj_gc2.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lj_obj.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lj_arena.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lj_prng.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lj_tg.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lj_bc.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lj_ctype.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lj_gc.h \
+ /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/lj_gc2.h

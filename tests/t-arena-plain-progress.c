@@ -219,36 +219,39 @@ static void check_shrink(lua_State *L)
   OwnerWork work = { alloc, &G(L)->prng, p, NULL, 0 };
   pthread_t owner;
   size_t span;
-  void *moved;
+  void *shrunk;
   assert(p && q && lj_arena_of(q) == a);
   memset(p, 0xa1, 128); memset(q, 0x6e, 64);
-  lj_arena_test_plain_commit_pause(a, 1);
+  lj_arena_test_plain_shrink_pause(a, 1);
   assert(pthread_create(&owner, NULL, shrink_owner, &work) == 0);
-  while (!lj_arena_test_plain_commit_paused()) sched_yield();
+  while (!lj_arena_test_plain_shrink_paused()) sched_yield();
   assert(lj_gc2_storage_lease_try(G(L), q, 64, &unrelated, NULL));
-  assert(!lj_gc2_storage_lease_try(G(L), p, 128, &target, NULL));
-  lj_arena_test_plain_commit_pause(a, 0);
+  assert(lj_gc2_storage_lease_try(G(L), p, 128, &target, &span));
+  assert(span == 128 && p[0] == 0xa1 && p[127] == 0xa1);
+  assert(lj_arena_test_plain_shrink_paused());
+  lj_arena_test_plain_shrink_pause(a, 0);
   assert(pthread_join(owner, NULL) == 0 && work.result == p);
-  assert(lj_gc2_storage_lease_try(G(L), p, 64, &target, &span));
-  assert(span == 64 && p[0] == 0xa1 && p[63] == 0xa1);
+  assert(lj_arena_plain_oversize_acq(a, lj_arena_cellof(p)));
+  assert(p[0] == 0xa1 && p[127] == 0xa1);
   assert(q[0] == 0x6e && q[63] == 0x6e);
   lj_gc2_lease_release(&target);
-  assert(!lj_gc2_storage_lease_try(G(L), p, 128, &target, NULL));
   lj_gc2_lease_release(&unrelated);
   lj_arena_free(alloc, p, 64); lj_arena_free(alloc, q, 64);
 
   /* A reader which predates shrink keeps its original full extent. Shrink
-  ** moves on admission conflict and returns while that reader stays held. */
+  ** returns the same allocation while that reader stays held; a later free
+  ** with the smaller logical size must still reclaim its complete span. */
   p = (unsigned char *)lj_arena_alloc(alloc, &G(L)->prng, 128, 0);
   assert(p); memset(p, 0xb2, 128);
   assert(lj_gc2_storage_lease_try(G(L), p, 128, &target, NULL));
-  moved = lj_arena_realloc(alloc, &G(L)->prng, p, 128, 64, 0);
-  assert(moved && moved != p && memcmp(moved, p, 64) == 0);
+  shrunk = lj_arena_realloc(alloc, &G(L)->prng, p, 128, 64, 0);
+  assert(shrunk == p);
+  assert(p[0] == 0xb2 && p[127] == 0xb2);
+  lj_arena_free(alloc, shrunk, 64);
   assert(p[0] == 0xb2 && p[127] == 0xb2);
   lj_gc2_lease_release(&target);
   (void)lj_arena_remote_free_drain(alloc);
   assert(!lj_arena_bm_get(lj_arena_of(p)->block, lj_arena_cellof(p)));
-  lj_arena_free(alloc, moved, 64);
 }
 
 #if LJ_HASBUFFER

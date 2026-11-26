@@ -1,0 +1,7 @@
+{
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/src/luajit": "32b056949fb5f752c635199196c06933d9fd032a65fb513b5ec40964dd922887",
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/src/libluajit.a": "e7955ceffdb546b7844377efc4ccb77ff98081a0425ea605565197d5fa1d8895",
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/tests/t-buffer-thread-safety.lua": "e90325db1a6c8cd661eede720047e03a6e3f08c4be611b921cc6e163f88a7155",
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/tests/t-buffer-consume.c": "5738fa68b3c7bb9e28b39ca1f99b7a2cc17a17ff14c47bbc3b73063f322d6334",
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/check-smoke/consume": "bfbd8d83d74e750185ccb2c7ffec5351051a2c36ee24d2ad72b2ecc9801b6c65"
+}

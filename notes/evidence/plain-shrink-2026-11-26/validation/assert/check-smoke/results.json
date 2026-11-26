@@ -1,0 +1,64 @@
+[
+  {
+    "name": "buffer-joff",
+    "command": [
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/assert/src/luajit",
+      "-joff",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/assert/tests/t-buffer-thread-safety.lua"
+    ],
+    "seconds": 0.5646707410051022,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "buffer-jon",
+    "command": [
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/assert/src/luajit",
+      "-jon",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/assert/tests/t-buffer-thread-safety.lua"
+    ],
+    "seconds": 0.9689779820037074,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "consume-build",
+    "command": [
+      "clang",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-ftrivial-auto-var-init=pattern",
+      "-I/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/assert/src",
+      "-I/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/assert/tests",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/assert/tests/t-buffer-consume.c",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/assert/src/libluajit.a",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_str_new",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/assert/check-smoke/consume"
+    ],
+    "seconds": 0.2643806499836501,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "consume",
+    "command": [
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/assert/check-smoke/consume"
+    ],
+    "seconds": 0.03269132602144964,
+    "exit": 0,
+    "test": true
+  }
+]

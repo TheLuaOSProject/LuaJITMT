@@ -1,0 +1,6 @@
+{
+  "base": "78f117627cdecbe83600d9e1d39c0b0f923459c1",
+  "prior": "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6",
+  "purpose": "Infallible small PLAIN logical shrink with complete physical-extent reclamation",
+  "initial_package": "/tmp/lj-plain-shrink-20261126-7izllbqs"
+}

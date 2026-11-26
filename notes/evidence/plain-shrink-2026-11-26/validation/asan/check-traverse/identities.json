@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/src/luajit": "32b056949fb5f752c635199196c06933d9fd032a65fb513b5ec40964dd922887",
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/src/libluajit.a": "e7955ceffdb546b7844377efc4ccb77ff98081a0425ea605565197d5fa1d8895",
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/tests/t-gc2-traverse.c": "65e693eae2712a250c0b12e8cf40a965c2f560aea0b08b2c1361bea9a0d1006f",
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/check-traverse/traverse": "65844bd9fa07f05274a179480254c7c620a66d09ffe8c5184ed2916966b4bc38"
+}

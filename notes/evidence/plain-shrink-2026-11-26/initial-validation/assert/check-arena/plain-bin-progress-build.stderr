@@ -1,0 +1,31 @@
+In file included from /tmp/lj-plain-shrink-20261126-7izllbqs/assert/tests/t-arena-plain-bin-progress.c:11:
+/tmp/lj-plain-shrink-20261126-7izllbqs/assert/src/lj_arena.h:1373:3: error: call to undeclared function 'lj_assert_fail'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+ 1373 |   lj_assertX(a && !(lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE) &&
+      |   ^
+/tmp/lj-plain-shrink-20261126-7izllbqs/assert/src/lj_def.h:372:28: note: expanded from macro 'lj_assertX'
+  372 | #define lj_assertX(c, ...)      lj_assert_check(NULL, (c), __VA_ARGS__)
+      |                                 ^
+/tmp/lj-plain-shrink-20261126-7izllbqs/assert/src/lj_def.h:362:10: note: expanded from macro 'lj_assert_check'
+  362 |    (void)lj_assert_fail((g), __FILE__, __LINE__, __func__, __VA_ARGS__))
+      |          ^
+/tmp/lj-plain-shrink-20261126-7izllbqs/assert/src/lj_arena.h:1373:3: note: did you mean '__assert_fail'?
+/tmp/lj-plain-shrink-20261126-7izllbqs/assert/src/lj_def.h:372:28: note: expanded from macro 'lj_assertX'
+  372 | #define lj_assertX(c, ...)      lj_assert_check(NULL, (c), __VA_ARGS__)
+      |                                 ^
+/tmp/lj-plain-shrink-20261126-7izllbqs/assert/src/lj_def.h:362:10: note: expanded from macro 'lj_assert_check'
+  362 |    (void)lj_assert_fail((g), __FILE__, __LINE__, __func__, __VA_ARGS__))
+      |          ^
+/usr/include/assert.h:69:13: note: '__assert_fail' declared here
+   69 | extern void __assert_fail (const char *__assertion, const char *__file,
+      |             ^
+In file included from /tmp/lj-plain-shrink-20261126-7izllbqs/assert/tests/t-arena-plain-bin-progress.c:11:
+/tmp/lj-plain-shrink-20261126-7izllbqs/assert/src/lj_arena.h:1381:3: error: call to undeclared function 'lj_assert_fail'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+ 1381 |   lj_assertX(a && !(lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE) &&
+      |   ^
+/tmp/lj-plain-shrink-20261126-7izllbqs/assert/src/lj_def.h:372:28: note: expanded from macro 'lj_assertX'
+  372 | #define lj_assertX(c, ...)      lj_assert_check(NULL, (c), __VA_ARGS__)
+      |                                 ^
+/tmp/lj-plain-shrink-20261126-7izllbqs/assert/src/lj_def.h:362:10: note: expanded from macro 'lj_assert_check'
+  362 |    (void)lj_assert_fail((g), __FILE__, __LINE__, __func__, __VA_ARGS__))
+      |          ^
+2 errors generated.

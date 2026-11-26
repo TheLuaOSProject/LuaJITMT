@@ -1,0 +1,38 @@
+{
+  "build_command": [
+    "gcc",
+    "-std=gnu11",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-I/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src",
+    "-I/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/tests",
+    "/tmp/lj-worker-plain-retention-20261126-4u6_n8fl/census-finreg.c",
+    "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/libluajit.a",
+    "-Wl,-E",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-worker-plain-retention-20261126-4u6_n8fl/baseline-finreg"
+  ],
+  "build_exit": 0,
+  "inputs": {
+    "/tmp/lj-worker-plain-retention-20261126-4u6_n8fl/census-finreg.c": "fc26a70b80f28cdd718f78af273dc3094bdb15ad6f561509bb3f33cfd1f05505",
+    "/tmp/lj-worker-plain-retention-20261126-4u6_n8fl/census-finreg.lua": "5679b5d5aaa62c7cef37ec61f2e6b2046441762de1a9b67ab710f7a165108a22",
+    "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/libluajit.a": "3bb7eeeb89592e2122775129163efafeca4f74e32a6aa13143c93c56abca0e74",
+    "/tmp/lj-worker-plain-retention-20261126-4u6_n8fl/baseline-finreg": "0f77f0d65fb49e87299ff1d62520471771d059167f0111031c95a215c8f5da35"
+  },
+  "run_command": [
+    "taskset",
+    "-c",
+    "0-7",
+    "/tmp/lj-worker-plain-retention-20261126-4u6_n8fl/baseline-finreg",
+    "/tmp/lj-worker-plain-retention-20261126-4u6_n8fl/census-finreg.lua"
+  ],
+  "exit": 0,
+  "seconds": 2.0659525269875303
+}

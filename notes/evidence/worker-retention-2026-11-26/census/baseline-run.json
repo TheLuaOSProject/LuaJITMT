@@ -1,0 +1,11 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-7",
+    "/tmp/lj-worker-plain-retention-20261126-4u6_n8fl/baseline-census",
+    "/tmp/lj-worker-plain-retention-20261126-4u6_n8fl/census.lua"
+  ],
+  "exit": 0,
+  "seconds": 2.1169744590006303
+}

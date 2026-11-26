@@ -1,0 +1,59 @@
+[
+  {
+    "name": "buffer-joff",
+    "command": [
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc/src/luajit",
+      "-joff",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc/tests/t-buffer-thread-safety.lua"
+    ],
+    "seconds": 0.5668610819848254,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "buffer-jon",
+    "command": [
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc/src/luajit",
+      "-jon",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc/tests/t-buffer-thread-safety.lua"
+    ],
+    "seconds": 0.7646917110250797,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "consume-build",
+    "command": [
+      "gcc",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc/src",
+      "-I/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc/tests",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc/tests/t-buffer-consume.c",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc/src/libluajit.a",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_str_new",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc/check-smoke/consume"
+    ],
+    "seconds": 0.1139401080145035,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "consume",
+    "command": [
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc/check-smoke/consume"
+    ],
+    "seconds": 0.0074353129894007,
+    "exit": 0,
+    "test": true
+  }
+]

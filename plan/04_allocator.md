@@ -16,8 +16,12 @@ allowing readers of unrelated live storage through the admission generation.
 Late drains freeze their target cohort before admitting later readers. See
 [the reuse review](../notes/plain-storage-reuse-2026-11-26.md),
 [the reader-progress review](../notes/plain-reader-progress-2026-11-26.md), and
-[the current completion plan](15_x64_linux_completion.md), including the
-remaining same-allocation in-place-shrink progress obligation.
+[the shrink review](../notes/plain-shrink-2026-11-26.md). Positive small PLAIN
+shrinks retain their original physical span and return the same address without
+allocation or writer exclusion. A start flag lets every eventual free recover
+that full span despite the reduced logical size. Huge shrink, retained-capacity
+cost and reclamation across worker exit remain obligations in
+[the current completion plan](15_x64_linux_completion.md).
 
 ## 4.1 Constants & layout
 

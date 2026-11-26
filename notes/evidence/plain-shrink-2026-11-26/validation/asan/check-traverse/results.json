@@ -1,0 +1,47 @@
+[
+  {
+    "name": "progress-build",
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/check-traverse/progress.d",
+      "-I/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/src",
+      "-I/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/tests",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/tests/t-gc2-traverse.c",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/src/libluajit.a",
+      "-fsanitize=address",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/check-traverse/traverse"
+    ],
+    "seconds": 8.191930885019246,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "progress",
+    "command": [
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/asan/check-traverse/traverse"
+    ],
+    "seconds": 43.49207317302353,
+    "exit": 0,
+    "test": true
+  }
+]

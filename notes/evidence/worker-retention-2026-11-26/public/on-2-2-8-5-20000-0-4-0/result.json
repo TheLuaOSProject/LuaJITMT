@@ -1,0 +1,26 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "8-15",
+    "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/luajit",
+    "-jon",
+    "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/churn.lua",
+    "2",
+    "2",
+    "8",
+    "5",
+    "20000",
+    "0",
+    "4",
+    "0"
+  ],
+  "binary_sha256": "d092d949bbbae32eed53f05e1ee679be33dd30c96cc62ade7bb64e6302ee88a9",
+  "script_sha256": "8d00495348a5e60542b0106c35388ae3805c47be63c4316803d6f9c973bacbcc",
+  "started": 1795713678.2295797,
+  "max_rss_kib": 8960,
+  "max_threads": 5,
+  "stop_reason": null,
+  "exit": 0,
+  "seconds": 12.223679345013807
+}

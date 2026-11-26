@@ -1,0 +1,50 @@
+[
+  {
+    "name": "progress-build",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-Wno-error=tsan",
+      "-fsanitize=thread",
+      "-fno-omit-frame-pointer",
+      "-fno-pie",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/tsan/check-progress/progress.d",
+      "-I/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/tsan/src",
+      "-I/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/tsan/tests",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/tsan/tests/t-buffer-progress.c",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/tsan/src/libluajit.a",
+      "-fsanitize=thread",
+      "-no-pie",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/tsan/check-progress/progress"
+    ],
+    "seconds": 0.36724395598866977,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "progress",
+    "command": [
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/tsan/check-progress/progress"
+    ],
+    "seconds": 0.6228521640005056,
+    "exit": 0,
+    "test": true
+  }
+]

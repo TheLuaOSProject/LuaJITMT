@@ -1,0 +1,47 @@
+{
+  "baseline_tree": "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc",
+  "candidate_tree": "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc",
+  "baseline_revision": "78f117627",
+  "cpu": 8,
+  "scope": "small PLAIN shrink stability, capacity retention and direct allocation/free timing; huge shrink unchanged",
+  "workspace_head": "78f117627cdecbe83600d9e1d39c0b0f923459c1",
+  "library_sha256": {
+    "baseline": "3bb7eeeb89592e2122775129163efafeca4f74e32a6aa13143c93c56abca0e74",
+    "candidate": "0e514cd5c35218c6ff012b60589739c3f49e28fd0272b4beff3c84e42d0ed894"
+  },
+  "luajit_sha256": {
+    "baseline": "d092d949bbbae32eed53f05e1ee679be33dd30c96cc62ade7bb64e6302ee88a9",
+    "candidate": "aa15b67e1a1764714dd0d2e82623be9b53fe3f29b24d92db295faab19fb16dcf"
+  },
+  "source_sha256": {
+    "witness.c": "f33a81432b2ea72fb91427616b171fa24fcdfe32d69fcc2c2c6341a6ab9cbca8",
+    "hot.c": "78034de6bdbc0974c3b486f4a8c63c095707bcff045dd61494d6046b1a353913",
+    "retention.c": "990c956be3699782e7e09622132039aa38d691504487e938deba60d57c46dc21"
+  },
+  "status": "complete",
+  "hot_processes": 30,
+  "retention_processes": 36,
+  "cpu8_released": true,
+  "runtime_input_count": {
+    "baseline": 228,
+    "candidate": 228
+  },
+  "final_runtime_invocations": 74,
+  "expected_baseline_witness_failures": 2,
+  "initial_seam_runtime_invocations": 4,
+  "rebuild_controls": 4,
+  "all_final_runtime_stderr_empty": true,
+  "all_final_results_expected": true,
+  "source_and_binary_reverification": "passed",
+  "runtime_changed_paths": [
+    "src/lj_arena.c",
+    "src/lj_arena.h"
+  ],
+  "candidate_source_hashes": {
+    "src/lj_arena.c": "1d7468f5a975d1255d8ea69ca72beb284a5e9a85f59046a058c9919fcf822ed5",
+    "src/lj_arena.h": "c9fb420ebd3c0b24bb77bcd61fe867bc10ca67086dc9f56d2947782afd55bcde"
+  },
+  "capacity_tradeoff": "retain original small allocation through logical shrink, maximum 16 KiB per live allocation; measured refill RSS increases",
+  "bin_discovery_followup": "both versions truncate long owner bins; candidate rebuild restores full usable capacity; baseline residual gaps retained",
+  "package": "/tmp/lj-plain-shrink-perf-20261126-s5650_mv"
+}

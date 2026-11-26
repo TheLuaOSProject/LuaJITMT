@@ -1,0 +1,5 @@
+asan smoke buffer-joff 0
+asan smoke buffer-jon 0
+asan smoke consume-build 0
+asan smoke consume 0
+asan smoke {'runtime_pass': 3, 'runtime_fail': 0, 'build_fail': 0}

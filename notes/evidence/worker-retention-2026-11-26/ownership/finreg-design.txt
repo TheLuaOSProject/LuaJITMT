@@ -1,0 +1,273 @@
+Runtime FINREG userdata-record reclamation design review
+2026-11-26; source reference78f117627cdecbe83600d9e1d39c0b0f923459c1
+Status: source-only proposed protocol; no implementation or tests run.
+
+The proposed active-list design is feasible for the default arena allocator.
+Use exact small-storage admission and validated source edges, freeze each
+inactive node's next link before any physical splice, and separate logical
+retirement from the two proofs needed for reclamation: QUEUED and UNLINKED.
+Remove the runtime retired-record root scan. Keep a bounded single-consumer
+retired drain, with independent retry/remainder ownership, outside the global
+SMR physical writer. Custom lua_Alloc can retain terminal-only reclamation.
+
+The parent census has now confirmed the predicted payload:64 retired FINREG
+records occupy64 dead worker plain arenas after16 waves x4 workers. Total
+retired records128 also includes main-allocated thread-handle registrations.
+Evidence: /tmp/lj-worker-plain-retention-20261126-4u6_n8fl/finreg-baseline.stdout.
+This does not fix the independently retained TG bodies or empty arena capacity.
+
+State and lifetime invariants
+
+Keep active as the existing monotonic1->0 state. Add separate atomic
+monotonic QUEUED and UNLINKED bits, initially0. On default64-bit layout a
+uint32 flags field fits the current trailing padding of the32-byte record;
+check sizeof/offsetof rather than assuming that on all targets.
+
+Use next's low bit as FROZEN. Every node is suitably aligned. All external
+pointer getters strip that bit; protocol helpers also expose the raw word.
+Only an inactive node may become FROZEN. FROZEN is never cleared for that
+incarnation. No physical unlink may bypass a node whose next is not FROZEN.
+Every predecessor-link CAS expects an untagged word, so freezing and link
+mutation arbitrate in the same atomic location. A separate active load cannot
+provide this property: a predecessor can become inactive after that load.
+
+The unique winner of active1->0 owns eventual retired-stack publication.
+Helpers may freeze and unlink without waiting for that publisher. A successful
+physical splice publishes UNLINKED with a release atomic OR while retaining
+the victim lease. A failed splice, failed search, active0, or FROZEN alone
+does not prove UNLINKED. QUEUED is published with release OR after the unique
+retired-stack push succeeds. Use OR, not stale whole-word stores, so the two
+actors cannot overwrite each other's proof. A node is never reactivated or
+reinserted on the active list; a later registration allocates a fresh node.
+
+No node can be freed until it is privately owned by the retired consumer,
+active0, QUEUED, and UNLINKED. Physical freeing uses the existing routed raw
+free; exact storage leases held by paused actors can make that free late,
+without authorizing an overwrite or invalidating their final accesses.
+
+Admission is arena-counted. Holding2-3 FINREG node leases can retain up to
+2-3 fixed64KiB arenas and their other allocations, not merely2-3 records.
+Later arenas must reclaim independently. Generic mem_lease's custom-allocator
+no-op is insufficient for runtime freeing; retain that path until teardown.
+
+One shared active-list walk protocol
+
+Use a helper carrying prev, current, next plus at most three linear leases.
+For default allocations, acquire with lj_gc2_small_lease_try(g, p,
+sizeof(GC2FinRegUDataNode), 0, lease, NULL). It is nonmarking and does not
+retain a global SMR read. Never inspect a target's fields before its lease.
+
+Start: load head pointer, acquire its lease, then reread head. Only equality
+authorizes interpreting the node. On failure/change, release and restart.
+Do not cache obj/active/next across acquiring the target: an address may have
+been recycled into a different current head, which must be read anew.
+
+Advance from an active current node: read its untagged next, acquire successor
+lease, and recheck the exact next word and current's active/unfrozen state.
+Only then transfer current into prev and successor into current, releasing
+the older prev lease. At every iteration revalidate the authoritative source
+head or untagged prev->next before semantic work or a structural CAS. A leased
+but unlinked predecessor is readable storage, not authority for a successor.
+
+Inactive current: first freeze its next by CAS. Do not use the frozen next as
+an authoritative identity by itself. Acquire the prospective successor lease,
+then validate the source head==current or the retained predecessor's untagged
+next==current, and recheck current's frozen next. Only this validated edge
+permits CAS(source,current,successor). Keep successor leased through the CAS.
+After success publish current.UNLINKED; after failure release/restart/help.
+
+This addresses the detached-predecessor race: every physically removed node
+has a frozen next, so a later CAS that expects an untagged predecessor word
+cannot succeed through that detached node. If the predecessor becomes inactive
+but has not frozen yet, either the splice wins first and the freezer observes
+its updated next, or freezing wins and the splice fails. No stale outgoing
+edge can certify the wrong node's unlink.
+
+One-node splices are enough. They preserve the relative order of active
+records. Consecutive inactive nodes can be helped one at a time; do not skip
+an arbitrary unleased chain. Cap structural attempts in GC quanta and release
+leases before a mutator retry/poll/throw. A structural restart is not semantic
+absence and must not be converted into an absorbing NO_RECLAIM condition.
+
+Fresh active-head publication
+
+Keep the newly allocated node privately owned and leased through its final
+post-publication access. Initialize obj/active/flags/next before publication.
+Load expected head, lease that exact head, revalidate head, initialize the
+fresh next, then CAS head. CAS failure releases/retries the old-head admission.
+On success the active list owns the fresh node; the publisher's own lease
+protects it if another actor immediately retires/unlinks it. Release both
+leases only after all post-CAS work finishes. No Lua allocation or throwing
+operation should occur while these transient walk leases are retained.
+
+Retirement and retired-stack publication
+
+Retain a node lease before clearing obj/claiming active1->0 and keep it through
+retired push, QUEUED publication, counter update, and progress wake. Losing
+active1->0 does not publish the node a second time. The winner may pause before
+push; helpers still freeze/unlink it and publish UNLINKED. It remains owned by
+that bounded paused publisher until publication completes.
+
+The retired stack is an MPSC ownership-transfer stack, not another semantic
+discovery list. Its unique publisher initializes retired_next before the head
+CAS and never changes retired_next after that successful CAS. Keeping a lease
+on the expected retired head through push is conservative and consistent with
+the source-validation rule. The publisher's own node lease is essential for
+its post-CAS flag/counter/wake operations.
+
+A consumer may detach a node after the head CAS but before QUEUED is visible.
+It must retain such a node for retry. Publish a wake after QUEUED and after
+UNLINKED so either delayed event reschedules a previously incomplete record.
+Neither pending metadata proof should prevent the GC cycle from closing or
+make later independent nodes wait for the paused publisher/helper.
+
+Retired consumer and removal of the retired scanner
+
+Remove the mark-only retired walk at lj_gc2.c9206-9224. Its own comment says
+it does not root node->obj. These are PLAIN explicit-lifetime allocations:
+block/list ownership retains them independently of mark[], and no production
+plain sweep uses their lack of a semantic mark to collect them. Runtime
+traversal of the retired stack is unnecessary once ownership is explicit.
+
+This removal matters: an atomic exchange detaching the public stack does NOT
+by itself make an external scanner's leased predecessor a safe source of its
+retired_next. The private consumer could free/recycle its successor. Retaining
+that scanner would require a separate invalidation protocol; leases alone
+plus a stable pointer in a detached predecessor are insufficient.
+
+Use the existing GC worker/list-owner serialization for one bounded consumer,
+not a traversal-long global SMR reader or physical-reclaimer scope. Under
+worker_active the TG allocator directory cannot transfer, so ordinary
+lj_mem_free can route a privately owned record to the original allocator.
+It already arbitrates with arena readers. Holding global SMR exclusion for
+each metadata free would let unrelated paused SMR readers stall all frees.
+
+Detach a public batch and charge every examined node against the work budget.
+Save each next link before repurposing/freeing that node. Persist an unfinished
+batch between quanta. Keep incomplete-proof nodes on a worker-owned retry list
+instead of republishing them to the public stack. A retry FIFO with head/tail,
+plus a batch remainder, gives constant work and prevents a permanently blocked
+head from hiding eligible successors. Allocate turns fairly between fresh
+batches and retry candidates. No runtime root scanner follows those private
+lists; their explicit ownership is sufficient for PLAIN storage.
+
+Only free once after both flags acquire true. The consumer may release its own
+temporary lease before the routed free because its private-list ownership now
+uniquely owns that final free; retain any other required authority until the
+last body read. External helper/publisher leases naturally cause late free.
+Never dereference the node after free/release. Callbacks are not invoked by
+this consumer. A deferred record is bookkeeping debt, not semantic GC work.
+
+Preserving active-node marking without a broad outer reader
+
+Remove the FINREG scan call from gc2_scan_pending_roots at9234. Leave all
+unrelated scanners in that function alone. Invoke an active-only FINREG walk
+immediately after gc2_scan_global_roots releases SMR at10240. This is a precise
+call-site move; it does not require changing the other global root walkers.
+Keep g alive under the enclosing VM/GC operation as before.
+
+Use the same leased/validated active-list walk. If preserving current raw
+mark diagnostics, reuse the already-held small admission through
+gc2_mark_small_cell_admitted (declaration1478, implementation17346), rather
+than acquiring another global SMR lookup. A node that retired concurrently
+is a structural skip/restart, not a lost semantic object root. Do not mark
+node->obj from this metadata-root walk; that would suppress finalization.
+Alternatively removing all mark-only FINREG metadata scanning is physically
+sound for PLAIN records, but retaining the active scan is the smaller semantic
+and diagnostic change to review.
+
+Semantic finalization and ordering
+
+Do not let a helper turn metadata retirement into callback discovery. Preserve
+the current finalizer logic: hold the exact userdata body through type/mark/
+metatable checks and main-root unlink, leave node active on lookup or root-
+unlink uncertainty, publish markfinalized and the callback queue before
+retiring the side node (14191-14341). A helper retires only an already-null
+obj/inactive record, never an active node with an unclassified live obj.
+
+Retain the current newest-registration-first active ordering. Frozen-link
+splices remove only inactive nodes; they do not reorder survivors. The callback
+queue remains the existing FIFO transfer, independent of retired-record
+reclamation order. Head restarts must not enqueue an already-finalized object
+twice. Keep existing FINALIZED/FINREG checks, metatable retry behavior, and
+the retained object scope through callback publication. Never change a failed
+node lease into a successful absent registration/finalizer observation.
+
+Removing/reinstalling metatables must still produce a fresh registration after
+the old active node is retired. Duplicate registration behavior for concurrent
+mutations of the same userdata is pre-existing; this memory-lifetime change
+must not silently strengthen or weaken its semantic contract.
+
+Pause/ABA invariants
+
+- A pause after active1->0 but before retired push retains one bounded node;
+  other walkers can unlink it and continue without waiting.
+- A pause after splice but before UNLINKED retains that node, never authorizes
+  a false free; later unlink and reclaim work proceeds independently.
+- A pause after retired-stack CAS but before QUEUED leaves a retryable consumer
+  record; the publisher's own lease protects its final stores and wake.
+- A held predecessor lease prevents address reuse of that predecessor. Frozen
+  next makes a detached predecessor unusable as structural authority.
+- Acquire successor before revalidating source. A stale pointer to a recycled
+  allocation is not identity. Only a still-valid source edge permits use, and
+  all fields are read anew after that validation. A valid head ABA may name a
+  newly published incarnation; treat it as that new node, not cached old data.
+- Small-storage leases impose a fixed-arena retention bound. They must not be
+  replaced with one epoch/global reader spanning the list or a whole batch.
+
+Terminal cleanup
+
+After all mutators/GC workers join, detach and drain the active head, public
+retired stack, consumer batch remainder, and retry list. Preserve the existing
+duplicate-ownership rule: inactive nodes still reachable from active links are
+owned by retired/private storage and must not be freed again by the active
+walk. Mask tagged next pointers before following them. Joined-world teardown
+must prove no paused retire publisher remains outside those owners; an
+unpublished active0 owner would otherwise be an orphan protocol violation.
+Custom lua_Alloc keeps all retired nodes until this terminal path. The global
+retired/private fields must be initialized/reset, and no helper-local remainder
+may disappear on return or an error path.
+
+Concrete source inventory
+
+src/lj_obj.h827: node flags/layout and raw/decoded tagged-next accessors.
+src/lj_obj.h2265 and relevant accessors: consumer-private remainder/retry fields,
+optional reclaimed/backlog diagnostics. Keep existing counters cumulative.
+src/lj_gc2.c2008-2013: initialize new fields;2121-2141: terminal drain all owners.
+src/lj_gc2.c5522-5541: close-pending active walk uses shared admission protocol.
+src/lj_gc2.c9180-9226: active-only common walker; remove retired scan.
+src/lj_gc2.c9234/10240: move that active walk outside the outer global SMR scope.
+src/lj_gc2.c13963-14115: publisher/register/retire/unlink/forget use one protocol.
+src/lj_gc2.c14168 and14191-14341: leased retry-node and finalizer walk integration.
+src/lj_gc2.c worker progress: bounded retired consumer, no broad global writer;
+QUEUED/UNLINKED release edges wake it. Do not count incomplete metadata as an
+unfinishable semantic sweep predicate. src/lj_gc2.h only for focused test hooks
+or public/internal counters if needed; current caller signatures can remain.
+No unrelated cdata FINREG redesign is required. Its existing FinOrderWalk
+13443-13519 still holds outer SMR and lacks the new edge revalidation/tag proof;
+do not treat that helper as a drop-in runtime-reclamation precedent.
+
+Required evidence before accepting the implementation
+
+1. Existing userdata finalizer/metatable and ordering coverage: m8 weak/FINREG
+   suite; t-gc2-traverse registration, clear/reinstall, false/no-finalizer,
+   unstable-metatable and root-unlink retry cases; GC-root pending reanchor
+   fixture; userdata constructor/finalizer-registration OOM paths.
+2. Replace t-gc2-finreg-udata-roots' retired-survives4GC assertion with active
+   survival, held retired-node safety, and release-then-reclaim. Never use an
+   unleased old pointer across GC and interpret address reuse as old identity.
+3. Deterministic predecessor race: pause with leased predecessor/current;
+   retire/freeze/unlink predecessor, then make stale CAS attempt. It must not
+   publish UNLINKED for a still-reachable successor or free that successor.
+4. Pause after active0/prepush, after unlink/preUNLINKED, and after retired
+   push/preQUEUED. In each case create/finalize/reclaim enough later records in
+   separate arenas while the paused actor remains stopped. Assert bounded
+   retained arenas, exact-once logical free, valid callbacks and completion
+   after release. Include one forced address-reuse/source-revalidation case.
+5. Public worker census: parked sentinel; repeated short buffer workers; retained
+   handles with repeat joins versus dropped handles; explicit GC and worker
+   pools0/1/4, JIT on/off. FINREG raw blocks should disappear after proof/reader
+   release, then dead empty-arena trim should release physical mappings.
+6. Quiescent transfer and lua_close after incomplete metadata proofs are later
+   completed; custom-allocator terminal fallback; Linux assert/ASan/TSan checks.
+   No private-table first-attachment diagnostic is needed for this scope.

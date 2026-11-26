@@ -1,0 +1,22 @@
+{
+  "baseline_tree": "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc",
+  "candidate_tree": "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/gcc",
+  "baseline_revision": "78f117627",
+  "cpu": 8,
+  "scope": "small PLAIN shrink stability, capacity retention and direct allocation/free timing; huge shrink unchanged",
+  "workspace_head": "78f117627cdecbe83600d9e1d39c0b0f923459c1",
+  "library_sha256": {
+    "baseline": "3bb7eeeb89592e2122775129163efafeca4f74e32a6aa13143c93c56abca0e74",
+    "candidate": "0e514cd5c35218c6ff012b60589739c3f49e28fd0272b4beff3c84e42d0ed894"
+  },
+  "luajit_sha256": {
+    "baseline": "d092d949bbbae32eed53f05e1ee679be33dd30c96cc62ade7bb64e6302ee88a9",
+    "candidate": "aa15b67e1a1764714dd0d2e82623be9b53fe3f29b24d92db295faab19fb16dcf"
+  },
+  "source_sha256": {
+    "witness.c": "5648fe1021946717052ab439b1d7458d735d7069079593d3d9a6180bd9eac631",
+    "hot.c": "78034de6bdbc0974c3b486f4a8c63c095707bcff045dd61494d6046b1a353913",
+    "retention.c": "990c956be3699782e7e09622132039aa38d691504487e938deba60d57c46dc21"
+  },
+  "status": "prepared, witnesses and measurements pending"
+}

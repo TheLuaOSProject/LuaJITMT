@@ -109,7 +109,15 @@ int main(void)
     assert(lj_arena_allocf(&ad, p, 256, ~(size_t)0) == NULL);
     check_seq((uint8_t *)p, 64, (uint8_t)(0x20u + round));
 
-    huge = lj_arena_allocf(&ad, p, 256, hsize);
+    /* A positive small shrink is infallible and keeps admitted old bytes.
+    ** Free and later growth must still recover the complete old extent. */
+    assert(lj_arena_rescue_enter(lj_arena_of(p)) == LJ_ARENA_RESCUE_FULL);
+    assert(lj_arena_allocf(&ad, p, 256, 64) == p);
+    check_seq((uint8_t *)p, 64, (uint8_t)(0x20u + round));
+    assert(!lj_arena_late_get(lj_arena_of(p), lj_arena_cellof(p)));
+    lj_arena_rescue_leave(lj_arena_of(p));
+
+    huge = lj_arena_allocf(&ad, p, 64, hsize);
     assert(huge != NULL);
     assert(lj_arena_ishuge(lj_arena_of(huge)));
     assert(lj_arena_of(huge)->hdr.owner_tid == alloc.owner_tid);
@@ -117,6 +125,8 @@ int main(void)
     assert(hi.size == hsize);
     assert(hi.flags == 0);
     check_seq((uint8_t *)huge, 64, (uint8_t)(0x20u + round));
+    assert(!lj_arena_bm_get(lj_arena_of(p)->block, lj_arena_cellof(p)));
+    assert(((LJArenaFreeRun *)p)->len == lj_arena_ncells(256));
     fill_seq((uint8_t *)huge, 128, (uint8_t)(0x50u + round));
 
     huge_same = lj_arena_allocf(&ad, huge, hsize, hsize_same);

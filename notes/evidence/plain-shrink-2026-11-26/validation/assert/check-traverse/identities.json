@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/assert/src/luajit": "10a18d8ebd8b86e0b04597b4077637424cce835fe9e248f9506d7f6915dbc362",
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/assert/src/libluajit.a": "43b0574b19df2b428f40ca28868567586bf6fbca54c56aadd1c04e2c7fbc704f",
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/assert/tests/t-gc2-traverse.c": "65e693eae2712a250c0b12e8cf40a965c2f560aea0b08b2c1361bea9a0d1006f",
+  "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/assert/check-traverse/traverse": "fec2e1418472d9173c4f44f1cf40ba4c00bd394e56b80c3b3cb2b06ba6d3f96f"
+}

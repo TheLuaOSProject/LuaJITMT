@@ -1,0 +1,1 @@
+The initial wrapper targeted mmap only, while these frozen libraries import mmap64. Both baseline modes moved successfully and the map-refusal count stayed zero. This did not establish an OOM witness. Final witness wraps both symbols and preserves these initial inputs/results for review.

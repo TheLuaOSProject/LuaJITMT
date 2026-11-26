@@ -1,0 +1,62 @@
+[
+  {
+    "variant": "baseline",
+    "mode": "move",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-shrink-perf-20261126-s5650_mv/baseline-witness",
+      "move"
+    ],
+    "exit": 1,
+    "binary_sha256": "1383588b75fdec956c9f2aa72f5a8a20640a61e834928ce1ff863cb191a61272",
+    "stdout": "{\"mode\":\"move\",\"same_pointer\":false,\"returned_null\":false,\"rejected_maps\":0,\"old_bytes_preserved\":true}\n",
+    "stderr": ""
+  },
+  {
+    "variant": "baseline",
+    "mode": "oom",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-shrink-perf-20261126-s5650_mv/baseline-witness",
+      "oom"
+    ],
+    "exit": 1,
+    "binary_sha256": "1383588b75fdec956c9f2aa72f5a8a20640a61e834928ce1ff863cb191a61272",
+    "stdout": "{\"mode\":\"oom\",\"same_pointer\":false,\"returned_null\":true,\"rejected_maps\":1,\"old_bytes_preserved\":true}\n",
+    "stderr": ""
+  },
+  {
+    "variant": "candidate",
+    "mode": "move",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-shrink-perf-20261126-s5650_mv/candidate-witness",
+      "move"
+    ],
+    "exit": 0,
+    "binary_sha256": "f66c1b536b0dcb98ad6a6cf6991a5f767b4a6c9b85b589fc3aab61da3cfb3c37",
+    "stdout": "{\"mode\":\"move\",\"same_pointer\":true,\"returned_null\":false,\"rejected_maps\":0,\"old_bytes_preserved\":true}\n",
+    "stderr": ""
+  },
+  {
+    "variant": "candidate",
+    "mode": "oom",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-shrink-perf-20261126-s5650_mv/candidate-witness",
+      "oom"
+    ],
+    "exit": 0,
+    "binary_sha256": "f66c1b536b0dcb98ad6a6cf6991a5f767b4a6c9b85b589fc3aab61da3cfb3c37",
+    "stdout": "{\"mode\":\"oom\",\"same_pointer\":true,\"returned_null\":false,\"rejected_maps\":0,\"old_bytes_preserved\":true}\n",
+    "stderr": ""
+  }
+]

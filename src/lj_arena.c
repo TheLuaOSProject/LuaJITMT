@@ -69,6 +69,8 @@ LJ_STATIC_ASSERT(LJ_HUGETAB_ADMISSION_CLOSED == LJ_HUGETAB_READER_MASK);
 #if defined(LJ_ARENA_TEST_HELPERS)
 static void arena_test_plain_claim_pause_after_close(void);
 static void arena_test_plain_commit_pause_after_commit(GCArena *a);
+static void arena_test_plain_shrink_pause_after_publish(GCArena *a);
+static int arena_test_alloc_fails(void);
 static void arena_test_plain_admit_pause_after_enter(void);
 static void arena_test_remote_publish_pause_after_queue(void);
 static void arena_test_remote_drain_pause_after_clear(void);
@@ -86,6 +88,8 @@ static void hugetab_test_admission_close_pause_after_close(void);
 #else
 #define arena_test_plain_claim_pause_after_close() ((void)0)
 #define arena_test_plain_commit_pause_after_commit(a) ((void)0)
+#define arena_test_plain_shrink_pause_after_publish(a) ((void)0)
+#define arena_test_alloc_fails() 0
 #define arena_test_plain_admit_pause_after_enter() ((void)0)
 #define arena_test_remote_publish_pause_after_queue() ((void)0)
 #define arena_test_remote_drain_pause_after_clear() ((void)0)
@@ -1169,11 +1173,10 @@ static int arena_plain_mutation_claim(GCArena *a, uint64_t own_count)
 }
 
 /* Return 1 for ownership, 0 if the initial close lost, or -1 with a replacement
-** admission after an abort. A free caller must publish late before dropping
-** that admission; a realloc caller restores its saved state before dropping
-** it. No payload or allocation-boundary mutation precedes successful commit. */
+** admission after an abort. The caller must publish late before dropping that
+** admission. No payload or allocation-boundary mutation precedes commit. */
 static int arena_plain_mutation_claim_at(GCArena *a, uint64_t own_count,
-                                        uint32_t cell, uint32_t *priorp)
+                                        uint32_t cell)
 {
   uint32_t state;
   if (!arena_plain_mutation_begin(a, own_count))
@@ -1181,23 +1184,10 @@ static int arena_plain_mutation_claim_at(GCArena *a, uint64_t own_count,
   state = lj_arena_sweep_state_acq(a, cell);
   if (state != LJ_ARENA_SWEEP_FREEING &&
       !lj_arena_sweep_state_cas(a, cell, state, LJ_ARENA_SWEEP_FREEING)) {
-    if (priorp) *priorp = LJ_ARENA_SWEEP_FREEING;
     arena_plain_mutation_abort_admit(a);
     return -1;
   }
-  if (priorp) *priorp = state;
   return arena_plain_mutation_commit(a);
-}
-
-static void arena_plain_mutation_restore(GCArena *a, uint32_t cell,
-                                         uint32_t prior)
-{
-  if (prior != LJ_ARENA_SWEEP_FREEING) {
-    int restored = lj_arena_sweep_state_cas(a, cell,
-      LJ_ARENA_SWEEP_FREEING, prior);
-    lj_assertX(restored, "plain realloc lost its temporary target marker");
-    UNUSED(restored);
-  }
 }
 
 static LJ_AINLINE int arena_plain_mutation_held(const GCArena *a)
@@ -1338,6 +1328,11 @@ static uint32_t arena_test_plain_claim_pause_seen;
 static GCArena *arena_test_plain_commit_target;
 static uint32_t arena_test_plain_commit_pause_flag;
 static uint32_t arena_test_plain_commit_pause_seen;
+static GCArena *arena_test_plain_shrink_target;
+static uint32_t arena_test_plain_shrink_pause_flag;
+static uint32_t arena_test_plain_shrink_pause_seen;
+static uint32_t arena_test_alloc_fail_flag;
+static uint64_t arena_test_alloc_fail_count;
 static uint32_t arena_test_plain_admit_pause_flag;
 static uint32_t arena_test_plain_admit_pause_seen;
 static uint32_t arena_test_remote_publish_pause_flag;
@@ -1375,6 +1370,51 @@ static void arena_test_plain_commit_pause_after_commit(GCArena *a)
       la_cpu_pause();
     la_store32_rel(&arena_test_plain_commit_pause_seen, 0);
   }
+}
+
+void lj_arena_test_plain_shrink_pause(GCArena *a, int enabled)
+{
+  if (enabled) {
+    la_store32_rel(&arena_test_plain_shrink_pause_seen, 0);
+    la_storeptr_rel((void **)&arena_test_plain_shrink_target, a);
+  }
+  la_store32_rel(&arena_test_plain_shrink_pause_flag, enabled != 0);
+}
+
+uint32_t lj_arena_test_plain_shrink_paused(void)
+{
+  return la_load32_acq(&arena_test_plain_shrink_pause_seen);
+}
+
+static void arena_test_plain_shrink_pause_after_publish(GCArena *a)
+{
+  if (la_load32_acq(&arena_test_plain_shrink_pause_flag) != 0 &&
+      la_loadptr_acq((void *const *)&arena_test_plain_shrink_target) == a) {
+    la_store32_rel(&arena_test_plain_shrink_pause_seen, 1);
+    while (la_load32_acq(&arena_test_plain_shrink_pause_flag) != 0)
+      la_cpu_pause();
+    la_store32_rel(&arena_test_plain_shrink_pause_seen, 0);
+  }
+}
+
+void lj_arena_test_alloc_fail(int enabled)
+{
+  if (enabled)
+    la_store64_rel(&arena_test_alloc_fail_count, 0);
+  la_store32_rel(&arena_test_alloc_fail_flag, enabled != 0);
+}
+
+uint64_t lj_arena_test_alloc_failures(void)
+{
+  return la_load64_acq(&arena_test_alloc_fail_count);
+}
+
+static int arena_test_alloc_fails(void)
+{
+  if (la_load32_acq(&arena_test_alloc_fail_flag) == 0)
+    return 0;
+  (void)la_add64_rlx(&arena_test_alloc_fail_count, 1);
+  return 1;
 }
 
 void lj_arena_test_open_sealed_pause(GCArena *a, int enabled)
@@ -5379,12 +5419,12 @@ static int arena_destruct_restore_live(GCArena *a, uint32_t cell)
 					LJ_ARENA_LIFETIME_LIVE);
 }
 
-/* Non-destructive layout mutation (currently small in-place realloc). */
+/* Non-destructive traversable layout mutation in the direct allocator API. */
 static int arena_mutation_claim_live(GCArena *a, uint32_t cell,
 				      uint64_t own_open_count)
 {
   if (!arena_lifetime_managed(a))
-    return 2;
+    return 0;
   if (!lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
 					    LJ_ARENA_LIFETIME_MUTATING))
     return 0;
@@ -5590,12 +5630,12 @@ static int arena_set_alloc(GCArena *a, uint32_t cell, uint32_t ncells,
     arena_alloc_claim_rollback(a, cell, root_construct);
     return 0;
   }
-  /* Free-run publication clears typed coverage for the complete reusable
-  ** span. Ordinary allocation must not pay side-plane RMWs. */
+  /* Free-run publication clears typed coverage and plain retained-extent
+  ** flags for the complete span. Ordinary allocation pays no side-plane RMW. */
   if (LJ_UNLIKELY(lj_arena_cdata_get(a, cell) ||
 		  lj_arena_ready_get(a, cell) ||
 		  lj_arena_dtor_kind_acq(a, cell) != LJ_ARENA_DTOR_NONE)) {
-    lj_assertX(0, "arena allocation reused published typed metadata");
+    lj_assertX(0, "arena allocation reused published extent/type metadata");
     arena_alloc_claim_rollback(a, cell, root_construct);
     return 0;  /* Retain the span; never publish over stale type authority. */
   }
@@ -5967,7 +6007,7 @@ int lj_arena_destruct_acquire(const void *p, size_t size)
     if (lj_arena_late_get(a, cell) || !arena_side_owners_none(a, cell))
       return LJ_ARENA_DESTRUCT_LOST;
     {
-      int gate = arena_plain_mutation_claim_at(a, 0, cell, NULL);
+      int gate = arena_plain_mutation_claim_at(a, 0, cell);
       if (gate != 1) {
 	if (gate < 0) {
 	  (void)arena_late_pin(NULL, a, p, size);
@@ -6124,6 +6164,15 @@ retry_open:
     arena_remote_leave(a);
     return 0;
   }
+  if (!arena_lifetime_managed(a) && lj_arena_plain_oversize_acq(a, start)) {
+    /* Logical osize no longer names the physical extent. A foreign producer
+    ** cannot read the owner's private bump cursor, so leave the unchanged
+    ** boundaries for its ordinary late drain instead of writing a short node.
+    ** The durable bit and owner wake precede release of this admission. */
+    int published = arena_late_pin(alloc, a, p, size);
+    arena_remote_leave(a);
+    return published == 1;
+  }
   if (!arena_side_owners_none(a, start)) {
     (void)(arena_lifetime_managed(a) ?
 	  arena_late_claim_release(a, p, size) :
@@ -6145,7 +6194,7 @@ retry_open:
     return 1;
   }
   if (claim == 2) {
-    int gate = arena_plain_mutation_claim_at(a, 1, start, NULL);
+    int gate = arena_plain_mutation_claim_at(a, 1, start);
     if (gate != 1) {
       (void)arena_late_pin(alloc, a, p, size);
       if (gate == 0)
@@ -6303,11 +6352,10 @@ static uint32_t arena_remote_free_drain_one(TGAlloc *alloc, GCArena *a)
   return n;
 }
 
-/* Raw allocations have no semantic sweep. Their explicit late frees become
-** reusable under the ordinary plain writer gate after all body readers leave.
-** Only the allocator owner may link the resulting runs into its private bins. */
-static uint32_t arena_plain_late_extent(TGAlloc *alloc, GCArena *a,
-                                      uint32_t start)
+/* Recover a raw allocation's physical extent, including a retained shrink.
+** Only its allocator owner may consult the active bump cursor, under the
+** ordinary plain writer gate after all earlier body readers leave. */
+static uint32_t arena_plain_extent(TGAlloc *alloc, GCArena *a, uint32_t start)
 {
   LJArenaBump *b = &alloc->bump[LJ_ARENAK_PLAIN];
   uint32_t cell = start + 1u, end = LJ_ARENA_CELLS;
@@ -6383,7 +6431,7 @@ static uint32_t arena_plain_late_drain_one(TGAlloc *alloc, GCArena *a)
       bits &= bits - 1u;
       if (start < LJ_AFIRST_CELL ||
           !arena_side_owners_none(a, start) ||
-          !(len = arena_plain_late_extent(alloc, a, start)) ||
+          !(len = arena_plain_extent(alloc, a, start)) ||
           !arena_range_ownership_preflight(a, start, len, 1, 0)) {
         lj_arena_remote_pending_rel(alloc, 1);
         continue;
@@ -8387,8 +8435,11 @@ uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
   for (k = 0; k < LJ_ARENA_NKINDS; k++) {
     LJArenaBump *b = &src->bump[k];
     uint32_t moved;
-    if (b->a && b->cell < b->end)
-      (void)arena_set_free_run(b->a, b->cell, b->end - b->cell);
+    if (b->a && b->cell < b->end &&
+        !arena_set_free_run(b->a, b->cell, b->end - b->cell))
+      /* Preserve the last allocation's physical end even when a side owner
+      ** vetoes tail publication. The destination has no source bump cursor. */
+      arena_retain_free_boundaries(b->a, b->cell, b->end - b->cell);
     src->bump[k].a = NULL;
     src->bump[k].cell = 0;
     src->bump[k].end = 0;
@@ -8768,6 +8819,8 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
   int adopted = 0, drained = 0;
   if (size == 0)
     return NULL;
+  if (arena_test_alloc_fails())
+    return NULL;
   if ((flags & LJ_AF_ROOT_CONSTRUCT) &&
       !(flags & LJ_AF_TRAVERSABLE))
     return NULL;
@@ -8939,7 +8992,7 @@ void lj_arena_free(TGAlloc *alloc, void *p, size_t size)
 	          LA_ACQ_REL, LA_ACQ)) {
       plain_held = 1;
     } else {
-      gate = arena_plain_mutation_claim_at(a, 0, start, NULL);
+      gate = arena_plain_mutation_claim_at(a, 0, start);
       if (gate == 1) {
 	plain_held = 1;
       } else {
@@ -8968,6 +9021,17 @@ void lj_arena_free(TGAlloc *alloc, void *p, size_t size)
       (void)arena_late_pin(alloc, a, p, size);
       arena_plain_mutation_release(a);
       return;
+    }
+    if (lj_arena_plain_oversize_acq(a, start)) {
+      uint32_t physical = arena_plain_extent(alloc, a, start);
+      if (physical < ncells) {
+        /* An inconsistent boundary is never permission to free only the
+        ** logical prefix and lose the retained suffix. Keep the exact intent. */
+        (void)arena_late_pin(alloc, a, p, size);
+        arena_plain_mutation_release(a);
+        return;
+      }
+      ncells = physical;
     }
   }
   if (claim == 1) {
@@ -9079,6 +9143,27 @@ void *lj_arena_realloc(TGAlloc *alloc, PRNGState *rs, void *p,
     int managed = arena_lifetime_managed(a);
     uint32_t life = managed ? lj_arena_lifetime_state_acq(a, cell) :
 	LJ_ARENA_LIFETIME_LIVE;
+    if (!managed && nsize != 0 && nsize <= osize) {
+      uint32_t ocells = lj_arena_ncells(osize);
+      /* A valid lua_Alloc shrink cannot fail for lack of memory. Keep the
+      ** complete physical allocation readable: neither its side owners nor
+      ** another target's writer generation requires any mutation here. The
+      ** caller retains semantic ownership; a concurrent free of this same
+      ** allocation is outside realloc's contract. */
+      if (lj_arena_ishuge(a) || cell < LJ_AFIRST_CELL ||
+          ocells > LJ_ARENA_CELLS - cell ||
+          lj_arena_cellptr(a, cell) != p ||
+          !lj_arena_bm_get(a->block, cell) || lj_arena_late_get(a, cell) ||
+          lj_arena_sweep_state_acq(a, cell) == LJ_ARENA_SWEEP_FREEING)
+        return NULL;
+      if (lj_arena_ncells(nsize) < ocells) {
+        lj_arena_plain_oversize_set_rel(a, cell);
+        arena_test_plain_shrink_pause_after_publish(a);
+      }
+      /* At most the original small allocation (<= LJ_HUGE_THRESHOLD) stays
+      ** reserved until a later full free. Logical accounting still shrinks. */
+      return p;
+    }
     if (!arena_side_owners_none(a, cell) ||
 	(managed && life != LJ_ARENA_LIFETIME_LIVE)) {
       if (nsize == 0 && managed && life == LJ_ARENA_LIFETIME_FREE)
@@ -9114,57 +9199,21 @@ void *lj_arena_realloc(TGAlloc *alloc, PRNGState *rs, void *p,
     if (ncells < ocells) {
       GCArena *a = lj_arena_of(p);
       uint32_t cell = lj_arena_cellof(p);
-      uint32_t plain_prior = LJ_ARENA_SWEEP_FREEING;
       int claim = arena_mutation_claim_live(a, cell, 0);
-      int plain_held = 0;
-      if (claim == 0)
+      if (claim != 1)
 	return NULL;  /* Original allocation remains unchanged and retryable. */
-      if (claim == 2) {
-	uint32_t aflags;
-	int gate = arena_plain_mutation_claim_at(a, 0, cell, &plain_prior);
-	if (gate != 1) {
-	  if (gate < 0) {
-	    arena_plain_mutation_restore(a, cell, plain_prior);
-	    arena_remote_late_leave(a);
-	  }
-	  goto move_realloc;
-	}
-	plain_held = 1;
-	aflags = lj_arena_flags_acq(a);
-	if ((aflags & (LJ_AF_PREPSWEEP|LJ_AF_NEEDSWEEP|
-		       LJ_AF_QUARANTINE|LJ_AF_RECLAIMED)) ||
-	    !lj_arena_bm_get(a->block, cell) || lj_arena_late_get(a, cell) ||
-	    !arena_side_owners_none(a, cell)) {
-	  arena_plain_mutation_restore(a, cell, plain_prior);
-	  arena_plain_mutation_release(a);
-	  goto move_realloc;
-	}
-      }
       if (!arena_insert_run(alloc, a, cell + ncells, ocells - ncells)) {
-	if (claim == 1) {
-	  arena_mutation_restore_live(a, cell);
-	  /* A traversable suffix can remain pinned by an interior root/recovery
-	  ** owner. Keep the original extent retryable: moving and then freeing the
-	  ** old full extent would encounter the same durable veto after terminal
-	  ** ownership and turn this accepted fail-closed state into an abort. */
-	  return NULL;
-	}
-	if (plain_held) {
-	  arena_plain_mutation_restore(a, cell, plain_prior);
-	  arena_plain_mutation_release(a);
-	}
-	goto move_realloc;
+        arena_mutation_restore_live(a, cell);
+        /* A traversable suffix can remain pinned by an interior root/recovery
+        ** owner. Keep the original extent retryable: moving and then freeing
+        ** the old full extent would encounter the same durable veto after
+        ** terminal ownership and turn this fail-closed state into an abort. */
+        return NULL;
       }
-      if (claim == 1)
-	arena_mutation_restore_live(a, cell);
-      if (plain_held) {
-	arena_plain_mutation_restore(a, cell, plain_prior);
-	arena_plain_mutation_release(a);
-      }
+      arena_mutation_restore_live(a, cell);
     }
     return p;
   }
-move_realloc:
   np = lj_arena_alloc(alloc, rs, nsize, flags);
   if (!np)
     return NULL;
@@ -9202,6 +9251,8 @@ static uint32_t arena_allocf_hflags(LJArenaAllocD *ad, uint32_t flags)
 static void *arena_allocf_new(LJArenaAllocD *ad, size_t size, uint32_t flags)
 {
   void *p;
+  if (arena_test_alloc_fails())
+    return NULL;
   if ((flags & LJ_AF_ROOT_CONSTRUCT) &&
       !(flags & LJ_AF_TRAVERSABLE))
     return NULL;

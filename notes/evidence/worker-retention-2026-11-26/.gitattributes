@@ -1,0 +1,2 @@
+# Preserve raw capture bytes, including CSV CRLF.
+* -whitespace

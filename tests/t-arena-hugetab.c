@@ -1993,19 +1993,18 @@ static void test_plain_reader_mutation_gate(PRNGState *rs)
   admission = lj_arena_rescue_enter(a);
   assert(admission == LJ_ARENA_RESCUE_FULL);
   {
-    void *moved = lj_arena_realloc(&alloc, rs, p, size, size / 2u, 0);
-    assert(moved != NULL && moved != p);
-    assert(memcmp(before, moved, size / 2u) == 0);
-    assert(lj_arena_bm_get(a->block, cell) && lj_arena_late_get(a, cell));
-    /* The admitted reader still owns the old bytes; realloc has transferred
-    ** the caller to an independent allocation without waiting for it. */
+    void *shrunk = lj_arena_realloc(&alloc, rs, p, size, size / 2u, 0);
+    assert(shrunk == p);
+    assert(lj_arena_bm_get(a->block, cell) && !lj_arena_late_get(a, cell));
+    /* Logical shrink preserves the complete physical span, including bytes
+    ** still owned by the admitted reader. No replacement is needed. */
     assert(memcmp(before, p, size) == 0);
     lj_arena_rescue_leave(a);
-    p = moved;
   }
   assert(lj_arena_realloc(&alloc, rs, p, size / 2u, size / 4u, 0) == p);
   assert(memcmp(before, p, size / 4u) == 0);
   lj_arena_free(&alloc, p, size / 4u);
+  assert(((LJArenaFreeRun *)p)->len == lj_arena_ncells(size));
 
   p = lj_arena_alloc(&alloc, rs, size, 0);
   assert(p != NULL);
@@ -2054,16 +2053,16 @@ static void test_plain_reader_mutation_gate(PRNGState *rs)
     assert(lj_arena_destruct_acquire(gatep, size) ==
 	   LJ_ARENA_DESTRUCT_ACQUIRED);
 
-    /* Losing the unrelated arena-wide plain writer gate is not an OOM. A
-    ** shrink which cannot take its in-place token moves immediately, keeps
-    ** the requested prefix and leaves the old body durably late-freed. */
+    /* An unrelated retained destructor cannot prevent logical shrink. The
+    ** complete original allocation remains readable without a writer token. */
     np = lj_arena_realloc(&move_alloc, rs, oldp, size, nsize, 0);
-    assert(np != NULL && np != oldp);
-    memset(before, 0xa5, nsize);
-    assert(memcmp(np, before, nsize) == 0);
-    assert(lj_arena_late_get(a, lj_arena_cellof(oldp)));
+    assert(np == oldp);
+    memset(before, 0xa5, size);
+    assert(memcmp(np, before, size) == 0);
+    assert(!lj_arena_late_get(a, lj_arena_cellof(oldp)));
     lj_arena_free(&move_alloc, gatep, size);
     lj_arena_free(&move_alloc, np, nsize);
+    assert(((LJArenaFreeRun *)np)->len == lj_arena_ncells(size));
     lj_arena_alloc_fini(&move_alloc);
   }
 

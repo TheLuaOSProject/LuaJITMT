@@ -115,12 +115,15 @@ int main(void)
   p5 = lj_arena_realloc(&alloc, &rs, p5, 96, 16, 0);
   assert(p5 != NULL);
   check_seq((uint8_t *)p5, 16, 0x80);
+  /* Logical shrink retains the physical suffix until the complete free.
+  ** It must not publish an independently reusable interior run. */
   assert(lj_arena_state(lj_arena_of(p5),
-			lj_arena_cellof(p5) + lj_arena_ncells(16)) == 1);
+			lj_arena_cellof(p5) + lj_arena_ncells(16)) == 0);
 
   lj_arena_free(&alloc, p2, 32);
   lj_arena_free(&alloc, p4, 16);
   lj_arena_free(&alloc, p5, 16);
+  assert(((LJArenaFreeRun *)p5)->len == lj_arena_ncells(96));
   p6 = lj_arena_alloc(&alloc, &rs, 16, 0);
   assert(p6 != NULL);
   assert(lj_arena_realloc(&alloc, &rs, p6, 16, 0, 0) == NULL);

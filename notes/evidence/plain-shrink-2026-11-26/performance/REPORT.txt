@@ -1,0 +1,32 @@
+Small PLAIN shrink: infallibility, retained capacity and ordinary-path cost
+
+Baseline commit: 78f117627cdecbe83600d9e1d39c0b0f923459c1
+Baseline library SHA256: 3bb7eeeb89592e2122775129163efafeca4f74e32a6aa13143c93c56abca0e74
+Candidate final library SHA256: 0e514cd5c35218c6ff012b60589739c3f49e28fd0272b4beff3c84e42d0ed894
+Candidate final LuaJIT SHA256: aa15b67e1a1764714dd0d2e82623be9b53fe3f29b24d92db295faab19fb16dcf
+Candidate changed runtime paths: src/lj_arena.c, src/lj_arena.h
+
+The final candidate passes both deterministic shrink witnesses. With a real full-span lease held, the baseline 4096→17 shrink moves to another allocation. With its bump exhausted and mmap64 refused, baseline shrink instead returns NULL after one rejected mapping. Candidate returns the original pointer in both modes, performs zero mapping attempts and preserves every original byte. Four final witness invocations retain exact commands, executable hashes, results and empty stderr. The two baseline exits of 1 are expected regression results, not successful old behavior.
+
+Ordinary plain allocate/free cost remains close to baseline in the focused controls. Five paired samples per size produce:
+
+bytes baseline_ns candidate_ns median_paired_ratio min_ratio max_ratio
+64 1310.607 1317.494 1.007666 0.986024 1.008484
+256 576.533 587.508 1.000561 0.995307 1.020445
+4096 742.530 747.718 1.001086 0.995778 1.011469
+
+Each sample measures 500000 allocate/touch/free cycles after warmup. Ratios pair adjacent baseline/candidate process samples; they are distinct from dividing the two independent medians. All 30 timing processes pass. The data does not establish stock performance parity or a general application throughput bound.
+
+Retaining the original small extent has a substantial, explicit memory tradeoff. In the largest 4 KiB case, 8192 allocations shrink to 16 bytes each: logical bytes become 131072, while candidate physical allocation bytes remain 33554432. Baseline physically allocates only the 131072-byte prefixes. Both still have 631 mapped arenas immediately after shrink, so immediate RSS alone conceals the lost reuse capacity. After subsequent 1 KiB allocations, median baseline/candidate footprints are 631/1062 arenas and 42960/70536 KiB RSS (about 42.0/68.9 MiB).
+
+At the maximum small allocation size, 2048 allocations of 16 KiB shrink to 16 bytes each. Logical bytes become 32768; candidate physical extents remain 33554432 versus baseline 32768. Subsequent 1 KiB refills use 683/1176 arenas and 43564/77852 KiB RSS (about 42.5/76.0 MiB). Retention is bounded by the original small extent per live allocation, up to 16 KiB, but can be 1024 times the new logical size in this deliberately extreme workload. These costs must remain visible in the plan; the no-OOM/no-writer property is not free capacity reclamation.
+
+The flag-only shrink avoids immediate suffix/bin work. In the largest 4 KiB configuration, median total shrink CPU time falls from 0.993479 s to 0.000246 s for 8192 objects. In the 16 KiB configuration it falls from 0.069155 s to 0.000093 s for 2048 objects. These numbers include deferred physical reuse and existing list-insertion costs; they are not a claim that equivalent reclamation work became costless.
+
+All 36 retention processes preserve their live data and end with zero bitmap allocated bytes and zero block starts. A separate preexisting bin-discovery issue appears in both versions: their published free-bin capacity after the bulk frees is only roughly 8 MiB, despite far more free arena storage. Source inspection finds the 8192-node insertion/search truncation; the publication reviewer is auditing its redesign separately.
+
+Four supplemental owner-only rebuild controls clarify that finding. In candidate, rebuilding after all frees restores exactly every usable arena byte: 59132160 bytes (1062 arenas) for the 4 KiB case, and 65479680 bytes (1176 arenas) for the 16 KiB case, including the active bump remainder. Thus these candidate extents were physically freed and remained discoverable in metadata, while ordinary bins had lost much of their reusable inventory. Baseline rebuild also restores most capacity, but leaves residual gaps of 43392 and 22912 bytes; those unexplained baseline gaps are preserved and not represented as complete recovery. No timed comparison uses these four CPU-0 rebuild controls.
+
+There are 74 final runtime invocations: 30 hot-path timings, 36 retention controls, four rebuild controls and four witnesses (including two expected baseline failures). All other final invocations exit zero, and all final runtime stderr is empty. Four initial witness runs with the incomplete mmap-only seam are archived separately. Frozen source inputs, libraries, all harness binaries and workload hashes were verified again after all measurements. CPU 8 is released. No shared runtime source changes were made by this measurement task.
+
+REPORT.txt summarizes the result; METHODOLOGY.txt explains the protocol. measurements.json preserves every paired phase; hot-summary.json and retention-summary.json contain summaries; witness-results.json and rebuild-control-results.json contain the behavioral proofs. Both source snapshots, runtime patch, compiler commands/output, dependency files and raw stdout/stderr remain in this package. Huge-shrink behavior remains unchanged and unresolved by this small-PLAIN change.

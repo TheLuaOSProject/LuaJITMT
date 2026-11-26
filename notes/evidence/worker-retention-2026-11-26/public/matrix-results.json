@@ -1,0 +1,362 @@
+[
+  {
+    "stem": "off-1-0-8-5-20000-0-4-0",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "off",
+      "1",
+      "0",
+      "8",
+      "5",
+      "20000",
+      "0",
+      "4",
+      "0"
+    ],
+    "exit": 0,
+    "seconds": 4.37059714802308
+  },
+  {
+    "stem": "off-2-0-8-5-20000-0-4-0",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "off",
+      "2",
+      "0",
+      "8",
+      "5",
+      "20000",
+      "0",
+      "4",
+      "0"
+    ],
+    "exit": 0,
+    "seconds": 8.174438365997048
+  },
+  {
+    "stem": "off-4-0-8-5-20000-0-4-0",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "off",
+      "4",
+      "0",
+      "8",
+      "5",
+      "20000",
+      "0",
+      "4",
+      "0"
+    ],
+    "exit": 0,
+    "seconds": 16.384949587023584
+  },
+  {
+    "stem": "off-1-2-8-5-20000-0-4-0",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "off",
+      "1",
+      "2",
+      "8",
+      "5",
+      "20000",
+      "0",
+      "4",
+      "0"
+    ],
+    "exit": 0,
+    "seconds": 6.823021126998356
+  },
+  {
+    "stem": "off-2-2-8-5-20000-0-4-0",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "off",
+      "2",
+      "2",
+      "8",
+      "5",
+      "20000",
+      "0",
+      "4",
+      "0"
+    ],
+    "exit": 0,
+    "seconds": 11.728294784988975
+  },
+  {
+    "stem": "off-4-2-8-5-20000-0-4-0",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "off",
+      "4",
+      "2",
+      "8",
+      "5",
+      "20000",
+      "0",
+      "4",
+      "0"
+    ],
+    "exit": 0,
+    "seconds": 21.542144242004724
+  },
+  {
+    "stem": "on-1-0-8-5-20000-0-4-0",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "on",
+      "1",
+      "0",
+      "8",
+      "5",
+      "20000",
+      "0",
+      "4",
+      "0"
+    ],
+    "exit": 0,
+    "seconds": 6.324388518987689
+  },
+  {
+    "stem": "on-2-0-8-5-20000-0-4-0",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "on",
+      "2",
+      "0",
+      "8",
+      "5",
+      "20000",
+      "0",
+      "4",
+      "0"
+    ],
+    "exit": 0,
+    "seconds": 9.829758428997593
+  },
+  {
+    "stem": "on-4-0-8-5-20000-0-4-0",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "on",
+      "4",
+      "0",
+      "8",
+      "5",
+      "20000",
+      "0",
+      "4",
+      "0"
+    ],
+    "exit": 0,
+    "seconds": 17.236212514981162
+  },
+  {
+    "stem": "on-1-2-8-5-20000-0-4-0",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "on",
+      "1",
+      "2",
+      "8",
+      "5",
+      "20000",
+      "0",
+      "4",
+      "0"
+    ],
+    "exit": 0,
+    "seconds": 11.478286269993987
+  },
+  {
+    "stem": "on-2-2-8-5-20000-0-4-0",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "on",
+      "2",
+      "2",
+      "8",
+      "5",
+      "20000",
+      "0",
+      "4",
+      "0"
+    ],
+    "exit": 0,
+    "seconds": 12.279042170994217
+  },
+  {
+    "stem": "on-4-2-8-5-20000-0-4-0",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "on",
+      "4",
+      "2",
+      "8",
+      "5",
+      "20000",
+      "0",
+      "4",
+      "0"
+    ],
+    "exit": 0,
+    "seconds": 22.29063687301823
+  },
+  {
+    "stem": "off-1-0-12-5-20000-1-0-6",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "off",
+      "1",
+      "0",
+      "12",
+      "5",
+      "20000",
+      "1",
+      "0",
+      "6"
+    ],
+    "exit": 0,
+    "seconds": 7.223154406005051
+  },
+  {
+    "stem": "off-4-0-12-5-20000-1-0-6",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "off",
+      "4",
+      "0",
+      "12",
+      "5",
+      "20000",
+      "1",
+      "0",
+      "6"
+    ],
+    "exit": 0,
+    "seconds": 27.598067815997638
+  },
+  {
+    "stem": "off-1-2-12-5-20000-1-0-6",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "off",
+      "1",
+      "2",
+      "12",
+      "5",
+      "20000",
+      "1",
+      "0",
+      "6"
+    ],
+    "exit": 0,
+    "seconds": 12.429352014005417
+  },
+  {
+    "stem": "off-4-2-12-5-20000-1-0-6",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "off",
+      "4",
+      "2",
+      "12",
+      "5",
+      "20000",
+      "1",
+      "0",
+      "6"
+    ],
+    "exit": 0,
+    "seconds": 30.650470276013948
+  },
+  {
+    "stem": "on-1-0-12-5-20000-1-0-6",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "on",
+      "1",
+      "0",
+      "12",
+      "5",
+      "20000",
+      "1",
+      "0",
+      "6"
+    ],
+    "exit": 0,
+    "seconds": 10.678262731991708
+  },
+  {
+    "stem": "on-4-0-12-5-20000-1-0-6",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "on",
+      "4",
+      "0",
+      "12",
+      "5",
+      "20000",
+      "1",
+      "0",
+      "6"
+    ],
+    "exit": 0,
+    "seconds": 30.05239647399867
+  },
+  {
+    "stem": "on-1-2-12-5-20000-1-0-6",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "on",
+      "1",
+      "2",
+      "12",
+      "5",
+      "20000",
+      "1",
+      "0",
+      "6"
+    ],
+    "exit": 0,
+    "seconds": 16.734234561998164
+  },
+  {
+    "stem": "on-4-2-12-5-20000-1-0-6",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-multiworker-buffer-20261126-o6j07pmh/run.py",
+      "on",
+      "4",
+      "2",
+      "12",
+      "5",
+      "20000",
+      "1",
+      "0",
+      "6"
+    ],
+    "exit": 0,
+    "seconds": 33.305079752986785
+  }
+]

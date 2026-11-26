@@ -1,0 +1,122 @@
+[
+  {
+    "mode": "assert",
+    "phase": "readers",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "assert",
+      "readers"
+    ],
+    "exit": 0,
+    "seconds": 0.37606399101787247
+  },
+  {
+    "mode": "assert",
+    "phase": "plain",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "assert",
+      "plain"
+    ],
+    "exit": 0,
+    "seconds": 0.5464617120160256
+  },
+  {
+    "mode": "asan",
+    "phase": "shrink",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "asan",
+      "shrink"
+    ],
+    "exit": 0,
+    "seconds": 0.5677822509896941
+  },
+  {
+    "mode": "asan",
+    "phase": "readers",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "asan",
+      "readers"
+    ],
+    "exit": 0,
+    "seconds": 0.46762157799093984
+  },
+  {
+    "mode": "asan",
+    "phase": "plain",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "asan",
+      "plain"
+    ],
+    "exit": 0,
+    "seconds": 0.6630071330000646
+  },
+  {
+    "mode": "asan",
+    "phase": "arena",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "asan",
+      "arena"
+    ],
+    "exit": 0,
+    "seconds": 39.6118149330141
+  },
+  {
+    "mode": "tsan",
+    "phase": "shrink",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "tsan",
+      "shrink"
+    ],
+    "exit": 0,
+    "seconds": 0.4493382999789901
+  },
+  {
+    "mode": "tsan",
+    "phase": "readers",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "tsan",
+      "readers"
+    ],
+    "exit": 0,
+    "seconds": 0.49995693800156005
+  },
+  {
+    "mode": "tsan",
+    "phase": "plain",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "tsan",
+      "plain"
+    ],
+    "exit": 0,
+    "seconds": 8.27800273601315
+  },
+  {
+    "mode": "tsan",
+    "phase": "arena",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-shrink-final-20261126-lxy_jr_l/validate.py",
+      "tsan",
+      "arena"
+    ],
+    "exit": 0,
+    "seconds": 63.03017363199615
+  }
+]

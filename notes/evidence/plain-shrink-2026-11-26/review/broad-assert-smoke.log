@@ -1,0 +1,5 @@
+assert smoke buffer-joff 0
+assert smoke buffer-jon 0
+assert smoke consume-build 0
+assert smoke consume 0
+assert smoke {'runtime_pass': 3, 'runtime_fail': 0, 'build_fail': 0}

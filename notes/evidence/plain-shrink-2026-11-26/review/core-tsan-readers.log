@@ -1,0 +1,3 @@
+tsan readers progress-build 0
+tsan readers progress 0
+tsan readers {'runtime_pass': 1, 'runtime_fail': 0, 'build_fail': 0}

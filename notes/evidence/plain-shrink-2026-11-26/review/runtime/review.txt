@@ -1,0 +1,222 @@
+Small PLAIN retained-extent shrink: final source review and next-design notes
+Recorded: 2026-11-26 17:42:15 UTC
+Workspace: /workspaces/lj-lockless
+Base HEAD: 78f117627cdecbe83600d9e1d39c0b0f923459c1
+Reviewer: /root/buffer_publication_review
+
+Scope and conclusion
+--------------------
+This is a second-pass source review by the agent which implemented the runtime
+patch, separate from the root agent's build/runtime validation. The reviewed
+candidate is the uncommitted small-only change atop the base HEAD above. No
+huge-shrink implementation is included. No additional small-path correctness
+blocker was found after fixing the standalone-header compile regression below.
+The full Linux GC/JIT/FFI nonblocking objective is not complete.
+
+Source identities (SHA256)
+--------------------------
+1d7468f5a975d1255d8ea69ca72beb284a5e9a85f59046a058c9919fcf822ed5  src/lj_arena.c
+c9fb420ebd3c0b24bb77bcd61fe867bc10ca67086dc9f56d2947782afd55bcde  src/lj_arena.h
+0f2fb01e9f4bdc580b03aa9e9acaed74d08fa8ff33c53725e85ee057a7e595e0  tests/t-arena-plain-shrink.c
+d1289617afe8630d11a5127414adf80b285d66e1cab4148a59f32183300d4564  tests/t-arena-plain-progress.c
+5cc44365ae45827f43569725b6e74714714f00318abee370aa8d844981b1b6ba  tests/t-arena-realloc.c
+7590c1a4d4c4e3229e191ff74fcf2d6f3f523a0c79c96242df09e77d3189f1b6  tests/t-arena-allocf.c
+1a88492d071f13b9e616c5d5d038962a8617c44e1d1d9c2685a0f56658540a1d  tests/t-arena-hugetab.c
+45121a9d2e5e8e0eee5ac99d36cdf515de348c46f0d29937d46475a23e13c77d  tests/suites/m2_arena.lua
+
+The first frozen header had SHA256
+73f6a172f464a561d060b8c6500ed05e89375a04742ba96a3843879c89e8ecac.
+That header contained the compile regression; arena.c did not change during
+the correction. Root was asked to retain the first snapshot as evidence.
+
+Problem and resulting behavior
+------------------------------
+The previous small raw shrink could publish FREEING on its original start,
+blocking new readers of the same allocation while paused. A failed writer
+claim fell back to allocation/copy/free, which could fail even for a shrink.
+An earlier side-owner check could also return NULL before the shrink branch.
+lj_mem_realloc turns any positive-size NULL into a memory error. Lua's allocator
+contract assumes nonfailure when old size is at least new size:
+https://www.lua.org/manual/5.1/manual.html#lua_Alloc
+
+The new positive small PLAIN shrink keeps p and the entire original physical
+allocation. When the rounded logical cell count decreases, it sets a start-only
+oversize bit in the otherwise unused PLAIN cdata bitmap. It does not acquire a
+writer gate, publish FREEING, alter block/mark boundaries, or touch payload.
+The branch precedes side-owner rejection for a valid caller-owned allocation.
+Invalid alignment, missing allocation, huge shape, late intent and FREEING
+still reject; concurrent free/realloc of the same allocation is not the
+single-owner realloc contract. Existing body readers are compatible.
+
+Publication and metadata review
+-------------------------------
+1. src/lj_arena.c:9146 validates the small PLAIN start before the accessor.
+   src/lj_arena.h:1371 and :1377 provide named accessors. A release fence plus
+   atomic OR publishes the bit; later acquire observations and ordinary caller
+   ownership handoff preserve it. Repeated shrinks keep the bit. A shrink within
+   the same rounded cell count needs no new flag but does not clear an old one.
+   The exact-arena test hook runs immediately after publication.
+
+2. The cdata plane retains its original meaning on TRAVERSABLE arenas. Typed
+   GC2 consumers require traversable, READY and/or lifetime authority before
+   treating coverage as a GC identity. Raw storage leases ignore this plane.
+   The flag creates no type, root, recovery, destructor or lifetime authority.
+   GCAhdr and GCArena layout, offsets and first usable cell are unchanged.
+
+3. Full free-run publication clears cdata/oversize coverage for the complete
+   reusable range. Allocation still rejects stale coverage and does not add
+   new side-plane RMWs. Rebuild treats live block boundaries as occupied; it
+   does not turn an oversized live allocation's suffix into reusable space.
+   The production collector does not semantically mark-sweep PLAIN raw blocks.
+
+Physical extent and all free routes
+----------------------------------
+4. src/lj_arena.c:9025 handles owner-local and retained-destructor completion.
+   Only after obtaining the existing exact writer authority does it recover a
+   flagged allocation's full physical cell count. The ordinary full-span
+   ownership preflight consequently includes the retained suffix. A bad extent
+   is retained as durable late intent, never truncated to logical osize.
+   The existing exact destructor token and duplicate-free rules are unchanged.
+
+5. src/lj_arena.c:6167 routes flagged remote frees to the admitted late path
+   before writing an intrusive node. The producer does not read the owner's
+   private bump cursor and does not enqueue logical length as physical length.
+   The durable late bit precedes the existing owner wake and admission release.
+   A drain defeated by the producer/reader count rearms; a late publication
+   behind a scan leaves a later wake. The last foreign release does not mutate
+   owner-local bins. Existing frozen-cohort drain rules are unchanged.
+
+6. Deferred free, quarantine-side-owner routing and failed writer claims
+   already preserve a late start without an intrusive size record. Their owner
+   drain therefore recovers the whole original extent. The six focused routes
+   are owner free, remote free, deferred free, destructor completion, allocf
+   free, and direct realloc-to-zero. A subsequent growth copies logical bytes
+   and sends the old allocation through the same physical free paths. Small
+   retained allocations remain small under the current size discriminator.
+
+7. src/lj_arena.c:6358 recovers extent from the next block|mark boundary, capped
+   by the owner's active PLAIN bump cursor only when that cursor is after the
+   start. This preserves allocations later than a reused interior bump window.
+   The original physical allocation is at most 1,024 16-byte cells. A valid
+   extent requires at most approximately 17 boundary-word observations.
+
+8. Dropping a source bump cursor requires a persistent tail boundary.
+   arena_publish_bump_run already preserves one on refusal. Transfer previously
+   ignored arena_set_free_run refusal and then discarded its cursor. The patch
+   at src/lj_arena.c:8438 preserves bitmap boundaries before that discard.
+   The fixture places a root LINKING veto at tail+1 and proves that the exact
+   old tail, full allocation extent and eventual reuse survive transfer.
+
+Tests reviewed
+--------------
+tests/t-arena-plain-shrink.c uses real registered storage leases and payload
+checks. It verifies a paused shrink permits new full-span observational and
+marking leases; old bytes remain unchanged while held. It first proves an
+actual allocation refusal, then shrinks 4096 -> 1025 -> 17 -> 1 without another
+allocation attempt while readers, another target's retained destructor and
+root/recovery metadata remain held. It checks all six free routes, exact full
+run lengths, address reuse, repeated shrink/grow, an active tail without a
+sentinel, a reused earlier bump window, and refused transfer-tail publication.
+
+Existing tests were updated to require retained full bytes and full physical
+free instead of a moved allocation or an immediately reusable suffix. Their
+reader-lifetime assertions were retained. The public reader-progress fixture
+now pauses at the shrink hook and requires the same target's old full-span
+lease to succeed before resume. No test/contract mismatch was found. A separate
+same-cell/equal-size positive shrink case was suggested as optional coverage;
+it was not a condition of this source verdict.
+
+Discovered and corrected standalone-header regression
+-----------------------------------------------------
+The initial accessor definitions used lj_assertX inside lj_arena.h. That header
+includes lj_def.h but not lj_obj.h, which declares lj_assert_fail. Translation
+units that included only the lightweight arena header failed assertion builds.
+The original syntax checks compiled arena.c, which includes lj_obj.h first,
+so they did not expose this mistake. Root's standalone fixture matrix did.
+
+The correction removes those two header assertions and documents caller
+validation. All production accesses already perform the required checks. No
+heavy include was introduced, and runtime behavior is unchanged.
+
+Verification directly performed by this reviewer:
+- GCC release syntax-only arena.c: passed.
+- GCC assertion/APICHECK/test-helper syntax-only arena.c: passed.
+- Clang assertion/APICHECK/test-helper syntax-only arena.c: passed.
+- After correction, GCC assertion TU including only lj_arena.h and invoking
+  both accessors, with -Werror=implicit-function-declaration: passed.
+- After correction, Clang assertion syntax-only checks of arena.c and the
+  realloc, allocf and hugetab standalone fixture sources: passed.
+- git diff --check at final recorded identities: passed.
+
+No shared build or runtime test was run by this reviewer. Root reported final
+assertion shrink plus 12 standalone fixtures passing, and ASan/TSan shrink and
+reader regressions passing; the full matrix was still running when this report
+was requested. Those are parent-reported results, not independent log checks.
+
+Memory and unresolved scope
+---------------------------
+A live shrunken small allocation can retain its complete original capacity,
+up to 16 KiB, while logical GC accounting decreases. The bound is per original
+allocation, not a process-wide constant. Many long-lived shrunk allocations can
+therefore use substantially more memory than their logical sizes. This review
+contains no new performance/RSS measurement and makes no stock-memory-parity
+claim. Huge shrink remains an active nonfailure obligation; ordinary small
+production shrink definitions currently have no callers, but that reachability
+fact was not used to dismiss the generic small allocator contract.
+
+Next design: huge and mixed-class raw shrink (NOT IMPLEMENTED)
+-------------------------------------------------------------
+A. Retain the physical raw Huge allocation and its HugeTab capacity on positive
+   shrink. Logical osize/nsize remain with the caller and GC accounting. Return
+   p after metadata-only validation, without BUSY, a body lease, allocation or
+   payload/header access. Counted readers, including saturation, should not
+   cause a valid shrink to fail. Missing, typed, terminal, competing-resize and
+   destructive-admission-closed identities must still reject.
+
+B. Classify existing allocator bases by immutable address geometry:
+   ((uintptr_t)p & LJ_ARENA_MASK) == sizeof(GCAhdr).
+   Huge payload bases have that offset; small allocations start at
+   LJ_AFIRST_CELL. GC2 storage leases already use this distinction. Update
+   owner free, direct realloc, allocf free and allocf realloc. Add explicit
+   huge-shape rejection to small-only remote/deferred/destructor/quarantine
+   APIs. Remote free currently admits before cell validation, so this guard is
+   particularly important for a physically huge pointer with small osize.
+
+C. Locate the exact HugeTab slot with bounded hugetab_search, then use one
+   la_load128_acq to validate coherent address/capacity/flags. This existing
+   primitive returns a snapshot with no CAS retry loop. A reader-count change
+   must not become false shrink OOM through a failed no-op validation CAS.
+   The snapshot is the no-op shrink LP. Retain current concurrent same-object
+   growth/free arbitration; valid realloc ownership remains required.
+
+D. Store immutable physical mapsize in a size_t union occupying the existing
+   sweep_epoch/live_cells pair. Current production uses of these fields are
+   small-arena operations except huge_map's unused truncated live_cells store.
+   This preserves the 128-byte header and full size_t direct-allocation range.
+   Direct huge unmap and direct same-mapping tests must use physical mapsize
+   because logical osize can fall below the huge threshold. Prefer retaining
+   authoritative HugeTab-capacity-driven lj_arena_huge_unmap_claimed: existing
+   callers provide consumed slot capacity or unchanged sizeof(GG_State), and
+   terminal cleanup deliberately avoids new header dependence.
+
+E. Pass logical osize into arena_allocf_realloc_huge and copy min(osize,nsize),
+   never min(stored capacity,nsize). Growth can retain its current BUSY and
+   reader-sensitive move policy. A successful same-mapping growth must publish
+   max(old capacity,nsize), so a grow after shrink cannot reduce capacity.
+
+F. Keep typed HugeTab sizes unchanged. Raw leases use capacity as their physical
+   bound; cdata exact-size validation only admits traversable entries. The GC
+   huge live-byte estimate filters TRAVERSABLE. Logical allocation accounting
+   is already performed from caller sizes, and deferred raw huge unmap does
+   not subtract capacity again.
+
+G. Preserve current growth BUSY/preemption tests. Add retained-reader and
+   injected-failure huge shrink tests across both map-size and huge/small
+   thresholds, a paused metadata-snapshot shrink, logical-prefix-only growth
+   copying, and exact original unmap length through direct, deferred, transfer
+   and terminal routes. Stale-pointer tests must run after the retained object
+   is actually freed, including calls with its reduced logical size.
+
+This huge design can retain an arbitrarily large original mapping for a small
+logical allocation. It requires explicit memory measurements and a separate
+reviewed implementation. It is not part of the source identities above.

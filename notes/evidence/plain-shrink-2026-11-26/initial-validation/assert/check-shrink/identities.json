@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-plain-shrink-20261126-7izllbqs/assert/src/luajit": "5c9870ff4a2b5072f6bf9a241b35d37c1915e561b68ad8ced685360b923220e8",
+  "/tmp/lj-plain-shrink-20261126-7izllbqs/assert/src/libluajit.a": "e15021408e6e18d9803c37955b2d123e915c2ef2087765e11e0d86faa01697cd",
+  "/tmp/lj-plain-shrink-20261126-7izllbqs/assert/tests/t-arena-plain-shrink.c": "0f2fb01e9f4bdc580b03aa9e9acaed74d08fa8ff33c53725e85ee057a7e595e0",
+  "/tmp/lj-plain-shrink-20261126-7izllbqs/assert/check-shrink/shrink": "d53d99cd36938170e372663b6e2cd367311c080827186a5eea65692432c759ef"
+}
