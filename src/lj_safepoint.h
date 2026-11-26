@@ -28,6 +28,7 @@ static LJ_AINLINE uint32_t lj_safepoint_idle_policy_actions(global_State *g)
 
 /* Reserved outside the range of real safepoint leader thread IDs. */
 #define LJ_SAFEPOINT_RESUMABLE_LEADER UINT32_MAX
+#define LJ_SAFEPOINT_FULL_FLUSH (LJ_GC2_HS_EXIT_TRACES | LJ_GC2_HS_FLUSHJ)
 #define LJ_SAFEPOINT_SWEEP_START (LJ_GC2_HS_DISABLE_BARRIER | LJ_GC2_HS_FLUSH_SSB)
 #define LJ_SAFEPOINT_MARK_START_ACTIONS (LJ_GC2_HS_ENABLE_BARRIER | \
   LJ_GC2_HS_ALLOC_BLACK | LJ_GC2_HS_EXIT_TRACES | LJ_GC2_HS_REDISPATCH | \

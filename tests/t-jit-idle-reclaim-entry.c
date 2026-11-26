@@ -346,6 +346,126 @@ static void check_first_attach_retirement(void)
   lua_close(L);
 }
 
+typedef struct IdleFlushPeer {
+  IdleReclaimCtx reclaim;
+  lua_State *peer;
+  TraceNo target;
+  uint32_t ready, start, overlap, attempted;
+} IdleFlushPeer;
+
+static IdleFlushPeer *idle_flush_peer;
+
+static void pause_after_retire_publication(global_State *g, GCtrace *T)
+{
+  IdleFlushPeer *run = idle_flush_peer;
+  if (g != run->reclaim.g || trace_traceno_acq(T) != run->target) return;
+  assert(trace_retired_link_listed_acq(T) && la_load64_acq(&T->retire_epoch));
+  assert(gc2_smr_readers_acq(g) == 0);
+  lj_gc2_test_idle_reclaim_release();
+  while (!la_load32_acq(&run->attempted))
+    sched_yield();
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE && trace_retired_link_listed_acq(T));
+}
+
+static void *idle_flush_reclaim(void *arg)
+{
+  IdleFlushPeer *run = (IdleFlushPeer *)arg;
+  if (run->peer) {
+    assert(lj_threading_attach(run->peer));
+    lj_native_enter(L2TG(run->peer));
+  }
+  la_store32_rel(&run->ready, 1);
+  while (!la_load32_acq(&run->start))
+    sched_yield();
+  (void)idle_reclaim_main(&run->reclaim);
+  if (run->overlap) {
+    global_State *g = run->reclaim.g;
+    uint32_t cycle = gc2_cycle_acq(g);
+    assert(gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_OPEN);
+    assert(gc2_hs_actions_acq(g) == LJ_SAFEPOINT_FULL_FLUSH &&
+           gc2_hs_leader_acq(g) != 0);
+    lj_gc2_mark_begin(g);
+    assert(gc2_cycle_leader_acq(g) != 0 && gc2_cycle_acq(g) == cycle &&
+           gc2_worker_active_acq(g) == 0 && gc2_phase_acq(g) == LJ_GC2_IDLE);
+    la_store32_rel(&run->attempted, 1);
+  }
+  if (run->peer) {
+    (void)lj_native_leave(run->peer);
+    lj_threading_detach(run->peer, 1);
+  }
+  return NULL;
+}
+
+static void check_live_upvalue_invalidation(int shared, int overlap)
+{
+  lua_State *L = ljt_lua_newstate_openlibs();
+  IdleFlushPeer run = {0};
+  global_State *g = G(L);
+  GCproto *pt;
+  TraceNo tr;
+  pthread_t collector;
+  lua_gc(L, LUA_GCSTOP, 0);
+  ljt_lua_dostring(L,
+    "jit.opt.start('hotloop=1')\n"
+    "local value = 3\n"
+    "return function(n)\n"
+    "  local s = 0; for i=1,n do s = s + value end; return s\n"
+    "end, require('jit.util').traceinfo");
+  pt = funcproto(funcV(L->top-2));
+  if (shared) run.peer = lua_newthread(L);
+  run.overlap = (uint32_t)overlap;
+  run.reclaim.g = g;
+  assert(pthread_create(&collector, NULL, idle_flush_reclaim, &run) == 0);
+  while (!la_load32_acq(&run.ready))
+    (void)lj_thr_retry_yield(L);
+  for (int i=0; i<8; i++) {
+    lua_pushvalue(L, 1);
+    lua_pushinteger(L, 80);
+    ljt_lua_pcall(L, 1, 1, "warm captured value");
+    assert(lua_tointeger(L, -1) == 240);
+    lua_pop(L, 1);
+  }
+  tr = proto_trace_acq(pt);
+  assert(tr != 0 && proto_has_op(pt, BC_JFORL));
+  if (overlap) {
+    run.target = tr;
+    idle_flush_peer = &run;
+    lj_trace_test_set_idle_flush_hook(pause_after_retire_publication);
+  }
+  run.reclaim.epoch = lj_gc2_retire_epoch(g) + 1u;
+  lj_gc2_test_idle_reclaim_pause_after_jit_quiescence();
+  la_store32_rel(&run.start, 1);
+  wait_for_idle_reclaim_pause(&run.reclaim);
+  lua_pushinteger(L, 5);
+  assert(lua_setupvalue(L, 1, 1) != NULL);
+  assert(!proto_has_op(pt, BC_JFORL));
+  lua_pushvalue(L, 2);
+  lua_pushinteger(L, tr);
+  ljt_lua_pcall(L, 1, 1, "inspect invalidated trace");
+  assert(lua_isnil(L, -1));
+  lua_pop(L, 1);
+  lua_pushvalue(L, 1);
+  lua_pushinteger(L, 80);
+  ljt_lua_pcall(L, 1, 1, "execute changed captured value");
+  assert(lua_tointeger(L, -1) == 400);
+  lua_pop(L, 1);
+  if (overlap) {
+    assert(la_load32_acq(&run.attempted));
+    lj_trace_test_set_idle_flush_hook(NULL);
+    idle_flush_peer = NULL;
+  } else {
+    assert(lj_gc2_test_idle_reclaim_paused());
+    lj_gc2_test_idle_reclaim_release();
+  }
+  assert(pthread_join(collector, NULL) == 0);
+  for (unsigned i=0; i<LJ_FLUSH_EPOCHS+8u; i++)
+    lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(lj_gc2_smr_read_try(g));
+  assert(trace_retired_head_acq(L2J(L)) == NULL);
+  lj_gc2_smr_read_leave(g);
+  lua_close(L);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -644,6 +764,9 @@ int main(void)
 #endif
   lua_close(L);
   check_first_attach_retirement();
+  check_live_upvalue_invalidation(0, 0);
+  check_live_upvalue_invalidation(1, 0);
+  check_live_upvalue_invalidation(1, 1);
   puts("t-jit-idle-reclaim-entry OK: IDLE reclaim owns native-entry closure");
   return 0;
 }

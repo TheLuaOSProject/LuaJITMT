@@ -162,6 +162,7 @@ LJ_FUNC GCtrace *lj_trace_published_lease(jit_State *J, TraceNo tr,
                                           struct LJGC2Lease *body);
 LJ_FUNC int lj_trace_flushall(lua_State *L);
 LJ_FUNC int lj_trace_flushall_gc(lua_State *L);
+LJ_FUNC int lj_trace_flushall_safepoint(lua_State *L);
 LJ_FUNC int lj_trace_flushall_hs(lua_State *L);
 LJ_FUNC int lj_trace_flushall_hs_noevent(lua_State *L);
 /* Bounded, callback-free pre-MT flush. Returns nonzero instead of waiting for
@@ -451,6 +452,7 @@ LJ_FUNC int lj_trace_markvecs(global_State *g, int gc2);
 
 #if defined(LJ_TRACE_TEST_HELPERS) || defined(LJ_GC2_TEST_HELPERS)
 LJ_FUNC void lj_trace_test_reset_retire_publish_calls(void);
+LJ_FUNC void lj_trace_test_set_idle_flush_hook(void (*hook)(global_State *, GCtrace *));
 LJ_FUNC uint32_t lj_trace_test_retire_publish_calls(void);
 LJ_FUNC void lj_trace_test_force_startins_retry(uint32_t count);
 LJ_FUNC void lj_trace_test_reset_exit_stats(void);

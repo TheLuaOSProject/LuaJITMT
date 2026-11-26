@@ -1363,7 +1363,7 @@ static uint32_t safepoint_handshake(global_State *g, uint32_t actions,
     }
     actions = lj_safepoint_idle_policy_actions(g);
   }
-  flush_only = actions == (LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ);
+  flush_only = actions == LJ_SAFEPOINT_FULL_FLUSH;
   gc2_hs_actions_rel(g, actions);  /* 05 section 5.4.2. */
   gc2_hs_pending_rel(g, 1);  /* 09 section 9.3 leader sentinel. */
   epoch = gc2_hs_epoch_rlx(g) + 1u;
@@ -1407,7 +1407,11 @@ static uint32_t safepoint_handshake(global_State *g, uint32_t actions,
      ** here, but do not emit a TRACE "flush" event through the VM event stack:
      ** that stack belongs to vmthread and is not owned by an arbitrary leader.
      */
-    (void)lj_trace_flushall_gc(safepoint_leader_lua_state(g));  /* 08 section 8.7 leader action. */
+    lua_State *L = safepoint_leader_lua_state(g);
+    if (flush_only)
+      (void)lj_trace_flushall_safepoint(L);
+    else
+      (void)lj_trace_flushall_gc(L);
   }
 #endif
   if (!flush_only)
