@@ -1,0 +1,30 @@
+Median CPU ns per operation. v4/combined are paired; head394/stock are later sequential controls.
+Stock is local reference LuaJIT2.1.1782726002, commit unknown; exact source/binary hashes in metadata.
+Four primary work loops have matching native exit witnesses for all four variants.
+stream_decode method loop falls back for head394/v4/combined, but has a native exit witness on stock.
+
+mode  work                  bytes records  head394       v4 combined    stock combined/v4 combined/head394
+jit   reset_put_get             64  100000   125.93   470.87   281.50    10.75       0.598            2.235
+jit   reset_put_get           1024   20000   242.35  1851.45  1598.15    19.50       0.863            6.594
+jit   small_append               1  200000     3.42    62.59    57.38     0.70       0.917           16.778
+jit   small_append              16   50000     3.28    74.80    66.98     1.84       0.895           20.421
+jit   fifo_get                   1  200000   105.87   112.12   103.69     3.90       0.925            0.979
+jit   fifo_get                  32  100000   108.32   213.70   205.36     4.45       0.961            1.896
+jit   set_get                   64  100000   155.64   427.32   388.72     5.10       0.910            2.498
+jit   set_get                 1024   20000   268.05   564.35   521.40    10.55       0.924            1.945
+jit   stream_decode              9    1000   789.38   929.09   916.48     1.78       0.986            1.161
+jit   stream_decode              9   10000   797.04   939.63   927.90     1.76       0.988            1.164
+jit   stream_decode              9  100000   788.59   939.17   927.23     1.76       0.987            1.176
+joff  reset_put_get             64  100000  1885.70  2531.64  2255.79    42.35       0.891            1.196
+joff  reset_put_get           1024   20000  2067.45  6195.10  5401.15    49.50       0.872            2.612
+joff  small_append               1  200000   540.57   606.41   602.69    13.87       0.994            1.115
+joff  small_append              16   50000   534.02   640.20   623.34    13.74       0.974            1.167
+joff  fifo_get                   1  200000   965.72  1009.64  1002.45    20.18       0.993            1.038
+joff  fifo_get                  32  100000   976.33  1019.43  1014.17    20.83       0.995            1.039
+joff  set_get                   64  100000  1503.51  1974.00  1928.17    31.41       0.977            1.282
+joff  set_get                 1024   20000  1628.05  2074.25  2015.05    35.70       0.971            1.238
+joff  stream_decode              9    1000   797.30   938.74   916.47    15.98       0.976            1.149
+joff  stream_decode              9   10000   792.25   952.51   926.82    15.98       0.973            1.170
+joff  stream_decode              9  100000   791.87   952.47   926.80    16.25       0.973            1.170
+jit   small_append_long          1 1000000     3.20    69.98    62.82     1.24       0.898           19.659
+jit   small_append_long         16 1000000     3.08    71.41    66.36     1.26       0.929           21.569

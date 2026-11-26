@@ -1,0 +1,44 @@
+{
+  "baseline_commit": "51f8adc8e48e9d9904c769d42ce57ca5a408f9af",
+  "baseline_note": "frozen accepted v4 runtime, exact current HEAD source",
+  "candidate_path": "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/capacity-v1/src/luajit",
+  "candidate_note": "capacity-only: at least four incoming chunks capped8192 on owned-tail exhaustion",
+  "cpu": 8,
+  "build_command": "make -C src -j5 BUILDMODE=static CC=gcc TARGET_STRIP=:",
+  "previous_package": "/tmp/lj-buffer-perf-v4-20261126-32pd9m6x",
+  "binary_sha256": {
+    "baseline": "162491d8216fcb4faacf45bc99442bd1e5008a9b7796aa679807287b764cf756",
+    "candidate": "fc86c17a60fc8dc2f4b805c32a5f2466a643a8a30878c8bb531895349d957005"
+  },
+  "benchmark_sha256": "5c404e5ec82a298d285d2f7a66255fe6314dc42ab66599762b30c49cac4991ed",
+  "samples": 3,
+  "warmups_per_row": 2,
+  "timing": "os.clock process CPU seconds and CLOCK_MONOTONIC wall seconds",
+  "long_append": {
+    "samples": 5,
+    "records_per_segment": 1000000,
+    "segments": 10,
+    "warmup_segments": 2,
+    "mode": "jit",
+    "note": "Every segment validates complete contents outside the timed interval."
+  },
+  "semantic_assertions": "All output assertions passed in all 12 main processes and all 10 long-append processes.",
+  "main_rows": 132,
+  "long_append_rows": 20,
+  "artifact_sha256": {
+    "baseline-input.tar.gz": "3961a0899dc3045d33442f52cb29decd94ae0be3e43824e63819dec01b496dc9",
+    "candidate-input.tar.gz": "819c021cf965c1cfa2bff5ac801ab63de7e96a0245bb2520a75f3f66ab5776be",
+    "candidate-input.sha256": "6d1650ffaa83bed8de3f3efacde0e6739984800b3452258550d2214db76177b1",
+    "bench.lua": "5c404e5ec82a298d285d2f7a66255fe6314dc42ab66599762b30c49cac4991ed",
+    "run.py": "813097580c4a4821aef77306abd265175ed8e3c5a760cc6654380c18111fc19e",
+    "append-long.lua": "ca1183a6fe819337482bf748bbc159765aa20cefd4b2fd2940146c67bb2c7956",
+    "run-append-long.py": "a121d251d1d20c6a83ab34485f5e3ddc519ca3826910e66c366a3a0903e047f0",
+    "results.csv": "683c4cad7253f8cc3dcfa9ab7f887d3a60fe62fee31a0aa5d3b9c4e2f1b301ba",
+    "append-long-results.csv": "89219db46595659799b27c0bab34e245daac04bb7f133c189e98b976a9bac056",
+    "summary.csv": "2dadedb049b3065329bf5a1f5e85d50fef7f2c430373bb5913ad347edd076ca6",
+    "paired-ratios.csv": "c2be791feb7a1df4c7e1c538a79858be1ede8f3060323af8d9f4ee812aedfd03"
+  },
+  "changed_sources": [
+    "src/lj_buf.c"
+  ]
+}

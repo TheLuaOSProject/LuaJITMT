@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/src/luajit": "e403af80a1dcac63b400c6cb9ffe0de3cb6e0e0d68b739f75a397c5374d5cdb2",
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/src/libluajit.a": "df1995ab8770fff753c30b649179a14af60ae1df56e376db31cb0bf74a22f0c4",
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/tests/t-gc2-small-lease-span.c": "e221568a914d812101bc5aef8834ac314703581a3cecb7d8871527dfe9ad2bf6",
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/check-lease/lease": "630e8c636296b53026e762ca7e88408a3f4ae3ac2fdd1e19cd1b1886fe5ccf00"
+}

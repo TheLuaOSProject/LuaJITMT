@@ -1,0 +1,470 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 479  of event 'cpu_core/cycles/u'
+# Event count (approx.): 5540775745
+#
+# Children      Self  Command          Shared Object                 Symbol                                  
+# ........  ........  ...............  ............................  ........................................
+#
+    93.12%     0.00%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x000055cd3986ffdd
+            |
+            ---0x55cd3986ffdd
+               |          
+                --92.91%--bufx_string
+                          |          
+                          |--50.93%--lj_str_new
+                          |          |          
+                          |          |--46.30%--hash_dense
+                          |          |          
+                          |           --0.64%--0x7fac4b87657f
+                          |          
+                           --38.18%--bufx_copy
+                                     |          
+                                     |--33.61%--bufx_read
+                                     |          |          
+                                     |          |--13.70%--bufx_userdata
+                                     |          |          |          
+                                     |          |           --13.07%--lj_gc2_tv_lease_acquire
+                                     |          |                     |          
+                                     |          |                      --12.87%--gc2_tv_admit_scoped_impl
+                                     |          |                                |          
+                                     |          |                                 --12.66%--gc2_observed_obj_status_scoped_impl
+                                     |          |                                           |          
+                                     |          |                                            --12.45%--gc2_small_candidate_admit
+                                     |          |                                                      |          
+                                     |          |                                                      |--8.67%--gc2_small_registered_rescue_enter
+                                     |          |                                                      |          |          
+                                     |          |                                                      |           --8.46%--lj_arena_hugetab_rescue_enter
+                                     |          |                                                      |                     |          
+                                     |          |                                                      |                      --1.47%--hugetab_search
+                                     |          |                                                      |          
+                                     |          |                                                       --0.85%--gc2_small_lifetime_nearest
+                                     |          |          
+                                     |          |--11.10%--lj_gc2_small_lease_try
+                                     |          |          |          
+                                     |          |           --7.55%--lj_arena_hugetab_observe_enter
+                                     |          |                     |          
+                                     |          |                      --0.63%--hugetab_search
+                                     |          |          
+                                     |          |--4.23%--bufx_snapshot
+                                     |          |          
+                                     |           --2.90%--lj_gc2_lease_release
+                                     |                     |          
+                                     |                      --2.69%--arena_publish_leave
+                                     |          
+                                      --2.48%--lj_gc2_lease_release
+                                                |          
+                                                 --2.28%--arena_publish_leave
+
+    92.91%     3.60%  baseline-luajit  baseline-luajit               [.] bufx_string
+            |          
+            |--89.31%--bufx_string
+            |          |          
+            |          |--50.93%--lj_str_new
+            |          |          |          
+            |          |          |--46.30%--hash_dense
+            |          |          |          
+            |          |           --0.64%--0x7fac4b87657f
+            |          |          
+            |           --38.18%--bufx_copy
+            |                     |          
+            |                     |--33.61%--bufx_read
+            |                     |          |          
+            |                     |          |--13.70%--bufx_userdata
+            |                     |          |          |          
+            |                     |          |           --13.07%--lj_gc2_tv_lease_acquire
+            |                     |          |                     |          
+            |                     |          |                      --12.87%--gc2_tv_admit_scoped_impl
+            |                     |          |                                |          
+            |                     |          |                                 --12.66%--gc2_observed_obj_status_scoped_impl
+            |                     |          |                                           |          
+            |                     |          |                                            --12.45%--gc2_small_candidate_admit
+            |                     |          |                                                      |          
+            |                     |          |                                                      |--8.67%--gc2_small_registered_rescue_enter
+            |                     |          |                                                      |          |          
+            |                     |          |                                                      |           --8.46%--lj_arena_hugetab_rescue_enter
+            |                     |          |                                                      |                     |          
+            |                     |          |                                                      |                      --1.47%--hugetab_search
+            |                     |          |                                                      |          
+            |                     |          |                                                       --0.85%--gc2_small_lifetime_nearest
+            |                     |          |          
+            |                     |          |--11.10%--lj_gc2_small_lease_try
+            |                     |          |          |          
+            |                     |          |           --7.55%--lj_arena_hugetab_observe_enter
+            |                     |          |                     |          
+            |                     |          |                      --0.63%--hugetab_search
+            |                     |          |          
+            |                     |          |--4.23%--bufx_snapshot
+            |                     |          |          
+            |                     |           --2.90%--lj_gc2_lease_release
+            |                     |                     |          
+            |                     |                      --2.69%--arena_publish_leave
+            |                     |          
+            |                      --2.48%--lj_gc2_lease_release
+            |                                |          
+            |                                 --2.28%--arena_publish_leave
+            |          
+             --3.60%--0x55cd3986ffdd
+                       bufx_string
+
+    50.94%     3.59%  baseline-luajit  baseline-luajit               [.] lj_str_new
+            |          
+            |--47.35%--lj_str_new
+            |          |          
+            |          |--46.30%--hash_dense
+            |          |          
+            |           --0.64%--0x7fac4b87657f
+            |          
+             --3.57%--0x55cd3986ffdd
+                       bufx_string
+                       lj_str_new
+
+    46.30%    46.30%  baseline-luajit  baseline-luajit               [.] hash_dense
+            |
+            ---0x55cd3986ffdd
+               bufx_string
+               lj_str_new
+               hash_dense
+
+    38.18%     0.42%  baseline-luajit  baseline-luajit               [.] bufx_copy
+            |          
+             --37.76%--bufx_copy
+                       |          
+                       |--33.61%--bufx_read
+                       |          |          
+                       |          |--13.70%--bufx_userdata
+                       |          |          |          
+                       |          |           --13.07%--lj_gc2_tv_lease_acquire
+                       |          |                     |          
+                       |          |                      --12.87%--gc2_tv_admit_scoped_impl
+                       |          |                                |          
+                       |          |                                 --12.66%--gc2_observed_obj_status_scoped_impl
+                       |          |                                           |          
+                       |          |                                            --12.45%--gc2_small_candidate_admit
+                       |          |                                                      |          
+                       |          |                                                      |--8.67%--gc2_small_registered_rescue_enter
+                       |          |                                                      |          |          
+                       |          |                                                      |           --8.46%--lj_arena_hugetab_rescue_enter
+                       |          |                                                      |                     |          
+                       |          |                                                      |                      --1.47%--hugetab_search
+                       |          |                                                      |          
+                       |          |                                                       --0.85%--gc2_small_lifetime_nearest
+                       |          |          
+                       |          |--11.10%--lj_gc2_small_lease_try
+                       |          |          |          
+                       |          |           --7.55%--lj_arena_hugetab_observe_enter
+                       |          |                     |          
+                       |          |                      --0.63%--hugetab_search
+                       |          |          
+                       |          |--4.23%--bufx_snapshot
+                       |          |          
+                       |           --2.90%--lj_gc2_lease_release
+                       |                     |          
+                       |                      --2.69%--arena_publish_leave
+                       |          
+                        --2.48%--lj_gc2_lease_release
+                                  |          
+                                   --2.28%--arena_publish_leave
+
+    33.61%     1.25%  baseline-luajit  baseline-luajit               [.] bufx_read
+            |          
+            |--32.36%--bufx_read
+            |          |          
+            |          |--13.70%--bufx_userdata
+            |          |          |          
+            |          |           --13.07%--lj_gc2_tv_lease_acquire
+            |          |                     |          
+            |          |                      --12.87%--gc2_tv_admit_scoped_impl
+            |          |                                |          
+            |          |                                 --12.66%--gc2_observed_obj_status_scoped_impl
+            |          |                                           |          
+            |          |                                            --12.45%--gc2_small_candidate_admit
+            |          |                                                      |          
+            |          |                                                      |--8.67%--gc2_small_registered_rescue_enter
+            |          |                                                      |          |          
+            |          |                                                      |           --8.46%--lj_arena_hugetab_rescue_enter
+            |          |                                                      |                     |          
+            |          |                                                      |                      --1.47%--hugetab_search
+            |          |                                                      |          
+            |          |                                                       --0.85%--gc2_small_lifetime_nearest
+            |          |          
+            |          |--11.10%--lj_gc2_small_lease_try
+            |          |          |          
+            |          |           --7.55%--lj_arena_hugetab_observe_enter
+            |          |                     |          
+            |          |                      --0.63%--hugetab_search
+            |          |          
+            |          |--4.23%--bufx_snapshot
+            |          |          
+            |           --2.90%--lj_gc2_lease_release
+            |                     |          
+            |                      --2.69%--arena_publish_leave
+            |          
+             --1.25%--0x55cd3986ffdd
+                       bufx_string
+                       bufx_copy
+                       bufx_read
+
+    13.70%     0.63%  baseline-luajit  baseline-luajit               [.] bufx_userdata
+            |          
+            |--13.07%--bufx_userdata
+            |          lj_gc2_tv_lease_acquire
+            |          |          
+            |           --12.87%--gc2_tv_admit_scoped_impl
+            |                     |          
+            |                      --12.66%--gc2_observed_obj_status_scoped_impl
+            |                                |          
+            |                                 --12.45%--gc2_small_candidate_admit
+            |                                           |          
+            |                                           |--8.67%--gc2_small_registered_rescue_enter
+            |                                           |          |          
+            |                                           |           --8.46%--lj_arena_hugetab_rescue_enter
+            |                                           |                     |          
+            |                                           |                      --1.47%--hugetab_search
+            |                                           |          
+            |                                            --0.85%--gc2_small_lifetime_nearest
+            |          
+             --0.63%--0x55cd3986ffdd
+                       bufx_string
+                       bufx_copy
+                       bufx_read
+                       bufx_userdata
+
+    13.07%     0.21%  baseline-luajit  baseline-luajit               [.] lj_gc2_tv_lease_acquire
+            |          
+             --12.87%--lj_gc2_tv_lease_acquire
+                       gc2_tv_admit_scoped_impl
+                       |          
+                        --12.66%--gc2_observed_obj_status_scoped_impl
+                                  |          
+                                   --12.45%--gc2_small_candidate_admit
+                                             |          
+                                             |--8.67%--gc2_small_registered_rescue_enter
+                                             |          |          
+                                             |           --8.46%--lj_arena_hugetab_rescue_enter
+                                             |                     |          
+                                             |                      --1.47%--hugetab_search
+                                             |          
+                                              --0.85%--gc2_small_lifetime_nearest
+
+    12.87%     0.21%  baseline-luajit  baseline-luajit               [.] gc2_tv_admit_scoped_impl
+            |          
+             --12.66%--gc2_tv_admit_scoped_impl
+                       gc2_observed_obj_status_scoped_impl
+                       |          
+                        --12.45%--gc2_small_candidate_admit
+                                  |          
+                                  |--8.67%--gc2_small_registered_rescue_enter
+                                  |          |          
+                                  |           --8.46%--lj_arena_hugetab_rescue_enter
+                                  |                     |          
+                                  |                      --1.47%--hugetab_search
+                                  |          
+                                   --0.85%--gc2_small_lifetime_nearest
+
+    12.66%     0.22%  baseline-luajit  baseline-luajit               [.] gc2_observed_obj_status_scoped_impl
+            |          
+             --12.45%--gc2_observed_obj_status_scoped_impl
+                       gc2_small_candidate_admit
+                       |          
+                       |--8.67%--gc2_small_registered_rescue_enter
+                       |          |          
+                       |           --8.46%--lj_arena_hugetab_rescue_enter
+                       |                     |          
+                       |                      --1.47%--hugetab_search
+                       |          
+                        --0.85%--gc2_small_lifetime_nearest
+
+    12.45%     2.50%  baseline-luajit  baseline-luajit               [.] gc2_small_candidate_admit
+            |          
+            |--9.94%--gc2_small_candidate_admit
+            |          |          
+            |          |--8.67%--gc2_small_registered_rescue_enter
+            |          |          |          
+            |          |           --8.46%--lj_arena_hugetab_rescue_enter
+            |          |                     |          
+            |          |                      --1.47%--hugetab_search
+            |          |          
+            |           --0.85%--gc2_small_lifetime_nearest
+            |          
+             --2.50%--0x55cd3986ffdd
+                       bufx_string
+                       bufx_copy
+                       bufx_read
+                       bufx_userdata
+                       lj_gc2_tv_lease_acquire
+                       gc2_tv_admit_scoped_impl
+                       gc2_observed_obj_status_scoped_impl
+                       gc2_small_candidate_admit
+
+    11.10%     3.55%  baseline-luajit  baseline-luajit               [.] lj_gc2_small_lease_try
+            |          
+            |--7.55%--lj_gc2_small_lease_try
+            |          lj_arena_hugetab_observe_enter
+            |          |          
+            |           --0.63%--hugetab_search
+            |          
+             --3.55%--0x55cd3986ffdd
+                       bufx_string
+                       bufx_copy
+                       bufx_read
+                       lj_gc2_small_lease_try
+
+     8.67%     0.20%  baseline-luajit  baseline-luajit               [.] gc2_small_registered_rescue_enter
+            |          
+             --8.46%--gc2_small_registered_rescue_enter
+                       lj_arena_hugetab_rescue_enter
+                       |          
+                        --1.47%--hugetab_search
+
+     8.46%     6.99%  baseline-luajit  baseline-luajit               [.] lj_arena_hugetab_rescue_enter
+            |          
+            |--6.99%--0x55cd3986ffdd
+            |          bufx_string
+            |          bufx_copy
+            |          bufx_read
+            |          bufx_userdata
+            |          lj_gc2_tv_lease_acquire
+            |          gc2_tv_admit_scoped_impl
+            |          gc2_observed_obj_status_scoped_impl
+            |          gc2_small_candidate_admit
+            |          gc2_small_registered_rescue_enter
+            |          lj_arena_hugetab_rescue_enter
+            |          
+             --1.47%--lj_arena_hugetab_rescue_enter
+                       hugetab_search
+
+     7.55%     6.91%  baseline-luajit  baseline-luajit               [.] lj_arena_hugetab_observe_enter
+            |          
+            |--6.91%--0x55cd3986ffdd
+            |          bufx_string
+            |          bufx_copy
+            |          bufx_read
+            |          lj_gc2_small_lease_try
+            |          lj_arena_hugetab_observe_enter
+            |          
+             --0.63%--lj_arena_hugetab_observe_enter
+                       hugetab_search
+
+     5.39%     0.20%  baseline-luajit  baseline-luajit               [.] lj_gc2_lease_release
+            |          
+             --5.18%--lj_gc2_lease_release
+                       |          
+                        --4.97%--arena_publish_leave
+
+     4.98%     4.98%  baseline-luajit  baseline-luajit               [.] arena_publish_leave
+            |          
+             --4.97%--0x55cd3986ffdd
+                       bufx_string
+                       bufx_copy
+                       |          
+                       |--2.69%--bufx_read
+                       |          lj_gc2_lease_release
+                       |          arena_publish_leave
+                       |          
+                        --2.28%--lj_gc2_lease_release
+                                  arena_publish_leave
+
+     4.45%     4.45%  baseline-luajit  baseline-luajit               [.] lj_bufx_reset_forjit
+            |
+            ---0x55cd3986feb4
+               lj_bufx_reset_forjit
+
+     4.45%     0.00%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x000055cd3986feb4
+            |
+            ---0x55cd3986feb4
+               lj_bufx_reset_forjit
+
+     4.23%     4.23%  baseline-luajit  baseline-luajit               [.] bufx_snapshot
+            |
+            ---0x55cd3986ffdd
+               bufx_string
+               bufx_copy
+               bufx_read
+               bufx_snapshot
+
+     2.10%     2.10%  baseline-luajit  baseline-luajit               [.] hugetab_search
+            |
+            ---0x55cd3986ffdd
+               bufx_string
+               bufx_copy
+               bufx_read
+               |          
+               |--1.47%--bufx_userdata
+               |          lj_gc2_tv_lease_acquire
+               |          gc2_tv_admit_scoped_impl
+               |          gc2_observed_obj_status_scoped_impl
+               |          gc2_small_candidate_admit
+               |          gc2_small_registered_rescue_enter
+               |          lj_arena_hugetab_rescue_enter
+               |          hugetab_search
+               |          
+                --0.63%--lj_gc2_small_lease_try
+                          lj_arena_hugetab_observe_enter
+                          hugetab_search
+
+     1.70%     0.00%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x000055cd3986ff20
+            |
+            ---0x55cd3986ff20
+               lj_bufx_putstr_forjit
+               |          
+                --1.49%--lj_buf_putstr
+                          |          
+                           --0.63%--0x7fac4b876d00
+
+     1.70%     0.22%  baseline-luajit  baseline-luajit               [.] lj_bufx_putstr_forjit
+            |          
+             --1.49%--lj_bufx_putstr_forjit
+                       lj_buf_putstr
+                       |          
+                        --0.63%--0x7fac4b876d00
+
+     1.49%     0.43%  baseline-luajit  baseline-luajit               [.] lj_buf_putstr
+            |          
+             --1.06%--lj_buf_putstr
+                       |          
+                        --0.63%--0x7fac4b876d00
+
+     0.85%     0.85%  baseline-luajit  baseline-luajit               [.] gc2_small_lifetime_nearest
+            |
+            ---0x55cd3986ffdd
+               bufx_string
+               bufx_copy
+               bufx_read
+               bufx_userdata
+               lj_gc2_tv_lease_acquire
+               gc2_tv_admit_scoped_impl
+               gc2_observed_obj_status_scoped_impl
+               gc2_small_candidate_admit
+               gc2_small_lifetime_nearest
+
+     0.64%     0.64%  baseline-luajit  libc.so.6                     [.] 0x000000000016257f
+            |
+            ---0x55cd3986ffdd
+               bufx_string
+               lj_str_new
+               0x7fac4b87657f
+
+     0.64%     0.00%  baseline-luajit  libc.so.6                     [.] 0x00007fac4b87657f
+            |
+            ---0x7fac4b87657f
+
+     0.63%     0.63%  baseline-luajit  libc.so.6                     [.] 0x0000000000162d00
+            |
+            ---0x55cd3986ff20
+               lj_bufx_putstr_forjit
+               lj_buf_putstr
+               0x7fac4b876d00
+
+     0.63%     0.00%  baseline-luajit  libc.so.6                     [.] 0x00007fac4b876d00
+            |
+            ---0x7fac4b876d00
+
+
+
+#
+# (Tip: To set sample time separation other than 100ms with --sort time use --time-quantum)
+#

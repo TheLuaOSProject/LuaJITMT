@@ -1,0 +1,25 @@
+RUN control-1-jit-1-head394
+DONE control-1-jit-1-head394
+RUN control-1-jit-2-stock
+DONE control-1-jit-2-stock
+RUN control-1-joff-1-head394
+DONE control-1-joff-1-head394
+RUN control-1-joff-2-stock
+DONE control-1-joff-2-stock
+RUN control-2-jit-1-stock
+DONE control-2-jit-1-stock
+RUN control-2-jit-2-head394
+DONE control-2-jit-2-head394
+RUN control-2-joff-1-stock
+DONE control-2-joff-1-stock
+RUN control-2-joff-2-head394
+DONE control-2-joff-2-head394
+RUN control-3-jit-1-head394
+DONE control-3-jit-1-head394
+RUN control-3-jit-2-stock
+DONE control-3-jit-2-stock
+RUN control-3-joff-1-head394
+DONE control-3-joff-1-head394
+RUN control-3-joff-2-stock
+DONE control-3-joff-2-stock
+FINISHED

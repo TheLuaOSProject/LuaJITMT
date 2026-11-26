@@ -1,0 +1,167 @@
+---- TRACE 1 start workload.lua:13
+0005  UGET     5   0      ; b
+0006  MOV      7   5
+0007  TGETS    5   5   0  ; "put"
+0008  UGET     8   1      ; payload
+0009  CALL     5   1   3
+0000  . FUNCC               ; buffer.method.put
+0010  FORL     1 => 0005
+---- TRACE 1 IR
+....              SNAP   #0   [ ---- ---- ]
+0001 rbx   >  int SLOAD  #4    CRI
+0002       >  int LE     0001  +2147483646
+0003 rbp      int SLOAD  #3    CI
+0004 rax      fun SLOAD  #0    R
+0005 rdx   >  p64 UREFC  0004  #0  
+0006 rsi   >  udt ULOAD  0005
+0007 rdx      tab FLOAD  0006  udata.meta
+0008          u8  FLOAD  0006  udata.udtype
+0009       >  int EQ     0008  +3  
+0010       >  tab NE     0007  NULL
+0011 rdx      p64 FLOAD  0007  tab.node
+0012       >  p64 HREFK  0011  "__index" @2
+0013 rdx   >  tab HLOAD  0012
+0014 rdx      p64 FLOAD  0013  tab.node
+0015       >  p64 HREFK  0014  "put" @12
+0016 r13   >  fun HLOAD  0015
+0017       >  fun EQ     0004  workload.lua:12
+0018       >  fun EQ     0016  buffer.method.put
+0019 rsi      p64 ADD    0006  +48 
+0021       >  nil CALLS  lj_bufx_putstr  (0019 "x" )
+0022 rbp    + int ADD    0003  +1  
+....              SNAP   #1   [ workload.lua:12 ---- ---- ]
+0023       >  int LE     0022  0001
+....              SNAP   #2   [ workload.lua:12 ---- ---- 0022 0001 ---- 0022 ]
+0024 ------------ LOOP ------------
+0025       >  nil XPOLL  #0  
+0026 r15   >  p64 UREFC  workload.lua:12  #0  
+0027 rsi   >  udt ULOAD  0026
+0028 r15      tab FLOAD  0027  udata.meta
+0029          u8  FLOAD  0027  udata.udtype
+0030       >  int EQ     0029  +3  
+0031       >  tab NE     0028  NULL
+0032 r15      p64 FLOAD  0028  tab.node
+0033       >  p64 HREFK  0032  "__index" @2
+0034 r15   >  tab HLOAD  0033
+0035 r15      p64 FLOAD  0034  tab.node
+0036       >  p64 HREFK  0035  "put" @12
+0037 r15   >  fun HLOAD  0036
+0038       >  fun EQ     0037  buffer.method.put
+0039 rsi      p64 ADD    0027  +48 
+0041       >  nil CALLS  lj_bufx_putstr  (0039 "x" )
+0042 rbp    + int ADD    0022  +1  
+....              SNAP   #3   [ workload.lua:12 ---- ---- ]
+0043       >  int LE     0042  0001
+0044 rbp      int PHI    0022  0042
+---- TRACE 1 mcode 597
+5652be7efdab  mov dword [r14+0x84c], 0x1
+5652be7efdb6  mov r12, 0x00007f8930dbb470
+5652be7efdc0  mov rdi, [r14+0x820]
+5652be7efdc7  mov rcx, 0x00007f8930dbb9b0
+5652be7efdd1  movsd xmm7, [rdx+0x10]
+5652be7efdd6  cvttsd2si ebx, xmm7
+5652be7efdda  xorps xmm6, xmm6
+5652be7efddd  cvtsi2sd xmm6, ebx
+5652be7efde1  ucomisd xmm7, xmm6
+5652be7efde5  jnz 0x5652be7e0110
+5652be7efdeb  jpe 0x5652be7e0110
+5652be7efdf1  cmp ebx, 0x7ffffffe
+5652be7efdf7  jg 0x5652be7e0110
+5652be7efdfd  cvttsd2si ebp, [rdx+0x8]
+5652be7efe02  rorx rax, [rdx-0x10], 0x2f
+5652be7efe09  shr rax, 0x11
+5652be7efe0d  mov rsi, [rax+0x28]
+5652be7efe11  cmp byte [rsi+0xa], 0x0
+5652be7efe15  jz 0x5652be7e0110
+5652be7efe1b  lea rdx, [rsi+0x10]
+5652be7efe1f  rorx rsi, [rdx], 0x2f
+5652be7efe25  cmp si, -0x0d
+5652be7efe29  jnz 0x5652be7e0110
+5652be7efe2f  shr rsi, 0x11
+5652be7efe33  mov rdx, [rsi+0x20]
+5652be7efe37  cmp byte [rsi+0xa], 0x3
+5652be7efe3b  jnz 0x5652be7e0110
+5652be7efe41  test rdx, rdx
+5652be7efe44  jz 0x5652be7e0110
+5652be7efe4a  mov rdx, [rdx+0x28]
+5652be7efe4e  cmp dword [rdx-0x10], +0x02
+5652be7efe52  jb 0x5652be7e0110
+5652be7efe58  mov r15, 0xfffdff8930db27a0
+5652be7efe62  cmp r15, [rdx+0x38]
+5652be7efe66  jnz 0x5652be7e0110
+5652be7efe6c  rorx rdx, [rdx+0x30], 0x2f
+5652be7efe73  cmp dx, -0x0c
+5652be7efe77  jnz 0x5652be7e0110
+5652be7efe7d  shr rdx, 0x11
+5652be7efe81  mov rdx, [rdx+0x28]
+5652be7efe85  cmp dword [rdx-0x10], +0x0c
+5652be7efe89  jb 0x5652be7e0110
+5652be7efe8f  mov r15, 0xfffdff8930db9fd0
+5652be7efe99  cmp r15, [rdx+0x128]
+5652be7efea0  jnz 0x5652be7e0110
+5652be7efea6  rorx r13, [rdx+0x120], 0x2f
+5652be7efeb0  cmp r13w, -0x09
+5652be7efeb5  jnz 0x5652be7e0110
+5652be7efebb  shr r13, 0x11
+5652be7efebf  cmp rax, rcx
+5652be7efec2  jnz 0x5652be7e0110
+5652be7efec8  cmp r13, r12
+5652be7efecb  jnz 0x5652be7e0110
+5652be7efed1  add rsi, +0x30
+5652be7efed5  mov rdx, 0x00007f8930db9dc0
+5652be7efedf  call 0x5652c97bbcd0	->lj_bufx_putstr
+5652be7efee4  add ebp, +0x01
+5652be7efee7  cmp ebp, ebx
+5652be7efee9  jg 0x5652be7e0118
+->LOOP:
+5652be7efeef  mov rdi, [r14+0x820]
+5652be7efef6  mov rsi, 0x00007f8930ff0da4
+5652be7eff00  mov esi, [rsi]
+5652be7eff02  cmp esi, +0x00
+5652be7eff05  jz 0x5652be7e0120
+5652be7eff0b  cmp dword [r14+0x808], +0x00
+5652be7eff13  jnz 0x5652be7e0120
+5652be7eff19  mov rsi, 0x00007f8930dbb9f0
+5652be7eff23  cmp byte [rsi+0xa], 0x0
+5652be7eff27  jz 0x5652be7e0120
+5652be7eff2d  lea r15, [rsi+0x10]
+5652be7eff31  rorx rsi, [r15], 0x2f
+5652be7eff37  cmp si, -0x0d
+5652be7eff3b  jnz 0x5652be7e0120
+5652be7eff41  shr rsi, 0x11
+5652be7eff45  mov r15, [rsi+0x20]
+5652be7eff49  cmp byte [rsi+0xa], 0x3
+5652be7eff4d  jnz 0x5652be7e0120
+5652be7eff53  test r15, r15
+5652be7eff56  jz 0x5652be7e0120
+5652be7eff5c  mov r15, [r15+0x28]
+5652be7eff60  cmp dword [r15-0x10], +0x02
+5652be7eff65  jb 0x5652be7e0120
+5652be7eff6b  mov rdx, 0xfffdff8930db27a0
+5652be7eff75  cmp rdx, [r15+0x38]
+5652be7eff79  jnz 0x5652be7e0120
+5652be7eff7f  rorx r15, [r15+0x30], 0x2f
+5652be7eff86  cmp r15w, -0x0c
+5652be7eff8b  jnz 0x5652be7e0120
+5652be7eff91  shr r15, 0x11
+5652be7eff95  mov r15, [r15+0x28]
+5652be7eff99  cmp dword [r15-0x10], +0x0c
+5652be7eff9e  jb 0x5652be7e0120
+5652be7effa4  mov rdx, 0xfffdff8930db9fd0
+5652be7effae  cmp rdx, [r15+0x128]
+5652be7effb5  jnz 0x5652be7e0120
+5652be7effbb  rorx r15, [r15+0x120], 0x2f
+5652be7effc5  cmp r15w, -0x09
+5652be7effca  jnz 0x5652be7e0120
+5652be7effd0  shr r15, 0x11
+5652be7effd4  cmp r15, r12
+5652be7effd7  jnz 0x5652be7e0120
+5652be7effdd  add rsi, +0x30
+5652be7effe1  mov rdx, 0x00007f8930db9dc0
+5652be7effeb  call 0x5652c97bbcd0	->lj_bufx_putstr
+5652be7efff0  add ebp, +0x01
+5652be7efff3  cmp ebp, ebx
+5652be7efff5  jle 0x5652be7efeef	->LOOP
+5652be7efffb  jmp 0x5652be7e0128
+---- TRACE 1 stop -> loop
+

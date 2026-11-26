@@ -1,0 +1,322 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cpu_core/cycles/u'
+# Event count (approx.): 18088190709
+#
+# Overhead  Symbol                                          
+# ........  ................................................
+#
+    15.35%  [.] lj_arena_hugetab_rescue_enter
+            |
+            ---lj_arena_hugetab_rescue_enter
+               gc2_small_registered_rescue_enter
+               gc2_small_candidate_admit
+               |          
+                --15.29%--gc2_retain_candidate_status
+                          gc2_markobj_preserve_status_impl.constprop.0
+                          gc2_markobj_expected_scoped_status_mode
+                          gc2_barrier_tv.part.0
+                          lj_gc_pubroot
+                          bufx_anchor
+                          lj_bufx_putstr
+                          0x55c6de96ffef
+
+    11.79%  [.] bufx_pin_try
+            |
+            ---bufx_pin_try
+               lj_bufx_append
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     6.47%  [.] hugetab_reader_entry
+            |
+            ---hugetab_reader_entry
+               lj_arena_hugetab_reader_acquire
+               lj_gc2_storage_lease_try
+               bufx_pin_try
+               lj_bufx_append
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     6.29%  [.] hugetab_counted_lease_release.part.0
+            |
+            ---hugetab_counted_lease_release.part.0
+               lj_gc2_lease_release
+               lj_bufx_append
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     5.98%  [.] gc2_small_candidate_admit
+            |
+            ---gc2_small_candidate_admit
+               gc2_retain_candidate_status
+               gc2_markobj_preserve_status_impl.constprop.0
+               |          
+                --5.92%--gc2_markobj_expected_scoped_status_mode
+                          gc2_barrier_tv.part.0
+                          lj_gc_pubroot
+                          bufx_anchor
+                          lj_bufx_putstr
+                          0x55c6de96ffef
+
+     5.17%  [.] bufx_endwrite
+            |
+            ---bufx_endwrite
+               lj_bufx_append
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     4.82%  [.] lj_gc2_smr_read_try
+            |
+            ---lj_gc2_smr_read_try
+               gc2_registry_read_try_mode
+               lj_gc2_storage_lease_try
+               bufx_pin_try
+               lj_bufx_append
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     4.49%  [.] gc2_mark_small_cell_admitted
+            |
+            ---gc2_mark_small_cell_admitted
+               gc2_retain_candidate_status
+               gc2_markobj_preserve_status_impl.constprop.0
+               |          
+                --4.43%--gc2_markobj_expected_scoped_status_mode
+                          gc2_barrier_tv.part.0
+                          lj_gc_pubroot
+                          bufx_anchor
+                          lj_bufx_putstr
+                          0x55c6de96ffef
+
+     4.22%  [.] hugetab_search
+            |
+            ---hugetab_search
+               |          
+               |--1.17%--hugetab_counted_lease_release.part.0
+               |          lj_gc2_lease_release
+               |          lj_bufx_append
+               |          lj_bufx_putstr
+               |          0x55c6de96ffef
+               |          
+               |--1.11%--lj_arena_hugetab_reader_acquire
+               |          lj_gc2_storage_lease_try
+               |          bufx_pin_try
+               |          lj_bufx_append
+               |          lj_bufx_putstr
+               |          0x55c6de96ffef
+               |          
+               |--0.98%--lj_arena_hugetab_rescue_enter
+               |          gc2_small_registered_rescue_enter
+               |          gc2_small_candidate_admit
+               |          gc2_retain_candidate_status
+               |          gc2_markobj_preserve_status_impl.constprop.0
+               |          gc2_markobj_expected_scoped_status_mode
+               |          gc2_barrier_tv.part.0
+               |          lj_gc_pubroot
+               |          bufx_anchor
+               |          lj_bufx_putstr
+               |          0x55c6de96ffef
+               |          
+                --0.97%--lj_arena_hugetab_range_lookup
+                          gc2_huge_table_for_address
+                          lj_gc2_storage_lease_try
+                          bufx_pin_try
+                          lj_bufx_append
+                          lj_bufx_putstr
+                          0x55c6de96ffef
+
+     4.01%  [.] lj_gc2_smr_read_leave
+            |
+            ---lj_gc2_smr_read_leave
+               lj_gc2_storage_lease_try
+               bufx_pin_try
+               lj_bufx_append
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     3.81%  [.] lj_bufx_append
+            |
+            ---lj_bufx_append
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     3.06%  [.] arena_publish_leave
+            |
+            ---arena_publish_leave
+               gc2_barrier_tv.part.0
+               lj_gc_pubroot
+               bufx_anchor
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     2.09%  [.] lj_tg_root_anchor_push
+            |
+            ---lj_tg_root_anchor_push
+               bufx_anchor
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     1.96%  [.] gc2_container_visit
+            |
+            ---gc2_container_visit
+               gc2_root_rescan_later
+               lj_gc_pubroot
+               bufx_anchor
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     1.69%  [.] gc2_markobj_preserve_status_impl.constprop.0
+            |
+            ---gc2_markobj_preserve_status_impl.constprop.0
+               gc2_markobj_expected_scoped_status_mode
+               gc2_barrier_tv.part.0
+               lj_gc_pubroot
+               bufx_anchor
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     1.56%  [.] gc2_markobj_expected_scoped_status_mode
+            |
+            ---gc2_markobj_expected_scoped_status_mode
+               gc2_barrier_tv.part.0
+               lj_gc_pubroot
+               bufx_anchor
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     1.43%  [.] lj_gc2_lease_release
+            |
+            ---lj_gc2_lease_release
+               lj_bufx_append
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     1.43%  [.] lj_gc2_storage_lease_try
+            |
+            ---lj_gc2_storage_lease_try
+               bufx_pin_try
+               lj_bufx_append
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     1.42%  [.] gc2_retain_candidate_status
+            |
+            ---gc2_retain_candidate_status
+               gc2_markobj_preserve_status_impl.constprop.0
+               gc2_markobj_expected_scoped_status_mode
+               gc2_barrier_tv.part.0
+               lj_gc_pubroot
+               bufx_anchor
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     1.24%  [.] lj_arena_hugetab_range_lookup
+            |
+            ---lj_arena_hugetab_range_lookup
+               gc2_huge_table_for_address
+               lj_gc2_storage_lease_try
+               bufx_pin_try
+               lj_bufx_append
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     1.22%  [.] bufx_anchor
+            |
+            ---bufx_anchor
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     1.17%  [.] gc2_small_registered_rescue_enter
+            |
+            ---gc2_small_registered_rescue_enter
+               gc2_small_candidate_admit
+               gc2_retain_candidate_status
+               gc2_markobj_preserve_status_impl.constprop.0
+               gc2_markobj_expected_scoped_status_mode
+               gc2_barrier_tv.part.0
+               lj_gc_pubroot
+               bufx_anchor
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     0.97%  [.] lj_bufx_putstr
+            |
+            ---lj_bufx_putstr
+               0x55c6de96ffef
+
+     0.91%  [.] lj_gc_pubroot
+            |
+            ---lj_gc_pubroot
+               bufx_anchor
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     0.90%  [.] lj_arena_hugetab_reader_acquire
+            |
+            ---lj_arena_hugetab_reader_acquire
+               lj_gc2_storage_lease_try
+               bufx_pin_try
+               lj_bufx_append
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     0.79%  [.] gc2_retained_candidate_valid
+            |
+            ---gc2_retained_candidate_valid
+               gc2_small_candidate_admit
+               gc2_retain_candidate_status
+               gc2_markobj_preserve_status_impl.constprop.0
+               |          
+                --0.72%--gc2_markobj_expected_scoped_status_mode
+                          gc2_barrier_tv.part.0
+                          lj_gc_pubroot
+                          bufx_anchor
+                          lj_bufx_putstr
+                          0x55c6de96ffef
+
+     0.78%  [.] gc2_huge_table_for_address
+            |
+            ---gc2_huge_table_for_address
+               lj_gc2_storage_lease_try
+               bufx_pin_try
+               lj_bufx_append
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     0.72%  [.] gc2_registry_read_try_mode
+            |
+            ---gc2_registry_read_try_mode
+               lj_gc2_storage_lease_try
+               bufx_pin_try
+               lj_bufx_append
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     0.65%  [.] gc2_small_lifetime_nearest
+            |
+            ---gc2_small_lifetime_nearest
+               gc2_small_candidate_admit
+               gc2_retain_candidate_status
+               gc2_markobj_preserve_status_impl.constprop.0
+               gc2_markobj_expected_scoped_status_mode
+               gc2_barrier_tv.part.0
+               lj_gc_pubroot
+               bufx_anchor
+               lj_bufx_putstr
+               0x55c6de96ffef
+
+     0.58%  [.] lj_tg_root_anchor_pop
+            |
+            ---lj_tg_root_anchor_pop
+               |          
+                --0.52%--0x55c6de96ffef
+
+
+
+#
+# (Tip: To record every process run by a user: perf record -u <user>)
+#

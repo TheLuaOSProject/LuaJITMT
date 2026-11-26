@@ -1,0 +1,2 @@
+[ perf record: Woken up 50 times to write data ]
+[ perf record: Captured and wrote 12.459 MB /tmp/lj-buffer-costs-20261126-kxgq98u7/user-record-current-append-1.data (1545 samples) ]

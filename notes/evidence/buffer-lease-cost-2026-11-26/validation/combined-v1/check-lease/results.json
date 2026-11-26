@@ -1,0 +1,40 @@
+[
+  {
+    "name": "progress-build",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/combined-v1/check-lease/progress.d",
+      "-I/tmp/lj-buffer-headroom-20261126-y6qc0l6f/combined-v1/src",
+      "-I/tmp/lj-buffer-headroom-20261126-y6qc0l6f/combined-v1/tests",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/combined-v1/tests/t-gc2-small-lease-span.c",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/combined-v1/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/combined-v1/check-lease/lease"
+    ],
+    "seconds": 0.1139222210040316,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "progress",
+    "command": [
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/combined-v1/check-lease/lease"
+    ],
+    "seconds": 0.0034440470044501126,
+    "exit": 0,
+    "test": true
+  }
+]

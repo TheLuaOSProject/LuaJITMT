@@ -1,0 +1,12 @@
+[
+  {
+    "name": "linux-x64-shared",
+    "command": [
+      "bash",
+      "tools/ci/linux_x64_shared.sh"
+    ],
+    "seconds": 30.06200957202236,
+    "exit": 0,
+    "test": true
+  }
+]

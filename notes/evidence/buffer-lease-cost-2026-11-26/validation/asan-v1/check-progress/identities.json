@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/src/luajit": "e403af80a1dcac63b400c6cb9ffe0de3cb6e0e0d68b739f75a397c5374d5cdb2",
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/src/libluajit.a": "df1995ab8770fff753c30b649179a14af60ae1df56e376db31cb0bf74a22f0c4",
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/tests/t-buffer-progress.c": "14b24dd2b5106854dec83e49cf5e5796752b26044b75a77a52664f5f35a03a39",
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/check-progress/progress": "e1cce7e40ff07661232c75deb3b29b7e48feafa1d9c95707186852d7f9abe1e4"
+}

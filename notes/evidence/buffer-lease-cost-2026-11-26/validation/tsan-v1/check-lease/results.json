@@ -1,0 +1,49 @@
+[
+  {
+    "name": "progress-build",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-Wno-error=tsan",
+      "-fsanitize=thread",
+      "-fno-omit-frame-pointer",
+      "-fno-pie",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/tsan-v1/check-lease/progress.d",
+      "-I/tmp/lj-buffer-headroom-20261126-y6qc0l6f/tsan-v1/src",
+      "-I/tmp/lj-buffer-headroom-20261126-y6qc0l6f/tsan-v1/tests",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/tsan-v1/tests/t-gc2-small-lease-span.c",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/tsan-v1/src/libluajit.a",
+      "-fsanitize=thread",
+      "-no-pie",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/tsan-v1/check-lease/lease"
+    ],
+    "seconds": 0.2142558389750775,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "progress",
+    "command": [
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/tsan-v1/check-lease/lease"
+    ],
+    "seconds": 0.11397978098830208,
+    "exit": 0,
+    "test": true
+  }
+]

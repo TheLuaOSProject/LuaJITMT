@@ -46,6 +46,7 @@ local m3_scaffold_deps = {
   "m3_gc2_internal_allocator_only",
   "m3_gc2_recovery",
   "m3_gc2_sweep_edge_lease",
+  "m3_gc2_small_lease_span",
   "m3_gc2_worker_scheduler",
   "m3_gc2_worker_sweep_bridge",
   "m3_gc2_constructor_defer",
@@ -815,6 +816,16 @@ return function(add)
 	timeout = "240s"
       })
       print("M3 interpreter-only stock suite passed under -joff")
+    end
+  })
+
+  register({
+    name = "m3_gc2_small_lease_span",
+    description = "small allocation minimum leases preserve full spans and deferred frees",
+    run = function(t)
+      t:build({ quiet = true })
+      compile_and_run_c(t, t:tmp("lj_t-gc2-small-lease-span"),
+                        "t-gc2-small-lease-span.c", { timeout = "30s" })
     end
   })
 

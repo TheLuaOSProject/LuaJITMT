@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/assert-v1/src/luajit": "f4421aa835dc4655bd6b550e82fda7141dd4155c2df016231318e065cce910d7",
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/assert-v1/src/libluajit.a": "727ea893bc44f35171c4510a7467857ae7f432e951c9da2c169556d5514349a4",
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/assert-v1/tests/t-gc2-small-lease-span.c": "e221568a914d812101bc5aef8834ac314703581a3cecb7d8871527dfe9ad2bf6",
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/assert-v1/check-lease/lease": "ccd3124d37ab5fe4289d9ff4a3c599295acb27eab44d078ba044f5c4089189df"
+}

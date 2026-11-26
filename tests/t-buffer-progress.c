@@ -1,5 +1,5 @@
 /* Public buffer operations must finish while a writer or metadata collector
-** is suspended. The held writer keeps its real storage leases throughout. */
+** is suspended, before storage admission and with real storage leases held. */
 #include <assert.h>
 #include <pthread.h>
 #include <sched.h>
@@ -34,8 +34,9 @@ static void pause_writer(lua_State *L, LJBuffer *buf, uint32_t stage)
       !la_cas32(&writer_state, &expected, WRITER_HELD, LA_ACQ_REL, LA_ACQ))
     return;
   (void)la_add32_rlx(&writer_hits, 1);
-  /* Deliberately provide no native region or safepoint certificate while the
-  ** buffer implementation owns leases. Automatic GC is stopped in this test. */
+  /* Deliberately provide no native region or safepoint certificate. Depending
+  ** on the stage, storage admission is pending or its real leases stay held.
+  ** Automatic GC is stopped in this test. */
   while (la_load32_acq(&writer_state) == WRITER_HELD)
     sched_yield();
 }
@@ -46,7 +47,8 @@ static int arm_writer(lua_State *L)
   assert(L == main_L && tvisbuf(L->base));
   assert(la_load32_acq(&writer_state) == WRITER_IDLE);
   assert(stage == LJ_BUF_TEST_TAIL_CLAIMED ||
-         stage == LJ_BUF_TEST_BEFORE_PUBLISH);
+         stage == LJ_BUF_TEST_BEFORE_PUBLISH ||
+         stage == LJ_BUF_TEST_STORAGE_SAMPLED);
   la_storeptr_rel(&writer_buf, bufV(L->base));
   la_store32_rel(&writer_stage, stage);
   la_store32_rel(&writer_hits, 0);
@@ -86,13 +88,14 @@ static void check_suspended_writers(lua_State *L)
   lua_gc(L, LUA_GCSTOP, 0);
   lj_buf_test_set_hook(pause_writer);
   ljt_lua_loadstring(L,
-    "local tail, publish = ...\n"
+    "local tail, publish, sampled = ...\n"
     "local th, buf = require('threading'), require('string.buffer')\n"
     "local havejit, jit = pcall(require, 'jit')\n"
     "if havejit then jit.off() end\n"
     "local function append(b) b:put('writer|'); return b:tostring() end\n"
     "local cases = {{tail, false, 'consume'},\n"
-    "               {publish, true, 'reset'}, {publish, true, 'free'}}\n"
+    "               {publish, true, 'reset'}, {publish, true, 'free'},\n"
+    "               {sampled, false, 'consume'}, {sampled, false, 'free'}}\n"
     "for _, case in ipairs(cases) do\n"
     "  local b = buf.new(64)\n"
     "  if case[2] then b:set('prefix|') else b:put('prefix|') end\n"
@@ -119,7 +122,8 @@ static void check_suspended_writers(lua_State *L)
     "end\n");
   lua_pushinteger(L, LJ_BUF_TEST_TAIL_CLAIMED);
   lua_pushinteger(L, LJ_BUF_TEST_BEFORE_PUBLISH);
-  ljt_lua_pcall(L, 2, 0, "buffer writer suspension");
+  lua_pushinteger(L, LJ_BUF_TEST_STORAGE_SAMPLED);
+  ljt_lua_pcall(L, 3, 0, "buffer writer suspension");
   lj_buf_test_set_hook(NULL);
   assert(la_load32_acq(&writer_state) == WRITER_IDLE);
   assert(!lj_gc2_activation_reclaim_veto(G(L)));

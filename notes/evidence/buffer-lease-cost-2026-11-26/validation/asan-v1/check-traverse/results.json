@@ -1,0 +1,46 @@
+[
+  {
+    "name": "progress-build",
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/check-traverse/progress.d",
+      "-I/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/src",
+      "-I/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/tests",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/tests/t-gc2-traverse.c",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/src/libluajit.a",
+      "-fsanitize=address",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/check-traverse/traverse"
+    ],
+    "seconds": 3.6188033390208147,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "progress",
+    "command": [
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/check-traverse/traverse"
+    ],
+    "seconds": 23.521757809998235,
+    "exit": 0,
+    "test": true
+  }
+]

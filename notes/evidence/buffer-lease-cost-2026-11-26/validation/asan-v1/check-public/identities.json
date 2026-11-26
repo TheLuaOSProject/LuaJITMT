@@ -1,0 +1,5 @@
+{
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/src/luajit": "e403af80a1dcac63b400c6cb9ffe0de3cb6e0e0d68b739f75a397c5374d5cdb2",
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/src/libluajit.a": "df1995ab8770fff753c30b649179a14af60ae1df56e376db31cb0bf74a22f0c4",
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/tests/t-buffer-concurrent-public.lua": "e7f61c097347eb0b7cb968db3d60e232c17d0ddeb0eb3aea436b1e4e30e3e40b"
+}

@@ -1,0 +1,44 @@
+[
+  {
+    "name": "progress-build",
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-ftrivial-auto-var-init=pattern",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/assert-v1/check-progress/progress.d",
+      "-I/tmp/lj-buffer-headroom-20261126-y6qc0l6f/assert-v1/src",
+      "-I/tmp/lj-buffer-headroom-20261126-y6qc0l6f/assert-v1/tests",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/assert-v1/tests/t-buffer-progress.c",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/assert-v1/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/assert-v1/check-progress/progress"
+    ],
+    "seconds": 0.16442232902045362,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "progress",
+    "command": [
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/assert-v1/check-progress/progress"
+    ],
+    "seconds": 0.007502349006244913,
+    "exit": 0,
+    "test": true
+  }
+]

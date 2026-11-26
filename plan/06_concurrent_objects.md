@@ -630,7 +630,9 @@ objects publish their backing allocation and both FIFO offsets with one x64
 128-bit CAS. Acquire/release pointer fields alone cannot protect a reader from
 an in-place write or compaction.
 
-Readers retain the selected allocation before copying or decoding its bytes.
+Readers sample a backing address, retain that allocation, then acquire the
+coherent tuple and confirm that it names the retained allocation. They inspect
+the header and copy or decode bytes only after this check.
 An internal writer claims only the unused tail. If another writer holds that
 claim, a peer can copy the committed prefix into private storage and publish
 its own append. Reset and consumption never make previously published bytes
@@ -650,7 +652,8 @@ The documented FFI boundary still applies: pointers returned by `ref` and
 cdata writes require application coordination. See
 [LuaJIT's buffer FFI caveats](https://luajit.org/ext_buffer.html).
 `m5_buffer_publish` checks public outcomes in both JIT modes;
-`m5_buffer_progress` suspends actual writer and metadata-reclamation owners.
+`m5_buffer_progress` suspends actual writer and metadata-reclamation owners,
+including a writer that has sampled an address but has not retained it yet.
 
 ## 6.7 lua_State ownership word
 `thr_owner` CAS protocol per 03 §3.7 / 05 §5.7.2. APIs that touch a foreign

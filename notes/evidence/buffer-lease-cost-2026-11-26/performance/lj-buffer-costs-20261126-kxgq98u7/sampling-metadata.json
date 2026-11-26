@@ -1,0 +1,74 @@
+[
+  {
+    "stem": "user-record-current-append-1",
+    "command": [
+      "perf",
+      "report",
+      "-i",
+      "/tmp/lj-buffer-costs-20261126-kxgq98u7/user-record-current-append-1.data",
+      "--stdio",
+      "--percent-limit",
+      "0.5",
+      "-g",
+      "graph,0.5,caller"
+    ],
+    "variant": "current",
+    "workload": "append",
+    "size": 1,
+    "operations": 30000000
+  },
+  {
+    "stem": "user-record-current-resetget-1024",
+    "command": [
+      "perf",
+      "report",
+      "-i",
+      "/tmp/lj-buffer-costs-20261126-kxgq98u7/user-record-current-resetget-1024.data",
+      "--stdio",
+      "--percent-limit",
+      "0.5",
+      "-g",
+      "graph,0.5,caller"
+    ],
+    "variant": "current",
+    "workload": "resetget",
+    "size": 1024,
+    "operations": 500000
+  },
+  {
+    "stem": "user-record-baseline-append-1",
+    "command": [
+      "perf",
+      "report",
+      "-i",
+      "/tmp/lj-buffer-costs-20261126-kxgq98u7/user-record-baseline-append-1.data",
+      "--stdio",
+      "--percent-limit",
+      "0.5",
+      "-g",
+      "graph,0.5,caller"
+    ],
+    "variant": "baseline",
+    "workload": "append",
+    "size": 1,
+    "operations": 600000000
+  },
+  {
+    "stem": "user-record-baseline-resetget-1024",
+    "command": [
+      "perf",
+      "report",
+      "-i",
+      "/tmp/lj-buffer-costs-20261126-kxgq98u7/user-record-baseline-resetget-1024.data",
+      "--stdio",
+      "--percent-limit",
+      "0.5",
+      "-g",
+      "graph,0.5,caller"
+    ],
+    "variant": "baseline",
+    "workload": "resetget",
+    "size": 1024,
+    "operations": 4000000
+  }
+]

@@ -1,0 +1,15 @@
+{
+  "current_commit": "51f8adc8e48e9d9904c769d42ce57ca5a408f9af",
+  "baseline_commit": "394159a5ca21ebc8be65bca055245dc2ca8e4526",
+  "v4_source_differences": [],
+  "cpu": 8,
+  "binaries": {
+    "baseline": "113546a9e740b090d51ae118e5a37a4cd32cd3a006fae0fd34b06118f728339e",
+    "current": "162491d8216fcb4faacf45bc99442bd1e5008a9b7796aa679807287b764cf756"
+  },
+  "combined_package": "/tmp/lj-buffer-perf-combined-20261126-payfa8fl",
+  "capacity_package": "/tmp/lj-buffer-perf-capacity-20261126-x8cbe3v3",
+  "combined_binary_sha256": "505476db8abd9a8cd425d622459c6aec4fa835e4d43fe79dbc0bfe61f248e17e",
+  "shared_edits": false,
+  "sampling_note": "perf record --all-user --user-callchains; initial denied attempt retained"
+}

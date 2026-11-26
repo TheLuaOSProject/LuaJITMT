@@ -1,0 +1,24 @@
+[
+  {
+    "name": "public-joff",
+    "command": [
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/src/luajit",
+      "-joff",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/tests/t-buffer-concurrent-public.lua"
+    ],
+    "seconds": 0.7660850929969456,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "public-jon",
+    "command": [
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/src/luajit",
+      "-jon",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/asan-v1/tests/t-buffer-concurrent-public.lua"
+    ],
+    "seconds": 0.966094517003512,
+    "exit": 0,
+    "test": true
+  }
+]

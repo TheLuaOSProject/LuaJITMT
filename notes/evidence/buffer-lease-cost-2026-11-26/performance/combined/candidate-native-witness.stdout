@@ -1,0 +1,5 @@
+small_append	native_loop_exit	1
+reset_put_get	native_loop_exit	1
+fifo_get	native_loop_exit	1
+set_get	native_loop_exit	1
+stream_decode	fallback_no_loop_exit	0

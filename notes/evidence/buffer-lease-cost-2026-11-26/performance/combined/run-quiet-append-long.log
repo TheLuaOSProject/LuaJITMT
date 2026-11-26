@@ -1,0 +1,21 @@
+RUN quiet-long-1-1-baseline
+DONE quiet-long-1-1-baseline
+RUN quiet-long-1-2-candidate
+DONE quiet-long-1-2-candidate
+RUN quiet-long-2-1-candidate
+DONE quiet-long-2-1-candidate
+RUN quiet-long-2-2-baseline
+DONE quiet-long-2-2-baseline
+RUN quiet-long-3-1-baseline
+DONE quiet-long-3-1-baseline
+RUN quiet-long-3-2-candidate
+DONE quiet-long-3-2-candidate
+RUN quiet-long-4-1-candidate
+DONE quiet-long-4-1-candidate
+RUN quiet-long-4-2-baseline
+DONE quiet-long-4-2-baseline
+RUN quiet-long-5-1-baseline
+DONE quiet-long-5-1-baseline
+RUN quiet-long-5-2-candidate
+DONE quiet-long-5-2-candidate
+FINISHED

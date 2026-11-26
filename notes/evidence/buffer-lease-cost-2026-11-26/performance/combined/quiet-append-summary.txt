@@ -1,0 +1,4 @@
+Additional quiet long append after root build/test jobs finished. Original full matrix remains unchanged.
+Median process CPU ns/append; same1000000 appends x10segments,2warmup segments,5alternating pairs.
+1B: v461.008→combined55.274ns;ratio0.9060;paired0.8867..0.9218;v4range59.688..64.577,combinedrange55.019..57.815
+16B: v462.942→combined58.850ns;ratio0.9350;paired0.8958..0.9420;v4range62.411..68.173,combinedrange58.120..61.071

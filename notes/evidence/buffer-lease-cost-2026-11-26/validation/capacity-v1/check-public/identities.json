@@ -1,0 +1,5 @@
+{
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/capacity-v1/src/luajit": "fc86c17a60fc8dc2f4b805c32a5f2466a643a8a30878c8bb531895349d957005",
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/capacity-v1/src/libluajit.a": "2c9a6ed0b023fbcfa0e069928a6c91645e42a33ee81180fd2b7db580e8b47495",
+  "/workspaces/lj-lockless/tests/t-buffer-concurrent-public.lua": "e7f61c097347eb0b7cb968db3d60e232c17d0ddeb0eb3aea436b1e4e30e3e40b"
+}

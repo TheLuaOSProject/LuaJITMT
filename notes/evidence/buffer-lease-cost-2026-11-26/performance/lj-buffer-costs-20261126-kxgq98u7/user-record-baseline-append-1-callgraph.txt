@@ -1,0 +1,165 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cpu_core/cycles/u'
+# Event count (approx.): 11862356047
+#
+# Children      Self  Command          Shared Object                 Symbol                                 
+# ........  ........  ...............  ............................  .......................................
+#
+    48.62%     0.00%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x0000557c3773ffef
+            |
+            ---0x557c3773ffef
+               lj_bufx_putstr_forjit
+               |          
+                --31.56%--lj_buf_putstr
+                          |          
+                          |--5.35%--memcpy@plt
+                          |          
+                           --4.60%--0x7f418afe4b84
+
+    48.62%    17.06%  baseline-luajit  baseline-luajit               [.] lj_bufx_putstr_forjit
+            |          
+            |--31.56%--lj_bufx_putstr_forjit
+            |          lj_buf_putstr
+            |          |          
+            |          |--5.35%--memcpy@plt
+            |          |          
+            |           --4.60%--0x7f418afe4b84
+            |          
+             --17.06%--0x557c3773ffef
+                       lj_bufx_putstr_forjit
+
+    31.56%    21.62%  baseline-luajit  baseline-luajit               [.] lj_buf_putstr
+            |          
+            |--21.62%--0x557c3773ffef
+            |          lj_bufx_putstr_forjit
+            |          lj_buf_putstr
+            |          
+             --9.94%--lj_buf_putstr
+                       |          
+                       |--5.35%--memcpy@plt
+                       |          
+                        --4.60%--0x7f418afe4b84
+
+    11.65%    11.65%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x000000000000ff86
+            |
+            ---0x557c3773ff86
+
+    11.65%     0.00%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x0000557c3773ff86
+            |
+            ---0x557c3773ff86
+
+     9.77%     9.77%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x000000000000ff9e
+            |
+            ---0x557c3773ff9e
+
+     9.77%     0.00%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x0000557c3773ff9e
+            |
+            ---0x557c3773ff9e
+
+     5.46%     5.46%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x000000000000ff4d
+            |
+            ---0x557c3773ff4d
+
+     5.46%     0.00%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x0000557c3773ff4d
+            |
+            ---0x557c3773ff4d
+
+     5.35%     5.35%  baseline-luajit  baseline-luajit               [.] memcpy@plt
+            |
+            ---0x557c3773ffef
+               lj_bufx_putstr_forjit
+               lj_buf_putstr
+               memcpy@plt
+
+     5.26%     5.26%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x000000000000feef
+            |
+            ---0x557c3773feef
+
+     5.26%     0.00%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x0000557c3773feef
+            |
+            ---0x557c3773feef
+
+     5.00%     5.00%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x000000000000ffa4
+            |
+            ---0x557c3773ffa4
+
+     5.00%     0.00%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x0000557c3773ffa4
+            |
+            ---0x557c3773ffa4
+
+     4.60%     4.60%  baseline-luajit  libc.so.6                     [.] 0x0000000000162b84
+            |
+            ---0x557c3773ffef
+               lj_bufx_putstr_forjit
+               lj_buf_putstr
+               0x7f418afe4b84
+
+     4.60%     0.00%  baseline-luajit  libc.so.6                     [.] 0x00007f418afe4b84
+            |
+            ---0x7f418afe4b84
+
+     4.19%     4.19%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x000000000000ff27
+            |
+            ---0x557c3773ff27
+
+     4.19%     0.00%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x0000557c3773ff27
+            |
+            ---0x557c3773ff27
+
+     2.93%     2.93%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x000000000000ffbb
+            |
+            ---0x557c3773ffbb
+
+     2.93%     0.00%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x0000557c3773ffbb
+            |
+            ---0x557c3773ffbb
+
+     1.67%     1.67%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x000000000000ffdd
+            |
+            ---0x557c3773ffdd
+
+     1.67%     0.00%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x0000557c3773ffdd
+            |
+            ---0x557c3773ffdd
+
+     1.66%     1.66%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x000000000000ff99
+            |
+            ---0x557c3773ff99
+
+     1.66%     0.00%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x0000557c3773ff99
+            |
+            ---0x557c3773ff99
+
+     1.61%     1.61%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x000000000000ffd4
+            |
+            ---0x557c3773ffd4
+
+     1.61%     0.00%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x0000557c3773ffd4
+            |
+            ---0x557c3773ffd4
+
+     1.06%     1.06%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x000000000000ffd0
+            |
+            ---0x557c3773ffd0
+
+     1.06%     0.00%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x0000557c3773ffd0
+            |
+            ---0x557c3773ffd0
+
+     0.68%     0.68%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x000000000000ffe1
+            |
+            ---0x557c3773ffe1
+
+     0.68%     0.00%  baseline-luajit  memfd:luajit-mcode (deleted)  [.] 0x0000557c3773ffe1
+            |
+            ---0x557c3773ffe1
+
+
+
+#
+# (Tip: To compare scalability of two workload samples use perf diff -c ratio file1 file2)
+#

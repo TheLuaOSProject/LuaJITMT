@@ -1,0 +1,24 @@
+[
+  {
+    "name": "public-joff",
+    "command": [
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/capacity-v1/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/tests/t-buffer-concurrent-public.lua"
+    ],
+    "seconds": 0.2639640890120063,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "public-jon",
+    "command": [
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/capacity-v1/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/tests/t-buffer-concurrent-public.lua"
+    ],
+    "seconds": 0.21407124400138855,
+    "exit": 0,
+    "test": true
+  }
+]

@@ -1,0 +1,722 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cpu_core/cycles/u'
+# Event count (approx.): 18088190709
+#
+# Children      Self  Command         Shared Object                 Symbol                                          
+# ........  ........  ..............  ............................  ................................................
+#
+    98.74%     0.00%  current-luajit  memfd:luajit-mcode (deleted)  [.] 0x000055c6de96ffef
+            |
+            ---0x55c6de96ffef
+               |          
+               |--98.23%--lj_bufx_putstr
+               |          |          
+               |          |--52.70%--lj_bufx_append
+               |          |          |          
+               |          |          |--34.24%--bufx_pin_try
+               |          |          |          |          
+               |          |          |           --22.45%--lj_gc2_storage_lease_try
+               |          |          |                     |          
+               |          |          |                     |--8.48%--lj_arena_hugetab_reader_acquire
+               |          |          |                     |          |          
+               |          |          |                     |          |--6.47%--hugetab_reader_entry
+               |          |          |                     |          |          
+               |          |          |                     |           --1.11%--hugetab_search
+               |          |          |                     |          
+               |          |          |                     |--5.54%--gc2_registry_read_try_mode
+               |          |          |                     |          |          
+               |          |          |                     |           --4.82%--lj_gc2_smr_read_try
+               |          |          |                     |          
+               |          |          |                     |--4.01%--lj_gc2_smr_read_leave
+               |          |          |                     |          
+               |          |          |                      --2.98%--gc2_huge_table_for_address
+               |          |          |                                |          
+               |          |          |                                 --2.20%--lj_arena_hugetab_range_lookup
+               |          |          |                                           |          
+               |          |          |                                            --0.97%--hugetab_search
+               |          |          |          
+               |          |          |--9.29%--lj_gc2_lease_release
+               |          |          |          |          
+               |          |          |           --7.53%--hugetab_counted_lease_release.part.0
+               |          |          |                     |          
+               |          |          |                      --1.17%--hugetab_search
+               |          |          |          
+               |          |           --5.17%--bufx_endwrite
+               |          |          
+               |           --44.49%--bufx_anchor
+               |                     |          
+               |                     |--41.18%--lj_gc_pubroot
+               |                     |          |          
+               |                     |          |--37.73%--gc2_barrier_tv.part.0
+               |                     |          |          |          
+               |                     |          |          |--33.83%--gc2_markobj_expected_scoped_status_mode
+               |                     |          |          |          |          
+               |                     |          |          |           --32.27%--gc2_markobj_preserve_status_impl.constprop.0
+               |                     |          |          |                     |          
+               |                     |          |          |                      --30.58%--gc2_retain_candidate_status
+               |                     |          |          |                                |          
+               |                     |          |          |                                |--24.72%--gc2_small_candidate_admit
+               |                     |          |          |                                |          |          
+               |                     |          |          |                                |          |--17.43%--gc2_small_registered_rescue_enter
+               |                     |          |          |                                |          |          |          
+               |                     |          |          |                                |          |           --16.26%--lj_arena_hugetab_rescue_enter
+               |                     |          |          |                                |          |                     |          
+               |                     |          |          |                                |          |                      --0.98%--hugetab_search
+               |                     |          |          |                                |          |          
+               |                     |          |          |                                |          |--0.72%--gc2_retained_candidate_valid
+               |                     |          |          |                                |          |          
+               |                     |          |          |                                |           --0.65%--gc2_small_lifetime_nearest
+               |                     |          |          |                                |          
+               |                     |          |          |                                 --4.43%--gc2_mark_small_cell_admitted
+               |                     |          |          |          
+               |                     |          |           --3.06%--arena_publish_leave
+               |                     |          |          
+               |                     |           --2.15%--gc2_root_rescan_later
+               |                     |                     |          
+               |                     |                      --1.96%--gc2_container_visit
+               |                     |          
+               |                      --2.09%--lj_tg_root_anchor_push
+               |          
+                --0.52%--lj_tg_root_anchor_pop
+
+    98.23%     0.97%  current-luajit  current-luajit                [.] lj_bufx_putstr
+            |          
+            |--97.26%--lj_bufx_putstr
+            |          |          
+            |          |--52.70%--lj_bufx_append
+            |          |          |          
+            |          |          |--34.24%--bufx_pin_try
+            |          |          |          |          
+            |          |          |           --22.45%--lj_gc2_storage_lease_try
+            |          |          |                     |          
+            |          |          |                     |--8.48%--lj_arena_hugetab_reader_acquire
+            |          |          |                     |          |          
+            |          |          |                     |          |--6.47%--hugetab_reader_entry
+            |          |          |                     |          |          
+            |          |          |                     |           --1.11%--hugetab_search
+            |          |          |                     |          
+            |          |          |                     |--5.54%--gc2_registry_read_try_mode
+            |          |          |                     |          |          
+            |          |          |                     |           --4.82%--lj_gc2_smr_read_try
+            |          |          |                     |          
+            |          |          |                     |--4.01%--lj_gc2_smr_read_leave
+            |          |          |                     |          
+            |          |          |                      --2.98%--gc2_huge_table_for_address
+            |          |          |                                |          
+            |          |          |                                 --2.20%--lj_arena_hugetab_range_lookup
+            |          |          |                                           |          
+            |          |          |                                            --0.97%--hugetab_search
+            |          |          |          
+            |          |          |--9.29%--lj_gc2_lease_release
+            |          |          |          |          
+            |          |          |           --7.53%--hugetab_counted_lease_release.part.0
+            |          |          |                     |          
+            |          |          |                      --1.17%--hugetab_search
+            |          |          |          
+            |          |           --5.17%--bufx_endwrite
+            |          |          
+            |           --44.49%--bufx_anchor
+            |                     |          
+            |                     |--41.18%--lj_gc_pubroot
+            |                     |          |          
+            |                     |          |--37.73%--gc2_barrier_tv.part.0
+            |                     |          |          |          
+            |                     |          |          |--33.83%--gc2_markobj_expected_scoped_status_mode
+            |                     |          |          |          |          
+            |                     |          |          |           --32.27%--gc2_markobj_preserve_status_impl.constprop.0
+            |                     |          |          |                     |          
+            |                     |          |          |                      --30.58%--gc2_retain_candidate_status
+            |                     |          |          |                                |          
+            |                     |          |          |                                |--24.72%--gc2_small_candidate_admit
+            |                     |          |          |                                |          |          
+            |                     |          |          |                                |          |--17.43%--gc2_small_registered_rescue_enter
+            |                     |          |          |                                |          |          |          
+            |                     |          |          |                                |          |           --16.26%--lj_arena_hugetab_rescue_enter
+            |                     |          |          |                                |          |                     |          
+            |                     |          |          |                                |          |                      --0.98%--hugetab_search
+            |                     |          |          |                                |          |          
+            |                     |          |          |                                |          |--0.72%--gc2_retained_candidate_valid
+            |                     |          |          |                                |          |          
+            |                     |          |          |                                |           --0.65%--gc2_small_lifetime_nearest
+            |                     |          |          |                                |          
+            |                     |          |          |                                 --4.43%--gc2_mark_small_cell_admitted
+            |                     |          |          |          
+            |                     |          |           --3.06%--arena_publish_leave
+            |                     |          |          
+            |                     |           --2.15%--gc2_root_rescan_later
+            |                     |                     |          
+            |                     |                      --1.96%--gc2_container_visit
+            |                     |          
+            |                      --2.09%--lj_tg_root_anchor_push
+            |          
+             --0.97%--0x55c6de96ffef
+                       lj_bufx_putstr
+
+    52.70%     3.81%  current-luajit  current-luajit                [.] lj_bufx_append
+            |          
+            |--48.89%--lj_bufx_append
+            |          |          
+            |          |--34.24%--bufx_pin_try
+            |          |          |          
+            |          |           --22.45%--lj_gc2_storage_lease_try
+            |          |                     |          
+            |          |                     |--8.48%--lj_arena_hugetab_reader_acquire
+            |          |                     |          |          
+            |          |                     |          |--6.47%--hugetab_reader_entry
+            |          |                     |          |          
+            |          |                     |           --1.11%--hugetab_search
+            |          |                     |          
+            |          |                     |--5.54%--gc2_registry_read_try_mode
+            |          |                     |          |          
+            |          |                     |           --4.82%--lj_gc2_smr_read_try
+            |          |                     |          
+            |          |                     |--4.01%--lj_gc2_smr_read_leave
+            |          |                     |          
+            |          |                      --2.98%--gc2_huge_table_for_address
+            |          |                                |          
+            |          |                                 --2.20%--lj_arena_hugetab_range_lookup
+            |          |                                           |          
+            |          |                                            --0.97%--hugetab_search
+            |          |          
+            |          |--9.29%--lj_gc2_lease_release
+            |          |          |          
+            |          |           --7.53%--hugetab_counted_lease_release.part.0
+            |          |                     |          
+            |          |                      --1.17%--hugetab_search
+            |          |          
+            |           --5.17%--bufx_endwrite
+            |          
+             --3.81%--0x55c6de96ffef
+                       lj_bufx_putstr
+                       lj_bufx_append
+
+    44.49%     1.22%  current-luajit  current-luajit                [.] bufx_anchor
+            |          
+            |--43.28%--bufx_anchor
+            |          |          
+            |          |--41.18%--lj_gc_pubroot
+            |          |          |          
+            |          |          |--37.73%--gc2_barrier_tv.part.0
+            |          |          |          |          
+            |          |          |          |--33.83%--gc2_markobj_expected_scoped_status_mode
+            |          |          |          |          |          
+            |          |          |          |           --32.27%--gc2_markobj_preserve_status_impl.constprop.0
+            |          |          |          |                     |          
+            |          |          |          |                      --30.58%--gc2_retain_candidate_status
+            |          |          |          |                                |          
+            |          |          |          |                                |--24.72%--gc2_small_candidate_admit
+            |          |          |          |                                |          |          
+            |          |          |          |                                |          |--17.43%--gc2_small_registered_rescue_enter
+            |          |          |          |                                |          |          |          
+            |          |          |          |                                |          |           --16.26%--lj_arena_hugetab_rescue_enter
+            |          |          |          |                                |          |                     |          
+            |          |          |          |                                |          |                      --0.98%--hugetab_search
+            |          |          |          |                                |          |          
+            |          |          |          |                                |          |--0.72%--gc2_retained_candidate_valid
+            |          |          |          |                                |          |          
+            |          |          |          |                                |           --0.65%--gc2_small_lifetime_nearest
+            |          |          |          |                                |          
+            |          |          |          |                                 --4.43%--gc2_mark_small_cell_admitted
+            |          |          |          |          
+            |          |          |           --3.06%--arena_publish_leave
+            |          |          |          
+            |          |           --2.15%--gc2_root_rescan_later
+            |          |                     |          
+            |          |                      --1.96%--gc2_container_visit
+            |          |          
+            |           --2.09%--lj_tg_root_anchor_push
+            |          
+             --1.22%--0x55c6de96ffef
+                       lj_bufx_putstr
+                       bufx_anchor
+
+    41.18%     0.91%  current-luajit  current-luajit                [.] lj_gc_pubroot
+            |          
+            |--40.27%--lj_gc_pubroot
+            |          |          
+            |          |--37.73%--gc2_barrier_tv.part.0
+            |          |          |          
+            |          |          |--33.83%--gc2_markobj_expected_scoped_status_mode
+            |          |          |          |          
+            |          |          |           --32.27%--gc2_markobj_preserve_status_impl.constprop.0
+            |          |          |                     |          
+            |          |          |                      --30.58%--gc2_retain_candidate_status
+            |          |          |                                |          
+            |          |          |                                |--24.72%--gc2_small_candidate_admit
+            |          |          |                                |          |          
+            |          |          |                                |          |--17.43%--gc2_small_registered_rescue_enter
+            |          |          |                                |          |          |          
+            |          |          |                                |          |           --16.26%--lj_arena_hugetab_rescue_enter
+            |          |          |                                |          |                     |          
+            |          |          |                                |          |                      --0.98%--hugetab_search
+            |          |          |                                |          |          
+            |          |          |                                |          |--0.72%--gc2_retained_candidate_valid
+            |          |          |                                |          |          
+            |          |          |                                |           --0.65%--gc2_small_lifetime_nearest
+            |          |          |                                |          
+            |          |          |                                 --4.43%--gc2_mark_small_cell_admitted
+            |          |          |          
+            |          |           --3.06%--arena_publish_leave
+            |          |          
+            |           --2.15%--gc2_root_rescan_later
+            |                     |          
+            |                      --1.96%--gc2_container_visit
+            |          
+             --0.91%--0x55c6de96ffef
+                       lj_bufx_putstr
+                       bufx_anchor
+                       lj_gc_pubroot
+
+    37.73%     0.45%  current-luajit  current-luajit                [.] gc2_barrier_tv.part.0
+            |          
+             --37.27%--gc2_barrier_tv.part.0
+                       |          
+                       |--33.83%--gc2_markobj_expected_scoped_status_mode
+                       |          |          
+                       |           --32.27%--gc2_markobj_preserve_status_impl.constprop.0
+                       |                     |          
+                       |                      --30.58%--gc2_retain_candidate_status
+                       |                                |          
+                       |                                |--24.72%--gc2_small_candidate_admit
+                       |                                |          |          
+                       |                                |          |--17.43%--gc2_small_registered_rescue_enter
+                       |                                |          |          |          
+                       |                                |          |           --16.26%--lj_arena_hugetab_rescue_enter
+                       |                                |          |                     |          
+                       |                                |          |                      --0.98%--hugetab_search
+                       |                                |          |          
+                       |                                |          |--0.72%--gc2_retained_candidate_valid
+                       |                                |          |          
+                       |                                |           --0.65%--gc2_small_lifetime_nearest
+                       |                                |          
+                       |                                 --4.43%--gc2_mark_small_cell_admitted
+                       |          
+                        --3.06%--arena_publish_leave
+
+    34.24%    11.79%  current-luajit  current-luajit                [.] bufx_pin_try
+            |          
+            |--22.45%--bufx_pin_try
+            |          lj_gc2_storage_lease_try
+            |          |          
+            |          |--8.48%--lj_arena_hugetab_reader_acquire
+            |          |          |          
+            |          |          |--6.47%--hugetab_reader_entry
+            |          |          |          
+            |          |           --1.11%--hugetab_search
+            |          |          
+            |          |--5.54%--gc2_registry_read_try_mode
+            |          |          |          
+            |          |           --4.82%--lj_gc2_smr_read_try
+            |          |          
+            |          |--4.01%--lj_gc2_smr_read_leave
+            |          |          
+            |           --2.98%--gc2_huge_table_for_address
+            |                     |          
+            |                      --2.20%--lj_arena_hugetab_range_lookup
+            |                                |          
+            |                                 --0.97%--hugetab_search
+            |          
+             --11.79%--0x55c6de96ffef
+                       lj_bufx_putstr
+                       lj_bufx_append
+                       bufx_pin_try
+
+    33.83%     1.56%  current-luajit  current-luajit                [.] gc2_markobj_expected_scoped_status_mode
+            |          
+            |--32.27%--gc2_markobj_expected_scoped_status_mode
+            |          gc2_markobj_preserve_status_impl.constprop.0
+            |          |          
+            |           --30.58%--gc2_retain_candidate_status
+            |                     |          
+            |                     |--24.72%--gc2_small_candidate_admit
+            |                     |          |          
+            |                     |          |--17.43%--gc2_small_registered_rescue_enter
+            |                     |          |          |          
+            |                     |          |           --16.26%--lj_arena_hugetab_rescue_enter
+            |                     |          |                     |          
+            |                     |          |                      --0.98%--hugetab_search
+            |                     |          |          
+            |                     |          |--0.72%--gc2_retained_candidate_valid
+            |                     |          |          
+            |                     |           --0.65%--gc2_small_lifetime_nearest
+            |                     |          
+            |                      --4.43%--gc2_mark_small_cell_admitted
+            |          
+             --1.56%--0x55c6de96ffef
+                       lj_bufx_putstr
+                       bufx_anchor
+                       lj_gc_pubroot
+                       gc2_barrier_tv.part.0
+                       gc2_markobj_expected_scoped_status_mode
+
+    32.47%     1.69%  current-luajit  current-luajit                [.] gc2_markobj_preserve_status_impl.constprop.0
+            |          
+            |--30.77%--gc2_markobj_preserve_status_impl.constprop.0
+            |          gc2_retain_candidate_status
+            |          |          
+            |          |--24.85%--gc2_small_candidate_admit
+            |          |          |          
+            |          |          |--17.43%--gc2_small_registered_rescue_enter
+            |          |          |          |          
+            |          |          |           --16.26%--lj_arena_hugetab_rescue_enter
+            |          |          |                     |          
+            |          |          |                      --0.98%--hugetab_search
+            |          |          |          
+            |          |          |--0.79%--gc2_retained_candidate_valid
+            |          |          |          
+            |          |           --0.65%--gc2_small_lifetime_nearest
+            |          |          
+            |           --4.49%--gc2_mark_small_cell_admitted
+            |          
+             --1.69%--0x55c6de96ffef
+                       lj_bufx_putstr
+                       bufx_anchor
+                       lj_gc_pubroot
+                       gc2_barrier_tv.part.0
+                       gc2_markobj_expected_scoped_status_mode
+                       gc2_markobj_preserve_status_impl.constprop.0
+
+    30.77%     1.42%  current-luajit  current-luajit                [.] gc2_retain_candidate_status
+            |          
+            |--29.35%--gc2_retain_candidate_status
+            |          |          
+            |          |--24.85%--gc2_small_candidate_admit
+            |          |          |          
+            |          |          |--17.43%--gc2_small_registered_rescue_enter
+            |          |          |          |          
+            |          |          |           --16.26%--lj_arena_hugetab_rescue_enter
+            |          |          |                     |          
+            |          |          |                      --0.98%--hugetab_search
+            |          |          |          
+            |          |          |--0.79%--gc2_retained_candidate_valid
+            |          |          |          
+            |          |           --0.65%--gc2_small_lifetime_nearest
+            |          |          
+            |           --4.49%--gc2_mark_small_cell_admitted
+            |          
+             --1.42%--0x55c6de96ffef
+                       lj_bufx_putstr
+                       bufx_anchor
+                       lj_gc_pubroot
+                       gc2_barrier_tv.part.0
+                       gc2_markobj_expected_scoped_status_mode
+                       gc2_markobj_preserve_status_impl.constprop.0
+                       gc2_retain_candidate_status
+
+    24.92%     5.98%  current-luajit  current-luajit                [.] gc2_small_candidate_admit
+            |          
+            |--18.94%--gc2_small_candidate_admit
+            |          |          
+            |          |--17.50%--gc2_small_registered_rescue_enter
+            |          |          |          
+            |          |           --16.33%--lj_arena_hugetab_rescue_enter
+            |          |                     |          
+            |          |                      --0.98%--hugetab_search
+            |          |          
+            |          |--0.79%--gc2_retained_candidate_valid
+            |          |          
+            |           --0.65%--gc2_small_lifetime_nearest
+            |          
+             --5.92%--0x55c6de96ffef
+                       lj_bufx_putstr
+                       bufx_anchor
+                       lj_gc_pubroot
+                       gc2_barrier_tv.part.0
+                       gc2_markobj_expected_scoped_status_mode
+                       gc2_markobj_preserve_status_impl.constprop.0
+                       gc2_retain_candidate_status
+                       gc2_small_candidate_admit
+
+    22.45%     1.43%  current-luajit  current-luajit                [.] lj_gc2_storage_lease_try
+            |          
+            |--21.02%--lj_gc2_storage_lease_try
+            |          |          
+            |          |--8.48%--lj_arena_hugetab_reader_acquire
+            |          |          |          
+            |          |          |--6.47%--hugetab_reader_entry
+            |          |          |          
+            |          |           --1.11%--hugetab_search
+            |          |          
+            |          |--5.54%--gc2_registry_read_try_mode
+            |          |          |          
+            |          |           --4.82%--lj_gc2_smr_read_try
+            |          |          
+            |          |--4.01%--lj_gc2_smr_read_leave
+            |          |          
+            |           --2.98%--gc2_huge_table_for_address
+            |                     |          
+            |                      --2.20%--lj_arena_hugetab_range_lookup
+            |                                |          
+            |                                 --0.97%--hugetab_search
+            |          
+             --1.43%--0x55c6de96ffef
+                       lj_bufx_putstr
+                       lj_bufx_append
+                       bufx_pin_try
+                       lj_gc2_storage_lease_try
+
+    17.50%     1.17%  current-luajit  current-luajit                [.] gc2_small_registered_rescue_enter
+            |          
+            |--16.33%--gc2_small_registered_rescue_enter
+            |          lj_arena_hugetab_rescue_enter
+            |          |          
+            |           --0.98%--hugetab_search
+            |          
+             --1.17%--0x55c6de96ffef
+                       lj_bufx_putstr
+                       bufx_anchor
+                       lj_gc_pubroot
+                       gc2_barrier_tv.part.0
+                       gc2_markobj_expected_scoped_status_mode
+                       gc2_markobj_preserve_status_impl.constprop.0
+                       gc2_retain_candidate_status
+                       gc2_small_candidate_admit
+                       gc2_small_registered_rescue_enter
+
+    16.33%    15.35%  current-luajit  current-luajit                [.] lj_arena_hugetab_rescue_enter
+            |          
+            |--15.29%--0x55c6de96ffef
+            |          lj_bufx_putstr
+            |          bufx_anchor
+            |          lj_gc_pubroot
+            |          gc2_barrier_tv.part.0
+            |          gc2_markobj_expected_scoped_status_mode
+            |          gc2_markobj_preserve_status_impl.constprop.0
+            |          gc2_retain_candidate_status
+            |          gc2_small_candidate_admit
+            |          gc2_small_registered_rescue_enter
+            |          lj_arena_hugetab_rescue_enter
+            |          
+             --0.98%--lj_arena_hugetab_rescue_enter
+                       hugetab_search
+
+     9.29%     1.43%  current-luajit  current-luajit                [.] lj_gc2_lease_release
+            |          
+            |--7.85%--lj_gc2_lease_release
+            |          |          
+            |           --7.53%--hugetab_counted_lease_release.part.0
+            |                     |          
+            |                      --1.17%--hugetab_search
+            |          
+             --1.43%--0x55c6de96ffef
+                       lj_bufx_putstr
+                       lj_bufx_append
+                       lj_gc2_lease_release
+
+     8.48%     0.90%  current-luajit  current-luajit                [.] lj_arena_hugetab_reader_acquire
+            |          
+            |--7.58%--lj_arena_hugetab_reader_acquire
+            |          |          
+            |          |--6.47%--hugetab_reader_entry
+            |          |          
+            |           --1.11%--hugetab_search
+            |          
+             --0.90%--0x55c6de96ffef
+                       lj_bufx_putstr
+                       lj_bufx_append
+                       bufx_pin_try
+                       lj_gc2_storage_lease_try
+                       lj_arena_hugetab_reader_acquire
+
+     7.53%     6.29%  current-luajit  current-luajit                [.] hugetab_counted_lease_release.part.0
+            |          
+            |--6.29%--0x55c6de96ffef
+            |          lj_bufx_putstr
+            |          lj_bufx_append
+            |          lj_gc2_lease_release
+            |          hugetab_counted_lease_release.part.0
+            |          
+             --1.24%--hugetab_counted_lease_release.part.0
+                       |          
+                        --1.17%--hugetab_search
+
+     6.47%     6.47%  current-luajit  current-luajit                [.] hugetab_reader_entry
+            |
+            ---0x55c6de96ffef
+               lj_bufx_putstr
+               lj_bufx_append
+               bufx_pin_try
+               lj_gc2_storage_lease_try
+               lj_arena_hugetab_reader_acquire
+               hugetab_reader_entry
+
+     5.54%     0.72%  current-luajit  current-luajit                [.] gc2_registry_read_try_mode
+            |          
+            |--4.82%--gc2_registry_read_try_mode
+            |          lj_gc2_smr_read_try
+            |          
+             --0.72%--0x55c6de96ffef
+                       lj_bufx_putstr
+                       lj_bufx_append
+                       bufx_pin_try
+                       lj_gc2_storage_lease_try
+                       gc2_registry_read_try_mode
+
+     5.17%     5.17%  current-luajit  current-luajit                [.] bufx_endwrite
+            |
+            ---0x55c6de96ffef
+               lj_bufx_putstr
+               lj_bufx_append
+               bufx_endwrite
+
+     4.82%     4.82%  current-luajit  current-luajit                [.] lj_gc2_smr_read_try
+            |
+            ---0x55c6de96ffef
+               lj_bufx_putstr
+               lj_bufx_append
+               bufx_pin_try
+               lj_gc2_storage_lease_try
+               gc2_registry_read_try_mode
+               lj_gc2_smr_read_try
+
+     4.49%     4.49%  current-luajit  current-luajit                [.] gc2_mark_small_cell_admitted
+            |          
+             --4.43%--0x55c6de96ffef
+                       lj_bufx_putstr
+                       bufx_anchor
+                       lj_gc_pubroot
+                       gc2_barrier_tv.part.0
+                       gc2_markobj_expected_scoped_status_mode
+                       gc2_markobj_preserve_status_impl.constprop.0
+                       gc2_retain_candidate_status
+                       gc2_mark_small_cell_admitted
+
+     4.22%     4.22%  current-luajit  current-luajit                [.] hugetab_search
+            |
+            ---0x55c6de96ffef
+               lj_bufx_putstr
+               |          
+               |--3.25%--lj_bufx_append
+               |          |          
+               |          |--2.07%--bufx_pin_try
+               |          |          lj_gc2_storage_lease_try
+               |          |          |          
+               |          |          |--1.11%--lj_arena_hugetab_reader_acquire
+               |          |          |          hugetab_search
+               |          |          |          
+               |          |           --0.97%--gc2_huge_table_for_address
+               |          |                     lj_arena_hugetab_range_lookup
+               |          |                     hugetab_search
+               |          |          
+               |           --1.17%--lj_gc2_lease_release
+               |                     hugetab_counted_lease_release.part.0
+               |                     hugetab_search
+               |          
+                --0.98%--bufx_anchor
+                          lj_gc_pubroot
+                          gc2_barrier_tv.part.0
+                          gc2_markobj_expected_scoped_status_mode
+                          gc2_markobj_preserve_status_impl.constprop.0
+                          gc2_retain_candidate_status
+                          gc2_small_candidate_admit
+                          gc2_small_registered_rescue_enter
+                          lj_arena_hugetab_rescue_enter
+                          hugetab_search
+
+     4.01%     4.01%  current-luajit  current-luajit                [.] lj_gc2_smr_read_leave
+            |
+            ---0x55c6de96ffef
+               lj_bufx_putstr
+               lj_bufx_append
+               bufx_pin_try
+               lj_gc2_storage_lease_try
+               lj_gc2_smr_read_leave
+
+     3.06%     3.06%  current-luajit  current-luajit                [.] arena_publish_leave
+            |
+            ---0x55c6de96ffef
+               lj_bufx_putstr
+               bufx_anchor
+               lj_gc_pubroot
+               gc2_barrier_tv.part.0
+               arena_publish_leave
+
+     2.98%     0.78%  current-luajit  current-luajit                [.] gc2_huge_table_for_address
+            |          
+            |--2.20%--gc2_huge_table_for_address
+            |          lj_arena_hugetab_range_lookup
+            |          |          
+            |           --0.97%--hugetab_search
+            |          
+             --0.78%--0x55c6de96ffef
+                       lj_bufx_putstr
+                       lj_bufx_append
+                       bufx_pin_try
+                       lj_gc2_storage_lease_try
+                       gc2_huge_table_for_address
+
+     2.20%     1.24%  current-luajit  current-luajit                [.] lj_arena_hugetab_range_lookup
+            |          
+            |--1.24%--0x55c6de96ffef
+            |          lj_bufx_putstr
+            |          lj_bufx_append
+            |          bufx_pin_try
+            |          lj_gc2_storage_lease_try
+            |          gc2_huge_table_for_address
+            |          lj_arena_hugetab_range_lookup
+            |          
+             --0.97%--lj_arena_hugetab_range_lookup
+                       hugetab_search
+
+     2.15%     0.20%  current-luajit  current-luajit                [.] gc2_root_rescan_later
+            |          
+             --1.96%--gc2_root_rescan_later
+                       gc2_container_visit
+
+     2.09%     2.09%  current-luajit  current-luajit                [.] lj_tg_root_anchor_push
+            |
+            ---0x55c6de96ffef
+               lj_bufx_putstr
+               bufx_anchor
+               lj_tg_root_anchor_push
+
+     1.96%     1.96%  current-luajit  current-luajit                [.] gc2_container_visit
+            |
+            ---0x55c6de96ffef
+               lj_bufx_putstr
+               bufx_anchor
+               lj_gc_pubroot
+               gc2_root_rescan_later
+               gc2_container_visit
+
+     0.79%     0.79%  current-luajit  current-luajit                [.] gc2_retained_candidate_valid
+            |          
+             --0.72%--0x55c6de96ffef
+                       lj_bufx_putstr
+                       bufx_anchor
+                       lj_gc_pubroot
+                       gc2_barrier_tv.part.0
+                       gc2_markobj_expected_scoped_status_mode
+                       gc2_markobj_preserve_status_impl.constprop.0
+                       gc2_retain_candidate_status
+                       gc2_small_candidate_admit
+                       gc2_retained_candidate_valid
+
+     0.65%     0.65%  current-luajit  current-luajit                [.] gc2_small_lifetime_nearest
+            |
+            ---0x55c6de96ffef
+               lj_bufx_putstr
+               bufx_anchor
+               lj_gc_pubroot
+               gc2_barrier_tv.part.0
+               gc2_markobj_expected_scoped_status_mode
+               gc2_markobj_preserve_status_impl.constprop.0
+               gc2_retain_candidate_status
+               gc2_small_candidate_admit
+               gc2_small_lifetime_nearest
+
+     0.58%     0.58%  current-luajit  current-luajit                [.] lj_tg_root_anchor_pop
+            |
+            ---0x55c6de96ffef
+               |          
+                --0.52%--lj_tg_root_anchor_pop
+
+
+
+#
+# (Tip: To record every process run by a user: perf record -u <user>)
+#

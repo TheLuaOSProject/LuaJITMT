@@ -1,0 +1,95 @@
+{
+  "baseline_commit": "51f8adc8e48e9d9904c769d42ce57ca5a408f9af",
+  "baseline_note": "frozen accepted v4 runtime, current HEAD",
+  "candidate_path": "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/combined-v1/src/luajit",
+  "candidate_note": "capacity+bounded small lease span+pointer-first pin",
+  "cpu": 8,
+  "build_command": [
+    "make",
+    "-C",
+    "src",
+    "-j5",
+    "BUILDMODE=static",
+    "CC=gcc",
+    "XCFLAGS=",
+    "TARGET_CFLAGS=",
+    "TARGET_LDFLAGS=",
+    "TARGET_STRIP=:"
+  ],
+  "source_manifest_runtime_count": 228,
+  "source_manifest_differences": [],
+  "previous_package": "/tmp/lj-buffer-perf-capacity-20261126-x8cbe3v3",
+  "binary_sha256": {
+    "baseline": "162491d8216fcb4faacf45bc99442bd1e5008a9b7796aa679807287b764cf756",
+    "candidate": "505476db8abd9a8cd425d622459c6aec4fa835e4d43fe79dbc0bfe61f248e17e"
+  },
+  "benchmark_sha256": "5c404e5ec82a298d285d2f7a66255fe6314dc42ab66599762b30c49cac4991ed",
+  "samples": 3,
+  "warmups_per_row": 2,
+  "timing": "os.clock process CPU seconds and CLOCK_MONOTONIC wall seconds",
+  "controls": {
+    "head394": {
+      "commit": "394159a5ca21ebc8be65bca055245dc2ca8e4526",
+      "binary_sha256": "113546a9e740b090d51ae118e5a37a4cd32cd3a006fae0fd34b06118f728339e"
+    },
+    "stock": {
+      "source_path": "/tmp/lj-nov-stock.XunoVr",
+      "version": "LuaJIT2.1.1782726002",
+      "upstream_commit": "unknown",
+      "source_manifest_sha256": "03549c4729b453aefd982354bc55f5b6a79986cd21b79b7a1657069ad7077d9c",
+      "binary_sha256": "531fb7be1ef2a68e71333677df9bf2b5d1beee074551bb7c3565eb4c50d2bcb9"
+    },
+    "timing_note": "sequential controls after paired v4/combined matrix, identical benchmark script"
+  },
+  "long_append": {
+    "samples": 5,
+    "records_per_segment": 1000000,
+    "segments": 10,
+    "warmup_segments": 2,
+    "mode": "jit",
+    "note": "Every segment validates complete contents outside the timed interval."
+  },
+  "semantic_assertions": "All output assertions passed in all 12 main processes and all 10 long-append processes.",
+  "main_rows": 132,
+  "long_append_rows": 20,
+  "artifact_sha256": {
+    "baseline-input.tar.gz": "3961a0899dc3045d33442f52cb29decd94ae0be3e43824e63819dec01b496dc9",
+    "candidate-input.tar.gz": "c7741c0c041bb84c49630dc3e4bc28e84596828f8b118a9d9a48aca95bcd5c9a",
+    "candidate-input.sha256": "ec1da1654462ac0093f2ba8b3115829557f02bb029672af2ce86d55fc407cd73",
+    "bench.lua": "5c404e5ec82a298d285d2f7a66255fe6314dc42ab66599762b30c49cac4991ed",
+    "run.py": "813097580c4a4821aef77306abd265175ed8e3c5a760cc6654380c18111fc19e",
+    "append-long.lua": "ca1183a6fe819337482bf748bbc159765aa20cefd4b2fd2940146c67bb2c7956",
+    "run-append-long.py": "a121d251d1d20c6a83ab34485f5e3ddc519ca3826910e66c366a3a0903e047f0",
+    "results.csv": "a58d788edc18469107a9b4a2d62efdba655b248a2d5a5bc1e2c52d6fd19228b7",
+    "append-long-results.csv": "368637486049b1c74491d42628d61f45a392de5bd4f716b949d9ddc01568c2b4",
+    "summary.csv": "3eb1ee6a589bdfb42ae8b326e2e0fc9c0ada3b1d9877cffb281f2c3e3f21bae9",
+    "paired-ratios.csv": "f4777ec4fe38425624ec1a5ff197c4673e08f42e578a0da43ed5dea42c77778d"
+  },
+  "native_witness": {
+    "cpu": 10,
+    "method": "jit texit handler observes corresponding JFORL root trace exit for each loop",
+    "all_four_variants_native": [
+      "small_append",
+      "reset_put_get",
+      "fifo_get",
+      "set_get"
+    ],
+    "decode_fallback": [
+      "head394",
+      "baseline",
+      "candidate"
+    ],
+    "decode_native": [
+      "stock"
+    ]
+  },
+  "control_rows": 152,
+  "quiet_append": {
+    "samples": 5,
+    "rows": 20,
+    "timing_note": "after root reported all compilation and test jobs finished; CPU8; data separate from first152rows"
+  },
+  "total_timing_rows": 324,
+  "all_semantic_assertions": "passed in primary, controls, quiet append, and native witnesses",
+  "final_runtime_manifest_differences": []
+}

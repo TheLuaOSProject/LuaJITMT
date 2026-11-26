@@ -1,0 +1,443 @@
+{
+  "base": "51f8adc8e48e9d9904c769d42ce57ca5a408f9af",
+  "builds": {
+    "combined-v1": {
+      "runtime_input_count": 228,
+      "source_mismatches": [],
+      "binary_sha256": {
+        "luajit": "505476db8abd9a8cd425d622459c6aec4fa835e4d43fe79dbc0bfe61f248e17e",
+        "libluajit.a": "97811f9cc8f56b402b31846b72a2c82b7cf5f8963c9a075600a9fdd3f75ccb02"
+      },
+      "checks": [
+        {
+          "phase": "check-extra",
+          "name": "large-buffer",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-extra",
+          "name": "jit-flush-gc-workers",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-lease",
+          "name": "progress-build",
+          "exit": 0,
+          "runtime": false
+        },
+        {
+          "phase": "check-lease",
+          "name": "progress",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-matrix",
+          "name": "linux-x64-shared",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-public",
+          "name": "public-joff",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-public",
+          "name": "public-jon",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-smoke",
+          "name": "buffer-joff",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-smoke",
+          "name": "buffer-jon",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-smoke",
+          "name": "consume-build",
+          "exit": 0,
+          "runtime": false
+        },
+        {
+          "phase": "check-smoke",
+          "name": "consume",
+          "exit": 0,
+          "runtime": true
+        }
+      ]
+    },
+    "assert-v1": {
+      "runtime_input_count": 228,
+      "source_mismatches": [],
+      "binary_sha256": {
+        "luajit": "f4421aa835dc4655bd6b550e82fda7141dd4155c2df016231318e065cce910d7",
+        "libluajit.a": "727ea893bc44f35171c4510a7467857ae7f432e951c9da2c169556d5514349a4"
+      },
+      "checks": [
+        {
+          "phase": "check-extra",
+          "name": "large-buffer",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-extra",
+          "name": "jit-flush-gc-workers",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-lease",
+          "name": "progress-build",
+          "exit": 0,
+          "runtime": false
+        },
+        {
+          "phase": "check-lease",
+          "name": "progress",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-matrix",
+          "name": "linux-x64-shared",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-progress",
+          "name": "progress-build",
+          "exit": 0,
+          "runtime": false
+        },
+        {
+          "phase": "check-progress",
+          "name": "progress",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-public",
+          "name": "public-joff",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-public",
+          "name": "public-jon",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-smoke",
+          "name": "buffer-joff",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-smoke",
+          "name": "buffer-jon",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-smoke",
+          "name": "consume-build",
+          "exit": 0,
+          "runtime": false
+        },
+        {
+          "phase": "check-smoke",
+          "name": "consume",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-traverse",
+          "name": "progress-build",
+          "exit": 0,
+          "runtime": false
+        },
+        {
+          "phase": "check-traverse",
+          "name": "progress",
+          "exit": 0,
+          "runtime": true
+        }
+      ]
+    },
+    "asan-v1": {
+      "runtime_input_count": 228,
+      "source_mismatches": [],
+      "binary_sha256": {
+        "luajit": "e403af80a1dcac63b400c6cb9ffe0de3cb6e0e0d68b739f75a397c5374d5cdb2",
+        "libluajit.a": "df1995ab8770fff753c30b649179a14af60ae1df56e376db31cb0bf74a22f0c4"
+      },
+      "checks": [
+        {
+          "phase": "check-extra",
+          "name": "large-buffer",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-extra",
+          "name": "jit-flush-gc-workers",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-lease",
+          "name": "progress-build",
+          "exit": 0,
+          "runtime": false
+        },
+        {
+          "phase": "check-lease",
+          "name": "progress",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-matrix",
+          "name": "linux-x64-shared",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-progress",
+          "name": "progress-build",
+          "exit": 0,
+          "runtime": false
+        },
+        {
+          "phase": "check-progress",
+          "name": "progress",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-public",
+          "name": "public-joff",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-public",
+          "name": "public-jon",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-smoke",
+          "name": "buffer-joff",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-smoke",
+          "name": "buffer-jon",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-smoke",
+          "name": "consume-build",
+          "exit": 0,
+          "runtime": false
+        },
+        {
+          "phase": "check-smoke",
+          "name": "consume",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-traverse",
+          "name": "progress-build",
+          "exit": 0,
+          "runtime": false
+        },
+        {
+          "phase": "check-traverse",
+          "name": "progress",
+          "exit": 0,
+          "runtime": true
+        }
+      ]
+    },
+    "tsan-v1": {
+      "runtime_input_count": 228,
+      "source_mismatches": [],
+      "binary_sha256": {
+        "luajit": "800a5f0cd4153d3f43bd6788661fd106335b538c67f932304b40ddbf2b7f41dc",
+        "libluajit.a": "ea5130f9e8314568e7ffc857e27fca79f5b40632c086c3bfae5a698630c4e50f"
+      },
+      "checks": [
+        {
+          "phase": "check-extra",
+          "name": "large-buffer",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-lease",
+          "name": "progress-build",
+          "exit": 0,
+          "runtime": false
+        },
+        {
+          "phase": "check-lease",
+          "name": "progress",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-progress",
+          "name": "progress-build",
+          "exit": 0,
+          "runtime": false
+        },
+        {
+          "phase": "check-progress",
+          "name": "progress",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-public",
+          "name": "public-joff",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-public",
+          "name": "public-jon",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-smoke",
+          "name": "buffer-joff",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-smoke",
+          "name": "buffer-jon",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-smoke",
+          "name": "consume-build",
+          "exit": 0,
+          "runtime": false
+        },
+        {
+          "phase": "check-smoke",
+          "name": "consume",
+          "exit": 0,
+          "runtime": true
+        }
+      ]
+    },
+    "nojit-v1": {
+      "runtime_input_count": 228,
+      "source_mismatches": [],
+      "binary_sha256": {
+        "luajit": "95d12035d560a75e1c528400bf3d77fa9407eb372d18df4b52d968636f2489f0",
+        "libluajit.a": "2f121173bb35cbfe18183129561a2367f2ce224e3f9a446f3d9e195a5dc4fb61"
+      },
+      "checks": [
+        {
+          "phase": "check-extra",
+          "name": "buffer-basic",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-extra",
+          "name": "buffer-public",
+          "exit": 0,
+          "runtime": true
+        }
+      ]
+    },
+    "noffi-v1": {
+      "runtime_input_count": 228,
+      "source_mismatches": [],
+      "binary_sha256": {
+        "luajit": "d758e3de408437e3c65c81a5e01cd354f9f65b44d4091f409ddf4c398a7b6fcb",
+        "libluajit.a": "19e7a12a5b3d3fd7a340026fdfae2d8b039922ebcbed406fbb654cbadbcdd56f"
+      },
+      "checks": [
+        {
+          "phase": "check-extra",
+          "name": "buffer-basic",
+          "exit": 0,
+          "runtime": true
+        },
+        {
+          "phase": "check-extra",
+          "name": "buffer-public",
+          "exit": 0,
+          "runtime": true
+        }
+      ]
+    },
+    "nobuf-v1": {
+      "runtime_input_count": 228,
+      "source_mismatches": [],
+      "binary_sha256": {
+        "luajit": "464b19a115051a67a758cd4e44dbffac5e0378f3abe401823075be97f159a01f",
+        "libluajit.a": "970cb8272c3c6ed86a4a5c0bf2fa1ead0d5dcef0ab2c75d6dfb3ad42af447ea4"
+      },
+      "checks": [
+        {
+          "phase": "check-extra",
+          "name": "disabled-buffer",
+          "exit": 0,
+          "runtime": true
+        }
+      ]
+    }
+  },
+  "canonical": {
+    "command": [
+      "taskset",
+      "-c",
+      "0-7,9-15",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/combined-v1/src/luajit",
+      "tools/test.lua",
+      "m5_buffer_publish",
+      "m5_buffer_progress",
+      "m3_gc2_small_lease_span"
+    ],
+    "exit": 0,
+    "seconds": 40.09915637498489,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/combined-v1/src/?.lua;;",
+      "JOBS": "6"
+    },
+    "outputs": {
+      "luajit": "705b0d3826e4823a12aa706da7221bf755f1308a32260dbdd975020b061a9cbb",
+      "libluajit.a": "1ebfe052a4a53d3d84670733a437a4ff33e2a71728c019c39b3090a475eba1b4",
+      "libluajit.so": "206b7eda02dbc65770654d31370a573f24fa676d83a08cb34031ba38135259a1"
+    },
+    "source_mismatches": []
+  },
+  "tracked_changes": " plan/06_concurrent_objects.md   |  7 +++++--\n plan/15_x64_linux_completion.md |  3 +++\n src/lj_buf.c                    | 24 ++++++++++++++++++++----\n src/lj_buf.h                    |  3 ++-\n src/lj_gc2.c                    |  9 +++++----\n tests/suites/m3_gc.lua          | 11 +++++++++++\n tests/t-buffer-progress.c       | 18 +++++++++++-------\n 7 files changed, 57 insertions(+), 18 deletions(-)\n",
+  "runtime_checks": 44
+}

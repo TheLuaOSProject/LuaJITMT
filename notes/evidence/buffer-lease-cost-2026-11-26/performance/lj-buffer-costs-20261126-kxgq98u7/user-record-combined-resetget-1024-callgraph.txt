@@ -1,0 +1,1022 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cpu_core/cycles/u'
+# Event count (approx.): 20569066247
+#
+# Children      Self  Command          Shared Object                 Symbol                                              
+# ........  ........  ...............  ............................  ....................................................
+#
+    72.96%     0.00%  candidate-luaji  memfd:luajit-mcode (deleted)  [.] 0x0000556a776eff20
+            |
+            ---0x556a776eff20
+               lj_bufx_putstr
+               |          
+               |--72.06%--lj_bufx_append
+               |          |          
+               |          |--70.14%--bufx_copy_store
+               |          |          bufx_alloc
+               |          |          gc_mem_new_nothrow
+               |          |          lj_arena_alloc
+               |          |          |          
+               |          |          |--68.67%--arena_find_run
+               |          |          |          
+               |          |           --1.25%--arena_set_alloc
+               |          |          
+               |          |--0.78%--bufx_replace
+               |          |          
+               |           --0.53%--bufx_pin_try
+               |          
+                --0.90%--bufx_anchor
+                          |          
+                           --0.84%--lj_gc_pubroot
+                                     gc2_barrier_tv.part.0
+                                     |          
+                                      --0.74%--gc2_markobj_expected_scoped_status_mode
+                                                gc2_markobj_preserve_status_impl.constprop.0
+                                                gc2_retain_candidate_status
+                                                |          
+                                                 --0.58%--gc2_small_candidate_admit
+
+    72.96%     0.00%  candidate-luaji  candidate-luajit              [.] lj_bufx_putstr
+            |
+            ---lj_bufx_putstr
+               |          
+               |--72.06%--lj_bufx_append
+               |          |          
+               |          |--70.14%--bufx_copy_store
+               |          |          bufx_alloc
+               |          |          gc_mem_new_nothrow
+               |          |          lj_arena_alloc
+               |          |          |          
+               |          |          |--68.67%--arena_find_run
+               |          |          |          
+               |          |           --1.25%--arena_set_alloc
+               |          |          
+               |          |--0.78%--bufx_replace
+               |          |          
+               |           --0.53%--bufx_pin_try
+               |          
+                --0.90%--bufx_anchor
+                          |          
+                           --0.84%--lj_gc_pubroot
+                                     gc2_barrier_tv.part.0
+                                     |          
+                                      --0.74%--gc2_markobj_expected_scoped_status_mode
+                                                gc2_markobj_preserve_status_impl.constprop.0
+                                                gc2_retain_candidate_status
+                                                |          
+                                                 --0.58%--gc2_small_candidate_admit
+
+    72.06%     0.06%  candidate-luaji  candidate-luajit              [.] lj_bufx_append
+            |          
+             --72.00%--lj_bufx_append
+                       |          
+                       |--70.14%--bufx_copy_store
+                       |          bufx_alloc
+                       |          gc_mem_new_nothrow
+                       |          lj_arena_alloc
+                       |          |          
+                       |          |--68.67%--arena_find_run
+                       |          |          
+                       |           --1.25%--arena_set_alloc
+                       |          
+                       |--0.78%--bufx_replace
+                       |          
+                        --0.53%--bufx_pin_try
+
+    70.14%     0.06%  candidate-luaji  candidate-luajit              [.] lj_arena_alloc
+            |          
+             --70.08%--lj_arena_alloc
+                       |          
+                       |--68.67%--arena_find_run
+                       |          
+                        --1.25%--arena_set_alloc
+
+    70.14%     0.00%  candidate-luaji  candidate-luajit              [.] bufx_copy_store
+            |
+            ---bufx_copy_store
+               bufx_alloc
+               gc_mem_new_nothrow
+               lj_arena_alloc
+               |          
+               |--68.67%--arena_find_run
+               |          
+                --1.25%--arena_set_alloc
+
+    70.14%     0.00%  candidate-luaji  candidate-luajit              [.] bufx_alloc
+            |
+            ---bufx_alloc
+               gc_mem_new_nothrow
+               lj_arena_alloc
+               |          
+               |--68.67%--arena_find_run
+               |          
+                --1.25%--arena_set_alloc
+
+    70.14%     0.00%  candidate-luaji  candidate-luajit              [.] gc_mem_new_nothrow
+            |
+            ---gc_mem_new_nothrow
+               lj_arena_alloc
+               |          
+               |--68.67%--arena_find_run
+               |          
+                --1.25%--arena_set_alloc
+
+    68.67%    68.61%  candidate-luaji  candidate-luajit              [.] arena_find_run
+            |          
+             --68.61%--0x556a776eff20
+                       lj_bufx_putstr
+                       lj_bufx_append
+                       bufx_copy_store
+                       bufx_alloc
+                       gc_mem_new_nothrow
+                       lj_arena_alloc
+                       arena_find_run
+
+    18.90%     0.00%  candidate-luaji  candidate-luajit              [.] _start
+            |
+            ---_start
+               __libc_start_main
+               0x7fbbe1fb7ca7
+               main
+               |          
+               |--11.26%--lua_cpcall
+               |          lj_vm_cpcall
+               |          lj_BC_FUNCC
+               |          pmain
+               |          |          
+               |           --11.25%--docall
+               |                     lua_pcall
+               |                     lj_vm_pcall_unwind
+               |                     |          
+               |                     |--10.66%--lj_vm_exit_interp
+               |                     |          lj_safepoint_vm_checkpoint
+               |                     |          gc_auto_string_checkpoint
+               |                     |          lj_vm_cpcall
+               |                     |          lj_vm_cpcall_asm
+               |                     |          gc_auto_string_cp
+               |                     |          gc2_step_auto
+               |                     |          gc2_step
+               |                     |          gc2_mark_begin
+               |                     |          |          
+               |                     |           --10.45%--lj_arena_clear_registered_marks
+               |                     |                     |          
+               |                     |                      --7.75%--arena_clear_marks
+               |                     |          
+               |                      --0.59%--lj_BC_FUNCC
+               |          
+                --7.64%--close_state
+                          |          
+                          |--5.38%--lj_gc2_freeall
+                          |          lj_gc2_terminal_prefree
+                          |          |          
+                          |           --5.21%--gc2_recovery_discard_terminal.isra.0
+                          |          
+                          |--1.09%--lj_gc2_terminal_prefree
+                          |          |          
+                          |           --0.98%--gc2_recovery_discard_terminal.isra.0
+                          |          
+                           --1.04%--lj_gc2_fini
+                                     gc2_recovery_discard_terminal.isra.0
+
+    18.90%     0.00%  candidate-luaji  libc.so.6                     [.] __libc_start_main
+            |
+            ---__libc_start_main
+               0x7fbbe1fb7ca7
+               main
+               |          
+               |--11.26%--lua_cpcall
+               |          lj_vm_cpcall
+               |          lj_BC_FUNCC
+               |          pmain
+               |          |          
+               |           --11.25%--docall
+               |                     lua_pcall
+               |                     lj_vm_pcall_unwind
+               |                     |          
+               |                     |--10.66%--lj_vm_exit_interp
+               |                     |          lj_safepoint_vm_checkpoint
+               |                     |          gc_auto_string_checkpoint
+               |                     |          lj_vm_cpcall
+               |                     |          lj_vm_cpcall_asm
+               |                     |          gc_auto_string_cp
+               |                     |          gc2_step_auto
+               |                     |          gc2_step
+               |                     |          gc2_mark_begin
+               |                     |          |          
+               |                     |           --10.45%--lj_arena_clear_registered_marks
+               |                     |                     |          
+               |                     |                      --7.75%--arena_clear_marks
+               |                     |          
+               |                      --0.59%--lj_BC_FUNCC
+               |          
+                --7.64%--close_state
+                          |          
+                          |--5.38%--lj_gc2_freeall
+                          |          lj_gc2_terminal_prefree
+                          |          |          
+                          |           --5.21%--gc2_recovery_discard_terminal.isra.0
+                          |          
+                          |--1.09%--lj_gc2_terminal_prefree
+                          |          |          
+                          |           --0.98%--gc2_recovery_discard_terminal.isra.0
+                          |          
+                           --1.04%--lj_gc2_fini
+                                     gc2_recovery_discard_terminal.isra.0
+
+    18.90%     0.00%  candidate-luaji  libc.so.6                     [.] 0x00007fbbe1fb7ca7
+            |
+            ---0x7fbbe1fb7ca7
+               main
+               |          
+               |--11.26%--lua_cpcall
+               |          lj_vm_cpcall
+               |          lj_BC_FUNCC
+               |          pmain
+               |          |          
+               |           --11.25%--docall
+               |                     lua_pcall
+               |                     lj_vm_pcall_unwind
+               |                     |          
+               |                     |--10.66%--lj_vm_exit_interp
+               |                     |          lj_safepoint_vm_checkpoint
+               |                     |          gc_auto_string_checkpoint
+               |                     |          lj_vm_cpcall
+               |                     |          lj_vm_cpcall_asm
+               |                     |          gc_auto_string_cp
+               |                     |          gc2_step_auto
+               |                     |          gc2_step
+               |                     |          gc2_mark_begin
+               |                     |          |          
+               |                     |           --10.45%--lj_arena_clear_registered_marks
+               |                     |                     |          
+               |                     |                      --7.75%--arena_clear_marks
+               |                     |          
+               |                      --0.59%--lj_BC_FUNCC
+               |          
+                --7.64%--close_state
+                          |          
+                          |--5.38%--lj_gc2_freeall
+                          |          lj_gc2_terminal_prefree
+                          |          |          
+                          |           --5.21%--gc2_recovery_discard_terminal.isra.0
+                          |          
+                          |--1.09%--lj_gc2_terminal_prefree
+                          |          |          
+                          |           --0.98%--gc2_recovery_discard_terminal.isra.0
+                          |          
+                           --1.04%--lj_gc2_fini
+                                     gc2_recovery_discard_terminal.isra.0
+
+    18.90%     0.00%  candidate-luaji  candidate-luajit              [.] main
+            |
+            ---main
+               |          
+               |--11.26%--lua_cpcall
+               |          lj_vm_cpcall
+               |          lj_BC_FUNCC
+               |          pmain
+               |          |          
+               |           --11.25%--docall
+               |                     lua_pcall
+               |                     lj_vm_pcall_unwind
+               |                     |          
+               |                     |--10.66%--lj_vm_exit_interp
+               |                     |          lj_safepoint_vm_checkpoint
+               |                     |          gc_auto_string_checkpoint
+               |                     |          lj_vm_cpcall
+               |                     |          lj_vm_cpcall_asm
+               |                     |          gc_auto_string_cp
+               |                     |          gc2_step_auto
+               |                     |          gc2_step
+               |                     |          gc2_mark_begin
+               |                     |          |          
+               |                     |           --10.45%--lj_arena_clear_registered_marks
+               |                     |                     |          
+               |                     |                      --7.75%--arena_clear_marks
+               |                     |          
+               |                      --0.59%--lj_BC_FUNCC
+               |          
+                --7.64%--close_state
+                          |          
+                          |--5.38%--lj_gc2_freeall
+                          |          lj_gc2_terminal_prefree
+                          |          |          
+                          |           --5.21%--gc2_recovery_discard_terminal.isra.0
+                          |          
+                          |--1.09%--lj_gc2_terminal_prefree
+                          |          |          
+                          |           --0.98%--gc2_recovery_discard_terminal.isra.0
+                          |          
+                           --1.04%--lj_gc2_fini
+                                     gc2_recovery_discard_terminal.isra.0
+
+    13.67%     0.00%  candidate-luaji  candidate-luajit              [.] gc2_step_auto
+            |
+            ---gc2_step_auto
+               gc2_step
+               |          
+               |--10.66%--gc2_mark_begin
+               |          |          
+               |           --10.45%--lj_arena_clear_registered_marks
+               |                     |          
+               |                      --7.75%--arena_clear_marks
+               |          
+               |--1.07%--gc2_worker_drain_inner
+               |          |          
+               |           --0.54%--lj_gc2_sweep_owner_progress
+               |          
+                --0.87%--gc2_mark_complete_result
+                          gc2_mark_close_help
+                          gc2_fixpoint_round
+                          gc2_mark_drain_owned_bounded.isra.0
+                          gc2_drain_grey
+                          |          
+                           --0.82%--gc2_traverse_obj
+
+    13.67%     0.00%  candidate-luaji  candidate-luajit              [.] gc2_step
+            |
+            ---gc2_step
+               |          
+               |--10.66%--gc2_mark_begin
+               |          |          
+               |           --10.45%--lj_arena_clear_registered_marks
+               |                     |          
+               |                      --7.75%--arena_clear_marks
+               |          
+               |--1.07%--gc2_worker_drain_inner
+               |          |          
+               |           --0.54%--lj_gc2_sweep_owner_progress
+               |          
+                --0.87%--gc2_mark_complete_result
+                          gc2_mark_close_help
+                          gc2_fixpoint_round
+                          gc2_mark_drain_owned_bounded.isra.0
+                          gc2_drain_grey
+                          |          
+                           --0.82%--gc2_traverse_obj
+
+    11.26%     0.00%  candidate-luaji  candidate-luajit              [.] lua_cpcall
+            |
+            ---lua_cpcall
+               lj_vm_cpcall
+               lj_BC_FUNCC
+               pmain
+               |          
+                --11.25%--docall
+                          lua_pcall
+                          lj_vm_pcall_unwind
+                          |          
+                          |--10.66%--lj_vm_exit_interp
+                          |          lj_safepoint_vm_checkpoint
+                          |          gc_auto_string_checkpoint
+                          |          lj_vm_cpcall
+                          |          lj_vm_cpcall_asm
+                          |          gc_auto_string_cp
+                          |          gc2_step_auto
+                          |          gc2_step
+                          |          gc2_mark_begin
+                          |          |          
+                          |           --10.45%--lj_arena_clear_registered_marks
+                          |                     |          
+                          |                      --7.75%--arena_clear_marks
+                          |          
+                           --0.59%--lj_BC_FUNCC
+
+    11.26%     0.00%  candidate-luaji  candidate-luajit              [.] lj_vm_cpcall
+            |
+            ---lj_vm_cpcall
+               lj_BC_FUNCC
+               pmain
+               |          
+                --11.25%--docall
+                          lua_pcall
+                          lj_vm_pcall_unwind
+                          |          
+                          |--10.66%--lj_vm_exit_interp
+                          |          lj_safepoint_vm_checkpoint
+                          |          gc_auto_string_checkpoint
+                          |          lj_vm_cpcall
+                          |          lj_vm_cpcall_asm
+                          |          gc_auto_string_cp
+                          |          gc2_step_auto
+                          |          gc2_step
+                          |          gc2_mark_begin
+                          |          |          
+                          |           --10.45%--lj_arena_clear_registered_marks
+                          |                     |          
+                          |                      --7.75%--arena_clear_marks
+                          |          
+                           --0.59%--lj_BC_FUNCC
+
+    11.26%     0.00%  candidate-luaji  candidate-luajit              [.] lj_BC_FUNCC
+            |
+            ---lj_BC_FUNCC
+               pmain
+               |          
+                --11.25%--docall
+                          lua_pcall
+                          lj_vm_pcall_unwind
+                          |          
+                          |--10.66%--lj_vm_exit_interp
+                          |          lj_safepoint_vm_checkpoint
+                          |          gc_auto_string_checkpoint
+                          |          lj_vm_cpcall
+                          |          lj_vm_cpcall_asm
+                          |          gc_auto_string_cp
+                          |          gc2_step_auto
+                          |          gc2_step
+                          |          gc2_mark_begin
+                          |          |          
+                          |           --10.45%--lj_arena_clear_registered_marks
+                          |                     |          
+                          |                      --7.75%--arena_clear_marks
+                          |          
+                           --0.59%--lj_BC_FUNCC
+
+    11.26%     0.00%  candidate-luaji  candidate-luajit              [.] pmain
+            |
+            ---pmain
+               |          
+                --11.25%--docall
+                          lua_pcall
+                          lj_vm_pcall_unwind
+                          |          
+                          |--10.66%--lj_vm_exit_interp
+                          |          lj_safepoint_vm_checkpoint
+                          |          gc_auto_string_checkpoint
+                          |          lj_vm_cpcall
+                          |          lj_vm_cpcall_asm
+                          |          gc_auto_string_cp
+                          |          gc2_step_auto
+                          |          gc2_step
+                          |          gc2_mark_begin
+                          |          |          
+                          |           --10.45%--lj_arena_clear_registered_marks
+                          |                     |          
+                          |                      --7.75%--arena_clear_marks
+                          |          
+                           --0.59%--lj_BC_FUNCC
+
+    11.25%     0.00%  candidate-luaji  candidate-luajit              [.] docall
+            |
+            ---docall
+               lua_pcall
+               lj_vm_pcall_unwind
+               |          
+               |--10.66%--lj_vm_exit_interp
+               |          lj_safepoint_vm_checkpoint
+               |          gc_auto_string_checkpoint
+               |          lj_vm_cpcall
+               |          lj_vm_cpcall_asm
+               |          gc_auto_string_cp
+               |          gc2_step_auto
+               |          gc2_step
+               |          gc2_mark_begin
+               |          |          
+               |           --10.45%--lj_arena_clear_registered_marks
+               |                     |          
+               |                      --7.75%--arena_clear_marks
+               |          
+                --0.59%--lj_BC_FUNCC
+
+    11.25%     0.00%  candidate-luaji  candidate-luajit              [.] lua_pcall
+            |
+            ---lua_pcall
+               lj_vm_pcall_unwind
+               |          
+               |--10.66%--lj_vm_exit_interp
+               |          lj_safepoint_vm_checkpoint
+               |          gc_auto_string_checkpoint
+               |          lj_vm_cpcall
+               |          lj_vm_cpcall_asm
+               |          gc_auto_string_cp
+               |          gc2_step_auto
+               |          gc2_step
+               |          gc2_mark_begin
+               |          |          
+               |           --10.45%--lj_arena_clear_registered_marks
+               |                     |          
+               |                      --7.75%--arena_clear_marks
+               |          
+                --0.59%--lj_BC_FUNCC
+
+    11.25%     0.00%  candidate-luaji  candidate-luajit              [.] lj_vm_pcall_unwind
+            |
+            ---lj_vm_pcall_unwind
+               |          
+               |--10.66%--lj_vm_exit_interp
+               |          lj_safepoint_vm_checkpoint
+               |          gc_auto_string_checkpoint
+               |          lj_vm_cpcall
+               |          lj_vm_cpcall_asm
+               |          gc_auto_string_cp
+               |          gc2_step_auto
+               |          gc2_step
+               |          gc2_mark_begin
+               |          |          
+               |           --10.45%--lj_arena_clear_registered_marks
+               |                     |          
+               |                      --7.75%--arena_clear_marks
+               |          
+                --0.59%--lj_BC_FUNCC
+
+    10.70%     0.00%  candidate-luaji  candidate-luajit              [.] lj_vm_cpcall_asm
+            |
+            ---lj_vm_cpcall_asm
+               |          
+                --10.66%--gc_auto_string_cp
+                          gc2_step_auto
+                          gc2_step
+                          gc2_mark_begin
+                          |          
+                           --10.45%--lj_arena_clear_registered_marks
+                                     |          
+                                      --7.75%--arena_clear_marks
+
+    10.66%     0.00%  candidate-luaji  candidate-luajit              [.] lj_vm_exit_interp
+            |
+            ---lj_vm_exit_interp
+               lj_safepoint_vm_checkpoint
+               gc_auto_string_checkpoint
+               lj_vm_cpcall
+               lj_vm_cpcall_asm
+               gc_auto_string_cp
+               gc2_step_auto
+               gc2_step
+               gc2_mark_begin
+               |          
+                --10.45%--lj_arena_clear_registered_marks
+                          |          
+                           --7.75%--arena_clear_marks
+
+    10.66%     0.00%  candidate-luaji  candidate-luajit              [.] lj_safepoint_vm_checkpoint
+            |
+            ---lj_safepoint_vm_checkpoint
+               gc_auto_string_checkpoint
+               lj_vm_cpcall
+               lj_vm_cpcall_asm
+               gc_auto_string_cp
+               gc2_step_auto
+               gc2_step
+               gc2_mark_begin
+               |          
+                --10.45%--lj_arena_clear_registered_marks
+                          |          
+                           --7.75%--arena_clear_marks
+
+    10.66%     0.00%  candidate-luaji  candidate-luajit              [.] gc_auto_string_checkpoint
+            |
+            ---gc_auto_string_checkpoint
+               lj_vm_cpcall
+               lj_vm_cpcall_asm
+               gc_auto_string_cp
+               gc2_step_auto
+               gc2_step
+               gc2_mark_begin
+               |          
+                --10.45%--lj_arena_clear_registered_marks
+                          |          
+                           --7.75%--arena_clear_marks
+
+    10.66%     0.00%  candidate-luaji  candidate-luajit              [.] gc_auto_string_cp
+            |
+            ---gc_auto_string_cp
+               gc2_step_auto
+               gc2_step
+               gc2_mark_begin
+               |          
+                --10.45%--lj_arena_clear_registered_marks
+                          |          
+                           --7.75%--arena_clear_marks
+
+    10.66%     0.00%  candidate-luaji  candidate-luajit              [.] gc2_mark_begin
+            |
+            ---gc2_mark_begin
+               |          
+                --10.45%--lj_arena_clear_registered_marks
+                          |          
+                           --7.75%--arena_clear_marks
+
+    10.45%     2.27%  candidate-luaji  candidate-luajit              [.] lj_arena_clear_registered_marks
+            |          
+            |--8.18%--lj_arena_clear_registered_marks
+            |          |          
+            |           --7.75%--arena_clear_marks
+            |          
+             --2.27%--_start
+                       __libc_start_main
+                       0x7fbbe1fb7ca7
+                       main
+                       lua_cpcall
+                       lj_vm_cpcall
+                       lj_BC_FUNCC
+                       pmain
+                       docall
+                       lua_pcall
+                       lj_vm_pcall_unwind
+                       lj_vm_exit_interp
+                       lj_safepoint_vm_checkpoint
+                       gc_auto_string_checkpoint
+                       lj_vm_cpcall
+                       lj_vm_cpcall_asm
+                       gc_auto_string_cp
+                       gc2_step_auto
+                       gc2_step
+                       gc2_mark_begin
+                       lj_arena_clear_registered_marks
+
+     7.75%     7.75%  candidate-luaji  candidate-luajit              [.] arena_clear_marks
+            |
+            ---_start
+               __libc_start_main
+               0x7fbbe1fb7ca7
+               main
+               lua_cpcall
+               lj_vm_cpcall
+               lj_BC_FUNCC
+               pmain
+               docall
+               lua_pcall
+               lj_vm_pcall_unwind
+               lj_vm_exit_interp
+               lj_safepoint_vm_checkpoint
+               gc_auto_string_checkpoint
+               lj_vm_cpcall
+               lj_vm_cpcall_asm
+               gc_auto_string_cp
+               gc2_step_auto
+               gc2_step
+               gc2_mark_begin
+               lj_arena_clear_registered_marks
+               arena_clear_marks
+
+     7.64%     0.00%  candidate-luaji  candidate-luajit              [.] close_state
+            |
+            ---close_state
+               |          
+               |--5.38%--lj_gc2_freeall
+               |          lj_gc2_terminal_prefree
+               |          |          
+               |           --5.21%--gc2_recovery_discard_terminal.isra.0
+               |          
+               |--1.09%--lj_gc2_terminal_prefree
+               |          |          
+               |           --0.98%--gc2_recovery_discard_terminal.isra.0
+               |          
+                --1.04%--lj_gc2_fini
+                          gc2_recovery_discard_terminal.isra.0
+
+     7.23%     7.23%  candidate-luaji  candidate-luajit              [.] gc2_recovery_discard_terminal.isra.0
+            |
+            ---_start
+               __libc_start_main
+               0x7fbbe1fb7ca7
+               main
+               close_state
+               |          
+               |--5.21%--lj_gc2_freeall
+               |          lj_gc2_terminal_prefree
+               |          gc2_recovery_discard_terminal.isra.0
+               |          
+               |--1.04%--lj_gc2_fini
+               |          gc2_recovery_discard_terminal.isra.0
+               |          
+                --0.98%--lj_gc2_terminal_prefree
+                          gc2_recovery_discard_terminal.isra.0
+
+     6.47%     0.00%  candidate-luaji  candidate-luajit              [.] lj_gc2_terminal_prefree
+            |
+            ---lj_gc2_terminal_prefree
+               |          
+                --6.18%--gc2_recovery_discard_terminal.isra.0
+
+     5.38%     0.00%  candidate-luaji  candidate-luajit              [.] lj_gc2_freeall
+            |
+            ---lj_gc2_freeall
+               lj_gc2_terminal_prefree
+               |          
+                --5.21%--gc2_recovery_discard_terminal.isra.0
+
+     4.37%     0.00%  candidate-luaji  memfd:luajit-mcode (deleted)  [.] 0x0000556a776effdd
+            |
+            ---0x556a776effdd
+               lj_bufx_get
+               |          
+                --4.32%--bufx_string
+                          |          
+                          |--2.73%--lj_str_new
+                          |          |          
+                          |           --1.91%--hash_dense
+                          |          
+                          |--0.62%--bufx_copy
+                          |          
+                           --0.61%--lj_bufx_consume.part.0
+
+     4.37%     0.05%  candidate-luaji  candidate-luajit              [.] lj_bufx_get
+            |          
+             --4.32%--lj_bufx_get
+                       bufx_string
+                       |          
+                       |--2.73%--lj_str_new
+                       |          |          
+                       |           --1.91%--hash_dense
+                       |          
+                       |--0.62%--bufx_copy
+                       |          
+                        --0.61%--lj_bufx_consume.part.0
+
+     4.32%     0.05%  candidate-luaji  candidate-luajit              [.] bufx_string
+            |          
+             --4.27%--bufx_string
+                       |          
+                       |--2.73%--lj_str_new
+                       |          |          
+                       |           --1.91%--hash_dense
+                       |          
+                       |--0.62%--bufx_copy
+                       |          
+                        --0.61%--lj_bufx_consume.part.0
+
+     2.73%     0.16%  candidate-luaji  candidate-luajit              [.] lj_str_new
+            |          
+             --2.57%--lj_str_new
+                       |          
+                        --1.91%--hash_dense
+
+     2.70%     0.10%  candidate-luaji  candidate-luajit              [.] gc2_markobj_preserve_status_impl.constprop.0
+            |          
+             --2.60%--gc2_markobj_preserve_status_impl.constprop.0
+                       |          
+                        --2.13%--gc2_retain_candidate_status
+                                  |          
+                                   --1.59%--gc2_small_candidate_admit
+                                             |          
+                                              --0.90%--gc2_small_registered_rescue_enter
+                                                        lj_arena_hugetab_rescue_enter
+
+     2.66%     0.00%  candidate-luaji  candidate-luajit              [.] lj_vm_exit_handler
+            |
+            ---lj_vm_exit_handler
+               lj_trace_exit
+               |          
+                --2.45%--lj_gc_step
+                          gc2_step_auto
+                          gc2_step
+                          |          
+                           --1.07%--gc2_worker_drain_inner
+                                     |          
+                                      --0.54%--lj_gc2_sweep_owner_progress
+
+     2.66%     0.00%  candidate-luaji  candidate-luajit              [.] lj_trace_exit
+            |
+            ---lj_trace_exit
+               |          
+                --2.45%--lj_gc_step
+                          gc2_step_auto
+                          gc2_step
+                          |          
+                           --1.07%--gc2_worker_drain_inner
+                                     |          
+                                      --0.54%--lj_gc2_sweep_owner_progress
+
+     2.45%     0.00%  candidate-luaji  candidate-luajit              [.] lj_gc_step
+            |
+            ---lj_gc_step
+               gc2_step_auto
+               gc2_step
+               |          
+                --1.07%--gc2_worker_drain_inner
+                          |          
+                           --0.54%--lj_gc2_sweep_owner_progress
+
+     2.23%     0.16%  candidate-luaji  candidate-luajit              [.] gc2_retain_candidate_status
+            |          
+             --2.07%--gc2_retain_candidate_status
+                       |          
+                        --1.70%--gc2_small_candidate_admit
+                                  |          
+                                   --1.00%--gc2_small_registered_rescue_enter
+                                             lj_arena_hugetab_rescue_enter
+
+     1.91%     1.91%  candidate-luaji  candidate-luajit              [.] hash_dense
+            |
+            ---0x556a776effdd
+               lj_bufx_get
+               bufx_string
+               lj_str_new
+               hash_dense
+
+     1.86%     0.43%  candidate-luaji  candidate-luajit              [.] gc2_small_candidate_admit
+            |          
+             --1.43%--gc2_small_candidate_admit
+                       |          
+                        --1.16%--gc2_small_registered_rescue_enter
+                                  lj_arena_hugetab_rescue_enter
+
+     1.79%     0.50%  candidate-luaji  candidate-luajit              [.] bufx_pin_try
+            |          
+             --1.29%--bufx_pin_try
+                       |          
+                        --1.23%--lj_gc2_small_lease_try
+                                  |          
+                                   --0.97%--lj_arena_hugetab_observe_enter
+
+     1.41%     1.25%  candidate-luaji  candidate-luajit              [.] lj_arena_hugetab_rescue_enter
+     1.41%     0.00%  candidate-luaji  candidate-luajit              [.] gc2_small_registered_rescue_enter
+            |
+            ---gc2_small_registered_rescue_enter
+               lj_arena_hugetab_rescue_enter
+
+     1.40%     0.05%  candidate-luaji  candidate-luajit              [.] gc2_traverse_obj
+            |          
+             --1.35%--gc2_traverse_obj
+
+     1.40%     0.00%  candidate-luaji  candidate-luajit              [.] gc2_markobj_expected_scoped_status_mode
+            |
+            ---gc2_markobj_expected_scoped_status_mode
+               gc2_markobj_preserve_status_impl.constprop.0
+               |          
+                --1.40%--gc2_retain_candidate_status
+                          |          
+                           --1.18%--gc2_small_candidate_admit
+                                     |          
+                                      --0.69%--gc2_small_registered_rescue_enter
+                                                lj_arena_hugetab_rescue_enter
+
+     1.37%     0.31%  candidate-luaji  candidate-luajit              [.] lj_gc2_small_lease_try
+            |          
+             --1.06%--lj_gc2_small_lease_try
+                       lj_arena_hugetab_observe_enter
+
+     1.31%     0.00%  candidate-luaji  candidate-luajit              [.] gc2_worker_drain_inner
+            |
+            ---gc2_worker_drain_inner
+               |          
+                --0.54%--lj_gc2_sweep_owner_progress
+
+     1.25%     1.05%  candidate-luaji  candidate-luajit              [.] arena_set_alloc
+            |          
+             --1.05%--0x556a776eff20
+                       lj_bufx_putstr
+                       lj_bufx_append
+                       bufx_copy_store
+                       bufx_alloc
+                       gc_mem_new_nothrow
+                       lj_arena_alloc
+                       arena_set_alloc
+
+     1.25%     0.00%  candidate-luaji  candidate-luajit              [.] gc2_mark_drain_owned_bounded.isra.0
+            |
+            ---gc2_mark_drain_owned_bounded.isra.0
+               gc2_drain_grey
+               |          
+                --1.19%--gc2_traverse_obj
+
+     1.25%     0.00%  candidate-luaji  candidate-luajit              [.] gc2_drain_grey
+            |
+            ---gc2_drain_grey
+               |          
+                --1.19%--gc2_traverse_obj
+
+     1.16%     0.00%  candidate-luaji  candidate-luajit              [.] bufx_anchor
+            |
+            ---bufx_anchor
+               |          
+                --1.11%--lj_gc_pubroot
+                          |          
+                           --1.06%--gc2_barrier_tv.part.0
+                                     |          
+                                      --0.84%--gc2_markobj_expected_scoped_status_mode
+                                                gc2_markobj_preserve_status_impl.constprop.0
+                                                gc2_retain_candidate_status
+                                                |          
+                                                 --0.68%--gc2_small_candidate_admit
+
+     1.11%     0.00%  candidate-luaji  candidate-luajit              [.] lj_gc_pubroot
+            |
+            ---lj_gc_pubroot
+               |          
+                --1.06%--gc2_barrier_tv.part.0
+                          |          
+                           --0.84%--gc2_markobj_expected_scoped_status_mode
+                                     gc2_markobj_preserve_status_impl.constprop.0
+                                     gc2_retain_candidate_status
+                                     |          
+                                      --0.68%--gc2_small_candidate_admit
+
+     1.09%     0.00%  candidate-luaji  candidate-luajit              [.] gc2_fixpoint_round
+            |
+            ---gc2_fixpoint_round
+               |          
+                --0.87%--gc2_mark_drain_owned_bounded.isra.0
+                          gc2_drain_grey
+                          |          
+                           --0.82%--gc2_traverse_obj
+
+     1.09%     0.00%  candidate-luaji  candidate-luajit              [.] gc2_mark_close_help
+            |
+            ---gc2_mark_close_help
+               gc2_fixpoint_round
+               gc2_mark_drain_owned_bounded.isra.0
+               gc2_drain_grey
+               |          
+                --1.03%--gc2_traverse_obj
+
+     1.06%     1.06%  candidate-luaji  candidate-luajit              [.] lj_arena_hugetab_observe_enter
+     1.06%     0.11%  candidate-luaji  candidate-luajit              [.] gc2_barrier_tv.part.0
+            |          
+             --0.95%--gc2_barrier_tv.part.0
+                       |          
+                        --0.84%--gc2_markobj_expected_scoped_status_mode
+                                  gc2_markobj_preserve_status_impl.constprop.0
+                                  gc2_retain_candidate_status
+                                  |          
+                                   --0.68%--gc2_small_candidate_admit
+
+     1.04%     0.00%  candidate-luaji  candidate-luajit              [.] lj_gc2_fini
+            |
+            ---lj_gc2_fini
+               gc2_recovery_discard_terminal.isra.0
+
+     1.01%     0.00%  candidate-luaji  memfd:luajit-mcode (deleted)  [.] 0x0000556a776efeb4
+            |
+            ---0x556a776efeb4
+               lj_bufx_reset
+               |          
+                --0.51%--bufx_pin_try
+
+     1.01%     0.10%  candidate-luaji  candidate-luajit              [.] lj_bufx_reset
+            |          
+             --0.91%--lj_bufx_reset
+                       |          
+                        --0.51%--bufx_pin_try
+
+     0.98%     0.00%  candidate-luaji  candidate-luajit              [.] gc2_markobj_worker_status
+            |
+            ---gc2_markobj_worker_status
+               gc2_markobj_preserve_status_impl.constprop.0
+               |          
+                --0.62%--gc2_retain_candidate_status
+
+     0.87%     0.00%  candidate-luaji  candidate-luajit              [.] gc2_mark_complete_result
+            |
+            ---gc2_mark_complete_result
+               gc2_mark_close_help
+               gc2_fixpoint_round
+               gc2_mark_drain_owned_bounded.isra.0
+               gc2_drain_grey
+               |          
+                --0.82%--gc2_traverse_obj
+
+     0.78%     0.00%  candidate-luaji  candidate-luajit              [.] bufx_replace
+            |
+            ---bufx_replace
+
+     0.73%     0.73%  candidate-luaji  candidate-luajit              [.] arena_publish_leave
+     0.64%     0.64%  candidate-luaji  candidate-luajit              [.] gc2_mark_small_cell_admitted
+     0.62%     0.06%  candidate-luaji  candidate-luajit              [.] bufx_copy
+            |          
+             --0.56%--bufx_copy
+
+     0.62%     0.00%  candidate-luaji  candidate-luajit              [.] gc2_mark_payload_obj_worker
+            |
+            ---gc2_mark_payload_obj_worker
+               gc2_markobj_worker_status
+               gc2_markobj_preserve_status_impl.constprop.0
+               |          
+                --0.57%--gc2_retain_candidate_status
+
+     0.61%     0.10%  candidate-luaji  candidate-luajit              [.] lj_gc2_lease_release
+            |          
+             --0.51%--lj_gc2_lease_release
+                       arena_publish_leave
+
+     0.61%     0.05%  candidate-luaji  candidate-luajit              [.] lj_bufx_consume.part.0
+            |          
+             --0.55%--lj_bufx_consume.part.0
+
+     0.56%     0.00%  candidate-luaji  candidate-luajit              [.] gc_step_assist_top
+            |
+            ---gc_step_assist_top
+               gc2_step_auto
+               gc2_step
+               gc2_mark_complete_result
+               gc2_mark_close_help
+               gc2_fixpoint_round
+               gc2_mark_drain_owned_bounded.isra.0
+               gc2_drain_grey
+               gc2_traverse_obj
+
+     0.54%     0.00%  candidate-luaji  candidate-luajit              [.] lj_gc2_sweep_owner_progress
+            |
+            ---lj_gc2_sweep_owner_progress
+
+
+
+#
+# (Tip: To collect Processor Trace with samples use perf record -e '{intel_pt//,cycles}' ; perf script --call-trace or --insn-trace --xed -F +ipc (remove --xed if no xed))
+#

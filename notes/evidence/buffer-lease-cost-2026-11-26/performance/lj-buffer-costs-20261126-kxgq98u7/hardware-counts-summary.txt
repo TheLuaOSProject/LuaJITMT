@@ -1,0 +1,6 @@
+baseline append 1 {'cpu_core/cycles/u': 21.22, 'cpu_core/instructions/u': 122.52, 'cpu_core/mem_inst_retired.lock_loads/u': 0.01}
+baseline resetget 1024 {'cpu_core/cycles/u': 1425.23, 'cpu_core/instructions/u': 4425.86, 'cpu_core/mem_inst_retired.lock_loads/u': 16.23}
+baseline resetget 64 {'cpu_core/cycles/u': 759.98, 'cpu_core/instructions/u': 2228.27, 'cpu_core/mem_inst_retired.lock_loads/u': 16.12}
+current append 1 {'cpu_core/cycles/u': 582.82, 'cpu_core/instructions/u': 1845.27, 'cpu_core/mem_inst_retired.lock_loads/u': 13.24}
+current resetget 1024 {'cpu_core/cycles/u': 60096.89, 'cpu_core/instructions/u': 68861.56, 'cpu_core/mem_inst_retired.lock_loads/u': 502.7}
+current resetget 64 {'cpu_core/cycles/u': 3726.69, 'cpu_core/instructions/u': 11280.86, 'cpu_core/mem_inst_retired.lock_loads/u': 83.25}

@@ -1,0 +1,21 @@
+RUN long-1-1-baseline
+DONE long-1-1-baseline
+RUN long-1-2-candidate
+DONE long-1-2-candidate
+RUN long-2-1-candidate
+DONE long-2-1-candidate
+RUN long-2-2-baseline
+DONE long-2-2-baseline
+RUN long-3-1-baseline
+DONE long-3-1-baseline
+RUN long-3-2-candidate
+DONE long-3-2-candidate
+RUN long-4-1-candidate
+DONE long-4-1-candidate
+RUN long-4-2-baseline
+DONE long-4-2-baseline
+RUN long-5-1-baseline
+DONE long-5-1-baseline
+RUN long-5-2-candidate
+DONE long-5-2-candidate
+FINISHED

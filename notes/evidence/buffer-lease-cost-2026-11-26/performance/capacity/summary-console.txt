@@ -1,0 +1,28 @@
+All times are median process CPU nanoseconds per operation.
+Ratio = candidate time / frozen 51f8adc8e time; values above 1 are slower.
+
+suite        mode  workload             bytes  records streams   HEAD ns    new ns   ratio  paired min..max
+main         jit   reset_put_get           64   100000       1    474.64    322.71    0.68 0.65..0.72
+main         jit   reset_put_get         1024    20000       1   1738.85   1575.35    0.91 0.89..1.05
+main         jit   small_append             1   200000       1     62.12     61.78    0.99 0.95..1.04
+main         jit   small_append            16    50000       1     73.86     70.94    0.96 0.91..1.00
+main         jit   fifo_get                 1   200000       1    111.64    113.58    1.02 0.96..1.05
+main         jit   fifo_get                32   100000       1    214.99    210.86    0.98 0.94..0.98
+main         jit   set_get                 64   100000       1    418.73    415.60    0.99 0.95..1.03
+main         jit   set_get               1024    20000       1    543.05    532.15    0.98 0.94..1.03
+main         jit   stream_decode            9     1000     200    897.85    891.19    0.99 0.95..1.03
+main         jit   stream_decode            9    10000      20    912.48    909.80    1.00 0.98..1.03
+main         jit   stream_decode            9   100000       2    910.80    906.08    0.99 0.99..1.00
+main         joff  reset_put_get           64   100000       1   2441.63   2245.43    0.92 0.89..0.94
+main         joff  reset_put_get         1024    20000       1   5802.70   5172.05    0.89 0.86..0.91
+main         joff  small_append             1   200000       1    577.13    581.88    1.01 0.96..1.01
+main         joff  small_append            16    50000       1    600.20    598.10    1.00 0.95..1.04
+main         joff  fifo_get                 1   200000       1    967.59   1007.55    1.04 1.01..1.05
+main         joff  fifo_get                32   100000       1    966.89   1018.01    1.05 1.05..1.05
+main         joff  set_get                 64   100000       1   1894.20   1947.74    1.03 1.01..1.04
+main         joff  set_get               1024    20000       1   1969.70   2008.65    1.02 0.99..1.03
+main         joff  stream_decode            9     1000     200    890.92    895.52    1.01 1.00..1.01
+main         joff  stream_decode            9    10000      20    900.36    901.21    1.00 0.99..1.00
+main         joff  stream_decode            9   100000       2    898.65    902.45    1.00 1.00..1.01
+long_append  jit   small_append_long        1  1000000      10     59.74     61.31    1.03 0.98..1.10
+long_append  jit   small_append_long       16  1000000      10     63.26     64.43    1.02 0.97..1.04

@@ -1,0 +1,185 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cpu_core/cycles/u'
+# Event count (approx.): 23762822888
+#
+# Overhead  Symbol                                              
+# ........  ....................................................
+#
+    65.11%  [.] arena_find_run
+            |
+            ---arena_find_run
+               lj_arena_alloc
+               gc_mem_new_nothrow
+               bufx_alloc
+               bufx_copy_store
+               lj_bufx_append
+               lj_bufx_putstr
+               |          
+                --65.01%--0x555d103fff20
+
+    11.69%  [.] arena_clear_marks
+            |
+            ---arena_clear_marks
+               lj_arena_clear_registered_marks
+               gc2_mark_begin
+               gc2_step
+               gc2_step_auto
+               gc_auto_string_cp
+               lj_vm_cpcall_asm
+               lj_vm_cpcall
+               gc_auto_string_checkpoint
+               lj_safepoint_vm_checkpoint
+               lj_vm_exit_interp
+               lj_vm_pcall_unwind
+               lua_pcall
+               docall
+               pmain
+               lj_BC_FUNCC
+               lj_vm_cpcall
+               lua_cpcall
+               main
+               0x7ff117e11ca7
+               __libc_start_main
+               _start
+
+     6.40%  [.] gc2_recovery_discard_terminal.isra.0
+            |
+            ---gc2_recovery_discard_terminal.isra.0
+               |          
+               |--5.48%--lj_gc2_terminal_prefree
+               |          |          
+               |          |--4.56%--lj_gc2_freeall
+               |          |          close_state
+               |          |          main
+               |          |          0x7ff117e11ca7
+               |          |          __libc_start_main
+               |          |          _start
+               |          |          
+               |           --0.92%--close_state
+               |                     main
+               |                     0x7ff117e11ca7
+               |                     __libc_start_main
+               |                     _start
+               |          
+                --0.93%--lj_gc2_fini
+                          close_state
+                          main
+                          0x7ff117e11ca7
+                          __libc_start_main
+                          _start
+
+     1.85%  [.] lj_arena_clear_registered_marks
+            |
+            ---lj_arena_clear_registered_marks
+               gc2_mark_begin
+               gc2_step
+               gc2_step_auto
+               gc_auto_string_cp
+               lj_vm_cpcall_asm
+               lj_vm_cpcall
+               gc_auto_string_checkpoint
+               lj_safepoint_vm_checkpoint
+               lj_vm_exit_interp
+               lj_vm_pcall_unwind
+               lua_pcall
+               docall
+               pmain
+               lj_BC_FUNCC
+               lj_vm_cpcall
+               lua_cpcall
+               main
+               0x7ff117e11ca7
+               __libc_start_main
+               _start
+
+     1.57%  [.] lj_arena_hugetab_rescue_enter
+            |
+            ---lj_arena_hugetab_rescue_enter
+               gc2_small_registered_rescue_enter
+               |          
+                --1.16%--gc2_small_candidate_admit
+                          |          
+                           --1.12%--gc2_retain_candidate_status
+                                     gc2_markobj_preserve_status_impl.constprop.0
+                                     |          
+                                      --0.74%--gc2_markobj_expected_scoped_status_mode
+
+     1.20%  [.] lj_gc2_small_lease_try
+            |
+            ---lj_gc2_small_lease_try
+               |          
+                --0.97%--bufx_pin_try
+
+     1.20%  [.] hash_dense
+            |
+            ---hash_dense
+               lj_str_new
+               bufx_string
+               lj_bufx_get
+               |          
+                --1.15%--0x555d103fffdd
+
+     0.97%  [.] lj_arena_hugetab_observe_enter
+            |
+            ---lj_arena_hugetab_observe_enter
+               lj_gc2_small_lease_try
+               |          
+                --0.62%--bufx_pin_try
+
+     0.89%  [.] arena_set_alloc
+            |
+            ---arena_set_alloc
+               lj_arena_alloc
+               gc_mem_new_nothrow
+               bufx_alloc
+               bufx_copy_store
+               lj_bufx_append
+               lj_bufx_putstr
+               0x555d103fff20
+
+     0.72%  [.] arena_publish_leave
+            |
+            ---arena_publish_leave
+
+     0.65%  [.] lj_arena_hugetab_root_state_cas
+            |
+            ---lj_arena_hugetab_root_state_cas
+               lj_arena_clear_registered_marks
+               gc2_mark_begin
+               gc2_step
+               gc2_step_auto
+               gc_auto_string_cp
+               lj_vm_cpcall_asm
+               lj_vm_cpcall
+               gc_auto_string_checkpoint
+               lj_safepoint_vm_checkpoint
+               lj_vm_exit_interp
+               lj_vm_pcall_unwind
+               lua_pcall
+               docall
+               pmain
+               lj_BC_FUNCC
+               lj_vm_cpcall
+               lua_cpcall
+               main
+               0x7ff117e11ca7
+               __libc_start_main
+               _start
+
+     0.59%  [.] hugetab_search
+            |
+            ---hugetab_search
+
+     0.54%  [.] bufx_pin_try
+            |
+            ---bufx_pin_try
+
+
+
+#
+# (Tip: To show inline functions in call traces add --inline to perf report)
+#

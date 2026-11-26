@@ -1,0 +1,171 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 479  of event 'cpu_core/cycles/u'
+# Event count (approx.): 5540775745
+#
+# Overhead  Symbol                                 
+# ........  .......................................
+#
+    46.30%  [.] hash_dense
+            |
+            ---hash_dense
+               lj_str_new
+               bufx_string
+               0x55cd3986ffdd
+
+     6.99%  [.] lj_arena_hugetab_rescue_enter
+            |
+            ---lj_arena_hugetab_rescue_enter
+               gc2_small_registered_rescue_enter
+               gc2_small_candidate_admit
+               gc2_observed_obj_status_scoped_impl
+               gc2_tv_admit_scoped_impl
+               lj_gc2_tv_lease_acquire
+               bufx_userdata
+               bufx_read
+               bufx_copy
+               bufx_string
+               0x55cd3986ffdd
+
+     6.91%  [.] lj_arena_hugetab_observe_enter
+            |
+            ---lj_arena_hugetab_observe_enter
+               lj_gc2_small_lease_try
+               bufx_read
+               bufx_copy
+               bufx_string
+               0x55cd3986ffdd
+
+     4.98%  [.] arena_publish_leave
+            |
+            ---arena_publish_leave
+               |          
+                --4.97%--lj_gc2_lease_release
+                          |          
+                          |--2.69%--bufx_read
+                          |          bufx_copy
+                          |          bufx_string
+                          |          0x55cd3986ffdd
+                          |          
+                           --2.28%--bufx_copy
+                                     bufx_string
+                                     0x55cd3986ffdd
+
+     4.45%  [.] lj_bufx_reset_forjit
+            |
+            ---lj_bufx_reset_forjit
+               0x55cd3986feb4
+
+     4.23%  [.] bufx_snapshot
+            |
+            ---bufx_snapshot
+               bufx_read
+               bufx_copy
+               bufx_string
+               0x55cd3986ffdd
+
+     3.60%  [.] bufx_string
+            |
+            ---bufx_string
+               0x55cd3986ffdd
+
+     3.59%  [.] lj_str_new
+            |
+            ---lj_str_new
+               |          
+                --3.57%--bufx_string
+                          0x55cd3986ffdd
+
+     3.55%  [.] lj_gc2_small_lease_try
+            |
+            ---lj_gc2_small_lease_try
+               bufx_read
+               bufx_copy
+               bufx_string
+               0x55cd3986ffdd
+
+     2.50%  [.] gc2_small_candidate_admit
+            |
+            ---gc2_small_candidate_admit
+               gc2_observed_obj_status_scoped_impl
+               gc2_tv_admit_scoped_impl
+               lj_gc2_tv_lease_acquire
+               bufx_userdata
+               bufx_read
+               bufx_copy
+               bufx_string
+               0x55cd3986ffdd
+
+     2.10%  [.] hugetab_search
+            |
+            ---hugetab_search
+               |          
+               |--1.47%--lj_arena_hugetab_rescue_enter
+               |          gc2_small_registered_rescue_enter
+               |          gc2_small_candidate_admit
+               |          gc2_observed_obj_status_scoped_impl
+               |          gc2_tv_admit_scoped_impl
+               |          lj_gc2_tv_lease_acquire
+               |          bufx_userdata
+               |          bufx_read
+               |          bufx_copy
+               |          bufx_string
+               |          0x55cd3986ffdd
+               |          
+                --0.63%--lj_arena_hugetab_observe_enter
+                          lj_gc2_small_lease_try
+                          bufx_read
+                          bufx_copy
+                          bufx_string
+                          0x55cd3986ffdd
+
+     1.25%  [.] bufx_read
+            |
+            ---bufx_read
+               bufx_copy
+               bufx_string
+               0x55cd3986ffdd
+
+     0.85%  [.] gc2_small_lifetime_nearest
+            |
+            ---gc2_small_lifetime_nearest
+               gc2_small_candidate_admit
+               gc2_observed_obj_status_scoped_impl
+               gc2_tv_admit_scoped_impl
+               lj_gc2_tv_lease_acquire
+               bufx_userdata
+               bufx_read
+               bufx_copy
+               bufx_string
+               0x55cd3986ffdd
+
+     0.64%  [.] 0x000000000016257f
+            |
+            ---0x7fac4b87657f
+               lj_str_new
+               bufx_string
+               0x55cd3986ffdd
+
+     0.63%  [.] 0x0000000000162d00
+            |
+            ---0x7fac4b876d00
+               lj_buf_putstr
+               lj_bufx_putstr_forjit
+               0x55cd3986ff20
+
+     0.63%  [.] bufx_userdata
+            |
+            ---bufx_userdata
+               bufx_read
+               bufx_copy
+               bufx_string
+               0x55cd3986ffdd
+
+
+
+#
+# (Tip: To set sample time separation other than 100ms with --sort time use --time-quantum)
+#

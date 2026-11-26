@@ -1,0 +1,225 @@
+make: Entering directory '/tmp/lj-buffer-headroom-20261126-y6qc0l6f/noffi-v1/src'
+HOSTCC    host/minilua.o
+HOSTCC    host/buildvm_asm.o
+HOSTCC    host/buildvm_peobj.o
+HOSTCC    host/buildvm_lib.o
+HOSTCC    host/buildvm_fold.o
+HOSTLINK  host/minilua
+VERSION   luajit.h
+DYNASM    host/buildvm_arch.h
+**** WARNING Cannot determine rolling release version from git log.
+**** WARNING The 'git' command must be available during the build.
+CC        luajit.o
+HOSTCC    host/buildvm.o
+HOSTLINK  host/buildvm
+BUILDVM   lj_vm.S
+BUILDVM   lj_bcdef.h
+BUILDVM   lj_ffdef.h
+BUILDVM   lj_libdef.h
+BUILDVM   lj_recdef.h
+BUILDVM   lj_folddef.h
+BUILDVM   jit/vmdef.lua
+ASM       lj_vm.o
+CC        lj_assert.o
+CC        lj_gc.o
+CC        lj_gc2.o
+CC        lj_safepoint.o
+CC        lj_err.o
+CC        lj_char.o
+CC        lj_bc.o
+CC        lj_obj.o
+CC        lj_buf.o
+CC        lj_str.o
+CC        lj_tab.o
+CC        lj_func.o
+CC        lj_udata.o
+CC        lj_meta.o
+lj_gc2.c:13889:12: warning: ‘lj_gc2_finreg_cdata_dispatch’ defined but not used [-Wunused-function]
+13889 | static int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
+      |            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+lj_gc2.c:13412:13: warning: ‘gc2_finreg_cdata_finalizer_enqueue_admitted’ defined but not used [-Wunused-function]
+13412 | static void gc2_finreg_cdata_finalizer_enqueue_admitted(global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+lj_gc2.c:11723:13: warning: ‘gc2_finclaim_clear’ defined but not used [-Wunused-function]
+11723 | static void gc2_finclaim_clear(lua_State *L, global_State *g, MSize idx)
+      |             ^~~~~~~~~~~~~~~~~~
+lj_gc2.c:11705:13: warning: ‘gc2_finclaim_publish’ defined but not used [-Wunused-function]
+11705 | static void gc2_finclaim_publish(lua_State *L, global_State *g, MSize idx,
+      |             ^~~~~~~~~~~~~~~~~~~~
+lj_gc2.c:1622:12: warning: ‘gc2_small_cdata_span_exact’ defined but not used [-Wunused-function]
+ 1622 | static int gc2_small_cdata_span_exact(GCArena *a, uint32_t start,
+      |            ^~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_debug.o
+CC        lj_prng.o
+CC        lj_state.o
+CC        lj_dispatch.o
+CC        lj_tg.o
+CC        lj_thr.o
+CC        lj_chan.o
+CC        lj_arena.o
+CC        lj_vmevent.o
+CC        lj_vmmath.o
+CC        lj_strscan.o
+CC        lj_strfmt.o
+CC        lj_strfmt_num.o
+CC        lj_serialize.o
+CC        lj_api.o
+CC        lj_profile.o
+CC        lj_lex.o
+CC        lj_parse.o
+CC        lj_bcread.o
+CC        lj_bcwrite.o
+CC        lj_load.o
+CC        lj_ir.o
+CC        lj_opt_mem.o
+CC        lj_opt_fold.o
+CC        lj_opt_narrow.o
+lj_opt_fold.c: In function ‘kfold_int64arith’:
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_LT’ not handled in switch [-Wswitch]
+  380 |   switch (op) {
+      |   ^~~~~~
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_GE’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_LE’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_GT’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_ULT’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_UGE’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_ULE’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_UGT’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_EQ’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_NE’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_ABC’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_RETF’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_NOP’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_BASE’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_PVAL’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_GCSTEP’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_HIOP’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_LOOP’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_XPOLL’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_XSAVE’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_USE’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_PHI’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_RENAME’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_PROF’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_KPRI’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_KINT’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_KGC’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_KPTR’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_KKPTR’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_KNULL’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_KNUM’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_KINT64’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_KSLOT’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_BNOT’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_BSWAP’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_BAND’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_BOR’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_BXOR’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_BSHL’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_BSHR’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_BSAR’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_BROL’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_BROR’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_DIV’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_MOD’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_POW’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_NEG’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_ABS’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_LDEXP’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_MIN’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_MAX’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_FPMATH’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_ADDOV’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_SUBOV’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_MULOV’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_AREF’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_HREFK’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_HREF’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_NEWREF’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_UREFO’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_UREFC’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_FREF’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_TMPREF’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_STRREF’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_LREF’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_ALOAD’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_HLOAD’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_ULOAD’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_FLOAD’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_XLOAD’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_SLOAD’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_VLOAD’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_ALEN’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_ASTORE’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_HSTORE’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_USTORE’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_FSTORE’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_XSTORE’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_SNEW’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_XSNEW’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_TNEW’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_TDUP’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_CNEW’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_CNEWI’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_BUFHDR’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_BUFPUT’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_BUFSTR’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_TBAR’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_OBAR’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_XBAR’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_CONV’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_TOBIT’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_TOSTR’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_STRTO’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_CALLN’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_CALLA’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_CALLL’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_CALLS’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_CALLXS’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR_CARG’ not handled in switch [-Wswitch]
+lj_opt_fold.c:380:3: warning: enumeration value ‘IR__MAX’ not handled in switch [-Wswitch]
+CC        lj_opt_dce.o
+CC        lj_opt_loop.o
+CC        lj_opt_split.o
+CC        lj_opt_sink.o
+CC        lj_mcode.o
+CC        lj_snap.o
+CC        lj_record.o
+CC        lj_crecord.o
+CC        lj_ffrecord.o
+CC        lj_asm.o
+CC        lj_trace.o
+CC        lj_gdbjit.o
+CC        lj_ctype.o
+CC        lj_cdata.o
+In file included from lj_asm.c:2143:
+lj_asm_x86.h:4137:13: warning: ‘asm_xsave_restore_publish’ defined but not used [-Wunused-function]
+ 4137 | static void asm_xsave_restore_publish(ASMState *as, SnapShot *snap,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_cconv.o
+CC        lj_ccall.o
+CC        lj_ccallback.o
+CC        lj_carith.o
+CC        lj_clib.o
+CC        lj_cparse.o
+CC        lj_lib.o
+CC        lj_alloc.o
+CC        lib_aux.o
+CC        lib_base.o
+CC        lib_math.o
+CC        lib_bit.o
+CC        lib_string.o
+CC        lib_table.o
+CC        lib_io.o
+CC        lib_os.o
+CC        lib_package.o
+CC        lib_debug.o
+CC        lib_jit.o
+CC        lib_ffi.o
+CC        lib_buffer.o
+CC        lib_threading.o
+CC        lib_init.o
+AR        libluajit.a
+LINK      luajit
+OK        Successfully built LuaJIT
+make: Leaving directory '/tmp/lj-buffer-headroom-20261126-y6qc0l6f/noffi-v1/src'

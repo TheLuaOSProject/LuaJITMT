@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/assert-v1/src/luajit": "f4421aa835dc4655bd6b550e82fda7141dd4155c2df016231318e065cce910d7",
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/assert-v1/src/libluajit.a": "727ea893bc44f35171c4510a7467857ae7f432e951c9da2c169556d5514349a4",
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/assert-v1/tests/t-gc2-traverse.c": "65e693eae2712a250c0b12e8cf40a965c2f560aea0b08b2c1361bea9a0d1006f",
+  "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/assert-v1/check-traverse/traverse": "150e69e564eb29e998e31c83da13da5adcf77d889bf7a2a62b15b1a5d4ba910a"
+}

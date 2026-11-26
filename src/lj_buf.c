@@ -204,11 +204,17 @@ static int bufx_pin_try(lua_State *L, LJBuffer *buf, int bytes, BufPin *pin)
 {
   LJBufStorage *s;
   memset(pin, 0, sizeof(*pin));
-  pin->range = la_load128_acq(&buf->range);
-  pin->store = s = (LJBufStorage *)(uintptr_t)pin->range.lo;
+  /* The first load is only an address hint. Retain that allocation before
+  ** taking the coherent offsets or touching its header. Reuse before lease
+  ** admission is harmless if the current range names the retained incarnation;
+  ** reuse after admission is excluded. A null hint observes the empty buffer. */
+  pin->store = s = (LJBufStorage *)(uintptr_t)la_load64_acq(&buf->range.lo);
+  bufx_test(L, buf, LJ_BUF_TEST_STORAGE_SAMPLED);
   if (!s) return 1;
-  if (lj_gc2_storage_lease_try(G(L), s, sizeof(*s), &pin->header, NULL) &&
-      bufx_same(pin->range, la_load128_acq(&buf->range)) &&
+  if (!lj_gc2_storage_lease_try(G(L), s, sizeof(*s), &pin->header, NULL))
+    return 0;
+  pin->range = la_load128_acq(&buf->range);
+  if (pin->range.lo == (uintptr_t)s &&
       la_load32_acq(&s->written) > bufx_w(pin->range)) {
     TValue ref;
     if (!bytes || !s->ref || bufx_r(pin->range) == bufx_w(pin->range))
@@ -368,6 +374,16 @@ static LJBufStorage *bufx_copy_store(lua_State *L, LJBuffer *buf, BufPin *pin,
   *len = bufx_w(pin->range) - bufx_r(pin->range);
   if (more > LJ_MAX_BUF - *len) return NULL;
   cap = bufx_capacity(cap, *len + more);
+  /* Consumed bytes cannot be overwritten while a reader retains them. Give
+  ** a repeatedly refilled buffer room for four incoming chunks, bounded below
+  ** the dedicated-mapping threshold, instead of replacing it on every put.
+  ** Ordinary growth, copy-on-write and a busy tail keep their usual sizing. */
+  if (old && !old->ref && more > old->capacity - bufx_w(pin->range) &&
+      *len + more <= old->capacity && cap < LJ_HUGE_THRESHOLD / 2) {
+    MSize headroom = more < LJ_HUGE_THRESHOLD / 8 ?
+                      4 * more : LJ_HUGE_THRESHOLD / 2;
+    cap = bufx_capacity(cap, headroom);
+  }
   s = bufx_alloc(L, buf, cap, NULL, NULL);
   if (s && *len) memcpy(s+1, old->data + bufx_r(pin->range), *len);
   return s;

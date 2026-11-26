@@ -1,0 +1,24 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-7,9-15",
+    "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/combined-v1/src/luajit",
+    "tools/test.lua",
+    "m5_buffer_publish",
+    "m5_buffer_progress",
+    "m3_gc2_small_lease_span"
+  ],
+  "exit": 0,
+  "seconds": 40.09915637498489,
+  "environment": {
+    "LUA_PATH": "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/combined-v1/src/?.lua;;",
+    "JOBS": "6"
+  },
+  "outputs": {
+    "luajit": "705b0d3826e4823a12aa706da7221bf755f1308a32260dbdd975020b061a9cbb",
+    "libluajit.a": "1ebfe052a4a53d3d84670733a437a4ff33e2a71728c019c39b3090a475eba1b4",
+    "libluajit.so": "206b7eda02dbc65770654d31370a573f24fa676d83a08cb34031ba38135259a1"
+  },
+  "source_mismatches": []
+}

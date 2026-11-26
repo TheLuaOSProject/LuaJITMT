@@ -1,0 +1,5 @@
+# started on Thu Nov 26 15:48:29 2026
+
+768999285,,cpu_core/cycles/u,136982281,100.00,,
+2228307092,,cpu_core/instructions/u,136982281,100.00,2.90,insn per cycle
+16116104,,cpu_core/mem_inst_retired.lock_loads/u,136982281,100.00,,

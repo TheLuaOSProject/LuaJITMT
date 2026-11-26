@@ -62,7 +62,8 @@ typedef struct LJBufPosition {
 #ifdef LJ_BUF_TEST_HELPERS
 enum {
   LJ_BUF_TEST_TAIL_CLAIMED = 1,
-  LJ_BUF_TEST_BEFORE_PUBLISH = 2
+  LJ_BUF_TEST_BEFORE_PUBLISH = 2,
+  LJ_BUF_TEST_STORAGE_SAMPLED = 3
 };
 typedef void (*LJBufTestHook)(lua_State *L, LJBuffer *buf, uint32_t stage);
 LJ_FUNC void lj_buf_test_set_hook(LJBufTestHook hook);

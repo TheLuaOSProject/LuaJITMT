@@ -16977,11 +16977,12 @@ void lj_gc2_lease_release(LJGC2Lease *lease)
 
 /* Bound a retained exact start without touching its payload. Allocation/free
 ** boundaries are block|mark; the unconsumed bump tail need not have an end
-** sentinel, so this is an upper bound, not an exact requested byte count. */
-static size_t gc2_small_lease_span(GCArena *a, uint32_t start)
+** sentinel, so this is an upper bound, not an exact requested byte count.
+** Without a span result, only inspect the cells needed for the minimum. */
+static size_t gc2_small_lease_span(GCArena *a, uint32_t start, size_t limit)
 {
   uint32_t cell = start + 1u;
-  uint32_t end = start + (LJ_HUGE_THRESHOLD >> LJ_CELL_SHIFT);
+  uint32_t end = start + (uint32_t)((limit + LJ_CELL_SIZE - 1u) >> LJ_CELL_SHIFT);
   if (end > LJ_ARENA_CELLS)
     end = LJ_ARENA_CELLS;
   while (cell < end) {
@@ -17052,7 +17053,7 @@ int lj_gc2_small_lease_try(global_State *g, const void *p,
       (expected_gct && (!lj_arena_ready_get(a, cell) ||
 		       lj_arena_cdata_get(a, cell))))
     goto denied;
-  span = gc2_small_lease_span(a, cell);
+  span = gc2_small_lease_span(a, cell, spanp ? LJ_HUGE_THRESHOLD : minimum);
   if (minimum > span ||
       (expected_gct &&
        (minimum < offsetof(GChead, gct) + sizeof(((GChead *)0)->gct) ||

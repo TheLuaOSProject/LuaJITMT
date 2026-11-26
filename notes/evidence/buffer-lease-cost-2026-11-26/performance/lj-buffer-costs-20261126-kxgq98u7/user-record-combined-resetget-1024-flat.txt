@@ -1,0 +1,154 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cpu_core/cycles/u'
+# Event count (approx.): 20569066247
+#
+# Overhead  Symbol                                              
+# ........  ....................................................
+#
+    68.61%  [.] arena_find_run
+            |
+            ---arena_find_run
+               lj_arena_alloc
+               gc_mem_new_nothrow
+               bufx_alloc
+               bufx_copy_store
+               lj_bufx_append
+               lj_bufx_putstr
+               0x556a776eff20
+
+     7.75%  [.] arena_clear_marks
+            |
+            ---arena_clear_marks
+               lj_arena_clear_registered_marks
+               gc2_mark_begin
+               gc2_step
+               gc2_step_auto
+               gc_auto_string_cp
+               lj_vm_cpcall_asm
+               lj_vm_cpcall
+               gc_auto_string_checkpoint
+               lj_safepoint_vm_checkpoint
+               lj_vm_exit_interp
+               lj_vm_pcall_unwind
+               lua_pcall
+               docall
+               pmain
+               lj_BC_FUNCC
+               lj_vm_cpcall
+               lua_cpcall
+               main
+               0x7fbbe1fb7ca7
+               __libc_start_main
+               _start
+
+     7.23%  [.] gc2_recovery_discard_terminal.isra.0
+            |
+            ---gc2_recovery_discard_terminal.isra.0
+               |          
+               |--6.18%--lj_gc2_terminal_prefree
+               |          |          
+               |          |--5.21%--lj_gc2_freeall
+               |          |          close_state
+               |          |          main
+               |          |          0x7fbbe1fb7ca7
+               |          |          __libc_start_main
+               |          |          _start
+               |          |          
+               |           --0.98%--close_state
+               |                     main
+               |                     0x7fbbe1fb7ca7
+               |                     __libc_start_main
+               |                     _start
+               |          
+                --1.04%--lj_gc2_fini
+                          close_state
+                          main
+                          0x7fbbe1fb7ca7
+                          __libc_start_main
+                          _start
+
+     2.27%  [.] lj_arena_clear_registered_marks
+            |
+            ---lj_arena_clear_registered_marks
+               gc2_mark_begin
+               gc2_step
+               gc2_step_auto
+               gc_auto_string_cp
+               lj_vm_cpcall_asm
+               lj_vm_cpcall
+               gc_auto_string_checkpoint
+               lj_safepoint_vm_checkpoint
+               lj_vm_exit_interp
+               lj_vm_pcall_unwind
+               lua_pcall
+               docall
+               pmain
+               lj_BC_FUNCC
+               lj_vm_cpcall
+               lua_cpcall
+               main
+               0x7fbbe1fb7ca7
+               __libc_start_main
+               _start
+
+     1.91%  [.] hash_dense
+            |
+            ---hash_dense
+               lj_str_new
+               bufx_string
+               lj_bufx_get
+               0x556a776effdd
+
+     1.25%  [.] lj_arena_hugetab_rescue_enter
+            |
+            ---lj_arena_hugetab_rescue_enter
+               gc2_small_registered_rescue_enter
+               |          
+                --1.06%--gc2_small_candidate_admit
+                          |          
+                           --0.95%--gc2_retain_candidate_status
+                                     gc2_markobj_preserve_status_impl.constprop.0
+                                     |          
+                                      --0.69%--gc2_markobj_expected_scoped_status_mode
+
+     1.06%  [.] lj_arena_hugetab_observe_enter
+            |
+            ---lj_arena_hugetab_observe_enter
+               lj_gc2_small_lease_try
+               |          
+                --0.97%--bufx_pin_try
+
+     1.05%  [.] arena_set_alloc
+            |
+            ---arena_set_alloc
+               lj_arena_alloc
+               gc_mem_new_nothrow
+               bufx_alloc
+               bufx_copy_store
+               lj_bufx_append
+               lj_bufx_putstr
+               0x556a776eff20
+
+     0.73%  [.] arena_publish_leave
+            |
+            ---arena_publish_leave
+               |          
+                --0.51%--lj_gc2_lease_release
+
+     0.64%  [.] gc2_mark_small_cell_admitted
+            |
+            ---gc2_mark_small_cell_admitted
+
+     0.50%  [.] bufx_pin_try
+            |
+            ---bufx_pin_try
+
+
+
+#
+# (Tip: To collect Processor Trace with samples use perf record -e '{intel_pt//,cycles}' ; perf script --call-trace or --insn-trace --xed -F +ipc (remove --xed if no xed))
+#
