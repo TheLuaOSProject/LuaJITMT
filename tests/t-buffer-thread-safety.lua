@@ -131,33 +131,54 @@ if jit and jit.status() then
     return done:recv(10)
   end, ready, done)
   assert(ready:recv(10))
-  jit.flush(mixed_concat)
   jit.opt.start("hotloop=1", "hotexit=100")
-  local pc, seen
-  for i = 1, util.funcinfo(mixed_concat).bytecodes - 1 do
-    local op = bit.band(util.funcbc(mixed_concat, i), 255) * 6
-    if names:sub(op+1, op+6) == "FORL  " then pc = i end
-  end
-  assert(pc)
-  local function onexit(tr)
-    local ins = util.funcbc(mixed_concat, pc)
-    local op = bit.band(ins, 255) * 6
-    if names:sub(op+1, op+6) == "JFORL " and bit.rshift(ins, 16) == tr then
-      seen = true
+  local function check_loop(fn, run)
+    jit.flush(fn)
+    local pc, seen
+    for i = 1, util.funcinfo(fn).bytecodes - 1 do
+      local op = bit.band(util.funcbc(fn, i), 255) * 6
+      if names:sub(op+1, op+6) == "FORL  " then pc = i end
     end
+    assert(pc)
+    local function onexit(tr)
+      local ins = util.funcbc(fn, pc)
+      local op = bit.band(ins, 255) * 6
+      if names:sub(op+1, op+6) == "JFORL " and bit.rshift(ins, 16) == tr then
+        seen = true
+      end
+    end
+    jit.off(onexit)
+    jit.attach(onexit, "texit")
+    for _ = 1, 128 do
+      run()
+      if seen then break end
+      collectgarbage("step", 256)
+      th.sleep(0.001)
+    end
+    jit.attach(onexit)
+    assert(seen, "no native exit from the buffer loop")
   end
-  jit.off(onexit)
-  jit.attach(onexit, "texit")
-  for _ = 1, 128 do
+  jit.off(check_loop)
+  check_loop(mixed_concat, function()
     assert(mixed_concat(owned, cow, 90, owned.__tostring) == "n=90/2345/b\0cd!")
-    if seen then break end
-    collectgarbage("step", 256)
-    th.sleep(0.001)
+  end)
+  local function consume(b, n, get, skip)
+    local text
+    for i = 1, n do
+      local prefix = "n=" .. i
+      local byte = get(b, 1)
+      skip(b, 1)
+      text = prefix .. "/" .. byte
+    end
+    return text
   end
-  jit.attach(onexit)
+  local input, bytes = buffer.new(), ("A!"):rep(89) .. "B!"
+  check_loop(consume, function()
+    input:set(bytes)
+    assert(consume(input, 90, input.get, input.skip) == "n=90/B" and #input == 0)
+  end)
   assert(done:send(true, 10))
   assert(peer:join())
-  assert(seen, "no native exit from the buffer conversion and concat loop")
 end
 
 print("t-buffer-thread-safety OK")

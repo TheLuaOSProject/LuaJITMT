@@ -1319,7 +1319,7 @@ static void LJ_FASTCALL recff_buffer_method_skip(jit_State *J, RecordFFData *rd)
   trn = lj_opt_narrow_toint(J, J->base[1]);
   emitir(IRTGI(IR_GE), trn, lj_ir_kint(J, 0));
   emitir(IRTGI(IR_LE), trn, lj_ir_kint(J, LJ_MAX_BUF));
-  lj_ir_call(J, IRCALL_lj_bufx_skip_forjit,
+  lj_ir_call(J, IRCALL_lj_bufx_skip,
 	     recff_buffer_method_sbx(J, rd), trn);
 }
 
@@ -1350,7 +1350,7 @@ static void LJ_FASTCALL recff_buffer_method_putf(jit_State *J, RecordFFData *rd)
 
 static void LJ_FASTCALL recff_buffer_method_get(jit_State *J, RecordFFData *rd)
 {
-  TRef trn = lj_ir_kint(J, -1);
+  TRef trn = lj_ir_kint(J, LJ_MAX_BUF);
   if (J->base[1]) {
     int32_t n;
     if (J->base[2])
@@ -1365,8 +1365,10 @@ static void LJ_FASTCALL recff_buffer_method_get(jit_State *J, RecordFFData *rd)
     emitir(IRTGI(IR_LE), trn, lj_ir_kint(J, LJ_MAX_BUF));
   }
 emit_call:
-  J->base[0] = lj_ir_call(J, IRCALL_lj_bufx_get_forjit,
-			  recff_buffer_method_sbx(J, rd), trn);
+  {
+    TRef sbx = recff_buffer_method_sbx(J, rd);
+    J->base[0] = lj_ir_call(J, IRCALL_lj_bufx_get, lj_record_bufhdr(J), sbx, trn);
+  }
 }
 
 static TRef recff_buffer_method_sbx(jit_State *J, RecordFFData *rd)

@@ -23,15 +23,16 @@
 /* Extended string buffer. */
 typedef struct SBufExt {
   SBufHeader;
+  la_u128 cursor;	/* Read pointer and publication generation. */
   union {
     GCRef cowref;	/* Copy-on-write object reference. */
     MRef bsb;		/* Borrowed string buffer. */
   };
-  char *r;		/* Read pointer. */
   GCRef dict_str;	/* Serialization string dictionary table. */
   GCRef dict_mt;	/* Serialization metatable dictionary table. */
   int depth;		/* Remaining recursion depth. */
 } SBufExt;
+LJ_STATIC_ASSERT(sizeof(GCudata) % __alignof__(la_u128) == 0);
 
 static LJ_AINLINE char *lj_buf_ptr_load_acq(char *const *p)
 {
@@ -62,7 +63,7 @@ static LJ_AINLINE char *lj_buf_eptr_acq(const SBuf *sb)
 
 static LJ_AINLINE char *lj_buf_rptr_acq(const SBufExt *sbx)
 {
-  return lj_buf_ptr_load_acq((char *const *)&sbx->r);
+  return (char *)(uintptr_t)la_load64_acq(&sbx->cursor.lo);
 }
 
 static LJ_AINLINE void lj_buf_bptr_rel(SBuf *sb, char *p)
@@ -82,7 +83,11 @@ static LJ_AINLINE void lj_buf_eptr_rel(SBuf *sb, char *p)
 
 static LJ_AINLINE void lj_buf_rptr_rel(SBufExt *sbx, char *p)
 {
-  lj_buf_ptr_store_rel(&sbx->r, p);
+  la_u128 old = la_load128_acq(&sbx->cursor), next;
+  next.lo = (uintptr_t)p;
+  do {
+    next.hi = old.hi + 1;
+  } while (!la_cas128(&sbx->cursor, &old, next));
 }
 
 static LJ_AINLINE GCobj *lj_bufx_cowref_acq(const SBufExt *sbx)
@@ -334,8 +339,8 @@ static LJ_AINLINE void lj_bufx_set_borrow(lua_State *L, SBufExt *sbx, SBuf *sb)
   char *e = lj_buf_eptr_acq(sb);
   setsbufXL(sbx, L, SBUF_FLAG_EXT | SBUF_FLAG_BORROW);
   setmref(sbx->bsb, sb);
-  lj_buf_rptr_rel(sbx, b);
   lj_buf_bounds_rel((SBuf *)sbx, b, b, e);
+  lj_buf_rptr_rel(sbx, b);
 }
 
 static LJ_AINLINE void lj_bufx_set_cow(lua_State *L, SBufExt *sbx,
@@ -344,8 +349,8 @@ static LJ_AINLINE void lj_bufx_set_cow(lua_State *L, SBufExt *sbx,
   char *b = (char *)p;
   char *e = (char *)p + len;
   setsbufXL(sbx, L, SBUF_FLAG_EXT | SBUF_FLAG_COW);
-  lj_buf_rptr_rel(sbx, b);
   lj_buf_bounds_rel((SBuf *)sbx, b, e, e);
+  lj_buf_rptr_rel(sbx, b);
 }
 
 static LJ_AINLINE void lj_bufx_reset(SBufExt *sbx)
@@ -358,8 +363,8 @@ static LJ_AINLINE void lj_bufx_reset(SBufExt *sbx)
   }
   {
     char *b = lj_buf_bptr_acq((SBuf *)sbx);
-    lj_buf_rptr_rel(sbx, b);
     lj_buf_wptr_rel((SBuf *)sbx, b);
+    lj_buf_rptr_rel(sbx, b);
   }
 }
 
@@ -369,8 +374,8 @@ static LJ_AINLINE void lj_bufx_free(lua_State *L, SBufExt *sbx)
     lj_mem_free(G(L), lj_buf_bptr_acq((SBuf *)sbx), sbufsz(sbx));
   setsbufXL(sbx, L, SBUF_FLAG_EXT);
   lj_bufx_cowref_clear_rel(sbx);
-  lj_buf_rptr_rel(sbx, NULL);
   lj_buf_bounds_rel((SBuf *)sbx, NULL, NULL, NULL);
+  lj_buf_rptr_rel(sbx, NULL);
 }
 
 #if LJ_HASBUFFER
@@ -378,17 +383,16 @@ LJ_FUNC int lj_bufx_isbuf(lua_State *L, cTValue *o);
 LJ_FUNC MSize lj_bufx_readlen(lua_State *L, cTValue *o);
 LJ_FUNC void lj_bufx_putbuf(lua_State *L, SBuf *dst, cTValue *source);
 LJ_FUNC GCstr *LJ_FASTCALL lj_bufx_tostr(SBuf *sb, SBufExt *src);
+LJ_FUNC GCstr *lj_bufx_get(SBuf *scratch, SBufExt *src, MSize n);
+LJ_FUNC void LJ_FASTCALL lj_bufx_skip(SBufExt *sbx, MSize n);
 #endif
 
 #if LJ_HASBUFFER && LJ_HASJIT
 LJ_FUNC void lj_bufx_set(SBufExt *sbx, const char *p, MSize len, GCobj *o);
 LJ_FUNC void LJ_FASTCALL lj_bufx_reset_forjit(SBufExt *sbx);
-LJ_FUNC void LJ_FASTCALL lj_bufx_skip_forjit(SBufExt *sbx, int32_t narg);
 LJ_FUNC void LJ_FASTCALL lj_bufx_putstr_forjit(lua_State *L, SBufExt *sbx,
 					       GCstr *str);
 LJ_FUNC int32_t LJ_FASTCALL lj_bufx_len_forjit(SBufExt *sbx);
-LJ_FUNC GCstr *LJ_FASTCALL lj_bufx_get_forjit(lua_State *L, SBufExt *sbx,
-					      int32_t narg);
 #if LJ_HASFFI
 LJ_FUNC MSize LJ_FASTCALL lj_bufx_more(SBufExt *sbx, MSize sz);
 #endif

@@ -166,6 +166,12 @@ return function(add)
       t:build({ quiet = true })
       luajit_script(t, "t-buffer-thread-safety.lua", nil, { joff = true })
       luajit_script(t, "t-buffer-thread-safety.lua", nil, { jon = true })
+      if jit.os == "Linux" then
+        build_and_run_c(t, t:tmp("lj_t-buffer-consume"), "t-buffer-consume.c", {
+          build = false, timeout = "35s",
+          libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=lj_str_new" }
+        })
+      end
       print("M5 string.buffer publication smoke passed")
     end
   })

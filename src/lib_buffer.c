@@ -63,8 +63,8 @@ static char *buffer_storage_new_nothrow(lua_State *L, SBufExt *sbx, MSize sz)
   raw = (char *)lj_mem_new_nothrow(L, nsz);
   if (!raw)
     return NULL;
-  lj_buf_rptr_rel(sbx, raw);
   lj_buf_bounds_rel((SBuf *)sbx, raw, raw, raw + nsz);
+  lj_buf_rptr_rel(sbx, raw);
   return raw;
 }
 
@@ -92,16 +92,7 @@ LJLIB_CF(buffer_method_skip)		LJLIB_REC(.)
 {
   SBufExt *sbx = buffer_tobuf(L);
   MSize n = (MSize)lj_lib_checkintrange(L, 2, 0, LJ_MAX_BUF);
-  MSize len = sbufxlen(sbx);
-  if (n < len) {
-    lj_buf_rptr_rel(sbx, lj_buf_rptr_acq(sbx) + n);
-  } else if (sbufiscow(sbx)) {
-    lj_buf_rptr_rel(sbx, lj_buf_wptr_acq((SBuf *)sbx));
-  } else {
-    char *b = lj_buf_bptr_acq((SBuf *)sbx);
-    lj_buf_rptr_rel(sbx, b);
-    lj_buf_wptr_rel((SBuf *)sbx, b);
-  }
+  lj_bufx_skip(sbx, n);
   L->top = L->base+1;  /* Chain buffer object. */
   return 1;
 }
@@ -193,17 +184,8 @@ LJLIB_CF(buffer_method_get)		LJLIB_REC(.)
     TValue *o = &L->base[arg];
     MSize n = tvisnil(o) ? LJ_MAX_BUF :
 	      (MSize) lj_lib_checkintrange(L, (int)(arg+1), 0, LJ_MAX_BUF);
-    MSize len;
-    const char *p = lj_bufx_data_acq(sbx, &len);
-    if (n > len) n = len;
-    setstrV(L, o, lj_str_new(L, p, n));
-    lj_buf_rptr_rel(sbx, (char *)p + n);
-  }
-  if (lj_buf_rptr_acq(sbx) == lj_buf_wptr_acq((SBuf *)sbx) &&
-      !sbufiscow(sbx)) {
-    char *b = lj_buf_bptr_acq((SBuf *)sbx);
-    lj_buf_rptr_rel(sbx, b);
-    lj_buf_wptr_rel((SBuf *)sbx, b);
+    GCstr *s = lj_bufx_get(lj_buf_tmp_(L), sbx, n);
+    setstrV(L, &L->base[arg], s);
   }
   lj_gc_check(L);
   return (int)(narg-1);

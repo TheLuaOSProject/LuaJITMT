@@ -21,6 +21,7 @@
 static void buf_grow(SBuf *sb, MSize sz)
 {
   MSize osz = sbufsz(sb), len = sbuflen(sb), nsz = osz;
+  MSize slack = sbufisext(sb) ? sbufxslack(sbufX(sb)) : 0;
   char *oldb = lj_buf_bptr_acq(sb);
   char *b;
   GCSize flag;
@@ -37,12 +38,9 @@ static void buf_grow(SBuf *sb, MSize sz)
   } else {
     b = (char *)lj_mem_realloc(sbufL(sb), oldb, osz, nsz);
   }
-  if ((flag & SBUF_FLAG_EXT)) {
-    char *oldr = lj_buf_rptr_acq(sbufX(sb));
-    lj_buf_rptr_rel(sbufX(sb), oldb ? oldr - oldb + b : b);
-  }
-  /* Adjust buffer pointers. */
   lj_buf_bounds_rel(sb, b, b + len, b + nsz);
+  if ((flag & SBUF_FLAG_EXT))
+    lj_buf_rptr_rel(sbufX(sb), b + slack);
   if ((flag & SBUF_FLAG_BORROW)) {  /* Adjust borrowed buffer pointers. */
     SBuf *bsb = mref(sbufX(sb)->bsb, SBuf);
     lj_buf_bounds_rel(bsb, b, b + len, b + nsz);
@@ -76,9 +74,12 @@ LJ_NOINLINE char *LJ_FASTCALL lj_buf_more2(SBuf *sb, MSize sz)
       char *b = lj_buf_bptr_acq((SBuf *)sbx);
       char *r = lj_buf_rptr_acq(sbx);
       if (r != b) {  /* Compact by moving down. */
-	memmove(b, r, len);
-	lj_buf_rptr_rel(sbx, b);
+	char *w = lj_buf_wptr_acq((SBuf *)sbx);
+	/* A consumer can have advanced since the earlier size check. */
+	len = lj_buf_ptr_range(r, b, w) ? (MSize)(w - r) : 0;
+	if (len) memmove(b, r, len);
 	lj_buf_wptr_rel((SBuf *)sbx, b + len);
+	lj_buf_rptr_rel(sbx, b);
       }
       lj_assertG_(G(sbufL(sbx)), len + sz <= sbufsz(sbx), "bad SBuf compact");
     }
@@ -168,6 +169,7 @@ typedef struct BufReadSnapshot {
   char *w;
   GCobj *ref;
   GCSize flags;
+  uint64_t generation;
 } BufReadSnapshot;
 
 static void bufx_snapshot(const SBufExt *sbx, BufReadSnapshot *s)
@@ -175,7 +177,11 @@ static void bufx_snapshot(const SBufExt *sbx, BufReadSnapshot *s)
   s->flags = sbufflag(sbx) & SBUF_MASK_FLAG;
   s->b = lj_buf_bptr_acq((const SBuf *)sbx);
   s->e = lj_buf_eptr_acq((const SBuf *)sbx);
-  s->r = lj_buf_rptr_acq(sbx);
+  {
+    la_u128 cursor = la_load128_acq(&sbx->cursor);
+    s->r = (char *)(uintptr_t)cursor.lo;
+    s->generation = cursor.hi;
+  }
   s->w = lj_buf_wptr_acq((const SBuf *)sbx);
   s->ref = lj_bufx_cowref_acq(sbx);
 }
@@ -183,7 +189,8 @@ static void bufx_snapshot(const SBufExt *sbx, BufReadSnapshot *s)
 static int bufx_snapshot_same(const BufReadSnapshot *a, const BufReadSnapshot *b)
 {
   return a->flags == b->flags && a->b == b->b && a->e == b->e &&
-    a->r == b->r && a->w == b->w && a->ref == b->ref;
+    a->r == b->r && a->w == b->w && a->ref == b->ref &&
+    a->generation == b->generation;
 }
 
 static int bufx_snapshot_valid(const BufReadSnapshot *s, MSize *lenp)
@@ -199,7 +206,7 @@ static int bufx_snapshot_valid(const BufReadSnapshot *s, MSize *lenp)
 }
 
 static int bufx_read(lua_State *L, cTValue *o, const char **pp,
-		     MSize *lenp, LJGC2Lease *holdp)
+		     MSize *lenp, LJGC2Lease *holdp, la_u128 *cursor)
 {
   LJGC2Lease bodylease;
   SBufExt *sbx;
@@ -264,6 +271,10 @@ static int bufx_read(lua_State *L, cTValue *o, const char **pp,
     }
     if (pp) *pp = second.r ? second.r : "";
     if (lenp) *lenp = len;
+    if (cursor) {
+      cursor->lo = (uintptr_t)second.r;
+      cursor->hi = second.generation;
+    }
     lj_gc2_lease_release(&bodylease);
     if (holdp) {
       *holdp = storage;
@@ -280,7 +291,7 @@ static int bufx_read(lua_State *L, cTValue *o, const char **pp,
 MSize lj_bufx_readlen(lua_State *L, cTValue *o)
 {
   MSize len = 0;
-  (void)bufx_read(L, o, NULL, &len, NULL);
+  (void)bufx_read(L, o, NULL, &len, NULL, NULL);
   return len;
 }
 
@@ -289,7 +300,8 @@ MSize lj_bufx_readlen(lua_State *L, cTValue *o)
 ** resnapshotted and re-admitted. The loop is bounded so a racing writer cannot
 ** turn concatenation into a wait; an unstable buffer contributes an empty
 ** racy snapshot, which is memory-safe and within the allowed racy semantics. */
-void lj_bufx_putbuf(lua_State *L, SBuf *sb, cTValue *o)
+static MSize bufx_copy(lua_State *L, SBuf *sb, cTValue *o, MSize limit,
+                       la_u128 *cursor)
 {
   TValue source;
   uint32_t attempt;
@@ -300,8 +312,9 @@ void lj_bufx_putbuf(lua_State *L, SBuf *sb, cTValue *o)
     char *w;
     MSize len;
     memset(&lease, 0, sizeof(lease));
-    if (!bufx_read(L, &source, &p, &len, &lease))
-      return;  /* Safe empty result for an unstable racy descriptor. */
+    if (!bufx_read(L, &source, &p, &len, &lease, cursor))
+      return 0;
+    if (len > limit) len = limit;
     if (len > sbufleft(sb)) {
       lj_gc2_lease_release(&lease);
       (void)lj_buf_more(sb, len);  /* May throw only with no source lease. */
@@ -312,26 +325,74 @@ void lj_bufx_putbuf(lua_State *L, SBuf *sb, cTValue *o)
       lj_buf_wptr_rel(sb, lj_buf_wmem(w, p, len));
     }
     lj_gc2_lease_release(&lease);
-    return;
+    return len;
+  }
+  return 0;
+}
+
+void lj_bufx_putbuf(lua_State *L, SBuf *sb, cTValue *o)
+{
+  (void)bufx_copy(L, sb, o, LJ_MAX_BUF, NULL);
+}
+
+static int bufx_advance(SBufExt *sbx, la_u128 cursor, MSize n)
+{
+  la_u128 next = {cursor.lo + n, cursor.hi + 1};
+  return la_cas128(&sbx->cursor, &cursor, next);
+}
+
+void LJ_FASTCALL lj_bufx_skip(SBufExt *sbx, MSize n)
+{
+  while (n) {
+    BufReadSnapshot view;
+    la_u128 cursor;
+    MSize len;
+    bufx_snapshot(sbx, &view);
+    if (!bufx_snapshot_valid(&view, &len) || !len)
+      return;
+    cursor.lo = (uintptr_t)view.r;
+    cursor.hi = view.generation;
+    if (bufx_advance(sbx, cursor, n < len ? n : len))
+      return;
   }
 }
 
 /* The caller supplies the current temporary buffer, already reset. Generated
 ** code expresses that reset in IR so adjacent concatenations cannot reuse
 ** the bytes overwritten here. The source may exist only in a native register. */
-GCstr *LJ_FASTCALL lj_bufx_tostr(SBuf *sb, SBufExt *src)
+static GCstr *bufx_string(SBuf *sb, SBufExt *src, MSize limit, int consume)
 {
   lua_State *L = sbufL(sb);
   TGState *tg = L2TG(L);
   TValue source, *anchor;
   uint32_t index;
+  GCstr *s;
   setgcVraw(&source, obj2gco((GCudata *)src - 1), LJ_TUDATA);
   anchor = lj_tg_root_anchor_push(L, tg, &source, &index);
   if (LJ_UNLIKELY(!anchor)) lj_err_mem(L);
   lj_gc_pubroot(L, anchor);
-  lj_bufx_putbuf(L, sb, anchor);
+  for (;;) {
+    la_u128 cursor;
+    MSize n = bufx_copy(L, sb, anchor, limit, consume ? &cursor : NULL);
+    s = lj_buf_str(L, sb);
+    /* Intern before consuming so an allocation error leaves the bytes in
+    ** place. A reset, even to the same address, invalidates the old cursor. */
+    if (!n || !consume || bufx_advance(src, cursor, n))
+      break;
+    lj_buf_reset(sb);
+  }
   lj_tg_root_anchor_pop(tg, index);
-  return lj_buf_str(L, sb);
+  return s;
+}
+
+GCstr *LJ_FASTCALL lj_bufx_tostr(SBuf *sb, SBufExt *src)
+{
+  return bufx_string(sb, src, LJ_MAX_BUF, 0);
+}
+
+GCstr *lj_bufx_get(SBuf *scratch, SBufExt *src, MSize n)
+{
+  return bufx_string(scratch, src, n, 1);
 }
 #endif
 
@@ -350,21 +411,6 @@ void LJ_FASTCALL lj_bufx_reset_forjit(SBufExt *sbx)
   lj_bufx_reset(sbx);
 }
 
-void LJ_FASTCALL lj_bufx_skip_forjit(SBufExt *sbx, int32_t narg)
-{
-  MSize n = (MSize)narg;
-  MSize len = sbufxlen(sbx);
-  if (n < len) {
-    lj_buf_rptr_rel(sbx, lj_buf_rptr_acq(sbx) + n);
-  } else if (sbufiscow(sbx)) {
-    lj_buf_rptr_rel(sbx, lj_buf_wptr_acq((SBuf *)sbx));
-  } else {
-    char *b = lj_buf_bptr_acq((SBuf *)sbx);
-    lj_buf_rptr_rel(sbx, b);
-    lj_buf_wptr_rel((SBuf *)sbx, b);
-  }
-}
-
 void LJ_FASTCALL lj_bufx_putstr_forjit(lua_State *L, SBufExt *sbx, GCstr *str)
 {
   setsbufXL_(sbx, L);
@@ -375,23 +421,6 @@ void LJ_FASTCALL lj_bufx_putstr_forjit(lua_State *L, SBufExt *sbx, GCstr *str)
 int32_t LJ_FASTCALL lj_bufx_len_forjit(SBufExt *sbx)
 {
   return (int32_t)sbufxlen(sbx);
-}
-
-GCstr *LJ_FASTCALL lj_bufx_get_forjit(lua_State *L, SBufExt *sbx, int32_t narg)
-{
-  MSize len, n = narg < 0 ? LJ_MAX_BUF : (MSize)narg;
-  const char *p = lj_bufx_data_acq(sbx, &len);
-  GCstr *s;
-  if (n > len) n = len;
-  s = lj_str_new(L, p, n);
-  lj_buf_rptr_rel(sbx, (char *)p + n);
-  if (lj_buf_rptr_acq(sbx) == lj_buf_wptr_acq((SBuf *)sbx) &&
-      !sbufiscow(sbx)) {
-    char *b = lj_buf_bptr_acq((SBuf *)sbx);
-    lj_buf_rptr_rel(sbx, b);
-    lj_buf_wptr_rel((SBuf *)sbx, b);
-  }
-  return s;
 }
 
 #if LJ_HASFFI
