@@ -4,6 +4,11 @@ local runtime = require("suite_runtime")
 local build_and_run_luajit_code = runtime.build_and_run_luajit_code
 local compile_and_run_c = build.compile_and_run_c
 
+local function run_forward_read(t, name)
+  build.build_and_run_c(t, t:tmp("lj_" .. name), name .. ".c",
+                        build.tab_helper_opts({ timeout = "25s" }))
+end
+
 local function tget_array_header_smoke()
   return [[
 local t = {}
@@ -132,8 +137,7 @@ return function(add)
     description = "x64 TGET array bounds and FORWARD behavior",
     run = function(t)
       build_and_run_luajit_code(t, tget_array_header_smoke(), { joff = true })
-      compile_and_run_c(t, t:tmp("lj_t-x64-tget-forward"),
-                        "t-x64-tget-forward.c")
+      run_forward_read(t, "t-x64-tget-forward")
       print("M5 x64 TGET array bounds and FORWARD behavior passed")
     end
   })
@@ -143,8 +147,7 @@ return function(add)
     description = "x64 TGETS/TSETS FORWARD behavior",
     run = function(t)
       build_and_run_luajit_code(t, tgets_node_order_smoke(), { joff = true })
-      compile_and_run_c(t, t:tmp("lj_t-x64-tgets-forward"),
-                        "t-x64-tgets-forward.c")
+      run_forward_read(t, "t-x64-tgets-forward")
       print("M5 x64 TGETS/TSETS FORWARD behavior passed")
     end
   })
@@ -154,8 +157,7 @@ return function(add)
     description = "x64 ipairs_aux array/hash FORWARD behavior",
     run = function(t)
       build_and_run_luajit_code(t, ipairs_snapshot_smoke(), { joff = true })
-      compile_and_run_c(t, t:tmp("lj_t-x64-ipairs-forward"),
-                        "t-x64-ipairs-forward.c")
+      run_forward_read(t, "t-x64-ipairs-forward")
       print("M5 x64 ipairs_aux array/hash FORWARD behavior passed")
     end
   })
@@ -165,8 +167,7 @@ return function(add)
     description = "x64 BC_ITERN array/hash FORWARD behavior",
     run = function(t)
       build_and_run_luajit_code(t, itern_snapshot_smoke(), { joff = true })
-      compile_and_run_c(t, t:tmp("lj_t-x64-itern-forward"),
-                        "t-x64-itern-forward.c")
+      run_forward_read(t, "t-x64-itern-forward")
       print("M5 x64 BC_ITERN array/hash FORWARD behavior passed")
     end
   })

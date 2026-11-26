@@ -119,6 +119,7 @@ The lifetime rules follow the removal and reclamation split in RCU. C11 §5.1.2.
 
 - Run both stock corpora, the public embedding and FFI cases, first-attach/flush races, assertion builds, ASan, TSan C drivers and the torture and weak/finalizer soaks. Keep the stock bytecode producer separate from the executable under test. Record which cases are eligible for each build.
 - Run stalled-actor tests through ordinary API and bytecode entry points. Exercise sustained allocation, retention and reclamation with live workers, including after repeated worker detach. Explicit channel rendezvous, joins and module initialization have their own documented synchronization semantics.
+- The x64 table-read fixtures suspend the resize issuer after migration while both old vectors remain published. Lua must complete indexed reads, field reads, `pairs` and `ipairs` before the issuer resumes. They check growth and shrink with an object moving between the array and hash, including its identity and the iteration count.
 - Push tested commits regularly. Group completed work into larger releases and run the public semantic, lifetime and progress checks together on each candidate. Record outstanding issues in prerelease notes.
 
 ## Deferred performance work
