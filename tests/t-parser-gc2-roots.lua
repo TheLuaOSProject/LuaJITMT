@@ -16,14 +16,21 @@ pieces = nil
 
 local in_bc = false
 local bc_events = 0
-local function bc_hook()
+local funcinfo = require("jit.util").funcinfo
+local weak = setmetatable({}, { __mode = "v" })
+local callback_collected = false
+local function bc_hook(pt)
   bc_events = bc_events + 1
   if in_bc then return end
   in_bc = true
+  if bc_events == 1 then weak[1] = {} end
   for _ = 1, 2 do
     local garbage = {}
     for i = 1, 300 do garbage[i] = { tostring(i), i } end
     collectgarbage("collect")
+  end
+  if bc_events == 1 then
+    callback_collected = weak[1] == nil and funcinfo(pt) ~= nil
   end
   in_bc = false
 end
@@ -56,6 +63,7 @@ local run = compiled()
 assert(type(run) == "function")
 assert(run(3) == 3 + (900 * 901) / 2)
 assert(bc_events > 5, bc_events)
+assert(callback_collected, "collection did not clear a weak value inside the bytecode hook")
 
 -- Syntax errors after all three raw buffers have grown must unwind both the
 -- semantic proto anchors and the native LexState root descriptor.

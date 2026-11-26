@@ -9818,14 +9818,14 @@ static int gc2_mark_jit_event_owner_session(global_State *g, TGState *tg)
   acquired = lj_jit_event_session_snapshot_acquire(g, tg, &snapshot);
   if (acquired == LJ_JIT_EVENT_SNAPSHOT_IDLE) {
     callback_owner_state =
-      lj_jit_event_callback_snapshot(tg, &callback_owner);
+      lj_jit_event_callback_root_snapshot(tg, &callback_owner);
     if (callback_owner_state == LJ_JIT_EVENT_CALLBACK_SNAPSHOT_IDLE)
       return 1;
     goto retry_without_reader;
   }
   if (acquired != LJ_JIT_EVENT_SNAPSHOT_ACTIVE)
     goto retry_without_reader;
-  callback_owner_state = lj_jit_event_callback_snapshot(tg, &callback_owner);
+  callback_owner_state = lj_jit_event_callback_root_snapshot(tg, &callback_owner);
   if (callback_owner_state == LJ_JIT_EVENT_CALLBACK_SNAPSHOT_RETRY) {
     (void)lj_jit_event_session_snapshot_release(&snapshot);
     goto retry_without_reader;
@@ -9855,7 +9855,7 @@ static int gc2_mark_jit_event_owner_session(global_State *g, TGState *tg)
     callback_root = gcref_acq(roots[nroots]);
   proof_flags = flags & (LJ_JIT_EVENT_SLOT_F_VIEW |
 			 LJ_JIT_EVENT_SLOT_F_SOURCE_PIN);
-  if ((callback_owner_state == LJ_JIT_EVENT_CALLBACK_SNAPSHOT_ACTIVE &&
+  if (callback_owner_state == LJ_JIT_EVENT_CALLBACK_SNAPSHOT_ACTIVE &&
        (callback_owner.tg != tg || callback_owner.owner_L != owner_L ||
 	callback_owner.session_generation != snapshot.generation ||
 	callback_owner.session_slot != snapshot.slot_index ||
@@ -9881,9 +9881,7 @@ static int gc2_mark_jit_event_owner_session(global_State *g, TGState *tg)
 	callback_stream.terminal_event != callback_owner.event ||
 	callback_stream.terminal_slot != callback_owner.session_slot ||
 	callback_stream.terminal_session_generation !=
-	  callback_owner.session_generation)) ||
-      (callback_owner_state == LJ_JIT_EVENT_CALLBACK_SNAPSHOT_IDLE &&
-       (lj_tg_hookmask_load(tg) & (HOOK_ACTIVE|HOOK_VMEVENT)) != 0))
+	  callback_owner.session_generation))
     complete = 0;
   if (owner_mode == LJ_JIT_EVENT_OWNER_CONTINUATION_LIFECYCLE)
     owner_word = jit_owner_word_acq(g);
@@ -9986,7 +9984,9 @@ static int gc2_mark_jit_event_owner_session(global_State *g, TGState *tg)
   /* Handoff is forbidden while the session is nonquiescent. Recheck the
   ** captured actor on both sides of reader release so a corruption/retire
   ** overlap becomes a root-scan retry without touching freed slot backing. */
-  if (lj_tg_actor_acq(tg) != owner_actor)
+  if (lj_tg_actor_acq(tg) != owner_actor ||
+      la_load64_acq(&tg->jit_event_callback_owner.sequence) !=
+	callback_owner.sequence)
     complete = 0;
   if (!lj_jit_event_session_snapshot_release(&snapshot))
     complete = 0;

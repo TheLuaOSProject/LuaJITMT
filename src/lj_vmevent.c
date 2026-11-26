@@ -728,8 +728,19 @@ static int jit_event_callback_owner_active_raw(
     la_loadptr_acq((void *const *)&owner->owner_L) != NULL;
 }
 
-int lj_jit_event_callback_snapshot(
-  TGState *tg, LJJitEventCallbackSnapshot *snapshot)
+static int jit_event_other_callback_active(TGState *tg, uint32_t tid)
+{
+  if (tid && vmevent_owner_acq(tg->gl) == tid)
+    return 1;
+#if LJ_HASPROFILE
+  return lj_profile_callback_active_tg(tg);
+#else
+  return 0;
+#endif
+}
+
+static int jit_event_callback_snapshot(
+  TGState *tg, LJJitEventCallbackSnapshot *snapshot, int scan_roots)
 {
   LJJitEventCallbackOwner *owner;
   uint64_t sequence;
@@ -759,8 +770,17 @@ int lj_jit_event_callback_snapshot(
   if (la_load64_acq(&owner->sequence) != sequence)
     goto retry;
   if (snapshot->state == LJ_JIT_EVENT_CALLBACK_IDLE) {
+    uint8_t mask = lj_tg_hookmask_load(tg) & (HOOK_ACTIVE|HOOK_VMEVENT);
+    if (mask) {
+      uint32_t tid = lj_tg_tid_acq(tg);
+      /* The bytecode-event and profile handlers run with both suppression
+      ** bits set. Their Lua frames are stack roots. Only an actual owner of
+      ** those bits can explain them during a root scan of an idle JIT slot. */
+      if (!scan_roots || mask != (HOOK_ACTIVE|HOOK_VMEVENT) ||
+	  !jit_event_other_callback_active(tg, tid))
+	goto retry;
+    }
     if (!jit_event_callback_owner_idle_raw(owner) ||
-	(lj_tg_hookmask_load(tg) & (HOOK_ACTIVE|HOOK_VMEVENT)) != 0 ||
 	la_load64_acq(&owner->sequence) != sequence)
       goto retry;
     return LJ_JIT_EVENT_CALLBACK_SNAPSHOT_IDLE;
@@ -783,6 +803,18 @@ int lj_jit_event_callback_snapshot(
 retry:
   memset(snapshot, 0, sizeof(*snapshot));
   return LJ_JIT_EVENT_CALLBACK_SNAPSHOT_RETRY;
+}
+
+int lj_jit_event_callback_snapshot(
+  TGState *tg, LJJitEventCallbackSnapshot *snapshot)
+{
+  return jit_event_callback_snapshot(tg, snapshot, 0);
+}
+
+int lj_jit_event_callback_root_snapshot(
+  TGState *tg, LJJitEventCallbackSnapshot *snapshot)
+{
+  return jit_event_callback_snapshot(tg, snapshot, 1);
 }
 
 int lj_jit_event_callback_idle(TGState *tg)
@@ -908,10 +940,7 @@ int lj_jit_event_callback_claim_l(
   owner = &tg->jit_event_callback_owner;
   actor = lj_tg_actor_acq(tg);
   tid = lj_tg_tid_acq(tg);
-  if (tid == 0 || vmevent_owner_acq(tg->gl) == tid ||
-#if LJ_HASPROFILE
-      lj_profile_callback_active_tg(tg) ||
-#endif
+  if (tid == 0 || jit_event_other_callback_active(tg, tid) ||
       actor == 0 || actor == LJ_THR_ACTOR_RETIRED ||
       actor != lj_thr_actor_current() ||
       !jit_event_callback_sequence_claim(owner, 6u, &sequence))
@@ -919,10 +948,7 @@ int lj_jit_event_callback_claim_l(
   if (!jit_event_callback_owner_idle_raw(owner) ||
       la_load64_acq(&owner->next_generation) != before.next_generation ||
       !jit_event_callback_session_exact(L, session) ||
-      lj_tg_tid_acq(tg) != tid || vmevent_owner_acq(tg->gl) == tid ||
-#if LJ_HASPROFILE
-      lj_profile_callback_active_tg(tg) ||
-#endif
+      lj_tg_tid_acq(tg) != tid || jit_event_other_callback_active(tg, tid) ||
       lj_tg_actor_acq(tg) != actor || actor != lj_thr_actor_current() ||
       !lj_tg_hookmask_callback_enter_try(tg)) {
     jit_event_callback_sequence_publish(owner, sequence);

@@ -16,6 +16,7 @@
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
+#include "lj_gc2.h"
 #include "lj_jit.h"
 #include "lj_profile.h"
 #include "lj_safepoint.h"
@@ -347,6 +348,8 @@ static void test_snapshot_retry_and_saturation(
   (void)lj_tg_hookmask_update(tg, HOOK_ACTIVE, 0);
   (void)lj_tg_hookmask_update(tg, 0, HOOK_ACTIVE|HOOK_VMEVENT);
   assert(lj_jit_event_callback_snapshot(tg, &snapshot) ==
+         LJ_JIT_EVENT_CALLBACK_SNAPSHOT_RETRY);
+  assert(lj_jit_event_callback_root_snapshot(tg, &snapshot) ==
          LJ_JIT_EVENT_CALLBACK_SNAPSHOT_RETRY);
   assert(lj_tg_hookmask_callback_leave_exact(tg));
   expect_owner_idle(tg, 0);
@@ -692,6 +695,7 @@ static void profile_callback_claim(void *data, lua_State *L, int samples,
   ** substrate must report busy rather than an admissible idle snapshot. */
   assert(lj_jit_event_callback_snapshot(ctx->tg, &owner) ==
          LJ_JIT_EVENT_CALLBACK_SNAPSHOT_RETRY);
+  assert(lj_gc2_test_scan_jit_event_sessions(G(L), ctx->tg));
   assert(lj_jit_event_session_snapshot_release(&session));
   ctx->calls++;
 }

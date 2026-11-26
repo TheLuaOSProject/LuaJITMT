@@ -386,6 +386,8 @@ LJ_FUNC int lj_jit_event_callback_release_l(
   lua_State *L, const LJJitEventCallbackHandle *handle);
 LJ_FUNC int lj_jit_event_callback_snapshot(
   TGState *tg, LJJitEventCallbackSnapshot *snapshot);
+LJ_FUNC int lj_jit_event_callback_root_snapshot(
+  TGState *tg, LJJitEventCallbackSnapshot *snapshot);
 LJ_FUNC int lj_jit_event_callback_idle(TGState *tg);
 LJ_FUNC int lj_jit_event_frozen_view_valid(const LJJitEventFrozenView *view);
 /* Structural-only FLUSH transaction. Admission publishes the payload-free
