@@ -14,6 +14,7 @@ trace_ins=$tmpdir/trace-ins.c
 hotcall=$tmpdir/hotcall.c
 signal_late=$tmpdir/signal-late.c
 handshake=$tmpdir/handshake.c
+finish_leader=$tmpdir/finish-leader.c
 
 sed -n '/void LJ_FASTCALL lj_trace_hot/,/static void trace_hotside/p' \
   "$root/src/lj_trace.c" >"$trace_hot"
@@ -33,6 +34,8 @@ sed -n '/static uint32_t safepoint_signal_late/,/static int safepoint_native_ack
   "$root/src/lj_safepoint.c" >"$signal_late"
 sed -n '/^static uint32_t safepoint_handshake(/,/^}/p' \
   "$root/src/lj_safepoint.c" >"$handshake"
+sed -n '/^static void safepoint_finish_leader(/,/^}/p' \
+  "$root/src/lj_safepoint.c" >"$finish_leader"
 
 line_of() {
   file=$1
@@ -202,14 +205,19 @@ test -n "$signal_reqmask" && test -n "$signal_pause" && test -n "$signal_poll"
 test "$signal_reqmask" -lt "$signal_pause"
 test "$signal_pause" -lt "$signal_poll"
 
-final_poll_clear=$(line_of "$handshake" 'safepoint_clear_consumed_polls(g, epoch)' 1)
-final_clean_note=$(line_of "$handshake" 'safepoint_test_signal_note_before_leader_leave(g, epoch)' 1)
-leader_leave=$(awk -v start="$final_clean_note" \
-  'NR > start && /safepoint_leader_leave\(g, leader\)/ { print NR; exit }' "$handshake")
-test -n "$final_poll_clear" && test -n "$final_clean_note" && \
-  test -n "$leader_leave"
+grep -F 'safepoint_finish_leader(g, leader, epoch)' "$handshake" >/dev/null
+grep -F 'safepoint_finish_leader(g, LJ_SAFEPOINT_RESUMABLE_LEADER, epoch)' \
+  "$root/src/lj_safepoint.c" >/dev/null
+final_poll_clear=$(line_of "$finish_leader" 'safepoint_clear_consumed_polls(g, epoch)' 1)
+final_clean_note=$(line_of "$finish_leader" 'safepoint_test_signal_note_before_leader_leave(g, epoch)' 1)
+leader_leave=$(line_of "$finish_leader" 'safepoint_leader_leave(g, id)' 1)
+stop_rearm=$(line_of "$finish_leader" 'safepoint_rearm_fresh_stopreq_polls(g)' 1)
+for value in "$final_poll_clear" "$final_clean_note" "$leader_leave" "$stop_rearm"; do
+  test -n "$value" || { echo "missing final safepoint poll publication" >&2; exit 1; }
+done
 test "$final_poll_clear" -lt "$final_clean_note"
 test "$final_clean_note" -lt "$leader_leave"
+test "$leader_leave" -lt "$stop_rearm"
 grep -F 'LJ_TRACE_TEST_REQUEST_OBSERVE' "$root/src/lj_trace.c" >/dev/null
 
 for vm in vm_x64.dasc vm_arm64.dasc; do
