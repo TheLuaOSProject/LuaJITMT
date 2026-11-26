@@ -2382,6 +2382,7 @@ typedef struct global_State {
   GCSize mt_gc_threshold;  /* Saved automatic-GC threshold. */
   TabResizeState tab_resize;  /* Cold persistent table-resize state. */
   uint32_t mt_openuv;  /* Bit 0: activated; bits 1..31: open upvalue count. */
+  struct global_State *locale_next;  /* Process locale admission list. */
 } global_State;
 
 LJ_STATIC_ASSERT(offsetof(global_State, nilnode) ==

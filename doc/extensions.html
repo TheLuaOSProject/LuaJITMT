@@ -286,13 +286,15 @@ Important: Neither this nor any other PRNG based on the simplistic
 <tt>math.random()</tt> API is suitable for cryptographic use.
 </p>
 
-<h3 id="os_setlocale"><tt>os.setlocale()</tt> is restricted after threading activation</h3>
+<h3 id="os_setlocale"><tt>os.setlocale()</tt> during concurrent Lua execution</h3>
 <p>
-Process locale mutation is not thread-safe. After this fork has activated
-secondary thread support, requests to change the process locale return
-<tt>nil</tt>. Queries and requests that pass back the exact locale name returned
-for the same category remain available. Embedders must coordinate direct C
-or FFI locale changes with other users of the process locale.
+<tt>os.setlocale()</tt> changes the process locale when all open Lua heaps
+belong to the calling OS thread and no secondary Lua threads are attaching
+or active. A caller can change the locale again after its workers have
+joined. A request that cannot safely change the locale returns <tt>nil</tt>.
+Queries and requests that pass back the exact locale name for the same
+category remain available. Embedders must coordinate locale changes with
+direct C or FFI users of the process locale.
 </p>
 
 <h3 id="collectgarbage_threading"><tt>collectgarbage()</tt> during live threads</h3>

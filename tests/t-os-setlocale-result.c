@@ -27,10 +27,12 @@ char *__wrap_setlocale(int category, const char *locale)
     pause_push = 1;
     return locale_name;
   }
-  if (locale && strcmp(locale, "test-replace") == 0) {
+  if (!locale) {
+    /* Model libc reusing its returned storage on a subsequent query. */
     memset(locale_name, 'b', sizeof(locale_name)-1);
     return locale_name;
   }
+  assert(strcmp(locale, "test-refuse") != 0);
   return __real_setlocale(category, locale);
 }
 
@@ -51,8 +53,8 @@ static void *replace_locale(void *unused)
   (void)unused;
   rendezvous();
   ljt_lua_assert_ok(L, luaL_dostring(L,
-    "assert(os.setlocale('test-replace') == string.rep('b', 511))"),
-    "setlocale writer");
+    "assert(os.setlocale('test-refuse') == nil)\n"
+    "assert(os.setlocale() == string.rep('b', 511))"), "setlocale peer");
   rendezvous();
   lua_close(L);
   return NULL;
@@ -70,6 +72,13 @@ int main(void)
     "assert(os.setlocale() == string.rep('a', 511))"), "setlocale reader");
   is_reader = 0;
   assert(pthread_join(writer, NULL) == 0);
+  {
+    /* Independent heaps owned by the same OS actor remain usable serially. */
+    lua_State *second = ljt_lua_newstate_openlibs();
+    ljt_lua_assert_ok(L, luaL_dostring(L, "assert(os.setlocale('C') == 'C')"),
+                      "setlocale with two same-owner heaps");
+    lua_close(second);
+  }
   assert(pthread_barrier_destroy(&locale_barrier) == 0);
   lua_close(L);
   return 0;

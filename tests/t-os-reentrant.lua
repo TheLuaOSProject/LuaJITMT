@@ -59,7 +59,15 @@ harness.join_each(workers, function(worker_id, id, n)
 end)
 
 check_setlocale_query()
-check_setlocale_blocked()
+assert(os.setlocale("nonexistent-locale", "time") == nil)
+local alternate = os.setlocale("C.UTF-8", "all") or
+                  os.setlocale("C.utf8", "all")
+if alternate then
+  assert(alternate ~= "C" and os.setlocale() == alternate)
+elseif jit.os == "Linux" then
+  assert(type(os.setlocale("POSIX", "all")) == "string")
+end
+assert(os.setlocale("C", "all") == "C")
 
 print(("t-os-reentrant OK: %d child TGs x %d os.date/tmpname ops"):format(
   nthreads, iters))

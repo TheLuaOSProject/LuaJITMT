@@ -33,6 +33,7 @@
 #include "lj_vm.h"
 #include "lj_prng.h"
 #include "lj_lex.h"
+#include "lj_locale.h"
 #include "lj_alloc.h"
 #include "lj_mcode.h"
 #include "lj_vmevent.h"
@@ -1149,6 +1150,7 @@ static void close_state(lua_State *L)
   ** immutable slot spine. Partial initialization reaches this point with just
   ** the main slot and uses the same terminal cleanup. */
   lj_tg_registry_fini(g);
+  lj_locale_heap_unregister(g);
   if (arena_alloc) {
     /*
     ** Internal arena slabs are released when the arena allocator is destroyed
@@ -1351,6 +1353,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   lj_dispatch_init((GG_State *)L);
   lj_tg_init((GG_State *)L, arena_internal, tid);
   lj_gc2_init(g);
+  lj_locale_heap_register(g);
   L->status = LUA_ERRERR+1;  /* Avoid touching the stack upon memory error. */
   if (lj_vm_cpcall(L, NULL, NULL, cpluaopen) != 0) {
     /* Memory allocation error: free partial state. */

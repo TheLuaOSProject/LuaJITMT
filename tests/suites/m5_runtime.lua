@@ -272,6 +272,12 @@ return function(add)
           libs = { "-lm", "-ldl", "-pthread",
                    "-Wl,--wrap=setlocale", "-Wl,--wrap=lua_pushstring" }
         })
+        build.compile_and_run_c(t, t:tmp("lj_t-os-setlocale-attach"),
+                                "t-os-setlocale-attach.c", {
+          timeout = "20s",
+          libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=setlocale",
+                   "-Wl,--wrap=lj_locale_wait_attach" }
+        })
       end
       build_and_run_luajit_script(t, "t-os-reentrant.lua", nil, {
         joff = true,

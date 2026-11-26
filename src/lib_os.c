@@ -26,8 +26,10 @@
 #include "lj_buf.h"
 #include "lj_str.h"
 #include "lj_lib.h"
+#include "lj_locale.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
+#include "lj_thr.h"
 #include "lj_vm.h"
 
 #if LJ_TARGET_POSIX
@@ -367,6 +369,8 @@ LJLIB_CF(os_difftime)
 #if !LJ_TARGET_PSVITA
 /* Lua heaps share libc's locale names, including their lifetime. */
 static uint32_t os_locale_lock;
+static uint32_t os_locale_writer;
+static global_State *os_locale_heaps;
 
 static void os_locale_lock_acquire(void)
 {
@@ -385,41 +389,48 @@ static void os_locale_lock_release(void)
   la_futex_wake(&os_locale_lock, 1);
 }
 
-/* Reuse the runtime exclusive gate for process-global locale mutation. */
-static void os_setlocale_leaveexclusive(global_State *g)
+void lj_locale_heap_register(global_State *g)
 {
-  mt_gc_exclusive_rel(g, 0);
-  mt_gc_exclusive_futex_wake(g, INT_MAX);
+  os_locale_lock_acquire();
+  g->locale_next = os_locale_heaps;
+  os_locale_heaps = g;
+  os_locale_lock_release();
 }
 
-static int os_setlocale_threading_active(global_State *g)
+void lj_locale_heap_unregister(global_State *g)
 {
-  /*
-  ** Process-global locale mutation is only stock-safe before any concurrent
-  ** VM entry is active or in progress. An mt_entering thread has not yet
-  ** published mt_live, but it has crossed the attach/spawn boundary and must
-  ** not overlap a process-wide C library locale change.
-  */
-  return mt_active_acq(g) != 0 || mt_live_acq(g) != 0 ||
-	 mt_entering_acq(g) != 0;
+  global_State **link;
+  os_locale_lock_acquire();
+  for (link = &os_locale_heaps; *link && *link != g;
+       link = &(*link)->locale_next) {}
+  if (!*link)
+    abort();  /* A live heap must have exactly one registration. */
+  *link = g->locale_next;
+  os_locale_lock_release();
 }
 
-static int os_setlocale_enterexclusive(lua_State *L)
+void lj_locale_wait_attach(void)
 {
-  global_State *g = G(L);
-  for (;;) {
-    uint32_t expect = 0;
-    if (os_setlocale_threading_active(g))
+  while (la_load32_acq(&os_locale_writer) != 0)
+    (void)la_futex_wait(&os_locale_writer, 1, 1000000);
+}
+
+/* The locale lock stabilizes the heap list. The writer flag excludes entry.
+** Heaps on the calling actor can have no other executing main state. Load
+** entering before live so a reservation transferring between them cannot
+** be missed. A later entrant must pass through lj_locale_wait_attach(). */
+static int os_locale_quiescent(void)
+{
+  global_State *g;
+  uint32_t actor = lj_thr_actor_current();
+  if (actor == 0)
+    return 0;
+  for (g = os_locale_heaps; g; g = g->locale_next) {
+    if (lj_tg_actor_acq(g->main_tg) != actor ||
+	mt_entering_acq(g) != 0 || mt_live_acq(g) != 0)
       return 0;
-    if (mt_gc_exclusive_cas(g, &expect, 1)) {
-      if (!os_setlocale_threading_active(g))
-	return 1;
-      os_setlocale_leaveexclusive(g);
-      return 0;
-    }
-    if (expect != 0)
-      mt_gc_exclusive_futex_wait(g, expect, 1000000);
   }
+  return 1;
 }
 
 static TValue *os_locale_push_cp(lua_State *L, lua_CFunction dummy, void *ud)
@@ -435,12 +446,11 @@ LJLIB_CF(os_setlocale)
 #if LJ_TARGET_PSVITA
   lua_pushliteral(L, "C");
 #else
-  global_State *g = G(L);
   GCstr *s = lj_lib_optstr(L, 1);
   const char *str = s ? strdata(s) : NULL;
   const char *res;
   char buf[256], *copy = NULL;
-  int exclusive, oom = 0;
+  int oom = 0, mutation = 0;
   int opt = lj_lib_checkopt(L, 2, 6,
     "\5ctype\7numeric\4time\7collate\10monetary\1\377\3all");
   if (opt == 0) opt = LC_CTYPE;
@@ -449,16 +459,24 @@ LJLIB_CF(os_setlocale)
   else if (opt == 3) opt = LC_COLLATE;
   else if (opt == 4) opt = LC_MONETARY;
   else if (opt == 6) opt = LC_ALL;
-  exclusive = str && os_setlocale_enterexclusive(L);
   os_locale_lock_acquire();
-  if (str && !exclusive) {
+  if (str) {
+    /* Pair with the entrant's fence after publishing mt_entering. Either
+    ** we see its reservation or it sees the pending write before entry. */
+    la_store32_rel(&os_locale_writer, 1);
+    la_fence_seq();
+    mutation = os_locale_quiescent();
+    if (mutation)
+      res = setlocale(opt, str);
+    la_store32_rel(&os_locale_writer, 0);
+    la_futex_wake(&os_locale_writer, INT_MAX);
+  }
+  if (!mutation) {
     /* An exact name returned by libc requests no change. Do not ask libc
     ** to mutate, and keep empty-string environment lookup on the write path. */
     res = setlocale(opt, NULL);
-    if (!*str || !res || strcmp(str, res) != 0)
+    if (str && (!*str || !res || strcmp(str, res) != 0))
       res = NULL;
-  } else {
-    res = setlocale(opt, str);
   }
   if (res) {
     size_t len = strlen(res) + 1;
@@ -469,8 +487,6 @@ LJLIB_CF(os_setlocale)
       oom = 1;
   }
   os_locale_lock_release();
-  if (exclusive)
-    os_setlocale_leaveexclusive(g);
   if (oom)
     lj_err_mem(L);
   if (copy && copy != buf) {

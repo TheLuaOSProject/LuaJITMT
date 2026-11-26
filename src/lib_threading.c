@@ -30,6 +30,7 @@
 #include "lj_lib.h"
 #include "lj_safepoint.h"
 #include "lj_state.h"
+#include "lj_locale.h"
 #include "lj_str.h"
 #include "lj_tab.h"
 #include "lj_thr.h"
@@ -655,6 +656,9 @@ static int threading_entering_begin(global_State *g)
   ** forbidden.  A losing entrant keeps its reservation while yielding: this
   ** prevents lua_close from freeing g and makes the collector's race visible. */
   la_fence_seq();
+  /* The locale writer uses the same publication/check ordering. Its rare
+  ** mutation gate can delay entry, while locale queries use a separate lock. */
+  lj_locale_wait_attach();
   for (;;) {
     if (mt_shutdown_acq(g) != 0) {
       threading_entering_leave(g);

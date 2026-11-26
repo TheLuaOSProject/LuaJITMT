@@ -653,12 +653,13 @@ by caller (typical pattern: parent moves args into a not-yet-started L).
   problem per requirement 4 analog); `os.date` now uses caller-owned
   broken-down time buffers on the supported POSIX and Windows targets
   (`localtime_r`/`gmtime_r` or `localtime_s`/`gmtime_s`). Mutating
-  `os.setlocale()` is serialized with secondary-thread entry before the
-  activation latch is set. Lua heaps in the same runtime serialize locale
-  calls and copy libc's result before another call can replace it. Queries
-  and exact current-name requests work after activation. A request to change
-  the locale then returns nil. This follows the documented failure result
-  for a setting the runtime cannot honor. [Lua 5.1 manual](https://www.lua.org/manual/5.1/manual.html#pdf-os.setlocale)
+  `os.setlocale()` uses a cold lock for heap registration and locale calls.
+  Secondary-thread entry waits only while a mutation is pending.
+  It admits locale changes when live heaps
+  belong to the calling actor and their secondary entry and live counts are
+  zero, including after all workers join. For a request that cannot change
+  the locale, it returns nil. Queries and exact current-name requests take
+  the same lock to copy libc's returned name while valid. [Lua 5.1 manual](https://www.lua.org/manual/5.1/manual.html#pdf-os.setlocale)
   To support wider mutation, runtime locale-sensitive calls would need
   process-wide admission. A writer could publish a duplicate of the old
   locale to serve readers during mutation. This works for readers with
