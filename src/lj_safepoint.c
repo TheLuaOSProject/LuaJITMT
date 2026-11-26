@@ -1338,6 +1338,7 @@ static uint32_t safepoint_handshake(global_State *g, uint32_t actions,
   uint64_t epoch;
   uint32_t leader;
   uint32_t signaled, oldpending;
+  int flush_only;
   if (!g || (actions == 0 && !idle_policy))
     return 0;
   leader = safepoint_leader_enter(g);
@@ -1351,6 +1352,7 @@ static uint32_t safepoint_handshake(global_State *g, uint32_t actions,
     }
     actions = lj_safepoint_idle_policy_actions(g);
   }
+  flush_only = actions == (LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ);
   gc2_hs_actions_rel(g, actions);  /* 05 section 5.4.2. */
   gc2_hs_pending_rel(g, 1);  /* 09 section 9.3 leader sentinel. */
   epoch = gc2_hs_epoch_rlx(g) + 1u;
@@ -1397,7 +1399,8 @@ static uint32_t safepoint_handshake(global_State *g, uint32_t actions,
     (void)lj_trace_flushall_gc(safepoint_leader_lua_state(g));  /* 08 section 8.7 leader action. */
   }
 #endif
-  (void)lj_gc2_reclaim_retired(g, epoch);  /* 05 section 5.9 grace drain. */
+  if (!flush_only)
+    (void)lj_gc2_reclaim_retired(g, epoch);
   if (actions & LJ_GC2_HS_FLUSH_SSB) {
     TGState *self = lj_thr_get_tg_fallback(g);
     /* Epoch reclamation can preserve a late metadata/object edge after the
@@ -1416,6 +1419,11 @@ static uint32_t safepoint_handshake(global_State *g, uint32_t actions,
   safepoint_leader_leave(g, leader);
   safepoint_rearm_fresh_stopreq_polls(g);
   lj_gc2_smr_read_leave(g);
+  /* A full flush has already removed the code before releasing the polls.
+  ** Retired storage has its own grace, native-entry gate and reader checks.
+  ** A delayed reclaim pass must let acknowledged owners run the interpreter. */
+  if (flush_only)
+    (void)lj_gc2_reclaim_retired(g, epoch);
   return signaled;
 }
 

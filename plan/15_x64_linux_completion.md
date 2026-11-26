@@ -99,6 +99,7 @@ The lifetime rules follow the removal and reclamation split in RCU. C11 §5.1.2.
 
 - With a second mutator attached and its metadata collection suspended, C API and Lua stores replace and clear weak array/hash entries and insert string and object keys into spare hash capacity. Each store binds its address to the receiver and key before committing. The fixture checks a 20,000-byte cdata by identity across collection.
 - Table growth can also finish during metadata retirement. The C API grows an array to 256 entries and Lua grows a weak table with integer, string and object keys. A three-thread test pauses both the collector and the resize issuer. Each of `lua_rawgeti`, `lua_rawseti`, `lua_next` and `lua_objlen` finishes the shared resize before either thread resumes. A real reclamation pass retains the old array, nodes and retirement records while the issuer can still access them. The test then observes both vector allocations return to the allocator.
+- A first external attachment can pause in physical metadata reclamation after flushing preexisting traces. The previously running thread can leave a native call, execute its Lua loop with the correct result and grow a table while the attaching thread is paused. Full trace flush releases acknowledged mutators as soon as it has unpatched the code.
 
 ## Correctness and progress checks
 

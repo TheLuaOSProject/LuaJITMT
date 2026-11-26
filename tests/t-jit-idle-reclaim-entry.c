@@ -269,6 +269,72 @@ static void check_idle_read_generation(lua_State *L)
 }
 #endif
 
+typedef struct FirstAttach {
+  lua_State *child;
+  uint32_t done;
+} FirstAttach;
+
+static void *first_attach(void *data)
+{
+  FirstAttach *run = (FirstAttach *)data;
+  assert(lj_threading_attach(run->child));
+  lj_threading_detach(run->child, 1);
+  la_store32_rel(&run->done, 1);
+  return NULL;
+}
+
+static void check_first_attach_retirement(void)
+{
+  lua_State *L = luaL_newstate();
+  FirstAttach run = {0};
+  global_State *g;
+  TGState *tg;
+  pthread_t entrant;
+  uint64_t epoch;
+  assert(L);
+  g = G(L);
+  tg = L2TG(L);
+  luaL_openlibs(L);
+  lua_gc(L, LUA_GCSTOP, 0);
+  ljt_lua_dostring(L,
+    "jit.opt.start('hotloop=1'); local t={0}\n"
+    "local function sum(n) local s=0; for i=1,n do s=s+i end; t[1]=s; return t[1] end\n"
+    "for i=1,10 do assert(sum(32)==528) end\n"
+    "return sum");
+  assert(lua_isfunction(L, -1) && lj_trace_hasany(g) && !mt_active_acq(g));
+  run.child = lua_newthread(L);
+  epoch = gc2_hs_epoch_acq(g);
+  lj_native_enter(tg);
+  lj_gc2_test_idle_reclaim_pause_after_jit_quiescence();
+  assert(pthread_create(&entrant, NULL, first_attach, &run) == 0);
+  while (!lj_gc2_test_idle_reclaim_paused()) {
+    assert(!la_load32_acq(&run.done));
+    sched_yield();
+  }
+  assert(gc2_hs_epoch_acq(g) > epoch);
+  assert(gc2_hs_actions_acq(g) == (LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ));
+  (void)lj_native_leave(L);
+  lua_pushvalue(L, -2);
+  lua_pushinteger(L, 64);
+  ljt_lua_pcall(L, 1, 1, "execute during first-attach retirement");
+  assert(lua_tointeger(L, -1) == 2080);
+  lua_pop(L, 1);
+  lua_newtable(L);
+  for (int i = 1; i <= 80; i++) {
+    lua_pushinteger(L, i * 7);
+    lua_rawseti(L, -2, i);
+  }
+  assert(lua_objlen(L, -1) == 80);
+  lua_rawgeti(L, -1, 79);
+  assert(lua_tointeger(L, -1) == 553);
+  lua_pop(L, 2);
+  assert(lj_gc2_test_idle_reclaim_paused() && !la_load32_acq(&run.done));
+  lj_gc2_test_idle_reclaim_release();
+  assert(pthread_join(entrant, NULL) == 0);
+  assert(mt_active_acq(g) && la_load32_acq(&run.done));
+  lua_close(L);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -566,6 +632,7 @@ int main(void)
   check_idle_read_generation(L);
 #endif
   lua_close(L);
+  check_first_attach_retirement();
   puts("t-jit-idle-reclaim-entry OK: IDLE reclaim owns native-entry closure");
   return 0;
 }
