@@ -153,7 +153,7 @@ static int rec_check_child_cellslot(jit_State *J, GCproto *pt, BCReg slotno)
 {
   GCRef *kr;
   ptrdiff_t i, n;
-  if (!(pt->flags & PROTO_CHILD))
+  if (!(proto_flags_acq(pt) & PROTO_CHILD))
     return 0;
   n = proto_sizekgc_acq(pt);
   kr = mref(pt->k, GCRef) - 1;
@@ -185,7 +185,7 @@ static int rec_check_cellsrc_slot(jit_State *J, GCproto *pt, BCReg slotno)
   const BCIns *pc, *end;
   if (!pt)
     return 0;
-  if (!proto_cellops(pt) && !(pt->flags & PROTO_CHILD))
+  if (!proto_cellops(pt) && !(proto_flags_acq(pt) & PROTO_CHILD))
     return 0;
   /*
   ** Non-GC64 prototypes do not carry flags2, but the parser can still emit
@@ -1245,7 +1245,7 @@ static TRef rec_call_specialize(jit_State *J, GCfunc *fn, TRef tr)
       lj_trace_err_info(J, LJ_TRERR_NYIBC);
     }
     /* Too many closures created: specialize only by prototype, not identity. */
-    if (pt->flags >= PROTO_CLC_POLY) {
+    if (proto_flags_acq(pt) >= PROTO_CLC_POLY) {
       TRef trpt = emitir(IRT(IR_FLOAD, IRT_PGC), tr, IRFL_FUNC_PC);
       emitir(IRTG(IR_EQ, IRT_PGC), trpt, lj_ir_kptr(J, proto_bc(pt)));
       (void)lj_ir_kgc(J, obj2gco(pt), IRT_PROTO);  /* Prevent GC of proto. */
@@ -1459,7 +1459,7 @@ void lj_record_ret(jit_State *J, BCReg rbase, ptrdiff_t gotresults)
     ptrdiff_t nresults = bc_b(callins) ? (ptrdiff_t)bc_b(callins)-1 :gotresults;
     BCReg cbase = bc_a(callins);
     GCproto *pt = funcproto(frame_func(frame - (cbase+1+LJ_FR2)));
-    if ((pt->flags & PROTO_NOJIT))
+    if ((proto_flags_acq(pt) & PROTO_NOJIT))
       lj_trace_err(J, LJ_TRERR_CJITOFF);
     if (J->framedepth == 0 && J->pt && frame == J->L->base - 1) {
       if (!J->cur.root && check_downrec_unroll(J, pt)) {
@@ -3270,7 +3270,7 @@ static TRef rec_upvalue(jit_State *J, uint32_t uv, TRef val)
     TRef tr, kfunc;
     lj_assertJ(val == 0, "bad usage");
     if (!tref_isk(fn)) {  /* Late specialization of current function. */
-      if (J->pt->flags >= PROTO_CLC_POLY)
+      if (proto_flags_acq(J->pt) >= PROTO_CLC_POLY)
 	goto noconstify;
       kfunc = lj_ir_kfunc(J, J->fn);
       emitir(IRTG(IR_EQ, IRT_FUNC), fn, kfunc);
@@ -3919,7 +3919,7 @@ static void check_call_unroll(jit_State *J, TraceNo lnk)
   void *pc = mref(frame_func(frame)->l.pc, void);
   int32_t depth = J->framedepth;
   int32_t count = 0;
-  if ((J->pt->flags & PROTO_VARARG)) depth--;  /* Vararg frame still missing. */
+  if ((proto_flags_acq(J->pt) & PROTO_VARARG)) depth--;  /* Vararg frame still missing. */
   for (; depth > 0; depth--) {  /* Count frames with same prototype. */
     if (frame_iscont(frame)) depth--;
     frame = frame_prev(frame);
@@ -3966,7 +3966,7 @@ static void rec_func_setup(jit_State *J)
 {
   GCproto *pt = J->pt;
   BCReg s, numparams = pt->numparams;
-  if ((pt->flags & PROTO_NOJIT))
+  if ((proto_flags_acq(pt) & PROTO_NOJIT))
     lj_trace_err(J, LJ_TRERR_CJITOFF);
   if (J->baseslot + pt->framesize >= LJ_MAX_JSLOTS)
     lj_trace_err(J, LJ_TRERR_STACKOV);
@@ -3998,7 +3998,7 @@ static void rec_func_vararg(jit_State *J)
 {
   GCproto *pt = J->pt;
   BCReg s, fixargs, vframe = J->maxslot+1+LJ_FR2;
-  lj_assertJ((pt->flags & PROTO_VARARG), "FUNCV in non-vararg function");
+  lj_assertJ((proto_flags_acq(pt) & PROTO_VARARG), "FUNCV in non-vararg function");
   if (J->baseslot + vframe + pt->framesize >= LJ_MAX_JSLOTS)
     lj_trace_err(J, LJ_TRERR_STACKOV);
   J->base[vframe-1-LJ_FR2] = J->base[-1-LJ_FR2];  /* Copy function up. */

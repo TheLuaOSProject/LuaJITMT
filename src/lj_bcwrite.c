@@ -253,7 +253,7 @@ static void bcwrite_kgc(BCWriteCtx *ctx, GCproto *pt)
       tp = BCDUMP_KGC_STR + gco2str(o)->len;
       need = 5+gco2str(o)->len;
     } else if (o->gch.gct == ~LJ_TPROTO) {
-      lj_assertBCW((pt->flags & PROTO_CHILD), "prototype has unexpected child");
+      lj_assertBCW((proto_flags_acq(pt) & PROTO_CHILD), "prototype has unexpected child");
       tp = BCDUMP_KGC_CHILD;
 #if LJ_HASFFI
     } else if (o->gch.gct == ~LJ_TCDATA) {
@@ -417,7 +417,7 @@ static void bcwrite_proto(BCWriteCtx *ctx, GCproto *pt)
   char *p;
 
   /* Recursively write children of prototype. */
-  if ((pt->flags & PROTO_CHILD)) {
+  if ((proto_flags_acq(pt) & PROTO_CHILD)) {
     ptrdiff_t i, n = (ptrdiff_t)proto_sizekgc_acq(pt);
     GCRef *kr = mref(pt->k, GCRef) - 1;
     for (i = 0; i < n; i++, kr--) {
@@ -433,7 +433,7 @@ static void bcwrite_proto(BCWriteCtx *ctx, GCproto *pt)
   p += 5;  /* Leave room for final size. */
 
   /* Write prototype header. */
-  flags = (uint8_t)(pt->flags & (PROTO_CHILD|PROTO_VARARG|PROTO_FFI));
+  flags = (uint8_t)(proto_flags_acq(pt) & (PROTO_CHILD|PROTO_VARARG|PROTO_FFI));
   if (proto_legacyuv(pt))
     flags |= BCDUMP_PF_LEGACYUV;
   *p++ = flags;
@@ -493,7 +493,7 @@ static void bcwrite_header(BCWriteCtx *ctx)
   *p++ = BCDUMP_VERSION;
   *p++ = (ctx->flags & (BCDUMP_F_STRIP | BCDUMP_F_FR2)) +
 	 LJ_BE*BCDUMP_F_BE +
-	 ((ctx->pt->flags & PROTO_FFI) ? BCDUMP_F_FFI : 0);
+	 ((proto_flags_acq(ctx->pt) & PROTO_FFI) ? BCDUMP_F_FFI : 0);
   if (!(ctx->flags & BCDUMP_F_STRIP)) {
     p = lj_strfmt_wuleb128(p, len);
     p = lj_buf_wmem(p, name, len);

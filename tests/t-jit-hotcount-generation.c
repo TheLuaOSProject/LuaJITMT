@@ -20,6 +20,7 @@
 #include "lj_safepoint.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
+#include "lib/lua_fixture_helpers.h"
 
 #ifndef LJ_GC2_TEST_HELPERS
 #error "t-jit-hotcount-generation requires LJ_GC2_TEST_HELPERS"
@@ -81,6 +82,67 @@ static void wait_attach_pause(void)
        i++)
     (void)lj_thr_retry_yield(NULL);
   assert(lj_tg_test_hotcount_attach_paused() != 0);
+}
+
+typedef struct ProtoFlagsPeer {
+  lua_State *L;
+  uint32_t ready, start, done;
+} ProtoFlagsPeer;
+
+static void *make_and_inspect_closures(void *arg)
+{
+  ProtoFlagsPeer *peer = (ProtoFlagsPeer *)arg;
+  assert(lj_threading_attach(peer->L));
+  la_store32_rel(&peer->ready, 1);
+  while (!la_load32_acq(&peer->start))
+    (void)lj_thr_retry_yield(peer->L);
+  ljt_lua_pcall(peer->L, 0, 0, "inspect shared prototype");
+  la_store32_rel(&peer->done, 1);
+  lj_threading_detach(peer->L, 1);
+  return NULL;
+}
+
+static void test_shared_proto_flags(void)
+{
+  lua_State *L = ljt_lua_newstate_openlibs();
+  ProtoFlagsPeer peer = {0};
+  pthread_t thread;
+  GCproto *pt;
+  unsigned i;
+  lua_gc(L, LUA_GCSTOP, 0);
+  assert(luaJIT_setmode(L, 0, LUAJIT_MODE_ENGINE|LUAJIT_MODE_OFF));
+  ljt_lua_dostring(L,
+    "local function factory()\n"
+    "  return function(x, ...) return function() return x end end\n"
+    "end\n"
+    "local info = require('jit.util').funcinfo\n"
+    "return factory(), function()\n"
+    "  for i=1,64 do\n"
+    "    local f = factory(); local p = info(f)\n"
+    "    assert(p.isvararg and p.children and p.params == 1)\n"
+    "    local u = debug.getinfo(f, 'u')\n"
+    "    assert(u.isvararg and u.nparams == 1)\n"
+    "    local copy = assert(loadstring(string.dump(f)))\n"
+    "    assert(f(i)() == i and copy(i)() == i)\n"
+    "  end\n"
+    "end");
+  pt = funcproto(funcV(L->base));
+  peer.L = lua_newthread(L);
+  lua_pushvalue(L, 2);
+  lua_xmove(L, peer.L, 1);
+  assert(pthread_create(&thread, NULL, make_and_inspect_closures, &peer) == 0);
+  while (!la_load32_acq(&peer.ready))
+    (void)lj_thr_retry_yield(L);
+  la_store32_rel(&peer.start, 1);
+  for (i = 0; i < 128 || !la_load32_acq(&peer.done); i++) {
+    assert(luaJIT_setmode(L, 1, LUAJIT_MODE_FUNC|LUAJIT_MODE_ON));
+    (void)lj_thr_retry_yield(L);
+  }
+  assert(pthread_join(thread, NULL) == 0);
+  assert(luaJIT_setmode(L, 1, LUAJIT_MODE_FUNC|LUAJIT_MODE_OFF));
+  assert(proto_flags_acq(pt) ==
+         (uint8_t)(7u * PROTO_CLCOUNT | PROTO_VARARG | PROTO_CHILD | PROTO_NOJIT));
+  lua_close(L);
 }
 
 static void *attach_reset_thread(void *arg)
@@ -269,6 +331,7 @@ int main(void)
 
   test_attach_generation_window(g, J);
   lua_close(L);
+  test_shared_proto_flags();
   printf("t-jit-hotcount-generation OK: TG-local generations and attach closure verified\n");
   return 0;
 }

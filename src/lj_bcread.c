@@ -440,7 +440,7 @@ static void bcread_bytecode(LexState *ls, GCproto *pt, MSize sizebc)
   BCIns *bc = proto_bc(pt);
   BCIns op;
   if (ls->fr2 != LJ_FR2) op = BC_NOT;  /* Mark non-native prototype. */
-  else if ((pt->flags & PROTO_VARARG)) op = BC_FUNCV;
+  else if ((proto_flags_acq(pt) & PROTO_VARARG)) op = BC_FUNCV;
   else op = BC_FUNCF;
   bc[0] = BCINS_AD(op, pt->framesize, 0);
   bcread_block(ls, bc+1, (sizebc-1)*(MSize)sizeof(BCIns));

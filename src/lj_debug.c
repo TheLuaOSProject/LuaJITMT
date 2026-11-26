@@ -234,7 +234,7 @@ static TValue *debug_localname(lua_State *L, const lua_Debug *ar,
   if ((int)slot1 < 0) {  /* Negative slot number is for varargs. */
     if (pc != NO_BCPOS) {
       GCproto *pt = funcproto(fn);
-      if ((pt->flags & PROTO_VARARG)) {
+      if ((proto_flags_acq(pt) & PROTO_VARARG)) {
 	slot1 = pt->numparams + (BCReg)(-(int)slot1);
 	if (frame_isvarg(frame)) {  /* Vararg frame has been set up? (pc!=0) */
 	  nextframe = frame;
@@ -746,7 +746,7 @@ int lj_debug_getinfo_claimed(lua_State *L, const char *what, lj_Debug *ar,
 	if (isluafunc(fn)) {
 	  GCproto *pt = funcproto(fn);
 	  ar->nparams = pt->numparams;
-	  ar->isvararg = !!(pt->flags & PROTO_VARARG);
+	  ar->isvararg = !!(proto_flags_acq(pt) & PROTO_VARARG);
 	} else {
 	  ar->nparams = 0;
 	  ar->isvararg = 1;
@@ -822,7 +822,7 @@ int lj_debug_getinfo(lua_State *L, const char *what, lj_Debug *ar, int ext)
 	if (isluafunc(fn)) {
 	  GCproto *pt = funcproto(fn);
 	  ar->nparams = pt->numparams;
-	  ar->isvararg = !!(pt->flags & PROTO_VARARG);
+	  ar->isvararg = !!(proto_flags_acq(pt) & PROTO_VARARG);
 	} else {
 	  ar->nparams = 0;
 	  ar->isvararg = 1;

@@ -532,6 +532,13 @@ static LJ_AINLINE void proto_sizekgc_rel(GCproto *pt, MSize sizekgc)
 #define PROTO_CLC_BITS		3
 #define PROTO_CLC_POLY		(3*PROTO_CLCOUNT)  /* Polymorphic threshold. */
 
+/* FNEW updates the upper bits even when a reader only needs an immutable
+** language flag. JIT mode and loop patches share the byte with that counter. */
+static LJ_AINLINE uint8_t proto_flags_acq(const GCproto *pt)
+{
+  return la_load8_acq(&pt->flags);
+}
+
 /* Extended prototype flags. */
 #define PROTO2_LEGACYUV		0x00000001u  /* Loaded from v2 bytecode. */
 #define PROTO2_CELLUV		0x00000002u  /* Local upvalues are cell slots. */

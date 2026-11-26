@@ -3966,7 +3966,7 @@ static int trace_root_entry_funcf_generation_valid(const GCproto *pt,
 	const BCIns *pc, BCIns startins, BCIns liveins)
 {
   return pt != NULL && pc == proto_bc(pt) &&
-	(pt->flags & PROTO_VARARG) == 0 && pt->sizebc >= 3 &&
+	(proto_flags_acq(pt) & PROTO_VARARG) == 0 && pt->sizebc >= 3 &&
 	pt->sizebc <= UINT8_MAX && pt->framesize != 0 &&
 	pt->framesize <= UINT8_MAX && pt->numparams < pt->framesize &&
 	bc_op(startins) == BC_FUNCF && bc_a(startins) == pt->framesize &&
@@ -4008,7 +4008,7 @@ static int trace_root_entry_loop_geometry(uint32_t sourceop,
   if (sourceop == (uint32_t)BC_JFUNCF) {
     if (pos != 0 || pt->sizebc < 3 || pt->sizebc > UINT8_MAX ||
 	pt->framesize == 0 ||
-	pt->framesize > UINT8_MAX || (pt->flags & PROTO_VARARG) != 0 ||
+	pt->framesize > UINT8_MAX || (proto_flags_acq(pt) & PROTO_VARARG) != 0 ||
 	bc_op(startins) != BC_FUNCF || bc_a(startins) != pt->framesize ||
 	bc_d(startins) != 0)
       return 0;
@@ -9239,10 +9239,10 @@ void LJ_FASTCALL lj_trace_free(global_State *g, GCtrace *T)
 /* Re-enable compiling a prototype by unpatching any modified bytecode. */
 void lj_trace_reenableproto(GCproto *pt)
 {
-  if ((pt->flags & PROTO_ILOOP)) {
+  if ((proto_flags_acq(pt) & PROTO_ILOOP)) {
     BCIns *bc = proto_bc(pt);
     BCPos i, sizebc = pt->sizebc;
-    pt->flags &= ~PROTO_ILOOP;
+    (void)la_and8_acqrel(&pt->flags, (uint8_t)~PROTO_ILOOP);
     if (bc_op(bc[0]) == BC_IFUNCF)
       bc_publish_op(&bc[0], BC_FUNCF);
     for (i = 1; i < sizebc; i++) {
@@ -10991,7 +10991,7 @@ static void blacklist_pc(GCproto *pt, BCIns *pc)
 	     op == BC_FUNCF) {
     BCOp disabled = (BCOp)((int)op + (int)BC_ILOOP - (int)BC_LOOP);
     if (bc_publish_op_cas(pc, (uint32_t *)&ins, disabled))
-      pt->flags |= PROTO_ILOOP;
+      (void)la_or8_acqrel(&pt->flags, PROTO_ILOOP);
   }
 }
 
@@ -11162,7 +11162,7 @@ static int trace_root_funcf_shape(GCproto *pt, const BCIns *pc,
 	BCIns startins)
 {
 	if (!pt || !pc || pc != proto_bc(pt) ||
-	    (pt->flags & PROTO_VARARG) != 0)
+	    (proto_flags_acq(pt) & PROTO_VARARG) != 0)
 	  return 0;
 	return lj_asm_arm64_funcf_bytecode(proto_bc(pt), pt->sizebc,
 	  pt->framesize, pt->numparams, startins, startins, 1);
@@ -11260,7 +11260,7 @@ static TraceStartResult trace_start(jit_State *J)
     return TRACE_START_RESULT_IDLE;
   }
   trace_mark_active_startpt(J);
-  if ((J->pt->flags & PROTO_NOJIT)) {  /* JIT disabled for this proto? */
+  if ((proto_flags_acq(J->pt) & PROTO_NOJIT)) {  /* JIT disabled for this proto? */
     if (J->parent == 0 && J->exitno == 0) {
       /* Lazy bytecode patching to disable hotcount events. */
       BCOp op = bc_op(root_startins);
@@ -11270,7 +11270,7 @@ static TraceStartResult trace_start(jit_State *J)
 	BCOp disabled =
 	  (BCOp)((int)op + (int)BC_ILOOP - (int)BC_LOOP);
 	if (bc_publish_op_cas(J->pc, (uint32_t *)&expected, disabled))
-	  J->pt->flags |= PROTO_ILOOP;
+	  (void)la_or8_acqrel(&J->pt->flags, PROTO_ILOOP);
       }
     }
     return TRACE_START_RESULT_IDLE;  /* Silently ignored. */
@@ -12162,7 +12162,7 @@ int lj_trace_arm64_lua_leaf(const GCfunc *fn)
   if (!checkptrGC(obj2gco((GCproto *)pt)) ||
       pt->gct != (uint32_t)~LJ_TPROTO ||
       pt->sizeuv || pt->sizekgc ||
-      (la_load8_acq(&pt->flags) & (PROTO_CHILD|PROTO_VARARG|PROTO_FFI|PROTO_NOJIT)))
+      (proto_flags_acq(pt) & (PROTO_CHILD|PROTO_VARARG|PROTO_FFI|PROTO_NOJIT)))
     return 0;
   size = pt->sizebc; frame = pt->framesize; bc = proto_bc(pt);
   if (size < 3 || size > UINT8_MAX || !frame || frame > UINT8_MAX ||

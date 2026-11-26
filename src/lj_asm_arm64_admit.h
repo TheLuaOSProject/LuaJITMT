@@ -273,7 +273,7 @@ static int arm64_ir_start(const jit_State *J, const GCtrace *T,
 			     IR_LOOP, (uint16_t)op);
   } else if (op == BC_FUNCF) {
     if (LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED || pos != 0 ||
-	(pt->flags & PROTO_VARARG) != 0 ||
+	(proto_flags_acq(pt) & PROTO_VARARG) != 0 ||
 	!arm64_ir_funcf_bytecode(proto_bc(pt), pt->sizebc, pt->framesize,
 	  pt->numparams, startins, startins, 1) ||
 	pt->numparams > (BCReg)(pt->framesize-1u))

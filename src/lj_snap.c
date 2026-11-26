@@ -84,7 +84,7 @@ static int snapshot_child_cellslot(jit_State *J, GCproto *pt, BCReg slot)
 {
   GCRef *kr;
   ptrdiff_t i, n;
-  if (!(pt->flags & PROTO_CHILD))
+  if (!(proto_flags_acq(pt) & PROTO_CHILD))
     return 0;
   n = proto_sizekgc_acq(pt);
   kr = mref(pt->k, GCRef) - 1;
@@ -116,7 +116,7 @@ static int snapshot_cellref_pt(jit_State *J, GCproto *pt, BCReg slot)
   const BCIns *pc, *end;
   if (!pt)
     return 0;
-  if (!proto_cellops(pt) && !(pt->flags & PROTO_CHILD))
+  if (!proto_cellops(pt) && !(proto_flags_acq(pt) & PROTO_CHILD))
     return 0;
   pc = proto_bc(pt);
   end = pc + pt->sizebc;
@@ -442,7 +442,7 @@ static void snap_useuv(jit_State *J, GCproto *pt, uint8_t *udf)
   ** A false positive may cause a slot not to be purged, which is just
   ** a missed optimization.
   */
-  if ((pt->flags & PROTO_CHILD)) {
+  if ((proto_flags_acq(pt) & PROTO_CHILD)) {
     ptrdiff_t i, j, n = (ptrdiff_t)proto_sizekgc_acq(pt);
     GCRef *kr = mref(pt->k, GCRef) - 1;
     for (i = 0; i < n; i++, kr--) {
@@ -475,7 +475,7 @@ static void snap_usechildcellsrc(jit_State *J, GCproto *pt, uint8_t *udf,
 {
   GCRef *kr;
   ptrdiff_t i, n;
-  if (!(pt->flags & PROTO_CHILD))
+  if (!(proto_flags_acq(pt) & PROTO_CHILD))
     return;
   n = proto_sizekgc_acq(pt);
   kr = mref(pt->k, GCRef) - 1;
@@ -507,7 +507,7 @@ static void snap_usecellsrc(jit_State *J, GCproto *pt, uint8_t *udf,
   const BCIns *pc, *end;
   if (!pt)
     return;
-  if (!proto_cellops(pt) && !(pt->flags & PROTO_CHILD))
+  if (!proto_cellops(pt) && !(proto_flags_acq(pt) & PROTO_CHILD))
     return;
   /*
   ** Non-GC64 prototypes do not carry flags2, but local-cell bytecode still
