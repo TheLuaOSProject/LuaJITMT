@@ -3806,16 +3806,13 @@ static TRef rec_celluv(jit_State *J, cTValue *slot, TRef slotref, TRef val,
 static int rec_fnew_celluv(jit_State *J, GCproto *pt)
 {
   MSize i, n = pt->sizeuv;
-  int nlocal = 0;
-  if (!proto_celluv(pt))
-    return 0;
   for (i = 0; i < n; i++) {
     uint32_t v = proto_uv(pt)[i];
     if ((v & PROTO_UV_LOCAL)) {
       BCReg slot = (BCReg)(v & 0xff);
       cTValue *tv = &J->L->base[slot];
       TRef tr;
-      if (slot >= J->maxslot)
+      if (!proto_celluv(pt) || slot >= J->maxslot)
 	return 0;
       tr = getslot(J, slot);
       if (rec_celluv_iscellref(tr)) {
@@ -3827,10 +3824,11 @@ static int rec_fnew_celluv(jit_State *J, GCproto *pt)
 	lj_ir_call(J, IRCALL_lj_func_syncslot_forjit, rec_celluv_base(J),
 		   lj_ir_kint(J, (int32_t)slot), tmp);
       }
-      nlocal++;
     }
   }
-  return nlocal != 0;
+  /* An inherited cell is taken from the parent closure by the allocator.
+  ** This needs no stack-slot synchronization, also for stock bytecode. */
+  return 1;
 }
 
 static TRef rec_fnew_gc1num(jit_State *J, GCproto *pt)

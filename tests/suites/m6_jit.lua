@@ -1102,6 +1102,11 @@ assert(util.traceinfo(1), "Lua tailcall loop did not trace")
         cflags = "-DLJ_FUNC_TEST_HELPERS -DLJ_TAB_TEST_HELPERS",
         timeout = "20s"
       }))
+      build_and_run_c(t, t:tmp("lj_t-fnew-inherited-roots"),
+                      "t-fnew-inherited-roots.c", build.func_helper_c_opts({
+        build = false, timeout = "35s"
+      }))
+      runtime.luajit_script(t, "t-jit-fnew-inherited.lua", {}, {timeout = "30s"})
       print("M6 local-cell CNEW/FNEW allocation behavior passed")
     end
   })

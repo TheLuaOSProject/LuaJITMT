@@ -977,6 +977,17 @@ FUNC_TEST_COUNTER(uvcell_bump_calls, uvcell_bump_call)
 static uint32_t func_test_empty_uv_fail_after;
 static uint32_t func_test_finduv_fail_after;
 static uint32_t func_test_finduv_collect_after;
+static LJFuncCapturedHook func_test_captured_hook;
+
+void lj_func_test_set_captured_hook(LJFuncCapturedHook hook)
+{
+  func_test_captured_hook = hook;
+}
+
+static void func_test_captured(lua_State *L, GCfuncL *parent, uint32_t uv)
+{
+  if (func_test_captured_hook) func_test_captured_hook(L, parent, uv);
+}
 void lj_func_test_fail_empty_uv_after(uint32_t nth)
 {
   la_store32_rel(&func_test_empty_uv_fail_after, nth);
@@ -1029,6 +1040,7 @@ static int func_test_empty_uv_should_fail(void)
 #define func_test_gc0_bump_trace_call()		((void)0)
 #define func_test_uvcell_bump_call()		((void)0)
 #define func_test_empty_uv_should_fail()	0
+#define func_test_captured(L, parent, uv)	((void)0)
 #endif
 
 static LJ_AINLINE void func_nupvalues_rel(GCfuncL *fn, uint32_t nup)
@@ -1593,12 +1605,55 @@ GCfunc *lj_func_newL_empty(lua_State *L, GCproto *pt, GCtab *env,
   return fn;
 }
 
+/* Keep inherited cells reachable even if a join redirects the parent while
+** the constructor is allocating local cells. Capture before starting the
+** private allocation chain so a retry or interruption can unwind normally. */
+static void func_capture_inherited(lua_State *L, GCproto *pt, GCfuncL *parent,
+                                   uint32_t first)
+{
+  TGState *tg = L2TG(L);
+  MSize i;
+  for (i = 0; i < pt->sizeuv; i++) {
+    uint32_t uv = proto_uv(pt)[i];
+    TValue value, *anchor;
+    if (uv & PROTO_UV_LOCAL)
+      continue;
+    if (lj_tg_root_anchor_top_acq(tg) == first) {
+      setfuncV(L, &value, (GCfunc *)parent);
+      anchor = lj_tg_root_anchor_push(L, tg, &value, NULL);
+      lj_gc_pubroot(L, anchor);
+    }
+    if (!lj_tg_root_anchor_reserve_nothrow(L, tg)) {
+      lj_tg_root_anchor_rollback(tg, first);
+      lj_err_mem(L);
+    }
+    for (;;) {
+      LJGC2Lease lease = {0};
+      GCobj *cell = func_uvptr_acq(parent, uv);
+      if (lj_func_uv_lease_try(G(L), cell, &lease) &&
+          cell == func_uvptr_acq(parent, uv)) {
+        setgcVraw(&value, cell, LJ_TUPVAL);
+        anchor = lj_tg_root_anchor_push(L, tg, &value, NULL);
+        lj_gc_pubroot(L, anchor);
+        lj_gc2_lease_release(&lease);
+        func_test_captured(L, parent, uv);
+        break;
+      }
+      lj_gc2_lease_release(&lease);
+      lj_tab_wait_l(L);
+    }
+  }
+}
+
 /* Do a GC check and create a new Lua function with inherited upvalues. */
 static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
 				 GCfuncL *parent)
 {
   GCfunc *fn;
   GCobj *tail;
+  TGState *tg = L2TG(L);
+  uint32_t first, inherited;
+  ptrdiff_t baseofs;
   uint8_t promoted[256] = {0};  /* One-based upvalue index per local slot. */
   MSize i, nuv;
   if (base == NULL)
@@ -1613,9 +1668,16 @@ static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
 	return func_newL_gc1uv_chain(L, base, pt, parent, slotno, slot, v);
     }
   }
+  first = lj_tg_root_anchor_top_acq(tg);
+  baseofs = savestack(L, base);
+  func_capture_inherited(L, pt, parent, first);
+  inherited = first + 1u;  /* The parent is the first anchor. */
+  base = restorestack(L, baseofs);
   fn = func_newL_unlinked_nothrow(L, pt, lj_funcL_env_acq(parent));
-  if (LJ_UNLIKELY(fn == NULL))
+  if (LJ_UNLIKELY(fn == NULL)) {
+    lj_tg_root_anchor_rollback(tg, first);
     lj_err_mem(L);
+  }
   tail = obj2gco(fn);
   for (i = 0; i < nuv; i++) {
     uint32_t v = proto_uv(pt)[i];
@@ -1654,7 +1716,8 @@ static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
 	func_uvmeta(uv, parent, v);
       }
     } else {
-      uv = func_uv_acq(parent, v);
+      TValue *capture = lj_tg_root_anchor_slot_acq(tg, inherited++);
+      uv = gco2uv(gcV(capture));
     }
     setgcrefrel(fn->l.uvptr[i], obj2gco(uv));
   }
@@ -1670,9 +1733,11 @@ static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
     if ((v & PROTO_UV_LOCAL) && promoted[v & 0xffu] == i + 1u)
       func_storecell_pub(L, base + (v & 0xffu), gco2uv(uv));
   }
+  lj_tg_root_anchor_rollback(tg, first);
   return fn;
 oom:
   func_pending_chain_free(L, fn);
+  lj_tg_root_anchor_rollback(tg, first);
   lj_err_mem(L);
   return NULL;  /* Unreachable. */
 }

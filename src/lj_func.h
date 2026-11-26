@@ -67,6 +67,8 @@ LJ_FUNCA GCfunc *lj_func_newL_gc1num_forjit(lua_State *L, TValue *base,
 LJ_FUNC GCupval *lj_func_test_openuv(lua_State *L, TValue *slot);
 #endif
 #ifdef LJ_FUNC_TEST_HELPERS
+typedef void (*LJFuncCapturedHook)(lua_State *L, GCfuncL *parent, uint32_t uv);
+LJ_FUNC void lj_func_test_set_captured_hook(LJFuncCapturedHook hook);
 #if LJ_HASJIT
 /* Read the actual eligibility predicate without allocation or publication. */
 LJ_FUNC int lj_func_test_bump_alloc_ready(global_State *g, TGState *tg);

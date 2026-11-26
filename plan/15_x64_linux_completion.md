@@ -122,6 +122,7 @@ The lifetime rules follow the removal and reclamation split in RCU. C11 §5.1.2.
 - Shared buffer conversion copies the selected bytes under a storage lease before interning, formatting, loading Lua source, or passing them to stdio. A buffer remains readable after its last writer's Lua state has been collected. Native concatenation and the buffer tostring method explicitly reserve temporary space in the trace. The joined-worker test checks embedded zero bytes, owned and copy-on-write buffers, formatting and I/O. With a live peer, its mixed conversion loop produced the expected string and a native exit in 100 processes each under GCC, Clang assertions and ASan. Consuming methods and FFI pointer borrows have separate cursor and lifetime requirements. [LuaJIT string buffers](https://luajit.org/ext_buffer.html).
 
 - A joined worker's result stack is owned by the thread handle. Repeated joins preserve result identity, including a worker returning its own handle, and full GC clears the handle, closure, payload and error object once their last Lua owner goes away. The live-worker list and TG roots cover startup and execution.
+- Closure creation retains each inherited upvalue before a peer can redirect the parent with `debug.upvaluejoin`. An intervening full collection clears an unrelated weak value while the child keeps the captured value. A loop that creates closures with only inherited upvalues now runs natively from source and imported stock bytecode.
 
 ## Correctness and progress checks
 

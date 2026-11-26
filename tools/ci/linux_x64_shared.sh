@@ -18,7 +18,10 @@ export LUA_PATH="$root/src/?.lua;$root/tests/lib/?.lua;;"
 )
 
 cd "$root"
-for script in t-gc-workers t-jit-secondary t-jit-flush-thread-stress \
+"$LUAJIT_STOCK" -e 'io.write(string.dump(assert(loadfile("tests/t-jit-fnew-inherited.lua"))))' |
+  timeout 30 "$bin" -e 'local b = io.read("*a"); assert(b:sub(1, 4) == "\27LJ\2"); assert(loadstring(b))()'
+for script in t-gc-workers t-threading-join-lifetime t-jit-fnew-inherited \
+              t-jit-secondary t-jit-flush-thread-stress \
               t-jit-util-flush-race t-jit-park-vmevent-reentrant \
               t-x64-jit-rooted-upvalue t-x64-jit-side-upvalue \
               t-x64-jit-boxed-arithmetic \
