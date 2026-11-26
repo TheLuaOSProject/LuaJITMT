@@ -1,0 +1,39 @@
+Plain allocator reader-progress performance controls, Linux x86_64
+
+The candidate preserves bounded buffer storage reuse and shows no live-heap growth scaling regression in these controls. Automatic buffer refills are effectively unchanged. The policy with a full GC every 20,000 cycles has a roughly 4% higher median process mean, with individual paired ratios spanning a small improvement to a 4.9% slowdown. This narrow measurement does not establish general performance parity or stock-LuaJIT parity.
+
+Baseline: c2ad32edafe7d8d65f398a0e5be62f7e4204f319
+Baseline executable SHA256: 0f119ad9c02c8968ef91441aecaebfde4959f4c7a44a9901c4bbacaa69900a03
+Baseline library SHA256: 918be697f0804e0ce9d4553fb4a65ad6f44eb41dbbc67ca2d61f2459388c190a
+Candidate: frozen GCC static source snapshot of c2ad32 plus candidate.patch
+Candidate executable SHA256: d092d949bbbae32eed53f05e1ee679be33dd30c96cc62ade7bb64e6302ee88a9
+Candidate library SHA256: 3bb7eeeb89592e2122775129163efafeca4f74e32a6aa13143c93c56abca0e74
+Candidate runtime changes: src/lj_arena.c, src/lj_arena.h
+
+Timing and physical memory
+
+Paired immutable old/new, JIT enabled, CPU 8.40 rounds x20,000 cycles,1KiB reset/put/get.
+Each policy includes3 alternating paired samples; work CPU excludes diagnostics and explicitGC.
+policy old_ns new_ns new/old paired_min..max old/new_RSS_end_KiB old/new_RSS_after_drop5GC_KiB old/new_explicitGC_CPU_s
+auto 554.976 553.649 0.9976 0.9852..1.0319 5088/5020 5088/5020 0.000000/0.000000
+full_each_round 569.116 591.790 1.0398 0.9759..1.0492 5208/5296 5192/5280 0.024459/0.024846
+full_every_5_rounds 585.066 588.849 1.0065 1.0065..1.0152 5156/5160 5140/5144 0.005135/0.005077
+
+Ratios paired by process sample (distinct from ratio of independent medians):
+- auto: median paired candidate/baseline 0.994331, range 0.985208..1.031930; all ratios 0.985208, 0.994331, 1.031930.
+- full_each_round: median paired candidate/baseline 1.040359, range 0.975901..1.049250; all ratios 0.975901, 1.040359, 1.049250.
+- full_every_5_rounds: median paired candidate/baseline 1.006836, range 1.006465..1.015216; all ratios 1.015216, 1.006836, 1.006465.
+
+Every buffer payload assertion passed. Each process performed 800,000 measured 1 KiB reset/put/get cycles; all 18 processes completed. All synchronized process snapshots reported one OS thread. Root's validation/build work was constrained to CPUs 0–7 and 9–15 while these processes used CPU 8. Other-core activity can still affect shared machine resources; the raw variation remains in the package.
+
+The separate 200,000-cycle census is unchanged from the preceding storage-reuse review. Both variants end at five plain owned arenas and 19 pending late starts. Explicit buffer free leaves one; the first full collection clears it, and all five final collections retain zero late starts. The candidate has one fewer bin-list node in some snapshots, while physical arena and allocated-start counts agree. Both after-close records show successful state destruction. See census-summary.csv, complete JSONL records, and synchronized census-results.csv.
+
+Live heap growth
+
+The unchanged direct allocator control retains 960-byte allocations across 16, 128, 1024 and 4096 nominal arenas, then verifies every byte sentinel. Five paired fresh processes per size all passed. Median paired candidate/baseline ratios are 1.0363, 0.9842, 0.9962 and 0.9894. The 4096 first baseline process is a large wall-time outlier, yielding pair 0.3416; it is retained and must not be interpreted as a candidate speedup. The other 4096 ratios are 0.9894, 0.9811, 1.0034 and 1.0299. Full samples and per-size summaries are in live-growth.json and live-growth-summary.json. These timings include mapping/page costs and scheduler delay, unlike buffer work's process CPU timings.
+
+Reproducibility and scope
+
+All 60 runtime invocations exited zero with empty stderr. Build commands, compiler output, dependency files, exact workload hashes, complete source/build manifests and raw command/output rows are retained. Runtime inputs, executable/library hashes and workload hashes were reverified after measurements. Baseline and candidate runtime input manifests differ only in the two arena source/header paths. CPU 8 was released after the last timing.
+
+This is a single-mutator memory/performance control, not a full nonblocking proof, multiworker memory bound, sustained application workload, or Windows/macOS release validation. The project still requires the independent correctness/progress fixtures and broader completion plan.

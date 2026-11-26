@@ -1,0 +1,56 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "gcc",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-mcx16",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-census.d",
+      "-I/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/census.c",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-census"
+    ],
+    "exit": 0,
+    "binary_sha256": "59dd64582e27bcd65ef8d4276a5ea239f177ba0e623fc16ce218a687873829ea"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "gcc",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-mcx16",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth.d",
+      "-I/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/live-growth.c",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth"
+    ],
+    "exit": 0,
+    "binary_sha256": "b8b53ec16f66eae6eeb13681c5969fc9e4a30ee4d6b0faaa98435a4801d3ef40"
+  }
+]

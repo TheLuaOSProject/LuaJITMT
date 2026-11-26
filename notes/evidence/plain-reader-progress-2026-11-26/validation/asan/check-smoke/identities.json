@@ -1,0 +1,7 @@
+{
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/src/luajit": "490e67c0e07410d17d77a7ffdc58047f3bf8f3967bab832f2902635afe909955",
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/src/libluajit.a": "26204641046de256a3e7aad74af2a11c971983f7894c9e9f6a330d8792fe0c7b",
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/tests/t-buffer-thread-safety.lua": "e90325db1a6c8cd661eede720047e03a6e3f08c4be611b921cc6e163f88a7155",
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/tests/t-buffer-consume.c": "5738fa68b3c7bb9e28b39ca1f99b7a2cc17a17ff14c47bbc3b73063f322d6334",
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/check-smoke/consume": "2603cb30a99e78e90824133ee1c27b9ba131cb8c71289bb0a4e0f82a0b0aa35b"
+}

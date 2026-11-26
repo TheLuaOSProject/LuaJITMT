@@ -1,0 +1,32 @@
+{
+  "build_command": [
+    "clang",
+    "-std=gnu11",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-DLUA_USE_ASSERT",
+    "-DLJ_ARENA_TEST_HELPERS",
+    "-I/tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src",
+    "-I/workspaces/lj-lockless/tests",
+    "/workspaces/lj-lockless/tests/t-arena-plain-progress.c",
+    "/tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/libluajit.a",
+    "-Wl,-E",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/baseline"
+  ],
+  "run_command": [
+    "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/baseline"
+  ],
+  "exit": -6,
+  "seconds": 0.044483403995400295,
+  "source_sha256": "fe90813b049dc3b398b463475b9753c2a4c62bdafeb03e930102f7138348f5e5",
+  "binary_sha256": "774862a306672d66de0af204a161f61847e9cefd5129b28f810748efc42b352a",
+  "library_sha256": "2329e50f6809e40548cd11ca5c36314c5942616f6c8ca713f49610a8f6e9065a"
+}

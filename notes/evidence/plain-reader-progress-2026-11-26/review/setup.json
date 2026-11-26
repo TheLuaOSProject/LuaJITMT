@@ -1,0 +1,5 @@
+{
+  "base": "c2ad32edafe7d8d65f398a0e5be62f7e4204f319",
+  "previous_turn": "progress: committed/pushed plain late reclamation and verified physical memory bound",
+  "scope": "permit ordinary reads during unrelated plain storage mutation while preserving exact reuse safety"
+}

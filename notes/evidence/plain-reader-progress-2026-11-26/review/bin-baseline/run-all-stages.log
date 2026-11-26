@@ -1,0 +1,3 @@
+plain bin progress failed: committed=0 reused_B=0 owned_before=2 owned_during=3
+plain bin progress failed: committed=1 reused_B=0 owned_before=2 owned_during=3
+baseline-all-stages: /tmp/lj-plain-bin-progress-20261126-h5z9l2rs/tests/t-arena-plain-bin-progress-all-stages.c:142: main: Assertion `tentative && committed' failed.

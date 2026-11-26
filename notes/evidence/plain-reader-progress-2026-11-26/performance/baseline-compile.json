@@ -1,0 +1,56 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "gcc",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-mcx16",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-census.d",
+      "-I/tmp/lj-arena-reuse-20261126-zzbgmalf/gcc-final/src",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/census.c",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/gcc-final/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-census"
+    ],
+    "exit": 0,
+    "binary_sha256": "4bcb288d2a06cd53ce81f4c5a4a4d70889c70ac7cb0246b828e782c60edfa811"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "gcc",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-mcx16",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth.d",
+      "-I/tmp/lj-arena-reuse-20261126-zzbgmalf/gcc-final/src",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/live-growth.c",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/gcc-final/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth"
+    ],
+    "exit": 0,
+    "binary_sha256": "cd99d5929ae80424b1aece575714cd046ad1dbf73c81d8b3f10fa25d965f3320"
+  }
+]

@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/tsan/src/luajit": "ccbfd4442df3b6e32228c2ae1b9009046a380d6a2ef375d1f0dd5f840987b04d",
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/tsan/src/libluajit.a": "22159d05e4b12d15cfd6a1af03d14e1b5a8c1cef74f74b7c28fa6877d68ea0fe",
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/tsan/tests/t-arena-plain-progress.c": "749f24def6dd86c85563029ed13d1b9808807ed762a028d1a4117a4d8b8a5f53",
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/tsan/check-readers/readers": "bb36387d50a37241cdad010a99401b337cef897502585ef30ca9f400274b9ddd"
+}

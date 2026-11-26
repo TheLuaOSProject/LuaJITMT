@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/assert/src/luajit": "9f998faf297bd9d8fe5a66dc4898760bffc344f26e1f30f0e87f5ac73ee65595",
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/assert/src/libluajit.a": "76f20e0180865137066c8c84ad8f0274ab1c45c2f45c8bdbecad8c0862ea5781",
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/assert/tests/t-gc2-small-lease-span.c": "e221568a914d812101bc5aef8834ac314703581a3cecb7d8871527dfe9ad2bf6",
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/assert/check-lease/lease": "fa398c5ebfca380d7a6c4ca3a1e12ecaa9485b38a734ae579a9056050c7cabaf"
+}

@@ -1,0 +1,30 @@
+[
+  {
+    "name": "buffer-basic",
+    "command": [
+      "taskset",
+      "-c",
+      "0-7,9-15",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/noffi/src/luajit",
+      "tests/t-buffer-thread-safety.lua"
+    ],
+    "environment": {},
+    "exit": 0,
+    "seconds": 0.6150548619916663
+  },
+  {
+    "name": "buffer-public",
+    "command": [
+      "taskset",
+      "-c",
+      "0-7,9-15",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/noffi/src/luajit",
+      "tests/t-buffer-concurrent-public.lua"
+    ],
+    "environment": {
+      "LJ_BUFFER_LARGE": "1"
+    },
+    "exit": 0,
+    "seconds": 0.2643474659998901
+  }
+]

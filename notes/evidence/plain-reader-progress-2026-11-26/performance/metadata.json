@@ -1,0 +1,115 @@
+{
+  "baseline_commit": "c2ad32edafe7d8d65f398a0e5be62f7e4204f319",
+  "baseline_tree": "/tmp/lj-arena-reuse-20261126-zzbgmalf/gcc-final",
+  "original_workloads": "/tmp/lj-buffer-churn-final-20261126-rmdi4q4b",
+  "cpu": 8,
+  "count": 20000,
+  "rounds": 40,
+  "samples": 3,
+  "policies": {
+    "auto": 0,
+    "full_each_round": 1,
+    "full_every_5_rounds": 5
+  },
+  "live_growth_sizes": [
+    16,
+    128,
+    1024,
+    4096
+  ],
+  "live_growth_samples": 5,
+  "process_pairing": "alternate baseline/candidate within each sample and reverse policy order on even samples",
+  "binary_sha256": {
+    "baseline": "0f119ad9c02c8968ef91441aecaebfde4959f4c7a44a9901c4bbacaa69900a03",
+    "candidate": "d092d949bbbae32eed53f05e1ee679be33dd30c96cc62ade7bb64e6302ee88a9"
+  },
+  "library_sha256": {
+    "baseline": "918be697f0804e0ce9d4553fb4a65ad6f44eb41dbbc67ca2d61f2459388c190a",
+    "candidate": "3bb7eeeb89592e2122775129163efafeca4f74e32a6aa13143c93c56abca0e74"
+  },
+  "workload_sha256": {
+    "growth.lua": "279558a63a2a326473cffb34c07d3823e598e3b258b0052641b673c89a88476f",
+    "growth-census-free.lua": "67294668db6073fa6157fbd63ad7a09d8f07d96dd468888c81ec7e9ab4a17ae5",
+    "census.c": "634f9279e08854b3e4dab2b87bd1f6dc3b750769902d2f7ea04eceb29d112c38",
+    "live-growth.c": "33456c1b2555ca8d19255e3512945714f6b34416a860bcaa46eb37dffb996651"
+  },
+  "uname": "Linux 7f3bd9b38fd8 7.3.5-ogc2.1.fc45.x86_64 #1 SMP PREEMPT_DYNAMIC Mon Nov 23 19:56:04 UTC 2026 x86_64 GNU/Linux",
+  "allowed_cpu_list": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31
+  ],
+  "scope": "single-mutator; no shared source edits; CPU8 released",
+  "status": "complete",
+  "census_binary_sha256": {
+    "baseline": "4bcb288d2a06cd53ce81f4c5a4a4d70889c70ac7cb0246b828e782c60edfa811",
+    "candidate": "59dd64582e27bcd65ef8d4276a5ea239f177ba0e623fc16ce218a687873829ea"
+  },
+  "live_growth_binary_sha256": {
+    "baseline": "cd99d5929ae80424b1aece575714cd046ad1dbf73c81d8b3f10fa25d965f3320",
+    "candidate": "b8b53ec16f66eae6eeb13681c5969fc9e4a30ee4d6b0faaa98435a4801d3ef40"
+  },
+  "candidate_tree": "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc",
+  "result_rows": 1566,
+  "work_rounds": 720,
+  "census_rows": 56,
+  "all_semantic_assertions": "passed in all18policy processes and2census processes",
+  "lua_workload_sha256": "279558a63a2a326473cffb34c07d3823e598e3b258b0052641b673c89a88476f",
+  "original_lua_workload_sha256": "279558a63a2a326473cffb34c07d3823e598e3b258b0052641b673c89a88476f",
+  "runtime_input_count": {
+    "baseline": 228,
+    "candidate": 228
+  },
+  "cpu8_released": true,
+  "candidate_revision": "frozen GCC static source snapshot of c2ad32 plus candidate.patch",
+  "runtime_changed_paths": [
+    "src/lj_arena.c",
+    "src/lj_arena.h"
+  ],
+  "runtime_processes": {
+    "buffer": 18,
+    "census": 2,
+    "live_growth": 40
+  },
+  "all_runtime_stderr_empty": true,
+  "all_runtime_exit_zero": true,
+  "all_buffer_census_os_thread_counts": [
+    1
+  ],
+  "source_and_binary_reverification": "passed after all timings",
+  "candidate_source_hashes": {
+    "src/lj_arena.c": "93c6f8a5ca284fb343024fbf2675e13edc61de58ee823a2a2b42dce661e0baf2",
+    "src/lj_arena.h": "f90e405efc7174546084f26ee21d6905914a0ab6ce678140d658d76f4e3d26c0"
+  },
+  "package": "/tmp/lj-plain-progress-perf-20261126-sucpc_rf",
+  "git_head_at_finish": "c2ad32edafe7d8d65f398a0e5be62f7e4204f319"
+}

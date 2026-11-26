@@ -1,0 +1,802 @@
+[
+  {
+    "variant": "baseline",
+    "count": 16,
+    "sample": 1,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "16"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.003142338013276458,
+    "stdout": "928,0.000511275,550.943\n",
+    "stderr": "",
+    "allocations": 928,
+    "seconds": 0.000511275,
+    "ns_per_allocation": 550.943
+  },
+  {
+    "variant": "candidate",
+    "count": 16,
+    "sample": 1,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "16"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.002052953001111746,
+    "stdout": "928,0.000458356,493.918\n",
+    "stderr": "",
+    "allocations": 928,
+    "seconds": 0.000458356,
+    "ns_per_allocation": 493.918
+  },
+  {
+    "variant": "candidate",
+    "count": 16,
+    "sample": 2,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "16"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.0021246499964036047,
+    "stdout": "928,0.000465240,501.336\n",
+    "stderr": "",
+    "allocations": 928,
+    "seconds": 0.00046524,
+    "ns_per_allocation": 501.336
+  },
+  {
+    "variant": "baseline",
+    "count": 16,
+    "sample": 2,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "16"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.0019552739977370948,
+    "stdout": "928,0.000429139,462.434\n",
+    "stderr": "",
+    "allocations": 928,
+    "seconds": 0.000429139,
+    "ns_per_allocation": 462.434
+  },
+  {
+    "variant": "baseline",
+    "count": 16,
+    "sample": 3,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "16"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.0019263139984104782,
+    "stdout": "928,0.000431320,464.784\n",
+    "stderr": "",
+    "allocations": 928,
+    "seconds": 0.00043132,
+    "ns_per_allocation": 464.784
+  },
+  {
+    "variant": "candidate",
+    "count": 16,
+    "sample": 3,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "16"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.0019193860061932355,
+    "stdout": "928,0.000446978,481.657\n",
+    "stderr": "",
+    "allocations": 928,
+    "seconds": 0.000446978,
+    "ns_per_allocation": 481.657
+  },
+  {
+    "variant": "candidate",
+    "count": 16,
+    "sample": 4,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "16"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.0018527340143918991,
+    "stdout": "928,0.000436484,470.349\n",
+    "stderr": "",
+    "allocations": 928,
+    "seconds": 0.000436484,
+    "ns_per_allocation": 470.349
+  },
+  {
+    "variant": "baseline",
+    "count": 16,
+    "sample": 4,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "16"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.0020894089830107987,
+    "stdout": "928,0.000465865,502.010\n",
+    "stderr": "",
+    "allocations": 928,
+    "seconds": 0.000465865,
+    "ns_per_allocation": 502.01
+  },
+  {
+    "variant": "baseline",
+    "count": 16,
+    "sample": 5,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "16"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.001956904015969485,
+    "stdout": "928,0.000439578,473.683\n",
+    "stderr": "",
+    "allocations": 928,
+    "seconds": 0.000439578,
+    "ns_per_allocation": 473.683
+  },
+  {
+    "variant": "candidate",
+    "count": 16,
+    "sample": 5,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "16"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.0020780979830306023,
+    "stdout": "928,0.000485685,523.367\n",
+    "stderr": "",
+    "allocations": 928,
+    "seconds": 0.000485685,
+    "ns_per_allocation": 523.367
+  },
+  {
+    "variant": "baseline",
+    "count": 128,
+    "sample": 1,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "128"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.007882732024881989,
+    "stdout": "7424,0.004038734,544.011\n",
+    "stderr": "",
+    "allocations": 7424,
+    "seconds": 0.004038734,
+    "ns_per_allocation": 544.011
+  },
+  {
+    "variant": "candidate",
+    "count": 128,
+    "sample": 1,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "128"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.007641764997970313,
+    "stdout": "7424,0.004354210,586.505\n",
+    "stderr": "",
+    "allocations": 7424,
+    "seconds": 0.00435421,
+    "ns_per_allocation": 586.505
+  },
+  {
+    "variant": "candidate",
+    "count": 128,
+    "sample": 2,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "128"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.007977635017596185,
+    "stdout": "7424,0.004748942,639.674\n",
+    "stderr": "",
+    "allocations": 7424,
+    "seconds": 0.004748942,
+    "ns_per_allocation": 639.674
+  },
+  {
+    "variant": "baseline",
+    "count": 128,
+    "sample": 2,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "128"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.008793818997219205,
+    "stdout": "7424,0.005289970,712.550\n",
+    "stderr": "",
+    "allocations": 7424,
+    "seconds": 0.00528997,
+    "ns_per_allocation": 712.55
+  },
+  {
+    "variant": "baseline",
+    "count": 128,
+    "sample": 3,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "128"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.008721999009139836,
+    "stdout": "7424,0.005140720,692.446\n",
+    "stderr": "",
+    "allocations": 7424,
+    "seconds": 0.00514072,
+    "ns_per_allocation": 692.446
+  },
+  {
+    "variant": "candidate",
+    "count": 128,
+    "sample": 3,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "128"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.008497386996168643,
+    "stdout": "7424,0.004873686,656.477\n",
+    "stderr": "",
+    "allocations": 7424,
+    "seconds": 0.004873686,
+    "ns_per_allocation": 656.477
+  },
+  {
+    "variant": "candidate",
+    "count": 128,
+    "sample": 4,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "128"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.009367673977976665,
+    "stdout": "7424,0.005099793,686.933\n",
+    "stderr": "",
+    "allocations": 7424,
+    "seconds": 0.005099793,
+    "ns_per_allocation": 686.933
+  },
+  {
+    "variant": "baseline",
+    "count": 128,
+    "sample": 4,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "128"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.008745502011151984,
+    "stdout": "7424,0.004789821,645.181\n",
+    "stderr": "",
+    "allocations": 7424,
+    "seconds": 0.004789821,
+    "ns_per_allocation": 645.181
+  },
+  {
+    "variant": "baseline",
+    "count": 128,
+    "sample": 5,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "128"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.00943128700600937,
+    "stdout": "7424,0.004760432,641.222\n",
+    "stderr": "",
+    "allocations": 7424,
+    "seconds": 0.004760432,
+    "ns_per_allocation": 641.222
+  },
+  {
+    "variant": "candidate",
+    "count": 128,
+    "sample": 5,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "128"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.008099715021671727,
+    "stdout": "7424,0.004685132,631.079\n",
+    "stderr": "",
+    "allocations": 7424,
+    "seconds": 0.004685132,
+    "ns_per_allocation": 631.079
+  },
+  {
+    "variant": "baseline",
+    "count": 1024,
+    "sample": 1,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "1024"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.04826630500610918,
+    "stdout": "59392,0.037127705,625.130\n",
+    "stderr": "",
+    "allocations": 59392,
+    "seconds": 0.037127705,
+    "ns_per_allocation": 625.13
+  },
+  {
+    "variant": "candidate",
+    "count": 1024,
+    "sample": 1,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "1024"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.047000698978081346,
+    "stdout": "59392,0.036000467,606.150\n",
+    "stderr": "",
+    "allocations": 59392,
+    "seconds": 0.036000467,
+    "ns_per_allocation": 606.15
+  },
+  {
+    "variant": "candidate",
+    "count": 1024,
+    "sample": 2,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "1024"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.04618966398993507,
+    "stdout": "59392,0.035781476,602.463\n",
+    "stderr": "",
+    "allocations": 59392,
+    "seconds": 0.035781476,
+    "ns_per_allocation": 602.463
+  },
+  {
+    "variant": "baseline",
+    "count": 1024,
+    "sample": 2,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "1024"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.04588596397661604,
+    "stdout": "59392,0.035230751,593.190\n",
+    "stderr": "",
+    "allocations": 59392,
+    "seconds": 0.035230751,
+    "ns_per_allocation": 593.19
+  },
+  {
+    "variant": "baseline",
+    "count": 1024,
+    "sample": 3,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "1024"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.04866462200880051,
+    "stdout": "59392,0.037094621,624.573\n",
+    "stderr": "",
+    "allocations": 59392,
+    "seconds": 0.037094621,
+    "ns_per_allocation": 624.573
+  },
+  {
+    "variant": "candidate",
+    "count": 1024,
+    "sample": 3,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "1024"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.048025880998466164,
+    "stdout": "59392,0.036871253,620.812\n",
+    "stderr": "",
+    "allocations": 59392,
+    "seconds": 0.036871253,
+    "ns_per_allocation": 620.812
+  },
+  {
+    "variant": "candidate",
+    "count": 1024,
+    "sample": 4,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "1024"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.045184949005488306,
+    "stdout": "59392,0.034931590,588.153\n",
+    "stderr": "",
+    "allocations": 59392,
+    "seconds": 0.03493159,
+    "ns_per_allocation": 588.153
+  },
+  {
+    "variant": "baseline",
+    "count": 1024,
+    "sample": 4,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "1024"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.04510987698449753,
+    "stdout": "59392,0.035065563,590.409\n",
+    "stderr": "",
+    "allocations": 59392,
+    "seconds": 0.035065563,
+    "ns_per_allocation": 590.409
+  },
+  {
+    "variant": "baseline",
+    "count": 1024,
+    "sample": 5,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "1024"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.0460114790184889,
+    "stdout": "59392,0.035360095,595.368\n",
+    "stderr": "",
+    "allocations": 59392,
+    "seconds": 0.035360095,
+    "ns_per_allocation": 595.368
+  },
+  {
+    "variant": "candidate",
+    "count": 1024,
+    "sample": 5,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "1024"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.04668419499648735,
+    "stdout": "59392,0.035447857,596.846\n",
+    "stderr": "",
+    "allocations": 59392,
+    "seconds": 0.035447857,
+    "ns_per_allocation": 596.846
+  },
+  {
+    "variant": "baseline",
+    "count": 4096,
+    "sample": 1,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "4096"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.4591546779847704,
+    "stdout": "237568,0.418463706,1761.448\n",
+    "stderr": "",
+    "allocations": 237568,
+    "seconds": 0.418463706,
+    "ns_per_allocation": 1761.448
+  },
+  {
+    "variant": "candidate",
+    "count": 4096,
+    "sample": 1,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "4096"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.17730694499914534,
+    "stdout": "237568,0.142932217,601.648\n",
+    "stderr": "",
+    "allocations": 237568,
+    "seconds": 0.142932217,
+    "ns_per_allocation": 601.648
+  },
+  {
+    "variant": "candidate",
+    "count": 4096,
+    "sample": 2,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "4096"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.16996624501189217,
+    "stdout": "237568,0.136886809,576.201\n",
+    "stderr": "",
+    "allocations": 237568,
+    "seconds": 0.136886809,
+    "ns_per_allocation": 576.201
+  },
+  {
+    "variant": "baseline",
+    "count": 4096,
+    "sample": 2,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "4096"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.17275008198339492,
+    "stdout": "237568,0.138358805,582.397\n",
+    "stderr": "",
+    "allocations": 237568,
+    "seconds": 0.138358805,
+    "ns_per_allocation": 582.397
+  },
+  {
+    "variant": "baseline",
+    "count": 4096,
+    "sample": 3,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "4096"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.17468162198201753,
+    "stdout": "237568,0.139525991,587.310\n",
+    "stderr": "",
+    "allocations": 237568,
+    "seconds": 0.139525991,
+    "ns_per_allocation": 587.31
+  },
+  {
+    "variant": "candidate",
+    "count": 4096,
+    "sample": 3,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "4096"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.16995526701794006,
+    "stdout": "237568,0.136890189,576.215\n",
+    "stderr": "",
+    "allocations": 237568,
+    "seconds": 0.136890189,
+    "ns_per_allocation": 576.215
+  },
+  {
+    "variant": "candidate",
+    "count": 4096,
+    "sample": 4,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "4096"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.1677912279847078,
+    "stdout": "237568,0.135518413,570.441\n",
+    "stderr": "",
+    "allocations": 237568,
+    "seconds": 0.135518413,
+    "ns_per_allocation": 570.441
+  },
+  {
+    "variant": "baseline",
+    "count": 4096,
+    "sample": 4,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "4096"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.1680999610107392,
+    "stdout": "237568,0.135059620,568.509\n",
+    "stderr": "",
+    "allocations": 237568,
+    "seconds": 0.13505962,
+    "ns_per_allocation": 568.509
+  },
+  {
+    "variant": "baseline",
+    "count": 4096,
+    "sample": 5,
+    "order": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-live-growth",
+      "4096"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.17146307899383828,
+    "stdout": "237568,0.136074182,572.780\n",
+    "stderr": "",
+    "allocations": 237568,
+    "seconds": 0.136074182,
+    "ns_per_allocation": 572.78
+  },
+  {
+    "variant": "candidate",
+    "count": 4096,
+    "sample": 5,
+    "order": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-live-growth",
+      "4096"
+    ],
+    "exit": 0,
+    "controller_seconds": 0.1739202679891605,
+    "stdout": "237568,0.140141866,589.902\n",
+    "stderr": "",
+    "allocations": 237568,
+    "seconds": 0.140141866,
+    "ns_per_allocation": 589.902
+  }
+]

@@ -1,0 +1,8 @@
+{
+  "head": "c2ad32edafe7d8d65f398a0e5be62f7e4204f319",
+  "files": {
+    "src/lj_arena.c": "93c6f8a5ca284fb343024fbf2675e13edc61de58ee823a2a2b42dce661e0baf2",
+    "src/lj_arena.h": "f90e405efc7174546084f26ee21d6905914a0ab6ce678140d658d76f4e3d26c0"
+  },
+  "diff_sha256": "0a95c84bc581648dad0453e967c1119389d6166db78e5e5c523405e1153f36e0"
+}

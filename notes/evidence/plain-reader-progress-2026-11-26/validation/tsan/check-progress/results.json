@@ -1,0 +1,50 @@
+[
+  {
+    "name": "progress-build",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-Wno-error=tsan",
+      "-fsanitize=thread",
+      "-fno-omit-frame-pointer",
+      "-fno-pie",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/tsan/check-progress/progress.d",
+      "-I/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/tsan/src",
+      "-I/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/tsan/tests",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/tsan/tests/t-buffer-progress.c",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/tsan/src/libluajit.a",
+      "-fsanitize=thread",
+      "-no-pie",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/tsan/check-progress/progress"
+    ],
+    "seconds": 0.164856323011918,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "progress",
+    "command": [
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/tsan/check-progress/progress"
+    ],
+    "seconds": 0.21450531302252784,
+    "exit": 0,
+    "test": true
+  }
+]

@@ -1,0 +1,25 @@
+{
+  "baseline_commit": "c2ad32edafe7d8d65f398a0e5be62f7e4204f319",
+  "build_command": [
+    "gcc",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-DLUAJIT_SECURITY_PRNG=0",
+    "-DLJ_ARENA_TEST_HELPERS",
+    "-pthread",
+    "-I/tmp/lj-plain-bin-progress-20261126-h5z9l2rs/src",
+    "/tmp/lj-plain-bin-progress-20261126-h5z9l2rs/tests/t-arena-plain-bin-progress-all-stages.c",
+    "/tmp/lj-plain-bin-progress-20261126-h5z9l2rs/tests/t-arena-tls-stub.c",
+    "/tmp/lj-plain-bin-progress-20261126-h5z9l2rs/src/lj_arena.c",
+    "/tmp/lj-plain-bin-progress-20261126-h5z9l2rs/src/lj_prng.c",
+    "-o",
+    "/tmp/lj-plain-bin-progress-20261126-h5z9l2rs/baseline-all-stages"
+  ],
+  "build_exit": 0,
+  "build_seconds": 2.461211130983429,
+  "fixture_sha256": "36c765fa5dd750860811112b8ccf70f4fc0500f152e3cc6fd9d9e544dec8d129",
+  "binary_sha256": "78508ed4e38428fb2efadcef27790991e333806f1049a454bbc3dc69554bf1ff",
+  "run_exit": -6
+}

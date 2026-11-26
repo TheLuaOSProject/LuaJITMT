@@ -1,0 +1,110 @@
+[
+  {
+    "mode": "assert",
+    "phase": "readers",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "assert",
+      "readers"
+    ],
+    "exit": 0,
+    "seconds": 0.27127742298762314
+  },
+  {
+    "mode": "assert",
+    "phase": "plain",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "assert",
+      "plain"
+    ],
+    "exit": 0,
+    "seconds": 0.42901921999873593
+  },
+  {
+    "mode": "assert",
+    "phase": "arena",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "assert",
+      "arena"
+    ],
+    "exit": 0,
+    "seconds": 30.46030318099656
+  },
+  {
+    "mode": "asan",
+    "phase": "readers",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "asan",
+      "readers"
+    ],
+    "exit": 0,
+    "seconds": 0.3997013749903999
+  },
+  {
+    "mode": "asan",
+    "phase": "plain",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "asan",
+      "plain"
+    ],
+    "exit": 0,
+    "seconds": 0.5981895489967428
+  },
+  {
+    "mode": "asan",
+    "phase": "arena",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "asan",
+      "arena"
+    ],
+    "exit": 0,
+    "seconds": 39.16110120600206
+  },
+  {
+    "mode": "tsan",
+    "phase": "readers",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "tsan",
+      "readers"
+    ],
+    "exit": 0,
+    "seconds": 0.33563046998460777
+  },
+  {
+    "mode": "tsan",
+    "phase": "plain",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "tsan",
+      "plain"
+    ],
+    "exit": 0,
+    "seconds": 5.5092337139940355
+  },
+  {
+    "mode": "tsan",
+    "phase": "arena",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "tsan",
+      "arena"
+    ],
+    "exit": 0,
+    "seconds": 60.71202387099038
+  }
+]

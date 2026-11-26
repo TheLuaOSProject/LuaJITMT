@@ -1,0 +1,24 @@
+[
+  {
+    "name": "public-joff",
+    "command": [
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/tests/t-buffer-concurrent-public.lua"
+    ],
+    "seconds": 0.815116338984808,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "public-jon",
+    "command": [
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/tests/t-buffer-concurrent-public.lua"
+    ],
+    "seconds": 0.7647278019867372,
+    "exit": 0,
+    "test": true
+  }
+]

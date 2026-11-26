@@ -1,0 +1,2 @@
+plain bin progress failed: committed=0 reused_B=0 owned_before=2 owned_during=3
+baseline-witness: /tmp/lj-plain-bin-progress-20261126-h5z9l2rs/tests/t-arena-plain-bin-progress.c:123: check_bin_progress: Assertion `reused' failed.

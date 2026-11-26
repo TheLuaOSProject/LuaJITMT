@@ -11,9 +11,13 @@ sketches describe the original design. Production raw PLAIN storage is managed
 by explicit free intents, not by semantic mark/sweep. Its owner consumes durable
 late bits only after readers and side owners permit exact span reuse; routed
 publishers wake the existing allocator drain. Unmarked non-late storage remains
-allocated. See [the reuse review](../notes/plain-storage-reuse-2026-11-26.md)
-and [the current completion plan](15_x64_linux_completion.md), including the
-remaining progress limit of arena-wide plain writer admission.
+allocated. Ordinary plain writers publish exact opaque targets before commit,
+allowing readers of unrelated live storage through the admission generation.
+Late drains freeze their target cohort before admitting later readers. See
+[the reuse review](../notes/plain-storage-reuse-2026-11-26.md),
+[the reader-progress review](../notes/plain-reader-progress-2026-11-26.md), and
+[the current completion plan](15_x64_linux_completion.md), including the
+remaining same-allocation in-place-shrink progress obligation.
 
 ## 4.1 Constants & layout
 

@@ -1712,7 +1712,7 @@ static void test_registry_rescue_unmap_handoff(PRNGState *rs)
   RegistryRescueRace race;
   pthread_t thread;
   void *p, *observed = NULL;
-  uint32_t slot;
+  uint32_t slot, flags;
   int admission;
 
   assert(lj_arena_hugetab_init(&registry, 2));
@@ -1775,15 +1775,25 @@ static void test_registry_rescue_unmap_handoff(PRNGState *rs)
   la_store32_rel(&race.leave, 1);
   assert(pthread_join(thread, NULL) == 0);
 
-  /* Arena admission can decline an exact registered mapping. Keep the
-  ** registry observation available while supplying no body lease. */
+  /* A lifecycle owner can decline admission to an exact registered mapping.
+  ** Model PREPSWEEP explicitly: an ordinary plain writer's tentative seal
+  ** permits unrelated readers. Registry observation must remain available
+  ** when either ordinary or bounded arena admission supplies no body lease. */
+  flags = lj_arena_flags_acq(race.a);
+  assert(!(flags & LJ_AF_PREPSWEEP));
+  la_store32_rel(&race.a->hdr.flags, flags | LJ_AF_PREPSWEEP);
   assert(lj_arena_reclaim_seal(race.a));
   assert(lj_arena_hugetab_rescue_enter(&registry, race.a, &info) ==
 	 LJ_ARENA_RESCUE_RETRY);
   assert(info.size == LJ_ARENA_SIZE);
+  assert(lj_arena_hugetab_rescue_slot_enter_bounded(
+	&registry, slot, race.a, &info) == LJ_ARENA_RESCUE_RETRY);
+  assert(info.size == LJ_ARENA_SIZE);
   assert(lj_arena_alloc_registry_lookup(&alloc, race.a, &info));
   assert(info.readers == 0);
+  assert((lj_arena_remote_active_acq(race.a) & LJ_ARENA_REMOTE_COUNT_MASK) == 0);
   lj_arena_reclaim_unseal(race.a, 0);
+  la_store32_rel(&race.a->hdr.flags, flags);
 
   /* With both admissions gone, close -> registry delete -> unmap succeeds in
   ** that order. The stale address is used only as a HugeTab key afterward. */
@@ -2016,7 +2026,14 @@ static void test_plain_reader_mutation_gate(PRNGState *rs)
   a = lj_arena_of(p);
   cell = lj_arena_cellof(p);
   assert(lj_arena_destruct_acquire(p, size) == LJ_ARENA_DESTRUCT_ACQUIRED);
-  assert(lj_arena_rescue_enter(a) == LJ_ARENA_RESCUE_RETRY);
+  /* Arena admission keeps unrelated allocations accessible. It is not body
+  ** authority for this exact target, whose FREEING marker stays opaque. */
+  admission = lj_arena_rescue_enter(a);
+  assert(admission == LJ_ARENA_RESCUE_COMMITTED);
+  assert((lj_arena_remote_active_acq(a) & LJ_ARENA_REMOTE_COUNT_MASK) == 1u);
+  assert(lj_arena_sweep_state_acq(a, cell) == LJ_ARENA_SWEEP_FREEING);
+  lj_arena_rescue_leave(a);
+  assert((lj_arena_remote_active_acq(a) & LJ_ARENA_REMOTE_COUNT_MASK) == 0);
   assert(lj_arena_destruct_acquire(p, size) == LJ_ARENA_DESTRUCT_OWNED);
   memset(p, 0x84, size);  /* The unique semantic destructor owns these bytes. */
   lj_arena_free(&alloc, p, size);
@@ -2097,6 +2114,12 @@ static void test_plain_reader_mutation_gate(PRNGState *rs)
 			  &free_race) == 0);
     while (!lj_arena_test_plain_claim_paused())
       la_cpu_pause();
+    admission = lj_arena_rescue_enter(a);
+    assert(admission == LJ_ARENA_RESCUE_BIT_ONLY);
+    assert((lj_arena_remote_active_acq(a) & LJ_ARENA_REMOTE_COUNT_MASK) == 1u);
+    assert(lj_arena_sweep_state_acq(a, cell) == LJ_ARENA_SWEEP_FREEING);
+    lj_arena_rescue_leave(a);
+    assert((lj_arena_remote_active_acq(a) & LJ_ARENA_REMOTE_COUNT_MASK) == 0);
     assert(lj_arena_free_deferred(&alloc, p, size));
     lj_arena_test_plain_claim_pause(0);
     assert(pthread_join(thread, NULL) == 0);

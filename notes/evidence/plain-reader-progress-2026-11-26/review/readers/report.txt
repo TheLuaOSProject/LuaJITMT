@@ -1,0 +1,64 @@
+Source-only PLAIN reader and raw-allocation audit
+
+Revision: c2ad32edafe7d8d65f398a0e5be62f7e4204f319.
+All line references below name the frozen src/ directory beside this report. No builds, benchmarks, runtime mutations, or shared-workspace edits were performed.
+
+Conclusion: the existing late[]/sweep FREEING checks can support new readers of unrelated raw allocations during a plain writer, provided the writer freezes its exact mutation cohort before commit and preserves the admission ordering. I found no additional production raw borrowed-pointer or extent-ABA blocker in the audited buffer/table/trace readers. This is a reader-side result, not approval of an unfinished writer protocol.
+
+1. Existing admission coverage
+
+- lj_gc2_small_lease_try (lj_gc2.c17003–17078) enters a registered mapping plus arena admission, executes an SC fence at17045, and checks exact block/late/FREEING twice (17049–17067). Its lifetime-state checks are conditional on expected_gct!=0. A PLAIN implementation using new lifetime MUTATING/DESTRUCT lanes would therefore require changes here; an implementation using the existing FREEING/late representation is already recognized.
+- The marking raw lease lj_gc2_mem_lease_acquire (18238–18251) goes through gc2_markmem_registered_scoped_status_impl and gc2_mark_small_cell_begin. The latter fences at17432 and calls gc2_mark_small_cell_admitted (17346–17418), which rejects exact late/FREEING and retains scope until the final body access.
+- COMMITTED admission is not a bypass: gc2_mark_small_committed_status (17270–17290) and gc2_mark_small_prep_committed_status (17297–17317) also reject exact FREEING/late. Their state-before-block reads preserve the block-clear-before-FREEING-reset ordering.
+- gc2_ismarked_small_cell (23607–23669) also fences and rejects late/FREEING; lifetime gating is again TRAVERSABLE-only.
+- Both arena_rescue_enter (lj_arena.c1184–1186) and arena_rescue_enter_bounded (6893–6896) have the current broad PLAIN state-mask rejection. Updating only the former leaves bounded registry admission blocked.
+- lj_gc2_markmem / lj_gc2_markmem_registered release their scope before returning (18005–18010,18025–18027,18215–18218). The boolean means newly marked, not retained body lifetime. *_known is registration/block validation, not a lease (3863–3912). Preserve their callers' independent SMR/list/parent ownership.
+
+2. Ordering requirements if readers enter a committed writer
+
+- Publish the target marker before successful writer commit. Readers admitted before target publication must defeat commit while they remain admitted; do not change the commit CAS to accept those readers.
+- A postcommit reader must acquire the commit publication before body validation. It either sees target FREEING/late or a completely published final representation.
+- Preserve block-clear release (arena.c5563) before FREEING->WHITE reset (8896–8897; late drain6319–6320). The repeated small-lease checks then reject a removed target. Marking COMMITTED readers already use state->block ordering.
+- Keep reuse vetoed until readers/producers from the writer generation leave. Current allocation guards are arena_set_alloc5466–5469 and arena_find_run; bump-tail publication6489–6495 also observes the gate.
+- Freeze late-drain targets before commit. A late bit published after commit may represent a body whose reader entered earlier in the same writer generation; it must wait for a later generation.
+- A FREEING bit is not sufficient ownership of a destructor token. Publication reviewer separately identified the existing implicit combination arena_plain_mutation_held(a)+FREEING at5888–5890 and8834–8836: another exact target's writer must not authorize finishing this target. Prepublishing FREEING makes an exact retained-destructor identity especially important.
+
+3. Raw consumers and ABA
+
+| Consumer | Admission/source contract | Result |
+| --- | --- | --- |
+| Public LJBuffer | lj_buf.c203–232 retains sampled storage first, then reloads coherent range and checks the source pointer; capacity/ref/data are immutable for a storage allocation. Replacement retains fresh through publication at245–270. | Reuse before admission is acceptable only if the new current range names that retained incarnation; reuse after admission is excluded. |
+| Table node/array vectors | lj_tab.c5294–5313 and6006–6057 retain vectors, compare current table source pointers, then read immutable vector geometry and validate against span. | No cached old extent is used after address-only admission. |
+| TraceVec | lj_trace.c10312–10324 retains current vector, confirms source, then reads immutable sizetrace and checks span. | Same property. |
+| FINREG records/order spine | lj_ctype.c497–499,680–709,832–848,995–1065 use exact raw leases; outer SMR or stable native-list ownership retains sampled successors. | Their external ownership must remain; an arbitrary stale address is not an identity certificate. |
+| Thread start roots | lib_threading.c400–433 publishes initialized fixed vector once;446–455 clears values only. lj_udata.c231–238 frees it with parent destruction. GC scan atlj_gc2.c20996–21014 is under the admitted userdata. | Pointer/count are not replaced or resized while parent remains owned. |
+| TG/VM stack | lj_gc2.c9430–9433 explicitly says the native-park certificate prevents relocation, not the raw lease alone. | A body lease must not replace the stack publication/park contract. |
+
+gc2_small_lease_span (16983–17001) is only a conservative upper bound; a bump tail or concurrent unrelated free-boundary removal can make it larger than the requested allocation. Its documented contract (lj_gc2.h735–749) requires authoritative source confirmation and immutable size. Do not treat span as a generation or exact extent certificate.
+
+Buffer ref/reserve deliberately return a raw borrowed pointer after releasing the lease (lj_buf.c607–633 and655–663). This is the documented FFI boundary already accepted by the parent: same-buffer modification invalidates it, and the pointer does not anchor its owner. An unrelated allocation free must never overwrite its still-live allocation; no stronger borrowed-pointer promise should be inferred.
+
+4. In-place shrink
+
+Small in-place shrink currently needs the global writer gate (arena.c9007–9053). It frees the suffix at9035 while preserving the base block. If unrelated readers are admitted through that gate, marking only the suffix start is insufficient: a reader of the original base can still request/use the old full extent. Mark the original base unreadable before commit and retain that marker through complete suffix publication, or move the allocation.
+
+A whole-base transient FREEING/MUTATING marker is sufficient for lifetime safety with the admission ordering above, but a paused shrink owner then prevents readers of that same allocation from completing. It is not by itself the requested full progress solution. late[] is irrevocable logical-free provenance and should not be borrowed as a transient shrink marker.
+
+Existing PLAIN shrink already falls back to allocate/copy/free on gate conflict or failed suffix insertion (9019–9046 ->9055–9061). Replacement allocation failure returns NULL, and lj_mem_realloc raises OOM (lj_gc.c4952–4953). Therefore current code does not universally guarantee nonfailure-on-shrink; broadening allocation exposure still needs an explicit decision, not an assumption that it is costless.
+
+Production call inventory: lj_buf_shrink (lj_buf.c98–107) and lj_state_shrinkstack (lj_state.c191–206) have definitions/declarations but no production calls in this revision. The active shrink is lj_err.c277 -> lj_state_relimitstack -> resizestack (lj_state.c185–188,66–95), only after overflow beyond LJ_STACK_MAXEX, so both old and new stacks are huge. All other explicit lj_mem_realloc users grow: lj_ir.c76–90, lj_snap.c58–78, lj_bcread.c777–785, lj_buf.c23–43 and lj_mem_grow atlj_gc.c5984–5994. Thus no ordinary production small-shrink call was found; the generic/direct allocator API must nevertheless remain correct.
+
+Returning p while skipping physical suffix release is not a free implementation shortcut: later free receives the smaller logical osize and currently frees that many cells (arena.c8784–8807). Without actual-extent bookkeeping or changed free semantics the tail is stranded. Huge->small also cannot retain the original mapping under the current osize class discriminator.
+
+5. Do not simply classify PLAIN as TRAVERSABLE-managed
+
+arena_lifetime_managed (arena.c313–318) controls more than reader lifetime: GC2 token/descriptor sidecars, root construction, destructor rules, allocation claims, range preflight, and cleanup. PLAIN lacks those semantic sidecars; missing managed sidecars deliberately block every capable cell (345–362;376–386). Semantic TRAVERSABLE also forbids lj_mem_realloc (lj_gc.c4866–4879,4939–4946) and participates in typed GC tracing. Keep any physical raw-lifetime predicate separate.
+
+Generic plain allocation runs through arena_set_alloc; it publishes block before returning to its constructor (arena.c5524–5537). Thus raw admission alone cannot authorize interpreting an arbitrary reused/unpublished body: source publication or independent construction ownership remains necessary.
+
+6. Specialized bump inventory
+
+Production specialized bump publishers are all TRAVERSABLE: lj_func.c1281–1283,1340–1344,1435–1437; lj_tab.c3725; vm_x64.dasc4461–4478; lj_asm_x86.h1615,1648–1653. No production call to generic lj_arena_reserve_bump was found. The exported generic reservation still accepts plain flags and skips lifetime initialization atarena.c8375–8376, so a future physical PLAIN lifetime scheme must cover it or restrict its contract; this does not require touching current typed assembly for a FREEING/late-only reader change.
+
+Suggested deterministic coverage: unrelated reader through both tentative and committed plain writer states; same-target reader at marker and commit boundaries; reader admitted before commit defeating writer; postcommit new late bit excluded from frozen drain cohort; exact destructor token cannot be borrowed by another target; shrink old full-span admission vs retained prefix; final reader release/open and subsequent reuse. Also exercise marking/scoped raw leases, not only nonmarking storage leases.
+

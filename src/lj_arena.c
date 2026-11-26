@@ -68,6 +68,7 @@ LJ_STATIC_ASSERT(LJ_HUGETAB_ADMISSION_CLOSED == LJ_HUGETAB_READER_MASK);
 
 #if defined(LJ_ARENA_TEST_HELPERS)
 static void arena_test_plain_claim_pause_after_close(void);
+static void arena_test_plain_commit_pause_after_commit(GCArena *a);
 static void arena_test_plain_admit_pause_after_enter(void);
 static void arena_test_remote_publish_pause_after_queue(void);
 static void arena_test_remote_drain_pause_after_clear(void);
@@ -84,6 +85,7 @@ static void hugetab_test_admission_close_pause_after_close(void);
   ((void)la_add64_rlx(&arena_test_remote_arena_probe_count, 1))
 #else
 #define arena_test_plain_claim_pause_after_close() ((void)0)
+#define arena_test_plain_commit_pause_after_commit(a) ((void)0)
 #define arena_test_plain_admit_pause_after_enter() ((void)0)
 #define arena_test_remote_publish_pause_after_queue() ((void)0)
 #define arena_test_remote_drain_pause_after_clear() ((void)0)
@@ -1131,28 +1133,71 @@ static void arena_plain_mutation_abort_admit(GCArena *a)
   }
 }
 
-/* Plain allocations have no per-start lifetime lane. First close+seal the
-** exact admission generation, then commit it to the distinct SEALED|PENDING
-** writer state. A late publisher admitted between those CASes defeats commit;
-** the helper publishes CLOSED and returns -1 after consuming own_count.
-** Return 1 for committed ownership, 0 when the initial CAS lost, and -1 for
-** this safe post-acquisition abort. */
-static int arena_plain_mutation_claim(GCArena *a, uint64_t own_count)
+/* The tentative close excludes earlier readers. Before committing, a writer
+** must make each target opaque with FREEING or capture an already-late target
+** cohort. Readers of other allocations may enter either generation. */
+static int arena_plain_mutation_begin(GCArena *a, uint64_t own_count)
 {
   uint64_t expect = own_count;
   uint64_t closed = LJ_ARENA_REMOTE_CLOSED|LJ_ARENA_REMOTE_SEALED;
-  if (!a || arena_lifetime_managed(a) ||
-      !la_cas64(&a->hdr.remote_active, &expect, closed,
-		LA_ACQ_REL, LA_ACQ))
-    return 0;
+  return a && !arena_lifetime_managed(a) &&
+    la_cas64(&a->hdr.remote_active, &expect, closed, LA_ACQ_REL, LA_ACQ);
+}
+
+/* A reader admitted before target publication changes the exact word and
+** defeats commit while it can still access bytes. A late publisher also sets
+** PENDING, preserving its intent even if it leaves before this CAS. */
+static int arena_plain_mutation_commit(GCArena *a)
+{
+  uint64_t expect = LJ_ARENA_REMOTE_CLOSED|LJ_ARENA_REMOTE_SEALED;
   arena_test_plain_claim_pause_after_close();
-  expect = closed;
   if (la_cas64(&a->hdr.remote_active, &expect,
 	       LJ_ARENA_REMOTE_SEALED|LJ_ARENA_REMOTE_PENDING,
-	       LA_ACQ_REL, LA_ACQ))
+	       LA_ACQ_REL, LA_ACQ)) {
+    arena_test_plain_commit_pause_after_commit(a);
     return 1;
+  }
   arena_plain_mutation_abort_admit(a);
   return -1;
+}
+
+/* Queue targets are already FREEING before queue publication. */
+static int arena_plain_mutation_claim(GCArena *a, uint64_t own_count)
+{
+  return arena_plain_mutation_begin(a, own_count) ?
+    arena_plain_mutation_commit(a) : 0;
+}
+
+/* Return 1 for ownership, 0 if the initial close lost, or -1 with a replacement
+** admission after an abort. A free caller must publish late before dropping
+** that admission; a realloc caller restores its saved state before dropping
+** it. No payload or allocation-boundary mutation precedes successful commit. */
+static int arena_plain_mutation_claim_at(GCArena *a, uint64_t own_count,
+                                        uint32_t cell, uint32_t *priorp)
+{
+  uint32_t state;
+  if (!arena_plain_mutation_begin(a, own_count))
+    return 0;
+  state = lj_arena_sweep_state_acq(a, cell);
+  if (state != LJ_ARENA_SWEEP_FREEING &&
+      !lj_arena_sweep_state_cas(a, cell, state, LJ_ARENA_SWEEP_FREEING)) {
+    if (priorp) *priorp = LJ_ARENA_SWEEP_FREEING;
+    arena_plain_mutation_abort_admit(a);
+    return -1;
+  }
+  if (priorp) *priorp = state;
+  return arena_plain_mutation_commit(a);
+}
+
+static void arena_plain_mutation_restore(GCArena *a, uint32_t cell,
+                                         uint32_t prior)
+{
+  if (prior != LJ_ARENA_SWEEP_FREEING) {
+    int restored = lj_arena_sweep_state_cas(a, cell,
+      LJ_ARENA_SWEEP_FREEING, prior);
+    lj_assertX(restored, "plain realloc lost its temporary target marker");
+    UNUSED(restored);
+  }
 }
 
 static LJ_AINLINE int arena_plain_mutation_held(const GCArena *a)
@@ -1179,10 +1224,15 @@ static LJ_AINLINE int arena_rescue_enter(GCArena *a, int observe)
     int committed;
     if (arena_terminal_closed_acq(a))
       return LJ_ARENA_RESCUE_RETRY;
-    /* A plain writer has no object-local descriptor to make later admissions
-    ** reject. SEALED itself is therefore terminal for this nonblocking try. */
+    /* Ordinary plain writers freeze opaque targets before commit. Unrelated
+    ** live allocations remain readable. Bare committed SEALED belongs to a
+    ** generic structural owner, not this protocol; it and lifecycle/terminal
+    ** owners retain their separate, stronger admission restriction. */
     if (!arena_lifetime_managed(a) &&
-	(active & LJ_ARENA_REMOTE_STATE_MASK))
+	(active & LJ_ARENA_REMOTE_STATE_MASK) &&
+	(((active & LJ_ARENA_REMOTE_STATE_MASK) == LJ_ARENA_REMOTE_SEALED) ||
+	 (lj_arena_flags_acq(a) & (LJ_AF_PREPSWEEP|LJ_AF_NEEDSWEEP|
+	                          LJ_AF_QUARANTINE|LJ_AF_RECLAIMED))))
       return LJ_ARENA_RESCUE_RETRY;
     if (arena_remote_count(active) == LJ_ARENA_REMOTE_COUNT_MASK) {
       arena_remote_overflow();
@@ -1285,6 +1335,9 @@ static uint32_t arena_test_registry_pause_flag;
 static uint32_t arena_test_registry_pause_seen;
 static uint32_t arena_test_plain_claim_pause_flag;
 static uint32_t arena_test_plain_claim_pause_seen;
+static GCArena *arena_test_plain_commit_target;
+static uint32_t arena_test_plain_commit_pause_flag;
+static uint32_t arena_test_plain_commit_pause_seen;
 static uint32_t arena_test_plain_admit_pause_flag;
 static uint32_t arena_test_plain_admit_pause_seen;
 static uint32_t arena_test_remote_publish_pause_flag;
@@ -1298,6 +1351,31 @@ static uint32_t arena_test_gc2_sidecar_fail_alloc_flag;
 static GCArena *arena_test_open_sealed_target;
 static uint32_t arena_test_open_sealed_pause_flag;
 static uint32_t arena_test_open_sealed_pause_seen;
+
+void lj_arena_test_plain_commit_pause(GCArena *a, int enabled)
+{
+  if (enabled) {
+    la_store32_rel(&arena_test_plain_commit_pause_seen, 0);
+    la_storeptr_rel((void **)&arena_test_plain_commit_target, a);
+  }
+  la_store32_rel(&arena_test_plain_commit_pause_flag, enabled != 0);
+}
+
+uint32_t lj_arena_test_plain_commit_paused(void)
+{
+  return la_load32_acq(&arena_test_plain_commit_pause_seen);
+}
+
+static void arena_test_plain_commit_pause_after_commit(GCArena *a)
+{
+  if (la_load32_acq(&arena_test_plain_commit_pause_flag) != 0 &&
+      la_loadptr_acq((void *const *)&arena_test_plain_commit_target) == a) {
+    la_store32_rel(&arena_test_plain_commit_pause_seen, 1);
+    while (la_load32_acq(&arena_test_plain_commit_pause_flag) != 0)
+      la_cpu_pause();
+    la_store32_rel(&arena_test_plain_commit_pause_seen, 0);
+  }
+}
 
 void lj_arena_test_open_sealed_pause(GCArena *a, int enabled)
 {
@@ -5883,13 +5961,13 @@ int lj_arena_destruct_acquire(const void *p, size_t size)
       !lj_arena_bm_get(a->block, cell))
     return LJ_ARENA_DESTRUCT_LOST;
   if (!arena_lifetime_managed(a)) {
+    if (arena_plain_mutation_held(a) &&
+	la_loadptr_acq((void *const *)&a->hdr.plain_destruct) == p)
+      return LJ_ARENA_DESTRUCT_OWNED;
     if (lj_arena_late_get(a, cell) || !arena_side_owners_none(a, cell))
       return LJ_ARENA_DESTRUCT_LOST;
-    if (arena_plain_mutation_held(a) &&
-	lj_arena_sweep_state_acq(a, cell) == LJ_ARENA_SWEEP_FREEING)
-      return LJ_ARENA_DESTRUCT_OWNED;
     {
-      int gate = arena_plain_mutation_claim(a, 0);
+      int gate = arena_plain_mutation_claim_at(a, 0, cell, NULL);
       if (gate != 1) {
 	if (gate < 0) {
 	  (void)arena_late_pin(NULL, a, p, size);
@@ -5909,16 +5987,12 @@ int lj_arena_destruct_acquire(const void *p, size_t size)
       arena_plain_mutation_release(a);
       return LJ_ARENA_DESTRUCT_LOST;
     }
-    oldstate = lj_arena_sweep_state_acq(a, cell);
-    if (oldstate != LJ_ARENA_SWEEP_FREEING &&
-	!lj_arena_sweep_state_cas(a, cell, oldstate,
-				      LJ_ARENA_SWEEP_FREEING)) {
-      (void)arena_late_pin(NULL, a, p, size);
-      arena_plain_mutation_release(a);
-      return LJ_ARENA_DESTRUCT_LOST;
-    }
-    /* Keep SEALED held across the semantic destructor. lj_arena_free consumes
-    ** this exact FREEING token and reopens admissions only after bin commit. */
+    /* FREEING alone may name a deferred ordinary free. Retain the exact
+    ** destructor identity separately; a duplicate late producer cannot erase
+    ** the legitimate owner's authority to finish and reopen this generation. */
+    lj_assertX(la_loadptr_acq((void *const *)&a->hdr.plain_destruct) == NULL,
+               "plain destructor token already occupied");
+    la_storeptr_rel(&a->hdr.plain_destruct, (void *)p);
     return LJ_ARENA_DESTRUCT_ACQUIRED;
   }
   if (lj_arena_late_get(a, cell))
@@ -6071,7 +6145,7 @@ retry_open:
     return 1;
   }
   if (claim == 2) {
-    int gate = arena_plain_mutation_claim(a, 1);
+    int gate = arena_plain_mutation_claim_at(a, 1, start, NULL);
     if (gate != 1) {
       (void)arena_late_pin(alloc, a, p, size);
       if (gate == 0)
@@ -6262,6 +6336,7 @@ static uint32_t arena_plain_late_extent(TGAlloc *alloc, GCArena *a,
 
 static uint32_t arena_plain_late_drain_one(TGAlloc *alloc, GCArena *a)
 {
+  uint64_t cohort[LJ_ARENA_WORDS];
   uint32_t w, n = 0, flags;
   int gate;
   if (!alloc || !a || arena_lifetime_managed(a))
@@ -6276,7 +6351,15 @@ static uint32_t arena_plain_late_drain_one(TGAlloc *alloc, GCArena *a)
                 LJ_AF_QUARANTINE|LJ_AF_RECLAIMED)) ||
       arena_terminal_closed_acq(a))
     goto retry;
-  gate = arena_plain_mutation_claim(a, 0);
+  gate = arena_plain_mutation_begin(a, 0);
+  if (gate) {
+    /* A reader admitted after commit may predate a later late publication.
+    ** Only this frozen, already-opaque cohort belongs to the current writer. */
+    for (w = 0; w < LJ_ARENA_WORDS; w++)
+      cohort[w] = la_load64_acq(&a->late[w]) &
+                  la_load64_acq(&a->block[w]);
+    gate = arena_plain_mutation_commit(a);
+  }
   if (gate != 1) {
     if (gate < 0)
       arena_remote_late_leave(a);
@@ -6293,8 +6376,7 @@ static uint32_t arena_plain_late_drain_one(TGAlloc *alloc, GCArena *a)
     goto retry;
   }
   for (w = 0; w < LJ_ARENA_WORDS; w++) {
-    uint64_t bits = la_load64_acq(&a->late[w]) &
-                    la_load64_acq(&a->block[w]);
+    uint64_t bits = cohort[w];
     while (bits) {
       uint32_t bit = lj_ffs64(bits), start = (w << 6) + bit;
       uint32_t len, state;
@@ -6525,9 +6607,8 @@ static LJArenaFreeRun **arena_find_run(TGAlloc *alloc, uint32_t k,
 	break;
       }
       /* A completed plain writer may have linked this run while a counted
-      ** late publisher was preempted. SEALED/PENDING keeps that generation
-      ** non-reusable until it is opened; preserve the bin head for a later
-      ** allocation instead of scrubbing it as malformed. */
+      ** publisher remains preempted. Preserve the node without allowing it
+      ** to hide reusable runs from independent arenas in the same bin. */
       if (!arena_free_run_ptr_ok(run)) {
 	*pp = NULL;
 	arena_refresh_binmask(alloc, k, b);
@@ -6535,8 +6616,25 @@ static LJArenaFreeRun **arena_find_run(TGAlloc *alloc, uint32_t k,
       }
       if (!arena_lifetime_managed(lj_arena_of(run)) &&
 	  (lj_arena_remote_active_acq(lj_arena_of(run)) &
-	   (LJ_ARENA_REMOTE_SEALED|LJ_ARENA_REMOTE_PENDING)))
-	break;
+	   (LJ_ARENA_REMOTE_SEALED|LJ_ARENA_REMOTE_PENDING))) {
+	GCArena *a = lj_arena_of(run);
+	uint32_t cell = lj_arena_cellof(run);
+	/* Foreign ordinary writers touch allocated targets and queue nodes,
+	** never an owner-private block=0/mark=1 bin node. Prove that metadata
+	** before reading its body: a stale pointer into their target is unsafe.
+	** Lifecycle rebuilds have a different contract and remain fail-closed. */
+	if ((lj_arena_flags_acq(a) & (LJ_AF_PREPSWEEP|LJ_AF_NEEDSWEEP|
+	                            LJ_AF_QUARANTINE|LJ_AF_RECLAIMED)) ||
+	    lj_arena_state(a, cell) != 1 ||
+	    !arena_side_owners_none(a, cell) ||
+	    !arena_free_run_valid_knownptr(run, NULL))
+	  break;
+	next = run->next;
+	if (next == run)
+	  break;
+	pp = &run->next;
+	continue;
+      }
       if (!arena_free_run_body_readable(run)) {
 	*pp = NULL;
 	arena_refresh_binmask(alloc, k, b);
@@ -6891,7 +6989,10 @@ static int arena_rescue_enter_bounded(GCArena *a)
     return LJ_ARENA_RESCUE_RETRY;
   active = lj_arena_remote_active_acq(a);
   if ((!arena_lifetime_managed(a) &&
-       (active & LJ_ARENA_REMOTE_STATE_MASK)) ||
+       (active & LJ_ARENA_REMOTE_STATE_MASK) &&
+       (((active & LJ_ARENA_REMOTE_STATE_MASK) == LJ_ARENA_REMOTE_SEALED) ||
+        (lj_arena_flags_acq(a) & (LJ_AF_PREPSWEEP|LJ_AF_NEEDSWEEP|
+                                LJ_AF_QUARANTINE|LJ_AF_RECLAIMED)))) ||
       arena_remote_count(active) == LJ_ARENA_REMOTE_COUNT_MASK)
     return LJ_ARENA_RESCUE_RETRY;
   committed = (active & LJ_ARENA_REMOTE_SEALED) &&
@@ -8829,13 +8930,16 @@ void lj_arena_free(TGAlloc *alloc, void *p, size_t size)
   }
   if (claim == 2) {
     int gate;
-    /* destruct_acquire deliberately leaves SEALED+FREEING held across the
-    ** semantic destructor. Ordinary free acquires the same token from OPEN. */
+    void *expected = p;
+    /* Only the semantic destructor's exact retained token permits this
+    ** caller to finish an existing writer generation. A deferred FREEING
+    ** allocation must never borrow an unrelated target's arena writer. */
     if (arena_plain_mutation_held(a) &&
-	lj_arena_sweep_state_acq(a, start) == LJ_ARENA_SWEEP_FREEING) {
+	la_casptr(&a->hdr.plain_destruct, &expected, NULL,
+	          LA_ACQ_REL, LA_ACQ)) {
       plain_held = 1;
     } else {
-      gate = arena_plain_mutation_claim(a, 0);
+      gate = arena_plain_mutation_claim_at(a, 0, start, NULL);
       if (gate == 1) {
 	plain_held = 1;
       } else {
@@ -9010,16 +9114,19 @@ void *lj_arena_realloc(TGAlloc *alloc, PRNGState *rs, void *p,
     if (ncells < ocells) {
       GCArena *a = lj_arena_of(p);
       uint32_t cell = lj_arena_cellof(p);
+      uint32_t plain_prior = LJ_ARENA_SWEEP_FREEING;
       int claim = arena_mutation_claim_live(a, cell, 0);
       int plain_held = 0;
       if (claim == 0)
 	return NULL;  /* Original allocation remains unchanged and retryable. */
       if (claim == 2) {
 	uint32_t aflags;
-	int gate = arena_plain_mutation_claim(a, 0);
+	int gate = arena_plain_mutation_claim_at(a, 0, cell, &plain_prior);
 	if (gate != 1) {
-	  if (gate < 0)
+	  if (gate < 0) {
+	    arena_plain_mutation_restore(a, cell, plain_prior);
 	    arena_remote_late_leave(a);
+	  }
 	  goto move_realloc;
 	}
 	plain_held = 1;
@@ -9028,6 +9135,7 @@ void *lj_arena_realloc(TGAlloc *alloc, PRNGState *rs, void *p,
 		       LJ_AF_QUARANTINE|LJ_AF_RECLAIMED)) ||
 	    !lj_arena_bm_get(a->block, cell) || lj_arena_late_get(a, cell) ||
 	    !arena_side_owners_none(a, cell)) {
+	  arena_plain_mutation_restore(a, cell, plain_prior);
 	  arena_plain_mutation_release(a);
 	  goto move_realloc;
 	}
@@ -9041,14 +9149,18 @@ void *lj_arena_realloc(TGAlloc *alloc, PRNGState *rs, void *p,
 	  ** ownership and turn this accepted fail-closed state into an abort. */
 	  return NULL;
 	}
-	if (plain_held)
+	if (plain_held) {
+	  arena_plain_mutation_restore(a, cell, plain_prior);
 	  arena_plain_mutation_release(a);
+	}
 	goto move_realloc;
       }
       if (claim == 1)
 	arena_mutation_restore_live(a, cell);
-      if (plain_held)
+      if (plain_held) {
+	arena_plain_mutation_restore(a, cell, plain_prior);
 	arena_plain_mutation_release(a);
+      }
     }
     return p;
   }

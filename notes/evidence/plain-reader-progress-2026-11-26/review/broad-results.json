@@ -1,0 +1,295 @@
+[
+  {
+    "mode": "gcc",
+    "phase": "matrix",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "gcc",
+      "matrix"
+    ],
+    "exit": 0,
+    "seconds": 14.041027838014998
+  },
+  {
+    "mode": "gcc",
+    "phase": "smoke",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "gcc",
+      "smoke"
+    ],
+    "exit": 0,
+    "seconds": 1.0962697549839504
+  },
+  {
+    "mode": "gcc",
+    "phase": "public",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "gcc",
+      "public"
+    ],
+    "exit": 0,
+    "seconds": 0.8722666660032701
+  },
+  {
+    "mode": "assert",
+    "phase": "matrix",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "assert",
+      "matrix"
+    ],
+    "exit": 0,
+    "seconds": 15.942707214009715
+  },
+  {
+    "mode": "assert",
+    "phase": "smoke",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "assert",
+      "smoke"
+    ],
+    "exit": 0,
+    "seconds": 1.1486078290035948
+  },
+  {
+    "mode": "assert",
+    "phase": "public",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "assert",
+      "public"
+    ],
+    "exit": 0,
+    "seconds": 0.9740886070067063
+  },
+  {
+    "mode": "asan",
+    "phase": "matrix",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "asan",
+      "matrix"
+    ],
+    "exit": 0,
+    "seconds": 33.896618180995574
+  },
+  {
+    "mode": "asan",
+    "phase": "smoke",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "asan",
+      "smoke"
+    ],
+    "exit": 0,
+    "seconds": 2.426148809987353
+  },
+  {
+    "mode": "asan",
+    "phase": "public",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "asan",
+      "public"
+    ],
+    "exit": 0,
+    "seconds": 1.639548975013895
+  },
+  {
+    "mode": "assert",
+    "phase": "progress",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "assert",
+      "progress"
+    ],
+    "exit": 0,
+    "seconds": 0.22727403198950924
+  },
+  {
+    "mode": "assert",
+    "phase": "lease",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "assert",
+      "lease"
+    ],
+    "exit": 0,
+    "seconds": 0.1643482520012185
+  },
+  {
+    "mode": "assert",
+    "phase": "traverse",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "assert",
+      "traverse"
+    ],
+    "exit": 0,
+    "seconds": 11.942162118008127
+  },
+  {
+    "mode": "asan",
+    "phase": "progress",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "asan",
+      "progress"
+    ],
+    "exit": 0,
+    "seconds": 0.37221367700840347
+  },
+  {
+    "mode": "asan",
+    "phase": "lease",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "asan",
+      "lease"
+    ],
+    "exit": 0,
+    "seconds": 0.37104165699565783
+  },
+  {
+    "mode": "asan",
+    "phase": "traverse",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "asan",
+      "traverse"
+    ],
+    "exit": 0,
+    "seconds": 32.31889518001117
+  },
+  {
+    "mode": "tsan",
+    "phase": "progress",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "tsan",
+      "progress"
+    ],
+    "exit": 0,
+    "seconds": 0.43202212199685164
+  },
+  {
+    "mode": "tsan",
+    "phase": "lease",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "tsan",
+      "lease"
+    ],
+    "exit": 0,
+    "seconds": 0.2815969759831205
+  },
+  {
+    "mode": "tsan",
+    "phase": "public",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/validate.py",
+      "tsan",
+      "public"
+    ],
+    "exit": 0,
+    "seconds": 30.592391650017817
+  },
+  {
+    "mode": "gcc",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/extra.py",
+      "gcc"
+    ],
+    "exit": 0,
+    "seconds": 0.5489280309993774
+  },
+  {
+    "mode": "assert",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/extra.py",
+      "assert"
+    ],
+    "exit": 0,
+    "seconds": 0.5978870380204171
+  },
+  {
+    "mode": "asan",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/extra.py",
+      "asan"
+    ],
+    "exit": 0,
+    "seconds": 0.8528009500005282
+  },
+  {
+    "mode": "tsan",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/extra.py",
+      "tsan"
+    ],
+    "exit": 0,
+    "seconds": 16.26453569700243
+  },
+  {
+    "mode": "noffi",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/extra.py",
+      "noffi"
+    ],
+    "exit": 0,
+    "seconds": 0.908839840994915
+  },
+  {
+    "mode": "nojit",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/extra.py",
+      "nojit"
+    ],
+    "exit": 0,
+    "seconds": 0.8481912660063244
+  },
+  {
+    "mode": "nobuf",
+    "phase": "extra",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/extra.py",
+      "nobuf"
+    ],
+    "exit": 0,
+    "seconds": 0.022687978023895994
+  }
+]

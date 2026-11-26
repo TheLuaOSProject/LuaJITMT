@@ -1,0 +1,2 @@
+unrelated reader denied: committed=0 first=0 completed=0
+baseline: /workspaces/lj-lockless/tests/t-arena-plain-progress.c:81: void check_raw_reader(lua_State *, int): Assertion `admitted && completed' failed.

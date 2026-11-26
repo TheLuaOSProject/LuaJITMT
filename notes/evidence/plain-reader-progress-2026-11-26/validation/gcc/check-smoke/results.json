@@ -1,0 +1,59 @@
+[
+  {
+    "name": "buffer-joff",
+    "command": [
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/luajit",
+      "-joff",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/tests/t-buffer-thread-safety.lua"
+    ],
+    "seconds": 0.4646582910208963,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "buffer-jon",
+    "command": [
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/luajit",
+      "-jon",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/tests/t-buffer-thread-safety.lua"
+    ],
+    "seconds": 0.4648726799932774,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "consume-build",
+    "command": [
+      "gcc",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src",
+      "-I/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/tests",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/tests/t-buffer-consume.c",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/libluajit.a",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_str_new",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/check-smoke/consume"
+    ],
+    "seconds": 0.11381701700156555,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "consume",
+    "command": [
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/check-smoke/consume"
+    ],
+    "seconds": 0.007429460005369037,
+    "exit": 0,
+    "test": true
+  }
+]

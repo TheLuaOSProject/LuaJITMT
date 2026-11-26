@@ -1,0 +1,926 @@
+{
+  "base": "c2ad32edafe7d8d65f398a0e5be62f7e4204f319",
+  "builds": {
+    "gcc": {
+      "input_count": 1234,
+      "runtime_input_count": 228,
+      "source_mismatches": [],
+      "binary_sha256": {
+        "luajit": "d092d949bbbae32eed53f05e1ee679be33dd30c96cc62ade7bb64e6302ee88a9",
+        "libluajit.a": "3bb7eeeb89592e2122775129163efafeca4f74e32a6aa13143c93c56abca0e74"
+      },
+      "checks": [
+        {
+          "phase": "check-extra",
+          "name": "large-buffer",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-extra",
+          "name": "jit-flush-gc-workers",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-matrix",
+          "name": "linux-x64-shared",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-public",
+          "name": "public-joff",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-public",
+          "name": "public-jon",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-smoke",
+          "name": "buffer-joff",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-smoke",
+          "name": "buffer-jon",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-smoke",
+          "name": "consume-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-smoke",
+          "name": "consume",
+          "runtime": true,
+          "exit": 0
+        }
+      ]
+    },
+    "assert": {
+      "input_count": 1234,
+      "runtime_input_count": 228,
+      "source_mismatches": [],
+      "binary_sha256": {
+        "luajit": "9f998faf297bd9d8fe5a66dc4898760bffc344f26e1f30f0e87f5ac73ee65595",
+        "libluajit.a": "76f20e0180865137066c8c84ad8f0274ab1c45c2f45c8bdbecad8c0862ea5781"
+      },
+      "checks": [
+        {
+          "phase": "check-arena",
+          "name": "plain-bin-progress-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "plain-bin-progress",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "bitmap-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "bitmap",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "publication-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "publication",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "remote-pending-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "remote-pending",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "map-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "map",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "huge-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "huge",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "alloc-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "alloc",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "realloc-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "realloc",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "allocf-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "allocf",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "hugetab-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "hugetab",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "sweep-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "sweep",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "empty-reclaimed-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "empty-reclaimed",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-extra",
+          "name": "large-buffer",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-extra",
+          "name": "jit-flush-gc-workers",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-lease",
+          "name": "progress-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-lease",
+          "name": "progress",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-matrix",
+          "name": "linux-x64-shared",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-plain",
+          "name": "progress-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-plain",
+          "name": "progress",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-progress",
+          "name": "progress-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-progress",
+          "name": "progress",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-public",
+          "name": "public-joff",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-public",
+          "name": "public-jon",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-readers",
+          "name": "progress-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-readers",
+          "name": "progress",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-smoke",
+          "name": "buffer-joff",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-smoke",
+          "name": "buffer-jon",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-smoke",
+          "name": "consume-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-smoke",
+          "name": "consume",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-traverse",
+          "name": "progress-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-traverse",
+          "name": "progress",
+          "runtime": true,
+          "exit": 0
+        }
+      ]
+    },
+    "asan": {
+      "input_count": 1234,
+      "runtime_input_count": 228,
+      "source_mismatches": [],
+      "binary_sha256": {
+        "luajit": "490e67c0e07410d17d77a7ffdc58047f3bf8f3967bab832f2902635afe909955",
+        "libluajit.a": "26204641046de256a3e7aad74af2a11c971983f7894c9e9f6a330d8792fe0c7b"
+      },
+      "checks": [
+        {
+          "phase": "check-arena",
+          "name": "plain-bin-progress-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "plain-bin-progress",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "bitmap-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "bitmap",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "publication-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "publication",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "remote-pending-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "remote-pending",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "map-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "map",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "huge-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "huge",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "alloc-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "alloc",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "realloc-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "realloc",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "allocf-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "allocf",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "hugetab-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "hugetab",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "sweep-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "sweep",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "empty-reclaimed-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "empty-reclaimed",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-extra",
+          "name": "large-buffer",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-extra",
+          "name": "jit-flush-gc-workers",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-lease",
+          "name": "progress-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-lease",
+          "name": "progress",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-matrix",
+          "name": "linux-x64-shared",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-plain",
+          "name": "progress-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-plain",
+          "name": "progress",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-progress",
+          "name": "progress-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-progress",
+          "name": "progress",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-public",
+          "name": "public-joff",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-public",
+          "name": "public-jon",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-readers",
+          "name": "progress-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-readers",
+          "name": "progress",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-smoke",
+          "name": "buffer-joff",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-smoke",
+          "name": "buffer-jon",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-smoke",
+          "name": "consume-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-smoke",
+          "name": "consume",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-traverse",
+          "name": "progress-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-traverse",
+          "name": "progress",
+          "runtime": true,
+          "exit": 0
+        }
+      ]
+    },
+    "tsan": {
+      "input_count": 1234,
+      "runtime_input_count": 228,
+      "source_mismatches": [],
+      "binary_sha256": {
+        "luajit": "ccbfd4442df3b6e32228c2ae1b9009046a380d6a2ef375d1f0dd5f840987b04d",
+        "libluajit.a": "22159d05e4b12d15cfd6a1af03d14e1b5a8c1cef74f74b7c28fa6877d68ea0fe"
+      },
+      "checks": [
+        {
+          "phase": "check-arena",
+          "name": "plain-bin-progress-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "plain-bin-progress",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "bitmap-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "bitmap",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "publication-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "publication",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "remote-pending-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "remote-pending",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "map-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "map",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "huge-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "huge",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "alloc-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "alloc",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "realloc-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "realloc",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "allocf-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "allocf",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "hugetab-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "hugetab",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "sweep-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "sweep",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "empty-reclaimed-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-arena",
+          "name": "empty-reclaimed",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-extra",
+          "name": "large-buffer",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-lease",
+          "name": "progress-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-lease",
+          "name": "progress",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-plain",
+          "name": "progress-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-plain",
+          "name": "progress",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-progress",
+          "name": "progress-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-progress",
+          "name": "progress",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-public",
+          "name": "public-joff",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-public",
+          "name": "public-jon",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-readers",
+          "name": "progress-build",
+          "runtime": false,
+          "exit": 0
+        },
+        {
+          "phase": "check-readers",
+          "name": "progress",
+          "runtime": true,
+          "exit": 0
+        }
+      ]
+    },
+    "noffi": {
+      "input_count": 1234,
+      "runtime_input_count": 228,
+      "source_mismatches": [],
+      "binary_sha256": {
+        "luajit": "b3434a7fe22d1706d1a5ceb3ba50801de6d28d0a67f45868ce1532ce64511abc",
+        "libluajit.a": "2679eafca08198efa3374a3113dedc68b6f087b43bb0b4572e1f84e108ae50eb"
+      },
+      "checks": [
+        {
+          "phase": "check-extra",
+          "name": "buffer-basic",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-extra",
+          "name": "buffer-public",
+          "runtime": true,
+          "exit": 0
+        }
+      ]
+    },
+    "nojit": {
+      "input_count": 1234,
+      "runtime_input_count": 228,
+      "source_mismatches": [],
+      "binary_sha256": {
+        "luajit": "61c49b9c36577f8b0d7ab7580eefc301c2612a7450ffca0accb77a0d24f299d3",
+        "libluajit.a": "121064960203561abb74cb601ae0594a5839b751c474d98cc284ced6883dfa63"
+      },
+      "checks": [
+        {
+          "phase": "check-extra",
+          "name": "buffer-basic",
+          "runtime": true,
+          "exit": 0
+        },
+        {
+          "phase": "check-extra",
+          "name": "buffer-public",
+          "runtime": true,
+          "exit": 0
+        }
+      ]
+    },
+    "nobuf": {
+      "input_count": 1234,
+      "runtime_input_count": 228,
+      "source_mismatches": [],
+      "binary_sha256": {
+        "luajit": "cea53aa0c97cc503dfa9eaf414c0a67bf0502d2c2c2cd9729e87979777723d47",
+        "libluajit.a": "6131c25c906872ce223806f5d76e074367767caba050170bae8558d8114a3057"
+      },
+      "checks": [
+        {
+          "phase": "check-extra",
+          "name": "disabled-buffer",
+          "runtime": true,
+          "exit": 0
+        }
+      ]
+    }
+  },
+  "canonical": {
+    "command": [
+      "taskset",
+      "-c",
+      "0-7,9-15",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/luajit",
+      "tools/test.lua",
+      "m2_arena_plain_progress",
+      "m2_arena_plain_late",
+      "m2_arena_hugetab",
+      "m2_arena_publication",
+      "m2_arena_gcsweep",
+      "m2_arena_empty_reclaimed_runtime",
+      "m2_arena_gcphase"
+    ],
+    "exit": 0,
+    "seconds": 93.52408590898267,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/?.lua;;",
+      "JOBS": "6"
+    },
+    "outputs": {
+      "luajit": "8343d3ac70ba1cdc1313a95c95498e3db14da3fef7f44cd89605381d4490ab9d",
+      "libluajit.a": "5f30dedb6af6a2682a12770d51d9291002d6ce63e1385389857d1d8ebed77245",
+      "libluajit.so": "f9ad0a2080e57fb15ab1b770e65b09175904057e9b297fd15cb40fe713ab2420"
+    },
+    "source_mismatches": []
+  },
+  "runtime_checks": 82,
+  "initial_assertion_trial": {
+    "path": "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/assert-first",
+    "stale_expectation": "Bare tentative plain seal in old directory fixture expected rejection; final fixture uses explicit lifecycle PREPSWEEP and checks both entry paths."
+  },
+  "tracked_changes": " plan/04_allocator.md            |  10 +-\n plan/15_x64_linux_completion.md |   2 +-\n src/lj_arena.c                  | 208 ++++++++++++++++++++++++++++++----------\n src/lj_arena.h                  |  26 +++--\n tests/suites/m2_arena.lua       |  24 +++++\n tests/t-arena-hugetab.c         |  31 +++++-\n 6 files changed, 237 insertions(+), 64 deletions(-)\n"
+}

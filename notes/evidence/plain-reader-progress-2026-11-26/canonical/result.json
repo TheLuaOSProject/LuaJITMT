@@ -1,0 +1,28 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-7,9-15",
+    "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/luajit",
+    "tools/test.lua",
+    "m2_arena_plain_progress",
+    "m2_arena_plain_late",
+    "m2_arena_hugetab",
+    "m2_arena_publication",
+    "m2_arena_gcsweep",
+    "m2_arena_empty_reclaimed_runtime",
+    "m2_arena_gcphase"
+  ],
+  "exit": 0,
+  "seconds": 93.52408590898267,
+  "environment": {
+    "LUA_PATH": "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/gcc/src/?.lua;;",
+    "JOBS": "6"
+  },
+  "outputs": {
+    "luajit": "8343d3ac70ba1cdc1313a95c95498e3db14da3fef7f44cd89605381d4490ab9d",
+    "libluajit.a": "5f30dedb6af6a2682a12770d51d9291002d6ce63e1385389857d1d8ebed77245",
+    "libluajit.so": "f9ad0a2080e57fb15ab1b770e65b09175904057e9b297fd15cb40fe713ab2420"
+  },
+  "source_mismatches": []
+}

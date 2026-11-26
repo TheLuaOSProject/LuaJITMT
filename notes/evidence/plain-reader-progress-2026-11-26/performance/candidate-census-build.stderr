@@ -1,0 +1,7 @@
+/tmp/lj-plain-progress-perf-20261126-sucpc_rf/census.c: In function ‘main’:
+/tmp/lj-plain-progress-perf-20261126-sucpc_rf/census.c:67:2: warning: this ‘if’ clause does not guard... [-Wmisleading-indentation]
+   67 |  if(argc!=7)return 2;report=fopen(getenv("CENSUS_OUT"),"w");assert(report);
+      |  ^~
+/tmp/lj-plain-progress-perf-20261126-sucpc_rf/census.c:67:22: note: ...this statement, but the latter is misleadingly indented as if it were guarded by the ‘if’
+   67 |  if(argc!=7)return 2;report=fopen(getenv("CENSUS_OUT"),"w");assert(report);
+      |                      ^~~~~~

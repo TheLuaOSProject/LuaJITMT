@@ -1,0 +1,16 @@
+[
+  {
+    "name": "disabled-buffer",
+    "command": [
+      "taskset",
+      "-c",
+      "0-7,9-15",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/nobuf/src/luajit",
+      "-e",
+      "assert(not pcall(require,'string.buffer')); assert(('ab'..'cd')=='abcd'); assert(require('ffi').sizeof('int')==4)"
+    ],
+    "environment": {},
+    "exit": 0,
+    "seconds": 0.003589247993659228
+  }
+]

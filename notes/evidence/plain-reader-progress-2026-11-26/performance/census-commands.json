@@ -1,0 +1,46 @@
+[
+  {
+    "stem": "census-1-auto-1-baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/baseline-census",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/growth-census-free.lua",
+      "auto",
+      "1",
+      "20000",
+      "10",
+      "0"
+    ],
+    "variant": "baseline",
+    "policy": "auto",
+    "sample": 1,
+    "order": 1,
+    "binary_sha256": "4bcb288d2a06cd53ce81f4c5a4a4d70889c70ac7cb0246b828e782c60edfa811",
+    "exit": 0,
+    "controller_seconds": 0.13248739900882356
+  },
+  {
+    "stem": "census-1-auto-2-candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/candidate-census",
+      "/tmp/lj-plain-progress-perf-20261126-sucpc_rf/growth-census-free.lua",
+      "auto",
+      "1",
+      "20000",
+      "10",
+      "0"
+    ],
+    "variant": "candidate",
+    "policy": "auto",
+    "sample": 1,
+    "order": 2,
+    "binary_sha256": "59dd64582e27bcd65ef8d4276a5ea239f177ba0e623fc16ce218a687873829ea",
+    "exit": 0,
+    "controller_seconds": 0.13283095599035732
+  }
+]

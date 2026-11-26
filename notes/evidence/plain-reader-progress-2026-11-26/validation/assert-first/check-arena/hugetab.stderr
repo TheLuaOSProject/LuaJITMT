@@ -1,0 +1,1 @@
+hugetab: /tmp/lj-plain-reader-progress-20261126-n6ayl9h6/assert-first/tests/t-arena-hugetab.c:1782: void test_registry_rescue_unmap_handoff(PRNGState *): Assertion `lj_arena_hugetab_rescue_enter(&registry, race.a, &info) == LJ_ARENA_RESCUE_RETRY' failed.

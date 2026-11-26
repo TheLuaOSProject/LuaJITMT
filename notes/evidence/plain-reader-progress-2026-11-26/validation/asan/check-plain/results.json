@@ -1,0 +1,47 @@
+[
+  {
+    "name": "progress-build",
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/check-plain/progress.d",
+      "-I/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/src",
+      "-I/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/tests",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/tests/t-arena-plain-late.c",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/src/libluajit.a",
+      "-fsanitize=address",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/check-plain/plain"
+    ],
+    "seconds": 0.31432707599014975,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "progress",
+    "command": [
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/check-plain/plain"
+    ],
+    "seconds": 0.21418900601565838,
+    "exit": 0,
+    "test": true
+  }
+]

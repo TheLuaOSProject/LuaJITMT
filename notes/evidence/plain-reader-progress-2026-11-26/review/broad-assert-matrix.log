@@ -1,0 +1,2 @@
+assert matrix linux-x64-shared 0
+assert matrix {'runtime_pass': 1, 'runtime_fail': 0, 'build_fail': 0}

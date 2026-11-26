@@ -1,0 +1,5 @@
+{
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/src/luajit": "490e67c0e07410d17d77a7ffdc58047f3bf8f3967bab832f2902635afe909955",
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/src/libluajit.a": "26204641046de256a3e7aad74af2a11c971983f7894c9e9f6a330d8792fe0c7b",
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/tests/t-buffer-concurrent-public.lua": "e7f61c097347eb0b7cb968db3d60e232c17d0ddeb0eb3aea436b1e4e30e3e40b"
+}

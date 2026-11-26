@@ -1,0 +1,14 @@
+{
+  "runtime_invocations": 60,
+  "all_exit_zero": true,
+  "all_stderr_empty": true,
+  "all_input_and_binary_hashes_match": true,
+  "buffer_rows": 1566,
+  "work_rounds": 720,
+  "census_rows": 56,
+  "runtime_changed_paths": [
+    "src/lj_arena.c",
+    "src/lj_arena.h"
+  ],
+  "all_threads_one": true
+}

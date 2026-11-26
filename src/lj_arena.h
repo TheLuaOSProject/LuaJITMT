@@ -51,9 +51,10 @@
 ** makes rescues sticky through PENDING. SEALED excludes ordinary intrusive
 ** publishers and owner transfer while still allowing counted bit/status
 ** producers whose admission defeats exact commit/open arbitration. For plain
-** arenas, SEALED|PENDING is also the exact short-lived body-writer token;
-** readers reject it, while bit-only late publishers increment the same count
-** and keep the eventual bin generation CLOSED until the last leave. */
+** arenas, SEALED|PENDING is also the exact short-lived body-writer token.
+** Its targets are already opaque through FREEING/late, so readers of other
+** live allocations may enter. Counted readers and bit-only late publishers
+** keep the eventual bin generation CLOSED until the last leave. */
 #define LJ_ARENA_REMOTE_CLOSED		UINT64_C(0x8000000000000000)
 #define LJ_ARENA_REMOTE_SEALED		UINT64_C(0x4000000000000000)
 #define LJ_ARENA_REMOTE_PENDING		UINT64_C(0x2000000000000000)
@@ -178,7 +179,12 @@ typedef struct GCAhdr {
   uint32_t reclaim_deferred;
   uint64_t remote_active;
   LJArenaRemoteFree *remote_free;
-  void *retire_obj;  /* Exact GC header for variable-offset huge bodies. */
+  union {
+    void *retire_obj;  /* Exact GC header for variable-offset huge bodies. */
+    /* Small plain destructor's exact retained writer token. Ordinary frees
+    ** and transient realloc writers never publish this identity. */
+    void *plain_destruct;
+  };
   void *progress_g;  /* Immutable global_State used for progress wakes. */
   uint32_t prep_bump_cell;  /* Detached bump tail pending PREP commit. */
   uint32_t prep_bump_end;
@@ -940,6 +946,8 @@ LJ_FUNC void lj_arena_test_registry_pause(int enabled);
 LJ_FUNC uint32_t lj_arena_test_registry_paused(void);
 LJ_FUNC void lj_arena_test_plain_claim_pause(int enabled);
 LJ_FUNC uint32_t lj_arena_test_plain_claim_paused(void);
+LJ_FUNC void lj_arena_test_plain_commit_pause(GCArena *a, int enabled);
+LJ_FUNC uint32_t lj_arena_test_plain_commit_paused(void);
 LJ_FUNC void lj_arena_test_plain_admit_pause(int enabled);
 LJ_FUNC uint32_t lj_arena_test_plain_admit_paused(void);
 LJ_FUNC void lj_arena_test_remote_publish_pause(int enabled);
@@ -1082,12 +1090,14 @@ LJ_FUNC int lj_arena_remote_sweep_busy_acq(const GCArena *a);
 #define LJ_ARENA_DESTRUCT_OWNED		2
 /* Pre-destructor physical ownership. Only ACQUIRED authorizes one semantic
 ** destructor invocation. OWNED proves an irreversible terminal semantic owner:
-** the exact FREE+FREEING pair for a small body, or a HugeTab FREEING slot; that
-** owner may still be completing its destructor under a BUSY token. LOST
+** the exact FREE+FREEING pair for a traversable small body, the retained
+** plain_destruct identity for a plain body, or a HugeTab FREEING slot; that
+** owner may still be completing its destructor. LOST
 ** includes mere late/deferred intent or a semantic RESCUE/non-destructive
 ** owner, and no body byte may be touched. A plain-arena ACQUIRED result retains
-** its SEALED writer token across the destructor; the same owner must finish
-** with lj_arena_free(), which commits storage and reopens admissions. */
+** its SEALED writer generation and exact target token across the destructor.
+** The same owner must finish with lj_arena_free(), which consumes that token
+** before committing storage and completing the writer generation. */
 LJ_FUNC int lj_arena_destruct_acquire(const void *p, size_t size);
 /* Fresh root construction owns both descriptor planes until commit/abandon.
 ** Normally commit publishes LIVE before MEMBER and abandon clears LINKING

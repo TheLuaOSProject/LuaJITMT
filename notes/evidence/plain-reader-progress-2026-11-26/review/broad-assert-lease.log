@@ -1,0 +1,3 @@
+assert lease progress-build 0
+assert lease progress 0
+assert lease {'runtime_pass': 1, 'runtime_fail': 0, 'build_fail': 0}

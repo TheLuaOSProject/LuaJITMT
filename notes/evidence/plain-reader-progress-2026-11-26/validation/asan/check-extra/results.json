@@ -1,0 +1,32 @@
+[
+  {
+    "name": "large-buffer",
+    "command": [
+      "taskset",
+      "-c",
+      "0-7,9-15",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/src/luajit",
+      "tests/t-buffer-concurrent-public.lua"
+    ],
+    "environment": {
+      "LJ_BUFFER_LARGE": "1"
+    },
+    "exit": 0,
+    "seconds": 0.6653498529922217
+  },
+  {
+    "name": "jit-flush-gc-workers",
+    "command": [
+      "taskset",
+      "-c",
+      "0-7,9-15",
+      "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/asan/src/luajit",
+      "tests/t-jit-flush-thread-stress.lua"
+    ],
+    "environment": {
+      "LJ_M6_JIT_FLUSH_THREAD_GC_WORKERS": "2"
+    },
+    "exit": 0,
+    "seconds": 0.16401903101359494
+  }
+]

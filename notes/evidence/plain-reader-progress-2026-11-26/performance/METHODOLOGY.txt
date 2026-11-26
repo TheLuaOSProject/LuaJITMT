@@ -1,0 +1,15 @@
+Prepared paired performance controls for plain-arena reader progress.
+
+Baseline c2ad32edafe7d8d65f398a0e5be62f7e4204f319 uses the immutable GCC static build from the preceding accepted storage-reuse change. Each candidate will be a separately frozen build, with complete build/source manifests and executable/library identities recorded before measurements.
+
+Buffer workload is byte-for-byte unchanged from the accepted preceding review: JIT enabled; 1 KiB payload; reset, put, get, payload comparison; 40 rounds of 20,000 cycles after 1,000 warmup cycles. Three policies are automatic GC, explicit full GC every round, and explicit full GC every five rounds. Three fresh paired process samples alternate baseline/candidate order; policy order reverses on even samples. Each progress output is acknowledged only after synchronized /proc memory/thread snapshots. Work CPU timing excludes instrumentation and separately measured explicit GC.
+
+The exact prior C census and Lua census workload run separately for 200,000 cycles, including explicit buffer free and five full collections. This is an owner-TG physical arena/bin census, not a concurrency proof. It must retain a bounded reuse footprint and clear deferred starts after readers leave.
+
+The exact prior direct allocator workload grows live heaps using 960-byte blocks. It retains and validates every allocation, measuring 16, 128, 1,024 and 4,096 nominal arena sizes, five alternating paired process samples each. This catches accidental repeated all-arena scans on allocation but is not a general application throughput benchmark.
+
+All timed processes will be pinned to CPU 8 after root coordination. Harness compilation uses CPU 0. Raw rows, timing outliers and every failure are retained; results will not be filtered by expectation. No measurement has run at this preparation point.
+
+Expected performance sensitivities: an extra lifecycle predicate on raw lease admission may affect buffer hot paths; a complete precommit late-bit cohort snapshot adds a bounded cold-drain scan; exact retained-destructor identity and skipping gated bins should principally affect contention/cold paths. These are hypotheses to test, not measured effects.
+
+Scope: Linux x86_64, single-mutator performance and memory stability. Windows/macOS, multiworker heap bounds, direct stock parity and full runtime nonblocking claims are outside these measurements.

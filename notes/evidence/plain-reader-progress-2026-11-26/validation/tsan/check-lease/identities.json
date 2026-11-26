@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/tsan/src/luajit": "ccbfd4442df3b6e32228c2ae1b9009046a380d6a2ef375d1f0dd5f840987b04d",
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/tsan/src/libluajit.a": "22159d05e4b12d15cfd6a1af03d14e1b5a8c1cef74f74b7c28fa6877d68ea0fe",
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/tsan/tests/t-gc2-small-lease-span.c": "e221568a914d812101bc5aef8834ac314703581a3cecb7d8871527dfe9ad2bf6",
+  "/tmp/lj-plain-reader-progress-20261126-n6ayl9h6/tsan/check-lease/lease": "9b80a8473c3b25d35c097e6ef4ea71ac4c49e8a95a79d878cbd7303add517098"
+}

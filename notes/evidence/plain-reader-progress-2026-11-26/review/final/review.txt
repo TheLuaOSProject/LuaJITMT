@@ -1,0 +1,33 @@
+Final source review of the PLAIN writer admission change
+
+Reviewed frozen diff against c2ad32edafe7d8d65f398a0e5be62f7e4204f319.
+Snapshot: src/lj_arena.c SHA256 93c6f8a5ca284fb343024fbf2675e13edc61de58ee823a2a2b42dce661e0baf2; src/lj_arena.h SHA256 f90e405efc7174546084f26ee21d6905914a0ab6ce678140d658d76f4e3d26c0.
+Line references name the frozen files beside this report. This review includes the explicit rejection of bare committed SEALED. No additional lifetime blocker found under the documented owner and raw-pointer contracts.
+
+1. Admission ordering (arena.c1136–1190,1215–1253,6984–7010)
+The initial exact zero/own-count -> CLOSED|SEALED CAS excludes prior readers. Target FREEING or late-cohort capture occurs before the exact CLOSED|SEALED -> SEALED|PENDING commit CAS. A reader still admitted before target publication changes the expected word and prevents commit; a marking/late producer also leaves sticky PENDING. A postcommit reader acquires the writer publication and observes the target's opaque marker. Bare committed SEALED and explicit lifecycle flags retain stronger exclusion in ordinary and bounded admission.
+
+2. Shrink restoration (arena.c1192–1201,9111–9165)
+The original allocation start, not just the suffix, is made FREEING. The prior sweep value is saved. Commit failure restores it before dropping the replacement admission (9126–9128); postcommit validation failure restores before writer release (9138–9139); suffix insertion failure does the same (9152–9154); success restores after suffix publication and before writer release (9160–9162). A claim failure before marker ownership does not restore anyone else's state. The helper's failed state CAS leaves prior=FREEING, suppressing false rollback.
+The successful restore uses the acquired/release sweep-state CAS, so a subsequent accepted reader observes the new suffix boundary. Preexisting full-extent readers defeat the initial claim. Callers that cache old external extents still require the existing source/ownership contract; the public storage-lease APIs do not invent a generation certificate.
+
+3. Later late publications (arena.c6337–6418)
+The owner captures late&block for every word while tentative, then commits. Only that local cohort is processed. New frees published after commit may coexist with earlier admitted readers but cannot be consumed by this writer. Targets in the cohort were already opaque before commit. Completion clears late only for block0 bodies; a newly late block1 target stays pending for a future owner drain. New intrusive queue nodes also cannot be published through SEALED; queue-drain targets were already FREEING before queue publication.
+The block-clear-before-FREEING-reset sequence remains intact, so readers cannot acquire a removed allocation from a completed generation.
+
+4. Raw marking readers
+The unchanged small lease and scoped marker paths already check exact late/FREEING. The marking COMMITTED paths at lj_gc2.c17270–17317 preserve both the state->block ordering and final opaque-target checks. They grant retained body access only to a surviving allocation. Plain target FREEING does not need GC semantic lifetime sidecars; TRAVERSABLE classification remains unchanged. markmem and *_known queries still are not body leases.
+
+5. Exact retained destructor identity (arena.c5951–5997,8931–9006; arena.h181–187)
+The token is published only after exact target protection and successful writer validation. Ordinary free consumes it by pointer CAS before completing that generation. A deferred FREEING allocation q cannot borrow unrelated p's writer. Duplicate late intent for p no longer destroys the legitimate token's OWNED/finish path. A duplicate arriving before token publication makes the validation fail safely before semantic destruction starts, or is covered by the already-owned exact target.
+The anonymous union preserves header size; other retire_obj uses in arena.c are HugeTab/huge-body paths. This token identifies an allocation, not an arbitrary foreign thread's authority: the header explicitly requires the same owner to finish. Foreign production raw frees route through remote_free_publish; direct allocator callers must keep the existing owner contract.
+
+6. Gated bin traversal (arena.c6589 onward)
+The owner verifies plain lifecycle flags, exact free metadata and side ownership before reading the gated node. A valid owner-private block0/mark1 node cannot be a foreign ordinary writer's allocated target. Skipping it through next is therefore safe while preserving that node and reaching a different arena's run. Allocation from the gated arena remains vetoed.
+A deterministic real-helper fixture, tests/t-arena-plain-bin-progress.c, consumes two arenas through actual allocations, builds same-bin A->B using ordinary frees, pauses a foreign publisher on a different target in A, and requires exact B reuse plus unchanged arena count. Both tentative and committed c2ad32 baseline cases fail with owned_count 2->3. Baseline evidence is /tmp/lj-plain-bin-progress-20261126-h5z9l2rs/metadata-all-stages.json and run-all-stages.log. Candidate validation is owned by root.
+
+7. Compatibility test changes
+t-arena-hugetab.c now distinguishes raw arena admission from exact target body authority: COMMITTED and BIT_ONLY admissions are counted/released and FREEING is asserted. The registry handoff fixture explicitly sets PREPSWEEP to test denied arena admission while retaining registry observation; ordinary and bounded attempts both reject, both counts remain zero, and original flags are restored before terminal cleanup.
+
+Limits: this is source review, not an independent sanitizer proof. Same-allocation shrink readers can retry while the shrink owner is paused. Public ref/reserve pointers retain their documented expiration on buffer modification and do not anchor the owner. No new runtime edits or candidate builds were performed by this reviewer.
+
