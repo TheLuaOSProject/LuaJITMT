@@ -56,7 +56,7 @@ static void *run_peer(void *unused)
   assert(pthread_mutex_unlock(&mutex) == 0);
   lua_pushinteger(peer, 100);
   ljt_lua_pcall(peer, 1, 1, "record peer loop");
-  assert(lua_tointeger(peer, -1) == 5);
+  assert(lua_tointeger(peer, -1) == 7);
   lj_threading_detach(peer, 1);
   return NULL;
 }
@@ -123,9 +123,10 @@ int main(void)
     "  return last\n"
     "end\n"
     "jit.flush(); jit.opt.start('hotloop=1', 'hotexit=1000')\n"
-    "return sum, record");
-  pt = funcproto(funcV(L->top-2));
-  peer_pt = funcproto(funcV(L->top-1));
+    "local replacement = 7\n"
+    "return sum, record, function() return replacement end");
+  pt = funcproto(funcV(L->top-3));
+  peer_pt = funcproto(funcV(L->top-2));
   peer = lua_newthread(L);
   lua_pushvalue(L, 2);
   lua_xmove(L, peer, 1);
@@ -167,6 +168,16 @@ int main(void)
   assert(name && strcmp(name, "value") == 0);
   assert(proto_trace_acq(pt) == tr);
   check_native(L, tr, 5);
+
+  lua_upvaluejoin(L, 1, 1, 3, 1);
+  assert(lua_upvalueid(L, 1, 1) == lua_upvalueid(L, 3, 1));
+  assert(lua_upvalueid(L, 2, 1) != lua_upvalueid(L, 1, 1));
+  lua_pushinteger(L, 11);
+  assert(lua_setupvalue(L, 2, 1) != NULL);
+  assert(proto_trace_acq(pt) == tr);
+  check_native(L, tr, 7);
+  lua_upvaluejoin(L, 2, 1, 3, 1);
+  assert(lua_upvalueid(L, 2, 1) == lua_upvalueid(L, 3, 1));
 
   assert(pthread_mutex_lock(&mutex) == 0);
   resume = 1;

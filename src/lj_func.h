@@ -56,6 +56,8 @@ LJ_FUNCA void lj_func_storeuv_forjit(lua_State *L, TValue *tv,
 				     const TValue *src);
 LJ_FUNCA GCupval *lj_func_promoteuv_forjit(lua_State *L, TValue *base,
 					   int32_t slot, const TValue *tv);
+LJ_FUNC GCupval *lj_func_fnewcell_forjit(TValue *base, int32_t slot,
+                                         GCfunc *child);
 LJ_FUNCA GCupval *lj_func_newuvcell_forjit(lua_State *L, TValue *base,
 					   int32_t slot);
 LJ_FUNCA GCfunc *lj_func_newL_gc_forjit(lua_State *L, TValue *base,

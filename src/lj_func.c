@@ -751,6 +751,16 @@ GCupval *lj_func_promoteuv_forjit(lua_State *L, TValue *base, int32_t slot,
   return uv;
 }
 
+GCupval *lj_func_fnewcell_forjit(TValue *base, int32_t slot, GCfunc *child)
+{
+  TValue *tv = base + slot;
+  /* The child argument orders this load after the exact FNEW that promoted
+  ** the slot. Its public upvalue link can already point at another cell. */
+  UNUSED(child);
+  lj_assertX(itype(tv) == LJ_TUPVAL, "FNEW did not publish captured local");
+  return gco2uv(gcV(tv));
+}
+
 GCupval *lj_func_newuvcell_forjit(lua_State *L, TValue *base, int32_t slot)
 {
   /*

@@ -123,6 +123,7 @@ The lifetime rules follow the removal and reclamation split in RCU. C11 §5.1.2.
 
 - A joined worker's result stack is owned by the thread handle. Repeated joins preserve result identity, including a worker returning its own handle, and full GC clears the handle, closure, payload and error object once their last Lua owner goes away. The live-worker list and TG roots cover startup and execution.
 - Closure creation retains each inherited upvalue before a peer can redirect the parent with `debug.upvaluejoin`. An intervening full collection clears an unrelated weak value while the child keeps the captured value. A loop that creates closures with only inherited upvalues now runs natively from source and imported stock bytecode.
+- Joining two closed Lua upvalues on a shared heap can finish while a peer is suspended recording a read of the same upvalue. The running loop and resumed recorder both observe the donor. A native closure-creation loop also checks that redirecting the child leaves the parent's current local intact. [Lua upvalue identity and joining](https://www.lua.org/manual/5.2/manual.html#lua_upvaluejoin).
 
 ## Correctness and progress checks
 

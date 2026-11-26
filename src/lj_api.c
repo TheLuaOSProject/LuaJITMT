@@ -2927,10 +2927,9 @@ static int api_upvaluejoin_try(lua_State *L, int idx1, uint32_t n1,
                                int idx2, uint32_t n2, int flushed)
 {
   ApiUpvalueFunction dest = {0}, source = {0};
-  LJGC2Lease lease = {0};
+  LJGC2Lease old_lease = {0}, lease = {0};
   GCfunc *to, *from;
-  GCobj *cell;
-  int same;
+  GCobj *old, *cell;
   int status = api_upvalue_function_try(L, idx1, n1, &dest);
   if (status != API_UV_OK)
     goto leave;
@@ -2944,27 +2943,38 @@ static int api_upvaluejoin_try(lua_State *L, int idx1, uint32_t n1,
     goto leave;
   }
   cell = func_uvptr_acq(&from->l, n2);
-  same = func_uvptr_acq(&to->l, n1) == cell;
-  if (!same) {
-    if (!flushed) {
+  old = func_uvptr_acq(&to->l, n1);
+  if (old != cell) {
+    if (!flushed && !(LJ_HAS_X64_MT_JIT_HELPERS && mt_active_acq(G(L)))) {
       status = API_UV_FLUSH;
       goto leave;
     }
-    if (!lj_func_uv_lease_try(G(L), cell, &lease)) {
+    if (!lj_func_uv_lease_try(G(L), cell, &lease) ||
+        (!flushed && !lj_func_uv_lease_try(G(L), old, &old_lease))) {
       status = API_UV_RETRY;
+      goto leave;
+    }
+    /* Shared traces resolve closed upvalues at each access. The CAS below
+    ** must still replace the exact closed cell whose link we checked. */
+    if (!flushed && (mref_acq(old->uv.v, TValue) != &old->uv.tv ||
+                     mref_acq(cell->uv.v, TValue) != &cell->uv.tv)) {
+      status = API_UV_FLUSH;
       goto leave;
     }
   }
   if (!api_upvalue_function_current(&dest) ||
       !api_upvalue_function_current(&source) ||
       func_uvptr_acq(&from->l, n2) != cell ||
-      (same && func_uvptr_acq(&to->l, n1) != cell)) {
+      func_uvptr_acq(&to->l, n1) != old) {
     status = API_UV_RETRY;
-  } else if (!same) {
-    setgcrefrel(to->l.uvptr[n1], cell);
-    lj_gc_pubobjobj(L, to, cell);
+  } else if (old != cell) {
+    if (gcref_cas(&to->l.uvptr[n1], &old, cell))
+      lj_gc_pubobjobj(L, to, cell);
+    else
+      status = API_UV_RETRY;
   }
 leave:
+  lj_gc2_lease_release(&old_lease);
   lj_gc2_lease_release(&lease);
   lj_gc2_lease_release(&source.lease);
   lj_gc2_lease_release(&dest.lease);

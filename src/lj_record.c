@@ -3687,8 +3687,8 @@ static IRType rec_celluv_rooted_sample(jit_State *J, BCReg slotno)
   return itype2irt(&value);
 }
 
-/* Each of these helpers publishes its result back to BASE[slot]. The
-** generated read can recover that cell through the same enumerated root. */
+/* Recognize cells published in BASE[slot] by a promotion or constructor.
+** The generated read can recover that cell through the same stack root. */
 static int rec_celluv_rooted_source(jit_State *J, TRef tr, BCReg slot)
 {
   IRIns *ir = IR(tref_ref(tr));
@@ -3697,7 +3697,8 @@ static int rec_celluv_rooted_source(jit_State *J, TRef tr, BCReg slot)
   if (ir->o == IR_SLOAD)
     return ir->op1 == J->baseslot+slot && ir->op2 == IRSLOAD_TYPECHECK &&
            ir->t.irt == (IRT_P32|IRT_GUARD);
-  if (ir->o == IR_CALLS && ir->op2 == IRCALL_lj_func_promoteuv_forjit)
+  if (ir->o == IR_CALLS && (ir->op2 == IRCALL_lj_func_promoteuv_forjit ||
+			    ir->op2 == IRCALL_lj_func_fnewcell_forjit))
     nargs = 3;
   else if (ir->o == IR_CALLA && ir->op2 == IRCALL_lj_func_newuvcell_forjit)
     nargs = 2;
@@ -3859,8 +3860,9 @@ static TRef rec_fnew_gc1num(jit_State *J, GCproto *pt)
 		    lj_ir_kint(J, (int32_t)slot), tr);
 }
 
-/* Recover promoted cells from the newly allocated closure. A mid-trace
-** SLOAD would be mistaken for a loop-carried entry value by loop unrolling. */
+/* A mid-trace SLOAD would be mistaken for a loop-carried entry value by
+** loop unrolling. In shared code recover the local from its own frame slot,
+** independently of later public changes to the new closure's upvalue link. */
 static void rec_fnew_promoted_slots(jit_State *J, GCproto *pt, TRef fn)
 {
   MSize i, n = pt->sizeuv;
@@ -3870,9 +3872,14 @@ static void rec_fnew_promoted_slots(jit_State *J, GCproto *pt, TRef fn)
       BCReg slot = (BCReg)(v & 0xff);
       if (slot < J->maxslot && !rec_celluv_iscellref(J->base[slot]) &&
 	  itype(&J->L->base[slot]) != LJ_TUPVAL) {
-	TRef uref = emitir(IRT(IR_UREFC, IRT_PGC), fn, i << 8);
-	J->base[slot] = emitir(IRT(IR_SUB, IRT_PGC), uref,
-			     lj_ir_kintpgc(J, offsetof(GCupval, tv)));
+	if (LJ_HAS_X64_MT_JIT_HELPERS && lj_record_mt_runtime_shared(J2G(J), J->L)) {
+	  J->base[slot] = lj_ir_call(J, IRCALL_lj_func_fnewcell_forjit,
+				    rec_celluv_base(J), lj_ir_kint(J, slot), fn);
+	} else {
+	  TRef uref = emitir(IRT(IR_UREFC, IRT_PGC), fn, i << 8);
+	  J->base[slot] = emitir(IRT(IR_SUB, IRT_PGC), uref,
+			       lj_ir_kintpgc(J, offsetof(GCupval, tv)));
+	}
       }
     }
   }

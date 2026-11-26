@@ -93,4 +93,45 @@ if not resumed then assert(control:send(false, 10)) end
 local joined, result = peer:join(10)
 assert(ok, err)
 assert(joined and result)
+
+local function publish(n, stop, out, send, ack)
+  for i = 1, n do
+    local value = i + 0.25
+    local f = function() return value end
+    out[i] = f
+    if i == stop then
+      assert(send:send(f, 10))
+      assert(ack:recv(10))
+      return value, f()
+    end
+  end
+end
+
+local send, ack = threading.channel(1), threading.channel(1)
+local redirect = threading.spawn(function(q, done)
+  local f, got = q:recv(10)
+  assert(got)
+  local replacement = 900
+  local function donor() return replacement end
+  debug.upvaluejoin(f, 1, donor, 1)
+  assert(done:send(true, 10))
+end, send, ack)
+local function check_local()
+  local children = {}
+  for i = 1, 64 do children[i] = false end
+  jit.opt.start("hotloop=1", "hotexit=100", "-sink")
+  for _ = 1, 8 do publish(64, 0, children, send, ack) end
+  local tr = native_loop_calls(publish, "lj_func_fnewcell_forjit")
+  local exited = false
+  local function onexit(id) if id == tr then exited = true end end
+  jit.off(onexit)
+  jit.attach(onexit, "texit")
+  local parent, child = publish(64, 37, children, send, ack)
+  jit.attach(onexit)
+  assert(exited and parent == 37.25 and child == 900)
+  assert(children[36]() == 36.25 and children[37]() == child)
+end
+jit.off(check_local)
+check_local()
+assert(redirect:join(10))
 print("t-x64-jit-rooted-upvalue ok")
