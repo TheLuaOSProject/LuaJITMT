@@ -14,6 +14,7 @@
 
 #if LJ_HASJIT
 
+#include "luajit.h"
 #include "lj_atomic.h"
 #include "lj_arena.h"
 #include "lj_buf.h"
@@ -878,9 +879,9 @@ static int trace_entry_mark_invalidated(GCtrace *T)
 static int trace_arm64_first_side_retire_candidate(const GCtrace *T);
 static int trace_arm64_first_side_retire_edge(jit_State *J, GCtrace *T);
 static int trace_arm64_first_side_retire_topology(jit_State *J, GCtrace *T);
-static void trace_retire_disconnect(jit_State *J, GCtrace *T);
+static void trace_retire_disconnect(jit_State *J, GCtrace *T, int retained);
 static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
-				  uint64_t epoch);
+				  uint64_t epoch, int idle);
 
 /* -- Error handling ------------------------------------------------------ */
 
@@ -3566,7 +3567,7 @@ int LJ_FASTCALL lj_trace_retire_gc_claim(global_State *g, GCtrace *T)
     return 0;
   }
   trace_retire_at_epoch(g, T, lj_gc2_retire_epoch(g));
-  trace_retire_disconnect(J, T);
+  trace_retire_disconnect(J, T, 0);
   discoverable = trace_retire_discoverable_acq(J, T);
   if (smr)
     lj_gc2_smr_read_leave(g);
@@ -7728,7 +7729,7 @@ static int trace_retire_pending_consume(jit_State *J, TraceNo traceno,
 	       !trace_runnable_acq(T, traceno) &&
 	       la_load64_acq(&T->retire_epoch) == 0,
 	       "invalid deferred root-abort retirement");
-    trace_scope_clear_slot(J, traceno, T, lj_gc2_retire_epoch(J2G(J)));
+    trace_scope_clear_slot(J, traceno, T, lj_gc2_retire_epoch(J2G(J)), 0);
   }
   if (token)
     lj_jit_token_release(J);
@@ -9187,7 +9188,7 @@ int LJ_FASTCALL lj_trace_free_gc(global_State *g, GCtrace *T)
       else
 	lj_assertG(la_load64_acq(&T->retire_epoch) != 0,
 		   "listed trace without retirement epoch");
-      trace_retire_disconnect(J, T);
+      trace_retire_disconnect(J, T, 0);
       if (smr) {
 	lj_gc2_smr_read_leave(g);
 	smr = 0;
@@ -9237,7 +9238,7 @@ void LJ_FASTCALL lj_trace_free(global_State *g, GCtrace *T)
 }
 
 /* Re-enable compiling a prototype by unpatching any modified bytecode. */
-void lj_trace_reenableproto(GCproto *pt)
+static void trace_reenableproto(GCproto *pt)
 {
   if ((proto_flags_acq(pt) & PROTO_ILOOP)) {
     BCIns *bc = proto_bc(pt);
@@ -9358,15 +9359,12 @@ unpatch:
 
 static int trace_scope_flushing(jit_State *J, TraceNo traceno)
 {
-  global_State *g = J2G(J);
   int flushing = 0;
   if (traceno > 0 && traceno < trace_sizetrace_acq(J)) {
     GCtrace *T;
-    lj_gc2_smr_read_enter(g);
     T = traceref_safe(J, traceno);
     flushing = T && trace_traceno_acq(T) == traceno &&
 	       trace_scope_pending_acq(T);
-    lj_gc2_smr_read_leave(g);
   }
   return flushing;
 }
@@ -9780,7 +9778,7 @@ static void trace_unlink_side_chain(jit_State *J, GCtrace *T,
   }
 }
 
-static void trace_retire_disconnect(jit_State *J, GCtrace *T)
+static void trace_retire_disconnect(jit_State *J, GCtrace *T, int retained)
 {
   TraceNo traceno = trace_traceno_acq(T);
   TraceNo rootno = trace_root_acq(T);
@@ -9797,7 +9795,7 @@ static void trace_retire_disconnect(jit_State *J, GCtrace *T)
   lj_assertJ(la_load64_acq(&T->retire_epoch) != 0,
 	     "trace edges disconnected before retirement publication");
   if (rootno == 0) {
-    (void)trace_flushroot(J, T, TRACE_ROOT_UNLINK);
+    (void)trace_flushroot(J, T, retained ? TRACE_ROOT_UNLINK_HELD : TRACE_ROOT_UNLINK);
   } else if (trace_arm64_first_side_retire_candidate(T)) {
     trace_unlink_side_chain(J, T, traceno, rootno);
     trace_exittab_reset(J, T);
@@ -9826,15 +9824,13 @@ static int trace_scope_flush_dependency(jit_State *J, GCtrace *T)
   return 0;
 }
 
-static uint32_t trace_flushscope_mark_deps(jit_State *J)
+static void trace_flushscope_mark_deps(jit_State *J)
 {
-  global_State *g = J2G(J);
-  uint32_t marked = 0, changed;
+  uint32_t changed;
   do {
     TraceNo i;
     MSize sizetrace = trace_sizetrace_acq(J);
     changed = 0;
-    lj_gc2_smr_read_enter(g);
     for (i = 1; i < sizetrace; i++) {
       GCtrace *T = traceref_safe(J, i);
       if (T && trace_traceno_acq(T) == i &&
@@ -9846,23 +9842,18 @@ static uint32_t trace_flushscope_mark_deps(jit_State *J)
 	} else {
 	  (void)trace_flushside(J, T, 1);
 	}
-	marked++;
 	changed = 1;
       }
     }
-    lj_gc2_smr_read_leave(g);
   } while (changed);
-  return marked;
 }
 
 /* Flush a root or side trace. Returns non-zero iff scoped work was marked. */
-uint32_t lj_trace_flush(jit_State *J, TraceNo traceno)
+static uint32_t trace_flush_number(jit_State *J, TraceNo traceno)
 {
-  global_State *g = J2G(J);
   uint32_t flushed = 0;
   if (traceno > 0 && traceno < trace_sizetrace_acq(J)) {
     GCtrace *T;
-    lj_gc2_smr_read_enter(g);
     T = traceref_safe(J, traceno);
     if (T && trace_traceno_acq(T) == traceno) {
       if (trace_root_acq(T) == 0)
@@ -9870,7 +9861,6 @@ uint32_t lj_trace_flush(jit_State *J, TraceNo traceno)
       else
 	flushed = trace_flushside(J, T, 1);
     }
-    lj_gc2_smr_read_leave(g);
   }
   return flushed;
 }
@@ -10184,12 +10174,10 @@ BCIns LJ_FASTCALL lj_trace_invalidate_itern(jit_State *J, const BCIns *pc,
 }
 
 /* Flush all traces associated with a prototype. */
-uint32_t lj_trace_flushproto(global_State *g, GCproto *pt)
+static uint32_t trace_flushproto(jit_State *J, GCproto *pt)
 {
-  jit_State *J = G2J(g);
   TraceNo trace;
   uint32_t flushed = 0;
-  lj_gc2_smr_read_enter(g);
   for (trace = proto_trace_acq(pt); trace != 0; ) {
     GCtrace *T = traceref_safe(J, trace);
     if (!T || trace_traceno_acq(T) != trace)
@@ -10199,14 +10187,54 @@ uint32_t lj_trace_flushproto(global_State *g, GCproto *pt)
       break;
     flushed++;
   }
-  lj_gc2_smr_read_leave(g);
   return flushed;
 }
 
-static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
-				   uint64_t epoch)
+/* Set JIT mode for a single prototype. */
+static uint32_t setptmode(jit_State *J, GCproto *pt, int mode)
 {
-  global_State *g = J2G(J);
+  if ((mode & LUAJIT_MODE_ON)) {  /* (Re-)enable JIT compilation. */
+    (void)la_and8_acqrel(&pt->flags, (uint8_t)~PROTO_NOJIT);
+    trace_reenableproto(pt);  /* Unpatch all ILOOP etc. bytecodes. */
+    return 0;
+  } else {  /* Flush and/or disable JIT compilation. */
+    uint32_t flushed;
+    if (!(mode & LUAJIT_MODE_FLUSH))
+      (void)la_or8_acqrel(&pt->flags, PROTO_NOJIT);
+    flushed = trace_flushproto(J, pt);  /* Flush all traces of prototype. */
+    return (mode & LUAJIT_MODE_FLUSH) ? flushed : flushed + 1u;
+  }
+}
+
+/* Recursively set the JIT mode for all children of a prototype. */
+static uint32_t setptmode_all(jit_State *J, GCproto *pt, int mode)
+{
+  uint32_t flushed = 0;
+  ptrdiff_t i;
+  if (!(proto_flags_acq(pt) & PROTO_CHILD)) return 0;
+  for (i = -(ptrdiff_t)proto_sizekgc_acq(pt); i < 0; i++) {
+    GCobj *o = proto_kgc_acq(pt, i);
+    if (o->gch.gct == ~LJ_TPROTO) {
+      flushed += setptmode(J, gco2pt(o), mode);
+      flushed += setptmode_all(J, gco2pt(o), mode);
+    }
+  }
+  return flushed;
+}
+
+static void trace_retire_idle(jit_State *J, GCtrace *T, uint64_t epoch)
+{
+  /* The recorder token excludes physical trace and mcode retirement.
+  ** IDLE keeps prototype bodies stable. Publish the retired root before
+  ** removing its slot or bytecode edge and before MARK can start. */
+  trace_retire_close(T, epoch);
+  trace_retired_publish_token(J, T);
+  trace_test_idle_flush_published(J2G(J), T);
+}
+
+static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
+				   uint64_t epoch, int idle)
+{
   int arm64_edge;
   lj_assertJ(lj_jit_token_held(J),
 	     "scoped trace retirement without recorder-token ownership");
@@ -10217,8 +10245,11 @@ static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
   if (arm64_edge == TRACE_ARM64_FIRST_SIDE_RETIRE_RETRY)
     trace_arm64_first_side_retire_failstop(
       J, "pending ARM64 first-side retirement generation was lost");
-  trace_retire_at_epoch(g, T, epoch);
-  trace_retire_disconnect(J, T);
+  if (idle)
+    trace_retire_idle(J, T, epoch);
+  else
+    trace_retire_at_epoch(J2G(J), T, epoch);
+  trace_retire_disconnect(J, T, 1);
   (void)lj_gdbjit_deltrace(J, T);
   if (trace_root_acq(T) == 0)
     trace_unpatch(J, T);
@@ -10226,21 +10257,11 @@ static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
   trace_slot_retire(J, T, traceno);
 }
 
-uint32_t lj_trace_flushscope_retire_hs(global_State *g, uint64_t epoch)
+static void trace_flushscope_retire(jit_State *J, uint64_t epoch, int idle)
 {
-  jit_State *J = G2J(g);
   TraceNo i;
   uint32_t retired = 0;
   MSize sizetrace = trace_sizetrace_acq(J);
-  /* This is the post-boundary token-owner half of scoped retirement. Generic
-  ** EXIT_TRACES leaders only quiesce native users and abort recording: they may
-  ** be unrelated GC workers and must never mutate trace slots on behalf of the
-  ** parked token owner. Pending traces remain entry-gated until this call. */
-  lj_assertJ(lj_jit_token_held(J),
-	     "scoped retirement helper called without recorder token");
-  if (!lj_jit_token_held(J))
-    return 0;
-  lj_gc2_smr_read_enter(g);
   for (i = 1; i < sizetrace; i++) {
     GCtrace *T = traceref_safe(J, i);
     if (T && trace_root_acq(T) != 0 && trace_traceno_acq(T) == i) {
@@ -10249,7 +10270,7 @@ uint32_t lj_trace_flushscope_retire_hs(global_State *g, uint64_t epoch)
       if (trace_scope_pending_acq(T) ||
 	  (root && trace_traceno_acq(root) == rootno &&
 	   trace_scope_pending_acq(root))) {
-	trace_scope_clear_slot(J, i, T, epoch);
+	trace_scope_clear_slot(J, i, T, epoch, idle);
 	retired++;
       }
     }
@@ -10258,14 +10279,12 @@ uint32_t lj_trace_flushscope_retire_hs(global_State *g, uint64_t epoch)
     GCtrace *T = traceref_safe(J, i);
     if (T && trace_root_acq(T) == 0 && trace_traceno_acq(T) == i &&
 	trace_scope_pending_acq(T)) {
-      trace_scope_clear_slot(J, i, T, epoch);
+      trace_scope_clear_slot(J, i, T, epoch, idle);
       retired++;
     }
   }
-  lj_gc2_smr_read_leave(g);
   if (retired)
-    gc2_jit_scoped_slots_retired_add(g, retired);
-  return retired;
+    gc2_jit_scoped_slots_retired_add(J2G(J), retired);
 }
 
 /* Return 1 for a retained vector, 0 for an empty directory and -1 when its
@@ -10517,7 +10536,7 @@ static void trace_flushall_arm64_first_side_prepass(jit_State *J,
       trace_arm64_first_side_retire_failstop(
 	J, "full flush could not detach ARM64 first-side edge");
     trace_retire(g, T);
-    trace_retire_disconnect(J, T);
+    trace_retire_disconnect(J, T, 0);
   }
 }
 #endif
@@ -10525,6 +10544,26 @@ static void trace_flushall_arm64_first_side_prepass(jit_State *J,
 typedef enum {
   TRACE_FLUSH_DIRECT, TRACE_FLUSH_SMR_HELD, TRACE_FLUSH_LEADER
 } TraceFlushScope;
+
+/* Return a full reader or zero for a trace-flush leader that retains IDLE. */
+static int trace_flush_read_enter(global_State *g, int leader)
+{
+#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
+  leader = 0;  /* The authenticated side-edge walk requires full SMR. */
+#endif
+  while (!lj_gc2_smr_read_try(g)) {
+    if (leader && gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_META_EXCLUSIVE) {
+      /* Pair leadership publication with the phase worker's gate close
+      ** before ruling out a worker that already passed its admission check. */
+      la_fence_seq();
+      if (!gc2_worker_active_acq(g) && !gc2_mark_activation_request_acq(g) &&
+          gc2_phase_acq(g) == LJ_GC2_IDLE)
+        return 0;
+    }
+    (void)lj_thr_retry_yield(NULL);
+  }
+  return 1;
+}
 
 static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
                                  int send_event, TraceFlushScope scope)
@@ -10547,20 +10586,8 @@ static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
   if (token)
     jit_owner_l_rel(J, L);
   if (scope != TRACE_FLUSH_SMR_HELD) {
-    while (!(smr = lj_gc2_smr_read_try(g))) {
-      /* A published full-flush leader excludes the next MARK activation.
-      ** Pair its publication with the phase worker's close-and-check fence
-      ** before ruling out an earlier worker in the middle of activation. */
-      if (scope == TRACE_FLUSH_LEADER &&
-          gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_META_EXCLUSIVE) {
-        la_fence_seq();
-        idle = gc2_worker_active_acq(g) == 0 &&
-               gc2_mark_activation_request_acq(g) == 0 &&
-               gc2_phase_acq(g) == LJ_GC2_IDLE;
-      }
-      if (idle) break;
-      (void)lj_thr_retry_yield(NULL);
-    }
+    smr = trace_flush_read_enter(g, scope == TRACE_FLUSH_LEADER);
+    idle = !smr;
   }
 #if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
   sizetrace = trace_sizetrace_acq(J);
@@ -10581,16 +10608,10 @@ static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
 	  "retired full-flush trace is not discoverable");
       else
 #endif
-      if (idle) {
-        /* The recorder token excludes physical trace and mcode retirement.
-        ** IDLE keeps prototype bodies stable. Publish the retired root before
-        ** removing its slot or bytecode edge and before MARK can start. */
-        trace_retire_close(T, lj_gc2_retire_epoch(g));
-        trace_retired_publish_token(J, T);
-        trace_test_idle_flush_published(g, T);
-      } else {
-        trace_retire(g, T);
-      }
+      if (idle)
+        trace_retire_idle(J, T, lj_gc2_retire_epoch(g));
+      else
+        trace_retire(J2G(J), T);
       trace_exittab_reset(J, T);
       if (trace_root_acq(T) == 0) {
 	trace_flushroot(J, T, TRACE_ROOT_UNLINK_HELD);
@@ -10639,11 +10660,7 @@ int lj_trace_flushall_gc(lua_State *L)
 
 int lj_trace_flushall_safepoint(lua_State *L)
 {
-#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
-  return lj_trace_flushall_gc(L);  /* Side certificates require full SMR. */
-#else
   return trace_flushall_direct(L, 1, 0, TRACE_FLUSH_LEADER);
-#endif
 }
 
 /* Request a leader-owned full trace flush through the safepoint protocol.
@@ -10757,27 +10774,66 @@ int lj_trace_flushall_try_noevent(lua_State *L, int allow_entering)
   return retry;
 }
 
-void lj_trace_flushscope_hs(global_State *g, uint32_t work)
+/* The state claim roots the selected prototype tree. A flush also retains
+** trace storage through its read scope or its IDLE safepoint. */
+static uint32_t trace_select_scope(jit_State *J, const LJTraceFlushRequest *req)
 {
-  if (work != 0) {
-    jit_State *J = G2J(g);
-    int token = lj_jit_token_acquire_wait(J);
-    (void)trace_flushscope_mark_deps(G2J(g));
-    (void)lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES);  /* 08 section 8.7 scoped boundary. */
-    (void)lj_trace_flushscope_retire_hs(g, lj_gc2_retire_epoch(g));
-    if (token)
-      lj_jit_token_release(J);
+  uint32_t work = 0;
+  int target = req->mode & LUAJIT_MODE_MASK;
+  if (!req->pt) return trace_flush_number(J, req->trace);
+  if (target != LUAJIT_MODE_ALLSUBFUNC) work = setptmode(J, req->pt, req->mode);
+  if (target != LUAJIT_MODE_FUNC) work += setptmode_all(J, req->pt, req->mode);
+  return work;
+}
+
+void lj_trace_flushscope_safepoint(global_State *g, LJTraceFlushRequest *req,
+                                  uint64_t epoch)
+{
+  jit_State *J = G2J(g);
+  int smr;
+  lj_assertJ(lj_jit_token_held(J) &&
+             gc2_hs_actions_acq(g) == LJ_SAFEPOINT_SCOPED_FLUSH,
+             "scoped flush without its recorder token and safepoint");
+  smr = trace_flush_read_enter(g, 1);
+  if (!req->work) req->work = trace_select_scope(J, req);
+  if (req->work) {
+    trace_flushscope_mark_deps(J);
+    trace_flushscope_retire(J, epoch, !smr);
   }
+  if (smr) lj_gc2_smr_read_leave(g);
+}
+
+static void trace_flush_selected(jit_State *J, LJTraceFlushRequest *req)
+{
+  global_State *g = J2G(J);
+  if (lj_gc2_smr_read_tracked_try(g)) {
+    /* Gate entry immediately and skip a handshake for an empty selection.
+    ** Under a metadata closure the leader can select the same targets once
+    ** all native users have acknowledged and IDLE is retained. */
+    req->work = trace_select_scope(J, req);
+    lj_gc2_smr_read_leave(g);
+    if (!req->work) return;
+  }
+  lj_safepoint_flush_scope(g, req);
+}
+
+void lj_trace_setptmode(global_State *g, GCproto *pt, int mode)
+{
+  LJTraceFlushRequest req = {pt, 0, mode, 0};
+  if (mode & LUAJIT_MODE_ON)
+    (void)trace_select_scope(G2J(g), &req);
+  else
+    trace_flush_selected(G2J(g), &req);
 }
 
 uint32_t lj_trace_flushscope(jit_State *J, TraceNo traceno)
 {
+  LJTraceFlushRequest req = {NULL, traceno, 0, 0};
   int token = lj_jit_token_acquire_wait(J);
-  uint32_t work = lj_trace_flush(J, traceno);
-  lj_trace_flushscope_hs(J2G(J), work);
-  if (token)
-    lj_jit_token_release(J);
-  return work;
+  if (traceno && traceno < trace_sizetrace_acq(J))
+    trace_flush_selected(J, &req);
+  if (token) lj_jit_token_release(J);
+  return req.work;
 }
 
 /* Initialize JIT compiler state. */

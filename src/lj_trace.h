@@ -142,9 +142,13 @@ LJ_FUNC void LJ_FASTCALL lj_trace_native_unpin(global_State *g, GCtrace *T);
 LJ_FUNC int lj_trace_native_mark_pinned(global_State *g, GCtrace *T,
 					 TraceNo traceno);
 LJ_FUNC void LJ_FASTCALL lj_trace_free_unpublished(global_State *g, GCtrace *T);
-LJ_FUNC void lj_trace_reenableproto(GCproto *pt);
-LJ_FUNC uint32_t lj_trace_flushproto(global_State *g, GCproto *pt);
-LJ_FUNC uint32_t lj_trace_flush(jit_State *J, TraceNo traceno);
+typedef struct LJTraceFlushRequest {
+  GCproto *pt;  /* A rooted function selection, or NULL for one trace. */
+  TraceNo trace;
+  int mode;
+  uint32_t work;
+} LJTraceFlushRequest;
+LJ_FUNC void lj_trace_setptmode(global_State *g, GCproto *pt, int mode);
 LJ_FUNC uint32_t lj_trace_flush_unlink(jit_State *J, TraceNo traceno);
 #define LJ_TRACE_STARTINS_RETRY	((BCIns)~(BCIns)0)
 LJ_FUNCA BCIns LJ_FASTCALL lj_trace_stale_startins(jit_State *J,
@@ -169,9 +173,9 @@ LJ_FUNC int lj_trace_flushall_hs_noevent(lua_State *L);
 ** another JIT-token owner. Only runtime resize may cross mt_entering,
 ** while its guard prevents any new pre-MT direct-store traces. */
 LJ_FUNC int lj_trace_flushall_try_noevent(lua_State *L, int allow_entering);
-LJ_FUNC void lj_trace_flushscope_hs(global_State *g, uint32_t work);
-LJ_FUNC uint32_t lj_trace_flushscope_retire_hs(global_State *g,
-					       uint64_t epoch);
+LJ_FUNC void lj_trace_flushscope_safepoint(global_State *g,
+                                          LJTraceFlushRequest *request,
+                                          uint64_t epoch);
 LJ_FUNC int lj_jit_token_try(jit_State *J);
 LJ_FUNC int lj_jit_token_try_l(lua_State *L, jit_State *J);
 LJ_FUNC int lj_jit_token_held(jit_State *J);
@@ -599,7 +603,6 @@ static LJ_AINLINE int lj_trace_state_publish_try(jit_State *J)
 #define lj_trace_flushall_hs(L)	(UNUSED(L), 0)
 #define lj_trace_flushall_hs_noevent(L)	(UNUSED(L), 0)
 #define lj_trace_flushall_try_noevent(L, e)	(UNUSED(L), UNUSED(e), 0)
-#define lj_trace_flushscope_retire_hs(g, e)	(UNUSED(g), UNUSED(e), 0)
 #define lj_trace_hasany(g)	(UNUSED(g), 0)
 #define lj_jit_token_try(J)	(UNUSED(J), 0)
 #define lj_jit_token_try_l(L, J)	(UNUSED(L), UNUSED(J), 0)

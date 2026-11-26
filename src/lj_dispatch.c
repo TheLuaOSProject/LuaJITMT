@@ -513,40 +513,6 @@ retry:
 
 /* -- JIT mode setting ---------------------------------------------------- */
 
-#if LJ_HASJIT
-/* Set JIT mode for a single prototype. */
-static uint32_t setptmode(global_State *g, GCproto *pt, int mode)
-{
-  if ((mode & LUAJIT_MODE_ON)) {  /* (Re-)enable JIT compilation. */
-    (void)la_and8_acqrel(&pt->flags, (uint8_t)~PROTO_NOJIT);
-    lj_trace_reenableproto(pt);  /* Unpatch all ILOOP etc. bytecodes. */
-    return 0;
-  } else {  /* Flush and/or disable JIT compilation. */
-    uint32_t flushed;
-    if (!(mode & LUAJIT_MODE_FLUSH))
-      (void)la_or8_acqrel(&pt->flags, PROTO_NOJIT);
-    flushed = lj_trace_flushproto(g, pt);  /* Flush all traces of prototype. */
-    return (mode & LUAJIT_MODE_FLUSH) ? flushed : flushed + 1u;
-  }
-}
-
-/* Recursively set the JIT mode for all children of a prototype. */
-static uint32_t setptmode_all(global_State *g, GCproto *pt, int mode)
-{
-  uint32_t flushed = 0;
-  ptrdiff_t i;
-  if (!(proto_flags_acq(pt) & PROTO_CHILD)) return 0;
-  for (i = -(ptrdiff_t)proto_sizekgc_acq(pt); i < 0; i++) {
-    GCobj *o = proto_kgc_acq(pt, i);
-    if (o->gch.gct == ~LJ_TPROTO) {
-      flushed += setptmode(g, gco2pt(o), mode);
-      flushed += setptmode_all(g, gco2pt(o), mode);
-    }
-  }
-  return flushed;
-}
-#endif
-
 static lua_State *setmode_errstate(lua_State *L)
 {
   lua_State *cur = lj_tg_cur_L(G(L));
@@ -601,7 +567,6 @@ int luaJIT_setmode(lua_State *L, int idx, int mode)
   case LUAJIT_MODE_ALLFUNC:
   case LUAJIT_MODE_ALLSUBFUNC: {
     LJStateClaim claim;
-    uint32_t flushed = 0;
     int token = lj_jit_token_acquire_wait(G2J(g));
     cTValue *tv;
     GCproto *pt;
@@ -622,13 +587,8 @@ int luaJIT_setmode(lua_State *L, int idx, int mode)
 	lj_jit_token_release(G2J(g));
       return 0;  /* Failed. */
     }
-    if (mm != LUAJIT_MODE_ALLSUBFUNC)
-      flushed += setptmode(g, pt, mode);
-    if (mm != LUAJIT_MODE_FUNC)
-      flushed += setptmode_all(g, pt, mode);
+    lj_trace_setptmode(g, pt, mode);
     lj_state_dropclaim(&claim);
-    if (!(mode & LUAJIT_MODE_ON))
-      lj_trace_flushscope_hs(g, flushed);
     if (token)
       lj_jit_token_release(G2J(g));
     break;

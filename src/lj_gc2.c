@@ -4461,12 +4461,12 @@ static int gc2_mark_begin(global_State *g, int automatic)
   /* An IDLE retire owner can publish smr_reclaiming after this worker's first
   ** claim check but before the worker closes native entry. It owns that close
   ** only after winning its 1->0 CAS. Do not stage typed MARK or reopen its
-  ** gate. A full-flush leader walking trace slots during IDLE metadata
+  ** gate. A trace-flush leader walking trace slots during IDLE metadata
   ** reclamation retains this phase until all slots are retired, even after
   ** the reclaimer leaves. In either case keep the cycle request for retry. */
   if (gc2_smr_reclaiming_acq(g) != 0 ||
       (gc2_hs_leader_acq(g) != 0 &&
-       gc2_hs_actions_acq(g) == LJ_SAFEPOINT_FULL_FLUSH)) {
+       lj_safepoint_is_trace_flush(gc2_hs_actions_acq(g)))) {
     gc2_worker_release(g);
     return 0;
   }

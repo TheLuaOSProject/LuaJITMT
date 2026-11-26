@@ -11,6 +11,7 @@
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+#include "luajit.h"
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
@@ -350,7 +351,7 @@ typedef struct IdleFlushPeer {
   IdleReclaimCtx reclaim;
   lua_State *peer;
   TraceNo target;
-  uint32_t ready, start, overlap, attempted;
+  uint32_t ready, start, flush_actions, attempted;
 } IdleFlushPeer;
 
 static IdleFlushPeer *idle_flush_peer;
@@ -378,11 +379,11 @@ static void *idle_flush_reclaim(void *arg)
   while (!la_load32_acq(&run->start))
     sched_yield();
   (void)idle_reclaim_main(&run->reclaim);
-  if (run->overlap) {
+  if (run->flush_actions) {
     global_State *g = run->reclaim.g;
     uint32_t cycle = gc2_cycle_acq(g);
     assert(gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_OPEN);
-    assert(gc2_hs_actions_acq(g) == LJ_SAFEPOINT_FULL_FLUSH &&
+    assert(gc2_hs_actions_acq(g) == run->flush_actions &&
            gc2_hs_leader_acq(g) != 0);
     lj_gc2_mark_begin(g);
     assert(gc2_cycle_leader_acq(g) != 0 && gc2_cycle_acq(g) == cycle &&
@@ -413,7 +414,7 @@ static void check_live_upvalue_invalidation(int shared, int overlap)
     "end, require('jit.util').traceinfo");
   pt = funcproto(funcV(L->top-2));
   if (shared) run.peer = lua_newthread(L);
-  run.overlap = (uint32_t)overlap;
+  if (overlap) run.flush_actions = LJ_SAFEPOINT_FULL_FLUSH;
   run.reclaim.g = g;
   assert(pthread_create(&collector, NULL, idle_flush_reclaim, &run) == 0);
   while (!la_load32_acq(&run.ready))
@@ -463,6 +464,105 @@ static void check_live_upvalue_invalidation(int shared, int overlap)
   assert(lj_gc2_smr_read_try(g));
   assert(trace_retired_head_acq(L2J(L)) == NULL);
   lj_gc2_smr_read_leave(g);
+  lua_close(L);
+}
+
+static void check_sum(lua_State *L, int fn, int multiple)
+{
+  lua_pushvalue(L, fn);
+  lua_pushinteger(L, 64);
+  ljt_lua_pcall(L, 1, 1, "run scoped trace");
+  assert(lua_tointeger(L, -1) == 2080 * multiple);
+  lua_pop(L, 1);
+}
+
+static void check_scoped_flush(int overlap)
+{
+  lua_State *L = ljt_lua_newstate_openlibs();
+  IdleFlushPeer run = {0};
+  GCproto *pt[4];
+  TraceNo tr[4], side;
+  pthread_t collector;
+  int i, warm;
+  lua_gc(L, LUA_GCSTOP, 0);
+  ljt_lua_dostring(L,
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function parent(n)\n"
+    "  local s=0; for i=1,n do s=s+i end\n"
+    "  return s, function(m) local t=0; for j=1,m do t=t+2*j end; return t end\n"
+    "end\n"
+    "local _, child = parent(0)\n"
+    "local function other(n) local s=0; for i=1,n do s=s+3*i end; return s end\n"
+    "local function last(n, flip)\n"
+    "  local s=0; for i=1,n do s=s+4*i; if flip and i%4==0 then s=s+1 end end\n"
+    "  return s\n"
+    "end\n"
+    "return parent, child, other, last, jit.flush, require('jit.util').traceinfo");
+  run.peer = lua_newthread(L);
+  run.reclaim.g = G(L);
+  if (overlap) run.flush_actions = LJ_SAFEPOINT_SCOPED_FLUSH;
+  assert(pthread_create(&collector, NULL, idle_flush_reclaim, &run) == 0);
+  while (!la_load32_acq(&run.ready))
+    (void)lj_thr_retry_yield(L);
+  for (i = 0; i < 4; i++) {
+    for (warm = 0; warm < 8; warm++) check_sum(L, 1+i, 1+i);
+    pt[i] = funcproto(funcV(L->base+i));
+    tr[i] = proto_trace_acq(pt[i]);
+    assert(tr[i] && proto_has_op(pt[i], BC_JFORL));
+  }
+  for (warm = 0; warm < 64; warm++) {
+    lua_pushvalue(L, 4);
+    lua_pushinteger(L, 64);
+    lua_pushboolean(L, 1);
+    ljt_lua_pcall(L, 2, 1, "warm a scoped side trace");
+    assert(lua_tointeger(L, -1) == 8336);
+    lua_pop(L, 1);
+  }
+  side = trace_nextside_acq(traceref(L2J(L), tr[3]));
+  assert(side != 0 && trace_root_acq(traceref(L2J(L), side)) == tr[3]);
+  run.reclaim.epoch = lj_gc2_retire_epoch(G(L)) + 1u;
+  lj_gc2_test_idle_reclaim_pause_after_jit_quiescence();
+  la_store32_rel(&run.start, 1);
+  wait_for_idle_reclaim_pause(&run.reclaim);
+
+  lua_pushvalue(L, 5);
+  lua_pushinteger(L, tr[3]);
+  ljt_lua_pcall(L, 1, 0, "flush one trace by number");
+  assert(!proto_has_op(pt[3], BC_JFORL));
+  lua_pushvalue(L, 6);
+  lua_pushinteger(L, side);
+  ljt_lua_pcall(L, 1, 1, "inspect the flushed side trace");
+  assert(lua_isnil(L, -1));
+  lua_pop(L, 1);
+  for (i = 0; i < 3; i++) assert(proto_trace_acq(pt[i]) == tr[i]);
+  assert(luaJIT_setmode(L, 1, LUAJIT_MODE_ALLSUBFUNC|LUAJIT_MODE_OFF));
+  assert(!proto_has_op(pt[1], BC_JFORL) && (proto_flags_acq(pt[1]) & PROTO_NOJIT));
+  assert(proto_trace_acq(pt[0]) == tr[0] && !(proto_flags_acq(pt[0]) & PROTO_NOJIT));
+  if (overlap) {
+    run.target = tr[0];
+    idle_flush_peer = &run;
+    lj_trace_test_set_idle_flush_hook(pause_after_retire_publication);
+  }
+  lua_pushvalue(L, 5);
+  lua_pushvalue(L, 1);
+  ljt_lua_pcall(L, 1, 0, "flush one function");
+  assert(!proto_has_op(pt[0], BC_JFORL) && !(proto_flags_acq(pt[0]) & PROTO_NOJIT));
+  assert(proto_trace_acq(pt[2]) == tr[2] && proto_has_op(pt[2], BC_JFORL));
+  check_sum(L, 2, 2);
+  check_sum(L, 3, 3);
+  assert(luaJIT_setmode(L, 1, LUAJIT_MODE_ALLFUNC|LUAJIT_MODE_ON));
+  assert(!(proto_flags_acq(pt[1]) & PROTO_NOJIT));
+  if (overlap) {
+    assert(la_load32_acq(&run.attempted));
+    lj_trace_test_set_idle_flush_hook(NULL);
+    idle_flush_peer = NULL;
+  } else {
+    assert(lj_gc2_test_idle_reclaim_paused());
+    lj_gc2_test_idle_reclaim_release();
+  }
+  assert(pthread_join(collector, NULL) == 0);
+  for (warm = 0; warm < 8; warm++) check_sum(L, 2, 2);
+  assert(proto_has_op(pt[1], BC_JFORL));
   lua_close(L);
 }
 
@@ -767,6 +867,8 @@ int main(void)
   check_live_upvalue_invalidation(0, 0);
   check_live_upvalue_invalidation(1, 0);
   check_live_upvalue_invalidation(1, 1);
+  check_scoped_flush(0);
+  check_scoped_flush(1);
   puts("t-jit-idle-reclaim-entry OK: IDLE reclaim owns native-entry closure");
   return 0;
 }

@@ -1344,7 +1344,7 @@ int lj_safepoint_resumable_epoch_try(global_State *g, uint32_t actions, int star
 }
 
 static uint32_t safepoint_handshake(global_State *g, uint32_t actions,
-				    int idle_policy)
+				    int idle_policy, struct LJTraceFlushRequest *scope)
 {
   uint64_t epoch;
   uint32_t leader;
@@ -1363,7 +1363,7 @@ static uint32_t safepoint_handshake(global_State *g, uint32_t actions,
     }
     actions = lj_safepoint_idle_policy_actions(g);
   }
-  flush_only = actions == LJ_SAFEPOINT_FULL_FLUSH;
+  flush_only = lj_safepoint_is_trace_flush(actions);
   gc2_hs_actions_rel(g, actions);  /* 05 section 5.4.2. */
   gc2_hs_pending_rel(g, 1);  /* 09 section 9.3 leader sentinel. */
   epoch = gc2_hs_epoch_rlx(g) + 1u;
@@ -1401,6 +1401,8 @@ static uint32_t safepoint_handshake(global_State *g, uint32_t actions,
   }
   safepoint_wait_trace_quiescent(g, actions);
 #if LJ_HASJIT
+  if (scope)
+    lj_trace_flushscope_safepoint(g, scope, epoch);
   if (actions & LJ_GC2_HS_FLUSHJ) {
     /*
      ** The safepoint leader can be any participating thread. Flush trace state
@@ -1413,6 +1415,8 @@ static uint32_t safepoint_handshake(global_State *g, uint32_t actions,
     else
       (void)lj_trace_flushall_gc(L);
   }
+#else
+  UNUSED(scope);
 #endif
   if (!flush_only)
     (void)lj_gc2_reclaim_retired(g, epoch);
@@ -1426,7 +1430,7 @@ static uint32_t safepoint_handshake(global_State *g, uint32_t actions,
       (void)lj_gc2_flush_ssb(g, self);
   }
   safepoint_finish_leader(g, leader, epoch);
-  /* A full flush has already removed the code before releasing the polls.
+  /* A trace flush has already removed the code before releasing the polls.
   ** Retired storage has its own grace, native-entry gate and reader checks.
   ** A delayed reclaim pass must let acknowledged owners run the interpreter. */
   if (flush_only)
@@ -1436,10 +1440,19 @@ static uint32_t safepoint_handshake(global_State *g, uint32_t actions,
 
 uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
 {
-  return safepoint_handshake(g, actions, 0);
+  return safepoint_handshake(g, actions, 0, NULL);
 }
 
 void lj_safepoint_idle_policy(global_State *g)
 {
-  (void)safepoint_handshake(g, 0, 1);
+  (void)safepoint_handshake(g, 0, 1, NULL);
 }
+
+#if LJ_HASJIT
+void lj_safepoint_flush_scope(global_State *g, struct LJTraceFlushRequest *scope)
+{
+  /* The synchronous caller owns the recorder token and the request storage
+  ** until return. Only this leader selects and retires the requested graph. */
+  (void)safepoint_handshake(g, LJ_SAFEPOINT_SCOPED_FLUSH, 0, scope);
+}
+#endif
