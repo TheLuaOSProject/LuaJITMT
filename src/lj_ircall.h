@@ -186,7 +186,7 @@ typedef struct CCallInfo {
   _(BUFFER,	lj_bufx_skip_forjit,	2,  FS, NIL, 0) \
   _(BUFFER,	lj_bufx_putstr_forjit,	3,   S, NIL, CCI_L|CCI_T) \
   _(BUFFER,	lj_bufx_len_forjit,	1,  FL, INT, 0) \
-  _(BUFFER,	lj_bufx_tostr_forjit,	2,   S, STR, CCI_L|CCI_T) \
+  _(BUFFER,	lj_bufx_tostr,		2,   S, STR, CCI_T) \
   _(BUFFER,	lj_bufx_get_forjit,	3,   S, STR, CCI_L|CCI_T) \
   _(BUFFFI,	lj_bufx_more,		2,  FS, INT, CCI_T) \
   _(BUFFER,	lj_serialize_put,	2,  FS, PGC, CCI_T) \

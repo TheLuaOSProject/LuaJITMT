@@ -967,213 +967,15 @@ static cTValue *str2num(cTValue *o, TValue *n)
     return NULL;
 }
 
-#if LJ_HASBUFFER
-static int meta_buf_owner_valid(global_State *g, lua_State *owner)
-{
-  return owner != NULL &&
-	 (owner == mainthread_acq(g) ||
-	  lj_state_thread_registry_valid(g, owner));
-}
-
-static SBufExt *meta_buf_sbx(lua_State *L, cTValue *o, LJGC2Lease *lease,
-			     int retry)
-{
-  GCudata *ud;
-  int status;
-  if (!lease)
-    return NULL;
-  memset(lease, 0, sizeof(*lease));
-  if (!tvisudata(o))
-    return NULL;
-  /*
-  ** A racy snapshot can retain a userdata tag after the cell was retired and
-  ** reused. Validate the cell and the fixed buffer payload shape before reading
-  ** SBufExt fields; plain tvisbuf() only checks the published udtype byte.
-  */
-  for (;;) {
-    status = lj_gc2_tv_lease_acquire(G(L), o, lease);
-    if (status != LJ_GC2_TV_EDGE_RETRY || !retry)
-      break;
-    lj_tab_wait_l(L);
-  }
-  if (status != LJ_GC2_TV_EDGE_VALID)
-    return NULL;
-  ud = udataV(o);
-  if ((MSize)la_load32_acq(&ud->len) != sizeof(SBufExt) ||
-      lj_udata_udtype_acq(ud) != UDTYPE_BUFFER) {
-    lj_gc2_lease_release(lease);
-    return NULL;
-  }
-  return (SBufExt *)uddata(ud);
-}
-
-static int meta_cat_isbuf(lua_State *L, cTValue *o)
-{
-  LJGC2Lease lease;
-  /* Storage contention affects the copied contents, not the operand type. */
-  if (!meta_buf_sbx(L, o, &lease, 1))
-    return 0;
-  lj_gc2_lease_release(&lease);
-  return 1;
-}
-
-typedef struct MetaBufSnap {
-  char *b;
-  char *e;
-  char *r;
-  char *w;
-  GCobj *ref;
-  GCSize flags;
-} MetaBufSnap;
-
-static void meta_buf_snapshot(const SBufExt *sbx, MetaBufSnap *s)
-{
-  s->flags = (GCSize)la_load64_acq(&sbx->L.ptr64);
-  s->b = lj_buf_bptr_acq((const SBuf *)sbx);
-  s->e = lj_buf_eptr_acq((const SBuf *)sbx);
-  s->r = lj_buf_rptr_acq(sbx);
-  s->w = lj_buf_wptr_acq((const SBuf *)sbx);
-  s->ref = lj_bufx_cowref_acq(sbx);
-}
-
-static int meta_buf_snapshot_same(const MetaBufSnap *a,
-				  const MetaBufSnap *b)
-{
-  return a->flags == b->flags && a->b == b->b && a->e == b->e &&
-    a->r == b->r && a->w == b->w && a->ref == b->ref;
-}
-
-static int meta_buf_snapshot_valid(global_State *g, const MetaBufSnap *s,
-				   MSize *lenp)
-{
-  uintptr_t ur = (uintptr_t)(void *)s->r;
-  uintptr_t uw = (uintptr_t)(void *)s->w;
-  lua_State *owner = (lua_State *)(void *)(uintptr_t)
-    (s->flags & SBUF_MASK_L);
-  if (!(s->flags & SBUF_FLAG_EXT) || !meta_buf_owner_valid(g, owner) ||
-      !lj_buf_ptr_range(s->r, s->b, s->e) ||
-      !lj_buf_ptr_range(s->w, s->b, s->e) || ur > uw)
-    return 0;
-  *lenp = (MSize)(uw - ur);
-  return 1;
-}
-
-static int meta_buf_data(lua_State *L, cTValue *o, const char **pp,
-			 MSize *lenp, LJGC2Lease *holdp)
-{
-  LJGC2Lease bodylease;
-  SBufExt *sbx;
-  uint32_t attempt;
-  if (holdp)
-    memset(holdp, 0, sizeof(*holdp));
-  sbx = meta_buf_sbx(L, o, &bodylease, 0);
-  if (!sbx)
-    return 0;
-
-  /* Individual SBuf fields are atomic, but they are not one transaction.
-  ** Admit the storage selected by a first snapshot, then require the complete
-  ** descriptor (including COW identity) to match a second snapshot. If a
-  ** writer moved away and back, the retained allocation at the repeated
-  ** address is still the exact storage named by the accepted descriptor. */
-  for (attempt = 0; attempt < 8u; attempt++) {
-    LJGC2Lease storage;
-    MetaBufSnap first, second;
-    MSize len;
-    uint32_t gct = 0;
-    memset(&storage, 0, sizeof(storage));
-    meta_buf_snapshot(sbx, &first);
-    if (!meta_buf_snapshot_valid(G(L), &first, &len))
-      continue;
-    if (len != 0) {
-      if (first.flags & SBUF_FLAG_COW) {
-	/* Stock string.buffer COW storage is owned by a string or cdata edge.
-	** A cdata pointer may intentionally name external FFI memory; retaining
-	** the cdata preserves runtime identity but cannot validate user memory. */
-	if (first.ref == NULL ||
-	    lj_gc2_obj_lease_acquire(G(L), first.ref, 0, &gct, &storage) < 0)
-	  continue;
-	if (gct != (uint32_t)~LJ_TSTR
-#if LJ_HASFFI
-	    && gct != (uint32_t)~LJ_TCDATA
-#endif
-	   ) {
-	  lj_gc2_lease_release(&storage);
-	  continue;
-	}
-      } else if (first.b == NULL ||
-		 lj_gc2_mem_lease_acquire(G(L), first.b, &storage) < 0) {
-	continue;
-      }
-    }
-    meta_buf_snapshot(sbx, &second);
-    if (!meta_buf_snapshot_same(&first, &second) ||
-	!meta_buf_snapshot_valid(G(L), &second, &len)) {
-      lj_gc2_lease_release(&storage);
-      continue;
-    }
-    if ((second.flags & SBUF_FLAG_COW) &&
-	gct == (uint32_t)~LJ_TSTR) {
-      GCstr *s = gco2str(second.ref);
-      if (second.b != (char *)strdata(s) ||
-	  (uintptr_t)(void *)second.e - (uintptr_t)(void *)second.b !=
-	    (uintptr_t)s->len) {
-	lj_gc2_lease_release(&storage);
-	continue;
-      }
-    }
-    if (pp) *pp = second.r ? second.r : "";
-    if (lenp) *lenp = len;
-    lj_gc2_lease_release(&bodylease);
-    if (holdp) {
-      *holdp = storage;
-      memset(&storage, 0, sizeof(storage));
-    }
-    lj_gc2_lease_release(&storage);
-    return 1;
-  }
-
-  lj_gc2_lease_release(&bodylease);
-  return 0;
-}
-
-/* Copy one shared buffer without a throwing/growing operation while its body
-** lease is live. Capacity growth happens after release, then the source is
-** resnapshotted and re-admitted. The loop is bounded so a racing writer cannot
-** turn concatenation into a wait; an unstable buffer contributes an empty
-** racy snapshot, which is memory-safe and within the allowed racy semantics. */
-static int meta_buf_putmem(lua_State *L, SBuf *sb, cTValue *o)
-{
-  uint32_t attempt;
-  for (attempt = 0; attempt < 8u; attempt++) {
-    LJGC2Lease lease;
-    const char *p;
-    char *w;
-    MSize len;
-    memset(&lease, 0, sizeof(lease));
-    if (!meta_buf_data(L, o, &p, &len, &lease))
-      return 1;  /* Safe empty result for an unstable racy descriptor. */
-    if (len > sbufleft(sb)) {
-      lj_gc2_lease_release(&lease);
-      (void)lj_buf_more(sb, len);  /* May throw only with no source lease. */
-      continue;
-    }
-    w = lj_buf_wptr_acq(sb);
-    w = lj_buf_wmem(w, p, len);
-    lj_buf_wptr_rel(sb, w);
-    lj_gc2_lease_release(&lease);
-    return 1;
-  }
-  return 1;
-}
-#else
-#define meta_cat_isbuf(L, o)			0
-#define meta_buf_data(L, o, pp, lenp, holdp)	0
-#define meta_buf_putmem(L, sb, o)		0
+#if !LJ_HASBUFFER
+#define lj_bufx_isbuf(L, o)       0
+#define lj_bufx_readlen(L, o)     0
+#define lj_bufx_putbuf(L, sb, o)  ((void)0)
 #endif
 
 static LJ_AINLINE int meta_cat_compat(lua_State *L, cTValue *o)
 {
-  return tvisstr(o) || tvisnumber(o) || meta_cat_isbuf(L, o);
+  return tvisstr(o) || tvisnumber(o) || lj_bufx_isbuf(L, o);
 }
 
 /* Helper for arithmetic instructions. Coercion, metamethod. */
@@ -1260,7 +1062,6 @@ TValue *lj_meta_cat(lua_State *L, TValue *top, int left)
       */
       TValue *e = top, *o = top, *r;
       ptrdiff_t topofs;
-      MSize blen;
       uint64_t tlen = 0;
       SBuf *sb;
       GCstr *s;
@@ -1277,9 +1078,7 @@ TValue *lj_meta_cat(lua_State *L, TValue *top, int left)
 	} else {
 	  /* Compatibility classified this operand as a buffer. An unstable racy
 	  ** descriptor contributes an empty snapshot, not a numeric type-pun. */
-	  blen = 0;
-	  (void)meta_buf_data(L, r, NULL, &blen, NULL);
-	  tlen += blen;
+	  tlen += lj_bufx_readlen(L, r);
 	}
       }
       if (tlen >= LJ_MAX_STR) lj_err_msg(L, LJ_ERR_STROV);
@@ -1296,7 +1095,7 @@ TValue *lj_meta_cat(lua_State *L, TValue *top, int left)
 	} else if (tvisnum(o)) {
 	  lj_strfmt_putfnum(sb, STRFMT_G14, numV(o));
 	} else {
-	  (void)meta_buf_putmem(L, sb, o);
+	  lj_bufx_putbuf(L, sb, o);
 	}
       }
       topofs = savestack(L, top);

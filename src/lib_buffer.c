@@ -150,11 +150,8 @@ LJLIB_CF(buffer_method_put)		LJLIB_REC(.)
       lj_strfmt_putfnum((SBuf *)sbx, STRFMT_G14, numV(o));
     } else if (tvisbuf(o)) {
       SBufExt *sbx2 = bufV(o);
-      MSize len;
-      const char *p;
       if (sbx2 == sbx) lj_err_arg(L, (int)(arg+1), LJ_ERR_BUFFER_SELF);
-      p = lj_bufx_data_acq(sbx2, &len);
-      lj_buf_putmem((SBuf *)sbx, p, len);
+      lj_bufx_putbuf(L, (SBuf *)sbx, o);
     } else if (!mo &&
 	       !tvisnil(mo = lj_meta_lookuptv(L, &motv, o, MM_tostring))) {
       /* Call __tostring metamethod inline. */
@@ -299,9 +296,8 @@ LJLIB_CF(buffer_method___gc)
 LJLIB_CF(buffer_method___tostring)	LJLIB_REC(.)
 {
   SBufExt *sbx = buffer_tobuf(L);
-  MSize len;
-  const char *p = lj_bufx_data_acq(sbx, &len);
-  setstrV(L, L->top-1, lj_str_new(L, p, len));
+  GCstr *s = lj_bufx_tostr(lj_buf_tmp_(L), sbx);
+  setstrV(L, L->top-1, s);
   lj_gc_check(L);
   return 1;
 }

@@ -481,19 +481,19 @@ LJLIB_CF(load)
   int status;
   if (L->base < L->top &&
       (tvisstr(L->base) || tvisnumber(L->base) || tvisbuf(L->base))) {
-    const char *s;
-    MSize len;
+    GCstr *str;
+#if LJ_HASBUFFER
     if (tvisbuf(L->base)) {
-      SBufExt *sbx = bufV(L->base);
-      s = lj_bufx_data_acq(sbx, &len);
-      if (!name) name = &G(L)->strempty;  /* Buffers are not NUL-terminated. */
-    } else {
-      GCstr *str = lj_lib_checkstr(L, 1);
-      s = strdata(str);
-      len = str->len;
-    }
+      str = lj_bufx_tostr(lj_buf_tmp_(L), bufV(L->base));
+      setstrV(L, L->base, str);
+      lj_state_stack_pubtv(L, L, L->base);
+      if (!name) name = &G(L)->strempty;
+    } else
+#endif
+      str = lj_lib_checkstr(L, 1);
     lua_settop(L, 4);  /* Ensure env arg exists. */
-    status = luaL_loadbufferx(L, s, len, name ? strdata(name) : s,
+    status = luaL_loadbufferx(L, strdata(str), str->len,
+			      name ? strdata(name) : strdata(str),
 			      mode ? strdata(mode) : NULL);
   } else {
     lj_lib_checkfunc(L, 1);

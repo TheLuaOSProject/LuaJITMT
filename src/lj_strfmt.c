@@ -160,16 +160,18 @@ char * LJ_FASTCALL lj_strfmt_wuleb128(char *p, uint32_t v)
   return p;
 }
 
-/* Return string or write number to tmp buffer and return pointer to start. */
+/* Borrow an immutable string or stage the bytes in the current TG's buffer. */
 const char *lj_strfmt_wstrnum(lua_State *L, cTValue *o, MSize *lenp)
 {
   SBuf *sb;
   if (tvisstr(o)) {
     *lenp = strV(o)->len;
     return strVdata(o);
+#if LJ_HASBUFFER
   } else if (tvisbuf(o)) {
-    SBufExt *sbx = bufV(o);
-    return lj_bufx_data_acq(sbx, lenp);
+    sb = lj_buf_tmp_(L);
+    lj_bufx_putbuf(L, sb, o);
+#endif
   } else if (tvisint(o)) {
     sb = lj_strfmt_putint(lj_buf_tmp_(L), intV(o));
   } else if (tvisnum(o)) {
@@ -178,7 +180,7 @@ const char *lj_strfmt_wstrnum(lua_State *L, cTValue *o, MSize *lenp)
     return NULL;
   }
   *lenp = sbuflen(sb);
-  return lj_buf_bptr_acq(sb);
+  return *lenp ? lj_buf_bptr_acq(sb) : "";
 }
 
 /* -- Unformatted conversions to buffer ----------------------------------- */
@@ -452,8 +454,22 @@ int lj_strfmt_putarg(lua_State *L, SBuf *sb, int arg, int retry)
 #if LJ_HASBUFFER
 	} else if (tvisbuf(o)) {
 	  SBufExt *sbx = bufV(o);
+	  GCstr *str;
 	  if (sbx == (SBufExt *)sb) lj_err_arg(L, arg+1, LJ_ERR_BUFFER_SELF);
-	  s = lj_bufx_data_acq(sbx, &len);
+	  if (sf == STRFMT_STR) {
+	    lj_bufx_putbuf(L, sb, o);
+	    break;
+	  }
+	  str = lj_bufx_tostr(lj_buf_tmp_(L), sbx);
+	  o = &L->base[arg-1];
+	  setstrV(L, o, str);
+	  lj_state_stack_pubtv(L, L, o);
+	  if (retry < 2) {
+	    retry = 1;  /* Conversion used the formatter's temporary buffer. */
+	    break;
+	  }
+	  s = strdata(str);
+	  len = str->len;
 #endif
 	} else {
 	  GCstr *str = lj_strfmt_obj(L, o);

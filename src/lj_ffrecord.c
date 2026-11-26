@@ -248,19 +248,6 @@ static void LJ_FASTCALL recff_nyi(jit_State *J, RecordFFData *rd)
 /* Must stop the trace for classic C functions with arbitrary side-effects. */
 #define recff_c		recff_nyi
 
-/* Emit BUFHDR for the running thread group's temporary buffer. */
-static TRef recff_bufhdr(jit_State *J)
-{
-  TRef trl = emitir(IRT(IR_LREF, IRT_THREAD), 0, 0);
-#if LJ_TARGET_X86ORX64
-  return emitir(IRT(IR_BUFHDR, IRT_PGC), trl, IRBUFHDR_RESET);
-#else
-  TRef trsb = lj_ir_call(J, IRCALL_lj_buf_tmp_reset, trl);
-  return emitir(IRT(IR_BUFHDR, IRT_PGC),
-		trsb, IRBUFHDR_RESET);
-#endif
-}
-
 /* Emit TMPREF. */
 static TRef recff_tmpref(jit_State *J, TRef tr, int mode)
 {
@@ -969,7 +956,7 @@ static void LJ_FASTCALL recff_bit_shift(jit_State *J, RecordFFData *rd)
 static void LJ_FASTCALL recff_bit_tohex(jit_State *J, RecordFFData *rd)
 {
 #if LJ_HASFFI
-  TRef hdr = recff_bufhdr(J);
+  TRef hdr = lj_record_bufhdr(J);
   TRef tr = recff_bit64_tohex(J, rd, hdr);
   J->base[0] = emitir(IRTG(IR_BUFSTR, IRT_STR), tr, hdr);
 #else
@@ -1095,7 +1082,7 @@ static void LJ_FASTCALL recff_string_char(jit_State *J, RecordFFData *rd)
     J->base[i] = emitir(IRT(IR_TOSTR, IRT_STR), tr, IRTOSTR_CHAR);
   }
   if (i > 1) {  /* Concatenate the strings, if there's more than one. */
-    TRef hdr = recff_bufhdr(J), tr = hdr;
+    TRef hdr = lj_record_bufhdr(J), tr = hdr;
     for (i = 0; J->base[i] != 0; i++)
       tr = emitir(IRTG(IR_BUFPUT, IRT_PGC), tr, J->base[i]);
     J->base[0] = emitir(IRTG(IR_BUFSTR, IRT_STR), tr, hdr);
@@ -1115,13 +1102,13 @@ static void LJ_FASTCALL recff_string_rep(jit_State *J, RecordFFData *rd)
     int32_t vrep = argv2int(J, &rd->argv[1]);
     emitir(IRTGI(vrep > 1 ? IR_GT : IR_LE), rep, lj_ir_kint(J, 1));
     if (vrep > 1) {
-      TRef hdr2 = recff_bufhdr(J);
+      TRef hdr2 = lj_record_bufhdr(J);
       TRef tr2 = emitir(IRTG(IR_BUFPUT, IRT_PGC), hdr2, sep);
       tr2 = emitir(IRTG(IR_BUFPUT, IRT_PGC), tr2, str);
       str2 = emitir(IRTG(IR_BUFSTR, IRT_STR), tr2, hdr2);
     }
   }
-  tr = hdr = recff_bufhdr(J);
+  tr = hdr = lj_record_bufhdr(J);
   if (str2) {
     tr = emitir(IRTG(IR_BUFPUT, IRT_PGC), tr, str);
     str = str2;
@@ -1134,7 +1121,7 @@ static void LJ_FASTCALL recff_string_rep(jit_State *J, RecordFFData *rd)
 static void LJ_FASTCALL recff_string_op(jit_State *J, RecordFFData *rd)
 {
   TRef str = lj_ir_tostr(J, J->base[0]);
-  TRef hdr = recff_bufhdr(J);
+  TRef hdr = lj_record_bufhdr(J);
   TRef tr = lj_ir_call(J, rd->data, hdr, str);
   J->base[0] = emitir(IRTG(IR_BUFSTR, IRT_STR), tr, hdr);
 }
@@ -1295,7 +1282,7 @@ static void recff_format(jit_State *J, RecordFFData *rd, TRef hdr, int sbufx)
 
 static void LJ_FASTCALL recff_string_format(jit_State *J, RecordFFData *rd)
 {
-  recff_format(J, rd, recff_bufhdr(J), 0);
+  recff_format(J, rd, lj_record_bufhdr(J), 0);
 }
 
 /* -- Buffer library fast functions --------------------------------------- */
@@ -1394,8 +1381,8 @@ static TRef recff_buffer_method_sbx(jit_State *J, RecordFFData *rd)
 
 static void LJ_FASTCALL recff_buffer_method___tostring(jit_State *J, RecordFFData *rd)
 {
-  J->base[0] = lj_ir_call(J, IRCALL_lj_bufx_tostr_forjit,
-			  recff_buffer_method_sbx(J, rd));
+  TRef sbx = recff_buffer_method_sbx(J, rd);
+  J->base[0] = lj_ir_call(J, IRCALL_lj_bufx_tostr, lj_record_bufhdr(J), sbx);
 }
 
 static void LJ_FASTCALL recff_buffer_method___len(jit_State *J, RecordFFData *rd)
@@ -1516,7 +1503,7 @@ static void LJ_FASTCALL recff_table_concat(jit_State *J, RecordFFData *rd)
     TRef tre = (J->base[1] && J->base[2] && !tref_isnil(J->base[3])) ?
 	       lj_opt_narrow_toint(J, J->base[3]) :
 	       lj_record_tab_len(J, tab);
-    TRef hdr = recff_bufhdr(J);
+    TRef hdr = lj_record_bufhdr(J);
     TRef tr = lj_ir_call(J, IRCALL_lj_buf_puttab, hdr, tab, sep, tri, tre);
     emitir(IRTG(IR_NE, IRT_PTR), tr, lj_ir_kptr(J, NULL));
     J->base[0] = emitir(IRTG(IR_BUFSTR, IRT_STR), tr, hdr);

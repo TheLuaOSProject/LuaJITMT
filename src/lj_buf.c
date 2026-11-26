@@ -8,6 +8,7 @@
 
 #include "lj_obj.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_buf.h"
 #include "lj_str.h"
@@ -30,9 +31,9 @@ static void buf_grow(SBuf *sb, MSize sz)
     lj_assertG_(G(sbufL(sb)), lj_buf_wptr_acq(sb) == lj_buf_eptr_acq(sb),
 		"bad SBuf COW");
     b = (char *)lj_mem_new(sbufL(sb), nsz);
+    memcpy(b, oldb, osz);
     setsbufflag(sb, flag & ~(GCSize)SBUF_FLAG_COW);
     lj_bufx_cowref_clear_rel(sbufX(sb));
-    memcpy(b, oldb, osz);
   } else {
     b = (char *)lj_mem_realloc(sbufL(sb), oldb, osz, nsz);
   }
@@ -117,6 +118,223 @@ SBuf * LJ_FASTCALL lj_buf_tmp_reset(lua_State *L)
 }
 #endif
 
+#if LJ_HASBUFFER
+static SBufExt *bufx_userdata(lua_State *L, cTValue *o, LJGC2Lease *lease,
+			     int retry)
+{
+  GCudata *ud;
+  int status;
+  if (!lease)
+    return NULL;
+  memset(lease, 0, sizeof(*lease));
+  if (!tvisudata(o))
+    return NULL;
+  /*
+  ** A racy snapshot can retain a userdata tag after the cell was retired and
+  ** reused. Validate the cell and the fixed buffer payload shape before reading
+  ** SBufExt fields; plain tvisbuf() only checks the published udtype byte.
+  */
+  for (;;) {
+    status = lj_gc2_tv_lease_acquire(G(L), o, lease);
+    if (status != LJ_GC2_TV_EDGE_RETRY || !retry)
+      break;
+    lj_tab_wait_l(L);
+  }
+  if (status != LJ_GC2_TV_EDGE_VALID)
+    return NULL;
+  ud = udataV(o);
+  if ((MSize)la_load32_acq(&ud->len) != sizeof(SBufExt) ||
+      lj_udata_udtype_acq(ud) != UDTYPE_BUFFER) {
+    lj_gc2_lease_release(lease);
+    return NULL;
+  }
+  return (SBufExt *)uddata(ud);
+}
+
+int lj_bufx_isbuf(lua_State *L, cTValue *o)
+{
+  LJGC2Lease lease;
+  /* Storage contention affects the copied contents, not the operand type. */
+  if (!bufx_userdata(L, o, &lease, 1))
+    return 0;
+  lj_gc2_lease_release(&lease);
+  return 1;
+}
+
+typedef struct BufReadSnapshot {
+  char *b;
+  char *e;
+  char *r;
+  char *w;
+  GCobj *ref;
+  GCSize flags;
+} BufReadSnapshot;
+
+static void bufx_snapshot(const SBufExt *sbx, BufReadSnapshot *s)
+{
+  s->flags = sbufflag(sbx) & SBUF_MASK_FLAG;
+  s->b = lj_buf_bptr_acq((const SBuf *)sbx);
+  s->e = lj_buf_eptr_acq((const SBuf *)sbx);
+  s->r = lj_buf_rptr_acq(sbx);
+  s->w = lj_buf_wptr_acq((const SBuf *)sbx);
+  s->ref = lj_bufx_cowref_acq(sbx);
+}
+
+static int bufx_snapshot_same(const BufReadSnapshot *a, const BufReadSnapshot *b)
+{
+  return a->flags == b->flags && a->b == b->b && a->e == b->e &&
+    a->r == b->r && a->w == b->w && a->ref == b->ref;
+}
+
+static int bufx_snapshot_valid(const BufReadSnapshot *s, MSize *lenp)
+{
+  uintptr_t ur = (uintptr_t)(void *)s->r;
+  uintptr_t uw = (uintptr_t)(void *)s->w;
+  if (!(s->flags & SBUF_FLAG_EXT) ||
+      !lj_buf_ptr_range(s->r, s->b, s->e) ||
+      !lj_buf_ptr_range(s->w, s->b, s->e) || ur > uw || uw - ur > LJ_MAX_BUF)
+    return 0;
+  *lenp = (MSize)(uw - ur);
+  return 1;
+}
+
+static int bufx_read(lua_State *L, cTValue *o, const char **pp,
+		     MSize *lenp, LJGC2Lease *holdp)
+{
+  LJGC2Lease bodylease;
+  SBufExt *sbx;
+  uint32_t attempt;
+  if (holdp)
+    memset(holdp, 0, sizeof(*holdp));
+  sbx = bufx_userdata(L, o, &bodylease, 0);
+  if (!sbx)
+    return 0;
+
+  /* Individual SBuf fields are atomic, but they are not one transaction.
+  ** Admit the storage selected by a first snapshot, then require the complete
+  ** descriptor (including COW identity) to match a second snapshot. If a
+  ** writer moved away and back, the retained allocation at the repeated
+  ** address is still the exact storage named by the accepted descriptor. */
+  for (attempt = 0; attempt < 8u; attempt++) {
+    LJGC2Lease storage;
+    BufReadSnapshot first, second;
+    MSize len;
+    uint32_t gct = 0;
+    memset(&storage, 0, sizeof(storage));
+    bufx_snapshot(sbx, &first);
+    if (!bufx_snapshot_valid(&first, &len))
+      continue;
+    if (len != 0) {
+      if (first.flags & SBUF_FLAG_COW) {
+	/* Stock string.buffer COW storage is owned by a string or cdata edge.
+	** A cdata pointer may intentionally name external FFI memory; retaining
+	** the cdata preserves runtime identity but cannot validate user memory. */
+	if (first.ref == NULL ||
+	    lj_gc2_obj_lease_acquire(G(L), first.ref, 0, &gct, &storage) < 0)
+	  continue;
+	if (gct != (uint32_t)~LJ_TSTR
+#if LJ_HASFFI
+	    && gct != (uint32_t)~LJ_TCDATA
+#endif
+	   ) {
+	  lj_gc2_lease_release(&storage);
+	  continue;
+	}
+      } else if (first.b == NULL ||
+		 !lj_gc2_storage_lease_try(G(L), first.b,
+		   (uintptr_t)first.w - (uintptr_t)first.b, &storage, NULL)) {
+	continue;
+      }
+    }
+    bufx_snapshot(sbx, &second);
+    if (!bufx_snapshot_same(&first, &second) ||
+	!bufx_snapshot_valid(&second, &len)) {
+      lj_gc2_lease_release(&storage);
+      continue;
+    }
+    if ((second.flags & SBUF_FLAG_COW) &&
+	gct == (uint32_t)~LJ_TSTR) {
+      GCstr *s = gco2str(second.ref);
+      if (second.b != (char *)strdata(s) ||
+	  (uintptr_t)(void *)second.e - (uintptr_t)(void *)second.b !=
+	    (uintptr_t)s->len) {
+	lj_gc2_lease_release(&storage);
+	continue;
+      }
+    }
+    if (pp) *pp = second.r ? second.r : "";
+    if (lenp) *lenp = len;
+    lj_gc2_lease_release(&bodylease);
+    if (holdp) {
+      *holdp = storage;
+      memset(&storage, 0, sizeof(storage));
+    }
+    lj_gc2_lease_release(&storage);
+    return 1;
+  }
+
+  lj_gc2_lease_release(&bodylease);
+  return 0;
+}
+
+MSize lj_bufx_readlen(lua_State *L, cTValue *o)
+{
+  MSize len = 0;
+  (void)bufx_read(L, o, NULL, &len, NULL);
+  return len;
+}
+
+/* Copy one shared buffer without a throwing/growing operation while its body
+** lease is live. Capacity growth happens after release, then the source is
+** resnapshotted and re-admitted. The loop is bounded so a racing writer cannot
+** turn concatenation into a wait; an unstable buffer contributes an empty
+** racy snapshot, which is memory-safe and within the allowed racy semantics. */
+void lj_bufx_putbuf(lua_State *L, SBuf *sb, cTValue *o)
+{
+  TValue source;
+  uint32_t attempt;
+  lj_tv_load_acq(&source, o);
+  for (attempt = 0; attempt < 8u; attempt++) {
+    LJGC2Lease lease;
+    const char *p;
+    char *w;
+    MSize len;
+    memset(&lease, 0, sizeof(lease));
+    if (!bufx_read(L, &source, &p, &len, &lease))
+      return;  /* Safe empty result for an unstable racy descriptor. */
+    if (len > sbufleft(sb)) {
+      lj_gc2_lease_release(&lease);
+      (void)lj_buf_more(sb, len);  /* May throw only with no source lease. */
+      continue;
+    }
+    if (len) {
+      w = lj_buf_wptr_acq(sb);
+      lj_buf_wptr_rel(sb, lj_buf_wmem(w, p, len));
+    }
+    lj_gc2_lease_release(&lease);
+    return;
+  }
+}
+
+/* The caller supplies the current temporary buffer, already reset. Generated
+** code expresses that reset in IR so adjacent concatenations cannot reuse
+** the bytes overwritten here. The source may exist only in a native register. */
+GCstr *LJ_FASTCALL lj_bufx_tostr(SBuf *sb, SBufExt *src)
+{
+  lua_State *L = sbufL(sb);
+  TGState *tg = L2TG(L);
+  TValue source, *anchor;
+  uint32_t index;
+  setgcVraw(&source, obj2gco((GCudata *)src - 1), LJ_TUDATA);
+  anchor = lj_tg_root_anchor_push(L, tg, &source, &index);
+  if (LJ_UNLIKELY(!anchor)) lj_err_mem(L);
+  lj_gc_pubroot(L, anchor);
+  lj_bufx_putbuf(L, sb, anchor);
+  lj_tg_root_anchor_pop(tg, index);
+  return lj_buf_str(L, sb);
+}
+#endif
+
 #if LJ_HASBUFFER && LJ_HASJIT
 void lj_bufx_set(SBufExt *sbx, const char *p, MSize len, GCobj *ref)
 {
@@ -157,13 +375,6 @@ void LJ_FASTCALL lj_bufx_putstr_forjit(lua_State *L, SBufExt *sbx, GCstr *str)
 int32_t LJ_FASTCALL lj_bufx_len_forjit(SBufExt *sbx)
 {
   return (int32_t)sbufxlen(sbx);
-}
-
-GCstr *LJ_FASTCALL lj_bufx_tostr_forjit(lua_State *L, SBufExt *sbx)
-{
-  MSize len;
-  const char *p = lj_bufx_data_acq(sbx, &len);
-  return lj_str_new(L, p, len);
 }
 
 GCstr *LJ_FASTCALL lj_bufx_get_forjit(lua_State *L, SBufExt *sbx, int32_t narg)

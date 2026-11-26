@@ -4194,6 +4194,18 @@ static TRef rec_tnew(jit_State *J, uint32_t ah)
 
 /* -- Concatenation ------------------------------------------------------- */
 
+/* Emit BUFHDR for the running thread group's temporary buffer. */
+TRef lj_record_bufhdr(jit_State *J)
+{
+  TRef trl = emitir(IRT(IR_LREF, IRT_THREAD), 0, 0);
+#if LJ_TARGET_X86ORX64
+  return emitir(IRT(IR_BUFHDR, IRT_PGC), trl, IRBUFHDR_RESET);
+#else
+  TRef trsb = lj_ir_call(J, IRCALL_lj_buf_tmp_reset, trl);
+  return emitir(IRT(IR_BUFHDR, IRT_PGC), trsb, IRBUFHDR_RESET);
+#endif
+}
+
 typedef struct RecCatDataCP {
   TValue savetv[5+LJ_FR2];
   jit_State *J;
@@ -4214,7 +4226,7 @@ static TRef rec_cat_bufstr(jit_State *J, TRef tr)
   TRef sbx;
   emitir(IRTGI(IR_EQ), udtype, lj_ir_kint(J, UDTYPE_BUFFER));
   sbx = emitir(IRT(IR_ADD, IRT_PTR), tr, lj_ir_kintp(J, sizeof(GCudata)));
-  return lj_ir_call(J, IRCALL_lj_bufx_tostr_forjit, sbx);
+  return lj_ir_call(J, IRCALL_lj_bufx_tostr, lj_record_bufhdr(J), sbx);
 }
 
 #define rec_cat_compat(tr, tv) \
@@ -4241,25 +4253,18 @@ static TValue *rec_mm_concat_cp(lua_State *L, lua_CFunction dummy, void *ud)
     TRef tr, hdr, *trp, *xbase, *base = &J->base[baseslot];
     /* First convert numbers to strings. */
     for (trp = top; trp >= base; trp--) {
-      cTValue *tv = &J->L->base[trp - J->base];
       if (tref_isnumber(*trp))
 	*trp = emitir(IRT(IR_TOSTR, IRT_STR), *trp,
 		      tref_isnum(*trp) ? IRTOSTR_NUM : IRTOSTR_INT);
-      else if (LJ_HASBUFFER && rec_cat_isbuf(*trp, tv))
+#if LJ_HASBUFFER
+      else if (rec_cat_isbuf(*trp, &J->L->base[trp - J->base]))
 	*trp = rec_cat_bufstr(J, *trp);
+#endif
       else if (!tref_isstr(*trp))
 	break;
     }
     xbase = ++trp;
-    {
-      TRef trl = emitir(IRT(IR_LREF, IRT_THREAD), 0, 0);
-#if LJ_TARGET_X86ORX64
-      tr = hdr = emitir(IRT(IR_BUFHDR, IRT_PGC), trl, IRBUFHDR_RESET);
-#else
-      TRef trsb = lj_ir_call(J, IRCALL_lj_buf_tmp_reset, trl);
-      tr = hdr = emitir(IRT(IR_BUFHDR, IRT_PGC), trsb, IRBUFHDR_RESET);
-#endif
-    }
+    tr = hdr = lj_record_bufhdr(J);
     do {
       tr = emitir(IRTG(IR_BUFPUT, IRT_PGC), tr, *trp++);
     } while (trp <= top);

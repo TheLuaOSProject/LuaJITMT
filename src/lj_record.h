@@ -43,6 +43,7 @@ typedef struct RecordIndex {
   int idxchain;		/* Index indirections left or 0 for raw lookup. */
 } RecordIndex;
 
+LJ_FUNC TRef lj_record_bufhdr(jit_State *J);
 LJ_FUNC int lj_record_objcmp(jit_State *J, TRef a, TRef b,
 			     cTValue *av, cTValue *bv);
 LJ_FUNC void lj_record_stop(jit_State *J, TraceLink linktype, TraceNo lnk);
