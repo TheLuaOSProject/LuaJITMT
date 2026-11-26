@@ -10786,9 +10786,7 @@ int lj_tab_test_nextscalar_rooted_try(lua_State *L, cTValue *tabroot,
 }
 #endif
 
-/* Resolve a next() cursor only against one paired structural snapshot. The
-** caller owns vector SMR and the exact input-key lease, so hashing and header
-** validation cannot cross a reclaim/reuse boundary. */
+/* Hash the retained input key against a single pair of array and hash roots. */
 static int tab_keyindex_snapshot_held(const TabForjitSnapshot *snap,
 				       cTValue *origkey, uint32_t *idxp)
 {
@@ -10833,14 +10831,9 @@ static int tab_keyindex_snapshot_held(const TabForjitSnapshot *snap,
 		    visited++ > snap->hmask))
       return TAB_ROOTED_NEXT_RETRY;
     lj_tv_load_acq(&nodekey, &n->key);
-    if (LJ_UNLIKELY(tab_key_islocked(&nodekey)))
-      return TAB_ROOTED_NEXT_RETRY;
-    if (LJ_UNLIKELY(!tab_tv_snapshot_valid(&nodekey))) {
-      /* A nil-valued collision tombstone can outlive its collected key.
-      ** Keep walking to find a live cursor later in the same chain. */
-      if (!lj_tv_isnil_acq(&n->val))
-	return TAB_ROOTED_NEXT_RETRY;
-    } else if (!tvisnil(&nodekey) && lj_obj_equal(&nodekey, key)) {
+    /* A collision can contain a dead weak key or a pending insertion. Its
+    ** tagged word is enough to compare it to the retained cursor. */
+    if (!tvisnil(&nodekey) && tab_hash_key_equal_held(&nodekey, key)) {
       *idxp = (uint32_t)snap->asize +
 	      (uint32_t)((n + 1) - snap->node);
       return TAB_ROOTED_NEXT_FOUND;
@@ -10854,208 +10847,161 @@ static int tab_keyindex_snapshot_held(const TabForjitSnapshot *snap,
   return TAB_ROOTED_NEXT_INVALID;
 }
 
-/* Perform one bounded traversal attempt. No wait, allocation or L-aware
-** callout is permitted while the caller's vector SMR interval is active. */
-static int tab_next_current_held(GCtab *t, cTValue *key,
-				 TValue *outkey, TValue *outval,
-				 uint32_t *nextidx)
+/* A weak pair can disappear at either side. Retain the candidate bodies
+** before examining them and reconfirm both words in the retained vectors. */
+static int tab_next_snapshot(global_State *g, const TabForjitSnapshot *snap,
+                             cTValue *key, TValue *nextkey, TValue *nextval,
+                             LJGC2Lease *keylease, LJGC2Lease *vallease,
+                             uint32_t *nextidx)
 {
-  TabForjitSnapshot snap;
-  uint32_t idx;
-  int status;
-
-  if (!tab_forjit_snapshot_acq(t, &snap))
-    return TAB_ROOTED_NEXT_RETRY;
-  status = tab_keyindex_snapshot_held(&snap, key, &idx);
-  if (status != TAB_ROOTED_NEXT_FOUND) {
-    if (!tab_forjit_snapshot_current(t, &snap))
-      return TAB_ROOTED_NEXT_RETRY;
+  uint32_t i, end = snap->asize + (snap->hmask ? snap->hmask + 1u : 0);
+  int status = tab_keyindex_snapshot_held(snap, key, &i);
+  if (status != TAB_ROOTED_NEXT_FOUND)
     return status;
-  }
-
-  for (; idx < snap.asize; idx++) {
-    TValue val;
-    lj_tv_load_acq(&val, &snap.array[idx]);
-    if (LJ_UNLIKELY(tvisforward(&val) ||
-		    tab_val_is_publish_claim(&val) ||
-		    !tab_tv_forjit_loadable(&val)))
+  for (; i < end; i++) {
+    Node *node = i < snap->asize ? NULL : &snap->node[i - snap->asize];
+    TValue *slot = node ? &node->val : &snap->array[i];
+    int keystatus, valstatus;
+    lj_tv_load_acq(nextval, slot);
+    if (tvisforward(nextval))
       return TAB_ROOTED_NEXT_RETRY;
-    if (!tvisnil(&val)) {
-      if (!tab_forjit_snapshot_current(t, &snap))
-	return TAB_ROOTED_NEXT_RETRY;
-      setintV(outkey, (int32_t)idx);
-      *outval = val;
-      if (nextidx)
-	*nextidx = idx + 1u;
+    if (tvisnil(nextval) || tab_val_is_publish_claim(nextval))
+      continue;
+    if (tvistabinternal(nextval))
+      return TAB_ROOTED_NEXT_RETRY;
+    if (node) {
+      lj_tv_load_acq(nextkey, &node->key);
+      if (tab_hash_key_hidden(nextkey))
+        continue;
+      if (tvistabinternal(nextkey) || tab_val_is_publish_claim(nextkey))
+        return TAB_ROOTED_NEXT_RETRY;
+    } else {
+      setintV(nextkey, (int32_t)i);
+    }
+    keystatus = lj_gc2_tv_lease_acquire(g, nextkey, keylease);
+    valstatus = lj_gc2_tv_lease_acquire(g, nextval, vallease);
+    if (keystatus == LJ_GC2_TV_EDGE_RETRY || valstatus == LJ_GC2_TV_EDGE_RETRY ||
+        (node && tv_rawload_acq(&node->key) != tv_rawload(nextkey)) ||
+        tv_rawload_acq(slot) != tv_rawload(nextval))
+      return TAB_ROOTED_NEXT_RETRY;
+    if (keystatus == LJ_GC2_TV_EDGE_VALID && valstatus == LJ_GC2_TV_EDGE_VALID) {
+      *nextidx = i + 1;
       return TAB_ROOTED_NEXT_FOUND;
     }
+    lj_gc2_lease_release(vallease);
+    lj_gc2_lease_release(keylease);
   }
-
-  idx -= (uint32_t)snap.asize;
-  if (snap.hmask != 0) {
-    for (; idx <= snap.hmask; idx++) {
-      Node *n = &snap.node[idx];
-      TValue nodekey, val;
-      lj_tv_load_acq(&val, &n->val);
-      if (LJ_UNLIKELY(tvisforward(&val) ||
-		      tab_val_is_publish_claim(&val) ||
-		      !tab_tv_forjit_loadable(&val)))
-	return TAB_ROOTED_NEXT_RETRY;
-      if (tvisnil(&val))
-	continue;
-      lj_tv_load_acq(&nodekey, &n->key);
-      if (tab_key_islocked(&nodekey))
-	return TAB_ROOTED_NEXT_RETRY;
-      if (tvisnil(&nodekey))
-	continue;
-      if (LJ_UNLIKELY(!tab_tv_forjit_loadable(&nodekey)))
-	return TAB_ROOTED_NEXT_RETRY;
-      if (!tab_forjit_snapshot_current(t, &snap))
-	return TAB_ROOTED_NEXT_RETRY;
-      *outkey = nodekey;
-      *outval = val;
-      if (nextidx)
-	*nextidx = (uint32_t)snap.asize + idx + 1u;
-      return TAB_ROOTED_NEXT_FOUND;
-    }
-  }
-  if (!tab_forjit_snapshot_current(t, &snap))
-    return TAB_ROOTED_NEXT_RETRY;
   return TAB_ROOTED_NEXT_END;
 }
 
 int lj_tab_next_rooted(lua_State *L, cTValue *tabroot, cTValue *keyroot,
-		       TValue *outkey, TValue *outval, uint32_t *nextidx)
+                       TValue *outkey, TValue *outval, uint32_t *nextidx)
 {
+  global_State *g = G(L);
   int tabstack = tab_key_on_stack(L, tabroot);
   int keystack = tab_key_on_stack(L, keyroot);
   int outkeystack = tab_key_on_stack(L, outkey);
   int outvalstack = tab_key_on_stack(L, outval);
-  ptrdiff_t tabofs = tabstack ?
-			 savestack(L, (TValue *)(void *)tabroot) : 0;
-  ptrdiff_t keyofs = keystack ?
-			 savestack(L, (TValue *)(void *)keyroot) : 0;
+  ptrdiff_t tabofs = tabstack ? savestack(L, (TValue *)(void *)tabroot) : 0;
+  ptrdiff_t keyofs = keystack ? savestack(L, (TValue *)(void *)keyroot) : 0;
   ptrdiff_t outkeyofs = outkeystack ? savestack(L, outkey) : 0;
   ptrdiff_t outvalofs = outvalstack ? savestack(L, outval) : 0;
 
   lj_assertL(outkey != outval, "rooted next output slots alias");
   for (;;) {
-    LJGC2Lease table_lease, key_lease, outkey_lease, outval_lease;
-    cTValue *curtab = tabstack ? restorestack(L, tabofs) : tabroot;
-    cTValue *curkey = keystack ? restorestack(L, keyofs) : keyroot;
-    TValue tablev, keysnap, nextkey, nextval;
+    LJGC2Lease table = {0}, cursor = {0}, array = {0}, nodes = {0};
+    LJGC2Lease klease = {0}, vlease = {0};
+    cTValue *troot = tabstack ? restorestack(L, tabofs) : tabroot;
+    cTValue *kroot = keystack ? restorestack(L, keyofs) : keyroot;
+    TValue *kout = outkeystack ? restorestack(L, outkeyofs) : outkey;
+    TValue *vout = outvalstack ? restorestack(L, outvalofs) : outval;
+    TabForjitSnapshot snap;
+    TValue tablev, key, k, v;
     GCtab *t;
-    int table_status, key_status, outkey_status, outval_status, status;
-
-    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(G(L)))) {
-      /* A prior L-aware wait may have moved every stack-backed output too. */
-      TValue *curoutkey = outkeystack ? restorestack(L, outkeyofs) : outkey;
-      TValue *curoutval = outvalstack ? restorestack(L, outvalofs) : outval;
-      status = lj_tab_nextscalar_rooted_try(L, curtab, curkey, curoutkey,
-					   curoutval, nextidx);
+    uint32_t index = 0;
+    int smr = lj_gc2_smr_read_try(g), status = TAB_ROOTED_NEXT_RETRY, edge;
+#ifdef LJ_TAB_TEST_HELPERS
+    LJTabRootedReaderRetryHook hook = NULL;
+#endif
+    if (!smr) {
+      status = lj_tab_nextscalar_rooted_try(L, troot, kroot, kout, vout, nextidx);
       if (status != TAB_ROOTED_NEXT_RETRY)
-	return status;
-      lj_tab_wait_l(L);
-      continue;
-    }
-    lj_tv_load_acq(&tablev, curtab);
-    if (LJ_UNLIKELY(!tvistab(&tablev))) {
-      lj_gc2_smr_read_leave(G(L));
-      return TAB_ROOTED_NEXT_INVALID;
-    }
-    table_status = lj_gc2_tv_lease_acquire(G(L), &tablev, &table_lease);
-    if (LJ_UNLIKELY(table_status != LJ_GC2_TV_EDGE_VALID)) {
-      lj_gc2_smr_read_leave(G(L));
-      if (table_status == LJ_GC2_TV_EDGE_RETRY) {
-	lj_tab_wait_l(L);
-	continue;
+        return status;
+      if (gc2_smr_reclaiming_acq(g) != LJ_GC2_SMR_META_EXCLUSIVE) {
+        lj_tab_wait_l(L);
+        continue;
       }
-      return TAB_ROOTED_NEXT_END;
+    }
+    edge = lj_gc2_root_lease_acquire(g, troot, &tablev, &table, smr);
+    if (!tvistab(&tablev) || edge != LJ_GC2_TV_EDGE_VALID) {
+      if (!tvistab(&tablev))
+        status = TAB_ROOTED_NEXT_INVALID;
+      else if (edge == LJ_GC2_TV_EDGE_STALE)
+        status = TAB_ROOTED_NEXT_END;
+      goto leave;
     }
     t = tabV(&tablev);
-    lj_tv_load_acq(&keysnap, curkey);
-    key_status = lj_gc2_tv_lease_acquire(G(L), &keysnap, &key_lease);
-    if (LJ_UNLIKELY(key_status != LJ_GC2_TV_EDGE_VALID)) {
-      lj_gc2_smr_read_leave(G(L));
-      lj_gc2_lease_release(&table_lease);
-      if (key_status == LJ_GC2_TV_EDGE_RETRY) {
-	lj_tab_wait_l(L);
-	continue;
-      }
-      return TAB_ROOTED_NEXT_INVALID;
+    edge = lj_gc2_root_lease_acquire(g, kroot, &key, &cursor, smr);
+    if (edge != LJ_GC2_TV_EDGE_VALID) {
+      if (edge == LJ_GC2_TV_EDGE_STALE)
+        status = TAB_ROOTED_NEXT_INVALID;
+      goto leave;
     }
 #ifdef LJ_TAB_TEST_HELPERS
-    {
-      LJTabRootedReaderRetryHook hook =
-	tab_test_rooted_reader_retry_take();
-      if (hook) {
-	lj_gc2_smr_read_leave(G(L));
-	lj_gc2_lease_release(&key_lease);
-	lj_gc2_lease_release(&table_lease);
-	hook(L, t, LJ_TAB_ROOTED_READER_NEXT);
-	lj_tab_wait_l(L);
-	continue;
-      }
-    }
+    hook = tab_test_rooted_reader_retry_take();
+    if (hook)
+      goto leave;
 #endif
-    status = tab_next_current_held(t, &keysnap, &nextkey, &nextval,
-				   nextidx);
-    if (status == TAB_ROOTED_NEXT_RETRY &&
-	tab_runtime_cutover_help_held(G(L), t))
-      status = tab_next_current_held(t, &keysnap, &nextkey, &nextval,
-				     nextidx);
-    if (status != TAB_ROOTED_NEXT_FOUND) {
-      lj_gc2_smr_read_leave(G(L));
-      lj_gc2_lease_release(&key_lease);
-      lj_gc2_lease_release(&table_lease);
-      if (status == TAB_ROOTED_NEXT_RETRY) {
-	lj_tab_wait_l(L);
-	continue;
+    if (smr) {
+      if (!tab_forjit_snapshot_acq(t, &snap) &&
+          !(tab_runtime_cutover_help_held(g, t) && tab_forjit_snapshot_acq(t, &snap)))
+        goto leave;
+    } else if (!tab_snapshot_leased(L, t, &snap, &array, &nodes, 0, 0)) {
+      goto leave;
+    }
+    status = tab_next_snapshot(g, &snap, &key, &k, &v, &klease, &vlease, &index);
+    if (!tab_forjit_snapshot_current(t, &snap) ||
+        tv_rawload_acq(troot) != tv_rawload(&tablev) ||
+        tv_rawload_acq(kroot) != tv_rawload(&key))
+      status = TAB_ROOTED_NEXT_RETRY;
+    if (status == TAB_ROOTED_NEXT_FOUND) {
+      if (!lj_str_tv_rescue_held(&k) || !lj_str_tv_rescue_held(&v)) {
+        status = TAB_ROOTED_NEXT_RETRY;
+      } else {
+        copyTVrel(L, kout, &k);
+        copyTVrel(L, vout, &v);
+        if (nextidx)
+          *nextidx = index;
       }
+    } else if (smr && status == TAB_ROOTED_NEXT_RETRY) {
+      (void)tab_runtime_cutover_help_held(g, t);
+    }
+leave:
+    if (smr)
+      lj_gc2_smr_read_leave(g);
+    lj_gc2_lease_release(&nodes);
+    lj_gc2_lease_release(&array);
+    if (status == TAB_ROOTED_NEXT_FOUND) {
+      if (outkeystack)
+        lj_state_stack_pubtv(L, L, kout);
+      else
+        lj_gc_pubroot(L, kout);
+      if (outvalstack)
+        lj_state_stack_pubtv(L, L, vout);
+      else
+        lj_gc_pubroot(L, vout);
+    }
+    lj_gc2_lease_release(&vlease);
+    lj_gc2_lease_release(&klease);
+    lj_gc2_lease_release(&cursor);
+    lj_gc2_lease_release(&table);
+    if (status != TAB_ROOTED_NEXT_RETRY)
       return status;
-    }
-    outkey_status = lj_gc2_tv_lease_acquire(G(L), &nextkey,
-					     &outkey_lease);
-    if (LJ_UNLIKELY(outkey_status != LJ_GC2_TV_EDGE_VALID)) {
-      lj_gc2_smr_read_leave(G(L));
-      lj_gc2_lease_release(&key_lease);
-      lj_gc2_lease_release(&table_lease);
-      lj_tab_wait_l(L);
-      continue;
-    }
-    outval_status = lj_gc2_tv_lease_acquire(G(L), &nextval,
-					     &outval_lease);
-    if (LJ_UNLIKELY(outval_status != LJ_GC2_TV_EDGE_VALID ||
-		    !lj_str_tv_rescue_held(&nextkey) ||
-		    !lj_str_tv_rescue_held(&nextval))) {
-      lj_gc2_smr_read_leave(G(L));
-      lj_gc2_lease_release(&outval_lease);
-      lj_gc2_lease_release(&outkey_lease);
-      lj_gc2_lease_release(&key_lease);
-      lj_gc2_lease_release(&table_lease);
-      lj_tab_wait_l(L);
-      continue;
-    }
-    outkey = outkeystack ? restorestack(L, outkeyofs) : outkey;
-    outval = outvalstack ? restorestack(L, outvalofs) : outval;
-    copyTVrel(L, outkey, &nextkey);
-    copyTVrel(L, outval, &nextval);
-    lj_gc2_smr_read_leave(G(L));
-    outkey = outkeystack ? restorestack(L, outkeyofs) : outkey;
-    if (outkeystack)
-      lj_state_stack_pubtv(L, L, outkey);
-    else
-      lj_gc_pubroot(L, outkey);
-    outval = outvalstack ? restorestack(L, outvalofs) : outval;
-    if (outvalstack)
-      lj_state_stack_pubtv(L, L, outval);
-    else
-      lj_gc_pubroot(L, outval);
-    lj_gc2_lease_release(&outval_lease);
-    lj_gc2_lease_release(&outkey_lease);
-    lj_gc2_lease_release(&key_lease);
-    lj_gc2_lease_release(&table_lease);
-    return TAB_ROOTED_NEXT_FOUND;
+#ifdef LJ_TAB_TEST_HELPERS
+    if (hook)
+      hook(L, t, LJ_TAB_ROOTED_READER_NEXT);
+#endif
+    lj_tab_wait_l(L);
   }
 }
 

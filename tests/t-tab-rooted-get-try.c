@@ -571,7 +571,12 @@ static void exercise_parked_public_reads(lua_State *L)
     "      return false\n"
     "    end\n"
     "  end\n"
-    "  return inline[1]() == 42 and raw(t,4096) == fn and t[4096.5] == nil\n"
+    "  local count = 0\n"
+    "  for k,v in pairs(t) do\n"
+    "    if not eq(raw(t,k),v) then return false end\n"
+    "    count = count + 1\n"
+    "  end\n"
+    "  return count == 8202 and inline[1]() == 42 and raw(t,4096) == fn and t[4096.5] == nil\n"
     "    and raw(t,0/0) == nil and raw(t,nil) == nil\n"
     "end") == 0);
   lua_pushlightuserdata(L, &worker);
@@ -583,6 +588,16 @@ static void exercise_parked_public_reads(lua_State *L)
   while (!lj_gc2_test_idle_reclaim_paused())
     sched_yield();
   assert(gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_META_EXCLUSIVE);
+  {
+    unsigned count = 0;
+    lua_pushnil(L);
+    while (lua_next(L, top + 1)) {
+      assert(!lua_isnil(L, -2) && !lua_isnil(L, -1));
+      lua_pop(L, 1);
+      count++;
+    }
+    assert(count == 8202);
+  }
   assert(lua_objlen(L, -2) == 4096);
   lua_rawgeti(L, -2, 4096);
   assert(lua_isfunction(L, -1));
