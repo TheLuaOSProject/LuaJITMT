@@ -1,0 +1,47 @@
+[
+  {
+    "name": "progress-build",
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/asan-final/check-traverse/progress.d",
+      "-I/tmp/lj-arena-reuse-20261126-zzbgmalf/asan-final/src",
+      "-I/tmp/lj-arena-reuse-20261126-zzbgmalf/asan-final/tests",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/asan-final/tests/t-gc2-traverse.c",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/asan-final/src/libluajit.a",
+      "-fsanitize=address",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/asan-final/check-traverse/traverse"
+    ],
+    "seconds": 3.6251838080061134,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "progress",
+    "command": [
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/asan-final/check-traverse/traverse"
+    ],
+    "seconds": 27.899137345986674,
+    "exit": 0,
+    "test": true
+  }
+]

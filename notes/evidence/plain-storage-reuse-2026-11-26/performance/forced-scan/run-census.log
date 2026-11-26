@@ -1,0 +1,5 @@
+RUN census-1-auto-1-baseline
+DONE census-1-auto-1-baseline 0.771
+RUN census-1-auto-2-candidate
+DONE census-1-auto-2-candidate 0.141
+complete

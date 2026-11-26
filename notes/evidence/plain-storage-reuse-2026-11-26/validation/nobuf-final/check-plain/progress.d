@@ -1,0 +1,26 @@
+/tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/check-plain/plain: \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/tests/t-arena-plain-late.c \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lj_obj.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lua.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/luaconf.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lj_def.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lj_arch.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lj_atomic.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lj_gc2token.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lj_tgregistry.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lj_tgslot.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lj_arena.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lj_gc.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lj_obj.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lj_gc2.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lj_arena.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lj_prng.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lj_tg.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lj_bc.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lj_ctype.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lj_gc.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lj_gc2.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/tests/lib/lua_fixture_helpers.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lua.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lauxlib.h \
+ /tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/lualib.h

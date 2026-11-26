@@ -1,0 +1,750 @@
+make: Entering directory '/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan/src'
+HOSTCC    host/minilua.o
+HOSTCC    host/buildvm_asm.o
+HOSTCC    host/buildvm_peobj.o
+HOSTCC    host/buildvm_lib.o
+HOSTCC    host/buildvm_fold.o
+HOSTLINK  host/minilua
+VERSION   luajit.h
+DYNASM    host/buildvm_arch.h
+**** WARNING Cannot determine rolling release version from git log.
+**** WARNING The 'git' command must be available during the build.
+CC        luajit.o
+HOSTCC    host/buildvm.o
+HOSTLINK  host/buildvm
+BUILDVM   lj_vm.S
+BUILDVM   lj_bcdef.h
+BUILDVM   lj_ffdef.h
+BUILDVM   lj_libdef.h
+BUILDVM   lj_recdef.h
+BUILDVM   lj_folddef.h
+BUILDVM   jit/vmdef.lua
+ASM       lj_vm.o
+CC        lj_assert.o
+CC        lj_gc.o
+CC        lj_gc2.o
+CC        lj_safepoint.o
+CC        lj_err.o
+CC        lj_char.o
+CC        lj_bc.o
+CC        lj_obj.o
+CC        lj_buf.o
+In file included from lj_obj.h:15,
+                 from lj_safepoint.c:9:
+In function ‘la_fence_seq’,
+    inlined from ‘safepoint_requeue_consumed’ at lj_safepoint.c:525:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘safepoint_restore_counted_poll’ at lj_safepoint.c:248:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘safepoint_rearm_fresh_stopreq_poll’ at lj_safepoint.c:264:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_str.o
+In function ‘la_fence_seq’,
+    inlined from ‘safepoint_signal_late’ at lj_safepoint.c:1050:5:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘lj_native_leave’ at lj_safepoint.c:969:5:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘lj_native_leave_tg’ at lj_safepoint.c:990:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_tab.o
+In file included from lj_obj.h:15,
+                 from lj_str.c:9:
+In function ‘la_fence_seq’,
+    inlined from ‘str_source_pinned’ at lj_str.c:1267:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘strq_try_pin’ at lj_str.c:484:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘str_vm_cohort_ready’ at lj_str.c:1829:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_func.o
+In function ‘la_fence_seq’,
+    inlined from ‘strtab_finish_ready_copy’ at lj_str.c:775:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘strtab_help_expand’ at lj_str.c:797:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘strtab_claim’ at lj_str.c:530:3,
+    inlined from ‘str_resize’ at lj_str.c:981:10:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘lj_str_source_pin’ at lj_str.c:1252:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘strq_enter’ at lj_str.c:495:5,
+    inlined from ‘strcanon_lookup’ at lj_str.c:1372:44:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘strtab_enter’ at lj_str.c:595:7,
+    inlined from ‘lj_str_new’ at lj_str.c:1431:24:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘strtab_enter_completed’ at lj_str.c:877:7,
+    inlined from ‘lj_str_new’ at lj_str.c:1440:8:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘strq_readers_active’ at lj_str.c:2852:3,
+    inlined from ‘strq_retire_record’ at lj_str.c:2974:7,
+    inlined from ‘str_body_retire_record’ at lj_str.c:3007:12:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘str_reclaim_exclusive_try’ at lj_str.c:1915:3,
+    inlined from ‘lj_str_gc2_sweep_begin’ at lj_str.c:2502:16:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from lj_obj.h:15,
+                 from lj_gc.c:15:
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_sweep_pregrace_batch’ at lj_gc.c:2741:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_sweep_pregrace_batch’ at lj_gc.c:2758:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_udata.o
+CC        lj_meta.o
+CC        lj_debug.o
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_sweep_pregrace_destruct’ at lj_gc.c:2538:3,
+    inlined from ‘gc2_sweep_arena_unmarked_candidate’ at lj_gc.c:2818:13,
+    inlined from ‘gc2_sweep_arena_unmarked_bodies’ at lj_gc.c:2880:4,
+    inlined from ‘gc2_sweep_arena_unmarked_impl.isra’ at lj_gc.c:2929:7:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_sweep_pregrace_destruct’ at lj_gc.c:2553:3,
+    inlined from ‘gc2_sweep_arena_unmarked_candidate’ at lj_gc.c:2818:13,
+    inlined from ‘gc2_sweep_arena_unmarked_bodies’ at lj_gc.c:2880:4,
+    inlined from ‘gc2_sweep_arena_unmarked_impl.isra’ at lj_gc.c:2929:7:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_prng.o
+In file included from lj_obj.h:15,
+                 from lj_tab.c:12:
+In function ‘la_fence_seq’,
+    inlined from ‘tab_read_enter_owner’ at lj_tab.c:327:5,
+    inlined from ‘tab_vector_read_try’ at lj_tab.c:483:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_state.o
+CC        lj_dispatch.o
+CC        lj_tg.o
+In file included from lj_obj.h:15,
+                 from lj_dispatch.c:9:
+In function ‘la_fence_seq’,
+    inlined from ‘lj_dispatch_hotcount_publish’ at lj_dispatch.c:177:7:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_thr.o
+In file included from lj_obj.h:15,
+                 from lj_gc2.c:16:
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_ssb_published_empty’ at lj_gc2.c:15304:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘tab_read_enter_owner’ at lj_tab.c:327:5,
+    inlined from ‘lj_tab_read_enter’ at lj_tab.c:350:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_chan.o
+In function ‘la_fence_seq’,
+    inlined from ‘tab_read_enter_owner’ at lj_tab.c:327:5,
+    inlined from ‘tab_runtime_cutover_help_leased’ at lj_tab.c:531:3,
+    inlined from ‘tab_runtime_cutover_help_leased’ at lj_tab.c:524:13:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from lj_obj.h:15,
+                 from lj_tg.c:11:
+In function ‘la_fence_acq’,
+    inlined from ‘lj_gc2_rootdesc_snapshot’ at lj_gc2token.h:1287:3,
+    inlined from ‘lj_tg_attach’ at lj_tg.c:688:9:
+lj_atomic.h:170:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  170 | LA_INLINE void la_fence_acq(void){__atomic_thread_fence(__ATOMIC_ACQUIRE);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘lj_tg_attach’ at lj_tg.c:740:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from lj_obj.h:15,
+                 from lj_thr.c:9:
+In function ‘la_fence_acq’,
+    inlined from ‘lj_gc2_rootdesc_snapshot’ at lj_gc2token.h:1287:3,
+    inlined from ‘lj_thr_main_close_claim’ at lj_thr.c:1748:7:
+lj_atomic.h:170:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  170 | LA_INLINE void la_fence_acq(void){__atomic_thread_fence(__ATOMIC_ACQUIRE);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_acq’,
+    inlined from ‘lj_gc2_rootdesc_snapshot’ at lj_gc2token.h:1287:3,
+    inlined from ‘lj_tg_detach’ at lj_tg.c:851:7:
+lj_atomic.h:170:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  170 | LA_INLINE void la_fence_acq(void){__atomic_thread_fence(__ATOMIC_ACQUIRE);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_rel’,
+    inlined from ‘lj_tg_detach’ at lj_tg.c:920:3:
+lj_atomic.h:171:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  171 | LA_INLINE void la_fence_rel(void){__atomic_thread_fence(__ATOMIC_RELEASE);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_arena.o
+In function ‘la_fence_seq’,
+    inlined from ‘lj_thr_fence’ at lj_thr.c:2218:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_vmevent.o
+CC        lj_vmmath.o
+CC        lj_strscan.o
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_jit_phase_gate_close’ at lj_gc2.c:92:3,
+    inlined from ‘gc2_sweep_epoch’ at lj_gc2.c:5942:5:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_grey_pop’ at lj_gc2.c:14398:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘tab_read_enter_owner’ at lj_tab.c:327:5,
+    inlined from ‘lj_tab_resize’ at lj_tab.c:4148:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘tab_read_enter_owner’ at lj_tab.c:327:5,
+    inlined from ‘lj_tab_resize’ at lj_tab.c:4590:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from lj_obj.h:15,
+                 from lj_vmevent.c:13:
+In function ‘la_fence_acq’,
+    inlined from ‘lj_vmevent_prepare_try’ at lj_vmevent.c:500:7:
+lj_atomic.h:170:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  170 | LA_INLINE void la_fence_acq(void){__atomic_thread_fence(__ATOMIC_ACQUIRE);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+lj_atomic.h:170:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+In function ‘la_fence_acq’,
+    inlined from ‘lj_vmevent_absence_revalidate’ at lj_vmevent.c:582:5:
+lj_atomic.h:170:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  170 | LA_INLINE void la_fence_acq(void){__atomic_thread_fence(__ATOMIC_ACQUIRE);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_jit_phase_gate_close’ at lj_gc2.c:92:3,
+    inlined from ‘lj_gc2_jit_mark_request_exit’ at lj_gc2.c:220:3,
+    inlined from ‘lj_gc2_jit_mark_request_exit’ at lj_gc2.c:212:6:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_jit_phase_gate_close’ at lj_gc2.c:92:3,
+    inlined from ‘lj_gc2_jit_sweep_request_exit’ at lj_gc2.c:232:3,
+    inlined from ‘lj_gc2_jit_sweep_request_exit’ at lj_gc2.c:224:6:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_strfmt.o
+CC        lj_strfmt_num.o
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_idle_reclaim_enter’ at lj_gc2.c:7535:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+In function ‘la_fence_seq’,
+    inlined from ‘lj_gc2_set_generational’ at lj_gc2.c:4713:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_jit_phase_gate_close’ at lj_gc2.c:92:3,
+    inlined from ‘lj_gc2_mark_to_weak’ at lj_gc2.c:4743:5:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘tab_read_enter_owner’ at lj_tab.c:327:5,
+    inlined from ‘rehashtab’ at lj_tab.c:5008:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_jit_phase_gate_close’ at lj_gc2.c:92:3,
+    inlined from ‘lj_gc2_test_sweep_owner_progress’ at lj_gc2.c:6531:7:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_idle_transition_handshake’ at lj_gc2.c:4627:3,
+    inlined from ‘lj_gc2_preserve_abort_to_idle’ at lj_gc2.c:6767:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_jit_phase_gate_close’ at lj_gc2.c:92:3,
+    inlined from ‘lj_gc2_preserve_abort_to_idle’ at lj_gc2.c:6679:5:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_registry_read_try_mode’ at lj_gc2.c:7427:5:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_small_candidate_admit’ at lj_gc2.c:17670:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_serialize.o
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_small_containing_admit’ at lj_gc2.c:17252:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_mark_small_cell_begin’ at lj_gc2.c:17431:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_ismarked_small_cell’ at lj_gc2.c:23618:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_api.o
+In function ‘la_fence_seq’,
+    inlined from ‘tab_readers_past’ at lj_tab.c:3451:3,
+    inlined from ‘lj_tab_reclaim_retired’ at lj_tab.c:4771:2:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘tab_readers_past’ at lj_tab.c:3451:3,
+    inlined from ‘lj_tab_reclaim_retired’ at lj_tab.c:4720:2:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+In function ‘la_fence_seq’,
+    inlined from ‘tab_readers_past’ at lj_tab.c:3451:3,
+    inlined from ‘lj_tab_reclaim_retired’ at lj_tab.c:4685:2:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_mark_small_cell_begin_reclaim_held’ at lj_gc2.c:17452:3,
+    inlined from ‘gc2_markmem_registered_scoped_status_impl’ at lj_gc2.c:18194:5:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_profile.o
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_jit_phase_gate_close’ at lj_gc2.c:92:3,
+    inlined from ‘gc2_mark_begin’ at lj_gc2.c:4455:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from lj_obj.h:15,
+                 from lj_arena.c:25:
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_open_quiet’ at lj_arena.c:143:3,
+    inlined from ‘arena_destruct_claim_live’ at lj_arena.c:5271:8:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_closed_quiet’ at lj_arena.c:152:3,
+    inlined from ‘arena_quarantine_apply_bitmap’ at lj_arena.c:7817:9:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_closed_quiet’ at lj_arena.c:152:3,
+    inlined from ‘arena_quarantine_apply_bitmap’ at lj_arena.c:7834:9:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_table_token_scan_small_candidate.isra’ at lj_gc2.c:19676:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_lex.o
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_idle_retire_epoch_owned’ at lj_gc2.c:23191:5:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_parse.o
+CC        lj_bcread.o
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_jit_phase_gate_close’ at lj_gc2.c:92:3,
+    inlined from ‘gc2_sweep_root_snapshot’ at lj_gc2.c:5916:5,
+    inlined from ‘gc2_sweep_prepare_bridge_result’ at lj_gc2.c:6004:12:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_sweep_prepare_bridge_result’ at lj_gc2.c:6038:5:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_sweep_prepare_bridge_result’ at lj_gc2.c:6056:5:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_sweep_close_commit_owned’ at lj_gc2.c:6865:3,
+    inlined from ‘gc2_sweep_close_epoch_owned’ at lj_gc2.c:6937:10:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_closed_quiet’ at lj_arena.c:152:3,
+    inlined from ‘lj_arena_sweep_words’ at lj_arena.c:1712:14:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_worker_start_count_locked_l’ at lj_gc2.c:2530:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_jit_phase_gate_close’ at lj_gc2.c:92:3,
+    inlined from ‘lj_gc2_sweep_to_idle’ at lj_gc2.c:6977:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_idle_transition_handshake’ at lj_gc2.c:4627:3,
+    inlined from ‘lj_gc2_cycle_to_idle’ at lj_gc2.c:7130:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_jit_phase_gate_close’ at lj_gc2.c:92:3,
+    inlined from ‘lj_gc2_cycle_to_idle’ at lj_gc2.c:7026:5:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+In function ‘la_fence_seq’,
+    inlined from ‘lj_gc2_grey_steal’ at lj_gc2.c:14438:3,
+    inlined from ‘lj_gc2_test_grey_steal’ at lj_gc2.c:14455:10:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘lj_gc2_small_lease_try’ at lj_gc2.c:17045:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘tab_read_enter_owner’ at lj_tab.c:327:5,
+    inlined from ‘lj_tab_len_forjit_try’ at lj_tab.c:11562:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_bcwrite.o
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_closed_quiet’ at lj_arena.c:152:3,
+    inlined from ‘lj_arena_destruct_acquire’ at lj_arena.c:5931:9:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_open_quiet’ at lj_arena.c:143:3,
+    inlined from ‘lj_arena_destruct_acquire’ at lj_arena.c:5932:9:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_closed_quiet’ at lj_arena.c:152:3,
+    inlined from ‘lj_arena_destruct_acquire’ at lj_arena.c:5942:9:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_open_quiet’ at lj_arena.c:143:3,
+    inlined from ‘lj_arena_destruct_acquire’ at lj_arena.c:5943:9:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_open_quiet’ at lj_arena.c:143:3,
+    inlined from ‘lj_arena_remote_free_publish’ at lj_arena.c:6085:9:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_closed_quiet’ at lj_arena.c:152:3,
+    inlined from ‘arena_late_prepare_consume’ at lj_arena.c:6710:7,
+    inlined from ‘lj_arena_alloc_prepare_sweep_kind.part.0’ at lj_arena.c:7647:11:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_load.o
+CC        lj_ir.o
+CC        lj_opt_mem.o
+In function ‘la_fence_seq’,
+    inlined from ‘lj_gc2_ismarked’ at lj_gc2.c:23740:5:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_closed_quiet’ at lj_arena.c:152:3,
+    inlined from ‘arena_quarantine_settle_late’ at lj_arena.c:6764:7,
+    inlined from ‘lj_arena_alloc_quarantine_finish’ at lj_arena.c:7931:9:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_jit_phase_gate_close’ at lj_gc2.c:92:3,
+    inlined from ‘gc2_worker_drain_inner’ at lj_gc2.c:22930:7:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_jit_phase_gate_close’ at lj_gc2.c:92:3,
+    inlined from ‘gc2_worker_drain_inner’ at lj_gc2.c:22954:7:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_closed_quiet’ at lj_arena.c:152:3,
+    inlined from ‘lj_arena_alloc_restore_sweep_kind’ at lj_arena.c:8084:11:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_opt_fold.o
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_jit_phase_gate_close’ at lj_gc2.c:92:3,
+    inlined from ‘gc2_fixpoint_round’ at lj_gc2.c:23350:5:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_jit_phase_gate_close’ at lj_gc2.c:92:3,
+    inlined from ‘gc2_mark_root_snapshot’ at lj_gc2.c:23298:5,
+    inlined from ‘gc2_fixpoint_round’ at lj_gc2.c:23387:10:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘gc2_jit_phase_gate_close’ at lj_gc2.c:92:3,
+    inlined from ‘gc2_mark_close_help’ at lj_gc2.c:23509:5:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_open_quiet’ at lj_arena.c:143:3,
+    inlined from ‘lj_arena_free’ at lj_arena.c:8853:10:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_open_quiet’ at lj_arena.c:143:3,
+    inlined from ‘arena_mutation_claim_live’ at lj_arena.c:5313:8,
+    inlined from ‘lj_arena_realloc’ at lj_arena.c:8995:19:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_opt_narrow.o
+CC        lj_opt_dce.o
+CC        lj_opt_loop.o
+CC        lj_opt_split.o
+CC        lj_opt_sink.o
+In function ‘la_fence_rel’,
+    inlined from ‘lj_gc2_rootdesc_publish’ at lj_gc2token.h:1221:3,
+    inlined from ‘gc2_table_store_begin’ at lj_gc2.c:16465:15:
+lj_atomic.h:171:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  171 | LA_INLINE void la_fence_rel(void){__atomic_thread_fence(__ATOMIC_RELEASE);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_mcode.o
+CC        lj_snap.o
+CC        lj_record.o
+CC        lj_crecord.o
+CC        lj_ffrecord.o
+CC        lj_asm.o
+CC        lj_trace.o
+CC        lj_gdbjit.o
+CC        lj_ctype.o
+CC        lj_cdata.o
+In file included from lj_obj.h:15,
+                 from lj_trace.c:13:
+In function ‘la_fence_seq’,
+    inlined from ‘trace_flush_read_enter’ at lj_trace.c:10598:7:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_cconv.o
+In file included from lj_obj.h:15,
+                 from lj_ctype.c:6:
+In function ‘la_fence_seq’,
+    inlined from ‘ctype_fin_free_retired’ at lj_ctype.c:2852:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_ccall.o
+CC        lj_ccallback.o
+In function ‘la_fence_seq’,
+    inlined from ‘ctype_fin_read_enter’ at lj_ctype.c:465:3,
+    inlined from ‘lj_ctype_fin_get_native’ at lj_ctype.c:878:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘ctype_fin_read_enter’ at lj_ctype.c:465:3,
+    inlined from ‘lj_ctype_fin_newgen’ at lj_ctype.c:918:5:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from lj_obj.h:15,
+                 from lj_ccall.c:9:
+In function ‘la_fence_seq’,
+    inlined from ‘ffi_native_frame_transition_begin’ at lj_ccall.c:1897:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_rel’,
+    inlined from ‘lj_ffi_native_frame_push’ at lj_ccall.c:1564:3:
+lj_atomic.h:171:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  171 | LA_INLINE void la_fence_rel(void){__atomic_thread_fence(__ATOMIC_RELEASE);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_rel’,
+    inlined from ‘lj_ffi_native_frame_pop’ at lj_ccall.c:1591:3:
+lj_atomic.h:171:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  171 | LA_INLINE void la_fence_rel(void){__atomic_thread_fence(__ATOMIC_RELEASE);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_acq’,
+    inlined from ‘ffi_native_trace_remote_snapshot’ at lj_ccall.c:2096:3:
+lj_atomic.h:170:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  170 | LA_INLINE void la_fence_acq(void){__atomic_thread_fence(__ATOMIC_ACQUIRE);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from lj_obj.h:15,
+                 from lj_ccallback.c:6:
+In function ‘la_fence_seq’,
+    inlined from ‘lj_ccallback_enter’ at lj_ccallback.c:1312:5:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_acq’,
+    inlined from ‘lj_ffi_native_trace_remote_certify’ at lj_ccall.c:2163:3:
+lj_atomic.h:170:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  170 | LA_INLINE void la_fence_acq(void){__atomic_thread_fence(__ATOMIC_ACQUIRE);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘ffi_native_frame_finish_begin’ at lj_ccall.c:1638:3,
+    inlined from ‘lj_ffi_native_trace_leave’ at lj_ccall.c:2371:9:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lj_carith.o
+CC        lj_clib.o
+CC        lj_cparse.o
+CC        lj_lib.o
+CC        lj_alloc.o
+CC        lib_aux.o
+CC        lib_base.o
+CC        lib_math.o
+CC        lib_bit.o
+CC        lib_string.o
+CC        lib_table.o
+CC        lib_io.o
+CC        lib_os.o
+CC        lib_package.o
+CC        lib_debug.o
+In file included from lj_obj.h:15,
+                 from lib_os.c:22:
+In function ‘la_fence_seq’,
+    inlined from ‘lj_cf_os_setlocale’ at lib_os.c:467:5:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CC        lib_jit.o
+CC        lib_ffi.o
+CC        lib_buffer.o
+CC        lib_threading.o
+CC        lib_init.o
+In file included from lj_obj.h:15,
+                 from lib_threading.c:19:
+In function ‘la_fence_seq’,
+    inlined from ‘threading_entering_begin’ at lib_threading.c:658:3:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘threading_gc_enter_counted’ at lib_threading.c:864:5:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘threading_shutdown_clear_self_stopreq’ at lib_threading.c:706:3,
+    inlined from ‘lj_threading_shutdown’ at lib_threading.c:731:5:
+lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+AR        libluajit.a
+LINK      luajit
+OK        Successfully built LuaJIT
+make: Leaving directory '/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan/src'

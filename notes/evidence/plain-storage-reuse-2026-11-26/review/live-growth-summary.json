@@ -1,0 +1,94 @@
+{
+  "live-growth": [
+    {
+      "arenas": 16,
+      "median_ns_per_alloc": {
+        "old": 268.331,
+        "candidate": 270.019
+      },
+      "median_paired_ratio": 1.0014179873034414,
+      "min_paired_ratio": 0.9533225572252435,
+      "max_paired_ratio": 1.0062907379318826,
+      "samples": 3
+    },
+    {
+      "arenas": 128,
+      "median_ns_per_alloc": {
+        "old": 270.748,
+        "candidate": 281.66
+      },
+      "median_paired_ratio": 1.033030714908328,
+      "min_paired_ratio": 0.9911735475937811,
+      "max_paired_ratio": 1.0507388298844658,
+      "samples": 3
+    },
+    {
+      "arenas": 1024,
+      "median_ns_per_alloc": {
+        "old": 328.899,
+        "candidate": 542.888
+      },
+      "median_paired_ratio": 1.6401022806393453,
+      "min_paired_ratio": 1.6282801046419229,
+      "max_paired_ratio": 1.658443002553857,
+      "samples": 3
+    },
+    {
+      "arenas": 4096,
+      "median_ns_per_alloc": {
+        "old": 344.688,
+        "candidate": 1635.98
+      },
+      "median_paired_ratio": 4.776655990344891,
+      "min_paired_ratio": 4.566276042408464,
+      "max_paired_ratio": 4.791707549960606,
+      "samples": 3
+    }
+  ],
+  "live-growth-final": [
+    {
+      "arenas": 16,
+      "median_ns_per_alloc": {
+        "old": 283.75,
+        "candidate": 302.517
+      },
+      "median_paired_ratio": 0.9829546461078416,
+      "min_paired_ratio": 0.8752358362570113,
+      "max_paired_ratio": 1.1112470245966675,
+      "samples": 5
+    },
+    {
+      "arenas": 128,
+      "median_ns_per_alloc": {
+        "old": 347.484,
+        "candidate": 342.162
+      },
+      "median_paired_ratio": 0.9670069398884081,
+      "min_paired_ratio": 0.9481932848241428,
+      "max_paired_ratio": 0.9887951170768653,
+      "samples": 5
+    },
+    {
+      "arenas": 1024,
+      "median_ns_per_alloc": {
+        "old": 351.913,
+        "candidate": 356.113
+      },
+      "median_paired_ratio": 0.9990981477781901,
+      "min_paired_ratio": 0.9190582328147155,
+      "max_paired_ratio": 1.0368005636542028,
+      "samples": 5
+    },
+    {
+      "arenas": 4096,
+      "median_ns_per_alloc": {
+        "old": 360.167,
+        "candidate": 382.658
+      },
+      "median_paired_ratio": 1.005275187179824,
+      "min_paired_ratio": 0.9701777231117787,
+      "max_paired_ratio": 1.1109024070324005,
+      "samples": 5
+    }
+  ]
+}

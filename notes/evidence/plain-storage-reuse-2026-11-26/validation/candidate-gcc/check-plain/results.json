@@ -1,0 +1,40 @@
+[
+  {
+    "name": "progress-build",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-gcc/check-plain/progress.d",
+      "-I/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-gcc/src",
+      "-I/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-gcc/tests",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-gcc/tests/t-arena-plain-late.c",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-gcc/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-gcc/check-plain/plain"
+    ],
+    "seconds": 0.16430359301739372,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "progress",
+    "command": [
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-gcc/check-plain/plain"
+    ],
+    "seconds": 0.1139569679799024,
+    "exit": 0,
+    "test": true
+  }
+]

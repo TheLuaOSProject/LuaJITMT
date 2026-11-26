@@ -1,0 +1,13 @@
+/usr/bin/ld: /tmp/lj_arena-95673b.o: in function `lj_arena_root_construct_claim':
+/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/src/lj_arena.c:542:(.text+0x4bb): undefined reference to `lj_assert_fail'
+/usr/bin/ld: /tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/src/lj_arena.c:553:(.text+0x4de): undefined reference to `lj_assert_fail'
+/usr/bin/ld: /tmp/lj_arena-95673b.o: in function `lj_arena_reclaim_unseal':
+/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/src/lj_arena.c:1043:(.text+0x11c6): undefined reference to `lj_assert_fail'
+/usr/bin/ld: /tmp/lj_arena-95673b.o: in function `arena_publish_leave':
+/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/src/lj_arena.c:934:(.text+0x12ec): undefined reference to `lj_assert_fail'
+/usr/bin/ld: /tmp/lj_arena-95673b.o: in function `lj_arena_unmap':
+/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/src/lj_arena.c:2005:(.text+0x2bad): undefined reference to `lj_assert_fail'
+/usr/bin/ld: /tmp/lj_arena-95673b.o:/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/src/lj_arena.c:5959: more undefined references to `lj_assert_fail' follow
+/usr/bin/ld: /tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/check-arena/allocf: hidden symbol `lj_assert_fail' isn't defined
+/usr/bin/ld: final link failed: bad value
+clang: error: linker command failed with exit code 1 (use -v to see invocation)

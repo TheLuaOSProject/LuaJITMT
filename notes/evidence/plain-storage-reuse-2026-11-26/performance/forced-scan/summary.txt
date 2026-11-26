@@ -1,0 +1,6 @@
+Paired immutable old/new, JIT enabled, CPU 8.40 rounds x20,000 cycles,1KiB reset/put/get.
+Each policy includes3 alternating paired samples; work CPU excludes diagnostics and explicitGC.
+policy old_ns new_ns new/old paired_min..max old/new_RSS_end_KiB old/new_RSS_after_drop5GC_KiB old/new_explicitGC_CPU_s
+auto 5824.810 541.879 0.0930 0.0861..0.0992 992304/5072 992328/5072 0.000000/0.000000
+full_each_round 5990.368 564.244 0.0942 0.0935..0.0985 992432/5288 992432/5272 0.121215/0.024191
+full_every_5_rounds 5855.880 561.500 0.0959 0.0945..0.1017 992284/5176 992280/5160 0.029055/0.005001

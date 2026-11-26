@@ -1,0 +1,406 @@
+[
+  {
+    "build": "old",
+    "command": [
+      "gcc",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-buffer-headroom-20261126-y6qc0l6f/combined-v1/src",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth.c",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/combined-v1/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-old"
+    ],
+    "binary_sha256": "3a886f44311eee2d9e72c4b52d949cb104c66a3748404cb11a0813736ffb325c",
+    "library_sha256": "97811f9cc8f56b402b31846b72a2c82b7cf5f8963c9a075600a9fdd3f75ccb02"
+  },
+  {
+    "build": "candidate",
+    "command": [
+      "gcc",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-gcc/src",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth.c",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-gcc/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-candidate"
+    ],
+    "binary_sha256": "77ca6a152c3dd1c2ae03410d714a81fedf6599a34c8b31ead1849efdd6461359",
+    "library_sha256": "594f41cdcc0aae04a85f0f9036250155fe98ae0e60c4c93c39759ccf9144d470"
+  },
+  {
+    "mode": "old",
+    "count": 16,
+    "rep": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-old",
+      "16"
+    ],
+    "exit": 0,
+    "stdout": "928,0.000270980,292.004\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 16,
+    "rep": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-candidate",
+      "16"
+    ],
+    "exit": 0,
+    "stdout": "928,0.000258331,278.374\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 16,
+    "rep": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-candidate",
+      "16"
+    ],
+    "exit": 0,
+    "stdout": "928,0.000250578,270.019\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 16,
+    "rep": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-old",
+      "16"
+    ],
+    "exit": 0,
+    "stdout": "928,0.000249011,268.331\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 16,
+    "rep": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-old",
+      "16"
+    ],
+    "exit": 0,
+    "stdout": "928,0.000241492,260.228\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 16,
+    "rep": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-candidate",
+      "16"
+    ],
+    "exit": 0,
+    "stdout": "928,0.000241834,260.597\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 128,
+    "rep": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-old",
+      "128"
+    ],
+    "exit": 0,
+    "stdout": "7424,0.002203700,296.835\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 128,
+    "rep": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-candidate",
+      "128"
+    ],
+    "exit": 0,
+    "stdout": "7424,0.002184255,294.215\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 128,
+    "rep": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-candidate",
+      "128"
+    ],
+    "exit": 0,
+    "stdout": "7424,0.002076428,279.691\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 128,
+    "rep": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-old",
+      "128"
+    ],
+    "exit": 0,
+    "stdout": "7424,0.002010035,270.748\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 128,
+    "rep": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-old",
+      "128"
+    ],
+    "exit": 0,
+    "stdout": "7424,0.001990070,268.059\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 128,
+    "rep": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-candidate",
+      "128"
+    ],
+    "exit": 0,
+    "stdout": "7424,0.002091044,281.660\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 1024,
+    "rep": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-old",
+      "1024"
+    ],
+    "exit": 0,
+    "stdout": "59392,0.019955870,336.003\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 1024,
+    "rep": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-candidate",
+      "1024"
+    ],
+    "exit": 0,
+    "stdout": "59392,0.032493795,547.107\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 1024,
+    "rep": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-candidate",
+      "1024"
+    ],
+    "exit": 0,
+    "stdout": "59392,0.032037735,539.428\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 1024,
+    "rep": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-old",
+      "1024"
+    ],
+    "exit": 0,
+    "stdout": "59392,0.019533996,328.899\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 1024,
+    "rep": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-old",
+      "1024"
+    ],
+    "exit": 0,
+    "stdout": "59392,0.019441880,327.348\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 1024,
+    "rep": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-candidate",
+      "1024"
+    ],
+    "exit": 0,
+    "stdout": "59392,0.032243204,542.888\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 4096,
+    "rep": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-old",
+      "4096"
+    ],
+    "exit": 0,
+    "stdout": "237568,0.083401054,351.062\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 4096,
+    "rep": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-candidate",
+      "4096"
+    ],
+    "exit": 0,
+    "stdout": "237568,0.380832449,1603.046\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 4096,
+    "rep": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-candidate",
+      "4096"
+    ],
+    "exit": 0,
+    "stdout": "237568,0.388656410,1635.980\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 4096,
+    "rep": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-old",
+      "4096"
+    ],
+    "exit": 0,
+    "stdout": "237568,0.081110275,341.419\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 4096,
+    "rep": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-old",
+      "4096"
+    ],
+    "exit": 0,
+    "stdout": "237568,0.081886845,344.688\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 4096,
+    "rep": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-candidate",
+      "4096"
+    ],
+    "exit": 0,
+    "stdout": "237568,0.391145155,1646.456\n",
+    "stderr": ""
+  }
+]

@@ -1,0 +1,18 @@
+{
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/src/luajit": "28de670ff6942fd615c7179ada3ed806ee829cbcd8b12459acb64fb5afdddfae",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/src/libluajit.a": "74fb52d1dba6db3a132035ff8fff3b5441e3c33ca30bfbfb4fb66a9c3bd7c5c0",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/tests/t-arena-bitmap.c": "35b2133602c1cad4c0b500c45d8ca97a4359bac84d775f6e3f43bddd61e0b130",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/tests/t-arena-tls-stub.c": "c77bec4d1fa415bbfa741053e1eadb48f6cee1f32407046914a7ed526dd97b36",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/src/lj_arena.c": "7d1b52163037d060521a3997e6ab3b73455f0315e3d2a6b8cc349d3468fa1df3",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/src/lj_prng.c": "d1109cdd8e6ff74139a2290b2144c5d48e9c3da88b0b6f6462be44d69ae7c2ad",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/tests/t-arena-publication.c": "cf9ad835f226eab16c4aeb02bee94516d6fa2aa644ec87db0122970a3110e0fb",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/tests/t-arena-remote-pending.c": "400e0a24c9ea7bcb8b97b6d3527d6d5995f3d41abc897c2fef74e493b9e5ec1f",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/tests/t-arena-map.c": "2b0d7370438179e861cdf5aa9900129266a92cb43932b8f823250c72ca1962aa",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/tests/t-arena-huge.c": "89b9ec1d01fe612cac02a65a4ee2aa440aa6813adba0e896cc0670e953ce05de",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/tests/t-arena-alloc.c": "0a349c145f850ff02eaf9642c5b5c65d2ee0bc3a81145458ac5891a9299a6dd8",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/tests/t-arena-realloc.c": "ed39ac66074b247f684bb0c7813678d42ec0b2b71451769e7ed24e10a437d763",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/tests/t-arena-allocf.c": "222ec2805078f60416adb4d16df465eac2f8ecc3a2184258efa4b180d41bd2ad",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/tests/t-arena-hugetab.c": "58c093b1b09772f6f6b754731633f6eb37cea2dfd61548d43ae438a576e8bebc",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/tests/t-arena-sweep.c": "f9fd8f1ca0cc483112720c2cf26be13b6e85e4f8b893d9ecd185fccb6ed7503f",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-assert/tests/t-arena-empty-reclaimed.c": "c209265529878ddee64585824a006787f4984374a2137115fdd3ffe03bfb83fa"
+}

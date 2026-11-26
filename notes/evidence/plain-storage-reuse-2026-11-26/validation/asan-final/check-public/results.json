@@ -1,0 +1,24 @@
+[
+  {
+    "name": "public-joff",
+    "command": [
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/asan-final/src/luajit",
+      "-joff",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/asan-final/tests/t-buffer-concurrent-public.lua"
+    ],
+    "seconds": 1.9178736550093163,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "public-jon",
+    "command": [
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/asan-final/src/luajit",
+      "-jon",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/asan-final/tests/t-buffer-concurrent-public.lua"
+    ],
+    "seconds": 2.8716999029857107,
+    "exit": 0,
+    "test": true
+  }
+]

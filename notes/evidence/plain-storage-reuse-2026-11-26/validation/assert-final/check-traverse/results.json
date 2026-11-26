@@ -1,0 +1,45 @@
+[
+  {
+    "name": "progress-build",
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-ftrivial-auto-var-init=pattern",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/check-traverse/progress.d",
+      "-I/tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src",
+      "-I/tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/tests",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/tests/t-gc2-traverse.c",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/check-traverse/traverse"
+    ],
+    "seconds": 2.672609767992981,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "progress",
+    "command": [
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/check-traverse/traverse"
+    ],
+    "seconds": 9.38872692498262,
+    "exit": 0,
+    "test": true
+  }
+]

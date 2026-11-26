@@ -1,0 +1,39 @@
+{
+  "commit": "0c6d00bd1097e31e06bf0b7cbbf8cdbd2b408223",
+  "cpu": 8,
+  "count": 20000,
+  "rounds": 40,
+  "samples": 3,
+  "policies": {
+    "auto": 0,
+    "full_each_round": 1,
+    "full_every_5_rounds": 5
+  },
+  "baseline_package": "/tmp/lj-buffer-churn-growth-20261126-fu6iac_1",
+  "candidate_source": "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-gcc",
+  "runtime_source_manifest_count": 228,
+  "runtime_source_manifest_differences": [],
+  "binary_sha256": {
+    "baseline": "505476db8abd9a8cd425d622459c6aec4fa835e4d43fe79dbc0bfe61f248e17e",
+    "candidate": "068b2a1d07315bc2921d9db9519f5bb4ecb0f0f9ac9e7deb4be4540071439960"
+  },
+  "timing": "paired alternating old/new processes per policy/sample; original Lua workload unchanged",
+  "census_binary_sha256": {
+    "baseline": "4e3839835542aae1666c35d6a35d45aa1c98ce4e9d32d725949a2c4f424b9d62",
+    "candidate": "bc3e567aa65404bbc0b6e6153f57148ada90198cba7fcde5e144484d9e3c25de"
+  },
+  "candidate_library_sha256": "594f41cdcc0aae04a85f0f9036250155fe98ae0e60c4c93c39759ccf9144d470",
+  "result_rows": 1566,
+  "work_rounds": 720,
+  "census_rows": 56,
+  "all_semantic_assertions": "passed in all18policy processes and2census processes",
+  "scope": "single-mutator; no shared source edits; CPU8 released",
+  "lua_workload_sha256": "279558a63a2a326473cffb34c07d3823e598e3b258b0052641b673c89a88476f",
+  "original_lua_workload_sha256": "279558a63a2a326473cffb34c07d3823e598e3b258b0052641b673c89a88476f",
+  "final_runtime_source_manifest_differences": [
+    "src/lj_arena.c"
+  ],
+  "baseline_library_sha256": "97811f9cc8f56b402b31846b72a2c82b7cf5f8963c9a075600a9fdd3f75ccb02",
+  "cpu8_released": true,
+  "final_source_difference_note": "src/lj_arena.c comment-only clarification at arena_late_pin; measured source/binary immutable"
+}

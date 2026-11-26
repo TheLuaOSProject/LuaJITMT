@@ -1,0 +1,56 @@
+Sustained buffer churn at immutable HEAD 0c6d00bd1 — 2026-11-26
+
+Result: process memory grows almost linearly while Lua-accounted memory stays nearly flat. Explicit full GC does not reclaim retired PLAIN buffer backing. The allocator census shows those old backing starts still have block and late bits after dropping the buffer, flushing JIT traces, and five completed major collections. Closing the Lua state releases the mappings while the process remains alive.
+
+Baseline provenance
+- Commit: 0c6d00bd1097e31e06bf0b7cbbf8cdbd2b408223.
+- Immutable binary SHA256: 505476db8abd9a8cd425d622459c6aec4fa835e4d43fe79dbc0bfe61f248e17e.
+- All 228 Makefile/src/dynasm input hashes matched this HEAD before measurements. The binary is the previously frozen combined runtime, now committed at this HEAD. Build metadata and source input archive are included.
+- No shared source files were edited. Diagnostic embedding links the unchanged static runtime archive and only reads the current TG's allocator metadata.
+
+Policy experiment
+Three independent processes per policy, alternating order, pinned CPU 8. Each process warms 1,000 cycles and completes one full collection, then runs 40 rounds of 20,000 reset/put/get cycles using a 1 KiB string. Semantic equality and empty-buffer assertions are checked inside every round. JIT remains enabled.
+
+Policies are automatic GC, automatic GC plus explicit full GC after each 20,000-cycle round, and automatic GC plus explicit full GC every five rounds (100,000 cycles). Work CPU and explicit collection CPU are timed separately. All scalar threading.gcstats() fields and collectgarbage('count') are captured between rounds. The child flushes each CSV row and waits for the controller to read /proc/PID/status before continuing, giving synchronized RSS/VM snapshots. Observer allocations and I/O are outside the measured work interval and common to all policies. They may influence collection scheduling; the separate allocator census establishes the physical retention mechanism directly.
+
+Medians over the three processes, after 800,000 cycles:
+Policy                 Work CPU/op  Explicit GC CPU  Final RSS      Lua bytes after drop+5GC
+Automatic              6.475 us      0               969.0 MiB      790.6 KiB
+Full GC every 20,000    6.113 us      0.120 s total   969.2 MiB      789.2 KiB
+Full GC every 100,000   5.762 us      0.029 s total   969.1 MiB      789.2 KiB
+
+RSS starts around 6 MiB and adds about 24 MiB each 20,000-cycle round. There is no plateau through 800,000 cycles. VM grows similarly. RSS remains at this level after buffer references are cleared, jit.flush(), and five explicit full collections. All quiescent snapshots are phase IDLE. Automatic cycle_starts advance from 3 after warmup to 43 after work and 48 after final collections; the two explicit policies advance farther. Collector progress is occurring. All /proc snapshots show one OS thread; worker_runs counts are therefore not interpreted as evidence of background worker threads.
+
+CPU is non-monotonic across rounds, ranging roughly 0.79–18.97 us/cycle across the experiment. The direct census shows growing undersized free-bin chains; the non-monotonic CPU pattern is consistent with the allocator's bounded bin walks and list discard/rebuild behavior, but the precise cause of each timing drop was not instrumented. Public GC statistics do not expose a PLAIN backing free count; smr_reclaimed is retained in raw data but is not presented as such a count. summary.csv, summary.txt and round-medians.csv preserve all policy and round statistics; results.csv contains all 783 snapshots.
+
+Own-TG allocator census
+A separate private C embedding runs 10 rounds (200,000 cycles), reading allocator state from C callbacks between timed rounds. The process remains single-threaded at all synchronized snapshots. It counts arena lists, flags, block/mark/late bits, allocated and late extents, remote gate states, bump capacity, and PLAIN free-bin length histograms. It does not mutate allocator metadata or attempt manual sweeping. Extents are bounded using the block|mark start/boundary bitmap and are diagnostic counts, not allocator authority.
+
+At 200,000 cycles:
+- 3,870 owned PLAIN arenas, all flags REGISTERED (8).
+- 50,338 block starts and 50,250 late starts.
+- Late extents occupy 13,014,558 cells, or 198.6 MiB.
+- Remote CLOSED, SEALED, PENDING and active-actor counts are all zero.
+- Bin 31 has 3,930 nodes, all below the 259 cells required by a 4,144-byte backing allocation; none fit. Of those nodes, 3,857 have exactly 113 cells.
+
+After dropping the buffer, flushing traces and five full collections:
+- Still 3,870 owned PLAIN arenas.
+- Still 50,251 late starts: dropping the final backing adds one.
+- Bin 31 has 3,956 undersized nodes and zero fitting nodes.
+- The collector is IDLE, and the remote gate counts remain zero.
+
+This is physical retention of retired backing bodies, not just a cache of reusable large free runs. A 64 KiB arena has 3,480 usable 16-byte cells. Thirteen 259-cell backings leave a 113-cell tail. At four cycles per backing, one arena serves 52 cycles, predicting 65,536 / 52 = 1,260.3 bytes of new mapped capacity per cycle. The measured RSS slope and dominant 113-cell tail histogram match that geometry. The retained late bodies prevent reuse and produce the growing undersized-bin search cost.
+
+After lua_close(), with the process still alive and paused for the parent to read /proc, RSS falls from 253,464 KiB to 4,160 KiB, and VM from 256,252 KiB to 5,552 KiB. lua_close takes 0.119457 CPU seconds in this run. This distinguishes runtime reclamation failure from ordinary subprocess-exit cleanup. after-lua-close.json contains the complete snapshot.
+
+Key evidence
+- results.csv / summary.csv / round-medians.csv: immutable binary policy measurements.
+- census-1-auto-bins.jsonl: complete counted allocator census at every diagnostic stage.
+- census-summary.csv / census-summary.json: selected before/after values.
+- census-results.csv: corresponding public stats and synchronized process memory.
+- after-lua-close.json: memory after state destruction, before process exit.
+- growth.lua / run.py: primary measurement harness.
+- census.c / growth-census.lua / run-census.py: private C embedding and census harness.
+- baseline-build.json / baseline-input.tar.gz / census-build-command.json: reproducible build inputs and command.
+
+Root source audit independently identified missing production PLAIN late consumption. These measurements support that path as the reclamation priority. Bin-class refinement alone would shorten searches without reclaiming the retired bodies demonstrated here.

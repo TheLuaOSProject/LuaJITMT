@@ -1,0 +1,15 @@
+variant,stage,round,operations,plain_owned_arenas,block_starts,late_starts,late_extent_bytes,bin31_nodes,bin31_fit259,bin31_113cell_nodes,remote_closed,remote_sealed,remote_pending,remote_actors
+baseline,warm,0,0,22,312,250,1032928,46,0,18,0,0,0,0
+baseline,work,1,20000,407,5323,5250,21752928,432,0,402,0,0,0,0
+baseline,work,5,100000,1946,25338,25250,104632928,1981,0,1937,0,0,0,0
+baseline,work,10,200000,3870,50338,50250,208232928,3929,0,3857,0,0,0,0
+baseline,explicit_free,10,200000,3870,50338,50251,208237072,3935,0,3857,0,0,0,0
+baseline,quiescent_gc_1,10,200000,3870,50325,50251,208237072,3944,0,3857,0,0,0,0
+baseline,quiescent_gc_5,10,200000,3870,50316,50251,208237072,3956,0,3857,0,0,0,0
+candidate,warm,0,0,4,62,0,0,53,23,1,0,0,0,0
+candidate,work,1,20000,5,105,32,132608,33,2,1,0,0,0,0
+candidate,work,5,100000,5,107,19,78736,43,8,1,0,0,0,0
+candidate,work,10,200000,5,107,19,78736,46,3,1,0,0,0,0
+candidate,explicit_free,10,200000,5,88,1,4144,65,21,1,0,0,0,0
+candidate,quiescent_gc_1,10,200000,5,74,0,0,71,19,1,0,0,0,0
+candidate,quiescent_gc_5,10,200000,5,65,0,0,83,19,1,0,0,0,0

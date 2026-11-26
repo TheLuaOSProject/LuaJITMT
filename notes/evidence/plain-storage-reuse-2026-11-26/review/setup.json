@@ -1,0 +1,5 @@
+{
+  "base": "0c6d00bd1097e31e06bf0b7cbbf8cdbd2b408223",
+  "previous_turn": "progress: pushed0c6d00bd1 with verified performance andstability checks",
+  "current_scope": "reclaim explicitly freed plain storage once reader leases permit; preserve unfreed rawstorage"
+}

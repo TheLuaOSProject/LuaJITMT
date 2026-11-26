@@ -1,0 +1,42 @@
+[
+  {
+    "name": "progress-build",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLUAJIT_DISABLE_BUFFER",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/check-plain/progress.d",
+      "-I/tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src",
+      "-I/tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/tests",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/tests/t-arena-plain-late.c",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/check-plain/plain"
+    ],
+    "seconds": 0.16456217397353612,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "progress",
+    "command": [
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/nobuf-final/check-plain/plain"
+    ],
+    "seconds": 0.007367095997324213,
+    "exit": 0,
+    "test": true
+  }
+]

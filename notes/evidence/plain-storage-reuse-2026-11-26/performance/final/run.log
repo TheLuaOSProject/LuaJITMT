@@ -1,0 +1,37 @@
+RUN 1-auto-1-baseline
+DONE 1-auto-1-baseline 6.067
+RUN 1-auto-2-candidate
+DONE 1-auto-2-candidate 0.541
+RUN 1-full_each_round-1-baseline
+DONE 1-full_each_round-1-baseline 5.904
+RUN 1-full_each_round-2-candidate
+DONE 1-full_each_round-2-candidate 0.69
+RUN 1-full_every_5_rounds-1-baseline
+DONE 1-full_every_5_rounds-1-baseline 10.4
+RUN 1-full_every_5_rounds-2-candidate
+DONE 1-full_every_5_rounds-2-candidate 0.574
+RUN 2-full_every_5_rounds-1-candidate
+DONE 2-full_every_5_rounds-1-candidate 0.552
+RUN 2-full_every_5_rounds-2-baseline
+DONE 2-full_every_5_rounds-2-baseline 5.962
+RUN 2-full_each_round-1-candidate
+DONE 2-full_each_round-1-candidate 0.592
+RUN 2-full_each_round-2-baseline
+DONE 2-full_each_round-2-baseline 5.287
+RUN 2-auto-1-candidate
+DONE 2-auto-1-candidate 0.541
+RUN 2-auto-2-baseline
+DONE 2-auto-2-baseline 4.947
+RUN 3-auto-1-baseline
+DONE 3-auto-1-baseline 5.565
+RUN 3-auto-2-candidate
+DONE 3-auto-2-candidate 0.55
+RUN 3-full_each_round-1-baseline
+DONE 3-full_each_round-1-baseline 6.195
+RUN 3-full_each_round-2-candidate
+DONE 3-full_each_round-2-candidate 0.577
+RUN 3-full_every_5_rounds-1-baseline
+DONE 3-full_every_5_rounds-1-baseline 5.352
+RUN 3-full_every_5_rounds-2-candidate
+DONE 3-full_every_5_rounds-2-candidate 0.556
+complete

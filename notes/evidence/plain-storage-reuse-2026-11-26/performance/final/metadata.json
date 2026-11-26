@@ -1,0 +1,41 @@
+{
+  "commit": "0c6d00bd1097e31e06bf0b7cbbf8cdbd2b408223",
+  "cpu": 8,
+  "count": 20000,
+  "rounds": 40,
+  "samples": 3,
+  "policies": {
+    "auto": 0,
+    "full_each_round": 1,
+    "full_every_5_rounds": 5
+  },
+  "baseline_package": "/tmp/lj-buffer-churn-growth-20261126-fu6iac_1",
+  "baseline_library_sha256": "97811f9cc8f56b402b31846b72a2c82b7cf5f8963c9a075600a9fdd3f75ccb02",
+  "previous_candidate_package": "/tmp/lj-buffer-churn-fix-20261126-sr3y4cv_",
+  "candidate_source": "/tmp/lj-arena-reuse-20261126-zzbgmalf/gcc-final",
+  "candidate_note": "final hinted allocation drain: existing owner wake published after routed durable PLAIN late bit; forced GC checkpoint retained",
+  "runtime_source_manifest_count": 228,
+  "runtime_source_manifest_differences": [],
+  "binary_sha256": {
+    "baseline": "505476db8abd9a8cd425d622459c6aec4fa835e4d43fe79dbc0bfe61f248e17e",
+    "candidate": "0f119ad9c02c8968ef91441aecaebfde4959f4c7a44a9901c4bbacaa69900a03"
+  },
+  "timing": "paired alternating old/new processes per policy/sample; original Lua workload unchanged",
+  "census_binary_sha256": {
+    "baseline": "4e3839835542aae1666c35d6a35d45aa1c98ce4e9d32d725949a2c4f424b9d62",
+    "candidate": "a32869a91ffbc7cf55c4de7193592b7918ef3b8af50d8f1b3799d7f698ee0556"
+  },
+  "candidate_library_sha256": "918be697f0804e0ce9d4553fb4a65ad6f44eb41dbbc67ca2d61f2459388c190a",
+  "result_rows": 1566,
+  "work_rounds": 720,
+  "census_rows": 56,
+  "all_semantic_assertions": "passed in all18policy processes and2census processes",
+  "scope": "single-mutator; no shared source edits; CPU8 released",
+  "lua_workload_sha256": "279558a63a2a326473cffb34c07d3823e598e3b258b0052641b673c89a88476f",
+  "original_lua_workload_sha256": "279558a63a2a326473cffb34c07d3823e598e3b258b0052641b673c89a88476f",
+  "final_runtime_source_manifest_differences": [],
+  "cpu8_released": true,
+  "baseline_commit": "0c6d00bd1097e31e06bf0b7cbbf8cdbd2b408223",
+  "candidate_revision": "gcc-final frozen source snapshot; uncommitted baseline plus candidate.patch",
+  "freeze_note": "all228runtime source input hashes still match shared sources"
+}

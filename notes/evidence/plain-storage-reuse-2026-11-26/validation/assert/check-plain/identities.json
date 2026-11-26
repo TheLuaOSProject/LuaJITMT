@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/assert/src/luajit": "28de670ff6942fd615c7179ada3ed806ee829cbcd8b12459acb64fb5afdddfae",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/assert/src/libluajit.a": "74fb52d1dba6db3a132035ff8fff3b5441e3c33ca30bfbfb4fb66a9c3bd7c5c0",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/assert/tests/t-arena-plain-late.c": "7f53eac1858069ed2851a716fa7ba834ce31247cfc75fd651ae027453ad92e77",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/assert/check-plain/plain": "b12049d24bbf2d4beefbb1c26d77f41b22fcec9ba7640ec23fd3a94be34bc815"
+}

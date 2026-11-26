@@ -6,6 +6,15 @@ bitmaps, differential encoding, huge-block side table); concurrency comes
 from strict per-thread arena ownership. Executable model of the bitmap math:
 `aux/arena_bitmap_model.c` (run it; it asserts the sweep identities).
 
+Current Linux production note (2026-11-26): this chapter's layouts and sweep
+sketches describe the original design. Production raw PLAIN storage is managed
+by explicit free intents, not by semantic mark/sweep. Its owner consumes durable
+late bits only after readers and side owners permit exact span reuse; routed
+publishers wake the existing allocator drain. Unmarked non-late storage remains
+allocated. See [the reuse review](../notes/plain-storage-reuse-2026-11-26.md)
+and [the current completion plan](15_x64_linux_completion.md), including the
+remaining progress limit of arena-wide plain writer admission.
+
 ## 4.1 Constants & layout
 
 ```c

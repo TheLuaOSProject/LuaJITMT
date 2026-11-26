@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/luajit": "b61329ec691730e03f74f80f381dd6fc4d3b3ed8ff3f9dcb17cb0928e99f2482",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/libluajit.a": "b2012e5c392d29868aa287aac6984a2705504ad23c1cb7ae0eb09a6cf1aa96b4",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/tests/t-gc2-small-lease-span.c": "e221568a914d812101bc5aef8834ac314703581a3cecb7d8871527dfe9ad2bf6",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/check-lease/lease": "f251ff84fc58f98ac11741dfee85843eba1c176bf685138729e8c0e78190a375"
+}

@@ -1,0 +1,89 @@
+In file included from /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_obj.h:15,
+                 from /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:25:
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_open_quiet’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:143:3,
+    inlined from ‘arena_destruct_claim_live’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:5271:8:
+/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_closed_quiet’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:152:3,
+    inlined from ‘arena_quarantine_apply_bitmap’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:7833:9:
+/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_closed_quiet’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:152:3,
+    inlined from ‘arena_quarantine_apply_bitmap’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:7850:9:
+/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_closed_quiet’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:152:3,
+    inlined from ‘lj_arena_sweep_words’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:1712:14:
+/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_closed_quiet’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:152:3,
+    inlined from ‘lj_arena_destruct_acquire’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:5940:9:
+/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_open_quiet’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:143:3,
+    inlined from ‘lj_arena_destruct_acquire’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:5941:9:
+/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_closed_quiet’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:152:3,
+    inlined from ‘lj_arena_destruct_acquire’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:5951:9:
+/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_open_quiet’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:143:3,
+    inlined from ‘lj_arena_destruct_acquire’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:5952:9:
+/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_open_quiet’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:143:3,
+    inlined from ‘lj_arena_remote_free_publish’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:6100:9:
+/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_closed_quiet’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:152:3,
+    inlined from ‘arena_late_prepare_consume’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:6726:7,
+    inlined from ‘lj_arena_alloc_prepare_sweep_kind.part.0’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:7663:11:
+/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_closed_quiet’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:152:3,
+    inlined from ‘arena_quarantine_settle_late’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:6780:7,
+    inlined from ‘lj_arena_alloc_quarantine_finish’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:7947:9:
+/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_closed_quiet’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:152:3,
+    inlined from ‘lj_arena_alloc_restore_sweep_kind’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:8100:11:
+/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_open_quiet’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:143:3,
+    inlined from ‘lj_arena_free’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:8871:10:
+/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘la_fence_seq’,
+    inlined from ‘arena_mutation_open_quiet’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:143:3,
+    inlined from ‘arena_mutation_claim_live’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:5313:8,
+    inlined from ‘lj_arena_realloc’ at /tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_arena.c:9013:19:
+/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/lj_atomic.h:172:35: warning: ‘atomic_thread_fence’ is not supported with ‘-fsanitize=thread’ [-Wtsan]
+  172 | LA_INLINE void la_fence_seq(void){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

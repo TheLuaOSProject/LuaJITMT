@@ -1,0 +1,60 @@
+509 passed
+387 passed
+509 passed
+t-jit-fnew-inherited OK
+t-gc-workers
+t-gc-workers OK
+t-threading-join-lifetime
+t-threading-join-lifetime OK
+t-jit-fnew-inherited
+t-jit-fnew-inherited OK
+t-jit-secondary
+t-jit-secondary OK: secondary TG records, enters, side-traces, traces local-cell FORL roots/sides, uses rooted shared table reads/writes, keeps unproven trace-local allocation reads, metamethod chains, previous-nil metatable stores, and active-MT table.clear/next()/ipairs()/pairs() interpreted, keeps resize-churn safe, and preserves __index/__newindex semantics
+t-jit-flush-thread-stress
+t-jit-flush-thread-stress OK: 3 workers, 16 rounds, 32 short-lived threads, 0 GC2 workers
+t-jit-util-flush-race
+t-jit-util-flush-race OK: 1 probe rounds, 4 live snapshots
+t-jit-park-vmevent-reentrant
+t-jit-park-vmevent-reentrant OK
+t-x64-jit-rooted-upvalue
+t-x64-jit-rooted-upvalue ok
+t-x64-jit-side-upvalue
+t-x64-jit-side-upvalue ok
+t-x64-jit-boxed-arithmetic
+t-x64-jit-boxed-arithmetic ok
+t-x64-jit-next-scalar
+t-x64-jit-next-scalar ok
+t-ffi-callxs-production
+t-ffi-callxs-production OK: default scalar CALLXS executed
+t-ffi-callback-runtime
+t-ffi-callback-runtime OK: 6 threads, 1320 callback rounds
+t-ffi-jit-cnew-alloc
+t-ffi-jit-cnew-alloc OK: 2 traces
+t-ffi-cdata-shared-hammer
+t-ffi-cdata-shared-hammer OK: 6 threads, 24000 iterations
+t-weak-modes
+t-weak-modes OK: weak modes, weak cycles, and current finalizer semantics verified
+t-strtab-gc-stress
+t-strtab-gc-stress OK: 4 workers x 5000 interns, 384 GC rounds
+case	arch	semantic_checks	live_root_traces	observed_root_exits
+numeric-for	x64	13	1	6
+numeric-while	x64	13	1	6
+leaf-arithmetic	x64	13	1	6
+leaf-primitive	x64	13	1	6
+leaf-branch	x64	13	1	4
+nested-leaf	x64	13	0	0
+leaf-varargs	x64	13	1	6
+leaf-multires	x64	13	1	6
+table-read	x64	13	1	6
+table-write	x64	13	1	6
+table-iterator	x64	13	0	0
+upvalue-read	x64	13	1	6
+math-floor	x64	13	1	6
+math-sqrt	x64	13	1	6
+string-length	x64	13	1	6
+string-byte	x64	13	1	6
+string-length-dynamic	x64	13	1	6
+string-byte-dynamic	x64	13	1	6
+bit-rotate	x64	13	1	6
+ffi-i64-arithmetic	x64	13	1	6
+# sampled=20 root_exit_witness_rows=18; zero exits mean no witness, not proof of no native execution

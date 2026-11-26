@@ -1,0 +1,6 @@
+stage,round,operations,plain_owned_arenas,block_starts,late_starts,late_extent_bytes,bin31_nodes,bin31_fit259,bin31_113cell_nodes,remote_closed,remote_sealed,remote_pending,remote_actors
+warm,0,0,22,312,250,1032928,46,0,18,0,0,0,0
+work,1,20000,407,5323,5250,21752928,432,0,402,0,0,0,0
+work,5,100000,1946,25338,25250,104632928,1982,0,1937,0,0,0,0
+work,10,200000,3870,50338,50250,208232928,3930,0,3857,0,0,0,0
+quiescent_gc_5,10,200000,3870,50316,50251,208237072,3956,0,3857,0,0,0,0

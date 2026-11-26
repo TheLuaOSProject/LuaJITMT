@@ -1,0 +1,7 @@
+Immutable baseline0c6d00bd1, JIT enabled, CPU8.40rounds x20000cycles,1KiBreset/put/get.
+Policy full_each_round=automatic GC plus explicit fullGC every20000ops; full_every_5_rounds=every100000ops.
+All values below are medians across3processes perpolicy; CPUwork excludes diagnostics and explicitGC.
+policy mean_ns/op round_min..max work_s explicit_gc_s RSS_start/end/quiescent_KiB Lua_start/end/quiescent_KiB cycles_warm/end/quiescent
+auto 6475.33 789.3..18965.5 5.1803 0.0000 6232/992296/992324 786.0/825.4/790.6 3/43/48
+full_each_round 6112.76 795.5..16578.5 4.8902 0.1197 6156/992424/992424 786.1/805.7/789.2 3/82/88
+full_every_5_rounds 5761.62 795.7..16139.9 4.6093 0.0291 6228/992356/992356 786.1/819.0/789.2 3/50/56

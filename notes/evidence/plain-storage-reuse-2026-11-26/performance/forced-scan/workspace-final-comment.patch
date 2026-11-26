@@ -1,0 +1,16 @@
+--- /tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-gcc/src/lj_arena.c	2026-11-26 16:19:05.768349238 +0000
++++ /workspaces/lj-lockless/src/lj_arena.c	2026-11-26 16:27:11.902879276 +0000
+@@ -5753,9 +5753,10 @@
+   la_store32_rel(&node->meta, arena_remote_meta(start, len));
+ }
+ 
+-/* A terminal/grace-late free needs no intrusive size record. The allocation
+-** bitmap already identifies its exact start and extent, while this atomic bit
+-** pins that allocation until a later PREPSWEEP and grace consume it. */
++/* A late free needs no intrusive size record. The allocation bitmap identifies
++** its exact start and extent. This atomic bit preserves the explicit free
++** intent until the plain owner drain, or traversable PREPSWEEP and grace, can
++** safely consume it. */
+ static int arena_late_pin(GCArena *a, const void *p, size_t size)
+ {
+   uint32_t start, ncells;

@@ -1,0 +1,50 @@
+Final PLAIN late-free runtime: independent paired churn comparison
+2026-11-26
+
+The final hinted-drain runtime preserves reclamation and bounded memory in the tested single-mutator workload. Across all three collection policies, RSS  stays around5 MiB through 800,000 cycles instead of growing to about969 MiB. The own-TG census again reaches zero late backing starts after the first full collection following explicit free. Sustained work is about10.5–11.2 times faster than the immutable0c6d00bd1 baseline.
+
+Frozen identity
+Baseline commit:0c6d00bd1097e31e06bf0b7cbbf8cdbd2b408223.
+Baseline binary SHA256:505476db8abd9a8cd425d622459c6aec4fa835e4d43fe79dbc0bfe61f248e17e
+Final candidate binary SHA256:0f119ad9c02c8968ef91441aecaebfde4959f4c7a44a9901c4bbacaa69900a03
+Final candidate static library SHA256:918be697f0804e0ce9d4553fb4a65ad6f44eb41dbbc67ca2d61f2459388c190a
+Final candidate source:/tmp/lj-arena-reuse-20261126-zzbgmalf/gcc-final.
+All 228 runtime input hashes matched shared sources both before measurement and at final freeze. candidate-build.json records successful GCC 14 static build and output hashes; candidate-input.tar.gz and candidate-input.sha256 preserve exact source inputs. This final snapshot publishes the allocator wake after routed durable PLAIN late bits, keeps allocation drains hinted, and retains the forced GC owner checkpoint. It replaces the first candidate whose allocation expansion forced whole-owned-list scans.
+Prior candidate evidence remains unchanged in /tmp/lj-buffer-churn-fix-20261126-sr3y4cv_. Results from that earlier run are not pooled with this final comparison.
+
+Method
+The original growth.lua is byte-identical to the first churn investigation. Each process warms1,000 cycles, performs a full collection, then runs40 rounds of20,000 reset/put/get cycles using a1KiBstring. Every cycle checks returned contents; every round checks the buffer is empty. JIT remains enabled. Three paired samples compare old and final binaries for each policy; order alternates within samples. All timed processes run sequentially onCPU 8. Root builds/tests on other cores can affect shared-machine timing, so raw rows and paired ranges are retained.
+Policies: automatic collection; automatic plus explicit fullGC every20,000 cycles; automatic plus fullGC every100,000 cycles. Work CPU excludes diagnostic I/O and explicit collection time. Every stage captures all scalar public GC stats, Lua-accounted bytes and synchronized /procRSS /VM  while the child waits for controller acknowledgment. Observer allocations may affect collection scheduling but are identical across variants. Independent allocator counters establish the physical mechanism directly.
+All 18 policy processes and both census embeddings pass their workload assertions:720 timed rounds,1,566 policy snapshots and56census snapshots. All /proc snapshots report one OS thread. This package does not claim multi-mutator coverage.
+
+Paired medians
+Policy                 Old ns/cycle  Final ns/cycle  Final/old  Paired range
+auto                        6075.684        571.605     0.0941 0.0853–0.1075
+full_each_round             6340.320        603.423     0.0952 0.0872–0.1101
+full_every_5_rounds         6526.712        584.469     0.0896 0.0510–0.1009
+
+Candidate individual20krounds range from536.55to1,008.10 ns/cycle. Some old-runtime samples have large timing excursions; all observations remain in results.csv. These are fresh paired comparisons with 0c, not a causal timing comparison against the first candidate measured under different background load.
+
+Memory at800,000 cycles (median KiB)
+Policy                 Old RSS   Final RSS   Old VM   Final VM   Old/final RSS  after drop+5GC
+auto                     992252       5076  995200      9028 992264/5080
+full_each_round          992432       5300  995392      9156 992432/5284
+full_every_5_rounds      992224       5028  995264      9092 992240/5012
+
+The final runtime shows only small observer/runtime-state memory drift through 800,000 cycles, rather than the control's approximately24 MiB addition per20kround. Lua-accounted memory stays roughly0.8 MiB in both variants. GC cycle counts agree by policy; reclamation and reuse explain the improvement, not suppression of collection. Every quiescent snapshot after dropping references, flushing traces and five full collections is IDLE.
+Explicit fullGC CPU also improves: every20kpolicy totals0.132816→0.025798 seconds over the run; every100kpolicy0.034533→0.005192 seconds. summary.csv includes all per-process values and round ranges.
+
+Physical allocator census
+The same private census.c is linked separately against unchanged old and final static libraries. It reads only the current TG's arena lists, flags, block/mark/late planes, bounded allocation extents, remote gate states and free-bin histograms. It does not mutate allocator metadata. Each embedding performs200,000 cycles, then explicit b:free(), drops references, flushes traces and performs five full collections.
+At200,000 cycles: old has3,870 owned PLAIN arenas and50,250 late starts occupying208,232,928 bytes; final has5 arenas and19 pending late starts occupying78,736 bytes.
+After explicit free: final has one late start for the just-retired final backing. After the first fullGC it has zero late starts and zero late extents; they remain zero after five collections. The old runtime retains50,251 late starts and208,237,072 late bytes after all five collections.
+Free capacity is reusable in the final runtime: after the fifth fullGC, bin 31 has83 nodes including19 large enough for a 259-cell backing; old bin 31 has3,956 nodes and zero fitting nodes. Final owned PLAIN arenas remain at5. Remote CLOSED/SEALED/PENDING/active-actor counters are zero at the selected checkpoints. Complete histograms and every stage are retained.
+
+After lua_close, before process exit
+baseline: RSS 253464→4148 KiB; VM 256252→5552 KiB; close CPU 0.120896 seconds. The process remains alive awaiting controller acknowledgment during this snapshot.
+candidate: RSS 5256→4200 KiB; VM 8896→5556 KiB; close CPU 0.001138 seconds. The process remains alive awaiting controller acknowledgment during this snapshot.
+
+Artifacts and reproduction
+python3 run.py runs the18 paired policy processes; python3 run.py --census runs both census embeddings; python3 summarize.py regenerates summaries. growth.lua is unchanged; growth-census-free.lua adds the explicit-free checkpoint only to the census. Build commands, binaries, input archives, SHA256 manifests, raw stdout/stderr, all public stats and process-memory snapshots are included.
+Key tables: summary.csv/.txt, paired.csv, round-medians.csv, census-summary.csv/.json. Full counter evidence: census-*-bins.jsonl; exact post-close memory: baseline-after-lua-close.json and candidate-after-lua-close.json.
+CPU 8 was released after both census runs. No shared source edits were made. Earlier candidate packages remain separately frozen.

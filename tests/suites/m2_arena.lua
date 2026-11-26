@@ -10,6 +10,7 @@ local M2_ORDER = {
   "m2_arena_publication",
   "m2_arena_map",
   "m2_arena_alloc",
+  "m2_arena_plain_late",
   "m2_arena_hugetab",
   "m2_arena_huge_tail",
   "m2_arena_sweep",
@@ -100,6 +101,23 @@ return function(add)
       run_standalone_fixture(t, out .. ".alloc", "t-arena-alloc.c")
       run_standalone_fixture(t, out .. ".realloc", "t-arena-realloc.c")
       run_standalone_fixture(t, out .. ".allocf", "t-arena-allocf.c")
+    end
+  })
+
+  register({
+    name = "m2_arena_plain_late",
+    description = "plain storage frees wait for readers and then permit bounded reuse",
+    run = function(t)
+      if jit.os ~= "Linux" then return end
+      local flags = "-DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { quiet = true, xcflags = flags })
+        build.compile_and_run_c(t, t:tmp("lj_t-arena-plain-late"),
+                               "t-arena-plain-late.c", {
+          cflags = flags, timeout = "65s",
+          libs = { "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread" }
+        })
+      end)
     end
   })
 

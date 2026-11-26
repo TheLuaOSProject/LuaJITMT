@@ -405,9 +405,13 @@ static void safepoint_apply_allocator(global_State *g, TGState *tg,
   if ((actions & LJ_GC2_HS_RESET_ALLOC) &&
       (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
        la_load32_acq(&tg->alloc.prepare_epoch) != cycle)) {
-    int prepared = lj_arena_alloc_prepare_sweep_kind(
+    int prepared, plain_restored;
+    /* Plain storage is explicitly managed, never semantically swept. Finish
+    ** only its durable free intents while this ACK owns the allocator lists. */
+    (void)lj_arena_remote_free_drain_force(&tg->alloc);
+    prepared = lj_arena_alloc_prepare_sweep_kind(
 	&tg->alloc, LJ_ARENAK_TRAVERSABLE);
-    int plain_restored = lj_arena_alloc_restore_sweep_kind(
+    plain_restored = lj_arena_alloc_restore_sweep_kind(
 	&tg->alloc, LJ_ARENAK_PLAIN);
     if (lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
       lj_arena_hugetab_prepare_sweep(&tg->huge);

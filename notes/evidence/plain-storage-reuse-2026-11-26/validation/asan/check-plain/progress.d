@@ -1,0 +1,21 @@
+/tmp/lj-arena-reuse-20261126-zzbgmalf/asan/check-plain/plain: \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/tests/t-arena-plain-late.c \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/src/lj_obj.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/src/lua.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/src/luaconf.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/src/lj_def.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/src/lj_arch.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/src/lj_atomic.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/src/lj_gc2token.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/src/lj_tgregistry.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/src/lj_tgslot.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/src/lj_arena.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/src/lj_gc.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/src/lj_gc2.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/src/lj_prng.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/src/lj_tg.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/src/lj_bc.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/src/lj_ctype.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/tests/lib/lua_fixture_helpers.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/src/lauxlib.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/asan/src/lualib.h

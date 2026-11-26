@@ -1,0 +1,9 @@
+{
+  "command": [
+    "/tmp/lj-arena-reuse-20261126-zzbgmalf/plain-late-baseline"
+  ],
+  "exit": -6,
+  "seconds": 0.047806040005525574,
+  "binary_sha256": "76c0730ca832124af4a43651b55a2cbb4c3da359d1c3e3bc4fb24c16ef94953d",
+  "test_sha256": "8fa749b0cb8e073ab16efb77a27f11ba2e8881ea07d8945e851e97c394afc375"
+}

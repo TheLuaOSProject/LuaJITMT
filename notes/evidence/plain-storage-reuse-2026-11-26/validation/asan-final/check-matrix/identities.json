@@ -1,0 +1,5 @@
+{
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/asan-final/src/luajit": "6f3d12d0c4799d6a6c408eecb9ecf480cde3ee7297f44e4ac3b1288ccee87005",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/asan-final/src/libluajit.a": "2957d12dea9dcd8e0f106725065fe85e489d4fff2850707abcbe23aec446c60e",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/asan-final/tools/ci/linux_x64_shared.sh": "c0fb7fef479728cb11cb609e6fb98e721f6cff76daa81ec207bcf682b1015579"
+}

@@ -1,0 +1,30 @@
+{
+  "commit": "0c6d00bd1097e31e06bf0b7cbbf8cdbd2b408223",
+  "binary_sha256": "505476db8abd9a8cd425d622459c6aec4fa835e4d43fe79dbc0bfe61f248e17e",
+  "runtime_source_manifest_count": 228,
+  "runtime_source_manifest_differences": [],
+  "cpu": 8,
+  "count": 20000,
+  "rounds": 40,
+  "samples": 3,
+  "policies": {
+    "auto": 0,
+    "full_each_round": 1,
+    "full_every_5_rounds": 5
+  },
+  "scope": "unmodified immutable baseline; JIT on; private evidence only",
+  "result_rows": 783,
+  "census_rows": 27,
+  "all_semantic_assertions": "passed",
+  "gc_phase_names": {
+    "0": "IDLE",
+    "1": "MARK",
+    "2": "WEAK",
+    "3": "SWEEP"
+  },
+  "census_note": "private C embedding linked unchanged baseline static archive; same own TG; process remained one OS thread at every synchronized snapshot; diagnostic callbacks only read allocator metadata; no shared edits",
+  "census_binary_sha256": "4e3839835542aae1666c35d6a35d45aa1c98ce4e9d32d725949a2c4f424b9d62",
+  "runtime_library_sha256": "97811f9cc8f56b402b31846b72a2c82b7cf5f8963c9a075600a9fdd3f75ccb02",
+  "conclusion": "PLAIN backing late bodies accumulate through fullGC; RSS grows without plateau through800kcycles; state destruction releases mappings",
+  "cpu8_released": true
+}

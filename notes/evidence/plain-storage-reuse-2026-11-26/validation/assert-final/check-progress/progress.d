@@ -1,0 +1,23 @@
+/tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/check-progress/progress: \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/tests/t-buffer-progress.c \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/lj_obj.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/lua.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/luaconf.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/lj_def.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/lj_arch.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/lj_atomic.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/lj_gc2token.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/lj_tgregistry.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/lj_tgslot.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/lj_buf.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/lj_gc.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/lj_str.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/lj_tg.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/lj_bc.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/lj_arena.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/lj_ctype.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/lj_gc2.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/lj_thr.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/tests/lib/lua_fixture_helpers.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/lauxlib.h \
+  /tmp/lj-arena-reuse-20261126-zzbgmalf/assert-final/src/lualib.h

@@ -1,0 +1,59 @@
+[
+  {
+    "name": "buffer-joff",
+    "command": [
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/gcc-final/src/luajit",
+      "-joff",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/gcc-final/tests/t-buffer-thread-safety.lua"
+    ],
+    "seconds": 0.4142767110024579,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "buffer-jon",
+    "command": [
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/gcc-final/src/luajit",
+      "-jon",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/gcc-final/tests/t-buffer-thread-safety.lua"
+    ],
+    "seconds": 0.464459952985635,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "consume-build",
+    "command": [
+      "gcc",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-arena-reuse-20261126-zzbgmalf/gcc-final/src",
+      "-I/tmp/lj-arena-reuse-20261126-zzbgmalf/gcc-final/tests",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/gcc-final/tests/t-buffer-consume.c",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/gcc-final/src/libluajit.a",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_str_new",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/gcc-final/check-smoke/consume"
+    ],
+    "seconds": 0.11394056500284933,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "consume",
+    "command": [
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/gcc-final/check-smoke/consume"
+    ],
+    "seconds": 0.0074025279900524765,
+    "exit": 0,
+    "test": true
+  }
+]

@@ -1,0 +1,1 @@
+["taskset", "-c", "0", "gcc", "-O2", "-I/tmp/lj-buffer-headroom-20261126-y6qc0l6f/combined-v1/src", "census.c", "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/combined-v1/src/libluajit.a", "-Wl,-E", "-lm", "-ldl", "-pthread", "-o", "census-luajit"]

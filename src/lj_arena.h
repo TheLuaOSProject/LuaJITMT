@@ -329,7 +329,7 @@ struct GCArena {
   uint64_t dtor[LJ_ARENA_DTOR_PLANES][LJ_ARENA_WORDS];
   /* Closed-window remote-free deduplication. Unlike sweep[], this bitmap may
   ** be published after terminal bitmap commit. A bit naming committed live
-  ** storage persists across adoption and is consumed by the next sweep. */
+  ** storage persists across adoption until a sweep or plain owner drain. */
   uint64_t late[LJ_ARENA_WORDS];
   /* Per-cell allocation coverage for every fixed/interior cdata body. READY
   ** remains start-only and is published after the complete coverage range and
@@ -438,10 +438,11 @@ struct TGAlloc {
   uint32_t huge_retire_cursor;
   uint32_t huge_reclaim_cursor;
   uint8_t huge_retire_done;
-  /* Advisory allocator-wide wake for intrusive remote-free queues. A remote
-  ** producer release-publishes this only after its arena-local queue CAS.
-  ** Opportunistic drains consume it before walking owned[], while transfer,
-  ** sweep and terminal owners deliberately bypass it. */
+  /* Advisory allocator-wide wake for intrusive remote-free queues and plain
+  ** late frees. Producers release-publish after their queue CAS and admission
+  ** release, or after the durable late bit; a blocked plain drain rearms it.
+  ** Opportunistic drains consume it before walking owned[], while GC owner
+  ** checkpoints, transfer and terminal owners deliberately bypass it. */
   uint32_t remote_pending;
   uint32_t owner_tid;
   void *owner_tg;
@@ -1068,8 +1069,9 @@ LJ_FUNC int lj_arena_free_deferred(TGAlloc *alloc, void *p, size_t size);
 LJ_FUNC void lj_arena_free(TGAlloc *alloc, void *p, size_t size);
 LJ_FUNC int lj_arena_remote_free_publish(TGAlloc *alloc, void *p,
 					 size_t size);
-/* Joined-world/ownership-transfer drain. Unlike the opportunistic allocator
-** form, this always scans owned[] even when the advisory wake is clear. */
+/* Owner/ownership-transfer drain for intrusive queues and explicit plain late
+** frees. The forced form scans owned[] even when the advisory wake is clear;
+** GC owner checkpoints and transfer use it to cover parameterless cold APIs. */
 LJ_FUNC uint32_t lj_arena_remote_free_drain_force(TGAlloc *alloc);
 LJ_FUNC uint32_t lj_arena_remote_free_drain(TGAlloc *alloc);
 LJ_FUNC uint32_t lj_arena_remote_free_drain_sweep(TGAlloc *alloc,

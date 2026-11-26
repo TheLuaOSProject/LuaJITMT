@@ -1,0 +1,1 @@
+["taskset", "-c", "0", "gcc", "-O2", "-I/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-gcc/src", "/tmp/lj-buffer-churn-fix-20261126-sr3y4cv_/census.c", "/tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-gcc/src/libluajit.a", "-Wl,-E", "-lm", "-ldl", "-pthread", "-o", "/tmp/lj-buffer-churn-fix-20261126-sr3y4cv_/candidate-census"]

@@ -1,0 +1,19 @@
+RUN 1-auto
+DONE 1-auto 5.838
+RUN 1-full_each_round
+DONE 1-full_each_round 5.658
+RUN 1-full_every_5_rounds
+DONE 1-full_every_5_rounds 5.306
+RUN 2-full_every_5_rounds
+DONE 2-full_every_5_rounds 5.754
+RUN 2-full_each_round
+DONE 2-full_each_round 5.793
+RUN 2-auto
+DONE 2-auto 6.037
+RUN 3-auto
+DONE 3-auto 5.721
+RUN 3-full_each_round
+DONE 3-full_each_round 5.465
+RUN 3-full_every_5_rounds
+DONE 3-full_every_5_rounds 5.01
+complete

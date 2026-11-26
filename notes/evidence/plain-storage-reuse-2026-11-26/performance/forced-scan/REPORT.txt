@@ -1,0 +1,68 @@
+PLAIN late-free fix: independent physical-memory and timing comparison
+2026-11-26
+
+The frozen candidate fixes the demonstrated backing-retention problem in this single-mutator workload. Across all three GC policies, process RSS stays around 5 MiB through 800,000 cycles, instead of growing to about 969 MiB. The allocator census shows that old late bodies are reclaimed and storage is reused. Sustained work becomes about 10.4–10.8 times faster.
+
+Provenance
+Baseline commit: 0c6d00bd1097e31e06bf0b7cbbf8cdbd2b408223.
+Baseline binary SHA256: 505476db8abd9a8cd425d622459c6aec4fa835e4d43fe79dbc0bfe61f248e17e.
+Candidate binary SHA256: 068b2a1d07315bc2921d9db9519f5bb4ecb0f0f9ac9e7deb4be4540071439960.
+Candidate static archive SHA256: 594f41cdcc0aae04a85f0f9036250155fe98ae0e60c4c93c39759ccf9144d470.
+Candidate source: /tmp/lj-arena-reuse-20261126-zzbgmalf/candidate-gcc.
+All 228 runtime build-input hashes matched shared sources before measurement. candidate-build.json, candidate-input.sha256 and candidate-input.tar.gz preserve exact inputs and GCC 14 static build command. Both executable copies are included. No shared runtime edits were made by this investigation. At final freeze, shared lj_arena.c differed only by a comment clarifying the new late-free owner-drain path; the measured frozen binary and input archive remain unchanged. workspace-final-comment.patch records that difference.
+
+Method
+The Lua workload is byte-identical to /tmp/lj-buffer-churn-growth-20261126-fu6iac_1/growth.lua. Each process warms 1,000 reset/put/get cycles, performs a full collection, then runs 40 rounds of 20,000 cycles with a 1 KiB string. Every cycle asserts returned contents; every round asserts an empty buffer. JIT remains enabled.
+
+There are three paired samples for each policy: automatic GC, automatic GC plus full GC every 20,000 cycles, and automatic GC plus full GC every 100,000 cycles. Old and new processes alternate order within each sample. All timed runs are sequential on CPU 8. CPU time for workload and explicit collection is recorded separately. Every stage records Lua-accounted bytes, all scalar public GC statistics, and synchronized /proc RSS/VM while the child waits for the controller's acknowledgment. Diagnostic allocations and I/O remain outside the work interval. The observer can affect collection scheduling, but it is identical across variants and the allocator census directly verifies reclamation.
+
+All 18 policy processes and both diagnostic census processes passed their assertions: 720 timed work rounds, 1,566 primary snapshots and 56 census snapshots. All /proc snapshots show one OS thread. The optional multi-worker experiment was not included; this evidence concerns the single-mutator root cause.
+
+Paired results (median process means; lower time is better)
+Policy                 Old ns/cycle  New ns/cycle  New/old  Paired ratio range
+Automatic GC           5,824.810       541.879      0.0930   0.0861–0.0992
+Full GC every 20,000    5,990.368       564.244      0.0942   0.0935–0.0985
+Full GC every 100,000   5,855.880       561.500      0.0959   0.0945–0.1017
+
+Candidate individual rounds range from 512.15 to 707.05 ns/cycle. The old runtime retains its large growth and timing variation. Explicit collection CPU also falls: every-20k policy 0.121215→0.024191 seconds over the entire run; every-100k policy 0.029055→0.005001 seconds. summary.csv and paired.csv preserve all process means, round ranges and paired ratios.
+
+Physical memory at 800,000 cycles (median KiB)
+Policy                 Old RSS  New RSS  Old VM   New VM  Old/New RSS after drop+5GC
+Automatic GC           992304     5072   995200     9028   992328 / 5072
+Full GC every 20,000    992432     5288   995392     9220   992432 / 5272
+Full GC every 100,000   992284     5176   995264     9092   992280 / 5160
+
+Candidate RSS stays within approximately 4.8–5.2 MiB through 800,000 cycles; there is small observer/runtime-state drift, rather than the old ~24 MiB addition per round. Lua-accounted memory remains roughly 0.8 MiB in both variants. GC cycle counts match by policy, so the improvement does not come from suppressing collections. After dropping the buffer, flushing JIT traces and five full collections, all quiescent snapshots are IDLE. round-medians.csv shows every point rather than only endpoints.
+
+Allocator census
+The same private C census source is linked separately against the immutable old and new static archives. Each embedding runs 200,000 cycles in ten rounds, reading only its own TG's allocator metadata. The census counts list membership, arena flags, block/mark/late starts, allocated/late extents, remote gate state, bump capacity and PLAIN free-bin sizes. No allocator state is modified by the census.
+
+The diagnostic Lua workload adds an explicit b:free() checkpoint before dropping references; all other workload and sampling logic is the same. It then drops references, flushes traces and performs five full collections. Raw JSONL records every census stage.
+
+At 200,000 cycles:
+                         Old          Candidate
+Owned PLAIN arenas       3,870          5
+Block starts            50,338        107
+Late starts             50,250         19
+Late bytes          208,232,928     78,736
+
+After explicit b:free(): old has 50,251 late starts; candidate has one, representing the final retired backing. After the first full collection, candidate has zero late starts and zero late extents, remaining zero after five collections. Old still has 50,251 after five collections. Candidate owned PLAIN arena count remains five rather than growing with every replacement. Remote CLOSED/SEALED/PENDING/active-actor counts are zero at the selected checkpoints.
+
+This verifies bounded pending retirement followed by physical reclamation and reuse. The small number of remaining owned arenas is reusable capacity, unlike the old 198.6 MiB of retired late backing demonstrated by the control. Complete free-bin histograms are retained in census-*-bins.jsonl and selected totals in census-summary.csv/.json.
+
+After lua_close(), with each process still alive and waiting for the controller:
+- Old RSS falls from approximately 248 MiB to 4,108 KiB; VM becomes 5,552 KiB. Close CPU: 0.121270 seconds.
+- Candidate RSS falls from 5,280 KiB to 4,284 KiB; VM becomes 5,556 KiB. Close CPU: 0.001179 seconds.
+
+The exact pre-close RSS is in census-results.csv, and the after-close snapshots are baseline-after-lua-close.json and candidate-after-lua-close.json. State destruction is not needed to arrest candidate memory growth; the full-GC census already shows old buffer late bodies reclaimed before close.
+
+Reproduction and artifacts
+- python3 run.py: all 18 paired policy processes; raw stdout/stderr and results.csv.
+- python3 run.py --census: both own-TG census embeddings, including explicit free and post-lua_close pause.
+- python3 summarize.py: summary.csv, paired.csv, round-medians.csv, census-summary.csv/.json and summary.txt.
+- growth.lua: unchanged primary Lua workload; growth-census-free.lua adds the explicit-free checkpoint only for the diagnostic embeddings.
+- census.c and census-build-command.json: read-only diagnostic embedding source and candidate link command. Baseline embedding is copied from the prior frozen investigation, using the identical census source and unchanged baseline archive.
+- candidate.patch: runtime changes relative to baseline at measurement time.
+- SHA256SUMS covers every artifact except itself.
+
+CPU 8 was released after measurements. No regression appeared in these measured semantics or physical-memory results. Broader concurrency/sanitizer coverage is outside this independent performance package.

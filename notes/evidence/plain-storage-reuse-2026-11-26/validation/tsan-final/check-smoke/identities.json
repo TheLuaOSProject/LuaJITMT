@@ -1,0 +1,7 @@
+{
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/luajit": "b61329ec691730e03f74f80f381dd6fc4d3b3ed8ff3f9dcb17cb0928e99f2482",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/src/libluajit.a": "b2012e5c392d29868aa287aac6984a2705504ad23c1cb7ae0eb09a6cf1aa96b4",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/tests/t-buffer-thread-safety.lua": "e90325db1a6c8cd661eede720047e03a6e3f08c4be611b921cc6e163f88a7155",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/tests/t-buffer-consume.c": "5738fa68b3c7bb9e28b39ca1f99b7a2cc17a17ff14c47bbc3b73063f322d6334",
+  "/tmp/lj-arena-reuse-20261126-zzbgmalf/tsan-final/check-smoke/consume": "dbab975dd72d41869840f4b4f86f839434f9be42ba6709fbc4ab5e320115424e"
+}

@@ -1,0 +1,190 @@
+diff --git a/src/lj_arena.c b/src/lj_arena.c
+index 0189c6fb6..bc87ab407 100644
+--- a/src/lj_arena.c
++++ b/src/lj_arena.c
+@@ -6213,6 +6213,112 @@ static uint32_t arena_remote_free_drain_one(TGAlloc *alloc, GCArena *a)
+   return n;
+ }
+ 
++/* Raw allocations have no semantic sweep. Their explicit late frees become
++** reusable under the ordinary plain writer gate after all body readers leave.
++** Only the allocator owner may link the resulting runs into its private bins. */
++static uint32_t arena_plain_late_extent(TGAlloc *alloc, GCArena *a,
++                                      uint32_t start)
++{
++  LJArenaBump *b = &alloc->bump[LJ_ARENAK_PLAIN];
++  uint32_t cell = start + 1u, end = LJ_ARENA_CELLS;
++  /* An active bump tail has no required bitmap sentinel. Its owner cursor is
++  ** the exact end of the last allocation before that tail. A reused interior
++  ** bump window must not cap allocations which lie after it. Abandoned bump
++  ** windows publish or retain a mark boundary before forgetting their cursor. */
++  if (b->a == a && b->cell < end && b->cell > start)
++    end = b->cell;
++  while (cell < end) {
++    uint32_t wi = cell >> 6, lo = cell & 63u;
++    uint64_t bits = (la_load64_acq(&a->block[wi]) |
++                     la_load64_acq(&a->mark[wi])) & (~(uint64_t)0 << lo);
++    if (bits) {
++      uint32_t next = (wi << 6) + lj_ffs64(bits);
++      if (next < end)
++        end = next;
++      break;
++    }
++    cell = (wi + 1u) << 6;
++  }
++  if (end <= start || end - start > LJ_HUGE_THRESHOLD / LJ_CELL_SIZE)
++    return 0;
++  return end - start;
++}
++
++static uint32_t arena_plain_late_drain_one(TGAlloc *alloc, GCArena *a)
++{
++  uint32_t w, n = 0, flags;
++  int gate;
++  if (!alloc || !a || arena_lifetime_managed(a))
++    return 0;
++  for (w = 0; w < LJ_ARENA_WORDS; w++)
++    if (la_load64_acq(&a->late[w]))
++      break;
++  if (w == LJ_ARENA_WORDS)
++    return 0;
++  flags = lj_arena_flags_acq(a);
++  if ((flags & (LJ_AF_PREPSWEEP|LJ_AF_NEEDSWEEP|
++                LJ_AF_QUARANTINE|LJ_AF_RECLAIMED)) ||
++      arena_terminal_closed_acq(a))
++    goto retry;
++  gate = arena_plain_mutation_claim(a, 0);
++  if (gate != 1) {
++    if (gate < 0)
++      arena_remote_late_leave(a);
++    goto retry;
++  }
++  flags = lj_arena_flags_acq(a);
++  /* The intrusive queue owns its body bytes until the preceding queue drain
++  ** consumes it. New publishers cannot add queue nodes through this gate. */
++  if ((flags & (LJ_AF_PREPSWEEP|LJ_AF_NEEDSWEEP|
++                LJ_AF_QUARANTINE|LJ_AF_RECLAIMED)) ||
++      arena_terminal_closed_acq(a) ||
++      la_loadptr_acq((void *const *)&a->hdr.remote_free) != NULL) {
++    arena_plain_mutation_release(a);
++    goto retry;
++  }
++  for (w = 0; w < LJ_ARENA_WORDS; w++) {
++    uint64_t bits = la_load64_acq(&a->late[w]) &
++                    la_load64_acq(&a->block[w]);
++    while (bits) {
++      uint32_t bit = lj_ffs64(bits), start = (w << 6) + bit;
++      uint32_t len, state;
++      bits &= bits - 1u;
++      if (start < LJ_AFIRST_CELL ||
++          !arena_side_owners_none(a, start) ||
++          !(len = arena_plain_late_extent(alloc, a, start)) ||
++          !arena_range_ownership_preflight(a, start, len, 1, 0)) {
++        lj_arena_remote_pending_rel(alloc, 1);
++        continue;
++      }
++      state = lj_arena_sweep_state_acq(a, start);
++      if (state != LJ_ARENA_SWEEP_FREEING &&
++          !lj_arena_sweep_state_cas(a, start, state, LJ_ARENA_SWEEP_FREEING)) {
++        lj_arena_remote_pending_rel(alloc, 1);
++        continue;
++      }
++      if (!arena_insert_run(alloc, a, start, len)) {
++        lj_arena_remote_pending_rel(alloc, 1);
++        continue;
++      }
++      (void)lj_arena_sweep_state_cas(a, start,
++        LJ_ARENA_SWEEP_FREEING, LJ_ARENA_SWEEP_WHITE);
++      (void)la_and64_rlx(&a->late[w], ~((uint64_t)1 << bit));
++      n++;
++    }
++  }
++  arena_plain_mutation_release(a);
++  /* A late publisher may have arrived behind the scan. Retain the advisory
++  ** wake when visible; allocation/GC force scans also cover a publisher still
++  ** paused before its bit store. No foreign reader release mutates bins. */
++  for (w = 0; w < LJ_ARENA_WORDS; w++)
++    if (la_load64_acq(&a->late[w]))
++      goto retry;
++  return n;
++retry:
++  lj_arena_remote_pending_rel(alloc, 1);
++  return n;
++}
++
+ uint32_t lj_arena_remote_free_drain_sweep(TGAlloc *alloc, GCArena *a)
+ {
+   LJArenaRemoteFree *node;
+@@ -6283,6 +6389,8 @@ static uint32_t arena_remote_free_drain_all(TGAlloc *alloc, int force)
+     for (a = alloc->owned[k]; a != NULL; a = lj_arena_next_acq(a)) {
+       arena_test_remote_arena_probe();
+       n += arena_remote_free_drain_one(alloc, a);
++      if (k == LJ_ARENAK_PLAIN)
++        n += arena_plain_late_drain_one(alloc, a);
+     }
+   }
+   return n;
+@@ -8431,7 +8539,7 @@ static int arena_reserve_bump_impl(TGAlloc *alloc, PRNGState *rs,
+     if ((!pp || !*pp) && arena_adopt_reclaimed_one(alloc, k))
+       pp = arena_find_run(alloc, k, ncells, &bin);
+     if (!pp || !*pp) {
+-      (void)lj_arena_remote_free_drain(alloc);
++      (void)lj_arena_remote_free_drain_force(alloc);
+       pp = arena_find_run(alloc, k, ncells, &bin);
+     }
+     if (pp && *pp) {
+@@ -8600,7 +8708,7 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
+ 	}
+ 	if (!drained) {
+ 	  drained = 1;
+-	  (void)lj_arena_remote_free_drain(alloc);
++	  (void)lj_arena_remote_free_drain_force(alloc);
+ 	  continue;
+ 	}
+ 	if (!arena_alloc_fresh(alloc, rs, flags))
+diff --git a/src/lj_arena.h b/src/lj_arena.h
+index 153d2dc70..48c49711f 100644
+--- a/src/lj_arena.h
++++ b/src/lj_arena.h
+@@ -438,7 +438,8 @@ struct TGAlloc {
+   uint32_t huge_retire_cursor;
+   uint32_t huge_reclaim_cursor;
+   uint8_t huge_retire_done;
+-  /* Advisory allocator-wide wake for intrusive remote-free queues. A remote
++  /* Advisory allocator-wide wake for intrusive remote-free queues and
++  ** deferred plain frees which an owner drain could not yet finish. A remote
+   ** producer release-publishes this only after its arena-local queue CAS.
+   ** Opportunistic drains consume it before walking owned[], while transfer,
+   ** sweep and terminal owners deliberately bypass it. */
+@@ -1068,8 +1069,9 @@ LJ_FUNC int lj_arena_free_deferred(TGAlloc *alloc, void *p, size_t size);
+ LJ_FUNC void lj_arena_free(TGAlloc *alloc, void *p, size_t size);
+ LJ_FUNC int lj_arena_remote_free_publish(TGAlloc *alloc, void *p,
+ 					 size_t size);
+-/* Joined-world/ownership-transfer drain. Unlike the opportunistic allocator
+-** form, this always scans owned[] even when the advisory wake is clear. */
++/* Owner/ownership-transfer drain for intrusive queues and explicit plain late
++** frees. The forced form scans owned[] even when the advisory wake is clear;
++** allocation exhaustion and GC owner checkpoints use it to cover cold bits. */
+ LJ_FUNC uint32_t lj_arena_remote_free_drain_force(TGAlloc *alloc);
+ LJ_FUNC uint32_t lj_arena_remote_free_drain(TGAlloc *alloc);
+ LJ_FUNC uint32_t lj_arena_remote_free_drain_sweep(TGAlloc *alloc,
+diff --git a/src/lj_safepoint.c b/src/lj_safepoint.c
+index 18ac0b9c4..c1f0508a8 100644
+--- a/src/lj_safepoint.c
++++ b/src/lj_safepoint.c
+@@ -405,9 +405,13 @@ static void safepoint_apply_allocator(global_State *g, TGState *tg,
+   if ((actions & LJ_GC2_HS_RESET_ALLOC) &&
+       (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
+        la_load32_acq(&tg->alloc.prepare_epoch) != cycle)) {
+-    int prepared = lj_arena_alloc_prepare_sweep_kind(
++    int prepared, plain_restored;
++    /* Plain storage is explicitly managed, never semantically swept. Finish
++    ** only its durable free intents while this ACK owns the allocator lists. */
++    (void)lj_arena_remote_free_drain_force(&tg->alloc);
++    prepared = lj_arena_alloc_prepare_sweep_kind(
+ 	&tg->alloc, LJ_ARENAK_TRAVERSABLE);
+-    int plain_restored = lj_arena_alloc_restore_sweep_kind(
++    plain_restored = lj_arena_alloc_restore_sweep_kind(
+ 	&tg->alloc, LJ_ARENAK_PLAIN);
+     if (lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
+       lj_arena_hugetab_prepare_sweep(&tg->huge);

@@ -1,0 +1,646 @@
+[
+  {
+    "build": "old",
+    "command": [
+      "gcc",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-buffer-headroom-20261126-y6qc0l6f/combined-v1/src",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth.c",
+      "/tmp/lj-buffer-headroom-20261126-y6qc0l6f/combined-v1/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old"
+    ],
+    "binary_sha256": "3a886f44311eee2d9e72c4b52d949cb104c66a3748404cb11a0813736ffb325c",
+    "library_sha256": "97811f9cc8f56b402b31846b72a2c82b7cf5f8963c9a075600a9fdd3f75ccb02"
+  },
+  {
+    "build": "candidate",
+    "command": [
+      "gcc",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-arena-reuse-20261126-zzbgmalf/gcc-final/src",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth.c",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/gcc-final/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate"
+    ],
+    "binary_sha256": "ce47f87955841d7a00dc8d56e38793d6e05e100231db2b7eae2c09ae9f7f202e",
+    "library_sha256": "918be697f0804e0ce9d4553fb4a65ad6f44eb41dbbc67ca2d61f2459388c190a"
+  },
+  {
+    "mode": "old",
+    "count": 16,
+    "rep": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "16"
+    ],
+    "exit": 0,
+    "stdout": "928,0.000326822,352.179\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 16,
+    "rep": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "16"
+    ],
+    "exit": 0,
+    "stdout": "928,0.000296504,319.509\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 16,
+    "rep": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "16"
+    ],
+    "exit": 0,
+    "stdout": "928,0.000285368,307.509\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 16,
+    "rep": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "16"
+    ],
+    "exit": 0,
+    "stdout": "928,0.000263320,283.750\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 16,
+    "rep": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "16"
+    ],
+    "exit": 0,
+    "stdout": "928,0.000261925,282.247\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 16,
+    "rep": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "16"
+    ],
+    "exit": 0,
+    "stdout": "928,0.000257461,277.436\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 16,
+    "rep": 3,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "16"
+    ],
+    "exit": 0,
+    "stdout": "928,0.000254425,274.165\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 16,
+    "rep": 3,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "16"
+    ],
+    "exit": 0,
+    "stdout": "928,0.000290693,313.247\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 16,
+    "rep": 4,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "16"
+    ],
+    "exit": 0,
+    "stdout": "928,0.000252631,272.232\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 16,
+    "rep": 4,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "16"
+    ],
+    "exit": 0,
+    "stdout": "928,0.000280736,302.517\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 128,
+    "rep": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "128"
+    ],
+    "exit": 0,
+    "stdout": "7424,0.002579721,347.484\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 128,
+    "rep": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "128"
+    ],
+    "exit": 0,
+    "stdout": "7424,0.002540213,342.162\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 128,
+    "rep": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "128"
+    ],
+    "exit": 0,
+    "stdout": "7424,0.002385474,321.319\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 128,
+    "rep": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "128"
+    ],
+    "exit": 0,
+    "stdout": "7424,0.002466860,332.282\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 128,
+    "rep": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "128"
+    ],
+    "exit": 0,
+    "stdout": "7424,0.002332902,314.238\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 128,
+    "rep": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "128"
+    ],
+    "exit": 0,
+    "stdout": "7424,0.002306766,310.717\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 128,
+    "rep": 3,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "128"
+    ],
+    "exit": 0,
+    "stdout": "7424,0.002558856,344.673\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 128,
+    "rep": 3,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "128"
+    ],
+    "exit": 0,
+    "stdout": "7424,0.002698659,363.505\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 128,
+    "rep": 4,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "128"
+    ],
+    "exit": 0,
+    "stdout": "7424,0.002865516,385.980\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 128,
+    "rep": 4,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "128"
+    ],
+    "exit": 0,
+    "stdout": "7424,0.002755064,371.102\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 1024,
+    "rep": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "1024"
+    ],
+    "exit": 0,
+    "stdout": "59392,0.024461451,411.864\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 1024,
+    "rep": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "1024"
+    ],
+    "exit": 0,
+    "stdout": "59392,0.022481468,378.527\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 1024,
+    "rep": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "1024"
+    ],
+    "exit": 0,
+    "stdout": "59392,0.020791566,350.074\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 1024,
+    "rep": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "1024"
+    ],
+    "exit": 0,
+    "stdout": "59392,0.020810335,350.390\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 1024,
+    "rep": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "1024"
+    ],
+    "exit": 0,
+    "stdout": "59392,0.020951252,352.762\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 1024,
+    "rep": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "1024"
+    ],
+    "exit": 0,
+    "stdout": "59392,0.020721458,348.893\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 1024,
+    "rep": 3,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "1024"
+    ],
+    "exit": 0,
+    "stdout": "59392,0.021150275,356.113\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 1024,
+    "rep": 3,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "1024"
+    ],
+    "exit": 0,
+    "stdout": "59392,0.020399560,343.473\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 1024,
+    "rep": 4,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "1024"
+    ],
+    "exit": 0,
+    "stdout": "59392,0.020900795,351.913\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 1024,
+    "rep": 4,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "1024"
+    ],
+    "exit": 0,
+    "stdout": "59392,0.021277357,358.253\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 4096,
+    "rep": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "4096"
+    ],
+    "exit": 0,
+    "stdout": "237568,0.085564256,360.167\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 4096,
+    "rep": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "4096"
+    ],
+    "exit": 0,
+    "stdout": "237568,0.083012399,349.426\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 4096,
+    "rep": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "4096"
+    ],
+    "exit": 0,
+    "stdout": "237568,0.084165907,354.281\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 4096,
+    "rep": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "4096"
+    ],
+    "exit": 0,
+    "stdout": "237568,0.082214896,346.069\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 4096,
+    "rep": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "4096"
+    ],
+    "exit": 0,
+    "stdout": "237568,0.082590045,347.648\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 4096,
+    "rep": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "4096"
+    ],
+    "exit": 0,
+    "stdout": "237568,0.091749502,386.203\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 4096,
+    "rep": 3,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "4096"
+    ],
+    "exit": 0,
+    "stdout": "237568,0.091778800,386.326\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 4096,
+    "rep": 3,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "4096"
+    ],
+    "exit": 0,
+    "stdout": "237568,0.091344359,384.498\n",
+    "stderr": ""
+  },
+  {
+    "mode": "old",
+    "count": 4096,
+    "rep": 4,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-old",
+      "4096"
+    ],
+    "exit": 0,
+    "stdout": "237568,0.090430366,380.650\n",
+    "stderr": ""
+  },
+  {
+    "mode": "candidate",
+    "count": 4096,
+    "rep": 4,
+    "command": [
+      "taskset",
+      "-c",
+      "8",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/live-growth-final-candidate",
+      "4096"
+    ],
+    "exit": 0,
+    "stdout": "237568,0.090907361,382.658\n",
+    "stderr": ""
+  }
+]

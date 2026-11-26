@@ -1,0 +1,30 @@
+[
+  {
+    "name": "buffer-basic",
+    "command": [
+      "taskset",
+      "-c",
+      "0-7,9-15",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/noffi-final/src/luajit",
+      "tests/t-buffer-thread-safety.lua"
+    ],
+    "environment": {},
+    "exit": 0,
+    "seconds": 0.5148195530055091
+  },
+  {
+    "name": "buffer-public",
+    "command": [
+      "taskset",
+      "-c",
+      "0-7,9-15",
+      "/tmp/lj-arena-reuse-20261126-zzbgmalf/noffi-final/src/luajit",
+      "tests/t-buffer-concurrent-public.lua"
+    ],
+    "environment": {
+      "LJ_BUFFER_LARGE": "1"
+    },
+    "exit": 0,
+    "seconds": 0.4144989930209704
+  }
+]
