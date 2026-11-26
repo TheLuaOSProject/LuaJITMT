@@ -22,7 +22,6 @@
 #include "lj_safepoint.h"
 #include "lj_tg.h"
 #include "lj_lib.h"
-#include "lj_trace.h"
 
 /* ------------------------------------------------------------------------ */
 
@@ -333,29 +332,17 @@ LJLIB_CF(debug_upvalueid)
 
 LJLIB_CF(debug_upvaluejoin)
 {
-  GCfunc *fn[2];
-  GCRef *p[2];
+  int32_t n[2];
   int i;
   for (i = 0; i < 2; i++) {
-    int32_t n;
-    fn[i] = lj_lib_checkfunc(L, 2*i+1);
-    if (!isluafunc(fn[i]))
+    GCfunc *fn = lj_lib_checkfunc(L, 2*i+1);
+    if (!isluafunc(fn))
       lj_err_arg(L, 2*i+1, LJ_ERR_NOLFUNC);
-    n = lj_lib_checkint(L, 2*i+2) - 1;
-    if ((uint32_t)n >= lj_funcL_nupvalues(&fn[i]->l))
+    n[i] = lj_lib_checkint(L, 2*i+2);
+    if ((uint32_t)n[i] - 1u >= lj_funcL_nupvalues(&fn->l))
       lj_err_arg(L, 2*i+2, LJ_ERR_IDXRNG);
-    p[i] = &fn[i]->l.uvptr[n];
   }
-  {
-    GCobj *uv = gcref_acq(*p[1]);
-    GCobj *old = gcref_acq(*p[0]);
-    if (old != uv) {
-      if (lj_trace_flushall_hs(L))
-	lj_err_caller(L, LJ_ERR_NOGCMM);
-      setgcrefrel(*p[0], uv);
-      lj_gc_pubobjobj(L, fn[0], uv);
-    }
-  }
+  lua_upvaluejoin(L, 1, n[0], 3, n[1]);
   return 0;
 }
 

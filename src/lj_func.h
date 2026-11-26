@@ -12,6 +12,9 @@
 LJ_FUNC void LJ_FASTCALL lj_func_freeproto(global_State *g, GCproto *pt);
 
 /* Upvalues. */
+struct LJGC2Lease;
+LJ_FUNC int lj_func_uv_lease_try(global_State *g, GCobj *obj,
+                                 struct LJGC2Lease *lease);
 LJ_FUNCA GCupval *LJ_FASTCALL lj_func_newuvcell(lua_State *L);
 LJ_FUNCA void LJ_FASTCALL lj_func_closeuv(lua_State *L, TValue *level);
 LJ_FUNCA void lj_func_accessuv_vm(lua_State *L, BCIns ins);

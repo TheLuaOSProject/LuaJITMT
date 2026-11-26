@@ -31,6 +31,12 @@ static int after_store(lua_State *L)
   return 0;
 }
 
+static int join_upvalues(lua_State *L)
+{
+  lua_upvaluejoin(L, 1, luaL_checkint(L, 2), 3, luaL_checkint(L, 4));
+  return 0;
+}
+
 static int release_writer(lua_State *L)
 {
   GCArena *arena;
@@ -79,6 +85,7 @@ int main(void)
   lua_register(L, "after_store", after_store);
   lua_register(L, "release_writer", release_writer);
   lua_register(L, "reset_store", reset);
+  lua_register(L, "join_upvalues", join_upvalues);
   if (luaL_dostring(L,
     "local th = require('threading')\n"
     "jit.off(); jit.flush(); collectgarbage('stop')\n"
@@ -98,6 +105,17 @@ int main(void)
     "  local w = th.spawn(write, setters[i], values[i], before_store, after_store)\n"
     "  release_writer(setters[i], new); assert(w:join(10))\n"
     "  collectgarbage(); assert(old()==42 and new()==values[i])\n"
+    "end\n"
+    "local function join(target,donor,before,after,op)\n"
+    "  before(donor); op(target,1,donor,1); after()\n"
+    "end\n"
+    "for _,op in ipairs{join_upvalues,debug.upvaluejoin} do\n"
+    "  local ds,old=cells(55); local donor=ds[1]\n"
+    "  local _,target=cells(0); local _,replacement=cells(71)\n"
+    "  reset_store()\n"
+    "  local w=th.spawn(join,target,donor,before_store,after_store,op)\n"
+    "  release_writer(donor,replacement); assert(w:join(10))\n"
+    "  collectgarbage(); assert(target()==71 and old()==55)\n"
     "end\n"
     "local function localwrite(v, before, after)\n"
     "  local x=42; local function read() return x end\n"

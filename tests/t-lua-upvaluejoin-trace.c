@@ -52,6 +52,21 @@ int main(void)
     "assert(f(100) == 700, 'joined upvalue value not observed')\n"),
     "verify joined upvalue");
 
+  check_lua(L, luaL_dostring(L,
+    "local function cell(x) return function() return x end end\n"
+    "local dest, donor, replacement = cell(1), cell(2), cell(3)\n"
+    "jit.flush(); assert(f(120)==840 and require('jit.util').traceinfo(1))\n"
+    "local callbacks = 0\n"
+    "local function redirect(kind)\n"
+    "  if kind=='flush' and callbacks==0 then\n"
+    "    callbacks=callbacks+1; debug.upvaluejoin(donor,1,replacement,1)\n"
+    "  end\n"
+    "end\n"
+    "jit.off(redirect); jit.attach(redirect,'trace')\n"
+    "debug.upvaluejoin(dest,1,donor,1); jit.attach(redirect)\n"
+    "assert(callbacks==1 and donor()==3 and dest()==3)\n"),
+    "join after a flush callback redirects the donor");
+
   lua_close(L);
   printf("t-lua-upvaluejoin-trace OK: lua_upvaluejoin flushes stale traces\n");
   return 0;

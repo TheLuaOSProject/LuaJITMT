@@ -316,6 +316,16 @@ static int func_rooted_cell_slot(lua_State *L,
   return 1;
 }
 
+/* The slot that supplied obj must be rechecked under this lease. */
+int lj_func_uv_lease_try(global_State *g, GCobj *obj, LJGC2Lease *lease)
+{
+  if (LJ_LIKELY(gc2_small_arena_tab_acq(g)))
+    return lj_gc2_small_lease_try(g, obj, sizeof(GCupval),
+                                 (uint32_t)~LJ_TUPVAL, lease, NULL);
+  return lj_gc2_obj_lease_acquire(g, obj, (uint32_t)~LJ_TUPVAL,
+                                 NULL, lease) >= 0;
+}
+
 static cTValue *func_vm_store_source(lua_State *L, BCIns ins, TValue *literal)
 {
   BCReg d = bc_d(ins);
@@ -366,14 +376,8 @@ static int func_vm_cell_access(lua_State *L, BCIns ins)
     fn = &funcV(base - 2)->l;
     obj = func_uvptr_acq(fn, index);
   }
-  if (LJ_LIKELY(gc2_small_arena_tab_acq(g))) {
-    if (!lj_gc2_small_lease_try(g, obj, sizeof(GCupval),
-			       (uint32_t)~LJ_TUPVAL, &cell_lease, NULL))
-      return 0;
-  } else if (lj_gc2_obj_lease_acquire(g, obj, (uint32_t)~LJ_TUPVAL,
-				     NULL, &cell_lease) < 0) {
+  if (!lj_func_uv_lease_try(g, obj, &cell_lease))
     return 0;
-  }
   uv = &obj->uv;
   edge = mref_acq(uv->v, TValue);
   /* The closed cell's value lives inside its retained body. An open cell

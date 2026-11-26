@@ -2770,52 +2770,131 @@ LUA_API const char *lua_getupvalue(lua_State *L, int idx, int n)
   return name;
 }
 
+enum {
+  API_UV_RETRY = -1,
+  API_UV_INVALID,
+  API_UV_OK,
+  API_UV_FLUSH
+};
+
+typedef struct ApiUpvalueFunction {
+  cTValue *source;
+  TValue value;
+  LJGC2Lease lease;
+} ApiUpvalueFunction;
+
+static int api_upvalue_function_current(const ApiUpvalueFunction *f)
+{
+  return tv_rawload_acq(f->source) == tv_rawload(&f->value);
+}
+
+/* The claimed frame retains the storage for stack and C upvalue indices.
+** A C upvalue or registry index can select a different closure at any time. */
+static int api_upvalue_function_try(lua_State *L, int idx, uint32_t uv,
+                                    ApiUpvalueFunction *f)
+{
+  if (api_index_is_envroot(idx))
+    return API_UV_INVALID;
+  f->source = index2adr(L, idx);
+  lj_tv_load_acq(&f->value, f->source);
+  if (!tvisfunc(&f->value))
+    return API_UV_INVALID;
+  if (lj_gc2_tv_lease_acquire(G(L), &f->value, &f->lease) !=
+      LJ_GC2_TV_EDGE_VALID || !api_upvalue_function_current(f))
+    return API_UV_RETRY;
+  return uv < lj_func_nupvalues(funcV(&f->value)) ? API_UV_OK : API_UV_INVALID;
+}
+
 LUA_API void *lua_upvalueid(lua_State *L, int idx, int n)
 {
   LJStateClaim claim;
-  TValue snap;
-  GCfunc *fn;
-  void *id;
+  uint32_t uv = (uint32_t)n - 1u;
+  void *id = NULL;
   api_checkclaim(L, &claim);
-  fn = funcV(index2adr_read(L, idx, &snap));
-  n--;
-  if (isluafunc(fn)) {
-    lj_checkapi((uint32_t)n < lj_funcL_nupvalues(&fn->l),
-		"bad upvalue %d", n+1);
-    id = (void *)func_uvptr_acq(&fn->l, (uint32_t)n);
-  } else {
-    lj_checkapi((uint32_t)n < lj_funcC_nupvalues(&fn->c),
-		"bad upvalue %d", n+1);
-    id = (void *)&fn->c.upvalue[n];
+  for (;;) {
+    ApiUpvalueFunction f = {0};
+    int status = api_upvalue_function_try(L, idx, uv, &f);
+    if (status == API_UV_OK) {
+      GCfunc *fn = funcV(&f.value);
+      id = isluafunc(fn) ? (void *)func_uvptr_acq(&fn->l, uv) :
+                          (void *)&fn->c.upvalue[uv];
+    }
+    lj_gc2_lease_release(&f.lease);
+    lj_checkapi(status != API_UV_INVALID, "bad upvalue %d", n);
+    if (status != API_UV_RETRY)
+      break;
+    lj_tab_wait_l(L);
   }
   lj_state_dropclaim(&claim);
   return id;
+}
+
+static int api_upvaluejoin_try(lua_State *L, int idx1, uint32_t n1,
+                               int idx2, uint32_t n2, int flushed)
+{
+  ApiUpvalueFunction dest = {0}, source = {0};
+  LJGC2Lease lease = {0};
+  GCfunc *to, *from;
+  GCobj *cell;
+  int same;
+  int status = api_upvalue_function_try(L, idx1, n1, &dest);
+  if (status != API_UV_OK)
+    goto leave;
+  status = api_upvalue_function_try(L, idx2, n2, &source);
+  if (status != API_UV_OK)
+    goto leave;
+  to = funcV(&dest.value);
+  from = funcV(&source.value);
+  if (!isluafunc(to) || !isluafunc(from)) {
+    status = API_UV_INVALID;
+    goto leave;
+  }
+  cell = func_uvptr_acq(&from->l, n2);
+  same = func_uvptr_acq(&to->l, n1) == cell;
+  if (!same) {
+    if (!flushed) {
+      status = API_UV_FLUSH;
+      goto leave;
+    }
+    if (!lj_func_uv_lease_try(G(L), cell, &lease)) {
+      status = API_UV_RETRY;
+      goto leave;
+    }
+  }
+  if (!api_upvalue_function_current(&dest) ||
+      !api_upvalue_function_current(&source) ||
+      func_uvptr_acq(&from->l, n2) != cell ||
+      (same && func_uvptr_acq(&to->l, n1) != cell)) {
+    status = API_UV_RETRY;
+  } else if (!same) {
+    setgcrefrel(to->l.uvptr[n1], cell);
+    lj_gc_pubobjobj(L, to, cell);
+  }
+leave:
+  lj_gc2_lease_release(&lease);
+  lj_gc2_lease_release(&source.lease);
+  lj_gc2_lease_release(&dest.lease);
+  return status;
 }
 
 LUA_API void lua_upvaluejoin(lua_State *L, int idx1, int n1, int idx2, int n2)
 {
   LJStateClaim claim;
   lua_State *errL = api_errstate(L);
-  TValue snap1, snap2;
-  GCfunc *fn1, *fn2;
+  int flushed = 0;
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(errL, "thread busy");
-  fn1 = funcV(index2adr_read(L, idx1, &snap1));
-  fn2 = funcV(index2adr_read(L, idx2, &snap2));
-  n1--; n2--;
-  lj_checkapi(isluafunc(fn1), "stack slot %d is not a Lua function", idx1);
-  lj_checkapi(isluafunc(fn2), "stack slot %d is not a Lua function", idx2);
-  lj_checkapi((uint32_t)n1 < lj_funcL_nupvalues(&fn1->l),
-	      "bad upvalue %d", n1+1);
-  lj_checkapi((uint32_t)n2 < lj_funcL_nupvalues(&fn2->l),
-	      "bad upvalue %d", n2+1);
-  {
-    GCobj *uv = func_uvptr_acq(&fn2->l, (uint32_t)n2);
-    GCobj *old = func_uvptr_acq(&fn1->l, (uint32_t)n1);
-    if (old != uv) {
+  for (;;) {
+    int status = api_upvaluejoin_try(L, idx1, (uint32_t)n1 - 1u,
+                                    idx2, (uint32_t)n2 - 1u, flushed);
+    lj_checkapi(status != API_UV_INVALID, "invalid Lua upvalue join");
+    if (status == API_UV_FLUSH) {
       api_trace_flush_mutation_claimed(L, errL, &claim);
-      setgcrefrel(fn1->l.uvptr[n1], uv);
-      lj_gc_pubobjobj(L, fn1, uv);
+      flushed = 1;
+    } else if (status == API_UV_RETRY) {
+      lj_tab_wait_l(L);
+    } else {
+      break;
     }
   }
   lj_state_dropresumeclaim(&claim);
