@@ -1016,12 +1016,13 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
       continue;  /* 09 section 9.3: attach self-caught this epoch. */
     if (lj_tg_reqmask_acq(tg) != 0)
       continue;  /* Already counted by this handshake. */
-    if (resumable) {
-      /* A native executor consumes reqmask before its stack scan. Do not
-      ** issue a duplicate that a local executor could ACK and clear first. */
-      if (la_load64_acq(&tg->hs_resumable_epoch_signaled) == epoch)
+    if (resumable || (actions & LJ_GC2_HS_STOPREQ)) {
+      /* A native executor can consume reqmask before its scan. A stopped
+      ** Lua owner may never return to drain a second counted interrupt.
+      ** If an executor cannot apply a request it requeues its original slot. */
+      if (la_load64_acq(&tg->hs_request_epoch) == epoch)
 	continue;
-      la_store64_rel(&tg->hs_resumable_epoch_signaled, epoch);
+      la_store64_rel(&tg->hs_request_epoch, epoch);
     }
     (void)gc2_hs_pending_add_rlx(g, 1);
     signaled++;

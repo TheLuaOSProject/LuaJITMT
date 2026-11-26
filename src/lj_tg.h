@@ -339,7 +339,7 @@ struct TGState {
   uint8_t fini_state;  /* Physical allocator finalization ownership. */
   uint32_t reqmask;
   uint64_t hs_epoch_ack;
-  uint64_t hs_resumable_epoch_signaled;  /* One counted request per resumable epoch. */
+  uint64_t hs_request_epoch;  /* Last epoch signaled once to this TG. */
   TGAlloc alloc;
   LJArenaAllocD allocd;
   HugeTab huge;

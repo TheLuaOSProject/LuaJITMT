@@ -35,6 +35,7 @@ typedef struct Probe {
   GC2SSBNode *fresh;
   uint32_t mode, armed, before, cleared, release_before, release_tail;
   uint32_t returned, peer_done, allow_detach, remote_scans;
+  uint32_t stop_signals, stop_consumed;
   uint32_t observed_futex, late_done;
 #if defined(__APPLE__)
   pthread_t owner_thread;
@@ -54,6 +55,19 @@ static void completion_hook(global_State *g, TGState *tg,
 {
   Probe *p = &ctx;
   if (g != p->g || tg != p->owner || !la_load32_acq(&p->armed)) return;
+  if (p->mode == 3 && gc2_hs_actions_acq(g) == LJ_GC2_HS_STOPREQ) {
+    if (point == LJ_SAFEPOINT_COMPLETION_TEST_COUNTED)
+      assert(la_add32_acqrel(&p->stop_signals, 1) == 0);
+    else if (point == LJ_SAFEPOINT_COMPLETION_TEST_SIGNALED)
+      until(&p->stop_consumed, 1);
+    else if (point == LJ_SAFEPOINT_COMPLETION_TEST_CONSUMED) {
+      la_store32_rel(&p->stop_consumed, 1);
+      /* Force the leader to rescan the registry while the owner has consumed
+      ** its request and has yet to claim the epoch. Only our slot may remain. */
+      while (gc2_hs_pending_acq(g) != 1) la_cpu_pause();
+    }
+    return;
+  }
   if (point != LJ_SAFEPOINT_COMPLETION_TEST_BEFORE_CLEAR &&
       point != LJ_SAFEPOINT_COMPLETION_TEST_CLEARED) return;
   assert(lj_tg_reqmask_acq(tg) == 0);
@@ -306,7 +320,8 @@ static int native_probe(lua_State *L)
   }
   if (p->mode == 2 || p->mode == 3) {
     uint32_t next_actions = p->mode == 2 ? LJ_GC2_HS_FLUSH_SSB : LJ_GC2_HS_STOPREQ;
-    while (lj_tg_reqmask_acq(p->owner) == 0) la_cpu_pause();
+    while (lj_tg_reqmask_acq(p->owner) == 0 || !lj_tg_poll_acq(p->owner))
+      la_cpu_pause();
     assert(gc2_hs_epoch_acq(p->g) == p->epoch + 1);
     assert(lj_tg_reqmask_acq(p->owner) == next_actions);
     assert(lj_tg_poll_acq(p->owner) == 1);
@@ -349,6 +364,7 @@ static int native_probe(lua_State *L)
   lj_safepoint_test_completion_hook(NULL);
   assert(gc2_hs_pending_acq(p->g) == 0 && gc2_hs_leader_acq(p->g) == 0);
   if (p->mode == 3) {
+    assert(la_load32_acq(&p->stop_signals) == 1);
     assert(lj_tg_flags_test_acq(p->owner, TGF_STOPREQ_FRESH));
     assert(lj_tg_poll_acq(p->owner) == 1);
     assert(lj_safepoint_ack(L) == LJ_GC2_HS_STOPREQ);
