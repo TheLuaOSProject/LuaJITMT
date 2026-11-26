@@ -3,6 +3,7 @@
 */
 
 #include <assert.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -384,24 +385,48 @@ static void test_raw_metamethod_bypass(lua_State *L)
   lua_pop(L, 1);
 }
 
-static void test_smr_retry(lua_State *L)
+static void *idle_reclaim_thread(void *arg)
+{
+  global_State *g = (global_State *)arg;
+  assert(lj_gc2_test_idle_reclaim_enter(g));
+  lj_gc2_test_idle_reclaim_leave(g);
+  return NULL;
+}
+
+static void test_prepare_during_metadata_reclamation(lua_State *L)
 {
   global_State *g = G(L);
   LJVMEVENTPrepareResult result;
   ptrdiff_t top = savestack(L, L->top);
   uint8_t mask;
-  uint32_t expect = LJ_GC2_SMR_OPEN;
+  pthread_t collector;
+  uint32_t calls = handler_a_calls;
 
   raw_install_handler(L, LJ_VMEVENT_TRACE, handler_a);
   (void)vmevmask_set_bits_acqrel(g, VMEVENT_MASK(LJ_VMEVENT_TRACE));
   mask = vmevmask_load_acq(g);
-  assert(gc2_smr_reclaiming_cas(g, &expect, LJ_GC2_SMR_META_EXCLUSIVE));
+  lj_gc2_test_idle_reclaim_pause_after_jit_quiescence();
+  assert(pthread_create(&collector, NULL, idle_reclaim_thread, g) == 0);
+  while (!lj_gc2_test_idle_reclaim_paused())
+    la_cpu_pause();
+  assert(prepare_checked(L, LJ_VMEVENT_TRACE, &result, 1) ==
+	 LJ_VMEVENT_PREPARE_READY);
+  assert(funcV(prepared_handler(L, &result))->c.f == handler_a);
+  lj_vmevent_call(L, result.argbase, top);
+  assert(handler_a_calls == calls + 1);
+  assert(savestack(L, L->top) == top);
+
+  lj_gc2_test_stack_admission_retry_once(obj2gco(lj_registry_tab_acq(g)));
   assert(prepare_checked(L, LJ_VMEVENT_TRACE, &result, 1) ==
 	 LJ_VMEVENT_PREPARE_RETRY);
   assert_result_retry(&result);
+  assert(lj_gc2_test_stack_admission_retry_hits() == 1);
   assert(savestack(L, L->top) == top);
   assert(vmevmask_load_acq(g) == mask);
-  gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
+  assert(gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_META_EXCLUSIVE);
+  lj_gc2_test_idle_reclaim_release();
+  assert(pthread_join(collector, NULL) == 0);
+  assert(gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_OPEN);
 }
 
 typedef enum PrepareHookAction {
@@ -417,7 +442,7 @@ typedef enum PrepareHookAction {
 #if LJ_HASJIT
   PREPARE_HOOK_ADVANCE_CLOCK_MASK,
 #else
-  PREPARE_HOOK_CLOSE_SMR_MASK,
+  PREPARE_HOOK_DENY_REGISTRY_MASK,
 #endif
 } PrepareHookAction;
 
@@ -431,7 +456,6 @@ typedef struct PrepareHookCtx {
   uint32_t anchors;
   MSize old_stacksize;
   TValue *old_stack;
-  int smr_closed;
 } PrepareHookCtx;
 
 static void prepare_stage_hook(lua_State *L, VMEvent ev, int stage, void *ud);
@@ -473,13 +497,11 @@ static void prepare_hook_advance_clock_mask(lua_State *L)
   la_store64_rel(&clock->sequence, snapshot.sequence + 2u);
 }
 #else
-static void prepare_hook_close_smr_mask(lua_State *L, PrepareHookCtx *ctx)
+static void prepare_hook_deny_registry_mask(lua_State *L)
 {
   global_State *g = G(L);
-  uint32_t expect = LJ_GC2_SMR_OPEN;
   vmevmask_store_rel(g, VMEVENT_MASK(LJ_VMEVENT_BC));
-  assert(gc2_smr_reclaiming_cas(g, &expect, LJ_GC2_SMR_META_EXCLUSIVE));
-  ctx->smr_closed = 1;
+  lj_gc2_test_stack_admission_retry_once(obj2gco(lj_registry_tab_acq(g)));
 }
 #endif
 
@@ -558,8 +580,8 @@ static void prepare_stage_hook(lua_State *L, VMEvent ev, int stage, void *ud)
     prepare_hook_advance_clock_mask(L);
     break;
 #else
-  case PREPARE_HOOK_CLOSE_SMR_MASK:
-    prepare_hook_close_smr_mask(L, ctx);
+  case PREPARE_HOOK_DENY_REGISTRY_MASK:
+    prepare_hook_deny_registry_mask(L);
     break;
 #endif
   default:
@@ -983,7 +1005,7 @@ static void test_bounded_bit_restore(lua_State *L)
 		   PREPARE_HOOK_ADVANCE_CLOCK_MASK);
 #else
   arm_prepare_hook(L, &hook, LJ_VMEVENT_TEST_AFTER_MASK_CLEAR,
-		   PREPARE_HOOK_CLOSE_SMR_MASK);
+		   PREPARE_HOOK_DENY_REGISTRY_MASK);
 #endif
   assert(prepare_checked(L, LJ_VMEVENT_TRACE, &result, 0) ==
 	 LJ_VMEVENT_PREPARE_RETRY);
@@ -991,8 +1013,7 @@ static void test_bounded_bit_restore(lua_State *L)
   assert_hook_done(&hook);
   assert(vmevmask_load_acq(g) == expected);
 #if !LJ_HASJIT
-  assert(hook.smr_closed);
-  gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
+  assert(lj_gc2_test_stack_admission_retry_hits() == 1);
 #endif
 }
 
@@ -1176,7 +1197,7 @@ static void run_enabled_tests(void)
   lua_pushcfunction(L, handler_b);
   lua_setglobal(L, "lj_reader_handler_b");
   test_raw_metamethod_bypass(L);
-  test_smr_retry(L);
+  test_prepare_during_metadata_reclamation(L);
   test_stack_rehome_reentry_and_capture(L);
   test_registry_absence(L);
   test_published_and_runtime_joff(L);
