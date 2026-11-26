@@ -104,6 +104,7 @@ The lifetime rules follow the removal and reclamation split in RCU. C11 §5.1.2.
 - During IDLE metadata retirement, `jit.util.traceinfo` and `traceir` can inspect the exact trace in its published slot. Tests compare a runnable trace's fields and first and last IR instructions before and during a suspended collection. An ordinary trace-abort callback also inspects its committed body before retirement.
 - `table.clear` completes on weak mixed tables during metadata retirement, including when a third thread has paused halfway through resizing the same table. The tests check emptiness, subsequent insertion and eventual release of the old storage.
 - A GC-mode change can finish after a native peer acknowledges, even when that peer is suspended in metadata reclamation. The final safepoint walk retains only the thread registry. The test changes modes in both directions before releasing the collector and checks the installed barrier policy on both threads.
+- Trace reflection also retains machine code, exit stubs, constants and snapshot bytecode owners during metadata retirement. The test compares bytes, addresses, scalar and string constants and snapshot entries across a parked collection, including a 20,000-instruction function and a 4,097-slot trace directory. Snapshot positions are measured from the owning prototype, which fixes offsets for functions containing the fork's local-cell bytecodes.
 
 ## Correctness and progress checks
 

@@ -149,10 +149,11 @@ static void expect_vmevent_owner_and_jit_pointer(lua_State *L)
   vmevent_expected_L = NULL;
 }
 
-static void expect_vmevent_smr_try_drop(lua_State *L)
+static void expect_vmevent_during_reclaim(lua_State *L)
 {
   global_State *g = G(L);
-  ptrdiff_t top;
+  ptrdiff_t top, argbase;
+  uint32_t calls;
   uint32_t expect = 0;
   uint8_t mask;
 
@@ -167,11 +168,20 @@ static void expect_vmevent_smr_try_drop(lua_State *L)
   assert(gc2_smr_reclaiming_cas(
 	 g, &expect, LJ_GC2_SMR_META_EXCLUSIVE));
 
-  /* VM events are observational: a reclaimer collision is a one-shot drop,
-  ** not a wait. It must not consume the cache bit or leak a reader count. */
   assert(lj_gc2_smr_read_try(g) == 0);
   top = savestack(L, L->top);
+  /* A failed lease on the registry defers this event without consuming its
+  ** cache bit. The same registered callback can run when its lookup succeeds. */
+  lj_gc2_test_stack_admission_retry_once(gcV(registry(L)));
   assert(lj_vmevent_prepare(L, LJ_VMEVENT_TRACE) == 0);
+  assert(lj_gc2_test_stack_admission_retry_hits() == 1);
+  assert(savestack(L, L->top) == top && vmevmask_load_acq(g) == mask);
+  calls = la_load32_acq(&vmevent_calls);
+  argbase = lj_vmevent_prepare(L, LJ_VMEVENT_TRACE);
+  assert(argbase != 0);
+  lua_pushliteral(L, "flush");
+  lj_vmevent_call(L, argbase, top);
+  assert(la_load32_acq(&vmevent_calls) == calls + 1u);
   assert(savestack(L, L->top) == top);
   assert(vmevmask_load_acq(g) == mask);
   assert(gc2_smr_readers_acq(g) == 0);
@@ -214,8 +224,9 @@ static void expect_jit_util_smr_try_drop_one(lua_State *L, const char *name,
 
   assert(gc2_smr_readers_acq(g) == 0);
   assert(jit_token_acq(g) == 0);
+  /* Both whole-heap and metadata-only trace inspection refuse TG retirement. */
   assert(gc2_smr_reclaiming_cas(
-	 g, &expect, LJ_GC2_SMR_META_EXCLUSIVE));
+	 g, &expect, LJ_GC2_SMR_TG_EXCLUSIVE));
   status = lua_pcall(L, have_second ? 2 : 1, LUA_MULTRET, 0);
   gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
   if (status != LUA_OK) {
@@ -833,7 +844,7 @@ int main(void)
   g = G(L);
   assert(jit_token_acq(g) == 0);
   expect_jit_lifecycle_word_roundtrip(L);
-  expect_vmevent_smr_try_drop(L);
+  expect_vmevent_during_reclaim(L);
   expect_vmevent_owner_and_jit_pointer(L);
 
   lua_pushcfunction(L, assert_flush_event_detached);

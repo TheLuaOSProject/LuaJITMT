@@ -753,6 +753,9 @@ LJ_FUNC void lj_gc2_lease_release(LJGC2Lease *lease);
 ** The caller must hold a GC2 SMR read scope while allocator ownership can
 ** transfer between TG registries. */
 LJ_FUNC int lj_gc2_mark_proto_for_pc(global_State *g, const BCIns *pc);
+/* Copy a snapshot's instruction index while its prototype is retained. */
+LJ_FUNC int lj_gc2_snapshot_pcpos(global_State *g, const BCIns *pc,
+                                  BCPos *position);
 /* Retain the table allocation non-semantically while comparing one current
 ** vector root. Returns 1 for the same generation, 0 for a valid different or
 ** terminal owner, and -1 when admission is transient and reclaim must retry. */

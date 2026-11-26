@@ -27,7 +27,7 @@ enum ThirdArg {
 };
 
 static int snapshot_pcpos(global_State *g, jit_State *J, TraceNo tr,
-			  SnapNo sn, int32_t *pcpos)
+			  SnapNo sn, GCproto *const owners[2], int32_t *pcpos)
 {
   GCtrace *T;
   int have = 0;
@@ -39,11 +39,18 @@ static int snapshot_pcpos(global_State *g, jit_State *J, TraceNo tr,
     SnapShot *snap = &trace_snap_acq(T)[sn];
     SnapEntry *map = &trace_snapmap_acq(T)[snap_mapofs_acq(snap)];
     const BCIns *pc = snap_pc_acq(&map[snap_nent_acq(snap)]);
-    const BCIns *startpc = pc;
-    while (bc_op((BCIns)la_load32_acq(
-	     (const uint32_t *)startpc)) < BC_FUNCF)
-      startpc--;
-    *pcpos = (int32_t)(pc - startpc);
+    unsigned i;
+    *pcpos = 0;
+    for (i = 0; i < 2; i++) {
+      uintptr_t offset = (uintptr_t)pc - (uintptr_t)proto_bc(owners[i]);
+      if (offset < owners[i]->sizebc * sizeof(BCIns)) {
+        assert(offset % sizeof(BCIns) == 0);
+        *pcpos = (int32_t)(offset / sizeof(BCIns));
+        break;
+      }
+    }
+    if (i == 2)
+      assert(bc_isfunc_or_ff(bc_op((BCIns)la_load32_acq((const uint32_t *)pc))));
     have = 1;
   }
   lj_gc2_smr_read_leave(g);
@@ -109,6 +116,7 @@ int main(void)
   lua_State *L = ljt_lua_newstate_openlibs();
   global_State *g = G(L);
   jit_State *J = G2J(g);
+  GCproto *owners[2];
   TraceNo tr, firsttr = 0;
   SnapNo firstsn = 0;
   int32_t firstpos = 0;
@@ -122,7 +130,7 @@ int main(void)
   lua_remove(L, -2);
   assert(lua_gettop(L) == 1);
 
-  ljt_lua_dostring(L,
+  ljt_lua_loadstring(L,
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
     "local function work(n)\n"
@@ -133,14 +141,19 @@ int main(void)
     "  return sum\n"
     "end\n"
     "for i = 1, 20 do work(40) end\n"
-    "jit.off()\n");
+    "jit.off()\n"
+    "return work\n");
+  owners[0] = funcproto(funcV(L->top-1));
+  lua_pushvalue(L, -1);
+  ljt_lua_pcall(L, 0, 1, "record snapshot position probes");
+  owners[1] = funcproto(funcV(L->top-1));
 
   assert(gc2_smr_readers_acq(g) == 0);
   assert(jit_token_acq(g) == 0);
   for (tr = 1; tr < trace_sizetrace_acq(J); tr++) {
     SnapNo sn = 0;
     int32_t pos;
-    while (snapshot_pcpos(g, J, tr, sn, &pos)) {
+    while (snapshot_pcpos(g, J, tr, sn, owners, &pos)) {
       if (firsttr == 0) {
 	firsttr = tr;
 	firstsn = sn;
@@ -153,7 +166,7 @@ int main(void)
     }
   }
   assert(firsttr != 0);
-  assert(saw_nonzero);  /* Exercise the backwards owning-header scan. */
+  assert(saw_nonzero);
 
   (void)call_tracesnap(L, firsttr, firstsn, THIRD_OMITTED, firstpos, 1);
   (void)call_tracesnap(L, firsttr, firstsn, THIRD_FALSE, firstpos, 1);
@@ -163,6 +176,11 @@ int main(void)
     uint32_t expect = LJ_GC2_SMR_OPEN;
     assert(gc2_smr_reclaiming_cas(
 	     g, &expect, LJ_GC2_SMR_META_EXCLUSIVE));
+    (void)call_tracesnap(L, firsttr, firstsn, THIRD_TRUE, firstpos, 1);
+    gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
+    expect = LJ_GC2_SMR_OPEN;
+    assert(gc2_smr_reclaiming_cas(
+             g, &expect, LJ_GC2_SMR_TG_EXCLUSIVE));
     (void)call_tracesnap(L, firsttr, firstsn, THIRD_TRUE, firstpos, 0);
     gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
   }

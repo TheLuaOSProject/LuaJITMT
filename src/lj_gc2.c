@@ -1479,8 +1479,8 @@ static int gc2_small_candidate_transition_retry_held(GCArena *a,
 static int gc2_mark_small_cell_admitted(global_State *g, GCArena *a,
 					uint32_t cell, int admission,
 					int *retryp);
-static int gc2_frame_pc_valid_scoped(global_State *g, const BCIns *pc,
-				      GC2MarkScope *scope);
+static int gc2_bcins_valid_scoped(global_State *g, const BCIns *pc,
+                                  GC2MarkScope *scope, BCPos *position);
 static LJ_AINLINE void gc2_preserve_direct_bodies(global_State *g, GCobj *o);
 static int gc2_retained_candidate_valid(global_State *g, GCobj *o,
 					 void *base, GCArena *a,
@@ -7689,7 +7689,8 @@ static int gc2_tv_admit_scoped_impl(global_State *g, cTValue *tv,
 	   GC2_TV_SCOPE_ADMITTED : GC2_TV_SCOPE_STALE;
   allow_idle = tvisstr(tv) ||
     (value_read && (tviscdata(tv) || tvistab(tv) || tvisudata(tv) ||
-                    tvisfunc(tv) || itype(tv) == LJ_TTRACE));
+                    tvisfunc(tv) || itype(tv) == LJ_TTRACE ||
+                    itype(tv) == LJ_TPROTO));
   status = gc2_observed_obj_status_scoped_impl(g, o, &gct, scope, startp,
 					       allow_idle);
   if (status < 0)
@@ -8146,8 +8147,10 @@ static int gc2_frame_prev_safe(global_State *g, TValue *bot, TValue *max,
   if (frame_islua(frame)) {
     const BCIns *pc;
     pc = frame_pc(frame);
-    if (!pc || !gc2_frame_pc_valid_scoped(g, pc, &scope->pc))
-	goto fail;
+    if ((uintptr_t)pc < sizeof(BCIns) ||
+        !gc2_bcins_valid_scoped(g, (const BCIns *)((uintptr_t)pc - sizeof(BCIns)),
+                                &scope->pc, NULL))
+      goto fail;
     /* frame_pc belongs to the caller, not necessarily to the callee function
     ** in frame-1. This is particularly visible for Lua-to-C/fast calls, whose
     ** Lua-style frame has no callee prototype. Resolve and retain the caller
@@ -10550,11 +10553,10 @@ found:
   return marked;
 }
 
-/* Resolve a return PC to its containing prototype without changing MARK.
-** Frame-chain validation only needs a body-read lease for pc[-1]; the caller
-** function discovered by the next frame owns the semantic prototype edge. */
-static int gc2_frame_pc_valid_scoped(global_State *g, const BCIns *pc,
-				      GC2MarkScope *scope)
+/* Resolve an instruction to its containing prototype without changing MARK.
+** Frames retain the calling instruction. Reflection copies its position. */
+static int gc2_bcins_valid_scoped(global_State *g, const BCIns *pc,
+                                  GC2MarkScope *scope, BCPos *position)
 {
   GCArena *a;
   GCproto *pt;
@@ -10566,10 +10568,19 @@ static int gc2_frame_pc_valid_scoped(global_State *g, const BCIns *pc,
   gc2_mark_scope_init(scope);
   if (!g || !pc || !scope || !checkptrGC(pc))
     return 0;
-  /* Custom lua_Alloc bodies are outside GC2 reclamation for the documented
-  ** temporary b1.2 boundary. The owner-stable VM frame is sufficient there. */
-  if (la_load32_acq(&g->allocf_arena) == 0)
+  if (la_load32_acq(&g->allocf_arena) == 0) {
+    /* Custom allocator bodies are outside concurrent arena reclamation. */
+    if (position) {
+      const BCIns *header = pc;
+      while (!bc_isfunc_or_ff(bc_op((BCIns)la_load32_acq(
+                                    (const uint32_t *)header))))
+        header--;
+      *position = (BCPos)(pc - header);
+    }
     return 1;
+  }
+  if (position && !gc2_small_arena_tab_acq(g))
+    return 0;
   a = lj_arena_of(pc);
   if (gc2_small_arena_known(g, a)) {
     if (!gc2_small_containing_admit(g, a, lj_arena_cellof(pc),
@@ -10585,7 +10596,7 @@ static int gc2_frame_pc_valid_scoped(global_State *g, const BCIns *pc,
     TGState *tg;
     LJHugeInfo hi;
     int rc = LJ_ARENA_HUGE_READER_MISSING;
-    if (!gc2_huge_registry_read_try(g, &lease))
+    if (!gc2_registry_read_try_mode(g, &lease, position != NULL))
       return 0;
     for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
       if (!lj_tg_flags_test_acq(tg, TGF_HUGETAB))
@@ -10622,17 +10633,40 @@ static int gc2_frame_pc_valid_scoped(global_State *g, const BCIns *pc,
   p = (uintptr_t)pc;
   bc = (uintptr_t)proto_bc(pt);
   end = bc + (uintptr_t)pt->sizebc * sizeof(BCIns);
-  if (end < bc || p <= bc || p > end ||
+  if (end < bc || p < bc || p >= end ||
       ((p - bc) % sizeof(BCIns)) != 0)
     goto fail;
   if (scope->admission == GC2_SCOPE_HUGE_READER &&
-      !lj_arena_hugetab_reader_covers_range(&scope->huge, pc-1,
+      !lj_arena_hugetab_reader_covers_range(&scope->huge, pc,
 					     sizeof(BCIns)))
     goto fail;
+  if (position) *position = (BCPos)((p - bc) / sizeof(BCIns));
   return 1;
 fail:
   gc2_mark_scope_leave(scope);
   return 0;
+}
+
+static int gc2_global_bcins(global_State *g, const BCIns *pc)
+{
+  uintptr_t p = (uintptr_t)pc;
+  uintptr_t bc = (uintptr_t)&G2GG(g)->bcff[0];
+  uintptr_t end = (uintptr_t)&G2GG(g)->bcff[GG_NUM_ASMFF];
+  return pc == &g->bc_cfunc_int || pc == &g->bc_cfunc_ext ||
+         (p >= bc && p < end && ((p - bc) % sizeof(BCIns)) == 0);
+}
+
+int lj_gc2_snapshot_pcpos(global_State *g, const BCIns *pc, BCPos *position)
+{
+  GC2MarkScope scope;
+  if (!g || !pc || !position) return 0;
+  if (gc2_global_bcins(g, pc)) {
+    *position = 0;
+    return 1;
+  }
+  if (!gc2_bcins_valid_scoped(g, pc, &scope, position)) return 0;
+  gc2_mark_scope_leave(&scope);
+  return 1;
 }
 
 int lj_gc2_mark_proto_for_pc(global_State *g, const BCIns *pc)
@@ -10650,13 +10684,7 @@ int lj_gc2_mark_proto_for_pc(global_State *g, const BCIns *pc)
   /* C and fast-function snapshots encode synthetic bytecode PCs in permanent
   ** global storage. Their owner is the global allocation itself, not a
   ** GCproto discoverable through the arena registries. */
-  p = (uintptr_t)(const void *)pc;
-  if (p == (uintptr_t)(const void *)&g->bc_cfunc_int ||
-      p == (uintptr_t)(const void *)&g->bc_cfunc_ext)
-    return 1;
-  bc = (uintptr_t)(const void *)&G2GG(g)->bcff[0];
-  end = (uintptr_t)(const void *)&G2GG(g)->bcff[GG_NUM_ASMFF];
-  if (p >= bc && p < end && ((p - bc) % sizeof(BCIns)) == 0)
+  if (gc2_global_bcins(g, pc))
     return 1;
   /* IDLE has no concurrent reclaiming cycle to close. Do not seed a future
   ** minor/major mark plane merely because a diagnostic caller resolves a PC. */

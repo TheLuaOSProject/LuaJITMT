@@ -704,22 +704,10 @@ static LJ_AINLINE void jit_trace_read_unlock(lua_State *L, jit_State *J,
     lj_jit_token_release_l(L, J);
 }
 
-/* Trace reflection is observational. A concurrent exclusive SMR reclaimer is
-** therefore a transient "trace unavailable" result, never permission to wait
-** behind that peer. Drop the temporary recorder token before returning so a
-** reclaimer which needs it cannot form a token/SMR dependency cycle. */
-static LJ_AINLINE int jit_trace_read_smr_try(lua_State *L, jit_State *J,
-					     int token)
-{
-  if (lj_gc2_smr_read_try(G(L)))
-    return 1;
-  jit_trace_read_unlock(L, J, token);
-  return 0;
-}
-
 typedef struct JitTraceRead {
   int token, smr;
   LJGC2Lease body;
+  GCtrace *native;
 } JitTraceRead;
 
 /* A committed trace stores its header and IR in one allocation. Bind a
@@ -764,8 +752,21 @@ static GCtrace *jit_trace_read_body(lua_State *L, TraceNo tr, JitTraceRead *read
   return T;
 }
 
+/* Native pins cover the separately mapped machine code and exit stubs. The
+** recorder owns the unfinished code of its own current trace until return. */
+static GCtrace *jit_trace_read_code(lua_State *L, TraceNo tr, JitTraceRead *read)
+{
+  GCtrace *T = jit_trace_read_body(L, tr, read);
+  if (T && !read->smr && T != &L2J(L)->cur) {
+    if (!lj_trace_native_pin(T)) return NULL;
+    read->native = T;
+  }
+  return T;
+}
+
 static void jit_trace_read_end(lua_State *L, JitTraceRead *read)
 {
+  if (read->native) lj_trace_native_unpin(G(L), read->native);
   lj_gc2_lease_release(&read->body);
   if (read->smr) lj_gc2_smr_read_leave(G(L));
   jit_trace_read_unlock(L, L2J(L), read->token);
@@ -861,19 +862,13 @@ LJLIB_CF(jit_util_tracek)
 {
   TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
   IRRef ref = (IRRef)lj_lib_checkint(L, 2) + REF_BIAS;
-  jit_State *J = L2J(L);
-  int token = jit_trace_read_lock(L, J);
-  GCtrace *T;
+  JitTraceRead read = {0};
+  GCtrace *T = jit_trace_read_body(L, tr, &read);
   IRIns kir[2];
   TValue kgcv;
   LJGC2Lease kgclease;
   int32_t slot = -1;
   int have = 0, have_kgc = 0;
-  if (token < 0)
-    return 0;
-  if (!jit_trace_read_smr_try(L, J, token))
-    return 0;
-  T = jit_checktrace_tr(L, tr);
   if (T && ref >= trace_nk_acq(T) && ref < REF_BIAS) {
     IRIns *irbase = trace_ir_acq(T);
     IRIns *ir = &irbase[ref];
@@ -890,19 +885,19 @@ LJLIB_CF(jit_util_tracek)
       /* The copied IR word still names a reclaimable child. Retain that exact
       ** allocation after the trace-body interval closes and through stack-root
       ** publication; a native TValue copy alone is not a GC root. */
-      lj_ir_kvalue(L, &kgcv, &kir[0]);
+      GCobj *obj = ir_kgc_acq(&kir[0]);
+      setgcVraw(&kgcv, obj, irt_toitype(kir[0].t));
       if (lj_gc2_tv_lease_acquire(G(L), &kgcv, &kgclease) !=
-	  LJ_GC2_TV_EDGE_VALID) {
-	lj_gc2_smr_read_leave(G(L));
-	jit_trace_read_unlock(L, J, token);
+	  LJ_GC2_TV_EDGE_VALID || ir_kgc_load_acq(ir) != obj) {
+        lj_gc2_lease_release(&kgclease);
+	jit_trace_read_end(L, &read);
 	return 0;
       }
       have_kgc = 1;
     }
     have = 1;
   }
-  lj_gc2_smr_read_leave(G(L));
-  jit_trace_read_unlock(L, J, token);
+  jit_trace_read_end(L, &read);
   if (have) {
 #if LJ_HASFFI
     if (kir[0].o == IR_KINT64) ctype_loadffi(L);
@@ -929,19 +924,13 @@ LJLIB_CF(jit_util_tracesnap)
   TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
   SnapNo sn = (SnapNo)lj_lib_checkint(L, 2);
   int getpos = (L->base+2 < L->top && tvistruecond(L->base+2));
-  jit_State *J = L2J(L);
-  int token = jit_trace_read_lock(L, J);
-  GCtrace *T;
+  JitTraceRead read = {0};
+  GCtrace *T = jit_trace_read_body(L, tr, &read);
   SnapEntry mapcopy[256];
   IRRef snapref = 0;
   MSize nslots = 0, nent = 0, n;
-  int32_t pcpos = 0;
+  BCPos pcpos = 0;
   int have = 0;
-  if (token < 0)
-    return 0;
-  if (!jit_trace_read_smr_try(L, J, token))
-    return 0;
-  T = jit_checktrace_tr(L, tr);
   if (T && sn < trace_nsnap_acq(T)) {
     SnapShot *snap = &trace_snap_acq(T)[sn];
     SnapEntry *map = &trace_snapmap_acq(T)[snap_mapofs_acq(snap)];
@@ -950,18 +939,9 @@ LJLIB_CF(jit_util_tracesnap)
     nslots = snap_nslots_acq(snap);
     for (n = 0; n < nent; n++)
       mapcopy[n] = snapentry_acq(&map[n]);
-    if (getpos) {
-      const BCIns *pc = snap_pc_acq(&map[nent]);
-      const BCIns *startpc = pc;
-      while (bc_op((BCIns)la_load32_acq(
-	       (const uint32_t *)startpc)) < BC_FUNCF)
-	startpc--;
-      pcpos = (int32_t)(pc - startpc);
-    }
-    have = 1;
+    have = !getpos || lj_gc2_snapshot_pcpos(G(L), snap_pc_acq(&map[nent]), &pcpos);
   }
-  lj_gc2_smr_read_leave(G(L));
-  jit_trace_read_unlock(L, J, token);
+  jit_trace_read_end(L, &read);
   if (have) {
     GCtab *t;
     /* Allocation and table publication happen only after the trace body has
@@ -988,39 +968,28 @@ LJLIB_CF(jit_util_tracesnap)
 LJLIB_CF(jit_util_tracemc)
 {
   TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
-  jit_State *J = L2J(L);
-  int token = jit_trace_read_lock(L, J);
-  GCtrace *T;
+  JitTraceRead read = {0};
+  GCtrace *T = jit_trace_read_code(L, tr, &read);
   MSize szmcode = 0;
   MSize mcloop = 0;
-  if (token < 0)
-    return 0;
-  if (!jit_trace_read_smr_try(L, J, token))
-    return 0;
-  T = jit_checktrace_tr(L, tr);
   if (T) {
     MCode *mcode = trace_mcode_acq(T);
     if (mcode != NULL)
       szmcode = trace_szmcode_acq(T);
   }
-  lj_gc2_smr_read_leave(G(L));
-  jit_trace_read_unlock(L, J, token);
+  jit_trace_read_end(L, &read);
   if (szmcode != 0) {
     char *copy = lj_buf_tmp(L, szmcode);
     MSize capacity = szmcode;
     intptr_t mcodeaddr = 0;
     int have = 0;
+    JitTraceRead bytes = {0};
 
     /* Scratch growth may allocate, so do it before reacquiring body SMR. The
     ** second one-shot lookup is the linearization point: a reused trace number
     ** may name a different immutable body, but it is copied only when it fits
     ** the already-owned TG scratch storage. */
-    token = jit_trace_read_lock(L, J);
-    if (token < 0)
-      return 0;
-    if (!jit_trace_read_smr_try(L, J, token))
-      return 0;
-    T = jit_checktrace_tr(L, tr);
+    T = jit_trace_read_code(L, tr, &bytes);
     if (T) {
       MCode *mcode = trace_mcode_acq(T);
       szmcode = trace_szmcode_acq(T);
@@ -1031,8 +1000,7 @@ LJLIB_CF(jit_util_tracemc)
 	have = 1;
       }
     }
-    lj_gc2_smr_read_leave(G(L));
-    jit_trace_read_unlock(L, J, token);
+    jit_trace_read_end(L, &bytes);
     if (have) {
       /* The managed scratch copy survives trace retirement and is reclaimed
       ** with its TG even if string interning throws. */
@@ -1052,15 +1020,9 @@ LJLIB_CF(jit_util_traceexitstub)
   if (L->top > L->base+1) {  /* Don't throw for one-argument variant. */
     TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
     ExitNo exitno = (ExitNo)lj_lib_checkint(L, 2);
-    jit_State *J = L2J(L);
-    int token = jit_trace_read_lock(L, J);
-    GCtrace *T;
+    JitTraceRead read = {0};
+    GCtrace *T = jit_trace_read_code(L, tr, &read);
     intptr_t addr = 0;
-    if (token < 0)
-      return 0;
-    if (!jit_trace_read_smr_try(L, J, token))
-      return 0;
-    T = jit_checktrace_tr(L, tr);
     if (T) {
 #ifdef EXITSTUBS_PER_GROUP
       ExitNo maxexit = trace_nsnap_acq(T);
@@ -1074,8 +1036,7 @@ LJLIB_CF(jit_util_traceexitstub)
 	** admitted. Evaluating the pointer itself after leave is a C lifetime bug. */
 	addr = (intptr_t)(void *)jit_traceexitstub_addr_acq(T, exitno);
     }
-    lj_gc2_smr_read_leave(G(L));
-    jit_trace_read_unlock(L, J, token);
+    jit_trace_read_end(L, &read);
     if (addr != 0) {
       setintptrV(L->top-1, addr);
       return 1;

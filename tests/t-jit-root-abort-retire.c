@@ -310,28 +310,72 @@ static void run_case(int mode)
   printf("root ABORT mode=%d OK\n", mode);
 }
 
-static void test_live_inspection(void)
+static void test_live_inspection(int huge)
 {
   lua_State *L = new_state();
   RootAbortCtx ctx = {0};
-  int probe = new_probe(L, &ctx);
+  int probe;
   TraceNo tr;
+  GCtrace *T;
+  int object = 0, number = 0;
+  ljt_lua_loadstring(L,
+    "local n = ...\n"
+    "if n > 0 then jit.opt.start('maxtrace=4096') end\n"
+    "local make = assert(loadstring('local t = ...; return function(n) local s=0\\n'\n"
+    "  .. ('s=s+0\\n'):rep(n) .. 'for i=1,n do s=s+i+t.offset end; return s end'))\n"
+    "return make({offset=3})");
+  lua_pushinteger(L, huge ? 20000 : 0);
+  ljt_lua_pcall(L, 1, 1, "build trace reflection probe");
+  probe = lua_gettop(L);
+  ctx.g = G(L);
+  ctx.pt = funcproto(funcV(L->top - 1));
+  assert(!!lj_arena_ishuge(lj_arena_of(ctx.pt)) == huge);
   alarm(15);
   for (unsigned i = 0; i < 8; i++)
     call_probe(L, probe);
   tr = proto_trace_acq(ctx.pt);
   assert(tr != 0);
+  assert(lj_gc2_smr_read_try(ctx.g));
+  assert(!!lj_arena_ishuge(lj_arena_of(tracevec_acq(L2J(L)))) == huge);
+  T = traceref_safe(L2J(L), tr);
+  assert(T && trace_runnable_acq(T, tr));
+  for (IRRef ref = trace_nk_acq(T); ref < REF_BIAS; ) {
+    IRIns ir = ir_load_acq(&trace_ir_acq(T)[ref]);
+    if (ir.o == IR_KGC && irt_isstr(ir.t))
+      object = (int)ref - REF_BIAS;
+    if (ir.o == IR_KINT || ir.o == IR_KNUM)
+      number = (int)ref - REF_BIAS;
+    ref += ir_isk64(&ir) ? 2 : 1;
+  }
+  lj_gc2_smr_read_leave(ctx.g);
+  assert(object && number);
   ljt_lua_dostring(L,
     "local u = require('jit.util')\n"
-    "return function(tr)\n"
+    "return function(tr, object, number)\n"
     "  local info = assert(u.traceinfo(tr))\n"
     "  local first, last = {u.traceir(tr, 1)}, {u.traceir(tr, info.nins)}\n"
     "  assert(#first == 5 and #last == 5)\n"
+    "  local key, kt = u.tracek(tr, object)\n"
+    "  local num, nt = u.tracek(tr, number)\n"
+    "  assert(type(key) == 'string' and type(num) == 'number')\n"
+    "  local code, addr, loop = u.tracemc(tr)\n"
+    "  local stub = u.traceexitstub(tr, 0)\n"
+    "  assert(#code > 0 and type(stub) == 'number')\n"
+    "  local snap, pc = u.tracesnap(tr, info.nexit-1, true)\n"
+    "  assert(type(snap) == 'table' and type(pc) == 'number')\n"
     "  local function verify()\n"
     "    local got = assert(u.traceinfo(tr))\n"
     "    for k,v in pairs(info) do assert(got[k] == v) end\n"
     "    local a, b = {u.traceir(tr, 1)}, {u.traceir(tr, info.nins)}\n"
     "    for i=1,5 do assert(a[i] == first[i] and b[i] == last[i]) end\n"
+    "    local k, t = u.tracek(tr, object); assert(k == key and t == kt)\n"
+    "    k, t = u.tracek(tr, number); assert(k == num and t == nt)\n"
+    "    local c, addr2, loop2 = u.tracemc(tr)\n"
+    "    assert(c == code and addr2 == addr and loop2 == loop)\n"
+    "    assert(u.traceexitstub(tr, 0) == stub)\n"
+    "    local ss, pc2 = u.tracesnap(tr, info.nexit-1, true)\n"
+    "    assert(pc2 == pc and #ss == #snap)\n"
+    "    for i=0,#snap do assert(ss[i] == snap[i]) end\n"
     "    assert(select('#', u.traceinfo(0)) == 0)\n"
     "    assert(select('#', u.traceir(tr, info.nins + 1)) == 0)\n"
     "  end\n"
@@ -339,7 +383,9 @@ static void test_live_inspection(void)
     "  return verify\n"
     "end");
   lua_pushinteger(L, tr);
-  ljt_lua_pcall(L, 1, 1, "snapshot runnable trace");
+  lua_pushinteger(L, object);
+  lua_pushinteger(L, number);
+  ljt_lua_pcall(L, 3, 1, "snapshot runnable trace");
   pause_reclaimer(&ctx);
   ljt_lua_pcall(L, 0, 0, "inspect runnable trace during metadata retirement");
   assert(lj_gc2_test_idle_reclaim_paused());
@@ -388,7 +434,8 @@ int main(void)
   run_case(ORDINARY);
   run_case(FLUSH_IN_EVENT);
   run_case(CLOSE_PENDING);
-  test_live_inspection();
+  test_live_inspection(0);
+  test_live_inspection(1);
   test_capacity();
   puts("t-jit-root-abort-retire OK");
   return 0;
