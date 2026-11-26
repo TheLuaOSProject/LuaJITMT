@@ -25,6 +25,7 @@
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
+#include "lj_arena.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_tab.h"
@@ -605,6 +606,48 @@ static void test_malformed_parent_and_tvalue_rejected(void)
                                    &forged, &f.value) ==
          LJ_GC2_TABLE_STORE_GUARD_RETRY);
   assert_rejected_begin(&f, &guard, &before);
+}
+
+static void test_transient_store_operands(void)
+{
+  Fixture f = fixture_open();
+  LJGC2TableStoreGuard guard;
+  GCArena *arena = lj_arena_of(f.parent);
+  uint32_t cell = lj_arena_cellof(f.parent);
+  TValue key;
+  int i;
+
+  lua_newtable(f.L);
+  settabV(f.L, &key, tabV(f.L->top - 1));
+  for (i = 0; i < 3; i++) {
+    ResourceSnap before = resource_snapshot(&f);
+    if (i == 0)
+      assert(lj_arena_lifetime_state_cas(arena, cell, LJ_ARENA_LIFETIME_LIVE,
+					LJ_ARENA_LIFETIME_DESTRUCT));
+    else
+      lj_gc2_test_stack_admission_retry_once(i == 1 ? gcV(&key) : gcV(&f.value));
+    assert(lj_gc2_table_store_begin(f.L, &guard, f.parent, &key, &f.value) ==
+	   LJ_GC2_TABLE_STORE_GUARD_RETRY);
+    assert(!guard.globally_pinned && !guard.begun && !guard.store_authorized);
+    assert_guard_resources_released(&guard);
+    assert_descriptor_idle(&f);
+    assert_resources_unchanged(&f, &before);
+    assert(lj_gc2_activation_snapshot(&f.g->gc2.activation).state ==
+	   LJ_GC2_ACT_IDLE);
+    if (i == 0)
+      assert(lj_arena_lifetime_state_cas(arena, cell, LJ_ARENA_LIFETIME_DESTRUCT,
+					LJ_ARENA_LIFETIME_LIVE));
+    else
+      assert(lj_gc2_test_stack_admission_retry_hits() == 1);
+  }
+  lua_pushvalue(f.L, 3);
+  lua_pushvalue(f.L, 2);
+  lua_rawset(f.L, 1);
+  lua_gc(f.L, LUA_GCCOLLECT, 0);
+  lua_pushvalue(f.L, 3);
+  lua_rawget(f.L, 1);
+  assert(lua_rawequal(f.L, -1, 2));
+  fixture_close(&f);
 }
 
 static void wait_table_rescan_pause(uint32_t stage)
@@ -1250,6 +1293,7 @@ int main(void)
   test_wrong_owner_revalidate_cleanup();
   test_stage_order_rejection();
   test_malformed_parent_and_tvalue_rejected();
+  test_transient_store_operands();
   test_finish_ordering();
   test_sweep_finish_dirty_ordering();
   test_legacy_carrier_without_registry_borrow();

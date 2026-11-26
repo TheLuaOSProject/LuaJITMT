@@ -1422,15 +1422,13 @@ static int gc2_markobj_expected_scoped_status(global_State *g, GCobj *o,
 					       uint32_t expected_gct,
 					       uint32_t *gctp,
 					       GC2MarkScope *scope);
-static int gc2_obj_lease_acquire_mode(global_State *g, GCobj *o,
-                                     uint32_t expected_gct, uint32_t *gctp,
-                                     LJGC2Lease *lease, int semantic_publish);
+static void gc2_public_lease_take(LJGC2Lease *lease, GC2MarkScope *scope);
 static int gc2_markobj_expected_scoped_status_mode(global_State *g,
 						    GCobj *o,
 						    uint32_t expected_gct,
 						    uint32_t *gctp,
 						    GC2MarkScope *scope,
-						    int semantic_publish);
+						    int semantic_publish, int *retryp);
 static int gc2_markobj_preserve_status(global_State *g, GCobj *o,
 				       void **basep, uint32_t *gctp,
 				       int *traversablep);
@@ -12017,10 +12015,10 @@ static int gc2_expected_type_scoped_status(global_State *g, GCobj *o,
   ** LP and the generic helper publishes NEW graph work. Custom lua_Alloc
   ** follows its documented temporary compatibility boundary. */
   status = gc2_markobj_expected_scoped_status_mode(
-    g, o, expected_gct, NULL, scope, semantic_publish);
+    g, o, expected_gct, NULL, scope, semantic_publish, &markretry);
   if (status == GC2_MARK_DEAD) {
     gc2_mark_scope_leave(scope);
-    return GC2_TAB_SCOPE_STALE;
+    return markretry ? GC2_TAB_SCOPE_RETRY : GC2_TAB_SCOPE_STALE;
   }
   if (admittedp)
     *admittedp = o;
@@ -16316,11 +16314,23 @@ static int gc2_table_store_rescue_strings(LJGC2TableStoreGuard *guard)
 }
 
 static LJGC2TableStoreGuardResult
+gc2_table_store_lease_failed(lua_State *L, LJGC2TableStoreGuard *guard,
+			    int stale)
+{
+  /* No slot has been written. A transient reader conflict can release its
+  ** resources and retry from the caller's still-rooted operands. */
+  if (stale)
+    (void)gc2_table_store_guard_pin(guard);
+  return gc2_table_store_guard_abort(L, guard, LJ_GC2_TABLE_STORE_GUARD_RETRY);
+}
+
+static LJGC2TableStoreGuardResult
 gc2_table_store_begin(lua_State *L, LJGC2TableStoreGuard *guard,
 		      GCtab *parent, cTValue *key, cTValue *value, int array)
 {
   global_State *g;
   TGState *tg;
+  GC2MarkScope parent_scope;
   LJGC2RootDescSpec spec;
   LJTGSlotSnap slot;
   LJTGSlotResult borrowed;
@@ -16383,32 +16393,23 @@ gc2_table_store_begin(lua_State *L, LJGC2TableStoreGuard *guard,
     (void)gc2_table_store_guard_pin(guard);
   }
 
-  lease = gc2_obj_lease_acquire_mode(g, obj2gco(parent),
-                                    (uint32_t)~LJ_TTAB, NULL,
-                                    &guard->parent_lease, !array);
-  if (lease < 0) {
-    (void)gc2_table_store_guard_pin(guard);
-    return gc2_table_store_guard_abort(
-      L, guard, LJ_GC2_TABLE_STORE_GUARD_RETRY);
-  }
+  lease = gc2_expected_type_scoped_status(
+    g, obj2gco(parent), (uint32_t)~LJ_TTAB, NULL, &parent_scope, !array);
+  if (lease != GC2_TAB_SCOPE_VALID)
+    return gc2_table_store_lease_failed(L, guard, lease == GC2_TAB_SCOPE_STALE);
+  gc2_public_lease_take(&guard->parent_lease, &parent_scope);
   guard->parent_lease_active = 1;
   if (tvisgcv(&guard->key)) {
     lease = lj_gc2_tv_lease_acquire(g, &guard->key, &guard->key_lease);
-    if (lease != LJ_GC2_TV_EDGE_VALID) {
-      (void)gc2_table_store_guard_pin(guard);
-      return gc2_table_store_guard_abort(
-        L, guard, LJ_GC2_TABLE_STORE_GUARD_RETRY);
-    }
+    if (lease != LJ_GC2_TV_EDGE_VALID)
+      return gc2_table_store_lease_failed(L, guard, lease == LJ_GC2_TV_EDGE_STALE);
     guard->key_lease_active = 1;
   }
   if (tvisgcv(&guard->value)) {
     lease = lj_gc2_tv_lease_acquire(g, &guard->value,
 				    &guard->value_lease);
-    if (lease != LJ_GC2_TV_EDGE_VALID) {
-      (void)gc2_table_store_guard_pin(guard);
-      return gc2_table_store_guard_abort(
-        L, guard, LJ_GC2_TABLE_STORE_GUARD_RETRY);
-    }
+    if (lease != LJ_GC2_TV_EDGE_VALID)
+      return gc2_table_store_lease_failed(L, guard, lease == LJ_GC2_TV_EDGE_STALE);
     guard->value_lease_active = 1;
   }
   if (!gc2_table_store_rescue_strings(guard))
@@ -18388,14 +18389,14 @@ static int gc2_markobj_expected_scoped_status_mode(global_State *g,
 						    uint32_t expected_gct,
 						    uint32_t *gctp,
 						    GC2MarkScope *scope,
-						    int semantic_publish)
+						    int semantic_publish, int *retryp)
 {
   int status;
   int traversable;
   uint32_t gct;
   gc2_mark_scope_init(scope);
   status = gc2_markobj_preserve_status_impl(g, o, NULL, &gct, &traversable,
-						     expected_gct, scope, NULL);
+					     expected_gct, scope, retryp);
   if (status == GC2_MARK_DEAD)
     return GC2_MARK_DEAD;
   if (gctp)
@@ -18420,7 +18421,7 @@ static int gc2_markobj_expected_scoped_status(global_State *g, GCobj *o,
 					       GC2MarkScope *scope)
 {
   return gc2_markobj_expected_scoped_status_mode(
-    g, o, expected_gct, gctp, scope, 1);
+    g, o, expected_gct, gctp, scope, 1, NULL);
 }
 
 static int gc2_markobj_expected_status(global_State *g, GCobj *o,
@@ -18434,30 +18435,22 @@ static int gc2_markobj_expected_status(global_State *g, GCobj *o,
   return status;
 }
 
-static int gc2_obj_lease_acquire_mode(global_State *g, GCobj *o,
-				      uint32_t expected_gct, uint32_t *gctp,
-				      LJGC2Lease *lease, int semantic_publish)
+int lj_gc2_obj_lease_acquire(global_State *g, GCobj *o,
+			     uint32_t expected_gct, uint32_t *gctp,
+			     LJGC2Lease *lease)
 {
   GC2MarkScope scope;
   int status;
   if (!lease)
     return GC2_MARK_DEAD;
   gc2_public_lease_init(lease);
-  status = gc2_markobj_expected_scoped_status_mode(
-    g, o, expected_gct, gctp, &scope, semantic_publish);
+  status = gc2_markobj_expected_scoped_status(g, o, expected_gct, gctp, &scope);
   if (status == GC2_MARK_DEAD) {
     gc2_mark_scope_leave(&scope);
     return status;
   }
   gc2_public_lease_take(lease, &scope);
   return status;
-}
-
-int lj_gc2_obj_lease_acquire(global_State *g, GCobj *o,
-                            uint32_t expected_gct, uint32_t *gctp,
-                            LJGC2Lease *lease)
-{
-  return gc2_obj_lease_acquire_mode(g, o, expected_gct, gctp, lease, 1);
 }
 
 int lj_gc2_markobj_status(global_State *g, GCobj *o, uint32_t *gctp)
