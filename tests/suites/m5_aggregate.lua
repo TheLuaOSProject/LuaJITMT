@@ -50,6 +50,7 @@ local m5_concurrent_cases = {
   "m5_libc_error_reentrant",
   "m5_state_owner",
   "m5_buffer_publish",
+  "m5_buffer_progress",
   "m5_threading_alloc",
   "m5_jit_trace_publish",
   "m5_hookmask_atomic",

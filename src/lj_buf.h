@@ -20,7 +20,7 @@
 **   MRef L;	lua_State, used for buffer resizing. Extension bits in 3 LSB.
 */
 
-/* Extended string buffer. */
+/* Private serializer buffer. */
 typedef struct SBufExt {
   SBufHeader;
   la_u128 cursor;	/* Read pointer and publication generation. */
@@ -33,6 +33,46 @@ typedef struct SBufExt {
   int depth;		/* Remaining recursion depth. */
 } SBufExt;
 LJ_STATIC_ASSERT(sizeof(GCudata) % __alignof__(la_u128) == 0);
+
+/* A public buffer publishes its backing and both offsets in one x64 CAS.
+** Writers may fill an unused tail. Previously published bytes remain readable
+** until the last allocator lease leaves, including after reset or free. */
+typedef struct LJBufStorage {
+  uint64_t serial;
+  uint64_t claimed;
+  GCobj *ref;
+  const char *data;
+  MSize capacity;
+  uint32_t reftype;
+  uint32_t written;  /* One plus the initialized write offset, release-published. */
+} LJBufStorage;
+
+typedef struct LJBuffer {
+  la_u128 range;  /* lo = LJBufStorage *, hi = write:read offsets. */
+  uint64_t serial;
+  GCRef dict_str;
+  GCRef dict_mt;
+} LJBuffer;
+
+typedef struct LJBufPosition {
+  la_u128 range;
+  uint64_t serial;
+} LJBufPosition;
+
+#ifdef LJ_BUF_TEST_HELPERS
+enum {
+  LJ_BUF_TEST_TAIL_CLAIMED = 1,
+  LJ_BUF_TEST_BEFORE_PUBLISH = 2
+};
+typedef void (*LJBufTestHook)(lua_State *L, LJBuffer *buf, uint32_t stage);
+LJ_FUNC void lj_buf_test_set_hook(LJBufTestHook hook);
+#endif
+
+static LJ_AINLINE MSize lj_bufx_length(const LJBuffer *buf)
+{
+  la_u128 range = la_load128_acq(&buf->range);
+  return (MSize)(range.hi >> 32) - (MSize)range.hi;
+}
 
 static LJ_AINLINE char *lj_buf_ptr_load_acq(char *const *p)
 {
@@ -241,7 +281,7 @@ static LJ_AINLINE const char *lj_bufx_data_acq(const SBufExt *sbx,
 #define tvisbuf(o) \
   (LJ_HASBUFFER && tvisudata(o) && \
    lj_udata_udtype_acq(udataV(o)) == UDTYPE_BUFFER)
-#define bufV(o)		check_exp(tvisbuf(o), ((SBufExt *)uddata(udataV(o))))
+#define bufV(o)		check_exp(tvisbuf(o), ((LJBuffer *)uddata(udataV(o))))
 
 /* Buffer management */
 LJ_FUNC char *LJ_FASTCALL lj_buf_need2(SBuf *sb, MSize sz);
@@ -353,48 +393,32 @@ static LJ_AINLINE void lj_bufx_set_cow(lua_State *L, SBufExt *sbx,
   lj_buf_rptr_rel(sbx, b);
 }
 
-static LJ_AINLINE void lj_bufx_reset(SBufExt *sbx)
-{
-  if (sbufiscow(sbx)) {
-    setsbufflag(sbx, sbufflag(sbx) & ~(GCSize)SBUF_FLAG_COW);
-    lj_bufx_cowref_clear_rel(sbx);
-    lj_buf_bptr_rel((SBuf *)sbx, NULL);
-    lj_buf_eptr_rel((SBuf *)sbx, NULL);
-  }
-  {
-    char *b = lj_buf_bptr_acq((SBuf *)sbx);
-    lj_buf_wptr_rel((SBuf *)sbx, b);
-    lj_buf_rptr_rel(sbx, b);
-  }
-}
-
-static LJ_AINLINE void lj_bufx_free(lua_State *L, SBufExt *sbx)
-{
-  if (!sbufiscoworborrow(sbx))
-    lj_mem_free(G(L), lj_buf_bptr_acq((SBuf *)sbx), sbufsz(sbx));
-  setsbufXL(sbx, L, SBUF_FLAG_EXT);
-  lj_bufx_cowref_clear_rel(sbx);
-  lj_buf_bounds_rel((SBuf *)sbx, NULL, NULL, NULL);
-  lj_buf_rptr_rel(sbx, NULL);
-}
-
 #if LJ_HASBUFFER
 LJ_FUNC int lj_bufx_isbuf(lua_State *L, cTValue *o);
 LJ_FUNC MSize lj_bufx_readlen(lua_State *L, cTValue *o);
 LJ_FUNC void lj_bufx_putbuf(lua_State *L, SBuf *dst, cTValue *source);
-LJ_FUNC GCstr *LJ_FASTCALL lj_bufx_tostr(SBuf *sb, SBufExt *src);
-LJ_FUNC GCstr *lj_bufx_get(SBuf *scratch, SBufExt *src, MSize n);
-LJ_FUNC void LJ_FASTCALL lj_bufx_skip(SBufExt *sbx, MSize n);
-#endif
-
-#if LJ_HASBUFFER && LJ_HASJIT
-LJ_FUNC void lj_bufx_set(SBufExt *sbx, const char *p, MSize len, GCobj *o);
-LJ_FUNC void LJ_FASTCALL lj_bufx_reset_forjit(SBufExt *sbx);
-LJ_FUNC void LJ_FASTCALL lj_bufx_putstr_forjit(lua_State *L, SBufExt *sbx,
-					       GCstr *str);
-LJ_FUNC int32_t LJ_FASTCALL lj_bufx_len_forjit(SBufExt *sbx);
+LJ_FUNC GCstr *LJ_FASTCALL lj_bufx_tostr(SBuf *scratch, LJBuffer *buf);
+LJ_FUNC GCstr *lj_bufx_get(SBuf *scratch, LJBuffer *buf, MSize n);
+LJ_FUNC void lj_bufx_decode(lua_State *L, LJBuffer *buf, TValue *o);
+LJ_FUNC int lj_bufx_consume(lua_State *L, LJBuffer *buf, LJBufPosition *pos,
+                            MSize n);
+LJ_FUNC void LJ_FASTCALL lj_bufx_skip(LJBuffer *buf, MSize n);
+LJ_FUNC void lj_bufx_free(lua_State *L, LJBuffer *buf);
+LJ_FUNC void LJ_FASTCALL lj_bufx_reset(lua_State *L, LJBuffer *buf);
+LJ_FUNC void lj_bufx_set(lua_State *L, LJBuffer *buf, const char *p,
+                         MSize len, GCobj *ref);
+LJ_FUNC void lj_bufx_append(lua_State *L, LJBuffer *buf, const char *p, MSize n);
+LJ_FUNC void lj_bufx_putstr(lua_State *L, LJBuffer *buf, GCstr *s);
+LJ_FUNC int lj_bufx_init_storage(lua_State *L, LJBuffer *buf, MSize capacity);
 #if LJ_HASFFI
-LJ_FUNC MSize LJ_FASTCALL lj_bufx_more(SBufExt *sbx, MSize sz);
+LJ_FUNC char *lj_bufx_reserve(lua_State *L, LJBuffer *buf, MSize size,
+                              MSize *left);
+LJ_FUNC int lj_bufx_commit(lua_State *L, LJBuffer *buf, MSize used);
+LJ_FUNC const char *lj_bufx_ref(lua_State *L, LJBuffer *buf, MSize *len);
+LJ_FUNC const char *LJ_FASTCALL lj_bufx_ptr(lua_State *L, LJBuffer *buf);
+#endif
+#if LJ_HASJIT
+LJ_FUNC int32_t LJ_FASTCALL lj_bufx_len_forjit(LJBuffer *buf);
 #endif
 #endif
 

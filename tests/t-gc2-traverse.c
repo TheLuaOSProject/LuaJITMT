@@ -1446,7 +1446,7 @@ static void test_buffer_constructor_dict_barrier(lua_State *L, global_State *g,
 {
   GCtab *dict_str, *dict_mt;
   GCudata *ud;
-  SBufExt *sbx;
+  LJBuffer *sbx;
 
   lua_settop(L, 0);
   assert(luaL_dostring(L,
@@ -1468,9 +1468,9 @@ static void test_buffer_constructor_dict_barrier(lua_State *L, global_State *g,
   lua_pushvalue(L, -3);
   lua_call(L, 0, 1);
   ud = udataV(L->top - 1);
-  sbx = (SBufExt *)uddata(ud);
-  assert(lj_bufx_dict_str_acq(sbx) == dict_str);
-  assert(lj_bufx_dict_mt_acq(sbx) == dict_mt);
+  sbx = (LJBuffer *)uddata(ud);
+  assert(gcref_acq(sbx->dict_str) == obj2gco(dict_str));
+  assert(gcref_acq(sbx->dict_mt) == obj2gco(dict_mt));
   assert(lj_gc2_ismarked(g, obj2gco(dict_str)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(dict_mt)) == 1);
   flush_and_drain(g, tg);

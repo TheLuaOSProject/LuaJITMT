@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-buffer-review-20261126-jtn9tue9/assert-v4/src/luajit": "f6d37586bc2f6fe31a162230f9164473a5b46e08c42338e91ef0d52769bbe366",
+  "/tmp/lj-buffer-review-20261126-jtn9tue9/assert-v4/src/libluajit.a": "af210df605e1e3f83da44680121181350ac0a3700aec4adf124ade751953731a",
+  "/workspaces/lj-lockless/tests/t-gc2-traverse.c": "65e693eae2712a250c0b12e8cf40a965c2f560aea0b08b2c1361bea9a0d1006f",
+  "/tmp/lj-buffer-review-20261126-jtn9tue9/assert-v4/check-traverse/traverse": "a24680ab77c45f9ecbb4bf2787df0f26c33731f56ee5f91574d60a00967309a7"
+}

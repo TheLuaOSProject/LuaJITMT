@@ -762,11 +762,13 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
     tmpptr = uddata(ud);
     if (udtype == UDTYPE_IO_FILE)
       tmpptr = *(void **)tmpptr;
+#if LJ_HASBUFFER
     else if (udtype == UDTYPE_BUFFER) {
       MSize len;
-      tmpptr = (void *)lj_bufx_data_acq((SBufExt *)tmpptr, &len);
+      tmpptr = (void *)lj_bufx_ref(L, (LJBuffer *)tmpptr, &len);
       UNUSED(len);
     }
+#endif
   } else if (tvislightud(o)) {
     tmpptr = lightudV(cts->g, o);
   } else if (tvisfunc(o)) {

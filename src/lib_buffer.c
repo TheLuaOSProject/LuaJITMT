@@ -34,38 +34,11 @@
 /* -- Helper functions ---------------------------------------------------- */
 
 /* Check that the first argument is a string buffer. */
-static SBufExt *buffer_tobuf(lua_State *L)
+static LJBuffer *buffer_tobuf(lua_State *L)
 {
   if (!(L->base < L->top && tvisbuf(L->base)))
     lj_err_argtype(L, 1, "buffer");
   return bufV(L->base);
-}
-
-/* Ditto, but for writers. */
-static LJ_AINLINE SBufExt *buffer_tobufw(lua_State *L)
-{
-  SBufExt *sbx = buffer_tobuf(L);
-  setsbufXL_(sbx, L);
-  return sbx;
-}
-
-#define buffer_toudata(sbx)	((GCudata *)(sbx)-1)
-
-/* Allocate the first owned buffer without a longjmp while a constructor root
-** is live.  This is the empty-SBuf specialization of buf_grow(): there is no
-** old storage, payload, COW reference or borrowed owner to transfer. */
-static char *buffer_storage_new_nothrow(lua_State *L, SBufExt *sbx, MSize sz)
-{
-  MSize nsz = LJ_MIN_SBUF;
-  char *raw;
-  while (nsz < sz)
-    nsz += nsz;
-  raw = (char *)lj_mem_new_nothrow(L, nsz);
-  if (!raw)
-    return NULL;
-  lj_buf_bounds_rel((SBuf *)sbx, raw, raw, raw + nsz);
-  lj_buf_rptr_rel(sbx, raw);
-  return raw;
 }
 
 /* -- Buffer methods ------------------------------------------------------ */
@@ -74,7 +47,7 @@ static char *buffer_storage_new_nothrow(lua_State *L, SBufExt *sbx, MSize sz)
 
 LJLIB_CF(buffer_method_free)
 {
-  SBufExt *sbx = buffer_tobuf(L);
+  LJBuffer *sbx = buffer_tobuf(L);
   lj_bufx_free(L, sbx);
   L->top = L->base+1;  /* Chain buffer object. */
   return 1;
@@ -82,15 +55,15 @@ LJLIB_CF(buffer_method_free)
 
 LJLIB_CF(buffer_method_reset)		LJLIB_REC(.)
 {
-  SBufExt *sbx = buffer_tobuf(L);
-  lj_bufx_reset(sbx);
+  LJBuffer *sbx = buffer_tobuf(L);
+  lj_bufx_reset(L, sbx);
   L->top = L->base+1;  /* Chain buffer object. */
   return 1;
 }
 
 LJLIB_CF(buffer_method_skip)		LJLIB_REC(.)
 {
-  SBufExt *sbx = buffer_tobuf(L);
+  LJBuffer *sbx = buffer_tobuf(L);
   MSize n = (MSize)lj_lib_checkintrange(L, 2, 0, LJ_MAX_BUF);
   lj_bufx_skip(sbx, n);
   L->top = L->base+1;  /* Chain buffer object. */
@@ -99,7 +72,7 @@ LJLIB_CF(buffer_method_skip)		LJLIB_REC(.)
 
 LJLIB_CF(buffer_method_set)		LJLIB_REC(.)
 {
-  SBufExt *sbx = buffer_tobuf(L);
+  LJBuffer *sbx = buffer_tobuf(L);
   GCobj *ref;
   const char *p;
   MSize len;
@@ -116,33 +89,28 @@ LJLIB_CF(buffer_method_set)		LJLIB_REC(.)
     p = strdata(str);
     len = str->len;
   }
-  lj_bufx_free(L, sbx);
-  lj_bufx_set_cow(L, sbx, p, len);
   ref = gcV(L->base+1);
-  lj_bufx_cowref_rel(sbx, ref);
-  lj_gc_pubobjobj(L, buffer_toudata(sbx), ref);
+  lj_bufx_set(L, sbx, p, len, ref);
   L->top = L->base+1;  /* Chain buffer object. */
   return 1;
 }
 
 LJLIB_CF(buffer_method_put)		LJLIB_REC(.)
 {
-  SBufExt *sbx = buffer_tobufw(L);
+  LJBuffer *sbx = buffer_tobuf(L);
   ptrdiff_t arg, narg = L->top - L->base;
   for (arg = 1; arg < narg; arg++) {
     TValue motv;
     cTValue *o = &L->base[arg], *mo = NULL;
   retry:
     if (tvisstr(o)) {
-      lj_buf_putstr((SBuf *)sbx, strV(o));
-    } else if (tvisint(o)) {
-      lj_strfmt_putint((SBuf *)sbx, intV(o));
-    } else if (tvisnum(o)) {
-      lj_strfmt_putfnum((SBuf *)sbx, STRFMT_G14, numV(o));
+      lj_bufx_putstr(L, sbx, strV(o));
+    } else if (tvisnumber(o)) {
+      lj_bufx_putstr(L, sbx, lj_strfmt_number(L, o));
     } else if (tvisbuf(o)) {
-      SBufExt *sbx2 = bufV(o);
-      if (sbx2 == sbx) lj_err_arg(L, (int)(arg+1), LJ_ERR_BUFFER_SELF);
-      lj_bufx_putbuf(L, (SBuf *)sbx, o);
+      LJBuffer *source = bufV(o);
+      if (source == sbx) lj_err_arg(L, (int)(arg+1), LJ_ERR_BUFFER_SELF);
+      lj_bufx_putstr(L, sbx, lj_bufx_tostr(lj_buf_tmp_(L), source));
     } else if (!mo &&
 	       !tvisnil(mo = lj_meta_lookuptv(L, &motv, o, MM_tostring))) {
       /* Call __tostring metamethod inline. */
@@ -165,8 +133,14 @@ LJLIB_CF(buffer_method_put)		LJLIB_REC(.)
 
 LJLIB_CF(buffer_method_putf)		LJLIB_REC(.)
 {
-  SBufExt *sbx = buffer_tobufw(L);
-  lj_strfmt_putarg(L, (SBuf *)sbx, 2, 2);
+  LJBuffer *sbx = buffer_tobuf(L);
+  SBuf *scratch;
+  int retry = 0;
+  do {
+    scratch = lj_buf_tmp_(L);
+    retry = lj_strfmt_putarg(L, scratch, 2, -retry);
+  } while (retry > 0);
+  lj_bufx_putstr(L, sbx, lj_buf_str(L, scratch));
   L->top = L->base+1;  /* Chain buffer object. */
   lj_gc_check(L);
   return 1;
@@ -174,7 +148,7 @@ LJLIB_CF(buffer_method_putf)		LJLIB_REC(.)
 
 LJLIB_CF(buffer_method_get)		LJLIB_REC(.)
 {
-  SBufExt *sbx = buffer_tobuf(L);
+  LJBuffer *sbx = buffer_tobuf(L);
   ptrdiff_t arg, narg = L->top - L->base;
   if (narg == 1) {
     narg++;
@@ -186,6 +160,7 @@ LJLIB_CF(buffer_method_get)		LJLIB_REC(.)
 	      (MSize) lj_lib_checkintrange(L, (int)(arg+1), 0, LJ_MAX_BUF);
     GCstr *s = lj_bufx_get(lj_buf_tmp_(L), sbx, n);
     setstrV(L, &L->base[arg], s);
+    lj_state_stack_pubtv(L, L, &L->base[arg]);
   }
   lj_gc_check(L);
   return (int)(narg-1);
@@ -194,7 +169,7 @@ LJLIB_CF(buffer_method_get)		LJLIB_REC(.)
 #if LJ_HASFFI
 LJLIB_CF(buffer_method_putcdata)	LJLIB_REC(.)
 {
-  SBufExt *sbx = buffer_tobufw(L);
+  LJBuffer *sbx = buffer_tobuf(L);
   const char *p;
   MSize len;
   if (tviscdata(L->base+1)) {
@@ -205,45 +180,47 @@ LJLIB_CF(buffer_method_putcdata)	LJLIB_REC(.)
     lj_err_argtype(L, 2, "cdata");
   }
   len = (MSize)lj_lib_checkintrange(L, 3, 0, LJ_MAX_BUF);
-  lj_buf_putmem((SBuf *)sbx, p, len);
+  lj_bufx_append(L, sbx, p, len);
   L->top = L->base+1;  /* Chain buffer object. */
   return 1;
 }
 
 LJLIB_CF(buffer_method_reserve)		LJLIB_REC(.)
 {
-  SBufExt *sbx = buffer_tobufw(L);
+  LJBuffer *sbx = buffer_tobuf(L);
   MSize sz = (MSize)lj_lib_checkintrange(L, 2, 0, LJ_MAX_BUF);
   GCcdata *cd;
-  lj_buf_more((SBuf *)sbx, sz);
+  MSize left;
   ctype_loadffi(L);
   cd = lj_cdata_new_(L, CTID_P_UINT8, CTSIZE_PTR);
-  *(void **)cdataptr(cd) = lj_buf_wptr_acq((SBuf *)sbx);
+  *(void **)cdataptr(cd) = NULL;
   setcdataV(L, L->top++, cd);
-  setintV(L->top++, sbufleft(sbx));
+  lj_state_stack_pubtv(L, L, L->top-1);
+  *(void **)cdataptr(cd) = lj_bufx_reserve(L, sbx, sz, &left);
+  setintV(L->top++, left);
   return 2;
 }
 
 LJLIB_CF(buffer_method_commit)		LJLIB_REC(.)
 {
-  SBufExt *sbx = buffer_tobuf(L);
+  LJBuffer *sbx = buffer_tobuf(L);
   MSize len = (MSize)lj_lib_checkintrange(L, 2, 0, LJ_MAX_BUF);
-  if (len > sbufleft(sbx)) lj_err_arg(L, 2, LJ_ERR_NUMRNG);
-  lj_buf_wptr_rel((SBuf *)sbx, lj_buf_wptr_acq((SBuf *)sbx) + len);
+  if (!lj_bufx_commit(L, sbx, len)) lj_err_arg(L, 2, LJ_ERR_NUMRNG);
   L->top = L->base+1;  /* Chain buffer object. */
   return 1;
 }
 
 LJLIB_CF(buffer_method_ref)		LJLIB_REC(.)
 {
-  SBufExt *sbx = buffer_tobuf(L);
+  LJBuffer *sbx = buffer_tobuf(L);
   GCcdata *cd;
   MSize len;
-  const char *p = lj_bufx_data_acq(sbx, &len);
   ctype_loadffi(L);
   cd = lj_cdata_new_(L, CTID_P_UINT8, CTSIZE_PTR);
-  *(void **)cdataptr(cd) = (void *)p;
+  *(void **)cdataptr(cd) = NULL;
   setcdataV(L, L->top++, cd);
+  lj_state_stack_pubtv(L, L, L->top-1);
+  *(void **)cdataptr(cd) = (void *)lj_bufx_ref(L, sbx, &len);
   setintV(L->top++, len);
   return 2;
 }
@@ -251,9 +228,9 @@ LJLIB_CF(buffer_method_ref)		LJLIB_REC(.)
 
 LJLIB_CF(buffer_method_encode)		LJLIB_REC(.)
 {
-  SBufExt *sbx = buffer_tobufw(L);
+  LJBuffer *sbx = buffer_tobuf(L);
   cTValue *o = lj_lib_checkany(L, 2);
-  lj_serialize_put(sbx, o);
+  lj_bufx_putstr(L, sbx, lj_serialize_encode_buf(L, sbx, o));
   lj_gc_check(L);
   L->top = L->base+1;  /* Chain buffer object. */
   return 1;
@@ -261,33 +238,35 @@ LJLIB_CF(buffer_method_encode)		LJLIB_REC(.)
 
 LJLIB_CF(buffer_method_decode)		LJLIB_REC(.)
 {
-  SBufExt *sbx = buffer_tobufw(L);
+  LJBuffer *sbx = buffer_tobuf(L);
   setnilV(L->top++);
-  lj_buf_rptr_rel(sbx, lj_serialize_get(sbx, L->top-1));
+  lj_bufx_decode(L, sbx, L->top-1);
+  lj_state_stack_pubtv(L, L, L->top-1);
   lj_gc_check(L);
   return 1;
 }
 
 LJLIB_CF(buffer_method___gc)
 {
-  SBufExt *sbx = buffer_tobuf(L);
+  LJBuffer *sbx = buffer_tobuf(L);
   lj_bufx_free(L, sbx);
   return 0;
 }
 
 LJLIB_CF(buffer_method___tostring)	LJLIB_REC(.)
 {
-  SBufExt *sbx = buffer_tobuf(L);
+  LJBuffer *sbx = buffer_tobuf(L);
   GCstr *s = lj_bufx_tostr(lj_buf_tmp_(L), sbx);
   setstrV(L, L->top-1, s);
+  lj_state_stack_pubtv(L, L, L->top-1);
   lj_gc_check(L);
   return 1;
 }
 
 LJLIB_CF(buffer_method___len)		LJLIB_REC(.)
 {
-  SBufExt *sbx = buffer_tobuf(L);
-  setintV(L->top-1, (int32_t)sbufxlen(sbx));
+  LJBuffer *sbx = buffer_tobuf(L);
+  setintV(L->top-1, (int32_t)lj_bufx_length(sbx));
   return 1;
 }
 
@@ -307,8 +286,7 @@ LJLIB_CF(buffer_new)
   GCtab *env, *dict_str = NULL, *dict_mt = NULL;
   GCudata *ud;
   LJUdataRoot root;
-  SBufExt *sbx;
-  char *raw = NULL;
+  LJBuffer *sbx;
   if (L->base < L->top && !tvistab(L->base)) {
     targ = 2;
     if (!tvisnil(L->base))
@@ -337,34 +315,28 @@ LJLIB_CF(buffer_new)
   }
   env = lj_func_env_acq(curr_func(L));
   lj_state_checkstack(L, 1);  /* No stack growth with root live. */
-  ud = lj_udata_newrooted(L, sizeof(SBufExt), env, &root);
+  ud = lj_udata_newrooted(L, sizeof(LJBuffer), env, &root);
   lj_udata_metatable_rel(ud, env);
   lj_gc_pubobjobj(L, ud, env);
   /* Registration may allocate.  The generic constructor root remains the
-  ** semantic owner until the complete SBufExt payload is release-published. */
+  ** semantic owner until the complete buffer payload is release-published. */
   lj_udata_finreg_mt_rooted(L, ud, env, &root);
-  sbx = (SBufExt *)uddata(ud);
-  lj_bufx_init(L, sbx);
-  lj_bufx_dict_str_rel(sbx, dict_str);
+  sbx = (LJBuffer *)uddata(ud);
+  memset(sbx, 0, sizeof(*sbx));
+  setgcrefrel(sbx->dict_str, obj2gco(dict_str));
   if (dict_str)
     lj_gc_pubobjobj(L, ud, dict_str);
-  lj_bufx_dict_mt_rel(sbx, dict_mt);
+  setgcrefrel(sbx->dict_mt, obj2gco(dict_mt));
   if (dict_mt)
     lj_gc_pubobjobj(L, ud, dict_mt);
-  if (sz > 0) {
-    raw = buffer_storage_new_nothrow(L, sbx, sz);
-    if (LJ_UNLIKELY(raw == NULL)) {
-      lj_udata_root_release(&root);
-      lj_err_mem(L);
-    }
-    /* The backing store is raw arena memory, not an independently reachable
-    ** GC object.  Retain it before the subtype makes traversal authoritative. */
-    if (raw)
-      (void)lj_gc2_markmem(G(L), raw);
+  if (sz && !lj_bufx_init_storage(L, sbx, sz)) {
+    lj_udata_root_release(&root);
+    lj_err_mem(L);
   }
   lj_udata_specialize(L, ud, UDTYPE_BUFFER);
-  if (raw)
-    (void)lj_gc2_markmem(G(L), raw);  /* Close bitmap-clear vs subtype LP. */
+  if (sz)
+    (void)lj_gc2_markmem_registered_publish_try(G(L),
+                                               (void *)(uintptr_t)sbx->range.lo);
   lj_udata_pushrooted(L, ud, &root);
   lj_gc_check(L);
   return 1;
@@ -383,6 +355,7 @@ LJLIB_CF(buffer_decode)			LJLIB_REC(.)
   GCstr *str = lj_lib_checkstrx(L, 1);
   setnilV(L->top++);
   lj_serialize_decode(L, L->top-1, str);
+  lj_state_stack_pubtv(L, L, L->top-1);
   lj_gc_check(L);
   return 1;
 }

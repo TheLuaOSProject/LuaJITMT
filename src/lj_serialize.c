@@ -321,7 +321,9 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
 	  lj_tv_load_acq(&nk, &n->key);
 	  if (nk.u64 == mto.u64) {
 	    lj_tv_load_acq(&nv, &n->val);
-	    uint32_t idx = nv.u32.lo;
+	    /* Preparation publishes a normal Lua number, including in single
+	    ** number mode. Its payload bits are not the dictionary index. */
+	    uint32_t idx = (uint32_t)numberVint(&nv);
 	    w = serialize_more(w, sbx, 1+5);
 	    *w++ = SER_TAG_DICT_MT;
 	    w = serialize_wu124(w, idx);
@@ -361,7 +363,7 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
 		lj_tv_load_acq(&nk, &n->key);
 		if (tvisstr(&nk) && strV(&nk) == str) {
 		  lj_tv_load_acq(&nv, &n->val);
-		  uint32_t idx = nv.u32.lo;
+		  uint32_t idx = (uint32_t)numberVint(&nv);
 		  w = serialize_more(w, sbx, 1+5);
 		  *w++ = SER_TAG_DICT_STR;
 		  w = serialize_wu124(w, idx);
@@ -731,29 +733,53 @@ char * LJ_FASTCALL lj_serialize_get(SBufExt *sbx, TValue *o)
 }
 
 /* Stand-alone encoding, borrowing from global temporary buffer. */
-GCstr * LJ_FASTCALL lj_serialize_encode(lua_State *L, cTValue *o)
+GCstr *lj_serialize_encode_buf(lua_State *L, LJBuffer *buf, cTValue *o)
 {
   SBufExt sbx;
   char *w;
   memset(&sbx, 0, sizeof(SBufExt));
   lj_bufx_set_borrow(L, &sbx, &L2TG(L)->tmpbuf);
+  if (buf) { sbx.dict_str = buf->dict_str; sbx.dict_mt = buf->dict_mt; }
   sbx.depth = LJ_SERIALIZE_DEPTH;
   w = serialize_put_protected(&sbx, o);
   return lj_str_new(L, lj_buf_bptr_acq((SBuf *)&sbx),
 		    (size_t)(w - lj_buf_bptr_acq((SBuf *)&sbx)));
 }
 
-/* Stand-alone decoding, copy-on-write from string. */
-void lj_serialize_decode(lua_State *L, TValue *o, GCstr *str)
+GCstr * LJ_FASTCALL lj_serialize_encode(lua_State *L, cTValue *o)
+{
+  return lj_serialize_encode_buf(L, NULL, o);
+}
+
+/* The caller retains input storage and releases it before rethrowing errors. */
+int lj_serialize_decode_buf(lua_State *L, LJBuffer *buf, TValue *o,
+                            const char *data, MSize len, MSize *used)
 {
   SBufExt sbx;
-  char *r;
-  memset(&sbx, 0, sizeof(SBufExt));
-  lj_bufx_set_cow(L, &sbx, strdata(str), str->len);
-  /* No need to set sbx.cowref here. */
+  SerializeGetCtx ctx;
+  int status;
+  if (!data) data = "";
+  memset(&sbx, 0, sizeof(sbx));
+  lj_bufx_set_cow(L, &sbx, data, len);
+  if (buf) { sbx.dict_str = buf->dict_str; sbx.dict_mt = buf->dict_mt; }
   sbx.depth = LJ_SERIALIZE_DEPTH;
-  r = serialize_get_protected(&sbx, o);
-  if (r != lj_buf_wptr_acq((SBuf *)&sbx))
+  ctx.sbx = &sbx;
+  ctx.o = o;
+  ctx.result = NULL;
+  status = lj_vm_cpcall(L, NULL, &ctx, serialize_get_cp);
+  if (status == LUA_OK)
+    *used = (MSize)(ctx.result - data);
+  return status;
+}
+
+void lj_serialize_decode(lua_State *L, TValue *o, GCstr *str)
+{
+  MSize used;
+  int status = lj_serialize_decode_buf(L, NULL, o, strdata(str), str->len,
+                                      &used);
+  if (LJ_UNLIKELY(status != LUA_OK))
+    lj_err_throw(L, status);
+  if (used != str->len)
     lj_err_caller(L, LJ_ERR_BUFFER_LEFTOV);
 }
 

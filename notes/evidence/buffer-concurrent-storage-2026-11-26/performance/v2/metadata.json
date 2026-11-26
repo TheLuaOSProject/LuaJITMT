@@ -1,0 +1,42 @@
+{
+  "baseline_commit": "394159a5ca21ebc8be65bca055245dc2ca8e4526",
+  "candidate_path": "/tmp/lj-buffer-review-20261126-jtn9tue9/gcc-v2/src/luajit",
+  "candidate_sha256": "51f3ea3533df30ac00433be15c79a29bc56595110f4d3f6952a1ee4be99b2167",
+  "build_command": "make -C src -j5 BUILDMODE=static CC=gcc TARGET_STRIP=:",
+  "compiler": "gcc (Debian 14.2.0-19) 14.2.0\nCopyright (C) 2024 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "cpu": 8,
+  "cpu_topology": "CPU CORE SOCKET    MAXMHZ\n  0    0      0 5700.0000\n  1    0      0 5700.0000\n  2    1      0 5700.0000\n  3    1      0 5700.0000\n  4    2      0 5700.0000\n  5    2      0 5700.0000\n  6    3      0 5700.0000\n  7    3      0 5700.0000\n  8    4      0 6000.0000\n  9    4      0 6000.0000\n 10    5      0 6000.0000\n 11    5      0 6000.0000\n 12    6      0 5700.0000\n 13    6      0 5700.0000\n 14    7      0 5700.0000\n 15    7      0 5700.0000\n 16    8      0 4400.0000\n 17    9      0 4400.0000\n 18   10      0 4400.0000\n 19   11      0 4400.0000\n 20   12      0 4400.0000\n 21   13      0 4400.0000\n 22   14      0 4400.0000\n 23   15      0 4400.0000\n 24   16      0 4400.0000\n 25   17      0 4400.0000\n 26   18      0 4400.0000\n 27   19      0 4400.0000\n 28   20      0 4400.0000\n 29   21      0 4400.0000\n 30   22      0 4400.0000\n 31   23      0 4400.0000\n",
+  "candidate_note": "v2 includes the dictionary-index fix; original candidate was used only for an unreported pilot.",
+  "binary_sha256": {
+    "baseline": "113546a9e740b090d51ae118e5a37a4cd32cd3a006fae0fd34b06118f728339e",
+    "candidate": "51f3ea3533df30ac00433be15c79a29bc56595110f4d3f6952a1ee4be99b2167"
+  },
+  "benchmark_sha256": "5c404e5ec82a298d285d2f7a66255fe6314dc42ab66599762b30c49cac4991ed",
+  "samples": 3,
+  "warmups_per_row": 2,
+  "timing": "os.clock process CPU seconds and CLOCK_MONOTONIC wall seconds",
+  "long_append": {
+    "samples": 5,
+    "records_per_segment": 1000000,
+    "segments": 10,
+    "warmup_segments": 2,
+    "mode": "jit",
+    "note": "Every segment validates complete contents outside the timed interval."
+  },
+  "semantic_assertions": "All output assertions passed in all 12 main processes and all 10 long-append processes.",
+  "main_rows": 132,
+  "long_append_rows": 20,
+  "artifact_sha256": {
+    "baseline-input.tar": "6bf3bc0a5e530d638ed55945657adfc3cdc66fd240fa9e7ad13b55f11e056444",
+    "candidate-input.tar.gz": "cb0fa482bee079e6e401a918a2c586a9fc55d9b3dacff90cff25831d359acacb",
+    "candidate-input.sha256": "f2081dd029f8b462f59e2ca88d0e980234a6a1b25bb8170ff31887dfa573a528",
+    "bench.lua": "5c404e5ec82a298d285d2f7a66255fe6314dc42ab66599762b30c49cac4991ed",
+    "run.py": "e5a12322c782524456f9b7e0f98d7e09f81e23da7c144382e10d45bd3391fa63",
+    "append-long.lua": "ca1183a6fe819337482bf748bbc159765aa20cefd4b2fd2940146c67bb2c7956",
+    "run-append-long.py": "5aece5b49f280f0787f0892b3f4e5a67958aa849106f8e0185d25b4b66fbb9d3",
+    "results.csv": "da9a2c79b0e78a59ea59789f914623dab2c7635b3d0ab57ef046e792b4fda233",
+    "append-long-results.csv": "788f8d0243d6f10764bbb14f6128bce771703ce4374a7bcd5ecee386913408ec",
+    "summary.csv": "a6588098818fabf80882c4fb50b052ef667f5a8000af49778bb348153fb6a79a",
+    "paired-ratios.csv": "f2e5fb3b1178b56545439b6f3e4f0c2681415683063dd97da70e29e1b05718f5"
+  }
+}

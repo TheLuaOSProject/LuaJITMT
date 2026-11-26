@@ -1,0 +1,26 @@
+/tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/check-progress/progress: \
+ /workspaces/lj-lockless/tests/t-buffer-progress.c \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lj_obj.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lua.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/luaconf.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lj_def.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lj_arch.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lj_atomic.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lj_gc2token.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lj_tgregistry.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lj_tgslot.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lj_buf.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lj_obj.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lj_gc.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lj_str.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lj_tg.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lj_bc.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lj_arena.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lj_ctype.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lj_gc2.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lj_gc2.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lj_thr.h \
+ /workspaces/lj-lockless/tests/lib/lua_fixture_helpers.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lua.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lauxlib.h \
+ /tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/lualib.h

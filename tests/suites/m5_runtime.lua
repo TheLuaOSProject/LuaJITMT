@@ -166,6 +166,8 @@ return function(add)
       t:build({ quiet = true })
       luajit_script(t, "t-buffer-thread-safety.lua", nil, { joff = true })
       luajit_script(t, "t-buffer-thread-safety.lua", nil, { jon = true })
+      luajit_script(t, "t-buffer-concurrent-public.lua", nil, { joff = true })
+      luajit_script(t, "t-buffer-concurrent-public.lua", nil, { jon = true })
       if jit.os == "Linux" then
         build_and_run_c(t, t:tmp("lj_t-buffer-consume"), "t-buffer-consume.c", {
           build = false, timeout = "35s",
@@ -173,6 +175,22 @@ return function(add)
         })
       end
       print("M5 string.buffer publication smoke passed")
+    end
+  })
+
+  add({
+    name = "m5_buffer_progress",
+    description = "buffer operations with a suspended writer or metadata collector",
+    run = function(t)
+      if jit.os ~= "Linux" then return end
+      local flags = build.assert_flag ..
+                    " -DLJ_BUF_TEST_HELPERS -DLJ_GC2_TEST_HELPERS"
+      build.with_default_build_restore(t, function()
+        t:build({ clean = true, quiet = true, xcflags = flags })
+        build_and_run_c(t, t:tmp("lj_t-buffer-progress"), "t-buffer-progress.c", {
+          build = false, cflags = flags, timeout = "65s"
+        })
+      end)
     end
   })
 

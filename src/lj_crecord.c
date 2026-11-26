@@ -1495,8 +1495,12 @@ static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
     if (udtype == UDTYPE_IO_FILE || udtype == UDTYPE_BUFFER) {
       TRef tr = emitir(IRT(IR_FLOAD, IRT_U8), sp, IRFL_UDATA_UDTYPE);
       emitir(IRTGI(IR_EQ), tr, lj_ir_kint(J, udtype));
-      sp = emitir(IRT(IR_FLOAD, IRT_PTR), sp,
-		  udtype == UDTYPE_IO_FILE ? IRFL_UDATA_FILE : IRFL_SBUF_R);
+      if (udtype == UDTYPE_IO_FILE)
+        sp = emitir(IRT(IR_FLOAD, IRT_PTR), sp, IRFL_UDATA_FILE);
+      else {
+        TRef buf = emitir(IRT(IR_ADD, IRT_PTR), sp, lj_ir_kintp(J, sizeof(GCudata)));
+        sp = lj_ir_call(J, IRCALL_lj_bufx_ptr, buf);
+      }
     } else {
       sp = emitir(IRT(IR_ADD, IRT_PTR), sp, lj_ir_kintp(J, sizeof(GCudata)));
     }

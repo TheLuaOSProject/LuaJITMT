@@ -1,0 +1,50 @@
+{
+  "baseline_commit": "394159a5ca21ebc8be65bca055245dc2ca8e4526",
+  "candidate_path": "/tmp/lj-buffer-review-20261126-jtn9tue9/gcc-v3/src/luajit",
+  "candidate_sha256": "9a271042ccce0efd107beee0cbfd40571fcf673b87686b693be7b1a7a632f88f",
+  "build_command": "make -C src -j5 BUILDMODE=static CC=gcc TARGET_STRIP=:",
+  "compiler": "gcc (Debian 14.2.0-19) 14.2.0\nCopyright (C) 2024 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "cpu": 8,
+  "cpu_topology": "CPU CORE SOCKET    MAXMHZ\n  0    0      0 5700.0000\n  1    0      0 5700.0000\n  2    1      0 5700.0000\n  3    1      0 5700.0000\n  4    2      0 5700.0000\n  5    2      0 5700.0000\n  6    3      0 5700.0000\n  7    3      0 5700.0000\n  8    4      0 6000.0000\n  9    4      0 6000.0000\n 10    5      0 6000.0000\n 11    5      0 6000.0000\n 12    6      0 5700.0000\n 13    6      0 5700.0000\n 14    7      0 5700.0000\n 15    7      0 5700.0000\n 16    8      0 4400.0000\n 17    9      0 4400.0000\n 18   10      0 4400.0000\n 19   11      0 4400.0000\n 20   12      0 4400.0000\n 21   13      0 4400.0000\n 22   14      0 4400.0000\n 23   15      0 4400.0000\n 24   16      0 4400.0000\n 25   17      0 4400.0000\n 26   18      0 4400.0000\n 27   19      0 4400.0000\n 28   20      0 4400.0000\n 29   21      0 4400.0000\n 30   22      0 4400.0000\n 31   23      0 4400.0000\n",
+  "candidate_note": "v3: putstr tries a no-yield tail write before anchors; decode consumes with its existing input lease.",
+  "benchmark_sha256": "5c404e5ec82a298d285d2f7a66255fe6314dc42ab66599762b30c49cac4991ed",
+  "samples": 3,
+  "warmups_per_row": 2,
+  "timing": "os.clock process CPU seconds and CLOCK_MONOTONIC wall seconds",
+  "previous_package": "/tmp/lj-buffer-perf-20261126-dt90tksg",
+  "binary_sha256": {
+    "baseline": "113546a9e740b090d51ae118e5a37a4cd32cd3a006fae0fd34b06118f728339e",
+    "candidate": "9a271042ccce0efd107beee0cbfd40571fcf673b87686b693be7b1a7a632f88f"
+  },
+  "long_append": {
+    "samples": 5,
+    "records_per_segment": 1000000,
+    "segments": 10,
+    "warmup_segments": 2,
+    "mode": "jit",
+    "note": "Every segment validates complete contents outside the timed interval."
+  },
+  "semantic_assertions": "All output assertions passed in all 12 main processes and all 10 long-append processes.",
+  "main_rows": 132,
+  "long_append_rows": 20,
+  "artifact_sha256": {
+    "baseline-input.tar": "6bf3bc0a5e530d638ed55945657adfc3cdc66fd240fa9e7ad13b55f11e056444",
+    "candidate-input.tar.gz": "71f745beae6a4198c7eb3cf52a770123a0b70cb42add380ee48e738b4b9b295c",
+    "candidate-input.sha256": "1d186779149111f846c50e174380932ca6857e9da15753bd820a6ea945d6dccb",
+    "bench.lua": "5c404e5ec82a298d285d2f7a66255fe6314dc42ab66599762b30c49cac4991ed",
+    "run.py": "206f3364d379d5121899bb144d7cc9ea6f0477aa67aa2111e8e0c5030a69efcf",
+    "append-long.lua": "ca1183a6fe819337482bf748bbc159765aa20cefd4b2fd2940146c67bb2c7956",
+    "run-append-long.py": "91f3e813046c75791d1add7300fb85bdb136d7499bdb5b30cbadc479549c6736",
+    "results.csv": "d330a7546626297f13930becf75888b853c45529d2c3c43d8b22f040f488b1ec",
+    "append-long-results.csv": "74632a3260392dbea6166af68d1d597d9726ac756a655cbb471432a6c3c5fbff",
+    "summary.csv": "a6d1ea914ba81ed0361b05f5af6c3aa41b587664fe0849711bea7b46ee915310",
+    "paired-ratios.csv": "6579da12600ae9a373f9f35fa1201dd39e0449f266d09ebc3c9b9e93afc2e553",
+    "v2-summary.csv": "a6588098818fabf80882c4fb50b052ef667f5a8000af49778bb348153fb6a79a",
+    "comparison-v2-v3.csv": "687854560b72f1b071dbd2329d58e7cca83e3f6ac6424e3d1e91977229ff8eb7",
+    "candidate-v2-v3.patch": "db2debe8ad9a1d965b48fad1d1db9becc47089400951fd3e05ffd4c797acaca9",
+    "compare-v2-v3.py": "5c295a7eb2849b24abdb851172fc436f279b9131efa1b6fab168cf2ada90b047"
+  },
+  "changed_sources_since_v2": [
+    "src/lj_buf.c"
+  ]
+}

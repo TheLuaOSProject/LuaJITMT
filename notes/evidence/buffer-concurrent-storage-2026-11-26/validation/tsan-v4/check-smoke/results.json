@@ -1,0 +1,68 @@
+[
+  {
+    "name": "buffer-joff",
+    "command": [
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v4/src/luajit",
+      "-joff",
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v4/tests/t-buffer-thread-safety.lua"
+    ],
+    "seconds": 40.66257871297421,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "buffer-jon",
+    "command": [
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v4/src/luajit",
+      "-jon",
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v4/tests/t-buffer-thread-safety.lua"
+    ],
+    "seconds": 35.25644199599628,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "consume-build",
+    "command": [
+      "gcc",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-Wno-error=tsan",
+      "-fsanitize=thread",
+      "-fno-omit-frame-pointer",
+      "-fno-pie",
+      "-I/tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v4/src",
+      "-I/tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v4/tests",
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v4/tests/t-buffer-consume.c",
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v4/src/libluajit.a",
+      "-fsanitize=thread",
+      "-no-pie",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_str_new",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v4/check-smoke/consume"
+    ],
+    "seconds": 0.11404594199848361,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "consume",
+    "command": [
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v4/check-smoke/consume"
+    ],
+    "seconds": 0.11398654399090447,
+    "exit": 0,
+    "test": true
+  }
+]

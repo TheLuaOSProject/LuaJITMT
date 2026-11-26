@@ -625,10 +625,32 @@ sequences: strtab-unlink → tick handshake → release string arenas to lazy
 sweep). The §6.5.2 resurrect rule makes lookups during the window safe.
 
 ## 6.6 Buffers (lj_buf, string.buffer)
-SBuf in TG (03). `string.buffer` objects: documented single-owner (sharing
-one buffer object across threads without external sync = M-2 races but
-memory-safe: their data ptr/len updates become rel/acq pairs — 3-line
-change in lj_buf.h grow path). lj_strfmt users get tg-buf.
+Temporary `SBuf` storage belongs to its TG (03). Public `string.buffer`
+objects publish their backing allocation and both FIFO offsets with one x64
+128-bit CAS. Acquire/release pointer fields alone cannot protect a reader from
+an in-place write or compaction.
+
+Readers retain the selected allocation before copying or decoding its bytes.
+An internal writer claims only the unused tail. If another writer holds that
+claim, a peer can copy the committed prefix into private storage and publish
+its own append. Reset and consumption never make previously published bytes
+available for overwrite. Replacement retains both allocator identities through
+publication and retirement; existing readers may finish on the old storage.
+Copy-on-write references use typed leases and remain ordinary userdata GC
+edges. Their admission does not wait for IDLE metadata reclamation.
+
+`get` and `decode` advance only the prefix they actually observed. A changed
+read offset or replaced allocation causes a retry. Decode retains the input
+through a protected error boundary, so streaming work grows with the bytes
+decoded rather than repeatedly copying the remaining suffix. A multi-argument
+`put` publishes each argument separately.
+
+The documented FFI boundary still applies: pointers returned by `ref` and
+`reserve` expire on buffer modification and do not anchor the buffer. External
+cdata writes require application coordination. See
+[LuaJIT's buffer FFI caveats](https://luajit.org/ext_buffer.html).
+`m5_buffer_publish` checks public outcomes in both JIT modes;
+`m5_buffer_progress` suspends actual writer and metadata-reclamation owners.
 
 ## 6.7 lua_State ownership word
 `thr_owner` CAS protocol per 03 §3.7 / 05 §5.7.2. APIs that touch a foreign

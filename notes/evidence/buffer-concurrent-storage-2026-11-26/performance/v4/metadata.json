@@ -1,0 +1,58 @@
+{
+  "baseline_commit": "394159a5ca21ebc8be65bca055245dc2ca8e4526",
+  "candidate_path": "/tmp/lj-buffer-review-20261126-jtn9tue9/gcc-v4/src/luajit",
+  "candidate_sha256": "162491d8216fcb4faacf45bc99442bd1e5008a9b7796aa679807287b764cf756",
+  "build_command": "make -C src -j5 BUILDMODE=static CC=gcc TARGET_STRIP=:",
+  "compiler": "gcc (Debian 14.2.0-19) 14.2.0\nCopyright (C) 2024 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "cpu": 8,
+  "cpu_topology": "CPU CORE SOCKET    MAXMHZ\n  0    0      0 5700.0000\n  1    0      0 5700.0000\n  2    1      0 5700.0000\n  3    1      0 5700.0000\n  4    2      0 5700.0000\n  5    2      0 5700.0000\n  6    3      0 5700.0000\n  7    3      0 5700.0000\n  8    4      0 6000.0000\n  9    4      0 6000.0000\n 10    5      0 6000.0000\n 11    5      0 6000.0000\n 12    6      0 5700.0000\n 13    6      0 5700.0000\n 14    7      0 5700.0000\n 15    7      0 5700.0000\n 16    8      0 4400.0000\n 17    9      0 4400.0000\n 18   10      0 4400.0000\n 19   11      0 4400.0000\n 20   12      0 4400.0000\n 21   13      0 4400.0000\n 22   14      0 4400.0000\n 23   15      0 4400.0000\n 24   16      0 4400.0000\n 25   17      0 4400.0000\n 26   18      0 4400.0000\n 27   19      0 4400.0000\n 28   20      0 4400.0000\n 29   21      0 4400.0000\n 30   22      0 4400.0000\n 31   23      0 4400.0000\n",
+  "candidate_note": "Final v4: append and putstr restored to v2; decoder consumes directly with its held input lease.",
+  "benchmark_sha256": "5c404e5ec82a298d285d2f7a66255fe6314dc42ab66599762b30c49cac4991ed",
+  "samples": 3,
+  "warmups_per_row": 2,
+  "timing": "os.clock process CPU seconds and CLOCK_MONOTONIC wall seconds",
+  "previous_packages": {
+    "v2": "/tmp/lj-buffer-perf-20261126-dt90tksg",
+    "v3": "/tmp/lj-buffer-perf-v3-20261126-v8v1ezme"
+  },
+  "binary_sha256": {
+    "baseline": "113546a9e740b090d51ae118e5a37a4cd32cd3a006fae0fd34b06118f728339e",
+    "candidate": "162491d8216fcb4faacf45bc99442bd1e5008a9b7796aa679807287b764cf756"
+  },
+  "long_append": {
+    "samples": 5,
+    "records_per_segment": 1000000,
+    "segments": 10,
+    "warmup_segments": 2,
+    "mode": "jit",
+    "note": "Every segment validates complete contents outside the timed interval."
+  },
+  "semantic_assertions": "All output assertions passed in all 12 main processes and all 10 long-append processes.",
+  "main_rows": 132,
+  "long_append_rows": 20,
+  "artifact_sha256": {
+    "baseline-input.tar": "6bf3bc0a5e530d638ed55945657adfc3cdc66fd240fa9e7ad13b55f11e056444",
+    "candidate-input.tar.gz": "3961a0899dc3045d33442f52cb29decd94ae0be3e43824e63819dec01b496dc9",
+    "candidate-input.sha256": "7fa6b54837f84a9e5ceb6cde0a46388db8d67b482f75213c60b53b954ecafc8f",
+    "bench.lua": "5c404e5ec82a298d285d2f7a66255fe6314dc42ab66599762b30c49cac4991ed",
+    "run.py": "3df8df0a0243efdcea93d380fc1ff077e34e3a75ae5d7aa00a6feaeb557581b6",
+    "append-long.lua": "ca1183a6fe819337482bf748bbc159765aa20cefd4b2fd2940146c67bb2c7956",
+    "run-append-long.py": "9c3b9d8ebfb6d02d516ddf2a87fc90ac687078696ccda66c867c9a0c4e6950f3",
+    "results.csv": "58ea41785560f40827ed2e738d3dc43aec5ca8ff49302c3373c5e141c2b8b925",
+    "append-long-results.csv": "8cecd873a7b9d844f1fe63d3bba3b331aa648bb66c677ce104c7a937dd828fa4",
+    "summary.csv": "724931dce0c9a0214628d8c78fce5271df23be3ee0b81b4e3b153e1c7a28986f",
+    "paired-ratios.csv": "99e065db4166e0029a99ff7668a905ed206398057864e85f74035296da3da619",
+    "v2-summary.csv": "a6588098818fabf80882c4fb50b052ef667f5a8000af49778bb348153fb6a79a",
+    "v3-summary.csv": "a6d1ea914ba81ed0361b05f5af6c3aa41b587664fe0849711bea7b46ee915310",
+    "versions.csv": "9e2d9ec17137be5c909afe835f42e9d65a5b046c19ff0e2ce939b3a913710570",
+    "candidate-v2-v4.patch": "eb9fb071e7f272e02c1761591232f77ce0a80babac334f3d17bb1e79e3d380f1",
+    "candidate-v3-v4.patch": "b7a07bb3b73e36c2082b8c8f231acc0bee6e80cd78ed03fce6d5b6633045d1a3",
+    "compare-versions.py": "f289cc551417c191f0d30133d7a541e4e129b8de727dffc432b6869dfbc9a8a4"
+  },
+  "changed_sources_since_v2": [
+    "src/lj_buf.c"
+  ],
+  "changed_sources_since_v3": [
+    "src/lj_buf.c"
+  ]
+}

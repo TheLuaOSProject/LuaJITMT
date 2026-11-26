@@ -1,0 +1,63 @@
+[
+  {
+    "name": "buffer-joff",
+    "command": [
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/assert-v4/src/luajit",
+      "-joff",
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/assert-v4/tests/t-buffer-thread-safety.lua"
+    ],
+    "seconds": 0.564885850995779,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "buffer-jon",
+    "command": [
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/assert-v4/src/luajit",
+      "-jon",
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/assert-v4/tests/t-buffer-thread-safety.lua"
+    ],
+    "seconds": 0.6144202949944884,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "consume-build",
+    "command": [
+      "clang",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-ftrivial-auto-var-init=pattern",
+      "-I/tmp/lj-buffer-review-20261126-jtn9tue9/assert-v4/src",
+      "-I/tmp/lj-buffer-review-20261126-jtn9tue9/assert-v4/tests",
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/assert-v4/tests/t-buffer-consume.c",
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/assert-v4/src/libluajit.a",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_str_new",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/assert-v4/check-smoke/consume"
+    ],
+    "seconds": 0.16421210201224312,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "consume",
+    "command": [
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/assert-v4/check-smoke/consume"
+    ],
+    "seconds": 0.007774525001877919,
+    "exit": 0,
+    "test": true
+  }
+]

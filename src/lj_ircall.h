@@ -181,14 +181,14 @@ typedef struct CCallInfo {
   _(ANY,	lj_buf_puttab,		5,   L, PGC, CCI_T) \
   _(ANY,	lj_buf_tmp_reset,	1,  FS, PGC, 0) \
   _(ANY,	lj_buf_len_tg_forjit,	1,  FL, INT, 0) \
-  _(BUFFER,	lj_bufx_set,		4,   S, NIL, 0) \
-  _(BUFFER,	lj_bufx_reset_forjit,	1,  FS, NIL, 0) \
+  _(BUFFER,	lj_bufx_set,		5,   S, NIL, CCI_L|CCI_T) \
+  _(BUFFER,	lj_bufx_reset,		2,  FS, NIL, CCI_L|CCI_T) \
   _(BUFFER,	lj_bufx_skip,		2,  FS, NIL, 0) \
-  _(BUFFER,	lj_bufx_putstr_forjit,	3,   S, NIL, CCI_L|CCI_T) \
+  _(BUFFER,	lj_bufx_putstr,	3,   S, NIL, CCI_L|CCI_T) \
   _(BUFFER,	lj_bufx_len_forjit,	1,  FL, INT, 0) \
   _(BUFFER,	lj_bufx_tostr,		2,   S, STR, CCI_T) \
   _(BUFFER,	lj_bufx_get,		3,   S, STR, CCI_T) \
-  _(BUFFFI,	lj_bufx_more,		2,  FS, INT, CCI_T) \
+  _(BUFFFI,	lj_bufx_ptr,		2,  FS, PTR, CCI_L|CCI_T) \
   _(BUFFER,	lj_serialize_put,	2,  FS, PGC, CCI_T) \
   _(BUFFER,	lj_serialize_get,	2,  FS, PTR, CCI_T) \
   _(BUFFER,	lj_serialize_encode,	2,  FA, STR, CCI_L|CCI_T) \

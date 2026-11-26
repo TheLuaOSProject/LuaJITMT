@@ -15,6 +15,8 @@
 #include "lj_tab.h"
 #include "lj_state.h"
 #include "lj_strfmt.h"
+#include "lj_udata.h"
+#include "lj_serialize.h"
 
 /* -- Buffer management --------------------------------------------------- */
 
@@ -120,314 +122,542 @@ SBuf * LJ_FASTCALL lj_buf_tmp_reset(lua_State *L)
 #endif
 
 #if LJ_HASBUFFER
-static SBufExt *bufx_userdata(lua_State *L, cTValue *o, LJGC2Lease *lease,
-			     int retry)
+
+/* Readers retain the exact arena allocation before inspecting its header.
+** Internal writers never overwrite published bytes. A suspended tail writer
+** can be overtaken by copying the committed range to a different allocation. */
+#define BUFX_WRITING (UINT64_C(1) << 32)
+#define BUFX_RESERVED (UINT64_C(2) << 32)
+
+#ifdef LJ_BUF_TEST_HELPERS
+static LJBufTestHook buf_test_hook;
+
+void lj_buf_test_set_hook(LJBufTestHook hook)
+{
+  buf_test_hook = hook;
+}
+
+static void bufx_test(lua_State *L, LJBuffer *buf, uint32_t stage)
+{
+  if (buf_test_hook) buf_test_hook(L, buf, stage);
+}
+#else
+#define bufx_test(L, buf, stage) ((void)0)
+#endif
+
+typedef struct BufPin {
+  la_u128 range;
+  LJBufStorage *store;
+  LJGC2Lease header, ref;
+} BufPin;
+
+static LJ_AINLINE la_u128 bufx_range(LJBufStorage *store, MSize r, MSize w)
+{
+  la_u128 range = { (uintptr_t)store, ((uint64_t)w << 32) | r };
+  return range;
+}
+
+static LJ_AINLINE MSize bufx_r(la_u128 range) { return (MSize)range.hi; }
+static LJ_AINLINE MSize bufx_w(la_u128 range) { return (MSize)(range.hi >> 32); }
+
+static LJ_AINLINE int bufx_same(la_u128 a, la_u128 b)
+{
+  return a.lo == b.lo && a.hi == b.hi;
+}
+
+static size_t bufx_bytes(MSize capacity, const GCobj *ref)
+{
+  return sizeof(LJBufStorage) + (ref ? 0 : (size_t)capacity);
+}
+
+static MSize bufx_capacity(MSize old, MSize needed)
+{
+  MSize size = old < LJ_MIN_SBUF ? LJ_MIN_SBUF : old;
+  while (size < needed)
+    size = size <= LJ_MAX_BUF / 2 ? 2 * size : LJ_MAX_BUF;
+  return size;
+}
+
+static LJBufStorage *bufx_alloc(lua_State *L, LJBuffer *buf, MSize capacity,
+                                const char *data, GCobj *ref)
+{
+  LJBufStorage *s = (LJBufStorage *)lj_mem_new_nothrow(L, bufx_bytes(capacity, ref));
+  if (s) {
+    s->serial = la_add64_rlx(&buf->serial, 1) + 1;
+    s->claimed = 0;
+    la_store32_rlx(&s->written, 0);
+    s->capacity = capacity;
+    s->ref = ref;
+    s->reftype = ref ? ref->gch.gct : 0;
+    s->data = ref ? data : (const char *)(s+1);
+  }
+  return s;
+}
+
+static void bufx_unpin(BufPin *pin)
+{
+  lj_gc2_lease_release(&pin->ref);
+  lj_gc2_lease_release(&pin->header);
+}
+
+static int bufx_pin_try(lua_State *L, LJBuffer *buf, int bytes, BufPin *pin)
+{
+  LJBufStorage *s;
+  memset(pin, 0, sizeof(*pin));
+  pin->range = la_load128_acq(&buf->range);
+  pin->store = s = (LJBufStorage *)(uintptr_t)pin->range.lo;
+  if (!s) return 1;
+  if (lj_gc2_storage_lease_try(G(L), s, sizeof(*s), &pin->header, NULL) &&
+      bufx_same(pin->range, la_load128_acq(&buf->range)) &&
+      la_load32_acq(&s->written) > bufx_w(pin->range)) {
+    TValue ref;
+    if (!bytes || !s->ref || bufx_r(pin->range) == bufx_w(pin->range))
+      return 1;
+    setgcVraw(&ref, s->ref, ~s->reftype);
+    if ((s->reftype == (uint32_t)~LJ_TSTR &&
+         lj_gc2_small_lease_try(G(L), s->ref, sizeof(GCstr), s->reftype,
+                                &pin->ref, NULL)) ||
+        lj_gc2_tv_lease_acquire(G(L), &ref, &pin->ref) == LJ_GC2_TV_EDGE_VALID) {
+      if (bufx_same(pin->range, la_load128_acq(&buf->range)))
+        return 1;
+    }
+  }
+  bufx_unpin(pin);
+  return 0;
+}
+
+static void bufx_pin(lua_State *L, LJBuffer *buf, int bytes, BufPin *pin)
+{
+  while (!bufx_pin_try(L, buf, bytes, pin))
+    lj_tab_wait_l(L);
+}
+
+/* Replacement consumes the private candidate on both outcomes. The winner
+** retires the previous backing while its lease still pins the allocator
+** header. Keep the new backing retained through its publication barriers,
+** even if another writer immediately replaces it. */
+static int bufx_replace(lua_State *L, LJBuffer *buf, BufPin *pin,
+                        LJBufStorage *fresh, MSize w)
+{
+  la_u128 old = pin->range, next = bufx_range(fresh, 0, w);
+  LJBufStorage *removed = pin->store;
+  LJGC2Lease lease;
+  size_t size = removed ? bufx_bytes(removed->capacity, removed->ref) : 0;
+  if (fresh) {
+    if (!lj_gc2_storage_lease_try(G(L), fresh, sizeof(*fresh), &lease, NULL)) {
+      lj_mem_free(G(L), fresh, bufx_bytes(fresh->capacity, fresh->ref));
+      return 0;
+    }
+    (void)lj_gc2_markmem_registered_publish_try(G(L), fresh);
+    la_store32_rel(&fresh->written, w + 1);
+    bufx_test(L, buf, LJ_BUF_TEST_BEFORE_PUBLISH);
+  }
+  if (!la_cas128(&buf->range, &old, next)) {
+    if (fresh) {
+      lj_mem_free(G(L), fresh, bufx_bytes(fresh->capacity, fresh->ref));
+      lj_gc2_lease_release(&lease);
+    }
+    return 0;
+  }
+  if (fresh) {
+    if (fresh->ref) lj_gc_pubobjobj(L, (GCudata *)buf - 1, fresh->ref);
+    (void)lj_gc2_markmem_registered_publish_try(G(L), fresh);
+    lj_udata_rescan(L, (GCudata *)buf - 1);
+    lj_gc2_lease_release(&lease);
+  }
+  if (removed) lj_mem_free(G(L), removed, size);
+  bufx_unpin(pin);
+  return 1;
+}
+
+static void bufx_publish(lua_State *L, LJBuffer *buf, const char *data,
+                         MSize w, GCobj *ref)
+{
+  BufPin pin;
+  for (;;) {
+    LJBufStorage *fresh = NULL;
+    bufx_pin(L, buf, 0, &pin);
+    /* No private allocation may cross the safepoint in bufx_pin(). Allocate
+    ** only after admission, and retire a losing candidate before retrying. */
+    if (ref) {
+      fresh = bufx_alloc(L, buf, w, data, ref);
+      if (!fresh) { bufx_unpin(&pin); lj_err_mem(L); }
+    }
+    if (bufx_replace(L, buf, &pin, fresh, w)) return;
+    bufx_unpin(&pin);
+  }
+}
+
+int lj_bufx_init_storage(lua_State *L, LJBuffer *buf, MSize capacity)
+{
+  LJBufStorage *s = bufx_alloc(L, buf, bufx_capacity(0, capacity), NULL, NULL);
+  if (!s) return 0;
+  la_store32_rel(&s->written, 1);
+  buf->range = bufx_range(s, 0, 0);  /* Constructor still owns the payload. */
+  (void)lj_gc2_markmem_registered_publish_try(G(L), s);
+  return 1;
+}
+
+void lj_bufx_free(lua_State *L, LJBuffer *buf)
+{
+  bufx_publish(L, buf, NULL, 0, NULL);
+}
+
+void LJ_FASTCALL lj_bufx_reset(lua_State *L, LJBuffer *buf)
+{
+  for (;;) {
+    BufPin pin;
+    la_u128 expected, empty;
+    bufx_pin(L, buf, 0, &pin);
+    if (!pin.store) return;
+    if (pin.store->ref) {
+      if (bufx_replace(L, buf, &pin, NULL, 0)) return;
+    } else {
+      expected = pin.range;
+      empty = bufx_range(pin.store, bufx_w(expected), bufx_w(expected));
+      if (la_cas128(&buf->range, &expected, empty)) {
+        bufx_unpin(&pin);
+        return;
+      }
+    }
+    bufx_unpin(&pin);
+  }
+}
+
+static uint32_t bufx_anchor(lua_State *L, GCobj *obj, uint32_t tag)
+{
+  TValue tv, *slot;
+  uint32_t index;
+  setgcVraw(&tv, obj, tag);
+  slot = lj_tg_root_anchor_push(L, L2TG(L), &tv, &index);
+  if (!slot) lj_err_mem(L);
+  lj_gc_pubroot(L, slot);
+  return index;
+}
+
+void lj_bufx_set(lua_State *L, LJBuffer *buf, const char *p, MSize len, GCobj *ref)
+{
+  uint32_t root = bufx_anchor(L, obj2gco((GCudata *)buf - 1), LJ_TUDATA);
+  uint32_t value = bufx_anchor(L, ref, ~(uint32_t)ref->gch.gct);
+  bufx_publish(L, buf, p, len, ref);
+  lj_tg_root_anchor_pop(L2TG(L), value);
+  lj_tg_root_anchor_pop(L2TG(L), root);
+}
+
+static int bufx_endwrite(LJBuffer *buf, BufPin *pin, MSize w)
+{
+  la_u128 cur = pin->range;
+  la_store32_rel(&pin->store->written, w + 1);
+  do {
+    la_u128 next = bufx_range(pin->store, bufx_r(cur), w);
+    if (la_cas128(&buf->range, &cur, next)) {
+      la_store64_rel(&pin->store->claimed, w);
+      return 1;
+    }
+  } while (cur.lo == pin->range.lo && bufx_w(cur) == bufx_w(pin->range));
+  return 0;
+}
+
+/* Grow or compact from retained bytes into a private allocation. All
+** fallible input conversions finish before this operation can be retried. */
+static LJBufStorage *bufx_copy_store(lua_State *L, LJBuffer *buf, BufPin *pin,
+                                     MSize more, MSize *len)
+{
+  LJBufStorage *old = pin->store, *s;
+  MSize cap = old && !old->ref ? old->capacity : 0;
+  *len = bufx_w(pin->range) - bufx_r(pin->range);
+  if (more > LJ_MAX_BUF - *len) return NULL;
+  cap = bufx_capacity(cap, *len + more);
+  s = bufx_alloc(L, buf, cap, NULL, NULL);
+  if (s && *len) memcpy(s+1, old->data + bufx_r(pin->range), *len);
+  return s;
+}
+
+void lj_bufx_append(lua_State *L, LJBuffer *buf, const char *p, MSize n)
+{
+  while (n) {
+    BufPin pin;
+    LJBufStorage *s;
+    MSize w, len;
+    uint64_t expected;
+    bufx_pin(L, buf, 1, &pin);
+    w = bufx_w(pin.range);
+    expected = w;
+    if (pin.store && !pin.store->ref && n <= pin.store->capacity - w &&
+        la_cas64(&pin.store->claimed, &expected, BUFX_WRITING | w, LA_ACQ_REL, LA_ACQ)) {
+      bufx_test(L, buf, LJ_BUF_TEST_TAIL_CLAIMED);
+      memcpy((char *)(pin.store+1) + w, p, n);
+      if (bufx_endwrite(buf, &pin, w + n)) {
+        bufx_unpin(&pin);
+        return;
+      }
+      bufx_unpin(&pin);
+      continue;
+    }
+    s = bufx_copy_store(L, buf, &pin, n, &len);
+    if (!s) { bufx_unpin(&pin); lj_err_mem(L); }
+    memcpy((char *)(s+1) + len, p, n);
+    s->claimed = len + n;
+    if (bufx_replace(L, buf, &pin, s, len+n)) return;
+    bufx_unpin(&pin);
+  }
+}
+
+void lj_bufx_putstr(lua_State *L, LJBuffer *buf, GCstr *s)
+{
+  uint32_t root = bufx_anchor(L, obj2gco((GCudata *)buf - 1), LJ_TUDATA);
+  uint32_t value = bufx_anchor(L, obj2gco(s), LJ_TSTR);
+  lj_bufx_append(L, buf, strdata(s), s->len);
+  lj_tg_root_anchor_pop(L2TG(L), value);
+  lj_tg_root_anchor_pop(L2TG(L), root);
+}
+
+static LJBuffer *bufx_userdata(lua_State *L, cTValue *o, LJGC2Lease *lease)
 {
   GCudata *ud;
   int status;
-  if (!lease)
-    return NULL;
   memset(lease, 0, sizeof(*lease));
-  if (!tvisudata(o))
-    return NULL;
-  /*
-  ** A racy snapshot can retain a userdata tag after the cell was retired and
-  ** reused. Validate the cell and the fixed buffer payload shape before reading
-  ** SBufExt fields; plain tvisbuf() only checks the published udtype byte.
-  */
-  for (;;) {
-    status = lj_gc2_tv_lease_acquire(G(L), o, lease);
-    if (status != LJ_GC2_TV_EDGE_RETRY || !retry)
-      break;
-    lj_tab_wait_l(L);
-  }
-  if (status != LJ_GC2_TV_EDGE_VALID)
-    return NULL;
+  if (!tvisudata(o)) return NULL;
   ud = udataV(o);
-  if ((MSize)la_load32_acq(&ud->len) != sizeof(SBufExt) ||
-      lj_udata_udtype_acq(ud) != UDTYPE_BUFFER) {
-    lj_gc2_lease_release(lease);
-    return NULL;
+  if (!lj_gc2_small_lease_try(G(L), ud, sizeof(*ud) + sizeof(LJBuffer),
+                              (uint32_t)~LJ_TUDATA, lease, NULL)) {
+    for (;;) {
+      status = lj_gc2_tv_lease_acquire(G(L), o, lease);
+      if (status != LJ_GC2_TV_EDGE_RETRY) break;
+      lj_tab_wait_l(L);
+    }
+    if (status != LJ_GC2_TV_EDGE_VALID) return NULL;
   }
-  return (SBufExt *)uddata(ud);
+  if (ud->len == sizeof(LJBuffer) && lj_udata_udtype_acq(ud) == UDTYPE_BUFFER)
+    return (LJBuffer *)uddata(ud);
+  lj_gc2_lease_release(lease);
+  return NULL;
 }
 
 int lj_bufx_isbuf(lua_State *L, cTValue *o)
 {
   LJGC2Lease lease;
-  /* Storage contention affects the copied contents, not the operand type. */
-  if (!bufx_userdata(L, o, &lease, 1))
-    return 0;
+  LJBuffer *buf = bufx_userdata(L, o, &lease);
   lj_gc2_lease_release(&lease);
-  return 1;
-}
-
-typedef struct BufReadSnapshot {
-  char *b;
-  char *e;
-  char *r;
-  char *w;
-  GCobj *ref;
-  GCSize flags;
-  uint64_t generation;
-} BufReadSnapshot;
-
-static void bufx_snapshot(const SBufExt *sbx, BufReadSnapshot *s)
-{
-  s->flags = sbufflag(sbx) & SBUF_MASK_FLAG;
-  s->b = lj_buf_bptr_acq((const SBuf *)sbx);
-  s->e = lj_buf_eptr_acq((const SBuf *)sbx);
-  {
-    la_u128 cursor = la_load128_acq(&sbx->cursor);
-    s->r = (char *)(uintptr_t)cursor.lo;
-    s->generation = cursor.hi;
-  }
-  s->w = lj_buf_wptr_acq((const SBuf *)sbx);
-  s->ref = lj_bufx_cowref_acq(sbx);
-}
-
-static int bufx_snapshot_same(const BufReadSnapshot *a, const BufReadSnapshot *b)
-{
-  return a->flags == b->flags && a->b == b->b && a->e == b->e &&
-    a->r == b->r && a->w == b->w && a->ref == b->ref &&
-    a->generation == b->generation;
-}
-
-static int bufx_snapshot_valid(const BufReadSnapshot *s, MSize *lenp)
-{
-  uintptr_t ur = (uintptr_t)(void *)s->r;
-  uintptr_t uw = (uintptr_t)(void *)s->w;
-  if (!(s->flags & SBUF_FLAG_EXT) ||
-      !lj_buf_ptr_range(s->r, s->b, s->e) ||
-      !lj_buf_ptr_range(s->w, s->b, s->e) || ur > uw || uw - ur > LJ_MAX_BUF)
-    return 0;
-  *lenp = (MSize)(uw - ur);
-  return 1;
-}
-
-static int bufx_read(lua_State *L, cTValue *o, const char **pp,
-		     MSize *lenp, LJGC2Lease *holdp, la_u128 *cursor)
-{
-  LJGC2Lease bodylease;
-  SBufExt *sbx;
-  uint32_t attempt;
-  if (holdp)
-    memset(holdp, 0, sizeof(*holdp));
-  sbx = bufx_userdata(L, o, &bodylease, 0);
-  if (!sbx)
-    return 0;
-
-  /* Individual SBuf fields are atomic, but they are not one transaction.
-  ** Admit the storage selected by a first snapshot, then require the complete
-  ** descriptor (including COW identity) to match a second snapshot. If a
-  ** writer moved away and back, the retained allocation at the repeated
-  ** address is still the exact storage named by the accepted descriptor. */
-  for (attempt = 0; attempt < 8u; attempt++) {
-    LJGC2Lease storage;
-    BufReadSnapshot first, second;
-    MSize len;
-    uint32_t gct = 0;
-    memset(&storage, 0, sizeof(storage));
-    bufx_snapshot(sbx, &first);
-    if (!bufx_snapshot_valid(&first, &len))
-      continue;
-    if (len != 0) {
-      if (first.flags & SBUF_FLAG_COW) {
-	/* Stock string.buffer COW storage is owned by a string or cdata edge.
-	** A cdata pointer may intentionally name external FFI memory; retaining
-	** the cdata preserves runtime identity but cannot validate user memory. */
-	if (first.ref == NULL ||
-	    lj_gc2_obj_lease_acquire(G(L), first.ref, 0, &gct, &storage) < 0)
-	  continue;
-	if (gct != (uint32_t)~LJ_TSTR
-#if LJ_HASFFI
-	    && gct != (uint32_t)~LJ_TCDATA
-#endif
-	   ) {
-	  lj_gc2_lease_release(&storage);
-	  continue;
-	}
-      } else if (first.b == NULL ||
-		 !lj_gc2_storage_lease_try(G(L), first.b,
-		   (uintptr_t)first.w - (uintptr_t)first.b, &storage, NULL)) {
-	continue;
-      }
-    }
-    bufx_snapshot(sbx, &second);
-    if (!bufx_snapshot_same(&first, &second) ||
-	!bufx_snapshot_valid(&second, &len)) {
-      lj_gc2_lease_release(&storage);
-      continue;
-    }
-    if ((second.flags & SBUF_FLAG_COW) &&
-	gct == (uint32_t)~LJ_TSTR) {
-      GCstr *s = gco2str(second.ref);
-      if (second.b != (char *)strdata(s) ||
-	  (uintptr_t)(void *)second.e - (uintptr_t)(void *)second.b !=
-	    (uintptr_t)s->len) {
-	lj_gc2_lease_release(&storage);
-	continue;
-      }
-    }
-    if (pp) *pp = second.r ? second.r : "";
-    if (lenp) *lenp = len;
-    if (cursor) {
-      cursor->lo = (uintptr_t)second.r;
-      cursor->hi = second.generation;
-    }
-    lj_gc2_lease_release(&bodylease);
-    if (holdp) {
-      *holdp = storage;
-      memset(&storage, 0, sizeof(storage));
-    }
-    lj_gc2_lease_release(&storage);
-    return 1;
-  }
-
-  lj_gc2_lease_release(&bodylease);
-  return 0;
+  return buf != NULL;
 }
 
 MSize lj_bufx_readlen(lua_State *L, cTValue *o)
 {
-  MSize len = 0;
-  (void)bufx_read(L, o, NULL, &len, NULL, NULL);
+  LJGC2Lease lease;
+  LJBuffer *buf = bufx_userdata(L, o, &lease);
+  MSize len = buf ? lj_bufx_length(buf) : 0;
+  lj_gc2_lease_release(&lease);
   return len;
 }
 
-/* Copy one shared buffer without a throwing/growing operation while its body
-** lease is live. Capacity growth happens after release, then the source is
-** resnapshotted and re-admitted. The loop is bounded so a racing writer cannot
-** turn concatenation into a wait; an unstable buffer contributes an empty
-** racy snapshot, which is memory-safe and within the allowed racy semantics. */
-static MSize bufx_copy(lua_State *L, SBuf *sb, cTValue *o, MSize limit,
-                       la_u128 *cursor)
+static MSize bufx_copy(lua_State *L, SBuf *sb, LJBuffer *buf, MSize limit,
+                       LJBufPosition *pos)
 {
-  TValue source;
-  uint32_t attempt;
-  lj_tv_load_acq(&source, o);
-  for (attempt = 0; attempt < 8u; attempt++) {
-    LJGC2Lease lease;
-    const char *p;
-    char *w;
+  for (;;) {
+    BufPin pin;
     MSize len;
-    memset(&lease, 0, sizeof(lease));
-    if (!bufx_read(L, &source, &p, &len, &lease, cursor))
-      return 0;
+    bufx_pin(L, buf, 1, &pin);
+    len = bufx_w(pin.range) - bufx_r(pin.range);
     if (len > limit) len = limit;
-    if (len > sbufleft(sb)) {
-      lj_gc2_lease_release(&lease);
-      (void)lj_buf_more(sb, len);  /* May throw only with no source lease. */
-      continue;
+    if (len <= sbufleft(sb)) {
+      if (len) {
+        char *w = lj_buf_wptr_acq(sb);
+        lj_buf_wptr_rel(sb, lj_buf_wmem(w, pin.store->data + bufx_r(pin.range), len));
+      }
+      if (pos) {
+        pos->range = pin.range;
+        pos->serial = pin.store ? pin.store->serial : 0;
+      }
+      bufx_unpin(&pin);
+      return len;
     }
-    if (len) {
-      w = lj_buf_wptr_acq(sb);
-      lj_buf_wptr_rel(sb, lj_buf_wmem(w, p, len));
-    }
+    bufx_unpin(&pin);
+    (void)lj_buf_more(sb, len);
+  }
+}
+
+void lj_bufx_putbuf(lua_State *L, SBuf *dst, cTValue *source)
+{
+  TValue snap, nil, *slot;
+  uint32_t root;
+  LJGC2Lease lease;
+  LJBuffer *buf;
+  setnilV(&nil);
+  lj_tv_load_acq(&snap, source);
+  slot = lj_tg_root_anchor_push(L, L2TG(L), &nil, &root);
+  if (!slot) lj_err_mem(L);
+  buf = bufx_userdata(L, &snap, &lease);
+  if (buf) {
+    copyTVrel(L, slot, &snap);
+    lj_gc_pubroot(L, slot);
     lj_gc2_lease_release(&lease);
-    return len;
+    (void)bufx_copy(L, dst, buf, LJ_MAX_BUF, NULL);
   }
-  return 0;
+  lj_tg_root_anchor_pop(L2TG(L), root);
 }
 
-void lj_bufx_putbuf(lua_State *L, SBuf *sb, cTValue *o)
+int lj_bufx_consume(lua_State *L, LJBuffer *buf, LJBufPosition *pos, MSize n)
 {
-  (void)bufx_copy(L, sb, o, LJ_MAX_BUF, NULL);
+  BufPin pin;
+  int ok = 0;
+  if (!n) return 1;
+  /* get() has interned its result but has not returned it to a Lua root yet.
+  ** Refuse admission without a safepoint; the caller retries the whole read. */
+  if (!bufx_pin_try(L, buf, 0, &pin)) return 0;
+  if (pin.store && pin.store->serial == pos->serial &&
+      pin.range.lo == pos->range.lo && bufx_r(pin.range) == bufx_r(pos->range)) {
+    la_u128 old = pin.range;
+    la_u128 next = bufx_range(pin.store, bufx_r(old) + n, bufx_w(old));
+    ok = la_cas128(&buf->range, &old, next);
+  }
+  bufx_unpin(&pin);
+  return ok;
 }
 
-static int bufx_advance(SBufExt *sbx, la_u128 cursor, MSize n)
+void LJ_FASTCALL lj_bufx_skip(LJBuffer *buf, MSize n)
 {
-  la_u128 next = {cursor.lo + n, cursor.hi + 1};
-  return la_cas128(&sbx->cursor, &cursor, next);
-}
-
-void LJ_FASTCALL lj_bufx_skip(SBufExt *sbx, MSize n)
-{
+  la_u128 old = la_load128_acq(&buf->range);
   while (n) {
-    BufReadSnapshot view;
-    la_u128 cursor;
-    MSize len;
-    bufx_snapshot(sbx, &view);
-    if (!bufx_snapshot_valid(&view, &len) || !len)
-      return;
-    cursor.lo = (uintptr_t)view.r;
-    cursor.hi = view.generation;
-    if (bufx_advance(sbx, cursor, n < len ? n : len))
-      return;
+    MSize r = bufx_r(old), w = bufx_w(old), len = w - r;
+    la_u128 next = old;
+    if (!len) break;
+    next.hi = ((uint64_t)w << 32) | (r + (n < len ? n : len));
+    if (la_cas128(&buf->range, &old, next)) break;
   }
 }
 
-/* The caller supplies the current temporary buffer, already reset. Generated
-** code expresses that reset in IR so adjacent concatenations cannot reuse
-** the bytes overwritten here. The source may exist only in a native register. */
-static GCstr *bufx_string(SBuf *sb, SBufExt *src, MSize limit, int consume)
+static GCstr *bufx_string(SBuf *sb, LJBuffer *buf, MSize limit,
+                          LJBufPosition *pos, int consume)
 {
   lua_State *L = sbufL(sb);
-  TGState *tg = L2TG(L);
-  TValue source, *anchor;
-  uint32_t index;
+  uint32_t root = bufx_anchor(L, obj2gco((GCudata *)buf - 1), LJ_TUDATA);
   GCstr *s;
-  setgcVraw(&source, obj2gco((GCudata *)src - 1), LJ_TUDATA);
-  anchor = lj_tg_root_anchor_push(L, tg, &source, &index);
-  if (LJ_UNLIKELY(!anchor)) lj_err_mem(L);
-  lj_gc_pubroot(L, anchor);
   for (;;) {
-    la_u128 cursor;
-    MSize n = bufx_copy(L, sb, anchor, limit, consume ? &cursor : NULL);
+    MSize n = bufx_copy(L, sb, buf, limit, pos);
     s = lj_buf_str(L, sb);
-    /* Intern before consuming so an allocation error leaves the bytes in
-    ** place. A reset, even to the same address, invalidates the old cursor. */
-    if (!n || !consume || bufx_advance(src, cursor, n))
-      break;
+    if (!consume || lj_bufx_consume(L, buf, pos, n)) break;
     lj_buf_reset(sb);
   }
-  lj_tg_root_anchor_pop(tg, index);
+  lj_tg_root_anchor_pop(L2TG(L), root);
   return s;
 }
 
-GCstr *LJ_FASTCALL lj_bufx_tostr(SBuf *sb, SBufExt *src)
+GCstr *LJ_FASTCALL lj_bufx_tostr(SBuf *scratch, LJBuffer *buf)
 {
-  return bufx_string(sb, src, LJ_MAX_BUF, 0);
+  return bufx_string(scratch, buf, LJ_MAX_BUF, NULL, 0);
 }
 
-GCstr *lj_bufx_get(SBuf *scratch, SBufExt *src, MSize n)
+GCstr *lj_bufx_get(SBuf *scratch, LJBuffer *buf, MSize n)
 {
-  return bufx_string(scratch, src, n, 1);
-}
-#endif
-
-#if LJ_HASBUFFER && LJ_HASJIT
-void lj_bufx_set(SBufExt *sbx, const char *p, MSize len, GCobj *ref)
-{
-  lua_State *L = sbufL(sbx);
-  lj_bufx_free(L, sbx);
-  lj_bufx_set_cow(L, sbx, p, len);
-  lj_bufx_cowref_rel(sbx, ref);
-  lj_gc_pubobjobj(L, (GCudata *)sbx - 1, ref);
+  LJBufPosition pos;
+  return bufx_string(scratch, buf, n, &pos, 1);
 }
 
-void LJ_FASTCALL lj_bufx_reset_forjit(SBufExt *sbx)
+void lj_bufx_decode(lua_State *L, LJBuffer *buf, TValue *o)
 {
-  lj_bufx_reset(sbx);
-}
-
-void LJ_FASTCALL lj_bufx_putstr_forjit(lua_State *L, SBufExt *sbx, GCstr *str)
-{
-  setsbufXL_(sbx, L);
-  lj_buf_putstr((SBuf *)sbx, str);
-  lj_gc_check(L);
-}
-
-int32_t LJ_FASTCALL lj_bufx_len_forjit(SBufExt *sbx)
-{
-  return (int32_t)sbufxlen(sbx);
+  ptrdiff_t out = savestack(L, o);
+  for (;;) {
+    BufPin pin;
+    MSize used, len;
+    const char *data;
+    int status, consumed;
+    bufx_pin(L, buf, 1, &pin);
+    len = bufx_w(pin.range) - bufx_r(pin.range);
+    data = len ? pin.store->data + bufx_r(pin.range) : "";
+    /* The serializer catches errors before these retained input bytes are
+    ** released. Decode one record directly; copying the whole suffix here
+    ** would make a stream of small records quadratic. */
+    status = lj_serialize_decode_buf(L, buf, restorestack(L, out),
+                                    data, len, &used);
+    consumed = 0;
+    if (status == LUA_OK) {
+      la_u128 old = la_load128_acq(&buf->range);
+      /* The input lease still excludes address reuse. Accept an intervening
+      ** append, but never consume after another reader or replacement. */
+      if (old.lo == pin.range.lo && bufx_r(old) == bufx_r(pin.range)) {
+        la_u128 next = bufx_range(pin.store, bufx_r(old) + used, bufx_w(old));
+        consumed = la_cas128(&buf->range, &old, next);
+      }
+    }
+    bufx_unpin(&pin);
+    if (status != LUA_OK) lj_err_throw(L, status);
+    if (consumed) return;
+    setnilV(restorestack(L, out));
+  }
 }
 
 #if LJ_HASFFI
-MSize LJ_FASTCALL lj_bufx_more(SBufExt *sbx, MSize sz)
+char *lj_bufx_reserve(lua_State *L, LJBuffer *buf, MSize n, MSize *left)
 {
-  lj_buf_more((SBuf *)sbx, sz);
-  return sbufleft(sbx);
+  for (;;) {
+    BufPin pin;
+    LJBufStorage *s;
+    MSize w, len;
+    char *p;
+    uint64_t expected;
+    bufx_pin(L, buf, 1, &pin);
+    w = bufx_w(pin.range);
+    expected = w;
+    if (!pin.store && !n) { *left = 0; return NULL; }
+    if (pin.store && !pin.store->ref && n <= pin.store->capacity - w &&
+        la_cas64(&pin.store->claimed, &expected, BUFX_RESERVED | w, LA_ACQ_REL, LA_ACQ)) {
+      *left = pin.store->capacity - w;
+      p = (char *)(pin.store+1) + w;
+      bufx_unpin(&pin);
+      return p;
+    }
+    s = bufx_copy_store(L, buf, &pin, n, &len);
+    if (!s) { bufx_unpin(&pin); lj_err_mem(L); }
+    s->claimed = BUFX_RESERVED | len;
+    p = (char *)(s+1) + len;
+    *left = s->capacity - len;
+    if (bufx_replace(L, buf, &pin, s, len)) return p;
+    bufx_unpin(&pin);
+  }
+}
+
+int lj_bufx_commit(lua_State *L, LJBuffer *buf, MSize n)
+{
+  BufPin pin;
+  uint64_t expected;
+  MSize w;
+  int ok = n == 0;
+  if (ok) return 1;
+  bufx_pin(L, buf, 0, &pin);
+  w = bufx_w(pin.range);
+  if (pin.store && !pin.store->ref && n <= pin.store->capacity - w) {
+    expected = la_load64_acq(&pin.store->claimed);
+    if ((expected == w || expected == (BUFX_RESERVED | w)) &&
+        la_cas64(&pin.store->claimed, &expected, BUFX_WRITING | w, LA_ACQ_REL, LA_ACQ))
+      ok = bufx_endwrite(buf, &pin, w + n);
+  }
+  bufx_unpin(&pin);
+  return ok;
+}
+
+const char *lj_bufx_ref(lua_State *L, LJBuffer *buf, MSize *len)
+{
+  BufPin pin;
+  const char *p;
+  bufx_pin(L, buf, 1, &pin);
+  *len = bufx_w(pin.range) - bufx_r(pin.range);
+  p = pin.store && pin.store->data ? pin.store->data + bufx_r(pin.range) : "";
+  bufx_unpin(&pin);
+  return p;
+}
+
+const char *LJ_FASTCALL lj_bufx_ptr(lua_State *L, LJBuffer *buf)
+{
+  MSize len;
+  return lj_bufx_ref(L, buf, &len);
+}
+#endif
+
+#if LJ_HASJIT
+int32_t LJ_FASTCALL lj_bufx_len_forjit(LJBuffer *buf)
+{
+  return (int32_t)lj_bufx_length(buf);
 }
 #endif
 #endif

@@ -1,0 +1,35 @@
+[
+  {
+    "name": "baseline",
+    "command": [
+      "/tmp/lj-buffer-perf-v4-20261126-32pd9m6x/baseline-luajit",
+      "-joff",
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/dictionary-control/dictionary.lua"
+    ],
+    "exit": 1,
+    "seconds": 0.007563885999843478,
+    "binary_sha256": "113546a9e740b090d51ae118e5a37a4cd32cd3a006fae0fd34b06118f728339e"
+  },
+  {
+    "name": "candidate",
+    "command": [
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/gcc-v4/src/luajit",
+      "-joff",
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/dictionary-control/dictionary.lua"
+    ],
+    "exit": 0,
+    "seconds": 0.007459238986484706,
+    "binary_sha256": "162491d8216fcb4faacf45bc99442bd1e5008a9b7796aa679807287b764cf756"
+  },
+  {
+    "name": "stock",
+    "command": [
+      "/tmp/lj-nov-stock.XunoVr/src/luajit",
+      "-joff",
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/dictionary-control/dictionary.lua"
+    ],
+    "exit": 0,
+    "seconds": 0.0012919639993924648,
+    "binary_sha256": "531fb7be1ef2a68e71333677df9bf2b5d1beee074551bb7c3565eb4c50d2bcb9"
+  }
+]

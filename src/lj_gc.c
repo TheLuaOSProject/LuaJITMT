@@ -255,7 +255,7 @@ int lj_gc_udata_payload_valid_as(GCudata *ud, uint8_t udtype, GCSize *sizep)
 #endif
   case UDTYPE_BUFFER:
 #if LJ_HASBUFFER
-    if (len != sizeof(SBufExt))
+    if (len != sizeof(LJBuffer))
       return 0;
     break;
 #else

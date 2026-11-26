@@ -733,7 +733,7 @@ LJ_FUNC int lj_gc2_obj_lease_acquire(global_State *g, GCobj *o,
 LJ_FUNC int lj_gc2_mem_lease_acquire(global_State *g, void *p,
 				      LJGC2Lease *lease);
 /* Nonmarking small-allocation admission through the persistent mapping
-** registry only. expected_gct accepts TAB/STR/UPVAL, or zero for plain storage.
+** registry only. expected_gct accepts TAB/STR/UPVAL/UDATA, or zero for plain storage.
 ** No global SMR, Huge/custom allocator fallback, allocation or waiting.
 ** On success release the lease after the final byte read. spanp is a
 ** conservative cell-span bound, capped at the small allocation limit; an

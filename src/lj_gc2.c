@@ -17021,7 +17021,8 @@ int lj_gc2_small_lease_try(global_State *g, const void *p,
       la_load32_acq(&g->allocf_arena) == 0 ||
       (expected_gct && expected_gct != (uint32_t)~LJ_TTAB &&
 		       expected_gct != (uint32_t)~LJ_TSTR &&
-		       expected_gct != (uint32_t)~LJ_TUPVAL) ||
+		       expected_gct != (uint32_t)~LJ_TUPVAL &&
+		       expected_gct != (uint32_t)~LJ_TUDATA) ||
       !(registry = (HugeTab *)gc2_small_arena_tab_acq(g))) {
     GC2_PROGRESS_ADD(lease_refused);
     return 0;
@@ -20966,19 +20967,21 @@ static void gc2_traverse_udata(global_State *g, GCudata *ud)
     gc2_traverse_clib_cache(g, (CLibrary *)uddata(ud));
 #endif
   if (LJ_HASBUFFER && udtype == UDTYPE_BUFFER) {
-    SBufExt *sbx = (SBufExt *)uddata(ud);
+    LJBuffer *buf = (LJBuffer *)uddata(ud);
+    la_u128 range = la_load128_acq(&buf->range);
+    LJBufStorage *store = (LJBufStorage *)(uintptr_t)range.lo;
+    GC2MarkScope scope;
     GCobj *ref;
-    if (!sbufiscoworborrow(sbx))
-      lj_gc2_markmem(g, lj_buf_bptr_acq((SBuf *)sbx));
-    ref = lj_bufx_cowref_acq(sbx);
-    if (sbufiscow(sbx) && ref)
-      gc2_markobj_worker(g, ref);
-    ref = obj2gco(lj_bufx_dict_str_acq(sbx));
-    if (ref)
-      gc2_markobj_worker(g, ref);
-    ref = obj2gco(lj_bufx_dict_mt_acq(sbx));
-    if (ref)
-      gc2_markobj_worker(g, ref);
+    if (store && gc2_markmem_registered_scoped_status(g, store, &scope) != GC2_MARK_DEAD) {
+      if (la_load128_acq(&buf->range).lo == range.lo &&
+          la_load32_acq(&store->written) && store->ref)
+        gc2_markobj_worker(g, store->ref);
+      gc2_mark_scope_leave(&scope);
+    }
+    ref = gcref_acq(buf->dict_str);
+    if (ref) gc2_markobj_worker(g, ref);
+    ref = gcref_acq(buf->dict_mt);
+    if (ref) gc2_markobj_worker(g, ref);
   }
   if (udtype == UDTYPE_CHANNEL) {
     LJChan *ch = (LJChan *)uddata(ud);

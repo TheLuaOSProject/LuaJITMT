@@ -1,0 +1,12 @@
+== m5_buffer_publish ==
++ LUA_PATH='/workspaces/lj-lockless/tests/lib/?.lua;/workspaces/lj-lockless/src/?.lua;/workspaces/lj-lockless/src/jit/?.lua;;' './src/luajit' '-joff' './tests/t-buffer-thread-safety.lua'
++ LUA_PATH='/workspaces/lj-lockless/tests/lib/?.lua;/workspaces/lj-lockless/src/?.lua;/workspaces/lj-lockless/src/jit/?.lua;;' './src/luajit' '-jon' './tests/t-buffer-thread-safety.lua'
++ LUA_PATH='/workspaces/lj-lockless/tests/lib/?.lua;/workspaces/lj-lockless/src/?.lua;/workspaces/lj-lockless/src/jit/?.lua;;' './src/luajit' '-joff' './tests/t-buffer-concurrent-public.lua'
++ LUA_PATH='/workspaces/lj-lockless/tests/lib/?.lua;/workspaces/lj-lockless/src/?.lua;/workspaces/lj-lockless/src/jit/?.lua;;' './src/luajit' '-jon' './tests/t-buffer-concurrent-public.lua'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -I'./src' './tests/t-buffer-consume.c' './src/libluajit.a' -lm -ldl -pthread -Wl,--wrap=lj_str_new -o '/tmp/lj_t-buffer-consume'
++ timeout '35s' '/tmp/lj_t-buffer-consume'
+ok m5_buffer_publish
+== m5_buffer_progress ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLUA_USE_ASSERT -DLJ_BUF_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -DLUA_USE_ASSERT -DLJ_BUF_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -I'./src' './tests/t-buffer-progress.c' './src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj_t-buffer-progress'
++ timeout '65s' '/tmp/lj_t-buffer-progress'
+ok m5_buffer_progress

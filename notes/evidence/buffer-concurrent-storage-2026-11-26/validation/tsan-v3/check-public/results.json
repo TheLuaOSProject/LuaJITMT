@@ -1,0 +1,24 @@
+[
+  {
+    "name": "public-joff",
+    "command": [
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/tests/t-buffer-concurrent-public.lua"
+    ],
+    "seconds": 52.68235092799296,
+    "exit": 0,
+    "test": true
+  },
+  {
+    "name": "public-jon",
+    "command": [
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v3/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/tests/t-buffer-concurrent-public.lua"
+    ],
+    "seconds": 27.26036069498514,
+    "exit": 0,
+    "test": true
+  }
+]

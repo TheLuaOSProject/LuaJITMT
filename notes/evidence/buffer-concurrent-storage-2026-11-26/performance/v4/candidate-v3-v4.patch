@@ -1,0 +1,73 @@
+--- v3/src/lj_buf.c
++++ v4/src/lj_buf.c
+@@ -358,24 +358,6 @@
+   return 0;
+ }
+ 
+-/* No allocation, polling or yield: the caller's live arguments remain valid
+-** throughout this attempt. A lost publication leaves only unexposed tail
+-** bytes; another writer can always copy the committed prefix and proceed. */
+-static int bufx_append_tail(lua_State *L, LJBuffer *buf, BufPin *pin,
+-                            const char *p, MSize n)
+-{
+-  MSize w = bufx_w(pin->range);
+-  uint64_t expected = w;
+-  UNUSED(L);
+-  if (!pin->store || pin->store->ref || n > pin->store->capacity - w ||
+-      !la_cas64(&pin->store->claimed, &expected, BUFX_WRITING | w,
+-                LA_ACQ_REL, LA_ACQ))
+-    return 0;
+-  bufx_test(L, buf, LJ_BUF_TEST_TAIL_CLAIMED);
+-  memcpy((char *)(pin->store+1) + w, p, n);
+-  return bufx_endwrite(buf, pin, w + n) ? 1 : -1;
+-}
+-
+ /* Grow or compact from retained bytes into a private allocation. All
+ ** fallible input conversions finish before this operation can be retried. */
+ static LJBufStorage *bufx_copy_store(lua_State *L, LJBuffer *buf, BufPin *pin,
+@@ -396,13 +378,20 @@
+   while (n) {
+     BufPin pin;
+     LJBufStorage *s;
+-    MSize len;
+-    int appended;
++    MSize w, len;
++    uint64_t expected;
+     bufx_pin(L, buf, 1, &pin);
+-    appended = bufx_append_tail(L, buf, &pin, p, n);
+-    if (appended) {
++    w = bufx_w(pin.range);
++    expected = w;
++    if (pin.store && !pin.store->ref && n <= pin.store->capacity - w &&
++        la_cas64(&pin.store->claimed, &expected, BUFX_WRITING | w, LA_ACQ_REL, LA_ACQ)) {
++      bufx_test(L, buf, LJ_BUF_TEST_TAIL_CLAIMED);
++      memcpy((char *)(pin.store+1) + w, p, n);
++      if (bufx_endwrite(buf, &pin, w + n)) {
++        bufx_unpin(&pin);
++        return;
++      }
+       bufx_unpin(&pin);
+-      if (appended > 0) return;
+       continue;
+     }
+     s = bufx_copy_store(L, buf, &pin, n, &len);
+@@ -416,17 +405,8 @@
+ 
+ void lj_bufx_putstr(lua_State *L, LJBuffer *buf, GCstr *s)
+ {
+-  BufPin pin;
+-  uint32_t root, value;
+-  if (!s->len) return;
+-  if (bufx_pin_try(L, buf, 0, &pin)) {
+-    int appended = bufx_append_tail(L, buf, &pin, strdata(s), s->len);
+-    bufx_unpin(&pin);
+-    if (appended > 0) return;
+-  }
+-  /* Only the retry/allocation path needs roots across a possible safepoint. */
+-  root = bufx_anchor(L, obj2gco((GCudata *)buf - 1), LJ_TUDATA);
+-  value = bufx_anchor(L, obj2gco(s), LJ_TSTR);
++  uint32_t root = bufx_anchor(L, obj2gco((GCudata *)buf - 1), LJ_TUDATA);
++  uint32_t value = bufx_anchor(L, obj2gco(s), LJ_TSTR);
+   lj_bufx_append(L, buf, strdata(s), s->len);
+   lj_tg_root_anchor_pop(L2TG(L), value);
+   lj_tg_root_anchor_pop(L2TG(L), root);

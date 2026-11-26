@@ -1,0 +1,6 @@
+{
+  "/tmp/lj-buffer-review-20261126-jtn9tue9/tsan/src/luajit": "1add0ecfb58bf1f9c31e09ab60b240e7b94f7569c5e4df0de349e1c56900ec51",
+  "/tmp/lj-buffer-review-20261126-jtn9tue9/tsan/src/libluajit.a": "b2e94d8f38d10dbfe8a4c8d0b9db4a7d2f0394fc22f158e9ea6ff0c0bfb3b2ae",
+  "/workspaces/lj-lockless/tests/t-buffer-progress.c": "24ba373c422f2a2f10414993e6d1a0616c440f6be7aac266f89101599333c41c",
+  "/tmp/lj-buffer-review-20261126-jtn9tue9/tsan/check-progress/progress": "2e19b9b41a27bac8904883b559f665e9dd6f9b09854ce7712e45afa977f2b3a7"
+}

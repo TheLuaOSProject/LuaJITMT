@@ -1,0 +1,13 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-7,9-15",
+    "/tmp/lj-buffer-review-20261126-jtn9tue9/gcc-v2/src/luajit",
+    "tools/test.lua",
+    "m5_buffer_publish",
+    "m5_buffer_progress"
+  ],
+  "exit": 0,
+  "seconds": 34.035266313003376
+}

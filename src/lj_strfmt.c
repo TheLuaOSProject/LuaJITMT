@@ -453,9 +453,10 @@ int lj_strfmt_putarg(lua_State *L, SBuf *sb, int arg, int retry)
 	  s = strVdata(o);
 #if LJ_HASBUFFER
 	} else if (tvisbuf(o)) {
-	  SBufExt *sbx = bufV(o);
+	  LJBuffer *sbx = bufV(o);
 	  GCstr *str;
-	  if (sbx == (SBufExt *)sb) lj_err_arg(L, arg+1, LJ_ERR_BUFFER_SELF);
+	  if (narg && tvisbuf(L->base) && bufV(L->base) == sbx)
+	    lj_err_arg(L, arg, LJ_ERR_BUFFER_SELF);
 	  if (sf == STRFMT_STR) {
 	    lj_bufx_putbuf(L, sb, o);
 	    break;

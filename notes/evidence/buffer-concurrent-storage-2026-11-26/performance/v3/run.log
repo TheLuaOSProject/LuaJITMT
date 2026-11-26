@@ -1,0 +1,25 @@
+RUN 1-jit-1-baseline
+DONE 1-jit-1-baseline
+RUN 1-jit-2-candidate
+DONE 1-jit-2-candidate
+RUN 1-joff-1-baseline
+DONE 1-joff-1-baseline
+RUN 1-joff-2-candidate
+DONE 1-joff-2-candidate
+RUN 2-jit-1-candidate
+DONE 2-jit-1-candidate
+RUN 2-jit-2-baseline
+DONE 2-jit-2-baseline
+RUN 2-joff-1-candidate
+DONE 2-joff-1-candidate
+RUN 2-joff-2-baseline
+DONE 2-joff-2-baseline
+RUN 3-jit-1-baseline
+DONE 3-jit-1-baseline
+RUN 3-jit-2-candidate
+DONE 3-jit-2-candidate
+RUN 3-joff-1-baseline
+DONE 3-joff-1-baseline
+RUN 3-joff-2-candidate
+DONE 3-joff-2-candidate
+FINISHED

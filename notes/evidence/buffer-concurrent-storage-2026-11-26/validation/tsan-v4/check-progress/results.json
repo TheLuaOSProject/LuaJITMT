@@ -1,0 +1,49 @@
+[
+  {
+    "name": "progress-build",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_BUF_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-Wno-error=tsan",
+      "-fsanitize=thread",
+      "-fno-omit-frame-pointer",
+      "-fno-pie",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v4/check-progress/progress.d",
+      "-I/tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v4/src",
+      "-I/tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v4/tests",
+      "/workspaces/lj-lockless/tests/t-buffer-progress.c",
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v4/src/libluajit.a",
+      "-fsanitize=thread",
+      "-no-pie",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v4/check-progress/progress"
+    ],
+    "seconds": 0.1640220469853375,
+    "exit": 0,
+    "test": false
+  },
+  {
+    "name": "progress",
+    "command": [
+      "/tmp/lj-buffer-review-20261126-jtn9tue9/tsan-v4/check-progress/progress"
+    ],
+    "seconds": 0.21377365398802795,
+    "exit": 0,
+    "test": true
+  }
+]

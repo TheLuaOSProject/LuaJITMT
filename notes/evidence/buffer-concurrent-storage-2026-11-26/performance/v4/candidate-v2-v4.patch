@@ -1,0 +1,34 @@
+--- v2/src/lj_buf.c
++++ v4/src/lj_buf.c
+@@ -559,13 +559,10 @@
+   ptrdiff_t out = savestack(L, o);
+   for (;;) {
+     BufPin pin;
+-    LJBufPosition pos;
+     MSize used, len;
+     const char *data;
+     int status, consumed;
+     bufx_pin(L, buf, 1, &pin);
+-    pos.range = pin.range;
+-    pos.serial = pin.store ? pin.store->serial : 0;
+     len = bufx_w(pin.range) - bufx_r(pin.range);
+     data = len ? pin.store->data + bufx_r(pin.range) : "";
+     /* The serializer catches errors before these retained input bytes are
+@@ -573,7 +570,16 @@
+     ** would make a stream of small records quadratic. */
+     status = lj_serialize_decode_buf(L, buf, restorestack(L, out),
+                                     data, len, &used);
+-    consumed = status == LUA_OK && lj_bufx_consume(L, buf, &pos, used);
++    consumed = 0;
++    if (status == LUA_OK) {
++      la_u128 old = la_load128_acq(&buf->range);
++      /* The input lease still excludes address reuse. Accept an intervening
++      ** append, but never consume after another reader or replacement. */
++      if (old.lo == pin.range.lo && bufx_r(old) == bufx_r(pin.range)) {
++        la_u128 next = bufx_range(pin.store, bufx_r(old) + used, bufx_w(old));
++        consumed = la_cas128(&buf->range, &old, next);
++      }
++    }
+     bufx_unpin(&pin);
+     if (status != LUA_OK) lj_err_throw(L, status);
+     if (consumed) return;

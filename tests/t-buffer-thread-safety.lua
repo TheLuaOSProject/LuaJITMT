@@ -177,6 +177,21 @@ if jit and jit.status() then
     input:set(bytes)
     assert(consume(input, 90, input.get, input.skip) == "n=90/B" and #input == 0)
   end)
+  local function mutate(b, n, reset, set, put, get)
+    local text
+    for _ = 1, n do
+      reset(b)
+      put(b, "prefix")
+      set(b, "replacement")
+      put(b, "!")
+      text = get(b)
+    end
+    return text
+  end
+  check_loop(mutate, function()
+    assert(mutate(input, 90, input.reset, input.set, input.put, input.get) ==
+           "replacement!" and #input == 0)
+  end)
   assert(done:send(true, 10))
   assert(peer:join())
 end
