@@ -4,6 +4,8 @@
 
 #include <assert.h>
 #include <math.h>
+#include <pthread.h>
+#include <sched.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -279,8 +281,8 @@ static void exercise_admission_retries(lua_State *L)
   expect = LJ_GC2_SMR_OPEN;
   assert(gc2_smr_reclaiming_cas(g, &expect, LJ_GC2_SMR_META_EXCLUSIVE));
   assert(bounded_getint(L, L->top - 2, 3, L->top - 1) ==
-	 LJ_TAB_ROOTED_GET_RETRY);
-  assert(tvisnil(L->top - 1));
+	 LJ_TAB_ROOTED_GET_FOUND);
+  assert(lua_tointeger(L, -1) == 33);
   gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
   lua_pop(L, 1);
   assert_clean(L, clean);
@@ -538,6 +540,61 @@ static int close_finalizer_get(lua_State *L)
   return 0;
 }
 
+static void *reclaim_while_reading(void *arg)
+{
+  global_State *g = (global_State *)arg;
+  (void)lj_gc2_reclaim_retired(g, lj_gc2_retire_epoch(g) + 1);
+  return NULL;
+}
+
+static void exercise_parked_public_reads(lua_State *L)
+{
+  global_State *g = G(L);
+  pthread_t worker;
+  int top = lua_gettop(L);
+  assert(luaL_loadstring(L,
+    "local address = ...\n"
+    "local ffi = require('ffi')\n"
+    "local t = setmetatable({}, {__mode='kv'})\n"
+    "local fn = function() return 42 end\n"
+    "local keys = {false, true, 1.5, -407, address, {}, fn, newproxy(),\n"
+    "              coroutine.create(fn), ffi.new('int[1]')}\n"
+    "local vals = {fn, {}, 19, 's', address, newproxy(), false, keys,\n"
+    "              coroutine.create(fn), ffi.new('char[20000]')}\n"
+    "for i=1,4096 do t[i]=fn; t['h'..i]=i end\n"
+    "for i=1,#keys do t[keys[i]]=vals[i] end\n"
+    "local inline = {fn, keys}\n"
+    "local raw, eq = rawget, rawequal\n"
+    "return t, function()\n"
+    "  for i=1,#keys do\n"
+    "    if not eq(t[keys[i]],vals[i]) or not eq(raw(t,keys[i]),vals[i]) then\n"
+    "      return false\n"
+    "    end\n"
+    "  end\n"
+    "  return inline[1]() == 42 and raw(t,4096) == fn and t[4096.5] == nil\n"
+    "    and raw(t,0/0) == nil and raw(t,nil) == nil\n"
+    "end") == 0);
+  lua_pushlightuserdata(L, &worker);
+  assert(lua_pcall(L, 1, 2, 0) == 0);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+  lj_gc2_test_idle_reclaim_pause_after_jit_quiescence();
+  assert(pthread_create(&worker, NULL, reclaim_while_reading, g) == 0);
+  while (!lj_gc2_test_idle_reclaim_paused())
+    sched_yield();
+  assert(gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_META_EXCLUSIVE);
+  assert(lua_objlen(L, -2) == 4096);
+  lua_rawgeti(L, -2, 4096);
+  assert(lua_isfunction(L, -1));
+  lua_pop(L, 1);
+  assert(lua_pcall(L, 0, 1, 0) == 0 && lua_toboolean(L, -1));
+  assert(lj_gc2_test_idle_reclaim_paused());
+  lj_gc2_test_idle_reclaim_release();
+  assert(pthread_join(worker, NULL) == 0);
+  lua_settop(L, top);
+  lua_gc(L, LUA_GCRESTART, 0);
+}
+
 static void install_close_finalizer(lua_State *L)
 {
   int status;
@@ -569,6 +626,7 @@ int main(void)
   exercise_structural_retries(L);
   exercise_owner_contract(L, wrong);
   exercise_hit_only(L, wrong);
+  exercise_parked_public_reads(L);
 
   install_close_finalizer(L);
   lua_close(L);

@@ -282,7 +282,7 @@ static void exercise_admission_retries(lua_State *L)
 
   expect = LJ_GC2_SMR_OPEN;
   assert(gc2_smr_reclaiming_cas(g, &expect, LJ_GC2_SMR_META_EXCLUSIVE));
-  assert(bounded_len(L, L->top - 1, t) == LJ_TAB_LEN_RETRY);
+  assert(bounded_len(L, L->top - 1, t) == 7);
   assert(gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_META_EXCLUSIVE);
   gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
 

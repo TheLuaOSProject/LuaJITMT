@@ -5450,15 +5450,24 @@ static LJ_AINLINE int tab_forjit_snapshot_current(
   return lj_tab_asize_acq(t) == snap->asize;
 }
 
-/* Resolve one key entirely inside a caller-owned SMR interval. The returned
-** slot is an opaque address hint: callers must close this interval before any
-** wait/allocation and must revalidate the hint in the keyed store transaction
-** before dereferencing it. out, when non-NULL, is copied while the vectors are
-** still retained by SMR. */
-static int tab_resolve_current_keyed_held(GCtab *t, cTValue *key,
-					 TValue **slotp, TValue *out)
+/* The requested key is retained. A collision may be an unrelated, dead
+** weak key, so compare the tagged words before inspecting any GC header. */
+static LJ_AINLINE int tab_hash_key_equal_held(cTValue *stored, cTValue *key)
 {
-  TabForjitSnapshot snap;
+  if (tvisnumber(key))
+    return tvisnumber(stored) && numberVnum(stored) == numberVnum(key);
+  if (tvispri(key))
+    return itype(stored) == itype(key);
+  return tv_rawload(stored) == tv_rawload(key) && tab_tv_snapshot_valid(key);
+}
+
+/* Both vectors must be retained, by SMR or by exact storage leases. The
+** optional matched node lets a reader recheck the key after taking a lease
+** on its weak value. The slot is valid only while the storage is retained. */
+static int tab_resolve_keyed_snapshot(GCtab *t, cTValue *key,
+                                      const TabForjitSnapshot *snap,
+                                      TValue **slotp, TValue *out, Node **matchp)
+{
   TValue hkey;
   cTValue *hkeyp = key;
   Node *n;
@@ -5470,15 +5479,9 @@ static int tab_resolve_current_keyed_held(GCtab *t, cTValue *key,
   TValue *slot = NULL;
   int result = TAB_RESOLVE_ABSENT;
 
+  if (matchp) *matchp = NULL;
   if (slotp) *slotp = NULL;
   if (out) setnilV(out);
-  /* Nil is a terminal absent key, not a generation retry. */
-  if (tvisnil(key)) {
-    return TAB_RESOLVE_ABSENT;
-  }
-  if (!tab_forjit_snapshot_acq(t, &snap))
-    return TAB_RESOLVE_RETRY;
-
   if (tvisint(key)) {
     ik = intV(key);
     setnumV(&hkey, (lua_Number)ik);
@@ -5492,12 +5495,12 @@ static int tab_resolve_current_keyed_held(GCtab *t, cTValue *key,
 
   /* Current integral keys live in the array side when in range. Check it
   ** before the hash side, then validate both roots together below. */
-  if (isintkey && (MSize)ik < snap.asize) {
+  if (isintkey && (MSize)ik < snap->asize) {
     TValue val;
     TValue *candidate;
-    if (!snap.array)
+    if (!snap->array)
       return TAB_RESOLVE_RETRY;
-    candidate = &snap.array[ik];
+    candidate = &snap->array[ik];
     lj_tv_load_acq(&val, candidate);
     if (tvisforward(&val)) {
       /*
@@ -5506,7 +5509,7 @@ static int tab_resolve_current_keyed_held(GCtab *t, cTValue *key,
       ** single-mutator window, but keep the established retry contract for
       ** test-hook/reentrant inspection until the replacement root publishes.
       */
-      if (lj_tab_array_is_colocated(t, snap.array))
+      if (lj_tab_array_is_colocated(t, snap->array))
 	return TAB_RESOLVE_RETRY;
       result = TAB_RESOLVE_FORWARD_ARRAY;
       goto validate;
@@ -5522,29 +5525,22 @@ static int tab_resolve_current_keyed_held(GCtab *t, cTValue *key,
   if (isintkey)
     tab_forjit_test_pause_after_integral_array();
 
-  if (snap.hmask == 0)
+  if (snap->hmask == 0)
     goto absent;
-  n = isnumkey ? hashnum_node(snap.node, snap.hmask, hkeyp) :
-      tvisstr(hkeyp) ? hashstr_node(snap.node, snap.hmask, strV(hkeyp)) :
-      hashkey_node(snap.node, snap.hmask, hkeyp);
+  n = isnumkey ? hashnum_node(snap->node, snap->hmask, hkeyp) :
+      tvisstr(hkeyp) ? hashstr_node(snap->node, snap->hmask, strV(hkeyp)) :
+      hashkey_node(snap->node, snap->hmask, hkeyp);
   do {
     TValue nk;
     Node *next;
-    if (LJ_UNLIKELY(!tab_node_in_snapshot(snap.node, snap.hmask, n) ||
-		    visited++ > snap.hmask))
+    if (LJ_UNLIKELY(!tab_node_in_snapshot(snap->node, snap->hmask, n) ||
+		    visited++ > snap->hmask))
       return TAB_RESOLVE_RETRY;
     lj_tv_load_acq(&nk, &n->key);
     if (tab_key_islocked(&nk) || tvisforward(&nk) ||
 	tab_val_is_publish_claim(&nk))
       return TAB_RESOLVE_RETRY;
-    /* A dead weak-key snapshot can remain in an otherwise current collision
-    ** chain until its clearing pass.  It is not the exact leased/type-valid
-    ** target and cannot safely enter lj_obj_equal(), but it also must not turn
-    ** an unrelated lookup into a permanent retry. */
-    if (tab_tv_snapshot_valid(&nk) &&
-	((isnumkey && tvisnum(&nk) && nk.n == hkeyp->n) ||
-	 (tvisstr(hkeyp) && tvisstr(&nk) && strV(&nk) == strV(hkeyp)) ||
-	 (!isnumkey && !tvisstr(hkeyp) && lj_obj_equal(&nk, hkeyp)))) {
+    if (tab_hash_key_equal_held(&nk, hkeyp)) {
       TValue val;
       TValue *candidate = &n->val;
       lj_tv_load_acq(&val, candidate);
@@ -5555,6 +5551,7 @@ static int tab_resolve_current_keyed_held(GCtab *t, cTValue *key,
       if (tab_val_is_publish_claim(&val) ||
 	  (!out && !tab_tv_snapshot_valid(&val)))
 	return TAB_RESOLVE_RETRY;
+      if (matchp) *matchp = n;
       slot = candidate;
       if (out) *out = val;
       result = TAB_RESOLVE_FOUND;
@@ -5562,7 +5559,7 @@ static int tab_resolve_current_keyed_held(GCtab *t, cTValue *key,
     }
     next = lj_tab_nextnode_acq(n);
     if (LJ_UNLIKELY(next &&
-		    !tab_node_in_snapshot(snap.node, snap.hmask, next)))
+		    !tab_node_in_snapshot(snap->node, snap->hmask, next)))
       return TAB_RESOLVE_RETRY;
     n = next;
   } while (n);
@@ -5583,10 +5580,22 @@ validate:
        result == TAB_RESOLVE_FORWARD_HASH) &&
       lj_tab_struct_owner_acq(t) != 0)
     return TAB_RESOLVE_RETRY;
-  if (!tab_forjit_snapshot_current(t, &snap))
+  if (!tab_forjit_snapshot_current(t, snap))
     return TAB_RESOLVE_RETRY;
   if (slotp) *slotp = slot;
   return result;
+}
+
+static int tab_resolve_current_keyed_held(GCtab *t, cTValue *key,
+                                         TValue **slotp, TValue *out)
+{
+  TabForjitSnapshot snap;
+  if (tvisnil(key) || !tab_forjit_snapshot_acq(t, &snap)) {
+    if (slotp) *slotp = NULL;
+    if (out) setnilV(out);
+    return tvisnil(key) ? TAB_RESOLVE_ABSENT : TAB_RESOLVE_RETRY;
+  }
+  return tab_resolve_keyed_snapshot(t, key, &snap, slotp, out, NULL);
 }
 
 static LJ_AINLINE int tab_keyed_slot_key_valid(cTValue *key)
@@ -5906,6 +5915,70 @@ static void tab_scalar_test_at(lua_State *L, GCtab *t, uint32_t stage)
 #define tab_scalar_test_at(L, t, stage) ((void)0)
 #endif
 
+static int tab_vector_lease_try(global_State *g, const void *p, size_t header,
+                                int small_only, LJGC2Lease *lease, size_t *span)
+{
+  return small_only ? lj_gc2_small_lease_try(g, p, header, 0, lease, span) :
+                      lj_gc2_storage_lease_try(g, p, header, lease, span);
+}
+
+/* Acquire both vectors before reading either header. The caller already
+** holds the table body, including its inline array, through the final check. */
+static int tab_snapshot_leased(lua_State *L, GCtab *t, TabForjitSnapshot *snap,
+                               LJGC2Lease *array_lease, LJGC2Lease *node_lease,
+                               size_t table_span, int small_only)
+{
+  global_State *g = G(L);
+  size_t array_span = 0, node_span = 0;
+  snap->array = lj_tab_array_acq(t);
+  snap->node = lj_tab_node_acq(t);
+  if (small_only)
+    tab_scalar_test_at(L, t, LJ_TAB_SCALAR_TEST_VECTORS);
+  if (snap->array && !lj_tab_array_is_colocated(t, snap->array) &&
+      !tab_vector_lease_try(g,
+	(const void *)((uintptr_t)snap->array - sizeof(TabArrayHdr)),
+	sizeof(TabArrayHdr), small_only, array_lease, &array_span))
+    return 0;
+  if (snap->node != &g->nilnode &&
+      !tab_vector_lease_try(g,
+	(const void *)((uintptr_t)snap->node - sizeof(TabNodeHdr)),
+	sizeof(TabNodeHdr), small_only, node_lease, &node_span))
+    return 0;
+  if (lj_tab_array_acq(t) != snap->array || lj_tab_node_acq(t) != snap->node)
+    return 0;
+  if (small_only)
+    tab_scalar_test_at(L, t, LJ_TAB_SCALAR_TEST_RETAINED);
+  if (snap->array && !lj_tab_array_is_colocated(t, snap->array)) {
+    MSize acap = lj_tab_array_hdr_acap_acq(snap->array);
+    snap->asize = lj_tab_array_hdr_asize_acq(snap->array);
+    if (lj_tab_array_is_retiring(t, snap->array) || !tab_valid_acap(acap) ||
+	snap->asize > acap || lj_tab_array_bytes(acap) > array_span)
+      return 0;
+  } else {
+    snap->asize = lj_tab_asize_acq(t);
+    if (snap->array && !table_span) {
+      LJGC2Lease body;
+      if (!lj_gc2_small_lease_try(g, t, sizeof(GCtab), (uint32_t)~LJ_TTAB,
+                                  &body, &table_span))
+        return 0;
+      lj_gc2_lease_release(&body);
+    }
+    if ((!snap->array && snap->asize != 0) ||
+	(snap->array && (lj_tab_array_is_retiring(t, snap->array) ||
+			snap->asize > lj_tab_colo_size(t))) ||
+	(snap->array && (size_t)snap->asize >
+         (table_span - sizeof(GCtab)) / sizeof(TValue)))
+      return 0;
+  }
+  snap->hmask = snap->node == &g->nilnode ? 0 :
+		 lj_tab_node_hmask_acq(snap->node);
+  if (snap->node != &g->nilnode &&
+      (!tab_valid_hmask(snap->hmask) || lj_tab_node_is_retiring(snap->node) ||
+       lj_tab_node_bytes(snap->hmask) > node_span))
+    return 0;
+  return 1;
+}
+
 /* This resolver never calls the general snapshot helper: its first header
 ** reads already require SMR. Admit each raw vector start, confirm both source
 ** roots, then inspect immutable size headers within the retained cell bound.
@@ -5922,7 +5995,7 @@ int lj_tab_getscalar_rooted_try(lua_State *L, cTValue *tabroot,
   GCtab *t = NULL;
   Node *n, *matched = NULL;
   TValue *slot = NULL;
-  size_t table_span = 0, array_span = 0, node_span = 0;
+  size_t table_span = 0;
   MSize visited = 0;
   int64_t i64;
   int32_t ik = 0;
@@ -5960,41 +6033,8 @@ int lj_tab_getscalar_rooted_try(lua_State *L, cTValue *tabroot,
       !tab_keyed_slot_owner_current(L, &owner))
     goto leave;
   t = tabV(&tablev);
-  snap.array = lj_tab_array_acq(t);
-  snap.node = lj_tab_node_acq(t);
-  tab_scalar_test_at(L, t, LJ_TAB_SCALAR_TEST_VECTORS);
-  if (snap.array && !lj_tab_array_is_colocated(t, snap.array) &&
-      !lj_gc2_small_lease_try(owner.g,
-	(const void *)((uintptr_t)snap.array - sizeof(TabArrayHdr)),
-	sizeof(TabArrayHdr), 0, &array_lease, &array_span))
-    goto leave;
-  if (snap.node != &owner.g->nilnode &&
-      !lj_gc2_small_lease_try(owner.g,
-	(const void *)((uintptr_t)snap.node - sizeof(TabNodeHdr)),
-	sizeof(TabNodeHdr), 0, &node_lease, &node_span))
-    goto leave;
-  if (lj_tab_array_acq(t) != snap.array || lj_tab_node_acq(t) != snap.node)
-    goto leave;
-  tab_scalar_test_at(L, t, LJ_TAB_SCALAR_TEST_RETAINED);
-  if (snap.array && !lj_tab_array_is_colocated(t, snap.array)) {
-    MSize acap = lj_tab_array_hdr_acap_acq(snap.array);
-    snap.asize = lj_tab_array_hdr_asize_acq(snap.array);
-    if (lj_tab_array_is_retiring(t, snap.array) || !tab_valid_acap(acap) ||
-	snap.asize > acap || lj_tab_array_bytes(acap) > array_span)
-      goto leave;
-  } else {
-    snap.asize = lj_tab_asize_acq(t);
-    if ((!snap.array && snap.asize != 0) ||
-	(snap.array && (lj_tab_array_is_retiring(t, snap.array) ||
-			snap.asize > lj_tab_colo_size(t))) ||
-	(size_t)snap.asize > (table_span - sizeof(GCtab)) / sizeof(TValue))
-      goto leave;
-  }
-  snap.hmask = snap.node == &owner.g->nilnode ? 0 :
-		 lj_tab_node_hmask_acq(snap.node);
-  if (snap.node != &owner.g->nilnode &&
-      (!tab_valid_hmask(snap.hmask) || lj_tab_node_is_retiring(snap.node) ||
-       lj_tab_node_bytes(snap.hmask) > node_span))
+  if (!tab_snapshot_leased(L, t, &snap, &array_lease, &node_lease,
+                           table_span, 1))
     goto leave;
   isnum = tvisnumber(&keyv);
   if (tvisint(&keyv)) {
@@ -6081,6 +6121,61 @@ static LJ_AINLINE void tab_rooted_get_publish_nil(TValue *outroot)
     return;
   setnilV(&nilv);
   tv_rawstore_rel(outroot, tv_rawload(&nilv));
+}
+
+/* Read one point during metadata retirement. String keys depend only on
+** the hash vector. An integral key can move between hash and array during a
+** resize, so the general resolver validates the two roots together. */
+static int tab_get_leased_try(lua_State *L, GCtab *t, cTValue *key,
+                              TValue *out, LJGC2Lease *lease)
+{
+  LJGC2Lease array = {0}, nodes = {0};
+  TabForjitSnapshot snap;
+  TValue value, confirm, *slot = NULL;
+  Node *match = NULL;
+  int edge, status = TAB_RESOLVE_RETRY;
+  if (tvisstr(key)) {
+    status = lj_tab_getstr_leased_try(G(L), t, strV(key), out, lease);
+    return status == LJ_TAB_GC_LOOKUP_RETRY ? TAB_RESOLVE_RETRY : status;
+  }
+  if (tvisnil(key) || (tvisnum(key) && tvisnan(key)))
+    return TAB_RESOLVE_ABSENT;
+  if (!tab_snapshot_leased(L, t, &snap, &array, &nodes, 0, 0))
+    goto done;
+  status = tab_resolve_keyed_snapshot(t, key, &snap, &slot, &value, &match);
+  if (status != TAB_RESOLVE_FOUND)
+    goto done;
+  if (tvisnil(&value)) {
+    status = TAB_RESOLVE_ABSENT;
+    goto done;
+  }
+  if (tvistabinternal(&value)) {
+    status = TAB_RESOLVE_RETRY;
+    goto done;
+  }
+  edge = lj_gc2_tv_lease_acquire(G(L), &value, lease);
+  /* A weak value can disappear between the slot load and body admission.
+  ** A new incarnation at the same address must have a current source. */
+  if (match) {
+    lj_tv_load_acq(&confirm, &match->key);
+    if (!tab_hash_key_equal_held(&confirm, key))
+      goto retry;
+  }
+  if (tv_rawload_acq(slot) != tv_rawload(&value) ||
+      !tab_forjit_snapshot_current(t, &snap) || edge == LJ_GC2_TV_EDGE_RETRY)
+    goto retry;
+  if (edge == LJ_GC2_TV_EDGE_STALE)
+    status = TAB_RESOLVE_ABSENT;
+  else
+    *out = value;
+  goto done;
+retry:
+  lj_gc2_lease_release(lease);
+  status = TAB_RESOLVE_RETRY;
+done:
+  lj_gc2_lease_release(&nodes);
+  lj_gc2_lease_release(&array);
+  return status;
 }
 
 enum {
@@ -6179,13 +6274,10 @@ static int tab_gettv_rooted_try_impl(lua_State *L, cTValue *tabroot,
     goto confirm;
 
   if (!smr_active) {
-    if (!tvisstr(&keysnap))
-      goto confirm;
-    status = lj_tab_getstr_leased_try(owner.g, t, strV(&keysnap), &result,
-                                      &result_lease);
-    if (status == LJ_TAB_GC_LOOKUP_RETRY)
-      status = LJ_TAB_ROOTED_GET_RETRY;
-    else if (status == LJ_TAB_GC_LOOKUP_FOUND)
+    status = tab_get_leased_try(L, t, &keysnap, &result, &result_lease);
+    if (mode != TAB_ROOTED_GET_MODE_NIL_NO_META)
+      status = tab_resolve_public_status(status);
+    if (status == TAB_RESOLVE_FOUND)
       result_lease_active = 1;
     if (result_lease_active && mode == TAB_ROOTED_GET_MODE_NIL_NO_META)
       status = LJ_TAB_ROOTED_GET_RETRY;
@@ -11003,21 +11095,37 @@ int32_t LJ_FASTCALL lj_tab_vmnext_forward(GCtab *t, uint32_t idx, TValue *out)
 
 /* -- Table length calculation -------------------------------------------- */
 
-/* Read one positive integer key from a caller-retained paired vector
-** snapshot. Returns zero only for a structural/internal retry. */
-static int tab_len_snapshot_present(const TabForjitSnapshot *snap,
-				    uint32_t key, int *present)
+/* During local vector admission even a weak value's payload may retire. A
+** length probe needs only presence. Bind its exact source before counting it. */
+static int tab_len_slot_present(global_State *g, const TValue *slot, int *present)
 {
   TValue val;
-  if (key < snap->asize) {
-    lj_tv_load_acq(&val, &snap->array[key]);
-    if (LJ_UNLIKELY(tvisforward(&val) ||
-		    tab_val_is_publish_claim(&val) ||
-		    !tab_tv_forjit_loadable(&val)))
+  lj_tv_load_acq(&val, slot);
+  if (tvistabinternal(&val) || tab_val_is_publish_claim(&val))
+    return 0;
+  if (g && tvisgcv(&val)) {
+    LJGC2Lease lease;
+    int edge = lj_gc2_tv_lease_acquire(g, &val, &lease);
+    int current = tv_rawload_acq(slot) == tv_rawload(&val);
+    lj_gc2_lease_release(&lease);
+    if (!current || edge == LJ_GC2_TV_EDGE_RETRY)
       return 0;
+    *present = edge == LJ_GC2_TV_EDGE_VALID;
+  } else {
+    if (!tab_tv_snapshot_valid(&val)) return 0;
     *present = !tvisnil(&val);
-    return 1;
   }
+  return 1;
+}
+
+/* Read one positive integer key from a caller-retained paired vector
+** snapshot. Returns zero only for a structural/internal retry. */
+static int tab_len_snapshot_present(global_State *g,
+                                    const TabForjitSnapshot *snap,
+                                    uint32_t key, int *present)
+{
+  if (key < snap->asize)
+    return tab_len_slot_present(g, &snap->array[key], present);
   if (key > 0x7fffffffu || snap->hmask == 0) {
     *present = 0;
     return 1;
@@ -11035,18 +11143,13 @@ static int tab_len_snapshot_present(const TabForjitSnapshot *snap,
 		      visited++ > snap->hmask))
 	return 0;
       lj_tv_load_acq(&nodekey, &n->key);
-      if (LJ_UNLIKELY(tab_key_islocked(&nodekey) ||
-		      !tab_tv_snapshot_valid(&nodekey)))
+      if (LJ_UNLIKELY(tvistabinternal(&nodekey) ||
+                      tab_val_is_publish_claim(&nodekey)))
 	return 0;
       if ((tvisint(&nodekey) && intV(&nodekey) == (int32_t)key) ||
 	  (tvisnum(&nodekey) && numV(&nodekey) == numV(&numkey))) {
-	lj_tv_load_acq(&val, &n->val);
-	if (LJ_UNLIKELY(tvisforward(&val) ||
-			tab_val_is_publish_claim(&val) ||
-			!tab_tv_forjit_loadable(&val)))
-	  return 0;
-	*present = !tvisnil(&val);
-	return 1;
+        return tab_len_slot_present(g, &n->val, present) &&
+               tv_rawload_acq(&n->key) == tv_rawload(&nodekey);
       }
       next = lj_tab_nextnode_acq(n);
       if (LJ_UNLIKELY(next &&
@@ -11062,26 +11165,25 @@ static int tab_len_snapshot_present(const TabForjitSnapshot *snap,
 /* One bounded length computation against a paired current generation. Unlike
 ** the legacy naked-pointer helper, this never waits or follows a vector after
 ** its snapshot has been taken. */
-static int tab_len_current_held(GCtab *t, MSize *lenp, int rooted_try)
+static int tab_len_snapshot(global_State *g, GCtab *t,
+                            const TabForjitSnapshot *snap,
+                            MSize *lenp, int rooted_try)
 {
-  TabForjitSnapshot snap;
   MSize len;
   uint32_t hi, lo, mid;
   int present;
 
-  if (!tab_forjit_snapshot_acq(t, &snap))
-    return 0;
-  hi = (uint32_t)snap.asize;
+  hi = (uint32_t)snap->asize;
   if (hi)
     hi--;
   if (hi > 0) {
-    if (!tab_len_snapshot_present(&snap, hi, &present))
+    if (!tab_len_snapshot_present(g, snap, hi, &present))
       return 0;
     if (!present) {
       lo = 0;
       while (hi - lo > 1u) {
 	mid = lo + ((hi - lo) >> 1);
-	if (!tab_len_snapshot_present(&snap, mid, &present))
+	if (!tab_len_snapshot_present(g, snap, mid, &present))
 	  return 0;
 	if (present)
 	  lo = mid;
@@ -11092,7 +11194,7 @@ static int tab_len_current_held(GCtab *t, MSize *lenp, int rooted_try)
       goto validate;
     }
   }
-  if (snap.hmask == 0) {
+  if (snap->hmask == 0) {
     len = (MSize)hi;
     goto validate;
   }
@@ -11100,7 +11202,7 @@ static int tab_len_current_held(GCtab *t, MSize *lenp, int rooted_try)
   lo = hi;
   hi++;
   for (;;) {
-    if (!tab_len_snapshot_present(&snap, hi, &present))
+    if (!tab_len_snapshot_present(g, snap, hi, &present))
       return 0;
     if (!present)
       break;
@@ -11113,7 +11215,7 @@ static int tab_len_current_held(GCtab *t, MSize *lenp, int rooted_try)
   }
   while (hi - lo > 1u) {
     mid = lo + ((hi - lo) >> 1);
-    if (!tab_len_snapshot_present(&snap, mid, &present))
+    if (!tab_len_snapshot_present(g, snap, mid, &present))
       return 0;
     if (present)
       lo = mid;
@@ -11124,10 +11226,32 @@ static int tab_len_current_held(GCtab *t, MSize *lenp, int rooted_try)
 
 validate:
   tab_test_len_rooted_try_before_current(rooted_try, t);
-  if (!tab_forjit_snapshot_current(t, &snap))
+  if (!tab_forjit_snapshot_current(t, snap))
     return 0;
   *lenp = len;
   return 1;
+}
+
+static int tab_len_current_held(GCtab *t, MSize *lenp, int rooted_try)
+{
+  TabForjitSnapshot snap;
+  return tab_forjit_snapshot_acq(t, &snap) &&
+         tab_len_snapshot(NULL, t, &snap, lenp, rooted_try);
+}
+
+static int tab_len_rooted_snapshot(lua_State *L, GCtab *t, MSize *lenp,
+                                   int rooted_try, int smr)
+{
+  LJGC2Lease array = {0}, nodes = {0};
+  TabForjitSnapshot snap;
+  int valid;
+  if (smr)
+    return tab_len_current_held(t, lenp, rooted_try);
+  valid = tab_snapshot_leased(L, t, &snap, &array, &nodes, 0, 0) &&
+          tab_len_snapshot(G(L), t, &snap, lenp, rooted_try);
+  lj_gc2_lease_release(&nodes);
+  lj_gc2_lease_release(&array);
+  return valid;
 }
 
 enum {
@@ -11244,25 +11368,17 @@ int32_t lj_tab_len_rooted_try(lua_State *L, cTValue *tabroot)
   GCtab *t = NULL;
   MSize len = 0;
   int32_t result = LJ_TAB_LEN_RETRY;
-  int table_lease_active = 0;
+  int smr;
 
   tab_test_len_rooted_try_call();
-  if (!L || !tabroot || !tab_keyed_slot_owner_snapshot(L, &owner) ||
-      !lj_gc2_smr_read_try(owner.g))
+  if (!L || !tabroot || !tab_keyed_slot_owner_snapshot(L, &owner))
     return LJ_TAB_LEN_RETRY;
-
-  /* Copy the mutable semantic root only after SMR admission, then retain that
-  ** exact table incarnation before following either structural vector. */
-  lj_tv_load_acq(&tablev, tabroot);
-  if (!tvistab(&tablev))
+  smr = lj_gc2_smr_read_try(owner.g);
+  if (lj_gc2_root_lease_acquire(owner.g, tabroot, &tablev, &table_lease, smr) !=
+        LJ_GC2_TV_EDGE_VALID || !tvistab(&tablev))
     goto leave;
-  if (lj_gc2_tv_lease_acquire(owner.g, &tablev, &table_lease) !=
-      LJ_GC2_TV_EDGE_VALID)
-    goto leave;
-  table_lease_active = 1;
   t = tabV(&tablev);
-
-  if (!tab_len_current_held(t, &len, 1))
+  if (!tab_len_rooted_snapshot(L, t, &len, 1, smr))
     goto leave;
 
   /* The generation check above is the length LP. The original root and exact
@@ -11280,9 +11396,8 @@ int32_t lj_tab_len_rooted_try(lua_State *L, cTValue *tabroot)
 leave:
   /* Drop vector/body provenance before closing its retaining SMR interval. */
   t = NULL;
-  lj_gc2_smr_read_leave(owner.g);
-  if (table_lease_active)
-    lj_gc2_lease_release(&table_lease);
+  if (smr) lj_gc2_smr_read_leave(owner.g);
+  lj_gc2_lease_release(&table_lease);
   return result;
 }
 
@@ -11357,20 +11472,12 @@ MSize lj_tab_len_rooted(lua_State *L, cTValue *tabroot)
     TValue tablev;
     GCtab *t;
     MSize len;
-    int table_status;
-
-    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(G(L)))) {
-      lj_tab_wait_l(L);
-      continue;
-    }
-    lj_tv_load_acq(&tablev, curtab);
-    if (LJ_UNLIKELY(!tvistab(&tablev))) {
-      lj_gc2_smr_read_leave(G(L));
-      return 0;
-    }
-    table_status = lj_gc2_tv_lease_acquire(G(L), &tablev, &table_lease);
-    if (LJ_UNLIKELY(table_status != LJ_GC2_TV_EDGE_VALID)) {
-      lj_gc2_smr_read_leave(G(L));
+    int smr = lj_gc2_smr_read_try(G(L));
+    int table_status = lj_gc2_root_lease_acquire(G(L), curtab, &tablev,
+                                                 &table_lease, smr);
+    if (LJ_UNLIKELY(table_status != LJ_GC2_TV_EDGE_VALID || !tvistab(&tablev))) {
+      if (smr) lj_gc2_smr_read_leave(G(L));
+      lj_gc2_lease_release(&table_lease);
       if (table_status == LJ_GC2_TV_EDGE_RETRY) {
 	lj_tab_wait_l(L);
 	continue;
@@ -11383,7 +11490,7 @@ MSize lj_tab_len_rooted(lua_State *L, cTValue *tabroot)
       LJTabRootedReaderRetryHook hook =
 	tab_test_rooted_reader_retry_take();
       if (hook) {
-	lj_gc2_smr_read_leave(G(L));
+	if (smr) lj_gc2_smr_read_leave(G(L));
 	lj_gc2_lease_release(&table_lease);
 	hook(L, t, LJ_TAB_ROOTED_READER_LEN);
 	lj_tab_wait_l(L);
@@ -11391,13 +11498,13 @@ MSize lj_tab_len_rooted(lua_State *L, cTValue *tabroot)
       }
     }
 #endif
-    if (!tab_len_current_held(t, &len, 0)) {
-      lj_gc2_smr_read_leave(G(L));
+    if (!tab_len_rooted_snapshot(L, t, &len, 0, smr)) {
+      if (smr) lj_gc2_smr_read_leave(G(L));
       lj_gc2_lease_release(&table_lease);
       lj_tab_wait_l(L);
       continue;
     }
-    lj_gc2_smr_read_leave(G(L));
+    if (smr) lj_gc2_smr_read_leave(G(L));
     lj_gc2_lease_release(&table_lease);
     return len;
   }
