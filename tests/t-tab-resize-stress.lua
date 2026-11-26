@@ -600,14 +600,7 @@ local function exercise_metatable_resize()
 	 "metatable __index probe changed after resize")
 end
 
--- Live trace counts are shared and can fall during collection; traceinfo also
--- returns no snapshot when a peer owns the recorder. Observe native exits in
--- the workers' actual resize loops instead of subtracting two global counts.
--- Attachments are universe-wide: the controller installs one stable handler
--- after every worker is ready and keeps it through every join. The monotone
--- per-worker witnesses exclude native execution by the controller itself.
--- Events may be dropped on admission/observer contention. A positive witness
--- proves coverage; zero reports missing evidence, not absent native execution.
+-- The controller owns the universe-wide callback until every worker joins.
 local function watch_worker_jit_exits(workers)
   local seen = {}
   for i = 1, #workers do seen[workers[i]:id()] = false end
@@ -630,37 +623,94 @@ local function watch_worker_jit_exits(workers)
 end
 jit.off(watch_worker_jit_exits, true)
 
-local function jit_store_worker(tbl, ready, start, key, n)
-  local okjit, jitmod = pcall(require, "jit")
-  if okjit and jitmod.status() then
-    jitmod.opt.start("hotloop=1", "hotexit=1")
-  end
-  for warm = 1, 128 do
-    tbl[key] = warm
-  end
-  assert(ready:send(true, 10) == true)
-  local _, ok = start:recv(10)
-  assert(ok == true)
-  local i = 1
-  while i <= n do
+local function jit_store_loop(tbl, key, n)
+  for i = 1, n do
     tbl[key] = i
     if i % 257 == 0 then tbl[key + 64] = nil end
-    i = i + 1
+  end
+end
+
+local store_probe_reps = 256
+
+local function watch_store_loop(tbl, worker, seen)
+  local util, names = require("jit.util"), require("jit.vmdef").bcnames
+  local bit = require("bit")
+  local id, loop_pc = worker:id()
+  for pc = 1, util.funcinfo(jit_store_loop).bytecodes - 1 do
+    local op = bit.band(util.funcbc(jit_store_loop, pc), 255) * 6
+    if names:sub(op+1, op+6) == "FORL  " then
+      loop_pc = pc
+      break
+    end
+  end
+  assert(loop_pc, "missing bytecode for worker store loop")
+
+  local function onexit(trace)
+    if seen.active ~= false or th.current():id() ~= id then return end
+    local ins = util.funcbc(jit_store_loop, loop_pc)
+    local op = bit.band(ins, 255) * 6
+    -- The probe starts with a different value. Seeing its final store
+    -- during this loop's native exit also rules out entry-only guards.
+    if names:sub(op+1, op+6) == "JFORL " and
+       bit.rshift(ins, 16) == trace and tbl[1] == store_probe_reps then
+      seen.active = true
+    end
+  end
+  jit.off(onexit)
+  jit.attach(onexit, "texit")
+  return onexit
+end
+jit.off(watch_store_loop)
+
+local function observe_store_loop(tbl, key, seen)
+  for _ = 1, 128 do
+    tbl[key] = 0
+    seen.active = false
+    jit_store_loop(tbl, key, store_probe_reps)
+    local observed = seen.active
+    seen.active = nil
+    if observed then return true end
+    -- A collector handshake can close native entry until another worker
+    -- acknowledges. Advance its work and let the other workers run.
+    collectgarbage("step", 256)
+    th.sleep(0.001)
+  end
+  return false
+end
+jit.off(observe_store_loop)
+
+local function jit_store_worker(tbl, ready, start, key, n, probe, seen)
+  assert(ready:send(true, 10))
+  if key == 1 then
+    assert(select(2, probe:recv(10)))
+    assert(ready:send(observe_store_loop(tbl, key, seen), 10))
+  end
+  assert(select(2, start:recv(10)))
+  jit_store_loop(tbl, key, n)
+  assert(tbl[key] == n, "worker store lost across resize")
+  if key == 1 then
+    assert(select(2, probe:recv(10)))
+    assert(observe_store_loop(tbl, key, seen), "no native worker store after resize")
+    jit_store_loop(tbl, key, n)
   end
   return true
 end
+jit.off(jit_store_worker)
 
 local function exercise_jit_store_resize()
   local t = {}
   for i = 1, 256 do t[i] = 0 end
   local nworkers = writers
   local ready, start = ready_start(nworkers)
-  local workers = {}
+  local workers, seen, probe = {}, {}, th.channel(1)
   for i = 1, nworkers do
-    workers[i] = th.spawn(jit_store_worker, t, ready, start, i, jit_reps)
+    workers[i] = th.spawn(jit_store_worker, t, ready, start, i, jit_reps, probe, seen)
   end
   harness.wait_ready(ready, nworkers, 10, "jit resize")
-  local finish_exits = watch_worker_jit_exits(workers)
+  jit.opt.start("hotloop=1", "hotexit=1")
+  local onexit = watch_store_loop(t, workers[1], seen)
+  assert(probe:send(true, 10))
+  assert(ready:recv(10), "no native worker store before resize")
   harness.release_start(start, nworkers, 10)
   for i = 1, reps do
     local k = 10000 + i
@@ -668,17 +718,16 @@ local function exercise_jit_store_resize()
     if i % 3 == 0 then t[k - 1] = nil end
     if i % 32 == 0 then collectgarbage("step") end
   end
-  harness.join_each(workers, function(result)
-    assert(result == true, tostring(result))
-  end, 30)
-  assert(finish_exits() > 0,
-	 "no native exit observed from JIT resize store workers")
+  assert(probe:send(true, 10))
+  harness.join_all(workers, 30)
+  jit.attach(onexit)
   for i = 1, nworkers do
     assert(t[i] == jit_reps, "traced store lost update across resize")
     assert_lua_value(t[i], "jit resize")
   end
   harness.fullgc(2)
 end
+jit.off(exercise_jit_store_resize)
 
 local function jit_read_worker(tbl, ready, start, array_key, hash_key, want, n)
   local assertf, typef, collect = assert, type, collectgarbage
