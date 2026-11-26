@@ -157,6 +157,9 @@ LJ_FUNCA BCIns LJ_FASTCALL lj_trace_invalidate_itern(jit_State *J,
 						      lua_State *L);
 LJ_FUNC uint32_t lj_trace_flushscope(jit_State *J, TraceNo traceno);
 LJ_FUNC int lj_trace_hasany(global_State *g);
+struct LJGC2Lease;
+LJ_FUNC GCtrace *lj_trace_published_lease(jit_State *J, TraceNo tr,
+                                          struct LJGC2Lease *body);
 LJ_FUNC int lj_trace_flushall(lua_State *L);
 LJ_FUNC int lj_trace_flushall_gc(lua_State *L);
 LJ_FUNC int lj_trace_flushall_hs(lua_State *L);

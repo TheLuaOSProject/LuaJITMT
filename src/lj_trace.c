@@ -10248,14 +10248,98 @@ uint32_t lj_trace_flushscope_retire_hs(global_State *g, uint64_t epoch)
   return retired;
 }
 
-/* Flush all traces. */
+/* Return 1 for a retained vector, 0 for an empty directory and -1 when its
+** generation changed or could not be retained. */
+static int tracevec_read_lease(jit_State *J, TraceVec **out, LJGC2Lease *lease)
+{
+  TraceVec *tv = tracevec_acq(J);
+  size_t span, header = offsetof(TraceVec, slot);
+  if (!tv) return 0;
+  if (!lj_gc2_storage_lease_try(J2G(J), tv, header, lease, &span))
+    return -1;
+  if (tracevec_acq(J) != tv || tv->sizetrace > (span - header) / sizeof(GCRef)) {
+    lj_gc2_lease_release(lease);
+    return -1;
+  }
+  *out = tv;
+  return 1;
+}
+
+/* The caller retains tv. A retired reservation still contains an address,
+** but its body no longer owns the public trace number. */
+static int trace_slot_read_lease(jit_State *J, TraceVec *tv, TraceNo tr,
+                                 GCtrace **out, LJGC2Lease *lease)
+{
+  TValue edge;
+  GCobj *obj = gcref_acq(tv->slot[tr]);
+  if ((uintptr_t)obj <= LJ_TRACE_PENDING) return 0;
+  if (!checkptrGC(obj)) return -1;
+  setgcVraw(&edge, obj, LJ_TTRACE);
+  if (lj_gc2_tv_lease_acquire(J2G(J), &edge, lease) != LJ_GC2_TV_EDGE_VALID)
+    return -1;
+  if (gcref_acq(tv->slot[tr]) != obj || tracevec_acq(J) != tv) {
+    lj_gc2_lease_release(lease);
+    return -1;
+  }
+  if (trace_traceno_acq((GCtrace *)obj) != tr) {
+    lj_gc2_lease_release(lease);
+    return 0;
+  }
+  *out = (GCtrace *)obj;
+  return 1;
+}
+
+GCtrace *lj_trace_published_lease(jit_State *J, TraceNo tr, LJGC2Lease *body)
+{
+  LJGC2Lease vector;
+  TraceVec *tv;
+  GCtrace *T = NULL;
+  if (!tr || tracevec_read_lease(J, &tv, &vector) <= 0)
+    return NULL;
+  if (tr < tv->sizetrace && trace_slot_read_lease(J, tv, tr, &T, body) > 0 &&
+      la_load64_acq(&T->retire_epoch) != 0) {
+    lj_gc2_lease_release(body);
+    T = NULL;
+  }
+  lj_gc2_lease_release(&vector);
+  return T;
+}
+
+static int trace_hasany_leased(jit_State *J)
+{
+  LJGC2Lease vector, body;
+  TraceVec *tv;
+  GCtrace *T;
+  MSize i;
+  int status = tracevec_read_lease(J, &tv, &vector);
+  if (status <= 0) return status != 0;
+  status = 0;
+  for (i = 1; i < tv->sizetrace; i++) {
+    status = trace_slot_read_lease(J, tv, i, &T, &body);
+    if (status != 0) {
+      if (status > 0) lj_gc2_lease_release(&body);
+      break;
+    }
+  }
+  /* An inconclusive scan conservatively requires normal invalidation. */
+  status = status != 0 || tracevec_acq(J) != tv ||
+           lj_trace_state_load(J) != LJ_TRACE_IDLE;
+  lj_gc2_lease_release(&vector);
+  return status;
+}
+
 int lj_trace_hasany(global_State *g)
 {
   jit_State *J = G2J(g);
   MSize i, sizetrace = trace_sizetrace_acq(J);
   if (lj_trace_state_load(J) != LJ_TRACE_IDLE)
     return 1;  /* Active recorder must still be aborted by the boundary. */
-  lj_gc2_smr_read_enter(g);
+  if (sizetrace == 0) return 0;
+  if (!lj_gc2_smr_read_try(g)) {
+    if (gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_META_EXCLUSIVE)
+      return trace_hasany_leased(J);
+    lj_gc2_smr_read_enter(g);
+  }
   for (i = 1; i < sizetrace; i++) {
     GCtrace *T = traceref_safe(J, i);
     if (T && trace_traceno_acq(T) == i) {

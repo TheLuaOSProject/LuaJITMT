@@ -387,6 +387,7 @@ static void test_live_inspection(int huge)
   lua_pushinteger(L, number);
   ljt_lua_pcall(L, 3, 1, "snapshot runnable trace");
   pause_reclaimer(&ctx);
+  assert(lj_trace_hasany(ctx.g));
   ljt_lua_pcall(L, 0, 0, "inspect runnable trace during metadata retirement");
   assert(lj_gc2_test_idle_reclaim_paused());
   lj_gc2_test_idle_reclaim_release();

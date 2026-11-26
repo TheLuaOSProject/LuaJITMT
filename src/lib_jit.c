@@ -717,12 +717,7 @@ static GCtrace *jit_trace_read_body(lua_State *L, TraceNo tr, JitTraceRead *read
 {
   global_State *g = G(L);
   jit_State *J = L2J(L);
-  TraceVec *tv;
-  LJGC2Lease vector;
   GCtrace *T;
-  size_t span;
-  GCobj *obj;
-  TValue edge;
   read->token = jit_trace_read_lock(L, J);
   if (read->token < 0) return NULL;
   read->smr = lj_gc2_smr_read_try(g);
@@ -730,26 +725,7 @@ static GCtrace *jit_trace_read_body(lua_State *L, TraceNo tr, JitTraceRead *read
   if (!tr || gc2_smr_reclaiming_acq(g) != LJ_GC2_SMR_META_EXCLUSIVE)
     return NULL;
   T = jit_current_trace(L, tr);
-  if (T) return T;
-  tv = tracevec_acq(J);
-  if (!tv || !lj_gc2_storage_lease_try(g, tv, offsetof(TraceVec, slot),
-                                       &vector, &span))
-    return NULL;
-  if (tracevec_acq(J) == tv && tr < tv->sizetrace &&
-      tr < (span - offsetof(TraceVec, slot)) / sizeof(GCRef)) {
-    obj = gcref_acq(tv->slot[tr]);
-    if ((uintptr_t)obj > LJ_TRACE_PENDING && checkptrGC(obj)) {
-      setgcVraw(&edge, obj, LJ_TTRACE);
-      if (lj_gc2_tv_lease_acquire(g, &edge, &read->body) ==
-	  LJ_GC2_TV_EDGE_VALID &&
-          gcref_acq(tv->slot[tr]) == obj && tracevec_acq(J) == tv &&
-          trace_traceno_acq((GCtrace *)obj) == tr &&
-          la_load64_acq(&((GCtrace *)obj)->retire_epoch) == 0)
-        T = (GCtrace *)obj;
-    }
-  }
-  lj_gc2_lease_release(&vector);
-  return T;
+  return T ? T : lj_trace_published_lease(J, tr, &read->body);
 }
 
 /* Native pins cover the separately mapped machine code and exit stubs. The

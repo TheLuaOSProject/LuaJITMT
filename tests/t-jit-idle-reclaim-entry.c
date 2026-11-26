@@ -328,6 +328,17 @@ static void check_first_attach_retirement(void)
   lua_rawgeti(L, -1, 79);
   assert(lua_tointeger(L, -1) == 553);
   lua_pop(L, 2);
+  lua_newtable(L);
+  lua_pushvalue(L, -1);
+  assert(lua_setupvalue(L, 1, 1) != NULL);
+  lua_pushvalue(L, 1);
+  lua_pushinteger(L, 8);
+  ljt_lua_pcall(L, 1, 1, "run with replaced upvalue after first-attach flush");
+  assert(lua_tointeger(L, -1) == 36);
+  lua_pop(L, 1);
+  lua_rawgeti(L, -1, 1);
+  assert(lua_tointeger(L, -1) == 36);
+  lua_pop(L, 2);
   assert(lj_gc2_test_idle_reclaim_paused() && !la_load32_acq(&run.done));
   lj_gc2_test_idle_reclaim_release();
   assert(pthread_join(entrant, NULL) == 0);
