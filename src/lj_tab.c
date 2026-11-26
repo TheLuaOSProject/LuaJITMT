@@ -323,6 +323,8 @@ static LJ_AINLINE void tab_read_enter_owner(TGState *tg)
     lj_tg_tab_read_epoch_rel(tg, gc2_hs_epoch_acq(tg->gl));
   }
   lj_tg_tab_read_depth_rel(tg, depth + 1u);
+  if (depth == 0)
+    la_fence_seq();  /* Publish before sampling a root that can be unlinked. */
 }
 
 static LJ_AINLINE void tab_read_leave_owner(TGState *tg)
@@ -474,15 +476,18 @@ static int tab_struct_desc_help(lua_State *L, GCtab *t, uint64_t control)
   TGState *tg = L ? L2TG(L) : lj_thr_get_tg();
   global_State *g = L ? G(L) : (tg ? tg->gl : NULL);
   TabResizeDesc *desc;
-  int changed = 0;
-  if (!g || !lj_gc2_smr_read_try(g))
+  int smr, changed = 0;
+  if (!g)
     return 0;
-  /*
-  ** SMR admission precedes the exact tag recheck and every descriptor
-  ** dereference. Registry publication precedes the tag CAS; terminal reclaim
-  ** cannot free a still-tagged descriptor, and the reader closes the detach
-  ** race after this recheck.
-  */
+  smr = lj_gc2_smr_read_try(g);
+  if (!smr) {
+    if (!tg || tg->gl != g ||
+	gc2_smr_reclaiming_acq(g) != LJ_GC2_SMR_META_EXCLUSIVE)
+      return 0;
+    tab_read_enter_owner(tg);
+  }
+  /* Both admissions precede the exact tag recheck. The table read epoch
+  ** retains a detached descriptor and its old vectors until this helper leaves. */
   if (lj_tab_struct_control_acq(t) == control) {
     desc = lj_tab_struct_control_desc(control);
     if (desc && lj_tab_resize_desc_tab_acq(desc) == t) {
@@ -490,18 +495,34 @@ static int tab_struct_desc_help(lua_State *L, GCtab *t, uint64_t control)
       changed = lj_tab_struct_control_acq(t) != control;
     }
   }
-  lj_gc2_smr_read_leave(g);
+  if (smr)
+    lj_gc2_smr_read_leave(g);
+  else
+    tab_read_leave_owner(tg);
   return changed;
 }
 
-/* Unlike the bounded query APIs, blocking Lua operations can complete a
-** published resize descriptor before they retry their lookup. The caller holds SMR. */
+/* The caller retains the table and holds SMR or a table read epoch. */
 static int tab_runtime_cutover_help_held(global_State *g, GCtab *t)
 {
   TabResizeDesc *desc = lj_tab_resize_desc_control_acq(t);
   return desc && (lj_tab_resize_desc_flags_acq(desc) &
 		  TAB_RESIZE_DESC_F_RUNTIME_CUTOVER) &&
     lj_tab_resize_desc_maintain_held(g, desc);
+}
+
+/* Blocking operations which retained the table through a typed lease may
+** finish its resize even while the metadata collector excludes SMR readers. */
+static void tab_runtime_cutover_help_leased(lua_State *L, GCtab *t)
+{
+  TGState *tg;
+  if (!lj_tab_struct_control_is_desc(lj_tab_struct_control_acq(t)) ||
+      gc2_smr_reclaiming_acq(G(L)) != LJ_GC2_SMR_META_EXCLUSIVE)
+    return;
+  tg = L2TG(L);
+  tab_read_enter_owner(tg);
+  (void)tab_runtime_cutover_help_held(G(L), t);
+  tab_read_leave_owner(tg);
 }
 
 void lj_tab_wait_array_retiring(const GCtab *t)
@@ -1606,8 +1627,9 @@ static uint32_t tab_rehash_hashcount(Node *oldnode, MSize oldhmask,
       if (tvisnil(&key)) {
 	continue;
       }
-      if (!tab_tv_snapshot_valid(&key) || !tab_tv_snapshot_valid(&val) ||
-	  tab_hash_key_hidden(&key))
+      /* Sizing needs only the numeric index or an occupied hash key. A dead
+      ** weak edge can overestimate capacity without touching its referent. */
+      if (tvistabinternal(&key))
 	continue;
       if (tab_val_absent(&val))
 	deadkey = 1;
@@ -2662,18 +2684,21 @@ static int tab_hash_move_capture_held(global_State *g, TabResizeDesc *desc,
     status = lj_gc2_tv_lease_acquire(g, &key, &key_lease);
     if (status == LJ_GC2_TV_EDGE_RETRY)
       return 0;
-    if (status == LJ_GC2_TV_EDGE_STALE)
-      goto absent;
   }
-  if (tvisgcv(&val)) {
+  if (status != LJ_GC2_TV_EDGE_STALE && tvisgcv(&val)) {
     status = lj_gc2_tv_lease_acquire(g, &val, &value_lease);
-    if (status == LJ_GC2_TV_EDGE_RETRY) {
-      lj_gc2_lease_release(&key_lease);
-      return 0;
-    }
-    if (status == LJ_GC2_TV_EDGE_STALE)
-      goto absent;
+    if (status == LJ_GC2_TV_EDGE_RETRY)
+      goto retry;
   }
+  if (tvisgcv(&key) || tvisgcv(&val)) {
+    TValue currentkey, currentval;
+    if (tab_hash_move_source(desc, idx, &currentkey, &currentval) != 1 ||
+	tv_rawload(&key) != tv_rawload(&currentkey) ||
+	tv_rawload(&val) != tv_rawload(&currentval))
+      goto retry;
+  }
+  if (status == LJ_GC2_TV_EDGE_STALE)
+    goto absent;
   if (tvisgcv(&key) && !tab_resize_key_is_weak(desc->migration_weak, &key))
     lj_gc2_barrier_tv_g(g, &key);
   if (tvisgcv(&val) &&
@@ -2693,6 +2718,10 @@ publish:
   lj_gc2_lease_release(&value_lease);
   lj_gc2_lease_release(&key_lease);
   return 1;
+retry:
+  lj_gc2_lease_release(&value_lease);
+  lj_gc2_lease_release(&key_lease);
+  return 0;
 }
 
 /*
@@ -3212,6 +3241,10 @@ static int tab_resize_array_copy_held(global_State *g, TabResizeDesc *desc)
       int status = lj_gc2_tv_lease_acquire(g, &val, &lease);
       if (status == LJ_GC2_TV_EDGE_RETRY)
 	return 0;
+      if (tv_rawload_acq(&desc->oldarray[i]) != tv_rawload(&val)) {
+	lj_gc2_lease_release(&lease);
+	return 0;
+      }
       if (status == LJ_GC2_TV_EDGE_STALE)
 	setnilV(&val);
       else {
@@ -3400,6 +3433,36 @@ static uint64_t tab_read_oldest_epoch(global_State *g)
   if (!saw_self && self != main_tg)
     tab_read_oldest_on_tg(g, self, &oldest);
   return oldest;
+}
+
+/* Take a fresh reader sample after the last route to the old generation was
+** removed. A helper can have obtained the old vector through a still-tagged
+** descriptor after the table itself published its successor. */
+static int tab_readers_past(global_State *g, uint64_t epoch)
+{
+  la_fence_seq();
+  return tab_read_oldest_epoch(g) > epoch;
+}
+
+static int tab_retire_owner_ready(global_State *g, uint64_t control,
+				  TabResizeDesc **ownerp, uint64_t *epoch)
+{
+  TabResizeDesc *owner = lj_tab_struct_control_desc(control);
+  uint64_t detached;
+  *ownerp = owner;
+  if (!owner)
+    return 1;
+  if (LJ_UNLIKELY(!lj_gc2_mem_registered_known_reclaim_held(g, owner) ||
+		  owner->retire_records == 0)) {
+    lj_assertG(0, "retired table storage lost its descriptor");
+    abort();
+  }
+  if (lj_tab_resize_desc_phase_acq(owner) != TAB_RESIZE_DESC_TERMINAL)
+    return 0;
+  detached = lj_tab_resize_desc_epoch_acq(owner);
+  if (*epoch < detached)
+    *epoch = detached;
+  return 1;
 }
 
 /*
@@ -3922,21 +3985,20 @@ static int tab_resize_offer_early(lua_State *L, GCtab *t,
 				       TabResizeDesc *desc, Node *node)
 {
   global_State *g = G(L);
-  TGState *tg = L2TG(L);
   uint64_t stable, weak, tagged;
   LJTabShape shape;
   uintptr_t cursor, begin, end;
-  int result = 0;
+  int smr;
   int installed = 0;
 
-  tab_read_enter_owner(tg);
-  if (!lj_gc2_smr_read_try(g))
-    goto release;
+  smr = lj_gc2_smr_read_try(g);
+  if (!smr && gc2_smr_reclaiming_acq(g) != LJ_GC2_SMR_META_EXCLUSIVE)
+    return 0;
   stable = lj_tab_struct_control_acq(t);
   if (lj_tab_struct_control_is_desc(stable)) {
-    lj_gc2_smr_read_leave(g);
+    if (smr) lj_gc2_smr_read_leave(g);
     (void)tab_struct_desc_help(L, t, stable);
-    goto release;
+    return 0;
   }
   shape.packed = la_load128_acq(&t->resize_shape);
   if (lj_tab_struct_control_owner(stable) ||
@@ -3946,19 +4008,15 @@ static int tab_resize_offer_early(lua_State *L, GCtab *t,
       (desc->newarray && (lj_tab_array_acq(t) != desc->oldarray ||
                          lj_tab_array_is_retiring(t, desc->oldarray))) ||
       shape.fields.asize != desc->oldasize ||
-      shape.fields.hmask != desc->oldhmask) {
-    lj_gc2_smr_read_leave(g);
-    goto release;
-  }
+      shape.fields.hmask != desc->oldhmask)
+    goto retry;
   cursor = (uintptr_t)mref(shape.fields.freetop, Node);
   begin = (uintptr_t)desc->oldnode;
   end = begin + ((MSize)desc->oldhmask + 1u) * sizeof(Node);
   if (desc->oldret ? cursor < begin || cursor > end :
       cursor != (uintptr_t)(desc->oldarray ?
-        (const void *)desc->oldarray : (const void *)&g->nilnode)) {
-    lj_gc2_smr_read_leave(g);
-    goto release;
-  }
+        (const void *)desc->oldarray : (const void *)&g->nilnode))
+    goto retry;
   tagged = lj_tab_struct_control_desc_word(desc);
   desc->oldshape = shape.packed;
   desc->newnode = node;
@@ -3977,6 +4035,7 @@ static int tab_resize_offer_early(lua_State *L, GCtab *t,
   if (desc->oldret) {
     tab_retire_init(L, desc->oldret, t, desc->oldnode, desc->oldhmask);
     desc->oldret->hold_control = tagged;
+    desc->retire_records++;
     tab_retire_preserve(g, desc->oldret);
   }
   if (node)
@@ -3984,6 +4043,7 @@ static int tab_resize_offer_early(lua_State *L, GCtab *t,
   if (desc->oldaret) {
     tab_array_retire_init(L, desc->oldaret, t, desc->oldarray, desc->oldacap);
     desc->oldaret->hold_control = tagged;
+    desc->retire_records++;
     tab_array_retire_preserve(g, desc->oldaret);
   }
   tab_resize_desc_publish(g, desc);
@@ -3991,7 +4051,7 @@ static int tab_resize_offer_early(lua_State *L, GCtab *t,
     tab_retired_push(g, desc->oldret);
   if (desc->oldaret)
     tab_array_retired_push(g, desc->oldaret);
-  lj_gc2_smr_read_leave(g);
+  if (smr) lj_gc2_smr_read_leave(g);
 
   tab_test_hash_install_at(L, t, 0);
   weak = lj_tab_weak_record_raw_acq(t);
@@ -4011,21 +4071,22 @@ static int tab_resize_offer_early(lua_State *L, GCtab *t,
       break;
   }
   if (!installed) {
-    while (!lj_gc2_smr_read_try(g))
+    while (!(smr = lj_gc2_smr_read_try(g)) &&
+	   gc2_smr_reclaiming_acq(g) != LJ_GC2_SMR_META_EXCLUSIVE)
       lj_tab_wait_no_l();
     (void)tab_resize_early_cancel(g, desc);
-    lj_gc2_smr_read_leave(g);
+    if (smr) lj_gc2_smr_read_leave(g);
   } else {
     while (lj_tab_struct_control_acq(t) == tagged) {
       if (!tab_struct_desc_help(L, t, tagged))
 	lj_tab_wait_no_l();
     }
   }
-  result = (lj_tab_resize_desc_flags_acq(desc) &
+  return (lj_tab_resize_desc_flags_acq(desc) &
 	    TAB_RESIZE_DESC_F_CUTOVER) ? 1 : -1;
-release:
-  tab_read_leave_owner(tg);
-  return result;
+retry:
+  if (smr) lj_gc2_smr_read_leave(g);
+  return 0;
 }
 
 static void tab_resize_discard_candidate(global_State *g,
@@ -4042,6 +4103,7 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize,
 		   uint32_t requested_hbits)
 {
   global_State *g = G(L);
+  TGState *tg = L2TG(L);
   MSize oldhmask;
   Node *oldnode;
   TValue *oldarray;
@@ -4075,6 +4137,7 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize,
   int alloc_failed = 0;
   GCSize reserved;
 
+  tab_read_enter_owner(tg);
 restart_resize:
   hbits = requested_hbits;
   oldnode = lj_tab_node_snapshot_acq(t, &oldhmask);
@@ -4091,10 +4154,8 @@ restart_resize:
   if ((oldhmask > 0 && !tab_node_free_ready(oldnode, oldhmask)) ||
       oldasize > LJ_MAX_ASIZE ||
       (oldarray_separated &&
-       (!tab_array_free_ready(oldarray, oldacap) || oldasize > oldacap))) {
-    lj_tab_wait_l(L);
-    goto restart_resize;
-  }
+       (!tab_array_free_ready(oldarray, oldacap) || oldasize > oldacap)))
+    goto wait_resize;
   array = oldarray;
   newacap = oldacap;
   array_changed = asize != oldasize;
@@ -4132,8 +4193,7 @@ restart_resize:
     if (lj_tab_struct_control_is_desc(control) &&
 	tab_struct_desc_help(L, t, control))
       goto restart_resize;
-    lj_tab_wait_l(L);
-    goto restart_resize;
+    goto wait_resize;
   }
   hashcount = tab_rehash_hashcount(oldnode, oldhmask, asize,
 				   &deadkey, &count_retry);
@@ -4158,11 +4218,8 @@ restart_resize:
       hashcount += tail;
     }
   }
-  if (count_retry) {
-    /* No raw generation pointer survives the safepoint-capable wait. */
-    lj_tab_wait_l(L);
-    goto restart_resize;
-  }
+  if (count_retry)
+    goto wait_resize;
   if (hashcount) {
     uint32_t needhbits = hsize2hbits(hashcount);
     if (hbits < needhbits)
@@ -4188,11 +4245,11 @@ restart_resize:
       hbits = oldhbits;
     }
   }
-  if (hbits > LJ_MAX_HBITS)
+  if (hbits > LJ_MAX_HBITS || (asize > oldasize && asize > LJ_MAX_ASIZE)) {
+    tab_read_leave_owner(tg);
     lj_err_msg(L, LJ_ERR_TABOV);
+  }
   target_hmask = hbits ? (((MSize)1u << hbits) - 1u) : 0;
-  if (asize > oldasize && asize > LJ_MAX_ASIZE)
-    lj_err_msg(L, LJ_ERR_TABOV);
   if (array_changed) {
     if (oldarray_separated) {
       newarray = 1;
@@ -4208,8 +4265,10 @@ restart_resize:
   ** when dead value slots are present: that compaction is observable as future
   ** insert capacity and cannot be skipped safely.
   */
-  if (!array_changed && oldhmask == target_hmask && !deadkey && !compact_hbits)
+  if (!array_changed && oldhmask == target_hmask && !deadkey && !compact_hbits) {
+    tab_read_leave_owner(tg);
     return;
+  }
   /*
   ** Another mutator may publish the requested generation after the snapshot
   ** above has been sized and counted. Recheck before allocating replacement
@@ -4222,10 +4281,8 @@ restart_resize:
     Node *curnode = lj_tab_node_snapshot_acq(t, &curhmask);
     curasize = lj_tab_array_snapshot_acq(t, &curarray);
     if (curnode != oldnode || curhmask != oldhmask ||
-	curarray != oldarray || (uint32_t)curasize != oldasize) {
-      lj_tab_wait_l(L);
-      goto restart_resize;
-    }
+	curarray != oldarray || (uint32_t)curasize != oldasize)
+      goto wait_resize;
   }
   /* Prepare privately. GC assistance runs only once the vectors are
   ** published or retained by a published descriptor. A failed reservation
@@ -4364,11 +4421,11 @@ restart_resize:
     }
     offered = tab_resize_offer_early(L, t, cutover, newnode);
     if (offered) {
+      tab_read_leave_owner(tg);
       lj_mem_account_deferred(L, reserved);
       if (offered > 0)
         return;
-      lj_tab_wait_l(L);
-      goto restart_resize;
+      goto wait_unpinned;
     }
     goto retry_resize;
   }
@@ -4493,6 +4550,7 @@ restart_resize:
     lj_assertL(oldret && la_load32_acq(&oldret->armed),
 	       "retired table nodes not armed");
   lj_tab_struct_leave(t, struct_acq);
+  tab_read_leave_owner(tg);
   lj_mem_account_deferred(L, reserved);
   return;
 
@@ -4511,9 +4569,17 @@ retry_resize:
   tab_array_retire_discard(g, oldaret);
   tab_resize_discard_candidate(g, cutover);
   lj_tab_struct_leave(t, struct_acq);
-  if (alloc_failed)
+  if (alloc_failed) {
+    tab_read_leave_owner(tg);
     lj_err_mem(L);
+  }
+wait_resize:
+  tab_read_leave_owner(tg);
+wait_unpinned:
+  /* A Lua fast pcall can catch a STOPREQ before the outer C entry returns.
+  ** Drop the generation pin before every throwing wait or allocation error. */
   lj_tab_wait_l(L);
+  tab_read_enter_owner(tg);
   goto restart_resize;
 }
 
@@ -4563,7 +4629,6 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
   TabNodeRetire *ret;
   TabArrayRetire *aret;
   TabResizeDesc *desc;
-  uint64_t oldest_reader;
   uint32_t reclaimed = 0;
   if (!g || completed_epoch == 0)
     return 0;
@@ -4577,7 +4642,6 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
   ** a newer epoch, so they do not delay old storage. The table-published root
   ** check remains a separate cold-path validation before physical free.
   */
-  oldest_reader = tab_read_oldest_epoch(g);
   /*
   ** Flush pending table roots once before the conservative published-root
   ** checks below. Each retired generation still gets its own root-list scan,
@@ -4593,7 +4657,9 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
   while (ret) {
     Node *node = NULL;
     MSize hmask = 0;
-    int current;
+    uint32_t armed;
+    uint64_t epoch;
+    TabResizeDesc *owner;
     if (LJ_UNLIKELY(
 	!lj_gc2_mem_registered_known_reclaim_held(g, ret))) {
       lj_assertG(0, "invalid detached table-node retire record");
@@ -4601,31 +4667,16 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
     }
     TabNodeRetire *next = lj_tab_node_retired_next_acq(ret);
     lj_tab_node_retired_next_rel(ret, NULL);
-    if (lj_tab_node_retired_armed_acq(ret) == TAB_NODE_RETIRE_CANCELED) {
-      TabResizeDesc *owner = lj_tab_struct_control_desc(ret->hold_control);
-      if (LJ_UNLIKELY(!owner ||
-	  !lj_gc2_mem_registered_known_reclaim_held(g, owner))) {
-	lj_assertG(0, "canceled retire record lost its descriptor");
-	abort();
-      }
-      if (lj_tab_resize_desc_phase_acq(owner) == TAB_RESIZE_DESC_TERMINAL) {
-	lj_mem_freet(g, ret);
-	reclaimed++;
-      } else {
-	tab_retired_push(g, ret);
-      }
-      ret = next;
-      continue;
-    }
-    current = tab_node_still_published(g, ret);
-    if (!lj_tab_node_retired_armed_acq(ret)) {
-      tab_retired_push(g, ret);
-    } else if (tab_retire_epoch_elapsed(completed_epoch,
-					lj_tab_node_retired_epoch_acq(ret)) &&
-		       oldest_reader > lj_tab_node_retired_epoch_acq(ret) &&
-		       current == 0 &&
-		       tab_node_reclaim_body_valid(g, ret, &node, &hmask)) {
-      tab_node_free(g, node, hmask);
+    armed = lj_tab_node_retired_armed_acq(ret);
+    epoch = lj_tab_node_retired_epoch_acq(ret);
+    if (armed && tab_retire_owner_ready(g, ret->hold_control, &owner, &epoch) &&
+	(armed == TAB_NODE_RETIRE_CANCELED ||
+	 (tab_retire_epoch_elapsed(completed_epoch, epoch) &&
+	  tab_node_still_published(g, ret) == 0 &&
+	  tab_node_reclaim_body_valid(g, ret, &node, &hmask))) &&
+	tab_readers_past(g, epoch)) {
+      if (node) tab_node_free(g, node, hmask);
+      if (owner) owner->retire_records--;
       lj_mem_freet(g, ret);
       reclaimed++;
     } else {
@@ -4641,7 +4692,9 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
   while (aret) {
     TValue *array = NULL;
     MSize acap = 0;
-    int current;
+    uint32_t armed;
+    uint64_t epoch;
+    TabResizeDesc *owner;
     if (LJ_UNLIKELY(
 	!lj_gc2_mem_registered_known_reclaim_held(g, aret))) {
       lj_assertG(0, "invalid detached table-array retire record");
@@ -4649,31 +4702,16 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
     }
     TabArrayRetire *next = lj_tab_array_retired_next_acq(aret);
     lj_tab_array_retired_next_rel(aret, NULL);
-    if (lj_tab_array_retired_armed_acq(aret) == TAB_ARRAY_RETIRE_CANCELED) {
-      TabResizeDesc *owner = lj_tab_struct_control_desc(aret->hold_control);
-      if (LJ_UNLIKELY(!owner ||
-          !lj_gc2_mem_registered_known_reclaim_held(g, owner))) {
-        lj_assertG(0, "canceled array retire record lost its descriptor");
-        abort();
-      }
-      if (lj_tab_resize_desc_phase_acq(owner) == TAB_RESIZE_DESC_TERMINAL) {
-        lj_mem_freet(g, aret);
-        reclaimed++;
-      } else {
-        tab_array_retired_push(g, aret);
-      }
-      aret = next;
-      continue;
-    }
-    current = tab_array_still_published(g, aret);
-    if (!lj_tab_array_retired_armed_acq(aret)) {
-      tab_array_retired_push(g, aret);
-    } else if (tab_retire_epoch_elapsed(completed_epoch,
-					lj_tab_array_retired_epoch_acq(aret)) &&
-		       oldest_reader > lj_tab_array_retired_epoch_acq(aret) &&
-		       current == 0 &&
-		       tab_array_reclaim_body_valid(g, aret, &array, &acap)) {
-      tab_array_free(g, array, acap);
+    armed = lj_tab_array_retired_armed_acq(aret);
+    epoch = lj_tab_array_retired_epoch_acq(aret);
+    if (armed && tab_retire_owner_ready(g, aret->hold_control, &owner, &epoch) &&
+	(armed == TAB_ARRAY_RETIRE_CANCELED ||
+	 (tab_retire_epoch_elapsed(completed_epoch, epoch) &&
+	  tab_array_still_published(g, aret) == 0 &&
+	  tab_array_reclaim_body_valid(g, aret, &array, &acap))) &&
+	tab_readers_past(g, epoch)) {
+      if (array) tab_array_free(g, array, acap);
+      if (owner) owner->retire_records--;
       lj_mem_freet(g, aret);
       reclaimed++;
     } else {
@@ -4716,12 +4754,13 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
     if (phase == TAB_RESIZE_DESC_TERMINAL && !tagged)
       tab_resize_desc_vm_guard_release(g, desc);
     if (phase == TAB_RESIZE_DESC_TERMINAL && !tagged &&
+	desc->retire_records == 0 &&
 	(!(lj_tab_resize_desc_flags_acq(desc) &
 	   TAB_RESIZE_DESC_F_VM_GUARD) ||
 	 (lj_tab_resize_desc_flags_acq(desc) &
 	  TAB_RESIZE_DESC_F_VM_GUARD_RELEASED)) &&
 	tab_retire_epoch_elapsed(completed_epoch, retire_epoch) &&
-	oldest_reader > retire_epoch) {
+	tab_readers_past(g, retire_epoch)) {
       tab_resize_desc_free(g, desc);
       reclaimed++;
     } else {
@@ -4859,7 +4898,7 @@ static uint32_t countarray(const GCtab *t, uint32_t *bins)
     for (n = 0; i <= top; i++) {
       TValue val;
       lj_tv_load_acq(&val, &array[i]);
-      if (!tab_val_absent(&val) && tab_tv_snapshot_valid(&val))
+      if (!tvisnil(&val) && !tvistabinternal(&val))
 	n++;
     }
     bins[b] += n;
@@ -4877,9 +4916,9 @@ static uint32_t counthash(const GCtab *t, uint32_t *bins, uint32_t *narray)
     Node *n = &node[i];
     TValue key, val;
     lj_tv_load_acq(&val, &n->val);
-    if (!tab_val_absent(&val) && tab_tv_snapshot_valid(&val)) {
+    if (!tvisnil(&val) && !tvistabinternal(&val)) {
       lj_tv_load_acq(&key, &n->key);
-      if (tab_tv_snapshot_valid(&key) && !tab_hash_key_hidden(&key)) {
+      if (!tvisnil(&key) && !tvistabinternal(&key)) {
 	na += countint(&key, bins);
 	total++;
       }
@@ -4954,12 +4993,15 @@ static void tab_unanchor_rehash_key(TabRootAnchor *anchor)
 
 static void rehashtab(lua_State *L, GCtab *t, cTValue *ek)
 {
+  TGState *tg = L2TG(L);
   uint32_t bins[LJ_MAX_ABITS];
   uint32_t total, asize, na, i;
   for (i = 0; i < LJ_MAX_ABITS; i++) bins[i] = 0;
+  tab_read_enter_owner(tg);
   asize = countarray(t, bins);
   total = 1 + asize;
   total += counthash(t, bins, &asize);
+  tab_read_leave_owner(tg);
   asize += countint(ek, bins);
   na = bestasize(bins, &asize);
   total -= na;
@@ -6304,6 +6346,8 @@ static int tab_gettv_rooted_try_impl(lua_State *L, cTValue *tabroot,
 
   if (!smr_active) {
     status = tab_get_leased_try(L, t, &keysnap, &result, &result_lease);
+    if (status == TAB_RESOLVE_RETRY && mode == TAB_ROOTED_GET_MODE_RAW)
+      tab_runtime_cutover_help_leased(L, t);
     if (mode != TAB_ROOTED_GET_MODE_NIL_NO_META)
       status = tab_resolve_public_status(status);
     if (status == TAB_RESOLVE_FOUND)
@@ -6551,7 +6595,7 @@ typedef struct TabKeyedStorage {
 } TabKeyedStorage;
 
 static int tab_keyed_storage_lookup(lua_State *L, GCtab *t, cTValue *key,
-                                    TabKeyedStorage *storage)
+                                    TabKeyedStorage *storage, int help)
 {
   global_State *g = G(L);
   TValue receiver, k, ignored;
@@ -6559,10 +6603,13 @@ static int tab_keyed_storage_lookup(lua_State *L, GCtab *t, cTValue *key,
   if (lj_gc2_tv_lease_acquire(g, &receiver, &storage->table) !=
         LJ_GC2_TV_EDGE_VALID ||
       lj_gc2_root_lease_acquire(g, key, &k, &storage->key, 0) !=
-        LJ_GC2_TV_EDGE_VALID || !tab_keyed_slot_key_valid(&k) ||
-      !tab_snapshot_leased(L, t, &storage->snap,
-                           &storage->array, &storage->nodes, 0, 0))
+        LJ_GC2_TV_EDGE_VALID || !tab_keyed_slot_key_valid(&k))
     return TAB_RESOLVE_RETRY;
+  if (!tab_snapshot_leased(L, t, &storage->snap,
+                           &storage->array, &storage->nodes, 0, 0)) {
+    if (help) tab_runtime_cutover_help_leased(L, t);
+    return TAB_RESOLVE_RETRY;
+  }
   return tab_resolve_keyed_snapshot(t, &k, &storage->snap, &storage->slot,
                                     &ignored, &storage->match);
 }
@@ -6595,7 +6642,7 @@ static int tab_resolve_current_keyed_try_raw(lua_State *L, GCtab *t,
     TabKeyedStorage storage = {0};
     if (gc2_smr_reclaiming_acq(g) != LJ_GC2_SMR_META_EXCLUSIVE)
       return TAB_RESOLVE_RETRY;
-    status = tab_keyed_storage_lookup(L, t, key, &storage);
+    status = tab_keyed_storage_lookup(L, t, key, &storage, 1);
     if (status == TAB_RESOLVE_FOUND)
       *slotp = storage.slot;
     tab_keyed_storage_release(&storage);
@@ -7461,7 +7508,7 @@ retry_insert:
   if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
     int status = TAB_RESOLVE_RETRY;
     if (gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_META_EXCLUSIVE)
-      status = tab_keyed_storage_lookup(L, t, key, &retained);
+      status = tab_keyed_storage_lookup(L, t, key, &retained, 1);
     if (status == TAB_RESOLVE_FOUND) {
       TValue *slot = retained.slot;
       tab_keyed_storage_release(&retained);
@@ -8921,7 +8968,7 @@ static int tab_trystoretv_cas_keyed_once_mode(lua_State *L,
     if (!L || gc2_smr_reclaiming_acq(g) != LJ_GC2_SMR_META_EXCLUSIVE)
       return LJ_TAB_STORE_CAS_STALE;
     storage = &retained;
-    if (tab_keyed_storage_lookup(L, parent, &keysnap, storage) != TAB_RESOLVE_FOUND)
+    if (tab_keyed_storage_lookup(L, parent, &keysnap, storage, 0) != TAB_RESOLVE_FOUND)
       goto leave;
   }
   if (!tab_store_slot_current(parent, dst, &keysnap, storage, &array)) {
@@ -11045,6 +11092,7 @@ int lj_tab_next_rooted(lua_State *L, cTValue *tabroot, cTValue *keyroot,
           !(tab_runtime_cutover_help_held(g, t) && tab_forjit_snapshot_acq(t, &snap)))
         goto leave;
     } else if (!tab_snapshot_leased(L, t, &snap, &array, &nodes, 0, 0)) {
+      tab_runtime_cutover_help_leased(L, t);
       goto leave;
     }
     status = tab_next_snapshot(g, &snap, &key, &k, &v, &klease, &vlease, &index);
@@ -11562,7 +11610,12 @@ MSize lj_tab_len_rooted(lua_State *L, cTValue *tabroot)
     }
 #endif
     if (!tab_len_rooted_snapshot(L, t, &len, 0, smr)) {
-      if (smr) lj_gc2_smr_read_leave(G(L));
+      if (smr) {
+	(void)tab_runtime_cutover_help_held(G(L), t);
+	lj_gc2_smr_read_leave(G(L));
+      } else {
+	tab_runtime_cutover_help_leased(L, t);
+      }
       lj_gc2_lease_release(&table_lease);
       lj_tab_wait_l(L);
       continue;

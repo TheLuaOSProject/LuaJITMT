@@ -26,11 +26,13 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_arena.h"
 #include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_meta.h"
 #include "lj_tab.h"
+#include "lj_tg.h"
 #include "lj_thr.h"
 
 typedef struct WeakWindowObserve {
@@ -217,6 +219,8 @@ static void test_replacing_during_retirement(void)
     "for i=1,3072 do t[i]=i; t['h'..i]=i end\n"
     "t[key]=true\n"
     "local store,eq = rawset,rawequal\n"
+    "local grow, labels = setmetatable({}, {__mode='kv'}), {}\n"
+    "for i=1,80 do labels[i] = i%2==0 and {} or ('k'..i) end\n"
     "return t,key,value,function()\n"
     "  t.h19=value; assert(eq(t.h19,value))\n"
     "  store(t,key,value); assert(eq(t[key],value))\n"
@@ -224,6 +228,8 @@ static void test_replacing_during_retirement(void)
     "  t[3071]=value; assert(eq(t[3071],value))\n"
     "  t.new_field=value; assert(eq(t.new_field,value))\n"
     "  local other={}; store(t,other,value); assert(eq(t[other],value))\n"
+    "  for i=1,80 do grow[i]=value; grow[labels[i]]=i end\n"
+    "  for i=1,80 do assert(eq(grow[i],value) and grow[labels[i]]==i) end\n"
     "end") == 0);
   assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
   lua_gc(L, LUA_GCSTOP, 0);
@@ -236,6 +242,17 @@ static void test_replacing_during_retirement(void)
   while (!lj_gc2_test_idle_reclaim_paused())
     (void)lj_thr_retry_yield(NULL);
   assert(mt_active_or_entering_acq(g));
+  lua_newtable(L);
+  for (int i = 1; i <= 256; i++) {
+    lua_pushvalue(L, 3);
+    lua_rawseti(L, -2, i);
+  }
+  for (int i = 1; i <= 256; i++) {
+    lua_rawgeti(L, -1, i);
+    assert(lua_rawequal(L, -1, 3));
+    lua_pop(L, 1);
+  }
+  lua_pop(L, 1);
   lua_pushvalue(L, 3);
   lua_rawseti(L, 1, 3072);
   lua_rawgeti(L, 1, 3072);
@@ -274,6 +291,135 @@ static void test_replacing_during_retirement(void)
   lua_close(L);
 }
 
+typedef struct PausedResize {
+  lua_State *peer;
+  GCtab *table;
+  uint32_t ready, start, publishing, resume;
+} PausedResize;
+
+static PausedResize *resize_pause;
+
+static void pause_before_root_change(lua_State *L, GCtab *t, TValue *array, MSize size)
+{
+  PausedResize *run = resize_pause;
+  UNUSED(L); UNUSED(array); UNUSED(size);
+  if (run->table != t)
+    return;
+  la_store32_rel(&run->publishing, 1);
+  while (!la_load32_acq(&run->resume))
+    sched_yield();
+}
+
+static void *resize_while_reclaiming(void *ud)
+{
+  PausedResize *run = (PausedResize *)ud;
+  assert(lj_threading_attach(run->peer));
+  la_store32_rel(&run->ready, 1);
+  while (!la_load32_acq(&run->start))
+    sched_yield();
+  lj_tab_resize(run->peer, run->table, 257, 5);
+  lj_threading_detach(run->peer, 1);
+  return NULL;
+}
+
+static void test_helping_during_retirement(int operation)
+{
+  lua_State *L = luaL_newstate();
+  StoreReclaimPeer collector = {0};
+  PausedResize resize = {0};
+  pthread_t reclaimer, issuer;
+  TabResizeDesc *desc;
+  TabNodeRetire *oldnodes;
+  TabArrayRetire *oldarray;
+  global_State *g;
+  const void *node_body, *array_body;
+  uint64_t epoch, id;
+  assert(L);
+  g = G(L);
+  lua_createtable(L, 64, 4);
+  resize.table = tabV(L->top - 1);
+  lua_pushinteger(L, 42); lua_rawseti(L, 1, 1);
+  lua_pushinteger(L, 99); lua_rawseti(L, 1, -1);
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+  resize.peer = lua_newthread(L);
+  lua_pushvalue(L, 1);
+  lua_xmove(L, resize.peer, 1);
+  collector.peer = lua_newthread(L);
+  resize_pause = &resize;
+  lj_tab_test_set_resize_hash_cutover_hook(pause_before_root_change);
+  assert(pthread_create(&issuer, NULL, resize_while_reclaiming, &resize) == 0);
+  assert(pthread_create(&reclaimer, NULL, retire_metadata, &collector) == 0);
+  while (!la_load32_acq(&resize.ready) || !la_load32_acq(&collector.ready))
+    (void)lj_thr_retry_yield(L);
+  lj_gc2_test_idle_reclaim_pause_after_jit_quiescence();
+  la_store32_rel(&collector.start, 1);
+  while (!lj_gc2_test_idle_reclaim_paused())
+    sched_yield();
+  la_store32_rel(&resize.start, 1);
+  while (!la_load32_acq(&resize.publishing))
+    sched_yield();
+  desc = lj_tab_resize_desc_control_acq(resize.table);
+  assert(desc && desc->oldret && desc->oldaret);
+  oldnodes = desc->oldret;
+  oldarray = desc->oldaret;
+  id = desc->id;
+  node_body = lj_tab_node_hdr(desc->oldnode);
+  array_body = lj_tab_array_hdr(desc->oldarray);
+  switch (operation) {
+  case 0:
+    lua_rawgeti(L, 1, -1);
+    assert(lua_tointeger(L, -1) == 99);
+    lua_pop(L, 1);
+    break;
+  case 1:
+    lua_pushinteger(L, 111);
+    lua_rawseti(L, 1, -1);
+    lua_rawgeti(L, 1, -1);
+    assert(lua_tointeger(L, -1) == 111);
+    lua_pop(L, 1);
+    break;
+  case 2:
+    lua_pushnil(L);
+    assert(lua_next(L, 1));
+    assert(lua_tointeger(L, -1) == (lua_tointeger(L, -2) == 1 ? 42 : 99));
+    lua_pop(L, 2);
+    break;
+  default:
+    assert(lua_objlen(L, 1) == 1);
+    break;
+  }
+  assert(lj_tab_resize_desc_control_acq(resize.table) == NULL);
+  assert(lj_gc2_test_idle_reclaim_paused());
+  lj_gc2_test_idle_reclaim_release();
+  assert(pthread_join(reclaimer, NULL) == 0);
+  epoch = lj_tab_resize_desc_epoch_acq(desc) + LJ_TAB_RETIRE_EPOCHS;
+  assert(lj_gc2_test_idle_reclaim_enter(g));
+  (void)lj_tab_reclaim_retired(g, epoch);
+  assert(lj_gc2_mem_registered_known_reclaim_held(g, desc));
+  assert(desc->retire_records == 2 && lj_tab_resize_desc_phase_acq(desc) ==
+         TAB_RESIZE_DESC_TERMINAL);
+  assert(lj_gc2_mem_registered_known_reclaim_held(g, oldnodes) &&
+         lj_gc2_mem_registered_known_reclaim_held(g, oldarray));
+  assert(lj_gc2_mem_registered_known_reclaim_held(g, node_body) &&
+         lj_gc2_mem_registered_known_reclaim_held(g, array_body));
+  lj_gc2_test_idle_reclaim_leave(g);
+  la_store32_rel(&resize.resume, 1);
+  assert(pthread_join(issuer, NULL) == 0);
+  lj_tab_test_set_resize_hash_cutover_hook(NULL);
+  resize_pause = NULL;
+  assert(lj_gc2_test_idle_reclaim_enter(g));
+  (void)lj_tab_reclaim_retired(g, epoch);
+  lj_gc2_test_idle_reclaim_leave(g);
+  assert(lj_gc2_smr_read_try(g));
+  assert(lj_tab_resize_desc_find_held(g, resize.table, id) == NULL);
+  lj_gc2_smr_read_leave(g);
+  (void)lj_arena_remote_free_drain_force(&g->main_tg->alloc);
+  assert(!lj_gc2_mem_registered_known(g, node_body) &&
+         !lj_gc2_mem_registered_known(g, array_body));
+  lua_close(L);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -301,6 +447,8 @@ int main(void)
   assert(gc2_weak_write_active_acq(g) == 0u);
   lua_close(L);
   test_replacing_during_retirement();
+  for (int i = 0; i < 4; i++)
+    test_helping_during_retirement(i);
   puts("gc2 public scalar weak-window regression passed");
   return 0;
 }

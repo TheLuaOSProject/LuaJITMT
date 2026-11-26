@@ -813,6 +813,7 @@ typedef struct TabResizeDesc {
   uint32_t snapshot_state;
   uint32_t phase;
   uint32_t flags;
+  uint32_t retire_records;  /* After publication, owned by the retire-list consumer. */
   struct TabResizeDesc *next;
 } TabResizeDesc;
 
