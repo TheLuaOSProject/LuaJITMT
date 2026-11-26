@@ -27,6 +27,7 @@ end, b)
 local wok, text, wlen = writer:join()
 assert(wok == true and text == "worker17" and wlen == 8)
 assert(tostring(b) == "worker17")
+assert("pre:" .. b .. ":post" == "pre:worker17:post")
 
 -- One writer may replace/compact/free backing storage while another state is
 -- concatenating the same buffer. Racy contents are intentionally unspecified,
@@ -44,6 +45,7 @@ local race_writer = th.spawn(function(shared)
     else
       shared:put(string.rep("c", 8193 + (i % 31)))
     end
+    if i % 193 == 0 then shared:free() end
     if i % 127 == 0 then collectgarbage("step", 64) end
   end
   return true
@@ -53,6 +55,7 @@ local race_reader = th.spawn(function(shared)
     local left = "<" .. shared
     local right = shared .. ">"
     assert(type(left) == "string" and type(right) == "string")
+    assert(left:sub(1, 1) == "<" and right:sub(-1) == ">")
     assert(#left <= 9000 and #right <= 9000)
     if i % 131 == 0 then collectgarbage("step", 64) end
   end
@@ -60,8 +63,8 @@ local race_reader = th.spawn(function(shared)
 end, raced)
 local rwok, rwdone = race_writer:join()
 local rrok, rrdone = race_reader:join()
-assert(rwok == true and rwdone == true)
-assert(rrok == true and rrdone == true)
+assert(rwok == true and rwdone == true, rwdone)
+assert(rrok == true and rrdone == true, rrdone)
 
 local source = buffer.new()
 source:put("return 21 * 2")

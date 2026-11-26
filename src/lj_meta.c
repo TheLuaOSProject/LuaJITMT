@@ -975,40 +975,46 @@ static int meta_buf_owner_valid(global_State *g, lua_State *owner)
 	  lj_state_thread_registry_valid(g, owner));
 }
 
-static SBufExt *meta_buf_sbx(lua_State *L, cTValue *o, LJGC2Lease *lease)
+static SBufExt *meta_buf_sbx(lua_State *L, cTValue *o, LJGC2Lease *lease,
+			     int retry)
 {
-  GCobj *gco;
   GCudata *ud;
-  SBufExt *sbx;
-  GCSize flags;
-  lua_State *owner;
+  int status;
   if (!lease)
     return NULL;
   memset(lease, 0, sizeof(*lease));
   if (!tvisudata(o))
     return NULL;
-  gco = gcval(o);
   /*
   ** A racy snapshot can retain a userdata tag after the cell was retired and
   ** reused. Validate the cell and the fixed buffer payload shape before reading
   ** SBufExt fields; plain tvisbuf() only checks the published udtype byte.
   */
-  if (lj_gc2_obj_lease_acquire(G(L), gco, (uint32_t)~LJ_TUDATA,
-	NULL, lease) < 0)
+  for (;;) {
+    status = lj_gc2_tv_lease_acquire(G(L), o, lease);
+    if (status != LJ_GC2_TV_EDGE_RETRY || !retry)
+      break;
+    lj_tab_wait_l(L);
+  }
+  if (status != LJ_GC2_TV_EDGE_VALID)
     return NULL;
-  ud = &gco->ud;
+  ud = udataV(o);
   if ((MSize)la_load32_acq(&ud->len) != sizeof(SBufExt) ||
-      lj_udata_udtype_acq(ud) != UDTYPE_BUFFER)
-    goto invalid;
-  sbx = (SBufExt *)uddata(ud);
-  flags = (GCSize)la_load64_acq(&sbx->L.ptr64);
-  owner = (lua_State *)(void *)(uintptr_t)(flags & SBUF_MASK_L);
-  if (!(flags & SBUF_FLAG_EXT) || !meta_buf_owner_valid(G(L), owner))
-    goto invalid;
-  return sbx;
-invalid:
-  lj_gc2_lease_release(lease);
-  return NULL;
+      lj_udata_udtype_acq(ud) != UDTYPE_BUFFER) {
+    lj_gc2_lease_release(lease);
+    return NULL;
+  }
+  return (SBufExt *)uddata(ud);
+}
+
+static int meta_cat_isbuf(lua_State *L, cTValue *o)
+{
+  LJGC2Lease lease;
+  /* Storage contention affects the copied contents, not the operand type. */
+  if (!meta_buf_sbx(L, o, &lease, 1))
+    return 0;
+  lj_gc2_lease_release(&lease);
+  return 1;
 }
 
 typedef struct MetaBufSnap {
@@ -1060,7 +1066,7 @@ static int meta_buf_data(lua_State *L, cTValue *o, const char **pp,
   uint32_t attempt;
   if (holdp)
     memset(holdp, 0, sizeof(*holdp));
-  sbx = meta_buf_sbx(L, o, &bodylease);
+  sbx = meta_buf_sbx(L, o, &bodylease, 0);
   if (!sbx)
     return 0;
 
@@ -1160,14 +1166,14 @@ static int meta_buf_putmem(lua_State *L, SBuf *sb, cTValue *o)
   return 1;
 }
 #else
+#define meta_cat_isbuf(L, o)			0
 #define meta_buf_data(L, o, pp, lenp, holdp)	0
 #define meta_buf_putmem(L, sb, o)		0
 #endif
 
 static LJ_AINLINE int meta_cat_compat(lua_State *L, cTValue *o)
 {
-  return tvisstr(o) || tvisnumber(o) ||
-	 meta_buf_data(L, o, NULL, NULL, NULL);
+  return tvisstr(o) || tvisnumber(o) || meta_cat_isbuf(L, o);
 }
 
 /* Helper for arithmetic instructions. Coercion, metamethod. */
