@@ -1499,7 +1499,7 @@ static int gc2_recovery_publish_scoped(global_State *g, GCobj *o,
 static int gc2_recovery_publish(global_State *g, GCobj *o);
 static LJ_AINLINE int gc2_recovery_work_pending(global_State *g);
 static LJ_AINLINE int gc2_recovery_failed_veto(global_State *g);
-static LJ_AINLINE int gc2_recovery_stalled_failed(global_State *g);
+static LJ_AINLINE int gc2_collection_stalled(global_State *g);
 static LJ_AINLINE int gc2_recovery_empty(global_State *g);
 static void gc2_recovery_fail_closed(global_State *g);
 static int gc2_publish_mutator_scoped(global_State *g, GCobj *o,
@@ -2782,7 +2782,7 @@ static int gc2_worker_park_timeout_ns(global_State *g)
 {
   enum { GC2_ACTIVE_PARK_TIMEOUT_NS = 10000000 };
   uint32_t phase = gc2_phase_acq(g);
-  if (gc2_recovery_stalled_failed(g))
+  if (gc2_collection_stalled(g))
     return -1;
   if (phase == LJ_GC2_IDLE && gc2_fixpoint_epoch_actions_acq(g) == 0 &&
       !(gc2_cycle_leader_acq(g) != 0 &&
@@ -3079,7 +3079,7 @@ int lj_gc2_collect_active(lua_State *L)
   /* A sticky classification failure deliberately has no synthetic queue
   ** identity. Once all real identities drain, full collection must return
   ** fail-closed instead of self-waiting forever for impossible work. */
-  if (gc2_recovery_stalled_failed(g))
+  if (gc2_collection_stalled(g))
     return 0;
   /* Full collection can wait for the result. Its root and policy handshakes
   ** must release collector ownership between attempts, just like a GC step. */
@@ -3093,7 +3093,7 @@ int lj_gc2_collect_active(lua_State *L)
     ** responsibility for progress after the callback releases its scope. */
     if (gc2_finalizer_active_acq(g) != 0)
       return 0;
-    if (gc2_recovery_stalled_failed(g))
+    if (gc2_collection_stalled(g))
       return 0;
     /* Gate closure is an asynchronous request, not permission for explicit
     ** collection to wait on a peer's jit_base. This is expected in pre-MARK
@@ -3248,7 +3248,7 @@ static int gc2_step(lua_State *L, uint32_t budget, uint32_t sweep_limit)
     budget = (1u << 20);
   while (budget-- != 0) {
     uint32_t phase = gc2_phase_acq(g);
-    if (gc2_recovery_stalled_failed(g))
+    if (gc2_collection_stalled(g))
       break;
     if (phase != LJ_GC2_IDLE)
       drove_cycle = 1;
@@ -11187,9 +11187,14 @@ static LJ_AINLINE int gc2_recovery_failed_veto(global_State *g)
   return g && gc2_recovery_failed_acq(g) != 0;
 }
 
-static LJ_AINLINE int gc2_recovery_stalled_failed(global_State *g)
+static LJ_AINLINE int gc2_collection_stalled(global_State *g)
 {
-  return !gc2_recovery_work_pending(g) && gc2_recovery_failed_veto(g);
+  /* A failed store guard or a saturated epoch can pin the activation
+  ** without a recovery failure. After real recovery work drains, neither
+  ** case can complete the cycle or wake a collector waiting for progress. */
+  return !gc2_recovery_work_pending(g) &&
+    (gc2_recovery_failed_veto(g) ||
+     lj_gc2_activation_snapshot(&g->gc2.activation).state == LJ_GC2_ACT_NO_RECLAIM);
 }
 
 static LJ_AINLINE int gc2_recovery_empty(global_State *g)

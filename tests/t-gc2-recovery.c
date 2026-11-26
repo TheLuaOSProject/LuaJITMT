@@ -2592,6 +2592,33 @@ static void test_terminal_preflight_preserves_mismatch_locator(void)
   recovery_fixture_close(&f);
 }
 
+static void test_pinned_sweep_full_collection(void)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  LJGC2ActivationSnap sweep, pinned, after;
+  uint32_t i;
+
+  assert(lua_gc(f.L, LUA_GCCOLLECT, 0) == 0);
+  for (i = 0; i < 4096 && gc2_phase_acq(f.g) != LJ_GC2_SWEEP; i++)
+    lua_gc(f.L, LUA_GCSTEP, 1);
+  assert(gc2_phase_acq(f.g) == LJ_GC2_SWEEP);
+  for (i = 0; i < 4096 && !gc2_sweep_bridge_ready_acq(f.g); i++)
+    lj_gc2_sweep_prepare_bridge_boundary(f.g, NULL);
+  assert(gc2_sweep_bridge_ready_acq(f.g));
+  sweep = lj_gc2_activation_snapshot(&f.g->gc2.activation);
+  assert(lj_gc2_activation_try_transition(&f.g->gc2.activation, &sweep,
+	   sweep.mark_epoch, LJ_GC2_ACT_NO_RECLAIM, &pinned) == LJ_GC2_TRANSITION_OK);
+  assert(gc2_recovery_failed_acq(f.g) == 0);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(lua_gc(f.L, LUA_GCCOLLECT, 0) == 0);
+  assert(lj_gc2_collect_active(f.L) == 0);
+  assert(lua_gc(f.L, LUA_GCSTEP, 200) == 0);
+  after = lj_gc2_activation_snapshot(&f.g->gc2.activation);
+  assert(lj_gc2_activation_equal(&after, &pinned));
+  assert(gc2_phase_acq(f.g) == LJ_GC2_SWEEP);
+  lua_close(f.L);
+}
+
 static void test_sticky_failure_without_items_is_bounded(void)
 {
   RecoveryFixture f = recovery_fixture_open();
@@ -2667,6 +2694,8 @@ int main(int argc, char **argv)
       test_postrestore_claimant_one(0);
     else if (!strcmp(argv[1], "postrestore-abandon"))
       test_postrestore_claimant_one(1);
+    else if (!strcmp(argv[1], "pinned-collect"))
+      test_pinned_sweep_full_collection();
     else if (!strcmp(argv[1], "grey-observer")) {
       test_grey_observer_growth(0);
       test_grey_observer_growth(3 * LJ_GC2_GREY_EMBEDDED + 17);
@@ -2680,7 +2709,8 @@ int main(int argc, char **argv)
   if (argc != 1) {
     fprintf(stderr, "usage: %s [sampled-commit|sampled-abandon|"
 	    "drain-commit|drain-abandon|unrelated-mutating|"
-	    "postrestore-commit|postrestore-abandon|grey-observer]\n", argv[0]);
+	    "postrestore-commit|postrestore-abandon|grey-observer|pinned-collect]\n",
+	    argv[0]);
     return 2;
   }
   test_full_active_ssb_fallback();
@@ -2718,6 +2748,7 @@ int main(int argc, char **argv)
   test_lost_rollback_counts_fail_stop();
   test_terminal_preflight_preserves_mismatch_locator();
   test_sticky_failure_without_items_is_bounded();
+  test_pinned_sweep_full_collection();
   printf("t-gc2-recovery OK: no-drop SSB/recovery, exact huge-lane "
 	 "accounting/skip, SWEEP-stable late/saturated admission, retryable Huge "
 	 "destructors, held-reader SMR bypass, bounded terminal free, "
