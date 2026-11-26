@@ -249,8 +249,7 @@ static void run_case(int mode)
     assert(pthread_join(ctx.reclaimer, NULL) == 0);
     assert(la_load32_acq(&ctx.reclaimer_done));
   }
-  if (mode != PAUSE_BEFORE_EVENT)
-    assert(ctx.aborted == 1 && ctx.inspected == 1);
+  assert(ctx.aborted == 1 && ctx.inspected == 1);
   if (mode == CLOSE_PENDING) {
     /* Close consumes the existing ordinary-public-slot path at epoch zero. */
     lua_close(L);
@@ -311,6 +310,45 @@ static void run_case(int mode)
   printf("root ABORT mode=%d OK\n", mode);
 }
 
+static void test_live_inspection(void)
+{
+  lua_State *L = new_state();
+  RootAbortCtx ctx = {0};
+  int probe = new_probe(L, &ctx);
+  TraceNo tr;
+  alarm(15);
+  for (unsigned i = 0; i < 8; i++)
+    call_probe(L, probe);
+  tr = proto_trace_acq(ctx.pt);
+  assert(tr != 0);
+  ljt_lua_dostring(L,
+    "local u = require('jit.util')\n"
+    "return function(tr)\n"
+    "  local info = assert(u.traceinfo(tr))\n"
+    "  local first, last = {u.traceir(tr, 1)}, {u.traceir(tr, info.nins)}\n"
+    "  assert(#first == 5 and #last == 5)\n"
+    "  local function verify()\n"
+    "    local got = assert(u.traceinfo(tr))\n"
+    "    for k,v in pairs(info) do assert(got[k] == v) end\n"
+    "    local a, b = {u.traceir(tr, 1)}, {u.traceir(tr, info.nins)}\n"
+    "    for i=1,5 do assert(a[i] == first[i] and b[i] == last[i]) end\n"
+    "    assert(select('#', u.traceinfo(0)) == 0)\n"
+    "    assert(select('#', u.traceir(tr, info.nins + 1)) == 0)\n"
+    "  end\n"
+    "  jit.off(verify, true)\n"
+    "  return verify\n"
+    "end");
+  lua_pushinteger(L, tr);
+  ljt_lua_pcall(L, 1, 1, "snapshot runnable trace");
+  pause_reclaimer(&ctx);
+  ljt_lua_pcall(L, 0, 0, "inspect runnable trace during metadata retirement");
+  assert(lj_gc2_test_idle_reclaim_paused());
+  lj_gc2_test_idle_reclaim_release();
+  assert(pthread_join(ctx.reclaimer, NULL) == 0);
+  lua_close(L);
+  alarm(0);
+}
+
 static void test_capacity(void)
 {
   lua_State *L = new_state();
@@ -350,6 +388,7 @@ int main(void)
   run_case(ORDINARY);
   run_case(FLUSH_IN_EVENT);
   run_case(CLOSE_PENDING);
+  test_live_inspection();
   test_capacity();
   puts("t-jit-root-abort-retire OK");
   return 0;

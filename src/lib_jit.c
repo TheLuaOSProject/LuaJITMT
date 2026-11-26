@@ -655,11 +655,9 @@ LJLIB_CF(jit_util_funcuvname)
 
 #if LJ_HASJIT
 
-/* Check trace number. Must not throw for non-existent trace numbers. */
-static GCtrace *jit_checktrace_tr(lua_State *L, TraceNo tr)
+static GCtrace *jit_current_trace(lua_State *L, TraceNo tr)
 {
   jit_State *J = L2J(L);
-  TraceVec *tv = tracevec_acq(J);
   lua_State *owner = jit_owner_l_acq(J);
   if (tr > 0 && lj_trace_state_load(J) != LJ_TRACE_IDLE &&
       trace_traceno_acq(&J->cur) == tr &&
@@ -673,6 +671,16 @@ static GCtrace *jit_checktrace_tr(lua_State *L, TraceNo tr)
     */
     return &J->cur;
   }
+  return NULL;
+}
+
+/* Check trace number. Must not throw for non-existent trace numbers. */
+static GCtrace *jit_checktrace_tr(lua_State *L, TraceNo tr)
+{
+  GCtrace *cur = jit_current_trace(L, tr);
+  TraceVec *tv;
+  if (cur) return cur;
+  tv = tracevec_acq(L2J(L));
   if (tr > 0 && tv && (MSize)tr < tv->sizetrace) {
     GCtrace *T = traceref_fromgco_safe(gcref_acq(tv->slot[tr]));
     if (T && trace_traceno_acq(T) == tr &&
@@ -709,6 +717,60 @@ static LJ_AINLINE int jit_trace_read_smr_try(lua_State *L, jit_State *J,
   return 0;
 }
 
+typedef struct JitTraceRead {
+  int token, smr;
+  LJGC2Lease body;
+} JitTraceRead;
+
+/* A committed trace stores its header and IR in one allocation. Bind a
+** typed lease to its exact vector slot when a metadata collector is active.
+** The recorder token also keeps the owner-private J->cur IR buffer stable. */
+static GCtrace *jit_trace_read_body(lua_State *L, TraceNo tr, JitTraceRead *read)
+{
+  global_State *g = G(L);
+  jit_State *J = L2J(L);
+  TraceVec *tv;
+  LJGC2Lease vector;
+  GCtrace *T;
+  size_t span;
+  GCobj *obj;
+  TValue edge;
+  read->token = jit_trace_read_lock(L, J);
+  if (read->token < 0) return NULL;
+  read->smr = lj_gc2_smr_read_try(g);
+  if (read->smr) return jit_checktrace_tr(L, tr);
+  if (!tr || gc2_smr_reclaiming_acq(g) != LJ_GC2_SMR_META_EXCLUSIVE)
+    return NULL;
+  T = jit_current_trace(L, tr);
+  if (T) return T;
+  tv = tracevec_acq(J);
+  if (!tv || !lj_gc2_storage_lease_try(g, tv, offsetof(TraceVec, slot),
+                                       &vector, &span))
+    return NULL;
+  if (tracevec_acq(J) == tv && tr < tv->sizetrace &&
+      tr < (span - offsetof(TraceVec, slot)) / sizeof(GCRef)) {
+    obj = gcref_acq(tv->slot[tr]);
+    if ((uintptr_t)obj > LJ_TRACE_PENDING && checkptrGC(obj)) {
+      setgcVraw(&edge, obj, LJ_TTRACE);
+      if (lj_gc2_tv_lease_acquire(g, &edge, &read->body) ==
+	  LJ_GC2_TV_EDGE_VALID &&
+          gcref_acq(tv->slot[tr]) == obj && tracevec_acq(J) == tv &&
+          trace_traceno_acq((GCtrace *)obj) == tr &&
+          la_load64_acq(&((GCtrace *)obj)->retire_epoch) == 0)
+        T = (GCtrace *)obj;
+    }
+  }
+  lj_gc2_lease_release(&vector);
+  return T;
+}
+
+static void jit_trace_read_end(lua_State *L, JitTraceRead *read)
+{
+  lj_gc2_lease_release(&read->body);
+  if (read->smr) lj_gc2_smr_read_leave(G(L));
+  jit_trace_read_unlock(L, L2J(L), read->token);
+}
+
 /* Names of link types. ORDER LJ_TRLINK */
 static const char *const jit_trlinkname[] = {
   "none", "root", "loop", "tail-recursion", "up-recursion", "down-recursion",
@@ -738,18 +800,12 @@ static LJ_AINLINE MCode *jit_traceexitstub_addr_acq(const GCtrace *T,
 LJLIB_CF(jit_util_traceinfo)
 {
   TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
-  jit_State *J = L2J(L);
-  int token = jit_trace_read_lock(L, J);
-  GCtrace *T;
+  JitTraceRead read = {0};
+  GCtrace *T = jit_trace_read_body(L, tr, &read);
   IRRef nins = 0, nk = 0;
   SnapNo nsnap = 0;
   TraceLink linktype = LJ_TRLINK_NONE;
   TraceNo link = 0;
-  if (token < 0)
-    return 0;
-  if (!jit_trace_read_smr_try(L, J, token))
-    return 0;
-  T = jit_checktrace_tr(L, tr);
   if (T) {
     GCtab *t;
     nins = trace_nins_acq(T);
@@ -757,8 +813,7 @@ LJLIB_CF(jit_util_traceinfo)
     nsnap = trace_nsnap_acq(T);
     linktype = trace_linktype_acq(T);
     link = trace_link_acq(T);
-    lj_gc2_smr_read_leave(G(L));
-    jit_trace_read_unlock(L, J, token);
+    jit_trace_read_end(L, &read);
     lua_createtable(L, 0, 8);  /* Increment hash size if fields are added. */
     t = tabV(L->top-1);
     setintfield(L, t, "nins", (int32_t)nins - REF_BIAS - 1);
@@ -771,8 +826,7 @@ LJLIB_CF(jit_util_traceinfo)
     lj_gc_pubtab(L, t);
     return 1;
   }
-  lj_gc2_smr_read_leave(G(L));
-  jit_trace_read_unlock(L, J, token);
+  jit_trace_read_end(L, &read);
   return 0;
 }
 
@@ -781,22 +835,15 @@ LJLIB_CF(jit_util_traceir)
 {
   TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
   IRRef ref = (IRRef)lj_lib_checkint(L, 2) + REF_BIAS;
-  jit_State *J = L2J(L);
-  int token = jit_trace_read_lock(L, J);
-  GCtrace *T;
+  JitTraceRead read = {0};
+  GCtrace *T = jit_trace_read_body(L, tr, &read);
   IRIns ir;
   int have = 0;
-  if (token < 0)
-    return 0;
-  if (!jit_trace_read_smr_try(L, J, token))
-    return 0;
-  T = jit_checktrace_tr(L, tr);
   if (T && ref >= REF_BIAS && ref < trace_nins_acq(T)) {
     ir = ir_load_acq(&trace_ir_acq(T)[ref]);
     have = 1;
   }
-  lj_gc2_smr_read_leave(G(L));
-  jit_trace_read_unlock(L, J, token);
+  jit_trace_read_end(L, &read);
   if (have) {
     int32_t m = lj_ir_mode[ir.o];
     setintV(L->top-2, m);

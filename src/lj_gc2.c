@@ -7688,8 +7688,9 @@ static int gc2_tv_admit_scoped_impl(global_State *g, cTValue *tv,
   if (itype(tv) == LJ_TSTR && o == obj2gco(&g->strempty))
     return o->gch.gct == ~LJ_TSTR ?
 	   GC2_TV_SCOPE_ADMITTED : GC2_TV_SCOPE_STALE;
-  allow_idle = tvisstr(tv) || (value_read && (tviscdata(tv) || tvistab(tv) ||
-					      tvisudata(tv) || tvisfunc(tv)));
+  allow_idle = tvisstr(tv) ||
+    (value_read && (tviscdata(tv) || tvistab(tv) || tvisudata(tv) ||
+                    tvisfunc(tv) || itype(tv) == LJ_TTRACE));
   status = gc2_observed_obj_status_scoped_impl(g, o, &gct, scope, startp,
 					       allow_idle);
   if (status < 0)
