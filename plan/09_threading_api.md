@@ -164,21 +164,20 @@ private-environment GC root is release-published through `setgcrefroot()` and
 acquire-loaded in lib_threading readers. The old live-table root from the
 original report has been replaced by CAS-published `LJThreadLive` nodes whose
 `GCRef ud` is release-published and acquire-scanned by legacy GC and GC2.
-Current implementation note: spawned child stacks are now moved to the child
-TG's arena before the pthread is published/started. The original spawn flow
-created `lua_newthread()` stacks in the parent/main arena, which was faithful
-to legacy single-thread allocation but not to the per-owner arena rule from
-04. `lj_state_rehome_stack()` preserves the original stack contents and pointer
-offsets, accounts the allocation to the worker TG, and frees the parent-arena
-stack while only the spawning thread can touch it.
+The parent owns the initial coroutine stack and the startup argument vector
+before creating a native worker. The worker calls `lj_state_rehome_stack()`
+after claiming the coroutine and before executing user code. That move uses
+the worker's allocator, preserves stack-relative references and routes the
+old stack back to its allocator. A failed move reports a memory error through
+the parent. [Spawn and stack regression](../tests/t-threading-spawn-native.c)
 
-The temporary M4 active-child GC pause treats `g->gc.threshold` and the saved
+The historical M4 active-child GC pause treated `g->gc.threshold` and the saved
 `g->mt_gc_threshold` as shared handoff words. C-side checks and updates go
 through `lj_gc_threshold_*()` / `lj_gc_mt_threshold_*()` helpers, and
 `lua_gc(stop/restart)` replays its saved logical threshold to the real
 threshold if `mt_live` reaches zero during the update. Explicit legacy
 `collect` / `step` claim `mt_gc_exclusive` only after observing `mt_live == 0`
-and rechecking it after the claim; secondary `spawn` / `luaMT_attach()` entry
+and rechecking it after the claim; secondary spawn or foreign-thread attachment
 waits out that slow-path word before incrementing `mt_live`. If peers are
 already live, explicit `collect` / `step` now request a GC2 cycle and save the
 pending driver threshold in `mt_gc_threshold` instead of running the legacy
@@ -244,18 +243,14 @@ Per-TG PRNG (03 §3.3): streams are independent per thread;
 `math.randomseed(s)` seeds the calling thread; spawn derives child seed =
 splitmix(parent_seed, tid) so unseeded programs don't correlate. Document.
 
-## 9.9 C API additions (lua.h additions)
-```
-lua_State *luaMT_spawn(lua_State *L, int nargs);   /* like spawn, f+args on stack */
-int  luaMT_join(lua_State *L, lua_State *child, lua_Number timeout);
-void luaMT_fence(void);
-int  luaMT_attach(lua_State *L);  /* adopt foreign OS thread: builds TG,
-        claims a fresh lua_State; for embedders driving their own pools */
-void luaMT_detach(lua_State *L);
-```
-lua_lock/lua_unlock remain no-ops (the design point of the whole project).
-Rules for embedders: a lua_State may be used only by its owner thread or
-after explicit claim (06 §6.7); document loudly in luajit.h comments.
+## 9.9 Public threading interface
+
+Programs create workers, join them, and exchange values through
+`require("threading")`. Embedders can call the same module through the
+stock Lua C API. The runtime claims a separate `lua_State` when a
+foreign thread enters through an FFI callback. The attach/detach functions
+used by that path and the C fixtures are internal. A host must keep each
+Lua stack under one execution owner at a time. [Threading extension surface](../notes/archive/pre-aarch64/threading-extension-surface.md), [Lua module interface](../etc/threading.lua)
 
 ## 9.10 allocator note
 All Lua threads share the allocator installed on their state. A Linux x64
