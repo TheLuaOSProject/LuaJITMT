@@ -1,10 +1,7 @@
 /* A detached PLAIN owner can lose individual mappings during live SWEEP. */
 #include <assert.h>
-#include <errno.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/mman.h>
-#include <unistd.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -22,6 +19,21 @@ static GCArena *blocked, *empty, *late_arena;
 static void *late_block;
 static LJHugeReader directory_reader;
 static LJGC2Lease body_reader;
+static GCArena *unmap_targets[2];
+static uint32_t unmapped_targets[2];
+
+int __real_munmap(void *p, size_t size);
+
+int __wrap_munmap(void *p, size_t size)
+{
+  int result = __real_munmap(p, size);
+  if (result == 0 && size == LJ_ARENA_SIZE) {
+    for (unsigned i = 0; i < 2; i++)
+      if (p == la_loadptr_acq((void *const *)&unmap_targets[i]))
+	la_store32_rel(&unmapped_targets[i], 1);
+  }
+  return result;
+}
 
 static int all_free(GCArena *a)
 {
@@ -54,6 +66,8 @@ static int seed_plain(lua_State *L)
   while (count != 0)
     lj_mem_free(g, probes[--count], LJ_HUGE_THRESHOLD);
   assert(all_free(blocked) && all_free(empty));
+  la_storeptr_rel((void **)&unmap_targets[0], blocked);
+  la_storeptr_rel((void **)&unmap_targets[1], empty);
   /* Model a reader paused between directory admission and arena handoff. */
   assert(lj_arena_hugetab_reader_acquire(registry, blocked,
     &directory_reader, NULL) == LJ_ARENA_HUGE_READER_ACQUIRED);
@@ -73,13 +87,12 @@ static int hold_late(lua_State *L)
   return 0;
 }
 
-static int unmapped(HugeTab *registry, GCArena *a)
+static int unmapped(HugeTab *registry, unsigned index)
 {
-  unsigned char resident;
+  GCArena *a = (GCArena *)la_loadptr_acq((void *const *)&unmap_targets[index]);
   assert(lj_arena_hugetab_lookup(registry, a, NULL) == 0);
-  errno = 0;
-  return mincore(a, (size_t)sysconf(_SC_PAGESIZE), &resident) == -1 &&
-    errno == ENOMEM;
+  /* A collector allocation can reuse this address before this probe runs. */
+  return la_load32_acq(&unmapped_targets[index]) != 0;
 }
 
 static int check_blocked(lua_State *L)
@@ -89,7 +102,7 @@ static int check_blocked(lua_State *L)
   LJHugeInfo hi;
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   assert(lj_tg_flags_test_acq(dead, TGF_DEAD));
-  assert(unmapped(registry, empty));
+  assert(unmapped(registry, 1));
   assert(lj_arena_hugetab_lookup(registry, blocked, &hi) == 1);
   assert(hi.readers == 1 && all_free(blocked));
   assert(lj_arena_next_acq(blocked) == late_arena);
@@ -107,7 +120,7 @@ static int check_released(lua_State *L)
   global_State *g = G(L);
   HugeTab *registry = (HugeTab *)gc2_small_arena_tab_acq(g);
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
-  assert(unmapped(registry, blocked));
+  assert(unmapped(registry, 0));
   assert(lj_arena_bm_get(late_arena->block, lj_arena_cellof(late_block)) == 0);
   assert(lj_arena_late_get(late_arena, lj_arena_cellof(late_block)) == 0);
   assert(dead->alloc.owned[LJ_ARENAK_PLAIN] == late_arena);
