@@ -27,9 +27,10 @@ static void named(lua_State *L, const char *name)
   }
 }
 
-static uint32_t publish_by_allocating(lua_State *L)
+static int publish_by_allocating(lua_State *L)
 {
   global_State *g = G(L);
+  uint32_t *count = (uint32_t *)lua_touserdata(L, 1);
   uint64_t starts = gc2_cycle_starts_acq(g);
   uint32_t i;
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
@@ -46,7 +47,8 @@ static uint32_t publish_by_allocating(lua_State *L)
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   assert(lj_tg_local_total_acq(L2TG(L)) < LJ_GC2_ACCT_FLUSH);
   assert(lj_gc2_alloc_since_load(g) <= lj_gc2_hard_load(g));
-  return i + 1;
+  *count = i + 1;
+  return 0;
 }
 
 int main(int argc, char **argv)
@@ -109,7 +111,9 @@ int main(int argc, char **argv)
   base = snapshot(L, "baseline", 0, 0);
   assert(base.phase == LJ_GC2_IDLE && base.peers == (uint32_t)with_peer &&
          base.workers == (uint32_t)nworkers);
-  nstrings = publish_by_allocating(L);
+  /* Leave the real allocation request pending until the boundary under test.
+  ** A top-level string push may itself advance automatic collection. */
+  assert(lua_cpcall(L, publish_by_allocating, &nstrings) == 0);
   published = snapshot(L, "published", 0, 0);
   starts = published.cycles;
   completed = published.completed;
