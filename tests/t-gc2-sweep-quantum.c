@@ -16,14 +16,55 @@ static uint64_t tag_progress(global_State *g)
   return lj_str_sweep_bucket_acq(g) + la_load64_acq(&g->str.sweep_tagged);
 }
 
+static void check_published_rescues(void)
+{
+  enum { COUNT = 4 * LJ_GC2_SWEEP_BATCH };
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  uint64_t epoch, pushed;
+  unsigned i;
+  assert(L);
+  g = G(L);
+  lua_gc(L, LUA_GCSTOP, 0);
+  lua_createtable(L, COUNT, 0);
+  for (i = 1; i <= COUNT; i++) {
+    lua_newtable(L);
+    lua_rawseti(L, 1, (int)i);
+  }
+  for (i = 0; i < 10000; i++) {
+    (void)lj_gc2_step_explicit(L, 1);
+    if (gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+        gc2_sweep_root_scanned_acq(g) == 1 && !lj_gc2_sweep_needs_prepare(g))
+      break;
+  }
+  assert(i < 10000 && !gc2_sweep_bridge_ready_acq(g));
+  /* Each API read publishes its result. One bounded turn cannot consume all
+  ** those edges, even with no other mutator or private buffer to flush. */
+  for (i = 1; i <= COUNT; i++) {
+    lua_rawgeti(L, 1, (int)i);
+    assert(lua_istable(L, -1));
+    lua_pop(L, 1);
+  }
+  epoch = gc2_hs_epoch_acq(g);
+  pushed = gc2_grey_pushed_acq(g);
+  lj_gc2_sweep_prepare_bridge_boundary(g, NULL);
+  assert(gc2_grey_pushed_acq(g) > pushed && !gc2_sweep_bridge_ready_acq(g));
+  assert(gc2_hs_epoch_acq(g) == epoch);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(lua_objlen(L, 1) == COUNT);
+  lua_close(L);
+}
+
 int main(void)
 {
-  lua_State *L = luaL_newstate();
+  lua_State *L;
   global_State *g;
   enum { BUDGET = 8 };
   uint64_t before, advanced = 0;
   unsigned i;
   char bytes[4096];
+  check_published_rescues();
+  L = luaL_newstate();
   assert(L);
   g = G(L);
   lua_gc(L, LUA_GCSTOP, 0);

@@ -6167,6 +6167,15 @@ static int gc2_sweep_epoch(global_State *g, uint32_t actions, uint32_t grace)
   return gc2_fixpoint_epoch_owned(g, 1);
 }
 
+/* Only an owner's unpublished SSB suffix needs a handshake. A bounded drain
+** can leave published buffers, grey objects or recovery records for the next
+** collector turn. Asking every mutator to flush cannot drain that work. */
+static void gc2_sweep_flush_private_ssb(global_State *g)
+{
+  if (gc2_ssb_published_empty(g) && gc2_grey_empty(g) && gc2_recovery_empty(g))
+    (void)gc2_sweep_epoch(g, LJ_GC2_HS_FLUSH_SSB, 0);
+}
+
 static GC2SweepBridgeResult gc2_sweep_prepare_bridge_result(global_State *g)
 {
   GCRef *cursor0;
@@ -6233,7 +6242,7 @@ static GC2SweepBridgeResult gc2_sweep_prepare_bridge_result(global_State *g)
     if (gc2_deferred_epoch_acq(g) != defer0)
       goto retry;
     if (!lj_gc2_ssb_empty(g)) {
-      (void)gc2_sweep_epoch(g, LJ_GC2_HS_FLUSH_SSB, 0);
+      gc2_sweep_flush_private_ssb(g);
       goto retry;
     }
     if (gc2_table_rescan_pending_acq(g) != 0) {
@@ -6554,7 +6563,7 @@ static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
   if (gc2_weak_owned_peer_active(g))
     return 0;
   if (!lj_gc2_ssb_empty(g)) {
-    (void)gc2_sweep_epoch(g, LJ_GC2_HS_FLUSH_SSB, 0);
+    gc2_sweep_flush_private_ssb(g);
     return 0;
   }
   if (gc2_table_rescan_pending_acq(g) != 0) {
