@@ -914,21 +914,23 @@ CCallbackRuntime * LJ_FASTCALL lj_ccallback_prepare(CTState *cts, MSize slot)
   /* This is the first C callback helper after the tiny CTState accessor.
   ** Preserve the native caller's error pair across TLS lookup/auto-attach. */
   ccallback_error_save(&err);
-  tg = lj_thr_get_tg();
-  if (LJ_UNLIKELY(tg == NULL || tg->gl != cts->g ||
-		  lj_tg_load_cur_L(tg) == NULL)) {
-    if (tg == NULL && callback_auto_attach(cts, slot)) {
-      tg = lj_thr_get_tg();
+  /* One pthread can own several main states while raw TLS names the outer
+  ** universe. The callback trampoline identifies its own CTState. */
+  tg = lj_thr_get_tg_fallback(cts->g);
+  L = tg ? lj_tg_load_cur_L(tg) : NULL;
+  if (LJ_UNLIKELY(L == NULL)) {
+    if (lj_thr_get_tg() == NULL && callback_auto_attach(cts, slot)) {
+      tg = lj_thr_get_tg_fallback(cts->g);
+      L = tg ? lj_tg_load_cur_L(tg) : NULL;
       auto_detach = 1;
     }
-    if (tg == NULL || tg->gl != cts->g || lj_tg_load_cur_L(tg) == NULL) {
+    if (L == NULL) {
       ccallback_error_restore(&err);
       return NULL;  /* No legal callback carrier for this foreign pthread. */
     }
   }
-  L = lj_tg_load_cur_L(tg);
   cb = &tg->cb;
-  ccallback_L_rel(cb, L);  /* Carrier TG from current TLS, not slot owner. */
+  ccallback_L_rel(cb, L);
   ccallback_slot_rel(cb, slot);
   ccallback_auto_detach_rel(cb, auto_detach);
   ccallback_error_restore(&err);
@@ -942,8 +944,8 @@ void lj_ccallback_unwind(lua_State *L, TValue *cont)
   CCallbackRuntime *cb;
   CCallbackFrame *frame;
   ccallback_error_save(&err);
-  tg = lj_thr_get_tg();
-  if (L == NULL || tg == NULL || tg->gl != G(L)) {
+  tg = L ? lj_thr_get_tg_fallback(G(L)) : NULL;
+  if (tg == NULL) {
     ccallback_error_restore(&err);
     return;
   }
@@ -1288,9 +1290,9 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   ccallback_error_save(&err);
   L = ccallback_L_acq(cb);
   g = cts->g;
-  tg = lj_thr_get_tg();
+  tg = lj_thr_get_tg_fallback(g);
   auto_detach = ccallback_auto_detach_acq(cb);
-  if (LJ_UNLIKELY(tg == NULL || tg->gl != g || cb != &tg->cb ||
+  if (LJ_UNLIKELY(tg == NULL || cb != &tg->cb ||
 		  L == NULL || lj_tg_load_cur_L(tg) != L || L2TG(L) != tg))
     abort();
   native_depth = lj_tg_in_native_acq(tg);
@@ -1372,8 +1374,8 @@ static lua_State *ccallback_leave(CTState *cts, TValue *o,
   native_frame_depth = frame ? frame->native_frame_depth : 0;
   auto_detach = frame ? frame->auto_detach :
     ccallback_auto_detach_acq(cb);
-  tg = lj_thr_get_tg();
-  if (LJ_UNLIKELY(tg == NULL || tg->gl != cts->g || cb != &tg->cb ||
+  tg = lj_thr_get_tg_fallback(cts->g);
+  if (LJ_UNLIKELY(tg == NULL || cb != &tg->cb ||
 		  L == NULL || L2TG(L) != tg))
     abort();
   obase = L->base;
