@@ -3086,7 +3086,7 @@ int lj_gc2_collect_active(lua_State *L)
     return 0;
   g = G(L);
   tg = L2TG(L);
-  if (!g || !tg)
+  if (!g || !tg || lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH))
     return 0;
   gc2_finreg_udata_drain(g);
 #if LJ_HASJIT
@@ -3122,10 +3122,11 @@ int lj_gc2_collect_active(lua_State *L)
   }
   for (;;) {
     uint32_t phase = gc2_phase_acq(g);
-    /* A peer callback can enter after the admission check above. Never turn
-    ** that race into a SWEEP-close wait; bounded steps and GC workers retain
-    ** responsibility for progress after the callback releases its scope. */
-    if (gc2_finalizer_active_acq(g) != 0)
+    /* A peer finalizer can defer SWEEP close. A native wait or drain can also
+    ** acknowledge shutdown without throwing. The driver owns no work token
+    ** here, so lua_gc can release its scope and return to the Lua caller. */
+    if (gc2_finalizer_active_acq(g) != 0 ||
+	lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH))
       return 0;
     if (gc2_collection_stalled(g))
       return 0;
@@ -3283,7 +3284,8 @@ static int gc2_step(lua_State *L, uint32_t budget, uint32_t sweep_limit)
     budget = (1u << 20);
   while (budget-- != 0) {
     uint32_t phase = gc2_phase_acq(g);
-    if (gc2_collection_stalled(g))
+    if (gc2_collection_stalled(g) ||
+	lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH))
       break;
     if (phase != LJ_GC2_IDLE)
       drove_cycle = 1;

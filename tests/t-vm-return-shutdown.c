@@ -108,7 +108,7 @@ static void run(int pool, int mode)
 }
 
 #ifdef LJ_GC2_TEST_HELPERS
-static uint32_t parked_tid, consumed, waiting;
+static uint32_t parked_tid, consumed, waiting, gc_deferred;
 
 static void stop_wait_hook(global_State *g, TGState *tg, uint64_t epoch,
 			   uint32_t point)
@@ -135,14 +135,28 @@ static int leave_armed_wait(lua_State *L)
 {
   TGState *tg = L2TG(L);
   uint32_t actions;
+  uint64_t starts;
   la_store32_rel(&parked_tid, lj_tg_tid_acq(tg));
   lj_native_enter(tg);
   la_store32_rel(&entered, 1);
   while (!la_load32_acq(&consumed)) la_cpu_pause();
   actions = lj_native_leave(L);
   assert(actions == LJ_GC2_HS_STOPREQ);
+  starts = gc2_major_cycle_starts_acq(G(L));
+  assert(lj_gc2_collect_active(L) == 0);
+  assert(lj_gc2_step_explicit(L, 1u << 20) == 0);
+  assert(gc2_major_cycle_starts_acq(G(L)) == starts);
+  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH));
+  la_store32_rel(&gc_deferred, 1);
+  (void)lua_gc(L, LUA_GCCOLLECT, 0);
   lj_safepoint_checkstop(L, actions);
   abort();
+}
+
+static int observe_gc_shutdown(lua_State *L)
+{
+  assert(la_load32_acq(&G(L)->gc2.explicit_collectors) == 0);
+  return observe_shutdown(L);
 }
 
 static void run_consumed_stop(void)
@@ -152,7 +166,7 @@ static void run_consumed_stop(void)
   la_store32_rlx(&finished, 0);
   lua_register(L, "leave_armed_wait", leave_armed_wait);
   lua_register(L, "wait_for_callback", wait_for_callback);
-  lua_register(L, "observe_shutdown", observe_shutdown);
+  lua_register(L, "observe_shutdown", observe_gc_shutdown);
   lj_safepoint_test_completion_hook(stop_wait_hook);
   ljt_lua_dostring(L,
     "require('threading').spawn(function()\n"
@@ -162,7 +176,8 @@ static void run_consumed_stop(void)
     "wait_for_callback()\n");
   lua_close(L);
   lj_safepoint_test_completion_hook(NULL);
-  assert(la_load32_acq(&waiting) && la_load32_acq(&finished) == 1);
+  assert(la_load32_acq(&waiting) && la_load32_acq(&gc_deferred) &&
+         la_load32_acq(&finished) == 1);
 }
 #endif
 
