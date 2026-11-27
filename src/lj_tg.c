@@ -867,7 +867,10 @@ void lj_tg_detach(global_State *g, TGState *tg)
   ** make the owner-written publication disappear from reclamation scans while
   ** a C frame could still dereference that storage. This is an internal scope
   ** leak and cannot be recovered by publishing DEAD. */
-  if (lj_tg_tab_read_depth_acq(tg) != 0 || lj_tg_lexstate_acq(tg) != NULL)
+  if (lj_tg_tab_read_depth_acq(tg) != 0 || lj_tg_lexstate_acq(tg) != NULL ||
+      lj_tg_strtab_active_depth_acq(tg) != 0 ||
+      lj_tg_strq_active_depth_acq(tg) != 0 ||
+      la_loadptr_acq((void *const *)&tg->str_source_pin) != NULL)
     abort();
   /* DETACHING closes lifecycle publication before the first descriptor root
   ** or raw TLS-facing hint is cleared. It remains borrowable until RETIRED. */
@@ -1376,43 +1379,88 @@ TGState *lj_tg_thread_active(global_State *g, lua_State *L)
   return tg;
 }
 
+static int tg_registry_visit_live(global_State *g, LJTGRegistrySlot *slot,
+				  LJTGVisit visit, void *ud)
+{
+  unsigned attempt;
+  for (attempt = 0; attempt < 4; attempt++) {
+    LJTGSlotSnap snap = lj_tgslot_snapshot(&slot->token);
+    LJTGRegistryKey key;
+    LJTGRegistryBorrow borrow;
+    LJTGSlotResult status;
+    int result;
+    if (snap.state == LJ_TGSLOT_PINNED)
+      return -1;
+    if (!lj_tgslot_borrow_state(snap.state))
+      return 0;
+    key.slot = slot;
+    key.incarnation = snap.incarnation;
+    lj_tgregistry_borrow_init(&borrow);
+    status = lj_tgregistry_try_borrow(&key, &borrow, NULL);
+    if (status == LJ_TGSLOT_BUSY && snap.state == LJ_TGSLOT_ATTACHING)
+      return 0;  /* The incarnation has no published body yet. */
+    if (status != LJ_TGSLOT_OK)
+      continue;
+    result = visit(g, (TGState *)borrow.body, ud);
+    if (lj_tgregistry_release_to_completion(&borrow, NULL) != LJ_TGSLOT_OK)
+      abort();
+    return result;
+  }
+  return -1;
+}
+
+int lj_tg_visit_live(global_State *g, LJTGVisit visit, void *ud)
+{
+  LJTGRegistrySlot *slot;
+  TGState *tg;
+  if (!g)
+    return 0;
+  slot = gc2_tg_registry_head_acq(g);
+  if (slot && !gc2_tg_registry_incomplete_acq(g)) {
+    for (; slot; slot = lj_tgregistry_slot_next_all(slot)) {
+      int result = tg_registry_visit_live(g, slot, visit, ud);
+      if (result)
+	return result;
+    }
+    if (!gc2_tg_registry_incomplete_acq(g))
+      return 0;
+  }
+  /* A legacy-only attach may not have had storage for a stable slot. */
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    if (!lj_tg_flags_test_acq(tg, TGF_DEAD)) {
+      int result = visit(g, tg, ud);
+      if (result)
+	return result;
+    }
+  }
+  return 0;
+}
+
+#if LJ_HASJIT
+static int tg_jit_active_visit(global_State *g, TGState *tg, void *ud)
+{
+  UNUSED(g); UNUSED(ud);
+  return lj_tg_jit_active_acq(tg);
+}
+#endif
+
 int lj_tg_any_jit_active(global_State *g)
 {
 #if LJ_HASJIT
-  TGState *tg;
-  int saw_tg = 0;
+  TGState *main;
   if (!g)
     return 0;
-  /*
-  ** GC phase completion is global, while lj_tg_jit_base(g) intentionally reads
-  ** only the caller's TG. A different TG may be executing trace code with live
-  ** values only in machine registers or trace spill slots; stack scanners cannot
-  ** prove those roots until the trace reaches an exit/safepoint. Cold GC gates
-  ** therefore scan the registered TG list and defer final mark/weak/finalizer
-  ** transitions while any live TG has a published trace base or positive trace
-  ** vmstate.
-  */
-  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
-    saw_tg = 1;
-    if (!lj_tg_flags_test_acq(tg, TGF_DEAD) &&
-	lj_tg_jit_active_acq(tg))
-      return 1;
-  }
-  if (!saw_tg) {
-    tg = g->main_tg;
-    if (tg && !lj_tg_flags_test_acq(tg, TGF_DEAD)) {
-      if (lj_tg_jit_active_acq(tg))
-	return 1;
-      saw_tg = 1;
-    }
-  }
-  /*
-  ** The global jit_base/vmstate fields are a bootstrap mirror for code that has
-  ** no TG yet. Once a TG is registered, x64 trace entry/exit updates TG-local
-  ** state directly and the mirror may retain an old non-NULL base.
-  */
-  return !saw_tg &&
-	 (mref_acq(g->jit_base, TValue) != NULL || vmstate_load_acq(g) > 0);
+  /* Native roots can live in remote machine registers. A collector claiming
+  ** quiescence must count either a sampled active frame or an uncertain slot. */
+  main = g->main_tg;
+  if (main && !lj_tg_flags_test_acq(main, TGF_DEAD) &&
+      lj_tg_jit_active_acq(main))
+    return 1;
+  if (gc2_tg_list_acq(g) || gc2_tg_registry_head_acq(g))
+    return lj_tg_visit_live(g, tg_jit_active_visit, NULL) != 0;
+  /* The universe mirror is authority only before TG-local dispatch starts. */
+  return !main &&
+    (mref_acq(g->jit_base, TValue) != NULL || vmstate_load_acq(g) > 0);
 #else
   UNUSED(g);
   return 0;

@@ -67,6 +67,18 @@ static void release_stable_borrow(LJTGRegistryBorrow *borrow)
   }
 }
 
+#if LJ_HASJIT
+static void check_jit_visibility(global_State *g, TGState *tg)
+{
+  int32_t previous = lj_tg_vmstate_load_acq(tg);
+  assert(!lj_tg_any_jit_active(g));
+  lj_tg_vmstate_store_rel(tg, 1);
+  assert(lj_tg_any_jit_active(g));
+  lj_tg_vmstate_store_rel(tg, previous);
+  assert(!lj_tg_any_jit_active(g));
+}
+#endif
+
 static void *reader_main(void *arg)
 {
   TGLeaseCtx *ctx = (TGLeaseCtx *)arg;
@@ -135,6 +147,9 @@ int main(void)
   assert(lj_tgregistry_try_borrow(&dead_key, &stable_borrow, &snap) ==
 	 LJ_TGSLOT_OK);
   assert(stable_borrow.body == &dead_tg);
+#if LJ_HASJIT
+  check_jit_visibility(g, &dead_tg);
+#endif
 
   lj_tg_detach(g, &dead_tg);
   assert(gc2_n_threads_acq(g) == live0);
@@ -195,6 +210,9 @@ int main(void)
   assert(gc2_tg_registry_incomplete_acq(g) == 1u);
   assert(gc2_tg_registry_alloc_failures_acq(g) == failures0 + 1u);
   assert(gc2_tg_registry_nodes_acq(g) == stable_nodes0);
+#if LJ_HASJIT
+  check_jit_visibility(g, &missed_tg);
+#endif
   lj_tg_detach(g, &missed_tg);
   assert(gc2_n_threads_acq(g) == live0);
   assert(lj_tg_reclaim_dead(g) == 1u);

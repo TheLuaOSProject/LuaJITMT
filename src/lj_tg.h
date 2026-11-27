@@ -1646,6 +1646,10 @@ LJ_FUNC uint32_t lj_tg_reclaim_dead_terminal(global_State *g);
 LJ_FUNC uint32_t lj_tg_reclaim_dead_terminal_orphans(global_State *g);
 LJ_FUNC TGState *lj_tg_find_owner(global_State *g, uint32_t owner_tid);
 LJ_FUNC TGState *lj_tg_thread_active(global_State *g, lua_State *L);
+typedef int (*LJTGVisit)(global_State *g, TGState *tg, void *ud);
+/* The visitor may only sample the leased TG and return. Nonzero stops the
+** walk. -1 reports unresolved admission; visitors cannot transfer the lease. */
+LJ_FUNC int lj_tg_visit_live(global_State *g, LJTGVisit visit, void *ud);
 LJ_FUNC void lj_tg_sync_dispatch_tg(global_State *g, TGState *tg);
 LJ_FUNC void lj_tg_sync_dispatch(global_State *g);
 #if LJ_HASJIT && defined(LJ_GC2_TEST_HELPERS)

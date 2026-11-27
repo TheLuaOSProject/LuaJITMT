@@ -3417,29 +3417,22 @@ static LJ_AINLINE void tab_read_oldest_on_tg(global_State *g, TGState *tg,
   }
 }
 
+static int tab_read_epoch_visit(global_State *g, TGState *tg, void *ud)
+{
+  tab_read_oldest_on_tg(g, tg, (uint64_t *)ud);
+  return 0;
+}
+
 /* Return the oldest outer table-vector read which can still name a generation
-** retired in that epoch. The legacy TG list is append-only until the separate
-** SMR writer gate removes dead nodes; ordinary reclaim already owns that gate.
-** Main/self fallbacks cover attach/detach-adjacent owner publications which are
-** temporarily absent from the list, matching the string-table pin contract. */
+** retired in that epoch. Main/self observations also cover pins published
+** before bootstrap or attachment makes the owner discoverable. */
 static uint64_t tab_read_oldest_epoch(global_State *g)
 {
-  TGState *tg, *main_tg, *self;
   uint64_t oldest = ~(uint64_t)0;
-  int saw_main = 0, saw_self = 0;
-  main_tg = g->main_tg;
-  self = lj_thr_get_tg();
-  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
-    if (tg == main_tg)
-      saw_main = 1;
-    if (tg == self)
-      saw_self = 1;
-    tab_read_oldest_on_tg(g, tg, &oldest);
-  }
-  if (!saw_main)
-    tab_read_oldest_on_tg(g, main_tg, &oldest);
-  if (!saw_self && self != main_tg)
-    tab_read_oldest_on_tg(g, self, &oldest);
+  tab_read_oldest_on_tg(g, g->main_tg, &oldest);
+  tab_read_oldest_on_tg(g, lj_thr_get_tg(), &oldest);
+  if (lj_tg_visit_live(g, tab_read_epoch_visit, &oldest) < 0)
+    return 0;
   return oldest;
 }
 

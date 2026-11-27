@@ -381,71 +381,33 @@ static void strtab_active_leave(TGState *tg, StrTabHdr *hdr)
     lj_tg_strtab_active_hdr_rel(tg, NULL);
 }
 
-static LJ_AINLINE int strtab_active_on_tg(global_State *g, TGState *tg,
-					  StrTabHdr *hdr)
-{
-  return tg && tg->gl == g &&
-    lj_tg_strtab_active_depth_acq(tg) != 0 &&
-    lj_tg_strtab_active_hdr_acq(tg) == hdr;
-}
+typedef struct StrTabReaders {
+  StrTabHdr *hdr;
+  uint64_t epoch;
+} StrTabReaders;
 
-static int strtab_active_on_hdr(global_State *g, StrTabHdr *hdr)
+static int strtab_reader_visit(global_State *g, TGState *tg, void *ud)
 {
-  TGState *tg, *main_tg, *self;
-  int saw_main = 0, saw_self = 0;
-  main_tg = g->main_tg;
-  self = lj_thr_get_tg();
-  for (tg = gc2_tg_list_acq(g);
-       tg != NULL;
-       tg = lj_tg_next_acq(tg)) {
-    if (tg == main_tg)
-      saw_main = 1;
-    if (tg == self)
-      saw_self = 1;
-    if (strtab_active_on_tg(g, tg, hdr))
-      return 1;
-  }
-  /*
-  ** Attach/detach-adjacent code can have a same-state TG that is not yet, or
-  ** no longer, reachable from gc2.tg_list. A resize claim must still honor
-  ** those active pins before publishing and retiring the old header.
-  */
-  if (!saw_main && strtab_active_on_tg(g, main_tg, hdr))
-    return 1;
-  if (!saw_self && self != main_tg && strtab_active_on_tg(g, self, hdr))
-    return 1;
-  return 0;
-}
-
-static LJ_AINLINE int strtab_active_on_tg_before(global_State *g,
-						 TGState *tg, StrTabHdr *hdr,
-						 uint64_t epoch)
-{
-  return strtab_active_on_tg(g, tg, hdr) &&
-    lj_tg_strtab_active_epoch_acq(tg) <= epoch;
+  const StrTabReaders *view = (const StrTabReaders *)ud;
+  return tg && tg->gl == g && lj_tg_strtab_active_depth_acq(tg) != 0 &&
+    lj_tg_strtab_active_hdr_acq(tg) == view->hdr &&
+    lj_tg_strtab_active_epoch_acq(tg) <= view->epoch;
 }
 
 static int strtab_active_on_hdr_before(global_State *g, StrTabHdr *hdr,
 					       uint64_t epoch)
 {
-  TGState *tg, *main_tg, *self;
-  int saw_main = 0, saw_self = 0;
-  main_tg = g->main_tg;
-  self = lj_thr_get_tg();
-  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
-    if (tg == main_tg)
-      saw_main = 1;
-    if (tg == self)
-      saw_self = 1;
-    if (strtab_active_on_tg_before(g, tg, hdr, epoch))
-      return 1;
-  }
-  if (!saw_main && strtab_active_on_tg_before(g, main_tg, hdr, epoch))
-    return 1;
-  if (!saw_self && self != main_tg &&
-      strtab_active_on_tg_before(g, self, hdr, epoch))
-    return 1;
-  return 0;
+  StrTabReaders view = {hdr, epoch};
+  /* Bootstrap main and the current actor may have published a pin before
+  ** becoming discoverable through the registry. */
+  return strtab_reader_visit(g, g->main_tg, &view) ||
+    strtab_reader_visit(g, lj_thr_get_tg(), &view) ||
+    lj_tg_visit_live(g, strtab_reader_visit, &view) != 0;
+}
+
+static int strtab_active_on_hdr(global_State *g, StrTabHdr *hdr)
+{
+  return strtab_active_on_hdr_before(g, hdr, UINT64_MAX);
 }
 
 static void strq_active_enter(TGState *tg, StrCanonHdr *hdr)
@@ -1258,24 +1220,20 @@ void lj_str_source_unpin(TGState *tg)
   la_storeptr_rel((void **)&tg->str_source_pin, NULL);
 }
 
+static int str_source_pin_visit(global_State *g, TGState *tg, void *ud)
+{
+  UNUSED(g);
+  return la_loadptr_acq((void *const *)&tg->str_source_pin) == ud;
+}
+
 static int str_source_pinned(global_State *g, GCstr *s)
 {
-  TGState *tg;
   /* Pairs with the reader's pre-validation fence. A reader may only accept
   ** an exact source edge; retirement may only destroy a body whose strong
   ** edges have already been closed. */
   la_fence_seq();
-  if (la_loadptr_acq((void *const *)&g->main_tg->str_source_pin) == s)
-    return 1;
-  for (tg = gc2_tg_list_acq(g); tg != NULL;) {
-    TGState *next = lj_tg_next_acq(tg);
-    if (la_loadptr_acq((void *const *)&tg->str_source_pin) == s)
-      return 1;
-    if (next == tg)
-      break;
-    tg = next;
-  }
-  return 0;
+  return str_source_pin_visit(g, g->main_tg, s) ||
+    lj_tg_visit_live(g, str_source_pin_visit, s) != 0;
 }
 
 /* The caller retains the exact body across this arbitration. Directory
@@ -2844,23 +2802,19 @@ static int strq_unlink(global_State *g, StrCanonRec *rec)
   return unlinked;
 }
 
+static int strq_readers_visit(global_State *g, TGState *tg, void *ud)
+{
+  UNUSED(g); UNUSED(ud);
+  return lj_tg_strq_active_depth_acq(tg) != 0;
+}
+
 static int strq_readers_active(global_State *g)
 {
-  TGState *tg;
   /* Pair with the reader fence before its first bucket load. A reader not
   ** observed by this scan must observe the already-published unlink. */
   la_fence_seq();
-  if (lj_tg_strq_active_depth_acq(g->main_tg))
-    return 1;
-  for (tg = gc2_tg_list_acq(g); tg != NULL;) {
-    TGState *next = lj_tg_next_acq(tg);
-    if (lj_tg_strq_active_depth_acq(tg))
-      return 1;
-    if (next == tg)
-      return 1;
-    tg = next;
-  }
-  return 0;
+  return strq_readers_visit(g, g->main_tg, NULL) ||
+    lj_tg_visit_live(g, strq_readers_visit, NULL) != 0;
 }
 
 /* Publish the rescued body to the current main generation. Older chain
