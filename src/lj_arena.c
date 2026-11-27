@@ -70,6 +70,7 @@ LJ_STATIC_ASSERT(LJ_HUGETAB_ADMISSION_CLOSED == LJ_HUGETAB_READER_MASK);
 static void arena_test_plain_claim_pause_after_close(void);
 static void arena_test_plain_commit_pause_after_commit(GCArena *a);
 static void arena_test_plain_shrink_pause_after_publish(GCArena *a);
+static void arena_test_huge_shrink_pause_after_snapshot(const void *p);
 static int arena_test_alloc_fails(void);
 static void arena_test_plain_admit_pause_after_enter(void);
 static void arena_test_remote_publish_pause_after_queue(void);
@@ -89,6 +90,7 @@ static void hugetab_test_admission_close_pause_after_close(void);
 #define arena_test_plain_claim_pause_after_close() ((void)0)
 #define arena_test_plain_commit_pause_after_commit(a) ((void)0)
 #define arena_test_plain_shrink_pause_after_publish(a) ((void)0)
+#define arena_test_huge_shrink_pause_after_snapshot(p) ((void)0)
 #define arena_test_alloc_fails() 0
 #define arena_test_plain_admit_pause_after_enter() ((void)0)
 #define arena_test_remote_publish_pause_after_queue() ((void)0)
@@ -1331,6 +1333,9 @@ static uint32_t arena_test_plain_commit_pause_seen;
 static GCArena *arena_test_plain_shrink_target;
 static uint32_t arena_test_plain_shrink_pause_flag;
 static uint32_t arena_test_plain_shrink_pause_seen;
+static void *arena_test_huge_shrink_target;
+static uint32_t arena_test_huge_shrink_pause_flag;
+static uint32_t arena_test_huge_shrink_pause_seen;
 static uint32_t arena_test_alloc_fail_flag;
 static uint64_t arena_test_alloc_fail_count;
 static uint32_t arena_test_plain_admit_pause_flag;
@@ -1394,6 +1399,31 @@ static void arena_test_plain_shrink_pause_after_publish(GCArena *a)
     while (la_load32_acq(&arena_test_plain_shrink_pause_flag) != 0)
       la_cpu_pause();
     la_store32_rel(&arena_test_plain_shrink_pause_seen, 0);
+  }
+}
+
+void lj_arena_test_huge_shrink_pause(void *p, int enabled)
+{
+  if (enabled) {
+    la_store32_rel(&arena_test_huge_shrink_pause_seen, 0);
+    la_storeptr_rel(&arena_test_huge_shrink_target, p);
+  }
+  la_store32_rel(&arena_test_huge_shrink_pause_flag, enabled != 0);
+}
+
+uint32_t lj_arena_test_huge_shrink_paused(void)
+{
+  return la_load32_acq(&arena_test_huge_shrink_pause_seen);
+}
+
+static void arena_test_huge_shrink_pause_after_snapshot(const void *p)
+{
+  if (la_load32_acq(&arena_test_huge_shrink_pause_flag) != 0 &&
+      la_loadptr_acq((void *const *)&arena_test_huge_shrink_target) == p) {
+    la_store32_rel(&arena_test_huge_shrink_pause_seen, 1);
+    while (la_load32_acq(&arena_test_huge_shrink_pause_flag) != 0)
+      la_cpu_pause();
+    la_store32_rel(&arena_test_huge_shrink_pause_seen, 0);
   }
 }
 
@@ -2193,8 +2223,9 @@ size_t lj_arena_huge_mapsize(size_t size)
 {
   const size_t overhead = sizeof(GCAhdr) + sizeof(LJGC2TabWideStamp);
   size_t need;
-  /* Size-only physical geometry applies to both immutable mapping kinds.
-  ** HugeTab still publishes the exact logical payload size, never padding/W. */
+  /* Size-only geometry applies to both immutable mapping kinds. A typed
+  ** HugeTab size is exact; raw entries may retain capacity after shrink.
+  ** Neither kind includes padding or the tail W in its payload extent. */
   if (size <= LJ_HUGE_THRESHOLD ||
       size > ~(size_t)LJ_ARENA_MASK - overhead)
     return 0;
@@ -2214,7 +2245,7 @@ void *lj_arena_huge_map(PRNGState *rs, size_t size, uint32_t flags)
   memset(&a->hdr, 0, sizeof(a->hdr));
   a->hdr.flags = LJ_AF_HUGE_MAGIC |
     (flags & (LJ_AF_FLAG_MASK & ~LJ_AF_EMPTY_RECLAIMED));
-  a->hdr.live_cells = (uint32_t)(mapsize >> LJ_CELL_SHIFT);
+  a->hdr.huge_mapsize = mapsize;
   if (flags & LJ_AF_TRAVERSABLE) {
     LJGC2TabWideStamp *wide = (LJGC2TabWideStamp *)
       ((char *)a + mapsize - sizeof(LJGC2TabWideStamp));
@@ -2230,13 +2261,16 @@ void *lj_arena_huge_map(PRNGState *rs, size_t size, uint32_t flags)
 void lj_arena_huge_unmap(void *p, size_t size)
 {
   int olderr = errno;
-  size_t mapsize = lj_arena_huge_mapsize(size);
-  if (p && mapsize) {
+  if (p && size && lj_arena_ishuge_base(p)) {
     GCArena *a = lj_arena_of(p);
+    size_t mapsize = a->hdr.huge_mapsize;
     /* Last-resort mapping certificate. Normal callers prove this before
     ** deleting the HugeTab locator; retain a violated mapping rather than
-    ** erasing a live scan owner if a terminal caller regresses. */
-    if (lj_arena_gc2_tokens_empty_acq(a) &&
+    ** erasing a live scan owner if a terminal caller regresses. The owned
+    ** direct mapping retains its immutable physical extent across shrink. */
+    if (lj_arena_ishuge(a) && mapsize &&
+        (mapsize & LJ_ARENA_MASK) == 0 &&
+        lj_arena_gc2_tokens_empty_acq(a) &&
 	lj_arena_gc2_desc_mapping_clear_acq(a)) {
       arena_unmap_aligned((void *)a, mapsize);
     }
@@ -4838,12 +4872,36 @@ enum {
   LJ_HUGE_REALLOC_MOVE_PREEMPTED = 3
 };
 
+/* A raw shrink changes only the caller's logical size. Retaining capacity
+** leaves existing readers and nonterminal roots authoritative without taking
+** BUSY or reserving another reader. The coherent snapshot is its no-op LP;
+** even a saturated/changing reader count cannot turn it into false OOM.
+** As with every realloc, the caller still owns this allocation incarnation. */
+static int hugetab_raw_shrink_valid(HugeTab *ht, const void *p, size_t osize)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  LJHugeEnt *e;
+  uint64_t addr = (uint64_t)(uintptr_t)p;
+  la_u128 snapshot;
+  if (!h || !p || !hugetab_search(h, addr, &e, NULL))
+    return 0;
+  snapshot = la_load128_acq(&e->slot);
+  if (snapshot.lo != addr || hugetab_size(snapshot.hi) < osize ||
+      (snapshot.hi & (LJ_HUGEF_MASK &
+        ~(LJ_HUGEF_MARK|LJ_HUGEF_ROOT_MASK))) ||
+      hugetab_admission_closed(snapshot.hi))
+    return 0;
+  arena_test_huge_shrink_pause_after_snapshot(p);
+  return 1;
+}
+
 /* A realloc pin is nonterminal: it excludes prepare/free/header teardown while
 ** preserving the old allocation if replacement allocation fails. Counted raw
 ** readers may already exist; BUSY pins the mapping while the owner moves it
 ** and the eventual old-slot handoff retains those exact readers. Traversable
 ** allocations have address-bound GC identity and are never reallocable. */
-static int hugetab_claim_realloc(HugeTab *ht, const void *p, LJHugeInfo *hi)
+static int hugetab_claim_realloc(HugeTab *ht, const void *p, size_t osize,
+                               LJHugeInfo *hi)
 {
   LJHugeTabHdr *h = ht ? ht->h : NULL;
   uint64_t addr, meta;
@@ -4854,6 +4912,7 @@ static int hugetab_claim_realloc(HugeTab *ht, const void *p, LJHugeInfo *hi)
   for (;;) {
     uint64_t next;
     if (!hugetab_search(h, addr, &e, &meta) ||
+	hugetab_size(meta) < osize || hugetab_admission_closed(meta) ||
 	(meta & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_FREEING|
 		 LJ_HUGEF_RETIRED|LJ_HUGEF_TICKET|LJ_HUGEF_DEFER_FREE|
 		 LJ_HUGEF_RECOVERY_MASK|LJ_HUGEF_ROOT_MASK|
@@ -4906,7 +4965,11 @@ static int hugetab_finish_realloc_keep(HugeTab *ht, const void *p,
       return LJ_HUGE_REALLOC_KEEP_MOVE;
     flags = (uint32_t)meta & LJ_HUGEF_MASK;
     flags &= ~LJ_HUGEF_BUSY;
-    if (!hugetab_pack((void *)(uintptr_t)addr, nsize, flags,
+    /* A preceding raw shrink may have retained more payload capacity than
+    ** this logical growth needs. Never shorten the physical release bound. */
+    if (!hugetab_pack((void *)(uintptr_t)addr,
+                      hugetab_size(meta) > nsize ? hugetab_size(meta) : nsize,
+                      flags,
 		      &packed_addr, &next) || packed_addr != addr)
       return LJ_HUGE_REALLOC_KEEP_LOST;
     /* hugetab_pack resets the bounded reader field; the exact checks above
@@ -6017,7 +6080,8 @@ int lj_arena_destruct_acquire(const void *p, size_t size)
   GCArena *a;
   uint32_t cell, ncells, life, oldstate, aflags;
   uint64_t active;
-  if (!p || size == 0 || size > LJ_HUGE_THRESHOLD)
+  if (!p || size == 0 || size > LJ_HUGE_THRESHOLD ||
+      lj_arena_ishuge_base(p))
     return LJ_ARENA_DESTRUCT_LOST;
   a = lj_arena_of(p);
   cell = lj_arena_cellof(p);
@@ -6117,7 +6181,8 @@ static int arena_quarantine_owns_body(TGAlloc *alloc,
 {
   GCArena *a;
   uint32_t cell, ncells, flags, life;
-  if (!p || size == 0 || size > LJ_HUGE_THRESHOLD)
+  if (!p || size == 0 || size > LJ_HUGE_THRESHOLD ||
+      lj_arena_ishuge_base(p))
     return 0;
   a = lj_arena_of(p);
   cell = lj_arena_cellof(p);
@@ -6167,7 +6232,8 @@ int lj_arena_remote_free_publish(TGAlloc *alloc, void *p, size_t size)
   LJArenaRemoteFree *node, *head;
   uint32_t start, ncells, oldstate, flags;
   int claim, plain_held = 0;
-  if (!alloc || !p || size == 0 || size > LJ_HUGE_THRESHOLD)
+  if (!alloc || !p || size == 0 || size > LJ_HUGE_THRESHOLD ||
+      lj_arena_ishuge_base(p))
     return 0;
 retry_open:
   a = lj_arena_of(p);
@@ -8987,11 +9053,10 @@ void lj_arena_free(TGAlloc *alloc, void *p, size_t size)
   int claim, plain_held = 0;
   if (!p || size == 0)
     return;
-  /* lua_Alloc's old size is the lifetime-safe class discriminator. Never read
-  ** an arena header merely to decide whether a possibly stale huge address is
-  ** mapped. Direct huge allocations have no side table and retain the normal
-  ** single-owner free contract; arena_allocf uses terminal table ownership. */
-  if (size > LJ_HUGE_THRESHOLD) {
+  /* Physical class survives a logical shrink across the huge threshold.
+  ** Geometry needs no mapping-header read. Direct huge frees still require
+  ** an owned live mapping; arena_allocf first takes terminal table ownership. */
+  if (lj_arena_ishuge_base(p)) {
     lj_arena_huge_unmap(p, size);
     return;
   }
@@ -9124,7 +9189,7 @@ int lj_arena_free_deferred(TGAlloc *alloc, void *p, size_t size)
     return 0;
   if (!p || size == 0)
     return 0;
-  if (size > LJ_HUGE_THRESHOLD)
+  if (size > LJ_HUGE_THRESHOLD || lj_arena_ishuge_base(p))
     return 0;
 retry_open:
   a = lj_arena_of(p);
@@ -9181,7 +9246,15 @@ void *lj_arena_realloc(TGAlloc *alloc, PRNGState *rs, void *p,
   int oldhuge;
   if (!p)
     return lj_arena_alloc(alloc, rs, nsize, flags);
-  oldhuge = osize > LJ_HUGE_THRESHOLD;
+  oldhuge = lj_arena_ishuge_base(p);
+  if (oldhuge && nsize != 0 && nsize <= osize) {
+    GCArena *a = lj_arena_of(p);
+    /* The direct API owns a live mapping without a HugeTab. Its immutable
+    ** kind selects raw retention; flags describe only a possible replacement
+    ** and must not change the existing typed direct-resize contract. */
+    if (!(lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE))
+      return p;
+  }
   if (!oldhuge) {
     GCArena *a = lj_arena_of(p);
     uint32_t cell = lj_arena_cellof(p);
@@ -9223,11 +9296,11 @@ void *lj_arena_realloc(TGAlloc *alloc, PRNGState *rs, void *p,
     lj_arena_free(alloc, p, osize);
     return NULL;
   }
-  /* osize, not an allocation-header probe, is valid after a competing huge
-  ** table owner has unmapped p. The direct API still assumes the caller owns
-  ** p while copying; arena_allocf adds a BUSY pin for shared huge mappings. */
+  /* The direct API owns p throughout header access and any copy. Shared huge
+  ** allocations instead use the HugeTab path before touching this mapping.
+  ** A retained raw shrink may make osize smaller than its physical capacity. */
   if (oldhuge && nsize > LJ_HUGE_THRESHOLD &&
-      lj_arena_huge_mapsize(osize) == lj_arena_huge_mapsize(nsize))
+      lj_arena_of(p)->hdr.huge_mapsize == lj_arena_huge_mapsize(nsize))
     return p;
   if (oldhuge || nsize > LJ_HUGE_THRESHOLD) {
     size_t csize = osize < nsize ? osize : nsize;
@@ -9326,7 +9399,7 @@ static void arena_allocf_free(LJArenaAllocD *ad, void *ptr, size_t osize)
 {
   if (!ptr || osize == 0)
     return;
-  if (osize > LJ_HUGE_THRESHOLD) {
+  if (lj_arena_ishuge_base(ptr)) {
     /* The table claim is both duplicate suppression and the linearization
     ** point against prepare_sweep(). A missing entry is stale/already owned;
     ** in either case no mapping header or payload may be touched. */
@@ -9364,23 +9437,28 @@ static void arena_allocf_free(LJArenaAllocD *ad, void *ptr, size_t osize)
 }
 
 static void *arena_allocf_realloc_huge(LJArenaAllocD *ad, void *ptr,
-					 size_t nsize)
+					 size_t osize, size_t nsize)
 {
   LJHugeInfo hi;
   size_t csize;
   void *np;
   int claim, finish;
+  /* Positive raw shrink retains all physical bytes and publishes no state
+  ** which could obstruct a suspended reader. Validate metadata only, before
+  ** any BUSY claim, mapping/header access, or allocation-failure path. */
+  if (nsize <= osize)
+    return hugetab_raw_shrink_valid(ad->huge, ptr, osize) ? ptr : NULL;
   /* Claim before allocation: this both rejects a stale table address before
   ** the OS can reuse it for np and pins the old payload throughout allocation
   ** and copy. A failed replacement releases the nonterminal pin unchanged. */
-  claim = hugetab_claim_realloc(ad->huge, ptr, &hi);
+  claim = hugetab_claim_realloc(ad->huge, ptr, osize, &hi);
   if (claim == LJ_HUGE_REALLOC_CLAIM_LOST)
     return NULL;
   if (hi.readers == 0 && nsize > LJ_HUGE_THRESHOLD &&
       lj_arena_huge_mapsize(hi.size) == lj_arena_huge_mapsize(nsize)) {
     int kept;
-    /* Same mapping extent: update authoritative logical size and retain the
-    ** stock O(1) realloc fast path without a free/sweep observation window. */
+    /* Same mapping extent: extend authoritative capacity if needed without
+    ** shortening any capacity retained by an earlier logical shrink. */
     kept = hugetab_finish_realloc_keep(ad->huge, ptr, nsize, &hi);
     if (kept == LJ_HUGE_REALLOC_KEEP_DONE)
       return ptr;
@@ -9390,7 +9468,7 @@ static void *arena_allocf_realloc_huge(LJArenaAllocD *ad, void *ptr,
       (void)hugetab_release_realloc(ad->huge, ptr, NULL);
       return NULL;
     }
-    /* A reader admitted before BUSY owns the old logical size. Fall through
+    /* A reader admitted before BUSY owns the old capacity. Fall through
     ** to an allocate/copy/deferred-old release rather than rewriting it. */
   }
   np = arena_allocf_new(ad, nsize, ad->flags);
@@ -9400,7 +9478,7 @@ static void *arena_allocf_realloc_huge(LJArenaAllocD *ad, void *ptr,
     UNUSED(released);
     return NULL;
   }
-  csize = hi.size < nsize ? hi.size : nsize;
+  csize = osize < nsize ? osize : nsize;
   memcpy(np, ptr, csize);
   finish = hugetab_realloc_to_external_free(ad->huge, ptr, &hi);
   if (finish == LJ_HUGE_REALLOC_MOVE_PREEMPTED) {
@@ -9546,9 +9624,9 @@ void *lj_arena_allocf(void *ud, void *ptr, size_t osize, size_t nsize)
   }
   if (osize == 0)
     return NULL;
-  oldhuge = osize > LJ_HUGE_THRESHOLD;
+  oldhuge = lj_arena_ishuge_base(ptr);
   if (ad->huge && oldhuge)
-    return arena_allocf_realloc_huge(ad, ptr, nsize);
+    return arena_allocf_realloc_huge(ad, ptr, osize, nsize);
   if (ad->huge && nsize > LJ_HUGE_THRESHOLD) {
     size_t csize;
     void *np;

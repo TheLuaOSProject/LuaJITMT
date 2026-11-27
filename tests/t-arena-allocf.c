@@ -36,7 +36,7 @@ int main(void)
     LJArenaAllocD ad;
     HugeTab ht = { 0 };
     LJHugeInfo hi;
-    void *p, *q, *typed, *huge, *huge_same, *huge2, *small;
+    void *p, *q, *typed, *huge, *huge_same, *huge2;
     void *recovery_huge;
     size_t hsize = LJ_HUGE_THRESHOLD + 100u + round;
     size_t hsize_same = hsize + 512u;
@@ -147,19 +147,17 @@ int main(void)
     assert((hi.flags & LJ_HUGEF_MARK) != 0);
     check_seq((uint8_t *)huge2, 128, (uint8_t)(0x50u + round));
 
-    small = lj_arena_allocf(&ad, huge2, hsize2, 128);
-    assert(small != NULL);
-    assert(!lj_arena_ishuge(lj_arena_of(small)));
-    assert(lj_arena_of(small)->hdr.owner_tid == alloc.owner_tid);
-    assert(lj_arena_hugetab_lookup(&ht, huge2, NULL) == 0);
-    check_seq((uint8_t *)small, 128, (uint8_t)(0x50u + round));
-    /* The original size class makes all of these safe after huge2 is
-    ** unmapped. A duplicate/stale operation observes only the terminal table
-    ** state and never probes its former mapping header or payload. */
-    assert(lj_arena_allocf(&ad, huge2, hsize2, 0) == NULL);
-    assert(lj_arena_free_deferred(&alloc, huge2, hsize2) == 0);
-    assert(lj_arena_allocf(&ad, huge2, hsize2, hsize) == NULL);
-    assert(lj_arena_allocf(&ad, small, 128, 0) == NULL);
+    assert(lj_arena_allocf(&ad, huge2, hsize2, 128) == huge2);
+    assert(lj_arena_hugetab_lookup(&ht, huge2, &hi) && hi.size == hsize2);
+    check_seq((uint8_t *)huge2, 128, (uint8_t)(0x50u + round));
+    assert(lj_arena_allocf(&ad, huge2, 128, 0) == NULL);
+    assert(!lj_arena_hugetab_lookup(&ht, huge2, NULL));
+    /* Even a small logical size reaches the table after the mapping is gone. */
+    assert(lj_arena_allocf(&ad, huge2, 128, 0) == NULL);
+    assert(lj_arena_free_deferred(&alloc, huge2, 128) == 0);
+    assert(lj_arena_remote_free_publish(&alloc, huge2, 128) == 0);
+    assert(lj_arena_allocf(&ad, huge2, 128, 64) == NULL);
+    assert(lj_arena_allocf(&ad, huge2, 128, hsize) == NULL);
 
     lj_arena_hugetab_fini(&ht);
     lj_arena_alloc_fini(&alloc);

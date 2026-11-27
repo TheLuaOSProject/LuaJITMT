@@ -45,7 +45,7 @@ int main(void)
     assert(lj_arena_ishuge(a));
     assert((a->hdr.flags & flags) == flags);
     assert((a->hdr.flags & LJ_AF_TRAVERSABLE) == flags);
-    assert(a->hdr.live_cells == (uint32_t)(mapsize >> LJ_CELL_SHIFT));
+    assert(a->hdr.huge_mapsize == mapsize);
     assert(lj_arena_gc2_stamp_acq(p) == &a->hdr.huge_tabstamp);
     assert(la_load64_acq(&a->hdr.huge_tabstamp.state) == 0);
     assert(lj_gc2_table_token_state(

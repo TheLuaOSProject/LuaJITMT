@@ -164,8 +164,15 @@ typedef struct GCAhdr {
   uint32_t owner_tid;
   GCArena *next;
   GreyStack *grey;
-  uint32_t sweep_epoch;
-  uint32_t live_cells;
+  union {
+    struct {
+      uint32_t sweep_epoch;
+      uint32_t live_cells;
+    };
+    /* Huge mapping extent is immutable even when its logical payload shrinks.
+    ** Direct allocations retain the full size_t range without a HugeTab. */
+    size_t huge_mapsize;
+  };
   /* Immutable mapping kind selects this union. Small traversable mappings
   ** own the full inline+wide cell sidecar; huge mappings own one reserved W
   ** in their physical mapping tail.
@@ -574,7 +581,7 @@ static LJ_AINLINE int lj_arena_alloc_has_run_ge(const TGAlloc *alloc,
 }
 
 struct LJHugeInfo {
-  size_t size;
+  size_t size;  /* Exact typed payload size, or retained raw payload capacity. */
   uint32_t flags;
   uint32_t readers;
 };
@@ -642,12 +649,15 @@ LJ_FUNC uint32_t lj_arena_count_free_runs(const GCArena *a);
 LJ_FUNC int lj_arena_gc2_tokens_empty_acq(const GCArena *a);
 LJ_FUNC GCArena *lj_arena_map(PRNGState *rs, uint32_t flags);
 LJ_FUNC void lj_arena_unmap(GCArena *a);
-/* Physical extent for either Huge kind: header + exact logical payload +
+/* Physical extent for either Huge kind: header + requested payload capacity +
 ** one aligned 16-byte tail reservation, rounded to the arena quantum.
 ** The plain kind leaves its W pointer NULL. Neither padding nor W belongs
-** to HugeTab logical lookup, vector bounds, copying or live-byte accounting. */
+** to HugeTab payload bounds. A raw shrink retains its capacity and mapping;
+** callers separately retain logical sizes for copying and accounting. */
 LJ_FUNC size_t lj_arena_huge_mapsize(size_t size);
 LJ_FUNC void *lj_arena_huge_map(PRNGState *rs, size_t size, uint32_t flags);
+/* Requires an owned live direct mapping. Physical extent comes from its
+** immutable header; size may be the smaller logical size after raw shrink. */
 LJ_FUNC void lj_arena_huge_unmap(void *p, size_t size);
 /* Physical unmap after an exact HugeTab destructive CAS consumed a counted
 ** certificate lease (or an equivalent terminal recovery claim). The cutoff
@@ -953,6 +963,8 @@ LJ_FUNC void lj_arena_test_plain_commit_pause(GCArena *a, int enabled);
 LJ_FUNC uint32_t lj_arena_test_plain_commit_paused(void);
 LJ_FUNC void lj_arena_test_plain_shrink_pause(GCArena *a, int enabled);
 LJ_FUNC uint32_t lj_arena_test_plain_shrink_paused(void);
+LJ_FUNC void lj_arena_test_huge_shrink_pause(void *p, int enabled);
+LJ_FUNC uint32_t lj_arena_test_huge_shrink_paused(void);
 LJ_FUNC void lj_arena_test_alloc_fail(int enabled);
 LJ_FUNC uint64_t lj_arena_test_alloc_failures(void);
 LJ_FUNC void lj_arena_test_plain_admit_pause(int enabled);
@@ -1164,6 +1176,13 @@ LJ_FUNC void *lj_arena_allocf(void *ud, void *ptr, size_t osize,
 static LJ_AINLINE GCArena *lj_arena_of(const void *p)
 {
   return (GCArena *)((uintptr_t)p & ~(uintptr_t)LJ_ARENA_MASK);
+}
+
+/* Allocation-base geometry is immutable, unlike the caller's logical osize.
+** This classification never reads a possibly stale mapping header. */
+static LJ_AINLINE int lj_arena_ishuge_base(const void *p)
+{
+  return ((uintptr_t)p & (uintptr_t)LJ_ARENA_MASK) == sizeof(GCAhdr);
 }
 
 static LJ_AINLINE uint32_t lj_arena_cellof(const void *p)
@@ -1722,6 +1741,9 @@ LJ_STATIC_ASSERT(LJ_ARENA_LIFETIME_RELINK_RECOVERY <= 15);
 LJ_STATIC_ASSERT((LJ_AF_ROOT_CONSTRUCT & LJ_AF_FLAG_MASK) == 0);
 LJ_STATIC_ASSERT((LJ_AF_DTOR_CONSTRUCT & LJ_AF_FLAG_MASK) == 0);
 LJ_STATIC_ASSERT(sizeof(GCAhdr) == 128u);
+LJ_STATIC_ASSERT(offsetof(GCAhdr, huge_mapsize) == 24u);
+LJ_STATIC_ASSERT(offsetof(GCAhdr, sweep_epoch) == 24u);
+LJ_STATIC_ASSERT(offsetof(GCAhdr, live_cells) == 28u);
 LJ_STATIC_ASSERT(sizeof(LJGC2TabStamp) == 16u);
 LJ_STATIC_ASSERT(offsetof(LJGC2TabStamp, token) == 8u);
 LJ_STATIC_ASSERT(sizeof(LJGC2TabStampArena) == 2u * LJ_ARENA_SIZE);

@@ -216,6 +216,11 @@ return function(add)
           },
           timeout = "60s"
         })
+        build.compile_and_run_c(t, t:tmp("lj-t-stack-overflow-shrink"),
+                               "t-stack-overflow-shrink.c", {
+          cflags = flags, timeout = "20s",
+          libs = { "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread" }
+        })
       end)
     end
   })

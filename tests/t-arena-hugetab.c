@@ -521,6 +521,36 @@ static void test_huge_realloc_busy_preemption(PRNGState *rs)
   lj_arena_allocd_sethugetab(&primary_ad, &ht);
   lj_arena_allocd_sethugetab(&follower_ad, &ht);
 
+  /* A suspended shrink leaves both existing and newly admitted readers
+  ** able to finish. Free using the owner's new logical size after it resumes. */
+  p = lj_arena_allocd_alloc(&primary_ad, size, 0);
+  assert(p != NULL);
+  memset(p, 0x4d, size);
+  assert(lj_arena_hugetab_reader_acquire(&ht, p, &reader, NULL) == 1);
+  race.ad = &primary_ad;
+  race.p = p;
+  race.osize = size;
+  race.nsize = 1;
+  race.result = NULL;
+  lj_arena_test_huge_shrink_pause(p, 1);
+  assert(pthread_create(&thread, NULL, huge_realloc_race_thread, &race) == 0);
+  while (!lj_arena_test_huge_shrink_paused()) la_cpu_pause();
+  {
+    LJHugeReader next = { NULL, NULL, 0 };
+    assert(lj_arena_hugetab_reader_acquire(&ht, p, &next, &hi) == 1);
+    assert(hi.readers == 2 && hi.size == size && !(hi.flags & LJ_HUGEF_BUSY));
+    assert(lj_arena_hugetab_reader_covers_range(&next, p, size));
+    assert(((unsigned char *)p)[size - 1] == 0x4d);
+    assert(lj_arena_hugetab_reader_release(&reader, NULL) ==
+           LJ_ARENA_HUGE_READER_RELEASED);
+    assert(lj_arena_hugetab_reader_release(&next, NULL) ==
+           LJ_ARENA_HUGE_READER_RELEASED);
+  }
+  lj_arena_test_huge_shrink_pause(p, 0);
+  assert(pthread_join(thread, NULL) == 0 && race.result == p);
+  assert(lj_arena_allocf(&primary_ad, p, 1, 0) == NULL);
+  assert(!lj_arena_hugetab_lookup(&ht, p, NULL));
+
   p = lj_arena_allocd_alloc(&primary_ad, size, 0);
   assert(p != NULL);
   memset(p, 0x5a, 256u);
@@ -1640,6 +1670,17 @@ static void test_huge_reader_overflow_and_size(PRNGState *rs)
   assert(lj_arena_hugetab_reader_acquire(&ht, p, &extra, &hi) ==
 	 LJ_ARENA_HUGE_READER_OVERFLOW);
   assert(extra.h == NULL && extra.base == NULL);
+  {
+    TGAlloc alloc;
+    LJArenaAllocD ad;
+    lj_arena_alloc_init(&alloc);
+    lj_arena_allocd_init(&ad, &alloc, rs, 0);
+    lj_arena_allocd_sethugetab(&ad, &ht);
+    assert(lj_arena_allocf(&ad, p, size, 1) == p);
+    assert(lj_arena_hugetab_lookup(&ht, p, &hi));
+    assert(hi.readers == 0xfffeu && hi.size == size);
+    lj_arena_alloc_fini(&alloc);
+  }
   assert(!lj_arena_hugetab_claim_external_free(&ht, p, &hi));
   assert(hi.readers == 0xfffeu && (hi.flags & LJ_HUGEF_DEFER_FREE));
   for (i = 0; i < 0xfffdu; i++)

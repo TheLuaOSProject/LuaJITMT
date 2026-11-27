@@ -177,7 +177,7 @@ static void geometry(PRNGState *rs)
         a = lj_arena_of(p);
         w = lj_arena_gc2_wide_acq(p);
         assert((char *)p == (char *)a + 128);
-        assert(a->hdr.live_cells == (uint32_t)(m >> LJ_CELL_SHIFT));
+        assert(a->hdr.huge_mapsize == m);
         if (kind)
           assert((void *)w == (char *)a + m - 16 && ((uintptr_t)w & 15) == 0 &&
                  (char *)p + size <= (char *)w);
@@ -313,6 +313,7 @@ static void shared_resize_and_reader(PRNGState *rs)
   assert(lj_arena_hugetab_reader_acquire(&ht, p, &r, &hi) == 1);
   assert(lj_arena_allocf(&ad, p, 65000, 65392) == NULL);
   assert(lj_arena_allocf(&ad, p, 65000, 65408) == NULL);
+  assert(lj_arena_allocf(&ad, p, 65000, 17) == NULL);
   wide_is(p, proof);
   assert(lj_arena_hugetab_lookup(&ht, p, &hi) && hi.size == 65000 &&
          hi.readers == 1 && !(hi.flags & LJ_HUGEF_BUSY));
@@ -332,10 +333,20 @@ static void shared_resize_and_reader(PRNGState *rs)
   assert(lj_arena_allocf(&ad, p, 65392, SIZE_MAX) == NULL);
   assert(lj_arena_hugetab_lookup(&ht, p, &hi) && hi.size == 65392 &&
          hi.readers == 1 && !(hi.flags & LJ_HUGEF_BUSY));
-  q = lj_arena_allocf(&ad, p, 65392, 65200);
+  lj_arena_test_alloc_fail(1);
+  assert(lj_arena_allocf(&ad, NULL, 0, 64) == NULL);
+  assert(lj_arena_allocf(&ad, p, 65392, 65200) == p);
+  assert(lj_arena_allocf(&ad, p, 65200, 17) == p);
+  assert(lj_arena_test_alloc_failures() == 1);
+  lj_arena_test_alloc_fail(0);
+  assert(lj_arena_hugetab_reader_covers_range(&r, p, 65392));
+  q = lj_arena_allocf(&ad, p, 17, 65408);
   assert(q && q != p);
-  watch(q, 65200);
-  bytes_are(q, 65200, 0x41);
+  watch(q, 65408);
+  bytes_are(q, 17, 0x41);
+  /* A fresh anonymous mapping reveals whether growth copied the discarded
+  ** suffix. An already admitted reader still owns all of the old bytes. */
+  bytes_are((char *)q + 17, 65392 - 17, 0);
   bytes_are(p, 65392, 0x41);
   assert(!old->unmaps);
   assert(lj_arena_hugetab_lookup(&ht, p, &hi) && hi.size == 65392 &&
@@ -345,19 +356,52 @@ static void shared_resize_and_reader(PRNGState *rs)
   assert(!old->unmaps);
   delete_map(&ht, p);
   assert(old->unmaps == 1);
-  p = q;
-  old = &watched[nwatch - 1];
-  q = lj_arena_allocf(&ad, p, 65200, 65408);
-  assert(q && q != p);
-  watch(q, 65408);
-  assert(old->unmaps == 1);
-  bytes_are(q, 65200, 0x41);
   assert(lj_arena_gc2_wide_acq(q) == NULL);
   assert(lj_arena_allocf(&ad, q, 65408, 0) == NULL);
   lj_arena_alloc_fini(&alloc);
   lj_arena_hugetab_fini(&ht);
   puts("published traversable resize refuses; plain readers preserve old "
        "logical extent through deferred unmap");
+}
+
+static void raw_shrink_unmap(PRNGState *rs)
+{
+  const size_t orig = 2 * LJ_ARENA_SIZE + 31;
+  TGAlloc alloc;
+  HugeTab src = {0}, dst = {0};
+  LJArenaAllocD ad;
+  LJHugeInfo hi;
+  struct Watch *w;
+  void *p;
+  lj_arena_alloc_init(&alloc);
+  p = lj_arena_alloc(&alloc, rs, orig, 0);
+  assert(p);
+  w = watch(p, orig);
+  memset(p, 0xe3, orig);
+  lj_arena_test_alloc_fail(1);
+  assert(lj_arena_realloc(&alloc, rs, p, orig, LJ_ARENA_SIZE, 0) == p);
+  assert(lj_arena_realloc(&alloc, rs, p, LJ_ARENA_SIZE, 1, 0) == p);
+  assert(lj_arena_test_alloc_failures() == 0);
+  lj_arena_test_alloc_fail(0);
+  bytes_are(p, orig, 0xe3);
+  lj_arena_free(&alloc, p, 1);
+  assert(w->unmaps == 1);
+
+  assert(lj_arena_hugetab_init(&src, 2) && lj_arena_hugetab_init(&dst, 2));
+  lj_arena_allocd_init(&ad, &alloc, rs, 0);
+  lj_arena_allocd_sethugetab(&ad, &src);
+  p = lj_arena_allocf(&ad, NULL, 0, orig);
+  assert(p);
+  w = watch(p, orig);
+  assert(lj_arena_allocf(&ad, p, orig, 1) == p);
+  assert(lj_arena_allocf(&ad, p, 1, orig - 1) == p);
+  assert(lj_arena_allocf(&ad, p, orig - 1, 1) == p);
+  assert(lj_arena_hugetab_transfer(&dst, &src, 77));
+  assert(lj_arena_hugetab_lookup(&dst, p, &hi) && hi.size == orig);
+  assert(lj_arena_hugetab_fini_all(&dst) == 1);
+  assert(w->unmaps == 1);
+  lj_arena_hugetab_fini(&src);
+  lj_arena_alloc_fini(&alloc);
 }
 static void failures_transfer(PRNGState *rs)
 {
@@ -441,6 +485,7 @@ int main(int argc, char **argv)
   if (!strcmp(mode, "all") || !strcmp(mode, "resize")) {
     direct_resize(&rs);
     shared_resize_and_reader(&rs);
+    raw_shrink_unmap(&rs);
   }
   if (!strcmp(mode, "all") || !strcmp(mode, "failures"))
     failures_transfer(&rs);
