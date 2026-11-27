@@ -562,6 +562,18 @@ void lj_safepoint_channel_park_checkpoint(lua_State *L, TGState *tg)
     lj_tg_dead_read_checkpoint(tg);
 }
 
+void lj_safepoint_collectgarbage_checkpoint(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  /* Only the builtin calls here, after its protected collector driver has
+  ** returned. An arbitrary C API caller can still hold an old raw cursor. */
+  if (tg && tg == g->main_tg && gc2_finalizer_active_acq(g) == 0 &&
+      vmevent_owner_acq(g) != lj_tg_tid_acq(tg) &&
+      safepoint_str_vm_frame(L, tg))
+    (void)lj_tg_reclaim_empty_dead(g);
+}
+
 static uint32_t safepoint_ack_tg(global_State *g, TGState *tg,
 				 int note_latency, int wait_consumed,
 				 int native_parked,
@@ -903,8 +915,16 @@ static void safepoint_vm_scan(lua_State *L, int trace_exit)
 
 void lj_safepoint_vm_checkpoint(lua_State *L, int trace_exit)
 {
+  global_State *g = G(L);
   TGState *tg = L2TG(L);
   safepoint_vm_scan(L, trace_exit);
+  /* An outer dispatch checkpoint has returned from any prior C operation
+  ** with a raw TG cursor. A nested FFI/C callback cannot certify its caller. */
+  if (tg != g->main_tg &&
+      la_load64_acq(&tg->dead_tg_epoch) !=
+	la_load64_acq(&g->main_tg->dead_tg_epoch) &&
+      safepoint_str_vm_frame(L, tg))
+    lj_tg_dead_read_checkpoint(tg);
   if (la_load32_acq(&tg->str_auto_pending)) {
     int status = lj_gc_auto_string_checkpoint(L, 1);
     if (LJ_UNLIKELY(status != LUA_OK))

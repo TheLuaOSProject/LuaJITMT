@@ -3163,10 +3163,6 @@ int lj_gc2_collect_active(lua_State *L)
 	}
       }
       lj_gc2_publish_idle_threshold(g);
-      /* A background worker may have performed the IDLE transition. The
-      ** explicit requester supplies the main owner's dead-TG reclaim turn. */
-      if (gc2_n_threads_acq(g) > 1)
-	(void)lj_tg_reclaim_dead(g);
       return 1;
     }
     if (phase == LJ_GC2_MARK) {

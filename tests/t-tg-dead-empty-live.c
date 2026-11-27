@@ -92,7 +92,7 @@ static int begin_unlink(lua_State *L)
   wait_flag(&smr_ready);
   lj_tg_flags_or_rlx(target, TGF_DEFER_FREE);
   while (target_on_list(g))
-    (void)lj_tg_reclaim_dead(g);
+    (void)lj_tg_reclaim_empty_dead(g);
   return 0;
 }
 
@@ -101,7 +101,7 @@ static int check_mapped(lua_State *L)
   global_State *g = G(L);
   LJTGRegistryBodySnap body;
   unsigned char resident;
-  (void)lj_tg_reclaim_dead(g);
+  (void)lj_tg_reclaim_empty_dead(g);
   body = lj_tgregistry_slot_body_snapshot(target_key.slot);
   assert(lj_tgregistry_body_snap_is(&body, target, target_key.incarnation));
   assert(mincore(target_map, (size_t)sysconf(_SC_PAGESIZE), &resident) == 0);
@@ -115,15 +115,44 @@ static int release_cursor(lua_State *L)
   return 0;
 }
 
+static int release_smr(lua_State *L)
+{
+  UNUSED(L);
+  la_store32_rel(&smr_release, 1);
+  assert(pthread_join(smr_thread, NULL) == 0);
+  return 0;
+}
+
+static int nested_collect(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *held = target_on_list(g);
+  TGState *next;
+  assert(held);
+  next = lj_tg_next_acq(held);
+  lj_tg_flags_or_rlx(held, TGF_DEFER_FREE);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(target_on_list(g) == held);
+  lua_getglobal(L, "collectgarbage");
+  lua_call(L, 0, 0);
+  assert(target_on_list(g) == held);
+  assert_cursor(held, next);
+  return 0;
+}
+
+static int check_unlinked(lua_State *L)
+{
+  assert(target_on_list(G(L)) == NULL);
+  return 0;
+}
+
 static int await_withdrawn(lua_State *L)
 {
   global_State *g = G(L);
   LJTGSlotSnap slot;
   unsigned char resident;
-  la_store32_rel(&smr_release, 1);
-  assert(pthread_join(smr_thread, NULL) == 0);
   do {
-    (void)lj_tg_reclaim_dead(g);
+    (void)lj_tg_reclaim_empty_dead(g);
     assert(lj_tgregistry_key_snapshot(&target_key, &slot) == LJ_TGSLOT_OK);
     lj_thr_sched_yield();
   } while (slot.state != LJ_TGSLOT_EMPTY);
@@ -142,18 +171,26 @@ int main(void)
   lua_register(L, "begin_unlink", begin_unlink);
   lua_register(L, "check_mapped", check_mapped);
   lua_register(L, "release_cursor", release_cursor);
+  lua_register(L, "release_smr", release_smr);
+  lua_register(L, "nested_collect", nested_collect);
+  lua_register(L, "check_unlinked", check_unlinked);
   lua_register(L, "await_withdrawn", await_withdrawn);
   ljt_lua_assert_ok(L, luaL_loadstring(L,
-    "if jit then jit.off() end\n"
+    "if jit and os.getenv('JIT') ~= 'on' then jit.off() end\n"
     "collectgarbage('stop')\n"
     "local th = require('threading')\n"
     "th.gcworkers(tonumber(os.getenv('POOL')) or 0)\n"
     "make_target()\n"
     "local parked, unpark = th.channel(1), th.channel(1)\n"
+    "local spin, done = os.getenv('SPIN') == '1', false\n"
     "local sentinel = assert(th.spawn(function()\n"
     "  hold_cursor()\n"
     "  assert(parked:send(true, 10))\n"
-    "  assert(unpark:recv(10))\n"
+    "  if spin then\n"
+    "    while not done do end\n"
+    "  else\n"
+    "    assert(unpark:recv(10))\n"
+    "  end\n"
     "end))\n"
     "begin_unlink()\n"
     "check_mapped()\n"
@@ -162,9 +199,18 @@ int main(void)
     "release_cursor()\n"
     "assert(parked:recv(10))\n"
     "check_mapped()\n"
+    "release_smr()\n"
+    "if spin then for _ = 1, 3 do collectgarbage('collect') end end\n"
     "await_withdrawn()\n"
+    "if not spin then\n"
+    "  make_target()\n"
+    "  nested_collect()\n"
+    "  for _ = 1, 3 do collectgarbage('collect') end\n"
+    "  check_unlinked()\n"
+    "  await_withdrawn()\n"
+    "end\n"
     "assert(sentinel:running())\n"
-    "assert(unpark:send(true, 10))\n"
+    "if spin then done = true else assert(unpark:send(true, 10)) end\n"
     "assert(sentinel:join(10))\n"
     "th.gcworkers(0)\n"), "load live TG reap test");
   ljt_lua_pcall(L, 0, 0, "live TG reap test");

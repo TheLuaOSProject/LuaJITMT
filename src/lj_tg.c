@@ -1404,6 +1404,11 @@ restart:
 
 uint32_t lj_tg_reclaim_dead(global_State *g)
 {
+  return tg_reclaim_dead(g, 0, 0);
+}
+
+uint32_t lj_tg_reclaim_empty_dead(global_State *g)
+{
   uint32_t n = 0;
   TGState *main_tg;
   if (g && (main_tg = g->main_tg) != NULL && lj_thr_get_tg() == main_tg &&
@@ -1414,7 +1419,7 @@ uint32_t lj_tg_reclaim_dead(global_State *g)
 	!main_tg->dead_tg_head)
       tg_unlink_empty_dead(g, main_tg);
   }
-  return n + tg_reclaim_dead(g, 0, 0);
+  return n;
 }
 
 uint32_t lj_tg_reclaim_dead_terminal(global_State *g)

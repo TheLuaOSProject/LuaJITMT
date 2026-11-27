@@ -1645,6 +1645,8 @@ LJ_FUNC void lj_tg_detach(global_State *g, TGState *tg);
 LJ_FUNC int lj_tg_registry_main_close_begin(global_State *g);
 LJ_FUNC void lj_tg_registry_fini(global_State *g);
 LJ_FUNC uint32_t lj_tg_reclaim_dead(global_State *g);
+/* Only a certified outer Lua boundary may exempt main from the reader grace. */
+LJ_FUNC uint32_t lj_tg_reclaim_empty_dead(global_State *g);
 LJ_FUNC void lj_tg_dead_read_checkpoint(TGState *tg);
 LJ_FUNC uint32_t lj_tg_reclaim_dead_terminal(global_State *g);
 LJ_FUNC uint32_t lj_tg_reclaim_dead_terminal_orphans(global_State *g);
