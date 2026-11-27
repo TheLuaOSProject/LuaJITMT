@@ -2099,8 +2099,11 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   th = (LJThread *)uddata(ud);
   threading_start_roots_init(L, ud, th, baseofs, (uint32_t)(nargs + 1));
   live = threading_live_new(L, ud);
-  threading_live_publish(L, th, live);
-  tg = lj_mem_newt(L, sizeof(TGState), TGState);
+  tg = (TGState *)lj_mem_new_nothrow(L, sizeof(*tg));
+  if (!tg) {
+    lj_mem_freet(G(L), live);
+    lj_err_mem(L);
+  }
   /* The live handle owns L1 from startup through the first join. Subsequent
   ** joins reach the result stack through the same userdata. A second global
   ** state root would keep the handle and its results alive after Lua drops it. */
@@ -2116,6 +2119,9 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   lj_tg_tid_rel(tg, th->thr.tid);
   lj_tg_derive_prng(G(L), tg, th->thr.tid);
   lj_tg_store_thread_ud(tg, ud);
+  /* The parent stack roots both Lua objects during construction. Shutdown
+  ** may traverse a live handle as soon as its node becomes visible. */
+  threading_live_publish(L, th, live);
   rc = threading_gc_enter(L, ud);
   if (rc <= 0) {
     threading_unstarted_tg_finish(L, th, tg);

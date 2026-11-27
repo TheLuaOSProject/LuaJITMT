@@ -247,6 +247,38 @@ static int resume_callback(lua_State *L)
   return 0;
 }
 
+static void test_failed_spawn(void)
+{
+  Counting count = {0};
+  lua_State *L = lua_newstate(counting_alloc, &count);
+  assert(L);
+  luaL_openlibs(L);
+  lua_gc(L, LUA_GCSTOP, 0);
+  assert(luaL_dostring(L,
+    "spawn = require('threading').spawn\n"
+    "function work(x) return x end\n"
+    "weak = setmetatable({}, {__mode = 'v'})\n") == LUA_OK);
+  lua_getglobal(L, "spawn");
+  lua_getglobal(L, "work");
+  lua_newtable(L);
+  lua_getglobal(L, "weak");
+  lua_pushvalue(L, -2);
+  lua_rawseti(L, -2, 1);
+  lua_pop(L, 1);
+  count.fail_at = count.attempts + 1;
+  assert(lua_pcall(L, 2, 1, 0) == LUA_ERRMEM);
+  assert(count.attempts >= count.fail_at);
+  count.fail_at = 0;
+  lua_pop(L, 1);
+  collect(L);
+  assert(luaL_dostring(L,
+    "assert(weak[1] == nil)\n"
+    "local ok, value = spawn(work, 42):join()\n"
+    "assert(ok and value == 42)\n") == LUA_OK);
+  lua_close(L);
+  assert(count.live == 0);
+}
+
 static void test_parallel_callbacks(void)
 {
   Counting count = {0};
@@ -284,6 +316,7 @@ int main(void)
   test_bootstrap_failure();
   test_custom_allocator();
   test_wrapping_builtin();
+  test_failed_spawn();
   test_parallel_callbacks();
   puts("t-allocator-embedding OK");
   return 0;
