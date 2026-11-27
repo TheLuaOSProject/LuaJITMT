@@ -5942,18 +5942,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  lea RA, [BASE+RA*8]
     if (op == BC_IFORL || op == BC_JFORI || op == BC_JFORL) {
       |  // Resume the same instruction before updating the loop index.
-      if (op == BC_IFORL) {
-        |  cmp TGPOLL, 0
-        |  jnz >7
-        |  cmp PC_OP, BC_IFORL
-        |  jne >4
-        |  cmp TGSTRAUTO, 0
-        |  jz >4
-        |7:
-      } else {
-        |  cmp TGPOLL, 0
-        |  jz >4
-      }
+      |  cmp TGPOLL, 0
+      |  jz >4
       |  sub PC, 4
       |  jmp ->vm_safepoint_static
       |4:
@@ -6003,6 +5993,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 	|6:
       }
       |7:
+      if (op == BC_IFORL) {
+	|  // FORL also dispatches here with JIT disabled. Finish the loop
+	|  // instruction before servicing maintenance, so replay is unnecessary.
+	|  cmp TGSTRAUTO, 0
+	|  jnz ->vm_safepoint
+      }
       |  ins_next
       |
       |5:  // Invert check for negative step.
@@ -6084,6 +6080,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jmp <6
     |.else
     |2:
+    if (op == BC_IFORL) {
+      |  cmp TGSTRAUTO, 0
+      |  jnz ->vm_safepoint
+    }
     |  ins_next
     |.endif
     |
