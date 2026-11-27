@@ -13,6 +13,30 @@
 #include "lj_state.h"
 #include "lj_tg.h"
 
+static void check_stack_growth(lua_State *L)
+{
+  lua_State *a = lua_newthread(L);
+  lua_State *b = lua_newthread(L);
+  uintptr_t oldaddr = (uintptr_t)tvref(a->stack);
+  uintptr_t offset = (uintptr_t)b->base - oldaddr;
+  TValue *sibling = b->base;
+  /* The other real frame is beyond the old stack and within the number of
+  ** bytes requested for the replacement. Only the original extent counts. */
+  assert(offset >= a->stacksize * sizeof(TValue));
+  assert(offset < 1024 * sizeof(TValue));
+  lua_pushinteger(a, 42);
+  lj_tg_setjit_base(G(L), sibling);
+  assert(lua_checkstack(a, 1024));
+  assert((uintptr_t)tvref(a->stack) != oldaddr);
+  assert(lj_tg_jit_base(G(L)) == sibling);
+  lj_tg_setjit_base(G(L), a->base);
+  assert(lua_checkstack(a, 4096));
+  assert(lj_tg_jit_base(G(L)) == a->base);
+  lj_tg_setjit_base(G(L), NULL);
+  assert(lua_tointeger(a, -1) == 42);
+  lua_pop(L, 2);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -23,6 +47,7 @@ int main(void)
   uint64_t main_epoch, owner_epoch;
 
   assert(L != NULL);
+  check_stack_growth(L);
   g = G(L);
   main_tg = G2TG(g);
   assert(main_tg != NULL && L2TG(L) == main_tg);

@@ -64,37 +64,43 @@
 ** LJ_FR2: We need 2 more slots for the frame PC and the continuation PC.
 */
 
+/* Restore frame and upvalue offsets relative to the newly published stack. */
+static void rebase_stack_frames(lua_State *L, uintptr_t oldaddr)
+{
+  GCobj *up;
+  L->base = restorestack(L, (uintptr_t)L->base - oldaddr);
+  L->top = restorestack(L, (uintptr_t)L->top - oldaddr);
+  for (up = lj_state_openupval_acq(L); up != NULL; up = lj_obj_gcw_acq(up)) {
+    GCupval *uv = gco2uv(up);
+    setmref(uv->v, restorestack(L, (uintptr_t)uvval(uv) - oldaddr));
+  }
+}
+
 /* Resize stack slots and adjust pointers in state. */
 static void resizestack(lua_State *L, MSize n)
 {
   TValue *st, *oldst = tvref(L->stack);
-  ptrdiff_t delta;
+  uintptr_t oldaddr = (uintptr_t)oldst, joffset;
   MSize oldsize = L->stacksize;
   MSize realsize = n + 1 + LJ_STACK_EXTRA;
-  TValue *jbase;
-  uintptr_t jaddr, oldaddr;
-  GCobj *up;
+  MSize i;
   lj_assertL((MSize)(tvref(L->maxstack)-oldst) == L->stacksize-LJ_STACK_EXTRA-1,
 	     "inconsistent stack size");
   st = (TValue *)lj_mem_realloc(L, tvref(L->stack),
 				(MSize)(oldsize*sizeof(TValue)),
 				(MSize)(realsize*sizeof(TValue)));
   setmref(L->stack, st);
-  delta = (char *)st - (char *)oldst;
   setmref(L->maxstack, st + n);
-  while (oldsize < realsize)  /* Clear new slots. */
-    setnilV(st + oldsize++);
+  for (i = oldsize; i < realsize; i++)  /* Clear new slots. */
+    setnilV(st + i);
   L->stacksize = realsize;
-  jbase = lj_tg_jit_base(G(L));
-  jaddr = (uintptr_t)jbase;
-  oldaddr = (uintptr_t)oldst;
-  if (jaddr - oldaddr < (uintptr_t)oldsize * sizeof(TValue))
-    lj_tg_setjit_base(G(L), (TValue *)((char *)jbase + delta));
-  L->base = (TValue *)((char *)L->base + delta);
-  L->top = (TValue *)((char *)L->top + delta);
-  for (up = lj_state_openupval_acq(L); up != NULL;
-       up = lj_obj_gcw_acq(up))
-    setmref(gco2uv(up)->v, (TValue *)((char *)uvval(gco2uv(up)) + delta));
+  if ((uintptr_t)st == oldaddr) return;
+  /* Adjacent coroutines can have stacks in the same arena. Only references
+  ** inside the old allocation move with this coroutine. */
+  joffset = (uintptr_t)lj_tg_jit_base(G(L)) - oldaddr;
+  if (joffset < (uintptr_t)oldsize * sizeof(TValue))
+    lj_tg_setjit_base(G(L), (TValue *)((char *)st + joffset));
+  rebase_stack_frames(L, oldaddr);
 }
 
 int lj_vm_cpcall(lua_State *L, lua_CFunction func, void *ud, lua_CPFunction cp)
@@ -154,8 +160,7 @@ int lj_state_rehome_stack(lua_State *L)
   TGState *tg = L2TG(L);
   TValue *oldst = tvref(L->stack);
   TValue *st;
-  ptrdiff_t delta;
-  GCobj *up;
+  uintptr_t oldaddr = (uintptr_t)oldst;
   MSize stacksize = L->stacksize;
   size_t sz = (size_t)stacksize * sizeof(TValue);
   if (!oldst || !tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
@@ -171,13 +176,8 @@ int lj_state_rehome_stack(lua_State *L)
   lj_gc_total_add(g, (GCSize)sz);
   lj_gc2_account_alloc(g, tg, (GCSize)sz);  /* 04 section 4.8 worker stack. */
   setmrefrel(L->stack, st);
-  delta = (char *)st - (char *)oldst;
-  setmrefrel(L->maxstack, (TValue *)((char *)tvref(L->maxstack) + delta));
-  L->base = (TValue *)((char *)L->base + delta);
-  L->top = (TValue *)((char *)L->top + delta);
-  for (up = lj_state_openupval_acq(L); up != NULL;
-       up = lj_obj_gcw_acq(up))
-    setmref(gco2uv(up)->v, (TValue *)((char *)uvval(gco2uv(up)) + delta));
+  setmrefrel(L->maxstack, restorestack(L, (uintptr_t)tvref(L->maxstack) - oldaddr));
+  rebase_stack_frames(L, oldaddr);
   lj_state_stack_pubrange(L, L);
   lj_mem_freevec(g, oldst, stacksize, TValue);
   return 1;
