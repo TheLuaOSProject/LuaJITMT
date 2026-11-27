@@ -27,6 +27,7 @@ static atomic_int peer_resumed_mark;
 static int initial_phase;
 static int public_step;
 static int weak_flush_only;
+static int close_pending;
 
 static uint64_t monotonic_ns(void)
 {
@@ -140,8 +141,22 @@ static int finish_allocation(lua_State *L)
     assert(lj_tg_mark_active_acq(L2TG(L)) && lj_tg_alloc_black_acq(L2TG(L)));
   }
   lua_gc(L, LUA_GCSTOP, 0);
+  if (close_pending) {
+    uint32_t available = 0;
+    /* Model a preempted helper at the last ACK. Its claimed work token
+    ** prevents a second executor from finishing this real epoch. */
+    assert(gc2_worker_active_cas(g, &available, 1));
+  }
   atomic_store(&allocation_finished, 1);
   atomic_store(&release_owner, 1);
+  if (close_pending) {
+    uint64_t start = monotonic_ns();
+    while (!atomic_load(&peer_resumed_mark)) {
+      assert(monotonic_ns() - start < UINT64_C(5000000000));
+      wait_briefly();
+    }
+    gc2_worker_active_rel(g, 0);
+  }
   return 0;
 }
 
@@ -152,6 +167,12 @@ static int peer_after_poll(lua_State *L)
     return 0;
   assert(lj_tg_mark_active_acq(L2TG(L)));
   assert(lj_tg_alloc_black_acq(L2TG(L)));
+  if (close_pending) {
+    assert(gc2_hs_pending_acq(g) == 0);
+    assert(gc2_hs_leader_acq(g) == LJ_SAFEPOINT_RESUMABLE_LEADER);
+    atomic_store(&peer_resumed_mark, 1);
+    return 0;
+  }
   assert(gc2_fixpoint_epoch_actions_acq(g) == 0);
   if (initial_phase == LJ_GC2_MARK)
     assert(gc2_mark_root_scanned_acq(g) == 1);
@@ -184,7 +205,7 @@ static void *watchdog(void *unused)
 static int run_case(int phase)
 {
   static const char source[] =
-    "local hold, held, start, finish, resumed, prepare, flush = ...\n"
+    "local hold, held, start, finish, resumed, prepare, flush, closing = ...\n"
     "if jit then jit.off() end\n"
     "local threading = require('threading')\n"
     "local keep = {answer = 7391}\n"
@@ -201,7 +222,7 @@ static int run_case(int phase)
     "for i = 1, 150 do local t = {i}; assert(t[1] == i); end\n"
     "finish()\n"
     "assert(peer:join(5))\n"
-    "collectgarbage('collect')\n"
+    "if not closing then collectgarbage('collect') end\n"
     "assert(keep.answer == 7391 and (not flush or keep[1] == 'pending array value'))\n";
   lua_State *L = luaL_newstate();
   pthread_t timer;
@@ -227,12 +248,19 @@ static int run_case(int phase)
   else
     lua_pushnil(L);
   lua_pushboolean(L, weak_flush_only);
+  lua_pushboolean(L, close_pending);
   assert(pthread_create(&timer, NULL, watchdog, NULL) == 0);
-  status = lua_pcall(L, 7, 0, 0);
+  status = lua_pcall(L, 8, 0, 0);
   if (status) fprintf(stderr, "%s\n", lua_tostring(L, -1));
   atomic_store(&allocation_finished, 1);
   atomic_store(&release_owner, 1);
   assert(pthread_join(timer, NULL) == 0);
+  if (close_pending) {
+    global_State *g = G(L);
+    assert(mt_live_acq(g) == 0 && gc2_n_workers_acq(g) == 0);
+    assert(gc2_hs_pending_acq(g) == 0 && gc2_worker_active_acq(g) == 0);
+    assert(gc2_hs_leader_acq(g) == LJ_SAFEPOINT_RESUMABLE_LEADER);
+  }
   lua_close(L);
   if (atomic_load(&timed_out)) {
     static const char *const boundary[] = {
@@ -259,5 +287,11 @@ int main(void)
     if (run_case(LJ_GC2_WEAK))
       return 1;
   }
-  return 0;
+  public_step = 1;
+  close_pending = 1;
+  weak_flush_only = 0;
+  if (run_case(LJ_GC2_IDLE) || run_case(LJ_GC2_MARK) || run_case(LJ_GC2_WEAK))
+    return 1;
+  weak_flush_only = 1;
+  return run_case(LJ_GC2_WEAK);
 }

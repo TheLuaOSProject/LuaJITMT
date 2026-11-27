@@ -2733,6 +2733,9 @@ static int gc2_worker_stop_locked_l(global_State *g, lua_State *L,
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++)
     any |= gc2_worker_thread_acq(g, i) != NULL;
   if (!any) {
+    /* The last Lua mutator can ACK after the pool is gone. Finish its
+    ** outstanding epoch while shutdown still has the complete Lua heap. */
+    (void)lj_gc2_resumable_epoch_continue(g);
     gc2_n_workers_rel(g, 0);
     return gc2_worker_release_tg_slots(g);
   }
@@ -2767,9 +2770,8 @@ static int gc2_worker_stop_locked_l(global_State *g, lua_State *L,
   /* The last worker can exit after dropping its counted poll without owning
   ** the resume token. Give its published epoch one turn before releasing TG
   ** slots. An unacknowledged Lua peer can still finish the same epoch later. */
-  if (unjoined == 0 && gc2_fixpoint_epoch_actions_acq(g) &&
-      (gc2_phase_acq(g) == LJ_GC2_SWEEP || gc2_phase_acq(g) == LJ_GC2_IDLE))
-    (void)gc2_fixpoint_epoch_continue(g);
+  if (unjoined == 0)
+    (void)lj_gc2_resumable_epoch_continue(g);
   if (L) {
     uint32_t actions = lj_native_leave(L);
     if (actionsp)
