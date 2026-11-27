@@ -439,13 +439,20 @@ static lua_Integer run_named(lua_State *L, const char *name, lua_Integer n)
   return result;
 }
 
-static void run_aligned_value(lua_State *L, const char *name, lua_Integer n)
+/* CALLXS traces may guard the Lua caller. Use this same physical frame to
+** record a root and to test its generated exit and interrupt handling. */
+static int call_entry(lua_State *L, const char *name, lua_Integer n)
 {
-  const void *payload;
   lua_getglobal(L, "__callxs_postcall_compile_entry");
   lua_getglobal(L, name);
   lua_pushinteger(L, n);
-  assert(lua_pcall(L, 2, 1, 0) == 0);
+  return lua_pcall(L, 2, 1, 0);
+}
+
+static void run_aligned_value(lua_State *L, const char *name, lua_Integer n)
+{
+  const void *payload;
+  assert(call_entry(L, name, n) == 0);
   payload = lua_topointer(L, -1);
   assert(payload != NULL);
   assert(((uintptr_t)payload & (uintptr_t)31) == 0);
@@ -473,10 +480,7 @@ static lua_Integer run_entry_named(lua_State *L, const char *name,
 				    lua_Integer n)
 {
   lua_Integer result;
-  lua_getglobal(L, "__callxs_postcall_compile_entry");
-  lua_getglobal(L, name);
-  lua_pushinteger(L, n);
-  assert(lua_pcall(L, 2, 1, 0) == 0);
+  assert(call_entry(L, name, n) == 0);
   assert(lua_isnumber(L, -1));
   result = lua_tointeger(L, -1);
   lua_pop(L, 1);
@@ -536,8 +540,6 @@ static GCtrace *exercise_forced_result(lua_State *L, jit_State *J,
 
   ljt_lua_dostring(L, "jit.flush()\n");
   auth_result_reset(L, aggregate_result);
-  /* The compile entry supplies the physical Lua caller required while the
-  ** loop root is recorded; subsequent direct invocations exercise that root. */
   assert(run_entry_named(L, run_name, 200) == 200);
   assert_auth_result_count(L, 200, aggregate_result);
   auth_result_reset(L, aggregate_result);
@@ -554,7 +556,7 @@ static GCtrace *exercise_forced_result(lua_State *L, jit_State *J,
 
   finish_calls = 0;
   lj_ffi_native_trace_test_set_finish_hook(force_epoch_each);
-  assert(run_named(L, run_name, 20) == 20);
+  assert(run_entry_named(L, run_name, 20) == 20);
   lj_ffi_native_trace_test_set_finish_hook(NULL);
   assert(finish_calls != 0);
   lj_tg_hs_epoch_ack_rel(tg, finish_old_epoch);
@@ -572,7 +574,7 @@ static GCtrace *exercise_forced_result(lua_State *L, jit_State *J,
     lj_ffi_native_trace_test_set_finish_hook(observe_unexpected_finish);
     assert(lj_tg_in_native_acq(tg) == 0);
     lj_tg_in_native_rel(tg, 1);
-    assert(run_named(L, run_name, 20) == 20);
+    assert(run_entry_named(L, run_name, 20) == 20);
     assert(lj_tg_in_native_acq(tg) == 1);
     lj_tg_in_native_rel(tg, 0);
     lj_ffi_native_trace_test_set_finish_hook(NULL);
@@ -589,9 +591,7 @@ static GCtrace *exercise_forced_result(lua_State *L, jit_State *J,
     leave_hook_calls = 0;
     lj_ffi_native_trace_test_set_leave_hook(
       force_fresh_stopreq_after_native_leave);
-    lua_getglobal(L, run_name);
-    lua_pushinteger(L, 20);
-    assert(lua_pcall(L, 1, 1, 0) != 0);
+    assert(call_entry(L, run_name, 20) != 0);
     lj_ffi_native_trace_test_set_leave_hook(NULL);
     assert(leave_hook_calls == 1);
     assert(lua_tostring(L, -1) != NULL);
@@ -900,9 +900,11 @@ int main(void)
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
     "lib.lj_callxs_auth_reset()\n"
-    "assert(__callxs_postcall_run(200) == 200*201/2 + 9*200)\n"
-    "assert(lib.lj_callxs_auth_count() == 200)\n"
-    "lib.lj_callxs_auth_reset()\n");
+    "jit.off(__callxs_postcall_compile_entry)\n");
+  assert(run_entry_named(L, "__callxs_postcall_run", 200) ==
+         200 * 201 / 2 + 9 * 200);
+  assert(auth_count(L) == 200);
+  auth_reset(L);
 
   lua_getglobal(L, "__callxs_postcall_run");
   assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
@@ -922,9 +924,7 @@ int main(void)
   ** trace which would bypass the retained POSTCALL frame and pin release. */
   for (pass = 0; pass < 4; pass++) {
     uint32_t before = finish_calls;
-    lua_getglobal(L, "__callxs_postcall_run");
-    lua_pushinteger(L, 20);
-    assert(lua_pcall(L, 1, 1, 0) == 0);
+    assert(call_entry(L, "__callxs_postcall_run", 20) == 0);
     assert(lua_tointeger(L, -1) == 20 * 21 / 2 + 9 * 20);
     lua_pop(L, 1);
     assert(finish_calls > before);
@@ -940,9 +940,7 @@ int main(void)
 
   /* The repaired root must remain re-enterable after its retained-pin exit. */
   ljt_lua_dostring(L, "__callxs_postcall_lib.lj_callxs_auth_reset()\n");
-  lua_getglobal(L, "__callxs_postcall_run");
-  lua_pushinteger(L, 20);
-  assert(lua_pcall(L, 1, 1, 0) == 0);
+  assert(call_entry(L, "__callxs_postcall_run", 20) == 0);
   assert(lua_tointeger(L, -1) == 20 * 21 / 2 + 9 * 20);
   lua_pop(L, 1);
   ljt_lua_dostring(L,
@@ -961,9 +959,7 @@ int main(void)
   leave_hook_calls = 0;
   lj_ffi_native_trace_test_set_leave_hook(
     force_fresh_stopreq_after_native_leave);
-  lua_getglobal(L, "__callxs_postcall_run");
-  lua_pushinteger(L, 20);
-  assert(lua_pcall(L, 1, 1, 0) != 0);
+  assert(call_entry(L, "__callxs_postcall_run", 20) != 0);
   lj_ffi_native_trace_test_set_leave_hook(NULL);
   assert(leave_hook_calls == 1);
   assert(lua_tostring(L, -1) != NULL);
@@ -988,9 +984,7 @@ int main(void)
   finish_calls = 0;
   lj_ffi_native_trace_test_set_finish_hook(observe_unexpected_finish);
   lj_tg_in_native_rel(tg, 1);
-  lua_getglobal(L, "__callxs_postcall_run");
-  lua_pushinteger(L, 20);
-  assert(lua_pcall(L, 1, 1, 0) == 0);
+  assert(call_entry(L, "__callxs_postcall_run", 20) == 0);
   assert(lua_tointeger(L, -1) == 20 * 21 / 2 + 9 * 20);
   lua_pop(L, 1);
   assert(lj_tg_in_native_acq(tg) == 1);
@@ -1008,9 +1002,7 @@ int main(void)
   finish_calls = 0;
   lj_ffi_native_trace_test_set_finish_hook(observe_unexpected_finish);
   lj_tg_in_native_rel(tg, 1);
-  lua_getglobal(L, "__callxs_postcall_u64_run");
-  lua_pushinteger(L, 20);
-  assert(lua_pcall(L, 1, 1, 0) == 0);
+  assert(call_entry(L, "__callxs_postcall_u64_run", 20) == 0);
   assert(lua_tointeger(L, -1) == 20);
   lua_pop(L, 1);
   assert(lj_tg_in_native_acq(tg) == 1);
@@ -1026,10 +1018,11 @@ int main(void)
   assert(trace_native_pins_acq(T) == 0);
   ljt_lua_dostring(L,
     "jit.flush()\n"
-    "__callxs_postcall_lib.lj_callxs_auth_reset()\n"
-    "assert(__callxs_postcall_tail_run(200) == 200*201/2 + 9*200)\n"
-    "assert(__callxs_postcall_lib.lj_callxs_auth_count() == 200)\n"
     "__callxs_postcall_lib.lj_callxs_auth_reset()\n");
+  assert(run_entry_named(L, "__callxs_postcall_tail_run", 200) ==
+         200 * 201 / 2 + 9 * 200);
+  assert(auth_count(L) == 200);
+  auth_reset(L);
 
   lua_getglobal(L, "__callxs_postcall_tail_once");
   assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
@@ -1050,9 +1043,7 @@ int main(void)
   lj_ffi_native_trace_test_set_finish_hook(force_epoch_each);
   for (pass = 0; pass < 2; pass++) {
     uint32_t before = finish_calls;
-    lua_getglobal(L, "__callxs_postcall_tail_run");
-    lua_pushinteger(L, 20);
-    assert(lua_pcall(L, 1, 1, 0) == 0);
+    assert(call_entry(L, "__callxs_postcall_tail_run", 20) == 0);
     assert(lua_tointeger(L, -1) == 20 * 21 / 2 + 9 * 20);
     lua_pop(L, 1);
     assert(finish_calls > before);
@@ -1070,9 +1061,7 @@ int main(void)
   leave_hook_calls = 0;
   lj_ffi_native_trace_test_set_leave_hook(
     force_fresh_stopreq_after_native_leave);
-  lua_getglobal(L, "__callxs_postcall_tail_run");
-  lua_pushinteger(L, 20);
-  assert(lua_pcall(L, 1, 1, 0) != 0);
+  assert(call_entry(L, "__callxs_postcall_tail_run", 20) != 0);
   lj_ffi_native_trace_test_set_leave_hook(NULL);
   assert(leave_hook_calls == 1);
   assert(lua_tostring(L, -1) != NULL);
@@ -1095,10 +1084,11 @@ int main(void)
   ** regression in the multiple-result tail opcode. */
   ljt_lua_dostring(L,
     "jit.flush()\n"
-    "__callxs_postcall_lib.lj_callxs_auth_reset()\n"
-    "assert(__callxs_postcall_tailm_run(200) == 200*201/2 + 9*200)\n"
-    "assert(__callxs_postcall_lib.lj_callxs_auth_count() == 200)\n"
     "__callxs_postcall_lib.lj_callxs_auth_reset()\n");
+  assert(run_entry_named(L, "__callxs_postcall_tailm_run", 200) ==
+         200 * 201 / 2 + 9 * 200);
+  assert(auth_count(L) == 200);
+  auth_reset(L);
 
   lua_getglobal(L, "__callxs_postcall_tail_multres");
   assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
@@ -1119,9 +1109,7 @@ int main(void)
   lj_ffi_native_trace_test_set_finish_hook(force_epoch_each);
   for (pass = 0; pass < 2; pass++) {
     uint32_t before = finish_calls;
-    lua_getglobal(L, "__callxs_postcall_tailm_run");
-    lua_pushinteger(L, 20);
-    assert(lua_pcall(L, 1, 1, 0) == 0);
+    assert(call_entry(L, "__callxs_postcall_tailm_run", 20) == 0);
     assert(lua_tointeger(L, -1) == 20 * 21 / 2 + 9 * 20);
     lua_pop(L, 1);
     assert(finish_calls > before);
@@ -1139,9 +1127,7 @@ int main(void)
   leave_hook_calls = 0;
   lj_ffi_native_trace_test_set_leave_hook(
     force_fresh_stopreq_after_native_leave);
-  lua_getglobal(L, "__callxs_postcall_tailm_run");
-  lua_pushinteger(L, 20);
-  assert(lua_pcall(L, 1, 1, 0) != 0);
+  assert(call_entry(L, "__callxs_postcall_tailm_run", 20) != 0);
   lj_ffi_native_trace_test_set_leave_hook(NULL);
   assert(leave_hook_calls == 1);
   assert(lua_tostring(L, -1) != NULL);
@@ -1226,7 +1212,7 @@ int main(void)
   ljt_lua_dostring(L, "__callxs_postcall_bool_dynamic_state = 0\n");
   finish_calls = 0;
   lj_ffi_native_trace_test_set_finish_hook(force_epoch_each);
-  assert(run_named(L, "__callxs_postcall_bool_dynamic_run", 20) == 20);
+  assert(run_entry_named(L, "__callxs_postcall_bool_dynamic_run", 20) == 20);
   lj_ffi_native_trace_test_set_finish_hook(NULL);
   assert(finish_calls != 0);
   lj_tg_hs_epoch_ack_rel(tg, finish_old_epoch);
@@ -1252,9 +1238,7 @@ int main(void)
   leave_hook_calls = 0;
   lj_ffi_native_trace_test_set_leave_hook(
     force_fresh_stopreq_after_native_leave);
-  lua_getglobal(L, "__callxs_postcall_bool_dynamic_run");
-  lua_pushinteger(L, 20);
-  assert(lua_pcall(L, 1, 1, 0) != 0);
+  assert(call_entry(L, "__callxs_postcall_bool_dynamic_run", 20) != 0);
   lj_ffi_native_trace_test_set_leave_hook(NULL);
   assert(leave_hook_calls == 1);
   assert(lua_tostring(L, -1) != NULL);
