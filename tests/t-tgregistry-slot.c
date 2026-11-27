@@ -118,6 +118,49 @@ static void claim_and_publish(LJTGRegistrySlot *slot, TestBody *body,
   assert(snap.state == LJ_TGSLOT_LIVE && snap.lease_count == 1);
 }
 
+static void *read_new_body(void *ud)
+{
+  LJTGRegistrySlot *slot = ud;
+  LJTGSlotSnap snap;
+  LJTGRegistryKey key;
+  LJTGRegistryBorrow borrow;
+  TestBody *body;
+  do {
+    snap = lj_tgslot_snapshot(&slot->token);
+  } while (snap.state != LJ_TGSLOT_LIVE);
+  key.slot = slot;
+  key.incarnation = snap.incarnation;
+  lj_tgregistry_borrow_init(&borrow);
+  assert(retry_borrow(&key, &borrow, NULL) == LJ_TGSLOT_OK);
+  body = (TestBody *)borrow.body;
+  assert(body->incarnation == key.incarnation);
+  assert(body->canary == (UINT64_C(0x7467726567697374) ^ key.incarnation));
+  assert(body->reclaimed == 0);
+  assert(retry_release(&borrow, NULL) == LJ_TGSLOT_OK);
+  return NULL;
+}
+
+static void test_concurrent_body_publication(void)
+{
+  LJTGRegistrySlot slot;
+  LJTGRegistryKey key;
+  LJTGSlotSnap snap;
+  TestBody body;
+  void *reclaimed;
+  pthread_t reader;
+  assert(lj_tgregistry_slot_init_unpublished(&slot, 0, NULL));
+  /* Initialize after creating the reader. The body and token publications
+  ** are the only edges carrying these fields to the borrowing thread. */
+  assert(pthread_create(&reader, NULL, read_new_body, &slot) == 0);
+  claim_and_publish(&slot, &body, &key);
+  assert(pthread_join(reader, NULL) == 0);
+  assert(retry_detach(&key, &snap) == LJ_TGSLOT_OK);
+  assert(retry_retire(&key, &snap) == LJ_TGSLOT_OK);
+  assert(retry_reclaim(&key, &reclaimed, &snap) == LJ_TGSLOT_OK);
+  assert(reclaimed == &body);
+  assert(retry_clear(&key, &snap) == LJ_TGSLOT_OK);
+}
+
 static void test_body_publication_and_stable_chain(void)
 {
   LJTGRegistrySlot tail, head;
@@ -727,6 +770,7 @@ static void test_held_borrow_body_mismatch_pins(void)
 
 int main(void)
 {
+  test_concurrent_body_publication();
   test_body_publication_and_stable_chain();
   test_attach_abort_with_attaching_borrow();
   test_clear_before_empty_and_stale_reuse();

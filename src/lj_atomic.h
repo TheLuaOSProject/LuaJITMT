@@ -95,9 +95,22 @@ typedef char la_assert_cas128_always_lock_free[
 #define LA_USE_SPLIT128_SNAPSHOT 0
 #endif
 
+#if defined(__SANITIZE_THREAD__)
+#define LA_THREAD_SANITIZER 1
+#elif defined(__has_feature)
+#if __has_feature(thread_sanitizer)
+#define LA_THREAD_SANITIZER 1
+#endif
+#endif
+
 LA_INLINE int la_cas128(la_u128 *p, la_u128 *exp, la_u128 des)
 {
-#if defined(__x86_64__)
+#if defined(__x86_64__) && defined(__linux__) && defined(LA_THREAD_SANITIZER)
+  /* TSan cannot observe synchronization in inline assembly. Use its
+  ** instrumented 16-byte CAS so the actual comparison, success publication
+  ** and failed acquire all participate in the race detector's history. */
+  return __atomic_compare_exchange(p, exp, &des, 0, LA_ACQ_REL, LA_ACQ);
+#elif defined(__x86_64__)
   /* GCC ≥7 may route the 16-byte builtin through libatomic even with -mcx16
   ** (PR80878). Clang 19.1 may also miscompile its builtin when ASan inlines it
   ** by reusing the desired-low register as the memory base. The lockless fast
