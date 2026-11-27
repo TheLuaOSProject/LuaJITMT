@@ -35,13 +35,17 @@ static int worker_census(lua_State *L)
   TGState *main_tg = g->main_tg, *tg;
   uint32_t dead = 0, pending = 0;
   uint64_t epoch, completed, peer_ack = 0;
+  int peer_in_trace = 0;
   if (!lj_gc2_smr_read_try(g))
     return 0;
   for (tg = gc2_tg_list_acq(g); tg; tg = lj_tg_next_acq(tg)) {
     if (lj_tg_flags_all_acq(tg, TGF_DEAD|TGF_LUA_ALLOC))
       dead++;
-    else if (lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC))
+    else if (lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC)) {
       peer_ack = la_load64_acq(&tg->dead_tg_epoch);
+      peer_in_trace |= lj_tg_load_jit_base(tg) != NULL &&
+		       lj_tg_vmstate_load_acq(tg) > 0;
+    }
   }
   for (tg = main_tg->dead_tg_head; tg; tg = lj_tg_worker_retire_next_acq(tg))
     pending++;
@@ -54,7 +58,8 @@ static int worker_census(lua_State *L)
   lua_pushnumber(L, pending);
   lua_pushnumber(L, (lua_Number)peer_ack);
   lua_pushnumber(L, gc2_phase_acq(g));
-  return 6;
+  lua_pushboolean(L, peer_in_trace);
+  return 7;
 }
 
 int main(void)
@@ -68,15 +73,24 @@ int main(void)
     "th.gcworkers(tonumber(os.getenv('POOL')) or 0)\n"
     "if os.getenv('JIT') == 'off' then jit.off() end\n"
     "local ready, stop = th.channel(1), th.channel(1)\n"
+    "local spin, done = os.getenv('SPIN') == '1', false\n"
     "local sentinel = assert(th.spawn(function()\n"
     "  assert(ready:send(true, 10))\n"
+    "  if spin then\n"
+    "    local sum, rounds = 0, 0\n"
+    "    while not done do\n"
+    "      for i = 1, 2000 do sum = (sum + i) % 1048576 end\n"
+    "      rounds = rounds + 1\n"
+    "    end\n"
+    "    return sum, rounds\n"
+    "  end\n"
     "  assert(stop:recv(50))\n"
     "end))\n"
     "assert(ready:recv(10))\n"
     "local function census()\n"
     "  for _ = 1, 1000 do\n"
-    "    local dead, epoch, completed, pending, ack, phase = worker_census()\n"
-    "    if dead then return dead, epoch, completed, pending, ack, phase end\n"
+    "    local dead, epoch, completed, pending, ack, phase, native = worker_census()\n"
+    "    if dead then return dead, epoch, completed, pending, ack, phase, native end\n"
     "    th.sleep(0)\n"
     "  end\n"
     "  error('worker census admission did not settle')\n"
@@ -89,6 +103,15 @@ int main(void)
     "  end\n"
     "end\n"
     "jit.off(churn)\n"
+    "if spin then\n"
+    "  local deadline = th.now() + 10\n"
+    "  repeat\n"
+    "    churn()\n"
+    "    local _, _, _, _, _, _, native = census()\n"
+    "    if native then break end\n"
+    "    assert(th.now() < deadline, 'executing sentinel never entered a trace')\n"
+    "  until false\n"
+    "end\n"
     "nested_churn(function()\n"
     "  churn()\n"
     "  assert(debug.traceback():find('nested_churn', 1, true))\n"
@@ -132,7 +155,13 @@ int main(void)
     "  :format(dead + pending, pending, epoch, ack, completed - initial_cycles, phase)\n"
     "assert(completed > initial_cycles and epoch > 0 and dead + pending <= 16, stats)\n"
     "original:free()\n"
-    "assert(stop:send(true, 10) and sentinel:join(10))\n"
+    "if spin then\n"
+    "  done = true\n"
+    "  local ok, sum, rounds = sentinel:join(10)\n"
+    "  assert(ok and rounds > 0 and sum == (2001000 * rounds) % 1048576)\n"
+    "else\n"
+    "  assert(stop:send(true, 10) and sentinel:join(10))\n"
+    "end\n"
     "th.gcworkers(0)\n"), "load automatic worker reclamation test");
   ljt_lua_pcall(L, 0, 0, "automatic worker reclamation");
   lua_close(L);
