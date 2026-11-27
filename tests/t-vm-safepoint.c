@@ -479,6 +479,23 @@ static void check_return_interrupts(lua_State *L)
   unsigned i;
   lua_pushliteral(L, "outer guard");
   for (i = 0; i < sizeof(widths)/sizeof(widths[0]); i++) {
+    uint64_t epoch;
+    int got = widths[i] == LUA_MULTRET ? 2 : widths[i];
+    int j;
+    lua_getglobal(L, "math");
+    lua_getfield(L, -1, "modf");
+    lua_remove(L, -2);
+    lua_pushnumber(L, 17.25);
+    epoch = gc2_hs_epoch_acq(G(L));
+    publish_manual(G(L), L2TG(L), LJ_GC2_HS_DISABLE_BARRIER);
+    assert(lua_pcall(L, 1, widths[i], 0) == LUA_OK);
+    assert_acked(G(L), L2TG(L), epoch);
+    assert(lua_gettop(L) == 1 + got);
+    if (got > 0) assert(lua_tonumber(L, 2) == 17);
+    if (got > 1) assert(lua_tonumber(L, 3) == 0.25);
+    for (j = 2; j < got; j++) assert(lua_isnil(L, 2+j));
+    lua_pop(L, got);
+
     lua_pushcfunction(L, stop_on_return);
     expect_return_stop(L, 0, widths[i]);
     lua_pushcfunction(L, call_without_handler);
@@ -498,6 +515,12 @@ static void check_return_interrupts(lua_State *L)
   lua_pop(L, 1);
   assert(lj_tg_flags_test_acq(L2TG(L), TGF_STOPREQ_FRESH));
   expect_return_stop(L, 1, 1);
+
+  /* The fast pcall error return has already overwritten both header slots
+  ** with false and the primary error. The enclosing C call owns the stop. */
+  lua_getglobal(L, "pcall");
+  lua_pushcfunction(L, primary_error);
+  expect_return_stop(L, 1, LUA_MULTRET);
 
   co = lua_newthread(L);
   lua_getglobal(L, "math");
