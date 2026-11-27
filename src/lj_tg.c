@@ -363,13 +363,17 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   memcpy(tg->dispatch, G2GG(g)->dispatch, sizeof(tg->dispatch));
 }
 
-void lj_tg_init(GG_State *GG, int alloc_ready, uint32_t tid)
+int lj_tg_init(GG_State *GG, int alloc_ready, uint32_t tid)
 {
   TGState *tg = &GG->main_tg;
   global_State *g = &GG->g;
   lua_State *L = &GG->L;
   lj_assertG(lj_thr_id_is_owner(tid),
 	     "invalid main TG owner id");
+  /* An arena-backed state needs exact extents before it can publish a root
+  ** or become the current thread's allocator. */
+  if (alloc_ready && !lj_arena_hugetab_init(&tg->huge, TG_HUGETAB_BITS))
+    return 0;
 #if LJ_HASFFI
   /* Initialize remote-visible frame storage before publishing any path to
   ** this embedded TG through global state, the Lua carrier, or TLS. */
@@ -391,11 +395,12 @@ void lj_tg_init(GG_State *GG, int alloc_ready, uint32_t tid)
   }
   lj_arena_allocd_init(&tg->allocd, &tg->alloc, &tg->prng, 0);
   lj_arena_alloc_owner_tg_rel(&tg->alloc, tg);
-  if (alloc_ready && lj_arena_hugetab_init(&tg->huge, TG_HUGETAB_BITS)) {
+  if (alloc_ready) {
     lj_tg_flags_or_rlx(tg, TGF_HUGETAB);
     lj_arena_allocd_sethugetab(&tg->allocd, &tg->huge);
   }
   tg_init_common(g, tg, L);
+  return 1;
 }
 
 void lj_tg_fini(global_State *g)
@@ -420,18 +425,17 @@ void lj_tg_fini(global_State *g)
   }
 }
 
-void lj_tg_init_thread(global_State *g, TGState *tg, lua_State *L,
-		       int arena_internal)
+int lj_tg_init_thread(global_State *g, TGState *tg, lua_State *L,
+		      int arena_internal)
 {
   memset(tg, 0, sizeof(*tg));
+  if (arena_internal && !lj_arena_hugetab_init(&tg->huge, TG_HUGETAB_BITS))
+    return 0;
 #if LJ_HASFFI
   /* L->tg_hint is the first external path to this heap TG. */
   lj_ffi_native_frame_init(tg);
 #endif
-  if (L) {
-    lj_assertG(G(L) == g, "thread belongs to a different global state");
-    L->tg_hint = tg;
-  }
+  lj_assertG(!L || G(L) == g, "thread belongs to a different global state");
   lj_arena_alloc_init(&tg->alloc);
   if (arena_internal) {
     lj_tg_flags_or_rlx(tg, TGF_ARENA_INTERNAL);
@@ -443,7 +447,7 @@ void lj_tg_init_thread(global_State *g, TGState *tg, lua_State *L,
   }
   lj_arena_allocd_init(&tg->allocd, &tg->alloc, &tg->prng, 0);
   lj_arena_alloc_owner_tg_rel(&tg->alloc, tg);
-  if (arena_internal && lj_arena_hugetab_init(&tg->huge, TG_HUGETAB_BITS)) {
+  if (arena_internal) {
     /* Secondary TG creation runs after GC2 global initialization. Bind before
     ** TGF_HUGETAB or attach can expose this directory to a physical pass. */
     lj_arena_hugetab_bind_table_topology(
@@ -452,6 +456,9 @@ void lj_tg_init_thread(global_State *g, TGState *tg, lua_State *L,
     lj_arena_allocd_sethugetab(&tg->allocd, &tg->huge);
   }
   tg_init_common(g, tg, L);
+  if (L)
+    L->tg_hint = tg;
+  return 1;
 }
 
 void lj_tg_derive_prng(global_State *g, TGState *tg, uint32_t tid)

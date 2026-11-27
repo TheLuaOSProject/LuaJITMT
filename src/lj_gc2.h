@@ -275,7 +275,7 @@ enum {
 #define LJ_GC2_ROOT_RETRY_ROUNDS	8u
 #define LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT	80u
 
-LJ_FUNC void lj_gc2_init(global_State *g);
+LJ_FUNC int lj_gc2_init(global_State *g);
 LJ_FUNC void lj_gc2_fini(global_State *g);
 /* The small-arena directory outlives GC2 worker/raw teardown. It is released
 ** only after every registered allocator has deleted its exact entries. The

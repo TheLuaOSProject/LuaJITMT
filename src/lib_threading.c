@@ -2100,7 +2100,10 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   threading_start_roots_init(L, ud, th, baseofs, (uint32_t)(nargs + 1));
   live = threading_live_new(L, ud);
   tg = (TGState *)lj_mem_new_nothrow(L, sizeof(*tg));
-  if (!tg) {
+  if (!tg ||
+      !lj_tg_init_thread(G(L), tg, NULL, threading_arena_internal(G(L)))) {
+    if (tg)
+      lj_mem_freet(G(L), tg);
     lj_mem_freet(G(L), live);
     lj_err_mem(L);
   }
@@ -2111,7 +2114,6 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   th->tg = tg;
   th->state = LJ_THREAD_STARTING;
   th->nargs = (uint32_t)nargs;
-  lj_tg_init_thread(G(L), tg, NULL, threading_arena_internal(G(L)));
   lj_tg_store_thread_L(tg, L1);
   lj_tg_store_cur_L(tg, L1);
   lj_tg_flags_or_rlx(tg, TGF_LUA_ALLOC);
@@ -2324,14 +2326,14 @@ static int threading_attach(lua_State *L, int wait)
     return 0;
   }
   tg = (TGState *)malloc(sizeof(TGState));
-  if (!tg) {
+  if (!tg || !lj_tg_init_thread(g, tg, NULL, threading_arena_internal(g))) {
+    free(tg);
     threading_entering_leave(g);
     return 0;
   }
   /* Publish an empty provisional TG before the state-owner CAS. Thus every
   ** real owner id is registry-resolvable, while mt_entering keeps g and this
   ** private lifecycle transaction alive until it transitions to mt_live. */
-  lj_tg_init_thread(g, tg, NULL, threading_arena_internal(g));
   lj_tg_flags_or_rlx(tg, TGF_HEAP);
   lj_tg_tid_rel(tg, tid);
   lj_tg_derive_prng(g, tg, tid);

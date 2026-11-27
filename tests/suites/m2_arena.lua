@@ -112,11 +112,16 @@ return function(add)
 
   register({
     name = "m2_allocator_embedding",
-    description = "public allocator bootstrap, replacement, and parallel callbacks",
+    description = "allocator bootstrap, replacement, parallel callbacks and directory failures",
     run = function(t)
       if jit.os ~= "Linux" or jit.arch ~= "x64" then return end
       build_and_run_c(t, t:tmp("lj_t_allocator_embedding"),
                       "t-allocator-embedding.c", { timeout = "30s" })
+      build.compile_and_run_c(t, t:tmp("lj_t_arena_directory_oom"),
+                              "t-arena-directory-oom.c", {
+        timeout = "30s",
+        libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=lj_arena_hugetab_init" }
+      })
     end
   })
 

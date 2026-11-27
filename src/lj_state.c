@@ -1248,6 +1248,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   global_State *g;
   uint32_t tid;
   int arena_internal = 0;
+  int registry_ready;
   int open_status = LUA_OK;
 #if LJ_HAS_ARENA_HOST_ALLOC
   la_u128 boot_host = { 0, 0 };
@@ -1393,11 +1394,18 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   lj_gc_pause_store(g, LUAI_GCPAUSE);
   lj_gc_stepmul_store(g, LUAI_GCMUL);
   lj_dispatch_init((GG_State *)L);
-  lj_tg_init((GG_State *)L, arena_internal, tid);
-  lj_gc2_init(g);
+  if (!lj_tg_init(GG, arena_internal, tid)) {
+    /* Only the original GG backing exists. No thread or global directory
+    ** has acquired it yet. */
+    lj_arena_alloc_fini(&GG->main_tg.alloc);
+    lj_arena_huge_unmap(GG, sizeof(*GG));
+    return NULL;
+  }
+  registry_ready = lj_gc2_init(g);
   lj_locale_heap_register(g);
   L->status = LUA_ERRERR+1;  /* Avoid touching the stack upon memory error. */
-  if (lj_vm_cpcall(L, NULL, &open_status, cpluaopen) != LUA_OK ||
+  if ((arena_internal && !registry_ready) ||
+      lj_vm_cpcall(L, NULL, &open_status, cpluaopen) != LUA_OK ||
       open_status != LUA_OK) {
     if (open_status != LUA_OK)
       lj_tg_root_anchor_rollback(g->main_tg, 0);  /* Fresh TG anchor base. */

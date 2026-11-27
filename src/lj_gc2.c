@@ -1727,9 +1727,10 @@ int lj_gc2_small_arena_registry_fini_try(global_State *g)
   return 1;
 }
 
-void lj_gc2_init(global_State *g)
+int lj_gc2_init(global_State *g)
 {
   uint32_t i;
+  int registry_ready;
   lj_gc_auto_init(g);
   gc2_gcpause_pct_store_rlx(g, (uint32_t)lj_gc_pause_load(g));
   gc2_assist_shift_store_rlx(g,
@@ -2044,9 +2045,10 @@ void lj_gc2_init(global_State *g)
   gc2_tg_list_store_rlx(g, NULL);
   gc2_n_threads_store_rlx(g, 0);
   gc2_tg_reclaiming_store_rlx(g, 0);
-  (void)gc2_small_arena_registry_init(g);
+  registry_ready = gc2_small_arena_registry_init(g);
   lj_gc2_update_pacing(g);
   lj_tg_attach(g, G2TG(g));  /* 05 section 5.4.1 main TG registration. */
+  return registry_ready;
 }
 
 void lj_gc2_fini(global_State *g)
@@ -2556,13 +2558,13 @@ static int gc2_worker_start_count_locked_l(global_State *g, uint32_t n,
       return 0;
     }
     thr->tid = lj_thr_newid();
-    if (thr->tid == 0) {
+    if (thr->tid == 0 ||
+	!lj_tg_init_thread(g, tg, NULL, gc2_worker_arena_internal(g))) {
       free(tg);
       free(thr);
       (void)gc2_worker_stop_locked_l(g, waitL, actionsp);
       return 0;
     }
-    lj_tg_init_thread(g, tg, NULL, gc2_worker_arena_internal(g));
     lj_tg_tid_rel(tg, thr->tid);
     lj_tg_derive_prng(g, tg, thr->tid);
     gc2_worker_thread_store_rlx(g, i, thr);
