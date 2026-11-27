@@ -96,6 +96,7 @@ typedef struct GG_State {
   TGState main_tg;			/* Main per-OS-thread state. */
 #if LJ_HAS_ARENA_HOST_ALLOC
   la_u128 arena_host_alloc;		/* Public allocator and userdata. */
+  void *bootstrap_oom;			/* C jump target during state setup. */
 #endif
 } GG_State;
 

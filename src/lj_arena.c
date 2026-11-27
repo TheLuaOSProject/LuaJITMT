@@ -2141,6 +2141,15 @@ static LJArenaHostSpan *arena_host_span(GCArena *a)
   return (LJArenaHostSpan *)((char *)a - sizeof(LJArenaHostSpan));
 }
 
+static void arena_host_free(const la_u128 *host, void *p, size_t size)
+{
+  la_u128 pair = arena_host_snapshot(host);
+  lua_Alloc f = pair.lo ? (lua_Alloc)(uintptr_t)pair.lo : arena_host_default;
+  /* A temporary wrapper can be restored before its context expires,
+  ** even with live spans. */
+  f((void *)(uintptr_t)pair.hi, p, size, 0);
+}
+
 static GCArena *arena_backing_map(PRNGState *rs, size_t keep, size_t extra,
 				 const la_u128 *host, uint32_t *flags)
 {
@@ -2161,7 +2170,7 @@ static GCArena *arena_backing_map(PRNGState *rs, size_t keep, size_t extra,
       return NULL;
     aligned = ((uintptr_t)raw + padding) & ~(uintptr_t)LJ_ARENA_MASK;
     if (aligned < (uintptr_t)raw || !arena_addr_ok(aligned, keep)) {
-      f(ud, raw, size, 0);
+      arena_host_free(host, raw, size);
       return NULL;
     }
     span = arena_host_span((GCArena *)aligned);
@@ -2178,11 +2187,7 @@ static void arena_backing_unmap(GCArena *a, size_t size)
 {
   if (lj_arena_flags_acq(a) & LJ_AF_HOST_BACKED) {
     LJArenaHostSpan *span = arena_host_span(a);
-    la_u128 pair = arena_host_snapshot(span->host);
-    lua_Alloc f = pair.lo ? (lua_Alloc)(uintptr_t)pair.lo : arena_host_default;
-    /* Use the current compatible allocator. A temporary wrapper can be
-    ** restored before its context expires, even with live spans. */
-    f((void *)(uintptr_t)pair.hi, span->raw, span->size, 0);
+    arena_host_free(span->host, span->raw, span->size);
   } else {
     arena_unmap_aligned((void *)a, size);
   }

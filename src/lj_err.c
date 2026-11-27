@@ -1506,7 +1506,11 @@ LJ_NOINLINE void lj_err_mem(lua_State *L)
   }
   if (L->status == LUA_ERRERR+1) {  /* Don't touch stack during state setup. */
     err_os_restore(&err);
+#if LJ_HAS_ARENA_HOST_ALLOC
+    lj_state_bootstrap_oom(L);
+#else
     lj_vm_unwind_c(L->cframe, LUA_ERRMEM);
+#endif
   }
   if (LJ_HASJIT) {
     TValue *base = lj_tg_jit_base(G(L));

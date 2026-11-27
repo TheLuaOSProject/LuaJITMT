@@ -9,6 +9,8 @@
 #define lj_state_c
 #define LUA_CORE
 
+#include <setjmp.h>
+
 #include "lj_obj.h"
 #include "lj_arena.h"
 #include "lj_gc.h"
@@ -327,12 +329,34 @@ void lj_state_stack_pubrange(lua_State *L, lua_State *target)
 
 /* -- State handling ------------------------------------------------------ */
 
+#if LJ_HAS_ARENA_HOST_ALLOC
+void lj_state_bootstrap_oom(lua_State *L)
+{
+  jmp_buf *oom = (jmp_buf *)L2GG(L)->bootstrap_oom;
+  lj_assertX(oom != NULL, "state setup has no memory error handler");
+  longjmp(*oom, LUA_ERRMEM);
+}
+#endif
+
 /* Open parts that may cause memory-allocation errors. */
 static TValue *cpluaopen(lua_State *L, lua_CFunction dummy, void *ud)
 {
   global_State *g = G(L);
-  UNUSED(dummy);
+#if LJ_HAS_ARENA_HOST_ALLOC
+  /* Return through the VM's normal C epilogue after OOM. A direct jump
+  ** to the assembly landing pad skips restoration of C callee-saved
+  ** registers on builds using the system unwinder. */
+  jmp_buf oom;
+  L2GG(L)->bootstrap_oom = &oom;
+  if (setjmp(oom)) {
+    L2GG(L)->bootstrap_oom = NULL;
+    *(int *)ud = LUA_ERRMEM;
+    return NULL;
+  }
+#else
   UNUSED(ud);
+#endif
+  UNUSED(dummy);
   stack_init(L, L);
   /* NOBARRIER: State initialization, all objects are white. */
   lj_state_env_rel(L, lj_tab_new(L, 0, LJ_MIN_GLOBAL));
@@ -356,6 +380,9 @@ static TValue *cpluaopen(lua_State *L, lua_CFunction dummy, void *ud)
   }
   lj_gc2_update_pacing(g);
   lj_gc2_publish_idle_threshold(g);
+#if LJ_HAS_ARENA_HOST_ALLOC
+  L2GG(L)->bootstrap_oom = NULL;
+#endif
   return NULL;
 }
 
@@ -1221,6 +1248,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   global_State *g;
   uint32_t tid;
   int arena_internal = 0;
+  int open_status = LUA_OK;
 #if LJ_HAS_ARENA_HOST_ALLOC
   la_u128 boot_host = { 0, 0 };
   if (allocf != LJ_ALLOCF_INTERNAL)
@@ -1369,7 +1397,10 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   lj_gc2_init(g);
   lj_locale_heap_register(g);
   L->status = LUA_ERRERR+1;  /* Avoid touching the stack upon memory error. */
-  if (lj_vm_cpcall(L, NULL, NULL, cpluaopen) != 0) {
+  if (lj_vm_cpcall(L, NULL, &open_status, cpluaopen) != LUA_OK ||
+      open_status != LUA_OK) {
+    if (open_status != LUA_OK)
+      lj_tg_root_anchor_rollback(g->main_tg, 0);  /* Fresh TG anchor base. */
     /* Memory allocation error: free partial state. */
     close_state(L);
     return NULL;

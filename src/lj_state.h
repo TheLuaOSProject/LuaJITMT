@@ -174,6 +174,10 @@ LJ_FUNC lua_State *lj_state_newstate(lua_Alloc f, void *ud);
 
 #define LJ_ALLOCF_INTERNAL	((lua_Alloc)(void *)(uintptr_t)(1237<<4))
 
+#if LJ_HAS_ARENA_HOST_ALLOC
+LJ_FUNC_NORET void lj_state_bootstrap_oom(lua_State *L);
+#endif
+
 /* GC2 requires arena placement for Lua objects and raw storage. Platforms
 ** with public allocator support still retain this placement and use the
 ** callback for the arena backing blocks. */
