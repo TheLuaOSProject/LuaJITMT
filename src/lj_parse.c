@@ -1553,7 +1553,7 @@ static void fs_fixup_line(FuncState *fs, GCproto *pt,
 /* Prepare variable info for prototype. */
 static size_t fs_prep_var(LexState *ls, FuncState *fs, size_t *ofsvar)
 {
-  VarInfo *vs =ls->vstack, *ve;
+  VarInfo *vs = ls->vstack;
   MSize i, n;
   BCPos lastpc;
   lj_buf_reset(&ls->sb);  /* Copy to temp. string buffer. */
@@ -1568,9 +1568,10 @@ static size_t fs_prep_var(LexState *ls, FuncState *fs, size_t *ofsvar)
   *ofsvar = sbuflen(&ls->sb);
   lastpc = 0;
   /* Store local variable names and compressed ranges. */
-  for (ve = vs + ls->vtop, vs += fs->vbase; vs < ve; vs++) {
-    if (!gola_isgotolabel(vs)) {
-      GCstr *s = gcrefp(vs->name, GCstr);
+  for (i = fs->vbase, n = ls->vtop; i < n; i++) {
+    VarInfo *v = &vs[i];
+    if (!gola_isgotolabel(v)) {
+      GCstr *s = gcrefp(v->name, GCstr);
       BCPos startpc;
       char *p;
       if ((uintptr_t)s < VARNAME__MAX) {
@@ -1581,9 +1582,9 @@ static size_t fs_prep_var(LexState *ls, FuncState *fs, size_t *ofsvar)
 	p = lj_buf_more(&ls->sb, len + 2*5);
 	p = lj_buf_wmem(p, strdata(s), len);
       }
-      startpc = vs->startpc;
+      startpc = v->startpc;
       p = lj_strfmt_wuleb128(p, startpc-lastpc);
-      p = lj_strfmt_wuleb128(p, vs->endpc-startpc);
+      p = lj_strfmt_wuleb128(p, v->endpc-startpc);
       ls->sb.w = p;
       lastpc = startpc;
     }
