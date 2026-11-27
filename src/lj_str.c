@@ -1846,7 +1846,8 @@ static int str_reclaim_exclusive_try(global_State *g)
   uint32_t expect = 0;
   if (!g || g->allocf != lj_arena_allocf ||
       la_load32_acq(&g->allocf_arena) == 0 ||
-      lj_str_qcount_acq(g) != 0 || lj_gc2_finalizer_phase_pending(g))
+      lj_str_qcount_acq(g) != 0 || lj_gc2_finalizer_phase_pending(g) ||
+      gc2_finalizer_active_acq(g))
     return 0;
   tg = G2TG(g);
   if (!tg || tg != g->main_tg || tg->gl != g ||

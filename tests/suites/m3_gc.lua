@@ -616,6 +616,9 @@ return function(add)
           end
         end
       end
+      local major = compile("t-gc-finalizer-major",
+                            "lj_tg_root_anchor_reserve_nothrow")
+      t:run({ major }, { env = env, timeout = "30s" })
       for _, script in ipairs({ "t-gc-reentrant-finalizers.lua",
                                 "t-m8-finalizer-spawn-live.lua",
                                 "t-finalizer-spawn-query-enabled.lua" }) do

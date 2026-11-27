@@ -2273,6 +2273,7 @@ typedef struct GC2State {
   uint32_t finalizer_active;  /* Finalizer callbacks currently executing. */
   uint32_t finalizer_owner_actor;  /* Physical actor owning finalizer FIFO. */
   uint32_t finalizer_spawn_latch;  /* Callback-active/deferred bit latch. */
+  uint32_t finalizer_rooted_depth;  /* Callback frames backed by TG roots. */
   uint64_t finalizer_queued;  /* Objects published to the GC2 finalizer queue. */
   uint64_t finalizer_dequeued;  /* Objects popped from the GC2 finalizer queue. */
   uint64_t finalizer_mpsc_drained;  /* Objects drained from producer stack. */

@@ -1364,11 +1364,13 @@ static int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g,
 static int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
 					     GCobj *o, TValue *fin);
 static int gc2_call_finalizer(global_State *g, lua_State *L,
-			      cTValue *mo, GCobj *o);
+			      cTValue *mo, GCobj *o, GC2MarkScope *scope);
 static int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
-					GCobj *o, cTValue *fin, uint64_t id);
+					GCobj *o, cTValue *fin, uint64_t id,
+					GC2MarkScope *scope);
 static int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
-					GCobj *o, cTValue *fin);
+					GCobj *o, cTValue *fin,
+					GC2MarkScope *scope);
 static LJ_AINLINE int gc2_finreg_udata_obj_valid(global_State *g, GCobj *o);
 static uint32_t gc2_clear_container_needscan_all(global_State *g);
 static uint32_t gc2_clear_uncounted_needscan_all(global_State *g);
@@ -2022,6 +2024,7 @@ int lj_gc2_init(global_State *g)
   gc2_finalizer_tail_store_rlx(g, NULL);
   gc2_finalizer_active_store_rlx(g, 0);
   gc2_finalizer_owner_store_rlx(g, 0);
+  la_store32_rlx(&g->gc2.finalizer_rooted_depth, 0);
   gc2_finalizer_spawn_latch_store_rlx(g, 0);
   gc2_finalizer_queued_store_rlx(g, 0);
   gc2_finalizer_dequeued_store_rlx(g, 0);
@@ -3079,12 +3082,22 @@ static int gc2_request_major_explicit(global_State *g, TGState *tg)
   return gc2_request_cycle_start(g, tg, 0);
 }
 
+static int gc2_finalizer_major_allowed(global_State *g)
+{
+  return lj_gc2_finalizer_owned_by_current(g) &&
+    gc2_finalizer_active_acq(g) == la_load32_acq(&g->gc2.finalizer_rooted_depth) &&
+    !mt_shutdown_acq(g) && !mt_entering_acq(g) && !mt_live_acq(g) &&
+    !gc2_n_workers_acq(g) && !gc2_worker_active_acq(g) &&
+    !gc2_smr_readers_acq(g);
+}
+
 int lj_gc2_collect_active(lua_State *L)
 {
   global_State *g;
   TGState *tg;
   int need_major = 1;
   int extra_finreg = 0;
+  int nested;
   if (!L)
     return 0;
   g = G(L);
@@ -3103,15 +3116,10 @@ int lj_gc2_collect_active(lua_State *L)
     return 0;
   }
 #endif
-  /* gc2_call_finalizer retains the finalized object's body scope across the
-  ** Lua callback, so no full collector can close SWEEP until that callback
-  ** returns. This is not only a same-owner recursion hazard: a finalizer may
-  ** join a pre-existing peer which concurrently calls collectgarbage(). If
-  ** that peer waits for finalizer_active, each TG waits for the other forever.
-  ** The callback owner can still dispatch the pending FIFO. The outer
-  ** collector or a later request resumes the already-open cycle.
-  */
-  if (gc2_finalizer_active_acq(g) != 0) {
+  /* A finalizer may join a peer that calls collectgarbage(). Only its own
+  ** rooted callback frames can advance the sweep recursively. */
+  nested = gc2_finalizer_active_acq(g) != 0;
+  if (nested && !gc2_finalizer_major_allowed(g)) {
     (void)lj_gc2_step_owned_finalizers(L, UINT32_MAX);
     return 0;
   }
@@ -3137,7 +3145,8 @@ int lj_gc2_collect_active(lua_State *L)
     /* A peer finalizer can defer SWEEP close. A native wait or drain can also
     ** acknowledge shutdown without throwing. The driver owns no work token
     ** here, so lua_gc can release its scope and return to the Lua caller. */
-    if (gc2_finalizer_active_acq(g) != 0 ||
+    if ((gc2_finalizer_active_acq(g) != 0 &&
+         (!nested || !gc2_finalizer_major_allowed(g))) ||
 	lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH))
       return 0;
     if (gc2_collection_stalled(g))
@@ -3248,7 +3257,7 @@ int lj_gc2_collect_active(lua_State *L)
       UNUSED(cost);
       if (finstep != 0) {
 	if (finstep < 0) {
-	  if (lj_gc2_finalizer_deferred(g))
+	  if (nested || lj_gc2_finalizer_deferred(g))
 	    return 0;
 	  gc2_peer_wait_l(L);
 	}
@@ -3258,6 +3267,9 @@ int lj_gc2_collect_active(lua_State *L)
 	lj_gc2_publish_idle_threshold(g);
 	continue;
       }
+      /* A host can hold an arena or mapping reader across collectgarbage
+      ** inside __gc. Only returning to that host can release its reader. */
+      if (nested) return 0;
       gc2_peer_wait_l(L);
       continue;
     }
@@ -5246,14 +5258,14 @@ static int gc2_finalizer_dispatch_obj(lua_State *L, global_State *g, GCobj *o,
     return 0;
 #if LJ_HASFFI
   if (gct == (uint32_t)~LJ_TCDATA) {
-    rc = lj_gc2_finreg_cdata_dispatch(L, g, o, fin, id);
+    rc = lj_gc2_finreg_cdata_dispatch(L, g, o, fin, id, &scope);
     gc2_mark_scope_leave(&scope);
     return rc;
   }
 #endif
   UNUSED(id);
   if (gct == (uint32_t)~LJ_TUDATA) {
-    rc = lj_gc2_finreg_udata_dispatch(L, g, o, fin);
+    rc = lj_gc2_finreg_udata_dispatch(L, g, o, fin, &scope);
     gc2_mark_scope_leave(&scope);
     return rc;
   }
@@ -5973,13 +5985,27 @@ static int gc2_finalizer_checkstack_claimed(global_State *g, lua_State *L,
   return 1;
 }
 
+static int gc2_finalizer_anchor(lua_State *L, TGState *tg, GCobj *o)
+{
+  TValue tv;
+  if (!lj_tg_root_anchor_reserve_nothrow(L, tg))
+    return 0;
+  setgcV(L, &tv, o, ~o->gch.gct);
+  (void)lj_tg_root_anchor_push(L, tg, &tv, NULL);
+  lj_gc_pubobjroot(L, o);
+  return 1;
+}
+
 static int gc2_call_finalizer(global_State *g, lua_State *L,
-			      cTValue *mo, GCobj *o)
+			      cTValue *mo, GCobj *o, GC2MarkScope *scope)
 {
   /* Save and restore lots of state around the __gc callback. */
   LJStateClaim claim;
   lua_State *cbL = L;
   lua_State *oldL;
+  TGState *tg;
+  uint32_t anchor_top;
+  int rooted;
   uint8_t oldh;
   uint8_t oldauto;
   GCSize oldt;
@@ -5998,6 +6024,15 @@ static int gc2_call_finalizer(global_State *g, lua_State *L,
 					&claim))
     return 1;
   oldL = lj_tg_cur_L(g);
+  tg = L2TG(cbL);
+  anchor_top = lj_tg_root_anchor_top_acq(tg);
+  /* A C finalizer can pop its argument before running another full major.
+  ** Keep the object and the displaced coroutine alive through the call. An
+  ** allocation refusal leaves the original body lease with the dispatcher. */
+  rooted = !mt_shutdown_acq(g) && gc2_finalizer_anchor(cbL, tg, o) &&
+    (!oldL || oldL == cbL || gc2_finalizer_anchor(cbL, tg, obj2gco(oldL)));
+  if (!rooted)
+    lj_tg_root_anchor_rollback(tg, anchor_top);
   oldh = hook_save(g);
   lj_assertG(lj_gc2_finalizer_owned_by_current(g),
 	     "automatic GC pause requires finalizer owner");
@@ -6013,11 +6048,21 @@ static int gc2_call_finalizer(global_State *g, lua_State *L,
   if (LJ_FR2) setnilV(top++);
   setgcV(cbL, top, o, ~o->gch.gct);
   cbL->top = top+1;
+  if (rooted) {
+    lj_state_stack_pubtv(cbL, cbL, top-1-LJ_FR2);
+    lj_state_stack_pubtv(cbL, cbL, top);
+    gc2_mark_scope_leave(scope);
+    (void)la_add32_acqrel(&g->gc2.finalizer_rooted_depth, 1);
+  }
   errcode = gc2_finalizer_pcall(g, cbL, top, &continue_gc);
   if (oldL)
     lj_tg_setcur_L(g, oldL);
   else
     lj_tg_clearcur_L(g);
+  if (rooted) {
+    (void)la_sub32_acqrel(&g->gc2.finalizer_rooted_depth, 1);
+    lj_tg_root_anchor_rollback(tg, anchor_top);
+  }
   hook_restore(g, oldh);
   if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
   gc2_finalizer_restore_threshold(g, oldt);
@@ -14226,7 +14271,8 @@ static int gc2_finreg_dispatch_requeue(global_State *g, GCobj *o)
 }
 
 static int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
-					GCobj *o, cTValue *fin, uint64_t id)
+					GCobj *o, cTValue *fin, uint64_t id,
+					GC2MarkScope *scope)
 {
 #if LJ_HASFFI
   UNUSED(fin);  /* The queue carries an additional root for its snapshot. */
@@ -14262,10 +14308,10 @@ static int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
     lj_ctype_fin_order_retire_id(cts, o, id);
     lj_ctype_fin_lease_release(&lease);
     tv_rawstore(&tmp, old.lo);
-    return gc2_call_finalizer(g, L, &tmp, o) ? 1 : -1;
+    return gc2_call_finalizer(g, L, &tmp, o, scope) ? 1 : -1;
   }
 #else
-  UNUSED(L); UNUSED(g); UNUSED(o); UNUSED(fin); UNUSED(id);
+  UNUSED(L); UNUSED(g); UNUSED(o); UNUSED(fin); UNUSED(id); UNUSED(scope);
   return 0;
 #endif
 }
@@ -14582,7 +14628,8 @@ size_t lj_gc2_finreg_udata_finalize(global_State *g, int all)
 }
 
 static int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
-					GCobj *o, cTValue *fin)
+					GCobj *o, cTValue *fin,
+					GC2MarkScope *scope)
 {
   cTValue *mo;
   TValue motv;
@@ -14598,7 +14645,7 @@ static int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
   } else {
     mo = lj_meta_fasttv(g, lj_udata_metatable_acq(gco2ud(o)), MM_gc, &motv);
   }
-  if (mo && !gc2_call_finalizer(g, L, mo, o))
+  if (mo && !gc2_call_finalizer(g, L, mo, o, scope))
     return -1;
   return 1;  /* 05 section 5.8: GC2-owned userdata dispatch resolution. */
 }
